@@ -3,6 +3,11 @@ extends Node
 ## published as a GitHub release). Downloads it at most once a day, keeps it in
 ## user://, and works offline from that copy. The static functions do the
 ## parsing and matching so they can run on a worker thread and in tests.
+##
+## A finished download is unpacked and checked on a WorkerThreadPool thread,
+## never on the main thread. The checked document is handed to the next
+## load_file() of the same file (Library's scan, which `updated` starts), so a
+## new download is parsed once, not twice.
 
 signal updated
 
@@ -10,10 +15,21 @@ const URL := "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/g
 const CACHE_PATH := "user://gamedb.json.gz"
 const MAX_AGE_S := 24 * 60 * 60
 ## Upper bound for the unpacked file, so a bad download can't eat all memory.
-const MAX_UNPACKED := 512 * 1024 * 1024
+## The real file is compact JSON, roughly 100-200 bytes per game: even 200,000
+## games stay well under this.
+const MAX_UNPACKED := 64 * 1024 * 1024
 const STORES := ["steam", "gog", "epic"]
 
+## Where the copy lives; tests point it at a temp file.
+var cache_path := CACHE_PATH
+
 var _http: HTTPRequest
+var _task := -1
+
+## The last download's parsed document, waiting for load_file() of that path:
+## {"path": absolute path, "modified": unix mtime, "doc": Dictionary}.
+static var _handoff := {}
+static var _handoff_mutex := Mutex.new()
 
 
 ## True when the cached copy is missing or older than a day.
@@ -24,9 +40,9 @@ static func is_stale(cache_modified_unix: int, now_unix: int) -> bool:
 ## Starts a background download if the cached copy is stale. Emits `updated`
 ## after a good download; a failed one keeps the old copy and stays quiet.
 func update_if_stale() -> void:
-	var path := ProjectSettings.globalize_path(CACHE_PATH)
+	var path := ProjectSettings.globalize_path(cache_path)
 	var modified := int(FileAccess.get_modified_time(path)) if FileAccess.file_exists(path) else 0
-	if not is_stale(modified, int(Time.get_unix_time_from_system())) or _http != null:
+	if not is_stale(modified, int(Time.get_unix_time_from_system())) or _http != null or _task != -1:
 		return
 	_http = HTTPRequest.new()
 	_http.use_threads = true
@@ -40,19 +56,56 @@ func update_if_stale() -> void:
 
 
 func _on_downloaded(result: int, code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
-	var path := ProjectSettings.globalize_path(CACHE_PATH)
+	var path := ProjectSettings.globalize_path(cache_path)
 	var part := path + ".part"
-	var good := result == HTTPRequest.RESULT_SUCCESS and code == 200 \
-		and not parse_gz(FileAccess.get_file_as_bytes(part)).is_empty()
-	if good:
-		DirAccess.rename_absolute(part, path)
-	else:
+	_finish_http()
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		# offline, 404 (no release yet) and so on: keep the old copy
 		if FileAccess.file_exists(part):
 			DirAccess.remove_absolute(part)
 		print_verbose("gamedb: download skipped (result %d, HTTP %d); using cached copy" % [result, code])
-	_finish_http()
+		return
+	if not is_inside_tree():
+		# tests: no frames run, so do it right here
+		_validated(accept_download(part, path))
+		return
+	_task = WorkerThreadPool.add_task(func(): _validated.call_deferred(accept_download(part, path)),
+		false, "GameDB check")
+
+
+## Worker thread: unpacks and checks the downloaded `part`. A good one replaces
+## the copy at `path` and waits for the next load_file(path); a bad one is
+## deleted. Returns whether it was good.
+static func accept_download(part: String, path: String) -> bool:
+	var doc := parse_gz(FileAccess.get_file_as_bytes(part)) if FileAccess.file_exists(part) else {}
+	if doc.is_empty():
+		if FileAccess.file_exists(part):
+			DirAccess.remove_absolute(part)
+		print_verbose("gamedb: downloaded file isn't a valid database; using cached copy")
+		return false
+	if DirAccess.rename_absolute(part, path) != OK:
+		DirAccess.remove_absolute(part)
+		return false
+	_handoff_mutex.lock()
+	_handoff = {"path": path, "modified": int(FileAccess.get_modified_time(path)), "doc": doc}
+	_handoff_mutex.unlock()
+	return true
+
+
+## Main thread, after accept_download().
+func _validated(good: bool) -> void:
+	if _task != -1:
+		WorkerThreadPool.wait_for_task_completion(_task)
+		_task = -1
 	if good:
 		updated.emit()
+
+
+func _exit_tree() -> void:
+	if _task != -1:
+		WorkerThreadPool.wait_for_task_completion(_task)
+		_task = -1
+	_finish_http()
 
 
 func _finish_http() -> void:
@@ -77,8 +130,27 @@ static func parse_gz(bytes: PackedByteArray) -> Dictionary:
 	return doc if doc.get("games") is Array else {}
 
 
+## The database at `path`, or {} if it's missing or broken. If that file is
+## the one a download just checked, the document parsed then is reused (once).
+## Safe to call from any thread.
 static func load_file(path: String) -> Dictionary:
-	return parse_gz(FileAccess.get_file_as_bytes(path)) if FileAccess.file_exists(path) else {}
+	if not FileAccess.file_exists(path):
+		return {}
+	var doc := take_handoff(path)
+	return doc if not doc.is_empty() else parse_gz(FileAccess.get_file_as_bytes(path))
+
+
+## The document accept_download() left for `path`, or {} if there's none or the
+## file changed since. A hand-off for `path` is used up either way.
+static func take_handoff(path: String) -> Dictionary:
+	_handoff_mutex.lock()
+	var h := _handoff
+	if not h.is_empty() and h["path"] == path:
+		_handoff = {}
+	_handoff_mutex.unlock()
+	if h.is_empty() or h["path"] != path or h["modified"] != int(FileAccess.get_modified_time(path)):
+		return {}
+	return h["doc"]
 
 
 ## Title key for matching: lowercase letters and digits only, so ™ ® ©, case,

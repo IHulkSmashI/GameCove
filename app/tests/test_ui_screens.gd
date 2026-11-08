@@ -53,9 +53,11 @@ class FakeLauncher extends RefCounted:
 
 class FakeGamescope extends RefCounted:
 	var running := false
+	var focused := 0          # gamescope app id in front; 769 = GameCove
 	var overlay := []
 	var fps := []
 	func is_running() -> bool: return running
+	func focused_app() -> int: return focused
 	func set_fps_limit(f: int) -> bool:
 		fps.append(f)
 		return running
@@ -212,10 +214,14 @@ func test_quick_menu_with_game_and_full_support() -> void:
 	ok("Hades" in _texts(m.body), "game title")
 
 	var goal: Control = m.body.find_child("goal", true, false)
+	gs.focused = 769
 	goal.step(1)  # balanced -> smooth
 	eq(svc["launcher"].saved["steam:1"]["frame_gen"], true, "smooth saved")
 	ok(["profile", "performance"] in power.calls, "smooth picks the performance profile")
-	eq(gs.fps[-1], 0, "fps limit pushed to gamescope")
+	eq(gs.fps, [], "no live fps limit while GameCove's home is in front")
+	gs.focused = 1145360
+	goal.step(-1)  # smooth -> balanced
+	eq(gs.fps[-1], 60, "fps limit pushed to gamescope while the game runs")
 
 	m.show_section(1)
 	eq(m.focusables().size(), 4, "profile, TDP, charge limit, fan")

@@ -82,3 +82,71 @@ func test_collect_merges_all_stores() -> void:
 func test_collect_without_anything() -> void:
 	var r := LibraryScript.collect("/nonexistent/home", "/nonexistent/gamedb.json.gz")
 	eq(r["games"].size(), 0, "no stores, no database -> empty library")
+
+
+func _tmp_cache() -> String:
+	var dir := OS.get_cache_dir().path_join("gamecove-test-%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(dir)
+	return dir.path_join("gamedb.json.gz")
+
+
+func test_good_download_is_parsed_once_and_handed_on() -> void:
+	var path := _tmp_cache()
+	var good := FileAccess.get_file_as_bytes(fixture("library/gamedb.json.gz"))
+	var f := FileAccess.open(path + ".part", FileAccess.WRITE)
+	f.store_buffer(good)
+	f.close()
+	var db: Node = GameDB.new()
+	db.cache_path = path
+	var fired := [0]
+	db.updated.connect(func(): fired[0] += 1)
+	db._on_downloaded(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), PackedByteArray())
+	eq(fired[0], 1, "updated emitted")
+	ok(FileAccess.file_exists(path) and not FileAccess.file_exists(path + ".part"), "part renamed to the cache")
+	var h: Dictionary = GameDB._handoff
+	eq(h.get("path"), path, "parsed document waits for the library scan")
+	var first := GameDB.load_file(path)
+	ok(is_same(first, h.get("doc")), "library gets the already parsed document")
+	eq(first.get("games", []).size(), 6, "and it's the right one")
+	eq(GameDB._handoff, {}, "hand-off used up")
+	var second := GameDB.load_file(path)
+	ok(not is_same(second, first) and second == first, "later loads read the file again")
+	db.free()
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(path.get_base_dir())
+
+
+func test_bad_or_missing_download_keeps_old_copy() -> void:
+	var path := _tmp_cache()
+	var old := FileAccess.get_file_as_bytes(fixture("library/gamedb.json.gz"))
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_buffer(old)
+	f.close()
+	var db: Node = GameDB.new()
+	db.cache_path = path
+	var fired := [0]
+	db.updated.connect(func(): fired[0] += 1)
+	# 404: GitHub's error page lands in the .part file
+	f = FileAccess.open(path + ".part", FileAccess.WRITE)
+	f.store_string("Not Found")
+	f.close()
+	db._on_downloaded(HTTPRequest.RESULT_SUCCESS, 404, PackedStringArray(), PackedByteArray())
+	ok(not FileAccess.file_exists(path + ".part"), "404 part deleted")
+	# offline
+	db._on_downloaded(HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())
+	# 200 but junk
+	f = FileAccess.open(path + ".part", FileAccess.WRITE)
+	f.store_string("<html>maintenance</html>")
+	f.close()
+	db._on_downloaded(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), PackedByteArray())
+	ok(not FileAccess.file_exists(path + ".part"), "junk part deleted")
+	eq(fired[0], 0, "nothing new, no signal")
+	eq(FileAccess.get_file_as_bytes(path), old, "old copy untouched")
+	eq(GameDB.load_file(path).get("games", []).size(), 6, "still works offline")
+	db.free()
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(path.get_base_dir())
+
+
+func test_unpack_cap_is_sane() -> void:
+	ok(GameDB.MAX_UNPACKED <= 128 * 1024 * 1024, "a bad download can't take more than 128 MB")
