@@ -20,6 +20,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | Heroic Games Launcher | Library, playtime, prefixes and art for games installed through Heroic | GPL-3.0 |
 | gamescope-session-plus | The session GameCove runs in | see project |
 | xprop (X.Org) | Setting gamescope atoms | MIT |
+| MangoHud / mangoapp (flightlessmango) | Performance overlay and the game's frame timings (its log) | MIT |
 | udev-hid-bpf | Loading HID-BPF fixes | GPL-2.0 |
 | Godot Engine | UI | MIT |
 | Inter typeface | Banner lettering | OFL-1.1 |
@@ -33,6 +34,8 @@ GameCove stands on a lot of other people's work. Thank you.
 - **Decky Loader** (GPL-2.0) and **@decky/ui / decky-frontend-lib** (LGPL-2.1): how to reach the Steam client's `SteamClient` API over CEF remote debugging (port, tab, `.cef-enable-remote-debugging`) and the API's method names, for the opt-in Steam control. No code copied.
 - **Heroic Games Launcher**: how it runs legendary, gogdl and nile for installs and parses their progress; its `heroic://` protocol for hand-offs.
 - **SteamKit2** (LGPL-2.1): the `EAppState` bit values behind appmanifest `StateFlags`.
+- **OpenGamepadUI** (`core/systems/mangoapp/mangoapp.gd`, GPL-3.0) and **gamescope-session-plus** (MIT): driving mangoapp's overlay level through `MANGOHUD_CONFIGFILE`.
+- **node-vdf** (Anthony Beaumont, MIT): the binary KeyValues type table our parser follows. **Achievement Watcher** / **celes** (GPL) and **Steam Achievement Manager** (gibbed, zlib): where Steam keeps achievement stats and how the schema is laid out. Our code is our own.
 - **proton-cachyos** (CachyOS), **GE-Proton** (GloriousEggroll) and **low_latency_layer** (Korthos-Software): their docs for the launch variables we set.
 
 ## Data
@@ -41,6 +44,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | --- | --- | --- |
 | Wikidata | Titles, dates, cross-store IDs | CC0 |
 | AreWeAntiCheatYet | Anti-cheat status | MIT |
+| Steam Web API (`GetGlobalAchievementPercentagesForApp`) | Global achievement rarity, at most once per game per day | Steam Web API Terms of Use |
 | ProtonDB data dumps | Compatibility reports | ODbL (credit and share-alike) |
 | IGDB | Time to beat; upcoming release dates (nightly, when the job has Twitch credentials) | Free for non-commercial use under the [Twitch Developer Service Agreement](https://api-docs.igdb.com/#getting-started); commercial use needs an IGDB partnership; credit IGDB.com |
 | SteamGridDB | Optional artwork, only with each user's own API key | [Terms](https://www.steamgriddb.com/terms): personal, non-commercial use; no key ships with GameCove |

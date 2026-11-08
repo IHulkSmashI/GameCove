@@ -13,6 +13,8 @@ How the parts of GameCove talk to each other. Change a contract only with a matc
 | `Gamescope` | `scripts/gamescope/gamescope.gd` | `scripts/gamescope/` | Frame limit, refresh rate, overlay focus |
 | `Discover` | `scripts/discover/discover.gd` | `scripts/discover/` | Deals, prices across stores, wishlist and alerts, release calendar |
 | `Art` | `scripts/discover/art.gd` | `scripts/discover/` | Cover / hero / logo / header images for any game, cached in `user://art/` |
+| `PerfMonitor` | `scripts/perf/perf_monitor.gd` | `scripts/perf/` | Running game's fps, frame time, power, load, temps; feeds Auto TDP; performance overlay level |
+| `Achievements` | `scripts/achievements/achievements.gd` | `scripts/achievements/` | Steam achievements from the client's local cache, global rarity |
 
 The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these services; it never touches sysfs, D-Bus or store tools directly.
 
@@ -244,6 +246,67 @@ Order: by the last day a date can mean (so "December 2026" follows every known D
 ```
 
 Setters (`set_tdp`, `set_profile`, `set_charge_limit`, `set_fan_mode`) return `true` only after reading the value back. `changed(state)` fires after any change. The UI hides any control whose `supported` flag is false.
+
+## Auto TDP feed and "can't reach target" (`Power`)
+
+- `Power.request_feed(fps, watts)`: one sample (rendered fps, package watts or -1). Runs `autotune_feed` on Power's worker; newest wins while it's busy. Ignored unless Auto TDP runs. PerfMonitor calls it; nobody else needs to.
+- `Power.request_autotune_target(fps)`: the frame rate the game should hold (its frame limit, 0 = none). PerfMonitor's `set_target_fps` / `start(id, {"target_fps": n})` pass it on (again when Auto TDP starts); Power forgets it when Auto TDP stops.
+- `Power.autotune_active() -> bool`, `Power.autotune_limit_info() -> Dictionary`.
+- Signals (main thread): `autotune_changed(on: bool)`; `autotune_limit(cant_reach: bool, info)` with `info = {"cant_reach", "target_fps", "fps", "tdp_w", "ceiling_w", "ref_fps", "tdp_max"}`.
+- Can't reach: a target is set, the TDP is at the ceiling (the user's TDP) or the ceiling's measured best is under the target, and the fps stay under `target * 0.95` for 10 s. Clears after 5 s on target, a new ceiling or target, or stop. UI: `ceiling_w < tdp_max` → "raise the TDP to hold N fps"; else "this game can't hold N fps on this device; lower its settings or frame limit".
+
+## Performance (`PerfMonitor`)
+
+Samples once a second only between `start()` and `stop()` while focused (or while Auto TDP runs, which starts it by itself). Nothing at idle. Each sample is plain file reads on a thread-pool task; no process per sample.
+
+| Call | What |
+| --- | --- |
+| `start(app_id := 0, opts := {})` | A game runs and is in front. `opts`: `frame_gen_multiplier` (presented / rendered, default 1), `target_fps` (frame limit). Screens: on `GameSession.started` |
+| `stop()` | Screens: on `GameSession.ended` |
+| `set_focused(bool)` | false while home is in front of the running game (pauses) |
+| `set_target_fps(fps)`, `set_frame_gen_multiplier(m)` | When the quick menu changes them mid-game |
+| `latest`, `is_active()` | Last sample, running or not |
+| `capabilities()` | `{"fps": bool, "overlay": bool, "fps_needs_overlay": bool, "sources": {metric: source or ""}}`; reads sysfs, call once per screen |
+| `overlay_supported()`, `overlay_level()`, `overlay_levels()`, `set_overlay_level(n) -> bool` | Performance overlay: 0 off, 1 fps, 2 compact, 3 full |
+
+Signals: `sample(data)`, `running_changed(active)`, `overlay_changed(level)`.
+
+```
+{
+  "time": 1762600000.0, "app_id": 976730,
+  "fps": 119.6, "fps_rendered": 59.8, "frame_ms": 8.4,      # presented / rendered (fps / frame-gen multiplier)
+  "cpu_load": 34.0, "gpu_load": 91.0,                       # percent
+  "cpu_temp": 71.0, "gpu_temp": -1.0,                       # C
+  "package_w": 17.2, "gpu_w": -1.0, "cpu_w": -1.0, "battery_w": 21.5,
+  "gpu_mhz": 1850.0,
+  "sources": {"fps": "mangohud", "package_w": "rapl", ...}  # only metrics we have
+}
+```
+
+Every number is -1 when unknown. Sources (first that works):
+
+| Metric | Source |
+| --- | --- |
+| fps, frame_ms | mangoapp's MangoHud log: gamescope sends mangoapp each frame's timing (SysV queue `ftok("mangoapp", 65)`, one reader, so we don't read it). We add `output_folder=$XDG_RUNTIME_DIR/gamecove-mangohud` and `log_interval=1000` to the session's `MANGOHUD_CONFIGFILE` and start the log with `mangohudctl set log_session 1` (once per game; again only if no rows come, at most every 3 s, 5 times). No mangohudctl: `autostart_log=1`, which only logs while the overlay is visible (`fps_needs_overlay`). Not used: gamescope's `-T` stats pipe (fps once per 300 frames, may have another reader) |
+| cpu_load | `/proc/stat` delta |
+| package_w | RAPL `/sys/class/powercap/intel-rapl:N` (name `package-0`) `energy_uj` delta, if readable (root-only on many kernels); else amdgpu hwmon `power1_average`/`power1_input` on an APU (VRAM ≤ 4 GiB) |
+| gpu_w | RAPL `uncore` subzone; amdgpu power on a dGPU; discrete Intel hwmon `energy1_input`; else the log's `gpu_power` |
+| gpu_load | amdgpu `device/gpu_busy_percent`; else the log's `gpu_load` (Intel) |
+| gpu_mhz | xe `device/tile0/gt0/freq0/act_freq`, i915 `gt_act_freq_mhz`, amdgpu hwmon `freq1_input` |
+| cpu_temp, gpu_temp | hwmon `coretemp`/`k10temp`/`zenpower` `temp1_input`, else thermal zone `x86_pkg_temp`; amdgpu / discrete Intel hwmon `temp1_input` |
+| battery_w | `BAT*/power_now` (or current × voltage) while discharging |
+
+Overlay: no gamescope atom. Like Steam and OpenGamepadUI, we rewrite the session's `MANGOHUD_CONFIGFILE` (gamescope-session-plus makes it with `mktemp /tmp/mangohud.XXXXXXXX` and writes `no_display`); mangoapp reloads it on inotify, and gamescope reads it to know if the overlay shows. Unsupported (returns false) without that variable or without `mangoapp` on `PATH`. The level is remembered in `user://perf.cfg` and put back at start. The overlay also shows over our home screen; while a log runs MangoHud draws a small dot in its corner.
+
+## Achievements (`Achievements`)
+
+- `achievements_for(appid) -> Dictionary`, at once (cached against the files' mtimes):
+  `{"appid": "4242", "unlocked": 3, "total": 4, "source": "steam-local" | "", "items": [{"id": api name, "name", "description", "hidden": bool, "icon": local path or "", "icon_gray", "icon_url", "icon_gray_url", "unlocked": bool, "unlock_time": unix or 0, "rarity": percent or -1}]}`. Empty (`total` 0, `source` "") when Steam or the files are missing.
+- `request(appid)`: same, read on the thread pool; answers with `loaded(appid, result)`.
+- `changed(appid)`: rarity arrived; ask again. `invalidate(appid)` drops the cache (e.g. after the game ends).
+- Settings: `steam_root` ("" = first Steam root with `appcache/stats`), `account` ("" = MostRecent in `config/loginusers.vdf`), `language` (Steam language name), `fetch_rarity` (default true).
+- Files: `appcache/stats/UserGameStatsSchema_<appid>.bin` and `UserGameStats_<accountid>_<appid>.bin` (binary KeyValues); icons from `appcache/librarycache/<appid>/` when Steam cached them, else Steam's community CDN URL. Steam updates the user file when it syncs stats, so it can lag a running game.
+- Rarity: `GetGlobalAchievementPercentagesForApp/v0002` (no key), at most once per game per day (failures too), off the main thread, stored in `user://achievements/rarity/<appid>.json`. Steam Web API terms: personal use, no implied Valve endorsement.
 
 ## Per-game settings (`Launcher.settings_for(key)`)
 

@@ -25,6 +25,8 @@ Launcher="*res://scripts/launch/launcher.gd"
 Gamescope="*res://scripts/gamescope/gamescope.gd"
 Discover="*res://scripts/discover/discover.gd"
 Art="*res://scripts/discover/art.gd"
+PerfMonitor="*res://scripts/perf/perf_monitor.gd"
+Achievements="*res://scripts/achievements/achievements.gd"
 
 [display]
 

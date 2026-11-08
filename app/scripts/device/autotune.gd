@@ -11,11 +11,18 @@ extends RefCounted
 ## presents 2-4 frames per rendered frame; feed the rendered rate (presented
 ## fps divided by the frame-generation multiplier).
 ##
-## Where fps comes from (not wired yet): gamescope's mangoapp / MangoHud
-## (MANGOHUD_CONFIG=output_folder=...,log_interval=1000, one CSV row per second)
-## gives presented fps; for XeSS frame generation the xess-xmx-linux shim logs
-## XeLL's "xellSleep stats" once per 100 rendered frames, which is the rendered
-## rate. Watts come from the RAPL energy counter or Device.battery().
+## Where fps comes from: PerfMonitor (scripts/perf/perf_monitor.gd) reads
+## mangoapp's MangoHud log (gamescope's own frame timings, one row a second)
+## and divides by the frame-generation multiplier; watts are the package power
+## (RAPL, or amdgpu's socket power on AMD APUs), -1 when unreadable. It feeds
+## Power.request_feed(), which runs feed() on Power's worker.
+##
+## Target: an optional frame rate the game should hold (its frame limit). When
+## the TDP is at the ceiling, or the ceiling's own best is under the target, and
+## the frames stay under the target for CANT_REACH_N seconds, `cant_reach` turns
+## true (the UI says the target can't be reached at this TDP); RECOVER_N seconds
+## on target, a new ceiling, a new target or stop() clear it. It never changes
+## the TDP rule above.
 ##
 ## Phases:
 ##   measure  run at the ceiling for MEASURE_WINDOWS windows; their mean is ref_fps
@@ -46,6 +53,8 @@ const BELOW_N := 2          ## windows under the line in hold before +1 W
 const SLACK := 0.85         ## drawing under this share of the TDP: the limit doesn't bind
 const SLACK_N := 2
 const RESCAN_WINDOWS := 300 ## hold windows (~20 min) between fresh measurements when no watts come in
+const CANT_REACH_N := 10    ## seconds under the target at the ceiling before cant_reach
+const RECOVER_N := 5        ## seconds on target before cant_reach clears
 
 var floor_w := 8.0
 var ceiling_w := 35.0
@@ -54,6 +63,9 @@ var phase := "idle"         ## idle | measure | lower | hold
 var ref_fps := 0.0
 var last_good_w := 35.0
 var changes := 0            ## TDP changes made since start (for tests and the UI)
+var target_fps := 0.0       ## frames the game should hold (its frame limit); 0 = none
+var cant_reach := false     ## at the ceiling and still under target_fps (see above)
+var last_fps := 0.0
 
 var _window: Array[float] = []
 var _wwindow: Array[float] = []
@@ -67,6 +79,8 @@ var _up := 0
 var _misses := 0
 var _fine := false
 var _last_step := 0.0
+var _short := 0
+var _on_target := 0
 
 
 ## Start for a game. ceiling_w is the TDP the user picked (profile or slider).
@@ -78,6 +92,8 @@ func start(min_w: float, max_w: float) -> float:
 
 func stop() -> void:
 	phase = "idle"
+	target_fps = 0.0  # the next game sets its own
+	_clear_target_state()
 	_window.clear()
 	_wwindow.clear()
 	_runs.clear()
@@ -86,7 +102,57 @@ func stop() -> void:
 ## The user moved the TDP or picked a profile while a game runs.
 func set_ceiling(max_w: float) -> float:
 	ceiling_w = max(floor_w, max_w)
+	_clear_target_state()
 	return _remeasure()
+
+
+## The frame rate the game should hold (0 = none). Only feeds cant_reach.
+func set_target(fps: float) -> void:
+	target_fps = maxf(0.0, fps)
+	_clear_target_state()
+
+
+## What the UI needs to explain cant_reach.
+func limit_info() -> Dictionary:
+	return {"cant_reach": cant_reach, "target_fps": target_fps, "fps": last_fps,
+		"tdp_w": tdp_w, "ceiling_w": ceiling_w, "ref_fps": ref_fps}
+
+
+## True while the TDP can't go higher for this game: at the ceiling, or the
+## ceiling's measured best is already under the target.
+func at_limit() -> bool:
+	if tdp_w >= ceiling_w - 0.5:
+		return true
+	return (phase == "lower" or phase == "hold") and ref_fps > 0.0 and ref_fps < _target_line()
+
+
+func _target_line() -> float:
+	return target_fps * (1.0 - KEEP)
+
+
+func _track_target(fps: float) -> void:
+	last_fps = fps
+	if target_fps <= 0.0:
+		return
+	if fps >= _target_line():
+		_short = 0
+		_on_target += 1
+		if cant_reach and _on_target >= RECOVER_N:
+			cant_reach = false
+		return
+	_on_target = 0
+	if at_limit():
+		_short += 1
+		if _short >= CANT_REACH_N:
+			cant_reach = true
+	else:
+		_short = 0
+
+
+func _clear_target_state() -> void:
+	cant_reach = false
+	_short = 0
+	_on_target = 0
 
 
 func line() -> float:
@@ -99,6 +165,7 @@ func line() -> float:
 func feed(fps: float, watts: float = -1.0) -> float:
 	if phase == "idle" or fps <= 0.0:
 		return -1.0
+	_track_target(fps)
 	if _settle > 0:
 		_settle -= 1
 		return -1.0
