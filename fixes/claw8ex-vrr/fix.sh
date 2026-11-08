@@ -14,8 +14,8 @@
 # boot entry always starts without it. Ported from ClawDeck's edid.py. See README.md.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
-# shellcheck source=fixes/claw8ex-buttons/claw8ex-common.sh
-. "$HERE/../claw8ex-buttons/claw8ex-common.sh"
+# shellcheck source=fixes/lib/claw8ex-common.sh
+. "$HERE/../lib/claw8ex-common.sh"
 
 NAME=claw8ex-vrr
 PANELS=${GAMECOVE_VRR_PANELS:-$HERE/panels.txt}

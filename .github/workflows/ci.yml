@@ -39,3 +39,14 @@ jobs:
           ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log run.log
       - name: GDScript tests
         run: ./godot --headless --path app -s res://tests/run_tests.gd
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q shellcheck rpm x11-utils
+      - name: Root fixes, dispatcher, session scripts and packaging
+        run: sh packaging/tests/run.sh
+      - name: RPM spec parses
+        run: rpmspec -P packaging/rpm/gamecove.spec > /dev/null

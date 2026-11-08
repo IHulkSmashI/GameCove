@@ -251,7 +251,8 @@ for f in usr/bin/gamescope-session-plus usr/bin/gamecove-session-select \
 done
 contains "$TREE/usr/lib/extension-release.d/extension-release.gamecove" "^ID=_any$" "extension-release ID"
 if [ ! -e "$TREE/etc" ] && [ ! -e "$TREE/var" ]; then ok; else bad "sysext must only hold /usr"; fi
-if [ -z "$(find "$TREE" -name test.sh)" ]; then ok; else bad "fix tests must not ship"; fi
+if [ -z "$(find "$TREE" -name test.sh -o -type d -name tests)" ]; then ok; else bad "fix tests must not ship"; fi
+if [ -f "$TREE/usr/lib/gamecove/fixes/lib/claw8ex-common.sh" ]; then ok; else bad "shared fix code must ship"; fi
 
 # ------------------------------------------------------------------ polkit XML
 POL="$REPO/packaging/polkit/io.github.ihulksmashi.gamecove.policy"
@@ -273,9 +274,10 @@ else
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
 	if "$SHELLCHECK" -s bash "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
-	for f in "$REPO"/fixes/*/fix.sh "$REPO"/fixes/*/test.sh; do
+	for f in "$REPO"/fixes/*/fix.sh "$REPO"/fixes/*/test.sh "$REPO"/fixes/lib/*.sh; do
 		[ -f "$f" ] || continue
-		if "$SHELLCHECK" -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
+		# -x from the repo root so "# shellcheck source=fixes/..." paths resolve
+		if (cd "$REPO" && "$SHELLCHECK" -x -s sh "$f") >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 fi
 

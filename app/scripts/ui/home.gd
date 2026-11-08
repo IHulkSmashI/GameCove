@@ -159,9 +159,9 @@ func set_store(id: String) -> void:
 		return
 	for t in tiles(had[0]):
 		if t.game["key"] == had[1]:
-			t.grab_focus.call_deferred()
+			_focus_later(t)
 			return
-	_current_filter_button().grab_focus.call_deferred()
+	_focus_later(_current_filter_button())
 
 
 func cycle_store(d: int) -> void:
@@ -394,8 +394,25 @@ func _restore_focus(ref: Array) -> void:
 	if not ref.is_empty() and _tiles.has(ref[0]):
 		for t in _tiles[ref[0]]:
 			if t.game["key"] == ref[1]:
-				t.grab_focus.call_deferred()
+				_focus_later(t)
 				return
 	var f := get_viewport().gui_get_focus_owner()
 	if f == null or not is_instance_valid(f) or f.is_queued_for_deletion() or not is_ancestor_of(f):
-		default_focus().grab_focus.call_deferred()
+		_focus_later(default_focus())
+
+
+## Grabs focus next frame, skipping controls that were freed or left the tree
+## in between (tiles are rebuilt when the library finishes loading).
+static func focus_later(c: Control) -> void:
+	if c == null:
+		return
+	var ref: WeakRef = weakref(c)
+	(func():
+		var n: Control = ref.get_ref()
+		if n != null and n.is_inside_tree() and n.is_visible_in_tree():
+			n.grab_focus()
+	).call_deferred()
+
+
+func _focus_later(c: Control) -> void:
+	focus_later(c)

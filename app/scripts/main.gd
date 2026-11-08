@@ -49,7 +49,7 @@ func _ready() -> void:
 	add_child(_live_timer)
 	_refresh_live()
 	_update_timer()
-	home.default_focus().grab_focus.call_deferred()
+	home.focus_later(home.default_focus())
 
 
 func _notification(what: int) -> void:

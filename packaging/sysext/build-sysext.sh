@@ -85,6 +85,7 @@ mkdir -p "$tree/usr/lib/gamecove/fixes"
 if [ -d "$REPO/fixes" ]; then
 	cp -a "$REPO/fixes/." "$tree/usr/lib/gamecove/fixes/"
 	find "$tree/usr/lib/gamecove/fixes" -name test.sh -exec rm -f {} +
+	find "$tree/usr/lib/gamecove/fixes" -depth -type d -name tests -exec rm -rf {} +
 fi
 install -Dm0755 "$REPO/packaging/libexec/gamecove-fix" "$tree/usr/libexec/gamecove/gamecove-fix"
 install -Dm0755 "$REPO/session/gamecove-session-client" "$tree/usr/libexec/gamecove/gamecove-session-client"

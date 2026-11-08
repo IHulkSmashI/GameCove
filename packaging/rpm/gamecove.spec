@@ -61,6 +61,7 @@ if [ -d fixes ]; then
     mkdir -p %{buildroot}%{_prefix}/lib/gamecove/fixes
     cp -a fixes/. %{buildroot}%{_prefix}/lib/gamecove/fixes/
     find %{buildroot}%{_prefix}/lib/gamecove/fixes -name 'test.sh' -delete
+    find %{buildroot}%{_prefix}/lib/gamecove/fixes -depth -type d -name tests -exec rm -rf {} +
 fi
 mkdir -p %{buildroot}%{_prefix}/lib/gamecove/fixes
 

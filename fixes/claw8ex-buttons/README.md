@@ -32,7 +32,7 @@ If a future InputPlumber ships its own map for the board (anything other than `c
 
 Changes are recorded in `/var/lib/gamecove/fixes/claw8ex-buttons/manifest`, and `remove` undoes them.
 
-`claw8ex-common.sh` in this folder holds the code all three Claw 8 EX fixes share: the change record and undo, the kernel-argument holder count, and the InputPlumber override.
+`fixes/lib/claw8ex-common.sh` holds the code all three Claw 8 EX fixes share: the change record and undo, the kernel-argument holder count, and the InputPlumber override.
 
 ## Tests
 

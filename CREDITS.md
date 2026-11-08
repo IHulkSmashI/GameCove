@@ -16,10 +16,21 @@ GameCove stands on a lot of other people's work. Thank you.
 | InputPlumber | Controller input, button and gyro routing | GPL-3.0 |
 | PowerStation | TDP, GPU clocks over D-Bus | GPL-3.0 |
 | steamos-manager | TDP, GPU, charge limit over D-Bus | MIT |
-| legendary, heroic-gogdl, nile | Epic, GOG, Amazon libraries | GPL-3.0 |
+| legendary, heroic-gogdl, nile | Epic, GOG, Amazon libraries and launch | GPL-3.0 |
+| Heroic Games Launcher | Library, playtime, prefixes and art for games installed through Heroic | GPL-3.0 |
+| gamescope-session-plus | The session GameCove runs in | see project |
+| xprop (X.Org) | Setting gamescope atoms | MIT |
 | udev-hid-bpf | Loading HID-BPF fixes | GPL-2.0 |
 | Godot Engine | UI | MIT |
 | Inter typeface | Banner lettering | OFL-1.1 |
+
+## Ideas and findings we borrowed
+
+- **ClawDeck**: the Claw 8 EX power backend findings, launch environment, face-button and EDID findings, ported here.
+- **DeckyTDPTuner**: ideas behind Auto TDP.
+- **Zendo-GIT Intel-Handheld-and-ARC-GPU-laboratory** (MIT): the VRR range fix and the checked panel list.
+- **OpenGamepadUI** and **gamescope-x11-client**: how a gamescope main app sets its atoms and base layers.
+- **proton-cachyos** (CachyOS), **GE-Proton** (GloriousEggroll) and **low_latency_layer** (Korthos-Software): their docs for the launch variables we set.
 
 ## Data
 

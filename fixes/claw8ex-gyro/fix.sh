@@ -14,8 +14,8 @@
 # Bazzite (rpm-ostree) only for now. See README.md.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
-# shellcheck source=fixes/claw8ex-buttons/claw8ex-common.sh
-. "$HERE/../claw8ex-buttons/claw8ex-common.sh"
+# shellcheck source=fixes/lib/claw8ex-common.sh
+. "$HERE/../lib/claw8ex-common.sh"
 
 NAME=claw8ex-gyro
 KIT_URL="https://download.msi.com/nb_drivers/cs/ISH_Kit_5.8.1.7782_1T91%20_0318_5.8.58.0_0x96746247.zip"
