@@ -1,0 +1,12 @@
+{
+  "_about": "Steam Deck on SteamOS: steamos-manager's user-bus API offers TDP, charge limit and fan control.",
+  "props": {
+    "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.TdpLimit1 TdpLimit": {"type": "u", "data": 15},
+    "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.TdpLimit1 TdpLimitMin": {"type": "u", "data": 3},
+    "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.TdpLimit1 TdpLimitMax": {"type": "u", "data": 15},
+    "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.BatteryChargeLimit1 MaxChargeLevel": {"type": "i", "data": 100},
+    "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.BatteryChargeLimit1 SuggestedMinimumLimit": {"type": "i", "data": 50},
+    "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.FanControl1 FanControlState": {"type": "u", "data": 1}
+  },
+  "methods": {}
+}

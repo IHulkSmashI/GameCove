@@ -94,3 +94,48 @@ func battery() -> Dictionary:
 		if cur.is_valid_int() and volt.is_valid_int():
 			out["watts"] = cur.to_int() * volt.to_int() / 1e12
 	return out
+
+
+## Read helpers for the power layer. `root` is a filesystem prefix ("" on the
+## real system, a fixture folder in tests).
+
+## The hwmon folder whose "name" file is `hwmon_name` (e.g. "msi_wmi_platform"), or "".
+static func find_hwmon(hwmon_name: String, root := "") -> String:
+	var base := root + "/sys/class/hwmon/"
+	var dir := DirAccess.open(base)
+	if dir == null:
+		return ""
+	var names := Array(dir.get_directories()) + Array(dir.get_files())
+	names.sort()
+	for n in names:
+		if read_text(base + n + "/name") == hwmon_name:
+			return base + n + "/"
+	return ""
+
+
+## True when a charger is connected (a Mains or USB supply reports online=1).
+static func ac_online(root := "") -> bool:
+	var base := root + POWER_SUPPLY
+	var dir := DirAccess.open(base)
+	if dir == null:
+		return false
+	for n in Array(dir.get_directories()) + Array(dir.get_files()):
+		var kind := read_text(base + n + "/type")
+		if (kind == "Mains" or kind == "USB") and read_text(base + n + "/online") == "1":
+			return true
+	return false
+
+
+## The battery's charge_control_end_threshold file, or "" when the kernel has none.
+static func charge_threshold_path(root := "") -> String:
+	var base := root + POWER_SUPPLY
+	var dir := DirAccess.open(base)
+	if dir == null:
+		return ""
+	var names := Array(dir.get_directories()) + Array(dir.get_files())
+	names.sort()
+	for n in names:
+		var p: String = base + n + "/charge_control_end_threshold"
+		if read_text(base + n + "/type") == "Battery" and FileAccess.file_exists(p):
+			return p
+	return ""
