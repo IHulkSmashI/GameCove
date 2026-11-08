@@ -24,6 +24,14 @@ extends Node
 signal changed(state: Dictionary)
 ## A request_set() finished: setting is "profile", "tdp", "charge_limit" or "fan".
 signal applied(setting: String, ok: bool)
+## Auto TDP started (true) or stopped (false). PerfMonitor listens to sample
+## while it runs. Always arrives on the main thread.
+signal autotune_changed(on: bool)
+## Auto TDP can't (true) or can again (false) hold the target frame rate at the
+## TDP the user allows. info: {"cant_reach", "target_fps", "fps", "tdp_w",
+## "ceiling_w", "ref_fps", "tdp_max"}; ceiling_w < tdp_max means raising the TDP
+## may help, otherwise lower the game's settings or frame limit. Main thread.
+signal autotune_limit(cant_reach: bool, info: Dictionary)
 
 const Runner := preload("res://scripts/device/command_runner.gd")
 const Busctl := preload("res://scripts/device/busctl.gd")
@@ -79,6 +87,7 @@ var _fan_mode := ""
 var _autotune_on := false
 var _autotune_stopping := false  # request_autotune(false) queued: drop samples until it runs
 var _user_tdp := -1.0   # what the user picked; autotune works under it
+var _limit_shown := false  # last cant_reach reported through autotune_limit
 var _timer: Timer
 var _thread: Thread
 var _jobs := {}               # name -> Callable, newest wins
@@ -151,6 +160,36 @@ func request_autotune(on: bool) -> void:
 		_queue("autotune", func(): _autotune_stop(true); return true)
 
 
+## One PerfMonitor sample for Auto TDP, run on the worker so autotune's state
+## is only ever touched there. Newest wins: a sample that arrives while the
+## worker is busy replaces the one waiting.
+func request_feed(fps: float, watts := -1.0) -> void:
+	if not _autotune_on or _autotune_stopping:
+		return
+	_queue("feed", func(): autotune_feed(fps, watts); return true)
+
+
+## The frame rate the running game should hold (its frame limit; 0 = none).
+## Only drives the "can't reach" state; the TDP rule doesn't change.
+func request_autotune_target(fps: float) -> void:
+	_queue("autotune_target", func():
+		autotune.set_target(fps)
+		_check_limit()
+		return true)
+
+
+## True while Auto TDP runs.
+func autotune_active() -> bool:
+	return _autotune_on and not _autotune_stopping
+
+
+## Last "can't reach" state and its numbers (see autotune_limit).
+func autotune_limit_info() -> Dictionary:
+	var info: Dictionary = autotune.limit_info()
+	info["tdp_max"] = tdp_max()
+	return info
+
+
 ## refresh() on the worker (it runs busctl).
 func request_refresh() -> void:
 	_queue("refresh", func(): refresh(); return true)
@@ -187,6 +226,21 @@ func _worker() -> void:
 		var ok := bool(entry[0].call())
 		if entry[1]:
 			applied.emit.call_deferred(job_name, ok)
+
+
+## Signals other than `changed` also reach listeners on the main thread.
+func _emit_main(sig: Signal, args: Array) -> void:
+	if OS.get_thread_caller_id() == OS.get_main_thread_id():
+		_emit_now(sig, args)
+	else:
+		_emit_now.call_deferred(sig, args)
+
+
+func _emit_now(sig: Signal, args: Array) -> void:
+	match args.size():
+		1: sig.emit(args[0])
+		2: sig.emit(args[0], args[1])
+		_: sig.emit()
 
 
 ## `changed` always reaches listeners on the main thread.
@@ -634,8 +688,12 @@ func autotune_start() -> bool:
 		return false
 	if _user_tdp <= 0.0:
 		_user_tdp = _tdp_w if _tdp_w > 0.0 else tdp_max()
+	var was_on := _autotune_on
 	_autotune_on = true
+	_limit_shown = false
 	var w: float = autotune.start(_range["min"], _user_tdp)
+	if not was_on:
+		_emit_main(autotune_changed, [true])
 	return write_tdp(w) if w > 0.0 else true
 
 
@@ -646,6 +704,7 @@ func autotune_feed(fps: float, watts := -1.0) -> void:
 	if _autotune_stopping:
 		return
 	var w: float = autotune.feed(fps, watts)
+	_check_limit()
 	if w > 0.0:
 		_queue("autotune", func():
 			if _autotune_on and write_tdp(w):
@@ -664,6 +723,8 @@ func _autotune_stop(sync: bool) -> void:
 		return
 	_autotune_on = false
 	autotune.stop()
+	_check_limit()
+	_emit_main(autotune_changed, [false])
 	if _user_tdp <= 0.0:
 		return
 	var w := _user_tdp
@@ -675,3 +736,12 @@ func _autotune_stop(sync: bool) -> void:
 		if write_tdp(w):
 			_emit_changed()
 		return true)
+
+
+## Report autotune's cant_reach when it flips.
+func _check_limit() -> void:
+	var now: bool = autotune.cant_reach
+	if now == _limit_shown:
+		return
+	_limit_shown = now
+	_emit_main(autotune_limit, [now, autotune_limit_info()])

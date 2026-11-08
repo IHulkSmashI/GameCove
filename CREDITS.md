@@ -20,6 +20,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | Heroic Games Launcher | Library, playtime, prefixes and art for games installed through Heroic | GPL-3.0 |
 | gamescope-session-plus | The session GameCove runs in | see project |
 | xprop (X.Org) | Setting gamescope atoms | MIT |
+| MangoHud / mangoapp (flightlessmango) | Performance overlay and the game's frame timings (its log) | MIT |
 | udev-hid-bpf | Loading HID-BPF fixes | GPL-2.0 |
 | Godot Engine | UI | MIT |
 | Inter typeface | Banner lettering | OFL-1.1 |
@@ -30,6 +31,8 @@ GameCove stands on a lot of other people's work. Thank you.
 - **DeckyTDPTuner**: ideas behind Auto TDP.
 - **Zendo-GIT Intel-Handheld-and-ARC-GPU-laboratory** (MIT, © 2026 ClawLab contributors): the VRR range fix and the checked panel list. Notice reproduced in [fixes/claw8ex-vrr/LICENSE.ClawLab-MIT](fixes/claw8ex-vrr/LICENSE.ClawLab-MIT).
 - **OpenGamepadUI** and **gamescope-x11-client**: how a gamescope main app sets its atoms and base layers.
+- **OpenGamepadUI** (`core/systems/mangoapp/mangoapp.gd`, GPL-3.0) and **gamescope-session-plus** (MIT): driving mangoapp's overlay level through `MANGOHUD_CONFIGFILE`.
+- **node-vdf** (Anthony Beaumont, MIT): the binary KeyValues type table our parser follows. **Achievement Watcher** / **celes** (GPL) and **Steam Achievement Manager** (gibbed, zlib): where Steam keeps achievement stats and how the schema is laid out. Our code is our own.
 - **proton-cachyos** (CachyOS), **GE-Proton** (GloriousEggroll) and **low_latency_layer** (Korthos-Software): their docs for the launch variables we set.
 
 ## Data
@@ -38,6 +41,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | --- | --- | --- |
 | Wikidata | Titles, dates, cross-store IDs | CC0 |
 | AreWeAntiCheatYet | Anti-cheat status | MIT |
+| Steam Web API (`GetGlobalAchievementPercentagesForApp`) | Global achievement rarity, at most once per game per day | Steam Web API Terms of Use |
 | ProtonDB data dumps | Compatibility reports | ODbL (credit and share-alike) |
 | IGDB | Time to beat | IGDB terms; credit IGDB.com |
 | SteamGridDB | Optional artwork, with each user's own key | SteamGridDB terms |

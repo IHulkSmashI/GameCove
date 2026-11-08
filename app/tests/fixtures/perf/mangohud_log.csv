@@ -1,0 +1,9 @@
+v1
+0.8.2
+---------------------SYSTEM INFO---------------------
+os,cpu,gpu,ram,kernel,driver,cpuscheduler
+Bazzite,Intel Core Ultra X7 358H,Intel Arc B390,32GB,6.17,Mesa 25.2,
+--------------------FRAME METRICS--------------------
+fps,frametime,cpu_load,cpu_power,gpu_load,cpu_temp,gpu_temp,gpu_core_clock,gpu_mem_clock,gpu_vram_used,gpu_power,ram_used,swap_used,process_rss,cpu_mhz,elapsed
+59.8,16.72,35,0,88,0,0,1850,0,0.5,0,9.1,0,1.2,3100,1000000000
+60.2,16.61,37,0,90,0,0,1850,0,0.5,0,9.1,0,1.2,3100,2000000000
