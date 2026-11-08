@@ -5,6 +5,8 @@ extends RefCounted
 ## art from appcache/librarycache (old flat <appid>_*.jpg files and the newer
 ## per-app folders) with the user's own grid art (userdata/<user>/config/grid) first.
 
+const Acf := preload("res://scripts/steam/acf.gd")
+
 const STEAM_ROOTS := [
 	"~/.local/share/Steam",
 	"~/.steam/steam",
@@ -180,16 +182,21 @@ static func scan(home: String) -> Array[Dictionary]:
 			for file in dir.get_files():
 				if not (file.begins_with("appmanifest_") and file.ends_with(".acf")):
 					continue
-				var text := FileAccess.get_file_as_string(apps + "/" + file)
-				var appid := acf_value(text, "appid")
-				var name := acf_value(text, "name")
+				var m := Acf.parse(FileAccess.get_file_as_string(apps + "/" + file))
+				var appid: String = m.get("appid", "")
+				var name: String = m.get("name", "")
 				if appid == "" or seen.has(appid) or not is_game(name):
 					continue
 				seen[appid] = true
 				var p: Dictionary = played.get(appid, {"last_played": 0, "playtime_min": 0})
-				found.append({"store": "steam", "id": appid, "title": name, "installed": true,
+				var flags: int = m["flags"]
+				found.append({"store": "steam", "id": appid, "title": name,
+					# A first install in progress already has a manifest; it isn't playable yet.
+					"installed": Acf.is_installed(flags),
 					"art": art_for(steam_root, appid, users), "ids": {"steam": appid},
-					"last_played": p["last_played"], "playtime_min": p["playtime_min"]})
+					"last_played": p["last_played"], "playtime_min": p["playtime_min"],
+					"state_flags": flags, "busy": Acf.is_busy(flags), "library_folder": folder,
+					"install_path": folder.path_join("steamapps/common").path_join(m["installdir"]) if m["installdir"] != "" else ""})
 	return found
 
 
@@ -201,6 +208,22 @@ static func list_installed() -> Array[Dictionary]:
 ## The command that asks the running Steam client to start a game.
 static func launch_args(appid: String) -> PackedStringArray:
 	return PackedStringArray(["steam://rungameid/" + appid])
+
+
+## `steam` on PATH, or "" (Flatpak Steam).
+static func steam_bin() -> String:
+	var path := OS.get_environment("PATH")
+	for dir in path.split(":", false):
+		if FileAccess.file_exists(dir.path_join("steam")):
+			return dir.path_join("steam")
+	return ""
+
+
+## Hands any steam:// URI to the running client the same way launch() does.
+static func open_uri(uri: String, steam_bin_path := "") -> bool:
+	if steam_bin_path != "" and OS.create_process(steam_bin_path, PackedStringArray([uri])) > 0:
+		return true
+	return OS.shell_open(uri) == OK
 
 
 ## Starts a game through Steam. Runs `steam steam://rungameid/<id>` (handed to

@@ -8,6 +8,8 @@ extends RefCounted
 ## `launch` picks (gogdl/launch.py), so no GOG login or gogdl binary is needed.
 
 const Common := preload("res://scripts/library/stores/common.gd")
+## GameCove's own record of GOG games it installed with gogdl (see StoreCommands).
+const GOG_RECORD := "/.local/share/gamecove/gog/installed.json"
 
 
 static func art_from_heroic(item: Dictionary, heroic_root: String) -> Dictionary:
@@ -28,9 +30,25 @@ static func is_game(item: Dictionary) -> bool:
 	return id != "" and id != "gog-redist" and not dlc
 
 
+## Our own install record: appName -> {"appName", "install_path", "platform", "title"}.
+static func own_installs(home: String) -> Dictionary:
+	var out := {}
+	var d: Variant = Common.read_json(home + GOG_RECORD, {})
+	var list: Variant = d.get("installed", []) if d is Dictionary else []
+	if list is Array:
+		for i in list:
+			if i is Dictionary and str(i.get("appName", "")) != "":
+				out[str(i["appName"])] = i
+	return out
+
+
 static func scan(home: String) -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	var seen := {}
+	var ours := own_installs(home)
+	var titles := {}
+	var auth_root := ""
+	var auth_flatpak := false
 	for h in Common.heroic_roots(home):
 		var root: String = h["root"]
 		var inst_doc = Common.read_json(root + "/gog_store/installed.json", {})
@@ -49,8 +67,14 @@ static func scan(home: String) -> Array[Dictionary]:
 			if not library.has(id):
 				library[id] = {"app_name": id, "title": str(installed[id].get("install_path", id)).get_file()}
 		var playtime := Common.heroic_playtime(root)
+		if auth_root == "":
+			auth_root = root
+			auth_flatpak = h["flatpak"]
 		for id in library:
+			titles[id] = library[id]
 			var inst = installed.get(id, null)
+			if inst == null and ours.has(id):
+				continue
 			var platform := str(inst.get("platform", "windows")).to_lower() if inst is Dictionary else "windows"
 			if seen.has(id) or platform == "osx":
 				continue
@@ -71,6 +95,25 @@ static func scan(home: String) -> Array[Dictionary]:
 				e["prefix"] = Common.default_prefix(home, "gog", id)
 			Common.apply_heroic_playtime(e, playtime)
 			found.append(e)
+	for id in ours:
+		if seen.has(id):
+			continue
+		seen[id] = true
+		var rec: Dictionary = ours[id]
+		var lib: Dictionary = titles.get(id, {})
+		var e := {
+			"store": "gog", "id": id, "title": str(lib.get("title", rec.get("title", id))),
+			"installed": true,
+			"art": art_from_heroic(lib, auth_root) if auth_root != "" else Common.empty_art(),
+			"last_played": 0, "playtime_min": 0,
+			"ids": {"gog": id},
+			# heroic_root: where the GOG sign-in (gog_store/auth.json) lives, for gogdl.
+			"source": "gamecove", "heroic_root": auth_root, "heroic_flatpak": auth_flatpak,
+			"install_path": str(rec.get("install_path", "")),
+			"platform": str(rec.get("platform", "windows")).to_lower(),
+			"prefix": Common.default_prefix(home, "gog", id), "proton": true, "proton_path": "",
+		}
+		found.append(e)
 	return found
 
 
