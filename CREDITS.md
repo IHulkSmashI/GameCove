@@ -35,7 +35,10 @@ GameCove stands on a lot of other people's work. Thank you.
 | Handheld Daemon adjustor (hhd-dev) | Per-device TDP tables and profile watts (ROG Ally family, Claw, Legion Go S cap, GPD); the ROG Ally fan curve points and minimum/default curves behind the ASUS "quiet" fan preset | GPL-3.0 (adjustor); hhd itself LGPL-2.1-or-later |
 | Bazzite (Universal Blue) | Acer Predator Atlas 8 InputPlumber config (DMI board `F900_PTG`, QAM / M1 / M2 buttons) | Apache-2.0 |
 | OpenGamepadUI (ShadowBlip) | How a gamescope main app takes Guide / QAM from InputPlumber (intercept mode) | GPL-3.0 |
-| Inter typeface | Banner lettering | OFL-1.1 |
+| Outfit (Outfit Project Authors, github.com/Outfitio/Outfit-Fonts) | Display and heading type (SemiBold, Bold, ExtraBold; Latin subset in `app/fonts/`, licence `app/fonts/OFL-Outfit.txt`) | OFL-1.1 |
+| Plus Jakarta Sans (Plus Jakarta Sans Project Authors, github.com/tokotype/PlusJakartaSans) | Interface text (Regular to Bold; Latin subset, `app/fonts/OFL-PlusJakartaSans.txt`) | OFL-1.1 |
+| JetBrains Mono (JetBrains Mono Project Authors, github.com/JetBrains/JetBrainsMono) | Telemetry, counts and micro labels (Medium, Bold; Latin subset, `app/fonts/OFL-JetBrainsMono.txt`) | OFL-1.1 |
+| Inter typeface | Banner lettering (`assets/banner.png` only; not bundled) | OFL-1.1 |
 | QR Code encoder, kenyoni-software godot-addons (Iceflower S) | QR codes for store sign-in, vendored in `app/addons/kenyoni/qr_code/` (Kanji mode removed; see its README.GameCove.md) | MIT |
 
 ## Ideas and findings we borrowed

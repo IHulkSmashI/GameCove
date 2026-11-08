@@ -35,10 +35,10 @@ class Ring extends Control:
 
 func _init() -> void:
 	name = "Downloads"
-	theme_type_variation = "TabButton"
+	theme_type_variation = "IconButton"
 	focus_mode = Control.FOCUS_ALL
 	toggle_mode = false
-	custom_minimum_size = Vector2(52, 44)
+	custom_minimum_size = Vector2(44, 44)
 	size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tooltip_text = "Downloads"

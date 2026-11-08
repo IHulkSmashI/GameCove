@@ -14,8 +14,8 @@ signal tile_pressed(game: Dictionary)
 const GAP := 16
 ## Room around the tiles for the focus lift and glow.
 const PAD := Vector2(24, 16)
-## Below the tiles: room for the focused tile's title.
-const LABEL_ROOM := 40
+## Below the tiles: room for the focused tile's lift and glow.
+const LABEL_ROOM := 16
 
 var id := ""
 var title := ""
@@ -36,16 +36,22 @@ func setup(shelf_id: String, shelf_title: String, games: Array, tile_size := Til
 	var lead := Control.new()
 	lead.custom_minimum_size = Vector2(PAD.x - 10, 0)
 	head.add_child(lead)
+	# Section title in uppercase Outfit, the count in mono on the right.
 	var t := Kit.label(shelf_title, "LeadLabel")
 	t.name = "Title"
-	t.add_theme_font_override("font", ThemeLib.font("semibold"))
+	t.uppercase = true
+	t.add_theme_font_override("font", ThemeLib.font("heading_bold", false, 1))
+	t.add_theme_font_size_override("font_size", 19)
 	head.add_child(t)
-	count_label = Kit.label(str(games.size()), "CaptionLabel")
+	head.add_child(Kit.spacer())
+	count_label = Kit.micro("%d %s" % [games.size(), "game" if games.size() == 1 else "games"])
 	count_label.name = "Count"
 	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	count_label.size_flags_vertical = Control.SIZE_FILL
-	count_label.add_theme_font_override("font", ThemeLib.font("medium", true))
 	head.add_child(count_label)
+	var tail := Control.new()
+	tail.custom_minimum_size = Vector2(PAD.x, 0)
+	head.add_child(tail)
 	add_child(head)
 
 	scroll = ScrollContainer.new()
@@ -82,6 +88,7 @@ func remembered() -> Control:
 
 func _on_focus(i: int) -> void:
 	memory = i
+	count_label.text = "%02d / %02d" % [i + 1, tiles.size()]
 	scroll_to(i)
 	tile_focused.emit(tiles[i].game, i)
 

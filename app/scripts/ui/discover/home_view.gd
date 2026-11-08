@@ -44,6 +44,18 @@ func attach_stage(layer: Control) -> void:
 	visibility_changed.connect(func(): stage.visible = is_visible_in_tree())
 
 
+## Keep the hero art (on root's stage layer) inside the spotlight's frame.
+func _sync_stage(frame: Control) -> void:
+	if stage == null or not is_instance_valid(frame) or not frame.is_inside_tree():
+		return
+	stage.frame_radius = float(ThemeLib.radius("xl"))
+	stage.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	stage.global_position = frame.global_position
+	stage.size = frame.size
+	stage._apply_fade()
+	stage.visible = is_visible_in_tree() and frame.visible
+
+
 func build() -> void:
 	shelves.clear()
 	views.clear()
@@ -61,9 +73,20 @@ func build() -> void:
 	_spot = Kit.vbox(12)
 	_spot.name = "Spotlight"
 	_spot.custom_minimum_size = Vector2(0, SPOT_H)
-	_spot.alignment = BoxContainer.ALIGNMENT_END
+	_spot.alignment = BoxContainer.ALIGNMENT_CENTER
 	_spot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(_spot)
+	# The spotlight sits in a rounded glass card; the hero art fills it.
+	var frame := PanelContainer.new()
+	frame.name = "SpotFrame"
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fsb := ThemeLib.box(Color(ThemeLib.color("glass"), 0.45), ThemeLib.radius("xl"), 32, 20)
+	fsb.border_color = ThemeLib.color("line_2")
+	fsb.set_border_width_all(1)
+	frame.add_theme_stylebox_override("panel", fsb)
+	frame.add_child(_spot)
+	root.add_child(frame)
+	frame.item_rect_changed.connect(_sync_stage.bind(frame))
+	visibility_changed.connect(_sync_stage.bind(frame))
 	header = GameHeader.new()
 	header.max_logo = Vector2(440, 120)
 	header.max_badges = 0
@@ -140,7 +163,7 @@ func build() -> void:
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_rows.add_child(spacer)
 
-	_spot.visible = not nothing
+	_spot.get_parent().visible = not nothing
 	if nothing:
 		_spot.custom_minimum_size = Vector2.ZERO
 		if stage != null:

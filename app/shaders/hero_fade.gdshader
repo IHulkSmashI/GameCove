@@ -9,6 +9,8 @@ uniform float fade_left_from = 0.10;
 uniform float fade_left_to = 0.55;
 uniform float fade_bottom_from = 0.50;
 uniform float fade_top = 0.10;
+// Inside a rounded frame: corner radius in px (0 = no frame).
+uniform float frame_radius = 0.0;
 
 varying vec2 local;
 
@@ -21,6 +23,12 @@ void fragment() {
 	float a = smoothstep(fade_left_from, fade_left_to, local.x);
 	a *= 1.0 - smoothstep(fade_bottom_from, 1.0, local.y);
 	a *= mix(0.35, 1.0, smoothstep(0.0, fade_top, local.y));
+	if (frame_radius > 0.0) {
+		vec2 p = (local - 0.5) * rect_size;
+		vec2 q = abs(p) - rect_size * 0.5 + frame_radius;
+		float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - frame_radius;
+		a *= clamp(0.5 - d, 0.0, 1.0);
+	}
 	c.a *= a;
 	COLOR = c;
 }

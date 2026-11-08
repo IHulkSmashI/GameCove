@@ -100,6 +100,17 @@ func _run() -> void:
 	g["controller"].changed.emit({"available": false, "supported": {}})
 	mp.default_focus().grab_focus()
 	await shot("device_controller_missing")
+	await finish()
+
+
+## Free main and the static caches before quitting (see shoot.gd).
+func finish() -> void:
+	if main != null and is_instance_valid(main):
+		main.get_parent().remove_child(main)
+		main.free()
+	load("res://scripts/main.gd").release_caches()
+	load("res://scripts/ui/ui_kit.gd")._art_cache.clear()
+	await frames(4)
 	quit()
 
 

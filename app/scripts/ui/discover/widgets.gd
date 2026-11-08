@@ -75,6 +75,18 @@ static func decorate(t: Button, plate: String, plate_quiet := false, extras: Arr
 		l.add_theme_color_override("font_color", Color(1, 1, 1, 0.72) if plate_quiet else Color.WHITE)
 		p.add_child(l)
 		box.add_child(p)
+	# Tiles with a title block: the pills and price sit above the title.
+	var info: Control = t.get("info_box")
+	if info != null:
+		box.anchor_top = 0.0
+		box.anchor_bottom = 0.0
+		box.offset_left = 0
+		box.offset_top = 0
+		box.offset_bottom = 0
+		box.add_theme_constant_override("separation", 3)
+		info.add_child(box)
+		info.move_child(box, 0)
+		return
 	t.card.add_child(box)
 
 

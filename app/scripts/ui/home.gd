@@ -28,7 +28,12 @@ signal downloads_requested
 
 ## Kept for callers that walk rows; Home.shelves() has the real list.
 const ROWS := [["recent", "Recently played"], ["installed", "Installed"], ["all", "All games"]]
-const SPOTLIGHT_H := 276
+const SPOTLIGHT_H := 330
+## The hero card: from under the top bar, EDGE from the sides.
+const FRAME_TOP := 76
+const FRAME_H := 330
+const FRAME_PAD := 32
+const ProgressCard := preload("res://scripts/ui/progress_card.gd")
 
 var games: Array = []
 ## The "Continue" game: most recently played installed game.
@@ -56,14 +61,46 @@ var _accent := Color(0, 0, 0, 0)
 var tile_hook: Callable = Callable()
 ## What the spotlight's main button does: {"id", "text", "icon"}.
 var spotlight_action: Dictionary = {}
+## The rounded glass card the spotlight sits in.
+var frame: Panel
+## Achievements and battery for the spotlight game (hidden without data).
+var progress: Control
 
 
 func _init() -> void:
 	name = "Home"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame = Panel.new()
+	frame.name = "HeroFrame"
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.anchor_right = 1.0
+	frame.offset_left = ThemeLib.EDGE
+	frame.offset_right = -ThemeLib.EDGE
+	frame.offset_top = FRAME_TOP
+	frame.offset_bottom = FRAME_TOP + FRAME_H
+	add_child(frame)
 	hero_stage = HeroStage.new()
+	hero_stage.use_frame(ThemeLib.EDGE, FRAME_TOP, FRAME_H, ThemeLib.radius("xl"))
 	add_child(hero_stage)
+	var frame_edge := Panel.new()
+	frame_edge.name = "HeroFrameEdge"
+	frame_edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame_edge.anchor_right = 1.0
+	frame_edge.offset_left = ThemeLib.EDGE
+	frame_edge.offset_right = -ThemeLib.EDGE
+	frame_edge.offset_top = FRAME_TOP
+	frame_edge.offset_bottom = FRAME_TOP + FRAME_H
+	add_child(frame_edge)
+	progress = ProgressCard.new()
+	progress.anchor_left = 1.0
+	progress.anchor_right = 1.0
+	progress.offset_right = -ThemeLib.EDGE - 24
+	progress.offset_left = -ThemeLib.EDGE - 24 - ProgressCard.WIDTH
+	progress.offset_bottom = FRAME_TOP + FRAME_H - 24
+	progress.offset_top = FRAME_TOP + FRAME_H - 24
+	progress.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	add_child(progress)
 	_welcome_art = Illustrations.rect("library", 280)
 	_welcome_art.anchor_left = 0.64
 	_welcome_art.anchor_right = 0.64
@@ -74,40 +111,39 @@ func _init() -> void:
 	add_child(_welcome_art)
 	var margin := Kit.margin(0)
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 48 - int(Shelf.PAD.x))
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_top", 92)
-	margin.add_theme_constant_override("margin_bottom", 58)
+	margin.add_theme_constant_override("margin_left", ThemeLib.EDGE - int(Shelf.PAD.x))
+	margin.add_theme_constant_override("margin_right", ThemeLib.EDGE - int(Shelf.PAD.x))
+	margin.add_theme_constant_override("margin_top", FRAME_TOP)
+	margin.add_theme_constant_override("margin_bottom", ThemeLib.HINT_BAR_H)
 	add_child(margin)
-	var root := Kit.vbox(26)
+	var root := Kit.vbox(ThemeLib.SPACE_3)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(root)
 
-	_spotlight = Kit.vbox(16)
+	_spotlight = Kit.vbox(ThemeLib.SPACE_5)
 	_spotlight.name = "Spotlight"
 	_spotlight.custom_minimum_size = Vector2(0, SPOTLIGHT_H)
-	_spotlight.alignment = BoxContainer.ALIGNMENT_END
+	_spotlight.alignment = BoxContainer.ALIGNMENT_CENTER
 	_spotlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var spot_pad := Kit.margin(0)
-	spot_pad.add_theme_constant_override("margin_left", int(Shelf.PAD.x))
+	spot_pad.add_theme_constant_override("margin_left", int(Shelf.PAD.x) + FRAME_PAD)
+	spot_pad.add_theme_constant_override("margin_right", ProgressCard.WIDTH + 64)
 	spot_pad.add_child(_spotlight)
 	root.add_child(spot_pad)
 
 	header = GameHeader.new()
-	header.max_logo = Vector2(470, 150)
+	header.max_logo = Vector2(440, 130)
 	_spotlight.add_child(header)
 
-	_buttons_row = Kit.hbox(14)
+	_buttons_row = Kit.hbox(ThemeLib.SPACE_3)
 	_buttons_row.name = "HeroButtons"
-	play_button = Kit.button("Play", "AccentButton")
+	play_button = Kit.primary("Play", "A", "play")
 	play_button.name = "Play"
-	play_button.custom_minimum_size = Vector2(196, 58)
-	play_button.icon = Icons.tex("play", 22)
-	play_button.add_theme_constant_override("h_separation", 12)
+	play_button.custom_minimum_size = Vector2(176, 50)
 	play_button.pressed.connect(_on_play)
-	page_button = Kit.button("Game page")
+	page_button = Kit.secondary("Game page", "info")
 	page_button.name = "GamePage"
-	page_button.custom_minimum_size = Vector2(176, 58)
+	page_button.custom_minimum_size = Vector2(0, 50)
 	page_button.pressed.connect(func(): open_requested.emit(spotlight_game))
 	_buttons_row.add_child(play_button)
 	_buttons_row.add_child(page_button)
@@ -132,7 +168,7 @@ func _init() -> void:
 	var tips_pad := Kit.margin(0)
 	tips_pad.add_theme_constant_override("margin_left", int(Shelf.PAD.x))
 	tips_pad.add_theme_constant_override("margin_right", int(Shelf.PAD.x))
-	tips_pad.add_theme_constant_override("margin_top", 32)
+	tips_pad.add_theme_constant_override("margin_top", ThemeLib.SPACE_5)
 	tips_pad.add_child(tips)
 	root.add_child(tips_pad)
 	set_games([])
@@ -201,7 +237,7 @@ func set_status(_device_name: String, _battery: Dictionary, _clock: String) -> v
 func set_accent(c: Color) -> void:
 	_accent = c
 	_style_play()
-	header.eyebrow.add_theme_color_override("font_color", c if c.a > 0.0 else ThemeLib.color("accent"))
+	header.set_tag_color(c)
 
 
 func default_focus() -> Control:
@@ -245,6 +281,7 @@ func _set_spotlight(g: Dictionary, line: String, animate: bool) -> void:
 	_scroll.visible = not empty
 	if empty:
 		hero_stage.show_welcome()
+		progress.show_game({})
 	else:
 		hero_stage.show_game(g)
 	header.visible = not empty
@@ -254,6 +291,7 @@ func _set_spotlight(g: Dictionary, line: String, animate: bool) -> void:
 		if line == "":
 			line = "Jump back in" if g.get("key", "") == hero_game.get("key", "-") and int(g.get("last_played", 0)) > 0 else ""
 		header.show_game(g, line, animate)
+		progress.show_game(g)
 		spotlight_action = action_for(g)
 		play_button.text = spotlight_action["text"]
 		_style_play()
@@ -276,7 +314,30 @@ func set_top_target(c: Control) -> void:
 
 func _style_play() -> void:
 	Kit.accent_button(play_button, _accent)
-	play_button.icon = load("res://scripts/ui/games/game_icons.gd").tex(spotlight_action.get("icon", "play"), 22)
+	play_button.icon = load("res://scripts/ui/games/game_icons.gd").tex(spotlight_action.get("icon", "play"), 20)
+
+
+func _style_frame() -> void:
+	var r := ThemeLib.radius("xl")
+	var bg := ThemeLib.box(Color(ThemeLib.color("glass"), 0.55 if ThemeLib.is_dark() else 0.75), r, 0, 0)
+	frame.add_theme_stylebox_override("panel", bg)
+	var edge := StyleBoxFlat.new()
+	edge.draw_center = false
+	edge.border_color = ThemeLib.color("line_2")
+	edge.set_border_width_all(1)
+	edge.set_corner_radius_all(r)
+	edge.anti_aliasing = true
+	frame.get_parent().get_node("HeroFrameEdge").add_theme_stylebox_override("panel", edge)
+
+
+## Achievements service for the progress card (Achievements autoload or a fake).
+func set_achievements(svc: Object) -> void:
+	progress.set_service(svc)
+
+
+## "~2 h 45 min" of battery left, or "" when unknown (main.gd works it out).
+func set_battery_left(text: String) -> void:
+	progress.set_battery_left(text)
 
 
 ## The spotlight button for a game: Play, Install, Update, or the download's
@@ -399,4 +460,4 @@ static func focus_later(c: Control) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and play_button != null:
 		_style_play()
-		page_button.icon = null
+		_style_frame()

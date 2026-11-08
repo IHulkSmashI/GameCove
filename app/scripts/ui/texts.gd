@@ -83,10 +83,10 @@ const EXPLAIN_VALUE := {
 }
 
 const THEME_LINES := {
-	"cove": "Teal on deep navy. The GameCove look.",
-	"midnight": "True black with ice-blue accents. Saves power on OLED screens.",
-	"sunset": "Warm plum and apricot.",
-	"light": "Dark text on light panels, highest contrast in bright rooms.",
+	"cove": "Electric cyan and violet on near-black. The GameCove look.",
+	"midnight": "True black with ice-blue and lilac. Saves power on OLED screens.",
+	"sunset": "Apricot and rose on deep plum.",
+	"light": "Dark text on light glass, highest contrast in bright rooms.",
 }
 const SOUND_LEVELS := ["off", "low", "medium", "high"]
 const SOUND_LABELS := {"off": "Off", "low": "Low", "medium": "Medium", "high": "High"}

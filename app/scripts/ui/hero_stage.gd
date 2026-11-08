@@ -18,6 +18,8 @@ var layers: Array[TextureRect] = []
 var _front := 0
 var _path := ""
 var _paused := false
+## Inside the Home hero frame: rounded corners, no drift (it would leave the frame).
+var frame_radius := 0.0
 
 
 func _init() -> void:
@@ -58,7 +60,12 @@ func _apply_fade() -> void:
 		m.set_shader_parameter("fade_left_from", 0.10 if dark else 0.40)
 		m.set_shader_parameter("fade_left_to", 0.55 if dark else 0.85)
 		m.set_shader_parameter("fade_top", 0.10 if dark else 0.35)
-		m.set_shader_parameter("fade_bottom_from", 0.50 if dark else 0.40)
+		m.set_shader_parameter("fade_bottom_from", (0.50 if dark else 0.40) if frame_radius <= 0.0 else 0.70)
+		m.set_shader_parameter("frame_radius", frame_radius)
+		if frame_radius > 0.0:
+			m.set_shader_parameter("fade_left_from", 0.22 if dark else 0.40)
+			m.set_shader_parameter("fade_left_to", 0.68 if dark else 0.85)
+			m.set_shader_parameter("fade_top", 0.0)
 	self_modulate = Color.WHITE
 	modulate.a = 1.0 if dark else 0.8
 
@@ -119,7 +126,7 @@ func _crossfade(tex: Texture2D) -> void:
 	new.modulate.a = 0.0
 	Motion.to(new, "modulate:a", 1.0 if tex != null else 0.0, CROSSFADE)
 	Motion.to(old, "modulate:a", 0.0, CROSSFADE)
-	if tex != null and not Motion.reduce and not _paused:
+	if tex != null and not Motion.reduce and not _paused and frame_radius <= 0.0:
 		Motion.to(new, "scale", Vector2(DRIFT_SCALE, DRIFT_SCALE), DRIFT_S, Tween.TRANS_SINE, Tween.EASE_IN_OUT)
 
 
@@ -131,3 +138,18 @@ func pause_motion() -> void:
 
 func resume_motion() -> void:
 	_paused = false
+
+
+## Put the stage inside a rounded frame (Home's hero card): `side` px from the
+## left and right edges, from `top` down `height` px.
+func use_frame(side: float, top: float, height: float, radius: float) -> void:
+	frame_radius = radius
+	anchor_left = 0.0
+	anchor_right = 1.0
+	anchor_top = 0.0
+	anchor_bottom = 0.0
+	offset_left = side
+	offset_right = -side
+	offset_top = top
+	offset_bottom = top + height
+	_apply_fade()

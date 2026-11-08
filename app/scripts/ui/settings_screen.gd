@@ -189,6 +189,11 @@ func _category_button(id: String) -> Button:
 	b.name = "Cat_" + id
 	b.toggle_mode = true
 	b.custom_minimum_size = Vector2(0, 66)
+	# The chosen category: a cyan-to-violet tint with an accent edge.
+	var acc := ThemeLib.color("accent")
+	var chosen := ThemeLib.gradient_box(Color(acc, 0.20), Color(ThemeLib.color("accent_2"), 0.30), ThemeLib.radius("m"), Color(acc, 0.55), 18, 10)
+	b.add_theme_stylebox_override("pressed", chosen)
+	b.add_theme_stylebox_override("hover_pressed", chosen)
 	b.focus_entered.connect(func(): show_category(id))
 	b.pressed.connect(func():
 		b.set_pressed_no_signal(true)

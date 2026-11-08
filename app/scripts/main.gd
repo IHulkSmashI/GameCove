@@ -37,6 +37,7 @@ const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 const GameCloser := preload("res://scripts/ui/games/game_closer.gd")
 ## First-run setup (s-settings); loaded at runtime only when it exists.
 const SETUP_FLOW := "res://scripts/ui/setup/setup_flow.gd"
+const Glyph := preload("res://scripts/ui/glyph.gd")
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
@@ -54,6 +55,9 @@ var quick_menu: Control
 var backdrop: Control
 var top_bar: HBoxContainer
 var hint_bar: HBoxContainer
+## The bottom band: status text on the left, hint_bar's prompts on the right.
+var hint_band: PanelContainer
+var hint_status: Label
 var toasts: VBoxContainer
 var launch_overlay: Control
 var status_panel: PanelContainer
@@ -97,6 +101,8 @@ var setup_flow: Node
 func _ready() -> void:
 	UiPrefs.load_prefs()
 	_load_extra_prefs()
+	if Device.has_method("glyph_set"):
+		Glyph.use_set(str(Device.glyph_set()))
 	ThemeLib.use(UiPrefs.theme, device_accent())
 	theme = ThemeLib.build()
 
@@ -150,28 +156,39 @@ func _ready() -> void:
 	_hint_shade.anchor_top = 1.0
 	_hint_shade.anchor_right = 1.0
 	_hint_shade.anchor_bottom = 1.0
-	_hint_shade.offset_top = -64
+	_hint_shade.offset_top = -ThemeLib.HINT_BAR_H - 40
 	add_child(_hint_shade)
+	hint_band = PanelContainer.new()
+	hint_band.name = "HintBand"
+	hint_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_band.anchor_top = 1.0
+	hint_band.anchor_right = 1.0
+	hint_band.anchor_bottom = 1.0
+	hint_band.offset_top = -ThemeLib.HINT_BAR_H
+	add_child(hint_band)
+	var band_row := Kit.hbox(ThemeLib.SPACE_4)
+	band_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_band.add_child(band_row)
+	hint_status = Kit.micro("")
+	hint_status.name = "HintStatus"
+	hint_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	band_row.add_child(hint_status)
+	band_row.add_child(Kit.spacer())
 	hint_bar = Kit.hbox(22)
 	hint_bar.name = "HintBar"
 	hint_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hint_bar.anchor_top = 1.0
-	hint_bar.anchor_right = 1.0
-	hint_bar.anchor_bottom = 1.0
-	hint_bar.offset_left = 48
-	hint_bar.offset_right = -48
-	hint_bar.offset_top = -48
-	hint_bar.offset_bottom = -14
-	add_child(hint_bar)
+	hint_bar.alignment = BoxContainer.ALIGNMENT_END
+	band_row.add_child(hint_bar)
 
 	top_bar = TopBar.new()
 	top_bar.anchor_right = 1.0
-	top_bar.offset_left = 40
-	top_bar.offset_right = -32
-	top_bar.offset_top = 16
-	top_bar.offset_bottom = 64
+	top_bar.offset_left = ThemeLib.EDGE
+	top_bar.offset_right = -ThemeLib.EDGE
+	top_bar.offset_top = 10
+	top_bar.offset_bottom = ThemeLib.TOP_BAR_H - 10
 	top_bar.tab_pressed.connect(func(id): show_screen(id))
 	top_bar.status_pressed.connect(_open_status)
+	top_bar.search_pressed.connect(open_search)
 	add_child(top_bar)
 	downloads_button = DownloadsButton.new()
 	downloads_button.pressed.connect(open_downloads)
@@ -185,7 +202,7 @@ func _ready() -> void:
 	_modal_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_modal_layer)
 	move_child(_hint_shade, -1)
-	move_child(hint_bar, -1)
+	move_child(hint_band, -1)
 
 	toasts = Toasts.new()
 	add_child(toasts)
@@ -293,6 +310,7 @@ func _svc(n: String) -> Node:
 func _wire_games() -> void:
 	store_api = Library
 	achievements_api = _svc("Achievements")
+	home.set_achievements(achievements_api)
 	install_state = InstallState.new()
 	install_state.name = "InstallState"
 	add_child(install_state)
@@ -323,6 +341,7 @@ func use_store_api(api: Object, achievements: Object = null) -> void:
 	store_api = api
 	if achievements != null:
 		achievements_api = achievements
+		home.set_achievements(achievements)
 	game_actions.library = api
 	if api.has_signal("action_failed"):
 		api.action_failed.connect(_on_action_failed)
@@ -545,6 +564,8 @@ static func release_caches() -> void:
 	load("res://scripts/ui/art_cache.gd").shutdown()
 	ThemeLib._fonts.clear()
 	ThemeLib._knobs.clear()
+	ThemeLib._gradients.clear()
+	Kit._art_cache.clear()
 
 
 func _on_live_tick() -> void:
@@ -597,7 +618,10 @@ func _update_timer() -> void:
 func _refresh_live() -> void:
 	var b: Dictionary = Device.battery()
 	top_bar.set_status(Device.display_name(), b, clock_text(Time.get_time_dict_from_system()))
+	top_bar.set_telemetry(telemetry())
+	home.set_battery_left(battery_left_text(b, _battery_full_wh()))
 	status_panel.set_battery(Device.display_name(), b)
+	_refresh_hint_status()
 	if TopBar.is_low(b):
 		if not _battery_warned:
 			_battery_warned = true
@@ -606,6 +630,68 @@ func _refresh_live() -> void:
 		_battery_warned = false
 	if quick_menu.visible:
 		quick_menu.refresh_live()
+
+
+## What the top bar's telemetry pill shows: TDP and power profile when a power
+## backend is there, CPU temperature while a game is measured. -1 / "" = hide.
+func telemetry() -> Dictionary:
+	var out := {"tdp_w": -1.0, "profile": "", "temp_c": -1.0}
+	if Power.has_method("state"):
+		var st: Dictionary = Power.state()
+		if float(st.get("tdp_w", -1.0)) > 0.0:
+			out["tdp_w"] = float(st["tdp_w"])
+			out["profile"] = str(st.get("profile", ""))
+	var perf := _svc("PerfMonitor")
+	if perf != null and perf.has_method("is_active") and perf.is_active() and "latest" in perf:
+		var l: Dictionary = perf.latest
+		out["temp_c"] = float(l.get("cpu_temp", -1.0))
+	return out
+
+
+var _full_wh := -2.0
+
+## The battery's full capacity in Wh from Device.info() (read once), -1 if unknown.
+func _battery_full_wh() -> float:
+	if _full_wh < -1.0:
+		_full_wh = -1.0
+		if Device.has_method("battery_path") and Device.battery_path() != "":
+			var e := str(Device.read_text(Device.battery_path() + "energy_full"))
+			if e.is_valid_int() and e.to_int() > 0:
+				_full_wh = e.to_int() / 1_000_000.0
+	return _full_wh
+
+
+## "~2 h 45 min" while discharging with a known draw and capacity, else "".
+static func battery_left_text(b: Dictionary, full_wh: float) -> String:
+	var pct := int(b.get("percent", -1))
+	var w := float(b.get("watts", -1.0))
+	if b.get("status", "") != "Discharging" or pct < 0 or w <= 0.5 or full_wh <= 0.0:
+		return ""
+	var minutes := int(full_wh * pct / 100.0 / w * 60.0)
+	if minutes < 1:
+		return ""
+	return "~%d h %02d min" % [minutes / 60, minutes % 60] if minutes >= 60 else "~%d min" % minutes
+
+
+## Left of the hint bar: the app and version, the device, a running game.
+func _refresh_hint_status() -> void:
+	if hint_status == null:
+		return
+	var parts: Array[String] = ["● GameCove " + _version().trim_prefix("v")]
+	if not playing.is_empty() and session != null and session.has_method("is_active") and session.is_active():
+		parts.append("Playing " + str(playing.get("title", "")))
+	else:
+		var dn := str(Device.display_name())
+		if dn != "":
+			parts.append(dn)
+	hint_status.text = "   ".join(parts)
+
+
+## The top bar's search: Library with its search keyboard open.
+func open_search() -> void:
+	show_screen("library")
+	if library_screen.has_method("open_search"):
+		library_screen.open_search.call_deferred()
 
 
 static func clock_text(t: Dictionary) -> String:
@@ -934,6 +1020,7 @@ func _set_games(list: Array) -> void:
 	library_screen.set_games(list)
 	var fresh := View.newly_added(list, int(Time.get_unix_time_from_system()))
 	top_bar.set_dot("library", fresh.any(func(g): return not _seen_new.has(g.get("key", ""))))
+	top_bar.set_count("library", list.size() if not list.is_empty() else -1)
 
 
 func _mark_new_seen() -> void:
@@ -1044,13 +1131,18 @@ static func hints_for(ctx: Dictionary) -> Array:
 func _style_hint_shade() -> void:
 	var g := Gradient.new()
 	var sc: Color = ThemeLib.color("scrim")
-	g.colors = PackedColorArray([Color(sc, 0.0), Color(sc, 0.7)])
+	g.colors = PackedColorArray([Color(sc, 0.0), Color(sc, 0.75)])
 	var t := GradientTexture2D.new()
 	t.gradient = g
 	t.width = 4
 	t.height = 64
 	t.fill_to = Vector2(0, 1)
 	_hint_shade.texture = t
+	# The band: dark glass with a hairline on top, the screen's edge margins.
+	var band := ThemeLib.box(Color(ThemeLib.color("glass"), 0.72 if ThemeLib.is_dark() else 0.85), 0, ThemeLib.EDGE, 0)
+	band.border_color = ThemeLib.color("line")
+	band.border_width_top = 1
+	hint_band.add_theme_stylebox_override("panel", band)
 
 
 # ------------------------------------------------------------ settings
