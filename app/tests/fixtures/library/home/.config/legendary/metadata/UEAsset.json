@@ -1,0 +1,33 @@
+{
+  "app_name": "UEAsset",
+  "app_title": "Some Marketplace Pack",
+  "asset_infos": {
+    "Windows": {
+      "app_name": "UEAsset",
+      "asset_id": "UEAsset",
+      "build_version": "1",
+      "catalog_item_id": "cat-UEAsset",
+      "label_name": "Live-Windows",
+      "metadata": {},
+      "namespace": "ns-UEAsset"
+    }
+  },
+  "base_urls": [],
+  "metadata": {
+    "id": "cat-UEAsset",
+    "namespace": "ue",
+    "title": "Some Marketplace Pack",
+    "keyImages": [],
+    "customAttributes": {},
+    "categories": [
+      {
+        "path": "games"
+      },
+      {
+        "path": "applications"
+      }
+    ]
+  },
+  "sidecar": null,
+  "achievements": null
+}

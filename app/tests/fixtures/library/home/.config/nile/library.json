@@ -1,0 +1,24 @@
+[
+  {
+    "id": "amzn1.entitlement.amzn1.adg.product.aaaa-1111",
+    "product": {
+      "id": "amzn1.adg.product.aaaa-1111",
+      "title": "Fallout 3: Game of the Year Edition",
+      "productDetail": {
+        "iconUrl": "https://m.media-amazon.com/amzn1.adg.product.aaaa-1111_icon.png",
+        "details": {
+          "backgroundUrl1": "",
+          "backgroundUrl2": "",
+          "logoUrl": "",
+          "genres": [],
+          "websites": {
+            "official": null,
+            "steam": null,
+            "support": null,
+            "gog": null
+          }
+        }
+      }
+    }
+  }
+]

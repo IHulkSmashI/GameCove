@@ -1,0 +1,33 @@
+{
+  "app_name": "Winey",
+  "app_title": "Winey Game",
+  "asset_infos": {
+    "Windows": {
+      "app_name": "Winey",
+      "asset_id": "Winey",
+      "build_version": "1",
+      "catalog_item_id": "cat-Winey",
+      "label_name": "Live-Windows",
+      "metadata": {},
+      "namespace": "ns-Winey"
+    }
+  },
+  "base_urls": [],
+  "metadata": {
+    "id": "cat-Winey",
+    "namespace": "ns-Winey",
+    "title": "Winey Game",
+    "keyImages": [],
+    "customAttributes": {},
+    "categories": [
+      {
+        "path": "games"
+      },
+      {
+        "path": "applications"
+      }
+    ]
+  },
+  "sidecar": null,
+  "achievements": null
+}

@@ -1,0 +1,46 @@
+[
+  {
+    "id": "amzn1.entitlement.amzn1.adg.product.aaaa-1111",
+    "product": {
+      "id": "amzn1.adg.product.aaaa-1111",
+      "title": "Fallout 3: Game of the Year Edition",
+      "productDetail": {
+        "iconUrl": "https://m.media-amazon.com/amzn1.adg.product.aaaa-1111_icon.png",
+        "details": {
+          "backgroundUrl1": "",
+          "backgroundUrl2": "",
+          "logoUrl": "",
+          "genres": [],
+          "websites": {
+            "official": null,
+            "steam": "https://store.steampowered.com/app/22370/",
+            "support": null,
+            "gog": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "amzn1.entitlement.amzn1.adg.product.bbbb-2222",
+    "product": {
+      "id": "amzn1.adg.product.bbbb-2222",
+      "title": "Some Amazon Game",
+      "productDetail": {
+        "iconUrl": "https://m.media-amazon.com/amzn1.adg.product.bbbb-2222_icon.png",
+        "details": {
+          "backgroundUrl1": "",
+          "backgroundUrl2": "",
+          "logoUrl": "",
+          "genres": [],
+          "websites": {
+            "official": null,
+            "steam": null,
+            "support": null,
+            "gog": null
+          }
+        }
+      }
+    }
+  }
+]

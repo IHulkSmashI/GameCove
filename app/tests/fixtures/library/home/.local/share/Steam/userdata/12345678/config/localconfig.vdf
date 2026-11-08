@@ -1,0 +1,35 @@
+"UserLocalConfigStore"
+{
+	"Broadcast"
+	{
+		"Permissions"		"1"
+	}
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"apps"
+				{
+					"976730"
+					{
+						"LastPlayed"		"1762000000"
+						"Playtime"		"1234"
+						"Playtime2wks"		"60"
+						"cloud"
+						{
+							"last_sync_state"		"synchronized"
+						}
+					}
+					"1145360"
+					{
+						"LastPlayed"		"1700000000"
+						"Playtime"		"90"
+						"LaunchOptions"		"PROTON_LOG=1 \"%command%\""
+					}
+				}
+			}
+		}
+	}
+}

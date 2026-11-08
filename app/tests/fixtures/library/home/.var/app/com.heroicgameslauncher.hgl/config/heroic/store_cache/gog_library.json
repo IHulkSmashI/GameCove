@@ -1,0 +1,46 @@
+{
+  "games": [
+    {
+      "app_name": "1207664663",
+      "runner": "gog",
+      "title": "The Witcher 3: Wild Hunt - Game of the Year Edition",
+      "art_cover": "https://images.gog-statics.com/witcher_wide.jpg",
+      "art_square": "https://images.gog-statics.com/witcher_square.jpg",
+      "is_installed": true,
+      "canRunOffline": true
+    },
+    {
+      "app_name": "1453375253",
+      "runner": "gog",
+      "title": "Stardew Valley",
+      "art_cover": "",
+      "art_square": "",
+      "is_installed": true
+    },
+    {
+      "app_name": "1495134320",
+      "runner": "gog",
+      "title": "Cyberpunk 2077\u00ae",
+      "art_cover": "",
+      "art_square": "",
+      "is_installed": false
+    },
+    {
+      "app_name": "1234567890",
+      "runner": "gog",
+      "title": "Witcher DLC",
+      "is_dlc": true
+    },
+    {
+      "app_name": "gog-redist",
+      "runner": "gog",
+      "title": "Galaxy Common Redistributables",
+      "install": {
+        "is_dlc": true
+      }
+    }
+  ],
+  "__timestamp": {
+    "games": "Sun Nov 08 2026 10:00:00 GMT-0500"
+  }
+}
