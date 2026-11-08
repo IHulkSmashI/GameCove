@@ -1,0 +1,20 @@
+[project]
+name = "gamecove-gamedb"
+version = "0.1.0"
+description = "Builds GameCove's open game database from free, open sources"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["gamedb", "gamedb.sources"]

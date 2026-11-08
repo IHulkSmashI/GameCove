@@ -1,0 +1,43 @@
+; GameCove — Godot 4 project settings.
+; Compatibility renderer and low-processor mode keep idle power down on handhelds.
+
+config_version=5
+
+[application]
+
+config/name="GameCove"
+config/description="Every store. Every handheld. On Linux."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+run/low_processor_mode=true
+
+[audio]
+
+driver/driver="Dummy"
+
+[autoload]
+
+Device="*res://scripts/device.gd"
+SteamLibrary="*res://scripts/steam_library.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=800
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[gui]
+
+common/drop_mouse_on_gui_input_disabled=true
+
+[physics]
+
+2d/physics_engine="Dummy"
+3d/physics_engine="Dummy"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.07, 0.086, 0.11, 1)

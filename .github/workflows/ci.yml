@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gamedb:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gamedb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e '.[test]'
+      - run: pytest -q
+
+  app:
+    runs-on: ubuntu-latest
+    env:
+      GODOT: "4.7.2"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get Godot
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT}-stable_linux.x86_64" godot
+      - name: Import and load the project (fails on script errors)
+        run: |
+          ./godot --headless --path app --import 2>&1 | tee import.log
+          ./godot --headless --path app --quit-after 120 2>&1 | tee run.log
+          ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log run.log

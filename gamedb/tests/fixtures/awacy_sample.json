@@ -1,0 +1,196 @@
+[
+ {
+  "url": "",
+  "name": "Halo: The Master Chief Collection",
+  "logo": "",
+  "native": false,
+  "status": "Supported",
+  "reference": "",
+  "anticheats": [
+   "Easy Anti-Cheat"
+  ],
+  "notes": [
+   [
+    "All-modes enabled with minor caveats",
+    "https://www.gamingonlinux.com/2023/04/halo-the-master-chief-collection-gets-steam-deck-support/"
+   ],
+   [
+    "Singleplayer, co-op, and custom matches work",
+    "https://www.protondb.com/app/976730#s1M6yjsTt"
+   ]
+  ],
+  "updates": [
+   {
+    "name": "Tried to enable EAC",
+    "date": "Apr 12, 2022, 8:10 AM GMT+2",
+    "reference": "https://www.xda-developers.com/halo-mcc-broken-steam-deck/"
+   },
+   {
+    "name": "Updated Linux EAC Files",
+    "date": "Aug 31, 2022, 17:00:12 UTC",
+    "reference": "https://steamdb.info/patchnotes/9367265/"
+   },
+   {
+    "name": "Still actively working on it",
+    "date": "Dec 15, 2022, 4:15 PM GMT+1",
+    "reference": "https://www.theverge.com/23499215/valve-steam-deck-interview-late-2022"
+   },
+   {
+    "name": "Steam Deck Support",
+    "date": "Apr 6, 2023, 8:00 PM UTC",
+    "reference": "https://support.halowaypoint.com/hc/en-us/articles/14589112499348"
+   }
+  ],
+  "storeIds": {
+   "steam": "976730"
+  },
+  "slug": "halo-the-master-chief-collection",
+  "dateChanged": "2024-01-19T04:40:56.000Z"
+ },
+ {
+  "url": "",
+  "name": "Battlefield\u2122 2042",
+  "logo": "",
+  "native": false,
+  "status": "Denied",
+  "reference": "https://www.protondb.com/app/1517290#atmpx3XrXL",
+  "anticheats": [
+   "EA anticheat"
+  ],
+  "notes": [],
+  "updates": [],
+  "storeIds": {
+   "steam": "1517290",
+   "epic": {
+    "namespace": "52f57f57120c440fad9bfa0e6c279317",
+    "slug": "battlefield-2042"
+   }
+  },
+  "slug": "battlefield-2042",
+  "dateChanged": "2024-11-04T00:18:17.181Z"
+ },
+ {
+  "url": "https://www.ea.com/games/apex-legends",
+  "name": "Apex Legends",
+  "logo": "",
+  "native": false,
+  "status": "Denied",
+  "reference": "",
+  "anticheats": [
+   "Easy Anti-Cheat",
+   "Hyperion"
+  ],
+  "notes": [],
+  "updates": [
+   {
+    "name": "Enabled Linux support shortly after SteamDeck launch",
+    "date": "2022-03-01T18:00:27+00:00",
+    "reference": "https://steamdb.info/patchnotes/8270674/"
+   },
+   {
+    "name": "Linux support disabled",
+    "date": "Oct 31, 2024, 4:07 PM UTC",
+    "reference": "https://x.com/PlayApex/status/1852019667315102151"
+   }
+  ],
+  "storeIds": {
+   "steam": "1172470"
+  },
+  "slug": "apex-legends",
+  "dateChanged": "2024-10-31T18:29:00.000Z"
+ },
+ {
+  "url": "https://www.fortnite.com/",
+  "name": "Fortnite",
+  "logo": "",
+  "native": false,
+  "status": "Denied",
+  "reference": "",
+  "anticheats": [
+   "Easy Anti-Cheat"
+  ],
+  "notes": [
+   [
+    "Works on Xbox-Cloud",
+    "https://news.xbox.com/en-us/2022/05/05/play-fortnite-with-xbox-cloud-gaming-for-free/"
+   ]
+  ],
+  "updates": [
+   {
+    "name": "Not confident in anti-cheat",
+    "date": "Feb 07, 2022, 6:59 AM GMT+2",
+    "reference": "https://twitter.com/TimSweeneyEpic/status/1490565925648715781"
+   },
+   {
+    "name": "Removed Hyperion",
+    "date": "Nov 1, 2022, 6:43 PM GMT+1",
+    "reference": "https://github.com/Starz0r/AreWeAntiCheatYet/issues/918"
+   },
+   {
+    "name": "Was running for a short period of time",
+    "date": "Nov 2, 2022, 8:04 AM GMT+1",
+    "reference": "https://github.com/Starz0r/AreWeAntiCheatYet/issues/918#issuecomment-1299673303"
+   },
+   {
+    "name": "Removed BattlEye",
+    "date": "Jun 11, 2024, 5:34 PM GMT+1",
+    "reference": "https://x.com/ShiinaBR/status/1800567329870537171"
+   }
+  ],
+  "storeIds": {
+   "epic": {
+    "namespace": "fn",
+    "slug": "fortnite"
+   }
+  },
+  "slug": "fortnite",
+  "dateChanged": "2024-10-04T17:23:46.000Z"
+ },
+ {
+  "url": "https://www.fortnite.com/",
+  "name": "Fortnite",
+  "logo": "",
+  "native": false,
+  "status": "Denied",
+  "reference": "",
+  "anticheats": [
+   "Easy Anti-Cheat"
+  ],
+  "notes": [
+   [
+    "Works on Xbox-Cloud",
+    "https://news.xbox.com/en-us/2022/05/05/play-fortnite-with-xbox-cloud-gaming-for-free/"
+   ]
+  ],
+  "updates": [
+   {
+    "name": "Not confident in anti-cheat",
+    "date": "Feb 07, 2022, 6:59 AM GMT+2",
+    "reference": "https://twitter.com/TimSweeneyEpic/status/1490565925648715781"
+   },
+   {
+    "name": "Removed Hyperion",
+    "date": "Nov 1, 2022, 6:43 PM GMT+1",
+    "reference": "https://github.com/Starz0r/AreWeAntiCheatYet/issues/918"
+   },
+   {
+    "name": "Was running for a short period of time",
+    "date": "Nov 2, 2022, 8:04 AM GMT+1",
+    "reference": "https://github.com/Starz0r/AreWeAntiCheatYet/issues/918#issuecomment-1299673303"
+   },
+   {
+    "name": "Removed BattlEye",
+    "date": "Jun 11, 2024, 5:34 PM GMT+1",
+    "reference": "https://x.com/ShiinaBR/status/1800567329870537171"
+   }
+  ],
+  "storeIds": {
+   "epic": {
+    "namespace": "fn",
+    "slug": "fortnite"
+   }
+  },
+  "slug": "fortnite",
+  "dateChanged": "2024-10-04T17:23:46.000Z"
+ }
+]

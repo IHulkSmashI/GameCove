@@ -1,0 +1,11 @@
+# Godot
+app/.godot/
+*.import
+export_presets.cfg
+
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+gamedb/dist/
+.venv/
