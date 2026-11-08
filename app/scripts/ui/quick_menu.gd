@@ -13,10 +13,15 @@ const FixRow := preload("res://scripts/ui/fix_row.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
+const TS := preload("res://scripts/ui/texts_settings.gd")
+const Services := preload("res://scripts/ui/settings/services.gd")
 
 signal closed
 ## A result worth a toast (fix installed or removed): text, tone (good / bad).
 signal notice(text: String, tone: String)
+## "Exit game" was confirmed for `game`. The host closes it (main.gd owns the
+## running game); the button only shows while something listens.
+signal exit_game_requested(game: Dictionary)
 
 const SECTIONS := ["This game", "Power", "Screen", "Controller", "Device"]
 const SECTION_ICONS := ["game", "bolt", "screen", "gamepad", "handheld"]
@@ -25,6 +30,7 @@ const TOP_INSET := 72.0
 const SUPPORT_TEXT := {
 	"full": "Full support: tested on this device by the GameCove team.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
+	"partial": TS.QM_SUPPORT_PARTIAL,
 	"generic": "Generic: device-specific settings stay hidden until someone tests this device.",
 }
 ## The one root helper (docs/CONTRACTS.md "Root actions"). Status works without
@@ -39,6 +45,9 @@ var device: Object
 var power: Object
 var launcher: Object
 var gamescope: Object
+## Optional: PerfMonitor (overlay level) and the running GameSession.
+var perf: Object
+var session: Object
 
 var section := 0
 var game: Dictionary = {}
@@ -64,6 +73,11 @@ var _accel_wanted := false
 var _building := false
 var _steam_armed := false
 var _steam_button: Button
+var _exit_armed := false
+var _exit_button: Button
+var _session_key := ""
+var _session_start_ms := 0
+var _limit := {"cant_reach": false, "info": {}}
 
 
 ## services: {"device", "power", "launcher", "gamescope"} (the autoloads, or fakes in tests),
@@ -80,10 +94,19 @@ func setup(services: Dictionary) -> void:
 	power = services["power"]
 	launcher = services["launcher"]
 	gamescope = services["gamescope"]
+	perf = services.get("perf")
+	if services.has("session"):
+		attach_session(services["session"])
 	if power.has_signal("changed"):
 		power.changed.connect(_on_power_changed)
 	if power.has_signal("applied"):
 		power.applied.connect(func(setting, ok): _apply(ok, null, setting))
+	if power.has_signal("autotune_limit"):
+		power.autotune_limit.connect(_on_autotune_limit)
+	if power.has_signal("autotune_changed"):
+		power.autotune_changed.connect(func(_on):
+			if visible and section == 1:
+				show_section(1, _focused_row()))
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	visible = false
 
@@ -228,6 +251,8 @@ func _shoulder(text: String) -> Control:
 ## `for_game` is the game the "This game" section edits ({} for none).
 func open(for_game: Dictionary) -> void:
 	game = for_game
+	if perf == null:
+		perf = Services.from_tree(self).get("perf")
 	visible = true
 	_set_header(for_game)
 	_animate_in()
@@ -305,6 +330,8 @@ static func _is_shoulder(event: InputEvent, button: JoyButton, key: Key) -> bool
 func show_section(i: int, keep_focus := "") -> void:
 	section = i
 	status_label.text = ""
+	_exit_armed = false
+	_exit_button = null
 	for t in tabs.size():
 		tabs[t].set_pressed_no_signal(t == i)
 		# Icons for every section, the label only under the active one.
@@ -402,6 +429,141 @@ func _build_game() -> void:
 	form.saved.connect(_on_game_settings_saved)
 	body.add_child(form)
 	_focusables.append_array(form.focusables())
+	_build_session()
+
+
+# ------------------------------------------------------------ running game
+
+## Follows the host's GameSession for "Playing for" and Exit game.
+## main.gd: quick_menu.attach_session(session) after making it.
+func attach_session(s: Object) -> void:
+	session = s
+	if s == null:
+		return
+	if s.has_signal("started"):
+		s.started.connect(func(g: Dictionary):
+			_session_key = str(g.get("key", ""))
+			_session_start_ms = Time.get_ticks_msec())
+	if s.has_signal("ended"):
+		s.ended.connect(func(_g):
+			_session_key = ""
+			_session_start_ms = 0)
+	if s.has_method("is_active") and s.is_active() and "game" in s:
+		_session_key = str(s.game.get("key", ""))
+		_session_start_ms = Time.get_ticks_msec()
+
+
+## Seconds the open game has run this session, or -1 if it isn't running.
+func session_seconds() -> int:
+	if _session_key == "" or _session_key != str(game.get("key", "")):
+		return -1
+	return int((Time.get_ticks_msec() - _session_start_ms) / 1000)
+
+
+func _build_session() -> void:
+	var secs := session_seconds()
+	if secs < 0:
+		return
+	_line(TS.QM_SESSION % TS.session_time(secs).to_lower() if secs >= 60 else TS.session_time(secs), "AccentLabel", "SessionTime")
+	if exit_game_requested.get_connections().is_empty():
+		return
+	var box := Kit.vbox(4)
+	box.name = "ExitGame"
+	_exit_button = Kit.button(TS.QM_EXIT)
+	_exit_button.name = "Button"
+	_exit_button.icon = Icons.tex("power", 22, ThemeLib.color("text"))
+	_exit_button.custom_minimum_size = Vector2(0, 54)
+	_exit_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_exit_button.pressed.connect(_on_exit_pressed)
+	_exit_button.focus_exited.connect(_disarm_exit)
+	box.add_child(_exit_button)
+	body.add_child(box)
+	_focusables.append(_exit_button)
+
+
+func _on_exit_pressed() -> void:
+	if not _exit_armed:
+		_exit_armed = true
+		_exit_button.text = TS.QM_EXIT_CONFIRM
+		status_label.text = TS.QM_EXIT_LINE
+		return
+	_exit_armed = false
+	status_label.text = TS.QM_EXITING
+	exit_game_requested.emit(game)
+	close()
+
+
+func _disarm_exit() -> void:
+	if not _exit_armed or _exit_button == null:
+		return
+	_exit_armed = false
+	_exit_button.text = TS.QM_EXIT
+	status_label.text = ""
+
+
+func _focused_row() -> String:
+	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	return String(f.get_parent().name) if f != null and body.is_ancestor_of(f) else ""
+
+
+func _on_autotune_limit(cant_reach: bool, info: Dictionary) -> void:
+	_limit = {"cant_reach": cant_reach, "info": info}
+	var l := body.find_child("AutoTdpLimit", true, false) as Label if body != null else null
+	if l != null:
+		l.text = TS.autotune_line(cant_reach, info)
+		l.visible = l.text != ""
+	elif visible and section == 1 and power.has_method("autotune_active"):
+		show_section(1, _focused_row())
+
+
+## Auto TDP state and, while it runs, why it can't reach the frame rate.
+func _build_autotune() -> void:
+	if not power.has_method("autotune_active"):
+		return
+	var on: bool = power.autotune_active()
+	var box := Kit.vbox(4)
+	box.name = "AutoTdp"
+	var head := Kit.hbox(10)
+	var t := Kit.label(TS.QM_AUTOTDP, "LeadLabel")
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(t)
+	head.add_child(load("res://scripts/ui/badge.gd").make({"kind": "state", "text": "On" if on else "Off", "short": "On" if on else "Off",
+		"tone": "good" if on else "", "icon": "check" if on else ""}, "tile"))
+	box.add_child(head)
+	box.add_child(Kit.label(TS.QM_AUTOTDP_ON if on else TS.QM_AUTOTDP_OFF, "QuietLabel", true))
+	if on:
+		var info: Dictionary = _limit["info"]
+		var cant: bool = _limit["cant_reach"]
+		if info.is_empty() and power.has_method("autotune_limit_info"):
+			info = power.autotune_limit_info()
+			cant = bool(info.get("cant_reach", false))
+		var l := Kit.label(TS.autotune_line(cant, info), "AccentLabel", true)
+		l.name = "AutoTdpLimit"
+		l.add_theme_color_override("font_color", ThemeLib.tone("warn"))
+		l.visible = l.text != ""
+		box.add_child(l)
+	body.add_child(box)
+
+
+## Overlay level (PerfMonitor), with what this system can measure.
+func _build_perf() -> void:
+	if perf == null or not perf.has_method("set_overlay_level"):
+		return
+	_line(TS.QM_PERF_HEADER, "HeaderLabel", "PerfHeader")
+	if not perf.overlay_supported():
+		_line(TS.OVERLAY_MISSING, "QuietLabel", "OverlayMissing")
+		return
+	var r: VBoxContainer = ChoiceRow.new()
+	r.setup("overlay", TS.OVERLAY, [0, 1, 2, 3], TS.OVERLAY_LABELS, clampi(int(perf.overlay_level()), 0, 3))
+	r.set_explainer(func(v): return str(TS.OVERLAY_HELP.get(v, "")))
+	r.changed.connect(func(v):
+		if not perf.set_overlay_level(int(v)):
+			status_label.text = "Couldn't change the overlay."
+			r.set_value_quiet(int(perf.overlay_level())))
+	_add_row(r)
+	var caps: Dictionary = perf.capabilities() if perf.has_method("capabilities") else {}
+	if bool(caps.get("fps_needs_overlay", false)):
+		_line(TS.FPS_NEEDS_OVERLAY, "QuietLabel", "FpsNeedsOverlay")
 
 
 func _on_goal_changed(goal: String) -> void:
@@ -483,6 +645,8 @@ func _build_power() -> void:
 		_add_row(f)
 	else:
 		_unavailable("fan")
+	_build_autotune()
+	_build_perf()
 
 
 const POWER_SETTERS := {"profile": "set_profile", "tdp": "set_tdp", "charge_limit": "set_charge_limit", "fan": "set_fan_mode"}
@@ -581,6 +745,9 @@ func _build_device() -> void:
 	if level == "full":
 		support.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	_line(SUPPORT_TEXT.get(level, SUPPORT_TEXT["generic"]), "QuietLabel")
+	var unverified: Variant = p.get("unverified", [])
+	if level != "generic" and unverified is Array and not unverified.is_empty():
+		_line(TS.unverified_line(unverified), "QuietLabel", "Unverified")
 
 	var fixes := device_fixes()
 	if not fixes.is_empty():

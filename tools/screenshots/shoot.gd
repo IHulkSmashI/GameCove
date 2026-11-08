@@ -17,6 +17,7 @@ var main: Control
 var games: Array = []
 var T: GDScript
 var F: GDScript
+var S: GDScript
 
 
 func _initialize() -> void:
@@ -93,6 +94,11 @@ func _run() -> void:
 	await frames(3)
 	main._live_timer.stop()   # keep the fake status numbers on screen
 	main._live_timer.wait_time = 9999
+	# First-run setup would open over every shot; it has its own shots below.
+	var flow_script = load("res://scripts/ui/setup/setup_flow.gd")
+	if flow_script.instance != null:
+		flow_script.instance.finish()
+	S = load("res://tests/test_ui_settings.gd")
 	if want(["home_empty"]):
 		await shot("home_empty")
 	var lib := root.get_node("Library")
@@ -138,6 +144,8 @@ func _run() -> void:
 		await frames(4)
 		await shot("settings")
 		main.show_screen("home")
+
+	await _settings_shots()
 
 	if want(["game_page", "game_page_settings"]):
 		main._open_page(games[0])
@@ -223,6 +231,136 @@ func _run() -> void:
 			await shot("theme_%s_quick" % id)
 			main.quick_menu.close()
 	quit()
+
+
+## Settings pages, sign-in, credits, first-run setup and the quick menu
+## additions, on fake services with realistic values.
+func _settings_shots() -> void:
+	var names := ["settings_appearance", "settings_stores", "settings_signin", "settings_discover", "settings_performance",
+		"settings_device", "settings_about", "settings_credits", "setup_welcome", "setup_theme", "setup_stores",
+		"setup_signin", "setup_keys", "setup_fixes", "setup_done", "quick_perf", "quick_session", "quick_device_partial",
+		"settings_light", "setup_light"]
+	if not want(names):
+		return
+	var svc := {"setup": S.FakeSetup.new(), "library": S.FakeLibrary.new(), "discover": S.FakeDiscover.new(),
+		"perf": S.FakePerf.new(), "achievements": S.FakeAchievements.new(), "device": S.FakeDevicePic.new()}
+	svc["library"].s["steam_cef"] = true
+	svc["library"].s["steam_cef_status"] = "ready"
+	svc["library"].s["steam_pending_count"] = 1
+	svc["discover"].s["ggdeals_key"] = "a1B2c3D4e5F6g7H8"
+	svc["setup"].done = {"welcome": true, "theme": true}
+	svc["setup"].skipped = {"steamgriddb": true}
+	svc["perf"].level = 1
+	svc["perf"].needs_overlay = true
+	var st = main.settings
+	st.set_services(svc)
+	main.show_screen("settings")
+	await frames(4)
+	var pages := {"settings_appearance": "appearance", "settings_stores": "stores", "settings_discover": "discover",
+		"settings_performance": "performance", "settings_device": "device", "settings_about": "about"}
+	for n in pages:
+		if not want([n]) and not (n == "settings_stores" and want(["settings_signin"])) and not (n == "settings_about" and want(["settings_credits"])):
+			continue
+		st.cat_buttons[pages[n]].grab_focus()
+		await frames(2)
+		if pages[n] != "device":
+			st.enter_page()
+			if pages[n] == "stores":
+				st.pages["stores"].rows["store_epic"].button.grab_focus()
+			elif pages[n] == "discover":
+				st.pages["discover"].rows["country"].button.grab_focus()
+			elif pages[n] == "performance":
+				st.pages["performance"].rows["overlay"].button.grab_focus()
+			elif pages[n] == "about":
+				st.pages["about"].rows["setup_keys"].button.grab_focus()
+		await shot(n)
+		if pages[n] == "stores" and want(["settings_signin"]):
+			st.open_sign_in("epic")
+			await shot("settings_signin")
+			st.close_sheet()
+		if pages[n] == "about" and want(["settings_credits"]):
+			st.open_credits()
+			await shot("settings_credits")
+			st.close_sheet()
+	if want(["settings_light", "setup_light"]):
+		var prefs = load("res://scripts/ui/ui_prefs.gd")
+		prefs.theme = "light"
+		prefs.match_art = false
+		main.apply_theme()
+		await frames(2)
+		if want(["settings_light"]):
+			st.cat_buttons["stores"].grab_focus()
+			await frames(2)
+			st.enter_page()
+			await shot("settings_light")
+		if want(["setup_light"]):
+			var fl = load("res://scripts/ui/setup/setup_flow.gd").open(main, svc, "fixes")
+			await shot("setup_light")
+			fl.finish()
+		prefs.theme = "cove"
+		prefs.match_art = true
+		main.apply_theme()
+		await frames(2)
+	main.show_screen("home")
+
+	var flow_script = load("res://scripts/ui/setup/setup_flow.gd")
+	var setup_shots := {"setup_welcome": "welcome", "setup_theme": "theme", "setup_stores": "stores", "setup_keys": "keys", "setup_fixes": "fixes", "setup_done": "done"}
+	for n in setup_shots:
+		if not want([n]) and not (n == "setup_stores" and want(["setup_signin"])):
+			continue
+		var f = flow_script.open(main, svc, setup_shots[n])
+		f.go(setup_shots[n])
+		await frames(4)
+		if setup_shots[n] == "theme":
+			f.focusables()[0].grab_focus()
+		await shot(n)
+		if setup_shots[n] == "stores" and want(["setup_signin"]):
+			f.open_sign_in("epic")
+			await shot("setup_signin")
+		f.finish()
+		await frames(2)
+
+	if want(["quick_perf", "quick_session", "quick_device_partial"]):
+		var qm = main.quick_menu
+		var fp = S.FakeAutoPower.new()
+		fp.supported = {"tdp": true, "profiles": true, "charge_limit": true, "fan": true}
+		var gs = T.FakeGamescope.new()
+		gs.running = true
+		qm.power = fp
+		qm.gamescope = gs
+		qm.perf = svc["perf"]
+		qm.device = T.FakeDevice.new()
+		var sess = S.FakeSession.new()
+		qm.attach_session(sess)
+		if not qm.exit_game_requested.is_connected(_noop):
+			qm.exit_game_requested.connect(_noop)
+		main.playing = games[0]
+		sess.started.emit(games[0])
+		qm._session_start_ms = Time.get_ticks_msec() - 47 * 60 * 1000
+		main._open_menu()
+		if want(["quick_session"]):
+			qm.show_section(0)
+			await frames(2)
+			qm.focusables()[-1].grab_focus()
+			await shot("quick_session")
+		if want(["quick_perf"]):
+			qm.show_section(1)
+			qm._on_autotune_limit(true, {"cant_reach": true, "target_fps": 60, "ceiling_w": 15.0, "tdp_max": 30.0})
+			await frames(2)
+			qm.focusables()[-1].grab_focus()
+			await shot("quick_perf")
+		if want(["quick_device_partial"]):
+			qm.device.profile["support"] = "partial"
+			qm.device.profile["name"] = "Lenovo Legion Go 2"
+			qm.device.profile["unverified"] = ["tdp", "charge_limit", "panel.vrr"]
+			qm.show_section(4)
+			await shot("quick_device_partial")
+		qm.close()
+		main.playing = {}
+
+
+func _noop(_g = null) -> void:
+	pass
 
 
 func _status() -> void:

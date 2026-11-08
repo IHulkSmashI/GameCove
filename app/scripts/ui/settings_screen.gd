@@ -1,22 +1,69 @@
 extends Control
-## Settings: look and feel (theme, art colours, reduce motion, quick menu
-## side), sound, and about this device. Grouped in tinted cards. Emits
-## `changed(key, value)`; main.gd applies and saves.
+## Settings: a category list on the left (Appearance, Stores, Discover,
+## Performance, Device, About GameCove) and that category's tinted cards on the
+## right. Moving through the list shows each page; A or right goes in, B comes
+## back out to the list (B again goes home, handled by main.gd).
+##
+## Appearance rows are UI prefs: they go out through `changed(key, value)` and
+## main.gd applies and saves them (same contract as before). Everything else
+## talks to the services passed to set_services() (fakes in tests); without a
+## call it falls back to the autoloads once it's in the tree.
+##
+## Overlays it owns: the store sign-in sheet (QR code + code entry), the credits
+## viewer and the on-screen keyboard for keys and codes.
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
-const Texts := preload("res://scripts/ui/texts.gd")
-const Themes := preload("res://theme/themes.gd")
+const TS := preload("res://scripts/ui/texts_settings.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
-const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
+const Motion := preload("res://scripts/ui/motion.gd")
+const Osk := preload("res://scripts/ui/osk.gd")
+const Services := preload("res://scripts/ui/settings/services.gd")
+const SignIn := preload("res://scripts/ui/settings/sign_in.gd")
+const Credits := preload("res://scripts/ui/settings/credits.gd")
+const PerformancePage := preload("res://scripts/ui/settings/performance_page.gd")
+const SetupFlow := preload("res://scripts/ui/setup/setup_flow.gd")
+const PAGES := {
+	"appearance": preload("res://scripts/ui/settings/appearance_page.gd"),
+	"stores": preload("res://scripts/ui/settings/stores_page.gd"),
+	"discover": preload("res://scripts/ui/settings/discover_page.gd"),
+	"performance": PerformancePage,
+	"device": preload("res://scripts/ui/settings/device_page.gd"),
+	"about": preload("res://scripts/ui/settings/about_page.gd"),
+}
 
 signal changed(key: String, value: Variant)
+## Something worth a toast (key saved, sign-in done): main may show it.
+signal notice(text: String, tone: String)
+## Settings wants first-run setup open at `step` ("" = first unfinished).
+## Without a listener the screen opens it itself over its top Control.
+signal setup_requested(step: String)
 
+## UI pref rows (theme, match_art, reduce_motion, menu_side, ui_sounds).
 var rows := {}
+## Current UI pref values ({"theme", "match_art", ...}).
+var values := {}
+var version := "Development build"
+var services := {}
+var pages := {}
+var category := "appearance"
+var cat_buttons := {}
 var swatches: HBoxContainer
 var top_target: Control
+var status_label: Label
+var keyboard: PanelContainer
+var sheet: PanelContainer
+var sign_in: HBoxContainer
+var _layout: Control
+var _content: VBoxContainer
 var _scroll: ScrollContainer
-var _about: VBoxContainer
+var _dim: ColorRect
+var _sheet_body: VBoxContainer
+var _ask_done: Callable
+var _ask_return: Control
+var _sheet_return: Control
+var _status_timer: Timer
+var _services_set := false
 
 
 func _init() -> void:
@@ -25,150 +72,457 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+func _ready() -> void:
+	_late_start.call_deferred()
+
+
+## No host passed services: use the autoloads (never under the test runner),
+## and on a first run open setup if nobody else did.
+func _late_start() -> void:
+	if not _services_set:
+		var found := Services.from_tree(self)
+		if not found.is_empty():
+			set_services(found)
+	if setup_requested.get_connections().is_empty() and SetupFlow.instance == null \
+			and SetupFlow.should_show(services.get("setup")):
+		open_setup("")
+
+
 ## values: {"theme", "match_art", "reduce_motion", "menu_side", "ui_sounds"};
-## about: [[label, value], ...] lines for the About card.
-func setup(values: Dictionary, about: Array = []) -> void:
+## about: [[label, value], ...] (its "GameCove" line is the version).
+## Called again after a theme change: rebuilds, keeping the category.
+func setup(ui_values: Dictionary, about: Array = []) -> void:
+	values = ui_values.duplicate()
+	for l in about:
+		if l.size() >= 2 and str(l[0]) == "GameCove":
+			version = str(l[1])
+	_build()
+
+
+## The services the pages use: {"setup", "library", "discover", "perf",
+## "achievements", "device", plus anything the Device panels want}.
+func set_services(svc: Dictionary) -> void:
+	services = svc
+	_services_set = true
+	PerformancePage.restore_rarity(services.get("achievements"))
+	if _content != null:
+		_build()
+
+
+func _build() -> void:
+	var keep_cat := category
 	for c in get_children():
-		Kit.drop(self, c)
+		if c != _status_timer:
+			Kit.drop(self, c)
 	rows.clear()
+	pages.clear()
+	cat_buttons.clear()
+	keyboard = null
+	sheet = null
+	sign_in = null
+
 	var margin := Kit.margin(0)
+	margin.name = "Layout"
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 48)
 	margin.add_theme_constant_override("margin_right", 48)
 	margin.add_theme_constant_override("margin_top", 88)
 	margin.add_theme_constant_override("margin_bottom", 58)
 	add_child(margin)
-	var root := Kit.vbox(14)
+	_layout = margin
+	var root := Kit.vbox(16)
 	margin.add_child(root)
-	root.add_child(Kit.label("Settings", "TitleLabel"))
+	var head := Kit.hbox(16)
+	head.add_child(Kit.label("Settings", "TitleLabel"))
+	head.add_child(Kit.spacer())
+	status_label = Kit.label("", "AccentLabel")
+	status_label.name = "Status"
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_label.size_flags_vertical = Control.SIZE_FILL
+	head.add_child(status_label)
+	root.add_child(head)
+
+	var cols := Kit.hbox(28)
+	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(cols)
+	var list := Kit.vbox(6)
+	list.name = "Categories"
+	list.custom_minimum_size = Vector2(300, 0)
+	cols.add_child(list)
+	for id in TS.CATEGORIES:
+		var b := _category_button(id)
+		list.add_child(b)
+		cat_buttons[id] = b
+
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"
 	_scroll.follow_focus = true
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(_scroll)
-	var cols := Kit.hbox(24)
-	cols.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var pad := Kit.margin(6)
+	cols.add_child(_scroll)
+	var pad := Kit.margin(6, 6, 6)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pad.add_child(cols)
 	_scroll.add_child(pad)
+	_content = Kit.vbox(0)
+	_content.name = "Content"
+	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pad.add_child(_content)
 
-	var left := Kit.vbox(20)
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.size_flags_stretch_ratio = 1.6
-	cols.add_child(left)
-	var right := Kit.vbox(20)
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cols.add_child(right)
-
-	var look := card("Look", "palette")
-	left.add_child(look[0])
-	var ids: Array = Themes.ORDER
-	_add(look[1], "theme", ids, ids.map(func(i): return Themes.NAMES[i]), values.get("theme", "cove"), "palette")
-	swatches = _swatches(values.get("theme", "cove"))
-	look[1].add_child(swatches)
-	_add(look[1], "match_art", [false, true], ["Off", "On"], values.get("match_art", true), "sparkle")
-	_add(look[1], "reduce_motion", [false, true], ["Off", "On"], values.get("reduce_motion", false), "motion")
-	_add(look[1], "menu_side", ["right", "left"], ["Right", "Left"], values.get("menu_side", "right"), "screen")
-
-	var sound := card("Sound", "info")
-	right.add_child(sound[0])
-	var lv: Array = Texts.SOUND_LEVELS
-	_add(sound[1], "ui_sounds", lv, lv.map(func(l): return Texts.SOUND_LABELS[l]), values.get("ui_sounds", "low"), "")
-
-	var about_card := card("This device", "handheld")
-	right.add_child(about_card[0])
-	_about = about_card[1]
-	set_about(about)
-
-	var chain: Array = rows.values().map(func(r): return r.button)
-	Kit.link_vertical(chain, top_target)
+	for id in TS.CATEGORIES:
+		var p: VBoxContainer = PAGES[id].new()
+		p.visible = false
+		_content.add_child(p)
+		p.setup(id, services, self)
+		p.rebuilt.connect(_link)
+		pages[id] = p
+	for k in pages["appearance"].rows:
+		rows[k] = pages["appearance"].rows[k]
+	swatches = pages["appearance"].swatches
+	_build_overlays()
+	show_category(keep_cat if pages.has(keep_cat) else "appearance")
 
 
-func card(title: String, icon: String) -> Array:
-	var p := PanelContainer.new()
-	p.theme_type_variation = "CardPanel"
-	p.name = "Card_" + title.validate_node_name()
-	var col := Kit.vbox(14)
-	p.add_child(col)
-	col.add_child(Kit.icon_label(icon, title, "HeaderLabel", ThemeLib.color("accent"), 24))
-	return [p, col]
+func _category_button(id: String) -> Button:
+	var b := Kit.button("", "RowButton")
+	b.name = "Cat_" + id
+	b.toggle_mode = true
+	b.custom_minimum_size = Vector2(0, 66)
+	b.focus_entered.connect(func(): show_category(id))
+	b.pressed.connect(func():
+		b.set_pressed_no_signal(true)
+		enter_page())
+	var row := Kit.hbox(14)
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 16
+	row.offset_right = -12
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bar := Panel.new()
+	bar.name = "Bar"
+	bar.custom_minimum_size = Vector2(4, 30)
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("accent"), 999, 0, 0))
+	row.add_child(bar)
+	var ic := Icons.rect(TS.CATEGORY_ICONS[id], 24, ThemeLib.color("text_2"))
+	ic.name = "Icon"
+	row.add_child(ic)
+	var col := Kit.vbox(0)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var t := Kit.label(TS.CATEGORY_NAMES[id])
+	t.name = "Title"
+	t.add_theme_font_override("font", ThemeLib.font("semibold"))
+	col.add_child(t)
+	var sub := Kit.label(TS.CATEGORY_LINES[id], "CaptionLabel")
+	sub.name = "Line"
+	sub.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	sub.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+	col.add_child(sub)
+	row.add_child(col)
+	b.add_child(row)
+	return b
 
 
-func set_about(lines: Array) -> void:
-	if _about == null:
+## Shows a category's page (focus stays where it is).
+func show_category(id: String) -> void:
+	if not pages.has(id):
 		return
-	for i in range(_about.get_child_count() - 1, 0, -1):
-		Kit.drop(_about, _about.get_child(i))
-	for l in lines:
-		var row := Kit.hbox(12)
-		var k := Kit.label(l[0], "QuietLabel")
-		k.custom_minimum_size = Vector2(110, 0)
-		row.add_child(k)
-		var v := Kit.label(str(l[1]), "", true)
-		v.add_theme_font_override("font", ThemeLib.font("medium"))
-		row.add_child(v)
-		_about.add_child(row)
+	var old := category
+	category = id
+	for k in pages:
+		var on: bool = k == id
+		if pages[k].visible != on:
+			if on:
+				pages[k].visible = true
+				pages[k].modulate.a = 0.0
+				Motion.to(pages[k], "modulate:a", 1.0, Motion.FAST)
+			else:
+				pages[k].visible = false
+		var b: Button = cat_buttons[k]
+		b.set_pressed_no_signal(on)
+		b.find_child("Bar", true, false).modulate.a = 1.0 if on else 0.0
+		var col := ThemeLib.color("accent") if on else ThemeLib.color("text_2")
+		(b.find_child("Icon", true, false) as TextureRect).texture = Icons.tex(TS.CATEGORY_ICONS[k], 24, col)
+	if old != id and pages.has(old) and pages[old].has_method("on_hidden"):
+		pages[old].on_hidden()
+	if pages[id].has_method("on_shown"):
+		pages[id].on_shown()
+	if _scroll != null:
+		_scroll.scroll_vertical = 0
+	_link()
+
+
+## Focus into the current page's first control.
+func enter_page() -> void:
+	var f: Array = pages[category].focusables()
+	if not f.is_empty() and is_inside_tree():
+		f[0].grab_focus()
+
+
+func _link() -> void:
+	if cat_buttons.is_empty():
+		return
+	var list: Array = TS.CATEGORIES.map(func(k): return cat_buttons[k])
+	Kit.link_vertical(list, top_target)
+	var chain: Array = pages[category].focusables() if pages.has(category) else []
+	var cat: Button = cat_buttons[category]
+	for b in list:
+		b.focus_neighbor_right = b.get_path_to(chain[0] if not chain.is_empty() else b)
+	if chain.is_empty():
+		return
+	Kit.link_vertical(chain, top_target)
+	for c in chain:
+		c.focus_neighbor_left = c.get_path_to(cat)
 
 
 func set_top_target(c: Control) -> void:
 	top_target = c
-	var chain: Array = rows.values().map(func(r): return r.button)
-	if not chain.is_empty():
-		chain[0].focus_neighbor_top = chain[0].get_path_to(c)
+	_link()
 
 
 func default_focus() -> Control:
-	return rows["theme"].button if rows.has("theme") else null
+	return cat_buttons.get(category)
 
 
-func _add(box: VBoxContainer, key: String, vals: Array, lbls: Array, current: Variant, icon: String) -> void:
-	var r: VBoxContainer = ChoiceRow.new()
-	r.setup(key, Texts.TITLES[key], vals, lbls, current, icon)
-	r.changed.connect(func(v):
-		if key == "theme":
-			_mark_swatch(v)
-		changed.emit(key, v))
-	box.add_child(r)
-	rows[key] = r
+## True while focus is inside the page (not the category list).
+func in_page() -> bool:
+	if not is_inside_tree() or _content == null:
+		return false
+	var f := get_viewport().gui_get_focus_owner()
+	return f != null and _content.is_ancestor_of(f)
 
 
-func _swatches(current: String) -> HBoxContainer:
-	var row := Kit.hbox(12)
-	row.name = "Swatches"
-	for id in Themes.ORDER:
-		var t: Dictionary = Themes.get_theme(id)
-		var p := PanelContainer.new()
-		p.name = id
-		p.custom_minimum_size = Vector2(0, 64)
-		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var col := Kit.vbox(6)
-		var dots := Kit.hbox(5)
-		for k in ["accent", "accent_2", "text"]:
-			var d := Panel.new()
-			d.custom_minimum_size = Vector2(14, 14)
-			d.add_theme_stylebox_override("panel", ThemeLib.box(t[k], 999, 0, 0))
-			dots.add_child(d)
-		col.add_child(dots)
-		var l := Label.new()
-		l.text = Themes.NAMES[id]
-		l.add_theme_color_override("font_color", t["text"])
-		l.add_theme_font_override("font", ThemeLib.font("semibold"))
-		l.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
-		col.add_child(l)
-		p.add_child(col)
-		row.add_child(p)
-	_mark_swatch(current, row)
-	return row
+## Hint bar for whatever has focus here, for main.gd's hint bar
+## (see docs: main uses it when the screen has `hints`). [] = main's default.
+func hints(f: Control) -> Array:
+	if keyboard != null and keyboard.visible:
+		return [["A", "Type"], ["Y", "Space"], ["X", "Delete"], ["B", "Done"]]
+	if sheet != null and sheet.visible:
+		return [["A", "Select"], ["B", TS.CLOSE]]
+	if f == null:
+		return []
+	var cat := cat_buttons.values().has(f)
+	var out: Array = []
+	if cat:
+		out.append(["A", "Open"])
+		out.append(["B", "Home"])
+	else:
+		if f is Button and f.theme_type_variation == "RowButton" and f.get_parent() != null and "values" in f.get_parent():
+			out.append(["LR", "Change"])
+		else:
+			out.append(["A", "Select"])
+		out.append(["B", "Categories"])
+	out.append([["LB", "RB"], "Sections"])
+	out.append(["GUIDE", "Quick menu"])
+	return out
 
 
-func _mark_swatch(id: String, row: HBoxContainer = null) -> void:
-	var r := row if row != null else swatches
-	for p in r.get_children():
-		var t: Dictionary = Themes.get_theme(p.name)
-		var sb := ThemeLib.box(t["surface"], ThemeLib.radius("m"), 12, 10)
-		sb.border_color = t["accent"] if p.name == id else Color(1, 1, 1, 0.08)
-		sb.set_border_width_all(3 if p.name == id else 1)
-		p.add_theme_stylebox_override("panel", sb)
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_visible_in_tree():
+		return
+	var overlay := (sheet != null and sheet.visible) or (keyboard != null and keyboard.visible)
+	if overlay:
+		if event.is_action_pressed("ui_cancel") and sheet.visible and not keyboard.visible:
+			close_sheet()
+			get_viewport().set_input_as_handled()
+		elif _swallow(event):
+			get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("ui_cancel") and in_page():
+		cat_buttons[category].grab_focus()
+		get_viewport().set_input_as_handled()
+
+
+## Shoulder and trigger presses would switch screens behind an overlay.
+static func _swallow(event: InputEvent) -> bool:
+	if event is InputEventJoypadButton:
+		return event.button_index in [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]
+	if event is InputEventKey:
+		return event.keycode in [KEY_Q, KEY_E, KEY_PAGEUP, KEY_PAGEDOWN]
+	return event is InputEventJoypadMotion and event.axis in [JOY_AXIS_TRIGGER_LEFT, JOY_AXIS_TRIGGER_RIGHT]
+
+
+# ------------------------------------------------------------ host API for pages
+
+func notify(text: String, tone := "") -> void:
+	if status_label == null:
+		return
+	status_label.text = text
+	status_label.add_theme_color_override("font_color", ThemeLib.tone(tone) if tone in ["bad", "warn", "good"] else ThemeLib.color("accent"))
+	notice.emit(text, tone)
+	if _status_timer == null:
+		_status_timer = Timer.new()
+		_status_timer.one_shot = true
+		_status_timer.timeout.connect(func(): status_label.text = "")
+		add_child(_status_timer)
+	if _status_timer.is_inside_tree():
+		_status_timer.start(5.0)
+
+
+## Opens the keyboard for a key or code; `done(text)` gets what was typed.
+func ask_text(placeholder: String, start: String, done: Callable) -> void:
+	_ask_done = done
+	_ask_return = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	keyboard.use_for_codes(placeholder)
+	_set_layout_focus(false)
+	keyboard.open(start)
+
+
+func _on_keyboard_closed(text: String) -> void:
+	var cb := _ask_done
+	_ask_done = Callable()
+	if sheet == null or not sheet.visible:
+		_set_layout_focus(true)
+	if _ask_return != null and is_instance_valid(_ask_return) and _ask_return.is_visible_in_tree():
+		_ask_return.grab_focus()
+	if cb.is_valid():
+		cb.call(text)
+
+
+## The sign-in sheet for one store: QR code, steps, Type code.
+func open_sign_in(store: String) -> void:
+	_open_sheet()
+	for c in _sheet_body.get_children():
+		Kit.drop(_sheet_body, c)
+	sign_in = SignIn.new()
+	sign_in.finished.connect(func(s, ok, _m):
+		if ok:
+			notify(TS.SIGN_IN_DONE % TS.STORE_NAMES.get(s, s), "good"))
+	_sheet_body.add_child(sign_in)
+	var pr := Kit.prompts([["A", TS.SIGN_IN_TYPE], ["B", TS.CLOSE]])
+	pr.alignment = BoxContainer.ALIGNMENT_END
+	_sheet_body.add_child(pr)
+	sign_in.start(services.get("setup"), store, ask_text)
+	if is_inside_tree():
+		sign_in.first_focus().grab_focus()
+
+
+func open_credits() -> void:
+	_open_sheet()
+	for c in _sheet_body.get_children():
+		Kit.drop(_sheet_body, c)
+	_sheet_body.add_child(Kit.label(TS.ABOUT_CREDITS, "HeaderLabel"))
+	var text := Credits.load_text()
+	var r := RichTextLabel.new()
+	r.name = "Credits"
+	r.bbcode_enabled = true
+	r.focus_mode = Control.FOCUS_ALL
+	r.scroll_active = true
+	r.selection_enabled = false
+	r.custom_minimum_size = Vector2(0, 470)
+	r.add_theme_font_override("normal_font", ThemeLib.font("regular"))
+	r.add_theme_font_override("bold_font", ThemeLib.font("semibold"))
+	r.add_theme_font_size_override("normal_font_size", ThemeLib.SIZE_SMALL)
+	r.add_theme_font_size_override("bold_font_size", ThemeLib.SIZE_SMALL)
+	r.add_theme_color_override("default_color", ThemeLib.color("text"))
+	r.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	r.text = Credits.to_bbcode(text, "#" + ThemeLib.color("text").to_html(false), "#" + ThemeLib.color("text_2").to_html(false)) if text != "" else TS.CREDITS_MISSING
+	_sheet_body.add_child(r)
+	_sheet_body.add_child(Kit.prompts([["DPAD", "Scroll"], ["B", TS.CLOSE]]))
+	if is_inside_tree():
+		r.grab_focus()
+
+
+func open_url(url: String) -> void:
+	var d: Object = services.get("discover")
+	if d != null and d.has_method("open_link") and d.open_link({"kind": "url", "uri": url}):
+		notify("Opening in Steam…")
+	else:
+		notify(url)
+
+
+## Opens first-run setup at `step` (a TS.SETUP_STEPS id, "" = first unfinished).
+func open_setup(step: String) -> void:
+	if not setup_requested.get_connections().is_empty():
+		setup_requested.emit(step)
+		return
+	var host := _top_control()
+	if host == null:
+		return
+	var flow: Control = SetupFlow.open(host, services, step)
+	if flow != null and not flow.setting_changed.is_connected(_relay_setting):
+		flow.setting_changed.connect(_relay_setting)
+
+
+func _relay_setting(key: String, value: Variant) -> void:
+	changed.emit(key, value)
+
+
+func _top_control() -> Control:
+	var c: Node = self
+	while c.get_parent() is Control:
+		c = c.get_parent()
+	return c as Control if c is Control and c.is_inside_tree() else null
+
+
+# ------------------------------------------------------------ overlays
+
+func _build_overlays() -> void:
+	_dim = ColorRect.new()
+	_dim.name = "Dim"
+	_dim.color = Color(ThemeLib.color("scrim"), 0.78)
+	_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_dim.visible = false
+	add_child(_dim)
+	# Over the top bar and hint bar too (same canvas, higher z), so nothing
+	# behind the sheet looks pressable and the sheet's own prompts are the hints.
+	_dim.z_index = 10
+	sheet = PanelContainer.new()
+	sheet.name = "Sheet"
+	sheet.z_index = 10
+	var ssb := ThemeLib.box(Color(ThemeLib.color("surface"), 0.98), ThemeLib.radius("xl"), 32, 28)
+	ssb.border_color = ThemeLib.color("line")
+	ssb.set_border_width_all(1)
+	ssb.shadow_color = Color(0, 0, 0, 0.4 if ThemeLib.is_dark() else 0.12)
+	ssb.shadow_size = 28
+	sheet.add_theme_stylebox_override("panel", ssb)
+	sheet.visible = false
+	sheet.set_anchors_preset(Control.PRESET_CENTER)
+	sheet.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	sheet.grow_vertical = Control.GROW_DIRECTION_BOTH
+	sheet.custom_minimum_size = Vector2(900, 0)
+	_sheet_body = Kit.vbox(18)
+	sheet.add_child(_sheet_body)
+	add_child(sheet)
+	keyboard = Osk.new()
+	keyboard.z_index = 11
+	keyboard.anchor_left = 0.5
+	keyboard.anchor_right = 0.5
+	keyboard.anchor_top = 1.0
+	keyboard.anchor_bottom = 1.0
+	keyboard.offset_left = -400
+	keyboard.offset_right = 400
+	keyboard.offset_top = -380
+	keyboard.offset_bottom = -20
+	keyboard.closed.connect(_on_keyboard_closed)
+	add_child(keyboard)
+
+
+func _open_sheet() -> void:
+	_sheet_return = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	_set_layout_focus(false)
+	_dim.visible = true
+	Motion.fade(sheet, true)
+	sheet.pivot_offset = sheet.size / 2.0
+	sheet.scale = Vector2.ONE * (1.0 if Motion.reduce else 0.97)
+	Motion.to(sheet, "scale", Vector2.ONE, Motion.BASE)
+
+
+func close_sheet() -> void:
+	if sheet == null or not sheet.visible:
+		return
+	if sign_in != null and is_instance_valid(sign_in):
+		sign_in.stop()
+	sheet.visible = false
+	_dim.visible = false
+	_set_layout_focus(true)
+	if _sheet_return != null and is_instance_valid(_sheet_return) and _sheet_return.is_visible_in_tree():
+		_sheet_return.grab_focus()
+
+
+func _set_layout_focus(on: bool) -> void:
+	if _layout != null:
+		_layout.focus_behavior_recursive = Control.FOCUS_BEHAVIOR_INHERITED if on else Control.FOCUS_BEHAVIOR_DISABLED

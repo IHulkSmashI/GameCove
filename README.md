@@ -10,22 +10,34 @@ GameCove is a free, open-source, controller-first home screen for gaming handhel
 
 ## What it does
 
-- **One library:** Steam, Epic, GOG and Amazon first. EA, Ubisoft, Battle.net, emulators and cloud come later.
+- **One library:** Steam, Epic, GOG and Amazon in one place, with installs, updates and a download queue. EA, Ubisoft, Battle.net, emulators and cloud come later.
 - **Game info on every tile:** cover art, time to beat, compatibility and anti-cheat status before you hit play.
-- **A quick menu that makes sense:** one button, five sections (This game, Power, Screen, Controller, Device), and a short line under every setting saying what it does.
-- **Your handheld, set up properly:** power profiles, auto TDP, fan, charge limit, VRR, and the right upscaling and frame generation for your chip, picked per game.
+- **A quick menu that makes sense:** one button, five sections (This game, Power, Screen, Controller, Device), and a short line under every setting saying what it does. Performance overlay, Auto TDP status and Exit game are right there.
+- **Your handheld, set up properly:** power profiles, auto TDP, fan, charge limit, VRR, device fixes, and the right upscaling and frame generation for your chip, picked per game.
+- **Discover:** deals, real local prices, your wishlist with price alerts, and a release calendar.
+- **Two-minute setup:** pick a look, sign in to stores with your phone (scan a QR code, no typing passwords on the handheld), add optional free keys, see what your device needs.
+- **Settings in one place:** appearance and four themes, stores and downloads, Discover, performance, device and updates.
 - **Steam stays a store:** Steam games launch through Steam, so your Steam library keeps working. "Switch to Steam Gaming Mode" is always one press away.
 
 ## Devices
 
-Full support only where we have the hardware or documentation. Everything else gets the generic path, with device-specific settings hidden.
+**Full** = tested on the device by us. **Partial** = built from upstream data that was tested on the device, but we haven't run GameCove on it yet. Anything else (or an unknown model) gets the generic path, with device-specific settings hidden.
 
-| Device | Status |
-| --- | --- |
-| MSI Claw 8 EX | Full (our test device) |
-| Steam Deck, ROG Ally / Xbox Ally, Legion Go, Claw 7/8 AI+, OneXPlayer, GPD, Ayaneo, Zotac Zone | Generic for now, beta once testers confirm |
+| Maker | Models | Support |
+| --- | --- | --- |
+| MSI | Claw 8 EX AI+ | Full (our test device) |
+| MSI | Claw 8 AI+, Claw 7 AI+, Claw A1M, Claw A8 | Partial |
+| Valve | Steam Deck (LCD, OLED) | Partial |
+| ASUS | ROG Ally, Ally X, Xbox Ally, Xbox Ally X, Xbox Ally X20 | Partial |
+| Lenovo | Legion Go, Legion Go 2 (and Z2), Legion Go S (Z2 Go, Z1 Extreme) | Partial |
+| OneXPlayer | OneXFly F1, F1 Pro, Apex; X1 (AMD, Intel, Mini, Pro); 2, 2 Pro; G1 (AMD, Intel); 3 | Partial |
+| AYANEO | 2, 2S, 3, KUN, AIR 1S, AIR Plus, Flip, Flip 1S DS, Slide | Partial |
+| AOKZOE | A1, A1 Pro, A1X | Partial |
+| GPD | WIN 4, WIN Mini, WIN Max 2, WIN 5 | Partial |
+| ZOTAC, Acer, Orange Pi | Gaming Zone, Predator Atlas 8, Neo | Partial |
+| Others | OneXPlayer X2 Mini and Super X, Acer Nitro Blaze 7 / 8 / 11, unknown models | Generic |
 
-The device table lives in [`app/data/devices.json`](app/data/devices.json). Own a handheld that isn't listed? Open an issue with your device report.
+Details per device: [docs/DEVICES.md](docs/DEVICES.md); the data lives in [`app/data/devices.json`](app/data/devices.json). Own a handheld that isn't listed? Open an issue with your device report.
 
 ## Built on
 

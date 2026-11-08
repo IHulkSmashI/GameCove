@@ -15,6 +15,14 @@ const ROWS := ["1234567890", "qwertyuiop", "asdfghjkl'", "zxcvbnm-:."]
 const MAX_LEN := 40
 
 var text := ""
+## Longest text accepted (search keeps MAX_LEN). Sign-in codes need more.
+var max_len := MAX_LEN
+## Grey line shown while empty.
+var placeholder := "Type to search"
+## Keep upper case from a physical keyboard and allow Shift (codes, keys).
+var keep_case := false
+var shift := false
+var shift_button: Button
 var keys: Array = []          # rows of Buttons
 var field: Label
 var done_button: Button
@@ -105,9 +113,38 @@ func close() -> void:
 
 
 func type(ch: String) -> void:
-	if text.length() >= MAX_LEN:
+	if text.length() >= max_len:
 		return
-	set_text(text + ch)
+	set_text(text + (ch.to_upper() if shift and keep_case else ch))
+
+
+## For codes and keys: longer text, a placeholder, case kept, and a Shift key
+## on the bottom row. Search keeps the plain keyboard.
+func use_for_codes(hint: String, longest := 600) -> void:
+	placeholder = hint
+	max_len = longest
+	keep_case = true
+	if shift_button == null:
+		shift_button = Kit.button("Shift", "KeyButton")
+		shift_button.name = "Shift"
+		shift_button.toggle_mode = true
+		shift_button.custom_minimum_size = Vector2(120, 50)
+		shift_button.toggled.connect(func(on): _set_shift(on))
+		var last: Array = keys[-1]
+		last[0].get_parent().add_child(shift_button)
+		last[0].get_parent().move_child(shift_button, 0)
+		last.insert(0, shift_button)
+		_link()
+	_set_shift(false)
+	set_text(text, false)
+
+
+func _set_shift(on: bool) -> void:
+	shift = on
+	for row in keys.slice(0, keys.size() - 1):
+		for b in row:
+			if b.text.length() == 1 and b.text.to_lower() != b.text.to_upper():
+				b.text = b.text.to_upper() if on else b.text.to_lower()
 
 
 func backspace() -> void:
@@ -117,7 +154,8 @@ func backspace() -> void:
 
 func set_text(t: String, emit := true) -> void:
 	text = t
-	field.text = t if t != "" else "Type to search"
+	var shown := t if t.length() <= 48 else "…" + t.right(47)
+	field.text = shown if t != "" else placeholder
 	field.add_theme_color_override("font_color", ThemeLib.color("text") if t != "" else ThemeLib.color("text_3"))
 	if emit:
 		text_changed.emit(text)
@@ -133,7 +171,9 @@ func _input(event: InputEvent) -> void:
 		elif event.keycode == KEY_ESCAPE or event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 			close()
 		elif event.unicode >= 32 and event.unicode < 0x10000 and not event.ctrl_pressed:
-			type(String.chr(event.unicode).to_lower())
+			var ch := String.chr(event.unicode)
+			if text.length() < max_len:
+				set_text(text + (ch if keep_case else ch.to_lower()))
 		else:
 			handled = false
 	elif event is InputEventJoypadButton and event.pressed:

@@ -27,6 +27,8 @@ var _knob: Panel
 var _is_bool := false
 ## Hide the explanation unless the row has focus.
 var collapse_hint := true
+## Optional func(value) -> String for the line under the row; default Texts.explain.
+var explainer: Callable
 
 
 func setup(setting_key: String, title: String, vals: Array, lbls: Array, current: Variant, icon := "") -> void:
@@ -120,6 +122,12 @@ static func bool_row(setting_key: String, title: String, current: bool, icon := 
 	return r
 
 
+## Use `fn(value) -> String` for the explanation (rows whose words aren't in texts.gd).
+func set_explainer(fn: Callable) -> void:
+	explainer = fn
+	_refresh()
+
+
 func value() -> Variant:
 	return values[index] if not values.is_empty() else null
 
@@ -151,7 +159,7 @@ func value_text() -> String:
 func _refresh(animate := false) -> void:
 	var lbl: String = str(labels[index]) if index < labels.size() else str(value())
 	_value_label.text = lbl
-	_hint.text = Texts.explain(key, value())
+	_hint.text = str(explainer.call(value())) if explainer.is_valid() else Texts.explain(key, value())
 	var acc := ThemeLib.color("accent")
 	if _is_bool:
 		var on: bool = value() == true
