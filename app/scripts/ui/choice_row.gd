@@ -27,6 +27,8 @@ var _knob: Panel
 var _is_bool := false
 ## Hide the explanation unless the row has focus.
 var collapse_hint := true
+## Optional func(key, value) -> String for the line under the row; Texts.explain otherwise.
+var explain_fn: Callable
 
 
 func setup(setting_key: String, title: String, vals: Array, lbls: Array, current: Variant, icon := "") -> void:
@@ -151,7 +153,7 @@ func value_text() -> String:
 func _refresh(animate := false) -> void:
 	var lbl: String = str(labels[index]) if index < labels.size() else str(value())
 	_value_label.text = lbl
-	_hint.text = Texts.explain(key, value())
+	_hint.text = explain_fn.call(key, value()) if explain_fn.is_valid() else Texts.explain(key, value())
 	var acc := ThemeLib.color("accent")
 	if _is_bool:
 		var on: bool = value() == true

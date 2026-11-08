@@ -518,7 +518,16 @@ under Steam's session InputPlumber is left alone.
   the screen again. Quick Access stays Steam's inside a game (InputPlumber's Xbox target turns it into
   Guide + A, Steam's quick access menu); in GameCove's UI it opens our quick menu.
 
-## Tests
+## Device pages (`scripts/ui/device/`, embedded by Settings)
+
+`about_panel.gd`, `controller_panel.gd`, `storage_panel.gd`, `updates_panel.gd`: each
+`static func build(services: Dictionary) -> Control` with services `{"device", "power", "controller",
+"storage", "updates"}`. The Control (base `device_panel.gd`) offers `default_focus()`, `focusables()`,
+`set_top_target(c)`, `hints() -> [[glyph, label], ...]` + `signal hints_changed(hints)`,
+`signal toast_requested(text, icon, tone)`, and `opened()` / `closed()` (Storage watches hot-plug from
+open to close, Controller refreshes on open and ends the button test on close; entering / leaving the
+tree does the same). Pages listen to their services' signals and disconnect when freed.
+
 
 - GDScript: `godot --headless --path app -s res://tests/run_tests.gd`. Tests are `app/tests/test_*.gd` extending `res://tests/test_case.gd`; fixtures in `app/tests/fixtures/`.
 - Python (game database): `cd gamedb && pytest`.
