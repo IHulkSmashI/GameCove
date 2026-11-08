@@ -1,0 +1,24 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"/var/home/deck/.local/share/Steam"
+		"label"		""
+		"contentid"		"1234"
+		"totalsize"		"0"
+		"apps"
+		{
+			"228980"		"423105324"
+			"1091500"		"70368744177"
+		}
+	}
+	"1"
+	{
+		"path"		"/run/media/deck/SD512"
+		"label"		""
+		"apps"
+		{
+			"1245620"		"53687091200"
+		}
+	}
+}

@@ -1,0 +1,2 @@
+Note: --check and --preview may be unreliable.  See https://github.com/coreos/rpm-ostree/issues/1579
+No updates available.

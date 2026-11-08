@@ -1,0 +1,6 @@
+Filesystem      Type        1B-blocks          Used        Avail Mounted on
+composefs       overlay              0             0            0 /
+/dev/nvme0n1p3  btrfs    1022336598016  412316860416 608174227456 /var/home
+/dev/nvme0n1p2  ext4        1020702720     300000000    650000000 /boot
+/dev/mmcblk0p1  ext4      502468108288   60000000000 416894504960 /run/media/deck/SD512
+/dev/sda1       exfat    1000169226240  250000000000 750169226240 /run/media/deck/My Drive

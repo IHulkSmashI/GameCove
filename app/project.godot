@@ -23,6 +23,10 @@ Power="*res://scripts/device/power.gd"
 Library="*res://scripts/library/library.gd"
 Launcher="*res://scripts/launch/launcher.gd"
 Gamescope="*res://scripts/gamescope/gamescope.gd"
+Updates="*res://scripts/system/updates.gd"
+Storage="*res://scripts/system/storage.gd"
+Setup="*res://scripts/system/setup.gd"
+Controller="*res://scripts/input/controller.gd"
 
 [display]
 

@@ -1,0 +1,52 @@
+{
+ "filesystems": [
+  {
+   "source": "/dev/nvme0n1p3[/root]",
+   "target": "/sysroot",
+   "fstype": "btrfs",
+   "options": "ro,relatime,seclabel,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=256,subvol=/root"
+  },
+  {
+   "source": "/dev/nvme0n1p3[/home]",
+   "target": "/var/home",
+   "fstype": "btrfs",
+   "options": "rw,relatime,seclabel,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=257,subvol=/home"
+  },
+  {
+   "source": "/dev/nvme0n1p3[/root/ostree/deploy/default/var]",
+   "target": "/var",
+   "fstype": "btrfs",
+   "options": "rw,relatime,seclabel,compress=zstd:1"
+  },
+  {
+   "source": "/dev/nvme0n1p2",
+   "target": "/boot",
+   "fstype": "ext4",
+   "options": "rw,relatime"
+  },
+  {
+   "source": "/dev/nvme0n1p1",
+   "target": "/boot/efi",
+   "fstype": "vfat",
+   "options": "rw,relatime"
+  },
+  {
+   "source": "composefs",
+   "target": "/",
+   "fstype": "overlay",
+   "options": "ro"
+  },
+  {
+   "source": "/dev/mmcblk0p1",
+   "target": "/run/media/deck/SD512",
+   "fstype": "ext4",
+   "options": "rw,nosuid,nodev,relatime,errors=remount-ro"
+  },
+  {
+   "source": "/dev/sda1",
+   "target": "/run/media/deck/T7",
+   "fstype": "exfat",
+   "options": "rw,nosuid,nodev,relatime,uid=1000"
+  }
+ ]
+}

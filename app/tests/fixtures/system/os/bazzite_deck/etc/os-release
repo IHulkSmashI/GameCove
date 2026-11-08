@@ -1,0 +1,12 @@
+NAME="Bazzite"
+VERSION="43.20261101.0 (Kinoite)"
+RELEASE_TYPE=stable
+ID=bazzite
+ID_LIKE="fedora"
+VERSION_ID=43
+VERSION_CODENAME="Holographic"
+PLATFORM_ID="platform:f43"
+PRETTY_NAME="Bazzite 43 (FROM Fedora Kinoite)"
+HOME_URL="https://bazzite.gg"
+VARIANT_ID=bazzite-deck
+OSTREE_VERSION='43.20261101.0'

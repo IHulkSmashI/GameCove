@@ -11,6 +11,10 @@ How the parts of GameCove talk to each other. Change a contract only with a matc
 | `Library` | `scripts/library/library.gd` | `scripts/library/` | All stores in one list, game info from the game database, launching |
 | `Launcher` | `scripts/launch/launcher.gd` | `scripts/launch/` | Per-game settings and the launch environment (upscaler, frame gen, latency, Proton) |
 | `Gamescope` | `scripts/gamescope/gamescope.gd` | `scripts/gamescope/` | Frame limit, refresh rate, overlay focus |
+| `Updates` | `scripts/system/updates.gd` | `scripts/system/` | OS image, firmware (fwupd) and Flatpak updates |
+| `Storage` | `scripts/system/storage.gd` | `scripts/system/` | Drives, free space, game library folders, hot-plug while the page is open |
+| `Setup` | `scripts/system/setup.gd` | `scripts/system/` | First-run checklist, store sign-in, suggested device fixes |
+| `Controller` | `scripts/input/controller.gd` | `scripts/input/` | InputPlumber: paddles, gyro, rumble, per-game profiles (not named `Input`: that would hide Godot's `Input`) |
 
 The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these services; it never touches sysfs, D-Bus or store tools directly.
 
@@ -79,6 +83,95 @@ Two entry points, because polkit picks its rule by the program pkexec runs:
 - Install and remove always use `pkexec /usr/libexec/gamecove/gamecove-fix <name> install|remove`. That asks for a password, and the gamescope session has no polkit agent to ask with, so the UI must say so (e.g. run it from Desktop Mode or a terminal) rather than fail silently; pkexec exits 126 or 127 when nobody could authorize.
 - Read-only calls need no pkexec: `/usr/libexec/gamecove/gamecove-fix --list` prints one fix name per line; `/usr/libexec/gamecove/gamecove-fix <name> status` prints `key=value` lines and always ends with `state=<s>`. Every fix prints `applies=yes|no` (`no` with `state=n/a`: not this hardware) and, when it applies, `installed=yes|no`. `state` is `on` or `off` for every fix, plus per fix: `restart` (claw8ex-vrr, claw8ex-gyro: takes effect after a restart / cold boot, see `next=`), `partial`, `not-needed` (claw8ex-buttons), `unsupported`, `other-override` (claw8ex-vrr). charge-limit and fan are `installed=yes`/`state=on` from the first `set` until `remove`; `Power.restore()` re-applies a remembered charge limit or fan preset only while `installed=yes`, so `remove` sticks.
 - `devices.json` field `"fixes"`: the fixes the device page offers for that handheld, each exactly a folder name in `fixes/` (what `gamecove-fix --list` prints), e.g. `["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro"]` for the Claw 8 EX. Show only names that are both in this list and in `--list`, with their `status`. `charge-limit` and `fan` are not listed there; they belong to the Power page (`"charge_limit"`, `"fan"` fields).
+
+## System services (`Updates`, `Storage`, `Setup`, `Controller`)
+
+Research, privileges and the device checklist: [SYSTEM.md](SYSTEM.md). Shared rules: every
+call returns at once; work runs on the service's worker thread and comes back on the main
+thread as signals; nothing runs at start or polls (except `Controller` re-applying a saved
+layout at start, and `Storage.watch(true)`); no root action of ours. Each service has a
+`setup(runner, ...)` for tests, `state()` for the screen, and capability flags: hide what
+says `unsupported` / `false`.
+
+### `Updates`
+
+```
+signal changed(state)                         # after every phase change
+signal checked(kind, result)                  # os: {"available", "version", "notes_url", "staged", "staged_version", "error"}
+                                              # firmware: {"available", "devices": [{"id", "name", "current", "version", "summary", "needs_reboot", "trusted", "details_url"}], "error"}
+                                              # flatpak: {"available", "pending": [{"id", "name", "version", "branch", "origin", "installation"}], "error"}
+signal progress(kind, percent, line)          # percent 0..100 or -1
+signal finished(kind, ok, message)            # kind also "reboot"; message "" or game_running | busy | not_available | unsupported | tool's last line
+check_updates()                               # every supported kind
+check(kind) -> bool                           # kind: os | firmware | flatpak
+apply_update() -> bool                        # = apply("os")
+apply(kind, target := "") -> bool             # target: one firmware DeviceId, "" = all
+reboot() -> bool                              # systemctl reboot; refused during a game
+set_game_running(on)                          # main.gd from GameSession.started/ended; apply/reboot refuse while true
+phase(kind) -> String                         # unsupported | idle | checking | up_to_date | available | applying | staged | error
+state() -> {"os_info": {"id", "name", "version", "variant", "image", "atomic", "family", "backend", "apply_via", "notes_url"},
+            "phase": {kind: phase}, "os": {...}, "firmware": {...}, "flatpak": {...},
+            "supported": {"os", "firmware", "flatpak"}, "game_running", "reboot_needed"}
+```
+
+### `Storage`
+
+```
+signal changed(state)
+refresh()                                     # findmnt + lsblk + library files
+watch(on)                                     # true when the Storage page opens, false when it closes
+measure(path)                                 # du -sb one library folder on request
+state() -> {"ready", "error", "watching",
+            "drives": [{"device", "kind": internal|sd|external, "label", "model", "fstype", "mount", "mounts",
+                        "size", "used", "free", "compression", "removable"}],   # bytes, -1 unknown
+            "libraries": [{"store": steam|heroic|games, "path", "device", "mount", "free", "bytes", "games", "compression"}]}
+```
+
+No formatting (future work in SYSTEM.md).
+
+### `Setup`
+
+```
+signal changed(steps)
+signal login_started(store, info)             # {"store", "url", "needs": steam|code|redirect_url|heroic|unavailable, "param"}
+signal login_finished(store, ok, message)
+signal fixes_checked(fixes)                   # [{"name", "applies", "installed", "state", "status": {k: v}}]
+steps() -> [{"id", "optional", "done", "skipped", "status"}]   # welcome, theme, stores, device_fixes, steamgriddb, done
+is_first_run() -> bool                        # until complete("done")
+next_step() -> String
+complete(step) -> bool / skip(step) -> bool (optional steps only) / reset()
+store_status() -> {store: {"signed_in", "account", "tool", "how", "config"}}   # steam | epic | gog | amazon
+start_login(store) -> bool                    # then login_started: show `url` as QR + text
+finish_login(store, text) -> bool             # text: the code or the whole address; then login_finished
+cancel_login(store)
+suggested_fixes() -> Array / check_fixes()    # devices.json "fixes" that `gamecove-fix --list` has, with status
+steamgriddb_key() -> String / set_steamgriddb_key(key) -> bool   # 32 hex chars, "" removes
+```
+
+Stored in `user://setup.cfg` (`[steps]`, `[skipped]`, `[keys] steamgriddb`).
+
+### `Controller`
+
+```
+signal changed(state)
+signal applied(setting, ok)                   # paddle | gyro | rumble | profile | game_profile
+refresh()                                     # call when the controller page opens
+set_paddle(paddle, target)                    # paddle LeftPaddle1..3 / RightPaddle1..3; target a gamepad button, "Key…", or "" to reset
+set_gyro_mode(mode)                           # off | mouse | stick
+set_rumble(enabled) / test_rumble(strength := 0.6)
+set_led(color, brightness) -> false           # InputPlumber has no LED setter
+load_profile_file(path)
+set_game_profile(key, on) / has_game_profile(key)
+start_game(key) / end_game()                  # main.gd from GameSession.started/ended
+state() -> {"available", "version", "devices": [{"path", "name", "profile_name", "profile_path", "capabilities",
+            "output_capabilities", "paddles", "gyro", "rumble", "led", "gamepad"}], "active",
+            "profile": {"name", "path", "paddles": {paddle: target or ""}, "gyro": off|mouse|stick|custom},
+            "rumble": bool|null, "led", "game", "game_profile",
+            "supported": {"profiles", "paddles", "gyro", "rumble", "led", "per_game"}}
+```
+
+Profiles we write: `~/.config/inputplumber/profiles/gamecove/default.yaml` and `<store>_<id>.yaml`
+(JSON, InputPlumber profile schema v1).
 
 ## Tests
 
