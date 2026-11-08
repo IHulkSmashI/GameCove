@@ -1,0 +1,130 @@
+#!/bin/sh
+# gamecove-fix: the one root helper GameCove has. Run with pkexec:
+#
+#   pkexec /usr/libexec/gamecove/gamecove-fix <name> install|remove|status
+#   pkexec /usr/libexec/gamecove/gamecove-fix <name> set <value>
+#   /usr/libexec/gamecove/gamecove-fix --list
+#
+# <name> must be a folder under the fixes directory holding a fix.sh that
+# implements `install|remove|status|set <value>`. Every change (anything but
+# status) is logged to /var/lib/gamecove/changes.log with who asked, what and the
+# result; fix.sh may append its own detail lines to $GAMECOVE_CHANGES_LOG.
+#
+# Tests only: GAMECOVE_ROOT prefixes every path (fixes, log); GAMECOVE_FIXES_DIR
+# points at another fixes folder. Both are ignored when run through pkexec.
+#
+# Exit codes: 0 ok, 64 bad usage, 65 unknown fix, 66 bad value, else fix.sh's code.
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+umask 022
+
+if [ -n "${PKEXEC_UID:-}" ]; then
+	# Never let the calling user move our paths around.
+	GAMECOVE_ROOT=""
+	GAMECOVE_FIXES_DIR=""
+fi
+ROOT="${GAMECOVE_ROOT:-}"
+FIXES_DIR="${GAMECOVE_FIXES_DIR:-$ROOT/usr/lib/gamecove/fixes}"
+LOG_DIR="$ROOT/var/lib/gamecove"
+LOG_FILE="$LOG_DIR/changes.log"
+
+usage() {
+	echo "usage: gamecove-fix <name> install|remove|status|set <value>" >&2
+	echo "       gamecove-fix --list" >&2
+	exit 64
+}
+
+die() {
+	echo "gamecove-fix: $1" >&2
+	exit "$2"
+}
+
+# Fix names: lower-case letters, digits and dashes, starting with a letter or digit.
+# This alone rules out "..", "/" and anything else that could leave FIXES_DIR.
+valid_name() {
+	case "$1" in
+	"" | -* | *[!a-z0-9-]*) return 1 ;;
+	esac
+	[ "${#1}" -le 64 ]
+}
+
+# Values: short, one line, no shell or log metacharacters.
+valid_value() {
+	case "$1" in
+	"" | -* | *[!A-Za-z0-9._:,=+-]*) return 1 ;;
+	esac
+	[ "${#1}" -le 128 ]
+}
+
+log_change() {
+	mkdir -p "$LOG_DIR"
+	printf '%s uid=%s fix=%s action=%s value=%s result=%s\n' \
+		"$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${PKEXEC_UID:-$(id -u)}" \
+		"$1" "$2" "${3:--}" "$4" >>"$LOG_FILE"
+}
+
+list_fixes() {
+	[ -d "$FIXES_DIR" ] || return 0
+	for d in "$FIXES_DIR"/*/; do
+		[ -d "$d" ] || continue
+		n="$(basename "$d")"
+		if valid_name "$n" && [ -f "$d/fix.sh" ]; then
+			echo "$n"
+		fi
+	done
+}
+
+[ $# -ge 1 ] || usage
+if [ "$1" = "--list" ]; then
+	[ $# -eq 1 ] || usage
+	list_fixes
+	exit 0
+fi
+[ $# -ge 2 ] || usage
+
+name="$1"
+action="$2"
+value=""
+
+valid_name "$name" || die "invalid fix name" 65
+script="$FIXES_DIR/$name/fix.sh"
+[ -f "$script" ] && [ ! -L "$FIXES_DIR/$name" ] || die "unknown fix: $name" 65
+
+case "$action" in
+install | remove | status)
+	[ $# -eq 2 ] || usage
+	;;
+set)
+	[ $# -eq 3 ] || usage
+	value="$3"
+	valid_value "$value" || die "invalid value" 66
+	;;
+*)
+	usage
+	;;
+esac
+
+GAMECOVE_CHANGES_LOG="$LOG_FILE"
+export GAMECOVE_ROOT="$ROOT" GAMECOVE_CHANGES_LOG
+cd /
+
+if [ "$action" = "status" ]; then
+	exec sh "$script" status
+fi
+
+mkdir -p "$LOG_DIR"
+rc=0
+if [ "$action" = "set" ]; then
+	sh "$script" set "$value" || rc=$?
+else
+	sh "$script" "$action" || rc=$?
+fi
+
+if [ "$rc" -eq 0 ]; then
+	log_change "$name" "$action" "$value" ok
+else
+	log_change "$name" "$action" "$value" "fail($rc)"
+fi
+exit "$rc"

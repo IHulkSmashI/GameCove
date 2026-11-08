@@ -1,0 +1,61 @@
+#!/bin/sh
+# GameCove session client: the CLIENTCMD of the gamecove gamescope-session-plus
+# session. Installed to /usr/libexec/gamecove/gamecove-session-client.
+#
+# 1. Starts Steam in the background (unless GAMECOVE_STEAM_MODE=off) so
+#    steam://rungameid/ launches are instant and Steam Input is live.
+# 2. Replaces itself with the GameCove Godot app on gamescope's X display.
+#
+# Settings (environment, e.g. ~/.config/environment.d/gamecove.conf):
+#   GAMECOVE_STEAM_MODE  silent (default) | gamepadui (experimental) | off
+#   GAMECOVE_BIN         path of the GameCove binary
+set -u
+
+GAMECOVE_BIN="${GAMECOVE_BIN:-/usr/lib/gamecove/gamecove.x86_64}"
+GAMECOVE_STEAM_MODE="${GAMECOVE_STEAM_MODE:-silent}"
+
+log() {
+	echo "gamecove-session-client: $*" >&2
+}
+
+steam_running() {
+	pgrep -u "$(id -u)" -x steam >/dev/null 2>&1
+}
+
+start_steam() {
+	if ! command -v steam >/dev/null 2>&1; then
+		log "Steam is not installed; Steam games won't launch"
+		return 0
+	fi
+	if steam_running; then
+		return 0
+	fi
+	case "$GAMECOVE_STEAM_MODE" in
+	silent)
+		# Normal Steam client, no window: games, overlay and Steam Input work,
+		# the UI stays hidden. UNTESTED on hardware, see docs/SESSION.md.
+		steam -silent >/dev/null 2>&1 &
+		;;
+	gamepadui)
+		# Steam's handheld UI, hidden. Same flags OpenGamepadUI's Steam plugin
+		# uses. Gives Steam's on-screen keyboard and quick menu, but Steam may
+		# try to take the main-app role from us. EXPERIMENTAL.
+		steam -silent -gamepadui -steamos3 -steampal -steamdeck >/dev/null 2>&1 &
+		;;
+	off)
+		;;
+	*)
+		log "unknown GAMECOVE_STEAM_MODE '$GAMECOVE_STEAM_MODE', not starting Steam"
+		;;
+	esac
+}
+
+start_steam
+
+if [ ! -x "$GAMECOVE_BIN" ]; then
+	log "GameCove binary not found at $GAMECOVE_BIN"
+	exit 1
+fi
+
+# X11 on purpose: gamescope reads focus and overlay properties from X windows.
+exec "$GAMECOVE_BIN" --display-driver x11 --rendering-driver opengl3 --fullscreen "$@"

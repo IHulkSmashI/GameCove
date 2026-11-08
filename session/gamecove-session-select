@@ -1,0 +1,69 @@
+#!/bin/sh
+# Switch between GameCove, Steam Gaming Mode and the desktop using the distro's
+# own session switcher, steamos-manager (`steamosctl`), which Bazzite and SteamOS
+# both ship. No root, no files of our own: steamos-manager writes the SDDM
+# autologin entry and logs the session out.
+#
+#   gamecove-session-select steam               Steam Gaming Mode (this time)
+#   gamecove-session-select gamecove            GameCove (this time)
+#   gamecove-session-select gamecove --default  GameCove on every boot
+#   gamecove-session-select desktop             default desktop (Plasma/GNOME)
+#
+# How: steamos-manager accepts any session in wayland-sessions/ whose file name
+# has no "gamescope" in it as a "desktop session", so gamecove.desktop can be
+# picked with switch-to-desktop-mode. With --default, Steam's own "Switch to
+# Desktop" also lands in GameCove; undo with `steamosctl set-default-login-mode game`.
+set -eu
+
+STEAMOSCTL="${STEAMOSCTL:-steamosctl}"
+SESSION_FILE="gamecove.desktop"
+
+die() {
+	echo "gamecove-session-select: $*" >&2
+	exit "${2:-1}"
+}
+
+usage() {
+	echo "usage: gamecove-session-select steam|gamecove|desktop [--default]" >&2
+	exit 64
+}
+
+[ $# -ge 1 ] || usage
+target="$1"
+default=0
+if [ $# -ge 2 ]; then
+	[ "$2" = "--default" ] || usage
+	default=1
+fi
+[ $# -le 2 ] || usage
+
+if [ "$(id -u)" -eq 0 ]; then
+	die "run this as your own user, not root"
+fi
+
+if ! command -v "$STEAMOSCTL" >/dev/null 2>&1; then
+	die "steamosctl (steamos-manager) not found; switch sessions from the login screen instead" 2
+fi
+
+case "$target" in
+steam)
+	if [ "$default" -eq 1 ]; then
+		"$STEAMOSCTL" set-default-login-mode game
+	fi
+	exec "$STEAMOSCTL" switch-to-game-mode
+	;;
+gamecove)
+	if [ "$default" -eq 1 ]; then
+		"$STEAMOSCTL" set-default-desktop-session "$SESSION_FILE"
+		"$STEAMOSCTL" set-default-login-mode desktop
+	fi
+	exec "$STEAMOSCTL" switch-to-desktop-mode "$SESSION_FILE"
+	;;
+desktop)
+	[ "$default" -eq 0 ] || die "--default is only for steam or gamecove" 64
+	exec "$STEAMOSCTL" switch-to-desktop-mode
+	;;
+*)
+	usage
+	;;
+esac
