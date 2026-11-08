@@ -1,0 +1,47 @@
+[
+ {
+  "gameID": "196149",
+  "steamAppID": "1145360",
+  "cheapest": "24.99",
+  "cheapestDealID": "%2FRRvRbW4trH2Me4HcfUIFk5pCGamwlMuyid9ZTDJ4do%3D",
+  "external": "Hades",
+  "internalName": "HADES",
+  "thumb": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1145360/capsule_231x87.jpg?t=1758127023"
+ },
+ {
+  "gameID": "285827",
+  "steamAppID": "1145350",
+  "cheapest": "29.99",
+  "cheapestDealID": "Lf61NZp9V40aGLTj97IaB4GJcSaiyzddG3IydU7h4%2BM%3D",
+  "external": "Hades II",
+  "internalName": "HADESII",
+  "thumb": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1145350/10c9138570a8d7ac9144f601ab0f2ccbc820337e/capsule_231x87.jpg?t=1779901265"
+ },
+ {
+  "gameID": "335315",
+  "steamAppID": null,
+  "cheapest": "1.79",
+  "cheapestDealID": "cslqpEM%2BOwPciI8tc6GpYHDABIjGsyb6mqHsxpcKXkU%3D",
+  "external": "Cool Shades",
+  "internalName": "COOLSHADES",
+  "thumb": "https://cdn1.epicgames.com/spt-assets/9cf4b4df59d247f1b0ca5fa975be9c4e/pawbay-kwtgi.jpg"
+ },
+ {
+  "gameID": "209875",
+  "steamAppID": "1194940",
+  "cheapest": "1.99",
+  "cheapestDealID": "kGg4stI70jqzeFaeC4lijTXWv95CHHldWgi3%2FAtV3hM%3D",
+  "external": "Tower of Shades",
+  "internalName": "TOWEROFSHADES",
+  "thumb": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1194940/capsule_231x87.jpg?t=1588257230"
+ },
+ {
+  "gameID": "185903",
+  "steamAppID": "826460",
+  "cheapest": "0.99",
+  "cheapestDealID": "J15L4mTo%2FJrwyApplr1Pdc4McK8jq2bNMqaOLK3Kb1A%3D",
+  "external": "The Road to Hades",
+  "internalName": "THEROADTOHADES",
+  "thumb": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/826460/capsule_231x87.jpg?t=1523540778"
+ }
+]

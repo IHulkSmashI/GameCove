@@ -1,0 +1,212 @@
+{
+ "response": {
+  "store_items": [
+   {
+    "item_type": 0,
+    "id": 3900,
+    "success": 1,
+    "visible": true,
+    "name": "Sid Meier's Civilization\u00ae IV",
+    "store_url_path": "app/3900/Sid_Meiers_Civilization_IV",
+    "store_url_slug": "Sid_Meiers_Civilization_IV",
+    "appid": 3900,
+    "type": 0,
+    "related_items": {
+     "parent_appid": 3900
+    },
+    "categories": {
+     "supported_player_categoryids": [
+      2,
+      1
+     ],
+     "feature_categoryids": [
+      17,
+      62
+     ]
+    },
+    "assets": {
+     "asset_url_format": "steam/apps/3900/${FILENAME}?t=1724341287",
+     "main_capsule": "capsule_616x353.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "library_hero_2x": "library_hero_2x.jpg",
+     "community_icon": "297dc4f925d412fd0f8fe6f065dff58272e1b481",
+     "page_background_path": "app/3900?t=1724341287",
+     "last_modified": 1724341287
+    },
+    "release": {
+     "steam_release_date": 1161823860,
+     "original_release_date": 1130223600,
+     "mac_release_date": 1273687200
+    },
+    "best_purchase_option": {
+     "packageid": 4319,
+     "purchase_option_name": "Sid Meier's Civilization IV",
+     "final_price_in_cents": "439",
+     "original_price_in_cents": "2199",
+     "formatted_final_price": "C$ 4.39",
+     "formatted_original_price": "C$ 21.99",
+     "discount_pct": 80,
+     "active_discounts": [
+      {
+       "discount_amount": "1760",
+       "discount_description": "#discount_desc_preset_special",
+       "discount_end_date": 1795111200
+      }
+     ],
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 49520,
+    "success": 1,
+    "visible": true,
+    "name": "Borderlands 2",
+    "store_url_path": "app/49520/Borderlands_2",
+    "store_url_slug": "Borderlands_2",
+    "appid": 49520,
+    "type": 0,
+    "categories": {
+     "supported_player_categoryids": [
+      2,
+      1,
+      9
+     ],
+     "feature_categoryids": [
+      22,
+      29,
+      23,
+      41,
+      42,
+      43,
+      62
+     ],
+     "controller_categoryids": [
+      28
+     ]
+    },
+    "assets": {
+     "asset_url_format": "steam/apps/49520/${FILENAME}?t=1793288352",
+     "main_capsule": "a31378d171ddc282073952ada2b9514668f82106/capsule_616x353.jpg",
+     "main_capsule_2x": "a31378d171ddc282073952ada2b9514668f82106/capsule_616x353_2x.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "library_hero_2x": "library_hero_2x.jpg",
+     "community_icon": "a3f4945226e69b6196074df4c776e342d3e5a3be",
+     "page_background_path": "app/49520?t=1793288352",
+     "last_modified": 1793288352
+    },
+    "release": {
+     "steam_release_date": 1347940800,
+     "mac_release_date": 1353446520,
+     "linux_release_date": 1412097480
+    },
+    "best_purchase_option": {
+     "packageid": 16724,
+     "purchase_option_name": "Borderlands 2",
+     "final_price_in_cents": "219",
+     "original_price_in_cents": "2199",
+     "formatted_final_price": "C$ 2.19",
+     "formatted_original_price": "C$ 21.99",
+     "discount_pct": 90,
+     "active_discounts": [
+      {
+       "discount_amount": "1980",
+       "discount_description": "#discount_desc_preset_special",
+       "discount_end_date": 1794852000
+      }
+     ],
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 1145360,
+    "success": 1,
+    "visible": true,
+    "name": "Hades",
+    "store_url_path": "app/1145360/Hades",
+    "store_url_slug": "Hades",
+    "appid": 1145360,
+    "type": 0,
+    "categories": {
+     "supported_player_categoryids": [
+      2
+     ],
+     "feature_categoryids": [
+      22,
+      29,
+      13,
+      23,
+      41,
+      42,
+      43,
+      62
+     ],
+     "controller_categoryids": [
+      28
+     ]
+    },
+    "assets": {
+     "asset_url_format": "steam/apps/1145360/${FILENAME}?t=1758127023",
+     "main_capsule": "capsule_616x353.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "page_background": "page_bg_generated_v6b.jpg",
+     "hero_capsule": "hero_capsule.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "library_hero_2x": "library_hero_2x.jpg",
+     "community_icon": "8a3fca36a00883e8066263ad35dd15d77a1f9abc",
+     "page_background_path": "app/1145360?t=1758127023",
+     "raw_page_background": "page_bg_raw.jpg",
+     "last_modified": 1758127023
+    },
+    "release": {
+     "steam_release_date": 1600353507,
+     "original_steam_release_date": 1575997560
+    },
+    "best_purchase_option": {
+     "packageid": 415372,
+     "purchase_option_name": "Hades",
+     "final_price_in_cents": "3250",
+     "formatted_final_price": "C$ 32.50",
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 99999999,
+    "success": 15,
+    "visible": false,
+    "name": "",
+    "store_url_path": "app/0/",
+    "store_url_slug": "",
+    "appid": 0
+   }
+  ]
+ }
+}

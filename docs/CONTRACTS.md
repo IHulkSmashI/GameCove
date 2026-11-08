@@ -11,6 +11,8 @@ How the parts of GameCove talk to each other. Change a contract only with a matc
 | `Library` | `scripts/library/library.gd` | `scripts/library/` | All stores in one list, game info from the game database, launching |
 | `Launcher` | `scripts/launch/launcher.gd` | `scripts/launch/` | Per-game settings and the launch environment (upscaler, frame gen, latency, Proton) |
 | `Gamescope` | `scripts/gamescope/gamescope.gd` | `scripts/gamescope/` | Frame limit, refresh rate, overlay focus |
+| `Discover` | `scripts/discover/discover.gd` | `scripts/discover/` | Deals, prices across stores, wishlist and alerts, release calendar |
+| `Art` | `scripts/discover/art.gd` | `scripts/discover/` | Cover / hero / logo / header images for any game, cached in `user://art/` |
 
 The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these services; it never touches sysfs, D-Bus or store tools directly.
 
@@ -36,6 +38,141 @@ The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these 
 ```
 
 `Library` emits `changed` after every refresh. `Library.launch(game)` starts it through the right store and returns `{"ok": bool, "app_id": int, "pid": int, "scoped": bool}`: `app_id` is the id gamescope knows the game by (the Steam app id, or `Library.app_id_for(key)` for a game we start in an `app-steam-app<id>-<n>` scope; 0 when gamescope can't tell), `pid` the process we started (0 for Steam).
+
+## Discover (`Discover` autoload, `scripts/discover/`)
+
+Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (deals, other stores' prices in USD, historical low), Steam's keyless store and wishlist endpoints (regional price, sale end, release state, art), and `upcoming.json.gz` from the nightly job (calendar + ECB exchange rates). Everything is cached in `user://discover/` and works offline. Signals are emitted on the main thread.
+
+### Signals
+
+| Signal | When |
+| --- | --- |
+| `deals_changed` | `deals` replaced (after a refresh, a wishlist change, a settings change) |
+| `calendar_changed` | a new calendar file was loaded |
+| `wishlist_changed` | items added/removed/edited, or new prices for them |
+| `settings_changed` | `set_settings()` |
+| `prices_ready(game_key, deals: Array)` | answer to `request_prices()` |
+| `search_done(query, results: Array)` | answer to `search()` |
+| `import_done(ok: bool, added: int, error: String)` | answer to `import_steam_wishlist()`; `error` is a user-facing sentence ("" when fine; set with `ok` true for an empty/private wishlist) |
+| `price_alert(item, deal)` | a wishlist item hit its target or went on sale (once per event) |
+| `release_alert(item)` | a "notify me" game came out (once) |
+| `status_changed(source, status)` | `source` `cheapshark` \| `steam` \| `calendar` \| `wishlist_import`; `status` `ok` \| `offline` \| `rate_limited` \| `missing` (calendar file not published yet) \| `error: <why>` |
+
+### Properties
+
+- `deals: Array[Dictionary]` — top current deals (Deal shape), CheapShark's "deal rating" order.
+- `wishlist: Array[Dictionary]` — wishlist items with live fields, newest first (computed on read).
+- `calendar: Array[Dictionary]` — Release dicts in calendar order; `days_until` computed for today on read.
+- `status: Dictionary` — last status per source (as in `status_changed`).
+- `alerts_inbox: Array[Dictionary]` — fired alerts not yet marked seen, newest first: `{"id", "kind": "price"|"release", "key", "title", "at", "price_user"?, "target_price"?}`.
+- `game_running: bool` — set true while a game has focus; no background refresh then (same as `pause()`).
+
+### Methods
+
+| Method | Does |
+| --- | --- |
+| `refresh(force := false) -> bool` | Deals + wishlist prices if 6 h old, calendar file if 24 h old; `force` ignores ages and pause. False when nothing started (busy, paused, not due). A background timer calls `refresh()` 45 s after start-up, then every 15 min (it only fetches when due). At most ~10 requests. |
+| `pause()` / `resume()` / `is_paused()` | No background refresh while paused; one that came due runs on resume. |
+| `search(title)` | CheapShark title search (+ one Steam call for regional prices) → `search_done`. Result: `{"key", "title", "ids", "art", "best_deal": Deal or {}, "on_wishlist", "release": Release or {}}`. |
+| `prices_for(game) -> Array[Deal]` | Every store's price from cache, cheapest first in the user's currency (unconvertible last). `game`: Steam appid (int/String), title, Library game, wishlist item, Release, Deal or `{"ids", "title"}`. |
+| `request_prices(game)` | Fetches them (≤3 requests, works while paused) → `prices_ready(key, deals)`. |
+| `deal_for_appid(appid) -> Deal or {}` / `deal_for_title(title)` | Best known deal (wishlist prices, then top deals); cheap, for sale badges on library tiles. |
+| `add_to_wishlist(game: Dictionary) -> String` | Adds (Release, Deal, search result, Library game or `{"title", "appid"/"ids"}`); returns the key; existing items keep their settings. |
+| `remove_from_wishlist(key)` | |
+| `set_target_price(key, price_or_null)` | In the user's currency; null = alert on any sale. |
+| `set_notify(key, price = null, release = null)` | Turn price / release alerts on/off (null leaves as is). |
+| `notify_me(release) -> String` | "Notify me" on a calendar entry: wishlist + release alert (a game already out doesn't alert). |
+| `is_wishlisted(game) -> bool`, `get_item(key) -> Dictionary` | |
+| `import_steam_wishlist(profile := "")` | 64-bit id, `steamcommunity.com/profiles/<id>`, `steamcommunity.com/id/<name>` or a bare custom name (resolved through the public profile XML); "" uses `settings.steam_id`. Needs the profile's "Game details" set to public. Merges, keeps existing settings, remembers the profile in settings. |
+| `check_alerts()` | Runs the alert rules on cached data (also run after each refresh). |
+| `mark_seen(id := "")` | Drops an alert from `alerts_inbox` ("" = all). Alerts themselves fire once regardless. |
+| `get_settings() -> Dictionary` / `set_settings(patch)` | `{"country": "" (= from system locale) or "CA", "currency": "" (= the country's Steam currency) or "CAD", "steam_id", "steamgriddb_key", "alerts": bool}`; `get_settings()` adds `country_effective`, `currency_effective`, `steam_currency`. |
+| `country()`, `user_currency()` | Resolved values. |
+| `calendar_info() -> Dictionary` | `{"built", "sources", "credits", "fx_date"}` of the calendar file, `{}` before the first download. |
+| `open_link(link) -> bool`, `Discover.link_command(link, steam_bin) -> Array` | Opens a Deal's/Release's `link` (below). |
+
+### Deal
+
+```
+{
+  "key": "cheapshark:<dealID>" | "steam:<appid>",
+  "source": "cheapshark" | "steam",       # whose data this row is
+  "store": "steam" | "cs:<storeID>", "store_name": "GreenManGaming", "store_icon": url or "",
+  "title": "Borderlands 2", "appid": "49520" or "", "game_id": "<CheapShark gameID>" or "",
+  "price": 2.19, "regular_price": 21.99, "currency": "CAD",       # as the store charges it
+  "price_text": "C$ 2.19", "regular_text": "C$ 21.99",            # Steam's own labels, or ours
+  "price_user": 2.19 or null, "regular_user": 21.99 or null,      # in the user's currency; null = no exchange rate
+  "user_currency": "CAD", "converted": false,                     # true: price_user is an ECB-rate estimate
+  "price_user_text": "C$2.19" | "~C$3.51",
+  "savings_pct": 90, "on_sale": true,
+  "is_historical_low": true,              # only when CheapShark's lowest-ever price is known
+  "historical_low": {"price": 1.99, "currency": "USD", "date": unix} or null,
+  "sale_ends_at": unix or null,           # Steam only
+  "rating": 9.4 or null,                  # CheapShark deal rating 0-10
+  "art": {"cover": url, "hero": url, "header": url, "thumb": url},   # URLs; Art caches them
+  "link": {"kind": "steam", "uri": "steam://store/49520"} | {"kind": "url", "uri": "https://www.cheapshark.com/redirect?dealID=..."},
+  "on_wishlist": bool, "wishlist_key": "steam:49520"
+}
+```
+
+CheapShark prices are USD only. Rows from CheapShark data always link to CheapShark's redirect URL (their terms), even for Steam; a CheapShark Steam row shows Steam's regional price when known but keeps that link. Rows from Steam's own data (`source` "steam") link to `steam://store/<appid>`; in `prices_for()` such a row replaces CheapShark's Steam row.
+
+### Wishlist item (`Discover.wishlist`, `get_item()`)
+
+```
+{
+  "key": "steam:<appid>" | "title:<normalised title>",
+  "title", "ids": {"steam"?, "cheapshark"?, "igdb"?, "wikidata"?, ...},
+  "added": unix, "source": "manual" | "steam" | "calendar",
+  "target_price": float or null,          # user's currency; null = any sale
+  "notify_price": bool, "notify_release": bool,
+  "last_price": float or null,            # best price_user at the last refresh
+  "art": {"cover", "hero", "header"},
+  # live, computed on read:
+  "best_deal": Deal or {}, "historical_low": {...} or null,
+  "savings_pct": int, "on_sale": bool, "is_historical_low": bool, "sale_ends_at": unix or null,
+  "release": {"released": bool, "date", "precision", "days_until", "date_unix"} or {},
+  "on_wishlist": true
+}
+```
+
+Alert rules (`alerts.gd`): with a target, fires when the best `price_user` is at or below it and lower than the last alerted price; without one, when the best deal is on sale and lower than the last alerted price. The memory clears when the price goes back above the target / the sale ends, so the next drop alerts again. Release alerts fire once when Steam says the game is out or its day-precision date arrives. Never with `settings.alerts` false; unconvertible prices never alert.
+
+### Release (`Discover.calendar`)
+
+```
+{
+  "key": "steam:<appid>" | "title:<normalised>",
+  "title": "Football Manager 27",
+  "date": "2026-11-10" | "2026-12" | "2027-Q1" | "2027" | "",
+  "precision": "day" | "month" | "quarter" | "year" | "tba",
+  "date_unix": unix (first day of the period, UTC) or null,
+  "days_until": int (day precision only; 0 today, negative once out) or null,
+  "released": bool,                       # whole period in the past ("Out now")
+  "ids": {"steam"?, "igdb"?, "wikidata"?, "gog"?, "epic"?},
+  "art": {"cover": url or "", "hero": url or "", "header": url or ""},
+  "link": {"kind": "steam", "uri": "steam://store/<appid>"} | {"kind": "url", "uri": "https://www.wikidata.org/wiki/Q..."} | {},
+  "sources": ["steam", "igdb", "wikidata"], "on_wishlist": bool
+}
+```
+
+Order: by the last day a date can mean (so "December 2026" follows every known December day), finer precision first on ties, TBA last. Entries out for more than 14 days are dropped.
+
+`upcoming.json.gz` (rolling `gamedb` release, built by `gamedb/gamedb/upcoming.py`): `{"schema": 1, "built", "sources", "credits", "fx": {"base": "EUR", "date", "rates": {"USD": 1.1165, ...}, "source": "ECB statistics"}, "count", "releases": [{"title", "date", "precision", "ids", "art", "sources"}]}` (null fields omitted). The app downloads it at most daily; a 404 (not published yet) gives status `missing` and an empty calendar, a broken file keeps the old copy.
+
+### Opening links
+
+`link.kind == "steam"`: `steam steam://store/<appid>` (the running client shows the store page). `kind == "url"`: `steam steam://openurl/<url>` (Steam's built-in browser; the session has no desktop browser). Without `steam` on PATH: `xdg-open <url>`. Only `https://` and `steam://` URIs are opened. Use `Discover.open_link(deal["link"])`.
+
+### Art (`Art` autoload)
+
+- `request(key, kind, hints := {}) -> String`: cached path at once (and marks it used), or "" and a background download that ends in `art_ready(key, kind, path)` (`path` "" = nothing found; not retried for a day). `kind`: `cover` (600x900), `hero`, `logo`, `header`. `key`: any stable id, e.g. a Library key `"steam:976730"` / `"epic:Fortnite"` or a Discover key; `"steam:<appid>"` supplies the appid. `hints`: `{"appid", "url", "title"}`.
+- Order: `hints.url` → a URL `remember(key, {"cover": url, ...})`ed from Steam store data (Discover does this; newer Steam apps keep art under hashed paths only the store data knows) → Steam CDN by appid → SteamGridDB with the user's own key (`settings.steamgriddb_key`), by Steam id or by title.
+- `path_for(key, kind) -> String` (cache only), `cleanup()`, `total_bytes()`. Files are checked to be JPEG/PNG/WebP (≤ 8 MB); the cache is capped at `max_bytes` (256 MB) and trimmed to 80% by least recent use.
+
+### Testing and previews
+
+`scripts/discover/fake_http.gd` has the same `request(url, opts, done)` interface as the real `http.gd`, answers synchronously from files by URL prefix and records requests. Set `Discover.http` / `Art.http` to one, `data_dir` / `cache_dir` to a temp folder and `clock` to a fixed time; call `Discover.load_all()`. Under the test runner both autoloads stay idle (no timers, no network). Fixtures: `app/tests/fixtures/discover/` (real responses captured 2026-11-08); `helpers.gd` there wires everything.
 
 ## Running game (`scripts/launch/game_session.gd`, owned by `main.gd`)
 

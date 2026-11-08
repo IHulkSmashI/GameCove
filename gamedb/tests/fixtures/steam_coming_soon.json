@@ -1,0 +1,407 @@
+{
+ "response": {
+  "metadata": {
+   "total_matching_records": 62368,
+   "start": 0,
+   "count": 9
+  },
+  "store_items": [
+   {
+    "item_type": 0,
+    "id": 4530370,
+    "success": 1,
+    "visible": true,
+    "name": "Football Manager 27",
+    "store_url_path": "app/4530370/Football_Manager_27",
+    "store_url_slug": "Football_Manager_27",
+    "appid": 4530370,
+    "type": 0,
+    "assets": {
+     "asset_url_format": "steam/apps/4530370/${FILENAME}?t=1793982134",
+     "main_capsule": "dbddb621648ea947a5cc8d38f17088b571ca2fe7/capsule_616x353_alt_assets_0.jpg",
+     "main_capsule_2x": "dbddb621648ea947a5cc8d38f17088b571ca2fe7/capsule_616x353_alt_assets_0_2x.jpg",
+     "small_capsule": "23336e0bcc0127628c814534bf59950a2d93a40d/capsule_231x87_alt_assets_0.jpg",
+     "small_capsule_2x": "23336e0bcc0127628c814534bf59950a2d93a40d/capsule_231x87_alt_assets_0_2x.jpg",
+     "header": "1827516e497f3ddd2023b5ba3cd354af34a3548b/header_alt_assets_0.jpg",
+     "header_2x": "1827516e497f3ddd2023b5ba3cd354af34a3548b/header_alt_assets_0_2x.jpg",
+     "page_background": "58ff694d0b284789666cea9601d774acbcc415ea/page_bg_v6.jpg",
+     "hero_capsule": "319c2b5f9f192255802c8b2e77acd90bbb67ab65/hero_capsule_alt_assets_0.jpg",
+     "hero_capsule_2x": "319c2b5f9f192255802c8b2e77acd90bbb67ab65/hero_capsule_alt_assets_0_2x.jpg",
+     "library_capsule": "7ed4ea902189db0f278ae069ff5bfde4f601de93/library_capsule.jpg",
+     "library_capsule_2x": "7ed4ea902189db0f278ae069ff5bfde4f601de93/library_capsule_2x.jpg",
+     "library_hero": "d38e5bf84f475381c6146e2d54f03d1db5292f10/library_hero.jpg",
+     "library_hero_2x": "d38e5bf84f475381c6146e2d54f03d1db5292f10/library_hero_2x.jpg",
+     "community_icon": "6995bcff9583958099440e04d24d5790796cdee2",
+     "page_background_path": "app/4530370?t=1793982134",
+     "raw_page_background": "58ff694d0b284789666cea9601d774acbcc415ea/page_bg_raw.jpg",
+     "last_modified": 1793982134
+    },
+    "release": {
+     "steam_release_date": 1794326400,
+     "is_coming_soon": true,
+     "coming_soon_display": "date_full"
+    },
+    "is_coming_soon": true,
+    "best_purchase_option": {
+     "packageid": 1579953,
+     "purchase_option_name": "Football Manager 27",
+     "final_price_in_cents": "5399",
+     "original_price_in_cents": "5999",
+     "formatted_final_price": "$53.99",
+     "formatted_original_price": "$59.99",
+     "discount_pct": 10,
+     "active_discounts": [
+      {
+       "discount_amount": "600",
+       "discount_description": "#discount_desc_preset_prepurchase",
+       "discount_end_date": 1794326400
+      }
+     ],
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 2272360,
+    "success": 1,
+    "visible": true,
+    "name": "Warhammer 40,000: Dawn of War IV",
+    "store_url_path": "app/2272360/Warhammer_40000_Dawn_of_War_IV",
+    "store_url_slug": "Warhammer_40000_Dawn_of_War_IV",
+    "appid": 2272360,
+    "type": 0,
+    "content_descriptorids": [
+     2,
+     5
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/2272360/${FILENAME}?t=1793946854",
+     "main_capsule": "56e19a45e893e5a16a07b7a59570ce20d4a9ebfe/capsule_616x353.jpg",
+     "main_capsule_2x": "56e19a45e893e5a16a07b7a59570ce20d4a9ebfe/capsule_616x353_2x.jpg",
+     "small_capsule": "58655009cee15d3af27c68a064a7a351853fea0b/capsule_231x87.jpg",
+     "small_capsule_2x": "58655009cee15d3af27c68a064a7a351853fea0b/capsule_231x87_2x.jpg",
+     "header": "f50a309da98ef75cbdae400a7d492e36314ce415/header.jpg",
+     "header_2x": "f50a309da98ef75cbdae400a7d492e36314ce415/header_2x.jpg",
+     "page_background": "342d463c40347454a68cb6ddbb73e886b3b57965/page_bg_v6.jpg",
+     "hero_capsule": "e9eaad747c4e242d0a0f0db1a2e2fe9f76feee80/hero_capsule.jpg",
+     "hero_capsule_2x": "e9eaad747c4e242d0a0f0db1a2e2fe9f76feee80/hero_capsule_2x.jpg",
+     "library_capsule": "c7dfb77d135e6da1b8a392af39b4272c59b1162a/library_capsule.jpg",
+     "library_capsule_2x": "c7dfb77d135e6da1b8a392af39b4272c59b1162a/library_capsule_2x.jpg",
+     "library_hero": "63bb72eb8e7513bc4756bb46d38f046114c33087/library_hero.jpg",
+     "library_hero_2x": "63bb72eb8e7513bc4756bb46d38f046114c33087/library_hero_2x.jpg",
+     "community_icon": "913e77653c95f84aa2ace12cfa46f6e2401153fc",
+     "page_background_path": "app/2272360?t=1793946854",
+     "raw_page_background": "342d463c40347454a68cb6ddbb73e886b3b57965/page_bg_raw.jpg",
+     "edition_comparison": "cc292f0f4b8eee95f45a02b39ab850bd93acea4b/edition_comparision.png",
+     "last_modified": 1793946854
+    },
+    "release": {
+     "steam_release_date": 1796313600,
+     "is_coming_soon": true,
+     "coming_soon_display": "date_full"
+    },
+    "is_coming_soon": true,
+    "best_purchase_option": {
+     "packageid": 815160,
+     "purchase_option_name": "Warhammer 40,000: Dawn of War IV",
+     "final_price_in_cents": "5399",
+     "original_price_in_cents": "5999",
+     "formatted_final_price": "$53.99",
+     "formatted_original_price": "$59.99",
+     "discount_pct": 10,
+     "active_discounts": [
+      {
+       "discount_amount": "600",
+       "discount_description": "#discount_desc_preset_prepurchase",
+       "discount_end_date": 1796313600
+      }
+     ],
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 2523740,
+    "success": 1,
+    "visible": true,
+    "name": "DreamWorks Shrek 2 Remastered",
+    "store_url_path": "app/2523740/DreamWorks_Shrek_2_Remastered",
+    "store_url_slug": "DreamWorks_Shrek_2_Remastered",
+    "appid": 2523740,
+    "type": 0,
+    "assets": {
+     "asset_url_format": "steam/apps/2523740/${FILENAME}?t=1794005630",
+     "main_capsule": "8b0d10da8636c2f44d5ccfdcb127fa5390213bb0/capsule_616x353.jpg",
+     "main_capsule_2x": "8b0d10da8636c2f44d5ccfdcb127fa5390213bb0/capsule_616x353_2x.jpg",
+     "small_capsule": "e41ed2dd0e697fc28db115e1e219e54a294bba3b/capsule_231x87.jpg",
+     "small_capsule_2x": "e41ed2dd0e697fc28db115e1e219e54a294bba3b/capsule_231x87_2x.jpg",
+     "header": "abfa94e9a286146554386662e218aae82716711f/header.jpg",
+     "header_2x": "abfa94e9a286146554386662e218aae82716711f/header_2x.jpg",
+     "page_background": "4e349ac74d4b443654bccfebf6b1e2665ccf559f/page_bg_v6.jpg",
+     "hero_capsule": "cb4f84979a23496254732ea5424a297f50550c22/hero_capsule.jpg",
+     "hero_capsule_2x": "cb4f84979a23496254732ea5424a297f50550c22/hero_capsule_2x.jpg",
+     "library_capsule": "c2ab691a8ed252da54eee927f37d5aa86e54e79e/library_capsule.jpg",
+     "library_capsule_2x": "c2ab691a8ed252da54eee927f37d5aa86e54e79e/library_capsule_2x.jpg",
+     "library_hero": "d4d53f6a7f9724fd57bfb36eed66b3aced2bf878/library_hero.jpg",
+     "library_hero_2x": "d4d53f6a7f9724fd57bfb36eed66b3aced2bf878/library_hero_2x.jpg",
+     "community_icon": "664338e90037fd85c99c3829f434545439761e35",
+     "page_background_path": "app/2523740?t=1794005630",
+     "raw_page_background": "4e349ac74d4b443654bccfebf6b1e2665ccf559f/page_bg_raw.jpg",
+     "last_modified": 1794005630
+    },
+    "release": {
+     "steam_release_date": 1794330000,
+     "is_coming_soon": true,
+     "is_preload": true,
+     "coming_soon_display": "date_full"
+    },
+    "is_coming_soon": true,
+    "best_purchase_option": {
+     "packageid": 907066,
+     "purchase_option_name": "Shrek 2 Remastered",
+     "final_price_in_cents": "2699",
+     "original_price_in_cents": "2999",
+     "formatted_final_price": "$26.99",
+     "formatted_original_price": "$29.99",
+     "discount_pct": 10,
+     "active_discounts": [
+      {
+       "discount_amount": "300",
+       "discount_description": "#discount_desc_preset_prepurchase",
+       "discount_end_date": 1794934800
+      }
+     ],
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 3463440,
+    "success": 1,
+    "visible": true,
+    "name": "GridController",
+    "store_url_path": "app/3463440/GridController",
+    "store_url_slug": "GridController",
+    "appid": 3463440,
+    "type": 0,
+    "is_free": true,
+    "is_early_access": true,
+    "assets": {
+     "asset_url_format": "steam/apps/3463440/${FILENAME}?t=1794003254",
+     "main_capsule": "a6d72ed43ae466ef8cf96e3fdfffd6f82fa3e0c0/capsule_616x353.jpg",
+     "main_capsule_2x": "a6d72ed43ae466ef8cf96e3fdfffd6f82fa3e0c0/capsule_616x353_2x.jpg",
+     "small_capsule": "4ee633c9f5cdbaf1419d4280638b778df22e3954/capsule_231x87.jpg",
+     "small_capsule_2x": "4ee633c9f5cdbaf1419d4280638b778df22e3954/capsule_231x87_2x.jpg",
+     "header": "e993489ff8e436845afa297cbb2ed6e3cb887c56/header.jpg",
+     "header_2x": "e993489ff8e436845afa297cbb2ed6e3cb887c56/header_2x.jpg",
+     "page_background": "afd9265c75911327d14ff88198d1142a7569a489/page_bg_v6.jpg",
+     "hero_capsule": "8525c35cfc609e19156d8beaa0ae908548ee7e69/hero_capsule.jpg",
+     "hero_capsule_2x": "8525c35cfc609e19156d8beaa0ae908548ee7e69/hero_capsule_2x.jpg",
+     "library_capsule": "bc3463eaa6c5c1fa07275c43471fcb91e3bbd952/library_capsule.jpg",
+     "library_capsule_2x": "bc3463eaa6c5c1fa07275c43471fcb91e3bbd952/library_capsule_2x.jpg",
+     "library_hero": "adbe4c18ca00c79cded8aa6a5759bc3b92cb6552/library_hero.jpg",
+     "library_hero_2x": "adbe4c18ca00c79cded8aa6a5759bc3b92cb6552/library_hero_2x.jpg",
+     "community_icon": "16cf22ec63b22def0fcab29f7f602cff7b8ed6f0",
+     "page_background_path": "app/3463440?t=1794003254",
+     "raw_page_background": "afd9265c75911327d14ff88198d1142a7569a489/page_bg_raw.jpg",
+     "last_modified": 1794003254
+    },
+    "release": {
+     "steam_release_date": 1798704000,
+     "is_coming_soon": true,
+     "coming_soon_display": "date_quarter",
+     "is_early_access": true
+    },
+    "is_coming_soon": true
+   },
+   {
+    "item_type": 0,
+    "id": 1675880,
+    "success": 1,
+    "visible": true,
+    "name": "Unnatural : Land Of Dead",
+    "store_url_path": "app/1675880/Unnatural_Land_Of_Dead",
+    "store_url_slug": "Unnatural_Land_Of_Dead",
+    "appid": 1675880,
+    "type": 0,
+    "is_free": true,
+    "assets": {
+     "asset_url_format": "steam/apps/1675880/${FILENAME}?t=1651731466",
+     "main_capsule": "capsule_616x353.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "header_2x": "header.jpg",
+     "page_background": "page_bg_generated_v6b.jpg",
+     "hero_capsule": "hero_capsule.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "community_icon": "ed2fde59e5ebe70e019019d6ea5a8b46945da3d6",
+     "page_background_path": "app/1675880?t=1651731466",
+     "raw_page_background": "page_bg_raw.jpg",
+     "last_modified": 1651731466
+    },
+    "release": {
+     "is_coming_soon": true,
+     "custom_release_date_message": "Coming soon",
+     "coming_soon_display": "text_comingsoon"
+    },
+    "is_coming_soon": true
+   },
+   {
+    "item_type": 0,
+    "id": 1676280,
+    "success": 1,
+    "visible": true,
+    "name": "Metasweeper",
+    "store_url_path": "app/1676280/Metasweeper",
+    "store_url_slug": "Metasweeper",
+    "appid": 1676280,
+    "type": 0,
+    "assets": {
+     "asset_url_format": "steam/apps/1676280/${FILENAME}?t=1689789228",
+     "main_capsule": "capsule_616x353.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "header_2x": "header.jpg",
+     "page_background": "page_bg_generated_v6b.jpg",
+     "hero_capsule": "hero_capsule.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "community_icon": "8cb5d7a547028dccac2e33072834421d936b94ea",
+     "page_background_path": "app/1676280?t=1689789228",
+     "raw_page_background": "page_bg_raw.jpg",
+     "last_modified": 1689789228
+    },
+    "release": {
+     "is_coming_soon": true,
+     "custom_release_date_message": "To be announced",
+     "coming_soon_display": "text_tba"
+    },
+    "is_coming_soon": true
+   },
+   {
+    "item_type": 0,
+    "id": 1676990,
+    "success": 1,
+    "visible": true,
+    "name": "MusicLabeLManager 2K21",
+    "store_url_path": "app/1676990/MusicLabeLManager_2K21",
+    "store_url_slug": "MusicLabeLManager_2K21",
+    "appid": 1676990,
+    "type": 0,
+    "is_free": true,
+    "assets": {
+     "asset_url_format": "steam/apps/1676990/${FILENAME}?t=1709036988",
+     "main_capsule": "capsule_616x353.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "header_2x": "header.jpg",
+     "page_background": "page_bg_generated_v6b.jpg",
+     "hero_capsule": "hero_capsule.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "community_icon": "84c1cae09f9e626d5308c2889e7637713e37d245",
+     "page_background_path": "app/1676990?t=1709036988",
+     "raw_page_background": "page_bg_raw.jpg",
+     "last_modified": 1709036988
+    },
+    "release": {
+     "steam_release_date": 1861862400,
+     "is_coming_soon": true,
+     "coming_soon_display": "date_year"
+    },
+    "is_coming_soon": true
+   },
+   {
+    "item_type": 0,
+    "id": 1678830,
+    "success": 1,
+    "visible": true,
+    "name": "Untitled Game",
+    "store_url_path": "app/1678830/Untitled_Game",
+    "store_url_slug": "Untitled Game",
+    "appid": 1678830,
+    "type": 0,
+    "assets": {
+     "asset_url_format": "steam/apps/1678830/${FILENAME}?t=1650474459",
+     "main_capsule": "capsule_616x353.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "header_2x": "header.jpg",
+     "page_background": "page_bg_generated_v6b.jpg",
+     "hero_capsule": "hero_capsule.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "community_icon": "688721dd281812a2630ac8097f9fa100ca404c85",
+     "page_background_path": "app/1678830?t=1650474459",
+     "raw_page_background": "page_bg_raw.jpg",
+     "last_modified": 1650474459
+    },
+    "release": {
+     "is_coming_soon": true
+    },
+    "is_coming_soon": true
+   },
+   {
+    "item_type": 0,
+    "id": 4442740,
+    "success": 1,
+    "visible": true,
+    "name": "Adult Only Title",
+    "store_url_path": "app/4442740/Adult_Only_Title",
+    "store_url_slug": "Adult Only Title",
+    "appid": 4442740,
+    "type": 0,
+    "content_descriptorids": [
+     1,
+     3,
+     4,
+     5
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/4442740/${FILENAME}?t=1793635348",
+     "main_capsule": "afca389de1908ad6c81bd65206240af1bddb2157/capsule_616x353.jpg",
+     "main_capsule_2x": "afca389de1908ad6c81bd65206240af1bddb2157/capsule_616x353_2x.jpg",
+     "small_capsule": "376799e90fee1be5135127cc078216d1b87b13a0/capsule_231x87.jpg",
+     "small_capsule_2x": "376799e90fee1be5135127cc078216d1b87b13a0/capsule_231x87_2x.jpg",
+     "header": "676ee4e2ed3f5dfd456a30c0664f0dcbb8c07fc9/header.jpg",
+     "header_2x": "676ee4e2ed3f5dfd456a30c0664f0dcbb8c07fc9/header_2x.jpg",
+     "hero_capsule": "23bea954f580a3dd6f728a3b7f9ffa8e1ea7e777/hero_capsule.jpg",
+     "hero_capsule_2x": "23bea954f580a3dd6f728a3b7f9ffa8e1ea7e777/hero_capsule_2x.jpg",
+     "library_capsule": "c54a1b3475fc363cb4978015d42a132d91dfdba2/library_capsule.jpg",
+     "library_capsule_2x": "c54a1b3475fc363cb4978015d42a132d91dfdba2/library_capsule_2x.jpg",
+     "library_hero": "40041162e131d8ff48714be175db90cae8fe8016/library_hero.jpg",
+     "library_hero_2x": "40041162e131d8ff48714be175db90cae8fe8016/library_hero_2x.jpg",
+     "community_icon": "79a872bf3e265b814fe9a998d896f11776401ae9",
+     "page_background_path": "app/4442740?t=1793635348",
+     "last_modified": 1793635348
+    },
+    "release": {
+     "steam_release_date": 1796025600,
+     "is_coming_soon": true,
+     "coming_soon_display": "date_month"
+    },
+    "is_coming_soon": true
+   }
+  ]
+ }
+}

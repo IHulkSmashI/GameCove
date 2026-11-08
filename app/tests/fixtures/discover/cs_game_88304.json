@@ -1,0 +1,83 @@
+{
+ "info": {
+  "title": "Borderlands 2",
+  "steamAppID": "49520",
+  "thumb": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/49520/capsule_231x87.jpg?t=1793288352"
+ },
+ "cheapestPriceEver": {
+  "price": "1.99",
+  "date": 1793651134
+ },
+ "deals": [
+  {
+   "storeID": "1",
+   "dealID": "y9vH5Xf2O3lmQzX8IprLnYJ8PT7C2MafD4gPIMz7y%2Fs%3D",
+   "price": "1.99",
+   "retailPrice": "19.99",
+   "savings": "90.045023"
+  },
+  {
+   "storeID": "21",
+   "dealID": "%2F%2BAE6cH6NTYWBu0J7b5KaG1seT0IN9hqLBjdEFxq1Cs%3D",
+   "price": "2.89",
+   "retailPrice": "19.99",
+   "savings": "85.542771"
+  },
+  {
+   "storeID": "15",
+   "dealID": "3jpYAVDe2cqcTa%2BL0IXoawvkQTwP%2FZJXirGDQ3JcLJU%3D",
+   "price": "4.29",
+   "retailPrice": "19.99",
+   "savings": "78.539270"
+  },
+  {
+   "storeID": "23",
+   "dealID": "Pt4lUnvO9YO7awUvd%2Fl%2BL1q%2BscIXF4gyRHKxsj5C7VY%3D",
+   "price": "16.79",
+   "retailPrice": "19.99",
+   "savings": "16.008004"
+  },
+  {
+   "storeID": "27",
+   "dealID": "TX7%2BQszwTiertAoXRxNk5o%2BIH6HR7ww5ssYgNC0oEtM%3D",
+   "price": "17.99",
+   "retailPrice": "19.99",
+   "savings": "10.005003"
+  },
+  {
+   "storeID": "3",
+   "dealID": "507pzU1ScRNBxlmO930tTsIIOejPUelkMvtj2RVZS5Q%3D",
+   "price": "19.99",
+   "retailPrice": "19.99",
+   "savings": "0.000000"
+  },
+  {
+   "storeID": "11",
+   "dealID": "DCqsq6Hnmtzu2UVkBpD133kL1pG93Ovz4%2BEjTuJAx9c%3D",
+   "price": "19.99",
+   "retailPrice": "19.99",
+   "savings": "0.000000"
+  },
+  {
+   "storeID": "2",
+   "dealID": "2Xn3Vxq4NhtbGAWhZOx3jfcKGnqu7ISp2NcBZjGO0Dc%3D",
+   "price": "19.99",
+   "retailPrice": "19.99",
+   "savings": "0.000000"
+  },
+  {
+   "storeID": "30",
+   "dealID": "weEQ5lpwv57MD9hRzIZXVnS8OtDsfbOjmJPYJ6jianM%3D",
+   "price": "19.99",
+   "retailPrice": "19.99",
+   "savings": "0.000000"
+  },
+  {
+   "storeID": "35",
+   "dealID": "WXNIzdSnfc54Q3hIGhAYlz4Re5dkZFTyYQBqEMD%2Fh0c%3D",
+   "price": "19.99",
+   "retailPrice": "19.99",
+   "savings": "0.000000"
+  }
+ ]
+}

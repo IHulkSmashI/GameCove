@@ -39,5 +39,11 @@ GameCove stands on a lot of other people's work. Thank you.
 | Wikidata | Titles, dates, cross-store IDs | CC0 |
 | AreWeAntiCheatYet | Anti-cheat status | MIT |
 | ProtonDB data dumps | Compatibility reports | ODbL (credit and share-alike) |
-| IGDB | Time to beat | IGDB terms; credit IGDB.com |
-| SteamGridDB | Optional artwork, with each user's own key | SteamGridDB terms |
+| IGDB | Time to beat; upcoming release dates (nightly, when the job has Twitch credentials) | Free for non-commercial use under the [Twitch Developer Service Agreement](https://api-docs.igdb.com/#getting-started); commercial use needs an IGDB partnership; credit IGDB.com |
+| SteamGridDB | Optional artwork, only with each user's own API key | [Terms](https://www.steamgriddb.com/terms): personal, non-commercial use; no key ships with GameCove |
+| [CheapShark](https://www.cheapshark.com) | Deals, other stores' prices (USD), historical lows | [API terms](https://apidocs.cheapshark.com/): free, no key; deals must be opened through CheapShark's redirect links (we never use affiliate or direct links for CheapShark deals); descriptive User-Agent; no catalogue crawling. Price data by CheapShark. |
+| Steam (Valve) | Regional prices, sale end dates, release state and art by app id (`IStoreBrowseService/GetItems`); public wishlist import (`IWishlistService/GetWishlist`); coming-soon list for the nightly calendar (`IStoreQueryService/Query`); custom-URL lookup through the public profile XML | [Steam Web API Terms of Use](https://steamcommunity.com/dev/apiterms); called without a key; not affiliated with or endorsed by Valve. Game art © its publishers, shown to identify the game. |
+| European Central Bank | Euro reference exchange rates, to compare USD prices with your currency (estimates, marked "~") | [ECB reuse policy](https://www.ecb.europa.eu/stats/ecb_statistics/governance_and_quality_framework/html/usage_policy.en.html): free for any use, unmodified, with credit. Source: ECB statistics. |
+| Wikidata | Upcoming release dates for the calendar | CC0 |
+
+We looked at IsThereAnyDeal for regional deal prices and don't use it: its [API terms](https://docs.isthereanydeal.com/) forbid apps "that could be considered a competition to IsThereAnyDeal" and using the API to help its competition, which a deals and price-alert feature next to CheapShark could be read as.
