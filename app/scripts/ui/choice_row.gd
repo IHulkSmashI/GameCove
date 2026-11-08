@@ -186,7 +186,7 @@ func _refresh(animate := false) -> void:
 
 func _refresh_focus() -> void:
 	# Only the focused row explains itself; the rest stay compact.
-	_hint.visible = button.has_focus() or not collapse_hint
+	_hint.visible = (button.has_focus() or not collapse_hint) and _hint.text != ""
 	if _left == null:
 		return
 	var f := button.has_focus()
