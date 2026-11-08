@@ -65,7 +65,8 @@ func set_enabled(on: bool, created_flag_before := false) -> bool:
 		close()
 		if created_flag_before and FileAccess.file_exists(flag):
 			DirAccess.remove_absolute(flag)
-	_set_status("off" if not on else ("flag_missing" if not FileAccess.file_exists(flag) else "unreachable"))
+	# "connecting" until the first call answers or fails.
+	_set_status("off" if not on else ("flag_missing" if not FileAccess.file_exists(flag) else "connecting"))
 	return created
 
 

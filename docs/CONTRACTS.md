@@ -8,7 +8,7 @@ How the parts of GameCove talk to each other. Change a contract only with a matc
 | --- | --- | --- | --- |
 | `Device` | `scripts/device/device.gd` | `scripts/device/` | Which handheld this is (row of `data/devices.json`), live battery and watts |
 | `Power` | `scripts/device/power.gd` | `scripts/device/` | TDP, profiles, fan, charge limit via PowerStation / steamos-manager over D-Bus |
-| `Library` | `scripts/library/library.gd` | `scripts/library/` | All stores in one list, game info from the game database, launching |
+| `Library` | `scripts/library/library.gd` | `scripts/library/`, `scripts/steam/` | All stores in one list, game info from the game database, launching, store management (install, update, downloads, compatibility tool) |
 | `Launcher` | `scripts/launch/launcher.gd` | `scripts/launch/` | Per-game settings and the launch environment (upscaler, frame gen, latency, Proton) |
 | `Gamescope` | `scripts/gamescope/gamescope.gd` | `scripts/gamescope/` | Frame limit, refresh rate, overlay focus |
 
@@ -37,6 +37,39 @@ The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these 
 
 `Library` emits `changed` after every refresh. `Library.launch(game)` starts it through the right store and returns `{"ok": bool, "app_id": int, "pid": int, "scoped": bool}`: `app_id` is the id gamescope knows the game by (the Steam app id, or `Library.app_id_for(key)` for a game we start in an `app-steam-app<id>-<n>` scope; 0 when gamescope can't tell), `pid` the process we started (0 for Steam).
 
+`Library.launch(game, options := {})`: `options.args` adds arguments for this launch only (Steam: through Steam control or `steam://run/<id>//<args>/`).
+
+## Store management (`Library`, details in [STORES.md](STORES.md))
+
+Every action returns at once with `{"ok": bool, "via": String, "why": String}` (`via`: `steam-cef | steam-uri | steam-files | steam-files-after-restart | legendary | gogdl | nile | gamecove | heroic | queue | umu`; `why` is a short line to show when `ok` is false). What happens next arrives as signals. Process work runs off the main thread; nothing polls while idle.
+
+| Call | Notes |
+| --- | --- |
+| `capabilities(game) -> Dictionary` | `{"install", "uninstall", "update", "verify", "move", "launch_options", "compat_tool", "progress", "pause", "resume", "cancel": bool, "how": {cap: via}, "why": {cap: reason}, "needs_window": [caps that open a Steam/Heroic window]}`. Hide or explain anything false |
+| `install(game, options := {})` | `options.path`: a folder from `install_locations()` (default `<install_root>/<store>`; Steam: a Steam library folder, default Steam's). `options.platform`: `windows`/`linux` (GOG) |
+| `uninstall(game)`, `update(game)`, `verify(game)` | verify = verify and repair |
+| `move(game, path)` | Into folder `path`; the game keeps its folder name |
+| `pause(game)`, `resume(game)`, `cancel(game)`, `reorder_download(game, delta) -> bool` | |
+| `downloads() -> Array[Dictionary]` | `[{"key", "action", "title", "state": queued\|running\|paused, "progress": {"bytes_done", "bytes_total", "rate", "eta", "percent", "unit": bytes\|files, "phase"}, "error", "size"}]` in queue order, Steam jobs last |
+| `launch_options(game) -> String`, `set_launch_options(game, s)` | Steam: Steam's launch options (`pending: true` in the result when it waits for Steam to stop). Others: extra game arguments |
+| `compat_tool(game) -> String`, `set_compat_tool(game, tool_id)`, `compat_tools(game := {}) -> Array[Dictionary]` | `[{"id", "name", "path"}]`, default (`""`) first. Steam game: Steam's internal names; otherwise umu's PROTONPATH choices |
+| `install_locations() -> Array[Dictionary]` | `[{"path", "label", "free", "removable"}]`, internal first, then SD cards / USB under `/run/media` |
+| `store_settings() -> Dictionary`, `set_store_setting(name, value) -> bool` | `install_root` (absolute path), `steam_cef` (bool, opt-in Steam control; see security notes in STORES.md), `auto_resume`, `max_parallel` (1–4), `focus_steam_dialogs`; read-only `steam_cef_status` (`off\|flag_missing\|connecting\|ready\|unreachable`), `steam_pending_count` |
+| `apply_pending_steam_changes(restart := false)` | Writes Steam settings that waited; `restart` stops and restarts Steam to do it |
+| `open_steam_page(game, page)` | `store \| properties \| details \| downloads` |
+| `return_from_steam()` | Gives the screen back after a Steam dialog we brought forward (also automatic once Steam starts the job) |
+
+| Signal | When |
+| --- | --- |
+| `download_progress(key, bytes_done: int, bytes_total: int, rate: float, eta: int)` | bytes/s, seconds; `bytes_total` 0 and `eta` -1 when unknown |
+| `install_state_changed(key, state)` | `queued, installing, updating, verifying, moving, uninstalling, downloading, paused, installed, not_installed, update_required, failed` |
+| `queue_changed` | Call `downloads()` again |
+| `action_failed(key, action, message)` | `message` is shown as is |
+| `external_window_needed(key, app, reason)` | `app` `steam` or `heroic`; `reason` `install \| uninstall \| page \| manage` |
+| `store_settings_changed` | |
+
+The Library rescans the affected store after a change (`refresh_store(store)`) and emits `changed`. Tests and screens can swap the worker: `Library.attach_store(fake)` with the same methods and signals as `scripts/library/manage/store_manager.gd`.
+
 ## Running game (`scripts/launch/game_session.gd`, owned by `main.gd`)
 
 `GameSession.begin(game, Library.launch(game))` applies the game's `fps_limit` through `Gamescope`, starts Auto TDP when `Launcher.auto_tdp_for(key)` (goal `battery` or `balanced`), waits for the app id in `GAMESCOPE_FOCUSABLE_APPS` (0.5 s timer, up to 60 s) and calls `Gamescope.focus_app(id)`. A 3 s timer runs only while the game does; when its app id and process are gone it calls `focus_home()`, sets the frame limit to 0, stops Auto TDP and emits `ended(game)`.
@@ -62,7 +95,9 @@ Setters (`set_tdp`, `set_profile`, `set_charge_limit`, `set_fan_mode`) return `t
 {"goal": "battery|balanced|smooth", "fps_limit": 0, "upscaler": "auto|off|fsr|xess", "frame_gen": false, "low_latency": true}
 ```
 
-`Launcher.launch_env(game)` returns the environment variables to add for that game on this device. Steam games start through `steam://`, which takes no environment: for them the game page shows only goal and frame limit, plus a line pointing to Steam launch options. `Launcher.auto_tdp_for(key)` is true for goals `battery` and `balanced`.
+`Launcher.launch_env(game)` returns the environment variables to add for that game on this device.
+
+Non-Steam games also have compatibility settings, stored in the same file under `"compat"`: `Launcher.compat_for(key)` → `{"proton": tool id ("" = umu default), "prefix": "", "extra_env": {}, "args": ""}`, `save_compat(key, dict)`, `compat_tools()`, `proton_path_for(id)`. The UI changes them through `Library.set_compat_tool` / `set_launch_options`. Steam games start through `steam://`, which takes no environment: for them the game page shows only goal and frame limit, plus a line pointing to Steam launch options. `Launcher.auto_tdp_for(key)` is true for goals `battery` and `balanced`.
 
 ## Root actions
 

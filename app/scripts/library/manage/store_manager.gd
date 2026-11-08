@@ -42,6 +42,7 @@ var tools := {}
 ## func(key) -> store entry (Library's full entry, with paths), or {}.
 var entry_lookup := func(_key: String) -> Dictionary: return {}
 ## The Launcher service (per-game compat settings for non-Steam games), or null.
+## Looked up lazily: the Launcher autoload is added after Library.
 var launcher: Object
 ## func(cmd: Array) -> bool. Starts a store's GUI (Heroic) without waiting.
 var open_external := func(cmd: Array) -> bool: return OS.create_process(str(cmd[0]), PackedStringArray(cmd.slice(1))) > 0
@@ -350,11 +351,17 @@ func downloads() -> Array[Dictionary]:
 
 # --- Launch options and compatibility tool ---
 
+func _launcher() -> Object:
+	if launcher == null and is_inside_tree():
+		launcher = get_node_or_null("/root/Launcher")
+	return launcher
+
+
 func launch_options(game: Dictionary) -> String:
 	var e := _entry(game)
 	if str(e.get("store", "")) == "steam":
 		return steam.launch_options(str(e["id"]))
-	return launcher.compat_for(_key(e))["args"] if launcher != null else ""
+	return _launcher().compat_for(_key(e))["args"] if _launcher() != null else ""
 
 
 ## Steam: the game's launch options in Steam (e.g. "PROTON_LOG=1 %command%").
@@ -363,11 +370,11 @@ func set_launch_options(game: Dictionary, options: String) -> Dictionary:
 	var e := _entry(game)
 	if str(e.get("store", "")) == "steam":
 		return steam.set_launch_options(str(e["id"]), options)
-	if launcher == null:
+	if _launcher() == null:
 		return _fail(_key(e), "launch_options", "No launcher")
-	var c: Dictionary = launcher.compat_for(_key(e))
+	var c: Dictionary = _launcher().compat_for(_key(e))
 	c["args"] = options
-	launcher.save_compat(_key(e), c)
+	_launcher().save_compat(_key(e), c)
 	return _ok("gamecove")
 
 
@@ -375,7 +382,7 @@ func compat_tool(game: Dictionary) -> String:
 	var e := _entry(game)
 	if str(e.get("store", "")) == "steam":
 		return steam.compat_tool(str(e["id"]))
-	return launcher.compat_for(_key(e))["proton"] if launcher != null else ""
+	return _launcher().compat_for(_key(e))["proton"] if _launcher() != null else ""
 
 
 ## Steam: internal tool name for Steam's per-game setting ("" = Steam's default).
@@ -384,11 +391,11 @@ func set_compat_tool(game: Dictionary, tool_id: String) -> Dictionary:
 	var e := _entry(game)
 	if str(e.get("store", "")) == "steam":
 		return steam.set_compat_tool(str(e["id"]), tool_id)
-	if launcher == null:
+	if _launcher() == null:
 		return _fail(_key(e), "compat_tool", "No launcher")
-	var c: Dictionary = launcher.compat_for(_key(e))
+	var c: Dictionary = _launcher().compat_for(_key(e))
 	c["proton"] = tool_id
-	launcher.save_compat(_key(e), c)
+	_launcher().save_compat(_key(e), c)
 	return _ok("umu")
 
 
@@ -397,8 +404,8 @@ func set_compat_tool(game: Dictionary, tool_id: String) -> Dictionary:
 func compat_tools(game: Dictionary = {}) -> Array[Dictionary]:
 	if str(_entry(game).get("store", game.get("store", ""))) == "steam":
 		return steam.compat_tools()
-	if launcher != null:
-		return launcher.compat_tools()
+	if _launcher() != null:
+		return _launcher().compat_tools()
 	return [{"id": "", "name": "Default (UMU-Proton)", "path": ""}] as Array[Dictionary]
 
 

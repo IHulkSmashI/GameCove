@@ -72,6 +72,10 @@ func test_capabilities_with_cef_opt_in() -> void:
 	ok(c["update"] and c["move"] and c["pause"] and c["cancel"], "API actions on")
 	eq(c["how"]["compat_tool"], "steam-cef", "compat via SteamClient")
 	eq(c["needs_window"], [], "no dialogs")
+	b.cef.status = "unreachable"
+	var down: Dictionary = b.capabilities(true)
+	ok(not down["update"], "Steam not answering on the port: API actions off")
+	eq(down["how"]["install"] if down["install"] else down["how"]["verify"], "steam-uri", "back to steam://")
 	b.cef.set_enabled(false, true)
 	_done(b)
 

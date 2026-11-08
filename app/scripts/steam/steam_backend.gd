@@ -50,6 +50,7 @@ var _watch := {}   # appid -> {"action", "t", "seen_busy", "last_done", "last_t"
 var _timer: Timer
 var _clock := 0.0
 var _cef_watching := false
+var _last_probe := -60000
 
 
 func _init() -> void:
@@ -69,6 +70,8 @@ func setup(home_dir: String, cef_on := false, cef_flag_ours := false) -> void:
 	steam_root = Proton.steam_root(home) if home != "" else ""
 	cef.steam_root = steam_root
 	cef.set_enabled(cef_on, cef_flag_ours)
+	if cef.is_usable() and is_inside_tree():
+		cef.evaluate("true")
 
 
 func _default_open_uri(uri: String) -> bool:
@@ -79,8 +82,18 @@ func steam_running() -> bool:
 	return SteamConfig.is_running(home, proc_root)
 
 
+## Steam control is on and Steam hasn't been found unreachable. After a failure
+## it's tried again at most once a minute (the answer then is the fallback).
 func cef_usable() -> bool:
-	return cef.is_usable()
+	if not cef.is_usable():
+		return false
+	if cef.status == "unreachable":
+		var now := Time.get_ticks_msec()
+		if now - _last_probe > 60000 and is_inside_tree():
+			_last_probe = now
+			cef.evaluate("true")
+		return false
+	return true
 
 
 ## {"install", "uninstall", "update", "verify", "move", "launch_options",
