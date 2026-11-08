@@ -85,6 +85,18 @@ func _start(url: String, opts: Dictionary, done: Callable) -> void:
 		_on_done(HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray(), req, url, done)
 
 
+## Quitting: stop every transfer first. A threaded HTTPRequest freed while its
+## thread is still downloading crashes the engine at exit; cancel_request()
+## stops and joins that thread. Queued jobs are dropped without callbacks.
+func _exit_tree() -> void:
+	_queue.clear()
+	for c in get_children():
+		if c is HTTPRequest:
+			for conn in c.request_completed.get_connections():
+				c.request_completed.disconnect(conn["callable"])
+			c.cancel_request()
+
+
 func _on_done(result: int, code: int, headers: PackedStringArray, body: PackedByteArray,
 		req: HTTPRequest, url: String, done: Callable) -> void:
 	_active -= 1

@@ -37,6 +37,8 @@ jobs:
       - name: Import and load the project (fails on script errors)
         run: |
           ./godot --headless --path app --import 2>&1 | tee import.log
+          set -o pipefail
+          # must also exit 0: a crash at shutdown (e.g. static caches outliving the renderer) fails here
           ./godot --headless --path app --quit-after 120 2>&1 | tee run.log
           ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log run.log
       - name: GDScript tests (fail on failures and on script errors)

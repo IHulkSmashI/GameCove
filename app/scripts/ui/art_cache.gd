@@ -19,6 +19,8 @@ static var _tex := {}        # "kind|path" -> Texture2D (null = failed)
 static var _order := {}      # kind -> Array of keys, oldest first
 static var _pending := {}    # key -> Array[Callable]
 static var _accent := {}     # path -> Color (a = 0 when grey)
+static var _tasks: Array[int] = []   # WorkerThreadPool ids still running
+static var _closed := false          # set by shutdown(): late results are dropped
 
 
 static func usable(path: String) -> bool:
@@ -44,6 +46,7 @@ static func pending_count() -> int:
 static func request(kind: String, path: String, done: Callable = Callable(), owner: Node = null) -> Texture2D:
 	if not usable(path):
 		return null
+	_closed = false   # a new request after shutdown() (tests build main again)
 	var key := kind + "|" + path
 	if _tex.has(key):
 		_touch(kind, key)
@@ -57,10 +60,11 @@ static func request(kind: String, path: String, done: Callable = Callable(), own
 			_pending[key].append(done)
 		return null
 	_pending[key] = [done] if done.is_valid() else []
-	WorkerThreadPool.add_task(func():
+	_tasks = _tasks.filter(func(t): return not WorkerThreadPool.is_task_completed(t))
+	_tasks.append(WorkerThreadPool.add_task(func():
 		var r := _load(kind, path)
 		_finish.call_deferred(kind, path, r[0], r[1]),
-		false, "GameCove art")
+		false, "GameCove art"))
 	return null
 
 
@@ -139,6 +143,8 @@ static func _fit(img: Image, max_size: Vector2i) -> void:
 
 
 static func _finish(kind: String, path: String, img: Image, acc: Color) -> void:
+	if _closed:
+		return
 	var key := kind + "|" + path
 	var tex: Texture2D = ImageTexture.create_from_image(img) if img != null else null
 	_tex[key] = tex
@@ -161,6 +167,18 @@ static func _touch(kind: String, key: String) -> void:
 	_order[kind] = list
 	while list.size() > int(LIMIT.get(kind, 64)):
 		_tex.erase(list.pop_front())
+
+
+## Call when the app quits (main.gd does): waits for loads still running and
+## drops every texture. Static caches otherwise outlive the renderer at exit,
+## which crashes the engine on shutdown.
+static func shutdown() -> void:
+	for t in _tasks:
+		WorkerThreadPool.wait_for_task_completion(t)
+	_tasks.clear()
+	_pending.clear()
+	_closed = true
+	clear()
 
 
 static func clear() -> void:
