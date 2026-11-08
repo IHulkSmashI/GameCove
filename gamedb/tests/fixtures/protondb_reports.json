@@ -1,0 +1,305 @@
+[
+ {
+  "appId": "578850",
+  "title": "64",
+  "timestamp": 1535971667,
+  "rating": "Borked",
+  "protonVersion": "3.7"
+ },
+ {
+  "appId": "290970",
+  "title": "1849",
+  "timestamp": 1535386640,
+  "rating": "Platinum",
+  "protonVersion": "3.7-4"
+ },
+ {
+  "appId": "525480",
+  "title": ".hack//G.U. Last Recode",
+  "timestamp": 1535689434,
+  "rating": "Silver",
+  "protonVersion": "3.7-5"
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": "7760"
+   },
+   "title": "X-COM: UFO Defense"
+  },
+  "responses": {
+   "answerToWhatGame": "7760",
+   "audioFaults": "no",
+   "customizationsUsed": {
+    "customProton": true
+   },
+   "duration": "severalHours",
+   "extra": "no",
+   "graphicalFaults": "no",
+   "inputFaults": "no",
+   "installs": "yes",
+   "launchFlagsUsed": {
+    "largeAddressAware": false
+   },
+   "launcher": "steam",
+   "opens": "yes",
+   "performanceFaults": "no",
+   "protonVersion": "boxtron-0.5.3",
+   "saveGameFaults": "no",
+   "significantBugs": "no",
+   "stabilityFaults": "no",
+   "startsPlay": "yes",
+   "type": "tinker",
+   "verdict": "yes",
+   "windowingFaults": "no"
+  },
+  "timestamp": 1572308932
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": "219990"
+   },
+   "title": "Grim Dawn"
+  },
+  "responses": {
+   "answerToWhatGame": "219990",
+   "audioFaults": "no",
+   "duration": "lessThanAnHour",
+   "extra": "no",
+   "graphicalFaults": "no",
+   "inputFaults": "no",
+   "installs": "yes",
+   "isImpactedByAntiCheat": "no",
+   "isMultiplayerImportant": "no",
+   "localMultiplayerAttempted": "no",
+   "onlineMultiplayerAttempted": "no",
+   "opens": "yes",
+   "performanceFaults": "no",
+   "protonVersion": "Default",
+   "saveGameFaults": "no",
+   "significantBugs": "no",
+   "stabilityFaults": "no",
+   "startsPlay": "yes",
+   "type": "steamPlay",
+   "verdict": "yes",
+   "windowingFaults": "no"
+  },
+  "timestamp": 1572304395
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": "352620"
+   },
+   "title": "Porcunipine"
+  },
+  "responses": {
+   "answerToWhatGame": "352620",
+   "appSelectionMethod": "libraryLookup",
+   "installs": "no",
+   "protonVersion": "Default",
+   "type": "steamPlay",
+   "verdict": "no"
+  },
+  "timestamp": 1572299227
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": "460810"
+   },
+   "title": "Vanquish"
+  },
+  "responses": {
+   "answerToWhatGame": "460810",
+   "audioFaults": "no",
+   "graphicalFaults": "no",
+   "inputFaults": "no",
+   "installs": "yes",
+   "launcher": "steam",
+   "opens": "yes",
+   "performanceFaults": "no",
+   "saveGameFaults": "no",
+   "significantBugs": "no",
+   "stabilityFaults": "no",
+   "startsPlay": "yes",
+   "tinkerOverride": "no",
+   "variant": "official",
+   "verdict": "yes",
+   "windowingFaults": "no"
+  },
+  "timestamp": 1645207056
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": 1594950
+   },
+   "title": "Overgrown"
+  },
+  "responses": {
+   "answerToWhatGame": "1594950",
+   "audioFaults": "no",
+   "graphicalFaults": "no",
+   "inputFaults": "no",
+   "installs": "yes",
+   "launcher": "steam",
+   "opens": "yes",
+   "performanceFaults": "no",
+   "saveGameFaults": "no",
+   "significantBugs": "no",
+   "stabilityFaults": "no",
+   "startsPlay": "yes",
+   "triedOob": "yes",
+   "variant": "experimental",
+   "verdict": "yes",
+   "verdictOob": "yes",
+   "windowingFaults": "no"
+  },
+  "timestamp": 1645207711
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": "46500"
+   },
+   "title": "Syberia"
+  },
+  "responses": {
+   "answerToWhatGame": "46500",
+   "audioFaults": "no",
+   "customizationsUsed": {
+    "configChange": true
+   },
+   "graphicalFaults": "no",
+   "inputFaults": "no",
+   "installs": "yes",
+   "launcher": "steam",
+   "opens": "yes",
+   "performanceFaults": "no",
+   "protonVersion": "5.13-6",
+   "saveGameFaults": "no",
+   "significantBugs": "no",
+   "stabilityFaults": "no",
+   "startsPlay": "yes",
+   "triedOob": "yes",
+   "variant": "older",
+   "verdict": "yes",
+   "verdictOob": "no",
+   "windowingFaults": "yes"
+  },
+  "timestamp": 1645206913
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": 1761650
+   },
+   "title": "Kiospoly"
+  },
+  "responses": {
+   "answerToWhatGame": "1761650",
+   "audioFaults": "no",
+   "graphicalFaults": "no",
+   "inputFaults": "no",
+   "installs": "yes",
+   "launcher": "steam",
+   "localMultiplayerAttempted": "no",
+   "onlineMultiplayerAppraisal": "excellent",
+   "onlineMultiplayerAttempted": "yes",
+   "onlineMultiplayerPlayed": "yes",
+   "opens": "yes",
+   "performanceFaults": "no",
+   "saveGameFaults": "no",
+   "significantBugs": "no",
+   "stabilityFaults": "no",
+   "startsPlay": "yes",
+   "triedOob": "no",
+   "variant": "experimental",
+   "verdict": "yes",
+   "windowingFaults": "no"
+  },
+  "timestamp": 1645205641
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": 306130
+   },
+   "title": "The Elder Scrolls® Online"
+  },
+  "responses": {
+   "answerToWhatGame": "306130",
+   "audioFaults": "no",
+   "customizationsUsed": {
+    "notListed": true
+   },
+   "graphicalFaults": "no",
+   "inputFaults": "no",
+   "installs": "yes",
+   "launcher": "steam",
+   "localMultiplayerAttempted": "no",
+   "onlineMultiplayerAppraisal": "excellent",
+   "onlineMultiplayerAttempted": "yes",
+   "onlineMultiplayerPlayed": "yes",
+   "opens": "yes",
+   "performanceFaults": "yes",
+   "saveGameFaults": "no",
+   "significantBugs": "no",
+   "stabilityFaults": "no",
+   "startsPlay": "yes",
+   "tinkerOverride": "yes",
+   "triedOob": "yes",
+   "variant": "official",
+   "verdict": "yes",
+   "verdictOob": "yes",
+   "windowingFaults": "no"
+  },
+  "timestamp": 1645228293
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": "1091500"
+   },
+   "title": "Cyberpunk 2077"
+  },
+  "responses": {
+   "answerToWhatGame": "1091500",
+   "audioFaults": "no",
+   "graphicalFaults": "no",
+   "inputFaults": "no",
+   "installs": "yes",
+   "launcher": "steam",
+   "opens": "yes",
+   "performanceFaults": "no",
+   "saveGameFaults": "no",
+   "significantBugs": "yes",
+   "stabilityFaults": "no",
+   "startsPlay": "yes",
+   "tinkerOverride": "no",
+   "variant": "official",
+   "verdict": "yes",
+   "windowingFaults": "no"
+  },
+  "timestamp": 1645211698
+ },
+ {
+  "app": {
+   "steam": {
+    "appId": "1240440"
+   },
+   "title": "Halo Infinite"
+  },
+  "responses": {
+   "answerToWhatGame": "1240440",
+   "installs": "yes",
+   "launcher": "steam",
+   "opens": "no",
+   "variant": "experimental",
+   "verdict": "no"
+  },
+  "timestamp": 1645206979
+ }
+]

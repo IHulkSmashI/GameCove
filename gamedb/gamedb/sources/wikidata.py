@@ -1,18 +1,20 @@
 """Titles, release years and cross-store IDs from Wikidata (CC0).
 
 One small SPARQL query per store property keeps each request light enough for
-the public endpoint; results are merged by Wikidata item id.
+the public endpoint; results are merged by Wikidata item id. Requests go through
+`net.Client`, which honours the endpoint's 429 Retry-After (it has asked for
+"1 req / min" during outages) and stops at the build's time budget. Any failed
+query fails the whole source, so a half-fetched list is never published.
 """
 
 from __future__ import annotations
 
 import json
-import time
 import urllib.parse
-import urllib.request
+
+from ..net import Client
 
 ENDPOINT = "https://query.wikidata.org/sparql"
-USER_AGENT = "GameCove-gamedb/0.1 (https://github.com/IHulkSmashI/gamecove)"
 
 # Wikidata property -> our id key
 STORE_PROPERTIES = {
@@ -39,18 +41,9 @@ LIMIT {limit} OFFSET {offset}
 """
 
 
-def run_query(sparql: str, retries: int = 3) -> dict:
+def run_query(client: Client, sparql: str) -> dict:
     url = ENDPOINT + "?" + urllib.parse.urlencode({"query": sparql, "format": "json"})
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/sparql-results+json"})
-    for attempt in range(retries):
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                return json.load(r)
-        except Exception:
-            if attempt == retries - 1:
-                raise
-            time.sleep(10 * (attempt + 1))
-    return {}
+    return json.loads(client.get(url, headers={"Accept": "application/sparql-results+json"}))
 
 
 def parse_bindings(data: dict, key: str, items: dict[str, dict]) -> int:
@@ -72,15 +65,14 @@ def parse_bindings(data: dict, key: str, items: dict[str, dict]) -> int:
     return len(rows)
 
 
-def fetch(pause: float = 2.0) -> dict[str, dict]:
+def fetch(client: Client) -> dict[str, dict]:
     items: dict[str, dict] = {}
     for prop, key in {**STORE_PROPERTIES, **EXTRA_PROPERTIES}.items():
         offset = 0
         while True:
-            n = parse_bindings(run_query(query_for(prop, PAGE, offset)), key, items)
+            n = parse_bindings(run_query(client, query_for(prop, PAGE, offset)), key, items)
             if n < PAGE:
                 break
             offset += PAGE
-            time.sleep(pause)
     # Keep only items that are on at least one store we launch from.
     return {q: r for q, r in items.items() if any(k in r["ids"] for k in STORE_PROPERTIES.values())}

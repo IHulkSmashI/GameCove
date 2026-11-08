@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     defaults:
       run:
         working-directory: gamedb
@@ -19,15 +20,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install -e .
+      - run: pip install -e '.[test]'
+      - run: pytest -q
       - name: Build
+        # Each source falls back to last night's published data if it fails, so this
+        # only fails when there is nothing at all to publish (the old file then stays).
         env:
           TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
-        run: python -m gamedb.build --out dist/gamedb.json.gz
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m gamedb.build --out dist/gamedb.json.gz --max-minutes 55
       - name: Publish to the rolling "gamedb" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view gamedb >/dev/null 2>&1 || gh release create gamedb --title "Game database" --notes "Rebuilt nightly. Wikidata (CC0), AreWeAntiCheatYet (MIT), time to beat from IGDB.com." --latest=false
+          gh release view gamedb >/dev/null 2>&1 || gh release create gamedb --title "Game database" --notes "Rebuilt nightly. Wikidata (CC0), AreWeAntiCheatYet (MIT), time to beat from IGDB.com. Compatibility tiers are GameCove's own summary of ProtonDB user reports (github.com/bdefore/protondb-data, ODbL 1.0), not ProtonDB's official ratings; the ProtonDB-derived data in this file is shared under the ODbL 1.0." --latest=false
           gh release upload gamedb dist/gamedb.json.gz --clobber

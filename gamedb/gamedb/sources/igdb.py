@@ -11,7 +11,8 @@ import json
 import os
 import time
 import urllib.parse
-import urllib.request
+
+from ..net import Client
 
 TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 API = "https://api.igdb.com/v4/"
@@ -24,21 +25,18 @@ def credentials() -> tuple[str, str] | None:
     return (cid, secret) if cid and secret else None
 
 
-def token(cid: str, secret: str) -> str:
+def token(client: Client, cid: str, secret: str) -> str:
     q = urllib.parse.urlencode({"client_id": cid, "client_secret": secret, "grant_type": "client_credentials"})
-    with urllib.request.urlopen(urllib.request.Request(f"{TOKEN_URL}?{q}", method="POST"), timeout=30) as r:
-        return json.load(r)["access_token"]
+    return json.loads(client.get(f"{TOKEN_URL}?{q}", data=b"", method="POST"))["access_token"]
 
 
-def post(endpoint: str, body: str, cid: str, tok: str) -> list:
-    req = urllib.request.Request(
+def post(client: Client, endpoint: str, body: str, cid: str, tok: str) -> list:
+    out = json.loads(client.get(
         API + endpoint,
         data=body.encode(),
         headers={"Client-ID": cid, "Authorization": f"Bearer {tok}", "Accept": "application/json"},
         method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=60) as r:
-        out = json.load(r)
+    ))
     time.sleep(0.3)
     return out
 
@@ -58,17 +56,17 @@ def to_time_to_beat(row: dict) -> dict | None:
     return t if any(t[k] for k in ("main_h", "extra_h", "complete_h")) else None
 
 
-def fetch_for_steam(steam_ids: list[str]) -> dict[str, dict]:
-    """Steam app id -> time to beat. Empty when credentials are missing."""
+def fetch_for_steam(client: Client, steam_ids: list[str]) -> dict[str, dict]:
+    """Steam app id -> time to beat. Call only when `credentials()` is set."""
     creds = credentials()
     if not creds:
-        return {}
+        raise RuntimeError("TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET not set")
     cid, secret = creds
-    tok = token(cid, secret)
+    tok = token(client, cid, secret)
     steam_to_game: dict[str, int] = {}
     for i in range(0, len(steam_ids), BATCH):
         chunk = ",".join(f'"{s}"' for s in steam_ids[i:i + BATCH])
-        rows = post("external_games",
+        rows = post(client, "external_games",
                     f"fields game,uid; where external_game_source = {STEAM_SOURCE} & uid = ({chunk}); limit {BATCH};",
                     cid, tok)
         for r in rows:
@@ -79,7 +77,7 @@ def fetch_for_steam(steam_ids: list[str]) -> dict[str, dict]:
     games = list(game_to_steam)
     for i in range(0, len(games), BATCH):
         ids = ",".join(str(g) for g in games[i:i + BATCH])
-        rows = post("game_time_to_beats",
+        rows = post(client, "game_time_to_beats",
                     f"fields game_id,hastily,normally,completely,count; where game_id = ({ids}); limit {BATCH};",
                     cid, tok)
         for r in rows:

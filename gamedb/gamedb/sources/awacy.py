@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-import urllib.request
+
+from ..net import Client
 
 URL = "https://raw.githubusercontent.com/AreWeAntiCheatYet/AreWeAntiCheatYet/HEAD/games.json"
 
@@ -17,10 +18,11 @@ STATUS = {
 }
 
 
-def fetch() -> list:
-    req = urllib.request.Request(URL, headers={"User-Agent": "GameCove-gamedb/0.1"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)
+def fetch(client: Client) -> list:
+    data = json.loads(client.get(URL))
+    if not isinstance(data, list):
+        raise ValueError("AreWeAntiCheatYet games.json is not a list")
+    return data
 
 
 def _steam_id(store_ids) -> str | None:

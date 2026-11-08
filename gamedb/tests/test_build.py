@@ -48,10 +48,10 @@ def test_igdb_time_to_beat_converts_seconds_and_drops_empty_rows():
     assert igdb.to_time_to_beat({"hastily": 0, "normally": 0, "completely": 0}) is None
 
 
-def test_igdb_skipped_without_credentials(monkeypatch):
+def test_igdb_has_no_credentials_without_env(monkeypatch):
     monkeypatch.delenv("TWITCH_CLIENT_ID", raising=False)
     monkeypatch.delenv("TWITCH_CLIENT_SECRET", raising=False)
-    assert igdb.fetch_for_steam(["976730"]) == {}
+    assert igdb.credentials() is None
 
 
 def test_merge_attaches_badges_and_sorts_by_title():
@@ -62,9 +62,11 @@ def test_merge_attaches_badges_and_sorts_by_title():
     }
     ac = {"1172470": {"status": "denied", "anticheats": ["Easy Anti-Cheat"], "name": "Apex Legends"}}
     ttb = {"976730": {"main_h": 10.0, "extra_h": None, "complete_h": None, "count": 3, "source": "igdb"}}
-    games = merge(items, ac, ttb)
+    games = merge(items, ac, ttb, {"976730": "gold"})
     assert [g["title"] for g in games] == ["apex legends", "Halo"]  # untitled dropped
     assert games[0]["anticheat"]["status"] == "denied"
     assert games[1]["time_to_beat"]["main_h"] == 10.0
-    doc = document(games, ["wikidata"])
-    assert doc["count"] == 2 and doc["schema"] == 1
+    assert games[1]["protondb"] == "gold" and "protondb" not in games[0]
+    doc = document(games, {"wikidata": {"status": "ok"}})
+    assert doc["count"] == 2 and doc["schema"] == 2
+    assert "ODbL" in doc["credits"] and "not ProtonDB's official" in doc["credits"]
