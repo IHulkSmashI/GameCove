@@ -38,4 +38,82 @@ echo msi_other > "$H/name"
 set +e; sh "$FIX" set quiet 2>/dev/null; code=$?; set -e
 [ "$code" = "2" ] || fail "no fan driver -> exit 2 (got $code)"
 [ "$(sh "$FIX" status | tr '\n' ' ')" = "applies=no state=n/a " ] || fail "status without the driver"
+
+# ---- other drivers, each on a fresh fake hwmon -------------------------------
+# new_hw <name> <fans> [manual]: a fake hwmon in a fresh root; prints its path
+new_hw() {
+	R="$(mktemp -d)"
+	mkdir -p "$R/sys/class/hwmon/hwmon3"
+	d="$R/sys/class/hwmon/hwmon3"
+	echo "$1" > "$d/name"
+	n=1
+	while [ "$n" -le "$2" ]; do
+		echo 2 > "$d/pwm${n}_enable"
+		if [ "${3:-}" = manual ]; then
+			echo 90 > "$d/pwm$n"
+		else
+			for i in 1 2 3 4 5 6 7 8; do
+				echo $((i * 20)) > "$d/pwm${n}_auto_point${i}_pwm"
+				echo $((i * 10 + 20)) > "$d/pwm${n}_auto_point${i}_temp"
+			done
+		fi
+		n=$((n + 1))
+	done
+	echo "$R"
+}
+
+# ASUS: eight points, temperatures written too, enable 1 = custom curve, 2 = factory
+R="$(new_hw asus_custom_fan_curve 2)"; export GAMECOVE_ROOT="$R"; A="$R/sys/class/hwmon/hwmon3"
+sh "$FIX" status | grep -q '^driver=asus_custom_fan_curve$' || fail "asus: driver in status"
+sh "$FIX" status | grep -q '^modes=quiet,auto,max$' || fail "asus: modes in status"
+sh "$FIX" set quiet >/dev/null || fail "asus: set quiet"
+[ "$(cat "$A/pwm2_auto_point1_pwm") $(cat "$A/pwm2_auto_point8_pwm")" = "5 191" ] || fail "asus: quiet duty"
+[ "$(cat "$A/pwm1_auto_point1_temp") $(cat "$A/pwm1_auto_point8_temp")" = "30 100" ] || fail "asus: curve temperatures"
+[ "$(cat "$A/pwm1_enable")" = "1" ] || fail "asus: custom curve on"
+sh "$FIX" set max >/dev/null || fail "asus: set max"
+[ "$(cat "$A/pwm1_auto_point4_pwm")" = "255" ] || fail "asus: max duty"
+sh "$FIX" set auto >/dev/null || fail "asus: set auto"
+[ "$(cat "$A/pwm1_enable")" = "2" ] || fail "asus: factory curve"
+sh "$FIX" remove >/dev/null || fail "asus: remove"
+[ "$(cat "$A/pwm1_auto_point1_pwm") $(cat "$A/pwm1_auto_point1_temp")" = "20 30" ] || fail "asus: original curve back"
+rm -rf "$R"
+
+# OneXPlayer, oxpec 6.16+ (oxp_ec): manual only, no quiet, auto = 2
+R="$(new_hw oxp_ec 1 manual)"; export GAMECOVE_ROOT="$R"; O="$R/sys/class/hwmon/hwmon3"
+sh "$FIX" status | grep -q '^modes=auto,max$' || fail "oxp: modes"
+set +e; sh "$FIX" set quiet 2>/dev/null; code=$?; set -e
+[ "$code" = "2" ] || fail "oxp: quiet refused with exit 2 (got $code)"
+[ ! -f "$R/var/lib/gamecove/fixes/fan/original" ] || fail "oxp: refused quiet installs nothing"
+sh "$FIX" set max >/dev/null || fail "oxp: set max"
+[ "$(cat "$O/pwm1_enable") $(cat "$O/pwm1")" = "1 255" ] || fail "oxp: manual full duty"
+sh "$FIX" set auto >/dev/null || fail "oxp: set auto"
+[ "$(cat "$O/pwm1_enable")" = "2" ] || fail "oxp: auto is 2 on oxp_ec"
+sh "$FIX" set max >/dev/null
+sh "$FIX" remove >/dev/null || fail "oxp: remove"
+[ "$(cat "$O/pwm1_enable") $(cat "$O/pwm1")" = "2 90" ] || fail "oxp: original back"
+rm -rf "$R"
+
+# old oxp-sensors driver (oxpec): auto = 0
+R="$(new_hw oxpec 1 manual)"; export GAMECOVE_ROOT="$R"; O="$R/sys/class/hwmon/hwmon3"
+echo 0 > "$O/pwm1_enable"
+sh "$FIX" set max >/dev/null || fail "oxpec: set max"
+sh "$FIX" set auto >/dev/null || fail "oxpec: set auto"
+[ "$(cat "$O/pwm1_enable")" = "0" ] || fail "oxpec: auto is 0 on the old driver"
+rm -rf "$R"
+
+# AYANEO, GPD, ZOTAC: manual drivers, auto = 2
+for drv in ayaneo_ec gpdfan zotac_zone_platform; do
+	R="$(new_hw "$drv" 1 manual)"; export GAMECOVE_ROOT="$R"; O="$R/sys/class/hwmon/hwmon3"
+	sh "$FIX" set max >/dev/null || fail "$drv: set max"
+	[ "$(cat "$O/pwm1_enable") $(cat "$O/pwm1")" = "1 255" ] || fail "$drv: full duty"
+	sh "$FIX" set auto >/dev/null || fail "$drv: set auto"
+	[ "$(cat "$O/pwm1_enable")" = "2" ] || fail "$drv: auto"
+	sh "$FIX" status | tail -n 1 | grep -q '^state=on$' || fail "$drv: state=on"
+	rm -rf "$R"
+done
+
+# an unknown hwmon is never touched
+R="$(new_hw nct6775 1 manual)"; export GAMECOVE_ROOT="$R"
+[ "$(sh "$FIX" status | tr '\n' ' ')" = "applies=no state=n/a " ] || fail "unknown hwmon ignored"
+rm -rf "$R"
 echo "fan: all passed"

@@ -376,6 +376,34 @@ assert not bad, bad
 PY
 then ok; else bad "devices.json fixes must name folders in fixes/: $(cat "$T/out")"; fi
 
+# ------------------------------- fan drivers: power.gd, fan fix and allowlist agree
+if python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY'
+import json, os, re, sys
+repo = sys.argv[1]
+gd = open(os.path.join(repo, "app/scripts/device/power.gd")).read()
+fix = open(os.path.join(repo, "fixes/fan/fix.sh")).read()
+fixset = open(os.path.join(repo, "packaging/libexec/gamecove-fix-set")).read()
+block = gd[gd.index("const FAN_DRIVERS"):gd.index("const CHARGE_STATE_DIR")]
+drivers = re.findall(r'^\t"([a-z_]+)": \{', block, re.M)
+bad = []
+for d in drivers:
+    names = re.search(r'"%s": \{"hwmon": \[([^\]]*)\]' % d, block).group(1)
+    first = re.findall(r'"([a-z_]+)"', names)[0]
+    if first not in fix and not (first.startswith("zotac") and "zotac_*" in fix):
+        bad.append("fix.sh lacks driver " + first)
+for mode in set(re.findall(r'"(quiet|auto|max)"', block)):
+    if "fan:" + mode not in fixset:
+        bad.append("gamecove-fix-set does not allow fan " + mode)
+rows = json.load(open(os.path.join(repo, "app/data/devices.json")))["devices"]
+for r in rows:
+    if r.get("fan_via") == "fix" and r.get("fan") not in drivers:
+        bad.append("%s: fan_via fix but power.gd can't drive %s" % (r["id"], r.get("fan")))
+    if r.get("charge_limit") and r.get("charge_limit_via") not in ("steamos-manager", "fix", "sysfs"):
+        bad.append("%s: charge_limit_via %s" % (r["id"], r.get("charge_limit_via")))
+assert not bad, bad
+PY
+then ok; else bad "fan drivers out of step: $(cat "$T/out")"; fi
+
 # ------------------------------------------------------------------ shellcheck
 SHELLCHECK="$(command -v shellcheck || true)"
 if [ -z "$SHELLCHECK" ]; then

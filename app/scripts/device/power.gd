@@ -58,6 +58,24 @@ const PROFILES: Array[String] = ["battery", "balanced", "performance"]
 ## known-good Claw presets). Must match fixes/fan/fix.sh.
 const FAN_TABLES := {"quiet": [0, 40, 40, 45, 60, 75], "max": [100, 100, 100, 100, 100, 100]}
 const FIX_FAN_MODES: Array[String] = ["quiet", "auto", "max"]
+## Fan drivers the `fan` fix drives, keyed by devices.json "fan". Must match
+## fixes/fan/fix.sh. "hwmon": hwmon names to look for; "kind": table (duty
+## tables, pwmN_auto_pointM_pwm) or manual (one duty, pwm1); "auto": the
+## pwmN_enable value for the firmware's own control per hwmon name ("" = 2);
+## "full": enable values that mean full speed. Quiet only where a table exists.
+const FAN_DRIVERS := {
+	"msi_wmi_platform": {"hwmon": ["msi_wmi_platform"], "kind": "table", "points": 6,
+		"modes": ["quiet", "auto", "max"], "tables": FAN_TABLES},
+	"asus_custom_fan_curve": {"hwmon": ["asus_custom_fan_curve"], "kind": "table", "points": 8,
+		"modes": ["quiet", "auto", "max"],
+		"tables": {"quiet": [2, 5, 17, 35, 55, 75, 75, 75], "max": [100, 100, 100, 100, 100, 100, 100, 100]}},
+	"oxp_ec": {"hwmon": ["oxp_ec", "oxpec"], "kind": "manual", "modes": ["auto", "max"],
+		"auto": {"oxpec": "0"}, "full": {"oxp_ec": "0"}},
+	"ayaneo_ec": {"hwmon": ["ayaneo_ec"], "kind": "manual", "modes": ["auto", "max"]},
+	"gpdfan": {"hwmon": ["gpdfan", "gpd_fan"], "kind": "manual", "modes": ["auto", "max"], "full": {"gpdfan": "0", "gpd_fan": "0"}},
+	"zotac_zone_platform": {"hwmon": ["zotac_zone_platform", "zotac_platform"], "kind": "manual", "modes": ["auto", "max"]},
+}
+const CHARGE_STATE_DIR := "/var/lib/gamecove/fixes/charge-limit"
 const SM_FAN_MODES: Array[String] = ["auto", "firmware"]
 const CHARGE_MIN := 50
 const SOURCE_CHECK_S := 15.0
@@ -80,10 +98,16 @@ var _tdp_w := -1.0
 var _range := {"min": -1.0, "battery_max": -1.0, "plugged_max": -1.0}
 var _profile := ""
 var _charge_via := ""   # "steamos-manager" | "fix" | ""
+var _charge_mode := ""  # fix: "threshold" (charge_control_end_threshold) | "behaviour" (charge_behaviour)
+var _charge_path := ""
 var _charge := -1
 var _charge_min := CHARGE_MIN
 var _fan_via := ""      # "steamos-manager" | "fix" | ""
 var _fan_mode := ""
+var _fan_driver := ""   # key of FAN_DRIVERS while _fan_via == "fix"
+var _fan_hwmon := ""    # its hwmon folder (with a trailing /)
+var _fan_hwmon_name := ""
+var _svc_range := {}    # {"min", "max"} the TDP service reported, {} when none
 var _autotune_on := false
 var _autotune_stopping := false  # request_autotune(false) queued: drop samples until it runs
 var _user_tdp := -1.0   # what the user picked; autotune works under it
@@ -267,6 +291,7 @@ func setup(command_runner: RefCounted, device_row: Dictionary, root: String) -> 
 func detect() -> String:
 	backend = "none"
 	_ps_card = ""
+	_svc_range = {}
 	plugged = DeviceScript.ac_online(sys_root)
 	var t: Dictionary = device.get("tdp", {})
 	_range = {
@@ -282,6 +307,7 @@ func detect() -> String:
 		if b == "powerstation" and _detect_powerstation():
 			backend = b
 			break
+	_clamp_generic_range()
 	if backend != "none" and (_range["min"] <= 0.0 or _range["battery_max"] <= _range["min"]):
 		backend = "none"  # no safe range known from devices.json or the service
 	if backend != "none" and not device.has("tdp"):
@@ -294,6 +320,38 @@ func detect() -> String:
 
 
 ## The profile whose watts equal `watts` here, else "custom".
+## On hardware devices.json doesn't know (a generic row from the CPU table, or a
+## family row), its range is a guess: never go past what the power service
+## itself allows. Rows for a specific handheld keep their tested range (the
+## service may report 0/0 or a chip-wide range there, e.g. Panther Lake).
+func _clamp_generic_range() -> void:
+	if _svc_range.is_empty():
+		return
+	var generic := str(device.get("support", "")) == "generic" or str(device.get("tier", "")) in ["generic", "family"] \
+		or str(device.get("id", "unknown")) == "unknown"
+	if not generic:
+		return
+	var lo := float(_svc_range["min"])
+	var hi := float(_svc_range["max"])
+	var changed_range := false
+	if _range["min"] < lo:
+		_range["min"] = lo
+		changed_range = true
+	for k in ["battery_max", "plugged_max"]:
+		if _range[k] < 0.0 or _range[k] > hi:
+			_range[k] = hi
+			changed_range = true
+	if changed_range and device.has("tdp"):
+		device = device.duplicate(true)
+		var t: Dictionary = device["tdp"]
+		t["min"] = _range["min"]
+		t["battery_max"] = _range["battery_max"]
+		t["plugged_max"] = _range["plugged_max"]
+		if t.has("boost_max") and float(t["boost_max"]) > hi:
+			t["boost_max"] = hi
+		device.erase("profiles")  # profile watts were picked for the old range
+
+
 func _profile_for(watts: float) -> String:
 	for p in PROFILES:
 		if absf(profile_watts(device, p, plugged) - watts) < 0.5:
@@ -335,6 +393,7 @@ func _detect_powerstation() -> bool:
 
 ## A service's own range wins only where devices.json has nothing.
 func _merge_range(lo: float, hi: float) -> void:
+	_svc_range = {"min": lo, "max": hi}
 	if _range["min"] < 0.0:
 		_range["min"] = lo
 	if _range["battery_max"] < 0.0:
@@ -354,10 +413,38 @@ func _detect_charge() -> void:
 		var m: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "SuggestedMinimumLimit")
 		_charge_min = int(m) if m != null and int(m) > 0 else CHARGE_MIN
 		return
-	if device.get("charge_limit", false) and _helper_present() and DeviceScript.charge_threshold_path(sys_root) != "":
-		_charge_via = "fix"
-		_charge_min = CHARGE_MIN
-		_charge = read_charge_sysfs()
+	_charge_mode = ""
+	_charge_path = ""
+	if device.get("charge_limit", false) and _helper_present():
+		var ctl := charge_control(sys_root)
+		if not ctl.is_empty():
+			_charge_via = "fix"
+			_charge_mode = ctl["mode"]
+			_charge_path = ctl["path"]
+			_charge_min = CHARGE_MIN
+			_charge = read_charge_sysfs()
+
+
+## The battery's charge control: {"mode": "threshold", "path": …charge_control_end_threshold}
+## or {"mode": "behaviour", "path": …charge_behaviour} (only "auto"/"inhibit-charge",
+## AYANEO's ayaneo-ec), {} when there is none. Same order as fixes/charge-limit/fix.sh.
+static func charge_control(root := "") -> Dictionary:
+	var t := DeviceScript.charge_threshold_path(root)
+	if t != "":
+		return {"mode": "threshold", "path": t}
+	var dir := DirAccess.open(root + "/sys/class/power_supply")
+	if dir == null:
+		return {}
+	var names := Array(dir.get_directories())
+	names.sort()
+	for n in names:
+		var d: String = root + "/sys/class/power_supply/" + n + "/"
+		if DeviceScript.read_text(d + "type") != "Battery":
+			continue
+		if FileAccess.file_exists(d + "charge_behaviour") and \
+				("inhibit-charge" in DeviceScript.read_text(d + "charge_behaviour") or FileAccess.file_exists(root + CHARGE_STATE_DIR + "/limit")):
+			return {"mode": "behaviour", "path": d + "charge_behaviour"}
+	return {}
 
 
 func _detect_fan() -> void:
@@ -368,10 +455,20 @@ func _detect_fan() -> void:
 		_fan_via = "steamos-manager"
 		_fan_mode = "auto" if int(v) == 1 else "firmware"
 		return
-	if device.get("fan", null) == "msi_wmi_platform" and _helper_present() \
-			and DeviceScript.find_hwmon("msi_wmi_platform", sys_root) != "":
-		_fan_via = "fix"
-		_fan_mode = read_fan_sysfs()
+	_fan_driver = ""
+	_fan_hwmon = ""
+	_fan_hwmon_name = ""
+	var drv := str(device.get("fan", ""))
+	if FAN_DRIVERS.has(drv) and _helper_present():
+		for hw_name in FAN_DRIVERS[drv]["hwmon"]:
+			var h := DeviceScript.find_hwmon(hw_name, sys_root)
+			if h != "" and FileAccess.file_exists(h + "pwm1_enable"):
+				_fan_via = "fix"
+				_fan_driver = drv
+				_fan_hwmon = h
+				_fan_hwmon_name = hw_name
+				_fan_mode = read_fan_sysfs()
+				break
 
 
 func _helper_present() -> bool:
@@ -408,7 +505,7 @@ func tdp_max() -> float:
 
 func fan_modes() -> Array:
 	if _fan_via == "fix":
-		return FIX_FAN_MODES.duplicate()
+		return (FAN_DRIVERS[_fan_driver]["modes"] as Array).duplicate() if FAN_DRIVERS.has(_fan_driver) else FIX_FAN_MODES.duplicate()
 	if _fan_via == "steamos-manager":
 		return SM_FAN_MODES.duplicate()
 	return []
@@ -510,10 +607,31 @@ func restore() -> void:
 func check_power_source() -> void:
 	var now := DeviceScript.ac_online(sys_root)
 	if now == plugged:
+		hold_charge()
 		return
 	plugged = now
 	restore()
+	hold_charge()
 	_emit_changed()
+
+
+## Behaviour batteries (AYANEO) can't stop at a level by themselves: the fix
+## holds charging while plugged in at or above the limit. Runs it again when
+## the charger or the level crossed that line (from the 15 s check; one sysfs
+## read when nothing changed). True when it ran the fix.
+func hold_charge() -> bool:
+	if _charge_via != "fix" or _charge_mode != "behaviour" or _charge <= 0 or _charge >= 100:
+		return false
+	if not FileAccess.file_exists(sys_root + CHARGE_STATE_DIR + "/original"):
+		return false  # the fix isn't in use (removed): leave the battery alone
+	var cap_raw := DeviceScript.read_text(_charge_path.get_base_dir() + "/capacity")
+	if not cap_raw.is_valid_int():
+		return false
+	var want := plugged and cap_raw.to_int() >= _charge
+	var held := "[inhibit-charge]" in DeviceScript.read_text(_charge_path) or DeviceScript.read_text(_charge_path) == "inhibit-charge"
+	if want == held:
+		return false
+	return _run_fix("charge-limit", str(_charge))
 
 
 func _source() -> String:
@@ -588,8 +706,14 @@ func set_charge_limit(percent: int) -> bool:
 
 
 ## The kernel's charge_control_end_threshold as a percent; 0 (the Claw's "no
-## limit") reads as 100. -1 when unreadable.
+## limit") reads as 100. -1 when unreadable. Behaviour batteries (AYANEO): the
+## limit the charge-limit fix keeps (100 = none set).
 func read_charge_sysfs() -> int:
+	if _charge_mode == "behaviour":
+		if not FileAccess.file_exists(sys_root + CHARGE_STATE_DIR + "/original"):
+			return 100
+		var lim := DeviceScript.read_text(sys_root + CHARGE_STATE_DIR + "/limit")
+		return lim.to_int() if lim.is_valid_int() else 100
 	var raw := DeviceScript.read_text(DeviceScript.charge_threshold_path(sys_root))
 	if not raw.is_valid_int():
 		return -1
@@ -620,30 +744,44 @@ func set_fan_mode(mode: String) -> bool:
 	return true
 
 
-## "auto" (pwmN_enable = 2, MSI's own control), "quiet"/"max" when every fan's
-## table matches that preset, "custom" otherwise, "" when unreadable.
+## The fan preset the hardware is in now: "auto" (the firmware's own control),
+## "quiet"/"max" when every fan matches that preset, "custom" otherwise, ""
+## when unreadable. Works for every driver in FAN_DRIVERS.
 func read_fan_sysfs() -> String:
-	var h := DeviceScript.find_hwmon("msi_wmi_platform", sys_root)
+	var info: Dictionary = FAN_DRIVERS.get(_fan_driver, FAN_DRIVERS["msi_wmi_platform"])
+	var h := _fan_hwmon
+	var hw_name := _fan_hwmon_name if _fan_hwmon_name != "" else str(info["hwmon"][0])
+	if h == "":
+		h = DeviceScript.find_hwmon(hw_name, sys_root)
 	if h == "":
 		return ""
 	var fans := []
-	for n in [1, 2]:
+	for n in [1, 2, 3]:
 		if FileAccess.file_exists(h + "pwm%d_enable" % n):
 			fans.append(n)
 	if fans.is_empty():
 		return ""
+	var auto_value := str(info.get("auto", {}).get(hw_name, "2"))
+	var full_value := str(info.get("full", {}).get(hw_name, ""))
 	var enables := []
 	for n in fans:
 		enables.append(DeviceScript.read_text(h + "pwm%d_enable" % n))
-	if enables.all(func(e): return e == "2"):
+	if enables.all(func(e): return e == auto_value):
 		return "auto"
+	if info["kind"] == "manual":
+		if full_value != "" and enables.all(func(e): return e == full_value):
+			return "max"
+		if enables.all(func(e): return e == "1") and fans.all(func(n): return DeviceScript.read_text(h + "pwm%d" % n) == "255"):
+			return "max"
+		return "custom"
 	if not enables.all(func(e): return e == "1"):
 		return "custom"
-	for preset in FAN_TABLES:
-		var table: Array = FAN_TABLES[preset]
+	var points := int(info.get("points", 6))
+	for preset in info["tables"]:
+		var table: Array = info["tables"][preset]
 		var match_all := true
 		for n in fans:
-			for i in range(6):
+			for i in range(points):
 				var raw := DeviceScript.read_text(h + "pwm%d_auto_point%d_pwm" % [n, i + 1])
 				# hwmon's 0-255 scale; the EC stores percent, so allow rounding
 				if not raw.is_valid_int() or absi(roundi(raw.to_int() * 100.0 / 255.0) - int(table[i])) > 1:
