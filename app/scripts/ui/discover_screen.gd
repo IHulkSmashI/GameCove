@@ -1,25 +1,23 @@
 extends Control
-## Discover: deals, release calendar and wishlist.
+## Discover: deals, release calendar, wishlist and store pages.
 ##
-## HOOK FOR THE DISCOVER SCREENS. Two ways in, pick one:
-##   1. Edit build_content() below (this file is yours to take over), or
-##   2. From anywhere before the screen is shown, set
-##        DiscoverScreen.content_factory = func(services: Dictionary) -> Control: ...
-##      and that Control is used as the screen's content instead of the
-##      placeholder. `services` is what main.gd passes to setup():
-##      {"library": Library, "open_game": Callable(game), "toast": Callable(text, icon, tone)}
-## Build with the design system (docs/DESIGN.md): Shelf for rows of tiles,
-## Badge/Badges for "On sale -60%" / "Wishlisted", PageTemplate for a deal
-## page, GlassPanel/CardPanel for cards, Kit.prompts for the hint bar.
-## The content sits inside the same margins as Home; main.gd provides the top
-## bar, backdrop and hint bar. Emit `game_focused(game)` to make the backdrop
-## follow focus, `open_requested(game)` to open a game page. If the content
-## has default_focus() -> Control, main uses it when the tab opens.
+## build_content() makes the Discover area (scripts/ui/discover/root.gd) from
+## the Discover and Art services. `DiscoverScreen.content_factory` still
+## replaces it when set: func(services: Dictionary) -> Control.
+## `services` is what main.gd passes to setup():
+##   {"library": Library, "open_game": Callable(game), "toast": Callable(text, icon, tone, detail)}
+## plus, for tests and previews, optional "discover" / "art" fakes, "prefs_path"
+## and "clock". This screen adds "stage" (full-screen layer behind the content,
+## for hero art) and "overlay" (full-screen layer above it, for store pages).
+##
+## Talks to main.gd only through what main already offers: `game_focused`
+## (the backdrop follows), `default_focus()`, `set_top_target()`, and, found
+## by duck typing on the host, `hint_bar` (redrawn with Discover's own hints
+## after main draws its generic ones) and `top_bar` (hidden while a store
+## page is open; a dot on the Discover tab while alerts wait).
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
-const Icons := preload("res://scripts/ui/icons.gd")
-const Illustrations := preload("res://scripts/ui/illustrations.gd")
-const ThemeLib := preload("res://theme/gamecove_theme.gd")
+const Root := preload("res://scripts/ui/discover/root.gd")
 
 signal game_focused(game: Dictionary)
 signal open_requested(game: Dictionary)
@@ -28,13 +26,21 @@ static var content_factory: Callable = Callable()
 
 var services: Dictionary = {}
 var content: Control
+var stage: Control
+var overlay: Control
 var _margin: MarginContainer
+var _hint_queued := false
 
 
 func _init() -> void:
 	name = "Discover"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage = Control.new()
+	stage.name = "Stage"
+	stage.set_anchors_preset(Control.PRESET_FULL_RECT)
+	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(stage)
 	_margin = Kit.margin(0)
 	_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_margin.add_theme_constant_override("margin_left", 48)
@@ -42,42 +48,103 @@ func _init() -> void:
 	_margin.add_theme_constant_override("margin_top", 92)
 	_margin.add_theme_constant_override("margin_bottom", 58)
 	add_child(_margin)
+	overlay = Control.new()
+	overlay.name = "Overlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
+	visibility_changed.connect(func():
+		if visible:
+			_set_tab_dot(false))
+
+
+func _ready() -> void:
+	get_viewport().gui_focus_changed.connect(func(_f): request_hints())
 
 
 func setup(svc: Dictionary) -> void:
-	services = svc
+	services = svc.duplicate()
+	services["stage"] = stage
+	services["overlay"] = overlay
 	if content != null:
 		content.queue_free()
-	content = content_factory.call(svc) if content_factory.is_valid() else build_content()
+	for layer in [stage, overlay]:
+		for c in layer.get_children():
+			c.queue_free()
+	content = content_factory.call(services) if content_factory.is_valid() else build_content()
 	_margin.add_child(content)
+	if content.has_signal("game_focused"):
+		content.game_focused.connect(func(g): game_focused.emit(g))
+	if content.has_signal("open_requested"):
+		content.open_requested.connect(func(g): open_requested.emit(g))
+	if content.has_signal("hints_changed"):
+		content.hints_changed.connect(request_hints)
+	if content.has_signal("page_toggled"):
+		content.page_toggled.connect(_on_page_toggled)
+	if content.has_signal("alerts_changed"):
+		content.alerts_changed.connect(func(n): _set_tab_dot(n > 0 and not is_visible_in_tree()))
 
 
-## The placeholder: one card saying what's coming. Replace me.
 func build_content() -> Control:
-	var center := CenterContainer.new()
-	center.name = "Placeholder"
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var card := PanelContainer.new()
-	card.theme_type_variation = "GlassPanel"
-	card.custom_minimum_size = Vector2(760, 0)
-	center.add_child(card)
-	var row := Kit.hbox(32)
-	card.add_child(row)
-	row.add_child(Illustrations.rect("discover", 200))
-	var col := Kit.vbox(14)
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.add_child(Kit.label("Deals, release calendar and wishlist", "TitleLabel", true))
-	col.add_child(Kit.label("Price drops on games you want, what comes out this month, and your wishlist from every store in one place. It's being built now.", "QuietLabel", true))
-	var chips := Kit.hbox(8)
-	for spec in [["tag", "Deals", "sale"], ["calendar", "Release calendar", "info"], ["star", "Wishlist", "wish"]]:
-		chips.add_child(load("res://scripts/ui/badge.gd").make({"kind": spec[1], "text": spec[1], "short": spec[1], "tone": spec[2], "icon": spec[0]}, "chip"))
-	col.add_child(chips)
-	row.add_child(col)
-	return center
+	var r: Control = Root.new()
+	r.setup(services)
+	return r
 
 
 func default_focus() -> Control:
 	if content != null and content.has_method("default_focus"):
 		return content.default_focus()
 	return null
+
+
+func set_top_target(c: Control) -> void:
+	if content != null and content.has_method("set_top_target"):
+		content.set_top_target(c)
+
+
+## The node that owns the hint bar and top bar (main.gd), found by duck typing.
+func host() -> Node:
+	var n := get_parent()
+	while n != null:
+		if n.get("hint_bar") is Control:
+			return n
+		n = n.get_parent()
+	return null
+
+
+## Redraw the hint bar with Discover's hints once main has drawn its own.
+func request_hints() -> void:
+	if _hint_queued or not is_inside_tree():
+		return
+	_hint_queued = true
+	_apply_hints.call_deferred()
+
+
+func _apply_hints() -> void:
+	_hint_queued = false
+	if content == null or not content.has_method("hints_for") or not is_visible_in_tree():
+		return
+	var f := get_viewport().gui_get_focus_owner()
+	if f == null or not content.has_method("owns") or not content.owns(f):
+		return
+	var h := host()
+	if h == null:
+		return
+	var bar: Control = h.hint_bar
+	for c in bar.get_children():
+		bar.remove_child(c)
+		c.queue_free()
+	bar.add_child(Kit.prompts(content.hints_for(f)))
+
+
+func _on_page_toggled(open: bool) -> void:
+	var h := host()
+	if h != null and h.get("top_bar") is Control:
+		h.top_bar.visible = not open
+	request_hints()
+
+
+func _set_tab_dot(on: bool) -> void:
+	var h := host()
+	if h != null and h.get("top_bar") is Control and h.top_bar.has_method("set_dot"):
+		h.top_bar.set_dot("discover", on)

@@ -27,6 +27,9 @@ var _knob: Panel
 var _is_bool := false
 ## Hide the explanation unless the row has focus.
 var collapse_hint := true
+## Optional: func(value) -> String for the line under the row (default:
+## Texts.explain). An empty line takes no space.
+var explain_fn: Callable = Callable()
 
 
 func setup(setting_key: String, title: String, vals: Array, lbls: Array, current: Variant, icon := "") -> void:
@@ -151,7 +154,7 @@ func value_text() -> String:
 func _refresh(animate := false) -> void:
 	var lbl: String = str(labels[index]) if index < labels.size() else str(value())
 	_value_label.text = lbl
-	_hint.text = Texts.explain(key, value())
+	_hint.text = explain_fn.call(value()) if explain_fn.is_valid() else Texts.explain(key, value())
 	var acc := ThemeLib.color("accent")
 	if _is_bool:
 		var on: bool = value() == true
@@ -171,7 +174,7 @@ func _refresh(animate := false) -> void:
 
 func _refresh_focus() -> void:
 	# Only the focused row explains itself; the rest stay compact.
-	_hint.visible = button.has_focus() or not collapse_hint
+	_hint.visible = (button.has_focus() or not collapse_hint) and _hint.text != ""
 	if _left == null:
 		return
 	var f := button.has_focus()

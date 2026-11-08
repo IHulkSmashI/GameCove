@@ -15,6 +15,8 @@ const ROWS := ["1234567890", "qwertyuiop", "asdfghjkl'", "zxcvbnm-:."]
 const MAX_LEN := 40
 
 var text := ""
+## Shown in the field while it's empty.
+var placeholder := "Type to search"
 var keys: Array = []          # rows of Buttons
 var field: Label
 var done_button: Button
@@ -117,7 +119,7 @@ func backspace() -> void:
 
 func set_text(t: String, emit := true) -> void:
 	text = t
-	field.text = t if t != "" else "Type to search"
+	field.text = t if t != "" else placeholder
 	field.add_theme_color_override("font_color", ThemeLib.color("text") if t != "" else ThemeLib.color("text_3"))
 	if emit:
 		text_changed.emit(text)

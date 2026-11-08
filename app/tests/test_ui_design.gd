@@ -367,8 +367,8 @@ func test_page_template() -> void:
 
 func test_discover_hook() -> void:
 	var d: Control = DiscoverScreen.new()
-	d.setup({})
-	ok(d.find_child("Placeholder", true, false) != null, "placeholder by default")
+	d.setup({"prefs_path": ""})
+	ok(d.find_child("DiscoverRoot", true, false) != null, "the Discover area by default")
 	d.free()
 	DiscoverScreen.content_factory = func(_svc):
 		var c := Label.new()

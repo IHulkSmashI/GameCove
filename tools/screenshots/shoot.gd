@@ -133,6 +133,13 @@ func _run() -> void:
 		await shot("discover")
 		main.show_screen("home")
 
+	var dshots := ["discover_home", "discover_home_focus", "discover_deals", "discover_deals_store", "discover_calendar",
+		"discover_calendar_month", "discover_wishlist", "discover_import", "discover_page", "discover_page_prices",
+		"discover_page_upcoming", "discover_toast", "discover_offline", "discover_calendar_empty", "discover_wishlist_empty",
+		"discover_light", "discover_midnight_page"]
+	if want(dshots):
+		await _discover_shots(lib)
+
 	if want(["settings"]):
 		main.show_screen("settings")
 		await frames(4)
@@ -223,6 +230,127 @@ func _run() -> void:
 			await shot("theme_%s_quick" % id)
 			main.quick_menu.close()
 	quit()
+
+
+## Discover with fake services (tools/screenshots/discover_fake.gd).
+func _discover_shots(lib: Node) -> void:
+	var DF: GDScript = load(get_script().resource_path.get_base_dir().path_join("discover_fake.gd"))
+	var fk: Dictionary = await DF.make(self, art_dir)
+	var d = fk["discover"]
+	root.add_child(d)
+	var svc := {"library": lib, "open_game": main._open_page, "toast": main.toast, "discover": d, "art": fk["art"], "prefs_path": "", "clock": DF.now}
+	main.discover.setup(svc)
+	main.show_screen("discover")
+	var r = main.discover.content
+	await frames(4)
+	await shot("discover_home")
+	if want(["discover_home_focus"]):
+		var h = r.sections["home"]
+		h.shelves[0].tiles[1].grab_focus()
+		await shot("discover_home_focus")
+		h.primary.grab_focus()
+	if want(["discover_deals", "discover_deals_store"]):
+		r.show_section("deals")
+		await frames(4)
+		r.sections["deals"].rows[0].grab_focus()
+		await shot("discover_deals")
+		if want(["discover_deals_store"]):
+			r.sections["deals"].sort_row.button.grab_focus()
+			r.sections["deals"].sort_row.step(1)
+			await frames(4)
+			await shot("discover_deals_store")
+	if want(["discover_calendar", "discover_calendar_month"]):
+		r.show_section("calendar")
+		var cal = r.sections["calendar"]
+		cal.set_layout("list")
+		await frames(4)
+		cal.rows[1][0].grab_focus()
+		await shot("discover_calendar")
+		if want(["discover_calendar_month"]):
+			cal.set_layout("month")
+			await frames(4)
+			cal.day_buttons[13].grab_focus()
+			await shot("discover_calendar_month")
+			cal.set_layout("list")
+	if want(["discover_wishlist", "discover_import"]):
+		r.show_section("wishlist")
+		await frames(4)
+		r.sections["wishlist"].rows[0].grab_focus()
+		await shot("discover_wishlist")
+		if want(["discover_import"]):
+			var w = r.sections["wishlist"]
+			w.open_import()
+			w._open_keyboard()
+			for ch in "robin_walker":
+				w.keyboard.type(ch)
+			await shot("discover_import")
+			w.keyboard.close()
+			w.close_import()
+	if want(["discover_page", "discover_page_prices"]):
+		r.show_section("home")
+		await frames(2)
+		r.open_page(r.sections["home"].shelves[0].tiles[0].game)
+		await shot("discover_page")
+		if want(["discover_page_prices"]):
+			r.page.price_rows[0].grab_focus()
+			await frames(20)
+			await shot("discover_page_prices")
+		r.close_page()
+	if want(["discover_page_upcoming"]):
+		var rel = d.calendar[2]
+		r.open_page(r.sections["calendar"]._view_for(rel))
+		await shot("discover_page_upcoming")
+		r.close_page()
+	if want(["discover_toast"]):
+		r.show_section("home")
+		d.price_alert.emit(d.wishlist[0], d.deals[3])
+		d.release_alert.emit({"title": "Kite Season"})
+		for t in main.toasts.find_children("*", "Timer", true, false):
+			t.start(120.0)   # slow software rendering: keep them up for the shot
+		await shot("discover_toast")
+		for c in main.toasts.get_children():
+			c.free()
+	if want(["discover_light"]):
+		var prefs = load("res://scripts/ui/ui_prefs.gd")
+		prefs.theme = "light"
+		prefs.match_art = false
+		main.apply_theme()
+		r.show_section("deals")
+		await frames(4)
+		r.sections["deals"].rows[1].grab_focus()
+		await shot("discover_light")
+		prefs.theme = "cove"
+		prefs.match_art = true
+		main.apply_theme()
+	if want(["discover_midnight_page"]):
+		var prefs = load("res://scripts/ui/ui_prefs.gd")
+		prefs.theme = "midnight"
+		prefs.match_art = false
+		main.apply_theme()
+		r.show_section("wishlist")
+		await frames(4)
+		r.sections["wishlist"].rows[1].grab_focus()
+		await shot("discover_midnight_page")
+		prefs.theme = "cove"
+		prefs.match_art = true
+		main.apply_theme()
+	if want(["discover_offline", "discover_calendar_empty", "discover_wishlist_empty"]):
+		var e = DF.FakeDiscover.new()
+		e.status = {"cheapshark": "offline", "steam": "offline", "calendar": "missing"}
+		e.clock = DF.now
+		root.add_child(e)
+		svc["discover"] = e
+		main.discover.setup(svc)
+		r = main.discover.content
+		main.show_screen("home")
+		main.show_screen("discover")
+		await frames(4)
+		await shot("discover_offline")
+		r.show_section("calendar")
+		await shot("discover_calendar_empty")
+		r.show_section("wishlist")
+		await shot("discover_wishlist_empty")
+	main.show_screen("home")
 
 
 func _status() -> void:
