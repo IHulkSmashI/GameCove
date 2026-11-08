@@ -1,0 +1,9 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=GameCove
+Comment=Controller-first home screen for handhelds, running on gamescope
+Exec=gamescope-session-plus gamecove
+Type=Application
+DesktopNames=gamescope
+# The file name must not contain "gamescope": steamos-manager only accepts such
+# names as a "desktop session", which is how gamecove-session-select switches here.

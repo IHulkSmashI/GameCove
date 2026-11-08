@@ -1,0 +1,38 @@
+#!/bin/bash
+# shellcheck disable=SC2034  # variables are read by gamescope-session-plus
+# GameCove session for gamescope-session-plus (OpenGamingCollective/ChimeraOS).
+# Installed to /usr/share/gamescope-session-plus/sessions.d/gamecove and started by
+#   gamescope-session-plus gamecove
+# from /usr/share/wayland-sessions/gamecove.desktop.
+#
+# gamescope-session-plus sources this file with `set -a`, so every variable here
+# is exported to gamescope and to our client. Users can override any of them in
+# ~/.config/environment.d/*.conf (sourced after this file), for example:
+#   GAMECOVE_STEAM_MODE=off
+#   CUSTOM_REFRESH_RATES=40,45,50,55,60,120   (enables Gamescope.set_refresh_rate)
+
+# Main client: GameCove itself. It starts Steam in the background, then runs the
+# Godot app, which marks its window as gamescope's main app (STEAM_GAME=769).
+CLIENTCMD="/usr/libexec/gamecove/gamecove-session-client"
+
+# How Steam runs beside us: silent (default), gamepadui (experimental) or off.
+# See docs/SESSION.md.
+: "${GAMECOVE_STEAM_MODE:=silent}"
+
+# Steam's own cursor if Steam is installed; gamescope hides it after a few seconds.
+CURSOR_FILE="${HOME}/.local/share/Steam/tenfoot/resource/images/cursors/arrow.png"
+
+# If GameCove keeps failing to start (5 short sessions in a row), fall back to
+# the distro's Steam Gaming Mode instead of looping on a black screen.
+short_session_recover() {
+	if command -v steamosctl >/dev/null 2>&1; then
+		steamosctl switch-to-game-mode
+	fi
+}
+
+# Close Steam cleanly when GameCove exits so the session can end.
+post_client_shutdown() {
+	if command -v steam >/dev/null 2>&1 && pgrep -u "$(id -u)" -x steam >/dev/null 2>&1; then
+		steam -shutdown >/dev/null 2>&1 || true
+	fi
+}

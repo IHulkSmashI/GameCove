@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Lets the person at the handheld run GameCove's root helper from the UI.
+
+  allow_active=yes: the gamescope session has no polkit agent to show a password
+  prompt, so the active local session must be allowed without one (Bazzite and
+  OpenGamepadUI do the same for their session helpers). Everyone else (remote,
+  inactive sessions) needs an administrator password.
+
+  What this unlocks is narrow: /usr/libexec/gamecove/gamecove-fix only runs the
+  root-owned fix scripts shipped in /usr/lib/gamecove/fixes, validates names and
+  values, and logs every change to /var/lib/gamecove/changes.log.
+-->
+<policyconfig>
+  <vendor>GameCove</vendor>
+  <vendor_url>https://github.com/IHulkSmashI/gamecove</vendor_url>
+
+  <action id="io.github.ihulksmashi.gamecove.fix">
+    <description>Apply or undo a GameCove system fix</description>
+    <message>GameCove wants to change a system setting (firmware, kernel argument, fan or charge limit).</message>
+    <icon_name>input-gaming</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gamecove/gamecove-fix</annotate>
+  </action>
+</policyconfig>
