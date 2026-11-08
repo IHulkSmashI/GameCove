@@ -20,7 +20,7 @@ void fragment() {
 	vec4 c = texture(TEXTURE, UV) * COLOR;
 	float a = smoothstep(fade_left_from, fade_left_to, local.x);
 	a *= 1.0 - smoothstep(fade_bottom_from, 1.0, local.y);
-	a *= mix(0.55, 1.0, smoothstep(0.0, fade_top, local.y));
+	a *= mix(0.35, 1.0, smoothstep(0.0, fade_top, local.y));
 	c.a *= a;
 	COLOR = c;
 }

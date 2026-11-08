@@ -201,7 +201,7 @@ func _run() -> void:
 		main.status_panel.close()
 
 	for id in ["midnight", "sunset", "light", "cove"]:
-		if not want(["theme_" + id]):
+		if not want(["theme_" + id, "theme_%s_page" % id, "theme_%s_quick" % id]):
 			continue
 		prefs.theme = id
 		# Show each theme's own accent; Cove keeps colours from the art.
@@ -213,6 +213,15 @@ func _run() -> void:
 		if tl.size() > 1:
 			tl[1].grab_focus()
 		await shot("theme_" + id)
+		if want(["theme_%s_page" % id]):
+			main._open_page(games[1])
+			await shot("theme_%s_page" % id)
+			main._close_page()
+		if want(["theme_%s_quick" % id]):
+			main._open_menu()
+			main.quick_menu.show_section(1)
+			await shot("theme_%s_quick" % id)
+			main.quick_menu.close()
 	quit()
 
 

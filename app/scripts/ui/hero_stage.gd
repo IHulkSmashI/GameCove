@@ -41,10 +41,26 @@ func _init() -> void:
 
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_THEME_CHANGED:
+		_apply_fade()
 	if what == NOTIFICATION_RESIZED:
 		for l in layers:
 			(l.material as ShaderMaterial).set_shader_parameter("rect_size", size)
 			l.pivot_offset = Vector2(size.x * 0.75, size.y * 0.4)
+
+
+## Light themes keep the art further from the text and the top bar, so
+## dark text stays readable on the light side.
+func _apply_fade() -> void:
+	var dark: bool = load("res://theme/gamecove_theme.gd").is_dark()
+	for l in layers:
+		var m := l.material as ShaderMaterial
+		m.set_shader_parameter("fade_left_from", 0.10 if dark else 0.40)
+		m.set_shader_parameter("fade_left_to", 0.55 if dark else 0.85)
+		m.set_shader_parameter("fade_top", 0.10 if dark else 0.35)
+		m.set_shader_parameter("fade_bottom_from", 0.50 if dark else 0.40)
+	self_modulate = Color.WHITE
+	modulate.a = 1.0 if dark else 0.8
 
 
 static func hero_path(g: Dictionary) -> String:

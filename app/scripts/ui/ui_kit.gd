@@ -97,36 +97,9 @@ static func badge(text: String, tone := "") -> PanelContainer:
 ## "RT", "MENU", "VIEW" (pill), "GUIDE" (round, dots), "DPAD", "LR" (icons).
 ## `primary` fills it solid, for the main action of a screen.
 static func glyph(button: String, primary := false, small := false) -> Control:
-	var p := PanelContainer.new()
-	p.name = "Glyph_" + button
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var round := button in ["A", "B", "X", "Y", "GUIDE", "DPAD", "LR"]
-	var fg: Color = ThemeLib.color("on_focus") if primary else ThemeLib.color("text")
-	var bg: Color = ThemeLib.color("focus_fill") if primary else ThemeLib.soft(0.16)
-	var sb := ThemeLib.box(bg, 11 if small else 14, 0 if round else (6 if small else 8), 0)
-	sb.border_color = ThemeLib.soft(0.28)
-	sb.set_border_width_all(0 if primary else 1)
-	p.add_theme_stylebox_override("panel", sb)
-	p.custom_minimum_size = Vector2(22, 22) if small else Vector2(28, 28)
-	if small:
-		p.modulate.a = 0.6
-	var icon := {"GUIDE": "dots", "DPAD": "gamepad", "LR": "sort"}
-	if icon.has(button):
-		var ic: TextureRect = load("res://scripts/ui/icons.gd").rect(icon[button], 18, fg)
-		ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		p.add_child(ic)
-		return p
-	var l := Label.new()
-	l.text = button.capitalize() if button.length() > 2 else button
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_font_override("font", ThemeLib.font("semibold"))
-	l.add_theme_font_size_override("font_size", (12 if small else 14) if round else (11 if small else 13))
-	l.add_theme_color_override("font_color", fg)
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(l)
-	return p
+	var g: PanelContainer = load("res://scripts/ui/glyph.gd").new()
+	g.setup(button, primary, small)
+	return g
 
 
 ## "(A) Open  (B) Back" style prompt row. `prompts` = [[button, label], ...];

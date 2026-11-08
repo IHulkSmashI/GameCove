@@ -247,6 +247,9 @@ func close() -> void:
 
 ## Slim header: the game's mini cover and title when there is one.
 func _set_header(g: Dictionary) -> void:
+	var rule := panel.find_child("Rule", true, false) as ColorRect
+	if rule != null:
+		rule.color = ThemeLib.color("line")
 	var a: Variant = g.get("art", {})
 	var cover: String = a.get("cover", "") if a is Dictionary else ""
 	var tex: Texture2D = load("res://scripts/ui/art_cache.gd").cached("cover", cover) if cover != "" else null
