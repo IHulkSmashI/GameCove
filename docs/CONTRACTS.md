@@ -45,6 +45,8 @@ Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (which 
 
 **Every number shown is a store's real price for the user's country. Nothing is converted.** Steam rows carry Steam's own price for that country. CheapShark's prices are US prices, so other stores get a number only when the country is US; elsewhere their rows have `"price": null` and the UI shows the store, the discount and a "See price" button that opens the deal's link. GOG and Epic have no usable local-price source (see CREDITS.md), so they're "See price" rows outside the US too.
 
+**GG.deals (optional, the user's own free key in `settings.ggdeals_key`):** for games with a Steam app id, GG.deals gives the best current official-store price and the historical low in the user's region and currency (regions au be br ca ch de dk es eu fi fr gb ie it nl no pl se us; other countries get none). It appears as its own row in `prices_for()` / wishlist `best_deal`, and as a `ggdeals` block on top deals. GG.deals rows open GG.deals' URL unchanged and carry `attribution`; **the UI must show every `attribution` (text + active link) on any screen showing that data**, and `Discover.attributions()` lists the credits for the whole Discover area. Key-shop prices only with `settings.ggdeals_keyshops` (off by default; explain with `SETTINGS_INFO.ggdeals_keyshops.help`). Batches of ≤100 ids, one request per refresh, cached 6 h (GG.deals allows 100 ids/min, 1,000/hour per key).
+
 **Country:** `settings.country` if set, else detected (`region.gd`): a store-country key in Steam's local files (`config/config.vdf`, `registry.vdf`, `config/loginusers.vdf`, `userdata/<id>/config/localconfig.vdf`; keys `StoreCountry`, `IPCountry`, `WalletCountry`, `CountryCode`, `Country`, `SteamCountry` with a two-letter value; best effort, Valve documents none), then the time zone (`/etc/localtime` → `America/Toronto` → `CA` via tzdata's zone.tab), then the locale (`en_CA.UTF-8`), then `US`. The currency always follows the country (Steam's currency for it).
 
 ### Signals
@@ -60,7 +62,7 @@ Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (which 
 | `import_done(ok: bool, added: int, error: String)` | answer to `import_steam_wishlist()`; `error` is a user-facing sentence ("" when fine; set with `ok` true for an empty/private wishlist) |
 | `price_alert(item, deal)` | a wishlist item hit its target or went on sale (once per event) |
 | `release_alert(item)` | a "notify me" game came out (once) |
-| `status_changed(source, status)` | `source` `cheapshark` \| `steam` \| `calendar` \| `wishlist_import`; `status` `ok` \| `offline` \| `rate_limited` \| `missing` (calendar file not published yet) \| `error: <why>` |
+| `status_changed(source, status)` | `source` `cheapshark` \| `steam` \| `ggdeals` \| `calendar` \| `wishlist_import`; `ggdeals` also has `error: key not accepted`; `status` `ok` \| `offline` \| `rate_limited` \| `missing` (calendar file not published yet) \| `error: <why>` |
 
 ### Properties
 
@@ -90,8 +92,9 @@ Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (which 
 | `import_steam_wishlist(profile := "")` | 64-bit id, `steamcommunity.com/profiles/<id>`, `steamcommunity.com/id/<name>` or a bare custom name (resolved through the public profile XML); "" uses `settings.steam_id`. Needs the profile's "Game details" set to public. Merges, keeps existing settings, remembers the profile in settings. |
 | `check_alerts()` | Runs the alert rules on cached data (also run after each refresh). |
 | `mark_seen(id := "")` | Drops an alert from `alerts_inbox` ("" = all). Alerts themselves fire once regardless. |
-| `get_settings() -> Dictionary` / `set_settings(patch)` | `{"country": "" (= detected) or "CA", "steam_id", "steamgriddb_key", "alerts": bool}`; `get_settings()` adds `country_effective`, `country_source` (`settings` \| `steam` \| `timezone` \| `locale` \| `default`) and `currency_effective`. |
+| `get_settings() -> Dictionary` / `set_settings(patch)` | `{"country": "" (= detected) or "CA", "steam_id", "steamgriddb_key", "ggdeals_key", "ggdeals_keyshops": false, "alerts": true, "affiliate_links": true}`; `Discover.SETTINGS_INFO[key]` = `{"label", "help", "setup": bool}` for the Settings screen and first-run setup (country, Steam profile and "gg.deals key (optional) for real local prices from every store" are setup steps); `get_settings()` adds `country_effective`, `country_source` (`settings` \| `steam` \| `timezone` \| `locale` \| `default`) and `currency_effective`. |
 | `country()`, `country_source()`, `user_currency()` | Resolved values. |
+| `attributions() -> Array` | `[{"text", "url"}]` credits to show (linked) wherever Discover prices appear; includes GG.deals while its data is in use. |
 | `calendar_info() -> Dictionary` | `{"built", "sources", "credits"}` of the calendar file, `{}` before the first download. |
 | `open_link(link) -> bool`, `Discover.link_command(link, steam_bin) -> Array` | Opens a Deal's/Release's `link` (below). |
 
@@ -117,10 +120,15 @@ Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (which 
   "sale_ends_at": unix or null,           # Steam only
   "rating": 9.4 or null,                  # CheapShark deal rating 0-10
   "art": {"cover": url, "hero": url, "header": url, "thumb": url},   # URLs; Art caches them
-  "link": {"kind": "steam", "uri": "steam://store/49520"} | {"kind": "url", "uri": "https://www.cheapshark.com/redirect?dealID=..."},
+  "link": {"kind": "steam" | "url", "uri": ..., "affiliate": false, "note": ""},   # see Affiliate links
+  "attribution": {"text": "Prices by GG.deals", "url": "https://gg.deals/"} or null,  # render it, linked
+  "keyshop": false, "keyshop_note"?: "...",  # true only on GG.deals key-shop rows
+  "ggdeals": {"price": price block, "historical_low", "url", "attribution", "keyshop": price block or null} or null,
   "on_wishlist": bool, "wishlist_key": "steam:49520"
 }
 ```
+
+`source` can also be `"ggdeals"` (`store` `"ggdeals"` / `"ggdeals-keyshops"`, link = GG.deals' URL, unchanged).
 
 Rows from CheapShark data always link to CheapShark's redirect URL (their terms), even for Steam; a CheapShark Steam row shows Steam's price for the user's country when known but keeps that link. Rows from Steam's own data (`source` "steam") link to `steam://store/<appid>`; in `prices_for()` such a row replaces CheapShark's Steam row. `prices_for()` lists rows with a price first (cheapest first), then See-price rows by discount. `best_deal`, `deal_for_appid()` and `deal_for_title()` only return rows with a price (`{}` otherwise).
 
@@ -166,6 +174,10 @@ Alert rules (`alerts.gd`): with a target (in the user's currency), fires when th
 Order: by the last day a date can mean (so "December 2026" follows every known December day), finer precision first on ties, TBA last. Entries out for more than 14 days are dropped.
 
 `upcoming.json.gz` (rolling `gamedb` release, built by `gamedb/gamedb/upcoming.py`): `{"schema": 1, "built", "sources", "credits", "fx": {...ECB rates, not used for any displayed price}, "count", "releases": [{"title", "date", "precision", "ids", "art", "sources"}]}` (null fields omitted). The app downloads it at most daily; a 404 (not published yet) gives status `missing` and an empty calendar, a broken file keeps the old copy.
+
+### Affiliate links
+
+`res://data/affiliates.json` maps a store to `{"template", "id"}`; all empty today, so nothing changes. `affiliates.gd` applies them only to store links GameCove builds itself (today: Epic store pages for calendar entries with an Epic id and no Steam id), never to Steam, CheapShark or GG.deals links. A link with an affiliate id has `"affiliate": true, "note": "Supports GameCove"`; show the note small next to the button. `settings.affiliate_links` false turns them off. How to add an id: docs/AFFILIATES.md.
 
 ### Opening links
 

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "_comment": "Affiliate ids for store links GameCove builds itself. Empty = off. Never Steam, CheapShark or GG.deals links. See docs/AFFILIATES.md.",
+  "stores": {
+    "epic": {"program": "Epic Games Support-A-Creator / affiliate", "template": "", "id": ""},
+    "gog": {"program": "GOG affiliate program", "template": "", "id": ""},
+    "humble": {"program": "Humble Partner Program", "template": "", "id": ""},
+    "gmg": {"program": "Green Man Gaming affiliate", "template": "", "id": ""},
+    "fanatical": {"program": "Fanatical affiliate", "template": "", "id": ""}
+  }
+}

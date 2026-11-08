@@ -50,7 +50,8 @@ func test_non_steam_store_outside_us_is_see_price() -> void:
 	eq(d["price"], null, "no CAD price exists for GMG: no number")
 	eq(d["see_price"], true, "See price")
 	ok(d["savings_pct"] > 0, "discount percentage still shown")
-	eq(d["link"], {"kind": "url", "uri": "https://www.cheapshark.com/redirect?dealID=" + _offers()[1]["deal_id"]}, "opens CheapShark's redirect")
+	eq(d["link"], {"kind": "url", "uri": "https://www.cheapshark.com/redirect?dealID=" + _offers()[1]["deal_id"],
+		"affiliate": false, "note": ""}, "opens CheapShark's redirect, never an affiliate link")
 	eq([d["historical_low"], d["is_historical_low"]], [null, false], "USD low not shown in Canada")
 
 
@@ -79,7 +80,7 @@ func test_prices_for_canada_local_rows_first_then_see_price() -> void:
 	var list := Prices.prices_for(_lookup()["88304"], _steam()["49520"], _stores(), CA)
 	eq(list.size(), 10, "Steam's own row replaces CheapShark's Steam row")
 	eq(list[0]["source"], "steam", "the only local price leads")
-	eq(list[0]["link"], {"kind": "steam", "uri": "steam://store/49520"}, "opens in the Steam client")
+	eq(list[0]["link"], {"kind": "steam", "uri": "steam://store/49520", "affiliate": false, "note": ""}, "opens in the Steam client")
 	eq(list[0]["price"]["amount"], 2.19, "CAD price")
 	for x in list.slice(1):
 		eq(x["price"], null, "%s: no estimated number" % x["store_name"])

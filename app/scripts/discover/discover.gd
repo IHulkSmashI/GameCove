@@ -40,6 +40,8 @@ const Cal := preload("res://scripts/discover/calendar.gd")
 const Wish := preload("res://scripts/discover/wishlist.gd")
 const Alerts := preload("res://scripts/discover/alerts.gd")
 const Region := preload("res://scripts/discover/region.gd")
+const GG := preload("res://scripts/discover/ggdeals.gd")
+const Affiliates := preload("res://scripts/discover/affiliates.gd")
 
 const REFRESH_EVERY := 6 * 3600
 const CALENDAR_EVERY := 24 * 3600
@@ -51,13 +53,28 @@ const MAX_RESOLVE := 5          # CheapShark id lookups per refresh
 const MAX_LOOKUP_BATCHES := 2   # x25 games
 const MAX_STEAM_BATCHES := 3    # x50 apps
 const MAX_IMPORT_BATCHES := 10  # x50 titles on import
+const GG_EVERY := 6 * 3600      # GG.deals prices are cached this long
 const INBOX_MAX := 50
 
 const DEFAULT_SETTINGS := {
 	"country": "",            # ISO code; "" = detected (region.gd); the currency follows it
 	"steam_id": "",           # 64-bit id or custom URL name, for wishlist import
 	"steamgriddb_key": "",    # the user's own SteamGridDB API key (optional)
+	"ggdeals_key": "",        # the user's own GG.deals API key (optional)
+	"ggdeals_keyshops": false, # also show GG.deals key-shop prices
 	"alerts": true,           # master switch for price and release alerts
+	"affiliate_links": true,  # allow affiliate ids on links we build (none configured yet)
+}
+## Label and one-line help for each setting, for the Settings screen and the
+## setup steps ("setup": true = offered during first-run setup).
+const SETTINGS_INFO := {
+	"country": {"label": "Store country", "help": "Prices are shown as the stores charge them in this country. Leave empty to detect it.", "setup": true},
+	"steam_id": {"label": "Steam profile", "help": "Your profile link or name, to import your Steam wishlist (needs public game details).", "setup": true},
+	"ggdeals_key": {"label": "gg.deals key (optional)", "help": "For real local prices from every store. Free at gg.deals/api; stays on this device.", "setup": true},
+	"ggdeals_keyshops": {"label": "Show key-shop prices", "help": GG.KEYSHOP_NOTE, "setup": false},
+	"steamgriddb_key": {"label": "SteamGridDB key (optional)", "help": "Artwork for games Steam has none for. Free at steamgriddb.com; stays on this device.", "setup": false},
+	"alerts": {"label": "Price and release alerts", "help": "Tell me when a wishlisted game drops in price or comes out. Checks every 6 hours, never while you play.", "setup": false},
+	"affiliate_links": {"label": "Affiliate links", "help": "Some store links we build can carry a GameCove affiliate id, marked \"Supports GameCove\". Prices don't change.", "setup": false},
 }
 
 ## http.gd node (made in start()) or a fake_http.gd object in tests.
@@ -95,7 +112,9 @@ var game_running := false:
 var _settings := DEFAULT_SETTINGS.duplicate()
 var _items := {}            # key -> stored wishlist item
 var _state := {"seen": {}, "last_refresh": 0, "last_calendar": 0, "last_stores": 0, "cs_ids": {}, "last_prices": {}}
-var _cache := {"stores": {}, "steam": {}, "lookup": {}, "top": []}
+var _cache := {"stores": {}, "steam": {}, "lookup": {}, "top": [], "gg": {}}
+## Store -> affiliate config (res://data/affiliates.json); tests replace it.
+var affiliates := Affiliates.load_file()
 var _upcoming := {}         # parsed upcoming.json.gz
 var _cal_list: Array[Dictionary] = []
 var _cal_day := -1
@@ -167,11 +186,13 @@ func set_settings(patch: Dictionary) -> void:
 		if DEFAULT_SETTINGS.has(k):
 			var v = patch[k]
 			v = bool(v) if DEFAULT_SETTINGS[k] is bool else str(v).strip_edges()
-			if k == "country" and v != _settings[k]:
+			if k in ["country", "ggdeals_key", "ggdeals_keyshops"] and v != _settings[k]:
 				money_changed = true
 			_settings[k] = v
 	if money_changed:
 		_cache["steam"] = {}   # Steam prices are per country
+		_cache["gg"] = {}      # so are GG.deals'
+		_cal_day = -1
 		_state["last_refresh"] = 0
 	_save("settings.json", _settings)
 	settings_changed.emit()
@@ -203,7 +224,31 @@ func user_currency() -> String:
 
 
 func _ctx() -> Dictionary:
-	return {"country": country(), "currency": user_currency(), "wishlist": _items}
+	return {"country": country(), "currency": user_currency(), "wishlist": _items,
+		"keyshops": bool(_settings.get("ggdeals_keyshops", false))}
+
+
+func _gg_key() -> String:
+	return str(_settings.get("ggdeals_key", ""))
+
+
+func _gg_region() -> String:
+	return GG.region_for(country())
+
+
+## GG.deals entry for an app if it's for the current region, else null.
+func _gg(appid: String) -> Variant:
+	var g = _cache["gg"].get(appid, null)
+	return g if g is Dictionary and g.get("region", "") == _gg_region() and _gg_key() != "" else null
+
+
+## Credits the UI must show (with an active link) wherever Discover prices
+## appear: [{"text", "url"}]. GG.deals is listed whenever its data is in use.
+func attributions() -> Array:
+	var out := [{"text": "Price data by CheapShark", "url": "https://www.cheapshark.com/"}]
+	if _gg_key() != "" and not _cache["gg"].is_empty():
+		out.append(GG.ATTRIBUTION)
+	return out
 
 
 # ---- pause / resume ---------------------------------------------------------
@@ -356,7 +401,7 @@ func refresh(force := false) -> bool:
 	if cal_due:
 		steps.append(_step_calendar)
 	if due:
-		steps.append_array([_step_stores, _step_deals, _step_resolve, _step_lookup, _step_steam])
+		steps.append_array([_step_stores, _step_deals, _step_resolve, _step_lookup, _step_steam, _step_ggdeals])
 	steps.append(_step_finish.bind(due))
 	_run(steps)
 	return true
@@ -542,6 +587,54 @@ func _steam_batches(appids: Array, max_batches: int, done: Callable) -> void:
 		_steam_batches(rest, max_batches - 1, done))
 
 
+## GG.deals prices (only with the user's key and a supported region): wishlist
+## apps first, then top deals, those not fetched in the last 6 h, one request
+## of at most 100 ids (GG.deals allows 100 a minute, 1,000 an hour).
+func _step_ggdeals(next: Callable) -> void:
+	var appids: Array = []
+	for key in _items:
+		var a := str(_items[key]["ids"].get("steam", ""))
+		if a != "" and not a in appids:
+			appids.append(a)
+	for o in _cache["top"]:
+		if o.get("appid", "") != "" and not o["appid"] in appids:
+			appids.append(o["appid"])
+	_gg_fetch(appids, func(): next.call())
+
+
+func _gg_fetch(appids: Array, done: Callable) -> void:
+	var region := _gg_region()
+	if _gg_key() == "" or region == "":
+		done.call()
+		return
+	var now := _now()
+	var todo := appids.filter(func(a):
+		var g = _cache["gg"].get(a, null)
+		return not (g is Dictionary and g.get("region", "") == region and now - int(g.get("at", 0)) < GG_EVERY))
+	if todo.is_empty():
+		done.call()
+		return
+	todo = todo.slice(0, GG.MAX_IDS)
+	http.request(GG.prices_url(todo, region, _gg_key()), {}, func(res: Dictionary):
+		var parsed = GG.parse(res["body"]) if res["ok"] else null
+		if parsed == null:
+			var st := _status_from(res)
+			if int(res.get("code", 0)) in [401, 403]:
+				st = "error: key not accepted"
+			_set_status("ggdeals", st if not res["ok"] else "error: unreadable answer")
+			done.call()
+			return
+		_set_status("ggdeals", "ok")
+		for a in todo:
+			# unknown ids are remembered too, so they aren't asked again for 6 h
+			var g: Dictionary = parsed.get(a, {"title": "", "url": "", "currency": "", "retail": null,
+				"retail_low": null, "keyshop": null, "keyshop_low": null})
+			g["at"] = now
+			g["region"] = region
+			_cache["gg"][a] = g
+		done.call())
+
+
 func _step_finish(next: Callable, due: bool) -> void:
 	if due:
 		_state["last_refresh"] = _now()
@@ -570,7 +663,14 @@ func _rebuild_deals() -> void:
 		var low = null
 		if _cache["lookup"].has(o.get("game_id", "")):
 			low = _cache["lookup"][o["game_id"]].get("historical_low")
-		out.append(Prices.from_cheapshark(o, _cache["stores"], ctx, low, _cache["steam"].get(o.get("appid", ""), null)))
+		var d := Prices.from_cheapshark(o, _cache["stores"], ctx, low, _cache["steam"].get(o.get("appid", ""), null))
+		if d["appid"] != "":
+			d["ggdeals"] = Prices.gg_extra(d["appid"], _gg(d["appid"]), ctx)
+			if d["ggdeals"] != null and d["ggdeals"]["historical_low"] != null:
+				d["historical_low"] = d["ggdeals"]["historical_low"]
+				d["is_historical_low"] = d["price"] != null and d["price"]["currency"] == d["historical_low"]["currency"] \
+					and d["price"]["amount"] <= d["historical_low"]["amount"] + 0.005
+		out.append(d)
 	deals = out
 
 
@@ -600,8 +700,9 @@ func prices_for(game: Variant) -> Array[Dictionary]:
 	var g := _ids_of(game)
 	var gid := _cs_id_for(g["ids"], g["title"])
 	var lookup: Dictionary = _cache["lookup"].get(gid, {}) if gid != "" else {}
-	var steam = _cache["steam"].get(g["ids"].get("steam", ""), null)
-	return Prices.prices_for(lookup, steam, _cache["stores"], _ctx())
+	var appid: String = g["ids"].get("steam", "")
+	var steam = _cache["steam"].get(appid, null)
+	return Prices.prices_for(lookup, steam, _cache["stores"], _ctx(), _gg(appid) if appid != "" else null, appid)
 
 
 ## Fetches a game's prices (at most 3 requests) and emits
@@ -625,7 +726,7 @@ func request_prices(game: Variant) -> void:
 			prices_ready.emit(g["key"], prices_for(game)))
 	var after_resolve := func():
 		if steam != "":
-			_steam_batches([steam], 1, after_steam)
+			_steam_batches([steam], 1, func(ok: bool): _gg_fetch([steam], func(): after_steam.call(ok)))
 		else:
 			after_steam.call(true)
 	if _cs_id_for(g["ids"], g["title"]) == "" and (steam != "" or g["title"] != ""):
@@ -749,7 +850,7 @@ func _view(item: Dictionary, cal: Array) -> Dictionary:
 			if v["art"].get(k, "") == "":
 				v["art"][k] = steam["art"][k]
 	v["best_deal"] = best
-	v["historical_low"] = Prices.local_low(low, _ctx())   # only in the user's currency
+	v["historical_low"] = Prices.best_low(low, _gg(str(item["ids"].get("steam", ""))), _ctx())   # only in the user's currency
 	v["savings_pct"] = int(best.get("savings_pct", 0))
 	v["on_sale"] = v["savings_pct"] > 0
 	v["is_historical_low"] = bool(best.get("is_historical_low", false))
@@ -947,9 +1048,17 @@ func _calendar_view() -> Array[Dictionary]:
 		_cal_list = Cal.releases_from(_upcoming, now, {})
 		_cal_day = day
 	var out: Array[Dictionary] = []
+	var aff_on := bool(_settings.get("affiliate_links", true))
 	for r in _cal_list:
 		var c: Dictionary = r.duplicate()
 		c["on_wishlist"] = _items.has(c["key"])
+		var l: Dictionary = c["link"]
+		if l.has("store"):   # a store page we built ourselves (not Steam)
+			var al := Affiliates.link(l["store"], l["uri"], affiliates, aff_on)
+			al["store"] = l["store"]
+			c["link"] = al
+		else:
+			c["link"] = l.merged({"affiliate": false, "note": ""}) if not l.is_empty() else l
 		out.append(c)
 	return out
 

@@ -105,6 +105,9 @@ static func make_release(rec: Dictionary, now: int, wishlist_keys := {}) -> Dict
 	var link := {}
 	if ids.has("steam"):
 		link = {"kind": "steam", "uri": "steam://store/" + ids["steam"]}
+	elif ids.has("epic") and RegEx.create_from_string("^[a-z0-9-]+$").search(ids["epic"]):
+		# A store page we build ourselves: the only kind of link affiliates.gd may touch.
+		link = {"kind": "url", "uri": "https://store.epicgames.com/p/" + ids["epic"], "store": "epic"}
 	elif ids.has("wikidata"):
 		link = {"kind": "url", "uri": "https://www.wikidata.org/wiki/" + ids["wikidata"]}
 	var out := {

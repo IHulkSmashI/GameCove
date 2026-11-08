@@ -19,6 +19,7 @@ const CheapShark := preload("res://scripts/discover/cheapshark.gd")
 const Money := preload("res://scripts/discover/money.gd")
 const Wish := preload("res://scripts/discover/wishlist.gd")
 const SteamApi := preload("res://scripts/discover/steam_api.gd")
+const GG := preload("res://scripts/discover/ggdeals.gd")
 
 const STEAM_STORE_ID := "1"
 const CHEAPSHARK_COUNTRY := "US"
@@ -35,8 +36,14 @@ static func price_block(amount: float, regular: float, currency: String, country
 	}
 
 
-## ctx: {"country": "CA", "currency": "CAD", "wishlist": key -> item}
+## ctx: {"country": "CA", "currency": "CAD", "wishlist": key -> item, "keyshops": bool}
 static func _finish(deal: Dictionary, ctx: Dictionary) -> Dictionary:
+	for k in ["attribution", "ggdeals"]:
+		if not deal.has(k):
+			deal[k] = null
+	if not deal.has("keyshop"):
+		deal["keyshop"] = false
+	deal["link"].merge({"affiliate": false, "note": ""}, false)
 	deal["see_price"] = deal["price"] == null
 	deal["on_sale"] = deal["savings_pct"] > 0
 	var wkey := Wish.key_for({"steam": deal["appid"]}, deal["title"])
@@ -127,15 +134,79 @@ static func from_steam(info: Dictionary, ctx: Dictionary, low: Variant = null) -
 	return _finish(deal, ctx)
 
 
+## GG.deals data for one app as a local Deal (its best official-store price,
+## or with keyshop := true its best key-shop price), or {} when there's none
+## or it isn't in the user's currency. Opens GG.deals' URL unchanged.
+static func from_ggdeals(appid: String, g: Dictionary, ctx: Dictionary, keyshop := false) -> Dictionary:
+	var cur: String = g.get("currency", "")
+	var amount = g.get("keyshop" if keyshop else "retail")
+	if amount == null or cur == "" or cur != ctx.get("currency", "") or str(g.get("url", "")) == "":
+		return {}
+	var low = g.get("keyshop_low" if keyshop else "retail_low")
+	var hl = {"amount": float(low), "currency": cur, "date": 0} if low != null else null
+	var fb := SteamApi.fallback_art(appid)
+	var deal := {
+		"key": ("ggdeals-keyshop:" if keyshop else "ggdeals:") + appid, "source": "ggdeals",
+		"store": "ggdeals-keyshops" if keyshop else "ggdeals", "store_icon": "",
+		"store_name": "Key shops (GG.deals)" if keyshop else "Best store price (GG.deals)",
+		"title": g.get("title", ""), "appid": appid, "game_id": "",
+		"price": price_block(float(amount), float(amount), cur, ctx.get("country", ""), "ggdeals"),
+		"savings_pct": 0, "is_historical_low": _is_low(amount, hl), "historical_low": hl,
+		"sale_ends_at": null, "rating": null,
+		"art": {"cover": fb["cover"], "hero": fb["hero"], "header": fb["header"], "thumb": ""},
+		"link": {"kind": "url", "uri": str(g["url"])},
+		"attribution": GG.ATTRIBUTION, "keyshop": keyshop,
+	}
+	if keyshop:
+		deal["keyshop_note"] = GG.KEYSHOP_NOTE
+	return _finish(deal, ctx)
+
+
+## The "ggdeals" block a Deal carries when GG.deals knows its app:
+## {"price", "historical_low", "url", "attribution", "keyshop": price block or
+## null (only with the keyshops setting)}, or null.
+static func gg_extra(appid: String, g: Variant, ctx: Dictionary) -> Variant:
+	if not g is Dictionary:
+		return null
+	var retail := from_ggdeals(appid, g, ctx)
+	if retail.is_empty():
+		return null
+	var ks := from_ggdeals(appid, g, ctx, true) if ctx.get("keyshops", false) else {}
+	return {"price": retail["price"], "historical_low": retail["historical_low"], "url": g["url"],
+		"attribution": GG.ATTRIBUTION, "keyshop": ks.get("price") if not ks.is_empty() else null}
+
+
+## The historical low to show for a game: GG.deals' (local currency) first,
+## else CheapShark's when it's local (US).
+static func best_low(lookup_low: Variant, g: Variant, ctx: Dictionary) -> Variant:
+	if g is Dictionary and g.get("retail_low") != null and g.get("currency", "") == ctx.get("currency", ""):
+		return {"amount": float(g["retail_low"]), "currency": g["currency"], "date": 0}
+	return local_low(lookup_low, ctx)
+
+
 ## Every store's offer for one game: rows with a local price first, cheapest
 ## first, then "See price" rows by discount. `lookup` is one entry of
 ## CheapShark.parse_lookup() or {}; `steam` the game's Steam info or null.
-static func prices_for(lookup: Dictionary, steam: Variant, stores: Dictionary, ctx: Dictionary) -> Array[Dictionary]:
+## `gg` is the game's GG.deals entry or null (adds its best-price row, and a
+## key-shop row when ctx.keyshops is on).
+static func prices_for(lookup: Dictionary, steam: Variant, stores: Dictionary, ctx: Dictionary, gg: Variant = null, gg_appid := "") -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var low = lookup.get("historical_low", null)
 	var steam_deal := from_steam(steam, ctx, low) if steam is Dictionary else {}
 	if not steam_deal.is_empty():
+		var gl = best_low(low, gg, ctx)
+		steam_deal["historical_low"] = gl
+		steam_deal["is_historical_low"] = steam_deal["savings_pct"] > 0 and gl != null and _is_low(steam_deal["price"]["amount"], gl)
 		out.append(steam_deal)
+	if gg is Dictionary:
+		var appid := gg_appid if gg_appid != "" else (str(steam.get("appid", "")) if steam is Dictionary else str(lookup.get("appid", "")))
+		var r := from_ggdeals(appid, gg, ctx)
+		if not r.is_empty():
+			out.append(r)
+		if ctx.get("keyshops", false):
+			var k := from_ggdeals(appid, gg, ctx, true)
+			if not k.is_empty():
+				out.append(k)
 	for o in lookup.get("offers", []):
 		if o.get("store_id") == STEAM_STORE_ID and not steam_deal.is_empty():
 			continue
