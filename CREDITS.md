@@ -13,7 +13,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | --- | --- | --- |
 | gamescope | Display, frame limit, scaling, overlay layering | BSD-2-Clause |
 | Proton / umu-launcher | Running Windows games | Various / GPL-3.0 |
-| InputPlumber | Controller input, button and gyro routing | GPL-3.0 |
+| InputPlumber | Controller input, button and gyro routing; device profiles and D-Bus API for paddles, gyro, rumble | GPL-3.0 |
 | PowerStation | TDP, GPU clocks over D-Bus | GPL-3.0 |
 | steamos-manager | TDP, GPU, charge limit over D-Bus | MIT |
 | legendary, heroic-gogdl, nile | Epic, GOG, Amazon libraries, launch, install / update / repair / uninstall, progress output | GPL-3.0 |
@@ -21,6 +21,12 @@ GameCove stands on a lot of other people's work. Thank you.
 | gamescope-session-plus | The session GameCove runs in | see project |
 | xprop (X.Org) | Setting gamescope atoms | MIT |
 | MangoHud / mangoapp (flightlessmango) | Performance overlay and the game's frame timings (its log) | MIT |
+| rpm-ostree | Checking and staging OS updates on Bazzite / Fedora Atomic | LGPL-2.0-or-later (parts GPL-2.0-or-later, Apache-2.0 OR MIT) |
+| steamos-update helpers (Valve; OpenGamingCollective gamescope-session-steam) | OS updates the way Steam's Gaming Mode does them | MIT (OGC) |
+| uupd (Universal Blue) | Runs Bazzite's updates behind steamos-update | Apache-2.0 |
+| fwupd / LVFS | Firmware updates | LGPL-2.1-or-later |
+| Flatpak | App updates | LGPL-2.1-or-later |
+| util-linux (findmnt, lsblk) | Drives and free space | GPL-2.0-or-later |
 | udev-hid-bpf | Loading HID-BPF fixes | GPL-2.0 |
 | Godot Engine | UI | MIT |
 | Inter typeface | Banner lettering | OFL-1.1 |
@@ -36,6 +42,8 @@ GameCove stands on a lot of other people's work. Thank you.
 - **SteamKit2** (LGPL-2.1): the `EAppState` bit values behind appmanifest `StateFlags`.
 - **OpenGamepadUI** (`core/systems/mangoapp/mangoapp.gd`, GPL-3.0) and **gamescope-session-plus** (MIT): driving mangoapp's overlay level through `MANGOHUD_CONFIGFILE`.
 - **node-vdf** (Anthony Beaumont, MIT): the binary KeyValues type table our parser follows. **Achievement Watcher** / **celes** (GPL) and **Steam Achievement Manager** (gibbed, zlib): where Steam keeps achievement stats and how the schema is laid out. Our code is our own.
+- **Bazzite** (Apache-2.0): its Gaming Mode update path (`os-update`, polkit rules) shows which update commands work without a password.
+- **Heroic Games Launcher**: the GOG sign-in URL and where gogdl keeps its login.
 - **proton-cachyos** (CachyOS), **GE-Proton** (GloriousEggroll) and **low_latency_layer** (Korthos-Software): their docs for the launch variables we set.
 
 ## Data

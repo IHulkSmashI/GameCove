@@ -1,0 +1,50 @@
+version: 1
+kind: DeviceProfile
+name: Default
+description: null
+target_devices: null
+mapping:
+- name: LeftTop
+  source_event:
+    gamepad:
+      button: LeftTop
+  target_events:
+  - gamepad:
+      button: LeftPaddle1
+- name: Paddle One
+  source_event:
+    gamepad:
+      button: LeftPaddle1
+  target_events:
+  - gamepad:
+      button: South
+- name: 'Quick: Access'
+  source_event:
+    gamepad:
+      button: Keyboard
+  target_events:
+  - gamepad:
+      button: Guide
+  - gamepad:
+      button: North
+- name: Gyro Mouse
+  source_event:
+    gamepad:
+      gyro:
+        name: Gyro1
+        direction: null
+        deadzone: null
+        axis: null
+  target_events:
+  - mouse:
+      motion:
+        direction: null
+        speed_pps: 800.0
+- name: Key
+  source_event:
+    gamepad:
+      button: RightPaddle2
+  target_events:
+  - keyboard: KeyW
+  - mouse:
+      button: Left

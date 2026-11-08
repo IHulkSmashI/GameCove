@@ -1,0 +1,4 @@
+Note: --check and --preview may be unreliable.  See https://github.com/coreos/rpm-ostree/issues/1579
+AvailableUpdate:
+        Version: 43.20261105.0 (2026-11-05T06:12:45Z)
+         Digest: sha256:4f9c6e2d1b8a7f3e5c0d9b2a6e4f1c8d7b3a5e9f2c6d0b4a8e1f7c3d5b9a2e6f

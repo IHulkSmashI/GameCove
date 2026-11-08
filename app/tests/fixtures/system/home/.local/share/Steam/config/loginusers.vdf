@@ -1,0 +1,16 @@
+"users"
+{
+	"76561198000000001"
+	{
+		"AccountName"		"olduser"
+		"PersonaName"		"Old"
+		"MostRecent"		"0"
+	}
+	"76561198000000002"
+	{
+		"AccountName"		"hulk"
+		"PersonaName"		"HulkSmash"
+		"RememberPassword"		"1"
+		"MostRecent"		"1"
+	}
+}

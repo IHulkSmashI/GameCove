@@ -1,0 +1,126 @@
+{
+ "blockdevices": [
+  {
+   "name": "nvme0n1",
+   "path": "/dev/nvme0n1",
+   "pkname": null,
+   "type": "disk",
+   "size": 1024209543168,
+   "rm": false,
+   "hotplug": false,
+   "tran": "nvme",
+   "model": "WD PC SN5000S SDEQNSJ-1T00-1032",
+   "label": null,
+   "fstype": null,
+   "children": [
+    {
+     "name": "nvme0n1p1",
+     "path": "/dev/nvme0n1p1",
+     "pkname": "nvme0n1",
+     "type": "part",
+     "size": 629145600,
+     "rm": false,
+     "hotplug": false,
+     "tran": null,
+     "model": null,
+     "label": null,
+     "fstype": "vfat"
+    },
+    {
+     "name": "nvme0n1p2",
+     "path": "/dev/nvme0n1p2",
+     "pkname": "nvme0n1",
+     "type": "part",
+     "size": 1073741824,
+     "rm": false,
+     "hotplug": false,
+     "tran": null,
+     "model": null,
+     "label": null,
+     "fstype": "ext4"
+    },
+    {
+     "name": "nvme0n1p3",
+     "path": "/dev/nvme0n1p3",
+     "pkname": "nvme0n1",
+     "type": "part",
+     "size": 1022336598016,
+     "rm": false,
+     "hotplug": false,
+     "tran": null,
+     "model": null,
+     "label": "fedora",
+     "fstype": "btrfs"
+    }
+   ]
+  },
+  {
+   "name": "mmcblk0",
+   "path": "/dev/mmcblk0",
+   "pkname": null,
+   "type": "disk",
+   "size": 512110190592,
+   "rm": false,
+   "hotplug": false,
+   "tran": null,
+   "model": null,
+   "label": null,
+   "fstype": null,
+   "children": [
+    {
+     "name": "mmcblk0p1",
+     "path": "/dev/mmcblk0p1",
+     "pkname": "mmcblk0",
+     "type": "part",
+     "size": 512109142016,
+     "rm": false,
+     "hotplug": false,
+     "tran": null,
+     "model": null,
+     "label": "SD512",
+     "fstype": "ext4"
+    }
+   ]
+  },
+  {
+   "name": "sda",
+   "path": "/dev/sda",
+   "pkname": null,
+   "type": "disk",
+   "size": 1000204886016,
+   "rm": "0",
+   "hotplug": "1",
+   "tran": "usb",
+   "model": "Portable SSD T7",
+   "label": null,
+   "fstype": null,
+   "children": [
+    {
+     "name": "sda1",
+     "path": "/dev/sda1",
+     "pkname": "sda",
+     "type": "part",
+     "size": 1000169226240,
+     "rm": "0",
+     "hotplug": "1",
+     "tran": null,
+     "model": null,
+     "label": "T7",
+     "fstype": "exfat"
+    }
+   ]
+  },
+  {
+   "name": "zram0",
+   "path": "/dev/zram0",
+   "type": "disk",
+   "size": 8589934592,
+   "rm": false,
+   "hotplug": false,
+   "tran": null,
+   "model": null,
+   "label": null,
+   "fstype": "swap"
+  }
+ ]
+}

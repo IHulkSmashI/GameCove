@@ -1,0 +1,9 @@
+{
+  "image-name": "bazzite",
+  "image-flavor": "main",
+  "image-vendor": "ublue-os",
+  "image-ref": "ostree-image-signed:docker://ghcr.io/ublue-os/bazzite",
+  "image-tag": "stable",
+  "base-image-name": "kinoite",
+  "fedora-version": "43"
+}

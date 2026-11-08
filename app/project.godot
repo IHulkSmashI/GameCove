@@ -27,6 +27,10 @@ Discover="*res://scripts/discover/discover.gd"
 Art="*res://scripts/discover/art.gd"
 PerfMonitor="*res://scripts/perf/perf_monitor.gd"
 Achievements="*res://scripts/achievements/achievements.gd"
+Updates="*res://scripts/system/updates.gd"
+Storage="*res://scripts/system/storage.gd"
+Setup="*res://scripts/system/setup.gd"
+Controller="*res://scripts/input/controller.gd"
 
 [display]
 

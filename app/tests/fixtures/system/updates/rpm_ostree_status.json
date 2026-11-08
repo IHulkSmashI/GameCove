@@ -1,0 +1,37 @@
+{
+ "deployments": [
+  {
+   "id": "default-abc.0",
+   "osname": "default",
+   "serial": 0,
+   "checksum": "aaa111",
+   "version": "43.20261101.0",
+   "timestamp": 1761980000,
+   "booted": true,
+   "staged": false,
+   "pinned": false,
+   "origin": "ostree-image-signed:docker://ghcr.io/ublue-os/bazzite-deck:stable",
+   "container-image-reference": "ostree-image-signed:docker://ghcr.io/ublue-os/bazzite-deck:stable",
+   "requested-packages": [],
+   "base-checksum": null
+  },
+  {
+   "id": "default-abc.0",
+   "osname": "default",
+   "serial": 1,
+   "checksum": "999000",
+   "version": "43.20261020.0",
+   "timestamp": 1760900000,
+   "booted": false,
+   "staged": false,
+   "pinned": false,
+   "origin": "ostree-image-signed:docker://ghcr.io/ublue-os/bazzite-deck:stable",
+   "container-image-reference": "ostree-image-signed:docker://ghcr.io/ublue-os/bazzite-deck:stable",
+   "requested-packages": [],
+   "base-checksum": null
+  }
+ ],
+ "transaction": null,
+ "cached-update": null,
+ "update-driver": null
+}

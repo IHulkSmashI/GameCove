@@ -1,0 +1,61 @@
+{
+ "Devices": [
+  {
+   "Name": "System Firmware",
+   "DeviceId": "a45df35ac0e948ee180fe216a5f703f32dda163f",
+   "Guid": [
+    "230c8b18-8d9b-53ec-838b-6cfc0383493a"
+   ],
+   "Plugin": "uefi_capsule",
+   "Flags": [
+    "internal",
+    "updatable",
+    "require-ac",
+    "supported",
+    "registered",
+    "needs-reboot",
+    "usable-during-update"
+   ],
+   "Vendor": "Micro-Star International Co., Ltd.",
+   "Version": "E1T91IMS.10C",
+   "VersionFormat": "plain",
+   "Releases": [
+    {
+     "AppstreamId": "com.msi.MS1T91.firmware",
+     "RemoteId": "lvfs",
+     "Name": "MS-1T91 System Update",
+     "Summary": "Firmware for the MSI Claw 8 EX",
+     "Version": "E1T91IMS.10E",
+     "Filename": "x.cab",
+     "Protocol": "org.uefi.capsule",
+     "Checksum": [
+      "abc"
+     ],
+     "License": "proprietary",
+     "Size": 16777216,
+     "Created": 1761000000,
+     "Locations": [
+      "https://fwupd.org/downloads/x.cab"
+     ],
+     "DetailsUrl": "https://fwupd.org/lvfs/components/123",
+     "Flags": [
+      "trusted-payload",
+      "trusted-metadata",
+      "is-upgrade"
+     ],
+     "Urgency": "medium",
+     "InstallDuration": 120
+    }
+   ]
+  },
+  {
+   "Name": "Battery",
+   "DeviceId": "ffff",
+   "Flags": [
+    "internal"
+   ],
+   "Version": "1.0",
+   "Releases": []
+  }
+ ]
+}

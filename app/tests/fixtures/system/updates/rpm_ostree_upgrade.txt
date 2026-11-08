@@ -1,0 +1,7 @@
+Pulling manifest: ostree-image-signed:docker://ghcr.io/ublue-os/bazzite-deck:stable
+Importing: ostree-image-signed:docker://ghcr.io/ublue-os/bazzite-deck:stable (digest: sha256:4f9c)
+ostree chunk layers needed: 12 (1.2 GB)
+[3/12] Fetching ostree chunk sha256:12ab (95.1 MB)...done
+[12/12] Fetching ostree chunk sha256:99ff (10.0 MB)...done
+Staging deployment...done
+Run "systemctl reboot" to start a reboot

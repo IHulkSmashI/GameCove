@@ -1,0 +1,3 @@
+Application ID	Name	Version	Branch	Origin
+org.mozilla.firefox	Firefox	144.0	stable	flathub
+org.freedesktop.Platform.GL.default	Mesa	25.2.6	25.08	flathub
