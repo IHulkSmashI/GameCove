@@ -1,0 +1,808 @@
+{
+ "_about": "Real DMI ids (/sys/class/dmi/id) per device, from InputPlumber's and steamos-manager's device configs unless 'source' says otherwise. expect = devices.json id, \"\" = must not match any row.",
+ "fixtures": [
+  {
+   "expect": "steam-deck-lcd",
+   "dmi": {
+    "sys_vendor": "Valve",
+    "product_name": "Jupiter",
+    "board_name": "Jupiter",
+    "board_vendor": "Valve",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "steam-deck-oled",
+   "dmi": {
+    "sys_vendor": "Valve",
+    "product_name": "Galileo",
+    "board_name": "Galileo",
+    "board_vendor": "Valve",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "asus-rog-ally",
+   "dmi": {
+    "sys_vendor": "ASUSTeK COMPUTER INC.",
+    "product_name": "ROG Ally RC71L_RC71L",
+    "board_name": "RC71L",
+    "board_vendor": "ASUSTeK COMPUTER INC.",
+    "product_family": "ROG Ally"
+   },
+   "source": "InputPlumber + steamos-manager device configs; product_name from PowerStation"
+  },
+  {
+   "expect": "asus-rog-ally-x",
+   "dmi": {
+    "sys_vendor": "ASUSTeK COMPUTER INC.",
+    "product_name": "ROG Ally X RC72LA_RC72LA",
+    "board_name": "RC72LA",
+    "board_vendor": "ASUSTeK COMPUTER INC.",
+    "product_family": "ROG Ally X"
+   },
+   "source": "InputPlumber + steamos-manager device configs; product_name from PowerStation"
+  },
+  {
+   "expect": "asus-rog-xbox-ally",
+   "dmi": {
+    "sys_vendor": "ASUSTeK COMPUTER INC.",
+    "product_name": "ROG Xbox Ally RC73YA_RC73YA",
+    "board_name": "RC73YA",
+    "board_vendor": "ASUSTeK COMPUTER INC.",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs; product_name from PowerStation"
+  },
+  {
+   "expect": "asus-rog-xbox-ally-x",
+   "dmi": {
+    "sys_vendor": "ASUSTeK COMPUTER INC.",
+    "product_name": "ROG Xbox Ally X RC73XA_RC73XA",
+    "board_name": "RC73XA",
+    "board_vendor": "ASUSTeK COMPUTER INC.",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs; product_name from PowerStation"
+  },
+  {
+   "expect": "asus-rog-xbox-ally-x20",
+   "dmi": {
+    "sys_vendor": "ASUS",
+    "product_name": "ROG Xbox Ally X20 RC74XA",
+    "board_name": "RC74XA",
+    "board_vendor": "ASUS",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs; product_name guessed"
+  },
+  {
+   "expect": "lenovo-legion-go",
+   "dmi": {
+    "sys_vendor": "LENOVO",
+    "product_name": "83E1",
+    "board_name": "LNVNB161216",
+    "board_vendor": "LENOVO",
+    "product_family": "Legion Go 8APU1"
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "lenovo-legion-go-2",
+   "dmi": {
+    "sys_vendor": "LENOVO",
+    "product_name": "83N0",
+    "board_name": "LNVNB161216",
+    "board_vendor": "LENOVO",
+    "product_family": "Legion Go 8ASP2"
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "lenovo-legion-go-2-z2",
+   "dmi": {
+    "sys_vendor": "LENOVO",
+    "product_name": "83N1",
+    "board_name": "LNVNB161216",
+    "board_vendor": "LENOVO",
+    "product_family": "Legion Go 8AHP2"
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "lenovo-legion-go-s-z2go",
+   "dmi": {
+    "sys_vendor": "LENOVO",
+    "product_name": "83L3",
+    "board_name": "LNVNB161216",
+    "board_vendor": "LENOVO",
+    "product_family": "Legion Go S 8ARP1"
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "lenovo-legion-go-s-z2go",
+   "dmi": {
+    "sys_vendor": "LENOVO",
+    "product_name": "83Q2",
+    "board_name": "LNVNB161216",
+    "board_vendor": "LENOVO",
+    "product_family": "Legion Go S 8ARP1"
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "lenovo-legion-go-s-z1e",
+   "dmi": {
+    "sys_vendor": "LENOVO",
+    "product_name": "83N6",
+    "board_name": "LNVNB161216",
+    "board_vendor": "LENOVO",
+    "product_family": "Legion Go S 8APU1"
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "lenovo-legion-go-s-z1e",
+   "dmi": {
+    "sys_vendor": "LENOVO",
+    "product_name": "83Q3",
+    "board_name": "LNVNB161216",
+    "board_vendor": "LENOVO",
+    "product_family": "Legion Go S 8APU1"
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "msi-claw-8-ex",
+   "dmi": {
+    "sys_vendor": "Micro-Star International Co., Ltd.",
+    "product_name": "Claw 8 EX AI+ CG3EM",
+    "board_name": "MS-1T91",
+    "board_vendor": "Micro-Star International Co., Ltd.",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs; tested on the device"
+  },
+  {
+   "expect": "msi-claw-8-ai-plus",
+   "dmi": {
+    "sys_vendor": "Micro-Star International Co., Ltd.",
+    "product_name": "Claw 8 AI+ A2VM",
+    "board_name": "MS-1T52",
+    "board_vendor": "Micro-Star International Co., Ltd.",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "msi-claw-7-ai-plus",
+   "dmi": {
+    "sys_vendor": "Micro-Star International Co., Ltd.",
+    "product_name": "Claw 7 AI+ A2VM",
+    "board_name": "MS-1T42",
+    "board_vendor": "Micro-Star International Co., Ltd.",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "msi-claw-a1m",
+   "dmi": {
+    "sys_vendor": "Micro-Star International Co., Ltd.",
+    "product_name": "Claw A1M",
+    "board_name": "MS-1T41",
+    "board_vendor": "Micro-Star International Co., Ltd.",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "msi-claw-a8",
+   "dmi": {
+    "sys_vendor": "Micro-Star International Co., Ltd.",
+    "product_name": "Claw A8 BZ2EM",
+    "board_name": "MS-1T8K",
+    "board_vendor": "Micro-Star International Co., Ltd.",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "msi-claw-family",
+   "dmi": {
+    "sys_vendor": "Micro-Star International Co., Ltd.",
+    "product_name": "Claw Next",
+    "board_name": "MS-1T99",
+    "board_vendor": "Micro-Star International Co., Ltd.",
+    "product_family": ""
+   },
+   "source": "made up: a future Claw board"
+  },
+  {
+   "expect": "onexplayer-onexfly-f1",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER F1",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "onexplayer-onexfly-f1",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER F1 OLED",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "onexplayer-onexfly-f1-pro",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER F1Pro",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "onexplayer-onexfly-f1-pro",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER F1 EVA-02",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "onexplayer-x1-amd",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER X1 A",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber"
+  },
+  {
+   "expect": "onexplayer-x1-intel",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER X1 i",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber"
+  },
+  {
+   "expect": "onexplayer-x1-mini",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER X1 mini",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber"
+  },
+  {
+   "expect": "onexplayer-x1-pro",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER X1Pro",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "PowerStation dmi_overrides"
+  },
+  {
+   "expect": "onexplayer-2",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER 2 ARP23",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "onexplayer-2-pro",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER 2 PRO ARP23P",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "onexplayer-g1-amd",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER G1 A",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "onexplayer-g1-intel",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER G1 i",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber"
+  },
+  {
+   "expect": "onexplayer-3",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER 3",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + PowerStation"
+  },
+  {
+   "expect": "onexplayer-x2-mini",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER X2Mini",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + PowerStation"
+  },
+  {
+   "expect": "onexplayer-onexfly-apex",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER APEX",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber + PowerStation"
+  },
+  {
+   "expect": "onexplayer-super-x",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER SUPER X",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "PowerStation dmi_overrides"
+  },
+  {
+   "expect": "onexplayer-family",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER NEXT THING",
+    "board_name": "",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "made up: an unknown OneXPlayer"
+  },
+  {
+   "expect": "aokzoe-a1",
+   "dmi": {
+    "sys_vendor": "AOKZOE",
+    "product_name": "AOKZOE A1 AR07",
+    "board_name": "",
+    "board_vendor": "AOKZOE",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "aokzoe-a1-pro",
+   "dmi": {
+    "sys_vendor": "AOKZOE",
+    "product_name": "AOKZOE A1 Pro",
+    "board_name": "",
+    "board_vendor": "AOKZOE",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "aokzoe-a1x",
+   "dmi": {
+    "sys_vendor": "AOKZOE",
+    "product_name": "AOKZOE A1X",
+    "board_name": "",
+    "board_vendor": "AOKZOE",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "aokzoe-family",
+   "dmi": {
+    "sys_vendor": "AOKZOE",
+    "product_name": "AOKZOE A2",
+    "board_name": "",
+    "board_vendor": "AOKZOE",
+    "product_family": ""
+   },
+   "source": "made up: model without a row"
+  },
+  {
+   "expect": "ayaneo-2s",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "AYANEO 2S",
+    "board_name": "AB07-AMD",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-2s",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "GEEK 1S",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-2",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "AYANEO 2",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-kun",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "KUN",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-air-1s",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "AIR 1S",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-air-plus",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "AIR Plus",
+    "board_name": "AB05-AMD",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-air-plus",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "AIR Plus",
+    "board_name": "AB05-Mendocino",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-flip",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "FLIP DS",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-flip",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "FLIP KB",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-flip-1s-ds",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "FLIP 1S DS",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-3",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "AYANEO 3",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-slide",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "SLIDE",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "ayaneo-family",
+   "dmi": {
+    "sys_vendor": "AYANEO",
+    "product_name": "NEXT II",
+    "board_name": "",
+    "board_vendor": "AYANEO",
+    "product_family": ""
+   },
+   "source": "made up: model without a row"
+  },
+  {
+   "expect": "gpd-win-4",
+   "dmi": {
+    "sys_vendor": "GPD",
+    "product_name": "G1618-04",
+    "board_name": "Default string",
+    "board_vendor": "GPD",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "gpd-win-mini",
+   "dmi": {
+    "sys_vendor": "GPD",
+    "product_name": "G1617-01",
+    "board_name": "Default string",
+    "board_vendor": "GPD",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "gpd-win-mini",
+   "dmi": {
+    "sys_vendor": "GPD",
+    "product_name": "G1617-02",
+    "board_name": "Default string",
+    "board_vendor": "GPD",
+    "product_family": ""
+   },
+   "source": "PowerStation dmi_overrides"
+  },
+  {
+   "expect": "gpd-win-max-2",
+   "dmi": {
+    "sys_vendor": "GPD",
+    "product_name": "G1619-04",
+    "board_name": "Default string",
+    "board_vendor": "GPD",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "gpd-win-5",
+   "dmi": {
+    "sys_vendor": "GPD",
+    "product_name": "G1618-05",
+    "board_name": "Default string",
+    "board_vendor": "GPD",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "gpd-family",
+   "dmi": {
+    "sys_vendor": "GPD",
+    "product_name": "G1618-03",
+    "board_name": "Default string",
+    "board_vendor": "GPD",
+    "product_family": ""
+   },
+   "source": "InputPlumber (WIN 3, no row of its own)"
+  },
+  {
+   "expect": "zotac-zone",
+   "dmi": {
+    "sys_vendor": "ZOTAC",
+    "product_name": "ZOTAC GAMING ZONE",
+    "board_name": "G0A1W",
+    "board_vendor": "ZOTAC",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "zotac-zone",
+   "dmi": {
+    "sys_vendor": "ZOTAC",
+    "product_name": "ZOTAC GAMING ZONE",
+    "board_name": "G1A1W",
+    "board_vendor": "ZOTAC",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "acer-predator-atlas-8",
+   "dmi": {
+    "sys_vendor": "Acer",
+    "product_name": "Predator Atlas 8",
+    "board_name": "F900_PTG",
+    "board_vendor": "Acer",
+    "product_family": ""
+   },
+   "source": "Bazzite devices.d/70-acer_atlas8.yaml"
+  },
+  {
+   "expect": "acer-predator-atlas-8",
+   "dmi": {
+    "sys_vendor": "Acer",
+    "product_name": "Predator PA08-I51",
+    "board_name": "",
+    "board_vendor": "Acer",
+    "product_family": ""
+   },
+   "source": "GameCove's earlier row"
+  },
+  {
+   "expect": "acer-nitro-blaze-7",
+   "dmi": {
+    "sys_vendor": "Acer",
+    "product_name": "Nitro Blaze 7 GN771",
+    "board_name": "",
+    "board_vendor": "Acer",
+    "product_family": ""
+   },
+   "source": "guess"
+  },
+  {
+   "expect": "acer-nitro-blaze-8",
+   "dmi": {
+    "sys_vendor": "Acer",
+    "product_name": "Nitro Blaze 8 GN881",
+    "board_name": "",
+    "board_vendor": "Acer",
+    "product_family": ""
+   },
+   "source": "guess"
+  },
+  {
+   "expect": "acer-nitro-blaze-11",
+   "dmi": {
+    "sys_vendor": "Acer",
+    "product_name": "Nitro Blaze 11 GN1101",
+    "board_name": "",
+    "board_vendor": "Acer",
+    "product_family": ""
+   },
+   "source": "guess"
+  },
+  {
+   "expect": "orangepi-neo",
+   "dmi": {
+    "sys_vendor": "OrangePi",
+    "product_name": "NEO-01",
+    "board_name": "",
+    "board_vendor": "OrangePi",
+    "product_family": ""
+   },
+   "source": "InputPlumber + steamos-manager device configs"
+  },
+  {
+   "expect": "",
+   "dmi": {
+    "sys_vendor": "ASUSTeK COMPUTER INC.",
+    "product_name": "ROG Zephyrus G14 GA402RJ",
+    "board_name": "GA402RJ",
+    "board_vendor": "ASUSTeK COMPUTER INC.",
+    "product_family": ""
+   },
+   "source": "laptop"
+  },
+  {
+   "expect": "",
+   "dmi": {
+    "sys_vendor": "LENOVO",
+    "product_name": "21K5",
+    "board_name": "21K5",
+    "board_vendor": "LENOVO",
+    "product_family": "ThinkPad X1 Carbon Gen 12"
+   },
+   "source": "laptop"
+  },
+  {
+   "expect": "",
+   "dmi": {
+    "sys_vendor": "Micro-Star International Co., Ltd.",
+    "product_name": "Katana 15 B13VFK",
+    "board_name": "MS-1585",
+    "board_vendor": "Micro-Star International Co., Ltd.",
+    "product_family": ""
+   },
+   "source": "laptop"
+  },
+  {
+   "expect": "",
+   "dmi": {
+    "sys_vendor": "Valve",
+    "product_name": "Fremont",
+    "board_name": "Fremont",
+    "board_vendor": "Valve",
+    "product_family": ""
+   },
+   "source": "Steam Machine (steamos-manager)"
+  },
+  {
+   "expect": "",
+   "dmi": {
+    "sys_vendor": "Framework",
+    "product_name": "Laptop 13 (AMD Ryzen 7040Series)",
+    "board_name": "FRANMDCP07",
+    "board_vendor": "Framework",
+    "product_family": ""
+   },
+   "source": "laptop"
+  }
+ ]
+}
