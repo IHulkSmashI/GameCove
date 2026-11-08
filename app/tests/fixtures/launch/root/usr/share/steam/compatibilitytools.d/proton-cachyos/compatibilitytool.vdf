@@ -1,0 +1,11 @@
+"compatibilitytools"
+{
+  "compat_tools"
+  {
+    "proton-cachyos"
+    {
+      "install_path" "."
+      "display_name" "Proton-CachyOS"
+    }
+  }
+}

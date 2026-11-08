@@ -1,0 +1,13 @@
+"compatibilitytools"
+{
+  "compat_tools"
+  {
+    "proton-cachyos-slr"
+    {
+      "install_path" "."
+      "display_name" "proton-cachyos-11.0-20260702-slr"
+      "from_oslist"  "windows"
+      "to_oslist"    "linux"
+    }
+  }
+}

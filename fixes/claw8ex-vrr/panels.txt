@@ -1,0 +1,6 @@
+# Validated panels for claw8ex-vrr: only these exact factory EDIDs (matched by sha256) are ever patched.
+# From the Intel VRR range fix's validated panel catalog (github.com/Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory,
+# MIT), via ClawDeck's edid.py.
+# key      factory sha256                                                    length  range byte offsets (min,max,...)  panel / models
+CSW0801 e49bc570225510b7c889ed292570f1345caa07f5840db57ea6998a403db5cef0 256 95,96,142,143 PN8007QB1-2 (Claw 8 AI+ / 8 EX AI+)
+TMA2027 3518ab4456669d12a7b8d254f63005eae143c784dce02ec56c3753c41a664ca1 128 95,96 TL070FVXS02-0 (Claw A1M / 7 AI+)

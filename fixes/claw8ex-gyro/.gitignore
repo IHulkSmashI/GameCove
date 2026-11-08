@@ -1,0 +1,2 @@
+# Built by bpf/build-bpf.sh at packaging time
+bpf/*.bpf.o
