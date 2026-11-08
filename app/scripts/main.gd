@@ -8,17 +8,23 @@ const Home := preload("res://scripts/ui/home.gd")
 const GamePage := preload("res://scripts/ui/game_page.gd")
 const QuickMenu := preload("res://scripts/ui/quick_menu.gd")
 const View := preload("res://scripts/ui/library_view.gd")
+const GameSession := preload("res://scripts/launch/game_session.gd")
 
 const LIVE_REFRESH_S := 5.0
+## Wall clock running this far ahead of the monotonic clock means we were asleep.
+const RESUME_GAP_S := 20.0
 
 var home: Control
 var page: Control
 var quick_menu: Control
+## Focus, frame limit and Auto TDP for the running game.
+var session: Node
 ## The game launched from here most recently: what "This game" edits.
 var playing: Dictionary = {}
 var _live_timer: Timer
 var _window_focused := true
 var _focus_before_menu: Control
+var _clock_mark := [0.0, 0]   # [unix seconds, ticks msec] at the last resume check
 
 
 func _ready() -> void:
@@ -40,12 +46,19 @@ func _ready() -> void:
 	quick_menu.closed.connect(_on_menu_closed)
 	add_child(quick_menu)
 
+	session = GameSession.new()
+	session.name = "GameSession"
+	session.setup(Gamescope, Power, Launcher)
+	session.ended.connect(_on_game_ended)
+	add_child(session)
+
 	Library.changed.connect(_on_library_changed)
 	home.set_games(Library.games)
+	_clock_mark = [Time.get_unix_time_from_system(), Time.get_ticks_msec()]
 
 	_live_timer = Timer.new()
 	_live_timer.wait_time = LIVE_REFRESH_S
-	_live_timer.timeout.connect(_refresh_live)
+	_live_timer.timeout.connect(_on_live_tick)
 	add_child(_live_timer)
 	_refresh_live()
 	_update_timer()
@@ -58,8 +71,44 @@ func _notification(what: int) -> void:
 		_update_timer()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_window_focused = true
+		_check_resume()
 		_refresh_live()
 		_update_timer()
+	elif what == NOTIFICATION_WM_CLOSE_REQUEST and session != null:
+		session.stop()
+
+
+func _on_live_tick() -> void:
+	_check_resume()
+	_refresh_live()
+
+
+## Godot has no suspend/resume notification on Linux (NOTIFICATION_APPLICATION_RESUMED
+## is Android/iOS only), so we compare clocks: the monotonic clock stops while the
+## device sleeps, the wall clock doesn't. After a sleep, read power values again
+## (firmware may have reset the TDP or charge limit). Runs only on ticks we
+## already have and when our window comes back; never polls on its own.
+func _check_resume() -> void:
+	var now := [Time.get_unix_time_from_system(), Time.get_ticks_msec()]
+	if resumed_between(_clock_mark, now, RESUME_GAP_S):
+		_power_refresh()
+	_clock_mark = now
+
+
+static func resumed_between(before: Array, after: Array, gap_s: float) -> bool:
+	if before[1] == 0:
+		return false
+	var wall: float = after[0] - before[0]
+	var mono: float = (after[1] - before[1]) / 1000.0
+	return wall - mono > gap_s
+
+
+## Power.refresh() reads over busctl on the caller's thread; run it on Power's worker.
+func _power_refresh() -> void:
+	if Power.has_method("_queue"):
+		Power._queue("refresh", func(): Power.refresh(); return true)
+	else:
+		Power.refresh()
 
 
 ## Live numbers only tick while someone can see them: our window has focus or
@@ -134,7 +183,13 @@ func _screen_default_focus() -> Control:
 
 func _play(game: Dictionary) -> void:
 	playing = game
-	Library.launch(game)
+	session.begin(game, Library.launch(game))
+
+
+func _on_game_ended(game: Dictionary) -> void:
+	if not playing.is_empty() and playing.get("key", "") == game.get("key", ""):
+		playing = {}
+	_check_resume()
 
 
 func _open_page(game: Dictionary) -> void:

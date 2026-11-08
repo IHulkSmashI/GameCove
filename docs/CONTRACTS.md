@@ -35,7 +35,11 @@ The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these 
 }
 ```
 
-`Library` emits `changed` after every refresh. `Library.launch(game)` starts it through the right store.
+`Library` emits `changed` after every refresh. `Library.launch(game)` starts it through the right store and returns `{"ok": bool, "app_id": int, "pid": int, "scoped": bool}`: `app_id` is the id gamescope knows the game by (the Steam app id, or `Library.app_id_for(key)` for a game we start in an `app-steam-app<id>-<n>` scope; 0 when gamescope can't tell), `pid` the process we started (0 for Steam).
+
+## Running game (`scripts/launch/game_session.gd`, owned by `main.gd`)
+
+`GameSession.begin(game, Library.launch(game))` applies the game's `fps_limit` through `Gamescope`, starts Auto TDP when `Launcher.auto_tdp_for(key)` (goal `battery` or `balanced`), waits for the app id in `GAMESCOPE_FOCUSABLE_APPS` (0.5 s timer, up to 60 s) and calls `Gamescope.focus_app(id)`. A 3 s timer runs only while the game does; when its app id and process are gone it calls `focus_home()`, sets the frame limit to 0, stops Auto TDP and emits `ended(game)`.
 
 ## Power state (`Power.state()`)
 
@@ -58,7 +62,7 @@ Setters (`set_tdp`, `set_profile`, `set_charge_limit`, `set_fan_mode`) return `t
 {"goal": "battery|balanced|smooth", "fps_limit": 0, "upscaler": "auto|off|fsr|xess", "frame_gen": false, "low_latency": true}
 ```
 
-`Launcher.launch_env(game)` returns the environment variables to add for that game on this device.
+`Launcher.launch_env(game)` returns the environment variables to add for that game on this device. Steam games start through `steam://`, which takes no environment: for them the game page shows only goal and frame limit, plus a line pointing to Steam launch options. `Launcher.auto_tdp_for(key)` is true for goals `battery` and `balanced`.
 
 ## Root actions
 

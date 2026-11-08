@@ -20,6 +20,7 @@ var _entries := {}            # key -> full store entry (launch details live her
 var _tools := {}
 var _task := -1
 var _again := false
+var _launch_n := 0
 var _db: Node
 
 
@@ -124,20 +125,71 @@ static func launch_command(entry: Dictionary, tools: Dictionary, extra_env := {}
 	return [] as Array[String]
 
 
-## Starts the game through its store. Returns false if it couldn't be started.
-func launch(game: Dictionary) -> bool:
+## Gamescope app id for a game we start ourselves. Real Steam app ids are far
+## below 2^30, so ids with bit 30 set (and bit 31 clear, so it stays a positive
+## 31-bit int) can't collide with them, with our home screen (769) or with
+## Steam's 413091. Stable across runs: the first 32 bits of sha256(key).
+## OpenGamepadUI hashes the game name modulo 800483647 instead
+## (library_launch_item.gd get_app_id); that range overlaps real Steam ids.
+static func app_id_for(game_key: String) -> int:
+	return (game_key.sha256_text().substr(0, 8).hex_to_int() & 0x3FFFFFFF) | 0x40000000
+
+
+## Wraps `cmd` so it runs in its own systemd user scope named the way gamescope
+## reads an app id from a process's cgroup (`app-steam-app<id>-<n>.scope`,
+## gamescope src/Utils/Process.cpp GetAppIdFromCgroup). Every child the game
+## starts stays in the scope, so gamescope can focus its windows. --collect drops
+## the unit when it ends, even if the game crashed.
+static func scope_command(cmd: Array, app_id: int, n: int, systemd_run := "systemd-run") -> Array[String]:
+	var out: Array[String] = [systemd_run, "--user", "--scope", "--collect", "--quiet",
+		"--unit=app-steam-app%d-%d" % [app_id, n], "--"]
+	for c in cmd:
+		out.append(str(c))
+	return out
+
+
+## True when `systemd-run --user` can work here: the binary is on PATH and the
+## user's systemd instance is running (its runtime folder exists). Without it a
+## scoped launch would fail outright, so we start the game plainly instead.
+static func can_scope(systemd_run: String, runtime_dir: String) -> bool:
+	return systemd_run != "" and runtime_dir != "" and DirAccess.dir_exists_absolute(runtime_dir.path_join("systemd"))
+
+
+## Starts the game through its store. Returns {"ok", "app_id", "pid", "scoped"}:
+## app_id is what gamescope will know the game by (its Steam app id, or our own
+## id for a scoped launch; 0 when gamescope can't tell), pid the process we
+## started (0 for Steam, which hands the launch to the running client).
+func launch(game: Dictionary) -> Dictionary:
+	var result := {"ok": false, "app_id": 0, "pid": 0, "scoped": false}
 	var entry: Dictionary = _entries.get(game.get("key", ""), game)
+	var path_env := OS.get_environment("PATH")
 	if entry.get("store", "") == "steam":
-		Steam.launch(entry["id"])
-		return true
+		result["ok"] = Steam.launch(str(entry["id"]), Common.which("steam", path_env))
+		result["app_id"] = str(entry["id"]).to_int()
+		return result
 	if _tools.is_empty():
-		_tools = Common.find_tools(home, OS.get_environment("PATH"))
+		_tools = Common.find_tools(home, path_env)
 	var extra := {}
 	var launcher := get_node_or_null("/root/Launcher")
 	if launcher != null and launcher.has_method("launch_env"):
 		extra = launcher.launch_env(game)
-	var cmd := launch_command(entry, _tools, extra)
+	var cmd: Array = launch_command(entry, _tools, extra)
 	if cmd.is_empty():
 		push_warning("Can't launch %s: install umu-launcher and the store's tool, or Heroic" % entry.get("title", "?"))
-		return false
-	return OS.create_process(cmd[0], cmd.slice(1)) > 0
+		return result
+	var systemd_run := Common.which("systemd-run", path_env)
+	if can_scope(systemd_run, OS.get_environment("XDG_RUNTIME_DIR")):
+		var id := app_id_for("%s:%s" % [entry["store"], entry["id"]])
+		_launch_n += 1
+		var n := (int(Time.get_unix_time_from_system()) % 100000000) * 10 + _launch_n % 10
+		cmd = scope_command(cmd, id, n, systemd_run)
+		result["app_id"] = id
+		result["scoped"] = true
+	else:
+		push_warning("systemd-run --user not available: %s starts without an app id, so gamescope can't focus it" % entry.get("title", "?"))
+	var pid := OS.create_process(cmd[0], cmd.slice(1))
+	result["ok"] = pid > 0
+	result["pid"] = maxi(pid, 0)
+	if not result["ok"]:
+		result["app_id"] = 0
+	return result

@@ -1,6 +1,6 @@
 extends RefCounted
 ## Reads installed Steam games from Steam's own local files and launches them
-## through Steam (steam://rungameid/), so Steam Input and shader caching apply.
+## through Steam (`steam steam://rungameid/<id>`), so Steam Input and shader caching apply.
 ## Playtime and last played come from userdata/<user>/config/localconfig.vdf;
 ## art from appcache/librarycache (old flat <appid>_*.jpg files and the newer
 ## per-app folders) with the user's own grid art (userdata/<user>/config/grid) first.
@@ -198,5 +198,16 @@ static func list_installed() -> Array[Dictionary]:
 	return scan(_home())
 
 
-static func launch(appid: String) -> void:
-	OS.shell_open("steam://rungameid/" + appid)
+## The command that asks the running Steam client to start a game.
+static func launch_args(appid: String) -> PackedStringArray:
+	return PackedStringArray(["steam://rungameid/" + appid])
+
+
+## Starts a game through Steam. Runs `steam steam://rungameid/<id>` (handed to
+## the running client, returns at once) because the session has no desktop for
+## xdg-open to ask; falls back to OS.shell_open when `steam` isn't on PATH.
+## `steam_bin` is the full path from Common.which, or "".
+static func launch(appid: String, steam_bin := "") -> bool:
+	if steam_bin != "" and OS.create_process(steam_bin, launch_args(appid)) > 0:
+		return true
+	return OS.shell_open("steam://rungameid/" + appid) == OK

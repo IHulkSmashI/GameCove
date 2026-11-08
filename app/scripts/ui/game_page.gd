@@ -105,7 +105,7 @@ func setup(g: Dictionary, launcher: Object) -> void:
 	col.add_child(Kit.label("Settings for this game", "HeaderLabel"))
 	col.add_child(Kit.label("Saved for this game and used every time it starts.", "QuietLabel", true))
 	form = SettingsForm.new()
-	form.setup(g.get("key", ""), launcher, true)
+	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam")
 	col.add_child(form)
 
 	var chain: Array = [play_button]

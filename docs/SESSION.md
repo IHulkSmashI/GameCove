@@ -71,7 +71,42 @@ What the service does (`Gamescope` autoload):
 | `set_overlay(open)` | our `STEAM_OVERLAY` and `STEAM_INPUT_FOCUS` = 1/0 |
 | `focus_home()` / `focus_app(id)` | root `GAMESCOPECTRL_BASELAYER_APPID` |
 | `focused_app()` | reads root `GAMESCOPE_FOCUSED_APP` |
+| `focusable_apps()` | reads root `GAMESCOPE_FOCUSABLE_APPS` (apps with a window) |
 | `is_running()` | `GAMESCOPE_WAYLAND_DISPLAY` set (gamescope-session-plus exports it), else root has `GAMESCOPE_FOCUSABLE_APPS`. Cached |
+
+## Launching a game and giving it focus
+
+`claim_main_window()` puts our home in front (`[413091, 769]`); nothing else
+changes the base layer, so a launched game would stay behind us. The flow
+(`Library.launch` + `scripts/launch/game_session.gd`):
+
+1. **Steam:** `steam steam://rungameid/<id>` via `OS.create_process` (the running
+   client takes it and the command returns). `OS.shell_open` only if `steam` isn't
+   on `PATH` (Flatpak Steam), since it needs `xdg-open` and the session has no
+   desktop. Gamescope gets the Steam app id from Steam's reaper.
+2. **Epic / GOG / Amazon / Heroic:** the store command runs under
+   `systemd-run --user --scope --collect --quiet --unit=app-steam-app<id>-<n> -- <cmd>`.
+   `<id>` is `Library.app_id_for("<store>:<id>")`: the first 32 bits of the key's
+   sha256 with bit 30 set and bit 31 clear, so it's stable, a positive 31-bit
+   int, and can't collide with real Steam app ids, 769 or 413091. (OpenGamepadUI
+   uses `hash(name) % 800483647` and a `reaper SteamLaunch AppId=` wrapper from
+   its own extension, which we don't ship.) `<n>` changes per launch.
+   `systemd-run` is used only when it's on `PATH` and `$XDG_RUNTIME_DIR/systemd`
+   exists; otherwise the game starts plainly, with a warning: it runs but gamescope
+   can't focus it.
+3. **Focus:** a 0.5 s timer reads `GAMESCOPE_FOCUSABLE_APPS` until the app id is
+   listed (the game has a window), then `focus_app(id)`. It gives up after 60 s
+   (Steam: session over; our own launch: keep following the process).
+4. **While it runs:** the game's `fps_limit` is on `GAMESCOPE_FPS_LIMIT`, Auto TDP
+   runs for goals battery/balanced. A 3 s timer (only while a game runs) checks
+   the focusable list and our process.
+5. **End:** app id not listed and our process gone on two checks in a row:
+   `focus_home()`, frame limit 0, Auto TDP stopped. The frame limit is also
+   cleared when GameSession starts, so a crash never leaves home capped.
+
+Known gaps: a Heroic launch through the **Flatpak** lands in Flatpak's own scope,
+and a launch handed to an **already running** Heroic runs under Heroic's process,
+so neither carries our app id. Those games run but aren't focused.
 
 The app must run on **X11** (`--display-driver x11`, set by the session client):
 our window id comes from `DisplayServer.window_get_native_handle(WINDOW_HANDLE)`.
@@ -225,8 +260,10 @@ Do these in order; note results in an issue.
 2. Kill the app 5 times quickly: session falls back to Steam Gaming Mode.
 3. "Switch to Steam" lands in Bazzite's Gaming Mode; Steam's "Switch to Desktop"
    still goes to the desktop (without `--default`).
-4. **Steam, `silent` mode:** a `steam://rungameid/` launch starts the game and
-   gamescope focuses it; quitting returns to GameCove; a second launch is fast.
+4. **Steam, `silent` mode:** Play on a Steam game runs `steam steam://rungameid/<id>`,
+   the game starts and comes to the front within a second of its window
+   (`xprop -root GAMESCOPECTRL_BASELAYER_APPID` shows `413091, <appid>, 769`);
+   quitting returns to GameCove within ~6 s; a second launch is fast.
 5. **Steam overlay:** Shift+Tab / Steam button inside a game. Does anything show?
    Does the guide button reach us or Steam?
 6. **Keyboard:** a text field in a game and in Steam's login prompt. Which on-screen
@@ -239,7 +276,10 @@ Do these in order; note results in an issue.
    controller; `false` gives the game back. With and without transparency.
 10. `set_fps_limit(30)` caps a game (MangoHud). `set_refresh_rate` with
     `CUSTOM_REFRESH_RATES` set in `~/.config/environment.d/` and VRR off.
-11. Non-Steam game in an `app-steam-app<id>-<n>.scope` gets focus.
+11. Non-Steam game (legendary + umu): `systemctl --user list-units 'app-steam-app*'`
+    shows the scope, `GAMESCOPE_FOCUSABLE_APPS` lists its id, the game comes to the
+    front, and home comes back when it quits. The per-game frame limit applies at
+    launch and is 0 again at home.
 12. `pkexec gamecove-fix charge-limit set 80` from the UI: no password prompt,
     entry in `/var/lib/gamecove/changes.log`.
 13. Idle power and RAM of the session vs. Bazzite's Gaming Mode.

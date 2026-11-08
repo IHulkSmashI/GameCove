@@ -16,7 +16,13 @@ var rows := {}
 var _launcher: Object
 
 
-func setup(key: String, launcher: Object, with_low_latency: bool) -> void:
+## Rows for settings that go into the game's launch environment.
+const ENV_KEYS := ["upscaler", "frame_gen", "low_latency"]
+const STEAM_ENV_NOTE := "Steam starts this game, so upscaling, frame generation and low latency can't be set from here. Set them in the game's Steam launch options."
+
+## with_env_settings false (Steam games): no upscaler / frame generation / low
+## latency rows, since we can't pass a steam:// launch any environment; one line says so.
+func setup(key: String, launcher: Object, with_low_latency: bool, with_env_settings := true) -> void:
 	name = "SettingsForm"
 	game_key = key
 	_launcher = launcher
@@ -30,6 +36,11 @@ func setup(key: String, launcher: Object, with_low_latency: bool) -> void:
 		fps.append(int(settings["fps_limit"]))
 		fps.sort()
 	_add(_choice("fps_limit", fps, fps.map(func(f): return Texts.fps_label(f))))
+	if not with_env_settings:
+		var note := Kit.label(STEAM_ENV_NOTE, "QuietLabel", true)
+		note.name = "SteamNote"
+		add_child(note)
+		return
 	var ups: Array = Texts.UPSCALERS
 	_add(_choice("upscaler", ups, ups.map(func(u): return Texts.UPSCALER_LABELS[u])))
 	_add(ChoiceRow.bool_row("frame_gen", Texts.TITLES["frame_gen"], bool(settings.get("frame_gen", false))))
@@ -47,7 +58,7 @@ func reload() -> void:
 
 
 func focusables() -> Array:
-	return get_children().map(func(r): return r.button)
+	return rows.values().map(func(r): return r.button)
 
 
 func _choice(k: String, vals: Array, lbls: Array) -> VBoxContainer:
@@ -66,7 +77,8 @@ func _on_changed(v: Variant, k: String) -> void:
 	if k == "goal":
 		settings = Texts.apply_goal(settings, v)
 		for f in ["fps_limit", "upscaler", "frame_gen"]:
-			rows[f].set_value_quiet(settings[f])
+			if rows.has(f):
+				rows[f].set_value_quiet(settings[f])
 	else:
 		settings[k] = v
 	_launcher.save_settings(game_key, settings)

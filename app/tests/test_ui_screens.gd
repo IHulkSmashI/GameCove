@@ -146,7 +146,11 @@ func test_home_status_line() -> void:
 func test_game_page() -> void:
 	var launcher := FakeLauncher.new()
 	var p: Control = GamePage.new()
-	p.setup(_three()[0], launcher)
+	# Env rows (upscaler, frame gen, low latency) only show for games we start
+	# ourselves; Steam games get a note instead (test_launch_focus.gd).
+	var g: Dictionary = _three()[0].duplicate(true)
+	g["store"] = "epic"
+	p.setup(g, launcher)
 	var t := _texts(p)
 	ok("Hades" in t, "title")
 	ok("Play" in t, "play button")

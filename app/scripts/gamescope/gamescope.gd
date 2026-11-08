@@ -108,6 +108,12 @@ func focus_app(app_id: int) -> bool:
 	return _set_root(ATOM_BASELAYER_APPID, [EXTRA_UNKNOWN_GAME_ID, app_id, MAIN_APP_ID])
 
 
+## App ids gamescope can put in front right now (each has a mapped window).
+## Our home screen (769) is always among them under gamescope. [] if unknown.
+func focusable_apps() -> Array:
+	return read_root(ATOM_FOCUSABLE_APPS)
+
+
 ## App id gamescope has in front now (MAIN_APP_ID means our home screen), 0 if unknown.
 func focused_app() -> int:
 	var v := read_root(ATOM_FOCUSED_APP)

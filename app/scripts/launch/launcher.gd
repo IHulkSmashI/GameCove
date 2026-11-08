@@ -10,6 +10,8 @@ const SETTINGS_PATH := "user://launch_settings.json"
 const GOALS := ["battery", "balanced", "smooth"]
 const UPSCALERS := ["auto", "off", "fsr", "xess"]
 const MAX_FPS_LIMIT := 240
+## Goals that run Auto TDP while the game plays. "smooth" keeps the user's full TDP.
+const AUTO_TDP_GOALS := ["battery", "balanced"]
 const LAYER_DIRS := ["/usr/share/vulkan/implicit_layer.d", "/etc/vulkan/implicit_layer.d"]
 const XESS_ENV_CONF := ".config/environment.d/50-xess-xmx.conf"
 
@@ -77,6 +79,11 @@ func settings_for(game_key: String) -> Dictionary:
 	return sanitize(stored, base) if stored is Dictionary else base
 
 
+## Whether this game's goal turns Auto TDP on while it runs.
+func auto_tdp_for(game_key: String) -> bool:
+	return settings_for(game_key)["goal"] in AUTO_TDP_GOALS
+
+
 func save_settings(game_key: String, settings: Dictionary) -> void:
 	_load()
 	_games[game_key] = sanitize(settings, settings_for(game_key))
@@ -90,7 +97,9 @@ func reset_settings(game_key: String) -> void:
 
 
 ## Real frame rate measured last time (before frame generation). Frame generation is
-## only offered from about 40 fps.
+## only offered from about 40 fps. No caller yet: nothing in the app reads a game's
+## frame rate (mangoapp / MangoHud log or the XeLL shim, see autotune.gd); until
+## then base_fps() is -1 and frame generation is always offered.
 func record_base_fps(game_key: String, fps: int) -> void:
 	_load()
 	_measured[game_key] = clampi(fps, 0, 1000)
