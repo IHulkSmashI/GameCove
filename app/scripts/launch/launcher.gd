@@ -26,6 +26,7 @@ var show_indicator := false
 
 var _games := {}
 var _measured := {}
+var _compat := {}
 var _loaded := false
 
 
@@ -96,6 +97,81 @@ func reset_settings(game_key: String) -> void:
 	_write()
 
 
+## Compatibility settings for a game GameCove starts itself (Epic, GOG, Amazon):
+## {"proton": tool id ("" = umu's default), "prefix": Wine prefix ("" = the
+## store's), "extra_env": {NAME: value}, "args": extra game arguments}.
+## Steam games keep theirs in Steam (Library.set_compat_tool / set_launch_options).
+func compat_for(game_key: String) -> Dictionary:
+	_load()
+	var stored: Variant = _compat.get(game_key, {})
+	return sanitize_compat(stored if stored is Dictionary else {})
+
+
+func save_compat(game_key: String, compat: Dictionary) -> void:
+	_load()
+	var c := sanitize_compat(compat)
+	if c == sanitize_compat({}):
+		_compat.erase(game_key)
+	else:
+		_compat[game_key] = c
+	_write()
+
+
+static func sanitize_compat(raw: Dictionary) -> Dictionary:
+	var out := {"proton": "", "prefix": "", "extra_env": {}, "args": ""}
+	var p: Variant = raw.get("proton")
+	if p is String and p.length() <= 256 and not "\n" in p:
+		out["proton"] = p
+	var pre: Variant = raw.get("prefix")
+	if pre is String and (pre == "" or pre.is_absolute_path()) and not "\n" in pre:
+		out["prefix"] = pre
+	var a: Variant = raw.get("args")
+	if a is String and a.length() <= 2048 and not "\n" in a:
+		out["args"] = a
+	var env: Variant = raw.get("extra_env")
+	if env is Dictionary:
+		var name := RegEx.create_from_string("^[A-Za-z_][A-Za-z0-9_]*$")
+		for k in env:
+			var v := str(env[k])
+			if k is String and name.search(k) != null and not "\n" in v:
+				out["extra_env"][k] = v
+	return out
+
+
+## Proton builds a non-Steam game can run with, through umu-run's PROTONPATH:
+## [{"id", "name", "path"}]. "" is umu's default (UMU-Proton); "GE-Proton" makes
+## umu fetch and use the latest GE-Proton; the rest are installed builds
+## (compatibilitytools.d, system folders, and Valve's Proton from Steam).
+func compat_tools() -> Array[Dictionary]:
+	var out: Array[Dictionary] = [
+		{"id": "", "name": "Default (UMU-Proton)", "path": ""},
+		{"id": "GE-Proton", "name": "GE-Proton, latest (downloaded by umu)", "path": "GE-Proton"},
+	]
+	var steam := Proton.steam_root(home) if home != "" else ""
+	var tools := Proton.tools(Proton.tool_dirs(steam, root_prefix))
+	var ids := tools.keys()
+	ids.sort()
+	for id in ids:
+		out.append({"id": str(id), "name": str(tools[id]["display_name"]), "path": str(tools[id]["dir"])})
+	if steam != "":
+		var common := DirAccess.open(steam.path_join("steamapps/common"))
+		if common != null:
+			for d in common.get_directories():
+				if d.begins_with("Proton") and FileAccess.file_exists(steam.path_join("steamapps/common").path_join(d).path_join("proton")):
+					out.append({"id": d, "name": d, "path": steam.path_join("steamapps/common").path_join(d)})
+	return out
+
+
+## PROTONPATH for a tool id from compat_tools(), or "" for umu's default.
+func proton_path_for(tool_id: String) -> String:
+	if tool_id == "":
+		return ""
+	for t in compat_tools():
+		if t["id"] == tool_id:
+			return t["path"]
+	return ""
+
+
 ## Real frame rate measured last time (before frame generation). Frame generation is
 ## only offered from about 40 fps. No caller yet: nothing in the app reads a game's
 ## frame rate (mangoapp / MangoHud log or the XeLL shim, see autotune.gd); until
@@ -125,6 +201,15 @@ func launch_env(game: Dictionary) -> Dictionary:
 ## "conflicts", "notes", "proton"}. The UI shows conflicts and notes.
 func launch_plan(game: Dictionary) -> Dictionary:
 	var key := str(game.get("key", "%s:%s" % [game.get("store", ""), game.get("id", "")]))
+	if str(game.get("store", "")) != "steam":
+		var compat := compat_for(key)
+		if compat["proton"] != "" or not compat["extra_env"].is_empty():
+			game = game.duplicate()
+			if compat["proton"] != "":
+				game["proton"] = compat["proton"]
+			var extra: Dictionary = (game.get("extra_env", {}) as Dictionary).duplicate()
+			extra.merge(compat["extra_env"], true)
+			game["extra_env"] = extra
 	var p := profile()
 	var device := {"gpu_family": str(p.get("gpu_family", "")), "xmx": bool(p.get("xmx", false))}
 	var proton := proton_for(game)
@@ -192,6 +277,7 @@ func _load() -> void:
 	_loaded = true
 	_games = {}
 	_measured = {}
+	_compat = {}
 	if not FileAccess.file_exists(settings_path):
 		return
 	var json := JSON.new()
@@ -207,11 +293,14 @@ func _load() -> void:
 	var measured: Variant = parsed.get("measured", {})
 	if measured is Dictionary:
 		_measured = measured
+	var compat: Variant = parsed.get("compat", {})
+	if compat is Dictionary:
+		_compat = compat
 
 
 ## Written to a temp file first, then renamed, so a crash never leaves half a file.
 func _write() -> bool:
-	var data := JSON.stringify({"version": 1, "games": _games, "measured": _measured}, "\t", true)
+	var data := JSON.stringify({"version": 1, "games": _games, "measured": _measured, "compat": _compat}, "\t", true)
 	var tmp := settings_path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:

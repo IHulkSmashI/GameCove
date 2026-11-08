@@ -1,0 +1,11 @@
+"AppState"
+{
+	"appid"		"620"
+	"name"		"Portal 2"
+	"StateFlags"		"2097158"
+	"installdir"		"Portal 2"
+	"BytesToDownload"		"10000000"
+	"BytesDownloaded"		"10000000"
+	"BytesToStage"		"12000000"
+	"BytesStaged"		"6000000"
+}

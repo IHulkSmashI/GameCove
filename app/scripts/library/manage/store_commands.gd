@@ -1,0 +1,244 @@
+extends RefCounted
+## What it takes to install, update, verify, move or uninstall an Epic, GOG or
+## Amazon game on this machine: a plan of commands for the download queue, or a
+## hand-off to Heroic, or a reason it can't be done. Pure: no files written, no
+## processes; the caller passes the store entry, the tools found and a few facts.
+##
+## Command lines follow each tool's own CLI and what Heroic runs
+## (src/backend/storeManagers/{legendary,gog,nile}/games.ts):
+##   legendary install <app> --base-path <dir> --platform Windows -y --skip-sdl
+##   legendary update <app> -y --skip-sdl | repair <app> -y --skip-sdl
+##   legendary uninstall <app> -y --skip-uninstaller | move <app> <dir> --skip-move
+##   gogdl --auth-config-path <auth.json> download|update|repair <id> --platform <p> --path <dir>
+##   nile install|update|verify <id> [--base-path <dir>] | nile uninstall <id>
+## legendary's own `move` only renames inside one drive, so we `mv` first (which
+## copies across drives, e.g. to an SD card) and then tell legendary with --skip-move.
+##
+## Plan: {"ok", "via": legendary|gogdl|nile|heroic|"", "why": "", "steps": [step],
+##        "finalize": {...}, "external": [cmd] (Heroic hand-off)}
+## step: {"cmd": [program, args...], "env": {}, "parser": legendary|gogdl|nile|size|none,
+##        "kind": "probe"|"main", "tool": legendary|gogdl|nile}
+
+const Common := preload("res://scripts/library/stores/common.gd")
+
+const ACTIONS := ["install", "uninstall", "update", "verify", "move"]
+## Where GameCove records GOG games it installed with gogdl itself (Heroic keeps
+## its own record, which we never write). Same shape as Heroic's gog_store/installed.json.
+const GOG_RECORD: String = preload("res://scripts/library/stores/gog.gd").GOG_RECORD
+
+
+static func plan(action: String, entry: Dictionary, tools: Dictionary, facts: Dictionary = {}) -> Dictionary:
+	if not action in ACTIONS:
+		return _no("Unknown action")
+	var installed: bool = entry.get("installed", false)
+	if action == "install" and installed:
+		return _no("Already installed")
+	if action != "install" and not installed:
+		return _no("Not installed")
+	match str(entry.get("store", "")):
+		"epic":
+			return _epic(action, entry, tools, facts)
+		"gog":
+			return _gog(action, entry, tools, facts)
+		"amazon":
+			return _amazon(action, entry, tools, facts)
+	return _no("Not a store GameCove manages")
+
+
+static func _no(why: String) -> Dictionary:
+	return {"ok": false, "via": "", "why": why, "steps": [], "finalize": {}, "external": []}
+
+
+static func _yes(via: String, steps: Array, finalize := {}) -> Dictionary:
+	return {"ok": true, "via": via, "why": "", "steps": steps, "finalize": finalize, "external": []}
+
+
+static func _step(cmd: Array, env: Dictionary, parser: String, tool: String, kind := "main") -> Dictionary:
+	var c: Array[String] = []
+	for x in cmd:
+		c.append(str(x))
+	return {"cmd": c, "env": env, "parser": parser, "kind": kind, "tool": tool}
+
+
+## Install folder for a new game: options.path, else <install_root>/<store>.
+static func install_base(store: String, facts: Dictionary, options: Dictionary = {}) -> String:
+	if str(options.get("path", "")) != "":
+		return str(options["path"])
+	return str(facts.get("install_root", "")).path_join(store)
+
+
+## The Heroic hand-off. Install goes through heroic://launch, which asks the user
+## to install a game that isn't installed (Heroic src/backend/protocol.ts; the
+## protocol knows only `launch` and `ping`). Everything else opens Heroic.
+static func _heroic(action: String, entry: Dictionary, tools: Dictionary, runner: String, why_not_us: String) -> Dictionary:
+	var order := ["heroic_flatpak", "heroic"] if entry.get("heroic_flatpak", false) else ["heroic", "heroic_flatpak"]
+	var base: Array = tools.get(order[0], [])
+	if base.is_empty():
+		base = tools.get(order[1], [])
+	if base.is_empty():
+		return _no(why_not_us)
+	var cmd: Array[String] = []
+	for b in base:
+		cmd.append(str(b))
+	if action == "install":
+		cmd.append("heroic://launch?appName=%s&runner=%s" % [str(entry["id"]).uri_encode(), runner])
+	var p := _yes("heroic", [])
+	p["external"] = cmd
+	return p
+
+
+static func _epic(action: String, entry: Dictionary, tools: Dictionary, facts: Dictionary) -> Dictionary:
+	var legendary := str(tools.get("legendary", ""))
+	var heroic_managed: bool = entry.get("source", "") == "heroic"
+	if heroic_managed and (entry.get("heroic_flatpak", false) or legendary == ""):
+		return _heroic(action, entry, tools, "legendary", "Install legendary or Heroic")
+	if legendary == "":
+		return _no("Install legendary (or Heroic) to manage Epic games")
+	if str(entry.get("config_dir", "")) == "":
+		return _no("Sign in to Epic with legendary or Heroic first")
+	var env := {"LEGENDARY_CONFIG_PATH": str(entry["config_dir"])}
+	var id := str(entry["id"])
+	match action:
+		"install":
+			var base := install_base("epic", facts, facts.get("options", {}))
+			return _yes("legendary", [
+				_step([legendary, "info", id, "--json"], env, "size", "legendary", "probe"),
+				_step([legendary, "install", id, "--base-path", base, "--platform", "Windows", "-y", "--skip-sdl"], env, "legendary", "legendary"),
+			], {"base": base})
+		"update":
+			return _yes("legendary", [_step([legendary, "update", id, "-y", "--skip-sdl"], env, "legendary", "legendary")])
+		"verify":
+			return _yes("legendary", [_step([legendary, "repair", id, "-y", "--skip-sdl"], env, "legendary", "legendary")])
+		"uninstall":
+			return _yes("legendary", [_step([legendary, "uninstall", id, "-y", "--skip-uninstaller"], env, "none", "legendary")])
+		"move":
+			var dest := str(facts.get("options", {}).get("path", ""))
+			var src := str(entry.get("install_path", ""))
+			if dest == "" or src == "":
+				return _no("Pick a folder to move to")
+			return _yes("legendary", [
+				_step(["mv", "-T", "--", src, dest.path_join(src.get_file())], {}, "none", "mv"),
+				_step([legendary, "move", id, dest, "--skip-move"], env, "none", "legendary"),
+			], {"new_path": dest.path_join(src.get_file())})
+	return _no("Unknown action")
+
+
+## GOG games Heroic installed stay Heroic's (we'd have to write its installed.json).
+## Games we install go through gogdl with Heroic's GOG sign-in and are recorded
+## in our own file (GOG_RECORD).
+static func _gog(action: String, entry: Dictionary, tools: Dictionary, facts: Dictionary) -> Dictionary:
+	var gogdl := str(tools.get("gogdl", ""))
+	var ours: bool = entry.get("source", "") == "gamecove"
+	var auth := str(entry.get("heroic_root", "")).path_join("gog_store/auth.json") if str(entry.get("heroic_root", "")) != "" else ""
+	var can_gogdl: bool = gogdl != "" and auth != "" and bool(facts.get("gog_auth_exists", false)) and not entry.get("heroic_flatpak", false)
+	if not ours and (entry.get("installed", false) or not can_gogdl):
+		return _heroic(action, entry, tools, "gog", "Install Heroic to manage GOG games")
+	if ours and not can_gogdl and action in ["update", "verify"]:
+		return _no("gogdl and a GOG sign-in in Heroic are needed")
+	var id := str(entry["id"])
+	var platform := str(entry.get("platform", "windows"))
+	if platform == "" or platform == "osx":
+		platform = "windows"
+	var head: Array = [gogdl, "--auth-config-path", auth]
+	match action:
+		"install":
+			var base := install_base("gog", facts, facts.get("options", {}))
+			platform = str(facts.get("options", {}).get("platform", "windows"))
+			return _yes("gogdl", [
+				_step(head + ["info", id, "--platform", platform], {}, "size", "gogdl", "probe"),
+				_step(head + ["download", id, "--platform", platform, "--path", base, "--skip-dlcs"], {}, "gogdl", "gogdl"),
+			], {"gog_record": "add", "base": base, "platform": platform})
+		"update", "verify":
+			var sub := "update" if action == "update" else "repair"
+			return _yes("gogdl", [_step(head + [sub, id, "--platform", platform, "--path", str(entry.get("install_path", ""))], {}, "gogdl", "gogdl")])
+		"uninstall":
+			var path := str(entry.get("install_path", ""))
+			if not safe_to_delete(path, str(facts.get("home", "")), facts.get("gog_marker_exists", false)):
+				return _no("Won't delete this folder: it doesn't look like the game's install")
+			return _yes("gamecove", [_step(["rm", "-rf", "--", path], {}, "none", "rm")], {"gog_record": "remove"})
+		"move":
+			var dest := str(facts.get("options", {}).get("path", ""))
+			var src := str(entry.get("install_path", ""))
+			if dest == "" or src == "":
+				return _no("Pick a folder to move to")
+			return _yes("gamecove", [_step(["mv", "-T", "--", src, dest.path_join(src.get_file())], {}, "none", "mv")],
+				{"gog_record": "move", "new_path": dest.path_join(src.get_file())})
+	return _no("Unknown action")
+
+
+static func _amazon(action: String, entry: Dictionary, tools: Dictionary, facts: Dictionary) -> Dictionary:
+	var nile := str(tools.get("nile", ""))
+	var heroic_managed: bool = entry.get("source", "") == "heroic"
+	if heroic_managed and (entry.get("heroic_flatpak", false) or nile == ""):
+		return _heroic(action, entry, tools, "nile", "Install nile or Heroic")
+	if nile == "":
+		return _no("Install nile (or Heroic) to manage Amazon games")
+	var env := {"NILE_CONFIG_PATH": str(entry.get("config_dir", "")).get_base_dir()}
+	var id := str(entry["id"])
+	match action:
+		"install":
+			var base := install_base("amazon", facts, facts.get("options", {}))
+			return _yes("nile", [
+				_step([nile, "install", id, "--info", "--json"], env, "size", "nile", "probe"),
+				_step([nile, "install", id, "--base-path", base], env, "nile", "nile"),
+			], {"base": base})
+		"update":
+			return _yes("nile", [_step([nile, "update", id], env, "nile", "nile")])
+		"verify":
+			return _yes("nile", [_step([nile, "verify", id], env, "nile", "nile")])
+		"uninstall":
+			return _yes("nile", [_step([nile, "uninstall", id], env, "none", "nile")])
+		"move":
+			return _no("nile can't move games; reinstall to the new folder")
+	return _no("Unknown action")
+
+
+## Only delete a folder that is clearly a game install: absolute, at least three
+## levels deep, not the home folder itself, and holding the store's marker file.
+static func safe_to_delete(path: String, home: String, has_marker: bool) -> bool:
+	var p := path.simplify_path()
+	if not p.is_absolute_path() or p.count("/") < 3 or p == home.simplify_path() or ".." in p.split("/"):
+		return false
+	return has_marker
+
+
+## Our GOG install record: {"installed": [{"appName", "install_path", "platform", "title"}]}.
+static func read_gog_record(home: String) -> Array:
+	var d: Variant = Common.read_json(home + GOG_RECORD, {})
+	var list: Variant = d.get("installed", []) if d is Dictionary else []
+	return list if list is Array else []
+
+
+static func write_gog_record(home: String, list: Array) -> Error:
+	var path := home + GOG_RECORD
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var f := FileAccess.open(path + ".tmp", FileAccess.WRITE)
+	if f == null:
+		return FileAccess.get_open_error()
+	f.store_string(JSON.stringify({"installed": list}, "\t"))
+	f.close()
+	return DirAccess.rename_absolute(path + ".tmp", path)
+
+
+## The record with `item` added (replacing the same appName) or removed.
+static func gog_record_with(list: Array, item: Dictionary, remove := false) -> Array:
+	var out: Array = []
+	for i in list:
+		if i is Dictionary and str(i.get("appName", "")) != str(item.get("appName", "")):
+			out.append(i)
+	if not remove:
+		out.append(item)
+	return out
+
+
+## The folder gogdl created under `base` for game `id`: the subfolder holding
+## goggame-<id>.info (Windows) or gameinfo (Linux). "" if none.
+static func find_gog_install(base: String, id: String) -> String:
+	var d := DirAccess.open(base)
+	if d == null:
+		return ""
+	for sub in d.get_directories():
+		var p := base.path_join(sub)
+		if FileAccess.file_exists(p.path_join("goggame-%s.info" % id)) or FileAccess.file_exists(p.path_join("gameinfo")):
+			return p
+	return ""

@@ -9,7 +9,7 @@ const HEROIC_ROOTS := [
 	{"path": "/.config/heroic", "flatpak": false},
 	{"path": "/.var/app/com.heroicgameslauncher.hgl/config/heroic", "flatpak": true},
 ]
-## Where Heroic's native packages keep their bundled legendary / nile binaries.
+## Where Heroic's native packages keep their bundled legendary / gogdl / nile binaries.
 const HEROIC_BIN_DIRS := [
 	"/opt/Heroic/resources/app.asar.unpacked/build/bin/x64/linux",
 	"/usr/lib/heroic/resources/app.asar.unpacked/build/bin/x64/linux",
@@ -116,9 +116,9 @@ static func which(name: String, path_env: String) -> String:
 ## Store tools and launchers available on this machine.
 static func find_tools(home: String, path_env: String) -> Dictionary:
 	var tools := {"umu": which("umu-run", path_env), "legendary": which("legendary", path_env),
-		"nile": which("nile", path_env), "heroic": [], "heroic_flatpak": []}
+		"nile": which("nile", path_env), "gogdl": which("gogdl", path_env), "heroic": [], "heroic_flatpak": []}
 	for dir in HEROIC_BIN_DIRS:
-		for name in ["legendary", "nile"]:
+		for name in ["legendary", "nile", "gogdl"]:
 			if tools[name] == "" and FileAccess.file_exists(dir + "/" + name):
 				tools[name] = dir + "/" + name
 	var heroic := which("heroic", path_env)

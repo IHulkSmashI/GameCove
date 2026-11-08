@@ -2,8 +2,24 @@ extends Node
 ## One library across every store. See docs/CONTRACTS.md for the game shape.
 ## Store files are read on a WorkerThreadPool thread so the UI never waits on
 ## disk; `changed` fires on the main thread once `games` is replaced.
+##
+## Store management (install, uninstall, update, verify, move, downloads, launch
+## options, compatibility tool) is part of this API; the work is done by a
+## StoreManager child (scripts/library/manage/). See docs/STORES.md.
 
 signal changed
+## Download or other store job progress. bytes_total 0 = unknown; eta in seconds, -1 unknown.
+signal download_progress(key: String, bytes_done: int, bytes_total: int, rate: float, eta: int)
+## queued | installing | updating | verifying | moving | uninstalling | downloading | paused |
+## installed | not_installed | update_required | failed
+signal install_state_changed(key: String, state: String)
+## The download list changed (added, reordered, finished): call downloads() again.
+signal queue_changed
+signal action_failed(key: String, action: String, message: String)
+## A store's own window needs the user: app is "steam" (a Steam dialog, which we
+## bring forward under gamescope) or "heroic"; reason install | uninstall | page | manage.
+signal external_window_needed(key: String, app: String, reason: String)
+signal store_settings_changed
 
 const Steam := preload("res://scripts/library/stores/steam.gd")
 const Epic := preload("res://scripts/library/stores/epic.gd")
@@ -11,6 +27,7 @@ const Gog := preload("res://scripts/library/stores/gog.gd")
 const Amazon := preload("res://scripts/library/stores/amazon.gd")
 const Common := preload("res://scripts/library/stores/common.gd")
 const GameDB := preload("res://scripts/library/gamedb.gd")
+const StoreManager := preload("res://scripts/library/manage/store_manager.gd")
 
 var games: Array[Dictionary] = []
 ## Home folder the stores are read from.
@@ -22,6 +39,9 @@ var _task := -1
 var _again := false
 var _launch_n := 0
 var _db: Node
+var _task_store := ""
+## Does the store work; null until _ready (and in tests that don't make one).
+var store: Node
 
 
 func _ready() -> void:
@@ -29,12 +49,31 @@ func _ready() -> void:
 	var main_script = get_tree().get_script()
 	if main_script != null and str(main_script.resource_path).begins_with("res://tests/"):
 		return
+	attach_store(StoreManager.new())
+	store.setup(home)
 	_db = GameDB.new()
 	_db.name = "GameDB"
 	add_child(_db)
 	_db.updated.connect(refresh)
 	refresh()
 	_db.update_if_stale()
+
+
+## Uses `manager` (a StoreManager, or a fake with the same methods and signals)
+## for store management and forwards its signals. Tests pass their own.
+func attach_store(manager: Node) -> void:
+	store = manager
+	store.name = "Store"
+	add_child(store)
+	store.entry_lookup = func(key: String) -> Dictionary: return _entries.get(key, {})
+	store.launcher = get_node_or_null("/root/Launcher")
+	store.download_progress.connect(func(k, d, t, r, e): download_progress.emit(k, d, t, r, e))
+	store.install_state_changed.connect(func(k, s): install_state_changed.emit(k, s))
+	store.queue_changed.connect(func(): queue_changed.emit())
+	store.action_failed.connect(func(k, a, m): action_failed.emit(k, a, m))
+	store.external_window_needed.connect(func(k, a, r): external_window_needed.emit(k, a, r))
+	store.settings_changed.connect(func(): store_settings_changed.emit())
+	store.store_changed.connect(refresh_store)
 
 
 ## Re-reads every store in the background; emits `changed` when done.
@@ -44,18 +83,62 @@ func refresh() -> void:
 		return
 	var h := home
 	var db_path := ProjectSettings.globalize_path(GameDB.CACHE_PATH)
+	_task_store = ""
 	_task = WorkerThreadPool.add_task(func(): _apply.call_deferred(collect(h, db_path)), false, "Library scan")
+
+
+## Re-reads one store (steam | epic | gog | amazon) in the background after an
+## install, uninstall or move; emits `changed` when done.
+func refresh_store(store_name: String) -> void:
+	if _task != -1:
+		_again = true
+		return
+	var h := home
+	var db_path := ProjectSettings.globalize_path(GameDB.CACHE_PATH)
+	_task_store = store_name
+	_task = WorkerThreadPool.add_task(func(): _apply.call_deferred(collect(h, db_path, [store_name])), false, "Library scan")
 
 
 func _apply(result: Dictionary) -> void:
 	WorkerThreadPool.wait_for_task_completion(_task)
 	_task = -1
-	games = result["games"]
-	_entries = result["entries"]
+	if _task_store == "":
+		games = result["games"]
+		_entries = result["entries"]
+	else:
+		var merged := merge_store(games, _entries, result, _task_store)
+		games = merged["games"]
+		_entries = merged["entries"]
 	changed.emit()
+	if store != null:
+		store.on_library_scanned(_entries)
 	if _again:
 		_again = false
 		refresh()
+
+
+## `games`/`entries` with every game of `store_name` replaced by a one-store
+## scan's result, still sorted.
+static func merge_store(old_games: Array, old_entries: Dictionary, fresh: Dictionary, store_name: String) -> Dictionary:
+	var entries := {}
+	for k in old_entries:
+		if old_entries[k].get("store", "") != store_name:
+			entries[k] = old_entries[k]
+	var out: Array[Dictionary] = []
+	for g in old_games:
+		if g["store"] != store_name:
+			out.append(g)
+	for k in fresh["entries"]:
+		entries[k] = fresh["entries"][k]
+	out.append_array(fresh["games"])
+	_sort(out)
+	return {"games": out, "entries": entries}
+
+
+static func _sort(list: Array) -> void:
+	list.sort_custom(func(a, b):
+		var c: int = a["title"].naturalnocasecmp_to(b["title"])
+		return c < 0 if c != 0 else a["key"] < b["key"])
 
 
 func _exit_tree() -> void:
@@ -67,12 +150,16 @@ func _exit_tree() -> void:
 ## Reads all stores under `home_dir`, fills game info from the database at
 ## `db_path`, and returns {"games": sorted contract games, "entries": key -> entry}.
 ## Safe to call off the main thread. The same game in two stores keeps two keys.
-static func collect(home_dir: String, db_path: String) -> Dictionary:
+static func collect(home_dir: String, db_path: String, only: Array = []) -> Dictionary:
 	var all: Array[Dictionary] = []
-	all.append_array(Steam.scan(home_dir))
-	all.append_array(Epic.scan(home_dir))
-	all.append_array(Gog.scan(home_dir))
-	all.append_array(Amazon.scan(home_dir))
+	if only.is_empty() or "steam" in only:
+		all.append_array(Steam.scan(home_dir))
+	if only.is_empty() or "epic" in only:
+		all.append_array(Epic.scan(home_dir))
+	if only.is_empty() or "gog" in only:
+		all.append_array(Gog.scan(home_dir))
+	if only.is_empty() or "amazon" in only:
+		all.append_array(Amazon.scan(home_dir))
 	var index := GameDB.build_index(GameDB.load_file(db_path))
 	var entries := {}
 	for e in all:
@@ -88,9 +175,7 @@ static func collect(home_dir: String, db_path: String) -> Dictionary:
 	var out: Array[Dictionary] = []
 	for key in entries:
 		out.append(make_game(entries[key]))
-	out.sort_custom(func(a, b):
-		var c: int = a["title"].naturalnocasecmp_to(b["title"])
-		return c < 0 if c != 0 else a["key"] < b["key"])
+	_sort(out)
 	return {"games": out, "entries": entries}
 
 
@@ -155,25 +240,62 @@ static func can_scope(systemd_run: String, runtime_dir: String) -> bool:
 	return systemd_run != "" and runtime_dir != "" and DirAccess.dir_exists_absolute(runtime_dir.path_join("systemd"))
 
 
+## A store entry with the user's compatibility settings applied (Launcher.compat_for):
+## their Wine prefix and Proton (as umu's PROTONPATH) win over the store's.
+static func apply_compat(entry: Dictionary, compat: Dictionary, proton_path: String) -> Dictionary:
+	var e := entry.duplicate()
+	if str(compat.get("prefix", "")) != "":
+		e["prefix"] = compat["prefix"]
+	if proton_path != "":
+		e["proton_path"] = proton_path
+	return e
+
+
+## `cmd` plus the user's extra game arguments (shell-split). A Heroic hand-off
+## takes none: Heroic keeps its own per-game arguments.
+static func append_args(cmd: Array, args: String) -> Array[String]:
+	var out: Array[String] = []
+	for c in cmd:
+		out.append(str(c))
+	if args.strip_edges() == "":
+		return out
+	for c in out:
+		if c.begins_with("heroic://"):
+			return out
+	out.append_array(Common.shell_split(args))
+	return out
+
+
 ## Starts the game through its store. Returns {"ok", "app_id", "pid", "scoped"}:
 ## app_id is what gamescope will know the game by (its Steam app id, or our own
 ## id for a scoped launch; 0 when gamescope can't tell), pid the process we
 ## started (0 for Steam, which hands the launch to the running client).
-func launch(game: Dictionary) -> Dictionary:
+## options: {"args": String} extra arguments for this launch only (Steam: before
+## the game's own launch options; others: after the saved extra arguments).
+func launch(game: Dictionary, options := {}) -> Dictionary:
 	var result := {"ok": false, "app_id": 0, "pid": 0, "scoped": false}
 	var entry: Dictionary = _entries.get(game.get("key", ""), game)
 	var path_env := OS.get_environment("PATH")
+	var once := str(options.get("args", ""))
 	if entry.get("store", "") == "steam":
-		result["ok"] = Steam.launch(str(entry["id"]), Common.which("steam", path_env))
+		if once != "" and store != null:
+			result["ok"] = store.steam.launch(str(entry["id"]), once)["ok"]
+		else:
+			result["ok"] = Steam.launch(str(entry["id"]), Common.which("steam", path_env))
 		result["app_id"] = str(entry["id"]).to_int()
 		return result
 	if _tools.is_empty():
 		_tools = Common.find_tools(home, path_env)
 	var extra := {}
+	var args := once
 	var launcher := get_node_or_null("/root/Launcher")
 	if launcher != null and launcher.has_method("launch_env"):
 		extra = launcher.launch_env(game)
-	var cmd: Array = launch_command(entry, _tools, extra)
+	if launcher != null and launcher.has_method("compat_for"):
+		var compat: Dictionary = launcher.compat_for(str(game.get("key", "%s:%s" % [entry["store"], entry["id"]])))
+		entry = apply_compat(entry, compat, launcher.proton_path_for(compat["proton"]))
+		args = (str(compat["args"]) + " " + once).strip_edges()
+	var cmd: Array = append_args(launch_command(entry, _tools, extra), args)
 	if cmd.is_empty():
 		push_warning("Can't launch %s: install umu-launcher and the store's tool, or Heroic" % entry.get("title", "?"))
 		return result
@@ -193,3 +315,128 @@ func launch(game: Dictionary) -> Dictionary:
 	if not result["ok"]:
 		result["app_id"] = 0
 	return result
+
+
+# --- Store management (docs/STORES.md). Each returns at once; results arrive as signals. ---
+
+func _no_store() -> Dictionary:
+	return {"ok": false, "via": "", "why": "Store management isn't running"}
+
+
+## What can be done for this game here: {"install", "uninstall", "update", "verify",
+## "move", "launch_options", "compat_tool", "progress", "pause", "resume", "cancel": bool,
+## "how": {cap: backend}, "why": {cap: reason shown when false}, "needs_window": [caps
+## that show a Steam or Heroic window]}. Hide or explain whatever is false.
+func capabilities(game: Dictionary) -> Dictionary:
+	if store == null:
+		return {"install": false, "uninstall": false, "update": false, "verify": false, "move": false,
+			"launch_options": false, "compat_tool": false, "progress": false, "pause": false, "resume": false,
+			"cancel": false, "how": {}, "why": {}, "needs_window": []}
+	return store.capabilities(game)
+
+
+## options: {"path": folder from install_locations() (default <install_root>/<store>,
+## Steam: Steam's default library), "platform": "windows"|"linux" (GOG only)}.
+func install(game: Dictionary, options := {}) -> Dictionary:
+	return store.install(game, options) if store != null else _no_store()
+
+
+func uninstall(game: Dictionary) -> Dictionary:
+	return store.uninstall(game) if store != null else _no_store()
+
+
+func update(game: Dictionary) -> Dictionary:
+	return store.update(game) if store != null else _no_store()
+
+
+## Verify and repair the game's files.
+func verify(game: Dictionary) -> Dictionary:
+	return store.verify(game) if store != null else _no_store()
+
+
+## Moves the install into folder `path` (the game keeps its folder name).
+func move(game: Dictionary, path: String) -> Dictionary:
+	return store.move(game, path) if store != null else _no_store()
+
+
+func pause(game: Dictionary) -> Dictionary:
+	return store.pause(game) if store != null else _no_store()
+
+
+func resume(game: Dictionary) -> Dictionary:
+	return store.resume(game) if store != null else _no_store()
+
+
+func cancel(game: Dictionary) -> Dictionary:
+	return store.cancel(game) if store != null else _no_store()
+
+
+## Moves a waiting download up (delta < 0) or down the queue.
+func reorder_download(game: Dictionary, delta: int) -> bool:
+	return store.reorder(game, delta) if store != null else false
+
+
+## Unfinished downloads and store jobs, in queue order:
+## [{"key", "action", "title", "state", "progress": {"bytes_done", "bytes_total",
+##   "rate", "eta", "percent", "unit": bytes|files, "phase"}, "error", "size"}].
+func downloads() -> Array[Dictionary]:
+	return store.downloads() if store != null else [] as Array[Dictionary]
+
+
+func launch_options(game: Dictionary) -> String:
+	return store.launch_options(game) if store != null else ""
+
+
+## Steam: the game's launch options in Steam. Others: extra game arguments.
+## {"ok", "via", "why", "pending": true when it waits for a Steam restart}.
+func set_launch_options(game: Dictionary, options: String) -> Dictionary:
+	return store.set_launch_options(game, options) if store != null else _no_store()
+
+
+func compat_tool(game: Dictionary) -> String:
+	return store.compat_tool(game) if store != null else ""
+
+
+## tool_id from compat_tools(game); "" = the default.
+func set_compat_tool(game: Dictionary, tool_id: String) -> Dictionary:
+	return store.set_compat_tool(game, tool_id) if store != null else _no_store()
+
+
+## [{"id", "name", "path", ...}], the default ("" id) first. Steam's tools for a
+## Steam game, umu's (Proton builds GameCove can start a game with) otherwise.
+func compat_tools(game: Dictionary = {}) -> Array[Dictionary]:
+	return store.compat_tools(game) if store != null else [] as Array[Dictionary]
+
+
+## Where games can go: [{"path", "label", "free": bytes, "removable": bool}], internal first.
+func install_locations() -> Array[Dictionary]:
+	return store.install_locations() if store != null else [] as Array[Dictionary]
+
+
+## {"install_root", "steam_cef", "auto_resume", "max_parallel", "focus_steam_dialogs",
+##  "steam_cef_status": off|flag_missing|connecting|ready|unreachable, "steam_pending_count"}
+func store_settings() -> Dictionary:
+	return store.get_settings() if store != null else {}
+
+
+func set_store_setting(name: String, value: Variant) -> bool:
+	return store.set_setting(name, value) if store != null else false
+
+
+## Steam settings waiting for Steam to stop: write them now if it is stopped, or
+## (restart = true) restart Steam to write them.
+func apply_pending_steam_changes(restart := false) -> Dictionary:
+	return store.apply_pending_steam_changes(restart) if store != null else _no_store()
+
+
+## page: store | properties | details | downloads. Opens it in Steam's window.
+func open_steam_page(game: Dictionary, page: String) -> Dictionary:
+	if store == null:
+		return _no_store()
+	return store.steam.open_page(str(game.get("id", "")), page)
+
+
+## Back to GameCove after a Steam dialog we brought forward.
+func return_from_steam() -> void:
+	if store != null:
+		store.return_from_steam()
