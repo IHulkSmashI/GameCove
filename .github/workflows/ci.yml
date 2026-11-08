@@ -45,7 +45,9 @@ jobs:
           ./godot --headless --path app -s res://tests/run_tests.gd 2>&1 | tee tests.log
           ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" tests.log
       - name: Export preset packs the app
-        run: ./godot --headless --path app --export-pack "Linux" build/gamecove.pck
+        run: |
+          mkdir -p app/build
+          ./godot --headless --path app --export-pack "Linux" build/gamecove.pck
 
   shell:
     runs-on: ubuntu-latest

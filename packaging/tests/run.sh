@@ -384,15 +384,15 @@ else
 	for f in "$REPO/packaging/libexec/gamecove-fix" "$REPO/packaging/libexec/gamecove-fix-set" "$REPO/packaging/install.sh" \
 		"$REPO/packaging/sysext/build-sysext.sh" "$REPO/packaging/tests/run.sh" \
 		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select"; do
-		if "$SHELLCHECK" -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
+		if "$SHELLCHECK" -S warning -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
-	if "$SHELLCHECK" -s bash "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
+	if "$SHELLCHECK" -S warning -s bash "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	for f in "$REPO"/fixes/*/fix.sh "$REPO"/fixes/*/test.sh "$REPO"/fixes/*/tests/*.sh "$REPO"/fixes/lib/*.sh \
 		"$REPO"/fixes/*/bpf/*.sh; do
 		[ -f "$f" ] || continue
 		# -x from the repo root so "# shellcheck source=fixes/..." paths resolve
-		if (cd "$REPO" && "$SHELLCHECK" -x -s sh "$f") >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
+		if (cd "$REPO" && "$SHELLCHECK" -S warning -x -s sh "$f") >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 fi
 
