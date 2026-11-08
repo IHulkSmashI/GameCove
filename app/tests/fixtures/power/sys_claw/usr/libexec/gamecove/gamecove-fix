@@ -1,0 +1,3 @@
+#!/bin/sh
+# test marker: stands in for the real dispatcher
+exit 0
