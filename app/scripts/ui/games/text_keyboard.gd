@@ -8,9 +8,7 @@ const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 const SYMBOLS := ["⇧", "_", "=", "%", "/", "\"", "+", ",", ";", "!"]
 const LONG_MAX := 240
 
-var shift := false
-var placeholder := "Type here"
-var shift_button: Button
+# shift, placeholder and shift_button come from osk.gd.
 var _letters: Array = []   # [Button, lowercase char]
 
 
@@ -18,6 +16,9 @@ func _init() -> void:
 	if get_child_count() == 0:
 		super._init()
 	name = "TextKeyboard"
+	placeholder = "Type here"
+	max_len = LONG_MAX
+	keep_case = true
 	var col: VBoxContainer = get_child(0)
 	var head_icon: Variant = col.get_child(0).get_child(0)
 	if head_icon is TextureRect:

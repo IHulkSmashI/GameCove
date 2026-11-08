@@ -27,7 +27,7 @@ static func build(services_: Dictionary) -> Control:
 
 func _build() -> void:
 	var dev := svc("device")
-	info = dev.info() if dev != null else {}
+	info = dev.info() if dev != null and dev.has_method("info") else _basic_info(dev)
 	_side = side_column(0.78)
 	_cards = main_column(1.22)
 	_fill_side()
@@ -350,3 +350,12 @@ func _fixes_card() -> Control:
 		c[1].add_child(row)
 	c[1].add_child(DKit.quiet(Texts.FIXES_WHERE))
 	return c[0]
+
+
+## Services without info() (older fakes, partial backends): name and support only.
+static func _basic_info(dev: Object) -> Dictionary:
+	if dev == null:
+		return {}
+	var row: Dictionary = dev.get("profile") if dev.get("profile") is Dictionary else {}
+	return {"device": {"name": str(row.get("name", "This handheld")), "maker": str(row.get("maker", ""))},
+		"support": {"level": str(row.get("support", "generic"))}}

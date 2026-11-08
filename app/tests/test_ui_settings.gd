@@ -360,7 +360,7 @@ func test_device_page_loader() -> void:
 	for id in ["about", "controller", "storage", "updates"]:
 		if DevicePage.panel_script(id) == "":
 			ok(p.find_child("Placeholder_" + id, true, false) != null, "placeholder for " + id)
-	ok(_has_text(p, "MSI Claw 8 EX AI+"), "about placeholder still names the device")
+	ok(_has_text(p, "MSI Claw 8 EX AI+"), "about panel (or its placeholder) names the device")
 	s.free()
 	var d: VBoxContainer = DevicePage.new()
 	d.panel_dir = "res://tests/fixtures/settings/device/"

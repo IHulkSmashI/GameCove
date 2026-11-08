@@ -16,11 +16,10 @@ func _connect() -> void:
 				_later_rebuild())
 
 
+## Always deferred: a change usually arrives while the row that caused it is
+## still emitting, and rebuilding frees that row (a crash if done now).
 func _later_rebuild() -> void:
-	if is_inside_tree():
-		rebuild.call_deferred()
-	else:
-		rebuild()
+	rebuild.call_deferred()
 
 
 func build() -> void:
