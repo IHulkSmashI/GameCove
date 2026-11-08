@@ -59,9 +59,7 @@ func show_toast(text: String, icon := "info", tone := "", detail := "") -> Contr
 	p.add_child(row)
 	add_child(p)
 	while get_child_count() > MAX:
-		var old := get_child(0)
-		remove_child(old)
-		old.queue_free()
+		Kit.drop(self, get_child(0))
 	p.modulate.a = 0.0
 	Motion.to(p, "modulate:a", 1.0, Motion.BASE)
 	var timer := Timer.new()

@@ -204,6 +204,8 @@ func _run() -> void:
 		if not want(["theme_" + id]):
 			continue
 		prefs.theme = id
+		# Show each theme's own accent; Cove keeps colours from the art.
+		prefs.match_art = id == "cove"
 		main.apply_theme()
 		main.show_screen("home")
 		await frames(4)

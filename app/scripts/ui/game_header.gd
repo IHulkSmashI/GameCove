@@ -45,7 +45,7 @@ func _init() -> void:
 	title.max_lines_visible = 2
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.add_theme_constant_override("line_spacing", -6)
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.35 if ThemeLib.is_dark() else 0.0))
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.35) if ThemeLib.is_dark() else Color(1, 1, 1, 0.0))
 	title.add_theme_constant_override("shadow_offset_y", 2)
 	title.add_theme_constant_override("shadow_outline_size", 6)
 	add_child(title)
@@ -127,7 +127,8 @@ func _logo_for(g: Dictionary) -> void:
 	var p: String = a.get("logo", "") if a is Dictionary else ""
 	logo.visible = false
 	title.visible = true
-	if not ArtCache.usable(p):
+	# Store logos are drawn for dark art; on a light theme the title reads better.
+	if not ArtCache.usable(p) or not ThemeLib.is_dark():
 		return
 	var want := p
 	var tex := ArtCache.request("logo", p, func(t):

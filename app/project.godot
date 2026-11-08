@@ -44,4 +44,4 @@ common/drop_mouse_on_gui_input_disabled=true
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-environment/defaults/default_clear_color=Color(0.07, 0.086, 0.11, 1)
+environment/defaults/default_clear_color=Color(0.039, 0.067, 0.125, 1)

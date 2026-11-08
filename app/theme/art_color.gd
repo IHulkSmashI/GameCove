@@ -64,8 +64,9 @@ static func accent_for(picked: Color, tokens: Dictionary) -> Color:
 	var s := clampf(picked.s, 0.45, 0.80)
 	var v := clampf(picked.v, 0.85, 1.0) if dark else clampf(picked.v, 0.30, 0.55)
 	var c := Color.from_hsv(h, s, v)
-	for i in 24:
-		if Themes.contrast(c, surface) >= 4.5:
+	var ink := Color(0.03, 0.035, 0.045)
+	for i in 30:
+		if Themes.contrast(c, surface) >= 4.5 and (not dark or Themes.contrast(c, ink) >= 4.7):
 			break
 		if dark:
 			s = maxf(0.25, s - 0.04)
@@ -78,7 +79,7 @@ static func accent_for(picked: Color, tokens: Dictionary) -> Color:
 
 ## Dark or light text for an accent fill, whichever reads better.
 static func on_color(fill: Color) -> Color:
-	var dark := Color.from_hsv(fill.h, 0.6, 0.12)
+	var dark := Color(0.03, 0.035, 0.045)
 	var light := Color("#FFFFFF")
 	return dark if Themes.contrast(fill, dark) >= Themes.contrast(fill, light) else light
 
