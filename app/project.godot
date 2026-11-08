@@ -23,6 +23,8 @@ Power="*res://scripts/device/power.gd"
 Library="*res://scripts/library/library.gd"
 Launcher="*res://scripts/launch/launcher.gd"
 Gamescope="*res://scripts/gamescope/gamescope.gd"
+Discover="*res://scripts/discover/discover.gd"
+Art="*res://scripts/discover/art.gd"
 
 [display]
 

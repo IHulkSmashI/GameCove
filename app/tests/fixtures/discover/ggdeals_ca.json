@@ -1,0 +1,39 @@
+{
+ "success": true,
+ "data": {
+  "49520": {
+   "title": "Borderlands 2",
+   "url": "https://gg.deals/game/borderlands-2/?ref=gamecove-test",
+   "prices": {
+    "currentRetail": "1.98",
+    "currentKeyshops": "1.50",
+    "historicalRetail": "1.98",
+    "historicalKeyshops": "0.99",
+    "currency": "CAD"
+   }
+  },
+  "3900": {
+   "title": "Sid Meier's Civilization IV",
+   "url": "https://gg.deals/game/sid-meiers-civilization-iv/",
+   "prices": {
+    "currentRetail": "4.39",
+    "currentKeyshops": null,
+    "historicalRetail": "2.74",
+    "historicalKeyshops": null,
+    "currency": "CAD"
+   }
+  },
+  "2482760": {
+   "title": "Hunting Simulator 3",
+   "url": "https://gg.deals/game/hunting-simulator-3/",
+   "prices": {
+    "currentRetail": "31.49",
+    "currentKeyshops": "28.10",
+    "historicalRetail": "31.49",
+    "historicalKeyshops": "25.00",
+    "currency": "CAD"
+   }
+  },
+  "1": null
+ }
+}

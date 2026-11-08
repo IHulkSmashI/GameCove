@@ -61,3 +61,22 @@ Gzipped compact JSON, schema 2. Null fields are left out, so a missing field mea
 ```
 
 `status` is `ok`, `fallback` (failed, last night's data kept), `failed` (failed, nothing to fall back to) or `skipped` (not configured). The build prints the file size when it's done.
+
+## Discover calendar (`upcoming.json.gz`)
+
+A second, small file on the same release, for the app's Discover area:
+
+```
+python -m gamedb.upcoming --out dist/upcoming.json.gz [--max-minutes 12]
+```
+
+| Field | Source | Terms |
+| --- | --- | --- |
+| Coming-soon Steam games (the store's popularity order, top 300, adult-only titles left out), dates with Steam's own precision, art URLs | Steam Web API `IStoreQueryService/Query`, no key | [Steam Web API Terms of Use](https://steamcommunity.com/dev/apiterms) |
+| PC release dates (`release_dates`, platform 6) | IGDB, only with `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Free for non-commercial use (Twitch Developer Service Agreement); credit IGDB.com |
+| Video games (P31 Q7889) with a future publication date (P577) and its precision, PC only (a Steam/GOG/Epic id or Windows/Linux platform), minus games already out earlier | Wikidata | CC0 |
+| `fx`: euro reference rates, as published (the app doesn't use them for displayed prices) | ECB | Free reuse, unmodified, "Source: ECB statistics" |
+
+Records are merged by Steam id, then by normalised title; the date comes from Steam, else IGDB, else Wikidata, whichever isn't TBA. Precision is `day`, `month`, `quarter`, `year` or `tba`; dates are `2026-12-04`, `2026-12`, `2027-Q1`, `2027` or `""`. Entries stay for 14 days after release ("Out now"). Like the main build, a failing source is replaced by what it contributed to last night's file, and the exchange rates fall back to last night's. Shape: see docs/CONTRACTS.md ("Discover").
+
+The Wikidata query avoids `EXISTS` / `NOT EXISTS`: with them the public endpoint times out. The "already out" check is a second query over the matching items only.
