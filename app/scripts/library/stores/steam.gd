@@ -1,4 +1,4 @@
-extends Node
+extends RefCounted
 ## Reads installed Steam games from Steam's own local files and launches them
 ## through Steam (steam://rungameid/), so Steam Input and shader caching apply.
 
@@ -9,17 +9,6 @@ const STEAM_ROOTS := [
 ]
 ## Tools and runtimes Steam lists as apps; not games.
 const NOT_GAMES := ["Proton", "Steam Linux Runtime", "Steamworks Common Redistributables"]
-
-var games: Array[Dictionary] = []
-
-
-func _ready() -> void:
-	refresh()
-
-
-func refresh() -> void:
-	games = scan(_home())
-
 
 static func _home() -> String:
 	return OS.get_environment("HOME")
@@ -81,10 +70,14 @@ static func scan(home: String) -> Array[Dictionary]:
 				if appid == "" or seen.has(appid) or not is_game(name):
 					continue
 				seen[appid] = true
-				found.append({"store": "steam", "id": appid, "name": name})
-	found.sort_custom(func(a, b): return a["name"].naturalnocasecmp_to(b["name"]) < 0)
+				found.append({"store": "steam", "id": appid, "title": name, "installed": true})
 	return found
 
 
-func launch(appid: String) -> void:
+## Every installed Steam game, as store entries (see docs/CONTRACTS.md).
+static func list_installed() -> Array[Dictionary]:
+	return scan(_home())
+
+
+static func launch(appid: String) -> void:
 	OS.shell_open("steam://rungameid/" + appid)

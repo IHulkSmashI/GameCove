@@ -99,16 +99,16 @@ func _build_home() -> void:
 func _fill_library() -> void:
 	for child in _grid.get_children():
 		child.queue_free()
-	var games: Array = SteamLibrary.games
+	var games: Array = Library.games
 	_empty_label.visible = games.is_empty()
 	for g in games:
 		var b := Button.new()
-		b.text = g["name"]
+		b.text = g["title"]
 		b.custom_minimum_size = Vector2(260, 120)
 		b.clip_text = true
 		b.focus_mode = Control.FOCUS_ALL
-		var appid: String = g["id"]
-		b.pressed.connect(func(): SteamLibrary.launch(appid))
+		var game: Dictionary = g
+		b.pressed.connect(func(): Library.launch(game))
 		_grid.add_child(b)
 	if _grid.get_child_count() > 0:
 		(_grid.get_child(0) as Control).grab_focus.call_deferred()

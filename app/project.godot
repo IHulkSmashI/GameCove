@@ -18,8 +18,11 @@ driver/driver="Dummy"
 
 [autoload]
 
-Device="*res://scripts/device.gd"
-SteamLibrary="*res://scripts/steam_library.gd"
+Device="*res://scripts/device/device.gd"
+Power="*res://scripts/device/power.gd"
+Library="*res://scripts/library/library.gd"
+Launcher="*res://scripts/launch/launcher.gd"
+Gamescope="*res://scripts/gamescope/gamescope.gd"
 
 [display]
 
