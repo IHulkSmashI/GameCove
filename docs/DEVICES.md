@@ -1,0 +1,266 @@
+# Devices
+
+Which handhelds GameCove knows, what it can drive on each, and how to add one.
+The data lives in [`app/data/devices.json`](../app/data/devices.json); button
+profiles and glyphs in [`app/scripts/device/buttons.gd`](../app/scripts/device/buttons.gd);
+detection in [`app/scripts/device/device.gd`](../app/scripts/device/device.gd).
+
+Nothing here is invented from scratch: DMI ids, button maps and IMU presence
+come from InputPlumber's device configs; TDP ranges from PowerStation's APU
+database, steamos-manager's device files and Handheld Daemon's adjustor tables;
+panels from maker spec pages. Values we couldn't confirm are listed in a row's
+`unverified` field and the row has `"verified": false`, so the UI can say so.
+Sources and licenses: [CREDITS.md](../CREDITS.md).
+
+## Support levels
+
+| Level | Meaning |
+| --- | --- |
+| `full` | Tested on the device by us (today: MSI Claw 8 EX). |
+| `partial` | Every field comes from upstream data that was tested on the device (InputPlumber, steamos-manager, PowerStation, hhd), but we haven't run GameCove on it. |
+| `generic` | Matched, but key values are guesses (no upstream config), or a family row / CPU fallback. |
+
+`beta` (confirmed by testers) is still accepted for rows promoted later.
+
+## Support matrix
+
+TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface and, in brackets, what GameCove drives it with today (empty = nothing yet). Paddles = back buttons.
+
+| Device | id | Support | TDP W (min / battery / plugged) | Fan | Charge limit | Gyro | RGB | Buttons | Paddles | Glyphs | Verified |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Steam Deck (LCD) | `steam-deck-lcd` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
+| Steam Deck (OLED) | `steam-deck-oled` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
+| ASUS ROG Ally | `asus-rog-ally` | partial | 5 / 25 / 30 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
+| ASUS ROG Ally X | `asus-rog-ally-x` | partial | 5 / 25 / 30 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
+| ASUS ROG Xbox Ally | `asus-rog-xbox-ally` | partial | 4 / 20 / 20 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
+| ASUS ROG Xbox Ally X | `asus-rog-xbox-ally-x` | partial | 5 / 35 / 35 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
+| ASUS ROG Xbox Ally X20 | `asus-rog-xbox-ally-x20` | partial | 5 / 35 / 35 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | no: tdp, panel.vrr |
+| Lenovo Legion Go | `lenovo-legion-go` | partial | 5 / 30 / 30 | lenovo_wmi_other | – | yes | hhd | `legion-go` | 4 | xbox | no: charge_limit |
+| Lenovo Legion Go 2 | `lenovo-legion-go-2` | partial | 5 / 30 / 35 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-2` | 4 | xbox | no: tdp, charge_limit, panel.vrr |
+| Lenovo Legion Go 2 (Z2) | `lenovo-legion-go-2-z2` | partial | 5 / 30 / 35 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-2` | 4 | xbox | no: tdp, charge_limit, panel.vrr, chip |
+| Lenovo Legion Go S (Z2 Go) | `lenovo-legion-go-s-z2go` | partial | 5 / 30 / 33 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-s` | 2 | xbox | no: charge_limit |
+| Lenovo Legion Go S (Z1 Extreme) | `lenovo-legion-go-s-z1e` | partial | 5 / 30 / 33 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-s` | 2 | xbox | no: charge_limit |
+| MSI Claw 8 EX AI+ | `msi-claw-8-ex` | full | 8 / 35 / 35 | msi_wmi_platform (fix) | yes (fix) | fix | hhd | `msi-claw-8-ex` | 2 | xbox | yes |
+| MSI Claw 8 AI+ | `msi-claw-8-ai-plus` | partial | 8 / 30 / 30 | msi_wmi_platform (fix) | yes (steamos-manager) | no | hhd | `msi-claw` | 2 | xbox | no: panel.vrr |
+| MSI Claw 7 AI+ | `msi-claw-7-ai-plus` | partial | 8 / 30 / 30 | msi_wmi_platform (fix) | yes (steamos-manager) | no | hhd | `msi-claw` | 2 | xbox | no: panel |
+| MSI Claw A1M | `msi-claw-a1m` | partial | 8 / 35 / 43 | msi_wmi_platform (fix) | yes (steamos-manager) | yes | hhd | `msi-claw` | 2 | xbox | yes |
+| MSI Claw A8 | `msi-claw-a8` | partial | 8 / 35 / 35 | msi_wmi_platform (fix) | yes (steamos-manager) | yes | hhd | `msi-claw` | 2 | xbox | no: panel.vrr |
+| MSI Claw (unknown model) *(family)* | `msi-claw-family` | generic | 8 / 25 / 30 | msi_wmi_platform (fix) | – | unknown | – | `msi-claw` | 2 | xbox | no: tdp, panel, chip, buttons |
+| OneXFly F1 | `onexplayer-onexfly-f1` | partial | 5 / 28 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-f1` | 1 | xbox | no: panel.vrr |
+| OneXFly F1 Pro | `onexplayer-onexfly-f1-pro` | partial | 5 / 30 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-f1` | 1 | xbox | no: panel.vrr |
+| OneXPlayer X1 (AMD) | `onexplayer-x1-amd` | partial | 5 / 28 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
+| OneXPlayer X1 (Intel) | `onexplayer-x1-intel` | partial | 8 / 28 / 35 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
+| OneXPlayer X1 Mini | `onexplayer-x1-mini` | partial | 5 / 28 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
+| OneXPlayer X1 Pro | `onexplayer-x1-pro` | partial | 4 / 30 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: dmi, buttons, panel |
+| OneXPlayer 2 | `onexplayer-2` | partial | 5 / 28 / 33 | oxp_ec | – | yes | – | `oxp-2` | 0 | xbox | yes |
+| OneXPlayer 2 Pro | `onexplayer-2-pro` | partial | 5 / 30 / 30 | oxp_ec | – | yes | – | `oxp-2` | 0 | xbox | yes |
+| OneXPlayer G1 (AMD) | `onexplayer-g1-amd` | partial | 5 / 30 / 35 | oxp_ec | yes (sysfs) | none | – | `oxp-g1` | 0 | xbox | no: tdp, panel.vrr, chip |
+| OneXPlayer G1 (Intel) | `onexplayer-g1-intel` | partial | 8 / 30 / 35 | oxp_ec | yes (sysfs) | none | – | `oxp-g1` | 0 | xbox | no: tdp, panel.vrr, chip |
+| OneXPlayer 3 | `onexplayer-3` | partial | 8 / 35 / 35 | oxp_ec | yes (sysfs) | yes | – | `oxp-x2` | 2 | xbox | no: panel.resolution, panel.vrr |
+| OneXPlayer X2 Mini | `onexplayer-x2-mini` | generic | 3 / 30 / 45 | oxp_ec | yes (sysfs) | yes | – | `oxp-x2` | 2 | xbox | no: chip, panel, tdp |
+| OneXFly Apex | `onexplayer-onexfly-apex` | partial | 8 / 35 / 35 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-apex` | 2 | xbox | no: panel, tdp |
+| OneXPlayer Super X | `onexplayer-super-x` | generic | 8 / 45 / 80 | oxp_ec | yes (sysfs) | unknown | – | `generic` | 0 | xbox | no: buttons, panel, tdp.battery_max |
+| OneXPlayer (unknown model) *(family)* | `onexplayer-family` | generic | 5 / 25 / 28 | oxp_ec | – | unknown | – | `oxp-generic` | 0 | xbox | no: tdp, panel, chip, buttons |
+| AOKZOE A1 | `aokzoe-a1` | partial | 5 / 28 / 33 | oxp_ec | – | yes | oxp-ec | `aokzoe` | 0 | xbox | no: panel |
+| AOKZOE A1 Pro | `aokzoe-a1-pro` | partial | 5 / 30 / 30 | oxp_ec | – | yes | oxp-ec | `aokzoe` | 0 | xbox | no: panel |
+| AOKZOE A1X | `aokzoe-a1x` | partial | 5 / 30 / 30 | oxp_ec | – | yes | – | `aokzoe` | 0 | xbox | no: panel, chip, tdp |
+| AOKZOE (unknown model) *(family)* | `aokzoe-family` | generic | 5 / 25 / 28 | oxp_ec | – | unknown | – | `aokzoe` | 0 | xbox | no: tdp, panel, chip, buttons |
+| AYANEO 2S | `ayaneo-2s` | partial | 5 / 28 / 28 | ayaneo_ec | yes (sysfs) | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: charge_limit |
+| AYANEO 2 | `ayaneo-2` | partial | 5 / 28 / 33 | ayaneo_ec | yes (sysfs) | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: charge_limit |
+| AYANEO KUN | `ayaneo-kun` | partial | 5 / 30 / 30 | ayaneo_ec | yes (sysfs) | yes | ayaneo-ec | `aya-kun` | 0 | xbox | no: charge_limit, tdp |
+| AYANEO AIR 1S | `ayaneo-air-1s` | partial | 5 / 25 / 25 | ayaneo_ec | yes (sysfs) | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: charge_limit |
+| AYANEO AIR Plus | `ayaneo-air-plus` | partial | 5 / 28 / 28 | ayaneo_ec | – | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: chip |
+| AYANEO Flip | `ayaneo-flip` | partial | 5 / 28 / 28 | ayaneo_ec | – | yes | – | `aya-classic` | 0 | xbox | no: tdp, panel.vrr |
+| AYANEO Flip 1S DS | `ayaneo-flip-1s-ds` | partial | 5 / 30 / 30 | ayaneo_ec | – | yes | – | `aya-flip-1s` | 2 | xbox | no: chip, panel, tdp |
+| AYANEO 3 | `ayaneo-3` | partial | 5 / 30 / 30 | ayaneo_ec | yes (sysfs) | yes | inputplumber | `aya-3` | 0 | xbox | no: tdp, panel, charge_limit |
+| AYANEO Slide | `ayaneo-slide` | partial | 5 / 28 / 28 | ayaneo_ec | – | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: tdp |
+| AYANEO (unknown model) *(family)* | `ayaneo-family` | generic | 5 / 25 / 28 | ayaneo_ec | – | unknown | – | `aya-classic` | 0 | xbox | no: tdp, panel, chip, buttons |
+| GPD WIN 4 | `gpd-win-4` | partial | 5 / 28 / 28 | gpdfan | – | yes | – | `gpd-win4` | 1 | xbox | no: chip |
+| GPD WIN Mini | `gpd-win-mini` | partial | 5 / 28 / 28 | gpdfan | – | yes | – | `gpd-win4` | 1 | xbox | no: chip, panel.vrr |
+| GPD WIN Max 2 | `gpd-win-max-2` | partial | 5 / 28 / 28 | gpdfan | – | yes | – | `gpd-winmax2` | 2 | xbox | no: chip |
+| GPD WIN 5 | `gpd-win-5` | partial | 4 / 50 / 85 | gpdfan | – | yes | – | `gpd-win5` | 2 | xbox | no: tdp.battery_max, panel |
+| GPD (unknown model) *(family)* | `gpd-family` | generic | 5 / 25 / 28 | gpdfan | – | unknown | – | `gpd-win4` | 1 | xbox | no: tdp, panel, chip, buttons |
+| ZOTAC Gaming Zone | `zotac-zone` | partial | 5 / 28 / 30 | zotac_zone_platform | – | yes | inputplumber | `zotac-zone` | 2 | xbox | no: tdp, charge_limit |
+| Acer Predator Atlas 8 | `acer-predator-atlas-8` | partial | 8 / 30 / 40 | – | – | unknown | – | `acer-atlas` | 2 | xbox | no: tdp, panel.vrr, gyro |
+| Acer Nitro Blaze 7 | `acer-nitro-blaze-7` | generic | 5 / 28 / 30 | – | – | unknown | – | `acer-blaze` | 0 | xbox | no: dmi, buttons, tdp, panel.vrr, gyro |
+| Acer Nitro Blaze 8 | `acer-nitro-blaze-8` | generic | 5 / 28 / 30 | – | – | unknown | – | `acer-blaze` | 0 | xbox | no: dmi, buttons, tdp, panel.vrr, gyro |
+| Acer Nitro Blaze 11 | `acer-nitro-blaze-11` | generic | 5 / 28 / 30 | – | – | unknown | – | `acer-blaze` | 0 | xbox | no: dmi, buttons, tdp, panel.vrr, gyro |
+| Orange Pi Neo | `orangepi-neo` | partial | 8 / 28 / 28 | – | – | yes | – | `orangepi-neo` | 0 | xbox | no: panel.vrr |
+
+## Matching
+
+`Device.detect()` reads `/sys/class/dmi/id/{sys_vendor,product_name,board_name,board_vendor,product_family}`, `/proc/cpuinfo` and `/sys/class/drm/card*/device/uevent`, then:
+
+1. Every row's `match` is tried. `match` is one object or a list of objects (any may match). Inside an object every key must match one of its glob patterns (`*`, `?`, case-insensitive), like InputPlumber's `dmi_data`. A key the caller didn't read is skipped, but at least one key must be compared.
+2. The best match wins: `tier` first (`specific` > `family`), then how many keys matched, then exact (wildcard-free) hits. Family rows (`msi-claw-family`, `onexplayer-family`, `ayaneo-family`, `aokzoe-family`, `gpd-family`) catch new models of handheld-only makers.
+3. Rows sold with several chips (`chip_from_cpu: true`) and family rows take `chip`, `cpu_vendor`, `gpu_family`, `gpu_arch`, `xmx` from the CPU table (`cpus` in devices.json); family rows also take its TDP range.
+4. No match: a `generic` row is built from the CPU table (or, failing that, conservative AMD 5–20 W / Intel 8–25 W and the GPU driver: `xe` means Xe2 or newer). It has `id: "unknown"`, `support: "generic"`, the generic picture and Xbox glyphs.
+
+The tests check that each real DMI fixture (`app/tests/fixtures/devices/dmi.json`) resolves to exactly one specific row, that common laptops and the Steam Machine resolve to nothing, and that every specific row has a fixture.
+
+## Fields
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Stable id, lower-case words joined by `-`. |
+| `name`, `maker`, `family` | Display name, maker, and a family key shared by similar models. |
+| `tier` | `specific` or `family` (see Matching). |
+| `match` | DMI patterns (see Matching). Keys: `sys_vendor`, `product_name`, `board_name`, `board_vendor`, `product_family`. |
+| `chip`, `cpu_vendor` | APU name; `amd` or `intel`. `chip_from_cpu: true` when the CPU decides. |
+| `gpu`, `gpu_family`, `gpu_arch`, `xmx` | GPU name; `gpu_family` is what the launcher keys upscalers on (`amd-vega`, `amd-rdna2`, `amd-rdna3` (also RDNA 3.5, for the FSR 4 RDNA 3 path), `intel-xe-lpg`, `intel-xe2`, `intel-xe3`); `gpu_arch` the exact architecture (`RDNA2`, `RDNA3`, `RDNA3.5`, `Xe-LPG`, `Xe2`, `Xe3`, `Vega`); `xmx` = Intel XMX cores for XeSS. |
+| `panel` | `{size_in, resolution: [w, h], type: IPS/OLED}`. |
+| `panel_hz`, `vrr_range` | Native refresh `[min, max]` (the UI offers rates inside it); VRR window `[lo, hi]` or `null`. |
+| `tdp` | `{min, battery_max, plugged_max, boost_max?}` watts. `min < battery_max <= plugged_max`, `boost_max >= plugged_max`. |
+| `profiles` | Watts for `battery` / `balanced` / `performance`, inside `min..battery_max`. Missing: Power spreads the range. |
+| `pl2_offset_w` | Intel: PL2 = TDP + this. |
+| `tdp_backends` | Power services to try in order: `steamos-manager`, `powerstation`. |
+| `power_backend` | What actually writes the limit under those services (informational): `intel-rapl`, `intel-rapl-mmio`, `powerstation`, `steamos-manager`. |
+| `fan`, `fan_via` | Kernel fan interface (hwmon name or driver: `steamdeck_hwmon`, `msi_wmi_platform`, `asus_custom_fan_curve`, `lenovo_wmi_other`, `oxp_ec`, `ayaneo_ec`, `gpdfan`, `zotac_zone_platform`); how GameCove drives it today (`steamos-manager`, `fix`, or `null` = not yet). |
+| `charge_limit`, `charge_limit_via` | Battery charge limit available; through `steamos-manager`, the `charge-limit` fix (`fix`) or plain `sysfs` (`charge_control_end_threshold`). Power reads this flag. |
+| `gyro`, `imu` | `yes` (works through InputPlumber), `fix` (needs a GameCove fix), `no` (sensor present, not on Linux yet), `none` (no sensor), `unknown`; `imu` names the sensor. |
+| `rgb` | `null` or `{zones, via}`; `via` is who drives the LEDs (`inputplumber`, `hhd`, `ayaneo-ec`, `oxp-ec`). |
+| `buttons`, `glyphs`, `art` | Button profile in buttons.gd, glyph set (`xbox`, `deck`), picture in `app/assets/devices/art/`. |
+| `fixes` | Root fixes the Device page offers (folder names in `fixes/`). |
+| `quirks` | Known issues, one sentence each. |
+| `support`, `verified`, `unverified`, `sources` | Support level; `verified` is true exactly when `unverified` (field names that are best guesses) is empty; where the values came from. |
+
+## Buttons
+
+Each device's special buttons, as InputPlumber reports them (Gamepad:Button:&lt;capability&gt;):
+
+| Profile | Special buttons → InputPlumber capability | Back buttons | Source |
+| --- | --- | --- | --- |
+| `generic` | Guide → Guide | – | InputPlumber generic gamepad |
+| `steam-deck` | STEAM → Guide; Quick Access (…) → QuickAccess | L4 = LeftPaddle1, L5 = LeftPaddle2, R4 = RightPaddle1, R5 = RightPaddle2 | InputPlumber steam_deck driver |
+| `rog-ally` | Command Center → Guide; Command Center (hold) → Keyboard; Armoury Crate → QuickAccess; Armoury Crate (hold) → QuickAccess2 | M1 = LeftPaddle1, M2 = RightPaddle1 | InputPlumber ally_type1 |
+| `rog-xbox-ally` | Xbox button → Guide; Armoury Crate → Keyboard; Armoury Crate (hold) → LeftPaddle2; Library → QuickAccess; Library (hold) → QuickAccess2 | M1 = LeftPaddle1, M2 = RightPaddle1 | InputPlumber ally_type2 |
+| `legion-go` | Legion L → Guide; Legion R → QuickAccess; M1 → LeftStickTouch; M2 → RightStickTouch | Y1 = LeftPaddle1, Y2 = LeftPaddle2, Y3 = RightPaddle1, M3 = RightPaddle2 | InputPlumber legion_go driver (go1) |
+| `legion-go-2` | Legion L → Guide; Legion R → QuickAccess; Desktop (⧉) → Keyboard; Menu (☰) → QuickAccess2 | Y1 = LeftPaddle1, Y2 = LeftPaddle2, Y3 = RightPaddle1, M3 = RightPaddle2 | InputPlumber legion_go driver (go2) |
+| `legion-go-s` | Legion L → Guide; Legion R → QuickAccess | Y1 = LeftPaddle1, Y2 = RightPaddle1 | InputPlumber legion_go_s driver |
+| `msi-claw` | MSI Center M → Guide; Quick Settings → QuickAccess; Quick Settings (hold) → QuickAccess2 | M2 = LeftPaddle1, M1 = RightPaddle1 | InputPlumber msiclaw_type1 |
+| `msi-claw-8-ex` | MSI Center M → Guide; Quick Settings → QuickAccess | M2 = LeftPaddle1, M1 = RightPaddle1 | InputPlumber msiclaw_type2, tested on the device |
+| `oxp-generic` | Home (orange) → Guide; Home (hold) → QuickAccess2; Turbo → QuickAccess; Keyboard → Keyboard; Turbo + Home → Screenshot | – | InputPlumber onexplayer_type3 |
+| `oxp-f1` | Home (orange) → Guide; Home (hold) → QuickAccess2; Turbo → QuickAccess; Keyboard → Keyboard; Turbo + Home → Screenshot | M2 = RightPaddle1 | InputPlumber onexplayer_type7 |
+| `oxp-apex` | Home (orange) → Guide; Home (hold) → QuickAccess2; Turbo → QuickAccess; Keyboard → Keyboard; Turbo + Home → Screenshot | M1 = LeftPaddle1, M2 = RightPaddle1 | InputPlumber onexplayer_type8 |
+| `oxp-x1` | Turbo → Keyboard; Keyboard button → QuickAccess; Keyboard button (controller mode) → QuickAccess2 | M1 = LeftPaddle1, M2 = RightPaddle1 | InputPlumber onexplayer_type5 |
+| `oxp-2` | Turbo → QuickAccess | – | InputPlumber onexplayer_type4 |
+| `oxp-g1` | Home → Guide; Home (hold) → QuickAccess2; Turbo → QuickAccess | – | InputPlumber onexplayer_type6 |
+| `oxp-x2` | OneX button → QuickAccess; Keyboard button → QuickAccess2 (overrides: QuickAccess2: osk) | M1 = LeftPaddle1, M2 = RightPaddle1 | InputPlumber onexplayer_type9 |
+| `aokzoe` | Home (orange) → Guide; Home (hold) → QuickAccess2; Turbo → QuickAccess; Keyboard → Keyboard; Turbo + Home → Screenshot | – | InputPlumber onexplayer_type3 |
+| `aya-classic` | AYA Space → Guide; Custom → QuickAccess; LC → LeftTop; RC → RightTop; Second screen (Flip DS) → Keyboard | – | InputPlumber ayaneo_type4 |
+| `aya-kun` | AYA Space → QuickAccess2; Custom → QuickAccess; LC → LeftTop; RC → RightTop; T → RightTop (overrides: QuickAccess2: home) | – | InputPlumber ayaneo_type6 |
+| `aya-3` | AYA Space → Guide; Quick Access → QuickAccess; LC → LeftTop; RC → RightTop | – | InputPlumber ayaneo_type7 |
+| `aya-flip-1s` | AYA Space → QuickAccess; LC → LeftTop; RC → RightTop | L = LeftPaddle2, R = RightPaddle2 | InputPlumber ayaneo_type8 |
+| `gpd-win4` | R4 (back) → QuickAccess | L4 = LeftPaddle1 | InputPlumber gpd_type3 |
+| `gpd-winmax2` | – | L4 = LeftPaddle1, R4 = RightPaddle1 | InputPlumber gpd_type2 |
+| `gpd-win5` | Home → Guide; Mode switch → QuickAccess; Keyboard → Keyboard | L4 = LeftPaddle1, R4 = RightPaddle1 | InputPlumber gpd_type4 |
+| `zotac-zone` | ZOTAC button → Guide; More (…) → QuickAccess; Home → QuickAccess2; Home (hold) → Keyboard (overrides: QuickAccess2: home) | M1 = LeftPaddle1, M2 = RightPaddle1 | InputPlumber zone_buttons |
+| `acer-atlas` | Guide (hold) → Guide; Quick Access → QuickAccess; Quick Access (hold) → QuickAccess2 | M2 = LeftPaddle1, M1 = RightPaddle1 | Bazzite acer_atlas8_hid_type1/2 |
+| `acer-blaze` | Guide → Guide; Quick Access → QuickAccess | – | guess: no InputPlumber config yet |
+| `orangepi-neo` | Guide → Guide; Quick Access → QuickAccess; LC → LeftTop; RC → RightTop | – | InputPlumber orangepi_type1 |
+
+Default GameCove actions (`Buttons.DEFAULT_ACTIONS`, overridable per profile): **Guide → GameCove home**, **QuickAccess → quick menu**, **Keyboard → on-screen keyboard**, **Screenshot → screenshot**. QuickAccess2, LeftTop/RightTop and the paddles pass through to Steam or the game unless a profile says otherwise (Zotac Zone's and AYANEO KUN's Home buttons arrive as QuickAccess2 and open home; OneXPlayer 3 / X2 Mini's keyboard button arrives as QuickAccess2 and opens the keyboard). Devices without a button for an action (GPD WIN Max 2 has no Guide, for example) get `Buttons.FALLBACK_CHORDS`: QuickAccess + A for home, QuickAccess + Y for the keyboard, QuickAccess + RB for a screenshot.
+
+### What the Input service must do
+
+InputPlumber already turns every special button into a capability (above). To get them to GameCove inside gamescope without fighting Steam, do what OpenGamepadUI does (`core/ui/card_ui/card_ui.gd`):
+
+1. On start, and for every new composite device (service `org.shadowblip.InputPlumber`, objects `/org/shadowblip/InputPlumber/CompositeDeviceN`, interface `org.shadowblip.Input.CompositeDevice`; the manager is `/org/shadowblip/InputPlumber/Manager`), call `SetInterceptActivation(["Gamepad:Button:Guide"], "Gamepad:Button:Guide")`.
+2. While GameCove's own UI has focus, set the `InterceptMode` property to `2` (Always): every input goes to InputPlumber's D-Bus target instead of the virtual gamepad, so a game in the background sees nothing. Listen to `org.shadowblip.Input.DBusDevice.InputEvent(event s, value d)` on the composite device's D-Bus target (`/org/shadowblip/InputPlumber/devices/target/dbusN`; the composite device's `TargetDevices` property lists it) and map `event` with `Buttons.action_for_dbus(device_id, event)`: `ui_guide` → home, `ui_quick` → quick menu, `ui_osk` → keyboard, `ui_screenshot` → screenshot, `ui_accept`/`ui_back`/... → navigation. Value 1.0 = pressed, 0.0 = released.
+3. While a game has focus, set `InterceptMode` to `1` (Pass): everything reaches the game's virtual controller except the activation button. When Guide is pressed InputPlumber switches the device to Always and emits `ui_guide`; GameCove opens its home or quick menu and sets the mode back to `1` when it closes.
+4. QuickAccess: InputPlumber's Xbox targets turn QuickAccess into Guide + A, which Steam reads as its Quick Access Menu. To open GameCove's quick menu instead from inside a game, use OpenGamepadUI's overlay approach: `SetInterceptActivation(["Gamepad:Button:Guide", "Gamepad:Button:East"], "Gamepad:Button:QuickAccess2")`, or load a per-device profile (`LoadProfileFromYaml`) that maps QuickAccess to a DBus action. Only do this when GameCove is the session's main app; under Steam's own session leave InputPlumber alone.
+5. Steam games: Steam Input talks to InputPlumber's virtual controller (`deck-uhid` on steamos-manager setups, `xbox-elite` otherwise) like any pad. In Pass mode Steam keeps its Guide/QAM chords for everything except the intercepted button, so Steam's overlay still works.
+6. `InterceptMode` 3 (GamepadOnly) is available on newer InputPlumber: gamepad input goes to D-Bus but keyboard and mouse still reach the focused window, useful for the on-screen keyboard.
+
+The capability strings are the same names buttons.gd uses, so `Buttons.capabilities(device_id)` tells the Input service which ones to expect.
+
+## Glyphs and pictures
+
+- `Buttons.glyph_for(name, device)` → `res://assets/devices/glyphs/…svg` for an action (`accept`, `back`, `option`, `context`, `menu`, `view`, `tab_left`, `tab_right`, `page_left`, `page_right`, `home`, `quick_menu`, `osk`, `screenshot`), a capability (`South`, `Guide`, `LeftPaddle1`…) or a special-button id (`armoury_crate`). Never empty. Sets: `xbox` (A/B/X/Y, LB/RB/LT/RT, View/Menu) and `deck` (the Deck's own L1/R1/L2/R2/L4/L5/R4/R5, STEAM and … buttons). No current handheld uses PlayStation labels, so there's no PlayStation set. Special buttons get abstract icons (house, sliders, keyboard, camera, letters), never a maker's logo.
+- `Device.picture_for(device_id)` / `Device.picture()` → `res://assets/devices/art/<art>.svg`, a flat front view of the layout. Parts carry ids named after capabilities so a controller page can light one up: `btn-South`, `btn-Guide`, `btn-QuickAccess`, `btn-DPadUp` (inside `btn-DPad`), `btn-LeftStick` (inside `axis-LeftStick`), `btn-LeftBumper`, `btn-LeftTrigger`, `btn-LeftPaddle1` (back buttons, dashed, under the body), `pad-Left`/`pad-Right` (trackpads), `dial-Left`/`dial-Right`, `part-screen`, `part-body`.
+- Both are generated by `app/assets/devices/_tools/gen_svgs.py` (run `python3 -I app/assets/devices/_tools/gen_svgs.py app/assets/devices`). Add a glyph or layout there rather than drawing by hand, so the style stays the same.
+
+## Adding a device
+
+1. Find its DMI ids: `cat /sys/class/dmi/id/{sys_vendor,product_name,board_name,board_vendor}` (or the InputPlumber config in `rootfs/usr/share/inputplumber/devices/`). Add them to `app/tests/fixtures/devices/dmi.json` with `"expect": "<new id>"` and where they came from.
+2. Copy this template into `devices.json` and fill it in; put anything you guessed into `unverified`:
+
+```json
+{
+  "id": "maker-model",
+  "name": "Maker Model",
+  "maker": "Maker",
+  "family": "maker-line",
+  "tier": "specific",
+  "match": {"sys_vendor": ["Maker"], "product_name": ["Exact Product Name"]},
+  "chip": "AMD Ryzen Z2 Extreme", "cpu_vendor": "amd",
+  "gpu": "Radeon (RDNA 3.5)", "gpu_family": "amd-rdna3", "gpu_arch": "RDNA3.5", "xmx": false,
+  "panel": {"size_in": 7.0, "resolution": [1920, 1080], "type": "IPS"},
+  "panel_hz": [48, 120], "vrr_range": [48, 120],
+  "tdp": {"min": 5, "battery_max": 25, "plugged_max": 30},
+  "tdp_backends": ["steamos-manager", "powerstation"],
+  "fan": null, "fan_via": null,
+  "charge_limit": false, "charge_limit_via": null,
+  "gyro": "unknown", "imu": null, "rgb": null,
+  "buttons": "generic", "glyphs": "xbox", "art": "generic",
+  "fixes": [], "quirks": [],
+  "support": "generic", "verified": false, "unverified": ["tdp", "panel"],
+  "sources": ["where each value came from"]
+}
+```
+
+3. If its special buttons differ from an existing profile, add one to `Buttons.PROFILES` from its InputPlumber capability map, and a picture to `gen_svgs.py` if no existing layout fits.
+4. Run the tests: `godot --headless --path app -s res://tests/run_tests.gd`. `Device.row_problems(row)` is the schema check (required fields, `min < battery_max <= plugged_max`, profiles inside the range, refresh and VRR ranges, known enum values); the detection tests catch overlapping DMI patterns.
+5. Credit new sources in CREDITS.md.
+
+## Known issues per device
+
+- **Steam Deck (LCD)**: Steam Deck controller is a HID device; InputPlumber's deck driver exposes L4/L5/R4/R5 as paddles and both trackpads.
+- **Steam Deck (OLED)**: Panel runs 45-90 Hz; gamescope handles refresh switching.
+- **ASUS ROG Ally**: TDP through the asus-armoury firmware attributes (steamos-manager); older kernels only have asus-wmi ppt_* files. Fan curves live in the asus_custom_fan_curve hwmon; GameCove has no fan fix for it yet.
+- **ASUS ROG Ally X**: Same controls as the ROG Ally; 80 Wh battery.
+- **ASUS ROG Xbox Ally**: steamos-manager drives TDP through amdgpu hwmon (4-20 W) on this model.
+- **ASUS ROG Xbox Ally X20**: DMI sys_vendor is 'ASUS', not 'ASUSTeK COMPUTER INC.' like older Allys. TDP copied from the Xbox Ally X until someone measures it.
+- **Lenovo Legion Go**: Detachable controllers: gyro and buttons come from whichever halves are attached. TDP through lenovo-wmi-other firmware attributes in Lenovo's 'custom' mode (steamos-manager, kernel 6.17+); older kernels need hhd/acpi_call. Panel has no VRR; it switches between 60 and 144 Hz.
+- **Lenovo Legion Go 2**: Also sold as the SteamOS edition (same DMI). Detachable controllers.
+- **Lenovo Legion Go 2 (Z2)**: steamos-manager lists 83N1 as the 'Z2 SKU' (8AHP2).
+- **Lenovo Legion Go S (Z2 Go)**: Also sold as the 'Powered by SteamOS' edition (same DMI, 83L3). hhd caps it at 33 W.
+- **Lenovo Legion Go S (Z1 Extreme)**: SteamOS edition with Z1 Extreme uses the same DMI.
+- **MSI Claw 8 EX AI+**: MSI buttons need the claw8ex-buttons fix on older InputPlumber. VRR floor is 48 Hz until the claw8ex-vrr fix. Gyro needs the sensor-hub firmware (claw8ex-gyro fix).
+- **MSI Claw 8 AI+**: Has a gyro in hardware behind the Intel sensor hub; not exposed on Linux yet.
+- **MSI Claw A1M**: hhd uses 20 W as the lowest useful TDP on this chip.
+- **MSI Claw (unknown model)**: A Claw board we don't know yet; chip details come from the CPU.
+- **OneXFly F1**: Fan and charge limit through the oxpec kernel driver (6.16+; oxp-sensors before).
+- **OneXPlayer X1 (AMD)**: Detachable controllers; tablet with keyboard cover.
+- **OneXPlayer X1 Pro**: Only PowerStation knows this DMI name; InputPlumber has no X1 Pro config yet, so its buttons may not work.
+- **OneXPlayer 2**: Detachable controllers.
+- **OneXPlayer 2 Pro**: Detachable controllers.
+- **OneXPlayer G1 (AMD)**: Clamshell with a keyboard; no IMU in InputPlumber's config.
+- **OneXPlayer 3**: Detachable controllers. Like the Claw 8 EX, Panther Lake TDP is written through intel-rapl-mmio (PowerStation).
+- **OneXPlayer X2 Mini**: Chip comes from the CPU at run time.
+- **OneXFly Apex**: PowerStation caps it at 35 W sustained; the chip can take far more when plugged in.
+- **OneXPlayer Super X**: Tablet with detachable controllers; no InputPlumber config yet.
+- **AOKZOE (unknown model)**: Covers newer AOKZOE models (e.g. A2) until they get their own row.
+- **AYANEO 2S**: Fan, charge limit and RGB through the ayaneo-ec kernel driver (new; check your kernel).
+- **AYANEO AIR Plus**: Three boards share the name; chip details come from the CPU when they differ.
+- **AYANEO Flip**: Clamshell. The DS has a second 3.5in touch screen; its button maps to Keyboard in InputPlumber.
+- **AYANEO 3**: Modular side modules; the IPS 120 Hz panel option exists too.
+- **AYANEO Slide**: Slide-out keyboard.
+- **AYANEO (unknown model)**: Covers newer AYANEO models (NEXT II, Konkr) until they get their own row.
+- **GPD WIN 4**: Slide-out keyboard. Early units are 6800U (RDNA 2); chip details come from the CPU. Fan through the gpd-fan kernel driver (6.18+).
+- **GPD WIN Mini**: Clamshell with touchpad. G1617-02 is the 2025 refresh; InputPlumber only matches G1617-01.
+- **GPD WIN Max 2**: Small laptop with gamepad controls hidden under covers.
+- **GPD WIN 5**: External battery pack; PowerStation allows up to 85 W.
+- **ZOTAC Gaming Zone**: TDP and fan through the out-of-tree zotac_zone_platform driver (steamos-manager uses its firmware attributes). Two trackpads and two dials around the sticks.
+- **Acer Predator Atlas 8**: InputPlumber config ships in Bazzite (devices.d/70-acer_atlas8.yaml), not upstream yet.
+- **Acer Nitro Blaze 7**: DMI pattern is a guess from the model number; please send a device report.
+- **Acer Nitro Blaze 8**: DMI pattern is a guess from the model number; please send a device report.
+- **Acer Nitro Blaze 11**: DMI pattern is a guess from the model number; please send a device report.
+- **Orange Pi Neo**: Two trackpads; ships with Manjaro.
+
+## Not done yet (needs other parts of GameCove)
+
+- **Fan control** beyond the Claw's `msi_wmi_platform` and the Deck's steamos-manager: ASUS (`asus_custom_fan_curve`), OneXPlayer/AOKZOE (`oxp_ec`), AYANEO (`ayaneo_ec`), GPD (`gpdfan`) and Zotac (`zotac_zone_platform`) need a fan fix each, or Power should use steamos-manager's FanControl1 where it appears.
+- **Charge limit** on rows marked `charge_limit_via: "sysfs"` needs the `charge-limit` fix to accept those devices (it writes the same `charge_control_end_threshold`).
+- **RGB**: no GameCove control yet; InputPlumber exposes LEDs as `org.shadowblip.Input.Source.LEDDevice` on devices with a `led` source group (Ally, Go S, AYANEO, Zotac); Claw and Legion Go LEDs are driven by hhd today.
+- **Legion Go charge limit** is only reachable through hhd/acpi_call today.
