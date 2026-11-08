@@ -1,0 +1,28 @@
+"InstallConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"AutoUpdateWindowEnabled"		"0"
+				"CompatToolMapping"
+				{
+					"0"
+					{
+						"name"		"proton_9"
+						"config"		""
+						"priority"		"75"
+					}
+					"440"
+					{
+						"name"		"GE-Proton10-25"
+						"config"		""
+						"priority"		"250"
+					}
+				}
+			}
+		}
+	}
+}

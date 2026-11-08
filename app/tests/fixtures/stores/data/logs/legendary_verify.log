@@ -1,0 +1,2 @@
+[cli] INFO: Verifying "Hades" version "6.0.1"
+Verification progress: 10/400 (2.5%) [100.0 MiB/s]	Verification progress: 200/400 (50.0%) [150.5 MiB/s]	[cli] ERROR: Verification failed, 3 file(s) corrupted, 0 file(s) are missing.

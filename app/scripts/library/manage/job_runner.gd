@@ -4,9 +4,11 @@ extends RefCounted
 ## output on \n and \r (legendary's verify line uses \r) and hands every line,
 ## then the exit code, back to the main thread with call_deferred.
 ##
-## The process runs as its own session (`setsid`) with stderr merged into stdout
-## (the tools log progress to stderr) and PYTHONUNBUFFERED=1, so stop() can end
-## the tool and its worker processes together (`kill -TERM -<pgid>`).
+## OS.execute_with_pipe already starts the child as the leader of a new session
+## and process group (checked with ps on Godot 4.7.2), so stop() can end the tool
+## and its worker processes together (`kill -TERM -- -<pid>`). stderr is merged
+## into stdout (the tools log progress to stderr) and PYTHONUNBUFFERED=1 keeps
+## Python from holding output back.
 ##
 ## Tests use tests/fixtures/library/fake_job_runner.gd, which has the same
 ## start/stop/signals and never runs anything.
@@ -16,7 +18,6 @@ signal exited(handle: int, code: int)
 
 var _next := 0
 var _jobs := {}   # handle -> {"thread": Thread, "pid": int}
-var setsid := "setsid"
 var kill_bin := "kill"
 
 
@@ -25,7 +26,7 @@ var kill_bin := "kill"
 func start(cmd: Array, env := {}) -> int:
 	_next += 1
 	var handle: int = _next
-	var argv: PackedStringArray = wrap(cmd, env, setsid)
+	var argv: PackedStringArray = wrap_command(cmd, env)
 	var info := OS.execute_with_pipe(argv[0], argv.slice(1), true)
 	if info.is_empty():
 		_emit_exit.call_deferred(handle, -1)
@@ -36,9 +37,9 @@ func start(cmd: Array, env := {}) -> int:
 	return handle
 
 
-## The full argv: setsid, env (PYTHONUNBUFFERED and `env`), sh to merge stderr.
-static func wrap(cmd: Array, env: Dictionary, setsid_bin := "setsid") -> PackedStringArray:
-	var out := PackedStringArray([setsid_bin, "env", "PYTHONUNBUFFERED=1"])
+## The full argv: env (PYTHONUNBUFFERED and `env`), then sh to merge stderr.
+static func wrap_command(cmd: Array, env: Dictionary) -> PackedStringArray:
+	var out := PackedStringArray(["env", "PYTHONUNBUFFERED=1"])
 	var keys := env.keys()
 	keys.sort()
 	for k in keys:

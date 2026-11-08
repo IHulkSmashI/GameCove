@@ -1,0 +1,24 @@
+"UserLocalConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"apps"
+				{
+					"620"
+					{
+						"LastPlayed"		"1762000000"
+						"LaunchOptions"		"PROTON_LOG=1 \"%command%\" -novid"
+					}
+					"440"
+					{
+						"Playtime"		"5"
+					}
+				}
+			}
+		}
+	}
+}

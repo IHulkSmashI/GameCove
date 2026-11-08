@@ -1,0 +1,10 @@
+[cli] INFO: Preparing download for "Hades" (6.0.1)...
+[cli] INFO: Install size: 15025.21 MiB
+[cli] INFO: Download size: 10240.00 MiB (Compression savings: 31.8%)
+[cli] INFO: Reusable size: 0.00 MiB (chunks) / 0.00 MiB (skipped)
+[DLManager] INFO: = Progress: 25.00% (250/1000), Running for 00:02:00, ETA: 00:06:00
+[DLManager] INFO:  - Downloaded: 2560.00 MiB, Written: 3700.00 MiB
+[DLManager] INFO:  - Cache usage: 100.00 MiB, active tasks: 32
+[DLManager] INFO:  + Download	- 21.33 MiB/s (raw) / 30.00 MiB/s (decompressed)
+[DLManager] INFO:  + Disk	- 30.00 MiB/s (write) / 0.00 MiB/s (read)
+[cli] INFO: Finished installation process in 480.00 seconds.

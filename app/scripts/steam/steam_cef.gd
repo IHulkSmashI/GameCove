@@ -143,7 +143,8 @@ func _on_tabs(result: int, code: int, _headers: PackedStringArray, body: PackedB
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		_fail_all("unreachable")
 		return
-	var url := pick_tab(JSON.parse_string(body.get_string_from_utf8()))
+	var json := JSON.new()
+	var url := pick_tab(json.data if json.parse(body.get_string_from_utf8()) == OK else null)
 	if url == "":
 		_fail_all("unreachable")
 		return
@@ -209,7 +210,10 @@ func _process(delta: float) -> void:
 
 ## Handles one DevTools message (public for tests).
 func handle_message(text: String) -> void:
-	var msg: Variant = JSON.parse_string(text)
+	var json := JSON.new()
+	if json.parse(text) != OK:
+		return
+	var msg: Variant = json.data
 	if not (msg is Dictionary):
 		return
 	if msg.has("id"):
