@@ -10,6 +10,11 @@ func _initialize() -> void:
 	files.sort()
 	for f in files:
 		var script: GDScript = load("res://tests/" + f)
+		if script == null or not script.can_instantiate():
+			# a parse error would otherwise leave the runner hanging
+			printerr("FAIL %s: does not compile" % f)
+			failed += 1
+			continue
 		var t = script.new()
 		for m in t.get_method_list():
 			var name: String = m["name"]

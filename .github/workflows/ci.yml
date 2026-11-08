@@ -10,6 +10,7 @@ permissions:
 jobs:
   gamedb:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: gamedb
@@ -23,6 +24,7 @@ jobs:
 
   app:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       GODOT: "4.7.2"
     steps:
@@ -42,6 +44,7 @@ jobs:
 
   shell:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Tools

@@ -275,3 +275,33 @@ func test_autotune_drives_power() -> void:
 	eq(p.state()["tdp_w"], 25.0, "user's TDP back after the game")
 	eq(p.state()["profile"], "performance", "profile untouched by autotune")
 	p.free()
+
+
+## The running app's worker: settings queued while it is busy collapse to the
+## newest value, and the caller never waits on busctl.
+func test_worker_keeps_only_the_newest_value() -> void:
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), _sys("worker"))
+	var gate := Semaphore.new()
+	p._thread = Thread.new()
+	p._thread.start(p._worker)
+	p._queue("hold", func(): gate.wait(); return true)  # keeps the worker busy
+	var t0 := Time.get_ticks_msec()
+	for w in [10.0, 12.0, 14.0, 16.0]:
+		p.request_set("tdp", w)
+	ok(Time.get_ticks_msec() - t0 < 50, "request_set returns at once")
+	gate.post()
+	var waited := 0
+	while waited < 2000:
+		p._job_mutex.lock()
+		var idle: bool = p._job_order.is_empty()
+		p._job_mutex.unlock()
+		if idle and p.state()["tdp_w"] == 16.0:
+			break
+		OS.delay_msec(10)
+		waited += 10
+	var sets: Array = p.runner.calls.filter(func(c): return c.contains("set-property") and c.contains(" TDP d "))
+	eq(sets.size(), 1, "one TDP write for four slider steps")
+	eq(p.state()["tdp_w"], 16.0, "the newest value won")
+	p._exit_tree()
+	ok(p._thread == null, "worker stopped")
+	p.free()

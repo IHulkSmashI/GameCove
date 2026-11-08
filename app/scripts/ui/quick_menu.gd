@@ -44,6 +44,8 @@ func setup(services: Dictionary) -> void:
 	gamescope = services["gamescope"]
 	if power.has_signal("changed"):
 		power.changed.connect(_on_power_changed)
+	if power.has_signal("applied"):
+		power.applied.connect(func(setting, ok): _apply(ok, null, setting))
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	visible = false
 
@@ -264,7 +266,7 @@ func _on_goal_changed(goal: String) -> void:
 	if not st["supported"].get("profiles", false):
 		return
 	var p := Texts.goal_profile(goal, st.get("profiles", []))
-	if p != "" and p != st.get("profile", "") and not power.set_profile(p):
+	if p != "" and p != st.get("profile", "") and not _power_set("profile", p, null):
 		status_label.text = "Couldn't switch the power profile; the device kept its current one."
 
 
@@ -283,7 +285,7 @@ func _build_power() -> void:
 	if sup.get("profiles", false) and not profiles.is_empty():
 		var r: VBoxContainer = ChoiceRow.new()
 		r.setup("profile", Texts.TITLES["profile"], profiles, profiles.map(func(p): return String(p).capitalize()), st.get("profile", ""))
-		r.changed.connect(func(v): _apply(power.set_profile(v), r, "profile"))
+		r.changed.connect(func(v): _power_set("profile", v, r))
 		_add_row(r)
 	else:
 		_unavailable("profile")
@@ -293,7 +295,7 @@ func _build_power() -> void:
 	if sup.get("tdp", false) and lo >= 0.0 and hi > lo:
 		var s: VBoxContainer = SliderRow.new()
 		s.setup("tdp", Texts.TITLES["tdp"], lo, hi, float(st.get("tdp_w", lo)))
-		s.changed.connect(func(v): _apply(power.set_tdp(v), s, "tdp"))
+		s.changed.connect(func(v): _power_set("tdp", v, s))
 		_add_row(s)
 	else:
 		_unavailable("tdp")
@@ -306,7 +308,7 @@ func _build_power() -> void:
 			limits.sort()
 		var c: VBoxContainer = ChoiceRow.new()
 		c.setup("charge_limit", Texts.TITLES["charge_limit"], limits, limits.map(func(p): return Texts.charge_label(p)), cur)
-		c.changed.connect(func(v): _apply(power.set_charge_limit(v), c, "charge_limit"))
+		c.changed.connect(func(v): _power_set("charge_limit", v, c))
 		_add_row(c)
 	else:
 		_unavailable("charge_limit")
@@ -315,10 +317,25 @@ func _build_power() -> void:
 	if sup.get("fan", false) and not fans.is_empty():
 		var f: VBoxContainer = ChoiceRow.new()
 		f.setup("fan", Texts.TITLES["fan"], fans, fans.map(func(m): return String(m).capitalize()), st.get("fan_mode", ""))
-		f.changed.connect(func(v): _apply(power.set_fan_mode(v), f, "fan"))
+		f.changed.connect(func(v): _power_set("fan", v, f))
 		_add_row(f)
 	else:
 		_unavailable("fan")
+
+
+const POWER_SETTERS := {"profile": "set_profile", "tdp": "set_tdp", "charge_limit": "set_charge_limit", "fan": "set_fan_mode"}
+
+
+## Changes a power setting. The real Power service works in the background and
+## reports through `applied`, so this returns true (no failure yet); a service
+## without request_set answers at once.
+func _power_set(setting: String, value: Variant, row: Control) -> bool:
+	if power.has_method("request_set"):
+		power.request_set(setting, value)
+		return true
+	var ok := bool(power.call(POWER_SETTERS[setting], value))
+	_apply(ok, row, setting)
+	return ok
 
 
 ## A setter said no: put the control back to what the device really has.

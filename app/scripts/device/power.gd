@@ -10,8 +10,17 @@ extends Node
 ## starts with `sys_root`, so tests swap both. No polling: values are read once
 ## at start and after each change; a 15 s check of the charger (one sysfs read)
 ## switches the remembered profile when you plug in or unplug.
+##
+## Threading: busctl and pkexec can take seconds (pkexec may wait on a polkit
+## agent), so the running app does all of that on one worker thread. The UI
+## calls request_set(); each setting keeps only its newest value, so dragging
+## the TDP slider writes once per pause, not once per step. Results come back
+## on the main thread as `applied` and `changed`. Instances that never enter
+## the tree (tests) have no worker and run everything synchronously.
 
 signal changed(state: Dictionary)
+## A request_set() finished: setting is "profile", "tdp", "charge_limit" or "fan".
+signal applied(setting: String, ok: bool)
 
 const Runner := preload("res://scripts/device/command_runner.gd")
 const Busctl := preload("res://scripts/device/busctl.gd")
@@ -65,25 +74,106 @@ var _fan_mode := ""
 var _autotune_on := false
 var _user_tdp := -1.0   # what the user picked; autotune works under it
 var _timer: Timer
+var _thread: Thread
+var _jobs := {}               # name -> Callable, newest wins
+var _job_order: Array = []
+var _job_mutex := Mutex.new()
+var _job_sem := Semaphore.new()
+var _quit := false
 
 
 func _ready() -> void:
 	var dev := get_node_or_null("/root/Device")
 	setup(Runner.new(), dev.profile if dev else {}, "")
-	# after the first frame: detection runs a few busctl calls
-	_start.call_deferred()
+	_thread = Thread.new()
+	_thread.start(_worker)
+	# detection runs several busctl calls; restore may run a root action
+	_queue("start", _start)
 
 
-func _start() -> void:
+func _exit_tree() -> void:
+	if _thread == null:
+		return
+	_job_mutex.lock()
+	_quit = true
+	_job_mutex.unlock()
+	_job_sem.post()
+	_thread.wait_to_finish()
+	_thread = null
+
+
+func _start() -> bool:
 	detect()
 	restore()
 	if backend != "none":
-		_timer = Timer.new()
-		_timer.wait_time = SOURCE_CHECK_S
-		_timer.timeout.connect(check_power_source)
-		add_child(_timer)
-		_timer.start()
-	changed.emit(state())
+		_start_timer.call_deferred()
+	_emit_changed()
+	return true
+
+
+func _start_timer() -> void:
+	_timer = Timer.new()
+	_timer.wait_time = SOURCE_CHECK_S
+	_timer.timeout.connect(func(): _queue("source", func(): check_power_source(); return true))
+	add_child(_timer)
+	_timer.start()
+
+
+# ---- worker -------------------------------------------------------------------
+
+## Change a setting without blocking the caller. `applied` reports the result.
+func request_set(setting: String, value: Variant) -> void:
+	var job: Callable
+	match setting:
+		"profile": job = set_profile.bind(str(value))
+		"tdp": job = set_tdp.bind(float(value))
+		"charge_limit": job = set_charge_limit.bind(int(value))
+		"fan": job = set_fan_mode.bind(str(value))
+		_:
+			push_warning("Power: unknown setting %s" % setting)
+			return
+	_queue(setting, job, true)
+
+
+func _queue(job_name: String, job: Callable, report := false) -> void:
+	if _thread == null:
+		var ok := bool(job.call())
+		if report:
+			applied.emit(job_name, ok)
+		return
+	_job_mutex.lock()
+	if not _jobs.has(job_name):
+		_job_order.append(job_name)
+	_jobs[job_name] = [job, report]
+	_job_mutex.unlock()
+	_job_sem.post()
+
+
+func _worker() -> void:
+	while true:
+		_job_sem.wait()
+		_job_mutex.lock()
+		if _quit:
+			_job_mutex.unlock()
+			return
+		if _job_order.is_empty():  # coalesced: this post's job already ran
+			_job_mutex.unlock()
+			continue
+		var job_name: String = _job_order.pop_front()
+		var entry: Array = _jobs[job_name]
+		_jobs.erase(job_name)
+		_job_mutex.unlock()
+		var ok := bool(entry[0].call())
+		if entry[1]:
+			applied.emit.call_deferred(job_name, ok)
+
+
+## `changed` always reaches listeners on the main thread.
+func _emit_changed() -> void:
+	if OS.get_thread_caller_id() == OS.get_main_thread_id():
+		changed.emit(state())
+	else:
+		changed.emit.call_deferred(state())
 
 
 ## Tests call this instead of _ready.
@@ -261,7 +351,7 @@ func refresh() -> void:
 		_charge = read_charge_sysfs()
 	if _fan_via == "fix":
 		_fan_mode = read_fan_sysfs()
-	changed.emit(state())
+	_emit_changed()
 
 
 # ---- profiles -----------------------------------------------------------------
@@ -292,7 +382,7 @@ func set_profile(profile_name: String) -> bool:
 		return false
 	_profile = profile_name
 	_remember("profile", _source(), profile_name)
-	changed.emit(state())
+	_emit_changed()
 	return true
 
 
@@ -307,7 +397,7 @@ func set_tdp(watts: float) -> bool:
 	_remember("profile", _source(), _profile)
 	if _profile == "custom":
 		_remember("custom_w", _source(), w)
-	changed.emit(state())
+	_emit_changed()
 	return true
 
 
@@ -344,7 +434,7 @@ func check_power_source() -> void:
 		return
 	plugged = now
 	restore()
-	changed.emit(state())
+	_emit_changed()
 
 
 func _source() -> String:
@@ -414,7 +504,7 @@ func set_charge_limit(percent: int) -> bool:
 		return false
 	_charge = got
 	_remember("device", "charge_limit", percent)
-	changed.emit(state())
+	_emit_changed()
 	return true
 
 
@@ -447,7 +537,7 @@ func set_fan_mode(mode: String) -> bool:
 		return false
 	_fan_mode = got
 	_remember("device", "fan_mode", mode)
-	changed.emit(state())
+	_emit_changed()
 	return true
 
 
@@ -515,8 +605,11 @@ func autotune_feed(fps: float, watts := -1.0) -> void:
 	if not _autotune_on:
 		return
 	var w: float = autotune.feed(fps, watts)
-	if w > 0.0 and write_tdp(w):
-		changed.emit(state())
+	if w > 0.0:
+		_queue("autotune", func():
+			if write_tdp(w):
+				_emit_changed()
+			return true)
 
 
 ## Game closed: back to the user's own TDP.
@@ -525,5 +618,9 @@ func autotune_stop() -> void:
 		return
 	_autotune_on = false
 	autotune.stop()
-	if _user_tdp > 0.0 and write_tdp(_user_tdp):
-		changed.emit(state())
+	if _user_tdp > 0.0:
+		var w := _user_tdp
+		_queue("autotune", func():
+			if write_tdp(w):
+				_emit_changed()
+			return true)
