@@ -1,6 +1,8 @@
+<p align="center"><img src="assets/banner.png" alt="GameCove" width="100%"></p>
+
 # GameCove
 
-**Every store. Every handheld. On Linux.**
+**The all-in-one companion for Linux handhelds.**
 
 GameCove is a free, open-source, controller-first home screen for gaming handhelds. You boot into it, every store's games sit in one library, and your device's power, fan, screen and controller settings are built in. No plugins, no extra apps.
 

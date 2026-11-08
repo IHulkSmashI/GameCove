@@ -19,6 +19,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | legendary, heroic-gogdl, nile | Epic, GOG, Amazon libraries | GPL-3.0 |
 | udev-hid-bpf | Loading HID-BPF fixes | GPL-2.0 |
 | Godot Engine | UI | MIT |
+| Inter typeface | Banner lettering | OFL-1.1 |
 
 ## Data
 
