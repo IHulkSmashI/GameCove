@@ -90,15 +90,28 @@ m_put() {
 }
 
 # Undo everything in the manifest, newest first. Keeps going on errors; what couldn't be undone stays in
-# the manifest (and only that), so running remove again retries just those steps.
+# the manifest, so running remove again retries just those steps.
+# One exception keeps the system bootable as it is: once a kernel argument or initramfs entry can't be
+# taken out, the boot configuration may still point at this fix's files (EDID, firmware), so the files,
+# their folders and their initramfs tracking (all older in the manifest) are left alone and stay recorded
+# for the retry. Services and InputPlumber flags are still undone.
 m_undo() {
 	[ -f "$MANIFEST" ] || { m_tidy; return 0; }
 	units=0
+	boot_kept=0
 	sed -n '1!G;h;$p' "$MANIFEST" >"$M_DIR/undo"
 	: >"$M_DIR/left"
 	# fd 3, so nothing run in the loop can read the list
 	while read -r kind arg <&3; do
 		done_ok=1
+		if [ "$boot_kept" = 1 ]; then
+			case $kind in
+			file | replaced | dir | initramfs)
+				printf '%s %s\n' "$kind" "$arg" >>"$M_DIR/left"
+				continue
+				;;
+			esac
+		fi
 		case $kind in
 		file) rm -f "$ROOT$arg" ;;
 		replaced) mv -f "$M_DIR/backup$arg" "$ROOT$arg" || done_ok=0 ;;
@@ -107,8 +120,8 @@ m_undo() {
 			systemctl disable --now "$arg" >/dev/null 2>&1 || warn "could not stop $arg"
 			units=1
 			;;
-		karg) karg_release "$arg" "$FIX" || done_ok=0 ;;
-		initramfs) rpm-ostree initramfs-etc --untrack="$arg" >/dev/null || done_ok=0 ;;
+		karg) karg_release "$arg" "$FIX" || { done_ok=0; boot_kept=1; } ;;
+		initramfs) rpm-ostree initramfs-etc --untrack="$arg" >/dev/null || { done_ok=0; boot_kept=1; } ;;
 		ipflag) ip_flag_off "$arg" || done_ok=0 ;;
 		*) warn "unknown manifest line: $kind $arg" ;;
 		esac
@@ -246,7 +259,7 @@ EOF
 
 ip_accel_text() {
 	cat <<'EOF'
-  # Accelerometer (claw8ex-gyro "set accel on"): Steam fuses it with the gyro; gyro aim is better without it
+  # Accelerometer (claw8ex-gyro "set accel-on"): Steam fuses it with the gyro; gyro aim is better without it
   - group: imu
     iio:
       name: accel_3d

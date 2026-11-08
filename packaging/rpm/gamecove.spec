@@ -7,22 +7,39 @@
 #   Source0  the repository at a tag (git archive), for session files, helpers, fixes
 #   Source1  the exported Godot app: gamecove-<version>-x86_64.tar.gz holding
 #            gamecove.x86_64 and gamecove.pck (made by CI from app/, not by this spec,
-#            because Godot export templates aren't packaged in Fedora)
+#            because Godot export templates aren't packaged in Fedora;
+#            .github/workflows/release.yml makes it)
+#   Source2  udev-hid-bpf at a pinned commit, for the headers the gyro fix's HID-BPF
+#            program is compiled against in %%build
 
 %global debug_package %{nil}
 %global _build_id_links none
+# Keep in step with UHB_PIN in fixes/claw8ex-gyro/bpf/build-bpf.sh
+%global uhb_commit bbaad63
 
 Name:           gamecove
 Version:        0.1.0
 Release:        1%{?dist}
 Summary:        Controller-first home screen for Linux handhelds
-License:        GPL-3.0-only
+# GameCove: GPL-3.0-or-later. The gyro fix's HID-BPF program (fixes/claw8ex-gyro/bpf,
+# built here into MSI__Claw-ISH-IMU.bpf.o) is GPL-2.0-only; its Python helpers are
+# GPL-2.0-or-later. The VRR panel list and EDID logic derive from MIT-licensed code
+# (notice in fixes/claw8ex-vrr/LICENSE.ClawLab-MIT); MIT is GPL-compatible and
+# absorbed into the GPL-3.0-or-later work.
+License:        GPL-3.0-or-later AND GPL-2.0-only AND GPL-2.0-or-later
 URL:            https://github.com/IHulkSmashI/gamecove
 Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 Source1:        %{url}/releases/download/v%{version}/%{name}-%{version}-x86_64.tar.gz
+# udev-hid-bpf's BPF headers at the commit build-bpf.sh pins, to build the gyro program
+Source2:        https://gitlab.freedesktop.org/libevdev/udev-hid-bpf/-/archive/%{uhb_commit}/udev-hid-bpf-%{uhb_commit}.tar.gz
 ExclusiveArch:  x86_64
 
 BuildRequires:  systemd-rpm-macros
+# The gyro fix's HID-BPF program (fixes/claw8ex-gyro/bpf/build-bpf.sh)
+BuildRequires:  clang
+BuildRequires:  llvm
+BuildRequires:  libbpf-devel
+BuildRequires:  kernel-headers
 
 # File dependencies so any package that provides them works (Terra's
 # gamescope-session, a distro gamescope-session-plus, ...).
@@ -47,9 +64,13 @@ library and gives quick access to power, screen and controller settings.
 %autosetup -n %{name}-%{version}
 mkdir -p app-export
 tar -xzf %{SOURCE1} -C app-export
+mkdir -p udev-hid-bpf
+tar -xzf %{SOURCE2} -C udev-hid-bpf --strip-components=1
 
 %build
-# Nothing to build: the Godot app comes pre-exported in Source1.
+# The Godot app comes pre-exported in Source1. Build the gyro fix's HID-BPF
+# program from its source; fix.sh refuses to install without it.
+UHB_SRC="$PWD/udev-hid-bpf" sh fixes/claw8ex-gyro/bpf/build-bpf.sh
 
 %install
 # The app
@@ -67,6 +88,7 @@ mkdir -p %{buildroot}%{_prefix}/lib/gamecove/fixes
 
 # Helpers
 install -Dpm0755 packaging/libexec/gamecove-fix       %{buildroot}%{_libexecdir}/gamecove/gamecove-fix
+install -Dpm0755 packaging/libexec/gamecove-fix-set   %{buildroot}%{_libexecdir}/gamecove/gamecove-fix-set
 install -Dpm0755 session/gamecove-session-client      %{buildroot}%{_libexecdir}/gamecove/gamecove-session-client
 install -Dpm0755 session/gamecove-session-select      %{buildroot}%{_bindir}/gamecove-session-select
 
@@ -86,7 +108,7 @@ install -Dpm0644 packaging/polkit/io.github.ihulksmashi.gamecove.policy \
 mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 
 %files
-%license LICENSE
+%license LICENSE LICENSES/GPL-2.0-only.txt fixes/claw8ex-vrr/LICENSE.ClawLab-MIT
 %doc README.md docs/SESSION.md
 %dir %{_prefix}/lib/gamecove
 %{_prefix}/lib/gamecove/gamecove.x86_64
@@ -94,6 +116,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 %{_prefix}/lib/gamecove/fixes
 %dir %{_libexecdir}/gamecove
 %{_libexecdir}/gamecove/gamecove-fix
+%{_libexecdir}/gamecove/gamecove-fix-set
 %{_libexecdir}/gamecove/gamecove-session-client
 %{_bindir}/gamecove-session-select
 %dir %{_datadir}/gamescope-session-plus

@@ -41,3 +41,7 @@ It takes effect at the next restart. `remove` undoes all three, also at the next
 - refusals: unknown panel, someone else's override, no rpm-ostree
 - undo when the initramfs step fails
 - a zero-padded 128-byte EDID
+
+## License
+
+`panels.txt` and the EDID logic (`edid.awk`) derive from Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory (MIT, © 2026 ClawLab contributors); the notice is in [LICENSE.ClawLab-MIT](LICENSE.ClawLab-MIT). The rest is GPL-3.0-or-later, like GameCove.

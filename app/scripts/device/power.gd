@@ -4,7 +4,10 @@ extends Node
 ##   steamos-manager  (user bus)   com.steampowered.SteamOSManager1
 ##   PowerStation     (system bus) org.shadowblip.PowerStation
 ## and, for fan curves and charge limits neither offers, to the root actions in
-## fixes/ through `pkexec /usr/libexec/gamecove/gamecove-fix <name> set <value>`.
+## fixes/ through `pkexec /usr/libexec/gamecove/gamecove-fix-set <name> set <value>`
+## (the entry point polkit allows without a password; see docs/CONTRACTS.md).
+## Whether a fix is in use is read unprivileged with
+## `/usr/libexec/gamecove/gamecove-fix <name> status` (installed=yes|no).
 ##
 ## Every command goes through `runner` (command_runner.gd) and every sysfs read
 ## starts with `sys_root`, so tests swap both. No polling: values are read once
@@ -40,6 +43,7 @@ const SM_CHARGE_IFACE := "com.steampowered.SteamOSManager1.BatteryChargeLimit1" 
 const SM_FAN_IFACE := "com.steampowered.SteamOSManager1.FanControl1"            # FanControlState u: 0 BIOS, 1 OS
 
 const FIX_HELPER := "/usr/libexec/gamecove/gamecove-fix"
+const FIX_SET_HELPER := "/usr/libexec/gamecove/gamecove-fix-set"
 const CONFIG_PATH := "user://power.cfg"
 const PROFILES: Array[String] = ["battery", "balanced", "performance"]
 ## Fan presets for the msi_wmi_platform tables, in EC percent per point (ClawDeck's
@@ -58,6 +62,7 @@ var device: Dictionary = {}
 var sys_root := ""
 var config_path := CONFIG_PATH
 var fix_helper := FIX_HELPER
+var fix_set_helper := FIX_SET_HELPER
 var autotune: RefCounted = AutotuneScript.new()
 
 var backend := "none"
@@ -72,6 +77,7 @@ var _charge_min := CHARGE_MIN
 var _fan_via := ""      # "steamos-manager" | "fix" | ""
 var _fan_mode := ""
 var _autotune_on := false
+var _autotune_stopping := false  # request_autotune(false) queued: drop samples until it runs
 var _user_tdp := -1.0   # what the user picked; autotune works under it
 var _timer: Timer
 var _thread: Thread
@@ -133,6 +139,21 @@ func request_set(setting: String, value: Variant) -> void:
 			push_warning("Power: unknown setting %s" % setting)
 			return
 	_queue(setting, job, true)
+
+
+## Start (on = true) or stop Auto TDP on the worker. Both share one job, so a
+## stop queued behind a start (or the other way round) leaves only the newest.
+func request_autotune(on: bool) -> void:
+	_autotune_stopping = not on
+	if on:
+		_queue("autotune", func(): return autotune_start())
+	else:
+		_queue("autotune", func(): _autotune_stop(true); return true)
+
+
+## refresh() on the worker (it runs busctl).
+func request_refresh() -> void:
+	_queue("refresh", func(): refresh(); return true)
 
 
 func _queue(job_name: String, job: Callable, report := false) -> void:
@@ -419,13 +440,17 @@ func restore() -> void:
 				set_tdp(w)
 		elif remembered in PROFILES:
 			set_profile(remembered)
-	# root actions only when the live value differs, so no needless prompt
+	# root actions only when the live value differs, so no needless prompt, and
+	# only while the fix is in use: after `gamecove-fix fan remove` its status says
+	# installed=no and the remembered value must not bring it back
 	var c := int(_recall("device", "charge_limit", -1))
 	if c > 0 and _charge_via != "" and c != _charge:
-		set_charge_limit(c)
+		if _charge_via != "fix" or fix_installed("charge-limit"):
+			set_charge_limit(c)
 	var f := str(_recall("device", "fan_mode", ""))
 	if f != "" and _fan_via != "" and f != _fan_mode:
-		set_fan_mode(f)
+		if _fan_via != "fix" or fix_installed("fan"):
+			set_fan_mode(f)
 
 
 func check_power_source() -> void:
@@ -576,9 +601,23 @@ func read_fan_sysfs() -> String:
 
 # ---- root actions -------------------------------------------------------------
 
-## The command for a root action, per docs/CONTRACTS.md "Root actions".
+## The command for a root action, per docs/CONTRACTS.md "Root actions": the
+## no-password entry point, which only takes `set` on charge-limit, fan and the
+## gyro's accelerometer.
 func fix_command(fix_name: String, value: String) -> PackedStringArray:
-	return PackedStringArray(["pkexec", fix_helper, fix_name, "set", value])
+	return PackedStringArray(["pkexec", fix_set_helper, fix_name, "set", value])
+
+
+## True when `gamecove-fix <name> status` (run as the user, no pkexec) says
+## installed=yes. Runs a process: call it from the worker.
+func fix_installed(fix_name: String) -> bool:
+	var r: Dictionary = runner.run(fix_helper, PackedStringArray([fix_name, "status"]))
+	if int(r.get("code", -1)) != 0:
+		return false
+	for line in str(r.get("out", "")).split("\n"):
+		if line.strip_edges() == "installed=yes":
+			return true
+	return false
 
 
 func _run_fix(fix_name: String, value: String) -> bool:
@@ -604,23 +643,35 @@ func autotune_start() -> bool:
 func autotune_feed(fps: float, watts := -1.0) -> void:
 	if not _autotune_on:
 		return
+	if _autotune_stopping:
+		return
 	var w: float = autotune.feed(fps, watts)
 	if w > 0.0:
 		_queue("autotune", func():
-			if write_tdp(w):
+			if _autotune_on and write_tdp(w):
 				_emit_changed()
 			return true)
 
 
 ## Game closed: back to the user's own TDP.
 func autotune_stop() -> void:
+	_autotune_stop(false)
+
+
+## sync: write the TDP here (on the worker) instead of queueing the write.
+func _autotune_stop(sync: bool) -> void:
 	if not _autotune_on:
 		return
 	_autotune_on = false
 	autotune.stop()
-	if _user_tdp > 0.0:
-		var w := _user_tdp
-		_queue("autotune", func():
-			if write_tdp(w):
-				_emit_changed()
-			return true)
+	if _user_tdp <= 0.0:
+		return
+	var w := _user_tdp
+	if sync:
+		if write_tdp(w):
+			_emit_changed()
+		return
+	_queue("autotune", func():
+		if write_tdp(w):
+			_emit_changed()
+		return true)

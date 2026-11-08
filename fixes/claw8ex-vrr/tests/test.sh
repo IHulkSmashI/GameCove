@@ -99,11 +99,30 @@ before=$(snapshot)
 fix claw8ex-vrr install >/dev/null 2>&1
 export FAKE_FAIL=initramfs-etc
 ok '! fix claw8ex-vrr remove >/dev/null 2>&1' "remove reports the failed step"
-ok '[ "$(cat "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest")" = "initramfs $EDID_FILE" ]' "only that step is left"
+ok 'grep -qxF "initramfs $EDID_FILE" "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest"' "the failed step is left"
+ok '[ -f "$R$EDID_FILE" ] && grep -qxF "file $EDID_FILE" "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest"' "the EDID it tracks stays, recorded"
+ok '! grep -q "^karg " "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest"' "kernel arguments were undone"
 ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 0 ]' "the rest was undone"
 unset FAKE_FAIL
 fix claw8ex-vrr remove >/dev/null
 ok '[ "$(snapshot)" = "$before" ]' "second remove finishes the job"
+
+case_start karg_failure_keeps_edid
+vrr_ready
+before=$(snapshot)
+fix claw8ex-vrr install >/dev/null 2>&1
+export FAKE_FAIL=kargs
+ok '! fix claw8ex-vrr remove >/dev/null 2>&1' "remove reports the failed kernel argument"
+ok '[ "$(karg_count drm.edid_firmware=eDP-1:edid/gamecove-csw0801-30-120.bin)" = 1 ]' "argument still set"
+ok '[ -f "$R$EDID_FILE" ]' "so the EDID it points at stays"
+ok 'grep -qxF "$EDID_FILE" "$FAKE/initramfs"' "and stays in the initramfs"
+ok 'grep -qxF "file $EDID_FILE" "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest"' "file still recorded"
+ok 'grep -qxF "initramfs $EDID_FILE" "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest"' "initramfs tracking still recorded"
+ok 'grep -q "^karg drm.edid_firmware=" "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest"' "argument still recorded"
+ok 'fix claw8ex-vrr status | grep -qx installed=yes' "status: still installed"
+unset FAKE_FAIL
+fix claw8ex-vrr remove >/dev/null
+ok '[ "$(snapshot)" = "$before" ]' "retry removes everything"
 
 case_start padded_128_byte_panel
 mkdir -p "$R/sys/class/drm/card0-eDP-1"

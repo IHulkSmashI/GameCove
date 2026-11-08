@@ -1,12 +1,15 @@
 #!/bin/sh
 # GameCove fix: gyro on the MSI Claw 8 EX AI+ (board MS-1T91), the IMU behind Intel's sensor hub (ISH).
-# usage: fix.sh install|remove|status|set accel on|off
+# usage: fix.sh install|remove|status|set accel-on|accel-off
 #
 # Method found and tested by Kisenir (r/MSIClaw), used with his permission (2026-11-08); ported from
 # ClawDeck. Four pieces, all recorded and all taken out again by remove:
 #   1. MSI's ISH firmware, downloaded from MSI on the device (it may not be passed on), checked by size and
 #      sha256 BEFORE anything is written, installed as /etc/firmware/intel/ish/ish_ptl.bin, plus the kernel
 #      argument firmware_class.path=/etc/firmware (shared with claw8ex-vrr, removed when neither needs it).
+#      The file is also tracked in the initramfs (rpm-ostree initramfs-etc), like the VRR fix's EDID:
+#      Bazzite's generic initramfs carries drivers/hid (intel_ish_ipc included), so the hub may ask for its
+#      firmware before the root filesystem is mounted, where only the initramfs copy of /etc exists.
 #   2. A HID-BPF program (bpf/) that relabels the hub's two custom sensors as Accelerometer 3D / Gyrometer
 #      3D, so the kernel creates gyro_3d; installed to /etc/udev-hid-bpf/.
 #   3. Two helper services: keep-alive (sensor power and report rate) and gyro bias correction.
@@ -143,7 +146,7 @@ install() {
 	has_ish || die "no Panther Lake sensor hub at $ISH_PCI"
 	has_rpm_ostree || die "the gyro fix needs Bazzite for now (it sets a kernel argument with rpm-ostree)"
 	has_udev_hid_bpf || die "this system has no udev-hid-bpf, which loads the gyro program"
-	[ -f "$BPF_OBJ" ] || die "the gyro program ($BPF_NAME) isn't in this build; packaging builds it with bpf/build-bpf.sh"
+	[ -f "$BPF_OBJ" ] || die "the gyro program ($BPF_NAME) isn't in this build of GameCove. Install a release package (RPM or sysext from https://github.com/IHulkSmashI/gamecove/releases), which includes it, or build it from source with $HERE/bpf/build-bpf.sh (needs clang, llvm and libbpf headers) and run install again"
 	require_fw_path_free
 	ip_require_free
 	need_fw=1
@@ -156,6 +159,8 @@ install() {
 	# Verified (or already there): from here on every change is recorded.
 	if [ "$need_fw" = 1 ]; then
 		m_put "$GC_TMP/ish_ptl.bin.download" "$FW_DEST" 644 || fail "could not write $FW_DEST"
+		rpm-ostree initramfs-etc --track="$FW_DEST" >/dev/null || fail "rpm-ostree initramfs-etc failed"
+		m_add initramfs "$FW_DEST"
 	fi
 	m_put "$BPF_OBJ" "$BPF_DEST" 644 || fail "could not write $BPF_DEST"
 	for h in ish_imu_keepalive.py ish_gyro_bias.py ish_sensor_probe.py; do
@@ -191,18 +196,23 @@ remove() {
 	say "removed. Restart the Claw to finish (the loaded firmware stays until then)."
 }
 
+# One token, so it fits gamecove-fix's `set <value>` (values can't hold spaces).
 set_value() {
-	[ "${1:-}" = accel ] || die "usage: $0 set accel on|off"
+	[ $# -eq 1 ] || die "usage: $0 set accel-on|accel-off"
+	case $1 in
+	accel-on | accel-off) ;;
+	*) die "usage: $0 set accel-on|accel-off" ;;
+	esac
 	require_root
 	lock
 	m_installed || die "install the gyro first"
-	case ${2:-} in
-	on) mkdir -p "$IP_FLAGS" && : >"$IP_FLAGS/accel" ;;
-	off) rm -f "$IP_FLAGS/accel" ;;
-	*) die "usage: $0 set accel on|off" ;;
-	esac
+	if [ "$1" = accel-on ]; then
+		mkdir -p "$IP_FLAGS" && : >"$IP_FLAGS/accel"
+	else
+		rm -f "$IP_FLAGS/accel"
+	fi
 	ip_regen || die "could not update the InputPlumber override"
-	say "accelerometer ${2}; recalibrate the gyro in Steam"
+	say "accelerometer ${1#accel-}; recalibrate the gyro in Steam"
 }
 
 status() {
@@ -264,5 +274,5 @@ install) install ;;
 remove) remove ;;
 status) status ;;
 set) shift; set_value "$@" ;;
-*) die "usage: $0 install|remove|status|set accel on|off" ;;
+*) die "usage: $0 install|remove|status|set accel-on|accel-off" ;;
 esac

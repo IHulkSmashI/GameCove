@@ -1,0 +1,76 @@
+#!/bin/sh
+# gamecove-fix-set: the no-password entry point to GameCove's root helper.
+#
+#   pkexec /usr/libexec/gamecove/gamecove-fix-set <name> set <value>
+#   pkexec /usr/libexec/gamecove/gamecove-fix-set <name> status
+#
+# polkit lets the active local session run THIS file without a password
+# (action io.github.ihulksmashi.gamecove.fix-set), because the gamescope session
+# has no polkit agent to ask for one. So it does much less than gamecove-fix:
+# only `set` and `status`, only on the low-risk fixes below, only with the values
+# listed for each. Anything else (install, remove, any fix that touches the boot
+# configuration, firmware or systemd units) goes through
+# /usr/libexec/gamecove/gamecove-fix, which needs an administrator password.
+#
+#   charge-limit  set <50-100>                   battery charge limit (sysfs)
+#   fan           set auto|quiet|max             fan preset (sysfs)
+#   claw8ex-gyro  set accel-on|accel-off         accelerometer in the InputPlumber override
+#                                                (the gyro fix must already be installed)
+#
+# After checking, it hands over to gamecove-fix (same validation, logging and
+# exit codes). Exit 64 bad usage, 65 fix not allowed here, 66 value not allowed.
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+if [ -n "${PKEXEC_UID:-}" ]; then
+	DISPATCHER=/usr/libexec/gamecove/gamecove-fix
+else
+	# Tests: the dispatcher next to this file.
+	DISPATCHER="$(cd "$(dirname "$0")" && pwd)/gamecove-fix"
+fi
+
+usage() {
+	echo "usage: gamecove-fix-set charge-limit|fan|claw8ex-gyro set <value>" >&2
+	echo "       gamecove-fix-set charge-limit|fan|claw8ex-gyro status" >&2
+	echo "install and remove need an administrator: pkexec /usr/libexec/gamecove/gamecove-fix" >&2
+	exit 64
+}
+
+die() {
+	echo "gamecove-fix-set: $1" >&2
+	exit "$2"
+}
+
+[ $# -ge 2 ] || usage
+name="$1"
+action="$2"
+
+case "$name" in
+charge-limit | fan | claw8ex-gyro) ;;
+*) die "fix '$name' can't be changed without a password; use gamecove-fix" 65 ;;
+esac
+
+case "$action" in
+status)
+	[ $# -eq 2 ] || usage
+	exec sh "$DISPATCHER" "$name" status
+	;;
+set)
+	[ $# -eq 3 ] || usage
+	;;
+*)
+	die "only set and status here; install and remove need gamecove-fix (administrator password)" 64
+	;;
+esac
+
+value="$3"
+case "$name:$value" in
+charge-limit:[5-9][0-9] | charge-limit:100) ;;
+fan:auto | fan:quiet | fan:max) ;;
+claw8ex-gyro:accel-on | claw8ex-gyro:accel-off) ;;
+*) die "value not allowed for $name" 66 ;;
+esac
+
+exec sh "$DISPATCHER" "$name" set "$value"

@@ -11,7 +11,8 @@ const PS_CARD := "/org/shadowblip/Performance/GPU/card1"
 const PS_TDP_KEY := "--system get-property org.shadowblip.PowerStation " + PS_CARD + " org.shadowblip.GPU.Card.TDP TDP"
 const PS_BOOST_KEY := "--system get-property org.shadowblip.PowerStation " + PS_CARD + " org.shadowblip.GPU.Card.TDP Boost"
 const SM := "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1."
-const HELPER := "pkexec /usr/libexec/gamecove/gamecove-fix"
+const HELPER := "pkexec /usr/libexec/gamecove/gamecove-fix-set"
+const STATUS := "/usr/libexec/gamecove/gamecove-fix"
 
 
 func _row(id: String) -> Dictionary:
@@ -55,6 +56,19 @@ func _write(path: String, text: String) -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	f.store_string(text + "\n")
 	f.close()
+
+
+## fake_runner that also answers `gamecove-fix <name> status` with canned output.
+class StatusRunner extends "res://tests/fixtures/power/fake_runner.gd":
+	var status_out := {}  # fix name -> status text
+
+	func run(program: String, args: PackedStringArray) -> Dictionary:
+		if args.size() == 2 and args[1] == "status" and program.ends_with("/gamecove-fix"):
+			calls.append(program + " " + " ".join(args))
+			if status_out.has(args[0]):
+				return {"code": 0, "out": status_out[args[0]]}
+			return {"code": 65, "out": ""}
+		return super.run(program, args)
 
 
 func _power(bus_fixture: String, row: Dictionary, root: String) -> Node:
@@ -231,7 +245,7 @@ func test_fan_through_root_action() -> void:
 	eq(p.read_fan_sysfs(), "max", "tables read as max")
 	ok(p.set_fan_mode("auto"), "auto")
 	ok(not p.set_fan_mode("turbo"), "unknown mode refused")
-	eq(p.fix_command("fan", "quiet"), PackedStringArray(["pkexec", "/usr/libexec/gamecove/gamecove-fix", "fan", "set", "quiet"]), "argv")
+	eq(p.fix_command("fan", "quiet"), PackedStringArray(["pkexec", "/usr/libexec/gamecove/gamecove-fix-set", "fan", "set", "quiet"]), "argv: the no-password entry point")
 	p.free()
 
 
@@ -304,4 +318,86 @@ func test_worker_keeps_only_the_newest_value() -> void:
 	eq(p.state()["tdp_w"], 16.0, "the newest value won")
 	p._exit_tree()
 	ok(p._thread == null, "worker stopped")
+	p.free()
+
+
+## `gamecove-fix fan remove` must stick: restore() puts remembered fix values
+## back only while the fix's status says installed=yes.
+func test_restore_respects_removed_fixes() -> void:
+	for installed in ["no", "yes"]:
+		var root := _sys("restore_" + installed)
+		var fake := StatusRunner.new()
+		var src: RefCounted = Fake.from_fixture(fixture("power/bus_claw_powerstation.json"))
+		fake.props = src.props
+		fake.methods = src.methods
+		var status := "applies=yes\ninstalled=%s\nstate=%s\n" % [installed, "on" if installed == "yes" else "off"]
+		fake.status_out = {"fan": status, "charge-limit": status}
+		var p: Node = PowerScript.new()
+		p.setup(fake, _row("msi-claw-8-ex"), root)
+		p.config_path = root + "/power.cfg"
+		var cfg := ConfigFile.new()
+		cfg.set_value("device", "charge_limit", 80)
+		cfg.set_value("device", "fan_mode", "quiet")
+		cfg.save(p.config_path)
+		p.detect()
+		eq(p.state()["fan_mode"], "auto", "fixture fan starts on auto")
+		p.restore()
+		ok(fake.calls.has(STATUS + " fan status"), "fan status read (%s)" % installed)
+		ok(fake.calls.has(STATUS + " charge-limit status"), "charge-limit status read (%s)" % installed)
+		var root_calls := fake.calls.filter(func(c): return c.begins_with("pkexec"))
+		if installed == "no":
+			eq(root_calls.size(), 0, "removed fixes are not re-applied")
+		else:
+			ok(root_calls.has(HELPER + " fan set quiet"), "installed fan re-applied")
+			ok(root_calls.has(HELPER + " charge-limit set 80"), "installed charge limit re-applied")
+		p.free()
+
+
+func test_fix_installed_parses_status() -> void:
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), _sys("fixstatus"))
+	var fake := StatusRunner.new()
+	fake.status_out = {"fan": "applies=yes\ninstalled=yes\nstate=on\n", "charge-limit": "installed=no\nstate=off\n"}
+	p.runner = fake
+	ok(p.fix_installed("fan"), "installed=yes")
+	ok(not p.fix_installed("charge-limit"), "installed=no")
+	ok(not p.fix_installed("claw8ex-vrr"), "status failed -> not installed")
+	ok(not fake.calls.any(func(c): return c.begins_with("pkexec")), "status needs no pkexec")
+	p.free()
+
+
+## Auto TDP start/stop and refresh go through the worker; start then stop queued
+## while it is busy leaves only the stop.
+func test_autotune_and_refresh_requests_use_the_worker() -> void:
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), _sys("autotune_req"))
+	ok(p.set_profile("performance"), "user picks 25 W")
+	var gate := Semaphore.new()
+	p._thread = Thread.new()
+	p._thread.start(p._worker)
+	p._queue("hold", func(): gate.wait(); return true)
+	var before: int = p.runner.calls.size()
+	p.request_autotune(true)
+	p.request_refresh()
+	eq(p.runner.calls.size(), before, "nothing ran on the caller's thread")
+	p.request_autotune(false)
+	p.autotune_feed(30.0, 10.0)  # a late sample after the stop request is dropped
+	gate.post()
+	var waited := 0
+	while waited < 2000:
+		p._job_mutex.lock()
+		var idle: bool = p._job_order.is_empty()
+		p._job_mutex.unlock()
+		if idle and p.runner.calls.size() > before:
+			break
+		OS.delay_msec(10)
+		waited += 10
+	OS.delay_msec(50)
+	ok(not p._autotune_on, "stop was the newest: autotune never started")
+	eq(p.state()["tdp_w"], 25.0, "TDP untouched")
+	ok(p.runner.calls.size() > before, "refresh ran on the worker")
+	p._exit_tree()
+	p.request_autotune(true)  # no worker: runs here
+	ok(p._autotune_on, "start without a worker runs at once")
+	p.request_autotune(false)
+	ok(not p._autotune_on, "stop without a worker runs at once")
+	eq(p.state()["tdp_w"], 25.0, "user's TDP back")
 	p.free()

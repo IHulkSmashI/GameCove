@@ -4,7 +4,7 @@ GameCove stands on a lot of other people's work. Thank you.
 
 ## People
 
-- **Kisenir** (r/MSIClaw): found and tested how to bring up the MSI Claw 8 EX gyro on Linux (sensor-hub firmware, HID-BPF descriptor fix, keepalive and bias calibration). He gave us permission to use his work (2026-11-08). His HID-BPF program is GPL-2.0-only; his helper scripts are GPL-2.0-or-later once he confirms.
+- **Kisenir** (r/MSIClaw): found and tested how to bring up the MSI Claw 8 EX gyro on Linux (sensor-hub firmware, HID-BPF descriptor fix, keepalive and bias calibration). He gave us permission to use his work (2026-11-08). His HID-BPF program is GPL-2.0-only; his helper scripts are GPL-2.0-or-later once he confirms. GPL-2.0 text: [LICENSES/GPL-2.0-only.txt](LICENSES/GPL-2.0-only.txt).
 - **HHHHanasak1**: xess-xmx-linux, XeSS on the XMX cores under Proton.
 
 ## Projects we use or build on
@@ -28,7 +28,7 @@ GameCove stands on a lot of other people's work. Thank you.
 
 - **ClawDeck**: the Claw 8 EX power backend findings, launch environment, face-button and EDID findings, ported here.
 - **DeckyTDPTuner**: ideas behind Auto TDP.
-- **Zendo-GIT Intel-Handheld-and-ARC-GPU-laboratory** (MIT): the VRR range fix and the checked panel list.
+- **Zendo-GIT Intel-Handheld-and-ARC-GPU-laboratory** (MIT, © 2026 ClawLab contributors): the VRR range fix and the checked panel list. Notice reproduced in [fixes/claw8ex-vrr/LICENSE.ClawLab-MIT](fixes/claw8ex-vrr/LICENSE.ClawLab-MIT).
 - **OpenGamepadUI** and **gamescope-x11-client**: how a gamescope main app sets its atoms and base layers.
 - **proton-cachyos** (CachyOS), **GE-Proton** (GloriousEggroll) and **low_latency_layer** (Korthos-Software): their docs for the launch variables we set.
 

@@ -9,7 +9,8 @@
 #
 #   fix.sh install          record every fan's enable and table so it can be put back
 #   fix.sh set <mode>       auto | quiet | max
-#   fix.sh status           print installed= and each fan's enable and table
+#   fix.sh status           print applies=, installed=, each fan's enable and table, then state=
+#                           (state=on once GameCove has set a preset, off after remove, n/a without the driver)
 #   fix.sh remove           put the recorded tables and enable back and forget them
 #
 # Presets (EC percent per point), ClawDeck's known-good Claw tables:
@@ -112,7 +113,11 @@ do_set() {
 }
 
 do_status() {
-	need_hw
+	if [ -z "$HW" ]; then
+		printf 'applies=no\nstate=n/a\n'
+		return 0
+	fi
+	echo "applies=yes"
 	if [ -f "$STATE/original" ]; then echo "installed=yes"; else echo "installed=no"; fi
 	for n in $(fans); do
 		line=""
@@ -121,6 +126,7 @@ do_status() {
 		done
 		printf 'pwm%s_enable=%s\npwm%s_table=%s\n' "$n" "$(cat "$HW/pwm${n}_enable")" "$n" "${line# }"
 	done
+	if [ -f "$STATE/original" ]; then echo "state=on"; else echo "state=off"; fi
 }
 
 do_remove() {

@@ -12,7 +12,9 @@ fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
 table() { echo "$(cat "$H/pwm$1_auto_point1_pwm") $(cat "$H/pwm$1_auto_point2_pwm") $(cat "$H/pwm$1_auto_point3_pwm") $(cat "$H/pwm$1_auto_point4_pwm") $(cat "$H/pwm$1_auto_point5_pwm") $(cat "$H/pwm$1_auto_point6_pwm")"; }
 
 sh "$FIX" status | grep -q '^installed=no$' || fail "status before install"
+sh "$FIX" status | tail -n 1 | grep -q '^state=off$' || fail "status ends state=off before install"
 sh "$FIX" set quiet >/dev/null || fail "set quiet"
+sh "$FIX" status | tail -n 1 | grep -q '^state=on$' || fail "status ends state=on after set"
 for n in 1 2; do
 	[ "$(table $n)" = "0 102 102 115 153 191" ] || fail "fan $n quiet table ($(table $n))"
 	[ "$(cat "$H/pwm${n}_enable")" = "1" ] || fail "fan $n table mode"
@@ -30,8 +32,10 @@ for n in 1 2; do
 	[ "$(cat "$H/pwm${n}_enable")" = "2" ] || fail "fan $n original enable back"
 done
 sh "$FIX" status | grep -q '^installed=no$' || fail "status after remove"
+sh "$FIX" status | tail -n 1 | grep -q '^state=off$' || fail "remove sticks: state=off"
 grep -q 'set quiet' "$ROOT/var/lib/gamecove/fixes/fan/changes.log" || fail "changes logged"
 echo msi_other > "$H/name"
 set +e; sh "$FIX" set quiet 2>/dev/null; code=$?; set -e
 [ "$code" = "2" ] || fail "no fan driver -> exit 2 (got $code)"
+[ "$(sh "$FIX" status | tr '\n' ' ')" = "applies=no state=n/a " ] || fail "status without the driver"
 echo "fan: all passed"

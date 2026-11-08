@@ -132,6 +132,76 @@ code=$?
 if [ "$code" -eq 65 ]; then ok; else bad "pkexec must ignore GAMECOVE_ROOT (exit $code)"; fi
 if [ ! -s "$ROOT/calls" ]; then ok; else bad "fix ran from caller-chosen path under pkexec"; fi
 
+# Under pkexec GAMECOVE_PATH is cleared too (stub programs can't be slipped in).
+if awk '/PKEXEC_UID:-}" \]; then/ { inblk = 1 } inblk && /^fi/ { exit } inblk && /GAMECOVE_PATH=""/ { found = 1 } END { exit !found }' "$FIX"; then
+	ok
+else
+	bad "pkexec block must clear GAMECOVE_PATH"
+fi
+
+# ------------------------------------------------- gamecove-fix-set (no password)
+# polkit runs this one without a password, so it may only `set` (and `status`)
+# the low-risk fixes with fixed values, then hand over to gamecove-fix.
+FIXSET="$REPO/packaging/libexec/gamecove-fix-set"
+for n in fan charge-limit claw8ex-gyro claw8ex-vrr claw8ex-buttons; do
+	mkdir -p "$FIXES/$n"
+	cat >"$FIXES/$n/fix.sh" <<FIXEOF
+#!/bin/sh
+echo "$n:\$*" >>"\$GAMECOVE_ROOT/calls"
+[ "\$1" = status ] && echo "installed=yes" && echo "state=on"
+exit 0
+FIXEOF
+done
+gfs() {
+	GAMECOVE_ROOT="$ROOT" sh "$FIXSET" "$@"
+}
+: >"$ROOT/calls"
+expect_code 64 "set entry: no args" gfs
+expect_code 64 "set entry: one arg" gfs fan
+expect_code 64 "set entry refuses install" gfs fan install
+expect_code 64 "set entry refuses remove" gfs fan remove
+expect_code 64 "set entry refuses gyro install" gfs claw8ex-gyro install
+expect_code 64 "set entry refuses gyro remove" gfs claw8ex-gyro remove
+expect_code 64 "set entry refuses charge install" gfs charge-limit install
+expect_code 64 "set entry refuses other actions" gfs fan explode
+expect_code 65 "set entry refuses vrr (boot config)" gfs claw8ex-vrr set on
+expect_code 65 "set entry refuses vrr install" gfs claw8ex-vrr install
+expect_code 65 "set entry refuses vrr status" gfs claw8ex-vrr status
+expect_code 65 "set entry refuses buttons" gfs claw8ex-buttons set on
+expect_code 65 "set entry refuses buttons install" gfs claw8ex-buttons install
+expect_code 65 "set entry refuses other fixes" gfs dummy set 80
+expect_code 65 "set entry refuses traversal" gfs ../fan set quiet
+expect_code 65 "set entry refuses --list" gfs --list x
+expect_code 66 "set entry: fan value" gfs fan set turbo
+expect_code 66 "set entry: charge below 50" gfs charge-limit set 40
+expect_code 66 "set entry: charge above 100" gfs charge-limit set 101
+expect_code 66 "set entry: charge not a number" gfs charge-limit set 8x
+expect_code 66 "set entry: gyro old two-token form" gfs claw8ex-gyro set accel
+expect_code 64 "set entry: gyro with extra arg" gfs claw8ex-gyro set accel on
+expect_code 66 "set entry: gyro install as value" gfs claw8ex-gyro set install
+expect_code 64 "set entry: set with extra arg" gfs fan set quiet extra
+if [ ! -s "$ROOT/calls" ]; then ok; else bad "refused set-entry calls must not run a fix ($(cat "$ROOT/calls"))"; fi
+expect_code 0 "set entry: fan quiet" gfs fan set quiet
+contains "$ROOT/calls" "^fan:set quiet$" "fan set reached fix.sh"
+contains "$LOG" "fix=fan action=set value=quiet result=ok" "set entry logs through the dispatcher"
+expect_code 0 "set entry: charge 80" gfs charge-limit set 80
+expect_code 0 "set entry: charge 100" gfs charge-limit set 100
+contains "$ROOT/calls" "^charge-limit:set 100$" "charge set reached fix.sh"
+expect_code 0 "set entry: gyro accel-on" gfs claw8ex-gyro set accel-on
+expect_code 0 "set entry: gyro accel-off" gfs claw8ex-gyro set accel-off
+contains "$ROOT/calls" "^claw8ex-gyro:set accel-off$" "gyro set reached fix.sh"
+expect_code 0 "set entry: status" gfs fan status
+contains "$T/out" "^state=on$" "status passed through"
+lacks "$ROOT/calls" "install" "no install reached a fix through the set entry"
+lacks "$ROOT/calls" "remove" "no remove reached a fix through the set entry"
+# Under pkexec it hands over to the installed dispatcher; the caller's paths are ignored.
+: >"$ROOT/calls"
+PKEXEC_UID=1000 GAMECOVE_ROOT="$ROOT" GAMECOVE_FIXES_DIR="$FIXES" sh "$FIXSET" fan set quiet >"$T/out" 2>&1
+code=$?
+if [ "$code" -ne 0 ]; then ok; else bad "set entry under pkexec must not use the caller's fixes"; fi
+if [ ! -s "$ROOT/calls" ]; then ok; else bad "set entry ran a caller-chosen fix under pkexec"; fi
+rm -rf "$FIXES/fan" "$FIXES/charge-limit" "$FIXES/claw8ex-gyro" "$FIXES/claw8ex-vrr" "$FIXES/claw8ex-buttons"
+
 # ------------------------------------------------------------ session-select
 BIN="$T/bin"
 mkdir -p "$BIN"
@@ -243,7 +313,8 @@ expect_code 0 "sysext tree" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$
 TREE="$T/dist/gamecove"
 for f in usr/bin/gamescope-session-plus usr/bin/gamecove-session-select \
 	usr/lib/gamecove/gamecove.x86_64 usr/lib/gamecove/gamecove.pck \
-	usr/libexec/gamecove/gamecove-fix usr/libexec/gamecove/gamecove-session-client \
+	usr/libexec/gamecove/gamecove-fix usr/libexec/gamecove/gamecove-fix-set usr/libexec/gamecove/gamecove-session-client \
+	usr/share/licenses/gamecove/LICENSE usr/share/licenses/gamecove/GPL-2.0-only.txt usr/share/licenses/gamecove/LICENSE.ClawLab-MIT \
 	usr/share/gamescope-session-plus/sessions.d/gamecove usr/share/wayland-sessions/gamecove.desktop \
 	usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy \
 	usr/lib/systemd/user/gamescope-session-plus@gamecove.service.d/10-gamecove.conf; do
@@ -253,28 +324,72 @@ contains "$TREE/usr/lib/extension-release.d/extension-release.gamecove" "^ID=_an
 if [ ! -e "$TREE/etc" ] && [ ! -e "$TREE/var" ]; then ok; else bad "sysext must only hold /usr"; fi
 if [ -z "$(find "$TREE" -name test.sh -o -type d -name tests)" ]; then ok; else bad "fix tests must not ship"; fi
 if [ -f "$TREE/usr/lib/gamecove/fixes/lib/claw8ex-common.sh" ]; then ok; else bad "shared fix code must ship"; fi
+if [ -x "$TREE/usr/libexec/gamecove/gamecove-fix-set" ]; then ok; else bad "set entry point must be executable"; fi
 
 # ------------------------------------------------------------------ polkit XML
 POL="$REPO/packaging/polkit/io.github.ihulksmashi.gamecove.policy"
 if python3 -c "import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])" "$POL" 2>"$T/out"; then ok; else bad "policy XML: $(cat "$T/out")"; fi
-contains "$POL" "<allow_active>yes</allow_active>" "active session allowed"
-contains "$POL" "<allow_inactive>auth_admin</allow_inactive>" "inactive needs admin"
-contains "$POL" "<allow_any>auth_admin</allow_any>" "any needs admin"
-contains "$POL" "/usr/libexec/gamecove/gamecove-fix" "exec path"
+# Two actions: no password only for the set entry point; the full helper always asks.
+python3 -I - "$POL" >"$T/out" 2>&1 <<'PY'
+import sys, xml.dom.minidom
+doc = xml.dom.minidom.parse(sys.argv[1])
+acts = {}
+for a in doc.getElementsByTagName("action"):
+    d = a.getElementsByTagName("defaults")[0]
+    def get(t):
+        return d.getElementsByTagName(t)[0].firstChild.data.strip()
+    paths = [n.firstChild.data.strip() for n in a.getElementsByTagName("annotate")
+             if n.getAttribute("key") == "org.freedesktop.policykit.exec.path"]
+    acts[a.getAttribute("id")] = (get("allow_any"), get("allow_inactive"), get("allow_active"), paths)
+want = {
+    "io.github.ihulksmashi.gamecove.fix-set": ("auth_admin", "auth_admin", "yes", ["/usr/libexec/gamecove/gamecove-fix-set"]),
+    "io.github.ihulksmashi.gamecove.fix": ("auth_admin", "auth_admin", "auth_admin_keep", ["/usr/libexec/gamecove/gamecove-fix"]),
+}
+assert acts == want, acts
+PY
+code=$?
+if [ "$code" -eq 0 ]; then ok; else bad "policy actions: $(cat "$T/out")"; fi
+if [ "$(grep -c "<allow_active>yes</allow_active>" "$POL")" -eq 1 ]; then ok; else bad "only one action may skip the password"; fi
+
+# ------------------------------------------------------------------ RPM spec
+SPEC="$REPO/packaging/rpm/gamecove.spec"
+contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-2.0-only AND GPL-2.0-or-later$" "spec License tag"
+contains "$SPEC" "packaging/libexec/gamecove-fix-set" "spec installs the set entry point"
+contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-fix-set$" "spec lists the set entry point"
+contains "$SPEC" "build-bpf.sh" "spec builds the gyro program"
+contains "$SPEC" "LICENSES/GPL-2.0-only.txt" "spec ships the GPL-2.0 text"
+uhb_spec="$(sed -n 's/^%global uhb_commit //p' "$SPEC")"
+uhb_script="$(sed -n 's/.*UHB_PIN:-\([0-9a-f]*\)}.*/\1/p' "$REPO/fixes/claw8ex-gyro/bpf/build-bpf.sh")"
+if [ -n "$uhb_spec" ] && [ "$uhb_spec" = "$uhb_script" ]; then ok; else bad "udev-hid-bpf pin differs: spec '$uhb_spec', build-bpf.sh '$uhb_script'"; fi
+if grep -q "GPL-3.0-only" "$SPEC" "$REPO/README.md" "$REPO/CREDITS.md"; then bad "GPL-3.0-only mentioned; GameCove is GPL-3.0-or-later"; else ok; fi
+
+# ------------------------------------------- devices.json "fixes" = fix folders
+if python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY'
+import json, os, sys
+repo = sys.argv[1]
+bad = []
+for d in json.load(open(os.path.join(repo, "app/data/devices.json")))["devices"]:
+    for f in d.get("fixes", []):
+        if not os.path.isfile(os.path.join(repo, "fixes", f, "fix.sh")):
+            bad.append("%s: %s" % (d["id"], f))
+assert not bad, bad
+PY
+then ok; else bad "devices.json fixes must name folders in fixes/: $(cat "$T/out")"; fi
 
 # ------------------------------------------------------------------ shellcheck
 SHELLCHECK="$(command -v shellcheck || true)"
 if [ -z "$SHELLCHECK" ]; then
 	bad "shellcheck not found (pip install shellcheck-py)"
 else
-	for f in "$REPO/packaging/libexec/gamecove-fix" "$REPO/packaging/install.sh" \
+	for f in "$REPO/packaging/libexec/gamecove-fix" "$REPO/packaging/libexec/gamecove-fix-set" "$REPO/packaging/install.sh" \
 		"$REPO/packaging/sysext/build-sysext.sh" "$REPO/packaging/tests/run.sh" \
 		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select"; do
 		if "$SHELLCHECK" -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
 	if "$SHELLCHECK" -s bash "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
-	for f in "$REPO"/fixes/*/fix.sh "$REPO"/fixes/*/test.sh "$REPO"/fixes/lib/*.sh; do
+	for f in "$REPO"/fixes/*/fix.sh "$REPO"/fixes/*/test.sh "$REPO"/fixes/*/tests/*.sh "$REPO"/fixes/lib/*.sh \
+		"$REPO"/fixes/*/bpf/*.sh; do
 		[ -f "$f" ] || continue
 		# -x from the repo root so "# shellcheck source=fixes/..." paths resolve
 		if (cd "$REPO" && "$SHELLCHECK" -x -s sh "$f") >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
