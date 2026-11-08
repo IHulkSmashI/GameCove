@@ -13,6 +13,10 @@
 #   sh build-sysext.sh --app DIR [--session-src DIR] [--out DIR] [--tree-only]
 #
 #   --app DIR          exported Godot app: DIR/gamecove.x86_64 and DIR/gamecove.pck
+#                      (the contents of the release's gamecove-<version>-x86_64.tar.gz)
+#
+# Build the gyro fix's HID-BPF object first (sh fixes/claw8ex-gyro/bpf/build-bpf.sh);
+# it is copied in with fixes/. .github/workflows/release.yml does both.
 #   --session-src DIR  unpacked gamescope-session tree (else downloaded from GitHub)
 #   --out DIR          where to write gamecove.raw (default ./dist)
 #   --tree-only        stop after building the file tree (no mksquashfs)
@@ -87,7 +91,10 @@ if [ -d "$REPO/fixes" ]; then
 	find "$tree/usr/lib/gamecove/fixes" -name test.sh -exec rm -f {} +
 	find "$tree/usr/lib/gamecove/fixes" -depth -type d -name tests -exec rm -rf {} +
 fi
+[ -f "$tree/usr/lib/gamecove/fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o" ] ||
+	echo "build-sysext: warning: no gyro HID-BPF object; run fixes/claw8ex-gyro/bpf/build-bpf.sh first or the gyro fix won't install" >&2
 install -Dm0755 "$REPO/packaging/libexec/gamecove-fix" "$tree/usr/libexec/gamecove/gamecove-fix"
+install -Dm0755 "$REPO/packaging/libexec/gamecove-fix-set" "$tree/usr/libexec/gamecove/gamecove-fix-set"
 install -Dm0755 "$REPO/session/gamecove-session-client" "$tree/usr/libexec/gamecove/gamecove-session-client"
 install -Dm0755 "$REPO/session/gamecove-session-select" "$tree/usr/bin/gamecove-session-select"
 install -Dm0644 "$REPO/session/gamescope-session-plus/sessions.d/gamecove" "$tree/usr/share/gamescope-session-plus/sessions.d/gamecove"
@@ -97,6 +104,8 @@ install -Dm0644 "$REPO/session/systemd/gamescope-session-plus@gamecove.service.d
 install -Dm0644 "$REPO/packaging/polkit/io.github.ihulksmashi.gamecove.policy" \
 	"$tree/usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy"
 install -Dm0644 "$REPO/LICENSE" "$tree/usr/share/licenses/gamecove/LICENSE"
+install -Dm0644 "$REPO/LICENSES/GPL-2.0-only.txt" "$tree/usr/share/licenses/gamecove/GPL-2.0-only.txt"
+install -Dm0644 "$REPO/fixes/claw8ex-vrr/LICENSE.ClawLab-MIT" "$tree/usr/share/licenses/gamecove/LICENSE.ClawLab-MIT"
 
 # Tells systemd-sysext which OS this extension is for.
 mkdir -p "$tree/usr/lib/extension-release.d"

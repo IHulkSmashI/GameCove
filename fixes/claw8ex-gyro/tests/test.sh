@@ -55,6 +55,7 @@ ok "[ $rc -eq 0 ]" "install succeeds ($(tail -n 1 "$T/out"))"
 ok 'grep -q "cold boot" "$T/out"' "tells the user to cold boot"
 ok '[ -f "$R/etc/firmware/intel/ish/ish_ptl.bin" ]' "firmware installed"
 ok '[ "$(wc -c <"$R/etc/firmware/intel/ish/ish_ptl.bin" | tr -d " ")" = 432640 ]' "the verified file"
+ok 'grep -qxF /etc/firmware/intel/ish/ish_ptl.bin "$FAKE/initramfs"' "firmware tracked in the initramfs"
 ok '[ -f "$R/etc/udev-hid-bpf/MSI__Claw-ISH-IMU.bpf.o" ]' "HID-BPF program installed"
 ok '[ -x "$R/etc/gamecove/claw8ex-gyro/ish_gyro_bias.py" ]' "helpers installed"
 ok 'grep -q "StateDirectory=ish-gyro-bias" "$R/etc/systemd/system/gamecove-gyro-bias.service"' "bias unit has its state dir"
@@ -67,14 +68,66 @@ ok 'fix claw8ex-gyro status | grep -qx state=restart' "status: needs a cold boot
 cold_boot
 ok 'fix claw8ex-gyro status | grep -qx state=on' "status: on after cold boot"
 ok 'fix claw8ex-gyro status | grep -qx inputplumber_reading=yes' "status: InputPlumber reading"
-fix claw8ex-gyro set accel on >/dev/null
+fix claw8ex-gyro set accel-on >/dev/null
 ok 'override | grep -q "name: accel_3d"' "accelerometer on"
-fix claw8ex-gyro set accel off >/dev/null
+ok 'fix claw8ex-gyro status | grep -qx accelerometer=yes' "status: accelerometer on"
+fix claw8ex-gyro set accel-off >/dev/null
 ok '! override | grep -q "name: accel_3d"' "accelerometer off again"
-fix claw8ex-gyro set accel on >/dev/null
+ok '! fix claw8ex-gyro set accel on 2>/dev/null' "old two-token form refused"
+ok '! fix claw8ex-gyro set accel-maybe 2>/dev/null' "unknown value refused"
+fix claw8ex-gyro set accel-on >/dev/null
 fix claw8ex-gyro remove >/dev/null
 ok '[ "$(snapshot)" = "$before" ]' "remove restores the fake root exactly (accelerometer was on)"
 ok '[ ! -e "$FAKE/active/gamecove-gyro-bias.service" ]' "services stopped"
+
+case_start through_the_dispatcher
+# The app's path: pkexec gamecove-fix-set -> gamecove-fix -> fix.sh, values as single tokens.
+gyro_ready
+GF="$FIXES/../packaging/libexec/gamecove-fix"
+GFS="$FIXES/../packaging/libexec/gamecove-fix-set"
+disp() { GAMECOVE_FIXES_DIR="$FIXES" GAMECOVE_PATH="$BIN" sh "$@"; }
+ok '! disp "$GFS" claw8ex-gyro set accel-on >/dev/null 2>&1' "accel-on refused before install"
+ok '[ ! -e "$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml" ]' "nothing written"
+ok 'disp "$GF" claw8ex-gyro install >/dev/null 2>&1' "install through gamecove-fix"
+ok 'disp "$GFS" claw8ex-gyro set accel-on >/dev/null 2>&1' "accel-on through gamecove-fix-set"
+ok 'override | grep -q "name: accel_3d"' "accelerometer on"
+ok 'grep -q "fix=claw8ex-gyro action=set value=accel-on result=ok" "$R/var/lib/gamecove/changes.log"' "logged by the dispatcher"
+ok 'disp "$GF" claw8ex-gyro set accel-off >/dev/null 2>&1' "accel-off through gamecove-fix"
+ok '! override | grep -q "name: accel_3d"' "accelerometer off"
+ok '! disp "$GF" claw8ex-gyro set "accel on" >/dev/null 2>&1' "the dispatcher refuses a value with a space"
+ok 'disp "$GFS" claw8ex-gyro status | grep -qx installed=yes' "status through gamecove-fix-set"
+ok '! disp "$GFS" claw8ex-gyro remove >/dev/null 2>&1' "gamecove-fix-set refuses remove"
+ok 'disp "$GF" claw8ex-gyro remove >/dev/null 2>&1' "remove through gamecove-fix"
+ok '[ ! -e "$R/etc/firmware/intel/ish/ish_ptl.bin" ]' "removed"
+
+case_start karg_failure_keeps_firmware
+gyro_ready
+before=$(snapshot)
+fix claw8ex-gyro install >/dev/null 2>&1
+export FAKE_FAIL=kargs
+ok '! fix claw8ex-gyro remove >/dev/null 2>&1' "remove reports the failed kernel argument"
+ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 1 ]' "argument still set"
+ok '[ -f "$R/etc/firmware/intel/ish/ish_ptl.bin" ]' "firmware stays"
+ok 'grep -qxF /etc/firmware/intel/ish/ish_ptl.bin "$FAKE/initramfs"' "and stays in the initramfs"
+ok 'grep -qxF "file /etc/firmware/intel/ish/ish_ptl.bin" "$R/var/lib/gamecove/fixes/claw8ex-gyro/manifest"' "firmware still recorded"
+ok '[ ! -e "$FAKE/active/gamecove-gyro-keepalive.service" ]' "services still stopped"
+unset FAKE_FAIL
+fix claw8ex-gyro remove >/dev/null 2>&1
+ok '[ "$(snapshot)" = "$before" ]' "retry removes everything"
+
+case_start initramfs_failure_undoes
+gyro_ready
+before=$(snapshot)
+export FAKE_FAIL=initramfs-etc
+ok '! fix claw8ex-gyro install 2>/dev/null' "install fails when the initramfs can't be updated"
+ok '[ "$(snapshot)" = "$before" ]' "firmware written before is taken away"
+unset FAKE_FAIL
+
+case_start no_bpf_object
+gyro_ready
+export GAMECOVE_GYRO_BPF_OBJ="$T/missing.bpf.o"
+ok '! fix claw8ex-gyro install 2>"$T/err"' "refused without the HID-BPF object"
+ok 'grep -q "releases" "$T/err" && grep -q "build-bpf.sh" "$T/err"' "says how to get a build that has it"
 
 case_start wrong_sha
 make_kit 432640

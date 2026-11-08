@@ -1,0 +1,150 @@
+# Builds what packaging needs and the packages themselves:
+#   app      Godot export -> gamecove-<version>-x86_64.tar.gz (gamecove.x86_64 + gamecove.pck at the top
+#            level: Source1 of packaging/rpm/gamecove.spec, --app of packaging/sysext/build-sysext.sh)
+#   package  in a Fedora container: the gyro fix's HID-BPF object (fixes/claw8ex-gyro/bpf/build-bpf.sh),
+#            the RPM (rpmbuild, which builds the HID-BPF object again from source in %build) and the
+#            SteamOS sysext (gamecove.raw, with the object copied in under fixes/)
+#   release  only for tags v*: attaches everything to the GitHub release
+# Every run uploads the files as workflow artifacts.
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  GODOT: "4.7.2"
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version (spec Version; a tag must match it)
+        id: version
+        run: |
+          ver="$(sed -n 's/^Version:[[:space:]]*//p' packaging/rpm/gamecove.spec)"
+          [ -n "$ver" ] || { echo "no Version in the spec" >&2; exit 1; }
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "v$ver" ]; then
+            echo "tag ${GITHUB_REF_NAME} doesn't match the spec's Version $ver" >&2
+            exit 1
+          fi
+          echo "version=$ver" >>"$GITHUB_OUTPUT"
+      - name: Get Godot and its Linux export template
+        run: |
+          base="https://github.com/godotengine/godot/releases/download/${GODOT}-stable"
+          curl -fsSL -o godot.zip "$base/Godot_v${GODOT}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT}-stable_linux.x86_64" godot
+          curl -fsSL -o templates.tpz "$base/Godot_v${GODOT}-stable_export_templates.tpz"
+          dest="$HOME/.local/share/godot/export_templates/${GODOT}.stable"
+          mkdir -p "$dest"
+          unzip -q -j templates.tpz templates/linux_release.x86_64 templates/version.txt -d "$dest"
+          rm templates.tpz
+          [ "$(cat "$dest/version.txt")" = "${GODOT}.stable" ]
+      - name: Export (fails on script errors)
+        run: |
+          set -o pipefail
+          ./godot --headless --path app --import 2>&1 | tee import.log
+          mkdir -p app/build
+          ./godot --headless --path app --export-release "Linux" build/gamecove.x86_64 2>&1 | tee export.log
+          ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log export.log
+          test -x app/build/gamecove.x86_64
+          test -s app/build/gamecove.pck
+      - name: App tarball
+        run: |
+          ver="${{ steps.version.outputs.version }}"
+          mkdir -p dist
+          tar -czf "dist/gamecove-${ver}-x86_64.tar.gz" -C app/build gamecove.x86_64 gamecove.pck
+          tar -tzf "dist/gamecove-${ver}-x86_64.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: dist/gamecove-*-x86_64.tar.gz
+          if-no-files-found: error
+
+  package:
+    needs: app
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container: fedora:43
+    env:
+      VERSION: ${{ needs.app.outputs.version }}
+    steps:
+      - name: Tools
+        run: |
+          dnf -y -q install git tar gzip curl rpm-build rpmdevtools systemd-rpm-macros \
+            clang llvm libbpf-devel kernel-headers squashfs-tools python3
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: app
+          path: dist
+      - name: Gyro HID-BPF object (for the sysext; the RPM builds its own in %build)
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          sh fixes/claw8ex-gyro/bpf/build-bpf.sh
+          test -s fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o
+          cp fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o dist/
+      - name: RPM
+        run: |
+          top="$PWD/rpmbuild"
+          mkdir -p "$top/SOURCES"
+          # Source0: the repository as the spec's URL would serve it (top folder gamecove-<version>)
+          git archive --format=tar.gz --prefix="gamecove-${VERSION}/" -o "$top/SOURCES/gamecove-${VERSION}.tar.gz" HEAD
+          # Source1: the app tarball from the app job
+          cp "dist/gamecove-${VERSION}-x86_64.tar.gz" "$top/SOURCES/"
+          # Source2: udev-hid-bpf at the pinned commit
+          spectool -g -s 2 -C "$top/SOURCES" packaging/rpm/gamecove.spec
+          rpmbuild -ba --define "_topdir $top" packaging/rpm/gamecove.spec
+          rpm -qlp "$top"/RPMS/x86_64/gamecove-*.rpm | tee rpm-files.txt
+          grep -qx /usr/lib/gamecove/fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o rpm-files.txt
+          grep -qx /usr/libexec/gamecove/gamecove-fix-set rpm-files.txt
+          cp "$top"/RPMS/x86_64/gamecove-*.rpm "$top"/SRPMS/gamecove-*.src.rpm dist/
+      - name: Sysext
+        run: |
+          mkdir -p app-export
+          tar -xzf "dist/gamecove-${VERSION}-x86_64.tar.gz" -C app-export
+          sh packaging/sysext/build-sysext.sh --app app-export --out sysext 2>&1 | tee sysext.log
+          ! grep -q "no gyro HID-BPF object" sysext.log
+          mv sysext/gamecove.raw "dist/gamecove-${VERSION}-x86_64.raw"
+      - name: Checksums
+        run: cd dist && sha256sum -- * | tee SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            dist/*.rpm
+            dist/*.raw
+            dist/*.bpf.o
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [app, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -la dist
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "GameCove $TAG" --notes "Built by the Release workflow." --draft
+          gh release upload "$TAG" dist/* --clobber

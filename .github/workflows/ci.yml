@@ -39,8 +39,13 @@ jobs:
           ./godot --headless --path app --import 2>&1 | tee import.log
           ./godot --headless --path app --quit-after 120 2>&1 | tee run.log
           ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log run.log
-      - name: GDScript tests
-        run: ./godot --headless --path app -s res://tests/run_tests.gd
+      - name: GDScript tests (fail on failures and on script errors)
+        run: |
+          set -o pipefail
+          ./godot --headless --path app -s res://tests/run_tests.gd 2>&1 | tee tests.log
+          ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" tests.log
+      - name: Export preset packs the app
+        run: ./godot --headless --path app --export-pack "Linux" build/gamecove.pck
 
   shell:
     runs-on: ubuntu-latest

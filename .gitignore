@@ -1,7 +1,6 @@
 # Godot
 app/.godot/
 *.import
-export_presets.cfg
 
 # Python
 __pycache__/
@@ -9,3 +8,6 @@ __pycache__/
 .pytest_cache/
 gamedb/dist/
 .venv/
+
+# Export output (app/export_presets.cfg)
+app/build/

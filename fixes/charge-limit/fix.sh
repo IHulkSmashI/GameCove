@@ -6,7 +6,8 @@
 #   fix.sh install       record the current limit so it can be put back
 #   fix.sh set <50-100>  set the limit; 100 = no limit (the value recorded at install
 #                        when it was the firmware's "none", 0 on the Claw)
-#   fix.sh status        print installed=, path=, value=
+#   fix.sh status        print applies=, installed=, path=, value=, then state=
+#                        (state=on once GameCove has set a limit, off after remove, n/a without the sysfs file)
 #   fix.sh remove        put the recorded limit back and forget it
 #
 # GAMECOVE_ROOT is a filesystem prefix for tests (empty on a real system).
@@ -77,13 +78,18 @@ do_set() {
 }
 
 do_status() {
-	[ -n "$PATH_T" ] || die 2 "this battery has no charge_control_end_threshold"
+	if [ -z "$PATH_T" ]; then
+		printf 'applies=no\nstate=n/a\n'
+		return 0
+	fi
+	printf 'applies=yes\n'
 	if [ -f "$STATE/original" ]; then
 		printf 'installed=yes\noriginal=%s\n' "$(cat "$STATE/original")"
 	else
 		printf 'installed=no\n'
 	fi
 	printf 'path=%s\nvalue=%s\n' "${PATH_T#"$ROOT"}" "$(cat "$PATH_T")"
+	if [ -f "$STATE/original" ]; then printf 'state=on\n'; else printf 'state=off\n'; fi
 }
 
 do_remove() {

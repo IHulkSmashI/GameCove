@@ -3,29 +3,49 @@
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <!--
-  Lets the person at the handheld run GameCove's root helper from the UI.
+  GameCove's root helper has two entry points, so two actions. pkexec picks the
+  action by the program it is asked to run (org.freedesktop.policykit.exec.path).
 
-  allow_active=yes: the gamescope session has no polkit agent to show a password
-  prompt, so the active local session must be allowed without one (Bazzite and
-  OpenGamepadUI do the same for their session helpers). Everyone else (remote,
-  inactive sessions) needs an administrator password.
+  io.github.ihulksmashi.gamecove.fix-set: /usr/libexec/gamecove/gamecove-fix-set
+    No password for the person at the handheld (active local session), because
+    the gamescope session has no polkit agent to show a prompt. That entry point
+    only runs `set` and `status`, only on charge-limit, fan and the gyro's
+    accelerometer toggle, only with fixed values (see the script). Nothing it can
+    do touches the kernel command line, initramfs, firmware or systemd units.
 
-  What this unlocks is narrow: /usr/libexec/gamecove/gamecove-fix only runs the
-  root-owned fix scripts shipped in /usr/lib/gamecove/fixes, validates names and
-  values, and logs every change to /var/lib/gamecove/changes.log.
+  io.github.ihulksmashi.gamecove.fix: /usr/libexec/gamecove/gamecove-fix
+    Everything else: install and remove of any fix, and every fix that changes
+    boot configuration (kernel arguments, initramfs, firmware, systemd units,
+    InputPlumber overrides). Always an administrator password; auth_admin_keep
+    lets one password cover a few minutes of changes in the same session.
+
+  Both run only the root-owned fix scripts in /usr/lib/gamecove/fixes, validate
+  names and values, and log every change to /var/lib/gamecove/changes.log.
 -->
 <policyconfig>
   <vendor>GameCove</vendor>
   <vendor_url>https://github.com/IHulkSmashI/gamecove</vendor_url>
 
-  <action id="io.github.ihulksmashi.gamecove.fix">
-    <description>Apply or undo a GameCove system fix</description>
-    <message>GameCove wants to change a system setting (firmware, kernel argument, fan or charge limit).</message>
+  <action id="io.github.ihulksmashi.gamecove.fix-set">
+    <description>Change a GameCove device setting (charge limit, fan, accelerometer)</description>
+    <message>GameCove wants to change the charge limit, fan preset or accelerometer setting.</message>
     <icon_name>input-gaming</icon_name>
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gamecove/gamecove-fix-set</annotate>
+  </action>
+
+  <action id="io.github.ihulksmashi.gamecove.fix">
+    <description>Install or remove a GameCove system fix</description>
+    <message>GameCove wants to install or remove a system fix (firmware, kernel argument, initramfs or system service). This needs an administrator password.</message>
+    <icon_name>input-gaming</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gamecove/gamecove-fix</annotate>
   </action>

@@ -5,13 +5,19 @@
 #   pkexec /usr/libexec/gamecove/gamecove-fix <name> set <value>
 #   /usr/libexec/gamecove/gamecove-fix --list
 #
+# Through pkexec this file always needs an administrator password (polkit action
+# io.github.ihulksmashi.gamecove.fix). The app's everyday settings (charge limit,
+# fan, the gyro's accelerometer) go through gamecove-fix-set instead, which polkit
+# allows without a password and which only accepts those `set`s and hands them here.
+#
 # <name> must be a folder under the fixes directory holding a fix.sh that
 # implements `install|remove|status|set <value>`. Every change (anything but
 # status) is logged to /var/lib/gamecove/changes.log with who asked, what and the
 # result; fix.sh may append its own detail lines to $GAMECOVE_CHANGES_LOG.
 #
 # Tests only: GAMECOVE_ROOT prefixes every path (fixes, log); GAMECOVE_FIXES_DIR
-# points at another fixes folder. Both are ignored when run through pkexec.
+# points at another fixes folder; GAMECOVE_PATH goes in front of the fixed PATH
+# (stub programs). All three are ignored when run through pkexec.
 #
 # Exit codes: 0 ok, 64 bad usage, 65 unknown fix, 66 bad value, else fix.sh's code.
 set -eu
@@ -24,6 +30,11 @@ if [ -n "${PKEXEC_UID:-}" ]; then
 	# Never let the calling user move our paths around.
 	GAMECOVE_ROOT=""
 	GAMECOVE_FIXES_DIR=""
+	GAMECOVE_PATH=""
+fi
+if [ -n "${GAMECOVE_PATH:-}" ]; then
+	# Tests only: stub programs (rpm-ostree, systemctl, ...) ahead of the system's.
+	PATH="$GAMECOVE_PATH:$PATH"
 fi
 ROOT="${GAMECOVE_ROOT:-}"
 FIXES_DIR="${GAMECOVE_FIXES_DIR:-$ROOT/usr/lib/gamecove/fixes}"

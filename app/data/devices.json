@@ -1,5 +1,5 @@
 {
-  "_about": "One row per handheld. Matched on DMI ids (/sys/class/dmi/id). 'support': full = tested on the device by us, beta = confirmed by testers, generic = matched but untested. Power ranges in watts. Sources: ClawDeck's tested hardware table, PowerStation's device database. 'profiles': watts (TDP = PL1) for the battery / balanced / performance profiles, from ClawDeck's tested profile table; rows without it get a spread of their range. 'pl2_offset_w': boost limit PL2 = TDP + this (Intel). 'tdp_backends': which power services to try, in order (default steamos-manager, then powerstation).",
+  "_about": "One row per handheld. Matched on DMI ids (/sys/class/dmi/id). 'support': full = tested on the device by us, beta = confirmed by testers, generic = matched but untested. Power ranges in watts. Sources: ClawDeck's tested hardware table, PowerStation's device database. 'profiles': watts (TDP = PL1) for the battery / balanced / performance profiles, from ClawDeck's tested profile table; rows without it get a spread of their range. 'pl2_offset_w': boost limit PL2 = TDP + this (Intel). 'tdp_backends': which power services to try, in order (default steamos-manager, then powerstation). 'fixes': root fixes offered on this device, each the name of a folder in fixes/ (as `gamecove-fix --list` prints it); charge-limit and fan are driven by 'charge_limit' and 'fan' instead (docs/CONTRACTS.md, Root actions).",
   "version": 1,
   "devices": [
     {
@@ -20,7 +20,7 @@
       "charge_limit": true,
       "panel_hz": [60, 120],
       "vrr_range": [30, 120],
-      "fixes": ["face-buttons", "vrr-edid", "gyro-ish"],
+      "fixes": ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro"],
       "support": "full"
     },
     {
