@@ -1,7 +1,9 @@
 extends Control
 ## Library: every game as a dense cover grid, filtered by store, sorted
 ## (recent, A to Z, most played, shortest first) and searched with the
-## on-screen keyboard (Y) or a physical one. X cycles the sort.
+## on-screen keyboard (Y) or a physical one. X cycles the sort. Installed /
+## Not installed chips narrow it down; a Downloads chip shows while anything
+## is in the queue. Tiles show install state (main passes a tile_hook).
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const View := preload("res://scripts/ui/library_view.gd")
@@ -14,6 +16,9 @@ const Osk := preload("res://scripts/ui/osk.gd")
 
 signal open_requested(game: Dictionary)
 signal game_focused(game: Dictionary)
+signal downloads_requested
+
+const INSTALL_FILTERS := [["installed", "Installed"], ["not_installed", "Not installed"]]
 
 const GAP := Vector2(18, 20)
 const PAD := Vector2(24, 20)
@@ -23,6 +28,12 @@ var shown: Array = []
 var store := ""
 var sort := "recent"
 var query := ""
+## "" (all) | "installed" | "not_installed"
+var install_filter := ""
+## Called with every new tile (install badges and progress).
+var tile_hook: Callable = Callable()
+var filter_buttons: Array = []
+var downloads_chip: Button
 var top_target: Control
 
 var search_button: Button
@@ -76,7 +87,7 @@ func _init() -> void:
 	bar.name = "Toolbar"
 	search_button = Kit.button("", "ChipButton")
 	search_button.name = "Search"
-	search_button.custom_minimum_size = Vector2(250, 44)
+	search_button.custom_minimum_size = Vector2(164, 44)
 	search_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	search_button.add_theme_constant_override("h_separation", 10)
 	search_button.pressed.connect(open_search)
@@ -93,7 +104,26 @@ func _init() -> void:
 		b.pressed.connect(func(): set_store(id))
 		bar.add_child(b)
 		store_buttons.append(b)
+	var sep2 := Control.new()
+	sep2.custom_minimum_size = Vector2(6, 0)
+	bar.add_child(sep2)
+	for f in INSTALL_FILTERS:
+		var fb := Kit.button(f[1], "ChipButton")
+		fb.name = "Filter_" + f[0]
+		fb.toggle_mode = true
+		fb.custom_minimum_size = Vector2(0, 44)
+		var fid: String = f[0]
+		fb.pressed.connect(func(): set_install_filter("" if install_filter == fid else fid))
+		bar.add_child(fb)
+		filter_buttons.append(fb)
 	bar.add_child(Kit.spacer())
+	downloads_chip = Kit.button("", "ChipButton")
+	downloads_chip.name = "DownloadsChip"
+	downloads_chip.custom_minimum_size = Vector2(0, 44)
+	downloads_chip.add_theme_constant_override("h_separation", 8)
+	downloads_chip.visible = false
+	downloads_chip.pressed.connect(func(): downloads_requested.emit())
+	bar.add_child(downloads_chip)
 	sort_button = Kit.button("", "ChipButton")
 	sort_button.name = "Sort"
 	sort_button.custom_minimum_size = Vector2(0, 44)
@@ -212,6 +242,31 @@ func set_sort(mode: String) -> void:
 	_rebuild(false)
 
 
+func set_install_filter(f: String) -> void:
+	install_filter = f if f in ["installed", "not_installed"] else ""
+	_rebuild(false)
+
+
+## Games kept by an install filter ("" keeps all).
+static func filter_install(list: Array, f: String) -> Array:
+	if f == "installed":
+		return list.filter(func(g): return g.get("installed", false))
+	if f == "not_installed":
+		return list.filter(func(g): return not g.get("installed", false))
+	return list
+
+
+## The Downloads chip: shown while `jobs` > 0, with overall progress (0..1, -1 unknown).
+func set_downloads(jobs: int, overall := -1.0) -> void:
+	var was := downloads_chip.visible
+	downloads_chip.visible = jobs > 0
+	downloads_chip.text = ("%d%%" % roundi(overall * 100.0)) if overall >= 0.0 else str(jobs)
+	downloads_chip.tooltip_text = "Downloads"
+	downloads_chip.icon = load("res://scripts/ui/games/game_icons.gd").tex("download", 20)
+	if was != downloads_chip.visible:
+		_link_toolbar()
+
+
 func cycle_sort(d := 1) -> void:
 	set_sort(View.SORTS[posmod(View.SORTS.find(sort) + d, View.SORTS.size())])
 
@@ -255,7 +310,7 @@ func _rebuild(keep_focus: bool) -> void:
 		var f := get_viewport().gui_get_focus_owner()
 		if f != null and f in _tiles:
 			focused_key = f.game.get("key", "")
-	shown = View.sort_games(View.search(View.filter_by_store(games, store), query), sort)
+	shown = View.sort_games(View.search(filter_install(View.filter_by_store(games, store), install_filter), query), sort)
 	for t in _tiles:
 		Kit.drop(grid, t)
 	_tiles.clear()
@@ -267,6 +322,8 @@ func _rebuild(keep_focus: bool) -> void:
 		t.focus_entered.connect(_on_tile_focus.bind(t))
 		grid.add_child(t)
 		_tiles.append(t)
+		if tile_hook.is_valid():
+			tile_hook.call(t)
 	_refresh_toolbar()
 	_link_grid()
 	_empty.visible = shown.is_empty()
@@ -276,6 +333,9 @@ func _rebuild(keep_focus: bool) -> void:
 		_empty_text.text = "Your games will show up here once a store has some installed."
 	elif query != "":
 		_empty_text.text = "No games match \"%s\". Try fewer letters or another store." % query
+	elif shown.is_empty() and install_filter != "":
+		_empty_text.text = ("Nothing installed here yet. Clear the Installed filter to see everything you own." if install_filter == "installed"
+			else "Everything here is installed. Clear the filter to see all your games.")
 	elif shown.is_empty():
 		_empty_text.text = "No %s games found. Pick another store or All." % View.store_name(store)
 	count_label.text = ("%d of %d" % [shown.size(), games.size()]) if shown.size() != games.size() else ("%d games" % games.size() if games.size() != 1 else "1 game")
@@ -290,6 +350,8 @@ func _refresh_toolbar() -> void:
 	var ids: Array = View.STORES.map(func(s): return s[0])
 	for i in store_buttons.size():
 		store_buttons[i].set_pressed_no_signal(ids[i] == store)
+	for i in filter_buttons.size():
+		filter_buttons[i].set_pressed_no_signal(INSTALL_FILTERS[i][0] == install_filter)
 	search_button.text = query if query != "" else "Search"
 	search_button.icon = Icons.tex("search", 20)
 	sort_button.text = View.SORT_NAMES[sort]
@@ -300,6 +362,9 @@ func _refresh_toolbar() -> void:
 func _toolbar() -> Array:
 	var out: Array = [search_button]
 	out.append_array(store_buttons)
+	out.append_array(filter_buttons)
+	if downloads_chip != null and downloads_chip.visible:
+		out.append(downloads_chip)
 	out.append(sort_button)
 	return out
 

@@ -1,7 +1,8 @@
 extends Control
 ## The shell: art backdrop, top bar (tabs + status pill), the four screens
 ## (Home, Library, Discover, Settings), the game page, the hint bar, toasts,
-## the launch splash and the quick menu overlay (Guide button or F1). Routes
+## the launch splash and the quick menu overlay (Guide button or F1), the
+## downloads list, game action sheets and the "Steam needs you" overlay. Routes
 ## input and keeps the hint bar true to whatever has focus. Screens never call
 ## services themselves except through what's passed in here, so they can be
 ## tested with fakes.
@@ -24,6 +25,18 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const UiPrefs := preload("res://scripts/ui/ui_prefs.gd")
 const GameSession := preload("res://scripts/launch/game_session.gd")
+const TG := preload("res://scripts/ui/texts_games.gd")
+const InstallState := preload("res://scripts/ui/games/install_state.gd")
+const GameActions := preload("res://scripts/ui/games/game_actions.gd")
+const DownloadsView := preload("res://scripts/ui/games/downloads_view.gd")
+const DownloadsButton := preload("res://scripts/ui/games/downloads_button.gd")
+const SteamOverlay := preload("res://scripts/ui/games/steam_overlay.gd")
+const TileProgress := preload("res://scripts/ui/games/tile_progress.gd")
+const SessionWiring := preload("res://scripts/ui/games/session_wiring.gd")
+const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
+const GameCloser := preload("res://scripts/ui/games/game_closer.gd")
+## First-run setup (s-settings); loaded at runtime only when it exists.
+const SETUP_FLOW := "res://scripts/ui/setup/setup_flow.gd"
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
@@ -63,6 +76,22 @@ var _hint_shade: TextureRect
 var _last_input_ms := 0
 var _battery_warned := false
 var _seen_new := {}
+## Install state and live progress for every game (Library store signals).
+var install_state: Node
+## Install / uninstall / move / launch options... flows with sheets.
+var game_actions: Node
+var downloads_view: Control
+var downloads_button: Button
+var steam_overlay: Control
+var wiring: RefCounted
+## Library's store API and the Achievements service, swappable for previews.
+var store_api: Object
+var achievements_api: Object
+## Sheets, the text keyboard and the Steam overlay: above screens and top bar,
+## under the hint bar.
+var _modal_layer: Control
+var closer: Node
+var setup_flow: Node
 
 
 func _ready() -> void:
@@ -86,11 +115,15 @@ func _ready() -> void:
 	home.open_requested.connect(_open_page)
 	home.refresh_requested.connect(func(): Library.refresh())
 	home.game_focused.connect(_follow.bind("home"))
+	home.downloads_requested.connect(open_downloads)
+	home.tile_hook = _hook_tile
 	_screen_layer.add_child(home)
 
 	library_screen = LibraryScreen.new()
 	library_screen.open_requested.connect(_open_page)
 	library_screen.game_focused.connect(_follow.bind("library"))
+	library_screen.downloads_requested.connect(open_downloads)
+	library_screen.tile_hook = _hook_tile
 	library_screen.visible = false
 	_screen_layer.add_child(library_screen)
 
@@ -104,6 +137,8 @@ func _ready() -> void:
 	settings = SettingsScreen.new()
 	settings.visible = false
 	settings.changed.connect(_on_setting_changed)
+	if settings.has_signal("setup_requested"):
+		settings.setup_requested.connect(func(): open_setup(true))
 	_screen_layer.add_child(settings)
 	screens = {"home": home, "library": library_screen, "discover": discover, "settings": settings}
 
@@ -138,6 +173,19 @@ func _ready() -> void:
 	top_bar.tab_pressed.connect(func(id): show_screen(id))
 	top_bar.status_pressed.connect(_open_status)
 	add_child(top_bar)
+	downloads_button = DownloadsButton.new()
+	downloads_button.pressed.connect(open_downloads)
+	top_bar.add_child(downloads_button)
+	top_bar.move_child(downloads_button, top_bar.status_button.get_index())
+
+	# Modals sit above the screens and the top bar, under the hint bar.
+	_modal_layer = Control.new()
+	_modal_layer.name = "Modals"
+	_modal_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_modal_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_modal_layer)
+	move_child(_hint_shade, -1)
+	move_child(hint_bar, -1)
 
 	toasts = Toasts.new()
 	add_child(toasts)
@@ -153,7 +201,7 @@ func _ready() -> void:
 	add_child(launch_overlay)
 
 	quick_menu = QuickMenu.new()
-	quick_menu.setup({"device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope})
+	quick_menu.setup({"device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor")})
 	quick_menu.set_side(menu_side)
 	quick_menu.closed.connect(_on_menu_closed)
 	if quick_menu.has_signal("notice"):
@@ -169,8 +217,20 @@ func _ready() -> void:
 	session.setup(Gamescope, Power, Launcher)
 	session.ended.connect(_on_game_ended)
 	if session.has_signal("started"):
-		session.started.connect(func(_g): launch_overlay.finish())
+		session.started.connect(_on_game_started)
 	add_child(session)
+	wiring = SessionWiring.new()
+	wiring.setup({"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "updates": _svc("Updates"),
+		"controller": _svc("Controller"), "discover": _svc("Discover"), "launcher": Launcher})
+	_wire_games()
+	_wire_services()
+	closer = GameCloser.new()
+	closer.name = "GameCloser"
+	add_child(closer)
+	if quick_menu.has_method("attach_session"):
+		quick_menu.attach_session(session)
+	if quick_menu.has_signal("exit_game_requested"):
+		quick_menu.exit_game_requested.connect(exit_game)
 
 	Library.changed.connect(_on_library_changed)
 	_set_games(Library.games)
@@ -188,6 +248,237 @@ func _ready() -> void:
 	_link_top()
 	_last_input_ms = Time.get_ticks_msec()
 	home.focus_later(home.default_focus())
+	open_setup(false)
+
+
+## Closes the running game (quick menu "Exit game"). Never blocks.
+func exit_game() -> void:
+	if quick_menu.visible:
+		quick_menu.close()
+	if not closer.close(session):
+		toast("No game is running", "info", "", "")
+
+
+## First-run setup from the settings work, when that file is in this build.
+## force: Settings asked to run it again.
+func open_setup(force: bool) -> void:
+	if not ResourceLoader.exists(SETUP_FLOW):
+		return
+	var flow_script: Script = load(SETUP_FLOW)
+	var svc := {"setup": _svc("Setup"), "device": Device, "discover": _svc("Discover")}
+	var flow: Variant = null
+	if force and _script_has(flow_script, "open"):
+		flow = flow_script.call("open", self, svc)
+	elif not force and _script_has(flow_script, "open_if_first_run"):
+		flow = flow_script.call("open_if_first_run", self, svc)
+	if flow is Node:
+		setup_flow = flow
+		if flow.has_signal("setting_changed"):
+			flow.setting_changed.connect(_on_setting_changed)
+
+
+static func _script_has(sc: Script, method: String) -> bool:
+	for m in sc.get_script_method_list():
+		if m["name"] == method:
+			return true
+	return false
+
+
+## An autoload by name, or null (some are missing in previews).
+func _svc(n: String) -> Node:
+	return get_node_or_null("/root/" + n)
+
+
+## Install state, game actions, downloads list and the Steam overlay.
+func _wire_games() -> void:
+	store_api = Library
+	achievements_api = _svc("Achievements")
+	install_state = InstallState.new()
+	install_state.name = "InstallState"
+	add_child(install_state)
+	install_state.changed.connect(_on_install_changed)
+	install_state.progress.connect(_on_install_progress)
+	install_state.finished.connect(_on_install_finished)
+	game_actions = GameActions.new()
+	add_child(game_actions)
+	game_actions.setup(store_api, install_state, toast, _modal_layer, _svc("Storage"))
+	game_actions.open_game.connect(func(g):
+		close_downloads()
+		_open_page(g))
+	game_actions.modal_changed.connect(func(_o): _update_hints.call_deferred())
+	steam_overlay = SteamOverlay.new()
+	steam_overlay.back_requested.connect(func(): store_api.return_from_steam())
+	_modal_layer.add_child(steam_overlay)
+	if Library.has_signal("action_failed"):
+		Library.action_failed.connect(_on_action_failed)
+	if Library.has_signal("external_window_needed"):
+		Library.external_window_needed.connect(_on_external_window)
+	install_state.attach(store_api)
+	_refresh_downloads_indicators()
+
+
+## Previews and tests: use another store API (a fake with Library's store
+## methods and signals) and Achievements service.
+func use_store_api(api: Object, achievements: Object = null) -> void:
+	store_api = api
+	if achievements != null:
+		achievements_api = achievements
+	game_actions.library = api
+	if api.has_signal("action_failed"):
+		api.action_failed.connect(_on_action_failed)
+	if api.has_signal("external_window_needed"):
+		api.external_window_needed.connect(_on_external_window)
+	install_state.attach(api)
+
+
+## Power's "can't reach target" and the Controller's special buttons.
+func _wire_services() -> void:
+	var power: Node = _svc("Power")
+	if power != null and power.has_signal("autotune_limit"):
+		power.autotune_limit.connect(_on_autotune_limit)
+	# The s-hw Controller service may emit ui_action("home" | "quick_menu" | "osk")
+	# for Guide / QuickAccess / Keyboard buttons it intercepts in InputPlumber.
+	var ctl: Node = _svc("Controller")
+	if ctl != null and ctl.has_signal("ui_action"):
+		ctl.ui_action.connect(on_ui_action)
+
+
+func _on_autotune_limit(cant_reach: bool, info: Dictionary) -> void:
+	var m := TG.autotune_message(cant_reach, info)
+	if not m.is_empty():
+		toast(m[0], "bolt", "warn", m[1])
+
+
+## Guide -> Home, QuickAccess -> quick menu, Keyboard -> search keyboard.
+func on_ui_action(action: String) -> void:
+	match action:
+		"home":
+			if quick_menu.visible:
+				quick_menu.close()
+			if steam_overlay.is_open():
+				steam_overlay.close()
+			close_downloads()
+			_close_page()
+			show_screen("home")
+		"quick_menu":
+			if quick_menu.visible:
+				quick_menu.close()
+			else:
+				_open_menu()
+		"osk":
+			if game_actions.is_modal() or quick_menu.visible:
+				return
+			close_downloads()
+			_close_page()
+			if current != "library":
+				show_screen("library")
+			library_screen.open_search()
+
+
+func _on_action_failed(key: String, action: String, message: String) -> void:
+	if not game_actions.should_toast_failure(key, action):
+		return
+	var g := View.find_by_key(Library.games, key)
+	toast(TG.failed(action, str(g.get("title", ""))), "alert", "bad", message)
+
+
+func _on_external_window(key: String, app: String, reason: String) -> void:
+	var g := View.find_by_key(Library.games, key)
+	steam_overlay.show_for(key, str(g.get("title", "")), app, reason)
+	_update_hints.call_deferred()
+
+
+func _hook_tile(t: Control) -> void:
+	TileProgress.apply(t, install_state)
+
+
+## Install state changed (queued, started, finished...): badges and the
+## downloads indicators follow. Tiles are rebuilt only here, never per tick.
+func _on_install_changed() -> void:
+	_set_games(Library.games)
+	_refresh_downloads_indicators()
+	if steam_overlay.is_open() and install_state.is_busy(steam_overlay.key):
+		steam_overlay.close()
+
+
+## New numbers for one job: only the tiles showing it and the indicators.
+func _on_install_progress(key: String) -> void:
+	for t in _tiles_for(key):
+		TileProgress.apply(t, install_state)
+	_refresh_downloads_indicators()
+
+
+func _tiles_for(key: String) -> Array:
+	var out: Array = []
+	for s in home.shelves():
+		for t in s.tiles:
+			if t.game.get("key", "") == key:
+				out.append(t)
+	for t in library_screen.tiles():
+		if t.game.get("key", "") == key:
+			out.append(t)
+	return out
+
+
+func _refresh_downloads_indicators() -> void:
+	var jobs: int = install_state.queue.size()
+	var all_paused: bool = jobs > 0 and install_state.queue.all(func(d): return str(d.get("state", "")) == "paused")
+	downloads_button.set_progress(jobs > 0, install_state.overall_fraction(), jobs, all_paused)
+	library_screen.set_downloads(jobs, install_state.overall_fraction())
+
+
+func _on_install_finished(key: String, action: String, ok: bool) -> void:
+	if not ok:
+		return
+	var g := View.find_by_key(Library.games, key)
+	var title := str(g.get("title", ""))
+	if action == "install" and title != "":
+		toast("%s is ready to play" % title, "check", "good", "")
+	elif action in ["update", "move", "uninstall", "verify"] and title != "":
+		toast("%s: %s" % [title, TG.ACTION_DONE[action].to_lower()], "check", "good", "")
+
+
+func open_downloads() -> void:
+	if quick_menu.visible:
+		quick_menu.close()
+	if page != null:
+		_close_page()
+	if downloads_view == null:
+		downloads_view = DownloadsView.new()
+		downloads_view.setup(install_state, game_actions, func(k: String) -> Dictionary: return View.find_by_key(Library.games, k))
+		downloads_view.open_game.connect(func(g):
+			close_downloads()
+			_open_page(g))
+		downloads_view.browse_requested.connect(func():
+			close_downloads()
+			show_screen("library")
+			library_screen.set_install_filter("not_installed"))
+		add_child(downloads_view)
+		move_child(downloads_view, top_bar.get_index())
+	downloads_view.visible = false
+	screens[current].visible = false
+	top_bar.visible = false
+	downloads_view.open()
+	_sound("select")
+	_update_hints.call_deferred()
+
+
+func close_downloads() -> void:
+	if downloads_view == null or not downloads_view.visible:
+		return
+	downloads_view.visible = false
+	top_bar.visible = true
+	var s: Control = screens[current]
+	s.visible = true
+	s.modulate.a = 0.0
+	Motion.to(s, "modulate:a", 1.0, Motion.FAST)
+	if downloads_button.is_visible_in_tree():
+		downloads_button.grab_focus()
+	_update_hints.call_deferred()
+
+
+func _downloads_open() -> bool:
+	return downloads_view != null and downloads_view.visible
 
 
 func _on_accent(c: Color) -> void:
@@ -214,6 +505,8 @@ func device_accent() -> Color:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_window_focused = false
+		if wiring != null:
+			wiring.home_in_front(false)
 		if launch_overlay != null:
 			launch_overlay.finish()
 		if backdrop != null:
@@ -221,6 +514,8 @@ func _notification(what: int) -> void:
 		_update_timer()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_window_focused = true
+		if wiring != null:
+			wiring.home_in_front(true)
 		_check_resume()
 		_refresh_live()
 		_update_timer()
@@ -246,6 +541,7 @@ func _exit_tree() -> void:
 
 static func release_caches() -> void:
 	load("res://scripts/ui/icons.gd")._cache.clear()
+	load("res://scripts/ui/games/game_icons.gd").clear()
 	load("res://scripts/ui/art_cache.gd").clear()
 	ThemeLib._fonts.clear()
 	ThemeLib._knobs.clear()
@@ -351,6 +647,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("ui_accept"):
 		_sound("select")
+	# Sheets, the text keyboard and the Steam overlay handle their own input.
+	if game_actions.is_modal() or steam_overlay.is_open():
+		return
+	if _downloads_open():
+		if event.is_action_pressed("ui_cancel"):
+			_sound("back")
+			close_downloads()
+			get_viewport().set_input_as_handled()
+		elif _pressed(event, JOY_BUTTON_X, KEY_P):
+			downloads_view.toggle_focused()
+			get_viewport().set_input_as_handled()
+		return
 	if status_panel.visible:
 		if event.is_action_pressed("ui_cancel"):
 			status_panel.close()
@@ -420,6 +728,8 @@ static func _pressed(event: InputEvent, button: JoyButton, key: Key) -> bool:
 
 
 func _screen() -> Control:
+	if _downloads_open():
+		return downloads_view
 	return page if page != null else screens[current]
 
 
@@ -467,16 +777,31 @@ func _link_top() -> void:
 	for s in screens.values():
 		if s.has_method("set_top_target"):
 			s.set_top_target(tab)
-	var f: Control = _screen().default_focus() if page == null else null
+	var f: Control = screens[current].default_focus() if page == null else null
 	for t in top_bar.tab_buttons():
 		t.focus_neighbor_bottom = t.get_path_to(f if f != null else t)
 		t.focus_neighbor_top = t.get_path_to(t)
 	top_bar.link_bar()
+	# The downloads button sits between Discover and the status pill.
+	Kit.link_horizontal([top_bar.tabs["home"], top_bar.tabs["library"], top_bar.tabs["discover"], downloads_button, top_bar.status_button, top_bar.tabs["settings"]])
+	downloads_button.focus_neighbor_bottom = downloads_button.get_path_to(f if f != null else top_bar.tabs[current])
+	downloads_button.focus_neighbor_top = downloads_button.get_path_to(downloads_button)
 	top_bar.status_button.focus_neighbor_bottom = top_bar.status_button.get_path_to(f if f != null else top_bar.tabs[current])
 	top_bar.status_button.focus_neighbor_top = top_bar.status_button.get_path_to(top_bar.status_button)
 
 
+## Home's and the page's main button. Owned games that aren't installed get
+## installed; ones waiting for an update get updated; the rest start.
 func _play(game: Dictionary) -> void:
+	if not game.get("installed", false):
+		game_actions.install(game)
+		return
+	if install_state.state_of(str(game.get("key", ""))) == "update_required":
+		game_actions.update(game)
+		return
+	if install_state.is_busy(str(game.get("key", ""))):
+		open_downloads()
+		return
 	playing = game
 	launch_overlay.show_for(game, backdrop.current_accent())
 	_pause_motion()
@@ -489,7 +814,13 @@ func _on_launch_cancelled(_game: Dictionary) -> void:
 		session.stop()
 
 
+func _on_game_started(game: Dictionary) -> void:
+	launch_overlay.finish()
+	wiring.game_started(game, int(session.app_id))
+
+
 func _on_game_ended(game: Dictionary) -> void:
+	wiring.game_ended(game)
 	if not playing.is_empty() and playing.get("key", "") == game.get("key", ""):
 		playing = {}
 	launch_overlay.finish()
@@ -510,12 +841,15 @@ func _return_home() -> void:
 func _open_page(game: Dictionary) -> void:
 	if page != null:
 		_close_page()
+	close_downloads()
 	page = GamePage.new()
-	page.setup(game, Launcher)
+	var g := View.find_by_key(_decorated(), str(game.get("key", "")))
+	page.setup(g if not g.is_empty() else game, Launcher, {"library": store_api, "state": install_state, "actions": game_actions, "achievements": achievements_api})
 	page.play_requested.connect(_play)
 	page.back_requested.connect(_close_page)
+	page.downloads_requested.connect(open_downloads)
 	add_child(page)
-	move_child(page, _hint_shade.get_index())
+	move_child(page, top_bar.get_index())
 	page.modulate.a = 0.0
 	Motion.to(page, "modulate:a", 1.0, Motion.BASE)
 	screens[current].visible = false
@@ -589,7 +923,13 @@ func _open_status() -> void:
 		f.grab_focus()
 
 
+func _decorated() -> Array:
+	return install_state.decorate(Library.games) if install_state != null else Library.games
+
+
 func _set_games(list: Array) -> void:
+	if install_state != null:
+		list = install_state.decorate(list)
 	home.set_games(list)
 	library_screen.set_games(list)
 	var fresh := View.newly_added(list, int(Time.get_unix_time_from_system()))
@@ -607,8 +947,12 @@ func _on_library_changed() -> void:
 	if not playing.is_empty():
 		var fresh := View.find_by_key(Library.games, playing["key"])
 		playing = fresh
-	if page != null and View.find_by_key(Library.games, page.game["key"]).is_empty():
-		_close_page()
+	if page != null:
+		var fresh_page := View.find_by_key(Library.games, page.game["key"])
+		if fresh_page.is_empty():
+			_close_page()
+		else:
+			page.update_game(install_state.decorate([fresh_page])[0])
 	_link_top()
 
 
@@ -623,10 +967,32 @@ func _update_hints(f: Control = null) -> void:
 	if f == null:
 		f = get_viewport().gui_get_focus_owner()
 	var ctx := {"screen": current, "page": page != null, "kind": focus_kind(f), "label": f.text if f is Button else ""}
+	var list := hints_for(ctx)
+	var special := _special_hints(f)
+	if not special.is_empty():
+		list = special + [["GUIDE", "Quick menu"]]
 	for c in hint_bar.get_children():
 		hint_bar.remove_child(c)
 		c.queue_free()
-	hint_bar.add_child(Kit.prompts(hints_for(ctx)))
+	hint_bar.add_child(Kit.prompts(list))
+
+
+## Hints from whatever sits on top: a sheet, the Steam overlay, the downloads
+## list, or the game page's own (achievement grid, Manage). [] = the usual.
+func _special_hints(f: Control) -> Array:
+	if game_actions != null and game_actions.is_modal():
+		return game_actions.modal_hints()
+	if steam_overlay != null and steam_overlay.is_open():
+		return [["A", TG.BACK_TO_COVE]]
+	if _downloads_open():
+		return downloads_view.hints_for_focus(f)
+	if page != null and page.has_method("hints_for_focus"):
+		return page.hints_for_focus(f)
+	if page == null and screens[current].has_method("hints"):
+		var h: Variant = screens[current].hints(f)
+		if h is Array:
+			return h
+	return []
 
 
 ## What kind of control has focus, for the hint bar.
@@ -721,6 +1087,10 @@ func _build_settings() -> void:
 		["GameCove", _version()],
 	])
 	settings.set_top_target(top_bar.tabs["settings"])
+	if settings.has_method("set_services"):
+		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
+			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
+			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller")})
 
 
 static func _version() -> String:

@@ -23,6 +23,8 @@ signal open_requested(game: Dictionary)
 signal refresh_requested
 ## Focus moved to another game (spotlight changed): the backdrop follows.
 signal game_focused(game: Dictionary)
+## The spotlight game is downloading: its button opens the downloads list.
+signal downloads_requested
 
 ## Kept for callers that walk rows; Home.shelves() has the real list.
 const ROWS := [["recent", "Recently played"], ["installed", "Installed"], ["all", "All games"]]
@@ -50,6 +52,10 @@ var _rows_box: VBoxContainer
 var _shelves: Array = []        # Shelf nodes, top to bottom
 var _hero_buttons: Array = []
 var _accent := Color(0, 0, 0, 0)
+## Called with every new tile (install badges and progress).
+var tile_hook: Callable = Callable()
+## What the spotlight's main button does: {"id", "text", "icon"}.
+var spotlight_action: Dictionary = {}
 
 
 func _init() -> void:
@@ -98,7 +104,7 @@ func _init() -> void:
 	play_button.custom_minimum_size = Vector2(196, 58)
 	play_button.icon = Icons.tex("play", 22)
 	play_button.add_theme_constant_override("h_separation", 12)
-	play_button.pressed.connect(func(): play_requested.emit(spotlight_game))
+	play_button.pressed.connect(_on_play)
 	page_button = Kit.button("Game page")
 	page_button.name = "GamePage"
 	page_button.custom_minimum_size = Vector2(176, 58)
@@ -248,8 +254,8 @@ func _set_spotlight(g: Dictionary, line: String, animate: bool) -> void:
 		if line == "":
 			line = "Jump back in" if g.get("key", "") == hero_game.get("key", "-") and int(g.get("last_played", 0)) > 0 else ""
 		header.show_game(g, line, animate)
-		var installed: bool = g.get("installed", false)
-		play_button.text = "Play" if installed else "Install"
+		spotlight_action = action_for(g)
+		play_button.text = spotlight_action["text"]
 		_style_play()
 	Kit.link_horizontal(_hero_buttons)
 	for b in _hero_buttons:
@@ -270,7 +276,33 @@ func set_top_target(c: Control) -> void:
 
 func _style_play() -> void:
 	Kit.accent_button(play_button, _accent)
-	play_button.icon = Icons.tex("play" if spotlight_game.get("installed", true) else "download", 22)
+	play_button.icon = load("res://scripts/ui/games/game_icons.gd").tex(spotlight_action.get("icon", "play"), 22)
+
+
+## The spotlight button for a game: Play, Install, Update, or the download's
+## progress while one runs (opens the downloads list). Reads the fields
+## InstallState.decorate() adds.
+static func action_for(g: Dictionary) -> Dictionary:
+	var st := str(g.get("install_state", ""))
+	var TG = load("res://scripts/ui/texts_games.gd")
+	if st in TG.BUSY:
+		var dl: Variant = g.get("download")
+		var text: String = TG.STATE_SHORT.get(st, "Working")
+		if dl is Dictionary and dl.has("progress") and st in TG.RUNNING:
+			text = "%s %d%%" % [TG.STATE_LABEL.get(st, "Downloading"), roundi(float(dl["progress"]) * 100.0)]
+		return {"id": "downloads", "text": text, "icon": "download"}
+	if g.get("installed", false) and (st == "update_required" or g.get("update_available", false)) and st != "":
+		return {"id": "update", "text": "Update", "icon": "update"}
+	if g.get("installed", false):
+		return {"id": "play", "text": "Play", "icon": "play"}
+	return {"id": "install", "text": "Install", "icon": "download"}
+
+
+func _on_play() -> void:
+	if spotlight_action.get("id", "play") == "downloads":
+		downloads_requested.emit()
+	else:
+		play_requested.emit(spotlight_game)
 
 
 func _on_hero_focus() -> void:
@@ -295,6 +327,9 @@ func _build_rows() -> void:
 		s.tile_pressed.connect(func(g): open_requested.emit(g))
 		_rows_box.add_child(s)
 		_shelves.append(s)
+		if tile_hook.is_valid():
+			for t in s.tiles:
+				tile_hook.call(t)
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 240)
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE

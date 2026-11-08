@@ -148,3 +148,21 @@ Files: `scripts/ui/settings_screen.gd` (layout, overlays), `scripts/ui/settings/
 - **Hint bar.** `settings.hints(focus)` returns the prompts for whatever has focus here (B goes back to the list from a page, sheets show A / B); main.gd uses it when a screen has `hints`.
 - **First-run setup** (`SetupFlow`): a full-screen sheet with a step rail on the left (Welcome, Look, Stores, Keys, Device fixes, Done; check = done, x = skipped) and Back / Skip / Next. It opens on the first launch, `Skip setup` ends it, and Settings > About GameCove lists every step to open again. Device fixes are only listed there: installing needs an admin password Gaming Mode can't ask for, and the step says so.
 - **Quick menu additions.** Power shows Auto TDP's state and, while it can't hold the frame rate, what to do (raise the TDP or lower settings), then a Performance block with the overlay level. This game shows how long you've played this session and Exit game (press twice). Device explains Partial support and names unconfirmed values.
+## Games: page actions, downloads, install state
+
+All in `app/scripts/ui/games/` (words in `texts_games.gd`).
+
+| Piece | File | What it is |
+| --- | --- | --- |
+| Install state | `install_state.gd` | Follows Library's store signals: state per game, live progress (at most 1 update/s per job), queue, "Finished" list; `decorate(games)` adds the fields badges read |
+| Tile progress | `tile_progress.gd` | Corner pill ("45%", "Queued", "Paused", "Update") and a slim bar on the cover, applied from outside `game_tile.gd` |
+| Game actions | `game_actions.gd` | Install (drive picker with free space), update, uninstall (confirmed), check files, move, launch options (keyboard), compatibility tool, Steam pages, pause / resume / cancel / reorder. Shows the store's `why` when something can't run; Manage rows whose reason is only "it's in the other state" are hidden, others greyed with the reason |
+| Sheet | `sheet.gd` | Modal glass list: title, line, rows with icon, detail, value, current check; A picks, B closes |
+| Text keyboard | `text_keyboard.gd` | The search keyboard plus a symbol row and Shift, keeps case, 240 characters |
+| Achievements | `achievements_card.gd` | Count and bar, focused achievement line, icon grid (unlocked newest first, locked by rarity, hidden last and secret; locked dimmed; under 10% of players gets a gold ring) |
+| Downloads | `downloads_view.gd`, `downloads_button.gd` | Full-screen list (Now card, Up next rows, Finished) and the top bar's button with a progress ring and count; also a chip in the Library toolbar while anything downloads |
+| Steam needs you | `steam_overlay.gd` | Shown on `external_window_needed`; "Back to GameCove" calls `return_from_steam()` |
+| Session wiring | `session_wiring.gd` | Around a running game: PerfMonitor start/stop/focus, Achievements.invalidate, Updates.set_game_running, Controller start/end_game, Discover pause/resume |
+| Exit game | `game_closer.gd` | Steam: `pkill -f AppId=<id>` on Steam's launch wrapper (no steam://close exists), our scopes: `systemctl --user stop app-steam-app<id>-*.scope`, pids: TERM then KILL after 5 s. Never blocks |
+
+Game page action row: the one thing to do now (Play, Install, Update, Pause / Resume while downloading, Downloads when it can't be paused here), Manage, Settings, Back; a live progress line under it. Library has Installed / Not installed chips; home's spotlight button follows install state.
