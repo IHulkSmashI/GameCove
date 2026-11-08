@@ -109,20 +109,13 @@ func test_steam_wishlist_and_profile() -> void:
 	ok(not SteamApi.items_url(["1"], "CA").contains("key="), "no key")
 
 
-func test_money() -> void:
-	var fx := {"base": "EUR", "rates": {"USD": 1.1165, "CAD": 1.5705}}
-	eq(Money.convert(10.0, "USD", "CAD", fx), 14.07, "USD -> CAD")
-	eq(Money.convert(10.0, "EUR", "USD", fx), 11.17, "EUR base")
-	eq(Money.convert(10.0, "USD", "JPY", fx), null, "missing rate")
-	eq(Money.convert(5, "CAD", "CAD", {}), 5.0, "same currency needs no rate")
-	eq(Money.convert(null, "USD", "CAD", fx), null, "null stays null")
+func test_money_labels_only() -> void:
 	eq(Money.format(4.5, "CAD"), "C$4.50", "two decimals")
 	eq(Money.format(1200, "JPY"), "¥1200", "no decimals")
-	eq(Money.format(3.0, "USD", true), "~$3.00", "estimate marked")
+	eq(Money.format(null, "USD"), "", "no amount")
 	eq(Money.currency_for_country("ca"), "CAD", "Canada")
 	eq(Money.currency_for_country("AR"), "USD", "unlisted -> USD")
-	eq(Money.country_from_locale("fr_CA.UTF-8"), "CA", "locale country")
-	eq(Money.country_from_locale("en"), "US", "no country")
+	ok(not Money.new().has_method("convert"), "no conversion exists")
 
 
 func test_http_classify_and_user_agent() -> void:

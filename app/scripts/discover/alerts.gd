@@ -11,16 +11,16 @@ extends RefCounted
 ##   lower than the last alerted price; cleared when the sale ends.
 ## - Release: fires once when a "notify me" game comes out (Steam says it's
 ##   released, or its day-precision date has arrived).
-## Prices are compared in the user's currency (price_user); a deal whose price
-## can't be converted never alerts.
+## Prices are the stores' own prices for the user's country (deal.price.amount);
+## a "See price" deal (no local price) never alerts.
 
 
 ## seen["price:<key>"] = last alerted price; seen["release:<key>"] = unix time.
 static func check_price(item: Dictionary, deal: Dictionary, seen: Dictionary) -> Dictionary:
 	var skey: String = "price:" + str(item.get("key", ""))
-	if not item.get("notify_price", true) or deal.is_empty() or deal.get("price_user") == null:
+	if not item.get("notify_price", true) or deal.is_empty() or not deal.get("price") is Dictionary:
 		return {}
-	var price := float(deal["price_user"])
+	var price := float(deal["price"]["amount"])
 	var target = item.get("target_price", null)
 	var qualifies: bool
 	if target != null:
@@ -34,7 +34,8 @@ static func check_price(item: Dictionary, deal: Dictionary, seen: Dictionary) ->
 		return {}
 	seen[skey] = price
 	return {"id": "%s:%d" % [skey, int(round(price * 100))], "kind": "price", "key": item["key"],
-		"title": item.get("title", ""), "price_user": price, "target_price": target}
+		"title": item.get("title", ""), "amount": price, "currency": deal["price"].get("currency", ""),
+		"target_price": target}
 
 
 ## `release` is the item's release state: {"released": bool, ...} or {}.

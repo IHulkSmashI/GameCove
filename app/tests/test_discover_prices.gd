@@ -1,5 +1,6 @@
 extends "res://tests/test_case.gd"
-## Deal dicts, merging one game's prices across stores, and link rules.
+## Deal dicts, merging one game's prices across stores, link rules, and the
+## rule that only real local prices are ever shown (no estimates).
 
 const H := preload("res://tests/fixtures/discover/helpers.gd")
 const CheapShark := preload("res://scripts/discover/cheapshark.gd")
@@ -7,11 +8,12 @@ const SteamApi := preload("res://scripts/discover/steam_api.gd")
 const Prices := preload("res://scripts/discover/prices.gd")
 const DiscoverScript := preload("res://scripts/discover/discover.gd")
 
-const FX := {"base": "EUR", "rates": {"USD": 1.1165, "CAD": 1.5705}}
-
-
-func _ctx(wishlist := {}) -> Dictionary:
-	return {"currency": "CAD", "steam_currency": "CAD", "fx": FX, "wishlist": wishlist}
+const CA := {"country": "CA", "currency": "CAD", "wishlist": {}}
+const US := {"country": "US", "currency": "USD", "wishlist": {}}
+const KEYS := ["key", "source", "store", "store_name", "store_icon", "title", "appid", "game_id", "price",
+	"see_price", "savings_pct", "on_sale", "is_historical_low", "historical_low", "sale_ends_at", "rating",
+	"art", "link", "on_wishlist", "wishlist_key"]
+const PRICE_KEYS := ["amount", "regular", "currency", "country", "source", "is_local", "text", "regular_text"]
 
 
 func _stores() -> Dictionary:
@@ -26,81 +28,81 @@ func _lookup() -> Dictionary:
 	return CheapShark.parse_lookup(FileAccess.get_file_as_bytes(H.fx("cs_multi.json")))
 
 
-const KEYS := ["key", "source", "store", "store_name", "store_icon", "title", "appid", "game_id", "price",
-	"regular_price", "currency", "price_text", "regular_text", "price_user", "regular_user", "user_currency",
-	"converted", "price_user_text", "savings_pct", "on_sale", "is_historical_low", "historical_low",
-	"sale_ends_at", "rating", "art", "link", "on_wishlist", "wishlist_key"]
+func _offers() -> Array:
+	return CheapShark.parse_deals(FileAccess.get_file_as_bytes(H.fx("cs_deals.json")))
 
 
-func _has_all_keys(d: Dictionary, what: String) -> void:
+func _shape(d: Dictionary, what: String) -> void:
 	for k in KEYS:
 		ok(d.has(k), "%s has %s" % [what, k])
+	if d["price"] != null:
+		for k in PRICE_KEYS:
+			ok(d["price"].has(k), "%s price has %s" % [what, k])
+		eq(d["price"]["is_local"], true, what + ": displayed numbers are always local")
+	for gone in ["price_user", "converted", "price_user_text", "regular_user"]:
+		ok(not d.has(gone), "%s has no %s" % [what, gone])
 
 
-func test_cheapshark_deal_shape_and_redirect() -> void:
-	var offers: Array = CheapShark.parse_deals(FileAccess.get_file_as_bytes(H.fx("cs_deals.json")))
-	var d := Prices.from_cheapshark(offers[1], _stores(), _ctx())
-	_has_all_keys(d, "cheapshark deal")
+func test_non_steam_store_outside_us_is_see_price() -> void:
+	var d := Prices.from_cheapshark(_offers()[1], _stores(), CA)
+	_shape(d, "GMG deal in Canada")
 	eq(d["store_name"], "GreenManGaming", "store name")
-	eq(d["store"], "cs:3", "store id")
-	eq(d["currency"], "USD", "CheapShark is USD")
-	eq(d["converted"], true, "converted to CAD")
-	ok(d["price_user_text"].begins_with("~C$"), "estimate label")
-	eq(d["link"], {"kind": "url", "uri": "https://www.cheapshark.com/redirect?dealID=" + offers[1]["deal_id"]}, "CheapShark redirect")
-	eq(d["sale_ends_at"], null, "CheapShark has no sale end")
-	eq(d["is_historical_low"], false, "unknown low")
-	ok(d["art"]["cover"].ends_with("/2482760/library_600x900.jpg"), "Steam cover by appid")
+	eq(d["price"], null, "no CAD price exists for GMG: no number")
+	eq(d["see_price"], true, "See price")
+	ok(d["savings_pct"] > 0, "discount percentage still shown")
+	eq(d["link"], {"kind": "url", "uri": "https://www.cheapshark.com/redirect?dealID=" + _offers()[1]["deal_id"]}, "opens CheapShark's redirect")
+	eq([d["historical_low"], d["is_historical_low"]], [null, false], "USD low not shown in Canada")
 
 
-func test_cheapshark_steam_row_uses_regional_price_but_keeps_redirect() -> void:
-	var offers: Array = CheapShark.parse_deals(FileAccess.get_file_as_bytes(H.fx("cs_deals.json")))
-	var civ_offer: Dictionary = offers[6]
+func test_us_gets_cheapshark_prices_as_local() -> void:
 	var low = _lookup()["126"]["historical_low"]
-	var d := Prices.from_cheapshark(civ_offer, _stores(), _ctx({"steam:3900": {}}), low, _steam()["3900"])
-	eq([d["price"], d["currency"], d["price_text"]], [4.39, "CAD", "C$ 4.39"], "Steam's CAD price")
-	eq(d["converted"], false, "no conversion needed")
+	var d := Prices.from_cheapshark(_offers()[6], _stores(), US, low)
+	_shape(d, "Steam deal via CheapShark in the US")
+	eq(d["price"]["amount"], 3.99, "US price")
+	eq([d["price"]["currency"], d["price"]["country"], d["price"]["source"]], ["USD", "US", "cheapshark"], "local block")
+	eq(d["historical_low"], {"amount": 1.99, "currency": "USD", "date": 1688061001}, "low in the user's currency")
+	eq(d["is_historical_low"], false, "3.99 is above 1.99")
+
+
+func test_cheapshark_steam_row_uses_steam_price_for_canada_and_keeps_redirect() -> void:
+	var d := Prices.from_cheapshark(_offers()[6], _stores(), {"country": "CA", "currency": "CAD", "wishlist": {"steam:3900": {}}},
+		_lookup()["126"]["historical_low"], _steam()["3900"])
+	eq(d["price"], {"amount": 4.39, "regular": 21.99, "currency": "CAD", "country": "CA", "source": "steam",
+		"is_local": true, "text": "C$ 4.39", "regular_text": "C$ 21.99"}, "Steam's own Canadian price")
 	eq(d["sale_ends_at"], 1795111200, "sale end from Steam")
 	ok(d["link"]["uri"].begins_with("https://www.cheapshark.com/redirect?dealID="), "still CheapShark's link")
 	eq(d["on_wishlist"], true, "on wishlist")
-	eq(d["is_historical_low"], false, "3.99 USD is above the 1.99 low")
-	ok(d["art"]["cover"].contains("store_item_assets/steam/apps/3900/"), "art from Steam data")
+	eq(d["historical_low"], null, "no CAD historical low source")
 
 
-func test_prices_for_merges_stores_cheapest_first() -> void:
-	var lookup: Dictionary = _lookup()["88304"]
-	var list := Prices.prices_for(lookup, _steam()["49520"], _stores(), _ctx())
+func test_prices_for_canada_local_rows_first_then_see_price() -> void:
+	var list := Prices.prices_for(_lookup()["88304"], _steam()["49520"], _stores(), CA)
 	eq(list.size(), 10, "Steam's own row replaces CheapShark's Steam row")
-	var steam_rows := list.filter(func(x): return x["store"] == "steam")
-	eq(steam_rows.size(), 1, "one Steam row")
-	eq(steam_rows[0]["source"], "steam", "from Steam data")
-	eq(steam_rows[0]["link"], {"kind": "steam", "uri": "steam://store/49520"}, "opens in the Steam client")
-	eq(steam_rows[0]["price"], 2.19, "CAD price")
-	eq(steam_rows[0]["is_historical_low"], true, "Steam USD 1.99 equals the low")
-	eq(list[0]["store"], "steam", "C$2.19 beats ~C$4.07 (2.89 USD)")
-	for i in range(1, list.size()):
-		ok(list[i - 1]["price_user"] <= list[i]["price_user"], "sorted by price in CAD")
+	eq(list[0]["source"], "steam", "the only local price leads")
+	eq(list[0]["link"], {"kind": "steam", "uri": "steam://store/49520"}, "opens in the Steam client")
+	eq(list[0]["price"]["amount"], 2.19, "CAD price")
 	for x in list.slice(1):
-		ok(x["link"]["uri"].begins_with("https://www.cheapshark.com/redirect?dealID="), "others via redirect")
-	eq(Prices.best(list), list[0], "best is first")
-	eq(Prices.best([]), {}, "no prices")
+		eq(x["price"], null, "%s: no estimated number" % x["store_name"])
+		ok(x["link"]["uri"].begins_with("https://www.cheapshark.com/redirect?dealID="), "See price opens the redirect")
+	for i in range(2, list.size()):
+		ok(list[i - 1]["savings_pct"] >= list[i]["savings_pct"], "See-price rows by discount")
+	eq(Prices.best(list), list[0], "best is the cheapest local price")
+	for x in list:
+		_shape(x, x["store_name"])
 
 
-func test_prices_without_rates_put_unconvertible_last() -> void:
-	var lookup: Dictionary = _lookup()["126"]
-	var ctx := {"currency": "CAD", "steam_currency": "CAD", "fx": {}, "wishlist": {}}
-	var list := Prices.prices_for(lookup, _steam()["3900"], _stores(), ctx)
-	eq(list[0]["source"], "steam", "the only comparable price leads")
-	eq(list[0]["price_user"], 4.39, "CAD as is")
-	eq(list[1]["price_user"], null, "USD can't convert without rates")
-	eq(list[1]["converted"], false, "not marked converted")
+func test_prices_for_us_sorted_by_price() -> void:
+	var list := Prices.prices_for(_lookup()["126"], null, _stores(), US)
+	eq(list[0]["store"], "cs:21", "cheapest US store")
+	for i in range(1, list.size()):
+		ok(list[i - 1]["price"]["amount"] <= list[i]["price"]["amount"], "cheapest first")
 
 
-func test_prices_for_game_without_steam() -> void:
-	var lookup: Dictionary = _lookup()["126"]
-	var list := Prices.prices_for(lookup, null, _stores(), _ctx())
-	eq(list[0]["store"], "cs:21", "cheapest USD store")
-	ok(list.any(func(x): return x["store"] == "steam" and x["source"] == "cheapshark"), "CheapShark Steam row kept")
-	eq(list.filter(func(x): return x["is_historical_low"]).size(), 0, "2.78 is above the 1.99 low")
+func test_best_is_empty_without_local_price() -> void:
+	var list := Prices.prices_for(_lookup()["126"], null, _stores(), CA)
+	ok(list.size() > 0 and list.all(func(x): return x["see_price"]), "only See-price rows")
+	eq(Prices.best(list), {}, "no best deal to show a number for")
+	eq(Prices.best([]), {}, "nothing")
 
 
 func test_link_commands() -> void:

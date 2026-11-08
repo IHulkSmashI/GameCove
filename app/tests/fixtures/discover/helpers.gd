@@ -61,6 +61,8 @@ static func make(http: Variant, dir: String) -> Node:
 	d.http = http
 	d.data_dir = dir
 	d.clock = func() -> int: return now()
+	d.home = "/nonexistent"                                 # never the real home
+	d.detected_region = {"country": "US", "source": "default"}
 	d.load_all()
 	d.set_settings({"country": "CA"})
 	return d

@@ -36,26 +36,29 @@ func test_full_refresh_from_fixtures() -> void:
 	eq(d.status.get("calendar"), "ok", "calendar ok")
 	eq(d.deals.size(), 8, "top deals")
 	var civ: Dictionary = d.deals.filter(func(x): return x["appid"] == "3900")[0]
-	eq([civ["currency"], civ["price"]], ["CAD", 4.39], "Steam row priced for Canada")
+	eq([civ["price"]["currency"], civ["price"]["amount"], civ["price"]["source"]], ["CAD", 4.39, "steam"], "Steam row priced for Canada by Steam")
+	var gmg_row: Dictionary = d.deals[1]
+	eq([gmg_row["price"], gmg_row["see_price"]], [null, true], "GMG in Canada: See price, no estimate")
 	eq(d.calendar.size(), 8, "calendar from the downloaded file")
-	eq(d.calendar_info()["fx_date"], "2026-11-06", "rates from the calendar file")
+	eq(d.calendar_info()["built"], "2026-11-08T06:40:00Z", "calendar info")
 	var w: Array = d.wishlist
 	eq(w.size(), 1, "one wishlist item")
 	var bl2: Dictionary = w[0]
 	eq(bl2["ids"].get("cheapshark"), "88304", "CheapShark id resolved")
 	eq(bl2["best_deal"]["store"], "steam", "best deal is Steam's C$2.19")
-	eq(bl2["best_deal"]["price"], 2.19, "best price")
-	eq([bl2["on_sale"], bl2["savings_pct"], bl2["is_historical_low"]], [true, 90, true], "badge fields")
+	eq(bl2["best_deal"]["price"]["amount"], 2.19, "best price")
+	eq([bl2["on_sale"], bl2["savings_pct"], bl2["is_historical_low"]], [true, 90, false], "badge fields (no CAD low source)")
 	eq(bl2["sale_ends_at"], 1794852000, "sale end")
-	eq(bl2["historical_low"]["price"], 1.99, "historical low")
+	eq(bl2["historical_low"], null, "USD low not shown in Canada")
 	eq(bl2["release"]["released"], true, "released per Steam")
 	eq(ev.named("price_alert"), [["price_alert", "steam:49520", "steam"]], "any-drop alert once")
 	eq(d.alerts_inbox.size(), 1, "inbox")
 	ok(ev.named("deals_changed").size() >= 1 and ev.named("calendar_changed").size() == 1, "signals")
 	ok(http.requests.size() <= 8, "a handful of requests (%d)" % http.requests.size())
 	# Library tile lookup
-	eq(d.deal_for_appid("49520")["price"], 2.19, "deal_for_appid")
-	eq(d.deal_for_appid(3900)["price"], 4.39, "from top deals")
+	eq(d.deal_for_appid("49520")["price"]["amount"], 2.19, "deal_for_appid")
+	eq(d.deal_for_appid(3900)["price"]["amount"], 4.39, "from top deals")
+	eq(d.deal_for_appid("2482760"), {}, "a See-price-only game has no badge price")
 	eq(d.deal_for_appid("1"), {}, "unknown")
 	eq(d.deal_for_title("borderlands 2")["store"], "steam", "by title")
 	# a second check within 6 hours does nothing, alert doesn't repeat
@@ -81,7 +84,7 @@ func test_offline_keeps_cache_and_reports() -> void:
 	var d2 := H.make(off, dir)
 	eq(d2.deals.size(), 8, "deals from cache")
 	eq(d2.calendar.size(), 8, "calendar from cache")
-	eq(d2.wishlist[0]["best_deal"]["price"], 2.19, "prices from cache")
+	eq(d2.wishlist[0]["best_deal"]["price"]["amount"], 2.19, "prices from cache")
 	var ev := Events.new()
 	ev.watch(d2)
 	d2.refresh(true)
@@ -104,10 +107,8 @@ func test_missing_calendar_file_falls_back() -> void:
 	eq(d.status.get("calendar"), "missing", "404 is 'missing'")
 	eq(d.calendar, [], "empty calendar, no crash")
 	eq(d.deals.size(), 8, "deals still work")
-	ok(d.deals.filter(func(x): return x["converted"]).is_empty(), "no rates: nothing converted")
-	var gmg: Dictionary = d.deals[1]
-	eq(gmg["price_user"], null, "USD price can't show in CAD")
-	ok(gmg["price_text"].begins_with("$"), "USD label still there")
+	var civ: Dictionary = d.deals.filter(func(x): return x["appid"] == "3900")[0]
+	eq(civ["price"]["amount"], 4.39, "prices don't depend on the calendar file")
 	var n: int = http.count(H.UPCOMING)
 	d.clock = func() -> int: return H.now() + 7 * 3600
 	d.refresh()
@@ -296,8 +297,9 @@ func test_search_and_request_prices() -> void:
 	eq(results.size(), 5, "results")
 	eq(results[0]["title"], "Hades", "title")
 	eq(results[0]["ids"], {"cheapshark": "196149", "steam": "1145360"}, "ids")
-	eq(results[0]["best_deal"]["source"], "steam", "cheapest of Steam's CAD price and the converted CheapShark cheapest")
-	ok(results[0]["best_deal"].has("price_user"), "deal shape")
+	eq(results[0]["best_deal"]["source"], "steam", "Steam's Canadian price")
+	eq(results[0]["best_deal"]["price"]["amount"], 32.5, "C$32.50")
+	eq(results[2]["best_deal"], {}, "no Steam id, CheapShark's USD cheapest isn't shown in Canada")
 	eq(results[0]["on_wishlist"], false, "not wishlisted")
 	d.request_prices({"store": "steam", "id": "49520", "title": "Borderlands 2"})
 	var p: Array = ev.named("prices")
@@ -311,18 +313,21 @@ func test_search_and_request_prices() -> void:
 	H.wipe(dir)
 
 
-func test_settings_country_currency() -> void:
+func test_settings_country_override_and_currency() -> void:
 	var dir := H.temp_dir("disc_set")
 	var d := H.make(H.online_http(), dir)
-	eq(d.get_settings()["currency_effective"], "CAD", "Canada -> CAD")
+	eq([d.get_settings()["currency_effective"], d.get_settings()["country_source"]], ["CAD", "settings"], "Canada -> CAD")
 	d.refresh(true)
-	d.set_settings({"currency": "USD", "bogus": 1})
-	eq(d.get_settings()["currency_effective"], "USD", "explicit currency")
-	ok(not d.get_settings().has("bogus"), "unknown keys ignored")
+	d.set_settings({"country": "US", "currency": "EUR", "bogus": 1})
+	eq(d.get_settings()["currency_effective"], "USD", "currency follows the country")
+	ok(not d.get_settings().has("bogus") and not d.get_settings().has("currency"), "unknown keys ignored")
 	var gmg: Dictionary = d.deals[1]
-	eq([gmg["converted"], gmg["price_user"]], [false, gmg["price"]], "USD deals no longer converted")
+	eq([gmg["price"]["currency"], gmg["price"]["country"], gmg["price"]["source"]], ["USD", "US", "cheapshark"], "US: CheapShark prices are local")
+	d.set_settings({"country": ""})
+	d.detected_region = {"country": "GB", "source": "timezone"}
+	eq([d.country(), d.get_settings()["country_source"], d.user_currency()], ["GB", "timezone", "GBP"], "detected when not set")
 	d.free()
 	var d2 := H.make(FakeHttp.new(), dir)
-	eq(d2.get_settings()["currency"], "USD", "saved")
+	eq(d2.get_settings()["country"], "CA", "saved (helpers set CA)")
 	d2.free()
 	H.wipe(dir)

@@ -11,7 +11,7 @@ func _item(target: Variant = null) -> Dictionary:
 
 
 func _deal(price: float, savings: int) -> Dictionary:
-	return {"price_user": price, "savings_pct": savings}
+	return {"price": {"amount": price, "currency": "CAD", "is_local": true}, "savings_pct": savings}
 
 
 func test_target_price_fires_once_then_again_after_rise() -> void:
@@ -41,9 +41,9 @@ func test_any_drop() -> void:
 	ok(not Alerts.check_price(it, _deal(16.0, 20), seen).is_empty(), "new sale fires even if pricier")
 
 
-func test_price_alert_needs_comparable_price_and_switch() -> void:
+func test_price_alert_needs_local_price_and_switch() -> void:
 	var it := _item(null)
-	eq(Alerts.check_price(it, {"price_user": null, "savings_pct": 90}, {}), {}, "unconvertible price")
+	eq(Alerts.check_price(it, {"price": null, "savings_pct": 90, "see_price": true}, {}), {}, "a See-price row never alerts")
 	eq(Alerts.check_price(it, {}, {}), {}, "no deal")
 	it["notify_price"] = false
 	eq(Alerts.check_price(it, _deal(1.0, 90), {}), {}, "price alerts off")

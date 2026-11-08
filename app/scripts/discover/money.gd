@@ -1,8 +1,7 @@
 extends RefCounted
-## Currencies: which one a country pays in on Steam, converting with the ECB
-## reference rates the nightly job publishes (EUR base, "Source: ECB
-## statistics"), and short price labels. Converted prices are estimates and
-## every Deal carrying one says so ("converted": true).
+## Currencies: which one a country pays in on Steam, and short price labels.
+## Nothing is ever converted: every number shown is a store's own price for
+## the user's country (see prices.gd).
 
 ## Steam store currency per country (ISO 3166-1 alpha-2). Countries not listed
 ## are treated as paying in USD, as Steam does for many of them; the Steam
@@ -28,32 +27,8 @@ static func currency_for_country(country: String) -> String:
 	return STEAM_CURRENCY.get(country.to_upper(), "USD")
 
 
-## Country from a locale like "en_CA" or "fr_CA.UTF-8"; "US" when it has none.
-static func country_from_locale(locale: String) -> String:
-	var parts := locale.split(".")[0].split("_")
-	if parts.size() >= 2 and parts[1].length() == 2:
-		return parts[1].to_upper()
-	return "US"
-
-
-## `amount` in `from` converted to `to` with ECB rates ({"base": "EUR",
-## "rates": {"USD": 1.1, ...}}), or null when a rate is missing.
-static func convert(amount: Variant, from: String, to: String, fx: Dictionary) -> Variant:
-	if amount == null:
-		return null
-	if from == to:
-		return float(amount)
-	var rates: Dictionary = fx.get("rates", {}) if fx.get("rates") is Dictionary else {}
-	var base: String = fx.get("base", "EUR")
-	var r_from: float = 1.0 if from == base else float(rates.get(from, 0.0))
-	var r_to: float = 1.0 if to == base else float(rates.get(to, 0.0))
-	if r_from <= 0.0 or r_to <= 0.0:
-		return null
-	return snappedf(float(amount) / r_from * r_to, 0.01)
-
-
 ## "C$ 4.39", "$3.99", "€19,99" style labels, kept simple: symbol + amount.
-static func format(amount: Variant, currency: String, approx := false) -> String:
+static func format(amount: Variant, currency: String) -> String:
 	if amount == null:
 		return ""
 	var digits := 0 if currency in NO_DECIMALS else 2
@@ -63,4 +38,4 @@ static func format(amount: Variant, currency: String, approx := false) -> String
 	elif digits == 2 and num.length() - num.find(".") == 2:
 		num += "0"
 	var sym: String = SYMBOL.get(currency, currency + " ")
-	return ("~" if approx else "") + sym + num
+	return sym + num

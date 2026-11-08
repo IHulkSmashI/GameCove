@@ -41,7 +41,11 @@ The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these 
 
 ## Discover (`Discover` autoload, `scripts/discover/`)
 
-Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (deals, other stores' prices in USD, historical low), Steam's keyless store and wishlist endpoints (regional price, sale end, release state, art), and `upcoming.json.gz` from the nightly job (calendar + ECB exchange rates). Everything is cached in `user://discover/` and works offline. Signals are emitted on the main thread.
+Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (which stores have a game on sale, links, US prices, US historical lows), Steam's keyless store and wishlist endpoints (prices for the user's country, sale end, release state, art), and `upcoming.json.gz` from the nightly job (calendar). Everything is cached in `user://discover/` and works offline. Signals are emitted on the main thread.
+
+**Every number shown is a store's real price for the user's country. Nothing is converted.** Steam rows carry Steam's own price for that country. CheapShark's prices are US prices, so other stores get a number only when the country is US; elsewhere their rows have `"price": null` and the UI shows the store, the discount and a "See price" button that opens the deal's link. GOG and Epic have no usable local-price source (see CREDITS.md), so they're "See price" rows outside the US too.
+
+**Country:** `settings.country` if set, else detected (`region.gd`): a store-country key in Steam's local files (`config/config.vdf`, `registry.vdf`, `config/loginusers.vdf`, `userdata/<id>/config/localconfig.vdf`; keys `StoreCountry`, `IPCountry`, `WalletCountry`, `CountryCode`, `Country`, `SteamCountry` with a two-letter value; best effort, Valve documents none), then the time zone (`/etc/localtime` → `America/Toronto` → `CA` via tzdata's zone.tab), then the locale (`en_CA.UTF-8`), then `US`. The currency always follows the country (Steam's currency for it).
 
 ### Signals
 
@@ -64,7 +68,7 @@ Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (deals,
 - `wishlist: Array[Dictionary]` — wishlist items with live fields, newest first (computed on read).
 - `calendar: Array[Dictionary]` — Release dicts in calendar order; `days_until` computed for today on read.
 - `status: Dictionary` — last status per source (as in `status_changed`).
-- `alerts_inbox: Array[Dictionary]` — fired alerts not yet marked seen, newest first: `{"id", "kind": "price"|"release", "key", "title", "at", "price_user"?, "target_price"?}`.
+- `alerts_inbox: Array[Dictionary]` — fired alerts not yet marked seen, newest first: `{"id", "kind": "price"|"release", "key", "title", "at", "amount"?, "currency"?, "target_price"?}`.
 - `game_running: bool` — set true while a game has focus; no background refresh then (same as `pause()`).
 
 ### Methods
@@ -86,9 +90,9 @@ Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (deals,
 | `import_steam_wishlist(profile := "")` | 64-bit id, `steamcommunity.com/profiles/<id>`, `steamcommunity.com/id/<name>` or a bare custom name (resolved through the public profile XML); "" uses `settings.steam_id`. Needs the profile's "Game details" set to public. Merges, keeps existing settings, remembers the profile in settings. |
 | `check_alerts()` | Runs the alert rules on cached data (also run after each refresh). |
 | `mark_seen(id := "")` | Drops an alert from `alerts_inbox` ("" = all). Alerts themselves fire once regardless. |
-| `get_settings() -> Dictionary` / `set_settings(patch)` | `{"country": "" (= from system locale) or "CA", "currency": "" (= the country's Steam currency) or "CAD", "steam_id", "steamgriddb_key", "alerts": bool}`; `get_settings()` adds `country_effective`, `currency_effective`, `steam_currency`. |
-| `country()`, `user_currency()` | Resolved values. |
-| `calendar_info() -> Dictionary` | `{"built", "sources", "credits", "fx_date"}` of the calendar file, `{}` before the first download. |
+| `get_settings() -> Dictionary` / `set_settings(patch)` | `{"country": "" (= detected) or "CA", "steam_id", "steamgriddb_key", "alerts": bool}`; `get_settings()` adds `country_effective`, `country_source` (`settings` \| `steam` \| `timezone` \| `locale` \| `default`) and `currency_effective`. |
+| `country()`, `country_source()`, `user_currency()` | Resolved values. |
+| `calendar_info() -> Dictionary` | `{"built", "sources", "credits"}` of the calendar file, `{}` before the first download. |
 | `open_link(link) -> bool`, `Discover.link_command(link, steam_bin) -> Array` | Opens a Deal's/Release's `link` (below). |
 
 ### Deal
@@ -99,14 +103,17 @@ Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (deals,
   "source": "cheapshark" | "steam",       # whose data this row is
   "store": "steam" | "cs:<storeID>", "store_name": "GreenManGaming", "store_icon": url or "",
   "title": "Borderlands 2", "appid": "49520" or "", "game_id": "<CheapShark gameID>" or "",
-  "price": 2.19, "regular_price": 21.99, "currency": "CAD",       # as the store charges it
-  "price_text": "C$ 2.19", "regular_text": "C$ 21.99",            # Steam's own labels, or ours
-  "price_user": 2.19 or null, "regular_user": 21.99 or null,      # in the user's currency; null = no exchange rate
-  "user_currency": "CAD", "converted": false,                     # true: price_user is an ECB-rate estimate
-  "price_user_text": "C$2.19" | "~C$3.51",
-  "savings_pct": 90, "on_sale": true,
-  "is_historical_low": true,              # only when CheapShark's lowest-ever price is known
-  "historical_low": {"price": 1.99, "currency": "USD", "date": unix} or null,
+  "price": {                              # null = no local price: show store + discount + "See price"
+    "amount": 2.19, "regular": 21.99,     # the store's own price for `country`
+    "currency": "CAD", "country": "CA",
+    "source": "steam" | "cheapshark",     # cheapshark only when country is US
+    "is_local": true,                     # always true; no estimates exist
+    "text": "C$ 2.19", "regular_text": "C$ 21.99"   # Steam's own labels, or ours
+  } or null,
+  "see_price": bool,                      # price == null
+  "savings_pct": 90, "on_sale": true,     # shown for See-price rows too
+  "is_historical_low": bool,              # only when the low is in the user's currency (CheapShark: US only)
+  "historical_low": {"amount": 1.99, "currency": "USD", "date": unix} or null,
   "sale_ends_at": unix or null,           # Steam only
   "rating": 9.4 or null,                  # CheapShark deal rating 0-10
   "art": {"cover": url, "hero": url, "header": url, "thumb": url},   # URLs; Art caches them
@@ -115,7 +122,7 @@ Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (deals,
 }
 ```
 
-CheapShark prices are USD only. Rows from CheapShark data always link to CheapShark's redirect URL (their terms), even for Steam; a CheapShark Steam row shows Steam's regional price when known but keeps that link. Rows from Steam's own data (`source` "steam") link to `steam://store/<appid>`; in `prices_for()` such a row replaces CheapShark's Steam row.
+Rows from CheapShark data always link to CheapShark's redirect URL (their terms), even for Steam; a CheapShark Steam row shows Steam's price for the user's country when known but keeps that link. Rows from Steam's own data (`source` "steam") link to `steam://store/<appid>`; in `prices_for()` such a row replaces CheapShark's Steam row. `prices_for()` lists rows with a price first (cheapest first), then See-price rows by discount. `best_deal`, `deal_for_appid()` and `deal_for_title()` only return rows with a price (`{}` otherwise).
 
 ### Wishlist item (`Discover.wishlist`, `get_item()`)
 
@@ -126,7 +133,7 @@ CheapShark prices are USD only. Rows from CheapShark data always link to CheapSh
   "added": unix, "source": "manual" | "steam" | "calendar",
   "target_price": float or null,          # user's currency; null = any sale
   "notify_price": bool, "notify_release": bool,
-  "last_price": float or null,            # best price_user at the last refresh
+  "last_price": float or null,            # best local price amount at the last refresh
   "art": {"cover", "hero", "header"},
   # live, computed on read:
   "best_deal": Deal or {}, "historical_low": {...} or null,
@@ -136,7 +143,7 @@ CheapShark prices are USD only. Rows from CheapShark data always link to CheapSh
 }
 ```
 
-Alert rules (`alerts.gd`): with a target, fires when the best `price_user` is at or below it and lower than the last alerted price; without one, when the best deal is on sale and lower than the last alerted price. The memory clears when the price goes back above the target / the sale ends, so the next drop alerts again. Release alerts fire once when Steam says the game is out or its day-precision date arrives. Never with `settings.alerts` false; unconvertible prices never alert.
+Alert rules (`alerts.gd`): with a target (in the user's currency), fires when the best local `price.amount` is at or below it and lower than the last alerted price; without one, when the best deal is on sale and lower than the last alerted price. The memory clears when the price goes back above the target / the sale ends, so the next drop alerts again. Release alerts fire once when Steam says the game is out or its day-precision date arrives. Never with `settings.alerts` false; See-price rows never alert.
 
 ### Release (`Discover.calendar`)
 
@@ -158,7 +165,7 @@ Alert rules (`alerts.gd`): with a target, fires when the best `price_user` is at
 
 Order: by the last day a date can mean (so "December 2026" follows every known December day), finer precision first on ties, TBA last. Entries out for more than 14 days are dropped.
 
-`upcoming.json.gz` (rolling `gamedb` release, built by `gamedb/gamedb/upcoming.py`): `{"schema": 1, "built", "sources", "credits", "fx": {"base": "EUR", "date", "rates": {"USD": 1.1165, ...}, "source": "ECB statistics"}, "count", "releases": [{"title", "date", "precision", "ids", "art", "sources"}]}` (null fields omitted). The app downloads it at most daily; a 404 (not published yet) gives status `missing` and an empty calendar, a broken file keeps the old copy.
+`upcoming.json.gz` (rolling `gamedb` release, built by `gamedb/gamedb/upcoming.py`): `{"schema": 1, "built", "sources", "credits", "fx": {...ECB rates, not used for any displayed price}, "count", "releases": [{"title", "date", "precision", "ids", "art", "sources"}]}` (null fields omitted). The app downloads it at most daily; a 404 (not published yet) gives status `missing` and an empty calendar, a broken file keeps the old copy.
 
 ### Opening links
 

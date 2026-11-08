@@ -3,10 +3,13 @@ extends Node
 ## alerts, and the release calendar. See docs/CONTRACTS.md ("Discover") for
 ## the exact API and the Deal / Release / wishlist item shapes.
 ##
-## Sources (terms in CREDITS.md): CheapShark (deals, other stores, USD,
-## historical low), Steam's keyless store and wishlist endpoints (regional
-## prices, sale end, art, release state), the nightly upcoming.json.gz
-## (calendar + ECB exchange rates). No API keys ship with GameCove.
+## Sources (terms in CREDITS.md): CheapShark (which stores have a game on sale,
+## links, US prices and lows), Steam's keyless store and wishlist endpoints
+## (prices for the user's country, sale end, art, release state) and the
+## nightly upcoming.json.gz (calendar). No API keys ship with GameCove.
+## Every price shown is a store's own price for the user's country; rows
+## without one say "See price" (prices.gd). The country comes from settings,
+## else region.gd's detection (Steam files, time zone, locale).
 ##
 ## Network: every request goes through `http` (http.gd: threaded HTTPRequest,
 ## timeouts, per-host backoff; fake_http.gd in tests). A refresh makes a
@@ -36,6 +39,7 @@ const Money := preload("res://scripts/discover/money.gd")
 const Cal := preload("res://scripts/discover/calendar.gd")
 const Wish := preload("res://scripts/discover/wishlist.gd")
 const Alerts := preload("res://scripts/discover/alerts.gd")
+const Region := preload("res://scripts/discover/region.gd")
 
 const REFRESH_EVERY := 6 * 3600
 const CALENDAR_EVERY := 24 * 3600
@@ -50,8 +54,7 @@ const MAX_IMPORT_BATCHES := 10  # x50 titles on import
 const INBOX_MAX := 50
 
 const DEFAULT_SETTINGS := {
-	"country": "",            # ISO code; "" = from the system locale
-	"currency": "",           # "" = the country's Steam currency
+	"country": "",            # ISO code; "" = detected (region.gd); the currency follows it
 	"steam_id": "",           # 64-bit id or custom URL name, for wishlist import
 	"steamgriddb_key": "",    # the user's own SteamGridDB API key (optional)
 	"alerts": true,           # master switch for price and release alerts
@@ -60,6 +63,10 @@ const DEFAULT_SETTINGS := {
 ## http.gd node (made in start()) or a fake_http.gd object in tests.
 var http: Variant = null
 var data_dir := "user://discover"
+## Home folder Steam's files are read from for region detection.
+var home := OS.get_environment("HOME")
+## Region detection result {"country", "source"}; filled on first use, tests may set it.
+var detected_region := {}
 ## Unix time source; tests replace it.
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 ## Parse the calendar file on a worker thread (false in tests: synchronous).
@@ -142,12 +149,13 @@ func _now() -> int:
 # ---- settings ---------------------------------------------------------------
 
 ## A copy of the settings plus the resolved "country_effective",
-## "currency_effective" and "steam_currency".
+## "country_source" ("settings" | "steam" | "timezone" | "locale" | "default")
+## and "currency_effective".
 func get_settings() -> Dictionary:
 	var s := _settings.duplicate()
 	s["country_effective"] = country()
+	s["country_source"] = country_source()
 	s["currency_effective"] = user_currency()
-	s["steam_currency"] = Money.currency_for_country(country())
 	return s
 
 
@@ -159,7 +167,7 @@ func set_settings(patch: Dictionary) -> void:
 		if DEFAULT_SETTINGS.has(k):
 			var v = patch[k]
 			v = bool(v) if DEFAULT_SETTINGS[k] is bool else str(v).strip_edges()
-			if k in ["country", "currency"] and v != _settings[k]:
+			if k == "country" and v != _settings[k]:
 				money_changed = true
 			_settings[k] = v
 	if money_changed:
@@ -173,23 +181,29 @@ func set_settings(patch: Dictionary) -> void:
 		wishlist_changed.emit()
 
 
+func _region() -> Dictionary:
+	if detected_region.is_empty():
+		detected_region = Region.detect(home)
+	return detected_region
+
+
+## The store country prices are for: settings, else detected.
 func country() -> String:
 	var c: String = _settings.get("country", "")
-	return c.to_upper() if c.length() == 2 else Money.country_from_locale(OS.get_locale())
+	return c.to_upper() if c.length() == 2 else str(_region().get("country", "US"))
 
 
+func country_source() -> String:
+	return "settings" if str(_settings.get("country", "")).length() == 2 else str(_region().get("source", "default"))
+
+
+## The country's Steam currency (prices are never converted).
 func user_currency() -> String:
-	var c: String = _settings.get("currency", "")
-	return c.to_upper() if c.length() == 3 else Money.currency_for_country(country())
+	return Money.currency_for_country(country())
 
 
 func _ctx() -> Dictionary:
-	return {"currency": user_currency(), "steam_currency": Money.currency_for_country(country()),
-		"fx": _fx(), "wishlist": _items}
-
-
-func _fx() -> Dictionary:
-	return _upcoming.get("fx", {}) if _upcoming.get("fx") is Dictionary else {}
+	return {"country": country(), "currency": user_currency(), "wishlist": _items}
 
 
 # ---- pause / resume ---------------------------------------------------------
@@ -275,17 +289,14 @@ func load_all() -> void:
 	_rebuild_deals()
 
 
-func _calendar_loaded(doc: Dictionary, fresh: bool) -> void:
+func _calendar_loaded(doc: Dictionary, _fresh: bool) -> void:
 	if _task != -1:
 		WorkerThreadPool.wait_for_task_completion(_task)
 		_task = -1
 	if not doc.is_empty():
 		_upcoming = doc
 		_cal_day = -1
-		_rebuild_deals()   # exchange rates may have changed
 		calendar_changed.emit()
-		if fresh:
-			deals_changed.emit()
 
 
 func _save_state() -> void:
@@ -639,7 +650,7 @@ func deal_for_appid(appid: Variant) -> Dictionary:
 	var list := prices_for(a)
 	var best := Prices.best(list)
 	for d in deals:
-		if d["appid"] == a and (best.is_empty() or (d.get("price_user") != null and best.get("price_user") != null and d["price_user"] < best["price_user"])):
+		if d["appid"] == a and d["price"] != null and (best.is_empty() or d["price"]["amount"] < best["price"]["amount"]):
 			best = d
 	return best
 
@@ -651,7 +662,7 @@ func deal_for_title(title: String) -> Dictionary:
 		return {}
 	var best := Prices.best(prices_for(title))
 	for d in deals:
-		if Wish.normalise(d["title"]) == t and best.is_empty():
+		if Wish.normalise(d["title"]) == t and d["price"] != null and best.is_empty():
 			best = d
 	return best
 
@@ -697,7 +708,7 @@ func _search_results(found: Array) -> Array:
 			"appid": f["appid"], "title": f["title"], "price": f["cheapest"], "regular_price": f["cheapest"],
 			"savings_pct": 0, "thumb": f["thumb"]}, _cache["stores"], ctx)
 		cheapest["store_name"] = "Cheapest store"
-		if best.is_empty() or (cheapest["price_user"] != null and best["price_user"] != null and cheapest["price_user"] < best["price_user"]):
+		if best.is_empty() and cheapest["price"] != null:
 			best = cheapest
 		var key := Wish.key_for(ids, f["title"])
 		out.append({"key": key, "title": f["title"], "ids": ids, "art": best.get("art", {}),
@@ -738,7 +749,7 @@ func _view(item: Dictionary, cal: Array) -> Dictionary:
 			if v["art"].get(k, "") == "":
 				v["art"][k] = steam["art"][k]
 	v["best_deal"] = best
-	v["historical_low"] = low
+	v["historical_low"] = Prices.local_low(low, _ctx())   # only in the user's currency
 	v["savings_pct"] = int(best.get("savings_pct", 0))
 	v["on_sale"] = v["savings_pct"] > 0
 	v["is_historical_low"] = bool(best.get("is_historical_low", false))
@@ -907,8 +918,8 @@ func check_alerts() -> void:
 		if not ra.is_empty():
 			_push_inbox(ra, now)
 			release_alert.emit(v)
-		if best.get("price_user") != null:
-			_items[key]["last_price"] = best["price_user"]
+		if best.get("price") != null:
+			_items[key]["last_price"] = best["price"]["amount"]
 
 
 func _push_inbox(alert: Dictionary, now: int) -> void:
@@ -949,7 +960,7 @@ func calendar_info() -> Dictionary:
 	if _upcoming.is_empty():
 		return {}
 	return {"built": _upcoming.get("built", ""), "sources": _upcoming.get("sources", {}),
-		"credits": _upcoming.get("credits", ""), "fx_date": _fx().get("date", "")}
+		"credits": _upcoming.get("credits", "")}
 
 
 # ---- opening links ----------------------------------------------------------
