@@ -16,6 +16,7 @@ const Icons := preload("res://scripts/ui/icons.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const ArtColor := preload("res://theme/art_color.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
+const HeroStage := preload("res://scripts/ui/hero_stage.gd")
 
 signal play_requested(game: Dictionary)
 signal open_requested(game: Dictionary)
@@ -36,6 +37,9 @@ var spotlight_game: Dictionary = {}
 var top_target: Control
 
 var header: Control
+var hero_stage: Control
+var tips: HBoxContainer
+var _welcome_art: TextureRect
 var play_button: Button
 var page_button: Button
 var _spotlight: VBoxContainer
@@ -52,6 +56,16 @@ func _init() -> void:
 	name = "Home"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hero_stage = HeroStage.new()
+	add_child(hero_stage)
+	_welcome_art = Illustrations.rect("library", 280)
+	_welcome_art.anchor_left = 0.64
+	_welcome_art.anchor_right = 0.64
+	_welcome_art.offset_top = 84
+	_welcome_art.offset_left = 0
+	_welcome_art.offset_right = 280
+	_welcome_art.offset_bottom = 364
+	add_child(_welcome_art)
 	var margin := Kit.margin(0)
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 48 - int(Shelf.PAD.x))
@@ -104,32 +118,55 @@ func _init() -> void:
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	root.add_child(_scroll)
-	_rows_box = Kit.vbox(6)
+	_rows_box = Kit.vbox(8)
 	_rows_box.name = "Rows"
 	_rows_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(_rows_box)
+	tips = _build_tips()
+	var tips_pad := Kit.margin(0)
+	tips_pad.add_theme_constant_override("margin_left", int(Shelf.PAD.x))
+	tips_pad.add_theme_constant_override("margin_right", int(Shelf.PAD.x))
+	tips_pad.add_theme_constant_override("margin_top", 32)
+	tips_pad.add_child(tips)
+	root.add_child(tips_pad)
 	set_games([])
 
 
 func _build_empty() -> Control:
-	var row := Kit.hbox(36)
-	row.name = "Empty"
-	row.add_child(Illustrations.rect("library", 200))
-	var col := Kit.vbox(12)
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.add_child(Kit.label("No games found yet", "TitleLabel"))
+	var col := Kit.vbox(16)
+	col.name = "Empty"
+	col.add_child(Kit.label("Welcome to GameCove", "AccentLabel"))
+	col.add_child(Kit.label("No games found yet", "DisplayLabel"))
 	var line := Kit.label("Installed Steam games show up here on their own. Epic, GOG and Amazon are coming next.", "QuietLabel", true)
-	line.custom_minimum_size = Vector2(420, 0)
+	line.custom_minimum_size = Vector2(520, 0)
+	line.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	col.add_child(line)
 	var refresh := Kit.button("Look again", "AccentButton")
 	refresh.name = "Refresh"
-	refresh.custom_minimum_size = Vector2(200, 56)
+	refresh.custom_minimum_size = Vector2(208, 56)
 	refresh.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	refresh.icon = Icons.tex("update", 20)
+	refresh.add_theme_constant_override("h_separation", 10)
 	refresh.pressed.connect(func(): refresh_requested.emit())
 	col.add_child(refresh)
-	row.add_child(col)
+	return col
+
+
+## First launch: three short cards where the shelves will be.
+func _build_tips() -> HBoxContainer:
+	var row := Kit.hbox(16)
+	row.name = "Tips"
+	for spec in [["store", "Steam is found for you", "Games installed through Steam appear in a few seconds."],
+			["download", "More stores next", "Epic, GOG and Amazon libraries join the same shelves."],
+			["dots", "Quick menu", "Press the Guide button (or F1) for power, screen and device settings."]]:
+		var p := PanelContainer.new()
+		p.theme_type_variation = "CardPanel"
+		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var c := Kit.vbox(8)
+		c.add_child(Kit.icon_label(spec[0], spec[1], "LeadLabel", ThemeLib.color("accent"), 22))
+		c.add_child(Kit.label(spec[2], "QuietLabel", true))
+		p.add_child(c)
+		row.add_child(p)
 	return row
 
 
@@ -197,6 +234,13 @@ func _set_spotlight(g: Dictionary, line: String, animate: bool) -> void:
 	spotlight_game = g
 	var empty := games.is_empty()
 	_empty.visible = empty
+	tips.get_parent().visible = empty
+	_welcome_art.visible = empty
+	_scroll.visible = not empty
+	if empty:
+		hero_stage.show_welcome()
+	else:
+		hero_stage.show_game(g)
 	header.visible = not empty
 	_buttons_row.visible = not empty
 	_hero_buttons = [_empty.find_child("Refresh", true, false)] if empty else [play_button, page_button]

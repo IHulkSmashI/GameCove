@@ -217,7 +217,7 @@ func _notification(what: int) -> void:
 		if launch_overlay != null:
 			launch_overlay.finish()
 		if backdrop != null:
-			backdrop.pause_motion()
+			_pause_motion()
 		_update_timer()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_window_focused = true
@@ -226,6 +226,17 @@ func _notification(what: int) -> void:
 		_update_timer()
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST and session != null:
 		session.stop()
+
+
+## Slow drifts (hero, backdrop) stop when idle, in a game or under Reduce motion.
+func _pause_motion() -> void:
+	backdrop.pause_motion()
+	home.hero_stage.pause_motion()
+
+
+func _resume_motion() -> void:
+	backdrop.resume_motion()
+	home.hero_stage.resume_motion()
 
 
 ## Static caches hold textures and fonts; let them go so nothing leaks at exit.
@@ -244,7 +255,7 @@ func _on_live_tick() -> void:
 	_check_resume()
 	_refresh_live()
 	if Time.get_ticks_msec() - _last_input_ms > IDLE_S * 1000.0:
-		backdrop.pause_motion()
+		_pause_motion()
 
 
 ## Godot has no suspend/resume notification on Linux (NOTIFICATION_APPLICATION_RESUMED
@@ -322,7 +333,7 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton or event is InputEventKey or event is InputEventJoypadMotion:
 		if event.is_pressed():
 			if Time.get_ticks_msec() - _last_input_ms > IDLE_S * 1000.0:
-				backdrop.resume_motion()
+				_resume_motion()
 			_last_input_ms = Time.get_ticks_msec()
 
 
@@ -357,6 +368,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif _shoulder(event, JOY_BUTTON_RIGHT_SHOULDER, KEY_E):
 		cycle_screen(1)
 		get_viewport().set_input_as_handled()
+	elif current == "library" and _trigger(event) != 0:
+		library_screen.jump_letter(_trigger(event))
+		get_viewport().set_input_as_handled()
 	elif current == "library" and _pressed(event, JOY_BUTTON_Y, KEY_SLASH):
 		library_screen.open_search()
 		get_viewport().set_input_as_handled()
@@ -381,6 +395,24 @@ func _unhandled_input(event: InputEvent) -> void:
 
 static func _shoulder(event: InputEvent, button: JoyButton, key: Key) -> bool:
 	return QuickMenu._is_shoulder(event, button, key)
+
+
+var _trigger_held := {}
+
+## -1 for LT (or Page Up), +1 for RT (or Page Down), on the press only.
+func _trigger(event: InputEvent) -> int:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_PAGEUP:
+			return -1
+		if event.keycode == KEY_PAGEDOWN:
+			return 1
+	if event is InputEventJoypadMotion and event.axis in [JOY_AXIS_TRIGGER_LEFT, JOY_AXIS_TRIGGER_RIGHT]:
+		var down: bool = event.axis_value > 0.6
+		var was: bool = _trigger_held.get(event.axis, false)
+		_trigger_held[event.axis] = down if (down or event.axis_value < 0.3) else was
+		if down and not was:
+			return -1 if event.axis == JOY_AXIS_TRIGGER_LEFT else 1
+	return 0
 
 
 static func _pressed(event: InputEvent, button: JoyButton, key: Key) -> bool:
@@ -439,17 +471,15 @@ func _link_top() -> void:
 	for t in top_bar.tab_buttons():
 		t.focus_neighbor_bottom = t.get_path_to(f if f != null else t)
 		t.focus_neighbor_top = t.get_path_to(t)
-	var tabs: Array = top_bar.tab_buttons()
-	var last: Control = tabs[tabs.size() - 1]
-	last.focus_neighbor_right = last.get_path_to(top_bar.status_button)
-	top_bar.status_button.focus_neighbor_left = top_bar.status_button.get_path_to(last)
-	top_bar.status_button.focus_neighbor_bottom = top_bar.status_button.get_path_to(f if f != null else last)
+	top_bar.link_bar()
+	top_bar.status_button.focus_neighbor_bottom = top_bar.status_button.get_path_to(f if f != null else top_bar.tabs[current])
+	top_bar.status_button.focus_neighbor_top = top_bar.status_button.get_path_to(top_bar.status_button)
 
 
 func _play(game: Dictionary) -> void:
 	playing = game
 	launch_overlay.show_for(game, backdrop.current_accent())
-	backdrop.pause_motion()
+	_pause_motion()
 	session.begin(game, Library.launch(game))
 
 
@@ -469,7 +499,7 @@ func _on_game_ended(game: Dictionary) -> void:
 
 ## Coming back from a game: the screens settle in from slightly smaller.
 func _return_home() -> void:
-	backdrop.resume_motion()
+	_resume_motion()
 	_screen_layer.pivot_offset = size / 2.0
 	_screen_layer.scale = Vector2.ONE * (1.0 if Motion.reduce else 0.97)
 	_screen_layer.modulate.a = 0.0
@@ -637,6 +667,7 @@ static func hints_for(ctx: Dictionary) -> Array:
 		if screen == "library":
 			out.append(["Y", "Search"])
 			out.append(["X", "Sort"])
+			out.append([["LT", "RT"], "Jump"])
 		if screen != "home":
 			out.append(["B", "Home"])
 		out.append([["LB", "RB"], "Sections"])
@@ -707,9 +738,9 @@ func _on_setting_changed(key: String, value: Variant) -> void:
 		"reduce_motion":
 			Motion.reduce = bool(value)
 			if Motion.reduce:
-				backdrop.pause_motion()
+				_pause_motion()
 			else:
-				backdrop.resume_motion()
+				_resume_motion()
 		"menu_side":
 			menu_side = str(value)
 			quick_menu.set_side(menu_side)

@@ -42,8 +42,7 @@ func _init() -> void:
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(14, 0)
 	add_child(gap)
-	var lb := Kit.glyph("LB")
-	add_child(lb)
+	add_child(Kit.glyph("LB", false, true))
 	var order: Array = []
 	for t in TABS:
 		var b := Kit.button(t[1], "TabButton")
@@ -76,8 +75,7 @@ func _init() -> void:
 		add_child(b)
 		tabs[id] = b
 		order.append(b)
-	add_child(Kit.glyph("RB"))
-	Kit.link_horizontal(order)
+	add_child(Kit.glyph("RB", false, true))
 	add_child(Kit.spacer())
 
 	status_button = Kit.button("", "TabButton")
@@ -87,6 +85,10 @@ func _init() -> void:
 	status_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	status_button.pressed.connect(func(): status_pressed.emit())
 	add_child(status_button)
+	# Settings sits at the far right, after the status pill.
+	move_child(tabs["settings"], get_child_count() - 1)
+	tabs["settings"].toggle_mode = true
+	link_bar()
 	var pill := Kit.hbox(10)
 	pill.name = "Pill"
 	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -116,6 +118,12 @@ func _init() -> void:
 	clock_label.add_theme_font_override("font", ThemeLib.font("semibold", true))
 	pill.add_child(clock_label)
 	select("home")
+
+
+## Left/right across the bar: Home, Library, Discover, status, Settings.
+func link_bar() -> void:
+	var order: Array = [tabs["home"], tabs["library"], tabs["discover"], status_button, tabs["settings"]]
+	Kit.link_horizontal(order)
 
 
 func select(id: String) -> void:

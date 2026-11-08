@@ -29,8 +29,10 @@ func setup(b: Dictionary, badge_style := "tile") -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 5 if style == "tile" else 8)
 	add_child(row)
-	var tone_col: Color = Themes.TONES.get(b.get("tone", ""), Themes.TONES[""])
+	var tone_col: Color = ThemeLib.tone(b.get("tone", ""))
 	var solid := style == "solid"
+	# Solid flags: the dark-theme tone as fill with near-black text in every theme.
+	var flag: Color = Themes.TONES.get(b.get("tone", ""), Themes.TONES[""])
 	var fg := Color("#0A0F16") if solid else tone_col
 	var icon_px := 14 if style != "chip" else 18
 	if b.get("icon", "") != "":
@@ -45,7 +47,7 @@ func setup(b: Dictionary, badge_style := "tile") -> void:
 	label.add_theme_font_override("font", ThemeLib.font("semibold" if style != "chip" else "medium", true))
 	label.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO if style != "chip" else ThemeLib.SIZE_SMALL)
 	row.add_child(label)
-	var bg: Color = tone_col if solid else ThemeLib.color("chip")
+	var bg: Color = flag if solid else ThemeLib.color("chip")
 	var px := 7 if style != "chip" else 12
 	var py := 3 if style != "chip" else 6
 	var sb := ThemeLib.box(bg, 999 if style == "chip" else 6, px, py)

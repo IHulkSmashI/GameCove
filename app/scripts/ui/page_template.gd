@@ -142,7 +142,7 @@ func _build_scroll_cue() -> void:
 	t.fill_to = Vector2(0, 1)
 	_cue_fade.texture = t
 	add_child(_cue_fade)
-	cue = Kit.icon_label("chevron_down", "More below", "CaptionLabel", ThemeLib.color("text_2"), 18)
+	cue = Kit.icon_label("chevron_down", "More below", "CaptionLabel", ThemeLib.color("text_2"), 18, false)
 	cue.name = "ScrollCue"
 	cue.anchor_left = 0.5
 	cue.anchor_right = 0.5

@@ -30,6 +30,7 @@ const FONT_FILES := {
 	"medium": "res://fonts/Inter-Medium.otf",
 	"semibold": "res://fonts/Inter-SemiBold.otf",
 	"display": "res://fonts/InterDisplay-Bold.otf",
+	"display_tight": "res://fonts/InterDisplay-Bold.otf",
 }
 
 static var theme_id := "cove"
@@ -59,6 +60,12 @@ static func color(name: String, alpha := -1.0) -> Color:
 	return c
 
 
+## A badge tone colour for the current theme (Themes.TONES / TONES_LIGHT).
+static func tone(name: String) -> Color:
+	var set := Themes.tones(theme_id)
+	return set.get(name, set[""])
+
+
 static func radius(name := "m") -> int:
 	return int(tok("radius_" + name))
 
@@ -75,6 +82,13 @@ static func font(weight := "regular", tabular := false) -> Font:
 		return _fonts[key]
 	var base: Font = load(FONT_FILES.get(weight, FONT_FILES["regular"]))
 	var f: Font = base
+	if weight == "display_tight":
+		# Big titles read better slightly tighter.
+		var d := FontVariation.new()
+		d.base_font = base
+		d.spacing_glyph = -1
+		base = d
+		f = d
 	if tabular:
 		var v := FontVariation.new()
 		v.base_font = base
@@ -143,8 +157,8 @@ static func build(t: Dictionary = tokens) -> Theme:
 	_label(th, "CaptionLabel", SIZE_CAPTION, "text_2", "medium")
 	_label(th, "HeaderLabel", SIZE_TITLE, "text", "semibold")
 	_label(th, "LeadLabel", SIZE_LEAD, "text", "medium")
-	_label(th, "TitleLabel", SIZE_HEADLINE, "text", "display")
-	_label(th, "DisplayLabel", SIZE_DISPLAY, "text", "display")
+	_label(th, "TitleLabel", SIZE_HEADLINE, "text", "display_tight")
+	_label(th, "DisplayLabel", SIZE_DISPLAY, "text", "display_tight")
 	_label(th, "AccentLabel", SIZE_SMALL, "accent", "semibold")
 	_label(th, "ValueLabel", SIZE_BODY, "accent", "semibold", true)
 	_label(th, "NumberLabel", SIZE_BODY, "text", "medium", true)
@@ -173,12 +187,17 @@ static func build(t: Dictionary = tokens) -> Theme:
 
 	# Top-bar tabs: quiet text, a soft pill when chosen, solid when focused.
 	th.set_type_variation("TabButton", "Button")
-	_button(th, "TabButton", Color(0, 0, 0, 0), soft(0.08), soft(0.14), color("text_2"), 999, 18, 8)
+	_button(th, "TabButton", Color(0, 0, 0, 0), soft(0.06), Color(0, 0, 0, 0), color("text_2"), radius("s"), 12, 8)
+	var under := box(Color(0, 0, 0, 0), 0, 12, 8)
+	under.border_color = acc
+	under.border_width_bottom = 3
+	th.set_stylebox("pressed", "TabButton", under)
+	th.set_stylebox("hover_pressed", "TabButton", under)
 	th.set_font("font", "TabButton", font("semibold"))
 	th.set_font_size("font_size", "TabButton", SIZE_LEAD)
 	for c in ["font_pressed_color", "font_hover_pressed_color", "font_hover_color"]:
 		th.set_color(c, "TabButton", color("text"))
-	th.set_stylebox("focus", "TabButton", focus_ring(22))
+	th.set_stylebox("focus", "TabButton", focus_ring(radius("s")))
 	th.set_color("font_focus_color", "TabButton", color("text"))
 
 	# Quick menu section tabs: icon over label.
@@ -258,6 +277,9 @@ static func build(t: Dictionary = tokens) -> Theme:
 	th.set_icon("grabber", "HSlider", _knob(false))
 	th.set_icon("grabber_highlight", "HSlider", _knob(true))
 	th.set_icon("grabber_disabled", "HSlider", _knob(false))
+	th.set_icon("tick", "HSlider", load("res://scripts/ui/icons.gd").from_svg(
+		"<svg xmlns='http://www.w3.org/2000/svg' width='4' height='10'><rect x='1' y='0' width='2' height='10' rx='1' fill='#%s' fill-opacity='0.35'/></svg>" % color("text").to_html(false)))
+	th.set_constant("center_grabber", "HSlider", 0)
 
 	var bar := box(soft(0.20), 999, 0, 0)
 	for sb in ["VScrollBar", "HScrollBar"]:

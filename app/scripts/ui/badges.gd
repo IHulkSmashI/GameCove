@@ -22,11 +22,11 @@ const LONG_H := 30.0
 
 ## Display order on the game page.
 const ORDER := ["download", "sale", "wish", "new", "update", "device", "protondb", "anticheat", "ttb", "not_installed", "store"]
-## Tiles: one corner flag (first match) ...
-const TILE_CORNER := ["download", "sale", "new", "update", "wish"]
-## ... and at most two along the bottom, picked by importance, shown in this order.
-const TILE_STRIP := ["anticheat", "ttb", "not_installed"]
-const TILE_STRIP_PRIORITY := ["not_installed", "anticheat", "ttb"]
+## Tiles show one corner pill when unfocused (first match; anti-cheat only
+## when it's a problem) ...
+const TILE_CORNER := ["download", "sale", "update", "not_installed", "anticheat_problem", "new"]
+## ... and up to two more along the bottom only while focused.
+const TILE_STRIP := ["anticheat", "ttb", "protondb"]
 
 const PROTON_TONE := {"platinum": "platinum", "gold": "gold", "silver": "silver", "bronze": "bronze", "borked": "borked"}
 const DEVICE := {
@@ -83,7 +83,7 @@ static func for_game(g: Dictionary, now := -1) -> Array:
 	return list
 
 
-## {"corner": badge or {}, "strip": [<= 2 badges]} for a library tile.
+## {"corner": badge or {}, "strip": [<= 2 badges, shown on focus]} for a tile.
 static func for_tile(g: Dictionary, now := -1) -> Dictionary:
 	var all := for_game(g, now)
 	var by := {}
@@ -91,16 +91,16 @@ static func for_tile(g: Dictionary, now := -1) -> Dictionary:
 		by[b["kind"]] = b
 	var corner := {}
 	for k in TILE_CORNER:
-		if by.has(k):
+		if k == "anticheat_problem":
+			if by.has("anticheat") and by["anticheat"]["tone"] in ["warn", "bad"]:
+				corner = by["anticheat"]
+				break
+		elif by.has(k):
 			corner = by[k]
 			break
-	var picked: Array = []
-	for k in TILE_STRIP_PRIORITY:
-		if by.has(k) and picked.size() < 2:
-			picked.append(k)
 	var strip: Array = []
 	for k in TILE_STRIP:
-		if k in picked:
+		if by.has(k) and by[k] != corner and strip.size() < 2:
 			strip.append(by[k])
 	return {"corner": corner, "strip": strip}
 

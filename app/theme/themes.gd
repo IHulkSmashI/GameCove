@@ -83,13 +83,14 @@ const DATA := {
 		"accent": Color("#0A776F"), "accent_2": Color("#4B5FD6"), "on_accent": Color("#FFFFFF"),
 		"focus_fill": Color("#0D1624"), "on_focus": Color("#FFFFFF"),
 		"good": Color("#0E7A55"), "warn": Color("#935400"), "bad": Color("#B4232C"), "info": Color("#2F5BC4"),
-		"scrim": Color("#EEF2F7"), "chip": Color(0.03, 0.05, 0.09, 0.80),
+		"scrim": Color("#EEF2F7"), "chip": Color(1.0, 1.0, 1.0, 0.92),
 		"scrim_strength": 0.80, "radius_s": 8, "radius_m": 12, "radius_l": 18, "radius_xl": 26, "dark": 0,
 	},
 }
 
-## Badge colours. Badges always sit on a dark `chip`, in every theme, so
-## these are tuned for dark backgrounds (contrast tested against every chip).
+## Badge colours on a dark `chip` (dark themes). Light themes use
+## TONES_LIGHT on a light chip. Contrast is tested against each theme's chip
+## over black and over white, since badges sit on art.
 const TONES := {
 	"": Color("#E6ECF3"),
 	"good": Color("#5BE3A3"),
@@ -106,6 +107,29 @@ const TONES := {
 	"wish": Color("#FFB3D1"),
 	"new": Color("#7FD8FF"),
 }
+
+
+const TONES_LIGHT := {
+	"": Color("#1F2937"),
+	"good": Color("#0B6B4A"),
+	"warn": Color("#8A4B00"),
+	"bad": Color("#B42318"),
+	"info": Color("#1D4FB8"),
+	"accent": Color("#0A6B64"),
+	"platinum": Color("#3B4A5C"),
+	"gold": Color("#7A5A00"),
+	"silver": Color("#4B5563"),
+	"bronze": Color("#8A4A12"),
+	"borked": Color("#B42318"),
+	"sale": Color("#3F6B00"),
+	"wish": Color("#A3195B"),
+	"new": Color("#0B5F8A"),
+}
+
+
+## The badge tone set for a theme.
+static func tones(id: String) -> Dictionary:
+	return TONES if int(get_theme(id).get("dark", 1)) == 1 else TONES_LIGHT
 
 
 static func get_theme(id: String) -> Dictionary:

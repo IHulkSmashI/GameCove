@@ -96,7 +96,7 @@ static func badge(text: String, tone := "") -> PanelContainer:
 ## A controller button glyph: "A", "B", "X", "Y" (round), "LB", "RB", "LT",
 ## "RT", "MENU", "VIEW" (pill), "GUIDE" (round, dots), "DPAD", "LR" (icons).
 ## `primary` fills it solid, for the main action of a screen.
-static func glyph(button: String, primary := false) -> Control:
+static func glyph(button: String, primary := false, small := false) -> Control:
 	var p := PanelContainer.new()
 	p.name = "Glyph_" + button
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -104,11 +104,13 @@ static func glyph(button: String, primary := false) -> Control:
 	var round := button in ["A", "B", "X", "Y", "GUIDE", "DPAD", "LR"]
 	var fg: Color = ThemeLib.color("on_focus") if primary else ThemeLib.color("text")
 	var bg: Color = ThemeLib.color("focus_fill") if primary else ThemeLib.soft(0.16)
-	var sb := ThemeLib.box(bg, 14, 0 if round else 8, 0)
+	var sb := ThemeLib.box(bg, 11 if small else 14, 0 if round else (6 if small else 8), 0)
 	sb.border_color = ThemeLib.soft(0.28)
 	sb.set_border_width_all(0 if primary else 1)
 	p.add_theme_stylebox_override("panel", sb)
-	p.custom_minimum_size = Vector2(28, 28)
+	p.custom_minimum_size = Vector2(22, 22) if small else Vector2(28, 28)
+	if small:
+		p.modulate.a = 0.6
 	var icon := {"GUIDE": "dots", "DPAD": "gamepad", "LR": "sort"}
 	if icon.has(button):
 		var ic: TextureRect = load("res://scripts/ui/icons.gd").rect(icon[button], 18, fg)
@@ -120,7 +122,7 @@ static func glyph(button: String, primary := false) -> Control:
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.add_theme_font_override("font", ThemeLib.font("semibold"))
-	l.add_theme_font_size_override("font_size", 14 if round else 13)
+	l.add_theme_font_size_override("font_size", (12 if small else 14) if round else (11 if small else 13))
 	l.add_theme_color_override("font_color", fg)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_child(l)
@@ -161,12 +163,12 @@ static func prompts_text(row: Control) -> String:
 
 
 ## Icon + label in a row.
-static func icon_label(icon: String, text: String, variation := "", icon_color: Color = Color(0, 0, 0, 0), size := 20) -> HBoxContainer:
+static func icon_label(icon: String, text: String, variation := "", icon_color: Color = Color(0, 0, 0, 0), size := 20, wrap := true) -> HBoxContainer:
 	var row := hbox(10)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var col := icon_color if icon_color.a > 0.0 else ThemeLib.color("text_2")
 	row.add_child(load("res://scripts/ui/icons.gd").rect(icon, size, col))
-	var l := label(text, variation, true)
+	var l := label(text, variation, wrap)
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(l)
 	return row

@@ -13,7 +13,9 @@ signal tile_pressed(game: Dictionary)
 
 const GAP := 16
 ## Room around the tiles for the focus lift and glow.
-const PAD := Vector2(24, 22)
+const PAD := Vector2(24, 16)
+## Below the tiles: room for the focused tile's title.
+const LABEL_ROOM := 40
 
 var id := ""
 var title := ""
@@ -51,10 +53,11 @@ func setup(shelf_id: String, shelf_title: String, games: Array, tile_size := Til
 	scroll.follow_focus = false
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.custom_minimum_size = Vector2(0, tile_size.y + PAD.y * 2)
+	scroll.custom_minimum_size = Vector2(0, tile_size.y + PAD.y + LABEL_ROOM)
 	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(scroll)
 	var pad := Kit.margin(0, int(PAD.x), int(PAD.y))
+	pad.add_theme_constant_override("margin_bottom", LABEL_ROOM)
 	pad.mouse_filter = Control.MOUSE_FILTER_PASS
 	scroll.add_child(pad)
 	strip = Kit.hbox(GAP)

@@ -29,6 +29,10 @@ var shadow: Panel
 var fallback: Control
 var badges_box: VBoxContainer
 var corner_badge: Control
+## The title under the tile, shown while focused (shelves; the grid uses a
+## details bar instead).
+var title_label: Label
+var show_label := true
 var _glow_box: StyleBoxFlat
 var _mat: ShaderMaterial
 var _with_badges := true
@@ -38,8 +42,9 @@ var _accent := Color(0, 0, 0, 0)
 static var _last_focus := Vector2.ZERO
 
 
-func setup(g: Dictionary, with_badges := true, tile := SIZE) -> void:
+func setup(g: Dictionary, with_badges := true, tile := SIZE, label_under := true) -> void:
 	game = g
+	show_label = label_under
 	tile_size = tile
 	_with_badges = with_badges
 	name = "Tile_" + String(g.get("key", "")).validate_node_name()
@@ -71,9 +76,9 @@ func setup(g: Dictionary, with_badges := true, tile := SIZE) -> void:
 	glow.name = "Glow"
 	Kit.fill(glow)
 	_glow_box = StyleBoxFlat.new()
-	_glow_box.set_corner_radius_all(int(r) + 4)
-	_glow_box.set_expand_margin_all(4)
-	_glow_box.shadow_size = 18
+	_glow_box.set_corner_radius_all(int(r) + 3)
+	_glow_box.set_expand_margin_all(3)
+	_glow_box.shadow_size = 14
 	_glow_box.anti_aliasing = true
 	glow.add_theme_stylebox_override("panel", _glow_box)
 	glow.modulate.a = 0.0
@@ -108,17 +113,34 @@ func setup(g: Dictionary, with_badges := true, tile := SIZE) -> void:
 	badges_box.offset_bottom = -8
 	badges_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	card.add_child(badges_box)
+	# Unfocused: one corner pill at most. Focused: up to two more at the bottom.
+	badges_box.modulate.a = 0.0
 	if with_badges:
 		var tb := Badges.for_tile(g)
 		for b in tb["strip"]:
 			badges_box.add_child(Badge.make(b, "tile"))
 		if not tb["corner"].is_empty():
-			corner_badge = Badge.make(tb["corner"], "solid")
+			var solid: bool = tb["corner"]["kind"] in ["sale", "new", "update", "download"]
+			corner_badge = Badge.make(tb["corner"], "solid" if solid else "tile")
 			corner_badge.position = Vector2(8, 8)
 			card.add_child(corner_badge)
+	if label_under:
+		title_label = Label.new()
+		title_label.name = "TitleUnder"
+		title_label.text = g.get("title", "")
+		title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		title_label.clip_text = true
+		title_label.position = Vector2(-2, tile.y + 12)
+		title_label.size = Vector2(tile.x * 1.6, 24)
+		title_label.add_theme_font_override("font", ThemeLib.font("semibold"))
+		title_label.add_theme_font_size_override("font_size", ThemeLib.SIZE_SMALL)
+		title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title_label.modulate.a = 0.0
+		add_child(title_label)
+	card.modulate = Color(0.86, 0.86, 0.86) if ThemeLib.is_dark() else Color(0.94, 0.94, 0.94)
 	if not g.get("installed", false):
-		art.self_modulate = Color(0.78, 0.78, 0.78)
-		fallback.modulate = Color(0.8, 0.8, 0.8)
+		art.self_modulate = Color(0.72, 0.72, 0.72)
+		fallback.modulate = Color(0.76, 0.76, 0.76)
 
 	# Load the cover only while near the screen (with a tile of slack either side).
 	var vis := VisibleOnScreenNotifier2D.new()
@@ -202,9 +224,13 @@ func _on_focus() -> void:
 	_refresh_glow_color()
 	card.pivot_offset = size / 2.0
 	Motion.to(card, "scale", Vector2(LIFT, LIFT), Motion.BASE, Tween.TRANS_BACK)
+	Motion.to(card, "modulate", Color.WHITE, Motion.FAST)
 	Motion.to(glow, "modulate:a", 1.0, Motion.FAST)
+	Motion.to(badges_box, "modulate:a", 1.0, Motion.FAST)
+	if title_label != null:
+		Motion.to(title_label, "modulate:a", 1.0, Motion.FAST)
 	# Glow pulse: starts wide and settles.
-	Motion.method(self, "glow", func(v: float): _set_glow(v), 34.0, 18.0, 0.45)
+	Motion.method(self, "glow", func(v: float): _set_glow(v), 28.0, 14.0, 0.45)
 	# Parallax: the art drifts in from the side focus came from.
 	var here := global_position + size / 2.0
 	var from := (here - _last_focus)
@@ -218,7 +244,11 @@ func _on_focus() -> void:
 
 func _on_blur() -> void:
 	Motion.to(card, "scale", Vector2.ONE, Motion.FAST)
+	Motion.to(card, "modulate", Color(0.86, 0.86, 0.86) if ThemeLib.is_dark() else Color(0.94, 0.94, 0.94), Motion.FAST)
 	Motion.to(glow, "modulate:a", 0.0, Motion.FAST)
+	Motion.to(badges_box, "modulate:a", 0.0, Motion.FAST)
+	if title_label != null:
+		Motion.to(title_label, "modulate:a", 0.0, Motion.FAST)
 	Motion.method(self, "pan", func(t: float): _set_pan(Vector2.ZERO, 1.0 + 0.045 * t), 1.0, 0.0, Motion.FAST)
 
 
@@ -232,9 +262,13 @@ func _set_pan(p: Vector2, z: float) -> void:
 	_mat.set_shader_parameter("zoom", z)
 
 
-## Tile badges as [{"text", "tone", ...}] in display order (strip only).
+## Tile badges as [{"text", "tone", ...}]: the focus strip, then the corner pill.
 static func badge_specs(g: Dictionary) -> Array:
-	return Badges.for_tile(g)["strip"]
+	var tb := Badges.for_tile(g)
+	var out: Array = tb["strip"].duplicate()
+	if not tb["corner"].is_empty():
+		out.append(tb["corner"])
+	return out
 
 
 ## Art-less card (older call): the generated cover.

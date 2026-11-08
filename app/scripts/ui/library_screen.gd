@@ -29,7 +29,12 @@ var search_button: Button
 var sort_button: Button
 var store_buttons: Array = []
 var count_label: Label
-var focus_title: Label
+var details: PanelContainer
+var cue: HBoxContainer
+var _fade: TextureRect
+var _d_title: Label
+var _d_meta: HBoxContainer
+var _d_badges: HBoxContainer
 var grid: GridContainer
 var keyboard: PanelContainer
 var _scroll: ScrollContainer
@@ -63,15 +68,6 @@ func _init() -> void:
 	count_label.add_theme_font_override("font", ThemeLib.font("medium", true))
 	count_label.size_flags_vertical = Control.SIZE_SHRINK_END
 	head.add_child(count_label)
-	head.add_child(Kit.spacer())
-	focus_title = Kit.label("", "LeadLabel")
-	focus_title.name = "FocusTitle"
-	focus_title.size_flags_vertical = Control.SIZE_SHRINK_END
-	focus_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	focus_title.custom_minimum_size = Vector2(0, 0)
-	focus_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	focus_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(focus_title)
 	var head_pad := Kit.margin(0, int(PAD.x), 0)
 	head_pad.add_child(head)
 	root.add_child(head_pad)
@@ -108,14 +104,43 @@ func _init() -> void:
 	bar_pad.add_child(bar)
 	root.add_child(bar_pad)
 
+	var area := Control.new()
+	area.name = "GridArea"
+	area.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(area)
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"
 	_scroll.follow_focus = false
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
-	root.add_child(_scroll)
+	area.add_child(_scroll)
+	_fade = TextureRect.new()
+	_fade.name = "Fade"
+	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_fade.stretch_mode = TextureRect.STRETCH_SCALE
+	_fade.anchor_top = 1.0
+	_fade.anchor_right = 1.0
+	_fade.anchor_bottom = 1.0
+	_fade.offset_top = -72
+	area.add_child(_fade)
+	cue = Kit.icon_label("chevron_down", "More below", "CaptionLabel", ThemeLib.color("text_2"), 18, false)
+	cue.name = "MoreCue"
+	cue.anchor_left = 0.5
+	cue.anchor_right = 0.5
+	cue.anchor_top = 1.0
+	cue.anchor_bottom = 1.0
+	cue.offset_left = -70
+	cue.offset_right = 70
+	cue.offset_top = -28
+	cue.offset_bottom = -4
+	cue.alignment = BoxContainer.ALIGNMENT_CENTER
+	area.add_child(cue)
+	_scroll.get_v_scroll_bar().value_changed.connect(func(_v): _update_cue())
+	_scroll.get_v_scroll_bar().changed.connect(_update_cue)
 	var pad := Kit.margin(0, int(PAD.x), int(PAD.y))
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(pad)
@@ -125,6 +150,11 @@ func _init() -> void:
 	grid.add_theme_constant_override("h_separation", int(GAP.x))
 	grid.add_theme_constant_override("v_separation", int(GAP.y))
 	pad.add_child(grid)
+
+	details = _build_details()
+	var dpad := Kit.margin(0, int(PAD.x), 0)
+	dpad.add_child(details)
+	root.add_child(dpad)
 
 	_empty = Kit.hbox(28)
 	_empty.add_theme_constant_override("separation", 28)
@@ -231,7 +261,7 @@ func _rebuild(keep_focus: bool) -> void:
 	_tiles.clear()
 	for g in shown:
 		var t: Button = Tile.new()
-		t.setup(g, true, Tile.SIZE)
+		t.setup(g, true, Tile.SIZE, false)
 		var game: Dictionary = g
 		t.pressed.connect(func(): open_requested.emit(game))
 		t.focus_entered.connect(_on_tile_focus.bind(t))
@@ -240,7 +270,8 @@ func _rebuild(keep_focus: bool) -> void:
 	_refresh_toolbar()
 	_link_grid()
 	_empty.visible = shown.is_empty()
-	_scroll.visible = not shown.is_empty()
+	_scroll.get_parent().visible = not shown.is_empty()
+	details.get_parent().visible = not shown.is_empty()
 	if games.is_empty():
 		_empty_text.text = "Your games will show up here once a store has some installed."
 	elif query != "":
@@ -301,15 +332,93 @@ func _current_store_button() -> Button:
 
 func _on_tile_focus(t: Control) -> void:
 	_memory_key = t.game.get("key", "")
-	focus_title.text = t.game.get("title", "")
+	show_details(t.game)
 	for b in _toolbar():
 		b.focus_neighbor_bottom = b.get_path_to(t)
 	var row := _tiles.find(t) / grid.columns
 	var pitch := Tile.SIZE.y + GAP.y
-	var target := maxf(0.0, (row - 1) * pitch)
+	# Keep the focused row fully above the bottom fade, showing as much of the
+	# rows above it as fits.
+	var bottom := (row + 1) * pitch + PAD.y + 40.0
+	var target := clampf(bottom - _scroll.size.y, 0.0, row * pitch)
 	Motion.method(_scroll, "vscroll", func(v: float): _scroll.scroll_vertical = int(v),
 		float(_scroll.scroll_vertical), target, Motion.BASE)
 	game_focused.emit(t.game)
+
+
+## The slim bar under the grid: the focused game's title, store, playtime
+## and badges (tiles in the grid carry one corner pill at most).
+func _build_details() -> PanelContainer:
+	var p := PanelContainer.new()
+	p.name = "Details"
+	p.theme_type_variation = "CardPanel"
+	var row := Kit.hbox(20)
+	p.add_child(row)
+	_d_title = Kit.label("", "LeadLabel")
+	_d_title.name = "Title"
+	_d_title.add_theme_font_override("font", ThemeLib.font("semibold"))
+	_d_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_d_title.custom_minimum_size = Vector2(220, 0)
+	row.add_child(_d_title)
+	_d_meta = Kit.hbox(18)
+	row.add_child(_d_meta)
+	row.add_child(Kit.spacer())
+	_d_badges = Kit.hbox(8)
+	row.add_child(_d_badges)
+	return p
+
+
+func show_details(g: Dictionary) -> void:
+	_d_title.text = g.get("title", "")
+	for c in _d_meta.get_children():
+		Kit.drop(_d_meta, c)
+	var GH = load("res://scripts/ui/game_header.gd")
+	for seg in GH.meta_segments(g, int(Time.get_unix_time_from_system())).slice(0, 3):
+		_d_meta.add_child(Kit.icon_label(seg[0], seg[1], "QuietLabel", ThemeLib.color("text_2"), 18, false))
+	for c in _d_badges.get_children():
+		Kit.drop(_d_badges, c)
+	var n := 0
+	for b in load("res://scripts/ui/badges.gd").for_game(g):
+		if b["kind"] == "store" or n >= 3:
+			continue
+		_d_badges.add_child(load("res://scripts/ui/badge.gd").make(b, "tile"))
+		n += 1
+
+
+func _update_cue() -> void:
+	var bar := _scroll.get_v_scroll_bar()
+	var more := bar.max_value - bar.page - bar.value > 24.0
+	cue.visible = more
+	_fade.visible = more
+
+
+## LT / RT: jump to the previous / next first letter in the current order.
+func jump_letter(d: int) -> void:
+	if _tiles.is_empty() or not is_inside_tree():
+		return
+	var f := get_viewport().gui_get_focus_owner()
+	var i := maxi(0, _tiles.find(f))
+	var cur := _initial(_tiles[i].game)
+	var j := i
+	while true:
+		j += d
+		if j < 0 or j >= _tiles.size():
+			return
+		var ini := _initial(_tiles[j].game)
+		if ini != cur:
+			if d < 0:
+				# Land on the first tile of that letter.
+				while j > 0 and _initial(_tiles[j - 1].game) == ini:
+					j -= 1
+			_tiles[j].grab_focus()
+			return
+
+
+static func _initial(g: Dictionary) -> String:
+	var t := View.fold(String(g.get("title", "")))
+	if t.begins_with("the "):
+		t = t.substr(4)
+	return t.substr(0, 1) if t != "" else "#"
 
 
 func _after_search() -> void:
@@ -331,6 +440,15 @@ func _focus_later(c: Control) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and sort_button != null:
 		_refresh_toolbar()
+		var g := Gradient.new()
+		var sc: Color = ThemeLib.color("scrim")
+		g.colors = PackedColorArray([Color(sc, 0.0), Color(sc, 0.9)])
+		var t := GradientTexture2D.new()
+		t.gradient = g
+		t.width = 4
+		t.height = 64
+		t.fill_to = Vector2(0, 1)
+		_fade.texture = t
 	elif what == NOTIFICATION_RESIZED and grid != null:
 		var w := size.x - 48 - 24 - PAD.x
 		var cols := maxi(3, int((w + GAP.x) / (Tile.SIZE.x + GAP.x)))

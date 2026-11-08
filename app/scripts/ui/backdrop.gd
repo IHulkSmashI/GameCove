@@ -185,8 +185,12 @@ func _crossfade(tex: Texture2D) -> void:
 	_ken_burns(new)
 
 
+## Off by default: the crisp hero (hero_stage.gd) drifts instead.
+var drift := false
+
+
 func _ken_burns(layer: TextureRect) -> void:
-	if Motion.reduce or _paused or layer.texture == null:
+	if not drift or Motion.reduce or _paused or layer.texture == null:
 		return
 	Motion.to(layer, "scale", Vector2(KEN_BURNS_SCALE, KEN_BURNS_SCALE), KEN_BURNS_S, Tween.TRANS_SINE, Tween.EASE_IN_OUT)
 

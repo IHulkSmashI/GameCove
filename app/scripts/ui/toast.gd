@@ -39,9 +39,7 @@ func show_toast(text: String, icon := "info", tone := "", detail := "") -> Contr
 	p.add_theme_stylebox_override("panel", sb)
 	var row := Kit.hbox(12)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var col: Color = ThemeLib.color(tone) if tone in ["good", "warn", "bad", "info", "accent"] else Themes.TONES.get(tone, ThemeLib.color("accent"))
-	if not ThemeLib.is_dark() and tone in Themes.TONES and not tone in ["good", "warn", "bad", "info"]:
-		col = ThemeLib.color("accent")
+	var col: Color = ThemeLib.color(tone) if tone in ["good", "warn", "bad", "info", "accent"] else ThemeLib.tone(tone)
 	var badge := PanelContainer.new()
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge.add_theme_stylebox_override("panel", ThemeLib.box(Color(col, 0.18), 999, 8, 8))

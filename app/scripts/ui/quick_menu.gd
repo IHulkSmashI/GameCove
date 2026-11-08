@@ -20,7 +20,8 @@ signal notice(text: String, tone: String)
 
 const SECTIONS := ["This game", "Power", "Screen", "Controller", "Device"]
 const SECTION_ICONS := ["game", "bolt", "screen", "gamepad", "handheld"]
-const WIDTH := 600
+const WIDTH := 560
+const TOP_INSET := 72.0
 const SUPPORT_TEXT := {
 	"full": "Full support: tested on this device by the GameCove team.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
@@ -45,6 +46,9 @@ var tabs: Array[Button] = []
 var body: VBoxContainer
 var live_label: Label
 var live_icon: TextureRect
+var head_art: TextureRect
+var head_title: Label
+var head_caption: Label
 var panel: PanelContainer
 var dim: ColorRect
 ## Which edge the panel floats against: "right" or "left" (Settings).
@@ -100,10 +104,28 @@ func setup(services: Dictionary) -> void:
 	var col := Kit.vbox(14)
 	panel.add_child(col)
 
-	var head := Kit.hbox(10)
-	var title := Kit.label("Quick menu", "HeaderLabel")
-	head.add_child(title)
-	head.add_child(Kit.spacer())
+	var head := Kit.hbox(12)
+	head_art = TextureRect.new()
+	head_art.name = "HeadArt"
+	head_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	head_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	head_art.custom_minimum_size = Vector2(32, 48)
+	head_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head_art.visible = false
+	head.add_child(head_art)
+	var titles := Kit.vbox(0)
+	titles.alignment = BoxContainer.ALIGNMENT_CENTER
+	head_caption = Kit.label("", "CaptionLabel")
+	head_caption.name = "HeadCaption"
+	head_caption.visible = false
+	titles.add_child(head_caption)
+	head_title = Kit.label("Quick menu", "LeadLabel")
+	head_title.name = "HeadTitle"
+	head_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	head_title.add_theme_font_override("font", ThemeLib.font("semibold"))
+	titles.add_child(head_title)
+	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(titles)
 	live_icon = TextureRect.new()
 	live_icon.name = "LiveIcon"
 	live_icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
@@ -128,7 +150,8 @@ func setup(services: Dictionary) -> void:
 		t.icon = Icons.tex(SECTION_ICONS[i], 22, Color.WHITE)
 		t.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		t.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		t.custom_minimum_size = Vector2(0, 66)
+		t.custom_minimum_size = Vector2(0, 62)
+		t.tooltip_text = SECTIONS[i]
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		t.pressed.connect(show_section.bind(i))
 		tab_row.add_child(t)
@@ -181,7 +204,8 @@ func _place_panel() -> void:
 	var m := 14.0
 	panel.anchor_top = 0.0
 	panel.anchor_bottom = 1.0
-	panel.offset_top = m
+	# Below the top bar, so the clock and battery stay in view.
+	panel.offset_top = TOP_INSET
 	panel.offset_bottom = -m
 	if side == "left":
 		panel.anchor_left = 0.0
@@ -205,6 +229,7 @@ func _shoulder(text: String) -> Control:
 func open(for_game: Dictionary) -> void:
 	game = for_game
 	visible = true
+	_set_header(for_game)
 	_animate_in()
 	_fix_status.clear()   # fixes may have changed since last time: check again
 	gamescope.set_overlay(true)
@@ -218,6 +243,18 @@ func close() -> void:
 	visible = false
 	gamescope.set_overlay(false)
 	closed.emit()
+
+
+## Slim header: the game's mini cover and title when there is one.
+func _set_header(g: Dictionary) -> void:
+	var a: Variant = g.get("art", {})
+	var cover: String = a.get("cover", "") if a is Dictionary else ""
+	var tex: Texture2D = load("res://scripts/ui/art_cache.gd").cached("cover", cover) if cover != "" else null
+	head_art.texture = tex
+	head_art.visible = tex != null
+	head_caption.visible = not g.is_empty()
+	head_caption.text = "Quick menu"
+	head_title.text = g.get("title", "Quick menu") if not g.is_empty() else "Quick menu"
 
 
 func _animate_in() -> void:
@@ -267,6 +304,8 @@ func show_section(i: int, keep_focus := "") -> void:
 	status_label.text = ""
 	for t in tabs.size():
 		tabs[t].set_pressed_no_signal(t == i)
+		# Icons for every section, the label only under the active one.
+		tabs[t].text = SECTIONS[t] if t == i else ""
 	for c in body.get_children():
 		body.remove_child(c)
 		c.queue_free()

@@ -56,10 +56,15 @@ func test_theme_text_contrast() -> void:
 		for k in ["good", "warn", "bad"]:
 			ok(Themes.contrast(t[k], t["surface"]) >= 4.5, "%s: %s on surface" % [id, k])
 		# Badges sit on the chip over art: check against the chip over black and white.
-		for tone in Themes.TONES:
+		var tones := Themes.tones(id)
+		eq(tones.keys(), Themes.TONES.keys(), "%s: every badge tone" % id)
+		for tone in tones:
 			for under in [Color.BLACK, Color.WHITE]:
 				var chip := Themes.over(t["chip"], under)
-				ok(Themes.contrast(Themes.TONES[tone], chip) >= 4.5, "%s: badge tone '%s' on chip" % [id, tone])
+				ok(Themes.contrast(tones[tone], chip) >= 4.5, "%s: badge tone '%s' on chip" % [id, tone])
+		# Solid corner flags: dark text on the bright tone, every theme.
+		for tone in Themes.TONES:
+			ok(Themes.contrast(Color("#0A0F16"), Themes.TONES[tone]) >= 4.5, "flag '%s' text" % tone)
 
 
 func test_contrast_math() -> void:

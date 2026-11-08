@@ -47,7 +47,15 @@ func setup(setting_key: String, title: String, lo: float, hi: float, current: fl
 	slider.value_changed.connect(_on_value_changed)
 	add_child(slider)
 
-	add_child(Kit.label(Texts.explain(key), "QuietLabel", true))
+	var hint := Kit.label(Texts.explain(key), "QuietLabel", true)
+	hint.name = "Hint"
+	hint.visible = false
+	add_child(hint)
+	slider.focus_entered.connect(func(): hint.visible = true)
+	slider.focus_exited.connect(func(): hint.visible = false)
+	var span := (hi - lo) / step
+	slider.tick_count = int(span) + 1 if span <= 12 else int((hi - lo) / 5.0) + 1
+	slider.ticks_on_borders = true
 
 	_settle = Timer.new()
 	_settle.one_shot = true

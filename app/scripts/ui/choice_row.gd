@@ -25,6 +25,8 @@ var _dots: HBoxContainer
 var _switch: Panel
 var _knob: Panel
 var _is_bool := false
+## Hide the explanation unless the row has focus.
+var collapse_hint := true
 
 
 func setup(setting_key: String, title: String, vals: Array, lbls: Array, current: Variant, icon := "") -> void:
@@ -39,7 +41,7 @@ func setup(setting_key: String, title: String, vals: Array, lbls: Array, current
 
 	button = Kit.button("", "RowButton")
 	button.name = "Button"
-	button.custom_minimum_size = Vector2(0, 58)
+	button.custom_minimum_size = Vector2(0, 52)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.gui_input.connect(_on_gui_input)
 	button.pressed.connect(func(): step(1))
@@ -168,6 +170,8 @@ func _refresh(animate := false) -> void:
 
 
 func _refresh_focus() -> void:
+	# Only the focused row explains itself; the rest stay compact.
+	_hint.visible = button.has_focus() or not collapse_hint
 	if _left == null:
 		return
 	var f := button.has_focus()
