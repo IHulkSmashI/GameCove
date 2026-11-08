@@ -1,0 +1,38 @@
+{
+  "app_name": "Quail",
+  "app_title": "Celeste",
+  "asset_infos": {
+    "Windows": {
+      "app_name": "Quail",
+      "asset_id": "Quail",
+      "build_version": "1",
+      "catalog_item_id": "cat-Quail",
+      "label_name": "Live-Windows",
+      "metadata": {},
+      "namespace": "ns-Quail"
+    }
+  },
+  "base_urls": [],
+  "metadata": {
+    "id": "cat-Quail",
+    "namespace": "ns-Quail",
+    "title": "Celeste",
+    "keyImages": [],
+    "customAttributes": {
+      "com.epicgames.app.productSlug": {
+        "type": "STRING",
+        "value": "celeste/home"
+      }
+    },
+    "categories": [
+      {
+        "path": "games"
+      },
+      {
+        "path": "applications"
+      }
+    ]
+  },
+  "sidecar": null,
+  "achievements": null
+}

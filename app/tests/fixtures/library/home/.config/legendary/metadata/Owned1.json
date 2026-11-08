@@ -1,0 +1,33 @@
+{
+  "app_name": "Owned1",
+  "app_title": "Alan Wake 2\u2122",
+  "asset_infos": {
+    "Windows": {
+      "app_name": "Owned1",
+      "asset_id": "Owned1",
+      "build_version": "1",
+      "catalog_item_id": "cat-Owned1",
+      "label_name": "Live-Windows",
+      "metadata": {},
+      "namespace": "ns-Owned1"
+    }
+  },
+  "base_urls": [],
+  "metadata": {
+    "id": "cat-Owned1",
+    "namespace": "ns-Owned1",
+    "title": "Alan Wake 2\u2122",
+    "keyImages": [],
+    "customAttributes": {},
+    "categories": [
+      {
+        "path": "games"
+      },
+      {
+        "path": "applications"
+      }
+    ]
+  },
+  "sidecar": null,
+  "achievements": null
+}

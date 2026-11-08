@@ -1,0 +1,27 @@
+{
+  "installed": [
+    {
+      "platform": "windows",
+      "executable": "",
+      "install_path": "/home/deck/Games/Heroic/The Witcher 3 Wild Hunt GOTY",
+      "install_size": "50 GiB",
+      "is_dlc": false,
+      "version": "4.04",
+      "appName": "1207664663",
+      "installedDLCs": [],
+      "language": "en-US",
+      "versionEtag": "",
+      "buildId": "1"
+    },
+    {
+      "platform": "linux",
+      "executable": "",
+      "install_path": "/home/deck/Games/Heroic/Stardew Valley",
+      "install_size": "500 MiB",
+      "is_dlc": false,
+      "version": "1.6",
+      "appName": "1453375253",
+      "language": "en-US"
+    }
+  ]
+}

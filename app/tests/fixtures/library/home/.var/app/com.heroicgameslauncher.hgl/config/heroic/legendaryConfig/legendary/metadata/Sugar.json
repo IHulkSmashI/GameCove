@@ -1,0 +1,52 @@
+{
+  "app_name": "Sugar",
+  "app_title": "Rocket League\u00ae",
+  "asset_infos": {
+    "Windows": {
+      "app_name": "Sugar",
+      "asset_id": "Sugar",
+      "build_version": "1",
+      "catalog_item_id": "cat-Sugar",
+      "label_name": "Live-Windows",
+      "metadata": {},
+      "namespace": "ns-Sugar"
+    }
+  },
+  "base_urls": [],
+  "metadata": {
+    "id": "cat-Sugar",
+    "namespace": "ns-Sugar",
+    "title": "Rocket League\u00ae",
+    "keyImages": [
+      {
+        "type": "DieselGameBoxTall",
+        "url": "https://cdn1.epicgames.com/offer/ns/Tall.jpg",
+        "width": 1,
+        "height": 1
+      },
+      {
+        "type": "DieselGameBox",
+        "url": "https://cdn1.epicgames.com/offer/ns/Wide.jpg",
+        "width": 1,
+        "height": 1
+      },
+      {
+        "type": "DieselGameBoxLogo",
+        "url": "https://cdn1.epicgames.com/offer/ns/Logo.png",
+        "width": 1,
+        "height": 1
+      }
+    ],
+    "customAttributes": {},
+    "categories": [
+      {
+        "path": "games"
+      },
+      {
+        "path": "applications"
+      }
+    ]
+  },
+  "sidecar": null,
+  "achievements": null
+}

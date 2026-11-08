@@ -1,0 +1,10 @@
+{
+  "Sugar": {
+    "winePrefix": "~/Games/Heroic/Prefixes/default/Rocket League",
+    "wineVersion": {
+      "bin": "/home/deck/.var/app/com.heroicgameslauncher.hgl/config/heroic/tools/proton/GE-Proton10-25/proton",
+      "name": "Proton - GE-Proton10-25",
+      "type": "proton"
+    }
+  }
+}

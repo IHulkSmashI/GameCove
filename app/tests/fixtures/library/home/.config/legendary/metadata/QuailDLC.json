@@ -1,0 +1,37 @@
+{
+  "app_name": "QuailDLC",
+  "app_title": "Celeste Soundtrack",
+  "asset_infos": {
+    "Windows": {
+      "app_name": "QuailDLC",
+      "asset_id": "QuailDLC",
+      "build_version": "1",
+      "catalog_item_id": "cat-QuailDLC",
+      "label_name": "Live-Windows",
+      "metadata": {},
+      "namespace": "ns-QuailDLC"
+    }
+  },
+  "base_urls": [],
+  "metadata": {
+    "id": "cat-QuailDLC",
+    "namespace": "ns-QuailDLC",
+    "title": "Celeste Soundtrack",
+    "keyImages": [],
+    "customAttributes": {},
+    "categories": [
+      {
+        "path": "games"
+      },
+      {
+        "path": "applications"
+      }
+    ],
+    "mainGameItem": {
+      "id": "cat-Quail",
+      "namespace": "ns-Quail"
+    }
+  },
+  "sidecar": null,
+  "achievements": null
+}

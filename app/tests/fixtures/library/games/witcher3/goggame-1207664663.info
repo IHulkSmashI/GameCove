@@ -1,0 +1,36 @@
+{
+  "buildId": "1",
+  "clientId": "x",
+  "gameId": "1207664663",
+  "language": "English",
+  "languages": [
+    "en-US"
+  ],
+  "name": "The Witcher 3: Wild Hunt - Game of the Year Edition",
+  "playTasks": [
+    {
+      "category": "launcher",
+      "isPrimary": false,
+      "languages": [
+        "en-US"
+      ],
+      "name": "REDprelauncher",
+      "path": "REDprelauncher.exe",
+      "type": "FileTask"
+    },
+    {
+      "arguments": "-skipLauncher -lang \"en US\"",
+      "category": "game",
+      "isPrimary": true,
+      "languages": [
+        "en-US"
+      ],
+      "name": "The Witcher 3",
+      "path": "bin\\x64\\witcher3.exe",
+      "type": "FileTask",
+      "workingDir": "bin\\x64"
+    }
+  ],
+  "rootGameId": "1207664663",
+  "version": 1
+}

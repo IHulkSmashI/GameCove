@@ -1,0 +1,20 @@
+{
+  "Sugar": {
+    "app_name": "Sugar",
+    "install_path": "/home/deck/Games/Heroic/RocketLeague",
+    "title": "Rocket League\u00ae",
+    "version": "1",
+    "platform": "Windows",
+    "executable": "Binaries/Win64/RocketLeague.exe",
+    "is_dlc": false
+  },
+  "Winey": {
+    "app_name": "Winey",
+    "install_path": "/home/deck/Games/Heroic/Winey",
+    "title": "Winey Game",
+    "version": "1",
+    "platform": "Windows",
+    "executable": "w.exe",
+    "is_dlc": false
+  }
+}
