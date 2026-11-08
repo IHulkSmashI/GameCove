@@ -130,11 +130,13 @@ const STEAM_CONFIRM_LINE := "Sure? Press A again to switch to Steam, or move awa
 const STEAM_SWITCHING := "Switching to Steam…"
 const STEAM_FAILED := "Couldn't start the switch to Steam. Is gamecove-session-select installed?"
 const NO_PASSWORD := "No admin password given, so nothing changed."
+## Gaming Mode has no password prompt, so installs and removes need the desktop.
+const NEEDS_DESKTOP := "Nothing changed: this needs your admin password, and Gaming Mode can't ask for it. Switch to Desktop Mode, open GameCove there and try again."
 const ASKS_PASSWORD := "Enter your admin password if asked."
 
 
 static func fix_working(fix: String, verb: String) -> String:
-	return "%s %s… enter your admin password if asked." % ["Installing" if verb == "install" else "Removing", fix_title(fix).to_lower()]
+	return "%s %s… enter your admin password if asked (Desktop Mode only)." % ["Installing" if verb == "install" else "Removing", fix_title(fix).to_lower()]
 
 
 static func accel_result(on: bool, ok: bool, code: int) -> String:
@@ -170,7 +172,7 @@ static func fix_result(fix: String, verb: String, ok: bool, code: int, detail :=
 			return "%s installed. %s" % [title, DEVICE_FIXES.get(fix, {}).get("after", "")]
 		return "%s removed.%s" % [title, "" if fix == "claw8ex-buttons" else " Restart to finish."]
 	if code == 126 or code == 127:
-		return NO_PASSWORD
+		return NEEDS_DESKTOP
 	return "Couldn't %s %s%s." % [verb, title.to_lower(), ": " + detail if detail != "" else ""]
 
 

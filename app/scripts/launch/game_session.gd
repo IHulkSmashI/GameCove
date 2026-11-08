@@ -22,7 +22,6 @@ const EXIT_CHECK_S := 3.0
 ## Ticks in a row the game must look gone before we call it ended (a launcher
 ## window closing before the game's opens shouldn't send you home).
 const GONE_TICKS := 2
-const POWER_JOB := "game_autotune"
 
 var gamescope: Object
 var power: Object
@@ -85,7 +84,7 @@ func begin(g: Dictionary, launched: Dictionary) -> void:
 		gamescope.set_fps_limit(int(s.get("fps_limit", 0)))
 	if power != null and launcher != null and launcher.auto_tdp_for(key):
 		autotune_on = true
-		_power_job(power.autotune_start)
+		_power_autotune(true)
 	started.emit(game)
 	if app_id > 0:
 		_start(_focus_timer)
@@ -151,7 +150,7 @@ func _finish(go_home: bool) -> void:
 	_stop(_exit_timer)
 	phase = "idle"
 	if autotune_on and power != null:
-		_power_job(power.autotune_stop)
+		_power_autotune(false)
 	autotune_on = false
 	if gamescope != null and gamescope.is_running():
 		gamescope.set_fps_limit(0)
@@ -170,14 +169,15 @@ func _focusable() -> Array:
 	return gamescope.focusable_apps()
 
 
-## Power's autotune_start does busctl on the caller's thread, so it goes through
-## Power's worker queue when there is one. Start and stop share one job name:
-## the newest wins, so a quick start-then-stop never leaves Auto TDP on.
-func _power_job(job: Callable) -> void:
-	if power.has_method("_queue"):
-		power._queue(POWER_JOB, func(): job.call(); return true)
+## Auto TDP on or off through Power's worker (it runs busctl). Start and stop
+## share one job there, so a quick start-then-stop never leaves it on.
+func _power_autotune(on: bool) -> void:
+	if power.has_method("request_autotune"):
+		power.request_autotune(on)
+	elif on:
+		power.autotune_start()
 	else:
-		job.call()
+		power.autotune_stop()
 
 
 func _make_timer(wait: float, cb: Callable) -> Timer:

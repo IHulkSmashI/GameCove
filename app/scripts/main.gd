@@ -103,10 +103,10 @@ static func resumed_between(before: Array, after: Array, gap_s: float) -> bool:
 	return wall - mono > gap_s
 
 
-## Power.refresh() reads over busctl on the caller's thread; run it on Power's worker.
+## Power.refresh() reads over busctl, so it runs on Power's worker.
 func _power_refresh() -> void:
-	if Power.has_method("_queue"):
-		Power._queue("refresh", func(): Power.refresh(); return true)
+	if Power.has_method("request_refresh"):
+		Power.request_refresh()
 	else:
 		Power.refresh()
 

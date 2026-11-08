@@ -10,6 +10,7 @@ const Texts := preload("res://scripts/ui/texts.gd")
 const Screens := preload("res://tests/test_ui_screens.gd")
 
 const HELPER := "/usr/libexec/gamecove/gamecove-fix"
+const SET_HELPER := "/usr/libexec/gamecove/gamecove-fix-set"
 
 
 ## Pretends to be gamecove-fix: keeps a state per fix and answers like it.
@@ -31,7 +32,7 @@ class FakeRunner extends RefCounted:
 			if a[0] == "claw8ex-gyro":
 				out += "accelerometer=%s\n" % ("yes" if accel else "no")
 			return {"code": 0, "out": out + "state=%s\n" % states[a[0]]}
-		if program == "pkexec" and a.size() >= 3 and a[0] == HELPER_PATH:
+		if program == "pkexec" and a.size() >= 3 and (a[0] == HELPER_PATH or (a[0] == SET_PATH and a[2] == "set")):
 			if pkexec_code != 0:
 				return {"code": pkexec_code, "out": ""}
 			match a[2]:
@@ -46,6 +47,7 @@ class FakeRunner extends RefCounted:
 		return spawn_pid
 
 	const HELPER_PATH := "/usr/libexec/gamecove/gamecove-fix"
+	const SET_PATH := "/usr/libexec/gamecove/gamecove-fix-set"
 
 
 func _menu(runner: FakeRunner, fixes := ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "fan", "charge-limit"]) -> Control:
@@ -118,7 +120,7 @@ func test_install_and_remove() -> void:
 
 	r.pkexec_code = 126
 	_row(m, "claw8ex-vrr").button.pressed.emit()
-	eq(m.status_label.text, Texts.NO_PASSWORD, "cancelled password prompt explained")
+	eq(m.status_label.text, Texts.NEEDS_DESKTOP, "no password prompt in Gaming Mode: points to Desktop Mode")
 	eq(r.states["claw8ex-vrr"], "off", "nothing changed")
 	m.free()
 
@@ -146,7 +148,7 @@ func test_accelerometer_toggle() -> void:
 	var m := _menu(r)
 	r.calls.clear()
 	m.body.get_node("claw8ex-gyro-accel").step(1)
-	eq(r.calls[0], "pkexec %s claw8ex-gyro set accel-on" % HELPER, "single-token value")
+	eq(r.calls[0], "pkexec %s claw8ex-gyro set accel-on" % SET_HELPER, "no-password set entry point, single-token value")
 	ok(r.accel, "accelerometer on")
 	eq(m.body.get_node("claw8ex-gyro-accel").value(), true, "toggle shows the new value")
 	ok(m.status_label.text.begins_with("Accelerometer on."), "result shown")

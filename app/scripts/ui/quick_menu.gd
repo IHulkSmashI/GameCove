@@ -24,6 +24,8 @@ const SUPPORT_TEXT := {
 ## The one root helper (docs/CONTRACTS.md "Root actions"). Status works without
 ## root; install, remove and set go through pkexec.
 const FIX_HELPER := "/usr/libexec/gamecove/gamecove-fix"
+## No-password entry point for the low-risk `set` values (polkit fix-set action).
+const FIX_SET_HELPER := "/usr/libexec/gamecove/gamecove-fix-set"
 const SESSION_SELECT := "/usr/bin/gamecove-session-select"
 const GYRO := "claw8ex-gyro"
 
@@ -548,7 +550,7 @@ func _set_accel(on: bool, row: Control) -> void:
 	_accel_wanted = on
 	var value := "accel-on" if on else "accel-off"
 	status_label.text = Texts.ASKS_PASSWORD
-	if not commands.run("set:" + GYRO, "pkexec", PackedStringArray([FIX_HELPER, GYRO, "set", value])):
+	if not commands.run("set:" + GYRO, "pkexec", PackedStringArray([FIX_SET_HELPER, GYRO, "set", value])):
 		row.set_value_quiet(not on)
 		status_label.text = ""
 

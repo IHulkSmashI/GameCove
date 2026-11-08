@@ -20,7 +20,7 @@ tried on the Claw 8 EX before we call any of it working.
 | `session/gamecove-session-client` | `/usr/libexec/gamecove/` | Starts Steam in the background, then runs the app |
 | `session/gamecove-session-select` | `/usr/bin/` | Switch to Steam Gaming Mode, GameCove or desktop |
 | `packaging/libexec/gamecove-fix` | `/usr/libexec/gamecove/` | Root-fix dispatcher, run with `pkexec` |
-| `packaging/polkit/io.github.ihulksmashi.gamecove.policy` | `/usr/share/polkit-1/actions/` | Who may run `gamecove-fix` |
+| `packaging/polkit/io.github.ihulksmashi.gamecove.policy` | `/usr/share/polkit-1/actions/` | Who may run `gamecove-fix` and `gamecove-fix-set` |
 | `packaging/rpm/gamecove.spec` | | RPM for Bazzite / Fedora |
 | `packaging/install.sh` | | Guided install on Bazzite (`rpm-ostree install`) |
 | `packaging/sysext/build-sysext.sh` | | systemd-sysext image for SteamOS |
@@ -225,9 +225,17 @@ pkexec /usr/libexec/gamecove/gamecove-fix <name> set <value>
 - `GAMECOVE_ROOT` / `GAMECOVE_FIXES_DIR` are for tests and are **ignored when
   `PKEXEC_UID` is set** (pkexec also clears the environment).
 
-polkit (`io.github.ihulksmashi.gamecove.fix`): active local session `yes` (the
-gamescope session has no polkit agent to ask for a password; Bazzite and OGUI do
-the same for their helpers), inactive and remote `auth_admin`.
+polkit has two actions, picked by the program pkexec runs:
+
+| Action | Program | Active session | Allows |
+| --- | --- | --- | --- |
+| `io.github.ihulksmashi.gamecove.fix-set` | `/usr/libexec/gamecove/gamecove-fix-set` | `yes` (no password) | only `charge-limit set 50..100`, `fan set auto\|quiet\|max`, `claw8ex-gyro set accel-on\|accel-off`, and `status` |
+| `io.github.ihulksmashi.gamecove.fix` | `/usr/libexec/gamecove/gamecove-fix` | `auth_admin_keep` | everything else, including every install and remove |
+
+The gamescope session has no polkit agent, so it can't ask for a password: in
+Gaming Mode only the `fix-set` actions work, and pkexec on the full helper fails
+(126/127). The Device page says so and points to Desktop Mode, where the desktop's
+polkit agent asks. `status` needs no root and runs without pkexec.
 
 ## Packaging
 
@@ -280,8 +288,10 @@ Do these in order; note results in an issue.
     shows the scope, `GAMESCOPE_FOCUSABLE_APPS` lists its id, the game comes to the
     front, and home comes back when it quits. The per-game frame limit applies at
     launch and is 0 again at home.
-12. `pkexec gamecove-fix charge-limit set 80` from the UI: no password prompt,
-    entry in `/var/lib/gamecove/changes.log`.
+12. Charge limit and fan from the UI (`pkexec gamecove-fix-set …`): no password
+    prompt, entry in `/var/lib/gamecove/changes.log`. Installing a fix from the
+    Device page in Gaming Mode fails with the Desktop Mode message; in Desktop Mode
+    it asks for the password and works.
 13. Idle power and RAM of the session vs. Bazzite's Gaming Mode.
 
 ## Sources
