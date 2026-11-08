@@ -38,6 +38,7 @@ const TITLES := {
 	"fan": "Fan",
 	"refresh": "Refresh rate",
 	"screen_fps": "Frame rate limit",
+	"claw8ex-gyro-accel": "Accelerometer",
 }
 
 ## One line each: what it does, then what it costs.
@@ -53,6 +54,7 @@ const EXPLAIN := {
 	"fan": "How hard the fan works. Quiet runs warmer and may slow the chip; Max is loud but coolest.",
 	"refresh": "How often the screen redraws. Lower saves battery; higher feels smoother.",
 	"screen_fps": "Caps the frame rate of whatever is running right now. Lower saves battery; too low feels choppy.",
+	"claw8ex-gyro-accel": "Off gives steadier aiming. On adds the tilt sensor too, for games that want it. Asks for your admin password.",
 }
 
 ## Value-specific lines that replace the general one when that value is picked.
@@ -71,6 +73,105 @@ const EXPLAIN_VALUE := {
 }
 
 const NOT_AVAILABLE := "Not available on this device yet"
+
+# ------------------------------------------------------------ device fixes
+
+## Fixes from devices.json "fixes" that the Device section lists, by folder
+## name under fixes/. Fan and charge limit live in Power, so they're not here.
+const DEVICE_FIXES := {
+	"claw8ex-buttons": {
+		"title": "MSI buttons",
+		"explain": "Makes the two MSI buttons next to the screen work: left opens the Steam menu, right opens Quick Access. Also sets up the M1 / M2 back buttons.",
+		"after": "Works right away, no restart.",
+	},
+	"claw8ex-vrr": {
+		"title": "Smooth screen down to 30 fps",
+		"explain": "VRR (variable refresh rate) makes the screen wait for each new frame, so games stay smooth when fps drops. Out of the box it stops working under 48 fps; this takes it down to 30.",
+		"after": "Needs a restart to kick in.",
+	},
+	"claw8ex-gyro": {
+		"title": "Gyro aiming",
+		"explain": "Turns on the motion sensor so you can aim by tilting the Claw, in games that support gyro through Steam. Downloads the sensor's firmware straight from MSI.",
+		"after": "Needs a cold boot: shut down fully, then turn it back on.",
+	},
+}
+const HIDDEN_FIXES := ["fan", "charge-limit"]
+
+const FIXES_HEADER := "Device fixes"
+const FIXES_INTRO := "Fixes for things that don't work out of the box on this handheld. Install and Remove ask for your admin password, and every change can be undone."
+
+## What the helper's `state=` means, in words.
+const FIX_STATES := {
+	"on": "On",
+	"off": "Off",
+	"restart": "Restart needed",
+	"partial": "Partly working",
+	"not-needed": "Not needed",
+	"unsupported": "Not supported here",
+	"other-override": "Another fix is in place",
+	"n/a": "Doesn't apply",
+	"checking": "Checking…",
+	"working": "Working…",
+	"unknown": "Couldn't check",
+}
+## Shown under the explanation for states where you can't install.
+const FIX_STATE_NOTES := {
+	"not-needed": "This system already handles it, so there's nothing to fix.",
+	"unsupported": "Your screen isn't one we've checked, so we won't touch it.",
+	"other-override": "Something else already changed this setting. Remove that first if you want ours.",
+	"n/a": "This fix isn't for this exact model.",
+	"unknown": "The fix helper didn't answer. Is GameCove fully installed?",
+}
+
+const STEAM_TITLE := "Switch to Steam Gaming Mode"
+const STEAM_EXPLAIN := "Closes GameCove and starts Steam's own full-screen mode. Save first: anything running here closes."
+const STEAM_CONFIRM := "Press again to switch"
+const STEAM_CONFIRM_LINE := "Sure? Press A again to switch to Steam, or move away to cancel."
+const STEAM_SWITCHING := "Switching to Steam…"
+const STEAM_FAILED := "Couldn't start the switch to Steam. Is gamecove-session-select installed?"
+const NO_PASSWORD := "No admin password given, so nothing changed."
+const ASKS_PASSWORD := "Enter your admin password if asked."
+
+
+static func fix_working(fix: String, verb: String) -> String:
+	return "%s %s… enter your admin password if asked." % ["Installing" if verb == "install" else "Removing", fix_title(fix).to_lower()]
+
+
+static func accel_result(on: bool, ok: bool, code: int) -> String:
+	if ok:
+		return "Accelerometer %s. Recalibrate the gyro in Steam's controller settings." % ("on" if on else "off")
+	if code == 126 or code == 127:
+		return NO_PASSWORD
+	return "Couldn't change the accelerometer; it kept its old setting."
+
+
+static func fix_title(fix: String) -> String:
+	return DEVICE_FIXES.get(fix, {}).get("title", fix.capitalize())
+
+
+static func fix_explain(fix: String) -> String:
+	var d: Dictionary = DEVICE_FIXES.get(fix, {})
+	if d.is_empty():
+		return "A fix for this device from GameCove's fixes folder."
+	return "%s %s" % [d["explain"], d["after"]]
+
+
+static func fix_state(state: String, fix := "") -> String:
+	if state == "restart" and fix == "claw8ex-gyro":
+		return "Cold boot needed"
+	return FIX_STATES.get(state, state.capitalize())
+
+
+## The line after Install / Remove finishes (`ok` false: it failed with `code`).
+static func fix_result(fix: String, verb: String, ok: bool, code: int, detail := "") -> String:
+	var title := fix_title(fix)
+	if ok:
+		if verb == "install":
+			return "%s installed. %s" % [title, DEVICE_FIXES.get(fix, {}).get("after", "")]
+		return "%s removed.%s" % [title, "" if fix == "claw8ex-buttons" else " Restart to finish."]
+	if code == 126 or code == 127:
+		return NO_PASSWORD
+	return "Couldn't %s %s%s." % [verb, title.to_lower(), ": " + detail if detail != "" else ""]
 
 
 static func explain(setting: String, value: Variant = null) -> String:

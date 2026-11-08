@@ -15,6 +15,15 @@ func ok(condition: bool, what := "") -> void:
 		failures.append("%s: %s" % [_current, what])
 
 
+## Runs one test method. Returns true only when it ran straight through: a
+## method that awaits hands back a function state before it's done, which the
+## runner can't wait for, so it counts as not finished. Script errors inside the
+## method are caught by the runner's logger (they return here like a normal end).
+func _run_test(method: String) -> bool:
+	var r = call(method)
+	return not (r is Object and r.get_class() == "GDScriptFunctionState")
+
+
 ## Path to a fixture under res://tests/fixtures as an absolute filesystem path.
 func fixture(rel: String) -> String:
 	return ProjectSettings.globalize_path("res://tests/fixtures/" + rel)

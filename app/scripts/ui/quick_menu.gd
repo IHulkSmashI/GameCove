@@ -8,6 +8,8 @@ const Texts := preload("res://scripts/ui/texts.gd")
 const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
 const SliderRow := preload("res://scripts/ui/slider_row.gd")
 const SettingsForm := preload("res://scripts/ui/settings_form.gd")
+const BgCommand := preload("res://scripts/ui/bg_command.gd")
+const FixRow := preload("res://scripts/ui/fix_row.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 
 signal closed
@@ -19,6 +21,11 @@ const SUPPORT_TEXT := {
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
 	"generic": "Generic: device-specific settings stay hidden until someone tests this device.",
 }
+## The one root helper (docs/CONTRACTS.md "Root actions"). Status works without
+## root; install, remove and set go through pkexec.
+const FIX_HELPER := "/usr/libexec/gamecove/gamecove-fix"
+const SESSION_SELECT := "/usr/bin/gamecove-session-select"
+const GYRO := "claw8ex-gyro"
 
 var device: Object
 var power: Object
@@ -33,11 +40,26 @@ var live_label: Label
 var status_label: Label
 var _focusables: Array = []
 var _power_shape := {}
+## Runs gamecove-fix and friends off the main thread; tests give it a fake runner.
+var commands: Node
+var _fix_status := {}     # fix -> parsed `status` output; missing = not checked yet
+var _fix_working := {}    # fix -> "install" | "remove" while it runs
+var _accel_wanted := false
+var _building := false
+var _steam_armed := false
+var _steam_button: Button
 
 
-## services: {"device", "power", "launcher", "gamescope"} (the autoloads, or fakes in tests).
+## services: {"device", "power", "launcher", "gamescope"} (the autoloads, or fakes in tests),
+## plus optional "command_runner" (a fake for bg_command.gd in tests).
 func setup(services: Dictionary) -> void:
 	name = "QuickMenu"
+	commands = BgCommand.new()
+	commands.name = "Commands"
+	if services.has("command_runner"):
+		commands.runner = services["command_runner"]
+	commands.finished.connect(_on_command_finished)
+	add_child(commands)
 	device = services["device"]
 	power = services["power"]
 	launcher = services["launcher"]
@@ -138,6 +160,7 @@ func _shoulder(text: String) -> Label:
 func open(for_game: Dictionary) -> void:
 	game = for_game
 	visible = true
+	_fix_status.clear()   # fixes may have changed since last time: check again
 	gamescope.set_overlay(true)
 	show_section(0)
 	refresh_live()
@@ -185,12 +208,16 @@ func show_section(i: int, keep_focus := "") -> void:
 		body.remove_child(c)
 		c.queue_free()
 	_focusables.clear()
+	_steam_armed = false
+	_steam_button = null
+	_building = true
 	match i:
 		0: _build_game()
 		1: _build_power()
 		2: _build_screen()
 		3: _build_controller()
 		4: _build_device()
+	_building = false
 
 	Kit.link_vertical(_focusables, tabs[i])
 	for t in tabs:
@@ -254,7 +281,13 @@ func _build_game() -> void:
 	_line(game.get("title", ""), "HeaderLabel", "GameTitle")
 	_line("Changes save for this game and apply the next time it starts.", "QuietLabel")
 	var form: VBoxContainer = SettingsForm.new()
-	form.setup(game.get("key", ""), launcher, false)
+	# Steam games launch through Steam, so our launch env (upscaler, frame gen,
+	# low latency) doesn't reach them: SettingsForm's 4th argument hides those.
+	# Older SettingsForm without it: fall back to the 3-argument call.
+	if form.get_method_argument_count("setup") >= 4:
+		form.call("setup", game.get("key", ""), launcher, false, game.get("store", "") != "steam")
+	else:
+		form.setup(game.get("key", ""), launcher, false)
 	form.goal_changed.connect(_on_goal_changed)
 	form.saved.connect(_on_game_settings_saved)
 	body.add_child(form)
@@ -270,9 +303,28 @@ func _on_goal_changed(goal: String) -> void:
 		status_label.text = "Couldn't switch the power profile; the device kept its current one."
 
 
+## Push the new frame rate cap live only while a game is on screen; on the home
+## screen it would stick to GameCove itself. (Launcher applies it at launch.)
 func _on_game_settings_saved(settings: Dictionary) -> void:
-	if gamescope.is_running():
+	if _game_running():
 		gamescope.set_fps_limit(int(settings.get("fps_limit", 0)))
+
+
+## gamescope's own home app id (Gamescope.MAIN_APP_ID).
+const HOME_APP_ID := 769
+
+
+## True while a game (not GameCove) is the app gamescope has in front.
+## Gamescope.is_running() only means "we're inside a gamescope session".
+func _game_running() -> bool:
+	if not gamescope.is_running():
+		return false
+	if gamescope.has_method("game_running"):
+		return bool(gamescope.game_running())
+	if gamescope.has_method("focused_app"):
+		var app := int(gamescope.focused_app())
+		return app > 0 and app != HOME_APP_ID
+	return false
 
 
 func _build_power() -> void:
@@ -419,6 +471,145 @@ func _build_device() -> void:
 	if level == "full":
 		support.add_theme_color_override("font_color", ThemeLib.ACCENT)
 	_line(SUPPORT_TEXT.get(level, SUPPORT_TEXT["generic"]), "QuietLabel")
+
+	var fixes := device_fixes()
+	if not fixes.is_empty():
+		_line(Texts.FIXES_HEADER, "HeaderLabel", "FixesHeader")
+		_line(Texts.FIXES_INTRO, "QuietLabel")
+		for f in fixes:
+			if not _fix_status.has(f) and not _fix_working.has(f):
+				_check_fix(f)
+		for f in fixes:
+			var row: VBoxContainer = FixRow.new()
+			row.setup(f, fix_state(f))
+			row.action.connect(_on_fix_action)
+			body.add_child(row)
+			if row.button != null:
+				_focusables.append(row.button)
+			if f == GYRO and fix_state(f) in ["on", "partial", "restart"]:
+				var key := GYRO + "-accel"
+				var a: VBoxContainer = ChoiceRow.bool_row(key, Texts.TITLES[key], _fix_status[f].get("accelerometer", "no") == "yes")
+				a.changed.connect(func(v): _set_accel(v, a))
+				_add_row(a)
+
+	var steam := Kit.vbox(4)
+	steam.name = "SteamMode"
+	_steam_button = Kit.button(Texts.STEAM_TITLE)
+	_steam_button.name = "Button"
+	_steam_button.custom_minimum_size = Vector2(0, 54)
+	_steam_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_steam_button.pressed.connect(_on_steam_pressed)
+	_steam_button.focus_exited.connect(_disarm_steam)
+	steam.add_child(_steam_button)
+	steam.add_child(Kit.label(Texts.STEAM_EXPLAIN, "QuietLabel", true))
+	body.add_child(steam)
+	_focusables.append(_steam_button)
+
+
+## Fix folder names from this device's devices.json row that the Device section
+## shows (fan and charge limit are in Power).
+func device_fixes() -> Array:
+	var out := []
+	for f in device.profile.get("fixes", []):
+		if f is String and f != "" and f not in Texts.HIDDEN_FIXES and f not in out:
+			out.append(f)
+	return out
+
+
+## "checking", "working", "unknown" or the helper's own state= value.
+func fix_state(fix: String) -> String:
+	if _fix_working.has(fix):
+		return "working"
+	if not _fix_status.has(fix):
+		return "checking"
+	return _fix_status[fix].get("state", "unknown")
+
+
+func _check_fix(fix: String) -> void:
+	commands.run("status:" + fix, FIX_HELPER, PackedStringArray([fix, "status"]))
+
+
+func _on_fix_action(fix: String, verb: String) -> void:
+	if verb == "status":
+		_fix_status.erase(fix)
+		_check_fix(fix)
+		_refresh_device()
+		return
+	if _fix_working.has(fix):
+		return
+	_fix_working[fix] = verb
+	_refresh_device(Texts.fix_working(fix, verb))
+	if not commands.run(verb + ":" + fix, "pkexec", PackedStringArray([FIX_HELPER, fix, verb])):
+		_fix_working.erase(fix)
+		_refresh_device()
+
+
+func _set_accel(on: bool, row: Control) -> void:
+	_accel_wanted = on
+	var value := "accel-on" if on else "accel-off"
+	status_label.text = Texts.ASKS_PASSWORD
+	if not commands.run("set:" + GYRO, "pkexec", PackedStringArray([FIX_HELPER, GYRO, "set", value])):
+		row.set_value_quiet(not on)
+		status_label.text = ""
+
+
+func _on_command_finished(id: String, code: int, output: String) -> void:
+	var kind := id.get_slice(":", 0)
+	var fix := id.substr(kind.length() + 1)
+	var message := ""
+	match kind:
+		"status":
+			var kv := BgCommand.key_values(output)
+			if code != 0 or not kv.has("state"):
+				kv = {"state": "unknown"}
+			_fix_status[fix] = kv
+		"install", "remove":
+			_fix_working.erase(fix)
+			_fix_status.erase(fix)
+			message = Texts.fix_result(fix, kind, code == 0, code, BgCommand.error_line(output))
+		"set":
+			_fix_status.erase(fix)
+			message = Texts.accel_result(_accel_wanted, code == 0, code)
+		_:
+			return
+	_refresh_device(message)
+
+
+## Rebuilds the Device section if it's on screen, keeping focus where it was,
+## then shows `message` in the status line.
+func _refresh_device(message := "") -> void:
+	if _building or not visible or section != 4:
+		return
+	var f: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	var keep := ""
+	if f != null and body.is_ancestor_of(f):
+		keep = f.get_parent().name
+	show_section(4, keep)
+	if f != null and f in tabs:
+		f.grab_focus()
+	status_label.text = message
+
+
+func _on_steam_pressed() -> void:
+	if not _steam_armed:
+		_steam_armed = true
+		_steam_button.text = Texts.STEAM_CONFIRM
+		status_label.text = Texts.STEAM_CONFIRM_LINE
+		return
+	_steam_armed = false
+	_steam_button.text = Texts.STEAM_TITLE
+	if commands.spawn(SESSION_SELECT, PackedStringArray(["steam"])):
+		status_label.text = Texts.STEAM_SWITCHING
+	else:
+		status_label.text = Texts.STEAM_FAILED
+
+
+func _disarm_steam() -> void:
+	if not _steam_armed or _steam_button == null:
+		return
+	_steam_armed = false
+	_steam_button.text = Texts.STEAM_TITLE
+	status_label.text = ""
 
 
 func focusables() -> Array:
