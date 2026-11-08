@@ -1,0 +1,100 @@
+extends RefCounted
+## Small reader for Valve's text KeyValues files (config.vdf, compatibilitytool.vdf).
+## Read-only. Keys keep their case; use get_ci() because Steam mixes "Valve" and "valve".
+
+
+## Whole file as nested Dictionaries of Strings. Broken input gives what parsed so far.
+static func parse(text: String) -> Dictionary:
+	var tokens := tokenize(text)
+	var pos: Array[int] = [0]
+	return _object(tokens, pos)
+
+
+static func parse_file(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	return parse(FileAccess.get_file_as_string(path))
+
+
+## Value for a key, ignoring case. Missing gives `fallback`.
+static func get_ci(d: Dictionary, key: String, fallback: Variant = null) -> Variant:
+	if d.has(key):
+		return d[key]
+	var low := key.to_lower()
+	for k in d:
+		if str(k).to_lower() == low:
+			return d[k]
+	return fallback
+
+
+## First Dictionary found under `key` anywhere in the tree (depth first), or {}.
+static func find_ci(d: Dictionary, key: String) -> Dictionary:
+	var hit: Variant = get_ci(d, key)
+	if hit is Dictionary:
+		return hit
+	for k in d:
+		if d[k] is Dictionary:
+			var sub := find_ci(d[k], key)
+			if not sub.is_empty():
+				return sub
+	return {}
+
+
+static func tokenize(text: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var i := 0
+	var n := text.length()
+	while i < n:
+		var c := text[i]
+		if c == " " or c == "\t" or c == "\n" or c == "\r":
+			i += 1
+		elif c == "/" and i + 1 < n and text[i + 1] == "/":
+			while i < n and text[i] != "\n":
+				i += 1
+		elif c == "{" or c == "}":
+			out.append(c)
+			i += 1
+		elif c == "\"":
+			i += 1
+			var s := ""
+			while i < n and text[i] != "\"":
+				if text[i] == "\\" and i + 1 < n:
+					var e := text[i + 1]
+					s += "\n" if e == "n" else ("\t" if e == "t" else e)
+					i += 2
+				else:
+					s += text[i]
+					i += 1
+			i += 1
+			# Quoted strings are marked so a literal "{" value is never read as a brace.
+			out.append("\"" + s)
+		else:
+			var s := ""
+			while i < n and not (text[i] in [" ", "\t", "\n", "\r", "{", "}", "\""]):
+				s += text[i]
+				i += 1
+			out.append("\"" + s)
+	return out
+
+
+static func _object(tokens: PackedStringArray, pos: Array[int]) -> Dictionary:
+	var d := {}
+	while pos[0] < tokens.size():
+		var t := tokens[pos[0]]
+		pos[0] += 1
+		if t == "}":
+			return d
+		if t == "{":
+			continue
+		var key := t.substr(1)
+		if pos[0] >= tokens.size():
+			break
+		var nxt := tokens[pos[0]]
+		pos[0] += 1
+		if nxt == "{":
+			d[key] = _object(tokens, pos)
+		elif nxt == "}":
+			return d
+		else:
+			d[key] = nxt.substr(1)
+	return d
