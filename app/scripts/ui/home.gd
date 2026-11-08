@@ -25,7 +25,7 @@ signal game_focused(game: Dictionary)
 
 ## Kept for callers that walk rows; Home.shelves() has the real list.
 const ROWS := [["recent", "Recently played"], ["installed", "Installed"], ["all", "All games"]]
-const SPOTLIGHT_H := 300
+const SPOTLIGHT_H := 276
 
 var games: Array = []
 ## The "Continue" game: most recently played installed game.
@@ -59,7 +59,7 @@ func _init() -> void:
 	margin.add_theme_constant_override("margin_top", 92)
 	margin.add_theme_constant_override("margin_bottom", 58)
 	add_child(margin)
-	var root := Kit.vbox(4)
+	var root := Kit.vbox(26)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(root)
 
@@ -202,7 +202,7 @@ func _set_spotlight(g: Dictionary, line: String, animate: bool) -> void:
 	_hero_buttons = [_empty.find_child("Refresh", true, false)] if empty else [play_button, page_button]
 	if not empty:
 		if line == "":
-			line = "Continue playing" if g.get("key", "") == hero_game.get("key", "-") and int(g.get("last_played", 0)) > 0 else ""
+			line = "Jump back in" if g.get("key", "") == hero_game.get("key", "-") and int(g.get("last_played", 0)) > 0 else ""
 		header.show_game(g, line, animate)
 		var installed: bool = g.get("installed", false)
 		play_button.text = "Play" if installed else "Install"
@@ -267,7 +267,7 @@ func _on_tile_focus(g: Dictionary, i: int, s: Control) -> void:
 	for b in _hero_buttons:
 		b.focus_neighbor_bottom = b.get_path_to(t)
 	_scroll_to(s.position.y)
-	_set_spotlight(g, s.title, true)
+	_set_spotlight(g, "", true)
 
 
 func _scroll_to(y: float) -> void:

@@ -59,6 +59,13 @@ func _init() -> void:
 	add_child(badges)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_THEME_CHANGED and title != null:
+		title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.35) if ThemeLib.is_dark() else Color(1, 1, 1, 0.0))
+		if not game.is_empty():
+			show_game(game, eyebrow.text)
+
+
 ## `line`: the short accent line above the title ("" hides it).
 func show_game(g: Dictionary, line := "", animate := false) -> void:
 	var same: bool = g.get("key", "") == game.get("key", "-")

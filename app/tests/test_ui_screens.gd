@@ -118,7 +118,7 @@ func test_home_three_games() -> void:
 	eq(h.tiles("all").size(), 3, "all row")
 	eq(h.shelf_ids(), ["recent", "installed", "short", "store_steam", "store_epic", "store_gog", "all"], "shelves in order")
 	eq(String(h.default_focus().name), "Play", "focus lands on Play")
-	ok("Continue playing" in _texts(h), "spotlight says why it's there")
+	ok("Jump back in" in _texts(h), "spotlight says why it's there")
 	var all_text := _texts(h)
 	ok("Linux denied" in all_text, "anti-cheat badge on tile")
 	ok("10 h to beat" in all_text, "time to beat badge on tile")

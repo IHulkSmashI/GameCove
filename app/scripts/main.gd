@@ -485,7 +485,7 @@ func _open_page(game: Dictionary) -> void:
 	page.play_requested.connect(_play)
 	page.back_requested.connect(_close_page)
 	add_child(page)
-	move_child(page, top_bar.get_index())
+	move_child(page, _hint_shade.get_index())
 	page.modulate.a = 0.0
 	Motion.to(page, "modulate:a", 1.0, Motion.BASE)
 	screens[current].visible = false
@@ -734,5 +734,5 @@ func apply_theme() -> void:
 	_build_settings()
 	if keep != "" and settings.rows.has(keep):
 		Home.focus_later(settings.rows[keep].button)
-	backdrop.show_game(backdrop.game)
+	_on_accent(backdrop.current_accent())
 	_update_hints()

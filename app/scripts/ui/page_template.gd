@@ -32,6 +32,9 @@ var scroll: ScrollContainer
 var focusables: Array = []
 var _fade: TextureRect
 var _side: TextureRect
+var _cue_fade: TextureRect
+## "More below" cue, visible while the page can scroll further.
+var cue: HBoxContainer
 
 
 func setup_page(g: Dictionary, line := "") -> void:
@@ -113,6 +116,61 @@ func setup_page(g: Dictionary, line := "") -> void:
 	cards_box = Kit.vbox(18)
 	cards_box.name = "Cards"
 	col.add_child(cards_box)
+	_build_scroll_cue()
+
+
+## A fade and a "More below" cue at the bottom while there's more to scroll.
+## Updated from the scroll bar's signals, never per frame.
+func _build_scroll_cue() -> void:
+	_cue_fade = TextureRect.new()
+	_cue_fade.name = "ScrollFade"
+	_cue_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cue_fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_cue_fade.stretch_mode = TextureRect.STRETCH_SCALE
+	_cue_fade.anchor_top = 1.0
+	_cue_fade.anchor_right = 1.0
+	_cue_fade.anchor_bottom = 1.0
+	_cue_fade.offset_top = -150
+	_cue_fade.offset_bottom = -52
+	var g := Gradient.new()
+	var sc: Color = ThemeLib.color("scrim")
+	g.colors = PackedColorArray([Color(sc, 0.0), Color(sc, 0.95)])
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.width = 4
+	t.height = 64
+	t.fill_to = Vector2(0, 1)
+	_cue_fade.texture = t
+	add_child(_cue_fade)
+	cue = Kit.icon_label("chevron_down", "More below", "CaptionLabel", ThemeLib.color("text_2"), 18)
+	cue.name = "ScrollCue"
+	cue.anchor_left = 0.5
+	cue.anchor_right = 0.5
+	cue.anchor_top = 1.0
+	cue.anchor_bottom = 1.0
+	cue.offset_left = -70
+	cue.offset_right = 70
+	cue.offset_top = -86
+	cue.offset_bottom = -62
+	cue.alignment = BoxContainer.ALIGNMENT_CENTER
+	add_child(cue)
+	var bar := scroll.get_v_scroll_bar()
+	bar.value_changed.connect(func(_v): _update_cue())
+	bar.changed.connect(_update_cue)
+	_update_cue()
+
+
+func _update_cue() -> void:
+	if cue == null:
+		return
+	var bar := scroll.get_v_scroll_bar()
+	var more := bar.max_value - bar.page - bar.value > 24.0
+	cue.visible = more
+	_cue_fade.visible = more
+
+
+func can_scroll_down() -> bool:
+	return cue != null and cue.visible
 
 
 func _load_hero() -> void:
