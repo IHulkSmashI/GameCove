@@ -211,7 +211,12 @@ func test_quick_menu_with_game_and_full_support() -> void:
 	var svc := _services(power, gs)
 	var m: Control = QuickMenu.new()
 	m.setup(svc)
-	var game: Dictionary = _three()[0]
+	var steam_game: Dictionary = _three()[0]
+	m.open(steam_game)
+	eq(m.focusables().size(), 2, "Steam game: goal and fps only (env settings go in Steam launch options)")
+	m.close()
+	var game: Dictionary = _three()[0].duplicate(true)
+	game["store"] = "epic"  # a game we start ourselves gets every setting
 	m.open(game)
 	eq(_count(m.body, SettingsForm), 1, "game settings shown")
 	eq(m.focusables().size(), 4, "goal, fps, upscaler, frame gen")
@@ -253,7 +258,9 @@ func test_quick_menu_with_game_and_full_support() -> void:
 func test_quick_menu_input_and_focus() -> void:
 	var m: Control = QuickMenu.new()
 	m.setup(_services())
-	m.open(_three()[0])
+	var game: Dictionary = _three()[0].duplicate(true)
+	game["store"] = "epic"
+	m.open(game)
 	eq(m.focus_target(), m.focusables()[0], "first control gets focus on open")
 	eq(m.focus_target("upscaler"), m.focusables()[2], "rebuild keeps focus on the same setting")
 	var rb := InputEventJoypadButton.new()
