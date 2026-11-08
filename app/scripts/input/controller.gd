@@ -28,14 +28,28 @@ extends "res://scripts/system/service.gd"
 ##
 ## Nothing polls. Everything runs on the worker; results come back on the main
 ## thread as `changed` and `applied`.
+##
+## Guide / Quick Access inside GameCove's own gamescope session: the InputPlumber
+## intercept in intercept.gd (activation button, InterceptMode 2 while our UI
+## has focus and 1 while a game has focus, InputEvent signals read from a
+## `gdbus monitor` child). Results: `ui_action(action)` on the main thread, and
+## navigation turned back into Godot joypad events. Only when GameCove is the
+## session's main app; under Steam's own session InputPlumber is left alone.
 
 signal changed(state: Dictionary)
 ## A setter finished: setting is "paddle", "gyro", "rumble", "profile", "game_profile".
 signal applied(setting: String, ok: bool)
+## A special button asked for a GameCove action: "home", "quick_menu", "osk" or
+## "screenshot" (InputPlumber intercept, or a fallback chord). Main thread.
+signal ui_action(action: String)
+## Any button seen through the intercept went down or up (InputPlumber
+## capability name: "South", "Guide", "LeftBumper"...). For the button test.
+signal button_event(capability: String, pressed: bool)
 
 const Busctl := preload("res://scripts/device/busctl.gd")
 const Yaml := preload("res://scripts/input/yaml_lite.gd")
 const Profile := preload("res://scripts/input/ip_profile.gd")
+const Intercept := preload("res://scripts/input/intercept.gd")
 
 const SERVICE := "org.shadowblip.InputPlumber"
 const ROOT_PATH := "/org/shadowblip/InputPlumber"
@@ -59,6 +73,16 @@ var _game := ""
 var _game_profile_loaded := false
 var _baseline: Dictionary = {}    # profile before a per-game one was loaded
 
+## The intercept (see intercept.gd). `device_id` picks the button profile.
+var intercept: RefCounted = Intercept.new()
+var device_id := ""
+var _intercepting := false        # wanted here and set up
+var _monitor_alive := false
+var _game_focused := false
+var _button_test := false
+var _restarts := 0
+var _intercept_mode := -1         # last mode sent (main thread copy)
+
 
 func _init() -> void:
 	bus = Busctl.new(runner, "--system")
@@ -67,6 +91,13 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	var dev := get_node_or_null("/root/Device")
+	if dev != null and dev.has_method("id"):
+		device_id = dev.id()
+	var gs := get_node_or_null("/root/Gamescope")
+	if intercept_wanted(OS.get_environment("GAMECOVE_STEAM_MODE"), OS.get_environment("GAMECOVE_INTERCEPT"),
+			gs != null and gs.has_method("is_running") and gs.is_running()):
+		start_intercept()
 	# Only when there is a saved everyday layout: put it back on (InputPlumber
 	# forgot it at reboot). Otherwise nothing runs until the UI calls refresh().
 	if not FileAccess.file_exists(default_profile_path()):
@@ -76,6 +107,17 @@ func _ready() -> void:
 		if _active != "":
 			_load_file(default_profile_path())
 			_refresh())
+
+
+func _exit_tree() -> void:
+	if _intercepting:
+		# never leave a device in Always/Pass with nobody listening (synchronous:
+		# the worker is about to stop)
+		_intercepting = false
+		intercept.on_line = Callable()
+		_set_devices_mode(MODE_NONE_SAFE, Intercept.activation_for(device_id))
+		intercept.stop_monitor()
+	super._exit_tree()
 
 
 ## Tests: fake runner and a fixture home.
@@ -205,8 +247,155 @@ func set_game_profile(key: String, on: bool) -> void:
 			changed.emit(state())))
 
 
+# ---- intercept ----------------------------------------------------------------
+
+const MODE_NONE_SAFE := 0
+
+
+## True when GameCove should take the Guide button from InputPlumber: inside a
+## gamescope session that GameCove runs as its main app (our session file
+## exports GAMECOVE_STEAM_MODE), unless GAMECOVE_INTERCEPT=0.
+static func intercept_wanted(steam_mode_env: String, intercept_env: String, in_gamescope: bool) -> bool:
+	return in_gamescope and steam_mode_env != "" and intercept_env != "0"
+
+
+## Starts the intercept: the monitor first; devices get their activation and
+## mode once it prints its first line. False when gdbus can't run (then the
+## virtual pad keeps reaching Godot as usual and Guide arrives as a joypad button).
+func start_intercept(program := Intercept.MONITOR_PROGRAM, args: Array = Intercept.MONITOR_ARGS) -> bool:
+	_setup_intercept()
+	_intercepting = true
+	if not intercept.start_monitor(program, args):
+		_intercepting = false
+		return false
+	return true
+
+
+func _setup_intercept() -> void:
+	intercept.device = device_id
+	intercept.inject = _inject
+	intercept.on_action = func(a: String): ui_action.emit(a)
+	intercept.on_button = func(c: String, p: bool): button_event.emit(c, p)
+	intercept.on_line = _on_monitor_line
+
+
+## Tests: pretend the intercept runs (no monitor process); lines go through
+## monitor_line().
+func setup_intercept_for_tests() -> void:
+	_setup_intercept()
+	_intercepting = true
+
+
+func monitor_line(parsed: Dictionary) -> void:
+	_on_monitor_line(parsed)
+
+
+## While a game has focus (true) everything but the activation button goes to
+## the game; while GameCove's UI has focus (false) InputPlumber sends it all to
+## us. main.gd calls it when home / the quick menu opens over a game and when
+## the game gets the screen back. start_game / end_game set it too.
+func set_game_focused(on: bool) -> void:
+	_game_focused = on
+	intercept.reset()
+	_apply_intercept()
+
+
+## Button test: lets the virtual pad reach Godot directly (mode 0) so even back
+## paddles show up, but only with no game running behind us.
+func set_button_test(on: bool) -> void:
+	_button_test = on
+	intercept.reset()
+	_apply_intercept()
+
+
+## {"active": intercepting, "listening": monitor runs, "mode": last mode sent
+## (-1 none), "game_focused", "activation": {"events", "target"}, "chords": {action: [modifier, button]}}
+func intercept_state() -> Dictionary:
+	return {"active": _intercepting, "listening": _monitor_alive, "mode": _intercept_mode,
+		"game_focused": _game_focused, "activation": Intercept.activation_for(device_id),
+		"chords": Intercept.chords_for(device_id)}
+
+
+func _wanted_mode() -> int:
+	if not _monitor_alive:
+		return Intercept.MODE_NONE
+	if _game_focused:
+		return Intercept.MODE_PASS
+	if _button_test and _game == "":
+		return Intercept.MODE_NONE
+	return Intercept.MODE_ALWAYS
+
+
+func _apply_intercept() -> void:
+	if not _intercepting:
+		return
+	_send_mode(_wanted_mode())
+
+
+func _send_mode(mode: int) -> void:
+	_intercept_mode = mode
+	var act := Intercept.activation_for(device_id)
+	_queue("intercept", func(): _set_devices_mode(mode, act))
+
+
+## Worker: activation and mode on every gamepad composite device.
+func _set_devices_mode(mode: int, act: Dictionary) -> void:
+	var objs: Variant = bus.call_method(SERVICE, ROOT_PATH, OM_IFACE, "GetManagedObjects")
+	var devs := parse_devices(objs[0] if objs is Array and objs.size() > 0 else {})
+	for d in devs:
+		if not d.get("gamepad", false) and not d["capabilities"].is_empty():
+			continue
+		var events: Array = act["events"]
+		var args: Array = ["ass", str(events.size())]
+		args.append_array(events)
+		args.append(act["target"])
+		_call_void(d["path"], DEVICE_IFACE, "SetInterceptActivation", args)
+		bus.set_prop(SERVICE, d["path"], DEVICE_IFACE, "InterceptMode", "u", str(mode))
+
+
+func _on_monitor_line(d: Dictionary) -> void:
+	match str(d.get("kind", "")):
+		"started":
+			_monitor_alive = true
+			_restarts = 0
+			_apply_intercept()
+		"owner":
+			if str(d.get("owner", "")) != "":
+				_apply_intercept()   # InputPlumber (re)started: its devices are new
+		"added":
+			if str(d.get("path", "")).begins_with(ROOT_PATH + "/CompositeDevice"):
+				_apply_intercept()
+		"event":
+			intercept.handle(str(d["event"]), float(d["value"]))
+		"exited":
+			_monitor_alive = false
+			intercept.reset()
+			if _intercepting:
+				_send_mode(Intercept.MODE_NONE)
+				_restart_monitor_later()
+
+
+func _restart_monitor_later() -> void:
+	if _restarts >= 3 or not is_inside_tree():
+		return
+	_restarts += 1
+	get_tree().create_timer(5.0 * _restarts).timeout.connect(func():
+		if _intercepting and not intercept.running():
+			intercept.stop_monitor()
+			intercept.start_monitor())
+
+
+func _inject(e: InputEvent) -> void:
+	var pads := Input.get_connected_joypads()
+	if not pads.is_empty() and (e is InputEventJoypadButton or e is InputEventJoypadMotion):
+		e.device = pads[0]
+	Input.parse_input_event(e)
+
+
 ## GameSession: a game starts. Loads its profile when it has one.
 func start_game(key: String) -> void:
+	_game_focused = true
+	_apply_intercept()
 	_game = key
 	_state["game"] = key
 	_queue("game", func():
@@ -225,6 +414,9 @@ func start_game(key: String) -> void:
 
 ## GameSession: the game ended. Puts the everyday layout back.
 func end_game() -> void:
+	_game_focused = false
+	_game = ""
+	_apply_intercept()
 	var was_loaded := _game_profile_loaded
 	var base := _baseline
 	_game = ""

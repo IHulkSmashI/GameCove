@@ -30,11 +30,11 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Steam Deck (LCD) | `steam-deck-lcd` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
 | Steam Deck (OLED) | `steam-deck-oled` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
-| ASUS ROG Ally | `asus-rog-ally` | partial | 5 / 25 / 30 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
-| ASUS ROG Ally X | `asus-rog-ally-x` | partial | 5 / 25 / 30 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
-| ASUS ROG Xbox Ally | `asus-rog-xbox-ally` | partial | 4 / 20 / 20 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
-| ASUS ROG Xbox Ally X | `asus-rog-xbox-ally-x` | partial | 5 / 35 / 35 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
-| ASUS ROG Xbox Ally X20 | `asus-rog-xbox-ally-x20` | partial | 5 / 35 / 35 | asus_custom_fan_curve | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | no: tdp, panel.vrr |
+| ASUS ROG Ally | `asus-rog-ally` | partial | 5 / 25 / 30 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
+| ASUS ROG Ally X | `asus-rog-ally-x` | partial | 5 / 25 / 30 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
+| ASUS ROG Xbox Ally | `asus-rog-xbox-ally` | partial | 4 / 20 / 20 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
+| ASUS ROG Xbox Ally X | `asus-rog-xbox-ally-x` | partial | 5 / 35 / 35 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
+| ASUS ROG Xbox Ally X20 | `asus-rog-xbox-ally-x20` | partial | 5 / 35 / 35 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | no: tdp, panel.vrr |
 | Lenovo Legion Go | `lenovo-legion-go` | partial | 5 / 30 / 30 | lenovo_wmi_other | – | yes | hhd | `legion-go` | 4 | xbox | no: charge_limit |
 | Lenovo Legion Go 2 | `lenovo-legion-go-2` | partial | 5 / 30 / 35 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-2` | 4 | xbox | no: tdp, charge_limit, panel.vrr |
 | Lenovo Legion Go 2 (Z2) | `lenovo-legion-go-2-z2` | partial | 5 / 30 / 35 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-2` | 4 | xbox | no: tdp, charge_limit, panel.vrr, chip |
@@ -46,41 +46,41 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 | MSI Claw A1M | `msi-claw-a1m` | partial | 8 / 35 / 43 | msi_wmi_platform (fix) | yes (steamos-manager) | yes | hhd | `msi-claw` | 2 | xbox | yes |
 | MSI Claw A8 | `msi-claw-a8` | partial | 8 / 35 / 35 | msi_wmi_platform (fix) | yes (steamos-manager) | yes | hhd | `msi-claw` | 2 | xbox | no: panel.vrr |
 | MSI Claw (unknown model) *(family)* | `msi-claw-family` | generic | 8 / 25 / 30 | msi_wmi_platform (fix) | – | unknown | – | `msi-claw` | 2 | xbox | no: tdp, panel, chip, buttons |
-| OneXFly F1 | `onexplayer-onexfly-f1` | partial | 5 / 28 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-f1` | 1 | xbox | no: panel.vrr |
-| OneXFly F1 Pro | `onexplayer-onexfly-f1-pro` | partial | 5 / 30 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-f1` | 1 | xbox | no: panel.vrr |
-| OneXPlayer X1 (AMD) | `onexplayer-x1-amd` | partial | 5 / 28 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
-| OneXPlayer X1 (Intel) | `onexplayer-x1-intel` | partial | 8 / 28 / 35 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
-| OneXPlayer X1 Mini | `onexplayer-x1-mini` | partial | 5 / 28 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
-| OneXPlayer X1 Pro | `onexplayer-x1-pro` | partial | 4 / 30 / 30 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: dmi, buttons, panel |
-| OneXPlayer 2 | `onexplayer-2` | partial | 5 / 28 / 33 | oxp_ec | – | yes | – | `oxp-2` | 0 | xbox | yes |
-| OneXPlayer 2 Pro | `onexplayer-2-pro` | partial | 5 / 30 / 30 | oxp_ec | – | yes | – | `oxp-2` | 0 | xbox | yes |
-| OneXPlayer G1 (AMD) | `onexplayer-g1-amd` | partial | 5 / 30 / 35 | oxp_ec | yes (sysfs) | none | – | `oxp-g1` | 0 | xbox | no: tdp, panel.vrr, chip |
-| OneXPlayer G1 (Intel) | `onexplayer-g1-intel` | partial | 8 / 30 / 35 | oxp_ec | yes (sysfs) | none | – | `oxp-g1` | 0 | xbox | no: tdp, panel.vrr, chip |
-| OneXPlayer 3 | `onexplayer-3` | partial | 8 / 35 / 35 | oxp_ec | yes (sysfs) | yes | – | `oxp-x2` | 2 | xbox | no: panel.resolution, panel.vrr |
-| OneXPlayer X2 Mini | `onexplayer-x2-mini` | generic | 3 / 30 / 45 | oxp_ec | yes (sysfs) | yes | – | `oxp-x2` | 2 | xbox | no: chip, panel, tdp |
-| OneXFly Apex | `onexplayer-onexfly-apex` | partial | 8 / 35 / 35 | oxp_ec | yes (sysfs) | yes | inputplumber | `oxp-apex` | 2 | xbox | no: panel, tdp |
-| OneXPlayer Super X | `onexplayer-super-x` | generic | 8 / 45 / 80 | oxp_ec | yes (sysfs) | unknown | – | `generic` | 0 | xbox | no: buttons, panel, tdp.battery_max |
-| OneXPlayer (unknown model) *(family)* | `onexplayer-family` | generic | 5 / 25 / 28 | oxp_ec | – | unknown | – | `oxp-generic` | 0 | xbox | no: tdp, panel, chip, buttons |
-| AOKZOE A1 | `aokzoe-a1` | partial | 5 / 28 / 33 | oxp_ec | – | yes | oxp-ec | `aokzoe` | 0 | xbox | no: panel |
-| AOKZOE A1 Pro | `aokzoe-a1-pro` | partial | 5 / 30 / 30 | oxp_ec | – | yes | oxp-ec | `aokzoe` | 0 | xbox | no: panel |
-| AOKZOE A1X | `aokzoe-a1x` | partial | 5 / 30 / 30 | oxp_ec | – | yes | – | `aokzoe` | 0 | xbox | no: panel, chip, tdp |
-| AOKZOE (unknown model) *(family)* | `aokzoe-family` | generic | 5 / 25 / 28 | oxp_ec | – | unknown | – | `aokzoe` | 0 | xbox | no: tdp, panel, chip, buttons |
-| AYANEO 2S | `ayaneo-2s` | partial | 5 / 28 / 28 | ayaneo_ec | yes (sysfs) | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: charge_limit |
-| AYANEO 2 | `ayaneo-2` | partial | 5 / 28 / 33 | ayaneo_ec | yes (sysfs) | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: charge_limit |
-| AYANEO KUN | `ayaneo-kun` | partial | 5 / 30 / 30 | ayaneo_ec | yes (sysfs) | yes | ayaneo-ec | `aya-kun` | 0 | xbox | no: charge_limit, tdp |
-| AYANEO AIR 1S | `ayaneo-air-1s` | partial | 5 / 25 / 25 | ayaneo_ec | yes (sysfs) | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: charge_limit |
-| AYANEO AIR Plus | `ayaneo-air-plus` | partial | 5 / 28 / 28 | ayaneo_ec | – | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: chip |
-| AYANEO Flip | `ayaneo-flip` | partial | 5 / 28 / 28 | ayaneo_ec | – | yes | – | `aya-classic` | 0 | xbox | no: tdp, panel.vrr |
-| AYANEO Flip 1S DS | `ayaneo-flip-1s-ds` | partial | 5 / 30 / 30 | ayaneo_ec | – | yes | – | `aya-flip-1s` | 2 | xbox | no: chip, panel, tdp |
-| AYANEO 3 | `ayaneo-3` | partial | 5 / 30 / 30 | ayaneo_ec | yes (sysfs) | yes | inputplumber | `aya-3` | 0 | xbox | no: tdp, panel, charge_limit |
-| AYANEO Slide | `ayaneo-slide` | partial | 5 / 28 / 28 | ayaneo_ec | – | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: tdp |
-| AYANEO (unknown model) *(family)* | `ayaneo-family` | generic | 5 / 25 / 28 | ayaneo_ec | – | unknown | – | `aya-classic` | 0 | xbox | no: tdp, panel, chip, buttons |
-| GPD WIN 4 | `gpd-win-4` | partial | 5 / 28 / 28 | gpdfan | – | yes | – | `gpd-win4` | 1 | xbox | no: chip |
-| GPD WIN Mini | `gpd-win-mini` | partial | 5 / 28 / 28 | gpdfan | – | yes | – | `gpd-win4` | 1 | xbox | no: chip, panel.vrr |
-| GPD WIN Max 2 | `gpd-win-max-2` | partial | 5 / 28 / 28 | gpdfan | – | yes | – | `gpd-winmax2` | 2 | xbox | no: chip |
-| GPD WIN 5 | `gpd-win-5` | partial | 4 / 50 / 85 | gpdfan | – | yes | – | `gpd-win5` | 2 | xbox | no: tdp.battery_max, panel |
-| GPD (unknown model) *(family)* | `gpd-family` | generic | 5 / 25 / 28 | gpdfan | – | unknown | – | `gpd-win4` | 1 | xbox | no: tdp, panel, chip, buttons |
-| ZOTAC Gaming Zone | `zotac-zone` | partial | 5 / 28 / 30 | zotac_zone_platform | – | yes | inputplumber | `zotac-zone` | 2 | xbox | no: tdp, charge_limit |
+| OneXFly F1 | `onexplayer-onexfly-f1` | partial | 5 / 28 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-f1` | 1 | xbox | no: panel.vrr |
+| OneXFly F1 Pro | `onexplayer-onexfly-f1-pro` | partial | 5 / 30 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-f1` | 1 | xbox | no: panel.vrr |
+| OneXPlayer X1 (AMD) | `onexplayer-x1-amd` | partial | 5 / 28 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
+| OneXPlayer X1 (Intel) | `onexplayer-x1-intel` | partial | 8 / 28 / 35 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
+| OneXPlayer X1 Mini | `onexplayer-x1-mini` | partial | 5 / 28 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
+| OneXPlayer X1 Pro | `onexplayer-x1-pro` | partial | 4 / 30 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: dmi, buttons, panel |
+| OneXPlayer 2 | `onexplayer-2` | partial | 5 / 28 / 33 | oxp_ec (fix) | – | yes | – | `oxp-2` | 0 | xbox | yes |
+| OneXPlayer 2 Pro | `onexplayer-2-pro` | partial | 5 / 30 / 30 | oxp_ec (fix) | – | yes | – | `oxp-2` | 0 | xbox | yes |
+| OneXPlayer G1 (AMD) | `onexplayer-g1-amd` | partial | 5 / 30 / 35 | oxp_ec (fix) | yes (sysfs) | none | – | `oxp-g1` | 0 | xbox | no: tdp, panel.vrr, chip |
+| OneXPlayer G1 (Intel) | `onexplayer-g1-intel` | partial | 8 / 30 / 35 | oxp_ec (fix) | yes (sysfs) | none | – | `oxp-g1` | 0 | xbox | no: tdp, panel.vrr, chip |
+| OneXPlayer 3 | `onexplayer-3` | partial | 8 / 35 / 35 | oxp_ec (fix) | yes (sysfs) | yes | – | `oxp-x2` | 2 | xbox | no: panel.resolution, panel.vrr |
+| OneXPlayer X2 Mini | `onexplayer-x2-mini` | generic | 3 / 30 / 45 | oxp_ec (fix) | yes (sysfs) | yes | – | `oxp-x2` | 2 | xbox | no: chip, panel, tdp |
+| OneXFly Apex | `onexplayer-onexfly-apex` | partial | 8 / 35 / 35 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-apex` | 2 | xbox | no: panel, tdp |
+| OneXPlayer Super X | `onexplayer-super-x` | generic | 8 / 45 / 80 | oxp_ec (fix) | yes (sysfs) | unknown | – | `generic` | 0 | xbox | no: buttons, panel, tdp.battery_max |
+| OneXPlayer (unknown model) *(family)* | `onexplayer-family` | generic | 5 / 25 / 28 | oxp_ec (fix) | – | unknown | – | `oxp-generic` | 0 | xbox | no: tdp, panel, chip, buttons |
+| AOKZOE A1 | `aokzoe-a1` | partial | 5 / 28 / 33 | oxp_ec (fix) | – | yes | oxp-ec | `aokzoe` | 0 | xbox | no: panel |
+| AOKZOE A1 Pro | `aokzoe-a1-pro` | partial | 5 / 30 / 30 | oxp_ec (fix) | – | yes | oxp-ec | `aokzoe` | 0 | xbox | no: panel |
+| AOKZOE A1X | `aokzoe-a1x` | partial | 5 / 30 / 30 | oxp_ec (fix) | – | yes | – | `aokzoe` | 0 | xbox | no: panel, chip, tdp |
+| AOKZOE (unknown model) *(family)* | `aokzoe-family` | generic | 5 / 25 / 28 | oxp_ec (fix) | – | unknown | – | `aokzoe` | 0 | xbox | no: tdp, panel, chip, buttons |
+| AYANEO 2S | `ayaneo-2s` | partial | 5 / 28 / 28 | ayaneo_ec (fix) | yes (sysfs) | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: charge_limit |
+| AYANEO 2 | `ayaneo-2` | partial | 5 / 28 / 33 | ayaneo_ec (fix) | yes (sysfs) | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: charge_limit |
+| AYANEO KUN | `ayaneo-kun` | partial | 5 / 30 / 30 | ayaneo_ec (fix) | yes (sysfs) | yes | ayaneo-ec | `aya-kun` | 0 | xbox | no: charge_limit, tdp |
+| AYANEO AIR 1S | `ayaneo-air-1s` | partial | 5 / 25 / 25 | ayaneo_ec (fix) | yes (sysfs) | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: charge_limit |
+| AYANEO AIR Plus | `ayaneo-air-plus` | partial | 5 / 28 / 28 | ayaneo_ec (fix) | – | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: chip |
+| AYANEO Flip | `ayaneo-flip` | partial | 5 / 28 / 28 | ayaneo_ec (fix) | – | yes | – | `aya-classic` | 0 | xbox | no: tdp, panel.vrr |
+| AYANEO Flip 1S DS | `ayaneo-flip-1s-ds` | partial | 5 / 30 / 30 | ayaneo_ec (fix) | – | yes | – | `aya-flip-1s` | 2 | xbox | no: chip, panel, tdp |
+| AYANEO 3 | `ayaneo-3` | partial | 5 / 30 / 30 | ayaneo_ec (fix) | yes (sysfs) | yes | inputplumber | `aya-3` | 0 | xbox | no: tdp, panel, charge_limit |
+| AYANEO Slide | `ayaneo-slide` | partial | 5 / 28 / 28 | ayaneo_ec (fix) | – | yes | ayaneo-ec | `aya-classic` | 0 | xbox | no: tdp |
+| AYANEO (unknown model) *(family)* | `ayaneo-family` | generic | 5 / 25 / 28 | ayaneo_ec (fix) | – | unknown | – | `aya-classic` | 0 | xbox | no: tdp, panel, chip, buttons |
+| GPD WIN 4 | `gpd-win-4` | partial | 5 / 28 / 28 | gpdfan (fix) | – | yes | – | `gpd-win4` | 1 | xbox | no: chip |
+| GPD WIN Mini | `gpd-win-mini` | partial | 5 / 28 / 28 | gpdfan (fix) | – | yes | – | `gpd-win4` | 1 | xbox | no: chip, panel.vrr |
+| GPD WIN Max 2 | `gpd-win-max-2` | partial | 5 / 28 / 28 | gpdfan (fix) | – | yes | – | `gpd-winmax2` | 2 | xbox | no: chip |
+| GPD WIN 5 | `gpd-win-5` | partial | 4 / 50 / 85 | gpdfan (fix) | – | yes | – | `gpd-win5` | 2 | xbox | no: tdp.battery_max, panel |
+| GPD (unknown model) *(family)* | `gpd-family` | generic | 5 / 25 / 28 | gpdfan (fix) | – | unknown | – | `gpd-win4` | 1 | xbox | no: tdp, panel, chip, buttons |
+| ZOTAC Gaming Zone | `zotac-zone` | partial | 5 / 28 / 30 | zotac_zone_platform (fix) | – | yes | inputplumber | `zotac-zone` | 2 | xbox | no: tdp, charge_limit |
 | Acer Predator Atlas 8 | `acer-predator-atlas-8` | partial | 8 / 30 / 40 | – | – | unknown | – | `acer-atlas` | 2 | xbox | no: tdp, panel.vrr, gyro |
 | Acer Nitro Blaze 7 | `acer-nitro-blaze-7` | generic | 5 / 28 / 30 | – | – | unknown | – | `acer-blaze` | 0 | xbox | no: dmi, buttons, tdp, panel.vrr, gyro |
 | Acer Nitro Blaze 8 | `acer-nitro-blaze-8` | generic | 5 / 28 / 30 | – | – | unknown | – | `acer-blaze` | 0 | xbox | no: dmi, buttons, tdp, panel.vrr, gyro |
@@ -116,7 +116,7 @@ The tests check that each real DMI fixture (`app/tests/fixtures/devices/dmi.json
 | `tdp_backends` | Power services to try in order: `steamos-manager`, `powerstation`. |
 | `power_backend` | What actually writes the limit under those services (informational): `intel-rapl`, `intel-rapl-mmio`, `powerstation`, `steamos-manager`. |
 | `fan`, `fan_via` | Kernel fan interface (hwmon name or driver: `steamdeck_hwmon`, `msi_wmi_platform`, `asus_custom_fan_curve`, `lenovo_wmi_other`, `oxp_ec`, `ayaneo_ec`, `gpdfan`, `zotac_zone_platform`); how GameCove drives it today (`steamos-manager`, `fix`, or `null` = not yet). |
-| `charge_limit`, `charge_limit_via` | Battery charge limit available; through `steamos-manager`, the `charge-limit` fix (`fix`) or plain `sysfs` (`charge_control_end_threshold`). Power reads this flag. |
+| `charge_limit`, `charge_limit_via` | Battery charge limit available; through `steamos-manager`, the `charge-limit` fix (`fix`) or a kernel battery control (`sysfs`: `charge_control_end_threshold`, or `charge_behaviour` on AYANEO), which Power also writes through the `charge-limit` fix. Power reads this flag. |
 | `gyro`, `imu` | `yes` (works through InputPlumber), `fix` (needs a GameCove fix), `no` (sensor present, not on Linux yet), `none` (no sensor), `unknown`; `imu` names the sensor. |
 | `rgb` | `null` or `{zones, via}`; `via` is who drives the LEDs (`inputplumber`, `hhd`, `ayaneo-ec`, `oxp-ec`). |
 | `buttons`, `glyphs`, `art` | Button profile in buttons.gd, glyph set (`xbox`, `deck`), picture in `app/assets/devices/art/`. |
@@ -217,7 +217,7 @@ The capability strings are the same names buttons.gd uses, so `Buttons.capabilit
 
 - **Steam Deck (LCD)**: Steam Deck controller is a HID device; InputPlumber's deck driver exposes L4/L5/R4/R5 as paddles and both trackpads.
 - **Steam Deck (OLED)**: Panel runs 45-90 Hz; gamescope handles refresh switching.
-- **ASUS ROG Ally**: TDP through the asus-armoury firmware attributes (steamos-manager); older kernels only have asus-wmi ppt_* files. Fan curves live in the asus_custom_fan_curve hwmon; GameCove has no fan fix for it yet.
+- **ASUS ROG Ally**: TDP through the asus-armoury firmware attributes (steamos-manager); older kernels only have asus-wmi ppt_* files. Fan curves live in the asus_custom_fan_curve hwmon (GameCove's fan fix); changing the platform profile puts the factory curve back.
 - **ASUS ROG Ally X**: Same controls as the ROG Ally; 80 Wh battery.
 - **ASUS ROG Xbox Ally**: steamos-manager drives TDP through amdgpu hwmon (4-20 W) on this model.
 - **ASUS ROG Xbox Ally X20**: DMI sys_vendor is 'ASUS', not 'ASUSTeK COMPUTER INC.' like older Allys. TDP copied from the Xbox Ally X until someone measures it.
@@ -260,7 +260,7 @@ The capability strings are the same names buttons.gd uses, so `Buttons.capabilit
 
 ## Not done yet (needs other parts of GameCove)
 
-- **Fan control** beyond the Claw's `msi_wmi_platform` and the Deck's steamos-manager: ASUS (`asus_custom_fan_curve`), OneXPlayer/AOKZOE (`oxp_ec`), AYANEO (`ayaneo_ec`), GPD (`gpdfan`) and Zotac (`zotac_zone_platform`) need a fan fix each, or Power should use steamos-manager's FanControl1 where it appears.
-- **Charge limit** on rows marked `charge_limit_via: "sysfs"` needs the `charge-limit` fix to accept those devices (it writes the same `charge_control_end_threshold`).
+- **Fan control**: the `fan` fix drives `msi_wmi_platform`, `asus_custom_fan_curve` (Auto, Quiet, Max: fan tables), `oxp_ec`/`oxpec`, `ayaneo_ec`, `gpdfan` and `zotac_*` (Auto, Max: one duty, no safe fixed "quiet"); the Steam Deck uses steamos-manager's `FanControl1`. Lenovo's `lenovo_wmi_other` has no fan interface GameCove can drive yet. The Zotac driver is out of tree and its sysfs layout is unverified (`unverified: fan`).
+- **Charge limit**: rows with `charge_limit_via: "sysfs"` go through the `charge-limit` fix too. OneXPlayer (oxpec) has `charge_control_end_threshold`; AYANEO's ayaneo-ec only has `charge_behaviour` (`auto` / `inhibit-charge`), so the fix holds charging while plugged in at or above the limit and GameCove re-runs it when the charger or the level crosses the line (every 15 s check, only while plugged in); unplugging always returns to `auto`.
 - **RGB**: no GameCove control yet; InputPlumber exposes LEDs as `org.shadowblip.Input.Source.LEDDevice` on devices with a `led` source group (Ally, Go S, AYANEO, Zotac); Claw and Legion Go LEDs are driven by hhd today.
 - **Legion Go charge limit** is only reachable through hhd/acpi_call today.

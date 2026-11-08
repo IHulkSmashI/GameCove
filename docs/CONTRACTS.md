@@ -477,7 +477,12 @@ set_rumble(enabled) / test_rumble(strength := 0.6)
 set_led(color, brightness) -> false           # InputPlumber has no LED setter
 load_profile_file(path)
 set_game_profile(key, on) / has_game_profile(key)
-start_game(key) / end_game()                  # main.gd from GameSession.started/ended
+start_game(key) / end_game()                  # main.gd from GameSession.started/ended (also set game focus on / off)
+signal ui_action(action)                      # "home" | "quick_menu" | "osk" | "screenshot", main thread (intercept, below)
+signal button_event(capability, pressed)      # every button seen through the intercept ("South", "Guide"...): button test
+set_game_focused(on)                          # main.gd: false while home / quick menu is over a running game, true when the game has the screen again
+set_button_test(on)                           # controller page's button test: virtual pad straight to Godot (paddles show) when no game runs
+intercept_state() -> {"active", "listening", "mode", "game_focused", "activation": {"events", "target"}, "chords": {action: [modifier, button]}}
 state() -> {"available", "version", "devices": [{"path", "name", "profile_name", "profile_path", "capabilities",
             "output_capabilities", "paddles", "gyro", "rumble", "led", "gamepad"}], "active",
             "profile": {"name", "path", "paddles": {paddle: target or ""}, "gyro": off|mouse|stick|custom},
@@ -488,7 +493,41 @@ state() -> {"available", "version", "devices": [{"path", "name", "profile_name",
 Profiles we write: `~/.config/inputplumber/profiles/gamecove/default.yaml` and `<store>_<id>.yaml`
 (JSON, InputPlumber profile schema v1).
 
-## Tests
+**Guide / Quick Access intercept** (`scripts/input/intercept.gd`, as OpenGamepadUI does it; why in
+[DEVICES.md](DEVICES.md#what-the-input-service-must-do)). Only inside GameCove's own gamescope session
+(`GAMECOVE_STEAM_MODE` set by our session file, `Gamescope.is_running()`, and not `GAMECOVE_INTERCEPT=0`);
+under Steam's session InputPlumber is left alone.
+
+- Every gamepad composite device gets `SetInterceptActivation(as, s)`: its home button (Guide on most
+  handhelds), else its Quick Access button (GPD WIN 4), else View + Menu delivered as Guide (GPD WIN Max 2).
+- `InterceptMode` (u): **2** (Always) while GameCove's UI has focus, **1** (Pass) while a game has focus,
+  **0** when the monitor isn't running, for the button test, and when GameCove quits.
+- Signals: one `gdbus monitor --system --dest org.shadowblip.InputPlumber` child (a normal match rule;
+  `busctl monitor` / `dbus-monitor` need root on the system bus), read line by line on its own thread.
+  The exact signal: `org.shadowblip.Input.DBusDevice.InputEvent(event s, value d)` from
+  `/org/shadowblip/InputPlumber/devices/target/dbusN`; value 1.0 pressed, 0.0 released, 0..1 for stick
+  directions. `ObjectManager.InterfacesAdded` for a new `CompositeDeviceN`, or InputPlumber getting a new
+  bus owner, applies the intercept again. If the monitor exits it is restarted up to 3 times.
+- `event` goes through `Buttons.action_for_dbus(device, event)`: `home` / `quick_menu` / `osk` /
+  `screenshot` become `ui_action(action)`; navigation (`ui_accept`, `ui_back`, d-pad, sticks, LB/RB,
+  LT/RT...) is injected as Godot `InputEventJoypadButton` / `InputEventJoypadMotion`, because in mode 2
+  the virtual pad gets nothing. Devices without a button for an action get `Buttons.FALLBACK_CHORDS`
+  (Quick Access + A = home, + Y = keyboard, + RB = screenshot) while our UI has focus.
+- In a game, Guide (the activation) switches InputPlumber to Always and arrives as `ui_action("home")`;
+  main.gd shows home and calls `set_game_focused(false)`, and `set_game_focused(true)` when the game has
+  the screen again. Quick Access stays Steam's inside a game (InputPlumber's Xbox target turns it into
+  Guide + A, Steam's quick access menu); in GameCove's UI it opens our quick menu.
+
+## Device pages (`scripts/ui/device/`, embedded by Settings)
+
+`about_panel.gd`, `controller_panel.gd`, `storage_panel.gd`, `updates_panel.gd`: each
+`static func build(services: Dictionary) -> Control` with services `{"device", "power", "controller",
+"storage", "updates"}`. The Control (base `device_panel.gd`) offers `default_focus()`, `focusables()`,
+`set_top_target(c)`, `hints() -> [[glyph, label], ...]` + `signal hints_changed(hints)`,
+`signal toast_requested(text, icon, tone)`, and `opened()` / `closed()` (Storage watches hot-plug from
+open to close, Controller refreshes on open and ends the button test on close; entering / leaving the
+tree does the same). Pages listen to their services' signals and disconnect when freed.
+
 
 - GDScript: `godot --headless --path app -s res://tests/run_tests.gd`. Tests are `app/tests/test_*.gd` extending `res://tests/test_case.gd`; fixtures in `app/tests/fixtures/`.
 - Python (game database): `cd gamedb && pytest`.

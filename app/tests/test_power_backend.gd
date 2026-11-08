@@ -401,3 +401,123 @@ func test_autotune_and_refresh_requests_use_the_worker() -> void:
 	ok(not p._autotune_on, "stop without a worker runs at once")
 	eq(p.state()["tdp_w"], 25.0, "user's TDP back")
 	p.free()
+
+
+## A fresh fake root with one manual-duty fan hwmon (oxp_ec, ayaneo_ec, ...).
+func _sys_manual_fan(test_name: String, hw_name: String, enable: String) -> String:
+	var root := _sys(test_name)
+	var h := root + "/sys/class/hwmon/hwmon5/"
+	for f in DirAccess.get_files_at(h):
+		DirAccess.remove_absolute(h + f)
+	_write(h + "name", hw_name)
+	_write(h + "pwm1_enable", enable)
+	_write(h + "pwm1", "90")
+	return root
+
+
+func test_fan_drivers_for_other_makers() -> void:
+	for case in [["onexplayer-onexfly-f1", "oxp_ec", "2"], ["ayaneo-2s", "ayaneo_ec", "2"], ["gpd-win-4", "gpdfan", "2"], ["zotac-zone", "zotac_zone_platform", "2"]]:
+		var root := _sys_manual_fan("fan_" + case[1], case[1], case[2])
+		var row := _row(case[0])
+		eq(row.get("fan_via"), "fix", case[0] + ": devices.json drives the fan through the fix")
+		var p := _power("bus_claw_powerstation.json", row, root)
+		eq(p.state()["supported"]["fan"], true, case[1] + ": fan supported")
+		eq(p.state()["fan_modes"], ["auto", "max"], case[1] + ": no quiet on a one-duty driver")
+		eq(p.state()["fan_mode"], "auto", case[1] + ": enable 2 reads as auto")
+		var h := root + "/sys/class/hwmon/hwmon5/"
+		p.runner.exec_handler = func(argv: PackedStringArray) -> int:
+			if argv[4] == "max":
+				_write(h + "pwm1_enable", "1")
+				_write(h + "pwm1", "255")
+			else:
+				_write(h + "pwm1_enable", "2")
+			return 0
+		ok(p.set_fan_mode("max"), case[1] + ": max")
+		eq(p.state()["fan_mode"], "max", case[1] + ": manual 255 reads as max")
+		ok(not p.set_fan_mode("quiet"), case[1] + ": quiet refused before any root action")
+		ok(not p.runner.calls.has(HELPER + " fan set quiet"), case[1] + ": no pkexec for quiet")
+		p.free()
+
+
+func test_old_oxp_driver_auto_is_zero() -> void:
+	var root := _sys_manual_fan("fan_oxpec", "oxpec", "0")
+	var p := _power("bus_claw_powerstation.json", _row("aokzoe-a1"), root)
+	eq(p.state()["fan_mode"], "auto", "oxp-sensors: enable 0 is the EC's own control")
+	p.free()
+	var root2 := _sys_manual_fan("fan_oxp_full", "oxp_ec", "0")
+	var q := _power("bus_claw_powerstation.json", _row("aokzoe-a1"), root2)
+	eq(q.state()["fan_mode"], "max", "oxpec 6.16+: enable 0 is full speed")
+	q.free()
+
+
+func test_asus_fan_curve_tables() -> void:
+	var root := _sys("fan_asus")
+	var h := root + "/sys/class/hwmon/hwmon5/"
+	for f in DirAccess.get_files_at(h):
+		DirAccess.remove_absolute(h + f)
+	_write(h + "name", "asus_custom_fan_curve")
+	var quiet: Array = PowerScript.FAN_DRIVERS["asus_custom_fan_curve"]["tables"]["quiet"]
+	for n in [1, 2]:
+		_write(h + "pwm%d_enable" % n, "1")
+		for i in range(8):
+			_write(h + "pwm%d_auto_point%d_pwm" % [n, i + 1], str(int((int(quiet[i]) * 255 + 50) / 100)))
+	var p := _power("bus_claw_powerstation.json", _row("asus-rog-ally"), root)
+	eq(p.state()["fan_modes"], ["quiet", "auto", "max"], "ASUS has quiet")
+	eq(p.state()["fan_mode"], "quiet", "eight-point table read as quiet")
+	p.free()
+
+
+func test_ayaneo_charge_behaviour() -> void:
+	var root := _sys("charge_aya")
+	var bat := root + "/sys/class/power_supply/BAT1/"
+	DirAccess.remove_absolute(bat + "charge_control_end_threshold")
+	_write(bat + "charge_behaviour", "[auto] inhibit-charge")
+	_write(bat + "capacity", "85")
+	var state_dir := root + PowerScript.CHARGE_STATE_DIR
+	var row := _row("ayaneo-2s")
+	eq(row.get("charge_limit_via"), "sysfs", "AYANEO row says sysfs")
+	var p := _power("bus_claw_powerstation.json", row, root)
+	eq(p.state()["supported"]["charge_limit"], true, "behaviour battery offers a limit")
+	eq(p.state()["charge_limit"], 100, "no limit before the fix ran")
+	p.runner.exec_handler = func(argv: PackedStringArray) -> int:
+		if argv[2] != "charge-limit":
+			return 2
+		DirAccess.make_dir_recursive_absolute(state_dir)
+		_write(state_dir + "/original", "auto")
+		_write(state_dir + "/limit", argv[4])
+		var cap := DeviceScript.read_text(bat + "capacity").to_int()
+		var on := DeviceScript.ac_online(root)
+		_write(bat + "charge_behaviour", "auto [inhibit-charge]" if on and cap >= int(argv[4]) and int(argv[4]) < 100 else "[auto] inhibit-charge")
+		return 0
+	_write(root + "/sys/class/power_supply/ADP1/online", "1")
+	p.plugged = true
+	ok(p.set_charge_limit(80), "limit 80 through the fix")
+	eq(p.state()["charge_limit"], 80, "limit read back from the fix's state")
+	ok("inhibit-charge]" in DeviceScript.read_text(bat + "charge_behaviour"), "85 % on the charger: charging held")
+	p.runner.calls.clear()
+	ok(not p.hold_charge(), "nothing crossed: no root action")
+	eq(p.runner.calls.size(), 0, "one sysfs read only")
+	_write(root + "/sys/class/power_supply/ADP1/online", "0")
+	p.check_power_source()
+	ok(p.runner.calls.has(HELPER + " charge-limit set 80"), "unplugging re-runs the fix")
+	ok(DeviceScript.read_text(bat + "charge_behaviour").begins_with("[auto]"), "unplugged: back to auto")
+	p.free()
+
+
+func test_unknown_device_never_exceeds_the_service_max() -> void:
+	# A CPU-table row for an unknown handheld says 5..28 W; the service allows 4..15 W.
+	var row := {"id": "unknown", "tier": "generic", "support": "generic", "tdp": {"min": 5, "battery_max": 28, "plugged_max": 30},
+		"tdp_backends": ["steamos-manager"], "fan": null, "charge_limit": false}
+	var p := _power("bus_deck_steamos.json", row, _sys("unknown_clamp", false))
+	eq(p.backend, "steamos-manager", "backend")
+	ok(p.state()["tdp_max"] <= 15.0, "battery max clamped to the service (%s)" % p.state()["tdp_max"])
+	ok(p._range["plugged_max"] <= 15.0, "plugged max clamped too")
+	ok(p.state()["tdp_min"] >= 5.0, "own min kept when it is above the service's")
+	ok(p.set_tdp(40.0), "a too-high request is clamped, not refused")
+	ok(p.state()["tdp_w"] <= 15.0, "never above the service's max (%s)" % p.state()["tdp_w"])
+	ok(PowerScript.profile_watts(p.device, "performance", true) <= 15.0, "profiles inside the clamped range")
+	p.free()
+	# a specific, tested row keeps its own range
+	var q := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), _sys("specific_keep"))
+	eq(q.state()["tdp_max"], 35.0, "specific row keeps devices.json's range")
+	q.free()

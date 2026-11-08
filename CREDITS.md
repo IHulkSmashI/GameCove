@@ -32,7 +32,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | InputPlumber device configs and capability maps (ShadowBlip) | DMI matches, special-button and paddle capabilities, IMU and LED presence for every handheld in `devices.json` / `buttons.gd`; D-Bus intercept mode documented in DEVICES.md | GPL-3.0 |
 | PowerStation APU and DMI-override databases (ShadowBlip) | TDP ranges and boost in `devices.json` and its `cpus` fallback table | GPL-3.0 |
 | steamos-manager device files (Valve, Collabora, Igalia) | DMI ids, TDP / fan / charge-limit methods per handheld | MIT |
-| Handheld Daemon adjustor (hhd-dev) | Per-device TDP tables and profile watts (ROG Ally family, Claw, Legion Go S cap, GPD) | GPL-3.0 (adjustor); hhd itself LGPL-2.1-or-later |
+| Handheld Daemon adjustor (hhd-dev) | Per-device TDP tables and profile watts (ROG Ally family, Claw, Legion Go S cap, GPD); the ROG Ally fan curve points and minimum/default curves behind the ASUS "quiet" fan preset | GPL-3.0 (adjustor); hhd itself LGPL-2.1-or-later |
 | Bazzite (Universal Blue) | Acer Predator Atlas 8 InputPlumber config (DMI board `F900_PTG`, QAM / M1 / M2 buttons) | Apache-2.0 |
 | OpenGamepadUI (ShadowBlip) | How a gamescope main app takes Guide / QAM from InputPlumber (intercept mode) | GPL-3.0 |
 | Inter typeface | Banner lettering | OFL-1.1 |
