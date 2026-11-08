@@ -25,15 +25,20 @@ func setup(fix_name: String, fix_state: String) -> void:
 	fix = fix_name
 	state = fix_state
 	name = fix_name
-	add_theme_constant_override("separation", 4)
+	add_theme_constant_override("separation", 6)
+	add_child(_gap())
 
 	var head := Kit.hbox()
-	var title := Kit.label(Texts.fix_title(fix))
+	var title := Kit.label(Texts.fix_title(fix), "LeadLabel")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	state_label = Kit.label(Texts.fix_state(state, fix), "AccentLabel" if state == "on" else "QuietLabel")
+	var tone: String = {"on": "good", "restart": "warn", "partial": "warn", "unknown": "bad", "unsupported": "bad"}.get(state, "")
+	var chip: PanelContainer = load("res://scripts/ui/badge.gd").make({"kind": "state", "text": Texts.fix_state(state, fix),
+		"short": Texts.fix_state(state, fix), "tone": tone, "icon": {"good": "check", "warn": "alert", "bad": "x"}.get(tone, "")}, "tile")
+	chip.name = "StateChip"
+	state_label = chip.label
 	state_label.name = "State"
-	head.add_child(state_label)
+	head.add_child(chip)
 	add_child(head)
 
 	var explain := Kit.label(Texts.fix_explain(fix), "QuietLabel", true)
@@ -46,6 +51,7 @@ func setup(fix_name: String, fix_state: String) -> void:
 
 	var verb := verb_for(state)
 	if verb == "" and state not in BUSY_STATES:
+		add_child(_gap())
 		return
 	button = Kit.button(button_text(state))
 	button.name = "Button"
@@ -55,6 +61,14 @@ func setup(fix_name: String, fix_state: String) -> void:
 		if verb != "":
 			action.emit(fix, verb))
 	add_child(button)
+	add_child(_gap())
+
+
+static func _gap() -> Control:
+	var c := Control.new()
+	c.custom_minimum_size = Vector2(0, 6)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return c
 
 
 ## What the button does in `fix_state`: "install", "remove", "status" or "" (nothing).
@@ -74,3 +88,18 @@ static func button_text(fix_state: String) -> String:
 		"remove": return "Remove"
 		"status": return "Check again"
 	return Texts.fix_state(fix_state)
+
+
+## Each fix sits on its own tinted card, drawn just outside the row so the
+## row's children (and the quick menu's focus lookups) stay as they are.
+func _draw() -> void:
+	var ThemeLib = load("res://theme/gamecove_theme.gd")
+	var sb: StyleBoxFlat = ThemeLib.box(ThemeLib.soft(0.05), ThemeLib.radius("l"), 0, 0)
+	sb.border_color = ThemeLib.color("line")
+	sb.set_border_width_all(1)
+	draw_style_box(sb, Rect2(Vector2(-14, 0), size + Vector2(28, 0)))
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED or what == NOTIFICATION_THEME_CHANGED:
+		queue_redraw()

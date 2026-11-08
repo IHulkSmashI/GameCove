@@ -39,6 +39,11 @@ const TITLES := {
 	"refresh": "Refresh rate",
 	"screen_fps": "Frame rate limit",
 	"claw8ex-gyro-accel": "Accelerometer",
+	"theme": "Theme",
+	"match_art": "Match game art colours",
+	"reduce_motion": "Reduce motion",
+	"menu_side": "Quick menu side",
+	"ui_sounds": "Interface sounds",
 }
 
 ## One line each: what it does, then what it costs.
@@ -55,6 +60,11 @@ const EXPLAIN := {
 	"refresh": "How often the screen redraws. Lower saves battery; higher feels smoother.",
 	"screen_fps": "Caps the frame rate of whatever is running right now. Lower saves battery; too low feels choppy.",
 	"claw8ex-gyro-accel": "Off gives steadier aiming. On adds the tilt sensor too, for games that want it. Asks for your admin password.",
+	"theme": "Colours for the whole app. Changes right away.",
+	"match_art": "Tints the background, focus glow and Play button with a colour from the focused game's art.",
+	"reduce_motion": "Swaps slides, zooms and pulses for plain fades or instant changes. Also saves a little battery.",
+	"menu_side": "Which edge the quick menu slides in from.",
+	"ui_sounds": "Soft clicks when you move, select and go back. Off saves a sliver of battery.",
 }
 
 ## Value-specific lines that replace the general one when that value is picked.
@@ -71,6 +81,15 @@ const EXPLAIN_VALUE := {
 		"xess": "Intel XeSS, best on Intel Arc. More fps; a small cost in sharpness.",
 	},
 }
+
+const THEME_LINES := {
+	"cove": "Teal on deep navy. The GameCove look.",
+	"midnight": "True black with ice-blue accents. Saves power on OLED screens.",
+	"sunset": "Warm plum and apricot.",
+	"light": "Dark text on light panels, highest contrast in bright rooms.",
+}
+const SOUND_LEVELS := ["off", "low", "medium", "high"]
+const SOUND_LABELS := {"off": "Off", "low": "Low", "medium": "Medium", "high": "High"}
 
 const NOT_AVAILABLE := "Not available on this device yet"
 
@@ -177,6 +196,8 @@ static func fix_result(fix: String, verb: String, ok: bool, code: int, detail :=
 
 
 static func explain(setting: String, value: Variant = null) -> String:
+	if setting == "theme" and value != null and THEME_LINES.has(value):
+		return THEME_LINES[value] + " " + EXPLAIN["theme"]
 	var per: Dictionary = EXPLAIN_VALUE.get(setting, {})
 	if value != null and per.has(value):
 		return per[value]
@@ -310,7 +331,12 @@ static func last_played_text(ts: int, now: int) -> String:
 		return "Played yesterday"
 	if days < 30:
 		return "Played %d days ago" % days
-	return "Played %s" % Time.get_date_string_from_unix_time(ts)
+	var d := Time.get_date_dict_from_unix_time(ts)
+	var months := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+	var nd := Time.get_date_dict_from_unix_time(now)
+	if nd["year"] == d["year"]:
+		return "Played %s %d" % [months[d["month"] - 1], d["day"]]
+	return "Played %s %d, %d" % [months[d["month"] - 1], d["day"], d["year"]]
 
 
 static func playtime_text(minutes: int) -> String:

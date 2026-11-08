@@ -1,130 +1,136 @@
 extends Control
-## The home screen: top bar with live device numbers, a "Continue" hero, a
-## store filter and three rows (Recently played, Installed, All games).
-## Knows nothing about services: main.gd feeds it games and status and acts on
-## its signals.
+## The home screen: a spotlight naming the focused game over its art (Play and
+## Game page act on it), then shelves: Recently played, Installed, Short
+## games, Anti-cheat friendly, one per store, All games. Starts on the
+## "Continue" game. Knows nothing about services: main.gd feeds it games and
+## acts on its signals. The top bar, backdrop and hint bar belong to main.
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const View := preload("res://scripts/ui/library_view.gd")
 const Tile := preload("res://scripts/ui/game_tile.gd")
+const Shelf := preload("res://scripts/ui/shelf.gd")
+const GameHeader := preload("res://scripts/ui/game_header.gd")
+const Illustrations := preload("res://scripts/ui/illustrations.gd")
+const Icons := preload("res://scripts/ui/icons.gd")
+const ThemeLib := preload("res://theme/gamecove_theme.gd")
+const ArtColor := preload("res://theme/art_color.gd")
+const Motion := preload("res://scripts/ui/motion.gd")
 
 signal play_requested(game: Dictionary)
 signal open_requested(game: Dictionary)
 signal refresh_requested
+## Focus moved to another game (spotlight changed): the backdrop follows.
+signal game_focused(game: Dictionary)
 
+## Kept for callers that walk rows; Home.shelves() has the real list.
 const ROWS := [["recent", "Recently played"], ["installed", "Installed"], ["all", "All games"]]
+const SPOTLIGHT_H := 300
 
 var games: Array = []
-var store := ""
+## The "Continue" game: most recently played installed game.
 var hero_game: Dictionary = {}
+## The game the spotlight shows and Play / Game page act on.
+var spotlight_game: Dictionary = {}
+## Where "up" from the spotlight buttons goes (the current top-bar tab).
+var top_target: Control
 
-var device_label: Label
-var battery_label: Label
-var clock_label: Label
+var header: Control
+var play_button: Button
+var page_button: Button
+var _spotlight: VBoxContainer
+var _buttons_row: HBoxContainer
+var _empty: Control
 var _scroll: ScrollContainer
-var _hero_box: Control
-var _hero_buttons: Array = []
-var _filter_buttons: Array = []
 var _rows_box: VBoxContainer
-var _empty_filter: Label
-## row id -> Array of tiles; row id -> last focused index (TV-style memory).
-var _tiles := {}
-var _row_memory := {}
-var _row_order: Array = []
+var _shelves: Array = []        # Shelf nodes, top to bottom
+var _hero_buttons: Array = []
+var _accent := Color(0, 0, 0, 0)
 
 
 func _init() -> void:
 	name = "Home"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	var margin := MarginContainer.new()
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var margin := Kit.margin(0)
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	for side in ["left", "right"]:
-		margin.add_theme_constant_override("margin_" + side, 32)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_bottom", 12)
+	margin.add_theme_constant_override("margin_left", 48 - int(Shelf.PAD.x))
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_top", 92)
+	margin.add_theme_constant_override("margin_bottom", 58)
 	add_child(margin)
-	var root := Kit.vbox(14)
+	var root := Kit.vbox(4)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(root)
 
-	root.add_child(_build_top_bar())
+	_spotlight = Kit.vbox(16)
+	_spotlight.name = "Spotlight"
+	_spotlight.custom_minimum_size = Vector2(0, SPOTLIGHT_H)
+	_spotlight.alignment = BoxContainer.ALIGNMENT_END
+	_spotlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var spot_pad := Kit.margin(0)
+	spot_pad.add_theme_constant_override("margin_left", int(Shelf.PAD.x))
+	spot_pad.add_child(_spotlight)
+	root.add_child(spot_pad)
+
+	header = GameHeader.new()
+	header.max_logo = Vector2(470, 150)
+	_spotlight.add_child(header)
+
+	_buttons_row = Kit.hbox(14)
+	_buttons_row.name = "HeroButtons"
+	play_button = Kit.button("Play", "AccentButton")
+	play_button.name = "Play"
+	play_button.custom_minimum_size = Vector2(196, 58)
+	play_button.icon = Icons.tex("play", 22)
+	play_button.add_theme_constant_override("h_separation", 12)
+	play_button.pressed.connect(func(): play_requested.emit(spotlight_game))
+	page_button = Kit.button("Game page")
+	page_button.name = "GamePage"
+	page_button.custom_minimum_size = Vector2(176, 58)
+	page_button.pressed.connect(func(): open_requested.emit(spotlight_game))
+	_buttons_row.add_child(play_button)
+	_buttons_row.add_child(page_button)
+	_spotlight.add_child(_buttons_row)
+
+	_empty = _build_empty()
+	_spotlight.add_child(_empty)
 
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"
-	_scroll.follow_focus = true
+	_scroll.follow_focus = false
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	root.add_child(_scroll)
-	var pad := MarginContainer.new()
-	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for side in ["left", "right", "top", "bottom"]:
-		pad.add_theme_constant_override("margin_" + side, 6)
-	_scroll.add_child(pad)
-	var content := Kit.vbox(22)
-	content.name = "Content"
-	pad.add_child(content)
-
-	_hero_box = Kit.vbox(0)
-	_hero_box.name = "HeroBox"
-	content.add_child(_hero_box)
-	content.add_child(_build_filter_bar())
-	_empty_filter = Kit.label("", "QuietLabel", true)
-	_empty_filter.name = "EmptyFilter"
-	content.add_child(_empty_filter)
-	_rows_box = Kit.vbox(20)
+	_rows_box = Kit.vbox(6)
 	_rows_box.name = "Rows"
-	content.add_child(_rows_box)
-
-	root.add_child(Kit.label("A  Open    ·    B  Back    ·    LB / RB  Store    ·    Guide or F1  Quick menu", "QuietLabel"))
+	_rows_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.add_child(_rows_box)
 	set_games([])
 
 
-func _build_top_bar() -> Control:
-	var bar := Kit.hbox(14)
-	bar.name = "TopBar"
-	var logo := TextureRect.new()
-	logo.texture = load("res://icon.svg")
-	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	logo.custom_minimum_size = Vector2(40, 40)
-	bar.add_child(logo)
-	var name_label := Kit.label("GameCove", "HeaderLabel")
-	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	bar.add_child(name_label)
-	bar.add_child(Kit.spacer())
-	device_label = Kit.label("", "QuietLabel")
-	device_label.name = "DeviceName"
-	battery_label = Kit.label("")
-	battery_label.name = "Battery"
-	clock_label = Kit.label("")
-	clock_label.name = "Clock"
-	for l in [device_label, battery_label, clock_label]:
-		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		l.size_flags_vertical = Control.SIZE_FILL
-		bar.add_child(l)
-	return bar
-
-
-func _build_filter_bar() -> Control:
-	var bar := Kit.hbox(8)
-	bar.name = "StoreFilter"
-	var l := Kit.label("Store", "QuietLabel")
-	l.custom_minimum_size = Vector2(64, 0)
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.size_flags_vertical = Control.SIZE_FILL
-	bar.add_child(l)
-	for s in View.STORES:
-		var b := Kit.button(s[1], "TabButton")
-		b.name = "Store_" + (s[0] if s[0] != "" else "all")
-		b.toggle_mode = true
-		b.custom_minimum_size = Vector2(104, 44)
-		var id: String = s[0]
-		b.pressed.connect(func(): set_store(id))
-		b.focus_entered.connect(_aim_filter_down.bind(b))
-		bar.add_child(b)
-		_filter_buttons.append(b)
-	Kit.link_horizontal(_filter_buttons)
-	return bar
+func _build_empty() -> Control:
+	var row := Kit.hbox(36)
+	row.name = "Empty"
+	row.add_child(Illustrations.rect("library", 200))
+	var col := Kit.vbox(12)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(Kit.label("No games found yet", "TitleLabel"))
+	var line := Kit.label("Installed Steam games show up here on their own. Epic, GOG and Amazon are coming next.", "QuietLabel", true)
+	line.custom_minimum_size = Vector2(420, 0)
+	col.add_child(line)
+	var refresh := Kit.button("Look again", "AccentButton")
+	refresh.name = "Refresh"
+	refresh.custom_minimum_size = Vector2(200, 56)
+	refresh.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	refresh.icon = Icons.tex("update", 20)
+	refresh.pressed.connect(func(): refresh_requested.emit())
+	col.add_child(refresh)
+	row.add_child(col)
+	return row
 
 
 # ------------------------------------------------------------ data in
@@ -132,273 +138,170 @@ func _build_filter_bar() -> Control:
 func set_games(list: Array) -> void:
 	var keep := _focused_tile_ref()
 	games = list
-	_build_hero()
+	hero_game = View.continue_game(games)
+	var spot := spotlight_game
+	if spot.is_empty() or View.find_by_key(games, spot.get("key", "")).is_empty():
+		spot = hero_game
+	else:
+		spot = View.find_by_key(games, spot["key"])
 	_build_rows()
+	_set_spotlight(spot, "", false)
 	_restore_focus(keep)
 
 
-## Live numbers for the top bar. `battery` is Device.battery()'s shape.
-func set_status(device_name: String, battery: Dictionary, clock: String) -> void:
-	device_label.text = device_name
-	var parts: Array[String] = []
-	if int(battery.get("percent", -1)) >= 0:
-		var charging: bool = battery.get("status", "") == "Charging"
-		parts.append("%s%d%%" % ["⚡" if charging else "", battery["percent"]])
-	if float(battery.get("watts", -1.0)) >= 0.0:
-		parts.append("%.1f W" % battery["watts"])
-	battery_label.text = "   ".join(parts)
-	battery_label.visible = not parts.is_empty()
-	clock_label.text = clock
+## Older call: main now puts live numbers in the top bar.
+func set_status(_device_name: String, _battery: Dictionary, _clock: String) -> void:
+	pass
 
 
-func set_store(id: String) -> void:
-	var had := _focused_tile_ref()
-	store = id
-	_build_rows()
-	if not is_inside_tree() or had.is_empty():
-		return
-	for t in tiles(had[0]):
-		if t.game["key"] == had[1]:
-			_focus_later(t)
-			return
-	_focus_later(_current_filter_button())
-
-
-func cycle_store(d: int) -> void:
-	var ids: Array = View.STORES.map(func(s): return s[0])
-	set_store(ids[posmod(ids.find(store) + d, ids.size())])
-	if is_inside_tree():
-		_current_filter_button().grab_focus()
+## The art accent of the spotlight game (from the backdrop), used for Play.
+func set_accent(c: Color) -> void:
+	_accent = c
+	_style_play()
+	header.eyebrow.add_theme_color_override("font_color", c if c.a > 0.0 else ThemeLib.color("accent"))
 
 
 func default_focus() -> Control:
-	return _hero_buttons[0] if not _hero_buttons.is_empty() else _current_filter_button()
+	if games.is_empty():
+		return _empty.find_child("Refresh", true, false)
+	return play_button
 
 
 func tiles(row_id: String) -> Array:
-	return _tiles.get(row_id, [])
+	for s in _shelves:
+		if s.id == row_id:
+			return s.tiles
+	return []
 
 
-# ------------------------------------------------------------ hero
+func shelves() -> Array:
+	return _shelves
 
-func _build_hero() -> void:
-	for c in _hero_box.get_children():
-		_hero_box.remove_child(c)
-		c.queue_free()
-	_hero_buttons.clear()
-	hero_game = View.continue_game(games)
 
-	var panel := PanelContainer.new()
-	panel.name = "Hero"
-	panel.custom_minimum_size = Vector2(0, 224)
-	panel.clip_contents = true
-	_hero_box.add_child(panel)
-	var row := Kit.hbox(28)
-	panel.add_child(row)
+func shelf_ids() -> Array:
+	return _shelves.map(func(s): return s.id)
 
-	var info := Kit.vbox(10)
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.alignment = BoxContainer.ALIGNMENT_CENTER
 
-	if hero_game.is_empty():
-		info.add_child(Kit.label("WELCOME", "AccentLabel"))
-		info.add_child(Kit.label("No games found yet", "TitleLabel"))
-		info.add_child(Kit.label("Installed Steam games show up here on their own. Epic, GOG and Amazon are coming next.", "QuietLabel", true))
-		var refresh := Kit.button("Look again")
-		refresh.name = "Refresh"
-		refresh.custom_minimum_size = Vector2(200, 52)
-		refresh.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		refresh.pressed.connect(func(): refresh_requested.emit())
-		info.add_child(refresh)
-		_hero_buttons = [refresh]
-		row.add_child(info)
-	else:
-		var hero_tex := Kit.load_art(hero_game["art"].get("hero", ""), Vector2i(1280, 400))
-		if hero_tex != null:
-			var bg := TextureRect.new()
-			bg.name = "HeroArt"
-			bg.texture = hero_tex
-			bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-			bg.modulate = Color(0.45, 0.45, 0.45)
-			bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			panel.add_child(bg)
-			panel.move_child(bg, 0)
-		var cover := Tile.new()
-		cover.setup(hero_game, false)
-		cover.focus_mode = Control.FOCUS_NONE
-		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cover.custom_minimum_size = Vector2(142, 213)
-		cover.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row.add_child(cover)
-		row.add_child(info)
-		info.add_child(Kit.label("CONTINUE", "AccentLabel"))
-		var title := Kit.label(hero_game["title"], "TitleLabel", true)
-		title.name = "HeroTitle"
-		title.max_lines_visible = 2
-		info.add_child(title)
-		var sub: Array[String] = [View.store_name(hero_game["store"]),
-			Texts.last_played_text(int(hero_game["last_played"]), int(Time.get_unix_time_from_system()))]
-		var pt := Texts.playtime_text(int(hero_game["playtime_min"]))
-		if pt != "":
-			sub.append(pt)
-		info.add_child(Kit.label("   ·   ".join(sub), "QuietLabel", true))
-		var badges := Kit.hbox(8)
-		for b in Tile.badge_specs(hero_game):
-			badges.add_child(Kit.badge(b["text"], b["tone"]))
-		info.add_child(badges)
-		var buttons := Kit.hbox(12)
-		var play := Kit.button("Play", "AccentButton")
-		play.name = "Play"
-		play.custom_minimum_size = Vector2(200, 56)
-		var g := hero_game
-		play.pressed.connect(func(): play_requested.emit(g))
-		var page := Kit.button("Game page")
-		page.name = "GamePage"
-		page.custom_minimum_size = Vector2(180, 56)
-		page.pressed.connect(func(): open_requested.emit(g))
-		buttons.add_child(play)
-		buttons.add_child(page)
-		info.add_child(buttons)
-		_hero_buttons = [play, page]
+## Every tile showing `key`, first match per shelf.
+func tile_for(key: String) -> Control:
+	for s in _shelves:
+		for t in s.tiles:
+			if t.game.get("key", "") == key:
+				return t
+	return null
 
+
+# ------------------------------------------------------------ spotlight
+
+func _set_spotlight(g: Dictionary, line: String, animate: bool) -> void:
+	spotlight_game = g
+	var empty := games.is_empty()
+	_empty.visible = empty
+	header.visible = not empty
+	_buttons_row.visible = not empty
+	_hero_buttons = [_empty.find_child("Refresh", true, false)] if empty else [play_button, page_button]
+	if not empty:
+		if line == "":
+			line = "Continue playing" if g.get("key", "") == hero_game.get("key", "-") and int(g.get("last_played", 0)) > 0 else ""
+		header.show_game(g, line, animate)
+		var installed: bool = g.get("installed", false)
+		play_button.text = "Play" if installed else "Install"
+		_style_play()
 	Kit.link_horizontal(_hero_buttons)
 	for b in _hero_buttons:
-		b.focus_neighbor_top = b.get_path_to(b)
-		b.focus_entered.connect(_aim_hero_down.bind(b))
+		b.focus_neighbor_top = b.get_path_to(top_target if top_target != null else b)
+		var down: Control = _shelves[0].remembered() if not _shelves.is_empty() else b
+		b.focus_neighbor_bottom = b.get_path_to(down)
+		if not b.focus_entered.is_connected(_on_hero_focus):
+			b.focus_entered.connect(_on_hero_focus)
+	if is_inside_tree():
+		game_focused.emit(g)
 
 
-# ------------------------------------------------------------ rows
+func set_top_target(c: Control) -> void:
+	top_target = c
+	for b in _hero_buttons:
+		b.focus_neighbor_top = b.get_path_to(c)
+
+
+func _style_play() -> void:
+	Kit.accent_button(play_button, _accent)
+	play_button.icon = Icons.tex("play" if spotlight_game.get("installed", true) else "download", 22)
+
+
+func _on_hero_focus() -> void:
+	# Show the whole spotlight and the first shelf.
+	_scroll_to(0.0)
+
+
+# ------------------------------------------------------------ shelves
 
 func _build_rows() -> void:
 	for c in _rows_box.get_children():
-		_rows_box.remove_child(c)
-		c.queue_free()
-	_tiles.clear()
-	_row_order.clear()
-	for b in _filter_buttons:
-		b.set_pressed_no_signal(b.name == _current_filter_button().name)
-
-	var shown := View.filter_by_store(games, store)
-	var lists := {
-		"recent": View.recently_played(shown),
-		"installed": View.installed(shown),
-		"all": shown,
-	}
-	for r in ROWS:
-		var list: Array = lists[r[0]]
-		if list.is_empty():
-			continue
-		_rows_box.add_child(_build_row(r[0], r[1], list))
-
-	_empty_filter.visible = _row_order.is_empty()
-	if games.is_empty():
-		_empty_filter.text = "Your games will appear in rows here."
-	elif _row_order.is_empty():
-		_empty_filter.text = "No %s games found. Pick another store or All." % View.store_name(store)
+		Kit.drop(_rows_box, c)
+	var memory := {}
+	for s in _shelves:
+		memory[s.id] = s.memory
+	_shelves.clear()
+	for spec in View.shelves(games):
+		var s: VBoxContainer = Shelf.new()
+		s.setup(spec["id"], spec["title"], spec["games"])
+		s.memory = mini(memory.get(spec["id"], 0), s.tiles.size() - 1)
+		s.tile_focused.connect(_on_tile_focus.bind(s))
+		s.tile_pressed.connect(func(g): open_requested.emit(g))
+		_rows_box.add_child(s)
+		_shelves.append(s)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 240)
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rows_box.add_child(spacer)
 
 
-func _build_row(id: String, title: String, list: Array) -> Control:
-	var box := Kit.vbox(8)
-	box.name = "Row_" + id
-	var head := Kit.hbox(12)
-	head.add_child(Kit.label(title, "HeaderLabel"))
-	var count := Kit.label(str(list.size()), "QuietLabel")
-	count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	count.size_flags_vertical = Control.SIZE_FILL
-	head.add_child(count)
-	box.add_child(head)
+func _on_tile_focus(g: Dictionary, i: int, s: Control) -> void:
+	var r := _shelves.find(s)
+	var t: Control = s.tiles[i]
+	var up: Control = _shelves[r - 1].remembered() if r > 0 else play_button
+	var down: Control = _shelves[r + 1].remembered() if r + 1 < _shelves.size() else t
+	t.focus_neighbor_top = t.get_path_to(up)
+	t.focus_neighbor_bottom = t.get_path_to(down)
+	for b in _hero_buttons:
+		b.focus_neighbor_bottom = b.get_path_to(t)
+	_scroll_to(s.position.y)
+	_set_spotlight(g, s.title, true)
 
-	var scroll := ScrollContainer.new()
-	scroll.follow_focus = true
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.custom_minimum_size = Vector2(0, Tile.SIZE.y + 14)
-	box.add_child(scroll)
-	var pad := MarginContainer.new()
-	for side in ["left", "right", "top", "bottom"]:
-		pad.add_theme_constant_override("margin_" + side, 7)
-	scroll.add_child(pad)
-	var strip := Kit.hbox(16)
-	strip.name = "Tiles"
-	pad.add_child(strip)
 
-	var row_tiles: Array = []
-	for g in list:
-		var t := Tile.new()
-		t.setup(g)
-		var game: Dictionary = g
-		t.pressed.connect(func(): open_requested.emit(game))
-		t.focus_entered.connect(_on_tile_focus.bind(id, row_tiles.size()))
-		strip.add_child(t)
-		row_tiles.append(t)
-	Kit.link_horizontal(row_tiles)
-	_tiles[id] = row_tiles
-	_row_order.append(id)
-	_row_memory[id] = mini(_row_memory.get(id, 0), row_tiles.size() - 1)
-	return box
+func _scroll_to(y: float) -> void:
+	if not is_inside_tree():
+		return
+	Motion.method(_scroll, "vscroll", func(v: float): _scroll.scroll_vertical = int(v),
+		float(_scroll.scroll_vertical), y, Motion.BASE)
 
 
 # ------------------------------------------------------------ focus
-
-## Each row remembers where you were, so up/down returns you there.
-func _remembered(id: String) -> Control:
-	var list: Array = _tiles[id]
-	return list[clampi(_row_memory.get(id, 0), 0, list.size() - 1)]
-
-
-func _on_tile_focus(id: String, i: int) -> void:
-	_row_memory[id] = i
-	var t: Control = _tiles[id][i]
-	var r := _row_order.find(id)
-	var up: Control = _remembered(_row_order[r - 1]) if r > 0 else _current_filter_button()
-	var down: Control = _remembered(_row_order[r + 1]) if r + 1 < _row_order.size() else t
-	t.focus_neighbor_top = t.get_path_to(up)
-	t.focus_neighbor_bottom = t.get_path_to(down)
-
-
-func _aim_filter_down(b: Control) -> void:
-	var down: Control = _remembered(_row_order[0]) if not _row_order.is_empty() else b
-	b.focus_neighbor_bottom = b.get_path_to(down)
-	b.focus_neighbor_top = b.get_path_to(default_focus())
-
-
-func _aim_hero_down(b: Control) -> void:
-	b.focus_neighbor_bottom = b.get_path_to(_current_filter_button())
-	# Show the whole hero, not just the button follow_focus would settle for.
-	if is_inside_tree():
-		await get_tree().process_frame
-		_scroll.scroll_vertical = 0
-
-
-func _current_filter_button() -> Button:
-	var ids: Array = View.STORES.map(func(s): return s[0])
-	return _filter_buttons[maxi(0, ids.find(store))]
-
 
 ## [row id, game key] of the focused tile, or [] if focus isn't on a tile.
 func _focused_tile_ref() -> Array:
 	if not is_inside_tree():
 		return []
 	var f := get_viewport().gui_get_focus_owner()
-	for id in _tiles:
-		for t in _tiles[id]:
+	for s in _shelves:
+		for t in s.tiles:
 			if t == f:
-				return [id, t.game["key"]]
+				return [s.id, t.game["key"]]
 	return []
 
 
 func _restore_focus(ref: Array) -> void:
 	if not is_inside_tree() or not is_visible_in_tree():
 		return
-	if not ref.is_empty() and _tiles.has(ref[0]):
-		for t in _tiles[ref[0]]:
+	if not ref.is_empty():
+		for t in tiles(ref[0]):
 			if t.game["key"] == ref[1]:
-				_focus_later(t)
+				focus_later(t)
 				return
 	var f := get_viewport().gui_get_focus_owner()
-	if f == null or not is_instance_valid(f) or f.is_queued_for_deletion() or not is_ancestor_of(f):
-		_focus_later(default_focus())
+	if f == null or not is_instance_valid(f) or f.is_queued_for_deletion():
+		focus_later(default_focus())
 
 
 ## Grabs focus next frame, skipping controls that were freed or left the tree
@@ -414,5 +317,7 @@ static func focus_later(c: Control) -> void:
 	).call_deferred()
 
 
-func _focus_later(c: Control) -> void:
-	focus_later(c)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_THEME_CHANGED and play_button != null:
+		_style_play()
+		page_button.icon = null

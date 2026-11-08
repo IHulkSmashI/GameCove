@@ -88,20 +88,131 @@ static func load_art(path: String, max_size: Vector2i) -> Texture2D:
 	return tex
 
 
-## A small pill with coloured text, for tile and page badges.
+## A small badge with coloured text (older call; see badge.gd / badges.gd).
 static func badge(text: String, tone := "") -> PanelContainer:
+	return load("res://scripts/ui/badge.gd").make({"kind": "text", "text": text, "short": text, "tone": tone, "icon": ""}, "tile")
+
+
+## A controller button glyph: "A", "B", "X", "Y" (round), "LB", "RB", "LT",
+## "RT", "MENU", "VIEW" (pill), "GUIDE" (round, dots), "DPAD", "LR" (icons).
+## `primary` fills it solid, for the main action of a screen.
+static func glyph(button: String, primary := false) -> Control:
 	var p := PanelContainer.new()
-	p.theme_type_variation = "BadgePanel"
+	p.name = "Glyph_" + button
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	var l := label(text)
-	l.add_theme_font_size_override("font_size", 15)
-	match tone:
-		"good":
-			l.add_theme_color_override("font_color", ThemeLib.ACCENT)
-		"warn":
-			l.add_theme_color_override("font_color", ThemeLib.WARN)
-		"bad":
-			l.add_theme_color_override("font_color", ThemeLib.BAD)
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var round := button in ["A", "B", "X", "Y", "GUIDE", "DPAD", "LR"]
+	var fg: Color = ThemeLib.color("on_focus") if primary else ThemeLib.color("text")
+	var bg: Color = ThemeLib.color("focus_fill") if primary else ThemeLib.soft(0.16)
+	var sb := ThemeLib.box(bg, 14, 0 if round else 8, 0)
+	sb.border_color = ThemeLib.soft(0.28)
+	sb.set_border_width_all(0 if primary else 1)
+	p.add_theme_stylebox_override("panel", sb)
+	p.custom_minimum_size = Vector2(28, 28)
+	var icon := {"GUIDE": "dots", "DPAD": "gamepad", "LR": "sort"}
+	if icon.has(button):
+		var ic: TextureRect = load("res://scripts/ui/icons.gd").rect(icon[button], 18, fg)
+		ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		p.add_child(ic)
+		return p
+	var l := Label.new()
+	l.text = button.capitalize() if button.length() > 2 else button
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.add_theme_font_override("font", ThemeLib.font("semibold"))
+	l.add_theme_font_size_override("font_size", 14 if round else 13)
+	l.add_theme_color_override("font_color", fg)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_child(l)
 	return p
+
+
+## "(A) Open  (B) Back" style prompt row. `prompts` = [[button, label], ...];
+## the first is drawn as the primary action.
+static func prompts(list: Array) -> HBoxContainer:
+	var row := hbox(22)
+	row.name = "Prompts"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for i in list.size():
+		var item := hbox(8)
+		item.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var buttons: Array = list[i][0] if list[i][0] is Array else [list[i][0]]
+		for b in buttons:
+			item.add_child(glyph(b, i == 0))
+		var l := label(list[i][1], "CaptionLabel")
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		item.add_child(l)
+		row.add_child(item)
+	return row
+
+
+## Plain text of a prompt row (tests, accessibility).
+static func prompts_text(row: Control) -> String:
+	var parts: Array[String] = []
+	for item in row.get_children():
+		var bits: Array[String] = []
+		for c in item.get_children():
+			if c is Label:
+				bits.append(c.text)
+			elif c is PanelContainer and c.name.begins_with("Glyph_"):
+				bits.append(String(c.name).substr(6))
+		parts.append(" ".join(bits))
+	return "  ".join(parts)
+
+
+## Icon + label in a row.
+static func icon_label(icon: String, text: String, variation := "", icon_color: Color = Color(0, 0, 0, 0), size := 20) -> HBoxContainer:
+	var row := hbox(10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var col := icon_color if icon_color.a > 0.0 else ThemeLib.color("text_2")
+	row.add_child(load("res://scripts/ui/icons.gd").rect(icon, size, col))
+	var l := label(text, variation, true)
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(l)
+	return row
+
+
+## Full-rect child that ignores the mouse.
+static func fill(c: Control) -> Control:
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return c
+
+
+static func margin(all := 0, h := -1, v := -1) -> MarginContainer:
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_left", h if h >= 0 else all)
+	m.add_theme_constant_override("margin_right", h if h >= 0 else all)
+	m.add_theme_constant_override("margin_top", v if v >= 0 else all)
+	m.add_theme_constant_override("margin_bottom", v if v >= 0 else all)
+	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return m
+
+
+## Remove and delete a child. Outside the scene tree (tests) there's no frame
+## to run queue_free, so it's freed at once.
+static func drop(parent: Node, c: Node) -> void:
+	if c.get_parent() == parent:
+		parent.remove_child(c)
+	if parent.is_inside_tree():
+		c.queue_free()
+	else:
+		c.free()
+
+
+## Restyle an accent button in `col` (e.g. the game art's colour), keeping
+## its text and icon readable (ArtColor.on_color picks dark or light).
+static func accent_button(b: Button, col: Color) -> void:
+	var a := col if col.a > 0.0 else ThemeLib.color("accent")
+	var on: Color = load("res://theme/art_color.gd").on_color(a)
+	var states := {"normal": a, "hover": a.lightened(0.1), "pressed": a.darkened(0.1), "hover_pressed": a.darkened(0.1)}
+	for st in states:
+		b.add_theme_stylebox_override(st, ThemeLib.box(states[st], -1, 18, 10))
+	var f := ThemeLib.box(a.lightened(0.14), -1, 18, 10)
+	f.border_color = ThemeLib.color("text")
+	f.set_border_width_all(3)
+	f.set_expand_margin_all(3)
+	b.add_theme_stylebox_override("focus", f)
+	for c in ["font_color", "font_focus_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color",
+			"icon_normal_color", "icon_focus_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color"]:
+		b.add_theme_color_override(c, on)

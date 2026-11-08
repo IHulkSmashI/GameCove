@@ -11,11 +11,16 @@ const SettingsForm := preload("res://scripts/ui/settings_form.gd")
 const BgCommand := preload("res://scripts/ui/bg_command.gd")
 const FixRow := preload("res://scripts/ui/fix_row.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
+const Icons := preload("res://scripts/ui/icons.gd")
+const Motion := preload("res://scripts/ui/motion.gd")
 
 signal closed
+## A result worth a toast (fix installed or removed): text, tone (good / bad).
+signal notice(text: String, tone: String)
 
 const SECTIONS := ["This game", "Power", "Screen", "Controller", "Device"]
-const WIDTH := 620
+const SECTION_ICONS := ["game", "bolt", "screen", "gamepad", "handheld"]
+const WIDTH := 600
 const SUPPORT_TEXT := {
 	"full": "Full support: tested on this device by the GameCove team.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
@@ -39,6 +44,11 @@ var game: Dictionary = {}
 var tabs: Array[Button] = []
 var body: VBoxContainer
 var live_label: Label
+var live_icon: TextureRect
+var panel: PanelContainer
+var dim: ColorRect
+## Which edge the panel floats against: "right" or "left" (Settings).
+var side := "right"
 var status_label: Label
 var _focusables: Array = []
 var _power_shape := {}
@@ -73,7 +83,7 @@ func setup(services: Dictionary) -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	visible = false
 
-	var dim := ColorRect.new()
+	dim = ColorRect.new()
 	dim.name = "Dim"
 	dim.color = Color(0, 0, 0, 0.55)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -82,25 +92,27 @@ func setup(services: Dictionary) -> void:
 			close())
 	add_child(dim)
 
-	var panel := PanelContainer.new()
+	panel = PanelContainer.new()
 	panel.name = "Panel"
-	var sb := ThemeLib.box(ThemeLib.PANEL, 0, 22, 20)
-	sb.border_width_left = 2
-	sb.border_color = ThemeLib.RAISED_HOVER
-	panel.add_theme_stylebox_override("panel", sb)
-	panel.anchor_left = 1.0
-	panel.anchor_right = 1.0
-	panel.anchor_bottom = 1.0
-	panel.offset_left = -WIDTH
+	panel.theme_type_variation = "GlassPanel"
 	add_child(panel)
+	_place_panel()
 	var col := Kit.vbox(14)
 	panel.add_child(col)
 
-	var head := Kit.hbox()
-	head.add_child(Kit.label("Quick menu", "HeaderLabel"))
+	var head := Kit.hbox(10)
+	var title := Kit.label("Quick menu", "HeaderLabel")
+	head.add_child(title)
 	head.add_child(Kit.spacer())
-	live_label = Kit.label("", "QuietLabel")
+	live_icon = TextureRect.new()
+	live_icon.name = "LiveIcon"
+	live_icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	live_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	live_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(live_icon)
+	live_label = Kit.label("", "NumberLabel")
 	live_label.name = "Live"
+	live_label.add_theme_font_size_override("font_size", ThemeLib.SIZE_SMALL)
 	live_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	live_label.size_flags_vertical = Control.SIZE_FILL
 	head.add_child(live_label)
@@ -110,11 +122,13 @@ func setup(services: Dictionary) -> void:
 	tab_row.name = "Tabs"
 	tab_row.add_child(_shoulder("LB"))
 	for i in SECTIONS.size():
-		var t := Kit.button(SECTIONS[i], "TabButton")
+		var t := Kit.button(SECTIONS[i], "SectionTab")
 		t.name = "Tab%d" % i
 		t.toggle_mode = true
-		t.add_theme_font_size_override("font_size", 17)
-		t.custom_minimum_size = Vector2(0, 44)
+		t.icon = Icons.tex(SECTION_ICONS[i], 22, Color.WHITE)
+		t.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		t.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		t.custom_minimum_size = Vector2(0, 66)
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		t.pressed.connect(show_section.bind(i))
 		tab_row.add_child(t)
@@ -124,19 +138,28 @@ func setup(services: Dictionary) -> void:
 	for t in tabs:
 		t.focus_neighbor_top = t.get_path_to(t)
 	col.add_child(tab_row)
+	var rule := ColorRect.new()
+	rule.name = "Rule"
+	rule.custom_minimum_size = Vector2(0, 1)
+	rule.color = ThemeLib.color("line")
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(rule)
 
 	var scroll := ScrollContainer.new()
 	scroll.name = "Scroll"
 	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(scroll)
 	var pad := MarginContainer.new()
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for side in ["left", "right", "top", "bottom"]:
-		pad.add_theme_constant_override("margin_" + side, 6)
+	for side_name in ["left", "right"]:
+		pad.add_theme_constant_override("margin_" + side_name, 16)
+	for side_name in ["top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side_name, 14)
 	scroll.add_child(pad)
-	body = Kit.vbox(20)
+	body = Kit.vbox(18)
 	body.name = "Body"
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_child(body)
@@ -144,16 +167,36 @@ func setup(services: Dictionary) -> void:
 	status_label = Kit.label("", "AccentLabel", true)
 	status_label.name = "Status"
 	col.add_child(status_label)
-	col.add_child(Kit.label("B  Close    ·    LB / RB  Section    ·    ← →  Change", "QuietLabel"))
+	col.add_child(Kit.prompts([["B", "Close"], [["LB", "RB"], "Section"], ["LR", "Change"]]))
 
 
-func _shoulder(text: String) -> Label:
-	var l := Kit.label(text, "QuietLabel")
-	l.custom_minimum_size = Vector2(30, 0)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.size_flags_vertical = Control.SIZE_FILL
-	return l
+## "right" (default) or "left": which edge the panel floats against.
+func set_side(s: String) -> void:
+	side = "left" if s == "left" else "right"
+	if panel != null:
+		_place_panel()
+
+
+func _place_panel() -> void:
+	var m := 14.0
+	panel.anchor_top = 0.0
+	panel.anchor_bottom = 1.0
+	panel.offset_top = m
+	panel.offset_bottom = -m
+	if side == "left":
+		panel.anchor_left = 0.0
+		panel.anchor_right = 0.0
+		panel.offset_left = m
+		panel.offset_right = m + WIDTH
+	else:
+		panel.anchor_left = 1.0
+		panel.anchor_right = 1.0
+		panel.offset_left = -WIDTH - m
+		panel.offset_right = -m
+
+
+func _shoulder(text: String) -> Control:
+	return Kit.glyph(text)
 
 
 # ------------------------------------------------------------ open / close
@@ -162,6 +205,7 @@ func _shoulder(text: String) -> Label:
 func open(for_game: Dictionary) -> void:
 	game = for_game
 	visible = true
+	_animate_in()
 	_fix_status.clear()   # fixes may have changed since last time: check again
 	gamescope.set_overlay(true)
 	show_section(0)
@@ -174,6 +218,23 @@ func close() -> void:
 	visible = false
 	gamescope.set_overlay(false)
 	closed.emit()
+
+
+func _animate_in() -> void:
+	dim.modulate.a = 0.0
+	Motion.to(dim, "modulate:a", 1.0, Motion.FAST)
+	var dx := Motion.slide(40.0) * (1.0 if side == "right" else -1.0)
+	panel.modulate.a = 0.0
+	var base_left := panel.offset_left
+	var base_right := panel.offset_right
+	_place_panel()
+	base_left = panel.offset_left
+	base_right = panel.offset_right
+	panel.offset_left = base_left + dx
+	panel.offset_right = base_right + dx
+	Motion.to(panel, "modulate:a", 1.0, Motion.FAST)
+	Motion.to(panel, "offset_left", base_left, Motion.BASE)
+	Motion.to(panel, "offset_right", base_right, Motion.BASE)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -241,6 +302,11 @@ func focus_target(keep := "") -> Control:
 func refresh_live() -> void:
 	var b: Dictionary = device.battery()
 	live_label.text = _battery_text(b)
+	var pct := int(b.get("percent", -1))
+	live_icon.visible = pct >= 0
+	if pct >= 0:
+		var charging: bool = b.get("status", "") in ["Charging", "Full"]
+		live_icon.texture = Icons.battery(pct, charging, 22, ThemeLib.color("text"), ThemeLib.color("good") if charging else ThemeLib.color("text"))
 	var power_live := body.get_node_or_null("PowerLive") as Label
 	if power_live != null:
 		power_live.text = _battery_text(b, true)
@@ -471,7 +537,7 @@ func _build_device() -> void:
 	_line("Graphics: %s" % p.get("gpu", "Unknown"))
 	var support := _line("Support: %s" % level.capitalize(), "", "Support")
 	if level == "full":
-		support.add_theme_color_override("font_color", ThemeLib.ACCENT)
+		support.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	_line(SUPPORT_TEXT.get(level, SUPPORT_TEXT["generic"]), "QuietLabel")
 
 	var fixes := device_fixes()
@@ -569,6 +635,7 @@ func _on_command_finished(id: String, code: int, output: String) -> void:
 			_fix_working.erase(fix)
 			_fix_status.erase(fix)
 			message = Texts.fix_result(fix, kind, code == 0, code, BgCommand.error_line(output))
+			notice.emit(message, "good" if code == 0 else "bad")
 		"set":
 			_fix_status.erase(fix)
 			message = Texts.accel_result(_accel_wanted, code == 0, code)

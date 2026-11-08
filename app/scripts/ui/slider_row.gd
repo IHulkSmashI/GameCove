@@ -21,14 +21,15 @@ func setup(setting_key: String, title: String, lo: float, hi: float, current: fl
 	key = setting_key
 	name = setting_key
 	unit = value_unit
-	add_theme_constant_override("separation", 6)
+	add_theme_constant_override("separation", 4)
 
 	var head := Kit.hbox()
 	var t := Kit.label(title)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.add_theme_font_override("font", load("res://theme/gamecove_theme.gd").font("medium"))
 	head.add_child(t)
-	_value_label = Kit.label("", "AccentLabel")
-	_value_label.add_theme_font_size_override("font_size", 20)
+	_value_label = Kit.label("", "ValueLabel")
+	_value_label.name = "Value"
 	head.add_child(_value_label)
 	add_child(head)
 
@@ -38,7 +39,9 @@ func setup(setting_key: String, title: String, lo: float, hi: float, current: fl
 	slider.max_value = hi
 	slider.step = step
 	slider.focus_mode = Control.FOCUS_ALL
-	slider.custom_minimum_size = Vector2(0, 40)
+	slider.custom_minimum_size = Vector2(0, 36)
+	slider.focus_entered.connect(func(): _value_label.add_theme_font_size_override("font_size", 22))
+	slider.focus_exited.connect(func(): _value_label.remove_theme_font_size_override("font_size"))
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.set_value_no_signal(clampf(current, lo, hi))
 	slider.value_changed.connect(_on_value_changed)
