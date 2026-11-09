@@ -18,7 +18,7 @@ const T := {
 	"power.governor": ["CPU governor", "How the kernel picks CPU speeds."],
 	"power.cpu_max": ["CPU speed limit", "Caps CPU clocks to leave more of the TDP to the GPU."],
 	"power.gpu_level": ["GPU performance level", "Auto lets the GPU pick its clock; low and high pin it; manual uses the clock below."],
-	"power.gpu_clock": ["GPU clock", "Fixed GPU clock in manual mode."],
+	"power.gpu_clock": ["GPU clock", "Fixed GPU clock. Setting it switches the GPU to manual mode."],
 	"power.gpu_min": ["GPU minimum clock", "Keeps the GPU from dropping below this; smoother, uses more power."],
 	"power.gpu_max": ["GPU maximum clock", "Caps the GPU clock; cooler, leaves power to the CPU."],
 	"power.gpu_profile": ["GPU efficiency mode", "The GPU prefers its most efficient clock and ramps up slower."],

@@ -251,6 +251,50 @@ func test_claw_live_gpu_profile_with_the_helper() -> void:
 	_free()
 
 
+## steamos-manager's Intel GPU driver as it behaves: ManualGpuClock reads min_freq and a
+## write in the "auto" level is only remembered (src/gpu.rs set_clocks); "manual" applies it.
+class SmIntelGpu extends "res://tests/fixtures/power/fake_runner.gd":
+	const K := "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.GpuPerformanceLevel1 "
+	var saved := -1
+
+	func run(program: String, args: PackedStringArray) -> Dictionary:
+		var a := Array(args)
+		if program == "busctl" and "set-property" in a and "ManualGpuClock" in a:
+			calls.append("busctl " + " ".join(PackedStringArray(a.filter(func(x): return not str(x).begins_with("--timeout=")))))
+			saved = int(a[-1])
+			if str(props[K + "GpuPerformanceLevel"]["data"]) == "manual":
+				props[K + "ManualGpuClock"]["data"] = saved
+			return {"code": 0, "out": ""}
+		var r := super.run(program, args)
+		if program == "busctl" and "set-property" in a and "GpuPerformanceLevel" in a and str(a[-1]) == "manual" and saved >= 0:
+			props[K + "ManualGpuClock"]["data"] = saved
+		return r
+
+
+func test_claw_live_gpu_clock_switches_to_manual() -> void:
+	var t := _claw_live(false)
+	var sm := Trees.SM
+	t["props"][sm + "GpuPerformanceLevel1 GpuPerformanceLevel"] = Trees.p("s", "auto")
+	t["props"][sm + "GpuPerformanceLevel1 AvailableGpuPerformanceLevels"] = Trees.p("as", ["auto", "manual"])
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClock"] = Trees.p("u", 1000)
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClockMin"] = Trees.p("u", 1000)
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClockMax"] = Trees.p("u", 2300)
+	var e := _setup(t)
+	var r: RefCounted = SmIntelGpu.new()
+	r.props = e["runner"].props
+	r.methods = e["runner"].methods
+	e["power"].be.runner = r
+	e["prov"].be.runner = r
+	e["prov"].be.user_bus.runner = r
+	e["prov"].be.system_bus.runner = r
+	var c: Dictionary = e["c"]
+	ok(c["power.gpu_clock"].available, "gpu_clock through steamos-manager (%s)" % c["power.gpu_clock"].reason)
+	ok(c["power.gpu_clock"].write(1050), "1050 applies")
+	eq(c["power.gpu_clock"].read(), 1050.0, "read back")
+	eq(str(r.props[sm + "GpuPerformanceLevel1 GpuPerformanceLevel"]["data"]), "manual", "switched to manual first")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)

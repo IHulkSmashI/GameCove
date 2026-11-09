@@ -794,12 +794,26 @@ func sm_manual_clock() -> Dictionary:
 	return {"value": int(v), "lo": int(lo), "hi": int(hi)}
 
 
+## steamos-manager applies ManualGpuClock only in the "manual" performance level: in
+## "auto" its Intel driver just remembers it (src/gpu.rs IntelGpuPerformanceLevelDriver::
+## set_clocks) and ManualGpuClock keeps reading min_freq, so a write in auto never read
+## back (the Claw 8 EX: 1000 -> 1050 read 1000). A fixed clock therefore switches to
+## manual first; if the clock doesn't read back, the level and clock from before go back.
 func set_sm_manual_clock(mhz: int) -> bool:
 	var c := sm_manual_clock()
 	if c.is_empty():
 		return false
 	mhz = clampi(mhz, c["lo"], c["hi"])
-	return sm_set("GpuPerformanceLevel1", "ManualGpuClock", "u", str(mhz)) and int(sm_manual_clock().get("value", -1)) == mhz
+	var lvl := gpu_level_info()
+	var was := str(lvl.get("active", ""))
+	if lvl.get("via", "") == "steamos-manager" and was != "manual" and "manual" in lvl.get("offered", []):
+		if not sm_set("GpuPerformanceLevel1", "GpuPerformanceLevel", "s", "manual"):
+			return false
+	if sm_set("GpuPerformanceLevel1", "ManualGpuClock", "u", str(mhz)) and int(sm_manual_clock().get("value", -1)) == mhz:
+		return true
+	if was != "" and str(gpu_level_info().get("active", "")) != was:
+		sm_set("GpuPerformanceLevel1", "GpuPerformanceLevel", "s", was)
+	return false
 
 
 ## Firmware platform profile: steamos-manager PerformanceProfile1, else the helper.
