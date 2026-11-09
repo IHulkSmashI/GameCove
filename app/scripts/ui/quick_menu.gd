@@ -15,6 +15,7 @@ extends Control
 ## this game, how long you've played and Exit game (press twice).
 
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
+const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
@@ -258,6 +259,9 @@ func _build_frame() -> void:
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(scroll)
+	# A 20 px alpha fade at the foot: the next card's top edge never pokes
+	# out above the prompts.
+	scroll_mask = FadeMask.wrap(scroll, 20.0)
 	var pad := MarginContainer.new()
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for side_name in ["left", "right"]:
@@ -265,7 +269,7 @@ func _build_frame() -> void:
 	for side_name in ["top", "bottom"]:
 		pad.add_theme_constant_override("margin_" + side_name, 10)
 	scroll.add_child(pad)
-	body = Kit.vbox(12)
+	body = Kit.vbox(8)
 	body.name = "Body"
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_child(body)
@@ -440,6 +444,7 @@ static func _is_shoulder(event: InputEvent, button: JoyButton, key: Key) -> bool
 # ------------------------------------------------------------ tabs
 
 var _scroll: ScrollContainer
+var scroll_mask: TextureRect
 
 
 func show_section(i: int, keep_focus := "") -> void:
@@ -628,8 +633,12 @@ func _build_game() -> void:
 func _style_use_row(r: VBoxContainer, on: bool) -> void:
 	r.title_label.add_theme_font_override("font", ThemeLib.font("semibold"))
 	if on:
+		# A quiet tint of the accent (the switch and tab bar's colour), not
+		# the violet gradient that read as a second theme.
 		var acc := ThemeLib.color("accent")
-		var sb := ThemeLib.gradient_box(Color(acc, 0.16), Color(ThemeLib.color("accent_2"), 0.22), ThemeLib.radius("m"), Color(acc, 0.5), 18, 10)
+		var sb := ThemeLib.box(Color(acc, 0.06) if ThemeLib.is_dark() else Color(acc, 0.08), ThemeLib.radius("m"), 18, 10)
+		sb.border_color = Color(acc, 0.25)
+		sb.set_border_width_all(1)
 		r.card_box = sb
 		r.button.add_theme_stylebox_override("normal", sb)
 		r.button.add_theme_stylebox_override("hover", sb)

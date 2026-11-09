@@ -50,6 +50,10 @@ var _d_badges: HBoxContainer
 var grid: GridContainer
 var keyboard: PanelContainer
 var _scroll: ScrollContainer
+var _area: Control
+## Whole rows the grid shows at once: the scroll window is cut to fit them, so
+## no row is ever sliced through its cover (the cue sits in what's left).
+var rows_visible := 2
 var _empty: Control
 var _empty_text: Label
 var _tiles: Array = []
@@ -148,6 +152,8 @@ func _init() -> void:
 	area.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	area.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(area)
+	_area = area
+	area.resized.connect(_fit_rows)
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"
 	_scroll.follow_focus = false
@@ -411,13 +417,14 @@ func _on_tile_focus(t: Control) -> void:
 		b.focus_neighbor_bottom = b.get_path_to(t)
 	var row := _tiles.find(t) / grid.columns
 	var pitch := tile_size.y + GAP.y
-	# Keep the focused row fully above the bottom fade, showing as much of the
-	# rows above it as fits.
-	var bottom := (row + 1) * pitch + PAD.y + 40.0
-	var target := clampf(bottom - _scroll.size.y, 0.0, row * pitch)
-	# Start on a row boundary so no row sits half cut under the toolbar.
-	if target > 0.0:
-		target = minf(ceilf(target / pitch) * pitch, row * pitch)
+	# Whole rows only: move the window of rows_visible rows just enough to
+	# hold the focused row.
+	var first := roundi(_scroll.scroll_vertical / pitch)
+	if row >= first + rows_visible:
+		first = row - rows_visible + 1
+	elif row < first:
+		first = row
+	var target := first * pitch
 	Motion.method(_scroll, "vscroll", func(v: float): _scroll.scroll_vertical = int(v),
 		float(_scroll.scroll_vertical), target, Motion.BASE)
 	game_focused.emit(t.game)
@@ -494,9 +501,29 @@ func show_details(g: Dictionary) -> void:
 
 func _update_cue() -> void:
 	var bar := _scroll.get_v_scroll_bar()
-	var more := bar.max_value - bar.page - bar.value > 24.0
+	# Only while a whole row waits below: never a cue pointing at nothing.
+	var more := bar.max_value - bar.page - bar.value > tile_size.y * 0.5
 	cue.visible = more
 	_fade.visible = more
+
+
+## Cut the scroll window to whole rows (with room for the focus ring above
+## and below); the cue sits in the bottom padding or the band left over.
+func _fit_rows() -> void:
+	if _area == null or _scroll == null:
+		return
+	var pitch := tile_size.y + GAP.y
+	var h := _area.size.y
+	if h <= 0.0:
+		return
+	rows_visible = maxi(1, int(floorf((h - 2.0 * PAD.y + GAP.y) / pitch)))
+	# a few px short of the next row's top edge, so not even its hairline shows
+	var fit := 2.0 * PAD.y + rows_visible * pitch - GAP.y - 6.0
+	if fit > h:
+		fit = h
+	_scroll.offset_bottom = -(h - fit)
+	_fade.offset_top = -(h - fit) - 40.0
+	_update_cue()
 
 
 ## LT / RT: jump to the previous / next first letter in the current order.
@@ -578,5 +605,6 @@ func _notification(what: int) -> void:
 		if want != tile_size:
 			tile_size = want
 			_rebuild.call_deferred(true)
+			_fit_rows.call_deferred()
 		elif relink:
 			_link_grid()

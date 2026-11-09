@@ -7,8 +7,8 @@ extends Button
 ##
 ## The top three quarters of a cover stay clean (covers carry their own logo
 ## there). Everything we add sits in one plate along the bottom:
-##   title      only where the art doesn't carry one: generated covers, and
-##              the focused tile (so a stylised logo still gets a plain name)
+##   title      only where the art doesn't carry one (generated covers); a
+##              cover with art never repeats its painted logo, focused or not
 ##   pill row   one status pill (sale, update, downloading, Linux denied...)
 ##              and, on Discover, the price
 ##   sub row    store and playtime (or "Not installed"), plus one quiet extra
@@ -283,13 +283,13 @@ static func row_width() -> float:
 	return w - 2.0 * ThemeLib.EDGE
 
 
-## The plate's title: generated covers always (the art has none), covers with
-## art only while focused (the art carries its own logo).
+## The plate's title: generated covers only (the art has none). A cover with
+## art carries its own logo, so focusing it never adds a second title or
+## shifts its store line (the spotlight, details bar or page names it).
 func _update_title() -> void:
 	if title_label == null:
 		return
-	# Library (show_label off) names the focused game in its details bar.
-	title_label.visible = not has_cover() or (show_label and has_focus())
+	title_label.visible = not has_cover()
 
 
 ## The status pill in the plate ({} clears it). Spec as Badges gives it.
@@ -308,34 +308,41 @@ func set_status_pill(spec: Dictionary) -> void:
 	_update_pills()
 
 
-## Discover's price next to the pill. `quiet`: there's no real local price,
-## so the line names the store instead ("Price on Fanatical").
-func set_price(text: String, quiet := false, icon: Texture2D = null) -> void:
+## Discover's price next to the pill. Every deal tile has the same two-line
+## plate: line 1 the discount pill and the price (or "See price" when there's
+## no real local price: `quiet`), line 2 the store, on one line that never
+## wraps, after the store's monochrome logo (`icon`, drawn at the line's
+## height like any other icon). `store_line` replaces the store name there
+## ("Best price · GG.deals").
+func set_price(text: String, quiet := false, icon: Texture2D = null, store_line := "") -> void:
 	if price_icon == null:
 		price_icon = TextureRect.new()
 		price_icon.name = "PriceIcon"
 		price_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		price_icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		price_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		price_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		price_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		pill_row.add_child(price_icon)
-		pill_row.move_child(price_icon, price_label.get_index())
+		sub_row.add_child(price_icon)
+		sub_row.move_child(price_icon, 0)
 	price_icon.texture = icon
 	price_icon.visible = icon != null and text != ""
+	if icon != null and icon.get_height() > 0:
+		var h := float(SUB_PX)
+		price_icon.custom_minimum_size = Vector2(clampf(h * icon.get_width() / icon.get_height(), h, h * 4.0), h)
+	sub_row.add_theme_constant_override("separation", 6 if price_icon.visible else 0)
 	price_label.text = text
 	price_label.add_theme_font_override("font", ThemeLib.font("bold", true))
 	price_label.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
-	price_label.add_theme_color_override("font_color", Color.WHITE)
-	if quiet and text != "":
-		# No real local price: "Price on Green Man Gaming" takes the store
-		# line's place (it would only repeat the store), two lines at most.
-		price_label.visible = false
-		sub_label.text = text
-		sub_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sub_label.max_lines_visible = 2
-		sub_label.clip_text = false
-		sub_label.visible = true
-	else:
-		price_label.visible = text != ""
+	price_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.78) if quiet else Color.WHITE)
+	price_label.visible = text != ""
+	if store_line != "":
+		sub_label.text = store_line
+	# One line, never two: a long store name trims instead of wrapping.
+	sub_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	sub_label.max_lines_visible = -1
+	sub_label.clip_text = true
+	sub_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	sub_label.visible = sub_label.text != ""
 	_update_pills()
 
 
@@ -348,6 +355,8 @@ func set_extra(spec: Dictionary) -> void:
 	sub_extra.visible = t != ""
 	var f: Font = sub_label.get_theme_font("font")
 	var room := tile_size.x - 20.0
+	if price_icon != null and price_icon.visible:
+		room -= price_icon.custom_minimum_size.x + 6.0
 	var joined := sub_label.text + " · " + t
 	var fits := sub_label.visible and sub_label.autowrap_mode == TextServer.AUTOWRAP_OFF \
 		and f.get_string_size(joined, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_PX).x <= room

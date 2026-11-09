@@ -355,8 +355,7 @@ func _svc(n: String) -> Node:
 ## Install state, game actions, downloads list and the Steam overlay.
 func _wire_games() -> void:
 	store_api = Library
-	achievements_api = _svc("Achievements")
-	home.set_achievements(achievements_api)
+	set_achievements(_svc("Achievements"))
 	install_state = InstallState.new()
 	install_state.name = "InstallState"
 	add_child(install_state)
@@ -381,13 +380,19 @@ func _wire_games() -> void:
 	_refresh_downloads_indicators()
 
 
+## One Achievements service (and its cache) for Home's progress card and the
+## game page, so both always show the same numbers for a game.
+func set_achievements(svc: Object) -> void:
+	achievements_api = svc
+	home.set_achievements(svc)
+
+
 ## Previews and tests: use another store API (a fake with Library's store
 ## methods and signals) and Achievements service.
 func use_store_api(api: Object, achievements: Object = null) -> void:
 	store_api = api
 	if achievements != null:
-		achievements_api = achievements
-		home.set_achievements(achievements)
+		set_achievements(achievements)
 	game_actions.library = api
 	if api.has_signal("action_failed"):
 		api.action_failed.connect(_on_action_failed)

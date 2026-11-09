@@ -13,6 +13,9 @@ const Motion := preload("res://scripts/ui/motion.gd")
 
 signal changed(value: Variant)
 
+## Most position dots under a stepper's value.
+const MAX_DOTS := 9
+
 var key := ""
 var values: Array = []
 var labels: Array = []
@@ -141,8 +144,10 @@ func setup(setting_key: String, title: String, vals: Array, lbls: Array, current
 		_dots = Kit.hbox(4)
 		_dots.alignment = BoxContainer.ALIGNMENT_CENTER
 		_dots.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if values.size() > 1 and values.size() <= 8:
-			for i in values.size():
+		# Every stepper gets its dots: one per value up to MAX_DOTS, past that
+		# MAX_DOTS dots and the lit one follows the position proportionally.
+		if values.size() > 1:
+			for i in mini(values.size(), MAX_DOTS):
 				var d := Panel.new()
 				d.custom_minimum_size = Vector2(5, 5)
 				d.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -154,6 +159,13 @@ func setup(setting_key: String, title: String, vals: Array, lbls: Array, current
 	_hint.name = "Hint"
 	add_child(_hint)
 	_refresh()
+
+
+## The lit dot for value `i` of `n` (proportional past MAX_DOTS).
+static func dot_for(i: int, n: int) -> int:
+	if n <= MAX_DOTS:
+		return i
+	return roundi(float(i) * (MAX_DOTS - 1) / float(maxi(1, n - 1)))
 
 
 ## Two to four values whose labels fit side by side: a segmented control.
@@ -264,9 +276,10 @@ func _refresh(animate := false) -> void:
 			seg.add_theme_stylebox_override("panel", sb)
 			seg.get_child(0).add_theme_color_override("font_color", ThemeLib.color("on_accent") if on else ThemeLib.color("text_2"))
 	elif _dots != null:
+		var lit := dot_for(index, values.size())
 		for i in _dots.get_child_count():
 			var d: Panel = _dots.get_child(i)
-			d.add_theme_stylebox_override("panel", ThemeLib.box(acc if i == index else ThemeLib.soft(0.22), 999, 0, 0))
+			d.add_theme_stylebox_override("panel", ThemeLib.box(acc if i == lit else ThemeLib.soft(0.22), 999, 0, 0))
 		var multi := values.size() > 1
 		_left.visible = multi
 		_right.visible = multi

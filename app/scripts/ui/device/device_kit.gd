@@ -57,12 +57,14 @@ class FocusCard extends PanelContainer:
 			accept_event()
 			action.call()
 
+	## The "(A) text" pill shows only while this card holds focus: one (A)
+	## prompt on screen at a time. Hidden by alpha, so the header never shifts.
 	func _style_pill() -> void:
 		if _pill == null or not is_instance_valid(_pill):
 			return
 		var on := has_focus()
-		_pill.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.soft(0.10 if on else 0.05), 999, 10, 3))
-		_pill.modulate.a = 1.0 if on else 0.7
+		_pill.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.soft(0.10), 999, 10, 3))
+		_pill.modulate.a = 1.0 if on else 0.0
 
 	func _init(tint_token := "", can_focus := true) -> void:
 		tint = tint_token
@@ -182,7 +184,9 @@ static func chip(text: String, tone := "", icon := "") -> PanelContainer:
 ## [[key, value], ...]; empty values are skipped. Optional third item: a
 ## quiet note under the value.
 ## `compact`: a size smaller (About this device packs its cards in two columns).
-static func kv(pairs: Array, key_width := 150, compact := false) -> GridContainer:
+## `fixed`: the key column is exactly `key_width` (long keys wrap), so the
+## values of every card on a page line up on one vertical axis.
+static func kv(pairs: Array, key_width := 150, compact := false, fixed := false) -> GridContainer:
 	var g := GridContainer.new()
 	g.name = "Lines"
 	g.columns = 2
@@ -199,6 +203,8 @@ static func kv(pairs: Array, key_width := 150, compact := false) -> GridContaine
 			k.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION + 1)
 		k.custom_minimum_size = Vector2(key_width, 0)
 		k.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		if fixed:
+			k.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		g.add_child(k)
 		var box := Kit.vbox(2)
 		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -304,39 +310,43 @@ static func scroller() -> ScrollContainer:
 	return s
 
 
-## A fade over the bottom of `holder` (the scroll's parent) while `s` can
-## scroll further; updated from the scroll bar's signals, never per frame.
-static func foot_fade(holder: Control, s: ScrollContainer) -> TextureRect:
-	var f := TextureRect.new()
-	f.name = "FootFade"
-	f.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	f.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	f.stretch_mode = TextureRect.STRETCH_SCALE
-	f.anchor_top = 1.0
-	f.anchor_right = 1.0
-	f.anchor_bottom = 1.0
-	f.offset_top = -56
-	var paint := func():
-		var g := Gradient.new()
-		var sc: Color = ThemeLib.color("scrim")
-		g.colors = PackedColorArray([Color(sc, 0.0), Color(sc, 0.92)])
-		var t := GradientTexture2D.new()
-		t.gradient = g
-		t.width = 4
-		t.height = 64
-		t.fill_to = Vector2(0, 1)
-		f.texture = t
-	paint.call()
-	f.theme_changed.connect(paint)
-	holder.add_child(f)
+## Every card (FocusCard) under `box`, in any column; else its direct children.
+static func cards_in(box: Node) -> Array:
+	var out: Array = []
+	for n in box.find_children("*", "PanelContainer", true, false):
+		if n is FocusCard:
+			out.append(n)
+	if out.is_empty():
+		for c in box.get_children():
+			if c is Control:
+				out.append(c)
+	return out
+
+
+## "More below" at the column's foot while more cards wait below (never
+## otherwise): the column's mask hides a card the edge would slice.
+static func more_cue(holder: Control, s: ScrollContainer) -> HBoxContainer:
+	var cue := Kit.icon_label("chevron_down", "More below", "CaptionLabel", ThemeLib.color("text_2"), 16, false)
+	cue.name = "MoreCue"
+	cue.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cue.anchor_left = 0.5
+	cue.anchor_right = 0.5
+	cue.anchor_top = 1.0
+	cue.anchor_bottom = 1.0
+	cue.offset_left = -70
+	cue.offset_right = 70
+	cue.offset_top = -24
+	cue.offset_bottom = 0
+	cue.alignment = BoxContainer.ALIGNMENT_CENTER
+	holder.add_child(cue)
 	var bar := s.get_v_scroll_bar()
 	var upd := func(_v = 0.0):
-		if is_instance_valid(f):
-			f.visible = bar.max_value - bar.page - bar.value > 8.0
+		if is_instance_valid(cue):
+			cue.visible = bar.max_value - bar.page - bar.value > 24.0
 	bar.value_changed.connect(upd)
 	bar.changed.connect(upd)
 	upd.call()
-	return f
+	return cue
 
 
 ## Padding around the scroller's content so focus rings aren't clipped.

@@ -108,11 +108,10 @@ static func stores_present(games: Array) -> Array:
 
 ## The home screen's shelves: [{"id", "title", "games"}], empty ones left out.
 ## Store shelves only when games come from more than one store.
-## Home's rows never repeat each other on the first screen: the "Continue"
-## game owns the spotlight, so Recently played starts after it, and Installed
-## leaves out what the first RECENT_VISIBLE recent tiles already show, newest
-## install first.
-const RECENT_VISIBLE := 7
+## The "Continue" game owns the spotlight, so Recently played and Installed
+## both start after it. Installed lists every other installed game, newest
+## install first: a game you played recently is still installed, and leaving
+## it out made holes in the row and counts that didn't add up.
 
 
 static func shelves(games: Array) -> Array:
@@ -123,10 +122,7 @@ static func shelves(games: Array) -> Array:
 	var hero_key := str(continue_game(games).get("key", ""))
 	var recent := recently_played(games).filter(func(g): return str(g.get("key", "")) != hero_key)
 	add.call("recent", "Recently played", recent)
-	var seen := {hero_key: true}
-	for g in recent.slice(0, RECENT_VISIBLE):
-		seen[str(g.get("key", ""))] = true
-	var inst := installed(games).filter(func(g): return not seen.has(str(g.get("key", ""))))
+	var inst := installed(games).filter(func(g): return str(g.get("key", "")) != hero_key)
 	inst.sort_custom(func(a, b):
 		var aa := int(a.get("added", 0))
 		var ab := int(b.get("added", 0))

@@ -8,8 +8,10 @@ extends "res://scripts/ui/discover/section.gd"
 const Shelf := preload("res://scripts/ui/shelf.gd")
 const GameHeader := preload("res://scripts/ui/game_header.gd")
 const HeroStage := preload("res://scripts/ui/hero_stage.gd")
+const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 
-const SPOT_H := 232
+## The spotlight card: about 26 px shorter than Home's, so the shelves get the room.
+const SPOT_H := 206
 
 var stage: Control              # HeroStage, lives on root's stage layer
 var header: Control             # GameHeader
@@ -29,8 +31,8 @@ var _hero: Dictionary = {}
 var _cards_pad: Control
 
 
-## Top deals shows nothing from the spotlight or the wishlist shelf in its
-## first this-many tiles.
+## Kept for callers: Top deals now leaves out every game the spotlight or the
+## wishlist shelf shows.
 const TOP_UNIQUE := 8
 
 
@@ -84,7 +86,7 @@ func build() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
-	_spot = Kit.vbox(12)
+	_spot = Kit.vbox(9)
 	_spot.name = "Spotlight"
 	_spot.custom_minimum_size = Vector2(0, SPOT_H)
 	_spot.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -93,7 +95,7 @@ func build() -> void:
 	var frame := PanelContainer.new()
 	frame.name = "SpotFrame"
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fsb := ThemeLib.box(Color(ThemeLib.color("glass"), 0.45), ThemeLib.radius("xl"), 32, 20)
+	var fsb := ThemeLib.box(Color(ThemeLib.color("glass"), 0.45), ThemeLib.radius("xl"), 32, 15)
 	fsb.border_color = ThemeLib.color("line_2")
 	fsb.set_border_width_all(1)
 	frame.add_theme_stylebox_override("panel", fsb)
@@ -106,7 +108,7 @@ func build() -> void:
 	if not visibility_changed.is_connected(_sync_current_stage):
 		visibility_changed.connect(_sync_current_stage)
 	header = GameHeader.new()
-	header.max_logo = Vector2(440, 120)
+	header.max_logo = Vector2(440, 100)
 	header.max_badges = 0
 	header.meta.visible = false
 	_spot.add_child(header)
@@ -135,6 +137,9 @@ func build() -> void:
 	_scroll = W.scroller()
 	_scroll.follow_focus = false
 	root.add_child(_scroll)
+	# A 48 px alpha fade at the foot: the next row peeking in looks masked,
+	# not sliced off under the hint bar.
+	FadeMask.wrap(_scroll, 48.0)
 	var pad := Kit.margin(0)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_theme_constant_override("margin_left", -int(Shelf.PAD.x))
@@ -150,16 +155,17 @@ func build() -> void:
 	var soon := cal.filter(func(r): return not r.get("released", false) or (r.get("days_until") != null and int(r["days_until"]) == 0))
 	var free := Model.free_now(deals)
 	var top := deals.filter(func(x): return not Model.is_free(x))
-	# No game twice on the first screen: the spotlight's game leaves the
-	# shelves, and Top deals pushes what the wishlist shelf shows past its
-	# first TOP_UNIQUE tiles.
+	# No game twice: the spotlight's game leaves the shelves, and Top deals
+	# leaves out what the wishlist shelf shows.
 	_hero = Model.pick_hero(deals, wish, cal)
 	var hero_key := Model.art_key(_hero.get("data", {})) if not _hero.is_empty() else ""
 	var wish_views: Array = ws.map(func(x): return Model.wish_view(x)).filter(func(v): return v["key"] != hero_key)
 	var shown := {hero_key: true}
 	for v in wish_views:
 		shown[v["key"]] = true
-	var top_views: Array = Model.push_back(top.map(func(x): return Model.deal_view(x)), shown, TOP_UNIQUE)
+	# Filtered, not pushed back: a game the wishlist shelf shows right below
+	# never repeats in Top deals.
+	var top_views: Array = top.map(func(x): return Model.deal_view(x)).filter(func(v): return not shown.has(v["key"]))
 	var specs := [
 		["deals", T.SHELF_DEALS, top_views],
 		["wish_sale", T.SHELF_WISH_SALE, wish_views],
@@ -242,14 +248,26 @@ func _decorate(t: Button, now: int, cur: String) -> void:
 	var plate := ""
 	var quiet := false
 	var extras: Array = []
+	var store_line := ""
 	match v["kind"]:
 		"deal":
 			plate = T.price(d)
 			if plate == "":
-				# No real local price: never convert or estimate one, name the store.
-				var sn := str(d.get("store_name", ""))
-				plate = T.PRICE_ON % sn if sn != "" else T.SEE_PRICE
-				quiet = true
+				var gg: Variant = d.get("ggdeals")
+				var ggp: Variant = gg.get("price") if gg is Dictionary else null
+				if ggp is Dictionary and bool(ggp.get("is_local", false)):
+					# The user's GG.deals key gives the game's real local price
+					# (its best across official stores): show it, say whose it
+					# is, and drop the store's own discount it may not match.
+					plate = str(ggp.get("text", ""))
+					store_line = T.GG_BEST
+					t.set_status_pill({})
+				else:
+					# No real local price: never convert or estimate one. Same
+					# plate as a priced deal: discount and "See price", then the store.
+					plate = T.SEE_PRICE
+					quiet = true
+					store_line = T.store_short(str(d.get("store_name", "")))
 			extras = W.deal_badges(d, cur, now).slice(0, 1)
 		"wish":
 			var bd: Dictionary = d.get("best_deal", {})
@@ -263,7 +281,7 @@ func _decorate(t: Button, now: int, cur: String) -> void:
 				plate = T.release_when(d, now)
 			if ctx.is_notifying(v):
 				extras.append({"kind": "notify", "text": "Notify", "tone": "new", "icon": "check"})
-	W.decorate(t, plate, quiet, extras, str(v.get("store", "")))
+	W.decorate(t, plate, quiet, extras, str(v.get("store", "")), store_line)
 
 
 # ---- spotlight -----------------------------------------------------------------
@@ -271,7 +289,8 @@ func _decorate(t: Button, now: int, cur: String) -> void:
 func _set_spot(v: Dictionary, line: String, animate: bool) -> void:
 	spot_view = v
 	spot_line = line
-	ctx.art.fill(v, ["hero", "logo"])
+	# cover too: the stage falls back to it, and the spotlight game is in no shelf to load it
+	ctx.art.fill(v, ["hero", "logo", "cover"])
 	header.show_game(v, line, animate)
 	for c in price_box.get_children():
 		W.detach(price_box, c)
@@ -505,7 +524,7 @@ func on_art(key: String, kind: String, path: String) -> void:
 				if t.game.get("key", "") == key:
 					t.ensure_art()
 	if spot_view.get("key", "") == key:
-		if kind == "hero" and stage != null:
+		if (kind == "hero" or kind == "cover") and stage != null:
 			stage.show_game(spot_view)
 		if kind == "logo" or kind == "hero":
 			header.show_game(header.game, spot_line)

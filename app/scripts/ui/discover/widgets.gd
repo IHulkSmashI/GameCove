@@ -47,13 +47,13 @@ static func tile(view: Dictionary, plate: String, plate_quiet := false, extras: 
 ## Adds the price plate and extra pills to an existing tile (e.g. a Shelf's):
 ## stacked at the bottom-left, over the darker end of the cover, away from
 ## the title most covers carry at the top.
-static func decorate(t: Button, plate: String, plate_quiet := false, extras: Array = [], store := "") -> void:
+static func decorate(t: Button, plate: String, plate_quiet := false, extras: Array = [], store := "", store_line := "") -> void:
 	if plate == "" and extras.is_empty():
 		return
 	# Library tiles: the price joins the sale pill in the bottom plate and one
 	# extra follows the store line, so the cover's top stays clean.
 	if t.has_method("set_price"):
-		t.set_price(plate, plate_quiet, store_icon(store) if plate_quiet else null)
+		t.set_price(plate, plate_quiet, store_icon(store, 12) if plate_quiet else null, store_line)
 		if not extras.is_empty():
 			t.set_extra(extras[0])
 		return
@@ -97,10 +97,12 @@ static func decorate(t: Button, plate: String, plate_quiet := false, extras: Arr
 	t.card.add_child(box)
 
 
-## The store's logo (single colour, light, for dark plates), else the store icon.
+## The store's logo (single colour, the plate's quiet grey, never a bright
+## white block), else the store icon. Callers size it to their line.
 static func store_icon(store: String, px := 14) -> Texture2D:
-	var tex: Texture2D = load("res://scripts/ui/brand_mark.gd").texture(store, px, Color(1, 1, 1, 0.82)) if store != "" else null
-	return tex if tex != null else Icons.tex("store", px, Color(1, 1, 1, 0.82))
+	var ink := Color(0.80, 0.84, 0.90, 0.72)
+	var tex: Texture2D = load("res://scripts/ui/brand_mark.gd").texture(store, px, ink) if store != "" else null
+	return tex if tex != null else Icons.tex("store", px, ink)
 
 
 ## A small rounded cover that loads its art off the main thread.

@@ -77,6 +77,8 @@ const ACH_EMPTY_GAME := "This game has no achievements."
 const ACH_HIDDEN := "Hidden achievement"
 const ACH_HIDDEN_DETAIL := "Keep playing to find out."
 const ACH_LOCKED := "Locked"
+const ACH_RAREST := "Rarest"
+const ACH_SHOW_ALL := "Show all %d"
 
 const ABOUT := "About this game"
 ## Time to beat as three chips on the game page.

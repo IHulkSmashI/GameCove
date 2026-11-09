@@ -213,7 +213,9 @@ func _update_cue() -> void:
 	if cue == null:
 		return
 	var bar := scroll.get_v_scroll_bar()
-	var more := bar.max_value - bar.page - bar.value > 24.0
+	# Only for real content below (a few px of padding or a ring's glow
+	# isn't any): never a cue pointing at nothing.
+	var more := bar.max_value - bar.page - bar.value > 48.0
 	cue.visible = more
 	_cue_fade.visible = more
 	# The hero art stays put while the cards scroll up over it: fade it out

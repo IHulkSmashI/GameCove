@@ -274,15 +274,16 @@ func test_game_page_v2() -> void:
 	ok(TG.RESTART_STEAM in t, "restart button")
 	eq(p.focusables[0], p.restart_button, "restart is the first stop below the actions")
 	eq(p.ach_card.summary.text, "2 of 4 unlocked", "achievement count")
-	eq(p.ach_card.cells.size(), 4, "a cell each")
+	eq(p.ach_card.cells.size(), 4, "a row each (four fit without Show all)")
+	ok(p.ach_card.show_all == null, "no Show all for four")
 	eq(p.ach_card.items[0]["id"], "b", "newest unlock first")
 	eq(p.ach_card.items[3]["id"], "c", "hidden last")
 	p.ach_card.show_item(p.ach_card.items[3])
 	eq(p.ach_card.detail_name.text, TG.ACH_HIDDEN, "hidden name stays secret")
 	ok(not p.ach_card.detail_line.text.contains("Spoiler"), "and its description")
-	ok(p.ach_card.cells[2].get_node("Icon").modulate.a < 0.5, "locked dimmed")
-	ok(p.ach_card.cells[1].focus_neighbor_left == p.ach_card.cells[1].get_path_to(p.ach_card.cells[0]), "grid left/right")
-	eq(p.hints_for_focus(p.ach_card.cells[0])[0], ["DPAD", "Browse"], "grid hints")
+	ok(p.ach_card.cells[2].find_child("Icon", true, false).modulate.a < 0.5, "locked dimmed")
+	ok(p.ach_card.cells[1].focus_neighbor_top == p.ach_card.cells[1].get_path_to(p.ach_card.cells[0]), "list up/down")
+	eq(p.hints_for_focus(p.ach_card.cells[0])[0], ["DPAD", "Browse"], "list hints")
 	p.restart_button.pressed.emit()
 	eq(r["lib"].calls[-1], ["apply_pending", true], "restart Steam to apply")
 	ok(not p.pending_card.visible, "card hides once applied")
@@ -299,6 +300,25 @@ func test_game_page_v2() -> void:
 	p.free()
 	ach.free()
 	_free(r)
+
+
+func test_achievements_card_rarest_and_show_all() -> void:
+	var ach := FakeAchievements.new()
+	var items: Array = []
+	for i in 9:
+		items.append({"id": "x%d" % i, "name": "Ach %d" % i, "unlocked": i < 4, "unlock_time": 1762000000 + i, "rarity": 50.0 - i * 5.0})
+	ach.data = {"unlocked": 4, "total": 9, "source": "steam-local", "items": items}
+	var c: VBoxContainer = AchievementsCard.new()
+	c.setup("42", ach)
+	eq(c.summary.text, "4 of 9 unlocked", "count and bar, like Home's card")
+	eq(c.rarest["id"], "x3", "the rarest unlocked one")
+	ok(c.detail_eyebrow.visible and c.detail_name.text == "Ach 3", "shown gold-edged over the list")
+	eq(c.cells.size(), AchievementsCard.LIST_ROWS + 1, "four rows, then Show all")
+	ok(c.show_all != null and c.show_all.text == TG.ACH_SHOW_ALL % 9, "names how many")
+	c.show_all.pressed.emit()
+	eq(c.cells.size(), 9, "every row after Show all")
+	c.free()
+	ach.free()
 
 
 func test_game_page_explains_unavailable_install() -> void:

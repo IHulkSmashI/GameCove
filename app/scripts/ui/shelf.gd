@@ -1,6 +1,8 @@
 extends VBoxContainer
-## A titled horizontal row of game tiles that glides to keep the focused tile
-## in view (one tile of lead on the left, so you see where you came from).
+## A titled horizontal row of game tiles that glides only as far as it must
+## to keep one tile of room either side of the focused one, so the row never
+## hides a tile on the left while there's room on the right (the "03 / 09"
+## counter always matches the third card you can see).
 ## Tiles size themselves to show Tile.PER_ROW across the screen; while the row
 ## runs past an edge, that edge fades out over FADE px instead of cutting a
 ## cover in half. Used by Home, Discover and Stream.
@@ -18,8 +20,10 @@ const GAP := 16
 const PAD := Vector2(24, 16)
 ## Below the tiles: room for the focused tile's lift and glow.
 const LABEL_ROOM := 16
-## Width of the soft edge where the row continues past the screen.
-const FADE := 64.0
+## Width of the soft edge where the row continues past the screen: wide and
+## solid at the very edge, so a peeking cover's bright title is gone before
+## the cut (solid for the last quarter, 85 % at 60 %, clear at the inside).
+const FADE := 96.0
 
 var id := ""
 var title := ""
@@ -151,12 +155,21 @@ func _style_fades() -> void:
 	var sc: Color = ThemeLib.color("scrim")
 	for i in _fades.size():
 		var g := Gradient.new()
-		var a := Color(sc, 0.92)
-		var b := Color(sc, 0.0)
-		g.colors = PackedColorArray([a, b] if i == 0 else [b, a])
+		# offsets run from the screen edge inwards; the right fade is mirrored
+		var stops := [[0.0, 1.0], [0.25, 1.0], [0.60, 0.85], [1.0, 0.0]]
+		var offs := PackedFloat32Array()
+		var cols := PackedColorArray()
+		for st in stops:
+			offs.append(st[0] if i == 0 else 1.0 - st[0])
+			cols.append(Color(sc, st[1]))
+		if i == 1:
+			offs.reverse()
+			cols.reverse()
+		g.offsets = offs
+		g.colors = cols
 		var t := GradientTexture2D.new()
 		t.gradient = g
-		t.width = 64
+		t.width = 96
 		t.height = 4
 		t.fill_to = Vector2(1, 0)
 		_fades[i].texture = t
@@ -178,14 +191,29 @@ func _on_focus(i: int) -> void:
 	tile_focused.emit(tiles[i].game, i)
 
 
-## Glide so tile `i` sits one tile in from the left edge.
+## The scroll that shows tile `i` with one tile of room either side, moving
+## as little as possible from `from`.
+func target_for(i: int, from: float) -> float:
+	if tiles.is_empty():
+		return 0.0
+	var pitch: float = tiles[0].custom_minimum_size.x + GAP
+	var view := scroll.size.x if scroll.size.x > 0.0 else Tile.row_width()
+	var left := PAD.x + (i - 1) * pitch                       # the tile before it
+	var right := PAD.x + (i + 2) * pitch - GAP + PAD.x        # the tile after it, and its margin
+	var target := from
+	if right - target > view:
+		target = right - view
+	if left - PAD.x < target:
+		target = left - PAD.x
+	var max_scroll := maxf(0.0, strip.size.x + PAD.x * 2 - view)
+	return clampf(target, 0.0, max_scroll)
+
+
+## Glide so tile `i` shows with a tile of room either side.
 func scroll_to(i: int, animate := true) -> void:
 	if tiles.is_empty() or not is_inside_tree():
 		return
-	var pitch: float = tiles[0].custom_minimum_size.x + GAP
-	var target := maxf(0.0, (i - 1) * pitch)
-	var max_scroll := maxf(0.0, strip.size.x + PAD.x * 2 - scroll.size.x)
-	target = minf(target, max_scroll)
+	var target := target_for(i, float(scroll.scroll_horizontal))
 	if not animate:
 		scroll.scroll_horizontal = int(target)
 		return

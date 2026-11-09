@@ -58,6 +58,8 @@ var restart_button: Button
 var ach_card: VBoxContainer
 ## "Game settings": this game's own profile, Edit and Reset.
 var game_settings: VBoxContainer
+var launch_rule: HSeparator
+var launch_title: Label
 var _accent := Color(0, 0, 0, 0)
 
 
@@ -91,25 +93,28 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 		columns_laid_out.connect(func(_n, inner): ach_card.fit_width(inner))
 		ach_card.setup(str(g.get("id", "")), achievements)
 
-	# Game settings: this game's own profile first, then its launch settings.
+	# Game settings: a switch for the game's own settings; off shows the
+	# everyday profile it runs with, on its saved values, Edit and its launch
+	# settings (low latency last, under Advanced / troubleshooting).
 	var gbody := add_card(TC.GAME_CARD, "layers", "", true, 2)
 	var ctl: Object = services.get("controls", Shared.autoload("Controls"))
 	if ctl != null and str(g.get("key", "")) != "":
 		game_settings = GameSettingsCard.new()
-		game_settings.setup(g, ctl, services.get("profiles", Shared.autoload("Profiles")))
-		game_settings.relinked.connect(func(): if is_instance_valid(self): _relink())
+		game_settings.setup(g, ctl, services.get("profiles", Shared.autoload("Profiles")), launcher)
+		game_settings.relinked.connect(func(): if is_instance_valid(self): _on_game_settings_changed())
 		gbody.add_child(game_settings)
-		var rule := HSeparator.new()
-		rule.name = "LaunchRule"
-		rule.add_theme_constant_override("separation", 10)
-		gbody.add_child(rule)
-	var launch := Kit.label(TG.SETTINGS_TITLE, "")
-	launch.name = "LaunchTitle"
-	launch.add_theme_font_override("font", ThemeLib.font("semibold"))
-	gbody.add_child(launch)
+	launch_rule = HSeparator.new()
+	launch_rule.name = "LaunchRule"
+	launch_rule.add_theme_constant_override("separation", 10)
+	gbody.add_child(launch_rule)
+	launch_title = Kit.label(TG.SETTINGS_TITLE, "")
+	launch_title.name = "LaunchTitle"
+	launch_title.add_theme_font_override("font", ThemeLib.font("semibold"))
+	gbody.add_child(launch_title)
 	form = SettingsForm.new()
 	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam")
 	gbody.add_child(form)
+	_show_launch_settings()
 
 	if state != null:
 		state.changed.connect(_on_state_changed)
@@ -439,6 +444,23 @@ func _refresh_pending() -> void:
 
 # ------------------------------------------------------------ focus
 
+## Launch settings show while the game has its own settings (or there's no
+## Game settings card to switch them, tests and previews).
+func _show_launch_settings() -> void:
+	var on: bool = game_settings == null or game_settings.custom()
+	launch_rule.visible = on and game_settings != null
+	launch_title.visible = on
+	form.visible = on
+
+
+func _on_game_settings_changed() -> void:
+	if form == null:
+		return
+	form.reload()
+	_show_launch_settings()
+	_relink()
+
+
 ## Rebuilds the focus chain from what's showing: actions, Restart Steam,
 ## achievements grid (as one stop that opens into a 2D grid), settings rows.
 func _relink() -> void:
@@ -449,10 +471,10 @@ func _relink() -> void:
 	if ach_card != null and not ach_card.cells.is_empty():
 		first_cell = ach_card.cells[0]
 		list.append(first_cell)
-	if form != null:
-		list.append_array(form.focusables())
 	if game_settings != null:
 		list.append_array(game_settings.focusables())
+	if form != null and form.visible:
+		list.append_array(form.focusables())
 	focusables = list
 	finish()
 	if first_cell != null:

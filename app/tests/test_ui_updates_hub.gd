@@ -31,7 +31,7 @@ func _hub_state() -> Dictionary:
 	st["usb_targets"] = [{"mount": "/run/media/deck/USB", "label": "USB", "device": "/dev/sda1"}]
 	st["hub"] = [
 		{"id": "index:bios:bios", "section": "firmware", "kind": "bios", "name": "BIOS", "current": "341", "latest": "343",
-			"status": "update", "how": "guided", "flash": "ez-flash", "notes": "Improves stability.\nMore", "source": "index",
+			"status": "update", "how": "guided", "flash": "ez-flash", "notes": "Improves stability.\nSecond line", "source": "index",
 			"download_page": "https://www.asus.com/supportonly/RC71L/helpdesk_bios/", "notes_url": ""},
 		{"id": "index:controller:mcu", "section": "firmware", "kind": "controller", "name": "Controller (MCU) firmware", "current": "",
 			"latest": "V321", "status": "unknown", "how": "link", "flash": "windows", "source": "index", "download_page": "https://x.invalid/"},
@@ -52,7 +52,7 @@ func test_maker_and_driver_rows() -> void:
 	var t := _texts(p)
 	ok(t.contains("New BIOS 343 available (yours: 341)"), "BIOS update line")
 	ok(t.contains(Hub.STEPS["ez-flash"][3]), "EZ Flash steps")
-	ok(t.contains("Improves stability.") and not t.contains("More"), "first line of the notes")
+	ok(t.contains("Improves stability.") and not t.contains("Second line"), "first line of the notes")
 	ok(t.contains("Mesa (graphics drivers)  ·  26.1.0  ·  upstream 26.2.6"), "driver row")
 	ok(t.contains(Hub.DRIVER_HOW["auto"]), "drivers come with the system")
 	ok(not t.contains("System Firmware  ·  1"), "fwupd devices stay in the Firmware card")

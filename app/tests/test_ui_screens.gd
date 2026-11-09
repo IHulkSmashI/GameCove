@@ -123,12 +123,12 @@ func test_home_three_games() -> void:
 	h.set_games(_three())
 	eq(h.hero_game["title"], "Fortnite", "hero is most recent installed")
 	eq(h.spotlight_game["title"], "Fortnite", "spotlight starts on the Continue game")
-	# The Continue game owns the spotlight: Recently played starts after it,
-	# and Installed leaves out what Recently played already shows.
+	# The Continue game owns the spotlight: Recently played and Installed
+	# start after it, and a recently played game is still installed.
 	eq(h.tiles("recent").map(func(t): return t.game["title"]), ["Hades"], "recent row skips the spotlight game")
-	eq(h.tiles("installed").size(), 0, "no installed row repeating the recent one")
+	eq(h.tiles("installed").map(func(t): return t.game["title"]), ["Hades"], "installed: every installed game but the spotlight's")
 	eq(h.tiles("all").size(), 3, "all row")
-	eq(h.shelf_ids(), ["recent", "short", "store_steam", "store_epic", "store_gog", "all"], "shelves in order")
+	eq(h.shelf_ids(), ["recent", "installed", "short", "store_steam", "store_epic", "store_gog", "all"], "shelves in order")
 	eq(String(h.default_focus().name), "Play", "focus lands on Play")
 	ok("Jump back in" in _texts(h), "spotlight says why it's there")
 	var all_text := _texts(h)
@@ -222,6 +222,15 @@ func test_game_page() -> void:
 	eq(p.form.rows["fps_limit"].value(), 30, "fps row follows goal")
 	p.form.rows["low_latency"].step(1)
 	eq(launcher.saved["steam:1"]["low_latency"], false, "toggle saved")
+	ok(p.form.find_child("AdvancedTitle", true, false) != null, "low latency sits under Advanced / troubleshooting")
+	p.form.rows["frame_gen"].step(1)
+	eq(p.form.rows["low_latency"].value(), true, "frame generation on: low latency shows On")
+	ok(p.form.rows["low_latency"].locked, "and can't be changed")
+	eq(p.form.rows["low_latency"].hint_text(), SettingsForm.LOW_LATENCY_WITH_FG, "says why")
+	p.form.rows["low_latency"].step(1)
+	eq(p.form.rows["low_latency"].value(), true, "a press does nothing while frame generation is on")
+	p.form.rows["frame_gen"].step(1)
+	ok(not p.form.rows["low_latency"].locked, "frame generation off: the override is back")
 	launcher.saved["steam:1"]["upscaler"] = "xess"
 	p.form.reload()
 	eq(p.form.rows["upscaler"].value(), "xess", "reload picks up changes made elsewhere")

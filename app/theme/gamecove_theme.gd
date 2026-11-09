@@ -161,6 +161,14 @@ static func focus_ring(r := -1, col: Color = Color(0, 0, 0, 0), width := 2, glow
 	return s
 
 
+## Focus on a primary pill: white inner border, a 3 px gap in `bg`, the 3 px
+## ring and a wide glow (theme/primary_focus.gd).
+static func primary_focus() -> StyleBox:
+	var g: Color = color("ring")
+	return load("res://theme/primary_focus.gd").new().setup(color("ring"), color("bg"),
+		Color(g, 0.5), 28, Color.WHITE if is_dark() else Color(1, 1, 1, 0.95))
+
+
 ## The selected-row look: a thick ring hugging the card, a cyan glow that
 ## falls below it, and the card's own dark fill (no tint), so text keeps its
 ## contrast. Rows, list items and device cards share it.
@@ -351,9 +359,9 @@ static func build(t: Dictionary = tokens) -> Theme:
 	th.set_stylebox("pressed", "AccentButton", gradient_pill(acc.darkened(0.12), c2.darkened(0.12), 40, 26, 11))
 	th.set_stylebox("hover_pressed", "AccentButton", gradient_pill(acc.darkened(0.12), c2.darkened(0.12), 40, 26, 11))
 	th.set_stylebox("disabled", "AccentButton", pill(soft(0.08), color("line"), 26, 11))
-	# The glow behind primaries comes from button_fx.gd; focus adds the ring.
-	var af := focus_ring(999, ring.lerp(Color.WHITE, 0.55) if is_dark() else ring, 2)
-	th.set_stylebox("focus", "AccentButton", af)
+	# The glow behind primaries comes from button_fx.gd; focus adds the ring,
+	# set off from the gradient by a white inner edge and a gap of the ground.
+	th.set_stylebox("focus", "AccentButton", primary_focus())
 	th.set_font("font", "AccentButton", font("heading_bold", false, 1))
 	th.set_font_size("font_size", "AccentButton", SIZE_LEAD - 2)
 	for c in ["font_color", "font_focus_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
@@ -408,14 +416,15 @@ static func build(t: Dictionary = tokens) -> Theme:
 		var cb: StyleBoxFlat = th.get_stylebox(st, "ChipButton")
 		cb.border_color = color("line_2")
 		cb.set_border_width_all(1)
-	# Chosen filter: a quiet surface fill and accent text, no accent edge.
-	var on_chip := active_box(999, 16, 6)
+	# Chosen filter: a solid accent fill with dark text, so it can never be
+	# mistaken for the focus ring (which is an outline).
+	var on_chip := box(acc, 999, 16, 6)
 	th.set_stylebox("pressed", "ChipButton", on_chip)
-	th.set_stylebox("hover_pressed", "ChipButton", on_chip)
+	th.set_stylebox("hover_pressed", "ChipButton", box(acc.lightened(0.08), 999, 16, 6))
 	th.set_font("font", "ChipButton", font("semibold"))
 	th.set_font_size("font_size", "ChipButton", SIZE_CAPTION + 1)
 	for c in ["font_pressed_color", "font_hover_pressed_color"]:
-		th.set_color(c, "ChipButton", acc if is_dark() else color("text"))
+		th.set_color(c, "ChipButton", color("on_accent"))
 	th.set_stylebox("focus", "ChipButton", focus_ring(999, ring, 2, true))
 	th.set_color("font_focus_color", "ChipButton", color("text"))
 
@@ -453,7 +462,7 @@ static func build(t: Dictionary = tokens) -> Theme:
 	_icons(th, "AccentButton", color("on_accent"), color("on_accent"), color("on_accent"))
 	_icons(th, "TabButton", color("text_2"), color("text"), color("text"))
 	_icons(th, "SectionTab", color("text_2"), color("text"), color("text"))
-	_icons(th, "ChipButton", color("text_2"), color("text"), acc if is_dark() else color("text"))
+	_icons(th, "ChipButton", color("text_2"), color("text"), color("on_accent"))
 	_icons(th, "KeyButton", color("text"), color("on_focus"), color("text"))
 	_icons(th, "RowButton", color("text_2"), color("text"), color("text"))
 
