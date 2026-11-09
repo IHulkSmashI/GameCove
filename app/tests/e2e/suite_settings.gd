@@ -180,9 +180,10 @@ func _change(id: String, v: Node) -> String:
 	var c := ctl(id)
 	var before: Variant = c.value
 	var n: int = w.fake.log_copy().size()
+	var model: Object = v.model   # the row may be rebuilt (and freed) by the change
 	if c.kind == "choice" and c.options.size() < 2:
 		return ""   # one choice: nothing to move to
-	var blocked: String = v.model.blocked_reason(c)
+	var blocked: String = model.blocked_reason(c)
 	if blocked != "":
 		# "Turn on X first": the row is locked and pushing it changes nothing
 		await right()
@@ -211,7 +212,6 @@ func _change(id: String, v: Node) -> String:
 		"action":
 			return ""
 	await w.idle()
-	var model: Object = v.model
 	var after: Variant = c.value
 	var why := ""
 	if model.is_failed(id):

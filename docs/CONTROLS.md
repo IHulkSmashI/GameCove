@@ -507,3 +507,43 @@ has none, so it now gets GameCove's own refresh unlock), `software-brightness-hd
 `controller.gyro_accel` follows the `claw8ex-gyro` fix's selector. Device-matrix expectations take
 trait selectors too (`soc:lunar-lake|panther-lake`, `panel:<id>`; `a+b` for both). New checks:
 prefer a trait selector when the behaviour comes from a part. Reference: docs/DEVICES.md, Traits.
+
+## End-to-end suite (`app/tests/e2e/`)
+
+The real app (scenes/main.tscn, the real autoloads, the Controls worker as a real thread) headless
+on whole fake handhelds, driven with the pad only, checked at the system layer.
+
+- **Run**: `python3 -I app/tests/e2e/run.py [--setups a,b] [--suites part] [--test part] [--iters N] [--seed S] [--keep]`.
+  `GODOT=<binary>`; `E2E_SOAK=1` = 200 iterations of the randomized parts (default 5); seeds are printed
+  (`E2E SEED ...`) and `--seed` replays them. CI job `e2e` runs `--iters 5 --seed <run number>`.
+- **Setups** (`tools/devicematrix/gen.py --setups`, `SETUPS`): `claw8ex-bazzite` (InputPlumber,
+  steamos-manager, PowerStation on intel-rapl-mmio, tuned-ppd, msi-wmi-platform), `ally-steamos`
+  (SteamOS 3.8: steamos-manager only, asus-armoury TDP gated on the performance profile as in
+  steamos-manager's `rog-ally-series.toml`, acpi_sb charge limit, InputPlumber), `legion-go-s-bazzite`
+  (lenovo-wmi-other-0 TDP in custom mode). The device matrix runs them too.
+- **Isolation**: one Godot process per setup (plus two for the restart suite on the same files), with
+  HOME / XDG_* in a private work folder, no session bus or display; `world.gd` points every autoload
+  (Device, Power, Controls, Profiles, Controller, Gamescope, PerfMonitor, Launcher) and main's own
+  services (Fixes, quick-menu commands, GameCloser, Streaming) at the fixture. Each test starts from the
+  pristine fixture (`world.reset()`, main rebooted if a modal stayed open). `Services.E2E_META` on the
+  SceneTree gives Settings the production autoload lookups.
+- **Fake system** (`fake_system.gd`, on the device matrix's FakeRunner): stateful steamos-manager
+  (TdpLimit1 via the firmware attribute exactly like its src/power.rs, PerformanceProfile1, CpuBoost1 on
+  no_turbo / cpufreq boost, CpuScaling1, GpuPerformanceLevel1, BatteryChargeLimit1), PowerStation
+  (RAPL PL1 / PL2, SMT, cores), tuned-ppd (and its acpi platform profile), logind SetBrightness,
+  wpctl, nmcli / rfkill, InputPlumber profiles, gamescope root atoms; the root helper is the **real**
+  `packaging/libexec/gamecove-fix-set` + `fixes/*/fix.sh` with `GAMECOVE_ROOT`, and kernel files that
+  aren't plain values (bracketed lists, amdgpu's clock table) behave as on hardware afterwards.
+  Faults: helper deny / fail, D-Bus timeouts per service, latency, read-only sysfs (chattr as root).
+- **Suites**: `settings` (every page walked by pad; every control present with its reason; every
+  available one moved and compared with the system and a fresh provider read; unavailable ones pushed
+  without a write), `quick_menu`, `profiles`, `game`, `robustness`, `restart`, `screens`, `smoke`.
+- **After every test** (`checks.gd`): device limits on the fake hardware (matrix checks), D-Bus /
+  helper values in limits, no real paths, every service still on the fixture, the charge limit the
+  control shows is the battery's, Switch to Desktop Mode reachable by pad, no command run on the main
+  thread, no engine / script errors, no orphan nodes; at the end InterceptMode 0 on every device when
+  the Controller leaves the tree; run.py fails a process that crashes or leaves processes behind.
+- **Adding a check**: a control's exact system effect goes in `effects.gd`; a new stack in gen.py
+  `SETUPS` + `setup_extras`; a new service behaviour in `fake_system.gd` (`_live_get` / `_live_set`).
+- **Contract addition**: `Control.affects` (ids a write moves on the system; Controls reads them again
+  after a write or apply that worked).

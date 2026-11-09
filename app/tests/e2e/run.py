@@ -145,6 +145,10 @@ def run_one(godot: str, work: str, info_path: str, extra: dict, timeout: int, la
     if code not in (0, 1) and code != 124:
         result["failed"] += 1
         result["failures"].append(f"{label}: Godot exited with {code} (crash?)")
+        crash = os.path.join(work, f"crash-{label.replace('/', '-')}-{int(time.time())}.log")
+        with open(crash, "w", encoding="utf-8") as f:
+            f.write(out + "\n----- stderr -----\n" + err)
+        result["failures"].append("last lines of stderr:\n" + "\n".join(err.splitlines()[-25:]))
     if code == 124:
         result["failed"] += 1
         result["failures"].append(f"{label}: timed out")

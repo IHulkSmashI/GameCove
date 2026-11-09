@@ -697,7 +697,10 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "SmtEnabled", "b", smt)
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "CoresCount", "u", threads)
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "CoresEnabled", "u", threads)
-        prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "Features", "as", ["boost"] + (["smt"] if smt else []))
+        # PowerStation lists /proc/cpuinfo flags (src/performance/cpu/cpu_features.rs): AMD core
+        # performance boost is "cpb", SMT is "ht"
+        prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "Features", "as",
+             (["cpb"] if vendor == "amd" else []) + (["ht"] if smt else []))
     prop("--system", "org.bluez", "/org/bluez/hci0", "org.bluez.Adapter1", "Powered", "b", True)
     prop("--system", "org.bluez", "/org/bluez/hci0", "org.bluez.Adapter1", "Name", "s", "devicematrix")
     hhd = None
@@ -713,6 +716,13 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
             caps += [f"Accelerometer:{s}" for s in sides] + [f"Gyroscope:{s}" for s in sides]
         if row.get("buttons") not in (None, "generic"):
             caps += ["Gamepad:Button:LeftPaddle1", "Gamepad:Button:RightPaddle1"]
+        # trackpads (InputPlumber "Touchpad:<pad>:Touch:Motion"): one centre pad on the Legion Go
+        # family, two on the Steam Deck, ZOTAC Zone and Orange Pi Neo (docs/CONTROLS.md table)
+        fam = row.get("family") or ""
+        pads = ["CenterPad"] if fam in ("legion-go", "legion-go-s") else (
+            ["LeftPad", "RightPad"] if fam in ("steam-deck", "zotac-zone", "orangepi-neo") or row["id"].startswith(("steam-deck", "zotac", "orangepi")) else [])
+        for pad in pads:
+            caps += [f"Touchpad:{pad}:Touch:Motion", f"Touchpad:{pad}:Button:Press"]
         outs = ["ForceFeedback"] + (["LED:Color", "LED:Brightness"] if row.get("rgb") else [])
         name = f"{row.get('name', 'Handheld')} Controller"
         iface = "org.shadowblip.Input.CompositeDevice"

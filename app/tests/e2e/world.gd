@@ -253,8 +253,11 @@ func shutdown_main() -> void:
 	if main != null and is_instance_valid(main):
 		if main.session != null and main.session.is_active():
 			main.session.stop()
+		var flow: Variant = load("res://scripts/ui/setup/setup_flow.gd").instance
+		if flow != null and is_instance_valid(flow):
+			flow.queue_free()
 		main.queue_free()
-		await frames(2)
+		await frames(3)
 	main = null
 
 
@@ -272,6 +275,11 @@ func reset() -> void:
 	fake_pids.clear()
 	fake_apps.clear()
 	await idle()
+	if main != null and not ui_clean():
+		# a test opened something that stays (first-run setup from "Run setup
+		# again", a sheet, the keyboard): start the main scene over
+		await shutdown_main()
+		await boot_main()
 	restore_tree(pristine, root)
 	var p := autoload("Profiles")
 	p.reset_all()
@@ -286,6 +294,20 @@ func reset() -> void:
 		main.quick_menu.commands.runner = Fake.BgRunner.new(fake)
 	await idle()
 	fake.reset_log()
+
+
+## Nothing modal left open over the screens.
+func ui_clean() -> bool:
+	var flow: Variant = load("res://scripts/ui/setup/setup_flow.gd").instance
+	if flow != null and is_instance_valid(flow):
+		return false
+	var s: Control = main.settings
+	for o in [main.status_panel, s.sheet, s.keyboard]:
+		if o != null and is_instance_valid(o) and o.is_visible_in_tree():
+			return false
+	if main.page != null or main._downloads_open() or main.game_actions.is_modal() or main.steam_overlay.is_open():
+		return false
+	return main.find_child("KeepDialog", true, false) == null
 
 
 ## Copies `from` over `to`: changed files rewritten, extra files removed.
