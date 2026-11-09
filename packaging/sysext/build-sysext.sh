@@ -5,7 +5,8 @@
 # packaging/tests/run.sh with fake inputs.
 #
 # SteamOS's /usr is read-only and wiped on updates; a sysext is a squashfs image
-# in /var/lib/extensions that systemd-sysext overlays onto /usr. Same approach
+# that systemd-sysext overlays onto /usr (the installer keeps it on /home and links it
+# from /etc/extensions; app/scripts/installer/commands.gd says why). Same approach
 # as OpenGamepadUI's `make dist-ext`. SteamOS has no gamescope-session-plus (it
 # uses Valve's own Steam-only session script), so we bundle it (MIT,
 # OpenGamingCollective/gamescope-session) at a pinned commit.
@@ -21,12 +22,17 @@
 #   --out DIR          where to write gamecove.raw (default ./dist)
 #   --tree-only        stop after building the file tree (no mksquashfs)
 #
-# Install on the Deck (as root):
-#   mkdir -p /var/lib/extensions && cp dist/gamecove.raw /var/lib/extensions/
-#   systemd-sysext refresh && systemd-sysext status
+# Install by hand on SteamOS (as root; the installer does the same):
+#   mkdir -p /home/.steamos/offload/gamecove /etc/extensions
+#   install -m 0644 dist/gamecove.raw /home/.steamos/offload/gamecove/gamecove.raw
+#   ln -sfn /home/.steamos/offload/gamecove/gamecove.raw /etc/extensions/gamecove.raw
+#   printf '%s\n' /etc/extensions/gamecove.raw \
+#     /etc/systemd/system/sysinit.target.wants/systemd-sysext.service >/etc/atomic-update.conf.d/gamecove.conf
+#   systemctl enable systemd-sysext && systemd-sysext refresh && systemd-sysext status
 #   systemctl reload polkit 2>/dev/null || true
 # Then from desktop or Gaming Mode: gamecove-session-select gamecove
-# Remove: rm /var/lib/extensions/gamecove.raw && systemd-sysext refresh
+# Remove: rm /etc/extensions/gamecove.raw /etc/atomic-update.conf.d/gamecove.conf \
+#   /home/.steamos/offload/gamecove/gamecove.raw && systemd-sysext refresh
 #
 # Hardware checks still needed on SteamOS: xprop present (else bundle Arch's
 # xorg-xprop), Valve's steamosctl accepts gamecove.desktop, SDDM shows it.

@@ -596,6 +596,18 @@ expect_code 0 "bootstrap elsewhere (app only)" gg "$R_ARCH"
 contains "$GI/release.env" "^PACKAGE=$" "no package on other systems"
 expect_code 0 "bootstrap with a tag" gg "$R_BAZ" GAMECOVE_TAG=v0.2.0
 contains "$T/curl.log" "/releases/tags/v0.2.0$" "tag API"
+# only pre-releases published (v0.1.0): releases/latest 404s, the newest release of any kind is used
+mv "$SRV/latest.json" "$SRV/latest.off"
+{ echo '['; cat "$SRV/tag.json"; echo ']'; } >"$SRV/releases?per_page=1"
+expect_code 0 "bootstrap with only a pre-release" gg "$R_DECK"
+contains "$T/curl.log" "/releases?per_page=1$" "falls back to the release list"
+contains "$GI/release.env" "^TAG=v0.2.0$" "pre-release picked"
+mv "$SRV/tag.json" "$SRV/tag.off"
+gg "$R_DECK" GAMECOVE_TAG=v9.9.9 >/dev/null 2>&1 || true
+lacks "$T/curl.log" "per_page" "a given tag is never replaced by another release"
+mv "$SRV/tag.off" "$SRV/tag.json"
+mv "$SRV/latest.off" "$SRV/latest.json"
+rm -f "$SRV/releases?per_page=1"
 rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
 expect_code 1 "bootstrap refuses a bad checksum" gg "$R_BAZ" SHA256SUM="$GB/badsum"

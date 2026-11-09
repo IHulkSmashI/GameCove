@@ -302,8 +302,40 @@ Untested: never built in mock or installed; `rpmspec -P` parses it and a local
 `gamecove.raw` (squashfs) holding our files plus gamescope-session-plus pinned at
 `08e65a6` (SteamOS doesn't have it), with `extension-release` `ID=_any`,
 `ARCHITECTURE=x86-64` so OS updates don't disable it (no SteamOS libraries
-inside). Copy to `/var/lib/extensions/`, `systemd-sysext refresh`. Same idea as
-OpenGamepadUI's `make dist-ext`. Documented, not run on SteamOS.
+inside). Same idea as OpenGamepadUI's `make dist-ext`. Documented, not run on SteamOS yet.
+
+Where the image lives on SteamOS, and why (checked against SteamOS 3.8 / steamos-manager v26.4):
+
+- `/var` is a small partition per OS slot, and since SteamOS 3.6 an OS update keeps only the `/etc` changes
+  listed in `/etc/atomic-update.conf.d/*.conf` (one path or glob per line; Igalia's "Keeping your system-wide
+  configuration files intact after updating SteamOS"; Determinate's Nix installer does the same). So the image
+  goes to `/home/.steamos/offload/gamecove/gamecove.raw` (root-owned, on the big home partition, beside
+  SteamOS's own offload folders; Nix keeps `/nix` in `/home/.steamos/offload/nix`), is linked from
+  `/etc/extensions/gamecove.raw` (a systemd-sysext search path; `systemd-sysext.service` runs after
+  `local-fs.target`, so `/home` is mounted), and `/etc/atomic-update.conf.d/gamecove.conf` keeps that link and
+  `systemd-sysext.service`'s enable link (`sysinit.target.wants`), which SteamOS doesn't enable by itself.
+  An older install's `/var/lib/extensions/gamecove.raw` is removed on reinstall.
+- The image is root-owned and never in a user-writable place: it carries the polkit policy and the
+  prompt-free `gamecove-fix-set`.
+- While SteamOS installs an update, its updater unmerges system extensions until the reboot (steamos-extension
+  loader notes): GameCove's files are gone from `/usr` until you restart. The app keeps running, but session
+  switching and root actions fail until then, so restart right after a SteamOS update.
+- Session switching uses Valve's steamos-manager (`SessionManagement1`, v25.9+): `steamosctl
+  switch-to-desktop-mode gamecove.desktop`, `get-valid-desktop-sessions`, game mode is
+  `gamescope-wayland.desktop`. Since SteamOS 3.8 Steam's own "Switch to Desktop" goes through steamos-manager
+  too (the default desktop session), which `gamecove-session-select`'s marker already handles.
+  steamos-manager reports the login mode from `gamescope-session.service`, so while GameCove runs it says
+  "desktop"; nothing of ours reads that.
+- polkit: `systemctl reload polkit` re-reads our policy on Type=notify-reload polkit; on an older polkit
+  without a reload, the prompt-free actions work after the next restart (`pkaction --action-id
+  io.github.ihulksmashi.gamecove.fix-set` shows whether it's loaded; the hardware checks test it).
+- Chrome is a Flatpak (`com.google.Chrome`); git may be missing (the testbed falls back to a tarball).
+- Device support Valve ships (steamos-manager `data/devices/*.toml`): ROG Ally (board RC71L) has TDP through
+  `asus-armoury` firmware attributes with platform profile `performance`, `asus-wmi` profiles and
+  `charge_control_end_threshold`; no InputPlumber entry (Steam reads the Ally's controller itself).
+  Legion Go S (83L3/83N6/83Q2/83Q3) has TDP through `lenovo-wmi-other-0` with profile `custom` and
+  InputPlumber in `deck-uhid` mode. The Claw 8 EX has `msi-wmi-platform` TDP and InputPlumber `deck-uhid`.
+  GameCove's power controls use steamos-manager's `TdpLimit1` first on SteamOS, so both agree.
 
 **CachyOS.** Later: a PKGBUILD with the same file list.
 
@@ -312,7 +344,9 @@ OpenGamepadUI's `make dist-ext`. Documented, not run on SteamOS.
 The guided install (README "Install"). Three parts:
 
 1. **`packaging/get-gamecove.sh`** (POSIX sh, no root): detects the OS from `os-release` (+ `/run/ostree-booted`
-   for Fedora Atomic), asks the GitHub API for the latest release, downloads the app tarball, the package for this
+   for Fedora Atomic), asks the GitHub API for the latest release (`--tag` / `GAMECOVE_TAG` for a given one;
+   `releases/latest` skips pre-releases, so while only pre-releases exist it takes the newest of the release
+   list, and a given tag is never replaced), downloads the app tarball, the package for this
    system (RPM, or the `.raw` sysext on SteamOS), its own copy and `SHA256SUMS` into
    `~/.local/share/gamecove/installer/`, checks `SHA256SUMS`'s Sigstore signature (`SHA256SUMS.sigstore.json`, made
    by the Release workflow with its GitHub OIDC identity, no key or secret; verified with cosign from the system or a
@@ -337,7 +371,7 @@ How the install runs (every privileged step through `pkexec`, so the desktop's p
 | System | Package | Live now? |
 | --- | --- | --- |
 | Bazzite / Fedora Atomic | `pkexec rpm-ostree install --idempotent --apply-live <rpm>`; if that fails, the same without `--apply-live` (staged) | with `--apply-live` yes, else after the reboot |
-| SteamOS | `pkexec sh -c '<install -m0644 "$1" /var/lib/extensions/gamecove.raw; systemctl enable systemd-sysext; systemd-sysext refresh; reload polkit>' sh <raw>`. `/var` is writable, so `steamos-readonly` stays on | yes |
+| SteamOS | `pkexec sh -c '<image to /home/.steamos/offload/gamecove/gamecove.raw, link /etc/extensions/gamecove.raw, keep list /etc/atomic-update.conf.d/gamecove.conf; systemctl enable systemd-sysext; systemd-sysext refresh; reload polkit>' sh <raw>` (elsewhere: `/var/lib/extensions/gamecove.raw`). Nothing goes into `/usr`, so `steamos-readonly` stays on | yes |
 
 When the package is live, fixes install right away (`pkexec gamecove-fix <name> install`) and
 `gamecove-apply-choices` runs at once. When it's only staged, the default session can't be set yet (the session

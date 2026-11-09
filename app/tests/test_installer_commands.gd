@@ -26,12 +26,21 @@ func test_sysext_commands() -> void:
 	var c := C.sysext_install("/dl/g.raw")
 	eq(c.slice(0, 3), ["pkexec", "sh", "-c"])
 	eq(c.slice(4), ["sh", "/dl/g.raw"], "the image path is an argument, never pasted into the script")
-	ok("/var/lib/extensions/gamecove.raw" in c[3])
+	ok("/var/lib/extensions/gamecove.raw" in c[3], "non-SteamOS sysext systems: /var/lib/extensions")
 	ok("systemd-sysext refresh" in c[3])
-	ok("steamos-readonly" not in c[3], "/var is writable: no read-only toggling")
+	ok("steamos-readonly" not in c[3], "no read-only toggling: the image never goes into /usr")
+	# SteamOS: image on /home (root-owned offload folder), linked from /etc/extensions,
+	# both links in an atomic-update keep list so an OS update keeps GameCove
+	ok("/home/.steamos/offload/gamecove/gamecove.raw" in c[3])
+	ok("ln -sfn /home/.steamos/offload/gamecove/gamecove.raw /etc/extensions/gamecove.raw" in c[3])
+	ok("/etc/atomic-update.conf.d/gamecove.conf" in c[3])
+	ok("sysinit.target.wants/systemd-sysext.service" in c[3], "the enable link is kept across updates too")
+	ok("systemctl enable systemd-sysext.service" in c[3])
 	var r := C.sysext_remove()
-	ok("rm -f /var/lib/extensions/gamecove.raw" in r[3])
+	ok("rm -f /etc/extensions/gamecove.raw /var/lib/extensions/gamecove.raw /etc/atomic-update.conf.d/gamecove.conf" in r[3])
+	ok("/home/.steamos/offload/gamecove/gamecove.raw" in r[3])
 	ok("systemd-sysext refresh" in r[3])
+	ok("systemctl disable" not in r[3], "other extensions may rely on systemd-sysext")
 
 
 func test_session_and_misc_commands() -> void:

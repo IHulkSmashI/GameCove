@@ -196,7 +196,22 @@ static func read_text(path: String) -> String:
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		return ""
-	return f.get_as_text().strip_edges()
+	return read_all(f).strip_edges()
+
+
+## Reads an open file to its real end. sysfs files report a size of 4096 and
+## /proc files a size of 0, so get_as_text() (which trusts the size) returns ""
+## for both; reading in chunks until a short read works for every kind of file.
+static func read_all(f: FileAccess) -> String:
+	var buf := PackedByteArray()
+	while true:
+		var chunk := f.get_buffer(65536)
+		if chunk.is_empty():
+			break
+		buf.append_array(chunk)
+		if chunk.size() < 65536 or buf.size() > 64 * 1024 * 1024:
+			break
+	return buf.get_string_from_utf8()
 
 
 static func load_doc() -> Dictionary:
