@@ -394,11 +394,19 @@ func hints(f: Control) -> Array:
 		out.append(["A", "Open"])
 		out.append(["B", "Home"])
 	else:
+		var pg_a: Control = pages.get(category)
+		var named: String = pg_a.a_hint(f) if pg_a != null and pg_a.has_method("a_hint") else ""
 		if f is Button and f.theme_type_variation == "RowButton" and f.get_parent() != null and "values" in f.get_parent():
 			out.append(["LR", "Change"])
+		elif named != "":
+			out.append(["A", named])
 		else:
 			out.append(["A", "Select"])
 		out.append(["B", "Categories"])
+	# LB / RB always switch the top sections; LT / RT the page's own tabs.
+	var pg: Control = pages.get(category)
+	if pg != null and pg.has_method("cycle_tabs"):
+		out.append([["LT", "RT"], "Tabs"])
 	out.append([["LB", "RB"], "Sections"])
 	out.append(["GUIDE", "Quick menu"])
 	return out
@@ -427,6 +435,19 @@ static func _swallow(event: InputEvent) -> bool:
 	if event is InputEventKey:
 		return event.keycode in [KEY_Q, KEY_E, KEY_PAGEUP, KEY_PAGEDOWN]
 	return event is InputEventJoypadMotion and event.axis in [JOY_AXIS_TRIGGER_LEFT, JOY_AXIS_TRIGGER_RIGHT]
+
+
+## LT / RT: the open page's tabs (Settings > Device: About, Fixes, Storage,
+## Updates). Focus follows to the new tab when it was inside the page.
+func cycle_tabs(d: int) -> bool:
+	var pg: Control = pages.get(category)
+	if pg == null or not pg.has_method("cycle_tabs") or not pg.is_visible_in_tree():
+		return false
+	var was_in := in_page()
+	var t: Control = pg.cycle_tabs(d)
+	if was_in and t != null:
+		t.grab_focus()
+	return true
 
 
 # ------------------------------------------------------------ host API for pages

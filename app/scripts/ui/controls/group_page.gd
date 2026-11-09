@@ -51,8 +51,14 @@ func build() -> void:
 
 
 ## Subclasses: cards after the generated ones (use add_card / toggle).
+## Controller links to the button map and test (the device's controller
+## panel), which used to be a second "Controller" tab under Device.
 func build_extra() -> void:
-	pass
+	if id != "controller" or host == null or not host.has_method("open_category"):
+		return
+	var box := add_card(TC.BUTTONS_CARD, "gamepad")
+	var r := action_row(box, "button_map", TC.BUTTONS_ROW, "", TC.BUTTONS_ROW_HINT, "gamepad")
+	r.pressed.connect(func(): host.open_category("device", "controller"))
 
 
 ## "2 games have their own settings": these are the everyday values.

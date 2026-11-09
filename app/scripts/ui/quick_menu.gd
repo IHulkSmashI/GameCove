@@ -343,9 +343,18 @@ func _set_header(g: Dictionary) -> void:
 		rule.color = ThemeLib.color("line")
 	var a: Variant = g.get("art", {})
 	var cover: String = a.get("cover", "") if a is Dictionary else ""
-	var tex: Texture2D = load("res://scripts/ui/art_cache.gd").cached("cover", cover) if cover != "" else null
+	var AC = load("res://scripts/ui/art_cache.gd")
+	var tex: Texture2D = AC.cached("cover", cover) if cover != "" else null
 	head_art.texture = tex
 	head_art.visible = tex != null
+	# Not on screen anywhere yet (Home no longer repeats the spotlight game in
+	# its rows): load it off the main thread and show it when it lands.
+	if tex == null and AC.usable(cover):
+		var want := cover
+		AC.request("cover", cover, func(t):
+			if is_instance_valid(head_art) and t != null and str(game.get("art", {}).get("cover", "")) == want:
+				head_art.texture = t
+				head_art.visible = true, self)
 	head_caption.visible = not g.is_empty()
 	var secs := session_seconds()
 	head_caption.text = (TS.QM_SESSION % TS.session_time(secs).to_lower()) if secs >= 60 else TC.QM_TITLE

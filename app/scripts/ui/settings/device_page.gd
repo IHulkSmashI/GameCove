@@ -25,6 +25,9 @@ const PANELS := {
 	"updates": ["updates_page.gd", "updates_panel.gd", "updates.gd"],
 }
 const ORDER := ["about", "fixes", "controller", "storage", "updates"]
+## Sections without a tab: Controller is its own Settings category, whose page
+## links here (open_category("device", "controller")).
+const UNTABBED := ["controller"]
 const TAB_TITLES := {"about": "About", "fixes": "Fixes", "controller": "Controller", "storage": "Storage", "updates": "Updates"}
 const TAB_ICONS := {"about": "handheld", "fixes": "wrench", "controller": "gamepad", "storage": "download", "updates": "update"}
 const Shared := preload("res://scripts/ui/controls/shared.gd")
@@ -67,6 +70,10 @@ func build() -> void:
 	tab_row = Kit.hbox(6)
 	tab_row.name = "DeviceTabs"
 	add_child(tab_row)
+	# LT / RT switch these tabs (LB / RB stay on the top sections).
+	var lt := Kit.glyph("LT", false, true)
+	lt.name = "TabsLT"
+	tab_row.add_child(lt)
 	for id in ORDER:
 		var path := panel_script(id, panel_dir)
 		if path == "" and id == "fixes":
@@ -85,15 +92,28 @@ func build() -> void:
 				c = s.build(svc_for)
 			elif s != null and s.can_instantiate():
 				c = s.new() as Control
-		_tab(id)
+		if not id in UNTABBED:
+			_tab(id)
 		if c == null:
 			sections[id] = _placeholder(id)
 			continue
 		c.name = "Panel_" + id
 		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if c.has_signal("part_requested"):
+			c.part_requested.connect(func(to: String):
+				var f := focus_part(to)
+				if f != null:
+					f.grab_focus())
+		if c.has_signal("category_requested"):
+			c.category_requested.connect(func(to: String):
+				if host != null and host.has_method("open_category"):
+					host.open_category(to))
 		add_child(c)
 		panels[id] = c
 		sections[id] = c
+	var rt := Kit.glyph("RT", false, true)
+	rt.name = "TabsRT"
+	tab_row.add_child(rt)
 	_photo_setting()
 	if not sections.has(part):
 		part = "about"
@@ -132,6 +152,28 @@ func _tab_input(event: InputEvent, id: String) -> void:
 	tabs[id].accept_event()
 	select_part(order[to])
 	tabs[order[to]].grab_focus()
+
+
+## What A does on `f` when a panel names it (About's "Copy info"), else "".
+func a_hint(f: Control) -> String:
+	var c: Control = panels.get(part)
+	if c == null or not c.has_method("hints_for") or f == null or not c.is_ancestor_of(f):
+		return ""
+	for h in c.hints_for(f):
+		if h[0] == "A":
+			return str(h[1])
+	return ""
+
+
+## LT / RT: the previous / next tab (wrapping). Returns the new tab.
+func cycle_tabs(d: int) -> Control:
+	var order: Array = tabs.keys()
+	if order.is_empty():
+		return null
+	var i := order.find(part)
+	var to: String = order[0] if i < 0 else order[posmod(i + signi(d), order.size())]
+	select_part(to)
+	return tabs.get(to)
 
 
 ## Shows section `id` (its tab lit, its panel filling the page).

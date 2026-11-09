@@ -498,8 +498,9 @@ func _update_cue() -> void:
 
 ## LT / RT: jump to the previous / next first letter in the current order.
 func jump_letter(d: int) -> void:
-	if _tiles.is_empty() or not is_inside_tree():
+	if d == 0 or _tiles.is_empty() or not is_inside_tree():
 		return
+	d = signi(d)
 	var f := get_viewport().gui_get_focus_owner()
 	var i := maxi(0, _tiles.find(f))
 	var cur := _initial(_tiles[i].game)

@@ -218,3 +218,8 @@ static func fixes_line(counts: Dictionary) -> String:
 	if todo > 0:
 		return FIXES_SUMMARY % [applied, todo]
 	return FIXES_ALL_GOOD % applied
+
+## Controller category: the link to the device's button map and test.
+const BUTTONS_CARD := "Buttons"
+const BUTTONS_ROW := "Back buttons and button test"
+const BUTTONS_ROW_HINT := "Map the back buttons, see this game's layout and test every button."
