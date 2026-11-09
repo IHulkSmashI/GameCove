@@ -31,6 +31,10 @@
 #   controller-led set off | <zone>,<rrggbb>,<percent>[,<effect>[,<speed>]]
 #                                                handheld RGB lights (kernel LED class);
 #                                                fix.sh checks every field strictly
+#   controller-rumble set <0-100>|off|low|medium|high
+#                                                rumble strength in the controller's firmware
+#                                                (hid-msi 0-100, hid-lenovo-go words); fix.sh
+#                                                checks it against what the driver offers
 #   <the fixes above> status                     read-only
 #
 # Not here (administrator password, auth_admin_keep, through gamecove-fix): every install
@@ -52,7 +56,7 @@ else
 fi
 
 usage() {
-	echo "usage: gamecove-fix-set charge-limit|fan|claw8ex-gyro|claw8ex-buttons|controller-led|power-tune set <value>" >&2
+	echo "usage: gamecove-fix-set charge-limit|fan|claw8ex-gyro|claw8ex-buttons|controller-led|controller-rumble|power-tune set <value>" >&2
 	echo "       gamecove-fix-set <name> status" >&2
 	echo "install and remove need an administrator: pkexec /usr/libexec/gamecove/gamecove-fix" >&2
 	exit 64
@@ -68,7 +72,7 @@ name="$1"
 action="$2"
 
 case "$name" in
-charge-limit | fan | claw8ex-gyro | claw8ex-buttons | controller-led | power-tune) ;;
+charge-limit | fan | claw8ex-gyro | claw8ex-buttons | controller-led | controller-rumble | power-tune) ;;
 *) die "fix '$name' can't be changed without a password; use gamecove-fix" 65 ;;
 esac
 
@@ -109,6 +113,8 @@ claw8ex-gyro:accel-on | claw8ex-gyro:accel-off) ;;
 claw8ex-gyro:refresh | claw8ex-buttons:refresh) ;;
 controller-led:off) ;;
 controller-led:*[!a-z0-9,]*) die "value not allowed for $name" 66 ;;
+controller-rumble:off | controller-rumble:low | controller-rumble:medium | controller-rumble:high) ;;
+controller-rumble:[0-9] | controller-rumble:[1-9][0-9] | controller-rumble:100) ;;
 controller-led:all,[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f],[0-9]* | controller-led:[0-9],[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f],[0-9]*) ;;
 *) die "value not allowed for $name" 66 ;;
 esac

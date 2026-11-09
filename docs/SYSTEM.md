@@ -286,6 +286,7 @@ handheld, never a background or remote session):
 | power-tune battery (long life) | a charge setting like the limit | the kernel's own charge_types values |
 | power-tune thermald hold / release | on Intel, thermald puts the firmware PL1 back every few seconds, so the TDP only sticks with it held | a watcher started by the hold starts thermald again once no game of that user runs (60 s for a game to start, then two checks 10 s apart), even if GameCove crashed; GameCove asks again on the next TDP write |
 | controller-led | the lights, changed often | every field checked strictly; the original colours are restored on removal |
+| controller-rumble | rumble strength, per game | 0-100 or off/low/medium/high, checked against what the driver offers; an unchanged value is never rewritten (hid-msi stores it in the controller's flash); the original is restored on removal |
 | claw8ex-gyro accel on/off | a gyro tuning switch | only rewrites GameCove's own InputPlumber override |
 | claw8ex-gyro / -buttons refresh | after an OS update the controller may otherwise stop matching; must work without a keyboard | only rebuilds GameCove's override from the current stock file, or removes it |
 

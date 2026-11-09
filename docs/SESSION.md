@@ -276,7 +276,7 @@ polkit has two actions, picked by the program pkexec runs:
 
 | Action | Program | Who | Allows |
 | --- | --- | --- | --- |
-| `io.github.ihulksmashi.gamecove.fix-set` | `/usr/libexec/gamecove/gamecove-fix-set` | active local session: `yes` (no password); inactive / remote: `no` | `set` and `status` only: `charge-limit` 50-100 / release, `fan` auto / quiet / max / curve, `power-tune` boost, epp, governor, cpumax, gpulevel, gpumin, gpumax, gpuprofile, sppt, fppt, platform, tau, battery, restore and thermald hold / release (a hold ends by itself when no game runs), `controller-led`, `claw8ex-gyro` accel-on / accel-off, `claw8ex-gyro` / `claw8ex-buttons` refresh |
+| `io.github.ihulksmashi.gamecove.fix-set` | `/usr/libexec/gamecove/gamecove-fix-set` | active local session: `yes` (no password); inactive / remote: `no` | `set` and `status` only: `charge-limit` 50-100 / release, `fan` auto / quiet / max / curve, `power-tune` boost, epp, governor, cpumax, gpulevel, gpumin, gpumax, gpuprofile, sppt, fppt, platform, tau, battery, restore and thermald hold / release (a hold ends by itself when no game runs), `controller-led`, `controller-rumble` 0-100 / off / low / medium / high, `claw8ex-gyro` accel-on / accel-off, `claw8ex-gyro` / `claw8ex-buttons` refresh |
 | `io.github.ihulksmashi.gamecove.fix` | `/usr/libexec/gamecove/gamecove-fix` | `auth_admin_keep` | everything else: every install and remove (the small udev-rule / session-file fixes too), `power-tune` smt, cores, sleep, mcu, `--remove-all` |
 
 Why each setting is on one side or the other: [SYSTEM.md](SYSTEM.md), "GameCove's root actions".
