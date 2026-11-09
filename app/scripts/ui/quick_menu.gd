@@ -32,6 +32,7 @@ const Catalog := preload("res://scripts/ui/controls/catalog.gd")
 const SteamInput := preload("res://scripts/ui/controls/steam_input.gd")
 const Shared := preload("res://scripts/ui/controls/shared.gd")
 const ControlScript := preload("res://scripts/controls/control.gd")
+const BrandMark := preload("res://scripts/ui/brand_mark.gd")
 
 signal closed
 ## A result worth a toast: text, tone (good / bad).
@@ -882,6 +883,9 @@ func _build_device() -> void:
 	var level: String = device.support_level() if device.has_method("support_level") else "generic"
 	var head := Kit.hbox(12)
 	head.name = "DeviceHead"
+	var maker := BrandMark.rect(str(p.get("maker", p.get("vendor", ""))), 28)
+	if maker != null:
+		head.add_child(maker)
 	var names := Kit.vbox(2)
 	names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var dn := Kit.label(device.display_name(), "HeaderLabel")

@@ -199,6 +199,15 @@ const SUMMARY_PASSWORD_NONE := "Nothing here needs your admin password."
 const SUMMARY_REBOOT := "A restart finishes the install. Your current system stays in the boot menu, just in case."
 const SUMMARY_STEAM_CONTROL := "Steam control on"
 
+# ---- XeSS XMX driver (Intel Arc with XMX only)
+const XESS_TITLE := "XeSS XMX driver"
+const XESS_LINE := "Lets XeSS and XeLL use the Arc chip's XMX cores in games: sharper upscaling and less input lag. Optional; you can remove it later."
+const XESS_BADGE := "Intel Arc"
+const XESS_TIME := "~1 MIN"
+const XESS_FOOT := "PRESS A TO ADD IT"
+const XESS_ON := "WILL BE INSTALLED"
+const XESS_SUMMARY := "XeSS XMX driver"
+
 # ---- progress
 const PROGRESS_TITLE := {
 	"install": "Installing GameCove", "change": "Applying your changes", "repair": "Repairing GameCove",
@@ -220,8 +229,11 @@ const TASKS := {
 	"remove_user_files": "Remove GameCove's shortcuts and startup files",
 	"remove_settings": "Remove GameCove's settings",
 	"forget": "Forget the install",
+	"xess_install": "Install the XeSS XMX driver",
+	"xess_remove": "Remove the XeSS XMX driver",
 }
 const TASK_WHY := {
+	"xess_install": "Downloads it from GitHub; no password needed.",
 	"package": "Asks for your admin password.",
 	"package_update": "Asks for your admin password.",
 	"package_remove": "Asks for your admin password.",

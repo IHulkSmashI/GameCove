@@ -1116,7 +1116,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 50.0,
    "group": "display",
@@ -1179,7 +1179,7 @@
    "value": 120.0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": false,
    "default": false,
    "group": "display",
@@ -1282,7 +1282,7 @@
    "value": 0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": false,
    "group": "display",
@@ -1303,7 +1303,7 @@
    "value": false
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 0,
    "group": "display",
@@ -1349,7 +1349,7 @@
    "value": 0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 0,
    "group": "display",
@@ -1391,7 +1391,7 @@
    "value": 0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 18.0,
    "group": "display",
@@ -1412,7 +1412,7 @@
    "value": 18.0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 0.0,
    "group": "display",
@@ -1433,7 +1433,7 @@
    "value": 0.0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 6500.0,
    "group": "display",
@@ -1454,7 +1454,7 @@
    "value": 6500.0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": false,
    "group": "display",
@@ -1475,7 +1475,7 @@
    "value": false
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 50.0,
    "group": "display",
@@ -1498,7 +1498,7 @@
    "value": 50.0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": "manual",
    "group": "display",
@@ -1532,7 +1532,7 @@
    "value": "manual"
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": false,
    "default": false,
    "group": "display",
@@ -1553,7 +1553,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": false,
    "default": false,
    "group": "display",
@@ -1576,7 +1576,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": false,
    "default": 203.0,
    "group": "display",
@@ -1599,7 +1599,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": "",
    "group": "display",
@@ -1633,7 +1633,7 @@
    "value": ""
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": "auto",
    "group": "display",
@@ -1675,7 +1675,7 @@
    "value": "auto"
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 60,
    "group": "display",
@@ -1717,7 +1717,7 @@
    "value": 60
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 300,
    "group": "display",
@@ -2128,59 +2128,6 @@
    "requires": [],
    "step": 1.0,
    "title": "Clock",
-   "unit": "",
-   "value": null
-  },
-  {
-   "apply_order": 5,
-   "available": false,
-   "default": 0.0,
-   "group": "perf",
-   "help": "MangoHud caps the frame rate inside the game (steadier than the screen's limit in some games). Off = 0. From the next launch.",
-   "id": "perf.mangohud_fps_limit",
-   "kind": "slider",
-   "max": 120.0,
-   "min": 0.0,
-   "needs_root": false,
-   "options": [],
-   "per_game": true,
-   "points": 0,
-   "reason": "Needs MangoHud (its Vulkan layer)",
-   "requires": [],
-   "step": 1.0,
-   "title": "In-game frame limit",
-   "unit": "fps",
-   "value": null
-  },
-  {
-   "apply_order": 0,
-   "available": false,
-   "default": "late",
-   "group": "perf",
-   "help": "Late waits after the frame (lowest input lag); Early waits before it (smoothest frame times).",
-   "id": "perf.mangohud_fps_limit_method",
-   "kind": "choice",
-   "max": 1.0,
-   "min": 0.0,
-   "needs_root": false,
-   "options": [
-    {
-     "label": "Lowest latency",
-     "value": "late"
-    },
-    {
-     "label": "Smoothest",
-     "value": "early"
-    }
-   ],
-   "per_game": true,
-   "points": 0,
-   "reason": "Needs MangoHud (its Vulkan layer)",
-   "requires": [
-    "perf.mangohud_fps_limit"
-   ],
-   "step": 1.0,
-   "title": "Frame limit timing",
    "unit": "",
    "value": null
   },
@@ -2596,12 +2543,12 @@
    "available": true,
    "default": null,
    "group": "power",
-   "help": "Watts the chip may hold for a few seconds above the TDP.",
+   "help": "Watts the chip may hold for up to about two minutes above the TDP. Kept within the safe limit for this handheld.",
    "id": "power.sppt",
    "kind": "slider",
-   "max": 41.0,
+   "max": 33.0,
    "min": 30.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": true,
    "points": 0,
@@ -2617,12 +2564,12 @@
    "available": true,
    "default": null,
    "group": "power",
-   "help": "Watts for very short peaks. Never below the short boost limit.",
+   "help": "Watts for peaks of a few seconds. Never below the short boost limit, never past the safe limit.",
    "id": "power.fppt",
    "kind": "slider",
-   "max": 41.0,
+   "max": 39.0,
    "min": 30.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": true,
    "points": 0,
@@ -2761,7 +2708,7 @@
    "kind": "choice",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [
     {
      "label": "Performance",
@@ -2829,7 +2776,7 @@
    "kind": "slider",
    "max": 100.0,
    "min": 30.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": true,
    "points": 0,
@@ -2884,26 +2831,26 @@
   },
   {
    "apply_order": 65,
-   "available": true,
+   "available": false,
    "default": null,
    "group": "power",
    "help": "Fixed GPU clock in manual mode.",
    "id": "power.gpu_clock",
    "kind": "slider",
-   "max": 2700.0,
-   "min": 800.0,
+   "max": 1.0,
+   "min": 0.0,
    "needs_root": false,
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "",
+   "reason": "Set by GPU minimum and maximum clock",
    "requires": [
     "power.gpu_level"
    ],
    "step": 50.0,
    "title": "GPU clock",
    "unit": "MHz",
-   "value": 1600.0
+   "value": null
   },
   {
    "apply_order": 63,
@@ -3020,7 +2967,7 @@
    "kind": "toggle",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": false,
    "points": 0,
@@ -3062,7 +3009,7 @@
    "kind": "curve",
    "max": 100.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": false,
    "points": 0,
@@ -3125,7 +3072,7 @@
    "kind": "choice",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [
     {
      "label": "S 2 Idle",
@@ -3155,7 +3102,7 @@
    "kind": "toggle",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": false,
    "points": 0,

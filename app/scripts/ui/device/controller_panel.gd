@@ -192,6 +192,9 @@ func _fill_cards() -> void:
 		c2[1].add_child(DKit.quiet(Texts.NO_INPUTPLUMBER_LINE))
 		_cards.add_child(c2[0])
 		focus.append(c2[0])
+	if not _loaded or not bool(state.get("available", false)):
+		# gyro on Controls doesn't need the Controller service's state
+		focus.append_array(_gyro_controls_card())
 	else:
 		focus.append_array(_paddles_card())
 		focus.append_array(_gyro_card())

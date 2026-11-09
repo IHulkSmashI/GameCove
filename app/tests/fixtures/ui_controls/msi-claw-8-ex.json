@@ -121,7 +121,7 @@
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": true,
    "group": "controller",
    "help": "Motion aiming for games and Steam Input. Off stops the gyro reaching games.",
@@ -133,12 +133,12 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Gyro",
    "unit": "",
-   "value": null
+   "value": true
   },
   {
    "apply_order": 0,
@@ -171,7 +171,7 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "This handheld has one gyro",
    "requires": [
     "controller.gyro"
    ],
@@ -231,8 +231,8 @@
   },
   {
    "apply_order": 20,
-   "available": false,
-   "default": "default",
+   "available": true,
+   "default": "dualsense",
    "group": "controller",
    "help": "What games see. Steam Deck and DualSense carry gyro and trackpads; Xbox works everywhere.",
    "id": "controller.emulation",
@@ -242,46 +242,22 @@
    "needs_root": false,
    "options": [
     {
-     "label": "Handheld default",
-     "value": "default"
-    },
-    {
-     "label": "Steam Deck",
-     "value": "deck"
-    },
-    {
-     "label": "DualSense Edge",
-     "value": "ds5-edge"
-    },
-    {
-     "label": "Xbox Elite",
-     "value": "xbox-elite"
-    },
-    {
-     "label": "Xbox Series",
-     "value": "xbox-series"
-    },
-    {
      "label": "DualSense",
-     "value": "ds5"
-    },
-    {
-     "label": "Xbox 360",
-     "value": "xb360"
+     "value": "dualsense"
     }
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Controller type",
    "unit": "",
-   "value": null
+   "value": "dualsense"
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": "steam_input",
    "group": "controller",
    "help": "What the back buttons do as a group (Handheld Daemon).",
@@ -298,12 +274,12 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Back buttons",
    "unit": "",
-   "value": null
+   "value": "steam_input"
   },
   {
    "apply_order": 0,
@@ -500,7 +476,7 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Handheld Daemon sets the back buttons together (Back buttons)",
    "requires": [],
    "step": 1.0,
    "title": "Back button M2",
@@ -702,7 +678,7 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Handheld Daemon sets the back buttons together (Back buttons)",
    "requires": [],
    "step": 1.0,
    "title": "Back button M1",
@@ -723,7 +699,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Handheld Daemon has no layout swap for this handheld",
    "requires": [],
    "step": 1.0,
    "title": "Swap A/B and X/Y",
@@ -744,7 +720,7 @@
    "options": [],
    "per_game": false,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Handheld Daemon has no mouse mode; use the touchpad or Steam's desktop layout",
    "requires": [],
    "step": 1.0,
    "title": "Mouse mode",
@@ -765,7 +741,7 @@
    "options": [],
    "per_game": false,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Needs InputPlumber",
    "requires": [
     "controller.desktop_mode"
    ],
@@ -806,7 +782,7 @@
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": true,
    "group": "controller",
    "help": "Vibration in games.",
@@ -818,16 +794,16 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Rumble",
    "unit": "",
-   "value": null
+   "value": true
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": 100,
    "group": "controller",
    "help": "How strong the vibration is.",
@@ -860,12 +836,12 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Rumble strength",
    "unit": "",
-   "value": null
+   "value": 100
   },
   {
    "apply_order": 0,
@@ -881,7 +857,7 @@
    "options": [],
    "per_game": false,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Handheld Daemon can't buzz on request",
    "requires": [],
    "step": 1.0,
    "title": "Test rumble",
@@ -902,7 +878,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Handheld Daemon has no deadzone setting for this handheld",
    "requires": [],
    "step": 2.0,
    "title": "Left stick deadzone",
@@ -923,7 +899,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Handheld Daemon has no deadzone setting for this handheld",
    "requires": [],
    "step": 2.0,
    "title": "Right stick deadzone",
@@ -944,7 +920,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Handheld Daemon has no deadzone setting for this handheld",
    "requires": [],
    "step": 2.0,
    "title": "Left trigger deadzone",
@@ -965,7 +941,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Handheld Daemon has no deadzone setting for this handheld",
    "requires": [],
    "step": 2.0,
    "title": "Right trigger deadzone",
@@ -974,7 +950,7 @@
   },
   {
    "apply_order": 5,
-   "available": false,
+   "available": true,
    "default": "solid",
    "group": "controller",
    "help": "Stick ring lighting.",
@@ -985,26 +961,22 @@
    "needs_root": false,
    "options": [
     {
-     "label": "Off",
-     "value": "off"
-    },
-    {
      "label": "Solid",
      "value": "solid"
     }
    ],
    "per_game": true,
    "points": 0,
-   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Lights",
    "unit": "",
-   "value": null
+   "value": "solid"
   },
   {
    "apply_order": 4,
-   "available": false,
+   "available": true,
    "default": "#ff6a00",
    "group": "controller",
    "help": "Colour of the stick rings.",
@@ -1016,14 +988,14 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "reason": "",
    "requires": [
     "controller.led_effect"
    ],
    "step": 1.0,
    "title": "Light colour",
    "unit": "",
-   "value": null
+   "value": "#ff8000"
   },
   {
    "apply_order": 4,
@@ -1039,7 +1011,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "reason": "Not on this handheld",
    "requires": [
     "controller.led_effect"
    ],
@@ -1050,7 +1022,7 @@
   },
   {
    "apply_order": 3,
-   "available": false,
+   "available": true,
    "default": 50.0,
    "group": "controller",
    "help": "0 turns the lights off.",
@@ -1062,14 +1034,14 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "reason": "",
    "requires": [
     "controller.led_effect"
    ],
    "step": 5.0,
    "title": "Light brightness",
    "unit": "%",
-   "value": null
+   "value": 50.0
   },
   {
    "apply_order": 2,
@@ -1085,7 +1057,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "reason": "This handheld's effects have a fixed speed",
    "requires": [
     "controller.led_effect"
    ],
@@ -1108,7 +1080,7 @@
    "options": [],
    "per_game": false,
    "points": 0,
-   "reason": "Needs InputPlumber or Handheld Daemon running",
+   "reason": "Needs InputPlumber",
    "requires": [],
    "step": 1.0,
    "title": "Reset controller layout",
@@ -1116,7 +1088,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 50.0,
    "group": "display",
@@ -1179,7 +1151,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": false,
    "group": "display",
@@ -1282,7 +1254,7 @@
    "value": 0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": false,
    "group": "display",
@@ -1303,7 +1275,7 @@
    "value": false
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 0,
    "group": "display",
@@ -1349,7 +1321,7 @@
    "value": 0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 0,
    "group": "display",
@@ -1391,7 +1363,7 @@
    "value": 0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 18.0,
    "group": "display",
@@ -1412,7 +1384,7 @@
    "value": 18.0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 0.0,
    "group": "display",
@@ -1433,7 +1405,7 @@
    "value": 0.0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 6500.0,
    "group": "display",
@@ -1454,7 +1426,7 @@
    "value": 6500.0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": false,
    "group": "display",
@@ -1475,7 +1447,7 @@
    "value": false
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 50.0,
    "group": "display",
@@ -1498,7 +1470,7 @@
    "value": 50.0
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": "manual",
    "group": "display",
@@ -1532,7 +1504,7 @@
    "value": "manual"
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": false,
    "default": false,
    "group": "display",
@@ -1553,7 +1525,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": false,
    "default": false,
    "group": "display",
@@ -1576,7 +1548,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": false,
    "default": 203.0,
    "group": "display",
@@ -1599,7 +1571,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": "",
    "group": "display",
@@ -1633,7 +1605,7 @@
    "value": ""
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": "auto",
    "group": "display",
@@ -1675,7 +1647,7 @@
    "value": "auto"
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 60,
    "group": "display",
@@ -1717,7 +1689,7 @@
    "value": 60
   },
   {
-   "apply_order": 0,
+   "apply_order": 11,
    "available": true,
    "default": 300,
    "group": "display",
@@ -2128,59 +2100,6 @@
    "requires": [],
    "step": 1.0,
    "title": "Clock",
-   "unit": "",
-   "value": null
-  },
-  {
-   "apply_order": 5,
-   "available": false,
-   "default": 0.0,
-   "group": "perf",
-   "help": "MangoHud caps the frame rate inside the game (steadier than the screen's limit in some games). Off = 0. From the next launch.",
-   "id": "perf.mangohud_fps_limit",
-   "kind": "slider",
-   "max": 120.0,
-   "min": 0.0,
-   "needs_root": false,
-   "options": [],
-   "per_game": true,
-   "points": 0,
-   "reason": "Needs MangoHud (its Vulkan layer)",
-   "requires": [],
-   "step": 1.0,
-   "title": "In-game frame limit",
-   "unit": "fps",
-   "value": null
-  },
-  {
-   "apply_order": 0,
-   "available": false,
-   "default": "late",
-   "group": "perf",
-   "help": "Late waits after the frame (lowest input lag); Early waits before it (smoothest frame times).",
-   "id": "perf.mangohud_fps_limit_method",
-   "kind": "choice",
-   "max": 1.0,
-   "min": 0.0,
-   "needs_root": false,
-   "options": [
-    {
-     "label": "Lowest latency",
-     "value": "late"
-    },
-    {
-     "label": "Smoothest",
-     "value": "early"
-    }
-   ],
-   "per_game": true,
-   "points": 0,
-   "reason": "Needs MangoHud (its Vulkan layer)",
-   "requires": [
-    "perf.mangohud_fps_limit"
-   ],
-   "step": 1.0,
-   "title": "Frame limit timing",
    "unit": "",
    "value": null
   },
@@ -2612,12 +2531,12 @@
    "available": false,
    "default": null,
    "group": "power",
-   "help": "Watts the chip may hold for a few seconds above the TDP.",
+   "help": "Watts the chip may hold for up to about two minutes above the TDP. Kept within the safe limit for this handheld.",
    "id": "power.sppt",
    "kind": "slider",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": true,
    "points": 0,
@@ -2633,12 +2552,12 @@
    "available": false,
    "default": null,
    "group": "power",
-   "help": "Watts for very short peaks. Never below the short boost limit.",
+   "help": "Watts for peaks of a few seconds. Never below the short boost limit, never past the safe limit.",
    "id": "power.fppt",
    "kind": "slider",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": true,
    "points": 0,
@@ -2764,7 +2683,7 @@
    "kind": "choice",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [
     {
      "label": "Performance",
@@ -2832,7 +2751,7 @@
    "kind": "slider",
    "max": 100.0,
    "min": 30.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": true,
    "points": 0,
@@ -3011,7 +2930,7 @@
    "kind": "toggle",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": false,
    "points": 0,
@@ -3053,7 +2972,7 @@
    "kind": "curve",
    "max": 100.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": false,
    "points": 0,
@@ -3116,7 +3035,7 @@
    "kind": "choice",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": false,
    "points": 0,
@@ -3137,7 +3056,7 @@
    "kind": "toggle",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": false,
+   "needs_root": true,
    "options": [],
    "per_game": false,
    "points": 0,
