@@ -57,7 +57,7 @@ def test_qlever_first_whole_property(monkeypatch):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["query"][0]
             assert "PREFIX wdt:" in q  # QLever needs explicit prefixes
             rows = [{"item": {"value": f"http://www.wikidata.org/entity/Q{i}"}, "value": {"value": str(i)}}
-                    for i in range(self.total)]
+                    for i in range(1, self.total + 1)]
             return json.dumps({"results": {"bindings": rows}})
 
     c = Big(total=30000, qlever_down=False)

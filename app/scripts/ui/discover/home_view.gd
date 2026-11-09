@@ -46,6 +46,14 @@ func attach_stage(layer: Control) -> void:
 
 
 ## Keep the hero art (on root's stage layer) inside the spotlight's frame.
+var _spot_frame: Control
+
+
+func _sync_current_stage() -> void:
+	if is_instance_valid(_spot_frame):
+		_sync_stage(_spot_frame)
+
+
 func _sync_stage(frame: Control) -> void:
 	if stage == null or not is_instance_valid(frame) or not frame.is_inside_tree():
 		return
@@ -87,7 +95,11 @@ func build() -> void:
 	frame.add_child(_spot)
 	root.add_child(frame)
 	frame.item_rect_changed.connect(_sync_stage.bind(frame))
-	visibility_changed.connect(_sync_stage.bind(frame))
+	# The spotlight is rebuilt on refresh; connect to our own visibility once
+	# and always sync the current frame.
+	_spot_frame = frame
+	if not visibility_changed.is_connected(_sync_current_stage):
+		visibility_changed.connect(_sync_current_stage)
 	header = GameHeader.new()
 	header.max_logo = Vector2(440, 120)
 	header.max_badges = 0
