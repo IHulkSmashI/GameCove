@@ -74,7 +74,8 @@
     "max_le": 100,
     "allow": [
      -1
-    ]
+    ],
+    "unset": 0
    }
   ],
   "hhd_tdp": {
@@ -485,8 +486,12 @@
    },
    "rgb": {
     "present": true,
-    "via": "hid",
-    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+    "via": "hid-msi",
+    "sysfs_leds": [
+     "go:rgb:joystick_rings"
+    ],
+    "abi": "hid-msi",
+    "source": "kernel drivers/hid/hid-msi.c (every Claw: USB 0db0:1901-1904) + OGC patch 0100 (node named go:rgb:joystick_rings); read live on a Claw 8 EX, Bazzite 45; HueSync MSILEDDevice"
    }
   },
   "msi-claw-8-ai-plus": {
@@ -498,8 +503,12 @@
    },
    "rgb": {
     "present": true,
-    "via": "hid",
-    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+    "via": "hid-msi",
+    "sysfs_leds": [
+     "go:rgb:joystick_rings"
+    ],
+    "abi": "hid-msi",
+    "source": "kernel drivers/hid/hid-msi.c (every Claw: USB 0db0:1901-1904) + OGC patch 0100 (node named go:rgb:joystick_rings); read live on a Claw 8 EX, Bazzite 45; HueSync MSILEDDevice"
    }
   },
   "msi-claw-8-ex": {
@@ -511,8 +520,12 @@
    },
    "rgb": {
     "present": true,
-    "via": "hid",
-    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+    "via": "hid-msi",
+    "sysfs_leds": [
+     "go:rgb:joystick_rings"
+    ],
+    "abi": "hid-msi",
+    "source": "kernel drivers/hid/hid-msi.c (every Claw: USB 0db0:1901-1904) + OGC patch 0100 (node named go:rgb:joystick_rings); read live on a Claw 8 EX, Bazzite 45; HueSync MSILEDDevice"
    }
   },
   "msi-claw-a1m": {
@@ -524,8 +537,12 @@
    },
    "rgb": {
     "present": true,
-    "via": "hid",
-    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+    "via": "hid-msi",
+    "sysfs_leds": [
+     "go:rgb:joystick_rings"
+    ],
+    "abi": "hid-msi",
+    "source": "kernel drivers/hid/hid-msi.c (every Claw: USB 0db0:1901-1904) + OGC patch 0100 (node named go:rgb:joystick_rings); read live on a Claw 8 EX, Bazzite 45; HueSync MSILEDDevice"
    }
   },
   "msi-claw-a8": {
@@ -538,8 +555,12 @@
    },
    "rgb": {
     "present": true,
-    "via": "hid",
-    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+    "via": "hid-msi",
+    "sysfs_leds": [
+     "go:rgb:joystick_rings"
+    ],
+    "abi": "hid-msi",
+    "source": "kernel drivers/hid/hid-msi.c (every Claw: USB 0db0:1901-1904) + OGC patch 0100 (node named go:rgb:joystick_rings); read live on a Claw 8 EX, Bazzite 45; HueSync MSILEDDevice"
    }
   },
   "onexplayer-2": {
@@ -882,7 +903,7 @@
     "min": 2,
     "max": 15
    },
-   "_source": "MSI Claw 8 EX (MS-1T91, Core Ultra 7 258V, Arc 140V, 8\" IPS 120 Hz VRR). Fixture stack: PowerStation + Handheld Daemon (devices.json tdp_backends, rgb.via hhd). TDP 8-35 W: hhd core/const.py CLAW_EX_DATA (max 35) and ClawDeck docs; firmware ignores SPPT/FPPT (ClawDeck tests/test_hardware_findings.py §12); RGB via hhd (HueSync MSILEDDevice).",
+   "_source": "MSI Claw 8 EX on Bazzite 45 as read live 2026-11-09 (Claw 8 EX AI+, MS-1T91, BIOS E1T91IMS.10E, kernel 7.2.15-ogc1.1): InputPlumber + PowerStation + steamos-manager, no Handheld Daemon (tools/devicematrix/overrides.json). TDP 8-35 W: hhd CLAW_EX_DATA and ClawDeck; firmware ignores SPPT/FPPT (ClawDeck tests/test_hardware_findings.py §12); RGB through hid-msi's go:rgb:joystick_rings.",
    "power.tdp": {
     "available": true,
     "min": 8,
@@ -895,12 +916,12 @@
    },
    "power.sppt": {
     "available": false,
-    "reason_contains": "Handheld Daemon",
-    "note": "hhd owns the limits here; without hhd the firmware ignores them (FW_IGNORED)"
+    "reason_contains": "ignores",
+    "note": "FW_IGNORED: the EX's firmware ignores the PPT attributes (ClawDeck §12)"
    },
    "power.fppt": {
     "available": false,
-    "reason_contains": "Handheld Daemon"
+    "reason_contains": "ignores"
    },
    "power.smt": {
     "available": false,
@@ -916,40 +937,67 @@
     "note": "xe power_profile"
    },
    "power.gpu_level": {
-    "available": false,
-    "reason_contains": "AMD"
+    "available": true,
+    "options_include": [
+     "auto",
+     "manual"
+    ],
+    "note": "steamos-manager's Intel driver (data/devices/msi-claw-8ex.toml gpu_performance intel)"
    },
    "power.fan_mode": {
-    "available": false,
-    "reason_contains": "Handheld Daemon"
+    "available": true,
+    "options_include": [
+     "quiet",
+     "auto",
+     "max"
+    ],
+    "options_exclude": [
+     "firmware"
+    ],
+    "note": "msi_wmi_platform tables through the fan fix; steamos-manager's FanControl1 (jupiter-fan-control) never used on a fan_via fix row"
    },
    "power.fan_curve": {
-    "available": false,
-    "reason_contains": "Handheld Daemon"
+    "available": true,
+    "note": "both fans' six-point EC tables"
    },
    "power.charge_limit": {
-    "available": false,
-    "reason_contains": "Handheld Daemon"
+    "available": true,
+    "min": 50,
+    "max": 100,
+    "value": 100,
+    "note": "steamos-manager acpi_sb (MaxChargeLevel 0 = EC limit never set = 100); EC honouring it unverified"
    },
    "controller.emulation": {
     "available": true
    },
    "controller.gyro": {
-    "available": true,
-    "note": "devices.json gyro fix: hhd passes the IMU"
+    "available": false,
+    "reason_contains": "gyro fix",
+    "note": "InputPlumber: the IMU needs the claw8ex-gyro fix first"
    },
    "controller.paddles_as": {
-    "available": true
+    "available": false,
+    "reason_contains": "InputPlumber"
    },
    "controller.rumble": {
     "available": true
    },
    "controller.rumble_strength": {
-    "available": true
+    "available": false,
+    "reason_contains": "InputPlumber"
    },
    "controller.led_effect": {
     "available": true,
-    "note": "HueSync py_modules/huesync.py#L110-L112 MSILEDDevice; hhd claw rgb"
+    "options_include": [
+     "off",
+     "solid",
+     "pulse",
+     "rainbow",
+     "spiral",
+     "frostfire"
+    ],
+    "value": "off",
+    "note": "hid-msi go:rgb:joystick_rings, enabled=false as found"
    },
    "controller.led_color": {
     "available": true
@@ -979,6 +1027,19 @@
      "fsr4_xmx"
     ],
     "note": "Arc 140V has XMX (games.py INTEL_UPSCALERS)"
+   },
+   "power.cpu_cores": {
+    "available": true,
+    "max": 14,
+    "note": "PowerStation per-core Online; never CoresEnabled (halves on no-SMT CPUs)"
+   },
+   "controller.led_speed": {
+    "available": true,
+    "note": "hid-msi speed 0-20"
+   },
+   "controller.led_color_2": {
+    "available": false,
+    "reason_contains": "one zone"
    }
   },
   "lenovo-legion-go-s-z2go": {

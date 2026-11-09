@@ -1,0 +1,12 @@
+{
+ "_doc": "Per-device corrections for gen.py (see its docstring). Keep each entry to what was read on the real device and say where.",
+ "msi-claw-8-ex": {
+  "_source": "read live 2026-11-09 on a Claw 8 EX AI+ (Bazzite 45, kernel 7.2.15-ogc1.1.fc45, board MS-1T91, BIOS E1T91IMS.10E) with `godot --headless --path app -- --controls list`: InputPlumber + PowerStation + steamos-manager (no hhd), BAT1 with charge_control_end_threshold 0, ADP1 + two ucsi supplies",
+  "controller": "inputplumber",
+  "stack_add": ["steamos-manager"],
+  "battery": "BAT1",
+  "sm_charge": 0,
+  "threads": 14,
+  "cores": 14
+ }
+}

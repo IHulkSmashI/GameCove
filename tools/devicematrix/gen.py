@@ -39,7 +39,22 @@ panel) and from the tables below for facts devices.json doesn't carry (CPU
 model string, thread counts, sysfs names). Names that are best guesses are
 marked "stand-in" below; overrides.json next to this file corrects a single
 device without touching code: {"<device id>": {"cpu_model": "...", "threads": 16,
-"leds": ["name"], "backlight": "name", "files": {"/sys/...": "value"}}}.
+"leds": ["name"], "backlight": "name", "files": {"/sys/...": "value"},
+"controller": "inputplumber" | "hhd" (the stack's controller service), "stack_add": ["steamos-manager"],
+"battery": "BAT1", "sm_charge": 0 (steamos-manager MaxChargeLevel)}}.
+
+Generic rules (from tested sources, so siblings get them through devices.json):
+  * LED nodes whose expectations fact says "abi": "hid-msi" get hid-msi's attribute set
+    (drivers/hid/hid-msi.c: effect/effect_index, enabled/enabled_index, speed/speed_range 0-20,
+    channels 0-100) with effect, multi_intensity and brightness 0666 as on Bazzite.
+  * msi_wmi_platform fans carry the EC's own Claw table (pwm 153..214, 47..78 C, read live
+    on a Claw 8 EX); steamos-manager's FanControl1 is answered (state 0) on fan_via "fix"
+    rows, as Bazzite does on every handheld.
+  * msi-wmi-platform batteries (traits.ec) read charge_control_end_threshold 0 (EC limit
+    never set); steamos-manager has acpi_sb configs for the Claws (data/devices/msi-claw-*.toml),
+    so MaxChargeLevel answers 0 there.
+  * xe: tile0/gt0/freq0 with rpa_freq and throttle/ as the kernel lays it out; Intel rows on
+    steamos-manager get its Intel GpuPerformanceLevel1 (auto/manual, ManualGpuClock = min_freq).
 
 Usage: python3 -I tools/devicematrix/gen.py OUT [--devices app/data/devices.json] [--only id,id]
 Stdlib only. Deterministic: the same devices.json gives the same tree.
@@ -322,6 +337,8 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
                      "rpe_freq": 1300, "rpn_freq": 400}.items():
             t.w(f"{freq}/{k}", v)
         t.w(f"{freq}/power_profile", "[base] power_saving")
+        t.w(f"{freq}/rpa_freq", 1300)
+        t.w(f"{freq}/throttle/status", 0)
         t.w(f"{dev}/tile0/gt1/freq0/min_freq", 400)   # media GT: never to be touched
         t.w(f"{dev}/tile0/gt1/freq0/max_freq", 1400)
         hwmon = f"/sys/class/hwmon/hwmon{hw}"
@@ -359,8 +376,12 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
             t.w(f"{hwmon}/pwm{n}_enable", 2)
             t.w(f"{hwmon}/fan{n}_input", 2900)
             for p in range(1, points + 1):
-                t.w(f"{hwmon}/pwm{n}_auto_point{p}_pwm", min(255, p * 40))
-                t.w(f"{hwmon}/pwm{n}_auto_point{p}_temp", 30000 + p * 10000)
+                if fan == "msi_wmi_platform":   # the EC's own table, read live on a Claw 8 EX
+                    t.w(f"{hwmon}/pwm{n}_auto_point{p}_pwm", [153, 163, 173, 188, 204, 214][p - 1])
+                    t.w(f"{hwmon}/pwm{n}_auto_point{p}_temp", [47, 50, 57, 64, 71, 78][p - 1])
+                else:
+                    t.w(f"{hwmon}/pwm{n}_auto_point{p}_pwm", min(255, p * 40))
+                    t.w(f"{hwmon}/pwm{n}_auto_point{p}_temp", 30000 + p * 10000)
         hw += 1
     elif fan in FAN_MANUAL:
         hwmon = f"/sys/class/hwmon/hwmon{hw}"
@@ -377,12 +398,15 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
 
     # Power supply
     ac = "ACAD" if row["id"].startswith("steam-deck") else ("AC0" if maker.startswith("asus") else "ADP1")
-    bat = "BAT1" if row["id"].startswith("steam-deck") else "BAT0"
+    bat = override.get("battery") or ("BAT1" if row["id"].startswith("steam-deck") else "BAT0")
     ps = "/sys/class/power_supply"
     t.w(f"{ps}/{ac}/type", "Mains")
     t.w(f"{ps}/{ac}/online", 0)
     t.w(f"{ps}/ucsi-source-psy-USBC000:001/type", "USB")
     t.w(f"{ps}/ucsi-source-psy-USBC000:001/online", 0)
+    if bat == "BAT1" and not row["id"].startswith("steam-deck"):
+        t.w(f"{ps}/ucsi-source-psy-USBC000:002/type", "USB")
+        t.w(f"{ps}/ucsi-source-psy-USBC000:002/online", 0)
     b = f"{ps}/{bat}"
     for k, v in {"type": "Battery", "status": "Discharging", "present": 1, "capacity": 76, "energy_now": 45600000,
                  "energy_full": 60000000, "energy_full_design": 64000000, "power_now": 9500000,
@@ -390,8 +414,9 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
         t.w(f"{b}/{k}", v)
     via = row.get("charge_limit_via")
     behaviour = via == "sysfs" and maker.startswith("ayaneo")
-    if row.get("charge_limit") and via in ("sysfs", "fix") and not behaviour:
-        t.w(f"{b}/charge_control_end_threshold", 100)
+    msi_ec = "msi-wmi-platform" in ((row.get("traits") or {}).get("ec") or [])
+    if row.get("charge_limit") and (via in ("sysfs", "fix") or msi_ec) and not behaviour:
+        t.w(f"{b}/charge_control_end_threshold", 0 if msi_ec else 100)
     if behaviour or (via == "sysfs" and fan == "oxp_ec"):
         t.w(f"{b}/charge_behaviour", "[auto] inhibit-charge")
 
@@ -407,6 +432,8 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
     # LEDs (kernel class only; HID/EC RGB has no sysfs node)
     rgb = row.get("rgb") or {}
     leds = override.get("leds")
+    fact = facts.get(did, {}).get("rgb") or {}
+    abi = fact.get("abi", "")
     if leds is None:
         fact = facts.get(did, {}).get("rgb")
         if fact is not None:
@@ -420,6 +447,14 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
         t.w(f"{lp}/multi_index", "red green blue")
         t.w(f"{lp}/multi_intensity", "255 255 255")
         t.w(f"{lp}/trigger", "[none]")
+        if abi == "hid-msi":   # drivers/hid/hid-msi.c, values as read live on a Claw 8 EX
+            for k, v in {"brightness": 21, "max_brightness": 100, "multi_intensity": "1 90 100",
+                         "multi_max_intensity": "100 100 100", "effect": "monocolor",
+                         "effect_index": "monocolor breathe chroma rainbow frostfire", "enabled": "false",
+                         "enabled_index": "true false", "speed": 10, "speed_range": "0-20"}.items():
+                t.w(f"{lp}/{k}", v)
+            for k in ("effect", "multi_intensity", "brightness"):
+                os.chmod(os.path.join(root, lp.lstrip("/"), k), 0o666)
 
     # Firmware attributes (PPT limits)
     tdp = tdp_of(row) if row.get("tdp") else None
@@ -495,7 +530,10 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
     order = row.get("tdp_backends") or ["steamos-manager", "powerstation"]
     for s in order:
         stack.append(s)
-    controller = "hhd" if rgb.get("via") == "hhd" else "inputplumber"
+    for s_add in override.get("stack_add") or []:
+        if s_add not in stack:
+            stack.append(s_add)
+    controller = override.get("controller") or ("hhd" if rgb.get("via") == "hhd" else "inputplumber")
     stack.append(controller)
     stack += ["gamescope", "pipewire", "networkmanager", "bluez"]
     tools = list(COMMON_TOOLS) + [{"steamos-manager": "steamos-manager", "powerstation": "powerstation",
@@ -519,7 +557,7 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
     for path, value in (override.get("files") or {}).items():
         t.w(path, value)
 
-    backends = backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads, cores, smt)
+    backends = backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads, cores, smt, override)
     with open(os.path.join(base, "backends.json"), "w", encoding="utf-8") as f:
         json.dump(backends, f, indent=1, sort_keys=True)
 
@@ -532,7 +570,8 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
             "tdp": tdp, "dmi": dmi}
 
 
-def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads, cores, smt) -> dict:
+def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads, cores, smt, override=None) -> dict:
+    override = override or {}
     props: dict = {}
     methods: dict = {}
 
@@ -546,15 +585,26 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
         prop("--user", SM, SM_PATH, f"{SM}.TdpLimit1", "TdpLimitMin", "u", int(t["min"]))
         prop("--user", SM, SM_PATH, f"{SM}.TdpLimit1", "TdpLimitMax", "u", int(t["plugged_max"]))
         level = 80 if row.get("charge_limit_via") == "steamos-manager" else -1
+        if "sm_charge" in override:
+            level = int(override["sm_charge"])
         prop("--user", SM, SM_PATH, f"{SM}.BatteryChargeLimit1", "MaxChargeLevel", "i", level)
         prop("--user", SM, SM_PATH, f"{SM}.BatteryChargeLimit1", "SuggestedMinimumLimit", "i", 10)
         if row.get("fan_via") == "steamos-manager":
             prop("--user", SM, SM_PATH, f"{SM}.FanControl1", "FanControlState", "u", 1)
+        elif row.get("fan_via") == "fix":   # Bazzite answers it on every handheld (jupiter-fan-control)
+            prop("--user", SM, SM_PATH, f"{SM}.FanControl1", "FanControlState", "u", 0)
         prop("--user", SM, SM_PATH, f"{SM}.PerformanceProfile1", "PerformanceProfile", "s", "balanced")
         prop("--user", SM, SM_PATH, f"{SM}.PerformanceProfile1", "AvailablePerformanceProfiles", "as",
              ["low-power", "balanced", "performance"])
         prop("--user", SM, SM_PATH, f"{SM}.CpuScaling1", "CpuScalingGovernor", "s", "powersave")
         prop("--user", SM, SM_PATH, f"{SM}.CpuScaling1", "AvailableCpuScalingGovernors", "as", ["performance", "powersave"])
+        if vendor == "intel" and "msi-wmi-platform" in ((row.get("traits") or {}).get("ec") or []):
+            # steamos-manager's Intel driver (data/devices/msi-claw-*.toml gpu_performance intel)
+            prop("--user", SM, SM_PATH, f"{SM}.GpuPerformanceLevel1", "GpuPerformanceLevel", "s", "auto")
+            prop("--user", SM, SM_PATH, f"{SM}.GpuPerformanceLevel1", "AvailableGpuPerformanceLevels", "as", ["auto", "manual"])
+            prop("--user", SM, SM_PATH, f"{SM}.GpuPerformanceLevel1", "ManualGpuClock", "u", 400)
+            prop("--user", SM, SM_PATH, f"{SM}.GpuPerformanceLevel1", "ManualGpuClockMin", "u", 1300)
+            prop("--user", SM, SM_PATH, f"{SM}.GpuPerformanceLevel1", "ManualGpuClockMax", "u", 1300)
         if vendor == "amd":
             prop("--user", SM, SM_PATH, f"{SM}.GpuPerformanceLevel1", "GpuPerformanceLevel", "s", "auto")
             prop("--user", SM, SM_PATH, f"{SM}.GpuPerformanceLevel1", "AvailableGpuPerformanceLevels", "as",

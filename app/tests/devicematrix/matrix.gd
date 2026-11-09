@@ -693,7 +693,10 @@ static func critical_problems(root: String, row: Dictionary) -> Array[String]:
 		var p := root + "/sys/class/power_supply/" + ps
 		if FileAccess.file_exists(p + "/charge_control_end_threshold"):
 			var v := _num(p + "/charge_control_end_threshold")
-			if v < 50 or v > 100:
+			# msi-wmi-platform reads 0 while the EC has no limit set (gen.py); GameCove never
+			# writes 0 there (it would be a 0 % limit): "no limit" is written as 100
+			var msi_unset: bool = v == 0 and "msi-wmi-platform" in (row.get("traits", {}).get("ec", []) if row.get("traits") is Dictionary and row["traits"].get("ec") is Array else [])
+			if (v < 50 or v > 100) and not msi_unset:
 				out.append("%s charge_control_end_threshold = %s (allowed 50..100)" % [ps, v])
 		if FileAccess.file_exists(p + "/charge_behaviour"):
 			var v := _read(p + "/charge_behaviour").replace("[", "").replace("]", "")
@@ -773,7 +776,13 @@ static func _cpu_gpu_problems(root: String, info: Dictionary, original: Dictiona
 static func backend_problems(runner: FakeRunner, hhd: FakeHhd, row: Dictionary, inv: Dictionary) -> Array[String]:
 	var out: Array[String] = []
 	for rule in inv.get("dbus", []):
-		for v in runner.prop_value(str(rule.get("prop", ""))):
+		var prop := str(rule.get("prop", ""))
+		# "unset": the service's "nothing set" value (MaxChargeLevel 0 on MSI's EC), fine
+		# only while nobody wrote the property
+		var written := runner.calls.any(func(c): return "set-property" in Array(c[1]) and prop in Array(c[1]))
+		for v in runner.prop_value(prop):
+			if rule.has("unset") and int(v) == int(rule["unset"]) and not written:
+				continue
 			var msg := _limit_problem(float(v), rule, row)
 			if msg != "":
 				out.append("D-Bus %s = %s: %s" % [rule["prop"], v, msg])
