@@ -567,7 +567,7 @@ printf '#!/bin/sh\n' >"$SS/usr/bin/gamescope-session-plus"
 echo MIT >"$SS/LICENSE"
 expect_code 0 "sysext tree" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$APP" --session-src "$SS" --out "$T/dist" --tree-only
 TREE="$T/dist/gamecove"
-for f in usr/bin/gamescope-session-plus usr/bin/gamecove-session-select \
+for f in usr/bin/gamescope-session-plus usr/bin/gamecove-session-select usr/bin/gamecove-selftest \
 	usr/lib/gamecove/gamecove.x86_64 usr/lib/gamecove/gamecove.pck \
 	usr/libexec/gamecove/gamecove-fix usr/libexec/gamecove/gamecove-fix-set usr/libexec/gamecove/gamecove-session-client \
 	usr/libexec/gamecove/gamecove-apply-choices usr/libexec/gamecove/get-gamecove.sh \
@@ -712,7 +712,8 @@ else
 	for f in "$REPO/packaging/libexec/gamecove-fix" "$REPO/packaging/libexec/gamecove-fix-set" "$REPO/packaging/install.sh" \
 		"$REPO/packaging/sysext/build-sysext.sh" "$REPO/packaging/tests/run.sh" \
 		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" \
-		"$REPO/packaging/get-gamecove.sh" "$REPO/packaging/libexec/gamecove-apply-choices"; do
+		"$REPO/packaging/get-gamecove.sh" "$REPO/packaging/libexec/gamecove-apply-choices" \
+		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh"; do
 		if "$SHELLCHECK" -S warning -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
@@ -724,6 +725,9 @@ else
 		if (cd "$REPO" && "$SHELLCHECK" -S warning -x -s sh "$f") >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 fi
+
+# ------------------------------------------------------- gamecove-selftest (fake root and commands)
+if sh "$REPO/packaging/tests/selftest.sh" >"$T/out" 2>&1; then ok; else bad "selftest: $(tail -20 "$T/out")"; fi
 
 # ------------------------------------------------------- fixes' own tests
 found=0

@@ -39,6 +39,30 @@ var _slow_thread: Thread
 
 func _ready() -> void:
 	detect()
+	if "--selftest" in OS.get_cmdline_user_args():
+		for line in selftest_lines():
+			print(line)
+		get_tree().quit.call_deferred()
+
+
+## `gamecove.x86_64 --headless -- --selftest` (used by gamecove-selftest): what
+## detection picked, one "selftest.<key>=<value>" per line. No serials or names.
+func selftest_lines() -> Array[String]:
+	var t: Dictionary = profile.get("tdp", {})
+	var out: Array[String] = []
+	var rows := {
+		"device.id": id(), "device.name": str(profile.get("name", "")), "device.support": str(profile.get("support", "")),
+		"device.verified": str(profile.get("verified", false)).to_lower(), "device.tier": str(profile.get("tier", "")),
+		"device.chip": str(profile.get("chip", "")), "device.gpu_family": str(profile.get("gpu_family", "")),
+		"device.tdp": "%s/%s/%s" % [t.get("min", "?"), t.get("battery_max", "?"), t.get("plugged_max", "?")],
+		"device.buttons": str(profile.get("buttons", "")), "device.gyro": str(profile.get("gyro", "")),
+		"device.fixes": ",".join(PackedStringArray(profile.get("fixes", []))),
+		"gpu.driver": str(gpu.get("driver", "")), "gpu.pci_id": str(gpu.get("pci_id", "")),
+		"cpu.model": cpu_model,
+	}
+	for k in rows:
+		out.append("selftest.%s=%s" % [k, rows[k]])
+	return out
 
 
 func _exit_tree() -> void:

@@ -101,6 +101,7 @@ install -Dm0755 "$REPO/packaging/get-gamecove.sh" "$tree/usr/libexec/gamecove/ge
 install -Dm0644 "$REPO/packaging/installer/io.github.ihulksmashi.GameCoveInstaller.desktop" \
 	"$tree/usr/share/applications/io.github.ihulksmashi.GameCoveInstaller.desktop"
 install -Dm0755 "$REPO/session/gamecove-session-select" "$tree/usr/bin/gamecove-session-select"
+install -Dm0755 "$REPO/packaging/bin/gamecove-selftest" "$tree/usr/bin/gamecove-selftest"
 install -Dm0644 "$REPO/session/gamescope-session-plus/sessions.d/gamecove" "$tree/usr/share/gamescope-session-plus/sessions.d/gamecove"
 install -Dm0644 "$REPO/session/wayland-sessions/gamecove.desktop" "$tree/usr/share/wayland-sessions/gamecove.desktop"
 install -Dm0644 "$REPO/session/systemd/gamescope-session-plus@gamecove.service.d/10-gamecove.conf" \

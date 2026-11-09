@@ -285,6 +285,23 @@ Bazzite enables InputPlumber and PowerStation on every non-Valve handheld (`bazz
 | Per-game | InputPlumber profile per game | Controller section and LEDs of hhd's state per game |
 | TDP | PowerStation / steamos-manager | hhd's API (when its TDP plugin is on) |
 
+## Testing on your handheld
+
+`gamecove-selftest` (installed with GameCove, source `packaging/bin/gamecove-selftest`) checks what GameCove needs on the handheld it runs on and writes one report, `~/gamecove-selftest-<device>-<date>.txt`. Run it from a terminal (Konsole) in Desktop Mode, as your normal user, on each handheld:
+
+```
+gamecove-selftest                      # reads only
+gamecove-selftest --write              # also sets the TDP to its current value and reads it back
+gamecove-selftest --interactive        # then: press each special button and paddle, move the device
+gamecove-selftest --no-network         # skip the GitHub check
+```
+
+Automatic checks: the device GameCove detects (the app's `--selftest` mode: row id, support level, chip, GPU family, TDP range, fixes) and the DMI strings it matched on; OS / image, kernel, Mesa, GPU driver, Secure Boot state; a leftover global Claw EDID kernel argument (a failure on any other handheld); gamescope session or Desktop Mode; Steam running and signed in (yes/no only); InputPlumber or Handheld Daemon and which controllers it sees (both running is a warning: they fight); the TDP through Handheld Daemon (when its TDP plugin is on), steamos-manager or PowerStation, and with `--write` a write and read-back of the same value; whether RAPL / GPU power readings are readable by the user (Auto TDP and the overlay need one); every fix's `status` (fan, charge limit, Claw fixes); store tools (legendary, gogdl, nile, umu-run, Heroic), MangoHud and mangohudctl; GitHub releases reachable; free disk space.
+
+`--interactive` asks for the home / Guide button, Quick Access, each back paddle and a tilt of the device, and watches every readable `/dev/input` device for a press (or gyro motion) for 10 seconds each; Enter skips a step. It names the device and button it saw (for example `Microsoft X-Box 360 pad 0: BTN_MODE`), which shows whether the press reached the virtual controller. Steam or GameCove may react to the presses if they run.
+
+The report has no personal data: user and host names, serial numbers, MAC addresses, account names, Steam ids and tokens are never read or are replaced (`<user>`, `<steamid>`, `<redacted>`). The script prints the report and its path; attach it to a GitHub issue. It exits 1 when a check failed. Its tests (`packaging/tests/selftest.sh`, run by `packaging/tests/run.sh`) use a fake root and stub commands.
+
 ## Known issues per device
 
 - **Steam Deck (LCD)**: Steam Deck controller is a HID device; InputPlumber's deck driver exposes L4/L5/R4/R5 as paddles and both trackpads.

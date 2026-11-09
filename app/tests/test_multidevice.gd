@@ -319,3 +319,21 @@ func test_measured_fps_per_device() -> void:
 	eq(l.base_fps("steam:1"), 52, "kept per device on disk")
 	eq(l.base_fps("steam:2"), 61)
 	l.free()
+
+
+# ---- gamecove-selftest's app part --------------------------------------------------------------
+
+func test_device_selftest_lines() -> void:
+	var d := _dir("selftest")
+	_write(d + "/sys/class/dmi/id/sys_vendor", "ASUSTeK COMPUTER INC.\n")
+	_write(d + "/sys/class/dmi/id/board_name", "RC71L\n")
+	_write(d + "/sys/class/dmi/id/product_name", "ROG Ally RC71L_RC71L\n")
+	_write(d + "/sys/class/dmi/id/product_serial", "SERIAL-SHOULD-NOT-SHOW\n")
+	var dev: Node = DeviceScript.new()
+	dev.root = d
+	dev.detect()
+	var lines: Array = dev.selftest_lines()
+	ok("selftest.device.id=asus-rog-ally" in lines, "device id line")
+	ok(lines.all(func(l): return str(l).begins_with("selftest.") and "=" in str(l)), "key=value lines")
+	ok(not lines.any(func(l): return "SERIAL" in str(l)), "no serial number")
+	dev.free()
