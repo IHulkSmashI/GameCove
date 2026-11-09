@@ -32,6 +32,7 @@ Updates="*res://scripts/system/updates.gd"
 Storage="*res://scripts/system/storage.gd"
 Setup="*res://scripts/system/setup.gd"
 Controller="*res://scripts/input/controller.gd"
+Controls="*res://scripts/controls/controls.gd"
 
 [display]
 
