@@ -48,12 +48,12 @@ static func frame_gens(g: Dictionary) -> Array:
 	return [0]
 
 
-## --gpu for the helper as key=value pairs: OS.execute drops double quotes
-## from arguments, so JSON can't pass (the helper reads both).
+## --gpu for the helper: the GPU facts as one JSON object (keys sorted). The
+## runners pass it byte for byte (system/exec_safe.gd); the helper also still
+## reads the older vendor=..,xmx=.. pairs.
 static func gpu_arg(g: Dictionary) -> String:
-	var safe := func(s): return str(s).replace(",", " ").replace("=", " ").replace("\"", "")
-	return "vendor=%s,family=%s,arch=%s,xmx=%s" % [safe.call(g.get("vendor", "")), safe.call(g.get("family", "")),
-		safe.call(g.get("arch", "")), "1" if g.get("xmx", false) else "0"]
+	return JSON.stringify({"vendor": str(g.get("vendor", "")), "family": str(g.get("family", "")),
+		"arch": str(g.get("arch", "")), "xmx": bool(g.get("xmx", false)), "chip": str(g.get("chip", ""))}, "", true)
 
 
 ## Runs one command; {} with "ok": false and "error" when it can't.

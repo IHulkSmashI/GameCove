@@ -9,6 +9,8 @@ extends RefCounted
 ## (gamescope atoms are set and read back, so order matters). The worker thread
 ## starts on the first async job and stops in shutdown().
 
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
+
 var _thread: Thread
 var _mutex := Mutex.new()
 var _sem := Semaphore.new()
@@ -16,11 +18,11 @@ var _queue: Array = []
 var _quit := false
 
 
-## Returns {"exit": int, "output": String}. exit is -1 if the program is missing.
+## Returns {"exit": int, "output": String} (stdout and stderr together).
+## exit is 127 if the program is missing, -1 if it can't start at all.
 func run(program: String, args: PackedStringArray) -> Dictionary:
-	var out: Array = []
-	var code := OS.execute(program, args, out, true)
-	return {"exit": code, "output": "".join(PackedStringArray(out))}
+	var r := ExecSafe.run(program, args, true)
+	return {"exit": r["code"], "output": r["out"]}
 
 
 ## Runs the command on the worker thread. `done` (optional) gets run()'s result

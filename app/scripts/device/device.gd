@@ -12,6 +12,7 @@ signal info_updated(info: Dictionary)
 
 const Buttons := preload("res://scripts/device/buttons.gd")
 const Traits := preload("res://scripts/device/traits.gd")
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 
 const DEVICE_TABLE := "res://data/devices.json"
 const DMI := "/sys/class/dmi/id/"
@@ -873,10 +874,10 @@ func _finish_vulkan(v: Dictionary) -> void:
 
 ## Mesa version and Vulkan driver name from `vulkaninfo --summary` (blocking).
 static func vulkan_info() -> Dictionary:
-	var lines := []
-	if OS.execute("/usr/bin/vulkaninfo", ["--summary"], lines, true) != 0 or lines.is_empty():
+	var r := ExecSafe.run("/usr/bin/vulkaninfo", PackedStringArray(["--summary"]), true)
+	if r["code"] != 0 or str(r["out"]) == "":
 		return {}
-	var v := parse_vulkaninfo(str(lines[0]))
+	var v := parse_vulkaninfo(str(r["out"]))
 	return {"mesa": mesa_from_text(v.get("driver_info", "")), "vulkan_driver": v.get("driver_name", "")}
 
 

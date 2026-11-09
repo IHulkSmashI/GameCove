@@ -21,6 +21,7 @@ const DeviceScript := preload("res://scripts/device/device.gd")
 signal started(game: Dictionary)
 signal ended(game: Dictionary)
 
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 const FOCUS_POLL_S := 0.5
 const FOCUS_WAIT_S := 60.0
 ## Past FOCUS_WAIT_S a Steam launch is followed by its process tree (Steam's reaper,
@@ -176,7 +177,7 @@ static func steam_launch_alive(id: int) -> bool:
 	var args := ["-f", "SteamLaunch AppId=%d( |$)" % id]
 	if uid.is_valid_int():
 		args = ["-u", uid] + args
-	return OS.execute("pgrep", PackedStringArray(args)) == 0
+	return ExecSafe.run("pgrep", PackedStringArray(args), false)["code"] == 0
 
 
 ## One look for the end of the game.
