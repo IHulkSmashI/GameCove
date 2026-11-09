@@ -122,10 +122,26 @@ func _probe(id: String) -> void:
 		out(["probe", id, "result=skipped", "reason=no value to change to (now %s)" % js(from)])
 		return
 	var saved := snapshot_files(saved_dir())
+	# what the provider wants back byte for byte (InputPlumber's live profile text), and the
+	# controls this one requires (gpu_clock switches gpu_level to manual)
+	var prov: Object = c.get_meta("provider") if c.has_meta("provider") else null
+	var snap: Dictionary = prov.probe_snapshot() if prov != null and prov.has_method("probe_snapshot") else {}
+	var req := {}
+	for r in c.requires:
+		var rc = controls.control(r)
+		if rc != null and rc.available:
+			req[r] = await _fresh(rc)
 	var ok := await _write(id, to)
 	var back: Variant = await _fresh(c)
 	var put_back := await _write(id, from)
 	var restored: Variant = await _fresh(c)
+	if not snap.is_empty():
+		prov.probe_restore(snap)
+		restored = await _fresh(c)
+	for r in req:
+		var rc = controls.control(r)
+		if req[r] != null and not same(rc, await _fresh(rc), req[r]):
+			await _write(r, req[r])
 	# a put-back leaves no trace: GameCove's saved InputPlumber layout as it was
 	restore_files(saved_dir(), saved)
 	var result := "ok"

@@ -280,6 +280,23 @@ func test_ally_emulation_reads_targets_by_property() -> void:
 	reg.free()
 
 
+## The controls probe puts InputPlumber's profile back byte for byte, not rebuilt by edits.
+func test_probe_snapshot_restores_the_exact_profile() -> void:
+	var t := _claw("claw_probe_snapshot")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	var prov: Object = _c(reg, "controller.paddle.LeftPaddle1").get_meta("provider")
+	var before := JSON.stringify(f.profile)
+	var snap: Dictionary = prov.probe_snapshot()
+	ok(snap.has("ip_yaml"), "snapshot taken")
+	ok(_w(reg, "controller.paddle.LeftPaddle1", "disabled"), "probe write")
+	ok(_w(reg, "controller.paddle.LeftPaddle1", ""), "probe put-back by edit")
+	ok(prov.probe_restore(snap), "restore")
+	eq(f.loads[-1], snap["ip_yaml"], "InputPlumber got back the very text it handed out")
+	eq(f.profile, JSON.parse_string(before), "the profile it had")
+	reg.free()
+
+
 func test_claw_rumble() -> void:
 	var t := _claw("claw_rumble")
 	var reg: Node = t[0]

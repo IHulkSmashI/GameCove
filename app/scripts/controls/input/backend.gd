@@ -233,6 +233,36 @@ func ip_profile() -> Dictionary:
 	return ip().get("profile", {})
 
 
+## InputPlumber's stock profile ("Default"): /etc override first, then the package's.
+func ip_stock_profile() -> Dictionary:
+	for f in [sys_root() + "/etc/inputplumber/profiles/default.yaml", sys_root() + "/usr/share/inputplumber/profiles/default.yaml"]:
+		if FileAccess.file_exists(f):
+			var parsed: Variant = Yaml.parse(FileAccess.get_file_as_string(f))
+			if parsed is Dictionary:
+				return parsed
+	return {}
+
+
+## The loaded profile exactly as InputPlumber hands it out ("" when none), for a
+## byte-exact put-back (controls probe).
+func ip_profile_yaml() -> String:
+	var dev: Dictionary = ip().get("device", {})
+	if dev.is_empty():
+		return ""
+	var y: Variant = bus.call_method(SERVICE, dev["path"], DEVICE_IFACE, "GetProfileYaml")
+	return str(y[0]) if y is Array and y.size() > 0 else ""
+
+
+## Loads a profile text as it was; true when InputPlumber took it.
+func ip_load_yaml(text: String) -> bool:
+	var dev: Dictionary = ip().get("device", {})
+	if dev.is_empty() or text == "":
+		return false
+	var ok := _load(dev["path"], text)
+	invalidate()
+	return ok
+
+
 func profile_path() -> String:
 	var dir := str(ctx.get("home", "")) + "/.config/inputplumber/profiles/gamecove/" + PerDevice.key(device_id())
 	return dir + "/default.yaml"

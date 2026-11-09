@@ -120,7 +120,28 @@ func controls() -> Array:
 
 func _make(spec: Dictionary, detect: Callable, read: Callable, write: Callable) -> RefCounted:
 	spec["group"] = "controller"
-	return Ctl.make(spec, detect, read, write)
+	var c: RefCounted = Ctl.make(spec, detect, read, write)
+	c.set_meta("provider", self)
+	return c
+
+
+## Controls probe (hwtest/controls_cli.gd): what to put back byte for byte afterwards.
+## InputPlumber's live profile text; {} where hhd or nothing drives the controller.
+func probe_snapshot() -> Dictionary:
+	if be.controller_backend() != "inputplumber":
+		return {}
+	be.invalidate()
+	var y := be.ip_profile_yaml()
+	return {"ip_yaml": y} if y != "" else {}
+
+
+func probe_restore(snap: Dictionary) -> bool:
+	if not snap.has("ip_yaml"):
+		return true
+	be.invalidate()
+	if be.ip_profile_yaml() == str(snap["ip_yaml"]):
+		return true
+	return be.ip_load_yaml(str(snap["ip_yaml"]))
 
 
 static func _opts(values: Array, labels: Dictionary) -> Array:
@@ -149,9 +170,11 @@ func _ip_gyro_reason() -> String:
 	# "Gamepad:Gyro" capability, and its profile matching ignores gamepad gyro source events
 	# (src/config/mod.rs: "Gyro was defined for source event! TODO"), so the gyro reaches
 	# games but can't be switched off from a profile; newer ones say "Gyroscope:<source>".
+	if str(row.get("gyro", "")) == "fix":
+		return R_GYRO_FIX
 	if be.ip_caps().any(func(c): return str(c) == "Gamepad:Gyro"):
 		return R_GYRO_OLD_IP % str(be.ip().get("version", "?"))
-	return R_GYRO_FIX if str(row.get("gyro", "")) == "fix" else R_NO_GYRO_IP
+	return R_NO_GYRO_IP
 
 
 func _gyro() -> RefCounted:
@@ -449,7 +472,8 @@ func _button(kind: String, cap: String, title: String) -> RefCounted:
 		func(_c, v):
 			if not IpEdit.valid_button_target(str(v)):
 				return false
-			return be.ip_apply(func(p): return IpEdit.set_button(p, cap, str(v)),
+			var stock := be.ip_stock_profile()
+			return be.ip_apply(func(p): return IpEdit.set_button(p, cap, str(v), stock),
 				func(p): return IpEdit.button_target(p, cap) == str(v)))
 
 
