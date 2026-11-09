@@ -48,6 +48,8 @@ var _saver_prev := {}
 var _saver_auto := false
 var _thermal_top := -1.0
 var _by_id := {}
+var _replaying := {}       # ids the resume replay is writing (main thread sets, worker clears)
+var _replay_mutex := Mutex.new()
 
 
 func setup(c: Dictionary) -> void:
@@ -149,7 +151,11 @@ func _wrote(id: String, v: Variant) -> void:
 	_last[id] = v
 	if id in DEVICE_IDS:
 		SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile): cfg.set_value(PerDevice.section("set", device_key()), id, v))
-	if id in LEVER_IDS and power != null and power.has_method("autotune_active") and power.autotune_active():
+	_replay_mutex.lock()
+	var replay := _replaying.has(id)
+	_replaying.erase(id)
+	_replay_mutex.unlock()
+	if not replay and id in LEVER_IDS and power != null and power.has_method("autotune_active") and power.autotune_active():
 		power.request_autotune_pause("manual " + id)
 
 
@@ -204,12 +210,33 @@ func _reassert_saver() -> void:
 
 ## After sleep the firmware may have reset what we set while every control still
 ## holds our value, so this writes them all again (forced, not "skip if equal").
+##
+## Not the TDP, the profile or the boost (review M16): Power's own refresh(true) already put
+## back the TDP that is in effect now (the battery saver's, or the battery profile after
+## waking on battery), and `_last` only knows the last value written through the control,
+## which Power or the saver may have changed since. Nor does this replay pause Auto TDP:
+## it is ours, not a manual change.
+const NO_RESUME_REPLAY := ["power.tdp", "power.profile", "power.boost"]
+
+
 func _on_resumed() -> void:
 	if registry == null:
 		return
 	var v := saved_device_values()
 	v.merge(_last, true)
+	for id in NO_RESUME_REPLAY:
+		v.erase(id)
+	_replay_mutex.lock()
+	for id in v:
+		_replaying[id] = true
+	_replay_mutex.unlock()
 	registry.apply(v, true)
+	if registry.has_method("run_on_worker"):
+		# a replay write that failed (or was skipped) must not hide a later manual change
+		registry.run_on_worker(func():
+			_replay_mutex.lock()
+			_replaying.clear()
+			_replay_mutex.unlock())
 
 
 ## The TDP's range follows the power source: detect again.

@@ -148,3 +148,53 @@ func test_m18_battery_care_does_not_override_the_slider() -> void:
 	e2["prov"]._on_detected()
 	eq(int(e2["runner"].props[key]["data"]), 80, "still 80 % at the next start")
 	_free()
+
+
+# ---- M16: resume no longer replays stale control values -------------------------------------------
+
+const SM_TDP := Trees.SM + "TdpLimit1 TdpLimit"
+
+
+## Proof B2: TDP 25 W, battery saver on (battery profile), sleep: 25 W came back.
+func test_m16_resume_keeps_the_battery_saver_tdp() -> void:
+	var t: Dictionary = Trees.new().ally()
+	var e := _setup(t)
+	e["reg"].set_value("power.tdp", 25)
+	e["reg"].set_value("power.battery_saver", true)
+	var saver_w := float(e["runner"].props[SM_TDP]["data"])
+	ok(saver_w < 25.0, "battery saver lowered the TDP (%.0f)" % saver_w)
+	e["power"].refresh(true)
+	eq(float(e["runner"].props[SM_TDP]["data"]), saver_w, "same TDP after resume")
+	eq(e["reg"].control("power.battery_saver").value, true, "saver still on")
+	_free()
+
+
+## Proof B3: 30 W on the charger, unplugged while asleep: 25 W on battery, remembered as the battery value.
+func test_m16_resume_on_battery_uses_the_battery_choice() -> void:
+	var t: Dictionary = Trees.new().ally()
+	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "1")
+	var e := _setup(t)
+	e["power"].plugged = false
+	e["power"].set_profile("battery")
+	e["power"].plugged = true
+	var battery_w := PowerScript.profile_watts(t["row"], "battery", false)
+	e["reg"].detect_all()
+	e["reg"].set_value("power.tdp", 30)
+	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "0")
+	e["power"].refresh(true)
+	eq(float(e["runner"].props[SM_TDP]["data"]), battery_w, "the battery profile's watts after waking on battery")
+	eq(e["power"]._recall("profile", "battery", ""), "battery", "the battery choice is unchanged")
+	_free()
+
+
+## The replay after resume must not pause Auto TDP for the rest of the game.
+func test_m16_resume_replay_does_not_pause_autotune() -> void:
+	var t: Dictionary = Trees.new().ally()
+	var e := _setup(t)
+	var cb: RefCounted = e["reg"].control("power.cpu_boost")
+	ok(cb.available, "cpu boost offered")
+	e["reg"].set_value("power.cpu_boost", false)
+	ok(e["power"].autotune_start("steam:1"), "Auto TDP started")
+	e["power"].refresh(true)
+	eq(e["power"].autotune.session.paused, false, "not paused by the replay")
+	_free()
