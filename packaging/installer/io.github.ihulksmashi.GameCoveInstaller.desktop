@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GameCove Installer
+Comment=Change GameCove's options, repair, update or remove it
+Exec=sh /usr/libexec/gamecove/get-gamecove.sh
+Icon=applications-games
+Terminal=false
+Categories=Game;Settings;
+Keywords=gamecove;handheld;launcher;

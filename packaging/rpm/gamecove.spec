@@ -90,6 +90,13 @@ mkdir -p %{buildroot}%{_prefix}/lib/gamecove/fixes
 install -Dpm0755 packaging/libexec/gamecove-fix       %{buildroot}%{_libexecdir}/gamecove/gamecove-fix
 install -Dpm0755 packaging/libexec/gamecove-fix-set   %{buildroot}%{_libexecdir}/gamecove/gamecove-fix-set
 install -Dpm0755 session/gamecove-session-client      %{buildroot}%{_libexecdir}/gamecove/gamecove-session-client
+%{_libexecdir}/gamecove/gamecove-apply-choices
+%{_libexecdir}/gamecove/get-gamecove.sh
+%{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop
+install -Dpm0755 packaging/libexec/gamecove-apply-choices %{buildroot}%{_libexecdir}/gamecove/gamecove-apply-choices
+install -Dpm0755 packaging/get-gamecove.sh            %{buildroot}%{_libexecdir}/gamecove/get-gamecove.sh
+install -Dpm0644 packaging/installer/io.github.ihulksmashi.GameCoveInstaller.desktop \
+    %{buildroot}%{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop
 install -Dpm0755 session/gamecove-session-select      %{buildroot}%{_bindir}/gamecove-session-select
 
 # Session
@@ -118,6 +125,9 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 %{_libexecdir}/gamecove/gamecove-fix
 %{_libexecdir}/gamecove/gamecove-fix-set
 %{_libexecdir}/gamecove/gamecove-session-client
+%{_libexecdir}/gamecove/gamecove-apply-choices
+%{_libexecdir}/gamecove/get-gamecove.sh
+%{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop
 %{_bindir}/gamecove-session-select
 %dir %{_datadir}/gamescope-session-plus
 %dir %{_datadir}/gamescope-session-plus/sessions.d

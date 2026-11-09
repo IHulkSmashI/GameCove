@@ -51,6 +51,9 @@ var _fixes: Array = []
 var _fixes_checked := false
 var _rebuild_queued := false
 var _theme := ""
+## First run: Next skips steps already done elsewhere (the installer marks
+## the steps it covered in the Setup service). Reopened from Settings: every step.
+var skip_finished := false
 
 
 ## True when setup should show now (first launch, setup not finished).
@@ -77,7 +80,9 @@ static func open(host: Control, svc: Dictionary, at := "") -> Control:
 static func open_if_first_run(host: Control, svc: Dictionary) -> Control:
 	if not should_show(svc.get("setup")):
 		return null
-	return open(host, svc, "")
+	var f: Control = open(host, svc, "")
+	f.set("skip_finished", true)
+	return f
 
 
 func setup(svc: Dictionary, at := "") -> void:
@@ -577,7 +582,19 @@ func next_step() -> void:
 	if step == "done":
 		finish()
 		return
-	go(TS.SETUP_STEPS[TS.SETUP_STEPS.find(step) + 1])
+	go(following(step))
+
+
+## The step after `from`; on a first run, past steps already done or skipped.
+func following(from: String) -> String:
+	var i := TS.SETUP_STEPS.find(from) + 1
+	var st: Object = services.get("setup")
+	while skip_finished and st != null and st.has_method("is_done") and i < TS.SETUP_STEPS.size() - 1:
+		var sid: String = TS.SETUP_SERVICE_IDS[TS.SETUP_STEPS[i]]
+		if not st.is_done(sid) and not (st.has_method("is_skipped") and st.is_skipped(sid)):
+			break
+		i += 1
+	return TS.SETUP_STEPS[mini(i, TS.SETUP_STEPS.size() - 1)]
 
 
 func skip_step() -> void:
@@ -587,7 +604,7 @@ func skip_step() -> void:
 		return
 	if st != null:
 		st.skip(TS.SETUP_SERVICE_IDS[step])
-	go(TS.SETUP_STEPS[TS.SETUP_STEPS.find(step) + 1])
+	go(following(step))
 
 
 ## "Skip setup": unfinished optional steps marked skipped, setup over.

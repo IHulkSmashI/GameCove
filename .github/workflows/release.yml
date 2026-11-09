@@ -115,6 +115,8 @@ jobs:
           sh packaging/sysext/build-sysext.sh --app app-export --out sysext 2>&1 | tee sysext.log
           ! grep -q "no gyro HID-BPF object" sysext.log
           mv sysext/gamecove.raw "dist/gamecove-${VERSION}-x86_64.raw"
+      - name: Installer bootstrap (get-gamecove.sh fetches itself from the release, checked against SHA256SUMS)
+        run: cp packaging/get-gamecove.sh dist/
       - name: Checksums
         run: cd dist && sha256sum -- * | tee SHA256SUMS
       - uses: actions/upload-artifact@v4
@@ -124,6 +126,7 @@ jobs:
             dist/*.rpm
             dist/*.raw
             dist/*.bpf.o
+            dist/get-gamecove.sh
             dist/SHA256SUMS
           if-no-files-found: error
 
