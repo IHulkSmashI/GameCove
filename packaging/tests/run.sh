@@ -252,6 +252,15 @@ else
 	contains "$T/steamosctl.log" "^set-default-login-mode desktop$" "login mode desktop"
 	expect_code 0 "steam default" sel steam --default
 	contains "$T/steamosctl.log" "^set-default-login-mode game$" "login mode game"
+	expect_code 0 "gamecove default without switching" sel gamecove --default --no-switch
+	contains "$T/steamosctl.log" "^set-default-desktop-session gamecove.desktop$" "no-switch still sets the session"
+	contains "$T/steamosctl.log" "^set-default-login-mode desktop$" "no-switch still sets the login mode"
+	lacks "$T/steamosctl.log" "switch-to" "no-switch doesn't switch"
+	expect_code 0 "steam default without switching" sel steam --default --no-switch
+	contains "$T/steamosctl.log" "^set-default-login-mode game$" "steam no-switch login mode"
+	lacks "$T/steamosctl.log" "switch-to" "steam no-switch doesn't switch"
+	expect_code 64 "no-switch without default" sel gamecove --no-switch
+	expect_code 64 "too many args" sel gamecove --default --no-switch extra
 	expect_code 0 "desktop" sel desktop
 	contains "$T/steamosctl.log" "^switch-to-desktop-mode$" "desktop default"
 	expect_code 64 "desktop --default" sel desktop --default
@@ -360,6 +369,194 @@ contains "$T/install.log" "rpm-ostree uninstall gamecove" "rpm-ostree uninstall"
 expect_code 64 "install.sh missing rpm" inst "$T/none.rpm"
 expect_code 1 "install.sh says no" sh -c "echo n | PATH='$IB:$PATH' IMAGE_INFO='$T/image-info.json' sh '$REPO/packaging/install.sh' '$T/gamecove-0.1.0-1.x86_64.rpm'"
 
+# ------------------------------------------------------------ apply-choices
+AC="$REPO/packaging/libexec/gamecove-apply-choices"
+AB="$T/acbin"
+AH="$T/achome"
+mkdir -p "$AB" "$AH"
+cat >"$AB/gamecove-session-select" <<EOF
+#!/bin/sh
+echo "select \$*" >>"$T/ac.log"
+exit \${SELECT_CODE:-0}
+EOF
+cat >"$AB/pkexec" <<EOF
+#!/bin/sh
+echo "pkexec \$*" >>"$T/ac.log"
+EOF
+cat >"$AB/systemctl" <<EOF
+#!/bin/sh
+[ -f "$T/steam-mode-on" ] && echo "gamescope-session-plus@steam.service loaded active running Steam"
+exit 0
+EOF
+chmod +x "$AB/gamecove-session-select" "$AB/pkexec" "$AB/systemctl"
+ac() {
+	: >"$T/ac.log"
+	env GAMECOVE_PENDING="$AH/pending" GAMECOVE_INSTALLER_LOG="$AH/installer.log" \
+		GAMECOVE_SESSION_SELECT="$AB/gamecove-session-select" GAMECOVE_FIX_SET=/usr/libexec/gamecove/gamecove-fix-set \
+		PKEXEC="$AB/pkexec" SYSTEMCTL="$AB/systemctl" "$@" sh "$AC"
+}
+expect_code 0 "apply-choices without a pending file" ac
+if [ ! -s "$T/ac.log" ]; then ok; else bad "nothing to apply must run nothing"; fi
+# shellcheck disable=SC2016  # the $(...) must stay literal: it must never run
+printf 'STARTUP=gamecove\nCHARGE_LIMIT=80\nEVIL=$(touch %s/pwned)\n' "$T" >"$AH/pending"
+expect_code 0 "apply-choices before the package is live" ac GAMECOVE_SESSION_SELECT=/nonexistent/select
+if [ -f "$AH/pending" ]; then ok; else bad "pending file must stay until the package is live"; fi
+expect_code 0 "apply-choices gamecove" ac
+contains "$T/ac.log" "^select gamecove --default --no-switch$" "default session set without switching"
+contains "$T/ac.log" "^pkexec /usr/libexec/gamecove/gamecove-fix-set charge-limit set 80$" "charge limit through the no-password entry"
+if [ ! -e "$AH/pending" ]; then ok; else bad "pending file removed once applied"; fi
+if [ ! -e "$T/pwned" ]; then ok; else bad "pending file must never be sourced"; fi
+contains "$AH/installer.log" "all installer choices applied" "apply-choices logs"
+printf 'STARTUP=steam\nCHARGE_LIMIT=30\nFIXES=claw8ex-vrr,claw8ex-gyro\n' >"$AH/pending"
+expect_code 0 "apply-choices steam" ac
+contains "$T/ac.log" "^select steam --default --no-switch$" "steam stays default"
+lacks "$T/ac.log" "charge-limit" "out-of-range charge limit ignored"
+if [ "$(cat "$AH/pending")" = "FIXES=claw8ex-vrr,claw8ex-gyro" ]; then ok; else bad "fixes kept for Desktop Mode: $(cat "$AH/pending")"; fi
+printf 'STARTUP=gamecove\n' >"$AH/pending"
+expect_code 1 "apply-choices keeps the file when steamosctl fails" ac SELECT_CODE=3
+if [ -f "$AH/pending" ]; then ok; else bad "failed apply keeps the pending file"; fi
+printf 'STARTUP=gamecove\nSWITCH_NOW=1\n' >"$AH/pending"
+expect_code 0 "apply-choices no switch outside Gaming Mode" ac
+lacks "$T/ac.log" "^select gamecove$" "no switch from the desktop"
+printf 'STARTUP=gamecove\nSWITCH_NOW=1\n' >"$AH/pending"
+touch "$T/steam-mode-on"
+expect_code 0 "apply-choices switches from Steam Gaming Mode" ac
+contains "$T/ac.log" "^select gamecove$" "switched to GameCove now"
+rm -f "$T/steam-mode-on"
+
+# --------------------------------------------------- get-gamecove.sh bootstrap
+GG="$REPO/packaging/get-gamecove.sh"
+GB="$T/ggbin"
+SRV="$T/ggsrv"
+mkdir -p "$GB" "$SRV"
+# Fake curl: serves $SRV/<last path part> ($SRV/latest.json for the API), logs every URL.
+cat >"$GB/curl" <<EOF
+#!/bin/sh
+out=""
+url=""
+while [ \$# -gt 0 ]; do
+	case "\$1" in
+	-o) out="\$2"; shift ;;
+	-H) shift ;;
+	-*) ;;
+	*) url="\$1" ;;
+	esac
+	shift
+done
+echo "\$url" >>"$T/curl.log"
+[ -f "$T/offline" ] && exit 6
+case "\$url" in
+*/releases/latest) f="$SRV/latest.json" ;;
+*/releases/tags/*) f="$SRV/tag.json" ;;
+*) f="$SRV/\${url##*/}" ;;
+esac
+[ -f "\$f" ] || exit 22
+if [ -n "\$out" ]; then cp "\$f" "\$out"; else cat "\$f"; fi
+EOF
+cat >"$GB/badsum" <<'EOF'
+#!/bin/sh
+echo "0000000000000000000000000000000000000000000000000000000000000000  $1"
+EOF
+chmod +x "$GB/curl" "$GB/badsum"
+mkdir -p "$T/ggapp"
+printf '#!/bin/sh\necho "app $*" >>"%s/launch.log"\n' "$T" >"$T/ggapp/gamecove.x86_64"
+echo pck >"$T/ggapp/gamecove.pck"
+tar -czf "$SRV/gamecove-0.2.0-x86_64.tar.gz" -C "$T/ggapp" gamecove.x86_64 gamecove.pck
+echo rpm >"$SRV/gamecove-0.2.0-1.fc43.x86_64.rpm"
+echo srpm >"$SRV/gamecove-0.2.0-1.fc43.src.rpm"
+echo raw >"$SRV/gamecove-0.2.0-x86_64.raw"
+cp "$GG" "$SRV/get-gamecove.sh"
+(cd "$SRV" && sha256sum gamecove-0.2.0-x86_64.tar.gz gamecove-0.2.0-1.fc43.x86_64.rpm gamecove-0.2.0-1.fc43.src.rpm \
+	gamecove-0.2.0-x86_64.raw get-gamecove.sh >SHA256SUMS)
+{
+	echo '{'
+	echo '  "tag_name": "v0.2.0",'
+	echo '  "assets": ['
+	for a in gamecove-0.2.0-1.fc43.src.rpm gamecove-0.2.0-1.fc43.x86_64.rpm gamecove-0.2.0-x86_64.raw \
+		gamecove-0.2.0-x86_64.tar.gz get-gamecove.sh SHA256SUMS; do
+		echo "    { \"name\": \"$a\", \"browser_download_url\": \"https://example.test/dl/$a\" },"
+	done
+	echo '  ]'
+	echo '}'
+} >"$SRV/latest.json"
+cp "$SRV/latest.json" "$SRV/tag.json"
+osroot() {
+	d="$T/os-$1"
+	mkdir -p "$d/etc" "$d/run"
+	printf '%s\n' "$2" >"$d/etc/os-release"
+	[ -n "${3:-}" ] && touch "$d/run/ostree-booted"
+	echo "$d"
+}
+R_BAZ="$(osroot bazzite 'ID=bazzite
+ID_LIKE="fedora"' 1)"
+R_FED="$(osroot fedora 'ID=fedora
+VARIANT_ID=silverblue' 1)"
+R_FEDWS="$(osroot fedora-ws 'ID=fedora
+VARIANT_ID=workstation')"
+R_DECK="$(osroot steamos 'ID=steamos
+ID_LIKE=arch')"
+R_ARCH="$(osroot arch 'ID=arch')"
+gg() {
+	root="$1"
+	shift
+	: >"$T/curl.log"
+	env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$root" GAMECOVE_ARCH=x86_64 \
+		GAMECOVE_API=https://api.example.test "$@" sh "$GG" --no-launch
+}
+for pair in "$R_BAZ:bazzite" "$R_FED:fedora-atomic" "$R_FEDWS:other" "$R_DECK:steamos" "$R_ARCH:other" "$T/os-none:other"; do
+	got="$(GAMECOVE_ROOT="${pair%%:*}" sh "$GG" --detect-os)"
+	if [ "$got" = "${pair##*:}" ]; then ok; else bad "detect-os ${pair%%:*}: got $got, want ${pair##*:}"; fi
+done
+GI="$T/gghome/.local/share/gamecove/installer"
+mkdir -p "$T/gghome/Desktop"
+expect_code 0 "bootstrap on Bazzite" gg "$R_BAZ"
+if [ -x "$GI/app/gamecove.x86_64" ] && [ -f "$GI/app/gamecove.pck" ]; then ok; else bad "app unpacked"; fi
+if [ -f "$GI/packages/gamecove-0.2.0-1.fc43.x86_64.rpm" ]; then ok; else bad "RPM downloaded"; fi
+if [ ! -e "$GI/packages/gamecove-0.2.0-1.fc43.src.rpm" ]; then ok; else bad "source RPM must not be picked"; fi
+lacks "$T/curl.log" "x86_64.raw" "no sysext on Bazzite"
+contains "$GI/release.env" "^TAG=v0.2.0$" "release tag"
+contains "$GI/release.env" "^OS=bazzite$" "release os"
+contains "$GI/release.env" "^PACKAGE=$GI/packages/gamecove-0.2.0-1.fc43.x86_64.rpm$" "release package"
+contains "$T/curl.log" "^https://api.example.test/repos/IHulkSmashI/GameCove/releases/latest$" "latest release API"
+if [ -x "$GI/get-gamecove.sh" ]; then ok; else bad "bootstrap keeps a checked copy of itself"; fi
+GE="$T/gghome/.local/share/applications/io.github.ihulksmashi.GameCoveInstaller.desktop"
+contains "$GE" "^Name=GameCove Installer$" "installer app entry"
+contains "$GE" "^Exec=sh \"$GI/get-gamecove.sh\"$" "entry re-runs the bootstrap"
+if [ -x "$T/gghome/Desktop/Install GameCove.desktop" ]; then ok; else bad "desktop shortcut"; fi
+contains "$T/gghome/.local/share/gamecove/installer.log" "sha256 ok gamecove-0.2.0-x86_64.tar.gz" "checksums logged"
+if [ -z "$(find "$GI" -name '.download.*')" ]; then ok; else bad "download folder cleaned up"; fi
+expect_code 0 "bootstrap on SteamOS" gg "$R_DECK"
+if [ -f "$GI/packages/gamecove-0.2.0-x86_64.raw" ] && [ ! -e "$GI/packages/gamecove-0.2.0-1.fc43.x86_64.rpm" ]; then ok; else bad "sysext replaces the RPM on SteamOS"; fi
+contains "$GI/release.env" "^OS=steamos$" "steamos release env"
+expect_code 0 "bootstrap elsewhere (app only)" gg "$R_ARCH"
+contains "$GI/release.env" "^PACKAGE=$" "no package on other systems"
+expect_code 0 "bootstrap with a tag" gg "$R_BAZ" GAMECOVE_TAG=v0.2.0
+contains "$T/curl.log" "/releases/tags/v0.2.0$" "tag API"
+rm -rf "$T/gghome"
+mkdir -p "$T/gghome"
+expect_code 1 "bootstrap refuses a bad checksum" gg "$R_BAZ" SHA256SUM="$GB/badsum"
+contains "$T/out" "doesn't match its checksum" "checksum error said"
+if [ ! -e "$GI/app" ] && [ ! -e "$GI/release.env" ]; then ok; else bad "nothing installed after a bad checksum"; fi
+mv "$SRV/SHA256SUMS" "$SRV/SHA256SUMS.off"
+expect_code 1 "bootstrap refuses without SHA256SUMS" gg "$R_BAZ"
+mv "$SRV/SHA256SUMS.off" "$SRV/SHA256SUMS"
+cp "$SRV/SHA256SUMS" "$SRV/SUMS.keep"
+grep -v "x86_64.rpm" "$SRV/SUMS.keep" >"$SRV/SHA256SUMS"
+expect_code 1 "bootstrap refuses a file missing from SHA256SUMS" gg "$R_BAZ"
+mv "$SRV/SUMS.keep" "$SRV/SHA256SUMS"
+expect_code 1 "bootstrap needs x86_64" gg "$R_BAZ" GAMECOVE_ARCH=aarch64
+expect_code 0 "bootstrap again" gg "$R_BAZ"
+touch "$T/offline"
+: >"$T/launch.log"
+expect_code 0 "bootstrap offline uses the cached app" env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$R_BAZ" \
+	GAMECOVE_ARCH=x86_64 DISPLAY=:9 sh "$GG"
+sleep 0.3
+contains "$T/launch.log" "^app -- --installer$" "installer launched with user args"
+rm -f "$T/offline"
+rm -rf "$T/gghome"
+expect_code 1 "bootstrap offline without a cache" env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$R_BAZ" \
+	GAMECOVE_ARCH=x86_64 CURL=false sh "$GG" --no-launch
+
 # ------------------------------------------------------- sysext tree (offline)
 APP="$T/app"
 SS="$T/gs-session"
@@ -373,6 +570,8 @@ TREE="$T/dist/gamecove"
 for f in usr/bin/gamescope-session-plus usr/bin/gamecove-session-select \
 	usr/lib/gamecove/gamecove.x86_64 usr/lib/gamecove/gamecove.pck \
 	usr/libexec/gamecove/gamecove-fix usr/libexec/gamecove/gamecove-fix-set usr/libexec/gamecove/gamecove-session-client \
+	usr/libexec/gamecove/gamecove-apply-choices usr/libexec/gamecove/get-gamecove.sh \
+	usr/share/applications/io.github.ihulksmashi.GameCoveInstaller.desktop \
 	usr/share/licenses/gamecove/LICENSE usr/share/licenses/gamecove/GPL-2.0-only.txt usr/share/licenses/gamecove/LICENSE.ClawLab-MIT \
 	usr/share/gamescope-session-plus/sessions.d/gamecove usr/share/wayland-sessions/gamecove.desktop \
 	usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy \
@@ -416,6 +615,8 @@ contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-2.0-only AND GPL-2.0
 contains "$SPEC" "packaging/libexec/gamecove-fix-set" "spec installs the set entry point"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-fix-set$" "spec lists the set entry point"
 contains "$SPEC" "build-bpf.sh" "spec builds the gyro program"
+contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-apply-choices$" "spec lists the installer's apply helper"
+contains "$SPEC" "^%{_libexecdir}/gamecove/get-gamecove.sh$" "spec lists the bootstrap"
 contains "$SPEC" "LICENSES/GPL-2.0-only.txt" "spec ships the GPL-2.0 text"
 uhb_spec="$(sed -n 's/^%global uhb_commit //p' "$SPEC")"
 uhb_script="$(sed -n 's/.*UHB_PIN:-\([0-9a-f]*\)}.*/\1/p' "$REPO/fixes/claw8ex-gyro/bpf/build-bpf.sh")"
@@ -510,7 +711,8 @@ if [ -z "$SHELLCHECK" ]; then
 else
 	for f in "$REPO/packaging/libexec/gamecove-fix" "$REPO/packaging/libexec/gamecove-fix-set" "$REPO/packaging/install.sh" \
 		"$REPO/packaging/sysext/build-sysext.sh" "$REPO/packaging/tests/run.sh" \
-		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select"; do
+		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" \
+		"$REPO/packaging/get-gamecove.sh" "$REPO/packaging/libexec/gamecove-apply-choices"; do
 		if "$SHELLCHECK" -S warning -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"

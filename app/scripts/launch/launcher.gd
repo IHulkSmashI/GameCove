@@ -27,6 +27,9 @@ var show_indicator := false
 var _games := {}
 var _measured := {}
 var _compat := {}
+## Goal for games without their own settings ("" = the device default). Set by
+## the installer's Auto TDP choice: "smooth" = Auto TDP off.
+var _default_goal := ""
 var _loaded := false
 
 
@@ -76,8 +79,24 @@ static func sanitize(raw: Dictionary, base: Dictionary) -> Dictionary:
 func settings_for(game_key: String) -> Dictionary:
 	_load()
 	var base := defaults_for(profile())
+	if _default_goal != "":
+		base["goal"] = _default_goal
 	var stored: Variant = _games.get(game_key, {})
 	return sanitize(stored, base) if stored is Dictionary else base
+
+
+## Goal for every game without its own settings; "" goes back to the device default.
+func set_default_goal(goal: String) -> bool:
+	if goal != "" and not goal in GOALS:
+		return false
+	_load()
+	_default_goal = goal
+	return _write()
+
+
+func default_goal() -> String:
+	_load()
+	return _default_goal
 
 
 ## Whether this game's goal turns Auto TDP on while it runs.
@@ -278,6 +297,7 @@ func _load() -> void:
 	_games = {}
 	_measured = {}
 	_compat = {}
+	_default_goal = ""
 	if not FileAccess.file_exists(settings_path):
 		return
 	var json := JSON.new()
@@ -296,11 +316,17 @@ func _load() -> void:
 	var compat: Variant = parsed.get("compat", {})
 	if compat is Dictionary:
 		_compat = compat
+	var dg: Variant = parsed.get("default_goal", "")
+	if dg is String and dg in GOALS:
+		_default_goal = dg
 
 
 ## Written to a temp file first, then renamed, so a crash never leaves half a file.
 func _write() -> bool:
-	var data := JSON.stringify({"version": 1, "games": _games, "measured": _measured, "compat": _compat}, "\t", true)
+	var all := {"version": 1, "games": _games, "measured": _measured, "compat": _compat}
+	if _default_goal != "":
+		all["default_goal"] = _default_goal
+	var data := JSON.stringify(all, "\t", true)
 	var tmp := settings_path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:

@@ -8,6 +8,8 @@
 #   gamecove-session-select gamecove            GameCove (this time)
 #   gamecove-session-select gamecove --default  GameCove on every boot
 #   gamecove-session-select desktop             default desktop (Plasma/GNOME)
+#   gamecove-session-select gamecove --default --no-switch
+#                                               make it the default, stay here
 #
 # How: steamos-manager accepts any session in wayland-sessions/ whose file name
 # has no "gamescope" in it as a "desktop session", so gamecove.desktop can be
@@ -24,18 +26,24 @@ die() {
 }
 
 usage() {
-	echo "usage: gamecove-session-select steam|gamecove|desktop [--default]" >&2
+	echo "usage: gamecove-session-select steam|gamecove|desktop [--default [--no-switch]]" >&2
 	exit 64
 }
 
 [ $# -ge 1 ] || usage
 target="$1"
 default=0
+switch=1
 if [ $# -ge 2 ]; then
 	[ "$2" = "--default" ] || usage
 	default=1
 fi
-[ $# -le 2 ] || usage
+if [ $# -ge 3 ]; then
+	# --no-switch: only change what the next boot starts (the installer uses it)
+	[ "$3" = "--no-switch" ] || usage
+	switch=0
+fi
+[ $# -le 3 ] || usage
 
 if [ "$(id -u)" -eq 0 ]; then
 	die "run this as your own user, not root"
@@ -66,6 +74,7 @@ steam)
 	if [ "$default" -eq 1 ]; then
 		"$STEAMOSCTL" set-default-login-mode game
 	fi
+	[ "$switch" -eq 1 ] || exit 0
 	exec "$STEAMOSCTL" switch-to-game-mode
 	;;
 gamecove)
@@ -73,6 +82,7 @@ gamecove)
 		"$STEAMOSCTL" set-default-desktop-session "$SESSION_FILE"
 		"$STEAMOSCTL" set-default-login-mode desktop
 	fi
+	[ "$switch" -eq 1 ] || exit 0
 	exec "$STEAMOSCTL" switch-to-desktop-mode "$SESSION_FILE"
 	;;
 desktop)

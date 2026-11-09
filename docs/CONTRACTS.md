@@ -390,7 +390,7 @@ Overlay: no gamescope atom. Like Steam and OpenGamepadUI, we rewrite the session
 
 `Launcher.launch_env(game)` returns the environment variables to add for that game on this device.
 
-Non-Steam games also have compatibility settings, stored in the same file under `"compat"`: `Launcher.compat_for(key)` → `{"proton": tool id ("" = umu default), "prefix": "", "extra_env": {}, "args": ""}`, `save_compat(key, dict)`, `compat_tools()`, `proton_path_for(id)`. The UI changes them through `Library.set_compat_tool` / `set_launch_options`. Steam games start through `steam://`, which takes no environment: for them the game page shows only goal and frame limit, plus a line pointing to Steam launch options. `Launcher.auto_tdp_for(key)` is true for goals `battery` and `balanced`.
+Non-Steam games also have compatibility settings, stored in the same file under `"compat"`: `Launcher.compat_for(key)` → `{"proton": tool id ("" = umu default), "prefix": "", "extra_env": {}, "args": ""}`, `save_compat(key, dict)`, `compat_tools()`, `proton_path_for(id)`. The UI changes them through `Library.set_compat_tool` / `set_launch_options`. Steam games start through `steam://`, which takes no environment: for them the game page shows only goal and frame limit, plus a line pointing to Steam launch options. `Launcher.auto_tdp_for(key)` is true for goals `battery` and `balanced`. `Launcher.set_default_goal(goal)` / `default_goal()`: the goal for games without their own settings (`""` = the device default); the installer's Auto TDP choice sets `balanced` or `smooth`.
 
 ## Root actions
 
@@ -472,7 +472,7 @@ suggested_fixes() -> Array / check_fixes()    # devices.json "fixes" that `gamec
 steamgriddb_key() -> String / set_steamgriddb_key(key) -> bool   # 32 hex chars, "" removes
 ```
 
-Stored in `user://setup.cfg` (`[steps]`, `[skipped]`, `[keys] steamgriddb`).
+Stored in `user://setup.cfg` (`[steps]`, `[skipped]`, `[keys] steamgriddb`). The installer (docs/SESSION.md, "Installer") marks the steps it covered after a successful install, so the first-run flow opens only for what's left; on a first run its Next skips steps already done or skipped.
 
 ### `Controller`
 

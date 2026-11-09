@@ -96,6 +96,10 @@ fi
 install -Dm0755 "$REPO/packaging/libexec/gamecove-fix" "$tree/usr/libexec/gamecove/gamecove-fix"
 install -Dm0755 "$REPO/packaging/libexec/gamecove-fix-set" "$tree/usr/libexec/gamecove/gamecove-fix-set"
 install -Dm0755 "$REPO/session/gamecove-session-client" "$tree/usr/libexec/gamecove/gamecove-session-client"
+install -Dm0755 "$REPO/packaging/libexec/gamecove-apply-choices" "$tree/usr/libexec/gamecove/gamecove-apply-choices"
+install -Dm0755 "$REPO/packaging/get-gamecove.sh" "$tree/usr/libexec/gamecove/get-gamecove.sh"
+install -Dm0644 "$REPO/packaging/installer/io.github.ihulksmashi.GameCoveInstaller.desktop" \
+	"$tree/usr/share/applications/io.github.ihulksmashi.GameCoveInstaller.desktop"
 install -Dm0755 "$REPO/session/gamecove-session-select" "$tree/usr/bin/gamecove-session-select"
 install -Dm0644 "$REPO/session/gamescope-session-plus/sessions.d/gamecove" "$tree/usr/share/gamescope-session-plus/sessions.d/gamecove"
 install -Dm0644 "$REPO/session/wayland-sessions/gamecove.desktop" "$tree/usr/share/wayland-sessions/gamecove.desktop"

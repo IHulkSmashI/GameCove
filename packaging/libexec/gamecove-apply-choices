@@ -1,0 +1,128 @@
+#!/bin/sh
+# Applies the choices the GameCove installer left for "after the package is live".
+# Installed to /usr/libexec/gamecove/gamecove-apply-choices; runs as the user.
+#
+# Who runs it:
+#   - the one-shot user unit the installer writes
+#     (~/.config/systemd/user/gamecove-apply-choices.service, at every login
+#     until the pending file is gone; its ConditionPathExists keeps it quiet
+#     before the package is live)
+#   - GameCove itself on start, if the file is still there
+#   - the installer, right away, when the package went live without a reboot
+#     (rpm-ostree --apply-live, or a SteamOS sysext)
+#
+# Pending file: ~/.local/share/gamecove/pending-choices, KEY=value lines. Only
+# these keys are read (never sourced):
+#   STARTUP=gamecove|steam|desktop   which session the next boot starts
+#   SWITCH_NOW=1                     also switch now if this is Steam Gaming Mode
+#   CHARGE_LIMIT=50..100             set once through gamecove-fix-set (no password)
+#   FIXES=a,b                        fixes still to install: left for the installer
+#                                    in Desktop Mode (they need a password)
+# The file is removed once STARTUP and CHARGE_LIMIT are done; it's rewritten
+# with only FIXES= when fixes are still waiting.
+# Nothing breaks if this never runs: the boot stays as it was (Steam Gaming
+# Mode) and GameCove is a choice at the login screen.
+set -u
+
+PENDING="${GAMECOVE_PENDING:-$HOME/.local/share/gamecove/pending-choices}"
+LOG="${GAMECOVE_INSTALLER_LOG:-$HOME/.local/share/gamecove/installer.log}"
+SELECT="${GAMECOVE_SESSION_SELECT:-/usr/bin/gamecove-session-select}"
+FIXSET="${GAMECOVE_FIX_SET:-/usr/libexec/gamecove/gamecove-fix-set}"
+PKEXEC="${PKEXEC:-pkexec}"
+SYSTEMCTL="${SYSTEMCTL:-systemctl}"
+
+log() {
+	mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
+	printf '%s apply-choices: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$LOG" 2>/dev/null || true
+}
+
+[ -f "$PENDING" ] || exit 0
+if [ ! -x "$SELECT" ]; then
+	# The package isn't live yet (staged for the next boot): try again then.
+	log "GameCove isn't live yet; keeping $PENDING"
+	exit 0
+fi
+
+startup=""
+switch_now=0
+charge=""
+fixes=""
+while IFS= read -r line || [ -n "$line" ]; do
+	key="${line%%=*}"
+	value="${line#*=}"
+	case "$key" in
+	STARTUP)
+		case "$value" in gamecove | steam | desktop) startup="$value" ;; esac
+		;;
+	SWITCH_NOW) [ "$value" = "1" ] && switch_now=1 ;;
+	CHARGE_LIMIT)
+		case "$value" in
+		'' | *[!0-9]*) ;;
+		*) [ "$value" -ge 50 ] && [ "$value" -le 100 ] && charge="$value" ;;
+		esac
+		;;
+	FIXES)
+		case "$value" in
+		*[!a-z0-9,-]*) ;;
+		*) fixes="$value" ;;
+		esac
+		;;
+	esac
+done <"$PENDING"
+
+ok=1
+
+# Steam's own Gaming Mode session is running (Bazzite: gamescope-session-plus@steam
+# or @ogui-steam; SteamOS: gamescope-session.service).
+in_steam_gaming_mode() {
+	units="$("$SYSTEMCTL" --user list-units --state=active --no-legend --plain 'gamescope-session*' 2>/dev/null)" || return 1
+	printf '%s\n' "$units" | grep -v 'gamescope-session-plus@gamecove' | grep -q 'gamescope-session'
+}
+
+case "$startup" in
+gamecove)
+	if "$SELECT" gamecove --default --no-switch >>"$LOG" 2>&1; then
+		log "next boot starts GameCove"
+	else
+		log "couldn't make GameCove the default session"
+		ok=0
+	fi
+	;;
+steam)
+	if "$SELECT" steam --default --no-switch >>"$LOG" 2>&1; then
+		log "next boot starts Steam Gaming Mode; GameCove is a choice"
+	else
+		log "couldn't make Steam Gaming Mode the default session"
+		ok=0
+	fi
+	;;
+desktop | "") ;;
+esac
+
+if [ -n "$charge" ]; then
+	if "$PKEXEC" "$FIXSET" charge-limit set "$charge" >>"$LOG" 2>&1; then
+		log "charge limit $charge%"
+	else
+		# Not fatal: Settings > Device can set it any time.
+		log "couldn't set the charge limit to $charge% (set it in Settings)"
+	fi
+fi
+
+if [ "$ok" -ne 1 ]; then
+	log "keeping $PENDING to try again at the next login"
+	exit 1
+fi
+
+if [ -n "$fixes" ]; then
+	printf 'FIXES=%s\n' "$fixes" >"$PENDING.tmp" && mv "$PENDING.tmp" "$PENDING"
+	log "fixes still waiting for Desktop Mode: $fixes"
+else
+	rm -f "$PENDING"
+	log "all installer choices applied"
+fi
+
+if [ "$startup" = "gamecove" ] && [ "$switch_now" -eq 1 ] && in_steam_gaming_mode; then
+	log "switching from Steam Gaming Mode to GameCove"
+	exec "$SELECT" gamecove
+fi
+exit 0

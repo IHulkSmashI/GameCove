@@ -23,6 +23,9 @@ tried on the Claw 8 EX before we call any of it working.
 | `packaging/polkit/io.github.ihulksmashi.gamecove.policy` | `/usr/share/polkit-1/actions/` | Who may run `gamecove-fix` and `gamecove-fix-set` |
 | `packaging/rpm/gamecove.spec` | | RPM for Bazzite / Fedora |
 | `packaging/install.sh` | | Guided install on Bazzite (`rpm-ostree install`) |
+| `packaging/get-gamecove.sh` | `/usr/libexec/gamecove/` | Installer bootstrap (`curl … \| bash`), see "Installer" below |
+| `packaging/libexec/gamecove-apply-choices` | `/usr/libexec/gamecove/` | Applies the installer's startup choice once the package is live |
+| `packaging/installer/*.desktop` | `/usr/share/applications/` | "GameCove Installer" app entry |
 | `packaging/sysext/build-sysext.sh` | | systemd-sysext image for SteamOS |
 | `packaging/tests/run.sh` | | Shell tests + shellcheck + every `fixes/*/test.sh` |
 
@@ -258,10 +261,69 @@ OpenGamepadUI's `make dist-ext`. Documented, not run on SteamOS.
 
 **CachyOS.** Later: a PKGBUILD with the same file list.
 
+## Installer
+
+The guided install (README "Install"). Three parts:
+
+1. **`packaging/get-gamecove.sh`** (POSIX sh, no root): detects the OS from `os-release` (+ `/run/ostree-booted`
+   for Fedora Atomic), asks the GitHub API for the latest release, downloads the app tarball, the package for this
+   system (RPM, or the `.raw` sysext on SteamOS), its own copy and `SHA256SUMS` into
+   `~/.local/share/gamecove/installer/`, refuses anything that isn't listed in or doesn't match `SHA256SUMS`,
+   unpacks the app, writes `release.env`, adds the "GameCove Installer" app entry and an "Install GameCove" desktop
+   shortcut, and starts `gamecove.x86_64 -- --installer`. Offline, it starts the copy it has.
+2. **Installer mode in the app.** `scenes/boot.tscn` is the main scene; `scripts/installer/boot.gd` reads
+   `OS.get_cmdline_user_args()` (what follows `--`, the same in an exported binary) and loads
+   `scenes/installer.tscn` for `--installer`, else `scenes/main.tscn`. Logic in `scripts/installer/`
+   (`plan.gd` steps and choices, `target.gd` system and install state, `commands.gd` every command,
+   `installer_service.gd` runs them on a worker and logs to `~/.local/share/gamecove/installer.log`,
+   `settings_writer.gd` writes the choices into the app's own settings, `user_files.gd`), UI in
+   `scripts/ui/installer/`.
+3. **`gamecove-apply-choices`**, shipped in the package: sets the default session
+   (`gamecove-session-select gamecove|steam --default --no-switch`) and a charge limit (through the no-password
+   `gamecove-fix-set`) from `~/.local/share/gamecove/pending-choices` (`KEY=value`, read, never sourced).
+
+How the install runs (every privileged step through `pkexec`, so the desktop's polkit agent asks):
+
+| System | Package | Live now? |
+| --- | --- | --- |
+| Bazzite / Fedora Atomic | `pkexec rpm-ostree install --idempotent --apply-live <rpm>`; if that fails, the same without `--apply-live` (staged) | with `--apply-live` yes, else after the reboot |
+| SteamOS | `pkexec sh -c '<install -m0644 "$1" /var/lib/extensions/gamecove.raw; systemctl enable systemd-sysext; systemd-sysext refresh; reload polkit>' sh <raw>`. `/var` is writable, so `steamos-readonly` stays on | yes |
+
+When the package is live, fixes install right away (`pkexec gamecove-fix <name> install`) and
+`gamecove-apply-choices` runs at once. When it's only staged, the default session can't be set yet (the session
+file isn't there), so the startup choice waits in `pending-choices`, and a one-shot user unit
+(`~/.config/systemd/user/gamecove-apply-choices.service`, `ConditionPathExists` on the helper and the file) applies
+it at the first login after the reboot; GameCove applies it too on its first start. With "Boot into GameCove" and
+the first login landing in Steam Gaming Mode, the helper also switches to GameCove once. Fixes can't install in
+Gaming Mode (no polkit agent), so they wait in `FIXES=` and an autostart entry opens the installer once in Desktop
+Mode ("Finish setting up"). If the reboot never happens, nothing changes: the boot stays Steam Gaming Mode.
+
+Startup choices: **Boot into GameCove** (default session), **Keep Steam, add GameCove** (Steam stays the default;
+a "GameCove" app entry switches with `gamecove-session-select gamecove`), **Desktop only** (nothing at boot; a
+"GameCove (window)" app entry). Steam mode goes to `~/.config/environment.d/gamecove.conf`
+(`GAMECOVE_STEAM_MODE`). The first-run setup steps the installer covered are marked in the Setup service, so the
+in-app setup shows nothing (it still runs for people who installed another way, and skips steps done elsewhere).
+
+Uninstall: `steamosctl set-default-login-mode game`, optionally `gamecove-fix <name> remove` for the fixes it
+installed, `pkexec rpm-ostree uninstall gamecove` (next boot) or removing the sysext (`systemd-sysext refresh`),
+then every user file above; "Keep my settings" off also deletes GameCove's `user://` folder and the download.
+Store sign-ins belong to legendary / gogdl / nile and stay. Every step can be undone after a failure (Undo).
+
+Store sign-in on the desktop uses the Setup service's flows: the store's own page opens in the browser
+(`OS.shell_open`). legendary, gogdl and nile have no local callback (legendary's automatic capture needs
+pywebview), so when the window gets focus back the installer reads the clipboard and finishes on its own if it
+holds the Epic JSON (`authorizationCode`), GOG's `on_login_success?…code=` address or Amazon's
+`openid.oa2.authorization_code=` address; Paste and Type it do the same by hand. Heroic's sign-ins are reused
+(its config folders are read first). No password is ever asked for or stored.
+
 ## Hardware checklist (MSI Claw 8 EX, Bazzite)
 
 Do these in order; note results in an issue.
 
+0. Installer: run the bootstrap in Desktop Mode, go through Easy. Check the password prompts appear, whether
+   `--apply-live` worked (`rpm-ostree status`), `~/.local/share/gamecove/installer.log`, and that after
+   "Restart now" the handheld boots into GameCove. Then Uninstall from "GameCove Installer" and check Steam
+   Gaming Mode is the default again after the restart.
 1. Install via `install.sh`, reboot, `gamecove-session-select gamecove`. GameCove
    appears (not a black screen). `xprop -root GAMESCOPECTRL_BASELAYER_APPID` from a
    terminal in the session (or SSH with `DISPLAY=:0`) shows `413091, 769`.
