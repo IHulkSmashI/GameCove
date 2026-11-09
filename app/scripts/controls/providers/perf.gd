@@ -26,6 +26,10 @@ const Upscale := preload("res://scripts/controls/perf/upscale.gd")
 const Proton := preload("res://scripts/launch/proton.gd")
 
 const NO_GAME := "Open a game first"
+## Low latency can't be turned off while frame generation is on: generated
+## frames add a frame of lag, which Anti-Lag 2 / XeLL win back.
+const LOW_LATENCY_WITH_FG := "On automatically with frame generation"
+const LOW_LATENCY_HELP := "Leave on. Turn off only if a game stutters or won't start with it."
 const MANGOHUD_LAYER_DIRS := ["/usr/share/vulkan/implicit_layer.d", "/etc/vulkan/implicit_layer.d",
 	"/usr/local/share/vulkan/implicit_layer.d"]
 const STATUS_TTL_MS := 3000
@@ -57,6 +61,8 @@ func setup(c: Dictionary) -> void:
 	store = Store.new(str(c.get("perf_store_path", "")), str(_profile().get("id", "unknown")))
 	if launcher != null and "env_hooks" in launcher:
 		launcher.env_hooks.append(launch_env_hook)
+	if launcher != null and "frame_gen_hooks" in launcher:
+		launcher.frame_gen_hooks.append(frame_gen_on)
 	refresh_device_files()
 
 
@@ -294,7 +300,7 @@ func _lsfg_controls() -> Array:
 	return [
 		_mk({"id": "perf.lsfg", "title": "Lossless Scaling frame generation",
 			"help": "Adds generated frames with lsfg-vk and your own Lossless Scaling. Best above 40 real fps.",
-			"kind": "toggle", "default_value": false},
+			"kind": "toggle", "default_value": false, "affects": ["perf.low_latency"]},
 			_lsfg_reason, func(): return bool(_gv("lsfg", false)), func(v): return _lsfg_set("lsfg", v)),
 		_mk({"id": "perf.lsfg_multiplier", "title": "Frame generation multiplier",
 			"help": "2x adds one frame per real frame; 3x and 4x add more (more lag, more artefacts).",
@@ -416,10 +422,14 @@ func _upscale_controls() -> Array:
 		_mk({"id": "perf.frame_gen", "title": "Frame generation",
 			"help": "XeSS frame generation on Intel Arc (2x-4x), FSR frame generation on AMD (2x). Needs about 40 real fps.",
 			"kind": "choice", "options": _opts(Upscale.frame_gens(g), {0: "Off", 2: "2x", 3: "3x", 4: "4x"}),
-			"default_value": 0, "apply_order": 2},
+			"default_value": 0, "apply_order": 2, "affects": ["perf.low_latency"]},
 			func(): return _upscale_reason() if Upscale.frame_gens(_gpu()).size() > 1 else "Not on this GPU",
 			func(): return int(upscale_status().get("fg", 0)) if upscale_status().get("ok", false) else null,
-			func(v): return _after_upscale(_upscale_run("choose", ["--upscaler", str(upscale_status().get("upscaler", "own")), "--fg", str(int(v))]))),
+			func(v):
+				if not _after_upscale(_upscale_run("choose", ["--upscaler", str(upscale_status().get("upscaler", "own")), "--fg", str(int(v))])):
+					return false
+				_sv("frame_gen", int(v))   # remembered, so a launch knows FG is on (low latency follows)
+				return true),
 		_mk({"id": "perf.upscale_recommended", "title": "Use the recommended setup",
 			"help": "Sets up the best upscaler for this game from what it ships and OptiScaler's game list.",
 			"kind": "action", "per_game": false},
@@ -433,25 +443,59 @@ func _upscale_controls() -> Array:
 
 # ---- low latency, Proton, the launch wrapper ------------------------------------
 
+## Is frame generation on for this game (`key`, or the game in ctx)? lsfg-vk,
+## the upscaling helper's frame generation (remembered when set here, and the
+## helper's live status for the open game) or the launch setting. Low latency
+## follows it. Also Launcher.frame_gen_hooks, so a launch forces low latency on.
+func frame_gen_on(key := "") -> bool:
+	var k := key if key != "" else game_key()
+	if k == "" or store == null:
+		return false
+	if bool(store.get_value(k, "lsfg", false)) or int(store.get_value(k, "frame_gen", 0)) > 0:
+		return true
+	if launcher != null and launcher.has_method("settings_for") and bool(launcher.settings_for(k).get("frame_gen", false)):
+		return true
+	if key == "" and _upscale_reason() == "":
+		var st := upscale_status()
+		if bool(st.get("ok", false)) and int(st.get("fg", 0)) > 0:
+			return true
+	return false
+
+
+## Low latency (Anti-Lag 2 through low_latency_layer on AMD, XeLL on Intel):
+## on by default for every game and forced on while frame generation is on
+## (detect gives the reason, read reports On, a write of Off is refused). Off
+## is only an override for a game that stutters or won't start with it.
+func _low_latency_control() -> RefCounted:
+	return Ctl.make({"id": "perf.low_latency", "group": "perf", "title": "Low latency",
+		"help": LOW_LATENCY_HELP, "kind": "toggle", "default_value": true, "apply_order": 1},
+		func(c):
+			c.forced_value = null
+			if launcher == null or not launcher.has_method("settings_for"):
+				return "Not available"
+			if _gpu()["vendor"] == "other":
+				return "Unknown GPU"
+			if game_key() == "":
+				return NO_GAME
+			if frame_gen_on():
+				c.forced_value = true
+				return LOW_LATENCY_WITH_FG
+			return "",
+		func(_c): return true if frame_gen_on() else bool(launcher.settings_for(game_key()).get("low_latency", true)),
+		func(_c, v):
+			if not bool(v) and frame_gen_on():
+				return false
+			var k := game_key()
+			var s: Dictionary = launcher.settings_for(k)
+			s["low_latency"] = bool(v)
+			launcher.save_settings(k, s)     # a small JSON file; Launcher reads it again itself
+			game_changed(k, game())
+			return true)
+
+
 func _launch_controls() -> Array:
 	return [
-		_mk({"id": "perf.low_latency", "title": "Low latency",
-			"help": "Cuts input lag: Anti-Lag through low_latency_layer on AMD, XeLL on Intel Arc. From the next launch.",
-			"kind": "toggle", "default_value": true, "apply_order": 1},
-			func():
-				if launcher == null or not launcher.has_method("settings_for"):
-					return "Not available"
-				if _gpu()["vendor"] == "other":
-					return "Unknown GPU"
-				return NO_GAME if game_key() == "" else "",
-			func(): return bool(launcher.settings_for(game_key()).get("low_latency", true)),
-			func(v):
-				var k := game_key()
-				var s: Dictionary = launcher.settings_for(k)
-				s["low_latency"] = bool(v)
-				launcher.save_settings(k, s)     # a small JSON file; Launcher reads it again itself
-				game_changed(k, game())
-				return true),
+		_low_latency_control(),
 		_mk({"id": "perf.proton", "title": "Proton version",
 			"help": "Which Proton runs this game.", "kind": "choice", "options": [], "default_value": ""},
 			_proton_detect,

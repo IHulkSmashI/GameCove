@@ -378,6 +378,15 @@ func test_list_frees_its_old_more_rows() -> void:
 	_done([c])
 
 
+func test_low_latency_is_only_an_override() -> void:
+	for tab in Catalog.QUICK:
+		ok(not "perf.low_latency" in Catalog.QUICK[tab], "not in the quick menu's %s tab" % tab)
+	var cards := Catalog.cards_for(["perf"], ["perf.proton", "perf.low_latency"])
+	var card: Array = cards.filter(func(cd): return "perf.low_latency" in cd[2] + cd[3])[0]
+	ok("troubleshooting" in str(card[0]).to_lower(), "under troubleshooting")
+	ok("perf.low_latency" in card[3], "behind More settings, not in the main list")
+
+
 func test_catalog_covers_everything() -> void:
 	var all := ["power.tdp", "power.new_thing", "controller.paddle.LeftPaddle1", "controller.paddle.RightPaddle1"]
 	var cards := Catalog.cards_for(["power", "controller"], all)

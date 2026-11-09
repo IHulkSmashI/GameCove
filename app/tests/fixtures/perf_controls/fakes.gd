@@ -26,6 +26,7 @@ class FakeLauncher extends RefCounted:
 	var settings := {}
 	var env := {"LOW_LATENCY_LAYER": "1"}
 	var env_hooks: Array[Callable] = []
+	var frame_gen_hooks: Array[Callable] = []
 	func settings_for(key: String) -> Dictionary:
 		return settings.get(key, {"low_latency": true}).duplicate()
 	func save_settings(key: String, s: Dictionary) -> void:

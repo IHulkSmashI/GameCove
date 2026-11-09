@@ -18,6 +18,9 @@ var _launcher: Object
 
 ## Rows for settings that go into the game's launch environment.
 const ENV_KEYS := ["upscaler", "frame_gen", "low_latency"]
+## Low latency is automatic: on by default, and forced on with frame generation.
+const LOW_LATENCY_WITH_FG := "On automatically with frame generation"
+const ADVANCED_TITLE := "Advanced / troubleshooting"
 const STEAM_ENV_NOTE := "Steam starts this game, so upscaling, frame generation and low latency can't be set from here. Set them in the game's Steam launch options."
 
 ## with_env_settings false (Steam games): no upscaler / frame generation / low
@@ -45,7 +48,26 @@ func setup(key: String, launcher: Object, with_low_latency: bool, with_env_setti
 	_add(_choice("upscaler", ups, ups.map(func(u): return Texts.UPSCALER_LABELS[u])))
 	_add(ChoiceRow.bool_row("frame_gen", Texts.TITLES["frame_gen"], bool(settings.get("frame_gen", false))))
 	if with_low_latency:
+		# Not something to think about: an override for a game that misbehaves
+		# with it, under its own small heading at the end.
+		var adv := Kit.micro(ADVANCED_TITLE)
+		adv.name = "AdvancedTitle"
+		add_child(adv)
 		_add(ChoiceRow.bool_row("low_latency", Texts.TITLES["low_latency"], bool(settings.get("low_latency", true))))
+		_sync_low_latency()
+
+
+## Frame generation on: low latency shows On, locked, with the reason.
+func _sync_low_latency() -> void:
+	if not rows.has("low_latency"):
+		return
+	var r: VBoxContainer = rows["low_latency"]
+	var forced := bool(settings.get("frame_gen", false))
+	if forced:
+		r.set_value_quiet(true)
+	r.set_locked(forced)
+	r.collapse_hint = not forced
+	r.set_explainer(func(_v): return LOW_LATENCY_WITH_FG if forced else Texts.EXPLAIN["low_latency"])
 
 
 ## Re-read saved settings (e.g. after the quick menu changed them) without
@@ -55,6 +77,7 @@ func reload() -> void:
 	for k in rows:
 		if settings.has(k):
 			rows[k].set_value_quiet(settings[k])
+	_sync_low_latency()
 
 
 func focusables() -> Array:
@@ -81,6 +104,7 @@ func _on_changed(v: Variant, k: String) -> void:
 				rows[f].set_value_quiet(settings[f])
 	else:
 		settings[k] = v
+	_sync_low_latency()
 	_launcher.save_settings(game_key, settings)
 	saved.emit(settings)
 	if k == "goal":

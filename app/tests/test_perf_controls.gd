@@ -17,6 +17,8 @@ const Files := preload("res://scripts/controls/perf/launch_files.gd")
 const Upscale := preload("res://scripts/controls/perf/upscale.gd")
 const MangoHud := preload("res://scripts/perf/mangohud.gd")
 const LauncherScript := preload("res://scripts/launch/launcher.gd")
+const LaunchEnv := preload("res://scripts/launch/launch_env.gd")
+const Proton := preload("res://scripts/launch/proton.gd")
 
 const CLAW := {"id": "msi-claw-8-ex", "gpu_family": "intel-xe3", "gpu_arch": "Xe3", "xmx": true, "panel_hz": [60, 120]}
 const ALLY_X := {"id": "asus-rog-xbox-ally-x", "gpu_family": "amd-rdna3", "gpu_arch": "RDNA3.5", "xmx": false, "panel_hz": [48, 120]}
@@ -372,6 +374,32 @@ func test_low_latency_and_proton_and_wrapper() -> void:
 	eq(w["library"].options["steam:42"], "PROTON_LOG=1 ~/fgmod/fgmod %command% -dx11", "taken out again")
 	_with_game(w, EPIC)
 	eq(reg.control("perf.launch_wrapper").reason, "Only for Steam games (GameCove starts the others itself)", "Steam only")
+	_done(w)
+
+
+func test_low_latency_follows_frame_generation() -> void:
+	var w := _world("lowlat_fg", DECK)
+	_with_game(w, GAME)
+	var reg: Node = w["reg"]
+	var ll: RefCounted = reg.control("perf.low_latency")
+	ok(ll.available, "frame generation off: the override is free")
+	eq(ll.help, PerfProvider.LOW_LATENCY_HELP, "says to leave it on")
+	reg.set_value("perf.low_latency", false)
+	eq(reg.value("perf.low_latency"), false, "off allowed without frame generation")
+	reg.set_value("perf.lsfg", true)
+	ok(not ll.available, "frame generation on: can't be changed")
+	eq(ll.reason, PerfProvider.LOW_LATENCY_WITH_FG, "and says why")
+	eq(ll.value, true, "shows On")
+	eq(ll.write(false), false, "a write of Off is refused")
+	eq(w["launcher"].frame_gen_hooks.size(), 1, "the launcher asks the provider")
+	ok(w["launcher"].frame_gen_hooks[0].call("steam:42"), "frame generation on for the launch")
+	var plan := LaunchEnv.compose(w["launcher"].settings_for("steam:42"), {"gpu_family": "amd-rdna3"},
+		Proton.classify("proton-cachyos-11.0-20260702-slr"), {}, {"frame_gen_on": w["launcher"].frame_gen_hooks[0].call("steam:42")})
+	eq(plan["env"].get("LOW_LATENCY_LAYER"), "1", "launch env has it although the saved setting says off")
+	reg.set_value("perf.lsfg", false)
+	ok(ll.available, "frame generation off again: the override is back")
+	eq(reg.value("perf.low_latency"), false, "with the user's own value")
+	ok(not w["launcher"].frame_gen_hooks[0].call("steam:42"), "no longer forced at launch")
 	_done(w)
 
 

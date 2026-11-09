@@ -138,7 +138,10 @@ func _rebuild() -> void:
 	var icon := str(opts.get("icon", ""))
 	if not bool(desc.get("available", false)):
 		var r: VBoxContainer = ActionRow.new()
-		r.setup("row", title(), "", str(desc.get("reason", "")), icon, false)
+		# a value another setting decides (low latency with frame generation) still shows
+		var forced: Variant = desc.get("value")
+		var shown := "" if forced == null else (("On" if forced else "Off") if forced is bool else str(forced))
+		r.setup("row", title(), shown, str(desc.get("reason", "")), icon, false)
 		r.collapse_hint = false
 		r.set_hint(str(desc.get("reason", "")))
 		r.title_label.modulate.a = 0.5

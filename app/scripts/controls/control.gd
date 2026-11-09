@@ -49,6 +49,12 @@ var affects: Array = []
 ## raised to Quiet and never falling); returns null to reject it. Called by
 ## coerce(), so profiles, imports and the UI all get the safe value.
 var normalize: Callable
+## Optional: the value the system holds while this control is unavailable
+## because another setting decides it (low latency is on whenever frame
+## generation is). read() reports it, so the UI shows the value greyed with
+## the reason. Never written, never saved in a profile (snapshot skips
+## unavailable controls). null: nothing to show.
+var forced_value: Variant = null
 
 var ctx: Dictionary = {}           # {"sys_root", "runner", "home", "device"}
 var available := false
@@ -80,7 +86,9 @@ func detect() -> void:
 
 func read() -> Variant:
 	if not available:
-		return null
+		if forced_value != null:
+			value = forced_value
+		return forced_value
 	value = _read()
 	return value
 

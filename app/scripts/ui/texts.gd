@@ -52,7 +52,7 @@ const EXPLAIN := {
 	"fps_limit": "Stops the game drawing more frames than this. Lower saves battery and heat; too low feels choppy.",
 	"upscaler": "Renders at a lower resolution and sharpens it back up. More fps and battery; the picture gets a little softer.",
 	"frame_gen": "Adds generated frames between real ones so motion looks smoother. Adds a little input lag; needs about 40 fps to feel right.",
-	"low_latency": "Keeps fewer frames waiting in line so controls feel snappier. Can cost a few fps.",
+	"low_latency": "Leave on. Turn off only if a game stutters or won't start with it.",
 	"profile": "The system's preset power levels. Higher profiles run faster and drain the battery faster.",
 	"tdp": "How many watts the chip may use. More watts: more fps, more heat and fan noise, shorter battery.",
 	"charge_limit": "Stops charging at this level to slow battery wear. Costs some time away from the charger.",
