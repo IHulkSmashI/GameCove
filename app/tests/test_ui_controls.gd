@@ -359,6 +359,25 @@ func test_list_more_and_hidden() -> void:
 	_done([c])
 
 
+## Each layout took the old "More settings" row out and dropped it without
+## freeing it: every More / Less press (and every re-layout after detection)
+## leaked a row of nodes. Found by the end-to-end suite (orphan node count).
+func test_list_frees_its_old_more_rows() -> void:
+	var c := fake()
+	var m = _model(c)
+	var l: VBoxContainer = ControlList.new()
+	l.setup(m, ["power.tdp", "power.smt"], ["power.cpu_boost"])
+	var olds: Array = []
+	for i in 4:
+		olds.append(l.more_row)
+		l.toggle_more()
+	for o in olds:
+		ok(not is_instance_valid(o) or o.is_queued_for_deletion(), "an old More row is freed, not orphaned")
+	ok(is_instance_valid(l.more_row) and l.more_row.get_parent() == l, "the current one is in the list")
+	l.free()
+	_done([c])
+
+
 func test_catalog_covers_everything() -> void:
 	var all := ["power.tdp", "power.new_thing", "controller.paddle.LeftPaddle1", "controller.paddle.RightPaddle1"]
 	var cards := Catalog.cards_for(["power", "controller"], all)

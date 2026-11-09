@@ -89,6 +89,9 @@ func _layout() -> void:
 	var keep := _focused_id()
 	for c in get_children():
 		remove_child(c)
+	# views are kept and put back; the More row is made again every time
+	if more_row != null and is_instance_valid(more_row):
+		more_row.queue_free()
 	more_row = null
 	for id in p[0]:
 		add_child(_view(id))
