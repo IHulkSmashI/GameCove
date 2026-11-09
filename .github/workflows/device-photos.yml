@@ -4,6 +4,9 @@ name: Device photos
 # Only freely licensed Commons files and Flickr photos (through Openverse) listed in
 # app/data/device_photos.json; every license is re-checked at its source on each run (see
 # tools/device_photos/build.py and docs/DEVICES.md).
+# The maker-links job requests every maker_image link (the makers' own product images, which the
+# app shows by link only and nobody copies) and keeps ONE issue listing the broken ones, so a
+# maker's site redesign is noticed within a week. No image is stored anywhere.
 
 on:
   schedule:
@@ -12,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   build:
@@ -41,3 +45,37 @@ jobs:
             gh release upload device-photos dist/*.webp --clobber
           fi
           gh release upload device-photos dist/manifest.json --clobber
+
+  maker-links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Request every maker image link (nothing is saved)
+        id: check
+        run: |
+          set +e
+          python tools/device_photos/makers.py --check --report broken.md
+          code=$?
+          set -e
+          [ "$code" = 1 ] && exit 1
+          echo "broken=$([ "$code" = 2 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+      - name: Open, update or close the single "Broken maker image links" issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Broken maker image links
+        run: |
+          num=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title \
+                --jq ".[] | select(.title == env.TITLE) | .number" | head -n1)
+          if [ "${{ steps.check.outputs.broken }}" = yes ]; then
+            if [ -n "$num" ]; then
+              gh issue edit "$num" --body-file broken.md
+            else
+              gh issue create --title "$TITLE" --body-file broken.md
+            fi
+          elif [ -n "$num" ]; then
+            gh issue close "$num" --comment "All maker image links answer with an image again."
+          fi

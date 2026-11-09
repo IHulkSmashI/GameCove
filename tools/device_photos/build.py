@@ -24,6 +24,10 @@ reason (not a license reason), that device keeps its previous entry, so a
 flaky run doesn't take photos away for a week. The old asset stays on the
 release because uploads never delete.
 
+"maker_image" entries (the makers' own product images, used by link only)
+are never downloaded or published here; rows that only have one are skipped
+quietly. See makers.py.
+
 Needs Pillow. The same license rule lives in app/scripts/device/photo.gd
 (license_allowed); keep the two in step.
 """
@@ -168,6 +172,12 @@ def source_key(e: dict) -> tuple[str, str]:
     return src, ""
 
 
+def has_free_source(e: dict) -> bool:
+    """True when the entry names a free photo (Commons file, Openverse id or another
+    source to warn about), False for rows that only carry a maker_image link."""
+    return any(k in e for k in ("file", "openverse_id", "source"))
+
+
 def commons_page(file: str) -> str:
     return PAGE + urllib.parse.quote(file.replace(" ", "_"), safe="()_,-.!'")
 
@@ -211,6 +221,8 @@ def main(argv=None) -> int:
     for dev_id, e in src.items():
         if dev_id.startswith("_") or not isinstance(e, dict):
             continue
+        if not has_free_source(e):
+            continue  # maker_image only: shown by link in the app, never copied
         src, file = source_key(e)
         if src not in ("commons", "openverse"):
             warn(f"SKIPPED {dev_id}: source {src!r} can't be re-checked automatically; "
