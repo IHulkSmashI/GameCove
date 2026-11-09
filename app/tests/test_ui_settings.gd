@@ -424,6 +424,24 @@ func test_about_page_checklist_and_links() -> void:
 	s.free()
 
 
+func test_credits_bundled_in_the_app() -> void:
+	# review H8: the page must read the copy exported into the pck (res://), not the checkout's ../CREDITS.md
+	eq(Credits.find(), "res://CREDITS.md", "CREDITS.md is part of the app (app/CREDITS.md, exported)")
+	var md := Credits.load_text()
+	ok(md.length() > 1000 and "## People" in md, "the real CREDITS.md")
+	var full := Credits.full_text()
+	ok("## Godot Engine" in full and "Permission is hereby granted" in full, "Godot's licence shown")
+	ok("### Components in Godot Engine" in full and "FreeType" in full, "the engine's third-party components listed")
+	for lf in Credits.LICENSE_FILES:
+		ok(FileAccess.file_exists(lf[1]), "bundled licence text exists: " + lf[1])
+	ok("SIL OPEN FONT LICENSE" in full and "Iceflower S" in full, "font and addon licence texts shown")
+	var bb := Credits.to_bbcode(full)
+	ok(bb.length() > 5000 and "[b][color=#ffffff]Godot Engine[/color][/b]" in bb, "renders with the Godot section")
+	var preset := FileAccess.get_file_as_string("res://export_presets.cfg")
+	for pat in ["CREDITS.md", "fonts/OFL-*.txt", "addons/kenyoni/qr_code/LICENSE.md"]:
+		ok(pat in preset, "export include_filter carries " + pat)
+
+
 func test_credits_markdown() -> void:
 	var md := "# Credits\n\n## People\n\n- **Kisenir**: gyro.\n\n| Project | What for | License |\n| --- | --- | --- |\n| gamescope | Display | BSD-2-Clause |\n\nSee [CREDITS](x.md) and `code`."
 	var bb := Credits.to_bbcode(md)

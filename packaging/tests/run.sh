@@ -731,7 +731,7 @@ contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-fix-set$" "spec lists the se
 contains "$SPEC" "build-bpf.sh" "spec builds the gyro program"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-apply-choices$" "spec lists the installer's apply helper"
 contains "$SPEC" "^%{_libexecdir}/gamecove/get-gamecove.sh$" "spec lists the bootstrap"
-contains "$SPEC" "LICENSES/GPL-2.0-only.txt" "spec ships the GPL-2.0 text"
+contains "$SPEC" "done < packaging/licenses.list" "spec ships every licence text (GPL-2.0, OFL, Godot, ...)"
 uhb_spec="$(sed -n 's/^%global uhb_commit //p' "$SPEC")"
 uhb_script="$(sed -n 's/.*UHB_PIN:-\([0-9a-f]*\)}.*/\1/p' "$REPO/fixes/claw8ex-gyro/bpf/build-bpf.sh")"
 if [ -n "$uhb_spec" ] && [ "$uhb_spec" = "$uhb_script" ]; then ok; else bad "udev-hid-bpf pin differs: spec '$uhb_spec', build-bpf.sh '$uhb_script'"; fi

@@ -101,13 +101,25 @@ jobs:
           ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log export.log
           test -x app/build/gamecove.x86_64
           test -s app/build/gamecove.pck
-      - name: App tarball
+      - name: Licence texts are inside the app (review H8)
         run: |
-          ver="${{ steps.version.outputs.version }}"
+          mkdir -p /tmp/pckls && touch /tmp/pckls/project.godot
+          ./godot --headless --path /tmp/pckls -s "$PWD/packaging/tests/pck_files.gd" -- "$PWD/app/build/gamecove.pck" >pck-files.txt
+          for f in res://CREDITS.md res://fonts/OFL-Outfit.txt res://fonts/OFL-PlusJakartaSans.txt \
+            res://fonts/OFL-JetBrainsMono.txt res://addons/kenyoni/qr_code/LICENSE.md; do
+            grep -qx "$f" pck-files.txt || { echo "missing from gamecove.pck: $f" >&2; exit 1; }
+          done
+      - name: App tarball (with licenses/)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
           mkdir -p dist
-          tar -czf "dist/gamecove-${ver}-x86_64.tar.gz" -C app/build gamecove.x86_64 gamecove.pck
-          tar -tzf "dist/gamecove-${ver}-x86_64.tar.gz"
-      - uses: actions/upload-artifact@v4
+          sh packaging/make-app-tarball.sh app/build "dist/gamecove-${VERSION}-x86_64.tar.gz"
+          tar -tzf "dist/gamecove-${VERSION}-x86_64.tar.gz" | tee tarball-files.txt
+          sed -n 's/^[^#][^ ]* \(.*\)$/licenses\/\1/p' packaging/licenses.list | while read -r f; do
+            grep -qx "$f" tarball-files.txt || { echo "missing from the tarball: $f" >&2; exit 1; }
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: app
           path: dist/gamecove-*-x86_64.tar.gz
@@ -150,6 +162,9 @@ jobs:
           rpm -qlp "$top"/RPMS/x86_64/gamecove-*.rpm | tee rpm-files.txt
           grep -qx /usr/lib/gamecove/fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o rpm-files.txt
           grep -qx /usr/libexec/gamecove/gamecove-fix-set rpm-files.txt
+          sed -n 's/^[^#][^ ]* \(.*\)$/\/usr\/share\/licenses\/gamecove\/\1/p' packaging/licenses.list | while read -r f; do
+            grep -qx "$f" rpm-files.txt || { echo "missing from the RPM: $f" >&2; exit 1; }
+          done
           cp "$top"/RPMS/x86_64/gamecove-*.rpm "$top"/SRPMS/gamecove-*.src.rpm dist/
       - name: Sysext
         run: |
@@ -157,6 +172,10 @@ jobs:
           tar -xzf "dist/gamecove-${VERSION}-x86_64.tar.gz" -C app-export
           sh packaging/sysext/build-sysext.sh --app app-export --out sysext 2>&1 | tee sysext.log
           ! grep -q "no gyro HID-BPF object" sysext.log
+          unsquashfs -l sysext/gamecove.raw >sysext-files.txt
+          sed -n 's/^[^#][^ ]* \(.*\)$/usr\/share\/licenses\/gamecove\/\1/p' packaging/licenses.list | while read -r f; do
+            grep -q "/$f\$" sysext-files.txt || { echo "missing from the sysext: $f" >&2; exit 1; }
+          done
           mv sysext/gamecove.raw "dist/gamecove-${VERSION}-x86_64.raw"
       - name: Installer bootstrap (get-gamecove.sh fetches itself from the release, checked against SHA256SUMS)
         run: cp packaging/get-gamecove.sh dist/

@@ -66,6 +66,12 @@ mkdir -p app-export
 tar -xzf %{SOURCE1} -C app-export
 mkdir -p udev-hid-bpf
 tar -xzf %{SOURCE2} -C udev-hid-bpf --strip-components=1
+# licence and notice texts: every file packaging/licenses.list names (review H8)
+mkdir -p licenses
+while read -r src dest; do
+    case "$src" in ''|'#'*) continue ;; esac
+    install -pm0644 "$src" "licenses/$dest"
+done < packaging/licenses.list
 
 %build
 # The Godot app comes pre-exported in Source1. Build the gyro fix's HID-BPF
@@ -120,8 +126,8 @@ install -Dpm0644 packaging/polkit/io.github.ihulksmashi.gamecove.policy \
 mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 
 %files
-%license LICENSE LICENSES/GPL-2.0-only.txt fixes/claw8ex-vrr/LICENSE.ClawLab-MIT
-%doc README.md docs/SESSION.md
+%license licenses/*
+%doc README.md CREDITS.md docs/SESSION.md
 %dir %{_prefix}/lib/gamecove
 %{_prefix}/lib/gamecove/gamecove.x86_64
 %{_prefix}/lib/gamecove/gamecove.pck
