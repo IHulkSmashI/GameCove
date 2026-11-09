@@ -1,7 +1,7 @@
 extends RefCounted
 ## Runs programs for the system services (Updates, Storage, Setup, Controller).
-## The one place they touch OS.execute, so tests swap in
-## tests/fixtures/system/fake_runner.gd and nothing real ever runs.
+## Goes through exec_safe.gd (arguments reach the program byte for byte), so
+## tests swap in tests/fixtures/system/fake_runner.gd and nothing real ever runs.
 ##
 ## A runner has:
 ##   run(program, args) -> {"code": int, "out": String}   stdout and stderr together
@@ -9,10 +9,11 @@ extends RefCounted
 ## Both block: call them from a worker thread, never the main thread.
 
 
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
+
+
 func run(program: String, args: PackedStringArray) -> Dictionary:
-	var out: Array = []
-	var code := OS.execute(program, args, out, true)
-	return {"code": code, "out": str(out[0]) if out.size() > 0 else ""}
+	return ExecSafe.run(program, args, true)
 
 
 ## Reads the program's output line by line while it runs (for progress).

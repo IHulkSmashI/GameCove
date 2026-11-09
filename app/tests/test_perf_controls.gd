@@ -5,6 +5,7 @@ extends "res://tests/test_case.gd"
 ## launch environment and per-device files. Everything runs in a fixture tree
 ## under user:// with fake services; nothing touches the real system.
 
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 const ControlsScript := preload("res://scripts/controls/controls.gd")
 const PerfProvider := preload("res://scripts/controls/providers/perf.gd")
 const Fakes := preload("res://tests/fixtures/perf_controls/fakes.gd")
@@ -301,7 +302,7 @@ func test_upscaler_runs_the_helper_and_keeps_its_environment() -> void:
 	reg.set_value("perf.upscaler", "fsr31")
 	var last: String = runner.calls[runner.calls.size() - 1]
 	ok(last.begins_with("/usr/libexec/gamecove/gamecove-upscale choose --home ") and "--key epic:abc --dir /games/abc --upscaler fsr31 --fg 0" in last, "choose call: " + last)
-	ok("--gpu vendor=amd,family=amd-rdna3,arch=RDNA3.5,xmx=0 " in last, "GPU facts passed without quotes")
+	ok("--gpu {\"arch\":\"RDNA3.5\",\"chip\":\"\",\"family\":\"amd-rdna3\",\"vendor\":\"amd\",\"xmx\":false} " in last, "GPU facts passed as JSON: " + last)
 	var env: Dictionary = w["p"].launch_env_hook("epic:abc", EPIC)
 	eq(env.get("WINEDLLOVERRIDES"), "dxgi=n,b;", "non-Steam launch gets OptiScaler's override")
 	runner.answers["choose"] = {"ok": false, "error": "Decky Framegen has put OptiScaler in this game"}
@@ -333,12 +334,12 @@ func test_python_and_gdscript_choices_agree() -> void:
 	var helpers := ProjectSettings.globalize_path("res://").path_join("../packaging/helpers").simplify_path()
 	for dev in [CLAW, ALLY_X, DECK, {"gpu_family": "intel-xe-lpg"}, {}]:
 		var g := Upscale.gpu(dev)
-		var out := []
-		var code := OS.execute("python3", ["-I", "-c",
+		# the real argv path (exec_safe), so the JSON --gpu reaches Python intact
+		var r := ExecSafe.run("python3", PackedStringArray(["-I", "-c",
 			"import sys,json; sys.path.insert(0, sys.argv[1]); from gamecove_upscale import cli, games; g=cli.parse_gpu(sys.argv[2]); print(json.dumps([games.upscalers_for(g), games.fg_for(g)]))",
-			helpers, Upscale.gpu_arg(g)], out)
-		eq(code, 0, "python ran")
-		eq(JSON.parse_string(str(out[0]).strip_edges()), [Upscale.upscalers(g), Upscale.frame_gens(g)].map(func(a): return a.map(func(x): return float(x) if x is int else x)), "same choices for %s" % str(dev.get("gpu_family", "?")))
+			helpers, Upscale.gpu_arg(g)]), false)
+		eq(r["code"], 0, "python ran")
+		eq(JSON.parse_string(str(r["out"]).strip_edges()), [Upscale.upscalers(g), Upscale.frame_gens(g)].map(func(a): return a.map(func(x): return float(x) if x is int else x)), "same choices for %s" % str(dev.get("gpu_family", "?")))
 
 
 func test_python_helper_tests_pass() -> void:

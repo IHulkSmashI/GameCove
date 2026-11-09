@@ -38,8 +38,8 @@ def _state(home: str, gpu: dict) -> dict:
 
 
 def parse_gpu(text: str) -> dict:
-    """--gpu as JSON, or as vendor=amd,family=amd-rdna3,arch=RDNA3.5,xmx=0 (what GameCove sends: Godot's
-    OS.execute drops double quotes from arguments, so JSON can't pass through it)."""
+    """--gpu as a JSON object (what GameCove sends), or as vendor=amd,family=amd-rdna3,arch=RDNA3.5,xmx=0
+    (older GameCove builds and the installer's fixed xess-install call)."""
     text = text.strip()
     if text.startswith("{"):
         gpu = json.loads(text)

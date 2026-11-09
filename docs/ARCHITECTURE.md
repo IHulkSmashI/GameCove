@@ -27,6 +27,10 @@ GameCove is one Godot 4 app that runs as gamescope's main client, plus small hel
 | PC streaming drives Moonlight's CLI against a Vibepollo host | Moonlight decodes and pairs; GameCove only discovers, shows apps, wakes and follows the session ([STREAMING.md](STREAMING.md)) |
 | Packaging: RPM on Bazzite first, sysext on SteamOS, native on CachyOS | Flatpak can't start Steam or reach system D-Bus the way we need |
 
+## Running programs
+
+Everything that waits on a program and reads its output goes through `app/scripts/system/exec_safe.gd` (`ExecSafe.run(program, args, merge_stderr)` -> `{code, out}`), usually via a runner (`system/proc.gd`, `device/command_runner.gd`, `gamescope/command_runner.gd`, `ui/bg_command.gd`) that tests swap for a fake. Godot 4.7's `OS.execute()` with an output array rebuilds the arguments into a shell command line and loses double quotes (`{"a":"b c"}` arrives as `{a:b` and `c}`), which broke every JSON argument (InputPlumber over busctl) on real hardware. `ExecSafe` uses `OS.execute_with_pipe()`, which passes argv untouched, with a `sh -c 'exec 2>&1; exec "$0" "$@"'` wrapper (or `2>/dev/null`) so only one pipe is read and nothing can deadlock. It blocks: call it from worker threads. `tests/test_exec_safe.gd` runs real processes through every runner and fails if anything in `app/scripts` calls `OS.execute(` directly. Fire-and-forget starts keep using `OS.create_process()` (argv is passed intact).
+
 ## Open items
 
 - How Steam's overlay, on-screen keyboard and Steam Input behave outside Steam's own session. Test first on the Claw 8 EX.
