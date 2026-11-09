@@ -372,9 +372,10 @@ func save_current(game := "<current>", src := "") -> Dictionary:
 ## Replaces one layer. Unknown ids are kept; values must be bool/number/text.
 func set_layer(game: String, src: String, values: Dictionary) -> void:
 	var l := _layer_ref(game, src, true)
+	var ids := l.keys() + values.keys()
 	l.clear()
 	l.merge(_clean(values), true)
-	_touched(game, src)
+	_touched(game, src, true, ids)
 
 
 ## One value in one layer; null removes it.
@@ -386,7 +387,7 @@ func set_value(game: String, src: String, id: String, v: Variant) -> void:
 		l[id] = _clean({id: v})[id]
 	else:
 		return
-	_touched(game, src)
+	_touched(game, src, true, [id])
 
 
 ## Copies one layer onto another (replacing it). src "*" copies all three of
@@ -551,7 +552,10 @@ func _stack(game: String, src: String) -> Array:
 	return out
 
 
-func _touched(game: String, src: String, stamp := true) -> void:
+## `ids`: only these changed (re-apply just them; [] = everything). One saved
+## value must not re-apply the whole layer over something that set others on
+## purpose since (the battery saver's TDP was undone by saving the vibrance).
+func _touched(game: String, src: String, stamp := true, ids: Array = []) -> void:
 	if stamp and game != "" and _dev().get("games", {}).has(game):
 		_dev()["games"][game]["updated"] = int(Time.get_unix_time_from_system())
 	save_file()
@@ -560,7 +564,7 @@ func _touched(game: String, src: String, stamp := true) -> void:
 	var current_ctx := game == "" or game == game_key
 	var current_src := src in ["", "*", source]
 	if current_ctx and current_src and _first_detect_done:
-		apply_now("profile edited")
+		apply_now("profile edited", ids)
 
 
 func _remember_title(key: String, title: String) -> void:

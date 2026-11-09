@@ -431,3 +431,21 @@ func test_source_change_applies_with_the_new_range() -> void:
 	eq(_store["power.tdp"], 25.0, "unplugged: back within the battery range")
 	p.free()
 	_cleanup()
+
+
+## Saving one value re-applied the whole layer: turning on the battery saver
+## (it sets the TDP itself) and then changing the vibrance put the everyday
+## TDP back. An edit re-applies only what it changed. Found by the end-to-end
+## suite (restart test).
+func test_an_edit_reapplies_only_what_changed() -> void:
+	var p = _setup()
+	_reg.detect_all()
+	p.set_layer("", "", {"power.tdp": 20})
+	eq(_store["power.tdp"], 20.0, "everyday TDP applied")
+	_reg.set_value("power.tdp", 8)   # something else (battery saver) set it
+	p.set_value("", "", "perf.fps", 40)
+	eq(_store["perf.fps"], 40, "the edited value applies")
+	eq(_store["power.tdp"], 8.0, "the rest of the layer isn't re-applied")
+	p.set_value("", "", "power.tdp", null)
+	p.free()
+	_cleanup()
