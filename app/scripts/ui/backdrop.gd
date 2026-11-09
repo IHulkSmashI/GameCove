@@ -4,6 +4,12 @@ extends Control
 ## with a slow Ken Burns zoom and a gradient scrim so text on top always reads.
 ## The zoom is one 20 s tween per game, stopped by Reduce motion or idle, so
 ## a still screen costs nothing.
+##
+## Ambient glow: a soft radial light in the focused game's colour (its cover's
+## vibrant colour, picked once per cover by ArtCache and cached) over the
+## scrim, so moving the d-pad shifts the room's colour. One stretched
+## gradient texture; it eases to a new colour only when the game changes
+## (instantly under Reduce motion) and nothing runs while it sits still.
 
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const ArtColor := preload("res://theme/art_color.gd")
@@ -16,6 +22,9 @@ signal accent_changed(color: Color)
 const CROSSFADE := 0.25
 const KEN_BURNS_S := 20.0
 const KEN_BURNS_SCALE := 1.05
+## Strength of the ambient glow on dark themes.
+const GLOW_ALPHA := 0.32
+static var _glow_tex: GradientTexture2D
 
 var game: Dictionary = {}
 var accent := Color(0, 0, 0, 0)
@@ -24,6 +33,7 @@ var layers: Array[TextureRect] = []
 var tint: ColorRect
 var scrim_v: TextureRect
 var scrim_h: TextureRect
+var glow: TextureRect
 var _front := 0
 var _source := ""
 var _paused := false
@@ -63,6 +73,14 @@ func _init() -> void:
 	scrim_h.stretch_mode = TextureRect.STRETCH_SCALE
 	_fill(scrim_h)
 	add_child(scrim_h)
+	glow = TextureRect.new()
+	glow.name = "AmbientGlow"
+	glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	glow.stretch_mode = TextureRect.STRETCH_SCALE
+	glow.texture = glow_texture()
+	glow.modulate = Color(1, 1, 1, 0)
+	_fill(glow)
+	add_child(glow)
 	_restyle()
 
 
@@ -227,3 +245,32 @@ func current_accent() -> Color:
 func _apply_accent() -> void:
 	var a := accent if (UiPrefs.match_art and accent.a > 0.0) else ThemeLib.color("accent")
 	tint.color = Color(a, 0.10 if ThemeLib.is_dark() else 0.05)
+	if glow != null:
+		var on := UiPrefs.match_art and accent.a > 0.0
+		Motion.to(glow, "modulate", glow_color(accent) if on else Color(1, 1, 1, 0), Motion.SLOW)
+
+
+## The glow's colour for an art colour: brightened a little so it reads as
+## light, at GLOW_ALPHA (lower on the light theme).
+static func glow_color(c: Color) -> Color:
+	var lit := Color.from_hsv(c.h, minf(1.0, c.s * 1.1), maxf(c.v, 0.75))
+	return Color(lit, GLOW_ALPHA if ThemeLib.is_dark() else GLOW_ALPHA * 0.45)
+
+
+## A radial light, brightest a little right of centre and fading to nothing
+## at the edges; made once and shared.
+static func glow_texture() -> GradientTexture2D:
+	if _glow_tex != null:
+		return _glow_tex
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.40), Color(1, 1, 1, 0)])
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.width = 128
+	t.height = 128
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.62, 0.42)
+	t.fill_to = Vector2(1.12, 0.42)
+	_glow_tex = t
+	return t

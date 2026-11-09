@@ -134,7 +134,9 @@ func show_data(result: Dictionary) -> void:
 	var total := int(result.get("total", 0))
 	var unlocked := int(result.get("unlocked", 0))
 	if total <= 0:
-		summary.text = TG.ACH_TITLE
+		# The card's heading already says Achievements: no second title.
+		summary.text = ""
+		summary.visible = false
 		percent_label.text = ""
 		bar.visible = false
 		_detail.visible = false
@@ -145,6 +147,7 @@ func show_data(result: Dictionary) -> void:
 		return
 	_status.visible = false
 	bar.visible = true
+	summary.visible = true
 	summary.text = "%d of %d unlocked" % [unlocked, total]
 	percent_label.text = "%d%%" % roundi(100.0 * unlocked / total)
 	bar.set_value(float(unlocked) / total, false)

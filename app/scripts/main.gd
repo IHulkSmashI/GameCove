@@ -698,6 +698,7 @@ static func release_caches() -> void:
 	ThemeLib._knobs.clear()
 	ThemeLib._gradients.clear()
 	Kit._art_cache.clear()
+	Backdrop._glow_tex = null
 
 
 func _on_live_tick() -> void:

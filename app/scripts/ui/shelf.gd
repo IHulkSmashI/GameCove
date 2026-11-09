@@ -128,6 +128,18 @@ func _update_fade() -> void:
 	var bar := scroll.get_h_scroll_bar()
 	_fades[0].visible = bar.value > 1.0
 	_fades[1].visible = bar.max_value - bar.page - bar.value > 1.0
+	# A cover the edge cuts into fades with it, so the cut never reads as a
+	# hard edge (a tile's own dimming, e.g. an asleep PC, is kept in meta).
+	var x0 := float(bar.value)
+	var x1 := x0 + scroll.size.x
+	var pitch := tile_size.x + GAP
+	for i in tiles.size():
+		var t: Control = tiles[i]
+		var left := PAD.x + i * pitch
+		var right := left + tile_size.x
+		var seen := clampf((minf(right, x1) - maxf(left, x0)) / tile_size.x, 0.0, 1.0)
+		var a := 1.0 if seen >= 0.98 else lerpf(0.2, 0.85, seen)
+		t.modulate.a = float(t.get_meta("base_alpha", 1.0)) * a
 
 
 ## [left faded, right faded].

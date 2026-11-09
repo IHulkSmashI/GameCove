@@ -79,7 +79,12 @@ const ACH_HIDDEN_DETAIL := "Keep playing to find out."
 const ACH_LOCKED := "Locked"
 
 const ABOUT := "About this game"
-const SETTINGS_TITLE := "Settings for this game"
+## Time to beat as three chips on the game page.
+const TTB_MAIN := "Main"
+const TTB_EXTRAS := "Extras"
+const TTB_ALL := "100%"
+const TTB_FROM := "Times from %d %s"
+const SETTINGS_TITLE := "Launch settings"
 const SETTINGS_SUB := "Saved for this game and used every time it starts."
 
 # ------------------------------------------------------------ install picker

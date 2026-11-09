@@ -147,10 +147,13 @@ func rebuild() -> void:
 		steam_button.name = "SteamInput"
 		steam_button.custom_minimum_size = Vector2(0, 48)
 		steam_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		var logo := BrandMark.texture("steam", 20)
+		# A small monochrome Steam mark (a full-colour logo outweighed every
+		# other button on the page).
+		var logo := BrandMark.texture("steam", 18, ThemeLib.color("text_2"))
 		if logo != null:
 			steam_button.icon = logo
 			steam_button.expand_icon = false
+			steam_button.add_theme_constant_override("icon_max_width", 18)
 		steam_button.tooltip_text = TC.GYRO_STEAM_LINE
 		steam_button.pressed.connect(_on_steam_input)
 		add_child(steam_button)
