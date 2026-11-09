@@ -21,6 +21,8 @@
 # mode, speed, multi_intensity, brightness, effect, enabled; colours scale by
 # multi_max_intensity (the ring is 0-100, not 0-255). py_modules/devices/asus_ally.py:
 # the Ally's multi_index may list 12 channels (4 zones x RGB); each zone gets the colour.
+# hid-asus-ally (OGC patch 0155) lists "rgb rgb rgb rgb" instead: one packed 0xRRGGBB
+# intensity per zone; every zone gets the colour.
 #
 #   fix.sh set <zone>,<rrggbb>,<percent>[,<effect>[,<speed percent>]]
 #                     zone: all, or the node's index in name order (0..9)
@@ -82,10 +84,11 @@ rgb_line() {
 			red) v=$r ;;
 			green) v=$g ;;
 			blue) v=$b ;;
+			rgb) v=$(((r << 16) | (g << 8) | b)) ;;   # hid-asus Ally zone: packed 0xRRGGBB
 			*) v=0 ;;
 		esac
 		mx="$(chan_max "$1" "$i")"
-		[ "$mx" -eq 255 ] || v=$(((v * mx + 127) / 255))
+		[ "$c" = rgb ] || [ "$mx" -eq 255 ] || v=$(((v * mx + 127) / 255))
 		out="$out $v"
 		i=$((i + 1))
 	done
@@ -105,6 +108,10 @@ hex_of() {
 		[ $# -gt 0 ] && shift
 		mx="$(chan_max "$d" "$i")"
 		i=$((i + 1))
+		if [ "$c" = rgb ]; then
+			printf '%02x%02x%02x\n' $(((v >> 16) & 255)) $(((v >> 8) & 255)) $((v & 255))
+			return 0
+		fi
 		[ "$mx" -eq 255 ] || v=$(((v * 255 + mx / 2) / mx))
 		case "$c" in
 			red) r=$v ;;

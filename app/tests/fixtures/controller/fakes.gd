@@ -39,9 +39,11 @@ var pkexec_calls: Array = []
 var fix_dir := ProjectSettings.globalize_path("res://").path_join("../fixes")
 
 
-func _init(root: String) -> void:
+func _init(root: String, with_helper := true) -> void:
 	sys_root = root
 	runner.handler = _handle
+	if with_helper:   # the root helper is installed (its stand-in; _pkexec runs the real fix)
+		write(root + "/usr/libexec/gamecove/gamecove-fix-set", "#!/bin/sh")
 
 
 func ctx(row: Dictionary, home := "") -> Dictionary:

@@ -479,6 +479,32 @@ func test_zotac_two_zones() -> void:
 	reg.free()
 
 
+## The original ROG Ally on SteamOS 3.10 (kernel 7.2.4-valve1-1-neptune): hid-asus-ally's
+## node lists "rgb rgb rgb rgb" (one packed 0xRRGGBB per zone), brightness 128/255,
+## sleep_animation, and is 0644 root: writes go through the root action.
+func test_ally_live_packed_rgb_zones() -> void:
+	var f: RefCounted = Fakes.new(_root("ally_live_led"))
+	f.with_ip("ASUS ROG Ally", ["Gamepad:Button:South"])
+	var n := "/sys/class/leds/ally:rgb:joystick_rings"
+	f.led("ally:rgb:joystick_rings", "rgb rgb rgb rgb", "16744448 16744448 16744448 16744448", 255, 128,
+		{"sleep_animation": "0", "sleep_animation_index": "0 1"})
+	var reg := _setup(f, _row("asus-rog-ally"))
+	ok(_avail(reg, "controller.led_color"), "colour (" + _reason(reg, "controller.led_color") + ")")
+	eq(_value(reg, "controller.led_color"), "#ff8000", "packed 0xff8000")
+	eq(_value(reg, "controller.led_brightness"), 50.0, "128 of 255")
+	ok(_w(reg, "controller.led_color", "#102030"), "colour")
+	eq(f.read(n + "/multi_intensity"), "1056816 1056816 1056816 1056816", "every zone gets 0x102030")
+	eq(f.pkexec_calls.size(), 1, "0644 root: the root action")
+	eq(f.read(n + "/sleep_animation"), "0", "never touched")
+	reg.free()
+	var g: RefCounted = Fakes.new(_root("ally_live_led_nohelper"), false)
+	g.with_ip("ASUS ROG Ally", ["Gamepad:Button:South"])
+	g.led("ally:rgb:joystick_rings", "rgb rgb rgb rgb", "0 0 0 0", 255, 128)
+	var reg2 := _setup(g, _row("asus-rog-ally"))
+	eq(_reason(reg2, "controller.led_color"), Provider.R_LED_HELPER, "root-only node without the helper says so")
+	reg2.free()
+
+
 func test_ally_twelve_channel_leds() -> void:
 	var f: RefCounted = Fakes.new(_root("ally_led"))
 	f.with_ip("ASUS ROG Ally", ["Gamepad:Button:South", "Gyroscope:Center"])

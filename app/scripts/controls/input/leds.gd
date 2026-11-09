@@ -124,13 +124,18 @@ static func read_node(path: String) -> Dictionary:
 	return node
 
 
-## The colour a node shows (first red/green/blue triplet).
+## The colour a node shows (first red/green/blue triplet, or the first packed "rgb"
+## channel: hid-asus's Ally rings list multi_index "rgb rgb rgb rgb", one 0xRRGGBB
+## intensity per zone; OGC patch 0155 "hid-asus-ally: Add joystick LED ring support").
 static func color_of(node: Dictionary) -> Color:
 	var rgb := {"red": 0, "green": 0, "blue": 0}
 	var idx: Array = node.get("index", [])
 	var inten: Array = node.get("intensity", [])
 	var mx: Array = node.get("chan_max", [])
 	for i in mini(idx.size(), inten.size()):
+		if idx[i] == "rgb":
+			var v := int(inten[i])
+			return Color8((v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff)
 		if idx[i] in rgb and rgb[idx[i]] == 0:
 			var top := int(mx[i]) if i < mx.size() and int(mx[i]) > 0 else 255
 			rgb[idx[i]] = clampi(int(roundf(float(inten[i]) * 255.0 / float(top))), 0, 255)
@@ -232,6 +237,9 @@ static func intensity_line(node: Dictionary, color: Color) -> String:
 	var out := PackedStringArray()
 	var idx: Array = node.get("index", [])
 	for i in idx.size():
+		if idx[i] == "rgb":   # packed 0xRRGGBB (hid-asus Ally zones)
+			out.append(str((color.r8 << 16) | (color.g8 << 8) | color.b8))
+			continue
 		var v: int = rgb.get(idx[i], 0)
 		var top := int(mx[i]) if i < mx.size() and int(mx[i]) > 0 else 255
 		if top != 255:
@@ -309,3 +317,8 @@ static func apply_direct(nodes: Array, s: String) -> int:
 static func _already(node: Dictionary, s: String) -> bool:
 	var p := s.split(",")
 	return p.size() <= 3 or p[3] in node.get("effects", [])
+
+
+## True when GameCove can change the node's colour and brightness without root.
+static func direct_capable(node: Dictionary) -> bool:
+	return writable(str(node.get("path", "")) + "/multi_intensity") and writable(str(node.get("path", "")) + "/brightness")

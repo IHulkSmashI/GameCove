@@ -31,6 +31,7 @@ const R_GYRO_FIX := "Needs the gyro fix first (Device, Fixes)"
 const R_GYRO_AIM := "Set gyro aiming in Steam's controller settings for the game"
 const R_DEADZONE_IP := "InputPlumber has no deadzone setting; Steam's controller settings have one per game"
 const R_NO_RGB := "This handheld has no RGB lights"
+const R_LED_HELPER := "Needs GameCove's root helper (install GameCove's system part)"
 const R_RGB_BACKEND := "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver"
 const R_NO_PAD := "This handheld has no trackpad"
 const CLAW8EX_OVERRIDE := "/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"
@@ -727,7 +728,14 @@ func _deadzone(name: String, key: String, title: String) -> RefCounted:
 
 func _rgb_block() -> String:
 	match be.rgb_backend():
-		"hhd", "sysfs":
+		"hhd":
+			return ""
+		"sysfs":
+			# root-only nodes (the Ally's ally:rgb:joystick_rings is 0644) need the
+			# no-password root action; world-writable ones (the Claw's hid-msi) don't
+			var n: Dictionary = be.leds()[0]
+			if not Leds.direct_capable(n) and not FileAccess.file_exists(str(ctx.get("sys_root", "")) + FIX_SET_HELPER):
+				return R_LED_HELPER
 			return ""
 	return R_NO_RGB if not hw["rgb"] else R_RGB_BACKEND
 
