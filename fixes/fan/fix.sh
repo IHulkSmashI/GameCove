@@ -37,9 +37,13 @@
 #   fix.sh remove           put the recorded values back and forget them
 #
 # Presets (percent per point):
-#   msi_wmi_platform       quiet 0 40 40 45 60 75 (ClawDeck's known-good Claw tables), max 100 x 6
-#   asus_custom_fan_curve  temperatures 30 40 50 60 70 80 90 100 C; quiet 2 5 17 35 55 75 75 75
+#   msi_wmi_platform       quiet 0 40 40 45 60 100 (ClawDeck's known-good Claw table, the EC's points are
+#                          50..100 C), max 100 x 6
+#   asus_custom_fan_curve  temperatures 30 40 50 60 70 80 90 100 C; quiet 2 5 17 35 55 75 75 100
 #                          (Handheld Daemon's minimum curve up to 50 C, its default curve above), max 100 x 8
+#   Quiet is quiet where the chip is cool, never at the hottest point: its last point is full speed
+#   (review L6), as Handheld Daemon's Lenovo default curve does (100 % from 90 C) and as fan curves
+#   generally end. Custom curves can't go under Quiet, so they end at full speed too.
 # Must match FAN_DRIVERS in app/scripts/device/power.gd.
 #
 # Only on the handhelds listed in ../lib/handhelds.txt (generated from devices.json):
@@ -161,9 +165,9 @@ do_install() {
 
 table_for() {
 	case "$DRIVER:$1" in
-		msi_wmi_platform:quiet) echo "0 40 40 45 60 75" ;;
+		msi_wmi_platform:quiet) echo "0 40 40 45 60 100" ;;
 		msi_wmi_platform:max) echo "100 100 100 100 100 100" ;;
-		asus_custom_fan_curve:quiet) echo "2 5 17 35 55 75 75 75" ;;
+		asus_custom_fan_curve:quiet) echo "2 5 17 35 55 75 75 100" ;;
 		asus_custom_fan_curve:max) echo "100 100 100 100 100 100 100 100" ;;
 		*) return 1 ;;
 	esac

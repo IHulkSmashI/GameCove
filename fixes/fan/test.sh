@@ -25,7 +25,7 @@ sh "$FIX" status | tail -n 1 | grep -q '^state=off$' || fail "status ends state=
 sh "$FIX" set quiet >/dev/null || fail "set quiet"
 sh "$FIX" status | tail -n 1 | grep -q '^state=on$' || fail "status ends state=on after set"
 for n in 1 2; do
-	[ "$(table $n)" = "0 102 102 115 153 191" ] || fail "fan $n quiet table ($(table $n))"
+	[ "$(table $n)" = "0 102 102 115 153 255" ] || fail "fan $n quiet table (full speed at the hottest point, review L6) ($(table $n))"
 	[ "$(cat "$H/pwm${n}_enable")" = "1" ] || fail "fan $n table mode"
 	[ "$(cat "$H/pwm${n}_auto_point3_temp")" = "70000" ] || fail "temperatures untouched"
 done
@@ -85,7 +85,7 @@ R="$(new_hw asus_custom_fan_curve 2)"; export GAMECOVE_ROOT="$R"; A="$R/sys/clas
 sh "$FIX" status | grep -q '^driver=asus_custom_fan_curve$' || fail "asus: driver in status"
 sh "$FIX" status | grep -q '^modes=quiet,auto,max$' || fail "asus: modes in status"
 sh "$FIX" set quiet >/dev/null || fail "asus: set quiet"
-[ "$(cat "$A/pwm2_auto_point1_pwm") $(cat "$A/pwm2_auto_point8_pwm")" = "5 191" ] || fail "asus: quiet duty"
+[ "$(cat "$A/pwm2_auto_point1_pwm") $(cat "$A/pwm2_auto_point8_pwm")" = "5 255" ] || fail "asus: quiet duty (full speed at 100 C, review L6)"
 [ "$(cat "$A/pwm1_auto_point1_temp") $(cat "$A/pwm1_auto_point8_temp")" = "30 100" ] || fail "asus: curve temperatures"
 [ "$(cat "$A/pwm1_enable")" = "1" ] || fail "asus: custom curve on"
 sh "$FIX" set max >/dev/null || fail "asus: set max"
