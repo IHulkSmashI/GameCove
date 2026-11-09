@@ -10,6 +10,7 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 const SKit := preload("res://scripts/ui/settings/kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
+const BrandMark := preload("res://scripts/ui/brand_mark.gd")
 
 var key := ""
 var selected := false
@@ -62,7 +63,13 @@ func setup(card_key: String, title: String, line: String, icon := "", badge: Arr
 		tsb.border_color = ThemeLib.color("line_2")
 		tsb.set_border_width_all(1)
 		tile.add_theme_stylebox_override("panel", tsb)
-		tile.add_child(Icons.rect(icon, 26, ThemeLib.color("accent")))
+		# "brand:<name>" shows that brand's logo (store cards), else the icon.
+		var mark: TextureRect = BrandMark.rect(icon.substr(6), 26, ThemeLib.color("accent")) if icon.begins_with("brand:") else null
+		if mark != null:
+			mark.custom_minimum_size = Vector2(26, 26)
+			tile.add_child(mark)
+		else:
+			tile.add_child(Icons.rect("store" if icon.begins_with("brand:") else icon, 26, ThemeLib.color("accent")))
 		top.add_child(tile)
 		top.add_child(Kit.spacer())
 		if b != null:

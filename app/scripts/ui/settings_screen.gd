@@ -355,7 +355,10 @@ func _link() -> void:
 		return
 	Kit.link_vertical(chain, top_target)
 	for c in chain:
-		c.focus_neighbor_left = c.get_path_to(cat)
+		# panels with columns (About this device) keep their own left move
+		if c.focus_neighbor_left.is_empty() or c.get_node_or_null(c.focus_neighbor_left) in cat_buttons.values() \
+				or c.get_node_or_null(c.focus_neighbor_left) == c:
+			c.focus_neighbor_left = c.get_path_to(cat)
 
 
 func set_top_target(c: Control) -> void:

@@ -219,7 +219,14 @@ func test_settings_open_category() -> void:
 
 
 func test_brand_mark_falls_back_to_text() -> void:
-	ok(BrandMark.rect("MSI", 22) == null, "makers have no logo: callers keep the name")
+	ok(BrandMark.rect("AYANEO", 22) == null, "a maker without a logo: callers keep the name")
+	ok(BrandMark.rect("", 22) == null, "no name, no logo")
+	ok(BrandMark.rect("Some Unknown Store", 22) == null, "unknown brand: text")
+	var msi := BrandMark.rect("Micro-Star International Co., Ltd.", 22)
+	ok(msi != null and msi.texture != null, "DMI vendor string finds the maker's logo")
+	if msi != null:
+		ok(msi.custom_minimum_size.y == 22 and msi.custom_minimum_size.x >= 22, "sized to the row, width from the logo")
+		msi.free()
 	var heroic := BrandMark.rect("heroic", 22)
 	ok(heroic != null and heroic.texture != null, "a bundled logo the owner allows")
 	if heroic != null:
@@ -244,3 +251,37 @@ func test_installer_xess_card() -> void:
 	eq(TI.task_title({"id": "xess_install"}), "Install the XeSS XMX driver", "task title")
 	eq(TI.task_title({"id": "xess_remove"}), "Remove the XeSS XMX driver", "undo title")
 	T._free(s)
+
+
+func test_installer_store_cards_show_logos() -> void:
+	var T = load("res://tests/test_installer_ui.gd").new()
+	var s: Control = T._screen(load("res://tests/fixtures/installer/fakes.gd").target("bazzite"))
+	s.plan.step = "stores"
+	s.show_step()
+	var epic: Node = s.body.find_child("Card_store_epic", true, false)
+	ok(epic != null and epic.find_child("BrandLogo", true, false) != null, "Epic card carries the Epic logo")
+	var amazon: Node = s.body.find_child("Card_store_amazon", true, false)
+	ok(amazon != null and amazon.find_child("BrandLogo", true, false) == null, "Amazon has no logo: the store icon")
+	T._free(s)
+
+
+func test_game_header_store_logo_keeps_the_name() -> void:
+	var H: GDScript = load("res://scripts/ui/game_header.gd")
+	var h: Node = H.new()
+	h.show_game({"key": "steam:1", "title": "Hades", "store": "steam"})
+	ok(h.meta.find_child("StoreLogo", true, false) != null, "Steam logo leads the meta line")
+	ok(h.meta_text().contains("Steam"), "the store's name stays in the text")
+	h.show_game({"key": "amazon:1", "title": "Hades", "store": "amazon"})
+	ok(h.meta.find_child("StoreLogo", true, false) == null, "no logo for Amazon: text only")
+	ok(h.meta_text().contains("Amazon"), "name shown")
+	h.free()
+
+
+func test_about_panel_maker_logo() -> void:
+	var Fakes: GDScript = load("res://tests/fixtures/device_ui/fakes.gd")
+	var s: Dictionary = Fakes.services()
+	var p: Control = load("res://scripts/ui/device/about_panel.gd").build(s)
+	ok(p.find_child("MakerLogo", true, false) != null, "MSI logo over the device name")
+	ok(p.find_child("DeviceName", true, false) != null, "name kept")
+	p.free()
+	Fakes.free_services(s)

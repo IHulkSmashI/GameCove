@@ -348,6 +348,13 @@ func _set_header(g: Dictionary) -> void:
 
 
 func _style_head() -> void:
+	# Near-opaque glass: the hint bar and shelves mustn't ghost through the rows.
+	panel.remove_theme_stylebox_override("panel")
+	var base := panel.get_theme_stylebox("panel")
+	if base is StyleBoxFlat:
+		var sb := (base as StyleBoxFlat).duplicate() as StyleBoxFlat
+		sb.bg_color.a = maxf(sb.bg_color.a, 0.97)
+		panel.add_theme_stylebox_override("panel", sb)
 	var lp := panel.find_child("LivePill", true, false) as PanelContainer
 	if lp != null:
 		lp.add_theme_stylebox_override("panel", ThemeLib.pill(ThemeLib.color("accent", 0.08), ThemeLib.color("accent", 0.35), 12, 5))
@@ -883,7 +890,7 @@ func _build_device() -> void:
 	var level: String = device.support_level() if device.has_method("support_level") else "generic"
 	var head := Kit.hbox(12)
 	head.name = "DeviceHead"
-	var maker := BrandMark.rect(str(p.get("maker", p.get("vendor", ""))), 28)
+	var maker := BrandMark.rect(maker_name(p, device.display_name()), 24)
 	if maker != null:
 		head.add_child(maker)
 	var names := Kit.vbox(2)
@@ -924,6 +931,16 @@ func _build_device() -> void:
 	steam.add_child(Kit.label(Texts.STEAM_EXPLAIN, "QuietLabel", true))
 	body.add_child(steam)
 	_parts.append(_steam_button)
+
+
+## The maker to show a logo for: the row's maker or DMI vendor, else the
+## first word of the device's name ("MSI Claw 8 EX" -> "MSI").
+static func maker_name(profile: Dictionary, display: String) -> String:
+	var m := str(profile.get("maker", profile.get("vendor", ""))).strip_edges()
+	if m != "":
+		return m
+	var words := display.strip_edges().split(" ", false)
+	return words[0] if not words.is_empty() else ""
 
 
 ## "3 applied, all good" from the Fixes service, else how many fixes the

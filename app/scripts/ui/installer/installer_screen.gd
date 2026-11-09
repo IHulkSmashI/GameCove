@@ -851,7 +851,7 @@ func _build_stores() -> void:
 			else TI.STORE_ROW_LINE.get(str(info.get("how", "")), "")
 		var badge: Array = [TS.SIGNED_IN, "good"] if signed else ([TI.BROWSER_SIGNIN, "info"] if can else [TS.NOT_SIGNED_IN, ""])
 		var foot: String = TI.STORE_READY if signed else (TI.SIGN_IN_BROWSER if can else TI.STORE_NOT_HERE)
-		var c := _card("store_" + store, TS.STORE_NAMES[store], line, "store", badge, "", foot, foot, cards)
+		var c := _card("store_" + store, TS.STORE_NAMES[store], line, "brand:" + store, badge, "", foot, foot, cards)
 		c.set_selected(signed)
 		if can:
 			c.pressed.connect(func(): open_sign_in(store))

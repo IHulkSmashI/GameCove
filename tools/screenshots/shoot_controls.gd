@@ -8,6 +8,8 @@ extends "shoot.gd"
 ## running), and the real Profiles on a temporary file.
 ##
 ##   SHOOT_SCRIPT=shoot_controls.gd tools/screenshots/shoot.sh /tmp/shots [WxH] [only,these]
+##   SHOOT_THEME=midnight|sunset|light renders the whole set in that theme
+##   (the per-theme extras are skipped then).
 
 const FakeControls := preload("res://tests/fixtures/ui_controls/fake_controls.gd")
 const ProfilesScript := preload("res://scripts/controls/profiles.gd")
@@ -17,7 +19,7 @@ const SHOTS := ["controls_quick_game", "controls_quick_game_everyday", "controls
 	"controls_settings_fan_curve", "controls_settings_display", "controls_settings_controller", "controls_settings_lights",
 	"controls_settings_performance", "controls_settings_system", "controls_settings_profiles", "controls_settings_fixes",
 	"controls_settings_more", "controls_keep", "controls_game_page", "controls_quick_midnight", "controls_settings_light",
-	"controls_quick_sunset", "controls_quick_legion"]
+	"controls_quick_sunset", "controls_quick_legion", "controls_settings_about", "controls_settings_stores"]
 
 var fake: Node
 var profiles: Node
@@ -122,6 +124,9 @@ func _run() -> void:
 	var prefs = load("res://scripts/ui/ui_prefs.gd")
 	prefs.path = "/tmp/gamecove-shots/ui-controls.cfg"
 	DirAccess.remove_absolute(prefs.path)
+	if theme_override() != "":
+		prefs.theme = theme_override()
+		prefs.match_art = theme_override() != "light"
 	load("res://scripts/main.gd").boot_splash = false
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
@@ -331,6 +336,15 @@ func _settings_shots_controls() -> void:
 		st.open_category("device", "fixes")
 		await frames(12)
 		await shot("controls_settings_fixes")
+	if want(["controls_settings_about"]):
+		main.show_screen("settings")
+		await frames(4)
+		st.open_category("device", "about")
+		await frames(12)
+		await shot("controls_settings_about")
+	if want(["controls_settings_stores"]):
+		await _settings_page("stores")
+		await shot("controls_settings_stores")
 	if want(["controls_keep"]):
 		await _settings_page("display", "display.hdr")
 		var KeepDialog = load("res://scripts/ui/controls/keep_dialog.gd")
@@ -357,7 +371,13 @@ func _game_page_shot() -> void:
 	main._close_page()
 
 
+static func theme_override() -> String:
+	return OS.get_environment("SHOOT_THEME")
+
+
 func _theme_shots() -> void:
+	if theme_override() != "":
+		return
 	var prefs = load("res://scripts/ui/ui_prefs.gd")
 	var g := _game(0)
 	for t in [["controls_quick_midnight", "midnight", 1, "power.tdp"], ["controls_quick_sunset", "sunset", 4, "controller.emulation"]]:
