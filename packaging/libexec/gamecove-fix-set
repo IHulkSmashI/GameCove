@@ -13,6 +13,8 @@
 # /usr/libexec/gamecove/gamecove-fix, which needs an administrator password.
 #
 #   charge-limit  set <50-100>                   battery charge limit (sysfs)
+#   charge-limit  set release                    let it charge now, keep the limit
+#                                                (GameCove's session runs it on exit)
 #   fan           set auto|quiet|max             fan preset (sysfs)
 #   claw8ex-gyro  set accel-on|accel-off         accelerometer in the InputPlumber override
 #                                                (the gyro fix must already be installed)
@@ -67,7 +69,7 @@ esac
 
 value="$3"
 case "$name:$value" in
-charge-limit:[5-9][0-9] | charge-limit:100) ;;
+charge-limit:[5-9][0-9] | charge-limit:100 | charge-limit:release) ;;
 fan:auto | fan:quiet | fan:max) ;;
 claw8ex-gyro:accel-on | claw8ex-gyro:accel-off) ;;
 *) die "value not allowed for $name" 66 ;;

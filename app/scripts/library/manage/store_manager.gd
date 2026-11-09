@@ -72,6 +72,8 @@ func _init(job_runner: Object = null) -> void:
 	steam.progress.connect(func(appid, d, t, r, e): download_progress.emit("steam:" + appid, d, t, r, e))
 	steam.state_changed.connect(_on_steam_state)
 	steam.finished.connect(_on_steam_finished)
+	steam.setting_failed.connect(func(appid: String, what: String, msg: String):
+		action_failed.emit("steam:" + appid, what, msg))
 	steam.window_needed.connect(func(appid, reason): _need_window("steam:" + appid, "steam", reason))
 	steam.pending_changed.connect(_save_settings)
 
@@ -176,8 +178,7 @@ func _facts(entry: Dictionary, options: Dictionary) -> Dictionary:
 		"home": home,
 		"options": options,
 		"gog_auth_exists": root != "" and FileAccess.file_exists(root.path_join("gog_store/auth.json")),
-		"gog_marker_exists": path != "" and (FileAccess.file_exists(path.path_join("goggame-%s.info" % id))
-			or FileAccess.file_exists(path.path_join("gameinfo")) or FileAccess.file_exists(path.path_join("start.sh"))),
+		"gog_marker_exists": StoreCommands.gog_folder_is(path, id),
 	}
 
 
@@ -278,6 +279,9 @@ func _do(action: String, game: Dictionary, options: Dictionary) -> Dictionary:
 	if action == "install":
 		var base := str(p["finalize"].get("base", ""))
 		DirAccess.make_dir_recursive_absolute(base)
+		if p["finalize"].has("gog_record"):
+			# what was there before, so the new folder can be told apart after
+			p["finalize"]["before"] = StoreCommands.list_dirs(base)
 	var job := queue.add(key, action, p, str(e.get("title", "")))
 	if job.is_empty():
 		return _fail(key, action, "Already in the download queue")
@@ -376,6 +380,31 @@ func set_launch_options(game: Dictionary, options: String) -> Dictionary:
 	c["args"] = options
 	_launcher().save_compat(_key(e), c)
 	return _ok("gamecove")
+
+
+## The same three reads with the result on `done` (main thread). Steam's come
+## from big files on a thread; the others are in memory and answer at once.
+func launch_options_async(game: Dictionary, done: Callable) -> void:
+	var e := _entry(game)
+	if str(e.get("store", "")) == "steam":
+		steam.launch_options_async(str(e["id"]), done)
+	else:
+		done.call(launch_options(game))
+
+
+func compat_tool_async(game: Dictionary, done: Callable) -> void:
+	var e := _entry(game)
+	if str(e.get("store", "")) == "steam":
+		steam.compat_tool_async(str(e["id"]), done)
+	else:
+		done.call(compat_tool(game))
+
+
+func compat_tools_async(game: Dictionary, done: Callable) -> void:
+	if str(_entry(game).get("store", game.get("store", ""))) == "steam":
+		steam.compat_tools_async(done)
+	else:
+		done.call(compat_tools(game))
 
 
 func compat_tool(game: Dictionary) -> String:
@@ -477,10 +506,19 @@ func _finalize(j: Dictionary) -> void:
 	var list := StoreCommands.read_gog_record(home)
 	match str(f["gog_record"]):
 		"add":
-			var path := StoreCommands.find_gog_install(str(f.get("base", "")), id)
+			var taken: Array = []
+			for item in list:
+				if item is Dictionary and str(item.get("appName", "")) != id:
+					taken.append(str(item.get("install_path", "")))
+			var path := StoreCommands.find_gog_install(str(f.get("base", "")), id, f.get("before"), taken)
 			if path == "":
-				action_failed.emit(j["key"], j["action"], "Installed, but couldn't find the game folder in %s" % f.get("base", ""))
+				action_failed.emit(j["key"], j["action"], "Installed, but couldn't tell which folder in %s is the game" % f.get("base", ""))
 				return
+			# proof for uninstall later: this folder is this game's
+			var mark := FileAccess.open(path.path_join(StoreCommands.GOG_OWNER_FILE % id), FileAccess.WRITE)
+			if mark != null:
+				mark.store_string(id + "\n")
+				mark.close()
 			list = StoreCommands.gog_record_with(list, {"appName": id, "install_path": path, "platform": str(f.get("platform", "windows")), "title": j["title"]})
 		"remove":
 			list = StoreCommands.gog_record_with(list, {"appName": id}, true)

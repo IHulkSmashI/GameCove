@@ -4,7 +4,8 @@
 #
 # 1. Starts Steam in the background (unless GAMECOVE_STEAM_MODE=off) so
 #    steam://rungameid/ launches are instant and Steam Input is live.
-# 2. Replaces itself with the GameCove Godot app on gamescope's X display.
+# 2. Runs the GameCove Godot app on gamescope's X display, and when it exits
+#    (even by a crash) puts InputPlumber's InterceptMode back to 0.
 #
 # Settings (environment, e.g. ~/.config/environment.d/gamecove.conf):
 #   GAMECOVE_STEAM_MODE  silent (default) | gamepadui (experimental) | off
@@ -57,5 +58,28 @@ if [ ! -x "$GAMECOVE_BIN" ]; then
 	exit 1
 fi
 
+# InputPlumber: put every device back to InterceptMode 0 (GameCove sets 2 while
+# its UI has focus; after a crash nobody would be listening).
+reset_input_intercept() {
+	command -v busctl >/dev/null 2>&1 || return 0
+	for dev in $(busctl --system --list tree org.shadowblip.InputPlumber 2>/dev/null |
+		grep -E '^/org/shadowblip/InputPlumber/CompositeDevice[0-9]+$'); do
+		busctl --system --timeout=2 set-property org.shadowblip.InputPlumber "$dev" \
+			org.shadowblip.Input.CompositeDevice InterceptMode u 0 >/dev/null 2>&1 || true
+	done
+}
+
 # X11 on purpose: gamescope reads focus and overlay properties from X windows.
-exec "$GAMECOVE_BIN" --display-driver x11 --rendering-driver opengl3 --fullscreen "$@"
+# Not exec'd: when the app exits (or crashes) we still hand the controller back.
+"$GAMECOVE_BIN" --display-driver x11 --rendering-driver opengl3 --fullscreen "$@" &
+app=$!
+trap 'kill -TERM "$app" 2>/dev/null' TERM INT HUP
+code=0
+wait "$app" || code=$?
+# a signal interrupts wait before the app is gone: wait for the real exit
+while kill -0 "$app" 2>/dev/null; do
+	code=0
+	wait "$app" || code=$?
+done
+reset_input_intercept
+exit "$code"

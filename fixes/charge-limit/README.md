@@ -14,7 +14,13 @@ Used only when neither steamos-manager (`BatteryChargeLimit1.MaxChargeLevel`) no
 | `install` | Records the current limit in `/var/lib/gamecove/fixes/charge-limit/original` |
 | `set <50-100>` | Sets the limit (installs first). 100 = no limit: the recorded value when it was the firmware's "none" (0 on the Claw) |
 | `status` | Prints `applies=`, `mode=` (threshold or behaviour), `installed=`, `original=`, `path=`, `value=` (behaviour: also `limit=`, `behaviour=`, `capacity=`, `ac=`), then `state=` |
-| `remove` | Writes the recorded value back and forgets it |
+| `remove` | Writes the recorded value back and forgets it (and deletes the udev rule) |
+| `set release` | Behaviour mode: lets the battery charge now (`auto`), keeps the limit for next time. GameCove's session runs it when GameCove exits (`post_client_shutdown`, through `gamecove-fix-set`, no password). Threshold mode: nothing to do |
+| `guard` | Run by udev on every `power_supply` add/change, boot included: in behaviour mode holds charging only while GameCove runs and the battery is at the limit on the charger, else `auto`. Writes only when the value differs |
+
+Behaviour mode's install also writes `/etc/udev/rules.d/90-gamecove-charge-limit.rules` (runs `guard`), so a crash, Steam's session or the desktop never find a battery that won't charge.
+
+Only acts on the handhelds in `fixes/lib/handhelds.txt` (generated from `devices.json` by `tools/fixes/gen_handhelds.py`): MSI and ASUS laptops share these battery drivers, so on anything else `status` says `applies=no` and `set` exits 2. One run at a time (`/run/gamecove-charge-limit.lock`).
 
 Every change is appended to `/var/lib/gamecove/fixes/charge-limit/changes.log`. GameCove calls it as `pkexec /usr/libexec/gamecove/gamecove-fix-set charge-limit set 80` (no password) and reads the value back from sysfs.
 

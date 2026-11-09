@@ -111,7 +111,9 @@ static func from_cheapshark(o: Dictionary, stores: Dictionary, ctx: Dictionary, 
 static func from_steam(info: Dictionary, ctx: Dictionary, low: Variant = null) -> Dictionary:
 	if info.get("price") == null:
 		return {}
-	var appid: String = info.get("appid", "")
+	var appid: String = str(info.get("appid", ""))
+	if not preload("res://scripts/steam/app_id.gd").valid(appid):
+		return {}   # the id goes into steam://store/<appid>
 	var art := {"cover": "", "hero": "", "header": "", "thumb": ""}
 	var fb := SteamApi.fallback_art(appid)
 	art.merge({"cover": fb["cover"], "hero": fb["hero"], "header": fb["header"]}, true)
@@ -141,6 +143,11 @@ static func from_ggdeals(appid: String, g: Dictionary, ctx: Dictionary, keyshop 
 	var cur: String = g.get("currency", "")
 	var amount = g.get("keyshop" if keyshop else "retail")
 	if amount == null or cur == "" or cur != ctx.get("currency", "") or str(g.get("url", "")) == "":
+		return {}
+	# GG.deals' own page only (it opens in Steam's browser), and a real app id
+	var u := str(g["url"])
+	if not (u.begins_with("https://gg.deals/") or (u.begins_with("https://") and u.substr(8).get_slice("/", 0).ends_with(".gg.deals"))) \
+			or not preload("res://scripts/steam/app_id.gd").valid(appid):
 		return {}
 	var low = g.get("keyshop_low" if keyshop else "retail_low")
 	var hl = {"amount": float(low), "currency": cur, "date": 0} if low != null else null

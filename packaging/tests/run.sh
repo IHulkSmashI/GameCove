@@ -186,6 +186,9 @@ contains "$ROOT/calls" "^fan:set quiet$" "fan set reached fix.sh"
 contains "$LOG" "fix=fan action=set value=quiet result=ok" "set entry logs through the dispatcher"
 expect_code 0 "set entry: charge 80" gfs charge-limit set 80
 expect_code 0 "set entry: charge 100" gfs charge-limit set 100
+expect_code 0 "set entry: charge release" gfs charge-limit set release
+contains "$ROOT/calls" "^charge-limit:set release$" "charge release reached fix.sh"
+expect_code 66 "set entry: fan release" gfs fan set release
 contains "$ROOT/calls" "^charge-limit:set 100$" "charge set reached fix.sh"
 expect_code 0 "set entry: gyro accel-on" gfs claw8ex-gyro set accel-on
 expect_code 0 "set entry: gyro accel-off" gfs claw8ex-gyro set accel-off
@@ -210,7 +213,19 @@ cat >"$BIN/steamosctl" <<EOF
 echo "\$*" >>"$T/steamosctl.log"
 EOF
 chmod +x "$BIN/steamosctl"
+# fake busctl: two composite devices and a target device in InputPlumber's tree
+cat >"$BIN/busctl" <<EOF
+#!/bin/sh
+echo "\$*" >>"$T/busctl.log"
+case "\$*" in
+*" tree "*) printf '%s\\n' /org/shadowblip/InputPlumber /org/shadowblip/InputPlumber/CompositeDevice0 \\
+	/org/shadowblip/InputPlumber/CompositeDevice1 /org/shadowblip/InputPlumber/devices/target/dbus0 ;;
+esac
+EOF
+chmod +x "$BIN/busctl"
 SEL="$REPO/session/gamecove-session-select"
+RESET0="--system --timeout=2 set-property org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/CompositeDevice0 org.shadowblip.Input.CompositeDevice InterceptMode u 0"
+RESET1="--system --timeout=2 set-property org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/CompositeDevice1 org.shadowblip.Input.CompositeDevice InterceptMode u 0"
 
 sel() {
 	: >"$T/steamosctl.log"
@@ -221,8 +236,15 @@ if [ "$(id -u)" -eq 0 ]; then
 	expect_code 1 "session-select refuses root" sel steam
 	echo "note: running as root, skipping session-select switch tests" >&2
 else
+	: >"$T/busctl.log"
 	expect_code 0 "switch to steam" sel steam
 	contains "$T/steamosctl.log" "^switch-to-game-mode$" "steam uses switch-to-game-mode"
+	contains "$T/busctl.log" "^$RESET0$" "switching resets InterceptMode on device 0"
+	contains "$T/busctl.log" "^$RESET1$" "switching resets InterceptMode on device 1"
+	lacks "$T/busctl.log" "dbus0 " "target devices left alone"
+	: >"$T/busctl.log"
+	expect_code 64 "unknown target, no reset" sel windows
+	lacks "$T/busctl.log" "set-property" "bad usage resets nothing"
 	expect_code 0 "switch to gamecove" sel gamecove
 	contains "$T/steamosctl.log" "^switch-to-desktop-mode gamecove.desktop$" "gamecove via desktop session"
 	expect_code 0 "gamecove default" sel gamecove --default
@@ -254,6 +276,7 @@ cat >"$CB/gamecove.x86_64" <<EOF
 echo "app \$*" >>"$T/client.log"
 EOF
 chmod +x "$CB/steam" "$CB/pgrep" "$CB/gamecove.x86_64"
+cp "$BIN/busctl" "$CB/busctl"
 CLIENT="$REPO/session/gamecove-session-client"
 
 client() {
@@ -274,6 +297,19 @@ expect_code 0 "client steam already running" client silent
 lacks "$T/client.log" "^steam" "steam not started twice"
 rm -f "$T/steam-running"
 expect_code 1 "client missing binary" env PATH="$CB:$PATH" GAMECOVE_BIN=/nonexistent GAMECOVE_STEAM_MODE=off sh "$CLIENT"
+# the app is not exec'd: after it exits (a crash here) the client hands the
+# controller back and passes the app's exit code on
+cat >"$T/crash.x86_64" <<EOF
+#!/bin/sh
+echo "app \$*" >>"$T/client.log"
+exit 3
+EOF
+chmod +x "$T/crash.x86_64"
+: >"$T/busctl.log"
+expect_code 3 "client passes the app's exit code" env PATH="$CB:$PATH" GAMECOVE_BIN="$T/crash.x86_64" GAMECOVE_STEAM_MODE=off sh "$CLIENT"
+contains "$T/busctl.log" "^$RESET0$" "client resets InterceptMode after the app exits"
+contains "$T/busctl.log" "^$RESET1$" "client resets every composite device"
+lacks "$REPO/session/gamecove-session-client" '^exec "\$GAMECOVE_BIN"' "client does not exec the app"
 
 # -------------------------------------------------------- session file syntax
 if bash -n "$REPO/session/gamescope-session-plus/sessions.d/gamecove"; then ok; else bad "sessions.d/gamecove syntax"; fi
@@ -281,6 +317,29 @@ if bash -n "$REPO/session/gamescope-session-plus/sessions.d/gamecove"; then ok; 
 if bash -c 'set -a; . "$1"; [ "$CLIENTCMD" = /usr/libexec/gamecove/gamecove-session-client ] && [ "$GAMECOVE_STEAM_MODE" = silent ]' _ \
 	"$REPO/session/gamescope-session-plus/sessions.d/gamecove"; then ok; else bad "session file sets CLIENTCMD"; fi
 contains "$REPO/session/wayland-sessions/gamecove.desktop" "^Exec=gamescope-session-plus gamecove$" "desktop Exec"
+# post_client_shutdown: InterceptMode 0 everywhere, charge limit released through
+# the no-password set entry (only when the fix keeps a limit), then Steam closed
+PB="$T/postbin"
+mkdir -p "$PB" "$T/gcstate/fixes/charge-limit"
+cp "$BIN/busctl" "$PB/busctl"
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/post.log"\n' "$T" >"$PB/pkexec"
+printf '#!/bin/sh\nshift\nexec "$@"\n' >"$PB/timeout"
+printf '#!/bin/sh\nexit 0\n' >"$T/fix-set"
+chmod +x "$PB/pkexec" "$PB/timeout" "$T/fix-set"
+post() {
+	: >"$T/busctl.log"
+	: >"$T/post.log"
+	# shellcheck disable=SC2016  # expanded by the inner bash
+	PATH="$PB:/usr/bin:/bin" GAMECOVE_STATE_DIR="$T/gcstate" GAMECOVE_FIX_SET="$T/fix-set" \
+		bash -c 'set -a; . "$1"; post_client_shutdown' _ "$REPO/session/gamescope-session-plus/sessions.d/gamecove"
+}
+expect_code 0 "post_client_shutdown without a charge limit" post
+contains "$T/busctl.log" "^$RESET0$" "session end resets InterceptMode on device 0"
+contains "$T/busctl.log" "^$RESET1$" "session end resets InterceptMode on device 1"
+lacks "$T/post.log" "pkexec" "no charge limit kept: no pkexec"
+echo 80 >"$T/gcstate/fixes/charge-limit/limit"
+expect_code 0 "post_client_shutdown with a charge limit" post
+contains "$T/post.log" "^pkexec $T/fix-set charge-limit set release$" "session end releases the charge limit"
 
 # ------------------------------------------------------------------ install.sh
 IB="$T/installbin"
@@ -376,6 +435,11 @@ assert not bad, bad
 PY
 then ok; else bad "devices.json fixes must name folders in fixes/: $(cat "$T/out")"; fi
 
+# ------------------------- fixes/lib/handhelds.txt is generated from devices.json
+if python3 -I "$REPO/tools/fixes/gen_handhelds.py" --check >"$T/out" 2>&1; then ok; else bad "$(cat "$T/out")"; fi
+contains "$REPO/fixes/lib/handhelds.txt" "^msi-claw-8-ex	board_name=MS-1T91$" "Claw 8 EX in the handheld list"
+lacks "$REPO/fixes/lib/handhelds.txt" "^steam-deck" "Steam Deck uses steamos-manager, not these fixes"
+
 # ------------------------------- fan drivers: power.gd, fan fix and allowlist agree
 if python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY'
 import json, os, re, sys
@@ -403,6 +467,41 @@ for r in rows:
 assert not bad, bad
 PY
 then ok; else bad "fan drivers out of step: $(cat "$T/out")"; fi
+
+# ------------------------------------- workflows and community templates parse
+if python3 -c "import yaml" 2>/dev/null; then
+	if python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY'
+import glob, json, os, sys, yaml
+repo = sys.argv[1]
+gh = os.path.join(repo, ".github")
+bad = []
+for f in sorted(glob.glob(os.path.join(gh, "**", "*.yml"), recursive=True)):
+    try:
+        doc = yaml.safe_load(open(f, encoding="utf-8"))
+    except yaml.YAMLError as e:
+        bad.append("%s: %s" % (f, e))
+        continue
+    rel = os.path.relpath(f, gh)
+    if rel.startswith("ISSUE_TEMPLATE/") and not rel.endswith("config.yml"):
+        if not (isinstance(doc, dict) and doc.get("name") and doc.get("description") and isinstance(doc.get("body"), list)):
+            bad.append(rel + ": issue forms need name, description and body")
+    if rel.startswith("DISCUSSION_TEMPLATE/") and not (isinstance(doc, dict) and isinstance(doc.get("body"), list)):
+        bad.append(rel + ": discussion forms need a body")
+    if isinstance(doc, dict) and isinstance(doc.get("body"), list):
+        ids = [b.get("id") for b in doc["body"] if b.get("id")]
+        if len(ids) != len(set(ids)):
+            bad.append(rel + ": duplicate ids")
+makers = sorted({d["maker"] for d in json.load(open(os.path.join(repo, "app/data/devices.json")))["devices"]})
+form = yaml.safe_load(open(os.path.join(gh, "ISSUE_TEMPLATE/bug_report.yml"), encoding="utf-8"))
+opts = [b for b in form["body"] if b.get("id") == "maker"][0]["attributes"]["options"]
+if opts != makers + ["Other"]:
+    bad.append("bug_report.yml makers %s != devices.json makers %s + Other" % (opts, makers))
+assert not bad, bad
+PY
+	then ok; else bad "YAML under .github: $(cat "$T/out")"; fi
+else
+	echo "note: python3 yaml module missing, skipped YAML checks" >&2
+fi
 
 # ------------------------------------------------------------------ shellcheck
 SHELLCHECK="$(command -v shellcheck || true)"

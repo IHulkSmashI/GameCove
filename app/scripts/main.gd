@@ -201,7 +201,7 @@ func _ready() -> void:
 	add_child(launch_overlay)
 
 	quick_menu = QuickMenu.new()
-	quick_menu.setup({"device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor")})
+	quick_menu.setup({"device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")})
 	quick_menu.set_side(menu_side)
 	quick_menu.closed.connect(_on_menu_closed)
 	if quick_menu.has_signal("notice"):
@@ -366,13 +366,16 @@ func on_ui_action(action: String) -> void:
 			else:
 				_open_menu()
 		"osk":
-			if game_actions.is_modal() or quick_menu.visible:
-				return
-			close_downloads()
-			_close_page()
-			if current != "library":
-				show_screen("library")
-			library_screen.open_search()
+			if not (game_actions.is_modal() or quick_menu.visible):
+				close_downloads()
+				_close_page()
+				if current != "library":
+					show_screen("library")
+				library_screen.open_search()
+	# InputPlumber switches itself to Always when Guide is pressed in Pass:
+	# say again who has the controller now.
+	if wiring != null:
+		wiring.sync_focus()
 
 
 func _on_action_failed(key: String, action: String, message: String) -> void:
@@ -896,11 +899,15 @@ func _open_menu() -> void:
 	if g.is_empty():
 		g = home.spotlight_game if not home.spotlight_game.is_empty() else home.hero_game
 	quick_menu.open(g)
+	if wiring != null:
+		wiring.menu_over_game(true)
 	_sound("select")
 	_update_timer()
 
 
 func _on_menu_closed() -> void:
+	if wiring != null:
+		wiring.menu_over_game(false)
 	_screen().focus_behavior_recursive = Control.FOCUS_BEHAVIOR_INHERITED
 	top_bar.focus_behavior_recursive = Control.FOCUS_BEHAVIOR_INHERITED
 	_update_timer()

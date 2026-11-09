@@ -8,6 +8,7 @@ const FakeRunner := preload("res://tests/fixtures/stores/fake_job_runner.gd")
 const LibraryScript := preload("res://scripts/library/library.gd")
 const LauncherScript := preload("res://scripts/launch/launcher.gd")
 const TempTree := preload("res://tests/fixtures/stores/temp_tree.gd")
+const StoreCommands := preload("res://scripts/library/manage/store_commands.gd")
 
 const TOOLS := {"legendary": "/usr/bin/legendary", "nile": "", "gogdl": "/opt/gogdl", "umu": "/usr/bin/umu-run",
 	"heroic": ["/usr/bin/heroic"], "heroic_flatpak": []}
@@ -243,3 +244,96 @@ func test_launch_helpers() -> void:
 	eq(lib.capabilities({"key": "epic:A"})["install"], false, "no manager: everything off")
 	eq(lib.install({"key": "epic:A"})["ok"], false, "no manager: refused")
 	lib.free()
+
+
+func _gog_manager(name: String) -> StoreManager:
+	var m := _manager(name)
+	var heroic := m.home.path_join("heroic")
+	DirAccess.make_dir_recursive_absolute(heroic.path_join("gog_store"))
+	FileAccess.open(heroic.path_join("gog_store/auth.json"), FileAccess.WRITE).close()
+	return m
+
+
+func _linux_game(dir: String, info := "Some Game\n1.0\n") -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	var f := FileAccess.open(dir.path_join("gameinfo"), FileAccess.WRITE)
+	f.store_string(info)
+	f.close()
+	FileAccess.open(dir.path_join("start.sh"), FileAccess.WRITE).close()
+
+
+## Two Linux games in one base folder: the second install must be recorded
+## against its own new folder, and uninstall must never rm -rf the other one.
+func test_gog_two_linux_games_in_one_folder() -> void:
+	var m := _gog_manager("sm_gog_two")
+	var r: Object = m.runner
+	var heroic := m.home.path_join("heroic")
+	var base := m.home.path_join("Games/gog")
+	# game 42 is already there (installed earlier; its gameinfo has no id line)
+	_linux_game(base.path_join("Alpha"))
+	StoreCommands.write_gog_record(m.home, [{"appName": "42", "install_path": base.path_join("Alpha"), "platform": "linux", "title": "Alpha"}])
+	entries["gog:77"] = {"key": "gog:77", "store": "gog", "id": "77", "title": "Beta", "installed": false,
+		"source": "heroic", "heroic_flatpak": false, "heroic_root": heroic}
+	m.install({"key": "gog:77"}, {"platform": "linux"})
+	r.finish(1, 0)
+	_linux_game(base.path_join("Beta"))
+	r.finish(2, 0)
+	var rec := StoreCommands.read_gog_record(m.home)
+	var beta: Array = rec.filter(func(i): return i["appName"] == "77")
+	eq(beta.size(), 1, "second game recorded")
+	eq(beta[0]["install_path"], base.path_join("Beta"), "against its own new folder, not Alpha")
+	ok(FileAccess.file_exists(base.path_join("Beta/.gamecove-gog-77")), "ownership marker left in Beta")
+	ok(not FileAccess.file_exists(base.path_join("Alpha/.gamecove-gog-77")), "nothing written into Alpha")
+	# uninstall: only a proven folder is deleted
+	entries["gog:77"] = {"key": "gog:77", "store": "gog", "id": "77", "title": "Beta", "installed": true,
+		"source": "gamecove", "heroic_flatpak": false, "heroic_root": heroic, "install_path": base.path_join("Beta"), "platform": "linux"}
+	var res := m.uninstall({"key": "gog:77"})
+	ok(res["ok"], "Beta can be uninstalled")
+	eq(r.last_cmd(), "rm -rf -- " + base.path_join("Beta"), "deletes Beta only")
+	r.finish(3, 0)
+	# a record pointing game 77 at Alpha's folder (the old bug) is refused
+	entries["gog:77"]["install_path"] = base.path_join("Alpha")
+	var started: int = r.started.size()
+	res = m.uninstall({"key": "gog:77"})
+	ok(not res["ok"], "won't delete a folder not proven to be game 77's")
+	ok(str(res["why"]).begins_with("Won't delete"), "refused for the right reason: " + str(res["why"]))
+	eq(r.started.size(), started, "nothing ran")
+	# Alpha's start.sh and bare gameinfo prove nothing either
+	entries["gog:42"] = {"key": "gog:42", "store": "gog", "id": "42", "title": "Alpha", "installed": true,
+		"source": "gamecove", "heroic_flatpak": false, "heroic_root": heroic, "install_path": base.path_join("Alpha"), "platform": "linux"}
+	res = m.uninstall({"key": "gog:42"})
+	ok(not res["ok"] and str(res["why"]).begins_with("Won't delete"), "start.sh is no uninstall marker")
+	_done(m)
+
+
+func test_gog_install_never_guesses() -> void:
+	var m := _gog_manager("sm_gog_guess")
+	var r: Object = m.runner
+	var heroic := m.home.path_join("heroic")
+	var base := m.home.path_join("Games/gog")
+	entries["gog:77"] = {"key": "gog:77", "store": "gog", "id": "77", "title": "Beta", "installed": false,
+		"source": "heroic", "heroic_flatpak": false, "heroic_root": heroic}
+	m.install({"key": "gog:77"}, {"platform": "linux"})
+	r.finish(1, 0)
+	# two unproven new folders appeared (another install ran at the same time)
+	_linux_game(base.path_join("Beta"))
+	_linux_game(base.path_join("Gamma"))
+	r.finish(2, 0)
+	eq(StoreCommands.read_gog_record(m.home), [], "nothing recorded")
+	ok(events.any(func(e): return e[0] == "failed" and e[1] == "gog:77"), "the person is told")
+	ok(not FileAccess.file_exists(base.path_join("Beta/.gamecove-gog-77")) and not FileAccess.file_exists(base.path_join("Gamma/.gamecove-gog-77")), "no marker written")
+	_done(m)
+
+
+func test_gog_folder_proof() -> void:
+	var dir := TempTree.temp_dir("gog_proof")
+	_linux_game(dir.path_join("A"), "Alpha\n1.0\n42\n")
+	ok(StoreCommands.gog_folder_is(dir.path_join("A"), "42"), "gameinfo with the id line")
+	ok(not StoreCommands.gog_folder_is(dir.path_join("A"), "4"), "a prefix of the id doesn't count")
+	ok(not StoreCommands.gog_folder_is(dir.path_join("A"), "../A"), "ids must be numbers")
+	eq(StoreCommands.find_gog_install(dir, "42"), dir.path_join("A"), "found by its gameinfo without a snapshot")
+	eq(StoreCommands.find_gog_install(dir, "77"), "", "no snapshot, no proof: nothing")
+	DirAccess.make_dir_recursive_absolute(dir.path_join("W"))
+	FileAccess.open(dir.path_join("W/goggame-99.info"), FileAccess.WRITE).close()
+	eq(StoreCommands.find_gog_install(dir, "77", ["A"]), "", "another game's info file is never taken")
+	TempTree.remove_tree(dir)

@@ -59,7 +59,8 @@ Every action returns at once with `{"ok": bool, "via": String, "why": String}` (
 | `move(game, path)` | Into folder `path`; the game keeps its folder name |
 | `pause(game)`, `resume(game)`, `cancel(game)`, `reorder_download(game, delta) -> bool` | |
 | `downloads() -> Array[Dictionary]` | `[{"key", "action", "title", "state": queued\|running\|paused, "progress": {"bytes_done", "bytes_total", "rate", "eta", "percent", "unit": bytes\|files, "phase"}, "error", "size"}]` in queue order, Steam jobs last |
-| `launch_options(game) -> String`, `set_launch_options(game, s)` | Steam: Steam's launch options (`pending: true` in the result when it waits for Steam to stop). Others: extra game arguments |
+| `launch_options(game) -> String`, `set_launch_options(game, s)` | Steam: Steam's launch options (`pending: true` in the result when it waits for Steam to stop). Others: extra game arguments. Steam files are written on a thread; a failed write comes back as `action_failed(key, "launch_options"/"compat_tool", why)` |
+| `launch_options_async(game, done)`, `compat_tool_async(game, done)`, `compat_tools_async(game, done)` | Same values, read off the main thread (localconfig.vdf, config.vdf, appmanifest scans); `done(value)` on the main thread. The UI uses these |
 | `compat_tool(game) -> String`, `set_compat_tool(game, tool_id)`, `compat_tools(game := {}) -> Array[Dictionary]` | `[{"id", "name", "path"}]`, default (`""`) first. Steam game: Steam's internal names; otherwise umu's PROTONPATH choices |
 | `install_locations() -> Array[Dictionary]` | `[{"path", "label", "free", "removable"}]`, internal first, then SD cards / USB under `/run/media` |
 | `store_settings() -> Dictionary`, `set_store_setting(name, value) -> bool` | `install_root` (absolute path), `steam_cef` (bool, opt-in Steam control; see security notes in STORES.md), `auto_resume`, `max_parallel` (1–4), `focus_steam_dialogs`; read-only `steam_cef_status` (`off\|flag_missing\|connecting\|ready\|unreachable`), `steam_pending_count` |
@@ -480,7 +481,8 @@ set_game_profile(key, on) / has_game_profile(key)
 start_game(key) / end_game()                  # main.gd from GameSession.started/ended (also set game focus on / off)
 signal ui_action(action)                      # "home" | "quick_menu" | "osk" | "screenshot", main thread (intercept, below)
 signal button_event(capability, pressed)      # every button seen through the intercept ("South", "Guide"...): button test
-set_game_focused(on)                          # main.gd: false while home / quick menu is over a running game, true when the game has the screen again
+set_game_focused(on)                          # via SessionWiring (home_in_front / menu_over_game / sync_focus): false while home or the quick menu is over a running game; the mode is written again on every call (InputPlumber moves itself from Pass to Always on Guide)
+release_intercept(done := Callable())          # before a session switch: stop intercepting, InterceptMode 0 on every composite device (worker), then done() on the main thread
 set_button_test(on)                           # controller page's button test: virtual pad straight to Godot (paddles show) when no game runs
 intercept_state() -> {"active", "listening", "mode", "game_focused", "activation": {"events", "target"}, "chords": {action: [modifier, button]}}
 state() -> {"available", "version", "devices": [{"path", "name", "profile_name", "profile_path", "capabilities",

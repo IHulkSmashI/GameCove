@@ -545,12 +545,14 @@ func test_session_wiring() -> void:
 func test_game_closer_plan() -> void:
 	var GC = load("res://scripts/ui/games/game_closer.gd")
 	var steam: Array = GC.plan(_steam_game(), 42, 0)
-	eq(steam[0], [["pkill", "-TERM", "-f", "AppId=42( |$)"]], "Steam: stop its launch wrapper")
-	eq(steam[1], [["pkill", "-KILL", "-f", "AppId=42( |$)"]], "then force")
+	eq(steam[0], [["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "TERM", "steam", "42"]], "Steam: stop its launch wrapper and everything under it")
+	eq(steam[1], [["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "KILL", "steam", "42"]], "then force")
+	ok(GC.KILL_SCRIPT.contains("pgrep -u \"$(id -u)\" -f \"SteamLaunch AppId=$arg( |$)\""), "own user only, anchored to SteamLaunch AppId=<id>")
 	var scoped: Array = GC.plan(_epic_game(true), 3000000123, 4242)
-	eq(scoped[0], [["systemctl", "--user", "stop", "app-steam-app3000000123-*.scope"], ["kill", "-TERM", "4242"]], "our scope and pid")
-	eq(scoped[1], [["kill", "-KILL", "4242"]], "pid forced later")
+	eq(scoped[0], [["systemctl", "--user", "stop", "app-steam-app3000000123-*.scope"], ["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "TERM", "pid", "4242"]], "our scope, and the pid's group and children")
+	eq(scoped[1], [["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "KILL", "pid", "4242"]], "pid forced later")
 	eq(GC.plan(_epic_game(true), 0, 0), [[], []], "nothing to close")
+	eq(GC.plan({"store": "steam", "id": "42 -x"}, 0, 0), [[], []], "a bad Steam id closes nothing")
 	var c: Node = GC.new()
 	var ran: Array = []
 	c.run = func(cmd: Array) -> int:
@@ -560,7 +562,7 @@ func test_game_closer_plan() -> void:
 	ok(not c.close(s), "nothing running")
 	s.active = true
 	ok(c.close(s), "closing")
-	eq(ran[0][0], "pkill", "ran without waiting")
+	eq(ran[0][0], "sh", "ran without waiting")
 	c.free()
 
 
@@ -570,3 +572,77 @@ class GameSessionStub extends RefCounted:
 	var app_id := 42
 	var pid := 0
 	func is_active() -> bool: return active
+
+
+## Library with the off-main-thread reads: answers come later, through callbacks.
+class AsyncLibrary extends FakeLibrary:
+	var waiting: Array = []
+	func launch_options_async(g: Dictionary, done: Callable) -> void: waiting.append(func(): done.call(launch_options(g)))
+	func compat_tool_async(g: Dictionary, done: Callable) -> void: waiting.append(func(): done.call(compat_tool(g)))
+	func compat_tools_async(g: Dictionary, done: Callable) -> void: waiting.append(func(): done.call(compat_tools(g)))
+	func answer() -> void:
+		while not waiting.is_empty():
+			waiting.pop_front().call()
+
+
+func test_launch_options_and_compat_read_off_the_main_thread() -> void:
+	var lib := AsyncLibrary.new()
+	var st: Node = InstallState.new()
+	st.attach(lib)
+	var acts: Node = GameActions.new()
+	var layer := Control.new()
+	acts.setup(lib, st, func(_t, _i = "", _tone = "", _d = ""): pass, layer, null)
+	lib.opts = "-novid"
+	acts.launch_options(_steam_game())
+	ok(not acts.is_modal(), "nothing opens before the value is read")
+	lib.answer()
+	ok(acts.is_modal(), "keyboard opens with the answer")
+	eq(acts.keyboard.text, "-novid", "with the current options")
+	acts.keyboard.close()
+	acts.compat_tool(_steam_game())
+	lib.answer()
+	eq(acts.sheet.rows.size(), 3, "tools menu after both answers")
+	acts.free()
+	layer.free()
+	st.free()
+	lib.free()
+
+
+## The kill script itself, with fake pgrep / ps / id on PATH and a recording
+## kill: never signals anything real.
+func test_game_closer_kill_script() -> void:
+	var GC = load("res://scripts/ui/games/game_closer.gd")
+	var bin := ProjectSettings.globalize_path("user://test_closer_bin")
+	DirAccess.make_dir_recursive_absolute(bin)
+	var log := bin.path_join("kills.log")
+	var files := {
+		# reaper 100 (AppId=42) with child 101, grandchild 102; reaper 200 is AppId=420
+		"pgrep": "#!/bin/sh\ncase \"$*\" in\n*\"-u 1000 -f SteamLaunch AppId=42( |$)\"*) echo 100 ;;\n\"-P 100\") echo 101 ;;\n\"-P 101\") echo 102 ;;\n\"-P 300\") echo 301 ;;\nesac\nexit 0\n",
+		"ps": "#!/bin/sh\ncase \"$*\" in *\"-p 100\") echo ' 100' ;; *\"-p 300\") echo ' 7' ;; esac\n",
+		"id": "#!/bin/sh\necho 1000\n",
+		"fakekill": "#!/bin/sh\necho \"$*\" >> '%s'\n" % log,
+	}
+	for f in files:
+		var h := FileAccess.open(bin.path_join(f), FileAccess.WRITE)
+		h.store_string(files[f])
+		h.close()
+		OS.execute("chmod", ["+x", bin.path_join(f)])
+	var run := func(args: Array) -> void:
+		if FileAccess.file_exists(log):
+			DirAccess.remove_absolute(log)
+		# create_process, like GameCloser.run: arguments go to execvp untouched
+		var pid := OS.create_process("env", PackedStringArray(["PATH=" + bin + ":/usr/bin:/bin", "GC_KILL=fakekill", "sh", "-c", GC.KILL_SCRIPT, "gamecove-close"] + args))
+		var waited := 0
+		while pid > 0 and OS.is_process_running(pid) and waited < 5000:
+			OS.delay_msec(10)
+			waited += 10
+	run.call(["TERM", "steam", "42"])
+	eq(FileAccess.get_file_as_string(log).split("\n", false), PackedStringArray(["-TERM -- -100", "-TERM 102", "-TERM 101", "-TERM 100"]),
+		"the reaper's own group, then every descendant and the reaper")
+	run.call(["KILL", "pid", "300"])
+	eq(FileAccess.get_file_as_string(log).split("\n", false), PackedStringArray(["-KILL 301", "-KILL 300"]),
+		"not a group leader (group 7 is someone else's): only the process and its children")
+	run.call(["TERM", "steam", "42; reboot"])
+	ok(not FileAccess.file_exists(log), "junk id: nothing signalled")
+	for f in files:
+		DirAccess.remove_absolute(bin.path_join(f))

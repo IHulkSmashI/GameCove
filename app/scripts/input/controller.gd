@@ -300,6 +300,26 @@ func set_game_focused(on: bool) -> void:
 	_apply_intercept()
 
 
+## Before leaving the session (quick menu "Switch to Steam"): stop
+## intercepting and put InterceptMode 0 on every composite device, so Steam or
+## the desktop never start with a device that sends its input nowhere. Runs on
+## the worker; `done` is called on the main thread once it's written.
+func release_intercept(done := Callable()) -> void:
+	_intercepting = false
+	_monitor_alive = false
+	intercept.on_line = Callable()
+	intercept.reset()
+	intercept.stop_monitor()
+	_intercept_mode = MODE_NONE_SAFE
+	_queue("intercept", func():
+		var objs: Variant = bus.call_method(SERVICE, ROOT_PATH, OM_IFACE, "GetManagedObjects")
+		for d in parse_devices(objs[0] if objs is Array and objs.size() > 0 else {}):
+			bus.set_prop(SERVICE, d["path"], DEVICE_IFACE, "InterceptMode", "u", str(MODE_NONE_SAFE))
+		_main(func():
+			if done.is_valid():
+				done.call()))
+
+
 ## Button test: lets the virtual pad reach Godot directly (mode 0) so even back
 ## paddles show up, but only with no game running behind us.
 func set_button_test(on: bool) -> void:

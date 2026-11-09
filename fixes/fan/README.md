@@ -35,3 +35,5 @@ The tables must match `FAN_DRIVERS` in `app/scripts/device/power.gd` (`packaging
 Every change is appended to `/var/lib/gamecove/fixes/fan/changes.log`. GameCove calls it as `pkexec /usr/libexec/gamecove/gamecove-fix-set fan set quiet` (no password: see docs/CONTRACTS.md, Root actions) and reads the values back from sysfs.
 
 Test (fake sysfs, never the real one): `sh fixes/fan/test.sh`. `GAMECOVE_ROOT` is the filesystem prefix.
+
+Only acts on the handhelds in `fixes/lib/handhelds.txt` (generated from `devices.json` by `tools/fixes/gen_handhelds.py`): MSI and ASUS laptops use the same `msi_wmi_platform` / `asus_custom_fan_curve` drivers, so on anything else `status` says `applies=no` and `set` exits 2. If a `set` fails halfway, every fan goes back to the firmware's automatic control before the error is returned. One run at a time (`/run/gamecove-fan.lock`).

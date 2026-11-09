@@ -103,7 +103,7 @@ static func make_release(rec: Dictionary, now: int, wishlist_keys := {}) -> Dict
 	var title: String = str(rec.get("title", ""))
 	var key := Wish.key_for(ids, title)
 	var link := {}
-	if ids.has("steam"):
+	if ids.has("steam") and preload("res://scripts/steam/app_id.gd").valid(ids["steam"]):
 		link = {"kind": "steam", "uri": "steam://store/" + ids["steam"]}
 	elif ids.has("epic") and RegEx.create_from_string("^[a-z0-9-]+$").search(ids["epic"]):
 		# A store page we build ourselves: the only kind of link affiliates.gd may touch.

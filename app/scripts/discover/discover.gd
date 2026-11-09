@@ -1080,13 +1080,45 @@ func calendar_info() -> Dictionary:
 ## desktop browser in the session). [] when there's nothing to open.
 ## Falls back to xdg-open when `steam` isn't installed.
 static func link_command(link: Dictionary, steam_bin: String) -> Array[String]:
-	var uri := str(link.get("uri", ""))
-	if uri == "" or not (uri.begins_with("steam://") or uri.begins_with("https://")):
+	if not link_allowed(link):
 		return [] as Array[String]
+	var uri := str(link.get("uri", ""))
 	var target := uri if link.get("kind", "") == "steam" else "steam://openurl/" + uri
 	if steam_bin != "":
 		return [steam_bin, target] as Array[String]
 	return ["xdg-open", uri] as Array[String]
+
+
+## Hosts a web link may open in Steam's browser: the price sites whose data we
+## show (their own redirect / referral pages) and the store pages we build.
+## Add an affiliate program's host here when one is filled in.
+const LINK_HOSTS := ["www.cheapshark.com", "cheapshark.com", "gg.deals", "store.epicgames.com", "www.wikidata.org",
+	"www.gog.com", "www.greenmangaming.com", "www.fanatical.com"]
+
+
+## True for a Steam store link with a valid app id (steam://store/<digits>)
+## or an https:// link to one of LINK_HOSTS (or a subdomain of gg.deals).
+static func link_allowed(link: Dictionary) -> bool:
+	var uri := str(link.get("uri", ""))
+	if link.get("kind", "") == "steam":
+		var m := RegEx.create_from_string("^steam://store/([0-9]+)/?$").search(uri)
+		return m != null and preload("res://scripts/steam/app_id.gd").valid(m.get_string(1))
+	return url_host_allowed(uri)
+
+
+static func url_host_allowed(uri: String) -> bool:
+	if not uri.begins_with("https://"):
+		return false
+	var rest := uri.substr(8)
+	var end := rest.length()
+	for c in ["/", "?", "#"]:
+		var i := rest.find(c)
+		if i >= 0:
+			end = mini(end, i)
+	var host := rest.substr(0, end).to_lower()
+	if host == "" or "@" in host or ":" in host or "\\" in host:
+		return false
+	return host in LINK_HOSTS or host.ends_with(".gg.deals")
 
 
 func open_link(link: Dictionary) -> bool:

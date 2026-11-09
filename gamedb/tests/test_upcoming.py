@@ -238,3 +238,34 @@ def test_igdb_fetch_pages(monkeypatch):
     monkeypatch.setattr(igdb, "post", fake_post)
     out = releases.fetch_igdb(object(), TODAY)
     assert len(out) == 1 and len(calls) == 1 and "release_dates" not in calls[0]
+
+
+def test_steam_ids_must_be_plain_digits():
+    """Steam ids end up in steam:// URIs in the app: anything but ASCII digits is dropped."""
+    from gamedb.ids import steam_id
+    assert steam_id("620") == "620" and steam_id(620) == "620"
+    for bad in ["620/../../uninstall/1", "620//-console", "steam://run/1", "", "0", "١٢٣", "²", " ", None, True,
+                "12345678901", "6 20", "620\n"]:
+        assert steam_id(bad) is None, bad
+    item = {"success": 1, "appid": "1/../../uninstall/440", "name": "Evil", "release": {}}
+    assert releases.from_steam_item(item) is None
+    data = {"results": {"bindings": [wd_row("Q9", "Evil", "2027-03-01T00:00:00Z", 11, steam="440//+quit")]}}
+    recs = releases.parse_wikidata(data)
+    assert all("steam" not in r["ids"] for r in recs)
+    row = {"date": 1798675200, "game": {"id": 7, "name": "G", "external_games": [
+        {"uid": "440/../x", "external_game_source": 1}]}}
+    assert "steam" not in releases.from_igdb_row(row)["ids"]
+    # a record read back from last build's file is cleaned too
+    merged = releases.merge([{"title": "Old", "date": "2027", "precision": "year",
+                              "ids": {"steam": "1;rm"}, "art": {}, "sources": ["steam"]}], today=TODAY)
+    assert merged and "steam" not in merged[0]["ids"]
+
+
+def test_other_sources_drop_bad_steam_ids():
+    from gamedb.sources import awacy, protondb, wikidata
+    assert awacy.by_steam_id([{"storeIds": {"steam": "12a"}, "status": "Supported"}]) == {}
+    assert protondb.app_id({"appId": "٣"}) is None and protondb.app_id({"appId": 70}) == "70"
+    items = {}
+    wikidata.parse_bindings({"results": {"bindings": [
+        {"item": {"value": "http://www.wikidata.org/entity/Q1"}, "value": {"value": "70/../1"}}]}}, "steam", items)
+    assert items == {}

@@ -9,6 +9,15 @@ cp -R "$HERE/../../app/tests/fixtures/power/sys_claw/." "$ROOT/"
 H="$ROOT/sys/class/hwmon/hwmon5"
 export GAMECOVE_ROOT="$ROOT"
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
+# dmi <root> <sys_vendor> <product_name> <board_name> [board_vendor]
+dmi() {
+	mkdir -p "$1/sys/class/dmi/id"
+	printf '%s\n' "$2" > "$1/sys/class/dmi/id/sys_vendor"
+	printf '%s\n' "$3" > "$1/sys/class/dmi/id/product_name"
+	printf '%s\n' "$4" > "$1/sys/class/dmi/id/board_name"
+	printf '%s\n' "${5:-$2}" > "$1/sys/class/dmi/id/board_vendor"
+}
+dmi "$ROOT" "Micro-Star International Co., Ltd." "Claw 8 AI+ A2VM" "MS-1T91"
 table() { echo "$(cat "$H/pwm$1_auto_point1_pwm") $(cat "$H/pwm$1_auto_point2_pwm") $(cat "$H/pwm$1_auto_point3_pwm") $(cat "$H/pwm$1_auto_point4_pwm") $(cat "$H/pwm$1_auto_point5_pwm") $(cat "$H/pwm$1_auto_point6_pwm")"; }
 
 sh "$FIX" status | grep -q '^installed=no$' || fail "status before install"
@@ -59,6 +68,14 @@ new_hw() {
 		fi
 		n=$((n + 1))
 	done
+	case "$1" in
+		asus_custom_fan_curve) dmi "$R" "ASUSTeK COMPUTER INC." "ROG Ally RC71L" "RC71L" ;;
+		oxp_ec|oxpec) dmi "$R" "ONE-NETBOOK" "ONEXPLAYER X1 A" "X1A" ;;
+		ayaneo_ec) dmi "$R" "AYANEO" "AYANEO 3" "AB09" ;;
+		gpdfan) dmi "$R" "GPD" "G1618-05" "G1618-05" ;;
+		zotac_*) dmi "$R" "ZOTAC" "ZOTAC GAMING ZONE" "G0A1W" ;;
+		*) dmi "$R" "ONE-NETBOOK" "ONEXPLAYER X1 A" "X1A" ;;
+	esac
 	echo "$R"
 }
 
@@ -115,5 +132,42 @@ done
 # an unknown hwmon is never touched
 R="$(new_hw nct6775 1 manual)"; export GAMECOVE_ROOT="$R"
 [ "$(sh "$FIX" status | tr '\n' ' ')" = "applies=no state=n/a " ] || fail "unknown hwmon ignored"
+rm -rf "$R"
+# ---- a set that fails halfway puts every fan back on automatic ----------------
+R="$(new_hw msi_wmi_platform 2)"; export GAMECOVE_ROOT="$R"; M="$R/sys/class/hwmon/hwmon3"
+dmi "$R" "Micro-Star International Co., Ltd." "Claw A1M" "MS-1T41"
+rm -f "$M/pwm2_auto_point4_pwm"; mkdir "$M/pwm2_auto_point4_pwm"   # the kernel refuses this write
+set +e; sh "$FIX" set quiet 2>/dev/null; code=$?; set -e
+[ "$code" = "1" ] || fail "failing write -> exit 1 (got $code)"
+[ "$(cat "$M/pwm1_enable") $(cat "$M/pwm2_enable")" = "2 2" ] || fail "failed set leaves both fans on automatic ($(cat "$M/pwm1_enable") $(cat "$M/pwm2_enable"))"
+grep -q 'set failed' "$R/var/lib/gamecove/fixes/fan/changes.log" || fail "failed set logged"
+[ ! -e "$R/run/gamecove-fan.lock" ] || fail "lock released after a failure"
+rm -rf "$R"
+R="$(new_hw oxp_ec 1 manual)"; export GAMECOVE_ROOT="$R"; O="$R/sys/class/hwmon/hwmon3"
+rm -f "$O/pwm1"; mkdir "$O/pwm1"
+set +e; sh "$FIX" set max 2>/dev/null; code=$?; set -e
+[ "$code" = "1" ] || fail "oxp: failing duty write -> exit 1 (got $code)"
+[ "$(cat "$O/pwm1_enable")" = "2" ] || fail "oxp: failed max goes back to automatic"
+rm -rf "$R"
+
+# ---- laptops with the same drivers are never touched -------------------------
+R="$(new_hw msi_wmi_platform 2)"; export GAMECOVE_ROOT="$R"; M="$R/sys/class/hwmon/hwmon3"
+dmi "$R" "Micro-Star International Co., Ltd." "Stealth 16 AI Studio A1VHG" "MS-15F2"
+before="$(cat "$M/pwm1_enable") $(cat "$M/pwm1_auto_point2_pwm")"
+[ "$(sh "$FIX" status | tr '\n' ' ')" = "applies=no state=n/a " ] || fail "MSI laptop: applies=no"
+set +e; sh "$FIX" set max 2>/dev/null; code=$?; set -e
+[ "$code" = "2" ] || fail "MSI laptop: set refused with exit 2 (got $code)"
+[ "$(cat "$M/pwm1_enable") $(cat "$M/pwm1_auto_point2_pwm")" = "$before" ] || fail "MSI laptop: nothing written"
+[ ! -e "$R/var/lib/gamecove/fixes/fan/original" ] || fail "MSI laptop: nothing recorded"
+rm -rf "$R"
+R="$(new_hw asus_custom_fan_curve 2)"; export GAMECOVE_ROOT="$R"
+dmi "$R" "ASUSTeK COMPUTER INC." "ROG Zephyrus G14 GA403UV" "GA403UV"
+set +e; sh "$FIX" set quiet 2>/dev/null; code=$?; set -e
+[ "$code" = "2" ] || fail "ROG laptop: set refused (got $code)"
+rm -rf "$R"
+R="$(new_hw oxp_ec 1 manual)"; export GAMECOVE_ROOT="$R"
+rm -rf "$R/sys/class/dmi"
+set +e; sh "$FIX" set max 2>/dev/null; code=$?; set -e
+[ "$code" = "2" ] || fail "no DMI ids: refused (got $code)"
 rm -rf "$R"
 echo "fan: all passed"

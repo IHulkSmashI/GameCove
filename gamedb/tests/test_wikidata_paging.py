@@ -22,7 +22,7 @@ class FakeClient:
         self.calls.append((limit, offset))
         if limit > 2000:
             return '{"results": {"bindings": [{"item"'  # cut off mid-stream
-        rows = [{"item": {"value": f"http://www.wikidata.org/entity/Q{i}"}, "value": {"value": str(i)},
+        rows = [{"item": {"value": f"http://www.wikidata.org/entity/Q{i}"}, "value": {"value": str(i + 1)},
                  "label": {"value": f"Game {i}"}} for i in range(offset, min(offset + limit, self.total))]
         return json.dumps({"results": {"bindings": rows}})
 

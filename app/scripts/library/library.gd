@@ -66,7 +66,7 @@ func attach_store(manager: Node) -> void:
 	store.name = "Store"
 	add_child(store)
 	store.entry_lookup = func(key: String) -> Dictionary: return _entries.get(key, {})
-	store.launcher = get_node_or_null("/root/Launcher")
+	store.launcher = get_node_or_null("/root/Launcher") if is_inside_tree() else null
 	store.download_progress.connect(func(k, d, t, r, e): download_progress.emit(k, d, t, r, e))
 	store.install_state_changed.connect(func(k, s): install_state_changed.emit(k, s))
 	store.queue_changed.connect(func(): queue_changed.emit())
@@ -288,7 +288,7 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 		_tools = Common.find_tools(home, path_env)
 	var extra := {}
 	var args := once
-	var launcher := get_node_or_null("/root/Launcher")
+	var launcher := get_node_or_null("/root/Launcher") if is_inside_tree() else null
 	if launcher != null and launcher.has_method("launch_env"):
 		extra = launcher.launch_env(game)
 	if launcher != null and launcher.has_method("compat_for"):
@@ -391,6 +391,28 @@ func launch_options(game: Dictionary) -> String:
 ## {"ok", "via", "why", "pending": true when it waits for a Steam restart}.
 func set_launch_options(game: Dictionary, options: String) -> Dictionary:
 	return store.set_launch_options(game, options) if store != null else _no_store()
+
+
+## Off-main-thread versions for the UI: `done` gets the value on the main thread.
+func launch_options_async(game: Dictionary, done: Callable) -> void:
+	if store != null:
+		store.launch_options_async(game, done)
+	else:
+		done.call("")
+
+
+func compat_tool_async(game: Dictionary, done: Callable) -> void:
+	if store != null:
+		store.compat_tool_async(game, done)
+	else:
+		done.call("")
+
+
+func compat_tools_async(game: Dictionary, done: Callable) -> void:
+	if store != null:
+		store.compat_tools_async(game, done)
+	else:
+		done.call([] as Array[Dictionary])
 
 
 func compat_tool(game: Dictionary) -> String:

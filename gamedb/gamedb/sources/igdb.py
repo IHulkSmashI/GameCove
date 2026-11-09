@@ -12,6 +12,7 @@ import os
 import time
 import urllib.parse
 
+from ..ids import steam_id
 from ..net import Client
 
 TOKEN_URL = "https://id.twitch.tv/oauth2/token"
@@ -64,14 +65,15 @@ def fetch_for_steam(client: Client, steam_ids: list[str]) -> dict[str, dict]:
     cid, secret = creds
     tok = token(client, cid, secret)
     steam_to_game: dict[str, int] = {}
+    steam_ids = [s for s in steam_ids if steam_id(s) is not None]  # they go into the query
     for i in range(0, len(steam_ids), BATCH):
         chunk = ",".join(f'"{s}"' for s in steam_ids[i:i + BATCH])
         rows = post(client, "external_games",
                     f"fields game,uid; where external_game_source = {STEAM_SOURCE} & uid = ({chunk}); limit {BATCH};",
                     cid, tok)
         for r in rows:
-            if "game" in r and "uid" in r:
-                steam_to_game[str(r["uid"])] = r["game"]
+            if "game" in r and steam_id(r.get("uid")) is not None:
+                steam_to_game[steam_id(r["uid"])] = r["game"]
     game_to_steam = {g: s for s, g in steam_to_game.items()}
     out: dict[str, dict] = {}
     games = list(game_to_steam)

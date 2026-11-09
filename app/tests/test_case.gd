@@ -3,11 +3,20 @@ extends RefCounted
 
 var failures: Array[String] = []
 var _current := ""
+var _expected_errors: Array[String] = []
 
 
 func eq(actual, expected, what := "") -> void:
 	if typeof(actual) != typeof(expected) or actual != expected:
 		failures.append("%s: %s expected %s, got %s" % [_current, what, var_to_str(expected), var_to_str(actual)])
+
+
+## Call before code that logs an engine error on purpose (push_error, a failed
+## condition...): one error whose text contains `part` won't fail the test.
+## Call it once per error expected.
+func expect_error(part: String, times := 1) -> void:
+	for i in times:
+		_expected_errors.append(part)
 
 
 func ok(condition: bool, what := "") -> void:

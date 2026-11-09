@@ -40,7 +40,66 @@ static func find_ci(d: Dictionary, key: String) -> Dictionary:
 	return {}
 
 
-static func tokenize(text: String) -> PackedStringArray:
+## For files we write back (localconfig.vdf, config.vdf): the whole text as
+## nested Dictionaries, or null unless it parsed cleanly: every string closed,
+## every brace balanced, every key with a value, all input used, and no key
+## twice at one level (a Dictionary would silently drop the second one, and
+## writing it back would lose it).
+static func parse_strict(text: String) -> Variant:
+	var errors: Array = []
+	var tokens := tokenize(text, errors)
+	if not errors.is_empty():
+		return null
+	var pos: Array[int] = [0]
+	var keys: Array[int] = [0]
+	var d: Variant = _object_strict(tokens, pos, 0, keys)
+	if d == null or pos[0] != tokens.size() or keys[0] != count_keys(d):
+		return null
+	return d
+
+
+static func parse_file_strict(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	return parse_strict(FileAccess.get_file_as_string(path))
+
+
+## Every key at every level.
+static func count_keys(d: Dictionary) -> int:
+	var n := d.size()
+	for k in d:
+		if d[k] is Dictionary:
+			n += count_keys(d[k])
+	return n
+
+
+static func _object_strict(tokens: PackedStringArray, pos: Array[int], depth: int, keys: Array[int]) -> Variant:
+	var d := {}
+	while pos[0] < tokens.size():
+		var t := tokens[pos[0]]
+		pos[0] += 1
+		if t == "}":
+			return d if depth > 0 else null
+		if t == "{":
+			return null   # a block without a key
+		keys[0] += 1
+		if pos[0] >= tokens.size():
+			return null   # a key without a value
+		var nxt := tokens[pos[0]]
+		pos[0] += 1
+		if nxt == "{":
+			var sub: Variant = _object_strict(tokens, pos, depth + 1, keys)
+			if sub == null:
+				return null
+			d[t.substr(1)] = sub
+		elif nxt == "}":
+			return null
+		else:
+			d[t.substr(1)] = nxt.substr(1)
+	return d if depth == 0 else null   # end of input inside a block
+
+
+static func tokenize(text: String, errors: Array = []) -> PackedStringArray:
 	var out := PackedStringArray()
 	var i := 0
 	var n := text.length()
@@ -65,6 +124,8 @@ static func tokenize(text: String) -> PackedStringArray:
 				else:
 					s += text[i]
 					i += 1
+			if i >= n:
+				errors.append("unclosed string")
 			i += 1
 			# Quoted strings are marked so a literal "{" value is never read as a brace.
 			out.append("\"" + s)

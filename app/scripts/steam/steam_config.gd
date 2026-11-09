@@ -85,14 +85,19 @@ static func set_launch_options(home: String, user_dir: String, appid: String, op
 	var path := localconfig_path(user_dir)
 	if not FileAccess.file_exists(path):
 		return ERR_FILE_NOT_FOUND
-	var root := VDF.parse_file(path)
-	if root.is_empty():
+	# only a file that parsed cleanly, all of it, is ever written back
+	var parsed: Variant = VDF.parse_file_strict(path)
+	if not parsed is Dictionary or parsed.is_empty():
 		return ERR_PARSE_ERROR
+	var root: Dictionary = parsed
+	var before := VDF.count_keys(root)
 	var app := VdfWriter.ensure_path(root, LOCALCONFIG_PATH + [appid])
 	if options == "":
 		VdfWriter.erase_ci(app, "LaunchOptions")
 	else:
 		VdfWriter.set_ci(app, "LaunchOptions", options)
+	if not _sane_change(before, VDF.count_keys(root)):
+		return ERR_PARSE_ERROR
 	return VdfWriter.save(path, root)
 
 
@@ -110,9 +115,11 @@ static func set_compat_tool(home: String, steam_root: String, appid: String, too
 	var path := config_path(steam_root)
 	if not FileAccess.file_exists(path):
 		return ERR_FILE_NOT_FOUND
-	var root := VDF.parse_file(path)
-	if root.is_empty():
+	var parsed: Variant = VDF.parse_file_strict(path)
+	if not parsed is Dictionary or parsed.is_empty():
 		return ERR_PARSE_ERROR
+	var root: Dictionary = parsed
+	var before := VDF.count_keys(root)
 	var mapping := VdfWriter.ensure_path(root, COMPAT_PATH)
 	if tool == "":
 		VdfWriter.erase_ci(mapping, appid)
@@ -121,7 +128,16 @@ static func set_compat_tool(home: String, steam_root: String, appid: String, too
 		VdfWriter.set_ci(entry, "name", tool)
 		VdfWriter.set_ci(entry, "config", "")
 		VdfWriter.set_ci(entry, "priority", USER_PRIORITY)
+	if not _sane_change(before, VDF.count_keys(root)):
+		return ERR_PARSE_ERROR
 	return VdfWriter.save(path, root)
+
+
+## One setting changes a handful of keys (a path of up to 6 new folders plus up
+## to 3 values, or one entry with its 3 values removed); anything more means the
+## tree isn't what we think it is.
+static func _sane_change(before: int, after: int) -> bool:
+	return after - before <= 9 and before - after <= 4
 
 
 ## Internal name Steam uses for a Valve Proton it installed as an app, from the

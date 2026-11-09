@@ -147,6 +147,7 @@ func test_accelerometer_toggle() -> void:
 	var r := FakeRunner.new()
 	var m := _menu(r)
 	r.calls.clear()
+	m.accel_cooldown_ms = 0   # the cooldown has its own test
 	m.body.get_node("claw8ex-gyro-accel").step(1)
 	eq(r.calls[0], "pkexec %s claw8ex-gyro set accel-on" % SET_HELPER, "no-password set entry point, single-token value")
 	ok(r.accel, "accelerometer on")
@@ -208,3 +209,45 @@ func test_bg_command_helpers() -> void:
 	eq(FixRow.verb_for("restart"), "remove", "restart pending can be undone")
 	eq(FixRow.verb_for("other-override"), "", "someone else's override: hands off")
 	bg.free()
+
+
+class FakeController extends RefCounted:
+	var released := 0
+	var done := Callable()
+	func release_intercept(cb := Callable()) -> void:
+		released += 1
+		done = cb
+
+
+func test_switch_to_steam_hands_the_controller_back_first() -> void:
+	var r := FakeRunner.new()
+	var ctl := FakeController.new()
+	var dev := Screens.FakeDevice.new()
+	dev.profile["fixes"] = []
+	var m: Control = QuickMenu.new()
+	m.setup({"device": dev, "power": Screens.FakePower.new(), "launcher": Screens.FakeLauncher.new(),
+		"gamescope": Screens.FakeGamescope.new(), "command_runner": r, "controller": ctl})
+	m.open({})
+	m.show_section(4)
+	var b: Button = m.focusables()[0]
+	b.pressed.emit()
+	b.pressed.emit()
+	eq(ctl.released, 1, "InterceptMode reset asked for")
+	eq(r.spawned, [], "the session switch waits until it's written")
+	ctl.done.call()
+	eq(r.spawned, ["/usr/bin/gamecove-session-select steam"], "then switches")
+	m.free()
+
+
+func test_accelerometer_changes_are_rate_limited() -> void:
+	var r := FakeRunner.new()
+	var m := _menu(r)
+	r.calls.clear()
+	var row = m.body.get_node("claw8ex-gyro-accel")
+	row.step(1)
+	eq(r.calls.filter(func(c): return c.contains(" set ")).size(), 1, "first change runs (InputPlumber restarts)")
+	row = m.body.get_node("claw8ex-gyro-accel")
+	row.step(1)
+	eq(r.calls.filter(func(c): return c.contains(" set ")).size(), 1, "a second change right after is held back")
+	eq(m.status_label.text, Texts.ACCEL_WAIT, "and says why")
+	m.free()

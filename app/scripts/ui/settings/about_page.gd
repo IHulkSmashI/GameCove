@@ -22,6 +22,7 @@ func build() -> void:
 	if dev != null and dev.has_method("display_name"):
 		head.add_child(SKit.fact("Device", dev.display_name()))
 	head.add_child(Kit.label(TS.ABOUT_LICENSE, "QuietLabel", true))
+	head.add_child(Kit.label(TS.ABOUT_DATA, "QuietLabel", true))
 
 	var st := svc("setup")
 	if st != null and st.has_method("steps"):

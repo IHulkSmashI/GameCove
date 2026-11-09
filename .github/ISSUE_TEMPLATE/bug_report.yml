@@ -1,0 +1,100 @@
+# Device list: the makers in app/data/devices.json, plus "Other".
+# packaging/tests/run.sh checks the two stay in step.
+name: Bug report
+description: Something in GameCove doesn't work the way it should.
+title: "[Bug] "
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The more of this you fill in, the faster we can fix it.
+        One problem per report, please. Check the [open issues](https://github.com/IHulkSmashI/GameCove/issues) first in case it's already there.
+  - type: dropdown
+    id: maker
+    attributes:
+      label: Handheld maker
+      options:
+        - AOKZOE
+        - ASUS
+        - AYANEO
+        - Acer
+        - GPD
+        - Lenovo
+        - MSI
+        - OneXPlayer
+        - Orange Pi
+        - Valve
+        - ZOTAC
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: As exact as you can, e.g. "Claw 8 AI+ A2VM" or "ROG Ally X". Settings > About GameCove > About this device shows what GameCove detected.
+      placeholder: Claw 8 AI+ A2VM
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Bazzite
+        - SteamOS
+        - CachyOS Handheld
+        - ChimeraOS
+        - Nobara
+        - Other (say which below)
+    validations:
+      required: true
+  - type: input
+    id: os_version
+    attributes:
+      label: OS version
+      description: "Bazzite: `rpm-ostree status` (the booted line). SteamOS: Settings > System."
+  - type: input
+    id: version
+    attributes:
+      label: GameCove version
+      description: Settings > About GameCove.
+      placeholder: "0.3.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        1. Opened the quick menu during Hades
+        2. Pressed Exit game
+        3. The game kept running
+    validations:
+      required: true
+  - type: dropdown
+    id: how_often
+    attributes:
+      label: How often
+      options:
+        - Every time
+        - Sometimes
+        - Once so far
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Paste or attach what you can (drag a file in). Where to find them:
+        - GameCove's log: `~/.local/share/godot/app_userdata/GameCove/logs/godot.log`
+        - The session: `journalctl --user -b -u gamescope-session-plus@gamecove > gamecove-session.txt`
+        - Device fixes (fan, charge limit, Claw fixes): `/var/lib/gamecove/changes.log`
+        - Controller problems: `busctl --system tree org.shadowblip.InputPlumber`
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, other launchers or tools you run (Decky, HHD, InputPlumber overrides), recent changes.

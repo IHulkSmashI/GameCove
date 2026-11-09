@@ -45,6 +45,9 @@ static func stores_url() -> String:
 ## The only link a CheapShark deal may be opened with. dealIDs come
 ## URL-encoded already (they contain %2B and %3D); they're passed through as is.
 static func redirect_url(deal_id: String) -> String:
+	# only URL-safe characters (they're already %-encoded); anything else = no link
+	if deal_id == "" or RegEx.create_from_string("^[A-Za-z0-9%._~-]+$").search(deal_id) == null:
+		return ""
 	return REDIRECT + deal_id
 
 

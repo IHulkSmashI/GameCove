@@ -32,7 +32,14 @@ static func dump(d: Dictionary, indent := 0) -> String:
 
 ## Saves `data` to `path`. Keeps the very first version as <path>.gamecove-orig
 ## and the one before this write as <path>.gamecove.bak. Returns OK or an error.
+##
+## Refuses (ERR_PARSE_ERROR) unless the text it would write reads back as the
+## same number of keys, so a broken tree never replaces Steam's file.
 static func save(path: String, data: Dictionary) -> Error:
+	var text := dump(data)
+	var back: Variant = VDF.parse_strict(text)
+	if not back is Dictionary or VDF.count_keys(back) != VDF.count_keys(data):
+		return ERR_PARSE_ERROR
 	if FileAccess.file_exists(path):
 		if not FileAccess.file_exists(path + ORIGINAL_SUFFIX):
 			var e := DirAccess.copy_absolute(path, path + ORIGINAL_SUFFIX)
@@ -45,7 +52,7 @@ static func save(path: String, data: Dictionary) -> Error:
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		return FileAccess.get_open_error()
-	f.store_string(dump(data))
+	f.store_string(text)
 	f.close()
 	return DirAccess.rename_absolute(tmp, path)
 

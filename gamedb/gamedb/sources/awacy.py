@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from ..ids import steam_id
 from ..net import Client
 
 URL = "https://raw.githubusercontent.com/AreWeAntiCheatYet/AreWeAntiCheatYet/HEAD/games.json"
@@ -28,10 +29,7 @@ def fetch(client: Client) -> list:
 def _steam_id(store_ids) -> str | None:
     if not isinstance(store_ids, dict):
         return None
-    sid = store_ids.get("steam")
-    if isinstance(sid, (str, int)) and str(sid).isdigit():
-        return str(sid)
-    return None
+    return steam_id(store_ids.get("steam"))
 
 
 def by_steam_id(entries: list) -> dict[str, dict]:

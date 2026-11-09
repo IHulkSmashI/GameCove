@@ -24,6 +24,20 @@
 #                        (behaviour mode also limit=, behaviour=, capacity=, ac=)
 #                        (state=on once GameCove has set a limit, off after remove, n/a without a control)
 #   fix.sh remove        put the recorded setting back and forget it
+#   fix.sh set release   behaviour mode: let it charge (auto) now, keep the limit for
+#                        next time; GameCove's session runs it when GameCove exits.
+#                        Threshold mode: nothing to do (the firmware keeps the limit).
+#   fix.sh guard         run by udev on every power_supply add/change (boot included):
+#                        behaviour mode only; holds charging only while GameCove runs
+#                        and the battery is at the limit on the charger, else auto.
+#                        So a crash, Steam's session or the desktop never find a
+#                        battery that won't charge. Writes only when the value differs.
+#
+# Behaviour mode's install also writes /etc/udev/rules.d/90-gamecove-charge-limit.rules
+# (runs `guard`); remove takes it away.
+#
+# Only on the handhelds listed in ../lib/handhelds.txt (generated from devices.json):
+# laptops share these battery drivers, so anything else gets applies=no / exit 2.
 #
 # GAMECOVE_ROOT is a filesystem prefix for tests (empty on a real system).
 # Exit codes: 0 done, 1 failed, 2 bad usage or not supported here.
@@ -31,6 +45,15 @@ set -eu
 
 ROOT="${GAMECOVE_ROOT:-}"
 STATE="$ROOT/var/lib/gamecove/fixes/charge-limit"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=fixes/lib/handheld.sh
+. "$HERE/../lib/handheld.sh"
+trap fix_unlock EXIT
+trap 'exit 1' INT TERM HUP
+RULE="$ROOT/etc/udev/rules.d/90-gamecove-charge-limit.rules"
+# where the fix is installed (the rule calls it from there)
+FIX_PATH=/usr/lib/gamecove/fixes/charge-limit/fix.sh
+APP_BIN=/usr/lib/gamecove/gamecove.x86_64
 
 die() { printf 'charge-limit: %s\n' "$2" >&2; exit "$1"; }
 
@@ -39,8 +62,9 @@ log_change() {
 	printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$STATE/changes.log"
 }
 
-# Prints "<mode> <file>" for the first battery with a control we can use.
+# Prints "<mode> <file>" for the first battery with a control we can use (handhelds only).
 find_control() {
+	handheld_ok || return 1
 	for d in "$ROOT"/sys/class/power_supply/*; do
 		[ -f "$d/type" ] || continue
 		[ "$(cat "$d/type")" = "Battery" ] || continue
@@ -102,6 +126,56 @@ do_install() {
 		fi
 		log_change "install mode=$MODE original=$(cat "$STATE/original")"
 	fi
+	if [ "$MODE" = behaviour ] && [ ! -f "$RULE" ]; then
+		install_rule
+	fi
+}
+
+install_rule() {
+	mkdir -p "$(dirname "$RULE")"
+	cat > "$RULE.tmp" <<RULEEOF
+# GameCove charge-limit fix (AYANEO charge_behaviour): never leave charging held
+# when GameCove isn't running. Removed by: gamecove-fix charge-limit remove
+ACTION=="add|change", SUBSYSTEM=="power_supply", RUN+="/bin/sh $FIX_PATH guard"
+RULEEOF
+	mv "$RULE.tmp" "$RULE"
+	udevadm control --reload >/dev/null 2>&1 || true
+	log_change "udev rule written"
+}
+
+app_running() {
+	pgrep -f "$APP_BIN" >/dev/null 2>&1
+}
+
+# behaviour mode: what charge_behaviour should be for this limit right now
+behaviour_for() {
+	want=auto
+	if [ "$1" -lt 100 ] && [ "$(ac_online)" = "1" ] && [ "$(capacity)" -ge "$1" ]; then
+		want=inhibit-charge
+	fi
+	printf '%s\n' "$want"
+}
+
+do_guard() {
+	[ "$MODE" = behaviour ] || return 0
+	want=auto
+	if [ -f "$STATE/original" ] && [ -f "$STATE/limit" ] && app_running; then
+		limit="$(cat "$STATE/limit")"
+		case "$limit" in ''|*[!0-9]*) limit=100 ;; esac
+		want="$(behaviour_for "$limit")"
+	fi
+	[ "$(behaviour_now)" = "$want" ] && return 0
+	write_value "$PATH_T" "$want" || die 1 "the kernel refused $want"
+	log_change "guard $want"
+}
+
+do_release() {
+	[ "$MODE" = behaviour ] || { printf 'value=release\n'; return 0; }
+	if [ "$(behaviour_now)" != auto ]; then
+		write_value "$PATH_T" auto || die 1 "the kernel refused auto"
+		log_change "release (auto)"
+	fi
+	printf 'value=release\nbehaviour=%s\n' "$(behaviour_now)"
 }
 
 set_threshold() {
@@ -127,11 +201,8 @@ set_threshold() {
 set_behaviour() {
 	value="$1"
 	printf '%s\n' "$value" > "$STATE/limit"
-	want=auto
 	cap="$(capacity)"
-	if [ "$value" -lt 100 ] && [ "$(ac_online)" = "1" ] && [ "$cap" -ge "$value" ]; then
-		want=inhibit-charge
-	fi
+	want="$(behaviour_for "$value")"
 	write_value "$PATH_T" "$want" || die 1 "the kernel refused $want"
 	got="$(behaviour_now)"
 	[ "$got" = "$want" ] || die 1 "reads $got after setting $want"
@@ -141,10 +212,17 @@ set_behaviour() {
 
 do_set() {
 	value="${1:-}"
+	if [ "$value" = release ]; then
+		[ -n "$PATH_T" ] || die 2 "this battery has no charge limit control"
+		fix_lock charge-limit
+		do_release
+		return 0
+	fi
 	case "$value" in
 		''|*[!0-9]*) die 2 "set needs a whole number 50-100" ;;
 	esac
 	[ "$value" -ge 50 ] && [ "$value" -le 100 ] || die 2 "set needs a whole number 50-100"
+	fix_lock charge-limit
 	do_install
 	if [ "$MODE" = behaviour ]; then
 		set_behaviour "$value"
@@ -176,10 +254,16 @@ do_status() {
 }
 
 do_remove() {
+	if [ -f "$RULE" ]; then
+		rm -f "$RULE"
+		udevadm control --reload >/dev/null 2>&1 || true
+		log_change "udev rule removed"
+	fi
 	if [ ! -f "$STATE/original" ]; then
 		printf 'nothing to undo\n'
 		return 0
 	fi
+	fix_lock charge-limit
 	original="$(cat "$STATE/original")"
 	if [ -n "$PATH_T" ]; then
 		if [ "$MODE" = behaviour ]; then
@@ -196,9 +280,10 @@ do_remove() {
 }
 
 case "${1:-}" in
-	install) do_install; printf 'installed=yes\n' ;;
+	install) [ -n "$PATH_T" ] || die 2 "this battery has no charge limit control"; fix_lock charge-limit; do_install; printf 'installed=yes\n' ;;
 	set) do_set "${2:-}" ;;
 	status) do_status ;;
 	remove) do_remove ;;
-	*) die 2 "usage: fix.sh install|remove|status|set <50-100>" ;;
+	guard) do_guard ;;
+	*) die 2 "usage: fix.sh install|remove|status|guard|set <50-100>|set release" ;;
 esac

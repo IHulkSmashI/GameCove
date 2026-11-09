@@ -40,6 +40,7 @@ import tarfile
 from collections import defaultdict
 from typing import IO, Iterable, Iterator
 
+from ..ids import steam_id
 from ..net import Client, GiveUp, NotFound
 
 REPO_API = "https://api.github.com/repos/bdefore/protondb-data/contents/reports"
@@ -133,8 +134,7 @@ def app_id(r: dict) -> str | None:
     sid = r.get("appId")
     if sid is None:
         sid = ((r.get("app") or {}).get("steam") or {}).get("appId")
-    sid = str(sid) if sid is not None else ""
-    return sid if sid.isdigit() else None
+    return steam_id(sid)
 
 
 def _yes(x) -> bool:
