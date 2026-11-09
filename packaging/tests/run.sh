@@ -880,6 +880,12 @@ if sh "$REPO/packaging/tests/selftest.sh" >"$T/out" 2>&1; then ok; else bad "sel
 if sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "release.sh: $(grep FAIL "$T/out" | head -30)"; fi
 if [ -n "$SHELLCHECK" ] && "$SHELLCHECK" -S warning -s sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "shellcheck release.sh: $(cat "$T/out")"; fi
 
+# ------------------------------------------------------- raw assets the app reads with FileAccess must ship raw
+for f in "$REPO"/app/assets/brand/*.svg "$REPO"/app/assets/device_photos/*.webp; do
+	[ -f "$f" ] || continue
+	grep -q 'importer="keep"' "$f.import" 2>/dev/null && ok || bad "$f.import must use importer=keep (the app reads the raw file; a texture import leaves it out of exports)"
+done
+
 # ------------------------------------------------------- release workflow signs what the installer verifies
 W="$REPO/.github/workflows/release.yml"
 grep -q "cosign sign-blob --yes --bundle dist/SHA256SUMS.sigstore.json dist/SHA256SUMS" "$W" && ok || bad "release.yml must sign SHA256SUMS into SHA256SUMS.sigstore.json (get-gamecove.sh refuses unsigned releases)"
