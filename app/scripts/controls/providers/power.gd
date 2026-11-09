@@ -150,9 +150,22 @@ func saved_device_values() -> Dictionary:
 
 func _on_detected() -> void:
 	var saved := saved_device_values()
-	if saved.is_empty() or registry == null:
+	if registry == null:
 		return
-	registry.apply(saved)
+	if not saved.is_empty():
+		registry.apply(saved)
+	# Battery saver still on from before the restart: its values win over the
+	# everyday profile Profiles applies right after this first detection (deferred,
+	# so this apply is queued after Profiles' one)
+	var bs: RefCounted = _ctl("power.battery_saver")
+	if bs != null and bs.value == true:
+		_reassert_saver.call_deferred()
+
+
+func _reassert_saver() -> void:
+	var bs: RefCounted = _ctl("power.battery_saver")
+	if registry != null and bs != null and bs.value == true:
+		registry.apply(saver_values())
 
 
 ## After sleep the firmware may have reset what we set while every control still

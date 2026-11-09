@@ -477,6 +477,14 @@ func test_battery_saver_survives_a_restart_and_still_puts_back() -> void:
 	eq(_read(e2["root"], "/sys/devices/system/cpu/intel_pstate/no_turbo"), "0", "and boost")
 	var e3 := _setup(t)
 	eq(e3["c"]["power.battery_saver"].value, false, "off is remembered too")
+	# on again, restart, and Profiles applies the everyday TDP right after the first
+	# detection: the saver's values are put back on top (queued after Profiles')
+	e3["reg"].set_value("power.battery_saver", true)
+	t["props"] = e3["runner"].props.duplicate(true)
+	var e4 := _setup(t)
+	e4["reg"].apply({"power.tdp": 25})
+	e4["prov"]._reassert_saver()
+	eq(e4["power"].state()["profile"], "battery", "the saver wins over the everyday profile after a restart")
 	_free()
 
 
