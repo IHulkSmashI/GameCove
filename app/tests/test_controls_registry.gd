@@ -82,3 +82,47 @@ func test_normalize_runs_after_coerce() -> void:
 		func(_c): return "", func(_c): return null, func(_c, _v): return true)
 	eq(c.coerce([0, 50, 10]), [20.0, 50.0, 50.0], "raised and never falling")
 	eq(c.coerce([0, 50]), null, "point count still checked first")
+
+
+## review S4-1: snapshot() / value() on the main thread while the worker applies: never a torn
+## read, never a state half-way through the apply (one commit per worker job).
+func test_snapshot_during_a_worker_apply_is_consistent() -> void:
+	var store := {"power.tdp": 15.0, "power.epp": 1.0}
+	var gate := Semaphore.new()
+	var started := [false]
+	var flag := Mutex.new()
+	var r: Node = ControlsScript.new()   # a real worker thread
+	r.setup({"sys_root": "", "runner": null, "home": "", "device": null})
+	var slow := Ctl.make({"id": "power.tdp", "title": "t", "group": "power", "kind": "slider", "min_value": 0.0,
+		"max_value": 30.0, "step": 1.0, "apply_order": 1},
+		func(_c): return "",
+		func(_c): return store["power.tdp"],
+		func(_c, v):
+			flag.lock(); started[0] = true; flag.unlock()
+			gate.wait()                     # the main thread looks while this write is in progress
+			store["power.tdp"] = v
+			return true)
+	r.register(slow)
+	# EPP is written first (higher apply_order), then the slow TDP: half-way, EPP is new and TDP old
+	r.register(_store_ctl("power.epp", store, {"group": "power", "max_value": 10.0, "step": 1.0, "apply_order": 10}))
+	r.detect_all()
+	var t0 := Time.get_ticks_msec()
+	while r.snapshot() != {"power.tdp": 15.0, "power.epp": 1.0} and Time.get_ticks_msec() - t0 < 3000:
+		OS.delay_msec(10)
+	eq(r.snapshot(), {"power.tdp": 15.0, "power.epp": 1.0}, "detected")
+	r.apply({"power.tdp": 25, "power.epp": 3})
+	t0 = Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 3000:
+		flag.lock(); var s: bool = started[0]; flag.unlock()
+		if s:
+			break
+		OS.delay_msec(5)
+	eq(r.snapshot(), {"power.tdp": 15.0, "power.epp": 1.0}, "mid-apply: the state before it, not half of it")
+	eq(r.value("power.tdp"), 15.0, "value() too")
+	gate.post()
+	t0 = Time.get_ticks_msec()
+	while r.value("power.tdp") != 25.0 and Time.get_ticks_msec() - t0 < 3000:
+		OS.delay_msec(10)
+	eq(r.snapshot(), {"power.tdp": 25.0, "power.epp": 3.0}, "after the job: all of it")
+	r._exit_tree()                          # stop the worker (not in the tree)
+	r.free()
