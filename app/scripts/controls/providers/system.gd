@@ -257,17 +257,18 @@ func _detect_sleep(c) -> String:
 
 func _write_screenshot(c, _v) -> bool:
 	var tmp := _sys(c) + SCREENSHOT_TMP
-	var before := FileAccess.get_modified_time(tmp) if FileAccess.file_exists(tmp) else 0
+	# gamescope always writes the same file; clear the last one so a new file
+	# (not a same-second mtime) tells us this shot is done.
+	if FileAccess.file_exists(tmp):
+		DirAccess.remove_absolute(tmp)
 	if not _x(c).send_cardinal(A_SCREENSHOT, SCREENSHOT_TYPE):
 		return false
 	# gamescope writes the file on its next frame; a short bounded wait, once.
 	var waited := 0
-	while waited < SCREENSHOT_WAIT_MS:
-		if FileAccess.file_exists(tmp) and FileAccess.get_modified_time(tmp) != before and FileAccess.get_size(tmp) > 0:
-			break
+	while not (FileAccess.file_exists(tmp) and FileAccess.get_size(tmp) > 0) and waited < SCREENSHOT_WAIT_MS:
 		OS.delay_msec(100)
 		waited += 100
-	if not FileAccess.file_exists(tmp) or FileAccess.get_modified_time(tmp) == before:
+	if not FileAccess.file_exists(tmp):
 		return false
 	var dir := str(c.ctx.get("home", "")).path_join(SCREENSHOT_DIR)
 	DirAccess.make_dir_recursive_absolute(dir)
