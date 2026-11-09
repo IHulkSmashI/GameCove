@@ -17,6 +17,7 @@ extends Node
 ## poll_exit() directly instead of running timers. A Gamescope without the
 ## async calls (simple fakes) is used synchronously.
 
+const DeviceScript := preload("res://scripts/device/device.gd")
 signal started(game: Dictionary)
 signal ended(game: Dictionary)
 
@@ -167,7 +168,9 @@ static func steam_launch_alive(id: int) -> bool:
 	if id <= 0:
 		return false
 	var uid := ""
-	for line in FileAccess.get_file_as_string("/proc/self/status").split("\n"):
+	# /proc files report a size of 0: read to the real end (get_file_as_string() gives "")
+	var st := FileAccess.open("/proc/self/status", FileAccess.READ)
+	for line in (DeviceScript.read_all(st) if st != null else "").split("\n"):
 		if line.begins_with("Uid:"):
 			uid = line.substr(4).strip_edges().split("\t", false)[0]
 	var args := ["-f", "SteamLaunch AppId=%d( |$)" % id]

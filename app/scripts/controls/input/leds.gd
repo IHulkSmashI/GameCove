@@ -33,6 +33,7 @@ extends RefCounted
 ##  * src/index.tsx: lights are applied again 5 s after resume (firmware resets
 ##    some of them); the provider lists which controls (REAPPLY_AFTER_RESUME).
 
+const DeviceScript := preload("res://scripts/device/device.gd")
 const PATTERNS: Array[String] = ["*:rgb:joystick_rings", "multicolor:chassis", "*:rgb:spectra_zone_*"]
 const FIX_SET_HELPER := "/usr/libexec/gamecove/gamecove-fix-set"
 const FIX := "controller-led"
@@ -66,8 +67,11 @@ static func scan(sys_root: String) -> Array:
 	return out
 
 
+## sysfs reports a size (4096) that isn't the file's length: read to the real end
+## (get_file_as_string() trusts the size and gives "" on real LED nodes).
 static func _read(path: String) -> String:
-	return FileAccess.get_file_as_string(path).strip_edges() if FileAccess.file_exists(path) else ""
+	var f := FileAccess.open(path, FileAccess.READ) if FileAccess.file_exists(path) else null
+	return DeviceScript.read_all(f).strip_edges() if f != null else ""
 
 
 static func read_node(path: String) -> Dictionary:

@@ -17,6 +17,7 @@ extends Node
 ## (responding addresses; default TCP connect), "send": WoL sender (tests), "clock":
 ## func() -> int unix seconds, "reaper": path of the app-id wrapper ("" = none)}.
 
+const DeviceScript := preload("res://scripts/device/device.gd")
 signal changed
 signal apps_changed(host_id: String)
 ## state: "waiting" (info: {"pin", "url", "name"}) | "paired" | "failed" (info: {"why"}) | "cancelled"
@@ -506,7 +507,9 @@ func _check_job(addrs: Array, port: int, paired: bool) -> Dictionary:
 		return out
 	# not answering: maybe the ARP cache still knows its MAC
 	var arp_path := str(ctx.get("sys_root", "")) + "/proc/net/arp"
-	var arp := FileAccess.get_file_as_string(arp_path) if FileAccess.file_exists(arp_path) else ""
+	# /proc reports a size of 0: read to the real end (get_file_as_string() gives "")
+	var arp_file := FileAccess.open(arp_path, FileAccess.READ) if FileAccess.file_exists(arp_path) else null
+	var arp := DeviceScript.read_all(arp_file) if arp_file != null else ""
 	return {"address": "", "arp": GameStream.parse_arp(arp), "addrs": addrs}
 
 
