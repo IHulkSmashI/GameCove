@@ -401,8 +401,12 @@ func _settings_shots() -> void:
 			qm.device.profile = {"id": "lenovo-legion-go-2", "name": "Lenovo Legion Go 2", "maker": "Lenovo",
 				"chip": "AMD Ryzen Z2 Extreme", "gpu": "Radeon 890M-class (RDNA 3.5)", "panel_hz": [30, 144],
 				"support": "partial", "unverified": ["tdp", "charge_limit", "panel.vrr"]}
+			# The fake Controls are a Claw's: What works comes from the Legion's row.
+			var claw_controls = qm.controls
+			qm.controls = null
 			qm.show_section(5)
 			await shot("quick_device_partial")
+			qm.controls = claw_controls
 		qm.close()
 		main.playing = {}
 
