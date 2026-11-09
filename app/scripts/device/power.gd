@@ -127,6 +127,9 @@ var _guard_timer: Timer
 var _busy := -1
 var _busy_at := -1000.0
 var _battery_pct := -1
+## Boost watts above the TDP the user picked on PowerStation (PL2 - PL1 / SPPT above SPL);
+## -1 = the device's default (devices.json pl2_offset_w, else what PowerStation keeps).
+var boost_w := -1.0
 ## Handheld Daemon client; setup() swaps its transport in tests.
 var hhd: RefCounted = Hhd.new()
 var _hhd_tdp := {}      # Hhd.tdp_info() while backend == "hhd"
@@ -830,8 +833,9 @@ func write_tdp(watts: float) -> bool:
 			ok = absf(read_tdp() - w) < 0.5
 	elif backend == "powerstation":
 		if system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "TDP", "d", "%.1f" % watts):
-			if device.has("pl2_offset_w"):
-				system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % float(device["pl2_offset_w"]))
+			var b := boost_w if boost_w >= 0.0 else float(device.get("pl2_offset_w", -1.0))
+			if b >= 0.0:
+				system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % b)
 			ok = absf(read_tdp() - watts) < 0.5
 	elif backend == "hhd" and not _hhd_tdp.is_empty():
 		var w := int(roundf(watts))
@@ -985,7 +989,45 @@ func _run_fix(fix_name: String, value: String) -> bool:
 # ClawDeck's algorithm (autotune.gd); this part is the plumbing ClawDeck's main.py does: where the
 # ceiling and floor come from, battery-only unless asked, what a game learned, levers restored.
 
+## PowerStation boost (power.boost control): watts above the TDP, clamped to the device's boost_max.
+func set_boost_w(watts: float) -> bool:
+	if backend != "powerstation":
+		return false
+	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
+	var w := maxf(0.0, watts)
+	if cap > 0.0:
+		w = minf(w, maxf(0.0, cap - _tdp_w))
+	if not be.set_ps_boost(w):
+		return false
+	boost_w = w
+	_remember("device", "boost_w", w)
+	return true
+
+
+## Handheld Daemon's TDP boost switch (<driver>.tdp.custom.boost), null when it has none.
+func hhd_boost() -> Variant:
+	if backend != "hhd" or _hhd_tdp.is_empty():
+		return null
+	var path: Array = (_hhd_tdp["value_path"] as Array).duplicate()
+	path[path.size() - 1] = "boost"
+	var v: Variant = Hhd.dig(hhd.get_state(), path)
+	return bool(v) if v != null else null
+
+
+func set_hhd_boost(on: bool) -> bool:
+	if hhd_boost() == null:
+		return false
+	var path: Array = (_hhd_tdp["value_path"] as Array).duplicate()
+	path[path.size() - 1] = "boost"
+	var patch := Hhd.tdp_patch(_hhd_tdp, int(roundf(_tdp_w)))
+	var node: Dictionary = Hhd.dig(patch, path.slice(0, path.size() - 1))
+	node["boost"] = on
+	var after: Variant = hhd.set_state(patch)
+	return after != null and Hhd.dig(after, path) == on
+
+
 func load_autotune_opts() -> void:
+	boost_w = float(_recall("device", "boost_w", -1.0))
 	autotune_opts = AUTOTUNE_DEFAULTS.duplicate()
 	var saved: Variant = _recall("device", "autotune_opts", {})
 	if saved is Dictionary:

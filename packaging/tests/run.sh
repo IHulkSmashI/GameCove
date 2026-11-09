@@ -369,6 +369,14 @@ lacks "$T/post.log" "pkexec" "no charge limit kept: no pkexec"
 echo 80 >"$T/gcstate/fixes/charge-limit/limit"
 expect_code 0 "post_client_shutdown with a charge limit" post
 contains "$T/post.log" "^pkexec $T/fix-set charge-limit set release$" "session end releases the charge limit"
+lacks "$T/post.log" "power-tune" "nothing recorded by power-tune: no restore"
+mkdir -p "$T/gcstate/fixes/power-tune/orig"
+expect_code 0 "post_client_shutdown with power-tune values" post
+contains "$T/post.log" "^pkexec $T/fix-set power-tune set restore$" "session end restores power-tune values"
+rmdir "$T/gcstate/fixes/power-tune/orig"
+: >"$T/gcstate/fixes/power-tune/thermald-held"
+expect_code 0 "post_client_shutdown with thermald held" post
+contains "$T/post.log" "^pkexec $T/fix-set power-tune set restore$" "session end starts thermald again"
 
 # ------------------------------------------------------------------ install.sh
 IB="$T/installbin"

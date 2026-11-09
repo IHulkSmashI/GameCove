@@ -71,11 +71,18 @@ func path(rel: String) -> String:
 	return root + rel
 
 
+## Line by line: sysfs files report a size (4096) that isn't their length, which get_as_text()
+## logs as an engine error.
 static func read(p: String) -> String:
-	if not FileAccess.file_exists(p):
+	if p == "" or not FileAccess.file_exists(p):
 		return ""
 	var f := FileAccess.open(p, FileAccess.READ)
-	return f.get_as_text().strip_edges() if f != null else ""
+	if f == null:
+		return ""
+	var lines := PackedStringArray()
+	while not f.eof_reached() and lines.size() < 64:
+		lines.append(f.get_line())
+	return "\n".join(lines).strip_edges()
 
 
 static func read_int(p: String) -> int:
@@ -383,10 +390,7 @@ func set_gpu_clocks(min_mhz: int, max_mhz: int) -> bool:
 	var nmin: int = clampi(min_mhz, lo, hi) if min_mhz >= 0 else int(c["min"])
 	var nmax: int = clampi(max_mhz, lo, hi) if max_mhz >= 0 else int(c["max"])
 	if nmin > nmax:
-		if min_mhz >= 0 and max_mhz < 0:
-			nmin = nmax
-		else:
-			nmax = maxi(nmax, nmin)
+		nmin = nmax  # the floor follows the ceiling down (ClawDeck power.py set_gpu_window)
 	var steps := []
 	if nmax >= int(c["max"]):
 		steps = [["max", nmax], ["min", nmin]]
@@ -639,12 +643,20 @@ func set_cores(n: int) -> bool:
 		"powerstation":
 			if not ps_set(PS_CPU, PS_CPU_IF, "CoresEnabled", "u", str(n)):
 				return false
+			return get_cores() == n
 		"sysfs":
 			if not root_set("cores", str(n)):
 				return false
 		_:
 			return false
 	return online_count() == n
+
+
+func get_cores() -> int:
+	if cores_via() == "powerstation":
+		var v: Variant = ps_get(PS_CPU, PS_CPU_IF, "CoresEnabled")
+		return int(v) if v != null else -1
+	return online_count()
 
 
 func set_epp(word: String) -> bool:
