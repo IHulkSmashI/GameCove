@@ -7,6 +7,7 @@ How the parts of GameCove talk to each other. Change a contract only with a matc
 | Autoload | File | Owner folder | What it does |
 | --- | --- | --- | --- |
 | `Device` | `scripts/device/device.gd` | `scripts/device/` | Which handheld this is (row of `data/devices.json`), its buttons, glyphs and picture, live battery and watts, "About this device" info |
+| `DevicePhoto` | `scripts/device/photo.gd` | `scripts/device/` | Real, freely licensed photo of this handheld from the `device-photos` release, cached in `user://device_photos/` (see [DEVICES.md](DEVICES.md#real-photos)) |
 | `Power` | `scripts/device/power.gd` | `scripts/device/` | TDP, profiles, fan, charge limit via PowerStation / steamos-manager over D-Bus |
 | `Library` | `scripts/library/library.gd` | `scripts/library/`, `scripts/steam/` | All stores in one list, game info from the game database, launching, store management (install, update, downloads, compatibility tool) |
 | `Launcher` | `scripts/launch/launcher.gd` | `scripts/launch/` | Per-game settings and the launch environment (upscaler, frame gen, latency, Proton) |
@@ -296,6 +297,13 @@ Grouped for an "About this device" panel. Cheap: reads files under `/sys`, `/pro
               "fixes": [String], "quirks": [String], "sources": [String], "buttons": profile id, "glyphs": set}
 }
 ```
+
+## Device photo (`DevicePhoto`, `scripts/device/photo.gd`)
+
+- `photo_for(device_id) -> {} | {"path": abs path, "credit": {"author", "license", "license_url", "page_url", "file"}}`: never blocks; a miss starts a one-time background download of this device's photo only. `{}` means show the drawing.
+- `cached(device_id)`: same, never touches the network. `signal photo_ready(device_id, path)`.
+- `enabled` / `set_enabled(on)`: "Show a real photo of my device" (`[device] real_photo` in `user://settings.cfg`, default on).
+- `credit_line(credit) -> "Photo: <author>, <license>"`. Tests: set `http` to `scripts/discover/fake_http.gd`, `cache_dir` and `prefs_path` to temp paths.
 
 ## Power state (`Power.state()`)
 

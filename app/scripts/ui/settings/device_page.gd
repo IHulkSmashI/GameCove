@@ -12,6 +12,8 @@ extends "res://scripts/ui/settings/page.gd"
 ## A panel that isn't there yet shows a placeholder card instead. The page is
 ## built the first time it's shown, so nothing runs at start-up.
 
+const TPhoto := preload("res://scripts/ui/texts_photo.gd")
+
 ## Panel -> script names we look for, first found wins.
 const PANELS := {
 	"about": ["about_device.gd", "about_panel.gd", "about.gd"],
@@ -60,6 +62,21 @@ func build() -> void:
 		panels[id] = c
 		var chain: Array = c.focusables() if c.has_method("focusables") else focusable_children(c)
 		_focusables.append_array(chain)
+	_photo_setting()
+
+
+# ---- real device photo setting (DevicePhoto service); kept apart for merges ----
+
+func _photo_setting() -> void:
+	var ph := svc("photo")
+	if ph == null or not ph.has_method("set_enabled"):
+		return
+	var box := add_card(TPhoto.SETTING_CARD, "handheld")
+	box.get_parent().name = "Card_photo"
+	var r := toggle(box, "real_photo", TPhoto.SETTING_TITLE, bool(ph.enabled), by_value(TPhoto.SETTING_HELP), "handheld")
+	r.changed.connect(func(v):
+		ph.set_enabled(bool(v))
+		rebuild.call_deferred())
 
 
 ## Focusable controls under `n`, in tree order.

@@ -4,7 +4,9 @@ extends SceneTree
 ##   SHOOT_SCRIPT=shoot_device.gd tools/screenshots/shoot.sh /tmp/shots 1280x800
 ## Shots: device_about, device_about_scrolled, device_controller, device_controller_test,
 ## device_storage, device_updates, device_about_light, device_controller_midnight,
-## device_about_generic, device_storage_loading, device_controller_missing.
+## device_about_generic, device_storage_loading, device_controller_missing,
+## device_about_photo (needs a photo at /tmp/gamecove-shots/device_photo.webp, e.g. one
+## built by tools/device_photos/build.py; skipped otherwise).
 
 var out := "/tmp/gamecove-shots/"
 var only: Array = []
@@ -13,6 +15,20 @@ var main: Control
 var Fakes: GDScript
 var Kit: GDScript
 var frame: Control
+
+const PHOTO := "/tmp/gamecove-shots/device_photo.webp"
+
+
+## Stand-in for DevicePhoto with one cached photo for every device.
+class FakePhoto extends RefCounted:
+	signal photo_ready(device_id: String, path: String)
+	var enabled := true
+	func photo_for(_id: String) -> Dictionary:
+		return {"path": PHOTO, "credit": {"author": "ZMASLO", "license": "CC BY 3.0",
+			"license_url": "https://creativecommons.org/licenses/by/3.0/",
+			"page_url": "https://commons.wikimedia.org/wiki/File:Example.png", "file": "Example.png"}}
+	func set_enabled(on: bool) -> void:
+		enabled = on
 
 
 func _initialize() -> void:
@@ -52,6 +68,10 @@ func _run() -> void:
 	await frames(3)
 	main._live_timer.stop()
 	main._live_timer.wait_time = 9999
+	# First-run setup would open over every shot (same as shoot.gd).
+	var flow_script = load("res://scripts/ui/setup/setup_flow.gd")
+	if flow_script.instance != null:
+		flow_script.instance.finish()
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
 	main.show_screen("settings")
 	await frames(4)
@@ -75,6 +95,11 @@ func _run() -> void:
 		cp.stop_test()
 	await _page("storage_panel.gd", "Storage", s, "device_storage", 1)
 	await _page("updates_panel.gd", "Updates", s, "device_updates", 1)
+
+	if FileAccess.file_exists(PHOTO) and (only.is_empty() or "device_about_photo" in only):
+		var ps: Dictionary = Fakes.services()
+		ps["photo"] = FakePhoto.new()
+		await _page("about_panel.gd", "About this device", ps, "device_about_photo")
 
 	var ThemeLib = load("res://theme/gamecove_theme.gd")
 	for pair in [["light", "about_panel.gd", "device_about_light", "About this device"], ["midnight", "controller_panel.gd", "device_controller_midnight", "Controller"], ["sunset", "storage_panel.gd", "device_storage_sunset", "Storage"]]:

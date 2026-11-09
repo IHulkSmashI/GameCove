@@ -20,6 +20,7 @@ driver/driver="Dummy"
 
 Device="*res://scripts/device/device.gd"
 Power="*res://scripts/device/power.gd"
+DevicePhoto="*res://scripts/device/photo.gd"
 Library="*res://scripts/library/library.gd"
 Launcher="*res://scripts/launch/launcher.gd"
 Gamescope="*res://scripts/gamescope/gamescope.gd"

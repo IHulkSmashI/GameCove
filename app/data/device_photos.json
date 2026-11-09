@@ -1,0 +1,138 @@
+{
+ "_about": "Freely licensed Wikimedia Commons photos of each handheld (CC0, public domain, CC BY, CC BY-SA only). The device-photos workflow re-checks every license through the Commons API before publishing. family_of: this device reuses another model's photo because the two look the same from the front. See docs/DEVICES.md.",
+ "steam-deck-lcd": {
+  "file": "Steam Deck (front).png",
+  "author": "Liam Dawe/GamingOnLinux (PNG version by VulcanSphere)",
+  "license": "CC BY-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Steam_Deck_(front).png"
+ },
+ "steam-deck-oled": {
+  "file": "Steam Deck OLED framsida hemskärm.jpg",
+  "author": "SparklesTrainNerd",
+  "license": "CC BY-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Steam_Deck_OLED_framsida_hemsk%C3%A4rm.jpg"
+ },
+ "asus-rog-ally": {
+  "file": "Asus ROG Ally.jpg",
+  "author": "TheHDGamer2008",
+  "license": "CC BY-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Asus_ROG_Ally.jpg"
+ },
+ "asus-rog-ally-x": {
+  "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 235.jpg",
+  "author": "RuinDig/Yuki Uchida",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_235.jpg",
+  "note": "Show-floor unit, Tokyo Game Show 2024."
+ },
+ "asus-rog-xbox-ally": {
+  "file": "ROG XBOX ALLY.jpg",
+  "author": "Kyu3a",
+  "license": "CC BY-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY.jpg",
+  "note": "Store demo unit. Not 'ROG Xbox Ally.jpg' (unsourced press render, refused)."
+ },
+ "asus-rog-xbox-ally-x": {
+  "file": "ROG XBOX ALLY X.jpg",
+  "author": "Kyu3a",
+  "license": "CC BY-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY_X.jpg",
+  "note": "Store demo unit. Not 'ROG Xbox Ally X.jpg' (unsourced press render, refused)."
+ },
+ "lenovo-legion-go": {
+  "file": "Lenovo Legion Go.jpg",
+  "author": "TaurusEmerald",
+  "license": "CC BY-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Lenovo_Legion_Go.jpg",
+  "note": "Screen off."
+ },
+ "msi-claw-a1m": {
+  "file": "MSI Claw - Co poszło nie tak¿ (2160p 30fps AV1-128kbit AAC)-00.08.15.665.png",
+  "author": "ZMASLO",
+  "license": "CC BY 3.0",
+  "license_url": "https://creativecommons.org/licenses/by/3.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:MSI_Claw_-_Co_posz%C5%82o_nie_tak%C2%BF_(2160p_30fps_AV1-128kbit_AAC)-00.08.15.665.png",
+  "note": "Frame from a CC BY YouTube review (license reviewed on Commons). Original 2024 Claw only."
+ },
+ "onexplayer-onexfly-f1": {
+  "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 469.jpg",
+  "author": "RuinDig/Yuki Uchida",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_469.jpg",
+  "note": "Show-floor OneXFly, Tokyo Game Show 2024."
+ },
+ "onexplayer-onexfly-f1-pro": {
+  "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 469.jpg",
+  "author": "RuinDig/Yuki Uchida",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_469.jpg",
+  "family_of": "onexplayer-onexfly-f1",
+  "note": "F1 Pro uses the F1's shell; same front."
+ },
+ "onexplayer-x1-mini": {
+  "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 477.jpg",
+  "author": "RuinDig/Yuki Uchida",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_477.jpg",
+  "note": "Shown with its keyboard cover attached."
+ },
+ "onexplayer-2-pro": {
+  "file": "Tokyo-Game-Show-2023-Day3-2023-09-23 381.jpg",
+  "author": "RuinDig/Yuki Uchida",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_381.jpg",
+  "note": "Show-floor unit, Tokyo Game Show 2023 (OneXPlayer 2 Pro stand)."
+ },
+ "onexplayer-2": {
+  "file": "Tokyo-Game-Show-2023-Day3-2023-09-23 381.jpg",
+  "author": "RuinDig/Yuki Uchida",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_381.jpg",
+  "family_of": "onexplayer-2-pro",
+  "note": "The 2 Pro is the same body as the 2."
+ },
+ "aokzoe-a1": {
+  "file": "AOKZOE A1.jpg",
+  "author": "Kyu3a",
+  "license": "CC BY-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:AOKZOE_A1.jpg"
+ },
+ "aokzoe-a1-pro": {
+  "file": "AOKZOE A1.jpg",
+  "author": "Kyu3a",
+  "license": "CC BY-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:AOKZOE_A1.jpg",
+  "family_of": "aokzoe-a1",
+  "note": "The A1 Pro is the A1's body with a newer chip."
+ },
+ "ayaneo-slide": {
+  "file": "Tokyo-Game-Show-2023-Day3-2023-09-23 393.jpg",
+  "author": "RuinDig/Yuki Uchida",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_393.jpg",
+  "note": "Show-floor unit, screen closed over the keyboard."
+ },
+ "ayaneo-3": {
+  "file": "Tokyo-Game-Show-2025 0728.jpg",
+  "author": "RuinDig/Yuki Uchida",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2025_0728.jpg",
+  "note": "Angled show-floor shot, Tokyo Game Show 2025."
+ }
+}

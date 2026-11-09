@@ -265,7 +265,7 @@ func open_setup(force: bool) -> void:
 	if not ResourceLoader.exists(SETUP_FLOW):
 		return
 	var flow_script: Script = load(SETUP_FLOW)
-	var svc := {"setup": _svc("Setup"), "device": Device, "discover": _svc("Discover")}
+	var svc := {"setup": _svc("Setup"), "device": Device, "discover": _svc("Discover"), "photo": _svc("DevicePhoto")}
 	var flow: Variant = null
 	if force and _script_has(flow_script, "open"):
 		flow = flow_script.call("open", self, svc)
@@ -1090,7 +1090,8 @@ func _build_settings() -> void:
 	if settings.has_method("set_services"):
 		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
-			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller")})
+			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
+			"photo": _svc("DevicePhoto")})
 
 
 static func _version() -> String:
