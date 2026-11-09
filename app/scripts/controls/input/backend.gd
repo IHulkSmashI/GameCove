@@ -319,9 +319,25 @@ func _load(path: String, json: String) -> bool:
 	return call_void(path, DEVICE_IFACE, "LoadProfileFromYaml", ["s", json])
 
 
+## Where an edit is kept (review H3). No game running: the everyday layout. A game running
+## (ctx.game_key, set on this worker by main.gd at its start and end): its legacy own-layout
+## file when it has one (the Controller service loads that for it), else nowhere: the game's
+## values live in its profile (Profiles) and go back to the everyday ones at its end, at the
+## next start or on --restore-baseline, so default.yaml must never take them.
+func save_target() -> String:
+	var game := str(ctx.get("game_key", ""))
+	if game == "":
+		return profile_path()
+	var own := profile_path().get_base_dir().path_join(Profile.file_name_for(game))
+	return own if FileAccess.file_exists(own) else ""
+
+
 func _save(profile: Dictionary) -> void:
-	DirAccess.make_dir_recursive_absolute(profile_path().get_base_dir())
-	SettingsFile.save_text(profile_path(), JSON.stringify(Profile.clean(Profile.normalize(profile)), "  ") + "\n")
+	var target := save_target()
+	if target == "":
+		return
+	DirAccess.make_dir_recursive_absolute(target.get_base_dir())
+	SettingsFile.save_text(target, JSON.stringify(Profile.clean(Profile.normalize(profile)), "  ") + "\n")
 
 
 ## busctl call with no reply value.
