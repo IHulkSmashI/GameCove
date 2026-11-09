@@ -60,6 +60,8 @@ func setup(context: Dictionary) -> void:
 	hhd = Hhd.new(context.get("runner"), str(context.get("sys_root", "")), str(context.get("home", "")))
 	hhd.transport = context.get("hhd_transport")
 	invalidate()
+	if str(context.get("home", "")) != "":
+		PerDevice.adopt_file(_led_cfg(), device_id())
 
 
 ## The devices.json row from ctx.device: a Device node (its `profile`), a

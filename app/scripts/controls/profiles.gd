@@ -624,6 +624,12 @@ func load_file() -> void:
 	for k in d["devices"]:
 		if d["devices"][k] is Dictionary:
 			_data["devices"][PerDevice.key(str(k))] = _clean_device(d["devices"][k])
+	# profiles made while devices.json didn't know this handheld are its own (review M25)
+	var devs: Dictionary = _data["devices"]
+	if device_id != PerDevice.UNKNOWN and not devs.has(device_id) and devs.has(PerDevice.UNKNOWN):
+		devs[device_id] = devs[PerDevice.UNKNOWN]
+		devs.erase(PerDevice.UNKNOWN)
+		save_file()
 
 
 ## Writes the file through a temporary one, so a crash never leaves half a file.

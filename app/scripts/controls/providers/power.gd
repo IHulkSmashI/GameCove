@@ -61,6 +61,7 @@ func setup(c: Dictionary) -> void:
 		be.fix_set = str(c["fix_set"])
 	power = c.get("power")
 	registry = c.get("registry")
+	PerDevice.adopt_file(cfg_path, device_key())
 	# the autoloads only on the real system: a fixture context (tests, device
 	# matrix) must never drive the machine running the tests
 	var real := str(c.get("sys_root", "")) == ""

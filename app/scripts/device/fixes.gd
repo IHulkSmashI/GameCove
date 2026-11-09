@@ -86,6 +86,7 @@ func setup(ctx: Dictionary) -> void:
 	if not device_row.has("traits"):
 		device_row = row_for(device_id, device_row)
 	data_dir = str(ctx.get("data_dir", home.path_join(".local/share/gamecove")))
+	PerDevice.adopt_file(_choices_path(), device_id)
 	_status.clear()
 
 

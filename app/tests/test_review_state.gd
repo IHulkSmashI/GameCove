@@ -420,3 +420,60 @@ func test_m14_coerce_while_the_worker_detects() -> void:
 	eq(good, n, "every one saw a valid option list")
 	reg._exit_tree()
 	_free()
+
+
+# ---- M25: settings saved under @unknown follow the device once a row knows it ---------------------
+
+func _mkdir(name: String) -> String:
+	var d := OS.get_user_data_dir().path_join("test_review_state_m25").path_join(name)
+	Trees.wipe(d)
+	DirAccess.make_dir_recursive_absolute(d)
+	return d
+
+
+func test_m25_unknown_settings_are_adopted() -> void:
+	SettingsFile.reset_for_tests()
+	var d := _mkdir("adopt")
+	var f := FileAccess.open(d + "/power.cfg", FileAccess.WRITE)
+	f.store_string("[profile@unknown]\nbattery=\"performance\"\n\n[device@unknown]\ncharge_limit=80\n")
+	f.close()
+	var power: Node = PowerScript.new()
+	power.setup(load("res://tests/fixtures/power/fake_runner.gd").new(), {"id": "msi-claw-8-ex"}, d)
+	power.config_path = d + "/power.cfg"
+	eq(power._recall("profile", "battery", ""), "performance", "power.cfg: the profile picked while the handheld was unknown")
+	eq(int(power._recall("device", "charge_limit", -1)), 80, "and the charge limit")
+	power.free()
+	# a device that already has its own values keeps them
+	f = FileAccess.open(d + "/power2.cfg", FileAccess.WRITE)
+	f.store_string("[profile@unknown]\nbattery=\"performance\"\n\n[profile@msi-claw-8-ex]\nbattery=\"balanced\"\n")
+	f.close()
+	var p2: Node = PowerScript.new()
+	p2.setup(load("res://tests/fixtures/power/fake_runner.gd").new(), {"id": "msi-claw-8-ex"}, d)
+	p2.config_path = d + "/power2.cfg"
+	eq(p2._recall("profile", "battery", ""), "balanced", "its own values win")
+	p2.free()
+	# profiles.json
+	f = FileAccess.open(d + "/profiles.json", FileAccess.WRITE)
+	f.store_string(JSON.stringify({"format": "gamecove-profiles", "version": 1, "devices": {"unknown": {"global": {"power.tdp": 12}, "ac": {}, "battery": {}, "games": {}}}}))
+	f.close()
+	var prof: Node = ProfilesScript.new()
+	prof.setup(null, "msi-claw-8-ex", d + "/profiles.json")
+	eq(prof.layer("", ""), {"power.tdp": 12}, "profiles.json: the unknown device's profiles")
+	prof.free()
+	# the perf store
+	f = FileAccess.open(d + "/perf.cfg", FileAccess.WRITE)
+	f.store_string("[perf/global@unknown]\noverlay=\"fps\"\n")
+	f.close()
+	var st = load("res://scripts/controls/perf/store.gd").new(d + "/perf.cfg", "msi-claw-8-ex")
+	eq(st.get_value("global", "overlay", ""), "fps", "perf store")
+	# controller layouts
+	var Ctl := load("res://scripts/input/controller.gd")
+	var c: Node = Ctl.new()
+	DirAccess.make_dir_recursive_absolute(d + "/home/.config/inputplumber/profiles/gamecove/unknown")
+	f = FileAccess.open(d + "/home/.config/inputplumber/profiles/gamecove/unknown/default.yaml", FileAccess.WRITE)
+	f.store_string("{}")
+	f.close()
+	c.setup(load("res://tests/fixtures/system/fake_runner.gd").new(), d + "/home")
+	c.set_device("msi-claw-8-ex")
+	ok(FileAccess.file_exists(c.default_profile_path()), "controller layout moved to the device's folder")
+	c.free()

@@ -18,6 +18,7 @@ var _mutex := Mutex.new()
 func _init(ctx: Dictionary, area: String, device_id: String) -> void:
 	_path = str(ctx.get("config_path", DEFAULT_PATH))
 	_section = PerDevice.section(area, device_id)
+	PerDevice.adopt_file(_path, device_id)
 	_cfg = SettingsFile.load_cfg(_path)
 
 

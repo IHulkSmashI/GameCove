@@ -31,6 +31,8 @@ func _load() -> void:
 	if _cfg != null:
 		return
 	_cfg = SettingsFile.load_cfg(path)
+	if PerDevice.adopt_unknown_cfg(_cfg, device_id):
+		SettingsFile.save_cfg(_cfg, path)
 
 
 func get_value(scope: String, key: String, fallback: Variant = null) -> Variant:

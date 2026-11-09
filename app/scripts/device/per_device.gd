@@ -11,6 +11,9 @@ extends RefCounted
 ## ConfigFile: section "<name>@<device id>" (e.g. "profile@msi-claw-8-ex").
 ## Folders:    <dir>/<device id>/... (e.g. InputPlumber profiles).
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
+const UNKNOWN := "unknown"
+
 ## A device id that is safe as a file name and a ConfigFile section suffix.
 static func key(device_id: String) -> String:
 	var out := ""
@@ -27,7 +30,7 @@ static func section(name: String, device_id: String) -> String:
 ## over the device's own: they are newer (first-run setup still writes them).
 ## True when something moved (the caller saves).
 static func migrate_cfg(cfg: ConfigFile, names: Array, device_id: String) -> bool:
-	var moved := false
+	var moved := adopt_unknown_cfg(cfg, device_id)
 	for n in names:
 		if not cfg.has_section(n):
 			continue
@@ -38,11 +41,47 @@ static func migrate_cfg(cfg: ConfigFile, names: Array, device_id: String) -> boo
 	return moved
 
 
+## Settings picked while devices.json didn't know this handheld (id "unknown", review M25)
+## belong to it once a release adds its row: every "<name>@unknown" section moves to
+## "<name>@<device>" where this device has no such section yet (one-time; its own values
+## win). True when something moved (the caller saves).
+static func adopt_unknown_cfg(cfg: ConfigFile, device_id: String) -> bool:
+	var k := key(device_id)
+	if k == UNKNOWN:
+		return false
+	var moved := false
+	for sec in cfg.get_sections():
+		if not sec.ends_with("@" + UNKNOWN):
+			continue
+		var dest := section(sec.trim_suffix("@" + UNKNOWN), k)
+		if cfg.has_section(dest):
+			continue
+		for kk in cfg.get_section_keys(sec):
+			cfg.set_value(dest, kk, cfg.get_value(sec, kk))
+		cfg.erase_section(sec)
+		moved = true
+	return moved
+
+
+## adopt_unknown_cfg() on a settings file, saved when something moved.
+static func adopt_file(path: String, device_id: String) -> void:
+	if key(device_id) == UNKNOWN or not FileAccess.file_exists(path):
+		return
+	SettingsFile.update_cfg(path, func(cfg: ConfigFile): return adopt_unknown_cfg(cfg, device_id))
+
+
 ## Files saved straight in `dir` (from before per-device folders) move into
 ## dir/<device id>/ once, unless that folder already has files. Returns the
 ## device folder.
 static func migrate_dir(dir: String, device_id: String, extension := ".yaml") -> String:
 	var dest := dir.path_join(key(device_id))
+	# layouts made while the handheld was "unknown" move to its own folder (review M25)
+	var unknown := dir.path_join(UNKNOWN)
+	if key(device_id) != UNKNOWN and DirAccess.dir_exists_absolute(unknown) and \
+			(not DirAccess.dir_exists_absolute(dest) or DirAccess.get_files_at(dest).is_empty()):
+		if DirAccess.dir_exists_absolute(dest):
+			DirAccess.remove_absolute(dest)
+		DirAccess.rename_absolute(unknown, dest)
 	var d := DirAccess.open(dir)
 	if d == null:
 		return dest
