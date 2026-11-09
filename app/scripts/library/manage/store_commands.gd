@@ -231,14 +231,75 @@ static func gog_record_with(list: Array, item: Dictionary, remove := false) -> A
 	return out
 
 
-## The folder gogdl created under `base` for game `id`: the subfolder holding
-## goggame-<id>.info (Windows) or gameinfo (Linux). "" if none.
-static func find_gog_install(base: String, id: String) -> String:
+## Marker we leave in a GOG folder we installed, so uninstall can prove whose it is.
+const GOG_OWNER_FILE := ".gamecove-gog-%s"
+
+
+## True only when `path` is proven to be GOG game `id`'s folder: it holds
+## goggame-<id>.info (Windows builds), our own .gamecove-gog-<id> marker, or a
+## Linux gameinfo file with the id on one of its lines. start.sh or a bare
+## gameinfo prove nothing (every Linux game has them).
+static func gog_folder_is(path: String, id: String) -> bool:
+	if path == "" or not id.is_valid_int():
+		return false
+	if FileAccess.file_exists(path.path_join("goggame-%s.info" % id)):
+		return true
+	if FileAccess.file_exists(path.path_join(GOG_OWNER_FILE % id)):
+		return true
+	return gameinfo_has_id(path.path_join("gameinfo"), id)
+
+
+## GOG's Linux installers write a `gameinfo` text file (title, version, ids one
+## per line). True when one line is exactly `id`.
+static func gameinfo_has_id(file: String, id: String) -> bool:
+	if not FileAccess.file_exists(file):
+		return false
+	for line in FileAccess.get_file_as_string(file).split("\n"):
+		if line.strip_edges() == id:
+			return true
+	return false
+
+
+## Folder names directly under `base`, sorted.
+static func list_dirs(base: String) -> Array:
 	var d := DirAccess.open(base)
 	if d == null:
+		return []
+	var out := Array(d.get_directories())
+	out.sort()
+	return out
+
+
+## The folder gogdl created under `base` for game `id`, or "" when it can't be
+## proven. First a subfolder that proves itself (gog_folder_is). Otherwise, with
+## `before` (the folder names before the download): the one folder that is new,
+## looks like a GOG Linux install (gameinfo or .gogdl-linux-manifest), and isn't
+## `taken` (folders already recorded for other games) or proven to be another
+## game's (goggame-<other>.info). Two candidates = "" (never guess).
+static func find_gog_install(base: String, id: String, before: Variant = null, taken: Array = []) -> String:
+	if not id.is_valid_int():
 		return ""
-	for sub in d.get_directories():
+	var names := list_dirs(base)
+	for sub in names:
+		if gog_folder_is(base.path_join(sub), id):
+			return base.path_join(sub)
+	if not before is Array:
+		return ""
+	var fresh: Array = []
+	for sub in names:
 		var p := base.path_join(sub)
-		if FileAccess.file_exists(p.path_join("goggame-%s.info" % id)) or FileAccess.file_exists(p.path_join("gameinfo")):
-			return p
-	return ""
+		if sub in before or p in taken or _other_gog_info(p, id):
+			continue
+		if FileAccess.file_exists(p.path_join("gameinfo")) or FileAccess.file_exists(p.path_join(".gogdl-linux-manifest")):
+			fresh.append(p)
+	return fresh[0] if fresh.size() == 1 else ""
+
+
+static func _other_gog_info(path: String, id: String) -> bool:
+	var d := DirAccess.open(path)
+	if d == null:
+		return false
+	for f in d.get_files():
+		if f.begins_with("goggame-") and f.ends_with(".info") and f != "goggame-%s.info" % id:
+			return true
+	return false

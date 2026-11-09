@@ -129,6 +129,9 @@ func close() -> void:
 
 func _discover() -> void:
 	_set_status("connecting")
+	if not is_inside_tree():
+		_fail_all("unreachable")   # HTTPRequest only works in the tree
+		return
 	_http = HTTPRequest.new()
 	_http.timeout = 3.0
 	add_child(_http)
@@ -258,14 +261,17 @@ func _send(method: String, params: Dictionary) -> int:
 
 
 func _fail_all(new_status: String) -> void:
-	for w in _waiting:
-		_answer(w[1], {"ok": false, "value": null, "error": new_status})
-	_waiting.clear()
-	for id in _pending:
-		_answer(_pending[id]["cb"], {"ok": false, "value": null, "error": new_status})
-	_pending.clear()
+	# lists taken first: a callback may call evaluate() again (re-entering here)
+	var waiting := _waiting
+	var pend := _pending
+	_waiting = []
+	_pending = {}
 	_set_status(new_status)
 	set_process(false)
+	for w in waiting:
+		_answer(w[1], {"ok": false, "value": null, "error": new_status})
+	for id in pend:
+		_answer(pend[id]["cb"], {"ok": false, "value": null, "error": new_status})
 
 
 func _answer(cb: Callable, r: Dictionary) -> void:

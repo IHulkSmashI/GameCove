@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import urllib.parse
 
+from ..ids import steam_id
 from ..net import Client
 
 ENDPOINT = "https://query.wikidata.org/sparql"
@@ -54,8 +55,12 @@ def parse_bindings(data: dict, key: str, items: dict[str, dict]) -> int:
     rows = data.get("results", {}).get("bindings", [])
     for row in rows:
         qid = row["item"]["value"].rsplit("/", 1)[-1]
-        rec = items.setdefault(qid, {"wikidata": qid, "title": "", "released": None, "ids": {}})
         value = row["value"]["value"]
+        if key == "steam":
+            value = steam_id(value)  # it ends up in steam:// URIs: digits only
+            if value is None:
+                continue
+        rec = items.setdefault(qid, {"wikidata": qid, "title": "", "released": None, "ids": {}})
         rec["ids"].setdefault(key, value)
         if not rec["title"] and "label" in row:
             rec["title"] = row["label"]["value"]

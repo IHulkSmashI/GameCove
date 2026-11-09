@@ -111,6 +111,32 @@ func test_link_commands() -> void:
 		["/usr/bin/steam", "steam://store/10"], "Steam link to the client")
 	eq(DiscoverScript.link_command({"kind": "url", "uri": "https://www.cheapshark.com/redirect?dealID=a%3D"}, "/usr/bin/steam"),
 		["/usr/bin/steam", "steam://openurl/https://www.cheapshark.com/redirect?dealID=a%3D"], "web link in Steam's browser")
-	eq(DiscoverScript.link_command({"kind": "url", "uri": "https://x.org/"}, ""), ["xdg-open", "https://x.org/"], "no Steam")
+	eq(DiscoverScript.link_command({"kind": "url", "uri": "https://gg.deals/game/x/"}, ""), ["xdg-open", "https://gg.deals/game/x/"], "no Steam")
+	eq(DiscoverScript.link_command({"kind": "url", "uri": "https://x.org/"}, "s"), [], "unknown host: not opened")
+	eq(DiscoverScript.link_command({"kind": "url", "uri": "https://gg.deals.evil.com/"}, "s"), [], "look-alike host")
+	eq(DiscoverScript.link_command({"kind": "url", "uri": "https://gg.deals@evil.com/"}, "s"), [], "userinfo trick")
+	eq(DiscoverScript.link_command({"kind": "url", "uri": "https://eu.gg.deals/x"}, "s"), ["s", "steam://openurl/https://eu.gg.deals/x"], "gg.deals subdomain")
+	eq(DiscoverScript.link_command({"kind": "steam", "uri": "steam://store/10/../uninstall/440"}, "s"), [], "Steam link with a bad id")
+	eq(DiscoverScript.link_command({"kind": "steam", "uri": "steam://run/10"}, "s"), [], "only store pages")
+	eq(DiscoverScript.link_command({"kind": "url", "uri": "steam://store/10"}, "s"), [], "a steam:// uri posing as a web link")
 	eq(DiscoverScript.link_command({"kind": "url", "uri": "file:///etc/passwd"}, "s"), [], "only https and steam")
 	eq(DiscoverScript.link_command({}, "s"), [], "nothing to open")
+
+
+func test_untrusted_steam_ids_never_reach_a_uri() -> void:
+	var AppId = load("res://scripts/steam/app_id.gd")
+	ok(AppId.valid("620") and AppId.valid(620), "plain digits")
+	for bad in ["", "0", "620/../uninstall/440", "620//-console", "+620", "-1", "6 20", "١٢", "12345678901", null, 1.5]:
+		ok(not AppId.valid(bad), "rejected: %s" % var_to_str(bad))
+	eq(load("res://scripts/discover/steam_api.gd").store_uri("1/../uninstall/2"), "", "no store uri for a bad id")
+	var Cal = load("res://scripts/discover/calendar.gd")
+	var r: Dictionary = Cal.make_release({"title": "Evil", "date": "2027", "precision": "year",
+		"ids": {"steam": "1/../uninstall/2", "wikidata": "Q1"}}, 0)
+	eq(r["link"].get("kind", ""), "url", "calendar: bad Steam id falls back to the Wikidata page")
+	var Prices = load("res://scripts/discover/prices.gd")
+	var ctx := {"currency": "USD", "country": "US"}
+	eq(Prices.from_steam({"appid": "1/../x", "price": 9.99, "title": "X"}, ctx), {}, "Steam deal with a bad id dropped")
+	eq(Prices.from_ggdeals("440", {"currency": "USD", "retail": 5.0, "url": "https://evil.example/x"}, ctx), {}, "GG.deals deal with a foreign URL dropped")
+	eq(Prices.from_ggdeals("44/0", {"currency": "USD", "retail": 5.0, "url": "https://gg.deals/x"}, ctx), {}, "GG.deals deal with a bad id dropped")
+	ok(not Prices.from_ggdeals("440", {"currency": "USD", "retail": 5.0, "url": "https://gg.deals/x"}, ctx).is_empty(), "a good GG.deals deal stays")
+	eq(load("res://scripts/discover/cheapshark.gd").redirect_url("a\"><x"), "", "CheapShark deal id with odd characters: no link")

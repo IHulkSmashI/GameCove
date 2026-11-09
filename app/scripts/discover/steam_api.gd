@@ -46,7 +46,7 @@ static func profile_xml_url(vanity: String) -> String:
 
 ## Store page in the Steam client.
 static func store_uri(appid: String) -> String:
-	return "steam://store/" + appid
+	return preload("res://scripts/steam/app_id.gd").store_uri(appid)
 
 
 ## What the user typed in "Import Steam wishlist": {"steam_id": "7656..."} when

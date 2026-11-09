@@ -60,7 +60,7 @@ const FOCUS_DIALOGS_HELP := {false: "Steam's install and uninstall windows stay 
 
 const STEAM_CONTROL := "Steam control"
 const STEAM_CONTROL_HELP := {false: "Off: installs and settings for Steam games go through Steam's own windows.", true: "On: GameCove installs Steam games and changes their settings without opening Steam's windows."}
-const STEAM_CONTROL_WARNING := "While on, any program on this device could control your signed-in Steam. Turn on only if you trust what's installed."
+const STEAM_CONTROL_WARNING := "While on, any program on this device could control your signed-in Steam. Games running through Proton can also reach it. Turn on only if you trust what's installed. Turning it off takes effect after Steam restarts."
 const STEAM_CEF_STATUS := {
 	"off": "Off.",
 	"flag_missing": "Steam needs a restart with remote control allowed. Restart Steam below.",
@@ -112,6 +112,7 @@ const DEVICE_PANEL_SOON := "Coming in the next build."
 
 const ABOUT_TAGLINE := "The all-in-one companion for Linux handhelds."
 const ABOUT_LICENSE := "Free and open source under GPL-3.0-or-later. Some parts carry their own licenses; see Credits."
+const ABOUT_DATA := "Compatibility tiers: our summary of ProtonDB community reports (protondb.com), ODbL 1.0. Time to beat: IGDB.com."
 const ABOUT_CREDITS := "Credits and licenses"
 const ABOUT_CREDITS_HELP := "Everyone whose work GameCove builds on."
 const ABOUT_SOURCE := "Source code"

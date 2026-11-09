@@ -1,0 +1,62 @@
+name: Tester sign-up
+description: Help test GameCove builds on your handheld before they go out.
+title: "[Tester] "
+labels: ["tester"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping out. Testers get early builds and a short checklist each round (about 20 minutes).
+        Nothing here is ever shared outside the project. You can drop out any time.
+  - type: input
+    id: model
+    attributes:
+      label: Handheld model
+      description: Maker and exact model, e.g. "MSI Claw 8 AI+", "ROG Ally X", "Legion Go S (Z1 Extreme)".
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Bazzite
+        - SteamOS
+        - CachyOS Handheld
+        - ChimeraOS
+        - Nobara
+        - Other (say which below)
+    validations:
+      required: true
+  - type: checkboxes
+    id: stores
+    attributes:
+      label: Stores you use
+      options:
+        - label: Steam
+        - label: Epic (Heroic or Legendary)
+        - label: GOG (Heroic)
+        - label: Amazon (Heroic or nile)
+        - label: Emulators / other
+  - type: dropdown
+    id: availability
+    attributes:
+      label: How much time can you give?
+      options:
+        - A quick check on each new build
+        - An hour or two a month
+        - Happy to dig into problems with logs
+    validations:
+      required: true
+  - type: checkboxes
+    id: ok
+    attributes:
+      label: Before you sign up
+      options:
+        - label: Test builds may have bugs, and you know how to get back to Steam's Gaming Mode.
+          required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Other handhelds you own, things you'd most like to see tested, how to reach you if not here.

@@ -209,8 +209,14 @@ func launch_options(game: Dictionary) -> void:
 	if not c.get("launch_options", false):
 		toast.call(TG.failed("launch_options", _title(game)), "alert", "warn", TG.why(c, "launch_options"))
 		return
+	if library.has_method("launch_options_async"):
+		library.launch_options_async(game, func(cur: Variant): _launch_options_with(game, str(cur)))
+	else:
+		_launch_options_with(game, library.launch_options(game))
+
+
+func _launch_options_with(game: Dictionary, current: String) -> void:
 	var steam := str(game.get("store", "")) == "steam"
-	var current: String = library.launch_options(game)
 	open_keyboard(TG.LAUNCH_OPTIONS + " · " + _title(game),
 		(TG.LAUNCH_OPTIONS_DETAIL_STEAM + " " + TG.LAUNCH_OPTIONS_HOWTO_STEAM + " " + TG.LAUNCH_OPTIONS_EXAMPLE_STEAM) if steam
 			else (TG.LAUNCH_OPTIONS_DETAIL + " " + TG.LAUNCH_OPTIONS_EXAMPLE),
@@ -225,9 +231,16 @@ func compat_tool(game: Dictionary) -> void:
 	if not c.get("compat_tool", false):
 		toast.call(TG.failed("compat_tool", _title(game)), "alert", "warn", TG.why(c, "compat_tool"))
 		return
-	var current: String = library.compat_tool(game)
+	if library.has_method("compat_tool_async") and library.has_method("compat_tools_async"):
+		library.compat_tool_async(game, func(cur: Variant):
+			library.compat_tools_async(game, func(tools: Variant): _compat_tool_with(game, str(cur), tools)))
+	else:
+		_compat_tool_with(game, library.compat_tool(game), library.compat_tools(game))
+
+
+func _compat_tool_with(game: Dictionary, current: String, tools: Array) -> void:
 	var rows: Array = []
-	for t in library.compat_tools(game):
+	for t in tools:
 		var id := str(t.get("id", ""))
 		rows.append({"id": id, "text": str(t.get("name", id)), "detail": "Recommended for most games" if id == "" else "",
 			"icon": "layers", "current": id == current})

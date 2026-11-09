@@ -67,9 +67,14 @@ var _focusables: Array = []
 var _power_shape := {}
 ## Runs gamecove-fix and friends off the main thread; tests give it a fake runner.
 var commands: Node
+## InputPlumber (Controller service, or a fake): handed back before a session switch.
+var controller: Object
 var _fix_status := {}     # fix -> parsed `status` output; missing = not checked yet
 var _fix_working := {}    # fix -> "install" | "remove" while it runs
 var _accel_wanted := false
+## Each accelerometer change restarts InputPlumber; at most one per this long.
+var accel_cooldown_ms := 5000
+var _accel_last_ms := -1000000
 var _building := false
 var _steam_armed := false
 var _steam_button: Button
@@ -95,6 +100,7 @@ func setup(services: Dictionary) -> void:
 	launcher = services["launcher"]
 	gamescope = services["gamescope"]
 	perf = services.get("perf")
+	controller = services.get("controller")
 	if services.has("session"):
 		attach_session(services["session"])
 	if power.has_signal("changed"):
@@ -822,6 +828,11 @@ func _on_fix_action(fix: String, verb: String) -> void:
 
 
 func _set_accel(on: bool, row: Control) -> void:
+	if Time.get_ticks_msec() - _accel_last_ms < accel_cooldown_ms:
+		row.set_value_quiet(not on)
+		status_label.text = Texts.ACCEL_WAIT
+		return
+	_accel_last_ms = Time.get_ticks_msec()
 	_accel_wanted = on
 	var value := "accel-on" if on else "accel-off"
 	status_label.text = Texts.ASKS_PASSWORD
@@ -876,6 +887,14 @@ func _on_steam_pressed() -> void:
 		return
 	_steam_armed = false
 	_steam_button.text = Texts.STEAM_TITLE
+	# InterceptMode 0 on every device first (gamecove-session-select does it too)
+	if controller != null and controller.has_method("release_intercept"):
+		controller.release_intercept(_spawn_steam_session)
+	else:
+		_spawn_steam_session()
+
+
+func _spawn_steam_session() -> void:
 	if commands.spawn(SESSION_SELECT, PackedStringArray(["steam"])):
 		status_label.text = Texts.STEAM_SWITCHING
 	else:

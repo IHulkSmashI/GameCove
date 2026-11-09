@@ -63,7 +63,7 @@ static func for_game(g: Dictionary, now := -1) -> Array:
 		out["device"] = _b("device", d["text"], d["short"], d["tone"], d["icon"])
 	var tier: Variant = info.get("protondb")
 	if tier is String and PROTON_TONE.has(tier):
-		out["protondb"] = _b("protondb", "ProtonDB " + tier.capitalize(), tier.capitalize(), PROTON_TONE[tier], "gauge")
+		out["protondb"] = _b("protondb", "Community reports: " + tier.capitalize(), tier.capitalize(), PROTON_TONE[tier], "gauge")
 	var ac := Texts.anticheat_badge(info)
 	if not ac.is_empty():
 		var icon: String = {"good": "shield", "warn": "shield_alert", "bad": "shield_x"}.get(ac["tone"], "shield")

@@ -189,3 +189,72 @@ func test_only_in_our_own_session() -> void:
 	c.set_button_test(true)
 	eq(_modes(t[1]), [], "never touches InputPlumber when not intercepting")
 	c.free()
+
+
+## End to end: main.gd's calls into SessionWiring (game start, window focus,
+## quick menu) reach a real Controller and come out as InterceptMode writes.
+func test_session_wiring_drives_intercept_mode() -> void:
+	var SW = load("res://scripts/ui/games/session_wiring.gd")
+	var t := _ctl("wiring")
+	var c: Node = t[0]
+	var f: RefCounted = t[1]
+	f.handler = func(cmd: String):
+		if cmd.begins_with(SETP) or cmd.contains(" SetInterceptActivation "):
+			return {"code": 0, "out": ""}
+		return null
+	c.setup_intercept_for_tests()
+	c.monitor_line({"kind": "started"})
+	var w = SW.new()
+	w.setup({"controller": c})
+	w.home_in_front(true)
+	eq(_modes(f).back(), 2, "no game: our UI keeps Always")
+	w.game_started({"key": "steam:42", "store": "steam", "id": "42"}, 42)
+	eq(_modes(f).back(), 1, "game starts: Pass")
+	w.home_in_front(false)
+	eq(_modes(f).back(), 1, "game window in front: Pass")
+	eq(c.intercept_state()["game_focused"], true)
+	w.home_in_front(true)
+	eq(_modes(f).back(), 2, "home in front of the game: Always")
+	w.home_in_front(false)
+	w.menu_over_game(true)
+	eq(_modes(f).back(), 2, "quick menu over the game: Always")
+	w.menu_over_game(false)
+	eq(_modes(f).back(), 1, "quick menu closed: Pass again")
+	# InputPlumber moved itself to Always on Guide; nothing changed on our
+	# side, but the mode is written again instead of trusting the last one.
+	var n := _modes(f).size()
+	w.sync_focus()
+	eq(_modes(f).size(), n + 1, "focus sync re-sends the mode")
+	eq(_modes(f).back(), 1, "still Pass while the game is in front")
+	w.game_ended({"key": "steam:42", "store": "steam", "id": "42"})
+	eq(_modes(f).back(), 2, "game over: Always")
+	n = _modes(f).size()
+	w.menu_over_game(true)
+	w.menu_over_game(false)
+	eq(_modes(f).size(), n, "quick menu with no game leaves the mode alone")
+	c.free()
+
+
+func test_release_intercept_resets_every_device() -> void:
+	var t := _ctl("release")
+	var c: Node = t[0]
+	var f: RefCounted = t[1]
+	f.handler = func(cmd: String):
+		if cmd.begins_with(SETP) or cmd.contains(" SetInterceptActivation "):
+			return {"code": 0, "out": ""}
+		return null
+	c.setup_intercept_for_tests()
+	c.monitor_line({"kind": "started"})
+	eq(_modes(f).back(), 2, "intercepting: Always")
+	var done := [false]
+	c.release_intercept(func(): done[0] = true)
+	eq(_modes(f).back(), 0, "released: InterceptMode 0")
+	var zeroed: Array = f.calls.filter(func(cmd): return cmd.begins_with(SETP) and cmd.ends_with("InterceptMode u 0"))
+	ok(zeroed.size() >= 1, "every composite device gets 0")
+	ok(done[0], "callback after the write")
+	eq(c.intercept_state()["active"], false, "no longer intercepting")
+	var n: int = f.calls.size()
+	c.set_game_focused(false)
+	c.set_game_focused(true)
+	eq(f.calls.size(), n, "focus changes after release write nothing")
+	c.free()

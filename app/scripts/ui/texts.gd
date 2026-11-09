@@ -286,7 +286,7 @@ static func ttb_line(info: Dictionary) -> String:
 	var n := int(t.get("count", 0)) if t.get("count") != null else 0
 	if n > 0:
 		line += "  ·  from %d %s" % [n, "player" if n == 1 else "players"]
-	return line
+	return line + "  ·  " + TTB_CREDIT
 
 
 static func anticheat_line(info: Dictionary) -> String:
@@ -305,6 +305,9 @@ static func anticheat_line(info: Dictionary) -> String:
 	return "Anti-cheat%s: no reports yet." % which
 
 
+const ACCEL_WAIT := "One moment: the controller is still restarting from the last change."
+
+
 const PROTONDB := {
 	"platinum": "runs perfectly out of the box",
 	"gold": "runs perfectly after small tweaks",
@@ -314,11 +317,20 @@ const PROTONDB := {
 }
 
 
+## Our own summary of ProtonDB's community reports (not ProtonDB's official
+## rating), so it's labelled as such.
+const PROTONDB_LABEL := "Community reports (ProtonDB data)"
+## Time to beat comes from IGDB; credit it wherever the numbers show.
+const TTB_CREDIT := "data from IGDB.com"
+## Shown with the numbers on the game page (ODbL needs the credit and licence).
+const DATA_CREDIT := "Compatibility tiers are our summary of ProtonDB's community reports (protondb.com), used under the ODbL 1.0. Time to beat by IGDB.com."
+
+
 static func protondb_line(info: Dictionary) -> String:
 	var tier: Variant = info.get("protondb")
 	if tier == null or not PROTONDB.has(tier):
-		return "ProtonDB: no rating yet"
-	return "ProtonDB %s: %s" % [String(tier).capitalize(), PROTONDB[tier]]
+		return PROTONDB_LABEL + ": no reports yet"
+	return "%s: %s, %s" % [PROTONDB_LABEL, String(tier).capitalize(), PROTONDB[tier]]
 
 
 static func last_played_text(ts: int, now: int) -> String:

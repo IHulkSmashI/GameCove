@@ -30,8 +30,35 @@ short_session_recover() {
 	fi
 }
 
-# Close Steam cleanly when GameCove exits so the session can end.
+# InputPlumber: GameCove sets InterceptMode 2 (everything to GameCove) while its
+# UI has focus. If GameCove died or the session is switching, put every device
+# back to 0 so Steam's session or the desktop get a normal controller.
+reset_input_intercept() {
+	command -v busctl >/dev/null 2>&1 || return 0
+	local dev
+	for dev in $(busctl --system --list tree org.shadowblip.InputPlumber 2>/dev/null |
+		grep -E '^/org/shadowblip/InputPlumber/CompositeDevice[0-9]+$'); do
+		busctl --system --timeout=2 set-property org.shadowblip.InputPlumber "$dev" \
+			org.shadowblip.Input.CompositeDevice InterceptMode u 0 >/dev/null 2>&1 || true
+	done
+}
+
+# AYANEO charge limit (charge_behaviour): GameCove holds charging only while it
+# runs. Let the battery charge again (the limit is kept for next time); polkit
+# allows this one set without a password. The fix's udev rule is the backstop.
+release_charge_limit() {
+	local state="${GAMECOVE_STATE_DIR:-/var/lib/gamecove}" helper="${GAMECOVE_FIX_SET:-/usr/libexec/gamecove/gamecove-fix-set}"
+	[ -f "$state/fixes/charge-limit/limit" ] || return 0
+	[ -x "$helper" ] || return 0
+	command -v pkexec >/dev/null 2>&1 || return 0
+	timeout 15 pkexec "$helper" charge-limit set release >/dev/null 2>&1 || true
+}
+
+# When GameCove exits: controller and battery back to normal, then close Steam
+# cleanly so the session can end.
 post_client_shutdown() {
+	reset_input_intercept
+	release_charge_limit
 	if command -v steam >/dev/null 2>&1 && pgrep -u "$(id -u)" -x steam >/dev/null 2>&1; then
 		steam -shutdown >/dev/null 2>&1 || true
 	fi

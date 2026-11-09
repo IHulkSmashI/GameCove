@@ -29,6 +29,7 @@ import json
 import re
 import urllib.parse
 
+from ..ids import steam_id
 from ..net import Client
 from . import igdb as igdb_auth
 
@@ -149,8 +150,11 @@ def from_steam_item(item: dict) -> dict | None:
     when = dt.datetime.fromtimestamp(stamp, dt.timezone.utc).date() if stamp else None
     if when is None:
         precision = "tba"
+    sid = steam_id(item.get("appid") or item.get("id"))
+    if sid is None:
+        return None
     rec = {"title": item["name"].strip(), "date": date_label(when, precision), "precision": precision,
-           "ids": {"steam": str(item.get("appid") or item.get("id"))}, "art": steam_art(item.get("assets")),
+           "ids": {"steam": sid}, "art": steam_art(item.get("assets")),
            "sources": ["steam"]}
     return rec
 
@@ -226,7 +230,12 @@ def parse_wikidata(data: dict) -> list[dict]:
                                      "_when": None})
         for key in ("steam", "gog", "epic"):
             if key in row:
-                rec["ids"].setdefault(key, row[key]["value"])
+                value = row[key]["value"]
+                if key == "steam":
+                    value = steam_id(value)
+                    if value is None:
+                        continue
+                rec["ids"].setdefault(key, value)
                 pc.add(qid)
         if "plat" in row:
             pc.add(qid)
@@ -284,8 +293,8 @@ def from_igdb_row(row: dict) -> dict | None:
         precision = "tba"
     ids = {"igdb": str(game.get("id", ""))} if game.get("id") else {}
     for ext in game.get("external_games") or []:
-        if isinstance(ext, dict) and ext.get("external_game_source") == IGDB_STEAM_SOURCE and ext.get("uid"):
-            ids.setdefault("steam", str(ext["uid"]))
+        if isinstance(ext, dict) and ext.get("external_game_source") == IGDB_STEAM_SOURCE and steam_id(ext.get("uid")):
+            ids.setdefault("steam", steam_id(ext["uid"]))
     art = {}
     cover = game.get("cover")
     if isinstance(cover, dict) and cover.get("image_id"):
@@ -323,6 +332,8 @@ def merge(*lists: list[dict], today: dt.date, limit: int = 3000) -> list[dict]:
     title_to_key: dict[str, str] = {}
     for recs in lists:
         for r in recs:
+            if "steam" in r["ids"] and steam_id(r["ids"]["steam"]) is None:
+                r["ids"] = {k: v for k, v in r["ids"].items() if k != "steam"}  # e.g. last build's file
             steam = r["ids"].get("steam")
             t = normalise(r["title"])
             key = f"steam:{steam}" if steam else title_to_key.get(t, f"title:{t}")

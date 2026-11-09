@@ -22,7 +22,10 @@ signal finished(appid: String, action: String, ok: bool, message: String)
 signal window_needed(appid: String, reason: String)
 ## A Steam setting we couldn't write yet waits for Steam to stop (appid, what).
 signal pending_changed
+## A launch-options / compat-tool write that ran on the worker failed.
+signal setting_failed(appid: String, what: String, message: String)
 
+const AppId := preload("res://scripts/steam/app_id.gd")
 const Acf := preload("res://scripts/steam/acf.gd")
 const SteamConfig := preload("res://scripts/steam/steam_config.gd")
 const SteamCef := preload("res://scripts/steam/steam_cef.gd")
@@ -45,6 +48,7 @@ var run_steam := func(args: Array) -> void: OS.create_process(_steam_cmd(), Pack
 var cef: Node
 ## appid -> {"launch_options": String?, "compat_tool": String?}
 var pending := {}
+var _inflight := {}   # "<appid>/<what>" -> value being written on a thread
 
 var _watch := {}   # appid -> {"action", "t", "seen_busy", "last_done", "last_t", "rate", "target"}
 var _timer: Timer
@@ -137,6 +141,8 @@ func _result(ok: bool, via: String, why := "") -> Dictionary:
 
 ## Installs into the Steam library folder `library_path` ("" = Steam's default).
 func install(appid: String, library_path := "") -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	if cef_usable():
 		cef.evaluate(SteamCef.js_install(appid.to_int(), library_path), func(r: Dictionary) -> void:
 			if not r["ok"]:
@@ -157,6 +163,8 @@ func _uri_install(appid: String) -> Dictionary:
 
 
 func uninstall(appid: String) -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	if cef_usable():
 		cef.evaluate(SteamCef.js_uninstall(appid.to_int()), func(r: Dictionary) -> void:
 			if not r["ok"]:
@@ -167,6 +175,8 @@ func uninstall(appid: String) -> Dictionary:
 
 
 func verify(appid: String) -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	if cef_usable():
 		cef.evaluate(SteamCef.js_verify(appid.to_int()), func(r: Dictionary) -> void:
 			if not r["ok"]:
@@ -186,10 +196,14 @@ func _uri_simple(appid: String, action: String, prefix: String, dialog: bool) ->
 
 
 func update(appid: String) -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	return _api_only(appid, "update", SteamCef.js_update(appid.to_int()))
 
 
 func pause(appid: String) -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	var r := _api_only(appid, "", SteamCef.js_pause(appid.to_int()))
 	if r["ok"]:
 		state_changed.emit(appid, "paused")
@@ -197,10 +211,14 @@ func pause(appid: String) -> Dictionary:
 
 
 func resume(appid: String) -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	return _api_only(appid, "update", SteamCef.js_resume(appid.to_int()))
 
 
 func cancel(appid: String) -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	var r := _api_only(appid, "", SteamCef.js_cancel(appid.to_int()))
 	if r["ok"]:
 		_stop_watch(appid)
@@ -210,6 +228,8 @@ func cancel(appid: String) -> Dictionary:
 
 ## Moves the install to another Steam library folder (added to Steam if new).
 func move(appid: String, library_path: String) -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	if library_path == "":
 		return _result(false, "", "Pick a folder")
 	var r := _api_only(appid, "move", SteamCef.js_move(appid.to_int(), library_path))
@@ -235,6 +255,8 @@ func _api_only(appid: String, action: String, js: String) -> Dictionary:
 ## when available (arguments go before the game's own launch options), else
 ## steam://run/<id>//<args>/ (Steam asks the user to confirm custom arguments).
 func launch(appid: String, args := "") -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	if args == "":
 		return _result(open_uri.call("steam://rungameid/" + appid), "steam-uri")
 	if cef_usable():
@@ -251,6 +273,8 @@ static func run_uri(appid: String, args: String) -> String:
 
 ## Opens a Steam page: store | properties | details | downloads.
 func open_page(appid: String, page: String) -> Dictionary:
+	if page != "downloads" and not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	var uri: String = {"store": "steam://store/%s", "properties": "steam://gameproperties/%s",
 		"details": "steam://nav/games/details/%s", "downloads": "steam://open/downloads"}.get(page, "")
 	if uri == "":
@@ -262,6 +286,57 @@ func open_page(appid: String, page: String) -> Dictionary:
 
 
 # --- Launch options and compatibility tool ---
+
+## Reading localconfig.vdf / config.vdf and scanning appmanifests can take a
+## while on a big library, so the UI uses these: the work runs on a thread and
+## `done` gets the result on the main thread. (Outside the scene tree, in tests,
+## it runs at once.)
+func launch_options_async(appid: String, done: Callable) -> void:
+	if pending.has(appid) and pending[appid].has("launch_options"):
+		done.call(pending[appid]["launch_options"])
+		return
+	if _inflight.has(appid + "/launch_options"):
+		done.call(_inflight[appid + "/launch_options"])
+		return
+	var root := steam_root
+	_spawn(func() -> Variant:
+		var user := SteamConfig.current_user_dir(root)
+		return SteamConfig.launch_options(user, appid) if user != "" else "", done, is_inside_tree())
+
+
+func compat_tool_async(appid: String, done: Callable) -> void:
+	if pending.has(appid) and pending[appid].has("compat_tool"):
+		done.call(pending[appid]["compat_tool"])
+		return
+	if _inflight.has(appid + "/compat_tool"):
+		done.call(_inflight[appid + "/compat_tool"])
+		return
+	var root := steam_root
+	_spawn(func() -> Variant: return SteamConfig.compat_tool(root, appid) if root != "" else "", done, is_inside_tree())
+
+
+func compat_tools_async(done: Callable) -> void:
+	var root := steam_root
+	_spawn(func() -> Variant: return scan_compat_tools(root), done, is_inside_tree())
+
+
+## Runs `work` on its own thread and hands its result to `done` on the main
+## thread (deferred). Static, so the lambdas hold no reference to a node that
+## may be gone by then. threaded = false runs both right away.
+static func _spawn(work: Callable, done: Callable, threaded: bool) -> void:
+	if not threaded:
+		var r: Variant = work.call()
+		if done.is_valid():
+			done.call(r)
+		return
+	var t := Thread.new()
+	t.start(func() -> void:
+		var r: Variant = work.call()
+		(func() -> void:
+			t.wait_to_finish()
+			if done.is_valid():
+				done.call(r)).call_deferred())
+
 
 func launch_options(appid: String) -> String:
 	if pending.has(appid) and pending[appid].has("launch_options"):
@@ -277,10 +352,14 @@ func compat_tool(appid: String) -> String:
 
 
 func set_launch_options(appid: String, options: String) -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	return _set_setting(appid, "launch_options", options, SteamCef.js_set_launch_options(appid.to_int(), options))
 
 
 func set_compat_tool(appid: String, tool: String) -> Dictionary:
+	if not AppId.valid(appid):
+		return _result(false, "", "Not a Steam app id")
 	return _set_setting(appid, "compat_tool", tool, SteamCef.js_set_compat_tool(appid.to_int(), tool))
 
 
@@ -293,10 +372,23 @@ func _set_setting(appid: String, what: String, value: String, js: String) -> Dic
 				_queue_pending(appid, what, value))
 		return _result(true, "steam-cef")
 	if not steam_running():
-		var err := _write_setting(appid, what, value)
-		if err == OK:
-			return _result(true, "steam-files")
-		return _result(false, "steam-files", "Couldn't write Steam's settings (%s)" % error_string(err))
+		if not is_inside_tree():
+			var err := _write_setting(appid, what, value)
+			if err == OK:
+				return _result(true, "steam-files")
+			return _result(false, "steam-files", "Couldn't write Steam's settings (%s)" % error_string(err))
+		# parsing and writing a big localconfig.vdf: on a thread; a failure comes
+		# back as setting_failed. Reads see the new value meanwhile (_inflight).
+		_inflight[appid + "/" + what] = value
+		var root := steam_root
+		var h := home
+		var pr := proc_root
+		_spawn(func() -> Variant: return _write_setting_in(root, h, pr, appid, what, value), func(err: Variant) -> void:
+			if _inflight.get(appid + "/" + what) == value:
+				_inflight.erase(appid + "/" + what)
+			if int(err) != OK:
+				setting_failed.emit(appid, what, "Couldn't write Steam's settings (%s)" % error_string(int(err))), true)
+		return _result(true, "steam-files")
 	_queue_pending(appid, what, value)
 	var r := _result(true, "steam-files-after-restart")
 	r["pending"] = true
@@ -311,12 +403,23 @@ func _queue_pending(appid: String, what: String, value: String) -> void:
 
 
 func _write_setting(appid: String, what: String, value: String) -> Error:
+	return _write_setting_in(steam_root, home, proc_root, appid, what, value)
+
+
+## Thread-safe: only files, no node state. One write at a time.
+static func _write_setting_in(root: String, h: String, pr: String, appid: String, what: String, value: String) -> Error:
+	_write_lock.lock()
+	var err: Error
 	if what == "launch_options":
-		var user := SteamConfig.current_user_dir(steam_root)
-		if user == "":
-			return ERR_FILE_NOT_FOUND
-		return SteamConfig.set_launch_options(home, user, appid, value, proc_root)
-	return SteamConfig.set_compat_tool(home, steam_root, appid, value, proc_root)
+		var user := SteamConfig.current_user_dir(root)
+		err = SteamConfig.set_launch_options(h, user, appid, value, pr) if user != "" else ERR_FILE_NOT_FOUND
+	else:
+		err = SteamConfig.set_compat_tool(h, root, appid, value, pr)
+	_write_lock.unlock()
+	return err
+
+
+static var _write_lock := Mutex.new()
 
 
 ## Writes every waiting setting if Steam is stopped. Returns how many were written.
@@ -364,6 +467,11 @@ static func _steam_cmd() -> String:
 ## Compatibility tools Steam can use, from local files (Valve Proton apps and
 ## compatibilitytools.d). First entry is Steam's default ("").
 func compat_tools() -> Array[Dictionary]:
+	return scan_compat_tools(steam_root)
+
+
+## Thread-safe (files only). See compat_tools_async().
+static func scan_compat_tools(steam_root: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = [{"id": "", "name": "Steam default", "path": "", "source": "default"}]
 	if steam_root == "":
 		return out

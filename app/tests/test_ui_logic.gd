@@ -75,11 +75,12 @@ func test_badge_text() -> void:
 func test_game_page_lines() -> void:
 	var info := {"time_to_beat": {"main_h": 10.0, "extra_h": 20.0, "complete_h": null, "count": 17, "source": "igdb"},
 		"anticheat": {"status": "denied", "anticheats": ["Easy Anti-Cheat"]}, "protondb": "gold"}
-	eq(Texts.ttb_line(info), "Main story 10 h  ·  Main + extras 20 h  ·  100% —  ·  from 17 players", "ttb line")
+	eq(Texts.ttb_line(info), "Main story 10 h  ·  Main + extras 20 h  ·  100% —  ·  from 17 players  ·  data from IGDB.com", "ttb line credits IGDB")
 	ok(Texts.anticheat_line(info).contains("Easy Anti-Cheat"), "anti-cheat names listed")
 	ok(Texts.anticheat_line(info).contains("blocks Linux"), "denied explained")
-	eq(Texts.protondb_line(info), "ProtonDB Gold: runs perfectly after small tweaks", "protondb line")
-	eq(Texts.protondb_line({"protondb": null}), "ProtonDB: no rating yet", "no protondb")
+	eq(Texts.protondb_line(info), "Community reports (ProtonDB data): Gold, runs perfectly after small tweaks", "tier labelled as our summary of community reports")
+	eq(Texts.protondb_line({"protondb": null}), "Community reports (ProtonDB data): no reports yet", "no protondb")
+	ok(Texts.DATA_CREDIT.contains("ODbL") and Texts.DATA_CREDIT.contains("IGDB"), "ODbL notice and IGDB credit")
 	eq(Texts.ttb_line({"time_to_beat": null}), "Time to beat: no data yet", "no ttb")
 
 

@@ -38,12 +38,37 @@
 #                          (Handheld Daemon's minimum curve up to 50 C, its default curve above), max 100 x 8
 # Must match FAN_DRIVERS in app/scripts/device/power.gd.
 #
+# Only on the handhelds listed in ../lib/handhelds.txt (generated from devices.json):
+# MSI and ASUS laptops use the same drivers, so anything else gets applies=no / exit 2.
+# If a `set` fails halfway, every fan goes back to the firmware's automatic control.
+#
 # GAMECOVE_ROOT is a filesystem prefix for tests (empty on a real system).
 # Exit codes: 0 done, 1 failed, 2 bad usage or not supported here.
 set -eu
 
 ROOT="${GAMECOVE_ROOT:-}"
 STATE="$ROOT/var/lib/gamecove/fixes/fan"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=fixes/lib/handheld.sh
+. "$HERE/../lib/handheld.sh"
+SETTING=0
+
+# On any exit: a `set` that didn't finish puts every fan back on automatic,
+# then the lock goes.
+on_exit() {
+	rc=$?
+	if [ "$rc" -ne 0 ] && [ "$SETTING" -eq 1 ] && [ -n "${HW:-}" ]; then
+		for n in $(fans); do
+			write_value "$HW/pwm${n}_enable" "$AUTO" || true
+		done
+		printf 'fan: set failed, every fan is back on automatic\n' >&2
+		log_change "set failed (exit $rc), fans back on automatic" || true
+	fi
+	fix_unlock
+	exit "$rc"
+}
+trap on_exit EXIT
+trap 'exit 1' INT TERM HUP
 
 die() { printf 'fan: %s\n' "$2" >&2; exit "$1"; }
 
@@ -52,8 +77,9 @@ log_change() {
 	printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$STATE/changes.log"
 }
 
-# Prints "<hwmon dir> <driver>" for the first supported fan driver.
+# Prints "<hwmon dir> <driver>" for the first supported fan driver (handhelds only).
 find_hwmon() {
+	handheld_ok || return 1
 	for h in "$ROOT"/sys/class/hwmon/*; do
 		[ -f "$h/name" ] || continue
 		n="$(cat "$h/name")"
@@ -157,7 +183,9 @@ do_set() {
 		*" $mode "*) ;;
 		*) die 2 "$DRIVER has no $mode mode (it offers: $MODES)" ;;
 	esac
+	fix_lock fan
 	do_install
+	SETTING=1
 	for n in $(fans); do
 		if [ "$mode" = "auto" ]; then
 			set_enable "$n" "$AUTO"
@@ -184,6 +212,7 @@ do_set() {
 		done
 		set_enable "$n" "$CUSTOM"
 	done
+	SETTING=0
 	log_change "set $mode driver=$DRIVER"
 	printf 'mode=%s\n' "$mode"
 }
@@ -217,6 +246,7 @@ do_remove() {
 		return 0
 	fi
 	need_hw
+	fix_lock fan
 	# values first, then the enable flags (the order the file was written in)
 	while IFS='=' read -r key value; do
 		case "$key" in
@@ -235,7 +265,7 @@ do_remove() {
 }
 
 case "${1:-}" in
-	install) do_install; echo "installed=yes" ;;
+	install) fix_lock fan; do_install; echo "installed=yes" ;;
 	set) do_set "${2:-}" ;;
 	status) do_status ;;
 	remove) do_remove ;;

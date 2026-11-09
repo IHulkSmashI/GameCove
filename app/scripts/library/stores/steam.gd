@@ -5,6 +5,7 @@ extends RefCounted
 ## art from appcache/librarycache (old flat <appid>_*.jpg files and the newer
 ## per-app folders) with the user's own grid art (userdata/<user>/config/grid) first.
 
+const AppId := preload("res://scripts/steam/app_id.gd")
 const Acf := preload("res://scripts/steam/acf.gd")
 
 const STEAM_ROOTS := [
@@ -207,6 +208,8 @@ static func list_installed() -> Array[Dictionary]:
 
 ## The command that asks the running Steam client to start a game.
 static func launch_args(appid: String) -> PackedStringArray:
+	if not AppId.valid(appid):
+		return PackedStringArray()
 	return PackedStringArray(["steam://rungameid/" + appid])
 
 
@@ -231,6 +234,8 @@ static func open_uri(uri: String, steam_bin_path := "") -> bool:
 ## xdg-open to ask; falls back to OS.shell_open when `steam` isn't on PATH.
 ## `steam_bin` is the full path from Common.which, or "".
 static func launch(appid: String, steam_bin := "") -> bool:
+	if not AppId.valid(appid):
+		return false
 	if steam_bin != "" and OS.create_process(steam_bin, launch_args(appid)) > 0:
 		return true
 	return OS.shell_open("steam://rungameid/" + appid) == OK

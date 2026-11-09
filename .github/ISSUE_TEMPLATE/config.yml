@@ -1,0 +1,15 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and help
+    url: https://github.com/IHulkSmashI/GameCove/discussions/categories/q-a
+    about: Setup questions, "how do I...", and help with your handheld.
+  - name: Ideas and feedback
+    url: https://github.com/IHulkSmashI/GameCove/discussions/categories/ideas
+    about: Talk through an idea with others before it becomes a request.
+  # Uncomment once they exist:
+  # - name: Discord
+  #   url: https://discord.gg/REPLACE_ME
+  #   about: Chat with other players and testers.
+  # - name: Reddit
+  #   url: https://www.reddit.com/r/REPLACE_ME/
+  #   about: News and community posts.

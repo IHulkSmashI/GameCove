@@ -210,3 +210,20 @@ func test_observe_and_cef_progress() -> void:
 	b._on_cef_binding(SteamCef.DOWNLOADS_BINDING, JSON.stringify({"kind": "overview", "appid": 620, "bytes_done": 10, "bytes_total": 100, "rate": 5.0, "eta": 18}))
 	eq(_has("progress").back(), ["progress", "620", 10, 100, 5.0, 18], "Steam's own numbers")
 	_done(b)
+
+
+func test_bad_app_ids_never_become_uris() -> void:
+	var Backend = load("res://scripts/steam/steam_backend.gd")
+	var b = Backend.new()
+	var uris := []
+	b.open_uri = func(u):
+		uris.append(u)
+		return true
+	for bad in ["1/../uninstall/2", "620//-console", ""]:
+		for r in [b.install(bad), b.uninstall(bad), b.verify(bad), b.launch(bad), b.launch(bad, "-x"), b.open_page(bad, "store")]:
+			ok(not r["ok"], "refused: " + bad)
+	eq(uris, [], "no steam:// uri was opened")
+	var Store = load("res://scripts/library/stores/steam.gd")
+	eq(Store.launch_args("1/../x"), PackedStringArray(), "no launch args for a bad id")
+	ok(not Store.launch("1/../x", "/bin/false"), "launch refused")
+	b.free()

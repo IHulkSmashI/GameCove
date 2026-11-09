@@ -145,3 +145,59 @@ func test_tool_names_and_local_tools() -> void:
 	eq(tools[0]["id"], "proton_9", "valve first")
 	eq(tools[1]["id"], "GE-Proton10-25", "custom from compatibilitytool.vdf")
 	eq(tools[1]["source"], "custom", "source")
+
+
+func test_vdf_strict_parse() -> void:
+	eq(VDF.parse_strict("\"a\"\n{\n\t\"b\"\t\t\"1\"\n\t\"c\" { \"d\" \"2\" }\n}\n"), {"a": {"b": "1", "c": {"d": "2"}}}, "clean file")
+	eq(VDF.parse_strict("// comment\n\"a\" { }\n"), {"a": {}}, "comments and empty blocks")
+	eq(VDF.parse_strict("\"a\" { \"b\" \"1\""), null, "missing closing brace")
+	eq(VDF.parse_strict("\"a\" { \"b\" \"1\" } }"), null, "extra closing brace")
+	eq(VDF.parse_strict("\"a\" { \"b\" \"1 }"), null, "unclosed string")
+	eq(VDF.parse_strict("\"a\" { \"b\" }"), null, "key without a value")
+	eq(VDF.parse_strict("\"a\" { { \"b\" \"1\" } }"), null, "block without a key")
+	eq(VDF.parse_strict("\"a\" { \"b\" \"1\" \"b\" \"2\" }"), null, "the same key twice (writing back would drop one)")
+	eq(VDF.parse_strict("\"a\""), null, "a lone key")
+	var text := FileAccess.get_file_as_string(_data("steamhome/" + STEAM + "/config/config.vdf"))
+	eq(VDF.parse_strict(text), VDF.parse(text), "Steam's own file parses strictly")
+
+
+## A localconfig.vdf that is cut off or broken is never written back.
+func test_broken_steam_files_are_never_written() -> void:
+	var home := _temp_home("steam_broken")
+	var root := home.path_join(STEAM)
+	var user := root.path_join("userdata/12345678")
+	var no_proc := home.path_join("noproc")
+	var path := SteamConfig.localconfig_path(user)
+	var full := FileAccess.get_file_as_string(path)
+	var cut := full.substr(0, full.length() - 4)   # loses closing braces, as a half-written file would
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(cut)
+	f.close()
+	eq(SteamConfig.set_launch_options(home, user, "440", "-dx11", no_proc), ERR_PARSE_ERROR, "cut-off file refused")
+	eq(FileAccess.get_file_as_string(path), cut, "file left exactly as it was")
+	ok(not FileAccess.file_exists(path + VdfWriter.BACKUP_SUFFIX), "nothing written at all")
+	var cpath := SteamConfig.config_path(root)
+	var ctext := FileAccess.get_file_as_string(cpath)
+	f = FileAccess.open(cpath, FileAccess.WRITE)
+	f.store_string(ctext + "\n\"extra\" { \"x\" \"1\" ")
+	f.close()
+	eq(SteamConfig.set_compat_tool(home, root, "620", "proton_9", no_proc), ERR_PARSE_ERROR, "trailing garbage refused")
+	eq(VdfWriter.save(path, {"a": {"b": "1"}}), OK, "a sane tree saves")
+	TempTree.remove_tree(home)
+
+
+## Reads and writes of Steam's settings files go through a thread when the
+## backend is in the tree; the UI gets the value through a callback.
+func test_backend_async_reads() -> void:
+	var Backend = load("res://scripts/steam/steam_backend.gd")
+	var home := _temp_home("steam_async")
+	var b: Node = Backend.new()
+	b.steam_root = home.path_join(STEAM)
+	b.home = home
+	var got := []
+	b.launch_options_async("620", func(v): got.append(["lo", v]))
+	b.compat_tool_async("440", func(v): got.append(["ct", v]))
+	b.compat_tools_async(func(v): got.append(["tools", v.size() >= 1 and v[0]["id"] == ""]))
+	eq(got, [["lo", "PROTON_LOG=1 \"%command%\" -novid"], ["ct", "GE-Proton10-25"], ["tools", true]], "values reach the callback")
+	b.free()
+	TempTree.remove_tree(home)

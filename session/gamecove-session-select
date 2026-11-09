@@ -45,6 +45,22 @@ if ! command -v "$STEAMOSCTL" >/dev/null 2>&1; then
 	die "steamosctl (steamos-manager) not found; switch sessions from the login screen instead" 2
 fi
 
+# GameCove takes every button from InputPlumber (InterceptMode 2) while its UI
+# has focus. Hand the controller back before the session goes, so Steam or the
+# desktop never start with a device that sends its input nowhere.
+reset_input_intercept() {
+	command -v busctl >/dev/null 2>&1 || return 0
+	for dev in $(busctl --system --list tree org.shadowblip.InputPlumber 2>/dev/null |
+		grep -E '^/org/shadowblip/InputPlumber/CompositeDevice[0-9]+$'); do
+		busctl --system --timeout=2 set-property org.shadowblip.InputPlumber "$dev" \
+			org.shadowblip.Input.CompositeDevice InterceptMode u 0 >/dev/null 2>&1 || true
+	done
+}
+
+case "$target" in
+steam | gamecove | desktop) reset_input_intercept ;;
+esac
+
 case "$target" in
 steam)
 	if [ "$default" -eq 1 ]; then

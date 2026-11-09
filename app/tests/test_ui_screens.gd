@@ -188,7 +188,8 @@ func test_game_page() -> void:
 	ok("Hades" in t, "title")
 	ok("Play" in t, "play button")
 	ok(t.has(Texts.ttb_line(_three()[0]["info"])), "time to beat line")
-	eq(p.info_lines.size(), 3, "ttb, anti-cheat and ProtonDB lines")
+	eq(p.info_lines.size(), 4, "ttb, anti-cheat and ProtonDB lines, then the data credit")
+	eq(p.info_lines[3].text, Texts.DATA_CREDIT, "ProtonDB (ODbL) and IGDB credited on the about card")
 	eq(p.form.rows.keys(), ["goal", "fps_limit", "upscaler", "frame_gen", "low_latency"], "all per-game settings")
 	for k in p.form.rows:
 		ok(p.form.rows[k].hint_text().length() > 20, "explanation under " + k)

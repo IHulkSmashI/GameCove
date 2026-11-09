@@ -63,7 +63,8 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 
 	var info: Dictionary = g.get("info", {})
 	var about := add_card(TG.ABOUT, "info")
-	var specs := [["clock", Texts.ttb_line(info), ""], ["shield", Texts.anticheat_line(info), "anticheat"], ["gauge", Texts.protondb_line(info), ""]]
+	var specs := [["clock", Texts.ttb_line(info), ""], ["shield", Texts.anticheat_line(info), "anticheat"], ["gauge", Texts.protondb_line(info), ""],
+		["info", Texts.DATA_CREDIT, ""]]
 	var ac := Texts.anticheat_badge(info)
 	for s in specs:
 		var tone: String = ac.get("tone", "") if s[2] == "anticheat" else ""
