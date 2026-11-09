@@ -58,6 +58,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Tools
         run: sudo apt-get update -q && sudo apt-get install -y -q shellcheck rpm x11-utils
+      - name: Testbed script
+        run: shellcheck -S warning tools/testbed/*.sh && sh tools/testbed/test.sh
       - name: Root fixes, dispatcher, session scripts and packaging
         run: sh packaging/tests/run.sh
       - name: RPM spec parses
