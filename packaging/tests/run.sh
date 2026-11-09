@@ -526,6 +526,8 @@ rm -f "$T/steam-mode-on"
 
 # --------------------------------------------------- get-gamecove.sh bootstrap
 GG="$REPO/packaging/get-gamecove.sh"
+# review L29: curl | bash safety: nothing runs until the last line calls main
+if [ "$(tail -n 1 "$GG")" = 'main "$@"' ] && grep -q '^main() {$' "$GG"; then ok; else bad "get-gamecove.sh must run everything from main on its last line"; fi
 GB="$T/ggbin"
 SRV="$T/ggsrv"
 mkdir -p "$GB" "$SRV"

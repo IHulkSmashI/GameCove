@@ -103,6 +103,9 @@ detect_os() {
 	echo other
 }
 
+# Everything below runs from main, called on the last line (review L29): piped into bash,
+# a download cut short defines a function that never runs instead of running half a script.
+main() {
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--no-launch) launch=0 ;;
@@ -388,3 +391,6 @@ if [ -d "$desktop_dir" ]; then
 fi
 
 launch_app
+}
+
+main "$@"
