@@ -63,7 +63,7 @@ jobs:
           echo "started the release run for $tag on $GITHUB_SHA"
 
   app:
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'branch') }}
+    if: github.event_name != 'workflow_dispatch' || !inputs.publish || github.ref_type != 'branch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
