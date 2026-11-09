@@ -40,6 +40,6 @@ static func autoload(node_name: String) -> Node:
 	if tree == null or tree.root == null:
 		return null
 	var s = tree.get_script()
-	if s != null and str(s.resource_path).begins_with("res://tests/"):
+	if s != null and str(s.resource_path).begins_with("res://tests/") and not tree.has_meta(Services.E2E_META):
 		return null
 	return tree.root.get_node_or_null(node_name)

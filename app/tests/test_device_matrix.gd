@@ -27,6 +27,12 @@ func _info(m: Dictionary, id: String) -> Dictionary:
 func test_every_row_has_a_fixture_and_resolves_to_it() -> void:
 	var m := _manifest()
 	eq(m.get("problems", []), [], "generator self-check")
+	for s in m.get("setups", []):
+		var sd: Node = DeviceScript.new()
+		sd.root = s["root"]
+		sd.detect()
+		eq(sd.id(), s["expect_row"], "setup %s resolves" % s["id"])
+		sd.free()
 	var ids := {}
 	for d in m.get("devices", []):
 		ids[d["id"]] = true
@@ -62,7 +68,9 @@ func test_all_providers_on_all_devices() -> void:
 	var scripts := Matrix.provider_scripts()
 	var report := {}
 	var problems: Array[String] = []
-	for d in m.get("devices", []):
+	# every devices.json row, then the whole-OS setups the end-to-end suite uses
+	# (gen.py SETUPS: Claw 8 EX and Legion Go S on Bazzite, ROG Ally on SteamOS)
+	for d in m.get("devices", []) + m.get("setups", []):
 		var r := Matrix.run_device(d, scripts, e)
 		problems.append_array(r["problems"])
 		report[d["id"]] = {"controls": r["report"], "unmatched_commands": r["unmatched"]}

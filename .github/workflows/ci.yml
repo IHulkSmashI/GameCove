@@ -43,7 +43,7 @@ jobs:
           ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log run.log
       - name: Device matrix fixtures (every devices.json row + generic AMD/Intel)
         run: |
-          python3 -I tools/devicematrix/gen.py "$RUNNER_TEMP/devicematrix"
+          python3 -I tools/devicematrix/gen.py "$RUNNER_TEMP/devicematrix" --setups all
           echo "DEVICEMATRIX_DIR=$RUNNER_TEMP/devicematrix" >> "$GITHUB_ENV"
           echo "DEVICEMATRIX_REPORT=$RUNNER_TEMP/devicematrix-report.json" >> "$GITHUB_ENV"
       - name: GDScript tests (fail on failures, script errors and unexpected engine errors)
@@ -62,6 +62,26 @@ jobs:
         run: |
           mkdir -p app/build
           ./godot --headless --path app --export-pack "Linux" build/gamecove.pck
+
+  e2e:
+    # The real app headless on three fake handhelds (Claw 8 EX / Bazzite, ROG Ally / SteamOS,
+    # Legion Go S / Bazzite): quick menu, Settings, profiles and what reaches the system.
+    # Long soak: E2E_SOAK=1 (200 iterations of the randomized parts).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GODOT: "4.7.2"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get Godot
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT}-stable_linux.x86_64" godot
+      - name: Import the project
+        run: ./godot --headless --path app --import > /dev/null 2>&1
+      - name: End-to-end suite (seed = run number, printed for replay)
+        run: GODOT="$PWD/godot" python3 -I app/tests/e2e/run.py --iters 5 --seed "${{ github.run_number }}"
 
   shell:
     runs-on: ubuntu-latest

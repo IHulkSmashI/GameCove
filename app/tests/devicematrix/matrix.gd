@@ -235,7 +235,7 @@ static func manifest() -> Dictionary:
 			_generated_dir = dir
 		var gen := ProjectSettings.globalize_path("res://").path_join("../tools/devicematrix/gen.py").simplify_path()
 		var out := []
-		var code := OS.execute("python3", PackedStringArray(["-I", gen, dir]), out, true)
+		var code := OS.execute("python3", PackedStringArray(["-I", gen, dir, "--setups", "all"]), out, true)
 		if code != 0:
 			return {"error": "gen.py failed (%d): %s" % [code, "".join(PackedStringArray(out.map(func(x): return str(x))))]}
 	var m: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("manifest.json")))

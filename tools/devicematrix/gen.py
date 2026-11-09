@@ -218,9 +218,10 @@ def tdp_of(row: dict) -> dict:
     return t
 
 
-def build(row: dict, out: str, override: dict, generic: dict | None, devices: list, facts: dict) -> dict:
+def build(row: dict, out: str, override: dict, generic: dict | None, devices: list, facts: dict,
+          setup: dict | None = None) -> dict:
     did = generic["id"] if generic else row["id"]
-    base = os.path.join(out, did)
+    base = os.path.join(out, setup["name"] if setup else did)
     root = os.path.join(base, "root")
     t = Tree(root)
     vendor = generic["vendor"] if generic else row.get("cpu_vendor", "amd") or "amd"
@@ -493,14 +494,18 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
     # Stack (what's installed and running)
     stack = []
     order = row.get("tdp_backends") or ["steamos-manager", "powerstation"]
+    if setup:
+        order = setup["services"]
     for s in order:
         stack.append(s)
     controller = "hhd" if rgb.get("via") == "hhd" else "inputplumber"
+    if setup:
+        controller = setup["controller"]
     stack.append(controller)
     stack += ["gamescope", "pipewire", "networkmanager", "bluez"]
     tools = list(COMMON_TOOLS) + [{"steamos-manager": "steamos-manager", "powerstation": "powerstation",
-                                   "inputplumber": "inputplumber", "hhd": "hhd"}[s] for s in stack
-                                  if s in ("steamos-manager", "powerstation", "inputplumber", "hhd")]
+                                   "inputplumber": "inputplumber", "hhd": "hhd", "ppd": "tuned-ppd"}[s] for s in stack
+                                  if s in ("steamos-manager", "powerstation", "inputplumber", "hhd", "ppd")]
     for tool in tools:
         t.w(f"/usr/bin/{tool}", "#!/bin/sh\n# devicematrix stand-in\nexit 0")
     t.w("/usr/share/gamescope-session-plus/gamescope-session-plus", "#!/bin/sh\n# devicematrix stand-in")
@@ -520,16 +525,125 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
         t.w(path, value)
 
     backends = backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads, cores, smt)
+    if setup:
+        setup_extras(setup, row, t, backends, tdp, vendor, fw, bat)
     with open(os.path.join(base, "backends.json"), "w", encoding="utf-8") as f:
         json.dump(backends, f, indent=1, sort_keys=True)
 
-    return {"id": did, "expect_row": "unknown" if generic else row["id"], "generic": bool(generic),
+    return {"id": setup["name"] if setup else did, "expect_row": "unknown" if generic else row["id"], "generic": bool(generic),
+            "setup": setup["name"] if setup else "", "os": setup["os"] if setup else "bazzite",
             "vendor": vendor, "root": root, "home": os.path.join(root, "home"),
             "backends": os.path.join(base, "backends.json"),
             "ac_online_file": f"/sys/class/power_supply/{ac}/online", "battery": f"/sys/class/power_supply/{bat}",
             "backlight": bl, "leds": leds, "gpu_driver": driver, "gpu_card": card, "cpu_model": model,
             "threads": threads, "cores": cores, "stack": stack, "files": t.count,
             "tdp": tdp, "dmi": dmi}
+
+
+# Whole setups for the end-to-end suite (app/tests/e2e): one handheld on one OS image with
+# that image's service stack, not the stack devices.json picks. Facts per stack:
+#   Bazzite Deck 44: InputPlumber for the controller, steamos-manager for TDP where its device
+#     config knows the handheld, PowerStation as the fallback, tuned-ppd (power-profiles-daemon
+#     API) for power modes (gamingonlinux.com 2026/08 "bazzite linux 44 for handhelds").
+#   SteamOS 3.8: steamos-manager only (no PowerStation, no power-profiles-daemon), InputPlumber
+#     for non-Deck pads. steamos-manager a3b2013 data/devices/rog-ally-series.toml: TDP through
+#     the asus-armoury firmware attribute, performance profile via asus-wmi platform_profile,
+#     charge limit acpi_sb (charge_control_end_threshold), GPU level / power profile amdgpu;
+#     no FanControl1 (that is jupiter-fan-control, Steam Deck only).
+#   steamos-manager legion-go-s.toml: lenovo-wmi-other-0 TDP, lenovo-wmi-gamezone profile,
+#     suggested default "custom"; msi-claw-8ex.toml: msi-wmi-platform TDP (the firmware ignores
+#     it, ClawDeck), suggested "balanced", acpi_sb charge limit that reads -1.
+SETUPS = {
+    "claw8ex-bazzite": {"row": "msi-claw-8-ex", "os": "bazzite", "controller": "inputplumber",
+                        "services": ["steamos-manager", "powerstation", "ppd"],
+                        "platform_profiles": "low-power balanced performance", "platform_now": "balanced",
+                        "sm_model": ["claw", "Claw 8 EX AI+ CG3EM"], "sm_default_profile": "balanced"},
+    "ally-steamos": {"row": "asus-rog-ally", "os": "steamos", "controller": "inputplumber",
+                     "services": ["steamos-manager"],
+                     "platform_profiles": "quiet balanced performance", "platform_now": "performance",
+                     "sm_model": ["rog_ally", "RC71L"], "sm_default_profile": "performance"},
+    "legion-go-s-bazzite": {"row": "lenovo-legion-go-s-z2go", "os": "bazzite", "controller": "inputplumber",
+                            "services": ["steamos-manager", "powerstation", "ppd"],
+                            "platform_profiles": "low-power balanced balanced-performance performance custom",
+                            "platform_now": "custom", "sm_model": ["legion_go_s", "83L3"], "sm_default_profile": "custom"},
+}
+
+OS_RELEASE = {
+    "bazzite": ('NAME="Bazzite"\nID=bazzite\nID_LIKE="fedora"\nVERSION_ID=44\nVARIANT_ID=bazzite-deck\n'
+                'PRETTY_NAME="Bazzite 44 (FROM Fedora Kinoite)"', "7.2.4-ba02.fc44.x86_64"),
+    "steamos": ('NAME="SteamOS"\nID=steamos\nID_LIKE=arch\nVERSION_ID=3.8.11\nVARIANT_ID=steamdeck\n'
+                'PRETTY_NAME="SteamOS"\nBUILD_ID=20261020.1', "6.11.11-valve24-2-neptune-611-gb3afa9aa9ae7"),
+}
+
+
+def setup_extras(setup: dict, row: dict, t: "Tree", backends: dict, tdp: dict | None, vendor: str,
+                 fw: str | None, bat: str) -> None:
+    """What a whole OS image adds on top of build(): its os-release and kernel, the platform
+    profile and battery files these handhelds' drivers have, and the steamos-manager / tuned-ppd
+    interfaces GameCove reads (CpuBoost1, GpuPowerProfile1, Manager2, SessionManagement1...)."""
+    text, kernel = OS_RELEASE[setup["os"]]
+    t.w("/etc/os-release", text)
+    t.w("/proc/sys/kernel/osrelease", kernel)
+    t.w("/sys/firmware/acpi/platform_profile", setup["platform_now"])
+    t.w("/sys/firmware/acpi/platform_profile_choices", setup["platform_profiles"])
+    maker = (row.get("maker") or "").lower()
+    if maker == "lenovo":
+        t.w(f"/sys/class/power_supply/{bat}/charge_types", "[Standard] Long_Life")
+    if maker.startswith("asus"):
+        t.w("/sys/devices/platform/asus-nb-wmi/mcu_powersave", 1)
+        if row.get("charge_limit"):
+            t.w(f"/sys/class/power_supply/{bat}/charge_control_end_threshold", 80)
+    if setup["os"] == "steamos":
+        # SteamOS has no rpm-ostree / PowerStation; steamos-session-select switches sessions
+        t.w("/usr/bin/steamos-session-select", "#!/bin/sh\n# devicematrix stand-in\nexit 0")
+        t.w("/usr/bin/steamos-update", "#!/bin/sh\n# devicematrix stand-in\nexit 0")
+    else:
+        t.w("/usr/bin/rpm-ostree", "#!/bin/sh\n# devicematrix stand-in\nexit 0")
+    t.w("/usr/bin/gamecove-session-select", "#!/bin/sh\n# devicematrix stand-in\nexit 0")
+    # gamescope-session starts mangoapp with MANGOHUD_CONFIGFILE (both images); GameCove's
+    # package ships the Steam launch wrapper
+    t.w("/usr/bin/mangoapp", "#!/bin/sh\n# devicematrix stand-in\nexit 0")
+    t.w("/run/user/1000/mangohud.conf", "no_display")
+    t.w("/usr/libexec/gamecove/gamecove-run", "#!/bin/sh\n# devicematrix stand-in\nexec \"$@\"")
+    props = backends["dbus"]["props"]
+    methods = backends["dbus"]["methods"]
+    stack = backends["stack"]
+
+    def prop(bus, svc, path, iface, name, typ, data):
+        props[f"{bus} {svc} {path} {iface} {name}"] = {"type": typ, "data": data}
+
+    if "steamos-manager" in stack:
+        prop("--user", SM, SM_PATH, f"{SM}.CpuBoost1", "CpuBoostState", "u", 1)
+        prop("--user", SM, SM_PATH, f"{SM}.PerformanceProfile1", "AvailablePerformanceProfiles", "as",
+             setup["platform_profiles"].split())
+        prop("--user", SM, SM_PATH, f"{SM}.PerformanceProfile1", "PerformanceProfile", "s", setup["platform_now"])
+        prop("--user", SM, SM_PATH, f"{SM}.PerformanceProfile1", "SuggestedDefaultPerformanceProfile", "s",
+             setup["sm_default_profile"])
+        prop("--user", SM, SM_PATH, f"{SM}.Manager2", "DeviceModel", "(ss)", setup["sm_model"])
+        prop("--user", SM, SM_PATH, f"{SM}.WifiPowerManagement1", "WifiPowerManagementState", "u", 1)
+        if vendor == "amd":
+            prop("--user", SM, SM_PATH, f"{SM}.GpuPowerProfile1", "AvailableGpuPowerProfiles", "as",
+                 ["bootup_default", "3d_full_screen", "power_saving", "video", "vr", "compute", "custom"])
+            prop("--user", SM, SM_PATH, f"{SM}.GpuPowerProfile1", "GpuPowerProfile", "s", "bootup_default")
+        else:
+            # steamos-manager's Intel GPU driver has a performance level but no ManualGpuClock
+            for k in list(props):
+                if ".GpuPerformanceLevel1 " in k:
+                    del props[k]
+        for m in ("SwitchToDesktopMode", "SwitchToGameMode"):
+            methods[f"--user {SM} {SM_PATH} {SM}.SessionManagement1 {m}"] = {"type": "", "data": []}
+    if "ppd" in stack:
+        ppd = "org.freedesktop.UPower.PowerProfiles"
+        path = "/org/freedesktop/UPower/PowerProfiles"
+        prop("--system", ppd, path, ppd, "ActiveProfile", "s", "balanced")
+        prop("--system", ppd, path, ppd, "Profiles", "aa{sv}",
+             [{"Profile": {"type": "s", "data": p}, "Driver": {"type": "s", "data": "tuned"}}
+              for p in ("power-saver", "balanced", "performance")])
+    if "powerstation" in stack and vendor == "intel":
+        # PowerStation's BoostEnabled is AMD "cpb" only (src/performance/cpu/cpu_features.rs)
+        props.pop(f"--system {PS} {PS_CPU} org.shadowblip.CPU BoostEnabled", None)
+    backends["setup"] = setup["name"]
+    backends["os"] = setup["os"]
 
 
 def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads, cores, smt) -> dict:
@@ -571,11 +685,14 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
         prop("--system", PS, card, "org.shadowblip.GPU.Card.TDP", "MaxTdp", "d", 0.0 if xe3 else float(t["plugged_max"]))
         prop("--system", PS, card, "org.shadowblip.GPU.Card.TDP", "Boost", "d", float(t["boost_max"] - t["plugged_max"]))
         prop("--system", PS, card, "org.shadowblip.GPU.Card.TDP", "MaxBoost", "d", float(t["boost_max"] - t["min"]))
-        prop("--system", PS, card, "org.shadowblip.GPU.Card", "ManualClock", "b", False)
-        prop("--system", PS, card, "org.shadowblip.GPU.Card", "ClockLimitMin", "d", 400.0 if vendor == "intel" else 800.0)
-        prop("--system", PS, card, "org.shadowblip.GPU.Card", "ClockLimitMax", "d", 2500.0 if vendor == "intel" else 2700.0)
-        prop("--system", PS, card, "org.shadowblip.GPU.Card", "ClockValueMin", "d", 400.0 if vendor == "intel" else 800.0)
-        prop("--system", PS, card, "org.shadowblip.GPU.Card", "ClockValueMax", "d", 2500.0 if vendor == "intel" else 2700.0)
+        # GPU clocks: amdgpu (pp_od_clk_voltage) and i915 (gt_*_freq_mhz) only; PowerStation
+        # can't read Intel xe (src/performance/gpu/intel/intelgpu.rs), so no clock props there.
+        if gpu_family not in ("intel-xe2", "intel-xe3"):
+            prop("--system", PS, card, "org.shadowblip.GPU.Card", "ManualClock", "b", False)
+            prop("--system", PS, card, "org.shadowblip.GPU.Card", "ClockLimitMhzMin", "d", 300.0 if vendor == "intel" else 800.0)
+            prop("--system", PS, card, "org.shadowblip.GPU.Card", "ClockLimitMhzMax", "d", 2250.0 if vendor == "intel" else 2700.0)
+            prop("--system", PS, card, "org.shadowblip.GPU.Card", "ClockValueMhzMin", "d", 300.0 if vendor == "intel" else 800.0)
+            prop("--system", PS, card, "org.shadowblip.GPU.Card", "ClockValueMhzMax", "d", 2250.0 if vendor == "intel" else 2700.0)
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "BoostEnabled", "b", True)
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "SmtEnabled", "b", smt)
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "CoresCount", "u", threads)
@@ -590,7 +707,10 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
                 "Gamepad:Button:Guide", "Gamepad:Button:QuickAccess", "Gamepad:Axis:LeftStick", "Gamepad:Axis:RightStick",
                 "Gamepad:Trigger:LeftTrigger", "Gamepad:Trigger:RightTrigger"]
         if row.get("gyro") in ("yes", "fix"):
-            caps += ["Gamepad:Accelerometer", "Gamepad:Gyro"]
+            # InputPlumber 6aca920 src/input/capability.rs: "Gyroscope:<source>" (Gamepad:Gyro is
+            # ignored since); Legion Go detachable controllers report one per side
+            sides = ["Left", "Right"] if row.get("family") == "legion-go" else ["Center"]
+            caps += [f"Accelerometer:{s}" for s in sides] + [f"Gyroscope:{s}" for s in sides]
         if row.get("buttons") not in (None, "generic"):
             caps += ["Gamepad:Button:LeftPaddle1", "Gamepad:Button:RightPaddle1"]
         outs = ["ForceFeedback"] + (["LED:Color", "LED:Brightness"] if row.get("rgb") else [])
@@ -667,6 +787,7 @@ def main(argv=None) -> int:
     ap.add_argument("--devices", default=os.path.join(REPO, "app", "data", "devices.json"))
     ap.add_argument("--overrides", default=os.path.join(HERE, "overrides.json"))
     ap.add_argument("--only", default="")
+    ap.add_argument("--setups", default="", help="comma list of SETUPS names (or 'all') to build as well")
     a = ap.parse_args(argv)
     with open(a.devices, "rb") as f:
         raw = f.read()
@@ -708,11 +829,23 @@ def main(argv=None) -> int:
         if any(score(r, info["dmi"]) >= 0 for r in devices):
             problems.append(f"{g['id']}: generic DMI matches a devices.json row")
         built.append(info)
+    setups = []
+    wanted = list(SETUPS) if a.setups == "all" else [x for x in a.setups.split(",") if x]
+    for name in wanted:
+        if name not in SETUPS:
+            problems.append(f"unknown setup {name}")
+            continue
+        spec = dict(SETUPS[name], name=name)
+        row = next((r for r in devices if r["id"] == spec["row"]), None)
+        if row is None:
+            problems.append(f"setup {name}: no devices.json row {spec['row']}")
+            continue
+        setups.append(build(row, out, overrides.get(row["id"], {}), None, devices, facts, spec))
     manifest = {"generator": "tools/devicematrix/gen.py", "devices_json_sha256": hashlib.sha256(raw).hexdigest(),
-                "devices": built, "problems": problems}
+                "devices": built, "setups": setups, "problems": problems}
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=1, sort_keys=True)
-    files = sum(d["files"] for d in built)
+    files = sum(d["files"] for d in built + setups)
     print(f"devicematrix: {len(built)} fixtures, {files} files in {out}")
     for p in problems:
         print("problem: " + p, file=sys.stderr)

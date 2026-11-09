@@ -17,8 +17,17 @@ const AUTOLOADS := {
 static func under_tests(node: Node) -> bool:
 	if node == null or not node.is_inside_tree():
 		return true
-	var s = node.get_tree().get_script()
+	var tree := node.get_tree()
+	var s = tree.get_script()
+	# the end-to-end suite (tests/e2e) runs the real app on a fake handheld whose
+	# autoloads it pointed at the fixture: it wants the production lookups
+	if tree.has_meta(E2E_META):
+		return false
 	return s != null and str(s.resource_path).begins_with("res://tests/")
+
+
+## Set on the SceneTree by tests/e2e/run_e2e.gd (autoloads already on a fixture).
+const E2E_META := &"gamecove_e2e"
 
 
 ## {short name: autoload} for every autoload that exists; {} under tests.
