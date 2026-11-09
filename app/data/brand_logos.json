@@ -402,12 +402,12 @@
     "shenzhen xunlong software co., ltd."
    ],
    "enabled": true,
-   "file": "",
-   "mono": false,
-   "hex": "",
-   "source": "",
-   "license": "",
-   "upstream": "",
+   "file": "res://assets/brand/orangepi.svg",
+   "mono": true,
+   "hex": "F4A524",
+   "source": "https://github.com/orangepi-xunlong/orangepi-build/blob/next/external/packages/plymouth-theme-orangepi/orangepi-logo.png",
+   "license": "Traced from the Orange Pi emblem in Orange Pi's own OS boot theme (orangepi-build, plymouth-theme-orangepi/orangepi-logo.png, 185x208, the same emblem as the orangepi.org header logo; the largest crisp official copy, no vector published); potrace, single colour, IoU 0.973 at the original's resolution. Orange slice F4A524 and leaf 7BB63A in the original. Trademark of Shenzhen Xunlong Software Co., Ltd.",
+   "upstream": "http://www.orangepi.org",
    "notice": "",
    "system_icons": [],
    "owner_terms": "http://www.orangepi.org/"
