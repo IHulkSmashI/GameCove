@@ -49,7 +49,10 @@ _row_ok() {
 	[ "$compared" -gt 0 ]
 }
 
-handheld_id() {
+# A subshell: _row_ok's working variables (key, value, rest, line...) must never
+# leak into the fix that sourced this (power-tune printed "board_name=28" after a
+# handheld check had clobbered its own $key).
+handheld_id() (
 	[ -f "$HANDHELDS" ] || return 1
 	while IFS= read -r line; do
 		case "$line" in ''|'#'*) continue ;; esac
@@ -59,7 +62,7 @@ handheld_id() {
 		fi
 	done < "$HANDHELDS"
 	return 1
-}
+)
 
 handheld_ok() {
 	handheld_id >/dev/null

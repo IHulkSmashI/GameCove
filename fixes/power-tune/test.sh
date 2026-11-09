@@ -206,6 +206,8 @@ expect 0 "amd gpu floor" set gpumin:1200
 expect 2 "amd gpu over range" set gpumax:3000
 expect 0 "sppt" set sppt:28
 [ "$(r "$A/ppt_pl2_sppt/current_value")" = 28 ] || fail "sppt written"
+# the handheld check (lib/handheld.sh) once clobbered fix.sh's $key: "board_name=28" (end-to-end suite)
+[ "$(cat "$T/out")" = "sppt=28" ] || fail "sppt reports its own key, got: $(cat "$T/out")"
 expect 2 "sppt over the firmware max" set sppt:31
 expect 2 "sppt under spl" set sppt:14
 expect 2 "fppt under sppt" set fppt:27
