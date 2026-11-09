@@ -362,6 +362,39 @@ func test_page_shows_why_a_fix_is_unavailable() -> void:
 	s.free()
 
 
+func test_stale_inputplumber_override_is_rebuilt_at_start() -> void:
+	# review S1-4: an OS update changed the stock file our override shadows
+	var h := _tmp("ip_stale")
+	var s := _svc("msi-claw-8-ex", {}, h)
+	var root := h + "/root"
+	DirAccess.make_dir_recursive_absolute(root + "/usr/share/inputplumber/devices")
+	DirAccess.make_dir_recursive_absolute(root + "/etc/inputplumber/devices.d")
+	var stock := root + FixesSvc.IP_STOCK
+	var f := FileAccess.open(stock, FileAccess.WRITE)
+	f.store_string("version: 1\ncapability_map_id: claw2\n")
+	f.close()
+	var o := FileAccess.open(root + FixesSvc.IP_OVERRIDE, FileAccess.WRITE)
+	o.store_string("# GameCove override of %s\n# Delete this file...\n# stock-sha256: %s\nversion: 1\n" % [FixesSvc.IP_STOCK, FileAccess.get_sha256(stock)])
+	o.close()
+	ok(not FixesSvc.ip_override_stale(root), "current override")
+	s.data_dir = h + "/data"
+	s.check_changes()
+	ok(not s.commands.runner.calls.any(func(c): return "refresh" in c), "nothing run while current")
+	f = FileAccess.open(stock, FileAccess.WRITE)
+	f.store_string("version: 2\ncapability_map_id: claw2\nnew_field: x\n")
+	f.close()
+	ok(FixesSvc.ip_override_stale(root), "stale after the stock file changed")
+	s.check_changes()
+	ok(s.commands.runner.calls.has("pkexec %s claw8ex-buttons set refresh" % FixesSvc.FIX_SET_HELPER), "rebuilt through the no-password entry")
+	ok("inputplumber" in s.last_changes["changed"].map(func(c): return c["key"]), "shows in what changed")
+	# someone else's override is never touched
+	o = FileAccess.open(root + FixesSvc.IP_OVERRIDE, FileAccess.WRITE)
+	o.store_string("# mine\nversion: 1\n")
+	o.close()
+	ok(not FixesSvc.ip_override_stale(root), "foreign override ignored")
+	s.free()
+
+
 func test_page_empty_states() -> void:
 	var s := _svc("unknown", {})
 	var dev := FakeDevice.new()

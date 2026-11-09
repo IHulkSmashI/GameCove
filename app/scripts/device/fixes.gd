@@ -30,6 +30,9 @@ const DEVICE_TABLE := "res://data/devices.json"
 const CATALOGUE := "res://data/fixes.json"
 const FIX_HELPER := "/usr/libexec/gamecove/gamecove-fix"
 const FIX_SET_HELPER := "/usr/libexec/gamecove/gamecove-fix-set"
+## GameCove's InputPlumber override for the Claw 8 EX shadows this stock file (fixes/lib/claw8ex-common.sh).
+const IP_STOCK := "/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
+const IP_OVERRIDE := "/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"
 ## Helper state= -> page status (see status_of for the rest).
 const STATE_STATUS := {"on": "applied", "restart": "restart", "partial": "partial", "os-fixed": "os-fixed",
 	"not-needed": "not-needed", "n/a": "not-needed", "unsupported": "blocked", "other-override": "blocked"}
@@ -280,6 +283,10 @@ func _on_finished(id: String, code: int, output: String) -> void:
 	match kind:
 		"status":
 			_status[fix] = parse_status(output) if code == 0 else {}
+		"refresh":
+			if code != 0:
+				push_warning("Fixes: couldn't rebuild the InputPlumber override (%d): %s" % [code, output.strip_edges()])
+			refresh()
 		"apply", "undo":
 			_working.erase(fix)
 			var e := entry(fix)
@@ -415,7 +422,35 @@ func system_snapshot() -> Dictionary:
 	var snap := {"kernel": _read(sys_root + "/proc/sys/kernel/osrelease"), "os": _os_version()}
 	var q := sys_root + "/usr/share/gamescope-session-plus/device-quirks"
 	snap["quirks"] = FileAccess.get_md5(q) if FileAccess.file_exists(q) else ""
+	var ip := sys_root + IP_STOCK
+	snap["inputplumber"] = FileAccess.get_md5(ip) if FileAccess.file_exists(ip) else ""
 	return snap
+
+
+## Our InputPlumber override was built from a stock file that has changed since (an OS update):
+## a frozen copy of the old file could stop the controller from matching (review S1-4).
+static func ip_override_stale(root: String) -> bool:
+	var o := root + IP_OVERRIDE
+	if not FileAccess.file_exists(o):
+		return false
+	var text := FileAccess.get_file_as_string(o)
+	if not text.begins_with("# GameCove override of"):
+		return false  # someone else's: never touched
+	var recorded := ""
+	for line in text.split("\n", false).slice(0, 5):
+		if line.begins_with("# stock-sha256: "):
+			recorded = line.trim_prefix("# stock-sha256: ").strip_edges()
+	var stock := root + IP_STOCK
+	var now := FileAccess.get_sha256(stock) if FileAccess.file_exists(stock) else ""
+	return recorded != now
+
+
+## Rebuilds a stale override at once, without a password (the controller may not work until then).
+func refresh_stale_override() -> bool:
+	if not ip_override_stale(sys_root):
+		return false
+	return commands.run("refresh:inputplumber", "pkexec",
+		PackedStringArray([FIX_SET_HELPER, "claw8ex-buttons", "set", "refresh"]))
 
 
 func _read(path: String) -> String:
@@ -455,6 +490,8 @@ func check_changes() -> Dictionary:
 	if f != null:
 		f.store_string(JSON.stringify(now, "  "))
 	last_changes = {"first_run": not old is Dictionary, "changed": changes}
+	# every start, not only after a change: cheap, and the update may have come before this check existed
+	refresh_stale_override()
 	if not changes.is_empty():
 		refresh()
 	return last_changes

@@ -1,6 +1,6 @@
 #!/bin/sh
 # GameCove fix: gyro on the MSI Claw 8 EX AI+ (board MS-1T91), the IMU behind Intel's sensor hub (ISH).
-# usage: fix.sh install|remove|status|set accel-on|accel-off
+# usage: fix.sh install|remove|status|set accel-on|accel-off|refresh
 #
 # Method found and tested by Kisenir (r/MSIClaw), used with his permission (2026-11-08); ported from
 # ClawDeck. Four pieces, all recorded and all taken out again by remove:
@@ -224,10 +224,16 @@ remove() {
 
 # One token, so it fits gamecove-fix's `set <value>` (values can't hold spaces).
 set_value() {
-	[ $# -eq 1 ] || die "usage: $0 set accel-on|accel-off"
+	[ $# -eq 1 ] || die "usage: $0 set accel-on|accel-off|refresh"
 	case $1 in
 	accel-on | accel-off) ;;
-	*) die "usage: $0 set accel-on|accel-off" ;;
+	refresh)
+		require_root
+		lock
+		ip_refresh
+		return 0
+		;;
+	*) die "usage: $0 set accel-on|accel-off|refresh" ;;
 	esac
 	require_root
 	lock
@@ -286,6 +292,7 @@ status() {
 	say "inputplumber_imu=$ip"
 	say "inputplumber_reading=$reading"
 	say "accelerometer=$accel"
+	say "inputplumber_override=$(ip_override_state)"
 	say "services=$services"
 	if [ "$installed" = no ]; then
 		say "state=off"
@@ -304,5 +311,5 @@ install) install ;;
 remove) remove ;;
 status) status ;;
 set) shift; set_value "$@" ;;
-*) die "usage: $0 install|remove|status|set accel-on|accel-off" ;;
+*) die "usage: $0 install|remove|status|set accel-on|accel-off|refresh" ;;
 esac

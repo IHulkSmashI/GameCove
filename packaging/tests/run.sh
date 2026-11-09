@@ -167,8 +167,8 @@ expect_code 64 "set entry refuses other actions" gfs fan explode
 expect_code 65 "set entry refuses vrr (boot config)" gfs claw8ex-vrr set on
 expect_code 65 "set entry refuses vrr install" gfs claw8ex-vrr install
 expect_code 65 "set entry refuses vrr status" gfs claw8ex-vrr status
-expect_code 65 "set entry refuses buttons" gfs claw8ex-buttons set on
-expect_code 65 "set entry refuses buttons install" gfs claw8ex-buttons install
+expect_code 66 "set entry refuses buttons on" gfs claw8ex-buttons set on
+expect_code 64 "set entry refuses buttons install" gfs claw8ex-buttons install
 expect_code 65 "set entry refuses other fixes" gfs dummy set 80
 expect_code 65 "set entry refuses traversal" gfs ../fan set quiet
 expect_code 65 "set entry refuses --list" gfs --list x
@@ -193,6 +193,10 @@ contains "$ROOT/calls" "^charge-limit:set 100$" "charge set reached fix.sh"
 expect_code 0 "set entry: gyro accel-on" gfs claw8ex-gyro set accel-on
 expect_code 0 "set entry: gyro accel-off" gfs claw8ex-gyro set accel-off
 contains "$ROOT/calls" "^claw8ex-gyro:set accel-off$" "gyro set reached fix.sh"
+# review S1-4: rebuilding the InputPlumber override after an OS update needs no password
+expect_code 0 "set entry: buttons refresh" gfs claw8ex-buttons set refresh
+expect_code 0 "set entry: gyro refresh" gfs claw8ex-gyro set refresh
+contains "$ROOT/calls" "^claw8ex-buttons:set refresh$" "buttons refresh reached fix.sh"
 expect_code 0 "set entry: status" gfs fan status
 contains "$T/out" "^state=on$" "status passed through"
 expect_code 0 "set entry: fan curve" gfs fan set curve:0,40,50,60,80,100

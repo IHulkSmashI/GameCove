@@ -26,6 +26,9 @@
 #                                                checks every value against what the kernel offers
 #   claw8ex-gyro  set accel-on|accel-off         accelerometer in the InputPlumber override
 #                                                (the gyro fix must already be installed)
+#   claw8ex-gyro | claw8ex-buttons  set refresh  rebuild GameCove's InputPlumber override from the
+#                                                current stock file after an OS update (or drop it
+#                                                if the new layout can't be edited); nothing else
 #   controller-led set off | <zone>,<rrggbb>,<percent>[,<effect>[,<speed>]]
 #                                                handheld RGB lights (kernel LED class);
 #                                                fix.sh checks every field strictly
@@ -75,7 +78,7 @@ name="$1"
 action="$2"
 
 case "$name" in
-charge-limit | fan | claw8ex-gyro | controller-led | power-tune) ;;
+charge-limit | fan | claw8ex-gyro | claw8ex-buttons | controller-led | power-tune) ;;
 *) is_file_fix "$name" || die "fix '$name' can't be changed without a password; use gamecove-fix" 65 ;;
 esac
 
@@ -113,6 +116,7 @@ power-tune:boost:* | power-tune:smt:* | power-tune:cores:* | power-tune:epp:* | 
 	[ "${#value}" -le 48 ] || die "value not allowed for $name" 66
 	;;
 claw8ex-gyro:accel-on | claw8ex-gyro:accel-off) ;;
+claw8ex-gyro:refresh | claw8ex-buttons:refresh) ;;
 controller-led:off) ;;
 controller-led:*[!a-z0-9,]*) die "value not allowed for $name" 66 ;;
 controller-led:all,[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f],[0-9]* | controller-led:[0-9],[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f],[0-9]*) ;;
