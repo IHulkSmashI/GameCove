@@ -2295,7 +2295,7 @@
       "name": "ZOTAC Gaming Zone",
       "maker": "ZOTAC",
       "family": "zotac-zone",
-      "traits": {"platform": "zotac-zone", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["zotac-zone-platform"], "controller": "zotac-zone", "imu": "bmi260", "wifi": null, "panel": {"id": "zotac-zone-7in-oled", "vendor": "ZDZ/DXQ", "model": "ZDZ0501/DXQ7D0023", "orientation": "left-up", "touch": true, "type": "oled", "gamescope": "zotac.zone.oled", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "pq", "dfix"], "unverified": ["ec"]},
+      "traits": {"platform": "zotac-zone", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["zotac-zone-platform"], "controller": "zotac-zone", "imu": "bmi260", "wifi": null, "panel": {"id": "zotac-zone-7in-oled", "vendor": "ZDZ/DXQ", "model": "ZDZ0501/DXQ7D0023", "orientation": "left-up", "touch": true, "type": "oled", "gamescope": "zotac.zone.oled", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "zotac-g1a1w-left", "sources": ["ip", "gs", "pq", "dfix"], "unverified": ["ec"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ZOTAC"],

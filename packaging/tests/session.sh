@@ -254,5 +254,18 @@ env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_RUNTIME_DIR="$RUNDIR" GAMECOVE_BIN=
 sleep 0.3
 has "$T/order.log" "^steam -silent$" "an app that never says ready doesn't keep Steam away (timeout)"
 
+# --- traits: ZOTAC Zone board G1A1W, which Linux's orientation quirk misses (G0A1W only)
+SD="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
+orient() { # <vendor> <board> [preset]
+	mkdir -p "$T/dmi"
+	echo "$1" >"$T/dmi/sys_vendor"
+	echo "$2" >"$T/dmi/board_name"
+	env -i GAMECOVE_DMI="$T/dmi" ORIENTATION="${3:-}" HOME="$T/home" bash -c 'set -a; . "$1"; printf "%s" "$ORIENTATION"' _ "$SD"
+}
+eqv "$(orient ZOTAC G1A1W)" left "Zone G1A1W: the session turns the panel left"
+eqv "$(orient ZOTAC G0A1W)" "" "Zone G0A1W: the kernel's quirk does it, nothing from us"
+eqv "$(orient ZOTAC G1A1W right)" right "a user's ORIENTATION wins"
+eqv "$(orient "Micro-Star International Co., Ltd." MS-1T91)" "" "other handhelds untouched"
+
 echo "session: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

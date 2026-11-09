@@ -19,6 +19,17 @@ CLIENTCMD="/usr/libexec/gamecove/gamecove-session-client"
 # See docs/SESSION.md.
 : "${GAMECOVE_STEAM_MODE:=silent}"
 
+# ZOTAC Gaming Zone: the panel is mounted left side up. Linux's panel orientation quirk
+# (drm_panel_orientation_quirks.c, "ZOTAC Gaming Zone": lcd1080x1920_leftside_up) matches board
+# G0A1W only, and gamescope-session-plus's device-quirks has no Zone block, so units with board
+# G1A1W (InputPlumber 50-zotac-zone.yaml and its hwdb list both) would start sideways. Only when
+# nobody set ORIENTATION (~/.config/environment.d still wins: it's sourced after this file).
+GAMECOVE_DMI="${GAMECOVE_DMI:-/sys/class/dmi/id}"
+if [ -z "${ORIENTATION:-}" ] && [ "$(cat "$GAMECOVE_DMI/sys_vendor" 2>/dev/null)" = ZOTAC ] &&
+	[ "$(cat "$GAMECOVE_DMI/board_name" 2>/dev/null)" = G1A1W ]; then
+	ORIENTATION=left
+fi
+
 # Steam's own cursor if Steam is installed; gamescope hides it after a few seconds.
 CURSOR_FILE="${HOME}/.local/share/Steam/tenfoot/resource/images/cursors/arrow.png"
 
