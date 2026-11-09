@@ -402,3 +402,32 @@ func test_game_session_defers_frame_limit_to_profiles() -> void:
 	s.free()
 	p.free()
 	_cleanup()
+
+
+## The TDP's range follows the power source (25 W on battery, 30 W plugged in
+## on the ROG Ally). On plugging in, Profiles applied at once, clamping the
+## saved 30 W to the battery range still in place, so the handheld stayed at
+## 25 W on the charger. Profiles now detects again (new ranges) and applies
+## once that's done. Found by the end-to-end suite.
+func test_source_change_applies_with_the_new_range() -> void:
+	var p = _setup()
+	var ac := [false]
+	_reg.register(Ctl.make({"id": "power.tdp", "group": "power", "kind": "slider", "min_value": 5.0, "max_value": 25.0, "step": 1.0},
+		func(c):
+			c.max_value = 30.0 if ac[0] else 25.0
+			return "",
+		func(_c): return _store.get("power.tdp"),
+		func(_c, v):
+			_store["power.tdp"] = v
+			return true))
+	_reg.detect_all()
+	p.set_layer("", "", {"power.tdp": 30})
+	eq(_store["power.tdp"], 25.0, "battery: clamped to 25 W")
+	ac[0] = true
+	p.set_plugged(true)
+	eq(_store["power.tdp"], 30.0, "plugged in: the saved 30 W, in the new range")
+	ac[0] = false
+	p.set_plugged(false)
+	eq(_store["power.tdp"], 25.0, "unplugged: back within the battery range")
+	p.free()
+	_cleanup()

@@ -81,6 +81,7 @@ var _pre_game: Dictionary = {}     # every per-game value when the game started
 var _session: Object
 var _first_detect_done := false
 var _seen_available: Dictionary = {}   # ids available at the last detection
+var _apply_after_detect := ""          # a reason to apply once the detection asked for ends
 
 
 func _ready() -> void:
@@ -165,7 +166,13 @@ func set_plugged(on: bool) -> void:
 	if s == source:
 		return
 	source = s
-	apply_now("power source")
+	# Ranges follow the source (the TDP's ceiling on battery vs plugged in): detect
+	# again and apply once that's done, or the new values get clamped to the old range.
+	if controls != null and controls.has_method("detect_all") and controls.has_signal("detected"):
+		_apply_after_detect = "power source"
+		controls.detect_all()
+	else:
+		apply_now("power source")
 
 
 func _on_power_changed(_state: Dictionary = {}) -> void:
@@ -191,6 +198,13 @@ func _on_detected() -> void:
 	for c in _all_controls():
 		if c.available:
 			now[c.id] = true
+	if _apply_after_detect != "":
+		var why := _apply_after_detect
+		_apply_after_detect = ""
+		_first_detect_done = true
+		_seen_available = now
+		apply_now(why)
+		return
 	if not _first_detect_done:
 		_first_detect_done = true
 		_seen_available = now
