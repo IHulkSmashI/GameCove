@@ -26,10 +26,11 @@ mkdir -p "$T/bin"
 cat > "$T/bin/systemctl" <<'EOF'
 #!/bin/sh
 f="$GAMECOVE_ROOT/thermald.state"
-case "$1" in
-is-active) cat "$f" 2>/dev/null || echo inactive ;;
-stop) echo inactive > "$f"; echo "stop" >> "$GAMECOVE_ROOT/systemctl.log" ;;
-start) echo active > "$f"; echo "start" >> "$GAMECOVE_ROOT/systemctl.log" ;;
+case "$1 ${2:-}" in
+"is-active thermald.service") cat "$f" 2>/dev/null || echo inactive ;;
+"stop thermald.service") echo inactive > "$f"; echo "stop" >> "$GAMECOVE_ROOT/systemctl.log" ;;
+"start thermald.service") echo active > "$f"; echo "start" >> "$GAMECOVE_ROOT/systemctl.log" ;;
+*) echo "$*" >> "$GAMECOVE_ROOT/systemctl-other.log" ;;
 esac
 EOF
 chmod +x "$T/bin/systemctl"
@@ -142,6 +143,7 @@ PKEXEC_UID=1000 expect 0 "thermald hold during a game" set thermald:hold
 sleep 1
 [ "$(r "$R/thermald.state")" = inactive ] || fail "still held while the game runs"
 grep -q "pgrep -u 1000 -f" "$T/pgrep.log" || fail "the watcher looks only at the caller's games"
+[ ! -e "$R/var/lib/gamecove/fixes/power-tune/thermald-watch" ] || fail "the watcher PID is not kept under /var/lib (review M3)"
 PKEXEC_UID=1000 expect 0 "a second hold replaces the watcher" set thermald:hold
 rm -f "$T/game"
 n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 30 ]; do sleep 0.2; n=$((n + 1)); done
@@ -152,6 +154,31 @@ expect 0 "hold at home (no game)" set thermald:hold
 n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 30 ]; do sleep 0.2; n=$((n + 1)); done
 [ "$(r "$R/thermald.state")" = active ] || fail "without a game the hold ends after the start-up grace"
 : > "$T/game"
+# review M3 (proof 9.2 B): a PID left from before a reboot, or one that isn't a watcher, is never killed
+sleep 300 & victim=$!
+w "$R/var/lib/gamecove/fixes/power-tune/thermald-watch" "$victim"
+echo active > "$R/thermald.state"
+expect 0 "hold with a stale PID under /var/lib" set thermald:hold
+sleep 0.3
+kill -0 "$victim" 2>/dev/null || fail "an unrelated process named by the old /var/lib PID file was killed"
+[ ! -e "$R/var/lib/gamecove/fixes/power-tune/thermald-watch" ] || fail "the old PID file is dropped"
+w "$R/run/gamecove/power-tune-thermald-watch.pid" "$victim"
+expect 0 "hold with a PID file naming a non-watcher" set thermald:hold
+sleep 0.3
+kill -0 "$victim" 2>/dev/null || fail "a process that isn't a watcher was killed"
+kill "$victim"
+n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 30 ]; do sleep 0.2; n=$((n + 1)); done
+# with systemd running, the watcher is a transient system unit (outside the session's cgroup)
+printf '#!/bin/sh\necho "systemd-run $*" >> "%s/systemd-run.log"\n' "$T" > "$T/bin/systemd-run"
+chmod +x "$T/bin/systemd-run"
+mkdir -p "$R/run/systemd/system"; rm -f "$R/run/gamecove/power-tune-thermald-watch.pid" "$R/systemctl-other.log"
+echo active > "$R/thermald.state"
+PKEXEC_UID=1000 expect 0 "hold through systemd-run" set thermald:hold
+grep -q "^systemd-run --unit=gamecove-thermald-watch --collect --quiet .*power-tune/fix.sh thermald-watch 1000$" "$T/systemd-run.log" || fail "watcher started as a transient unit ($(cat "$T/systemd-run.log"))"
+[ ! -e "$R/run/gamecove/power-tune-thermald-watch.pid" ] || fail "no PID file for a unit"
+grep -q "^stop gamecove-thermald-watch.service$" "$R/systemctl-other.log" || fail "a previous watcher unit is stopped first"
+expect 0 "release after the systemd-run hold" set thermald:release
+rm -r "$R/run/systemd"; rm "$T/bin/systemd-run"
 # thermald already stopped by someone else: hold changes nothing, release doesn't start it
 echo inactive > "$R/thermald.state"; : > "$R/systemctl.log"
 expect 0 "hold when inactive" set thermald:hold

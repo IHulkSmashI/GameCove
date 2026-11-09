@@ -33,7 +33,10 @@
 #                             findings §21). A hold is bounded (review S3-2): a watcher starts
 #                             thermald again once no game runs (a game has 60 s to show up,
 #                             then two checks 10 s apart without one), so a hold never outlives
-#                             the game even when GameCove's own restore doesn't run
+#                             the game even when GameCove's own restore doesn't run. The watcher
+#                             runs as a transient system unit (gamecove-thermald-watch.service,
+#                             systemd-run) so stopping the user's session can't kill it; without
+#                             systemd it is a setsid process whose PID is kept in /run (review M3)
 #     sleep:s2idle|deep       /sys/power/mem_sleep, from what it offers
 #     mcu:on|off              ROG Ally controller MCU power saving in sleep (mcu_powersave); handhelds only;
 #                             on only with new enough MCU firmware (../lib/ally-mcu.sh), exit 3 otherwise
@@ -459,25 +462,55 @@ thermald_watch() {
 		fi
 		fix_unlock
 	fi
-	[ "$(cat "$STATE/thermald-watch" 2>/dev/null)" = "$$" ] && rm -f "$STATE/thermald-watch"
+	[ "$(cat "$WATCH_PID" 2>/dev/null)" = "$$" ] && rm -f "$WATCH_PID"
+	return 0
+}
+
+# Review M3: the watcher's PID lives in /run (gone after a reboot, so a PID from before a hard power-off is
+# never reused), and is only signalled when that process really is a watcher.
+WATCH_PID="$ROOT/run/gamecove/power-tune-thermald-watch.pid"
+WATCH_UNIT=gamecove-thermald-watch
+is_watcher() {
+	[ -r "/proc/$1/cmdline" ] && tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null | grep -q "power-tune/fix.sh thermald-watch"
+}
+# systemd is running here (the fake root of a test only when it says so): the watcher becomes a
+# transient system unit, outside the session's cgroup, so ending the session can't take it down
+use_systemd_run() { [ -d "$ROOT/run/systemd/system" ] && command -v systemd-run >/dev/null 2>&1; }
+
+stop_watch() {
+	# a PID file from before (it was under /var/lib and survived reboots): dropped, never signalled
+	rm -f "$STATE/thermald-watch"
+	if [ -f "$WATCH_PID" ]; then
+		old="$(cat "$WATCH_PID" 2>/dev/null)"
+		case "$old" in "" | *[!0-9]*) ;; *) if is_watcher "$old"; then kill "$old" 2>/dev/null || true; fi ;; esac
+		rm -f "$WATCH_PID"
+	fi
+	if use_systemd_run; then
+		systemctl stop "$WATCH_UNIT.service" >/dev/null 2>&1 || true
+		systemctl reset-failed "$WATCH_UNIT.service" >/dev/null 2>&1 || true
+	fi
 	return 0
 }
 
 start_watch() {
 	# tests of other parts (a fake root) may switch it off; never on a real system
 	[ -n "$ROOT" ] && [ "${GAMECOVE_THERMALD_WATCH:-}" = off ] && return 0
-	w="$STATE/thermald-watch"
 	# one watcher, for the latest hold (and its caller)
-	if [ -f "$w" ]; then
-		old="$(cat "$w" 2>/dev/null)"
-		case "$old" in "" | *[!0-9]*) ;; *) kill "$old" 2>/dev/null || true ;; esac
+	stop_watch
+	uid="${PKEXEC_UID:-}"
+	case "$uid" in *[!0-9]*) uid="" ;; esac
+	if use_systemd_run && systemd-run --unit="$WATCH_UNIT" --collect --quiet \
+		--description="GameCove: start thermald again once no game runs" \
+		sh "$HERE/fix.sh" thermald-watch "$uid" </dev/null >/dev/null 2>&1; then
+		return 0
 	fi
 	if command -v setsid >/dev/null 2>&1; then
-		setsid sh "$HERE/fix.sh" thermald-watch "${PKEXEC_UID:-}" </dev/null >/dev/null 2>&1 &
+		setsid sh "$HERE/fix.sh" thermald-watch "$uid" </dev/null >/dev/null 2>&1 &
 	else
-		nohup sh "$HERE/fix.sh" thermald-watch "${PKEXEC_UID:-}" </dev/null >/dev/null 2>&1 &
+		nohup sh "$HERE/fix.sh" thermald-watch "$uid" </dev/null >/dev/null 2>&1 &
 	fi
-	echo "$!" >"$w"
+	mkdir -p "${WATCH_PID%/*}"
+	echo "$!" >"$WATCH_PID"
 }
 
 set_thermald() {
