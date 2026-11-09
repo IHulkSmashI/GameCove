@@ -25,6 +25,7 @@ const BgCommand := preload("res://scripts/ui/bg_command.gd")
 const Texts := preload("res://scripts/ui/texts_fixes.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
 const Traits := preload("res://scripts/device/traits.gd")
+const DeviceScript := preload("res://scripts/device/device.gd")
 const DEVICE_TABLE := "res://data/devices.json"
 
 const CATALOGUE := "res://data/fixes.json"
@@ -371,7 +372,7 @@ func efficiency_cores() -> Array:
 	var f := FileAccess.open(sys_root + "/sys/devices/cpu_atom/cpus", FileAccess.READ)
 	if f == null:
 		return []
-	var atom := parse_cpus(f.get_as_text())
+	var atom := parse_cpus(DeviceScript.read_all(f))
 	var lpe := atom.filter(func(c): return not DirAccess.dir_exists_absolute(sys_root + "/sys/devices/system/cpu/cpu%d/cache/index3" % c))
 	return lpe if not lpe.is_empty() else atom
 
@@ -455,7 +456,7 @@ func refresh_stale_override() -> bool:
 
 func _read(path: String) -> String:
 	var f := FileAccess.open(path, FileAccess.READ)
-	return f.get_as_text().strip_edges() if f != null else ""
+	return DeviceScript.read_all(f).strip_edges() if f != null else ""
 
 
 func _os_version() -> String:
