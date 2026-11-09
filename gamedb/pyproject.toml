@@ -17,4 +17,4 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["gamedb", "gamedb.sources"]
+packages = ["gamedb", "gamedb.sources", "gamedb.firmware", "gamedb.firmware.sources"]

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="316" height="399" viewBox="0 0 316 399">
+<title>AYANEO Flip DS (clamshell) (1 mm = 1.6 units)</title>
+<path id="part-lid" d="M25.2 10 H290.8 Q302 10 302 21.2 L302 162 Q302 173.2 290.8 173.2 H25.2 Q14 173.2 14 162 L14 21.2 Q14 10 25.2 10 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="part-screen" x="34.03" y="16.97" width="247.946" height="139.47" rx="4" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
+<path d="M187.756 24.97 L232.387 24.97" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<path id="part-body" d="M23.6 203.2 H292.4 Q302 203.2 302 212.8 L302 350.4 Q302 366.4 286 366.4 H30 Q14 366.4 14 350.4 L14 212.8 Q14 203.2 23.6 203.2 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="btn-LeftTrigger" x="28.4" y="183.2" width="43.2" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightTrigger" x="244.4" y="183.2" width="43.2" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-LeftBumper" x="33.2" y="195.2" width="33.6" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightBumper" x="249.2" y="195.2" width="33.6" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="part-screen-2" x="98.82" y="232.29" width="118.351" height="78.9006" rx="3" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
+<path d="M172.198 240.29 L193.501 240.29" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<g id="axis-LeftStick"><circle cx="52.4" cy="252.16" r="13.2288" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="52.4" cy="252.16" r="8.20186" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-DPad"><rect id="btn-DPadUp" x="48.0944" y="299.11" width="8.6112" height="10.764" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="48.0944" y="318.486" width="8.6112" height="10.764" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="37.3304" y="309.874" width="10.764" height="8.6112" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="56.7056" y="309.874" width="10.764" height="8.6112" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="48.0944" y="309.874" width="8.6112" height="8.6112" fill="#1F2630"/></g>
+<g id="btn-North"><circle cx="263.6" cy="240.429" r="5.8656" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M261.74 237.64 L263.60 240.43 L265.46 237.64 M263.60 240.43 L263.60 243.21" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-East"><circle cx="275.331" cy="252.16" r="5.8656" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M273.47 249.37 L273.47 254.95 L276.26 254.95 L277.19 254.02 L277.19 253.09 L276.26 252.16 L273.47 252.16 M273.47 249.37 L276.26 249.37 L277.00 250.12 L277.00 251.42 L276.26 252.16" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-South"><circle cx="263.6" cy="263.891" r="5.8656" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M261.74 266.68 L263.60 261.11 L265.46 266.68 M262.39 264.82 L264.81 264.82" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-West"><circle cx="251.869" cy="252.16" r="5.8656" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M250.01 249.37 L253.73 254.95 M253.73 249.37 L250.01 254.95" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="axis-RightStick"><circle cx="263.6" cy="314.18" r="13.2288" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="263.6" cy="314.18" r="8.20186" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-LeftTop"><rect x="49.744" y="208.544" width="9.152" height="5.632" rx="2.112" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-RightTop"><rect x="257.104" y="208.544" width="9.152" height="5.632" rx="2.112" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Select"><circle cx="109.04" cy="341.92" r="3.2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Start"><circle cx="206.96" cy="341.92" r="3.2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Keyboard"><rect x="130.8" y="352.42" width="8.32" height="5.12" rx="1.92" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-QuickAccess"><rect x="176.88" y="352.42" width="8.32" height="5.12" rx="1.92" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Guide"><circle cx="273.2" cy="353.34" r="3.84" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+</svg>

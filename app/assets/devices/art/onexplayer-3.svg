@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="529" height="281" viewBox="0 0 529 281">
+<title>OneXPlayer 3 (detachable controllers) (1 mm = 1.6 units)</title>
+<path id="part-controller-left" d="M99 30 H58.8 Q14 30 14 74.8 L14 206 Q14 250.8 58.8 250.8 H99 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<path id="part-controller-right" d="M429.8 30 H470 Q514.8 30 514.8 74.8 L514.8 206 Q514.8 250.8 470 250.8 H429.8 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="part-body" x="99.96" y="30" width="328.871" height="220.8" rx="8" fill="#262E3A" stroke="#5A6678" stroke-width="2.5"/>
+<rect id="btn-LeftTrigger" x="39.04" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightTrigger" x="432.16" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-LeftBumper" x="43.84" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightBumper" x="436.96" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="part-screen" x="112.76" y="45.63" width="303.271" height="189.545" rx="4" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
+<path d="M300.788 53.63 L355.377 53.63" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<g id="axis-LeftStick"><circle cx="56.98" cy="89.62" r="16.96" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="56.98" cy="89.62" r="10.5152" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-DPad"><rect id="btn-DPadUp" x="51.46" y="143.16" width="11.04" height="13.8" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="51.46" y="168" width="11.04" height="13.8" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="37.66" y="156.96" width="13.8" height="11.04" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="62.5" y="156.96" width="13.8" height="11.04" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="51.46" y="156.96" width="11.04" height="11.04" fill="#1F2630"/></g>
+<g id="btn-North"><circle cx="471.82" cy="74.58" r="7.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M469.44 71.01 L471.82 74.58 L474.20 71.01 M471.82 74.58 L471.82 78.15" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-East"><circle cx="486.86" cy="89.62" r="7.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M484.48 86.05 L484.48 93.19 L488.05 93.19 L489.24 92.00 L489.24 90.81 L488.05 89.62 L484.48 89.62 M484.48 86.05 L488.05 86.05 L489.00 87.00 L489.00 88.67 L488.05 89.62" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-South"><circle cx="471.82" cy="104.66" r="7.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M469.44 108.23 L471.82 101.09 L474.20 108.23 M470.27 105.85 L473.37 105.85" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-West"><circle cx="456.78" cy="89.62" r="7.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M454.40 86.05 L459.16 93.19 M459.16 86.05 L454.40 93.19" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="axis-RightStick"><circle cx="471.82" cy="162.48" r="16.96" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="471.82" cy="162.48" r="10.5152" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-QuickAccess"><circle cx="51.56" cy="224.3" r="4.16" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-QuickAccess2"><rect x="471.832" y="220.972" width="10.816" height="6.656" rx="2.496" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Select"><circle cx="69.09" cy="52.08" r="3.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Start"><circle cx="459.71" cy="52.08" r="3.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-LeftPaddle1"><rect x="39.98" y="258.8" width="34" height="16" rx="8" fill="none" stroke="#9AA4B0" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M51.50 270.30 L51.50 263.30 L53.83 267.38 L56.16 263.30 L56.16 270.30 M58.96 264.47 L60.13 263.30 L60.13 270.30 M58.96 270.30 L61.30 270.30" fill="none" stroke="#9AA4B0" stroke-width="1.10" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-RightPaddle1"><rect x="454.82" y="258.8" width="34" height="16" rx="8" fill="none" stroke="#9AA4B0" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M466.34 270.30 L466.34 263.30 L468.67 267.38 L471.00 263.30 L471.00 270.30 M472.64 264.47 L473.80 263.30 L476.14 263.30 L477.30 264.47 L477.30 265.63 L472.64 270.30 L477.30 270.30" fill="none" stroke="#9AA4B0" stroke-width="1.10" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>

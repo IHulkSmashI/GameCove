@@ -153,3 +153,7 @@ GameCove shows these logos only to identify a device, chip, store or launcher. T
 | AMD (`app/assets/brand/amd.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `amd` | CC0-1.0 (Simple Icons) | — |
 
 Shown as text (no logo bundled yet): Amazon Games, OneXPlayer, AYANEO, AOKZOE, GPD, ZOTAC, Orange Pi. For stores and launchers without a bundled logo, GameCove shows the icon the user's own system already has installed, if there is one; nothing is copied or redistributed.
+Store and launcher icons other than these (Steam, Heroic, Lutris, Bottles) come from the user's own system: GameCove shows the icon that app installed into the desktop icon theme, the same way any Linux desktop does. Nothing is copied into GameCove or redistributed. Steam is a trademark of Valve Corporation.
+
+Not bundled because their terms need a licence or written permission, or publish no terms for third parties: Valve (Steam, Steam Deck), Epic Games, GOG, Amazon, MSI, ASUS / ROG, Lenovo / Legion, Acer / Predator, OneXPlayer, AYANEO, GPD, ZOTAC, Intel. AMD's brand terms cover only products that contain an AMD chip.
+- **ClawDeck** (same author): Parts ported from ClawDeck (same author). Its MSI BIOS check (`msibios.py`) as the MSI source of the firmware index (`gamedb/gamedb/firmware/sources/msi.py`).

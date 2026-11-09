@@ -485,3 +485,9 @@ QuickMenu node); the Controller provider's `REAPPLY_AFTER_RESUME` ~5 s after wak
 **Contract additions (backward compatible):** `Control.normalize` (Callable run after coerce), kind `curve` in the matrix, `Controls.apply(values, force)`, `Controls.run_on_worker(job)`, `ctx.runner` always set (`NoRunner` when missing), `Power.request_resumed()` / `refresh(after_resume)`, providers use autoloads only when `sys_root == ""`. `GAMECOVE_TEST=<part of a name>` runs a subset of the test suite.
 
 **main.gd wiring:** Fixes service (`main.fixes`), `PerfProvider.set_game` + `Controls.detect_all()` around GameSession start/end (on the Controls worker, ordered with Profiles), `Profiles.attach_session`, `Power.request_resumed()` after a sleep and `controller.*` lights re-applied 5 s later (forced).
+
+## Firmware & driver updates (feat/firmware)
+
+Not a Controls provider: lives in the Updates service. See [SYSTEM.md](SYSTEM.md#firmware-bios-and-drivers-updates-hub)
+for coverage per maker, the index job and the safety rules (no automatic flashing, AC + 50% battery).
+Uses devices.json `traits` when present (falls back to maker/family/chip/buttons).
