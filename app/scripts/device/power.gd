@@ -961,6 +961,12 @@ func write_tdp(watts: float) -> bool:
 
 # ---- charge limit -------------------------------------------------------------
 
+## steamos-manager's charge limit lands about a second after set-property.
+const CHARGE_SETTLE_MAX_MS := 3000
+## Pause between read-backs while it lands (tests set 0: no sleeping, the
+## loop still counts 250 ms per read toward the 3 s cap).
+var charge_settle_ms := 250
+
 ## 50-100 %. 100 means no limit.
 func set_charge_limit(percent: int) -> bool:
 	if _charge_via == "" or percent < _charge_min or percent > 100:
@@ -968,8 +974,17 @@ func set_charge_limit(percent: int) -> bool:
 	var got := -1
 	if _charge_via == "steamos-manager":
 		if user_bus.set_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel", "i", str(percent)):
-			var v: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
-			got = sm_charge(int(v)) if v != null else -1
+			# steamos-manager applies it about a second later (seen live on a ROG
+			# Ally): poll the read-back for up to 3 s before calling it refused.
+			var waited := 0
+			while true:
+				var v: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
+				got = sm_charge(int(v)) if v != null else -1
+				if got == percent or waited >= CHARGE_SETTLE_MAX_MS:
+					break
+				if charge_settle_ms > 0:
+					OS.delay_msec(charge_settle_ms)
+				waited += maxi(charge_settle_ms, 1) if charge_settle_ms > 0 else 250
 	else:
 		if _run_fix("charge-limit", str(percent)):
 			got = read_charge_sysfs()

@@ -9,6 +9,10 @@ var props: Dictionary = {}
 var methods: Dictionary = {}
 ## get-property keys whose set-property "succeeds" but changes nothing (read-back failure).
 var frozen: Array[String] = []
+## get-property key -> how many reads keep returning the old value after a
+## set-property (steamos-manager applies MaxChargeLevel about a second late).
+var late_reads: Dictionary = {}
+var _pending: Dictionary = {}
 var calls: Array[String] = []
 ## Optional func(argv: PackedStringArray) -> int, or -> {"code", "out"}, for non-busctl commands
 ## (pkexec, systemctl).
@@ -40,6 +44,13 @@ func run(program: String, args: PackedStringArray) -> Dictionary:
 		"get-property":
 			var key := " ".join(PackedStringArray(a.slice(0, 6)))
 			if props.has(key):
+				if _pending.has(key):
+					var p: Dictionary = _pending[key]
+					if int(p["left"]) > 0:
+						p["left"] = int(p["left"]) - 1
+						return {"code": 0, "out": JSON.stringify(props[key])}
+					props[key]["data"] = p["value"]
+					_pending.erase(key)
 				return {"code": 0, "out": JSON.stringify(props[key])}
 		"set-property":
 			var key := " ".join(PackedStringArray([bus, "get-property"] + a.slice(2, 6)))
@@ -47,7 +58,11 @@ func run(program: String, args: PackedStringArray) -> Dictionary:
 				if not key in frozen:
 					var sig: String = a[6]
 					var raw: String = a[7]
-					props[key]["data"] = float(raw) if sig == "d" else (int(raw) if sig in ["u", "i"] else (raw == "true" if sig == "b" else raw))
+					var val: Variant = float(raw) if sig == "d" else (int(raw) if sig in ["u", "i"] else (raw == "true" if sig == "b" else raw))
+					if int(late_reads.get(key, 0)) > 0:
+						_pending[key] = {"value": val, "left": int(late_reads[key])}
+					else:
+						props[key]["data"] = val
 				return {"code": 0, "out": ""}
 		"call":
 			var key := " ".join(PackedStringArray(a.slice(0, 6)))

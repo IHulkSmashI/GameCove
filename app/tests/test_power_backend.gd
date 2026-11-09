@@ -171,9 +171,21 @@ func test_read_back_failure_returns_false() -> void:
 	eq(p.state()["tdp_w"], 25.0, "state keeps the real value")
 	eq(seen.size(), 0, "no changed signal on failure")
 	var deck := _power("bus_deck_steamos.json", _row("steam-deck-oled"), _sys("readback_deck", false))
+	deck.charge_settle_ms = 0
 	deck.runner.frozen.append(SM + "BatteryChargeLimit1 MaxChargeLevel")
 	ok(not deck.set_charge_limit(80), "steamos-manager charge ignored -> false")
 	p.free()
+	deck.free()
+
+
+## Live on a ROG Ally (SteamOS 3.10): MaxChargeLevel reads the old value for
+## about a second after set-property, then the new one.
+func test_steamos_manager_charge_applies_late() -> void:
+	var deck := _power("bus_deck_steamos.json", _row("steam-deck-oled"), _sys("late_charge", false))
+	deck.charge_settle_ms = 0
+	deck.runner.late_reads[SM + "BatteryChargeLimit1 MaxChargeLevel"] = 3
+	ok(deck.set_charge_limit(85), "a late read-back still counts once it arrives")
+	eq(deck.state()["charge_limit"], 85, "85 read back")
 	deck.free()
 
 
