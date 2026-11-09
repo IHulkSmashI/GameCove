@@ -74,12 +74,15 @@ func _run() -> void:
 	if flow_script.instance != null:
 		flow_script.instance.finish()
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
+	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
+	main.hint_status.text = "● GameCove 0.4   MSI Claw 8 EX AI+"
 	main.show_screen("settings")
 	await frames(4)
 	for c in main.settings.get_children():
 		c.visible = false
 
 	var s: Dictionary = Fakes.services()
+	s["controls"] = _claw_controls()
 	await _page("about_panel.gd", "About this device", s, "device_about")
 	if only.is_empty() or "device_about_scrolled" in only:
 		var p: Control = frame.get_meta("panel")
@@ -100,6 +103,7 @@ func _run() -> void:
 	if FileAccess.file_exists(PHOTO) and (only.is_empty() or "device_about_photo" in only):
 		var ps: Dictionary = Fakes.services()
 		ps["photo"] = FakePhoto.new()
+		ps["controls"] = s["controls"]
 		await _page("about_panel.gd", "About this device", ps, "device_about_photo")
 
 	var ThemeLib = load("res://theme/gamecove_theme.gd")
@@ -127,6 +131,17 @@ func _run() -> void:
 	mp.default_focus().grab_focus()
 	await shot("device_controller_missing")
 	await finish()
+
+
+## A set-up Claw 8 EX's Controls (the snapshot and patch shoot_controls.gd uses),
+## so the Controller page's gyro rows show real values, not "Needs InputPlumber".
+func _claw_controls() -> Node:
+	var here: String = get_script().resource_path.get_base_dir()
+	var fc: Node = load("res://tests/fixtures/ui_controls/fake_controls.gd").new()
+	fc.name = "ShotControls"
+	fc.load_snapshot("res://tests/fixtures/ui_controls/msi-claw-8-ex.json", load(here.path_join("shoot_controls.gd")).claw_patch())
+	root.add_child(fc)
+	return fc
 
 
 ## Free main and the static caches before quitting (see shoot.gd).

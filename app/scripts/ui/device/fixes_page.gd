@@ -109,7 +109,7 @@ func _fill_side() -> void:
 	var fx := svc("fixes")
 	var n: Dictionary = fx.counts() if fx != null else {}
 	var lines := [["yes", TF.SUMMARY_APPLIED, "applied"], ["maybe", TF.SUMMARY_AVAILABLE, "available"],
-		["yes", TF.SUMMARY_OS, "os-fixed"], ["no", TF.SUMMARY_NOT_NEEDED, "not-needed"]]
+		["yes", TF.SUMMARY_OS, "os-fixed"], ["none", TF.SUMMARY_NOT_NEEDED, "not-needed"]]
 	for l in lines:
 		var k: int = int(n.get(l[2], 0))
 		if k > 0:

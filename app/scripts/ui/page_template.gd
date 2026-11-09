@@ -122,7 +122,9 @@ func setup_page(g: Dictionary, line := "") -> void:
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	scroll.offset_top = FRAME_TOP + top_inset
 	scroll.offset_bottom = -52
-	scroll.follow_focus = true
+	# Follows focus once the layout settles, keeping rows clear of the
+	# "More below" fade at the bottom.
+	load("res://scripts/ui/focus_scroll.gd").attach(scroll, 64.0)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	add_child(scroll)

@@ -215,14 +215,18 @@ const PROGRESS_TITLE := {
 	"install": "Installing GameCove", "change": "Applying your changes", "repair": "Repairing GameCove",
 	"update": "Updating GameCove", "uninstall": "Removing GameCove", "finish": "Installing fixes",
 }
+const PROGRESS_STOPPED := {
+	"install": "Install stopped", "change": "Changes stopped", "repair": "Repair stopped",
+	"update": "Update stopped", "uninstall": "Removal stopped", "finish": "Fixes stopped",
+}
 const PROGRESS_LINE := "Keep the handheld plugged in or charged. A password window may pop up; that's your system asking, not us."
 const TASKS := {
 	"check_game": "Make sure no game is running",
 	"package": "Install GameCove",
 	"package_update": "Update GameCove",
 	"package_remove": "Remove GameCove",
-	"fix_install": "Install %s",
-	"fix_remove": "Remove %s",
+	"fix_install": "Install fix: %s",
+	"fix_remove": "Remove fix: %s",
 	"user_files": "Save Steam and shortcut settings",
 	"pending": "Set what starts at boot",
 	"apply_now": "Apply the startup choice",
@@ -312,7 +316,7 @@ static func task_title(t: Dictionary) -> String:
 	var base: String = TASKS.get(str(t.get("id", "")), str(t.get("id", "")))
 	if "%s" in base:
 		var Texts = load("res://scripts/ui/texts.gd")
-		return base % Texts.fix_title(str(t.get("fix", ""))).to_lower()
+		return base % Texts.fix_title(str(t.get("fix", "")))
 	return base
 
 

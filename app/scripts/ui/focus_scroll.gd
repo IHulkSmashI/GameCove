@@ -23,14 +23,17 @@ const Motion := preload("res://scripts/ui/motion.gd")
 const MARGIN := 18.0
 
 var scroll: ScrollContainer
+## Extra room under the focused control (pages with a "More below" fade).
+var margin_bottom := MARGIN
 var _watched: Control
 var _queued := false
 
 
-static func attach(s: ScrollContainer) -> Node:
+static func attach(s: ScrollContainer, bottom_room := MARGIN) -> Node:
 	var fs = load("res://scripts/ui/focus_scroll.gd").new()
 	fs.name = "FocusScroll"
 	fs.scroll = s
+	fs.margin_bottom = bottom_room
 	s.follow_focus = false
 	s.add_child(fs, false, Node.INTERNAL_MODE_BACK)
 	return fs
@@ -83,7 +86,7 @@ func _apply() -> void:
 	var from := float(scroll.scroll_vertical)
 	if absf(target - from) < 1.0:
 		return
-	Motion.method(scroll, "focus_scroll", func(v: float): scroll.scroll_vertical = int(round(v)), from, target, Motion.FAST)
+	Motion.method(scroll, "vscroll", func(v: float): scroll.scroll_vertical = int(round(v)), from, target, Motion.FAST)
 
 
 ## Content height scrolled past the top for `c` to show nicely (see above).
@@ -97,12 +100,13 @@ func target_for(c: Control) -> float:
 	var top := r.position.y
 	var bottom := r.end.y
 	var v := float(scroll.scroll_vertical)
-	if bottom + MARGIN <= view:
+	var below := margin_bottom
+	if bottom + below <= view:
 		return 0.0
-	if top - MARGIN < v or bottom - top + 2.0 * MARGIN > view:
+	if top - MARGIN < v or bottom - top + MARGIN + below > view:
 		v = top - MARGIN   # taller than the view: its top first
-	elif bottom + MARGIN > v + view:
-		v = bottom + MARGIN - view
+	elif bottom + below > v + view:
+		v = bottom + below - view
 	v = clampf(v, 0.0, max_v)
 	# Something cut by the top edge (a row, a line of text): show it whole if
 	# the focus still fits, else scroll past it. A few passes, as moving up
@@ -116,7 +120,7 @@ func target_for(c: Control) -> float:
 			var rr := _rect_in_content(b)
 			if rr.position.y < v - 1.0 and rr.end.y > v + 1.0:
 				var up := maxf(0.0, rr.position.y - 6.0)
-				if bottom + MARGIN <= up + view:
+				if bottom + below <= up + view:
 					v = up
 				else:
 					v = minf(rr.end.y + 2.0, top - 4.0)

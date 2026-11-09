@@ -438,7 +438,8 @@ func _build_details() -> PanelContainer:
 	_d_meta.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_d_meta)
 	_style_details(p)
-	row.add_child(Kit.spacer())
+	# No spacer: the meta line takes all the free width (a spacer split it
+	# in half and cut "Played…" short with room to spare).
 	_d_badges = Kit.hbox(8)
 	row.add_child(_d_badges)
 	return p

@@ -14,6 +14,8 @@ var main: Control
 var svc: Node
 var screen: Control
 var covers: Array = []
+## Painted cover per game title, so each app tile shows its own game.
+var cover_by_title: Dictionary = {}
 
 const UUID := "A1B2C3D4-0000-4E5F-8899-AABBCCDDEEFF"
 const APPS := [["Steam Big Picture", 1093255277], ["Desktop", 881448767], ["Iron Meridian", 101], ["Kingdom of Ash", 102],
@@ -61,6 +63,7 @@ func _run() -> void:
 	for g in await painter.make_library(self, art_dir):
 		if str(g["art"]["cover"]) != "":
 			covers.append(g["art"]["cover"])
+			cover_by_title[str(g.get("title", "")).to_lower()] = g["art"]["cover"]
 	var prefs = load("res://scripts/ui/ui_prefs.gd")
 	prefs.path = "/tmp/gamecove-shots/ui-stream.cfg"
 	DirAccess.remove_absolute(prefs.path)
@@ -177,7 +180,7 @@ func _hosts() -> void:
 	var apps: Array = []
 	for i in APPS.size():
 		apps.append({"id": APPS[i][1], "title": APPS[i][0], "hdr": true, "uuid": "",
-			"art": covers[i % covers.size()] if i >= 2 and not covers.is_empty() else ""})
+			"art": str(cover_by_title.get(str(APPS[i][0]).to_lower(), "")) if i >= 2 else ""})
 	h["apps"] = apps
 	var u: Dictionary = S.blank_host("5C2B7E9A-1111-2222-3333-444455556666")
 	u.merge({"uuid": "5C2B7E9A-1111-2222-3333-444455556666", "name": "living-room", "addresses": ["192.168.1.31"], "address": "192.168.1.31",

@@ -1150,7 +1150,10 @@ func edit(step_id: String) -> void:
 
 func _build_progress() -> void:
 	var act: String = plan.action()
-	_heading(TI.PROGRESS_TITLE.get(act, TI.PROGRESS_TITLE["install"]) + "…", "")
+	if _run_state == "failed":
+		_heading(TI.PROGRESS_STOPPED.get(act, TI.PROGRESS_STOPPED["install"]), "")
+	else:
+		_heading(TI.PROGRESS_TITLE.get(act, TI.PROGRESS_TITLE["install"]) + "…", "")
 	_nav_note(TI.PROGRESS_LINE)
 	if installer == null:
 		return
@@ -1229,9 +1232,8 @@ func _build_progress() -> void:
 		grid.add_child(row)
 		task_rows.append(row)
 	col.add_child(grid)
-	body.add_child(card)
-	for i in task_rows.size():
-		_refresh_task(i)
+	# Failed: what went wrong and what to do sit above the task list, so
+	# they're on screen at 1280x800 without scrolling.
 	if _run_state == "failed":
 		body.add_child(SKit.note(TI.error_line(_run_message), "bad", "Error"))
 		var acts := Kit.hbox(12)
@@ -1253,9 +1255,18 @@ func _build_progress() -> void:
 			acts.add_child(b)
 			_focusables.append(b)
 		body.add_child(acts)
-		_nav_note(TI.LOG_AT % installer.paths.log_file())
-	elif _run_state == "undone":
+		_nav_note(TI.LOG_AT % _short_path(installer.paths.log_file()))
+	body.add_child(card)
+	for i in task_rows.size():
+		_refresh_task(i)
+	if _run_state == "undone":
 		body.add_child(SKit.note(_run_message, "info", "Undone"))
+
+
+## A path with the home folder as "~" (shorter, and the same on every handheld).
+func _short_path(p: String) -> String:
+	var h := str(installer.paths.get("home")) if installer != null and installer.paths != null else ""
+	return "~" + p.substr(h.length()) if h != "" and h != "<null>" and p.begins_with(h + "/") else p
 
 
 func _start_run(act: String) -> void:

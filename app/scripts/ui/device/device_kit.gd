@@ -167,13 +167,14 @@ static func kv(pairs: Array, key_width := 150, compact := false) -> GridContaine
 
 ## A line with a check, cross or dot icon in front: [ok?, text].
 static func check_line(state: String, text: String) -> HBoxContainer:
-	var icon: String = {"yes": "check", "no": "x", "maybe": "alert"}.get(state, "dots")
+	# "none": nothing to do / not needed (a faint dash, never a cross).
+	var icon: String = {"yes": "check", "no": "x", "maybe": "alert", "none": "minus"}.get(state, "dots")
 	var tone: String = {"yes": "good", "no": "text_3", "maybe": "warn"}.get(state, "text_3")
 	var row := Kit.hbox(10)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(Icons.rect(icon, 18, ThemeLib.color(tone)))
 	var l := Kit.label(text, "", true)
-	if state == "no":
+	if state in ["no", "none"]:
 		l.add_theme_color_override("font_color", ThemeLib.color("text_2"))
 	row.add_child(l)
 	return row

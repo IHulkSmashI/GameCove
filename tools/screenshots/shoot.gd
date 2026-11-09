@@ -102,6 +102,8 @@ func _run() -> void:
 		flow_script.instance.finish()
 	S = load("res://tests/test_ui_settings.gd")
 	if want(["home_empty"]):
+		_status()
+		await frames(2)
 		await shot("home_empty")
 	var lib := root.get_node("Library")
 	lib.games.assign(games)
