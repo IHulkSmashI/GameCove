@@ -51,8 +51,8 @@ Floats are IEEE bit patterns in a CARDINAL. Names from gamescope `src/steamcompm
 notes (Legion Go 2 ignores the backlight in PQ; gamescope drops the level after suspend);
 Outpox/Bluetooth `main.py` (BlueZ `Adapter1.Powered`; a dongle can own hci0, so the adapter owning a
 paired device is switched, the lowest one only when nothing is paired); gamescope-session-plus (environment.d order: device-quirks
-first, then user files, so ours wins; device-quirks' refresh lists aren't exported, hence
-`SESSION_QUIRK_REFRESH`). SimpleDeckyTDP and PowerTools have no display code; Decky-AudioLoader and
+first, then user files, so ours wins; device-quirks' refresh lists aren't exported, hence the
+`session-refresh-switching` quirk). SimpleDeckyTDP and PowerTools have no display code; Decky-AudioLoader and
 the brightness-bar plugin only touch Steam's UI, so nothing to take from them.
 
 **Contract notes:** `ctx.env` (optional dict) overrides environment variables, `ctx.config_path`
@@ -462,3 +462,16 @@ See the report in the merge request: firmware acceptance of the RAPL 8 s window,
 Not a Controls provider: lives in the Updates service. See [SYSTEM.md](SYSTEM.md#firmware-bios-and-drivers-updates-hub)
 for coverage per maker, the index job and the safety rules (no automatic flashing, AC + 50% battery).
 Uses devices.json `traits` when present (falls back to maker/family/chip/buttons).
+
+
+## Traits: fixes, quirks and checks follow the shared part
+
+Provider checks that used to name model ids read quirks keyed by devices.json traits
+(`app/data/quirks.json`, `Traits.has_quirk(id, row)`): `fw-ppt-ignored` (power.gd: MSI Panther Lake
+Claw firmware), `gamescope-known-refresh` (panel has a gamescope display script:
+`traits.panel.gamescope`), `session-refresh-switching` (device-quirks blocks; the ONEXPLAYER X1 Pro
+has none, so it now gets GameCove's own refresh unlock), `software-brightness-hdr`,
+`software-brightness-in-pq` (both Legion Go 2 SoCs) and `hdr-switch-blocked` (display panel.gd).
+`controller.gyro_accel` follows the `claw8ex-gyro` fix's selector. Device-matrix expectations take
+trait selectors too (`soc:lunar-lake|panther-lake`, `panel:<id>`; `a+b` for both). New checks:
+prefer a trait selector when the behaviour comes from a part. Reference: docs/DEVICES.md, Traits.

@@ -121,7 +121,8 @@ The tests check that each real DMI fixture (`app/tests/fixtures/devices/dmi.json
 | `gyro`, `imu` | `yes` (works through InputPlumber), `fix` (needs a GameCove fix), `no` (sensor present, not on Linux yet), `none` (no sensor), `unknown`; `imu` names the sensor. |
 | `rgb` | `null` or `{zones, via}`; `via` is who drives the LEDs (`inputplumber`, `hhd`, `ayaneo-ec`, `oxp-ec`). |
 | `buttons`, `glyphs`, `art` | Button profile in buttons.gd, glyph set (`xbox`, `deck`), picture in `app/assets/devices/art/`. |
-| `fixes` | Root fixes the Device page offers (folder names in `fixes/`). |
+| `fixes` | Root / file fixes the installer applies here (folder names in `fixes/`). Generated: the fix catalogue's `auto` selectors resolved on this row's `traits` (`python3 tools/fixes/gen_handhelds.py`; the tests fail when it's stale). |
+| `traits` | The parts this handheld shares with others (see Traits below). One line per row. |
 | `quirks` | Known issues, one sentence each. |
 | `support`, `verified`, `unverified`, `sources` | Support level; `verified` is true exactly when `unverified` (field names that are best guesses) is empty; where the values came from. |
 
@@ -241,6 +242,85 @@ Some reviewers (Booredatwork.com, Tame That Tech, RetroBoy, GPD's own channel an
 
 No free photo of your handheld? Take one and upload it to Commons as your own work under CC0 or CC BY-SA 4.0: front view, screen on, straight on at screen height, on a plain light or dark background, in soft even light (daylight from a window or two lamps from the sides, no flash), no reflections of you on the screen, at least 2000 px wide. Testers can also offer one in the tester sign-up form.
 
+## Traits
+
+Handhelds share a lot: the same SoC, EC driver, controller, Wi-Fi card, panel, or the whole body
+with another chip. Every row has a one-line `"traits"` object naming those parts, and fixes, quirks
+and device-matrix checks name the devices they're for by trait, so something found on one model
+reaches every sibling with the same part (the owner's rule).
+
+| Trait | What | Example values |
+| --- | --- | --- |
+| `platform` | Shared body / board group (rows with the same shell or board) | `claw-8` (Claw 8 AI+, 8 EX, A8), `legion-go-2` (83N0, 83N1), `onexplayer-2` (2, 2 Pro), `ayaneo-2` (2, 2S, Geek) |
+| `soc` | Silicon die(s), a list when the row covers several | `van-gogh`, `phoenix`, `hawk-point`, `strix-point`, `strix-halo`, `rembrandt`, `meteor-lake`, `lunar-lake`, `panther-lake` |
+| `gpu_arch`, `gpu_driver`, `cpu_vendor` | GPU architecture, kernel GPU driver, CPU maker | `rdna3.5`, `xe3`; `amdgpu`, `xe`, `i915`; `amd`, `intel` |
+| `ec` | Platform / EC drivers | `asus-wmi` + `asus-armoury`, `lenovo-wmi-gamezone` + `lenovo-wmi-other`, `msi-wmi-platform`, `oxpec`, `ayaneo-ec`, `gpd-fan` |
+| `controller` | Built-in controller family (USB ids from InputPlumber) | `asus-ally` (0b05:1abe), `asus-ally-x` (0b05:1b4c), `msi-claw` (0db0:1901/1902), `legion-go-controllers`, `oxp-xpad-at`, `oxp-xpad-fe00` |
+| `imu` | Motion sensor | `bmi260`, `bmi323`, `ish-hid-sensor`, `amd-sfh` |
+| `wifi` | Wi-Fi card(s) | `ax210`, `intel-be200`, `mt7922`, `mt7925`, `rtl8822ce` |
+| `panel` | `{id, vendor, model, hz, orientation, touch, type, gamescope}`; `id` is the same on every row with that exact panel; `gamescope` names gamescope's display script when it has one | `csw-pn8007qb1-2`, `lenovo-go2-oled` |
+| `audio` | Codec / amplifiers | `cs35l41`, `max98388` |
+| `fingerprint` | Reader USB id (or a placeholder when the id isn't confirmed) | `1c7a:0588`, `2808:9338` |
+| `firmware` | BIOS family | `msi-e1t91`, `asus-rc71l` |
+| `session_quirk` | The gamescope-session-plus `device-quirks` block that applies | `oxp-60-external-left`, `ally` |
+| `sources`, `unverified` | Source keys (described in the file's `_trait_sources`) and the traits that are still best guesses | |
+
+Every trait is present (`null` when unknown). Values are lower-case ids. Unverified values come
+from spec sheets or reviews; a fix keyed to one still checks the hardware itself before it does
+anything ("not needed" when the part isn't there).
+
+### Selectors
+
+`app/data/fixes.json` (`auto`, `optional`, `exclude`), `app/data/quirks.json` (`applies`) and
+`tools/devicematrix/expectations.json` (`devices` keys) use the same selectors, resolved by
+`app/scripts/device/traits.gd` in the app and `tools/traits/traits.py` in the tools (the tests check
+both agree):
+
+| Selector | Picks |
+| --- | --- |
+| `*` | every row |
+| `msi-claw-8-ex` | one row |
+| `soc:lunar-lake\|panther-lake` | rows with that trait value (shell globs, any case; list traits match on any element) |
+| `driver:asus-armoury` | GPU driver or EC driver; `vendor:` = `cpu_vendor`; `panel:` = `panel.id`; `panel.<field>:` |
+| `["a", "b"]`, `{"any-of": [...]}` | any of them |
+| `{"all-of": [...]}`, `{"not": sel}` | all of them; not |
+| `a+b` | (matrix keys only, which must be strings) both |
+
+A fix entry also has `exclude` (device id -> why a model with the trait still mustn't get it, e.g.
+the AMD Claw A8 for the Claw panel fix) and `why` (the shared part). From the selectors,
+`tools/fixes/gen_handhelds.py` writes each row's `fixes` and `fixes/lib/fix-devices.txt`; the file
+fixes read their device list from it (`DEVICES="@"`) and `gcfix.sh` builds each udev rule's DMI
+match from those handhelds' DMI ids (`gc_rule_lines`), so a rule written on one handheld of a
+shared drive acts only on handhelds with the trait.
+
+### Report
+
+```
+python3 tools/traits/traits.py trait wifi              every value of a trait and who has it
+python3 tools/traits/traits.py trait panel:csw-pn8007qb1-2   every model sharing it (any selector)
+python3 tools/traits/traits.py model msi-claw-8-ai-plus     traits, siblings, every fix / quirk / matrix check that applies and why
+python3 tools/traits/traits.py fixes                   each fix's device set
+python3 tools/traits/traits.py check                   validate traits and every selector
+```
+
+### Who shares what (2026-11-09)
+
+- **Controllers:** ASUS 0b05:1b4c on the Ally X, Xbox Ally, Xbox Ally X and Xbox Ally X20; MSI
+  0db0:1901/1902 on every Claw (with the volume keys on the i8042 keyboard); Lenovo's detachable
+  controllers on the Legion Go and Go 2 (17ef:61eb-61ee); xpad + AT keyboard on OneXPlayer 2 /
+  OneXFly / AOKZOE and on classic AYANEOs; xpad + 1a86:fe00 on OneXPlayer X1 / Apex / 3 / X2 Mini.
+- **EC:** `oxpec` on every OneXPlayer, AOKZOE and the Orange Pi Neo; `asus-armoury` on every Ally;
+  `msi-wmi-platform` on every Claw; `gpd-fan` on every GPD (WIN 5 uses the Duo's table).
+- **Panels:** CSW PN8007QB1-2 in the Claw 8 AI+ and 8 EX (EDID CSW0801); TMX TL070FVXS02-0 in the
+  Claw A1M and 7 AI+ (TMA2027); Samsung AMS881KB01-0 OLED in both Legion Go 2 models; the
+  TL070FVXS01-0 / TS070FHM-LU0 in the Ally and Ally X; the Legion Go S uses the same CSW panel family
+  (PN8007QB1-1) as the Claw 8, a different EDID.
+- **Bodies:** Claw 8 AI+ / 8 EX / A8; Legion Go 2 83N0 / 83N1; Legion Go S Z2 Go / Z1E; Xbox Ally /
+  Xbox Ally X; OneXPlayer 2 / 2 Pro; AOKZOE A1 / A1 Pro; AYANEO 2 / 2S / Geek; OneXFly F1 / F1 Pro;
+  OneXPlayer X1 A / i / Pro; G1 A / i; OneXPlayer 3 / X2 Mini (same controller layout).
+- **SoCs:** Strix Point (HX 370 / Z2 Extreme) on 12 rows, Phoenix / Hawk Point (7840U, 8840U, Z1
+  Extreme) on most 2023-24 handhelds, Panther Lake on the Claw 8 EX, OneXPlayer 3 and Predator Atlas 8.
+
 ## Adding a device
 
 1. Find its DMI ids: `cat /sys/class/dmi/id/{sys_vendor,product_name,board_name,board_vendor}` (or the InputPlumber config in `rootfs/usr/share/inputplumber/devices/`). Add them to `app/tests/fixtures/devices/dmi.json` with `"expect": "<new id>"` and where they came from.
@@ -264,6 +344,7 @@ No free photo of your handheld? Take one and upload it to Commons as your own wo
   "charge_limit": false, "charge_limit_via": null,
   "gyro": "unknown", "imu": null, "rgb": null,
   "buttons": "generic", "glyphs": "xbox", "art": "generic",
+  "traits": {"platform": null, "soc": [...], ...},  (every trait, null when unknown: Traits above)
   "fixes": [], "quirks": [],
   "support": "generic", "verified": false, "unverified": ["tdp", "panel"],
   "sources": ["where each value came from"]

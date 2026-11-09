@@ -26,6 +26,42 @@ rule on the system already does the same (Bazzite) or the value is already right
 `not-needed` when the part isn't in this handheld. Apply / Undo need no password
 (`gamecove-fix-set <fix> set on|off`), so the Fixes page works in Gaming Mode.
 
+## Shared parts: who else gets each fix (traits pass, 2026-11-09)
+
+Fixes now name the part they're for (selectors over devices.json `traits`, docs/DEVICES.md), not
+model ids, and every fix researched for one model was re-checked against its siblings. Each udev
+rule's DMI match is generated from the resolved handhelds. `python3 tools/traits/traits.py fixes`
+prints the current sets.
+
+| Fix | Keyed by | Was | Now also | Why the siblings have the same issue |
+|---|---|---|---|---|
+| ally-controller-wakeup | `controller:asus-ally-x` (0b05:1b4c) | Ally X, Xbox Ally, Xbox Ally X | **Xbox Ally X20 (auto)** | Same controller per InputPlumber `50-rog_xbox_ally_x20.yaml`; Bazzite's rule matches the USB id alone. Our old rule also matched `sys_vendor=="ASUSTeK COMPUTER INC."`, which the X20 (`ASUS`) never matched, so the X20 kept waking from stick bumps. |
+| ally-fingerprint-drain | `fingerprint:1c7a:0588`; optional `fingerprint:asus-power-button` | Ally, Ally X | **Xbox Ally, Xbox Ally X, X20 (optional)** | They have a power-button reader too; its USB id isn't confirmed, so it's offered and the fix's status shows "not needed" if the id differs. X20 rule DMI fixed as above. |
+| claw8ex-vrr | `panel:csw-pn8007qb1-2` + Intel GPU driver; optional `panel:tmx-tl070fvxs02-0` | Claw 8 EX | **Claw 8 AI+ (auto)**, **Claw A1M, Claw 7 AI+ (optional)** | Same body and panel: the fix's own validated panel list (ClawLab catalogue) already had the 8 AI+ panel (CSW0801) and the A1M / 7 AI+ panel (TMA2027), but only the 8 EX got it. Patches only those exact EDIDs (sha256). Excluded: Claw A8 (AMD: the hook runs before xe/i915 only; EDID not validated). |
+| claw-wifi-d3cold | `controller:msi-claw` + `cpu_vendor:intel` | A1M, 7 AI+, 8 AI+ (optional) | **Claw 8 EX (optional)** | Same MSI firmware family with an Intel Wi-Fi card; the workaround is user-verified on the other Intel Claws. |
+| ax210-d3cold | `wifi:ax210` (auto), `*` (optional) | WIN 5 (auto) | **AYANEO 2, 2S (auto)** | AYANEO ships the AX210 (Bazzite's rule names AYANEO Air devices); the 2 / 2S value is unverified, so the fix checks for PCI 8086:2725 and says "not needed" without it. |
+| onexfly-touch | `session_quirk:oxp-120-external-left`; optional the other external + left blocks | OneXFly F1 | **OneXPlayer 2, 2 Pro, AOKZOE A1, A1 Pro, OneXPlayer X1 A, X1 mini (optional)** | device-quirks starts them the same way (PANEL_TYPE=external, ORIENTATION=left) and none has a kernel panel-orientation quirk. Confirmed only on the F1 (Bazzite 5581), so optional elsewhere. The session file and "needed" check now read the product's own device-quirks block. |
+| claw-kbd-wakeup | `controller:msi-claw` | every Claw | (same set) | |
+| gpd-fingerprint | `fingerprint:2808:9338\|2541:9711` | WIN 4, WIN Max 2 | (same set) | WIN Mini / WIN 5 readers: none known. |
+| ally-mcu-powersave | `ec:asus-armoury` + `controller:asus-ally*` | every Ally | (same set) | |
+| claw8ex-buttons, claw8ex-gyro | `firmware:msi-e1t91` (+ `imu:ish-hid-sensor`) | Claw 8 EX | (same) | Board-specific InputPlumber config and Panther Lake ISH firmware; Lunar / Meteor Lake Claws use other hubs. |
+
+Other findings from the shared-part pass:
+
+- **ZOTAC Zone:** Linux's panel orientation quirk matches board `G0A1W` only; `G1A1W` units (in
+  devices.json and InputPlumber) don't get it (quirk `kernel-orientation-quirk-first-board-only`;
+  GameCove's rotation control covers it, an upstream kernel patch would fix it for everyone).
+- **Orange Pi Neo:** the kernel's `oxpec` EC driver covers it (board NEO-01) like OneXPlayer and
+  AOKZOE, so its fan should work through `oxp_ec`; devices.json still has no fan driver for it
+  (left for the power owner to verify on hardware).
+- **ONEXPLAYER X1 Pro:** device-quirks has no block for it (only X1 A / X1 i / X1 mini), so
+  gamescope doesn't switch its refresh; the display provider used to assume it did. Fixed through
+  the `session-refresh-switching` quirk.
+- **ONEXPLAYER X2 Mini:** devices.json says AMD, but InputPlumber's config uses the Intel xHCI
+  (`usb-0000:00:14.0`) like the OneXPlayer 3; left unknown in traits until someone checks.
+- **Thermald** restoring the firmware TDP (found on the Claw 8 EX) applies to every Intel handheld
+  (quirk `thermald-restores-tdp`).
+
 ## Valve Steam Deck (LCD `Jupiter`, OLED `Galileo`)
 
 | Fix | Symptom | Bazzite | SteamOS | Method | GameCove | Sources |
