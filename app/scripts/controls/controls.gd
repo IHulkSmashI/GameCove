@@ -12,6 +12,7 @@ signal control_failed(id: String, value: Variant)
 signal detected()
 
 const ControlScript := preload("res://scripts/controls/control.gd")
+const PROVIDERS_DIR := "res://scripts/controls/providers"
 const GROUPS := ["power", "display", "perf", "audio", "controller", "system", "network"]
 
 var ctx: Dictionary = {}
@@ -29,6 +30,25 @@ func _ready() -> void:
 	if ctx.is_empty():
 		setup({"sys_root": "", "runner": load("res://scripts/device/command_runner.gd").new(),
 			"home": OS.get_environment("HOME"), "device": get_node_or_null("/root/Device")})
+		load_providers()
+		detect_all()
+
+
+## Every script in providers/ is a provider (new() then controls()), so each
+## area adds its own file without touching a shared list. Exports keep scripts
+## as *.gd.remap; both spellings load.
+func load_providers(dir := PROVIDERS_DIR) -> void:
+	var names := []
+	for f in DirAccess.get_files_at(dir):
+		var n := f.trim_suffix(".remap")
+		if n.ends_with(".gd") and not names.has(n):
+			names.append(n)
+	names.sort()
+	for n in names:
+		var p = load(dir.path_join(n)).new()
+		if p.has_method("setup"):
+			p.setup(ctx)
+		register_provider(p)
 
 
 func _exit_tree() -> void:
