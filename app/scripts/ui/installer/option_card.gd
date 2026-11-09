@@ -44,24 +44,39 @@ func setup(card_key: String, title: String, line: String, icon := "", badge: Arr
 	_content = col
 	col.minimum_size_changed.connect(_fit)
 	resized.connect(_fit)
+	# Top row: icon tile on the left and the badge on the right, or (no icon)
+	# the badge on the left and the mono corner value on the right.
 	var top := Kit.hbox(12)
+	top.name = "Top"
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var b: Control = null
+	if not badge.is_empty():
+		b = Kit.chip(badge[0], {"good": "star", "info": "sliders"}.get(badge[1], ""), badge[1])
+		b.name = "Badge"
+		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	if icon != "":
 		var tile := PanelContainer.new()
+		tile.name = "IconTile"
 		tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		tile.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("surface_3"), ThemeLib.radius("m"), 12, 12))
+		var tsb := ThemeLib.box(ThemeLib.soft(0.06), ThemeLib.radius("m"), 12, 12)
+		tsb.border_color = ThemeLib.color("line_2")
+		tsb.set_border_width_all(1)
+		tile.add_theme_stylebox_override("panel", tsb)
 		tile.add_child(Icons.rect(icon, 26, ThemeLib.color("accent")))
 		top.add_child(tile)
-	if not badge.is_empty():
-		var b := SKit.chip(badge[0], badge[1], "star" if badge[1] == "good" else "")
-		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		top.add_child(b)
-	top.add_child(Kit.spacer())
+		top.add_child(Kit.spacer())
+		if b != null:
+			top.add_child(b)
+	else:
+		if b != null:
+			top.add_child(b)
+		top.add_child(Kit.spacer())
 	if corner != "":
-		var c := Kit.label(corner, "CaptionLabel")
-		c.add_theme_font_override("font", ThemeLib.font("semibold", true))
-		c.add_theme_color_override("font_color", ThemeLib.color("accent"))
+		var c := Kit.micro(corner, "EyebrowLabel")
+		c.name = "Corner"
 		c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		if not badge.is_empty() and badge[1] != "good":
+			c.add_theme_color_override("font_color", ThemeLib.color("text_2"))
 		top.add_child(c)
 	col.add_child(top)
 	title_label = Kit.label(title.to_upper(), "LeadLabel", true)
@@ -70,12 +85,15 @@ func setup(card_key: String, title: String, line: String, icon := "", badge: Arr
 	col.add_child(title_label)
 	var l := Kit.label(line, "CaptionLabel", true)
 	l.name = "Line"
+	l.add_theme_font_override("font", ThemeLib.font("regular"))
 	l.add_theme_color_override("font_color", ThemeLib.color("text_2"))
 	l.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(l)
-	footer = Kit.label("", "CaptionLabel")
+	# Mono footer: "• SELECTED BY DEFAULT" in the accent once chosen.
+	footer = Kit.label("", "MonoLabel")
 	footer.name = "Footer"
-	footer.add_theme_font_override("font", ThemeLib.font("medium", true))
+	footer.add_theme_font_override("font", ThemeLib.mono(false, 1))
+	footer.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO + 1)
 	col.add_child(footer)
 	set_selected(false)
 
@@ -92,8 +110,9 @@ func _fit() -> void:
 func set_selected(on: bool) -> void:
 	selected = on
 	if footer != null:
-		footer.text = ("•  " + _selected_text) if on else _footer_text
-		footer.add_theme_color_override("font_color", ThemeLib.color("accent") if on else ThemeLib.color("text_3"))
+		footer.text = ("●  " + _selected_text) if on else _footer_text
+		footer.add_theme_font_override("font", ThemeLib.mono(on, 1))
+		footer.add_theme_color_override("font_color", ThemeLib.color("accent") if on else ThemeLib.color("text_2"))
 	_restyle()
 
 
@@ -105,7 +124,7 @@ func _restyle() -> void:
 		return
 	_styling = true
 	var r := ThemeLib.radius("l")
-	var base := ThemeLib.box(ThemeLib.color("surface_2"), r, 0, 0)
+	var base := ThemeLib.box(ThemeLib.color("surface"), r, 0, 0)
 	base.border_color = ThemeLib.color("accent") if selected else ThemeLib.color("line")
 	base.set_border_width_all(2 if selected else 1)
 	var hover := base.duplicate() as StyleBoxFlat
@@ -121,6 +140,6 @@ func _restyle() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and footer != null and not _styling:
 		_styling = true
-		footer.add_theme_color_override("font_color", ThemeLib.color("accent") if selected else ThemeLib.color("text_3"))
+		footer.add_theme_color_override("font_color", ThemeLib.color("accent") if selected else ThemeLib.color("text_2"))
 		_styling = false
 		_restyle()

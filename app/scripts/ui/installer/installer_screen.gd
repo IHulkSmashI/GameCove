@@ -73,6 +73,7 @@ var task_rows: Array = []
 var progress_bar: ProgressBar
 var progress_title: Label
 var progress_pct: Label
+var progress_ring: Control
 var _focusables: Array = []
 var _ask_done: Callable
 var _ask_return: Control
@@ -81,6 +82,34 @@ var _run_message := ""
 var _started_action := ""
 var _rebuild_queued := false
 var _configured := false
+
+
+## The install progress ring: a track and an accent arc, the percent inside.
+## Redraws only when the value changes.
+class ProgressRing extends Control:
+	var value := 0.0
+	func _init() -> void:
+		custom_minimum_size = Vector2(76, 76)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+	func set_value(v: float) -> void:
+		value = clampf(v, 0.0, 1.0)
+		queue_redraw()
+	func _draw() -> void:
+		var Lib = load("res://theme/gamecove_theme.gd")
+		var c := size / 2.0
+		var r := minf(size.x, size.y) / 2.0 - 5.0
+		draw_arc(c, r, 0.0, TAU, 64, Lib.color("surface_3"), 6.0, true)
+		if value > 0.0:
+			var a0 := -PI / 2.0
+			var steps := 48
+			# Accent into accent_2 along the arc, like the primary gradient.
+			for i in steps:
+				var t0 := float(i) / steps
+				if t0 >= value:
+					break
+				var t1 := minf(float(i + 1) / steps, value)
+				var col: Color = Lib.color("accent").lerp(Lib.color("accent_2"), t0)
+				draw_arc(c, r, a0 + TAU * t0, a0 + TAU * t1, 4, col, 6.0, true)
 
 
 static func create(svc: Dictionary, t: Dictionary, p: RefCounted, inst: Node) -> Control:
@@ -110,6 +139,25 @@ func configure(svc: Dictionary, t: Dictionary, p: RefCounted, inst: Node) -> voi
 	if st != null and st.has_signal("changed"):
 		st.changed.connect(func(_s): _refresh_stores_later())
 	_build()
+
+
+## Big windows get more room, not just bigger pixels: the same density rule
+## as the app (1920x1200 lays out at 1536x960), so the installer's type
+## matches the main screens.
+func _enter_tree() -> void:
+	var w := get_window()
+	if w == null or not is_instance_valid(w):
+		return
+	if not w.size_changed.is_connected(_fit_density):
+		w.size_changed.connect(_fit_density)
+	_fit_density()
+
+
+func _fit_density() -> void:
+	var w := get_window()
+	if w == null or w.content_scale_mode == Window.CONTENT_SCALE_MODE_DISABLED:
+		return
+	w.content_scale_size = load("res://scripts/main.gd").base_size_for(w.size)
 
 
 ## The real thing: autoloads, this system, a real command runner.
@@ -181,16 +229,19 @@ func _build() -> void:
 	var lock := Kit.hbox(12)
 	lock.name = "Lockup"
 	var mark := PanelContainer.new()
-	var msb := ThemeLib.box(ThemeLib.soft(0.12), ThemeLib.radius("m"), 8, 8)
-	msb.border_color = ThemeLib.color("accent")
-	msb.set_border_width_all(2)
-	mark.add_theme_stylebox_override("panel", msb)
+	mark.name = "Mark"
+	# The app icon tile: dark glass with the cyan-to-violet gradient edge.
+	mark.add_theme_stylebox_override("panel", ThemeLib.gradient_box(ThemeLib.color("accent"), ThemeLib.color("accent_2"), ThemeLib.radius("m"), Color(0, 0, 0, 0), 2, 2))
+	var inner := PanelContainer.new()
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("bg"), ThemeLib.radius("m") - 2, 8, 8))
+	mark.add_child(inner)
 	var logo := TextureRect.new()
 	logo.texture = load("res://assets/logo-mark.svg") if ResourceLoader.exists("res://assets/logo-mark.svg") else Icons.tex("handheld", 24, ThemeLib.color("accent"))
 	logo.custom_minimum_size = Vector2(24, 24)
 	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	mark.add_child(logo)
+	inner.add_child(logo)
 	lock.add_child(mark)
 	var words := Kit.vbox(0)
 	words.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -203,9 +254,9 @@ func _build() -> void:
 	brand.add_child(w1)
 	brand.add_child(w2)
 	words.add_child(brand)
-	var sub := Kit.label(TI.LOCKUP_LINE, "CaptionLabel")
-	sub.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO)
-	sub.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+	var sub := Kit.micro(TI.LOCKUP_LINE)
+	sub.name = "LockupLine"
+	sub.add_theme_font_size_override("font_size", 11)
 	words.add_child(sub)
 	lock.add_child(words)
 	top_row.add_child(lock)
@@ -232,15 +283,15 @@ func _build() -> void:
 	var tpad := Control.new()
 	tpad.custom_minimum_size = Vector2(0, 22)
 	title_box.add_child(tpad)
-	eyebrow = Kit.label("", "AccentLabel")
+	# Mono eyebrow in the accent, then the big caps title (the app's page
+	# heading style), then a plain lead line.
+	eyebrow = Kit.micro("", "EyebrowLabel")
 	eyebrow.name = "Eyebrow"
-	eyebrow.add_theme_font_override("font", ThemeLib.font("semibold", true))
-	eyebrow.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
 	title_box.add_child(eyebrow)
 	page_title = Kit.label("", "DisplayLabel", true)
 	page_title.name = "Heading"
-	page_title.add_theme_font_override("font", ThemeLib.font("display_tight"))
-	page_title.add_theme_font_size_override("font_size", ThemeLib.SIZE_HEADLINE + 6)
+	page_title.add_theme_font_override("font", ThemeLib.font("display"))
+	page_title.add_theme_font_size_override("font_size", ThemeLib.SIZE_HEADLINE + 8)
 	title_box.add_child(page_title)
 	page_lead = Kit.label("", "QuietLabel", true)
 	page_lead.name = "Lead"
@@ -269,18 +320,18 @@ func _build() -> void:
 	nav.add_child(nav_note)
 	skip_button = Kit.button(TI.SKIP)
 	skip_button.name = "Skip"
-	skip_button.custom_minimum_size = Vector2(120, 52)
+	skip_button.custom_minimum_size = Vector2(112, 50)
 	skip_button.pressed.connect(skip_step)
 	nav.add_child(skip_button)
 	back_button = Kit.button(TI.BACK)
 	back_button.name = "Back"
-	back_button.custom_minimum_size = Vector2(120, 52)
+	back_button.custom_minimum_size = Vector2(112, 50)
 	back_button.pressed.connect(go_back)
 	nav.add_child(back_button)
-	next_button = Kit.button(TI.NEXT, "AccentButton")
+	# The gradient primary pill with the A glyph, like Play on the game page.
+	next_button = Kit.primary(TI.NEXT, "A")
 	next_button.name = "Next"
-	next_button.custom_minimum_size = Vector2(220, 52)
-	next_button.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
+	next_button.custom_minimum_size = Vector2(200, 50)
 	next_button.pressed.connect(next_step)
 	nav.add_child(next_button)
 	var nav_pad := Kit.margin(0, 0, 14)
@@ -297,10 +348,8 @@ func _build() -> void:
 	step_chip = _pill("", "", true)
 	step_chip.name = "StepChip"
 	foot_row.add_child(step_chip)
-	foot_label = Kit.label("", "CaptionLabel")
+	foot_label = Kit.micro("")
 	foot_label.name = "Where"
-	foot_label.add_theme_font_override("font", ThemeLib.font("medium", true))
-	foot_label.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 	foot_row.add_child(foot_label)
 	foot_row.add_child(Kit.spacer())
 	prompts_box = Kit.hbox(0)
@@ -350,7 +399,7 @@ func _hairline() -> ColorRect:
 func _pill(text: String, dot_tone: String, accent: bool) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sb := ThemeLib.box(ThemeLib.soft(0.10) if accent else Color(ThemeLib.color("surface_2"), 0.8), 999, 10, 4)
+	var sb := ThemeLib.box(Color(ThemeLib.color("accent"), 0.10) if accent else Color(ThemeLib.color("surface"), 0.85), 999, 12, 5)
 	sb.border_color = Color(ThemeLib.color("accent"), 0.5) if accent else ThemeLib.color("line")
 	sb.set_border_width_all(1)
 	p.add_theme_stylebox_override("panel", sb)
@@ -358,15 +407,17 @@ func _pill(text: String, dot_tone: String, accent: bool) -> PanelContainer:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if dot_tone != "":
 		var d := Panel.new()
-		d.custom_minimum_size = Vector2(8, 8)
+		d.name = "Dot"
+		d.custom_minimum_size = Vector2(7, 7)
 		d.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		d.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var col: Color = ThemeLib.color("text_3") if dot_tone == "muted" else (ThemeLib.color("accent") if dot_tone == "accent" else ThemeLib.tone(dot_tone))
 		d.add_theme_stylebox_override("panel", ThemeLib.box(col, 4, 0, 0))
 		row.add_child(d)
+	# Mono, tracked: the step pills, the status pill and STEP n / N.
 	var l := Kit.label(text, "CaptionLabel")
 	l.name = "Text"
-	l.add_theme_font_override("font", ThemeLib.font("semibold" if accent else "medium", true))
+	l.add_theme_font_override("font", ThemeLib.mono(accent, 1))
 	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO)
 	l.add_theme_color_override("font_color", ThemeLib.color("accent") if accent else ThemeLib.color("text_2"))
 	row.add_child(l)
@@ -396,6 +447,7 @@ func show_step() -> void:
 		_drop(body, c)
 	_focusables.clear()
 	_nav_note("")
+	page_title.get_parent().visible = true
 	match plan.step:
 		"welcome": _build_welcome()
 		"startup": _build_startup()
@@ -496,10 +548,11 @@ func _nav_note(text: String, tone := "") -> void:
 		n.custom_minimum_size = Vector2(380, 0)
 		nav_note.add_child(n)
 	else:
-		var l := Kit.label(text, "CaptionLabel", true)
+		var l := Kit.label(text, "MonoLabel", true)
 		l.name = "NavNoteText"
-		l.add_theme_font_override("font", ThemeLib.font("medium", true))
-		l.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+		l.add_theme_font_override("font", ThemeLib.mono(false, 1))
+		l.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO + 1)
+		l.add_theme_color_override("font_color", ThemeLib.color("text_2"))
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		nav_note.add_child(l)
@@ -589,12 +642,10 @@ func _build_welcome() -> void:
 	dev.size_flags_stretch_ratio = 0.9
 	var dcol := Kit.vbox(10)
 	dev.add_child(dcol)
-	var k := Kit.label(TI.DETECTED, "AccentLabel")
-	k.add_theme_font_override("font", ThemeLib.font("semibold", true))
-	k.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO + 1)
+	var k := Kit.micro(TI.DETECTED, "EyebrowLabel")
 	k.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dcol.add_child(k)
-	var pic := _device_picture(110)
+	var pic := _device_picture(170)
 	pic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	dcol.add_child(pic)
 	var dn := Kit.label(_device_name().to_upper(), "LeadLabel", true)
@@ -604,9 +655,10 @@ func _build_welcome() -> void:
 	dcol.add_child(dn)
 	var level := _support()
 	var os_name := str(target.get("os", {}).get("name", "Linux"))
-	var facts := Kit.label("%s  ·  %s" % [TI.SUPPORT.get(level, TI.SUPPORT["generic"]), os_name], "CaptionLabel", true)
+	var facts := Kit.label("%s  ·  %s" % [TI.SUPPORT.get(level, TI.SUPPORT["generic"]), os_name], "MonoLabel", true)
 	facts.name = "Facts"
-	facts.add_theme_font_override("font", ThemeLib.font("medium", true))
+	facts.add_theme_font_override("font", ThemeLib.mono(false, 1))
+	facts.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO + 1)
 	facts.add_theme_color_override("font_color", ThemeLib.tone("good") if level in ["full", "partial"] else ThemeLib.tone("warn"))
 	facts.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dcol.add_child(facts)
@@ -617,16 +669,16 @@ func _build_welcome() -> void:
 	psb.set_border_width_all(1)
 	plan_box.add_theme_stylebox_override("panel", psb)
 	var pcol := Kit.vbox(8)
-	var ph := Kit.label(TI.WHAT_WILL_HAPPEN, "CaptionLabel")
-	ph.add_theme_font_override("font", ThemeLib.font("semibold", true))
-	ph.add_theme_color_override("font_color", ThemeLib.color("text_2"))
+	var ph := Kit.micro(TI.WHAT_WILL_HAPPEN + ":")
+	ph.add_theme_font_override("font", ThemeLib.mono(true, 2))
 	pcol.add_child(ph)
 	var n := 1
 	for p in TI.PLAN:
 		var r := Kit.hbox(10)
 		var num := Kit.label("%d." % n, "CaptionLabel")
 		num.add_theme_color_override("font_color", ThemeLib.color("accent"))
-		num.add_theme_font_override("font", ThemeLib.font("semibold"))
+		num.add_theme_font_override("font", ThemeLib.mono(true, 0))
+		num.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		r.add_child(num)
 		var l := Kit.label(p[2], "CaptionLabel", true)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -778,19 +830,28 @@ func _build_stores() -> void:
 		var info: Dictionary = status.get(store, {})
 		if "heroic" in str(info.get("config", "")).to_lower() or str(info.get("how", "")) == "heroic":
 			heroic = true
+	if heroic:
+		body.add_child(SKit.note(TI.STORES_HEROIC, "good", "Heroic"))
+	# One card per store: its state as a badge, what A does in the footer.
+	var cards := Kit.hbox(18)
+	cards.name = "StoreCards"
+	for store in ["epic", "gog", "amazon"]:
+		var info: Dictionary = status.get(store, {})
 		var signed: bool = info.get("signed_in", false)
 		var can := TS.can_sign_in(info)
 		var acct := str(info.get("account", ""))
 		var line: String = TI.STORE_ROW_LINE["signed"] % (" as " + acct if acct != "" else "") if signed \
 			else TI.STORE_ROW_LINE.get(str(info.get("how", "")), "")
-		var r := _row("store_" + store, TS.STORE_NAMES[store], TS.SIGNED_IN if signed else (TS.SIGN_IN if can else TS.NOT_SIGNED_IN), line, "store")
-		r.collapse_hint = false
-		r.set_hint(line)
-		r.set_value(r.value_label.text, "good" if signed else ("" if can else "muted"))
+		var badge: Array = [TS.SIGNED_IN, "good"] if signed else ([TI.BROWSER_SIGNIN, "info"] if can else [TS.NOT_SIGNED_IN, ""])
+		var foot: String = TI.STORE_READY if signed else (TI.SIGN_IN_BROWSER if can else TI.STORE_NOT_HERE)
+		var c := _card("store_" + store, TS.STORE_NAMES[store], line, "store", badge, "", foot, foot, cards)
+		c.set_selected(signed)
 		if can:
-			r.pressed.connect(func(): open_sign_in(store))
-	if heroic:
-		body.add_child(SKit.note(TI.STORES_HEROIC, "good", "Heroic"))
+			c.pressed.connect(func(): open_sign_in(store))
+		else:
+			c.disabled = true
+	body.add_child(cards)
+	_nav_note(TI.STORES_LATER)
 
 
 func open_sign_in(store: String) -> void:
@@ -843,50 +904,112 @@ func _refresh_stores_later() -> void:
 func _build_device() -> void:
 	_heading(TI.DEVICE_TITLE % _device_name(), TI.DEVICE_LINE)
 	var fixes: Array = plan.suggested_fixes.filter(func(f): return not f in Texts.HIDDEN_FIXES)
+	var cols := Kit.hbox(18)
+	cols.name = "DeviceCols"
+	body.add_child(cols)
+	# Left: the fixes this handheld needs. Right: power defaults.
+	var left := _panel_card(cols, TI.FIXES_HEADER, TI.FIXES_MATCHED % _device_name() if not fixes.is_empty() else "", 1.35)
 	if fixes.is_empty():
-		body.add_child(SKit.note(TI.DEVICE_GENERIC if _support() == "generic" else TI.DEVICE_NO_FIXES, "info", "NoFixes"))
+		left.add_child(SKit.note(TI.DEVICE_GENERIC if _support() == "generic" else TI.DEVICE_NO_FIXES, "info", "NoFixes"))
 	for f in fixes:
-		var r := _bool("fix_" + f, Texts.fix_title(f), f in plan.choices["fixes"], {}, "sparkle")
+		var r := _bool("fix_" + f, Texts.fix_title(f), f in plan.choices["fixes"], {}, "sparkle", left)
 		r.collapse_hint = false
 		r.set_explainer(func(_v): return Texts.fix_explain(f))
 		r.changed.connect(func(v): plan.toggle_fix(f, v))
-	if not fixes.is_empty():
-		body.add_child(SKit.note(TI.DEVICE_RESTART, "info", "Restart"))
-	var power := Kit.label(TI.POWER_HEADER, "LeadLabel")
-	power.name = "PowerHeader"
-	body.add_child(power)
+	var right := _panel_card(cols, TI.POWER_HEADER, "", 1.0)
+	right.get_parent().get_parent().name = "PowerCard"
 	var row := _device_row()
 	var has_tdp: bool = row.get("tdp", null) is Dictionary or row.is_empty()
 	if has_tdp:
-		var a := _bool("auto_tdp", TI.AUTO_TDP, bool(plan.choices["auto_tdp"]), TI.AUTO_TDP_LINES, "bolt")
-		a.changed.connect(func(v): plan.set_choice("auto_tdp", v))
 		var p := _choice("power_profile", TI.PROFILE, Plan.PROFILES, Plan.PROFILES.map(func(x): return TI.PROFILES[x]),
-			plan.choices["power_profile"], func(v): return TI.PROFILE_LINES.get(v, ""), "gauge")
+			plan.choices["power_profile"], func(v): return TI.PROFILE_LINES.get(v, ""), "gauge", right)
 		p.changed.connect(func(v): plan.set_choice("power_profile", v))
+		var a := _bool("auto_tdp", TI.AUTO_TDP, bool(plan.choices["auto_tdp"]), TI.AUTO_TDP_LINES, "bolt", right)
+		a.changed.connect(func(v): plan.set_choice("auto_tdp", v))
 	if bool(row.get("charge_limit", false)):
 		var s: VBoxContainer = SliderRow.new()
 		s.setup("charge_limit", TI.CHARGE, 50, 100, float(plan.choices["charge_limit"]), 5, "%")
-		body.add_child(s)
+		right.add_child(s)
 		var hint := Kit.label(TI.CHARGE_LINE, "QuietLabel", true)
-		body.add_child(hint)
+		hint.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+		right.add_child(hint)
 		s.changed.connect(func(v): plan.set_choice("charge_limit", int(v)))
 		_focusables.append(s.slider)
 	if not has_tdp and not bool(row.get("charge_limit", false)):
-		body.add_child(SKit.note(TI.NO_POWER, "info", "NoPower"))
+		right.add_child(SKit.note(TI.NO_POWER, "info", "NoPower"))
+	if not fixes.is_empty():
+		body.add_child(SKit.note(TI.DEVICE_RESTART, "info", "Restart"))
+	_nav_note(TI.DEVICE_REVERSIBLE)
+
+
+## A titled card in a row of cards (caps heading, optional chip on the
+## right). Returns the box to put rows in.
+func _panel_card(parent: Control, title: String, chip: String, ratio: float) -> VBoxContainer:
+	var p := PanelContainer.new()
+	p.name = "Card_" + title.validate_node_name().replace(" ", "")
+	p.theme_type_variation = "CardPanel"
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.size_flags_stretch_ratio = ratio
+	parent.add_child(p)
+	var col := Kit.vbox(12)
+	p.add_child(col)
+	var head := Kit.hbox(10)
+	var t := Kit.label(title.to_upper(), "HeaderLabel")
+	t.add_theme_font_size_override("font_size", ThemeLib.SIZE_LEAD)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(t)
+	if chip != "":
+		head.add_child(Kit.chip(chip, "check", "accent"))
+	col.add_child(head)
+	var rows := Kit.vbox(10)
+	rows.name = "Rows"
+	col.add_child(rows)
+	return rows
 
 
 func _build_look() -> void:
 	_heading(TI.LOOK_TITLE, TI.LOOK_LINE)
-	var t := _choice("theme", TI.THEME, Themes.ORDER, Themes.ORDER.map(func(x): return Themes.NAMES.get(x, x)),
-		plan.choices["theme"], func(v): return Texts.THEME_LINES.get(v, ""), "palette")
-	t.collapse_hint = false
-	t.changed.connect(pick_theme)
-	var m := _bool("match_art", TI.MATCH_ART, bool(plan.choices["match_art"]), TI.MATCH_ART_LINES, "sparkle")
+	# One card per theme with a swatch of its colours; the chosen one is ticked.
+	var cards := Kit.hbox(16)
+	cards.name = "Themes"
+	for id in Themes.ORDER:
+		var c := _card("theme_" + id, Themes.NAMES.get(id, id), str(Texts.THEME_LINES.get(id, "")), "", [], "", "", TI.SELECTED, cards)
+		c.min_height = 230.0
+		var t: Dictionary = Themes.get_theme(id)
+		var sw := Panel.new()
+		sw.name = "Swatch"
+		sw.custom_minimum_size = Vector2(0, 64)
+		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sw.add_theme_stylebox_override("panel", _swatch_box(t))
+		var content: Control = c.get_node("Content")
+		content.add_child(sw)
+		content.move_child(sw, 0)
+		c.set_selected(plan.choices["theme"] == id)
+		c.pressed.connect(func(): pick_theme(id))
+	body.add_child(cards)
+	var toggles := Kit.hbox(16)
+	toggles.name = "LookToggles"
+	body.add_child(toggles)
+	var m := _bool("match_art", TI.MATCH_ART, bool(plan.choices["match_art"]), TI.MATCH_ART_LINES, "sparkle", toggles)
+	m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	m.changed.connect(func(v): plan.set_choice("match_art", v))
-	var r := _bool("reduce_motion", TI.REDUCE_MOTION, bool(plan.choices["reduce_motion"]), TI.REDUCE_MOTION_LINES, "motion")
+	var r := _bool("reduce_motion", TI.REDUCE_MOTION, bool(plan.choices["reduce_motion"]), TI.REDUCE_MOTION_LINES, "motion", toggles)
+	r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	r.changed.connect(func(v):
 		plan.set_choice("reduce_motion", v)
 		Motion.reduce = v)
+
+
+## A theme's swatch: its surface with the accent-to-accent_2 gradient.
+func _swatch_box(t: Dictionary) -> StyleBox:
+	var a: Color = t["accent"]
+	var b: Color = t["accent_2"]
+	var sb := ThemeLib.gradient_box(Color(a, 0.85), Color(b, 0.85), ThemeLib.radius("m"), t["line_2"], 0, 0)
+	if int(t.get("dark", 1)) == 0:
+		sb = ThemeLib.gradient_box(Color(t["surface"]), Color(a, 0.35), ThemeLib.radius("m"), t["line_2"], 0, 0)
+	elif str(t.get("bg", "")) == str(Color("#000000")):
+		sb = ThemeLib.gradient_box(Color("#000000"), Color(a, 0.30), ThemeLib.radius("m"), t["line_2"], 0, 0)
+	return sb
 
 
 ## Theme changes show at once (the choice is saved when the install runs).
@@ -1010,24 +1133,37 @@ func _build_progress() -> void:
 	card.theme_type_variation = "CardPanel"
 	var col := Kit.vbox(16)
 	card.add_child(col)
-	var head := Kit.hbox(12)
+	# Ring with the percent, the current task in caps, then the gradient bar.
+	var head := Kit.hbox(20)
+	progress_ring = ProgressRing.new()
+	progress_ring.name = "Ring"
+	head.add_child(progress_ring)
+	progress_pct = Kit.label("", "NumberLabel")
+	progress_pct.name = "Percent"
+	progress_pct.add_theme_font_override("font", ThemeLib.mono(true, 0))
+	progress_pct.add_theme_font_size_override("font_size", ThemeLib.SIZE_SMALL)
+	progress_pct.add_theme_color_override("font_color", ThemeLib.color("accent"))
+	progress_pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	progress_pct.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	progress_pct.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	progress_ring.add_child(progress_pct)
+	var hcol := Kit.vbox(4)
+	hcol.alignment = BoxContainer.ALIGNMENT_CENTER
+	hcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hcol.add_child(Kit.micro(TI.PROGRESS_NOW, "EyebrowLabel"))
 	progress_title = Kit.label("", "HeaderLabel", true)
 	progress_title.name = "Current"
 	progress_title.add_theme_font_override("font", ThemeLib.font("display"))
-	progress_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(progress_title)
-	progress_pct = Kit.label("", "HeaderLabel")
-	progress_pct.name = "Percent"
-	progress_pct.add_theme_font_override("font", ThemeLib.font("semibold", true))
-	progress_pct.add_theme_color_override("font_color", ThemeLib.color("accent"))
-	head.add_child(progress_pct)
+	progress_title.add_theme_font_size_override("font_size", ThemeLib.SIZE_LEAD)
+	hcol.add_child(progress_title)
+	head.add_child(hcol)
 	col.add_child(head)
 	progress_bar = ProgressBar.new()
 	progress_bar.name = "Bar"
 	progress_bar.show_percentage = false
-	progress_bar.custom_minimum_size = Vector2(0, 14)
+	progress_bar.custom_minimum_size = Vector2(0, 12)
 	progress_bar.add_theme_stylebox_override("background", ThemeLib.box(ThemeLib.color("surface_3"), 999, 0, 0))
-	progress_bar.add_theme_stylebox_override("fill", ThemeLib.box(ThemeLib.color("accent"), 999, 0, 0))
+	progress_bar.add_theme_stylebox_override("fill", ThemeLib.gradient_box(ThemeLib.color("accent"), ThemeLib.color("accent_2"), 6, Color(0, 0, 0, 0), 0, 0))
 	col.add_child(progress_bar)
 	var grid := GridContainer.new()
 	grid.name = "Tasks"
@@ -1044,7 +1180,8 @@ func _build_progress() -> void:
 		col2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var l := Kit.label("", "CaptionLabel", true)
 		l.name = "Title"
-		l.add_theme_font_override("font", ThemeLib.font("medium", true))
+		l.add_theme_font_override("font", ThemeLib.mono(false, 0))
+		l.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO + 1)
 		col2.add_child(l)
 		var sub := Kit.label("", "CaptionLabel", true)
 		sub.name = "Line"
@@ -1055,7 +1192,8 @@ func _build_progress() -> void:
 		h.add_child(col2)
 		var st := Kit.label("", "CaptionLabel")
 		st.name = "State"
-		st.add_theme_font_override("font", ThemeLib.font("semibold", true))
+		st.add_theme_font_override("font", ThemeLib.mono(true, 1))
+		st.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO)
 		st.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		h.add_child(st)
 		row.add_child(h)
@@ -1156,6 +1294,8 @@ func _refresh_task(i: int) -> void:
 		var pct := int(round(100.0 * done / total))
 		progress_bar.value = pct
 		progress_pct.text = "%d%%" % pct
+		if progress_ring != null and is_instance_valid(progress_ring):
+			progress_ring.set_value(pct / 100.0)
 		if current == "":
 			current = TI.PROGRESS_TITLE.get(plan.action(), "") if _run_state != "failed" else TI.STATE["failed"]
 		progress_title.text = current.to_upper()
@@ -1210,30 +1350,58 @@ func _wants_restart() -> bool:
 
 func _build_done() -> void:
 	var act: String = plan.action()
-	var art := Icons.rect("check", 64, ThemeLib.tone("good"))
-	art.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	body.add_child(art)
 	_heading(TI.DONE_TITLE.get(act, TI.DONE_TITLE["install"]), "")
-	var c := SKit.card(TI.WHATS_NEXT, "power")
-	c[0].name = "NextBoot"
+	# The title moves into a centred card: check ring, eyebrow, title, what's next.
+	page_title.get_parent().visible = false
+	var wrap := CenterContainer.new()
+	wrap.name = "DoneWrap"
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_child(wrap)
+	var card := PanelContainer.new()
+	card.name = "DoneCard"
+	card.theme_type_variation = "CardPanel"
+	card.custom_minimum_size = Vector2(880, 0)
+	wrap.add_child(card)
+	var col := Kit.vbox(14)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	card.add_child(col)
+	var ring := PanelContainer.new()
+	ring.name = "Check"
+	ring.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var rsb := ThemeLib.box(Color(ThemeLib.tone("good"), 0.12), 999, 12, 12)
+	rsb.border_color = ThemeLib.tone("good")
+	rsb.set_border_width_all(2)
+	ring.add_theme_stylebox_override("panel", rsb)
+	ring.add_child(Icons.rect("check", 30, ThemeLib.tone("good")))
+	col.add_child(ring)
+	var eb := Kit.micro(TI.DONE_EYEBROW, "EyebrowLabel")
+	eb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(eb)
+	var title := Kit.label(page_title.text, "TitleLabel", true)
+	title.name = "DoneTitle"
+	title.add_theme_font_override("font", ThemeLib.font("display"))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(title)
 	var line: String = TI.NEXT_BOOT_UNINSTALL if act == "uninstall" else TI.NEXT_BOOT.get(str(plan.choices.get("startup", "steam")), "")
-	c[1].add_child(Kit.label(line, "", true))
-	body.add_child(c[0])
+	var nb := Kit.label(line, "QuietLabel", true)
+	nb.name = "NextBoot"
+	nb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(nb)
 	var live: bool = installer != null and installer.is_live()
 	if act != "uninstall":
-		body.add_child(SKit.note(TI.RESTART_NEEDED if not live or act == "update" else TI.RESTART_OPTIONAL, "info", "Restart"))
+		col.add_child(SKit.note(TI.RESTART_NEEDED if not live or act == "update" else TI.RESTART_OPTIONAL, "info", "Restart"))
 	if installer != null and not installer.deferred_fixes.is_empty():
-		body.add_child(SKit.note(TI.WAITING_FIXES, "warn", "WaitingFixes"))
+		col.add_child(SKit.note(TI.WAITING_FIXES, "warn", "WaitingFixes"))
 	var fixes: Array = plan.choices.get("fixes", []) if act in ["install", "change", "repair", "finish"] else []
 	if "claw8ex-gyro" in fixes:
-		body.add_child(SKit.note(TI.COLD_BOOT, "warn", "ColdBoot"))
+		col.add_child(SKit.note(TI.COLD_BOOT, "warn", "ColdBoot"))
 	elif "claw8ex-vrr" in fixes:
-		body.add_child(SKit.note(TI.RESTART_FIX, "info", "RestartFix"))
+		col.add_child(SKit.note(TI.RESTART_FIX, "info", "RestartFix"))
 	var later := SKit.action(TI.LATER if _wants_restart() else TI.CLOSE, "x", "Later")
-	later.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	later.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	later.custom_minimum_size = Vector2(220, 52)
 	later.pressed.connect(close)
-	body.add_child(later)
+	col.add_child(later)
 	_focusables.append(later)
 
 
@@ -1380,18 +1548,29 @@ func _link() -> void:
 		b.focus_neighbor_bottom = b.get_path_to(b)
 	if last != null and not navs.is_empty():
 		last.focus_neighbor_bottom = last.get_path_to(next_button if next_button.visible else navs[-1])
-	# Rows that sit side by side (sign-in, fail actions) also move left / right.
-	for row_name in ["FailActions", "Modes", "Startup"]:
+	# Rows that sit side by side (cards, fail actions) move left / right; down
+	# goes to whatever follows the row in the chain (else Continue), up to
+	# what comes before it.
+	for row_name in ["FailActions", "Modes", "Startup", "StoreCards", "Themes"]:
 		var r := body.find_child(row_name, true, false)
-		if r != null:
-			var items: Array = r.get_children().filter(func(c): return c is BaseButton and not c.disabled)
-			Kit.link_horizontal(items)
-			for c in items:
-				c.focus_neighbor_bottom = c.get_path_to(next_button if next_button.visible else c)
-				c.focus_neighbor_top = c.get_path_to(c)
-			if not items.is_empty():
-				for b in navs:
-					b.focus_neighbor_top = b.get_path_to(items[0])
+		if r == null:
+			continue
+		var items: Array = r.get_children().filter(func(c): return c is BaseButton and not c.disabled and c in chain)
+		if items.is_empty():
+			continue
+		Kit.link_horizontal(items)
+		var first_i := chain.find(items[0])
+		var last_i := chain.find(items[-1])
+		var below: Control = chain[last_i + 1] if last_i + 1 < chain.size() else (next_button if next_button.visible else null)
+		var above: Control = chain[first_i - 1] if first_i > 0 else null
+		for c in items:
+			c.focus_neighbor_bottom = c.get_path_to(below if below != null else c)
+			c.focus_neighbor_top = c.get_path_to(above if above != null else c)
+		if below != null and below in chain:
+			below.focus_neighbor_top = below.get_path_to(items[0])
+		if last_i == chain.size() - 1:
+			for b in navs:
+				b.focus_neighbor_top = b.get_path_to(items[0])
 
 
 func ask_text(placeholder: String, start: String, done: Callable) -> void:
