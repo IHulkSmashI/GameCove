@@ -197,7 +197,7 @@ func controls() -> Array:
 
 
 func _tdp() -> RefCounted:
-	return _make("power.tdp", "slider", {"unit": "W", "step": 1.0, "apply_order": 100, "per_game": true},
+	return _make("power.tdp", "slider", {"affects": ["power.profile", "power.boost", "power.sppt", "power.fppt"], "unit": "W", "step": 1.0, "apply_order": 100, "per_game": true},
 		func(c):
 			var st := _pstate()
 			if st.is_empty() or not st.get("supported", {}).get("tdp", false):
@@ -213,7 +213,7 @@ func _profile() -> RefCounted:
 	var opts := []
 	for p in PowerScript.PROFILES:
 		opts.append({"value": p, "label": p.capitalize()})
-	return _make("power.profile", "choice", {"options": opts, "apply_order": 101, "per_game": false},
+	return _make("power.profile", "choice", {"affects": ["power.tdp", "power.boost", "power.sppt", "power.fppt"], "options": opts, "apply_order": 101, "per_game": false},
 		func(_c):
 			var st := _pstate()
 			return "" if st.get("supported", {}).get("profiles", false) else Tx.NO_TDP,
@@ -236,7 +236,7 @@ func _boost_cap(c: RefCounted) -> float:
 
 
 func _boost() -> RefCounted:
-	return _make("power.boost", "slider", {"unit": "W", "step": 1.0, "min_value": 0.0, "apply_order": 99},
+	return _make("power.boost", "slider", {"affects": ["power.sppt", "power.fppt"], "unit": "W", "step": 1.0, "min_value": 0.0, "apply_order": 99},
 		func(c):
 			if power == null or str(power.get("backend")) != "powerstation":
 				return Tx.NOT_HERE
@@ -258,7 +258,7 @@ func _boost_on() -> RefCounted:
 
 
 func _ppt(which: String) -> RefCounted:
-	var c: RefCounted = _make("power." + which, "slider", {"unit": "W", "step": 1.0, "apply_order": 98 if which == "sppt" else 97, "needs_root": true},
+	var c: RefCounted = _make("power." + which, "slider", {"affects": ["power.fppt" if which == "sppt" else "power.sppt"], "unit": "W", "step": 1.0, "apply_order": 98 if which == "sppt" else 97, "needs_root": true},
 		func(c):
 			var backend := str(power.get("backend")) if power != null else "none"
 			if backend == "hhd":
@@ -324,7 +324,7 @@ func _choice_opts(words: Array) -> Array:
 
 
 func _power_mode() -> RefCounted:
-	return _make("power.power_mode", "choice", {"apply_order": 90},
+	return _make("power.power_mode", "choice", {"affects": ["power.platform_profile", "power.tdp", "power.epp"], "apply_order": 90},
 		func(c):
 			var p: Dictionary = be.ppd()
 			if p.is_empty():
@@ -336,7 +336,7 @@ func _power_mode() -> RefCounted:
 
 
 func _platform() -> RefCounted:
-	return _make("power.platform_profile", "choice", {"apply_order": 89},
+	return _make("power.platform_profile", "choice", {"affects": ["power.tdp", "power.sppt", "power.fppt", "power.power_mode"], "apply_order": 89},
 		func(c):
 			var info: Dictionary = be.platform_info()
 			if info.is_empty():
@@ -360,7 +360,7 @@ func _cpu_boost() -> RefCounted:
 
 
 func _smt() -> RefCounted:
-	return _make("power.smt", "toggle", {"apply_order": 82},
+	return _make("power.smt", "toggle", {"affects": ["power.cpu_cores"], "apply_order": 82},
 		func(_c):
 			if not be.smt_control() in ["on", "off"]:
 				return Tx.NO_SMT
@@ -372,7 +372,7 @@ func _smt() -> RefCounted:
 
 
 func _cores() -> RefCounted:
-	return _make("power.cpu_cores", "slider", {"step": 1.0, "apply_order": 81},
+	return _make("power.cpu_cores", "slider", {"affects": ["power.smt"], "step": 1.0, "apply_order": 81},
 		func(c):
 			if be.cores_via() == "":
 				return Tx.NOT_HERE if not be.can_offline() else Tx.NO_HELPER
@@ -400,7 +400,7 @@ func _epp() -> RefCounted:
 
 
 func _governor() -> RefCounted:
-	return _make("power.governor", "choice", {"apply_order": 75},
+	return _make("power.governor", "choice", {"affects": ["power.epp"], "apply_order": 75},
 		func(c):
 			if be.governor_via() == "":
 				return Tx.NOT_HERE if be.governor_dir() == "" else Tx.NO_HELPER
@@ -425,7 +425,7 @@ func _cpu_max() -> RefCounted:
 
 
 func _gpu_level() -> RefCounted:
-	return _make("power.gpu_level", "choice", {"apply_order": 66},
+	return _make("power.gpu_level", "choice", {"affects": ["power.gpu_min", "power.gpu_max", "power.gpu_clock"], "apply_order": 66},
 		func(c):
 			var info: Dictionary = be.gpu_level_info()
 			if info.is_empty():
@@ -454,7 +454,7 @@ func _gpu_clock() -> RefCounted:
 
 
 func _gpu_min_max(which: String) -> RefCounted:
-	return _make("power.gpu_" + which, "slider", {"unit": "MHz", "step": 50.0, "apply_order": 64 if which == "max" else 63},
+	return _make("power.gpu_" + which, "slider", {"affects": ["power.gpu_" + ("max" if which == "min" else "min"), "power.gpu_level"], "unit": "MHz", "step": 50.0, "apply_order": 64 if which == "max" else 63},
 		func(c):
 			var g: Dictionary = be.gpu_clocks()
 			if g.is_empty():

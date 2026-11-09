@@ -140,11 +140,34 @@ func set_value(id: String, v: Variant) -> void:
 		return
 	_queue(func():
 		var done: bool = c.write(v)
-		_commit([id])
+		var moved: Array = _reread_affected([c]) if done else []
+		_commit([id] + moved)
 		if done:
 			_emit(control_changed, [id, c.value])
+			for m in moved:
+				_emit(control_changed, [m, _controls[m].value])
 		else:
 			_emit(control_failed, [id, v]))
+
+
+## Worker: reads again what the written controls `affects` (not the written ones
+## themselves); returns the ids whose value changed.
+func _reread_affected(written: Array) -> Array:
+	var skip := {}
+	for c in written:
+		skip[c.id] = true
+	var out := []
+	for c in written:
+		for a in c.affects:
+			var o = _controls.get(a)
+			if o == null or skip.has(a) or not o.available:
+				continue
+			skip[a] = true
+			var before: Variant = o.value
+			o.read()
+			if o.value != before:
+				out.append(a)
+	return out
 
 
 ## {id: value} for every available per-game control (what a profile stores).
@@ -188,13 +211,17 @@ func apply(values: Dictionary, force := false) -> void:
 			if not c.available or (not force and c.value == c.coerce(values[id])):
 				continue
 			out.append([id, c.write(values[id])])
+		var written := out.filter(func(r): return r[1]).map(func(r): return _controls[r[0]])
+		var moved: Array = _reread_affected(written).filter(func(m): return not values.has(m))
 		# one commit for the whole apply: a snapshot never sees it half done
-		_commit(ids)
+		_commit(ids + moved)
 		for r in out:
 			if r[1]:
 				_emit(control_changed, [r[0], _controls[r[0]].value])
 			else:
-				_emit(control_failed, [r[0], values[r[0]]]))
+				_emit(control_failed, [r[0], values[r[0]]])
+		for m in moved:
+			_emit(control_changed, [m, _controls[m].value]))
 
 
 ## Runs `job` on the Controls worker after everything queued before it (e.g.

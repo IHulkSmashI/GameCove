@@ -40,6 +40,10 @@ var apply_order := 0
 var needs_root := false
 ## Optional: ids this depends on; disabled while a dependency is off/unavailable.
 var requires: Array = []
+## Optional: ids whose value a write of this one changes on the system (a power
+## profile sets the TDP, the TDP sets PL2, the battery saver several). Controls
+## reads them again after a write that worked, so they never show a stale value.
+var affects: Array = []
 ## Optional: makes an already coerced value safe for this device (a fan curve
 ## raised to Quiet and never falling); returns null to reject it. Called by
 ## coerce(), so profiles, imports and the UI all get the safe value.

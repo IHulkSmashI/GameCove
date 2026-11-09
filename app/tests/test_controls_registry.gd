@@ -126,3 +126,32 @@ func test_snapshot_during_a_worker_apply_is_consistent() -> void:
 	eq(r.snapshot(), {"power.tdp": 25.0, "power.epp": 3.0}, "after the job: all of it")
 	r._exit_tree()                          # stop the worker (not in the tree)
 	r.free()
+
+
+## A write that changes another setting on the system (a power profile sets
+## the TDP, the TDP sets PL2): Controls reads the ones it `affects` again, so
+## the quick menu never shows a stale TDP. Found by the end-to-end suite
+## (power.tdp said 35 W after the profile had set 25 W).
+func test_a_write_rereads_what_it_affects() -> void:
+	var store := {"a": 1.0, "b": 10.0}
+	var reg: Node = load("res://scripts/controls/controls.gd").new()
+	reg.sync_mode = true
+	reg.setup({"sys_root": "/nonexistent"})
+	var Ctl := load("res://scripts/controls/control.gd")
+	reg.register(Ctl.make({"id": "power.a", "group": "power", "kind": "slider", "min_value": 0.0, "max_value": 50.0, "affects": ["power.b"]},
+		func(_c): return "", func(_c): return store["a"],
+		func(_c, v):
+			store["a"] = v
+			store["b"] = v * 2.0   # the system moves b too
+			return true))
+	reg.register(Ctl.make({"id": "power.b", "group": "power", "kind": "slider", "min_value": 0.0, "max_value": 100.0},
+		func(_c): return "", func(_c): return store["b"], func(_c, v): store["b"] = v; return true))
+	reg.detect_all()
+	var seen := []
+	reg.control_changed.connect(func(id, v): seen.append([id, v]))
+	reg.set_value("power.a", 20)
+	eq(reg.value("power.b"), 40.0, "b read again after a's write")
+	ok(seen.has(["power.b", 40.0]), "and reported as changed")
+	reg.apply({"power.a": 5})
+	eq(reg.value("power.b"), 10.0, "the same through a profile apply")
+	reg.free()
