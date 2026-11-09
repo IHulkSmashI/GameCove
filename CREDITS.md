@@ -138,3 +138,4 @@ GameCove shows a company's logo only when that company's own published terms let
 Store and launcher icons other than these (Steam, Heroic, Lutris, Bottles) come from the user's own system: GameCove shows the icon that app installed into the desktop icon theme, the same way any Linux desktop does. Nothing is copied into GameCove or redistributed. Steam is a trademark of Valve Corporation.
 
 Not bundled because their terms need a licence or written permission, or publish no terms for third parties: Valve (Steam, Steam Deck), Epic Games, GOG, Amazon, MSI, ASUS / ROG, Lenovo / Legion, Acer / Predator, OneXPlayer, AYANEO, GPD, ZOTAC, Intel. AMD's brand terms cover only products that contain an AMD chip.
+- **ClawDeck** (same author): Parts ported from ClawDeck (same author). Its MSI BIOS check (`msibios.py`) as the MSI source of the firmware index (`gamedb/gamedb/firmware/sources/msi.py`).
