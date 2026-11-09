@@ -137,7 +137,7 @@ func test_bundled_logos_for_makers_chips_and_stores() -> void:
 			"Intel", "AMD", "Heroic", "Lutris", "Bottles"]:
 		ok(Brand.bundled_logo_for(name) != "", name + " has a bundled logo")
 		eq(Brand.logo_for(name), Brand.bundled_logo_for(name), name + " bundled wins")
-	for name in ["Amazon", "AYANEO", "AOKZOE", "ZOTAC", "Orange Pi"]:
+	for name in ["Amazon", "AYANEO", "ZOTAC", "Orange Pi"]:
 		eq(Brand.bundled_logo_for(name), "", name + " has no bundled logo yet")
 		eq(Brand.logo_for(name), "", name + " shows text")
 	ok(Brand.is_mono("Steam"), "Simple Icons logo is mono")

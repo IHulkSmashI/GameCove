@@ -342,12 +342,12 @@
     "aokzoe"
    ],
    "enabled": true,
-   "file": "",
-   "mono": false,
-   "hex": "",
-   "source": "",
-   "license": "",
-   "upstream": "",
+   "file": "res://assets/brand/aokzoe.svg",
+   "mono": true,
+   "hex": "04C903",
+   "source": "https://aokzoestore.com/cdn/shop/files/aokzoe_logo115.png?v=1679997801",
+   "license": "Traced from AOKZOE's official store header logo PNG (512x115, the largest AOKZOE publishes; aokzoe.com serves an expired certificate); potrace, single colour, IoU 0.979 at the original's resolution. Trademark of AOKZOE.",
+   "upstream": "https://aokzoestore.com",
    "notice": "",
    "system_icons": [],
    "owner_terms": "https://aokzoestore.com/"
