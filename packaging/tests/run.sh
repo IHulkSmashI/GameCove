@@ -702,10 +702,19 @@ expect_code 1 "bootstrap offline without a cache" env PATH="$GB:$PATH" GAMECOVE_
 # ------------------------------------------------------- sysext tree (offline)
 APP="$T/app"
 SS="$T/gs-session"
-mkdir -p "$APP" "$SS/usr/bin" "$SS/usr/share/gamescope-session-plus"
+mkdir -p "$APP" "$SS/usr/bin" "$SS/usr/share/gamescope-session-plus" "$SS/usr/lib/systemd/user" \
+	"$SS/usr/share/gamescope/scripts/50-custom"
 echo bin >"$APP/gamecove.x86_64"
 echo pck >"$APP/gamecove.pck"
+# upstream gamescope-session's usr/ at the pinned commit, file for file
 printf '#!/bin/sh\n' >"$SS/usr/bin/gamescope-session-plus"
+chmod +x "$SS/usr/bin/gamescope-session-plus"
+printf '#!/bin/sh\n' >"$SS/usr/bin/export-gpu"
+printf '#!/bin/bash\n' >"$SS/usr/share/gamescope-session-plus/gamescope-session-plus"
+echo quirks >"$SS/usr/share/gamescope-session-plus/device-quirks"
+printf '[Unit]\nPartOf=gamescope-session.target\n' >"$SS/usr/lib/systemd/user/gamescope-session-plus@.service"
+printf '[Unit]\nDescription=Gamescope Session\n' >"$SS/usr/lib/systemd/user/gamescope-session.target"
+echo lua >"$SS/usr/share/gamescope/scripts/50-custom/50-disable-explicit-sync.lua"
 echo MIT >"$SS/LICENSE"
 expect_code 0 "sysext tree" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$APP" --session-src "$SS" --out "$T/dist" --tree-only
 TREE="$T/dist/gamecove"
@@ -722,6 +731,36 @@ for f in usr/bin/gamescope-session-plus usr/bin/gamecove-session-select usr/bin/
 	if [ -e "$TREE/$f" ]; then ok; else bad "sysext tree missing $f"; fi
 done
 contains "$TREE/usr/lib/extension-release.d/extension-release.gamecove" "^ID=_any$" "extension-release ID"
+# review H10: a sysext overlays /usr, so it must never hold a file SteamOS already has. These exist on
+# SteamOS 3.10 (gamescope 3.16.30, owned by the gamescope package; checked on a ROG Ally):
+for f in usr/lib/systemd/user/gamescope-session.target usr/share/wayland-sessions/gamescope-wayland.desktop \
+	usr/lib/systemd/user/gamescope-session.service usr/lib/systemd/user/gamescope-session.service.d \
+	usr/lib/systemd/user/gamescope-session.service.wants usr/lib/systemd/user/gamescope-mangoapp.service \
+	usr/lib/systemd/user/ibus-gamescope.service usr/lib/systemd/user/xdg-desktop-portal-gamescope.service \
+	usr/share/gamescope usr/bin/export-gpu; do
+	if [ ! -e "$TREE/$f" ]; then ok; else bad "sysext would shadow SteamOS's $f"; fi
+done
+# ...and nothing outside the allow-list: GameCove's own folders, licences, and the named files
+(cd "$TREE" && find . \( -type f -o -type l \) | sed 's|^\./||' | sort) >"$T/sysext-files"
+while IFS= read -r f; do
+	case "$f" in
+	usr/lib/gamecove/* | usr/libexec/gamecove/* | usr/share/licenses/*) ;;
+	usr/bin/gamescope-session-plus | usr/share/gamescope-session-plus/gamescope-session-plus | \
+		usr/share/gamescope-session-plus/device-quirks | usr/lib/systemd/user/gamescope-session-plus@.service) ;;
+	usr/bin/gamecove-session-select | usr/bin/gamecove-selftest | usr/share/gamescope-session-plus/sessions.d/gamecove | \
+		usr/share/wayland-sessions/gamecove.desktop | usr/share/applications/io.github.ihulksmashi.GameCoveInstaller.desktop | \
+		usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy | \
+		usr/lib/systemd/user/gamescope-session-plus@gamecove.service.d/10-gamecove.conf | \
+		usr/lib/extension-release.d/extension-release.gamecove) ;;
+	*) echo "$f" >>"$T/sysext-extra" ;;
+	esac
+done <"$T/sysext-files"
+if [ ! -s "$T/sysext-extra" ]; then ok; else bad "sysext holds files outside the allow-list: $(cat "$T/sysext-extra")"; fi
+for f in usr/share/gamescope-session-plus/gamescope-session-plus usr/share/gamescope-session-plus/device-quirks \
+	usr/lib/systemd/user/gamescope-session-plus@.service; do
+	if [ -e "$TREE/$f" ]; then ok; else bad "sysext tree missing upstream $f"; fi
+done
+if [ -x "$TREE/usr/bin/gamescope-session-plus" ]; then ok; else bad "gamescope-session-plus must stay executable"; fi
 if [ ! -e "$TREE/etc" ] && [ ! -e "$TREE/var" ]; then ok; else bad "sysext must only hold /usr"; fi
 if [ -z "$(find "$TREE" -name test.sh -o -type d -name tests)" ]; then ok; else bad "fix tests must not ship"; fi
 if [ -f "$TREE/usr/lib/gamecove/fixes/lib/claw8ex-common.sh" ]; then ok; else bad "shared fix code must ship"; fi
