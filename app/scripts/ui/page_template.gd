@@ -201,6 +201,10 @@ func _update_cue() -> void:
 	var more := bar.max_value - bar.page - bar.value > 24.0
 	cue.visible = more
 	_cue_fade.visible = more
+	# The hero art stays put while the cards scroll up over it: fade it out
+	# so text never sits on a busy picture (only on scroll, never per frame).
+	if frame != null:
+		frame.modulate.a = clampf(1.0 - bar.value / 260.0, 0.0, 1.0)
 
 
 func can_scroll_down() -> bool:

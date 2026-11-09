@@ -191,8 +191,9 @@ static func prompts(list: Array) -> HBoxContainer:
 		var buttons: Array = list[i][0] if list[i][0] is Array else [list[i][0]]
 		for b in buttons:
 			item.add_child(glyph(b, i == 0))
-		var l := label(list[i][1], "CaptionLabel")
-		l.add_theme_color_override("font_color", ThemeLib.color("text") if i == 0 else ThemeLib.color("text_2"))
+		# Theme variations, not colour overrides, so a theme switch recolours
+		# prompt rows that are already built.
+		var l := label(list[i][1], "PromptLabel" if i == 0 else "CaptionLabel")
 		l.add_theme_font_override("font", ThemeLib.font("semibold"))
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		item.add_child(l)

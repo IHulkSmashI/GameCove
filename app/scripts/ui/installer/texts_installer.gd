@@ -151,7 +151,7 @@ const FIXES_MATCHED := "Matched for %s"
 const DEVICE_REVERSIBLE := "Every fix can be removed later in Settings, Device."
 const AUTO_TDP := "Auto TDP"
 const AUTO_TDP_LINES := {true: "Games use only the power they need to hold their frame rate. Saves battery.", false: "Games get the full power limit of their profile."}
-const PROFILE := "Default power profile"
+const PROFILE := "Power profile"
 const PROFILES := {"battery": "Battery", "balanced": "Balanced", "performance": "Performance"}
 const PROFILE_LINES := {
 	"battery": "Lowest power. Longest battery, fine for older and 2D games.",

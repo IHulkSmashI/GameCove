@@ -103,6 +103,8 @@ func _fill_side() -> void:
 	picture.setup(pic_path)
 	picture.custom_minimum_size = Vector2(0, 230)
 	col.add_child(picture)
+	# No drawing for this device: no empty box where it would go.
+	picture.visible = picture.texture != null
 	_device_photo_hook(col, str(d.get("id", "")))
 	var title := Kit.label(str(d.get("name", Texts.UNKNOWN)), "HeaderLabel", true)
 	title.name = "DeviceName"
@@ -321,6 +323,9 @@ func _chip_card() -> Control:
 	var driver := str(ch.get("gpu_driver", ""))
 	if str(ch.get("vulkan_driver", "")) != "":
 		driver += ", Vulkan: %s" % ch["vulkan_driver"]
+	if cores == "" and gpu.strip_edges() == "" and driver == "" and str(ch.get("cpu", "")) == "" and str(ch.get("kernel", "")) == "":
+		c[0].free()
+		return null   # nothing known yet: no empty card
 	c[1].add_child(_kv([
 		["Processor", ch.get("cpu", "")], ["Cores", cores], ["Graphics", gpu], ["Graphics driver", driver],
 		["PCI id", ch.get("gpu_pci_id", "")], ["Mesa", ch.get("mesa", "")], ["Kernel", ch.get("kernel", "")],
@@ -419,6 +424,8 @@ func _battery_card() -> Control:
 
 func _software_card() -> Control:
 	var s := _g("software")
+	if [s.get("os", ""), s.get("gamecove_version", ""), s.get("steam_version", ""), s.get("proton", [])].all(func(v): return str(v) in ["", "[]"]):
+		return null   # nothing known yet: no empty card
 	var c := _section("software", "accent")
 	var proton: Array = s.get("proton", []) if s.get("proton") is Array else []
 	var proton_text := ""

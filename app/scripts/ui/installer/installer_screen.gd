@@ -558,6 +558,12 @@ func _nav_note(text: String, tone := "") -> void:
 		nav_note.add_child(l)
 
 
+## The size the page lays out at (the window's content scale size), or the
+## base 1280x800 outside the tree.
+func _layout_size() -> Vector2:
+	return get_viewport_rect().size if is_inside_tree() else Vector2(1280, 800)
+
+
 func _device() -> Object:
 	return services.get("device")
 
@@ -645,7 +651,8 @@ func _build_welcome() -> void:
 	var k := Kit.micro(TI.DETECTED, "EyebrowLabel")
 	k.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dcol.add_child(k)
-	var pic := _device_picture(170)
+	# Smaller picture on short screens so the plan and the cards fit unscrolled.
+	var pic := _device_picture(170.0 if _layout_size().y >= 900.0 else 96.0)
 	pic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	dcol.add_child(pic)
 	var dn := Kit.label(_device_name().to_upper(), "LeadLabel", true)
@@ -908,7 +915,7 @@ func _build_device() -> void:
 	cols.name = "DeviceCols"
 	body.add_child(cols)
 	# Left: the fixes this handheld needs. Right: power defaults.
-	var left := _panel_card(cols, TI.FIXES_HEADER, TI.FIXES_MATCHED % _device_name() if not fixes.is_empty() else "", 1.35)
+	var left := _panel_card(cols, TI.FIXES_HEADER, TI.FIXES_MATCHED % _device_name() if not fixes.is_empty() else "", 1.0)
 	if fixes.is_empty():
 		left.add_child(SKit.note(TI.DEVICE_GENERIC if _support() == "generic" else TI.DEVICE_NO_FIXES, "info", "NoFixes"))
 	for f in fixes:

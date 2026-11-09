@@ -293,6 +293,7 @@ static func build(t: Dictionary = tokens) -> Theme:
 	th.set_color("font_color", "Label", color("text"))
 	_label(th, "QuietLabel", SIZE_SMALL, "text_2", "regular")
 	_label(th, "CaptionLabel", SIZE_CAPTION, "text_2", "medium")
+	_label(th, "PromptLabel", SIZE_CAPTION, "text", "semibold")
 	_label(th, "HeaderLabel", SIZE_TITLE, "text", "heading_bold")
 	_label(th, "LeadLabel", SIZE_LEAD, "text", "heading")
 	_label(th, "TitleLabel", SIZE_HEADLINE, "text", "display_tight")
