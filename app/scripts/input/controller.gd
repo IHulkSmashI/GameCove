@@ -73,6 +73,7 @@ const Intercept := preload("res://scripts/input/intercept.gd")
 const Hhd := preload("res://scripts/input/hhd.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
+const ProfileLock := preload("res://scripts/input/profile_lock.gd")
 
 const SERVICE := "org.shadowblip.InputPlumber"
 const ROOT_PATH := "/org/shadowblip/InputPlumber"
@@ -96,6 +97,7 @@ var _active := ""
 var _profiles_ok := false
 var _rumble_ok := false
 var _profile: Dictionary = {}     # loaded profile of the active device
+var _profile_read_ok := false     # its last GetProfileYaml worked (review M13)
 var _backend := "none"            # "inputplumber" | "hhd" | "none"
 var _hhd_state: Variant = null    # last hhd state (worker)
 var _game := ""
@@ -586,6 +588,7 @@ func end_game() -> void:
 
 func _refresh() -> void:
 	var st := _blank()
+	var read_ok := false
 	var version: Variant = bus.get_prop(SERVICE, MANAGER_PATH, MANAGER_IFACE, "Version")
 	var profile := {}
 	if version != null:
@@ -606,6 +609,7 @@ func _refresh() -> void:
 		var y: Variant = bus.call_method(SERVICE, dev["path"], DEVICE_IFACE, "GetProfileYaml")
 		var parsed: Variant = Yaml.parse(str(y[0])) if y is Array and y.size() > 0 else null
 		profile = parsed if parsed is Dictionary else {}
+		read_ok = parsed is Dictionary
 		st["profile"] = {"name": dev["profile_name"], "path": dev["profile_path"],
 			"paddles": Profile.paddles(profile, dev["paddles"]), "gyro": Profile.gyro_mode(profile)}
 		st["led"] = dev["led"]
@@ -633,6 +637,7 @@ func _refresh() -> void:
 	_profiles_ok = st["supported"]["profiles"]
 	_rumble_ok = st["supported"]["rumble"]
 	_profile = profile
+	_profile_read_ok = read_ok
 	_main(func():
 		st["game"] = _game
 		_state = st
@@ -791,15 +796,20 @@ func _fill_device(d: Dictionary) -> void:
 
 ## Applies `edit` (profile -> profile) to the loaded profile, sends it, reads it
 ## back, and saves it where it belongs.
+##
+## Under ProfileLock, on the profile read again right now, and only when that read worked (review M13).
 func _change(setting: String, edit: Callable) -> void:
 	var ok := false
-	if _active != "" and _profiles_ok:
+	ProfileLock.mutex.lock()
+	_refresh()
+	if _active != "" and _profiles_ok and _profile_read_ok:
 		var base: Dictionary = _profile if not _profile.is_empty() else Profile.empty()
 		var next: Dictionary = edit.call(base)
 		ok = _load_json(Profile.to_json(next))
 		if ok:
 			var target := game_profile_path(_game) if _game != "" and _game_profile_loaded else default_profile_path()
 			_write(target, next)
+	ProfileLock.mutex.unlock()
 	_refresh()
 	_main(func(): applied.emit(setting, ok))
 
@@ -814,7 +824,11 @@ func _load_json(text: String) -> bool:
 	var path := _active
 	if path == "":
 		return false
-	return _call_void(path, DEVICE_IFACE, "LoadProfileFromYaml", ["s", text])
+	# never in the middle of the Controls worker's read-modify-write (ProfileLock is recursive)
+	ProfileLock.mutex.lock()
+	var ok := _call_void(path, DEVICE_IFACE, "LoadProfileFromYaml", ["s", text])
+	ProfileLock.mutex.unlock()
+	return ok
 
 
 ## busctl call for a method with no reply value (busctl.gd's call_method

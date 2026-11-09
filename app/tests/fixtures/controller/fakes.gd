@@ -26,6 +26,7 @@ var profile: Dictionary = {"version": 1, "kind": "DeviceProfile", "name": "Defau
 var loads: Array = []           # every JSON sent with LoadProfileFromYaml
 var refuse_load := false        # LoadProfileFromYaml fails
 var ignore_load := false        # it "succeeds" but nothing changes
+var refuse_yaml := false        # GetProfileYaml fails (a busctl timeout)
 var buzzes := 0
 
 # hhd
@@ -94,6 +95,8 @@ func _busctl(c: String) -> Dictionary:
 		return {"code": 0, "out": JSON.stringify({"type": "a{oa{sa{sv}}}", "data": [{DEV: ifaces}]})}
 	var dev := "call %s %s " % [SVC, DEV]
 	if c == dev + DEV_IFACE + " GetProfileYaml":
+		if refuse_yaml:
+			return {"code": 1, "out": ""}
 		return _s([JSON.stringify(profile)], "s")
 	if c.begins_with(dev + DEV_IFACE + " LoadProfileFromYaml s "):
 		var json := c.trim_prefix(dev + DEV_IFACE + " LoadProfileFromYaml s ")

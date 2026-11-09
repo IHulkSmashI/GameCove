@@ -25,6 +25,7 @@ const PerDevice := preload("res://scripts/device/per_device.gd")
 const Hhd := preload("res://scripts/controls/input/hhd_client.gd")
 const Leds := preload("res://scripts/controls/input/leds.gd")
 const IpEdit := preload("res://scripts/controls/input/ip_edit.gd")
+const ProfileLock := preload("res://scripts/input/profile_lock.gd")
 
 const SERVICE := "org.shadowblip.InputPlumber"
 const ROOT_PATH := "/org/shadowblip/InputPlumber"
@@ -154,6 +155,8 @@ func _read_ip() -> Dictionary:
 	var y: Variant = bus.call_method(SERVICE, dev["path"], DEVICE_IFACE, "GetProfileYaml")
 	var parsed: Variant = Yaml.parse(str(y[0])) if y is Array and y.size() > 0 else null
 	out["profile"] = parsed if parsed is Dictionary else {}
+	# false: the call failed or its answer didn't parse; never the same as "no mappings"
+	out["profile_ok"] = parsed is Dictionary
 	if dev["rumble"]:
 		var en: Variant = bus.get_prop(SERVICE, dev["path"], FF_IFACE, "Enabled")
 		out["rumble"] = bool(en) if en != null else null
@@ -293,9 +296,21 @@ func ip_config_targets() -> Array:
 ## `verify` (profile -> bool) on what InputPlumber hands back, saves it as the
 ## everyday layout. If InputPlumber took it but it doesn't read back right, the
 ## previous profile goes back on.
+##
+## Under ProfileLock, on the profile read right now (not the cached snapshot: the Controller
+## service may have loaded another one since), and only when that read worked: an edit on an
+## empty stand-in for a failed read dropped every other mapping (review M13).
 func ip_apply(edit: Callable, verify: Callable) -> bool:
+	ProfileLock.mutex.lock()
+	var ok := _ip_apply_locked(edit, verify)
+	ProfileLock.mutex.unlock()
+	return ok
+
+
+func _ip_apply_locked(edit: Callable, verify: Callable) -> bool:
+	invalidate()
 	var dev: Dictionary = ip().get("device", {})
-	if dev.is_empty():
+	if dev.is_empty() or not ip().get("profile_ok", false):
 		return false
 	var before: Dictionary = ip_profile()
 	var base: Dictionary = before if not before.is_empty() else Profile.empty()
@@ -305,9 +320,8 @@ func ip_apply(edit: Callable, verify: Callable) -> bool:
 		return false
 	invalidate()
 	var after: Dictionary = ip_profile()
-	if after.is_empty() or not verify.call(after):
-		if not before.is_empty():
-			_load(dev["path"], Profile.to_json(before))
+	if not ip().get("profile_ok", false) or not verify.call(after):
+		_load(dev["path"], Profile.to_json(before))
 		invalidate()
 		return false
 	_save(next)

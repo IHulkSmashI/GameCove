@@ -96,3 +96,45 @@ func test_h3_legacy_game_file_gets_the_game_edit() -> void:
 	ok("Nintendo" in FileAccess.get_file_as_string(game_file), "saved to the game's own file")
 	ok(not FileAccess.file_exists(f.sys_root + LAYOUTS + "default.yaml"), "not to the everyday one")
 	reg.free()
+
+
+# ---- M13: profile edits never start from a stale or failed read ----------------------------------
+
+const OTHER := {"name": "Someone Else", "source_event": {"gamepad": {"button": "LeftPaddle1"}}, "target_events": [{"keyboard": "KeyW"}]}
+
+
+## A failed GetProfileYaml read as {}: the edit went onto an empty profile and dropped every mapping.
+func test_m13_failed_read_is_a_failed_edit() -> void:
+	var t := _claw("m13_failed")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	f.profile["mapping"] = [OTHER.duplicate(true)]
+	f.refuse_yaml = true
+	var c: RefCounted = reg.control("controller.nintendo_layout")
+	eq(c.write(true), false, "the edit fails")
+	eq(f.profile["mapping"], [OTHER], "the loaded profile keeps its mappings")
+	ok(f.loads.is_empty(), "nothing sent to InputPlumber")
+	reg.free()
+
+
+## The Controller service loaded default.yaml while the Controls snapshot was cached (1.5 s):
+## the edit was built on the profile from before.
+func test_m13_edit_reads_the_live_profile() -> void:
+	var t := _claw("m13_stale")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	var be: RefCounted = reg.control("controller.nintendo_layout").get_meta("provider").be
+	be.snapshot()
+	be._snap_at = Time.get_ticks_msec()   # cached right now (the fixture's detection takes a while)
+	f.profile = {"version": 1, "kind": "DeviceProfile", "name": "Loaded", "mapping": [OTHER.duplicate(true)]}
+	ok(_w(reg, "controller.nintendo_layout", true), "Nintendo on")
+	ok((f.profile["mapping"] as Array).any(func(m): return m.get("name") == "Someone Else"), "the mapping loaded meanwhile is kept")
+	reg.free()
+
+
+## Both workers edit under one lock.
+func test_m13_one_lock_for_both_workers() -> void:
+	var Lock := load("res://scripts/input/profile_lock.gd")
+	ok(Lock != null and Lock.mutex is Mutex, "a shared profile lock exists")
+	for f in ["res://scripts/controls/input/backend.gd", "res://scripts/input/controller.gd"]:
+		ok("ProfileLock.mutex.lock()" in FileAccess.get_file_as_string(f), "%s takes it" % f)
