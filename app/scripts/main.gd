@@ -172,7 +172,7 @@ func _ready() -> void:
 	settings.visible = false
 	settings.changed.connect(_on_setting_changed)
 	if settings.has_signal("setup_requested"):
-		settings.setup_requested.connect(func(): open_setup(true))
+		settings.setup_requested.connect(_on_setup_requested)
 	if settings.has_signal("game_settings_requested"):
 		settings.game_settings_requested.connect(_open_game_settings)
 	_screen_layer.add_child(settings)
@@ -315,6 +315,11 @@ func exit_game(_game: Dictionary = {}) -> void:
 		streaming.stop_stream()   # Moonlight's Flatpak sits outside our scope
 	if not closer.close(session):
 		toast("No game is running", "info", "", "")
+
+
+## Settings > Run setup again (it names a step; setup opens at the first unfinished one).
+func _on_setup_requested(_step: String = "") -> void:
+	open_setup(true)
 
 
 ## First-run setup from the settings work, when that file is in this build.

@@ -2,10 +2,12 @@ extends "res://tests/test_case.gd"
 ## main.gd connects services' signals to its own methods; a method that takes
 ## fewer arguments than the signal sends is never called (Godot logs "Method
 ## expected 0 argument(s), but called with 1" and drops the call). The quick
-## menu's Exit game did nothing because of that. Found by the end-to-end suite.
+## menu's Exit game and Settings' "Run setup again" did nothing because of
+## that. Found by the end-to-end suite.
 
 const Main := preload("res://scripts/main.gd")
 const QuickMenu := preload("res://scripts/ui/quick_menu.gd")
+const SettingsScreen := preload("res://scripts/ui/settings_screen.gd")
 
 
 static func _method(script: Script, name: String) -> Dictionary:
@@ -27,6 +29,8 @@ const WIRES := [
 	[QuickMenu, "exit_game_requested", "exit_game"],
 	[QuickMenu, "settings_requested", "_open_settings_category"],
 	[QuickMenu, "closed", "_on_menu_closed"],
+	[SettingsScreen, "setup_requested", "_on_setup_requested"],
+	[SettingsScreen, "game_settings_requested", "_open_game_settings"],
 ]
 
 
