@@ -232,6 +232,25 @@ func test_claw_live_charge_limit_through_steamos_manager() -> void:
 	_free()
 
 
+func test_claw_live_without_the_helper_says_so() -> void:
+	var e := _setup(_claw_live(false, -1))
+	var c: Dictionary = e["c"]
+	for id in ["power.charge_limit", "power.fan_mode", "power.fan_curve", "power.gpu_profile"]:
+		eq(c[id].reason, Tx.NO_HELPER, id + ": the hardware has it, only the root helper can write it")
+	eq(e["power"].state()["fan_modes"], [], "no steamos-manager fan switch on a Claw")
+	_free()
+
+
+func test_claw_live_gpu_profile_with_the_helper() -> void:
+	var e := _setup(_claw_live(true))
+	var c: Dictionary = e["c"]
+	ok(c["power.gpu_profile"].available, "xe power_profile (%s)" % c["power.gpu_profile"].reason)
+	eq(c["power.gpu_profile"].value, "base")
+	e["reg"].set_value("power.gpu_profile", "power_saving")
+	eq(_read(e["root"], "/sys/class/drm/card1/device/tile0/gt0/freq0/power_profile"), "power_saving")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)

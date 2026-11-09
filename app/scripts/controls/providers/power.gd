@@ -468,7 +468,9 @@ func _gpu_profile() -> RefCounted:
 		func(c):
 			var info: Dictionary = be.gpu_profile_info()
 			if info.is_empty():
-				return Tx.XE_ONLY
+				# xe's power_profile is 0644 root and steamos-manager's GpuPowerProfile1 is amdgpu-only
+				# (steamos-manager src/gpu.rs), so on Intel only the root helper can write it
+				return Tx.NO_HELPER if not be.xe_profile().is_empty() else Tx.XE_ONLY
 			c.options = _choice_opts(info["offered"])
 			return "",
 		func(_c): return str(be.gpu_profile_info().get("active", "")),
