@@ -18,6 +18,12 @@
 #   fan           set auto|quiet|max             fan preset (sysfs)
 #   claw8ex-gyro  set accel-on|accel-off         accelerometer in the InputPlumber override
 #                                                (the gyro fix must already be installed)
+#   <file fix>    set on|off                     the small udev / session-file fixes built on
+#                                                fixes/lib/gcfix.sh (FILE_FIXES below): a fixed,
+#                                                root-owned rule from the fixes folder is put in
+#                                                place or taken away; nothing the caller supplies
+#                                                is written. Lets the Fixes page Apply / Undo them
+#                                                in Gaming Mode, where nobody can type a password.
 #
 # After checking, it hands over to gamecove-fix (same validation, logging and
 # exit codes). Exit 64 bad usage, 65 fix not allowed here, 66 value not allowed.
@@ -35,7 +41,8 @@ fi
 
 usage() {
 	echo "usage: gamecove-fix-set charge-limit|fan|claw8ex-gyro set <value>" >&2
-	echo "       gamecove-fix-set charge-limit|fan|claw8ex-gyro status" >&2
+	echo "       gamecove-fix-set <file fix> set on|off" >&2
+	echo "       gamecove-fix-set <name> status" >&2
 	echo "install and remove need an administrator: pkexec /usr/libexec/gamecove/gamecove-fix" >&2
 	exit 64
 }
@@ -45,13 +52,20 @@ die() {
 	exit "$2"
 }
 
+# Fixes that only write a fixed udev rule or session file (no boot config, firmware or units).
+FILE_FIXES="claw-kbd-wakeup claw-wifi-d3cold ax210-d3cold gpd-fingerprint gpd-wm2-touch-wakeup ally-controller-wakeup ally-fingerprint-drain ally-mcu-powersave onexfly-touch"
+is_file_fix() {
+	case " $FILE_FIXES " in *" $1 "*) return 0 ;; esac
+	return 1
+}
+
 [ $# -ge 2 ] || usage
 name="$1"
 action="$2"
 
 case "$name" in
 charge-limit | fan | claw8ex-gyro) ;;
-*) die "fix '$name' can't be changed without a password; use gamecove-fix" 65 ;;
+*) is_file_fix "$name" || die "fix '$name' can't be changed without a password; use gamecove-fix" 65 ;;
 esac
 
 case "$action" in
@@ -72,6 +86,7 @@ case "$name:$value" in
 charge-limit:[5-9][0-9] | charge-limit:100 | charge-limit:release) ;;
 fan:auto | fan:quiet | fan:max) ;;
 claw8ex-gyro:accel-on | claw8ex-gyro:accel-off) ;;
+*:on | *:off) is_file_fix "$name" || die "value not allowed for $name" 66 ;;
 *) die "value not allowed for $name" 66 ;;
 esac
 

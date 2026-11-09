@@ -56,7 +56,7 @@ func test_claw_8_ex_row_kept() -> void:
 	eq(ex.get("tdp"), {"min": 8.0, "battery_max": 35.0, "plugged_max": 35.0, "boost_max": 45.0}, "tdp")
 	eq(ex.get("profiles"), {"battery": 12.0, "balanced": 17.0, "performance": 25.0}, "profiles")
 	eq(ex.get("tdp_backends"), ["powerstation"], "backends")
-	eq(ex.get("fixes"), ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro"], "fixes")
+	eq(ex.get("fixes"), ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "claw-kbd-wakeup"], "fixes")
 	eq(ex.get("vrr_range"), [30.0, 120.0], "vrr")
 	eq(ex.get("fan"), "msi_wmi_platform", "fan")
 	eq(ex.get("gpu_family"), "intel-xe3", "gpu family")

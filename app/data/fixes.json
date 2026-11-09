@@ -1,0 +1,315 @@
+{
+ "_about": "Every device fix GameCove knows. id = folder in fixes/ (kind root / file / power) or an app-level fix (kind app). auto: devices.json ids the installer applies it on (must equal those rows' \"fixes\" field); optional: ids where the Fixes page offers Apply. \"*\" = any handheld (the fix itself checks the hardware). password: none (Apply / Undo through gamecove-fix-set, works in Gaming Mode) or admin (gamecove-fix, Desktop Mode). restart: '' | restart | cold-boot | session. page: fixes, or power (shown on the Power page). bazzite / steamos: whether the shipping OS already fixes it (checked 2026-11-08). Research: docs/DEVICE-FIXES.md.",
+ "version": 1,
+ "fixes": [
+  {
+   "id": "claw8ex-buttons",
+   "title": "MSI buttons",
+   "line": "Makes the two MSI buttons next to the screen work: left opens the menu, right opens Quick Access.",
+   "symptom": "Both MSI face buttons do nothing in Gaming Mode: the firmware sends Win+G and F15, InputPlumber's stock map waits for other keys.",
+   "kind": "root",
+   "password": "admin",
+   "restart": "",
+   "auto": [
+    "msi-claw-8-ex"
+   ],
+   "optional": [],
+   "bazzite": "Not fixed (InputPlumber still maps the board to claw2).",
+   "steamos": "Not supported on SteamOS.",
+   "sources": [
+    "https://github.com/ShadowBlip/InputPlumber/blob/main/rootfs/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml",
+    "ClawDeck docs/HARDWARE-FINDINGS.md section 12 (measured with evtest on BIOS E1T91IMS.10D)"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "claw8ex-vrr",
+   "title": "Smooth screen down to 30 fps",
+   "line": "Lets VRR keep games smooth down to 30 fps instead of 48.",
+   "symptom": "The panel's EDID says 48-120 Hz although the panel does 30-120 Hz, so VRR stops working under 48 fps.",
+   "kind": "root",
+   "password": "admin",
+   "restart": "restart",
+   "auto": [
+    "msi-claw-8-ex"
+   ],
+   "optional": [],
+   "bazzite": "Not fixed.",
+   "steamos": "Not supported on SteamOS.",
+   "sources": [
+    "ClawDeck docs/HARDWARE-FINDINGS.md section 11",
+    "fixes/claw8ex-vrr/README.md"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "claw8ex-gyro",
+   "title": "Gyro aiming",
+   "line": "Turns on the motion sensor so you can aim by tilting the Claw.",
+   "symptom": "The Claw 8 EX's IMU sits behind the Intel sensor hub with MSI firmware Linux doesn't load, so there is no gyro.",
+   "kind": "root",
+   "password": "admin",
+   "restart": "cold-boot",
+   "auto": [
+    "msi-claw-8-ex"
+   ],
+   "optional": [],
+   "bazzite": "Not fixed.",
+   "steamos": "Not supported on SteamOS.",
+   "sources": [
+    "fixes/claw8ex-gyro/README.md"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "claw-kbd-wakeup",
+   "title": "Volume buttons don't wake it",
+   "line": "Stops a bump of the volume buttons from waking the Claw in your bag.",
+   "symptom": "The volume buttons are keys on the i8042 keyboard, which is a wakeup source, so pressing them wakes the Claw from sleep.",
+   "kind": "file",
+   "password": "none",
+   "restart": "",
+   "auto": [
+    "msi-claw-a1m",
+    "msi-claw-7-ai-plus",
+    "msi-claw-8-ai-plus",
+    "msi-claw-8-ex",
+    "msi-claw-a8",
+    "msi-claw-family"
+   ],
+   "optional": [],
+   "bazzite": "Not fixed: Handheld Daemon switched it off at start, InputPlumber (Bazzite 44+) doesn't.",
+   "steamos": "Not fixed (no Claw support in SteamOS).",
+   "sources": [
+    "https://lkml.iu.edu/hypermail/linux/kernel/2506.2/01805.html",
+    "https://lkml.indiana.edu/hypermail/linux/kernel/2506.2/03339.html",
+    "https://github.com/hhd-dev/hhd/blob/master/src/hhd/device/claw/__init__.py"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "claw-wifi-d3cold",
+   "title": "Wi-Fi back after sleep",
+   "line": "Keeps the Wi-Fi card awake enough to come back after sleep. Uses a little more battery asleep.",
+   "symptom": "Wi-Fi is gone after sleep until a restart: the Intel card drops into D3cold and doesn't come back.",
+   "kind": "file",
+   "password": "none",
+   "restart": "",
+   "auto": [],
+   "optional": [
+    "msi-claw-a1m",
+    "msi-claw-7-ai-plus",
+    "msi-claw-8-ai-plus"
+   ],
+   "bazzite": "Not fixed (reported 2024-12, no answer).",
+   "steamos": "Not fixed (SteamOS issues 2742, 2703; user-verified workaround).",
+   "sources": [
+    "https://github.com/ValveSoftware/SteamOS/issues/2742",
+    "https://github.com/ValveSoftware/SteamOS/issues/2703",
+    "https://universal-blue.discourse.group/t/wifi-refuses-to-reconnect-after-resuming-from-sleep/5519"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "ax210-d3cold",
+   "title": "Intel AX210 Wi-Fi after sleep",
+   "line": "Stops the Intel AX210 Wi-Fi card from crashing after sleep.",
+   "symptom": "The AX210 enters D3cold during sleep, iwlwifi can't wake it, Wi-Fi is dead (sometimes even after a restart).",
+   "kind": "file",
+   "password": "none",
+   "restart": "",
+   "auto": [
+    "gpd-win-5"
+   ],
+   "optional": [
+    "*"
+   ],
+   "bazzite": "Fixed (50-intel-ax200-ax210-disable-d3cold-state.rules, after issue 5867).",
+   "steamos": "Not shipped as far as we can tell; the fix checks the system's own rules.",
+   "sources": [
+    "https://github.com/ublue-os/bazzite/issues/5867",
+    "https://github.com/ublue-os/bazzite/blob/main/system_files/deck/shared/usr/lib/udev/rules.d/50-intel-ax200-ax210-disable-d3cold-state.rules"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "gpd-fingerprint",
+   "title": "Sleep that works",
+   "line": "Switches off the fingerprint reader, which has no Linux driver and breaks sleep.",
+   "symptom": "Suspend/resume is unreliable on the GPD Win 4 and Win Max 2 because of their USB fingerprint readers.",
+   "kind": "file",
+   "password": "none",
+   "restart": "",
+   "auto": [
+    "gpd-win-4",
+    "gpd-win-max-2"
+   ],
+   "optional": [],
+   "bazzite": "Fixed (50-gpd-win-4-fingerprint.rules, 50-gpd-wm2-fingerprint.rules).",
+   "steamos": "Not shipped (GPD isn't a SteamOS device).",
+   "sources": [
+    "https://github.com/aarron-lee/gpd-win-tricks",
+    "https://github.com/ublue-os/bazzite/tree/main/system_files/deck/shared/usr/lib/udev/rules.d"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "gpd-wm2-touch-wakeup",
+   "title": "Stays asleep",
+   "line": "Stops the touch panel from waking the Win Max 2 right after it goes to sleep.",
+   "symptom": "The Win Max 2 (2025 especially) wakes again at once: its I2C touch device (PNP0C50:00) is a wakeup source.",
+   "kind": "file",
+   "password": "none",
+   "restart": "",
+   "auto": [],
+   "optional": [
+    "gpd-win-max-2"
+   ],
+   "bazzite": "Not fixed.",
+   "steamos": "Not shipped.",
+   "sources": [
+    "https://github.com/aarron-lee/gpd-win-tricks/blob/main/wm2-suspend-udev.sh",
+    "https://github.com/torvalds/linux/commit/805c74eac8cb306dc69b87b6b066ab4da77ceaf1"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "ally-controller-wakeup",
+   "title": "Sticks don't wake it",
+   "line": "Stops a nudge of the sticks from waking the handheld while it goes to sleep.",
+   "symptom": "The built-in controller (0b05:1b4c) is a wakeup source, so stick movement wakes the device before or during sleep.",
+   "kind": "file",
+   "password": "none",
+   "restart": "",
+   "auto": [
+    "asus-rog-ally-x",
+    "asus-rog-xbox-ally",
+    "asus-rog-xbox-ally-x"
+   ],
+   "optional": [],
+   "bazzite": "Fixed (50-ally-x-controller.rules).",
+   "steamos": "Unknown; the fix checks the system's own rules.",
+   "sources": [
+    "https://github.com/ublue-os/bazzite/blob/main/system_files/deck/shared/usr/lib/udev/rules.d/50-ally-x-controller.rules"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "ally-fingerprint-drain",
+   "title": "No drain while off",
+   "line": "Lets the fingerprint reader power down, so the battery doesn't drain while the Ally is off.",
+   "symptom": "The fingerprint reader (1c7a:0588) stays powered and drains the battery even with the Ally switched off.",
+   "kind": "file",
+   "password": "none",
+   "restart": "",
+   "auto": [
+    "asus-rog-ally",
+    "asus-rog-ally-x"
+   ],
+   "optional": [],
+   "bazzite": "Fixed (50-ally-fingerprint.rules).",
+   "steamos": "Unknown; the fix checks the system's own rules.",
+   "sources": [
+    "https://github.com/ublue-os/bazzite/blob/main/system_files/deck/shared/usr/lib/udev/rules.d/50-ally-fingerprint.rules"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "ally-mcu-powersave",
+   "title": "Less drain while asleep",
+   "line": "Lets the controller chip power down during sleep. Needs up-to-date MCU firmware.",
+   "symptom": "The Ally loses more battery asleep than it needs to while MCU powersave is off.",
+   "kind": "file",
+   "password": "none",
+   "restart": "",
+   "auto": [],
+   "optional": [
+    "asus-rog-ally",
+    "asus-rog-ally-x",
+    "asus-rog-xbox-ally",
+    "asus-rog-xbox-ally-x",
+    "asus-rog-xbox-ally-x20"
+   ],
+   "bazzite": "Handled by Bazzite's own MCU workaround (shows as fixed by the system when on).",
+   "steamos": "Not on by default.",
+   "sources": [
+    "https://github.com/aarron-lee/SimpleDeckyTDP/blob/main/py_modules/devices/rog_ally.py",
+    "https://github.com/aarron-lee/SimpleDeckyTDP/blob/main/py_modules/advanced_options.py"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "onexfly-touch",
+   "title": "Touch in the right place",
+   "line": "Makes touch line up with the picture in Gaming Mode (it's turned 90 degrees).",
+   "symptom": "gamescope-session-plus marks the F1's sideways panel as external, so gamescope turns the picture but not touch input.",
+   "kind": "file",
+   "password": "none",
+   "restart": "session",
+   "auto": [
+    "onexplayer-onexfly-f1"
+   ],
+   "optional": [],
+   "bazzite": "Not fixed (issue 5581; waits for ChimeraOS/gamescope-session PR 128).",
+   "steamos": "Not affected the same way (SteamOS uses its own session).",
+   "sources": [
+    "https://github.com/ublue-os/bazzite/issues/5581",
+    "https://github.com/ChimeraOS/gamescope-session/pull/128"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "quiet",
+   "title": "Keep GameCove off the game's cores",
+   "line": "While a game runs, GameCove's own work moves to the efficiency cores at low priority.",
+   "symptom": "GameCove's background work could land on a performance core next to the game's render thread.",
+   "kind": "app",
+   "password": "none",
+   "restart": "",
+   "auto": [
+    "*"
+   ],
+   "optional": [],
+   "bazzite": "Not applicable (GameCove's own behaviour).",
+   "steamos": "Not applicable.",
+   "sources": [
+    "ClawDeck py_modules/clawdeck/quiet.py (same author, measured on the Claw 8 EX 2026-11-04)"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "fan",
+   "title": "Fan presets",
+   "line": "Quiet, auto and max fan presets for handhelds whose fan driver has no service.",
+   "symptom": "",
+   "kind": "power",
+   "password": "none",
+   "restart": "",
+   "auto": [],
+   "optional": [],
+   "page": "power",
+   "bazzite": "",
+   "steamos": "",
+   "sources": [
+    "fixes/fan/README.md"
+   ]
+  },
+  {
+   "id": "charge-limit",
+   "title": "Charge limit",
+   "line": "Stops charging at a limit you choose.",
+   "symptom": "",
+   "kind": "power",
+   "password": "none",
+   "restart": "",
+   "auto": [],
+   "optional": [],
+   "page": "power",
+   "bazzite": "",
+   "steamos": "",
+   "sources": [
+    "fixes/charge-limit/README.md"
+   ]
+  }
+ ]
+}
