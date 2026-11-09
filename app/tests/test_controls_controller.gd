@@ -108,7 +108,7 @@ func test_claw_controls_and_reasons() -> void:
 	eq(_reason(reg, "controller.gyro_source"), "This handheld has one gyro")
 	eq(_reason(reg, "controller.gyro_aim"), Provider.R_GYRO_AIM)
 	eq(_reason(reg, "controller.trackpad"), Provider.R_NO_PAD)
-	eq(_reason(reg, "controller.rumble_strength"), "InputPlumber can only turn rumble on or off")
+	eq(_reason(reg, "controller.rumble_strength"), "Needs a kernel whose hid-msi driver has rumble strength")
 	eq(_reason(reg, "controller.deadzone_left_stick"), Provider.R_DEADZONE_IP)
 	eq(_reason(reg, "controller.paddles_as"), "With InputPlumber each back button is set on its own")
 	eq(_reason(reg, "controller.led_effect"), Provider.R_RGB_BACKEND, "Claw has RGB but no driver here")

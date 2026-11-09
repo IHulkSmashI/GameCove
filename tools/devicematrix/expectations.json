@@ -100,6 +100,10 @@
     "min_ge": [
      "tdp.min"
     ]
+   },
+   "controller-rumble": {
+    "min_ge": 0,
+    "max_le": 100
    }
   }
  },
@@ -942,7 +946,8 @@
      "auto",
      "manual"
     ],
-    "note": "steamos-manager's Intel driver (data/devices/msi-claw-8ex.toml gpu_performance intel)"
+    "note": "steamos-manager's Intel driver (data/devices/msi-claw-8ex.toml gpu_performance intel)",
+    "reason_contains": "AMD"
    },
    "power.fan_mode": {
     "available": true,
@@ -954,18 +959,21 @@
     "options_exclude": [
      "firmware"
     ],
-    "note": "msi_wmi_platform tables through the fan fix; steamos-manager's FanControl1 (jupiter-fan-control) never used on a fan_via fix row"
+    "note": "msi_wmi_platform tables through the fan fix; steamos-manager's FanControl1 (jupiter-fan-control) never used on a fan_via fix row",
+    "reason_contains": "Handheld Daemon"
    },
    "power.fan_curve": {
     "available": true,
-    "note": "both fans' six-point EC tables"
+    "note": "both fans' six-point EC tables",
+    "reason_contains": "Handheld Daemon"
    },
    "power.charge_limit": {
     "available": true,
     "min": 50,
     "max": 100,
     "value": 100,
-    "note": "steamos-manager acpi_sb (MaxChargeLevel 0 = EC limit never set = 100); EC honouring it unverified"
+    "note": "steamos-manager acpi_sb (MaxChargeLevel 0 = EC limit never set = 100); EC honouring it unverified",
+    "reason_contains": "Handheld Daemon"
    },
    "controller.emulation": {
     "available": true
@@ -1040,6 +1048,11 @@
    "controller.led_color_2": {
     "available": false,
     "reason_contains": "one zone"
+   },
+   "controller.rumble_test": {
+    "available": false,
+    "reason_contains": "Handheld Daemon",
+    "note": "the matrix runs the Claw under hhd (devices.json rgb.via); live it runs InputPlumber 0.83.1, where the buzz works (test_controls_rumble.gd)"
    }
   },
   "lenovo-legion-go-s-z2go": {
@@ -1601,6 +1614,77 @@
     "available": true,
     "value": "deck",
     "note": "TargetDevices gamepad1 = deck-uhid"
+   }
+  },
+  "controller:msi-claw": {
+   "controller.rumble": {
+    "available": true
+   },
+   "controller.rumble_strength": {
+    "available": true,
+    "kind": "choice",
+    "options_include": [
+     10,
+     50,
+     100
+    ],
+    "options_exclude": [
+     0
+    ],
+    "note": "hid-msi rumble_intensity_left/_right 0-100 (gen.py builds them; from source, unverified on a device)"
+   }
+  },
+  "controller:legion-go-controllers": {
+   "controller.rumble": {
+    "available": true
+   },
+   "controller.rumble_strength": {
+    "available": true,
+    "options_include": [
+     "low",
+     "medium",
+     "high"
+    ],
+    "options_exclude": [
+     "off"
+    ],
+    "note": "hid-lenovo-go rumble_intensity (from source, unverified on a device)"
+   }
+  },
+  "controller:legion-go-s": {
+   "controller.rumble": {
+    "available": true
+   },
+   "controller.rumble_strength": {
+    "available": false,
+    "reason_contains": "no rumble strength",
+    "note": "hid-lenovo-go-s and hhd have no strength setting"
+   }
+  },
+  "controller:asus-ally|asus-ally-x": {
+   "controller.rumble": {
+    "available": true
+   },
+   "controller.rumble_test": {
+    "available": true
+   },
+   "controller.rumble_strength": {
+    "available": false,
+    "reason_contains": "Handheld Daemon",
+    "note": "InputPlumber can't scale; hhd's limits.manual.vibration is the only knob until the hid-asus Ally series lands"
+   }
+  },
+  "controller:steam-deck": {
+   "controller.rumble": {
+    "available": true
+   },
+   "controller.rumble_test": {
+    "available": true
+   },
+   "controller.rumble_strength": {
+    "available": false,
+    "reason_contains": "Steam",
+    "note": "no knob in hid-steam or steamos-manager"
    }
   }
  },

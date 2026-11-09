@@ -479,6 +479,20 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
             for k in ("effect", "multi_intensity", "brightness"):
                 os.chmod(os.path.join(root, lp.lstrip("/"), k), 0o666)
 
+    # Controller firmware rumble strength (devices.json "rumble": strength kernel; the HID
+    # driver's attributes, read by input/rumble.gd and written by fixes/controller-rumble)
+    rum = row.get("rumble") or {}
+    if rum.get("strength") == "kernel" and rum.get("driver") == "hid-msi":
+        h = "/sys/bus/hid/drivers/hid-msi/0003:0DB0:1901.0004"
+        t.d("/sys/bus/hid/drivers/hid-msi/0003:0DB0:1901.0003")   # the gamepad interface: no attributes
+        t.w(f"{h}/rumble_intensity_left", 100)
+        t.w(f"{h}/rumble_intensity_right", 100)
+        t.w(f"{h}/rumble_intensity_range", "0-100")
+    elif rum.get("strength") == "kernel" and rum.get("driver") == "hid-lenovo-go":
+        h = "/sys/bus/hid/drivers/hid-lenovo-go/0003:17EF:61EB.0002"
+        t.w(f"{h}/rumble_intensity", "medium")
+        t.w(f"{h}/rumble_intensity_index", "off low medium high ")
+
     # Firmware attributes (PPT limits)
     tdp = tdp_of(row) if row.get("tdp") else None
     fw = None
