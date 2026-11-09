@@ -2,6 +2,7 @@ extends "res://tests/test_case.gd"
 ## The Fixes catalogue, the Fixes service (fake runner, temp home, fake sysfs)
 ## and the Fixes page. Nothing real runs.
 
+const Traits := preload("res://scripts/device/traits.gd")
 const FixesSvc := preload("res://scripts/device/fixes.gd")
 const Page := preload("res://scripts/ui/device/fixes_page.gd")
 const Fake := preload("res://tests/fixtures/system/fake_runner.gd")
@@ -77,8 +78,11 @@ func test_catalogue_entries_are_complete_and_real() -> void:
 			ok(FileAccess.file_exists(_repo().path_join("fixes/%s/fix.sh" % id)), id + ": fix folder exists")
 			ok(FileAccess.file_exists(_repo().path_join("fixes/%s/test.sh" % id)), id + ": has test.sh")
 		for key in ["auto", "optional"]:
-			for d in e.get(key, []):
-				ok(d == "*" or d in ids, "%s: %s device %s is in devices.json" % [id, key, d])
+			var sel: Variant = e.get(key, [])
+			if not (sel is Array and sel.is_empty()):
+				ok(not Traits.resolve(sel, _devices()).is_empty(), "%s: %s selector picks at least one handheld" % [id, key])
+		for d in e.get("exclude", {}):
+			ok(d in ids, "%s: excluded device %s is in devices.json" % [id, d])
 		if e["kind"] == "file":
 			ok(e["password"] == "none", id + ": file fixes need no password")
 			var src := FileAccess.get_file_as_string(_repo().path_join("fixes/%s/fix.sh" % id))
@@ -93,7 +97,7 @@ func test_auto_lists_match_devices_json_fixes() -> void:
 	for d in _devices():
 		var want: Array = []
 		for e in cat:
-			if e["kind"] != "app" and d["id"] in e.get("auto", []):
+			if e["kind"] in ["root", "file"] and Traits.fix_auto(e, d):
 				want.append(e["id"])
 		var have: Array = d["fixes"].duplicate()
 		want.sort()
@@ -108,7 +112,8 @@ func test_entries_per_device() -> void:
 	var ids := s.entries().map(func(e): return e["id"])
 	for f in ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "claw-kbd-wakeup", "quiet", "ax210-d3cold"]:
 		ok(f in ids, "Claw 8 EX lists " + f)
-	ok(not "claw-wifi-d3cold" in ids, "no Wi-Fi fix on the 8 EX")
+	ok("claw-wifi-d3cold" in ids and not s.is_auto("claw-wifi-d3cold"), "8 EX: Intel Claw Wi-Fi fix offered (shared with the other Intel Claws)")
+	ok(s.why("claw-kbd-wakeup").contains("controller msi-claw"), "why: the shared controller")
 	ok(not "fan" in ids and not "charge-limit" in ids, "fan / charge limit stay on the Power page")
 	ok(not "gpd-fingerprint" in ids, "other makers' fixes don't show")
 	ok(s.is_auto("claw-kbd-wakeup") and not s.is_auto("ax210-d3cold"), "auto vs optional")

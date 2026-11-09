@@ -11,6 +11,7 @@ extends Node
 signal info_updated(info: Dictionary)
 
 const Buttons := preload("res://scripts/device/buttons.gd")
+const Traits := preload("res://scripts/device/traits.gd")
 
 const DEVICE_TABLE := "res://data/devices.json"
 const DMI := "/sys/class/dmi/id/"
@@ -56,7 +57,8 @@ func selftest_lines() -> Array[String]:
 		"device.chip": str(profile.get("chip", "")), "device.gpu_family": str(profile.get("gpu_family", "")),
 		"device.tdp": "%s/%s/%s" % [t.get("min", "?"), t.get("battery_max", "?"), t.get("plugged_max", "?")],
 		"device.buttons": str(profile.get("buttons", "")), "device.gyro": str(profile.get("gyro", "")),
-		"device.fixes": ",".join(PackedStringArray(profile.get("fixes", []))),
+		"device.fixes": ",".join(PackedStringArray(Traits.auto_fixes(profile) if profile.get("traits") is Dictionary else profile.get("fixes", []))),
+		"device.platform": str((profile.get("traits", {}) as Dictionary).get("platform", "")) if profile.get("traits") is Dictionary else "",
 		"gpu.driver": str(gpu.get("driver", "")), "gpu.pci_id": str(gpu.get("pci_id", "")),
 		"cpu.model": cpu_model,
 	}

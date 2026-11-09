@@ -9,7 +9,7 @@
 # for MSI Claw boards only. The power button is an ACPI button and still wakes it. See fixes/README.md.
 set -eu
 NAME=claw-kbd-wakeup
-DEVICES="msi-claw-a1m msi-claw-7-ai-plus msi-claw-8-ai-plus msi-claw-8-ex msi-claw-a8 msi-claw-family"
+DEVICES="@"  # fixes/lib/fix-devices.txt, from the trait selectors in app/data/fixes.json
 RULE=/etc/udev/rules.d/60-gamecove-claw-kbd-wakeup.rules
 FILES="$RULE"
 RELOAD=udev
@@ -21,7 +21,7 @@ file_text() {
 $GC_MARK
 # The volume buttons are part of the i8042 keyboard and must not wake the Claw from sleep.
 # Remove with: gamecove-fix $NAME remove
-ACTION=="add|change", SUBSYSTEM=="serio", DRIVERS=="atkbd", ATTR{[dmi/id]board_vendor}=="Micro-Star International Co., Ltd.", ATTR{[dmi/id]board_name}=="MS-1T*", ATTR{power/wakeup}="disabled"
+$(gc_rule_lines 'ACTION=="add|change", SUBSYSTEM=="serio", DRIVERS=="atkbd", ' 'ATTR{power/wakeup}="disabled"')
 EOF
 }
 

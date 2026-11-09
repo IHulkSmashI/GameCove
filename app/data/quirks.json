@@ -1,0 +1,87 @@
+{
+ "_about": "Known behaviour of a shared part that controls and the device matrix must respect, keyed by devices.json traits (selectors: docs/DEVICES.md, Traits), so a quirk found on one handheld covers every sibling with the same part. applies: selector. what: one line. why: the shared part. used_by: the code that reads it (Traits.has_quirk). Report: python3 tools/traits/traits.py model <id>.",
+ "version": 1,
+ "quirks": [
+  {
+   "id": "fw-ppt-ignored",
+   "applies": {"all-of": ["controller:msi-claw", "soc:panther-lake"]},
+   "what": "The firmware accepts SPPT / FPPT writes and ignores them; RAPL (PowerStation) is the real limit.",
+   "why": "MSI's Panther Lake Claw firmware (msi-wmi-platform ppt_* attributes); measured on the Claw 8 EX.",
+   "used_by": "app/scripts/controls/providers/power.gd (power.sppt / power.fppt unavailable)",
+   "sources": ["ClawDeck docs/HARDWARE-FINDINGS.md section 12 (measured 2026-10-21)"]
+  },
+  {
+   "id": "thermald-restores-tdp",
+   "applies": "cpu_vendor:intel",
+   "what": "thermald puts the firmware's power limits back every few seconds, so Power holds it while GameCove sets a lower TDP (with a temperature guard).",
+   "why": "Every Intel handheld runs Intel's thermald on Bazzite.",
+   "used_by": "app/scripts/controls/power/thermal_guard.gd, app/scripts/device/power.gd",
+   "sources": ["ClawDeck docs/HARDWARE-FINDINGS.md section 21"]
+  },
+  {
+   "id": "gamescope-known-refresh",
+   "applies": "panel.gamescope:*",
+   "what": "gamescope ships a display script for this panel and switches its refresh rate itself.",
+   "why": "The panel's EDID matches one of gamescope's known displays (traits.panel.gamescope).",
+   "used_by": "app/scripts/controls/display/panel.gd, providers/display.gd (refresh rate, unlock)",
+   "sources": ["https://github.com/ValveSoftware/gamescope/tree/89b9e6ee61513767f4771e0022b669a48efb5780/scripts/00-gamescope/displays"]
+  },
+  {
+   "id": "session-refresh-switching",
+   "applies": "session_quirk:oxp-x1*|oxp-g1*",
+   "what": "gamescope-session-plus sets CUSTOM_REFRESH_RATES for this handheld, so gamescope switches refresh already.",
+   "why": "The device-quirks blocks for the ONEXPLAYER X1 A / X1 i / X1 mini and G1 (the X1 Pro has none).",
+   "used_by": "app/scripts/controls/providers/display.gd",
+   "sources": ["https://github.com/ChimeraOS/gamescope-session/blob/73d2da84ace7f41006a0f85bd2fdb19ef593a464/usr/share/gamescope-session-plus/device-quirks"]
+  },
+  {
+   "id": "software-brightness-hdr",
+   "applies": "panel:oxp3-8.8in-oled",
+   "what": "gamescope drives this OLED in HDR10 and the backlight does nothing; brightness is gamescope's SDR-on-HDR level.",
+   "why": "The ONEXPLAYER 3's OLED panel.",
+   "used_by": "app/scripts/controls/display/panel.gd, providers/display.gd",
+   "sources": ["ClawDeck py_modules/clawdeck/screen.py", "ONEXPLAYER 3 owners' reports, 2026-10"]
+  },
+  {
+   "id": "software-brightness-in-pq",
+   "applies": "panel:lenovo-go2-oled",
+   "what": "While gamescope outputs PQ (HDR) the backlight is ignored, so brightness is the SDR-on-HDR level, re-applied after suspend.",
+   "why": "Samsung AMS881KB01-0 OLED, driven over eDP AUX luminance in PQ (both Legion Go 2 SoC models).",
+   "used_by": "app/scripts/controls/display/panel.gd, providers/display.gd",
+   "sources": ["https://github.com/Rayekkk/LeGo2BrightnessFix (release notes v1.0.0-v2.0.0)"]
+  },
+  {
+   "id": "hdr-switch-blocked",
+   "applies": "panel:oxp3-8.8in-oled",
+   "what": "Switching HDR on or off at runtime can leave the screen off until a long power press or a second reboot.",
+   "reason": "Switching HDR can turn this screen off until a reboot",
+   "why": "The ONEXPLAYER 3's OLED panel.",
+   "used_by": "providers/display.gd (display.hdr unavailable with this reason)",
+   "sources": ["ClawDeck py_modules/clawdeck/screen.py", "ONEXPLAYER 3 owners' reports, 2026-10"]
+  },
+  {
+   "id": "oxpec-fan",
+   "applies": "ec:oxpec",
+   "what": "Fan and charge behaviour come from the oxpec EC driver (hwmon oxp_ec); the Orange Pi Neo shares it with OneXPlayer and AOKZOE.",
+   "why": "The Linux oxpec driver's DMI table lists OneXPlayer, AOKZOE and the Orange Pi Neo (NEO-01).",
+   "used_by": "informational (devices.json fan / fan_via)",
+   "sources": ["https://github.com/torvalds/linux/blob/master/drivers/platform/x86/oxpec.c"]
+  },
+  {
+   "id": "volume-keys-i8042",
+   "applies": "controller:msi-claw",
+   "what": "The volume buttons are keys on the i8042 keyboard, a wakeup source (fix claw-kbd-wakeup).",
+   "why": "Every MSI Claw board (InputPlumber lists the AT keyboard as a source on all of them).",
+   "used_by": "fixes.json claw-kbd-wakeup",
+   "sources": ["https://github.com/hhd-dev/hhd/blob/master/src/hhd/device/claw/__init__.py", "https://lkml.iu.edu/hypermail/linux/kernel/2506.2/01805.html"]
+  },
+  {
+   "id": "kernel-orientation-quirk-first-board-only",
+   "applies": "platform:zotac-zone",
+   "what": "Linux's panel orientation quirk matches board G0A1W only; G1A1W units start sideways unless the session sets ORIENTATION.",
+   "why": "drm_panel_orientation_quirks.c ZOTAC Gaming Zone entry (DMI_BOARD_NAME G0A1W); devices.json and InputPlumber also know G1A1W.",
+   "used_by": "informational (display.rotation covers it)",
+   "sources": ["https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/drm_panel_orientation_quirks.c"]
+  }
+ ]
+}

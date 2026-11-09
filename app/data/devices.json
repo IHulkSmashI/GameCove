@@ -9,7 +9,7 @@
       "name": "Steam Deck (LCD)",
       "maker": "Valve",
       "family": "steam-deck",
-      "traits": {"platform": "steam-deck-lcd", "soc": ["van-gogh"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["steamdeck-hwmon"], "controller": "steam-deck", "imu": "steam-deck-hid", "wifi": ["rtl8822ce"], "panel": {"id": "valve-lcd-800x1280", "orientation": "right-up", "touch": true, "type": "ips", "hz": [40, 60]}, "audio": ["nau8821", "cs35l41"], "fingerprint": null, "firmware": "valve-jupiter", "session_quirk": "steam-deck", "sources": ["ip", "pq", "gss", "spec"], "unverified": ["wifi", "audio"]},
+      "traits": {"platform": "steam-deck-lcd", "soc": ["van-gogh"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["steamdeck-hwmon"], "controller": "steam-deck", "imu": "steam-deck-hid", "wifi": ["rtl8822ce"], "panel": {"id": "valve-lcd-800x1280", "orientation": "right-up", "touch": true, "type": "ips", "gamescope": "valve.steamdeck.lcd", "hz": [40, 60]}, "audio": ["nau8821", "cs35l41"], "fingerprint": null, "firmware": "valve-jupiter", "session_quirk": "steam-deck", "sources": ["ip", "pq", "gss", "spec"], "unverified": ["wifi", "audio"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["Valve"],
@@ -54,7 +54,7 @@
       "name": "Steam Deck (OLED)",
       "maker": "Valve",
       "family": "steam-deck",
-      "traits": {"platform": "steam-deck-oled", "soc": ["sephiroth"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["steamdeck-hwmon"], "controller": "steam-deck", "imu": "steam-deck-hid", "wifi": ["qca2066"], "panel": {"id": "valve-oled-800x1280", "vendor": "VLV/BOE", "orientation": "right-up", "touch": true, "type": "oled", "hz": [45, 90]}, "audio": ["nau8821", "max98388"], "fingerprint": null, "firmware": "valve-galileo", "session_quirk": "steam-deck", "sources": ["ip", "pq", "gs", "gss", "dfix"], "unverified": ["wifi"]},
+      "traits": {"platform": "steam-deck-oled", "soc": ["sephiroth"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["steamdeck-hwmon"], "controller": "steam-deck", "imu": "steam-deck-hid", "wifi": ["qca2066"], "panel": {"id": "valve-oled-800x1280", "vendor": "VLV/BOE", "orientation": "right-up", "touch": true, "type": "oled", "gamescope": "valve.steamdeck.oled", "hz": [45, 90]}, "audio": ["nau8821", "max98388"], "fingerprint": null, "firmware": "valve-galileo", "session_quirk": "steam-deck", "sources": ["ip", "pq", "gs", "gss", "dfix"], "unverified": ["wifi"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["Valve"],
@@ -99,7 +99,7 @@
       "name": "ASUS ROG Ally",
       "maker": "ASUS",
       "family": "rog-ally",
-      "traits": {"platform": "rog-ally", "soc": ["phoenix", "phoenix2"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally", "imu": "bmi323", "wifi": ["mt7922"], "panel": {"id": "asus-ally-7in-lcd", "vendor": "TMX/BOE", "model": "TL070FVXS01-0/TS070FHM-LU0", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": ["alc294", "cs35l41"], "fingerprint": "1c7a:0588", "firmware": "asus-rc71l", "session_quirk": "ally", "sources": ["ip", "gs", "gss", "bz", "hhd"], "unverified": ["wifi", "audio"]},
+      "traits": {"platform": "rog-ally", "soc": ["phoenix", "phoenix2"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally", "imu": "bmi323", "wifi": ["mt7922"], "panel": {"id": "asus-ally-7in-lcd", "vendor": "TMX/BOE", "model": "TL070FVXS01-0/TS070FHM-LU0", "touch": true, "type": "ips", "gamescope": "asus.rogally.lcd", "hz": [48, 120]}, "audio": ["alc294", "cs35l41"], "fingerprint": "1c7a:0588", "firmware": "asus-rc71l", "session_quirk": "ally", "sources": ["ip", "gs", "gss", "bz", "hhd"], "unverified": ["wifi", "audio"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ASUSTeK COMPUTER INC."],
@@ -145,7 +145,7 @@
       "name": "ASUS ROG Ally X",
       "maker": "ASUS",
       "family": "rog-ally",
-      "traits": {"platform": "rog-ally-x", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally-x", "imu": "bmi323", "wifi": ["mt7922"], "panel": {"id": "asus-ally-7in-lcd", "vendor": "TMX/BOE", "model": "TL070FVXS01-0/TS070FHM-LU0", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": ["alc294", "cs35l41"], "fingerprint": "1c7a:0588", "firmware": "asus-rc72la", "session_quirk": "ally", "sources": ["ip", "gs", "gss", "bz", "hhd"], "unverified": ["wifi", "audio"]},
+      "traits": {"platform": "rog-ally-x", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally-x", "imu": "bmi323", "wifi": ["mt7922"], "panel": {"id": "asus-ally-7in-lcd", "vendor": "TMX/BOE", "model": "TL070FVXS01-0/TS070FHM-LU0", "touch": true, "type": "ips", "gamescope": "asus.rogally.lcd", "hz": [48, 120]}, "audio": ["alc294", "cs35l41"], "fingerprint": "1c7a:0588", "firmware": "asus-rc72la", "session_quirk": "ally", "sources": ["ip", "gs", "gss", "bz", "hhd"], "unverified": ["wifi", "audio"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ASUSTeK COMPUTER INC."],
@@ -280,7 +280,7 @@
       "name": "ASUS ROG Xbox Ally X20",
       "maker": "ASUS",
       "family": "rog-xbox-ally",
-      "traits": {"platform": "rog-xbox-ally-x20", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally-x", "imu": "bmi323", "wifi": null, "panel": {"id": "asus-ally-x20-oled", "vendor": "SDC", "model": "0x4501", "touch": true, "type": "oled", "hz": [48, 120]}, "audio": null, "fingerprint": "asus-power-button", "firmware": "asus-rc74", "session_quirk": null, "sources": ["ip", "gs", "hhd"], "unverified": ["fingerprint"]},
+      "traits": {"platform": "rog-xbox-ally-x20", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally-x", "imu": "bmi323", "wifi": null, "panel": {"id": "asus-ally-x20-oled", "vendor": "SDC", "model": "0x4501", "touch": true, "type": "oled", "gamescope": "asus.rogallyx20.oled", "hz": [48, 120]}, "audio": null, "fingerprint": "asus-power-button", "firmware": "asus-rc74", "session_quirk": null, "sources": ["ip", "gs", "hhd"], "unverified": ["fingerprint"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ASUS"],
@@ -312,7 +312,7 @@
       "buttons": "rog-xbox-ally",
       "glyphs": "xbox",
       "art": "rog-xbox-ally",
-      "fixes": [],
+      "fixes": ["ally-controller-wakeup"],
       "quirks": ["DMI sys_vendor is 'ASUS', not 'ASUSTeK COMPUTER INC.' like older Allys.", "TDP copied from the Xbox Ally X until someone measures it."],
       "support": "partial",
       "verified": false,
@@ -325,7 +325,7 @@
       "name": "Lenovo Legion Go",
       "maker": "Lenovo",
       "family": "legion-go",
-      "traits": {"platform": "legion-go", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-controllers", "imu": "legion-controller+amd-sfh", "wifi": ["mt7922"], "panel": {"id": "lenovo-go-8.8in-lcd", "vendor": "LEN", "model": "Go Display", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": "lenovo-n3cn", "session_quirk": "legion-go", "sources": ["ip", "gs", "gss", "pq", "bz"], "unverified": ["wifi", "firmware"]},
+      "traits": {"platform": "legion-go", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-controllers", "imu": "legion-controller+amd-sfh", "wifi": ["mt7922"], "panel": {"id": "lenovo-go-8.8in-lcd", "vendor": "LEN", "model": "Go Display", "orientation": "left-up", "touch": true, "type": "ips", "gamescope": "lenovo.legiongo.lcd", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": "lenovo-n3cn", "session_quirk": "legion-go", "sources": ["ip", "gs", "gss", "pq", "bz"], "unverified": ["wifi", "firmware"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -370,7 +370,7 @@
       "name": "Lenovo Legion Go 2",
       "maker": "Lenovo",
       "family": "legion-go",
-      "traits": {"platform": "legion-go-2", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-controllers", "imu": "legion-controller+amd-sfh", "wifi": null, "panel": {"id": "lenovo-go2-oled", "vendor": "SDC", "model": "AMS881KB01-0 (0x4301)", "touch": true, "type": "oled", "hz": [30, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "bz"], "unverified": []},
+      "traits": {"platform": "legion-go-2", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-controllers", "imu": "legion-controller+amd-sfh", "wifi": null, "panel": {"id": "lenovo-go2-oled", "vendor": "SDC", "model": "AMS881KB01-0 (0x4301)", "touch": true, "type": "oled", "gamescope": "lenovo.legiongo2.oled", "hz": [30, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "bz"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -415,7 +415,7 @@
       "name": "Lenovo Legion Go 2 (Z2)",
       "maker": "Lenovo",
       "family": "legion-go",
-      "traits": {"platform": "legion-go-2", "soc": ["hawk-point-z2"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-controllers", "imu": "legion-controller+amd-sfh", "wifi": null, "panel": {"id": "lenovo-go2-oled", "vendor": "SDC", "model": "AMS881KB01-0 (0x4301)", "touch": true, "type": "oled", "hz": [30, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "bz"], "unverified": ["soc"]},
+      "traits": {"platform": "legion-go-2", "soc": ["hawk-point-z2"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-controllers", "imu": "legion-controller+amd-sfh", "wifi": null, "panel": {"id": "lenovo-go2-oled", "vendor": "SDC", "model": "AMS881KB01-0 (0x4301)", "touch": true, "type": "oled", "gamescope": "lenovo.legiongo2.oled", "hz": [30, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "bz"], "unverified": ["soc"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -461,7 +461,7 @@
       "name": "Lenovo Legion Go S (Z2 Go)",
       "maker": "Lenovo",
       "family": "legion-go-s",
-      "traits": {"platform": "legion-go-s", "soc": ["rembrandt-z2go"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-s", "imu": "amd-sfh", "wifi": null, "panel": {"id": "lenovo-gos-8in-lcd", "vendor": "CSW/BOE", "model": "PN8007QB1-1/NS080WUM-LX1", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "dfix"], "unverified": []},
+      "traits": {"platform": "legion-go-s", "soc": ["rembrandt-z2go"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-s", "imu": "amd-sfh", "wifi": null, "panel": {"id": "lenovo-gos-8in-lcd", "vendor": "CSW/BOE", "model": "PN8007QB1-1/NS080WUM-LX1", "touch": true, "type": "ips", "gamescope": "lenovo.legiongos.lcd", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "dfix"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -506,7 +506,7 @@
       "name": "Lenovo Legion Go S (Z1 Extreme)",
       "maker": "Lenovo",
       "family": "legion-go-s",
-      "traits": {"platform": "legion-go-s", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-s", "imu": "amd-sfh", "wifi": null, "panel": {"id": "lenovo-gos-8in-lcd", "vendor": "CSW/BOE", "model": "PN8007QB1-1/NS080WUM-LX1", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "dfix"], "unverified": []},
+      "traits": {"platform": "legion-go-s", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-s", "imu": "amd-sfh", "wifi": null, "panel": {"id": "lenovo-gos-8in-lcd", "vendor": "CSW/BOE", "model": "PN8007QB1-1/NS080WUM-LX1", "touch": true, "type": "ips", "gamescope": "lenovo.legiongos.lcd", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "dfix"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -631,7 +631,7 @@
       "buttons": "msi-claw",
       "glyphs": "xbox",
       "art": "msi-claw",
-      "fixes": ["claw-kbd-wakeup"],
+      "fixes": ["claw8ex-vrr", "claw-kbd-wakeup"],
       "quirks": ["Has a gyro in hardware behind the Intel sensor hub; not exposed on Linux yet."],
       "support": "partial",
       "verified": false,
@@ -823,7 +823,7 @@
       "name": "OneXFly F1",
       "maker": "OneXPlayer",
       "family": "onexfly",
-      "traits": {"platform": "onexfly", "soc": ["phoenix", "hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-f1-7in-oled", "orientation": "left-up", "touch": true, "type": "oled", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-120-external-left", "sources": ["ip", "gs", "gss", "oxpec", "bz"], "unverified": []},
+      "traits": {"platform": "onexfly", "soc": ["phoenix", "hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-f1-7in-oled", "vendor": "YHB", "model": "YHB02P25", "orientation": "left-up", "touch": true, "type": "oled", "hz": [60, 144], "gamescope": "onexplayer.f1.oled"}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-120-external-left", "sources": ["ip", "gs", "gss", "oxpec", "bz"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -867,7 +867,7 @@
       "name": "OneXFly F1 Pro",
       "maker": "OneXPlayer",
       "family": "onexfly",
-      "traits": {"platform": "onexfly", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-f1-7in-oled", "orientation": "left-up", "touch": true, "type": "oled", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gss", "oxpec"], "unverified": ["panel"]},
+      "traits": {"platform": "onexfly", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-f1-7in-oled", "vendor": "YHB", "model": "YHB02P25", "orientation": "left-up", "touch": true, "type": "oled", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gss", "oxpec"], "unverified": ["panel"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1312,7 +1312,7 @@
       "name": "OneXPlayer X2 Mini",
       "maker": "OneXPlayer",
       "family": "onexplayer-x1",
-      "traits": {"platform": "onexplayer-x2", "soc": ["panther-lake"], "gpu_arch": ["xe3"], "gpu_driver": ["xe"], "cpu_vendor": "intel", "ec": ["oxpec"], "controller": "oxp-xpad-fe00", "imu": "bmi260", "wifi": null, "panel": null, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "oxpec"], "unverified": ["soc", "gpu_arch", "gpu_driver", "platform"]},
+      "traits": {"platform": "onexplayer-x2", "soc": null, "gpu_arch": null, "gpu_driver": null, "cpu_vendor": null, "ec": ["oxpec"], "controller": "oxp-xpad-fe00", "imu": "bmi260", "wifi": null, "panel": null, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "oxpec"], "unverified": ["platform"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1677,7 +1677,7 @@
       "buttons": "aya-classic",
       "glyphs": "xbox",
       "art": "ayaneo",
-      "fixes": [],
+      "fixes": ["ax210-d3cold"],
       "quirks": ["Fan, charge limit and RGB through the ayaneo-ec kernel driver (new; check your kernel)."],
       "support": "partial",
       "verified": false,
@@ -1720,7 +1720,7 @@
       "buttons": "aya-classic",
       "glyphs": "xbox",
       "art": "ayaneo",
-      "fixes": [],
+      "fixes": ["ax210-d3cold"],
       "quirks": [],
       "support": "partial",
       "verified": false,
@@ -2077,7 +2077,7 @@
       "name": "GPD WIN 4",
       "maker": "GPD",
       "family": "gpd-win",
-      "traits": {"platform": "gpd-win-4", "soc": ["rembrandt", "phoenix", "hawk-point"], "gpu_arch": ["rdna2", "rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["gpd-fan"], "controller": "gpd-xpad", "imu": "bmi260", "wifi": null, "panel": {"id": "gpd-win4-6in-lcd", "touch": true, "type": "ips", "hz": [40, 60]}, "audio": null, "fingerprint": "2808:9338", "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "gss", "gpd-fan", "bz"], "unverified": []},
+      "traits": {"platform": "gpd-win-4", "soc": ["rembrandt", "phoenix", "hawk-point"], "gpu_arch": ["rdna2", "rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["gpd-fan"], "controller": "gpd-xpad", "imu": "bmi260", "wifi": null, "panel": {"id": "gpd-win4-6in-lcd", "vendor": "GPD", "model": "G1618-04", "touch": true, "type": "ips", "gamescope": "gpd.win4.lcd", "hz": [40, 60]}, "audio": null, "fingerprint": "2808:9338", "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "gss", "gpd-fan", "bz"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["GPD"],
@@ -2295,7 +2295,7 @@
       "name": "ZOTAC Gaming Zone",
       "maker": "ZOTAC",
       "family": "zotac-zone",
-      "traits": {"platform": "zotac-zone", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["zotac-zone-platform"], "controller": "zotac-zone", "imu": "bmi260", "wifi": null, "panel": {"id": "zotac-zone-7in-oled", "orientation": "left-up", "touch": true, "type": "oled", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "pq", "dfix"], "unverified": ["ec"]},
+      "traits": {"platform": "zotac-zone", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["zotac-zone-platform"], "controller": "zotac-zone", "imu": "bmi260", "wifi": null, "panel": {"id": "zotac-zone-7in-oled", "vendor": "ZDZ/DXQ", "model": "ZDZ0501/DXQ7D0023", "orientation": "left-up", "touch": true, "type": "oled", "gamescope": "zotac.zone.oled", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "pq", "dfix"], "unverified": ["ec"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ZOTAC"],

@@ -30,9 +30,11 @@ const DEVICE_IDS := ["power.sleep_mode", "power.mcu_powersave", "power.battery_l
 ## Levers Auto TDP moves: a manual change pauses it for the game (ClawDeck main.py).
 const LEVER_IDS := ["power.cpu_boost", "power.cpu_max", "power.epp", "power.gpu_min", "power.gpu_max",
 	"power.gpu_profile", "power.gpu_level", "power.gpu_clock"]
-## The MSI Claw 8 EX firmware accepts ppt_* attributes and ignores them (ClawDeck
-## docs/HARDWARE-FINDINGS.md §12, measured 2026-10-21); RAPL through PowerStation is the real limit.
-const FW_PPT_IGNORED := ["msi-claw-8-ex"]
+## Firmware that accepts ppt_* attributes and ignores them: quirk "fw-ppt-ignored" in
+## app/data/quirks.json (MSI's Panther Lake Claw firmware, ClawDeck docs/HARDWARE-FINDINGS.md §12,
+## measured 2026-10-21); RAPL through PowerStation is the real limit. Keyed by traits, so siblings
+## with the same firmware get it too.
+const Traits := preload("res://scripts/device/traits.gd")
 const TARGETS := [0, 30, 40, 45, 50, 60, 72, 90, 120]
 
 var ctx: Dictionary = {}
@@ -261,7 +263,7 @@ func _ppt(which: String) -> RefCounted:
 			var backend := str(power.get("backend")) if power != null else "none"
 			if backend == "hhd":
 				return Tx.HHD_OWNS
-			if str(row().get("id", "")) in FW_PPT_IGNORED:
+			if Traits.has_quirk("fw-ppt-ignored", row()):
 				return Tx.FW_IGNORED
 			if backend == "powerstation":
 				return Tx.NOT_HERE  # PowerStation keeps SPPT/FPPT itself (its Boost): power.boost

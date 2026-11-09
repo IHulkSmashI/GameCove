@@ -8,7 +8,7 @@
 # ships for the Intel AX210). Costs a little battery while asleep, so it's optional. See fixes/README.md.
 set -eu
 NAME=claw-wifi-d3cold
-DEVICES="msi-claw-a1m msi-claw-7-ai-plus msi-claw-8-ai-plus"
+DEVICES="@"  # fixes/lib/fix-devices.txt, from the trait selectors in app/data/fixes.json
 RULE=/etc/udev/rules.d/60-gamecove-claw-wifi-d3cold.rules
 FILES="$RULE"
 RELOAD=udev
@@ -20,7 +20,7 @@ file_text() {
 $GC_MARK
 # Keeps the Claw's Intel Wi-Fi card out of D3cold, so it comes back after sleep.
 # Remove with: gamecove-fix $NAME remove
-ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{class}=="0x028000", ATTR{[dmi/id]board_vendor}=="Micro-Star International Co., Ltd.", ATTR{[dmi/id]board_name}=="MS-1T41|MS-1T42|MS-1T52", ATTR{d3cold_allowed}="0"
+$(gc_rule_lines 'ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{class}=="0x028000", ' 'ATTR{d3cold_allowed}="0"')
 EOF
 }
 

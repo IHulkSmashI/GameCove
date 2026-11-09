@@ -305,7 +305,7 @@ func test_oxp3_hdr_never_switched_and_brightness_in_software() -> void:
 	var s := Env.make("oxp3", "onexplayer-3", BACKLIGHT)
 	s.fake.props["GAMESCOPE_DISPLAY_SUPPORTS_HDR"] = "1"
 	var c := _controls(s)
-	eq(c["display.hdr"].reason, PanelInfo.HDR_SWITCH_BLOCKED["onexplayer-3"], "HDR switch blocked")
+	eq(c["display.hdr"].reason, PanelInfo.hdr_switch_blocked({"id": "onexplayer-3", "traits": {"panel": {"id": "oxp3-8.8in-oled"}}}), "HDR switch blocked")
 	ok(not c["display.hdr"].write(false), "and refused")
 	ok(not s.fake.props.has("GAMESCOPE_DISPLAY_HDR_ENABLED"), "never touched")
 	eq(c["display.sdr_brightness"].reason, T.USE_BRIGHTNESS, "one brightness control only")
@@ -487,7 +487,7 @@ func test_every_device_row() -> void:
 		var b = c["display.brightness"]
 		if b.available:
 			b.write(0)
-			if id in PanelInfo.SOFTWARE_BRIGHTNESS:
+			if PanelInfo.software_brightness(row):
 				ok(s.fake.float_prop("GAMESCOPE_SDR_ON_HDR_CONTENT_BRIGHTNESS")[0] > 20.0, id + " HDR floor")
 			else:
 				ok(int(FileAccess.get_file_as_string(s.root + "/sys/class/backlight/amdgpu_bl0/brightness")) >= 150, id + " backlight floor")

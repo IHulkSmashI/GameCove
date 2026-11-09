@@ -39,7 +39,9 @@ done
 t_check '[ "$(t_state)" = on ]' "state=on"
 t_check '[ "$(sh "$FIX" install)" = "already installed" ]' "install twice is a no-op"
 # the file only acts on the F1 (it reads the DMI product name itself), and sets PANEL_TYPE=internal there
-t_check 'grep -q "\"ONEXPLAYER F1\" | \"ONEXPLAYER F1 EVA-01\") PANEL_TYPE=internal" "$R$S/gamecove"' "session file gates on the product name"
+t_check 'grep -q "\"ONEXPLAYER F1\" | \"ONEXPLAYER F1 EVA-01\" | " "$R$S/gamecove"' "session file gates on the product names"
+t_check 'grep -q "\"AOKZOE A1 AR07\"" "$R$S/gamecove"' "session file also names the siblings in such quirk blocks"
+t_check '! grep -q "ONEXPLAYER X1 i" "$R$S/gamecove"' "session file never names the X1 i (its block is internal)"
 cp "$R$S/gamecove" "$R/probe"
 sed -i "s|/sys/class/dmi/id/product_name|$R/sys/class/dmi/id/product_name|" "$R/probe"
 t_check '[ "$(PANEL_TYPE=external sh -c ". \"$R/probe\"; echo \$PANEL_TYPE")" = internal ]' "F1: PANEL_TYPE becomes internal"
@@ -80,4 +82,18 @@ t_dmi "ONE-NETBOOK" "ONEXPLAYER X1 i" "X1"
 quirks external
 t_check '[ "$(sh "$FIX" status | tr "\n" " ")" = "applies=no state=n/a " ]' "X1: applies=no"
 t_check '[ "$(t_code sh "$FIX" install)" = 2 ]' "X1: install refused"
+# a sibling in the same kind of block (OneXPlayer 2: OXP_LIST, PANEL_TYPE=external): offered, works
+t_new
+t_dmi "ONE-NETBOOK" "ONEXPLAYER 2 ARP23" "ONEXPLAYER 2"
+mkdir -p "$R/usr/share/gamescope-session-plus"
+printf '%s\n' 'OXP_LIST="ONE XPLAYER:ONEXPLAYER 2 ARP23:ONEXPLAYER 2 PRO ARP23H"' 'AOK_LIST="AOKZOE A1 AR07:AOKZOE A1 Pro"' \
+	'if [[ ":$OXP_LIST:" =~ ":$SYS_ID:" ]] || [[ ":$AOK_LIST:" =~ ":$SYS_ID:" ]]; then' '  DRM_MODE=fixed' '  PANEL_TYPE=external' '  ORIENTATION=left' 'fi' >"$R$Q"
+t_check '[ "$(t_state)" = off ]' "OneXPlayer 2: needed (external block)"
+t_check 'sh "$FIX" install >/dev/null && [ "$(t_state)" = on ]' "OneXPlayer 2: install"
+cp "$R$S/gamecove" "$R/probe"
+sed -i "s|/sys/class/dmi/id/product_name|$R/sys/class/dmi/id/product_name|" "$R/probe"
+t_check '[ "$(PANEL_TYPE=external sh -c ". \"$R/probe\"; echo \$PANEL_TYPE")" = internal ]' "OneXPlayer 2: PANEL_TYPE becomes internal"
+sed -i 's/PANEL_TYPE=external/PANEL_TYPE=internal/' "$R$Q"
+sh "$FIX" remove >/dev/null
+t_check '[ "$(t_state)" = os-fixed ]' "OneXPlayer 2: block fixed upstream: os-fixed"
 t_end

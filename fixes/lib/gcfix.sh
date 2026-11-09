@@ -5,7 +5,9 @@
 #
 # A fix sets, before sourcing:
 #   NAME         its folder name (gamecove-fix <NAME> ...)
-#   DEVICES      devices.json ids it may act on (space separated); "*" = any handheld in devices.txt
+#   DEVICES      "@" = the handhelds fixes/lib/fix-devices.txt names for it (resolved from the fix's
+#                trait selectors in app/data/fixes.json); or devices.json ids (space separated);
+#                "*" = any handheld in devices.txt
 #   FILES        real paths it writes (space separated, no spaces inside), e.g. /etc/udev/rules.d/...
 #   RELOAD       "udev" to reload udev rules after a change, else empty
 # and defines:
@@ -13,6 +15,7 @@
 #   hw_present         0 when the part the fix is for is in this handheld (else: not needed)
 #   os_fixed           0 when the system already does this by itself (another rule, a newer kernel)
 #   apply_now          optional: make it take effect now (save originals with save_value first)
+#                      (file_text builds udev lines with gc_rule_lines, which adds the DMI match)
 #   revert_now         optional: undo apply_now (restore_values does the usual thing)
 #
 # Commands: install | remove | status | set on | set off ("set" is the no-password path through
@@ -20,8 +23,9 @@
 # hw=, then state= (on | off | os-fixed | not-needed | partial | n/a).
 #
 # Only the handhelds in DEVICES: the id comes from fixes/lib/devices.txt (generated from
-# devices.json). Rules themselves also match the DMI ids, so on a drive that boots several
-# handhelds a rule written on one never acts on another.
+# devices.json). Rules themselves also match the DMI ids of every handheld in DEVICES
+# (gc_rule_lines), so on a drive that boots several handhelds a rule written on one acts only on
+# those that share the trait the fix is for, never on another.
 #
 # GAMECOVE_ROOT prefixes every path (tests); GAMECOVE_CHANGES_LOG gets one line per change.
 # Exit codes: 0 done (also "not needed"), 1 failed, 2 bad usage or not this handheld.
@@ -32,6 +36,10 @@ GC_LIB="$(cd "$(dirname "$0")/../lib" && pwd)"
 . "$GC_LIB/handheld.sh"
 # Every handheld row, not just the fan / charge-limit ones (handheld.sh reads $HANDHELDS).
 HANDHELDS="$GC_LIB/devices.txt"
+FIX_DEVICES="$GC_LIB/fix-devices.txt"
+if [ "$DEVICES" = "@" ]; then
+	DEVICES="$(awk -F '\t' -v n="$NAME" '$1 == n { print $2; exit }' "$FIX_DEVICES" 2>/dev/null || true)"
+fi
 GC_MARK="# GameCove fix $NAME"
 STATE="$ROOT/var/lib/gamecove/fixes/$NAME"
 RELOAD="${RELOAD:-}"
@@ -57,6 +65,41 @@ gc_applies() {
 	*" * "* | *" $_id "*) return 0 ;;
 	esac
 	return 1
+}
+
+# gc_rule_lines <prefix> <suffix>: one udev line per DMI alternative of every handheld in DEVICES
+# (from devices.txt): <prefix>ATTR{[dmi/id]<key>}=="<pat>|<pat>", ...<suffix>. With DEVICES="*" one
+# line without a DMI match (the fix's own hardware match is the gate). Prefix ends with ", ".
+gc_rule_lines() {
+	if [ "$DEVICES" = "*" ]; then
+		printf '%s%s\n' "$1" "$2"
+		return 0
+	fi
+	_n=0
+	while IFS= read -r _l; do
+		case "$_l" in '' | '#'*) continue ;; esac
+		_id="${_l%%	*}"
+		case " $DEVICES " in *" $_id "*) ;; *) continue ;; esac
+		_attrs=""
+		_rest="${_l#*	}"
+		while [ -n "$_rest" ]; do
+			_f="${_rest%%	*}"
+			if [ "$_f" = "$_rest" ]; then _rest=""; else _rest="${_rest#*	}"; fi
+			_attrs="${_attrs}ATTR{[dmi/id]${_f%%=*}}==\"${_f#*=}\", "
+		done
+		printf '%s%s%s\n' "$1" "$_attrs" "$2"
+		_n=$((_n + 1))
+	done <"$HANDHELDS"
+	[ "$_n" -gt 0 ] || gc_die 1 "no handheld in fix-devices.txt for $NAME"
+}
+
+# gc_products: the DMI product_name patterns of every handheld in DEVICES, one per line.
+gc_products() {
+	while IFS= read -r _l; do
+		case "$_l" in '' | '#'*) continue ;; esac
+		case " $DEVICES " in *" ${_l%%	*} "*) ;; *) continue ;; esac
+		printf '%s\n' "$_l" | tr '\t' '\n' | sed -n 's/^product_name=//p' | tr '|' '\n'
+	done <"$HANDHELDS"
 }
 
 # A file of ours: present and its first line is our marker.

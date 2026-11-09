@@ -8,7 +8,7 @@
 # it reports os-fixed; this brings the same rule to SteamOS and other systems. See fixes/README.md.
 set -eu
 NAME=ax210-d3cold
-DEVICES="*"
+DEVICES="@"  # fixes/lib/fix-devices.txt, from the trait selectors in app/data/fixes.json
 RULE=/etc/udev/rules.d/60-gamecove-ax210-d3cold.rules
 FILES="$RULE"
 RELOAD=udev
@@ -20,7 +20,7 @@ file_text() {
 $GC_MARK
 # Keeps the Intel AX210 Wi-Fi card out of D3cold: the driver can't wake it from there after sleep.
 # Remove with: gamecove-fix $NAME remove
-ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{device}=="0x2725", ATTR{d3cold_allowed}="0"
+$(gc_rule_lines 'ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{device}=="0x2725", ' 'ATTR{d3cold_allowed}="0"')
 EOF
 }
 

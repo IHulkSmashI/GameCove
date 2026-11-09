@@ -2,38 +2,45 @@ extends RefCounted
 ## What this device's screen can do, from its devices.json row (via ctx.device)
 ## plus what the gamescope session tells us. Pure functions: tests pass rows.
 
-## Panels gamescope already knows the refresh rates of: it ships a display
-## script for them (ValveSoftware/gamescope scripts/00-gamescope/displays/*.lua,
-## 89b9e6e: valve.steamdeck.lcd/oled, asus.rogally.lcd, asus.rogallyx20.oled,
-## gpd.win4.lcd, lenovo.legiongo.lcd, lenovo.legiongo2.oled,
-## lenovo.legiongos.lcd, onexplayer.f1.oled, zotac.zone.oled). Only rows whose
-## panel is the one those scripts match (same maker, size and resolution).
-const GAMESCOPE_KNOWN_REFRESH := [
-	"steam-deck-lcd", "steam-deck-oled", "asus-rog-ally", "asus-rog-ally-x", "asus-rog-xbox-ally-x20",
-	"gpd-win-4", "lenovo-legion-go", "lenovo-legion-go-2", "lenovo-legion-go-2-z2",
-	"lenovo-legion-go-s-z2go", "lenovo-legion-go-s-z1e", "onexplayer-onexfly-f1", "zotac-zone",
-]
+const Traits := preload("res://scripts/device/traits.gd")
 
-## Screens where gamescope drives the panel in HDR10 and the backlight does
-## nothing, so brightness is gamescope's SDR-on-HDR level (ClawDeck screen.py,
-## OXP3 owners' reports 2026-10).
-const SOFTWARE_BRIGHTNESS := ["onexplayer-3"]
+## What each screen needs comes from app/data/quirks.json, keyed by the panel and
+## session traits in devices.json (not model ids), so a sibling with the same
+## panel gets the same handling:
+## - gamescope-known-refresh: gamescope ships a display script for this panel
+##   (ValveSoftware/gamescope scripts/00-gamescope/displays/*.lua, 89b9e6e;
+##   traits.panel.gamescope), so it switches refresh itself.
+## - session-refresh-switching: gamescope-session-plus device-quirks sets
+##   CUSTOM_REFRESH_RATES for this block (ONEXPLAYER X1 A / X1 i / X1 mini, G1).
+## - software-brightness-hdr: gamescope drives the panel in HDR10 and the
+##   backlight does nothing, so brightness is gamescope's SDR-on-HDR level
+##   (ClawDeck screen.py, OXP 3 owners 2026-10).
+## - software-brightness-in-pq: the backlight is ignored only while gamescope
+##   outputs PQ: Legion Go 2's Samsung AMS881KB01-0 OLED (Rayekkk/LeGo2BrightnessFix
+##   v1.0.0-v2.0.0); gamescope drops the level after suspend, so display.gd
+##   re-applies it from the saved value.
+## - hdr-switch-blocked: switching HDR at runtime is unsafe (its "reason" is shown).
 
-## Screens that ignore the backlight only while gamescope outputs PQ (HDR):
-## Legion Go 2's Samsung AMS881KB01-0 OLED is driven over eDP AUX luminance in
-## PQ, so writes to amdgpu_bl0 do nothing and brightness has to be the
-## SDR-on-HDR level (Rayekkk/LeGo2BrightnessFix, release notes v1.0.0-v2.0.0;
-## gamescope publishes PQ output as GAMESCOPE_HDR_OUTPUT_FEEDBACK = 1). The same
-## plugin found gamescope drops that level after suspend or a session restart,
-## so it's re-applied from the saved value when read (display.gd).
-const SOFTWARE_BRIGHTNESS_IN_PQ := ["lenovo-legion-go-2", "lenovo-legion-go-2-z2"]
 
-## Screens where switching HDR on/off at runtime is unsafe, with the reason
-## shown. ONEXPLAYER 3: the screen stays off until a long power press or a
-## second reboot (ClawDeck screen.py, reported by owners 2026-10).
-const HDR_SWITCH_BLOCKED := {
-	"onexplayer-3": "Switching HDR can turn this screen off until a reboot",
-}
+static func gamescope_knows_refresh(r: Dictionary) -> bool:
+	return Traits.has_quirk("gamescope-known-refresh", r)
+
+
+static func session_switches_refresh(r: Dictionary) -> bool:
+	return Traits.has_quirk("session-refresh-switching", r)
+
+
+static func software_brightness(r: Dictionary) -> bool:
+	return Traits.has_quirk("software-brightness-hdr", r)
+
+
+static func software_brightness_in_pq(r: Dictionary) -> bool:
+	return Traits.has_quirk("software-brightness-in-pq", r)
+
+
+## "" when switching HDR is fine here, else the reason to show.
+static func hdr_switch_blocked(r: Dictionary) -> String:
+	return str(Traits.quirk("hdr-switch-blocked").get("reason", "")) if Traits.has_quirk("hdr-switch-blocked", r) else ""
 
 ## Never dim the backlight below this (some panels go fully black at 0).
 const MIN_BRIGHTNESS_PCT := 5.0

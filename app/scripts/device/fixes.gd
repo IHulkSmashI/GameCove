@@ -24,6 +24,8 @@ signal action_finished(fix: String, verb: String, ok: bool, message: String)
 const BgCommand := preload("res://scripts/ui/bg_command.gd")
 const Texts := preload("res://scripts/ui/texts_fixes.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
+const Traits := preload("res://scripts/device/traits.gd")
+const DEVICE_TABLE := "res://data/devices.json"
 
 const CATALOGUE := "res://data/fixes.json"
 const FIX_HELPER := "/usr/libexec/gamecove/gamecove-fix"
@@ -34,6 +36,8 @@ const STATE_STATUS := {"on": "applied", "restart": "restart", "partial": "partia
 
 var catalogue: Array = []
 var device_id := "unknown"
+## This handheld's devices.json row (its traits pick the fixes: app/data/fixes.json selectors).
+var device_row: Dictionary = {}
 var sys_root := ""
 var home := OS.get_environment("HOME")
 ## Where the user's choices and the system snapshot live (tests: a temp folder).
@@ -62,14 +66,20 @@ func setup(ctx: Dictionary) -> void:
 	if ctx.get("runner") != null:
 		commands.runner = ctx["runner"]
 	var dev: Variant = ctx.get("device")
+	device_row = {}
 	if dev is String:
 		device_id = dev
 	elif dev is Dictionary:
 		device_id = str(dev.get("id", "unknown"))
+		device_row = dev
 	elif dev is Object and dev.has_method("id"):
 		device_id = str(dev.id())
+		if dev.get("profile") is Dictionary:
+			device_row = dev.profile
 	if device_id == "":
 		device_id = "unknown"
+	if not device_row.has("traits"):
+		device_row = row_for(device_id, device_row)
 	data_dir = str(ctx.get("data_dir", home.path_join(".local/share/gamecove")))
 	_status.clear()
 
@@ -91,14 +101,34 @@ func entry(fix: String) -> Dictionary:
 	return {}
 
 
-static func _lists(e: Dictionary, key: String, id: String) -> bool:
-	var l: Array = e.get(key, []) if e.get(key) is Array else []
-	return id in l or ("*" in l and id != "unknown")
+## The devices.json row for an id (with its traits), else `fallback` / {"id": id}.
+static func row_for(id: String, fallback: Dictionary = {}) -> Dictionary:
+	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(DEVICE_TABLE))
+	if d is Dictionary and d.get("devices") is Array:
+		for r in d["devices"]:
+			if r is Dictionary and str(r.get("id", "")) == id:
+				return r
+	return fallback if not fallback.is_empty() else {"id": id}
 
 
-## Auto-applied by the installer on this device (devices.json "fixes" agrees).
+## Auto-applied by the installer on this device: the entry's "auto" selector
+## holds on this row's traits (devices.json "fixes" is generated from it).
 func is_auto(fix: String) -> bool:
-	return _lists(entry(fix), "auto", device_id)
+	return Traits.fix_auto(entry(fix), device_row)
+
+
+## Offered with Apply here (the "optional" selector), and why it applies.
+func is_optional(fix: String) -> bool:
+	return Traits.fix_optional(entry(fix), device_row)
+
+
+func why(fix: String) -> String:
+	var e := entry(fix)
+	if Traits.fix_auto(e, device_row):
+		return Traits.why(e["auto"], device_row)
+	if Traits.fix_optional(e, device_row):
+		return Traits.why(e["optional"], device_row)
+	return ""
 
 
 ## Catalogue entries for this exact model, Fixes page ones only, auto first.
@@ -107,7 +137,7 @@ func entries() -> Array:
 	for e in catalogue:
 		if str(e.get("page", "fixes")) != "fixes":
 			continue
-		if _lists(e, "auto", device_id) or _lists(e, "optional", device_id):
+		if Traits.fix_auto(e, device_row) or Traits.fix_optional(e, device_row):
 			out.append(e)
 	out.sort_custom(func(a, b): return int(is_auto(a["id"])) > int(is_auto(b["id"])))
 	return out
@@ -182,6 +212,7 @@ func rows() -> Array:
 			"can_undo": s in ["applied", "restart", "partial"],
 			"can_check": s == "unknown",
 			"sources": e.get("sources", []), "bazzite": str(e.get("bazzite", "")), "steamos": str(e.get("steamos", "")),
+			"why": why(id),
 		})
 	return out
 

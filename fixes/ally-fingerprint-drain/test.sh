@@ -15,11 +15,21 @@ ally() {
 	t_usb 3-2 1c7a 0588 power/control=on
 	F="$R/sys/bus/usb/devices/3-2/power/control"
 }
-xally() {
-	t_dmi "ASUSTeK COMPUTER INC." "ROG Xbox Ally RC73YA_RC73YA" "RC73YA"
+# A handheld without the reader trait (Legion Go), even with the same USB id plugged in.
+other() {
+	t_dmi "LENOVO" "83E1" "LNVNB161216"
 	t_usb 3-2 1c7a 0588 power/control=on
 }
-t_common "$RULE" ally xally '[ "$(cat "$F")" = auto ]' '[ "$(cat "$F")" = on ]'
+t_common "$RULE" ally other '[ "$(cat "$F")" = auto ]' '[ "$(cat "$F")" = on ]'
+# Siblings by trait: the Xbox Ally X20 (sys_vendor "ASUS") is offered it, and the rule matches its DMI.
+t_new
+t_dmi "ASUS" "ROG Xbox Ally X20 RC74XA" "RC74XA"
+t_usb 3-2 1c7a 0588 power/control=on
+t_check 'sh "$FIX" status | grep -qx "applies=yes"' "Xbox Ally X20 (power-button reader trait): applies"
+sh "$FIX" install >/dev/null
+t_check 'grep -q "ATTR{\[dmi/id\]sys_vendor}==\"ASUS\", ATTR{\[dmi/id\]board_name}==\"RC74XA\"" "$R$RULE"' "rule matches the X20's DMI"
+t_check 'grep -q "board_name}==\"RC71L\"" "$R$RULE"' "rule still matches the first Ally"
+t_check '! grep -q "LENOVO" "$R$RULE"' "rule never matches a handheld without the trait"
 t_new
 ally
 mkdir -p "$R/usr/lib/udev/rules.d"

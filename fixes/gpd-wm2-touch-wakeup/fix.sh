@@ -8,7 +8,7 @@
 # yet widely tested), hence optional. Touch still works while awake; the power button still wakes it.
 set -eu
 NAME=gpd-wm2-touch-wakeup
-DEVICES="gpd-win-max-2"
+DEVICES="@"  # fixes/lib/fix-devices.txt, from the trait selectors in app/data/fixes.json
 RULE=/etc/udev/rules.d/60-gamecove-gpd-wm2-touch-wakeup.rules
 FILES="$RULE"
 RELOAD=udev
@@ -20,7 +20,7 @@ file_text() {
 $GC_MARK
 # The Win Max 2's I2C touch device must not wake it from sleep.
 # Remove with: gamecove-fix $NAME remove
-ACTION=="add", SUBSYSTEM=="i2c", ATTR{name}=="PNP0C50:00", ATTR{[dmi/id]sys_vendor}=="GPD", ATTR{power/wakeup}="disabled"
+$(gc_rule_lines 'ACTION=="add", SUBSYSTEM=="i2c", ATTR{name}=="PNP0C50:00", ' 'ATTR{power/wakeup}="disabled"')
 EOF2
 }
 

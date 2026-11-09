@@ -9,7 +9,7 @@
 # The reader does nothing on Linux, so nothing is lost. Undo brings it back after a restart.
 set -eu
 NAME=gpd-fingerprint
-DEVICES="gpd-win-4 gpd-win-max-2"
+DEVICES="@"  # fixes/lib/fix-devices.txt, from the trait selectors in app/data/fixes.json
 RULE=/etc/udev/rules.d/60-gamecove-gpd-fingerprint.rules
 FILES="$RULE"
 RELOAD=udev
@@ -21,8 +21,8 @@ file_text() {
 $GC_MARK
 # Takes the GPD fingerprint reader (no Linux driver) off the USB bus so sleep works.
 # Remove with: gamecove-fix $NAME remove (the reader comes back after a restart)
-SUBSYSTEM=="usb", ATTR{idVendor}=="2808", ATTR{idProduct}=="9338", ATTR{[dmi/id]sys_vendor}=="GPD", ATTR{remove}="1"
-SUBSYSTEM=="usb", ATTR{idVendor}=="2541", ATTR{idProduct}=="9711", ATTR{[dmi/id]sys_vendor}=="GPD", ATTR{remove}="1"
+$(gc_rule_lines 'SUBSYSTEM=="usb", ATTR{idVendor}=="2808", ATTR{idProduct}=="9338", ' 'ATTR{remove}="1"')
+$(gc_rule_lines 'SUBSYSTEM=="usb", ATTR{idVendor}=="2541", ATTR{idProduct}=="9711", ' 'ATTR{remove}="1"')
 EOF
 }
 

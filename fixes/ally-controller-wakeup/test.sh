@@ -25,6 +25,15 @@ t_new
 allyx
 sh "$FIX" install >/dev/null
 t_check '[ "$(cat "$R/sys/bus/usb/devices/1-4/power/wakeup")" = enabled ]' "other USB devices untouched"
+# The Xbox Ally X20 shares the controller (0b05:1b4c) and has sys_vendor "ASUS": it gets the fix too.
+t_new
+t_dmi "ASUS" "ROG Xbox Ally X20 RC74XA" "RC74XA"
+t_usb 1-3 0b05 1b4c power/wakeup=enabled
+t_check 'sh "$FIX" status | grep -qx "applies=yes"' "Xbox Ally X20: applies"
+sh "$FIX" install >/dev/null
+t_check '[ "$(cat "$R/sys/bus/usb/devices/1-3/power/wakeup")" = disabled ]' "Xbox Ally X20: controller no longer wakes it"
+t_check 'grep -q "sys_vendor}==\"ASUS\", ATTR{\[dmi/id\]board_name}==\"RC74XA\"" "$R$RULE"' "rule matches the X20's DMI"
+t_check '! grep -q "RC71L" "$R$RULE"' "rule doesn't match the first Ally (other controller)"
 t_new
 allyx
 mkdir -p "$R/usr/lib/udev/rules.d"

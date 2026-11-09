@@ -65,13 +65,6 @@ const OFF_CHOICES := [
 	{"value": 300, "label": "5 minutes"}, {"value": 600, "label": "10 minutes"},
 ]
 
-## gamescope-session-plus device-quirks sets CUSTOM_REFRESH_RATES for these
-## (ONEXPLAYER X1 family, G1), so gamescope switches their refresh already.
-const SESSION_QUIRK_REFRESH := [
-	"onexplayer-x1-amd", "onexplayer-x1-intel", "onexplayer-x1-mini", "onexplayer-x1-pro",
-	"onexplayer-g1-amd", "onexplayer-g1-intel",
-]
-
 const HDR_NITS_MIN := 20.0     # software brightness range (ClawDeck screen.py)
 const HDR_NITS_MAX := 600.0
 const SDR_DEFAULT_NITS := 203.0  # gamescope's default SDR-on-HDR level
@@ -221,11 +214,11 @@ static func find_backlight(sys_root: String) -> String:
 
 
 func _bright_mode(c) -> String:
-	var id := PanelInfo.device_id(c.ctx)
+	var r := _row(c)
 	if _x(c).running():
-		if id in PanelInfo.SOFTWARE_BRIGHTNESS:
+		if PanelInfo.software_brightness(r):
 			return "hdr"
-		if id in PanelInfo.SOFTWARE_BRIGHTNESS_IN_PQ and int(_x(c).cardinal(A_HDR_OUTPUT, 0)) == 1:
+		if PanelInfo.software_brightness_in_pq(r) and int(_x(c).cardinal(A_HDR_OUTPUT, 0)) == 1:
 			return "hdr"
 	return "backlight" if find_backlight(str(c.ctx.get("sys_root", ""))) != "" else ""
 
@@ -301,8 +294,8 @@ func _hz(c) -> Array:
 
 
 func _refresh_known(c) -> bool:
-	var id := PanelInfo.device_id(c.ctx)
-	return id in PanelInfo.GAMESCOPE_KNOWN_REFRESH or id in SESSION_QUIRK_REFRESH or _x(c).env("CUSTOM_REFRESH_RATES") != ""
+	var r := _row(c)
+	return PanelInfo.gamescope_knows_refresh(r) or PanelInfo.session_switches_refresh(r) or _x(c).env("CUSTOM_REFRESH_RATES") != ""
 
 
 func _detect_refresh(c) -> String:
@@ -336,10 +329,9 @@ func _detect_unlock(c) -> String:
 	var r := _row(c)
 	if PanelInfo.is_generic(r):
 		return T.UNKNOWN_DEVICE
-	var id := str(r.get("id", ""))
 	var ours := SessionEnv.get_value(c.ctx, "CUSTOM_REFRESH_RATES")
 	var envv: String = _x(c).env("CUSTOM_REFRESH_RATES")
-	if id in PanelInfo.GAMESCOPE_KNOWN_REFRESH or id in SESSION_QUIRK_REFRESH or (envv != "" and envv != ours):
+	if PanelInfo.gamescope_knows_refresh(r) or PanelInfo.session_switches_refresh(r) or (envv != "" and envv != ours):
 		return T.ALREADY_KNOWN
 	if PanelInfo.custom_rates(r).is_empty():
 		return T.NO_PANEL_RANGE
@@ -453,9 +445,9 @@ func _hdr_supported(c) -> bool:
 
 
 func _detect_hdr(c) -> String:
-	var id := PanelInfo.device_id(c.ctx)
-	if PanelInfo.HDR_SWITCH_BLOCKED.has(id):
-		return PanelInfo.HDR_SWITCH_BLOCKED[id]
+	var blocked := PanelInfo.hdr_switch_blocked(_row(c))
+	if blocked != "":
+		return blocked
 	return _detect_hdr_extra(c)
 
 
@@ -466,8 +458,8 @@ func _detect_hdr_extra(c) -> String:
 
 
 func _detect_sdr_brightness(c) -> String:
-	var id := PanelInfo.device_id(c.ctx)
-	if id in PanelInfo.SOFTWARE_BRIGHTNESS or (id in PanelInfo.SOFTWARE_BRIGHTNESS_IN_PQ and int(_x(c).cardinal(A_HDR_OUTPUT, 0)) == 1):
+	var r := _row(c)
+	if PanelInfo.software_brightness(r) or (PanelInfo.software_brightness_in_pq(r) and int(_x(c).cardinal(A_HDR_OUTPUT, 0)) == 1):
 		return T.USE_BRIGHTNESS
 	return _detect_hdr_extra(c)
 

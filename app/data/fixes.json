@@ -1,5 +1,5 @@
 {
- "_about": "Every device fix GameCove knows. id = folder in fixes/ (kind root / file / power) or an app-level fix (kind app). auto: devices.json ids the installer applies it on (must equal those rows' \"fixes\" field); optional: ids where the Fixes page offers Apply. \"*\" = any handheld (the fix itself checks the hardware). password: none (Apply / Undo through gamecove-fix-set, works in Gaming Mode) or admin (gamecove-fix, Desktop Mode). restart: '' | restart | cold-boot | session. page: fixes, or power (shown on the Power page). bazzite / steamos: whether the shipping OS already fixes it (checked 2026-11-08). Research: docs/DEVICE-FIXES.md.",
+ "_about": "Every device fix GameCove knows. id = folder in fixes/ (kind root / file / power) or an app-level fix (kind app). auto: a selector over devices.json traits (docs/DEVICES.md, Traits) for the handhelds the installer applies it on; devices.json \"fixes\" is generated from it (python3 tools/fixes/gen_handhelds.py). optional: selector for where the Fixes page offers Apply. exclude: device id -> why a model that has the trait still mustn't get it. why: the shared part that makes it apply. \"*\" = any handheld (the fix itself checks the hardware). password: none (Apply / Undo through gamecove-fix-set, works in Gaming Mode) or admin (gamecove-fix, Desktop Mode). restart: '' | restart | cold-boot | session. page: fixes, or power (shown on the Power page). bazzite / steamos: whether the shipping OS already fixes it (checked 2026-11-08). Research: docs/DEVICE-FIXES.md.",
  "version": 1,
  "fixes": [
   {
@@ -10,10 +10,9 @@
    "kind": "root",
    "password": "admin",
    "restart": "",
-   "auto": [
-    "msi-claw-8-ex"
-   ],
+   "auto": "firmware:msi-e1t91",
    "optional": [],
+   "why": "InputPlumber's stock config for board MS-1T91 (firmware E1T91) waits for keys this firmware never sends; other Claw firmwares send what their configs expect.",
    "bazzite": "Not fixed (InputPlumber still maps the board to claw2).",
    "steamos": "Not supported on SteamOS.",
    "sources": [
@@ -26,14 +25,26 @@
    "id": "claw8ex-vrr",
    "title": "Smooth screen down to 30 fps",
    "line": "Lets VRR keep games smooth down to 30 fps instead of 48.",
-   "symptom": "The panel's EDID says 48-120 Hz although the panel does 30-120 Hz, so VRR stops working under 48 fps.",
+   "symptom": "The Claw's panel EDID says 48-120 Hz although the panel does 30-120 Hz, so VRR stops working under 48 fps.",
    "kind": "root",
    "password": "admin",
    "restart": "restart",
-   "auto": [
-    "msi-claw-8-ex"
-   ],
-   "optional": [],
+   "auto": {
+    "all-of": [
+     "panel:csw-pn8007qb1-2",
+     "gpu_driver:xe|i915"
+    ]
+   },
+   "optional": {
+    "all-of": [
+     "panel:tmx-tl070fvxs02-0",
+     "gpu_driver:xe|i915"
+    ]
+   },
+   "why": "The panel: the CSW PN8007QB1-2 in the Claw 8 AI+ and 8 EX (and the TMX TL070FVXS02-0 in the A1M and 7 AI+) report 48-120 Hz but run 30-120 Hz; the fix only patches those exact factory EDIDs (sha256) and hooks the Intel GPU driver.",
+   "exclude": {
+    "msi-claw-a8": "AMD GPU: the boot hook runs before xe/i915 only, and the A8's panel EDID isn't in the validated list."
+   },
    "bazzite": "Not fixed.",
    "steamos": "Not supported on SteamOS.",
    "sources": [
@@ -50,10 +61,14 @@
    "kind": "root",
    "password": "admin",
    "restart": "cold-boot",
-   "auto": [
-    "msi-claw-8-ex"
-   ],
+   "auto": {
+    "all-of": [
+     "firmware:msi-e1t91",
+     "imu:ish-hid-sensor"
+    ]
+   },
    "optional": [],
+   "why": "MSI's Panther Lake ISH firmware (ish_ptl.bin) and the 2247-byte sensor descriptor of board MS-1T91; Lunar Lake and Meteor Lake Claws use other sensor hubs.",
    "bazzite": "Not fixed.",
    "steamos": "Not supported on SteamOS.",
    "sources": [
@@ -69,15 +84,9 @@
    "kind": "file",
    "password": "none",
    "restart": "",
-   "auto": [
-    "msi-claw-a1m",
-    "msi-claw-7-ai-plus",
-    "msi-claw-8-ai-plus",
-    "msi-claw-8-ex",
-    "msi-claw-a8",
-    "msi-claw-family"
-   ],
+   "auto": "controller:msi-claw",
    "optional": [],
+   "why": "Every MSI Claw (controller 0db0:1901/1902) puts its volume keys on the i8042 keyboard, which is a wakeup source.",
    "bazzite": "Not fixed: Handheld Daemon switched it off at start, InputPlumber (Bazzite 44+) doesn't.",
    "steamos": "Not fixed (no Claw support in SteamOS).",
    "sources": [
@@ -96,11 +105,13 @@
    "password": "none",
    "restart": "",
    "auto": [],
-   "optional": [
-    "msi-claw-a1m",
-    "msi-claw-7-ai-plus",
-    "msi-claw-8-ai-plus"
-   ],
+   "optional": {
+    "all-of": [
+     "controller:msi-claw",
+     "cpu_vendor:intel"
+    ]
+   },
+   "why": "Intel Claws (MSI firmware with an Intel Wi-Fi card): the card drops into D3cold during sleep and doesn't come back.",
    "bazzite": "Not fixed (reported 2024-12, no answer).",
    "steamos": "Not fixed (SteamOS issues 2742, 2703; user-verified workaround).",
    "sources": [
@@ -118,12 +129,9 @@
    "kind": "file",
    "password": "none",
    "restart": "",
-   "auto": [
-    "gpd-win-5"
-   ],
-   "optional": [
-    "*"
-   ],
+   "auto": "wifi:ax210",
+   "optional": "*",
+   "why": "The Intel AX210 card (PCI 8086:2725), whichever handheld it is in; the fix checks for the card, so it is offered everywhere.",
    "bazzite": "Fixed (50-intel-ax200-ax210-disable-d3cold-state.rules, after issue 5867).",
    "steamos": "Not shipped as far as we can tell; the fix checks the system's own rules.",
    "sources": [
@@ -140,11 +148,9 @@
    "kind": "file",
    "password": "none",
    "restart": "",
-   "auto": [
-    "gpd-win-4",
-    "gpd-win-max-2"
-   ],
+   "auto": "fingerprint:2808:9338|2541:9711",
    "optional": [],
+   "why": "The GPD fingerprint readers 2808:9338 (WIN 4) and 2541:9711 (WIN Max 2), which have no Linux driver.",
    "bazzite": "Fixed (50-gpd-win-4-fingerprint.rules, 50-gpd-wm2-fingerprint.rules).",
    "steamos": "Not shipped (GPD isn't a SteamOS device).",
    "sources": [
@@ -162,9 +168,8 @@
    "password": "none",
    "restart": "",
    "auto": [],
-   "optional": [
-    "gpd-win-max-2"
-   ],
+   "optional": "platform:gpd-win-max-2",
+   "why": "The WIN Max 2 body's I2C touch device (PNP0C50:00).",
    "bazzite": "Not fixed.",
    "steamos": "Not shipped.",
    "sources": [
@@ -181,12 +186,9 @@
    "kind": "file",
    "password": "none",
    "restart": "",
-   "auto": [
-    "asus-rog-ally-x",
-    "asus-rog-xbox-ally",
-    "asus-rog-xbox-ally-x"
-   ],
+   "auto": "controller:asus-ally-x",
    "optional": [],
+   "why": "The ASUS controller 0b05:1b4c shared by the Ally X, Xbox Ally, Xbox Ally X and Xbox Ally X20 (InputPlumber configs); the first Ally's 0b05:1abe isn't a wakeup source.",
    "bazzite": "Fixed (50-ally-x-controller.rules).",
    "steamos": "Unknown; the fix checks the system's own rules.",
    "sources": [
@@ -202,11 +204,9 @@
    "kind": "file",
    "password": "none",
    "restart": "",
-   "auto": [
-    "asus-rog-ally",
-    "asus-rog-ally-x"
-   ],
-   "optional": [],
+   "auto": "fingerprint:1c7a:0588",
+   "optional": "fingerprint:asus-power-button",
+   "why": "The fingerprint reader 1c7a:0588 (Ally, Ally X). The Xbox Allys also have a power-button reader; its USB id isn't confirmed, so the fix is offered there and checks for the part.",
    "bazzite": "Fixed (50-ally-fingerprint.rules).",
    "steamos": "Unknown; the fix checks the system's own rules.",
    "sources": [
@@ -223,13 +223,13 @@
    "password": "none",
    "restart": "",
    "auto": [],
-   "optional": [
-    "asus-rog-ally",
-    "asus-rog-ally-x",
-    "asus-rog-xbox-ally",
-    "asus-rog-xbox-ally-x",
-    "asus-rog-xbox-ally-x20"
-   ],
+   "optional": {
+    "all-of": [
+     "ec:asus-armoury",
+     "controller:asus-ally*"
+    ]
+   },
+   "why": "Every ROG Ally controller MCU behind asus-armoury / asus-wmi mcu_powersave.",
    "bazzite": "Handled by Bazzite's own MCU workaround (shows as fixed by the system when on).",
    "steamos": "Not on by default.",
    "sources": [
@@ -242,14 +242,13 @@
    "id": "onexfly-touch",
    "title": "Touch in the right place",
    "line": "Makes touch line up with the picture in Gaming Mode (it's turned 90 degrees).",
-   "symptom": "gamescope-session-plus marks the F1's sideways panel as external, so gamescope turns the picture but not touch input.",
+   "symptom": "gamescope-session-plus marks this sideways panel as external, so gamescope turns the picture but not touch input.",
    "kind": "file",
    "password": "none",
    "restart": "session",
-   "auto": [
-    "onexplayer-onexfly-f1"
-   ],
-   "optional": [],
+   "auto": "session_quirk:oxp-120-external-left",
+   "optional": "session_quirk:oxp-60-external-left|oxp-x1-external-left|oxp-x1mini-external-left",
+   "why": "gamescope-session-plus device-quirks starts these OneXPlayer / AOKZOE panels as PANEL_TYPE=external with ORIENTATION=left, so touch isn't turned with the picture. Confirmed on the OneXFly F1 (Bazzite 5581); offered on the other models in such blocks.",
    "bazzite": "Not fixed (issue 5581; waits for ChimeraOS/gamescope-session PR 128).",
    "steamos": "Not affected the same way (SteamOS uses its own session).",
    "sources": [
@@ -266,10 +265,9 @@
    "kind": "app",
    "password": "none",
    "restart": "",
-   "auto": [
-    "*"
-   ],
+   "auto": "*",
    "optional": [],
+   "why": "GameCove's own behaviour, every handheld.",
    "bazzite": "Not applicable (GameCove's own behaviour).",
    "steamos": "Not applicable.",
    "sources": [

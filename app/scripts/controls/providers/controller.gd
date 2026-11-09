@@ -21,6 +21,7 @@ const Leds := preload("res://scripts/controls/input/leds.gd")
 const Caps := preload("res://scripts/controls/input/caps.gd")
 const Hhd := preload("res://scripts/controls/input/hhd_client.gd")
 const Profile := preload("res://scripts/input/ip_profile.gd")
+const Traits := preload("res://scripts/device/traits.gd")
 
 const R_NONE := "Needs InputPlumber or Handheld Daemon running"
 const R_HHD_ONLY := "Needs Handheld Daemon (InputPlumber has no such setting)"
@@ -237,7 +238,11 @@ func _gyro_accel() -> RefCounted:
 		"per_game": false, "needs_root": true, "requires": ["controller.gyro"],
 		"help": "Off gives steadier aiming. On adds the tilt sensor for games that want it."},
 		func(_c):
-			if str(row.get("id", "")) != "msi-claw-8-ex":
+			var gyro_fix := {}
+			for e in Traits.load_fixes():
+				if str(e.get("id", "")) == "claw8ex-gyro":
+					gyro_fix = e
+			if not Traits.fix_auto(gyro_fix, row):
 				return "Only on the MSI Claw 8 EX"
 			var f := str(ctx.get("sys_root", "")) + CLAW8EX_OVERRIDE
 			if not FileAccess.file_exists(f) or not "gyro_3d" in FileAccess.get_file_as_string(f):

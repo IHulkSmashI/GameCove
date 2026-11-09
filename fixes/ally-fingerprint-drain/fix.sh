@@ -8,7 +8,7 @@
 # others. See fixes/README.md.
 set -eu
 NAME=ally-fingerprint-drain
-DEVICES="asus-rog-ally asus-rog-ally-x"
+DEVICES="@"  # fixes/lib/fix-devices.txt, from the trait selectors in app/data/fixes.json
 RULE=/etc/udev/rules.d/60-gamecove-ally-fingerprint-drain.rules
 FILES="$RULE"
 RELOAD=udev
@@ -20,7 +20,7 @@ file_text() {
 $GC_MARK
 # Lets the ROG Ally's fingerprint reader power down, so the battery doesn't drain while it's off.
 # Remove with: gamecove-fix $NAME remove
-ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{idVendor}=="1c7a", ATTR{idProduct}=="0588", ATTR{[dmi/id]sys_vendor}=="ASUSTeK COMPUTER INC.", ATTR{power/control}="auto"
+$(gc_rule_lines 'ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{idVendor}=="1c7a", ATTR{idProduct}=="0588", ' 'ATTR{power/control}="auto"')
 EOF
 }
 

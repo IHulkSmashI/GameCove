@@ -9,7 +9,7 @@
 # waking; update the firmware in Windows / Armoury Crate first. See fixes/README.md.
 set -eu
 NAME=ally-mcu-powersave
-DEVICES="asus-rog-ally asus-rog-ally-x asus-rog-xbox-ally asus-rog-xbox-ally-x asus-rog-xbox-ally-x20"
+DEVICES="@"  # fixes/lib/fix-devices.txt, from the trait selectors in app/data/fixes.json
 RULE=/etc/udev/rules.d/60-gamecove-ally-mcu-powersave.rules
 FILES="$RULE"
 RELOAD=udev
@@ -23,8 +23,8 @@ file_text() {
 $GC_MARK
 # Lets the ROG Ally's controller MCU power down while the handheld sleeps.
 # Remove with: gamecove-fix $NAME remove
-ACTION=="add", SUBSYSTEM=="platform", KERNEL=="asus-nb-wmi", TEST=="mcu_powersave", ATTR{[dmi/id]board_name}=="RC71L|RC72LA|RC73YA|RC73XA|RC74XA", ATTR{mcu_powersave}="1"
-ACTION=="add", SUBSYSTEM=="firmware-attributes", KERNEL=="asus-armoury", TEST=="attributes/mcu_powersave/current_value", ATTR{[dmi/id]board_name}=="RC71L|RC72LA|RC73YA|RC73XA|RC74XA", ATTR{attributes/mcu_powersave/current_value}="1"
+$(gc_rule_lines 'ACTION=="add", SUBSYSTEM=="platform", KERNEL=="asus-nb-wmi", TEST=="mcu_powersave", ' 'ATTR{mcu_powersave}="1"')
+$(gc_rule_lines 'ACTION=="add", SUBSYSTEM=="firmware-attributes", KERNEL=="asus-armoury", TEST=="attributes/mcu_powersave/current_value", ' 'ATTR{attributes/mcu_powersave/current_value}="1"')
 EOF2
 }
 

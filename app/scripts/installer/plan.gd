@@ -14,6 +14,7 @@ extends RefCounted
 ## A step opened from the summary (edit) goes back to the summary on Next or Back.
 
 const Themes := preload("res://theme/themes.gd")
+const Traits := preload("res://scripts/device/traits.gd")
 
 const OPTION_STEPS: Array[String] = ["startup", "steam", "stores", "device", "look", "extras"]
 const STEPS := {
@@ -56,7 +57,7 @@ var ran := false
 ## left fixes to install, else the welcome page in Easy mode.
 static func start(target: Dictionary, device_row: Dictionary, prefs: Dictionary) -> RefCounted:
 	var p: RefCounted = load("res://scripts/installer/plan.gd").new()
-	p.suggested_fixes = (device_row.get("fixes", []) as Array).duplicate() if device_row.get("fixes", []) is Array else []
+	p.suggested_fixes = auto_fixes_for(device_row)
 	p.xess_offered = xess_capable(device_row)
 	p.choices = defaults(target, device_row, prefs)
 	var saved: Variant = target.get("state", {}).get("choices", {})
@@ -75,6 +76,16 @@ static func start(target: Dictionary, device_row: Dictionary, prefs: Dictionary)
 	var undone := undone_fixes(target, device_row)
 	p.choices["fixes"] = (p.choices["fixes"] as Array).filter(func(f): return not f in undone)
 	return p
+
+
+## The fixes the installer applies here: the fix catalogue's "auto" selectors
+## resolved on the row's traits (app/data/fixes.json), so every handheld with
+## the shared part gets them; rows without traits (tests, old tables) use
+## their "fixes" list.
+static func auto_fixes_for(device_row: Dictionary) -> Array:
+	if device_row.get("traits") is Dictionary:
+		return Traits.auto_fixes(device_row)
+	return (device_row.get("fixes", []) as Array).duplicate() if device_row.get("fixes", []) is Array else []
 
 
 ## Fixes the user undid on the Fixes page on this handheld (fixes.cfg): repair,
@@ -96,7 +107,7 @@ static func xess_capable(device_row: Dictionary) -> bool:
 
 ## Recommended choices for this device and system.
 static func defaults(target: Dictionary, device_row: Dictionary, prefs: Dictionary) -> Dictionary:
-	var fixes: Array = device_row.get("fixes", []) if device_row.get("fixes", []) is Array else []
+	var fixes: Array = auto_fixes_for(device_row)
 	return {
 		"startup": "gamecove" if bool(target.get("supported", false)) else "desktop",
 		"steam_mode": "silent",
