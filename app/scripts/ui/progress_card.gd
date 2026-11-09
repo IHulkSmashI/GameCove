@@ -162,7 +162,8 @@ func _render() -> void:
 	rare_box.visible = has_ach and not r.is_empty()
 	battery_row.visible = battery_left != ""
 	battery_label.text = battery_left
-	visible = has_ach or battery_left != ""
+	# No game (the empty home's welcome picture sits here): no card.
+	visible = (has_ach or battery_left != "") and not game.is_empty()
 	if has_ach:
 		var got := int(data.get("unlocked", 0))
 		var pct := roundi(100.0 * got / total)
