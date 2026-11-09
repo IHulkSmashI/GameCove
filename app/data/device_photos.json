@@ -46,12 +46,13 @@
   "AYANEO": {
    "image_prefixes": [
     "https://ayaneo-1305909189.cos.accelerate.myqcloud.com/",
-    "https://ayaneo-1305909189.cos.ap-guangzhou.myqcloud.com/"
+    "https://ayaneo-1305909189.cos.ap-guangzhou.myqcloud.com/",
+    "https://cdn.ayaneo.com/ayaneo/img/product/"
    ],
    "page_domains": [
     "ayaneo.com"
    ],
-   "note": "AYANEO's own Tencent COS bucket, used by ayaneo.com"
+   "note": "AYANEO's own Tencent COS bucket and its cdn.ayaneo.com product-image folder, both used by ayaneo.com"
   },
   "Acer": {
    "image_prefixes": [
@@ -96,12 +97,13 @@
   },
   "ASUS": {
    "image_prefixes": [
-    "https://dlcdnwebimgs.asus.com/files/media/"
+    "https://dlcdnwebimgs.asus.com/files/media/",
+    "https://dlcdnwebimgs.asus.com/gain/"
    ],
    "page_domains": [
     "asus.com"
    ],
-   "note": "ASUS's own image CDN; only the product-page media folders (files/media/), where rog.asus.com keeps its official renders"
+   "note": "ASUS's own image CDN; only the product-page media folders (files/media/), where rog.asus.com keeps its official renders, and the gallery images (gain/) of rog.asus.com's Gallery tabs"
   },
   "Valve": {
    "image_prefixes": [
@@ -118,7 +120,8 @@
   "author": "Liam Dawe/GamingOnLinux (PNG version by VulcanSphere)",
   "license": "CC BY-SA 4.0",
   "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Steam_Deck_(front).png"
+  "page_url": "https://commons.wikimedia.org/wiki/File:Steam_Deck_(front).png",
+  "view": "front"
  },
  "steam-deck-oled": {
   "maker_image": {
@@ -126,7 +129,8 @@
    "page_url": "https://www.steamdeck.com/en/press",
    "maker": "Valve",
    "checked": "2026-11-09",
-   "note": "Press-kit front render (1.7 MB PNG); replaces a dark room photo."
+   "note": "Press-kit front render (1.7 MB PNG); replaces a dark room photo.",
+   "view": "front"
   }
  },
  "asus-rog-ally": {
@@ -135,16 +139,19 @@
    "page_url": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-ally-2023/",
    "maker": "ASUS",
    "checked": "2026-11-09",
-   "note": "Official front render; replaces a room photo."
+   "note": "Official front render; replaces a room photo.",
+   "view": "front"
   }
  },
  "asus-rog-ally-x": {
-  "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 235.jpg",
-  "author": "RuinDig/Yuki Uchida",
-  "license": "CC BY 4.0",
-  "license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_235.jpg",
-  "note": "Show-floor unit, Tokyo Game Show 2024."
+  "maker_image": {
+   "url": "https://dlcdnwebimgs.asus.com/gain/F12D7B4D-DC78-4228-8426-D2C474B7BD0D/w1600/fwebp",
+   "page_url": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-ally-x-2024/gallery/",
+   "maker": "ASUS",
+   "checked": "2026-11-09",
+   "note": "Head-on gallery render (1600 px rendition of the page's own product image); replaces an angled show-floor photo.",
+   "view": "front"
+  }
  },
  "asus-rog-xbox-ally": {
   "maker_image": {
@@ -152,7 +159,8 @@
    "page_url": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-xbox-ally-2025/",
    "maker": "ASUS",
    "checked": "2026-11-09",
-   "note": "Official front render; replaces a store demo photo with signage."
+   "note": "Official front render; replaces a store demo photo with signage.",
+   "view": "front"
   }
  },
  "asus-rog-xbox-ally-x": {
@@ -161,7 +169,8 @@
    "page_url": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-xbox-ally-x-2025/",
    "maker": "ASUS",
    "checked": "2026-11-09",
-   "note": "Official front render; replaces a store demo photo with signage."
+   "note": "Official front render; replaces a store demo photo with signage.",
+   "view": "front"
   }
  },
  "asus-rog-xbox-ally-x20": {
@@ -170,7 +179,8 @@
    "page_url": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-xbox-ally-x20-2026/",
    "maker": "ASUS",
    "checked": "2026-11-09",
-   "note": "The X20's own front render (translucent shell); replaces the Xbox Ally X store photo it borrowed."
+   "note": "The X20's own front render (translucent shell); replaces the Xbox Ally X store photo it borrowed.",
+   "view": "front"
   }
  },
  "lenovo-legion-go": {
@@ -179,7 +189,8 @@
    "page_url": "https://www.lenovo.com/us/en/p/handheld/legion-go/len106g0001",
    "maker": "Lenovo",
    "checked": "2026-11-09",
-   "note": "Replaces a show-floor photo with stands and signage in front of the device."
+   "note": "Replaces a show-floor photo with stands and signage in front of the device.",
+   "view": "front"
   }
  },
  "msi-claw-a1m": {
@@ -188,7 +199,8 @@
    "page_url": "https://www.msi.com/Handheld/Claw-A1MX/Gallery",
    "maker": "MSI",
    "checked": "2026-11-09",
-   "note": "Replaces a room photo where the Claw filled a fifth of the frame."
+   "note": "Replaces a room photo where the Claw filled a fifth of the frame.",
+   "view": "front"
   }
  },
  "onexplayer-onexfly-f1": {
@@ -197,7 +209,8 @@
    "page_url": "https://onexplayerstore.com/products/onexfly-f1-pro-wolrd-s-first-amd-ai-370-oled-144hz-gaming-handheld-console",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "The F1 and F1 Pro share one shell. Replaces a dim show-floor photo with the screen off."
+   "note": "The F1 and F1 Pro share one shell. Replaces a dim show-floor photo with the screen off.",
+   "view": "front"
   }
  },
  "onexplayer-onexfly-f1-pro": {
@@ -205,7 +218,8 @@
    "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/onexfly-f1-pro-black.webp?v=1766717233",
    "page_url": "https://onexplayerstore.com/products/onexfly-f1-pro-wolrd-s-first-amd-ai-370-oled-144hz-gaming-handheld-console",
    "maker": "OneXPlayer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "onexplayer-x1-mini": {
@@ -214,7 +228,8 @@
    "page_url": "https://www.onexplayer.com/product/X1%20mini",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "Front view with the controllers on; replaces an angled photo with the keyboard cover. Dark banner: the view crops the margin."
+   "note": "Front view with the controllers on; replaces an angled photo with the keyboard cover. Dark banner: the view crops the margin.",
+   "view": "front"
   }
  },
  "onexplayer-2-pro": {
@@ -223,7 +238,8 @@
    "page_url": "https://onexplayerstore.com/products/refurbished-2-pro-8-4",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "Store front view with the product name above it; replaces a show-floor photo on a desk with cables. The 2 has no page of its own any more."
+   "note": "Store front view with the product name above it; replaces a show-floor photo on a desk with cables. The 2 has no page of its own any more.",
+   "view": "front"
   }
  },
  "onexplayer-2": {
@@ -233,7 +249,8 @@
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
    "note": "The 2 Pro is the same body as the 2.",
-   "family_of": "onexplayer-2-pro"
+   "family_of": "onexplayer-2-pro",
+   "view": "front"
   }
  },
  "aokzoe-a1": {
@@ -243,7 +260,8 @@
    "maker": "AOKZOE",
    "checked": "2026-11-09",
    "note": "The A1 Pro is the A1's body with a newer chip; the A1 has no listing of its own any more.",
-   "family_of": "aokzoe-a1-pro"
+   "family_of": "aokzoe-a1-pro",
+   "view": "front"
   }
  },
  "aokzoe-a1-pro": {
@@ -252,24 +270,29 @@
    "page_url": "https://aokzoestore.com/products/aokzoe-a1-pro",
    "maker": "AOKZOE",
    "checked": "2026-11-09",
-   "note": "Store front view (800 px); replaces a 480 x 258 show-floor photo."
+   "note": "Store front view (800 px); replaces a 480 x 258 show-floor photo.",
+   "view": "front"
   }
  },
  "ayaneo-slide": {
-  "file": "Tokyo-Game-Show-2023-Day3-2023-09-23 390.jpg",
-  "author": "RuinDig/Yuki Uchida",
-  "license": "CC BY 4.0",
-  "license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_390.jpg",
-  "note": "Show-floor unit, Tokyo Game Show 2023, screen slid up over the keyboard."
+  "maker_image": {
+   "url": "https://cdn.ayaneo.com/ayaneo/img/product/AYANEO-SLIDE/2_02.jpg?imageView2/0/format/webp/q/80",
+   "page_url": "https://www.ayaneo.com/product/AYANEO-SLIDE",
+   "maker": "AYANEO",
+   "checked": "2026-11-09",
+   "note": "Head-on studio view, screen slid up over the keyboard (the slider is the product); replaces a cluttered show-floor photo.",
+   "view": "front"
+  }
  },
  "ayaneo-3": {
-  "file": "Tokyo-Game-Show-2025 0728.jpg",
-  "author": "RuinDig/Yuki Uchida",
-  "license": "CC BY 4.0",
-  "license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2025_0728.jpg",
-  "note": "Angled show-floor shot, Tokyo Game Show 2025."
+  "maker_image": {
+   "url": "https://ayaneo-1305909189.cos.accelerate.myqcloud.com/ayaneo_com/image/product/2024/AYANEO3/11-1.png?imageMogr2/format/webp",
+   "page_url": "https://www.ayaneo.com/product/AYANEO-3",
+   "maker": "AYANEO",
+   "checked": "2026-11-09",
+   "note": "Official front render; replaces an angled show-floor photo with signage.",
+   "view": "front"
+  }
  },
  "_manual": {
   "_how": "Each video below came up under YouTube's Creative Commons filter, but YouTube blocks scripted access from servers (GitHub Actions and our build box get 'confirm you're not a bot'), so neither the license nor a frame can be fetched automatically. To use one: open it, check the description says 'Creative Commons Attribution license (reuse allowed)', grab a clean front frame, upload it to Commons with {{From YouTube}} and {{YouTube CC-BY}} so it gets a license review, then add a normal Commons entry. Steps in docs/DEVICES.md.",
@@ -479,7 +502,8 @@
    "url": "https://p1-ofp.static.pub//fes/cms/2025/08/06/ljumrkg2mzb2wlpur3x44pqtqt5upu462137.jpg",
    "page_url": "https://www.lenovo.com/us/en/p/handheld/legion-go-gen-2/83n0000aus",
    "maker": "Lenovo",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "lenovo-legion-go-s-z1e": {
@@ -487,7 +511,8 @@
    "url": "https://p1-ofp.static.pub//fes/cms/2024/12/04/ba08bc863lb0ngtypbj9n1y574geir402620.png",
    "page_url": "https://www.lenovo.com/us/en/p/handheld/legion-go-s-gen-1/83n60000us",
    "maker": "Lenovo",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "msi-claw-8-ex": {
@@ -495,7 +520,8 @@
    "url": "https://asset-us-store.msi.com/image/cache/catalog/Pd_page/Handheld/CLAW8EX/CLAW8EX-1-1024x1024.png",
    "page_url": "https://us-store.msi.com/Claw-8-EX-AI-CG3EM-024US",
    "maker": "MSI",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "msi-claw-8-ai-plus": {
@@ -503,16 +529,19 @@
    "url": "https://asset-us-store.msi.com/image/cache/catalog/Pd_page/Handheld/CLAW8A/CLAWAI8-1-1024x1024.png",
    "page_url": "https://us-store.msi.com/Claw-8-A2VM-001US",
    "maker": "MSI",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "msi-claw-7-ai-plus": {
   "maker_image": {
-   "url": "https://th-store.msi.com/cdn/shop/files/1024_1_1bdc3016-ffba-4a42-93d4-42d00a50cbc0.png?v=1747379974",
-   "page_url": "https://th-store.msi.com/products/msi-claw-7-ai-a2vm-009th",
+   "url": "https://storage-asset.msi.com/global/picture/product/product_1777259637bbaf6b7fa643bebc2c492c5a4436365b.webp",
+   "page_url": "https://www.msi.com/Handheld/Claw-A1MX/Gallery",
    "maker": "MSI",
    "checked": "2026-11-09",
-   "note": "The store's first image carries award and Copilot+ badges; this one is the same render without them."
+   "note": "The Claw 7 AI+ uses the Claw A1M's body; MSI's only head-on Claw 7 AI+ renders carry award and Copilot+ badges, and its clean one is angled.",
+   "family_of": "msi-claw-a1m",
+   "view": "front"
   }
  },
  "msi-claw-a8": {
@@ -520,7 +549,8 @@
    "url": "https://asset-us-store.msi.com/image/cache/catalog/Pd_page/Handheld/CLAWA8BZ2EMW/CLAWBZ2EMW-1-1024x1024.png",
    "page_url": "https://us-store.msi.com/Claw-A8-BZ2EM-070US",
    "maker": "MSI",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "onexplayer-x1-intel": {
@@ -528,7 +558,8 @@
    "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/4_4ea280a7-79dc-4f9d-ab9d-6d1ba4b168ca.png?v=1756115881",
    "page_url": "https://onexplayerstore.com/products/x1-155h",
    "maker": "OneXPlayer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "onexplayer-x1-pro": {
@@ -537,7 +568,8 @@
    "page_url": "https://www.onexplayer.com/product/X1%20Pro",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "The official site's front view; replaces the store's dark hero shot."
+   "note": "The official site's front view; replaces the store's dark hero shot.",
+   "view": "front"
   }
  },
  "onexplayer-g1-amd": {
@@ -545,7 +577,9 @@
    "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/ONEXPLAYERG1Ultimategaminghandheldlaptop-2.jpg?v=1763625246",
    "page_url": "https://onexplayerstore.com/products/onexplayer-g1-amd-ryzen-ai-9-hx-370-ultimate-gaming-handheld-console-versatile-laptop",
    "maker": "OneXPlayer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "best-available",
+   "view_note": "No head-on G1 image on onexplayer.com or onexplayerstore.com; this open-clamshell store shot is the cleanest."
   }
  },
  "onexplayer-3": {
@@ -554,7 +588,9 @@
    "page_url": "https://www.onexplayer.com/product/ONEXPLAYER%203",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "The store's images are text-heavy promo cards; this is the official site's front view."
+   "note": "The store's images are text-heavy promo cards; this is the official site's front view.",
+   "view": "best-available",
+   "view_note": "No flat head-on image of the OneXPlayer 3 exists on onexplayer.com, onexplayerstore.com or the maker's Amazon listing (all hands, angles or promo cards); this is the official front view."
   }
  },
  "onexplayer-x2-mini": {
@@ -563,7 +599,9 @@
    "page_url": "https://onexplayerstore.com/products/onexplayer-x2-mini-with-intel%C2%AE-arc%E2%84%A2-g3-extreme-8-8-oled-3-in-1-gaming-handheld",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "Replaces the 'Page_1' promo card (big title text, hands)."
+   "note": "Replaces the 'Page_1' promo card (big title text, hands).",
+   "view": "best-available",
+   "view_note": "Same body as the OneXPlayer 3; every official image (site, store, Amazon) shows hands or an angle. Front view held in hands."
   }
  },
  "onexplayer-x2-mini-pro": {
@@ -572,7 +610,9 @@
    "page_url": "https://www.onexplayer.com/product/X2%20Mini%20Pro",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "Replaces the 'Page_1' promo card; every store image of the Pro is a text card."
+   "note": "Replaces the 'Page_1' promo card; every store image of the Pro is a text card.",
+   "view": "best-available",
+   "view_note": "Same body as the OneXPlayer 3; every official image shows hands or an angle. Front view held in hands."
   }
  },
  "onexplayer-onexfly-apex": {
@@ -581,7 +621,8 @@
    "page_url": "https://www.onexplayer.com/product/%E9%A3%9E%E8%A1%8C%E5%AE%B6%20Apex",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "Front view without the store card's brand line and chip badge."
+   "note": "Front view without the store card's brand line and chip badge.",
+   "view": "front"
   }
  },
  "onexplayer-super-x": {
@@ -590,7 +631,8 @@
    "page_url": "https://www.onexplayer.com/product/Super%20X",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "Replaces a promo card with title text; the tablet from the front."
+   "note": "Replaces a promo card with title text; the tablet from the front.",
+   "view": "front"
   }
  },
  "aokzoe-a1x": {
@@ -599,7 +641,8 @@
    "page_url": "https://aokzoestore.com/products/aokzoe-a1x",
    "maker": "AOKZOE",
    "checked": "2026-11-09",
-   "note": "Fills the frame better than the first store image."
+   "note": "Fills the frame better than the first store image.",
+   "view": "front"
   }
  },
  "ayaneo-2s": {
@@ -607,7 +650,8 @@
    "url": "https://ayaneo-1305909189.cos.accelerate.myqcloud.com/ayaneo_cn/image/home_page/2024/A5.png?imageMogr2/format/webp",
    "page_url": "https://www.ayaneo.com/product/AYANEO-2S",
    "maker": "AYANEO",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "ayaneo-2": {
@@ -615,7 +659,8 @@
    "url": "https://ayaneo-1305909189.cos.accelerate.myqcloud.com/ayaneo_cn/image/home_page/2024/xin4.jpg?imageMogr2/format/webp",
    "page_url": "https://www.ayaneo.com/product/AYANEO-2",
    "maker": "AYANEO",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "ayaneo-kun": {
@@ -623,7 +668,8 @@
    "url": "https://ayaneo-1305909189.cos.accelerate.myqcloud.com/ayaneo_cn/image/home_page/2024/Banner-05.png?imageMogr2/format/webp",
    "page_url": "https://www.ayaneo.com/product/AYANEO-KUN",
    "maker": "AYANEO",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "ayaneo-air-1s": {
@@ -631,7 +677,8 @@
    "url": "https://ayaneo-1305909189.cos.accelerate.myqcloud.com/ayaneo_cn/image/home_page/2024/A9.png?imageMogr2/format/webp",
    "page_url": "https://www.ayaneo.com/product/AYANEOAIR1S",
    "maker": "AYANEO",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "ayaneo-air-plus": {
@@ -639,7 +686,8 @@
    "url": "https://ayaneo-1305909189.cos.accelerate.myqcloud.com/ayaneo_cn/image/home_page/2024/airplus-1.jpg?imageMogr2/format/webp",
    "page_url": "https://www.ayaneo.com/product/AYANEO-AIR-Plus",
    "maker": "AYANEO",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "ayaneo-flip": {
@@ -647,7 +695,8 @@
    "url": "https://ayaneo-1305909189.cos.accelerate.myqcloud.com/ayaneo_cn/image/home_page/2024/Banner-03.jpg?imageMogr2/format/webp",
    "page_url": "https://www.ayaneo.com/product/AYANEO-FLIP-DS",
    "maker": "AYANEO",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "ayaneo-flip-1s-ds": {
@@ -655,7 +704,8 @@
    "url": "https://ayaneo-1305909189.cos.accelerate.myqcloud.com/ayaneo_com/image/product/2025/AYANEO_FLIP_1S_DS_20250710/20250902-140805.jpg?imageMogr2/format/webp",
    "page_url": "https://www.ayaneo.com/product/AYANEO-Flip-1S-DS",
    "maker": "AYANEO",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "acer-predator-atlas-8": {
@@ -664,16 +714,18 @@
    "page_url": "https://store.acer.com/en-gb/predator-atlas-8-handheld-pa08-i51-black-nh-u7xek-001",
    "maker": "Acer",
    "checked": "2026-11-09",
-   "note": "Without the store's resize parameters: 1000 x 1000 instead of 500 x 500."
+   "note": "Without the store's resize parameters: 1000 x 1000 instead of 500 x 500.",
+   "view": "front"
   }
  },
  "acer-nitro-blaze-7": {
   "maker_image": {
-   "url": "https://static2-ecemea.acer.com/media/catalog/product/a/c/acer-nitro-blaze-7-gn771-wp-black-red-01_1.jpg",
+   "url": "https://images.acer.com/is/image/acer/acer-nitro-blaze-7-gn771-wp-black-red-01?wid=1600",
    "page_url": "https://store.acer.com/en-gb/acer-nitro-blaze-acer-nitro-blaze-7-handheld-gn771-08hs7-black-dh-e4jem-001",
    "maker": "Acer",
    "checked": "2026-11-09",
-   "note": "The only straight front view Acer publishes (500 x 500); the newsroom render is angled with a second unit."
+   "note": "The store's front view from Acer's own image server at 1600 px (the store page shows it at 500 px); the newsroom render is angled with a second unit.",
+   "view": "front"
   }
  },
  "acer-nitro-blaze-8": {
@@ -682,7 +734,9 @@
    "page_url": "https://news.acer.com/acer-expands-handheld-gaming-portfolio-with-new-nitro-blaze-8-and-nitro-blaze-11",
    "maker": "Acer",
    "checked": "2026-11-09",
-   "note": "Replaces a 375 x 210 promo banner."
+   "note": "Replaces a 375 x 210 promo banner.",
+   "view": "best-available",
+   "view_note": "Acer publishes only tilted renders of the Blaze 8 (news.acer.com, acer.com); not sold on Acer's store or Amazon US."
   }
  },
  "acer-nitro-blaze-11": {
@@ -691,7 +745,9 @@
    "page_url": "https://news.acer.com/acer-expands-handheld-gaming-portfolio-with-new-nitro-blaze-8-and-nitro-blaze-11",
    "maker": "Acer",
    "checked": "2026-11-09",
-   "note": "Replaces a 375 x 210 promo banner; shown with its controllers detached."
+   "note": "Replaces a 375 x 210 promo banner; shown with its controllers detached.",
+   "view": "best-available",
+   "view_note": "Acer publishes only tilted renders of the Blaze 11 (news.acer.com, acer.com); not sold on Acer's store or Amazon US."
   }
  },
  "lenovo-legion-go-2-z2": {
@@ -700,7 +756,8 @@
    "page_url": "https://www.lenovo.com/us/en/p/handheld/legion-go-gen-2/83n0000aus",
    "maker": "Lenovo",
    "checked": "2026-11-09",
-   "note": "Same body as the Legion Go 2."
+   "note": "Same body as the Legion Go 2.",
+   "view": "front"
   }
  },
  "lenovo-legion-go-s-z2go": {
@@ -709,7 +766,8 @@
    "page_url": "https://www.lenovo.com/us/en/p/handheld/legion-go-s-gen-1/83n60000us",
    "maker": "Lenovo",
    "checked": "2026-11-09",
-   "family_of": "lenovo-legion-go-s-z1e"
+   "family_of": "lenovo-legion-go-s-z1e",
+   "view": "front"
   }
  },
  "onexplayer-x1-amd": {
@@ -718,7 +776,8 @@
    "page_url": "https://onexplayerstore.com/products/x1-155h",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "family_of": "onexplayer-x1-intel"
+   "family_of": "onexplayer-x1-intel",
+   "view": "front"
   }
  },
  "onexplayer-g1-intel": {
@@ -727,7 +786,9 @@
    "page_url": "https://onexplayerstore.com/products/onexplayer-g1-amd-ryzen-ai-9-hx-370-ultimate-gaming-handheld-console-versatile-laptop",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "family_of": "onexplayer-g1-amd"
+   "family_of": "onexplayer-g1-amd",
+   "view": "best-available",
+   "view_note": "Same body as the G1 AMD; see there."
   }
  },
  "gpd-win-4": {
@@ -736,7 +797,8 @@
    "page_url": "https://www.gpd.hk/gpdwin42025",
    "maker": "GPD",
    "checked": "2026-11-09",
-   "note": "Front view from the WIN 4 2025 page; every WIN 4 (6800U to HX 370) has this body."
+   "note": "Front view from the WIN 4 2025 page; every WIN 4 (6800U to HX 370) has this body.",
+   "view": "front"
   }
  },
  "gpd-win-mini": {
@@ -745,7 +807,9 @@
    "page_url": "https://www.gpd.hk/gpdwinmini2025",
    "maker": "GPD",
    "checked": "2026-11-09",
-   "note": "Open, from the front; the WIN Mini 2024 and 2025 share this body."
+   "note": "Open, from the front; the WIN Mini 2024 and 2025 share this body.",
+   "view": "best-available",
+   "view_note": "gpd.hk's WIN Mini pages only show the device held in hands or angled; this is its front view."
   }
  },
  "gpd-win-max-2": {
@@ -754,7 +818,8 @@
    "page_url": "https://www.gpd.hk/gpdwinmax2",
    "maker": "GPD",
    "checked": "2026-11-09",
-   "note": "Open, from the front; the 2023-2025 Max 2 refreshes share this body."
+   "note": "Open, from the front; the 2023-2025 Max 2 refreshes share this body.",
+   "view": "front"
   }
  },
  "gpd-win-5": {
@@ -762,7 +827,8 @@
    "url": "https://img.website.xin/contents/sitefiles3601/18006016/images/11443996.png",
    "page_url": "https://www.gpd.hk/gpdwin56773453f",
    "maker": "GPD",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "zotac-zone": {
@@ -770,7 +836,8 @@
    "url": "https://www.zotacstore.com/media/catalog/product/z/g/zgc-g1a1w-01-image02_0.jpg",
    "page_url": "https://www.zotacstore.com/us/zone-handheld-gaming-console-open-box",
    "maker": "ZOTAC",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "view": "front"
   }
  },
  "orangepi-neo": {
@@ -778,7 +845,9 @@
    "url": "https://forum.manjaro.org/uploads/default/original/3X/8/f/8fa8b3e6981e02cbde167a4f33144ece6553058d.jpeg",
    "page_url": "https://forum.manjaro.org/t/development-q-a-orangepi-neo-01/156450",
    "maker": "Orange Pi",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "Kept: orangepi.org still doesn't load (2026-11-09, also in a browser) and Orange Pi has no store listing for the Neo, so the official render from Manjaro's development thread stays.",
+   "view": "front"
   }
  },
  "msi-claw-family": {
