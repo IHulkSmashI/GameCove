@@ -190,8 +190,8 @@ func _reread_affected(written: Array) -> Array:
 	for c in written:
 		for a in c.affects:
 			var o = _controls.get(a)
-			if o == null or skip.has(a) or not o.available:
-				continue
+			if o == null or skip.has(a):
+				continue   # unavailable ones too: the write may be what makes them usable
 			skip[a] = true
 			var before: Variant = o.value
 			var shape := [o.available, o.min_value, o.max_value, o.options.size()]

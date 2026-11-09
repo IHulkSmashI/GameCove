@@ -65,7 +65,10 @@ func _c(reg: Node, id: String) -> RefCounted:
 
 func _w(reg: Node, id: String, v: Variant) -> bool:
 	var c := _c(reg, id)
-	return c != null and c.write(v)
+	var done: bool = c != null and c.write(v)
+	if done:
+		reg._reread_affected([c])   # what Controls does after a write (Control.affects)
+	return done
 
 
 func _avail(reg: Node, id: String) -> bool:
@@ -374,12 +377,14 @@ func test_claw_live_hid_msi_leds() -> void:
 	var reg: Node = t[0]
 	var f: RefCounted = t[1]
 	var n := "/sys/class/leds/go:rgb:joystick_rings"
-	for id in ["controller.led_effect", "controller.led_color", "controller.led_brightness", "controller.led_speed"]:
+	for id in ["controller.led_effect", "controller.led_color", "controller.led_brightness"]:
 		ok(_avail(reg, id), id + " available (" + _reason(reg, id) + ")")
+	# a still or dark ring has no speed: greyed with a reason, not a slider whose writes fail
+	# (the end-to-end suite pushed it and got "didn't work")
+	eq(_reason(reg, "controller.led_speed"), Provider.R_LED_STILL, "no speed while off / solid")
 	eq(_reason(reg, "controller.led_color_2"), "This handheld's lights have one zone")
 	eq(_opt_values(reg, "controller.led_effect"), ["off", "solid", "pulse", "rainbow", "spiral", "frostfire"])
 	eq(_value(reg, "controller.led_effect"), "off", "enabled=false is dark")
-	eq(_value(reg, "controller.led_speed"), 50.0, "10 of 0-20")
 	# turning on needs enabled=true (root only): the root action does it
 	ok(_w(reg, "controller.led_color", "#ff0000"), "red")
 	eq(f.pkexec_calls.size(), 1, "enabled is root-only: one root action")
@@ -400,6 +405,8 @@ func test_claw_live_hid_msi_leds() -> void:
 	# speed is root-only
 	ok(_w(reg, "controller.led_brightness", 60.0), "on again, direct")
 	ok(_w(reg, "controller.led_effect", "rainbow"), "rainbow")
+	ok(_avail(reg, "controller.led_speed"), "a moving effect has a speed (re-detected after the effect)")
+	eq(_value(reg, "controller.led_speed"), 50.0, "10 of 0-20")
 	ok(_w(reg, "controller.led_speed", 100.0), "speed through the root action")
 	eq(f.read(n + "/speed"), "20")
 	eq(f.pkexec_calls.size(), 2)
@@ -431,7 +438,7 @@ func test_claw_live_brightness_is_the_file_and_speed_needs_the_helper() -> void:
 	for a in ["effect", "multi_intensity", "brightness"]:
 		FileAccess.set_unix_permissions(d + "/" + a, 438)
 	var reg2 := _setup(g, _row("msi-claw-8-ex"))
-	eq(_reason(reg2, "controller.led_speed"), Provider.R_LED_HELPER, "speed is root-only")
+	ok(_reason(reg2, "controller.led_speed") in [Provider.R_LED_HELPER, Provider.R_LED_STILL], "speed is root-only (and the ring is still)")
 	ok(_avail(reg2, "controller.led_brightness"), "brightness needs no helper")
 	reg2.free()
 

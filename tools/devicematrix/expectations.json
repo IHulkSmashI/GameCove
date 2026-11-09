@@ -1038,8 +1038,9 @@
     "note": "PowerStation per-core Online; never CoresEnabled (halves on no-SMT CPUs)"
    },
    "controller.led_speed": {
-    "available": true,
-    "note": "hid-msi speed 0-20"
+    "available": false,
+    "reason_contains": "moving effect",
+    "note": "hid-msi speed 0-20, offered once a moving effect is on (the fixture ring is monocolor)"
    },
    "controller.led_color_2": {
     "available": false,

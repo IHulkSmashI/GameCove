@@ -761,7 +761,7 @@ static func _ordinal(pct: float, options: Array) -> String:
 
 
 func _led_effect() -> RefCounted:
-	return _make({"id": "controller.led_effect", "title": "Lights", "kind": "choice", "default_value": "solid",
+	return _make({"id": "controller.led_effect", "affects": ["controller.led_speed"], "title": "Lights", "kind": "choice", "default_value": "solid",
 		"apply_order": 5, "options": _opts(["off", "solid"], EFFECT_LABELS),
 		"help": "Stick ring lighting."},
 		func(c):
@@ -908,6 +908,9 @@ func _led_brightness() -> RefCounted:
 			return be.led_apply(spec, func(ls): return absf(Leds.brightness_pct(ls[0]) - pct) <= 1.0))
 
 
+const R_LED_STILL := "Pick a moving effect first (pulse, rainbow...)"
+
+
 func _led_speed() -> RefCounted:
 	return _make({"id": "controller.led_speed", "title": "Effect speed", "kind": "slider",
 		"min_value": 0.0, "max_value": 100.0, "step": 10.0, "unit": "%", "default_value": 50.0, "apply_order": 2,
@@ -928,6 +931,10 @@ func _led_speed() -> RefCounted:
 			# speed is 0644 root on hid-msi: only the root action can set it
 			if not Leds.writable(str(n0["path"]) + "/speed") and not FileAccess.file_exists(str(ctx.get("sys_root", "")) + FIX_SET_HELPER):
 				return R_LED_HELPER
+			# a still colour has no speed: say so instead of offering a slider that can't apply
+			var eff0 := Leds.effect_of(n0)
+			if eff0 in ["off", "solid"] or Leds.kernel_effect(n0, eff0) == "":
+				return R_LED_STILL
 			return "",
 		func(_c):
 			if be.rgb_backend() == "hhd":
