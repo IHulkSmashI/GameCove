@@ -9,8 +9,11 @@
 #            nothing else runs in that first run
 #   release  only for tags v*: signs SHA256SUMS with cosign (keyless, this workflow's GitHub OIDC
 #            identity for the tag: what packaging/get-gamecove.sh verifies), then publishes the
-#            GitHub release with packaging/release-notes/<tag>.md and every file attached
+#            GitHub release with packaging/release-notes/<tag>.md: created as a draft, every file
+#            uploaded, then published, so nobody sees a release without its files
 # Every build run uploads the files as workflow artifacts.
+# Supply chain (review M6): actions are pinned by commit (tag in the comment), the Fedora container by
+# digest, and the Godot editor, its export template and Source2 (udev-hid-bpf) by sha256 below.
 name: Release
 
 on:
@@ -32,6 +35,12 @@ permissions:
 
 env:
   GODOT: "4.7.2"
+  # sha256 of Godot_v4.7.2-stable_linux.x86_64.zip and Godot_v4.7.2-stable_export_templates.tpz; both files'
+  # sha512 match godotengine/godot's own SHA512-SUMS.txt for 4.7.2-stable (checked 2026-11-09)
+  GODOT_EDITOR_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+  GODOT_TEMPLATES_SHA256: f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011
+  # Source2: udev-hid-bpf-bbaad63.tar.gz from gitlab.freedesktop.org (same bytes on two downloads, 2026-11-09)
+  UHB_SHA256: aab408afea76fab67b925225d6b4f0d28b226a9558ab6e750db79b12732e9ff8
 
 jobs:
   tag:
@@ -42,7 +51,7 @@ jobs:
       contents: write
       actions: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Tag this commit and start the release run on the tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,7 +78,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Version (spec Version; a tag must match it)
         id: version
         run: |
@@ -84,9 +93,11 @@ jobs:
         run: |
           base="https://github.com/godotengine/godot/releases/download/${GODOT}-stable"
           curl -fsSL -o godot.zip "$base/Godot_v${GODOT}-stable_linux.x86_64.zip"
+          echo "${GODOT_EDITOR_SHA256}  godot.zip" | sha256sum -c -
           unzip -q godot.zip
           mv "Godot_v${GODOT}-stable_linux.x86_64" godot
           curl -fsSL -o templates.tpz "$base/Godot_v${GODOT}-stable_export_templates.tpz"
+          echo "${GODOT_TEMPLATES_SHA256}  templates.tpz" | sha256sum -c -
           dest="$HOME/.local/share/godot/export_templates/${GODOT}.stable"
           mkdir -p "$dest"
           unzip -q -j templates.tpz templates/linux_release.x86_64 templates/version.txt -d "$dest"
@@ -129,7 +140,8 @@ jobs:
     needs: app
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    container: fedora:43
+    # fedora:43, pinned by digest (the multi-arch index; review M6)
+    container: fedora@sha256:f01112b9a1f1d0504ad962d9adfa401425033f8ab067e0a821904ebdde5b8ca5
     env:
       VERSION: ${{ needs.app.outputs.version }}
     steps:
@@ -137,15 +149,21 @@ jobs:
         run: |
           dnf -y -q install git tar gzip curl rpm-build rpmdevtools systemd-rpm-macros \
             clang llvm libbpf-devel kernel-headers squashfs-tools python3
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: app
           path: dist
+      - name: Source2 (udev-hid-bpf at the pinned commit, sha256 checked)
+        run: |
+          mkdir -p rpmbuild/SOURCES uhb
+          spectool -g -s 2 -C rpmbuild/SOURCES packaging/rpm/gamecove.spec
+          echo "${UHB_SHA256}  $(ls rpmbuild/SOURCES/udev-hid-bpf-*.tar.gz)" | sha256sum -c -
+          tar -xzf rpmbuild/SOURCES/udev-hid-bpf-*.tar.gz -C uhb --strip-components=1
       - name: Gyro HID-BPF object (for the sysext; the RPM builds its own in %build)
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          sh fixes/claw8ex-gyro/bpf/build-bpf.sh
+          UHB_SRC="$PWD/uhb" sh fixes/claw8ex-gyro/bpf/build-bpf.sh
           test -s fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o
           cp fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o dist/
       - name: RPM
@@ -156,8 +174,7 @@ jobs:
           git archive --format=tar.gz --prefix="gamecove-${VERSION}/" -o "$top/SOURCES/gamecove-${VERSION}.tar.gz" HEAD
           # Source1: the app tarball from the app job
           cp "dist/gamecove-${VERSION}-x86_64.tar.gz" "$top/SOURCES/"
-          # Source2: udev-hid-bpf at the pinned commit
-          spectool -g -s 2 -C "$top/SOURCES" packaging/rpm/gamecove.spec
+          # Source2: udev-hid-bpf, fetched and checked in the step before
           rpmbuild -ba --define "_topdir $top" packaging/rpm/gamecove.spec
           rpm -qlp "$top"/RPMS/x86_64/gamecove-*.rpm | tee rpm-files.txt
           grep -qx /usr/lib/gamecove/fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o rpm-files.txt
@@ -181,7 +198,7 @@ jobs:
         run: cp packaging/get-gamecove.sh dist/
       - name: Checksums
         run: cd dist && sha256sum -- * | tee SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: packages
           path: |
@@ -247,9 +264,12 @@ jobs:
           false) ;;
           *) case "$TAG" in v0.* | *-*) pre="--prerelease" ;; esac ;;
           esac
+          # draft first, files next, publish last (review L26): the installer never sees a release without
+          # its SHA256SUMS and signature
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --notes-file "$notes" --draft=false $pre
+            gh release edit "$TAG" --notes-file "$notes" --draft=true $pre
           else
-            gh release create "$TAG" --verify-tag --title "GameCove $TAG" --notes-file "$notes" $pre
+            gh release create "$TAG" --draft --verify-tag --title "GameCove $TAG" --notes-file "$notes" $pre
           fi
           gh release upload "$TAG" dist/* --clobber
+          gh release edit "$TAG" --draft=false
