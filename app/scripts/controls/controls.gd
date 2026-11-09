@@ -164,8 +164,11 @@ func _reread_affected(written: Array) -> Array:
 				continue
 			skip[a] = true
 			var before: Variant = o.value
+			var shape := [o.available, o.min_value, o.max_value, o.options.size()]
+			# detect too: a range follows the other setting (SPPT never under the TDP)
+			o.detect()
 			o.read()
-			if o.value != before:
+			if o.value != before or shape != [o.available, o.min_value, o.max_value, o.options.size()]:
 				out.append(a)
 	return out
 

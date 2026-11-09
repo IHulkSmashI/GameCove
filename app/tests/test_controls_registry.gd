@@ -145,12 +145,16 @@ func test_a_write_rereads_what_it_affects() -> void:
 			store["b"] = v * 2.0   # the system moves b too
 			return true))
 	reg.register(Ctl.make({"id": "power.b", "group": "power", "kind": "slider", "min_value": 0.0, "max_value": 100.0},
-		func(_c): return "", func(_c): return store["b"], func(_c, v): store["b"] = v; return true))
+		func(c):
+			c.min_value = store["a"]   # b's range follows a (SPPT never under the TDP)
+			return "",
+		func(_c): return store["b"], func(_c, v): store["b"] = v; return true))
 	reg.detect_all()
 	var seen := []
 	reg.control_changed.connect(func(id, v): seen.append([id, v]))
 	reg.set_value("power.a", 20)
 	eq(reg.value("power.b"), 40.0, "b read again after a's write")
+	eq(reg.control("power.b").min_value, 20.0, "and its range detected again")
 	ok(seen.has(["power.b", 40.0]), "and reported as changed")
 	reg.apply({"power.a": 5})
 	eq(reg.value("power.b"), 10.0, "the same through a profile apply")
