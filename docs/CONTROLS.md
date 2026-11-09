@@ -432,3 +432,27 @@ Levers (`controls/power/levers.gd`), wherever the handheld allows: TDP (hhd / st
 ### Needs real hardware
 
 See the report in the merge request: firmware acceptance of the RAPL 8 s window, amdgpu clock read-back, xe `power_profile` and `mcu_powersave` writes, Lenovo custom mode timing, deep sleep on each model.
+
+## Integration rules (hardening pass)
+
+**One owner per setting.** Where two providers could set the same thing, one Control owns it and the other path is an internal helper:
+
+| Setting | Owner (Control) | Internal helper |
+| --- | --- | --- |
+| Frame limit | `display.fps_limit` (gamescope; per game through Profiles) | `PerfProvider.set_mangohud_limit(key, fps, method)` (MangoHud's in-game limiter, next launch); Launcher's old `fps_limit` is taken over by Profiles |
+| GPU clocks | `power.gpu_min` / `power.gpu_max` (min = max is a fixed clock) | `power.gpu_clock` (steamos-manager manual clock) only where min/max can't work; otherwise "Set by GPU minimum and maximum clock" |
+| Charge limit, fan preset, TDP | `power.charge_limit`, `power.fan_mode`, `power.tdp` (all through the `Power` service) | the quick menu's direct `Power.set_*` calls are the legacy UI path to the same service; the UI wave switches them to the controls |
+| Battery care on Lenovo | `power.battery_long_life` (no Lenovo row has `charge_limit`) | |
+| Firmware mode | `power.power_mode` when power-profiles-daemon runs | `power.platform_profile` greys out ("Set by Power mode") |
+
+**apply_order bands** (higher runs first when a profile applies): power 40-101 (TDP 100, boosts 97-99, CPU 70-82, GPU 60-66, fan 49-50, Auto TDP 40-41), display 10-30 (VRR 30, refresh 20, every other display control 11, frame limit 10), perf 0-5. Controller (0-20) and audio/network (0) don't depend on the others.
+
+**needs_root** is true where the only write path is the root helper (`gamecove-fix-set`, prompt-free): `power.sppt`, `power.fppt`, `power.epp`, `power.cpu_max`, `power.fan_curve`, `power.sleep_mode`, `power.mcu_powersave`, `power.battery_long_life`, `controller.gyro_accel`. Settings that use a service first (steamos-manager, PowerStation) and the helper only as a fallback stay false.
+
+**per_game** false for everything that belongs to the device or the moment: brightness, volume, outputs, Wi-Fi/Bluetooth/airplane, night light, HDR, rotation, timers, charge limit, battery care, fan curve, sleep mode, overlay look.
+
+**Safety.** `power.sppt` / `power.fppt` never exceed devices.json `tdp.sppt_max` / `fppt_max` (else `boost_max`) and follow Handheld Daemon's formulas against the current sustained limit (`*_ratio`, `*_over`), checked again at write time (`Control.normalize`); `fixes/power-tune/ppt-limits.txt` makes the root helper refuse anything above the static ceiling. Fan curves are raised to Quiet and never fall, in the control's value too. The device matrix checks both on every handheld (`curve_problems`, facts from hhd).
+
+**Contract additions (backward compatible):** `Control.normalize` (Callable run after coerce), kind `curve` in the matrix, `Controls.apply(values, force)`, `Controls.run_on_worker(job)`, `ctx.runner` always set (`NoRunner` when missing), `Power.request_resumed()` / `refresh(after_resume)`, providers use autoloads only when `sys_root == ""`. `GAMECOVE_TEST=<part of a name>` runs a subset of the test suite.
+
+**main.gd wiring:** Fixes service (`main.fixes`), `PerfProvider.set_game` + `Controls.detect_all()` around GameSession start/end (on the Controls worker, ordered with Profiles), `Profiles.attach_session`, `Power.request_resumed()` after a sleep and `controller.*` lights re-applied 5 s later (forced).

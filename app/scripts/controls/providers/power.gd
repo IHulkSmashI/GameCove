@@ -256,7 +256,7 @@ func _boost_on() -> RefCounted:
 
 
 func _ppt(which: String) -> RefCounted:
-	var c: RefCounted = _make("power." + which, "slider", {"unit": "W", "step": 1.0, "apply_order": 98 if which == "sppt" else 97},
+	var c: RefCounted = _make("power." + which, "slider", {"unit": "W", "step": 1.0, "apply_order": 98 if which == "sppt" else 97, "needs_root": true},
 		func(c):
 			var backend := str(power.get("backend")) if power != null else "none"
 			if backend == "hhd":
@@ -378,7 +378,7 @@ func _cores() -> RefCounted:
 
 
 func _epp() -> RefCounted:
-	return _make("power.epp", "choice", {"apply_order": 70},
+	return _make("power.epp", "choice", {"apply_order": 70, "needs_root": true},
 		func(c):
 			if be.epp_files().is_empty() or be.epp_choices().is_empty():
 				return Tx.NOT_HERE
@@ -402,7 +402,7 @@ func _governor() -> RefCounted:
 
 
 func _cpu_max() -> RefCounted:
-	return _make("power.cpu_max", "slider", {"unit": "%", "step": 5.0, "max_value": 100.0, "apply_order": 72},
+	return _make("power.cpu_max", "slider", {"unit": "%", "step": 5.0, "max_value": 100.0, "apply_order": 72, "needs_root": true},
 		func(c):
 			var m: Dictionary = be.cpu_max()
 			if m.is_empty():
@@ -433,6 +433,10 @@ func _gpu_clock() -> RefCounted:
 			var m: Dictionary = be.sm_manual_clock()
 			if m.is_empty():
 				return Tx.NOT_HERE
+			# one owner for GPU clocks: min/max wherever they work (min = max is a fixed
+			# clock); steamos-manager's manual clock only where nothing else can
+			if not be.gpu_clocks().is_empty():
+				return Tx.USE_GPU_MIN_MAX
 			c.min_value = float(m["lo"])
 			c.max_value = float(m["hi"])
 			return "",
@@ -500,7 +504,7 @@ func _charge_limit() -> RefCounted:
 
 
 func _battery_long_life() -> RefCounted:
-	return _make("power.battery_long_life", "toggle", {"per_game": false},
+	return _make("power.battery_long_life", "toggle", {"per_game": false, "needs_root": true},
 		func(_c):
 			var c2: Dictionary = be.charge_types()
 			if c2.is_empty() or not "Long_Life" in c2["offered"]:
@@ -560,7 +564,7 @@ func _normalize_curve(v: Variant) -> Variant:
 
 func _fan_curve() -> RefCounted:
 	return _make("power.fan_curve", "curve", {"unit": "%", "min_value": 0.0, "max_value": 100.0, "step": 1.0, "apply_order": 49, "per_game": false,
-			"normalize": _normalize_curve},
+			"needs_root": true, "normalize": _normalize_curve},
 		func(c):
 			var st := _pstate()
 			if str(st.get("backend", "")) == "hhd":
@@ -660,7 +664,7 @@ func _battery_capacity_file() -> String:
 
 
 func _sleep_mode() -> RefCounted:
-	return _make("power.sleep_mode", "choice", {"per_game": false},
+	return _make("power.sleep_mode", "choice", {"per_game": false, "needs_root": true},
 		func(c):
 			var m: Dictionary = be.mem_sleep()
 			if m.is_empty():
@@ -677,7 +681,7 @@ func _sleep_mode() -> RefCounted:
 
 
 func _mcu() -> RefCounted:
-	return _make("power.mcu_powersave", "toggle", {"per_game": false},
+	return _make("power.mcu_powersave", "toggle", {"per_game": false, "needs_root": true},
 		func(_c):
 			if be.mcu_file() == "":
 				return Tx.NOT_HERE

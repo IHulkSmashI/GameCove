@@ -132,7 +132,6 @@ func _main(job: Callable) -> void:
 func controls() -> Array:
 	var out: Array = []
 	out.append_array(_overlay_controls())
-	out.append_array(_limiter_controls())
 	out.append_array(_lsfg_controls())
 	out.append_array(_upscale_controls())
 	out.append_array(_launch_controls())
@@ -259,31 +258,18 @@ func mangohud_layer() -> bool:
 	return false
 
 
-func _limiter_reason() -> String:
-	if not mangohud_layer():
-		return "Needs MangoHud (its Vulkan layer)"
-	return NO_GAME if game_key() == "" else ""
-
-
-func _limiter_controls() -> Array:
-	var hz: Array = _profile().get("panel_hz", [])
-	var top := float(hz[1]) if hz is Array and hz.size() == 2 else 240.0
-	return [
-		_mk({"id": "perf.mangohud_fps_limit", "title": "In-game frame limit",
-			"help": "MangoHud caps the frame rate inside the game (steadier than the screen's limit in some games). Off = 0. From the next launch.",
-			"kind": "slider", "min_value": 0.0, "max_value": top, "step": 1.0, "unit": "fps", "default_value": 0.0,
-			"apply_order": 5},
-			_limiter_reason,
-			func(): return float(_gv("fps_limit", 0.0)),
-			func(v): return _sv("fps_limit", v if v > 0.0 else null)),
-		_mk({"id": "perf.mangohud_fps_limit_method", "title": "Frame limit timing",
-			"help": "Late waits after the frame (lowest input lag); Early waits before it (smoothest frame times).",
-			"kind": "choice", "options": _opts(["late", "early"], {"late": "Lowest latency", "early": "Smoothest"}),
-			"default_value": "late", "requires": ["perf.mangohud_fps_limit"]},
-			_limiter_reason,
-			func(): return str(_gv("fps_limit_method", "late")),
-			func(v): return _sv("fps_limit_method", v)),
-	]
+## The frame limit has one owner: display.fps_limit (gamescope's limiter, applied
+## live and per game through Profiles). MangoHud's in-game limiter stays as an
+## internal helper, not a second Frame limit control: code that needs it for a
+## game (fps 0 = off; method "late" = lowest latency, "early" = smoothest)
+## calls this; env_for() then adds MANGOHUD_CONFIG at the next launch.
+func set_mangohud_limit(key: String, fps: int, method := "late") -> bool:
+	if key == "" or not mangohud_layer():
+		return false
+	var ok: bool = store.set_value(key, "fps_limit", fps if fps > 0 else null)
+	ok = store.set_value(key, "fps_limit_method", "early" if method == "early" else "late") and ok
+	game_changed(key, game() if key == game_key() else {})
+	return ok
 
 
 # ---- lsfg-vk frame generation -------------------------------------------------------
