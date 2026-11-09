@@ -59,7 +59,9 @@ sel() {
 	: >"$T/steamosctl.log"
 	rm -f "$ST/switched"
 	env PATH="$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" XDG_CONFIG_HOME="$T/home/.config" \
-		GAMECOVE_SESSIONS_DIRS="$T/sessions" GAMECOVE_BOOT_ID_FILE="$T/boot_id" sh "$SEL" "$@" >"$T/out" 2>&1
+		GAMECOVE_SESSIONS_DIRS="$T/sessions" GAMECOVE_BOOT_ID_FILE="$T/boot_id" \
+		GAMECOVE_OSTREE_BOOTED="${OSTREE_BOOTED_TEST:-$T/not-ostree}" OSTREE="$BIN/ostree" RPM_OSTREE="$BIN/rpm-ostree" \
+		sh "$SEL" "$@" >"$T/out" 2>&1
 }
 fresh() {
 	echo plasma.desktop >"$ST/desktop"
@@ -91,6 +93,44 @@ has "$UNITS/gamecove-session-guard.service" "guard$" "unit runs guard"
 sel gamecove --default --no-switch
 eqv "$(cat "$DATA/prev-desktop-session")" plasma.desktop "previous session survives a second --default"
 eqv "$(cat "$DATA/prev-login-mode")" game "previous mode survives a second --default"
+
+# --- review H4: on rpm-ostree, "boot into GameCove" waits until the booted deployment has it
+# (--apply-live only overlays the running /usr; the next boot could still be an image without it)
+cat >"$BIN/ostree" <<EOF
+#!/bin/sh
+[ "\$*" = "admin --print-current-dir" ] && [ -f "$T/ostree-ok" ] && echo "$T/deploy" && exit 0
+exit 1
+EOF
+cat >"$BIN/rpm-ostree" <<EOF
+#!/bin/sh
+[ "\$*" = "status --booted --json" ] && cat "$T/rpmostree.json"
+EOF
+chmod +x "$BIN/ostree" "$BIN/rpm-ostree"
+touch "$T/ostree-booted" "$T/ostree-ok"
+mkdir -p "$T/deploy/usr"
+OSTREE_BOOTED_TEST="$T/ostree-booted"
+fresh
+sel gamecove --default --no-switch
+eqv "$?" 4 "staged only (booted deployment has no gamecove.desktop): not the boot default yet"
+eqv "$(cat "$ST/desktop")" plasma.desktop "the boot default is left alone"
+eqv "$(cat "$ST/mode")" game "the boot mode is left alone"
+has "$T/out" "restart" "says to restart first"
+mkdir -p "$T/deploy$T/sessions"
+touch "$T/deploy$T/sessions/gamecove.desktop"
+sel gamecove --default --no-switch
+eqv "$?" 0 "after the reboot into it: the boot default"
+eqv "$(cat "$ST/desktop")" gamecove.desktop "boot default set once booted"
+rm -f "$T/ostree-ok"
+fresh
+echo '{"deployments":[{"booted":true,"requested-local-packages":[],"packages":["steam"]}]}' >"$T/rpmostree.json"
+sel gamecove --default --no-switch
+eqv "$?" 4 "no ostree answer, rpm-ostree's booted deployment lacks gamecove: wait"
+echo '{"deployments":[{"booted":true,"requested-local-packages":["gamecove-0.2.0-1.fc43.x86_64"]}]}' >"$T/rpmostree.json"
+sel gamecove --default --no-switch
+eqv "$?" 0 "rpm-ostree lists gamecove in the booted deployment"
+sel gamecove
+eqv "$?" 0 "just this time needs no reboot (the live /usr has it)"
+unset OSTREE_BOOTED_TEST
 
 # --- every desktop path names the real desktop
 sel desktop
@@ -222,6 +262,34 @@ touch "$T/sets-ignored"
 sel gamecove --default --no-switch
 [ "$?" -ne 0 ] && ok || bad "--default fails when steamosctl doesn't take it (apply-choices keeps it pending)"
 rm -f "$T/sets-ignored"
+
+# --- review H4: SDDM shows its login screen when the autologin session file is missing; the root
+# guard (copied into /etc by the SteamOS installer) points autologin back at Steam before that
+AG="$REPO/session/gamecove-autologin-guard"
+AR="$T/agroot"
+rm -rf "$AR"
+mkdir -p "$AR/etc/sddm.conf.d" "$AR/usr/share/wayland-sessions"
+touch "$AR/usr/share/wayland-sessions/gamescope-wayland.desktop" "$AR/usr/share/wayland-sessions/plasma.desktop"
+printf '[Autologin]\nSession=gamecove.desktop\n' >"$AR/etc/sddm.conf.d/zz-holo-autologin.conf"
+printf '[Autologin]\nSession=gamecove.desktop\n' >"$AR/etc/sddm.conf.d/zzt-holo-temp-login.conf"
+printf '[Autologin]\nUser=deck\n' >"$AR/etc/sddm.conf.d/steamos.conf"
+touch "$AR/usr/share/wayland-sessions/gamecove.desktop"
+GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
+eqv "$?" 0 "autologin guard runs"
+has "$AR/etc/sddm.conf.d/zz-holo-autologin.conf" "^Session=gamecove.desktop$" "GameCove there: autologin left alone"
+rm "$AR/usr/share/wayland-sessions/gamecove.desktop"
+GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
+has "$AR/etc/sddm.conf.d/zz-holo-autologin.conf" "^Session=gamescope-wayland.desktop$" "GameCove gone: autologin starts Steam Gaming Mode"
+has "$AR/etc/sddm.conf.d/zzt-holo-temp-login.conf" "^Session=gamescope-wayland.desktop$" "the temporary autologin too"
+has "$AR/etc/sddm.conf.d/zz-holo-autologin.conf" "^\[Autologin\]$" "the rest of the file kept"
+eqv "$(cat "$AR/etc/sddm.conf.d/steamos.conf")" "$(printf '[Autologin]\nUser=deck')" "other files untouched"
+printf '[Autologin]\nSession=plasma.desktop\n' >"$AR/etc/sddm.conf.d/zz-holo-autologin.conf"
+GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
+has "$AR/etc/sddm.conf.d/zz-holo-autologin.conf" "^Session=plasma.desktop$" "only ever rewrites GameCove's entry"
+rm "$AR/usr/share/wayland-sessions/gamescope-wayland.desktop"
+printf '[Autologin]\nSession=gamecove\n' >"$AR/etc/sddm.conf.d/zz-holo-autologin.conf"
+GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
+has "$AR/etc/sddm.conf.d/zz-holo-autologin.conf" "^Session=plasma.desktop$" "no Steam session: the desktop"
 
 # no steamosctl: guard/session-start are no-ops, switches explain
 env PATH="$BIN:$PATH" HOME="$T/home" STEAMOSCTL=/nonexistent sh "$SEL" guard

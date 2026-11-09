@@ -193,7 +193,9 @@ func test_uninstall_restores_steam_and_cleans_up() -> void:
 	_cleanup()
 
 
-func test_optional_failures_continue() -> void:
+## Review H4: a failed session restore stops the uninstall before the package goes, so the boot
+## default never names a removed gamecove.desktop.
+func test_failed_session_restore_stops_the_uninstall() -> void:
 	var d := _dir("optional")
 	_make_live(d)
 	var t := F.target("bazzite", {"installed": true})
@@ -202,8 +204,9 @@ func test_optional_failures_continue() -> void:
 	var results := []
 	s.finished.connect(func(a, ok_, m): results.append([a, ok_, m]))
 	s.start("uninstall", _choices(t))
-	eq(results[-1], ["uninstall", true, ""], "a failed session restore doesn't stop the removal")
-	eq(s.results[1], "skipped")
+	eq(results[-1], ["uninstall", false, "no_password"], "a failed session restore stops the removal")
+	eq(s.results[1], "failed")
+	ok(not s.results.slice(2).has("ok"), "nothing after it ran (the package stays)")
 	_cleanup()
 
 

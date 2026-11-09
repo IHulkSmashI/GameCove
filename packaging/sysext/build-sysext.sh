@@ -119,6 +119,9 @@ install -Dm0644 "$REPO/session/gamescope-session-plus/sessions.d/gamecove" "$tre
 install -Dm0644 "$REPO/session/wayland-sessions/gamecove.desktop" "$tree/usr/share/wayland-sessions/gamecove.desktop"
 install -Dm0644 "$REPO/session/systemd/gamescope-session-plus@gamecove.service.d/10-gamecove.conf" \
 	"$tree/usr/lib/systemd/user/gamescope-session-plus@gamecove.service.d/10-gamecove.conf"
+# the root autologin guard: the installer copies both into /etc (review H4), never enabled from here
+install -Dm0755 "$REPO/session/gamecove-autologin-guard" "$tree/usr/lib/gamecove/session/gamecove-autologin-guard"
+install -Dm0644 "$REPO/session/systemd/gamecove-autologin-guard.service" "$tree/usr/lib/gamecove/session/gamecove-autologin-guard.service"
 install -Dm0644 "$REPO/packaging/polkit/io.github.ihulksmashi.gamecove.policy" \
 	"$tree/usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy"
 install -Dm0644 "$REPO/LICENSE" "$tree/usr/share/licenses/gamecove/LICENSE"

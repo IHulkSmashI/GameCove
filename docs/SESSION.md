@@ -231,6 +231,32 @@ helper of our own:
 
 `gamecove-session-select steam|gamecove|desktop [--default] | restore | guard` wraps this.
 
+### The boot default never names a missing session (review H4)
+
+SDDM looks the autologin `Session=` up in its session folders; if the file isn't
+there it logs "Unable to find autologin session entry" and shows the login screen
+(`src/daemon/Display.cpp`), which on a handheld is a password prompt with no
+keyboard. The login guard above can't help, it runs after a login. So:
+
+- **Bazzite:** `rpm-ostree install --apply-live` only overlays the running `/usr`;
+  the deployment that boots next is staged. `gamecove-session-select gamecove
+  --default` refuses (exit 4) until the booted deployment holds `gamecove.desktop`
+  (`ostree admin --print-current-dir`, else `rpm-ostree status --booted --json`),
+  so the installer's `STARTUP=gamecove` stays in `pending-choices` and the login
+  unit applies it after the reboot. Each ostree deployment has its own `/etc`, so a
+  rollback boots the `/etc` from before, which never named GameCove.
+- **Uninstall:** the installer's `session_restore` and `fix_remove_all` must succeed
+  before the package goes (a failure stops the uninstall); `install.sh --uninstall`
+  runs `gamecove-session-select restore` and `gamecove-fix --remove-all` first and
+  stops if either fails.
+- **SteamOS:** the installer copies `gamecove-autologin-guard` and its unit out of
+  the sysext into `/etc/gamecove/` and `/etc/systemd/system/` (listed in
+  `/etc/atomic-update.conf.d/gamecove.conf`). It runs as root after
+  `systemd-sysext.service` and before the display manager, and if an autologin entry
+  names `gamecove.desktop` while no session folder holds it, points it at
+  `gamescope-wayland.desktop` (Steam Gaming Mode), else the desktop. Uninstall
+  removes it.
+
 ### If GameCove won't let you out
 
 - **Crash loop:** the session client counts unclean exits in a row (a non-zero

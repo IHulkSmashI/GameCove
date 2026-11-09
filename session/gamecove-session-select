@@ -44,6 +44,9 @@ GUARD_COPY="$DATA/gamecove-session-guard"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_NAME="gamecove-session-guard.service"
 BOOT_ID_FILE="${GAMECOVE_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}"
+OSTREE_BOOTED="${GAMECOVE_OSTREE_BOOTED:-/run/ostree-booted}"
+OSTREE="${OSTREE:-ostree}"
+RPM_OSTREE="${RPM_OSTREE:-rpm-ostree}"
 
 die() {
 	echo "gamecove-session-select: $*" >&2
@@ -122,6 +125,28 @@ sm_set() { # <what: default-desktop-session | default-login-mode> <value>
 	[ "$got" = "$2" ] && return 0
 	echo "gamecove-session-select: steamosctl set-$1 $2 didn't take (reads back '$got')" >&2
 	return 1
+}
+
+# Review H4: on rpm-ostree (Bazzite) `rpm-ostree install --apply-live` puts GameCove in the
+# running /usr through a transient overlay, but the deployment that boots next is only
+# staged: power loss, a failed finalize or a rollback boots an image without
+# gamecove.desktop. Booting into GameCove is only set once the booted deployment itself
+# holds the session file (ostree admin --print-current-dir is that deployment's root; the
+# overlay isn't in it), else once rpm-ostree lists gamecove in the booted deployment.
+in_booted_image() {
+	[ -e "$OSTREE_BOOTED" ] || return 0 # not ostree: /usr is what boots
+	dep="$("$OSTREE" admin --print-current-dir 2>/dev/null)" || dep=""
+	if [ -n "$dep" ] && [ -d "$dep/usr" ]; then
+		for d in $SESSIONS_DIRS; do
+			[ -f "$dep$d/$SESSION_FILE" ] && return 0
+		done
+		return 1
+	fi
+	if command -v "$RPM_OSTREE" >/dev/null 2>&1; then
+		"$RPM_OSTREE" status --booted --json 2>/dev/null | grep -q '"gamecove\(-[0-9][^"]*\)\{0,1\}"'
+		return
+	fi
+	return 0 # no way to tell: as before
 }
 
 # "Sessions:\n\n- plasma.desktop\n- plasmax11.desktop"
@@ -308,6 +333,7 @@ steam)
 gamecove)
 	session_installed "$SESSION_FILE" || die "GameCove's session ($SESSION_FILE) isn't installed"
 	if [ "$default" -eq 1 ]; then
+		in_booted_image || die "GameCove is staged for the next boot but isn't in the system that's running; restart, then it can be the boot default" 4
 		save_previous
 		install_guard
 		sm_set default-desktop-session "$SESSION_FILE"

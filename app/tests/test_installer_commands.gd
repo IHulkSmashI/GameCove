@@ -107,6 +107,8 @@ func test_change_repair_update_uninstall_finish() -> void:
 	eq(un[1]["cmd"][4], p.data_dir() + "/gamecove-session-guard", "the copy that survives the package goes first")
 	eq(un[4]["cmd"], C.rpm_uninstall())
 	ok(un[2]["optional"], "taking GameCove out of Steam's launch options never stops an uninstall")
+	ok(not un[1]["optional"], "review H4: the boot default must be restored before the package goes")
+	ok(not un[3]["optional"], "review H4: every fix undone before the helper that undoes them goes")
 	c["remove_fixes"] = false
 	c["keep_settings"] = true
 	eq(_ids(C.tasks_for("uninstall", c, t, p)), ["check_game", "session_restore", "steam_unwrap", "package_remove", "remove_user_files", "forget"])
@@ -157,3 +159,14 @@ func test_xess_driver_option() -> void:
 	c["xess_driver"] = false
 	ok("xess_remove" in _ids(C.tasks_for("change", c, had, p)), "turned off in change: removed")
 	ok("xess_remove" in _ids(C.tasks_for("uninstall", c, had, p)), "uninstall takes it out")
+
+
+## Review H4: the root autologin guard is copied out of the sysext into /etc (kept across OS
+## updates) and removed with it.
+func test_sysext_installs_the_autologin_guard_into_etc() -> void:
+	ok(C.SYSEXT_INSTALL.contains("install -D -m 0755 /usr/lib/gamecove/session/gamecove-autologin-guard /etc/gamecove/autologin-guard"), "script copied into /etc")
+	ok(C.SYSEXT_INSTALL.contains("ln -sfn " + C.GUARD_UNIT + " " + C.GUARD_LINK), "unit enabled")
+	ok(C.SYSEXT_INSTALL.contains(C.GUARD_SCRIPT + " " + C.GUARD_UNIT + " " + C.GUARD_LINK + " > " + C.SYSEXT_KEEP), "kept across SteamOS updates")
+	for f in [C.GUARD_LINK, C.GUARD_UNIT, C.GUARD_SCRIPT]:
+		ok(C.SYSEXT_REMOVE.contains(f), "removed with GameCove: " + f)
+

@@ -420,8 +420,37 @@ inst() {
 }
 expect_code 0 "install.sh install" inst "$T/gamecove-0.1.0-1.x86_64.rpm"
 contains "$T/install.log" "rpm-ostree install $T/gamecove-0.1.0-1.x86_64.rpm" "rpm-ostree install"
-expect_code 0 "install.sh uninstall" inst --uninstall
+# review H4: --uninstall puts the boot default back and undoes every fix first, and stops if either fails
+cat >"$IB/select" <<EOF
+#!/bin/sh
+echo "select \$*" >>"$T/install.log"
+exit \$(cat "$T/select-code" 2>/dev/null || echo 0)
+EOF
+cat >"$IB/pkexec" <<EOF
+#!/bin/sh
+echo "pkexec \$*" >>"$T/install.log"
+exit \$(cat "$T/pkexec-code" 2>/dev/null || echo 0)
+EOF
+printf '#!/bin/sh\n' >"$IB/fixhelper"
+chmod +x "$IB/select" "$IB/pkexec" "$IB/fixhelper"
+uninst() {
+	: >"$T/install.log"
+	PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" SESSION_SELECT="$IB/select" GUARD_COPY="$T/no-guard" \
+		FIX_HELPER="$IB/fixhelper" PKEXEC="$IB/pkexec" sh "$REPO/packaging/install.sh" --uninstall
+}
+expect_code 0 "install.sh uninstall" uninst
 contains "$T/install.log" "rpm-ostree uninstall gamecove" "rpm-ostree uninstall"
+contains "$T/install.log" "^select restore$" "uninstall restores the boot default"
+contains "$T/install.log" "^pkexec $IB/fixhelper --remove-all$" "uninstall undoes every fix"
+if [ "$(head -n 1 "$T/install.log")" = "select restore" ] && [ "$(tail -n 1 "$T/install.log")" = "rpm-ostree uninstall gamecove" ]; then ok; else bad "restore and fixes before the package goes: $(cat "$T/install.log")"; fi
+echo 1 >"$T/select-code"
+expect_code 1 "install.sh uninstall stops when restore fails" uninst
+lacks "$T/install.log" "rpm-ostree uninstall" "package kept when the boot default couldn't go back"
+rm -f "$T/select-code"
+echo 126 >"$T/pkexec-code"
+expect_code 1 "install.sh uninstall stops when the fixes can't be undone" uninst
+lacks "$T/install.log" "rpm-ostree uninstall" "package kept when the fixes couldn't be undone"
+rm -f "$T/pkexec-code"
 expect_code 64 "install.sh missing rpm" inst "$T/none.rpm"
 expect_code 1 "install.sh says no" sh -c "echo n | PATH='$IB:$PATH' IMAGE_INFO='$T/image-info.json' sh '$REPO/packaging/install.sh' '$T/gamecove-0.1.0-1.x86_64.rpm'"
 
@@ -688,7 +717,8 @@ for f in usr/bin/gamescope-session-plus usr/bin/gamecove-session-select usr/bin/
 	usr/share/licenses/gamecove/LICENSE usr/share/licenses/gamecove/GPL-2.0-only.txt usr/share/licenses/gamecove/LICENSE.ClawLab-MIT \
 	usr/share/gamescope-session-plus/sessions.d/gamecove usr/share/wayland-sessions/gamecove.desktop \
 	usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy \
-	usr/lib/systemd/user/gamescope-session-plus@gamecove.service.d/10-gamecove.conf; do
+	usr/lib/systemd/user/gamescope-session-plus@gamecove.service.d/10-gamecove.conf \
+	usr/lib/gamecove/session/gamecove-autologin-guard usr/lib/gamecove/session/gamecove-autologin-guard.service; do
 	if [ -e "$TREE/$f" ]; then ok; else bad "sysext tree missing $f"; fi
 done
 contains "$TREE/usr/lib/extension-release.d/extension-release.gamecove" "^ID=_any$" "extension-release ID"
@@ -842,7 +872,7 @@ else
 		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" \
 		"$REPO/packaging/get-gamecove.sh" "$REPO/packaging/libexec/gamecove-apply-choices" \
 		"$REPO/packaging/libexec/reaper" \
-		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh" "$REPO/packaging/tests/session.sh" "$REPO/packaging/tests/wrapper.sh"; do
+		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh" "$REPO/packaging/tests/session.sh" "$REPO/session/gamecove-autologin-guard" "$REPO/packaging/tests/wrapper.sh"; do
 		if "$SHELLCHECK" -S warning -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"

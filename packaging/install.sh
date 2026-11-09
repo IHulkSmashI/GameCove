@@ -13,6 +13,10 @@ set -eu
 RPM_OSTREE="${RPM_OSTREE:-rpm-ostree}"
 IMAGE_INFO="${IMAGE_INFO:-/usr/share/ublue-os/image-info.json}"
 ASSUME_YES="${ASSUME_YES:-0}"
+SESSION_SELECT="${SESSION_SELECT:-/usr/bin/gamecove-session-select}"
+GUARD_COPY="${GUARD_COPY:-${XDG_DATA_HOME:-$HOME/.local/share}/gamecove/gamecove-session-guard}"
+FIX_HELPER="${FIX_HELPER:-/usr/libexec/gamecove/gamecove-fix}"
+PKEXEC="${PKEXEC:-pkexec}"
 
 say() {
 	printf '\n==> %s\n' "$*"
@@ -46,15 +50,44 @@ if ! command -v "$RPM_OSTREE" >/dev/null 2>&1; then
 fi
 
 if [ "${1:-}" = "--uninstall" ]; then
-	say "Step 1/2: remove the GameCove layer"
-	echo "    rpm-ostree builds a new system image without GameCove."
-	echo "    Your current image stays bootable until you reboot."
+	# Review H4: the boot default and every fix go back first, while GameCove's tools are still
+	# here. If either fails, stop: removing the package anyway could leave the login screen
+	# pointing at a session that no longer exists, or kernel arguments and rules nobody can undo.
+	echo "    Removing GameCove: the boot default goes back, every device fix is undone,"
+	echo "    then rpm-ostree builds a new system image without GameCove."
 	ask "Remove GameCove?"
+	say "Step 1/4: boot into Steam Gaming Mode again (or the desktop, if that was the default)"
+	select=""
+	for s in "$GUARD_COPY" "$SESSION_SELECT"; do
+		if [ -f "$s" ]; then
+			select="$s"
+			break
+		fi
+	done
+	if [ -n "$select" ]; then
+		run sh "$select" restore || {
+			echo "    Couldn't put the boot default back; GameCove was not removed."
+			echo "    Try again, or from a TTY: gamecove-session-select restore (docs/SESSION.md)."
+			exit 1
+		}
+	else
+		echo "    GameCove never was the boot default here; nothing to do."
+	fi
+	say "Step 2/4: undo every device fix and setting GameCove applied"
+	if [ -x "$FIX_HELPER" ]; then
+		echo "    This asks for your password."
+		run "$PKEXEC" "$FIX_HELPER" --remove-all || {
+			echo "    Couldn't undo the fixes; GameCove was not removed. Try again."
+			exit 1
+		}
+	else
+		echo "    No fix helper installed; nothing to undo."
+	fi
+	say "Step 3/4: remove the GameCove layer"
+	echo "    Your current image stays bootable until you reboot."
 	run "$RPM_OSTREE" uninstall gamecove
-	say "Step 2/2: reboot to finish"
-	echo "    Before rebooting, make sure you're not set to boot into GameCove:"
-	echo "      steamosctl set-default-login-mode game"
-	echo "    Then: systemctl reboot"
+	say "Step 4/4: reboot to finish"
+	echo "    Run: systemctl reboot"
 	exit 0
 fi
 
