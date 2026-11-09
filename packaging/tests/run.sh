@@ -143,7 +143,7 @@ fi
 # polkit runs this one without a password, so it may only `set` (and `status`)
 # the low-risk fixes with fixed values, then hand over to gamecove-fix.
 FIXSET="$REPO/packaging/libexec/gamecove-fix-set"
-for n in fan charge-limit claw8ex-gyro claw8ex-vrr claw8ex-buttons; do
+for n in fan charge-limit claw8ex-gyro claw8ex-vrr claw8ex-buttons power-tune; do
 	mkdir -p "$FIXES/$n"
 	cat >"$FIXES/$n/fix.sh" <<FIXEOF
 #!/bin/sh
@@ -195,6 +195,26 @@ expect_code 0 "set entry: gyro accel-off" gfs claw8ex-gyro set accel-off
 contains "$ROOT/calls" "^claw8ex-gyro:set accel-off$" "gyro set reached fix.sh"
 expect_code 0 "set entry: status" gfs fan status
 contains "$T/out" "^state=on$" "status passed through"
+expect_code 0 "set entry: fan curve" gfs fan set curve:0,40,50,60,80,100
+contains "$ROOT/calls" "^fan:set curve:0,40,50,60,80,100$" "fan curve reached fix.sh"
+expect_code 66 "set entry: fan curve letters" gfs fan set curve:0,40,x
+expect_code 66 "set entry: fan curve empty" gfs fan set curve:
+expect_code 66 "set entry: fan curve trailing comma" gfs fan set curve:1,2,
+expect_code 66 "set entry: fan curve shell" gfs fan set 'curve:1;reboot'
+for v in boost:off smt:on cores:4 epp:balance_power governor:powersave cpumax:70 gpulevel:auto gpumin:600 \
+	gpumax:1800 gpuprofile:power_saving sppt:28 fppt:33 platform:low-power tau:8000000 tau:restore \
+	thermald:hold thermald:release sleep:deep battery:long-life mcu:off restore; do
+	expect_code 0 "set entry: power-tune $v" gfs power-tune set "$v"
+done
+contains "$ROOT/calls" "^power-tune:set epp:balance_power$" "power-tune set reached fix.sh"
+expect_code 66 "set entry: power-tune unknown key" gfs power-tune set fan:max
+expect_code 66 "set entry: power-tune no key" gfs power-tune set 15
+expect_code 66 "set entry: power-tune empty value" gfs power-tune set epp:
+expect_code 66 "set entry: power-tune bad chars" gfs power-tune set 'epp:a b'
+expect_code 66 "set entry: power-tune path" gfs power-tune set epp:../x
+expect_code 66 "set entry: power-tune upper case" gfs power-tune set epp:POWER
+expect_code 64 "set entry refuses power-tune install" gfs power-tune install
+expect_code 64 "set entry refuses power-tune remove" gfs power-tune remove
 lacks "$ROOT/calls" "install" "no install reached a fix through the set entry"
 lacks "$ROOT/calls" "remove" "no remove reached a fix through the set entry"
 # Under pkexec it hands over to the installed dispatcher; the caller's paths are ignored.

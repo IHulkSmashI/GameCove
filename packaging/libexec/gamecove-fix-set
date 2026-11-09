@@ -16,6 +16,14 @@
 #   charge-limit  set release                    let it charge now, keep the limit
 #                                                (GameCove's session runs it on exit)
 #   fan           set auto|quiet|max             fan preset (sysfs)
+#   fan           set curve:<d1>,<d2>,...        your own fan curve (table drivers; fix.sh checks
+#                                                it is never quieter than Quiet and never falls)
+#   power-tune    set <key>:<value> | restore    CPU boost, SMT, cores, EPP, governor, CPU ceiling,
+#                                                GPU level / clocks / power profile, firmware SPPT /
+#                                                FPPT, platform profile, RAPL time window, thermald
+#                                                hold / release, sleep mode, battery mode, Ally MCU
+#                                                power saving; fix.sh
+#                                                checks every value against what the kernel offers
 #   claw8ex-gyro  set accel-on|accel-off         accelerometer in the InputPlumber override
 #                                                (the gyro fix must already be installed)
 #
@@ -34,8 +42,8 @@ else
 fi
 
 usage() {
-	echo "usage: gamecove-fix-set charge-limit|fan|claw8ex-gyro set <value>" >&2
-	echo "       gamecove-fix-set charge-limit|fan|claw8ex-gyro status" >&2
+	echo "usage: gamecove-fix-set charge-limit|fan|claw8ex-gyro|power-tune set <value>" >&2
+	echo "       gamecove-fix-set charge-limit|fan|claw8ex-gyro|power-tune status" >&2
 	echo "install and remove need an administrator: pkexec /usr/libexec/gamecove/gamecove-fix" >&2
 	exit 64
 }
@@ -50,7 +58,7 @@ name="$1"
 action="$2"
 
 case "$name" in
-charge-limit | fan | claw8ex-gyro) ;;
+charge-limit | fan | claw8ex-gyro | power-tune) ;;
 *) die "fix '$name' can't be changed without a password; use gamecove-fix" 65 ;;
 esac
 
@@ -71,6 +79,22 @@ value="$3"
 case "$name:$value" in
 charge-limit:[5-9][0-9] | charge-limit:100 | charge-limit:release) ;;
 fan:auto | fan:quiet | fan:max) ;;
+fan:curve:*)
+	case "${value#curve:}" in
+	"" | *[!0-9,]* | ,* | *, | *,,*) die "value not allowed for $name" 66 ;;
+	esac
+	[ "${#value}" -le 64 ] || die "value not allowed for $name" 66
+	;;
+power-tune:restore) ;;
+power-tune:boost:* | power-tune:smt:* | power-tune:cores:* | power-tune:epp:* | power-tune:governor:* | \
+	power-tune:cpumax:* | power-tune:gpulevel:* | power-tune:gpumin:* | power-tune:gpumax:* | \
+	power-tune:gpuprofile:* | power-tune:sppt:* | power-tune:fppt:* | power-tune:platform:* | \
+	power-tune:tau:* | power-tune:thermald:* | power-tune:sleep:* | power-tune:battery:* | power-tune:mcu:*)
+	case "${value#*:}" in
+	"" | *[!a-z0-9_-]*) die "value not allowed for $name" 66 ;;
+	esac
+	[ "${#value}" -le 48 ] || die "value not allowed for $name" 66
+	;;
 claw8ex-gyro:accel-on | claw8ex-gyro:accel-off) ;;
 *) die "value not allowed for $name" 66 ;;
 esac

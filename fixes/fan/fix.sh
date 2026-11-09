@@ -28,6 +28,10 @@
 #
 #   fix.sh install          record every fan's enable flag and table/duty so it can be put back
 #   fix.sh set <mode>       auto | quiet | max
+#   fix.sh set curve:<d1>,<d2>,...   table drivers only: your own duty per point (percent,
+#                           one per table point). Never quieter than the quiet preset at any
+#                           point and never falling as the temperature rises, so a custom
+#                           curve can't run the chip hotter than Quiet does.
 #   fix.sh status           applies=, driver=, modes=, installed=, per-fan values, then state=
 #                           (state=on once GameCove has set a preset, off after remove, n/a without a driver)
 #   fix.sh remove           put the recorded values back and forget them
@@ -172,14 +176,39 @@ set_enable() {
 	[ "$(read_value "$HW/pwm$1_enable")" = "$2" ] || die 1 "fan $1 did not switch to mode $2"
 }
 
+# check_curve "d1,d2,...": prints the duties space separated, or exits 2. Same count as the table's
+# points, whole numbers 0-100, never below the quiet preset at a point, never falling.
+check_curve() {
+	[ "$KIND" = table ] || die 2 "$DRIVER has no fan table: no custom curve"
+	floor="$(table_for quiet)"
+	duties="$(printf '%s' "$1" | tr ',' ' ')"
+	case "$1" in ''|*[!0-9,]*|,*|*,|*,,*) die 2 "curve needs whole numbers separated by commas" ;; esac
+	set -- $floor
+	prev=0
+	count=0
+	for d in $duties; do
+		count=$((count + 1))
+		[ $# -gt 0 ] || die 2 "curve has more points than the $DRIVER table"
+		[ "$d" -le 100 ] || die 2 "curve point $count is over 100 %"
+		[ "$d" -ge "$1" ] || die 2 "curve point $count ($d %) is quieter than the quiet preset ($1 %)"
+		[ "$d" -ge "$prev" ] || die 2 "curve point $count falls below the point before it"
+		prev="$d"
+		shift
+	done
+	[ $# -eq 0 ] || die 2 "curve needs $(echo "$floor" | wc -w | tr -d ' ') points"
+	printf '%s\n' "$duties"
+}
+
 do_set() {
 	mode="${1:-}"
+	CURVE=""
 	case "$mode" in
 		auto|quiet|max) ;;
-		*) die 2 "set needs auto, quiet or max" ;;
+		curve:*) need_hw; CURVE="$(check_curve "${mode#curve:}")" || exit 2; mode=curve ;;
+		*) die 2 "set needs auto, quiet, max or curve:<duties>" ;;
 	esac
 	need_hw
-	case " $MODES " in
+	case " $MODES curve " in
 		*" $mode "*) ;;
 		*) die 2 "$DRIVER has no $mode mode (it offers: $MODES)" ;;
 	esac
@@ -201,7 +230,8 @@ do_set() {
 		fi
 		i=1
 		set -- $ASUS_TEMPS
-		for d in $(table_for "$mode"); do
+		if [ "$mode" = curve ]; then table="$CURVE"; else table="$(table_for "$mode")"; fi
+		for d in $table; do
 			if [ "$DRIVER" = asus_custom_fan_curve ]; then
 				write_value "$HW/pwm${n}_auto_point${i}_temp" "$1" || die 1 "fan $n point $i refused $1 C"
 				shift
@@ -213,7 +243,7 @@ do_set() {
 		set_enable "$n" "$CUSTOM"
 	done
 	SETTING=0
-	log_change "set $mode driver=$DRIVER"
+	log_change "set $mode${CURVE:+ $CURVE} driver=$DRIVER"
 	printf 'mode=%s\n' "$mode"
 }
 
@@ -277,5 +307,5 @@ case "${1:-}" in
 	set) do_set "${2:-}" ;;
 	status) do_status ;;
 	remove) do_remove ;;
-	*) die 2 "usage: fix.sh install|remove|status|set auto|quiet|max" ;;
+	*) die 2 "usage: fix.sh install|remove|status|set auto|quiet|max|curve:<duties>" ;;
 esac
