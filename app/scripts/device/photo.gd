@@ -33,6 +33,22 @@ extends Node
 ##   maker_enabled / set_maker_enabled(on)  "Show maker photos" (default on;
 ##       ConfigFile user://settings.cfg [device] maker_photo). Off: no request
 ##       to any maker's site; free photo or drawing only.
+##
+## Families. A "<maker> (unknown model)" row (GameCove knows the maker, not the
+## model) has "representative" in device_photos.json: that maker's most common
+## current model. photo_for(family) returns the representative's picture plus
+##   "family": {"device_id", "representative"}, "caption": "MSI Claw (model not
+##   identified)", "pictured": "Pictured: MSI Claw 8 AI+"
+## so the UI can say plainly the exact model wasn't recognised. photo_ready is
+## emitted for the family id too.
+##
+## First launch. prefetch(device_id) (and prefetch_detected() for this
+## handheld) fetches the picture into the cache ahead of time: the app calls it
+## in the background at start, the installer wizard while it is online anyway,
+## and `gamecove -- --prefetch-photo` (get-gamecove.sh --no-launch) headless,
+## so the photo is there the first time Game Mode opens, even offline. Same
+## limits as an ordinary miss (one image, size cap, type sniffed, the maker's
+## own URL), and nothing at all when either photo setting is off.
 
 signal photo_ready(device_id: String, path: String)
 
@@ -47,6 +63,7 @@ const MAKER_MAX_AGE := 7 * 24 * 3600
 const MAKER_TIMEOUT := 10.0
 const MAKER_EXTS := ["png", "jpg", "webp"]
 const COMMONS_PAGE := "https://commons.wikimedia.org/wiki/File:"
+const TPhoto := preload("res://scripts/ui/texts_photo.gd")
 ## Credit pages we accept: Commons files and Flickr photos (taken through
 ## Openverse by the build). Same list as tools/device_photos/build.py.
 const PAGE_PREFIXES := [COMMONS_PAGE, "https://www.flickr.com/photos/"]
@@ -75,6 +92,9 @@ var _failed := {}            # device_id -> true: download failed, no retry this
 var _checked := {}           # abs path -> sha256 already verified this session
 var _maker_tried := {}       # url -> true: one request per session at most
 var _maker_inflight := {}    # url -> [device ids]
+var _reps := {}              # family id -> representative id (bundled list)
+var _aliases := {}           # representative id -> [family ids asked for]
+var _names := {}             # device id -> name (devices.json), for family captions
 
 
 func _ready() -> void:
@@ -86,11 +106,14 @@ func _ready() -> void:
 	var d := get_node_or_null("/root/Discover")
 	if d != null and d.get("http") != null:
 		http = d.http
-		return
-	var node: Node = preload("res://scripts/discover/http.gd").new()
-	node.name = "Http"
-	add_child(node)
-	http = node
+	else:
+		var node: Node = preload("res://scripts/discover/http.gd").new()
+		node.name = "Http"
+		add_child(node)
+		http = node
+	# Background prefetch at start, so the picture is cached before anyone opens
+	# About (and before the next offline start).
+	prefetch_detected.call_deferred()
 
 
 # ---- the setting ----------------------------------------------------------------
@@ -236,6 +259,11 @@ func _manifest_stale() -> bool:
 func photo_for(device_id: String) -> Dictionary:
 	if not enabled or device_id == "":
 		return {}
+	var rid := representative_of(device_id)
+	if rid != device_id:
+		if not device_id in _aliases.get(rid, []):
+			_aliases[rid] = _aliases.get(rid, []) + [device_id]
+		return _family_photo(device_id, rid, photo_for(rid))
 	_load_manifest()
 	var got := cached(device_id)
 	if got.is_empty() and _use_maker(device_id):
@@ -254,6 +282,9 @@ func photo_for(device_id: String) -> Dictionary:
 func cached(device_id: String) -> Dictionary:
 	if not enabled:
 		return {}
+	var rid := representative_of(device_id)
+	if rid != device_id:
+		return _family_photo(device_id, rid, cached(rid))
 	_load_manifest()
 	var e: Dictionary = _manifest.get(device_id, {})
 	if e.is_empty():
@@ -308,7 +339,7 @@ func _on_manifest(res: Dictionary) -> void:
 		if cached(id).is_empty():
 			_download(id)
 		else:
-			photo_ready.emit(id, cached(id)["path"])
+			_ready_for(id, cached(id)["path"])
 
 
 func _download(device_id: String) -> void:
@@ -322,7 +353,7 @@ func _download(device_id: String) -> void:
 		_inflight.erase(device_id)
 		var path := store_part(part, e) if res.get("ok", false) else _drop(part)
 		if path != "":
-			photo_ready.emit(device_id, path)
+			_ready_for(device_id, path)
 		else:
 			_failed[device_id] = true)
 
@@ -418,6 +449,7 @@ func _load_sources() -> void:
 			var e: Variant = doc[id]
 			if not str(id).begins_with("_") and e is Dictionary and (e.has("file") or e.has("openverse_id")):
 				_free[str(id)] = true
+		_reps = parse_representatives(doc)
 
 
 ## The maker entry for a device, or {} (also when the setting is off).
@@ -429,9 +461,9 @@ func maker_entry(device_id: String) -> Dictionary:
 ## Maker image instead of the free-photo route: only for a device with a
 ## maker entry and no free photo of its own (a free photo always wins).
 func _use_maker(device_id: String) -> bool:
-	if maker_entry(device_id).is_empty() or _free.has(device_id):
-		return false
-	return not _manifest.has(device_id)
+	# The bundled list decides: a row that moved from a free photo to a maker
+	# image switches at once, not when the weekly manifest catches up.
+	return not maker_entry(device_id).is_empty() and not _free.has(device_id)
 
 
 func _maker_base(url: String) -> String:
@@ -494,7 +526,7 @@ func _on_maker(res: Dictionary, url: String) -> void:
 	if path == "":
 		return
 	for id in ids:
-		photo_ready.emit(id, path)
+		_ready_for(id, path)
 
 
 ## Writes the image bytes as they came (no re-encoding) and drops older copies
@@ -515,6 +547,99 @@ func store_maker(url: String, body: PackedByteArray, ext: String) -> String:
 	if DirAccess.rename_absolute(part, dest) != OK:
 		return _drop(part)
 	return dest
+
+
+# ---- families ---------------------------------------------------------------------
+
+## {family id: representative id} for the rows with "representative" whose
+## representative is a real row with a picture source of its own (no chains).
+static func parse_representatives(doc: Variant) -> Dictionary:
+	var out := {}
+	if not doc is Dictionary:
+		return out
+	for id in doc:
+		var e: Variant = doc[id]
+		if str(id).begins_with("_") or not e is Dictionary or not e.has("representative"):
+			continue
+		var rid := str(e["representative"])
+		var r: Variant = doc.get(rid)
+		if rid == str(id) or not r is Dictionary or r.has("representative"):
+			continue
+		if r.has("file") or r.has("openverse_id") or r.has("maker_image"):
+			out[str(id)] = rid
+	return out
+
+
+## The model whose picture stands in for `device_id` (itself for exact models).
+func representative_of(device_id: String) -> String:
+	_load_sources()
+	return str(_reps.get(device_id, device_id))
+
+
+## "MSI Claw (unknown model)" -> "MSI Claw (model not identified)".
+static func family_caption(family_name: String) -> String:
+	var base := family_name.replace(TPhoto.UNKNOWN_MODEL_SUFFIX, "").strip_edges()
+	return TPhoto.FAMILY_CAPTION % base
+
+
+func _name_of(device_id: String) -> String:
+	if _names.is_empty():
+		for row in preload("res://scripts/device/device.gd").load_table():
+			if row is Dictionary:
+				_names[str(row.get("id", ""))] = str(row.get("name", ""))
+	return str(_names.get(device_id, device_id))
+
+
+func _family_photo(family_id: String, rid: String, got: Dictionary) -> Dictionary:
+	if got.is_empty():
+		return {}
+	var out := got.duplicate(true)
+	out["family"] = {"device_id": family_id, "representative": rid}
+	out["caption"] = family_caption(_name_of(family_id))
+	out["pictured"] = TPhoto.FAMILY_PICTURED % _name_of(rid)
+	return out
+
+
+func _ready_for(device_id: String, path: String) -> void:
+	photo_ready.emit(device_id, path)
+	for fam in _aliases.get(device_id, []):
+		photo_ready.emit(fam, path)
+
+
+# ---- prefetch (instant first launch) ---------------------------------------------
+
+## Puts this device's picture into the cache ahead of time (the representative's
+## for a family row). True when it's already cached or a download started;
+## false when switched off, unknown, no source or no network object.
+func prefetch(device_id: String) -> bool:
+	if not enabled or device_id == "" or device_id == "unknown" or http == null:
+		return false
+	photo_for(device_id)
+	return has_cached(device_id) or _busy(representative_of(device_id))
+
+
+## True when this device's picture (free photo or maker image, the
+## representative's for a family) is in the cache. Never touches the network.
+func has_cached(device_id: String) -> bool:
+	var rid := representative_of(device_id)
+	if not cached(rid).is_empty():
+		return true
+	return _use_maker(rid) and not maker_cached(rid).is_empty()
+
+
+## prefetch() for the handheld Device detected ("" / unknown: nothing).
+func prefetch_detected() -> bool:
+	var dev := get_node_or_null("/root/Device") if is_inside_tree() else null
+	if dev == null or not dev.has_method("id"):
+		return false
+	return prefetch(str(dev.id()))
+
+
+func _busy(rid: String) -> bool:
+	if _inflight.has(rid) or rid in _waiting or _manifest_fetching:
+		return true
+	var m := maker_entry(rid)
+	return not m.is_empty() and _maker_inflight.has(m["url"])
 
 
 # ---- for the UI -----------------------------------------------------------------

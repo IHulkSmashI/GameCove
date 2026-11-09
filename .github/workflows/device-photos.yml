@@ -6,7 +6,8 @@ name: Device photos
 # tools/device_photos/build.py and docs/DEVICES.md).
 # The maker-links job requests every maker_image link (the makers' own product images, which the
 # app shows by link only and nobody copies) and keeps ONE issue listing the broken ones, so a
-# maker's site redesign is noticed within a week. No image is stored anywhere.
+# maker's site redesign is noticed within a week. Family rows ("<maker> (unknown model)") are
+# covered through their representative model's link and listed by name. No image is stored anywhere.
 
 on:
   schedule:

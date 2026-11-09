@@ -15,6 +15,11 @@ response body is read only far enough to recognise an image and discarded.
     python tools/device_photos/makers.py --check --report broken.md
     exit 0: all links fine, 2: some links broken (report written), 1: bad entries
 
+Family rows ("<maker> (unknown model)") carry "representative": the model whose
+picture stands in for them (photo.gd parse_representatives). The link check
+covers them through that model's link, and reports them by name, so a broken
+link shows every row that loses its picture.
+
 The rules here match app/scripts/device/photo.gd (parse_maker_sources); keep
 them in step.
 """
@@ -25,6 +30,7 @@ import argparse
 import json
 import re
 import sys
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -82,8 +88,53 @@ def load(path: Path = SRC) -> tuple[dict, dict]:
     return makers, entries
 
 
-def check_url(url: str, timeout: float = 20.0) -> str:
-    """'' when the link answers with an image under the size cap, else why not."""
+def representatives(doc: dict) -> dict:
+    """{family id: representative id} (same rule as photo.gd parse_representatives)."""
+    out = {}
+    for k, v in doc.items():
+        if k.startswith("_") or not isinstance(v, dict) or "representative" not in v:
+            continue
+        rep = str(v["representative"])
+        r = doc.get(rep)
+        if rep != k and isinstance(r, dict) and "representative" not in r and \
+                any(x in r for x in ("file", "openverse_id", "maker_image")):
+            out[k] = rep
+    return out
+
+
+def family_problems(doc: dict) -> list[str]:
+    """Why a family row's representative can't stand in ([] when all are fine)."""
+    reps = representatives(doc)
+    return [f"{k}: representative {v.get('representative')!r} is not a row with a picture of its own"
+            for k, v in doc.items()
+            if not k.startswith("_") and isinstance(v, dict) and "representative" in v and k not in reps]
+
+
+def checked_rows(path: Path = SRC) -> dict:
+    """Every row the link check covers: {device_id: maker_image}, families through
+    their representative's link."""
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    _, entries = load(path)
+    out = dict(entries)
+    for fam, rep in representatives(doc).items():
+        if rep in entries:
+            out[fam] = dict(entries[rep], via=rep)
+    return out
+
+
+def check_url(url: str, timeout: float = 20.0, tries: int = 3) -> str:
+    """'' when the link answers with an image under the size cap, else why not.
+    A failed request is tried again (some makers' hosts drop the odd connection)."""
+    why = ""
+    for i in range(tries):
+        why = _check_once(url, timeout)
+        if not why.startswith("request failed"):
+            return why
+        time.sleep(2 * (i + 1))
+    return why
+
+
+def _check_once(url: str, timeout: float) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "image/png,image/jpeg,image/webp,*/*;q=0.5"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -105,7 +156,8 @@ def report(broken: list[tuple[str, dict, str]]) -> str:
              "product page and update `url`, `page_url` and `checked`.", "",
              "| Device | Maker | Problem | Image link | Product page |", "|---|---|---|---|---|"]
     for dev, m, why in broken:
-        lines.append(f"| `{dev}` | {m.get('maker', '')} | {why.replace('|', '/')} | {m.get('url', '')} | {m.get('page_url', '')} |")
+        name = f"`{dev}` (shows `{m['via']}`)" if m.get("via") else f"`{dev}`"
+        lines.append(f"| {name} | {m.get('maker', '')} | {why.replace('|', '/')} | {m.get('url', '')} | {m.get('page_url', '')} |")
     return "\n".join(lines) + "\n"
 
 
@@ -117,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     makers, entries = load(Path(a.src))
     problems = [p for dev, m in entries.items() for p in entry_problems(dev, m, makers)]
+    problems += family_problems(json.loads(Path(a.src).read_text(encoding="utf-8")))
     for p in problems:
         print("BAD ENTRY", p, file=sys.stderr)
     if problems:
@@ -126,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     broken = []
     seen: dict[str, str] = {}
+    entries = checked_rows(Path(a.src))
     for dev, m in sorted(entries.items()):
         url = m["url"]
         if url not in seen:

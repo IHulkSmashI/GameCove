@@ -1,5 +1,5 @@
 {
- "_about": "Freely licensed photos of each handheld (CC0, public domain, CC BY, CC BY-SA only). Default source is Wikimedia Commons (\"file\"); \"source\": \"openverse\" with \"openverse_id\" takes a Flickr photo through Openverse's metadata. The device-photos workflow re-checks every license on each run. family_of: this device reuses another model's photo because the two look the same from the front. _manual: free-license candidates that can't be fetched or re-checked automatically (YouTube frames); see docs/DEVICES.md. maker_image: for a handheld with no free photo, the maker's own official product image, BY LINK ONLY: url (on the maker's own site or image CDN), page_url (the maker's product page it was read from), maker, checked (date the link was last confirmed). GameCove never copies these images into the repo or the device-photos release; the app downloads that one image from the maker on the user's device and credits \"Image: <Maker>\". _makers lists, per maker, the only image URL prefixes and product-page domains accepted (app, build and weekly link check all read it).",
+ "_about": "Freely licensed photos of each handheld (CC0, public domain, CC BY, CC BY-SA only). Default source is Wikimedia Commons (\"file\"); \"source\": \"openverse\" with \"openverse_id\" takes a Flickr photo through Openverse's metadata. The device-photos workflow re-checks every license on each run. family_of: this device reuses another model's photo because the two look the same from the front. _manual: free-license candidates that can't be fetched or re-checked automatically (YouTube frames); see docs/DEVICES.md. maker_image: for a handheld with no free photo, the maker's own official product image, BY LINK ONLY: url (on the maker's own site or image CDN), page_url (the maker's product page it was read from), maker, checked (date the link was last confirmed). GameCove never copies these images into the repo or the device-photos release; the app downloads that one image from the maker on the user's device and credits \"Image: <Maker>\". _makers lists, per maker, the only image URL prefixes and product-page domains accepted (app, build and weekly link check all read it). representative: a family row ('<maker> (unknown model)', GameCove knows the maker but not the model) shows the picture of that maker's most common current model, captioned as not identified.",
  "_makers": {
   "Lenovo": {
    "image_prefixes": [
@@ -24,13 +24,14 @@
   },
   "OneXPlayer": {
    "image_prefixes": [
-    "https://cdn.shopify.com/s/files/1/0557/8535/7492/"
+    "https://cdn.shopify.com/s/files/1/0557/8535/7492/",
+    "https://onexplayer.com/uploadFiles/"
    ],
    "page_domains": [
     "onexplayerstore.com",
     "onexplayer.com"
    ],
-   "note": "Shopify CDN path of the official ONEXPLAYER store (onexplayerstore.com) only"
+   "note": "Shopify CDN path of the official ONEXPLAYER store (onexplayerstore.com) and the uploads folder of the official site (onexplayer.com) only"
   },
   "AOKZOE": {
    "image_prefixes": [
@@ -55,11 +56,43 @@
   "Acer": {
    "image_prefixes": [
     "https://images.acer.com/is/image/acer/",
-    "https://static2-ecemea.acer.com/media/catalog/product/"
+    "https://static2-ecemea.acer.com/media/catalog/product/",
+    "https://cdn.assets.prezly.com/b96853cc-de7c-474d-9e1b-e3e4bdff2e01/",
+    "https://cdn.assets.prezly.com/7aa9da80-c326-4ca1-ba33-40ba7d75f9db/"
    ],
    "page_domains": [
     "acer.com"
-   ]
+   ],
+   "note": "Acer's newsroom (news.acer.com) serves its press images from Prezly; only the two Nitro Blaze 8 / 11 product renders are accepted, by their asset folders"
+  },
+  "GPD": {
+   "image_prefixes": [
+    "https://img.website.xin/contents/sitefiles3601/18006016/images/"
+   ],
+   "page_domains": [
+    "gpd.hk"
+   ],
+   "note": "GPD's own site gpd.hk serves its pictures from its site builder's CDN; only GPD's site folder (sitefiles3601/18006016) is accepted"
+  },
+  "ZOTAC": {
+   "image_prefixes": [
+    "https://www.zotacstore.com/media/catalog/product/"
+   ],
+   "page_domains": [
+    "zotacstore.com",
+    "zotac.com"
+   ],
+   "note": "ZOTAC's official store (zotacstore.com, run by ZOTAC)"
+  },
+  "Orange Pi": {
+   "image_prefixes": [
+    "https://forum.manjaro.org/uploads/default/original/3X/8/f/8fa8b3e6981e02cbde167a4f33144ece6553058d."
+   ],
+   "page_domains": [
+    "orangepi.org",
+    "manjaro.org"
+   ],
+   "note": "The Neo was made by Orange Pi with Manjaro as its OS partner; orangepi.org could not be reached when the links were collected, so the official render from Manjaro's own development thread (posted by Manjaro's project lead) is used. Only that one file is accepted."
   }
  },
  "steam-deck-lcd": {
@@ -117,37 +150,39 @@
   "family_of": "asus-rog-xbox-ally-x"
  },
  "lenovo-legion-go": {
-  "file": "Lenovo Legion Go.jpg",
-  "author": "TaurusEmerald",
-  "license": "CC BY-SA 4.0",
-  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Lenovo_Legion_Go.jpg",
-  "note": "Screen off."
+  "maker_image": {
+   "url": "https://p1-ofp.static.pub/fes/cms/2023/09/25/ikf8mbop11t35m350chnoag1ctx88x566711.jpg",
+   "page_url": "https://www.lenovo.com/us/en/p/handheld/legion-go/len106g0001",
+   "maker": "Lenovo",
+   "checked": "2026-11-09",
+   "note": "Replaces a show-floor photo with stands and signage in front of the device."
+  }
  },
  "msi-claw-a1m": {
-  "file": "MSI Claw - Co poszło nie tak¿ (2160p 30fps AV1-128kbit AAC)-00.08.15.665.png",
-  "author": "ZMASLO",
-  "license": "CC BY 3.0",
-  "license_url": "https://creativecommons.org/licenses/by/3.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:MSI_Claw_-_Co_posz%C5%82o_nie_tak%C2%BF_(2160p_30fps_AV1-128kbit_AAC)-00.08.15.665.png",
-  "note": "Frame from a CC BY YouTube review (license reviewed on Commons). Original 2024 Claw only."
+  "maker_image": {
+   "url": "https://storage-asset.msi.com/global/picture/product/product_1777259637bbaf6b7fa643bebc2c492c5a4436365b.webp",
+   "page_url": "https://www.msi.com/Handheld/Claw-A1MX/Gallery",
+   "maker": "MSI",
+   "checked": "2026-11-09",
+   "note": "Replaces a room photo where the Claw filled a fifth of the frame."
+  }
  },
  "onexplayer-onexfly-f1": {
-  "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 469.jpg",
-  "author": "RuinDig/Yuki Uchida",
-  "license": "CC BY 4.0",
-  "license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_469.jpg",
-  "note": "Show-floor OneXFly, Tokyo Game Show 2024."
+  "maker_image": {
+   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/onexfly-f1-pro-black.webp?v=1766717233",
+   "page_url": "https://onexplayerstore.com/products/onexfly-f1-pro-wolrd-s-first-amd-ai-370-oled-144hz-gaming-handheld-console",
+   "maker": "OneXPlayer",
+   "checked": "2026-11-09",
+   "note": "The F1 and F1 Pro share one shell. Replaces a dim show-floor photo with the screen off."
+  }
  },
  "onexplayer-onexfly-f1-pro": {
-  "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 469.jpg",
-  "author": "RuinDig/Yuki Uchida",
-  "license": "CC BY 4.0",
-  "license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_469.jpg",
-  "family_of": "onexplayer-onexfly-f1",
-  "note": "F1 Pro uses the F1's shell; same front."
+  "maker_image": {
+   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/onexfly-f1-pro-black.webp?v=1766717233",
+   "page_url": "https://onexplayerstore.com/products/onexfly-f1-pro-wolrd-s-first-amd-ai-370-oled-144hz-gaming-handheld-console",
+   "maker": "OneXPlayer",
+   "checked": "2026-11-09"
+  }
  },
  "onexplayer-x1-mini": {
   "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 477.jpg",
@@ -411,7 +446,7 @@
  },
  "lenovo-legion-go-2": {
   "maker_image": {
-   "url": "https://p1-ofp.static.pub/medias/27424134970_LegionGO2_202506230352441757092978167.png",
+   "url": "https://p1-ofp.static.pub//fes/cms/2025/08/06/ljumrkg2mzb2wlpur3x44pqtqt5upu462137.jpg",
    "page_url": "https://www.lenovo.com/us/en/p/handheld/legion-go-gen-2/83n0000aus",
    "maker": "Lenovo",
    "checked": "2026-11-09"
@@ -443,10 +478,11 @@
  },
  "msi-claw-7-ai-plus": {
   "maker_image": {
-   "url": "https://th-store.msi.com/cdn/shop/files/1024_168906b5-18cc-4a41-b3fd-0bb801ed2bb3.png?v=1747379974&width=1500",
+   "url": "https://th-store.msi.com/cdn/shop/files/1024_1_1bdc3016-ffba-4a42-93d4-42d00a50cbc0.png?v=1747379974",
    "page_url": "https://th-store.msi.com/products/msi-claw-7-ai-a2vm-009th",
    "maker": "MSI",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "The store's first image carries award and Copilot+ badges; this one is the same render without them."
   }
  },
  "msi-claw-a8": {
@@ -483,50 +519,56 @@
  },
  "onexplayer-3": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/OneXPlayer_3_Next-Gen_3-in-1_AI_Gaming_and_Productivity_Handheld_main_page-1.png?v=1788349123",
-   "page_url": "https://onexplayerstore.com/products/onexplayer-3-next-gen-3-in-1-ai-gaming-and-productivity-handheld",
+   "url": "https://onexplayer.com/uploadFiles/1786085541450-1.webp",
+   "page_url": "https://www.onexplayer.com/product/ONEXPLAYER%203",
    "maker": "OneXPlayer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "The store's images are text-heavy promo cards; this is the official site's front view."
   }
  },
  "onexplayer-x2-mini": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/ONEXPLAYERX2MiniwithIntel_Arc_G3Extreme_8.8OLED3-in-1GamingHandheld_1.png?v=1783316546",
+   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/ONEXPLAYER_X2_Mini_with_Intel_Arc_G3_Extreme_8.8_OLED_3-in-1_Gaming_Handheld_3.png?v=1783316564",
    "page_url": "https://onexplayerstore.com/products/onexplayer-x2-mini-with-intel%C2%AE-arc%E2%84%A2-g3-extreme-8-8-oled-3-in-1-gaming-handheld",
    "maker": "OneXPlayer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "Replaces the 'Page_1' promo card (big title text, hands)."
   }
  },
  "onexplayer-x2-mini-pro": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/OnexplayerX2MiniProPage_1.png?v=1784196091",
-   "page_url": "https://onexplayerstore.com/products/onexplayer-x2-mini-pro-8-8-3-in-1-oled-gaming-handheld-with-amd-ryzen%E2%84%A2-ai-max-388-liquid-cooling",
+   "url": "https://onexplayer.com/uploadFiles/4%E5%85%A8%E6%96%B0%E5%8F%AF%E6%8B%86%E5%8D%B8%20%E5%88%86%E4%BD%93%E5%BC%8F%E6%89%8B%E6%9F%84-%E7%82%B9%E5%87%BB_.webp",
+   "page_url": "https://www.onexplayer.com/product/X2%20Mini%20Pro",
    "maker": "OneXPlayer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "Replaces the 'Page_1' promo card; every store image of the Pro is a text card."
   }
  },
  "onexplayer-onexfly-apex": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/Onexplayer_Apex_388.png?v=1784354033",
-   "page_url": "https://onexplayerstore.com/products/onexfly-apex-worlds-most-powerful-8-gaming-handheld",
+   "url": "https://onexplayer.com/uploadFiles/1761732209844-%E7%94%BB%E6%9D%BF%202.webp",
+   "page_url": "https://www.onexplayer.com/product/%E9%A3%9E%E8%A1%8C%E5%AE%B6%20Apex",
    "maker": "OneXPlayer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "Front view without the store card's brand line and chip badge."
   }
  },
  "onexplayer-super-x": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/Super_X_Pro.png?v=1791797020",
-   "page_url": "https://onexplayerstore.com/products/onexplayer-super-x",
+   "url": "https://onexplayer.com/uploadFiles/super.webp",
+   "page_url": "https://www.onexplayer.com/product/Super%20X",
    "maker": "OneXPlayer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "Replaces a promo card with title text; the tablet from the front."
   }
  },
  "aokzoe-a1x": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0650/6879/4073/files/A1X-__01.jpg?v=1747386685",
+   "url": "https://cdn.shopify.com/s/files/1/0650/6879/4073/files/A1X-__05.jpg?v=1747386685",
    "page_url": "https://aokzoestore.com/products/aokzoe-a1x",
    "maker": "AOKZOE",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "Fills the frame better than the first store image."
   }
  },
  "ayaneo-2s": {
@@ -587,43 +629,47 @@
  },
  "acer-predator-atlas-8": {
   "maker_image": {
-   "url": "https://static2-ecemea.acer.com/media/catalog/product/p/r/predator-atlas-8-pa08-i51-wp-shale-black-01-1_2.jpg?quality=80&bg-color=255%2C255%2C255&fit=bounds&height=500&width=500&canvas=500%3A500",
+   "url": "https://static2-ecemea.acer.com/media/catalog/product/p/r/predator-atlas-8-pa08-i51-wp-shale-black-01-1_2.jpg",
    "page_url": "https://store.acer.com/en-gb/predator-atlas-8-handheld-pa08-i51-black-nh-u7xek-001",
    "maker": "Acer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "Without the store's resize parameters: 1000 x 1000 instead of 500 x 500."
   }
  },
  "acer-nitro-blaze-7": {
   "maker_image": {
-   "url": "https://static2-ecemea.acer.com/media/catalog/product/a/c/acer-nitro-blaze-7-gn771-wp-black-red-01_1.jpg?quality=80&bg-color=255%2C255%2C255&fit=bounds&height=500&width=500&canvas=500%3A500",
+   "url": "https://static2-ecemea.acer.com/media/catalog/product/a/c/acer-nitro-blaze-7-gn771-wp-black-red-01_1.jpg",
    "page_url": "https://store.acer.com/en-gb/acer-nitro-blaze-acer-nitro-blaze-7-handheld-gn771-08hs7-black-dh-e4jem-001",
    "maker": "Acer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "The only straight front view Acer publishes (500 x 500); the newsroom render is angled with a second unit."
   }
  },
  "acer-nitro-blaze-8": {
   "maker_image": {
-   "url": "https://images.acer.com/is/image/acer/Nitro-Blaze-8-GN782U-KSP04-Speed-Up_-Game-On-5000x2800:Static-KSP-Image-Right-Left-S",
-   "page_url": "https://www.acer.com/us-en/handheld-gaming/nitro-handheld-gaming/nitro-blaze-8",
+   "url": "https://cdn.assets.prezly.com/b96853cc-de7c-474d-9e1b-e3e4bdff2e01/-/resize/1600/Nitro-Blaze-8-GN782U-01.png",
+   "page_url": "https://news.acer.com/acer-expands-handheld-gaming-portfolio-with-new-nitro-blaze-8-and-nitro-blaze-11",
    "maker": "Acer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "Replaces a 375 x 210 promo banner."
   }
  },
  "acer-nitro-blaze-11": {
   "maker_image": {
-   "url": "https://images.acer.com/is/image/acer/Acer-NITRO-Blaze-11-GN7211U-KSP03-Immersive-Visual-Excellence:KSP-with-Specs-S",
-   "page_url": "https://www.acer.com/ee-en/handheld-gaming/nitro-handheld-gaming/nitro-blaze-11",
+   "url": "https://cdn.assets.prezly.com/7aa9da80-c326-4ca1-ba33-40ba7d75f9db/-/resize/1600/Nitro-Blaze-11-GN7112U-SA01_high.png",
+   "page_url": "https://news.acer.com/acer-expands-handheld-gaming-portfolio-with-new-nitro-blaze-8-and-nitro-blaze-11",
    "maker": "Acer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "Replaces a 375 x 210 promo banner; shown with its controllers detached."
   }
  },
  "lenovo-legion-go-2-z2": {
   "maker_image": {
-   "url": "https://p1-ofp.static.pub/medias/27424134970_LegionGO2_202506230352441757092978167.png",
+   "url": "https://p1-ofp.static.pub//fes/cms/2025/08/06/ljumrkg2mzb2wlpur3x44pqtqt5upu462137.jpg",
    "page_url": "https://www.lenovo.com/us/en/p/handheld/legion-go-gen-2/83n0000aus",
    "maker": "Lenovo",
    "checked": "2026-11-09",
-   "family_of": "lenovo-legion-go-2"
+   "note": "Same body as the Legion Go 2."
   }
  },
  "lenovo-legion-go-s-z2go": {
@@ -652,5 +698,71 @@
    "checked": "2026-11-09",
    "family_of": "onexplayer-g1-amd"
   }
+ },
+ "gpd-win-4": {
+  "maker_image": {
+   "url": "https://img.website.xin/contents/sitefiles3601/18006016/images/10483228.png",
+   "page_url": "https://www.gpd.hk/gpdwin42025",
+   "maker": "GPD",
+   "checked": "2026-11-09",
+   "note": "Front view from the WIN 4 2025 page; every WIN 4 (6800U to HX 370) has this body."
+  }
+ },
+ "gpd-win-mini": {
+  "maker_image": {
+   "url": "https://img.website.xin/contents/sitefiles3601/18006016/images/10179576.png",
+   "page_url": "https://www.gpd.hk/gpdwinmini2025",
+   "maker": "GPD",
+   "checked": "2026-11-09",
+   "note": "Open, from the front; the WIN Mini 2024 and 2025 share this body."
+  }
+ },
+ "gpd-win-max-2": {
+  "maker_image": {
+   "url": "https://img.website.xin/contents/sitefiles3601/18006016/images/7044093.png",
+   "page_url": "https://www.gpd.hk/gpdwinmax2",
+   "maker": "GPD",
+   "checked": "2026-11-09",
+   "note": "Open, from the front; the 2023-2025 Max 2 refreshes share this body."
+  }
+ },
+ "gpd-win-5": {
+  "maker_image": {
+   "url": "https://img.website.xin/contents/sitefiles3601/18006016/images/11443996.png",
+   "page_url": "https://www.gpd.hk/gpdwin56773453f",
+   "maker": "GPD",
+   "checked": "2026-11-09"
+  }
+ },
+ "zotac-zone": {
+  "maker_image": {
+   "url": "https://www.zotacstore.com/media/catalog/product/z/g/zgc-g1a1w-01-image02_0.jpg",
+   "page_url": "https://www.zotacstore.com/us/zone-handheld-gaming-console-open-box",
+   "maker": "ZOTAC",
+   "checked": "2026-11-09"
+  }
+ },
+ "orangepi-neo": {
+  "maker_image": {
+   "url": "https://forum.manjaro.org/uploads/default/original/3X/8/f/8fa8b3e6981e02cbde167a4f33144ece6553058d.jpeg",
+   "page_url": "https://forum.manjaro.org/t/development-q-a-orangepi-neo-01/156450",
+   "maker": "Orange Pi",
+   "checked": "2026-11-09"
+  }
+ },
+ "msi-claw-family": {
+  "representative": "msi-claw-8-ai-plus"
+ },
+ "onexplayer-family": {
+  "representative": "onexplayer-onexfly-f1-pro"
+ },
+ "aokzoe-family": {
+  "representative": "aokzoe-a1x"
+ },
+ "ayaneo-family": {
+  "representative": "ayaneo-2s"
+ },
+ "gpd-family": {
+  "representative": "gpd-win-4"
  }
 }

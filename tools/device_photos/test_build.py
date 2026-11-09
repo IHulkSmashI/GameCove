@@ -22,6 +22,10 @@ def test_source_file_is_valid():
         if dev.startswith("_"):
             continue
         assert dev in ids, dev
+        if "representative" in e:
+            assert set(e) == {"representative"}, f"{dev}: a family row only names its representative"
+            assert dev.endswith("-family"), f"{dev}: only '<maker> (unknown model)' rows stand in for another model"
+            continue
         if not build.has_free_source(e):
             assert set(e) == {"maker_image"}, f"{dev}: a row without a free photo only carries maker_image"
             continue
@@ -98,20 +102,55 @@ def test_maker_images_are_well_formed():
     assert makers.main(["--src", str(makers.SRC)]) == 0
 
 
+def _has_picture(e: dict) -> bool:
+    return build.has_free_source(e) or "maker_image" in e
+
+
 def test_every_known_model_has_a_picture_source():
-    """Free photo or maker link for every exact model; the 'unknown model' rows keep the drawing."""
+    """Every row in devices.json has a real picture: a free photo or the maker's image,
+    and every 'unknown model' row a representative model with one of those."""
     src = _src()
     devices = json.loads((ROOT / "app/data/devices.json").read_text())["devices"]
-    # Rows whose maker site could not be read when the links were collected (see docs/DEVICES.md).
-    no_link_yet = {"gpd-win-4", "gpd-win-mini", "gpd-win-max-2", "gpd-win-5", "zotac-zone", "orangepi-neo"}
+    reps = makers.representatives(src)
     for d in devices:
         dev = d["id"]
         if dev.endswith("-family"):
-            assert dev not in src, f"{dev}: unknown-model rows keep the drawing"
+            assert dev in reps, f"{dev}: a family row needs a representative model with a picture"
+            rep = next(x for x in devices if x["id"] == reps[dev])
+            assert rep["maker"] == d["maker"], f"{dev}: the representative must be the same maker's model"
+            assert not rep["id"].endswith("-family"), dev
             continue
-        if dev in no_link_yet:
-            continue
-        assert dev in src, f"{dev}: no free photo and no maker image"
+        assert dev in src and _has_picture(src[dev]), f"{dev}: no free photo and no maker image"
+
+
+def test_family_rows_are_checked_through_their_representative():
+    rows = makers.checked_rows()
+    src = _src()
+    for fam, rep in makers.representatives(src).items():
+        if "maker_image" in src[rep]:
+            assert rows[fam]["url"] == src[rep]["maker_image"]["url"], fam
+            assert rows[fam]["via"] == rep, fam
+    assert makers.family_problems(src) == []
+    bad = dict(src, **{"x-family": {"representative": "nope"}})
+    assert makers.family_problems(bad), "a representative that isn't a row is refused"
+
+
+def test_every_maker_url_is_on_its_makers_rules():
+    """CI-safe (no network): each maker_image link is on a host and path that maker's
+    _makers rules list, https only, and its product page is on the maker's domain."""
+    import urllib.parse
+    rules, entries = makers.load()
+    for dev, m in entries.items():
+        r = rules[m["maker"]]
+        url = m["url"]
+        assert url.startswith("https://"), dev
+        prefixes = [p for p in r["image_prefixes"] if url.startswith(p)]
+        assert prefixes, f"{dev}: {url} is not under {m['maker']}'s image prefixes"
+        host = urllib.parse.urlsplit(url).hostname
+        assert any(urllib.parse.urlsplit(p).hostname == host for p in prefixes), dev
+        assert all(p.startswith("https://") and urllib.parse.urlsplit(p).hostname for p in r["image_prefixes"]), m["maker"]
+        page = urllib.parse.urlsplit(m["page_url"]).hostname or ""
+        assert any(page == d or page.endswith("." + d) for d in r["page_domains"]), dev
 
 
 def test_maker_entry_rules():
@@ -140,11 +179,14 @@ def test_link_check_reports_broken_without_storing(tmp_path, monkeypatch):
                                  "maker": "MSI", "checked": "2026-11-09"}}}
     p = tmp_path / "src.json"
     p.write_text(json.dumps(src))
+    src["c-family"] = {"representative": "b"}
+    p.write_text(json.dumps(src))
     monkeypatch.setattr(makers, "check_url", lambda url, timeout=20.0: "" if url.endswith("a.png") else "http 404")
     rep = tmp_path / "broken.md"
     assert makers.main(["--src", str(p), "--check", "--report", str(rep)]) == 2
     text = rep.read_text()
     assert "`b`" in text and "`a`" not in text
+    assert "`c-family` (shows `b`)" in text, "families are reported with the row they show"
     assert sorted(x.name for x in tmp_path.iterdir()) == ["broken.md", "src.json"], "no image stored"
 
 

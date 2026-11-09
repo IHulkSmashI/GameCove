@@ -22,6 +22,21 @@ jobs:
       - run: pip install -e '.[test]'
       - run: pytest -q
 
+  device-photos:
+    # Offline checks of app/data/device_photos.json on every push: every row has a picture
+    # source, each maker image link sits on that maker's own site (its _makers rules), family
+    # rows name a representative. The weekly device-photos workflow does the network checks.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pillow pytest
+      - run: python -m pytest -q tools/device_photos
+      - run: python tools/device_photos/makers.py
+
   app:
     runs-on: ubuntu-latest
     timeout-minutes: 15

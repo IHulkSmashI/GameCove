@@ -100,6 +100,9 @@ func test_shipped_list_is_all_allowed() -> void:
 			ok(not e.has("file") and not e.has("openverse_id"), "%s: maker link only where no free photo" % id)
 			ok(PhotoSvc.parse_maker_sources(doc).has(id), "%s: maker link follows the _makers rules" % id)
 			continue
+		if e.has("representative"):
+			ok(PhotoSvc.parse_representatives(doc).has(id), "%s: representative has a picture" % id)
+			continue
 		ok(PhotoSvc.license_allowed(e["license"]), "%s license" % id)
 		ok(PhotoSvc.page_allowed(str(e["page_url"])), "%s page" % id)
 		ok(str(e["author"]) != "", "%s author" % id)
@@ -240,7 +243,7 @@ func test_maker_sources_follow_the_rules() -> void:
 	eq(PhotoSvc.parse_maker_sources({"a": {"maker_image": good}}), {}, "no _makers rules -> nothing")
 	var shipped: Dictionary = PhotoSvc.parse_maker_sources(JSON.parse_string(FileAccess.get_file_as_string("res://data/device_photos.json")))
 	ok(shipped.size() >= 25, "shipped maker links parse (%d)" % shipped.size())
-	ok(not shipped.has("msi-claw-family"), "unknown-model rows keep the drawing")
+	ok(not shipped.has("msi-claw-family"), "family rows have no link of their own (they borrow a model's)")
 
 
 func test_sniff_image() -> void:
@@ -436,3 +439,184 @@ func test_about_panel_photo_or_drawing() -> void:
 	eq(p.hints_for(p.photo_view.credit)[0][0], "A", "A opens the source")
 	p.free()
 	_clean()
+
+
+# ---- families: the maker's representative model, captioned ----------------------
+
+const REP_URL := "https://asset-us-store.msi.com/claw8.png"
+
+
+func _family_svc(http: Variant) -> Node:
+	var s := _svc(http)
+	s.maker_sources = {"msi-claw-8-ai-plus": {"url": REP_URL, "page_url": "https://us-store.msi.com/claw8", "maker": "MSI"}}
+	s._reps = {"msi-claw-family": "msi-claw-8-ai-plus"}
+	return s
+
+
+func test_family_caption_text() -> void:
+	eq(PhotoSvc.family_caption("MSI Claw (unknown model)"), "MSI Claw (model not identified)", "claw")
+	eq(PhotoSvc.family_caption("GPD (unknown model)"), "GPD (model not identified)", "gpd")
+	eq(PhotoSvc.family_caption("AYANEO"), "AYANEO (model not identified)", "no suffix")
+
+
+func test_representative_pick_rules() -> void:
+	var doc := {"a-family": {"representative": "a1"}, "a1": {"maker_image": {}},
+		"b-family": {"representative": "nope"}, "c-family": {"representative": "c-family"},
+		"d-family": {"representative": "a-family"}, "e-family": {"representative": "e1"}, "e1": {"note": "no picture"},
+		"f-family": {"representative": "f1"}, "f1": {"file": "F1.jpg"}}
+	eq(PhotoSvc.parse_representatives(doc), {"a-family": "a1", "f-family": "f1"},
+		"only real rows with a picture of their own; no self, chains or missing rows")
+	var shipped: Dictionary = PhotoSvc.parse_representatives(JSON.parse_string(FileAccess.get_file_as_string("res://data/device_photos.json")))
+	var rows := {}
+	for r in load("res://scripts/device/device.gd").load_table():
+		rows[r["id"]] = r
+	for id in rows:
+		if str(id).ends_with("-family"):
+			ok(shipped.has(id), "%s has a representative" % id)
+			if shipped.has(id):
+				eq(rows[shipped[id]]["maker"], rows[id]["maker"], "%s: same maker" % id)
+	eq(shipped.get("msi-claw-family"), "msi-claw-8-ai-plus", "MSI Claw family shows the Claw 8 AI+")
+	eq(shipped.get("gpd-family"), "gpd-win-4", "GPD family shows the WIN 4")
+
+
+func test_family_shows_representative_with_caption() -> void:
+	var http := FakeHttp.new()
+	var body := _png_bytes()
+	http.route(REP_URL, {"bytes": body})
+	var s := _family_svc(http)
+	var ready := []
+	s.photo_ready.connect(func(id, _p): ready.append(id))
+	eq(s.representative_of("msi-claw-family"), "msi-claw-8-ai-plus", "representative")
+	eq(s.representative_of("msi-claw-8-ex"), "msi-claw-8-ex", "exact models stand for themselves")
+	eq(s.photo_for("msi-claw-family"), {}, "first ask is a miss")
+	ok("msi-claw-family" in ready, "photo_ready for the family id")
+	ok("msi-claw-8-ai-plus" in ready, "and for the model fetched")
+	var got: Dictionary = s.photo_for("msi-claw-family")
+	eq(FileAccess.get_file_as_bytes(got["path"]), body, "the representative's picture")
+	eq(got["caption"], "MSI Claw (model not identified)", "caption says the model wasn't recognised")
+	eq(got["pictured"], "Pictured: MSI Claw 8 AI+", "and which model is pictured")
+	eq(got["family"], {"device_id": "msi-claw-family", "representative": "msi-claw-8-ai-plus"}, "family info")
+	eq(PhotoSvc.credit_line(got["credit"]), "Image: MSI", "credit unchanged")
+	ok(not s.photo_for("msi-claw-8-ai-plus").has("caption"), "the model itself has no family caption")
+	eq(http.count(REP_URL), 1, "one request serves both")
+	var v = PhotoView.make(got, 200, Callable())
+	ok(v != null and v.caption != null, "view shows the caption")
+	ok(v.caption.text.begins_with("MSI Claw (model not identified)"), "caption text")
+	ok(v.caption.get_index() < v.credit.get_index(), "caption above the credit")
+	v.free()
+	s.free()
+
+
+# ---- prefetch (instant first launch) --------------------------------------------
+
+func test_prefetch_fills_cache_for_offline_start() -> void:
+	var http := FakeHttp.new()
+	http.route(REP_URL, {"bytes": _png_bytes()})
+	var s := _family_svc(http)
+	ok(not s.has_cached("msi-claw-family"), "nothing cached yet")
+	ok(s.prefetch("msi-claw-family"), "prefetch fetched it")
+	ok(s.has_cached("msi-claw-family"), "cached for the family")
+	ok(s.has_cached("msi-claw-8-ai-plus"), "and the model")
+	eq(http.count(REP_URL), 1, "one image")
+	var o: Dictionary = http.options[0]
+	eq(int(o.get("max_bytes", 0)), PhotoSvc.MAKER_MAX_BYTES, "same size cap")
+	# Next start, offline: the cached photo shows without any request.
+	var off := FakeHttp.new()
+	off.offline = true
+	var s2 := PhotoSvc.new()
+	s2.cache_dir = _dir
+	s2.prefs_path = _prefs
+	s2.http = off
+	s2.maker_sources = s.maker_sources.duplicate(true)
+	s2._reps = s._reps.duplicate()
+	ok(not s2.photo_for("msi-claw-family").is_empty(), "offline start shows the prefetched photo")
+	eq(off.requests.size(), 0, "no request while the copy is fresh")
+	ok(s2.prefetch("msi-claw-family"), "prefetch with a cached copy: true, nothing to do")
+	eq(off.requests.size(), 0, "still no request")
+	s.free()
+	s2.free()
+
+
+func test_prefetch_respects_settings_and_failures() -> void:
+	var http := FakeHttp.new()
+	http.route(REP_URL, {"bytes": _png_bytes()})
+	var s := _family_svc(http)
+	s.set_maker_enabled(false)
+	ok(not s.prefetch("msi-claw-family"), "Show maker photos off: no prefetch")
+	eq(http.requests.size(), 0, "and no request")
+	s.set_maker_enabled(true)
+	s.set_enabled(false)
+	ok(not s.prefetch("msi-claw-family"), "real photos off: no prefetch")
+	eq(http.requests.size(), 0, "and no request")
+	s.set_enabled(true)
+	ok(not s.prefetch(""), "no device")
+	ok(not s.prefetch("unknown"), "unknown device")
+	ok(not s.prefetch("steam-deck-lcd"), "no picture source here: nothing cached")
+	var http2 := FakeHttp.new()
+	http2.route(REP_URL, {"text": "<html>moved</html>"})
+	var s2 := _family_svc(http2)
+	ok(not s2.prefetch("msi-claw-family"), "not an image: false, nothing cached")
+	ok(not s2.has_cached("msi-claw-family"), "nothing cached")
+	var s3 := _family_svc(null)
+	ok(not s3.prefetch("msi-claw-family"), "no network object: false")
+	s.free()
+	s2.free()
+	s3.free()
+
+
+func test_prefetch_detected_without_device_is_harmless() -> void:
+	var s := _family_svc(FakeHttp.new())
+	ok(not s.prefetch_detected(), "outside the tree / no Device: false")
+	s.free()
+
+
+# ---- view: the plain margin is cropped at display time --------------------------
+
+func test_view_crops_plain_margin() -> void:
+	var img := Image.create(400, 400, false, Image.FORMAT_RGBA8)
+	img.fill(Color.WHITE)
+	img.fill_rect(Rect2i(100, 170, 200, 60), Color(0.1, 0.1, 0.1))
+	var r: Rect2i = PhotoView.subject_rect(img)
+	ok(r.size.x < 260 and r.size.y < 110, "white margin cropped (%s)" % r)
+	ok(r.encloses(Rect2i(100, 170, 200, 60)), "the subject is kept whole")
+	var clear := Image.create(300, 300, false, Image.FORMAT_RGBA8)
+	clear.fill(Color(0, 0, 0, 0))
+	clear.fill_rect(Rect2i(50, 120, 200, 60), Color(0.3, 0.3, 0.3))
+	ok(PhotoView.subject_rect(clear).size.y < 100, "transparent margin cropped")
+	var photo := Image.create(200, 100, false, Image.FORMAT_RGB8)
+	for y in 100:
+		for x in 200:
+			photo.set_pixel(x, y, Color(float(x) / 200.0, float(y) / 100.0, 0.5))
+	eq(PhotoView.subject_rect(photo), Rect2i(0, 0, 200, 100), "a real photo (corners differ) is left alone")
+	var p := ProjectSettings.globalize_path(_dir.path_join("margin.png"))
+	_clean()
+	img.save_png(p)
+	var tex := PhotoView.load_trimmed(p)
+	ok(tex != null and tex.get_width() < 260, "the view's texture is the cropped one")
+	eq(FileAccess.get_file_as_bytes(p).size() > 0, true, "the cached file itself is untouched")
+	_clean()
+
+
+func test_about_panel_family_caption() -> void:
+	var About: GDScript = load("res://scripts/ui/device/about_panel.gd")
+	var s: Dictionary = load("res://tests/fixtures/device_ui/fakes.gd").services()
+	var ph := FakeFamilyPhoto.new()
+	ph.path = _photo_file()
+	s["photo"] = ph
+	var p: Control = About.build(s)
+	ok(p.photo_view != null, "photo shown")
+	var cap: Label = p.photo_view.find_child("FamilyCaption", true, false)
+	ok(cap != null and cap.text.contains("(model not identified)"), "family caption on About")
+	p.free()
+	_clean()
+
+
+class FakeFamilyPhoto extends RefCounted:
+	signal photo_ready(device_id: String, path: String)
+	var enabled := true
+	var path := ""
+	func photo_for(_id: String) -> Dictionary:
+		return {"path": path, "credit": {"kind": "maker", "maker": "MSI", "page_url": "https://www.msi.com/x"},
+			"caption": "MSI Claw (model not identified)", "pictured": "Pictured: MSI Claw 8 AI+"}
+	func set_enabled(on: bool) -> void:
+		enabled = on
