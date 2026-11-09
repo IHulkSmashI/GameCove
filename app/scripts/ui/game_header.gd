@@ -69,10 +69,14 @@ func _init() -> void:
 	title.add_theme_constant_override("shadow_offset_y", 2)
 	title.add_theme_constant_override("shadow_outline_size", 8)
 	add_child(title)
-	meta = Kit.hbox(ThemeLib.SPACE_5)
+	meta = Kit.hbox(ThemeLib.SPACE_3)
 	meta.name = "Meta"
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(meta)
+	# The source (store, year) joins the mono meta line under the title.
+	remove_child(meta)
+	add_child(meta)
+	move_child(meta, title.get_index() + 1)
 	badges = Kit.hbox(ThemeLib.SPACE_2)
 	badges.name = "Badges"
 	badges.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -81,11 +85,8 @@ func _init() -> void:
 
 
 func _restyle() -> void:
-	var a := eyebrow.get_theme_color("font_color") if eyebrow.has_theme_color_override("font_color") else ThemeLib.color("accent")
-	var sb := ThemeLib.box(Color(a, 0.10), 6, 10, 3)
-	sb.border_color = Color(a, 0.55)
-	sb.set_border_width_all(1)
-	tag.add_theme_stylebox_override("panel", sb)
+	# The line above the title is plain mono accent text (no box).
+	tag.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.40) if ThemeLib.is_dark() else Color(1, 1, 1, 0.0))
 
 
@@ -114,14 +115,14 @@ func show_game(g: Dictionary, line := "", animate := false) -> void:
 	_logo_for(g)
 	for c in meta.get_children():
 		Kit.drop(meta, c)
-	var src: Array[String] = []
+	# One mono line: "Steam · Played today · 13 h played · 2017".
+	var parts: Array[String] = []
 	for seg in meta_segments(g, int(Time.get_unix_time_from_system())):
-		if seg[0] == "store" or seg[0] == "calendar":
-			src.append(seg[1])
-		else:
-			meta.add_child(_segment(seg[0], seg[1]))
-	source.text = "  //  ".join(src)
-	source.visible = not src.is_empty()
+		parts.append(seg[1])
+	if not parts.is_empty():
+		meta.add_child(_segment("", "  ·  ".join(parts)))
+	source.text = ""
+	source.visible = false
 	meta.visible = meta.get_child_count() > 0
 	for c in badges.get_children():
 		Kit.drop(badges, c)
@@ -168,10 +169,15 @@ func meta_text() -> String:
 func _segment(icon: String, text: String) -> HBoxContainer:
 	var row := Kit.hbox(ThemeLib.SPACE_2)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(Icons.rect(icon, 18, ThemeLib.color("accent")))
-	var l := Kit.label(text, "QuietLabel")
-	l.add_theme_font_override("font", ThemeLib.font("medium"))
-	l.add_theme_color_override("font_color", ThemeLib.color("text"))
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if icon != "":
+		row.add_child(Icons.rect(icon, 18, ThemeLib.color("accent")))
+	var l := Kit.label(text, "MonoLabel")
+	l.add_theme_font_override("font", ThemeLib.mono(false, 2))
+	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+	l.add_theme_color_override("font_color", ThemeLib.color("text").lerp(ThemeLib.color("text_2"), 0.35))
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(l)
 	return row

@@ -19,6 +19,8 @@ signal cells_changed
 signal cell_focused
 
 const COLS := 12
+## Columns in use (set_columns); COLS by default.
+var cols := COLS
 const CELL := Vector2(74, 74)
 const MAX_CELLS := 48
 const RARE := 10.0
@@ -88,7 +90,7 @@ func setup(id: String, svc: Object) -> void:
 	add_child(_detail)
 	grid = GridContainer.new()
 	grid.name = "Grid"
-	grid.columns = COLS
+	grid.columns = cols
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 12)
 	add_child(grid)
@@ -261,13 +263,13 @@ func show_item(a: Dictionary) -> void:
 func _link() -> void:
 	for i in cells.size():
 		var c: Control = cells[i]
-		var col := i % COLS
+		var col := i % cols
 		c.focus_neighbor_left = c.get_path_to(cells[i - 1] if col > 0 else c)
-		c.focus_neighbor_right = c.get_path_to(cells[i + 1] if col < COLS - 1 and i + 1 < cells.size() else c)
-		if i >= COLS:
-			c.focus_neighbor_top = c.get_path_to(cells[i - COLS])
-		if i + COLS < cells.size():
-			c.focus_neighbor_bottom = c.get_path_to(cells[i + COLS])
+		c.focus_neighbor_right = c.get_path_to(cells[i + 1] if col < cols - 1 and i + 1 < cells.size() else c)
+		if i >= cols:
+			c.focus_neighbor_top = c.get_path_to(cells[i - cols])
+		if i + cols < cells.size():
+			c.focus_neighbor_bottom = c.get_path_to(cells[i + cols])
 
 
 ## Edges: the first row's up goes to `above`, the last row's down to `below`.
@@ -275,13 +277,24 @@ func link_edges(above: Control, below: Control) -> void:
 	_link()
 	for i in cells.size():
 		var c: Control = cells[i]
-		if i < COLS and above != null:
+		if i < cols and above != null:
 			c.focus_neighbor_top = c.get_path_to(above)
-		if i + COLS >= cells.size():
+		if i + cols >= cells.size():
 			# Cells in a short last row's columns fall to the next control too.
 			c.focus_neighbor_bottom = c.get_path_to(below if below != null else c)
 	# A cell above an empty spot in the short last row drops to the last cell.
-	var last_row_start := (cells.size() - 1) / COLS * COLS
-	for i in range(maxi(0, last_row_start - COLS), last_row_start):
-		if i + COLS >= cells.size() and i < cells.size():
+	var last_row_start := (cells.size() - 1) / cols * cols
+	for i in range(maxi(0, last_row_start - cols), last_row_start):
+		if i + cols >= cells.size() and i < cells.size():
 			cells[i].focus_neighbor_bottom = cells[i].get_path_to(cells[cells.size() - 1])
+
+
+## Fits the grid to `width` px (the card's inner width); relinks focus.
+func fit_width(width: float) -> void:
+	var n := clampi(int((width + 12.0) / (CELL.x + 12.0)), 3, COLS)
+	if n == cols:
+		return
+	cols = n
+	grid.columns = n
+	if not cells.is_empty():
+		cells_changed.emit()

@@ -273,8 +273,19 @@ func add_action(text: String, icon := "", primary := false, node_name := "") -> 
 	return b
 
 
-## A tinted content card with an icon heading; returns its body.
-func add_card(title: String, icon := "", subtitle := "") -> VBoxContainer:
+## Cards added with `column = true` sit side by side under the hero: three
+## columns on wide screens, two (the first two stacked) below COLUMNS_3_W.
+const COLUMNS_3_W := 1350.0
+## After the column cards are dealt: how many columns, and each one's inner
+## width (inside the card's padding), so content can fit itself.
+signal columns_laid_out(count: int, inner_width: float)
+var columns: HBoxContainer
+var _column_cards: Array = []
+
+
+## A tinted content card with an icon heading; returns its body. `column`:
+## put it in the side-by-side row instead of the full-width stack.
+func add_card(title: String, icon := "", subtitle := "", column := false) -> VBoxContainer:
 	var p := PanelContainer.new()
 	p.theme_type_variation = "CardPanel"
 	p.name = "Card_" + title.validate_node_name()
@@ -289,8 +300,57 @@ func add_card(title: String, icon := "", subtitle := "") -> VBoxContainer:
 	if subtitle != "":
 		head.add_child(Kit.label(subtitle, "QuietLabel", true))
 	col.add_child(head)
-	cards_box.add_child(p)
+	if column:
+		_add_column_card(p)
+	else:
+		cards_box.add_child(p)
 	return col
+
+
+func _add_column_card(card: PanelContainer) -> void:
+	if columns == null:
+		columns = Kit.hbox(18)
+		columns.name = "Columns"
+		columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cards_box.add_child(columns)
+		columns.resized.connect(_layout_columns)
+	_column_cards.append(card)
+	_layout_columns()
+
+
+## (Re)deals the column cards into stacks for the current width.
+func _layout_columns() -> void:
+	if columns == null:
+		return
+	var w := columns.size.x if columns.size.x > 0.0 else size.x
+	if w <= 0.0:
+		w = size.x - 2.0 * (ThemeLib.EDGE + 32)
+	var n := 3 if w >= COLUMNS_3_W else 2
+	n = mini(n, _column_cards.size())
+	if n > 0:
+		columns_laid_out.emit(n, (w - 18.0 * (n - 1)) / n - 40.0)
+	if columns.get_child_count() == n and columns.get_meta("dealt", 0) == _column_cards.size():
+		return
+	columns.set_meta("dealt", _column_cards.size())
+	for c in _column_cards:
+		if c.get_parent() != null:
+			c.get_parent().remove_child(c)
+	for s in columns.get_children():
+		columns.remove_child(s)
+		s.queue_free()
+	var stacks: Array = []
+	for i in n:
+		var st := Kit.vbox(18)
+		st.name = "Column%d" % i
+		st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		columns.add_child(st)
+		stacks.append(st)
+	for i in _column_cards.size():
+		# Two columns: everything but the last card stacks on the left.
+		var k := i if n >= _column_cards.size() else (0 if i < _column_cards.size() - 1 else n - 1)
+		var card: PanelContainer = _column_cards[i]
+		card.size_flags_vertical = Control.SIZE_EXPAND_FILL if n == _column_cards.size() else Control.SIZE_FILL
+		stacks[k].add_child(card)
 
 
 ## Tint the primary action with the art's colour (from the backdrop).

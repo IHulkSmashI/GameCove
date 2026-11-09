@@ -211,9 +211,12 @@ static func price_column(deal: Dictionary, big := false, align_right := true) ->
 	var p := T.price(deal)
 	var main := Kit.label(p if p != "" else T.SEE_PRICE, "NumberLabel")
 	main.name = "Amount"
-	main.add_theme_font_override("font", ThemeLib.font("semibold", true))
-	main.add_theme_font_size_override("font_size", ThemeLib.SIZE_HEADLINE if big else ThemeLib.SIZE_LEAD)
+	# Prices are mono in the accent ("$19.99 CAD").
+	main.add_theme_font_override("font", ThemeLib.mono(true, 1))
+	main.add_theme_font_size_override("font_size", ThemeLib.SIZE_HEADLINE - 4 if big else ThemeLib.SIZE_BODY)
+	main.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	if p == "":
+		main.add_theme_font_override("font", ThemeLib.font("semibold"))
 		main.add_theme_color_override("font_color", ThemeLib.color("text_2"))
 		main.add_theme_font_size_override("font_size", ThemeLib.SIZE_TITLE if big else ThemeLib.SIZE_BODY)
 	top.add_child(main)
@@ -233,7 +236,7 @@ static func strike(text: String, align_right := true) -> RichTextLabel:
 	r.autowrap_mode = TextServer.AUTOWRAP_OFF
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	r.focus_mode = Control.FOCUS_NONE
-	r.add_theme_font_override("normal_font", ThemeLib.font("regular", true))
+	r.add_theme_font_override("normal_font", ThemeLib.mono(false, 1))
 	r.add_theme_font_size_override("normal_font_size", ThemeLib.SIZE_CAPTION)
 	r.add_theme_color_override("default_color", ThemeLib.color("text_3"))
 	r.text = ("[right][s]%s[/s][/right]" if align_right else "[s]%s[/s]") % text

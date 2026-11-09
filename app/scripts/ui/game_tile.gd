@@ -345,7 +345,8 @@ func _on_focus() -> void:
 	Motion.to(card, "scale", Vector2(LIFT, LIFT), Motion.BASE, Tween.TRANS_BACK)
 	Motion.to(card, "modulate", Color.WHITE, Motion.FAST)
 	Motion.to(glow, "modulate:a", 1.0, Motion.FAST)
-	Motion.to(badges_box, "modulate:a", 1.0, Motion.FAST)
+	# The focused tile shows SELECTED and its corner pill; the strip's facts
+	# (Platinum, time to beat) sit in the hero / details bar instead.
 	Motion.to(selected_pill, "modulate:a", 1.0, Motion.FAST)
 	# Glow pulse: starts wide and settles.
 	Motion.method(self, "glow", func(v: float): _set_glow(v), 30.0, 18.0, 0.45)

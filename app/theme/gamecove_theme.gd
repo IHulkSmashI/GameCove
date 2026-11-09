@@ -158,6 +158,24 @@ static func focus_ring(r := -1, col: Color = Color(0, 0, 0, 0), width := 2, glow
 	return s
 
 
+## The selected-row look: a thick ring hugging the card, a cyan glow that
+## falls below it, and the card's own dark fill (no tint), so text keeps its
+## contrast. Rows, list items and device cards share it.
+static func row_focus(r := -1) -> StyleBoxFlat:
+	var rr := r if r >= 0 else radius("m")
+	var s := focus_ring(rr, color("ring"), 3)
+	s.draw_center = true
+	# Opaque: a StyleBoxFlat's shadow shows through a see-through centre.
+	var base: Color = color("surface_2") if is_dark() else color("surface")
+	s.bg_color = base.lerp(color("ring"), 0.04)
+	s.bg_color.a = 1.0
+	var g: Color = color("glow")
+	s.shadow_color = Color(g, g.a * 0.75)
+	s.shadow_size = int(tok("glow_size")) + 4
+	s.shadow_offset = Vector2(0, 6)
+	return s
+
+
 ## A pill (fully rounded) with an optional hairline border.
 static func pill(bg: Color, border: Color = Color(0, 0, 0, 0), pad_x := 20, pad_y := 10) -> StyleBoxFlat:
 	var s := box(bg, 999, pad_x, pad_y)
@@ -356,20 +374,22 @@ static func build(t: Dictionary = tokens) -> Theme:
 	th.set_stylebox("focus", "TabButton", focus_ring(999, ring, 2, true))
 	th.set_color("font_focus_color", "TabButton", color("text"))
 
-	# Quick menu section tabs: icon over label.
+	# Quick menu section tabs: segments of a pill group; the open one is a
+	# solid accent segment.
 	th.set_type_variation("SectionTab", "Button")
-	_button(th, "SectionTab", Color(0, 0, 0, 0), soft(0.06), soft(0.10), color("text_2"), radius("m"), 4, 8)
-	var sel := box(soft(0.10) if is_dark() else color("surface"), radius("m"), 4, 8)
-	sel.border_color = Color(acc, 0.55)
-	sel.set_border_width_all(1)
+	_button(th, "SectionTab", Color(0, 0, 0, 0), soft(0.06), soft(0.10), color("text_2"), radius("s"), 8, 6)
+	var sel := box(acc, radius("s"), 8, 6)
+	sel.shadow_color = Color(glow, glow.a * 0.5)
+	sel.shadow_size = 8
 	th.set_stylebox("pressed", "SectionTab", sel)
 	th.set_stylebox("hover_pressed", "SectionTab", sel)
-	th.set_font("font", "SectionTab", font("bold"))
-	th.set_font_size("font_size", "SectionTab", SIZE_CAPTION)
+	th.set_font("font", "SectionTab", font("semibold"))
+	th.set_font_size("font_size", "SectionTab", SIZE_CAPTION - 1)
 	th.set_constant("h_separation", "SectionTab", 4)
-	for c in ["font_pressed_color", "font_hover_pressed_color", "font_hover_color"]:
-		th.set_color(c, "SectionTab", color("text"))
-	th.set_stylebox("focus", "SectionTab", focus_ring(radius("m"), ring, 2, true))
+	for c in ["font_pressed_color", "font_hover_pressed_color"]:
+		th.set_color(c, "SectionTab", color("on_accent"))
+	th.set_color("font_hover_color", "SectionTab", color("text"))
+	th.set_stylebox("focus", "SectionTab", focus_ring(radius("s"), ring, 2, true))
 	th.set_color("font_focus_color", "SectionTab", color("text"))
 
 	# Filter / sort chips: outline pills; chosen = accent-tinted fill and edge.
@@ -398,12 +418,7 @@ static func build(t: Dictionary = tokens) -> Theme:
 		var rb: StyleBoxFlat = th.get_stylebox(st, "RowButton")
 		rb.border_color = color("line")
 		rb.set_border_width_all(1)
-	var rf := focus_ring(radius("m"), ring, 2)
-	rf.draw_center = true
-	rf.bg_color = Color(ring, 0.07 if is_dark() else 0.06)
-	rf.shadow_color = Color(glow, glow.a * 0.35)
-	rf.shadow_size = gsize - 4
-	th.set_stylebox("focus", "RowButton", rf)
+	th.set_stylebox("focus", "RowButton", row_focus())
 
 	# Tiles draw their own card, ring and glow.
 	th.set_type_variation("TileButton", "Button")

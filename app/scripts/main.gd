@@ -99,6 +99,8 @@ var setup_flow: Node
 
 
 func _ready() -> void:
+	get_window().size_changed.connect(_fit_density)
+	_fit_density()
 	UiPrefs.load_prefs()
 	_load_extra_prefs()
 	if Device.has_method("glyph_set"):
@@ -551,6 +553,24 @@ func _pause_motion() -> void:
 func _resume_motion() -> void:
 	backdrop.resume_motion()
 	home.hero_stage.resume_motion()
+
+
+## Big screens get more room instead of just bigger pixels: past 1280x800
+## the scale grows at half the rate (1920x1200 lays out at 1536x960, 1.25x),
+## which keeps text about the size it is on a 7" 800p handheld.
+func _fit_density() -> void:
+	var w := get_window()
+	if w == null or w.content_scale_mode == Window.CONTENT_SCALE_MODE_DISABLED:
+		return
+	w.content_scale_size = base_size_for(w.size)
+
+
+static func base_size_for(win: Vector2i) -> Vector2i:
+	var s := minf(win.x / 1280.0, win.y / 800.0)
+	if s <= 1.0:
+		return Vector2i(1280, 800)
+	var eff := 1.0 + (s - 1.0) * 0.5
+	return Vector2i(roundi(win.x / eff), roundi(win.y / eff))
 
 
 ## Static caches hold textures and fonts; let them go so nothing leaks at exit.
@@ -1057,7 +1077,13 @@ func _update_hints(f: Control = null) -> void:
 	var list := hints_for(ctx)
 	var special := _special_hints(f)
 	if not special.is_empty():
-		list = special + [["GUIDE", "Quick menu"]]
+		list = special.duplicate()
+		var has_guide := false
+		for h in special:
+			if h[0] is String and h[0] == "GUIDE":
+				has_guide = true
+		if not has_guide:
+			list.append(["GUIDE", "Quick menu"])
 	for c in hint_bar.get_children():
 		hint_bar.remove_child(c)
 		c.queue_free()

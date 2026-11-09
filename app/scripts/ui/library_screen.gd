@@ -74,10 +74,12 @@ func _init() -> void:
 	head.name = "Head"
 	var title := Kit.label("Library", "TitleLabel")
 	head.add_child(title)
-	count_label = Kit.label("", "QuietLabel")
+	var dot := Kit.label("·", "TitleLabel")
+	dot.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+	head.add_child(dot)
+	count_label = Kit.label("", "TitleLabel")
 	count_label.name = "Count"
-	count_label.add_theme_font_override("font", ThemeLib.font("medium", true))
-	count_label.size_flags_vertical = Control.SIZE_SHRINK_END
+	count_label.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	head.add_child(count_label)
 	var head_pad := Kit.margin(0, int(PAD.x), 0)
 	head_pad.add_child(head)
@@ -417,20 +419,42 @@ func _build_details() -> PanelContainer:
 	var p := PanelContainer.new()
 	p.name = "Details"
 	p.theme_type_variation = "CardPanel"
-	var row := Kit.hbox(20)
+	var row := Kit.hbox(18)
 	p.add_child(row)
-	_d_title = Kit.label("", "LeadLabel")
+	var pill := PanelContainer.new()
+	pill.name = "SelectedPill"
+	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pl := Kit.micro("Selected", "MicroLabel")
+	pl.name = "Text"
+	pl.add_theme_font_override("font", ThemeLib.mono(true, 2))
+	pill.add_child(pl)
+	row.add_child(pill)
+	_d_title = Kit.label("", "HeaderLabel")
 	_d_title.name = "Title"
-	_d_title.add_theme_font_override("font", ThemeLib.font("semibold"))
 	_d_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_d_title.custom_minimum_size = Vector2(220, 0)
+	_d_title.custom_minimum_size = Vector2(160, 0)
 	row.add_child(_d_title)
 	_d_meta = Kit.hbox(18)
+	_d_meta.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_d_meta)
+	_style_details(p)
 	row.add_child(Kit.spacer())
 	_d_badges = Kit.hbox(8)
 	row.add_child(_d_badges)
 	return p
+
+
+## The details bar: an accent-edged card with a solid SELECTED pill.
+func _style_details(p: PanelContainer) -> void:
+	var acc := ThemeLib.color("accent")
+	var sb := ThemeLib.card(22, 12)
+	sb.border_color = Color(acc, 0.45)
+	p.add_theme_stylebox_override("panel", sb)
+	var pill := p.find_child("SelectedPill", true, false) as PanelContainer
+	if pill != null:
+		pill.add_theme_stylebox_override("panel", ThemeLib.box(acc, 4, 8, 3))
+		(pill.get_node("Text") as Label).add_theme_color_override("font_color", ThemeLib.color("on_accent"))
 
 
 func show_details(g: Dictionary) -> void:
@@ -438,15 +462,23 @@ func show_details(g: Dictionary) -> void:
 	for c in _d_meta.get_children():
 		Kit.drop(_d_meta, c)
 	var GH = load("res://scripts/ui/game_header.gd")
+	var parts: Array[String] = []
 	for seg in GH.meta_segments(g, int(Time.get_unix_time_from_system())).slice(0, 3):
-		_d_meta.add_child(Kit.icon_label(seg[0], seg[1], "QuietLabel", ThemeLib.color("text_2"), 18, false))
+		parts.append(seg[1])
+	var m := Kit.label("  ·  ".join(parts), "MonoLabel")
+	m.add_theme_font_override("font", ThemeLib.mono(false, 1))
+	m.add_theme_color_override("font_color", ThemeLib.color("text_2"))
+	m.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	m.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_d_meta.add_child(m)
 	for c in _d_badges.get_children():
 		Kit.drop(_d_badges, c)
 	var n := 0
 	for b in load("res://scripts/ui/badges.gd").for_game(g):
 		if b["kind"] == "store" or n >= 3:
 			continue
-		_d_badges.add_child(load("res://scripts/ui/badge.gd").make(b, "tile"))
+		_d_badges.add_child(load("res://scripts/ui/badge.gd").make(b, "chip"))
 		n += 1
 
 
@@ -505,6 +537,9 @@ func _focus_later(c: Control) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and sort_button != null:
 		_refresh_toolbar()
+		count_label.add_theme_color_override("font_color", ThemeLib.color("accent"))
+		if details != null:
+			_style_details(details)
 		var g := Gradient.new()
 		var sc: Color = ThemeLib.color("scrim")
 		g.colors = PackedColorArray([Color(sc, 0.0), Color(sc, 0.9)])

@@ -4,11 +4,17 @@ extends RefCounted
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 
 
+## Label styles shown in capitals.
+const UPPER := ["TitleLabel", "DisplayLabel", "HeaderLabel", "EyebrowLabel"]
+
+
 static func label(text: String, variation := "", wrap := false) -> Label:
 	var l := Label.new()
 	l.text = text
 	if variation != "":
 		l.theme_type_variation = variation
+		# Titles are set in uppercase Outfit (the text itself stays as given).
+		l.uppercase = variation in UPPER
 	if wrap:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL

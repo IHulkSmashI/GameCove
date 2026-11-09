@@ -28,6 +28,7 @@ var _switch: Panel
 var _knob: Panel
 var _is_bool := false
 var _segments: HBoxContainer
+var _busy := false
 ## Hide the explanation unless the row has focus.
 var collapse_hint := true
 ## Optional func(value) -> String for the line under the row; default Texts.explain.
@@ -236,16 +237,45 @@ func _refresh(animate := false) -> void:
 
 
 func _refresh_focus() -> void:
-	# Only the focused row explains itself; the rest stay compact.
-	_hint.visible = (button.has_focus() or not collapse_hint) and _hint.text != ""
-	var hc: Color = ThemeLib.color("accent") if button.has_focus() and ThemeLib.is_dark() else ThemeLib.color("text_2")
+	# Only the focused row explains itself; the rest stay compact. Focused,
+	# the ring wraps the row and its explanation as one card (see _draw).
+	var f := button.has_focus()
+	_hint.visible = (f or not collapse_hint) and _hint.text != ""
+	var hc: Color = ThemeLib.color("accent") if f and ThemeLib.is_dark() else ThemeLib.color("text_2")
 	_hint.add_theme_color_override("font_color", hc)
+	var carded := f and _hint.visible
+	var sep := 0 if carded else 6
+	if get_theme_constant("separation") != sep:
+		_busy = true
+		add_theme_constant_override("separation", sep)
+		_busy = false
+	if carded:
+		for st in ["focus", "normal", "hover"]:
+			button.add_theme_stylebox_override(st, StyleBoxEmpty.new())
+		var pad := StyleBoxEmpty.new()
+		pad.content_margin_left = 18
+		pad.content_margin_right = 18
+		pad.content_margin_bottom = 14
+		_hint.add_theme_stylebox_override("normal", pad)
+	else:
+		for st in ["focus", "normal", "hover"]:
+			button.remove_theme_stylebox_override(st)
+		_hint.remove_theme_stylebox_override("normal")
+	queue_redraw()
 	if _left == null:
 		return
-	var f := button.has_focus()
 	var c: Color = ThemeLib.color("text") if f else ThemeLib.color("text_3")
 	_left.texture = Icons.tex("chevron_left", 18, c)
 	_right.texture = Icons.tex("chevron_right", 18, c)
+
+
+func _draw() -> void:
+	if button == null or not button.has_focus() or not _hint.visible:
+		return
+	var r := Rect2(Vector2.ZERO, size)
+	var th := button.theme_type_variation
+	draw_style_box(get_theme_stylebox("normal", th if th != "" else &"Button"), r)
+	draw_style_box(ThemeLib.row_focus(), r)
 
 
 func _on_gui_input(event: InputEvent) -> void:
@@ -258,5 +288,7 @@ func _on_gui_input(event: InputEvent) -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_THEME_CHANGED and _value_label != null:
+	if what == NOTIFICATION_THEME_CHANGED and _value_label != null and not _busy:
+		_busy = true
 		_refresh()
+		_busy = false

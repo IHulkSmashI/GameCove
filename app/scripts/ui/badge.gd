@@ -7,6 +7,9 @@ const Themes := preload("res://theme/themes.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 
+## Chip tones remapped for the outline-chip look.
+const CHIP_TONES := {"": "accent", "platinum": "good", "new": "accent"}
+
 var spec: Dictionary = {}
 var style := "tile"
 var label: Label
@@ -29,7 +32,12 @@ func setup(b: Dictionary, badge_style := "tile") -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 4 if style != "chip" else 6)
 	add_child(row)
-	var tone_col: Color = ThemeLib.tone(b.get("tone", ""))
+	var tone_name: String = b.get("tone", "")
+	if style == "chip":
+		# Chips are colourful outlines: neutral facts read in the accent,
+		# a Platinum rating as "works".
+		tone_name = CHIP_TONES.get(tone_name, tone_name)
+	var tone_col: Color = ThemeLib.color("accent") if tone_name == "accent" else ThemeLib.tone(tone_name)
 	var solid := style == "solid"
 	# Solid flags: the dark-theme tone as fill with near-black text in every theme.
 	var flag: Color = Themes.TONES.get(b.get("tone", ""), Themes.TONES[""])

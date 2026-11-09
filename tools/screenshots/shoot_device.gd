@@ -52,6 +52,9 @@ func _run() -> void:
 	await frames(3)
 	main._live_timer.stop()
 	main._live_timer.wait_time = 9999
+	var flow_script = load("res://scripts/ui/setup/setup_flow.gd")
+	if flow_script.instance != null:
+		flow_script.instance.finish()
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
 	main.show_screen("settings")
 	await frames(4)

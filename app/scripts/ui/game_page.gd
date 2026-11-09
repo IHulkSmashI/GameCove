@@ -39,7 +39,7 @@ var game_actions: Object
 var achievements: Object
 ## {"id", "text", "icon"} of the primary action.
 var primary: Dictionary = {}
-var status_box: VBoxContainer
+var status_box: HBoxContainer
 var status_bar: Control
 var status_label: Label
 var pending_card: PanelContainer
@@ -62,7 +62,7 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 		_build_pending()
 
 	var info: Dictionary = g.get("info", {})
-	var about := add_card(TG.ABOUT, "info")
+	var about := add_card(TG.ABOUT, "info", "", true)
 	var specs := [["clock", Texts.ttb_line(info), ""], ["shield", Texts.anticheat_line(info), "anticheat"], ["gauge", Texts.protondb_line(info), ""]]
 	var ac := Texts.anticheat_badge(info)
 	for s in specs:
@@ -82,14 +82,15 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 		about.add_child(row)
 
 	if achievements != null and _is_steam():
-		var body := add_card(TG.ACH_TITLE, "star")
+		var body := add_card(TG.ACH_TITLE, "star", "", true)
 		ach_card = AchievementsCard.new()
 		ach_card.cells_changed.connect(_relink)
 		ach_card.cell_focused.connect(func(): _reveal(body.get_parent()))
 		body.add_child(ach_card)
+		columns_laid_out.connect(func(_n, inner): ach_card.fit_width(inner))
 		ach_card.setup(str(g.get("id", "")), achievements)
 
-	var sbody := add_card(TG.SETTINGS_TITLE, "settings", TG.SETTINGS_SUB)
+	var sbody := add_card(TG.SETTINGS_TITLE, "settings", TG.SETTINGS_SUB, true)
 	form = SettingsForm.new()
 	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam")
 	sbody.add_child(form)
@@ -223,18 +224,21 @@ func _refresh_actions() -> void:
 # ------------------------------------------------------------ live status
 
 func _build_status() -> void:
-	status_box = Kit.vbox(8)
+	# One line under the actions: mono progress text, then the bar.
+	status_box = Kit.hbox(18)
 	status_box.name = "Status"
 	status_box.custom_minimum_size = Vector2(0, 0)
+	status_label = Kit.label("", "MonoLabel")
+	status_label.name = "Line"
+	status_label.add_theme_font_override("font", ThemeLib.mono(true, 1))
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_box.add_child(status_label)
 	status_bar = ProgressLine.new(8.0)
 	status_bar.name = "Bar"
-	status_bar.custom_minimum_size = Vector2(560, 8)
+	status_bar.custom_minimum_size = Vector2(300, 8)
 	status_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	status_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	status_box.add_child(status_bar)
-	status_label = Kit.label("", "QuietLabel")
-	status_label.name = "Line"
-	status_label.add_theme_font_override("font", ThemeLib.font("medium", true))
-	status_box.add_child(status_label)
 	var col := actions_row.get_parent()
 	col.add_child(status_box)
 	col.move_child(status_box, actions_row.get_index() + 1)
@@ -267,7 +271,7 @@ func _refresh_status() -> void:
 			head = "%s %d%%" % [TG.ACTION_ING.get(state.action_of(_key()), head), roundi(f * 100.0)]
 		var nums := TG.progress_line(p) if st in TG.RUNNING else ""
 		status_label.text = head + ("  ·  " + nums if nums != "" else "")
-		status_label.remove_theme_color_override("font_color")
+		status_label.add_theme_color_override("font_color", _accent if _accent.a > 0.0 else ThemeLib.color("accent"))
 		return
 	status_bar.visible = false
 	var cap: String = {"install": "install", "update": "update"}.get(primary.get("id", ""), "")

@@ -31,11 +31,11 @@ class FocusCard extends PanelContainer:
 			return
 		_styling = true
 		var base: Color = ThemeLib.color("surface")
-		var col := Color(base, 0.78) if ThemeLib.is_dark() else Color(base, 0.94)
+		var col := Color(base, 0.86) if ThemeLib.is_dark() else Color(base, 0.94)
 		if tint != "":
 			var t: Color = ThemeLib.color(tint)
-			col = Color(col.lerp(t, 0.07 if ThemeLib.is_dark() else 0.05), col.a)
-		var sb := ThemeLib.box(col, ThemeLib.radius("l"), 20, 16)
+			col = Color(col.lerp(t, 0.03), col.a)
+		var sb := ThemeLib.box(col, ThemeLib.radius("l"), 22, 18)
 		sb.border_color = ThemeLib.color("line")
 		sb.set_border_width_all(1)
 		add_theme_stylebox_override("panel", sb)
@@ -43,7 +43,7 @@ class FocusCard extends PanelContainer:
 
 	func _draw() -> void:
 		if has_focus():
-			draw_style_box(ThemeLib.focus_ring(ThemeLib.radius("l")), Rect2(Vector2.ZERO, size))
+			draw_style_box(ThemeLib.row_focus(ThemeLib.radius("l")), Rect2(Vector2.ZERO, size))
 
 	func _notification(what: int) -> void:
 		if what == NOTIFICATION_THEME_CHANGED:
@@ -100,11 +100,13 @@ static func card(title: String, icon: String, tint := "accent", can_focus := tru
 	head.name = "Head"
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var col_icon: Color = ThemeLib.color(tint) if tint != "" else ThemeLib.color("accent")
-	head.add_child(Icons.rect(icon, 22, col_icon))
-	var t := Kit.label(title, "LeadLabel")
+	head.add_child(Icons.rect(icon, 18, col_icon))
+	# Mono micro heading in the section colour ("CHIP AND DRIVERS").
+	var t := Kit.micro(title, "EyebrowLabel")
 	t.name = "Title"
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	t.add_theme_font_override("font", ThemeLib.font("semibold"))
+	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	t.add_theme_color_override("font_color", col_icon)
 	head.add_child(t)
 	col.add_child(head)
 	return [c, col]
@@ -119,7 +121,7 @@ static func head_chip(col: VBoxContainer, chip: Control) -> void:
 
 ## A state chip: text on the theme's chip colour, coloured by tone.
 static func chip(text: String, tone := "", icon := "") -> PanelContainer:
-	var b: PanelContainer = load("res://scripts/ui/badge.gd").make({"kind": "state", "text": text, "short": text, "tone": tone, "icon": icon}, "tile")
+	var b: PanelContainer = load("res://scripts/ui/badge.gd").make({"kind": "state", "text": text, "short": text, "tone": tone, "icon": icon}, "chip")
 	b.name = "Chip"
 	return b
 
@@ -148,7 +150,7 @@ static func kv(pairs: Array, key_width := 150) -> GridContainer:
 		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var val := Kit.label(v, "", true)
 		val.name = "Value_" + str(p[0]).validate_node_name().replace(" ", "")
-		val.add_theme_font_override("font", ThemeLib.font("medium", true))
+		val.add_theme_font_override("font", ThemeLib.font("semibold", true))
 		box.add_child(val)
 		if p.size() > 2 and str(p[2]) != "":
 			var note := Kit.label(str(p[2]), "CaptionLabel", true)

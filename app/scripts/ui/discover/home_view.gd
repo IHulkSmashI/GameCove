@@ -38,6 +38,7 @@ func setup(c: RefCounted) -> void:
 func attach_stage(layer: Control) -> void:
 	stage = HeroStage.new()
 	stage.name = "DiscoverHero"
+	stage.frame_radius = float(ThemeLib.radius("xl"))
 	layer.add_child(stage)
 	stage.pause_motion()      # no slow drift here: nothing moves when nothing happens
 	stage.visible = visible
