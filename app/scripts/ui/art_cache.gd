@@ -60,7 +60,9 @@ static func request(kind: String, path: String, done: Callable = Callable(), own
 			_pending[key].append(done)
 		return null
 	_pending[key] = [done] if done.is_valid() else []
-	_tasks = _tasks.filter(func(t): return not WorkerThreadPool.is_task_completed(t))
+	for t in _tasks.filter(func(t): return WorkerThreadPool.is_task_completed(t)):
+		WorkerThreadPool.wait_for_task_completion(t)   # frees it; returns at once
+		_tasks.erase(t)
 	_tasks.append(WorkerThreadPool.add_task(func():
 		var r := _load(kind, path)
 		_finish.call_deferred(kind, path, r[0], r[1]),

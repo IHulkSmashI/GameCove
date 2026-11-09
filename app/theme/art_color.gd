@@ -77,6 +77,25 @@ static func accent_for(picked: Color, tokens: Dictionary) -> Color:
 	return c
 
 
+## The far end of a primary gradient that starts at `a`: the hue turned toward
+## violet (the theme's accent_2 side), adjusted until `on` text still reads at
+## 4.5:1, so a label anywhere on the gradient stays readable.
+static func gradient_end(a: Color, on: Color, tokens: Dictionary) -> Color:
+	var v2: Color = tokens.get("accent_2", Color("#7000FF"))
+	var h := fposmod(a.h + 0.13, 1.0)
+	# Cyan and teal art turn toward the theme's violet; warm art just shifts hue.
+	if a.h > 0.40 and a.h < 0.62:
+		h = lerpf(a.h, v2.h if v2.h > a.h else v2.h + 1.0, 0.85)
+		h = fposmod(h, 1.0)
+	var c := Color.from_hsv(h, clampf(a.s * 0.75, 0.3, 0.8), a.v)
+	var light_text := Themes.luminance(on) > 0.5
+	for i in 40:
+		if Themes.contrast(on, c) >= 4.6:
+			break
+		c = c.darkened(0.04) if light_text else c.lightened(0.04)
+	return c
+
+
 ## Dark or light text for an accent fill, whichever reads better.
 static func on_color(fill: Color) -> Color:
 	var dark := Color(0.03, 0.035, 0.045)

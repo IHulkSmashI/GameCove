@@ -4,11 +4,17 @@ extends RefCounted
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 
 
+## Label styles shown in capitals.
+const UPPER := ["TitleLabel", "DisplayLabel", "HeaderLabel", "EyebrowLabel"]
+
+
 static func label(text: String, variation := "", wrap := false) -> Label:
 	var l := Label.new()
 	l.text = text
 	if variation != "":
 		l.theme_type_variation = variation
+		# Titles are set in uppercase Outfit (the text itself stays as given).
+		l.uppercase = variation in UPPER
 	if wrap:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -35,13 +41,84 @@ static func spacer() -> Control:
 	return c
 
 
+## A button. Primary ("AccentButton") buttons get the gradient pill's glow and
+## a capitals label; secondary ("") and icon buttons a slight scale on focus
+## (button_fx.gd). Their `text` stays as given.
 static func button(text: String, variation := "") -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_ALL
 	if variation != "":
 		b.theme_type_variation = variation
+	if variation == "AccentButton":
+		load("res://scripts/ui/button_fx.gd").attach(b, {"caps": true, "glow": true})
+	elif variation in ["", "IconButton"]:
+		load("res://scripts/ui/button_fx.gd").attach(b)
 	return b
+
+
+## Primary button with the controller glyph inside: "(A) PLAY >".
+static func primary(text: String, glyph_name := "A", icon_name := "") -> Button:
+	var b := button(text, "AccentButton")
+	if icon_name != "":
+		b.icon = load("res://scripts/ui/icons.gd").tex(icon_name, 22)
+	load("res://scripts/ui/button_fx.gd").attach(b, {"glyph": glyph_name})
+	return b
+
+
+## Secondary glass pill with an icon and an optional glyph: "(X) TDP".
+static func secondary(text: String, icon_name := "", glyph_name := "") -> Button:
+	var b := button(text)
+	if icon_name != "":
+		b.icon = load("res://scripts/ui/icons.gd").tex(icon_name, 20)
+	if glyph_name != "":
+		load("res://scripts/ui/button_fx.gd").attach(b, {"glyph": glyph_name})
+	return b
+
+
+## Icon-only round button ("more", search).
+static func icon_button(icon_name: String, tip := "", px := 48) -> Button:
+	var b := button("", "IconButton")
+	b.icon = load("res://scripts/ui/icons.gd").tex(icon_name, 22)
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.custom_minimum_size = Vector2(px, px)
+	b.tooltip_text = tip
+	return b
+
+
+## A mono micro label: uppercase, tracked wide (ACTION RPG, READY TO RESUME).
+static func micro(text: String, variation := "MicroLabel") -> Label:
+	var l := label(text, variation)
+	l.uppercase = true
+	return l
+
+
+## Outline chip with a leading icon, coloured by meaning (Themes tones):
+## "(check) Platinum", "(clock) 12 h to beat". `mono` for telemetry chips.
+static func chip(text: String, icon_name := "", tone := "", mono := false) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.name = "Chip"
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var col: Color = ThemeLib.tone(tone) if tone != "" else ThemeLib.color("text")
+	var sb := ThemeLib.pill(Color(ThemeLib.color("chip"), ThemeLib.color("chip").a * 0.85),
+		Color(col, 0.42) if tone != "" else ThemeLib.color("line_2"), 12, 5)
+	p.add_theme_stylebox_override("panel", sb)
+	var row := hbox(7)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if icon_name != "":
+		row.add_child(load("res://scripts/ui/icons.gd").rect(icon_name, 16, col))
+	var l := label(text)
+	l.name = "Text"
+	l.add_theme_color_override("font_color", col if tone != "" else ThemeLib.color("text"))
+	l.add_theme_font_override("font", ThemeLib.mono(true, 1) if mono else ThemeLib.font("semibold"))
+	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION - (1 if mono else 0))
+	l.uppercase = mono
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(l)
+	p.add_child(row)
+	return p
 
 
 ## Chain controls top to bottom. The ends point at `top` / themselves so focus
@@ -105,16 +182,18 @@ static func glyph(button: String, primary := false, small := false) -> Control:
 ## "(A) Open  (B) Back" style prompt row. `prompts` = [[button, label], ...];
 ## the first is drawn as the primary action.
 static func prompts(list: Array) -> HBoxContainer:
-	var row := hbox(22)
+	var row := hbox(20)
 	row.name = "Prompts"
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for i in list.size():
-		var item := hbox(8)
+		var item := hbox(7)
 		item.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var buttons: Array = list[i][0] if list[i][0] is Array else [list[i][0]]
 		for b in buttons:
 			item.add_child(glyph(b, i == 0))
 		var l := label(list[i][1], "CaptionLabel")
+		l.add_theme_color_override("font_color", ThemeLib.color("text") if i == 0 else ThemeLib.color("text_2"))
+		l.add_theme_font_override("font", ThemeLib.font("semibold"))
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		item.add_child(l)
 		row.add_child(item)
@@ -175,19 +254,27 @@ static func drop(parent: Node, c: Node) -> void:
 		c.free()
 
 
-## Restyle an accent button in `col` (e.g. the game art's colour), keeping
-## its text and icon readable (ArtColor.on_color picks dark or light).
+## Restyle a primary button in `col` (e.g. the game art's colour): the
+## gradient runs from `col` toward violet and the glow takes `col`, while the
+## label stays readable (ArtColor.on_color, gradient_end keeps 4.5:1).
 static func accent_button(b: Button, col: Color) -> void:
-	var a := col if col.a > 0.0 else ThemeLib.color("accent")
+	var cs: Array = ThemeLib.primary_colors(col)
+	var a: Color = cs[0]
+	var e: Color = cs[1]
 	var on: Color = load("res://theme/art_color.gd").on_color(a)
-	var states := {"normal": a, "hover": a.lightened(0.1), "pressed": a.darkened(0.1), "hover_pressed": a.darkened(0.1)}
-	for st in states:
-		b.add_theme_stylebox_override(st, ThemeLib.box(states[st], -1, 18, 10))
-	var f := ThemeLib.box(a.lightened(0.14), -1, 18, 10)
-	f.border_color = ThemeLib.color("text")
-	f.set_border_width_all(3)
-	f.set_expand_margin_all(3)
+	b.add_theme_stylebox_override("normal", ThemeLib.gradient_pill(a, e, 40, 26, 11))
+	b.add_theme_stylebox_override("hover", ThemeLib.gradient_pill(a.lightened(0.1), e.lightened(0.1), 40, 26, 11))
+	b.add_theme_stylebox_override("pressed", ThemeLib.gradient_pill(a.darkened(0.12), e.darkened(0.12), 40, 26, 11))
+	b.add_theme_stylebox_override("hover_pressed", ThemeLib.gradient_pill(a.darkened(0.12), e.darkened(0.12), 40, 26, 11))
+	var glow: Color = ThemeLib.color("glow")
+	b.set_meta("glow_color", Color(a, glow.a))
+	var f := ThemeLib.focus_ring(999, a.lerp(Color.WHITE, 0.55) if ThemeLib.is_dark() else a.darkened(0.2), 2)
 	b.add_theme_stylebox_override("focus", f)
-	for c in ["font_color", "font_focus_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color",
-			"icon_normal_color", "icon_focus_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color"]:
-		b.add_theme_color_override(c, on)
+	var fx: Control = b.get_node_or_null("Fx")
+	if fx != null:
+		fx.fg = on
+		fx._apply()
+	else:
+		for c in ["font_color", "font_focus_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color",
+				"icon_normal_color", "icon_focus_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color"]:
+			b.add_theme_color_override(c, on)

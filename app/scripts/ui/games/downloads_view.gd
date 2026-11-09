@@ -64,7 +64,7 @@ func setup(install_state: Object, game_actions: Object, lookup: Callable) -> voi
 	head.add_child(title_label)
 	summary_label = Kit.label("", "QuietLabel")
 	summary_label.name = "Summary"
-	summary_label.add_theme_font_override("font", ThemeLib.font("medium", true))
+	summary_label.add_theme_font_override("font", ThemeLib.mono(false, 1))
 	summary_label.size_flags_vertical = Control.SIZE_SHRINK_END
 	head.add_child(summary_label)
 	root.add_child(head)
@@ -193,8 +193,8 @@ func _summary(queue: Array) -> void:
 
 
 func _section(text: String) -> Label:
-	var l := Kit.label(text.to_upper(), "CaptionLabel")
-	l.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+	var l := Kit.label(text.to_upper(), "HeaderLabel")
+	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
 	l.add_theme_constant_override("line_spacing", 0)
 	return l
 
@@ -248,7 +248,7 @@ func _now_card(d: Dictionary) -> PanelContainer:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(col)
-	var what := Kit.label(_job_text(d), "AccentLabel")
+	var what := Kit.micro(_job_text(d), "EyebrowLabel")
 	what.name = "What"
 	col.add_child(what)
 	var t := Kit.label(str(g.get("title", d.get("title", ""))), "HeaderLabel")
@@ -259,13 +259,15 @@ func _now_card(d: Dictionary) -> PanelContainer:
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar_row.add_child(bar)
 	var pct := Kit.label("", "NumberLabel")
-	pct.add_theme_font_override("font", ThemeLib.font("semibold", true))
+	pct.add_theme_font_override("font", ThemeLib.mono(true, 1))
+	pct.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	pct.custom_minimum_size = Vector2(64, 0)
 	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	bar_row.add_child(pct)
 	col.add_child(bar_row)
 	var line := Kit.label("", "QuietLabel")
-	line.add_theme_font_override("font", ThemeLib.font("regular", true))
+	line.add_theme_font_override("font", ThemeLib.mono(false, 1))
+	line.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
 	col.add_child(line)
 	_live[key] = {"bar": bar, "line": line, "pct": pct}
 	_update_live(key)
@@ -324,15 +326,16 @@ func _job_row(d: Dictionary, index: int, count: int) -> Button:
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var t := Kit.label(str(g.get("title", "")))
-	t.add_theme_font_override("font", ThemeLib.font("semibold"))
+	var t := Kit.label(str(g.get("title", "")), "HeaderLabel")
+	t.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
 	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	col.add_child(t)
 	var sub := _job_text(d)
 	if int(d.get("size", 0)) > 0:
 		sub += " · " + TG.bytes(int(d["size"]))
 	var line := Kit.label(sub, "QuietLabel")
-	line.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+	line.add_theme_font_override("font", ThemeLib.mono(false, 1))
+	line.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION - 1)
 	col.add_child(line)
 	row.add_child(col)
 	var right := Kit.vbox(6)
@@ -341,7 +344,8 @@ func _job_row(d: Dictionary, index: int, count: int) -> Button:
 	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var pct := Kit.label("", "CaptionLabel")
 	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	pct.add_theme_font_override("font", ThemeLib.font("medium", true))
+	pct.add_theme_font_override("font", ThemeLib.mono(true, 1))
+	pct.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	right.add_child(pct)
 	var bar := ProgressLine.new(6.0)
 	right.add_child(bar)
@@ -371,8 +375,8 @@ func _done_row(d: Dictionary) -> Button:
 	b.add_child(row)
 	var ok: bool = d.get("ok", false)
 	row.add_child(GameIcons.rect("check" if ok else "alert", 22, ThemeLib.color("good") if ok else ThemeLib.color("bad")))
-	var t := Kit.label(str(g.get("title", d.get("title", ""))))
-	t.add_theme_font_override("font", ThemeLib.font("medium"))
+	var t := Kit.label(str(g.get("title", d.get("title", ""))), "HeaderLabel")
+	t.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(t)
@@ -380,7 +384,9 @@ func _done_row(d: Dictionary) -> Button:
 	var what: String = TG.ACTION_DONE.get(str(d.get("action", "")), "Done") if ok else TG.failed(str(d.get("action", "")), "").replace(" this game", "") + (": " + msg if msg != "" else "")
 	var when := TG.ago(int(d.get("at", 0)), int(state.clock.call()) if state != null else int(d.get("at", 0)))
 	var l := Kit.label(what + (" · " + when if when != "" else ""), "QuietLabel")
-	l.add_theme_color_override("font_color", ThemeLib.color("text_2") if ok else ThemeLib.color("bad"))
+	l.add_theme_font_override("font", ThemeLib.mono(false, 1))
+	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+	l.add_theme_color_override("font_color", ThemeLib.color("good") if ok else ThemeLib.color("bad"))
 	row.add_child(l)
 	b.pressed.connect(func(): open_game.emit(g))
 	focus_list.append(b)

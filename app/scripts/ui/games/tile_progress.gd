@@ -47,13 +47,19 @@ static func apply(tile: Control, state: Object) -> void:
 	bar.set_color(Color(0.62, 0.7, 0.78) if st == "paused" else Color(0, 0, 0, 0))
 
 
-## Moves the focus strip badges up so the bar never covers them.
-static func _lift_badges(tile: Control, lifted: bool) -> void:
+## The focus strip sits under the SELECTED pill at the top of the card and the
+## bar along its bottom edge, so they never meet; kept for callers.
+static func _lift_badges(tile: Control, _lifted: bool) -> void:
 	var box: Control = tile.get("badges_box")
 	if box == null:
 		return
-	box.offset_top = -20 if lifted else -8
-	box.offset_bottom = -20 if lifted else -8
+	box.offset_top = 32
+	box.offset_bottom = 32
+	# The title block moves up while the bar shows.
+	var info: Control = tile.get("info_box")
+	if info != null:
+		info.offset_top = -20 if _lifted else -10
+		info.offset_bottom = -20 if _lifted else -10
 
 
 ## The corner pill for a state, {} to leave the tile's own pill.

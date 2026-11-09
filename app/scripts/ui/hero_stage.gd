@@ -12,12 +12,16 @@ const FadeShader := preload("res://shaders/hero_fade.gdshader")
 const CROSSFADE := 0.30
 const DRIFT_S := 20.0
 const DRIFT_SCALE := 1.05
+## Where a poster (cover art standing in for a missing hero) starts, 0..1.
+const POSTER_LEFT := 0.52
 
 var game: Dictionary = {}
 var layers: Array[TextureRect] = []
 var _front := 0
 var _path := ""
 var _paused := false
+## Inside the Home hero frame: rounded corners, no drift (it would leave the frame).
+var frame_radius := 0.0
 
 
 func _init() -> void:
@@ -36,6 +40,7 @@ func _init() -> void:
 		m.shader = FadeShader
 		t.material = m
 		t.modulate.a = 0.0
+		t.resized.connect(func(): (t.material as ShaderMaterial).set_shader_parameter("rect_size", t.size))
 		add_child(t)
 		layers.append(t)
 
@@ -45,22 +50,34 @@ func _notification(what: int) -> void:
 		_apply_fade()
 	if what == NOTIFICATION_RESIZED:
 		for l in layers:
-			(l.material as ShaderMaterial).set_shader_parameter("rect_size", size)
 			l.pivot_offset = Vector2(size.x * 0.75, size.y * 0.4)
 
 
 ## Light themes keep the art further from the text and the top bar, so
 ## dark text stays readable on the light side.
 func _apply_fade() -> void:
-	var dark: bool = load("res://theme/gamecove_theme.gd").is_dark()
 	for l in layers:
-		var m := l.material as ShaderMaterial
-		m.set_shader_parameter("fade_left_from", 0.10 if dark else 0.40)
-		m.set_shader_parameter("fade_left_to", 0.55 if dark else 0.85)
-		m.set_shader_parameter("fade_top", 0.10 if dark else 0.35)
-		m.set_shader_parameter("fade_bottom_from", 0.50 if dark else 0.40)
+		_fade_layer(l)
+	var dark: bool = load("res://theme/gamecove_theme.gd").is_dark()
 	self_modulate = Color.WHITE
 	modulate.a = 1.0 if dark else 0.8
+
+
+func _fade_layer(l: TextureRect) -> void:
+	var dark: bool = load("res://theme/gamecove_theme.gd").is_dark()
+	var m := l.material as ShaderMaterial
+	m.set_shader_parameter("fade_left_from", 0.10 if dark else 0.40)
+	m.set_shader_parameter("fade_left_to", 0.55 if dark else 0.85)
+	m.set_shader_parameter("fade_top", 0.10 if dark else 0.35)
+	m.set_shader_parameter("fade_bottom_from", (0.50 if dark else 0.40) if frame_radius <= 0.0 else 0.70)
+	m.set_shader_parameter("frame_radius", frame_radius)
+	if frame_radius > 0.0:
+		m.set_shader_parameter("fade_left_from", 0.22 if dark else 0.40)
+		m.set_shader_parameter("fade_left_to", 0.68 if dark else 0.85)
+		m.set_shader_parameter("fade_top", 0.0)
+	if l.get_meta("poster", false):
+		m.set_shader_parameter("fade_left_from", 0.0)
+		m.set_shader_parameter("fade_left_to", 0.55)
 
 
 static func hero_path(g: Dictionary) -> String:
@@ -69,8 +86,19 @@ static func hero_path(g: Dictionary) -> String:
 	return p if ArtCache.usable(p) else ""
 
 
+## No hero image: the cover, as a poster on the right that dissolves leftward.
+static func cover_path(g: Dictionary) -> String:
+	var a: Variant = g.get("art", {})
+	var p: String = a.get("cover", "") if a is Dictionary else ""
+	return p if ArtCache.usable(p) else ""
+
+
 func show_game(g: Dictionary) -> void:
 	var p := hero_path(g)
+	var kind := "hero"
+	if p == "" and frame_radius > 0.0:
+		p = cover_path(g)
+		kind = "cover"
 	if g.get("key", "") == game.get("key", "-") and p == _path:
 		return
 	game = g
@@ -79,11 +107,11 @@ func show_game(g: Dictionary) -> void:
 		_crossfade(null)
 		return
 	var want := p
-	var tex := ArtCache.request("hero", p, func(t):
+	var tex := ArtCache.request(kind, p, func(t):
 		if _path == want:
-			_crossfade(t), self)
+			_crossfade(t, kind == "cover"), self)
 	if tex != null:
-		_crossfade(tex)
+		_crossfade(tex, kind == "cover")
 
 
 ## First launch: a soft glow in the theme's two accents instead of key art.
@@ -108,18 +136,23 @@ func has_art() -> bool:
 	return layers[_front].texture != null
 
 
-func _crossfade(tex: Texture2D) -> void:
+func _crossfade(tex: Texture2D, poster := false) -> void:
 	var old := layers[_front]
 	_front = 1 - _front
 	var new := layers[_front]
 	if new.get_index() < old.get_index():
 		move_child(new, old.get_index())   # new fades in on top
 	new.texture = tex
+	# A poster (cover, no hero) fills the right part of the frame only.
+	new.anchor_left = POSTER_LEFT if poster else 0.0
+	(new.material as ShaderMaterial).set_shader_parameter("rect_size", new.size)
+	new.set_meta("poster", poster)
+	_fade_layer(new)
 	Motion.to(new, "scale", Vector2.ONE, 0.0)
 	new.modulate.a = 0.0
 	Motion.to(new, "modulate:a", 1.0 if tex != null else 0.0, CROSSFADE)
 	Motion.to(old, "modulate:a", 0.0, CROSSFADE)
-	if tex != null and not Motion.reduce and not _paused:
+	if tex != null and not Motion.reduce and not _paused and frame_radius <= 0.0:
 		Motion.to(new, "scale", Vector2(DRIFT_SCALE, DRIFT_SCALE), DRIFT_S, Tween.TRANS_SINE, Tween.EASE_IN_OUT)
 
 
@@ -131,3 +164,18 @@ func pause_motion() -> void:
 
 func resume_motion() -> void:
 	_paused = false
+
+
+## Put the stage inside a rounded frame (Home's hero card): `side` px from the
+## left and right edges, from `top` down `height` px.
+func use_frame(side: float, top: float, height: float, radius: float) -> void:
+	frame_radius = radius
+	anchor_left = 0.0
+	anchor_right = 1.0
+	anchor_top = 0.0
+	anchor_bottom = 0.0
+	offset_left = side
+	offset_right = -side
+	offset_top = top
+	offset_bottom = top + height
+	_apply_fade()

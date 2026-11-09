@@ -41,6 +41,7 @@ var fetcher: Callable
 var _cache := {}   # appid -> {"key": [mtimes], "result": Dictionary}
 var _mutex := Mutex.new()
 var _in_flight := {}
+var _tasks: Array[int] = []   # thread-pool ids; every task must be waited on before exit
 
 
 func _ready() -> void:
@@ -64,9 +65,19 @@ func request(appid: Variant) -> void:
 	if not is_inside_tree():
 		loaded.emit(id, achievements_for(id))
 		return
-	WorkerThreadPool.add_task(func():
+	for t in _tasks.filter(func(t): return WorkerThreadPool.is_task_completed(t)):
+		WorkerThreadPool.wait_for_task_completion(t)   # frees it; returns at once
+		_tasks.erase(t)
+	_tasks.append(WorkerThreadPool.add_task(func():
 		var r := _read(id)
-		_finish_request.call_deferred(id, r))
+		_finish_request.call_deferred(id, r)))
+
+
+## Unwaited pool tasks crash the engine at exit; wait for ours.
+func _exit_tree() -> void:
+	for t in _tasks:
+		WorkerThreadPool.wait_for_task_completion(t)
+	_tasks.clear()
 
 
 func _finish_request(id: String, r: Dictionary) -> void:

@@ -7,9 +7,13 @@ uniform vec2 size = vec2(150.0, 225.0);
 uniform float radius = 12.0;
 uniform vec2 pan = vec2(0.0);
 uniform float zoom = 1.0;
+// Fraction of the texture shown on each axis (cover-crop when the card's
+// aspect differs from the art's), and where the crop sits (0.5 = centre).
+uniform vec2 crop = vec2(1.0);
+uniform vec2 crop_at = vec2(0.5);
 
 void fragment() {
-	vec2 uv = (UV - 0.5) / zoom + 0.5 + pan;
+	vec2 uv = (UV - 0.5) * crop / zoom + crop_at + pan;
 	vec4 c = texture(TEXTURE, clamp(uv, vec2(0.0), vec2(1.0))) * COLOR;
 	vec2 p = (UV - 0.5) * size;
 	vec2 q = abs(p) - size * 0.5 + radius;

@@ -75,6 +75,18 @@ static func decorate(t: Button, plate: String, plate_quiet := false, extras: Arr
 		l.add_theme_color_override("font_color", Color(1, 1, 1, 0.72) if plate_quiet else Color.WHITE)
 		p.add_child(l)
 		box.add_child(p)
+	# Tiles with a title block: the pills and price sit above the title.
+	var info: Control = t.get("info_box")
+	if info != null:
+		box.anchor_top = 0.0
+		box.anchor_bottom = 0.0
+		box.offset_left = 0
+		box.offset_top = 0
+		box.offset_bottom = 0
+		box.add_theme_constant_override("separation", 3)
+		info.add_child(box)
+		info.move_child(box, 0)
+		return
 	t.card.add_child(box)
 
 
@@ -151,9 +163,9 @@ static func row(view: Dictionary, parts: Dictionary, height := 96) -> Button:
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var title := Kit.label(str(parts.get("title", view.get("title", ""))))
+	var title := Kit.label(str(parts.get("title", view.get("title", ""))), "HeaderLabel")
 	title.name = "Title"
-	title.add_theme_font_override("font", ThemeLib.font("semibold"))
+	title.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.clip_text = true
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -161,6 +173,8 @@ static func row(view: Dictionary, parts: Dictionary, height := 96) -> Button:
 	if str(parts.get("sub", "")) != "":
 		var sub := Kit.label(str(parts["sub"]), "QuietLabel")
 		sub.name = "Sub"
+		sub.add_theme_font_override("font", ThemeLib.mono(false, 1))
+		sub.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION - 1)
 		sub.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		sub.clip_text = true
 		sub.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -199,9 +213,12 @@ static func price_column(deal: Dictionary, big := false, align_right := true) ->
 	var p := T.price(deal)
 	var main := Kit.label(p if p != "" else T.SEE_PRICE, "NumberLabel")
 	main.name = "Amount"
-	main.add_theme_font_override("font", ThemeLib.font("semibold", true))
-	main.add_theme_font_size_override("font_size", ThemeLib.SIZE_HEADLINE if big else ThemeLib.SIZE_LEAD)
+	# Prices are mono in the accent ("$19.99 CAD").
+	main.add_theme_font_override("font", ThemeLib.mono(true, 1))
+	main.add_theme_font_size_override("font_size", ThemeLib.SIZE_HEADLINE - 4 if big else ThemeLib.SIZE_BODY)
+	main.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	if p == "":
+		main.add_theme_font_override("font", ThemeLib.font("semibold"))
 		main.add_theme_color_override("font_color", ThemeLib.color("text_2"))
 		main.add_theme_font_size_override("font_size", ThemeLib.SIZE_TITLE if big else ThemeLib.SIZE_BODY)
 	top.add_child(main)
@@ -221,7 +238,7 @@ static func strike(text: String, align_right := true) -> RichTextLabel:
 	r.autowrap_mode = TextServer.AUTOWRAP_OFF
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	r.focus_mode = Control.FOCUS_NONE
-	r.add_theme_font_override("normal_font", ThemeLib.font("regular", true))
+	r.add_theme_font_override("normal_font", ThemeLib.mono(false, 1))
 	r.add_theme_font_size_override("normal_font_size", ThemeLib.SIZE_CAPTION)
 	r.add_theme_color_override("default_color", ThemeLib.color("text_3"))
 	r.text = ("[right][s]%s[/s][/right]" if align_right else "[s]%s[/s]") % text

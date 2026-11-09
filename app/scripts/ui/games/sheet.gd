@@ -1,6 +1,7 @@
 extends Control
-## A modal choice sheet: dims the screen, shows a glass card with a title, a
-## line under it and a list of rows. A picks, B closes. Used for the Manage
+## A modal choice sheet: dims the screen and slides a glass drawer in from
+## the right edge with a title, a line under it and a list of rows. A picks,
+## B closes. Used for the Manage
 ## menu, install / move location, compatibility tool and confirmations.
 ##
 ##   sheet.open("Where should it go?", "Pick a drive.", [
@@ -18,8 +19,8 @@ const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 signal chosen(id: String)
 signal closed
 
-const WIDTH := 680.0
-const MAX_ROWS := 8
+const WIDTH := 560.0
+const MAX_ROWS := 9
 
 var items: Array = []
 var rows: Array = []
@@ -47,21 +48,25 @@ func _init() -> void:
 	panel = PanelContainer.new()
 	panel.name = "Panel"
 	panel.theme_type_variation = "GlassPanel"
-	panel.anchor_left = 0.5
-	panel.anchor_right = 0.5
-	panel.anchor_top = 0.5
-	panel.anchor_bottom = 0.5
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.custom_minimum_size = Vector2(WIDTH, 0)
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
+	panel.anchor_top = 0.0
+	panel.anchor_bottom = 1.0
+	panel.offset_left = -WIDTH
+	panel.offset_right = 0.0
+	panel.offset_top = 0.0
+	# The hint bar stays in view under the drawer.
+	panel.offset_bottom = -ThemeLib.HINT_BAR_H
+	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	add_child(panel)
-	var col := Kit.vbox(14)
+	var col := Kit.vbox(18)
 	panel.add_child(col)
-	var head := Kit.vbox(4)
-	title_label = Kit.label("", "HeaderLabel", true)
+	var head := Kit.vbox(6)
+	title_label = Kit.label("", "EyebrowLabel", true)
+	title_label.uppercase = true
 	title_label.name = "Title"
 	head.add_child(title_label)
-	sub_label = Kit.label("", "QuietLabel", true)
+	sub_label = Kit.label("", "HeaderLabel", true)
 	sub_label.name = "Sub"
 	head.add_child(sub_label)
 	col.add_child(head)
@@ -80,7 +85,26 @@ func _init() -> void:
 
 func _restyle() -> void:
 	var sc: Color = ThemeLib.color("scrim")
-	_dim.color = Color(sc, 0.74)
+	_dim.color = Color(sc, 0.62)
+	# A drawer: square on the screen edge, rounded where it meets the page.
+	var g := ThemeLib.glass(ThemeLib.radius("xl"), 32, 32)
+	g.corner_radius_top_right = 0
+	g.corner_radius_bottom_right = 0
+	g.border_width_right = 0
+	g.bg_color = ThemeLib.color("surface")
+	panel.add_theme_stylebox_override("panel", g)
+
+
+## Short lines (a game's name) read as the headline under a mono eyebrow;
+## longer ones (a question's explanation) as a plain line under a headline.
+func _style_head(subtitle: String) -> void:
+	var short := subtitle != "" and subtitle.length() <= 34 and not subtitle.ends_with(".")
+	title_label.theme_type_variation = "EyebrowLabel" if short else "HeaderLabel"
+	title_label.uppercase = true
+	sub_label.theme_type_variation = "HeaderLabel" if short else "QuietLabel"
+	sub_label.uppercase = short
+	if short:
+		title_label.get_parent().move_child(title_label, 0)
 
 
 func _notification(what: int) -> void:
@@ -94,6 +118,7 @@ func open(title: String, subtitle: String, list: Array, on_choose: Callable = Ca
 	title_label.text = title
 	sub_label.text = subtitle
 	sub_label.visible = subtitle != ""
+	_style_head(subtitle)
 	for r in rows:
 		Kit.drop(_list, r)
 	rows.clear()
@@ -117,6 +142,11 @@ func open(title: String, subtitle: String, list: Array, on_choose: Callable = Ca
 	_open = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	Motion.fade(self, true)
+	var dx := Motion.slide(40.0)
+	panel.offset_left = -WIDTH + dx
+	panel.offset_right = dx
+	Motion.to(panel, "offset_left", -WIDTH, Motion.FAST)
+	Motion.to(panel, "offset_right", 0.0, Motion.FAST)
 	var f: Control = first if first != null else (rows[0] if not rows.is_empty() else null)
 	if f != null and is_inside_tree():
 		f.grab_focus()
@@ -131,6 +161,13 @@ func _row(it: Dictionary) -> Button:
 	var disabled: bool = it.get("disabled", false)
 	var tone := str(it.get("tone", ""))
 	var main_col: Color = ThemeLib.color("text_3") if disabled else (ThemeLib.color(tone) if tone in ["bad", "warn", "good"] else ThemeLib.color("text"))
+	if tone == "bad" and not disabled:
+		var bad: Color = ThemeLib.color("bad")
+		for st in ["normal", "hover"]:
+			var sb := ThemeLib.box(Color(bad, 0.10 if st == "normal" else 0.16), ThemeLib.radius("m"), 18, 10)
+			sb.border_color = Color(bad, 0.45)
+			sb.set_border_width_all(1)
+			b.add_theme_stylebox_override(st, sb)
 	var row := Kit.hbox(14)
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	row.offset_left = 18

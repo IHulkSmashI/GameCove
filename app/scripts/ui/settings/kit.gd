@@ -17,9 +17,11 @@ static func card(title: String, icon: String, line := "") -> Array:
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var col := Kit.vbox(12)
 	p.add_child(col)
-	var head := Kit.icon_label(icon, title, "LeadLabel", ThemeLib.color("accent"), 22, false)
+	var head := Kit.icon_label(icon, title, "HeaderLabel", ThemeLib.color("accent"), 22, false)
 	head.name = "Heading"
-	(head.get_child(1) as Label).add_theme_font_override("font", ThemeLib.font("semibold"))
+	var hl := head.get_child(1) as Label
+	hl.uppercase = true
+	hl.add_theme_font_size_override("font_size", 20)
 	col.add_child(head)
 	if line != "":
 		var l := Kit.label(line, "QuietLabel", true)

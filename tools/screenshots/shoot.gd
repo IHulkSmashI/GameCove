@@ -18,6 +18,7 @@ var games: Array = []
 var T: GDScript
 var F: GDScript
 var S: GDScript
+var _home_ach: Node
 
 
 func _initialize() -> void:
@@ -89,6 +90,7 @@ func _run() -> void:
 	prefs.path = "/tmp/gamecove-shots/ui.cfg"
 	DirAccess.remove_absolute(prefs.path)
 
+	load("res://scripts/main.gd").boot_splash = false
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await frames(3)
@@ -239,7 +241,31 @@ func _run() -> void:
 			main.quick_menu.show_section(1)
 			await shot("theme_%s_quick" % id)
 			main.quick_menu.close()
-	quit()
+	if want(["boot"]):
+		# The splash at its hold point (not started, so it stays put).
+		var sp: Control = load("res://scripts/ui/boot_splash.gd").new()
+		main.add_child(sp)
+		await shot("boot")
+		sp.queue_free()
+	await finish()
+
+
+## Free main and every static cache before quitting, or the engine aborts at
+## exit (textures and fonts held in static vars outlive the renderer).
+func finish() -> void:
+	if main != null and is_instance_valid(main):
+		main.get_parent().remove_child(main)
+		main.free()   # _exit_tree -> release_caches(), waits for art workers
+	load("res://scripts/main.gd").release_caches()
+	load("res://scripts/ui/ui_kit.gd")._art_cache.clear()
+	# Background work (library scans, art decodes) must end before the engine does.
+	for n in root.get_children():
+		var t: Variant = n.get("_task")
+		if t is int and t >= 0:
+			WorkerThreadPool.wait_for_task_completion(t)
+			n.set("_task", -1)
+	await frames(4)
+	quit(0)
 
 
 ## Settings pages, sign-in, credits, first-run setup and the quick menu
@@ -374,6 +400,14 @@ func _noop(_g = null) -> void:
 
 func _status() -> void:
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
+	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
+	main.home.set_battery_left("~2 h 45 min")
+	main.hint_status.text = "● GameCove 0.4   MSI Claw 8 EX AI+"
+	if _home_ach == null:
+		_home_ach = load("res://tests/test_ui_games.gd").FakeAchievements.new()
+		_home_ach.data = _ach_data()
+		root.add_child(_home_ach)
+		main.home.set_achievements(_home_ach)
 	main.status_panel.set_battery("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4, "time_left_min": 214})
 
 

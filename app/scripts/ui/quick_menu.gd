@@ -133,63 +133,74 @@ func setup(services: Dictionary) -> void:
 	var col := Kit.vbox(14)
 	panel.add_child(col)
 
-	var head := Kit.hbox(12)
+	var head := Kit.hbox(14)
 	head_art = TextureRect.new()
 	head_art.name = "HeadArt"
 	head_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	head_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	head_art.custom_minimum_size = Vector2(32, 48)
+	head_art.custom_minimum_size = Vector2(38, 50)
 	head_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head_art.visible = false
 	head.add_child(head_art)
-	var titles := Kit.vbox(0)
+	var titles := Kit.vbox(2)
 	titles.alignment = BoxContainer.ALIGNMENT_CENTER
-	head_caption = Kit.label("", "CaptionLabel")
+	head_title = Kit.label("Quick menu", "HeaderLabel")
+	head_title.name = "HeadTitle"
+	head_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	head_title.add_theme_font_size_override("font_size", ThemeLib.SIZE_LEAD)
+	titles.add_child(head_title)
+	head_caption = Kit.label("", "MicroLabel")
 	head_caption.name = "HeadCaption"
 	head_caption.visible = false
 	titles.add_child(head_caption)
-	head_title = Kit.label("Quick menu", "LeadLabel")
-	head_title.name = "HeadTitle"
-	head_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	head_title.add_theme_font_override("font", ThemeLib.font("semibold"))
-	titles.add_child(head_title)
 	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(titles)
+	var live_pill := PanelContainer.new()
+	live_pill.name = "LivePill"
+	live_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	live_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var live_row := Kit.hbox(6)
+	live_pill.add_child(live_row)
 	live_icon = TextureRect.new()
 	live_icon.name = "LiveIcon"
 	live_icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	live_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	live_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	head.add_child(live_icon)
-	live_label = Kit.label("", "NumberLabel")
+	live_row.add_child(live_icon)
+	live_label = Kit.label("", "MonoLabel")
 	live_label.name = "Live"
-	live_label.add_theme_font_size_override("font_size", ThemeLib.SIZE_SMALL)
 	live_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	live_label.size_flags_vertical = Control.SIZE_FILL
-	head.add_child(live_label)
+	live_row.add_child(live_label)
+	head.add_child(live_pill)
 	col.add_child(head)
 
-	var tab_row := Kit.hbox(4)
+	# Sections: a segmented pill group, the open one filled with the accent.
+	var tab_row := Kit.hbox(2)
 	tab_row.name = "Tabs"
-	tab_row.add_child(_shoulder("LB"))
+	var tab_track := PanelContainer.new()
+	tab_track.name = "TabTrack"
+	tab_track.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tab_track.add_child(tab_row)
 	for i in SECTIONS.size():
 		var t := Kit.button(SECTIONS[i], "SectionTab")
 		t.name = "Tab%d" % i
 		t.toggle_mode = true
-		t.icon = Icons.tex(SECTION_ICONS[i], 22, Color.WHITE)
-		t.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		t.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		t.custom_minimum_size = Vector2(0, 62)
+		t.custom_minimum_size = Vector2(0, 36)
 		t.tooltip_text = SECTIONS[i]
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		t.pressed.connect(show_section.bind(i))
 		tab_row.add_child(t)
 		tabs.append(t)
-	tab_row.add_child(_shoulder("RB"))
 	Kit.link_horizontal(tabs)
 	for t in tabs:
 		t.focus_neighbor_top = t.get_path_to(t)
-	col.add_child(tab_row)
+	var tabs_line := Kit.hbox(8)
+	tabs_line.add_child(_shoulder("LB"))
+	tabs_line.add_child(tab_track)
+	tabs_line.add_child(_shoulder("RB"))
+	col.add_child(tabs_line)
+	_style_head()
 	var rule := ColorRect.new()
 	rule.name = "Rule"
 	rule.custom_minimum_size = Vector2(0, 1)
@@ -287,8 +298,25 @@ func _set_header(g: Dictionary) -> void:
 	head_art.texture = tex
 	head_art.visible = tex != null
 	head_caption.visible = not g.is_empty()
-	head_caption.text = "Quick menu"
+	var secs := session_seconds()
+	head_caption.text = (TS.QM_SESSION % TS.session_time(secs).to_lower()) if secs >= 60 else "Quick menu"
 	head_title.text = g.get("title", "Quick menu") if not g.is_empty() else "Quick menu"
+	_style_head()
+
+
+## Live pill (battery · watts in mono accent) and the section track.
+func _style_head() -> void:
+	var lp := panel.find_child("LivePill", true, false) as PanelContainer
+	if lp != null:
+		lp.add_theme_stylebox_override("panel", ThemeLib.pill(ThemeLib.color("accent", 0.08), ThemeLib.color("accent", 0.35), 12, 5))
+		live_label.add_theme_color_override("font_color", ThemeLib.color("accent"))
+		live_label.add_theme_font_override("font", ThemeLib.mono(true, 1))
+	var tt := panel.find_child("TabTrack", true, false) as PanelContainer
+	if tt != null:
+		var sb := ThemeLib.box(ThemeLib.soft(0.04), ThemeLib.radius("m"), 5, 5)
+		sb.border_color = ThemeLib.color("line")
+		sb.set_border_width_all(1)
+		tt.add_theme_stylebox_override("panel", sb)
 
 
 func _animate_in() -> void:
@@ -340,8 +368,7 @@ func show_section(i: int, keep_focus := "") -> void:
 	_exit_button = null
 	for t in tabs.size():
 		tabs[t].set_pressed_no_signal(t == i)
-		# Icons for every section, the label only under the active one.
-		tabs[t].text = SECTIONS[t] if t == i else ""
+		tabs[t].text = SECTIONS[t]
 	for c in body.get_children():
 		body.remove_child(c)
 		c.queue_free()
@@ -376,7 +403,7 @@ func focus_target(keep := "") -> Control:
 ## Called every few seconds by main while the menu is open.
 func refresh_live() -> void:
 	var b: Dictionary = device.battery()
-	live_label.text = _battery_text(b)
+	live_label.text = _battery_text(b).replace("   ·   ", " · ")
 	var pct := int(b.get("percent", -1))
 	live_icon.visible = pct >= 0
 	if pct >= 0:

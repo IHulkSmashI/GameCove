@@ -19,6 +19,10 @@ const Icons := preload("res://scripts/ui/icons.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 
 const HERO_FRACTION := 0.66
+## The hero card: EDGE from the sides, FRAME_TOP from the top, FRAME_H tall.
+const FRAME_TOP := 20
+const FRAME_H := 336
+const FadeShader := preload("res://shaders/hero_fade.gdshader")
 
 var game: Dictionary = {}
 var hero: TextureRect
@@ -31,6 +35,8 @@ var scroll: ScrollContainer
 ## Focusable controls inside cards, top to bottom (add_focusable / finish).
 var focusables: Array = []
 var _fade: TextureRect
+var frame: Control
+var _frame_edge: Panel
 var _side: TextureRect
 var _cue_fade: TextureRect
 ## "More below" cue, visible while the page can scroll further.
@@ -48,51 +54,74 @@ func setup_page(g: Dictionary, line := "") -> void:
 	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	base.color = ThemeLib.color("scrim")
 	add_child(base)
+	# The hero sits in a rounded glass card at the top, art on the right.
+	frame = Control.new()
+	frame.name = "HeroFrame"
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.anchor_right = 1.0
+	frame.offset_left = ThemeLib.EDGE
+	frame.offset_right = -ThemeLib.EDGE
+	frame.offset_top = FRAME_TOP
+	frame.offset_bottom = FRAME_TOP + FRAME_H
+	add_child(frame)
 	hero_fallback = FallbackArt.new()
-	hero_fallback.setup(g, 0, 0.0, false)
-	hero_fallback.anchor_right = 1.0
-	hero_fallback.anchor_bottom = HERO_FRACTION
+	hero_fallback.setup(g, 0, float(ThemeLib.radius("xl")), false)
+	hero_fallback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hero_fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(hero_fallback)
+	frame.add_child(hero_fallback)
 	hero = TextureRect.new()
 	hero.name = "HeroArt"
 	hero.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	hero.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	hero.anchor_right = 1.0
-	hero.anchor_bottom = HERO_FRACTION
+	hero.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hero.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hero.visible = false
-	add_child(hero)
+	frame.add_child(hero)
 	_load_hero()
 
 	_fade = TextureRect.new()
 	_fade.name = "HeroFade"
 	_fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_fade.stretch_mode = TextureRect.STRETCH_SCALE
-	_fade.anchor_right = 1.0
-	_fade.anchor_bottom = HERO_FRACTION + 0.01
+	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_fade)
+	frame.add_child(_fade)
 	_side = TextureRect.new()
 	_side.name = "HeroSide"
 	_side.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_side.stretch_mode = TextureRect.STRETCH_SCALE
-	_side.anchor_right = 0.75
-	_side.anchor_bottom = HERO_FRACTION + 0.01
+	_side.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_side.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_side)
+	frame.add_child(_side)
+	for t in [hero, _fade, _side]:
+		var m := ShaderMaterial.new()
+		m.shader = FadeShader
+		m.set_shader_parameter("fade_left_from", -1.0)
+		m.set_shader_parameter("fade_left_to", 0.0)
+		m.set_shader_parameter("fade_bottom_from", 0.999)
+		m.set_shader_parameter("fade_top", 0.0001)
+		m.set_shader_parameter("frame_radius", float(ThemeLib.radius("xl")))
+		t.material = m
+	frame.resized.connect(func():
+		for t in [hero, _fade, _side]:
+			(t.material as ShaderMaterial).set_shader_parameter("rect_size", frame.size))
+	_frame_edge = Panel.new()
+	_frame_edge.name = "HeroFrameEdge"
+	_frame_edge.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_frame_edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_child(_frame_edge)
 	_restyle()
 
 	scroll = ScrollContainer.new()
 	scroll.name = "Scroll"
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.offset_top = 70
+	scroll.offset_top = FRAME_TOP
 	scroll.offset_bottom = -52
 	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	add_child(scroll)
-	var pad := Kit.margin(0, 48, 0)
+	var pad := Kit.margin(0, ThemeLib.EDGE + 32, 0)
 	pad.add_theme_constant_override("margin_bottom", 28)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(pad)
@@ -101,7 +130,7 @@ func setup_page(g: Dictionary, line := "") -> void:
 	pad.add_child(col)
 	var top := Control.new()
 	top.name = "HeroSpace"
-	top.custom_minimum_size = Vector2(0, 150)
+	top.custom_minimum_size = Vector2(0, 52)
 	col.add_child(top)
 	header = GameHeader.new()
 	header.max_badges = 6
@@ -111,7 +140,7 @@ func setup_page(g: Dictionary, line := "") -> void:
 	actions_row.name = "Actions"
 	col.add_child(actions_row)
 	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 10)
+	gap.custom_minimum_size = Vector2(0, 30)
 	col.add_child(gap)
 	cards_box = Kit.vbox(18)
 	cards_box.name = "Cards"
@@ -199,8 +228,8 @@ func _show_hero(tex: Texture2D) -> void:
 func _restyle() -> void:
 	var bg: Color = ThemeLib.color("scrim")
 	var g := Gradient.new()
-	g.offsets = PackedFloat32Array([0.0, 0.35, 0.75, 1.0])
-	g.colors = PackedColorArray([Color(bg, 0.35), Color(bg, 0.10), Color(bg, 0.75), Color(bg, 1.0)])
+	g.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	g.colors = PackedColorArray([Color(bg, 0.0), Color(bg, 0.15), Color(bg, 0.70)])
 	var t := GradientTexture2D.new()
 	t.gradient = g
 	t.width = 4
@@ -208,13 +237,21 @@ func _restyle() -> void:
 	t.fill_to = Vector2(0, 1)
 	_fade.texture = t
 	var g2 := Gradient.new()
-	g2.colors = PackedColorArray([Color(bg, 0.80), Color(bg, 0.0)])
+	g2.offsets = PackedFloat32Array([0.0, 0.40, 0.75])
+	g2.colors = PackedColorArray([Color(bg, 0.92), Color(bg, 0.70), Color(bg, 0.0)])
 	var t2 := GradientTexture2D.new()
 	t2.gradient = g2
 	t2.width = 256
 	t2.height = 4
 	t2.fill_to = Vector2(1, 0)
 	_side.texture = t2
+	var edge := StyleBoxFlat.new()
+	edge.draw_center = false
+	edge.border_color = ThemeLib.color("line_2")
+	edge.set_border_width_all(1)
+	edge.set_corner_radius_all(ThemeLib.radius("xl"))
+	edge.anti_aliasing = true
+	_frame_edge.add_theme_stylebox_override("panel", edge)
 
 
 func _notification(what: int) -> void:
@@ -224,33 +261,96 @@ func _notification(what: int) -> void:
 
 ## A button in the action row. `primary`: the accent button (Play / Buy).
 func add_action(text: String, icon := "", primary := false, node_name := "") -> Button:
-	var b := Kit.button(text, "AccentButton" if primary else "")
+	var b := Kit.primary(text, "A") if primary else Kit.button(text, "")
 	if node_name != "":
 		b.name = node_name
-	b.custom_minimum_size = Vector2(220 if primary else 150, 58)
+	b.custom_minimum_size = Vector2(176 if primary else 0, 50)
 	if icon != "":
-		b.icon = Icons.tex(icon, 22)
-		b.add_theme_constant_override("h_separation", 10)
+		b.icon = Icons.tex(icon, 20)
 	b.focus_entered.connect(func(): scroll.scroll_vertical = 0)
 	actions_row.add_child(b)
 	actions.append(b)
 	return b
 
 
-## A tinted content card with an icon heading; returns its body.
-func add_card(title: String, icon := "", subtitle := "") -> VBoxContainer:
+## Cards added with `column = true` sit side by side under the hero: three
+## columns on wide screens, two (the first two stacked) below COLUMNS_3_W.
+const COLUMNS_3_W := 1350.0
+## After the column cards are dealt: how many columns, and each one's inner
+## width (inside the card's padding), so content can fit itself.
+signal columns_laid_out(count: int, inner_width: float)
+var columns: HBoxContainer
+var _column_cards: Array = []
+
+
+## A tinted content card with an icon heading; returns its body. `column`:
+## put it in the side-by-side row instead of the full-width stack.
+func add_card(title: String, icon := "", subtitle := "", column := false) -> VBoxContainer:
 	var p := PanelContainer.new()
 	p.theme_type_variation = "CardPanel"
 	p.name = "Card_" + title.validate_node_name()
 	var col := Kit.vbox(14)
 	p.add_child(col)
 	var head := Kit.vbox(4)
-	head.add_child(Kit.icon_label(icon, title, "HeaderLabel", ThemeLib.color("accent"), 24) if icon != "" else Kit.label(title, "HeaderLabel"))
+	var ht: Control = Kit.icon_label(icon, title, "HeaderLabel", ThemeLib.color("accent"), 22) if icon != "" else Kit.label(title, "HeaderLabel")
+	var hl: Label = ht if ht is Label else ht.get_child(ht.get_child_count() - 1)
+	hl.uppercase = true
+	hl.add_theme_font_size_override("font_size", 20)
+	head.add_child(ht)
 	if subtitle != "":
 		head.add_child(Kit.label(subtitle, "QuietLabel", true))
 	col.add_child(head)
-	cards_box.add_child(p)
+	if column:
+		_add_column_card(p)
+	else:
+		cards_box.add_child(p)
 	return col
+
+
+func _add_column_card(card: PanelContainer) -> void:
+	if columns == null:
+		columns = Kit.hbox(18)
+		columns.name = "Columns"
+		columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cards_box.add_child(columns)
+		columns.resized.connect(_layout_columns)
+	_column_cards.append(card)
+	_layout_columns()
+
+
+## (Re)deals the column cards into stacks for the current width.
+func _layout_columns() -> void:
+	if columns == null:
+		return
+	var w := columns.size.x if columns.size.x > 0.0 else size.x
+	if w <= 0.0:
+		w = size.x - 2.0 * (ThemeLib.EDGE + 32)
+	var n := 3 if w >= COLUMNS_3_W else 2
+	n = mini(n, _column_cards.size())
+	if n > 0:
+		columns_laid_out.emit(n, (w - 18.0 * (n - 1)) / n - 40.0)
+	if columns.get_child_count() == n and columns.get_meta("dealt", 0) == _column_cards.size():
+		return
+	columns.set_meta("dealt", _column_cards.size())
+	for c in _column_cards:
+		if c.get_parent() != null:
+			c.get_parent().remove_child(c)
+	for s in columns.get_children():
+		columns.remove_child(s)
+		s.queue_free()
+	var stacks: Array = []
+	for i in n:
+		var st := Kit.vbox(18)
+		st.name = "Column%d" % i
+		st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		columns.add_child(st)
+		stacks.append(st)
+	for i in _column_cards.size():
+		# Two columns: everything but the last card stacks on the left.
+		var k := i if n >= _column_cards.size() else (0 if i < _column_cards.size() - 1 else n - 1)
+		var card: PanelContainer = _column_cards[i]
+		card.size_flags_vertical = Control.SIZE_EXPAND_FILL if n == _column_cards.size() else Control.SIZE_FILL
+		stacks[k].add_child(card)
 
 
 ## Tint the primary action with the art's colour (from the backdrop).

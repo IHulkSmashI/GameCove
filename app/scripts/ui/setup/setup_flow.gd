@@ -148,9 +148,12 @@ func _build() -> void:
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	logo.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	rail.add_child(logo)
-	var setup_label := Kit.label("Setup", "LeadLabel")
-	setup_label.add_theme_font_override("font", ThemeLib.font("semibold"))
+	var setup_label := Kit.label("Setup", "HeaderLabel")
+	setup_label.name = "SetupLabel"
 	rail.add_child(setup_label)
+	var step_label := Kit.micro("", "EyebrowLabel")
+	step_label.name = "StepOf"
+	rail.add_child(step_label)
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 8)
 	rail.add_child(gap)
@@ -261,24 +264,34 @@ func _build_rail() -> void:
 	if st != null and st.has_method("steps"):
 		for s in st.steps():
 			states[s["id"]] = "done" if s.get("done", false) else ("skipped" if s.get("skipped", false) else "todo")
+	var n := 0
 	for k in TS.SETUP_STEPS:
+		n += 1
 		var on: bool = k == step
 		var state: String = states.get(TS.SETUP_SERVICE_IDS[k], "todo")
+		if on:
+			var so := find_child("StepOf", true, false) as Label
+			if so != null:
+				so.text = "Step %d of %d" % [n, TS.SETUP_STEPS.size()]
+		# Mono step pills: done in green, the current one in the accent.
+		var tone_col: Color = ThemeLib.color("accent") if on else (ThemeLib.tone("good") if state == "done" else ThemeLib.color("text_3"))
 		var row := PanelContainer.new()
 		row.name = "Step_" + k
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.soft(0.10) if on else Color(0, 0, 0, 0), ThemeLib.radius("m"), 12, 9))
-		var h := Kit.hbox(12)
+		var sb := ThemeLib.box(Color(tone_col, 0.10) if on or state == "done" else ThemeLib.soft(0.03), ThemeLib.radius("m"), 14, 9)
+		sb.border_color = Color(tone_col, 0.55) if on or state == "done" else ThemeLib.color("line")
+		sb.set_border_width_all(1)
+		row.add_theme_stylebox_override("panel", sb)
+		var h := Kit.hbox(10)
 		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var icon := "check" if state == "done" else ("chevron_right" if on else "dots")
-		var col: Color = ThemeLib.tone("good") if state == "done" else (ThemeLib.color("accent") if on else ThemeLib.color("text_3"))
-		if state == "skipped" and not on:
-			icon = "x"
-		h.add_child(Icons.rect(icon, 18, col))
-		var l := Kit.label(TS.SETUP_STEP_NAMES[k])
-		l.add_theme_font_override("font", ThemeLib.font("semibold" if on else "medium"))
-		l.add_theme_color_override("font_color", ThemeLib.color("text") if on else ThemeLib.color("text_2"))
+		var l := Kit.label("%d. %s" % [n, TS.SETUP_STEP_NAMES[k]])
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l.add_theme_font_override("font", ThemeLib.mono(on, 1))
+		l.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+		l.add_theme_color_override("font_color", ThemeLib.color("text") if on else (tone_col if state == "done" else ThemeLib.color("text_2")))
 		h.add_child(l)
+		if state == "done" or (state == "skipped" and not on):
+			h.add_child(Icons.rect("check" if state == "done" else "x", 16, tone_col))
 		row.add_child(h)
 		steps_box.add_child(row)
 
