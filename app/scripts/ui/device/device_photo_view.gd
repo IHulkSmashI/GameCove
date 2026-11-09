@@ -9,6 +9,9 @@ extends VBoxContainer
 ##     photo: {"path", "credit"} from DevicePhoto; open_link: Callable(url)
 ##     A family row's photo also has "caption" / "pictured" ("MSI Claw (model
 ##     not identified)", "Pictured: MSI Claw 8 AI+"), shown over the credit.
+##     A bundled picture (res://assets/device_photos/) has credit {}: no credit
+##     line at all (the button stays, hidden and disabled, so callers that
+##     check credit.disabled skip it).
 ##
 ## Makers' pictures often sit in a big plain margin (square store shots, wide
 ## banners). The view crops that margin at display time (subject_rect: the
@@ -46,12 +49,13 @@ static var _trim_cache := {}
 ## The photo with its plain margin cropped, at most 1200 px; null when the file
 ## is missing or unreadable. Cached per path and modification time.
 static func load_trimmed(path: String) -> Texture2D:
-	if path == "" or path.contains("://") or not FileAccess.file_exists(path):
+	var bundled := path.begins_with(Photo.BUNDLED_DIR) and not path.contains("..")
+	if path == "" or (path.contains("://") and not bundled) or not FileAccess.file_exists(path):
 		return null
 	var key := "%s@%d" % [path, FileAccess.get_modified_time(path)]
 	if _trim_cache.has(key):
 		return _trim_cache[key]
-	var img := Image.load_from_file(path)
+	var img := _load_bundled(path) if bundled else Image.load_from_file(path)
 	if img == null or img.is_empty():
 		return null
 	var r := subject_rect(img)
@@ -63,6 +67,23 @@ static func load_trimmed(path: String) -> Texture2D:
 	var tex := ImageTexture.create_from_image(img)
 	_trim_cache[key] = tex
 	return tex
+
+
+## A picture shipped in the pck: read the raw bytes (export_presets.cfg
+## force-includes them) and decode by sniffed type, so it works the same in
+## the editor and an exported build.
+static func _load_bundled(path: String) -> Image:
+	var b := FileAccess.get_file_as_bytes(path)
+	var img := Image.new()
+	var err := ERR_FILE_UNRECOGNIZED
+	match Photo.sniff_image(b):
+		"webp":
+			err = img.load_webp_from_buffer(b)
+		"png":
+			err = img.load_png_from_buffer(b)
+		"jpg":
+			err = img.load_jpg_from_buffer(b)
+	return img if err == OK else null
 
 
 ## The box holding the subject: pixels that differ from the background (the
@@ -155,7 +176,10 @@ func _build(tex: Texture2D, cr: Dictionary, height: float, open_link: Callable) 
 	credit.add_theme_font_override("font", ThemeLib.font("medium"))
 	credit.add_theme_color_override("font_color", ThemeLib.color("text_2"))
 	credit.tooltip_text = page_url
-	credit.disabled = page_url == "" or not open_link.is_valid()
+	credit.disabled = page_url == "" or not open_link.is_valid() or credit.text == ""
+	credit.visible = credit.text != ""
+	if not credit.visible:
+		credit.focus_mode = Control.FOCUS_NONE
 	credit.pressed.connect(func(): open_link.call(page_url))
 	add_child(credit)
 
