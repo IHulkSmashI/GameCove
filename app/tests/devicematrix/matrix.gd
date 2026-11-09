@@ -25,12 +25,17 @@ extends RefCounted
 
 const ControlsScript := preload("res://scripts/controls/controls.gd")
 const DeviceScript := preload("res://scripts/device/device.gd")
+const PowerService := preload("res://scripts/device/power.gd")
 
 const PROVIDERS_DIR := "res://scripts/controls/providers"
 const SCENARIOS: Array[String] = ["battery", "ac", "failing", "bare"]
 const REAL_PREFIXES: Array[String] = ["/sys/", "/proc/", "/dev/", "/etc/", "/var/", "/run/", "/tmp/", "/home/", "/root/"]
 ## Real paths that are fine to name ("tail -f /dev/null" keeps a process alive).
 const HARMLESS_PATHS: Array[String] = ["/dev/null", "/dev/zero"]
+## Helpers that put sys_root in front of the path they're given (checked by
+## reading them: power/backend.gd path(rel) and dirs(rel) return root + rel).
+## Key: the file the bare call is allowed in ("*" = any file, through `be.`).
+const SYS_ROOT_HELPERS := {"power/backend.gd": ["path(", "dirs("], "*": ["be.path(", "be.dirs("]}
 const SLOW_HOOK_MS := 1500
 const REASON_MAX := 100
 const INVALID := "__devicematrix_invalid__"
@@ -38,6 +43,10 @@ const EXPECT_KEYS: Array[String] = ["available", "reason_contains", "kind", "uni
 	"step", "options_include", "options_exclude", "value", "ac", "note"]
 
 static var _manifest_cache: Dictionary = {}
+static var _generated_dir := ""
+## gen.py's marker file (MARKER in tools/devicematrix/gen.py).
+const MARKER := ".devicematrix"
+const STALE_S := 3600
 
 
 # ---- fakes --------------------------------------------------------------------
@@ -212,14 +221,17 @@ class FakeHhd extends RefCounted:
 # ---- fixtures -----------------------------------------------------------------
 
 ## The generated matrix: DEVICEMATRIX_DIR when it holds one, else generated
-## now into user://devicematrix (once per run). {} + error on failure.
+## now into this run's user://devicematrix-<pid> (once per run). {} + error on failure.
 static func manifest() -> Dictionary:
 	if not _manifest_cache.is_empty():
 		return _manifest_cache
 	var dir := OS.get_environment("DEVICEMATRIX_DIR")
 	if dir == "" or not FileAccess.file_exists(dir.path_join("manifest.json")):
 		if dir == "":
-			dir = OS.get_user_data_dir().path_join("devicematrix")
+			# one folder per test run: two runs at once (worktrees, CI shards) never share one
+			clean_stale()
+			dir = OS.get_user_data_dir().path_join("devicematrix-%d" % OS.get_process_id())
+			_generated_dir = dir
 		var gen := ProjectSettings.globalize_path("res://").path_join("../tools/devicematrix/gen.py").simplify_path()
 		var out := []
 		var code := OS.execute("python3", PackedStringArray(["-I", gen, dir]), out, true)
@@ -230,6 +242,46 @@ static func manifest() -> Dictionary:
 		return {"error": "no manifest in " + dir}
 	_manifest_cache = m
 	return m
+
+
+## Removes the folder this run generated (never a DEVICEMATRIX_DIR given from
+## outside, as CI does for its artifact). test_device_matrix.gd after_all().
+static func cleanup() -> void:
+	if _generated_dir != "" and FileAccess.file_exists(_generated_dir.path_join(MARKER)):
+		_rm_tree(_generated_dir)
+	_generated_dir = ""
+	_manifest_cache = {}
+
+
+## Folders other runs left behind (killed mid-run): only ones gen.py made (they
+## carry its marker) and only when older than an hour, so a run still going
+## elsewhere keeps its own.
+static func clean_stale(max_age_s := STALE_S) -> Array[String]:
+	var removed: Array[String] = []
+	var base := OS.get_user_data_dir()
+	var now := Time.get_unix_time_from_system()
+	for d in DirAccess.get_directories_at(base):
+		if not (d == "devicematrix" or d.begins_with("devicematrix-")):
+			continue
+		var marker := base.path_join(d).path_join(MARKER)
+		if base.path_join(d) == _generated_dir:
+			continue
+		if FileAccess.file_exists(marker) and now - FileAccess.get_modified_time(marker) > max_age_s:
+			_rm_tree(base.path_join(d))
+			removed.append(d)
+	return removed
+
+
+static func _rm_tree(path: String) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		return
+	d.include_hidden = true
+	for f in d.get_files():
+		d.remove(f)
+	for sub in d.get_directories():
+		_rm_tree(path.path_join(sub))
+	DirAccess.remove_absolute(path)
 
 
 static func expectations() -> Dictionary:
@@ -295,11 +347,17 @@ static func _run_scenario(info: Dictionary, scripts: Array, backends: Dictionary
 	var row: Dictionary = dev.profile
 	if dev.id() != str(info["expect_row"]):
 		problems.append("DMI resolved to %s, expected %s" % [dev.id(), info["expect_row"]])
-	var ctx := {"sys_root": root, "runner": runner, "home": str(info["home"]), "device": dev,
-		"hhd_transport": hhd, "devicematrix": scenario, "env": session_env(info, scenario),
-		"config_path": str(info["home"]).path_join(".config/gamecove/devicematrix-%s.cfg" % scenario)}
+	# the Power service on this fixture (never the test machine's autoload)
+	var power: Node = PowerService.new()
+	power.setup(runner, row, root, hhd)
+	power.config_path = str(info["home"]).path_join(".config/gamecove/devicematrix-power-%s.cfg" % scenario)
+	power.detect()
 	var reg: Node = ControlsScript.new()
 	reg.sync_mode = true
+	var ctx := {"sys_root": root, "runner": runner, "home": str(info["home"]), "device": dev,
+		"hhd_transport": hhd, "devicematrix": scenario, "env": session_env(info, scenario),
+		"config_path": str(info["home"]).path_join(".config/gamecove/devicematrix-%s.cfg" % scenario),
+		"power": power, "registry": reg}
 	reg.setup(ctx)
 	var owner := {}
 	for path in scripts:
@@ -348,7 +406,7 @@ static func _run_scenario(info: Dictionary, scripts: Array, backends: Dictionary
 					seen[p] = true
 					problems.append(p)
 		for c in reg.list():
-			problems.append_array(_exercise(c, hot))
+			problems.append_array(_exercise(c, hot, row))
 		problems.append_array(hardware_problems(root, row, info, original).filter(func(p): return not seen.has(p)))
 		problems.append_array(backend_problems(runner, hhd, row, expect.get("invariants", {})))
 		problems.append_array(check_expectations(str(info["id"]), info, row, reg, expect, scenario))
@@ -361,6 +419,7 @@ static func _run_scenario(info: Dictionary, scripts: Array, backends: Dictionary
 		desc[id]["after"] = reg.control(id).value
 	var unmatched := runner.unmatched.duplicate()
 	reg.free()
+	power.free()
 	dev.free()
 	return {"problems": problems, "report": desc, "unmatched": unmatched}
 
@@ -382,6 +441,8 @@ static func _describe(c: Object) -> Dictionary:
 		d.merge({"min": c.min_value, "max": c.max_value, "step": c.step, "unit": c.unit})
 	elif c.kind == "choice":
 		d["options"] = c.options.map(func(o): return o.get("value") if o is Dictionary else o)
+	elif c.kind == "curve":
+		d.merge({"min": c.min_value, "max": c.max_value, "step": c.step, "unit": c.unit, "points": c.points})
 	return d
 
 
@@ -397,8 +458,10 @@ static func _check_shape(c: Object, row: Dictionary) -> Array[String]:
 			out.append("%s: unavailable without a reason" % c.id)
 		if c.reason.length() > REASON_MAX or "\n" in c.reason:
 			out.append("%s: reason should be one short line: %s" % [c.id, c.reason])
-	if not c.kind in ["slider", "choice", "toggle", "color", "action"]:
+	if not c.kind in ["slider", "choice", "toggle", "color", "action", "curve"]:
 		out.append("%s: unknown kind %s" % [c.id, c.kind])
+	if c.available and c.kind == "curve":
+		out.append_array(_curve_shape(c, row))
 	if c.available and c.kind == "slider":
 		if not (c.max_value > c.min_value) or c.step < 0.0:
 			out.append("%s: bad range %s..%s step %s" % [c.id, c.min_value, c.max_value, c.step])
@@ -415,7 +478,7 @@ static func _check_shape(c: Object, row: Dictionary) -> Array[String]:
 
 ## Writes past both ends, the middle, choices and invalid values; puts the
 ## original back.
-static func _exercise(c: Object, hot: Callable) -> Array[String]:
+static func _exercise(c: Object, hot: Callable, row: Dictionary = {}) -> Array[String]:
 	var out: Array[String] = []
 	if not c.available or c.kind == "action":
 		return out   # actions (sleep, screenshot) are never fired by the matrix
@@ -430,14 +493,21 @@ static func _exercise(c: Object, hot: Callable) -> Array[String]:
 			tries = [not bool(before) if before != null else true, bool(before) if before != null else false]
 		"color":
 			tries = ["#ff0000", "#00ff80"]
+		"curve":
+			tries = _curve_tries(c)
 	for v in tries:
 		if c.write(v):
+			if c.kind == "curve":
+				for p in curve_problems(c.value, c, row):
+					out.append("%s: after writing %s the value %s %s" % [c.id, v, c.value, p])
 			if c.kind == "slider" and (c.value < c.min_value or c.value > c.max_value):
 				out.append("%s: value %s outside %s..%s after writing %s" % [c.id, c.value, c.min_value, c.max_value, v])
 			if c.kind == "slider":
 				hot.call()   # the hardware right after an extreme value, before it's put back
 	hot.call()
 	var bads: Array = [null, INVALID, [1, 2]]
+	if c.kind == "curve":
+		bads = [null, INVALID, [], ["a"] if c.points <= 0 else range(c.points + 1)]
 	if c.kind in ["choice", "color"]:
 		bads.append(-987654321)
 	for bad in bads:
@@ -467,6 +537,12 @@ static func _exercise_failing(c: Object) -> Array[String]:
 			v = not bool(before) if before != null else true
 		"color":
 			v = "#123456"
+		"curve":
+			var n: int = c.points if c.points > 0 else 4
+			var top := []
+			for i in n:
+				top.append(c.max_value)
+			v = top if str(before) != str(c.coerce(top)) else null
 	if v == null:
 		return out
 	var wrote: bool = c.write(v)
@@ -476,6 +552,71 @@ static func _exercise_failing(c: Object) -> Array[String]:
 		var now: Variant = c.read()
 		if before != null and now != null and str(now) != str(before):
 			out.append("%s: hardware now reads %s after a failed write (was %s): not restored" % [c.id, now, before])
+	return out
+
+
+# ---- curves (power.fan_curve) ---------------------------------------------------
+
+## The fan table this row's driver uses ({"points", "quiet"}), {} for none.
+static func fan_table(row: Dictionary) -> Dictionary:
+	var info: Dictionary = PowerService.FAN_DRIVERS.get(str(row.get("fan", "")), {})
+	if info.get("kind", "") != "table":
+		return {}
+	return {"points": int(info["points"]), "quiet": info["tables"]["quiet"]}
+
+
+## Curves past both ends, falling, all off and one point under Quiet.
+static func _curve_tries(c: Object) -> Array:
+	var n: int = c.points if c.points > 0 else 4
+	var high := []
+	var low := []
+	var falling := []
+	var dip := []
+	for i in n:
+		high.append(c.max_value + 1000.0)
+		low.append(c.min_value - 1000.0)
+		falling.append(c.max_value - (c.max_value - c.min_value) * i / maxf(1.0, n - 1.0))
+		dip.append(c.max_value if i != n / 2 else c.min_value)
+	return [high, low, falling, dip, c.default_value]
+
+
+## The rules every fan curve keeps: one duty per table point, each inside the
+## control's (device's) range and 0-100 %, never falling as the temperature
+## rises, never quieter than the Quiet preset at any point.
+static func curve_problems(v: Variant, c: Object, row: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	if not v is Array:
+		return ["is not a list of duties"]
+	var t := fan_table(row)
+	var lo := 0.0 if c == null else maxf(0.0, c.min_value)
+	var hi := 100.0 if c == null else minf(100.0, c.max_value)
+	if not t.is_empty() and v.size() != int(t["points"]):
+		out.append("has %d points, the %s table has %d" % [v.size(), row.get("fan"), t["points"]])
+	var prev := -INF
+	for i in v.size():
+		var d := float(v[i])
+		if d < lo - 0.001 or d > hi + 0.001:
+			out.append("point %d = %s outside %s..%s %%" % [i + 1, _n(d), _n(lo), _n(hi)])
+		if d < prev - 0.001:
+			out.append("falls at point %d (%s after %s)" % [i + 1, _n(d), _n(prev)])
+		if not t.is_empty() and i < (t["quiet"] as Array).size() and d < float(t["quiet"][i]) - 0.001:
+			out.append("point %d = %s is quieter than Quiet (%s)" % [i + 1, _n(d), _n(t["quiet"][i])])
+		prev = maxf(prev, d)
+	return out
+
+
+static func _curve_shape(c: Object, row: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	var t := fan_table(row)
+	if c.min_value < 0.0 or c.max_value > 100.0 or not (c.max_value > c.min_value):
+		out.append("%s: curve range %s..%s outside 0..100 %%" % [c.id, c.min_value, c.max_value])
+	if t.is_empty():
+		out.append("%s: curve offered but the %s fan has no table" % [c.id, row.get("fan")])
+	elif c.points != int(t["points"]):
+		out.append("%s: %d points, the %s table has %d" % [c.id, c.points, row.get("fan"), t["points"]])
+	if c.default_value != null:
+		for p in curve_problems(c.default_value, c, row):
+			out.append("%s: default %s" % [c.id, p])
 	return out
 
 
@@ -650,6 +791,11 @@ static func backend_problems(runner: FakeRunner, hhd: FakeHhd, row: Dictionary, 
 			continue
 		var verb := str(argv[i - 1])
 		var value := str(argv[i + 1])
+		if verb == "fan" and value.begins_with("curve:"):
+			var duties := Array(value.trim_prefix("curve:").split(",")).map(func(x): return x.to_float() if x.is_valid_float() else -1.0)
+			for p in curve_problems(duties, null, row):
+				out.append("gamecove-fix-set fan set %s: %s" % [value, p])
+			continue
 		if roots.has(verb) and value.is_valid_float():
 			var msg := _limit_problem(value.to_float(), roots[verb], row)
 			if msg != "":
@@ -894,9 +1040,21 @@ static func lint(dir := "res://scripts/controls") -> Array[String]:
 				var before := line.substr(0, at).strip_edges()
 				if before.ends_with("+"):
 					continue   # <prefix expression> + "/sys/..."
+				if _sys_root_helper(f, before):
+					continue   # be.dirs("/sys/...") and friends add sys_root themselves
 				out.append("%s:%d absolute path without sys_root: %s" % [f, n + 1, line])
 				break
 	return out
+
+
+static func _sys_root_helper(file: String, before: String) -> bool:
+	for k in SYS_ROOT_HELPERS:
+		if k != "*" and not file.ends_with("/" + str(k)):
+			continue
+		for h in SYS_ROOT_HELPERS[k]:
+			if before.ends_with(str(h)):
+				return true
+	return false
 
 
 static func _gd_files(dir: String) -> Array[String]:

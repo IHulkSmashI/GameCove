@@ -44,7 +44,8 @@
       "support": "partial",
       "verified": true,
       "unverified": [],
-      "sources": ["InputPlumber", "steamos-manager"]
+      "sources": ["InputPlumber", "steamos-manager"],
+      "notes": ["TDP max 15 W is Valve's limit; SimpleDeckyTDP (aarron-lee/SimpleDeckyTDP@ab0128f) lets the slider reach 20 W - devices.json keeps 15 W."]
     },
     {
       "id": "steam-deck-oled",
@@ -87,7 +88,8 @@
       "support": "partial",
       "verified": true,
       "unverified": [],
-      "sources": ["InputPlumber", "steamos-manager"]
+      "sources": ["InputPlumber", "steamos-manager"],
+      "notes": ["TDP max 15 W is Valve's limit; SimpleDeckyTDP (aarron-lee/SimpleDeckyTDP@ab0128f) lets the slider reach 20 W - devices.json keeps 15 W."]
     },
     {
       "id": "asus-rog-ally",
@@ -112,7 +114,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 5, "battery_max": 25, "plugged_max": 30, "boost_max": 35},
+      "tdp": {"min": 5, "battery_max": 25, "plugged_max": 30, "boost_max": 35, "sppt_max": 35, "fppt_max": 35, "sppt_ratio": 1.2, "fppt_ratio": 1.4},
       "profiles": {"battery": 10, "balanced": 15, "performance": 25},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "asus_custom_fan_curve",
@@ -131,6 +133,7 @@
       "verified": true,
       "unverified": [],
       "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"],
+      "notes": ["Boost limits follow Handheld Daemon's ASUS rule: hhd-dev/hhd@6f6045a src/adjustor/drivers/asus/__init__.py L51-53, L370-380: FPPT = min(max(SPL, 35), SPL*35/25), SPPT = min(max(SPL, 35), SPL*30/25)."],
       "chip_from_cpu": true
     },
     {
@@ -156,7 +159,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 5, "battery_max": 25, "plugged_max": 30, "boost_max": 35},
+      "tdp": {"min": 5, "battery_max": 25, "plugged_max": 30, "boost_max": 35, "sppt_max": 35, "fppt_max": 35, "sppt_ratio": 1.2, "fppt_ratio": 1.4},
       "profiles": {"battery": 13, "balanced": 17, "performance": 25},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "asus_custom_fan_curve",
@@ -174,7 +177,8 @@
       "support": "partial",
       "verified": true,
       "unverified": [],
-      "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"],
+      "notes": ["Boost limits follow Handheld Daemon's ASUS rule: hhd-dev/hhd@6f6045a src/adjustor/drivers/asus/__init__.py L51-53, L370-380: FPPT = min(max(SPL, 35), SPL*35/25), SPPT = min(max(SPL, 35), SPL*30/25)."]
     },
     {
       "id": "asus-rog-xbox-ally",
@@ -199,7 +203,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 4, "battery_max": 20, "plugged_max": 20, "boost_max": 25},
+      "tdp": {"min": 4, "battery_max": 20, "plugged_max": 20, "boost_max": 25, "sppt_max": 25, "fppt_max": 25, "sppt_ratio": 1.2, "fppt_ratio": 1.4},
       "profiles": {"battery": 6, "balanced": 15, "performance": 20},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "asus_custom_fan_curve",
@@ -217,7 +221,8 @@
       "support": "partial",
       "verified": true,
       "unverified": [],
-      "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"],
+      "notes": ["Boost limits: hhd-dev/hhd@6f6045a core/const.py L299-312 XBOX_ALLY_DATA (max 20 W, 'SPPT 20 FPPT 25', OC 25 W) with the ASUS rule (asus/__init__.py L51-53)."]
     },
     {
       "id": "asus-rog-xbox-ally-x",
@@ -242,7 +247,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 5, "battery_max": 35, "plugged_max": 35, "boost_max": 45},
+      "tdp": {"min": 5, "battery_max": 35, "plugged_max": 35, "boost_max": 35, "sppt_max": 35, "fppt_max": 35, "sppt_ratio": 1.2, "fppt_ratio": 1.4},
       "profiles": {"battery": 13, "balanced": 17, "performance": 30},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "asus_custom_fan_curve",
@@ -260,7 +265,8 @@
       "support": "partial",
       "verified": true,
       "unverified": [],
-      "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"],
+      "notes": ["boost_max 45 -> 35 W: hhd-dev/hhd@6f6045a core/const.py L314-327 XBOX_ALLYX_DATA has max 35 W and the ASUS rule caps SPPT/FPPT at max(SPL, 35) = 35 W. ASUS documents no higher manual-mode figure (rog.asus.com 'How to boost gaming performance on the ROG Ally or ROG Xbox Ally' gives no watt limits); hhd's 50 W 'OC' is opt-in and not a safe default."]
     },
     {
       "id": "asus-rog-xbox-ally-x20",
@@ -285,7 +291,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 5, "battery_max": 35, "plugged_max": 35, "boost_max": 45},
+      "tdp": {"min": 7, "battery_max": 35, "plugged_max": 35, "boost_max": 35, "sppt_max": 35, "fppt_max": 35, "sppt_ratio": 1.2, "fppt_ratio": 1.4},
       "profiles": {"battery": 13, "balanced": 17, "performance": 30},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "asus_custom_fan_curve",
@@ -303,7 +309,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["tdp", "panel.vrr"],
-      "sources": ["InputPlumber", "steamos-manager", "ASUS spec page (7.4in 120 Hz OLED)"]
+      "sources": ["InputPlumber", "steamos-manager", "ASUS spec page (7.4in 120 Hz OLED)"],
+      "notes": ["min 5 -> 7 W and boost_max 45 -> 35 W: hhd-dev/hhd@6f6045a core/const.py L349 ASUS_DATA['ROG XBOX Ally X RC74X'] = XBOX_ALLYX_DATA with min_tdp 7; boost per the ASUS rule (asus/__init__.py L51-53, L370-380)."]
     },
     {
       "id": "lenovo-legion-go",
@@ -328,7 +335,7 @@
       },
       "panel_hz": [60, 144],
       "vrr_range": null,
-      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 30, "boost_max": 41},
+      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 30, "boost_max": 41, "sppt_max": 32, "fppt_max": 41, "fppt_ratio": 1.3667, "sppt_over": 2},
       "profiles": {"battery": 8, "balanced": 15, "performance": 25},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "lenovo_wmi_other",
@@ -346,7 +353,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["charge_limit"],
-      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"],
+      "notes": ["Boost limits: hhd-dev/hhd@6f6045a src/adjustor/drivers/lenovo/__init__.py L62-66, L302-311 (go): SPPT = SPL + 2, at most 32 W; FPPT = min(41, SPL*41/30). Legion Space allows SPPT up to 41 W in custom mode on some BIOSes; 32 W is kept as the ceiling."]
     },
     {
       "id": "lenovo-legion-go-2",
@@ -371,7 +379,7 @@
       },
       "panel_hz": [30, 144],
       "vrr_range": [30, 144],
-      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 35, "boost_max": 41},
+      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 35, "boost_max": 41, "sppt_max": 37, "fppt_max": 41, "fppt_ratio": 1.2858, "sppt_over": 2},
       "profiles": {"battery": 8, "balanced": 15, "performance": 25},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "lenovo_wmi_other",
@@ -389,7 +397,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["tdp", "charge_limit", "panel.vrr"],
-      "sources": ["InputPlumber", "steamos-manager"]
+      "sources": ["InputPlumber", "steamos-manager"],
+      "notes": ["Boost limits: hhd-dev/hhd@6f6045a src/adjustor/drivers/lenovo/__init__.py L57-60, L302-311 (go2): SPPT = SPL + 2, at most 37 W; FPPT = min(45, SPL*45/35). hhd lets FPPT reach 45 W; devices.json keeps the more conservative 41 W as the ceiling."]
     },
     {
       "id": "lenovo-legion-go-2-z2",
@@ -414,7 +423,7 @@
       },
       "panel_hz": [30, 144],
       "vrr_range": [30, 144],
-      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 35, "boost_max": 41},
+      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 35, "boost_max": 41, "sppt_max": 37, "fppt_max": 41, "fppt_ratio": 1.2858, "sppt_over": 2},
       "profiles": {"battery": 8, "balanced": 15, "performance": 25},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "lenovo_wmi_other",
@@ -433,6 +442,7 @@
       "verified": false,
       "unverified": ["tdp", "charge_limit", "panel.vrr", "chip"],
       "sources": ["InputPlumber", "steamos-manager"],
+      "notes": ["Boost limits: hhd-dev/hhd@6f6045a src/adjustor/drivers/lenovo/__init__.py L57-60, L302-311 (go2): SPPT = SPL + 2, at most 37 W; FPPT = min(45, SPL*45/35). hhd lets FPPT reach 45 W; devices.json keeps the more conservative 41 W as the ceiling."],
       "chip_from_cpu": true
     },
     {
@@ -458,7 +468,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 33, "boost_max": 41},
+      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 33, "boost_max": 41, "sppt_max": 33, "fppt_max": 41, "fppt_ratio": 1.325, "sppt_over": 3},
       "profiles": {"battery": 8, "balanced": 15, "performance": 25},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "lenovo_wmi_other",
@@ -476,7 +486,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["charge_limit"],
-      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"],
+      "notes": ["TDP and boost: hhd-dev/hhd@6f6045a src/adjustor/drivers/lenovo/__init__.py L49-55 (gos) documents 'AC 40/43/53W, DC 33/33/43W'. Lenovo/hhd allow 40 W sustained on AC; devices.json keeps 33 W (the battery figure) as the default ceiling, SPPT at most 33 W and FPPT at most 41 W (below hhd's DC 43 W)."]
     },
     {
       "id": "lenovo-legion-go-s-z1e",
@@ -501,7 +512,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 33, "boost_max": 41},
+      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 33, "boost_max": 41, "sppt_max": 33, "fppt_max": 41, "fppt_ratio": 1.325, "sppt_over": 3},
       "profiles": {"battery": 8, "balanced": 15, "performance": 25},
       "tdp_backends": ["steamos-manager", "powerstation"],
       "fan": "lenovo_wmi_other",
@@ -519,7 +530,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["charge_limit"],
-      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"],
+      "notes": ["TDP and boost: hhd-dev/hhd@6f6045a src/adjustor/drivers/lenovo/__init__.py L49-55 (gos) documents 'AC 40/43/53W, DC 33/33/43W'. Lenovo/hhd allow 40 W sustained on AC; devices.json keeps 33 W (the battery figure) as the default ceiling, SPPT at most 33 W and FPPT at most 41 W (below hhd's DC 43 W)."]
     },
     {
       "id": "msi-claw-8-ex",
@@ -589,7 +601,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 8, "battery_max": 30, "plugged_max": 30, "boost_max": 37},
+      "tdp": {"min": 8, "battery_max": 30, "plugged_max": 30, "boost_max": 37, "sppt_max": 37, "fppt_max": 37, "sppt_ratio": 1.2334, "fppt_ratio": 1.2334},
       "power_backend": "intel-rapl",
       "profiles": {"battery": 12, "balanced": 17, "performance": 25},
       "pl2_offset_w": 2,
@@ -609,7 +621,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["panel.vrr"],
-      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"],
+      "notes": ["Boost limits: hhd-dev/hhd@6f6045a src/adjustor/drivers/msi/__init__.py L161-176, L375-389 and core/const.py CLAW_*_DATA: SPPT = SPL*max_tdp_sppt/max_tdp, capped (CLAW_AI_DATA: max 30, SPPT 37)."]
     },
     {
       "id": "msi-claw-7-ai-plus",
@@ -634,7 +647,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 8, "battery_max": 30, "plugged_max": 30, "boost_max": 37},
+      "tdp": {"min": 8, "battery_max": 30, "plugged_max": 30, "boost_max": 37, "sppt_max": 37, "fppt_max": 37, "sppt_ratio": 1.2334, "fppt_ratio": 1.2334},
       "power_backend": "intel-rapl",
       "profiles": {"battery": 12, "balanced": 17, "performance": 25},
       "pl2_offset_w": 2,
@@ -654,7 +667,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["panel"],
-      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"],
+      "notes": ["Boost limits: hhd-dev/hhd@6f6045a src/adjustor/drivers/msi/__init__.py L161-176, L375-389 and core/const.py CLAW_*_DATA: SPPT = SPL*max_tdp_sppt/max_tdp, capped (CLAW_AI_DATA: max 30, SPPT 37)."]
     },
     {
       "id": "msi-claw-a1m",
@@ -679,7 +693,7 @@
       },
       "panel_hz": [60, 120],
       "vrr_range": null,
-      "tdp": {"min": 8, "battery_max": 35, "plugged_max": 43, "boost_max": 45},
+      "tdp": {"min": 8, "battery_max": 35, "plugged_max": 43, "boost_max": 45, "sppt_max": 45, "fppt_max": 45, "sppt_ratio": 1.0466, "fppt_ratio": 1.0466},
       "power_backend": "intel-rapl",
       "profiles": {"battery": 12, "balanced": 17, "performance": 25},
       "pl2_offset_w": 2,
@@ -699,7 +713,8 @@
       "support": "partial",
       "verified": true,
       "unverified": [],
-      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"],
+      "notes": ["Boost limits: hhd-dev/hhd@6f6045a src/adjustor/drivers/msi/__init__.py L161-176, L375-389 and core/const.py CLAW_*_DATA: SPPT = SPL*max_tdp_sppt/max_tdp, capped (CLAW_DATA: max 43, SPPT 45)."]
     },
     {
       "id": "msi-claw-a8",
@@ -724,7 +739,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 8, "battery_max": 35, "plugged_max": 35, "boost_max": 40},
+      "tdp": {"min": 8, "battery_max": 35, "plugged_max": 35, "boost_max": 40, "sppt_max": 40, "fppt_max": 40, "sppt_ratio": 1.1429, "fppt_ratio": 1.3715},
       "power_backend": "powerstation",
       "profiles": {"battery": 12, "balanced": 17, "performance": 25},
       "tdp_backends": ["steamos-manager", "powerstation"],
@@ -743,7 +758,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["panel.vrr"],
-      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "Handheld Daemon (adjustor)"],
+      "notes": ["Boost limits: hhd-dev/hhd@6f6045a src/adjustor/drivers/msi/__init__.py L161-176, L375-389 and core/const.py CLAW_*_DATA: SPPT = SPL*max_tdp_sppt/max_tdp, capped (CLAW_8A_DATA: max 35, SPPT 40, FPPT 48). FPPT is kept at boost_max 40 W, under hhd's 48 W. tdp.min stays 8 W (hhd: 7 W), the safer side."]
     },
     {
       "id": "msi-claw-family",
@@ -935,7 +951,7 @@
       },
       "panel_hz": [60, 120],
       "vrr_range": null,
-      "tdp": {"min": 8, "battery_max": 28, "plugged_max": 35, "boost_max": 40},
+      "tdp": {"min": 8, "battery_max": 28, "plugged_max": 30, "boost_max": 32},
       "power_backend": "intel-rapl",
       "pl2_offset_w": 2,
       "tdp_backends": ["powerstation", "steamos-manager"],
@@ -954,7 +970,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["tdp", "panel.vrr"],
-      "sources": ["InputPlumber"]
+      "sources": ["InputPlumber"],
+      "notes": ["plugged_max 35 -> 30 W and boost_max 40 -> 32 W: hhd-dev/hhd@6f6045a core/const.py L19-25 INTEL_TDP_PRESETS (PL1 30, PL2 32). OneXPlayer quotes a 15-45 W class for the 155H (finalboss.io, unconfirmed); 30/32 W is kept as the default ceiling."]
     },
     {
       "id": "onexplayer-x1-mini",
@@ -1063,7 +1080,7 @@
       },
       "panel_hz": [60, 60],
       "vrr_range": null,
-      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 33, "boost_max": 38},
+      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 30, "boost_max": 38},
       "tdp_backends": ["powerstation", "steamos-manager"],
       "fan": "oxp_ec",
       "fan_via": "fix",
@@ -1080,7 +1097,8 @@
       "support": "partial",
       "verified": true,
       "unverified": [],
-      "sources": ["InputPlumber", "steamos-manager", "PowerStation"]
+      "sources": ["InputPlumber", "steamos-manager", "PowerStation"],
+      "notes": ["plugged_max 33 -> 30 W: hhd-dev/hhd@6f6045a core/const.py L141-150 DEV_PARAMS_30W for the 6800U; the maker's 33 W AC figure is not used as the default ceiling."]
     },
     {
       "id": "onexplayer-2-pro",
@@ -1147,7 +1165,7 @@
       },
       "panel_hz": [60, 144],
       "vrr_range": null,
-      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 35, "boost_max": 41},
+      "tdp": {"min": 5, "battery_max": 30, "plugged_max": 30, "boost_max": 41},
       "tdp_backends": ["powerstation", "steamos-manager"],
       "fan": "oxp_ec",
       "fan_via": "fix",
@@ -1155,7 +1173,7 @@
       "charge_limit_via": "sysfs",
       "gyro": "none",
       "imu": null,
-      "rgb": null,
+      "rgb": {"zones": "stick rings and keyboard", "via": "hhd"},
       "buttons": "oxp-g1",
       "glyphs": "xbox",
       "art": "onexplayer-g1",
@@ -1165,6 +1183,7 @@
       "verified": false,
       "unverified": ["tdp", "panel.vrr", "chip"],
       "sources": ["InputPlumber", "steamos-manager"],
+      "notes": ["plugged_max 35 -> 30 W: hhd-dev/hhd@6f6045a core/const.py L141-150 DEV_PARAMS_30W for the HX 370; finalboss.io lists 'up to 30 W' for the AMD G1. ", "RGB: HueSync onexplayer_configs.py L224-227 (G1 A, protocol hid_v1_g1, 5 zones, rgb=True) and hhd oxp/const.py L218-222."],
       "chip_from_cpu": true
     },
     {
@@ -1190,7 +1209,7 @@
       },
       "panel_hz": [60, 144],
       "vrr_range": null,
-      "tdp": {"min": 8, "battery_max": 30, "plugged_max": 35, "boost_max": 40},
+      "tdp": {"min": 8, "battery_max": 30, "plugged_max": 30, "boost_max": 32},
       "power_backend": "intel-rapl",
       "pl2_offset_w": 2,
       "tdp_backends": ["powerstation", "steamos-manager"],
@@ -1200,7 +1219,7 @@
       "charge_limit_via": "sysfs",
       "gyro": "none",
       "imu": null,
-      "rgb": null,
+      "rgb": {"zones": "stick rings and keyboard", "via": "hhd"},
       "buttons": "oxp-g1",
       "glyphs": "xbox",
       "art": "onexplayer-g1",
@@ -1209,7 +1228,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["tdp", "panel.vrr", "chip"],
-      "sources": ["InputPlumber"]
+      "sources": ["InputPlumber"],
+      "notes": ["plugged_max 35 -> 30 W and boost_max 40 -> 32 W: hhd-dev/hhd@6f6045a core/const.py L19-25 INTEL_TDP_PRESETS (PL1 30, PL2 32). The 255H is rated 28-45 W by Intel (unconfirmed for the G1 on finalboss.io); 30/32 W is kept as the default ceiling.", "RGB: HueSync onexplayer_configs.py L218-221 (G1 i, protocol hid_v1_g1, rgb=True) and hhd oxp/const.py L212-216."]
     },
     {
       "id": "onexplayer-3",
@@ -1234,7 +1254,7 @@
       },
       "panel_hz": [60, 144],
       "vrr_range": [48, 144],
-      "tdp": {"min": 8, "battery_max": 35, "plugged_max": 35, "boost_max": 52},
+      "tdp": {"min": 8, "battery_max": 35, "plugged_max": 35, "boost_max": 42},
       "power_backend": "intel-rapl-mmio",
       "profiles": {"battery": 12, "balanced": 17, "performance": 25},
       "pl2_offset_w": 2,
@@ -1254,7 +1274,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["panel.resolution", "panel.vrr"],
-      "sources": ["InputPlumber", "PowerStation", "OneXPlayer launch coverage (8.8in 144 Hz OLED, Arc G3 Extreme)"]
+      "sources": ["InputPlumber", "PowerStation", "OneXPlayer launch coverage (8.8in 144 Hz OLED, Arc G3 Extreme)"],
+      "notes": ["boost_max 52 -> 42 W: hhd-dev/hhd@6f6045a core/const.py L19-25 INTEL_TDP_PRESETS['ONEXPLAYER 3'] (min 3, PL1 40, PL2 42)."]
     },
     {
       "id": "onexplayer-x2-mini",
@@ -1438,7 +1459,7 @@
       },
       "panel_hz": [60, 60],
       "vrr_range": null,
-      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 33, "boost_max": 38},
+      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 30, "boost_max": 38},
       "tdp_backends": ["powerstation", "steamos-manager"],
       "fan": "oxp_ec",
       "fan_via": "fix",
@@ -1446,7 +1467,7 @@
       "charge_limit_via": null,
       "gyro": "yes",
       "imu": "bmi260",
-      "rgb": {"zones": "stick rings", "via": "oxp-ec"},
+      "rgb": null,
       "buttons": "aokzoe",
       "glyphs": "xbox",
       "art": "aokzoe",
@@ -1455,7 +1476,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["panel"],
-      "sources": ["InputPlumber", "steamos-manager", "PowerStation"]
+      "sources": ["InputPlumber", "steamos-manager", "PowerStation"],
+      "notes": ["plugged_max 33 -> 30 W: hhd-dev/hhd@6f6045a core/const.py L141-150 DEV_PARAMS_30W for the 6800U (CPU_DATA L248-265); AOKZOE advertised up to 33 W on AC, 30 W is kept as the default ceiling.", "No RGB: HueSync py_modules/devices/onexplayer_configs.py L147-153 (AOKZOE_CONF rgb=False) and hhd src/hhd/device/oxp/const.py L79-85 agree."]
     },
     {
       "id": "aokzoe-a1-pro",
@@ -1488,7 +1510,7 @@
       "charge_limit_via": null,
       "gyro": "yes",
       "imu": "bmi260",
-      "rgb": {"zones": "stick rings", "via": "oxp-ec"},
+      "rgb": null,
       "buttons": "aokzoe",
       "glyphs": "xbox",
       "art": "aokzoe",
@@ -1497,7 +1519,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["panel"],
-      "sources": ["InputPlumber", "steamos-manager", "PowerStation"]
+      "sources": ["InputPlumber", "steamos-manager", "PowerStation"],
+      "notes": ["No RGB: HueSync py_modules/devices/onexplayer_configs.py L147-153 (AOKZOE_CONF rgb=False) and hhd src/hhd/device/oxp/const.py L79-91 agree."]
     },
     {
       "id": "aokzoe-a1x",
@@ -1530,7 +1553,7 @@
       "charge_limit_via": null,
       "gyro": "yes",
       "imu": "bmi260",
-      "rgb": null,
+      "rgb": {"zones": "stick rings", "via": "hhd"},
       "buttons": "aokzoe",
       "glyphs": "xbox",
       "art": "aokzoe",
@@ -1540,6 +1563,7 @@
       "verified": false,
       "unverified": ["panel", "chip", "tdp"],
       "sources": ["InputPlumber", "steamos-manager"],
+      "notes": ["RGB stick rings: HueSync py_modules/devices/onexplayer_configs.py L251-254 (rgb=True) and hhd src/hhd/device/oxp/const.py L93-96 (protocol hid_dual)."],
       "chip_from_cpu": true
     },
     {
@@ -1644,7 +1668,7 @@
       },
       "panel_hz": [60, 60],
       "vrr_range": null,
-      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 33, "boost_max": 38},
+      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 30, "boost_max": 38},
       "tdp_backends": ["powerstation", "steamos-manager"],
       "fan": "ayaneo_ec",
       "fan_via": "fix",
@@ -1661,7 +1685,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["charge_limit"],
-      "sources": ["InputPlumber", "steamos-manager", "PowerStation"]
+      "sources": ["InputPlumber", "steamos-manager", "PowerStation"],
+      "notes": ["plugged_max 33 -> 30 W: hhd-dev/hhd@6f6045a core/const.py L141-150 DEV_PARAMS_30W for the 6800U; AYANEO's 33 W AC figure is not used as the default ceiling."]
     },
     {
       "id": "ayaneo-kun",
@@ -2022,7 +2047,7 @@
       },
       "panel_hz": [40, 60],
       "vrr_range": null,
-      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 28, "boost_max": 33},
+      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 28, "boost_max": 32},
       "tdp_backends": ["powerstation", "steamos-manager"],
       "fan": "gpdfan",
       "fan_via": "fix",
@@ -2030,7 +2055,7 @@
       "charge_limit_via": null,
       "gyro": "yes",
       "imu": "bmi260",
-      "rgb": null,
+      "rgb": {"zones": "L1/R1 buttons", "via": "hhd"},
       "buttons": "gpd-win4",
       "glyphs": "xbox",
       "art": "gpd-win-4",
@@ -2040,6 +2065,7 @@
       "verified": false,
       "unverified": ["chip"],
       "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"],
+      "notes": ["boost_max 33 -> 32 W: hhd-dev/hhd@6f6045a core/const.py L175-184 DEV_PARAMS_28W (fast limit 32 W), DEV_DATA['G1618-04'] L233.", "RGB on the L1/R1 buttons: gpd.hk/gpdwin4 ('L1 and R1 have RGB lights, seven colours') and HueSync py_modules/huesync.py L116-118 (G1618-04 -> GPDLEDDevice, through the EC). GameCove drives it where Handheld Daemon exposes it."],
       "chip_from_cpu": true
     },
     {
@@ -2065,7 +2091,7 @@
       },
       "panel_hz": [48, 120],
       "vrr_range": [48, 120],
-      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 28, "boost_max": 33},
+      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 28, "boost_max": 32},
       "tdp_backends": ["powerstation", "steamos-manager"],
       "fan": "gpdfan",
       "fan_via": "fix",
@@ -2083,6 +2109,7 @@
       "verified": false,
       "unverified": ["chip", "panel.vrr"],
       "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"],
+      "notes": ["boost_max 33 -> 32 W: hhd-dev/hhd@6f6045a core/const.py L175-184 DEV_PARAMS_28W (fast limit 32 W), DEV_DATA['G1617-01'] L234."],
       "chip_from_cpu": true
     },
     {
@@ -2108,7 +2135,7 @@
       },
       "panel_hz": [60, 60],
       "vrr_range": null,
-      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 28, "boost_max": 33},
+      "tdp": {"min": 5, "battery_max": 28, "plugged_max": 28, "boost_max": 32},
       "tdp_backends": ["powerstation", "steamos-manager"],
       "fan": "gpdfan",
       "fan_via": "fix",
@@ -2126,6 +2153,7 @@
       "verified": false,
       "unverified": ["chip"],
       "sources": ["InputPlumber", "PowerStation", "Handheld Daemon (adjustor)"],
+      "notes": ["boost_max 33 -> 32 W: hhd-dev/hhd@6f6045a core/const.py L175-184 DEV_PARAMS_28W (fast limit 32 W), DEV_DATA['G1619-04'] L235."],
       "chip_from_cpu": true
     },
     {

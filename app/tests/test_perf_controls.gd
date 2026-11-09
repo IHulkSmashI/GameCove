@@ -108,13 +108,14 @@ func test_every_control_is_perf_and_explains_itself() -> void:
 		ok(c.title != "" and c.help != "", c.id + " has a title and help")
 		ok(c.available or c.reason != "", c.id + " says why it is unavailable")
 	for want in ["perf.overlay", "perf.overlay_position", "perf.overlay_opacity", "perf.overlay_scale",
-			"perf.overlay_item.fps", "perf.mangohud_fps_limit", "perf.mangohud_fps_limit_method", "perf.lsfg",
+			"perf.overlay_item.fps", "perf.lsfg",
 			"perf.lsfg_multiplier", "perf.lsfg_flow_scale", "perf.lsfg_performance", "perf.upscaler",
 			"perf.frame_gen", "perf.upscale_recommended", "perf.upscale_undo", "perf.low_latency", "perf.proton",
 			"perf.launch_wrapper", "perf.shader_threads", "perf.clear_shader_cache"]:
 		ok(want in ids, want + " registered")
 	# per-game controls wait for a game
-	for id in ["perf.mangohud_fps_limit", "perf.lsfg", "perf.upscaler", "perf.low_latency", "perf.proton", "perf.launch_wrapper"]:
+	ok(not "perf.mangohud_fps_limit" in ids, "one Frame limit control (display.fps_limit); MangoHud's is a helper")
+	for id in ["perf.lsfg", "perf.upscaler", "perf.low_latency", "perf.proton", "perf.launch_wrapper"]:
 		eq(w["reg"].control(id).reason, PerfProvider.NO_GAME, id + " without a game")
 	_done(w)
 
@@ -192,10 +193,7 @@ func test_limiter_writes_the_steam_file_and_adds_the_wrapper() -> void:
 	var w := _world("limiter", ALLY_X)
 	_with_game(w, GAME)
 	var reg: Node = w["reg"]
-	ok(reg.control("perf.mangohud_fps_limit").available, "available with a game")
-	eq(reg.control("perf.mangohud_fps_limit").max_value, 120.0, "panel's top refresh rate")
-	reg.set_value("perf.mangohud_fps_limit", 40)
-	reg.set_value("perf.mangohud_fps_limit_method", "early")
+	ok(w["p"].set_mangohud_limit("steam:42", 40, "early"), "internal helper")
 	var env := Files.read_env(Files.perf_env_path(w["home"], "42"))
 	eq(env.get("MANGOHUD"), "1", "layer on")
 	eq(env.get("MANGOHUD_CONFIG"), "no_display,fps_limit=40,fps_limit_method=early", "limit and method")
@@ -203,7 +201,7 @@ func test_limiter_writes_the_steam_file_and_adds_the_wrapper() -> void:
 	eq(w["library"].options.get("steam:42"), "/usr/libexec/gamecove/gamecove-run %command%", "wrapper in the launch options")
 	reg.detect_all()
 	eq(reg.value("perf.launch_wrapper"), true, "wrapper reads back")
-	reg.set_value("perf.mangohud_fps_limit", 0)
+	w["p"].set_mangohud_limit("steam:42", 0)
 	ok(not Files.read_env(Files.perf_env_path(w["home"], "42")).has("MANGOHUD"), "0 removes the limiter")
 	_done(w)
 
@@ -211,7 +209,7 @@ func test_limiter_writes_the_steam_file_and_adds_the_wrapper() -> void:
 func test_limiter_needs_mangohud() -> void:
 	var w := _world("nomh", ALLY_X, ["mangohud"])
 	_with_game(w, GAME)
-	eq(w["reg"].control("perf.mangohud_fps_limit").reason, "Needs MangoHud (its Vulkan layer)", "reason")
+	ok(not w["p"].set_mangohud_limit("steam:42", 40), "no MangoHud layer: refused")
 	_done(w)
 
 
@@ -425,7 +423,7 @@ func test_launcher_env_hooks_merge() -> void:
 func test_files_follow_the_device() -> void:
 	var w := _world("devices", ALLY_X)
 	_with_game(w, GAME)
-	w["reg"].set_value("perf.mangohud_fps_limit", 45)
+	w["p"].set_mangohud_limit("steam:42", 45)
 	var path := Files.perf_env_path(w["home"], "42")
 	ok(Files.read_env(path).has("MANGOHUD"), "written on the Ally")
 	# the same drive boots a Claw: its own (empty) values, the Ally's file goes

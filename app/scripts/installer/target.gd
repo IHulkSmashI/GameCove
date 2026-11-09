@@ -46,9 +46,28 @@ static func detect(paths: RefCounted, path_env := "") -> Dictionary:
 		"update_available": installed_version != "" and str(release.get("version", "")) != "" \
 			and newer(str(release["version"]), installed_version),
 		"pending": read_pending(paths.pending_file()),
+		"fix_choices": read_fix_choices(paths.data_dir().path_join("fixes.cfg")),
 		"steam": {"installed": str(steam.get("tool", "")) != "" or str(steam.get("config", "")) != "",
 			"signed_in": bool(steam.get("signed_in", false)), "account": str(steam.get("account", ""))},
 	}
+
+
+## What the user did on the Fixes page (device/fixes.gd), per device:
+## {"<device key>": {"<fix>": "on" | "off"}}. Repair and change must not put back
+## a fix the user undid there.
+static func read_fix_choices(path: String) -> Dictionary:
+	var cfg := ConfigFile.new()
+	if cfg.load(path) != OK:
+		return {}
+	var out := {}
+	for sec in cfg.get_sections():
+		if not sec.begins_with("fixes@"):
+			continue
+		var per := {}
+		for k in cfg.get_section_keys(sec):
+			per[k] = str(cfg.get_value(sec, k))
+		out[sec.trim_prefix("fixes@")] = per
+	return out
 
 
 ## release.env from get-gamecove.sh -> {"tag", "version", "os", "package", "app"}.

@@ -61,6 +61,16 @@ static func fix(helper: String, fix_name: String, verb: String) -> Array:
 	return pkexec([helper, fix_name, verb])
 
 
+## XeSS XMX driver (xess-xmx-linux), the same install ClawDeck does: downloaded,
+## its install.sh run as the desktop user (no pkexec). Intel Arc with XMX only.
+static func xess_install(helper: String, home: String) -> Array:
+	return [helper, "xess-install", "--home", home, "--gpu", "vendor=intel,xmx=1"]
+
+
+static func xess_remove(helper: String, home: String) -> Array:
+	return [helper, "xess-remove", "--home", home]
+
+
 ## Default session without switching now (needs the package live).
 static func session_default(select: String, startup: String) -> Array:
 	if startup == "gamecove":
@@ -123,6 +133,8 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 	var had_fixes: Array = state.get("fixes", []) if state.get("fixes", []) is Array else []
 	var want_fixes: Array = choices.get("fixes", [])
 	var present := bool(target.get("installed", false)) or bool(target.get("staged", false))
+	var had_xess := bool(state.get("choices", {}).get("xess_driver", false)) if state.get("choices") is Dictionary else false
+	var want_xess := bool(choices.get("xess_driver", false))
 	var out: Array = [_internal("check_game")]
 	match action:
 		"install", "change", "repair":
@@ -136,6 +148,12 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 					if not f in want_fixes:
 						out.append(fix_task(paths, f, "remove"))
 			out.append(_internal("user_files", {"undo": "remove_user_files"}))
+			# the helper ships in the package: after a staged install it waits for the reboot
+			if want_xess and (action != "change" or not had_xess):
+				out.append(_cmd("xess_install", xess_install(paths.upscale_helper(), paths.home),
+					{"needs_live": true, "optional": true, "undo": xess_remove(paths.upscale_helper(), paths.home)}))
+			elif action == "change" and had_xess and not want_xess:
+				out.append(_cmd("xess_remove", xess_remove(paths.upscale_helper(), paths.home), {"needs_live": true, "optional": true}))
 			out.append(_internal("pending", {"undo": "remove_pending"}))
 			if method != "none":
 				out.append(_cmd("apply_now", [paths.apply_helper()], {"needs_live": true, "optional": true}))
@@ -150,6 +168,8 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 			if bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false)):
 				for f in had_fixes:
 					out.append(fix_task(paths, f, "remove"))
+			if had_xess and bool(target.get("installed", false)):
+				out.append(_cmd("xess_remove", xess_remove(paths.upscale_helper(), paths.home), {"optional": true}))
 			if method == "rpm-ostree":
 				out.append(_cmd("package_remove", rpm_uninstall()))
 			elif method == "sysext":

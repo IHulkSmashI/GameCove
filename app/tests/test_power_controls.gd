@@ -149,7 +149,9 @@ func test_claw8ex_fan_curve_is_never_quieter_than_quiet() -> void:
 		got.append(_read(root, h + "pwm2_auto_point%d_pwm" % (i + 1)))
 	eq(got, ["0", "102", "128", "128", "230", "255"], "lifted to Quiet (40 %) and never falling")
 	eq(_read(root, h + "pwm1_enable"), "1", "table mode")
-	eq(e["c"]["power.fan_curve"].value, [0.0, 10.0, 50.0, 40.0, 90.0, 100.0], "control keeps what was asked until read again")
+	eq(e["c"]["power.fan_curve"].value, [0.0, 40.0, 50.0, 50.0, 90.0, 100.0], "the control keeps the safe curve it sent, not what was asked")
+	eq(e["c"]["power.fan_curve"].coerce([0, 0, 0, 0, 0, 0]), [0.0, 40.0, 40.0, 45.0, 60.0, 75.0], "a profile or import gets the same safe curve")
+	eq(e["c"]["power.fan_curve"].coerce([0, 0, 0]), null, "wrong point count refused")
 	reg.detect_all()
 	eq(e["c"]["power.fan_curve"].value, [0.0, 40.0, 50.0, 50.0, 90.0, 100.0], "read back from the EC table")
 	eq(e["c"]["power.fan_mode"].value, "custom", "fan preset reads custom")
@@ -219,8 +221,9 @@ func test_ally_offers_what_this_handheld_has() -> void:
 	eq(c["power.platform_profile"].reason, Tx.PPD_OWNS, "PPD owns the firmware mode")
 	eq(c["power.gpu_profile"].reason, Tx.XE_ONLY, "no xe")
 	eq(c["power.sleep_mode"].reason, Tx.NOT_HERE, "no mem_sleep file")
-	eq([c["power.sppt"].min_value, c["power.sppt"].max_value], [15.0, 30.0], "SPPT: not under SPL, firmware max")
-	eq([c["power.fppt"].min_value, c["power.fppt"].max_value], [20.0, 35.0], "FPPT: not under SPPT, capped at boost_max 35")
+	# hhd's ASUS rule at SPL 15 W: SPPT <= min(35, 15 x 1.2) = 18, FPPT <= min(35, 15 x 1.4) = 21
+	eq([c["power.sppt"].min_value, c["power.sppt"].max_value], [15.0, 18.0], "SPPT: not under SPL, hhd's ASUS ceiling")
+	eq([c["power.fppt"].min_value, c["power.fppt"].max_value], [20.0, 21.0], "FPPT: not under SPPT, hhd's ASUS ceiling")
 	eq(c["power.thermal_limit"].max_value, 95.0, "never above the firmware's Tctl")
 	eq(c["power.fan_curve"].points, 8, "asus curve points")
 	_free()
@@ -231,9 +234,15 @@ func test_ally_writes_each_backend() -> void:
 	var reg: Node = e["reg"]
 	var root: String = e["root"]
 	reg.set_value("power.sppt", 28)
-	eq(_read(root, "/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl2_sppt/current_value"), "28", "SPPT")
+	eq(_read(root, "/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl2_sppt/current_value"), "18", "SPPT clamped to 1.2 x SPL")
 	reg.set_value("power.fppt", 50)
-	eq(_read(root, "/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl3_fppt/current_value"), "35", "FPPT clamped to boost_max")
+	eq(_read(root, "/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl3_fppt/current_value"), "21", "FPPT clamped to 1.4 x SPL")
+	# SPL raised since detect (the TDP moved): the ceiling follows it at write time
+	var spl := FileAccess.open(root + "/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/current_value", FileAccess.WRITE)
+	spl.store_string("25\n")
+	spl.close()
+	ok(e["prov"].ppt_ceiling("sppt", 25.0) == 30.0 and e["prov"].ppt_ceiling("fppt", 25.0) == 35.0, "25 W: SPPT 30, FPPT 35 (hhd)")
+	ok(e["prov"].ppt_ceiling("fppt", 30.0) == 35.0, "never past 35 W on the Ally")
 	reg.set_value("power.cpu_boost", false)
 	var cpb_key := Trees.PS_CPU + "BoostEnabled"
 	ok(e["runner"].calls.any(func(x): return x.contains("set-property") and x.contains("BoostEnabled")) or _read(root, "/sys/devices/system/cpu/cpufreq/policy0/boost") == "0", "CPU boost off (PowerStation or per-policy)")
@@ -307,12 +316,16 @@ func test_deck_refused_service_write_fails_and_keeps_the_value() -> void:
 func test_legion_ppt_in_custom_mode_and_battery_care() -> void:
 	var e := _setup(Trees.new().legion())
 	var c: Dictionary = e["c"]
-	ok(c["power.sppt"].available and c["power.fppt"].available and c["power.battery_long_life"].available, "offered")
-	eq(c["power.sppt"].max_value, 35.0, "firmware max")
-	eq(c["power.fppt"].max_value, 41.0, "boost_max 41")
+	ok(c["power.sppt"].available and c["power.battery_long_life"].available, "offered")
+	# hhd's Legion Go S rule at SPL 15 W: SPPT <= SPL + 3 = 18 (under the firmware's 35 W)
+	eq(c["power.sppt"].max_value, 18.0, "SPPT ceiling SPL + 3 (hhd gos)")
+	# FPPT <= min(41, 15 x 53/40) = 19, under the firmware's current SPPT of 20: nothing safe to offer yet
+	ok(not c["power.fppt"].available, "FPPT waits until SPPT is inside the safe range")
 	e["reg"].set_value("power.sppt", 25)
 	eq([_read(e["root"], "/sys/class/firmware-attributes/lenovo-wmi-other-0/attributes/ppt_pl2_sppt/current_value"), _read(e["root"], "/sys/firmware/acpi/platform_profile")],
-		["25", "custom"], "custom mode first (SimpleDeckyTDP lenovo.py)")
+		["18", "custom"], "custom mode first (SimpleDeckyTDP lenovo.py), clamped to the safe ceiling")
+	e["reg"].detect_all()
+	ok(c["power.fppt"].available and c["power.fppt"].min_value == 18.0 and c["power.fppt"].max_value == 19.0, "then FPPT 18..19 W")
 	e["reg"].set_value("power.battery_long_life", true)
 	eq(_read(e["root"], "/sys/class/power_supply/BAT1/charge_types"), "Long_Life", "Long Life")
 	_free()
@@ -383,7 +396,7 @@ func test_resume_puts_back_what_the_firmware_reset() -> void:
 	var f := FileAccess.open(e["root"] + "/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference", FileAccess.WRITE)
 	f.store_string("performance\n")
 	f.close()
-	e["reg"].detect_all()
+	# no detect in between: the control still holds balance_power, the hardware doesn't
 	e["power"].resumed.emit()
 	eq(_read(e["root"], "/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"), "balance_power", "re-applied after sleep")
 	_free()
@@ -398,6 +411,8 @@ func test_power_refresh_after_resume_rewrites_a_reset_tdp() -> void:
 	var resumed := [false]
 	power.resumed.connect(func(): resumed[0] = true)
 	power.refresh()
+	ok(not resumed[0], "a plain refresh (after a control's own write) doesn't claim a resume")
+	power.refresh(true)
 	eq(float(e["runner"].props[key]["data"]), 15.0, "our TDP back (SimpleDeckyTDP / PowerTools resume)")
 	ok(resumed[0], "resumed emitted")
 	_free()

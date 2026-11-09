@@ -285,6 +285,12 @@ func request_refresh() -> void:
 	_queue("refresh", func(): refresh(); return true)
 
 
+## After a resume from sleep: refresh() on the worker, then `resumed` so every
+## other setting is put back (main.gd calls this when it sees the device slept).
+func request_resumed() -> void:
+	_queue("refresh", func(): refresh(true); return true)
+
+
 func _queue(job_name: String, job: Callable, report := false) -> void:
 	if _thread == null:
 		var ok := bool(job.call())
@@ -617,7 +623,9 @@ func fan_modes() -> Array:
 
 
 ## Read the live values again (after resume, or when another tool changed them).
-func refresh() -> void:
+## `resumed` only when after_resume: controls call refresh() after their own
+## writes, and a `resumed` from there would re-apply everything again, forever.
+func refresh(after_resume := false) -> void:
 	var v := read_tdp()
 	# after sleep some firmwares come back at their own limit (SimpleDeckyTDP, aarron-lee/SimpleDeckyTDP
 	# src/steamListeners.tsx re-applies the TDP after resume; PowerTools, NGnius/PowerTools
@@ -634,7 +642,8 @@ func refresh() -> void:
 		_charge = read_charge_sysfs()
 	if _fan_via == "fix":
 		_fan_mode = read_fan_sysfs()
-	_emit_main(resumed, [])
+	if after_resume:
+		_emit_main(resumed, [])
 	_emit_changed()
 
 

@@ -110,7 +110,8 @@ The tests check that each real DMI fixture (`app/tests/fixtures/devices/dmi.json
 | `gpu`, `gpu_family`, `gpu_arch`, `xmx` | GPU name; `gpu_family` is what the launcher keys upscalers on (`amd-vega`, `amd-rdna2`, `amd-rdna3` (also RDNA 3.5, for the FSR 4 RDNA 3 path), `intel-xe-lpg`, `intel-xe2`, `intel-xe3`); `gpu_arch` the exact architecture (`RDNA2`, `RDNA3`, `RDNA3.5`, `Xe-LPG`, `Xe2`, `Xe3`, `Vega`); `xmx` = Intel XMX cores for XeSS. |
 | `panel` | `{size_in, resolution: [w, h], type: IPS/OLED}`. |
 | `panel_hz`, `vrr_range` | Native refresh `[min, max]` (the UI offers rates inside it); VRR window `[lo, hi]` or `null`. |
-| `tdp` | `{min, battery_max, plugged_max, boost_max?}` watts. `min < battery_max <= plugged_max`, `boost_max >= plugged_max`. |
+| `tdp` | `{min, battery_max, plugged_max, boost_max?, sppt_max?, fppt_max?, sppt_ratio?, fppt_ratio?, sppt_over?, fppt_over?}` watts. `min < battery_max <= plugged_max`, `boost_max >= plugged_max`. The boost limits (firmware SPPT / FPPT) never go past `sppt_max` / `fppt_max` (else `boost_max`); `*_ratio` caps them at floor(SPL x ratio) and `*_over` at SPL + over, Handheld Daemon's own formulas (ASUS `min(max(SPL, 35), SPL*1.2/1.4)`, Lenovo `SPL + 2..3` / `SPL*fppt_max/max`, MSI `SPL*sppt_max/max`). The root helper enforces the static ceilings too (`fixes/power-tune/ppt-limits.txt`, generated). Where a maker allows more than hhd, the row keeps the conservative value and says so in `notes`. |
+| `notes` | Optional list of sentences: where a value came from when it differs from another source (hhd, HueSync, SimpleDeckyTDP, the maker), with file/line or URL. |
 | `profiles` | Watts for `battery` / `balanced` / `performance`, inside `min..battery_max`. Missing: Power spreads the range. |
 | `pl2_offset_w` | Intel: PL2 = TDP + this. |
 | `tdp_backends` | Power services to try in order: `steamos-manager`, `powerstation`. |

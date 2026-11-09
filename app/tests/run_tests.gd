@@ -66,6 +66,8 @@ func _initialize() -> void:
 	var dir := DirAccess.open("res://tests")
 	var files := Array(dir.get_files()).filter(func(f): return f.begins_with("test_") and f.ends_with(".gd") and f != "test_case.gd")
 	files.sort()
+	# GAMECOVE_TEST=<part of a file or test name>: run only the matching tests
+	var only := OS.get_environment("GAMECOVE_TEST")
 	for f in files:
 		var script: GDScript = load("res://tests/" + f)
 		if script == null or not script.can_instantiate():
@@ -77,6 +79,8 @@ func _initialize() -> void:
 		for m in t.get_method_list():
 			var name: String = m["name"]
 			if not name.begins_with("test_"):
+				continue
+			if only != "" and not only in "%s::%s" % [f, name]:
 				continue
 			var before: int = t.failures.size()
 			errors.take()
@@ -94,6 +98,8 @@ func _initialize() -> void:
 					printerr("FAIL ", msg)
 			else:
 				passed += 1
+		if t.has_method("after_all"):
+			t.after_all()   # per-file cleanup (generated fixture folders...)
 	OS.remove_logger(errors)
 	print("%d passed, %d failed" % [passed, failed])
 	quit(1 if failed > 0 else 0)

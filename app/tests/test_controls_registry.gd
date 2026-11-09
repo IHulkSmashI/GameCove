@@ -51,3 +51,34 @@ func test_detect_set_snapshot_apply() -> void:
 	eq(store["display.brightness"], 80.0, "applied non-matching")
 	eq(changed, [["power.tdp", 22.0], ["display.brightness", 80.0]], "skips equal, unknown, unavailable")
 	r.free()
+
+
+## After a resume the hardware may differ from what a control holds: force writes anyway.
+func test_forced_apply_and_worker_jobs_and_a_runner_always_there() -> void:
+	var store := {"display.brightness": 50.0}
+	var writes := [0]
+	var r := _reg()
+	ok(r.ctx["runner"] != null and int(r.ctx["runner"].run("busctl", PackedStringArray()).get("code", 0)) == 127, "NoRunner stands in: nothing runs")
+	var c := Ctl.make({"id": "display.brightness", "group": "display", "kind": "slider", "min_value": 0.0, "max_value": 100.0},
+		func(_c): return "", func(_c): return store["display.brightness"],
+		func(_c, v): writes[0] += 1; store["display.brightness"] = v; return true)
+	r.register(c)
+	r.detect_all()
+	r.apply({"display.brightness": 50.0})
+	eq(writes[0], 0, "same value: skipped")
+	store["display.brightness"] = 10.0   # the firmware reset it; the control still holds 50
+	r.apply({"display.brightness": 50.0}, true)
+	eq([writes[0], store["display.brightness"]], [1, 50.0], "forced: written again")
+	var seen := []
+	r.run_on_worker(func(): seen.append("job"))
+	eq(seen, ["job"], "worker job ran")
+	r.free()
+
+
+## normalize() makes every coerced value safe (fan curves: raised to Quiet, never falling).
+func test_normalize_runs_after_coerce() -> void:
+	var c := Ctl.make({"id": "power.fan_curve", "group": "power", "kind": "curve", "min_value": 0.0, "max_value": 100.0,
+		"points": 3, "normalize": func(v): return [maxf(v[0], 20.0), maxf(v[1], v[0]), maxf(v[2], v[1])]},
+		func(_c): return "", func(_c): return null, func(_c, _v): return true)
+	eq(c.coerce([0, 50, 10]), [20.0, 50.0, 50.0], "raised and never falling")
+	eq(c.coerce([0, 50]), null, "point count still checked first")

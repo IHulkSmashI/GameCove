@@ -240,7 +240,7 @@ func _write_state() -> void:
 	st["waiting_fixes"] = deferred_fixes.duplicate()
 	var keep := {}
 	for k in ["startup", "steam_mode", "steam_control", "fixes", "auto_tdp", "power_profile", "charge_limit",
-			"theme", "match_art", "reduce_motion"]:
+			"theme", "match_art", "reduce_motion", "xess_driver"]:
 		if choices.has(k):
 			keep[k] = choices[k]
 	if action == "finish":

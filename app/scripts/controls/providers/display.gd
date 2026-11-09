@@ -153,7 +153,8 @@ func controls() -> Array:
 
 
 func _mk(id: String, spec: Dictionary, d: Callable, r: Callable, w: Callable) -> RefCounted:
-	var s := {"id": id, "title": T.title(id), "help": T.help(id), "group": "display"}
+	# display settings apply after power (40+) and before perf (0-9): 10 and up
+	var s := {"id": id, "title": T.title(id), "help": T.help(id), "group": "display", "apply_order": 11}
 	s.merge(spec, true)
 	var c = Ctl.make(s, d, r, w)
 	c.set_meta("provider", self)   # keeps this provider alive as long as its controls
