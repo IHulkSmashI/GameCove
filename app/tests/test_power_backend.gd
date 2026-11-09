@@ -198,6 +198,70 @@ func test_profile_remembered_per_power_source() -> void:
 	p.free()
 
 
+## review S1-2: unplugging (or waking up) never keeps a TDP above the battery limit.
+const SM_TDP_KEY := SM + "TdpLimit1 TdpLimit"
+
+
+func _tdp_key(p: Node) -> String:
+	return SM_TDP_KEY if p.backend == "steamos-manager" else PS_TDP_KEY
+
+
+func _unplug_clamps(id: String, plugged_w: float, battery_w: float) -> void:
+	var root := _sys("unplug_" + id)
+	_write(root + "/sys/class/power_supply/ADP1/online", "1")
+	var p := _power("bus_claw_powerstation.json", _row(id), root)
+	p.check_power_source()
+	ok(p.plugged, id + ": on the charger")
+	var key := _tdp_key(p)
+	ok(p.set_tdp(plugged_w), id + ": charger's maximum")
+	eq(p.state()["tdp_w"], plugged_w, id + ": %d W on the charger" % plugged_w)
+	_write(root + "/sys/class/power_supply/ADP1/online", "0")
+	p.check_power_source()
+	eq(p.state()["tdp_w"], battery_w, id + ": unplugged with nothing saved for battery: clamped to %d W" % battery_w)
+	eq(float(p.runner.props[key]["data"]), battery_w, id + ": written to the hardware")
+	# resume: the firmware (or a stale value) comes back above the battery limit
+	p.runner.props[key]["data"] = plugged_w
+	p.refresh(true)
+	eq(float(p.runner.props[key]["data"]), battery_w, id + ": resume never re-applies the charger's value on battery")
+	eq(p.state()["tdp_w"], battery_w, id + ": state follows")
+	# unplugged while asleep
+	_write(root + "/sys/class/power_supply/ADP1/online", "1")
+	p.check_power_source()
+	eq(p.state()["tdp_w"], plugged_w, id + ": charger's own value back on the charger")
+	_write(root + "/sys/class/power_supply/ADP1/online", "0")
+	p.refresh(true)
+	ok(not p.plugged, id + ": resume notices the charger went while asleep")
+	eq(float(p.runner.props[key]["data"]), battery_w, id + ": and clamps")
+	p.free()
+
+
+func test_unplug_clamps_tdp_rog_ally() -> void:
+	_unplug_clamps("asus-rog-ally", 30.0, 25.0)
+
+
+func test_unplug_clamps_tdp_legion_go_s() -> void:
+	_unplug_clamps("lenovo-legion-go-s-z1e", 33.0, 30.0)
+
+
+func test_unplug_clamps_auto_tdp_ceiling() -> void:
+	var root := _sys("unplug_auto")
+	_write(root + "/sys/class/power_supply/ADP1/online", "1")
+	var p := _power("bus_claw_powerstation.json", _row("asus-rog-ally"), root)
+	p.check_power_source()
+	var key := _tdp_key(p)
+	p.autotune_opts["plugged"] = true
+	ok(p.set_tdp(30.0), "30 W plugged")
+	ok(p.autotune_start("g"), "Auto TDP on the charger (asked for)")
+	eq(p.autotune.session.ceiling_tdp, 30, "plugged ceiling")
+	_write(root + "/sys/class/power_supply/ADP1/online", "0")
+	p.check_power_source()
+	ok(p.autotune.session.ceiling_tdp <= 25, "ceiling down to the battery limit")
+	ok(p.state()["tdp_w"] <= 25.0, "TDP too")
+	p.autotune_stop()
+	ok(float(p.runner.props[key]["data"]) <= 25.0, "stopping Auto TDP on battery doesn't put 30 W back")
+	p.free()
+
+
 func test_charge_limit_through_root_action() -> void:
 	var root := _sys("charge")
 	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
