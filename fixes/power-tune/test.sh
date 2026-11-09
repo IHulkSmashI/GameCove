@@ -228,6 +228,15 @@ expect 0 "restore ally" set restore
 [ "$(r "$C/cpufreq/policy0/scaling_max_freq")" = 5100000 ] || fail "scaling_max_freq back"
 [ "$(r "$D/power_dpm_force_performance_level")" = auto ] || fail "GPU level back"
 [ "$(r "$R/sys/firmware/acpi/platform_profile")" = balanced ] || fail "platform profile back"
+# ASUS order (hhd asus driver): thermal profile first, then the PPT values
+expect 0 "ally sppt for order" set sppt:28
+expect 0 "ally platform for order" set platform:performance
+mv "$A/ppt_pl2_sppt/current_value" "$T/cv"; mkdir "$A/ppt_pl2_sppt/current_value"
+mv "$R/sys/firmware/acpi/platform_profile" "$T/pp"; mkdir "$R/sys/firmware/acpi/platform_profile"
+expect 1 "ally restore order probe" set restore
+grep -q "could not put back: platform sppt" "$T/out" || fail "ally: platform before sppt ($(cat "$T/out"))"
+rmdir "$A/ppt_pl2_sppt/current_value" "$R/sys/firmware/acpi/platform_profile"; mv "$T/cv" "$A/ppt_pl2_sppt/current_value"; mv "$T/pp" "$R/sys/firmware/acpi/platform_profile"
+expect 0 "ally restore after probe" set restore
 # the same attributes on a laptop are never written
 dmi "$R" "ASUSTeK COMPUTER INC." "ROG Zephyrus G14" "GA403UV"
 expect 2 "laptop sppt refused" set sppt:25
@@ -310,6 +319,16 @@ expect 0 "lenovo sppt" set sppt:25
 [ "$(r "$L/ppt_pl2_sppt/current_value") $(r "$R/sys/firmware/acpi/platform_profile")" = "25 custom" ] || fail "lenovo sppt in custom mode"
 expect 0 "restore lenovo" set restore
 [ "$(r "$L/ppt_pl2_sppt/current_value") $(r "$R/sys/firmware/acpi/platform_profile")" = "20 balanced" ] || fail "lenovo sppt and mode back"
+# review L5: Lenovo takes PPT only in custom (hhd): the limit goes back while still custom, the profile last
+expect 0 "lenovo sppt for order" set sppt:25
+mv "$L/ppt_pl2_sppt/current_value" "$T/cv"; mkdir "$L/ppt_pl2_sppt/current_value"
+mv "$R/sys/firmware/acpi/platform_profile" "$T/pp"; mkdir "$R/sys/firmware/acpi/platform_profile"
+expect 1 "lenovo restore order probe" set restore
+grep -q "could not put back: sppt platform" "$T/out" || fail "lenovo: sppt before platform ($(cat "$T/out"))"
+rmdir "$L/ppt_pl2_sppt/current_value" "$R/sys/firmware/acpi/platform_profile"; mv "$T/cv" "$L/ppt_pl2_sppt/current_value"; mv "$T/pp" "$R/sys/firmware/acpi/platform_profile"
+expect 0 "lenovo restore after probe" set restore
+[ "$(r "$L/ppt_pl2_sppt/current_value") $(r "$R/sys/firmware/acpi/platform_profile")" = "20 balanced" ] || fail "lenovo back after the probe"
+
 # ---- Lenovo Legion Go S: charge_types (Long Life = 80 %), i915-style GPU clocks -------------------------------
 R="$T/legion"; export GAMECOVE_ROOT="$R"
 dmi "$R" "LENOVO" "83L3" "83L3"

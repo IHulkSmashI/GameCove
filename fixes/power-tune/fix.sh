@@ -588,7 +588,17 @@ do_restore() {
 		# the others still come back. Order matters:
 		#  - smt before cores: the kernel won't bring an SMT sibling online while SMT is off;
 		#  - GPU ceiling before floor, so min <= max holds at every step;
-		order="smt cores gpumax gpumin"; last=""
+		#  - firmware power limits vs platform profile as Handheld Daemon does it
+		#    (hhd adjustor/drivers): Lenovo takes PPT values only in its "custom" profile, so they
+		#    go back while it is still custom and the profile last; ASUS sets the thermal profile
+		#    first and the PPT values after it.
+		lenovo=""
+		for d in "$ROOT"/sys/class/firmware-attributes/lenovo-wmi-other*; do [ -d "$d" ] && lenovo=1; done
+		if [ -n "$lenovo" ]; then
+			order="smt cores gpumax gpumin sppt fppt"; last="platform"
+		else
+			order="smt cores gpumax gpumin platform sppt fppt"; last=""
+		fi
 		keys="$order"
 		for f in "$ORIG"/*; do
 			[ -f "$f" ] || continue
