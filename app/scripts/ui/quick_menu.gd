@@ -32,6 +32,7 @@ const Catalog := preload("res://scripts/ui/controls/catalog.gd")
 const SteamInput := preload("res://scripts/ui/controls/steam_input.gd")
 const Shared := preload("res://scripts/ui/controls/shared.gd")
 const ControlScript := preload("res://scripts/controls/control.gd")
+const Caps := preload("res://scripts/device/capabilities.gd")
 const BrandMark := preload("res://scripts/ui/brand_mark.gd")
 
 signal closed
@@ -915,6 +916,7 @@ func _build_device() -> void:
 	var unverified: Variant = p.get("unverified", [])
 	if level != "generic" and unverified is Array and not unverified.is_empty():
 		_line(TS.unverified_line(unverified), "QuietLabel", "Unverified")
+	_works_chips(p)
 
 	var fx := ActionRow.new()
 	fx.setup("Fixes", TC.DEVICE_FIXES, fixes_summary(), TC.FIXES_OPEN + ".", "wrench")
@@ -950,6 +952,32 @@ func _build_device() -> void:
 	desk.add_child(Kit.label(Texts.DESKTOP_EXPLAIN, "QuietLabel", true))
 	body.add_child(desk)
 	_parts.append(_desktop_button)
+
+
+## What works here, as small chips (the same answer About this device gives:
+## Capabilities over devices.json and live Controls detection). Hardware this
+## model doesn't have is left out; unconfirmed things get a warn chip.
+func _works_chips(p: Dictionary) -> void:
+	var f: Dictionary = device.features() if device.has_method("features") else {}
+	if f.is_empty():
+		return
+	var unv: Array = p.get("unverified", []) if p.get("unverified") is Array else []
+	var flow := HFlowContainer.new()
+	flow.name = "WhatWorks"
+	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flow.add_theme_constant_override("h_separation", 6)
+	flow.add_theme_constant_override("v_separation", 6)
+	for st in Caps.states(f, unv, controls):
+		if st["state"] == "absent":
+			continue
+		var ok: bool = st["state"] == "yes"
+		var chip := Kit.chip(TC.WORKS_SHORT.get(st["key"], st["key"]), "check" if ok else "alert", "good" if ok else "warn")
+		chip.tooltip_text = st["note"]
+		flow.add_child(chip)
+	if flow.get_child_count() > 0:
+		body.add_child(flow)
+	else:
+		flow.free()
 
 
 ## The maker to show a logo for: the row's maker or DMI vendor, else the

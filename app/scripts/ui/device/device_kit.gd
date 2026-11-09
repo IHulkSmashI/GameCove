@@ -179,6 +179,42 @@ static func check_line(state: String, text: String) -> HBoxContainer:
 	return row
 
 
+## One "what works" line (Capabilities.states): a green check for what works,
+## a warn mark with its reason underneath for what's there but unconfirmed or
+## missing a piece, and a faint dash with "Not on this handheld" for hardware
+## this model doesn't have (never a cross: nothing here has failed).
+static func feature_line(state: String, text: String, note := "", absent_text := "Not on this handheld") -> Control:
+	var icon: String = {"yes": "check", "maybe": "alert", "absent": "minus"}.get(state, "dots")
+	var tone: String = {"yes": "good", "maybe": "warn", "absent": "text_3"}.get(state, "text_3")
+	var col := Kit.vbox(2)
+	col.name = "Feature"
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := Kit.hbox(10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(Icons.rect(icon, 18, ThemeLib.color(tone)))
+	var l := Kit.label(text, "", true)
+	if state == "absent":
+		l.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+	row.add_child(l)
+	if state == "absent":
+		var a := Kit.label(absent_text, "CaptionLabel")
+		a.name = "Absent"
+		a.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+		a.size_flags_horizontal = Control.SIZE_SHRINK_END
+		row.add_child(a)
+	col.add_child(row)
+	if state == "maybe" and note != "":
+		var n := Kit.label(note, "CaptionLabel", true)
+		n.name = "Note"
+		n.add_theme_color_override("font_color", ThemeLib.color("text_2"))
+		var pad := MarginContainer.new()
+		pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pad.add_theme_constant_override("margin_left", 28)
+		pad.add_child(n)
+		col.add_child(pad)
+	return col
+
+
 static func quiet(text: String) -> Label:
 	return Kit.label(text, "QuietLabel", true)
 

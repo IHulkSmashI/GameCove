@@ -34,6 +34,8 @@ const QUIRKS_TITLE := "Good to know"
 const NO_FIXES := "Nothing to fix here. This handheld works out of the box."
 const FIXES_WHERE := "Install them from the quick menu: Device. They ask for your admin password, and every one can be undone."
 const LOADING := "Looking up a few more details…"
+const HERO_EYEBROW := "Hardware profile"
+const DRAWING_CREDIT := "Drawn to scale · %d × %d mm"
 const FEATURES := {
 	"tdp": "Power limit (TDP)", "fan_control": "Fan presets", "charge_limit": "Charge limit",
 	"gyro": "Gyro", "vrr": "Variable refresh (VRR)", "paddles": "Back buttons", "rgb": "Lights",

@@ -13,6 +13,7 @@ const Picture := preload("res://scripts/ui/device/device_picture.gd")
 const FixTexts := preload("res://scripts/ui/texts.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 const PhotoView := preload("res://scripts/ui/device/device_photo_view.gd")
+const Caps := preload("res://scripts/device/capabilities.gd")
 
 var info: Dictionary = {}
 var picture: TextureRect
@@ -20,6 +21,10 @@ var _side: VBoxContainer
 var _cards: VBoxContainer
 var _loading: Label
 var _focused_card := ""
+var _credit: Label
+var _facts: Control
+const PICTURE_MIN_H := 120.0
+const FACTS_MIN_W := 380.0
 ## The card grid inside the scrolling column: one or two stacks.
 var _grid: HBoxContainer
 var _stacks: Array = []
@@ -57,6 +62,10 @@ func _build() -> void:
 			listen(dev.info_updated, _on_info)
 		if dev.has_method("request_slow_info"):
 			dev.request_slow_info()
+	# "What works here" follows live detection: redraw once Controls has looked.
+	var ctl := svc("controls")
+	if ctl != null and ctl.has_signal("detected"):
+		listen(ctl.detected, func(): _on_info(info))
 
 
 func _on_info(new_info: Dictionary) -> void:
@@ -94,40 +103,68 @@ func _fill_side() -> void:
 	var hero := DKit.card("", "handheld", "accent", false)
 	var hero_card: PanelContainer = hero[0]
 	hero_card.name = "Hero"
+	# The hero fills the column: the picture takes whatever height is left.
+	hero_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var col: VBoxContainer = hero[1]
 	Kit.drop(col, col.get_node("Head"))
-	col.add_theme_constant_override("separation", 12)
+	col.add_theme_constant_override("separation", 10)
+	var eyebrow := Kit.micro(Texts.HERO_EYEBROW, "EyebrowLabel")
+	eyebrow.name = "Eyebrow"
+	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(eyebrow)
+	var device_id := str(d.get("id", ""))
 	picture = Picture.new()
 	var pic_path := str(d.get("picture", ""))
 	if pic_path == "":
 		var dev := svc("device")
-		pic_path = dev.picture_for(str(d.get("id", "unknown"))) if dev != null and dev.has_method("picture_for") else ""
+		if dev != null and dev.has_method("picture_for"):
+			pic_path = dev.picture_for(device_id if device_id != "" else "unknown")
+		elif dev != null and dev.has_method("picture"):
+			pic_path = dev.picture()
 	picture.setup(pic_path)
-	picture.custom_minimum_size = Vector2(0, 230)
+	picture.custom_minimum_size = Vector2(0, PICTURE_MIN_H)
 	col.add_child(picture)
 	# No drawing for this device: no empty box where it would go.
 	picture.visible = picture.texture != null
-	_device_photo_hook(col, str(d.get("id", "")))
-	# The maker's logo over the name (text only when there's no logo).
-	var maker_logo := BrandMark.rect(QuickMenu.maker_name(d, str(d.get("name", ""))), 26)
+	_credit = Kit.label(_drawing_credit(device_id, pic_path), "CaptionLabel", true)
+	_credit.name = "DrawingCredit"
+	_credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_credit.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+	_credit.visible = picture.visible and _credit.text != ""
+	col.add_child(_credit)
+	_device_photo_hook(col, device_id)
+	# The maker's logo over the name (nothing when there's no logo).
+	var maker_logo := BrandMark.rect(QuickMenu.maker_name(d, str(d.get("name", ""))), 22)
 	if maker_logo != null:
 		maker_logo.name = "MakerLogo"
+		maker_logo.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		col.add_child(maker_logo)
 	var title := Kit.label(str(d.get("name", Texts.UNKNOWN)), "HeaderLabel", true)
 	title.name = "DeviceName"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", ThemeLib.font("display"))
 	col.add_child(title)
 	var maker_line := " · ".join(PackedStringArray([str(d.get("maker", "")), str(d.get("model", ""))].filter(func(x): return x != "" and x != str(d.get("name", "")))))
 	if maker_line != "":
-		col.add_child(Kit.label(maker_line, "QuietLabel", true))
+		var ml := Kit.label(maker_line, "QuietLabel", true)
+		ml.name = "MakerLine"
+		ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(ml)
 	var level := str(sup.get("level", "generic"))
-	var chips := Kit.hbox(8)
+	var chips := HFlowContainer.new()
+	chips.name = "Chips"
+	chips.alignment = FlowContainer.ALIGNMENT_CENTER
+	chips.add_theme_constant_override("h_separation", 8)
+	chips.add_theme_constant_override("v_separation", 8)
 	chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chips.add_child(DKit.chip(Texts.SUPPORT_LABELS.get(level, level.capitalize()), Texts.SUPPORT_TONES.get(level, ""), "shield"))
 	if bool(sup.get("verified", false)):
 		chips.add_child(DKit.chip("Verified", "good", "check"))
 	col.add_child(chips)
-	col.add_child(DKit.quiet(Texts.SUPPORT_LINES.get(level, "")))
+	var line := DKit.quiet(Texts.SUPPORT_LINES.get(level, ""))
+	line.name = "SupportLine"
+	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(line)
 	_side.add_child(hero_card)
 
 	# three quick facts
@@ -149,6 +186,29 @@ func _fill_side() -> void:
 		facts.add_child(_fact("screen", "%d Hz" % int(hz[hz.size() - 1]), "Screen"))
 	if facts.get_child_count() > 0:
 		_side.add_child(facts)
+		_facts = facts
+		if not _side.resized.is_connected(_fit_side):
+			_side.resized.connect(_fit_side)
+		_fit_side()
+
+
+## The three fact tiles need room for their captions; in a narrow column
+## (Settings at 1280x800) they'd clip, and the cards repeat them anyway.
+func _fit_side() -> void:
+	if _facts != null and is_instance_valid(_facts) and _side.size.x > 0.0:
+		_facts.visible = _side.size.x >= FACTS_MIN_W
+
+
+## "Drawn to scale: 321 x 130 mm" from the shell record behind the drawing.
+static func _drawing_credit(device_id: String, pic_path: String) -> String:
+	if pic_path == "" or pic_path.ends_with("/generic.svg"):
+		return ""
+	var body: Dictionary = load("res://scripts/device/device.gd").body_for(device_id)
+	var w: Variant = body.get("w_mm")
+	var h: Variant = body.get("h_mm")
+	if (w is float or w is int) and (h is float or h is int):
+		return Texts.DRAWING_CREDIT % [int(w), int(h)]
+	return ""
 
 
 # ---- real device photo (DevicePhoto service) ---------------------------------------
@@ -171,12 +231,16 @@ func _device_photo_hook(col: VBoxContainer, device_id: String) -> void:
 	var got: Dictionary = ph.photo_for(device_id)
 	if got.is_empty():
 		return
-	photo_view = PhotoView.make(got, 230, _open_photo_link)
+	photo_view = PhotoView.make(got, PICTURE_MIN_H, _open_photo_link)
 	if photo_view == null:
 		return
+	photo_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	photo_view.image.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(photo_view)
 	col.move_child(photo_view, picture.get_index())
 	picture.visible = false
+	if _credit != null:
+		_credit.visible = false
 
 
 func _on_photo_ready(device_id: String, _path: String) -> void:
@@ -234,7 +298,9 @@ func _fill_cards() -> void:
 	_card_list = cards.filter(func(c): return c != null)
 	_grid.set_meta("dealt", -1)
 	_deal()
-	if not info.has("software") or not (_g("software").has("steam_version")):
+	# Only while Device is still looking (its slow lookups finish in a second or two).
+	var dev := svc("device")
+	if dev != null and dev.has_method("request_slow_info") and _g("software").get("slow_done", true) == false:
 		_loading = DKit.quiet(Texts.LOADING)
 		_loading.name = "Loading"
 		_cards.add_child(_loading)
@@ -453,26 +519,13 @@ func _support_card() -> Control:
 	var c := _section("support", Texts.SUPPORT_TONES.get(level, "accent"))
 	DKit.head_chip(c[1], DKit.chip(Texts.SUPPORT_LABELS.get(level, level), Texts.SUPPORT_TONES.get(level, "")))
 	var f: Dictionary = sup.get("features", {}) if sup.get("features") is Dictionary else {}
+	var unv: Array = sup.get("unverified", []) if sup.get("unverified") is Array else []
 	var lines := Kit.vbox(8)
 	lines.name = "Features"
 	lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var feats := [
-		["tdp", bool(f.get("tdp", false))],
-		["fan_control", bool(f.get("fan_control", false))],
-		["charge_limit", bool(f.get("charge_limit", false))],
-		["vrr", bool(f.get("vrr", false))],
-		["paddles", int(f.get("paddles", 0)) > 0],
-		["trackpads", int(f.get("trackpads", 0)) > 0],
-	]
-	for item in feats:
-		lines.add_child(DKit.check_line("yes" if item[1] else "no", Texts.FEATURES[item[0]]))
-	var gyro := str(f.get("gyro", "unknown"))
-	lines.add_child(DKit.check_line({"yes": "yes", "fix": "maybe", "unknown": "maybe"}.get(gyro, "no"),
-		"%s: %s" % [Texts.FEATURES["gyro"], Texts.GYRO_STATES.get(gyro, gyro)]))
-	if bool(f.get("rgb", false)):
-		lines.add_child(DKit.check_line("maybe", "%s: %s" % [Texts.FEATURES["rgb"], Texts.LED_LINE]))
+	for st in Caps.states(f, unv, svc("controls")):
+		lines.add_child(DKit.feature_line(st["state"], Texts.FEATURES[st["key"]], st["note"]))
 	c[1].add_child(lines)
-	var unv: Array = sup.get("unverified", []) if sup.get("unverified") is Array else []
 	if not unv.is_empty():
 		var names := PackedStringArray(unv.map(func(u): return str(Texts.UNVERIFIED_NAMES.get(u, u))))
 		c[1].add_child(DKit.quiet("%s %s." % [Texts.UNVERIFIED_INTRO, ", ".join(names)]))
@@ -514,5 +567,12 @@ static func _basic_info(dev: Object) -> Dictionary:
 	if dev == null:
 		return {}
 	var row: Dictionary = dev.get("profile") if dev.get("profile") is Dictionary else {}
-	return {"device": {"name": str(row.get("name", "This handheld")), "maker": str(row.get("maker", ""))},
-		"support": {"level": str(row.get("support", "generic"))}}
+	var out := {"device": {"name": str(row.get("name", "This handheld")), "maker": str(row.get("maker", "")),
+		"id": str(dev.call("id")) if dev.has_method("id") else str(row.get("id", ""))},
+		"support": {"level": str(row.get("support", "generic")), "unverified": row.get("unverified", []),
+			"fixes": row.get("fixes", [])}}
+	if dev.has_method("picture"):
+		out["device"]["picture"] = str(dev.call("picture"))
+	if dev.has_method("features"):
+		out["support"]["features"] = dev.call("features")
+	return out

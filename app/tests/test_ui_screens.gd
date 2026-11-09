@@ -19,6 +19,13 @@ class FakeDevice extends RefCounted:
 	func display_name() -> String: return profile["name"]
 	func support_level() -> String: return profile["support"]
 	func battery() -> Dictionary: return bat
+	## devices.json's answer for the Claw 8 EX (the quick menu's What works chips).
+	func features() -> Dictionary:
+		var D: GDScript = load("res://scripts/device/device.gd")
+		for r in D.load_table():
+			if r.get("id", "") == "msi-claw-8-ex":
+				return D.features_of(r)
+		return {}
 
 
 class FakePower extends RefCounted:

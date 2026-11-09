@@ -12,6 +12,8 @@ extends "shoot.gd"
 ##   (the per-theme extras are skipped then).
 
 const FakeControls := preload("res://tests/fixtures/ui_controls/fake_controls.gd")
+const DeviceFakes := preload("res://tests/fixtures/device_ui/fakes.gd")
+const PHOTO := "/tmp/gamecove-shots/device_photo.webp"
 const ProfilesScript := preload("res://scripts/controls/profiles.gd")
 const SNAP := "res://tests/fixtures/ui_controls/%s.json"
 const SHOTS := ["controls_quick_game", "controls_quick_game_everyday", "controls_quick_power", "controls_quick_display",
@@ -19,7 +21,31 @@ const SHOTS := ["controls_quick_game", "controls_quick_game_everyday", "controls
 	"controls_settings_fan_curve", "controls_settings_display", "controls_settings_controller", "controls_settings_lights",
 	"controls_settings_performance", "controls_settings_system", "controls_settings_profiles", "controls_settings_fixes",
 	"controls_settings_more", "controls_keep", "controls_game_page", "controls_quick_midnight", "controls_settings_light",
-	"controls_quick_sunset", "controls_quick_legion", "controls_settings_about", "controls_settings_stores"]
+	"controls_quick_sunset", "controls_quick_legion", "controls_settings_about", "controls_settings_about_works", "controls_settings_about_photo", "controls_settings_stores"]
+
+
+## The Device service the Settings pages see: Device.info() of a set-up Claw
+## 8 EX (every slow detail resolved), plus the bits the other pages read.
+class ClawDevice extends "res://tests/fixtures/device_ui/fakes.gd".FakeDevice:
+	var profile := {"name": "MSI Claw 8 EX AI+", "chip": "Intel Panther Lake", "gpu": "Arc B390 / B370 (Xe3)",
+		"panel_hz": [60, 120], "support": "full", "maker": "MSI", "unverified": []}
+	func display_name() -> String: return profile["name"]
+	func support_level() -> String: return profile["support"]
+	var bat := {"percent": 72, "status": "Discharging", "watts": 9.4}
+	func battery() -> Dictionary: return bat
+	func picture() -> String: return picture_for(device_id)
+
+
+## A cached Commons photo (shoot_device.gd's) for the photo case.
+class OnePhoto extends RefCounted:
+	signal photo_ready(device_id: String, path: String)
+	var enabled := true
+	func photo_for(_id: String) -> Dictionary:
+		return {"path": "/tmp/gamecove-shots/device_photo.webp", "credit": {"author": "ZMASLO", "license": "CC BY 3.0",
+			"license_url": "https://creativecommons.org/licenses/by/3.0/",
+			"page_url": "https://commons.wikimedia.org/wiki/File:Example.png", "file": "Example.png"}}
+	func set_enabled(on: bool) -> void:
+		enabled = on
 
 var fake: Node
 var profiles: Node
@@ -191,13 +217,21 @@ func _use_device(id: String, patch: Dictionary) -> void:
 	profiles._remember_title("epic:fn", "Fortnite")
 	profiles.save_file()
 
-	dev = T.FakeDevice.new()
 	if id.begins_with("lenovo"):
+		dev = ClawDevice.new()
+		dev.device_id = id
+		dev.name = "ShotDeviceLegion"
+		root.add_child(dev)
 		dev.profile = {"name": "Lenovo Legion Go S", "chip": "AMD Ryzen Z2 Go", "gpu": "Radeon 680M-class (RDNA 2)",
-			"panel_hz": [48, 120], "support": "partial", "fixes": [], "unverified": ["tdp"]}
+			"panel_hz": [48, 120], "support": "partial", "fixes": [], "unverified": ["charge_limit"], "maker": "Lenovo"}
 		dev.bat = {"percent": 58, "status": "Discharging", "watts": 11.2}
 	else:
+		dev = ClawDevice.new()
+		dev.name = "ShotDevice"
+		dev.data = DeviceFakes.claw_info()
 		dev.profile["fixes"] = ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "claw-kbd-wakeup"]
+		dev.data["support"]["fixes"] = dev.profile["fixes"]
+		root.add_child(dev)
 	var qm = main.quick_menu
 	qm.device = dev
 	qm_power = S.FakeAutoPower.new()
@@ -212,7 +246,10 @@ func _use_device(id: String, patch: Dictionary) -> void:
 	var svc: Dictionary = main.settings.services.duplicate()
 	svc["controls"] = fake
 	svc["profiles"] = profiles
-	svc["device"] = S.FakeDevicePic.new() if not id.begins_with("lenovo") else svc.get("device")
+	if not id.begins_with("lenovo"):
+		svc["device"] = dev
+		# Offline: no cached photo, so About shows the drawing.
+		svc.erase("photo")
 	svc["fixes"] = _fake_fixes(id)
 	svc["profiles_dir"] = "/tmp/gamecove-shots/profiles-export"
 	main.settings.set_services(svc)
@@ -346,6 +383,27 @@ func _settings_shots_controls() -> void:
 		st.open_category("device", "about")
 		await frames(12)
 		await shot("controls_settings_about")
+	if want(["controls_settings_about_works"]):
+		main.show_screen("settings")
+		await frames(4)
+		st.open_category("device", "about")
+		await frames(12)
+		var works: Node = st.find_child("Card_support", true, false)
+		if works is Control:
+			works.grab_focus()
+		await frames(8)
+		await shot("controls_settings_about_works")
+	if want(["controls_settings_about_photo"]) and FileAccess.file_exists(PHOTO):
+		var svc: Dictionary = st.services.duplicate()
+		svc["photo"] = OnePhoto.new()
+		st.set_services(svc)
+		main.show_screen("settings")
+		await frames(4)
+		st.open_category("device", "about")
+		await frames(12)
+		await shot("controls_settings_about_photo")
+		svc.erase("photo")
+		st.set_services(svc)
 	if want(["controls_settings_stores"]):
 		await _settings_page("stores")
 		await shot("controls_settings_stores")

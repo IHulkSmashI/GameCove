@@ -105,7 +105,9 @@ const GYRO_STEAM_FAILED := "Couldn't open Steam. Open the game in Steam, then Co
 
 const DEVICE_FIXES := "Device fixes"
 const FIXES_OPEN := "Open device fixes"
-const FIXES_NONE := "No known fixes for this handheld."
+const FIXES_NONE := "None needed"
+const WORKS_SHORT := {"tdp": "TDP", "fan_control": "Fan", "charge_limit": "Charge limit", "vrr": "VRR", "gyro": "Gyro",
+	"paddles": "Back buttons", "trackpads": "Trackpads", "rgb": "Lights"}
 const FIXES_SUMMARY := "%d applied, %d more available"
 const FIXES_ALL_GOOD := "%d applied, all good"
 const FIXES_COUNT_ONLY := "%d fixes for this handheld"

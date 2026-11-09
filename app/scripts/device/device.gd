@@ -664,6 +664,7 @@ func info() -> Dictionary:
 			"gamecove_version": gamecove_version(),
 			"steam_version": "",
 			"proton": [],
+			"slow_done": not _slow.is_empty(),
 		},
 		"support": {
 			"level": support_level(),
@@ -831,14 +832,37 @@ func request_slow_info() -> void:
 	_slow_thread.start(_slow_worker)
 
 
+## Two steps so the page isn't left waiting on vulkaninfo (a second or more on
+## a cold start): Steam, Proton and free space first, then the Vulkan driver.
 func _slow_worker() -> void:
-	var s := slow_info(true)
+	var s := slow_info(false)
 	_finish_slow.call_deferred(s)
+	if root == "" and FileAccess.file_exists("/usr/bin/vulkaninfo"):
+		var v := vulkan_info()
+		if not v.is_empty():
+			_finish_vulkan.call_deferred(v)
 
 
 func _finish_slow(s: Dictionary) -> void:
 	_slow = s
 	info_updated.emit(info())
+
+
+func _finish_vulkan(v: Dictionary) -> void:
+	if _slow.is_empty():
+		return
+	_slow["mesa"] = v.get("mesa", "")
+	_slow["vulkan_driver"] = v.get("vulkan_driver", "")
+	info_updated.emit(info())
+
+
+## Mesa version and Vulkan driver name from `vulkaninfo --summary` (blocking).
+static func vulkan_info() -> Dictionary:
+	var lines := []
+	if OS.execute("/usr/bin/vulkaninfo", ["--summary"], lines, true) != 0 or lines.is_empty():
+		return {}
+	var v := parse_vulkaninfo(str(lines[0]))
+	return {"mesa": mesa_from_text(v.get("driver_info", "")), "vulkan_driver": v.get("driver_name", "")}
 
 
 ## Steam client version, Proton builds, free space, and (if `run_vulkaninfo` and
@@ -863,11 +887,9 @@ func slow_info(run_vulkaninfo := false) -> Dictionary:
 					free["sd_card"] = g
 	out["free_gb"] = free
 	if run_vulkaninfo and root == "" and FileAccess.file_exists("/usr/bin/vulkaninfo"):
-		var lines := []
-		if OS.execute("/usr/bin/vulkaninfo", ["--summary"], lines, true) == 0 and not lines.is_empty():
-			var v := parse_vulkaninfo(str(lines[0]))
-			out["mesa"] = mesa_from_text(v.get("driver_info", ""))
-			out["vulkan_driver"] = v.get("driver_name", "")
+		var v := vulkan_info()
+		out["mesa"] = v.get("mesa", "")
+		out["vulkan_driver"] = v.get("vulkan_driver", "")
 	return out
 
 
