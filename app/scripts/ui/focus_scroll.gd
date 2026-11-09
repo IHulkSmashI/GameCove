@@ -53,10 +53,20 @@ func _exit_tree() -> void:
 func _on_focus(c: Control) -> void:
 	_unwatch()
 	if c == null or scroll == null or not scroll.is_ancestor_of(c):
+		_stop()
 		return
 	_watched = c
 	c.resized.connect(_queue)
 	_queue()
+
+
+## Ends a glide still running for the previous focus.
+func _stop() -> void:
+	if scroll != null and scroll.has_meta("_mm_vscroll"):
+		var t: Variant = scroll.get_meta("_mm_vscroll")
+		if t is Tween and (t as Tween).is_valid():
+			(t as Tween).kill()
+		scroll.remove_meta("_mm_vscroll")
 
 
 func _unwatch() -> void:

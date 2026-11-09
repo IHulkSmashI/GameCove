@@ -447,7 +447,8 @@ func _storage_card() -> Control:
 			row.add_child(Kit.label(Texts.FREE_OF % [Texts.gb(free), Texts.gb(size)], "CaptionLabel"))
 		c[1].add_child(row)
 	if not any:
-		c[1].add_child(DKit.quiet(Texts.UNKNOWN))
+		c[0].free()
+		return null   # nothing known: no "Unknown" card
 	return c[0]
 
 

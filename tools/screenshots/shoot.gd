@@ -284,7 +284,8 @@ func _settings_shots() -> void:
 	if not want(names):
 		return
 	var svc := {"setup": S.FakeSetup.new(), "library": S.FakeLibrary.new(), "discover": S.FakeDiscover.new(),
-		"perf": S.FakePerf.new(), "achievements": S.FakeAchievements.new(), "device": S.FakeDevicePic.new()}
+		"perf": S.FakePerf.new(), "achievements": S.FakeAchievements.new(), "device": _claw_device()}
+	svc["controls"] = root.get_node_or_null("Controls")
 	svc["library"].s["steam_cef"] = true
 	svc["library"].s["steam_cef_status"] = "ready"
 	svc["library"].s["steam_pending_count"] = 1
@@ -311,7 +312,13 @@ func _settings_shots() -> void:
 			elif pages[n] == "discover":
 				st.pages["discover"].rows["country"].button.grab_focus()
 			elif pages[n] == "performance":
-				st.pages["performance"].rows["overlay"].button.grab_focus()
+				# The Controls-built page has no "overlay" row of its own:
+				# its first row (the overlay control) then.
+				var pp = st.pages["performance"]
+				if "rows" in pp and pp.rows.has("overlay"):
+					pp.rows["overlay"].button.grab_focus()
+				elif not pp.focusables().is_empty():
+					pp.focusables()[0].grab_focus()
 			elif pages[n] == "about":
 				st.pages["about"].rows["setup_keys"].button.grab_focus()
 		await shot(n)
@@ -391,13 +398,23 @@ func _settings_shots() -> void:
 			qm.focusables()[-1].grab_focus()
 			await shot("quick_perf")
 		if want(["quick_device_partial"]):
-			qm.device.profile["support"] = "partial"
-			qm.device.profile["name"] = "Lenovo Legion Go 2"
-			qm.device.profile["unverified"] = ["tdp", "charge_limit", "panel.vrr"]
+			qm.device.profile = {"id": "lenovo-legion-go-2", "name": "Lenovo Legion Go 2", "maker": "Lenovo",
+				"chip": "AMD Ryzen Z2 Extreme", "gpu": "Radeon 890M-class (RDNA 3.5)", "panel_hz": [30, 144],
+				"support": "partial", "unverified": ["tdp", "charge_limit", "panel.vrr"]}
 			qm.show_section(5)
 			await shot("quick_device_partial")
 		qm.close()
 		main.playing = {}
+
+
+## The Device service with a fully resolved Claw 8 EX info() (About this device).
+func _claw_device() -> Node:
+	var here: String = get_script().resource_path.get_base_dir()
+	var d: Node = load(here.path_join("shoot_controls.gd")).ClawDevice.new()
+	d.name = "ShotDevice"
+	d.data = load("res://tests/fixtures/device_ui/fakes.gd").claw_info()
+	root.add_child(d)
+	return d
 
 
 ## A set-up Claw 8 EX's Controls (shoot_controls.gd's snapshot and patch) in

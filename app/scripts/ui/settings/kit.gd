@@ -57,7 +57,10 @@ static func note(text: String, tone := "info", node_name := "Note") -> PanelCont
 
 ## Small state chip (Signed in, Done, Skipped…).
 static func chip(text: String, tone := "", icon := "") -> PanelContainer:
-	return Badge.make({"kind": "state", "text": text, "short": text, "tone": tone, "icon": icon}, "tile")
+	# The card chip (tone hairline on the theme's chip colour), not the tile
+	# corner flag: these sit on cards, where the flag read as a tiny blob
+	# (and lost its text in Light).
+	return Badge.make({"kind": "state", "text": text, "short": text, "tone": tone, "icon": icon}, "chip")
 
 
 ## "Label    value" line for read-only facts.

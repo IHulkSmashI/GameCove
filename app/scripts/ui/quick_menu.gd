@@ -248,6 +248,7 @@ func _build_frame() -> void:
 
 	var scroll := ScrollContainer.new()
 	scroll.name = "Scroll"
+	_scroll = scroll
 	FocusScroll.attach(scroll)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
@@ -425,6 +426,9 @@ static func _is_shoulder(event: InputEvent, button: JoyButton, key: Key) -> bool
 
 # ------------------------------------------------------------ tabs
 
+var _scroll: ScrollContainer
+
+
 func show_section(i: int, keep_focus := "") -> void:
 	section = i
 	status_label.text = ""
@@ -451,6 +455,9 @@ func show_section(i: int, keep_focus := "") -> void:
 		"controller": _build_controller()
 		"device": _build_device()
 	_relink()
+	# A new tab opens at its top (the old tab's scroll would carry over).
+	if _scroll != null:
+		_scroll.scroll_vertical = 0
 	if is_inside_tree():
 		focus_target(keep_focus).grab_focus()
 

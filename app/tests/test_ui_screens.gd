@@ -22,8 +22,9 @@ class FakeDevice extends RefCounted:
 	## devices.json's answer for the Claw 8 EX (the quick menu's What works chips).
 	func features() -> Dictionary:
 		var D: GDScript = load("res://scripts/device/device.gd")
+		var want := str(profile.get("id", "msi-claw-8-ex"))
 		for r in D.load_table():
-			if r.get("id", "") == "msi-claw-8-ex":
+			if r.get("id", "") == want:
 				return D.features_of(r)
 		return {}
 
