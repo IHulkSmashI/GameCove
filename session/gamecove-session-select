@@ -107,8 +107,27 @@ session_installed() { # <name.desktop>
 	return 1
 }
 
+# steamosctl's getters print a bare value ("plasma.desktop", "game"; steamos-manager's
+# steamosctl.rs println!("{session}")), other getters a label ("Max charge level: 100").
+# Take the first line, drop a "Label: " prefix, CRs and spaces, so either form reads the same.
+sm_get() { # <get-command>
+	"$STEAMOSCTL" "$1" 2>/dev/null | head -n 1 | tr -d '\r' | sed 's/^[^:]*:[[:space:]]*//' | tr -d '[:space:]'
+}
+
+# A set, then the value read back (review M9): a set that didn't take is a failure, so
+# restore never reports success (and forgets what to restore) while nothing changed.
+sm_set() { # <what: default-desktop-session | default-login-mode> <value>
+	"$STEAMOSCTL" "set-$1" "$2" || return 1
+	got="$(sm_get "get-$1")"
+	[ "$got" = "$2" ] && return 0
+	echo "gamecove-session-select: steamosctl set-$1 $2 didn't take (reads back '$got')" >&2
+	return 1
+}
+
+# "Sessions:\n\n- plasma.desktop\n- plasmax11.desktop"
 valid_sessions() {
-	"$STEAMOSCTL" get-valid-desktop-sessions 2>/dev/null | sed -n 's/^- \(.*\.desktop\)$/\1/p'
+	"$STEAMOSCTL" get-valid-desktop-sessions 2>/dev/null | tr -d '\r' |
+		sed -n 's/^[[:space:]]*-[[:space:]]*\([^[:space:]]*\.desktop\)[[:space:]]*$/\1/p'
 }
 
 is_valid() { # <name.desktop>: a real desktop session steamos-manager will accept
@@ -133,7 +152,7 @@ real_desktop() {
 			return 0
 		fi
 	fi
-	s="$("$STEAMOSCTL" get-default-desktop-session 2>/dev/null | head -n 1 | tr -d '[:space:]')" || s=""
+	s="$(sm_get get-default-desktop-session)" || s=""
 	if is_valid "$s"; then
 		echo "$s"
 		return 0
@@ -168,13 +187,13 @@ reset_input_intercept() {
 # --default must not save GameCove as "the previous one").
 save_previous() {
 	mkdir -p "$DATA"
-	cur="$("$STEAMOSCTL" get-default-desktop-session 2>/dev/null | head -n 1 | tr -d '[:space:]')" || cur=""
+	cur="$(sm_get get-default-desktop-session)" || cur=""
 	if is_valid "$cur"; then
 		echo "$cur" >"$PREV_SESSION"
 	elif [ ! -f "$PREV_SESSION" ]; then
 		real_desktop >"$PREV_SESSION"
 	fi
-	mode="$("$STEAMOSCTL" get-default-login-mode 2>/dev/null | head -n 1 | tr -d '[:space:]')" || mode=""
+	mode="$(sm_get get-default-login-mode)" || mode=""
 	if [ "$mode" = "desktop" ] && [ "$cur" = "$SESSION_FILE" ]; then
 		: # already GameCove: keep what was saved before
 	elif [ "$mode" = "game" ] || [ "$mode" = "desktop" ]; then
@@ -218,8 +237,8 @@ remove_guard() {
 # Undo --default: the desktop default and login mode from before GameCove.
 restore_defaults() {
 	ensure_manager
-	cur="$("$STEAMOSCTL" get-default-desktop-session 2>/dev/null | head -n 1 | tr -d '[:space:]')" || cur=""
-	mode="$("$STEAMOSCTL" get-default-login-mode 2>/dev/null | head -n 1 | tr -d '[:space:]')" || mode=""
+	cur="$(sm_get get-default-desktop-session)" || cur=""
+	mode="$(sm_get get-default-login-mode)" || mode=""
 	desk="$(real_desktop)"
 	prev_mode="game"
 	if [ -f "$PREV_MODE" ]; then
@@ -228,12 +247,12 @@ restore_defaults() {
 	[ "$prev_mode" = "desktop" ] || prev_mode="game"
 	rc=0
 	if [ "$cur" = "$SESSION_FILE" ] || [ -z "$cur" ]; then
-		"$STEAMOSCTL" set-default-desktop-session "$desk" || rc=1
+		sm_set default-desktop-session "$desk" || rc=1
 	fi
 	if [ "$cur" = "$SESSION_FILE" ] && [ "$mode" = "desktop" ]; then
-		"$STEAMOSCTL" set-default-login-mode "$prev_mode" || rc=1
+		sm_set default-login-mode "$prev_mode" || rc=1
 	elif [ "$mode" != "game" ] && [ "$mode" != "desktop" ]; then
-		"$STEAMOSCTL" set-default-login-mode game || rc=1
+		sm_set default-login-mode game || rc=1
 	fi
 	rm -f "$STEAM_MARK"
 	if [ "$rc" -eq 0 ]; then
@@ -279,7 +298,7 @@ steam)
 	if [ "$default" -eq 1 ]; then
 		# GameCove no longer starts at boot: the desktop default goes back too
 		restore_defaults || true
-		"$STEAMOSCTL" set-default-login-mode game
+		sm_set default-login-mode game
 	fi
 	[ "$switch" -eq 1 ] || exit 0
 	mkdir -p "$DATA"
@@ -291,8 +310,8 @@ gamecove)
 	if [ "$default" -eq 1 ]; then
 		save_previous
 		install_guard
-		"$STEAMOSCTL" set-default-desktop-session "$SESSION_FILE"
-		"$STEAMOSCTL" set-default-login-mode desktop
+		sm_set default-desktop-session "$SESSION_FILE"
+		sm_set default-login-mode desktop
 	fi
 	rm -f "$STEAM_MARK"
 	[ "$switch" -eq 1 ] || exit 0

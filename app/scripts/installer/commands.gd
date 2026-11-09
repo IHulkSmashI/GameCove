@@ -113,7 +113,7 @@ static func session_default(select: String, startup: String) -> Array:
 ## desktop session if it names GameCove, boot back to Steam Gaming Mode).
 const SESSION_RESTORE_SH := "for s in \"$1\" \"$2\"; do if [ -f \"$s\" ]; then sh \"$s\" restore && exit 0; fi; done; " \
 	+ "command -v steamosctl >/dev/null 2>&1 || exit 0; " \
-	+ "if [ \"$(steamosctl get-default-desktop-session 2>/dev/null)\" = gamecove.desktop ]; then " \
+	+ "if [ \"$(steamosctl get-default-desktop-session 2>/dev/null | head -n 1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '[:space:]')\" = gamecove.desktop ]; then " \
 	+ "for d in plasma.desktop gnome.desktop; do steamosctl set-default-desktop-session \"$d\" 2>/dev/null && break; done; fi; " \
 	+ "steamosctl set-default-login-mode game"
 

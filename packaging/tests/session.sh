@@ -34,12 +34,14 @@ printf '#!/bin/sh\n[ "$1" = "-u" ] && echo 1000 || /usr/bin/id "$@"\n' >"$BIN/id
 cat >"$BIN/steamosctl" <<EOF
 #!/bin/sh
 echo "\$*" >>"$T/steamosctl.log"
+lab() { if [ -f "$T/labels" ]; then printf '%s: ' "\$1"; fi; }
 case "\$1" in
-get-default-desktop-session) cat "$ST/desktop" ;;
-get-default-login-mode) cat "$ST/mode" ;;
+get-default-desktop-session) lab "Default desktop session"; cat "$ST/desktop" ;;
+get-default-login-mode) lab "Default login mode"; cat "$ST/mode" ;;
 get-valid-desktop-sessions) printf 'Sessions:\n\n'; for f in "$T/sessions"/*.desktop; do [ -f "\$f" ] && echo "- \${f##*/}"; done ;;
-set-default-desktop-session) [ -f "$T/sessions/\$2" ] || exit 1; echo "\$2" >"$ST/desktop" ;;
-set-default-login-mode) echo "\$2" >"$ST/mode" ;;
+set-default-desktop-session) [ -f "$T/sessions/\$2" ] || exit 1; [ -f "$T/sets-ignored" ] || echo "\$2" >"$ST/desktop" ;;
+set-default-login-mode) case "\$2" in game | desktop) ;; *) echo "error: invalid value '\$2'" >&2; exit 2 ;; esac
+	[ -f "$T/sets-ignored" ] || echo "\$2" >"$ST/mode" ;;
 switch-to-desktop-mode) echo "\${2:-DEFAULT}" >"$ST/switched" ;;
 switch-to-game-mode) echo game >"$ST/switched" ;;
 esac
@@ -163,6 +165,63 @@ eqv "$(cat "$ST/mode")" game "guard: boot back to Steam Gaming Mode"
 sel gamecove
 eqv "$?" 1 "gamecove refuses when its session isn't installed"
 touch "$T/sessions/gamecove.desktop"
+
+# --- review M9: steamosctl output as SteamOS 3.10 prints it (steamos-manager 26.4.1, ROG Ally), a
+# labelled variant, and a set that doesn't take
+SM2="$T/sm2bin"
+mkdir -p "$SM2"
+cat >"$SM2/steamosctl" <<'EOF'
+#!/bin/sh
+case "$1" in
+get-default-desktop-session) echo "plasma.desktop" ;;
+get-default-login-mode) echo "game" ;;
+get-valid-desktop-sessions) printf 'Sessions:\n\n- plasma.desktop\n- plasmax11.desktop\n' ;;
+get-fan-control-state) echo "Fan control state: BIOS" ;;
+get-max-charge-level) echo "Max charge level: 100" ;;
+esac
+echo "$*" >>"$SM2LOG"
+EOF
+chmod +x "$SM2/steamosctl"
+rm -rf "$T/ally"
+mkdir -p "$T/ally/sessions"
+touch "$T/ally/sessions/plasma.desktop" "$T/ally/sessions/plasmax11.desktop"
+ally() {
+	: >"$T/sm2.log"
+	env PATH="$BIN:$PATH" HOME="$T/ally" SM2LOG="$T/sm2.log" STEAMOSCTL="$SM2/steamosctl" \
+		GAMECOVE_SESSIONS_DIRS="$T/ally/nothing" sh "$SEL" "$@" >"$T/out" 2>&1
+}
+ally desktop
+has "$T/sm2.log" "^switch-to-desktop-mode plasma.desktop$" "real SteamOS output: the desktop is plasma.desktop"
+mkdir -p "$T/ally/.local/share/gamecove"
+echo bogus.desktop >"$T/ally/.local/share/gamecove/prev-desktop-session"
+ally desktop
+has "$T/sm2.log" "^switch-to-desktop-mode plasma.desktop$" "real SteamOS output: the valid-session list is read"
+ally restore
+eqv "$?" 0 "real SteamOS output: restore with nothing of ours to undo"
+hasnt "$T/sm2.log" "^set-" "real SteamOS output: nothing set when nothing names GameCove"
+fresh
+touch "$T/labels"
+sel gamecove --default --no-switch
+eqv "$?" 0 "labelled getters: --default reads back"
+eqv "$(cat "$DATA/prev-desktop-session")" plasma.desktop "labelled getter: previous session saved bare"
+eqv "$(cat "$DATA/prev-login-mode")" game "labelled getter: previous mode saved bare"
+sel restore
+eqv "$?" 0 "labelled getters: restore"
+eqv "$(cat "$ST/desktop")" plasma.desktop "labelled getters: restore really sets Plasma"
+eqv "$(cat "$ST/mode")" game "labelled getters: restore really sets game"
+rm -f "$T/labels"
+fresh
+sel gamecove --default --no-switch
+touch "$T/sets-ignored"
+sel restore
+eqv "$?" 1 "a set that doesn't take fails restore"
+has "$T/out" "didn't take" "says which set didn't take"
+[ -f "$DATA/prev-desktop-session" ] && [ -e "$UNITS/gamecove-session-guard.service" ] && ok || bad "failed restore keeps what to restore and the guard"
+fresh
+touch "$T/sets-ignored"
+sel gamecove --default --no-switch
+[ "$?" -ne 0 ] && ok || bad "--default fails when steamosctl doesn't take it (apply-choices keeps it pending)"
+rm -f "$T/sets-ignored"
 
 # no steamosctl: guard/session-start are no-ops, switches explain
 env PATH="$BIN:$PATH" HOME="$T/home" STEAMOSCTL=/nonexistent sh "$SEL" guard
