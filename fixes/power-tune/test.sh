@@ -154,6 +154,23 @@ expect 0 "hold at home (no game)" set thermald:hold
 n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 30 ]; do sleep 0.2; n=$((n + 1)); done
 [ "$(r "$R/thermald.state")" = active ] || fail "without a game the hold ends after the start-up grace"
 : > "$T/game"
+# review M20: a library game (Heroic/umu/emulator) runs in a systemd-run user scope that no command line
+# names (pgrep finds nothing): its populated app-steam-app scope keeps the hold; another user's doesn't
+rm -f "$T/game"
+CG="$R/sys/fs/cgroup/user.slice"
+w "$CG/user-1000.slice/user@1000.service/app.slice/app-steam-app1234567890-1.scope/cgroup.events" "populated 1
+frozen 0"
+w "$CG/user-1001.slice/user@1001.service/app.slice/app-steam-app42-1.scope/cgroup.events" "populated 1"
+echo active > "$R/thermald.state"
+PKEXEC_UID=1000 expect 0 "hold for a library game" set thermald:hold
+sleep 1.2
+[ "$(r "$R/thermald.state")" = inactive ] || fail "a library game in its scope keeps the hold (review M20)"
+w "$CG/user-1000.slice/user@1000.service/app.slice/app-steam-app1234567890-1.scope/cgroup.events" "populated 0
+frozen 0"
+n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 30 ]; do sleep 0.2; n=$((n + 1)); done
+[ "$(r "$R/thermald.state")" = active ] || fail "an empty scope (game gone) ends the hold; another user's game doesn't count"
+rm -rf "$R/sys/fs/cgroup"
+: > "$T/game"
 # review M3 (proof 9.2 B): a PID left from before a reboot, or one that isn't a watcher, is never killed
 sleep 300 & victim=$!
 w "$R/var/lib/gamecove/fixes/power-tune/thermald-watch" "$victim"

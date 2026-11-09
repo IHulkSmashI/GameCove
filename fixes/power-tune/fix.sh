@@ -433,14 +433,37 @@ set_tau() {
 	[ "$d" -le $(($1 / 4)) ] || die 1 "the time window reads $got us after $1"
 }
 
-# A running game of the caller (Steam's reaper, or a GameCove launch's app-steam-app<id> scope).
+# A running game of the caller:
+#  - a Steam game, or one GameCove starts behind its reaper wrapper (streaming): a process whose command
+#    line is "reaper SteamLaunch AppId=<id> ..." (pgrep);
+#  - a game from GameCove's library (Heroic, umu, GOG, Amazon, emulators): library.gd scope_command runs
+#    `systemd-run --user --scope --unit=app-steam-app<id>-<n> -- <cmd>`, which execs the game, so no command
+#    line names it (review M20); its scope does, while it has processes (cgroup v2 "populated 1").
 GAME_PATTERN='SteamLaunch AppId=|app-steam-app[0-9]'
 game_running() {
 	if [ -n "${1:-}" ]; then
-		pgrep -u "$1" -f "$GAME_PATTERN" >/dev/null 2>&1
+		pgrep -u "$1" -f "$GAME_PATTERN" >/dev/null 2>&1 && return 0
 	else
-		pgrep -f "$GAME_PATTERN" >/dev/null 2>&1
+		pgrep -f "$GAME_PATTERN" >/dev/null 2>&1 && return 0
 	fi
+	game_scope_running "${1:-}"
+}
+
+# game_scope_running [uid]: a populated app-steam-app<id>-<n>.scope in that user's (or any user's) systemd tree
+game_scope_running() {
+	base="$ROOT/sys/fs/cgroup/user.slice"
+	[ -z "${1:-}" ] || base="$base/user-$1.slice"
+	[ -d "$base" ] || return 1
+	find "$base" -maxdepth 5 -type d -name 'app-steam-app[0-9]*.scope' 2>/dev/null | {
+		while IFS= read -r sc; do
+			if [ -f "$sc/cgroup.events" ]; then
+				grep -qx 'populated 1' "$sc/cgroup.events" 2>/dev/null && exit 0
+			elif [ -s "$sc/cgroup.procs" ]; then
+				exit 0
+			fi
+		done
+		exit 1
+	}
 }
 
 # The watcher behind a hold: runs detached as root until thermald is running again.
