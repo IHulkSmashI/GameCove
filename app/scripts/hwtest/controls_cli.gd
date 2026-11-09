@@ -121,10 +121,29 @@ func _probe(id: String) -> void:
 	if from == null or to == null:
 		out(["probe", id, "result=skipped", "reason=no value to change to (now %s)" % js(from)])
 		return
+	var saved := snapshot_files(saved_dir())
+	# what the provider wants back byte for byte (InputPlumber's live profile text), and the
+	# controls this one requires (gpu_clock switches gpu_level to manual)
+	var prov: Object = c.get_meta("provider") if c.has_meta("provider") else null
+	var snap: Dictionary = prov.probe_snapshot() if prov != null and prov.has_method("probe_snapshot") else {}
+	var req := {}
+	for r in c.requires:
+		var rc = controls.control(r)
+		if rc != null and rc.available:
+			req[r] = await _fresh(rc)
 	var ok := await _write(id, to)
 	var back: Variant = await _fresh(c)
 	var put_back := await _write(id, from)
 	var restored: Variant = await _fresh(c)
+	if not snap.is_empty():
+		prov.probe_restore(snap)
+		restored = await _fresh(c)
+	for r in req:
+		var rc = controls.control(r)
+		if req[r] != null and not same(rc, await _fresh(rc), req[r]):
+			await _write(r, req[r])
+	# a put-back leaves no trace: GameCove's saved InputPlumber layout as it was
+	restore_files(saved_dir(), saved)
 	var result := "ok"
 	if not ok:
 		result = "write_failed"
@@ -233,6 +252,50 @@ func _write(id: String, v: Variant) -> bool:
 
 
 # ---- pure helpers (tested) --------------------------------------------------------
+
+## Where controller writes save the everyday InputPlumber layout (input/backend.gd profile_path()).
+static func saved_dir(home := "") -> String:
+	return (home if home != "" else OS.get_environment("HOME")) + "/.config/inputplumber/profiles/gamecove"
+
+
+## {relative path: bytes} of every file under dir.
+static func snapshot_files(dir: String, rel := "") -> Dictionary:
+	var out := {}
+	var d := DirAccess.open(dir.path_join(rel))
+	if d == null:
+		return out
+	for f in d.get_files():
+		out[rel.path_join(f)] = FileAccess.get_file_as_bytes(dir.path_join(rel).path_join(f))
+	for sub in d.get_directories():
+		out.merge(snapshot_files(dir, rel.path_join(sub)))
+	return out
+
+
+## Puts dir back to a snapshot_files() result: new files go (and folders left empty), changed ones get their bytes back.
+static func restore_files(dir: String, before: Dictionary) -> void:
+	var now := snapshot_files(dir)
+	for f in now:
+		if not before.has(f):
+			DirAccess.remove_absolute(dir.path_join(f))
+			var parent := dir.path_join(f).get_base_dir()
+			while parent.begins_with(dir) and parent != dir and DirAccess.get_files_at(parent).is_empty() and DirAccess.get_directories_at(parent).is_empty():
+				DirAccess.remove_absolute(parent)
+				parent = parent.get_base_dir()
+		elif now[f] != before[f]:
+			var w := FileAccess.open(dir.path_join(f), FileAccess.WRITE)
+			if w != null:
+				w.store_buffer(before[f])
+				w.close()
+	for f in before:
+		if not now.has(f):
+			DirAccess.make_dir_recursive_absolute(dir.path_join(f).get_base_dir())
+			var w := FileAccess.open(dir.path_join(f), FileAccess.WRITE)
+			if w != null:
+				w.store_buffer(before[f])
+				w.close()
+	if before.is_empty() and DirAccess.dir_exists_absolute(dir) and DirAccess.get_files_at(dir).is_empty() and DirAccess.get_directories_at(dir).is_empty():
+		DirAccess.remove_absolute(dir)
+
 
 static func describe(c: RefCounted) -> Array:
 	var shape := ""

@@ -176,3 +176,19 @@ func test_caps_per_device() -> void:
 	for id in rows:
 		var c := Caps.of(rows[id])
 		ok(c.has("paddles") and c.has("trackpads"), id + " caps")
+
+
+## The Ally's stock profile maps QuickAccess2 -> Screenshot. "As itself" drops it; picking
+## Screenshot again must put the stock mapping back, not a "GameCove QuickAccess2" override.
+func test_button_back_to_stock_restores_the_stock_mapping() -> void:
+	var stock_map := {"name": "Screenshot", "source_event": {"gamepad": {"button": "QuickAccess2"}},
+		"target_events": [{"gamepad": {"button": "Screenshot"}}]}
+	var stock := {"version": 1, "kind": "DeviceProfile", "name": "Default", "mapping": [stock_map]}
+	eq(IpEdit.button_target(stock, "QuickAccess2"), "Screenshot", "stock reads Screenshot")
+	var p1 := IpEdit.set_button(stock.duplicate(true), "QuickAccess2", "", stock)
+	eq(IpEdit.button_target(p1, "QuickAccess2"), "", "as itself")
+	var p2 := IpEdit.set_button(p1, "QuickAccess2", "Screenshot", stock)
+	eq(p2["mapping"], [stock_map], "exactly the stock mapping again")
+	ok(not (p2["mapping"] as Array).any(func(m): return str(m.get("name", "")).begins_with("GameCove")), "no GameCove override left")
+	var p3 := IpEdit.set_button(p2, "QuickAccess2", "KeyF13", stock)
+	ok((p3["mapping"] as Array).any(func(m): return m.get("name") == "GameCove QuickAccess2"), "other targets still get GameCove's mapping")

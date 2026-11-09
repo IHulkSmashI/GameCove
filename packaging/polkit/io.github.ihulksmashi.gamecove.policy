@@ -20,6 +20,7 @@
                     thermald hold/release (a hold lasts only while a game runs:
                     thermald starts again by itself after)
       controller-led  colour, brightness, effect, or off
+      controller-rumble  rumble strength (0-100, or off/low/medium/high)
       claw8ex-gyro  accelerometer on/off; claw8ex-gyro / claw8ex-buttons refresh
                     (rebuild the InputPlumber override after an OS update)
     It never installs or removes anything, never writes udev rules, kernel

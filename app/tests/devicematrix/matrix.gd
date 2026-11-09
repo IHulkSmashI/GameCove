@@ -653,8 +653,10 @@ static func critical_problems(root: String, row: Dictionary) -> Array[String]:
 		var m := _num(lp + "/max_brightness")
 		if _num(lp + "/brightness") < 0 or _num(lp + "/brightness") > m:
 			out.append("led %s brightness out of 0..%s" % [led, m])
+		# a packed "rgb" channel (hid-asus-ally) holds 0xRRGGBB
+		var top := 0xffffff if _read(lp + "/multi_index").begins_with("rgb") else 255
 		for part in _read(lp + "/multi_intensity").split(" ", false):
-			if not part.is_valid_int() or part.to_int() < 0 or part.to_int() > 255:
+			if not part.is_valid_int() or part.to_int() < 0 or part.to_int() > top:
 				out.append("led %s multi_intensity %s" % [led, _read(lp + "/multi_intensity")])
 				break
 	# PPT firmware attributes
@@ -693,7 +695,10 @@ static func critical_problems(root: String, row: Dictionary) -> Array[String]:
 		var p := root + "/sys/class/power_supply/" + ps
 		if FileAccess.file_exists(p + "/charge_control_end_threshold"):
 			var v := _num(p + "/charge_control_end_threshold")
-			if v < 50 or v > 100:
+			# 0 is "never set" (msi-wmi-platform on the Claws, asus-wmi on the Ally); GameCove
+			# never writes it (on MSI's EC it would be a 0 % limit): "no limit" is written as 100,
+			# and writes are checked by the root_set / D-Bus rules
+			if (v < 50 or v > 100) and v != 0:
 				out.append("%s charge_control_end_threshold = %s (allowed 50..100)" % [ps, v])
 		if FileAccess.file_exists(p + "/charge_behaviour"):
 			var v := _read(p + "/charge_behaviour").replace("[", "").replace("]", "")
@@ -773,7 +778,13 @@ static func _cpu_gpu_problems(root: String, info: Dictionary, original: Dictiona
 static func backend_problems(runner: FakeRunner, hhd: FakeHhd, row: Dictionary, inv: Dictionary) -> Array[String]:
 	var out: Array[String] = []
 	for rule in inv.get("dbus", []):
-		for v in runner.prop_value(str(rule.get("prop", ""))):
+		var prop := str(rule.get("prop", ""))
+		# "unset": the service's "nothing set" value (MaxChargeLevel 0 on MSI's EC), fine
+		# only while nobody wrote the property
+		var written := runner.calls.any(func(c): return "set-property" in Array(c[1]) and prop in Array(c[1]))
+		for v in runner.prop_value(prop):
+			if rule.has("unset") and int(v) == int(rule["unset"]) and not written:
+				continue
 			var msg := _limit_problem(float(v), rule, row)
 			if msg != "":
 				out.append("D-Bus %s = %s: %s" % [rule["prop"], v, msg])
@@ -934,11 +945,14 @@ static func _expect_one(c: Object, e: Dictionary, label: String) -> Array[String
 	if e.has("max_le") and c.max_value > float(e["max_le"]):
 		out.append("%s: max %s above %s" % [label, c.max_value, e["max_le"]])
 	var vals: Array = c.options.map(func(o): return o.get("value") if o is Dictionary else o)
+	# JSON numbers arrive as floats; int options (10, 50 ...) still match them
+	var offered := func(v: Variant) -> bool:
+		return vals.any(func(x): return (typeof(x) == typeof(v) and x == v) or ((x is int or x is float) and (v is int or v is float) and absf(float(x) - float(v)) < 0.001))
 	for v in e.get("options_include", []):
-		if not vals.has(v):
+		if not offered.call(v):
 			out.append("%s: option %s missing (has %s)" % [label, v, vals])
 	for v in e.get("options_exclude", []):
-		if vals.has(v):
+		if offered.call(v):
 			out.append("%s: option %s must not be offered" % [label, v])
 	if e.has("value") and str(c.value) != str(e["value"]) and not (c.value is float and absf(c.value - float(e["value"])) < 0.001):
 		out.append("%s: value %s, expected %s" % [label, c.value, e["value"]])

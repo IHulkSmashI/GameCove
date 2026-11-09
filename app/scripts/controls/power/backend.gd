@@ -605,7 +605,12 @@ func boost_via() -> String:
 	return ""
 
 
+## The kernel's switch is the truth wherever it exists (intel_pstate/no_turbo, cpufreq
+## boost): PowerStation's BoostEnabled read false on the Claw 8 EX with turbo on.
 func get_boost() -> Variant:
+	var truth: Variant = boost_sysfs()
+	if truth != null and boost_via() != "":
+		return truth
 	match boost_via():
 		"steamos-manager":
 			var v: Variant = sm_get("CpuBoost1", "CpuBoostState")
@@ -662,33 +667,74 @@ func set_smt(on: bool) -> bool:
 	return get_smt() == on
 
 
-## Logical CPUs online: PowerStation CoresEnabled, else the helper.
+## Logical CPUs online: PowerStation's per-core Online (prompt-free), else the helper.
+## Never PowerStation's CoresEnabled: with SmtEnabled false (which it also reports on CPUs
+## without SMT, like Panther Lake) it caps the count at half the threads and walks cores by
+## core_id (PowerStation src/performance/cpu/cpu_features.rs set_cores_enabled), so on the
+## Claw 8 EX 13 read back 8 and 14 left cpus 7-13 offline.
+const PS_CORE_IF := "org.shadowblip.CPU.Core"
+const MIN_CORES := 2
+
+
 func cores_via() -> String:
 	if not can_offline():
 		return ""
-	if ps_get(PS_CPU, PS_CPU_IF, "CoresEnabled") != null:
+	if ps_get(PS_CPU, PS_CPU_IF, "CoresCount") != null:
 		return "powerstation"
 	return "sysfs" if helper_present() else ""
 
 
+## CPU numbers online now (cpu0 always), from sysfs: the truth for every path.
+func online_cpus() -> Array:
+	var out := []
+	for c in cpu_numbers():
+		if c == 0 or read(path(CPU + "/cpu%d/online" % c)) != "0":
+			out.append(c)
+	return out
+
+
+## Exactly n CPUs online, the lowest-numbered ones (cpu0 never goes off, never fewer
+## than MIN_CORES). Read back from sysfs; if it isn't exactly that, the CPUs that were
+## online before are put back at once and it fails.
 func set_cores(n: int) -> bool:
+	var nums := cpu_numbers()
+	n = clampi(n, MIN_CORES, nums.size())
+	var before := online_cpus()
+	var want := nums.slice(0, n)
 	match cores_via():
 		"powerstation":
-			if not ps_set(PS_CPU, PS_CPU_IF, "CoresEnabled", "u", str(n)):
+			if not _ps_online(want):
+				_ps_online(before)
 				return false
-			return get_cores() == n
 		"sysfs":
 			if not root_set("cores", str(n)):
 				return false
 		_:
 			return false
-	return online_count() == n
+	if online_cpus() == want:
+		return true
+	if cores_via() == "powerstation":
+		_ps_online(before)
+	return false
+
+
+## Each CPU on or off through PowerStation's CoreN Online so that exactly `on` are online;
+## CPUs are switched on before any goes off.
+func _ps_online(on: Array) -> bool:
+	var ok := true
+	var nums := cpu_numbers()
+	for c in nums:
+		if c != 0 and c in on and not c in online_cpus():
+			ok = ps_set(PS_CPU + "/Core%d" % c, PS_CORE_IF, "Online", "b", "true") and ok
+	var now := online_cpus()
+	for i in range(nums.size() - 1, -1, -1):
+		var c: int = nums[i]
+		if c != 0 and not c in on and c in now:
+			ok = ps_set(PS_CPU + "/Core%d" % c, PS_CORE_IF, "Online", "b", "false") and ok
+	return ok
 
 
 func get_cores() -> int:
-	if cores_via() == "powerstation":
-		var v: Variant = ps_get(PS_CPU, PS_CPU_IF, "CoresEnabled")
-		return int(v) if v != null else -1
 	return online_count()
 
 
@@ -794,12 +840,26 @@ func sm_manual_clock() -> Dictionary:
 	return {"value": int(v), "lo": int(lo), "hi": int(hi)}
 
 
+## steamos-manager applies ManualGpuClock only in the "manual" performance level: in
+## "auto" its Intel driver just remembers it (src/gpu.rs IntelGpuPerformanceLevelDriver::
+## set_clocks) and ManualGpuClock keeps reading min_freq, so a write in auto never read
+## back (the Claw 8 EX: 1000 -> 1050 read 1000). A fixed clock therefore switches to
+## manual first; if the clock doesn't read back, the level and clock from before go back.
 func set_sm_manual_clock(mhz: int) -> bool:
 	var c := sm_manual_clock()
 	if c.is_empty():
 		return false
 	mhz = clampi(mhz, c["lo"], c["hi"])
-	return sm_set("GpuPerformanceLevel1", "ManualGpuClock", "u", str(mhz)) and int(sm_manual_clock().get("value", -1)) == mhz
+	var lvl := gpu_level_info()
+	var was := str(lvl.get("active", ""))
+	if lvl.get("via", "") == "steamos-manager" and was != "manual" and "manual" in lvl.get("offered", []):
+		if not sm_set("GpuPerformanceLevel1", "GpuPerformanceLevel", "s", "manual"):
+			return false
+	if sm_set("GpuPerformanceLevel1", "ManualGpuClock", "u", str(mhz)) and int(sm_manual_clock().get("value", -1)) == mhz:
+		return true
+	if was != "" and str(gpu_level_info().get("active", "")) != was:
+		sm_set("GpuPerformanceLevel1", "GpuPerformanceLevel", "s", was)
+	return false
 
 
 ## Firmware platform profile: steamos-manager PerformanceProfile1, else the helper.

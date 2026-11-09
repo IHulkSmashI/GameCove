@@ -1,10 +1,9 @@
 {
-  "_about": "MSI Claw 8 EX on Bazzite: steamos-manager offers TdpLimit1 (firmware attributes the Claw ignores) and reports MaxChargeLevel -1; PowerStation serves card1 with MinTdp = MaxTdp = 0 (Panther Lake not in its database).",
+  "_about": "MSI Claw 8 EX on Bazzite: steamos-manager offers TdpLimit1 (firmware attributes the Claw ignores); this steamos-manager has no charge config for it (no BatteryChargeLimit1 answer), so the charge limit goes through the root helper; PowerStation serves card1 with MinTdp = MaxTdp = 0 (Panther Lake not in its database).",
   "props": {
     "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.TdpLimit1 TdpLimit": {"type": "u", "data": 25},
     "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.TdpLimit1 TdpLimitMin": {"type": "u", "data": 8},
     "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.TdpLimit1 TdpLimitMax": {"type": "u", "data": 35},
-    "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.BatteryChargeLimit1 MaxChargeLevel": {"type": "i", "data": -1},
     "--system get-property org.shadowblip.PowerStation /org/shadowblip/Performance/GPU/card1 org.shadowblip.GPU.Card.TDP TDP": {"type": "d", "data": 25.0},
     "--system get-property org.shadowblip.PowerStation /org/shadowblip/Performance/GPU/card1 org.shadowblip.GPU.Card.TDP MinTdp": {"type": "d", "data": 0.0},
     "--system get-property org.shadowblip.PowerStation /org/shadowblip/Performance/GPU/card1 org.shadowblip.GPU.Card.TDP MaxTdp": {"type": "d", "data": 0.0},

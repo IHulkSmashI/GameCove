@@ -6,13 +6,13 @@ Used only when neither steamos-manager (`BatteryChargeLimit1.MaxChargeLevel`) no
 
 | Battery control | Devices | How |
 | --- | --- | --- |
-| `charge_control_end_threshold` | MSI Claw 8 EX, OneXPlayer (oxpec 6.16+) | The firmware stops at the level by itself. ClawDeck tested the Claw 8 EX: 0 = no limit, accepts 80, back to 0. |
+| `charge_control_end_threshold` | MSI Claw 8 EX, OneXPlayer (oxpec 6.16+) | The firmware stops at the level by itself. The Claw reads 0 until a limit is set (no limit). msi-wmi-platform (OGC kernel patch "Add charge_threshold support") writes value\|0x80 to EC byte 0xd7 and reads it back without bit 7, so writing 0 would set a 0 % limit: GameCove never writes 0 (no limit is 100, also on remove). Whether the EC stops at the limit is unverified on the device. |
 | `charge_behaviour` (`auto` / `inhibit-charge` only) | AYANEO (ayaneo-ec) | The firmware can't stop at a level. `set N` remembers N in `/var/lib/gamecove/fixes/charge-limit/limit` and holds charging (`inhibit-charge`) only while the charger is in and the battery is at N % or more; otherwise `auto`. GameCove runs `set N` again when the charger or the level crosses that line (its 15 s charger check; a single sysfs read when nothing changed). Unplugging always goes back to `auto`, so another session (Steam, Desktop) never finds a battery that won't charge; `remove` also leaves `auto`. |
 
 | Command | What it does |
 | --- | --- |
 | `install` | Records the current limit in `/var/lib/gamecove/fixes/charge-limit/original` |
-| `set <50-100>` | Sets the limit (installs first). 100 = no limit: the recorded value when it was the firmware's "none" (0 on the Claw) |
+| `set <50-100>` | Sets the limit (installs first). 100 = no limit, always written as 100 (never the Claw's 0) |
 | `status` | Prints `applies=`, `mode=` (threshold or behaviour), `installed=`, `original=`, `path=`, `value=` (behaviour: also `limit=`, `behaviour=`, `capacity=`, `ac=`), then `state=` |
 | `remove` | Writes the recorded value back and forgets it (and deletes the udev rule) |
 | `set release` | Behaviour mode: lets the battery charge now (`auto`), keeps the limit for next time. GameCove's session runs it when GameCove exits (`post_client_shutdown`, through `gamecove-fix-set`, no password). Threshold mode: nothing to do |

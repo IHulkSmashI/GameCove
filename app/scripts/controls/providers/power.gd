@@ -227,9 +227,17 @@ func _profile() -> RefCounted:
 	for p in PowerScript.PROFILES:
 		opts.append({"value": p, "label": p.capitalize()})
 	return _make("power.profile", "choice", {"affects": ["power.tdp", "power.boost", "power.sppt", "power.fppt"], "options": opts, "apply_order": 101, "per_game": false},
-		func(_c):
+		func(c):
 			var st := _pstate()
-			return "" if st.get("supported", {}).get("profiles", false) else Tx.NO_TDP,
+			if not st.get("supported", {}).get("profiles", false):
+				return Tx.NO_TDP
+			# "custom" (the watts the user set with the TDP slider) can be picked again
+			# once there are some; without it a probe or profile could never go back
+			var o: Array = opts.duplicate()
+			if str(st.get("profile", "")) == "custom" or (power.has_method("custom_watts") and float(_p(func(): return power.custom_watts())) > 0.0):
+				o.append({"value": "custom", "label": "Custom"})
+			c.options = o
+			return "",
 		func(_c): return str(_pstate().get("profile", "")),
 		func(_c, v): return bool(_p(func(): return power.set_profile(str(v)))))
 
@@ -484,6 +492,14 @@ func _gpu_profile() -> RefCounted:
 		func(c):
 			var info: Dictionary = be.gpu_profile_info()
 			if info.is_empty():
+				# xe's power_profile is 0644 root and steamos-manager's GpuPowerProfile1 is amdgpu-only
+				# (steamos-manager src/gpu.rs), so on Intel only the root helper can write it
+				if not be.xe_profile().is_empty():
+					return Tx.NO_HELPER
+				# steamos-manager answers with an empty list where its config has no GPU
+				# power profiles (the ROG Ally on SteamOS 3.10)
+				if be.sm_get("GpuPowerProfile1", "AvailableGpuPowerProfiles") is Array:
+					return Tx.SM_NO_GPU_PROFILES
 				return Tx.XE_ONLY
 			c.options = _choice_opts(info["offered"])
 			return "",
@@ -520,6 +536,8 @@ func _charge_limit() -> RefCounted:
 				return Tx.NO_CHARGE
 			if str(st.get("backend", "")) == "hhd":
 				return Tx.HHD_OWNS
+			if st.get("needs_helper", {}).get("charge_limit", false):
+				return Tx.NO_HELPER
 			return "" if st.get("supported", {}).get("charge_limit", false) else Tx.NO_CHARGE,
 		func(_c): return float(_pstate().get("charge_limit", -1)),
 		func(_c, v): return bool(_p(func(): return power.set_charge_limit(int(v)))))
@@ -542,6 +560,8 @@ func _fan_mode() -> RefCounted:
 			var st := _pstate()
 			if str(st.get("backend", "")) == "hhd":
 				return Tx.HHD_OWNS
+			if st.get("needs_helper", {}).get("fan", false):
+				return Tx.NO_HELPER
 			if not st.get("supported", {}).get("fan", false):
 				return Tx.NO_FAN
 			c.options = _choice_opts(st.get("fan_modes", []))
@@ -591,6 +611,8 @@ func _fan_curve() -> RefCounted:
 			var st := _pstate()
 			if str(st.get("backend", "")) == "hhd":
 				return Tx.HHD_OWNS
+			if st.get("needs_helper", {}).get("fan", false):
+				return Tx.NO_HELPER
 			var t := _fan_table()
 			if t.is_empty():
 				return Tx.NO_CURVE if st.get("supported", {}).get("fan", false) else Tx.NO_FAN
@@ -669,14 +691,23 @@ func _battery_saver() -> RefCounted:
 						_saver_prev[id] = other.value
 				if _saver_prev.has("power.profile") and str(_saver_prev["power.profile"]) == "custom":
 					_saver_prev.erase("power.profile")
-					var tdp: RefCounted = _ctl("power.tdp")
-					if tdp != null and tdp.value != null:
-						_saver_prev["power.tdp"] = tdp.value
+				# the exact watts and the firmware limits that follow them (the Ally's
+				# SPPT/FPPT went 30/30 -> 15/15 under the battery profile and stayed)
+				for id in ["power.tdp", "power.boost", "power.sppt", "power.fppt"]:
+					var other: RefCounted = _ctl(id)
+					if other != null and other.available:
+						other.detect()
+						var now: Variant = other.read()
+						if now != null:
+							_saver_prev[id] = now
 				registry.apply(want)
 				_save_saver(true)
 			else:
 				_saver_auto = false
-				registry.apply(_saver_prev)
+				# forced: the controls' cached values may still show what was there before the
+				# saver (the TDP control never re-read after the profile wrote 12 W), and a
+				# plain apply would skip them as "unchanged"
+				registry.apply(_saver_prev, true)
 				_saver_prev = {}
 				_save_saver(false)
 			return true)

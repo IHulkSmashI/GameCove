@@ -18,7 +18,7 @@ const T := {
 	"power.governor": ["CPU governor", "How the kernel picks CPU speeds."],
 	"power.cpu_max": ["CPU speed limit", "Caps CPU clocks to leave more of the TDP to the GPU."],
 	"power.gpu_level": ["GPU performance level", "Auto lets the GPU pick its clock; low and high pin it; manual uses the clock below."],
-	"power.gpu_clock": ["GPU clock", "Fixed GPU clock in manual mode."],
+	"power.gpu_clock": ["GPU clock", "Fixed GPU clock. Setting it switches the GPU to manual mode."],
 	"power.gpu_min": ["GPU minimum clock", "Keeps the GPU from dropping below this; smoother, uses more power."],
 	"power.gpu_max": ["GPU maximum clock", "Caps the GPU clock; cooler, leaves power to the CPU."],
 	"power.gpu_profile": ["GPU efficiency mode", "The GPU prefers its most efficient clock and ramps up slower."],
@@ -52,6 +52,7 @@ const NO_GPU_CLOCKS := "No GPU clock control here"
 const USE_GPU_MIN_MAX := "Set by GPU minimum and maximum clock"
 const AMD_ONLY := "An AMD GPU setting"
 const XE_ONLY := "Needs an Intel Arc (xe) GPU or steamos-manager"
+const SM_NO_GPU_PROFILES := "steamos-manager offers no GPU power profiles on this handheld"
 const NO_PPD := "No power-profiles-daemon or tuned-ppd running"
 const PPD_OWNS := "Set by Power mode (power-profiles-daemon)"
 const NO_THERMAL := "PowerStation can't set a temperature limit here (AMD with ryzenadj only)"

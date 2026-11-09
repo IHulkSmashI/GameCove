@@ -21,6 +21,7 @@ research behind it: `app/data/fixes.json` and [docs/DEVICE-FIXES.md](../docs/DEV
 | `ally-mcu-powersave` | every ROG Ally (optional) | drain while asleep | udev rule + sysfs |
 | `onexfly-touch` | OneXFly F1; OneXPlayer 2 / 2 Pro / X1 A / X1 mini, AOKZOE A1 / A1 Pro (optional) | touch turned 90° in Gaming Mode | gamescope-session file |
 | `fan`, `charge-limit` | see devices.json | fan presets, charge limit (Power page) | sysfs |
+| `controller-led`, `controller-rumble` | handhelds with the kernel LED / rumble-strength attributes | lights and rumble strength (Controller settings) | sysfs, no password |
 
 ## File fixes (`lib/gcfix.sh`)
 

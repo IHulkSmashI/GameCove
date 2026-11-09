@@ -111,9 +111,9 @@ Picked at detect time on the running system, not from the table:
 | `controller.desktop_mode` | toggle | right stick = pointer, RT left click, LT right click, adds the `mouse`/`keyboard` targets | unavailable |
 | `controller.desktop_speed` | slider 200-3000 px/s | pointer `speed_pps` | unavailable |
 | `controller.trackpad` | choice | one pad (Legion Go/Go S CenterPad): as sent / Steam right pad / Steam left pad / off; two pads: as sent / off | `touchpad` mode (Legion Go, GPD) or multiple (Legion Go S) |
-| `controller.rumble` | toggle | `ForceFeedback.Enabled` | Ally `limits.manual.vibration` 0/100; AYANEO `vibration` disabled; OneXPlayer can't go off |
-| `controller.rumble_strength` | choice | unavailable (on/off only) | Ally 20-100 %, OneXPlayer `vibration_strength` v1-v5, AYANEO low/medium/high |
-| `controller.rumble_test` | action | `ForceFeedback.Rumble(0.6)` then `Stop` | unavailable |
+| `controller.rumble` | toggle | `ForceFeedback.Enabled` | Ally `limits.manual.vibration` 0/100; AYANEO `vibration` disabled; GPD `wincontrols.vibration` off; OneXPlayer can't go off |
+| `controller.rumble_strength` | choice | the controller firmware's knob (see Rumble below), else unavailable | firmware knob first, else Ally 20-100 %, OneXPlayer `vibration_strength` v1-v5, AYANEO low/medium/high, GPD medium/high |
+| `controller.rumble_test` | action | `ForceFeedback.Rumble(1.0 with a firmware knob, else 0.6)` then `Stop` | unavailable |
 | `controller.deadzone_{left,right}_stick`, `_{left,right}_trigger` | slider % | unavailable (no deadzone translation in InputPlumber) | Ally `limits.manual.ls_min/rs_min/lt_min/rt_min` |
 | `controller.led_effect` | choice | LED nodes: off, solid + the node's `effect_index` | hhd rgb modes (off, solid, pulse, rainbow, spiral, duality, oxp...) |
 | `controller.led_color`, `controller.led_color_2` | color | first zone / second node (ZOTAC Zone) | `hue`/`saturation`, `hue2` (duality) |
@@ -123,7 +123,7 @@ Picked at detect time on the running system, not from the table:
 
 Per game: everything but `gyro_accel`, `gyro_aim`, `desktop_*`, the actions. Every unavailable
 control has a plain reason ("This handheld has no trackpad", "Needs the gyro fix first (Device,
-Fixes)", "InputPlumber can only turn rumble on or off").
+Fixes)", "Only Steam sets this controller's rumble strength").
 
 ### Hardware per handheld
 
@@ -194,6 +194,51 @@ backend.
 - `SetTargetDevices` through a profile reload re-creating devices without losing the intercept.
 - hhd schema shapes on each device (option names, Legion Go S `touchpad` multiple).
 Each area appends its own section.
+
+### Rumble
+
+Code: `app/scripts/controls/input/rumble.gd` (the provider's `_rumble*()` hooks build it), root
+action `fixes/controller-rumble` (`gamecove-fix-set controller-rumble set <0-100|off|low|medium|high>`,
+no password). Tests: `app/tests/test_controls_rumble.gd` (runs the real fix.sh on a fixture tree),
+`fixes/controller-rumble/test.sh`, device matrix.
+
+Where a strength can be set (research 2026-11-09):
+
+- **InputPlumber** (0.78.0 .. 0.84.0, main 6aca920) `org.shadowblip.Output.ForceFeedback`: `Enabled`
+  (b), `Rumble(d)` (0..1, both motors), `Stop()`. No gain, scale or device-YAML option; effects reach
+  the source driver unscaled. On/off only.
+- **The controller firmware, through the kernel HID driver** (Linux master): hid-msi
+  `rumble_intensity_left/_right` 0-100 (MSI Claw, controller firmware 1.66+ / 2.17+; each store is
+  synced to the controller's flash, so unchanged values are never rewritten and on/off never touches
+  it on InputPlumber); hid-lenovo-go `rumble_intensity` off/low/medium/high (Legion Go, Go 2).
+  Scales every game, whoever drives the pad, so it wins over hhd.
+- **Handheld Daemon** settings when hhd runs: Ally `limits.manual.vibration` (MCU command 0x06; hhd
+  defaults the Ally X to 50), OneXPlayer, AYANEO, GPD WinControls. hhd's Claw and Legion Go code
+  only passes rumble through.
+- **Nothing**: hid-asus (the Ally series with "vibration strength configuration", v7 2026-10, isn't
+  merged), hid-lenovo-go-s, hid-steam, steamos-manager. Steam owns the Steam Deck's haptics.
+- **GameCove's own intercept can't scale it**: `InterceptMode` only routes input events to
+  GameCove (`scripts/input/intercept.gd`); force feedback goes game -> virtual pad (deck-uhid) ->
+  InputPlumber -> controller and never passes through GameCove. Scaling there would need an
+  InputPlumber change (a gain in the composite device's output path).
+
+| Handheld | Strength | On/off | Checked on a device |
+| --- | --- | --- | --- |
+| MSI Claw 8 EX (and every Claw) | hid-msi 10-100 % | InputPlumber `Enabled`; the knob under hhd | on/off + test: InputPlumber 0.83.1, Bazzite 45, 7.2.15. Strength: from source |
+| ROG Ally / Ally X / Xbox Allys | hhd only ("Needs Handheld Daemon") | InputPlumber `Enabled` / hhd | on/off + test: RC71L, InputPlumber 0.78.0, SteamOS 3.10. Strength: from source |
+| Legion Go / Go 2 | hid-lenovo-go low/medium/high | InputPlumber / hhd / the knob | from source |
+| Legion Go S | none | InputPlumber | from source |
+| Steam Deck | Steam only | InputPlumber | from source |
+
+`controller.rumble` comes back on at the strength it had (hhd and the knob); a strength chosen
+while a knob-switched rumble is off waits for on. Test rumble `requires` Rumble on and buzzes at
+full scale where the firmware scales it (so it plays the chosen strength), 0.6 elsewhere. Both
+toggle and strength are per game (strength applies first: `apply_order` 2, toggle 1). devices.json
+`rumble` (docs/DEVICES.md) feeds the reasons and the matrix fixtures.
+
+**Needs a real handheld:** the hid-msi attributes on Bazzite's 7.2.15 kernel and the Claw 8 EX's
+controller firmware (`rumble_support`), the strength actually felt, Legion Go 1 controllers bound
+by hid-lenovo-go after their firmware update.
 
 ## Fixes (device fixes)
 
@@ -391,7 +436,7 @@ Owner: ctl-power. 33 controls, group `power`. Each detects its backend on this e
 | id | kind | Backends, in order | Where it shows up |
 | --- | --- | --- | --- |
 | `power.tdp` | slider W | Handheld Daemon, devices.json `tdp_backends` (steamos-manager, PowerStation) | every row with a TDP range; range per power source |
-| `power.profile` | choice | Power (devices.json `profiles` watts) | same; not per game (the TDP is) |
+| `power.profile` | choice | Power (devices.json `profiles` watts); `custom` puts back the user's own watts for this power source (`custom_w@<device>`), offered once there are some | same; not per game (the TDP is) |
 | `power.boost` | slider W | PowerStation `Boost` (PL2-PL1 on Intel RAPL, SPPT/FPPT on ASUS/ryzenadj); max = `boost_max` - TDP | PowerStation TDP rows (Claw 8 EX, OneXPlayer, GPD…) |
 | `power.boost_on` | toggle | Handheld Daemon `<driver>.tdp.custom.boost` | hhd with its TDP plugin on |
 | `power.sppt`, `power.fppt` | slider W | firmware attributes via helper (asus-armoury, lenovo-wmi-other-0 in custom mode, msi-wmi-platform); range = attribute min/max, ≥ SPL (FPPT ≥ SPPT), ≤ `boost_max` | ROG Ally family, Legion Go family, Claws with steamos-manager TDP; off on the Claw 8 EX (firmware ignores them, ClawDeck §12), under hhd, and where PowerStation keeps them |
@@ -406,7 +451,7 @@ Owner: ctl-power. 33 controls, group `power`. Each detects its backend on this e
 | `power.gpu_level` | choice | steamos-manager `GpuPerformanceLevel1`, helper (`power_dpm_force_performance_level`) | AMD |
 | `power.gpu_clock` | slider MHz | steamos-manager `ManualGpuClock` (manual level) | Steam Deck |
 | `power.gpu_min`, `power.gpu_max` | slider MHz | PowerStation clocks (AMD `pp_od_clk_voltage`, i915), helper (xe `tile0/gt0/freq0`, amdgpu); hardware range, min ≤ max kept | AMD, Intel |
-| `power.gpu_profile` | choice | helper (xe `power_profile`), steamos-manager `GpuPowerProfile1` | Intel Arc (xe), Steam Deck |
+| `power.gpu_profile` | choice | helper (xe `power_profile`, 0644 root), steamos-manager `GpuPowerProfile1` (amdgpu only) | Intel Arc (xe) with the root helper, Steam Deck |
 | `power.thermal_limit` | slider °C | PowerStation `ThermalThrottleLimitC`; 60..the first-seen firmware value (kept per handheld) | AMD with ryzenadj |
 | `power.charge_limit` | slider % | Power (steamos-manager, charge-limit fix) | rows with `charge_limit` |
 | `power.battery_long_life` | toggle | helper (`charge_types` Long_Life = 80 %) | Lenovo Legion Go family (lenovo-wmi-other) |

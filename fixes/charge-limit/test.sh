@@ -34,13 +34,13 @@ sh "$FIX" status | tail -n 1 | grep -q '^state=on$' || fail "status ends state=o
 [ "$(cat "$T")" = "80" ] || fail "threshold is 80"
 sh "$FIX" status | grep -q '^original=0$' || fail "original recorded"
 sh "$FIX" set 100 >/dev/null || fail "set 100"
-[ "$(cat "$T")" = "0" ] || fail "no limit writes the Claw's 0"
+[ "$(cat "$T")" = "100" ] || fail "no limit writes 100, never 0 (0|0x80 is a 0 % limit on MSI's EC)"
 if sh "$FIX" set 49 2>/dev/null; then fail "49 refused"; fi
 if sh "$FIX" set "80; reboot" 2>/dev/null; then fail "junk refused"; fi
 if sh "$FIX" bogus 2>/dev/null; then fail "unknown action refused"; fi
 sh "$FIX" set 90 >/dev/null
 sh "$FIX" remove >/dev/null || fail "remove"
-[ "$(cat "$T")" = "0" ] || fail "remove puts 0 back"
+[ "$(cat "$T")" = "100" ] || fail "remove of the Claw's unset 0 writes 100, never 0"
 sh "$FIX" status | grep -q '^installed=no$' || fail "status after remove"
 sh "$FIX" status | tail -n 1 | grep -q '^state=off$' || fail "remove sticks: state=off"
 grep -q 'set 80' "$ROOT/var/lib/gamecove/fixes/charge-limit/changes.log" || fail "changes logged"
@@ -50,6 +50,11 @@ sh "$FIX" set 80 >/dev/null
 sh "$FIX" set release | grep -q '^value=release$' || fail "release in threshold mode is a no-op"
 [ "$(cat "$T")" = "80" ] || fail "release keeps the firmware's threshold"
 sh "$FIX" remove >/dev/null
+# an odd value found at install (another tool's 30 %) is never put back: remove leaves no limit
+echo 30 > "$T"
+sh "$FIX" set 80 >/dev/null
+sh "$FIX" remove >/dev/null
+[ "$(cat "$T")" = "100" ] || fail "remove turns an odd original into 100"
 rm -rf "$ROOT/sys/class/power_supply/BAT1/charge_control_end_threshold"
 set +e; sh "$FIX" set 80 2>/dev/null; code=$?; set -e
 [ "$code" = "2" ] || fail "no threshold file -> exit 2 (got $code)"

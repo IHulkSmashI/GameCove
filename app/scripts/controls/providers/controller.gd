@@ -22,15 +22,18 @@ const Caps := preload("res://scripts/controls/input/caps.gd")
 const Hhd := preload("res://scripts/controls/input/hhd_client.gd")
 const Profile := preload("res://scripts/input/ip_profile.gd")
 const Traits := preload("res://scripts/device/traits.gd")
+const Rumble := preload("res://scripts/controls/input/rumble.gd")
 
 const R_NONE := "Needs InputPlumber or Handheld Daemon running"
 const R_HHD_ONLY := "Needs Handheld Daemon (InputPlumber has no such setting)"
 const R_IP_ONLY := "Needs InputPlumber"
 const R_NO_GYRO_IP := "InputPlumber sees no gyro on this handheld"
+const R_GYRO_OLD_IP := "The gyro works, but InputPlumber %s can't switch it off; a newer InputPlumber can"
 const R_GYRO_FIX := "Needs the gyro fix first (Device, Fixes)"
 const R_GYRO_AIM := "Set gyro aiming in Steam's controller settings for the game"
 const R_DEADZONE_IP := "InputPlumber has no deadzone setting; Steam's controller settings have one per game"
 const R_NO_RGB := "This handheld has no RGB lights"
+const R_LED_HELPER := "Needs GameCove's root helper (install GameCove's system part)"
 const R_RGB_BACKEND := "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver"
 const R_NO_PAD := "This handheld has no trackpad"
 const CLAW8EX_OVERRIDE := "/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"
@@ -41,9 +44,12 @@ const EMULATION_LABELS := {
 	"xbox-elite": "Xbox Elite", "xbox-series": "Xbox Series", "xb360": "Xbox 360", "hori-steam": "Steam Controller (HORI)",
 	"dualsense": "DualSense", "dualsense_edge": "DualSense Edge", "uinput": "Xbox", "xbox_elite": "Xbox Elite",
 	"hori_steam": "Steam Controller", "disabled": "Paused", "hidden": "Hidden",
+	"none": "No gamepad", "gamepad": "Generic gamepad",
 }
 ## InputPlumber gamepad types offered (the rest stay reachable through a profile file).
 const IP_EMULATION := ["default", "deck", "ds5-edge", "xbox-elite", "xbox-series", "ds5", "xb360"]
+## InputPlumber target kinds that are one of the choices above under another name.
+const EMULATION_ALIASES := {"deck-uhid": "deck"}
 const EFFECT_LABELS := {
 	"off": "Off", "disabled": "Off", "solid": "Solid", "pulse": "Pulse", "strobe": "Strobe", "rainbow": "Rainbow",
 	"spiral": "Spiral", "cycle": "Colour cycle", "duality": "Two colours", "frostfire": "Frostfire",
@@ -74,6 +80,8 @@ var row: Dictionary = {}
 var hw: Dictionary = {}
 ## Last non-off hhd gyro mode (Legion Go: left / right / both), for gyro on.
 var _hhd_imu_mode := "left"
+## InputPlumber's target kinds as GameCove first found them (controller.emulation put-back).
+var _ip_first_targets: Array = []
 var _desktop_speed := IpEdit.DESKTOP_SPEED_DEFAULT
 
 
@@ -113,7 +121,28 @@ func controls() -> Array:
 
 func _make(spec: Dictionary, detect: Callable, read: Callable, write: Callable) -> RefCounted:
 	spec["group"] = "controller"
-	return Ctl.make(spec, detect, read, write)
+	var c: RefCounted = Ctl.make(spec, detect, read, write)
+	c.set_meta("provider", self)
+	return c
+
+
+## Controls probe (hwtest/controls_cli.gd): what to put back byte for byte afterwards.
+## InputPlumber's live profile text; {} where hhd or nothing drives the controller.
+func probe_snapshot() -> Dictionary:
+	if be.controller_backend() != "inputplumber":
+		return {}
+	be.invalidate()
+	var y := be.ip_profile_yaml()
+	return {"ip_yaml": y} if y != "" else {}
+
+
+func probe_restore(snap: Dictionary) -> bool:
+	if not snap.has("ip_yaml"):
+		return true
+	be.invalidate()
+	if be.ip_profile_yaml() == str(snap["ip_yaml"]):
+		return true
+	return be.ip_load_yaml(str(snap["ip_yaml"]))
 
 
 static func _opts(values: Array, labels: Dictionary) -> Array:
@@ -138,7 +167,15 @@ func _hhd_gyro() -> Dictionary:
 
 
 func _ip_gyro_reason() -> String:
-	return R_GYRO_FIX if str(row.get("gyro", "")) == "fix" else R_NO_GYRO_IP
+	# Older InputPlumber (0.78 on SteamOS 3.10, the ROG Ally) reports the IMU as the legacy
+	# "Gamepad:Gyro" capability, and its profile matching ignores gamepad gyro source events
+	# (src/config/mod.rs: "Gyro was defined for source event! TODO"), so the gyro reaches
+	# games but can't be switched off from a profile; newer ones say "Gyroscope:<source>".
+	if str(row.get("gyro", "")) == "fix":
+		return R_GYRO_FIX
+	if be.ip_caps().any(func(c): return str(c) == "Gamepad:Gyro"):
+		return R_GYRO_OLD_IP % str(be.ip().get("version", "?"))
+	return R_NO_GYRO_IP
 
 
 func _gyro() -> RefCounted:
@@ -287,7 +324,11 @@ func _emulation() -> RefCounted:
 		func(c):
 			match be.controller_backend():
 				"inputplumber":
-					c.options = _opts(IP_EMULATION, EMULATION_LABELS)
+					var vals: Array = IP_EMULATION.duplicate()
+					var now := _ip_emulation_now()
+					if not now in vals:
+						vals.append(now)   # what another tool set (hori-steam, gamepad...): shown, not lost
+					c.options = _opts(vals, EMULATION_LABELS)
 					c.default_value = "default"
 					return ""
 				"hhd":
@@ -309,12 +350,7 @@ func _emulation() -> RefCounted:
 		func(_c):
 			if be.controller_backend() == "hhd":
 				return str(be.hhd_ctl([_hhd_mode_key(), "mode"]))
-			var p: Dictionary = be.ip_profile()
-			var t := IpEdit.gamepad_target(p)
-			var conf := be.ip_config_targets()
-			if t == "" or (p.get("target_devices") is Array and p["target_devices"] == conf):
-				return "default"
-			return t if t in IP_EMULATION else "default",
+			return _ip_emulation_now(),
 		func(_c, v):
 			if be.controller_backend() == "hhd":
 				var path: Array = ["controllers", be.hhd_key(), _hhd_mode_key(), "mode"]
@@ -328,8 +364,45 @@ func _emulation() -> RefCounted:
 						q["target_devices"] = conf.duplicate()
 						return q,
 					func(p): return p.get("target_devices") is Array and p["target_devices"] == conf)
-			return be.ip_apply(func(p): return IpEdit.set_gamepad_target(p, v, conf),
-				func(p): return IpEdit.gamepad_target(p) == v))
+			# the exact list GameCove first found when it is that choice again (deck-uhid
+			# stays deck-uhid, mouse and keyboard stay): a put-back restores what was there
+			var want := str(v)
+			var base := conf
+			if _ip_first_targets.size() > 0 and emulation_choice(_ip_first_targets, conf) == want:
+				want = IpEdit.gamepad_target({"target_devices": _ip_first_targets})
+				base = _ip_first_targets
+			return be.ip_apply(func(p): return IpEdit.set_gamepad_target(p, want, base),
+				func(p): return IpEdit.gamepad_target(p) == want))
+
+
+## InputPlumber's live target kinds when it lists them, else the profile's.
+func _ip_targets_now() -> Array:
+	var live: Array = be.ip_live_targets()
+	if not live.is_empty():
+		return live
+	var p: Dictionary = be.ip_profile()
+	return p["target_devices"] if p.get("target_devices") is Array else []
+
+
+## The controller.emulation value for what InputPlumber emulates now; the first list seen
+## is kept so writing that choice again puts the very same targets back.
+func _ip_emulation_now() -> String:
+	var t := _ip_targets_now()
+	if _ip_first_targets.is_empty() and not t.is_empty():
+		_ip_first_targets = t.duplicate()
+	return emulation_choice(t, be.ip_config_targets())
+
+
+## "default" only when the targets are the device config's own; else the gamepad kind as a
+## GameCove choice (deck-uhid is a Steam Deck too). Kinds outside IP_EMULATION come back
+## as themselves (detect adds them as options) rather than a wrong "default".
+static func emulation_choice(targets: Array, conf: Array) -> String:
+	if targets.is_empty() or (not conf.is_empty() and targets == conf):
+		return "default"
+	var g := IpEdit.gamepad_target({"target_devices": targets})
+	if g == "":
+		return "default" if conf.is_empty() else "none"
+	return EMULATION_ALIASES.get(g, g)
 
 
 # ---- buttons ------------------------------------------------------------------------
@@ -400,7 +473,8 @@ func _button(kind: String, cap: String, title: String) -> RefCounted:
 		func(_c, v):
 			if not IpEdit.valid_button_target(str(v)):
 				return false
-			return be.ip_apply(func(p): return IpEdit.set_button(p, cap, str(v)),
+			var stock := be.ip_stock_profile()
+			return be.ip_apply(func(p): return IpEdit.set_button(p, cap, str(v), stock),
 				func(p): return IpEdit.button_target(p, cap) == str(v)))
 
 
@@ -529,124 +603,27 @@ func _trackpad() -> RefCounted:
 				func(p): return IpEdit.pad_mode(p, pads[0]) == str(v)))
 
 
-# ---- rumble -----------------------------------------------------------------------------
+# ---- rumble (input/rumble.gd: InputPlumber, hhd and the controller firmware's own strength) ----
 
-## hhd's vibration setting for this handheld: {"path", "off" (value meaning
-## off, or null when it can't go off), "node", "kind": "limits" | "multiple"}.
-func _hhd_rumble() -> Dictionary:
-	var lim: Variant = be.hhd_ctl(["limits"])
-	if lim is Dictionary and lim.get("mode") is String:
-		return {"kind": "limits", "path": ["limits", "manual", "vibration"], "off": 0,
-			"node": be.hhd_ctl_schema(["limits", "manual", "vibration"])}
-	for k in ["vibration_strength", "vibration"]:
-		if be.hhd_ctl([k]) is String:
-			var node: Variant = be.hhd_ctl_schema([k])
-			var vals := Hhd.options_of(node)
-			return {"kind": "multiple", "path": [k], "off": "disabled" if "disabled" in vals else null, "node": node}
-	return {}
+var _rumble_impl: RefCounted = null
 
 
-func _hhd_rumble_value() -> Variant:
-	var r := _hhd_rumble()
-	if r["kind"] == "limits":
-		if str(be.hhd_ctl(["limits", "mode"])) != "manual":
-			return 100   # hhd's default limits vibrate at full strength
-		var v: Variant = be.hhd_ctl(r["path"])
-		return int(v) if v != null else 100
-	return str(be.hhd_ctl(r["path"]))
-
-
-func _hhd_rumble_patch(value: Variant) -> Dictionary:
-	var r := _hhd_rumble()
-	var key := be.hhd_key()
-	if r["kind"] == "limits":
-		return {"controllers": {key: {"limits": {"mode": "manual", "manual": {"vibration": value}}}}}
-	return Hhd.nest(["controllers", key] + r["path"], value)
+func _rumble_ctl() -> RefCounted:
+	if _rumble_impl == null:
+		_rumble_impl = Rumble.new(be)
+	return _rumble_impl
 
 
 func _rumble() -> RefCounted:
-	return _make({"id": "controller.rumble", "title": "Rumble", "kind": "toggle", "default_value": true,
-		"help": "Vibration in games."},
-		func(_c):
-			match be.controller_backend():
-				"inputplumber":
-					return "" if be.ip().get("device", {}).get("rumble", false) else "This handheld can't rumble through InputPlumber"
-				"hhd":
-					var r := _hhd_rumble()
-					if r.is_empty():
-						return "Handheld Daemon has no vibration setting for this handheld"
-					return "" if r["off"] != null else "This handheld can't turn rumble off; set its strength"
-			return R_NONE,
-		func(_c):
-			if be.controller_backend() == "hhd":
-				return _hhd_rumble_value() != _hhd_rumble()["off"]
-			return be.ip().get("rumble"),
-		func(_c, v):
-			if be.controller_backend() == "hhd":
-				var r := _hhd_rumble()
-				var want: Variant = r["off"]
-				if v:
-					var opts := Hhd.options_of(r["node"]).filter(func(o): return o != r["off"])
-					want = 100 if r["kind"] == "limits" else (opts[int(opts.size() / 2.0)] if not opts.is_empty() else null)
-				if want == null:
-					return false
-				return be.hhd_set(_hhd_rumble_patch(want), [[["controllers", be.hhd_key()] + r["path"], want]])
-			return be.ip_set_rumble(bool(v)))
+	return _rumble_ctl().toggle()
 
 
 func _rumble_strength() -> RefCounted:
-	return _make({"id": "controller.rumble_strength", "title": "Rumble strength", "kind": "choice", "default_value": 100,
-		"options": _opts([20, 40, 60, 80, 100], {20: "20%", 40: "40%", 60: "60%", 80: "80%", 100: "100%"}),
-		"help": "How strong the vibration is."},
-		func(c):
-			match be.controller_backend():
-				"inputplumber":
-					return "InputPlumber can only turn rumble on or off"
-				"hhd":
-					var r := _hhd_rumble()
-					if r.is_empty():
-						return "Handheld Daemon has no vibration setting for this handheld"
-					if r["kind"] == "limits":
-						var node: Variant = r["node"]
-						var lo := int(node.get("min", 0)) if node is Dictionary else 0
-						var hi := int(node.get("max", 100)) if node is Dictionary else 100
-						var st := maxi(1, int(node.get("step", 20)) if node is Dictionary else 20)
-						var vals: Array = []
-						var x := maxi(lo, st)
-						while x <= hi:
-							vals.append(x)
-							x += st
-						var labels := {}
-						for v in vals:
-							labels[v] = "%d%%" % v
-						c.options = _opts(vals, labels)
-					else:
-						var vals := Hhd.options_of(r["node"]).filter(func(o): return o != r["off"])
-						c.options = _opts(vals, Hhd.labels_of(r["node"]))
-					return ""
-			return R_NONE,
-		func(c):
-			var v: Variant = _hhd_rumble_value()
-			if v is int and not c.options.any(func(o): return o["value"] == v):
-				return null   # off, or a value between our steps
-			return v,
-		func(_c, v):
-			var r := _hhd_rumble()
-			return be.hhd_set(_hhd_rumble_patch(v), [[["controllers", be.hhd_key()] + r["path"], v]]))
+	return _rumble_ctl().strength()
 
 
 func _rumble_test() -> RefCounted:
-	return _make({"id": "controller.rumble_test", "title": "Test rumble", "kind": "action", "per_game": false,
-		"help": "A short buzz."},
-		func(_c):
-			match be.controller_backend():
-				"inputplumber":
-					return "" if be.ip().get("device", {}).get("rumble", false) else "This handheld can't rumble through InputPlumber"
-				"hhd":
-					return "Handheld Daemon can't buzz on request"
-			return R_NONE,
-		func(_c): return null,
-		func(_c, _v): return be.ip_rumble_test(0.6))
+	return _rumble_ctl().test()
 
 
 # ---- deadzones (hhd "Deadzones & Vibration": the ROG Ally family) ---------------------------
@@ -686,7 +663,14 @@ func _deadzone(name: String, key: String, title: String) -> RefCounted:
 
 func _rgb_block() -> String:
 	match be.rgb_backend():
-		"hhd", "sysfs":
+		"hhd":
+			return ""
+		"sysfs":
+			# root-only nodes (the Ally's ally:rgb:joystick_rings is 0644) need the
+			# no-password root action; world-writable ones (the Claw's hid-msi) don't
+			var n: Dictionary = be.leds()[0]
+			if not Leds.direct_capable(n) and not FileAccess.file_exists(str(ctx.get("sys_root", "")) + FIX_SET_HELPER):
+				return R_LED_HELPER
 			return ""
 	return R_NO_RGB if not hw["rgb"] else R_RGB_BACKEND
 

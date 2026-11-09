@@ -103,3 +103,30 @@ func test_profiles_detached() -> void:
 	r.free()
 	p.free()
 	pw.free()
+
+
+## A controls probe leaves no saved InputPlumber layout behind (the Claw kept
+## ~/.config/inputplumber/profiles/gamecove/msi-claw-8-ex/default.yaml after one).
+func test_probe_put_back_leaves_no_saved_layout() -> void:
+	var home := ProjectSettings.globalize_path("user://test_cli_saved")
+	var dir: String = Cli.saved_dir(home)
+	DirAccess.make_dir_recursive_absolute(dir + "/other")
+	var keep := FileAccess.open(dir + "/other/default.yaml", FileAccess.WRITE)
+	keep.store_string("theirs\n")
+	keep.close()
+	var before: Dictionary = Cli.snapshot_files(dir)
+	DirAccess.make_dir_recursive_absolute(dir + "/msi-claw-8-ex")
+	var f := FileAccess.open(dir + "/msi-claw-8-ex/default.yaml", FileAccess.WRITE)
+	f.store_string("written by the probe\n")
+	f.close()
+	var g := FileAccess.open(dir + "/other/default.yaml", FileAccess.WRITE)
+	g.store_string("changed\n")
+	g.close()
+	Cli.restore_files(dir, before)
+	ok(not FileAccess.file_exists(dir + "/msi-claw-8-ex/default.yaml"), "the probe's file is gone")
+	ok(not DirAccess.dir_exists_absolute(dir + "/msi-claw-8-ex"), "and its folder")
+	eq(FileAccess.get_file_as_string(dir + "/other/default.yaml"), "theirs\n", "an existing layout gets its bytes back")
+	DirAccess.remove_absolute(dir + "/other/default.yaml")
+	DirAccess.remove_absolute(dir + "/other")
+	Cli.restore_files(dir, {})
+	ok(not DirAccess.dir_exists_absolute(dir), "nothing saved before: no folder left")

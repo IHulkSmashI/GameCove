@@ -165,6 +165,321 @@ func test_claw8ex_fan_curve_is_never_quieter_than_quiet() -> void:
 	_free()
 
 
+# ---- the real Claw 8 EX on Bazzite 45 (kernel 7.2.15-ogc1.1, BIOS E1T91IMS.10E), read live ----
+
+## claw8ex() plus what the device showed: steamos-manager answers FanControlState 0 (its
+## jupiter-fan-control switch, meaningless here) and MaxChargeLevel 0 (EC limit never set),
+## the EC's own fan tables (60-84 %), and GPU performance level auto with a manual clock.
+func _claw_live(helper: bool, max_charge := 0) -> Dictionary:
+	var trees := Trees.new()
+	var t: Dictionary = trees.claw8ex()
+	var sm := Trees.SM
+	t["props"][sm + "FanControl1 FanControlState"] = Trees.p("u", 0)
+	if max_charge >= -1:
+		t["props"][sm + "BatteryChargeLimit1 MaxChargeLevel"] = Trees.p("i", max_charge)
+	else:   # steamos-manager without the Claw's charge config: a D-Bus error
+		t["props"].erase(sm + "BatteryChargeLimit1 MaxChargeLevel")
+	t["props"][sm + "BatteryChargeLimit1 SuggestedMinimumLimit"] = Trees.p("i", 10)
+	var h := "/sys/class/hwmon/hwmon5/"
+	var duty := [153, 163, 173, 188, 204, 214]
+	var temp := [47, 50, 57, 64, 71, 78]
+	for n in [1, 2]:
+		for i in 6:
+			trees.w(h + "pwm%d_auto_point%d_pwm" % [n, i + 1], str(duty[i]))
+			trees.w(h + "pwm%d_auto_point%d_temp" % [n, i + 1], str(temp[i]))
+	trees.w(h + "fan1_input", "2900")
+	trees.w(h + "fan2_input", "2900")
+	for u in ["ucsi-source-psy-USBC000:001", "ucsi-source-psy-USBC000:002"]:
+		trees.w("/sys/class/power_supply/%s/type" % u, "USB")
+		trees.w("/sys/class/power_supply/%s/online" % u, "0")
+	if not helper:
+		DirAccess.remove_absolute(t["root"] + "/usr/libexec/gamecove/gamecove-fix-set")
+		DirAccess.remove_absolute(t["root"] + "/usr/libexec/gamecove/gamecove-fix")
+	return t
+
+
+func test_claw_live_fan_tables_win_over_steamos_manager() -> void:
+	var e := _setup(_claw_live(true))
+	var c: Dictionary = e["c"]
+	var root: String = e["root"]
+	var h := "/sys/class/hwmon/hwmon5/"
+	ok(c["power.fan_curve"].available, "fan curve offered (%s)" % c["power.fan_curve"].reason)
+	eq(c["power.fan_mode"].options.map(func(o): return o["value"]), ["quiet", "auto", "max"], "the EC's presets, not steamos-manager's")
+	eq(c["power.fan_mode"].value, "auto", "pwm1/2_enable 2 is MSI's automatic control")
+	eq(c["power.fan_curve"].value, [60.0, 64.0, 68.0, 74.0, 80.0, 84.0], "the EC's own table, 0-255 shown as percent")
+	e["reg"].set_value("power.fan_curve", [50.0, 55.0, 60.0, 70.0, 85.0, 100.0])
+	for n in [1, 2]:
+		var got := []
+		for i in 6:
+			got.append(_read(root, h + "pwm%d_auto_point%d_pwm" % [n, i + 1]))
+		eq(got, ["128", "140", "153", "179", "217", "255"], "fan %d gets the curve" % n)
+		eq(_read(root, h + "pwm%d_enable" % n), "1", "fan %d follows its table" % n)
+		eq(_read(root, h + "pwm%d_auto_point1_temp" % n), "47", "temperatures never written")
+	ok(not e["runner"].calls.any(func(x): return str(x).contains("FanControlState")), "steamos-manager's fan switch never set")
+	_free()
+
+
+func test_claw_live_charge_limit_through_steamos_manager() -> void:
+	var e := _setup(_claw_live(false))
+	var c: Dictionary = e["c"]
+	ok(c["power.charge_limit"].available, "charge limit without the root helper (%s)" % c["power.charge_limit"].reason)
+	eq(c["power.charge_limit"].value, 100.0, "the EC's unset 0 reads as no limit")
+	e["reg"].set_value("power.charge_limit", 80)
+	eq(c["power.charge_limit"].value, 80.0, "80 read back")
+	var sets: Array = e["runner"].calls.filter(func(x): return str(x).contains("set-property") and str(x).contains("MaxChargeLevel"))
+	eq(sets.size(), 1, "one prompt-free steamos-manager write: %s" % [sets])
+	ok(not e["power"].set_charge_limit(40), "never under 50 % (steamos-manager suggests 10)")
+	ok(e["power"].set_charge_limit(100), "no limit")
+	ok(e["runner"].calls.any(func(x): return str(x).ends_with("MaxChargeLevel i 100")), "no limit is written as 100, never 0")
+	ok(not e["runner"].calls.any(func(x): return str(x).ends_with("MaxChargeLevel i 0")), "0 never written")
+	_free()
+
+
+func test_claw_live_without_the_helper_says_so() -> void:
+	var e := _setup(_claw_live(false, -2))
+	var c: Dictionary = e["c"]
+	for id in ["power.charge_limit", "power.fan_mode", "power.fan_curve", "power.gpu_profile"]:
+		eq(c[id].reason, Tx.NO_HELPER, id + ": the hardware has it, only the root helper can write it")
+	eq(e["power"].state()["fan_modes"], [], "no steamos-manager fan switch on a Claw")
+	_free()
+
+
+func test_claw_live_gpu_profile_with_the_helper() -> void:
+	var e := _setup(_claw_live(true))
+	var c: Dictionary = e["c"]
+	ok(c["power.gpu_profile"].available, "xe power_profile (%s)" % c["power.gpu_profile"].reason)
+	eq(c["power.gpu_profile"].value, "base")
+	e["reg"].set_value("power.gpu_profile", "power_saving")
+	eq(_read(e["root"], "/sys/class/drm/card1/device/tile0/gt0/freq0/power_profile"), "power_saving")
+	_free()
+
+
+## steamos-manager's Intel GPU driver as it behaves: ManualGpuClock reads min_freq and a
+## write in the "auto" level is only remembered (src/gpu.rs set_clocks); "manual" applies it.
+class SmIntelGpu extends "res://tests/fixtures/power/fake_runner.gd":
+	const K := "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.GpuPerformanceLevel1 "
+	var saved := -1
+
+	func run(program: String, args: PackedStringArray) -> Dictionary:
+		var a := Array(args)
+		if program == "busctl" and "set-property" in a and "ManualGpuClock" in a:
+			calls.append("busctl " + " ".join(PackedStringArray(a.filter(func(x): return not str(x).begins_with("--timeout=")))))
+			saved = int(a[-1])
+			if str(props[K + "GpuPerformanceLevel"]["data"]) == "manual":
+				props[K + "ManualGpuClock"]["data"] = saved
+			return {"code": 0, "out": ""}
+		var r := super.run(program, args)
+		if program == "busctl" and "set-property" in a and "GpuPerformanceLevel" in a and str(a[-1]) == "manual" and saved >= 0:
+			props[K + "ManualGpuClock"]["data"] = saved
+		return r
+
+
+func test_claw_live_gpu_clock_switches_to_manual() -> void:
+	var t := _claw_live(false)
+	var sm := Trees.SM
+	t["props"][sm + "GpuPerformanceLevel1 GpuPerformanceLevel"] = Trees.p("s", "auto")
+	t["props"][sm + "GpuPerformanceLevel1 AvailableGpuPerformanceLevels"] = Trees.p("as", ["auto", "manual"])
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClock"] = Trees.p("u", 1000)
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClockMin"] = Trees.p("u", 1000)
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClockMax"] = Trees.p("u", 2300)
+	var e := _setup(t)
+	var r: RefCounted = SmIntelGpu.new()
+	r.props = e["runner"].props
+	r.methods = e["runner"].methods
+	e["power"].be.runner = r
+	e["prov"].be.runner = r
+	e["prov"].be.user_bus.runner = r
+	e["prov"].be.system_bus.runner = r
+	var c: Dictionary = e["c"]
+	ok(c["power.gpu_clock"].available, "gpu_clock through steamos-manager (%s)" % c["power.gpu_clock"].reason)
+	ok(c["power.gpu_clock"].write(1050), "1050 applies")
+	eq(c["power.gpu_clock"].read(), 1050.0, "read back")
+	eq(str(r.props[sm + "GpuPerformanceLevel1 GpuPerformanceLevel"]["data"]), "manual", "switched to manual first")
+	_free()
+
+
+## PowerStation's CPU object as it behaves: CoreN.Online writes cpuN/online; CoresEnabled
+## halves the count when SmtEnabled is false (cpu_features.rs set_cores_enabled).
+class PsCores extends "res://tests/fixtures/power/fake_runner.gd":
+	var root := ""
+
+	func run(program: String, args: PackedStringArray) -> Dictionary:
+		var a := Array(args).filter(func(x): return not str(x).begins_with("--timeout="))
+		if program == "busctl" and a.size() >= 8 and a[1] == "set-property" and a[2] == "org.shadowblip.PowerStation":
+			calls.append("busctl " + " ".join(PackedStringArray(a)))
+			if a[4] == "org.shadowblip.CPU.Core" and a[5] == "Online":
+				var n := int(str(a[3]).get_slice("/Core", 1))
+				if n != 0:
+					var f := FileAccess.open(root + "/sys/devices/system/cpu/cpu%d/online" % n, FileAccess.WRITE)
+					f.store_string("1\n" if a[7] == "true" else "0\n")
+					f.close()
+				return {"code": 0, "out": ""}
+			if a[5] == "CoresEnabled":
+				var want := mini(int(a[7]), 7)   # SmtEnabled false: half of 14
+				for c in range(1, 14):
+					var f := FileAccess.open(root + "/sys/devices/system/cpu/cpu%d/online" % c, FileAccess.WRITE)
+					f.store_string("1\n" if c < want else "0\n")
+					f.close()
+				return {"code": 0, "out": ""}
+		return super.run(program, args)
+
+
+func _swap_runner(e: Dictionary, r: RefCounted) -> void:
+	r.props = e["runner"].props
+	r.methods = e["runner"].methods
+	r.exec_handler = e["runner"].exec_handler
+	for be in [e["power"].be, e["prov"].be]:
+		be.runner = r
+		be.user_bus.runner = r
+		be.system_bus.runner = r
+	e["power"].runner = r
+	e["power"].user_bus.runner = r
+	e["power"].system_bus.runner = r
+	e["runner"] = r
+
+
+func test_claw_live_cores_exact_count_and_restore() -> void:
+	var t := _claw_live(false)
+	var trees := Trees.new()
+	trees.root = t["root"]
+	for i in range(4, 14):
+		trees.w(Trees.CPU + "/cpu%d/online" % i, "1")
+		trees.w(Trees.CPU + "/cpu%d/cpufreq/energy_performance_preference" % i, "balance_performance")
+	t["props"][Trees.PS_CPU + "CoresCount"] = Trees.p("u", 14)
+	t["props"][Trees.PS_CPU + "CoresEnabled"] = Trees.p("u", 14)
+	t["props"][Trees.PS_CPU + "SmtEnabled"] = Trees.p("b", false)
+	t["props"][Trees.PS_CPU + "BoostEnabled"] = Trees.p("b", false)
+	var e := _setup(t)
+	var r: RefCounted = PsCores.new()
+	r.root = t["root"]
+	_swap_runner(e, r)
+	var c: Dictionary = e["c"]
+	e["reg"].detect_all()
+	ok(c["power.cpu_cores"].available, "cores (%s)" % c["power.cpu_cores"].reason)
+	eq(c["power.cpu_cores"].max_value, 14.0)
+	eq(c["power.cpu_cores"].read(), 14.0)
+	ok(c["power.cpu_cores"].write(13), "13")
+	eq(e["prov"].be.online_cpus(), range(13), "exactly cpus 0-12")
+	ok(c["power.cpu_cores"].write(14), "back to 14")
+	eq(e["prov"].be.online_cpus(), range(14), "every CPU back")
+	ok(c["power.cpu_cores"].write(1), "a floor of 2")
+	eq(e["prov"].be.online_cpus(), [0, 1], "never fewer than 2, cpu0 stays")
+	ok(not r.calls.any(func(x): return x.contains("CoresEnabled")), "PowerStation's CoresEnabled maths never used")
+	ok(not r.calls.any(func(x): return x.contains("/Core0 ")), "cpu0 never touched")
+	c["power.cpu_cores"].write(14)
+	# a service's boost flag never outranks the kernel's: PowerStation said false with turbo on
+	r.props[Trees.SM + "CpuBoost1 CpuBoostState"] = Trees.p("u", 0)
+	eq(e["prov"].be.get_boost(), true, "turbo on: intel_pstate/no_turbo 0 is the truth")
+	_free()
+
+
+func test_profile_can_go_back_to_custom() -> void:
+	var e := _setup(Trees.new().claw8ex())
+	var c: Dictionary = e["c"]
+	e["reg"].set_value("power.tdp", 20)
+	e["reg"].detect_all()
+	eq(c["power.profile"].value, "custom", "20 W is no preset")
+	ok("custom" in c["power.profile"].options.map(func(o): return o["value"]), "custom offered")
+	ok(c["power.profile"].write("battery"), "battery")
+	eq(e["power"].state()["tdp_w"], 12.0)
+	ok(c["power.profile"].write("custom"), "custom again (the probe's put-back)")
+	eq(c["power.profile"].read(), "custom")
+	eq(e["power"].state()["tdp_w"], 20.0, "the user's own 20 W back")
+	_free()
+
+
+# ---- the real ROG Ally (RC71L) on SteamOS 3.10 (kernel 7.2.4-valve1-1-neptune, BIOS RC71L.342) ----
+
+## ally() as the device showed it: steamos-manager only (no PowerStation), MaxChargeLevel -1
+## and charge_control_end_threshold 0 (no limit set), FanControl1 answering 0, an empty
+## GpuPowerProfile1 list, GpuPerformanceLevel1 auto with ManualGpuClock 800 (800-2700), and
+## asus-wmi's own hwmon next to asus_custom_fan_curve.
+func _ally_live(helper: bool) -> Dictionary:
+	var trees := Trees.new()
+	var t: Dictionary = trees.ally()
+	for k in t["props"].keys():
+		if str(k).begins_with(Trees.PS):
+			t["props"].erase(k)
+	t["methods"] = {}
+	var sm := Trees.SM
+	t["props"][sm + "BatteryChargeLimit1 MaxChargeLevel"] = Trees.p("i", -1)
+	t["props"][sm + "BatteryChargeLimit1 SuggestedMinimumLimit"] = Trees.p("i", 10)
+	t["props"][sm + "FanControl1 FanControlState"] = Trees.p("u", 0)
+	t["props"][sm + "GpuPowerProfile1 GpuPowerProfile"] = Trees.p("s", "")
+	t["props"][sm + "GpuPowerProfile1 AvailableGpuPowerProfiles"] = Trees.p("as", [])
+	t["props"][sm + "GpuPerformanceLevel1 GpuPerformanceLevel"] = Trees.p("s", "auto")
+	t["props"][sm + "GpuPerformanceLevel1 AvailableGpuPerformanceLevels"] = Trees.p("as", ["auto", "low", "high", "manual", "profile_peak"])
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClock"] = Trees.p("u", 800)
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClockMin"] = Trees.p("u", 800)
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClockMax"] = Trees.p("u", 2700)
+	trees.w("/sys/class/power_supply/BAT1/charge_control_end_threshold", "0")
+	trees.w("/sys/class/hwmon/hwmon5/name", "asus")
+	trees.w("/sys/class/hwmon/hwmon5/pwm1_enable", "2")
+	trees.w("/sys/class/hwmon/hwmon5/pwm2_enable", "2")
+	if not helper:
+		DirAccess.remove_absolute(t["root"] + "/usr/libexec/gamecove/gamecove-fix-set")
+		DirAccess.remove_absolute(t["root"] + "/usr/libexec/gamecove/gamecove-fix")
+	return t
+
+
+func test_ally_live_charge_fan_and_gpu_profile() -> void:
+	var e := _setup(_ally_live(true))
+	var c: Dictionary = e["c"]
+	ok(c["power.charge_limit"].available, "charge limit through steamos-manager (%s)" % c["power.charge_limit"].reason)
+	eq(c["power.charge_limit"].value, 100.0, "MaxChargeLevel -1 = no limit set")
+	e["reg"].set_value("power.charge_limit", 80)
+	eq(c["power.charge_limit"].value, 80.0)
+	ok(not e["runner"].calls.any(func(x): return str(x).contains("charge-limit")), "no root helper for it")
+	ok(c["power.fan_curve"].available, "asus curve (%s)" % c["power.fan_curve"].reason)
+	eq(c["power.fan_curve"].points, 8)
+	eq(c["power.fan_mode"].options.map(func(o): return o["value"]), ["quiet", "auto", "max"], "the fan fix, not steamos-manager's switch")
+	eq(c["power.gpu_profile"].reason, Tx.SM_NO_GPU_PROFILES, "an empty list is steamos-manager's answer, not a missing GPU")
+	_free()
+
+
+func test_ally_live_without_the_helper() -> void:
+	var e := _setup(_ally_live(false))
+	var c: Dictionary = e["c"]
+	ok(c["power.charge_limit"].available, "steamos-manager needs no helper")
+	eq(c["power.fan_curve"].reason, Tx.NO_HELPER)
+	eq(c["power.fan_mode"].reason, Tx.NO_HELPER)
+	_free()
+
+
+## Battery saver off puts back the exact profile, watts and firmware limits (the Ally's
+## PPTs stayed at 10/15/15 W after a probe).
+func test_ally_battery_saver_puts_custom_watts_and_ppts_back() -> void:
+	var e := _setup(_ally_live(true), true)
+	var reg: Node = e["reg"]
+	var c: Dictionary = e["c"]
+	var a := "/sys/class/firmware-attributes/asus-armoury/attributes/"
+	var spl := FileAccess.open(e["root"] + a + "ppt_pl1_spl/current_value", FileAccess.WRITE)
+	spl.store_string("30\n")
+	spl.close()
+	for f in ["ppt_pl2_sppt", "ppt_pl3_fppt"]:
+		var mx := FileAccess.open(e["root"] + a + f + "/max_value", FileAccess.WRITE)
+		mx.store_string("35\n")
+		mx.close()
+	reg.set_value("power.tdp", 30)
+	reg.detect_all()
+	reg.set_value("power.sppt", 30)
+	reg.set_value("power.fppt", 30)
+	eq(e["power"].state()["profile"], "custom", "30 W on the charger is custom")
+	eq([_read(e["root"], a + "ppt_pl2_sppt/current_value"), _read(e["root"], a + "ppt_pl3_fppt/current_value")], ["30", "30"])
+	reg.set_value("power.battery_saver", true)
+	eq(e["power"].state()["profile"], "battery")
+	# the firmware lowers the boost limits with the SPL (what the Ally did)
+	for f in ["ppt_pl2_sppt", "ppt_pl3_fppt"]:
+		var w := FileAccess.open(e["root"] + a + f + "/current_value", FileAccess.WRITE)
+		w.store_string("15\n")
+		w.close()
+	reg.set_value("power.battery_saver", false)
+	eq(e["power"].state()["tdp_w"], 30.0, "30 W back")
+	eq(e["power"].state()["profile"], "custom", "custom back")
+	eq([_read(e["root"], a + "ppt_pl2_sppt/current_value"), _read(e["root"], a + "ppt_pl3_fppt/current_value")], ["30", "30"], "PPTs back")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)
@@ -315,8 +630,11 @@ func test_ally_writes_each_backend() -> void:
 	eq(float(e["runner"].props[tkey]["data"]), 80.0, "Tctl lowered")
 	reg.set_value("power.mcu_powersave", false)
 	eq(_read(root, "/sys/class/firmware-attributes/asus-armoury/attributes/mcu_powersave/current_value"), "0", "MCU power saving off")
+	var pr: RefCounted = PsCores.new()
+	pr.root = root
+	_swap_runner(e, pr)
 	reg.set_value("power.cpu_cores", 1)
-	eq(int(e["runner"].props[Trees.PS_CPU + "CoresEnabled"]["data"]), 2, "never fewer than 2 cores")
+	eq(e["prov"].be.online_cpus(), [0, 1], "never fewer than 2 cores, through PowerStation's per-core Online")
 	reg.set_value("power.fan_curve", [0, 0, 0, 0, 0, 0, 0, 0])
 	eq(_read(root, "/sys/class/hwmon/hwmon6/pwm1_auto_point8_pwm"), "191", "a silent curve becomes Quiet")
 	ok(not cpb_key.is_empty(), "")

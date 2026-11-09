@@ -7,7 +7,7 @@ const EXPECT := {
 	"claw8ex-bazzite": {
 		"power.tdp": [8.0, 35.0], "power.boost": true, "power.cpu_cores": true, "power.power_mode": true,
 		"power.charge_limit": true, "power.fan_mode": true, "power.fan_curve": true, "power.gpu_min": true,
-		"power.gpu_profile": true, "controller.gyro": true, "perf.overlay": true,
+		"power.gpu_profile": true, "perf.overlay": true, "controller.gyro": "gyro fix",
 		"power.sppt": "firmware ignores", "power.smt": "no SMT", "power.platform_profile": "Set by Power mode",
 		"power.gpu_level": "AMD", "power.sleep_mode": "only one sleep mode", "controller.trackpad": "no trackpad",
 		"display.hdr": "doesn't support HDR", "controller.led_effect": "No RGB driver",

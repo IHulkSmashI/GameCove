@@ -8,8 +8,11 @@
 # Two kinds of battery controls, picked by what the battery has:
 #
 #   threshold  charge_control_end_threshold (MSI Claw, OneXPlayer): the firmware stops
-#              at the level by itself. 100 = no limit (the value recorded at install
-#              when it was the firmware's "none", 0 on the Claw).
+#              at the level by itself. 100 = no limit. The Claw reads 0 until a limit
+#              is set: msi-wmi-platform (OGC kernel, "Add charge_threshold support")
+#              reads the EC byte 0xd7 without its enable bit 7 and writes value|0x80,
+#              so writing 0 would turn ON a 0 % limit (a battery that never charges).
+#              0 is therefore never written: "no limit" is always 100, also on remove.
 #   behaviour  only charge_behaviour with "inhibit-charge" (AYANEO's ayaneo-ec driver):
 #              the firmware can't stop at a level, so `set N` remembers N and holds
 #              charging (inhibit-charge) only while the charger is in and the battery
@@ -182,13 +185,10 @@ set_threshold() {
 	value="$1"
 	original="$(cat "$STATE/original")"
 	if [ "$value" -eq 100 ]; then
-		if [ "$original" = "0" ]; then
-			write_value "$PATH_T" 0 || die 1 "the kernel refused 0"
-		elif ! write_value "$PATH_T" 100; then
-			write_value "$PATH_T" 0 || die 1 "the kernel refused 100 and 0"
-		fi
+		# 100 = charge to full; never 0 (see the top: 0 is a 0 % limit on MSI's EC)
+		write_value "$PATH_T" 100 || die 1 "the kernel refused 100 (original $original)"
 		got="$(cat "$PATH_T")"
-		[ "$got" = "100" ] || [ "$got" = "0" ] || die 1 "reads $got after setting no limit"
+		[ "$got" = "100" ] || die 1 "reads $got after setting no limit"
 	else
 		write_value "$PATH_T" "$value" || die 1 "the kernel refused $value"
 		got="$(cat "$PATH_T")"
@@ -274,6 +274,12 @@ do_remove() {
 			write_value "$PATH_T" auto || die 1 "the kernel refused auto"
 			original=auto
 		else
+			# a recorded 0 (the Claw's "never set") or anything not 50-100 goes back as 100,
+			# no limit: writing 0 would set a 0 % limit
+			case "$original" in
+				5[0-9] | [6-9][0-9] | 100) ;;
+				*) original=100 ;;
+			esac
 			write_value "$PATH_T" "$original" || die 1 "the kernel refused $original"
 		fi
 	fi

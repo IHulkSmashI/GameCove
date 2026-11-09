@@ -25,6 +25,7 @@ const REGULAR_FILES := {
 	"res://scripts/controls/providers/perf.gd|var was := FileAccess.get_file_as_string(stamp)": "GameCove's device stamp file",
 	"res://scripts/controls/display/session_env.gd|f.get_as_text()": "environment.d file in the home folder",
 	"res://scripts/controls/display/reshade.gd|FileAccess.get_file_as_string(p) == want": "a ReShade .fx GameCove wrote",
+	"res://scripts/controls/input/backend.gd|Yaml.parse(FileAccess.get_file_as_string(f))": "InputPlumber's default.yaml under /etc or /usr/share",
 	"res://scripts/controls/input/ip_edit.gd|parse_config_head(FileAccess.get_file_as_string(": "InputPlumber device configs under /usr/share and /etc",
 	"res://scripts/controls/perf/launch_files.gd|FileAccess.get_file_as_string(path)": "a launch env file GameCove writes",
 	"res://scripts/controls/perf/launch_files.gd|FileAccess.get_file_as_string(p)": "a launch env file GameCove writes",

@@ -18,11 +18,24 @@ extends RefCounted
 ## rootfs/usr/share/inputplumber/devices/*.yaml (group: led); hhd
 ## src/hhd/controller/physical/rgb.py.
 ##
-## The nodes are root-only to write, so writes go through the no-password root
-## action `gamecove-fix-set controller-led set <spec>` (fixes/controller-led):
+## Writes: where every file a change needs is world-writable (the MSI Claw's
+## hid-msi node on Bazzite has effect, multi_intensity and brightness at 0666),
+## apply_direct() writes them itself and reads them back. Anything else (enabled
+## and speed are 0644 root there; the Legion rings need profile/mode first) goes
+## through the no-password root action `gamecove-fix-set controller-led set <spec>`
+## (fixes/controller-led):
 ##   <zone>,<rrggbb>,<percent>[,<effect>[,<speed percent>]]   zone: all | 0..9
 ##   off
-## Reading needs no rights.
+## Reading needs no rights. Reads go line by line: real sysfs files report a size
+## of 4096, and FileAccess.get_file_as_string() returns "" for them (that hid
+## every LED on real hardware while the regular-file fixtures worked).
+##
+## hid-msi ABI (drivers/hid/hid-msi.c; OGC's 0100 patch names the node
+## go:rgb:joystick_rings, the Legion Go name, so Steam lights it): effect one of
+## effect_index (monocolor breathe chroma rainbow frostfire), enabled true|false
+## (false = dark whatever the rest says), speed 0..speed_range max (20 = fastest),
+## multi_intensity per multi_max_intensity (100), brightness 0..max_brightness;
+## the driver sends the frame 50 ms after the last write.
 ##
 ## Quirks from HueSync (github.com/honjow/HueSync, tested on these handhelds):
 ##  * py_modules/devices/legion_go2.py: channel values scale by multi_max_intensity
@@ -67,11 +80,22 @@ static func scan(sys_root: String) -> Array:
 	return out
 
 
-## sysfs reports a size (4096) that isn't the file's length: read to the real end
-## (get_file_as_string() trusts the size and gives "" on real LED nodes).
+## Line by line, so a sysfs file's fake size (4096) or a /proc file's 0 doesn't blank it.
 static func _read(path: String) -> String:
-	var f := FileAccess.open(path, FileAccess.READ) if FileAccess.file_exists(path) else null
-	return DeviceScript.read_all(f).strip_edges() if f != null else ""
+	if not FileAccess.file_exists(path):
+		return ""
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return ""
+	var lines := PackedStringArray()
+	while lines.size() < 64:
+		var l := f.get_line()
+		if f.eof_reached() and l == "":
+			break
+		lines.append(l)
+		if f.eof_reached():
+			break
+	return "\n".join(lines).strip_edges()
 
 
 static func read_node(path: String) -> Dictionary:
@@ -101,13 +125,18 @@ static func read_node(path: String) -> Dictionary:
 	return node
 
 
-## The colour a node shows (first red/green/blue triplet).
+## The colour a node shows (first red/green/blue triplet, or the first packed "rgb"
+## channel: hid-asus's Ally rings list multi_index "rgb rgb rgb rgb", one 0xRRGGBB
+## intensity per zone; OGC patch 0155 "hid-asus-ally: Add joystick LED ring support").
 static func color_of(node: Dictionary) -> Color:
 	var rgb := {"red": 0, "green": 0, "blue": 0}
 	var idx: Array = node.get("index", [])
 	var inten: Array = node.get("intensity", [])
 	var mx: Array = node.get("chan_max", [])
 	for i in mini(idx.size(), inten.size()):
+		if idx[i] == "rgb":
+			var v := int(inten[i])
+			return Color8((v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff)
 		if idx[i] in rgb and rgb[idx[i]] == 0:
 			var top := int(mx[i]) if i < mx.size() and int(mx[i]) > 0 else 255
 			rgb[idx[i]] = clampi(int(roundf(float(inten[i]) * 255.0 / float(top))), 0, 255)
@@ -179,3 +208,118 @@ static func apply(runner: RefCounted, s: String) -> bool:
 		return false
 	var r: Dictionary = runner.run("pkexec", PackedStringArray([FIX_SET_HELPER, FIX, "set", s]))
 	return int(r.get("code", -1)) == 0
+
+
+# ---- direct writes (world-writable nodes) ---------------------------------------------
+
+const DIRECT_OK := 1      # written and read back
+const DIRECT_NO := 0      # a needed file isn't writable for us: use the root action
+const DIRECT_FAIL := -1   # tried, a value didn't stick; what was there is back
+
+
+static func writable(path: String) -> bool:
+	return FileAccess.file_exists(path) and (int(FileAccess.get_unix_permissions(path)) & 2) != 0   # others may write (o+w)
+
+
+static func _write(path: String, value: String) -> bool:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(value + "\n")
+	f.close()
+	return _read(path) == value
+
+
+## multi_intensity for a colour, in the node's multi_index order, scaled by
+## multi_max_intensity (fixes/controller-led rgb_line does the same).
+static func intensity_line(node: Dictionary, color: Color) -> String:
+	var rgb := {"red": color.r8, "green": color.g8, "blue": color.b8}
+	var mx: Array = node.get("chan_max", [])
+	var out := PackedStringArray()
+	var idx: Array = node.get("index", [])
+	for i in idx.size():
+		if idx[i] == "rgb":   # packed 0xRRGGBB (hid-asus Ally zones)
+			out.append(str((color.r8 << 16) | (color.g8 << 8) | color.b8))
+			continue
+		var v: int = rgb.get(idx[i], 0)
+		var top := int(mx[i]) if i < mx.size() and int(mx[i]) > 0 else 255
+		if top != 255:
+			v = int((v * top + 127) / 255)
+		out.append(str(v))
+	return " ".join(out)
+
+
+## The attribute writes one node needs for a spec, in the root action's order:
+## [[attribute, value], ...]; [] when the spec doesn't fit the node.
+static func plan(node: Dictionary, s: String) -> Array:
+	var path: String = node["path"]
+	var want_on := s != "off"
+	var out: Array = []
+	if want_on:
+		var p := s.split(",")
+		var color := Color.html("#" + p[1])
+		var pct := int(p[2])
+		var eff := p[3] if p.size() > 3 else ""
+		if eff != "" and not eff in node.get("effects", []):
+			return []
+		if eff != "" and p.size() > 4 and (node.get("speed_range", []) as Array).size() == 2:
+			var r: Array = node["speed_range"]
+			out.append(["speed", str(int(r[0]) + int((int(r[1]) - int(r[0])) * int(p[4]) / 100))])
+		out.append(["multi_intensity", intensity_line(node, color)])
+		out.append(["brightness", str(int((int(node["max"]) * pct + 50) / 100))])
+		if eff != "":
+			out.append(["effect", eff])
+		want_on = pct > 0
+	else:
+		out.append(["brightness", "0"])
+	if node.get("enabled") != null and bool(node["enabled"]) != want_on:
+		# brightness 0 is dark already: off needn't touch a root-only enabled
+		if want_on or writable(path + "/enabled"):
+			out.append(["enabled", "true" if want_on else "false"])
+	# drop writes that change nothing (an unwritable file holding the right value is fine)
+	return out.filter(func(w): return _read(path + "/" + w[0]) != w[1])
+
+
+## Writes a spec straight to world-writable nodes. Nodes that need the root
+## action's set-up (Legion profile/mode, AYN led_mode) never go direct.
+static func apply_direct(nodes: Array, s: String) -> int:
+	if not valid_spec(s) or nodes.is_empty():
+		return DIRECT_NO
+	var zone := "all" if s == "off" else s.split(",")[0]
+	var targets: Array = nodes if zone == "all" else ([nodes[int(zone)]] if int(zone) < nodes.size() else [])
+	if targets.is_empty():
+		return DIRECT_NO
+	var plans: Array = []
+	for n in targets:
+		for extra in ["profile", "mode", "led_mode"]:
+			if FileAccess.file_exists(str(n["path"]) + "/" + extra):
+				return DIRECT_NO
+		var pl := plan(n, s)
+		if s != "off" and pl.is_empty() and not _already(n, s):
+			return DIRECT_NO
+		for w in pl:
+			if not writable(str(n["path"]) + "/" + w[0]):
+				return DIRECT_NO
+		plans.append(pl)
+	for i in targets.size():
+		var path: String = targets[i]["path"]
+		var before := {}
+		for w in plans[i]:
+			before[w[0]] = _read(path + "/" + w[0])
+		for w in plans[i]:
+			if not _write(path + "/" + w[0], w[1]):
+				for k in before:
+					_write(path + "/" + k, before[k])
+				return DIRECT_FAIL
+	return DIRECT_OK
+
+
+## A spec whose plan is empty: the node already shows it (or the effect is unknown).
+static func _already(node: Dictionary, s: String) -> bool:
+	var p := s.split(",")
+	return p.size() <= 3 or p[3] in node.get("effects", [])
+
+
+## True when GameCove can change the node's colour and brightness without root.
+static func direct_capable(node: Dictionary) -> bool:
+	return writable(str(node.get("path", "")) + "/multi_intensity") and writable(str(node.get("path", "")) + "/brightness")

@@ -393,6 +393,41 @@ static func row_problems(row: Dictionary) -> Array:
 	var rgb: Variant = row.get("rgb")
 	if rgb != null and (not rgb is Dictionary or str(rgb.get("via", "")) == ""):
 		p.append("%s: rgb must be null or {zones, via}" % id)
+	p.append_array(rumble_problems(id, row.get("rumble")))
+	return p
+
+
+const RUMBLE_STRENGTH := ["kernel", "hhd", "steam", "none"]
+const RUMBLE_DRIVERS := ["hid-msi", "hid-lenovo-go"]
+const RUMBLE_FIELDS := ["strength", "on_off", "test"]
+
+
+## devices.json `rumble` (optional): {strength, driver, values, hhd, checked,
+## unverified, source}; docs/DEVICES.md, Fields.
+static func rumble_problems(id: String, r: Variant) -> Array:
+	var p := []
+	if r == null:
+		return p
+	if not r is Dictionary:
+		return ["%s: rumble must be an object" % id]
+	var how := str(r.get("strength", ""))
+	if not how in RUMBLE_STRENGTH:
+		p.append("%s: rumble.strength must be one of %s" % [id, ", ".join(RUMBLE_STRENGTH)])
+	if (how == "kernel") != (r.get("driver") != null) or (how == "kernel" and not str(r.get("driver")) in RUMBLE_DRIVERS):
+		p.append("%s: rumble.driver names the kernel driver (%s) exactly when strength is kernel" % [id, ", ".join(RUMBLE_DRIVERS)])
+	if (how == "hhd") != (r.get("hhd") != null and str(r.get("hhd")) != ""):
+		p.append("%s: rumble.hhd names the Handheld Daemon setting exactly when strength is hhd" % id)
+	var vals: Variant = r.get("values")
+	if how in ["kernel", "hhd"] and not (vals is Array and vals.size() >= 2):
+		p.append("%s: rumble.values must be [lo, hi] or the driver's words" % id)
+	for k in ["checked", "unverified"]:
+		var l: Variant = r.get(k, [])
+		if not l is Array or not (l as Array).all(func(x): return str(x) in RUMBLE_FIELDS):
+			p.append("%s: rumble.%s lists %s" % [id, k, ", ".join(RUMBLE_FIELDS)])
+	if str(r.get("source", "")) == "":
+		p.append("%s: rumble.source says where it comes from" % id)
+	if not (r.get("checked", []) as Array).is_empty() and str(r.get("checked_on", "")) == "":
+		p.append("%s: rumble.checked_on names the system it was checked on" % id)
 	return p
 
 

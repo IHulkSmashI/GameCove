@@ -152,6 +152,9 @@ var _fan_mode := ""
 var _fan_driver := ""   # key of FAN_DRIVERS while _fan_via == "fix"
 var _fan_hwmon := ""    # its hwmon folder (with a trailing /)
 var _fan_hwmon_name := ""
+## Settings this handheld has but that only the root helper can write, while it isn't
+## installed (a source checkout, or before the installer ran): {"charge_limit": bool, "fan": bool}.
+var _needs_helper := {"charge_limit": false, "fan": false}
 var _svc_range := {}    # {"min", "max"} the TDP service reported, {} when none
 var _autotune_on := false
 var _autotune_stopping := false  # request_autotune(false) queued: drop samples until it runs
@@ -517,24 +520,46 @@ func _merge_range(lo: float, hi: float) -> void:
 func _detect_charge() -> void:
 	_charge_via = ""
 	_charge = -1
+	_needs_helper["charge_limit"] = false
 	var v: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
-	# steamos-manager reports -1 where it can't read the limit (the Claw 8 EX)
-	if v != null and int(v) > 0 and int(v) <= 100:
+	# steamos-manager reads charge_control_end_threshold as it is. -1: it couldn't
+	# (ENODATA, or older builds without the Claw's config). 0: MSI's EC has no limit
+	# set (msi-wmi-platform reads the EC byte without its enable bit; steamos-manager
+	# data/devices/msi-claw-8ex.toml: battery_charge_limit method acpi_sb), so only
+	# where devices.json says this battery has a limit.
+	# -1: steamos-manager found the attribute but read ENODATA (asus-wmi until a limit is
+	# written; power.rs parse_max_charge_level): no limit set, and it can still write it.
+	# A missing attribute is a D-Bus error (null), never -1. So where devices.json says the
+	# battery has a limit, 0 and -1 both mean "charges to full" (the ROG Ally on SteamOS 3.10).
+	var sm := int(v) if v != null else -2
+	if sm > 0 and sm <= 100 or (sm in [0, -1] and device.get("charge_limit", false)):
 		_charge_via = "steamos-manager"
-		_charge = int(v)
+		_charge = sm_charge(sm)
 		var m: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "SuggestedMinimumLimit")
-		_charge_min = int(m) if m != null and int(m) > 0 else CHARGE_MIN
+		# never under 50 %: MSI's EC takes 0-100 and 0 with its enable bit would stop charging
+		_charge_min = maxi(int(m) if m != null else 0, CHARGE_MIN)
 		return
 	_charge_mode = ""
 	_charge_path = ""
-	if device.get("charge_limit", false) and _helper_present():
+	if device.get("charge_limit", false):
 		var ctl := charge_control(sys_root)
-		if not ctl.is_empty():
+		if not ctl.is_empty() and not _helper_present():
+			_needs_helper["charge_limit"] = true
+		elif not ctl.is_empty():
 			_charge_via = "fix"
 			_charge_mode = ctl["mode"]
 			_charge_path = ctl["path"]
 			_charge_min = CHARGE_MIN
 			_charge = read_charge_sysfs()
+
+
+## steamos-manager's MaxChargeLevel as a percent: 0 and -1 (no limit set, see
+## _detect_charge) are 100, anything else outside 1-100 is unknown (-1). Only used where
+## devices.json says the battery has a limit.
+static func sm_charge(v: int) -> int:
+	if v == 0 or v == -1:
+		return 100
+	return v if v > 0 and v <= 100 else -1
 
 
 ## The battery's charge control: {"mode": "threshold", "path": …charge_control_end_threshold}
@@ -559,14 +584,40 @@ static func charge_control(root := "") -> Dictionary:
 	return {}
 
 
+## The handheld's own fan driver (devices.json "fan", driven by the fan fix) first.
+## steamos-manager's FanControl1 only switches the Steam Deck's jupiter-fan-control
+## service (platform.toml [fan_control]); Bazzite exposes it on every handheld, so on
+## the MSI Claw it answered "firmware" and hid the EC's fan tables. It is used only
+## where devices.json says so (fan_via "steamos-manager") or no driver of our own is there.
 func _detect_fan() -> void:
 	_fan_via = ""
 	_fan_mode = ""
+	_needs_helper["fan"] = false
+	_detect_fan_driver()
+	if _fan_via != "":
+		return
+	var drv := str(device.get("fan", ""))
+	if FAN_DRIVERS.has(drv) and _fan_hwmon_found(drv) != "" and not _helper_present():
+		_needs_helper["fan"] = true
+		return
+	if str(device.get("fan_via", "")) == "fix":
+		return
 	var v: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_FAN_IFACE, "FanControlState")
 	if v != null:
 		_fan_via = "steamos-manager"
 		_fan_mode = "auto" if int(v) == 1 else "firmware"
-		return
+
+
+## hwmon folder of a FAN_DRIVERS driver with a pwm1_enable, "" when none.
+func _fan_hwmon_found(drv: String) -> String:
+	for hw_name in FAN_DRIVERS[drv]["hwmon"]:
+		var h := DeviceScript.find_hwmon(hw_name, sys_root)
+		if h != "" and FileAccess.file_exists(h + "pwm1_enable"):
+			return h
+	return ""
+
+
+func _detect_fan_driver() -> void:
 	_fan_driver = ""
 	_fan_hwmon = ""
 	_fan_hwmon_name = ""
@@ -602,6 +653,7 @@ func state() -> Dictionary:
 		"charge_limit": _charge if _charge_via != "" else -1,
 		"fan_mode": _fan_mode,
 		"fan_modes": fan_modes(),
+		"needs_helper": _needs_helper.duplicate(),
 		"plugged": plugged,
 		"supported": {
 			"tdp": tdp_ok,
@@ -646,7 +698,7 @@ func refresh(after_resume := false) -> void:
 		_clamp_to_source()
 	if _charge_via == "steamos-manager":
 		var c: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
-		_charge = int(c) if c != null else -1
+		_charge = sm_charge(int(c)) if c != null else -1
 	elif _charge_via == "fix":
 		_charge = read_charge_sysfs()
 	if _fan_via == "fix":
@@ -677,7 +729,13 @@ static func profile_watts(row: Dictionary, profile_name: String, on_charger: boo
 
 
 func set_profile(profile_name: String) -> bool:
-	if backend == "none" or not profile_name in PROFILES:
+	if backend == "none":
+		return false
+	if profile_name == "custom":
+		# back to the user's own watts for this power source (custom_w@<device>)
+		var cw := custom_watts()
+		return cw > 0.0 and set_tdp(cw)
+	if not profile_name in PROFILES:
 		return false
 	var w := profile_watts(device, profile_name, plugged)
 	if not _apply_user_tdp(w):
@@ -701,6 +759,11 @@ func set_tdp(watts: float) -> bool:
 		_remember("custom_w", _source(), w)
 	_emit_changed()
 	return true
+
+
+## The user's own watts for the power source we're on (set by the TDP slider), -1 when none.
+func custom_watts() -> float:
+	return float(_recall("custom_w", _source(), -1.0))
 
 
 func _apply_user_tdp(w: float) -> bool:
@@ -904,7 +967,7 @@ func set_charge_limit(percent: int) -> bool:
 	if _charge_via == "steamos-manager":
 		if user_bus.set_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel", "i", str(percent)):
 			var v: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
-			got = int(v) if v != null else -1
+			got = sm_charge(int(v)) if v != null else -1
 	else:
 		if _run_fix("charge-limit", str(percent)):
 			got = read_charge_sysfs()
@@ -929,6 +992,8 @@ func read_charge_sysfs() -> int:
 	if not raw.is_valid_int():
 		return -1
 	var v := raw.to_int()
+	if v < 0 or v > 100:
+		return -1   # not a percent: show nothing rather than a wrong limit
 	return 100 if v == 0 else v
 
 

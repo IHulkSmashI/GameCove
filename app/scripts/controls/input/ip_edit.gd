@@ -132,12 +132,22 @@ static func _target_event(target: String) -> Dictionary:
 
 
 ## New profile with `button` sending `target` ("" = itself, "disabled" = nothing).
-static func set_button(profile: Dictionary, button: String, target: String) -> Dictionary:
+## `stock`: the device's stock profile (InputPlumber's default.yaml). Picking what the stock
+## profile does for this button puts its own mapping(s) back instead of adding a GameCove
+## one (the Ally's QuickAccess2 -> Screenshot is stock: a put-back must not leave a
+## "GameCove QuickAccess2" override behind).
+static func set_button(profile: Dictionary, button: String, target: String, stock: Dictionary = {}) -> Dictionary:
 	var p := Profile.normalize(profile)
 	var kept: Array = []
 	for m in p["mapping"]:
 		if not (m is Dictionary and Profile.button_of(m.get("source_event")) == button and not _named(m, "GameCove Nintendo")):
 			kept.append(m)
+	if not stock.is_empty() and button_target(stock, button) == target:
+		for m in _mapping_list(stock):
+			if m is Dictionary and Profile.button_of(m.get("source_event")) == button and not _named(m, "GameCove"):
+				kept.append((m as Dictionary).duplicate(true))
+		p["mapping"] = kept
+		return p
 	if target == "disabled":
 		kept.append({"name": "GameCove " + button, "source_event": {"gamepad": {"button": button}}, "target_events": []})
 	elif target != "" and target != button:

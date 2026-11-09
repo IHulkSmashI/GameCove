@@ -101,6 +101,56 @@ func test_output_and_mic() -> void:
 	eq(c["audio.input"].value, "Digital Microphone", "mic choice")
 
 
+## The fake system plus pipewire-pulse's `pactl -f json list sinks|sources`.
+class WithPactl extends RefCounted:
+	var inner: RefCounted
+	var json := {}   # "sinks"/"sources" -> JSON text
+
+	func run(program: String, args: PackedStringArray) -> Dictionary:
+		if program == "pactl":
+			inner.calls.append("pactl " + " ".join(args))
+			return {"code": 0, "out": json.get(args[3], "[]")} if json.has(args[3]) else {"code": 1, "out": ""}
+		return inner.run(program, args)
+
+
+## The Claw 8 EX (Bazzite 45): UCM gives every jack its own node; nothing was plugged in.
+func test_claw_unplugged_jacks_are_not_offered() -> void:
+	var s := Env.make("jacks", "msi-claw-8-ex")
+	var spk := "Core Ultra Processors (Series 3) HD Audio Speaker"
+	var hp := "Core Ultra Processors (Series 3) HD Audio Headphones"
+	var mic := "Core Ultra Processors (Series 3) HD Audio SoundWire microphones"
+	var hs := "Core Ultra Processors (Series 3) HD Audio Headset Microphone"
+	s.fake.sinks = [{"id": 60, "name": spk, "volume": 0.5, "muted": false}, {"id": 61, "name": hp, "volume": 0.5, "muted": false}]
+	s.fake.sources = [{"id": 70, "name": mic, "volume": 1.0, "muted": false}, {"id": 71, "name": hs, "volume": 1.0, "muted": false}]
+	s.fake.default_sink = 60
+	s.fake.default_source = 70
+	var w := WithPactl.new()
+	w.inner = s.fake
+	w.json = {
+		"sinks": JSON.stringify([
+			{"name": "alsa_output.speaker", "description": spk, "active_port": "[Out] Speaker",
+				"ports": [{"name": "[Out] Speaker", "availability": "availability unknown"}]},
+			{"name": "alsa_output.headphones", "description": hp, "active_port": "[Out] Headphones",
+				"ports": [{"name": "[Out] Headphones", "availability": "not available"}]}]),
+		"sources": JSON.stringify([
+			{"name": "alsa_input.dmic", "description": mic, "active_port": "[In] Mic1",
+				"ports": [{"name": "[In] Mic1", "availability": "availability unknown"}]},
+			{"name": "alsa_input.headset", "description": hs, "active_port": "[In] Mic2",
+				"ports": [{"name": "[In] Mic2", "availability": "not available"}]},
+			{"name": "alsa_output.speaker.monitor", "description": "Monitor of " + spk, "ports": []}])}
+	s.ctx["runner"] = w
+	var c := _audio(s)
+	eq(c["audio.output"].options.map(func(x): return x["value"]), [spk], "headphones jack empty: not offered")
+	eq(c["audio.input"].options.map(func(x): return x["value"]), [mic], "headset mic jack empty: not offered")
+	ok(not c["audio.output"].write(hp), "an empty jack is refused")
+	ok(not s.fake.calls.has("wpctl set-default 61"), "nothing switched")
+	# plugged in: offered
+	w.json["sinks"] = w.json["sinks"].replace("not available", "available")
+	c = _audio(s)
+	eq(c["audio.output"].options.size(), 2, "headphones offered once plugged in")
+	ok(c["audio.output"].write(hp), "and selectable")
+
+
 func test_audio_reasons() -> void:
 	var s := Env.make("noaudio", "steam-deck-oled")
 	s.fake.wpctl_ok = false

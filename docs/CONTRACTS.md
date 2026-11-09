@@ -316,7 +316,8 @@ Grouped for an "About this device" panel. Cheap: reads files under `/sys`, `/pro
   "charge_limit": 80,             # percent, -1 if unknown
   "fan_mode": "auto", "fan_modes": ["quiet", "auto", "max"],
   "plugged": false,               # on the charger
-  "supported": {"tdp": true, "profiles": true, "charge_limit": true, "fan": false}
+  "supported": {"tdp": true, "profiles": true, "charge_limit": true, "fan": false},
+  "needs_helper": {"charge_limit": false, "fan": true}   # the hardware has it, only the root helper (not installed) can write it
 }
 ```
 

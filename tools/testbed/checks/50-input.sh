@@ -16,7 +16,12 @@ if "$GC_BUSCTL" --system --list tree "$IP" >"$CHECK_OUT/tree.txt" 2>/dev/null; t
 		caps="$(get "$dev" org.shadowblip.Input.CompositeDevice Capabilities)"
 		printf '%s\nname=%s\nprofile=%s\nintercept=%s\ntargets=%s\ncaps=%s\n\n' "$dev" "$name" "$prof" "$mode" "$targets" "$caps" >>"$CHECK_OUT/devices.txt"
 		info "device$n" "$name, profile $prof, intercept $mode"
-		case "$caps" in *Gyro*) info "device$n.gyro" "gyro capability present" ;; esac
+		# the same rule as controller.gyro: Gyroscope:<source> can be switched by a profile;
+		# older InputPlumber's legacy Gamepad:Gyro passes the IMU but can't be switched off
+		case "$caps" in
+			*'"Gyroscope:'*) info "device$n.gyro" "gyro capability present (Gyroscope:*, GameCove can switch it)" ;;
+			*'"Gamepad:Gyro"'*) info "device$n.gyro" "legacy Gamepad:Gyro only: the gyro reaches games, GameCove can't switch it off on this InputPlumber" ;;
+		esac
 		case "$caps" in *Paddle*) info "device$n.paddles" "back buttons present" ;; esac
 		case "$caps" in *Touchpad* | *touchpad*) info "device$n.touchpad" "touchpad present" ;; esac
 		for t in $(printf '%s' "$targets" | grep -o '/org/shadowblip/InputPlumber/devices/target/[a-z0-9_]*'); do

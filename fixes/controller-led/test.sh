@@ -52,6 +52,14 @@ for bad in "all,FF0000,50" "all,ff00,50" "all,ff0000,101" "x,ff0000,50" "all,ff0
 done
 
 # ---- Legion Go ring (hid-lenovo-go): profile, mode, enabled, effects, 0-100 channels
+# ---- ROG Ally on SteamOS 3.10: hid-asus-ally packs each zone as 0xRRGGBB ("rgb rgb rgb rgb")
+R="$T/ally-packed"
+node "$R" ally:rgb:joystick_rings "rgb rgb rgb rgb" "0 0 0 0" 255 128
+run set all,102030,100 >/dev/null || fail "set packed ally"
+P="$R/sys/class/leds/ally:rgb:joystick_rings"
+[ "$(cat "$P/multi_intensity")" = "1056816 1056816 1056816 1056816" ] || fail "packed zones ($(cat "$P/multi_intensity"))"
+run status | grep -qx 'led0_rgb=102030' || fail "packed status colour"
+
 R="$T/legion"
 node "$R" go:rgb:joystick_rings "red green blue" "100 100 100" 100 50 multi_max_intensity="100 100 100" \
 	effect=monocolor effect_index="monocolor breathe chroma rainbow" enabled=false enabled_index="true false" \

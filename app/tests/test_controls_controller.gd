@@ -108,7 +108,7 @@ func test_claw_controls_and_reasons() -> void:
 	eq(_reason(reg, "controller.gyro_source"), "This handheld has one gyro")
 	eq(_reason(reg, "controller.gyro_aim"), Provider.R_GYRO_AIM)
 	eq(_reason(reg, "controller.trackpad"), Provider.R_NO_PAD)
-	eq(_reason(reg, "controller.rumble_strength"), "InputPlumber can only turn rumble on or off")
+	eq(_reason(reg, "controller.rumble_strength"), "Needs a kernel whose hid-msi driver has rumble strength")
 	eq(_reason(reg, "controller.deadzone_left_stick"), Provider.R_DEADZONE_IP)
 	eq(_reason(reg, "controller.paddles_as"), "With InputPlumber each back button is set on its own")
 	eq(_reason(reg, "controller.led_effect"), Provider.R_RGB_BACKEND, "Claw has RGB but no driver here")
@@ -214,6 +214,89 @@ func test_claw_nintendo_desktop_emulation_reset() -> void:
 	reg.free()
 
 
+## The live Claw: OpenGamepadUI had set TargetDevices deck-uhid ("Valve Steam Deck
+## Controller") + mouse + keyboard with SetTargetDevices; the device config's own targets
+## are xbox-elite, mouse, keyboard. GameCove read "default", and a probe's put-back to
+## "default" replaced the user's Steam Deck controller with an Xbox Elite pad.
+func test_claw_live_emulation_reads_and_restores_the_live_targets() -> void:
+	var f: RefCounted = Fakes.new(_root("claw_live_emulation"))
+	f.with_ip("MSI Claw 8 EX", CLAW_CAPS)
+	Fakes.write(f.sys_root + "/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml",
+		"version: 1\nkind: CompositeDevice\nname: MSI Claw 8 EX\ntarget_devices:\n  - xbox-elite\n  - mouse\n  - keyboard\n")
+	var live := {"targets": ["deck-uhid", "mouse", "keyboard"]}
+	var names := {"deck-uhid": "Valve Steam Deck Controller", "xbox-elite": "Microsoft X-Box One Elite pad",
+		"xbox-series": "Microsoft Xbox Series S|X Controller", "mouse": "InputPlumber Mouse", "keyboard": "InputPlumber Keyboard"}
+	var inner: Callable = f.runner.handler
+	f.runner.handler = func(cmd: String) -> Variant:
+		var r: Variant = inner.call(cmd)
+		if cmd.ends_with("org.freedesktop.DBus.ObjectManager GetManagedObjects") and r is Dictionary:
+			var j: Dictionary = JSON.parse_string(r["out"])
+			var objs: Dictionary = j["data"][0]
+			var paths := []
+			for i in live["targets"].size():
+				var tp := "/org/shadowblip/InputPlumber/devices/target/%s%d" % [live["targets"][i], i]
+				paths.append(tp)
+				objs[tp] = {"org.shadowblip.Input.Target": {"Name": {"type": "s", "data": names.get(live["targets"][i], "")},
+					"DeviceType": {"type": "s", "data": live["targets"][i]}}}
+			objs[Fakes.DEV][Fakes.DEV_IFACE]["TargetDevices"] = {"type": "as", "data": paths}
+			return {"code": 0, "out": JSON.stringify(j)}
+		if cmd.contains(" LoadProfileFromYaml s ") and r is Dictionary and int(r["code"]) == 0:
+			var p: Variant = JSON.parse_string(cmd.get_slice(" LoadProfileFromYaml s ", 1))
+			if p is Dictionary and p.get("target_devices") is Array:
+				live["targets"] = (p["target_devices"] as Array).duplicate()
+		return r
+	var reg := _setup(f, _row("msi-claw-8-ex"))
+	eq(_value(reg, "controller.emulation"), "deck", "deck-uhid is the Steam Deck choice, not default")
+	ok(_w(reg, "controller.emulation", "xbox-series"), "probe: Xbox Series")
+	eq(live["targets"], ["xbox-series", "mouse", "keyboard"])
+	ok(_w(reg, "controller.emulation", "deck"), "put back")
+	eq(live["targets"], ["deck-uhid", "mouse", "keyboard"], "the exact list that was there")
+	eq(_value(reg, "controller.emulation"), "deck")
+	ok(_w(reg, "controller.emulation", "default"), "default")
+	eq(live["targets"], ["xbox-elite", "mouse", "keyboard"], "the device config's own")
+	eq(_value(reg, "controller.emulation"), "default", "default only when equal to the config's targets")
+	reg.free()
+
+
+## The ROG Ally on InputPlumber 0.78: TargetDevices only through get-property (not in
+## GetManagedObjects), gamepad1 = deck-uhid; the profile "Default" names no targets.
+func test_ally_emulation_reads_targets_by_property() -> void:
+	var f: RefCounted = Fakes.new(_root("ally_emulation"))
+	f.with_ip("ASUS ROG Ally", ["Gamepad:Button:South"])
+	Fakes.write(f.sys_root + "/usr/share/inputplumber/devices/50-rog_ally.yaml",
+		"version: 1\nkind: CompositeDevice\nname: ASUS ROG Ally\ntarget_devices:\n  - xbox-elite\n  - mouse\n  - keyboard\n")
+	var inner: Callable = f.runner.handler
+	var t := "/org/shadowblip/InputPlumber/devices/target/gamepad1"
+	f.runner.handler = func(cmd: String) -> Variant:
+		if cmd == "busctl --system get-property %s %s %s TargetDevices" % [Fakes.SVC, Fakes.DEV, Fakes.DEV_IFACE]:
+			return {"code": 0, "out": JSON.stringify({"type": "as", "data": [t, t.replace("gamepad1", "mouse0")]})}
+		if cmd == "busctl --system get-property %s %s org.shadowblip.Input.Target DeviceType" % [Fakes.SVC, t]:
+			return {"code": 0, "out": JSON.stringify({"type": "s", "data": "deck-uhid"})}
+		if cmd == "busctl --system get-property %s %s org.shadowblip.Input.Target DeviceType" % [Fakes.SVC, t.replace("gamepad1", "mouse0")]:
+			return {"code": 0, "out": JSON.stringify({"type": "s", "data": "mouse"})}
+		return inner.call(cmd)
+	var reg := _setup(f, _row("asus-rog-ally"))
+	eq(_value(reg, "controller.emulation"), "deck", "deck-uhid on the Ally reads as Steam Deck")
+	reg.free()
+
+
+## The controls probe puts InputPlumber's profile back byte for byte, not rebuilt by edits.
+func test_probe_snapshot_restores_the_exact_profile() -> void:
+	var t := _claw("claw_probe_snapshot")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	var prov: Object = _c(reg, "controller.paddle.LeftPaddle1").get_meta("provider")
+	var before := JSON.stringify(f.profile)
+	var snap: Dictionary = prov.probe_snapshot()
+	ok(snap.has("ip_yaml"), "snapshot taken")
+	ok(_w(reg, "controller.paddle.LeftPaddle1", "disabled"), "probe write")
+	ok(_w(reg, "controller.paddle.LeftPaddle1", ""), "probe put-back by edit")
+	ok(prov.probe_restore(snap), "restore")
+	eq(f.loads[-1], snap["ip_yaml"], "InputPlumber got back the very text it handed out")
+	eq(f.profile, JSON.parse_string(before), "the profile it had")
+	reg.free()
+
+
 func test_claw_rumble() -> void:
 	var t := _claw("claw_rumble")
 	var reg: Node = t[0]
@@ -245,6 +328,86 @@ func test_claw_gyro_fix_states() -> void:
 	reg = _setup(f, _row("asus-rog-ally"))
 	eq(_reason(reg, "controller.gyro_accel"), "Only on the MSI Claw 8 EX")
 	reg.free()
+
+
+# ---- MSI Claw 8 EX, hid-msi LED node as read live (Bazzite 45, kernel 7.2.15-ogc1.1) -------
+
+const LIVE_LEDS := preload("res://scripts/controls/input/leds.gd")
+
+
+## The node exactly as the Claw showed it: go:rgb:joystick_rings (OGC renames hid-msi's
+## msi_claw: node), lights disabled, effect/multi_intensity/brightness 0666 (no root),
+## enabled and speed 0644 root.
+func _claw_live(test_name: String) -> Array:
+	var f: RefCounted = Fakes.new(_root(test_name))
+	f.with_ip("MSI Claw 8 EX", CLAW_CAPS)
+	var d: String = f.led("go:rgb:joystick_rings", "red green blue", "1 90 100", 100, 21, {
+		"multi_max_intensity": "100 100 100", "effect": "monocolor",
+		"effect_index": "monocolor breathe chroma rainbow frostfire", "enabled": "false",
+		"enabled_index": "true false", "speed": "10", "speed_range": "0-20", "trigger": "[none]"})
+	for a in ["effect", "multi_intensity", "brightness"]:
+		FileAccess.set_unix_permissions(d + "/" + a, 438)   # 0666
+	for a in ["enabled", "speed"]:
+		FileAccess.set_unix_permissions(d + "/" + a, 420)   # 0644
+	return [_setup(f, _row("msi-claw-8-ex")), f]
+
+
+func test_claw_live_hid_msi_leds() -> void:
+	var t := _claw_live("claw_live_led")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	var n := "/sys/class/leds/go:rgb:joystick_rings"
+	for id in ["controller.led_effect", "controller.led_color", "controller.led_brightness", "controller.led_speed"]:
+		ok(_avail(reg, id), id + " available (" + _reason(reg, id) + ")")
+	eq(_reason(reg, "controller.led_color_2"), "This handheld's lights have one zone")
+	eq(_opt_values(reg, "controller.led_effect"), ["off", "solid", "pulse", "rainbow", "spiral", "frostfire"])
+	eq(_value(reg, "controller.led_effect"), "off", "enabled=false is dark")
+	eq(_value(reg, "controller.led_speed"), 50.0, "10 of 0-20")
+	# turning on needs enabled=true (root only): the root action does it
+	ok(_w(reg, "controller.led_color", "#ff0000"), "red")
+	eq(f.pkexec_calls.size(), 1, "enabled is root-only: one root action")
+	eq(f.read(n + "/enabled"), "true")
+	eq(f.read(n + "/multi_intensity"), "100 0 0")
+	# lit now: colour, brightness, effect and off need no root
+	ok(_w(reg, "controller.led_brightness", 40.0), "brightness")
+	eq(f.read(n + "/brightness"), "40")
+	ok(_w(reg, "controller.led_color", "#00ff00"), "green")
+	eq(f.read(n + "/multi_intensity"), "0 100 0")
+	ok(_w(reg, "controller.led_effect", "pulse"), "pulse")
+	eq(f.read(n + "/effect"), "breathe")
+	ok(_w(reg, "controller.led_effect", "off"), "off")
+	eq(f.read(n + "/brightness"), "0", "dark by brightness")
+	eq(f.read(n + "/enabled"), "true", "root-only enabled left alone")
+	eq(_value(reg, "controller.led_effect"), "off")
+	eq(f.pkexec_calls.size(), 1, "every change after the first went direct: %s" % [f.pkexec_calls])
+	# speed is root-only
+	ok(_w(reg, "controller.led_brightness", 60.0), "on again, direct")
+	ok(_w(reg, "controller.led_effect", "rainbow"), "rainbow")
+	ok(_w(reg, "controller.led_speed", 100.0), "speed through the root action")
+	eq(f.read(n + "/speed"), "20")
+	eq(f.pkexec_calls.size(), 2)
+	reg.free()
+
+
+## Real sysfs files report a size of 4096 and /proc files 0: get_file_as_string()
+## returns "" for both, which hid the Claw's LED node. Two of the node's files are
+## links to a real /proc file here, so the regular-file fixture reads like the device.
+func test_led_node_reads_files_with_a_fake_size() -> void:
+	var src := "/proc/sys/kernel/pid_max"
+	if not FileAccess.file_exists(src):
+		ok(true, "no /proc here")
+		return
+	var f: RefCounted = Fakes.new(_root("led_fake_size"))
+	var d: String = f.led("go:rgb:joystick_rings", "red green blue", "1 90 100", 100, 21)
+	for a in ["max_brightness", "brightness"]:
+		DirAccess.remove_absolute(d + "/" + a)
+		eq(DirAccess.open(d).create_link(src, d + "/" + a), OK, "link " + a)
+	var want := int(LIVE_LEDS._read(src))
+	var nodes: Array = LIVE_LEDS.scan(f.sys_root)
+	eq(nodes.size(), 1, "the node is found")
+	if nodes.size() == 1:
+		eq(int(nodes[0]["max"]), want, "max_brightness read to its real end")
+	ok(want > 0, "pid_max read: %d" % want)
 
 
 # ---- Legion Go on InputPlumber with kernel LEDs ----------------------------------------------
@@ -352,6 +515,42 @@ func test_zotac_two_zones() -> void:
 	eq(_opt_values(reg, "controller.trackpad"), ["default", "off"], "two pads: on or off")
 	ok(_w(reg, "controller.trackpad", "off"), "both pads off")
 	eq((f.profile["mapping"] as Array).size(), 6)
+	reg.free()
+
+
+## The original ROG Ally on SteamOS 3.10 (kernel 7.2.4-valve1-1-neptune): hid-asus-ally's
+## node lists "rgb rgb rgb rgb" (one packed 0xRRGGBB per zone), brightness 128/255,
+## sleep_animation, and is 0644 root: writes go through the root action.
+func test_ally_live_packed_rgb_zones() -> void:
+	var f: RefCounted = Fakes.new(_root("ally_live_led"))
+	f.with_ip("ASUS ROG Ally", ["Gamepad:Button:South"])
+	var n := "/sys/class/leds/ally:rgb:joystick_rings"
+	f.led("ally:rgb:joystick_rings", "rgb rgb rgb rgb", "16744448 16744448 16744448 16744448", 255, 128,
+		{"sleep_animation": "0", "sleep_animation_index": "0 1"})
+	var reg := _setup(f, _row("asus-rog-ally"))
+	ok(_avail(reg, "controller.led_color"), "colour (" + _reason(reg, "controller.led_color") + ")")
+	eq(_value(reg, "controller.led_color"), "#ff8000", "packed 0xff8000")
+	eq(_value(reg, "controller.led_brightness"), 50.0, "128 of 255")
+	ok(_w(reg, "controller.led_color", "#102030"), "colour")
+	eq(f.read(n + "/multi_intensity"), "1056816 1056816 1056816 1056816", "every zone gets 0x102030")
+	eq(f.pkexec_calls.size(), 1, "0644 root: the root action")
+	eq(f.read(n + "/sleep_animation"), "0", "never touched")
+	reg.free()
+	var g: RefCounted = Fakes.new(_root("ally_live_led_nohelper"), false)
+	g.with_ip("ASUS ROG Ally", ["Gamepad:Button:South"])
+	g.led("ally:rgb:joystick_rings", "rgb rgb rgb rgb", "0 0 0 0", 255, 128)
+	var reg2 := _setup(g, _row("asus-rog-ally"))
+	eq(_reason(reg2, "controller.led_color"), Provider.R_LED_HELPER, "root-only node without the helper says so")
+	reg2.free()
+
+
+## InputPlumber 0.78 (SteamOS 3.10, the Ally) lists the IMU as legacy Gamepad:Gyro: the
+## gyro works but a profile can't switch it off there. Say that, not "no gyro".
+func test_ally_legacy_gamepad_gyro() -> void:
+	var f: RefCounted = Fakes.new(_root("ally_legacy_gyro"))
+	f.with_ip("ASUS ROG Ally", ["Gamepad:Button:South", "Gamepad:Gyro", "Gamepad:Accelerometer"])
+	var reg := _setup(f, _row("asus-rog-ally"))
+	eq(_reason(reg, "controller.gyro"), Provider.R_GYRO_OLD_IP % "0.82.0", "the gyro is there, only not switchable")
 	reg.free()
 
 
