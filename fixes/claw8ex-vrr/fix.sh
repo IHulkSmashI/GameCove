@@ -16,8 +16,13 @@
 #   /etc/gamecove/claw8ex-vrr/edid-hook.sh            the board check (shell built-ins only)
 #   /etc/modprobe.d/gamecove-claw8ex-vrr.conf         install xe / i915 = hook, then the real modprobe
 #   rpm-ostree initramfs-etc --track (all four)        so it also works when the driver loads in the initramfs
-# Takes effect at the next restart; remove undoes everything (also at the next restart), and the previous
-# boot entry always starts without it. Older installs used kernel arguments (drm.edid_firmware=...,
+#   kernel argument gamecove.vrr=1                    the switch: the hook acts only when it is there
+# Takes effect at the next restart; remove undoes everything (also at the next restart). The files are
+# written to the live /etc, so the previous boot entry has them too; it still starts with the panel's own
+# EDID because its command line has no gamecove.vrr=1 (the marker does nothing by itself, so it is safe
+# on other handhelds booting this drive). Kill switch at the boot menu: add gamecove.novrr (or delete
+# gamecove.vrr=1) for that boot; `remove` then undoes it for good (review S1-5).
+# Older installs used kernel arguments (drm.edid_firmware=...,
 # firmware_class.path=...); install, and status run as root, move them to the hook. Ported from
 # ClawDeck's edid.py. See fixes/README.md.
 set -eu
@@ -36,7 +41,17 @@ HOOK=$CONF_DIR/edid-hook.sh
 HOOK_CONF=$CONF_DIR/edid.conf
 MODPROBE_CONF=/etc/modprobe.d/gamecove-claw8ex-vrr.conf
 DRM_PARAM=/sys/module/drm/parameters/edid_firmware
+VRR_KARG=gamecove.vrr=1
 m_init "$NAME"
+
+# The boot entry switch (kept in the manifest as "marker", so migrate never takes it for an old karg).
+ensure_marker() {
+	m_has marker "$VRR_KARG" && return 0
+	karg_hold "$VRR_KARG" "$NAME" || return 1
+	m_add marker "$VRR_KARG"
+}
+
+kill_switch() { karg_in gamecove.novrr "$(cmdline)"; }
 
 # edid_q <edid file> -v mode=... : run edid.awk on the file's bytes.
 edid_q() { f=$1; shift; od -An -v -tu1 "$f" | awk -f "$HERE/edid.awk" "$@"; }
@@ -169,7 +184,10 @@ install() {
 	lock
 	if m_installed; then
 		migrate || die "could not move the old kernel arguments to the boot hook; see the messages above"
-		m_installed && say "already installed"
+		if m_installed; then
+			ensure_marker || die "could not add the gamecove.vrr=1 kernel argument"
+			say "already installed"
+		fi
 		return 0
 	fi
 	claw_board || die "this fix is only for the MSI Claw (boards MS-1T*); this board is '$(board_name)'"
@@ -217,8 +235,10 @@ install() {
 	fi
 	m_add initramfs "$dest"
 	put_hook "$(board_name)" "$name" || { m_undo || true; die "could not set up the boot hook"; }
+	ensure_marker || { m_undo || true; die "could not add the gamecove.vrr=1 kernel argument"; }
 	say "installed for panel $key on board $(board_name): restart the Claw to get 30-120 Hz VRR"
 	say "other handhelds booting this drive are not affected"
+	say "if the screen is wrong after the restart: pick the previous boot entry, or add gamecove.novrr at the boot menu (e), then remove this fix"
 }
 
 remove() {
@@ -233,9 +253,10 @@ remove() {
 }
 
 status() {
-	if m_installed && [ -n "$(old_kargs)" ] && is_root; then
+	if m_installed && is_root && { [ -n "$(old_kargs)" ] || ! m_has marker "$VRR_KARG"; }; then
 		lock
 		migrate >&2 || true
+		! m_installed || ensure_marker >&2 || true
 	fi
 	old=no
 	[ -n "$(old_kargs)" ] && old=yes
@@ -264,6 +285,8 @@ status() {
 	say "installed=$installed"
 	say "pending=$pending"
 	say "old_kernel_args=$old"
+	say "boot_switch=$(m_has marker "$VRR_KARG" && echo yes || echo no)"
+	say "kill_switch=$(kill_switch && echo on || echo off)"
 	if theirs "$booted"; then
 		say "state=other-override"
 	elif [ "$installed" = yes ] && [ "$range" = "$LO $HI" ] && [ -n "$booted" ]; then

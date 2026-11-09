@@ -40,7 +40,16 @@ ok '[ "$(od -An -v -tu1 "$E" | awk -f "$FIXES/claw8ex-vrr/edid.awk" -v mode=rang
 ok 'od -An -v -tu1 "$E" | awk -f "$FIXES/claw8ex-vrr/edid.awk" -v mode=check' "factory checksums valid"
 
 # What modprobe does right before the GPU driver loads: run the hook (as installed in the fake root).
-boot_hook() { GAMECOVE_ROOT=$R sh "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh"; }
+# The next boot uses the deployment's kernel arguments (the fake rpm-ostree's list).
+boot_hook() {
+	printf 'BOOT_IMAGE=/vmlinuz %s\n' "$(tr '\n' ' ' <"$FAKE/kargs")" >"$R/proc/cmdline"
+	GAMECOVE_ROOT=$R sh "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh"
+}
+# A boot whose command line is given (the previous boot entry, or one edited at the boot menu).
+boot_hook_with() {
+	printf '%s\n' "$1" >"$R/proc/cmdline"
+	GAMECOVE_ROOT=$R sh "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh"
+}
 drm_param() { tr -d '\n' <"$R/sys/module/drm/parameters/edid_firmware"; }
 fw_param() { tr -d '\n' <"$R/sys/module/firmware_class/parameters/path"; }
 
@@ -111,6 +120,37 @@ rm "$R$EDID_FILE"
 boot_hook
 ok '[ -z "$(drm_param)" ]' "EDID file missing: hook does nothing"
 ok 'boot_hook' "hook always exits 0"
+
+# review S1-5: the previous boot entry is clean, and there is a kill switch at the boot menu
+case_start rollback_and_kill_switch
+vrr_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+ok 'grep -qx "gamecove.vrr=1" "$FAKE/kargs"' "install adds the gamecove.vrr=1 switch to the new boot entry"
+ok 'fix claw8ex-vrr status | grep -qx boot_switch=yes' "status: boot switch set"
+boot_hook_with "BOOT_IMAGE=/vmlinuz root=UUID=x quiet splash"
+ok '[ -z "$(drm_param)" ]' "previous boot entry (no gamecove.vrr=1): panel's own EDID, even with the hook in /etc"
+boot_hook_with "BOOT_IMAGE=/vmlinuz root=UUID=x gamecove.vrr=1 gamecove.novrr"
+ok '[ -z "$(drm_param)" ]' "gamecove.novrr at the boot menu: off for that boot"
+ok 'fix claw8ex-vrr status | grep -qx kill_switch=on' "status: kill switch on"
+boot_hook_with "BOOT_IMAGE=/vmlinuz gamecove.novrr=1 gamecove.vrr=1"
+ok '[ -z "$(drm_param)" ]' "gamecove.novrr=<anything> works too"
+boot_hook_with "BOOT_IMAGE=/vmlinuz root=UUID=x gamecove.vrr=1"
+ok '[ "$(drm_param)" = "eDP-1:edid/gamecove-csw0801-30-120.bin" ]' "with the switch: applied"
+fix claw8ex-vrr remove >/dev/null
+ok '! grep -qx "gamecove.vrr=1" "$FAKE/kargs"' "remove takes the switch out"
+# an install from before the switch gets it on the next install / root status, never treated as an old karg
+fix claw8ex-vrr install >/dev/null 2>&1
+M=$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest
+grep -v "^marker " "$M" >"$M.tmp"
+mv "$M.tmp" "$M"
+grep -vx "gamecove.vrr=1" "$FAKE/kargs" >"$FAKE/k.tmp"
+mv "$FAKE/k.tmp" "$FAKE/kargs"
+rm -rf "$R/var/lib/gamecove/kargs/gamecove_vrr_1"
+fix claw8ex-vrr status >/dev/null 2>&1
+ok 'grep -qx "gamecove.vrr=1" "$FAKE/kargs" && grep -qx "marker gamecove.vrr=1" "$M"' "root status adds the switch to an older install"
+fix claw8ex-vrr status >/dev/null 2>&1
+ok '[ "$(karg_count gamecove.vrr=1)" = 1 ]' "only once"
+fix claw8ex-vrr remove >/dev/null
 
 case_start refuses_other_modprobe_rule
 vrr_ready

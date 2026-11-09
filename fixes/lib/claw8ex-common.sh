@@ -123,7 +123,7 @@ m_undo() {
 			systemctl disable --now "$arg" >/dev/null 2>&1 || warn "could not stop $arg"
 			units=1
 			;;
-		karg) karg_release "$arg" "$FIX" || { done_ok=0; boot_kept=1; } ;;
+		karg | marker) karg_release "$arg" "$FIX" || { done_ok=0; boot_kept=1; } ;;
 		initramfs) rpm-ostree initramfs-etc --untrack="$arg" >/dev/null || { done_ok=0; boot_kept=1; } ;;
 		ipflag) ip_flag_off "$arg" || done_ok=0 ;;
 		*) warn "unknown manifest line: $kind $arg" ;;

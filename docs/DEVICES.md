@@ -368,7 +368,7 @@ Each handheld keeps its own Secure Boot keys in its own firmware, not on the dri
 
 | What | How it's kept apart |
 | --- | --- |
-| Claw VRR fix (`claw8ex-vrr`) | No kernel argument. A modprobe hook gives the Intel GPU driver the patched EDID only when `board_name` is the board it was installed on. The Ally and Legion Go S use AMD's driver, so the hook never even runs there. Older installs (kernel arguments) are moved over by `install` or a root `status`; seen from another handheld, the old install is removed. |
+| Claw VRR fix (`claw8ex-vrr`) | No global kernel argument (only the inert switch `gamecove.vrr=1`, which makes the previous boot entry clean and can be removed at the boot menu; `gamecove.novrr` is the kill switch). A modprobe hook gives the Intel GPU driver the patched EDID only when `board_name` is the board it was installed on. The Ally and Legion Go S use AMD's driver, so the hook never even runs there. Older installs (kernel arguments) are moved over by `install` or a root `status`; seen from another handheld, the old install is removed. |
 | Claw gyro fix (`claw8ex-gyro`) | Its two services have `ExecCondition` on board MS-1T91 and are skipped elsewhere. The firmware search path (`firmware_class.path=/etc/firmware`) and the HID-BPF program (matched to the Claw's sensor hub id) do nothing on other hardware. |
 | Claw buttons fix (`claw8ex-buttons`) | InputPlumber override with the stock `dmi_data: board_name: MS-1T91` match, so InputPlumber only uses it on the Claw. |
 | Fan and charge-limit fixes | Only act on handhelds in `fixes/lib/handhelds.txt`. What they saved (the values `remove` writes back) is kept per handheld (`/var/lib/gamecove/fixes/<fix>/device`, others parked in `devices/<id>/`). |
