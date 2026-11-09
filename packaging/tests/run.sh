@@ -611,7 +611,7 @@ if [ "$(grep -c "<allow_active>yes</allow_active>" "$POL")" -eq 1 ]; then ok; el
 
 # ------------------------------------------------------------------ RPM spec
 SPEC="$REPO/packaging/rpm/gamecove.spec"
-contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-2.0-only AND GPL-2.0-or-later$" "spec License tag"
+contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later$" "spec License tag"
 contains "$SPEC" "packaging/libexec/gamecove-fix-set" "spec installs the set entry point"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-fix-set$" "spec lists the set entry point"
 contains "$SPEC" "build-bpf.sh" "spec builds the gyro program"
