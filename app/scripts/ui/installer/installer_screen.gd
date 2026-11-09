@@ -41,7 +41,7 @@ const Login := preload("res://scripts/system/store_login.gd")
 
 signal closed
 
-## {"setup", "library", "discover", "launcher", "device", "power_cfg", "ui_prefs"}
+## {"setup", "library", "discover", "launcher", "device", "power_cfg", "ui_prefs", "photo"}
 var services := {}
 var target := {}
 var plan: RefCounted
@@ -139,6 +139,18 @@ func configure(svc: Dictionary, t: Dictionary, p: RefCounted, inst: Node) -> voi
 	if st != null and st.has_signal("changed"):
 		st.changed.connect(func(_s): _refresh_stores_later())
 	_build()
+	prefetch_photo()
+
+
+## The installer is online anyway: fetch this handheld's real photo into the
+## cache now (DevicePhoto.prefetch), so it shows the first time Game Mode opens
+## GameCove, even offline. Nothing when the photo settings are off.
+func prefetch_photo() -> bool:
+	var ph: Object = services.get("photo")
+	var id := str(_device_row().get("id", ""))
+	if ph == null or not ph.has_method("prefetch") or id == "" or id == "unknown":
+		return false
+	return bool(ph.prefetch(id))
 
 
 ## Big windows get more room, not just bigger pixels: the same density rule
@@ -180,7 +192,8 @@ func _ready() -> void:
 	inst.name = "InstallerService"
 	inst.setup(inst.runner, paths, t)
 	configure({"setup": _svc("Setup"), "library": _svc("Library"), "discover": _svc("Discover"),
-		"launcher": _svc("Launcher"), "device": dev, "power_cfg": "user://power.cfg", "ui_prefs": true}, t, p, inst)
+		"launcher": _svc("Launcher"), "device": dev, "power_cfg": "user://power.cfg", "ui_prefs": true,
+		"photo": _svc("DevicePhoto")}, t, p, inst)
 	focus_first()
 
 

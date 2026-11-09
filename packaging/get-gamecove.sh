@@ -138,14 +138,30 @@ steamos) say "This is SteamOS. GameCove installs as a system extension (sysext).
 *) say "This system isn't Bazzite, Fedora Atomic or SteamOS. You can still try GameCove in a window." ;;
 esac
 
+# The handheld's real photo into the app's cache while we're online anyway, so it
+# shows the first time GameCove opens in Game Mode, even offline. The app does
+# the work (same rules as in the app: the "Show maker photos" setting, one image,
+# size cap, type checked); the installer wizard does the same when it opens, so
+# this is only for the runs that don't open it. Never fails the bootstrap.
+prefetch_photo() {
+	log "photo prefetch $1 --headless -- --prefetch-photo"
+	if command -v timeout >/dev/null 2>&1; then
+		timeout 45 "$1" --headless -- --prefetch-photo >/dev/null 2>&1 || true
+	else
+		"$1" --headless -- --prefetch-photo >/dev/null 2>&1 || true
+	fi
+}
+
 launch_app() {
 	bin="$DEST/app/gamecove.x86_64"
 	[ -x "$bin" ] || die "the installer app is missing; run this script again"
 	if [ "$launch" -ne 1 ]; then
+		prefetch_photo "$bin"
 		say "Downloaded. Start the installer from the app menu: GameCove Installer."
 		return 0
 	fi
 	if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+		prefetch_photo "$bin"
 		say "No desktop found. Switch to Desktop Mode and open \"GameCove Installer\" from the app menu."
 		return 0
 	fi

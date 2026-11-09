@@ -588,6 +588,7 @@ contains "$GE" "^Name=GameCove Installer$" "installer app entry"
 contains "$GE" "^Exec=sh \"$GI/get-gamecove.sh\"$" "entry re-runs the bootstrap"
 if [ -x "$T/gghome/Desktop/Install GameCove.desktop" ]; then ok; else bad "desktop shortcut"; fi
 contains "$T/gghome/.local/share/gamecove/installer.log" "sha256 ok gamecove-0.2.0-x86_64.tar.gz" "checksums logged"
+contains "$T/launch.log" "^app --headless -- --prefetch-photo$" "device photo fetched into the cache without opening the installer"
 if [ -z "$(find "$GI" -name '.download.*')" ]; then ok; else bad "download folder cleaned up"; fi
 expect_code 0 "bootstrap on SteamOS" gg "$R_DECK"
 if [ -f "$GI/packages/gamecove-0.2.0-x86_64.raw" ] && [ ! -e "$GI/packages/gamecove-0.2.0-1.fc43.x86_64.rpm" ]; then ok; else bad "sysext replaces the RPM on SteamOS"; fi
@@ -663,6 +664,7 @@ expect_code 0 "bootstrap offline uses the cached app" env PATH="$GB:$PATH" GAMEC
 	GAMECOVE_ARCH=x86_64 DISPLAY=:9 sh "$GG"
 sleep 0.3
 contains "$T/launch.log" "^app -- --installer$" "installer launched with user args"
+lacks "$T/launch.log" "prefetch-photo" "the installer fetches the photo itself when it opens"
 rm -f "$T/offline"
 rm -rf "$T/gghome"
 expect_code 1 "bootstrap offline without a cache" env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$R_BAZ" \

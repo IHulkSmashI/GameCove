@@ -570,6 +570,50 @@ func test_prefetch_detected_without_device_is_harmless() -> void:
 	s.free()
 
 
+class FakePrefetch extends RefCounted:
+	var asked: Array = []
+	func prefetch(id: String) -> bool:
+		asked.append(id)
+		return true
+
+
+func test_installer_prefetches_the_photo() -> void:
+	var F: GDScript = load("res://tests/fixtures/installer/fakes.gd")
+	var Plan: GDScript = load("res://scripts/installer/plan.gd")
+	var Screen: GDScript = load("res://scripts/ui/installer/installer_screen.gd")
+	var Service: GDScript = load("res://scripts/installer/installer_service.gd")
+	var Paths: GDScript = load("res://scripts/installer/paths.gd")
+	var Fake: GDScript = load("res://tests/fixtures/system/fake_runner.gd")
+	var d := ProjectSettings.globalize_path("user://test_installer_photo")
+	DirAccess.make_dir_recursive_absolute(d)
+	var dev = F.claw()
+	var ph := FakePrefetch.new()
+	var svc: Dictionary = F.services(dev, F.FakeSetup.new(), F.Recorder.new(), d + "/power.cfg")
+	svc["photo"] = ph
+	var tgt: Dictionary = F.target("bazzite")
+	var make := func() -> Control:
+		var r = Fake.new()
+		r.handler = func(cmd: String): return {"code": 1, "out": ""} if cmd.begins_with("pgrep") else {"code": 0, "out": ""}
+		var inst: Node = Service.new()
+		inst.setup(r, Paths.for_home(d + "/home", d + "/root"), tgt, "/opt/gc/gamecove.x86_64")
+		return Screen.create(svc, tgt, Plan.start(tgt, dev.profile, {"theme": "cove"}), inst)
+	var scr: Control = make.call()
+	eq(ph.asked, [str(dev.profile["id"])], "the installer fetches this handheld's photo while online")
+	ok(scr.prefetch_photo(), "prefetch_photo() reports the service's answer")
+	scr.free()
+	svc.erase("photo")
+	var scr2: Control = make.call()
+	ok(not scr2.prefetch_photo(), "no photo service (tests, previews): nothing")
+	scr2.free()
+
+
+func test_boot_prefetch_argument() -> void:
+	var Boot: GDScript = load("res://scripts/installer/boot.gd")
+	ok(Boot.wants_photo_prefetch(PackedStringArray(["--prefetch-photo"])), "--prefetch-photo")
+	ok(not Boot.wants_photo_prefetch(PackedStringArray(["--installer"])), "installer is not prefetch")
+	eq(Boot.scene_for(PackedStringArray(["--prefetch-photo"])), Boot.MAIN, "scene_for unchanged (prefetch quits before)")
+
+
 # ---- view: the plain margin is cropped at display time --------------------------
 
 func test_view_crops_plain_margin() -> void:
