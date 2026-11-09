@@ -483,6 +483,27 @@ func mcu_file() -> String:
 	return legacy if FileAccess.file_exists(legacy) else ""
 
 
+## Why MCU power saving can't be turned on here ("" = it may): the controller MCU firmware version
+## the root helper read and cached (fixes/lib/ally-mcu.sh) is older than the kernel's minimum, or
+## couldn't be read. Not cached yet: "" (turning it on checks first and refuses old firmware).
+func mcu_blocked() -> String:
+	var t := FileAccess.get_file_as_string(path("/var/lib/gamecove/ally-mcu-version"))
+	if t == "":
+		return ""
+	var kv := {}
+	for line in t.split("\n", false):
+		var i := line.find("=")
+		if i > 0:
+			kv[line.substr(0, i)] = line.substr(i + 1).strip_edges()
+	var v := str(kv.get("version", ""))
+	var lo := str(kv.get("min", ""))
+	if not v.is_valid_int() or not lo.is_valid_int():
+		return "Not available: the controller firmware version couldn't be read. Update it in Armoury Crate (Windows) first."
+	if v.to_int() < lo.to_int():
+		return "Not available: controller firmware %s is older than %s and may not wake after sleep. Update it in Armoury Crate (Windows) first." % [v, lo]
+	return ""
+
+
 ## RAPL package PL1 time window file (MMIO first, as PowerStation and thermald do), "" when none.
 func rapl_window() -> String:
 	for prefix in ["intel-rapl-mmio:", "intel-rapl:"]:

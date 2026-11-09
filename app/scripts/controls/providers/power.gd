@@ -687,6 +687,10 @@ func _mcu() -> RefCounted:
 		func(_c):
 			if be.mcu_file() == "":
 				return Tx.NOT_HERE
+			# only with new enough controller MCU firmware (review S1-3)
+			var why: String = be.mcu_blocked()
+			if why != "" and Backend.read(be.mcu_file()) != "1":
+				return why
 			return "" if be.helper_present() else Tx.NO_HELPER,
 		func(_c): return Backend.read(be.mcu_file()) == "1",
 		func(_c, v): return be.set_mcu(bool(v)))

@@ -17,6 +17,8 @@
 #   apply_now          optional: make it take effect now (save originals with save_value first)
 #                      (file_text builds udev lines with gc_rule_lines, which adds the DMI match)
 #   revert_now         optional: undo apply_now (restore_values does the usual thing)
+#   blocked            optional: prints why it can't be applied on this machine now ("" = it can);
+#                      install refuses (exit 3) and status says state=unsupported, reason=<text>
 #
 # Commands: install | remove | status | set on | set off ("set" is the no-password path through
 # gamecove-fix-set; on = install, off = remove). status prints applies=, installed=, os_fixed=,
@@ -28,7 +30,8 @@
 # those that share the trait the fix is for, never on another.
 #
 # GAMECOVE_ROOT prefixes every path (tests); GAMECOVE_CHANGES_LOG gets one line per change.
-# Exit codes: 0 done (also "not needed"), 1 failed, 2 bad usage or not this handheld.
+# Exit codes: 0 done (also "not needed"), 1 failed, 2 bad usage or not this handheld,
+# 3 not available here (blocked).
 
 ROOT="${GAMECOVE_ROOT:-}"
 GC_LIB="$(cd "$(dirname "$0")/../lib" && pwd)"
@@ -186,6 +189,10 @@ gc_install() {
 		gc_say "not needed: this handheld doesn't have the part this fix is for"
 		return 0
 	fi
+	if command -v blocked >/dev/null 2>&1; then
+		_why="$(blocked)"
+		[ -z "$_why" ] || gc_die 3 "$_why"
+	fi
 	for _f in $FILES; do
 		if [ -e "$ROOT$_f" ] && ! gc_ours "$_f"; then
 			gc_die 1 "$_f exists and isn't GameCove's; leaving it"
@@ -252,6 +259,10 @@ gc_status() {
 	hw=no
 	hw_present && hw=yes
 	gc_say "hw=$hw"
+	_why=""
+	if [ "$inst" = no ] && [ "$osf" = no ] && [ "$hw" = yes ] && command -v blocked >/dev/null 2>&1; then
+		_why="$(blocked)"
+	fi
 	if [ "$inst" = yes ] && gc_files_ok; then
 		gc_say "state=on"
 	elif [ "$inst" = yes ]; then
@@ -260,6 +271,9 @@ gc_status() {
 		gc_say "state=os-fixed"
 	elif [ "$hw" = no ]; then
 		gc_say "state=not-needed"
+	elif [ -n "$_why" ]; then
+		gc_say "reason=$_why"
+		gc_say "state=unsupported"
 	else
 		gc_say "state=off"
 	fi

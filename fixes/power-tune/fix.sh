@@ -32,7 +32,8 @@
 #                             the firmware's power limits back every few seconds (ClawDeck,
 #                             findings §21)
 #     sleep:s2idle|deep       /sys/power/mem_sleep, from what it offers
-#     mcu:on|off              ROG Ally controller MCU power saving in sleep (mcu_powersave); handhelds only
+#     mcu:on|off              ROG Ally controller MCU power saving in sleep (mcu_powersave); handhelds only;
+#                             on only with new enough MCU firmware (../lib/ally-mcu.sh), exit 3 otherwise
 #     battery:standard|long-life      charge_types (Lenovo Legion Go: Long Life stops at 80 %);
 #                             handhelds only
 #     restore                 put back everything this fix changed (GameCove's session runs it
@@ -54,6 +55,8 @@ ORIG="$STATE/orig"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=fixes/lib/handheld.sh
 . "$HERE/../lib/handheld.sh"
+# shellcheck source=fixes/lib/ally-mcu.sh
+. "$HERE/../lib/ally-mcu.sh"
 # every handheld in devices.json, not only the fan / charge-limit ones
 # shellcheck disable=SC2034 # read by handheld.sh
 HANDHELDS="$HERE/handhelds.txt"
@@ -449,6 +452,10 @@ set_mcu() {
 	case "$1" in on) v=1 ;; off) v=0 ;; *) die 2 "mcu:on or mcu:off" ;; esac
 	handheld_ok || die 2 "MCU power saving is only set on the handhelds GameCove knows"
 	f="$(mcu_file)" || die 2 "no MCU power saving switch here"
+	if [ "$v" = 1 ]; then
+		# only with new enough MCU firmware (review S1-3); off is always allowed
+		why="$(ally_mcu_blocked strict)" && die 3 "$why"
+	fi
 	put "$f" "$v" mcu
 }
 

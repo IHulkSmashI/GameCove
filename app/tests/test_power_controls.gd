@@ -229,6 +229,36 @@ func test_ally_offers_what_this_handheld_has() -> void:
 	_free()
 
 
+func test_ally_mcu_powersave_needs_new_enough_firmware() -> void:
+	# review S1-3: never offered with an old (or unreadable) controller MCU firmware
+	var t := Trees.new().ally()
+	var mcu: String = t["root"] + "/sys/class/firmware-attributes/asus-armoury/attributes/mcu_powersave/current_value"
+	var f := FileAccess.open(mcu, FileAccess.WRITE)
+	f.store_string("0\n")
+	f.close()
+	DirAccess.make_dir_recursive_absolute(str(t["root"]) + "/var/lib/gamecove")
+	f = FileAccess.open(t["root"] + "/var/lib/gamecove/ally-mcu-version", FileAccess.WRITE)
+	f.store_string("model=ally\nversion=318\nmin=319\n")
+	f.close()
+	var e := _setup(t)
+	var c: Dictionary = e["c"]
+	ok(not c["power.mcu_powersave"].available, "old firmware: not available")
+	ok(c["power.mcu_powersave"].reason.contains("318") and c["power.mcu_powersave"].reason.contains("319"), "reason names both versions")
+	_free()
+	f = FileAccess.open(t["root"] + "/var/lib/gamecove/ally-mcu-version", FileAccess.WRITE)
+	f.store_string("error=couldn't ask the MCU\n")
+	f.close()
+	e = _setup(t)
+	ok(not e["c"]["power.mcu_powersave"].available, "unreadable version: not available")
+	_free()
+	f = FileAccess.open(t["root"] + "/var/lib/gamecove/ally-mcu-version", FileAccess.WRITE)
+	f.store_string("model=ally\nversion=319\nmin=319\n")
+	f.close()
+	e = _setup(t)
+	ok(e["c"]["power.mcu_powersave"].available, "319: available")
+	_free()
+
+
 func test_ally_writes_each_backend() -> void:
 	var e := _setup(Trees.new().ally())
 	var reg: Node = e["reg"]

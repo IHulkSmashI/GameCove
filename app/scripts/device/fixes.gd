@@ -213,6 +213,7 @@ func rows() -> Array:
 			"can_check": s == "unknown",
 			"sources": e.get("sources", []), "bazzite": str(e.get("bazzite", "")), "steamos": str(e.get("steamos", "")),
 			"why": why(id),
+			"reason": str(_status.get(id, {}).get("reason", "")),
 		})
 	return out
 

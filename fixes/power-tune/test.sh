@@ -214,6 +214,18 @@ expect 0 "fppt under its older name" set fppt:32
 expect 0 "mcu off" set mcu:off
 [ "$(r "$A/mcu_powersave/current_value")" = 0 ] || fail "mcu_powersave 0"
 expect 2 "mcu other" set mcu:maybe
+# review S1-3: on only with new enough MCU firmware; off always
+printf 'model=ally\nversion=318\nmin=319\n' >"$T/mcu-old"
+printf 'model=ally\nversion=319\nmin=319\n' >"$T/mcu-ok"
+printf 'error=no ROG Ally controller MCU found\n' >"$T/mcu-err"
+GAMECOVE_TEST_MCU_INFO="$T/mcu-old" expect 3 "mcu on refused with MCU firmware 318" set mcu:on
+grep -q "older than 319" "$T/out" || fail "reason names the firmware ($(cat "$T/out"))"
+[ "$(r "$A/mcu_powersave/current_value")" = 0 ] || fail "nothing written for old firmware"
+GAMECOVE_TEST_MCU_INFO="$T/mcu-err" expect 3 "mcu on refused when the version can't be read" set mcu:on
+expect 3 "mcu on refused without any version" set mcu:on
+GAMECOVE_TEST_MCU_INFO="$T/mcu-ok" expect 0 "mcu on with MCU firmware 319" set mcu:on
+[ "$(r "$A/mcu_powersave/current_value")" = 1 ] || fail "mcu_powersave 1"
+GAMECOVE_TEST_MCU_INFO="$T/mcu-old" expect 0 "mcu off always allowed" set mcu:off
 expect 0 "restore pstate" set restore
 [ "$(r "$C/cpufreq/policy1/boost") $(r "$A/ppt_fppt/current_value") $(r "$A/mcu_powersave/current_value")" = "1 30 1" ] || fail "per-policy boost, FPPT and MCU back"
 

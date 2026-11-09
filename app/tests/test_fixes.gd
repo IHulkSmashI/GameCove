@@ -346,6 +346,22 @@ func test_page_shows_os_fixed_and_changes() -> void:
 	s.free()
 
 
+func test_page_shows_why_a_fix_is_unavailable() -> void:
+	# review S1-3: the helper's reason= shows on the card, and there is no Apply
+	var h := _tmp("page_reason")
+	var s := _svc("asus-rog-ally", {"ally-fingerprint-drain": "off"}, h)
+	s.commands.runner.responses["%s ally-mcu-powersave status" % HELPER] = {"code": 0,
+		"out": "applies=yes\ninstalled=no\nos_fixed=no\nhw=yes\nreason=not available: controller MCU firmware 318 is older than 319\nstate=unsupported\n"}
+	s.refresh()
+	var dev := FakeDevice.new()
+	var p: Control = Page.build({"fixes": s, "device": dev})
+	ok(_texts(p).contains("older than 319"), "reason shown")
+	ok(not p.buttons.has("apply:ally-mcu-powersave"), "no Apply")
+	p.free()
+	dev.free()
+	s.free()
+
+
 func test_page_empty_states() -> void:
 	var s := _svc("unknown", {})
 	var dev := FakeDevice.new()
