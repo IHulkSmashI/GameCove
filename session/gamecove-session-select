@@ -25,12 +25,15 @@
 # doesn't name a session (Steam's, steamosctl's) land in GameCove. So:
 #   - --default saves the default desktop session and login mode from before;
 #     `desktop` and every switch of ours name that saved session explicitly;
-#   - `steam` leaves a marker; if GameCove's session then starts without having
-#     been asked for, it was a "switch to desktop" from Steam: session-start
-#     forwards it to the real desktop;
+#   - `steam` and `desktop` leave a marker for this boot; while it's there, a
+#     GameCove session that starts without having been asked for is a "switch to
+#     desktop" from Steam: session-start forwards it to the real desktop (every
+#     time this boot, until `gamecove` is asked for);
 #   - --default also copies this script to the user's data folder with a user
 #     unit that runs `guard` at every login, so a removed or rolled-back GameCove
 #     never leaves the default desktop pointing at a missing gamecove.desktop.
+#     If it was only missing for a boot, the guard makes it the default again
+#     once it's back; `restore` and `steam --default` remove the guard.
 set -eu
 
 STEAMOSCTL="${STEAMOSCTL:-steamosctl}"
@@ -40,6 +43,7 @@ DATA="${XDG_DATA_HOME:-$HOME/.local/share}/gamecove"
 PREV_SESSION="$DATA/prev-desktop-session"
 PREV_MODE="$DATA/prev-login-mode"
 STEAM_MARK="$DATA/left-for-steam"
+SUSPENDED="$DATA/default-suspended"
 GUARD_COPY="$DATA/gamecove-session-guard"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_NAME="gamecove-session-guard.service"
@@ -260,7 +264,9 @@ remove_guard() {
 }
 
 # Undo --default: the desktop default and login mode from before GameCove.
-restore_defaults() {
+# keep (guard): the guard stays and remembers that GameCove was the default (review L24).
+restore_defaults() { # [keep]
+	keep="${1:-}"
 	ensure_manager
 	cur="$(sm_get get-default-desktop-session)" || cur=""
 	mode="$(sm_get get-default-login-mode)" || mode=""
@@ -282,7 +288,13 @@ restore_defaults() {
 	rm -f "$STEAM_MARK"
 	if [ "$rc" -eq 0 ]; then
 		rm -f "$PREV_SESSION" "$PREV_MODE"
-		remove_guard
+		if [ -n "$keep" ]; then
+			mkdir -p "$DATA"
+			: >"$SUSPENDED"
+		else
+			rm -f "$SUSPENDED"
+			remove_guard
+		fi
 		echo "gamecove-session-select: the desktop default is $desk again"
 	fi
 	return "$rc"
@@ -291,10 +303,22 @@ restore_defaults() {
 case "$target" in
 guard)
 	if session_installed "$SESSION_FILE"; then
+		# Review L24: back after a boot without it (a SteamOS update that didn't merge the
+		# sysext, a rollback): GameCove was the boot default, so it is again.
+		if [ -f "$SUSPENDED" ] && in_booted_image; then
+			save_previous
+			if sm_set default-desktop-session "$SESSION_FILE" && sm_set default-login-mode desktop; then
+				rm -f "$SUSPENDED"
+				echo "gamecove-session-select: GameCove is back; it's the boot default again"
+			fi
+		fi
 		exit 0
 	fi
-	# GameCove's session is gone: never leave a default that points at it
-	restore_defaults || true
+	[ ! -f "$SUSPENDED" ] || exit 0 # already put back at an earlier login
+	# GameCove's session is gone: never leave a default that points at it. The guard stays,
+	# so a GameCove that comes back (it was only missing this boot) is the default again;
+	# `restore` (uninstall) or `steam --default` remove it for good.
+	restore_defaults keep || true
 	exit 0
 	;;
 session-start)
@@ -302,10 +326,15 @@ session-start)
 	# GameCove for Steam this boot and nothing asked for GameCove since, this
 	# session is a "switch to desktop" from Steam (or anything else that didn't
 	# name a session): forward it to the real desktop. Exit 3 = forwarded.
+	# The marker stays for the whole boot (review L22): Steam -> Desktop -> Gaming Mode ->
+	# Steam's "Switch to Desktop" again must reach the desktop too. Only an explicit
+	# `gamecove` (or a new boot) clears it.
 	[ -f "$STEAM_MARK" ] || exit 0
 	mark="$(head -n 1 "$STEAM_MARK" 2>/dev/null)" || mark=""
-	rm -f "$STEAM_MARK"
-	[ "$mark" = "$(boot_id)" ] || exit 0
+	if [ "$mark" != "$(boot_id)" ]; then
+		rm -f "$STEAM_MARK"
+		exit 0
+	fi
 	desk="$(real_desktop)"
 	"$STEAMOSCTL" switch-to-desktop-mode "$desk" || exit 0
 	exit 3
@@ -345,7 +374,9 @@ gamecove)
 	;;
 desktop)
 	[ "$default" -eq 0 ] || die "--default is only for steam or gamecove" 64
-	rm -f "$STEAM_MARK"
+	# left GameCove: from here a switch that names no session means the real desktop
+	mkdir -p "$DATA"
+	boot_id >"$STEAM_MARK"
 	exec "$STEAMOSCTL" switch-to-desktop-mode "$(real_desktop)"
 	;;
 esac

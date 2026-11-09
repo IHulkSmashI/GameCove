@@ -149,9 +149,9 @@ eqv "$(cat "$DATA/left-for-steam")" boot-1 "marker with this boot's id"
 sel session-start
 eqv "$?" 3 "session start after leaving for Steam is forwarded"
 eqv "$(cat "$ST/switched")" plasma.desktop "forwarded to Plasma"
+# review L22: Desktop -> Gaming Mode -> Steam's "Switch to Desktop" again: still the desktop
 sel session-start
-eqv "$?" 0 "only once: the next start is GameCove"
-sel steam
+eqv "$?" 3 "a second unnamed desktop switch this boot is forwarded too"
 echo boot-2 >"$T/boot_id"
 sel session-start
 eqv "$?" 0 "after a reboot GameCove starts normally"
@@ -161,10 +161,13 @@ sel gamecove
 eqv "$(cat "$ST/switched")" gamecove.desktop "explicit gamecove"
 sel session-start
 eqv "$?" 0 "asked-for GameCove isn't forwarded"
-sel steam
 sel desktop
+eqv "$(cat "$DATA/left-for-steam" 2>/dev/null)" boot-1 "leaving GameCove for the desktop marks this boot too"
 sel session-start
-eqv "$?" 0 "desktop clears the marker too"
+eqv "$?" 3 "after GameCove -> desktop, an unnamed desktop switch goes to the desktop"
+sel gamecove
+sel session-start
+eqv "$?" 0 "only an explicit gamecove clears it"
 
 # --- restore (uninstall, TTY): previous desktop session and boot mode back
 sel restore
@@ -201,10 +204,23 @@ env PATH="$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" XDG_CO
 eqv "$?" 0 "guard copy runs without the package"
 eqv "$(cat "$ST/desktop")" plasma.desktop "guard: default desktop no longer names the missing file"
 eqv "$(cat "$ST/mode")" game "guard: boot back to Steam Gaming Mode"
-[ ! -e "$UNITS/gamecove-session-guard.service" ] && ok || bad "guard removes itself when done"
+# review L24: missing only this boot (a SteamOS update that didn't merge the sysext): the guard
+# stays and puts GameCove back as the default once its session is back
+[ -e "$UNITS/gamecove-session-guard.service" ] && [ -f "$DATA/default-suspended" ] && ok || bad "guard stays, remembering GameCove was the default"
+env PATH="$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" XDG_CONFIG_HOME="$T/home/.config" \
+	GAMECOVE_SESSIONS_DIRS="$T/sessions" sh "$DATA/gamecove-session-guard" guard >"$T/out" 2>&1
+eqv "$(cat "$ST/mode")" game "guard again while still missing: nothing changes"
 sel gamecove
 eqv "$?" 1 "gamecove refuses when its session isn't installed"
 touch "$T/sessions/gamecove.desktop"
+env PATH="$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" XDG_CONFIG_HOME="$T/home/.config" \
+	GAMECOVE_SESSIONS_DIRS="$T/sessions" GAMECOVE_OSTREE_BOOTED="$T/not-ostree" sh "$DATA/gamecove-session-guard" guard >"$T/out" 2>&1
+eqv "$(cat "$ST/desktop")" gamecove.desktop "GameCove back: boot default again"
+eqv "$(cat "$ST/mode")" desktop "GameCove back: boot mode desktop again"
+eqv "$(cat "$DATA/prev-desktop-session")" plasma.desktop "previous desktop remembered again"
+[ ! -e "$DATA/default-suspended" ] && ok || bad "suspended mark cleared"
+sel restore
+[ ! -e "$UNITS/gamecove-session-guard.service" ] && [ ! -e "$DATA/default-suspended" ] && ok || bad "restore removes the guard for good"
 
 # --- review M9: steamosctl output as SteamOS 3.10 prints it (steamos-manager 26.4.1, ROG Ally), a
 # labelled variant, and a set that doesn't take

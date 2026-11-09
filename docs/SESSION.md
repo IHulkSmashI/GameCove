@@ -218,16 +218,21 @@ helper of our own:
   - Steam's "Switch to Desktop": on Bazzite it runs `os-session-select plasma`,
     which names `plasma.desktop`/`gnome.desktop` itself. Where Steam asks
     steamos-manager for the *default* desktop instead, the switch lands in our
-    session; `gamecove-session-select steam` left a marker (with the boot id), so
-    the session client sees that nothing asked for GameCove and forwards to the
-    real desktop before the app starts (`session-start`, exit 3).
+    session; `gamecove-session-select steam` (or `desktop`) left a marker (with the
+    boot id), so the session client sees that nothing asked for GameCove and
+    forwards to the real desktop before the app starts (`session-start`, exit 3).
+    The marker lasts the whole boot (review L22: Desktop, back to Gaming Mode, then
+    "Switch to Desktop" again still reaches the desktop) until `gamecove` is asked for.
   - `steam --default` and `restore` put the saved desktop session and boot mode
     back. The installer's Uninstall runs `restore`.
   - `--default` also keeps a copy of the script in the data folder and enables a
     user unit, `gamecove-session-guard.service`, that runs `guard` at every login:
     if `gamecove.desktop` is gone (package removed, previous deployment booted) it
-    runs `restore`, then removes itself. Both live in the home folder, so they
-    survive the package.
+    puts the previous defaults back but stays, marked `default-suspended`: when
+    GameCove's session is back at a later login (it was only missing for a boot, e.g.
+    a SteamOS update that didn't merge the sysext) it makes GameCove the default
+    again (review L24). `restore` (uninstall) and `steam --default` remove it. Both
+    live in the home folder, so they survive the package.
 
 `gamecove-session-select steam|gamecove|desktop [--default] | restore | guard` wraps this.
 
