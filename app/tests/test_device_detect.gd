@@ -95,6 +95,18 @@ func test_family_row_takes_chip_from_cpu() -> void:
 	eq(row["tdp"]["battery_max"], 28.0, "range from cpu table")
 
 
+func test_unlisted_claw_takes_its_cpu_vendor_from_the_cpu() -> void:
+	# review S5-2: the msi-claw-family row no longer says "amd"; an unlisted Intel Claw is Intel
+	var doc := DeviceScript.load_doc()
+	var dmi := {"sys_vendor": "Micro-Star International Co., Ltd.", "product_name": "Claw Next", "board_name": "MS-1T99",
+		"board_vendor": "Micro-Star International Co., Ltd.", "product_family": ""}
+	var row := DeviceScript.resolve(doc, dmi, "Intel(R) Core(TM) Ultra 9 999X", {})
+	eq(row["id"], "msi-claw-family", "family row")
+	eq(row["cpu_vendor"], "intel", "Intel from the CPU name")
+	eq(DeviceScript.resolve(doc, dmi, "AMD Ryzen Z9 Extreme", {})["cpu_vendor"], "amd", "AMD from the CPU name")
+	eq(DeviceScript.resolve(doc, dmi, "", {"vendor": "intel"})["cpu_vendor"], "intel", "else the GPU's vendor")
+
+
 func test_multi_chip_row_refined_by_cpu() -> void:
 	var doc := DeviceScript.load_doc()
 	var dmi := {"sys_vendor": "GPD", "product_name": "G1618-04", "board_name": "Default string", "board_vendor": "GPD", "product_family": ""}

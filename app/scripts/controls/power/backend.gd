@@ -40,7 +40,12 @@ const PS_TDP_IF := "org.shadowblip.GPU.Card.TDP"
 const PPD := "org.freedesktop.UPower.PowerProfiles"
 const PPD_PATH := "/org/freedesktop/UPower/PowerProfiles"
 const FIX_SET := "/usr/libexec/gamecove/gamecove-fix-set"
+const FIX_ADMIN := "/usr/libexec/gamecove/gamecove-fix"
 const FIX_NAME := "power-tune"
+## power-tune keys that need the administrator password (review S3-2: not needed day to day, and
+## risky enough that the prompt-free entry point doesn't take them): through gamecove-fix, which
+## asks in Desktop Mode; Gaming Mode has no polkit agent, so there the controls say so.
+const ADMIN_KEYS := ["smt", "cores", "sleep", "mcu"]
 const FW_ATTR_DRIVERS := ["asus-armoury", "lenovo-wmi-other", "msi-wmi-platform"]
 const EPP_ORDER := ["performance", "balance_performance", "default", "balance_power", "power"]
 
@@ -122,13 +127,20 @@ func helper_present() -> bool:
 	return FileAccess.file_exists(root + fix_set)
 
 
-## pkexec gamecove-fix-set power-tune set <key>:<value>; true on exit 0.
+## pkexec gamecove-fix-set power-tune set <key>:<value> (ADMIN_KEYS: gamecove-fix, which asks for
+## the administrator password); true on exit 0.
 func root_set(key: String, value: String) -> bool:
 	if not helper_present():
 		return false
 	var arg := key + ":" + value if key != "" else value
-	var r: Dictionary = runner.run("pkexec", PackedStringArray([fix_set, FIX_NAME, "set", arg]))
+	var helper := fix_set.get_base_dir().path_join("gamecove-fix") if key in ADMIN_KEYS else fix_set
+	var r: Dictionary = runner.run("pkexec", PackedStringArray([helper, FIX_NAME, "set", arg]))
 	return int(r.get("code", -1)) == 0
+
+
+## True in GameCove's gamescope session (no polkit agent: a password can't be asked for).
+static func no_password_prompt() -> bool:
+	return OS.get_environment("GAMESCOPE_WAYLAND_DISPLAY") != "" or OS.get_environment("XDG_CURRENT_DESKTOP").to_lower() == "gamescope"
 
 
 # ---- services ------------------------------------------------------------------------------------
@@ -481,6 +493,27 @@ func mcu_file() -> String:
 		return a["path"] + "/current_value"
 	var legacy := path("/sys/devices/platform/asus-nb-wmi/mcu_powersave")
 	return legacy if FileAccess.file_exists(legacy) else ""
+
+
+## Why MCU power saving can't be turned on here ("" = it may): the controller MCU firmware version
+## the root helper read and cached (fixes/lib/ally-mcu.sh) is older than the kernel's minimum, or
+## couldn't be read. Not cached yet: "" (turning it on checks first and refuses old firmware).
+func mcu_blocked() -> String:
+	var t := FileAccess.get_file_as_string(path("/var/lib/gamecove/ally-mcu-version"))
+	if t == "":
+		return ""
+	var kv := {}
+	for line in t.split("\n", false):
+		var i := line.find("=")
+		if i > 0:
+			kv[line.substr(0, i)] = line.substr(i + 1).strip_edges()
+	var v := str(kv.get("version", ""))
+	var lo := str(kv.get("min", ""))
+	if not v.is_valid_int() or not lo.is_valid_int():
+		return "Not available: the controller firmware version couldn't be read. Update it in Armoury Crate (Windows) first."
+	if v.to_int() < lo.to_int():
+		return "Not available: controller firmware %s is older than %s and may not wake after sleep. Update it in Armoury Crate (Windows) first." % [v, lo]
+	return ""
 
 
 ## RAPL package PL1 time window file (MMIO first, as PowerStation and thermald do), "" when none.

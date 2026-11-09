@@ -213,8 +213,8 @@ Each area appends its own section.
   signals `changed(rows)` and `action_finished(fix, verb, ok, message)`. Status words: `applied`,
   `restart`, `partial`, `needed` (auto fix that is off), `available` (optional, off),
   `not-needed`, `os-fixed`, `blocked`, `checking`, `working`, `unknown`. Apply / Undo:
-  `pkexec gamecove-fix-set <fix> set on|off` for file fixes (no password, works in Gaming Mode),
-  `pkexec gamecove-fix <fix> install|remove` for root fixes (Desktop Mode). The user's Apply /
+  `pkexec gamecove-fix <fix> install|remove` for every fix, file fixes included (administrator
+  password, Desktop Mode; review S3-2). The user's Apply /
   Undo is remembered per device in `~/.local/share/gamecove/fixes.cfg`
   (`[fixes@<device>] <fix>="on"|"off"`): the installer reads it (`Target.read_fix_choices`) and
   `Plan.start` leaves a fix the user undid off for repair, change and finish (the Device step can
@@ -266,7 +266,8 @@ another handheld, the files are rewritten from that device's values (stamp `laun
 | `perf.upscaler`, `perf.frame_gen`, `perf.upscale_recommended`, `perf.upscale_undo` | `gamecove-upscale choose/apply/undo --home --key --gpu vendor=..,family=..,arch=..,xmx=.. [--dir]` (JSON out). OptiScaler (pinned, sha256) into the folder of the game's exe with the game's fixes, REFramework for Capcom RE Engine games, everything recorded and undone exactly | a known GPU, the helper installed, a game whose folder is known |
 | `perf.low_latency` (per game) | `Launcher.save_settings(key, {low_latency})`: `LOW_LATENCY_LAYER=1` (Anti-Lag 2 / Reflex through low_latency_layer, bundled in Proton-CachyOS 11) on AMD, XeLL (`IGDEXT_XELL_CAP`) on Intel with the XeSS XMX driver | Launcher and a known GPU |
 | `perf.proton` (per game) | `Library.set_compat_tool` (Steam's own API or config.vdf; umu's PROTONPATH for other stores); options from `Library.compat_tools(game)` | Library and a game |
-| `perf.launch_wrapper` (Steam games) | adds / removes `gamecove-run` in the launch options | the wrapper installed |
+| `perf.launch_wrapper` (Steam games) | adds / removes `gamecove-run` in the launch options, in a fall-through form: `/bin/sh -c '[ -x <w> ] && exec <w> "$@"; exec "$@"' gamecove-run %command%`, so the game still starts when GameCove is removed or the previous deployment boots (review S2-1). Older bare-path entries are moved to this form at start while Steam is stopped | the wrapper installed |
+| `perf.wrapper_remove_all` (action) | takes GameCove out of every Steam game's launch options, every account (Steam closes and starts again). The installer's Uninstall does the same | Steam |
 | `perf.shader_threads` (0 = Steam's default, 1-16; not per game) | `steam_dev.cfg` `unShaderBackgroundProcessingThreads N` (Bazzite's bazzite-steam sets the same), next Steam start | Steam installed |
 | `perf.clear_shader_cache` (action, Steam games) | deletes `steamapps/shadercache/<appid>` in every library (only that path shape, never following links) | a cache folder exists |
 

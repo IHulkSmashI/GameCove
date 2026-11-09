@@ -109,6 +109,7 @@ status() {
 	say "installed=$installed"
 	say "stock_map=${stock:-none}"
 	say "inputplumber=${active:-unknown}"
+	say "inputplumber_override=$(ip_override_state)"
 	if [ "$installed" = yes ] && [ "$active" = active ]; then
 		say "state=on"
 	elif [ "$installed" = yes ]; then
@@ -124,5 +125,12 @@ case ${1:-} in
 install) install ;;
 remove) remove ;;
 status) status ;;
-*) die "usage: $0 install|remove|status" ;;
+set)
+	# set refresh: rebuild the shared InputPlumber override if the stock file changed (no password)
+	[ "${2:-}" = refresh ] && [ $# -eq 2 ] || die "usage: $0 set refresh"
+	require_root
+	lock
+	ip_refresh
+	;;
+*) die "usage: $0 install|remove|status|set refresh" ;;
 esac

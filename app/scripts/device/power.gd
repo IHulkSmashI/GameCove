@@ -123,6 +123,8 @@ var autotune_opts := AUTOTUNE_DEFAULTS.duplicate()
 var _game_key := ""
 var _thermald_checked := false
 var _thermald_held := false
+var _thermald_try_ms := 0
+const THERMALD_RETRY_MS := 30000
 var _guard_timer: Timer
 var _busy := -1
 var _busy_at := -1000.0
@@ -626,15 +628,22 @@ func fan_modes() -> Array:
 ## `resumed` only when after_resume: controls call refresh() after their own
 ## writes, and a `resumed` from there would re-apply everything again, forever.
 func refresh(after_resume := false) -> void:
+	if after_resume:
+		# the charger may have come or gone while asleep: limits first (review S1-2)
+		check_power_source()
 	var v := read_tdp()
 	# after sleep some firmwares come back at their own limit (SimpleDeckyTDP, aarron-lee/SimpleDeckyTDP
 	# src/steamListeners.tsx re-applies the TDP after resume; PowerTools, NGnius/PowerTools
-	# backend/src/resume_worker.rs re-applies every setting): put ours back
-	if v >= 0.0 and _tdp_w > 0.0 and backend != "none" and absf(v - _tdp_w) >= 0.5:
-		if not write_tdp(_tdp_w):
+	# backend/src/resume_worker.rs re-applies every setting): put ours back, never above the
+	# limit for the power source we're on now
+	var want := minf(_tdp_w, tdp_max()) if _tdp_w > 0.0 else _tdp_w
+	if v >= 0.0 and want > 0.0 and backend != "none" and absf(v - want) >= 0.5:
+		if not write_tdp(want):
 			_tdp_w = v
 	elif v >= 0.0:
 		_tdp_w = v
+	if v >= 0.0 and backend != "none" and _tdp_w > tdp_max() + 0.01:
+		_clamp_to_source()
 	if _charge_via == "steamos-manager":
 		var c: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
 		_charge = int(c) if c != null else -1
@@ -736,6 +745,7 @@ func check_power_source() -> void:
 	if _autotune_on and plugged and not bool(autotune_opts.get("plugged", false)):
 		_autotune_stop(true)  # Auto TDP is for battery unless asked (ClawDeck)
 	restore()
+	_clamp_to_source()
 	hold_charge()
 	_emit_main(source_changed, [plugged])
 	_emit_changed()
@@ -744,6 +754,28 @@ func check_power_source() -> void:
 ## Capacity only: Decky Battery Tracker (safijari/steam-deck-battery-tracker main.py) also reads
 ## voltage_now * current_now, but current_now isn't credible on the Claw 8 EX (ClawDeck
 ## docs/HARDWARE-FINDINGS.md §6: -65 A at idle), and battery saver needs only the level.
+## Never above the limit for the power source we're on (review S1-2): unplugging with 30 W
+## set on an Ally (battery_max 25), or a firmware that came back from sleep higher, brings
+## the TDP, the user's own value and Auto TDP's ceiling down to the battery limit. Only
+## lowers; nothing is remembered, so the charger's own value comes back on the charger.
+func _clamp_to_source() -> void:
+	if backend == "none":
+		return
+	var hi := tdp_max()
+	if hi <= 0.0:
+		return
+	if _user_tdp > hi:
+		_user_tdp = hi
+	if _autotune_on and autotune.session != null and autotune.session.ceiling_tdp > int(floorf(hi)):
+		autotune.set_ceiling(int(floorf(hi)))
+	if _tdp_w > hi + 0.01:
+		if write_tdp(hi):
+			_profile = _profile_for(hi)
+			_emit_changed()
+		else:
+			push_warning("Power: couldn't bring the TDP down to %.0f W for this power source" % hi)
+
+
 func _report_battery(on_ac: bool) -> void:
 	var pct := -1
 	var dir := DirAccess.open(sys_root + "/sys/class/power_supply")
@@ -1179,10 +1211,19 @@ func _check_limit() -> void:
 # thermald running, thermald is held (stopped, never disabled; started again by the session when
 # GameCove exits: power-tune set restore) and the guard watches the package temperature instead.
 
+## The helper bounds a hold to a running game (review S3-2): thermald starts again by itself when no
+## game runs. So a hold is asked for again (at most every THERMALD_RETRY_MS) once thermald runs again.
 func _hold_thermald() -> void:
-	if _thermald_checked or backend != "powerstation" or str(device.get("cpu_vendor", "")) != "intel":
+	if backend != "powerstation" or str(device.get("cpu_vendor", "")) != "intel":
+		return
+	if _thermald_held and not be.thermald_active():
+		return
+	_thermald_held = false
+	var now := Time.get_ticks_msec()
+	if _thermald_checked and now - _thermald_try_ms < THERMALD_RETRY_MS:
 		return
 	_thermald_checked = true
+	_thermald_try_ms = now
 	if not be.helper_present() or not be.thermald_active():
 		return
 	if be.root_set("thermald", "hold"):

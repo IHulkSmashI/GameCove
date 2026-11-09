@@ -376,6 +376,17 @@
    "source": "InputPlumber + PowerStation"
   },
   {
+   "expect": "onexplayer-x2-mini-pro",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER X2Mini PRO",
+    "board_name": "ONEXPLAYER X2Mini PRO",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "InputPlumber 50-onexplayer_x2_mini_pro.yaml + Linux oxpec.c"
+  },
+  {
    "expect": "onexplayer-onexfly-apex",
    "dmi": {
     "sys_vendor": "ONE-NETBOOK",

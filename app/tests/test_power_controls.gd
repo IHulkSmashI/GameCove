@@ -123,6 +123,11 @@ func test_claw8ex_writes_through_the_root_verbs_and_reads_back() -> void:
 	eq(_read(root, "/sys/power/mem_sleep"), "deep", "deep sleep")
 	reg.set_value("power.cpu_cores", 2)
 	eq(_read(root, "/sys/devices/system/cpu/cpu3/online"), "0", "cores through the helper (PowerStation can't here: no CoresEnabled write)")
+	# review S3-2: cores and sleep mode go through the admin helper, the day-to-day ones through the prompt-free one
+	var calls: Array = e["runner"].calls
+	ok(calls.any(func(x): return str(x).contains("/gamecove-fix power-tune set cores:2")), "cores: gamecove-fix (admin password)")
+	ok(calls.any(func(x): return str(x).contains("/gamecove-fix power-tune set sleep:deep")), "sleep: gamecove-fix (admin password)")
+	ok(calls.any(func(x): return str(x).contains("/gamecove-fix-set power-tune set epp:")), "EPP: gamecove-fix-set (no password)")
 	reg.set_value("power.governor", "performance")
 	eq(_read(root, "/sys/devices/system/cpu/cpufreq/policy0/scaling_governor"), "performance", "governor")
 	reg.set_value("power.epp", "turbo")
@@ -226,6 +231,59 @@ func test_ally_offers_what_this_handheld_has() -> void:
 	eq([c["power.fppt"].min_value, c["power.fppt"].max_value], [20.0, 21.0], "FPPT: not under SPPT, hhd's ASUS ceiling")
 	eq(c["power.thermal_limit"].max_value, 95.0, "never above the firmware's Tctl")
 	eq(c["power.fan_curve"].points, 8, "asus curve points")
+	_free()
+
+
+func test_ally_mcu_powersave_needs_new_enough_firmware() -> void:
+	# review S1-3: never offered with an old (or unreadable) controller MCU firmware
+	var t := Trees.new().ally()
+	var mcu: String = t["root"] + "/sys/class/firmware-attributes/asus-armoury/attributes/mcu_powersave/current_value"
+	var f := FileAccess.open(mcu, FileAccess.WRITE)
+	f.store_string("0\n")
+	f.close()
+	DirAccess.make_dir_recursive_absolute(str(t["root"]) + "/var/lib/gamecove")
+	f = FileAccess.open(t["root"] + "/var/lib/gamecove/ally-mcu-version", FileAccess.WRITE)
+	f.store_string("model=ally\nversion=318\nmin=319\n")
+	f.close()
+	var e := _setup(t)
+	var c: Dictionary = e["c"]
+	ok(not c["power.mcu_powersave"].available, "old firmware: not available")
+	ok(c["power.mcu_powersave"].reason.contains("318") and c["power.mcu_powersave"].reason.contains("319"), "reason names both versions")
+	_free()
+	f = FileAccess.open(t["root"] + "/var/lib/gamecove/ally-mcu-version", FileAccess.WRITE)
+	f.store_string("error=couldn't ask the MCU\n")
+	f.close()
+	e = _setup(t)
+	ok(not e["c"]["power.mcu_powersave"].available, "unreadable version: not available")
+	_free()
+	f = FileAccess.open(t["root"] + "/var/lib/gamecove/ally-mcu-version", FileAccess.WRITE)
+	f.store_string("model=ally\nversion=319\nmin=319\n")
+	f.close()
+	e = _setup(t)
+	ok(e["c"]["power.mcu_powersave"].available, "319: available")
+	_free()
+
+
+func test_admin_only_levers_say_so_in_gaming_mode() -> void:
+	# review S3-2: SMT, cores, sleep mode and MCU power saving need the admin password; Gaming Mode can't ask
+	var t := Trees.new().claw8ex()
+	Trees.make_bin()
+	var runner: RefCounted = Trees.runner(t)
+	var reg: Node = ControlsScript.new()
+	reg.sync_mode = true
+	var ctx := {"sys_root": t["root"], "runner": runner, "home": t["root"], "device": t["row"], "registry": reg, "password_prompt": false}
+	reg.setup(ctx)
+	var prov: RefCounted = ProviderScript.new()
+	prov.cfg_path = t["root"] + "/power_controls.cfg"
+	prov.setup(ctx)
+	reg.register_provider(prov)
+	reg.detect_all()
+	_nodes.append(reg)
+	var c: Object = reg.control("power.sleep_mode")
+	ok(not c.available and c.reason == Tx.NEEDS_ADMIN, "sleep mode: admin password, Desktop Mode (%s)" % c.reason)
+	c = reg.control("power.cpu_cores")
+	ok(not c.available and c.reason == Tx.NEEDS_ADMIN, "cores through sysfs: admin password (%s)" % c.reason)
+	ok(reg.control("power.epp").available, "EPP stays prompt-free")
 	_free()
 
 

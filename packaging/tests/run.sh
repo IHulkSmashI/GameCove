@@ -139,6 +139,32 @@ else
 	bad "pkexec block must clear GAMECOVE_PATH"
 fi
 
+# ------------------------------------------------- gamecove-fix --remove-all (uninstall, review S2-5)
+RA="$T/raroot"
+RAF="$RA/usr/lib/gamecove/fixes"
+for spec in "charge-limit:installed=yes" "controller-led:state=on" "fan:installed=no" "gpd-fingerprint:state=not-needed" "claw8ex-vrr:installed=yes"; do
+	n="${spec%%:*}"
+	mkdir -p "$RAF/$n"
+	cat >"$RAF/$n/fix.sh" <<FIXEOF
+#!/bin/sh
+case "\$1" in
+status) echo "applies=yes"; echo "${spec#*:}" ;;
+remove) echo "$n" >>"\$GAMECOVE_ROOT/removed"; [ "$n" = claw8ex-vrr ] && exit 1 ;;
+esac
+exit 0
+FIXEOF
+done
+GAMECOVE_ROOT="$RA" sh "$FIX" --remove-all >"$T/out" 2>&1
+code=$?
+if [ "$code" -eq 1 ]; then ok; else bad "--remove-all reports a failed remove (exit $code)"; fi
+contains "$RA/removed" "^charge-limit$" "installed=yes: removed (charge limit back)"
+contains "$RA/removed" "^controller-led$" "state=on without installed=: removed (LEDs back)"
+lacks "$RA/removed" "^fan$" "installed=no: left alone"
+lacks "$RA/removed" "gpd-fingerprint" "not-needed: left alone"
+contains "$T/out" "^failed=claw8ex-vrr$" "a failed one is named"
+contains "$RA/var/lib/gamecove/changes.log" "fix=charge-limit action=remove value=- result=ok" "logged"
+expect_code 64 "--remove-all takes no arguments" sh "$FIX" --remove-all extra
+
 # ------------------------------------------------- gamecove-fix-set (no password)
 # polkit runs this one without a password, so it may only `set` (and `status`)
 # the low-risk fixes with fixed values, then hand over to gamecove-fix.
@@ -167,8 +193,8 @@ expect_code 64 "set entry refuses other actions" gfs fan explode
 expect_code 65 "set entry refuses vrr (boot config)" gfs claw8ex-vrr set on
 expect_code 65 "set entry refuses vrr install" gfs claw8ex-vrr install
 expect_code 65 "set entry refuses vrr status" gfs claw8ex-vrr status
-expect_code 65 "set entry refuses buttons" gfs claw8ex-buttons set on
-expect_code 65 "set entry refuses buttons install" gfs claw8ex-buttons install
+expect_code 66 "set entry refuses buttons on" gfs claw8ex-buttons set on
+expect_code 64 "set entry refuses buttons install" gfs claw8ex-buttons install
 expect_code 65 "set entry refuses other fixes" gfs dummy set 80
 expect_code 65 "set entry refuses traversal" gfs ../fan set quiet
 expect_code 65 "set entry refuses --list" gfs --list x
@@ -193,6 +219,10 @@ contains "$ROOT/calls" "^charge-limit:set 100$" "charge set reached fix.sh"
 expect_code 0 "set entry: gyro accel-on" gfs claw8ex-gyro set accel-on
 expect_code 0 "set entry: gyro accel-off" gfs claw8ex-gyro set accel-off
 contains "$ROOT/calls" "^claw8ex-gyro:set accel-off$" "gyro set reached fix.sh"
+# review S1-4: rebuilding the InputPlumber override after an OS update needs no password
+expect_code 0 "set entry: buttons refresh" gfs claw8ex-buttons set refresh
+expect_code 0 "set entry: gyro refresh" gfs claw8ex-gyro set refresh
+contains "$ROOT/calls" "^claw8ex-buttons:set refresh$" "buttons refresh reached fix.sh"
 expect_code 0 "set entry: status" gfs fan status
 contains "$T/out" "^state=on$" "status passed through"
 expect_code 0 "set entry: fan curve" gfs fan set curve:0,40,50,60,80,100
@@ -201,10 +231,14 @@ expect_code 66 "set entry: fan curve letters" gfs fan set curve:0,40,x
 expect_code 66 "set entry: fan curve empty" gfs fan set curve:
 expect_code 66 "set entry: fan curve trailing comma" gfs fan set curve:1,2,
 expect_code 66 "set entry: fan curve shell" gfs fan set 'curve:1;reboot'
-for v in boost:off smt:on cores:4 epp:balance_power governor:powersave cpumax:70 gpulevel:auto gpumin:600 \
+for v in boost:off epp:balance_power governor:powersave cpumax:70 gpulevel:auto gpumin:600 \
 	gpumax:1800 gpuprofile:power_saving sppt:28 fppt:33 platform:low-power tau:8000000 tau:restore \
-	thermald:hold thermald:release sleep:deep battery:long-life mcu:off restore; do
+	thermald:hold thermald:release battery:long-life restore; do
 	expect_code 0 "set entry: power-tune $v" gfs power-tune set "$v"
+done
+# review S3-2: not day-to-day, or risky: the administrator password (gamecove-fix)
+for v in smt:on cores:4 sleep:deep mcu:on mcu:off; do
+	expect_code 66 "set entry refuses power-tune $v" gfs power-tune set "$v"
 done
 contains "$ROOT/calls" "^power-tune:set epp:balance_power$" "power-tune set reached fix.sh"
 expect_code 66 "set entry: power-tune unknown key" gfs power-tune set fan:max
@@ -217,20 +251,23 @@ expect_code 64 "set entry refuses power-tune install" gfs power-tune install
 expect_code 64 "set entry refuses power-tune remove" gfs power-tune remove
 lacks "$ROOT/calls" "install" "no install reached a fix through the set entry"
 lacks "$ROOT/calls" "remove" "no remove reached a fix through the set entry"
-# The small file fixes (udev rules, session files): only on / off, never install / remove.
+# review S3-2: the small file fixes (udev rules, session files) need the administrator password now
 : >"$ROOT/calls"
-expect_code 0 "set entry: file fix on" gfs claw-kbd-wakeup set on
-expect_code 0 "set entry: file fix off" gfs claw-kbd-wakeup set off
-contains "$ROOT/calls" "^claw-kbd-wakeup:set on$" "file fix on reached fix.sh"
-contains "$ROOT/calls" "^claw-kbd-wakeup:set off$" "file fix off reached fix.sh"
-expect_code 66 "set entry: file fix other value" gfs claw-kbd-wakeup set quiet
-expect_code 64 "set entry: file fix install" gfs claw-kbd-wakeup install
-expect_code 64 "set entry: file fix remove" gfs claw-kbd-wakeup remove
-expect_code 66 "set entry: fan on is not a file fix value" gfs fan set on
-# FILE_FIXES = exactly the fix folders built on gcfix.sh
-want=$(grep -l 'gcfix.sh"$' "$REPO"/fixes/*/fix.sh | sed 's|.*/fixes/\([^/]*\)/fix.sh|\1|' | sort | tr '\n' ' ')
-have=$(sed -n 's/^FILE_FIXES="\(.*\)"$/\1/p' "$FIXSET" | tr ' ' '\n' | sort | tr '\n' ' ')
-if [ "$want" = "$have" ]; then ok; else bad "FILE_FIXES in gamecove-fix-set ($have) must list the gcfix fixes ($want)"; fi
+expect_code 65 "set entry refuses a file fix on" gfs claw-kbd-wakeup set on
+expect_code 65 "set entry refuses a file fix off" gfs claw-kbd-wakeup set off
+expect_code 65 "set entry refuses a file fix status" gfs claw-kbd-wakeup status
+expect_code 66 "set entry: fan on is not a value" gfs fan set on
+if [ ! -s "$ROOT/calls" ]; then ok; else bad "refused file-fix calls must not run a fix"; fi
+# the policy text names exactly the power-tune keys the set entry takes, and none it refuses
+keys=$(sed -n 's/.*power-tune:\([a-z]*\):\*.*/\1/p; s/.*| power-tune:\([a-z]*\):\*.*/\1/p' "$FIXSET" | tr ' |\\' '\n\n\n' | grep -o 'power-tune:[a-z]*' | sed 's/power-tune://' | sort -u)
+[ -z "$keys" ] && keys=$(grep -o 'power-tune:[a-z]*:\*' "$FIXSET" | sed 's/power-tune:\([a-z]*\):\*/\1/' | sort -u)
+POLICY="$REPO/packaging/polkit/io.github.ihulksmashi.gamecove.policy"
+for k in $keys; do
+	if grep -q "\b$k\b" "$POLICY"; then ok; else bad "policy text doesn't mention power-tune $k, which gamecove-fix-set allows"; fi
+done
+for k in smt cores sleep mcu; do
+	if printf '%s\n' "$keys" | grep -qx "$k"; then bad "gamecove-fix-set must not take power-tune $k"; else ok; fi
+done
 # Under pkexec it hands over to the installed dispatcher; the caller's paths are ignored.
 : >"$ROOT/calls"
 PKEXEC_UID=1000 GAMECOVE_ROOT="$ROOT" GAMECOVE_FIXES_DIR="$FIXES" sh "$FIXSET" fan set quiet >"$T/out" 2>&1
@@ -266,41 +303,18 @@ sel() {
 	PATH="$BIN:$PATH" sh "$SEL" "$@"
 }
 
-if [ "$(id -u)" -eq 0 ]; then
-	expect_code 1 "session-select refuses root" sel steam
-	echo "note: running as root, skipping session-select switch tests" >&2
-else
-	: >"$T/busctl.log"
-	expect_code 0 "switch to steam" sel steam
-	contains "$T/steamosctl.log" "^switch-to-game-mode$" "steam uses switch-to-game-mode"
+# switching, saved defaults, restore, guard, bounce and the crash-loop guard:
+# packaging/tests/session.sh (runs as root too, with a fake id)
+if sh "$REPO/packaging/tests/session.sh" >"$T/out" 2>&1; then ok; else bad "session.sh: $(grep FAIL "$T/out" | head -20)"; fi
+: >"$T/busctl.log"
+if [ "$(id -u)" -ne 0 ]; then
+	expect_code 0 "switch to steam resets InterceptMode" env XDG_DATA_HOME="$T/xdg" sel steam
 	contains "$T/busctl.log" "^$RESET0$" "switching resets InterceptMode on device 0"
 	contains "$T/busctl.log" "^$RESET1$" "switching resets InterceptMode on device 1"
 	lacks "$T/busctl.log" "dbus0 " "target devices left alone"
 	: >"$T/busctl.log"
 	expect_code 64 "unknown target, no reset" sel windows
 	lacks "$T/busctl.log" "set-property" "bad usage resets nothing"
-	expect_code 0 "switch to gamecove" sel gamecove
-	contains "$T/steamosctl.log" "^switch-to-desktop-mode gamecove.desktop$" "gamecove via desktop session"
-	expect_code 0 "gamecove default" sel gamecove --default
-	contains "$T/steamosctl.log" "^set-default-desktop-session gamecove.desktop$" "default session set"
-	contains "$T/steamosctl.log" "^set-default-login-mode desktop$" "login mode desktop"
-	expect_code 0 "steam default" sel steam --default
-	contains "$T/steamosctl.log" "^set-default-login-mode game$" "login mode game"
-	expect_code 0 "gamecove default without switching" sel gamecove --default --no-switch
-	contains "$T/steamosctl.log" "^set-default-desktop-session gamecove.desktop$" "no-switch still sets the session"
-	contains "$T/steamosctl.log" "^set-default-login-mode desktop$" "no-switch still sets the login mode"
-	lacks "$T/steamosctl.log" "switch-to" "no-switch doesn't switch"
-	expect_code 0 "steam default without switching" sel steam --default --no-switch
-	contains "$T/steamosctl.log" "^set-default-login-mode game$" "steam no-switch login mode"
-	lacks "$T/steamosctl.log" "switch-to" "steam no-switch doesn't switch"
-	expect_code 64 "no-switch without default" sel gamecove --no-switch
-	expect_code 64 "too many args" sel gamecove --default --no-switch extra
-	expect_code 0 "desktop" sel desktop
-	contains "$T/steamosctl.log" "^switch-to-desktop-mode$" "desktop default"
-	expect_code 64 "desktop --default" sel desktop --default
-	expect_code 64 "unknown target" sel windows
-	expect_code 64 "bad flag" sel steam --now
-	expect_code 2 "no steamosctl" env STEAMOSCTL=/nonexistent/steamosctl sh "$SEL" steam
 fi
 
 # ------------------------------------------------------------ session-client
@@ -499,7 +513,13 @@ cat >"$GB/badsum" <<'EOF'
 #!/bin/sh
 echo "0000000000000000000000000000000000000000000000000000000000000000  $1"
 EOF
-chmod +x "$GB/curl" "$GB/badsum"
+# fake cosign: logs its arguments; fails while $T/cosign-fail exists
+cat >"$GB/cosign" <<EOF
+#!/bin/sh
+echo "\$*" >>"$T/cosign.log"
+[ ! -f "$T/cosign-fail" ]
+EOF
+chmod +x "$GB/curl" "$GB/badsum" "$GB/cosign"
 mkdir -p "$T/ggapp"
 printf '#!/bin/sh\necho "app $*" >>"%s/launch.log"\n' "$T" >"$T/ggapp/gamecove.x86_64"
 echo pck >"$T/ggapp/gamecove.pck"
@@ -510,12 +530,13 @@ echo raw >"$SRV/gamecove-0.2.0-x86_64.raw"
 cp "$GG" "$SRV/get-gamecove.sh"
 (cd "$SRV" && sha256sum gamecove-0.2.0-x86_64.tar.gz gamecove-0.2.0-1.fc43.x86_64.rpm gamecove-0.2.0-1.fc43.src.rpm \
 	gamecove-0.2.0-x86_64.raw get-gamecove.sh >SHA256SUMS)
+echo '{"bundle": "fake"}' >"$SRV/SHA256SUMS.sigstore.json"
 {
 	echo '{'
 	echo '  "tag_name": "v0.2.0",'
 	echo '  "assets": ['
 	for a in gamecove-0.2.0-1.fc43.src.rpm gamecove-0.2.0-1.fc43.x86_64.rpm gamecove-0.2.0-x86_64.raw \
-		gamecove-0.2.0-x86_64.tar.gz get-gamecove.sh SHA256SUMS; do
+		gamecove-0.2.0-x86_64.tar.gz get-gamecove.sh SHA256SUMS SHA256SUMS.sigstore.json; do
 		echo "    { \"name\": \"$a\", \"browser_download_url\": \"https://example.test/dl/$a\" },"
 	done
 	echo '  ]'
@@ -542,8 +563,9 @@ gg() {
 	root="$1"
 	shift
 	: >"$T/curl.log"
+	: >"$T/cosign.log"
 	env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$root" GAMECOVE_ARCH=x86_64 \
-		GAMECOVE_API=https://api.example.test "$@" sh "$GG" --no-launch
+		GAMECOVE_API=https://api.example.test COSIGN="$GB/cosign" "$@" sh "$GG" --no-launch
 }
 for pair in "$R_BAZ:bazzite" "$R_FED:fedora-atomic" "$R_FEDWS:other" "$R_DECK:steamos" "$R_ARCH:other" "$T/os-none:other"; do
 	got="$(GAMECOVE_ROOT="${pair%%:*}" sh "$GG" --detect-os)"
@@ -587,6 +609,41 @@ grep -v "x86_64.rpm" "$SRV/SUMS.keep" >"$SRV/SHA256SUMS"
 expect_code 1 "bootstrap refuses a file missing from SHA256SUMS" gg "$R_BAZ"
 mv "$SRV/SUMS.keep" "$SRV/SHA256SUMS"
 expect_code 1 "bootstrap needs x86_64" gg "$R_BAZ" GAMECOVE_ARCH=aarch64
+# review S3-3: SHA256SUMS must carry a Sigstore signature from this repository's release workflow
+rm -rf "$T/gghome"
+mkdir -p "$T/gghome"
+expect_code 0 "signed release accepted" gg "$R_BAZ"
+contains "$T/cosign.log" "^verify-blob --bundle .*SHA256SUMS.sigstore.json --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp " "cosign checks the bundle and the GitHub OIDC issuer"
+contains "$T/cosign.log" 'IHulkSmashI/GameCove/\\.github/workflows/release\\.yml@refs/tags/v' "identity: this repo's release workflow on a v* tag"
+contains "$GI/release.env" "^SIGNATURE=verified$" "recorded for the installer"
+rm -rf "$T/gghome"
+mkdir -p "$T/gghome"
+touch "$T/cosign-fail"
+expect_code 1 "a bad signature is refused" gg "$R_BAZ"
+contains "$T/out" "signature doesn't check out" "said why"
+if [ ! -e "$GI/app" ] && [ ! -e "$GI/release.env" ]; then ok; else bad "nothing installed after a bad signature"; fi
+rm -f "$T/cosign-fail"
+mv "$SRV/SHA256SUMS.sigstore.json" "$SRV/bundle.off"
+cp "$SRV/latest.json" "$SRV/latest.keep"
+grep -v "sigstore.json" "$SRV/latest.keep" >"$SRV/latest.json"
+expect_code 1 "an unsigned release is refused" gg "$R_BAZ"
+contains "$T/out" "has no signature" "said why"
+expect_code 0 "unsigned accepted only when asked" gg "$R_BAZ" GAMECOVE_ALLOW_UNSIGNED=1
+contains "$GI/release.env" "^SIGNATURE=unsigned$" "and recorded as unsigned"
+mv "$SRV/bundle.off" "$SRV/SHA256SUMS.sigstore.json"
+mv "$SRV/latest.keep" "$SRV/latest.json"
+# no cosign anywhere: the pinned release is downloaded and its sha256 checked (a fake one here: refused)
+printf 'not cosign\n' >"$SRV/cosign-linux-amd64"
+mkdir -p "$T/ggbin2"
+cp "$GB/curl" "$T/ggbin2/curl"
+if command -v cosign >/dev/null 2>&1; then
+	echo "note: a real cosign is installed here, skipped the pinned-download test" >&2
+else
+	expect_code 1 "a cosign download that isn't the pinned one is refused" env PATH="$T/ggbin2:/usr/bin:/bin" GAMECOVE_HOME="$T/gghome" \
+		GAMECOVE_ROOT="$R_BAZ" GAMECOVE_ARCH=x86_64 GAMECOVE_API=https://api.example.test sh "$GG" --no-launch
+	contains "$T/out" "doesn't match its pinned sha256" "said why"
+	contains "$T/curl.log" "sigstore/cosign/releases/download/v2.5.3/cosign-linux-amd64" "the pinned cosign release"
+fi
 expect_code 0 "bootstrap again" gg "$R_BAZ"
 touch "$T/offline"
 : >"$T/launch.log"
@@ -642,7 +699,8 @@ for a in doc.getElementsByTagName("action"):
              if n.getAttribute("key") == "org.freedesktop.policykit.exec.path"]
     acts[a.getAttribute("id")] = (get("allow_any"), get("allow_inactive"), get("allow_active"), paths)
 want = {
-    "io.github.ihulksmashi.gamecove.fix-set": ("auth_admin", "auth_admin", "yes", ["/usr/libexec/gamecove/gamecove-fix-set"]),
+    # review S3-2: the prompt-free action is for the active local session only
+    "io.github.ihulksmashi.gamecove.fix-set": ("no", "no", "yes", ["/usr/libexec/gamecove/gamecove-fix-set"]),
     "io.github.ihulksmashi.gamecove.fix": ("auth_admin", "auth_admin", "auth_admin_keep", ["/usr/libexec/gamecove/gamecove-fix"]),
 }
 assert acts == want, acts
@@ -764,7 +822,7 @@ else
 		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" \
 		"$REPO/packaging/get-gamecove.sh" "$REPO/packaging/libexec/gamecove-apply-choices" \
 		"$REPO/packaging/libexec/reaper" \
-		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh"; do
+		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh" "$REPO/packaging/tests/session.sh" "$REPO/packaging/tests/wrapper.sh"; do
 		if "$SHELLCHECK" -S warning -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
@@ -790,6 +848,10 @@ sleep 0.5
 kill -TERM "$rp"
 wait "$rp"
 contains "$T/reaper2" "got-term" "reaper passes TERM on to the program"
+
+# ------------------------------------------------------- gamecove-run (launch wrapper)
+if sh "$REPO/packaging/tests/wrapper.sh" >"$T/out" 2>&1; then ok; else bad "wrapper.sh: $(grep FAIL "$T/out" | head -20)"; fi
+if "$SHELLCHECK" -S warning -s bash "$REPO/packaging/libexec/gamecove-run" >"$T/out" 2>&1; then ok; else bad "shellcheck gamecove-run: $(cat "$T/out")"; fi
 
 # ------------------------------------------------------- gamecove-selftest (fake root and commands)
 if sh "$REPO/packaging/tests/selftest.sh" >"$T/out" 2>&1; then ok; else bad "selftest: $(tail -20 "$T/out")"; fi

@@ -1,12 +1,17 @@
 #!/bin/sh
 # GameCove fix: gyro on the MSI Claw 8 EX AI+ (board MS-1T91), the IMU behind Intel's sensor hub (ISH).
-# usage: fix.sh install|remove|status|set accel-on|accel-off
+# usage: fix.sh install|remove|status|set accel-on|accel-off|refresh
 #
 # Method found and tested by Kisenir (r/MSIClaw), used with his permission (2026-11-08); ported from
 # ClawDeck. Four pieces, all recorded and all taken out again by remove:
 #   1. MSI's ISH firmware, downloaded from MSI on the device (it may not be passed on), checked by size and
-#      sha256 BEFORE anything is written, installed as /etc/firmware/intel/ish/ish_ptl.bin, plus the kernel
-#      argument firmware_class.path=/etc/firmware (shared with claw8ex-vrr, removed when neither needs it).
+#      sha256 BEFORE anything is written, installed under the product-specific name the kernel's ISH loader
+#      tries before the generic ish_ptl.bin (drivers/hid/intel-ish-hid/ishtp/loader.c:
+#      intel/ish/ish_<gen>_<crc32(sys_vendor)>_<crc32(product_name)>.bin, CRC-32 as zlib's), so another
+#      Panther Lake machine booting this drive never loads MSI's Claw firmware (review S1-6); plus the
+#      kernel argument firmware_class.path=/etc/firmware (shared with claw8ex-vrr, removed when neither
+#      needs it; it only adds a search path). Installs from before used the generic name; install and a
+#      root status move them.
 #      The file is also tracked in the initramfs (rpm-ostree initramfs-etc), like the VRR fix's EDID:
 #      Bazzite's generic initramfs carries drivers/hid (intel_ish_ipc included), so the hub may ask for its
 #      firmware before the root filesystem is mounted, where only the initramfs copy of /etc exists.
@@ -25,7 +30,7 @@ KIT_URL="https://download.msi.com/nb_drivers/cs/ISH_Kit_5.8.1.7782_1T91%20_0318_
 KIT_MEMBER="Drivers/Win10/IshHeci/x64/FWImage/0004/ishS_SI_5.8.1.7782.bin"
 FW_SIZE=432640
 FW_SHA256=8194475367978c473d17e7e777fe196d99383f80f51b433927ea9afd0e9e661b
-FW_DEST=$FW_DIR/intel/ish/ish_ptl.bin
+FW_GENERIC=$FW_DIR/intel/ish/ish_ptl.bin
 ISH_PCI=/sys/bus/pci/devices/0000:00:12.0
 BPF_NAME=MSI__Claw-ISH-IMU.bpf.o
 BPF_OBJ=${GAMECOVE_GYRO_BPF_OBJ:-$HERE/bpf/$BPF_NAME}
@@ -78,6 +83,38 @@ EOF
 }
 
 sha_of() { sha256sum "$1" 2>/dev/null | cut -d ' ' -f 1; }
+
+# crc32 <text>: the kernel's crc32(~0, s) ^ ~0 (= zlib's CRC-32) as 8 hex digits.
+crc32() { python3 -I -c 'import sys, zlib; print("%08x" % zlib.crc32(sys.argv[1].encode()))' "$1"; }
+
+dmi_field() { tr -d '\n' <"$ROOT/sys/class/dmi/id/$1" 2>/dev/null; }
+
+# The firmware path only this product loads ("" when the DMI strings can't be read).
+fw_dest() {
+	v=$(dmi_field sys_vendor)
+	p=$(dmi_field product_name)
+	[ -n "$v" ] && [ -n "$p" ] || return 1
+	cv=$(crc32 "$v") && cp_=$(crc32 "$p") || return 1
+	printf '%s/intel/ish/ish_ptl_%s_%s.bin' "$FW_DIR" "$cv" "$cp_"
+}
+
+# Move an older install's generic ish_ptl.bin to the product-specific name.
+migrate_fw() {
+	m_has file "$FW_GENERIC" || return 0
+	[ -n "$FW_DEST" ] || return 1
+	if ! m_has file "$FW_DEST"; then
+		m_put "$ROOT$FW_GENERIC" "$FW_DEST" 644 || return 1
+		rpm-ostree initramfs-etc --track="$FW_DEST" >/dev/null || return 1
+		m_add initramfs "$FW_DEST"
+	fi
+	if m_has initramfs "$FW_GENERIC"; then
+		rpm-ostree initramfs-etc --untrack="$FW_GENERIC" >/dev/null || return 1
+	fi
+	rm -f "$ROOT$FW_GENERIC"
+	grep -vxF -e "file $FW_GENERIC" -e "initramfs $FW_GENERIC" "$MANIFEST" >"$MANIFEST.tmp" || true
+	mv -f "$MANIFEST.tmp" "$MANIFEST"
+	say "moved MSI's ISH firmware to the name only this model loads (${FW_DEST##*/})" >&2
+}
 
 has_ish() {
 	[ "$(cat "$ROOT$ISH_PCI/vendor" 2>/dev/null)" = 0x8086 ] || return 1
@@ -164,8 +201,10 @@ install() {
 	require_root
 	require_board
 	lock
+	FW_DEST=$(fw_dest) || die "can't read this machine's DMI vendor and product name, needed to name the firmware for this model only"
 	if m_installed; then
 		refresh_units || die "could not update the services"
+		migrate_fw || die "could not move the ISH firmware to its model-specific name"
 		say "already installed"
 		return 0
 	fi
@@ -224,10 +263,16 @@ remove() {
 
 # One token, so it fits gamecove-fix's `set <value>` (values can't hold spaces).
 set_value() {
-	[ $# -eq 1 ] || die "usage: $0 set accel-on|accel-off"
+	[ $# -eq 1 ] || die "usage: $0 set accel-on|accel-off|refresh"
 	case $1 in
 	accel-on | accel-off) ;;
-	*) die "usage: $0 set accel-on|accel-off" ;;
+	refresh)
+		require_root
+		lock
+		ip_refresh
+		return 0
+		;;
+	*) die "usage: $0 set accel-on|accel-off|refresh" ;;
 	esac
 	require_root
 	lock
@@ -242,9 +287,11 @@ set_value() {
 }
 
 status() {
+	FW_DEST=$(fw_dest) || FW_DEST=""
 	if m_installed && is_root; then
 		lock
 		refresh_units || true
+		migrate_fw || true
 	fi
 	if [ "$(board_name)" != "$BOARD_WANTED" ] || ! has_ish; then
 		say "applies=no"
@@ -286,6 +333,7 @@ status() {
 	say "inputplumber_imu=$ip"
 	say "inputplumber_reading=$reading"
 	say "accelerometer=$accel"
+	say "inputplumber_override=$(ip_override_state)"
 	say "services=$services"
 	if [ "$installed" = no ]; then
 		say "state=off"
@@ -304,5 +352,5 @@ install) install ;;
 remove) remove ;;
 status) status ;;
 set) shift; set_value "$@" ;;
-*) die "usage: $0 install|remove|status|set accel-on|accel-off" ;;
+*) die "usage: $0 install|remove|status|set accel-on|accel-off|refresh" ;;
 esac

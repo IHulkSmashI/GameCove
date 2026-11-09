@@ -263,3 +263,41 @@ Device fixes: `devices.json` `"fixes"` ∩ `gamecove-fix --list`, each with its 
   `src/dbus/polkit.rs`, `rootfs/usr/share/polkit-1/`, `rootfs/usr/share/inputplumber/schema/device_profile_v1.json`,
   `profiles/test.yaml`, `src/cli/device.rs` (<https://github.com/ShadowBlip/InputPlumber>, `6aca920`)
 - legendary `cli.py` (auth), heroic-gogdl `auth.py`/`args.py`, nile `cli.py`, `api/authorization.py`, `arguments.py`
+
+
+## GameCove's root actions (polkit)
+
+GameCove's own root helper has two polkit actions (`packaging/polkit/io.github.ihulksmashi.gamecove.policy`),
+picked by the program pkexec runs. Gaming Mode has no polkit agent, so anything that needs a password only works
+from Desktop Mode (or the installer there). The split follows one rule: **a setting people change while playing
+is prompt-free and bounded; anything installed, persistent across boots, or risky without being needed day to
+day needs the administrator password.** (Review S3-2; `packaging/tests/run.sh` checks the policy text names
+exactly what `gamecove-fix-set` accepts.)
+
+Prompt-free (`gamecove-fix-set`, `allow_active` yes, `allow_inactive` / `allow_any` no, so only the person at the
+handheld, never a background or remote session):
+
+| Setting | Why prompt-free | How it's bounded |
+| --- | --- | --- |
+| charge-limit 50-100, release | changed from the Power page and at session end | 50-100 only; a udev guard never leaves charging blocked |
+| fan auto / quiet / max / curve | changed while playing | curves never below Quiet and never falling; a failed set goes back to auto |
+| power-tune boost, epp, governor, cpumax, gpulevel, gpumin, gpumax, gpuprofile | Auto TDP and the Power page move them per game | every value checked against what the kernel offers; recorded and restored on exit |
+| power-tune sppt, fppt, platform, tau | the TDP slider on firmware-attribute handhelds | inside the firmware's own min/max and devices.json, never under SPL |
+| power-tune battery (long life) | a charge setting like the limit | the kernel's own charge_types values |
+| power-tune thermald hold / release | on Intel, thermald puts the firmware PL1 back every few seconds, so the TDP only sticks with it held | a watcher started by the hold starts thermald again once no game of that user runs (60 s for a game to start, then two checks 10 s apart), even if GameCove crashed; GameCove asks again on the next TDP write |
+| controller-led | the lights, changed often | every field checked strictly; the original colours are restored on removal |
+| claw8ex-gyro accel on/off | a gyro tuning switch | only rewrites GameCove's own InputPlumber override |
+| claw8ex-gyro / -buttons refresh | after an OS update the controller may otherwise stop matching; must work without a keyboard | only rebuilds GameCove's override from the current stock file, or removes it |
+
+Administrator password (`gamecove-fix`, `auth_admin_keep`):
+
+| Action | Why it needs the password |
+| --- | --- |
+| install / remove of every fix, `--remove-all` | writes udev rules, kernel arguments, initramfs, firmware or units that persist across boots |
+| the small file fixes (udev rules, session files) | they persist across boots and act on every start; applied once from Desktop Mode, not a day-to-day setting |
+| power-tune smt, cores | taking CPUs offline is rarely needed and can make the system crawl if misused |
+| power-tune sleep (s2idle / deep) | a wrong mode can stop the handheld waking; set once |
+| power-tune mcu (Ally controller power saving) | old MCU firmware leaves the controller dead after sleep; also gated on the firmware version |
+
+In Gaming Mode the Power page shows these as "Needs your admin password: change it in Desktop Mode", and the
+Fixes page shows the admin note on the file fixes.

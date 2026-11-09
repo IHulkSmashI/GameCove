@@ -175,6 +175,10 @@ func _fix_card(r: Dictionary) -> Array:
 		w.name = "Who"
 		w.add_theme_color_override("font_color", ThemeLib.color("good" if r.get("auto_applied", false) else "text_3"))
 		col.add_child(w)
+	if str(r.get("reason", "")) != "":
+		var why := DKit.quiet(str(r["reason"]))
+		why.name = "Reason"
+		col.add_child(why)
 	if TF.STATUS_NOTES.has(status):
 		var note := DKit.quiet(TF.STATUS_NOTES[status])
 		note.name = "Note"

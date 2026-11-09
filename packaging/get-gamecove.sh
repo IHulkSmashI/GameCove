@@ -7,7 +7,9 @@
 #   1. works out which system this is (Bazzite / Fedora Atomic, SteamOS, other)
 #   2. downloads the latest GameCove release from GitHub: the app, the package
 #      for this system (RPM or SteamOS sysext) and SHA256SUMS
-#   3. checks every file against SHA256SUMS (stops on any mismatch)
+#   3. checks SHA256SUMS's signature (Sigstore keyless: signed by this repository's release
+#      workflow through GitHub OIDC, verified with cosign) and every file against SHA256SUMS
+#      (stops on any mismatch)
 #   4. unpacks the app into ~/.local/share/gamecove/installer
 #   5. adds "GameCove Installer" to the app menu and "Install GameCove" to the desktop
 #   6. opens GameCove in installer mode, which explains each step and asks
@@ -19,7 +21,17 @@
 #          --detect-os (print the system type and stop), --help
 # Environment (for tests and forks): GAMECOVE_REPO, GAMECOVE_API, GAMECOVE_TAG,
 #   GAMECOVE_HOME, GAMECOVE_ROOT (prefix for /etc/os-release, /run/ostree-booted),
-#   CURL, SHA256SUM.
+#   CURL, SHA256SUM, COSIGN (a cosign binary; else the system's, else a pinned download),
+#   GAMECOVE_ALLOW_UNSIGNED=1 (accept a release without a signature, e.g. one from before
+#   signing; the checksums are still checked).
+#
+# Signature (review S3-3): .github/workflows/release.yml signs SHA256SUMS with
+# `cosign sign-blob` using the workflow's GitHub OIDC identity (no key or secret to keep), and
+# attaches SHA256SUMS.sigstore.json. This script accepts it only when the certificate says it
+# was made by https://github.com/$REPO/.github/workflows/release.yml for a v* tag, issued to
+# GitHub Actions, and logged in Rekor. So a changed release file, or a release made any other
+# way (a stolen token uploading files by hand), is refused. cosign comes from the system, or
+# is downloaded once into ~/.local/share/gamecove/tools/ and checked against the sha256 below.
 set -eu
 
 REPO="${GAMECOVE_REPO:-IHulkSmashI/GameCove}"
@@ -34,6 +46,9 @@ DEST="$DATA/installer"
 LOG="$DATA/installer.log"
 APP_ID="io.github.ihulksmashi.GameCoveInstaller"
 launch=1
+COSIGN_VERSION=v2.5.3
+COSIGN_SHA256=783b5d6c74105401c63946c68d9b2a4e1aab3c8abce043e06b8510b02b623ec9
+OIDC_ISSUER=https://token.actions.githubusercontent.com
 
 say() {
 	printf '==> %s\n' "$*"
@@ -180,6 +195,7 @@ pick() {
 
 app_url="$(pick 'gamecove-*-x86_64.tar.gz')"
 sums_url="$(pick 'SHA256SUMS')"
+bundle_url="$(pick 'SHA256SUMS.sigstore.json')"
 script_url="$(pick 'get-gamecove.sh')"
 pkg_url=""
 case "$os" in
@@ -203,6 +219,54 @@ fetch() {
 }
 
 fetch "$sums_url"
+
+# cosign: $COSIGN, the system's, else the pinned release (downloaded once, sha256 checked).
+cosign_bin() {
+	if [ -n "${COSIGN:-}" ]; then
+		echo "$COSIGN"
+		return 0
+	fi
+	if command -v cosign >/dev/null 2>&1; then
+		command -v cosign
+		return 0
+	fi
+	c="$DATA/tools/cosign-$COSIGN_VERSION"
+	if [ ! -x "$c" ] || [ "$("$SHA256SUM" "$c" | cut -d ' ' -f 1)" != "$COSIGN_SHA256" ]; then
+		mkdir -p "$DATA/tools"
+		say "Downloading cosign $COSIGN_VERSION (checks the release's signature; once)" >&2
+		"$CURL" -fsSL -o "$c.part" "https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION/cosign-linux-amd64" ||
+			die "couldn't download cosign to check the release's signature"
+		[ "$("$SHA256SUM" "$c.part" | cut -d ' ' -f 1)" = "$COSIGN_SHA256" ] || {
+			rm -f "$c.part"
+			die "the cosign download doesn't match its pinned sha256; nothing installed"
+		}
+		chmod +x "$c.part" && mv -f "$c.part" "$c"
+	fi
+	echo "$c"
+}
+
+signature="none"
+if [ -n "$bundle_url" ]; then
+	fetch "$bundle_url"
+	cos="$(cosign_bin)"
+	# the identity: this repository's release workflow, for a v* tag (any case: GitHub URLs aren't case-sensitive)
+	ident="(?i)^https://github\.com/$(printf '%s' "$REPO" | sed 's/[.]/\\./g')/\.github/workflows/release\.yml@refs/tags/v"
+	if "$cos" verify-blob --bundle "$work/SHA256SUMS.sigstore.json" \
+		--certificate-oidc-issuer "$OIDC_ISSUER" --certificate-identity-regexp "$ident" \
+		"$work/SHA256SUMS" >"$work/cosign.log" 2>&1; then
+		signature="verified"
+		say "Signature checked: made by $REPO's release workflow"
+	else
+		log "cosign: $(tail -n 3 "$work/cosign.log" | tr '\n' ' ')"
+		die "release $tag's signature doesn't check out (not made by $REPO's release workflow, or files changed); nothing installed"
+	fi
+elif [ "${GAMECOVE_ALLOW_UNSIGNED:-}" = 1 ]; then
+	say "warning: release $tag isn't signed; going on because GAMECOVE_ALLOW_UNSIGNED=1 (checksums still checked)"
+	signature="unsigned"
+else
+	die "release $tag has no signature (SHA256SUMS.sigstore.json); not installing. GAMECOVE_ALLOW_UNSIGNED=1 accepts it anyway"
+fi
+
 for u in $app_url $pkg_url $script_url; do
 	fetch "$u"
 done
@@ -252,6 +316,7 @@ fi
 	echo "PACKAGE=$package"
 	echo "APP=$DEST/app/gamecove.x86_64"
 	echo "REPO=$REPO"
+	echo "SIGNATURE=$signature"
 } >"$DEST/release.env"
 log "release $tag for $os in $DEST"
 

@@ -10,6 +10,14 @@ extends "res://scripts/system/service.gd"
 const Commands := preload("res://scripts/installer/commands.gd")
 const UserFiles := preload("res://scripts/installer/user_files.gd")
 const Paths := preload("res://scripts/installer/paths.gd")
+const LaunchFiles := preload("res://scripts/controls/perf/launch_files.gd")
+const SteamConfig := preload("res://scripts/steam/steam_config.gd")
+const Proton := preload("res://scripts/launch/proton.gd")
+
+## How long uninstall waits for Steam to close before editing its launch options.
+const STEAM_STOP_WAIT_S := 30
+## Tests: "/proc" except in fixtures.
+var proc_root := "/proc"
 
 signal task_started(index: int, task: Dictionary)
 signal task_line(index: int, line: String)
@@ -195,6 +203,8 @@ func _internal(id: String) -> Array:
 		"remove_user_files":
 			log_line("removed " + ", ".join(PackedStringArray(UserFiles.remove_all(paths))))
 			return [true, ""]
+		"steam_unwrap":
+			return _steam_unwrap()
 		"remove_settings":
 			var user_dir := OS.get_user_data_dir()
 			# Only GameCove's own folders: the app's user:// and ~/.local/share/gamecove (but its log).
@@ -209,6 +219,27 @@ func _internal(id: String) -> Array:
 					DirAccess.remove_absolute(p)
 			return [true, ""]
 	return [false, "unknown task " + id]
+
+
+## Review S2-1: takes GameCove's launcher out of every Steam game. Steam writes its settings back
+## when it exits, so it is closed first (and waited for). If it won't close, nothing is lost: the
+## launch options fall through to the game when GameCove's wrapper is gone.
+func _steam_unwrap() -> Array:
+	var root := Proton.steam_root(paths.home)
+	if root == "" or not DirAccess.dir_exists_absolute(root.path_join("userdata")):
+		return [true, ""]
+	if SteamConfig.is_running(paths.home, proc_root):
+		runner.run("steam", PackedStringArray(["-shutdown"]))
+		var waited := 0
+		while SteamConfig.is_running(paths.home, proc_root) and waited < STEAM_STOP_WAIT_S * 2:
+			OS.delay_msec(500)
+			waited += 1
+	var r: Dictionary = LaunchFiles.unwrap_all(paths.home, root, proc_root)
+	if int(r["error"]) == ERR_BUSY:
+		log_line("Steam is still running: launch options left (they fall through to the game without GameCove)")
+		return [false, "Steam is running"]
+	log_line("launch options: GameCove taken out of %d game(s)" % (r["changed"] as Array).size())
+	return [int(r["error"]) == OK, "" if int(r["error"]) == OK else error_string(int(r["error"]))]
 
 
 ## The pending-choices file for an install. The default session can only be

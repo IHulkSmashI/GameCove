@@ -7,6 +7,9 @@
 #     it is added by whoever needs it first and removed only when no fix holds it);
 #   - the InputPlumber override for board MS-1T91, which the face buttons and the gyro both edit. It is
 #     always rebuilt from the stock file plus the features switched on, so neither fix can undo the other.
+#     Its header records the stock file's sha256; `set refresh` (no password, also run by GameCove's
+#     "what changed" check at every start) rebuilds it when an OS update changed the stock file, or
+#     drops it (back to stock) when the new layout can't be edited safely (review S1-4).
 #
 # Every path is prefixed with $GAMECOVE_ROOT (empty on a real system, a fake root in tests).
 # Paths written to the manifest and handed to rpm-ostree are real paths, without the prefix.
@@ -23,7 +26,7 @@ IP_OVERRIDE=/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml
 IP_MARK="# GameCove override of $IP_STOCK"
 IP_MAP_ID=gamecove_claw8ex
 
-say() { printf '%s\n' "$*"; }
+say() { printf '%s\n' "$*" 2>/dev/null || :; } # a reader that stopped early (grep -q) is fine
 warn() { printf 'warning: %s\n' "$*" >&2; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
@@ -120,7 +123,7 @@ m_undo() {
 			systemctl disable --now "$arg" >/dev/null 2>&1 || warn "could not stop $arg"
 			units=1
 			;;
-		karg) karg_release "$arg" "$FIX" || { done_ok=0; boot_kept=1; } ;;
+		karg | marker) karg_release "$arg" "$FIX" || { done_ok=0; boot_kept=1; } ;;
 		initramfs) rpm-ostree initramfs-etc --untrack="$arg" >/dev/null || { done_ok=0; boot_kept=1; } ;;
 		ipflag) ip_flag_off "$arg" || done_ok=0 ;;
 		*) warn "unknown manifest line: $kind $arg" ;;
@@ -232,6 +235,53 @@ ip_require_free() {
 
 ip_flag() { [ -e "$IP_FLAGS/$1" ]; }
 
+ip_stock_sha() { sha256sum "$ROOT$IP_STOCK" 2>/dev/null | cut -d ' ' -f 1; }
+
+# The stock file's sha256 the override was built from ("" for an override older than this check).
+ip_override_sha() { sed -n 's/^# stock-sha256: \([0-9a-f]*\)$/\1/p' "$ROOT$IP_OVERRIDE" 2>/dev/null | head -n 1; }
+
+# Our override no longer matches the stock file it shadows (an OS / InputPlumber update changed it).
+ip_stale() {
+	ip_override_ours || return 1
+	[ "$(ip_override_sha)" != "$(ip_stock_sha)" ]
+}
+
+# none | current | stale | dropped (rebuilding failed, InputPlumber runs the stock file)
+ip_override_state() {
+	if ip_override_ours; then
+		if ip_stale; then echo stale; else echo current; fi
+	elif [ -f "$IP_FLAGS/stale" ]; then
+		echo dropped
+	else
+		echo none
+	fi
+}
+
+# Rebuild a stale override from the current stock file. If the new stock file can't be edited the
+# way we expect (or is gone), remove the override so InputPlumber uses the stock file: a frozen copy
+# of an old schema could stop the controller from working. The flags stay, so the next refresh (after
+# a GameCove update that knows the new layout) brings the features back.
+ip_refresh() {
+	if ! ip_override_ours; then
+		# dropped earlier: try again (a GameCove update may handle the new layout)
+		if [ -f "$IP_FLAGS/stale" ] && { ip_flag buttons || ip_flag imu; } && [ -f "$ROOT$IP_STOCK" ] && [ ! -e "$ROOT$IP_OVERRIDE" ]; then
+			ip_regen >/dev/null 2>&1 && rm -f "$IP_FLAGS/stale" && say "override rebuilt from the current stock file"
+		fi
+		return 0
+	fi
+	ip_stale || { say "override is current"; return 0; }
+	if [ -f "$ROOT$IP_STOCK" ] && ip_regen; then
+		rm -f "$IP_FLAGS/stale"
+		say "override rebuilt from the updated stock file"
+		return 0
+	fi
+	rm -f "$ROOT$IP_OVERRIDE" "$ROOT$IP_OVERRIDE.gamecove-tmp"
+	mkdir -p "$IP_FLAGS" && printf '%s\n' "$(ip_stock_sha)" >"$IP_FLAGS/stale"
+	ip_restart
+	warn "the stock InputPlumber file changed in a way GameCove can't edit safely; using it unchanged"
+	return 0
+}
+
 ip_flag_on() {
 	mkdir -p "$IP_FLAGS" && : >"$IP_FLAGS/$1" && ip_regen
 }
@@ -286,6 +336,7 @@ ip_render() {
 		! ip_flag accel || ip_accel_text >>"$snip"
 	fi
 	printf '%s\n# Delete this file and restart inputplumber to go back to the stock config.\n' "$IP_MARK"
+	printf '# stock-sha256: %s\n' "$(ip_stock_sha)"
 	awk -v swap="$swap" -v imu="$imu" -v snip="$snip" -v mapid="$IP_MAP_ID" '
 		swap == 1 && !swapped && /^capability_map_id:[ \t]*[^ \t]/ { print "capability_map_id: " mapid; swapped = 1; next }
 		imu == 1 && !inserted && (/^# Optional configuration/ || /^options:/) {

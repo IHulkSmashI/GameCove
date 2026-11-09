@@ -121,6 +121,14 @@ func test_traits_fill_from_row_and_shared_firmware_matches_siblings() -> void:
 	eq(own["family"], "f", "missing ones filled")
 	ok(Index.traits_match({"wifi": "RTL8922AE"}, own), "lists and case")
 	ok(not Index.traits_match({}, own), "empty traits match nothing")
+	# traits review: "platform" is the shared board group, never the CPU vendor
+	var ally := Index.traits_of(_row("asus-rog-ally"))
+	ok(str(ally.get("platform", "")) != "amd", "platform isn't the CPU vendor (%s)" % ally.get("platform", ""))
+	eq(ally["cpu_vendor"], "amd", "the vendor has its own key")
+	ok(not Index.traits_match({"platform": "amd"}, ally), "firmware for platform 'amd' doesn't reach every AMD handheld")
+	var bare := Index.traits_of({"id": "y", "cpu_vendor": "intel", "traits": {"platform": null, "wifi": []}})
+	ok(not bare.has("platform"), "a null trait is unknown, not filled with something else")
+	ok(not bare.has("wifi"), "an empty list is unknown too")
 	# both Deck models get the shared controller firmware; the OLED has no own entry at all
 	var oled := Index.entries_for(_index(), _row("steam-deck-oled"))
 	eq(oled["items"].size(), 1)

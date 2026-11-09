@@ -50,6 +50,36 @@ echo "drm.edid_firmware=eDP-1:edid/claw.bin" >"$T/kargs"
 printf '#!/bin/sh\nexit 1\n' >"$T/bin/pkexec"
 if sh "$S" reset --yes >/dev/null 2>&1; then bad "a failed removal must not report clean"; else ok; fi
 
+# review S3-1: the browser terminal: 127.0.0.1 only, origin checked, random path, no password, stopped by reset
+mkdir -p "$T/home/.local/bin"
+cat >"$T/home/.local/bin/ttyd" <<EOF
+#!/bin/sh
+echo "\$*" >"$T/ttyd-args"
+while :; do sleep 1; done
+EOF
+chmod +x "$T/home/.local/bin/ttyd"
+sh "$S" console >"$T/console-out" 2>&1 &
+cpid=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$T/ttyd-args" ] && break; sleep 0.2; done
+args="$(cat "$T/ttyd-args" 2>/dev/null || true)"
+case " $args " in *" -i 127.0.0.1 "*) ok ;; *) bad "ttyd listens on 127.0.0.1 only ($args)" ;; esac
+case " $args " in *" --check-origin "*) ok ;; *) bad "ttyd checks the WebSocket origin" ;; esac
+case " $args " in *" -c "* | *" --credential "*) bad "no basic auth (Claude can't type a password)" ;; *) ok ;; esac
+tok="$(printf '%s\n' "$args" | sed -n 's|.* -b /\([0-9a-f]*\) .*|\1|p')"
+[ "${#tok}" -eq 32 ] && ok || bad "served under a 128-bit random path ($tok)"
+grep -q "http://127.0.0.1:7681/$tok/" "$T/console-out" && ok || bad "console prints the link"
+[ "$(stat -c %a "$T/home/gamecove-tests/console-url")" = 600 ] && ok || bad "link file is private"
+grep -q "$tok" "$T/home/gamecove-tests/testbed.log" && bad "the token never goes into the log" || ok
+grep -rq "ttyd" "$T/home/.config" 2>/dev/null && bad "never an autostart or service" || ok
+touch "$T/state/claw8ex-vrr"
+rm -f "$T/kargs"
+printf '#!/bin/sh\n"$@"\n' >"$T/bin/pkexec"
+sh "$S" reset --yes >/dev/null 2>&1 || true
+sleep 0.3
+kill -0 "$cpid" 2>/dev/null && bad "reset stops the browser terminal" || ok
+[ ! -e "$T/home/gamecove-tests/console-url" ] && ok || bad "reset forgets the link"
+kill "$cpid" 2>/dev/null || true
+
 sh "$S" bogus >/dev/null 2>&1 && bad "unknown command exits non-zero" || ok
 echo "testbed: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -58,4 +58,34 @@ fix claw8ex-buttons install >/dev/null
 fix claw8ex-buttons remove >/dev/null
 ok '[ "$(snapshot)" = "$before" ]' "existing folders and files kept"
 
+# review S1-4: an OS update changes the stock file; the override must follow it, never stay frozen
+case_start stock_updated
+STOCK="$R/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
+fix claw8ex-buttons install >/dev/null 2>&1
+ok 'override | grep -q "^# stock-sha256: $(sha256sum "$STOCK" | cut -d " " -f 1)$"' "override records the stock file's sha256"
+ok 'fix claw8ex-buttons status | grep -qx inputplumber_override=current' "status: current"
+printf '# new field from an InputPlumber update\nnew_schema_field: true\n' >>"$STOCK"
+ok 'fix claw8ex-buttons status | grep -qx inputplumber_override=stale' "status: stale after the stock file changed"
+: >"$FAKE/calls"
+fix claw8ex-buttons set refresh >/dev/null 2>&1; rc=$?
+ok "[ $rc -eq 0 ]" "refresh succeeds"
+ok 'override | grep -qx "new_schema_field: true"' "rebuilt from the new stock file"
+ok 'override | grep -qx "capability_map_id: gamecove_claw8ex"' "our map still in"
+ok 'fix claw8ex-buttons status | grep -qx inputplumber_override=current' "current again"
+ok 'grep -q "systemctl restart inputplumber" "$FAKE/calls"' "InputPlumber restarted"
+: >"$FAKE/calls"
+fix claw8ex-buttons set refresh >/dev/null 2>&1
+ok '! grep -q "systemctl restart inputplumber" "$FAKE/calls"' "a current override isn't touched"
+# a layout we can't edit (no capability_map_id line): drop to stock, never keep the old copy
+sed -i '/^capability_map_id:/d' "$STOCK"
+fix claw8ex-buttons set refresh >/dev/null 2>&1; rc=$?
+ok "[ $rc -eq 0 ]" "refresh with an unknown layout still succeeds"
+ok '[ ! -e "$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml" ]' "stale override removed: InputPlumber uses the stock file"
+ok 'fix claw8ex-buttons status | grep -qx inputplumber_override=dropped' "status: dropped"
+# a later stock file GameCove can edit again brings it back
+echo "capability_map_id: claw2" >>"$STOCK"
+fix claw8ex-buttons set refresh >/dev/null 2>&1
+ok 'override | grep -qx "capability_map_id: gamecove_claw8ex"' "rebuilt once the layout is editable again"
+ok '! fix claw8ex-buttons set other 2>/dev/null' "only refresh can be set"
+
 finish

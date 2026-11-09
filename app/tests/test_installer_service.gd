@@ -181,8 +181,11 @@ func test_uninstall_restores_steam_and_cleans_up() -> void:
 	var c := _choices(t)
 	c["keep_settings"] = true
 	s2.start("uninstall", c)
-	eq(_cmds(r), ["steamosctl set-default-login-mode game", "pkexec " + s2.paths.fix_helper() + " claw8ex-vrr remove",
-		"pkexec rpm-ostree uninstall gamecove"])
+	var cmds := _cmds(r)
+	eq(cmds.size(), 3)
+	ok(cmds[0].begins_with("sh -c ") and "restore" in cmds[0], "session defaults restored first (desktop session too)")
+	ok(cmds[0].ends_with(s2.paths.session_select()), "through the switcher when it's there")
+	eq(cmds.slice(1), ["pkexec " + s2.paths.fix_helper() + " --remove-all", "pkexec rpm-ostree uninstall gamecove"])
 	for f in [s2.paths.env_conf(), s2.paths.unit_file(), s2.paths.switch_entry(), s2.paths.window_entry(),
 			s2.paths.pending_file(), s2.paths.state_file()]:
 		ok(not FileAccess.file_exists(f), "removed " + f)
@@ -194,12 +197,12 @@ func test_optional_failures_continue() -> void:
 	var d := _dir("optional")
 	_make_live(d)
 	var t := F.target("bazzite", {"installed": true})
-	var r := _runner({"steamosctl": {"code": 127, "out": ""}})
+	var r := _runner({"sh": {"code": 127, "out": ""}})
 	var s := _svc(d, r, t)
 	var results := []
 	s.finished.connect(func(a, ok_, m): results.append([a, ok_, m]))
 	s.start("uninstall", _choices(t))
-	eq(results[-1], ["uninstall", true, ""], "a missing steamosctl doesn't stop the removal")
+	eq(results[-1], ["uninstall", true, ""], "a failed session restore doesn't stop the removal")
 	eq(s.results[1], "skipped")
 	_cleanup()
 

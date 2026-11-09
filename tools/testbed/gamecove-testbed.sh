@@ -3,7 +3,8 @@
 # several handhelds, one device at a time.
 #
 #   sh gamecove-testbed.sh prepare        once per SSD: tools, repo, terminal link
-#   sh gamecove-testbed.sh console        start the browser terminal (127.0.0.1:7681)
+#   sh gamecove-testbed.sh console        start the browser terminal (127.0.0.1:7681 under a random path)
+#   sh gamecove-testbed.sh console-stop   stop it (reset does this too)
 #   sh gamecove-testbed.sh status         which device this is and what's installed
 #   sh gamecove-testbed.sh report         save logs + self-test for this device
 #   sh gamecove-testbed.sh reset [--full] [--yes]
@@ -15,6 +16,15 @@
 #
 # Run it in Desktop Mode (Konsole). Anything that needs root asks for your
 # password through pkexec; this script never stores or types a password.
+#
+# The browser terminal (review S3-1) is a writable shell, so: it listens on
+# 127.0.0.1 only, refuses WebSocket connections from any other origin
+# (--check-origin: another web page open in Chrome can't drive it), and is
+# served under an unguessable random path (ttyd -b /<128-bit token>) that
+# `console` prints and keeps in ~/gamecove-tests/console-url (mode 600). No
+# password prompt (Claude drives it through the browser and can't type one).
+# It runs only while `console` does: never a service, gone at reboot, and
+# `reset` / `console-stop` stop it.
 # Every step is printed and logged to ~/gamecove-tests/testbed.log.
 set -eu
 
@@ -88,10 +98,38 @@ cmd_prepare() {
 }
 
 # --------------------------------------------------------------------- console
+PIDFILE="$TESTS/ttyd.pid"
+URLFILE="$TESTS/console-url"
+
+# 32 hex digits (128 bits) from the kernel's random source.
+random_token() {
+	od -An -N16 -tx1 /dev/urandom | tr -d ' \n'
+}
+
 cmd_console() {
 	[ -x "$BIN/ttyd" ] || die "run 'prepare' first"
-	say "terminal link on http://127.0.0.1:$PORT (this handheld only). Leave this window open; Ctrl+C to stop."
-	exec "$BIN/ttyd" -i 127.0.0.1 -p "$PORT" -W bash
+	stop_console
+	token="$(random_token)"
+	[ "${#token}" -eq 32 ] || die "couldn't make a random path"
+	url="http://127.0.0.1:$PORT/$token/"
+	mkdir -p "$TESTS"
+	(umask 077 && printf '%s\n' "$url" >"$URLFILE")
+	echo "$$" >"$PIDFILE"
+	say "browser terminal started (this handheld only; the link is also in $URLFILE). Leave this window open; Ctrl+C to stop."
+	printf 'open: %s\n' "$url"   # printed, not logged
+	exec "$BIN/ttyd" -i 127.0.0.1 -p "$PORT" -b "/$token" --check-origin -W bash
+}
+
+# Stops a browser terminal `console` started (only a process that is ttyd).
+stop_console() {
+	[ -f "$PIDFILE" ] || { rm -f "$URLFILE"; return 0; }
+	pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+	case "$pid" in "" | *[!0-9]*) pid="" ;; esac
+	if [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = ttyd ]; then
+		kill "$pid" 2>/dev/null || true
+		say "browser terminal stopped"
+	fi
+	rm -f "$PIDFILE" "$URLFILE"
 }
 
 # ---------------------------------------------------------------------- status
@@ -141,6 +179,7 @@ cmd_reset() {
 		esac
 	done
 	say "== reset on $(device_slug)"
+	stop_console
 	cmd_report
 	removed=0
 	for f in $(fix_list); do
@@ -188,11 +227,12 @@ cmd_reset() {
 case "${1:-}" in
 prepare) cmd_prepare ;;
 console) cmd_console ;;
+console-stop) stop_console ;;
 status) cmd_status ;;
 report) cmd_report ;;
 reset) shift; cmd_reset "$@" ;;
 *)
-	sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
 	exit 64
 	;;
 esac

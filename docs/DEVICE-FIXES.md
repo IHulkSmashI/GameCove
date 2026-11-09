@@ -23,8 +23,9 @@ gamescope-session file) in `/etc`, matched on the DMI ids inside the rule itself
 boots several handhelds never applies one handheld's fix to another), applied at once by writing
 the same sysfs value (the original is saved and written back by Undo), `os-fixed` when another
 rule on the system already does the same (Bazzite) or the value is already right without us,
-`not-needed` when the part isn't in this handheld. Apply / Undo need no password
-(`gamecove-fix-set <fix> set on|off`), so the Fixes page works in Gaming Mode.
+`not-needed` when the part isn't in this handheld. Apply / Undo need the administrator password
+(`gamecove-fix <fix> install|remove`, Desktop Mode): they write a udev rule or session file that acts on
+every boot, which isn't a day-to-day setting (review S3-2, docs/SYSTEM.md "GameCove's root actions").
 
 ## Shared parts: who else gets each fix (traits pass, 2026-11-09)
 

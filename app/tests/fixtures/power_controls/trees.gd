@@ -296,10 +296,11 @@ static func runner(t: Dictionary) -> RefCounted:
 			var f := FileAccess.open(tree_root + "/thermald.state", FileAccess.WRITE)
 			f.store_string("inactive" if argv[1] == "stop" else "active")
 			return {"code": 0, "out": ""}
-		if argv[0] == "pkexec" and argv.size() >= 5 and argv[1].ends_with("gamecove-fix-set"):
+		if argv[0] == "pkexec" and argv.size() >= 5 and (argv[1].ends_with("gamecove-fix-set") or argv[1].ends_with("gamecove-fix")):
 			var out := []
 			var bin := ProjectSettings.globalize_path("user://test_power_controls/bin")
 			var code := OS.execute("env", PackedStringArray(["GAMECOVE_ROOT=" + tree_root, "PATH=" + bin + ":/usr/bin:/bin",
+				"GAMECOVE_THERMALD_WATCH=off",
 				"sh", repo.path_join("fixes/%s/fix.sh" % argv[2]), argv[3], argv[4]]), out, true)
 			return {"code": code, "out": out[0] if out.size() > 0 else ""}
 		return {"code": 0, "out": ""}

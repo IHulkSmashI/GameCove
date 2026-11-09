@@ -13,7 +13,7 @@ sh ~/gamecove-testbed.sh prepare
 
 **On each handheld:**
 
-1. `sh ~/gamecove-testbed.sh console` and leave the window open. The terminal is only reachable from this handheld (127.0.0.1:7681).
+1. `sh ~/gamecove-testbed.sh console` and leave the window open. It prints the link (`http://127.0.0.1:7681/<random>/`, also in `~/gamecove-tests/console-url`); give it to Claude. The terminal is reachable only from this handheld, only under that random path, and only from its own page (other sites open in Chrome are refused). It stops when you close the window, at `reset` or `console-stop`, and at reboot; it is never a service.
 2. Open Chrome on the handheld (with the Claude extension) so Claude can work in that terminal: install, run `gamecove-selftest`, read logs, fix things.
 3. Do the hands-on parts Claude asks for (buttons, gyro, Game Mode checks).
 

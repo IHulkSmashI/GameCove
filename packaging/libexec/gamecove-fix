@@ -44,6 +44,7 @@ LOG_FILE="$LOG_DIR/changes.log"
 usage() {
 	echo "usage: gamecove-fix <name> install|remove|status|set <value>" >&2
 	echo "       gamecove-fix --list" >&2
+	echo "       gamecove-fix --remove-all" >&2
 	exit 64
 }
 
@@ -87,11 +88,46 @@ list_fixes() {
 	done
 }
 
+# Uninstall (review S2-5): undo every fix that is in use on this machine, whoever applied it (the
+# installer, the Fixes page, the Power page's charge limit, fan curve, LEDs, power-tune values), so
+# no udev rule, EC value or kernel argument outlives GameCove. "In use": status says installed=yes,
+# or (fixes without that line) state=on|partial|restart. Prints removed=/failed= per fix.
+remove_all() {
+	rc=0
+	export GAMECOVE_ROOT="$ROOT" GAMECOVE_CHANGES_LOG="$LOG_FILE"
+	mkdir -p "$LOG_DIR"
+	cd /
+	for n in $(list_fixes); do
+		out="$(sh "$FIXES_DIR/$n/fix.sh" status 2>/dev/null)" || true
+		inst="$(printf '%s\n' "$out" | sed -n 's/^installed=//p' | head -n 1)"
+		st="$(printf '%s\n' "$out" | sed -n 's/^state=//p' | tail -n 1)"
+		case "$inst:$st" in
+		yes:* | :on | :partial | :restart) ;;
+		*) continue ;;
+		esac
+		if sh "$FIXES_DIR/$n/fix.sh" remove >/dev/null 2>&1; then
+			log_change "$n" remove "" ok
+			echo "removed=$n"
+		else
+			code=$?
+			log_change "$n" remove "" "fail($code)"
+			echo "failed=$n"
+			rc=1
+		fi
+	done
+	return "$rc"
+}
+
 [ $# -ge 1 ] || usage
 if [ "$1" = "--list" ]; then
 	[ $# -eq 1 ] || usage
 	list_fixes
 	exit 0
+fi
+if [ "$1" = "--remove-all" ]; then
+	[ $# -eq 1 ] || usage
+	remove_all
+	exit $?
 fi
 [ $# -ge 2 ] || usage
 

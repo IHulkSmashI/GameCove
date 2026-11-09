@@ -40,6 +40,7 @@ const T := {
 
 const NO_TDP := "No TDP service on this system (PowerStation, steamos-manager or Handheld Daemon)"
 const NO_HELPER := "Needs GameCove's root helper (install GameCove's system part)"
+const NEEDS_ADMIN := "Needs your admin password: change it in Desktop Mode"
 const HHD_OWNS := "Handheld Daemon manages this"
 const FW_IGNORED := "This handheld's firmware ignores these limits; the TDP above is the real one"
 const NOT_HERE := "Not available on this handheld"

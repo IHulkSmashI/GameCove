@@ -2,8 +2,8 @@
 
 One folder per fix, each with `fix.sh` (`install | remove | status`, some `set <value>`) and
 `test.sh` (runs against a fake root, never the real system). They run as root through
-`packaging/libexec/gamecove-fix` (admin password) or, for the small file fixes and the everyday
-settings, `gamecove-fix-set` (no password). What each fix is for, who gets it automatically and the
+`packaging/libexec/gamecove-fix` (admin password; every install, the small file fixes included) or, for the everyday
+settings, `gamecove-fix-set` (no password; day-to-day settings only, see docs/SYSTEM.md "GameCove's root actions"). What each fix is for, who gets it automatically and the
 research behind it: `app/data/fixes.json` and [docs/DEVICE-FIXES.md](../docs/DEVICE-FIXES.md).
 
 | Fix | Devices | What it fixes | Kind |

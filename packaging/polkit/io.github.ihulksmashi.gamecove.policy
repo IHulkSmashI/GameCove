@@ -5,19 +5,32 @@
 <!--
   GameCove's root helper has two entry points, so two actions. pkexec picks the
   action by the program it is asked to run (org.freedesktop.policykit.exec.path).
+  docs/SYSTEM.md ("GameCove's root actions") explains every choice below.
 
   io.github.ihulksmashi.gamecove.fix-set: /usr/libexec/gamecove/gamecove-fix-set
-    No password for the person at the handheld (active local session), because
-    the gamescope session has no polkit agent to show a prompt. That entry point
-    only runs `set` and `status`, only on charge-limit, fan and the gyro's
-    accelerometer toggle, only with fixed values (see the script). Nothing it can
-    do touches the kernel command line, initramfs, firmware or systemd units.
+    No password, and only for the person at the handheld: the active local
+    session (allow_active yes; inactive and remote sessions: no). The gamescope
+    session has no polkit agent to show a prompt, so this is how day-to-day
+    settings work in Gaming Mode. It runs only `set` (and `status`) with values
+    checked by the script and again by the fix:
+      charge-limit  50-100, or release
+      fan           auto, quiet, max, or a custom curve (never below Quiet)
+      power-tune    boost, epp, governor, cpumax, gpulevel, gpumin, gpumax,
+                    gpuprofile, sppt, fppt, platform, tau, battery, restore, and
+                    thermald hold/release (a hold lasts only while a game runs:
+                    thermald starts again by itself after)
+      controller-led  colour, brightness, effect, or off
+      claw8ex-gyro  accelerometer on/off; claw8ex-gyro / claw8ex-buttons refresh
+                    (rebuild the InputPlumber override after an OS update)
+    It never installs or removes anything, never writes udev rules, kernel
+    arguments, the initramfs, firmware or systemd units.
 
   io.github.ihulksmashi.gamecove.fix: /usr/libexec/gamecove/gamecove-fix
-    Everything else: install and remove of any fix, and every fix that changes
-    boot configuration (kernel arguments, initramfs, firmware, systemd units,
-    InputPlumber overrides). Always an administrator password; auth_admin_keep
-    lets one password cover a few minutes of changes in the same session.
+    Everything else, with an administrator password (auth_admin_keep: one
+    password covers a few minutes in the same session): install and remove of
+    every fix (the small udev-rule and session-file fixes too), power-tune smt,
+    cores, sleep and mcu, and every fix that changes boot configuration (kernel
+    arguments, initramfs, firmware, systemd units, InputPlumber overrides).
 
   Both run only the root-owned fix scripts in /usr/lib/gamecove/fixes, validate
   names and values, and log every change to /var/lib/gamecove/changes.log.
@@ -27,20 +40,20 @@
   <vendor_url>https://github.com/IHulkSmashI/gamecove</vendor_url>
 
   <action id="io.github.ihulksmashi.gamecove.fix-set">
-    <description>Change a GameCove device setting (charge limit, fan, accelerometer)</description>
-    <message>GameCove wants to change the charge limit, fan preset or accelerometer setting.</message>
+    <description>Change a GameCove device setting (charge limit, fan, lights, CPU/GPU power, gyro accelerometer)</description>
+    <message>GameCove wants to change a device setting: charge limit, fan, lights, CPU or GPU power limits, or the gyro accelerometer.</message>
     <icon_name>input-gaming</icon_name>
     <defaults>
-      <allow_any>auth_admin</allow_any>
-      <allow_inactive>auth_admin</allow_inactive>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gamecove/gamecove-fix-set</annotate>
   </action>
 
   <action id="io.github.ihulksmashi.gamecove.fix">
-    <description>Install or remove a GameCove system fix</description>
-    <message>GameCove wants to install or remove a system fix (firmware, kernel argument, initramfs or system service). This needs an administrator password.</message>
+    <description>Install or remove a GameCove system fix, or change a setting that needs an administrator</description>
+    <message>GameCove wants to install or remove a system fix (udev rule, firmware, kernel argument, initramfs or system service) or change SMT, CPU cores, sleep mode or controller power saving. This needs an administrator password.</message>
     <icon_name>input-gaming</icon_name>
     <defaults>
       <allow_any>auth_admin</allow_any>

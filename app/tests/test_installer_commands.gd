@@ -37,7 +37,11 @@ func test_sysext_commands() -> void:
 func test_session_and_misc_commands() -> void:
 	eq(C.session_default("/usr/bin/gamecove-session-select", "gamecove"), ["/usr/bin/gamecove-session-select", "gamecove", "--default", "--no-switch"])
 	eq(C.session_default("/usr/bin/gamecove-session-select", "steam"), ["/usr/bin/gamecove-session-select", "steam", "--default", "--no-switch"])
-	eq(C.session_restore(), ["steamosctl", "set-default-login-mode", "game"])
+	var rs := C.session_restore()
+	eq(rs.slice(0, 2), ["sh", "-c"], "restore runs as a small shell step")
+	eq(rs[-1], "/usr/bin/gamecove-session-select", "installed switcher is the second choice")
+	ok("restore" in rs[2] and "set-default-desktop-session" in rs[2], "restores the desktop session, not only the login mode")
+	ok("set-default-login-mode game" in rs[2], "and the boot mode")
 	eq(C.fix("/usr/libexec/gamecove/gamecove-fix", "claw8ex-vrr", "install"), ["pkexec", "/usr/libexec/gamecove/gamecove-fix", "claw8ex-vrr", "install"])
 	eq(C.game_check()[0], "pgrep")
 	eq(C.reboot(), ["systemctl", "reboot"])
@@ -87,13 +91,16 @@ func test_change_repair_update_uninstall_finish() -> void:
 	c["remove_fixes"] = true
 	c["keep_settings"] = false
 	var un := C.tasks_for("uninstall", c, t, p)
-	eq(_ids(un), ["check_game", "session_restore", "fix_remove:claw8ex-buttons", "fix_remove:claw8ex-gyro", "package_remove",
+	eq(_ids(un), ["check_game", "session_restore", "steam_unwrap", "fix_remove_all", "package_remove",
 		"remove_user_files", "remove_settings", "forget"])
-	eq(un[1]["cmd"], C.session_restore())
+	eq(un[3]["cmd"], ["pkexec", p.fix_helper(), "--remove-all"], "every fix in use, not only the installer's (review S2-5)")
+	eq(un[1]["cmd"], C.session_restore(p))
+	eq(un[1]["cmd"][4], p.data_dir() + "/gamecove-session-guard", "the copy that survives the package goes first")
 	eq(un[4]["cmd"], C.rpm_uninstall())
+	ok(un[2]["optional"], "taking GameCove out of Steam's launch options never stops an uninstall")
 	c["remove_fixes"] = false
 	c["keep_settings"] = true
-	eq(_ids(C.tasks_for("uninstall", c, t, p)), ["check_game", "session_restore", "package_remove", "remove_user_files", "forget"])
+	eq(_ids(C.tasks_for("uninstall", c, t, p)), ["check_game", "session_restore", "steam_unwrap", "package_remove", "remove_user_files", "forget"])
 	c["fixes"] = ["claw8ex-vrr"]
 	eq(_ids(C.tasks_for("finish", c, t, p)), ["check_game", "fix_install:claw8ex-vrr", "pending", "state"])
 

@@ -6,6 +6,11 @@ extends Node
 ##
 ## Tests: var c = ControlsScript.new(); c.sync_mode = true; c.setup(ctx)
 ## then register controls; every call runs inline.
+##
+## Threads (review S4-1): hooks change a Control's fields on the worker, so the main
+## thread never reads them for snapshot() / value(). Each worker job commits what it
+## changed to a cache under a mutex when it finishes (one commit per job), and those two
+## read the cache: no torn reads, and never a state half-way through an apply.
 
 signal control_changed(id: String, value: Variant)
 signal control_failed(id: String, value: Variant)
@@ -31,6 +36,8 @@ var _mutex := Mutex.new()
 var _sem := Semaphore.new()
 var _thread: Thread
 var _quit := false
+var _cache: Dictionary = {}        # id -> {"available", "value", "per_game"}, committed per worker job
+var _cache_mutex := Mutex.new()
 
 
 func _ready() -> void:
@@ -81,6 +88,7 @@ func register(c: RefCounted) -> void:
 		_order.append(c.id)
 	c.ctx = ctx
 	_controls[c.id] = c
+	_commit([c.id])
 
 
 ## A provider is any object with controls() -> Array of Control.
@@ -105,9 +113,13 @@ func list(group := "") -> Array:
 	return out
 
 
+## The control's value as of the last finished worker job (safe on any thread).
 func value(id: String) -> Variant:
-	var c = _controls.get(id)
-	return c.value if c != null else null
+	_cache_mutex.lock()
+	var e: Variant = _cache.get(id)
+	var v: Variant = _copy(e["value"]) if e != null else null
+	_cache_mutex.unlock()
+	return v
 
 
 ## Detects and reads everything (worker). Emits detected().
@@ -117,6 +129,7 @@ func detect_all() -> void:
 			var c = _controls[id]
 			c.detect()
 			c.read()
+		_commit(_order)
 		_emit(detected, []))
 
 
@@ -126,20 +139,39 @@ func set_value(id: String, v: Variant) -> void:
 	if c == null:
 		return
 	_queue(func():
-		if c.write(v):
+		var done: bool = c.write(v)
+		_commit([id])
+		if done:
 			_emit(control_changed, [id, c.value])
 		else:
 			_emit(control_failed, [id, v]))
 
 
 ## {id: value} for every available per-game control (what a profile stores).
+## From the cache: safe while the worker runs, and never half-way through an apply.
 func snapshot(per_game_only := true) -> Dictionary:
 	var out := {}
+	_cache_mutex.lock()
 	for id in _order:
-		var c = _controls[id]
-		if c.available and c.value != null and (c.per_game or not per_game_only):
-			out[id] = c.value
+		var e: Variant = _cache.get(id)
+		if e != null and e["available"] and e["value"] != null and (e["per_game"] or not per_game_only):
+			out[id] = _copy(e["value"])
+	_cache_mutex.unlock()
 	return out
+
+
+## Copies what the worker changed into the cache (end of each worker job).
+func _commit(ids: Array) -> void:
+	_cache_mutex.lock()
+	for id in ids:
+		var c = _controls.get(id)
+		if c != null:
+			_cache[id] = {"available": bool(c.available), "value": _copy(c.value), "per_game": bool(c.per_game)}
+	_cache_mutex.unlock()
+
+
+static func _copy(v: Variant) -> Variant:
+	return v.duplicate(true) if v is Array or v is Dictionary else v
 
 
 ## Applies a {id: value} map, highest apply_order first, skipping values that
@@ -150,14 +182,19 @@ func apply(values: Dictionary, force := false) -> void:
 	var ids := values.keys().filter(func(i): return _controls.has(i))
 	ids.sort_custom(func(a, b): return _controls[a].apply_order > _controls[b].apply_order)
 	_queue(func():
+		var out := []
 		for id in ids:
 			var c = _controls[id]
 			if not c.available or (not force and c.value == c.coerce(values[id])):
 				continue
-			if c.write(values[id]):
-				_emit(control_changed, [id, c.value])
+			out.append([id, c.write(values[id])])
+		# one commit for the whole apply: a snapshot never sees it half done
+		_commit(ids)
+		for r in out:
+			if r[1]:
+				_emit(control_changed, [r[0], _controls[r[0]].value])
 			else:
-				_emit(control_failed, [id, values[id]]))
+				_emit(control_failed, [r[0], values[r[0]]]))
 
 
 ## Runs `job` on the Controls worker after everything queued before it (e.g.

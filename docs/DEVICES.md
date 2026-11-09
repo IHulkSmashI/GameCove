@@ -57,7 +57,8 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 | OneXPlayer G1 (AMD) | `onexplayer-g1-amd` | partial | 5 / 30 / 35 | oxp_ec (fix) | yes (sysfs) | none | – | `oxp-g1` | 0 | xbox | no: tdp, panel.vrr, chip |
 | OneXPlayer G1 (Intel) | `onexplayer-g1-intel` | partial | 8 / 30 / 35 | oxp_ec (fix) | yes (sysfs) | none | – | `oxp-g1` | 0 | xbox | no: tdp, panel.vrr, chip |
 | OneXPlayer 3 | `onexplayer-3` | partial | 8 / 35 / 35 | oxp_ec (fix) | yes (sysfs) | yes | – | `oxp-x2` | 2 | xbox | no: panel.resolution, panel.vrr |
-| OneXPlayer X2 Mini | `onexplayer-x2-mini` | generic | 3 / 30 / 45 | oxp_ec (fix) | yes (sysfs) | yes | – | `oxp-x2` | 2 | xbox | no: chip, panel, tdp |
+| OneXPlayer X2 Mini (Intel Arc G3 Extreme) | `onexplayer-x2-mini` | generic | 3 / 30 / 45 | – (not in oxpec) | – | yes | – | `oxp-x2` | 2 | xbox | no: chip, panel, tdp |
+| OneXPlayer X2 Mini Pro (AMD Ryzen AI Max) | `onexplayer-x2-mini-pro` | generic | 3 / 30 / 45 | oxp_ec (fix) | yes (sysfs) | yes | – | `oxp-x2` | 2 | xbox | no: chip, panel, tdp |
 | OneXFly Apex | `onexplayer-onexfly-apex` | partial | 8 / 35 / 35 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-apex` | 2 | xbox | no: panel, tdp |
 | OneXPlayer Super X | `onexplayer-super-x` | generic | 8 / 45 / 80 | oxp_ec (fix) | yes (sysfs) | unknown | – | `generic` | 0 | xbox | no: buttons, panel, tdp.battery_max |
 | OneXPlayer (unknown model) *(family)* | `onexplayer-family` | generic | 5 / 25 / 28 | oxp_ec (fix) | – | unknown | – | `oxp-generic` | 0 | xbox | no: tdp, panel, chip, buttons |
@@ -368,7 +369,7 @@ Each handheld keeps its own Secure Boot keys in its own firmware, not on the dri
 
 | What | How it's kept apart |
 | --- | --- |
-| Claw VRR fix (`claw8ex-vrr`) | No kernel argument. A modprobe hook gives the Intel GPU driver the patched EDID only when `board_name` is the board it was installed on. The Ally and Legion Go S use AMD's driver, so the hook never even runs there. Older installs (kernel arguments) are moved over by `install` or a root `status`; seen from another handheld, the old install is removed. |
+| Claw VRR fix (`claw8ex-vrr`) | No global kernel argument (only the inert switch `gamecove.vrr=1`, which makes the previous boot entry clean and can be removed at the boot menu; `gamecove.novrr` is the kill switch). A modprobe hook gives the Intel GPU driver the patched EDID only when `board_name` is the board it was installed on. The Ally and Legion Go S use AMD's driver, so the hook never even runs there. Older installs (kernel arguments) are moved over by `install` or a root `status`; seen from another handheld, the old install is removed. |
 | Claw gyro fix (`claw8ex-gyro`) | Its two services have `ExecCondition` on board MS-1T91 and are skipped elsewhere. The firmware search path (`firmware_class.path=/etc/firmware`) and the HID-BPF program (matched to the Claw's sensor hub id) do nothing on other hardware. |
 | Claw buttons fix (`claw8ex-buttons`) | InputPlumber override with the stock `dmi_data: board_name: MS-1T91` match, so InputPlumber only uses it on the Claw. |
 | Fan and charge-limit fixes | Only act on handhelds in `fixes/lib/handhelds.txt`. What they saved (the values `remove` writes back) is kept per handheld (`/var/lib/gamecove/fixes/<fix>/device`, others parked in `devices/<id>/`). |
@@ -442,7 +443,8 @@ The report has no personal data: user and host names, serial numbers, MAC addres
 - **OneXPlayer 2 Pro**: Detachable controllers.
 - **OneXPlayer G1 (AMD)**: Clamshell with a keyboard; no IMU in InputPlumber's config.
 - **OneXPlayer 3**: Detachable controllers. Like the Claw 8 EX, Panther Lake TDP is written through intel-rapl-mmio (PowerStation).
-- **OneXPlayer X2 Mini**: Chip comes from the CPU at run time.
+- **OneXPlayer X2 Mini**: Intel Arc G3 Extreme (Panther Lake): InputPlumber's gamepad is on the Intel xHCI (phys usb-0000:00:14.0) and OneXPlayer sells it as "X2 Mini with Intel Arc G3 Extreme". Not in Linux's oxpec DMI table, so no fan or charge control yet. Chip details come from the CPU at run time.
+- **OneXPlayer X2 Mini Pro**: AMD Ryzen AI Max (Strix Halo): gamepad on an AMD xHCI (0000:65:00.4), Handheld Daemon DPTC_AI_MAX, oxpec board oxp_fly (fan, charge limit). Was one row with the X2 Mini, marked AMD for both (traits review).
 - **OneXFly Apex**: PowerStation caps it at 35 W sustained; the chip can take far more when plugged in.
 - **OneXPlayer Super X**: Tablet with detachable controllers; no InputPlumber config yet.
 - **AOKZOE (unknown model)**: Covers newer AOKZOE models (e.g. A2) until they get their own row.

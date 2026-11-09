@@ -78,10 +78,10 @@
   {
    "id": "kernel-orientation-quirk-first-board-only",
    "applies": "platform:zotac-zone",
-   "what": "Linux's panel orientation quirk matches board G0A1W only; G1A1W units start sideways unless the session sets ORIENTATION.",
-   "why": "drm_panel_orientation_quirks.c ZOTAC Gaming Zone entry (DMI_BOARD_NAME G0A1W); devices.json and InputPlumber also know G1A1W.",
-   "used_by": "informational (display.rotation covers it)",
-   "sources": ["https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/drm_panel_orientation_quirks.c"]
+   "what": "Linux's panel orientation quirk matches board G0A1W only; G1A1W units would start sideways, so GameCove's session sets ORIENTATION=left on G1A1W (session_quirk zotac-g1a1w-left).",
+   "why": "drm_panel_orientation_quirks.c ZOTAC Gaming Zone entry: DMI_EXACT_MATCH board G0A1W, lcd1080x1920_leftside_up (checked on master, 2026-11-09). InputPlumber's 50-zotac-zone.yaml and its autostart hwdb list both G0A1W and G1A1W; gamescope-session-plus's device-quirks has no Zone block.",
+   "used_by": "session/gamescope-session-plus/sessions.d/gamecove (ORIENTATION, only when unset); display.rotation can still change it",
+   "sources": ["https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/drm_panel_orientation_quirks.c", "https://github.com/ShadowBlip/InputPlumber/blob/main/rootfs/usr/share/inputplumber/devices/50-zotac-zone.yaml"]
   }
  ]
 }

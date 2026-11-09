@@ -50,13 +50,19 @@ static func is_stale(modified_unix: int, now_unix: int) -> bool:
 
 
 ## Traits a devices.json row shares with its siblings. Uses the row's own "traits" when it has
-## them (soc, wifi, controller, platform, ...) and fills the rest from long-standing fields, so
+## them (soc, wifi, controller, platform, ...; nulls dropped) and fills the rest from long-standing fields, so
 ## shared firmware ("every Steam Deck", "every RC73 board") matches before and after that field.
 static func traits_of(row: Dictionary) -> Dictionary:
 	var t := {}
 	if row.get("traits") is Dictionary:
 		t = (row["traits"] as Dictionary).duplicate(true)
-	var fill := {"maker": row.get("maker", ""), "family": row.get("family", ""), "platform": row.get("cpu_vendor", ""),
+	# a trait devices.json leaves null is unknown, not a value
+	for k in t.keys():
+		if t[k] == null or (t[k] is Array and (t[k] as Array).is_empty()):
+			t.erase(k)
+	# "platform" is a shared body / board group (traits.platform) and only comes from traits: the CPU
+	# vendor is far broader ("every AMD handheld") and goes under its own key (traits review)
+	var fill := {"maker": row.get("maker", ""), "family": row.get("family", ""), "cpu_vendor": row.get("cpu_vendor", ""),
 		"soc": row.get("chip", ""), "controller": row.get("buttons", ""), "gpu": row.get("gpu_family", "")}
 	for k in fill:
 		if not t.has(k) and str(fill[k]) != "":

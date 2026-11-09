@@ -84,10 +84,13 @@ func test_catalogue_entries_are_complete_and_real() -> void:
 		for d in e.get("exclude", {}):
 			ok(d in ids, "%s: excluded device %s is in devices.json" % [id, d])
 		if e["kind"] == "file":
-			ok(e["password"] == "none", id + ": file fixes need no password")
+			# review S3-2: installing a udev rule / session file isn't a day-to-day setting: admin password
+			ok(e["password"] == "admin", id + ": file fixes need the admin password")
 			var src := FileAccess.get_file_as_string(_repo().path_join("fixes/%s/fix.sh" % id))
 			ok(src.contains("gcfix.sh"), id + ": built on gcfix.sh")
-			ok(FileAccess.get_file_as_string(_repo().path_join("packaging/libexec/gamecove-fix-set")).contains(id), id + ": allowed in gamecove-fix-set")
+			ok(not FileAccess.get_file_as_string(_repo().path_join("packaging/libexec/gamecove-fix-set")).contains(" " + id), id + ": not in gamecove-fix-set")
+		if str(e.get("password", "admin")) == "none":
+			ok(FileAccess.get_file_as_string(_repo().path_join("packaging/libexec/gamecove-fix-set")).contains(id), id + ": a no-password fix is allowed in gamecove-fix-set")
 		if e["kind"] == "root":
 			ok(e["password"] == "admin", id + ": root fixes need the admin password")
 
@@ -183,7 +186,7 @@ func test_apply_and_undo_use_the_right_helper() -> void:
 	s.action_finished.connect(func(f, v, okk, m): got.append([f, v, okk, m]))
 	s.refresh()
 	ok(s.apply("claw-kbd-wakeup"), "apply starts")
-	ok(r.calls.has("pkexec %s claw-kbd-wakeup set on" % SET_HELPER), "file fix: no-password set on")
+	ok(r.calls.has("pkexec %s claw-kbd-wakeup install" % HELPER), "file fix: the admin helper (review S3-2)")
 	ok(s.undo("claw8ex-vrr"), "undo starts")
 	ok(r.calls.has("pkexec %s claw8ex-vrr remove" % HELPER), "root fix: gamecove-fix remove")
 	eq(got.size(), 2, "both finished")
@@ -340,9 +343,58 @@ func test_page_shows_os_fixed_and_changes() -> void:
 	ok(t.contains("System: Bazzite 44 → Bazzite 45"), "what changed")
 	ok(p.buttons.has("apply:ally-mcu-powersave"), "optional fix: Apply")
 	ok(t.contains("Optional"), "optional fixes say so")
-	ok(not t.contains("admin password"), "file fixes: no password note")
+	ok(t.contains("admin password"), "file fixes: the admin password note (review S3-2)")
 	p.free()
 	dev.free()
+	s.free()
+
+
+func test_page_shows_why_a_fix_is_unavailable() -> void:
+	# review S1-3: the helper's reason= shows on the card, and there is no Apply
+	var h := _tmp("page_reason")
+	var s := _svc("asus-rog-ally", {"ally-fingerprint-drain": "off"}, h)
+	s.commands.runner.responses["%s ally-mcu-powersave status" % HELPER] = {"code": 0,
+		"out": "applies=yes\ninstalled=no\nos_fixed=no\nhw=yes\nreason=not available: controller MCU firmware 318 is older than 319\nstate=unsupported\n"}
+	s.refresh()
+	var dev := FakeDevice.new()
+	var p: Control = Page.build({"fixes": s, "device": dev})
+	ok(_texts(p).contains("older than 319"), "reason shown")
+	ok(not p.buttons.has("apply:ally-mcu-powersave"), "no Apply")
+	p.free()
+	dev.free()
+	s.free()
+
+
+func test_stale_inputplumber_override_is_rebuilt_at_start() -> void:
+	# review S1-4: an OS update changed the stock file our override shadows
+	var h := _tmp("ip_stale")
+	var s := _svc("msi-claw-8-ex", {}, h)
+	var root := h + "/root"
+	DirAccess.make_dir_recursive_absolute(root + "/usr/share/inputplumber/devices")
+	DirAccess.make_dir_recursive_absolute(root + "/etc/inputplumber/devices.d")
+	var stock := root + FixesSvc.IP_STOCK
+	var f := FileAccess.open(stock, FileAccess.WRITE)
+	f.store_string("version: 1\ncapability_map_id: claw2\n")
+	f.close()
+	var o := FileAccess.open(root + FixesSvc.IP_OVERRIDE, FileAccess.WRITE)
+	o.store_string("# GameCove override of %s\n# Delete this file...\n# stock-sha256: %s\nversion: 1\n" % [FixesSvc.IP_STOCK, FileAccess.get_sha256(stock)])
+	o.close()
+	ok(not FixesSvc.ip_override_stale(root), "current override")
+	s.data_dir = h + "/data"
+	s.check_changes()
+	ok(not s.commands.runner.calls.any(func(c): return "refresh" in c), "nothing run while current")
+	f = FileAccess.open(stock, FileAccess.WRITE)
+	f.store_string("version: 2\ncapability_map_id: claw2\nnew_field: x\n")
+	f.close()
+	ok(FixesSvc.ip_override_stale(root), "stale after the stock file changed")
+	s.check_changes()
+	ok(s.commands.runner.calls.has("pkexec %s claw8ex-buttons set refresh" % FixesSvc.FIX_SET_HELPER), "rebuilt through the no-password entry")
+	ok("inputplumber" in s.last_changes["changed"].map(func(c): return c["key"]), "shows in what changed")
+	# someone else's override is never touched
+	o = FileAccess.open(root + FixesSvc.IP_OVERRIDE, FileAccess.WRITE)
+	o.store_string("# mine\nversion: 1\n")
+	o.close()
+	ok(not FixesSvc.ip_override_stale(root), "foreign override ignored")
 	s.free()
 
 

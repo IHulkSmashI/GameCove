@@ -98,8 +98,12 @@ changes the base layer, so a launched game would stay behind us. The flow
    exists; otherwise the game starts plainly, with a warning: it runs but gamescope
    can't focus it.
 3. **Focus:** a 0.5 s timer reads `GAMESCOPE_FOCUSABLE_APPS` until the app id is
-   listed (the game has a window), then `focus_app(id)`. It gives up after 60 s
-   (Steam: session over; our own launch: keep following the process).
+   listed (the game has a window), then `focus_app(id)`. After 60 s without a
+   window, our own launch keeps following its process; a Steam launch keeps waiting
+   while Steam's reaper for it runs (`pgrep -f "SteamLaunch AppId=<id>( |$)"`, every
+   3 s): shader pre-caching, an update or a launcher can take minutes. The profile and
+   Auto TDP stay on and the window gets focus when it appears. The session ends when
+   the reaper is gone twice in a row (Controller.end_game hands input back).
 4. **While it runs:** the game's `fps_limit` is on `GAMESCOPE_FPS_LIMIT`, Auto TDP
    runs for goals battery/balanced. A 3 s timer (only while a game runs) checks
    the focusable list and our process.
@@ -164,7 +168,8 @@ with `--xwayland-count 2`, exports `DISPLAY` and `GAMESCOPE_WAYLAND_DISPLAY`, so
 `~/.config/environment.d/*.conf` (so users can tune `CUSTOM_REFRESH_RATES`,
 `GAMECOVE_STEAM_MODE`, …), and runs `$CLIENTCMD`. After 5 sessions shorter than 60 s
 it calls `short_session_recover`; ours switches to Steam Gaming Mode so a broken
-GameCove never traps you on a black screen.
+GameCove never traps you on a black screen. The session client adds a tighter
+guard (3 app crashes in 2 minutes), see "If GameCove won't let you out".
 
 Bazzite today boots `gamescope-session-ogui-steam.desktop` (Steam as main client,
 OpenGamepadUI as overlay; Terra packages `gamescope-session`,
@@ -201,11 +206,50 @@ helper of our own:
   steamos-manager accepts any `wayland-sessions/*.desktop` whose **name has no
   "gamescope"** as a desktop session (`is_valid_desktop_session_name`), which is why
   our file is `gamecove.desktop`.
-- `--default` makes it stick across boots. Side effect: Steam's own "Switch to
-  Desktop" then lands in GameCove. Undo: `steamosctl set-default-login-mode game`.
+- `--default` makes it stick across boots. steamos-manager boots "desktop mode"
+  into its *default desktop session*, so GameCove has to be that default, and any
+  "switch to desktop" that doesn't name a session would then land in GameCove.
+  The rules that keep Desktop Mode reachable:
+  - `--default` first saves the default desktop session and boot mode it replaces
+    (`~/.local/share/gamecove/prev-desktop-session`, `prev-login-mode`).
+  - `gamecove-session-select desktop` (the quick menu's **Switch to Desktop Mode**)
+    always names the real desktop: the saved session, else Plasma/GNOME from
+    `get-valid-desktop-sessions`.
+  - Steam's "Switch to Desktop": on Bazzite it runs `os-session-select plasma`,
+    which names `plasma.desktop`/`gnome.desktop` itself. Where Steam asks
+    steamos-manager for the *default* desktop instead, the switch lands in our
+    session; `gamecove-session-select steam` left a marker (with the boot id), so
+    the session client sees that nothing asked for GameCove and forwards to the
+    real desktop before the app starts (`session-start`, exit 3).
+  - `steam --default` and `restore` put the saved desktop session and boot mode
+    back. The installer's Uninstall runs `restore`.
+  - `--default` also keeps a copy of the script in the data folder and enables a
+    user unit, `gamecove-session-guard.service`, that runs `guard` at every login:
+    if `gamecove.desktop` is gone (package removed, previous deployment booted) it
+    runs `restore`, then removes itself. Both live in the home folder, so they
+    survive the package.
 
-`gamecove-session-select steam|gamecove|desktop [--default]` wraps this. The UI's
-"Switch to Steam Gaming Mode" button should run `gamecove-session-select steam`.
+`gamecove-session-select steam|gamecove|desktop [--default] | restore | guard` wraps this.
+
+### If GameCove won't let you out
+
+- **Crash loop:** the session client counts app crashes (non-zero exits it didn't
+  cause) in `~/.local/share/gamecove/crash-starts`. Three within two minutes, across
+  sessions, and it switches to Steam Gaming Mode (the desktop if Steam isn't
+  installed). gamescope-session-plus's own guard (5 sessions under 60 s) also
+  switches to Steam, through `gamecove-session-select steam`.
+- **From a TTY** (Ctrl+Alt+F3 with a keyboard, or SSH), logged in as yourself, not root:
+
+  ```
+  gamecove-session-select restore    # boot and desktop defaults from before GameCove
+  gamecove-session-select desktop    # leave GameCove for the desktop now
+  ```
+
+  If steamos-manager doesn't answer (it starts it as a user unit when it can),
+  the root fallback is the autologin file it writes:
+  `printf '[Autologin]\nSession=plasma.desktop\n' | sudo tee /etc/sddm.conf.d/zz-holo-autologin.conf`
+  (`zz-steamos-autologin.conf` if that one exists), then `sudo systemctl restart sddm`.
+- **At the login screen** pick Plasma or Steam (touch works).
 
 ## Root fixes: `gamecove-fix`
 
@@ -230,10 +274,12 @@ pkexec /usr/libexec/gamecove/gamecove-fix <name> set <value>
 
 polkit has two actions, picked by the program pkexec runs:
 
-| Action | Program | Active session | Allows |
+| Action | Program | Who | Allows |
 | --- | --- | --- | --- |
-| `io.github.ihulksmashi.gamecove.fix-set` | `/usr/libexec/gamecove/gamecove-fix-set` | `yes` (no password) | only `charge-limit set 50..100`, `fan set auto\|quiet\|max`, `claw8ex-gyro set accel-on\|accel-off`, and `status` |
-| `io.github.ihulksmashi.gamecove.fix` | `/usr/libexec/gamecove/gamecove-fix` | `auth_admin_keep` | everything else, including every install and remove |
+| `io.github.ihulksmashi.gamecove.fix-set` | `/usr/libexec/gamecove/gamecove-fix-set` | active local session: `yes` (no password); inactive / remote: `no` | `set` and `status` only: `charge-limit` 50-100 / release, `fan` auto / quiet / max / curve, `power-tune` boost, epp, governor, cpumax, gpulevel, gpumin, gpumax, gpuprofile, sppt, fppt, platform, tau, battery, restore and thermald hold / release (a hold ends by itself when no game runs), `controller-led`, `claw8ex-gyro` accel-on / accel-off, `claw8ex-gyro` / `claw8ex-buttons` refresh |
+| `io.github.ihulksmashi.gamecove.fix` | `/usr/libexec/gamecove/gamecove-fix` | `auth_admin_keep` | everything else: every install and remove (the small udev-rule / session-file fixes too), `power-tune` smt, cores, sleep, mcu, `--remove-all` |
+
+Why each setting is on one side or the other: [SYSTEM.md](SYSTEM.md), "GameCove's root actions".
 
 The gamescope session has no polkit agent, so it can't ask for a password: in
 Gaming Mode only the `fix-set` actions work, and pkexec on the full helper fails
@@ -268,7 +314,11 @@ The guided install (README "Install"). Three parts:
 1. **`packaging/get-gamecove.sh`** (POSIX sh, no root): detects the OS from `os-release` (+ `/run/ostree-booted`
    for Fedora Atomic), asks the GitHub API for the latest release, downloads the app tarball, the package for this
    system (RPM, or the `.raw` sysext on SteamOS), its own copy and `SHA256SUMS` into
-   `~/.local/share/gamecove/installer/`, refuses anything that isn't listed in or doesn't match `SHA256SUMS`,
+   `~/.local/share/gamecove/installer/`, checks `SHA256SUMS`'s Sigstore signature (`SHA256SUMS.sigstore.json`, made
+   by the Release workflow with its GitHub OIDC identity, no key or secret; verified with cosign from the system or a
+   pinned, sha256-checked download, and only accepted for `.github/workflows/release.yml` on a `v*` tag of this
+   repository; a release without one is refused unless `GAMECOVE_ALLOW_UNSIGNED=1`; review S3-3), refuses anything
+   that isn't listed in or doesn't match `SHA256SUMS`,
    unpacks the app, writes `release.env`, adds the "GameCove Installer" app entry and an "Install GameCove" desktop
    shortcut, and starts `gamecove.x86_64 -- --installer`. Offline, it starts the copy it has.
 2. **Installer mode in the app.** `scenes/boot.tscn` is the main scene; `scripts/installer/boot.gd` reads
@@ -304,7 +354,8 @@ a "GameCove" app entry switches with `gamecove-session-select gamecove`), **Desk
 (`GAMECOVE_STEAM_MODE`). The first-run setup steps the installer covered are marked in the Setup service, so the
 in-app setup shows nothing (it still runs for people who installed another way, and skips steps done elsewhere).
 
-Uninstall: `steamosctl set-default-login-mode game`, optionally `gamecove-fix <name> remove` for the fixes it
+Uninstall: `gamecove-session-select restore` (the copy in the data folder, else the installed one, else
+`steamosctl` directly: the default desktop session back from `gamecove.desktop`, boot to Steam Gaming Mode), optionally `gamecove-fix --remove-all` (every fix in use, whoever applied it: charge limit, fan curve, LEDs, power-tune values, udev rules; review S2-5) instead of only the fixes it
 installed, `pkexec rpm-ostree uninstall gamecove` (next boot) or removing the sysext (`systemd-sysext refresh`),
 then every user file above; "Keep my settings" off also deletes GameCove's `user://` folder and the download.
 Store sign-ins belong to legendary / gogdl / nile and stay. Every step can be undone after a failure (Undo).

@@ -7,8 +7,22 @@
 #
 # edid.conf: "<board_name> <connector>:edid/<file>", e.g. "MS-1T91 eDP-1:edid/gamecove-csw0801-30-120.bin".
 # GAMECOVE_ROOT prefixes every path in tests (empty on a real system).
+#
+# Kill switch and rollback (review S1-5): it acts only when the kernel command line holds the marker
+# gamecove.vrr=1, which the fix adds to the boot entry it creates (rpm-ostree kargs) and removes on
+# `remove`. So the previous boot entry, and any entry the marker was deleted from, start with the
+# panel's own EDID even though this hook and its rule are in /etc. At the boot menu: press e, add
+# gamecove.novrr to the "linux" line (or delete gamecove.vrr=1), Ctrl+X: VRR fix off for that boot.
 R=${GAMECOVE_ROOT:-}
 conf=$R/etc/gamecove/claw8ex-vrr/edid.conf
+
+cmd=
+read -r cmd <"$R/proc/cmdline" 2>/dev/null || [ -n "$cmd" ] || exit 0
+case " $cmd " in
+*" gamecove.novrr "* | *" gamecove.novrr="*) exit 0 ;;
+*" gamecove.vrr=1 "*) ;;
+*) exit 0 ;;
+esac
 
 board=
 read -r board <"$R/sys/class/dmi/id/board_name" 2>/dev/null || [ -n "$board" ] || exit 0

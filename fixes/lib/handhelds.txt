@@ -22,7 +22,7 @@ onexplayer-2-pro	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER 2 PRO ARP23|ONEX
 onexplayer-g1-amd	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER G1 A
 onexplayer-g1-intel	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER G1 i
 onexplayer-3	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER 3
-onexplayer-x2-mini	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER X2Mini|ONEXPLAYER X2Mini PRO
+onexplayer-x2-mini-pro	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER X2Mini PRO
 onexplayer-onexfly-apex	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER APEX
 onexplayer-super-x	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER SUPER X
 onexplayer-family	sys_vendor=ONE-NETBOOK
@@ -46,3 +46,4 @@ gpd-win-max-2	sys_vendor=GPD	product_name=G1619-04|G1619-05
 gpd-win-5	sys_vendor=GPD	product_name=G1618-05
 gpd-family	sys_vendor=GPD
 zotac-zone	sys_vendor=ZOTAC	board_name=G0A1W|G1A1W
+orangepi-neo	sys_vendor=OrangePi	product_name=NEO-01

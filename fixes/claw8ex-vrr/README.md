@@ -30,7 +30,13 @@ The same drive may boot more than one handheld (a Claw, a ROG Ally, a Legion Go 
 | modprobe rule | `/etc/modprobe.d/gamecove-claw8ex-vrr.conf`: `install xe /bin/sh <hook> \|\| :; /sbin/modprobe --ignore-install xe $CMDLINE_OPTS` (same for `i915`) |
 | Initramfs | `rpm-ostree initramfs-etc --track=` for all four files, so it also works when the driver loads from the initramfs |
 
-It takes effect at the next restart. `remove` undoes all of it, also at the next restart. The boot menu's previous entry always starts without the fix. Changes are recorded in `/var/lib/gamecove/fixes/claw8ex-vrr/manifest`. `install` refuses when another modprobe rule already has an `install` line for `xe`/`i915`.
+It takes effect at the next restart. `remove` undoes all of it, also at the next restart. The hook acts only when the kernel command line holds `gamecove.vrr=1`, which the fix adds to the boot entry it creates and `remove` takes out; the marker does nothing by itself, so other handhelds booting the drive are unaffected.
+
+**If the screen is wrong after the restart:**
+
+- Pick the previous boot entry in the boot menu. Its command line has no `gamecove.vrr=1`, so it starts with the panel's own EDID even though the hook and its modprobe rule are in `/etc` (rpm-ostree carries live `/etc` edits into it).
+- Or kill switch: at the boot menu press `e`, add `gamecove.novrr` to the `linux` line (or delete `gamecove.vrr=1`), then Ctrl+X. VRR fix off for that boot.
+- Then `gamecove-fix claw8ex-vrr remove` (Desktop Mode, or `sudo` from a TTY / SSH) undoes it for good at the next restart. Changes are recorded in `/var/lib/gamecove/fixes/claw8ex-vrr/manifest`. `install` refuses when another modprobe rule already has an `install` line for `xe`/`i915`.
 
 ### Older installs
 

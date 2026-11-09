@@ -207,6 +207,56 @@ def install(home: str, entry: dict, allow_unpinned: bool = False) -> dict:
     return out
 
 
+PREFIX_STOCK = ".gamecove-stock"      # gamecove-run: the prefix's own igdext64.dll, kept while the shim is in
+PREFIX_ADDED = ".gamecove-added"      # gamecove-run: the prefix had none; ours goes away
+PROTON_IGDEXT = os.path.join("files", "lib", "wine", "igdext", "x86_64-windows", "igdext64.dll")
+
+
+def _steam_libraries(home: str) -> list[str]:
+    libs = [os.path.join(home, STEAM)]
+    for m in re.finditer(r'"path"\s+"([^"]+)"', sysfs.read(os.path.join(home, STEAM, "steamapps", "libraryfolders.vdf")) or ""):
+        libs.append(m.group(1).replace("\\\\", "/"))
+    return list(dict.fromkeys(os.path.realpath(x) for x in libs))
+
+
+def restore_igdext(home: str) -> dict:
+    """Undo every igdext64.dll change GameCove's launch wrapper made (review S2-2): each game prefix's own copy back
+    from igdext64.dll.gamecove-stock (or ours removed where the prefix had none), and the .stock copies older builds
+    left inside Proton installs put back, but only where the Proton's file is still a shim (a Proton update since
+    wins). Nothing else in a Proton or Steam install is touched."""
+    prefixes = protons = 0
+    for lib in _steam_libraries(home):
+        for marker in glob.glob(os.path.join(lib, "steamapps", "compatdata", "*", "pfx", "drive_c", "windows",
+                                             "system32", "*", "*", "igd_faux.inf_1", "igdext64.dll*")):
+            dll = os.path.join(os.path.dirname(marker), "igdext64.dll")
+            try:
+                if marker.endswith(PREFIX_STOCK):
+                    os.replace(marker, dll)
+                    prefixes += 1
+                elif marker.endswith(PREFIX_ADDED):
+                    for f in (dll, marker):
+                        if os.path.exists(f):
+                            os.remove(f)
+                    prefixes += 1
+            except OSError as e:
+                log.warning("couldn't restore %s: %s", dll, e)
+        tools = glob.glob(os.path.join(lib, "steamapps", "common", "*", PROTON_IGDEXT + ".stock"))
+        if lib == os.path.realpath(os.path.join(home, STEAM)):
+            tools += glob.glob(os.path.join(lib, "compatibilitytools.d", "*", PROTON_IGDEXT + ".stock"))
+        for stock in tools:
+            dll = stock[: -len(".stock")]
+            try:
+                cur = open(dll, "rb").read() if os.path.exists(dll) else b""
+                if not cur or b"IGDEXT_" in cur:
+                    if os.path.exists(dll):
+                        os.chmod(dll, 0o644)
+                    os.replace(stock, dll)
+                    protons += 1
+            except OSError as e:
+                log.warning("couldn't restore %s: %s", dll, e)
+    return {"prefixes": prefixes, "protons": protons}
+
+
 def remove_for_uninstall(home: str) -> dict:
     """GameCove is being uninstalled. A driver GameCove installed (its package under ~/.local/share/gamecove) goes with
     it: its own uninstall.sh takes out the session file, the shim watcher and the prefix files. Putting the session
@@ -217,15 +267,16 @@ def remove_for_uninstall(home: str) -> dict:
     pkg = package_dir(home)
     root = os.path.realpath(os.path.join(home, INSTALL_ROOT))
     ours = bool(pkg) and os.path.realpath(pkg).startswith(root + os.sep)
+    restored = restore_igdext(home)
     if not ours or not os.path.isfile(os.path.join(pkg, "uninstall.sh")):
-        return {**xmxscope.restore_session(home), "ours": False}
+        return {**xmxscope.restore_session(home), "ours": False, "igdext": restored}
     r = userexec.run(["bash", os.path.join(pkg, "uninstall.sh")], home, timeout=600, cwd=pkg)
     for f in (xmxscope.SESSION_CONF + xmxscope.PARKED_SUFFIX, xmxscope.XMX_ENV, ENV_CONF):
         try:
             os.remove(os.path.join(home, f))
         except FileNotFoundError:
             pass
-    return {"ok": r["rc"] == 0, "ours": True, "package_dir": pkg,
+    return {"ok": r["rc"] == 0, "ours": True, "package_dir": pkg, "igdext": restored,
             **({} if r["rc"] == 0 else {"error": f"uninstall.sh exited {r['rc']}: {r['out'].strip()[-200:]}"})}
 
 
