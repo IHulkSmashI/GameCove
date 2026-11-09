@@ -153,6 +153,18 @@ set +e; sh "$FIX" set quiet 2>/dev/null; code=$?; set -e
 [ "$(cat "$M/pwm1_enable") $(cat "$M/pwm2_enable")" = "2 2" ] || fail "failed set leaves both fans on automatic ($(cat "$M/pwm1_enable") $(cat "$M/pwm2_enable"))"
 grep -q 'set failed' "$R/var/lib/gamecove/fixes/fan/changes.log" || fail "failed set logged"
 [ ! -e "$R/run/gamecove-fan.lock" ] || fail "lock released after a failure"
+# review L3: a lock left by a run killed with SIGKILL (its PID gone) is taken over; a live holder's is not
+sh -c 'exit 0' & dead=$!; wait "$dead" || true
+mkdir -p "$R/run/gamecove-fan.lock"; echo "$dead" > "$R/run/gamecove-fan.lock/pid"
+set +e; timeout 10 sh "$FIX" set auto >"$ROOT/l3.out" 2>&1; code=$?; set -e
+[ "$code" != "124" ] || fail "a dead holder's lock blocks the fix ($(cat "$ROOT/l3.out"))"
+[ ! -e "$R/run/gamecove-fan.lock" ] || fail "taken-over lock released"
+sleep 30 & live=$!
+mkdir -p "$R/run/gamecove-fan.lock"; echo "$live" > "$R/run/gamecove-fan.lock/pid"
+set +e; timeout 3 sh "$FIX" set auto >/dev/null 2>&1; code=$?; set -e
+[ "$code" = "124" ] || fail "a live holder's lock is respected (exit $code)"
+[ "$(cat "$R/run/gamecove-fan.lock/pid" 2>/dev/null)" = "$live" ] || fail "a run stopped while waiting leaves the holder's lock alone"
+kill "$live"; rm -r "$R/run/gamecove-fan.lock"
 rm -rf "$R"
 R="$(new_hw oxp_ec 1 manual)"; export GAMECOVE_ROOT="$R"; O="$R/sys/class/hwmon/hwmon3"
 rm -f "$O/pwm1"; mkdir "$O/pwm1"

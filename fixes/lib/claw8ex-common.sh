@@ -15,6 +15,8 @@
 # Paths written to the manifest and handed to rpm-ostree are real paths, without the prefix.
 
 ROOT=${GAMECOVE_ROOT:-}
+# shellcheck source=fixes/lib/lockdir.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/lockdir.sh"
 GC_STATE=/var/lib/gamecove
 BOARD_WANTED=MS-1T91
 FW_DIR=/etc/firmware
@@ -43,13 +45,9 @@ require_root() {
 # One fix at a time. /run exists on every real system; tests create it in the fake root.
 lock() {
 	GC_LOCK="$ROOT/run/gamecove-fix.lock"
-	n=0
-	while ! mkdir "$GC_LOCK" 2>/dev/null; do
-		n=$((n + 1))
-		[ "$n" -lt 60 ] || die "another GameCove fix is running ($GC_LOCK)"
-		sleep 1
-	done
-	trap 'rmdir "$GC_LOCK" 2>/dev/null; [ -z "${GC_TMP:-}" ] || rm -rf "$GC_TMP"' EXIT
+	# a lock left by a run that was killed (its PID is gone) is taken over (lockdir.sh, review L3)
+	lockdir_take "$GC_LOCK" 60 || die "another GameCove fix is running ($GC_LOCK)"
+	trap 'lockdir_drop "$GC_LOCK"; [ -z "${GC_TMP:-}" ] || rm -rf "$GC_TMP"' EXIT
 	trap 'exit 1' INT TERM HUP PIPE
 }
 
