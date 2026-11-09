@@ -113,5 +113,15 @@ PY
 grep -q 'cosign-release: ${{ steps.cosign.outputs.version }}' "$W" && ok || bad "cosign-installer must install get-gamecove.sh's COSIGN_VERSION"
 grep -q "COSIGN_SHA256=" "$W" && ok || bad "release.yml must check cosign against get-gamecove.sh's COSIGN_SHA256"
 
+# ------------------------------------------------------------- firmware index signature (M21)
+FW="$REPO/.github/workflows/firmware.yml"
+grep -q "cosign sign-blob --yes --bundle dist/firmware.json.gz.sigstore.json dist/firmware.json.gz" "$FW" && ok || bad "firmware.yml must sign the index"
+grep -q "dist/firmware.json.gz.sigstore.json --clobber" "$FW" && ok || bad "firmware.yml must publish the signature"
+grep -q "id-token: write" "$FW" && ok || bad "firmware.yml needs id-token: write"
+app_cos=$(sed -n 's/^const COSIGN_VERSION := "\(.*\)"$/\1/p' "$REPO/app/scripts/system/updates.gd")
+gg_cos=$(sed -n 's/^COSIGN_VERSION=//p' "$REPO/packaging/get-gamecove.sh")
+[ -n "$app_cos" ] && [ "$app_cos" = "$gg_cos" ] && ok || bad "updates.gd COSIGN_VERSION ($app_cos) must match get-gamecove.sh ($gg_cos)"
+grep -q 'workflows/firmware\\\\.yml@refs/heads/main\$' "$REPO/app/scripts/system/firmware_index.gd" && ok || bad "firmware_index.gd SIGNER_IDENTITY must name firmware.yml on main"
+
 echo "$PASS passed, $FAILS failed"
 [ "$FAILS" -eq 0 ]

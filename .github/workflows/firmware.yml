@@ -4,6 +4,9 @@ name: Nightly firmware index
 # app/data/devices.json, plus upstream versions of the Linux driver stack, published as
 # firmware.json.gz (+ .sha256) on the rolling "firmware" release. GameCove reads it at most
 # weekly (app/scripts/system/firmware_index.gd). Nothing is mirrored: only versions and links.
+# The file is signed with cosign keyless (firmware.json.gz.sigstore.json, this workflow's GitHub OIDC
+# identity on main); the app verifies it when cosign is on the device (review M21) and, either way,
+# only downloads from the device maker's own domains.
 
 on:
   schedule:
@@ -12,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   build:
@@ -33,9 +37,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python -m gamedb.firmware.build --out dist/firmware.json.gz --max-minutes 12
+      - name: cosign version (the one get-gamecove.sh pins)
+        id: cosign
+        working-directory: .
+        run: echo "version=$(sed -n 's/^COSIGN_VERSION=//p' packaging/get-gamecove.sh)" >>"$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          cosign-release: ${{ steps.cosign.outputs.version }}
+      - name: Sign the index (keyless; the identity the app checks)
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          cosign sign-blob --yes --bundle dist/firmware.json.gz.sigstore.json dist/firmware.json.gz
+          cosign verify-blob --bundle dist/firmware.json.gz.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "(?i)^https://github\.com/$(printf '%s' "$REPO" | sed 's/[.]/\\./g')/\.github/workflows/firmware\.yml@refs/heads/main$" \
+            dist/firmware.json.gz
       - name: Publish to the rolling "firmware" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view firmware >/dev/null 2>&1 || gh release create firmware --title "Firmware index" --notes "Rebuilt nightly from each handheld maker's public support listings (ASUS, Lenovo, MSI, Valve's jupiter-hw-support) and upstream release pages. Versions, dates and links only; no firmware is hosted here." --latest=false
-          gh release upload firmware dist/firmware.json.gz dist/firmware.json.gz.sha256 --clobber
+          gh release upload firmware dist/firmware.json.gz dist/firmware.json.gz.sha256 dist/firmware.json.gz.sigstore.json --clobber

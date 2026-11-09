@@ -329,7 +329,10 @@ func _hub_row(col: VBoxContainer, it: Dictionary) -> Array:
 		var btns := Kit.hbox(12)
 		btns.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var up := svc("updates")
-		if it.get("flash") == "ez-flash" and status == "update" and up != null:
+		if bool(it.get("download_blocked", false)) and status == "update":
+			row.add_child(DKit.check_line("maybe", Hub.DOWNLOAD_BLOCKED))
+		if it.get("flash") == "ez-flash" and status == "update" and up != null and str(it.get("download_host", "")) != "":
+			row.add_child(DKit.quiet(Hub.FROM_HOST % str(it["download_host"])))
 			var targets: Array = state.get("usb_targets", []) if state.get("usb_targets") is Array else []
 			if targets.is_empty():
 				row.add_child(DKit.quiet(Hub.NEEDS_USB))

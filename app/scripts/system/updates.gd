@@ -556,17 +556,48 @@ func load_index() -> Dictionary:
 	if Index.is_stale(mod, _now()) and _stamp_due("index_fetch", REFRESH_EVERY_S) and network_ok():
 		_touch_stamp("index_fetch")
 		var part := path + ".part"
-		var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "60", "-o", part, Index.URL]))
-		var s: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "20", Index.URL + ".sha256"]))
+		var r: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "60", "-o", part, "--", Index.URL]))
+		var s: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "20", "--", Index.URL + ".sha256"]))
 		var want := Index.sha_from_text(str(s.get("out", "")))
 		var good := int(r.get("code", -1)) == 0 and int(s.get("code", -1)) == 0 and want != "" \
 			and FileAccess.file_exists(part) and FileAccess.get_sha256(part) == want \
-			and not Index.parse_gz(FileAccess.get_file_as_bytes(part)).is_empty()
+			and not Index.parse_gz(FileAccess.get_file_as_bytes(part)).is_empty() \
+			and _index_signature_ok(part)
 		if good:
 			DirAccess.rename_absolute(part, path)
 		elif FileAccess.file_exists(part):
 			DirAccess.remove_absolute(part)
 	return Index.parse_gz(FileAccess.get_file_as_bytes(path)) if FileAccess.file_exists(path) else {}
+
+
+## cosign on this device: the system's, else the copy the installer downloaded (get-gamecove.sh's pinned
+## COSIGN_VERSION and sha256); "" when there is none.
+const COSIGN_VERSION := "v2.5.3"
+
+
+func _cosign() -> String:
+	var sys := _which("cosign")
+	if sys != "":
+		return sys
+	var mine := home.path_join(".local/share/gamecove/tools/cosign-" + COSIGN_VERSION)
+	return mine if home != "" and FileAccess.file_exists(mine) else ""
+
+
+## The index's Sigstore signature (review M21): with cosign on the device, the download is used only when
+## firmware.json.gz.sigstore.json proves it was made by the nightly workflow. Without cosign, the published sha256
+## and the per-maker download allow-list (Index.download_host) still apply.
+func _index_signature_ok(part: String) -> bool:
+	var cos := _cosign()
+	if cos == "":
+		return true
+	var bundle := part + ".sigstore.json"
+	var b: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "20", "-o", bundle, "--", Index.URL + ".sigstore.json"]))
+	var ok := int(b.get("code", -1)) == 0 and FileAccess.file_exists(bundle) and int(runner.run(cos, PackedStringArray([
+		"verify-blob", "--bundle", bundle, "--certificate-oidc-issuer", Index.OIDC_ISSUER,
+		"--certificate-identity-regexp", Index.SIGNER_IDENTITY, part])).get("code", -1)) == 0
+	if FileAccess.file_exists(bundle):
+		DirAccess.remove_absolute(bundle)
+	return ok
 
 
 func _check_maker() -> void:
@@ -745,7 +776,8 @@ func prepare_usb(item_id: String, mount: String) -> bool:
 	var reason := ""
 	if game_running:
 		reason = "game_running"
-	elif it.is_empty() or it.get("flash") != "ez-flash" or str(it.get("download_url", "")) == "" or str(it.get("sha256", "")).length() != 64:
+	elif it.is_empty() or it.get("flash") != "ez-flash" or str(it.get("sha256", "")).length() != 64 \
+			or Index.download_host(str(it.get("download_url", "")), str(_row().get("maker", ""))) == "":
 		reason = "not_available"
 	elif not usb_targets().any(func(t): return t["mount"] == mount):
 		reason = "no_usb"
@@ -763,7 +795,7 @@ func _prepare_usb(it: Dictionary, mount: String) -> void:
 	if FileAccess.file_exists(zip):
 		DirAccess.remove_absolute(zip)
 	_main(func(): progress.emit("usb", -1.0, "Downloading " + str(it["name"])))
-	var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "600", "-o", zip, str(it["download_url"])]))
+	var r: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "600", "-o", zip, "--", str(it["download_url"])]))
 	var msg := ""
 	var written: Array = []
 	if int(r.get("code", -1)) != 0 or not FileAccess.file_exists(zip):
