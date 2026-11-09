@@ -50,6 +50,10 @@ GameCove stands on a lot of other people's work. Thank you.
 - **Bluetooth** Decky plugin (Outpox): BlueZ adapter power over D-Bus, and why hci0 isn't always the right adapter.
 
 - **ClawDeck**: the Claw 8 EX power backend findings, launch environment, face-button and EDID findings, ported here.
+- **ClawDeck** (same author): Parts ported from ClawDeck (same author). Its per-game upscaling modules (OptiScaler, XeSS XMX driver and scope, launch environment, game list, REFramework, Decky Framegen detection, downloads) and their tests in `packaging/helpers/gamecove_upscale/`, its launch wrapper as `packaging/libexec/gamecove-run`. `data/games.json` is ClawDeck's list, derived from OptiScaler's GameConfigs (GPL-3.0).
+- **decky-lsfg-vk** (xXJSONDeruloXx, GPL-3.0): lsfg-vk 2 config keys, the Lossless Scaling DLL location and its gamescope workarounds. **Decky-Framegen** (xXJSONDeruloXx): its per-game markers, so GameCove never overwrites its OptiScaler. **MangoPeel** (Gawah): which overlay knobs work on mangoapp's file. **decky-storage-cleaner** (mcarlucci): the per-game shader cache folder. Our code is our own.
+- **lsfg-vk** (PancakeTAS, lsfg-vk.dev): its configuration and environment-variable docs. GameCove ships none of it; the user's own Lossless Scaling is used.
+- **OptiScaler**, **OptiPatcher**, **fakenvapi**, **REFramework** (onehoon's fork) and **AMD FSR SDK** (GPUOpen FidelityFX-SDK, AMD binary licence: redistribution allowed with its notice): downloaded from their own releases when the user asks, pinned with sha256 (`packaging/helpers/gamecove_upscale/data/versions.json`); GameCove ships none of their files.
 - **DeckyTDPTuner**: ideas behind Auto TDP.
 - **Zendo-GIT Intel-Handheld-and-ARC-GPU-laboratory** (MIT, © 2026 ClawLab contributors): the VRR range fix and the checked panel list. Notice reproduced in [fixes/claw8ex-vrr/LICENSE.ClawLab-MIT](fixes/claw8ex-vrr/LICENSE.ClawLab-MIT).
 - **OpenGamepadUI** and **gamescope-x11-client**: how a gamescope main app sets its atoms and base layers.

@@ -193,3 +193,84 @@ backend.
   Deck / DualSense target (Legion Go).
 - `SetTargetDevices` through a profile reload re-creating devices without losing the intercept.
 - hhd schema shapes on each device (option names, Legion Go S `touchpad` multiple).
+
+## Performance (ctl-perf)
+
+Provider: `app/scripts/controls/providers/perf.gd`; helpers in `app/scripts/controls/perf/` (store, overlay, lsfg,
+launch_files, upscale). Python helper `packaging/helpers/gamecove_upscale/` with its entry
+`packaging/libexec/gamecove-upscale`, and the Steam launch wrapper `packaging/libexec/gamecove-run` (both installed
+to `/usr/libexec/gamecove/`, the package to `/usr/lib/gamecove/helpers/`). Tests: `app/tests/test_perf_controls.gd`
+(fake services in `app/tests/fixtures/perf_controls/`), `packaging/helpers/tests/` (pytest: ClawDeck's tests for
+the ported modules plus GameCove's; run from the GDScript suite when pytest is installed).
+
+**Game scope.** Per-game controls act on `ctx["game"]` (a Library game) or `ctx["game_key"]`. Set it with
+`PerfProvider.set_game(Controls.ctx, game)` (`preload("res://scripts/controls/providers/perf.gd")`), then call
+`Controls.detect_all()`: availability, options (Proton list) and values follow the game. Without a game they report
+"Open a game first". Values are stored per device (`user://perf_controls.cfg`, sections `perf/<game key>@<device>`).
+
+**How a game gets its settings.** Non-Steam games GameCove starts: `Launcher.env_hooks` (new, backward compatible)
+adds our variables at launch. Steam games (steam:// takes no environment): the files
+`~/.local/share/gamecove/launch/<appid>.perf.env` (ours, plus Launcher's own upscaler/latency variables, which
+never reached Steam games before) and `<appid>.env` (the upscaling helper's) are exported by `gamecove-run`, which
+GameCove puts into the game's Steam launch options through `Library.set_launch_options` the first time a setting
+needs it (after `VAR=value` words, in front of other wrappers such as Decky Framegen's fgmod). When the drive boots
+another handheld, the files are rewritten from that device's values (stamp `launch/.device`).
+
+| Control | Applied with | Available when |
+| --- | --- | --- |
+| `perf.overlay` (off, fps, compact, bar, full, custom; per game) | `PerfMonitor.set_overlay_level` plus the new `set_overlay_style(override, extra)`: mangohud.gd writes the session's `MANGOHUD_CONFIGFILE`. bar = one stretched row (fps, frame graph, CPU/GPU, battery W); custom = the ticked items | mangoapp and its config file (`PerfMonitor.overlay_supported()`) |
+| `perf.overlay_position`, `perf.overlay_opacity` (0-100 %), `perf.overlay_scale` (50-200 %), `perf.overlay_item.*` (11 items for custom) | MangoHud `position=`, `background_alpha=`, `font_scale=`; items map to MangoHud options (overlay.gd) | same |
+| `perf.mangohud_fps_limit` (0 = off, up to the panel's top Hz), `perf.mangohud_fps_limit_method` (late / early) | the game's environment: `MANGOHUD=1 MANGOHUD_CONFIG=no_display,fps_limit=N,fps_limit_method=M`. With `MANGOHUD_CONFIG` set, MangoHud's layer reads no config file (overlay_params.cpp), so the session overlay isn't drawn twice | a MangoHud Vulkan layer JSON in an implicit_layer.d |
+| `perf.lsfg`, `perf.lsfg_multiplier` (2-4x), `perf.lsfg_flow_scale` (0.25-1.0), `perf.lsfg_performance` | `~/.config/lsfg-vk/conf.toml`: one `[[profile]]` per game named `GameCove <key>` (Steam games by `active_in = [ "<appid>" ]`, others by `LSFGVK_PROFILE`); every other line kept; a 1.x file is moved to `conf.toml.v1.bak`. The game also gets `ENABLE_GAMESCOPE_WSI=0 DXVK_HDR=0` | lsfg-vk 2 layer (`VkLayer_LSFGVK_frame_generation.json`) and the user's own `lsfg-vk.dll` in `steamapps/common/Lossless Scaling` (Steam beta branch `lsfg-vk`). Never bundled |
+| `perf.upscaler`, `perf.frame_gen`, `perf.upscale_recommended`, `perf.upscale_undo` | `gamecove-upscale choose/apply/undo --home --key --gpu vendor=..,family=..,arch=..,xmx=.. [--dir]` (JSON out). OptiScaler (pinned, sha256) into the folder of the game's exe with the game's fixes, REFramework for Capcom RE Engine games, everything recorded and undone exactly | a known GPU, the helper installed, a game whose folder is known |
+| `perf.low_latency` (per game) | `Launcher.save_settings(key, {low_latency})`: `LOW_LATENCY_LAYER=1` (Anti-Lag 2 / Reflex through low_latency_layer, bundled in Proton-CachyOS 11) on AMD, XeLL (`IGDEXT_XELL_CAP`) on Intel with the XeSS XMX driver | Launcher and a known GPU |
+| `perf.proton` (per game) | `Library.set_compat_tool` (Steam's own API or config.vdf; umu's PROTONPATH for other stores); options from `Library.compat_tools(game)` | Library and a game |
+| `perf.launch_wrapper` (Steam games) | adds / removes `gamecove-run` in the launch options | the wrapper installed |
+| `perf.shader_threads` (0 = Steam's default, 1-16; not per game) | `steam_dev.cfg` `unShaderBackgroundProcessingThreads N` (Bazzite's bazzite-steam sets the same), next Steam start | Steam installed |
+| `perf.clear_shader_cache` (action, Steam games) | deletes `steamapps/shadercache/<appid>` in every library (only that path shape, never following links) | a cache folder exists |
+
+**Upscaling per GPU** (games.py, generalized from ClawDeck's Claw-only logic):
+
+| GPU | Choices | Default route |
+| --- | --- | --- |
+| Intel Arc with XMX (Xe2, Xe3, Arrow Lake H) | game's own, XeSS, FSR 4.1.2 on XMX, FSR 4.1.2 Lite; XeSS-FG 2x-4x | exactly ClawDeck's: own XeSS if shipped, else OptiScaler XeSS (FSR 4.1.2 on XMX for DX12 games when nitec's files are there), Capcom setup for RE Engine |
+| Intel without XMX (Meteor Lake) | game's own, XeSS (DP4a) | as above without XeSS-FG |
+| AMD RDNA3 / RDNA3.5 | game's own, FSR 3.1, FSR 4 (AMD's FSR SDK 2.4 upscaler 4.1.2, downloaded from AMD's GitHub at a pinned commit, sha256 checked); FSR-FG 2x | games with FSR keep it (Proton-CachyOS / GE upgrade it to FSR 4 on RDNA3); DLSS / XeSS / FSR 2 games get OptiScaler FSR 3.1; FSR 4 opt-in |
+| AMD RDNA2 (Steam Deck, Z2 A, Z2 Go, 6800U) | game's own, FSR 3.1; FSR-FG 2x | as above, no FSR 4 (AMD's lightweight model takes 5.6 ms at 1080p on a Z2 A) |
+| unknown | game's own | nothing added |
+
+Conflicts: OptiScaler put in by Decky Framegen (its `FRAMEGEN_PATCH` marker or `<proxy>.b` backups, checked against
+Decky-Framegen v0.17), by ClawDeck (`.clawdeck-optiscaler/manifest.json`) or by hand is never touched; the control
+fails with the reason ("remove it there first").
+
+### Taken from Decky plugins and other projects
+- **ClawDeck** (same author): optiscaler.py, xess.py, xmxscope.py, launchenv.py, gamedb.py, livedb.py,
+  reframework.py, framegen.py (read-only part), downloads.py, games.json and its tests, main.py's per-game flow
+  (games.py), clawdeck-launch.sh (gamecove-run).
+- **decky-lsfg-vk** (xXJSONDeruloXx, e744826): the v2 config keys and ranges (config_schema.py), the DLL location
+  and Steam beta branch (steam_service.py, constants.py), `ENABLE_GAMESCOPE_WSI=0` / `DXVK_HDR=0` defaults
+  (wrapper_service.py).
+- **Decky-Framegen** (xXJSONDeruloXx, 96eb17b): its per-game markers (`defaults/assets/fgmod.sh`, main.py).
+- **MangoPeel** (Gawah): the knobs it offers on the same session file (position, offsets, background_alpha), and
+  font_size left out there.
+- **decky-storage-cleaner** (mcarlucci): `steamapps/shadercache/<appid>` is what to delete for one game.
+- **Bazzite** (bazzite-steam): `unShaderBackgroundProcessingThreads` in steam_dev.cfg.
+
+### Improvements over ClawDeck (each tested)
+- Every GPU, not just the Claw (table above); AMD presets in launchenv (`fsr31`, `fsr4_amd`, FSR-FG output, Capcom
+  setup on FSR) and AMD's own FSR SDK 2.4 upscaler instead of leaked builds (`test_games.py`).
+- ClawDeck's own OptiScaler installs are recognised and left alone (`test_foreign_optiscaler_is_never_touched`).
+- The LZMS cabinet.dll is looked up (GAMECOVE_CABINET, ~/.local/share/gamecove, an installed ClawDeck) instead of
+  assumed inside the package.
+
+### Needs real hardware / real games to confirm
+- MangoHud limiter inside gamescope with mangoapp running (frame pacing, no second overlay).
+- lsfg-vk 2 profile pick by Steam app id under gamescope with `ENABLE_GAMESCOPE_WSI=0`.
+- FSR 4 through OptiScaler with AMD's SDK DLL on RDNA3 / RDNA3.5 under Proton-CachyOS / GE (needs their amdxc64
+  shim), and the Capcom setup on AMD.
+- `font_scale` in mangoapp; the bar preset's look on 7-8" screens.
+- The wrapper in Steam launch options set through Steam's CEF API while Steam runs.
+- Not done: a Steam shader pre-caching on/off switch (Steam keeps it where no tested tool writes it; Steam's own
+  Settings > Downloads), installing the XeSS XMX driver from a control (ported in the helper, xess.install; one-time
+  setup belongs to the installer), the helper's launch file when the drive boots a handheld with another GPU vendor
+  (re-pick the upscaler there).
