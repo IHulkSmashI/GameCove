@@ -233,6 +233,13 @@ expect_code 0 "set entry: status" gfs fan status
 contains "$T/out" "^state=on$" "status passed through"
 expect_code 0 "set entry: fan curve" gfs fan set curve:0,40,50,60,80,100
 contains "$ROOT/calls" "^fan:set curve:0,40,50,60,80,100$" "fan curve reached fix.sh"
+# review L2: the session's `timeout pkexec` can't stop a root child, so the set entry bounds the fix itself
+cp "$FIXES/charge-limit/fix.sh" "$T/charge-limit.fix.sh"
+printf '#!/bin/sh\nsleep 30\n' >"$FIXES/charge-limit/fix.sh"
+t0=$(date +%s)
+GAMECOVE_FIX_SET_TIMEOUT=1 expect_code 124 "set entry: a fix that hangs is stopped" gfs charge-limit set 80
+if [ $(($(date +%s) - t0)) -le 8 ]; then ok; else bad "set entry: hung fix stopped within the bound"; fi
+cp "$T/charge-limit.fix.sh" "$FIXES/charge-limit/fix.sh"
 expect_code 66 "set entry: fan curve letters" gfs fan set curve:0,40,x
 expect_code 66 "set entry: fan curve empty" gfs fan set curve:
 expect_code 66 "set entry: fan curve trailing comma" gfs fan set curve:1,2,
