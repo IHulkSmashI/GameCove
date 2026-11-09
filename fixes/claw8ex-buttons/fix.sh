@@ -5,7 +5,7 @@
 # Its firmware sends Win+G for the left face button and F15 alone for the right one; InputPlumber's stock
 # map for the board (claw2) waits for the chord F15+G and for F16, so both buttons do nothing. This adds a
 # capability map (Guide = G, QuickAccess = F15, M1/M2 back buttons) and points the board's device config at
-# it through InputPlumber's own override folders in /etc. See README.md.
+# it through InputPlumber's own override folders in /etc. See fixes/README.md.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=fixes/lib/claw8ex-common.sh
