@@ -180,16 +180,42 @@ func test_uninstall_restores_steam_and_cleans_up() -> void:
 	var s2 := _svc(d, r, t)
 	var c := _choices(t)
 	c["keep_settings"] = true
+	# review L25: the session's leftovers and the bootstrap's cosign download
+	var data: String = s2.paths.data_dir()
+	DirAccess.make_dir_recursive_absolute(data + "/tools")
+	for f in ["/crash-count", "/crash-fallback", "/left-for-steam", "/default-suspended", "/tools/cosign-v2.5.3"]:
+		FileAccess.open(data + f, FileAccess.WRITE).store_string("x")
 	s2.start("uninstall", c)
 	var cmds := _cmds(r)
 	eq(cmds.size(), 3)
 	ok(cmds[0].begins_with("sh -c ") and "restore" in cmds[0], "session defaults restored first (desktop session too)")
 	ok(cmds[0].ends_with(s2.paths.session_select()), "through the switcher when it's there")
-	eq(cmds.slice(1), ["pkexec " + s2.paths.fix_helper() + " --remove-all", "pkexec rpm-ostree uninstall gamecove"])
+	eq(cmds[1], "pkexec " + s2.paths.fix_helper() + " --remove-all")
+	ok(cmds[2].begins_with("pkexec sh -c rm -rf /var/lib/gamecove && exec rpm-ostree uninstall gamecove"), "the helper's state goes with the layer: " + cmds[2])
 	for f in [s2.paths.env_conf(), s2.paths.unit_file(), s2.paths.switch_entry(), s2.paths.window_entry(),
-			s2.paths.pending_file(), s2.paths.state_file()]:
+			s2.paths.pending_file(), s2.paths.state_file(), data + "/crash-count", data + "/crash-fallback",
+			data + "/left-for-steam", data + "/default-suspended"]:
 		ok(not FileAccess.file_exists(f), "removed " + f)
+	ok(not DirAccess.dir_exists_absolute(data + "/tools"), "cosign download removed")
 	ok(FileAccess.file_exists(s2.paths.log_file()), "the log stays")
+	_cleanup()
+
+
+## Review L25: without "keep settings" the installer's app entry goes too (its script is deleted).
+func test_uninstall_without_settings_removes_the_installer_entry() -> void:
+	var d := _dir("uninstall_all")
+	_make_live(d)
+	var t := F.target("bazzite", {"installed": true, "state": {"version": "0.2.0", "fixes": []}})
+	var s := _svc(d, _runner(), t)
+	DirAccess.make_dir_recursive_absolute(s.paths.apps_dir())
+	FileAccess.open(s.paths.installer_entry(), FileAccess.WRITE).store_string("[Desktop Entry]\n")
+	DirAccess.make_dir_recursive_absolute(s.paths.data_dir() + "/launch")
+	FileAccess.open(s.paths.data_dir() + "/launch/steam-42.env", FileAccess.WRITE).store_string("x")
+	var c := _choices(t)
+	c["keep_settings"] = false
+	s.start("uninstall", c)
+	ok(not FileAccess.file_exists(s.paths.installer_entry()), "installer entry removed")
+	ok(not DirAccess.dir_exists_absolute(s.paths.data_dir() + "/launch"), "launch files removed")
 	_cleanup()
 
 

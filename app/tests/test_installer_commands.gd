@@ -40,7 +40,16 @@ func test_sysext_commands() -> void:
 	ok("rm -f /etc/extensions/gamecove.raw /var/lib/extensions/gamecove.raw /etc/atomic-update.conf.d/gamecove.conf" in r[3])
 	ok("/home/.steamos/offload/gamecove/gamecove.raw" in r[3])
 	ok("systemd-sysext refresh" in r[3])
-	ok("systemctl disable" not in r[3], "other extensions may rely on systemd-sysext")
+	# review L25: turned off again only if GameCove turned it on and no other extension is left
+	ok("if ! systemctl is-enabled -q systemd-sysext.service 2>/dev/null; then mkdir -p /etc/gamecove && : > /etc/gamecove/sysext-enabled; fi" in c[3], "remembers it was off")
+	ok("if [ -f /etc/gamecove/sysext-enabled ]; then" in r[3] and "systemctl disable systemd-sysext.service" in r[3], "off again only then")
+	ok(r[3].find("for e in /etc/extensions/* /var/lib/extensions/*") < r[3].find("systemctl disable"), "...and only with no other extension")
+	ok(r.size() == 5 and "rm -rf /var/lib/gamecove" in r[3] and "\"${1:-}\" = purge" in r[3], "state only with purge")
+	eq(C.sysext_remove(true).back(), "purge")
+	var rr := C.rpm_remove(true)
+	eq(rr[0], "pkexec")
+	ok(rr[3].begins_with("rm -rf /var/lib/gamecove && exec rpm-ostree uninstall gamecove"), "rpm-ostree: state, then the layer, one password")
+	eq(C.rpm_remove(false), C.rpm_uninstall(), "fixes kept: their state stays too")
 
 
 func test_session_and_misc_commands() -> void:
@@ -105,13 +114,15 @@ func test_change_repair_update_uninstall_finish() -> void:
 	eq(un[3]["cmd"], ["pkexec", p.fix_helper(), "--remove-all"], "every fix in use, not only the installer's (review S2-5)")
 	eq(un[1]["cmd"], C.session_restore(p))
 	eq(un[1]["cmd"][4], p.data_dir() + "/gamecove-session-guard", "the copy that survives the package goes first")
-	eq(un[4]["cmd"], C.rpm_uninstall())
+	eq(un[4]["cmd"], C.rpm_remove(true), "fixes undone: /var/lib/gamecove goes with the layer (review L25)")
 	ok(un[2]["optional"], "taking GameCove out of Steam's launch options never stops an uninstall")
 	ok(not un[1]["optional"], "review H4: the boot default must be restored before the package goes")
 	ok(not un[3]["optional"], "review H4: every fix undone before the helper that undoes them goes")
 	c["remove_fixes"] = false
 	c["keep_settings"] = true
-	eq(_ids(C.tasks_for("uninstall", c, t, p)), ["check_game", "session_restore", "steam_unwrap", "package_remove", "remove_user_files", "forget"])
+	var kept := C.tasks_for("uninstall", c, t, p)
+	eq(_ids(kept), ["check_game", "session_restore", "steam_unwrap", "package_remove", "remove_user_files", "forget"])
+	eq(kept[3]["cmd"], C.rpm_uninstall(), "fixes kept: their state stays")
 	c["fixes"] = ["claw8ex-vrr"]
 	eq(_ids(C.tasks_for("finish", c, t, p)), ["check_game", "fix_install:claw8ex-vrr", "pending", "state"])
 
@@ -166,7 +177,7 @@ func test_xess_driver_option() -> void:
 func test_sysext_installs_the_autologin_guard_into_etc() -> void:
 	ok(C.SYSEXT_INSTALL.contains("install -D -m 0755 /usr/lib/gamecove/session/gamecove-autologin-guard /etc/gamecove/autologin-guard"), "script copied into /etc")
 	ok(C.SYSEXT_INSTALL.contains("ln -sfn " + C.GUARD_UNIT + " " + C.GUARD_LINK), "unit enabled")
-	ok(C.SYSEXT_INSTALL.contains(C.GUARD_SCRIPT + " " + C.GUARD_UNIT + " " + C.GUARD_LINK + " > " + C.SYSEXT_KEEP), "kept across SteamOS updates")
+	ok(C.SYSEXT_INSTALL.contains(C.GUARD_SCRIPT + " " + C.GUARD_UNIT + " " + C.GUARD_LINK + " " + C.SYSEXT_ENABLED_MARK + " > " + C.SYSEXT_KEEP), "kept across SteamOS updates")
 	for f in [C.GUARD_LINK, C.GUARD_UNIT, C.GUARD_SCRIPT]:
 		ok(C.SYSEXT_REMOVE.contains(f), "removed with GameCove: " + f)
 

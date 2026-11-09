@@ -132,11 +132,31 @@ static func remove_pending(paths: RefCounted) -> void:
 ## so it can be run again; remove_settings takes those too).
 static func remove_all(paths: RefCounted) -> Array:
 	var gone: Array = []
+	var data: String = paths.data_dir()
+	# review L25: the session's own leftovers too (crash guard, desktop bounce, guard marks)
 	for p in [paths.env_conf(), paths.unit_link(), paths.unit_file(), paths.switch_entry(), paths.window_entry(),
-			paths.pending_file(), paths.autostart_entry(), paths.desktop_shortcut()]:
+			paths.pending_file(), paths.autostart_entry(), paths.desktop_shortcut(),
+			data + "/crash-count", data + "/crash-fallback", data + "/crash-starts", data + "/left-for-steam",
+			data + "/default-suspended"]:
 		if FileAccess.file_exists(p) or _is_link(p):
 			_remove(p)
 			gone.append(p)
+	# the bootstrap's cosign download (a cache: it comes back if the installer runs again)
+	if DirAccess.dir_exists_absolute(data + "/tools") and remove_tree(data + "/tools", data):
+		gone.append(data + "/tools")
+	return gone
+
+
+## Uninstall without keeping settings: also the installer's app entry (its script goes with the
+## download) and the per-game launch files.
+static func remove_settings_files(paths: RefCounted) -> Array:
+	var gone: Array = []
+	var data: String = paths.data_dir()
+	if FileAccess.file_exists(paths.installer_entry()) or _is_link(paths.installer_entry()):
+		_remove(paths.installer_entry())
+		gone.append(paths.installer_entry())
+	if DirAccess.dir_exists_absolute(data + "/launch") and remove_tree(data + "/launch", data):
+		gone.append(data + "/launch")
 	return gone
 
 
