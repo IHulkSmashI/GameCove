@@ -631,7 +631,17 @@ func _battery_saver() -> RefCounted:
 			if tdp != null and not tdp.available and be.boost_via() == "" and be.ppd().is_empty():
 				return Tx.NOT_HERE
 			return "",
-		func(c): return c.value if c.value != null else false,
+		func(c):
+			if c.value != null:
+				return c.value
+			# first read since GameCove started: the saver may still be on from before,
+			# with the values it replaced (the hardware kept the saver's)
+			var saved := _saved_saver()
+			if bool(saved.get("on", false)):
+				_saver_prev = saved.get("prev", {}) if saved.get("prev") is Dictionary else {}
+				_saver_auto = bool(saved.get("auto", false))
+				return true
+			return false,
 		func(c, v):
 			if registry == null:
 				return false
@@ -650,11 +660,34 @@ func _battery_saver() -> RefCounted:
 					if tdp != null and tdp.value != null:
 						_saver_prev["power.tdp"] = tdp.value
 				registry.apply(want)
+				_save_saver(true)
 			else:
 				_saver_auto = false
 				registry.apply(_saver_prev)
 				_saver_prev = {}
+				_save_saver(false)
 			return true)
+
+
+## Battery saver on / off and what it replaced, per handheld (survives a restart).
+func _save_saver(on: bool) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(cfg_path)
+	var sec := PerDevice.section("saver", device_key())
+	cfg.set_value(sec, "on", on)
+	cfg.set_value(sec, "prev", _saver_prev.duplicate(true) if on else {})
+	cfg.set_value(sec, "auto", _saver_auto and on)
+	cfg.save(cfg_path)
+
+
+func _saved_saver() -> Dictionary:
+	var cfg := ConfigFile.new()
+	if cfg.load(cfg_path) != OK:
+		return {}
+	var sec := PerDevice.section("saver", device_key())
+	if not cfg.has_section(sec):
+		return {}
+	return {"on": cfg.get_value(sec, "on", false), "prev": cfg.get_value(sec, "prev", {}), "auto": cfg.get_value(sec, "auto", false)}
 
 
 func _battery_saver_at() -> RefCounted:

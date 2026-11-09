@@ -455,6 +455,31 @@ func test_battery_saver_applies_the_lowest_and_puts_back() -> void:
 	_free()
 
 
+## Battery saver lived only in memory: after GameCove started again it read
+## Off while the handheld still had the saver's TDP, EPP and boost, and the
+## values from before it were gone, so nothing could put them back. It's
+## remembered per handheld now, with what it replaced. Found by the
+## end-to-end suite (a fresh read of the system disagreed).
+func test_battery_saver_survives_a_restart_and_still_puts_back() -> void:
+	var t: Dictionary = Trees.new().claw8ex()
+	var e := _setup(t)
+	e["reg"].set_value("power.tdp", 25)
+	e["reg"].set_value("power.epp", "balance_performance")
+	e["reg"].set_value("power.battery_saver", true)
+	eq(_read(e["root"], "/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"), "power", "saver on: EPP power")
+	# GameCove quits and starts again: the hardware keeps what the saver set
+	t["props"] = e["runner"].props.duplicate(true)
+	var e2 := _setup(t)
+	eq(e2["c"]["power.battery_saver"].value, true, "still on after a restart")
+	e2["reg"].set_value("power.battery_saver", false)
+	eq(e2["power"].state()["tdp_w"], 25.0, "off puts the TDP from before it back")
+	eq(_read(e2["root"], "/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"), "balance_performance", "and the EPP")
+	eq(_read(e2["root"], "/sys/devices/system/cpu/intel_pstate/no_turbo"), "0", "and boost")
+	var e3 := _setup(t)
+	eq(e3["c"]["power.battery_saver"].value, false, "off is remembered too")
+	_free()
+
+
 func test_battery_saver_turns_on_at_the_level_and_off_on_the_charger() -> void:
 	var e := _setup(Trees.new().claw8ex())
 	e["reg"].set_value("power.battery_saver_at", 20)
