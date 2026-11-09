@@ -39,7 +39,7 @@ Floats are IEEE bit patterns in a CARDINAL. Names from gamescope `src/steamcompm
 | `audio.mic_mute` | `wpctl set-mute @DEFAULT_AUDIO_SOURCE@` | a source |
 | per-app volume | `audio.gd streams(ctx)` / `set_stream_volume(ctx, id, pct)` for a UI list (not a Control) | |
 | `network.wifi` | `nmcli radio wifi on|off`; lifts an rfkill soft block first | `/sys/class/ieee80211/*` and nmcli |
-| `network.bluetooth` | BlueZ `Adapter1.Powered` via busctl; rfkill unblock first | `/sys/class/bluetooth/hci*` and BlueZ answering |
+| `network.bluetooth` | BlueZ `Adapter1.Powered` via busctl on the adapter that owns a paired device (BlueZ `GetManagedObjects`, as Outpox/Bluetooth does), else the lowest hciN; rfkill unblock first | `/sys/class/bluetooth/hci*` and BlueZ answering |
 | `network.airplane` | `rfkill block all`; off unblocks only the radios that were on (saved per device) | `/sys/class/rfkill` entries |
 | `network.wifi_power_save` | steamos-manager `WifiPowerManagement1.WifiPowerManagementState` (user bus) | Wi-Fi and steamos-manager |
 | `system.sleep` | `systemctl suspend` | `/sys/power/state` has mem or freeze |
@@ -49,8 +49,8 @@ Floats are IEEE bit patterns in a CARDINAL. Names from gamescope `src/steamcompm
 **Findings reused (cited in code):** vibrantDeck (`main.py`, gamut atom and encoding); ClawDeck
 `screen.py` (OXP3 SDR-on-HDR brightness, never switch HDR there); Rayekkk/LeGo2BrightnessFix release
 notes (Legion Go 2 ignores the backlight in PQ; gamescope drops the level after suspend);
-Outpox/Bluetooth `main.py` (BlueZ `Adapter1.Powered`; a dongle can own hci0 — with several adapters we
-still switch the lowest one, a known limit); gamescope-session-plus (environment.d order: device-quirks
+Outpox/Bluetooth `main.py` (BlueZ `Adapter1.Powered`; a dongle can own hci0, so the adapter owning a
+paired device is switched, the lowest one only when nothing is paired); gamescope-session-plus (environment.d order: device-quirks
 first, then user files, so ours wins; device-quirks' refresh lists aren't exported, hence
 `SESSION_QUIRK_REFRESH`). SimpleDeckyTDP and PowerTools have no display code; Decky-AudioLoader and
 the brightness-bar plugin only touch Steam's UI, so nothing to take from them.
@@ -216,15 +216,17 @@ Each area appends its own section.
   `pkexec gamecove-fix-set <fix> set on|off` for file fixes (no password, works in Gaming Mode),
   `pkexec gamecove-fix <fix> install|remove` for root fixes (Desktop Mode). The user's Apply /
   Undo is remembered per device in `~/.local/share/gamecove/fixes.cfg`
-  (`[fixes@<device>] <fix>="on"|"off"`): **the installer should skip re-installing a fix the
-  user undid there** (not wired yet; installer owner).
+  (`[fixes@<device>] <fix>="on"|"off"`): the installer reads it (`Target.read_fix_choices`) and
+  `Plan.start` leaves a fix the user undid off for repair, change and finish (the Device step can
+  still tick it again).
 - **quiet** (from ClawDeck `quiet.py`): `set_game_running(bool)` moves GameCove's threads to the
   LP-E cores at nice 10 while a game runs and back after (`taskset -a -p`, `renice`); on by
-  default, off with Undo on the page. The game-session owner must call `set_game_running`.
+  default, off with Undo on the page. main.gd owns the service (`main.fixes`, for the Fixes
+  page) and calls `set_game_running` on GameSession start / end.
 - **What changed** (from ClawDeck `changes.py`): `check_changes()` compares kernel, OS version and
   gamescope-session device-quirks with the last start (`system-snapshot.json`), re-checks every
   fix when something changed; `last_changes`, `now_os_fixed()` (GameCove fixes the system now
-  does itself, so they can be undone). Call it once at start.
+  does itself, so they can be undone). main.gd calls it once at start.
 - **Page** `app/scripts/ui/device/fixes_page.gd`: `build({"fixes": svc, "device": Device})`, a
   device page (`device_panel.gd`): summary and "what changed" on the left, one card per fix with
   status chip, one line, "Applied by GameCove" / "Optional", Undo / Apply / Check again.
@@ -310,9 +312,12 @@ fails with the reason ("remove it there first").
 - `font_scale` in mangoapp; the bar preset's look on 7-8" screens.
 - The wrapper in Steam launch options set through Steam's CEF API while Steam runs.
 - Not done: a Steam shader pre-caching on/off switch (Steam keeps it where no tested tool writes it; Steam's own
-  Settings > Downloads), installing the XeSS XMX driver from a control (ported in the helper, xess.install; one-time
-  setup belongs to the installer), the helper's launch file when the drive boots a handheld with another GPU vendor
+  Settings > Downloads), the helper's launch file when the drive boots a handheld with another GPU vendor
   (re-pick the upscaler there).
+- XeSS XMX driver: a one-time installer option on Intel Arc handhelds with XMX (`Plan.xess_offered`, choice
+  `xess_driver`, off by default): `gamecove-upscale xess-install --home H --gpu vendor=intel,xmx=1` runs ClawDeck's
+  `xess.install` (pinned release, its install.sh as the desktop user) once the package is live; change / uninstall
+  run `xess-remove`. The installer screen still needs its option card (UI wave).
 
 ## Profiles
 

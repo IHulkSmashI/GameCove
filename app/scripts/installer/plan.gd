@@ -37,10 +37,14 @@ const PROFILES := ["battery", "balanced", "performance"]
 const PROFILE_DEFAULT := "balanced"
 
 var mode := "easy"
+const PerDevice := preload("res://scripts/device/per_device.gd")
+
 var step := "welcome"
 var choices := {}
 ## Fixes devices.json suggests for this handheld (the only ones `fixes` may hold).
 var suggested_fixes: Array = []
+## Intel Arc with XMX cores (devices.json xmx): the XeSS XMX driver option is offered.
+var xess_offered := false
 var skipped := {}
 ## "summary" while a step was opened from the summary.
 var return_to := ""
@@ -53,6 +57,7 @@ var ran := false
 static func start(target: Dictionary, device_row: Dictionary, prefs: Dictionary) -> RefCounted:
 	var p: RefCounted = load("res://scripts/installer/plan.gd").new()
 	p.suggested_fixes = (device_row.get("fixes", []) as Array).duplicate() if device_row.get("fixes", []) is Array else []
+	p.xess_offered = xess_capable(device_row)
 	p.choices = defaults(target, device_row, prefs)
 	var saved: Variant = target.get("state", {}).get("choices", {})
 	if saved is Dictionary:
@@ -67,7 +72,26 @@ static func start(target: Dictionary, device_row: Dictionary, prefs: Dictionary)
 	elif bool(target.get("maintenance", false)):
 		p.mode = "maintenance"
 		p.step = "maintenance"
+	var undone := undone_fixes(target, device_row)
+	p.choices["fixes"] = (p.choices["fixes"] as Array).filter(func(f): return not f in undone)
 	return p
+
+
+## Fixes the user undid on the Fixes page on this handheld (fixes.cfg): repair,
+## change and finish leave them off; the Device step can still tick one again.
+static func undone_fixes(target: Dictionary, device_row: Dictionary) -> Array:
+	var per: Variant = target.get("fix_choices", {}).get(PerDevice.key(str(device_row.get("id", "unknown"))), {})
+	var out: Array = []
+	if per is Dictionary:
+		for f in per:
+			if str(per[f]) == "off":
+				out.append(f)
+	return out
+
+
+## The XeSS XMX driver only helps Intel GPUs with XMX cores (Arc Xe2 / Xe3, Arrow Lake H).
+static func xess_capable(device_row: Dictionary) -> bool:
+	return bool(device_row.get("xmx", false)) and str(device_row.get("cpu_vendor", "")) == "intel"
 
 
 ## Recommended choices for this device and system.
@@ -90,6 +114,7 @@ static func defaults(target: Dictionary, device_row: Dictionary, prefs: Dictiona
 		"country": "",
 		"remove_fixes": true,
 		"keep_settings": true,
+		"xess_driver": false,
 	}
 
 
@@ -193,6 +218,9 @@ func set_choice(key: String, value: Variant) -> bool:
 				return false
 		"steam_control", "auto_tdp", "match_art", "reduce_motion", "remove_fixes", "keep_settings":
 			if not value is bool:
+				return false
+		"xess_driver":
+			if not value is bool or (value and not xess_offered):
 				return false
 		"ggdeals_key", "steamgriddb_key", "steam_id", "country":
 			value = str(value).strip_edges()

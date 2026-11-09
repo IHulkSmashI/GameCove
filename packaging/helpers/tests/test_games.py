@@ -203,3 +203,20 @@ def test_entry_script_runs_the_package(tmp_path):
     r = subprocess.run(["sh", script, "state", "--home", str(tmp_path), "--gpu", json.dumps(RDNA2)],
                        capture_output=True, text=True, timeout=60, check=False)
     assert r.returncode == 0 and json.loads(r.stdout)["upscalers"] == ["own", "fsr31"]
+
+
+def test_cli_xess_install_is_for_xmx_only_and_uses_the_pinned_release(tmp_path, capsys, monkeypatch):
+    from gamecove_upscale import xess
+    seen = {}
+    monkeypatch.setattr(xess, "install", lambda home, entry, unpinned=False: seen.update(home=home, entry=entry) or {"ok": True})
+    monkeypatch.setattr(xess, "remove_for_uninstall", lambda home: {"ok": True, "ours": False})
+    home = str(tmp_path)
+    assert cli.main(["xess-install", "--home", home, "--gpu", "vendor=amd,xmx=0"]) == 0
+    assert json.loads(capsys.readouterr().out)["ok"] is False and not seen, "never on AMD"
+    assert cli.main(["xess-install", "--home", home, "--gpu", json.dumps(INTEL_LPG)]) == 0
+    assert json.loads(capsys.readouterr().out)["ok"] is False and not seen, "never without XMX"
+    assert cli.main(["xess-install", "--home", home, "--gpu", "vendor=intel,xmx=1"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    assert seen["entry"] == games.versions()["xess_xmx_linux"] and seen["home"] == home
+    assert cli.main(["xess-remove", "--home", home]) == 0
+    assert json.loads(capsys.readouterr().out)["ok"] is True

@@ -152,16 +152,42 @@ func _write_wifi(c, v) -> bool:
 
 # --- Bluetooth -------------------------------------------------------------------------
 
-## The radio to switch: the lowest hciN. Outpox/Bluetooth (Decky, main.py
-## _adapter_path_of) prefers the adapter that owns a paired device, because a
-## dock or USB dongle can take hci0; powering every adapter would be wrong for
-## the same reason, so with several adapters we still pick one, and say so in
-## docs/CONTROLS.md. Powered goes through BlueZ's Adapter1 like that plugin.
+## The radio to switch: the adapter that owns a paired device, else the lowest
+## hciN. Outpox/Bluetooth (Decky, main.py _adapter_path_of) does the same: a
+## dock or USB dongle can take hci0 while the radio holding the user's devices
+## is hci1, and powering every adapter would be wrong for the same reason.
+## One BlueZ GetManagedObjects per detect pass; read/write reuse the answer.
+## Powered goes through BlueZ's Adapter1 like that plugin.
 func _adapter(c) -> String:
+	if c.has_meta("bt_adapter"):
+		return str(c.get_meta("bt_adapter"))
+	return _pick_adapter(c)
+
+
+func _pick_adapter(c) -> String:
+	var adapters: Array = []
 	for n in _entries(_sys(c) + "/sys/class/bluetooth"):
 		if str(n).begins_with("hci") and not ":" in str(n):
-			return "/org/bluez/" + str(n)
-	return ""
+			adapters.append("/org/bluez/" + str(n))
+	if adapters.is_empty():
+		return ""
+	adapters.sort()
+	var objs: Variant = _sys_bus(c).call_method(BLUEZ, "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects")
+	var tree: Variant = objs[0] if objs is Array and not objs.is_empty() else null
+	if tree is Dictionary:
+		var paths: Array = tree.keys()
+		paths.sort()
+		for path in paths:
+			var dev: Variant = tree[path].get("org.bluez.Device1") if tree[path] is Dictionary else null
+			if not dev is Dictionary:
+				continue
+			var paired: Variant = dev.get("Paired")
+			if paired is Dictionary:
+				paired = paired.get("data")
+			var owner := str(path).get_base_dir()
+			if paired == true and owner in adapters:
+				return owner
+	return adapters[0]
 
 
 func _sys_bus(c) -> RefCounted:
@@ -173,7 +199,8 @@ func _user_bus(c) -> RefCounted:
 
 
 func _detect_bt(c) -> String:
-	var path := _adapter(c)
+	var path := _pick_adapter(c)
+	c.set_meta("bt_adapter", path)
 	if path == "":
 		return T.NO_BT
 	return "" if _sys_bus(c).get_prop(BLUEZ, path, BLUEZ_ADAPTER, "Powered") != null else T.NO_BLUEZ

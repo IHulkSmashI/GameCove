@@ -396,7 +396,7 @@ func test_resume_puts_back_what_the_firmware_reset() -> void:
 	var f := FileAccess.open(e["root"] + "/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference", FileAccess.WRITE)
 	f.store_string("performance\n")
 	f.close()
-	e["reg"].detect_all()
+	# no detect in between: the control still holds balance_power, the hardware doesn't
 	e["power"].resumed.emit()
 	eq(_read(e["root"], "/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"), "balance_power", "re-applied after sleep")
 	_free()

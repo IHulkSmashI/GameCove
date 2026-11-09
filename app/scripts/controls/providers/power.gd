@@ -153,12 +153,14 @@ func _on_detected() -> void:
 	registry.apply(saved)
 
 
+## After sleep the firmware may have reset what we set while every control still
+## holds our value, so this writes them all again (forced, not "skip if equal").
 func _on_resumed() -> void:
 	if registry == null:
 		return
 	var v := saved_device_values()
 	v.merge(_last, true)
-	registry.apply(v)
+	registry.apply(v, true)
 
 
 ## The TDP's range follows the power source: detect again.

@@ -38,6 +38,10 @@ const GameCloser := preload("res://scripts/ui/games/game_closer.gd")
 ## First-run setup (s-settings); loaded at runtime only when it exists.
 const SETUP_FLOW := "res://scripts/ui/setup/setup_flow.gd"
 const Glyph := preload("res://scripts/ui/glyph.gd")
+const FixesService := preload("res://scripts/device/fixes.gd")
+const CommandRunner := preload("res://scripts/device/command_runner.gd")
+const ControllerProvider := preload("res://scripts/controls/providers/controller.gd")
+const PerfProvider := preload("res://scripts/controls/providers/perf.gd")
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
@@ -75,6 +79,10 @@ var _live_timer: Timer
 var _window_focused := true
 var _focus_before_menu: Control
 var _clock_mark := [0.0, 0]   # [unix seconds, ticks msec] at the last resume check
+## Device fixes service (scripts/device/fixes.gd): quiet fix while a game runs,
+## "what changed" at start. The Fixes page uses this instance.
+var fixes: Node
+var _resume_reapply_pending := false
 var _screen_layer: Control
 var _hint_shade: TextureRect
 var _last_input_ms := 0
@@ -247,6 +255,7 @@ func _ready() -> void:
 		"controller": _svc("Controller"), "discover": _svc("Discover"), "launcher": Launcher})
 	_wire_games()
 	_wire_services()
+	_wire_controls()
 	closer = GameCloser.new()
 	closer.name = "GameCloser"
 	add_child(closer)
@@ -368,6 +377,59 @@ func _wire_services() -> void:
 	var ctl: Node = _svc("Controller")
 	if ctl != null and ctl.has_signal("ui_action"):
 		ctl.ui_action.connect(on_ui_action)
+
+
+## Controls, Profiles and the device fixes around the game session. Each signal
+## is connected once here (session start/end go through _on_game_started /
+## _on_game_ended, connected in _ready before GameSession joins the tree, so they
+## run before Profiles' own handlers).
+func _wire_controls() -> void:
+	var profiles := _svc("Profiles")
+	if profiles != null and profiles.has_method("attach_session"):
+		profiles.attach_session(session)   # no-op when it already found it
+	fixes = FixesService.new()
+	fixes.name = "Fixes"
+	add_child(fixes)
+	fixes.setup({"sys_root": "", "runner": CommandRunner.new(), "home": OS.get_environment("HOME"), "device": Device})
+	fixes.check_changes()
+
+
+## The game is the scope of the per-game controls (perf.*): set it, then detect
+## again so availability, options and values follow the game. Both run on the
+## Controls worker in order, before Profiles applies the game's layers.
+func _controls_follow_game(game: Dictionary) -> void:
+	var controls := _svc("Controls")
+	if controls == null or not controls.has_method("detect_all"):
+		return
+	var g := game.duplicate()
+	if controls.has_method("run_on_worker"):
+		controls.run_on_worker(func(): PerfProvider.set_game(controls.ctx, g))
+	else:
+		PerfProvider.set_game(controls.ctx, g)
+	controls.detect_all()
+
+
+## Firmware resets some controller lights over sleep: put them back once the
+## pad is up again (HueSync waits 5 s). Forced: the controls still hold our values.
+func _schedule_resume_reapply() -> void:
+	if _resume_reapply_pending or not is_inside_tree():
+		return
+	_resume_reapply_pending = true
+	get_tree().create_timer(ControllerProvider.RESUME_DELAY_S).timeout.connect(_reapply_after_resume, CONNECT_ONE_SHOT)
+
+
+func _reapply_after_resume() -> void:
+	_resume_reapply_pending = false
+	var controls := _svc("Controls")
+	if controls == null or not controls.has_method("apply"):
+		return
+	var vals := {}
+	for id in ControllerProvider.REAPPLY_AFTER_RESUME:
+		var v: Variant = controls.value(id)
+		if v != null:
+			vals[id] = v
+	if not vals.is_empty():
+		controls.apply(vals, true)
 
 
 func _on_autotune_limit(cant_reach: bool, info: Dictionary) -> void:
@@ -633,12 +695,17 @@ static func resumed_between(before: Array, after: Array, gap_s: float) -> bool:
 	return wall - mono > gap_s
 
 
-## Power.refresh() reads over busctl, so it runs on Power's worker.
+## After a sleep: Power re-reads on its worker, puts the TDP back and emits
+## `resumed` (the power controls re-apply on that); the controller lights follow
+## 5 s later.
 func _power_refresh() -> void:
-	if Power.has_method("request_refresh"):
+	if Power.has_method("request_resumed"):
+		Power.request_resumed()
+	elif Power.has_method("request_refresh"):
 		Power.request_refresh()
 	else:
 		Power.refresh()
+	_schedule_resume_reapply()
 
 
 ## Live numbers only tick while someone can see them: our window has focus or
@@ -966,10 +1033,17 @@ func _on_launch_cancelled(_game: Dictionary) -> void:
 func _on_game_started(game: Dictionary) -> void:
 	launch_overlay.finish()
 	wiring.game_started(game, int(session.app_id))
+	if fixes != null:
+		fixes.set_game_running(true)
+	_controls_follow_game(game)
 
 
 func _on_game_ended(game: Dictionary) -> void:
 	wiring.game_ended(game)
+	if fixes != null:
+		fixes.set_game_running(false)
+	# after Profiles has put the pre-game values back (its handler runs after ours)
+	_controls_follow_game.call_deferred({})
 	if not playing.is_empty() and playing.get("key", "") == game.get("key", ""):
 		playing = {}
 	launch_overlay.finish()

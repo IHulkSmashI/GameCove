@@ -27,9 +27,18 @@ func get_value(key: String, fallback: Variant = null) -> Variant:
 	return v
 
 
+## Saves at once. When the file can't be written the value in memory stays as
+## it was, so a failed write never looks applied.
 func set_value(key: String, v: Variant) -> bool:
 	_mutex.lock()
+	var had := _cfg.has_section_key(_section, key)
+	var old: Variant = _cfg.get_value(_section, key) if had else null
 	_cfg.set_value(_section, key, v)
 	var err := _cfg.save(_path)
+	if err != OK:
+		if had:
+			_cfg.set_value(_section, key, old)
+		else:
+			_cfg.erase_section_key(_section, key)
 	_mutex.unlock()
 	return err == OK

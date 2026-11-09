@@ -143,19 +143,27 @@ func snapshot(per_game_only := true) -> Dictionary:
 
 
 ## Applies a {id: value} map, highest apply_order first, skipping values that
-## already match and unknown/unavailable ids. Worker.
-func apply(values: Dictionary) -> void:
+## already match and unknown/unavailable ids. Worker. `force` writes even values
+## that match what the control last saw (after a resume the firmware may have
+## reset the hardware behind our back).
+func apply(values: Dictionary, force := false) -> void:
 	var ids := values.keys().filter(func(i): return _controls.has(i))
 	ids.sort_custom(func(a, b): return _controls[a].apply_order > _controls[b].apply_order)
 	_queue(func():
 		for id in ids:
 			var c = _controls[id]
-			if not c.available or c.value == c.coerce(values[id]):
+			if not c.available or (not force and c.value == c.coerce(values[id])):
 				continue
 			if c.write(values[id]):
 				_emit(control_changed, [id, c.value])
 			else:
 				_emit(control_failed, [id, values[id]]))
+
+
+## Runs `job` on the Controls worker after everything queued before it (e.g.
+## changing ctx between a profile's apply and the next detect_all).
+func run_on_worker(job: Callable) -> void:
+	_queue(job)
 
 
 func _queue(job: Callable) -> void:

@@ -10,6 +10,9 @@ Prints one JSON object on stdout and exits 0 (also for {"ok": false, "error": ..
   state       OptiScaler package, Decky Framegen, the XeSS XMX driver, the FSR 4 files (read-only)
   refresh     the per-game lists (ClawDeck's games.json, OptiScaler's compatibility list), at most twice a day
   latency     what XeLL did in the game's last launch (Intel XMX)
+  xess-install  the XeSS XMX driver (xess-xmx-linux, pinned in versions.json): the installer's one-time
+                option on Intel Arc handhelds with XMX; --gpu must say xmx=1. Runs as the desktop user.
+  xess-remove   take out a driver GameCove installed (its own uninstall.sh), as on uninstall
 """
 from __future__ import annotations
 
@@ -20,7 +23,7 @@ import sys
 
 from . import framegen, games, launchenv, livedb, optiscaler, xess
 
-COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency")
+COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency", "xess-install", "xess-remove")
 
 
 def _state(home: str, gpu: dict) -> dict:
@@ -82,6 +85,13 @@ def run(argv: list[str]) -> dict:
         return games.undo(home, a.key, gpu, a.dir)
     if a.command == "state":
         return {"ok": True, **_state(home, gpu)}
+    if a.command == "xess-install":
+        # same code path as ClawDeck's main.py xess_install (same author): pinned release, its install.sh as the user
+        if games.vendor(gpu) != "intel" or not gpu.get("xmx"):
+            return {"ok": False, "error": "this GPU has no XMX cores: XeSS runs on its general path without this driver"}
+        return xess.install(home, games.versions()["xess_xmx_linux"], a.allow_unpinned)
+    if a.command == "xess-remove":
+        return xess.remove_for_uninstall(home)
     if a.command == "refresh":
         return {"ok": True, "lists": livedb.refresh(os.path.join(home, games.LISTS), games.BUNDLED_GAMES)}
     on = games.get_launch(home, a.key).get("low_latency", True) is not False

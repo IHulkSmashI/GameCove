@@ -96,3 +96,48 @@ func test_change_repair_update_uninstall_finish() -> void:
 	eq(_ids(C.tasks_for("uninstall", c, t, p)), ["check_game", "session_restore", "package_remove", "remove_user_files", "forget"])
 	c["fixes"] = ["claw8ex-vrr"]
 	eq(_ids(C.tasks_for("finish", c, t, p)), ["check_game", "fix_install:claw8ex-vrr", "pending", "state"])
+
+
+## The Fixes page's Undo sticks: repair doesn't put back a fix the user turned off there.
+func test_repair_skips_fixes_the_user_undid() -> void:
+	var t := F.target("bazzite", {"installed": true, "state": {"fixes": ["claw8ex-buttons", "claw8ex-gyro"]},
+		"fix_choices": {"msi-claw-8-ex": {"claw8ex-gyro": "off", "claw8ex-buttons": "on"}, "asus-rog-ally": {"claw8ex-vrr": "off"}}})
+	var c := _choices(t)
+	ok(not "claw8ex-gyro" in c["fixes"], "undone on this handheld: left off")
+	ok("claw8ex-buttons" in c["fixes"] and "claw8ex-vrr" in c["fixes"], "other fixes and other handhelds' choices untouched")
+	var ids := _ids(C.tasks_for("repair", c, t, Paths.for_home("/h")))
+	ok(not "fix_install:claw8ex-gyro" in ids, "repair doesn't reinstall it: %s" % [ids])
+
+
+func test_target_reads_the_fixes_page_choices() -> void:
+	var dir := OS.get_temp_dir().path_join("gc_fixcfg_%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(dir)
+	var cfg := ConfigFile.new()
+	cfg.set_value("fixes@msi-claw-8-ex", "claw8ex-gyro", "off")
+	cfg.set_value("other", "x", 1)
+	cfg.save(dir.path_join("fixes.cfg"))
+	eq(load("res://scripts/installer/target.gd").read_fix_choices(dir.path_join("fixes.cfg")), {"msi-claw-8-ex": {"claw8ex-gyro": "off"}})
+	eq(load("res://scripts/installer/target.gd").read_fix_choices(dir.path_join("none.cfg")), {})
+
+
+## The XeSS XMX driver is an installer option on Intel Arc handhelds with XMX only (same install as ClawDeck's).
+func test_xess_driver_option() -> void:
+	var t := F.target("bazzite")
+	var claw := Plan.start(t, F.claw().profile, {})
+	ok(claw.xess_offered, "offered on the Claw 8 EX (Xe2 XMX)")
+	eq(claw.choices["xess_driver"], false, "off unless the user picks it")
+	ok(claw.set_choice("xess_driver", true), "can be picked")
+	var amd := Plan.start(t, {"id": "asus-rog-ally", "cpu_vendor": "amd", "xmx": false, "fixes": []}, {})
+	ok(not amd.xess_offered and not amd.set_choice("xess_driver", true), "never offered on AMD")
+	var p := Paths.for_home("/h")
+	var tasks := C.tasks_for("install", claw.choices, t, p)
+	var x: Array = tasks.filter(func(k): return k["id"] == "xess_install")
+	eq(x.size(), 1, "one install task")
+	eq(x[0]["cmd"], ["/usr/libexec/gamecove/gamecove-upscale", "xess-install", "--home", "/h", "--gpu", "vendor=intel,xmx=1"])
+	ok(not x[0]["privileged"] and x[0]["needs_live"] and x[0]["optional"], "as the user, after the package is live, never fatal")
+	var had := F.target("bazzite", {"installed": true, "state": {"choices": {"xess_driver": true}}})
+	var c: Dictionary = claw.choices.duplicate()
+	ok(_ids(C.tasks_for("change", c, had, p)).filter(func(i): return i.begins_with("xess")).is_empty(), "already there: change leaves it")
+	c["xess_driver"] = false
+	ok("xess_remove" in _ids(C.tasks_for("change", c, had, p)), "turned off in change: removed")
+	ok("xess_remove" in _ids(C.tasks_for("uninstall", c, had, p)), "uninstall takes it out")

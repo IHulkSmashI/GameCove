@@ -158,6 +158,22 @@ func test_bluetooth() -> void:
 	eq(s.fake.bt_powered, true, "unblocked, then powered")
 	var none := Env.make("nobt", "msi-claw-8-ex")
 	eq(_system(none)["network.bluetooth"].reason, T.NO_BT, "no adapter")
+
+
+## A dock or dongle on hci0, the user's devices paired on hci1 (Outpox/Bluetooth's rule).
+func test_bluetooth_switches_the_adapter_with_paired_devices() -> void:
+	var files := RADIOS.duplicate()
+	files["sys/class/bluetooth/hci1/name"] = "hci1\n"
+	var s := Env.make("bt2", "msi-claw-8-ex", files)
+	s.fake.bt_devices = {"/org/bluez/hci0/dev_11_22": false, "/org/bluez/hci1/dev_AA_BB": true}
+	var b = _system(s)["network.bluetooth"]
+	ok(b.write(false), "off")
+	eq(s.fake.bt_set_paths, ["/org/bluez/hci1"], "the adapter owning the paired device")
+	s.fake.bt_devices = {}
+	s.fake.bt_set_paths = []
+	var b2 = _system(s)["network.bluetooth"]
+	ok(b2.write(true), "on")
+	eq(s.fake.bt_set_paths, ["/org/bluez/hci0"], "nothing paired: the lowest adapter")
 	var nobluez := Env.make("nobluez", "msi-claw-8-ex", RADIOS)
 	nobluez.fake.bluez_ok = false
 	eq(_system(nobluez)["network.bluetooth"].reason, T.NO_BLUEZ, "bluetoothd not running")
