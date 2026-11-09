@@ -216,6 +216,22 @@ func test_claw_live_fan_tables_win_over_steamos_manager() -> void:
 	_free()
 
 
+func test_claw_live_charge_limit_through_steamos_manager() -> void:
+	var e := _setup(_claw_live(false))
+	var c: Dictionary = e["c"]
+	ok(c["power.charge_limit"].available, "charge limit without the root helper (%s)" % c["power.charge_limit"].reason)
+	eq(c["power.charge_limit"].value, 100.0, "the EC's unset 0 reads as no limit")
+	e["reg"].set_value("power.charge_limit", 80)
+	eq(c["power.charge_limit"].value, 80.0, "80 read back")
+	var sets: Array = e["runner"].calls.filter(func(x): return str(x).contains("set-property") and str(x).contains("MaxChargeLevel"))
+	eq(sets.size(), 1, "one prompt-free steamos-manager write: %s" % [sets])
+	ok(not e["power"].set_charge_limit(40), "never under 50 % (steamos-manager suggests 10)")
+	ok(e["power"].set_charge_limit(100), "no limit")
+	ok(e["runner"].calls.any(func(x): return str(x).ends_with("MaxChargeLevel i 100")), "no limit is written as 100, never 0")
+	ok(not e["runner"].calls.any(func(x): return str(x).ends_with("MaxChargeLevel i 0")), "0 never written")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)

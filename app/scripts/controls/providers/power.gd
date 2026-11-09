@@ -504,6 +504,8 @@ func _charge_limit() -> RefCounted:
 				return Tx.NO_CHARGE
 			if str(st.get("backend", "")) == "hhd":
 				return Tx.HHD_OWNS
+			if st.get("needs_helper", {}).get("charge_limit", false):
+				return Tx.NO_HELPER
 			return "" if st.get("supported", {}).get("charge_limit", false) else Tx.NO_CHARGE,
 		func(_c): return float(_pstate().get("charge_limit", -1)),
 		func(_c, v): return bool(_p(func(): return power.set_charge_limit(int(v)))))
