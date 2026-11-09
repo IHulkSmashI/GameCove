@@ -88,6 +88,9 @@ static func color(name: String, alpha := -1.0) -> Color:
 
 ## A badge tone colour for the current theme (Themes.TONES / TONES_LIGHT).
 static func tone(name: String) -> Color:
+	# "accent" follows the theme (Sunset's orange, Midnight's blue), not Cove's cyan.
+	if name == "accent":
+		return color("accent")
 	var set := Themes.tones(theme_id)
 	return set.get(name, set[""])
 

@@ -140,6 +140,10 @@ func _run() -> void:
 	lib.games.assign(games)
 	lib.changed.emit()
 	_status()
+	if theme_override() != "":
+		prefs.theme = theme_override()
+		prefs.match_art = theme_override() != "light"
+		main.apply_theme()
 	await frames(4)
 
 	await _use_device("msi-claw-8-ex", claw_patch())
