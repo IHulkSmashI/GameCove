@@ -184,14 +184,14 @@ The capability strings are the same names buttons.gd uses, so `Buttons.capabilit
 
 "About this device" and the first-run welcome show a real photo of the handheld when there's a freely licensed one, with a credit line under it ("Photo: <author>, <license>", A opens the Commons page). No photo, offline, or "Show a real photo of my device" switched off (Settings > Device; on by default): the drawing from `Device.picture_for` shows, as before.
 
-- `app/data/device_photos.json`: `{device_id: {file, author, license, license_url, page_url, family_of?, note?}}`. `file` is the Commons file name without `File:`.
-- `.github/workflows/device-photos.yml` (weekly + manual) runs `tools/device_photos/build.py`: re-checks each license through the Commons API (`extmetadata.LicenseShortName`), skips anything not on the allowlist with a `::warning::` on the run, downloads a 1200 px rendition, converts it to WebP and uploads it plus `manifest.json` (`{devices: {id: {asset, sha256, size, credit}}}`) to the rolling `device-photos` release. If Commons is down, a device keeps last week's entry. User-Agent: `GameCove/<version> (+https://github.com/IHulkSmashI/GameCove)`, per Wikimedia's policy.
+- `app/data/device_photos.json`: `{device_id: {file, author, license, license_url, page_url, family_of?, note?}}`. `file` is the Commons file name without `File:`. A Flickr photo uses `"source": "openverse", "openverse_id": "<uuid>"` instead of `file`, with `page_url` = the Flickr photo page. `_manual` lists candidates the build can't fetch (see below).
+- `.github/workflows/device-photos.yml` (weekly + manual) runs `tools/device_photos/build.py`: re-checks each license at its source (Commons API `extmetadata.LicenseShortName`; for Flickr, Openverse's image API, since Flickr's own API needs a key), skips anything not on the allowlist with a `::warning::` on the run, downloads a 1200 px rendition, converts it to WebP and uploads it plus `manifest.json` (`{devices: {id: {asset, sha256, size, credit}}}`) to the rolling `device-photos` release. If Commons is down, a device keeps last week's entry. User-Agent: `GameCove/<version> (+https://github.com/IHulkSmashI/GameCove)`, per Wikimedia's policy.
 - `DevicePhoto` (`app/scripts/device/photo.gd`, autoload): `photo_for(device_id) -> {} | {path, credit}` never blocks. A miss fetches the manifest (at most once a week, one try per session) and then only this device's file, once, checks size and sha256 against the manifest and keeps it in `user://device_photos/`; `photo_ready(device_id, path)` follows. The app re-applies the license allowlist to the manifest, so a bad build can't push a non-free photo.
 - UI: `app/scripts/ui/device/device_photo_view.gd` (`make(photo, height, open_link)` returns null when there's nothing to show). About and setup call it from one small function each (`_device_photo_hook`).
 
 ### License rules
 
-- Only Wikimedia Commons files under **CC0, public domain, CC BY or CC BY-SA** (any version). No NonCommercial (NC), NoDerivatives (ND), GFDL-only, "fair use" or other non-free files, even if Wikipedia uses them.
+- Only Wikimedia Commons files, or Flickr photos found through [Openverse](https://openverse.org/), under **CC0, public domain, CC BY or CC BY-SA** (any version). Unsplash/Pexels photos can't be re-checked automatically without an API key, so they go through Commons first, like YouTube frames (below). Press-kit images only if their terms explicitly allow redistribution in software; "editorial use only" isn't enough. No NonCommercial (NC), NoDerivatives (ND), GFDL-only, "fair use" or other non-free files, even if Wikipedia uses them.
 - No press or marketing images, even if someone uploaded them as their own work: an unsourced, studio-clean product render is almost always one (`ROG Xbox Ally X.jpg` on Commons is an example; we use `ROG XBOX ALLY X.jpg`, a store photo, instead). Prefer files with `{{own}}` as source, a Flickr/YouTube license review, or a `LicenseReview` template.
 - Always credit author and license with a link; the in-app credit line and the CREDITS.md table do this.
 - Prefer a straight front view with the screen visible, a plain background and no faces. Hands are fine if there's nothing better.
@@ -199,12 +199,22 @@ The capability strings are the same names buttons.gd uses, so `Buttons.capabilit
 
 ### Adding a photo
 
-1. Find a file on Commons (search the device's category, `Category:Handheld gaming computers`, or Tokyo Game Show / Computex categories). Open the file page and check the license box and the source.
+1. Find a file on Commons (search the device's category, `Category:Handheld gaming computers`, or Tokyo Game Show / Computex categories), or a Flickr photo on Openverse (`https://api.openverse.org/v1/images/?q=<model>&license=by,by-sa,cc0,pdm`; the result's `id` is the `openverse_id`). Open the source page and check the license and that it's really the uploader's photo.
 2. Add an entry to `app/data/device_photos.json` (copy an existing one; `page_url` is `https://commons.wikimedia.org/wiki/File:` + the name with spaces as `_`).
 3. Add a row to the "Device photos" table in CREDITS.md.
 4. Run `python -m pytest -q tools/device_photos` and the Godot tests (`test_device_photo.gd` checks every entry), then run the workflow by hand from the Actions tab.
 
-No free photo of your handheld? Take one and upload it to Commons as your own work under CC0 or CC BY-SA 4.0: front view, screen on, straight on at screen height, on a plain light or dark background, in soft even light (daylight from a window or two lamps from the sides, no flash), no reflections of you on the screen, at least 2000 px wide.
+### YouTube frames (manual)
+
+Some reviewers (Booredatwork.com, Tame That Tech, RetroBoy, GPD's own channel and others) publish under CC BY on YouTube. YouTube refuses scripted access from servers ("confirm you're not a bot"), so the workflow can't check the license or grab a frame. `_manual` in `device_photos.json` lists, per model, videos that came up under YouTube's Creative Commons filter. To turn one into a photo, on your own computer:
+
+1. Open the video and check the description box says "Creative Commons Attribution license (reuse allowed)". If not, skip it.
+2. Find a clean front view (screen on, no faces) and note the time, e.g. `1:23`.
+3. Grab the frame at full resolution: `yt-dlp -f "bv*[height<=2160]" --download-sections "*83-84" -o clip.mp4 <url>` then `ffmpeg -ss 0.3 -i clip.mp4 -frames:v 1 frame.png`. Crop to the device if needed.
+4. Upload `frame.png` to Commons (Upload Wizard, "This file is not my own work", source = the video URL, author = the channel, license `{{YouTube CC-BY|<channel>}}`, plus `{{From YouTube|<id>}}`). A reviewer or bot confirms the license (the Claw A1M photo went this way).
+5. Add a normal Commons entry for the device, remove it from `_manual`, add the CREDITS.md row, run the tests and the workflow.
+
+No free photo of your handheld? Take one and upload it to Commons as your own work under CC0 or CC BY-SA 4.0: front view, screen on, straight on at screen height, on a plain light or dark background, in soft even light (daylight from a window or two lamps from the sides, no flash), no reflections of you on the screen, at least 2000 px wide. Testers can also offer one in the tester sign-up form.
 
 ## Adding a device
 
