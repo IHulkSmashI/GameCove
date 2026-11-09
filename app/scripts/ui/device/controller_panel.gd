@@ -9,6 +9,10 @@ const Picture := preload("res://scripts/ui/device/device_picture.gd")
 const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
 const Buttons := preload("res://scripts/device/buttons.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
+const ControlView := preload("res://scripts/ui/controls/control_view.gd")
+const CModel := preload("res://scripts/ui/controls/model.gd")
+const CShared := preload("res://scripts/ui/controls/shared.gd")
+const TC := preload("res://scripts/ui/texts_controls.gd")
 
 ## Godot joypad buttons -> InputPlumber capability (part ids in the picture).
 ## SDL paddles: 1 = upper right, 2 = upper left, 3 = lower right, 4 = lower left.
@@ -250,7 +254,37 @@ func _set_paddle(cap: String, target: String) -> void:
 		ctl.set_paddle(cap, target)
 
 
+## Gyro through the Controls (controller.gyro on/off, controller.emulation):
+## aiming itself is Steam Input's, so the card says so. The Controller
+## service's older "mouse" / "stick" gyro modes write a profile form current
+## InputPlumber ignores (docs/CONTROLS.md), so they're only the fallback when
+## there are no Controls.
+func _gyro_controls_card() -> Array:
+	var ctl: Object = services.get("controls", CShared.autoload("Controls"))
+	if ctl == null or not ctl.has_method("has") or not ctl.has("controller.gyro"):
+		return []
+	var m = CModel.new()
+	m.setup(ctl, services.get("profiles", CShared.autoload("Profiles")))
+	var c := DKit.card(Texts.GYRO_TITLE, "motion", "info", false)
+	c[0].name = "Card_gyro"
+	var out := []
+	for id in ["controller.gyro", "controller.emulation", "controller.gyro_accel"]:
+		var v: Control = ControlView.make(m, id)
+		if v == null or (id == "controller.gyro_accel" and not bool(v.desc.get("available", false))):
+			if v != null:
+				v.free()
+			continue
+		c[1].add_child(v)
+		out.append_array(v.focusables())
+	c[1].add_child(DKit.quiet(TC.GYRO_STEAM_TITLE + ". " + TC.GYRO_STEAM_LINE))
+	_cards.add_child(c[0])
+	return out if not out.is_empty() else [c[0]]
+
+
 func _gyro_card() -> Array:
+	var via_controls := _gyro_controls_card()
+	if not via_controls.is_empty():
+		return via_controls
 	var dev := svc("device")
 	var f: Dictionary = dev.features() if dev != null and dev.has_method("features") else {}
 	var hw := str(f.get("gyro", "unknown"))

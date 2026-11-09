@@ -67,7 +67,11 @@ static func tex(name: String, size := 24, col: Color = Color.WHITE) -> Texture2D
 
 ## The SVG source of an icon (also used by tests and the docs).
 static func svg(name: String, size := 24, col: Color = Color.WHITE) -> String:
-	var spec: String = PATHS.get(name, PATHS["dots"])
+	var spec: String = PATHS.get(name, "")
+	if spec == "":
+		# the Controls UI's extra icons (controls/cicons.gd), else the dots
+		var extra: Dictionary = load("res://scripts/ui/controls/cicons.gd").PATHS
+		spec = extra.get(name, PATHS["dots"])
 	var hex := "#" + col.to_html(false)
 	var op := "%.3f" % col.a
 	var parts := ""

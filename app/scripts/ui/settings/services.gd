@@ -10,6 +10,7 @@ const AUTOLOADS := {
 	"gamescope": "Gamescope", "discover": "Discover", "art": "Art", "perf": "PerfMonitor",
 	"achievements": "Achievements", "updates": "Updates", "storage": "Storage",
 	"setup": "Setup", "controller": "Controller",
+	"controls": "Controls", "profiles": "Profiles",
 }
 
 

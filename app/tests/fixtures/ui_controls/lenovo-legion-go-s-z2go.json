@@ -1,0 +1,3462 @@
+{
+ "controls": [
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 50.0,
+   "group": "audio",
+   "help": "Speaker or headphone volume.",
+   "id": "audio.volume",
+   "kind": "slider",
+   "max": 100.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Volume",
+   "unit": "%",
+   "value": 50.0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "audio",
+   "help": "Silences all sound.",
+   "id": "audio.mute",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Mute",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "audio",
+   "help": "Where sound plays: speakers, headphones, HDMI or Bluetooth.",
+   "id": "audio.output",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Speaker",
+     "value": "Speaker"
+    },
+    {
+     "label": "HDMI / DisplayPort",
+     "value": "HDMI / DisplayPort"
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Sound output",
+   "unit": "",
+   "value": "Speaker"
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "audio",
+   "help": "Nobody hears you while this is on.",
+   "id": "audio.mic_mute",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Mute microphone",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "audio",
+   "help": "Which microphone to use.",
+   "id": "audio.input",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Digital Microphone",
+     "value": "Digital Microphone"
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Microphone",
+   "unit": "",
+   "value": "Digital Microphone"
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": true,
+   "group": "controller",
+   "help": "Motion aiming for games and Steam Input. Off stops the gyro reaching games.",
+   "id": "controller.gyro",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "InputPlumber sees no gyro on this handheld",
+   "requires": [],
+   "step": 1.0,
+   "title": "Gyro",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": "both",
+   "group": "controller",
+   "help": "Which controller's motion sensor aims.",
+   "id": "controller.gyro_source",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Left controller",
+     "value": "left"
+    },
+    {
+     "label": "Right controller",
+     "value": "right"
+    },
+    {
+     "label": "Body",
+     "value": "center"
+    },
+    {
+     "label": "Both",
+     "value": "both"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "InputPlumber sees no gyro on this handheld",
+   "requires": [
+    "controller.gyro"
+   ],
+   "step": 1.0,
+   "title": "Gyro sensor",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "controller",
+   "help": "Off gives steadier aiming. On adds the tilt sensor for games that want it.",
+   "id": "controller.gyro_accel",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": true,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Only on the MSI Claw 8 EX",
+   "requires": [
+    "controller.gyro"
+   ],
+   "step": 1.0,
+   "title": "Accelerometer",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": "steam",
+   "group": "controller",
+   "help": "Sensitivity, activation button and style live in Steam's controller settings.",
+   "id": "controller.gyro_aim",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Steam Input",
+     "value": "steam"
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "Set gyro aiming in Steam's controller settings for the game",
+   "requires": [],
+   "step": 1.0,
+   "title": "Gyro as mouse or joystick",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 20,
+   "available": true,
+   "default": "default",
+   "group": "controller",
+   "help": "What games see. Steam Deck and DualSense carry gyro and trackpads; Xbox works everywhere.",
+   "id": "controller.emulation",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Handheld default",
+     "value": "default"
+    },
+    {
+     "label": "Steam Deck",
+     "value": "deck"
+    },
+    {
+     "label": "DualSense Edge",
+     "value": "ds5-edge"
+    },
+    {
+     "label": "Xbox Elite",
+     "value": "xbox-elite"
+    },
+    {
+     "label": "Xbox Series",
+     "value": "xbox-series"
+    },
+    {
+     "label": "DualSense",
+     "value": "ds5"
+    },
+    {
+     "label": "Xbox 360",
+     "value": "xb360"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Controller type",
+   "unit": "",
+   "value": "default"
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": "steam_input",
+   "group": "controller",
+   "help": "What the back buttons do as a group (Handheld Daemon).",
+   "id": "controller.paddles_as",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Steam Input",
+     "value": "steam_input"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "With InputPlumber each back button is set on its own",
+   "requires": [],
+   "step": 1.0,
+   "title": "Back buttons",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": "",
+   "group": "controller",
+   "help": "What this button sends.",
+   "id": "controller.paddle.LeftPaddle1",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "As itself",
+     "value": ""
+    },
+    {
+     "label": "Off",
+     "value": "disabled"
+    },
+    {
+     "label": "A",
+     "value": "South"
+    },
+    {
+     "label": "B",
+     "value": "East"
+    },
+    {
+     "label": "Y",
+     "value": "North"
+    },
+    {
+     "label": "X",
+     "value": "West"
+    },
+    {
+     "label": "Menu",
+     "value": "Start"
+    },
+    {
+     "label": "View",
+     "value": "Select"
+    },
+    {
+     "label": "Guide",
+     "value": "Guide"
+    },
+    {
+     "label": "Quick Access",
+     "value": "QuickAccess"
+    },
+    {
+     "label": "Keyboard",
+     "value": "Keyboard"
+    },
+    {
+     "label": "Screenshot",
+     "value": "Screenshot"
+    },
+    {
+     "label": "D-pad up",
+     "value": "DPadUp"
+    },
+    {
+     "label": "D-pad down",
+     "value": "DPadDown"
+    },
+    {
+     "label": "D-pad left",
+     "value": "DPadLeft"
+    },
+    {
+     "label": "D-pad right",
+     "value": "DPadRight"
+    },
+    {
+     "label": "LB",
+     "value": "LeftBumper"
+    },
+    {
+     "label": "RB",
+     "value": "RightBumper"
+    },
+    {
+     "label": "LT",
+     "value": "LeftTrigger"
+    },
+    {
+     "label": "RT",
+     "value": "RightTrigger"
+    },
+    {
+     "label": "Left stick click",
+     "value": "LeftStick"
+    },
+    {
+     "label": "Right stick click",
+     "value": "RightStick"
+    },
+    {
+     "label": "Mouse left click",
+     "value": "mouse:Left"
+    },
+    {
+     "label": "Mouse right click",
+     "value": "mouse:Right"
+    },
+    {
+     "label": "Key Esc",
+     "value": "KeyEsc"
+    },
+    {
+     "label": "Key Enter",
+     "value": "KeyEnter"
+    },
+    {
+     "label": "Key Space",
+     "value": "KeySpace"
+    },
+    {
+     "label": "Key Tab",
+     "value": "KeyTab"
+    },
+    {
+     "label": "Key LeftShift",
+     "value": "KeyLeftShift"
+    },
+    {
+     "label": "Key LeftCtrl",
+     "value": "KeyLeftCtrl"
+    },
+    {
+     "label": "Key LeftAlt",
+     "value": "KeyLeftAlt"
+    },
+    {
+     "label": "Key W",
+     "value": "KeyW"
+    },
+    {
+     "label": "Key A",
+     "value": "KeyA"
+    },
+    {
+     "label": "Key S",
+     "value": "KeyS"
+    },
+    {
+     "label": "Key D",
+     "value": "KeyD"
+    },
+    {
+     "label": "Key Q",
+     "value": "KeyQ"
+    },
+    {
+     "label": "Key E",
+     "value": "KeyE"
+    },
+    {
+     "label": "Key R",
+     "value": "KeyR"
+    },
+    {
+     "label": "Key F",
+     "value": "KeyF"
+    },
+    {
+     "label": "Key M",
+     "value": "KeyM"
+    },
+    {
+     "label": "Key I",
+     "value": "KeyI"
+    },
+    {
+     "label": "Key 1",
+     "value": "Key1"
+    },
+    {
+     "label": "Key 2",
+     "value": "Key2"
+    },
+    {
+     "label": "Key 3",
+     "value": "Key3"
+    },
+    {
+     "label": "Key 4",
+     "value": "Key4"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Back button Y1",
+   "unit": "",
+   "value": ""
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": "",
+   "group": "controller",
+   "help": "What this button sends.",
+   "id": "controller.paddle.RightPaddle1",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "As itself",
+     "value": ""
+    },
+    {
+     "label": "Off",
+     "value": "disabled"
+    },
+    {
+     "label": "A",
+     "value": "South"
+    },
+    {
+     "label": "B",
+     "value": "East"
+    },
+    {
+     "label": "Y",
+     "value": "North"
+    },
+    {
+     "label": "X",
+     "value": "West"
+    },
+    {
+     "label": "Menu",
+     "value": "Start"
+    },
+    {
+     "label": "View",
+     "value": "Select"
+    },
+    {
+     "label": "Guide",
+     "value": "Guide"
+    },
+    {
+     "label": "Quick Access",
+     "value": "QuickAccess"
+    },
+    {
+     "label": "Keyboard",
+     "value": "Keyboard"
+    },
+    {
+     "label": "Screenshot",
+     "value": "Screenshot"
+    },
+    {
+     "label": "D-pad up",
+     "value": "DPadUp"
+    },
+    {
+     "label": "D-pad down",
+     "value": "DPadDown"
+    },
+    {
+     "label": "D-pad left",
+     "value": "DPadLeft"
+    },
+    {
+     "label": "D-pad right",
+     "value": "DPadRight"
+    },
+    {
+     "label": "LB",
+     "value": "LeftBumper"
+    },
+    {
+     "label": "RB",
+     "value": "RightBumper"
+    },
+    {
+     "label": "LT",
+     "value": "LeftTrigger"
+    },
+    {
+     "label": "RT",
+     "value": "RightTrigger"
+    },
+    {
+     "label": "Left stick click",
+     "value": "LeftStick"
+    },
+    {
+     "label": "Right stick click",
+     "value": "RightStick"
+    },
+    {
+     "label": "Mouse left click",
+     "value": "mouse:Left"
+    },
+    {
+     "label": "Mouse right click",
+     "value": "mouse:Right"
+    },
+    {
+     "label": "Key Esc",
+     "value": "KeyEsc"
+    },
+    {
+     "label": "Key Enter",
+     "value": "KeyEnter"
+    },
+    {
+     "label": "Key Space",
+     "value": "KeySpace"
+    },
+    {
+     "label": "Key Tab",
+     "value": "KeyTab"
+    },
+    {
+     "label": "Key LeftShift",
+     "value": "KeyLeftShift"
+    },
+    {
+     "label": "Key LeftCtrl",
+     "value": "KeyLeftCtrl"
+    },
+    {
+     "label": "Key LeftAlt",
+     "value": "KeyLeftAlt"
+    },
+    {
+     "label": "Key W",
+     "value": "KeyW"
+    },
+    {
+     "label": "Key A",
+     "value": "KeyA"
+    },
+    {
+     "label": "Key S",
+     "value": "KeyS"
+    },
+    {
+     "label": "Key D",
+     "value": "KeyD"
+    },
+    {
+     "label": "Key Q",
+     "value": "KeyQ"
+    },
+    {
+     "label": "Key E",
+     "value": "KeyE"
+    },
+    {
+     "label": "Key R",
+     "value": "KeyR"
+    },
+    {
+     "label": "Key F",
+     "value": "KeyF"
+    },
+    {
+     "label": "Key M",
+     "value": "KeyM"
+    },
+    {
+     "label": "Key I",
+     "value": "KeyI"
+    },
+    {
+     "label": "Key 1",
+     "value": "Key1"
+    },
+    {
+     "label": "Key 2",
+     "value": "Key2"
+    },
+    {
+     "label": "Key 3",
+     "value": "Key3"
+    },
+    {
+     "label": "Key 4",
+     "value": "Key4"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Back button Y2",
+   "unit": "",
+   "value": ""
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "controller",
+   "help": "Nintendo layout: confirm on the right button.",
+   "id": "controller.nintendo_layout",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Swap A/B and X/Y",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "controller",
+   "help": "Right stick moves the pointer, right trigger clicks, left trigger right-clicks.",
+   "id": "controller.desktop_mode",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Mouse mode",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 1000.0,
+   "group": "controller",
+   "help": "How fast the pointer moves.",
+   "id": "controller.desktop_speed",
+   "kind": "slider",
+   "max": 3000.0,
+   "min": 200.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [
+    "controller.desktop_mode"
+   ],
+   "step": 100.0,
+   "title": "Mouse mode speed",
+   "unit": "px/s",
+   "value": 1000.0
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": "default",
+   "group": "controller",
+   "help": "What the trackpad does in games.",
+   "id": "controller.trackpad",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Default",
+     "value": "default"
+    },
+    {
+     "label": "Off",
+     "value": "off"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "This handheld has no trackpad",
+   "requires": [],
+   "step": 1.0,
+   "title": "Trackpad",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": true,
+   "group": "controller",
+   "help": "Vibration in games.",
+   "id": "controller.rumble",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Rumble",
+   "unit": "",
+   "value": true
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 100,
+   "group": "controller",
+   "help": "How strong the vibration is.",
+   "id": "controller.rumble_strength",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "20%",
+     "value": 20
+    },
+    {
+     "label": "40%",
+     "value": 40
+    },
+    {
+     "label": "60%",
+     "value": 60
+    },
+    {
+     "label": "80%",
+     "value": 80
+    },
+    {
+     "label": "100%",
+     "value": 100
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "InputPlumber can only turn rumble on or off",
+   "requires": [],
+   "step": 1.0,
+   "title": "Rumble strength",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "controller",
+   "help": "A short buzz.",
+   "id": "controller.rumble_test",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Test rumble",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 5.0,
+   "group": "controller",
+   "help": "How far it moves before it counts.",
+   "id": "controller.deadzone_left_stick",
+   "kind": "slider",
+   "max": 50.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "InputPlumber has no deadzone setting; Steam's controller settings have one per game",
+   "requires": [],
+   "step": 2.0,
+   "title": "Left stick deadzone",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 5.0,
+   "group": "controller",
+   "help": "How far it moves before it counts.",
+   "id": "controller.deadzone_right_stick",
+   "kind": "slider",
+   "max": 50.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "InputPlumber has no deadzone setting; Steam's controller settings have one per game",
+   "requires": [],
+   "step": 2.0,
+   "title": "Right stick deadzone",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 5.0,
+   "group": "controller",
+   "help": "How far it moves before it counts.",
+   "id": "controller.deadzone_left_trigger",
+   "kind": "slider",
+   "max": 50.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "InputPlumber has no deadzone setting; Steam's controller settings have one per game",
+   "requires": [],
+   "step": 2.0,
+   "title": "Left trigger deadzone",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 5.0,
+   "group": "controller",
+   "help": "How far it moves before it counts.",
+   "id": "controller.deadzone_right_trigger",
+   "kind": "slider",
+   "max": 50.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "InputPlumber has no deadzone setting; Steam's controller settings have one per game",
+   "requires": [],
+   "step": 2.0,
+   "title": "Right trigger deadzone",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 5,
+   "available": false,
+   "default": "solid",
+   "group": "controller",
+   "help": "Stick ring lighting.",
+   "id": "controller.led_effect",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Off",
+     "value": "off"
+    },
+    {
+     "label": "Solid",
+     "value": "solid"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "requires": [],
+   "step": 1.0,
+   "title": "Lights",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 4,
+   "available": false,
+   "default": "#ff6a00",
+   "group": "controller",
+   "help": "Colour of the stick rings.",
+   "id": "controller.led_color",
+   "kind": "color",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "requires": [
+    "controller.led_effect"
+   ],
+   "step": 1.0,
+   "title": "Light colour",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 4,
+   "available": false,
+   "default": "#00aaff",
+   "group": "controller",
+   "help": "The second zone or the second colour of two-colour effects.",
+   "id": "controller.led_color_2",
+   "kind": "color",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "requires": [
+    "controller.led_effect"
+   ],
+   "step": 1.0,
+   "title": "Second colour",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 3,
+   "available": false,
+   "default": 50.0,
+   "group": "controller",
+   "help": "0 turns the lights off.",
+   "id": "controller.led_brightness",
+   "kind": "slider",
+   "max": 100.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "requires": [
+    "controller.led_effect"
+   ],
+   "step": 5.0,
+   "title": "Light brightness",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 2,
+   "available": false,
+   "default": 50.0,
+   "group": "controller",
+   "help": "For pulse, rainbow and other moving effects.",
+   "id": "controller.led_speed",
+   "kind": "slider",
+   "max": 100.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No RGB driver here: needs Handheld Daemon or a kernel with this handheld's LED driver",
+   "requires": [
+    "controller.led_effect"
+   ],
+   "step": 10.0,
+   "title": "Effect speed",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "controller",
+   "help": "Removes GameCove's button, gyro, trackpad and controller-type changes.",
+   "id": "controller.reset_layout",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Reset controller layout",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 50.0,
+   "group": "display",
+   "help": "Screen brightness.",
+   "id": "display.brightness",
+   "kind": "slider",
+   "max": 100.0,
+   "min": 5.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Brightness",
+   "unit": "%",
+   "value": 50.0
+  },
+  {
+   "apply_order": 30,
+   "available": true,
+   "default": false,
+   "group": "display",
+   "help": "The screen follows the game's frame rate, so uneven frame rates look smooth.",
+   "id": "display.vrr",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Variable refresh rate (VRR)",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 20,
+   "available": true,
+   "default": 120.0,
+   "group": "display",
+   "help": "How many times a second the screen redraws while a game runs. Lower saves battery. Has no effect while VRR is on.",
+   "id": "display.refresh_rate",
+   "kind": "slider",
+   "max": 120.0,
+   "min": 48.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Refresh rate",
+   "unit": "Hz",
+   "value": 120.0
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "display",
+   "help": "Lets gamescope switch this screen's refresh rate. Takes effect after the session restarts.",
+   "id": "display.refresh_unlock",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Already works on this screen",
+   "requires": [],
+   "step": 1.0,
+   "title": "Unlock refresh rates",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 10,
+   "available": true,
+   "default": 0,
+   "group": "display",
+   "help": "Caps the game's frame rate. Steadier and cooler; pick a whole fraction of the refresh rate.",
+   "id": "display.fps_limit",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Off",
+     "value": 0
+    },
+    {
+     "label": "15 fps",
+     "value": 15
+    },
+    {
+     "label": "20 fps",
+     "value": 20
+    },
+    {
+     "label": "24 fps",
+     "value": 24
+    },
+    {
+     "label": "30 fps",
+     "value": 30
+    },
+    {
+     "label": "36 fps",
+     "value": 36
+    },
+    {
+     "label": "40 fps",
+     "value": 40
+    },
+    {
+     "label": "45 fps",
+     "value": 45
+    },
+    {
+     "label": "48 fps",
+     "value": 48
+    },
+    {
+     "label": "50 fps",
+     "value": 50
+    },
+    {
+     "label": "60 fps",
+     "value": 60
+    },
+    {
+     "label": "72 fps",
+     "value": 72
+    },
+    {
+     "label": "90 fps",
+     "value": 90
+    },
+    {
+     "label": "100 fps",
+     "value": 100
+    },
+    {
+     "label": "120 fps",
+     "value": 120
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Frame limit",
+   "unit": "fps",
+   "value": 0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "display",
+   "help": "Shows each frame as soon as it's ready. A little less input lag, some tearing.",
+   "id": "display.allow_tearing",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Allow tearing",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 0,
+   "group": "display",
+   "help": "How a game running below the screen's resolution is scaled up. FSR and NIS sharpen; Nearest and Pixel keep pixel art crisp.",
+   "id": "display.upscale_filter",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Linear",
+     "value": 0
+    },
+    {
+     "label": "Nearest",
+     "value": 1
+    },
+    {
+     "label": "FSR",
+     "value": 2
+    },
+    {
+     "label": "NIS",
+     "value": 3
+    },
+    {
+     "label": "Pixel",
+     "value": 4
+    },
+    {
+     "label": "SGSR",
+     "value": 5
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Upscaler",
+   "unit": "",
+   "value": 0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 0,
+   "group": "display",
+   "help": "How the game's picture fits the screen.",
+   "id": "display.upscale_scaler",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Auto",
+     "value": 0
+    },
+    {
+     "label": "Integer",
+     "value": 1
+    },
+    {
+     "label": "Fit",
+     "value": 2
+    },
+    {
+     "label": "Fill",
+     "value": 3
+    },
+    {
+     "label": "Stretch",
+     "value": 4
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Scaling",
+   "unit": "",
+   "value": 0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 18.0,
+   "group": "display",
+   "help": "How much FSR, NIS or SGSR sharpen the picture.",
+   "id": "display.sharpness",
+   "kind": "slider",
+   "max": 20.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Sharpness",
+   "unit": "",
+   "value": 18.0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 0.0,
+   "group": "display",
+   "help": "Richer colours. 0 is the most natural.",
+   "id": "display.vibrance",
+   "kind": "slider",
+   "max": 100.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 5.0,
+   "title": "Colour vibrance",
+   "unit": "%",
+   "value": 0.0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 6500.0,
+   "group": "display",
+   "help": "Warmer (lower) or cooler (higher) whites. 6500 K is neutral.",
+   "id": "display.color_temp",
+   "kind": "slider",
+   "max": 9500.0,
+   "min": 4500.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 100.0,
+   "title": "Colour temperature",
+   "unit": "K",
+   "value": 6500.0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "display",
+   "help": "Warmer colours, easier on the eyes at night.",
+   "id": "display.night_light",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Night light",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 50.0,
+   "group": "display",
+   "help": "How warm the night light is.",
+   "id": "display.night_light_strength",
+   "kind": "slider",
+   "max": 100.0,
+   "min": 10.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [
+    "display.night_light"
+   ],
+   "step": 5.0,
+   "title": "Night light strength",
+   "unit": "%",
+   "value": 50.0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": "manual",
+   "group": "display",
+   "help": "Turn night light on and off by itself.",
+   "id": "display.night_light_schedule",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Off",
+     "value": "manual"
+    },
+    {
+     "label": "8 PM to 7 AM",
+     "value": "evening"
+    },
+    {
+     "label": "10 PM to 6 AM",
+     "value": "night"
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Night light schedule",
+   "unit": "",
+   "value": "manual"
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "display",
+   "help": "High dynamic range for games that support it. Also kept for the next session.",
+   "id": "display.hdr",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "This screen doesn't support HDR",
+   "requires": [],
+   "step": 1.0,
+   "title": "HDR",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "display",
+   "help": "Expands normal (SDR) games to HDR brightness.",
+   "id": "display.hdr_itm",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "This screen doesn't support HDR",
+   "requires": [
+    "display.hdr"
+   ],
+   "step": 1.0,
+   "title": "HDR for SDR games",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 203.0,
+   "group": "display",
+   "help": "How bright normal content looks while HDR is on.",
+   "id": "display.sdr_brightness",
+   "kind": "slider",
+   "max": 500.0,
+   "min": 100.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "This screen doesn't support HDR",
+   "requires": [
+    "display.hdr"
+   ],
+   "step": 10.0,
+   "title": "SDR brightness in HDR",
+   "unit": "nits",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": "",
+   "group": "display",
+   "help": "A ReShade effect over the game, like a CRT look. Shows in games only.",
+   "id": "display.effect",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Off",
+     "value": ""
+    },
+    {
+     "label": "CRT (Lottes)",
+     "value": "gamecove/crt-lottes.fx"
+    },
+    {
+     "label": "Scanlines",
+     "value": "gamecove/scanlines.fx"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Screen effect",
+   "unit": "",
+   "value": ""
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": "auto",
+   "group": "display",
+   "help": "Turn the picture. Takes effect after the session restarts.",
+   "id": "display.rotation",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Automatic",
+     "value": "auto"
+    },
+    {
+     "label": "Normal",
+     "value": "normal"
+    },
+    {
+     "label": "Left",
+     "value": "left"
+    },
+    {
+     "label": "Right",
+     "value": "right"
+    },
+    {
+     "label": "Upside down",
+     "value": "upsidedown"
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Screen rotation",
+   "unit": "",
+   "value": "auto"
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 60,
+   "group": "display",
+   "help": "Dims the screen when you haven't touched anything for a while.",
+   "id": "display.dim_after",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Never",
+     "value": 0
+    },
+    {
+     "label": "30 seconds",
+     "value": 30
+    },
+    {
+     "label": "1 minute",
+     "value": 60
+    },
+    {
+     "label": "2 minutes",
+     "value": 120
+    },
+    {
+     "label": "5 minutes",
+     "value": 300
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Dim screen after",
+   "unit": "",
+   "value": 60
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 300,
+   "group": "display",
+   "help": "Turns the screen off when you haven't touched anything for a while.",
+   "id": "display.screen_off_after",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Never",
+     "value": 0
+    },
+    {
+     "label": "1 minute",
+     "value": 60
+    },
+    {
+     "label": "2 minutes",
+     "value": 120
+    },
+    {
+     "label": "5 minutes",
+     "value": 300
+    },
+    {
+     "label": "10 minutes",
+     "value": 600
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Turn screen off after",
+   "unit": "",
+   "value": 300
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": "off",
+   "group": "perf",
+   "help": "What the overlay shows on top of games: frame rate only, a thin bar, the full stats, or your own pick.",
+   "id": "perf.overlay",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Off",
+     "value": "off"
+    },
+    {
+     "label": "Frame rate",
+     "value": "fps"
+    },
+    {
+     "label": "Compact",
+     "value": "compact"
+    },
+    {
+     "label": "Horizontal bar",
+     "value": "bar"
+    },
+    {
+     "label": "Full",
+     "value": "full"
+    },
+    {
+     "label": "Custom",
+     "value": "custom"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Performance overlay",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": "top-left",
+   "group": "perf",
+   "help": "Where on the screen the overlay sits.",
+   "id": "perf.overlay_position",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Top Left",
+     "value": "top-left"
+    },
+    {
+     "label": "Top Center",
+     "value": "top-center"
+    },
+    {
+     "label": "Top Right",
+     "value": "top-right"
+    },
+    {
+     "label": "Middle Left",
+     "value": "middle-left"
+    },
+    {
+     "label": "Middle Right",
+     "value": "middle-right"
+    },
+    {
+     "label": "Bottom Left",
+     "value": "bottom-left"
+    },
+    {
+     "label": "Bottom Center",
+     "value": "bottom-center"
+    },
+    {
+     "label": "Bottom Right",
+     "value": "bottom-right"
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Overlay position",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 50.0,
+   "group": "perf",
+   "help": "How see-through the overlay's background is (0 % is fully clear).",
+   "id": "perf.overlay_opacity",
+   "kind": "slider",
+   "max": 100.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 5.0,
+   "title": "Overlay background",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 100.0,
+   "group": "perf",
+   "help": "Bigger text is easier to read on a small screen.",
+   "id": "perf.overlay_scale",
+   "kind": "slider",
+   "max": 200.0,
+   "min": 50.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 10.0,
+   "title": "Overlay text size",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": true,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.fps",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Frame rate",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.frametime",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Frame time",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": true,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.graph",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Frame time graph",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": true,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.cpu",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "CPU load",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": true,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.gpu",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "GPU load",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.temps",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Temperatures",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.power",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "CPU and GPU watts",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.clocks",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Clock speeds",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.ram",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Memory use",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": true,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.battery",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Battery",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "perf",
+   "help": "Shown when the overlay is set to Custom.",
+   "id": "perf.overlay_item.time",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Performance overlay isn't available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Clock",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 5,
+   "available": false,
+   "default": 0.0,
+   "group": "perf",
+   "help": "MangoHud caps the frame rate inside the game (steadier than the screen's limit in some games). Off = 0. From the next launch.",
+   "id": "perf.mangohud_fps_limit",
+   "kind": "slider",
+   "max": 120.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs MangoHud (its Vulkan layer)",
+   "requires": [],
+   "step": 1.0,
+   "title": "In-game frame limit",
+   "unit": "fps",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": "late",
+   "group": "perf",
+   "help": "Late waits after the frame (lowest input lag); Early waits before it (smoothest frame times).",
+   "id": "perf.mangohud_fps_limit_method",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Lowest latency",
+     "value": "late"
+    },
+    {
+     "label": "Smoothest",
+     "value": "early"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs MangoHud (its Vulkan layer)",
+   "requires": [
+    "perf.mangohud_fps_limit"
+   ],
+   "step": 1.0,
+   "title": "Frame limit timing",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "perf",
+   "help": "Adds generated frames with lsfg-vk and your own Lossless Scaling. Best above 40 real fps.",
+   "id": "perf.lsfg",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs lsfg-vk",
+   "requires": [],
+   "step": 1.0,
+   "title": "Lossless Scaling frame generation",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 2,
+   "group": "perf",
+   "help": "2x adds one frame per real frame; 3x and 4x add more (more lag, more artefacts).",
+   "id": "perf.lsfg_multiplier",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "2x",
+     "value": 2
+    },
+    {
+     "label": "3x",
+     "value": 3
+    },
+    {
+     "label": "4x",
+     "value": 4
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs lsfg-vk",
+   "requires": [
+    "perf.lsfg"
+   ],
+   "step": 1.0,
+   "title": "Frame generation multiplier",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": 0.8,
+   "group": "perf",
+   "help": "Lower is faster with a softer result; 80 % suits handheld screens.",
+   "id": "perf.lsfg_flow_scale",
+   "kind": "slider",
+   "max": 1.0,
+   "min": 0.25,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs lsfg-vk",
+   "requires": [
+    "perf.lsfg"
+   ],
+   "step": 0.05,
+   "title": "Flow scale",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "perf",
+   "help": "A lighter frame generation model: faster, slightly lower quality.",
+   "id": "perf.lsfg_performance",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs lsfg-vk",
+   "requires": [
+    "perf.lsfg"
+   ],
+   "step": 1.0,
+   "title": "Performance mode",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 3,
+   "available": false,
+   "default": "own",
+   "group": "perf",
+   "help": "Puts a better upscaler into the game with OptiScaler (XeSS on Intel Arc, FSR on AMD). Pick the game's DLSS or FSR in its menu.",
+   "id": "perf.upscaler",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Game's own",
+     "value": "own"
+    },
+    {
+     "label": "FSR 3.1 (OptiScaler)",
+     "value": "fsr31"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Upscaler",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 2,
+   "available": false,
+   "default": 0,
+   "group": "perf",
+   "help": "XeSS frame generation on Intel Arc (2x-4x), FSR frame generation on AMD (2x). Needs about 40 real fps.",
+   "id": "perf.frame_gen",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Off",
+     "value": 0
+    },
+    {
+     "label": "2x",
+     "value": 2
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Frame generation",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "Sets up the best upscaler for this game from what it ships and OptiScaler's game list.",
+   "id": "perf.upscale_recommended",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Use the recommended setup",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "Takes OptiScaler (and REFramework) out of the game folder, exactly as it was.",
+   "id": "perf.upscale_undo",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Remove GameCove's upscaler",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 1,
+   "available": false,
+   "default": true,
+   "group": "perf",
+   "help": "Cuts input lag: Anti-Lag through low_latency_layer on AMD, XeLL on Intel Arc. From the next launch.",
+   "id": "perf.low_latency",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Not available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Low latency",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": "",
+   "group": "perf",
+   "help": "Which Proton runs this game.",
+   "id": "perf.proton",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Not available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Proton version",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "perf",
+   "help": "Adds GameCove's launcher to the game's Steam launch options so per-game settings reach it. Turned on by itself when needed.",
+   "id": "perf.launch_wrapper",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Not available",
+   "requires": [],
+   "step": 1.0,
+   "title": "Start through GameCove",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 0.0,
+   "group": "perf",
+   "help": "How many CPU threads Steam uses to prepare shaders in the background. 0 = Steam's default. Applies when Steam restarts.",
+   "id": "perf.shader_threads",
+   "kind": "slider",
+   "max": 16.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Shader pre-caching threads",
+   "unit": "",
+   "value": 0.0
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "Deletes Steam's compiled shaders for this game; they are rebuilt on the next start (fixes some stutter or crashes after driver updates).",
+   "id": "perf.clear_shader_cache",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Open a game first",
+   "requires": [],
+   "step": 1.0,
+   "title": "Clear this game's shader cache",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 100,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "How much power the chip may use. Lower lasts longer; higher runs games faster.",
+   "id": "power.tdp",
+   "kind": "slider",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No TDP service on this system (PowerStation, steamos-manager or Handheld Daemon)",
+   "requires": [],
+   "step": 1.0,
+   "title": "TDP",
+   "unit": "W",
+   "value": null
+  },
+  {
+   "apply_order": 101,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "Battery, Balanced or Performance watts for this handheld.",
+   "id": "power.profile",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Battery",
+     "value": "battery"
+    },
+    {
+     "label": "Balanced",
+     "value": "balanced"
+    },
+    {
+     "label": "Performance",
+     "value": "performance"
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "No TDP service on this system (PowerStation, steamos-manager or Handheld Daemon)",
+   "requires": [],
+   "step": 1.0,
+   "title": "Power profile",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 99,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "Extra watts for short bursts above the TDP. 0 keeps power flat.",
+   "id": "power.boost",
+   "kind": "slider",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Not available on this handheld",
+   "requires": [],
+   "step": 1.0,
+   "title": "Boost",
+   "unit": "W",
+   "value": null
+  },
+  {
+   "apply_order": 99,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "Lets the chip burst above the TDP for a moment (Handheld Daemon).",
+   "id": "power.boost_on",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Not available on this handheld",
+   "requires": [],
+   "step": 1.0,
+   "title": "TDP boost",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 98,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "Watts the chip may hold for a few seconds above the TDP.",
+   "id": "power.sppt",
+   "kind": "slider",
+   "max": 41.0,
+   "min": 30.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Short boost limit (SPPT)",
+   "unit": "W",
+   "value": 30.0
+  },
+  {
+   "apply_order": 97,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "Watts for very short peaks. Never below the short boost limit.",
+   "id": "power.fppt",
+   "kind": "slider",
+   "max": 41.0,
+   "min": 30.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Peak boost limit (FPPT)",
+   "unit": "W",
+   "value": 30.0
+  },
+  {
+   "apply_order": 90,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "The system's power mode: also sets CPU energy and firmware mode.",
+   "id": "power.power_mode",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No power-profiles-daemon or tuned-ppd running",
+   "requires": [],
+   "step": 1.0,
+   "title": "Power mode",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 89,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "The maker's own power and fan mode for this handheld.",
+   "id": "power.platform_profile",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Low Power",
+     "value": "low-power"
+    },
+    {
+     "label": "Balanced",
+     "value": "balanced"
+    },
+    {
+     "label": "Performance",
+     "value": "performance"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Firmware mode",
+   "unit": "",
+   "value": "balanced"
+  },
+  {
+   "apply_order": 80,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "Lets the CPU clock above its base speed. Off is cooler and quieter.",
+   "id": "power.cpu_boost",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "CPU boost",
+   "unit": "",
+   "value": true
+  },
+  {
+   "apply_order": 82,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "Two threads per CPU core. Off can save power in older or lighter games.",
+   "id": "power.smt",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "SMT",
+   "unit": "",
+   "value": true
+  },
+  {
+   "apply_order": 81,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "How many CPU threads stay on. Fewer saves power in light games.",
+   "id": "power.cpu_cores",
+   "kind": "slider",
+   "max": 8.0,
+   "min": 2.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "CPU cores",
+   "unit": "",
+   "value": 8.0
+  },
+  {
+   "apply_order": 70,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "How eagerly the CPU clocks up: performance reacts fastest, power saves most.",
+   "id": "power.epp",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Performance",
+     "value": "performance"
+    },
+    {
+     "label": "Balance Performance",
+     "value": "balance_performance"
+    },
+    {
+     "label": "Balance Power",
+     "value": "balance_power"
+    },
+    {
+     "label": "Power",
+     "value": "power"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "CPU energy mode",
+   "unit": "",
+   "value": "balance_performance"
+  },
+  {
+   "apply_order": 75,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "How the kernel picks CPU speeds.",
+   "id": "power.governor",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Performance",
+     "value": "performance"
+    },
+    {
+     "label": "Powersave",
+     "value": "powersave"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "CPU governor",
+   "unit": "",
+   "value": "powersave"
+  },
+  {
+   "apply_order": 72,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "Caps CPU clocks to leave more of the TDP to the GPU.",
+   "id": "power.cpu_max",
+   "kind": "slider",
+   "max": 100.0,
+   "min": 30.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 5.0,
+   "title": "CPU speed limit",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "apply_order": 66,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "Auto lets the GPU pick its clock; low and high pin it; manual uses the clock below.",
+   "id": "power.gpu_level",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Auto",
+     "value": "auto"
+    },
+    {
+     "label": "Low",
+     "value": "low"
+    },
+    {
+     "label": "High",
+     "value": "high"
+    },
+    {
+     "label": "Manual",
+     "value": "manual"
+    },
+    {
+     "label": "Peak Performance",
+     "value": "peak_performance"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "GPU performance level",
+   "unit": "",
+   "value": "auto"
+  },
+  {
+   "apply_order": 65,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "Fixed GPU clock in manual mode.",
+   "id": "power.gpu_clock",
+   "kind": "slider",
+   "max": 2700.0,
+   "min": 800.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [
+    "power.gpu_level"
+   ],
+   "step": 50.0,
+   "title": "GPU clock",
+   "unit": "MHz",
+   "value": 1600.0
+  },
+  {
+   "apply_order": 63,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "Keeps the GPU from dropping below this; smoother, uses more power.",
+   "id": "power.gpu_min",
+   "kind": "slider",
+   "max": 2700.0,
+   "min": 800.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 50.0,
+   "title": "GPU minimum clock",
+   "unit": "MHz",
+   "value": 800.0
+  },
+  {
+   "apply_order": 64,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "Caps the GPU clock; cooler, leaves power to the CPU.",
+   "id": "power.gpu_max",
+   "kind": "slider",
+   "max": 2700.0,
+   "min": 800.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 50.0,
+   "title": "GPU maximum clock",
+   "unit": "MHz",
+   "value": 2700.0
+  },
+  {
+   "apply_order": 62,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "The GPU prefers its most efficient clock and ramps up slower.",
+   "id": "power.gpu_profile",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs an Intel Arc (xe) GPU or steamos-manager",
+   "requires": [],
+   "step": 1.0,
+   "title": "GPU efficiency mode",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 60,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "The chip slows down at this temperature. Lower is cooler and quieter.",
+   "id": "power.thermal_limit",
+   "kind": "slider",
+   "max": 1.0,
+   "min": 60.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "PowerStation can't set a temperature limit here (AMD with ryzenadj only)",
+   "requires": [],
+   "step": 1.0,
+   "title": "Temperature limit",
+   "unit": "°C",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "Stops charging at this level to keep the battery healthy. 100 = no limit.",
+   "id": "power.charge_limit",
+   "kind": "slider",
+   "max": 100.0,
+   "min": 50.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "This battery has no charge limit",
+   "requires": [],
+   "step": 5.0,
+   "title": "Charge limit",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "Stops charging at 80 % (the battery's own Long Life mode).",
+   "id": "power.battery_long_life",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "This battery has no charge limit",
+   "requires": [],
+   "step": 1.0,
+   "title": "Battery care (80 %)",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 50,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "Auto lets the firmware run the fan; Quiet and Max are presets.",
+   "id": "power.fan_mode",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No fan control on this kernel",
+   "requires": [],
+   "step": 1.0,
+   "title": "Fan",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 49,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "Your own fan speed per temperature point. Never quieter than Quiet.",
+   "id": "power.fan_curve",
+   "kind": "curve",
+   "max": 100.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "No fan control on this kernel",
+   "requires": [],
+   "step": 1.0,
+   "title": "Fan curve",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "power",
+   "help": "Lowest power settings this handheld allows, until you turn it off or plug in.",
+   "id": "power.battery_saver",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Battery saver",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 0.0,
+   "group": "power",
+   "help": "Turns battery saver on by itself at this battery level. 0 = never.",
+   "id": "power.battery_saver_at",
+   "kind": "slider",
+   "max": 50.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 5.0,
+   "title": "Battery saver at",
+   "unit": "%",
+   "value": 0.0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "power",
+   "help": "s2idle wakes fastest; deep uses less battery while asleep where the firmware supports it.",
+   "id": "power.sleep_mode",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "S 2 Idle",
+     "value": "s2idle"
+    },
+    {
+     "label": "Deep",
+     "value": "deep"
+    }
+   ],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Sleep mode",
+   "unit": "",
+   "value": "deep"
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "Less battery used while asleep. Turn off if the device won't wake from a button.",
+   "id": "power.mcu_powersave",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Not available on this handheld",
+   "requires": [],
+   "step": 1.0,
+   "title": "Controller power saving in sleep",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 40,
+   "available": false,
+   "default": 0,
+   "group": "power",
+   "help": "Off finds the most frames at your TDP; a number holds that frame rate with the fewest watts.",
+   "id": "power.autotune_target",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Most frames",
+     "value": 0
+    },
+    {
+     "label": "30 fps",
+     "value": 30
+    },
+    {
+     "label": "40 fps",
+     "value": 40
+    },
+    {
+     "label": "45 fps",
+     "value": 45
+    },
+    {
+     "label": "50 fps",
+     "value": 50
+    },
+    {
+     "label": "60 fps",
+     "value": 60
+    },
+    {
+     "label": "72 fps",
+     "value": 72
+    },
+    {
+     "label": "90 fps",
+     "value": 90
+    },
+    {
+     "label": "120 fps",
+     "value": 120
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "No TDP service on this system (PowerStation, steamos-manager or Handheld Daemon)",
+   "requires": [],
+   "step": 1.0,
+   "title": "Auto TDP target",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 41,
+   "available": false,
+   "default": true,
+   "group": "power",
+   "help": "When the target is out of reach, hold the closest frame rate the TDP gives.",
+   "id": "power.autotune_auto_fps",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No TDP service on this system (PowerStation, steamos-manager or Handheld Daemon)",
+   "requires": [
+    "power.autotune_target"
+   ],
+   "step": 1.0,
+   "title": "Auto FPS",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 41,
+   "available": false,
+   "default": 5.0,
+   "group": "power",
+   "help": "Frames Auto TDP may give up to save watts, in percent of the most.",
+   "id": "power.autotune_keep",
+   "kind": "slider",
+   "max": 15.0,
+   "min": 2.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No TDP service on this system (PowerStation, steamos-manager or Handheld Daemon)",
+   "requires": [],
+   "step": 1.0,
+   "title": "Auto TDP keeps",
+   "unit": "%",
+   "value": null
+  },
+  {
+   "apply_order": 41,
+   "available": false,
+   "default": null,
+   "group": "power",
+   "help": "The lowest TDP Auto TDP may use.",
+   "id": "power.autotune_floor",
+   "kind": "slider",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": true,
+   "points": 0,
+   "reason": "No TDP service on this system (PowerStation, steamos-manager or Handheld Daemon)",
+   "requires": [],
+   "step": 1.0,
+   "title": "Auto TDP lowest",
+   "unit": "W",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": false,
+   "group": "power",
+   "help": "Auto TDP normally runs on battery only.",
+   "id": "power.autotune_plugged",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "No TDP service on this system (PowerStation, steamos-manager or Handheld Daemon)",
+   "requires": [],
+   "step": 1.0,
+   "title": "Auto TDP when plugged in",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": true,
+   "group": "network",
+   "help": "Turn Wi-Fi on or off.",
+   "id": "network.wifi",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Wi-Fi",
+   "unit": "",
+   "value": true
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": true,
+   "group": "network",
+   "help": "Turn Bluetooth on or off.",
+   "id": "network.bluetooth",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Bluetooth",
+   "unit": "",
+   "value": true
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "network",
+   "help": "Turns off every radio (Wi-Fi and Bluetooth). Turning it off brings back what was on.",
+   "id": "network.airplane",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Airplane mode",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": true,
+   "group": "network",
+   "help": "Saves battery. Turn off if online games stutter.",
+   "id": "network.wifi_power_save",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs steamos-manager",
+   "requires": [],
+   "step": 1.0,
+   "title": "Wi-Fi power saving",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "system",
+   "help": "Puts the handheld to sleep.",
+   "id": "system.sleep",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Sleep now",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "system",
+   "help": "Saves the game's picture to Pictures/Screenshots.",
+   "id": "system.screenshot",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Take a screenshot",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "system",
+   "help": "Stops the screen from dimming or the handheld from sleeping on its own.",
+   "id": "system.keep_awake",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Keep awake",
+   "unit": "",
+   "value": false
+  }
+ ],
+ "device": "lenovo-legion-go-s-z2go"
+}

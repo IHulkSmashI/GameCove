@@ -16,6 +16,8 @@ var value_label: Label
 var _hint: Label
 var _chevron: TextureRect
 var _icon := ""
+var _row: HBoxContainer
+var _badge_box: HBoxContainer
 ## Keep the explanation visible even without focus.
 var collapse_hint := true
 
@@ -39,6 +41,7 @@ func setup(row_key: String, title: String, value := "", hint := "", icon := "", 
 	row.offset_right = -14
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(row)
+	_row = row
 	if icon != "":
 		row.add_child(Icons.rect(icon, 22, ThemeLib.color("text_2")))
 	title_label = Kit.label(title)
@@ -79,6 +82,24 @@ func set_hint(text: String) -> void:
 
 func hint_text() -> String:
 	return _hint.text
+
+
+## A box right after the title for small chips (see ChoiceRow.badge_slot).
+func badge_slot() -> HBoxContainer:
+	if _badge_box == null:
+		_badge_box = Kit.hbox(6)
+		_badge_box.name = "Badges"
+		_badge_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_badge_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		title_label.size_flags_horizontal = Control.SIZE_FILL
+		title_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		_row.add_child(_badge_box)
+		_row.move_child(_badge_box, title_label.get_index() + 1)
+		var gap := Kit.spacer()
+		gap.name = "BadgeGap"
+		_row.add_child(gap)
+		_row.move_child(gap, _badge_box.get_index() + 1)
+	return _badge_box
 
 
 func _refresh_focus() -> void:

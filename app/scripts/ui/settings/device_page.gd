@@ -17,11 +17,13 @@ const TPhoto := preload("res://scripts/ui/texts_photo.gd")
 ## Panel -> script names we look for, first found wins.
 const PANELS := {
 	"about": ["about_device.gd", "about_panel.gd", "about.gd"],
+	"fixes": ["fixes_page.gd"],
 	"controller": ["controller_page.gd", "controller_panel.gd", "controller.gd"],
 	"storage": ["storage_page.gd", "storage_panel.gd", "storage.gd"],
 	"updates": ["updates_page.gd", "updates_panel.gd", "updates.gd"],
 }
-const ORDER := ["about", "controller", "storage", "updates"]
+const ORDER := ["about", "fixes", "controller", "storage", "updates"]
+const Shared := preload("res://scripts/ui/controls/shared.gd")
 const DIR := "res://scripts/ui/device/"
 
 var panels := {}   # id -> Control (loaded panels only)
@@ -46,11 +48,20 @@ func build() -> void:
 		return
 	for id in ORDER:
 		var path := panel_script(id, panel_dir)
+		if path == "" and id == "fixes":
+			continue
 		var c: Control = null
 		if path != "":
 			var s: Script = load(path)
+			var svc_for: Dictionary = services
+			if id == "fixes" and not services.has("fixes"):
+				# the Fixes service isn't an autoload: the shared one (none under tests)
+				var fx := Shared.fixes(self)
+				if fx != null:
+					svc_for = services.duplicate()
+					svc_for["fixes"] = fx
 			if s != null and s.has_method("build"):
-				c = s.build(services)
+				c = s.build(svc_for)
 			elif s != null and s.can_instantiate():
 				c = s.new() as Control
 		if c == null:
@@ -100,6 +111,17 @@ func _placeholder(id: String) -> void:
 			box.add_child(SKit.fact("Support", dev.support_level().capitalize() if dev.has_method("support_level") else "Generic"))
 			return
 	box.add_child(Kit.label(TS.DEVICE_PANEL_SOON, "QuietLabel", true))
+
+
+## Settings asked for a part of this page ("fixes"): its first control.
+func focus_part(part: String) -> Control:
+	if not _built:
+		on_shown()
+	var c: Control = panels.get(part)
+	if c == null:
+		return null
+	var chain: Array = c.focusables() if c.has_method("focusables") else focusable_children(c)
+	return chain[0] if not chain.is_empty() else null
 
 
 ## Called by the settings screen when the Device page shows / hides.

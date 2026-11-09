@@ -35,6 +35,12 @@ var collapse_hint := true
 var explainer: Callable
 ## Optional func(key, value) -> String for the line under the row; Texts.explain otherwise.
 var explain_fn: Callable
+## Locked rows show their value but don't change (a setting that needs
+## another one first, or isn't available). Set with set_locked().
+var locked := false
+var title_label: Label
+var _row: HBoxContainer
+var _badge_box: HBoxContainer
 
 
 func setup(setting_key: String, title: String, vals: Array, lbls: Array, current: Variant, icon := "") -> void:
@@ -63,9 +69,11 @@ func setup(setting_key: String, title: String, vals: Array, lbls: Array, current
 	row.offset_right = -14
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(row)
+	_row = row
 	if icon != "":
 		row.add_child(Icons.rect(icon, 22, ThemeLib.color("text_2")))
 	var t := Kit.label(title)
+	title_label = t
 	t.name = "Title"
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -183,7 +191,7 @@ func set_value_quiet(v: Variant) -> void:
 
 
 func step(d: int) -> void:
-	if values.size() < 2:
+	if values.size() < 2 or locked:
 		return
 	index = posmod(index + d, values.size())
 	_refresh(true)
@@ -192,6 +200,32 @@ func step(d: int) -> void:
 
 func hint_text() -> String:
 	return _hint.text
+
+
+## A box right after the title for small chips (where a value comes from, a
+## lock). The title stops stretching so the chips sit next to it.
+func badge_slot() -> HBoxContainer:
+	if _badge_box == null:
+		_badge_box = Kit.hbox(6)
+		_badge_box.name = "Badges"
+		_badge_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_badge_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		title_label.size_flags_horizontal = Control.SIZE_FILL
+		_row.add_child(_badge_box)
+		_row.move_child(_badge_box, title_label.get_index() + 1)
+		var gap := Kit.spacer()
+		gap.name = "BadgeGap"
+		_row.add_child(gap)
+		_row.move_child(gap, _badge_box.get_index() + 1)
+	return _badge_box
+
+
+## Locked: the value shows dimmed and left / right / A do nothing.
+func set_locked(on: bool) -> void:
+	locked = on
+	for c in _row.get_children():
+		if c != title_label and c != _badge_box and c is CanvasItem and c.name != "BadgeGap":
+			c.modulate.a = 0.45 if on else 1.0
 
 
 func value_text() -> String:

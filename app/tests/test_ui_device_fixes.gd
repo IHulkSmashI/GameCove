@@ -1,13 +1,15 @@
 extends "res://tests/test_case.gd"
-## The quick menu's Device section: device fixes with their status, Install /
-## Remove, the gyro's accelerometer toggle and the switch to Steam. Every
-## command goes to a fake runner; nothing real ever runs.
+## The quick menu's Device tab: the fixes summary that links to Settings >
+## Device > Fixes (the fixes themselves are on that page, test_fixes.gd and
+## test_ui_device_pages.gd) and the switch to Steam. Every command goes to a
+## fake runner; nothing real ever runs.
 
 const QuickMenu := preload("res://scripts/ui/quick_menu.gd")
 const BgCommand := preload("res://scripts/ui/bg_command.gd")
 const FixRow := preload("res://scripts/ui/fix_row.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const Screens := preload("res://tests/test_ui_screens.gd")
+const TC := preload("res://scripts/ui/texts_controls.gd")
 
 const HELPER := "/usr/libexec/gamecove/gamecove-fix"
 const SET_HELPER := "/usr/libexec/gamecove/gamecove-fix-set"
@@ -50,19 +52,20 @@ class FakeRunner extends RefCounted:
 	const SET_PATH := "/usr/libexec/gamecove/gamecove-fix-set"
 
 
-func _menu(runner: FakeRunner, fixes := ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "fan", "charge-limit"]) -> Control:
+const DEVICE_TAB := 5
+
+
+func _menu(runner: FakeRunner, fixes := ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "fan", "charge-limit"], extra := {}) -> Control:
 	var dev := Screens.FakeDevice.new()
 	dev.profile["fixes"] = fixes
 	var m: Control = QuickMenu.new()
-	m.setup({"device": dev, "power": Screens.FakePower.new(), "launcher": Screens.FakeLauncher.new(),
-		"gamescope": Screens.FakeGamescope.new(), "command_runner": runner})
+	var svc := {"device": dev, "power": Screens.FakePower.new(), "launcher": Screens.FakeLauncher.new(),
+		"gamescope": Screens.FakeGamescope.new(), "command_runner": runner}
+	svc.merge(extra, true)
+	m.setup(svc)
 	m.open({})
-	m.show_section(4)
+	m.show_section(DEVICE_TAB)
 	return m
-
-
-func _row(m: Control, fix: String) -> VBoxContainer:
-	return m.body.get_node_or_null(fix)
 
 
 func _texts(n: Node, out: Array = []) -> Array:
@@ -73,99 +76,55 @@ func _texts(n: Node, out: Array = []) -> Array:
 	return out
 
 
-func test_lists_fixes_with_status() -> void:
-	var r := FakeRunner.new()
-	var m := _menu(r)
-	eq(m.device_fixes(), ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro"], "fan and charge limit stay in Power")
-	ok(_row(m, "fan") == null and _row(m, "charge-limit") == null, "no rows for Power's fixes")
-	eq(r.calls, [HELPER + " claw8ex-buttons status", HELPER + " claw8ex-vrr status", HELPER + " claw8ex-gyro status"],
-		"status checked once each, without pkexec")
-	eq(_row(m, "claw8ex-buttons").state_label.text, "Off", "buttons off")
-	eq(_row(m, "claw8ex-buttons").button.text, "Install", "off offers Install")
-	eq(_row(m, "claw8ex-vrr").button.text, "Remove", "on offers Remove")
-	ok(m.body.get_node_or_null("claw8ex-gyro-accel") != null, "installed gyro shows the accelerometer toggle")
-	eq(m.body.get_node("claw8ex-gyro-accel").value(), false, "accelerometer read from status")
-	eq(m.focusables().size(), 5, "three fix buttons, accelerometer, Steam")
+class FakeFixes extends RefCounted:
+	signal changed(rows: Array)
+	var list := [{"id": "a", "status": "applied"}, {"id": "b", "status": "applied"}, {"id": "c", "status": "available"}]
+	func rows() -> Array: return list
+	func counts() -> Dictionary:
+		var c := {"applied": 0, "available": 0, "os-fixed": 0, "not-needed": 0}
+		for r in list:
+			c["applied" if r["status"] == "applied" else "available"] += 1
+		return c
+
+
+func test_fixes_summary_links_to_the_fixes_page() -> void:
+	var m := _menu(FakeRunner.new(), ["claw8ex-buttons", "fan"])
+	var row: Node = m.body.get_node("Fixes")
+	eq(row.value_label.text, TC.FIXES_COUNT_ONLY % 2, "without the service: how many fixes the device row lists")
+	var asked := []
+	m.settings_requested.connect(func(cat, part): asked.append([cat, part]))
+	m.visible = true
+	row.pressed.emit()
+	eq(asked, [["device", "fixes"]], "opens Settings > Device > Fixes")
+	ok(not m.visible, "menu closes")
+	m.free()
+	var m2 := _menu(FakeRunner.new(), [], {"fixes": FakeFixes.new()})
+	eq(m2.body.get_node("Fixes").value_label.text, TC.fixes_line({"applied": 2, "available": 1}), "counts from the Fixes service")
+	ok(TC.fixes_line({"applied": 2, "available": 1}).contains("1"), "names what's left")
+	m2.free()
+	var m3 := _menu(FakeRunner.new(), [])
+	eq(m3.body.get_node("Fixes").value_label.text, TC.FIXES_NONE, "no fixes")
+	m3.free()
+
+
+func test_device_lines() -> void:
+	var m := _menu(FakeRunner.new())
 	var t := _texts(m.body)
-	ok(Texts.FIXES_INTRO in t, "explains the admin password")
-	for f in Texts.DEVICE_FIXES:
-		ok(Texts.fix_explain(f) in t, "explanation for " + f)
-	ok("Needs a restart" in Texts.fix_explain("claw8ex-vrr"), "VRR says it needs a restart")
-	ok("cold boot" in Texts.fix_explain("claw8ex-gyro"), "gyro says it needs a cold boot")
-	ok(Texts.explain("claw8ex-gyro-accel").begins_with("Off gives steadier aiming."), "accelerometer explained")
-	m.show_section(4)
-	eq(r.calls.size(), 3, "switching back to the section doesn't check again")
-	m.close()
-	m.open({})
-	m.show_section(4)
-	eq(r.calls.size(), 6, "reopening the menu checks again")
+	ok("MSI Claw 8 EX AI+" in t, "device name")
+	ok(t.any(func(x): return str(x).contains("Intel Panther Lake")), "chip")
+	ok("Full" in t or "FULL" in t, "support chip")
 	m.free()
 
 
-func test_install_and_remove() -> void:
-	var r := FakeRunner.new()
-	var m := _menu(r)
-	r.calls.clear()
-	_row(m, "claw8ex-buttons").button.pressed.emit()
-	eq(r.calls, ["pkexec %s claw8ex-buttons install" % HELPER, HELPER + " claw8ex-buttons status"], "install through pkexec, then check")
-	eq(_row(m, "claw8ex-buttons").state_label.text, "On", "now on")
-	ok(m.status_label.text.begins_with("MSI buttons installed."), "result shown: " + m.status_label.text)
-	eq(m.focus_target("claw8ex-buttons"), _row(m, "claw8ex-buttons").button, "focus can stay on the row after the rebuild")
-
-	r.calls.clear()
-	_row(m, "claw8ex-vrr").button.pressed.emit()
-	eq(r.calls[0], "pkexec %s claw8ex-vrr remove" % HELPER, "remove through pkexec")
-	ok(m.status_label.text.contains("Restart"), "remove says to restart")
-	eq(_row(m, "claw8ex-vrr").button.text, "Install", "removed fix offers Install again")
-
-	r.pkexec_code = 126
-	_row(m, "claw8ex-vrr").button.pressed.emit()
-	eq(m.status_label.text, Texts.NEEDS_DESKTOP, "no password prompt in Gaming Mode: points to Desktop Mode")
-	eq(r.states["claw8ex-vrr"], "off", "nothing changed")
-	m.free()
-
-
-func test_states_without_an_action() -> void:
-	var r := FakeRunner.new()
-	r.states = {"claw8ex-buttons": "not-needed", "claw8ex-vrr": "n/a"}
-	var m := _menu(r)
-	ok(_row(m, "claw8ex-buttons").button == null, "not needed: no button")
-	ok(_row(m, "claw8ex-buttons").get_node_or_null("Note") != null, "not needed: a note says why")
-	ok(_row(m, "claw8ex-vrr").button == null, "doesn't apply: no button")
-	var gyro := _row(m, "claw8ex-gyro")
-	eq(gyro.state, "unknown", "helper said unknown fix")
-	eq(gyro.button.text, "Check again", "unknown offers Check again")
-	ok(m.body.get_node_or_null("claw8ex-gyro-accel") == null, "no accelerometer toggle without the gyro fix")
-	eq(m.focusables().size(), 2, "Check again and Steam")
-	r.states["claw8ex-gyro"] = "off"
-	gyro.button.pressed.emit()
-	eq(_row(m, "claw8ex-gyro").button.text, "Install", "checked again")
-	m.free()
-
-
-func test_accelerometer_toggle() -> void:
-	var r := FakeRunner.new()
-	var m := _menu(r)
-	r.calls.clear()
-	m.accel_cooldown_ms = 0   # the cooldown has its own test
-	m.body.get_node("claw8ex-gyro-accel").step(1)
-	eq(r.calls[0], "pkexec %s claw8ex-gyro set accel-on" % SET_HELPER, "no-password set entry point, single-token value")
-	ok(r.accel, "accelerometer on")
-	eq(m.body.get_node("claw8ex-gyro-accel").value(), true, "toggle shows the new value")
-	ok(m.status_label.text.begins_with("Accelerometer on."), "result shown")
-	r.pkexec_code = 126
-	m.body.get_node("claw8ex-gyro-accel").step(1)
-	eq(m.body.get_node("claw8ex-gyro-accel").value(), true, "refused change rolls back")
-	eq(m.status_label.text, Texts.NO_PASSWORD, "refusal explained")
-	m.free()
+func _steam(m: Control) -> Button:
+	return m.body.get_node("SteamMode/Button")
 
 
 func test_switch_to_steam_needs_a_second_press() -> void:
 	var r := FakeRunner.new()
 	var m := _menu(r, [])
-	eq(m.focusables().size(), 1, "no fixes: just the Steam button")
-	ok(m.body.get_node_or_null("FixesHeader") == null, "no fixes header")
-	var b: Button = m.focusables()[0]
+	var b := _steam(m)
+	ok(b in m.focusables(), "Steam button in the focus chain")
 	b.pressed.emit()
 	eq(r.spawned, [], "first press only asks")
 	eq(b.text, Texts.STEAM_CONFIRM, "button asks to press again")
@@ -185,10 +144,10 @@ func test_switch_to_steam_needs_a_second_press() -> void:
 func test_focus_chain() -> void:
 	var m := _menu(FakeRunner.new())
 	var f: Array = m.focusables()
-	eq(f[0].get_node(f[0].focus_neighbor_top), m.tabs[4], "up from the first fix reaches the tab")
-	eq(f[0].get_node(f[0].focus_neighbor_bottom), f[1], "down goes to the next fix")
+	eq(f[0].get_node(f[0].focus_neighbor_top), m.tabs[DEVICE_TAB], "up from the first row reaches the tab")
 	eq(f[-1].get_node(f[-1].focus_neighbor_bottom), f[-1], "down from Steam stays put")
-	eq(m.tabs[4].get_node(m.tabs[4].focus_neighbor_bottom), f[0], "down from the tab enters the section")
+	eq(f[-1], _steam(m), "Steam last")
+	eq(m.tabs[DEVICE_TAB].get_node(m.tabs[DEVICE_TAB].focus_neighbor_bottom), f[0], "down from the tab enters the section")
 	m.free()
 
 
@@ -222,32 +181,12 @@ class FakeController extends RefCounted:
 func test_switch_to_steam_hands_the_controller_back_first() -> void:
 	var r := FakeRunner.new()
 	var ctl := FakeController.new()
-	var dev := Screens.FakeDevice.new()
-	dev.profile["fixes"] = []
-	var m: Control = QuickMenu.new()
-	m.setup({"device": dev, "power": Screens.FakePower.new(), "launcher": Screens.FakeLauncher.new(),
-		"gamescope": Screens.FakeGamescope.new(), "command_runner": r, "controller": ctl})
-	m.open({})
-	m.show_section(4)
-	var b: Button = m.focusables()[0]
+	var m := _menu(r, [], {"controller": ctl})
+	var b := _steam(m)
 	b.pressed.emit()
 	b.pressed.emit()
 	eq(ctl.released, 1, "InterceptMode reset asked for")
 	eq(r.spawned, [], "the session switch waits until it's written")
 	ctl.done.call()
 	eq(r.spawned, ["/usr/bin/gamecove-session-select steam"], "then switches")
-	m.free()
-
-
-func test_accelerometer_changes_are_rate_limited() -> void:
-	var r := FakeRunner.new()
-	var m := _menu(r)
-	r.calls.clear()
-	var row = m.body.get_node("claw8ex-gyro-accel")
-	row.step(1)
-	eq(r.calls.filter(func(c): return c.contains(" set ")).size(), 1, "first change runs (InputPlumber restarts)")
-	row = m.body.get_node("claw8ex-gyro-accel")
-	row.step(1)
-	eq(r.calls.filter(func(c): return c.contains(" set ")).size(), 1, "a second change right after is held back")
-	eq(m.status_label.text, Texts.ACCEL_WAIT, "and says why")
 	m.free()
