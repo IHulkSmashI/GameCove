@@ -106,7 +106,7 @@ Device data was taken as facts (DMI strings, wattages, capability names, which b
 
 ## Device photos
 
-"About this device" and the first-run welcome show a real photo of your handheld when a freely licensed one exists on [Wikimedia Commons](https://commons.wikimedia.org/). The photos aren't in the app: the weekly `device-photos` workflow re-checks each license through the Commons API, scales the photo to 1200 px wide, converts it to WebP and publishes it to the `device-photos` release; the app downloads only your device's photo, once. Converting and resizing is the only change made. Each photo stays under its own license (below), not GameCove's GPL; the credit line under the photo in the app links to its Commons page. Where a row lists more than one device, the models look the same from the front and share the photo.
+"About this device" and the first-run welcome show a real photo of your handheld when a freely licensed one exists on [Wikimedia Commons](https://commons.wikimedia.org/) (or on Flickr, found through [Openverse](https://openverse.org/)). The photos aren't in the app: the weekly `device-photos` workflow re-checks each license at its source, scales the photo to 1200 px wide, converts it to WebP and publishes it to the `device-photos` release; the app downloads only your device's photo, once. Converting and resizing is the only change made. Each photo stays under its own license (below), not GameCove's GPL; the credit line under the photo in the app links to its source page. Where a row lists more than one device, the models look the same from the front and share the photo.
 
 | Device | Commons file | Author | License |
 | --- | --- | --- | --- |
@@ -115,14 +115,14 @@ Device data was taken as facts (DMI strings, wattages, capability names, which b
 | ASUS ROG Ally | [Asus ROG Ally.jpg](https://commons.wikimedia.org/wiki/File:Asus_ROG_Ally.jpg) | TheHDGamer2008 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | ASUS ROG Ally X | [Tokyo-Game-Show-2024-Day4---2024-09-29 235.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_235.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | ASUS ROG Xbox Ally | [ROG XBOX ALLY.jpg](https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY.jpg) | Kyu3a | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
-| ASUS ROG Xbox Ally X | [ROG XBOX ALLY X.jpg](https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY_X.jpg) | Kyu3a | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | [ROG XBOX ALLY X.jpg](https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY_X.jpg) | Kyu3a | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | Lenovo Legion Go | [Lenovo Legion Go.jpg](https://commons.wikimedia.org/wiki/File:Lenovo_Legion_Go.jpg) | TaurusEmerald | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | MSI Claw A1M | [MSI Claw - Co poszło nie tak¿ (2160p 30fps AV1-128kbit AAC)-00.08.15.665.png](https://commons.wikimedia.org/wiki/File:MSI_Claw_-_Co_posz%C5%82o_nie_tak%C2%BF_(2160p_30fps_AV1-128kbit_AAC)-00.08.15.665.png) | ZMASLO | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 | OneXFly F1, OneXFly F1 Pro | [Tokyo-Game-Show-2024-Day4---2024-09-29 469.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_469.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | OneXPlayer X1 Mini | [Tokyo-Game-Show-2024-Day4---2024-09-29 477.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_477.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | OneXPlayer 2 Pro, OneXPlayer 2 | [Tokyo-Game-Show-2023-Day3-2023-09-23 381.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_381.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | AOKZOE A1, AOKZOE A1 Pro | [AOKZOE A1.jpg](https://commons.wikimedia.org/wiki/File:AOKZOE_A1.jpg) | Kyu3a | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
-| AYANEO Slide | [Tokyo-Game-Show-2023-Day3-2023-09-23 393.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_393.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| AYANEO Slide | [Tokyo-Game-Show-2023-Day3-2023-09-23 390.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_390.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | AYANEO 3 | [Tokyo-Game-Show-2025 0728.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2025_0728.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
 ## Trademarks

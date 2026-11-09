@@ -1,8 +1,8 @@
 name: Device photos
 
 # Real photos of each handheld for "About this device" and the first-run welcome.
-# Only freely licensed Wikimedia Commons files listed in app/data/device_photos.json;
-# every license is re-checked through the Commons API on each run (see
+# Only freely licensed Commons files and Flickr photos (through Openverse) listed in
+# app/data/device_photos.json; every license is re-checked at its source on each run (see
 # tools/device_photos/build.py and docs/DEVICES.md).
 
 on:
@@ -36,7 +36,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view device-photos >/dev/null 2>&1 || gh release create device-photos --title "Device photos" --notes "Photos of supported handhelds from Wikimedia Commons, each under its own free license (CC0, public domain, CC BY or CC BY-SA). Author, license and source for every file are in manifest.json. Rebuilt weekly; licenses are re-checked on every run." --latest=false
+          gh release view device-photos >/dev/null 2>&1 || gh release create device-photos --title "Device photos" --notes "Photos of supported handhelds from Wikimedia Commons and Flickr, each under its own free license (CC0, public domain, CC BY or CC BY-SA). Author, license and source for every file are in manifest.json. Rebuilt weekly; licenses are re-checked on every run." --latest=false
           if ls dist/*.webp >/dev/null 2>&1; then
             gh release upload device-photos dist/*.webp --clobber
           fi
