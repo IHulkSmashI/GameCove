@@ -170,9 +170,9 @@ static func row_focus(r := -1) -> StyleBoxFlat:
 	s.bg_color = base.lerp(color("ring"), 0.04)
 	s.bg_color.a = 1.0
 	var g: Color = color("glow")
-	s.shadow_color = Color(g, g.a * 0.75)
-	s.shadow_size = int(tok("glow_size")) + 4
-	s.shadow_offset = Vector2(0, 6)
+	s.shadow_color = Color(g, g.a * 0.6)
+	s.shadow_size = int(tok("glow_size"))
+	s.shadow_offset = Vector2(0, 4)
 	return s
 
 

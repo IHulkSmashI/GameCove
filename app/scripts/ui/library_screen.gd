@@ -432,8 +432,7 @@ func _build_details() -> PanelContainer:
 	row.add_child(pill)
 	_d_title = Kit.label("", "HeaderLabel")
 	_d_title.name = "Title"
-	_d_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_d_title.custom_minimum_size = Vector2(160, 0)
+	_d_title.max_lines_visible = 1
 	row.add_child(_d_title)
 	_d_meta = Kit.hbox(18)
 	_d_meta.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -552,6 +551,9 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_RESIZED and grid != null:
 		var w := size.x - 48 - 24 - PAD.x
 		var cols := maxi(3, int((w + GAP.x) / (Tile.SIZE.x + GAP.x)))
+		# Spread the leftover width into the gaps so the grid spans the row.
+		var gap := clampf((w - 4.0 - cols * Tile.SIZE.x) / maxf(1.0, cols - 1), GAP.x, GAP.x * 3.0)
+		grid.add_theme_constant_override("h_separation", int(gap))
 		if cols != grid.columns:
 			grid.columns = cols
 			_link_grid()
