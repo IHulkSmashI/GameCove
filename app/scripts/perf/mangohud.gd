@@ -59,6 +59,11 @@ var ctl := ""
 var runner: RefCounted
 
 var level := 0
+## Style (perf controls, scripts/controls/perf/overlay.gd): lines that replace
+## the level's own when not empty (the "bar" and "custom" presets), and lines
+## added to any visible level (position, opacity, scale). Never used at level 0.
+var override_lines: Array = []
+var extra_lines: Array = []
 var logging := false
 ## What PerfMonitor wants (set on the main thread); sync() makes it so. Jobs
 ## may run out of order on the thread pool, so each applies the newest want.
@@ -82,9 +87,13 @@ func supported() -> bool:
 
 
 ## The config file text for an overlay level, with or without our log lines.
-static func config_text(lvl: int, with_log: bool, folder: String, autostart := true) -> String:
+static func config_text(lvl: int, with_log: bool, folder: String, autostart := true,
+		override: Array = [], extra: Array = []) -> String:
 	var lines: Array = [HEADER]
-	lines.append_array(LEVELS[clampi(lvl, 0, LEVELS.size() - 1)])
+	var l := clampi(lvl, 0, LEVELS.size() - 1)
+	lines.append_array(override if l > 0 and not override.is_empty() else LEVELS[l])
+	if l > 0:
+		lines.append_array(extra)
 	if with_log and folder != "":
 		lines.append("output_folder=" + folder)
 		lines.append("log_interval=1000")
@@ -98,7 +107,7 @@ static func config_text(lvl: int, with_log: bool, folder: String, autostart := t
 func _write_config() -> bool:
 	if config_path == "":
 		return false
-	var text := config_text(level, logging, log_dir, ctl == "")
+	var text := config_text(level, logging, log_dir, ctl == "", override_lines, extra_lines)
 	if text == _written and FileAccess.file_exists(config_path):
 		return true
 	var f := FileAccess.open(config_path, FileAccess.WRITE)
@@ -120,6 +129,30 @@ func set_level(lvl: int) -> bool:
 		_last_kick_s = -1000.0  # the reload stopped the log: start it again soon
 	_mutex.unlock()
 	return ok
+
+
+## The overlay's style (see override_lines / extra_lines), rewritten at once.
+## Lines are MangoHud options without newlines; anything else is dropped.
+func set_style(override: Array, extra: Array) -> bool:
+	_mutex.lock()
+	override_lines = _clean(override)
+	extra_lines = _clean(extra)
+	var ok := _write_config()
+	if ok and logging:
+		_kicks = 0
+		_last_kick_s = -1000.0
+	_mutex.unlock()
+	return ok
+
+
+static func _clean(lines: Array) -> Array:
+	var out := []
+	for l in lines:
+		var s := str(l).strip_edges()
+		if s != "" and not "\n" in s and not "\r" in s and not s.begins_with("#") \
+				and not s.begins_with("output_folder") and not s.begins_with("log_"):
+			out.append(s)
+	return out
 
 
 ## Starts or stops logging to match want_logging. Call off the main thread.

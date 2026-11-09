@@ -189,6 +189,15 @@ def test_cli_answers_json_and_refuses_bad_usage(tmp_path, capsys):
     assert st["vendor"] == "intel" and st["xess"]["installed"] is False
 
 
+def test_gpu_argument_as_pairs_or_json():
+    assert cli.parse_gpu("vendor=amd,family=amd-rdna3,arch=RDNA3.5,xmx=0") == \
+        {"vendor": "amd", "family": "amd-rdna3", "arch": "RDNA3.5", "xmx": False}
+    assert cli.parse_gpu('{"vendor": "intel", "xmx": true}') == {"vendor": "intel", "xmx": True}
+    assert cli.parse_gpu("") == {}
+    with pytest.raises(ValueError):
+        cli.parse_gpu("evil=1")
+
+
 def test_entry_script_runs_the_package(tmp_path):
     script = os.path.join(HERE, "..", "..", "libexec", "gamecove-upscale")
     r = subprocess.run(["sh", script, "state", "--home", str(tmp_path), "--gpu", json.dumps(RDNA2)],

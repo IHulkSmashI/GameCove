@@ -34,6 +34,24 @@ def _state(home: str, gpu: dict) -> dict:
             "upscalers": games.upscalers_for(gpu), "frame_gens": games.fg_for(gpu), "vendor": games.vendor(gpu)}
 
 
+def parse_gpu(text: str) -> dict:
+    """--gpu as JSON, or as vendor=amd,family=amd-rdna3,arch=RDNA3.5,xmx=0 (what GameCove sends: Godot's
+    OS.execute drops double quotes from arguments, so JSON can't pass through it)."""
+    text = text.strip()
+    if text.startswith("{"):
+        gpu = json.loads(text)
+        if not isinstance(gpu, dict):
+            raise ValueError("--gpu must be a JSON object")
+        return gpu
+    gpu: dict = {}
+    for part in filter(None, text.split(",")):
+        k, sep, v = part.partition("=")
+        if not sep or k not in ("vendor", "family", "arch", "xmx", "chip"):
+            raise ValueError(f"bad --gpu entry {part!r}")
+        gpu[k] = v in ("1", "true") if k == "xmx" else v
+    return gpu
+
+
 def run(argv: list[str]) -> dict:
     p = argparse.ArgumentParser(prog="gamecove-upscale")
     p.add_argument("command", choices=COMMANDS)
@@ -48,9 +66,7 @@ def run(argv: list[str]) -> dict:
     p.add_argument("--online", action="store_true")
     p.add_argument("--allow-unpinned", action="store_true")
     a = p.parse_args(argv)
-    gpu = json.loads(a.gpu)
-    if not isinstance(gpu, dict):
-        raise ValueError("--gpu must be a JSON object")
+    gpu = parse_gpu(a.gpu)
     home = a.home
     if a.command in ("recommend", "status", "choose", "apply", "undo", "latency") and not a.key:
         raise ValueError(f"{a.command} needs --key")
