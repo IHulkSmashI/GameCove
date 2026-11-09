@@ -19,8 +19,10 @@
 #   sh gamecove-testbed.sh check [--detach] [name...]
 #                                         run the machine checks in checks/ (all when no name);
 #                                         results in ~/gamecove-tests/results/<device>/
-#   sh gamecove-testbed.sh report         one bundle for this device: logs, self-test, check
-#                                         results, versions (no secrets); prints where it is
+#   sh gamecove-testbed.sh results        print every check result for this device
+#   sh gamecove-testbed.sh note <check.item> pass|fail|warn|skip <text>
+#                                         record the owner's answer to a hands-on step
+#   sh gamecove-testbed.sh report         save logs + self-test for this device
 #   sh gamecove-testbed.sh reset [--full] [--yes]
 #                                         before moving the drive to the next device:
 #                                         save a report, remove this device's fixes,
@@ -75,12 +77,18 @@ TESTS="$HOME_DIR/gamecove-tests"
 SRC="$HOME_DIR/src/GameCove"
 LOG="$TESTS/testbed.log"
 GC_DATA="$HOME_DIR/.local/share/gamecove"
+# The checks: next to this script (the repo copy), else in the prepared source.
+CHECKS="${GAMECOVE_TESTBED_CHECKS:-}"
+if [ -z "$CHECKS" ]; then
+	CHECKS="$(cd "$(dirname "$0")" && pwd)/checks"
+	[ -f "$CHECKS/lib.sh" ] || CHECKS="$SRC/tools/testbed/checks"
+fi
 INSTALLER_APP="$GC_DATA/installer/app/gamecove.x86_64"
 
 say() { printf '%s\n' "$*"; mkdir -p "$TESTS"; printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >>"$LOG"; }
 die() { say "error: $*"; exit 1; }
 
-dmi() { tr -d '\n' <"$DMI_DIR/$1" 2>/dev/null || true; }
+dmi() { tr -d '\n' 2>/dev/null <"$DMI_DIR/$1" || true; }
 
 # A short, file-name-safe device name, e.g. "msi-claw-8-ex-ai" or "asus-rog-ally-rc71l".
 device_slug() {
@@ -327,6 +335,86 @@ cmd_uninstall() {
 	say "uninstall log: $log"
 }
 
+# ----------------------------------------------------------------------- check
+results_dir() { echo "$TESTS/results/$(device_slug)"; }
+
+# check [--detach] [name...]: names match the part after the number (install, controls,
+# suspend...). --detach runs them in the background (setsid), so a check that sleeps the
+# handheld or waits for the owner survives the browser terminal reconnecting.
+cmd_check() {
+	detach=0
+	names=""
+	for a in "$@"; do
+		case "$a" in
+		--detach) detach=1 ;;
+		-*) die "unknown option: $a" ;;
+		*) names="$names $a" ;;
+		esac
+	done
+	[ -f "$CHECKS/lib.sh" ] || die "no checks in $CHECKS (run prepare)"
+	res="$(results_dir)"
+	mkdir -p "$res/out"
+	if [ "$detach" = 1 ]; then
+		# shellcheck disable=SC2086  # names is a word list
+		setsid nohup sh "$0" check $names >>"$res/detached.log" 2>&1 </dev/null &
+		say "checks running in the background ($names); progress: $res/detached.log, then: sh $0 results"
+		return 0
+	fi
+	ran=0
+	for f in "$CHECKS"/[0-9]*.sh; do
+		[ -f "$f" ] || continue
+		name="$(basename "$f" .sh | sed 's/^[0-9]*-//')"
+		if [ -n "$names" ]; then
+			case " $names " in *" $name "*) ;; *) continue ;; esac
+		elif grep -q '^# testbed: by-name-only' "$f"; then
+			say "-- check $name: skipped (hands-on; run: check $name)"
+			continue
+		fi
+		ran=$((ran + 1))
+		out="$res/$name.tsv"
+		: >"$out"
+		say "-- check $name"
+		rc=0
+		GC_RESULTS="$out" GC_OUT="$res/out" GC_HOME="$HOME_DIR" CHECK="$name" sh "$f" 2>"$res/out/$name.stderr" || rc=$?
+		[ "$rc" -eq 0 ] || printf 'FAIL\t%s.script\tthe check stopped with exit code %s (see out/%s.stderr)\n' "$name" "$rc" "$name" >>"$out"
+		summarize "$out"
+	done
+	[ "$ran" -gt 0 ] || die "no check named:$names"
+	say "results: $res (sh $0 results prints them all)"
+}
+
+count() { grep -c "^$1" "$2" || true; }
+
+summarize() { # <tsv>: counts, then every line that needs attention
+	p="$(count PASS "$1")"; f="$(count FAIL "$1")"; w="$(count WARN "$1")"
+	m="$(count MANUAL "$1")"; k="$(count SKIP "$1")"
+	say "   pass $p, fail $f, warn $w, skip $k, manual $m"
+	grep -E '^(FAIL|WARN|MANUAL)' "$1" | sed 's/^/   /' || true
+}
+
+cmd_results() {
+	res="$(results_dir)"
+	[ -d "$res" ] || die "no results yet: run check"
+	for t in "$res"/*.tsv; do
+		[ -f "$t" ] || continue
+		say "== $(basename "$t" .tsv)"
+		sed 's/^/   /' "$t"
+	done
+}
+
+# note <check.item> <pass|fail|warn|skip> <what was seen>: the owner's answer to a MANUAL step
+# (Claude writes what he says), kept with the results.
+cmd_note() {
+	[ $# -ge 3 ] || die "usage: note <check.item> pass|fail|warn|skip <what you saw>"
+	item="$1"; st="$2"; shift 2
+	case "$st" in pass | fail | warn | skip) ;; *) die "status must be pass, fail, warn or skip" ;; esac
+	case "$item" in *[!A-Za-z0-9._-]*) die "item: letters, digits, . _ - only" ;; esac
+	res="$(results_dir)"
+	mkdir -p "$res"
+	printf '%s\t%s\t%s\n' "$(echo "$st" | tr '[:lower:]' '[:upper:]')" "$item" "$(printf '%s' "$*" | tr '\t\n' '  ')" >>"$res/manual.tsv"
+	say "noted $item: $st"
+}
+
 # ---------------------------------------------------------------------- report
 cmd_report() {
 	dir="$TESTS/$(date +%Y%m%d-%H%M)-$(device_slug)"
@@ -404,11 +492,14 @@ console) shift; cmd_console "$@" ;;
 console-stop) stop_console ;;
 status) cmd_status ;;
 install) shift; cmd_install "$@" ;;
+check) shift; cmd_check "$@" ;;
+results) cmd_results ;;
+note) shift; cmd_note "$@" ;;
 uninstall) cmd_uninstall ;;
 report) cmd_report ;;
 reset) shift; cmd_reset "$@" ;;
 *)
-	sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'
 	exit 64
 	;;
 esac

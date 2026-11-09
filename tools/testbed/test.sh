@@ -155,6 +155,116 @@ sh "$S" console-stop >/dev/null 2>&1
 grep -q "systemctl --user stop gamecove-testbed-console" "$T/systemctl-calls" && ok || bad "console-stop stops the unit"
 [ ! -e "$T/home/gamecove-tests/console-url" ] && ok || bad "console-stop forgets the link"
 
+# ---- check / results / note / report against a fake ROG Ally on SteamOS ---------------------
+R="$T/root"
+mkdir -p "$R/etc/extensions" "$R/etc/atomic-update.conf.d" "$R/sys/class/dmi/id" "$R/usr/lib/gamecove" \
+	"$R/home/.steamos/offload/gamecove" "$R/sys/class/power_supply/ACAD" "$R/sys/class/power_supply/BAT0" \
+	"$R/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl" "$R/sys/firmware/acpi" "$T/fakebin"
+printf 'ID=steamos\nVERSION_ID=3.8.10\nPRETTY_NAME="SteamOS"\n' >"$R/etc/os-release"
+printf 'ASUSTeK COMPUTER INC.\n' >"$R/sys/class/dmi/id/sys_vendor"
+printf 'ROG Ally RC71L_RC71L\n' >"$R/sys/class/dmi/id/product_name"
+printf 'RC71L\n' >"$R/sys/class/dmi/id/board_name"
+touch "$R/usr/lib/gamecove/gamecove.x86_64" "$R/home/.steamos/offload/gamecove/gamecove.raw"
+ln -s /home/.steamos/offload/gamecove/gamecove.raw "$R/etc/extensions/gamecove.raw"
+printf '/etc/extensions/gamecove.raw\n/etc/systemd/system/sysinit.target.wants/systemd-sysext.service\n' >"$R/etc/atomic-update.conf.d/gamecove.conf"
+echo 1 >"$R/sys/class/power_supply/ACAD/online"
+echo Charging >"$R/sys/class/power_supply/BAT0/status"
+echo 15 >"$R/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/current_value"
+echo 7 >"$R/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/min_value"
+echo 30 >"$R/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/max_value"
+echo performance >"$R/sys/firmware/acpi/platform_profile"
+mkdir -p "$T/home/.local/share/gamecove/installer"
+printf 'TAG=v0.1.0\nOS=steamos\nSIGNATURE=verified\n' >"$T/home/.local/share/gamecove/installer/release.env"
+# the controls CLI: power.tdp probes by writing the fake sysfs node and putting it back
+cat >"$T/fakebin/gamecove.x86_64" <<EOF
+#!/bin/sh
+shift 3   # --headless -- --controls
+echo "Godot Engine v4.7.2 (banner)"
+case "\$1" in
+list)
+	printf 'control\tpower.tdp\tpower\tslider\tavailable=yes\tvalue=15.0\troot=no\tper_game=yes\tshape=7..30 step 1 W\treason=\n'
+	printf 'control\tsystem.sleep\tsystem\taction\tavailable=yes\tvalue=null\troot=no\tper_game=no\tshape=\treason=\n'
+	printf 'control\tnetwork.wifi\tnetwork\ttoggle\tavailable=yes\tvalue=true\troot=no\tper_game=no\tshape=\treason=\n'
+	printf 'control\tdisplay.hdr\tdisplay\ttoggle\tavailable=no\tvalue=null\troot=no\tper_game=no\tshape=\treason=No HDR panel\n' ;;
+get) printf 'get\t%s\tavailable=yes\tvalue=15.0\n' "\$2" ;;
+probe)
+	shift
+	for id in "\$@"; do
+		echo "\$id" >>"$T/probed"
+		echo 16 >"$R/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/current_value"
+		echo 15 >"$R/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/current_value"
+		printf 'probe\t%s\tresult=ok\tfrom=15.0\tto=16.0\tread=16.0\trestored=15.0\n' "\$id"
+	done ;;
+profile-test) printf 'profile\t%s\tresult=ok\tbefore=15.0\tgame=16.0\tafter=15.0\n' "\$2" ;;
+source-test) printf 'source\t%s\tresult=ok\tac=16.0\tbattery=15.0\trestored=15.0\treal_source=ac\n' "\$2" ;;
+esac
+EOF
+printf '#!/bin/sh\nexit 1\n' >"$T/fakebin/busctl"
+cat >"$T/fakebin/systemctl" <<EOF
+#!/bin/sh
+echo "systemctl \$*" >>"$T/fake-systemctl"
+case "\$*" in *is-enabled*) echo enabled ;; *is-active*) echo inactive ;; esac
+exit 0
+EOF
+cat >"$T/fakebin/steamosctl" <<'EOF'
+#!/bin/sh
+case "$1" in
+get-valid-desktop-sessions) printf 'Sessions:\n\n- gamecove.desktop\n- plasma.desktop\n' ;;
+get-default-login-mode) echo game ;;
+get-default-desktop-session) echo plasma.desktop ;;
+esac
+EOF
+printf '#!/bin/sh\necho "[ok]   fine"; echo "ok=3 warn=0 fail=0"\n' >"$T/fakebin/selftest"
+printf '#!/bin/sh\necho "Nov 09 gamecove[1]: token=SECRET123 at /home/mena/x from 192.168.1.20"\n' >"$T/fakebin/journalctl"
+printf '#!/bin/sh\necho enabled\n' >"$T/fakebin/steamos-readonly"
+printf '#!/bin/sh\necho "/usr gamecove"\n' >"$T/fakebin/systemd-sysext"
+printf '#!/bin/sh\nexit 1\n' >"$T/fakebin/xprop"
+chmod +x "$T/fakebin/"*
+export GC_ROOT="$R" GC_APP="$T/fakebin/gamecove.x86_64" GC_BUSCTL="$T/fakebin/busctl" GC_SYSTEMCTL="$T/fakebin/systemctl" \
+	GC_STEAMOSCTL="$T/fakebin/steamosctl" GC_SELFTEST="$T/fakebin/selftest" GC_JOURNALCTL="$T/fakebin/journalctl" \
+	GC_FIX="$T/bin/fix" GC_XPROP="$T/fakebin/xprop" GAMECOVE_TESTBED_DMI="$R/sys/class/dmi/id" \
+	GAMECOVE_TESTBED_OS_RELEASE="$R/etc/os-release" GAMECOVE_TESTBED_SELFTEST="$T/fakebin/selftest" GAMECOVE_EXPECT_TAG=v0.1.0 \
+	GC_SLEEP_WAIT=2 GC_SETTLE=0 GC_PKEXEC=false
+OLDPATH="$PATH"
+PATH="$T/fakebin:$PATH"
+out="$(sh "$S" check 2>&1)" && ok || bad "check runs every check ($out)"
+RES="$(ls -d "$T"/home/gamecove-tests/results/asus* 2>/dev/null | head -n 1)"
+[ -n "$RES" ] && ok || bad "results per device"
+for c in env install selftest session controls profiles input gamescope device system streaming logs uninstall; do
+	[ -f "$RES/$c.tsv" ] && ok || bad "check $c ran"
+done
+[ ! -f "$RES/suspend.tsv" ] && [ ! -f "$RES/power-source.tsv" ] && ok || bad "hands-on checks only run by name"
+grep -q "systemctl suspend" "$T/fake-systemctl" && bad "check never sleeps the handheld unasked" || ok
+grep -q '\.script	' "$RES"/*.tsv && bad "a check crashed: $(grep -h '\.script' "$RES"/*.tsv)" || ok
+bad_lines="$(cat "$RES"/*.tsv | grep -v -E '^(PASS|FAIL|WARN|SKIP|INFO|MANUAL)	[a-z-]+\.[^	]+	' || true)"
+[ -z "$bad_lines" ] && ok || bad "result lines keep the format: $bad_lines"
+grep -q "^PASS	env.device	ROG Ally" "$RES/env.tsv" && ok || bad "env knows the Ally"
+grep -q '^PASS	install.sysext.keep' "$RES/install.tsv" && ok || bad "install: SteamOS keep list checked"
+grep -q '^PASS	install.release	installed release v0.1.0' "$RES/install.tsv" && ok || bad "install: expected tag checked"
+grep -q '^PASS	session.valid' "$RES/session.tsv" && ok || bad "session: steamos-manager lists gamecove.desktop"
+grep -qx power.tdp "$T/probed" && ok || bad "controls: TDP probed"
+grep -q -e system.sleep -e network.wifi "$T/probed" && bad "controls: sleep / Wi-Fi never probed automatically" || ok
+grep -q '^PASS	controls.restored' "$RES/controls.tsv" && ok || bad "controls: nodes back to their values"
+grep -q '^INFO	controls.display.hdr	unavailable: No HDR panel' "$RES/controls.tsv" && ok || bad "controls: reasons recorded"
+grep -q '^PASS	profiles.game' "$RES/profiles.tsv" && grep -q '^PASS	profiles.source' "$RES/profiles.tsv" && ok || bad "profiles: game and source layers"
+grep -q '^PASS	device.tdp' "$RES/device.tsv" && ok || bad "device: Ally firmware attributes"
+grep -q '^SKIP	uninstall.uninstalled' "$RES/uninstall.tsv" && ok || bad "uninstall check waits for the uninstall"
+grep -q '^SKIP	streaming.host' "$RES/streaming.tsv" && ok || bad "streaming skipped without a host"
+out="$(sh "$S" check suspend 2>&1)" || true
+grep -q "systemctl suspend" "$T/fake-systemctl" && ok || bad "check suspend runs by name"
+sh "$S" check nosuch >/dev/null 2>&1 && bad "an unknown check name fails" || ok
+sh "$S" note controls.feel.rumble pass "strong, then weaker" >/dev/null && ok || bad "note records"
+grep -q '^PASS	controls.feel.rumble	strong, then weaker' "$RES/manual.tsv" && ok || bad "note format"
+sh "$S" note controls.x maybe "?" >/dev/null 2>&1 && bad "note: status checked" || ok
+sh "$S" note 'a;b' pass x >/dev/null 2>&1 && bad "note: item checked" || ok
+sh "$S" results | grep -q "== controls" && ok || bad "results prints every check"
+rm -f "$RES/env.tsv"
+sh "$S" check --detach env >/dev/null 2>&1 && ok || bad "check --detach returns at once"
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [ -s "$RES/env.tsv" ] && break; sleep 0.5; done
+[ -s "$RES/env.tsv" ] && ok || bad "detached check finishes on its own"
+PATH="$OLDPATH"
+unset GC_SLEEP_WAIT GC_SETTLE GC_PKEXEC GC_ROOT GC_APP GC_BUSCTL GC_SYSTEMCTL GC_STEAMOSCTL GC_SELFTEST GC_JOURNALCTL GC_FIX GC_XPROP GAMECOVE_EXPECT_TAG
+
 sh "$S" bogus >/dev/null 2>&1 && bad "unknown command exits non-zero" || ok
 echo "testbed: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
