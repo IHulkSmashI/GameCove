@@ -335,6 +335,26 @@ func test_ally_thermal_ceiling_stays_after_a_lower_limit() -> void:
 	_free()
 
 
+# ---- Bazzite: steamos-manager and tuned-ppd both run ---------------------------------------------
+
+## Bazzite 44 runs steamos-manager (PerformanceProfile1) and tuned-ppd, whose profiles set the same
+## firmware platform profile (tuned's acpi plugin). One owner per setting (docs/CONTROLS.md
+## "Integration rules"): Power mode; the platform profile greys out whichever path it would use,
+## or a profile applying both (power_mode 90, then platform 89) fights itself. Found by the
+## end-to-end suite on the Claw 8 EX / Legion Go S Bazzite setups.
+func test_power_mode_owns_the_firmware_mode_with_steamos_manager() -> void:
+	var t: Dictionary = Trees.new().deck()
+	t["props"][Trees.PPD + "ActiveProfile"] = {"type": "s", "data": "balanced"}
+	t["props"][Trees.PPD + "Profiles"] = {"type": "aa{sv}", "data": [{"Profile": {"type": "s", "data": "power-saver"}},
+		{"Profile": {"type": "s", "data": "balanced"}}, {"Profile": {"type": "s", "data": "performance"}}]}
+	var e := _setup(t)
+	var c: Dictionary = e["c"]
+	ok(c["power.power_mode"].available, "Power mode through tuned-ppd")
+	eq(c["power.platform_profile"].reason, Tx.PPD_OWNS, "the platform profile is Power mode's, even through steamos-manager")
+	ok(not e["reg"].control("power.platform_profile").write("low-power"), "and can't be written behind its back")
+	_free()
+
+
 # ---- Steam Deck: steamos-manager only -----------------------------------------------------------
 
 func test_deck_uses_steamos_manager_and_no_helper() -> void:

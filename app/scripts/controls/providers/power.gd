@@ -341,7 +341,10 @@ func _platform() -> RefCounted:
 			var info: Dictionary = be.platform_info()
 			if info.is_empty():
 				return Tx.NOT_HERE
-			if info["via"] == "sysfs" and not be.ppd().is_empty():
+			# power-profiles-daemon / tuned-ppd set the same firmware profile with their own
+			# modes (tuned's acpi plugin), also where steamos-manager offers it (Bazzite runs both):
+			# one owner, Power mode
+			if not be.ppd().is_empty():
 				return Tx.PPD_OWNS
 			c.options = _choice_opts(info["offered"])
 			return "",
