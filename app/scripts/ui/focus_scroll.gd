@@ -26,6 +26,7 @@ var scroll: ScrollContainer
 ## Extra room under the focused control (pages with a "More below" fade).
 var margin_bottom := MARGIN
 var _watched: Control
+var _content: Control
 var _queued := false
 
 
@@ -57,6 +58,11 @@ func _on_focus(c: Control) -> void:
 		return
 	_watched = c
 	c.resized.connect(_queue)
+	# A freshly built list (a new tab) keeps growing for a few frames:
+	# place the focus again once its height settles.
+	_content = scroll.get_child(0) as Control if scroll.get_child_count() > 0 else null
+	if _content != null and not _content.resized.is_connected(_queue):
+		_content.resized.connect(_queue)
 	_queue()
 
 
@@ -72,7 +78,10 @@ func _stop() -> void:
 func _unwatch() -> void:
 	if _watched != null and is_instance_valid(_watched) and _watched.resized.is_connected(_queue):
 		_watched.resized.disconnect(_queue)
+	if _content != null and is_instance_valid(_content) and _content.resized.is_connected(_queue):
+		_content.resized.disconnect(_queue)
 	_watched = null
+	_content = null
 
 
 func _queue() -> void:
