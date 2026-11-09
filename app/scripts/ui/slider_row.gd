@@ -23,6 +23,11 @@ var _settle: Timer
 var _hint: Label
 var _ticks: Control
 var _tick_values: Array = []
+## Hide the explanation unless the slider has focus.
+var collapse_hint := true
+var title_label: Label
+var _head: HBoxContainer
+var _badge_box: HBoxContainer
 
 
 func setup(setting_key: String, title: String, lo: float, hi: float, current: float, step := 1.0, value_unit := " W") -> void:
@@ -44,7 +49,10 @@ func setup(setting_key: String, title: String, lo: float, hi: float, current: fl
 	pad.add_child(col)
 
 	var head := Kit.hbox()
+	_head = head
 	var t := Kit.label(title)
+	title_label = t
+	t.name = "Title"
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t.add_theme_font_override("font", ThemeLib.font("semibold"))
 	head.add_child(t)
@@ -99,10 +107,14 @@ static func tick_values(lo: float, hi: float, step: float) -> Array:
 		return [lo]
 	var span := hi - lo
 	var nice := step if step > 0.0 else 1.0
-	for n in [1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0]:
+	var found := false
+	for n in [1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0]:
 		if n >= step and span / n <= MAX_LABELS - 1:
 			nice = n
+			found = true
 			break
+	if not found:
+		nice = maxf(step, ceilf(span / (MAX_LABELS - 1)))
 	var out: Array = [lo]
 	var v := ceilf(lo / nice) * nice
 	while v < hi - 0.001:
@@ -138,6 +150,40 @@ func value_text() -> String:
 	return _value_label.text
 
 
+## The line under the slider (shown while focused, or always with collapse_hint off).
+func set_hint(text: String) -> void:
+	_hint.text = text
+	_refresh_focus()
+
+
+func hint_text() -> String:
+	return _hint.text
+
+
+## A box right after the title for small chips (see ChoiceRow.badge_slot).
+func badge_slot() -> HBoxContainer:
+	if _badge_box == null:
+		_badge_box = Kit.hbox(6)
+		_badge_box.name = "Badges"
+		_badge_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_badge_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		title_label.size_flags_horizontal = Control.SIZE_FILL
+		_head.add_child(_badge_box)
+		_head.move_child(_badge_box, title_label.get_index() + 1)
+		var gap := Kit.spacer()
+		gap.name = "BadgeGap"
+		_head.add_child(gap)
+		_head.move_child(gap, _badge_box.get_index() + 1)
+	return _badge_box
+
+
+## Locked: shown dimmed, the d-pad can't move it.
+func set_locked(on: bool) -> void:
+	slider.editable = not on
+	slider.modulate.a = 0.45 if on else 1.0
+	_value_label.modulate.a = 0.45 if on else 1.0
+
+
 func _on_value_changed(v: float) -> void:
 	_show(v)
 	if _settle.is_inside_tree():
@@ -170,7 +216,7 @@ func _show(v: float) -> void:
 
 func _refresh_focus() -> void:
 	var f := slider.has_focus()
-	_hint.visible = f and _hint.text != ""
+	_hint.visible = (f or not collapse_hint) and _hint.text != ""
 	_hint.add_theme_color_override("font_color", ThemeLib.color("accent") if ThemeLib.is_dark() else ThemeLib.color("text_2"))
 	queue_redraw()
 

@@ -196,9 +196,9 @@ func _run() -> void:
 		await shot("quick_power")
 		qm.show_section(2)
 		await shot("quick_screen")
-		qm.show_section(4)
+		qm.show_section(5)
 		await frames(20)
-		qm.show_section(4)
+		qm.show_section(5)
 		await shot("quick_device")
 		qm.close()
 
@@ -388,7 +388,7 @@ func _settings_shots() -> void:
 			qm.device.profile["support"] = "partial"
 			qm.device.profile["name"] = "Lenovo Legion Go 2"
 			qm.device.profile["unverified"] = ["tdp", "charge_limit", "panel.vrr"]
-			qm.show_section(4)
+			qm.show_section(5)
 			await shot("quick_device_partial")
 		qm.close()
 		main.playing = {}

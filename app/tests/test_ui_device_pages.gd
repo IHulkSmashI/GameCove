@@ -103,8 +103,8 @@ func test_controller_rows_drive_the_service() -> void:
 	eq(p.rows["paddle_LeftPaddle1"].value_text(), "A", "current mapping shown")
 	p.rows["paddle_LeftPaddle1"].step(1)
 	ok(ctl.calls.has("paddle LeftPaddle1 East"), "remap through Controller.set_paddle")
-	p.rows["gyro"].step(1)
-	ok(ctl.calls.has("gyro stick"), "gyro mode")
+	ok(not p.rows.has("gyro"), "no legacy gyro modes (current InputPlumber ignores them)")
+	ok(_texts(p).contains("Gyro aiming lives in Steam"), "says aiming is Steam Input's")
 	p.rows["rumble"].step(1)
 	ok(ctl.calls.has("rumble false"), "rumble off")
 	p.rumble_button.pressed.emit()
@@ -113,7 +113,7 @@ func test_controller_rows_drive_the_service() -> void:
 	ok(ctl.calls.has("game_profile steam:976730 true"), "per-game layout")
 	ok(p.find_child("Card_lights", true, false) != null, "lights card, read-only")
 	ok(_texts(p).contains(Texts.LED_LINE), "says lights can't be changed")
-	eq(p.hints_for(p.rows["gyro"].button), [["LR", "Change"], ["B", "Back"]], "row hints")
+	eq(p.hints_for(p.rows["rumble"].button), [["LR", "Change"], ["B", "Back"]], "row hints")
 	_done(p, s)
 
 

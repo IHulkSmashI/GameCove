@@ -34,6 +34,7 @@ func build() -> void:
 	_build_steam(lib, s)
 
 
+const BrandMark := preload("res://scripts/ui/brand_mark.gd")
 const SvcLib := preload("res://scripts/ui/settings/services.gd")
 
 
@@ -50,6 +51,12 @@ func _build_sign_in() -> void:
 		var can: bool = TS.can_sign_in(info)
 		var value: String = TS.SIGNED_IN if signed else (TS.SIGN_IN if can else TS.NOT_SIGNED_IN)
 		var r: VBoxContainer = action_row(box, "store_" + store, TS.STORE_NAMES[store], value, TS.store_line(info), "")
+		var logo := BrandMark.rect(str(store), 22)
+		if logo != null:
+			# the store's own logo before its name (brand.gd); the name stays
+			var hb: Node = r.button.get_child(0)
+			hb.add_child(logo)
+			hb.move_child(logo, 0)
 		r.collapse_hint = false
 		r.set_hint(TS.store_line(info))
 		r.set_value(value, "good" if signed else ("" if can else "muted"))

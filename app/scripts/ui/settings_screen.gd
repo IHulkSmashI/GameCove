@@ -1,8 +1,12 @@
 extends Control
-## Settings: a category list on the left (Appearance, Stores, Discover,
-## Performance, Device, About GameCove) and that category's tinted cards on the
-## right. Moving through the list shows each page; A or right goes in, B comes
-## back out to the list (B again goes home, handled by main.gd).
+## Settings: a category list on the left in two groups, HANDHELD (Power,
+## Display, Sound, Controller, Performance, System, Profiles: generated from
+## the Controls registry, scripts/ui/controls/) and GAMECOVE (Appearance,
+## Stores, Discover, Device, About GameCove), and that category's tinted cards
+## on the right. Moving through the list shows each page; A or right goes in,
+## B comes back out to the list (B again goes home, handled by main.gd).
+## open_category(id, part) jumps straight to a page (the quick menu's "All
+## settings").
 ##
 ## Appearance rows are UI prefs: they go out through `changed(key, value)` and
 ## main.gd applies and saves them (same contract as before). Everything else
@@ -23,11 +27,22 @@ const SignIn := preload("res://scripts/ui/settings/sign_in.gd")
 const Credits := preload("res://scripts/ui/settings/credits.gd")
 const PerformancePage := preload("res://scripts/ui/settings/performance_page.gd")
 const SetupFlow := preload("res://scripts/ui/setup/setup_flow.gd")
+const TC := preload("res://scripts/ui/texts_controls.gd")
+const CIcons := preload("res://scripts/ui/controls/cicons.gd")
+const GroupPage := preload("res://scripts/ui/controls/group_page.gd")
+const SessionGuard := preload("res://scripts/ui/controls/session_guard.gd")
+const Shared := preload("res://scripts/ui/controls/shared.gd")
 const PAGES := {
+	"power": GroupPage,
+	"display": GroupPage,
+	"audio": GroupPage,
+	"controller": GroupPage,
+	"performance": preload("res://scripts/ui/controls/perf_page.gd"),
+	"system": GroupPage,
+	"profiles": preload("res://scripts/ui/controls/profiles_page.gd"),
 	"appearance": preload("res://scripts/ui/settings/appearance_page.gd"),
 	"stores": preload("res://scripts/ui/settings/stores_page.gd"),
 	"discover": preload("res://scripts/ui/settings/discover_page.gd"),
-	"performance": PerformancePage,
 	"device": preload("res://scripts/ui/settings/device_page.gd"),
 	"about": preload("res://scripts/ui/settings/about_page.gd"),
 }
@@ -38,6 +53,8 @@ signal notice(text: String, tone: String)
 ## Settings wants first-run setup open at `step` ("" = first unfinished).
 ## Without a listener the screen opens it itself over its top Control.
 signal setup_requested(step: String)
+## A page wants the quick menu open for `game` (Profiles > a game > Edit).
+signal game_settings_requested(game: Dictionary)
 
 ## UI pref rows (theme, match_art, reduce_motion, menu_side, ui_sounds).
 var rows := {}
@@ -86,6 +103,25 @@ func _late_start() -> void:
 	if setup_requested.get_connections().is_empty() and SetupFlow.instance == null \
 			and SetupFlow.should_show(services.get("setup")):
 		open_setup("")
+	# A refresh-rate unlock from the last session waits for "Keep this?".
+	if not Services.under_tests(self):
+		SessionGuard.check(self, services.get("controls"), services.get("profiles"))
+
+
+## Every category id, in list order (both groups).
+static func categories() -> Array:
+	var out := []
+	for g in TC.CATEGORY_GROUPS:
+		out.append_array(g[1])
+	return out
+
+
+static func category_name(id: String) -> String:
+	return str(TC.CATEGORY_NAMES.get(id, TS.CATEGORY_NAMES.get(id, id.capitalize())))
+
+
+static func category_icon(id: String) -> String:
+	return str(TC.CATEGORY_ICONS.get(id, TS.CATEGORY_ICONS.get(id, "settings")))
 
 
 ## values: {"theme", "match_art", "reduce_motion", "menu_side", "ui_sounds"};
@@ -103,6 +139,13 @@ func setup(ui_values: Dictionary, about: Array = []) -> void:
 ## "achievements", "device", plus anything the Device panels want}.
 func set_services(svc: Dictionary) -> void:
 	services = svc
+	# main.gd doesn't pass Controls / Profiles: the autoloads (none under tests)
+	for k in [["controls", "Controls"], ["profiles", "Profiles"]]:
+		if not services.has(k[0]):
+			var n := Shared.autoload(k[1])
+			if n != null:
+				services = services.duplicate()
+				services[k[0]] = n
 	_services_set = true
 	PerformancePage.restore_rarity(services.get("achievements"))
 	if _content != null:
@@ -145,14 +188,31 @@ func _build() -> void:
 	var cols := Kit.hbox(28)
 	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(cols)
-	var list := Kit.vbox(6)
+	var list_scroll := ScrollContainer.new()
+	list_scroll.name = "CategoryScroll"
+	list_scroll.follow_focus = true
+	list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	list_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	list_scroll.custom_minimum_size = Vector2(280, 0)
+	cols.add_child(list_scroll)
+	var list := Kit.vbox(3)
 	list.name = "Categories"
-	list.custom_minimum_size = Vector2(300, 0)
-	cols.add_child(list)
-	for id in TS.CATEGORIES:
-		var b := _category_button(id)
-		list.add_child(b)
-		cat_buttons[id] = b
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_scroll.add_child(list)
+	for g in TC.CATEGORY_GROUPS:
+		var gl := Kit.micro(g[0])
+		gl.name = "Group_" + str(g[0])
+		gl.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+		var gpad := Kit.margin(0)
+		gpad.add_theme_constant_override("margin_left", 16)
+		gpad.add_theme_constant_override("margin_top", 0 if list.get_child_count() == 0 else 10)
+		gpad.add_theme_constant_override("margin_bottom", 2)
+		gpad.add_child(gl)
+		list.add_child(gpad)
+		for id in g[1]:
+			var b := _category_button(id)
+			list.add_child(b)
+			cat_buttons[id] = b
 
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"
@@ -170,12 +230,14 @@ func _build() -> void:
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_child(_content)
 
-	for id in TS.CATEGORIES:
+	for id in categories():
 		var p: VBoxContainer = PAGES[id].new()
 		p.visible = false
 		_content.add_child(p)
 		p.setup(id, services, self)
 		p.rebuilt.connect(_link)
+		if p.has_signal("edit_game_requested"):
+			p.edit_game_requested.connect(func(g): game_settings_requested.emit(g))
 		pages[id] = p
 	for k in pages["appearance"].rows:
 		rows[k] = pages["appearance"].rows[k]
@@ -188,45 +250,39 @@ func _category_button(id: String) -> Button:
 	var b := Kit.button("", "RowButton")
 	b.name = "Cat_" + id
 	b.toggle_mode = true
-	b.custom_minimum_size = Vector2(0, 66)
+	b.custom_minimum_size = Vector2(0, 40)
+	b.tooltip_text = str(TC.CATEGORY_LINES.get(id, TS.CATEGORY_LINES.get(id, "")))
 	# The chosen category: a cyan-to-violet tint with an accent edge.
 	var acc := ThemeLib.color("accent")
-	var chosen := ThemeLib.gradient_box(Color(acc, 0.20), Color(ThemeLib.color("accent_2"), 0.30), ThemeLib.radius("m"), Color(acc, 0.55), 18, 10)
+	var chosen := ThemeLib.gradient_box(Color(acc, 0.20), Color(ThemeLib.color("accent_2"), 0.30), ThemeLib.radius("m"), Color(acc, 0.55), 18, 6)
 	b.add_theme_stylebox_override("pressed", chosen)
 	b.add_theme_stylebox_override("hover_pressed", chosen)
 	b.focus_entered.connect(func(): show_category(id))
 	b.pressed.connect(func():
 		b.set_pressed_no_signal(true)
 		enter_page())
-	var row := Kit.hbox(14)
+	var row := Kit.hbox(12)
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	row.offset_left = 16
+	row.offset_left = 12
 	row.offset_right = -12
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var bar := Panel.new()
 	bar.name = "Bar"
-	bar.custom_minimum_size = Vector2(4, 30)
+	bar.custom_minimum_size = Vector2(4, 22)
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("accent"), 999, 0, 0))
 	row.add_child(bar)
-	var ic := Icons.rect(TS.CATEGORY_ICONS[id], 24, ThemeLib.color("text_2"))
+	var ic := CIcons.rect(category_icon(id), 22, ThemeLib.color("text_2"))
 	ic.name = "Icon"
 	row.add_child(ic)
-	var col := Kit.vbox(0)
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var t := Kit.label(TS.CATEGORY_NAMES[id])
+	var t := Kit.label(category_name(id))
 	t.name = "Title"
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	t.size_flags_vertical = Control.SIZE_FILL
 	t.add_theme_font_override("font", ThemeLib.font("semibold"))
-	col.add_child(t)
-	var sub := Kit.label(TS.CATEGORY_LINES[id], "CaptionLabel")
-	sub.name = "Line"
-	sub.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	sub.add_theme_color_override("font_color", ThemeLib.color("text_3"))
-	col.add_child(sub)
-	row.add_child(col)
+	row.add_child(t)
 	b.add_child(row)
 	return b
 
@@ -250,7 +306,7 @@ func show_category(id: String) -> void:
 		b.set_pressed_no_signal(on)
 		b.find_child("Bar", true, false).modulate.a = 1.0 if on else 0.0
 		var col := ThemeLib.color("accent") if on else ThemeLib.color("text_2")
-		(b.find_child("Icon", true, false) as TextureRect).texture = Icons.tex(TS.CATEGORY_ICONS[k], 24, col)
+		(b.find_child("Icon", true, false) as TextureRect).texture = CIcons.tex(category_icon(k), 22, col)
 	if old != id and pages.has(old) and pages[old].has_method("on_hidden"):
 		pages[old].on_hidden()
 	if pages[id].has_method("on_shown"):
@@ -267,12 +323,31 @@ func enter_page() -> void:
 		f[0].grab_focus()
 
 
+## Shows category `id` and goes into it, at `part` when the page knows it
+## (Device: "fixes"). The quick menu's "All settings" lands here.
+func open_category(id: String, part := "") -> void:
+	if not pages.has(id):
+		return
+	if is_inside_tree() and cat_buttons.has(id):
+		cat_buttons[id].grab_focus()
+	show_category(id)
+	var target: Control = null
+	if part != "" and pages[id].has_method("focus_part"):
+		target = pages[id].focus_part(part)
+	if target == null:
+		var f: Array = pages[id].focusables()
+		target = f[0] if not f.is_empty() else null
+	if target != null and is_inside_tree():
+		target.grab_focus.call_deferred()
+
+
 func _link() -> void:
 	if cat_buttons.is_empty():
 		return
-	var list: Array = TS.CATEGORIES.map(func(k): return cat_buttons[k])
+	var list: Array = categories().map(func(k): return cat_buttons[k])
 	Kit.link_vertical(list, top_target)
 	var chain: Array = pages[category].focusables() if pages.has(category) else []
+	chain = chain.filter(func(c): return c != null and is_instance_valid(c))
 	var cat: Button = cat_buttons[category]
 	for b in list:
 		b.focus_neighbor_right = b.get_path_to(chain[0] if not chain.is_empty() else b)
@@ -280,7 +355,10 @@ func _link() -> void:
 		return
 	Kit.link_vertical(chain, top_target)
 	for c in chain:
-		c.focus_neighbor_left = c.get_path_to(cat)
+		# panels with columns (About this device) keep their own left move
+		if c.focus_neighbor_left.is_empty() or c.get_node_or_null(c.focus_neighbor_left) in cat_buttons.values() \
+				or c.get_node_or_null(c.focus_neighbor_left) == c:
+			c.focus_neighbor_left = c.get_path_to(cat)
 
 
 func set_top_target(c: Control) -> void:

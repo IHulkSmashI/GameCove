@@ -13,6 +13,8 @@ extends "res://scripts/ui/page_template.gd"
 ##   "state"        InstallState (live install state and progress)
 ##   "actions"      GameActions (flows with sheets, keyboard, toasts)
 ##   "achievements" Achievements service
+##   "controls", "profiles"  Controls / Profiles for the Game settings card
+##                  (the autoloads when not passed; none under tests)
 
 const Texts := preload("res://scripts/ui/texts.gd")
 const TG := preload("res://scripts/ui/texts_games.gd")
@@ -21,6 +23,9 @@ const SettingsForm := preload("res://scripts/ui/settings_form.gd")
 const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 const ProgressLine := preload("res://scripts/ui/games/progress_line.gd")
 const AchievementsCard := preload("res://scripts/ui/games/achievements_card.gd")
+const GameSettingsCard := preload("res://scripts/ui/controls/game_settings_card.gd")
+const Shared := preload("res://scripts/ui/controls/shared.gd")
+const TC := preload("res://scripts/ui/texts_controls.gd")
 ## Room for the top bar above the hero card (it starts where Home's does).
 const TOP_INSET := 56
 
@@ -47,6 +52,8 @@ var status_label: Label
 var pending_card: PanelContainer
 var restart_button: Button
 var ach_card: VBoxContainer
+## "Game settings": this game's own profile, Edit and Reset.
+var game_settings: VBoxContainer
 var _accent := Color(0, 0, 0, 0)
 
 
@@ -98,6 +105,14 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 	form = SettingsForm.new()
 	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam")
 	sbody.add_child(form)
+
+	var ctl: Object = services.get("controls", Shared.autoload("Controls"))
+	if ctl != null and str(g.get("key", "")) != "":
+		var gbody := add_card(TC.GAME_CARD, "layers", "", true)
+		game_settings = GameSettingsCard.new()
+		game_settings.setup(g, ctl, services.get("profiles", Shared.autoload("Profiles")))
+		game_settings.relinked.connect(func(): if is_instance_valid(self): _relink())
+		gbody.add_child(game_settings)
 
 	if state != null:
 		state.changed.connect(_on_state_changed)
@@ -344,6 +359,8 @@ func _relink() -> void:
 		list.append(first_cell)
 	if form != null:
 		list.append_array(form.focusables())
+	if game_settings != null:
+		list.append_array(game_settings.focusables())
 	focusables = list
 	finish()
 	if first_cell != null:

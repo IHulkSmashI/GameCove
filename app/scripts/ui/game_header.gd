@@ -13,6 +13,7 @@ const Badges := preload("res://scripts/ui/badges.gd")
 const Badge := preload("res://scripts/ui/badge.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
+const BrandMark := preload("res://scripts/ui/brand_mark.gd")
 
 var game: Dictionary = {}
 ## The line above the title ("Jump back in"), drawn as a mono tag chip.
@@ -119,6 +120,12 @@ func show_game(g: Dictionary, line := "", animate := false) -> void:
 	var parts: Array[String] = []
 	for seg in meta_segments(g, int(Time.get_unix_time_from_system())):
 		parts.append(seg[1])
+	# The store's own logo leads the line (the name stays in the text, so a
+	# store without a logo, or one switched off, still reads the same).
+	var mark := BrandMark.rect(str(g.get("store", "")), 18, _meta_color())
+	if mark != null:
+		mark.name = "StoreLogo"
+		meta.add_child(mark)
 	if not parts.is_empty():
 		meta.add_child(_segment("", "  ·  ".join(parts)))
 	source.text = ""
@@ -175,12 +182,16 @@ func _segment(icon: String, text: String) -> HBoxContainer:
 	var l := Kit.label(text, "MonoLabel")
 	l.add_theme_font_override("font", ThemeLib.mono(false, 2))
 	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
-	l.add_theme_color_override("font_color", ThemeLib.color("text").lerp(ThemeLib.color("text_2"), 0.35))
+	l.add_theme_color_override("font_color", _meta_color())
 	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(l)
 	return row
+
+
+static func _meta_color() -> Color:
+	return ThemeLib.color("text").lerp(ThemeLib.color("text_2"), 0.35)
 
 
 func _logo_for(g: Dictionary) -> void:

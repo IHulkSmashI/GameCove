@@ -851,7 +851,7 @@ func _build_stores() -> void:
 			else TI.STORE_ROW_LINE.get(str(info.get("how", "")), "")
 		var badge: Array = [TS.SIGNED_IN, "good"] if signed else ([TI.BROWSER_SIGNIN, "info"] if can else [TS.NOT_SIGNED_IN, ""])
 		var foot: String = TI.STORE_READY if signed else (TI.SIGN_IN_BROWSER if can else TI.STORE_NOT_HERE)
-		var c := _card("store_" + store, TS.STORE_NAMES[store], line, "store", badge, "", foot, foot, cards)
+		var c := _card("store_" + store, TS.STORE_NAMES[store], line, "brand:" + store, badge, "", foot, foot, cards)
 		c.set_selected(signed)
 		if can:
 			c.pressed.connect(func(): open_sign_in(store))
@@ -944,9 +944,27 @@ func _build_device() -> void:
 		_focusables.append(s.slider)
 	if not has_tdp and not bool(row.get("charge_limit", false)):
 		right.add_child(SKit.note(TI.NO_POWER, "info", "NoPower"))
+	if plan.xess_offered:
+		_xess_card()
 	if not fixes.is_empty():
 		body.add_child(SKit.note(TI.DEVICE_RESTART, "info", "Restart"))
 	_nav_note(TI.DEVICE_REVERSIBLE)
+
+
+## Intel Arc with XMX only: the XeSS XMX driver (off by default; the upscaler
+## and XeLL in the quick menu use it). A toggles it.
+func _xess_card() -> void:
+	var row := Kit.hbox(18)
+	row.name = "XessRow"
+	body.add_child(row)
+	var on := bool(plan.choices.get("xess_driver", false))
+	var c := _card("xess_driver", TI.XESS_TITLE, TI.XESS_LINE, "sparkle", [TI.XESS_BADGE, "info"], TI.XESS_TIME,
+		TI.XESS_FOOT, TI.XESS_ON, row)
+	c.set_selected(on)
+	c.pressed.connect(func():
+		var now := not bool(plan.choices.get("xess_driver", false))
+		plan.set_choice("xess_driver", now)
+		c.set_selected(now))
 
 
 ## A titled card in a row of cards (caps heading, optional chip on the
@@ -1105,6 +1123,8 @@ func _summary_value(item: Dictionary) -> Array:
 		"device":
 			var f: Array = c["fixes"]
 			var power := "%s, %s" % [TI.PROFILES[c["power_profile"]], TI.AUTO_TDP + (" on" if c["auto_tdp"] else " off")]
+			if bool(c.get("xess_driver", false)):
+				power += ". " + TI.XESS_SUMMARY
 			if f.is_empty():
 				return [TI.SUMMARY_NO_FIXES, power]
 			return ["%d fix%s" % [f.size(), "" if f.size() == 1 else "es"], ", ".join(PackedStringArray(f.map(func(x): return Texts.fix_title(x)))) + ". " + power]

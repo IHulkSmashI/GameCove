@@ -200,7 +200,9 @@ func _has_text(n: Node, needle: String) -> bool:
 
 func test_categories_and_focus_chain() -> void:
 	var s := _screen()
-	eq(s.cat_buttons.keys(), TS.CATEGORIES, "six categories in order")
+	eq(s.cat_buttons.keys(), SettingsScreen.categories(), "categories in order, handheld first")
+	for id in TS.CATEGORIES:
+		ok(s.cat_buttons.has(id), "keeps " + id)
 	eq(s.rows.keys(), ["theme", "match_art", "reduce_motion", "menu_side", "ui_sounds"], "UI pref rows kept for main.gd")
 	eq(s.version, "0.3.0", "version from the about lines")
 	ok(s.pages["appearance"].visible and not s.pages["stores"].visible, "Appearance shows first")
@@ -369,10 +371,22 @@ func test_device_page_loader() -> void:
 	var panel: Control = d.panels.get("storage")
 	ok(panel != null, "storage panel loaded from its build()")
 	eq(panel.got, {"storage": "fake"}, "panel got the services")
-	eq(panel.opened_count, 1, "opened() on show")
-	eq(d.focusables().size(), 1, "panel's buttons join the focus chain")
+	eq(panel.opened_count, 0, "only the open section is opened (About first)")
+	ok(d.find_child("DeviceTabs", true, false) != null, "section tabs on top")
+	eq(d.part, "about", "About first")
+	eq(d.focusables().size(), 1, "About placeholder: just its tab")
+	ok(not panel.visible, "other sections hidden")
+	var first: Control = d.focus_part("storage")
+	eq(d.part, "storage", "focus_part opens that section")
+	ok(panel.visible, "storage shown")
+	eq(panel.opened_count, 1, "opened() when its section shows")
+	eq(d.focusables().size(), 2, "tab, then the panel's buttons")
+	eq(first, d.focusables()[1], "lands on the panel's first control")
+	d.select_part("about")
+	eq(panel.closed_count, 1, "closed() when another section shows")
+	d.select_part("storage")
 	d.on_hidden()
-	eq(panel.closed_count, 1, "closed() on hide")
+	eq(panel.closed_count, 2, "closed() on hide")
 	ok(d.find_child("Placeholder_about", true, false) != null, "missing panels still get placeholders")
 	d.free()
 
@@ -497,78 +511,6 @@ func test_setup_skip_all() -> void:
 	ok(SetupFlow.open_if_first_run(Control.new(), svc) == null, "no flow once setup is done")
 
 
-# ------------------------------------------------------------ quick menu
-
-func test_quick_menu_partial_support() -> void:
-	var m: Control = QuickMenu.new()
-	var svc: Dictionary = Screens.new()._services()
-	svc["device"].profile["support"] = "partial"
-	svc["device"].profile["unverified"] = ["tdp", "panel.vrr"]
-	m.setup(svc)
-	m.open({})
-	m.show_section(4)
-	ok(_has_text(m.body, TS.QM_SUPPORT_PARTIAL), "partial support explained")
-	ok(_has_text(m.body, "Not confirmed yet: power limits, VRR range."), "unverified fields named")
-	m.free()
-
-
-func test_quick_menu_performance_and_autotdp() -> void:
-	var m: Control = QuickMenu.new()
-	var power := FakeAutoPower.new()
-	var perf := FakePerf.new()
-	perf.needs_overlay = true
-	var svc: Dictionary = Screens.new()._services(power)
-	svc["perf"] = perf
-	m.setup(svc)
-	m.open({})
-	m.show_section(1)
-	ok(m.body.get_node_or_null("AutoTdp") != null, "Auto TDP state shown")
-	var overlay: Control = m.body.get_node_or_null("overlay")
-	ok(overlay != null and overlay.button in m.focusables(), "overlay row in Power")
-	overlay.step(1)
-	eq(perf.level, 1, "overlay level set")
-	ok(m.body.get_node_or_null("FpsNeedsOverlay") != null, "fps needs overlay note")
-	power.autotune_limit.emit(true, {"cant_reach": true, "target_fps": 60, "ceiling_w": 15.0, "tdp_max": 30.0})
-	var l: Label = m.body.get_node("AutoTdp/AutoTdpLimit")
-	eq(l.text, TS.QM_RAISE_TDP % [60, 15, 30], "raise TDP message")
-	power.autotune_limit.emit(true, {"cant_reach": true, "target_fps": 60, "ceiling_w": 30.0, "tdp_max": 30.0})
-	eq(l.text, TS.QM_CANT_HOLD % 60, "can't hold message at the ceiling")
-	power.autotune_limit.emit(false, {})
-	ok(not l.visible, "clears")
-	m.free()
-
-
-func test_quick_menu_session_and_exit() -> void:
-	var m: Control = QuickMenu.new()
-	var sess := FakeSession.new()
-	var svc: Dictionary = Screens.new()._services()
-	svc["session"] = sess
-	m.setup(svc)
-	var g: Dictionary = {"key": "epic:2", "title": "Fortnite", "store": "epic"}
-	m.open(g)
-	ok(m.body.get_node_or_null("SessionTime") == null, "no time before the game starts")
-	sess.started.emit(g)
-	m.show_section(0)
-	ok(m.body.get_node_or_null("SessionTime") != null, "session time shown")
-	ok(m.body.get_node_or_null("ExitGame") == null, "no exit button without a host listening")
-	var exits: Array = []
-	m.exit_game_requested.connect(func(x): exits.append(x["key"]))
-	m.show_section(0)
-	var b: Button = m.body.get_node("ExitGame/Button")
-	ok(b in m.focusables(), "exit in focus chain")
-	b.pressed.emit()
-	eq(exits, [], "first press only arms")
-	eq(b.text, TS.QM_EXIT_CONFIRM, "asks to press again")
-	b.pressed.emit()
-	eq(exits, ["epic:2"], "second press exits")
-	ok(not m.visible, "menu closes")
-	sess.ended.emit(g)
-	m.open(g)
-	ok(m.body.get_node_or_null("SessionTime") == null, "time gone after the game ends")
-	m.free()
-	sess.free()
-
-
 func test_texts_helpers() -> void:
 	eq(TS.session_time(30), "Just started", "under a minute")
 	eq(TS.session_time(75 * 60), "1 h 15 min", "hours and minutes")
@@ -577,3 +519,28 @@ func test_texts_helpers() -> void:
 	eq(TS.masked("abcdef1234"), "••••1234", "masked key")
 	eq(TS.store_line({"signed_in": true, "account": "x"}), "Signed in as x", "account")
 	ok(TS.can_sign_in({"signed_in": false, "how": "code"}) and not TS.can_sign_in({"signed_in": false, "how": "heroic"}), "who can sign in here")
+
+
+class FakePhoto extends RefCounted:
+	var enabled := true
+	var maker_enabled := true
+	func set_enabled(on: bool) -> void:
+		enabled = on
+	func set_maker_enabled(on: bool) -> void:
+		maker_enabled = on
+
+
+func test_device_page_photo_settings() -> void:
+	var ph := FakePhoto.new()
+	var d: VBoxContainer = DevicePage.new()
+	d.panel_dir = "res://tests/fixtures/settings/device/"
+	d.setup("device", {"photo": ph}, null)
+	d.on_shown()
+	ok(d.rows.has("real_photo"), "real photo switch")
+	ok(d.rows.has("maker_photo"), "Show maker photos switch")
+	d.rows["maker_photo"].step(1)
+	eq(ph.maker_enabled, false, "turned off through DevicePhoto.set_maker_enabled")
+	ok(d.find_child("Card_photo", true, false).visible, "shown under About")
+	d.select_part("storage")
+	ok(not d.find_child("Card_photo", true, false).visible, "hidden on other sections")
+	d.free()

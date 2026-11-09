@@ -9,6 +9,10 @@ const Picture := preload("res://scripts/ui/device/device_picture.gd")
 const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
 const Buttons := preload("res://scripts/device/buttons.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
+const ControlView := preload("res://scripts/ui/controls/control_view.gd")
+const CModel := preload("res://scripts/ui/controls/model.gd")
+const CShared := preload("res://scripts/ui/controls/shared.gd")
+const TC := preload("res://scripts/ui/texts_controls.gd")
 
 ## Godot joypad buttons -> InputPlumber capability (part ids in the picture).
 ## SDL paddles: 1 = upper right, 2 = upper left, 3 = lower right, 4 = lower left.
@@ -188,6 +192,9 @@ func _fill_cards() -> void:
 		c2[1].add_child(DKit.quiet(Texts.NO_INPUTPLUMBER_LINE))
 		_cards.add_child(c2[0])
 		focus.append(c2[0])
+	if not _loaded or not bool(state.get("available", false)):
+		# gyro on Controls doesn't need the Controller service's state
+		focus.append_array(_gyro_controls_card())
 	else:
 		focus.append_array(_paddles_card())
 		focus.append_array(_gyro_card())
@@ -250,25 +257,49 @@ func _set_paddle(cap: String, target: String) -> void:
 		ctl.set_paddle(cap, target)
 
 
+## Gyro through the Controls (controller.gyro on/off, controller.emulation):
+## aiming itself is Steam Input's, so the card says so. The Controller
+## service's older "mouse" / "stick" gyro modes write a profile form current
+## InputPlumber ignores (docs/CONTROLS.md), so they're only the fallback when
+## there are no Controls.
+func _gyro_controls_card() -> Array:
+	var ctl: Object = services.get("controls", CShared.autoload("Controls"))
+	if ctl == null or not ctl.has_method("has") or not ctl.has("controller.gyro"):
+		return []
+	var m = CModel.new()
+	m.setup(ctl, services.get("profiles", CShared.autoload("Profiles")))
+	var c := DKit.card(Texts.GYRO_TITLE, "motion", "info", false)
+	c[0].name = "Card_gyro"
+	var out := []
+	for id in ["controller.gyro", "controller.emulation", "controller.gyro_accel"]:
+		var v: Control = ControlView.make(m, id)
+		if v == null or (id == "controller.gyro_accel" and not bool(v.desc.get("available", false))):
+			if v != null:
+				v.free()
+			continue
+		c[1].add_child(v)
+		out.append_array(v.focusables())
+	c[1].add_child(DKit.quiet(TC.GYRO_STEAM_TITLE + ". " + TC.GYRO_STEAM_LINE))
+	_cards.add_child(c[0])
+	return out if not out.is_empty() else [c[0]]
+
+
 func _gyro_card() -> Array:
+	var via_controls := _gyro_controls_card()
+	if not via_controls.is_empty():
+		return via_controls
 	var dev := svc("device")
 	var f: Dictionary = dev.features() if dev != null and dev.has_method("features") else {}
 	var hw := str(f.get("gyro", "unknown"))
 	var c := DKit.card(Texts.GYRO_TITLE, "motion", "info", not _supported("gyro"))
 	c[0].name = "Card_gyro"
 	if _supported("gyro"):
-		var prof: Dictionary = state.get("profile", {}) if state.get("profile") is Dictionary else {}
-		var cur := str(prof.get("gyro", "off"))
-		var vals: Array = Texts.GYRO_MODES.duplicate()
-		if not cur in vals:
-			vals.append(cur)
-		var r := _row(c[1], "gyro", "Gyro aiming", vals, vals.map(func(v): return Texts.GYRO_LABELS.get(v, v)), cur, "",
-			func(_k, v): return Texts.GYRO_EXPLAIN.get(v, ""))
-		r.changed.connect(func(v):
-			if str(v) in Texts.GYRO_MODES:
-				svc("controller").set_gyro_mode(str(v)))
+		# No Controls here: the old "mouse" / "stick" modes would write a
+		# profile form current InputPlumber ignores, so no switch that does
+		# nothing. Aiming is Steam Input's; say where it lives.
+		c[1].add_child(DKit.quiet(TC.GYRO_STEAM_TITLE + ". " + TC.GYRO_STEAM_LINE))
 		_cards.add_child(c[0])
-		return [r.button]
+		return [c[0]]
 	if hw == "none":
 		c[0].free()
 		return []
