@@ -477,3 +477,48 @@ func test_m25_unknown_settings_are_adopted() -> void:
 	c.set_device("msi-claw-8-ex")
 	ok(FileAccess.file_exists(c.default_profile_path()), "controller layout moved to the device's folder")
 	c.free()
+
+
+# ---- L9: Auto TDP's originals survive a failed write-back; ManualClock goes back off ---------------
+
+class LeverBe extends RefCounted:
+	var boost := true
+	var fail_boost := 0        # set_boost calls that fail
+	var clocks := {"lo": 100, "hi": 2000, "min": 300, "max": 2000, "via": "powerstation", "card": "c1"}
+	var manual := false
+	func gpu_clocks() -> Dictionary: return clocks.duplicate()
+	func set_gpu_clocks(mn: int, mx: int) -> bool:
+		manual = true
+		if mn >= 0: clocks["min"] = mn
+		if mx >= 0: clocks["max"] = mx
+		return true
+	func gpu_raw_state() -> Dictionary:
+		return {"ps": [{"card": "c1", "manual": manual, "min": clocks["min"], "max": clocks["max"]}]}
+	func gpu_raw_restore(st: Dictionary, _with_level := true) -> bool:
+		var c: Dictionary = st["ps"][0]
+		clocks["min"] = c["min"]
+		clocks["max"] = c["max"]
+		manual = c["manual"]
+		return true
+	func get_boost() -> Variant: return boost
+	func set_boost(on: bool) -> bool:
+		if fail_boost > 0:
+			fail_boost -= 1
+			return false
+		boost = on
+		return true
+
+
+func test_l9_failed_restore_keeps_the_original() -> void:
+	var Levers := load("res://scripts/controls/power/levers.gd")
+	var be := LeverBe.new()
+	var lv: RefCounted = Levers.new(be, func(_w): return true)
+	ok(lv.boost(false), "Auto TDP turned boost off")
+	ok(lv.gpu_floor(800), "and raised the GPU floor")
+	eq(be.manual, true, "PowerStation in manual clock mode")
+	be.fail_boost = 1
+	eq(lv.restore(), false, "the boost write-back failed")
+	eq(be.manual, false, "ManualClock handed back to the driver")
+	eq(be.clocks["min"], 300, "GPU floor back")
+	ok(lv.restore(), "a second restore")
+	eq(be.boost, true, "boost back on: the original was kept after the failure")
