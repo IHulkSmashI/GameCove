@@ -324,12 +324,12 @@
     "ayadevice"
    ],
    "enabled": true,
-   "file": "",
-   "mono": false,
-   "hex": "",
-   "source": "",
-   "license": "",
-   "upstream": "",
+   "file": "res://assets/brand/ayaneo.svg",
+   "mono": true,
+   "hex": "64656A",
+   "source": "https://shop.ayaneo.com/cdn/shop/files/AYA_logo__20210601_-02.png?v=1663762027",
+   "license": "Traced from AYANEO's official logo PNG on shop.ayaneo.com (1642x1643, emblem 994x387); potrace, single colour, IoU 0.995 against it and 0.994 against the current ayaneo.com header logo (/ayaneo/img/header/logo-b.png). Trademark of AYANEO.",
+   "upstream": "https://www.ayaneo.com",
    "notice": "",
    "system_icons": [],
    "owner_terms": "https://www.ayaneo.com/community/brand"
