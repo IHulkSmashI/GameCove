@@ -259,7 +259,8 @@ func _fps_limit(fps: int) -> void:
 ## share one job there, so a quick start-then-stop never leaves it on.
 func _power_autotune(on: bool) -> void:
 	if power.has_method("request_autotune"):
-		power.request_autotune(on)
+		# the game's key: Power keeps what Auto TDP learned per game and power source
+		power.request_autotune(on, str(game.get("key", "")))
 	elif on:
 		power.autotune_start()
 	else:

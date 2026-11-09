@@ -23,7 +23,7 @@ class FakePower extends Object:
 	var targets: Array = []
 	func autotune_active() -> bool:
 		return on
-	func request_feed(fps: float, watts := -1.0) -> void:
+	func request_feed(fps: float, watts := -1.0, _sample := {}) -> void:
 		fed.append([fps, watts])
 	func request_autotune_target(fps: float) -> void:
 		targets.append(fps)

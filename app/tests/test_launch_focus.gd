@@ -50,7 +50,7 @@ class FakePower:
 class QueuedPower:
 	extends FakePower
 	var jobs := {}
-	func request_autotune(on: bool) -> void:
+	func request_autotune(on: bool, _key := "") -> void:
 		jobs["autotune"] = autotune_start if on else autotune_stop
 	func flush() -> void:
 		for k in jobs:
