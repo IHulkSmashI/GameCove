@@ -71,7 +71,7 @@ Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAnt
 
 ## Community
 
-Bugs and ideas: [GitHub issues](https://github.com/IHulkSmashI/GameCove/issues/new/choose) and [Discussions](https://github.com/IHulkSmashI/GameCove/discussions). Chat and testing: [Discord](https://discord.gg/tuUsn6sSZH). Want to test on your handheld? [Sign up here](https://github.com/IHulkSmashI/GameCove/issues/new?template=tester_signup.yml). More in [COMMUNITY.md](docs/COMMUNITY.md).
+Bugs and ideas: [GitHub issues](https://github.com/IHulkSmashI/GameCove/issues/new/choose) and [Discussions](https://github.com/IHulkSmashI/GameCove/discussions). Chat and testing: [Discord](https://discord.gg/tuUsn6sSZH). News and tips: [r/GameCoveLinux](https://www.reddit.com/r/GameCoveLinux/). Want to test on your handheld? [Sign up here](https://github.com/IHulkSmashI/GameCove/issues/new?template=tester_signup.yml). More in [COMMUNITY.md](docs/COMMUNITY.md).
 
 ## Thanks
 

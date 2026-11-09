@@ -9,7 +9,6 @@ contact_links:
   - name: Discord
     url: https://discord.gg/tuUsn6sSZH
     about: Chat with other players and testers.
-  # Uncomment once the subreddit exists:
-  # - name: Reddit
-  #   url: https://www.reddit.com/r/REPLACE_ME/
-  #   about: News and community posts.
+  - name: Reddit
+    url: https://www.reddit.com/r/GameCoveLinux/
+    about: News, device tips and community posts.
