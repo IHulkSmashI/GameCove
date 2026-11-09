@@ -228,10 +228,19 @@ func test_session_wiring_drives_intercept_mode() -> void:
 	eq(_modes(f).back(), 1, "still Pass while the game is in front")
 	w.game_ended({"key": "steam:42", "store": "steam", "id": "42"})
 	eq(_modes(f).back(), 2, "game over: Always")
+	w.home_in_front(true)   # GameCove comes back in front
 	n = _modes(f).size()
 	w.menu_over_game(true)
 	w.menu_over_game(false)
 	eq(_modes(f).size(), n, "quick menu with no game leaves the mode alone")
+	# review M15: no game, and Steam's install dialog takes focus: it gets the controller
+	w.home_in_front(false)
+	eq(_modes(f).back(), 1, "another window in front with no game: Pass")
+	n = _modes(f).size()
+	w.home_in_front(false)
+	eq(_modes(f).size(), n, "nothing changed: nothing sent")
+	w.home_in_front(true)
+	eq(_modes(f).back(), 2, "GameCove in front again: Always")
 	c.free()
 
 
