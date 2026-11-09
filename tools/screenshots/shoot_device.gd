@@ -47,6 +47,7 @@ func _run() -> void:
 	var prefs = load("res://scripts/ui/ui_prefs.gd")
 	prefs.path = "/tmp/gamecove-shots/ui-device.cfg"
 	DirAccess.remove_absolute(prefs.path)
+	load("res://scripts/main.gd").boot_splash = false
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await frames(3)
@@ -113,8 +114,14 @@ func finish() -> void:
 		main.free()
 	load("res://scripts/main.gd").release_caches()
 	load("res://scripts/ui/ui_kit.gd")._art_cache.clear()
+	# Background work (library scans, art decodes) must end before the engine does.
+	for n in root.get_children():
+		var t: Variant = n.get("_task")
+		if t is int and t >= 0:
+			WorkerThreadPool.wait_for_task_completion(t)
+			n.set("_task", -1)
 	await frames(4)
-	quit()
+	quit(0)
 
 
 ## Shows one page in a Settings-like frame, focuses `focus_index`, shoots.

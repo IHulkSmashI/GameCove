@@ -163,9 +163,9 @@ static func row(view: Dictionary, parts: Dictionary, height := 96) -> Button:
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var title := Kit.label(str(parts.get("title", view.get("title", ""))))
+	var title := Kit.label(str(parts.get("title", view.get("title", ""))), "HeaderLabel")
 	title.name = "Title"
-	title.add_theme_font_override("font", ThemeLib.font("semibold"))
+	title.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.clip_text = true
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -173,6 +173,8 @@ static func row(view: Dictionary, parts: Dictionary, height := 96) -> Button:
 	if str(parts.get("sub", "")) != "":
 		var sub := Kit.label(str(parts["sub"]), "QuietLabel")
 		sub.name = "Sub"
+		sub.add_theme_font_override("font", ThemeLib.mono(false, 1))
+		sub.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION - 1)
 		sub.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		sub.clip_text = true
 		sub.size_flags_horizontal = Control.SIZE_EXPAND_FILL

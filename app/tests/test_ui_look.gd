@@ -186,3 +186,63 @@ func test_choice_row_segments() -> void:
 	r.step(1)
 	eq(r.value(), "max", "left/right still step")
 	r.free()
+
+
+func test_big_screens_get_more_room() -> void:
+	eq(MainScript.base_size_for(Vector2i(1280, 800)), Vector2i(1280, 800), "800p unchanged")
+	eq(MainScript.base_size_for(Vector2i(1024, 640)), Vector2i(1280, 800), "smaller: same base")
+	eq(MainScript.base_size_for(Vector2i(1920, 1200)), Vector2i(1536, 960), "1200p lays out at 1.25x")
+
+
+func test_slider_tick_labels_are_round() -> void:
+	var SliderRow = load("res://scripts/ui/slider_row.gd")
+	eq(SliderRow.tick_values(5.0, 30.0, 1.0), [5.0, 10.0, 15.0, 20.0, 25.0, 30.0], "every 5 W on 5-30 W")
+	var v: Array = SliderRow.tick_values(8.0, 35.0, 1.0)
+	eq(v[0], 8.0, "starts at the minimum")
+	eq(v[-1], 35.0, "ends at the maximum")
+	ok(v.size() <= SliderRow.MAX_LABELS, "at most %d labels" % SliderRow.MAX_LABELS)
+	var r: VBoxContainer = SliderRow.new()
+	r.setup("tdp", "Power limit (TDP)", 5, 30, 17)
+	eq(r.value_text(), "17 W", "value shown")
+	ok(r.find_child("Ticks", true, false) != null, "labelled ticks")
+	r.free()
+
+
+func test_selected_row_ring_is_opaque() -> void:
+	var s: StyleBoxFlat = ThemeLib.row_focus()
+	eq(s.bg_color.a, 1.0, "opaque fill, so the glow never tints the row")
+	eq(s.border_width_top, 3, "thick ring")
+	ok(s.shadow_size > 0, "glow")
+
+
+func test_chip_badges_are_colourful() -> void:
+	var Badge = load("res://scripts/ui/badge.gd")
+	var b: PanelContainer = Badge.make({"kind": "proton", "text": "ProtonDB Platinum", "short": "Platinum", "tone": "platinum", "icon": "gauge"}, "chip")
+	eq(b.label.get_theme_color("font_color"), ThemeLib.tone("good"), "Platinum reads as works")
+	b.free()
+	var n: PanelContainer = Badge.make({"kind": "ttb", "text": "18 h to beat", "short": "18 h", "tone": "", "icon": "clock"}, "chip")
+	eq(n.label.get_theme_color("font_color"), ThemeLib.color("accent"), "neutral facts in the accent")
+	n.free()
+
+
+func test_titles_in_capitals() -> void:
+	var t := Kit.label("Library", "TitleLabel")
+	ok(t.uppercase and t.text == "Library", "shown in capitals, text kept")
+	t.free()
+	var q := Kit.label("x", "QuietLabel")
+	ok(not q.uppercase, "body text untouched")
+	q.free()
+
+
+func test_boot_splash_skipped_under_reduce_motion() -> void:
+	var Motion = load("res://scripts/ui/motion.gd")
+	var Splash = load("res://scripts/ui/boot_splash.gd")
+	var host := Control.new()
+	var was: bool = Motion.reduce
+	Motion.reduce = true
+	eq(Splash.play(host), null, "no splash")
+	Motion.reduce = was
+	var s: Control = Splash.new()
+	eq(s.mouse_filter, Control.MOUSE_FILTER_IGNORE, "never takes input")
+	s.free()
+	host.free()

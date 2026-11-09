@@ -355,7 +355,7 @@ func _day_cell(day: int, rels: Array, h: int, is_today: bool) -> Control:
 	var top := Kit.hbox(6)
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var n := Kit.label(str(day), "CaptionLabel")
-	n.add_theme_font_override("font", ThemeLib.font("semibold", true))
+	n.add_theme_font_override("font", ThemeLib.mono(true, 0))
 	if is_today:
 		n.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	top.add_child(n)

@@ -90,6 +90,7 @@ func _run() -> void:
 	prefs.path = "/tmp/gamecove-shots/ui.cfg"
 	DirAccess.remove_absolute(prefs.path)
 
+	load("res://scripts/main.gd").boot_splash = false
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await frames(3)
@@ -240,6 +241,12 @@ func _run() -> void:
 			main.quick_menu.show_section(1)
 			await shot("theme_%s_quick" % id)
 			main.quick_menu.close()
+	if want(["boot"]):
+		# The splash at its hold point (not started, so it stays put).
+		var sp: Control = load("res://scripts/ui/boot_splash.gd").new()
+		main.add_child(sp)
+		await shot("boot")
+		sp.queue_free()
 	await finish()
 
 
@@ -251,8 +258,14 @@ func finish() -> void:
 		main.free()   # _exit_tree -> release_caches(), waits for art workers
 	load("res://scripts/main.gd").release_caches()
 	load("res://scripts/ui/ui_kit.gd")._art_cache.clear()
+	# Background work (library scans, art decodes) must end before the engine does.
+	for n in root.get_children():
+		var t: Variant = n.get("_task")
+		if t is int and t >= 0:
+			WorkerThreadPool.wait_for_task_completion(t)
+			n.set("_task", -1)
 	await frames(4)
-	quit()
+	quit(0)
 
 
 ## Settings pages, sign-in, credits, first-run setup and the quick menu

@@ -98,6 +98,10 @@ var closer: Node
 var setup_flow: Node
 
 
+## Play the boot splash at start (screenshots and tests turn it off).
+static var boot_splash := true
+
+
 func _ready() -> void:
 	get_window().size_changed.connect(_fit_density)
 	_fit_density()
@@ -268,6 +272,8 @@ func _ready() -> void:
 	_last_input_ms = Time.get_ticks_msec()
 	home.focus_later(home.default_focus())
 	open_setup(false)
+	if boot_splash and DisplayServer.get_name() != "headless":
+		load("res://scripts/ui/boot_splash.gd").play(self)
 
 
 ## Closes the running game (quick menu "Exit game"). Never blocks.
