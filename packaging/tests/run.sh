@@ -387,7 +387,7 @@ post() {
 	: >"$T/busctl.log"
 	: >"$T/post.log"
 	# shellcheck disable=SC2016  # expanded by the inner bash
-	PATH="$PB:/usr/bin:/bin" GAMECOVE_STATE_DIR="$T/gcstate" GAMECOVE_FIX_SET="$T/fix-set" \
+	PATH="$PB:/usr/bin:/bin" GAMECOVE_STATE_DIR="$T/gcstate" GAMECOVE_FIX_SET="$T/fix-set" GAMECOVE_ROOT_WAIT_S="${ROOT_WAIT:-10}" \
 		bash -c 'set -a; . "$1"; post_client_shutdown' _ "$REPO/session/gamescope-session-plus/sessions.d/gamecove"
 }
 expect_code 0 "post_client_shutdown without a charge limit" post
@@ -405,6 +405,17 @@ rmdir "$T/gcstate/fixes/power-tune/orig"
 : >"$T/gcstate/fixes/power-tune/thermald-held"
 expect_code 0 "post_client_shutdown with thermald held" post
 contains "$T/post.log" "^pkexec $T/fix-set power-tune set restore$" "session end starts thermald again"
+# low (review): a root restore that hangs must not hold up the session's end (timeout only killed pkexec)
+cp "$PB/pkexec" "$T/pkexec.keep"
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/post.log"\nsleep 20\n' "$T" >"$PB/pkexec"
+rm -f "$PB/timeout"
+started="$(date +%s)"
+ROOT_WAIT=1 post
+if [ $(($(date +%s) - started)) -lt 6 ]; then ok; else bad "session end waited $(($(date +%s) - started)) s on a hung root restore"; fi
+contains "$T/post.log" "^pkexec $T/fix-set charge-limit set release$" "the restore was still started"
+cp "$T/pkexec.keep" "$PB/pkexec"
+printf '#!/bin/sh\nshift\nexec "$@"\n' >"$PB/timeout"
+chmod +x "$PB/pkexec" "$PB/timeout"
 # busctl --list tree can hang on a stuck bus: every call has a timeout
 for f in "$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" "$REPO/session/gamescope-session-plus/sessions.d/gamecove"; do
 	if grep -n 'busctl --' "$f" | grep -v -- '--timeout=' | grep -q .; then bad "busctl without --timeout in $f"; else ok; fi

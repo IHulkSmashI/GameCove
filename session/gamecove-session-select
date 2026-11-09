@@ -44,6 +44,11 @@ PREV_SESSION="$DATA/prev-desktop-session"
 PREV_MODE="$DATA/prev-login-mode"
 STEAM_MARK="$DATA/left-for-steam"
 SUSPENDED="$DATA/default-suspended"
+GAMECOVE_BIN="${GAMECOVE_BIN:-/usr/lib/gamecove/gamecove.x86_64}"
+FIX_SET="${GAMECOVE_FIX_SET:-/usr/libexec/gamecove/gamecove-fix-set}"
+STATE_DIR="${GAMECOVE_STATE_DIR:-/var/lib/gamecove}"
+PKEXEC="${PKEXEC:-pkexec}"
+ROOT_WAIT_S="${GAMECOVE_ROOT_WAIT_S:-10}"
 GUARD_COPY="$DATA/gamecove-session-guard"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_NAME="gamecove-session-guard.service"
@@ -212,6 +217,57 @@ reset_input_intercept() {
 	done
 }
 
+# Runs "$@" in the background and waits for it at most <seconds>; past that it goes on by
+# itself. A root child of pkexec can't be stopped from here anyway (`timeout pkexec` only
+# killed pkexec while the helper went on), so the session never waits on it for long.
+bounded() { # <seconds> <command...>
+	limit=$(($1 * 10))
+	shift
+	flag="$(mktemp "${TMPDIR:-/tmp}/gamecove-wait.XXXXXX")" || return 0
+	rm -f "$flag"
+	(
+		"$@" </dev/null >/dev/null 2>&1
+		: >"$flag"
+	) &
+	i=0
+	while [ ! -e "$flag" ] && [ "$i" -lt "$limit" ]; do
+		sleep 0.1
+		i=$((i + 1))
+	done
+	rm -f "$flag"
+}
+
+root_restores() {
+	if [ -f "$STATE_DIR/fixes/charge-limit/limit" ]; then
+		"$PKEXEC" "$FIX_SET" charge-limit set release
+	fi
+	if [ -d "$STATE_DIR/fixes/power-tune/orig" ] || [ -f "$STATE_DIR/fixes/power-tune/thermald-held" ]; then
+		"$PKEXEC" "$FIX_SET" power-tune set restore
+	fi
+}
+
+# Review H2: a switch logs the session out, which stops gamescope-session-plus with a signal,
+# so its post_client_shutdown never runs and Godot gets no _exit_tree. Before switching away
+# from GameCove's session: the everyday values back in place of a game's (GameCove's own
+# headless entry point), the charge limit released and power-tune values restored (the
+# no-password helper), and Steam closed cleanly so it writes its files.
+leave_session() {
+	[ "${GAMECOVE_SESSION:-}" = 1 ] || return 0
+	if [ -x "$GAMECOVE_BIN" ]; then
+		if command -v timeout >/dev/null 2>&1; then
+			timeout 35 "$GAMECOVE_BIN" --headless -- --restore-baseline </dev/null >/dev/null 2>&1 || true
+		else
+			bounded 35 "$GAMECOVE_BIN" --headless -- --restore-baseline
+		fi
+	fi
+	if [ -x "$FIX_SET" ] && command -v "$PKEXEC" >/dev/null 2>&1; then
+		bounded "$ROOT_WAIT_S" root_restores
+	fi
+	if command -v steam >/dev/null 2>&1 && pgrep -u "$(id -u)" -x steam >/dev/null 2>&1; then
+		bounded 10 steam -shutdown
+	fi
+}
+
 # --default: remember what the desktop and boot defaults were, once (a second
 # --default must not save GameCove as "the previous one").
 save_previous() {
@@ -357,6 +413,7 @@ steam)
 	[ "$switch" -eq 1 ] || exit 0
 	mkdir -p "$DATA"
 	boot_id >"$STEAM_MARK"
+	leave_session
 	exec "$STEAMOSCTL" switch-to-game-mode
 	;;
 gamecove)
@@ -377,6 +434,8 @@ desktop)
 	# left GameCove: from here a switch that names no session means the real desktop
 	mkdir -p "$DATA"
 	boot_id >"$STEAM_MARK"
-	exec "$STEAMOSCTL" switch-to-desktop-mode "$(real_desktop)"
+	desk="$(real_desktop)"
+	leave_session
+	exec "$STEAMOSCTL" switch-to-desktop-mode "$desk"
 	;;
 esac

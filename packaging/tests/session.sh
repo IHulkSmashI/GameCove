@@ -313,6 +313,50 @@ eqv "$?" 0 "guard without steamosctl"
 env PATH="$BIN:$PATH" HOME="$T/home" STEAMOSCTL=/nonexistent sh "$SEL" steam >/dev/null 2>&1
 eqv "$?" 2 "steam without steamosctl"
 
+# --- review H2: a switch logs the session out (post_client_shutdown never runs), so leaving GameCove's
+# session first puts the everyday values back, releases the charge limit / power-tune values and
+# closes Steam, each bounded
+LB="$T/leavebin"
+mkdir -p "$LB" "$T/lstate/fixes/charge-limit" "$T/lstate/fixes/power-tune/orig"
+echo 80 >"$T/lstate/fixes/charge-limit/limit"
+printf '#!/bin/sh\necho "app $*" >>"%s/leave.log"\n' "$T" >"$LB/gamecove.x86_64"
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/leave.log"\n[ -f "%s/pkexec-hangs" ] && sleep 20\nexit 0\n' "$T" "$T" >"$LB/pkexec"
+printf '#!/bin/sh\nexit 0\n' >"$LB/fix-set"
+printf '#!/bin/sh\necho "steam $*" >>"%s/leave.log"\n' "$T" >"$LB/steam"
+printf '#!/bin/sh\nexit 0\n' >"$LB/pgrep" # Steam runs
+cat >"$LB/steamosctl" <<EOF
+#!/bin/sh
+case "\$1" in switch-*) echo "steamosctl \$*" >>"$T/leave.log" ;; *) exec "$BIN/steamosctl" "\$@" ;; esac
+EOF
+chmod +x "$LB"/*
+leave() { # [env...] -- <target>
+	: >"$T/leave.log"
+	env PATH="$LB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" XDG_CONFIG_HOME="$T/home/.config" \
+		GAMECOVE_SESSIONS_DIRS="$T/sessions" GAMECOVE_BOOT_ID_FILE="$T/boot_id" GAMECOVE_OSTREE_BOOTED="$T/not-ostree" \
+		STEAMOSCTL="$LB/steamosctl" GAMECOVE_BIN="$LB/gamecove.x86_64" GAMECOVE_FIX_SET="$LB/fix-set" PKEXEC="$LB/pkexec" \
+		GAMECOVE_STATE_DIR="$T/lstate" GAMECOVE_ROOT_WAIT_S=1 "$@" >"$T/out" 2>&1
+}
+fresh
+leave GAMECOVE_SESSION=1 sh "$SEL" steam
+eqv "$(cat "$T/leave.log")" "$(printf '%s\n' "app --headless -- --restore-baseline" \
+	"pkexec $LB/fix-set charge-limit set release" "pkexec $LB/fix-set power-tune set restore" \
+	"steam -shutdown" "steamosctl switch-to-game-mode")" "leaving for Steam: baseline, root restores, Steam closed, then the switch"
+leave GAMECOVE_SESSION=1 sh "$SEL" desktop
+has "$T/leave.log" "^app --headless -- --restore-baseline$" "leaving for the desktop restores the baseline too"
+eqv "$(tail -n 1 "$T/leave.log")" "steamosctl switch-to-desktop-mode plasma.desktop" "and switches last"
+leave sh "$SEL" steam
+eqv "$(cat "$T/leave.log")" "steamosctl switch-to-game-mode" "outside GameCove's session (desktop, Steam): only the switch"
+touch "$T/pkexec-hangs"
+started="$(date +%s)"
+leave GAMECOVE_SESSION=1 sh "$SEL" steam
+[ $(($(date +%s) - started)) -lt 8 ] && ok || bad "a hung root restore holds the switch up only briefly"
+has "$T/leave.log" "^steamosctl switch-to-game-mode$" "the switch still happens"
+rm -f "$T/pkexec-hangs"
+rm "$LB/gamecove.x86_64"
+leave GAMECOVE_SESSION=1 sh "$SEL" steam
+has "$T/leave.log" "^steamosctl switch-to-game-mode$" "no GameCove binary: the rest still runs"
+hasnt "$T/leave.log" "^app " "no binary, no baseline run"
+
 # --- session client: crash-loop guard (3 unclean exits in a row) and the bounce
 CB="$T/cbin"
 mkdir -p "$CB"

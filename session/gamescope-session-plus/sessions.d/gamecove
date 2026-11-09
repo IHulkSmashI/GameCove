@@ -15,6 +15,10 @@
 # Godot app, which marks its window as gamescope's main app (STEAM_GAME=769).
 CLIENTCMD="/usr/libexec/gamecove/gamecove-session-client"
 
+# Marks GameCove's own session for gamecove-session-select (it tidies up before a switch
+# only from here) and anything else that needs to know.
+GAMECOVE_SESSION=1
+
 # How Steam runs beside us: silent (default), gamepadui (experimental) or off.
 # See docs/SESSION.md.
 : "${GAMECOVE_STEAM_MODE:=silent}"
@@ -60,34 +64,44 @@ reset_input_intercept() {
 	done
 }
 
-# AYANEO charge limit (charge_behaviour): GameCove holds charging only while it
-# runs. Let the battery charge again (the limit is kept for next time); polkit
-# allows this one set without a password. The fix's udev rule is the backstop.
-release_charge_limit() {
+# Root restores, no password (polkit allows these sets in the active session):
+#  - AYANEO charge limit (charge_behaviour): GameCove holds charging only while it runs; let
+#    the battery charge again (the limit is kept for next time). The fix's udev rule is the
+#    backstop.
+#  - CPU / GPU / platform values GameCove's power-tune verbs changed (and thermald, held while
+#    GameCove sets the TDP on Intel) back to what they were, so Steam's session or the desktop
+#    get the system as they left it.
+# Both run in one background job that the session waits for at most GAMECOVE_ROOT_WAIT_S
+# (10 s). `timeout 15 pkexec` only killed pkexec, not its root child, so the session could
+# wait 15 s per call while the helper went on holding its lock.
+root_restores() {
 	local state="${GAMECOVE_STATE_DIR:-/var/lib/gamecove}" helper="${GAMECOVE_FIX_SET:-/usr/libexec/gamecove/gamecove-fix-set}"
-	[ -f "$state/fixes/charge-limit/limit" ] || return 0
+	local charge=0 tune=0
+	[ -f "$state/fixes/charge-limit/limit" ] && charge=1
+	{ [ -d "$state/fixes/power-tune/orig" ] || [ -f "$state/fixes/power-tune/thermald-held" ]; } && tune=1
+	[ "$charge" = 1 ] || [ "$tune" = 1 ] || return 0
 	[ -x "$helper" ] || return 0
 	command -v pkexec >/dev/null 2>&1 || return 0
-	timeout 15 pkexec "$helper" charge-limit set release >/dev/null 2>&1 || true
-}
-
-# CPU / GPU / platform values GameCove's power-tune verbs changed (and thermald, held while
-# GameCove sets the TDP on Intel) back to what they were, so Steam's session or the desktop
-# get the system as they left it. Same no-password entry point.
-restore_power_tune() {
-	local state="${GAMECOVE_STATE_DIR:-/var/lib/gamecove}" helper="${GAMECOVE_FIX_SET:-/usr/libexec/gamecove/gamecove-fix-set}"
-	[ -d "$state/fixes/power-tune/orig" ] || [ -f "$state/fixes/power-tune/thermald-held" ] || return 0
-	[ -x "$helper" ] || return 0
-	command -v pkexec >/dev/null 2>&1 || return 0
-	timeout 15 pkexec "$helper" power-tune set restore >/dev/null 2>&1 || true
+	local flag i=0 limit=$((${GAMECOVE_ROOT_WAIT_S:-10} * 10))
+	flag="$(mktemp "${TMPDIR:-/tmp}/gamecove-wait.XXXXXX")" || return 0
+	rm -f "$flag"
+	(
+		[ "$charge" = 1 ] && pkexec "$helper" charge-limit set release
+		[ "$tune" = 1 ] && pkexec "$helper" power-tune set restore
+		: >"$flag"
+	) </dev/null >/dev/null 2>&1 &
+	while [ ! -e "$flag" ] && [ "$i" -lt "$limit" ]; do
+		sleep 0.1
+		i=$((i + 1))
+	done
+	rm -f "$flag"
 }
 
 # When GameCove exits: controller and battery back to normal, then close Steam
 # cleanly so the session can end.
 post_client_shutdown() {
 	reset_input_intercept
-	release_charge_limit
-	restore_power_tune
+	root_restores
 	if command -v steam >/dev/null 2>&1 && pgrep -u "$(id -u)" -x steam >/dev/null 2>&1; then
 		steam -shutdown >/dev/null 2>&1 || true
 	fi

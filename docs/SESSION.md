@@ -262,6 +262,18 @@ keyboard. The login guard above can't help, it runs after a login. So:
   `gamescope-wayland.desktop` (Steam Gaming Mode), else the desktop. Uninstall
   removes it.
 
+### Leaving GameCove's session (review H2)
+
+A switch logs the session out, which stops gamescope-session-plus with a signal, so
+`post_client_shutdown` never runs and Godot gets no `_exit_tree`. So
+`gamecove-session-select steam|desktop`, when run from GameCove's session (the session
+file exports `GAMECOVE_SESSION=1`), first runs `gamecove.x86_64 --headless --
+--restore-baseline` (the everyday values back in place of a running game's, bounded to
+35 s), then the charge-limit release and power-tune restore through the no-password
+helper, then `steam -shutdown`, then switches. The root restores run in one background
+job waited for at most `GAMECOVE_ROOT_WAIT_S` (10 s), here and in
+`post_client_shutdown`: `timeout pkexec` only killed pkexec, never its root child.
+
 ### If GameCove won't let you out
 
 - **Crash loop:** the session client counts unclean exits in a row (a non-zero
