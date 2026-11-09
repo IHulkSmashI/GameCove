@@ -267,3 +267,25 @@ func test_stale_sample_from_last_game_is_dropped() -> void:
 	eq(got.size(), 0, "sample from the previous game ignored")
 	m.stop()
 	m.free()
+
+
+## PerfMonitor's sample and mangohud tasks were never waited for: after any
+## game had been measured GameCove crashed on exit (a WorkerThreadPool task
+## outliving the pool, SIGABRT in pthread_mutex_lock). Tasks are kept and
+## waited for now. Found by the end-to-end suite.
+func test_tasks_are_waited_for() -> void:
+	var pm: Node = load("res://scripts/perf/perf_monitor.gd").new()
+	var box := {"done": false}
+	pm._add_task(func():
+		OS.delay_msec(150)
+		box["done"] = true)
+	eq(pm._tasks.size(), 1, "the task is kept")
+	pm._exit_tree()   # leaving the tree (the app quits)
+	ok(box["done"], "leaving the tree waited for it")
+	eq(pm._tasks.size(), 0, "nothing left behind")
+	pm._add_task(func(): pass)
+	OS.delay_msec(50)
+	pm._add_task(func(): pass)
+	eq(pm._tasks.size(), 1, "finished tasks are freed when the next one starts")
+	pm._exit_tree()
+	pm.free()

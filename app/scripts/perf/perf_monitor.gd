@@ -60,6 +60,10 @@ var mangohud: RefCounted
 var _sampler: Sampler
 var _timer: Timer
 var _busy := false
+## WorkerThreadPool tasks started and not yet waited for: every task must be
+## waited for, or it outlives the pool at exit (GameCove crashed on the way out
+## after any game had been measured).
+var _tasks: Array[int] = []
 var _auto_started := false   # started for Auto TDP, not by start()
 var _setup_done := false
 
@@ -317,7 +321,7 @@ func _tick() -> void:
 		return
 	_busy = true
 	var s := _sampler
-	WorkerThreadPool.add_task(func():
+	_add_task(func():
 		var d := s.sample(Time.get_ticks_usec() / 1_000_000.0)
 		_publish_from_task.call_deferred(d, s))
 
@@ -409,9 +413,22 @@ func _env(name: String) -> String:
 
 func _run_off_main(job: Callable) -> void:
 	if is_inside_tree():
-		WorkerThreadPool.add_task(job)
+		_add_task(job)
 	else:
 		job.call()
+
+
+func _add_task(job: Callable) -> void:
+	for t in _tasks.filter(func(t): return WorkerThreadPool.is_task_completed(t)):
+		WorkerThreadPool.wait_for_task_completion(t)   # frees it; returns at once
+		_tasks.erase(t)
+	_tasks.append(WorkerThreadPool.add_task(job, false, "GameCove perf sample"))
+
+
+func _exit_tree() -> void:
+	for t in _tasks:
+		WorkerThreadPool.wait_for_task_completion(t)
+	_tasks.clear()
 
 
 func _remember(section: String, key: String, value: Variant) -> void:
