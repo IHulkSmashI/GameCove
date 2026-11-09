@@ -16,6 +16,9 @@ const DEVICE_TABLE := "res://data/devices.json"
 const DMI := "/sys/class/dmi/id/"
 const POWER_SUPPLY := "/sys/class/power_supply/"
 const ART_ROOT := "res://assets/devices/art/"
+## Every device drawing uses the same scale: 1 mm of the real handheld = this many
+## SVG units, so texture sizes compare truthfully (docs/DEVICES.md, Drawings).
+const UNITS_PER_MM := 1.6
 const DMI_KEYS: Array[String] = ["sys_vendor", "product_name", "board_name", "board_vendor", "product_family"]
 const TIER_RANK := {"specific": 2, "family": 1, "generic": 0}
 
@@ -164,6 +167,16 @@ static func picture_for(device_id: String) -> String:
 		if d.get("id", "") == device_id:
 			return art_path(str(d.get("art", "generic")))
 	return art_path("generic")
+
+
+## The shell record ("bodies" in devices.json) behind this device's drawing:
+## {w_mm, h_mm, d_mm, screen_in, aspect, source, ...}; {} for the generic drawing.
+static func body_for(device_id: String) -> Dictionary:
+	var bodies: Dictionary = load_doc().get("bodies", {})
+	for d in load_table():
+		if d.get("id", "") == device_id:
+			return bodies.get(str(d.get("art", "")), {})
+	return {}
 
 
 static func art_path(art: String) -> String:

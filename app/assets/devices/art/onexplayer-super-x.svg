@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="672" height="375" viewBox="0 0 672 375">
+<title>OneXPlayer Super X (tablet, detachable controllers) (1 mm = 1.6 units)</title>
+<path id="part-controller-left" d="M83.44 30 H52.4 Q14 30 14 68.4 L14 324.4 Q14 362.8 52.4 362.8 H83.44 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<path id="part-controller-right" d="M587.76 30 H618.8 Q657.2 30 657.2 68.4 L657.2 324.4 Q657.2 362.8 618.8 362.8 H587.76 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="part-body" x="84.4" y="30" width="502.4" height="332.8" rx="8" fill="#262E3A" stroke="#5A6678" stroke-width="2.5"/>
+<rect id="btn-LeftTrigger" x="46.16" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightTrigger" x="567.44" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-LeftBumper" x="50.96" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightBumper" x="572.24" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="part-screen" x="94.36" y="45.63" width="482.477" height="301.548" rx="4" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
+<path d="M393.496 53.63 L480.342 53.63" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<g id="axis-LeftStick"><circle cx="49.2" cy="103.22" r="16.96" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="49.2" cy="103.22" r="10.5152" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-DPad"><rect id="btn-DPadUp" x="43.68" y="157.11" width="11.04" height="13.8" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="43.68" y="181.95" width="11.04" height="13.8" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="29.88" y="170.91" width="13.8" height="11.04" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="54.72" y="170.91" width="13.8" height="11.04" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="43.68" y="170.91" width="11.04" height="11.04" fill="#1F2630"/></g>
+<g id="btn-North"><circle cx="622" cy="88.18" r="7.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M619.62 84.61 L622.00 88.18 L624.38 84.61 M622.00 88.18 L622.00 91.75" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-East"><circle cx="637.04" cy="103.22" r="7.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M634.66 99.65 L634.66 106.79 L638.23 106.79 L639.42 105.60 L639.42 104.41 L638.23 103.22 L634.66 103.22 M634.66 99.65 L638.23 99.65 L639.18 100.60 L639.18 102.27 L638.23 103.22" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-South"><circle cx="622" cy="118.26" r="7.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M619.62 121.83 L622.00 114.69 L624.38 121.83 M620.45 119.45 L623.55 119.45" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-West"><circle cx="606.96" cy="103.22" r="7.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M604.58 99.65 L609.34 106.79 M609.34 99.65 L604.58 106.79" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="axis-RightStick"><circle cx="622" cy="176.43" r="16.96" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="622" cy="176.43" r="10.5152" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-Guide"><circle cx="39.73" cy="316.21" r="4.16" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Select"><circle cx="52.59" cy="249.65" r="3.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Start"><circle cx="618.61" cy="249.65" r="3.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+</svg>

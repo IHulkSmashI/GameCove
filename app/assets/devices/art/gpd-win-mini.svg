@@ -1,61 +1,53 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300">
-<title>GPD WIN Mini layout (clamshell)</title>
-<rect id="part-lid" x="70" y="10" width="340" height="130" rx="14" fill="#262E3A" stroke="#5A6678" stroke-width="2.5"/>
-<rect id="part-screen" x="90" y="20" width="300" height="110" rx="6" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
-<path d="M276 28 L330 28" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
-<rect id="part-body" x="40" y="148" width="400" height="144" rx="30" fill="#262E3A" stroke="#5A6678" stroke-width="2.5"/>
-<rect id="btn-LeftTrigger" x="48" y="130" width="50" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="btn-RightTrigger" x="382" y="130" width="50" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="btn-LeftBumper" x="54" y="142" width="38" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="btn-RightBumper" x="388" y="142" width="38" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
-<g id="axis-LeftStick"><circle cx="92" cy="182" r="17" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="92" cy="182" r="10.54" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
-<g id="btn-DPad"><rect id="btn-DPadUp" x="86.5" y="228.75" width="11" height="13.75" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="86.5" y="253.5" width="11" height="13.75" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="72.75" y="242.5" width="13.75" height="11" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="97.5" y="242.5" width="13.75" height="11" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="86.5" y="242.5" width="11" height="11" fill="#1F2630"/></g>
-<g id="btn-North"><circle cx="388" cy="167" r="7.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M385.62 163.44 L388.00 167.00 L390.38 163.44 M388.00 167.00 L388.00 170.56" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-East"><circle cx="403" cy="182" r="7.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M400.62 178.44 L400.62 185.56 L404.19 185.56 L405.38 184.38 L405.38 183.19 L404.19 182.00 L400.62 182.00 M400.62 178.44 L404.19 178.44 L405.14 179.39 L405.14 181.05 L404.19 182.00" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-South"><circle cx="388" cy="197" r="7.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M385.62 200.56 L388.00 193.44 L390.38 200.56 M386.46 198.19 L389.54 198.19" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-West"><circle cx="373" cy="182" r="7.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M370.62 178.44 L375.38 185.56 M375.38 178.44 L370.62 185.56" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="axis-RightStick"><circle cx="388" cy="248" r="17" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="388" cy="248" r="10.54" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
-<rect x="162" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="178" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="194" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="210" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="226" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="242" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="258" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="274" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="290" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="306" y="168" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="166" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="182" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="198" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="214" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="230" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="246" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="262" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="278" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="294" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="310" y="182" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="170" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="186" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="202" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="218" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="234" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="250" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="266" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="282" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="298" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="314" y="196" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="174" y="210" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="190" y="210" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="206" y="210" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="222" y="210" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="238" y="210" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="254" y="210" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="270" y="210" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect x="286" y="210" width="13" height="10" rx="2" fill="#1F2630"/>
-<rect id="pad-Touch" x="204" y="228" width="72" height="40" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
-<g id="btn-Guide"><circle cx="136" cy="164" r="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
-<g id="btn-QuickAccess"><rect x="337.5" y="160" width="13" height="8" rx="3" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
-<g id="btn-Select"><circle cx="136" cy="276" r="3.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
-<g id="btn-Start"><circle cx="344" cy="276" r="3.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" width="297" height="439" viewBox="0 0 297 439">
+<title>GPD WIN Mini (clamshell) (1 mm = 1.6 units)</title>
+<path id="part-lid" d="M25.2 10 H271.6 Q282.8 10 282.8 21.2 L282.8 173.2 Q282.8 184.4 271.6 184.4 H25.2 Q14 184.4 14 173.2 L14 21.2 Q14 10 25.2 10 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="part-screen" x="24.43" y="22.23" width="247.946" height="139.47" rx="4" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
+<path d="M178.156 30.23 L222.787 30.23" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<path id="part-body" d="M23.6 214.4 H273.2 Q282.8 214.4 282.8 224 L282.8 372.8 Q282.8 388.8 266.8 388.8 H30 Q14 388.8 14 372.8 L14 224 Q14 214.4 23.6 214.4 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="btn-LeftTrigger" x="27.44" y="194.4" width="40.32" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightTrigger" x="229.04" y="194.4" width="40.32" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-LeftBumper" x="32.24" y="206.4" width="30.72" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightBumper" x="233.84" y="206.4" width="30.72" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect x="71.6" y="224" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="90.8" y="224" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="110" y="224" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="129.2" y="224" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="148.4" y="224" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="167.6" y="224" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="186.8" y="224" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="206" y="224" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="74" y="240.8" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="93.2" y="240.8" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="112.4" y="240.8" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="131.6" y="240.8" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="150.8" y="240.8" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="170" y="240.8" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="189.2" y="240.8" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="208.4" y="240.8" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="76.4" y="257.6" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="95.6" y="257.6" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="114.8" y="257.6" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="134" y="257.6" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="153.2" y="257.6" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="172.4" y="257.6" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="191.6" y="257.6" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="210.8" y="257.6" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="78.8" y="274.4" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="98" y="274.4" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="117.2" y="274.4" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="136.4" y="274.4" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="155.6" y="274.4" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<rect x="174.8" y="274.4" width="16.64" height="14.24" rx="1.6" fill="#1F2630"/>
+<g id="axis-LeftStick"><circle cx="42.8" cy="249.28" r="12.2112" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="42.8" cy="249.28" r="7.57094" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-DPad"><rect id="btn-DPadUp" x="38.8256" y="280.71" width="7.9488" height="9.936" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="38.8256" y="298.594" width="7.9488" height="9.936" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="28.8896" y="290.646" width="9.936" height="7.9488" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="46.7744" y="290.646" width="9.936" height="7.9488" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="38.8256" y="290.646" width="7.9488" height="7.9488" fill="#1F2630"/></g>
+<g id="btn-North"><circle cx="254" cy="238.451" r="5.4144" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M252.29 235.88 L254.00 238.45 L255.71 235.88 M254.00 238.45 L254.00 241.02" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-East"><circle cx="264.829" cy="249.28" r="5.4144" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M263.11 246.71 L263.11 251.85 L265.69 251.85 L266.54 250.99 L266.54 250.14 L265.69 249.28 L263.11 249.28 M263.11 246.71 L265.69 246.71 L266.37 247.39 L266.37 248.59 L265.69 249.28" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-South"><circle cx="254" cy="260.109" r="5.4144" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M252.29 262.68 L254.00 257.54 L255.71 262.68 M252.89 260.97 L255.11 260.97" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-West"><circle cx="243.171" cy="249.28" r="5.4144" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M241.46 246.71 L244.89 251.85 M244.89 246.71 L241.46 251.85" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="axis-RightStick"><circle cx="254" cy="294.62" r="12.2112" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="254" cy="294.62" r="7.57094" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<rect id="pad-Touch" x="111.6" y="329.63" width="73.6" height="41.6" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
+<g id="btn-Select"><circle cx="40.88" cy="339.97" r="3.04" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Start"><circle cx="255.92" cy="339.97" r="3.04" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-LeftPaddle1"><rect x="25.8" y="396.8" width="34" height="16" rx="8" fill="none" stroke="#9AA4B0" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M37.32 401.30 L37.32 408.30 L41.98 408.30 M47.12 408.30 L47.12 401.30 L43.62 405.97 L48.28 405.97" fill="none" stroke="#9AA4B0" stroke-width="1.10" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-QuickAccess"><rect x="237" y="396.8" width="34" height="16" rx="8" fill="none" stroke="#9AA4B0" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M248.52 408.30 L248.52 401.30 L252.02 401.30 L253.18 402.47 L253.18 403.63 L252.02 404.80 L248.52 404.80 M250.85 404.80 L253.18 408.30 M258.32 408.30 L258.32 401.30 L254.82 405.97 L259.48 405.97" fill="none" stroke="#9AA4B0" stroke-width="1.10" stroke-linecap="round" stroke-linejoin="round"/></g>
 </svg>

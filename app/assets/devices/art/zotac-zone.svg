@@ -1,26 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="500" height="260" viewBox="0 0 500 260">
-<title>ZOTAC Zone layout</title>
-<path id="part-body" d="M84 50 H416 Q456 50 456 84 L460 204 Q460 234 410 234 L376 200 Q366 200 346 200 H154 Q134 200 124 200 L90 234 Q40 234 40 204 L44 84 Q44 50 84 50 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
-<rect id="btn-LeftTrigger" x="54" y="32" width="54" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="btn-RightTrigger" x="392" y="32" width="54" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="btn-LeftBumper" x="60" y="44" width="42" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="btn-RightBumper" x="398" y="44" width="42" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="part-screen" x="150" y="64" width="200" height="124" rx="6" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
-<path d="M274 72 L310 72" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
-<circle id="dial-Left" cx="112" cy="92" r="24" fill="none" stroke="#9AA4B0" stroke-width="3" stroke-dasharray="3 3"/>
-<g id="axis-LeftStick"><circle cx="112" cy="92" r="17" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="112" cy="92" r="10.54" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
-<g id="btn-DPad"><rect id="btn-DPadUp" x="65.5" y="76.25" width="9" height="11.25" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="65.5" y="96.5" width="9" height="11.25" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="54.25" y="87.5" width="11.25" height="9" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="74.5" y="87.5" width="11.25" height="9" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="65.5" y="87.5" width="9" height="9" fill="#1F2630"/></g>
-<circle id="dial-Right" cx="388" cy="92" r="24" fill="none" stroke="#9AA4B0" stroke-width="3" stroke-dasharray="3 3"/>
-<g id="axis-RightStick"><circle cx="388" cy="92" r="17" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="388" cy="92" r="10.54" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
-<g id="btn-North"><circle cx="432" cy="80" r="6" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M430.10 77.15 L432.00 80.00 L433.90 77.15 M432.00 80.00 L432.00 82.85" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-East"><circle cx="444" cy="92" r="6" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M442.10 89.15 L442.10 94.85 L444.95 94.85 L445.90 93.90 L445.90 92.95 L444.95 92.00 L442.10 92.00 M442.10 89.15 L444.95 89.15 L445.71 89.91 L445.71 91.24 L444.95 92.00" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-South"><circle cx="432" cy="104" r="6" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M430.10 106.85 L432.00 101.15 L433.90 106.85 M430.77 104.95 L433.24 104.95" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-West"><circle cx="420" cy="92" r="6" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M418.10 89.15 L421.90 94.85 M421.90 89.15 L418.10 94.85" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<rect id="pad-Left" x="72" y="132" width="64" height="50" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
-<rect id="pad-Right" x="364" y="132" width="64" height="50" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
-<g id="btn-Guide"><circle cx="132" cy="196" r="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
-<g id="btn-QuickAccess"><circle cx="368" cy="196" r="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
-<g id="btn-QuickAccess2"><rect x="243.5" y="200" width="13" height="8" rx="3" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
-<g id="btn-LeftPaddle1"><rect x="123" y="236" width="34" height="16" rx="8" fill="none" stroke="#9AA4B0" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M134.52 247.50 L134.52 240.50 L136.85 244.58 L139.18 240.50 L139.18 247.50 M141.98 241.67 L143.15 240.50 L143.15 247.50 M141.98 247.50 L144.32 247.50" fill="none" stroke="#9AA4B0" stroke-width="1.10" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-RightPaddle1"><rect x="343" y="236" width="34" height="16" rx="8" fill="none" stroke="#9AA4B0" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M354.52 247.50 L354.52 240.50 L356.85 244.58 L359.18 240.50 L359.18 247.50 M360.82 241.67 L361.98 240.50 L364.32 240.50 L365.48 241.67 L365.48 242.83 L360.82 247.50 L365.48 247.50" fill="none" stroke="#9AA4B0" stroke-width="1.10" stroke-linecap="round" stroke-linejoin="round"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" width="484" height="244" viewBox="0 0 484 244">
+<title>ZOTAC Gaming Zone (1 mm = 1.6 units)</title>
+<path id="part-body" d="M55.6 30 H428.4 Q470 30 470 71.6 L470 159.6 Q470 214 415.6 214 L401.36 214 C364.4 214 364.4 188.93 327.44 188.93 H156.56 C119.6 188.93 119.6 214 82.64 214 L68.4 214 Q14 214 14 159.6 L14 71.6 Q14 30 55.6 30 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="btn-LeftTrigger" x="36.8" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightTrigger" x="389.6" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-LeftBumper" x="41.6" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightBumper" x="394.4" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="part-screen" x="118.03" y="43.07" width="247.946" height="139.47" rx="4" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
+<path d="M271.756 51.07 L316.387 51.07" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<g id="btn-DPad"><rect id="btn-DPadUp" x="33.842" y="62.292" width="9.936" height="12.42" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="33.842" y="84.648" width="9.936" height="12.42" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="21.422" y="74.712" width="12.42" height="9.936" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="43.778" y="74.712" width="12.42" height="9.936" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="33.842" y="74.712" width="9.936" height="9.936" fill="#1F2630"/></g>
+<g id="axis-LeftStick"><circle cx="93.21" cy="79.68" r="15.264" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="93.21" cy="79.68" r="9.46368" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-North"><circle cx="445.19" cy="66.144" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M443.05 62.93 L445.19 66.14 L447.33 62.93 M445.19 66.14 L445.19 69.36" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-East"><circle cx="458.726" cy="79.68" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M456.58 76.47 L456.58 82.89 L459.80 82.89 L460.87 81.82 L460.87 80.75 L459.80 79.68 L456.58 79.68 M456.58 76.47 L459.80 76.47 L460.65 77.32 L460.65 78.82 L459.80 79.68" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-South"><circle cx="445.19" cy="93.216" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M443.05 96.43 L445.19 90.00 L447.33 96.43 M443.80 94.29 L446.58 94.29" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-West"><circle cx="431.654" cy="79.68" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M429.51 76.47 L433.80 82.89 M433.80 76.47 L429.51 82.89" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="axis-RightStick"><circle cx="390.79" cy="79.68" r="15.264" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="390.79" cy="79.68" r="9.46368" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<circle id="dial-Left" cx="93.21" cy="79.68" r="19.8432" fill="none" stroke="#9AA4B0" stroke-width="3" stroke-dasharray="3 3"/>
+<circle id="dial-Right" cx="390.79" cy="79.68" r="19.8432" fill="none" stroke="#9AA4B0" stroke-width="3" stroke-dasharray="3 3"/>
+<rect id="pad-Left" x="76.88" y="133.84" width="38.4" height="35.2" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
+<rect id="pad-Right" x="368.72" y="133.84" width="38.4" height="35.2" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
+<g id="btn-Guide"><circle cx="128" cy="195.6" r="4.16" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-QuickAccess"><circle cx="356" cy="195.6" r="4.16" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-QuickAccess2"><rect x="236.592" y="195.952" width="10.816" height="6.656" rx="2.496" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Select"><circle cx="111.31" cy="44.72" r="3.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Start"><circle cx="372.69" cy="44.72" r="3.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-LeftPaddle1"><rect x="49.01" y="222" width="34" height="16" rx="8" fill="none" stroke="#9AA4B0" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M60.53 233.50 L60.53 226.50 L62.86 230.58 L65.19 226.50 L65.19 233.50 M67.99 227.67 L69.16 226.50 L69.16 233.50 M67.99 233.50 L70.33 233.50" fill="none" stroke="#9AA4B0" stroke-width="1.10" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-RightPaddle1"><rect x="400.99" y="222" width="34" height="16" rx="8" fill="none" stroke="#9AA4B0" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M412.51 233.50 L412.51 226.50 L414.84 230.58 L417.17 226.50 L417.17 233.50 M418.81 227.67 L419.97 226.50 L422.31 226.50 L423.47 227.67 L423.47 228.83 L418.81 233.50 L423.47 233.50" fill="none" stroke="#9AA4B0" stroke-width="1.10" stroke-linecap="round" stroke-linejoin="round"/></g>
 </svg>
