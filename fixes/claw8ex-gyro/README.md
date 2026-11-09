@@ -44,5 +44,5 @@ Every change is recorded in `/var/lib/gamecove/fixes/claw8ex-gyro/manifest`, and
 ## Licenses
 
 - `bpf/MSI__Claw-ISH-IMU.bpf.c` (and the `.bpf.o` built from it): GPL-2.0-only, © Kisenir (r/MSIClaw). Text: `LICENSES/GPL-2.0-only.txt` at the top of the repository.
-- `helpers/*.py`: by Kisenir (r/MSIClaw). Licensed GPL-2.0-or-later pending his confirmation.
+- `helpers/*.py`: by Kisenir (r/MSIClaw). Licensed GPL-2.0-or-later, confirmed by him (2026-11-09).
 - `fix.sh`: GPL-3.0-or-later, like the rest of GameCove
