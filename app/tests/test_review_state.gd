@@ -522,3 +522,35 @@ func test_l9_failed_restore_keeps_the_original() -> void:
 	eq(be.clocks["min"], 300, "GPU floor back")
 	ok(lv.restore(), "a second restore")
 	eq(be.boost, true, "boost back on: the original was kept after the failure")
+
+
+# ---- L10: thermal guard gaps ---------------------------------------------------------------------
+
+func test_l10_guard_steps_back_up_without_a_user_pick() -> void:
+	var t: Dictionary = Trees.new().claw8ex()
+	var e := _setup(t)
+	var p: Node = e["power"]
+	p._thermald_held = true
+	p._user_tdp = -1.0   # nobody moved the slider this run
+	ok(p.write_tdp(20.0), "TDP 20 W")
+	_wr(t["root"] + "/sys/class/thermal/thermal_zone3/temp", "96000")
+	eq(p.guard_check(), 18, "hot: stepped down to 18 W")
+	_wr(t["root"] + "/sys/class/thermal/thermal_zone3/temp", "70000")
+	var w := -1
+	for i in 4:   # one check clears the trip, then RECOVER_CHECKS cool ones
+		w = p.guard_check()
+	eq(w, 20, "cool again: back up to the 20 W from before the step")
+	_free()
+
+
+## thermald already stopped by a hold of an earlier run (its held file is there): the guard runs.
+func test_l10_guard_runs_when_thermald_was_already_held() -> void:
+	var t: Dictionary = Trees.new().claw8ex()
+	_wr(t["root"] + "/thermald.state", "inactive")
+	DirAccess.make_dir_recursive_absolute(t["root"] + "/var/lib/gamecove/fixes/power-tune")
+	_wr(t["root"] + "/var/lib/gamecove/fixes/power-tune/thermald-held", "")
+	var e := _setup(t)
+	var p: Node = e["power"]
+	ok(p.write_tdp(20.0), "TDP 20 W")
+	eq(p._thermald_held, true, "held (by the earlier run): the temperature guard is on")
+	_free()

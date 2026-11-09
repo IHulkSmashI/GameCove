@@ -127,6 +127,7 @@ var _thermald_held := false
 var _thermald_try_ms := 0
 const THERMALD_RETRY_MS := 30000
 var _guard_timer: Timer
+var _guard_base_w := -1.0   # the TDP before the guard's first step (no user pick this run)
 var _busy := -1
 var _busy_at := -1000.0
 var _battery_pct := -1
@@ -1381,7 +1382,15 @@ func _hold_thermald() -> void:
 		return
 	_thermald_checked = true
 	_thermald_try_ms = now
-	if not be.helper_present() or not be.thermald_active():
+	if not be.helper_present():
+		return
+	if not be.thermald_active():
+		# stopped by an earlier hold (a run that crashed or was switched away): thermald's
+		# temperature control is off all the same, so the guard has to run (review L10)
+		if be.thermald_held_mark():
+			_thermald_held = true
+			guard.reset()
+			_start_guard.call_deferred()
 		return
 	if be.root_set("thermald", "hold"):
 		_thermald_held = true
@@ -1412,7 +1421,12 @@ func guard_check() -> int:
 		w = guard.check(t, sess.learned.tdp, sess.floor_tdp, func(x): return autotune.thermal_step(x),
 			sess.ceiling_tdp, func(x): return autotune.thermal_release(x))
 	else:
-		var limit := int(roundf(_user_tdp)) if _user_tdp > 0.0 else int(roundf(_tdp_w))
+		# with no pick this run the limit is the TDP from before the first step, not the
+		# stepped one (which never let the guard step back up, review L10)
+		if guard.stepped_w < 0:
+			_guard_base_w = _tdp_w
+		var base := _user_tdp if _user_tdp > 0.0 else _guard_base_w
+		var limit := int(roundf(base)) if base > 0.0 else int(roundf(_tdp_w))
 		w = guard.check(t, int(roundf(_tdp_w)), _floor_w(), func(x): return write_tdp(float(x)), limit)
 	if w > 0:
 		_emit_changed()
