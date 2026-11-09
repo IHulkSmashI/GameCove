@@ -332,6 +332,23 @@ func test_brightness_backlight_via_logind() -> void:
 	eq(FileAccess.get_file_as_string(s.root + "/sys/class/backlight/amdgpu_bl0/brightness"), "150", "floor 5 %, never black")
 
 
+## The Claw's backlight (max 96000): raw 22465 reads 23 %; a probe to 30 % and back must
+## put 22465 back, not 23 % of 96000 (23040).
+func test_brightness_put_back_is_raw_exact() -> void:
+	var s := Env.make("bl_exact", "msi-claw-8-ex", BACKLIGHT)
+	var bl: String = s.root + "/sys/class/backlight/amdgpu_bl0/"
+	for kv in [["max_brightness", "96000"], ["brightness", "22465"]]:
+		var f := FileAccess.open(bl + kv[0], FileAccess.WRITE)
+		f.store_string(kv[1])
+		f.close()
+	var b = _controls(s)["display.brightness"]
+	eq(b.read(), 23.0, "23 %")
+	ok(b.write(30), "probe")
+	eq(FileAccess.get_file_as_string(bl + "brightness"), "28800")
+	ok(b.write(23), "put back")
+	eq(FileAccess.get_file_as_string(bl + "brightness"), "22465", "the raw value that was there")
+
+
 func test_brightness_fallback_direct_write() -> void:
 	var s := Env.make("bl2", "msi-claw-8-ex", BACKLIGHT)
 	s.fake.logind_ok = false

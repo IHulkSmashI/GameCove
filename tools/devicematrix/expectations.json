@@ -930,7 +930,7 @@
    "power.smt": {
     "available": false,
     "reason_contains": "no SMT",
-    "note": "Lunar Lake has no SMT"
+    "note": "Panther Lake has no SMT"
    },
    "power.gpu_profile": {
     "available": true,
@@ -988,7 +988,7 @@
    },
    "controller.rumble_strength": {
     "available": true,
-    "note": "live the Claw runs InputPlumber 0.83 with hid-msi: strength through the kernel knob (feat/rumble)"
+    "note": "hid-msi rumble_intensity_left/right 0-100 (live: both 75, 0644 root, through the root helper)"
    },
    "controller.led_effect": {
     "available": true,
@@ -1047,7 +1047,7 @@
    },
    "controller.rumble_test": {
     "available": true,
-    "note": "InputPlumber ForceFeedback.Rumble (test_controls_rumble.gd); the Claw runs InputPlumber live (claw-live)"
+    "note": "InputPlumber ForceFeedback"
    }
   },
   "lenovo-legion-go-s-z2go": {

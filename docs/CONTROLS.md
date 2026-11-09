@@ -454,7 +454,7 @@ Owner: ctl-power. 33 controls, group `power`. Each detects its backend on this e
 | `power.gpu_profile` | choice | helper (xe `power_profile`, 0644 root), steamos-manager `GpuPowerProfile1` (amdgpu only) | Intel Arc (xe) with the root helper, Steam Deck |
 | `power.thermal_limit` | slider °C | PowerStation `ThermalThrottleLimitC`; 60..the first-seen firmware value (kept per handheld) | AMD with ryzenadj |
 | `power.charge_limit` | slider % | Power (steamos-manager, charge-limit fix) | rows with `charge_limit` |
-| `power.battery_long_life` | toggle | helper (`charge_types` Long_Life = 80 %) | Lenovo Legion Go family (lenovo-wmi-other) |
+| `power.battery_long_life` | toggle | helper (`charge_types` Long_Life = 80 %); elsewhere an 80 % charge limit through `power.charge_limit`'s backend (steamos-manager or the charge-limit fix), off = 100 % | Lenovo Legion Go family; every handheld with a charge limit |
 | `power.fan_mode` | choice | Power (steamos-manager `FanControl1`, fan fix) | rows with a fan driver |
 | `power.fan_curve` | curve | fan fix `set curve:` (never quieter than Quiet, never falling) | msi_wmi_platform (6 points), asus_custom_fan_curve (8) |
 | `power.battery_saver` | toggle | applies battery profile, power-saver mode, EPP power, boost off, GPU efficiency; puts the old values back | all with any of those |
@@ -524,7 +524,7 @@ QuickMenu node); the Controller provider's `REAPPLY_AFTER_RESUME` ~5 s after wak
 
 **apply_order bands** (higher runs first when a profile applies): power 40-101 (TDP 100, boosts 97-99, CPU 70-82, GPU 60-66, fan 49-50, Auto TDP 40-41), display 10-30 (VRR 30, refresh 20, every other display control 11, frame limit 10), perf 0-5. Controller (0-20) and audio/network (0) don't depend on the others.
 
-**needs_root** is true where the only write path is the root helper (`gamecove-fix-set`, prompt-free): `power.sppt`, `power.fppt`, `power.epp`, `power.cpu_max`, `power.fan_curve`, `power.sleep_mode`, `power.mcu_powersave`, `power.battery_long_life`, `controller.gyro_accel`. Settings that use a service first (steamos-manager, PowerStation) and the helper only as a fallback stay false.
+**needs_root** is true where the only write path is the root helper (`gamecove-fix-set`, prompt-free): `power.sppt`, `power.fppt`, `power.epp`, `power.cpu_max`, `power.fan_curve`, `power.sleep_mode`, `power.mcu_powersave`, `controller.gyro_accel`. Settings that use a service first (steamos-manager, PowerStation) and the helper only as a fallback stay false.
 
 **per_game** false for everything that belongs to the device or the moment: brightness, volume, outputs, Wi-Fi/Bluetooth/airplane, night light, HDR, rotation, timers, charge limit, battery care, fan curve, sleep mode, overlay look.
 

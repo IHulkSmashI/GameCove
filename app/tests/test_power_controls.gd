@@ -437,6 +437,34 @@ func test_ally_live_charge_fan_and_gpu_profile() -> void:
 	_free()
 
 
+## Round 2: on the Ally steamos-manager's GPU profile property didn't answer (no driver
+## configured); it still runs (GPU level works), so the reason names it, not a missing GPU.
+func test_ally_live_gpu_profile_reason_when_steamos_manager_errors() -> void:
+	var t := _ally_live(true)
+	t["props"].erase(Trees.SM + "GpuPowerProfile1 GpuPowerProfile")
+	t["props"].erase(Trees.SM + "GpuPowerProfile1 AvailableGpuPowerProfiles")
+	var e := _setup(t)
+	eq(e["c"]["power.gpu_profile"].reason, Tx.SM_NO_GPU_PROFILES)
+	_free()
+
+
+## Round 2: battery care agreed with no one; it is now an 80 % limit through the same
+## backend as power.charge_limit (steamos-manager on the Ally).
+func test_ally_live_long_life_is_an_80_percent_limit() -> void:
+	var e := _setup(_ally_live(false))
+	var c: Dictionary = e["c"]
+	ok(c["power.battery_long_life"].available, "battery care (%s)" % c["power.battery_long_life"].reason)
+	eq(c["power.battery_long_life"].value, false, "no limit set")
+	e["reg"].set_value("power.battery_long_life", true)
+	e["reg"].detect_all()
+	eq(c["power.charge_limit"].value, 80.0, "an 80 % limit")
+	eq(c["power.battery_long_life"].value, true)
+	e["reg"].set_value("power.battery_long_life", false)
+	e["reg"].detect_all()
+	eq(c["power.charge_limit"].value, 100.0, "off: charges to full")
+	_free()
+
+
 func test_ally_live_without_the_helper() -> void:
 	var e := _setup(_ally_live(false))
 	var c: Dictionary = e["c"]
@@ -477,6 +505,27 @@ func test_ally_battery_saver_puts_custom_watts_and_ppts_back() -> void:
 	eq(e["power"].state()["tdp_w"], 30.0, "30 W back")
 	eq(e["power"].state()["profile"], "custom", "custom back")
 	eq([_read(e["root"], a + "ppt_pl2_sppt/current_value"), _read(e["root"], a + "ppt_pl3_fppt/current_value")], ["30", "30"], "PPTs back")
+	_free()
+
+
+## Round 2 (Ally, steamos-manager's amdgpu level auto, ManualGpuClock 800): the probe's
+## put-back is clock first (switching to manual), then the level back to auto; afterwards
+## the control reads 800 again and the level is auto.
+func test_ally_live_gpu_clock_put_back_order() -> void:
+	var e := _setup(_ally_live(true))
+	var r: RefCounted = SmIntelGpu.new()
+	_swap_runner(e, r)
+	var c: Dictionary = e["c"]
+	var sm := Trees.SM + "GpuPerformanceLevel1 "
+	# the helper's amdgpu min/max own the clocks here: use steamos-manager's path directly
+	var be: RefCounted = e["prov"].be
+	ok(be.set_sm_manual_clock(850), "probe 850 (switches to manual)")
+	eq(str(r.props[sm + "GpuPerformanceLevel"]["data"]), "manual")
+	ok(be.set_sm_manual_clock(800), "put-back 800 while manual")
+	ok(be.set_gpu_level("auto"), "then the level back to auto")
+	eq(int(be.sm_manual_clock()["value"]), 800, "800 again")
+	eq(str(r.props[sm + "GpuPerformanceLevel"]["data"]), "auto", "auto again")
+	ok(c.has("power.gpu_clock"), "")
 	_free()
 
 
@@ -539,7 +588,7 @@ func test_ally_offers_what_this_handheld_has() -> void:
 			"power.fan_mode", "power.fan_curve", "power.mcu_powersave"]:
 		ok(c[id].available, "ally offers %s (%s)" % [id, c[id].reason])
 	eq(c["power.platform_profile"].reason, Tx.PPD_OWNS, "PPD owns the firmware mode")
-	eq(c["power.gpu_profile"].reason, Tx.XE_ONLY, "no xe")
+	eq(c["power.gpu_profile"].reason, Tx.SM_NO_GPU_PROFILES, "no xe; steamos-manager runs but has none")
 	eq(c["power.sleep_mode"].reason, Tx.NOT_HERE, "no mem_sleep file")
 	# hhd's ASUS rule at SPL 15 W: SPPT <= min(35, 15 x 1.2) = 18, FPPT <= min(35, 15 x 1.4) = 21
 	eq([c["power.sppt"].min_value, c["power.sppt"].max_value], [15.0, 18.0], "SPPT: not under SPL, hhd's ASUS ceiling")

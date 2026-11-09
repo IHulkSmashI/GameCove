@@ -105,8 +105,11 @@ func test_output_and_mic() -> void:
 class WithPactl extends RefCounted:
 	var inner: RefCounted
 	var json := {}   # "sinks"/"sources" -> JSON text
+	var status_text := ""   # replaces `wpctl status` when set
 
 	func run(program: String, args: PackedStringArray) -> Dictionary:
+		if program == "wpctl" and status_text != "" and args.size() == 1 and args[0] == "status":
+			return {"code": 0, "out": status_text}
 		if program == "pactl":
 			inner.calls.append("pactl " + " ".join(args))
 			return {"code": 0, "out": json.get(args[3], "[]")} if json.has(args[3]) else {"code": 1, "out": ""}
@@ -149,6 +152,25 @@ func test_claw_unplugged_jacks_are_not_offered() -> void:
 	c = _audio(s)
 	eq(c["audio.output"].options.size(), 2, "headphones offered once plugged in")
 	ok(c["audio.output"].write(hp), "and selectable")
+
+
+## The Ally on SteamOS 3.10: the microphone is a loopback source WirePlumber 0.5 lists
+## under Filters; its internal port works while the headset jack next to it is empty.
+func test_ally_loopback_mic_is_offered() -> void:
+	var s := Env.make("ally_mic", "asus-rog-ally")
+	var mic := "alsa_loopback_device.alsa_input.pci-0000_09_00.6.analog-stereo"
+	var status := "PipeWire 'pipewire-0' [1.4.7]\n\nAudio\n ├─ Devices:\n │      48. Family 17h/19h HD Audio Controller [alsa]\n │  \n ├─ Sinks:\n │  *   60. Speaker [vol: 0.50]\n │  \n ├─ Sources:\n │  \n ├─ Filters:\n │    - loopback-1234-15\n │  *   57. %s [Audio/Source]\n │      58. alsa_loopback_device.input [Audio/Sink]\n │  \n └─ Streams:\n" % mic
+	var w := WithPactl.new()
+	w.inner = s.fake
+	w.json = {"sources": JSON.stringify([{"name": mic, "description": mic, "active_port": "analog-input-internal-mic",
+		"ports": [{"name": "analog-input-internal-mic", "availability": "availability unknown"},
+			{"name": "analog-input-mic", "availability": "not available"}]}]), "sinks": "[]"}
+	w.status_text = status
+	s.ctx["runner"] = w
+	var c := _audio(s)
+	ok(c["audio.input"].available, "a microphone (%s)" % c["audio.input"].reason)
+	eq(c["audio.input"].options.map(func(x): return x["value"]), [mic], "the loopback source, internal port in use")
+	eq(c["audio.input"].value, mic, "and it is the default")
 
 
 func test_audio_reasons() -> void:

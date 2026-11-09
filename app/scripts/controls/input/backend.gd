@@ -253,6 +253,19 @@ func ip_profile_yaml() -> String:
 	return str(y[0]) if y is Array and y.size() > 0 else ""
 
 
+## SetTargetDevices with this exact list (what OpenGamepadUI does); read back.
+func ip_set_targets(kinds: Array) -> bool:
+	var dev: Dictionary = ip().get("device", {})
+	if dev.is_empty() or kinds.is_empty():
+		return false
+	var args: Array = ["as", str(kinds.size())]
+	args.append_array(kinds)
+	if not call_void(dev["path"], DEVICE_IFACE, "SetTargetDevices", args):
+		return false
+	invalidate()
+	return ip_live_targets() == kinds
+
+
 ## Loads a profile text as it was; true when InputPlumber took it.
 func ip_load_yaml(text: String) -> bool:
 	var dev: Dictionary = ip().get("device", {})

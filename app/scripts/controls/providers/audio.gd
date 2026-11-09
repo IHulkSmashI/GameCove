@@ -132,6 +132,12 @@ func _default_name(c, kind: String) -> Variant:
 	for n in st[kind]:
 		if n["default"]:
 			return n["name"]
+	# no "*" in the list (a filter/virtual default on some WirePlumber versions): ask
+	var r := _run(c, ["inspect", Wp.SINK if kind == "sinks" else Wp.SOURCE])
+	var name := Wp.parse_inspect_name(str(r.get("out", ""))) if int(r.get("code", -1)) == 0 else ""
+	for n in st[kind]:
+		if n["name"] == name:
+			return name
 	return null
 
 

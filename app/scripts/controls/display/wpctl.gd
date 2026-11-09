@@ -51,6 +51,14 @@ static func parse_status(out: String) -> Dictionary:
 		var name := line.substr(dot + 2).strip_edges()
 		var vol := -1.0
 		var muted := false
+		# WirePlumber 0.5 lists loopback / echo-cancel nodes under "Filters", each with
+		# its media class: on SteamOS the Ally's microphone is such a loopback source
+		# (alsa_loopback_device.alsa_input...), so it counts as a real one
+		var klass := ""
+		var cb := name.rfind("[Audio/")
+		if cb >= 0 and section == "filters":
+			klass = name.substr(cb + 1).trim_suffix("]")
+			name = name.substr(0, cb).strip_edges()
 		var b := name.rfind("[vol:")
 		if b >= 0:
 			var inner := name.substr(b + 5).trim_suffix("]").strip_edges()
@@ -58,6 +66,12 @@ static func parse_status(out: String) -> Dictionary:
 			var n := inner.get_slice(" ", 0)
 			vol = n.to_float() if n.is_valid_float() else -1.0
 			name = name.substr(0, b).strip_edges()
+		if section == "filters":
+			if klass.begins_with("Audio/Source"):
+				res["sources"].append({"id": id, "name": name, "default": is_default, "volume": vol, "muted": muted})
+			elif klass.begins_with("Audio/Sink"):
+				res["sinks"].append({"id": id, "name": name, "default": is_default, "volume": vol, "muted": muted})
+			continue
 		match section:
 			"sinks":
 				res["sinks"].append({"id": id, "name": name, "default": is_default, "volume": vol, "muted": muted})
@@ -82,8 +96,7 @@ static func _strip_tree(s: String) -> String:
 
 
 ## `pactl -f json list sinks|sources` (pipewire-pulse) -> descriptions of the nodes whose
-## jack has nothing plugged in: the active port (else every port) reports availability
-## "not available". With UCM (Intel SOF/SoundWire, the MSI Claw) Headphones and Headset
+## jacks have nothing plugged in: every port reports availability "not available". With UCM (Intel SOF/SoundWire, the MSI Claw) Headphones and Headset
 ## Microphone are nodes of their own that wpctl lists even when no jack is connected.
 ## Unknown availability counts as plugged. [] when the text isn't that JSON.
 static func parse_unplugged(json: String) -> Array:
@@ -94,16 +107,24 @@ static func parse_unplugged(json: String) -> Array:
 	for n in data:
 		if not n is Dictionary or not n.get("ports") is Array or (n["ports"] as Array).is_empty():
 			continue
+		# ports, not nodes: only a node whose every port is empty is gone (the Ally's mic
+		# has an internal port next to the empty headset jack)
 		var ports: Array = n["ports"]
-		var active := str(n.get("active_port", ""))
-		var gone := false
-		var found := false
-		for p in ports:
-			if p is Dictionary and str(p.get("name", "")) == active:
-				found = true
-				gone = str(p.get("availability", "")) == "not available"
-		if not found:
-			gone = ports.all(func(p): return p is Dictionary and str(p.get("availability", "")) == "not available")
+		var gone := ports.all(func(p): return p is Dictionary and str(p.get("availability", "")) == "not available")
 		if gone:
 			out.append(str(n.get("description", n.get("name", ""))))
 	return out
+
+
+## `wpctl inspect @DEFAULT_AUDIO_SOURCE@` -> the node's description (else nick, else name).
+static func parse_inspect_name(out: String) -> String:
+	var found := {}
+	for line in out.split("\n"):
+		var l := line.strip_edges().trim_prefix("* ").strip_edges()
+		for k in ["node.description", "node.nick", "node.name"]:
+			if l.begins_with(k + " = "):
+				found[k] = l.substr(k.length() + 3).strip_edges().trim_prefix("\"").trim_suffix("\"")
+	for k in ["node.description", "node.nick", "node.name"]:
+		if found.has(k):
+			return found[k]
+	return ""

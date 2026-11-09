@@ -241,7 +241,15 @@ func _read_brightness(c) -> Variant:
 	var mx := _read_int(dir.path_join("max_brightness"))
 	if mx <= 0:
 		return null
-	return roundf(clampf(_read_int(dir.path_join("brightness")) * 100.0 / mx, 0.0, 100.0))
+	var raw := _read_int(dir.path_join("brightness"))
+	var pct := roundf(clampf(raw * 100.0 / mx, 0.0, 100.0))
+	# remember the exact raw value seen at each percent, so writing that percent back
+	# restores it exactly (the Claw: 22465 -> 23 % -> 23040 lost the panel's own step)
+	var seen: Dictionary = c.get_meta("raw_seen", {})
+	if not seen.has(int(pct)):
+		seen[int(pct)] = raw
+		c.set_meta("raw_seen", seen)
+	return pct
 
 
 func _write_brightness(c, v) -> bool:
@@ -257,6 +265,9 @@ func _write_brightness(c, v) -> bool:
 	var dir := _bl_dir(c)
 	var mx := _read_int(dir.path_join("max_brightness"))
 	var raw := clampi(roundi(mx * pct / 100.0), 1, mx)
+	var seen: Dictionary = c.get_meta("raw_seen", {})
+	if is_equal_approx(pct, roundf(pct)) and seen.has(int(pct)) and int(seen[int(pct)]) >= 1 and int(seen[int(pct)]) <= mx:
+		raw = int(seen[int(pct)])
 	# logind lets the active session set its own backlight: no root, no prompt.
 	var r: Dictionary = c.ctx.runner.run("busctl", PackedStringArray(["--system", "call", LOGIND, LOGIND_SESSION,
 		"org.freedesktop.login1.Session", "SetBrightness", "ssu", "backlight", name, str(raw)]))

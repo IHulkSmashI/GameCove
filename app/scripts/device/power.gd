@@ -929,9 +929,10 @@ func read_tdp() -> float:
 	return float(v) if v != null else -1.0
 
 
-## Write the TDP and read it back. On PowerStation the boost (PL2 - PL1) is set
-## to the device's "pl2_offset_w" too (2 W on Intel, as Handheld Daemon,
-## PowerControl and PowerStation's own database do).
+## Write the TDP and read it back. On PowerStation the boost (PL2 - PL1) is only
+## written when the user picked one (power.boost, boost_w) and the live value differs:
+## writing devices.json's pl2_offset_w with every TDP write put 2 W over the Claw 8
+## EX's live 7 W at start (and a probe then stored 2 as the user's).
 func write_tdp(watts: float) -> bool:
 	var ok := false
 	if backend == "steamos-manager":
@@ -940,9 +941,10 @@ func write_tdp(watts: float) -> bool:
 			ok = absf(read_tdp() - w) < 0.5
 	elif backend == "powerstation":
 		if system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "TDP", "d", "%.1f" % watts):
-			var b := boost_w if boost_w >= 0.0 else float(device.get("pl2_offset_w", -1.0))
-			if b >= 0.0:
-				system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % b)
+			if boost_w >= 0.0:
+				var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
+				if live == null or absf(float(live) - boost_w) >= 0.05:
+					system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % boost_w)
 			ok = absf(read_tdp() - watts) < 0.5
 	elif backend == "hhd" and not _hhd_tdp.is_empty():
 		var w := int(roundf(watts))
@@ -959,6 +961,12 @@ func write_tdp(watts: float) -> bool:
 
 # ---- charge limit -------------------------------------------------------------
 
+## steamos-manager's charge limit lands about a second after set-property.
+const CHARGE_SETTLE_MAX_MS := 3000
+## Pause between read-backs while it lands (tests set 0: no sleeping, the
+## loop still counts 250 ms per read toward the 3 s cap).
+var charge_settle_ms := 250
+
 ## 50-100 %. 100 means no limit.
 func set_charge_limit(percent: int) -> bool:
 	if _charge_via == "" or percent < _charge_min or percent > 100:
@@ -966,8 +974,17 @@ func set_charge_limit(percent: int) -> bool:
 	var got := -1
 	if _charge_via == "steamos-manager":
 		if user_bus.set_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel", "i", str(percent)):
-			var v: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
-			got = sm_charge(int(v)) if v != null else -1
+			# steamos-manager applies it about a second later (seen live on a ROG
+			# Ally): poll the read-back for up to 3 s before calling it refused.
+			var waited := 0
+			while true:
+				var v: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
+				got = sm_charge(int(v)) if v != null else -1
+				if got == percent or waited >= CHARGE_SETTLE_MAX_MS:
+					break
+				if charge_settle_ms > 0:
+					OS.delay_msec(charge_settle_ms)
+				waited += maxi(charge_settle_ms, 1) if charge_settle_ms > 0 else 250
 	else:
 		if _run_fix("charge-limit", str(percent)):
 			got = read_charge_sysfs()
