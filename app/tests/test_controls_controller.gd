@@ -258,6 +258,28 @@ func test_claw_live_emulation_reads_and_restores_the_live_targets() -> void:
 	reg.free()
 
 
+## The ROG Ally on InputPlumber 0.78: TargetDevices only through get-property (not in
+## GetManagedObjects), gamepad1 = deck-uhid; the profile "Default" names no targets.
+func test_ally_emulation_reads_targets_by_property() -> void:
+	var f: RefCounted = Fakes.new(_root("ally_emulation"))
+	f.with_ip("ASUS ROG Ally", ["Gamepad:Button:South"])
+	Fakes.write(f.sys_root + "/usr/share/inputplumber/devices/50-rog_ally.yaml",
+		"version: 1\nkind: CompositeDevice\nname: ASUS ROG Ally\ntarget_devices:\n  - xbox-elite\n  - mouse\n  - keyboard\n")
+	var inner: Callable = f.runner.handler
+	var t := "/org/shadowblip/InputPlumber/devices/target/gamepad1"
+	f.runner.handler = func(cmd: String) -> Variant:
+		if cmd == "busctl --system get-property %s %s %s TargetDevices" % [Fakes.SVC, Fakes.DEV, Fakes.DEV_IFACE]:
+			return {"code": 0, "out": JSON.stringify({"type": "as", "data": [t, t.replace("gamepad1", "mouse0")]})}
+		if cmd == "busctl --system get-property %s %s org.shadowblip.Input.Target DeviceType" % [Fakes.SVC, t]:
+			return {"code": 0, "out": JSON.stringify({"type": "s", "data": "deck-uhid"})}
+		if cmd == "busctl --system get-property %s %s org.shadowblip.Input.Target DeviceType" % [Fakes.SVC, t.replace("gamepad1", "mouse0")]:
+			return {"code": 0, "out": JSON.stringify({"type": "s", "data": "mouse"})}
+		return inner.call(cmd)
+	var reg := _setup(f, _row("asus-rog-ally"))
+	eq(_value(reg, "controller.emulation"), "deck", "deck-uhid on the Ally reads as Steam Deck")
+	reg.free()
+
+
 func test_claw_rumble() -> void:
 	var t := _claw("claw_rumble")
 	var reg: Node = t[0]

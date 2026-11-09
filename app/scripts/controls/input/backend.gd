@@ -140,6 +140,13 @@ func _read_ip() -> Dictionary:
 	var dev := _pick(devices, order if order is Array else [])
 	if not dev.is_empty():
 		dev["targets"] = live_targets(tree, dev["path"])
+		if dev["targets"].is_empty():
+			# older InputPlumber (0.78) may leave TargetDevices out of GetManagedObjects
+			var paths: Variant = bus.get_prop(SERVICE, dev["path"], DEVICE_IFACE, "TargetDevices")
+			for tp in (paths if paths is Array else []):
+				var kind: Variant = bus.get_prop(SERVICE, str(tp), TARGET_IFACE, "DeviceType")
+				if kind != null and str(kind) != "":
+					dev["targets"].append(str(kind))
 	var out := {"version": str(version), "device": dev, "profile": {}, "rumble": null}
 	if dev.is_empty():
 		return out
