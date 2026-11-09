@@ -26,7 +26,10 @@ EXTRA_PROPERTIES = {
     "P5794": "igdb_slug",  # IGDB game ID (a slug)
     "P2816": "hltb",       # HowLongToBeat ID
 }
-PAGE = 25000
+PAGE = 5000
+MIN_PAGE = 500
+# The public endpoint stops streaming at its 60 s limit and the JSON arrives
+# cut off part-way; a cut-off page is asked again at half the size.
 
 
 def query_for(prop: str, limit: int, offset: int) -> str:
@@ -65,14 +68,28 @@ def parse_bindings(data: dict, key: str, items: dict[str, dict]) -> int:
     return len(rows)
 
 
+def fetch_page(client: Client, prop: str, size: int, offset: int) -> tuple[dict, int]:
+    """One page; on a cut-off (unparseable) answer, retry with half the page
+    size down to MIN_PAGE. Returns (data, page size used)."""
+    while True:
+        try:
+            return run_query(client, query_for(prop, size, offset)), size
+        except json.JSONDecodeError:
+            if size <= MIN_PAGE:
+                raise
+            size = max(MIN_PAGE, size // 2)
+
+
 def fetch(client: Client) -> dict[str, dict]:
     items: dict[str, dict] = {}
     for prop, key in {**STORE_PROPERTIES, **EXTRA_PROPERTIES}.items():
         offset = 0
+        size = PAGE
         while True:
-            n = parse_bindings(run_query(client, query_for(prop, PAGE, offset)), key, items)
-            if n < PAGE:
+            data, size = fetch_page(client, prop, size, offset)
+            n = parse_bindings(data, key, items)
+            if n < size:
                 break
-            offset += PAGE
+            offset += n
     # Keep only items that are on at least one store we launch from.
     return {q: r for q, r in items.items() if any(k in r["ids"] for k in STORE_PROPERTIES.values())}
