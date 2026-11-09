@@ -103,3 +103,17 @@ Device data was taken as facts (DMI strings, wattages, capability names, which b
 | AOKZOE A1, AOKZOE A1 Pro | [AOKZOE A1.jpg](https://commons.wikimedia.org/wiki/File:AOKZOE_A1.jpg) | Kyu3a | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | AYANEO Slide | [Tokyo-Game-Show-2023-Day3-2023-09-23 393.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_393.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | AYANEO 3 | [Tokyo-Game-Show-2025 0728.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2025_0728.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+
+## Trademarks
+
+Product and company names are trademarks of their respective owners; GameCove is not affiliated with or endorsed by them.
+
+GameCove shows a company's logo only when that company's own published terms let a free, unaffiliated app do so without asking (checked 2026-11-08; the table and its sources are in [`app/data/brand_logos.json`](app/data/brand_logos.json)). Everyone else's name is shown as plain text.
+
+| Logo | Notice |
+| --- | --- |
+| Heroic Games Launcher icon (`app/assets/brand/heroic.svg`) | Heroic Games Launcher icon © Heroic Games Launcher contributors, GPL-3.0-only ([github.com/Heroic-Games-Launcher/HeroicGamesLauncher](https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher)). Unmodified. |
+
+Store and launcher icons other than these (Steam, Heroic, Lutris, Bottles) come from the user's own system: GameCove shows the icon that app installed into the desktop icon theme, the same way any Linux desktop does. Nothing is copied into GameCove or redistributed. Steam is a trademark of Valve Corporation.
+
+Not bundled because their terms need a licence or written permission, or publish no terms for third parties: Valve (Steam, Steam Deck), Epic Games, GOG, Amazon, MSI, ASUS / ROG, Lenovo / Legion, Acer / Predator, OneXPlayer, AYANEO, GPD, ZOTAC, Intel. AMD's brand terms cover only products that contain an AMD chip.

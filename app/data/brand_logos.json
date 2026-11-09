@@ -1,0 +1,128 @@
+{
+ "_about": "Which logo GameCove may show for each handheld maker, chip maker, store and launcher. A logo is bundled only when the owner's own published terms allow a free, unaffiliated app to show it without asking; everything else shows text, or for stores and launchers the icon the user's own system already has installed (freedesktop hicolor theme, Flatpak exports, pixmaps; nothing redistributed). Each entry's source is the owner page the verdict rests on (checked 2026-11-08); required notices are repeated in CREDITS.md under Trademarks. Read by app/scripts/device/brand.gd.",
+ "version": 1,
+ "checked": "2026-11-08",
+ "general_notice": "Product and company names are trademarks of their respective owners; GameCove is not affiliated with or endorsed by them.",
+ "display_rules": {
+  "unmodified": "Show bundled logos and system icons as they are: no recolouring, cropping, stretching, effects or combining with other marks.",
+  "meaning": "Only to say which store or launcher a game comes from or opens in. Never as GameCove's own branding or to suggest endorsement.",
+  "prominence": "Smaller and less prominent than GameCove's own logo.",
+  "fallback": "When logo_for() returns \"\", show the name as plain text."
+ },
+ "brands": {
+  "steam": {
+   "name": "Steam", "kind": "store", "owner": "Valve Corporation",
+   "aliases": ["steam", "steam store", "valve steam"],
+   "verdict": "needs_permission", "logo": "", "notice": "",
+   "system_icons": ["steam", "com.valvesoftware.Steam"],
+   "official_assets": "https://shared.fastly.steamstatic.com/community_assets/images/steamworks_docs/english/steam_brandAssets.eps",
+   "notice_if_licensed": "©2026 Valve Corporation. Steam and the Steam logo are trademarks and/or registered trademarks of Valve Corporation in the U.S. and/or other countries.",
+   "source": "https://partner.steamgames.com/doc/marketing/branding"
+  },
+  "epic": {
+   "name": "Epic Games Store", "kind": "store", "owner": "Epic Games, Inc.",
+   "aliases": ["epic", "epic games", "epic games store", "egs", "legendary"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://legal.epicgames.com/epicgames/fan-art-policy"
+  },
+  "gog": {
+   "name": "GOG", "kind": "store", "owner": "GOG sp. z o.o.",
+   "aliases": ["gog", "gog.com", "gog galaxy", "gogdl"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://support.gog.com/hc/zh-cn/articles/13835318737821-GOG-content-guidelines-for-Partners"
+  },
+  "amazon": {
+   "name": "Amazon Games", "kind": "store", "owner": "Amazon.com, Inc.",
+   "aliases": ["amazon", "amazon games", "prime gaming", "nile"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://digprjsurvey.amazon.com/csad/help/node/GNYNL3A8HPATWCH8"
+  },
+  "heroic": {
+   "name": "Heroic Games Launcher", "kind": "launcher", "owner": "Heroic Games Launcher contributors",
+   "aliases": ["heroic", "heroic games launcher", "heroicgameslauncher"],
+   "verdict": "allowed", "logo": "res://assets/brand/heroic.svg",
+   "notice": "Heroic Games Launcher icon © Heroic Games Launcher contributors, GPL-3.0-only (github.com/Heroic-Games-Launcher/HeroicGamesLauncher). Unmodified.",
+   "system_icons": ["com.heroicgameslauncher.hgl", "heroic"],
+   "official_assets": "https://raw.githubusercontent.com/Heroic-Games-Launcher/HeroicGamesLauncher/main/src/frontend/assets/heroic-icon.svg",
+   "source": "https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher"
+  },
+  "lutris": {
+   "name": "Lutris", "kind": "launcher", "owner": "Lutris contributors",
+   "aliases": ["lutris"],
+   "verdict": "system_icon_only", "logo": "", "notice": "",
+   "system_icons": ["net.lutris.Lutris", "lutris"], "source": ""
+  },
+  "bottles": {
+   "name": "Bottles", "kind": "launcher", "owner": "Bottles contributors",
+   "aliases": ["bottles"],
+   "verdict": "system_icon_only", "logo": "", "notice": "",
+   "system_icons": ["com.usebottles.bottles", "bottles"], "source": ""
+  },
+  "valve": {
+   "name": "Valve", "kind": "maker", "owner": "Valve Corporation",
+   "aliases": ["valve", "valve corporation", "steam deck"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://partner.steamgames.com/doc/steamdeck/brandguidelines"
+  },
+  "msi": {
+   "name": "MSI", "kind": "maker", "owner": "Micro-Star Int'l Co., Ltd.",
+   "aliases": ["msi", "micro-star international co., ltd.", "micro-star international", "micro-star int'l co., ltd."],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://www.msi.com/page/terms-of-use"
+  },
+  "asus": {
+   "name": "ASUS", "kind": "maker", "owner": "ASUSTeK Computer Inc.",
+   "aliases": ["asus", "asustek computer inc.", "rog", "republic of gamers"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://rog.asus.com/terms-of-notice/official-site/"
+  },
+  "lenovo": {
+   "name": "Lenovo", "kind": "maker", "owner": "Lenovo",
+   "aliases": ["lenovo", "legion", "lenovo legion"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://lenovo.com/ca/en/legal/copytrade"
+  },
+  "acer": {
+   "name": "Acer", "kind": "maker", "owner": "Acer Inc.",
+   "aliases": ["acer", "predator", "acer predator"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://www.acer.com/ca-en/predator/legal"
+  },
+  "onexplayer": {
+   "name": "OneXPlayer", "kind": "maker", "owner": "One-Netbook Technology",
+   "aliases": ["onexplayer", "one-netbook", "one-netbook technology co., ltd.", "onexfly"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://onexplayerstore.com/pages/about-us"
+  },
+  "ayaneo": {
+   "name": "AYANEO", "kind": "maker", "owner": "AYANEO",
+   "aliases": ["ayaneo", "aya neo", "ayn"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://www.ayaneo.com/community/brand"
+  },
+  "gpd": {
+   "name": "GPD", "kind": "maker", "owner": "Shenzhen GPD Technology Co., Ltd.",
+   "aliases": ["gpd"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://trademark.justia.com/owners/shenzhen-gpd-technology-co-ltd-4083602"
+  },
+  "zotac": {
+   "name": "ZOTAC", "kind": "maker", "owner": "ZOTAC International",
+   "aliases": ["zotac", "zotac gaming"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://www.zotac.com/pl/system/files/media_center/zotac_branding_guidelines.pdf"
+  },
+  "intel": {
+   "name": "Intel", "kind": "chip", "owner": "Intel Corporation",
+   "aliases": ["intel", "genuineintel", "intel corporation"],
+   "verdict": "needs_permission", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://intel.com/content/www/us/en/trademarks/trademarks.html"
+  },
+  "amd": {
+   "name": "AMD", "kind": "chip", "owner": "Advanced Micro Devices, Inc.",
+   "aliases": ["amd", "authenticamd", "advanced micro devices, inc."],
+   "verdict": "not_allowed", "logo": "", "notice": "", "system_icons": [],
+   "source": "https://www.amd.com/content/dam/amd/en/documents/newsroom/brand-assets-terms-conditions.pdf"
+  }
+ }
+}
