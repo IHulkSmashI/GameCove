@@ -1,0 +1,36 @@
+#!/bin/sh
+# reaper - gives a program GameCove starts the app id gamescope focuses it by.
+# Installed to /usr/libexec/gamecove/reaper; the file name matters.
+#
+#   reaper SteamLaunch AppId=<id> -- <program> [args...]
+#
+# gamescope finds a window's app id from its process: first the cgroup
+# (app-steam-app<id>-<n>.scope, which GameCove's systemd-run scope gives), else
+# by walking up the parent processes to one named "reaper" whose command line has
+# "SteamLaunch" and "AppId=<id>" (gamescope src/Utils/Process.cpp GetAppIdFromReaper,
+# the way Steam's own reaper works). Flatpak apps such as Moonlight move themselves
+# into their own app-flatpak-*.scope, so only the parent walk can find them; this
+# wrapper stays their parent for as long as they run. It only runs the command.
+# Exit status: the program's; 64 when no command was given.
+set -u
+
+while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+	shift
+done
+[ "${1:-}" = "--" ] && shift
+[ $# -gt 0 ] || {
+	echo "usage: reaper SteamLaunch AppId=<id> -- <program> [args...]" >&2
+	exit 64
+}
+
+"$@" &
+child=$!
+# Stopping the scope or the game: pass it on, then wait for the program to go.
+trap 'kill -TERM "$child" 2>/dev/null' TERM INT HUP
+status=0
+while :; do
+	wait "$child"
+	status=$?
+	kill -0 "$child" 2>/dev/null || break
+done
+exit "$status"

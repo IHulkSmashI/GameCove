@@ -95,6 +95,18 @@ static func daemon_reload() -> Array:
 	return ["systemctl", "--user", "daemon-reload"]
 
 
+## Moonlight for the Stream tab: a Flatpak for this user (no password), the same
+## commands the Stream page runs (scripts/streaming/moonlight.gd).
+static func moonlight_tasks() -> Array:
+	var Moonlight = load("res://scripts/streaming/moonlight.gd")
+	var cmds: Array = Moonlight.install_commands("flatpak")
+	return [
+		_cmd("moonlight_remote", cmds[0], {"optional": true}),
+		_cmd("moonlight_install", cmds[1], {"optional": true,
+			"undo": ["flatpak", "uninstall", "--user", "--noninteractive", "-y", Moonlight.FLATPAK_ID]}),
+	]
+
+
 static func _cmd(id: String, cmd: Array, extra := {}) -> Dictionary:
 	var t := {"id": id, "kind": "cmd", "cmd": cmd, "privileged": cmd.size() > 0 and cmd[0] == PKEXEC,
 		"undo": [], "fallback": [], "needs_live": false, "optional": false, "fix": ""}
@@ -135,6 +147,8 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 	var present := bool(target.get("installed", false)) or bool(target.get("staged", false))
 	var had_xess := bool(state.get("choices", {}).get("xess_driver", false)) if state.get("choices") is Dictionary else false
 	var want_xess := bool(choices.get("xess_driver", false))
+	var had_moonlight := bool(state.get("choices", {}).get("moonlight", false)) if state.get("choices") is Dictionary else false
+	var want_moonlight := bool(choices.get("moonlight", false))
 	var out: Array = [_internal("check_game")]
 	match action:
 		"install", "change", "repair":
@@ -154,6 +168,9 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 					{"needs_live": true, "optional": true, "undo": xess_remove(paths.upscale_helper(), paths.home)}))
 			elif action == "change" and had_xess and not want_xess:
 				out.append(_cmd("xess_remove", xess_remove(paths.upscale_helper(), paths.home), {"needs_live": true, "optional": true}))
+			# a change never removes Moonlight: the user may use it on its own
+			if want_moonlight and (action != "change" or not had_moonlight):
+				out.append_array(moonlight_tasks())
 			out.append(_internal("pending", {"undo": "remove_pending"}))
 			if method != "none":
 				out.append(_cmd("apply_now", [paths.apply_helper()], {"needs_live": true, "optional": true}))

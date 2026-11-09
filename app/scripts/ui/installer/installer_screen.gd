@@ -1062,6 +1062,8 @@ func _build_extras() -> void:
 	var labels: Array = [TI.REGION_AUTO] + TS.COUNTRIES
 	var c := _choice("country", TI.REGION, vals, labels, plan.choices["country"], func(_v): return TI.REGION_LINE, "discover")
 	c.changed.connect(func(v): plan.set_choice("country", v))
+	var ml := _bool("moonlight", TI.MOONLIGHT, bool(plan.choices.get("moonlight", false)), TI.MOONLIGHT_LINES, "screen")
+	ml.changed.connect(func(v): plan.set_choice("moonlight", v))
 
 
 ## A typed key or profile; false (and a note) when it doesn't look right.

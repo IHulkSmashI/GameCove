@@ -561,6 +561,41 @@ tree does the same). Pages listen to their services' signals and disconnect when
 - Shell helpers: `shellcheck`, plus tests under `packaging/tests/`.
 - No test may touch the real system: use fixture files and fake command output.
 
+## Streaming (`main.streaming`, `scripts/streaming/streaming.gd`)
+
+Not an autoload: main.gd makes it (child "Streaming") and hands it to the Stream tab
+(`scripts/ui/streaming/streaming_screen.gd`). PC setup, pairing and remote play: [STREAMING.md](STREAMING.md).
+Every call returns at once; process and network work runs one job at a time on the
+thread pool (`sync_mode` runs it inline for tests); signals come on the main thread.
+Checks run only while the Stream tab is open (`set_active`), never during a game.
+
+```
+setup(ctx)            # {runner, spawn (spawn(cmd)->pid, kill, running), home, path_env, sys_root, runtime_dir,
+                      #  data_dir, display: {width, height, hz, hdr}, display_fn, gpu_family, probe, send, clock, reaper}
+signal changed / apps_changed(host_id) / notice(text, tone)
+signal pair_changed(host_id, state, info)     # waiting {pin, url, name} | paired | failed {why} | cancelled
+signal install_changed(state, line)           # running | done | failed
+hosts: {id: host}; host_list(); host(id)      # id = the PC's GameStream uniqueid, or "addr:<address>" until known
+  host = {id, uuid, name, addresses, address, port, https_port, mac, manual, source: mdns|probe|manual|moonlight,
+          status: online|busy|asleep|waking|offline|checking|unknown, paired, latency_ms, remote, flavor:
+          vibepollo|apollo|sunshine|gfe, version, current_app, permission (-1 unknown), sleep_allowed,
+          apps: [{id, title, hdr, uuid, art}], apps_state: none|loading|ready|denied|error, info: serverinfo}
+refresh() / check_all() / check_host(id) / add_manual(text) -> "" or why / remove_host(id)
+load_apps(id) / app_by_id(id, app_id) / game_for(id, app) -> Game (store "stream", key "stream:<uuid>:<app id>")
+pair(id) -> bool / poll_pair() / cancel_pair() / pairing_host() / pairing_pin() / web_ui_url(host)
+wake(id) / can_wake(id) / sleep_pc(id) / can_sleep(id) / quit_app(id)
+launch(id, app) -> {ok, app_id, pid, scoped, why, settings}   # for GameSession.begin; stop_stream() for Exit game
+picks_for(id, app_id := 0) / set_pick(id, key, value, app_id := 0) / set_app_override(id, app_id, on) /
+has_app_picks(id, app_id) / effective_picks(id, app_id) / resolved(id, app_id) / hdr_available(id)
+has_moonlight() / locate_moonlight() / install_moonlight() / set_active(on) / set_game_running(on)
+```
+
+`GameSession.begin` skips the frame limit and Auto TDP for games whose `store` is
+`"stream"`. `library_view.gd` names that store "PC". Fakes for tests:
+`tests/fixtures/system/fake_runner.gd`, `tests/fixtures/streaming/fake_spawn.gd`, fixtures in
+`tests/fixtures/streaming/` (Vibepollo / Sunshine serverinfo, applist, avahi-browse,
+`moonlight list --csv`, Moonlight.conf, vainfo, ARP, ip addr).
+
 ## Style
 
 - Every user-visible setting has one short line saying what it does and what it costs.

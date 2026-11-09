@@ -16,7 +16,7 @@ signal status_pressed
 signal search_pressed
 
 ## [id, label, icon]
-const TABS := [["home", "Home", "home"], ["library", "Library", "library"], ["discover", "Discover", "discover"], ["settings", "Settings", "settings"]]
+const TABS := [["home", "Home", "home"], ["library", "Library", "library"], ["discover", "Discover", "discover"], ["stream", "Stream", "stream"], ["settings", "Settings", "settings"]]
 const LOW_BATTERY := 15
 const HOT_C := 80.0
 const WARM_C := 70.0
@@ -229,9 +229,9 @@ func _add_count(id: String) -> void:
 	_counts[id] = p
 
 
-## Left/right across the bar: Home, Library, Discover, search, status, Settings.
+## Left/right across the bar: Home, Library, Discover, Stream, search, status, Settings.
 func link_bar() -> void:
-	var order: Array = [tabs["home"], tabs["library"], tabs["discover"], status_button, tabs["settings"]]
+	var order: Array = [tabs["home"], tabs["library"], tabs["discover"], tabs["stream"], status_button, tabs["settings"]]
 	Kit.link_horizontal(order)
 
 
@@ -320,12 +320,14 @@ func set_telemetry(d: Dictionary) -> void:
 	temp_label.add_theme_color_override("font_color", hot)
 	tdp_label.get_parent().get_node("Sep").visible = tdp_label.visible and temp_label.visible
 	telemetry.visible = tdp_label.visible or temp_label.visible
+	fit_width.call_deferred()
 
 
 ## The pill's button sizes to its contents (buttons don't follow children).
 func _fit_pill() -> void:
 	var pill: Control = status_button.get_node("Pill")
 	status_button.custom_minimum_size.x = pill.get_combined_minimum_size().x + ThemeLib.SPACE_4 * 2
+	fit_width.call_deferred()
 
 
 static func is_low(bat: Dictionary) -> bool:
@@ -406,9 +408,22 @@ func _draw() -> void:
 	draw_style_box(band, r)
 
 
+## Five tabs, telemetry and the status pill can outgrow a 1280 px bar: then the
+## wordmark goes and the logo mark alone stays.
+func fit_width() -> void:
+	if not is_inside_tree():
+		return
+	var word: Control = get_node("Wordmark")
+	var room := get_viewport_rect().size.x - offset_left + offset_right
+	word.visible = true
+	if get_combined_minimum_size().x > room:
+		word.visible = false
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		queue_redraw()
+		fit_width.call_deferred()
 	if what == NOTIFICATION_THEME_CHANGED and tabs.has("settings"):
 		queue_redraw()
 		_restyle()
