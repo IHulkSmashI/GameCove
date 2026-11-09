@@ -185,7 +185,7 @@ func test_uninstall_restores_steam_and_cleans_up() -> void:
 	eq(cmds.size(), 3)
 	ok(cmds[0].begins_with("sh -c ") and "restore" in cmds[0], "session defaults restored first (desktop session too)")
 	ok(cmds[0].ends_with(s2.paths.session_select()), "through the switcher when it's there")
-	eq(cmds.slice(1), ["pkexec " + s2.paths.fix_helper() + " claw8ex-vrr remove", "pkexec rpm-ostree uninstall gamecove"])
+	eq(cmds.slice(1), ["pkexec " + s2.paths.fix_helper() + " --remove-all", "pkexec rpm-ostree uninstall gamecove"])
 	for f in [s2.paths.env_conf(), s2.paths.unit_file(), s2.paths.switch_entry(), s2.paths.window_entry(),
 			s2.paths.pending_file(), s2.paths.state_file()]:
 		ok(not FileAccess.file_exists(f), "removed " + f)

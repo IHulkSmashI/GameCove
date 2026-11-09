@@ -61,6 +61,12 @@ static func fix(helper: String, fix_name: String, verb: String) -> Array:
 	return pkexec([helper, fix_name, verb])
 
 
+## Every fix in use on this machine undone, whoever applied it (installer, Fixes page, the charge
+## limit, fan curve, LEDs, power-tune values): one password (review S2-5).
+static func fix_remove_all(helper: String) -> Array:
+	return pkexec([helper, "--remove-all"])
+
+
 ## XeSS XMX driver (xess-xmx-linux), the same install ClawDeck does: downloaded,
 ## its install.sh run as the desktop user (no pkexec). Intel Arc with XMX only.
 static func xess_install(helper: String, home: String) -> Array:
@@ -182,8 +188,8 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 			# GameCove's launcher out of every Steam game's launch options (stops Steam first)
 			out.append(_internal("steam_unwrap", {"optional": true}))
 			if bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false)):
-				for f in had_fixes:
-					out.append(fix_task(paths, f, "remove"))
+				# not only what the installer recorded: every fix and device setting in use
+				out.append(_cmd("fix_remove_all", fix_remove_all(paths.fix_helper()), {"optional": true}))
 			if had_xess and bool(target.get("installed", false)):
 				out.append(_cmd("xess_remove", xess_remove(paths.upscale_helper(), paths.home), {"optional": true}))
 			if method == "rpm-ostree":

@@ -227,6 +227,7 @@ const TASKS := {
 	"state": "Remember your choices",
 	"session_restore": "Make Steam Gaming Mode the default again",
 	"steam_unwrap": "Take GameCove out of your Steam games' launch options",
+	"fix_remove_all": "Undo every device fix and setting (charge limit, fan, lights, rules)",
 	"remove_user_files": "Remove GameCove's shortcuts and startup files",
 	"remove_settings": "Remove GameCove's settings",
 	"forget": "Forget the install",

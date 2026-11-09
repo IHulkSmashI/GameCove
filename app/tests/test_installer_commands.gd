@@ -91,11 +91,12 @@ func test_change_repair_update_uninstall_finish() -> void:
 	c["remove_fixes"] = true
 	c["keep_settings"] = false
 	var un := C.tasks_for("uninstall", c, t, p)
-	eq(_ids(un), ["check_game", "session_restore", "steam_unwrap", "fix_remove:claw8ex-buttons", "fix_remove:claw8ex-gyro", "package_remove",
+	eq(_ids(un), ["check_game", "session_restore", "steam_unwrap", "fix_remove_all", "package_remove",
 		"remove_user_files", "remove_settings", "forget"])
+	eq(un[3]["cmd"], ["pkexec", p.fix_helper(), "--remove-all"], "every fix in use, not only the installer's (review S2-5)")
 	eq(un[1]["cmd"], C.session_restore(p))
 	eq(un[1]["cmd"][4], p.data_dir() + "/gamecove-session-guard", "the copy that survives the package goes first")
-	eq(un[5]["cmd"], C.rpm_uninstall())
+	eq(un[4]["cmd"], C.rpm_uninstall())
 	ok(un[2]["optional"], "taking GameCove out of Steam's launch options never stops an uninstall")
 	c["remove_fixes"] = false
 	c["keep_settings"] = true

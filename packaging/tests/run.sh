@@ -139,6 +139,32 @@ else
 	bad "pkexec block must clear GAMECOVE_PATH"
 fi
 
+# ------------------------------------------------- gamecove-fix --remove-all (uninstall, review S2-5)
+RA="$T/raroot"
+RAF="$RA/usr/lib/gamecove/fixes"
+for spec in "charge-limit:installed=yes" "controller-led:state=on" "fan:installed=no" "gpd-fingerprint:state=not-needed" "claw8ex-vrr:installed=yes"; do
+	n="${spec%%:*}"
+	mkdir -p "$RAF/$n"
+	cat >"$RAF/$n/fix.sh" <<FIXEOF
+#!/bin/sh
+case "\$1" in
+status) echo "applies=yes"; echo "${spec#*:}" ;;
+remove) echo "$n" >>"\$GAMECOVE_ROOT/removed"; [ "$n" = claw8ex-vrr ] && exit 1 ;;
+esac
+exit 0
+FIXEOF
+done
+GAMECOVE_ROOT="$RA" sh "$FIX" --remove-all >"$T/out" 2>&1
+code=$?
+if [ "$code" -eq 1 ]; then ok; else bad "--remove-all reports a failed remove (exit $code)"; fi
+contains "$RA/removed" "^charge-limit$" "installed=yes: removed (charge limit back)"
+contains "$RA/removed" "^controller-led$" "state=on without installed=: removed (LEDs back)"
+lacks "$RA/removed" "^fan$" "installed=no: left alone"
+lacks "$RA/removed" "gpd-fingerprint" "not-needed: left alone"
+contains "$T/out" "^failed=claw8ex-vrr$" "a failed one is named"
+contains "$RA/var/lib/gamecove/changes.log" "fix=charge-limit action=remove value=- result=ok" "logged"
+expect_code 64 "--remove-all takes no arguments" sh "$FIX" --remove-all extra
+
 # ------------------------------------------------- gamecove-fix-set (no password)
 # polkit runs this one without a password, so it may only `set` (and `status`)
 # the low-risk fixes with fixed values, then hand over to gamecove-fix.

@@ -349,7 +349,7 @@ a "GameCove" app entry switches with `gamecove-session-select gamecove`), **Desk
 in-app setup shows nothing (it still runs for people who installed another way, and skips steps done elsewhere).
 
 Uninstall: `gamecove-session-select restore` (the copy in the data folder, else the installed one, else
-`steamosctl` directly: the default desktop session back from `gamecove.desktop`, boot to Steam Gaming Mode), optionally `gamecove-fix <name> remove` for the fixes it
+`steamosctl` directly: the default desktop session back from `gamecove.desktop`, boot to Steam Gaming Mode), optionally `gamecove-fix --remove-all` (every fix in use, whoever applied it: charge limit, fan curve, LEDs, power-tune values, udev rules; review S2-5) instead of only the fixes it
 installed, `pkexec rpm-ostree uninstall gamecove` (next boot) or removing the sysext (`systemd-sysext refresh`),
 then every user file above; "Keep my settings" off also deletes GameCove's `user://` folder and the download.
 Store sign-ins belong to legendary / gogdl / nile and stay. Every step can be undone after a failure (Undo).
