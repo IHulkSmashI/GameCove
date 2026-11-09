@@ -22,7 +22,8 @@
 #   sh gamecove-testbed.sh results        print every check result for this device
 #   sh gamecove-testbed.sh note <check.item> pass|fail|warn|skip <text>
 #                                         record the owner's answer to a hands-on step
-#   sh gamecove-testbed.sh report         save logs + self-test for this device
+#   sh gamecove-testbed.sh report         one bundle for this device: logs, self-test, check
+#                                         results, versions (no secrets); prints where it is
 #   sh gamecove-testbed.sh reset [--full] [--yes]
 #                                         before moving the drive to the next device:
 #                                         save a report, remove this device's fixes,
@@ -416,19 +417,89 @@ cmd_note() {
 }
 
 # ---------------------------------------------------------------------- report
+# Nothing personal or secret leaves the handheld in a report: serials and MAC addresses are
+# never collected, and as a safety net home paths, user and host names, Steam ids, IP and
+# MAC addresses and anything token- or password-like are replaced in every text file.
+redact() {
+	user="$(id -un 2>/dev/null || true)"
+	host="$(cat /proc/sys/kernel/hostname 2>/dev/null || true)"
+	# a default name (deck, bazzite, steamdeck...) says nothing and would mangle words like "Steam Deck"
+	case "$user" in deck | bazzite | gamer | user | root | "" | ?) user="" ;; esac
+	case "$host" in steamdeck | bazzite | localhost | fedora | "" | ?) host="" ;; esac
+	sed -e 's|\(http://127\.0\.0\.1:[0-9]*/\)[0-9a-f]\{32\}|\1<console>|g' \
+		-e 's/7656119[0-9]\{10\}/<steamid>/g' \
+		-e 's/\([Tt]oken\|[Ss]ecret\|[Pp]assword\|[Pp]asswd\|[Aa]uthorization\|[Cc]ookie\|[Aa]pi[_-]\{0,1\}[Kk]ey\|[Cc]ode\)\([^:=]\{0,20\}[:=][[:space:]]*\)[^[:space:],"]*/\1\2<redacted>/g' \
+		-e 's/\([0-9a-fA-F]\{2\}:\)\{5\}[0-9a-fA-F]\{2\}/<mac>/g' \
+		-e 's/\(^\|[^0-9.]\)\(127\.0\.0\.1\)\([^0-9.]\|$\)/\1<loopback>\3/g' \
+		-e 's/\(^\|[^0-9.]\)\([0-9]\{1,3\}\.\)\{3\}[0-9]\{1,3\}\([^0-9.]\|$\)/\1<ip>\3/g' \
+		-e 's|/var/home/[^/[:space:]"]*|/var/home/<user>|g' -e 's|/home/[^/[:space:]"]*|/home/<user>|g' |
+		if [ -n "$user$host" ]; then
+			sed -e "${user:+s/\\b$user\\b/<user>/g}" -e "${host:+s/\\b$host\\b/<host>/g}"
+		else
+			cat
+		fi
+}
+
+# One folder (and a .tar.gz of it) per device run: versions, status, every check result,
+# the owner's notes, logs, self-test, install logs. `sh $0 report` prints the path, and
+# report/INDEX.txt lists what's inside so Claude can read it back through the console.
 cmd_report() {
-	dir="$TESTS/$(date +%Y%m%d-%H%M)-$(device_slug)"
-	mkdir -p "$dir"
-	cmd_status >"$dir/status.txt" 2>&1 || true
-	for f in "$HOME_DIR/.local/share/gamecove/"*.log /var/lib/gamecove/changes.log; do
-		[ -f "$f" ] && cp "$f" "$dir/" 2>/dev/null || true
+	dir="$TESTS/report-$(date +%Y%m%d-%H%M)-$(device_slug)"
+	raw="$dir.raw"
+	rm -rf "$raw" "$dir"
+	mkdir -p "$raw/checks" "$raw/logs"
+	cmd_status >"$raw/status.txt" 2>&1 || true
+	{
+		echo "testbed $(git -C "$(dirname "$0")" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+		echo "device $(dmi sys_vendor) | $(dmi product_name) | board $(dmi board_name) | bios $(dmi bios_version)"
+		echo "os $(os_field PRETTY_NAME) (VERSION_ID=$(os_field VERSION_ID))"
+		echo "kernel $(uname -r 2>/dev/null)"
+		[ -f "$GC_DATA/installer/release.env" ] && sed -n 's/^\(TAG\|OS\|SIGNATURE\)=/release_\1 /p' "$GC_DATA/installer/release.env"
+		[ -f "$GC_DATA/install-state.json" ] && grep -o '"version"[^,]*' "$GC_DATA/install-state.json" | head -n 1
+	} >"$raw/versions.txt" 2>/dev/null
+	res="$(results_dir)"
+	if [ -d "$res" ]; then
+		cp "$res"/*.tsv "$raw/checks/" 2>/dev/null || true
+		[ -f "$res/out/env/env.txt" ] && cat "$res/out/env/env.txt" >>"$raw/versions.txt"
+		if [ -d "$res/out" ]; then
+			# command output and read-backs, text only, size-capped
+			(cd "$res/out" && find . -type f -size -2M) | while IFS= read -r f; do
+				mkdir -p "$raw/checks/out/$(dirname "$f")"
+				cp "$res/out/$f" "$raw/checks/out/$f" 2>/dev/null || true
+			done
+		fi
+		{
+			for t in "$res"/*.tsv; do
+				[ -f "$t" ] || continue
+				printf '%-14s pass %3s  fail %3s  warn %3s  skip %3s  manual %3s\n' "$(basename "$t" .tsv)" \
+					"$(count PASS "$t")" "$(count FAIL "$t")" "$(count WARN "$t")" \
+					"$(count SKIP "$t")" "$(count MANUAL "$t")"
+			done
+			echo
+			grep -h -E '^(FAIL|WARN)' "$res"/*.tsv 2>/dev/null || true
+		} >"$raw/summary.txt"
+	fi
+	for f in "$GC_DATA/"*.log /var/lib/gamecove/changes.log "$HOME_DIR/.local/share/godot/app_userdata/GameCove/logs/godot.log" \
+		"$TESTS"/install-*.log "$TESTS"/uninstall-*.log "$LOG"; do
+		[ -f "$f" ] && tail -n 3000 "$f" >"$raw/logs/$(basename "$f")" 2>/dev/null || true
 	done
 	if command -v "$SELFTEST" >/dev/null 2>&1; then
-		say "running the self-test (automatic checks only; run it with --interactive yourself for the button tests)"
-		"$SELFTEST" >"$dir/selftest.txt" 2>&1 || true
+		say "running the self-test (automatic checks only)"
+		"$SELFTEST" --no-network >"$raw/selftest.txt" 2>&1 || true
 	fi
-	journalctl --user -b --no-pager -n 400 2>/dev/null | grep -i -E 'gamecove|gamescope|inputplumber|hhd' >"$dir/journal-user.txt" 2>/dev/null || true
-	say "report saved in $dir"
+	journalctl --user -b --no-pager -n 2000 2>/dev/null | grep -i -E 'gamecove|gamescope|inputplumber|hhd|steamos-manager' | tail -n 600 >"$raw/logs/journal-user.txt" 2>/dev/null || true
+	journalctl -b --no-pager -n 4000 2>/dev/null | grep -i -E 'gamecove|inputplumber|hhd|systemd-sysext|polkit' | tail -n 600 >"$raw/logs/journal-system.txt" 2>/dev/null || true
+	# copy through the redaction; never anything that isn't text
+	(cd "$raw" && find . -type f) | while IFS= read -r f; do
+		mkdir -p "$dir/$(dirname "$f")"
+		if grep -Iq . "$raw/$f" 2>/dev/null || [ ! -s "$raw/$f" ]; then
+			redact <"$raw/$f" >"$dir/$f"
+		fi
+	done
+	rm -rf "$raw"
+	(cd "$dir" && find . -type f | sort | sed 's|^\./||') >"$dir/INDEX.txt"
+	tar -czf "$dir.tar.gz" -C "$TESTS" "$(basename "$dir")" 2>/dev/null || true
+	say "report saved in $dir (and $dir.tar.gz); start with $dir/summary.txt"
 }
 
 # ----------------------------------------------------------------------- reset
@@ -499,7 +570,7 @@ uninstall) cmd_uninstall ;;
 report) cmd_report ;;
 reset) shift; cmd_reset "$@" ;;
 *)
-	sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
 	exit 64
 	;;
 esac

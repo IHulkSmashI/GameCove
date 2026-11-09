@@ -258,6 +258,20 @@ grep -q '^PASS	controls.feel.rumble	strong, then weaker' "$RES/manual.tsv" && ok
 sh "$S" note controls.x maybe "?" >/dev/null 2>&1 && bad "note: status checked" || ok
 sh "$S" note 'a;b' pass x >/dev/null 2>&1 && bad "note: item checked" || ok
 sh "$S" results | grep -q "== controls" && ok || bad "results prints every check"
+mkdir -p "$T/home/.local/share/gamecove"
+echo "installer: ok for /home/mena/x token=SECRET123" >"$T/home/.local/share/gamecove/installer.log"
+out="$(sh "$S" report 2>&1)" && ok || bad "report runs ($out)"
+REP=""
+for d in "$T"/home/gamecove-tests/report-*-asus*; do [ -d "$d" ] && REP="$d"; done
+[ -n "$REP" ] && [ -f "$REP.tar.gz" ] && ok || bad "report folder and tarball"
+for f in summary.txt INDEX.txt versions.txt status.txt checks/controls.tsv checks/manual.tsv logs/installer.log selftest.txt; do
+	[ -f "$REP/$f" ] && ok || bad "report has $f"
+done
+grep -rq SECRET123 "$REP" && bad "report: tokens redacted" || ok
+grep -rq "/home/mena" "$REP" && bad "report: home paths redacted" || ok
+grep -rq "192.168.1.20" "$REP" && bad "report: IP addresses redacted" || ok
+grep -q "release_TAG v0.1.0" "$REP/versions.txt" && ok || bad "report: versions"
+case "$out" in *"$REP"*) ok ;; *) bad "report prints where it is" ;; esac
 rm -f "$RES/env.tsv"
 sh "$S" check --detach env >/dev/null 2>&1 && ok || bad "check --detach returns at once"
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [ -s "$RES/env.tsv" ] && break; sleep 0.5; done
