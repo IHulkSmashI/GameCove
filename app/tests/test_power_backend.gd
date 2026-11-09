@@ -97,6 +97,22 @@ func test_claw_uses_powerstation_and_fixes() -> void:
 	p.free()
 
 
+## The Claw 8 EX: PowerStation Boost 7, a stored boost_w of 2 that the user never chose
+## must not win; start (restore) and TDP writes leave the live boost.
+func test_live_boost_is_not_overwritten() -> void:
+	var root := _sys("live_boost")
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
+	p.runner.props[PS_BOOST_KEY]["data"] = 7.0
+	p.load_autotune_opts()
+	p.restore()
+	ok(p.set_tdp(17.0), "TDP")
+	eq(p.runner.props[PS_BOOST_KEY]["data"], 7.0, "live 7 W boost kept")
+	ok(p.set_boost_w(4.0), "the user picks 4 W")
+	ok(p.set_tdp(20.0), "TDP again")
+	eq(p.runner.props[PS_BOOST_KEY]["data"], 4.0, "the user's boost stays")
+	p.free()
+
+
 func test_default_order_prefers_steamos_manager() -> void:
 	var row := _row("msi-claw-8-ex").duplicate()
 	row.erase("tdp_backends")
@@ -138,7 +154,8 @@ func test_set_tdp_reads_back_and_sets_boost() -> void:
 	eq(p.state()["tdp_w"], 17.0, "tdp_w")
 	eq(p.state()["profile"], "balanced", "17 W is balanced")
 	ok(p.runner.calls.has("busctl --system set-property org.shadowblip.PowerStation " + PS_CARD + " org.shadowblip.GPU.Card.TDP TDP d 17.0"), "TDP command")
-	eq(p.runner.props[PS_BOOST_KEY]["data"], 2.0, "PL2 = TDP + 2 W")
+	eq(p.runner.props[PS_BOOST_KEY]["data"], 12.0, "PowerStation's own boost left alone (the user picked none)")
+	ok(not p.runner.calls.any(func(x): return x.contains("TDP Boost d")), "no boost write")
 	ok(p.set_tdp(99.0), "too high is clamped")
 	eq(p.state()["tdp_w"], 35.0, "clamped to battery max")
 	p.free()
