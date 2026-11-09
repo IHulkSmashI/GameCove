@@ -38,6 +38,13 @@ signal autotune_changed(on: bool)
 ## "ceiling_w", "ref_fps", "tdp_max"}; ceiling_w < tdp_max means raising the TDP
 ## may help, otherwise lower the game's settings or frame limit. Main thread.
 signal autotune_limit(cant_reach: bool, info: Dictionary)
+## The charger was plugged in (true) or out. Main thread. Profiles listen.
+signal source_changed(plugged: bool)
+## Battery percent changed (from the 15 s charger check; one sysfs read). Main thread.
+signal battery_level(percent: int, plugged: bool)
+## After a resume from sleep, once the TDP was put back (main.gd calls request_refresh()).
+## Providers re-apply what the firmware may have reset. Main thread.
+signal resumed()
 
 const Runner := preload("res://scripts/device/command_runner.gd")
 const Busctl := preload("res://scripts/device/busctl.gd")
@@ -46,8 +53,15 @@ const DeviceScript := preload("res://scripts/device/device.gd")
 const Hhd := preload("res://scripts/input/hhd.gd")
 const HhdHttp := preload("res://scripts/input/hhd_http.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
+const Backend := preload("res://scripts/controls/power/backend.gd")
+const Levers := preload("res://scripts/controls/power/levers.gd")
+const ThermalGuard := preload("res://scripts/controls/power/thermal_guard.gd")
 ## power.cfg sections kept per device ("<name>@<device id>", see per_device.gd).
 const DEVICE_SECTIONS: Array[String] = ["profile", "custom_w", "device"]
+## Auto TDP options (power.autotune_* controls), defaults as ClawDeck's.
+const AUTOTUNE_DEFAULTS := {"target": 0, "auto_fps": true, "keep_pct": 5.0, "floor_w": 0, "plugged": false}
+## Package power is read through PowerStation's GpuBusyPercent at most this often (ClawDeck BUSY_EVERY_S).
+const BUSY_EVERY_S := 10.0
 
 # PowerStation (GPL-3.0): src/constants.rs, src/performance/gpu/dbus/{gpu,tdp}.rs
 const PS_SERVICE := "org.shadowblip.PowerStation"
@@ -101,6 +115,21 @@ var config_path := CONFIG_PATH
 var fix_helper := FIX_HELPER
 var fix_set_helper := FIX_SET_HELPER
 var autotune: RefCounted = AutotuneScript.new()
+## Power levers below the TDP (CPU, GPU, RAPL...), shared with the power.* controls.
+var be: RefCounted
+var levers: RefCounted
+var guard: RefCounted = ThermalGuard.new()
+var autotune_opts := AUTOTUNE_DEFAULTS.duplicate()
+var _game_key := ""
+var _thermald_checked := false
+var _thermald_held := false
+var _guard_timer: Timer
+var _busy := -1
+var _busy_at := -1000.0
+var _battery_pct := -1
+## Boost watts above the TDP the user picked on PowerStation (PL2 - PL1 / SPPT above SPL);
+## -1 = the device's default (devices.json pl2_offset_w, else what PowerStation keeps).
+var boost_w := -1.0
 ## Handheld Daemon client; setup() swaps its transport in tests.
 var hhd: RefCounted = Hhd.new()
 var _hhd_tdp := {}      # Hhd.tdp_info() while backend == "hhd"
@@ -157,6 +186,7 @@ func _exit_tree() -> void:
 
 func _start() -> bool:
 	detect()
+	load_autotune_opts()
 	restore()
 	if backend != "none":
 		_start_timer.call_deferred()
@@ -190,10 +220,10 @@ func request_set(setting: String, value: Variant) -> void:
 
 ## Start (on = true) or stop Auto TDP on the worker. Both share one job, so a
 ## stop queued behind a start (or the other way round) leaves only the newest.
-func request_autotune(on: bool) -> void:
+func request_autotune(on: bool, game_key := "") -> void:
 	_autotune_stopping = not on
 	if on:
-		_queue("autotune", func(): return autotune_start())
+		_queue("autotune", func(): return autotune_start(game_key))
 	else:
 		_queue("autotune", func(): _autotune_stop(true); return true)
 
@@ -201,19 +231,41 @@ func request_autotune(on: bool) -> void:
 ## One PerfMonitor sample for Auto TDP, run on the worker so autotune's state
 ## is only ever touched there. Newest wins: a sample that arrives while the
 ## worker is busy replaces the one waiting.
-func request_feed(fps: float, watts := -1.0) -> void:
+## `sample`: PerfMonitor's whole reading (cpu_load, gpu_load, gpu_mhz, fps...) when it has one.
+func request_feed(fps: float, watts := -1.0, sample := {}) -> void:
 	if not _autotune_on or _autotune_stopping:
 		return
-	_queue("feed", func(): autotune_feed(fps, watts); return true)
+	_queue("feed", func(): autotune_feed(fps, watts, sample); return true)
 
 
 ## The frame rate the running game should hold (its frame limit; 0 = none).
 ## Only drives the "can't reach" state; the TDP rule doesn't change.
 func request_autotune_target(fps: float) -> void:
 	_queue("autotune_target", func():
-		autotune.set_target(fps)
+		autotune.set_frame_limit(fps)
 		_check_limit()
 		return true)
+
+
+## A manual change of a lever Auto TDP moves (CPU boost, GPU clocks...): Auto TDP stops changing
+## things for the rest of this game (ClawDeck: never fight the user).
+func request_autotune_pause(reason := "manual change") -> void:
+	_queue("autotune_pause", func(): autotune.pause(reason); return true)
+
+
+## Runs job on Power's worker and waits for its result (callers on another worker thread: the
+## power.* controls). Inline when there is no worker or when called from it.
+func run_sync(job: Callable) -> Variant:
+	if _thread == null or OS.get_thread_caller_id() == _thread.get_id().to_int():
+		return job.call()
+	var done := Semaphore.new()
+	var box := [null]
+	_queue("sync_%d_%d" % [Time.get_ticks_usec(), randi()], func():
+		box[0] = job.call()
+		done.post()
+		return true)
+	done.wait()
+	return box[0]
 
 
 ## True while Auto TDP runs.
@@ -301,6 +353,10 @@ func setup(command_runner: RefCounted, device_row: Dictionary, root: String, hhd
 	hhd.transport = hhd_transport if hhd_transport != null else _NoHhd.new()
 	system_bus = Busctl.new(runner, "--system")
 	user_bus = Busctl.new(runner, "--user")
+	be = Backend.new(root, runner)
+	levers = Levers.new(be, func(w: int) -> bool: return write_tdp(float(w)))
+	autotune = AutotuneScript.new()
+	autotune.levers = levers
 
 
 # ---- detection ----------------------------------------------------------------
@@ -538,6 +594,7 @@ func state() -> Dictionary:
 		"charge_limit": _charge if _charge_via != "" else -1,
 		"fan_mode": _fan_mode,
 		"fan_modes": fan_modes(),
+		"plugged": plugged,
 		"supported": {
 			"tdp": tdp_ok,
 			"profiles": tdp_ok,
@@ -562,7 +619,13 @@ func fan_modes() -> Array:
 ## Read the live values again (after resume, or when another tool changed them).
 func refresh() -> void:
 	var v := read_tdp()
-	if v >= 0.0:
+	# after sleep some firmwares come back at their own limit (SimpleDeckyTDP, aarron-lee/SimpleDeckyTDP
+	# src/steamListeners.tsx re-applies the TDP after resume; PowerTools, NGnius/PowerTools
+	# backend/src/resume_worker.rs re-applies every setting): put ours back
+	if v >= 0.0 and _tdp_w > 0.0 and backend != "none" and absf(v - _tdp_w) >= 0.5:
+		if not write_tdp(_tdp_w):
+			_tdp_w = v
+	elif v >= 0.0:
 		_tdp_w = v
 	if _charge_via == "steamos-manager":
 		var c: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
@@ -571,6 +634,7 @@ func refresh() -> void:
 		_charge = read_charge_sysfs()
 	if _fan_via == "fix":
 		_fan_mode = read_fan_sysfs()
+	_emit_main(resumed, [])
 	_emit_changed()
 
 
@@ -623,9 +687,10 @@ func set_tdp(watts: float) -> bool:
 
 func _apply_user_tdp(w: float) -> bool:
 	_user_tdp = w
+	guard.reset()  # the user's choice replaces a thermal step (ClawDeck: guard.reset on a pick)
 	if _autotune_on:
-		var t: float = autotune.set_ceiling(w)
-		return write_tdp(t if t > 0.0 else w)
+		# ClawDeck: a pick while a game runs starts Auto TDP over from the new limit
+		return autotune.set_ceiling(int(roundf(w))) > 0
 	return write_tdp(w)
 
 
@@ -654,13 +719,42 @@ func restore() -> void:
 
 func check_power_source() -> void:
 	var now := DeviceScript.ac_online(sys_root)
+	_report_battery(now)
 	if now == plugged:
 		hold_charge()
 		return
 	plugged = now
+	if _autotune_on and plugged and not bool(autotune_opts.get("plugged", false)):
+		_autotune_stop(true)  # Auto TDP is for battery unless asked (ClawDeck)
 	restore()
 	hold_charge()
+	_emit_main(source_changed, [plugged])
 	_emit_changed()
+
+
+## Capacity only: Decky Battery Tracker (safijari/steam-deck-battery-tracker main.py) also reads
+## voltage_now * current_now, but current_now isn't credible on the Claw 8 EX (ClawDeck
+## docs/HARDWARE-FINDINGS.md §6: -65 A at idle), and battery saver needs only the level.
+func _report_battery(on_ac: bool) -> void:
+	var pct := -1
+	var dir := DirAccess.open(sys_root + "/sys/class/power_supply")
+	if dir != null:
+		var names := Array(dir.get_directories()) + Array(dir.get_files())
+		names.sort()
+		for n in names:
+			var d: String = sys_root + "/sys/class/power_supply/" + n + "/"
+			if DeviceScript.read_text(d + "type") == "Battery":
+				var c := DeviceScript.read_text(d + "capacity")
+				if c.is_valid_int():
+					pct = c.to_int()
+				break
+	if pct >= 0 and pct != _battery_pct:
+		_battery_pct = pct
+		_emit_main(battery_level, [pct, on_ac])
+
+
+func battery_percent() -> int:
+	return _battery_pct
 
 
 ## Behaviour batteries (AYANEO) can't stop at a level by themselves: the fix
@@ -742,8 +836,9 @@ func write_tdp(watts: float) -> bool:
 			ok = absf(read_tdp() - w) < 0.5
 	elif backend == "powerstation":
 		if system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "TDP", "d", "%.1f" % watts):
-			if device.has("pl2_offset_w"):
-				system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % float(device["pl2_offset_w"]))
+			var b := boost_w if boost_w >= 0.0 else float(device.get("pl2_offset_w", -1.0))
+			if b >= 0.0:
+				system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % b)
 			ok = absf(read_tdp() - watts) < 0.5
 	elif backend == "hhd" and not _hhd_tdp.is_empty():
 		var w := int(roundf(watts))
@@ -754,6 +849,7 @@ func write_tdp(watts: float) -> bool:
 			_hhd_tdp = info
 	if ok:
 		_tdp_w = watts
+		_hold_thermald()
 	return ok
 
 
@@ -892,36 +988,138 @@ func _run_fix(fix_name: String, value: String) -> bool:
 	return int(r.get("code", -1)) == 0
 
 
-# ---- auto TDP -----------------------------------------------------------------
+# ---- auto TDP -----------------------------------------------------------------------------------
+# ClawDeck's algorithm (autotune.gd); this part is the plumbing ClawDeck's main.py does: where the
+# ceiling and floor come from, battery-only unless asked, what a game learned, levers restored.
 
-## Start Auto TDP for a game; it works under the TDP the user picked.
-func autotune_start() -> bool:
+## PowerStation boost (power.boost control): watts above the TDP, clamped to the device's boost_max.
+func set_boost_w(watts: float) -> bool:
+	if backend != "powerstation":
+		return false
+	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
+	var w := maxf(0.0, watts)
+	if cap > 0.0:
+		w = minf(w, maxf(0.0, cap - _tdp_w))
+	if not be.set_ps_boost(w):
+		return false
+	boost_w = w
+	_remember("device", "boost_w", w)
+	return true
+
+
+## Handheld Daemon's TDP boost switch (<driver>.tdp.custom.boost), null when it has none.
+func hhd_boost() -> Variant:
+	if backend != "hhd" or _hhd_tdp.is_empty():
+		return null
+	var path: Array = (_hhd_tdp["value_path"] as Array).duplicate()
+	path[path.size() - 1] = "boost"
+	var v: Variant = Hhd.dig(hhd.get_state(), path)
+	return bool(v) if v != null else null
+
+
+func set_hhd_boost(on: bool) -> bool:
+	if hhd_boost() == null:
+		return false
+	var path: Array = (_hhd_tdp["value_path"] as Array).duplicate()
+	path[path.size() - 1] = "boost"
+	var patch := Hhd.tdp_patch(_hhd_tdp, int(roundf(_tdp_w)))
+	var node: Dictionary = Hhd.dig(patch, path.slice(0, path.size() - 1))
+	node["boost"] = on
+	var after: Variant = hhd.set_state(patch)
+	return after != null and Hhd.dig(after, path) == on
+
+
+func load_autotune_opts() -> void:
+	boost_w = float(_recall("device", "boost_w", -1.0))
+	autotune_opts = AUTOTUNE_DEFAULTS.duplicate()
+	var saved: Variant = _recall("device", "autotune_opts", {})
+	if saved is Dictionary:
+		for k in saved:
+			if autotune_opts.has(k):
+				autotune_opts[k] = saved[k]
+
+
+## power.autotune_* controls. Applies to the running game at once where ClawDeck does.
+func set_autotune_option(key: String, value: Variant) -> bool:
+	if not AUTOTUNE_DEFAULTS.has(key):
+		return false
+	autotune_opts[key] = value
+	_remember("device", "autotune_opts", autotune_opts)
+	if _autotune_on:
+		match key:
+			"target": autotune.set_target(int(value), bool(autotune_opts["auto_fps"]))
+			"auto_fps": autotune.set_target(int(autotune_opts["target"]), bool(value))
+			"keep_pct": autotune.set_keep(float(value))
+			"floor_w": autotune.set_floor(_floor_w(), int(_range["min"]))
+	return true
+
+
+func _floor_w() -> int:
+	var lo := int(_range["min"])
+	var f := int(autotune_opts.get("floor_w", 0))
+	return lo if f <= 0 else clampi(f, lo, int(tdp_max()))
+
+
+func _learned_key() -> String:
+	return "%s|%s" % [_game_key if _game_key != "" else "_", _source()]
+
+
+## Start Auto TDP for a game; it works under the TDP the user picked. On the charger only when
+## "Auto TDP when plugged in" is on (ClawDeck main.py _start_game_power).
+func autotune_start(game_key := "") -> bool:
 	if backend == "none":
 		return false
+	if plugged and not bool(autotune_opts.get("plugged", false)):
+		return false
+	if _autotune_on:
+		_autotune_stop(true)
+	_game_key = game_key
 	if _user_tdp <= 0.0:
 		_user_tdp = _tdp_w if _tdp_w > 0.0 else tdp_max()
-	var was_on := _autotune_on
+	var ceiling := int(roundf(clampf(_user_tdp, _range["min"], tdp_max())))
+	var learned: Variant = _recall("autotune", _learned_key(), {})
 	_autotune_on = true
 	_limit_shown = false
-	var w: float = autotune.start(_range["min"], _user_tdp)
-	if not was_on:
-		_emit_main(autotune_changed, [true])
-	return write_tdp(w) if w > 0.0 else true
+	levers.refresh()
+	autotune.start(game_key, learned if learned is Dictionary else {}, mini(_floor_w(), ceiling), ceiling,
+		{"keep_pct": float(autotune_opts["keep_pct"]), "target": int(autotune_opts["target"]),
+		"auto_fps": bool(autotune_opts["auto_fps"]), "fg": 0})
+	_emit_main(autotune_changed, [true])
+	_emit_changed()
+	return true
 
 
-## One sample per second while the game runs: rendered fps and package watts.
-func autotune_feed(fps: float, watts := -1.0) -> void:
-	if not _autotune_on:
+## One sample per second while the game runs: rendered fps, package watts, PerfMonitor's reading.
+func autotune_feed(fps: float, watts := -1.0, sample := {}) -> void:
+	if not _autotune_on or _autotune_stopping:
 		return
-	if _autotune_stopping:
-		return
-	var w: float = autotune.feed(fps, watts)
+	var before := _tdp_w
+	autotune.step(autotune_sample(fps, watts, sample))
 	_check_limit()
-	if w > 0.0:
-		_queue("autotune", func():
-			if _autotune_on and write_tdp(w):
-				_emit_changed()
-			return true)
+	if not is_equal_approx(before, _tdp_w):
+		_emit_changed()
+
+
+## PerfMonitor's reading in the shape autotune.step() takes. GPU load: amdgpu's sysfs (in the
+## reading), else PowerStation's GpuBusyPercent at most every BUSY_EVERY_S (ClawDeck: xe has no
+## gpu_busy_percent; findings §2).
+func autotune_sample(fps: float, watts: float, d: Dictionary) -> Dictionary:
+	var busy := int(roundf(float(d.get("gpu_load", -1.0))))
+	if busy < 0:
+		var now := Time.get_ticks_msec() / 1000.0
+		if now - _busy_at >= BUSY_EVERY_S:
+			_busy_at = now
+			_busy = -1
+			var card: String = be.ps_tdp_card() if be != null else ""
+			if card != "":
+				var v: Variant = be.ps_get(card, Backend.PS_CARD_IF, "GpuBusyPercent")
+				_busy = int(v) if v != null else -1
+		busy = _busy
+	var shown := float(d.get("fps", -1.0))
+	var rendered := shown > 0.0 and absf(shown - fps) > 0.5
+	return {"fps": fps, "source": "rendered" if rendered else "presented", "shown_fps": shown if shown > 0.0 else fps,
+		"gpu_busy": busy, "cpu_pct": float(d.get("cpu_load", -1.0)), "gpu_mhz": float(d.get("gpu_mhz", -1.0)),
+		"gpu_max_mhz": float(d.get("gpu_max_mhz", -1.0)), "pkg_w": watts}
 
 
 ## Game closed: back to the user's own TDP.
@@ -934,20 +1132,26 @@ func _autotune_stop(sync: bool) -> void:
 	if not _autotune_on:
 		return
 	_autotune_on = false
-	autotune.stop()
+	var result: Dictionary = autotune.stop()
+	# only a finished result: a session cut short keeps the last good one (ClawDeck _save_learned)
+	if bool(result.get("settled", false)) and result.get("learned") is Dictionary:
+		_remember("autotune", _learned_key(), result["learned"])
 	_check_limit()
 	_emit_main(autotune_changed, [false])
-	if _user_tdp <= 0.0:
-		return
-	var w := _user_tdp
+	var restore_levers := func():
+		levers.restore()
+		if _user_tdp > 0.0 and write_tdp(_user_tdp):
+			_emit_changed()
+		return true
 	if sync:
-		if write_tdp(w):
-			_emit_changed()
-		return
-	_queue("autotune", func():
-		if write_tdp(w):
-			_emit_changed()
-		return true)
+		restore_levers.call()
+	else:
+		_queue("autotune", restore_levers)
+
+
+## What Auto TDP is doing now (autotune.gd status()).
+func autotune_status() -> Dictionary:
+	return autotune.status()
 
 
 ## Report autotune's cant_reach when it flips.
@@ -957,3 +1161,52 @@ func _check_limit() -> void:
 		return
 	_limit_shown = now
 	_emit_main(autotune_limit, [now, autotune_limit_info()])
+
+
+# ---- thermald and the temperature guard (Intel) ------------------------------------------------
+# thermald puts the firmware's power limits back into RAPL every few seconds: on the Claw 8 EX PL1
+# went back to 30 W within 10 s of every write (ClawDeck docs/HARDWARE-FINDINGS.md §21). PowerStation
+# writes RAPL and doesn't deal with it, so after GameCove's first TDP write on an Intel handheld with
+# thermald running, thermald is held (stopped, never disabled; started again by the session when
+# GameCove exits: power-tune set restore) and the guard watches the package temperature instead.
+
+func _hold_thermald() -> void:
+	if _thermald_checked or backend != "powerstation" or str(device.get("cpu_vendor", "")) != "intel":
+		return
+	_thermald_checked = true
+	if not be.helper_present() or not be.thermald_active():
+		return
+	if be.root_set("thermald", "hold"):
+		_thermald_held = true
+		guard.reset()
+		_start_guard.call_deferred()
+
+
+func _start_guard() -> void:
+	if _guard_timer != null or not is_inside_tree():
+		return
+	_guard_timer = Timer.new()
+	_guard_timer.wait_time = ThermalGuard.CHECK_S
+	_guard_timer.timeout.connect(func(): _queue("guard", func(): guard_check(); return true))
+	add_child(_guard_timer)
+	_guard_timer.start()
+
+
+## One guard check (worker): the package temperature against ThermalGuard's rules.
+func guard_check() -> int:
+	if not _thermald_held:
+		return -1
+	var f: String = be.pkg_temp_file()
+	var raw := Backend.read_int(f) if f != "" else -1
+	var t := raw / 1000.0 if raw > 0 else -1.0
+	var w := -1
+	if _autotune_on and autotune.session != null:
+		var sess = autotune.session
+		w = guard.check(t, sess.learned.tdp, sess.floor_tdp, func(x): return autotune.thermal_step(x),
+			sess.ceiling_tdp, func(x): return autotune.thermal_release(x))
+	else:
+		var limit := int(roundf(_user_tdp)) if _user_tdp > 0.0 else int(roundf(_tdp_w))
+		w = guard.check(t, int(roundf(_tdp_w)), _floor_w(), func(x): return write_tdp(float(x)), limit)
+	if w > 0:
+		_emit_changed()
+	return w

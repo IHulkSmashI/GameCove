@@ -54,11 +54,23 @@ release_charge_limit() {
 	timeout 15 pkexec "$helper" charge-limit set release >/dev/null 2>&1 || true
 }
 
+# CPU / GPU / platform values GameCove's power-tune verbs changed (and thermald, held while
+# GameCove sets the TDP on Intel) back to what they were, so Steam's session or the desktop
+# get the system as they left it. Same no-password entry point.
+restore_power_tune() {
+	local state="${GAMECOVE_STATE_DIR:-/var/lib/gamecove}" helper="${GAMECOVE_FIX_SET:-/usr/libexec/gamecove/gamecove-fix-set}"
+	[ -d "$state/fixes/power-tune/orig" ] || [ -f "$state/fixes/power-tune/thermald-held" ] || return 0
+	[ -x "$helper" ] || return 0
+	command -v pkexec >/dev/null 2>&1 || return 0
+	timeout 15 pkexec "$helper" power-tune set restore >/dev/null 2>&1 || true
+}
+
 # When GameCove exits: controller and battery back to normal, then close Steam
 # cleanly so the session can end.
 post_client_shutdown() {
 	reset_input_intercept
 	release_charge_limit
+	restore_power_tune
 	if command -v steam >/dev/null 2>&1 && pgrep -u "$(id -u)" -x steam >/dev/null 2>&1; then
 		steam -shutdown >/dev/null 2>&1 || true
 	fi

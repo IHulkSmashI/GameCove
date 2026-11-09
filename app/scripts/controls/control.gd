@@ -19,7 +19,8 @@ var title := ""
 var help := ""
 ## power | display | perf | audio | controller | system | network
 var group := ""
-## slider | choice | toggle | color | action
+## slider | choice | toggle | color | action | curve
+## (curve: an Array of `points` numbers, each in min..max on `step`; a fan curve)
 var kind := "toggle"
 ## slider: min/max/step/unit ("W", "%", "Hz", "fps"); choice: options =
 ## [{"value": v, "label": "..."}...]
@@ -28,6 +29,8 @@ var max_value := 1.0
 var step := 1.0
 var unit := ""
 var options: Array = []
+## curve: how many points (0 = any count).
+var points := 0
 var default_value: Variant = null
 ## Saved in per-game and power-source profiles (brightness: no; TDP: yes).
 var per_game := true
@@ -111,6 +114,18 @@ func coerce(v: Variant) -> Variant:
 			return null
 		"color":
 			return v if v is String and v.is_valid_html_color() else null
+		"curve":
+			if not v is Array or v.is_empty() or (points > 0 and v.size() != points):
+				return null
+			var out := []
+			for x in v:
+				if not (x is int or x is float):
+					return null
+				var f := clampf(float(x), min_value, max_value)
+				if step > 0.0:
+					f = clampf(min_value + roundf((f - min_value) / step) * step, min_value, max_value)
+				out.append(f)
+			return out
 		_:
 			return v
 
@@ -118,7 +133,7 @@ func coerce(v: Variant) -> Variant:
 func describe() -> Dictionary:
 	return {"id": id, "title": title, "help": help, "group": group, "kind": kind,
 		"min": min_value, "max": max_value, "step": step, "unit": unit,
-		"options": options, "default": default_value, "per_game": per_game,
+		"options": options, "points": points, "default": default_value, "per_game": per_game,
 		"needs_root": needs_root, "requires": requires,
 		"available": available, "reason": reason, "value": value}
 

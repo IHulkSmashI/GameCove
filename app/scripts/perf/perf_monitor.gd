@@ -333,7 +333,7 @@ func _publish(d: Dictionary, s: Sampler) -> void:
 	latest = d
 	if power != null and float(d["fps_rendered"]) > 0.0 and power.has_method("request_feed") \
 			and power.autotune_active():
-		power.request_feed(float(d["fps_rendered"]), float(d["package_w"]))
+		power.request_feed(float(d["fps_rendered"]), float(d["package_w"]), d)
 	sample.emit(d)
 
 

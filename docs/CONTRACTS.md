@@ -315,9 +315,12 @@ Grouped for an "About this device" panel. Cheap: reads files under `/sys`, `/pro
   "profile": "balanced", "profiles": ["battery", "balanced", "performance"],
   "charge_limit": 80,             # percent, -1 if unknown
   "fan_mode": "auto", "fan_modes": ["quiet", "auto", "max"],
+  "plugged": false,               # on the charger
   "supported": {"tdp": true, "profiles": true, "charge_limit": true, "fan": false}
 }
 ```
+
+More signals (main thread): `source_changed(plugged)` (charger in/out), `battery_level(percent, plugged)` (from the 15 s charger check, only when the level changes), `resumed()` (after `request_refresh()` following a resume; the TDP is already put back). `Power.run_sync(job)` runs a Callable on Power's worker and waits (the power.* controls use it). Auto TDP: `request_autotune(on, game_key)`, `request_autotune_pause(reason)`, `set_autotune_option(key, value)` (`target`, `auto_fps`, `keep_pct`, `floor_w`, `plugged`), `autotune_status()`. `request_feed(fps, watts, sample)` takes PerfMonitor's whole reading as the third argument. The full list of power controls: [CONTROLS.md](CONTROLS.md#power-providerspowergd-scriptscontrolspower).
 
 Setters (`set_tdp`, `set_profile`, `set_charge_limit`, `set_fan_mode`) return `true` only after reading the value back. `hhd`: Handheld Daemon's TDP plugin is on (`hhd.settings.tdp_enable`), so the TDP goes through its HTTP API (`scripts/input/hhd.gd`, driver path `tdp.asus.tdp_v2` / `tdp.lenovo.tdp` / `tdp.msi.tdp` switched to `custom`, or `tdp.qam.tdp`) and fan and charge limit are hhd's (`supported` false), so nothing fights it. Everything Power remembers in `user://power.cfg` is per device: sections `profile@<device id>`, `custom_w@<device id>`, `device@<device id>`; plain `[profile]` / `[custom_w]` / `[device]` (from older versions, or first-run setup) move to the device that reads them. `changed(state)` fires after any change. The UI hides any control whose `supported` flag is false.
 
@@ -401,6 +404,7 @@ Two entry points, because polkit picks its rule by the program pkexec runs:
 | Program | polkit action | Password | Accepts |
 | --- | --- | --- | --- |
 | `/usr/libexec/gamecove/gamecove-fix-set` | `io.github.ihulksmashi.gamecove.fix-set` | none in the active local session | `<name> set <value>` and `<name> status`, only for `charge-limit set 50..100`, `fan set auto\|quiet\|max`, `claw8ex-gyro set accel-on\|accel-off` (gyro must be installed), and `set on\|off` of the file fixes built on `fixes/lib/gcfix.sh` (list `FILE_FIXES`; see docs/CONTROLS.md, Fixes). Then hands over to `gamecove-fix`. |
+| `/usr/libexec/gamecove/gamecove-fix-set` | `io.github.ihulksmashi.gamecove.fix-set` | none in the active local session | `<name> set <value>` and `<name> status`, only for `charge-limit set 50..100`, `fan set auto\|quiet\|max\|curve:<duties>`, `claw8ex-gyro set accel-on\|accel-off` (gyro must be installed), `power-tune set <key>:<value>\|restore` (keys in CONTROLS.md; fix.sh checks each value against the kernel). Then hands over to `gamecove-fix`. |
 | `/usr/libexec/gamecove/gamecove-fix` | `io.github.ihulksmashi.gamecove.fix` | administrator (`auth_admin_keep`) | everything: `<name> install\|remove\|status\|set <value>`, `--list` |
 
 - The app's everyday settings use `pkexec /usr/libexec/gamecove/gamecove-fix-set <name> set <value>` (`Power.fix_command()`). Exit 64 bad usage or action not allowed there, 65 fix not allowed there, 66 value not allowed, else as `gamecove-fix`.

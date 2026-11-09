@@ -10,7 +10,8 @@ var methods: Dictionary = {}
 ## get-property keys whose set-property "succeeds" but changes nothing (read-back failure).
 var frozen: Array[String] = []
 var calls: Array[String] = []
-## Optional func(argv: PackedStringArray) -> int for non-busctl commands (pkexec).
+## Optional func(argv: PackedStringArray) -> int, or -> {"code", "out"}, for non-busctl commands
+## (pkexec, systemctl).
 var exec_handler: Callable
 
 
@@ -29,10 +30,10 @@ func run(program: String, args: PackedStringArray) -> Dictionary:
 	if program != "busctl":
 		var argv := PackedStringArray([program])
 		argv.append_array(args)
-		var code := 0
 		if exec_handler.is_valid():
-			code = exec_handler.call(argv)
-		return {"code": code, "out": ""}
+			var r: Variant = exec_handler.call(argv)
+			return r if r is Dictionary else {"code": int(r), "out": ""}
+		return {"code": 0, "out": ""}
 	var a := Array(args).filter(func(x): return x != "--json=short" and not x.begins_with("--timeout="))
 	var bus: String = a[0]
 	match a[1]:
@@ -46,7 +47,7 @@ func run(program: String, args: PackedStringArray) -> Dictionary:
 				if not key in frozen:
 					var sig: String = a[6]
 					var raw: String = a[7]
-					props[key]["data"] = float(raw) if sig == "d" else (int(raw) if sig in ["u", "i"] else raw)
+					props[key]["data"] = float(raw) if sig == "d" else (int(raw) if sig in ["u", "i"] else (raw == "true" if sig == "b" else raw))
 				return {"code": 0, "out": ""}
 		"call":
 			var key := " ".join(PackedStringArray(a.slice(0, 6)))
