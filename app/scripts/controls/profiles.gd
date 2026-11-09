@@ -48,6 +48,7 @@ signal changed()
 ## "values": {id: v} (what was sent), "from": {id: layer}, "reason": String}.
 signal applied(info: Dictionary)
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
 const DeviceScript := preload("res://scripts/device/device.gd")
 
@@ -498,10 +499,13 @@ func import_json(text: String, as_game := "") -> Dictionary:
 
 func load_file() -> void:
 	_data = {"format": FORMAT, "version": VERSION, "devices": {}}
-	if not FileAccess.file_exists(path):
-		return
-	var d: Variant = _parse(FileAccess.get_file_as_string(path))
-	if not d is Dictionary or str(d.get("format", "")) != FORMAT or not d.get("devices") is Dictionary:
+	var d: Variant = SettingsFile.load_json(path)["data"]
+	if d == null:
+		return   # none yet, or damaged (kept as .bad, never saved over this run)
+	if not d is Dictionary or str(d.get("format", "")) != FORMAT or not d.get("devices") is Dictionary \
+			or int(d.get("version", 0)) > VERSION:
+		# from a newer GameCove (or not ours): keep it, never replace it with an empty one
+		SettingsFile.reject(path, "not a profiles file this version reads")
 		return
 	for k in d["devices"]:
 		if d["devices"][k] is Dictionary:
@@ -510,14 +514,7 @@ func load_file() -> void:
 
 ## Writes the file through a temporary one, so a crash never leaves half a file.
 func save_file() -> bool:
-	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	var tmp := path + ".tmp"
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(JSON.stringify(_data, "  ", true))
-	f.close()
-	return DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path)) == OK
+	return SettingsFile.save_json(path, _data, "  ") == OK
 
 
 func _dev(create := false) -> Dictionary:

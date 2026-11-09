@@ -53,6 +53,7 @@ const DeviceScript := preload("res://scripts/device/device.gd")
 const Hhd := preload("res://scripts/input/hhd.gd")
 const HhdHttp := preload("res://scripts/input/hhd_http.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Backend := preload("res://scripts/controls/power/backend.gd")
 const Levers := preload("res://scripts/controls/power/levers.gd")
 const ThermalGuard := preload("res://scripts/controls/power/thermal_guard.gd")
@@ -893,18 +894,22 @@ func device_key() -> String:
 ## 30 W or a quiet fan curve picked on one must never be applied to the other.
 ## Values saved before (plain [profile]/[custom_w]/[device]) move to this device.
 func _load_cfg() -> ConfigFile:
-	var cfg := ConfigFile.new()
-	if cfg.load(config_path) != OK:
-		return cfg
+	var cfg := SettingsFile.load_cfg(config_path)
 	if PerDevice.migrate_cfg(cfg, DEVICE_SECTIONS, device_key()):
-		cfg.save(config_path)
+		SettingsFile.save_cfg(cfg, config_path)
 	return cfg
 
 
+## One load-modify-save under SettingsFile's lock (Power's worker, the Controls worker and
+## the installer all write power.cfg).
 func _remember(section: String, key: String, value: Variant) -> void:
-	var cfg := _load_cfg()
-	cfg.set_value(PerDevice.section(section, device_key()), key, value)
-	cfg.save(config_path)
+	SettingsFile.update_cfg(config_path, func(cfg: ConfigFile):
+		PerDevice.migrate_cfg(cfg, DEVICE_SECTIONS, device_key())
+		if value == null:
+			if cfg.has_section_key(PerDevice.section(section, device_key()), key):
+				cfg.erase_section_key(PerDevice.section(section, device_key()), key)
+		else:
+			cfg.set_value(PerDevice.section(section, device_key()), key, value))
 
 
 func _recall(section: String, key: String, fallback: Variant) -> Variant:

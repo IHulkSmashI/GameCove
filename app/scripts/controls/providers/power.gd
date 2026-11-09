@@ -21,6 +21,7 @@ const Ctl := preload("res://scripts/controls/control.gd")
 const Backend := preload("res://scripts/controls/power/backend.gd")
 const Tx := preload("res://scripts/controls/power/texts.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const PowerScript := preload("res://scripts/device/power.gd")
 
 const CFG := "user://power_controls.cfg"
@@ -142,18 +143,13 @@ func _ctl(id: String) -> RefCounted:
 func _wrote(id: String, v: Variant) -> void:
 	_last[id] = v
 	if id in DEVICE_IDS:
-		var cfg := ConfigFile.new()
-		cfg.load(cfg_path)
-		cfg.set_value(PerDevice.section("set", device_key()), id, v)
-		cfg.save(cfg_path)
+		SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile): cfg.set_value(PerDevice.section("set", device_key()), id, v))
 	if id in LEVER_IDS and power != null and power.has_method("autotune_active") and power.autotune_active():
 		power.request_autotune_pause("manual " + id)
 
 
 func saved_device_values() -> Dictionary:
-	var cfg := ConfigFile.new()
-	if cfg.load(cfg_path) != OK:
-		return {}
+	var cfg := SettingsFile.load_cfg(cfg_path)
 	var sec := PerDevice.section("set", device_key())
 	var out := {}
 	if cfg.has_section(sec):
@@ -533,13 +529,12 @@ func _thermal_limit() -> RefCounted:
 			if now <= 0.0:
 				return Tx.NO_THERMAL
 			if _thermal_top < 0.0:
-				var cfg := ConfigFile.new()
-				cfg.load(cfg_path)
 				var sec := PerDevice.section("firmware", device_key())
-				_thermal_top = float(cfg.get_value(sec, "thermal_limit", now))
-				if not cfg.has_section_key(sec, "thermal_limit"):
-					cfg.set_value(sec, "thermal_limit", now)
-					cfg.save(cfg_path)
+				SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile):
+					_thermal_top = float(cfg.get_value(sec, "thermal_limit", now))
+					if cfg.has_section_key(sec, "thermal_limit"):
+						return false
+					cfg.set_value(sec, "thermal_limit", now))
 			c.max_value = minf(_thermal_top, 100.0)
 			return "" if c.max_value > c.min_value else Tx.NO_THERMAL,
 		func(_c): return be.thermal_limit(),
@@ -762,19 +757,17 @@ func _battery_saver() -> RefCounted:
 
 ## Battery saver on / off and what it replaced, per handheld (survives a restart).
 func _save_saver(on: bool) -> void:
-	var cfg := ConfigFile.new()
-	cfg.load(cfg_path)
 	var sec := PerDevice.section("saver", device_key())
-	cfg.set_value(sec, "on", on)
-	cfg.set_value(sec, "prev", _saver_prev.duplicate(true) if on else {})
-	cfg.set_value(sec, "auto", _saver_auto and on)
-	cfg.save(cfg_path)
+	var prev := _saver_prev.duplicate(true) if on else {}
+	var auto := _saver_auto and on
+	SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile):
+		cfg.set_value(sec, "on", on)
+		cfg.set_value(sec, "prev", prev)
+		cfg.set_value(sec, "auto", auto))
 
 
 func _saved_saver() -> Dictionary:
-	var cfg := ConfigFile.new()
-	if cfg.load(cfg_path) != OK:
-		return {}
+	var cfg := SettingsFile.load_cfg(cfg_path)
 	var sec := PerDevice.section("saver", device_key())
 	if not cfg.has_section(sec):
 		return {}

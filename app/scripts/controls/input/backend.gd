@@ -17,6 +17,7 @@ extends RefCounted
 ##   sysfs LEDs     RGB when hhd isn't driving it (leds.gd), written by the
 ##                  no-password root action.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Busctl := preload("res://scripts/device/busctl.gd")
 const Yaml := preload("res://scripts/input/yaml_lite.gd")
 const Profile := preload("res://scripts/input/ip_profile.gd")
@@ -319,12 +320,7 @@ func _load(path: String, json: String) -> bool:
 
 
 func _save(profile: Dictionary) -> void:
-	var p := profile_path()
-	DirAccess.make_dir_recursive_absolute(p.get_base_dir())
-	var f := FileAccess.open(p, FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify(Profile.clean(Profile.normalize(profile)), "  ") + "\n")
-		f.close()
+	SettingsFile.save_text(profile_path(), JSON.stringify(Profile.clean(Profile.normalize(profile)), "  ") + "\n")
 
 
 ## busctl call with no reply value.
@@ -439,20 +435,16 @@ static func same(got: Variant, want: Variant) -> bool:
 ## enabled is root-only and the helper isn't there), so the next "on" brings it back
 ## (the Claw's 21 became 0 after a probe of led_effect). Per handheld, kept in the home.
 func led_saved_pct(node: Dictionary) -> float:
-	var cfg := ConfigFile.new()
-	cfg.load(_led_cfg())
+	var cfg := SettingsFile.load_cfg(_led_cfg())
 	return float(cfg.get_value(PerDevice.section("leds", device_id()), str(node.get("name", "")), -1.0))
 
 
 func _led_remember(nodes: Array) -> void:
-	var cfg := ConfigFile.new()
-	cfg.load(_led_cfg())
 	var sec := PerDevice.section("leds", device_id())
-	for n in nodes:
-		if Leds.brightness_pct(n) > 0.0:
-			cfg.set_value(sec, str(n.get("name", "")), Leds.brightness_pct(n))
-	DirAccess.make_dir_recursive_absolute(_led_cfg().get_base_dir())
-	cfg.save(_led_cfg())
+	SettingsFile.update_cfg(_led_cfg(), func(cfg: ConfigFile):
+		for n in nodes:
+			if Leds.brightness_pct(n) > 0.0:
+				cfg.set_value(sec, str(n.get("name", "")), Leds.brightness_pct(n)))
 
 
 func _led_cfg() -> String:

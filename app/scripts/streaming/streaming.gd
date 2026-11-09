@@ -17,6 +17,7 @@ extends Node
 ## (responding addresses; default TCP connect), "send": WoL sender (tests), "clock":
 ## func() -> int unix seconds, "reaper": path of the app-id wrapper ("" = none)}.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const DeviceScript := preload("res://scripts/device/device.gd")
 signal changed
 signal apps_changed(host_id: String)
@@ -1038,21 +1039,18 @@ func _save() -> void:
 		for k in SAVED:
 			e[k] = h.get(k)
 		list.append(e)
-	var f := FileAccess.open(_dir().path_join("hosts.json"), FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify({"schema": 1, "hosts": list}, "\t"))
-		f.close()
+	SettingsFile.save_json(_dir().path_join("hosts.json"), {"schema": 1, "hosts": list}, "\t")
 
 
 func _save_picks() -> void:
-	_picks.save(_dir().path_join("settings.cfg"))
+	SettingsFile.save_cfg(_picks, _dir().path_join("settings.cfg"))
 
 
 func _load() -> void:
 	hosts = {}
 	var path := _dir().path_join("hosts.json")
 	if FileAccess.file_exists(path):
-		var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+		var data: Variant = SettingsFile.load_json(path)["data"]
 		if data is Dictionary and data.get("hosts") is Array:
 			for e in data["hosts"]:
 				if not e is Dictionary or str(e.get("id", "")) == "":
@@ -1067,5 +1065,4 @@ func _load() -> void:
 				for a in h["apps"]:
 					a["id"] = int(a.get("id", 0))
 				hosts[h["id"]] = h
-	_picks = ConfigFile.new()
-	_picks.load(_dir().path_join("settings.cfg"))
+	_picks = SettingsFile.load_cfg(_dir().path_join("settings.cfg"))

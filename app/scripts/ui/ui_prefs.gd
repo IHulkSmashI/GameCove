@@ -3,6 +3,7 @@ extends RefCounted
 ## Saved in user://ui.cfg. Applying them is main.gd's job (apply_theme);
 ## this file only stores and validates.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Themes := preload("res://theme/themes.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 
@@ -17,8 +18,11 @@ static var path := PATH
 static func load_prefs(from := "") -> void:
 	if from != "":
 		path = from
-	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
+	if not FileAccess.file_exists(path):
+		set_values(DEFAULTS)
+		return
+	var cfg := SettingsFile.load_cfg(path)
+	if cfg.get_sections().is_empty():
 		set_values(DEFAULTS)
 		return
 	set_values({
@@ -29,10 +33,10 @@ static func load_prefs(from := "") -> void:
 
 
 static func save_prefs() -> void:
-	var cfg := ConfigFile.new()
-	for k in values():
-		cfg.set_value("ui", k, values()[k])
-	cfg.save(path)
+	# main.gd keeps more keys in [ui]: update, never replace the file
+	SettingsFile.update_cfg(path, func(cfg: ConfigFile):
+		for k in values():
+			cfg.set_value("ui", k, values()[k]))
 
 
 static func values() -> Dictionary:

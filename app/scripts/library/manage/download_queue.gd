@@ -20,6 +20,7 @@ signal job_changed(job: Dictionary)
 signal job_progress(job: Dictionary)
 signal job_finished(job: Dictionary)
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Progress := preload("res://scripts/library/manage/progress.gd")
 const Disk := preload("res://scripts/library/manage/disk.gd")
 
@@ -270,12 +271,7 @@ func _save() -> void:
 	for j in jobs:
 		out.append({"key": j["key"], "action": j["action"], "title": j["title"], "state": j["state"],
 			"steps": j["steps"], "step": j["step"], "finalize": j["finalize"], "size": j["size"]})
-	var f := FileAccess.open(save_path + ".tmp", FileAccess.WRITE)
-	if f == null:
-		return
-	f.store_string(JSON.stringify({"version": 1, "jobs": out}, "\t"))
-	f.close()
-	DirAccess.rename_absolute(ProjectSettings.globalize_path(save_path + ".tmp"), ProjectSettings.globalize_path(save_path))
+	SettingsFile.save_json(save_path, {"version": 1, "jobs": out}, "\t")
 
 
 ## Reads the saved queue. Jobs that were running come back queued (auto_resume)
@@ -284,7 +280,7 @@ func _save() -> void:
 func restore(still_needed := Callable()) -> void:
 	if save_path == "" or not FileAccess.file_exists(save_path):
 		return
-	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(save_path))
+	var data: Variant = SettingsFile.load_json(save_path)["data"]
 	if not (data is Dictionary) or not (data.get("jobs") is Array):
 		return
 	for saved in data["jobs"]:

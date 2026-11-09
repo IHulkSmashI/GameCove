@@ -21,6 +21,7 @@ signal changed(rows: Array)
 ## verb: "apply" | "undo" | "check". message: one plain line for a toast.
 signal action_finished(fix: String, verb: String, ok: bool, message: String)
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const BgCommand := preload("res://scripts/ui/bg_command.gd")
 const Texts := preload("res://scripts/ui/texts_fixes.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
@@ -311,9 +312,7 @@ func _choices_path() -> String:
 
 
 func _cfg() -> ConfigFile:
-	var c := ConfigFile.new()
-	c.load(_choices_path())
-	return c
+	return SettingsFile.load_cfg(_choices_path())
 
 
 ## What the user did on the page, per device: "on" | "off" (installer repairs
@@ -323,10 +322,8 @@ func choice(fix: String) -> String:
 
 
 func _remember_choice(fix: String, verb: String) -> void:
-	var c := _cfg()
-	c.set_value(PerDevice.section("fixes", device_id), fix, "on" if verb == "apply" else "off")
-	DirAccess.make_dir_recursive_absolute(data_dir)
-	c.save(_choices_path())
+	SettingsFile.update_cfg(_choices_path(), func(c: ConfigFile):
+		c.set_value(PerDevice.section("fixes", device_id), fix, "on" if verb == "apply" else "off"))
 
 
 # ------------------------------------------------------------- quiet fix
@@ -483,13 +480,10 @@ func check_changes() -> Dictionary:
 	var path := data_dir.path_join("system-snapshot.json")
 	var old: Variant = null
 	if FileAccess.file_exists(path):
-		old = JSON.parse_string(FileAccess.get_file_as_string(path))
+		old = SettingsFile.load_json(path)["data"]
 	var now := system_snapshot()
 	var changes: Array = diff(old, now) if old is Dictionary else []
-	DirAccess.make_dir_recursive_absolute(data_dir)
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify(now, "  "))
+	SettingsFile.save_json(path, now, "  ")
 	last_changes = {"first_run": not old is Dictionary, "changed": changes}
 	# every start, not only after a change: cheap, and the update may have come before this check existed
 	refresh_stale_override()

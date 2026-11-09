@@ -447,9 +447,10 @@ func test_store_keeps_the_old_value_when_the_save_fails() -> void:
 	var Store := load("res://scripts/controls/display/store.gd")
 	var good: RefCounted = Store.new({"config_path": OS.get_temp_dir().path_join("gc_store_ok_%d.cfg" % OS.get_process_id())}, "display", "x")
 	ok(good.set_value("dim_after", 60), "saved")
-	var bad: RefCounted = Store.new({"config_path": "/nonexistent-gamecove-dir/store.cfg"}, "display", "x")
-	expect_error("")  # ConfigFile.save may report the missing folder
-	ok(not bad.set_value("dim_after", 120), "save into a missing folder fails")
+	var bad: RefCounted = Store.new({"config_path": "/dev/null/gamecove/store.cfg"}, "display", "x")  # a folder that can never be made
+	expect_error("Could not create directory")
+	expect_error("")  # opening the file there may report it too
+	ok(not bad.set_value("dim_after", 120), "save into a folder that cannot exist fails")
 	eq(bad.get_value("dim_after", -1), -1, "nothing remembered from the failed write")
 
 

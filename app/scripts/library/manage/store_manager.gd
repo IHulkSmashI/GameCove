@@ -19,6 +19,7 @@ signal external_window_needed(key: String, app: String, reason: String)
 signal store_changed(store: String)
 signal settings_changed
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const LaunchFiles := preload("res://scripts/controls/perf/launch_files.gd")
 const JobRunner := preload("res://scripts/library/manage/job_runner.gd")
 const DownloadQueue := preload("res://scripts/library/manage/download_queue.gd")
@@ -108,7 +109,7 @@ static func default_settings(home_dir: String) -> Dictionary:
 
 func _load_settings() -> void:
 	settings = default_settings(home)
-	var d: Variant = Common.read_json(ProjectSettings.globalize_path(settings_path), {})
+	var d: Variant = SettingsFile.load_json(settings_path)["data"]
 	if not (d is Dictionary):
 		return
 	for k in settings:
@@ -134,12 +135,7 @@ static func mark_steam_ready(runtime_dir: String) -> void:
 func _save_settings() -> void:
 	settings["steam_pending"] = steam.pending
 	settings["steam_pending_base"] = steam.pending_base
-	var f := FileAccess.open(settings_path + ".tmp", FileAccess.WRITE)
-	if f == null:
-		return
-	f.store_string(JSON.stringify(settings, "\t"))
-	f.close()
-	DirAccess.rename_absolute(ProjectSettings.globalize_path(settings_path + ".tmp"), ProjectSettings.globalize_path(settings_path))
+	SettingsFile.save_json(settings_path, settings, "\t")
 
 
 ## Settings the UI can show: install_root, steam_cef, auto_resume, max_parallel,

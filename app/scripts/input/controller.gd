@@ -72,6 +72,7 @@ const Profile := preload("res://scripts/input/ip_profile.gd")
 const Intercept := preload("res://scripts/input/intercept.gd")
 const Hhd := preload("res://scripts/input/hhd.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 
 const SERVICE := "org.shadowblip.InputPlumber"
 const ROOT_PATH := "/org/shadowblip/InputPlumber"
@@ -825,20 +826,8 @@ func _call_void(path: String, iface: String, method: String, args: Array) -> boo
 
 
 func _write_text(path: String, text: String) -> bool:
-	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(text)
-	f.close()
-	return true
+	return SettingsFile.save_text(path, text) == OK
 
 
 func _write(path: String, profile: Dictionary) -> bool:
-	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(JSON.stringify(Profile.clean(Profile.normalize(profile)), "  ") + "\n")
-	f.close()
-	return true
+	return _write_text(path, JSON.stringify(Profile.clean(Profile.normalize(profile)), "  ") + "\n")

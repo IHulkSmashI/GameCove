@@ -7,6 +7,7 @@ extends Control
 ## services themselves except through what's passed in here, so they can be
 ## tested with fakes.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Home := preload("res://scripts/ui/home.gd")
 const LibraryScreen := preload("res://scripts/ui/library_screen.gd")
@@ -1411,19 +1412,17 @@ func _style_hint_shade() -> void:
 # ------------------------------------------------------------ settings
 
 func _load_extra_prefs() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load(UiPrefs.path) == OK:
+	var cfg := SettingsFile.load_cfg(UiPrefs.path)
+	if true:
 		menu_side = str(cfg.get_value("ui", "menu_side", "right"))
 		ui_sounds = str(cfg.get_value("ui", "ui_sounds", "low"))
 
 
 func _save_prefs() -> void:
 	UiPrefs.save_prefs()
-	var cfg := ConfigFile.new()
-	cfg.load(UiPrefs.path)
-	cfg.set_value("ui", "menu_side", menu_side)
-	cfg.set_value("ui", "ui_sounds", ui_sounds)
-	cfg.save(UiPrefs.path)
+	SettingsFile.update_cfg(UiPrefs.path, func(cfg: ConfigFile):
+		cfg.set_value("ui", "menu_side", menu_side)
+		cfg.set_value("ui", "ui_sounds", ui_sounds))
 
 
 func _settings_values() -> Dictionary:
