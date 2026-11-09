@@ -219,7 +219,7 @@ do_set() {
 		return 0
 	fi
 	case "$value" in
-		''|*[!0-9]*) die 2 "set needs a whole number 50-100" ;;
+		''|*[!0-9]*|0?*) die 2 "set needs a whole number 50-100" ;;
 	esac
 	[ "$value" -ge 50 ] && [ "$value" -le 100 ] || die 2 "set needs a whole number 50-100"
 	fix_lock charge-limit

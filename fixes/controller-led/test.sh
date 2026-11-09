@@ -46,7 +46,7 @@ run status | tail -n 1 | grep -qx 'state=off' || fail "state off after remove"
 grep -q 'set all,ff8000,50' "$R/var/lib/gamecove/fixes/controller-led/changes.log" || fail "changes logged"
 
 # ---- bad values
-for bad in "all,FF0000,50" "all,ff00,50" "all,ff0000,101" "x,ff0000,50" "all,ff0000,50,bad-name" "all,ff0000" "all,ff0000,50,monocolor,500"; do
+for bad in "all,FF0000,50" "all,ff00,50" "all,ff0000,101" "x,ff0000,50" "all,ff0000,50,bad-name" "all,ff0000" "all,ff0000,50,monocolor,500" "all,ff0000,077" "all,ff0000,50,monocolor,077"; do
 	set +e; run set "$bad" 2>/dev/null; c=$?; set -e
 	[ "$c" = 2 ] || fail "'$bad' refused with 2 (got $c)"
 done

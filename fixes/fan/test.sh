@@ -212,11 +212,12 @@ sh "$FIX" set curve:0,40,50,60,80,100 >/dev/null || fail "msi: custom curve"
 [ "$(cat "$M/pwm2_auto_point3_pwm") $(cat "$M/pwm2_auto_point6_pwm") $(cat "$M/pwm1_enable")" = "128 255 1" ] || fail "msi: curve written to both fans"
 grep -q 'set curve 0 40 50 60 80 100' "$R/var/lib/gamecove/fixes/fan/changes.log" || fail "msi: curve logged"
 before="$(cat "$M/pwm1_auto_point5_pwm")"
-for bad in curve:0,40,40,45,59,75 curve:0,40,50,45,60,75 curve:0,40,40,45,60 curve:0,40,40,45,60,75,80 curve:0,40,40,45,60,101 curve:0,,40,45,60,75 curve:a,b curve:; do
+for bad in curve:0,40,40,45,59,75 curve:0,40,50,45,60,75 curve:0,40,40,45,60 curve:0,40,40,45,60,75,80 curve:0,40,40,45,60,101 curve:0,,40,45,60,75 curve:a,b curve: curve:0,040,040,045,060,075 curve:00,40,40,45,60,75; do
 	set +e; sh "$FIX" set "$bad" 2>/dev/null; code=$?; set -e
 	[ "$code" = "2" ] || fail "msi: $bad refused with exit 2 (got $code)"
 done
 [ "$(cat "$M/pwm1_auto_point5_pwm")" = "$before" ] || fail "msi: refused curves write nothing"
+# review M1: "040" passes [ -ge 40 ] but is octal 32 in $((...)); leading zeros are refused (above)
 sh "$FIX" set auto >/dev/null
 rm -rf "$R"
 R="$(new_hw asus_custom_fan_curve 2)"; export GAMECOVE_ROOT="$R"; A="$R/sys/class/hwmon/hwmon3"

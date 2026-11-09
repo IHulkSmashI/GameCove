@@ -79,7 +79,9 @@ rd() { [ -f "$1" ] && tr -d '\n' < "$1" 2>/dev/null || true; }
 
 wr() { printf '%s\n' "$2" 2>/dev/null > "$1"; }
 
-is_uint() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; [ "${#1}" -le 9 ]; }
+# A plain decimal: no leading zeros, because `[ -ge ]` reads "050" as 50 but $((...)) reads it as
+# octal 40, so a checked value could change after the check (review M1).
+is_uint() { case "$1" in ''|*[!0-9]*|0?*) return 1 ;; esac; [ "${#1}" -le 9 ]; }
 
 # The active word of "[a] b c" (or the only word).
 active() {

@@ -231,6 +231,8 @@ expect_code 66 "set entry: fan curve letters" gfs fan set curve:0,40,x
 expect_code 66 "set entry: fan curve empty" gfs fan set curve:
 expect_code 66 "set entry: fan curve trailing comma" gfs fan set curve:1,2,
 expect_code 66 "set entry: fan curve shell" gfs fan set 'curve:1;reboot'
+expect_code 66 "set entry: fan curve leading zero (review M1)" gfs fan set curve:0,040,040,045,060,075
+expect_code 66 "set entry: fan curve leading zero first" gfs fan set curve:00,40,40,45,60,75
 for v in boost:off epp:balance_power governor:powersave cpumax:70 gpulevel:auto gpumin:600 \
 	gpumax:1800 gpuprofile:power_saving sppt:28 fppt:33 platform:low-power tau:8000000 tau:restore \
 	thermald:hold thermald:release battery:long-life restore; do

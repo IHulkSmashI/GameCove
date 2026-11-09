@@ -237,10 +237,11 @@ do_set() {
 	zone="$1"; hex="$2"; pct="$3"; eff="${4:-}"; spd="${5:-}"
 	case "$zone" in all|[0-9]) ;; *) die 2 "zone must be all or 0-9" ;; esac
 	case "$hex" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;; *) die 2 "colour must be rrggbb (lower case)" ;; esac
-	case "$pct" in ''|*[!0-9]*) die 2 "percent must be 0-100" ;; esac
+	# no leading zeros: $((...)) would read "077" as octal (review M1)
+	case "$pct" in ''|*[!0-9]*|0?*) die 2 "percent must be 0-100" ;; esac
 	[ "$pct" -le 100 ] || die 2 "percent must be 0-100"
 	case "$eff" in ''|*[!a-z]*) [ -z "$eff" ] || die 2 "bad effect name" ;; esac
-	case "$spd" in ''|*[!0-9]*) [ -z "$spd" ] || die 2 "speed must be 0-100" ;; esac
+	case "$spd" in ''|*[!0-9]*|0?*) [ -z "$spd" ] || die 2 "speed must be 0-100" ;; esac
 	[ -z "$spd" ] || [ "$spd" -le 100 ] || die 2 "speed must be 0-100"
 	targets=""
 	i=0

@@ -86,6 +86,11 @@ expect 0 "cpumax under min_perf_pct" set cpumax:30
 [ "$(r "$C/intel_pstate/max_perf_pct")" = 40 ] || fail "max_perf_pct never under min_perf_pct"
 expect 2 "cpumax too low" set cpumax:20
 expect 2 "cpumax too high" set cpumax:101
+# review M1: "050" passes [ -ge 30 ] but is octal 40 in $((...)): no leading zeros anywhere
+expect 2 "cpumax leading zero" set cpumax:050
+expect 2 "cores leading zero" set cores:02
+expect 2 "tau leading zero" set tau:08000000
+expect 2 "gpumax leading zero" set gpumax:02000
 expect 0 "cores 2" set cores:2
 [ "$(r "$C/cpu1/online") $(r "$C/cpu2/online") $(r "$C/cpu3/online")" = "1 0 0" ] || fail "two CPUs online"
 expect 2 "cores 1" set cores:1
@@ -197,6 +202,8 @@ expect 0 "amd boost off" set boost:off
 [ "$(r "$C/cpufreq/boost")" = 0 ] || fail "cpufreq boost 0"
 expect 0 "smt off" set smt:off
 [ "$(r "$C/smt/control")" = off ] || fail "smt off"
+expect 2 "cpumax amd leading zero (octal 40 %)" set cpumax:050
+[ "$(r "$C/cpufreq/policy1/scaling_max_freq")" = 5100000 ] || fail "nothing written for cpumax:050"
 expect 0 "cpumax amd" set cpumax:50
 [ "$(r "$C/cpufreq/policy1/scaling_max_freq")" = 2550000 ] || fail "scaling_max_freq 50 %"
 expect 0 "gpu level high" set gpulevel:high

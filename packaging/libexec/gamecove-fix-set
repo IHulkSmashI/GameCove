@@ -95,7 +95,7 @@ charge-limit:[5-9][0-9] | charge-limit:100 | charge-limit:release) ;;
 fan:auto | fan:quiet | fan:max) ;;
 fan:curve:*)
 	case "${value#curve:}" in
-	"" | *[!0-9,]* | ,* | *, | *,,*) die "value not allowed for $name" 66 ;;
+	"" | *[!0-9,]* | ,* | *, | *,,* | 0[0-9]* | *,0[0-9]*) die "value not allowed for $name" 66 ;;
 	esac
 	[ "${#value}" -le 64 ] || die "value not allowed for $name" 66
 	;;

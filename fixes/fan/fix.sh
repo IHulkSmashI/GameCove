@@ -178,11 +178,14 @@ set_enable() {
 
 # check_curve "d1,d2,...": prints the duties space separated, or exits 2. Same count as the table's
 # points, whole numbers 0-100, never below the quiet preset at a point, never falling.
+# No leading zeros: `[ -ge ]` reads "040" as 40 but to_pwm's $((...)) reads it as octal 32,
+# which would slip under the floor (review M1).
 check_curve() {
 	[ "$KIND" = table ] || die 2 "$DRIVER has no fan table: no custom curve"
 	floor="$(table_for quiet)"
 	duties="$(printf '%s' "$1" | tr ',' ' ')"
 	case "$1" in ''|*[!0-9,]*|,*|*,|*,,*) die 2 "curve needs whole numbers separated by commas" ;; esac
+	case "$1" in 0[0-9]*|*,0[0-9]*) die 2 "curve numbers can't have leading zeros" ;; esac
 	set -- $floor
 	prev=0
 	count=0
