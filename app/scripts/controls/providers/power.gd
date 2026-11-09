@@ -529,15 +529,44 @@ func _charge_limit() -> RefCounted:
 		func(_c, v): return bool(_p(func(): return power.set_charge_limit(int(v)))))
 
 
+## Battery care: the firmware's own Long_Life mode (Lenovo charge_types) where there is
+## one, else a preset charge limit (LONG_LIFE_PCT) through the same backend as
+## power.charge_limit, so the two never disagree (the Claw and the Ally said "no
+## charge limit" here while power.charge_limit offered 100).
+const LONG_LIFE_PCT := 80
+
+
+func _long_life_via() -> String:
+	var c2: Dictionary = be.charge_types()
+	if not c2.is_empty() and "Long_Life" in c2["offered"]:
+		return "charge_types"
+	var st := _pstate()
+	if str(st.get("backend", "")) != "hhd" and st.get("supported", {}).get("charge_limit", false):
+		return "limit"
+	return ""
+
+
 func _battery_long_life() -> RefCounted:
-	return _make("power.battery_long_life", "toggle", {"per_game": false, "needs_root": true},
+	return _make("power.battery_long_life", "toggle", {"per_game": false},
 		func(_c):
-			var c2: Dictionary = be.charge_types()
-			if c2.is_empty() or not "Long_Life" in c2["offered"]:
-				return Tx.NO_CHARGE
-			return "" if be.helper_present() else Tx.NO_HELPER,
-		func(_c): return str(be.charge_types().get("active", "")) == "Long_Life",
-		func(_c, v): return be.set_battery_mode(bool(v)))
+			match _long_life_via():
+				"charge_types":
+					return "" if be.helper_present() else Tx.NO_HELPER
+				"limit":
+					return ""
+			if _pstate().get("needs_helper", {}).get("charge_limit", false):
+				return Tx.NO_HELPER
+			return Tx.NO_CHARGE,
+		func(_c):
+			if _long_life_via() == "limit":
+				var lim := int(_pstate().get("charge_limit", -1))
+				return lim > 0 and lim <= LONG_LIFE_PCT
+			return str(be.charge_types().get("active", "")) == "Long_Life",
+		func(_c, v):
+			if _long_life_via() == "limit":
+				var want := LONG_LIFE_PCT if bool(v) else 100
+				return bool(_p(func(): return power.set_charge_limit(want)))
+			return be.set_battery_mode(bool(v)))
 
 
 func _fan_mode() -> RefCounted:

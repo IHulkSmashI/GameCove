@@ -448,6 +448,23 @@ func test_ally_live_gpu_profile_reason_when_steamos_manager_errors() -> void:
 	_free()
 
 
+## Round 2: battery care agreed with no one; it is now an 80 % limit through the same
+## backend as power.charge_limit (steamos-manager on the Ally).
+func test_ally_live_long_life_is_an_80_percent_limit() -> void:
+	var e := _setup(_ally_live(false))
+	var c: Dictionary = e["c"]
+	ok(c["power.battery_long_life"].available, "battery care (%s)" % c["power.battery_long_life"].reason)
+	eq(c["power.battery_long_life"].value, false, "no limit set")
+	e["reg"].set_value("power.battery_long_life", true)
+	e["reg"].detect_all()
+	eq(c["power.charge_limit"].value, 80.0, "an 80 % limit")
+	eq(c["power.battery_long_life"].value, true)
+	e["reg"].set_value("power.battery_long_life", false)
+	e["reg"].detect_all()
+	eq(c["power.charge_limit"].value, 100.0, "off: charges to full")
+	_free()
+
+
 func test_ally_live_without_the_helper() -> void:
 	var e := _setup(_ally_live(false))
 	var c: Dictionary = e["c"]
