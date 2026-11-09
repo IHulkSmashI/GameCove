@@ -843,7 +843,7 @@ static func _close(a: Color, b: Color) -> bool:
 
 func _led_brightness() -> RefCounted:
 	return _make({"id": "controller.led_brightness", "title": "Light brightness", "kind": "slider",
-		"min_value": 0.0, "max_value": 100.0, "step": 5.0, "unit": "%", "default_value": 50.0, "apply_order": 3,
+		"min_value": 0.0, "max_value": 100.0, "step": 1.0, "unit": "%", "default_value": 50.0, "apply_order": 3,
 		"requires": ["controller.led_effect"], "help": "0 turns the lights off."},
 		func(_c):
 			var b := _rgb_block()
@@ -883,8 +883,13 @@ func _led_brightness() -> RefCounted:
 					var opts := Hhd.options_of(ch["brightnessd"])
 					return _hhd_rgb_set(mode, {"brightnessd": _ordinal(pct, opts if not opts.is_empty() else ["low", "medium", "high"])})
 				return false
+			# brightness only: on/off is the effect (enabled); a world-writable node (the
+			# Claw's hid-msi) takes the exact value without root and without turning on
+			if Leds.set_brightness_direct(be.leds(), pct):
+				be.invalidate()
+				return absf(Leds.brightness_pct(be.leds()[0]) - pct) <= 1.0
 			if pct <= 0.0:
-				return be.led_apply("off", func(ls): return Leds.brightness_pct(ls[0]) == 0.0)
+				return be.led_apply("off", func(ls): return Leds.brightness_pct(ls[0]) == 0.0 or Leds.effect_of(ls[0]) == "off")
 			var n: Dictionary = be.leds()[0]
 			var kern := Leds.kernel_effect(n, Leds.effect_of(n))
 			var spec := Leds.spec("all", Leds.color_of(n), pct, kern)
@@ -905,7 +910,13 @@ func _led_speed() -> RefCounted:
 					if ch.has("speed") or ch.has("speedd"):
 						return ""
 				return "This handheld's effects have a fixed speed"
-			return "" if Leds.speed_pct(be.leds()[0]) >= 0.0 else "This handheld's effects have a fixed speed",
+			var n0: Dictionary = be.leds()[0]
+			if Leds.speed_pct(n0) < 0.0:
+				return "This handheld's effects have a fixed speed"
+			# speed is 0644 root on hid-msi: only the root action can set it
+			if not Leds.writable(str(n0["path"]) + "/speed") and not FileAccess.file_exists(str(ctx.get("sys_root", "")) + FIX_SET_HELPER):
+				return R_LED_HELPER
+			return "",
 		func(_c):
 			if be.rgb_backend() == "hhd":
 				var cur: Variant = Hhd.dig(be.hhd_state(), ["rgb", "handheld", "mode", _hhd_rgb_mode()])

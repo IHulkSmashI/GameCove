@@ -389,6 +389,36 @@ func test_claw_live_hid_msi_leds() -> void:
 	reg.free()
 
 
+## Round 2 on the Claw: brightness 21 with enabled=false read 0 and a put-back wrote 0;
+## led_speed (0644 root) failed to write without the helper.
+func test_claw_live_brightness_is_the_file_and_speed_needs_the_helper() -> void:
+	var t := _claw_live("claw_live_led_bri")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	var n := "/sys/class/leds/go:rgb:joystick_rings"
+	eq(_value(reg, "controller.led_brightness"), 21.0, "the file's 21, not 0 for enabled=false")
+	eq(_value(reg, "controller.led_effect"), "off", "off is enabled=false")
+	ok(_w(reg, "controller.led_brightness", 40.0), "40")
+	eq(f.read(n + "/brightness"), "40")
+	eq(f.read(n + "/enabled"), "false", "brightness never turns the lights on")
+	ok(_w(reg, "controller.led_brightness", 21.0), "put back")
+	eq(f.read(n + "/brightness"), "21", "the exact original")
+	eq(f.pkexec_calls.size(), 0, "no root for brightness")
+	reg.free()
+	var g: RefCounted = Fakes.new(_root("claw_live_speed_nohelper"), false)
+	g.with_ip("MSI Claw 8 EX", CLAW_CAPS)
+	var d: String = g.led("go:rgb:joystick_rings", "red green blue", "1 90 100", 100, 21, {
+		"multi_max_intensity": "100 100 100", "effect": "monocolor",
+		"effect_index": "monocolor breathe chroma rainbow frostfire", "enabled": "false",
+		"enabled_index": "true false", "speed": "10", "speed_range": "0-20"})
+	for a in ["effect", "multi_intensity", "brightness"]:
+		FileAccess.set_unix_permissions(d + "/" + a, 438)
+	var reg2 := _setup(g, _row("msi-claw-8-ex"))
+	eq(_reason(reg2, "controller.led_speed"), Provider.R_LED_HELPER, "speed is root-only")
+	ok(_avail(reg2, "controller.led_brightness"), "brightness needs no helper")
+	reg2.free()
+
+
 ## Real sysfs files report a size of 4096 and /proc files 0: get_file_as_string()
 ## returns "" for both, which hid the Claw's LED node. Two of the node's files are
 ## links to a real /proc file here, so the regular-file fixture reads like the device.

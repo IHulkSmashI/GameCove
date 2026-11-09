@@ -142,17 +142,17 @@ static func color_of(node: Dictionary) -> Color:
 	return Color8(rgb["red"], rgb["green"], rgb["blue"])
 
 
+## The brightness file as a percent, whatever `enabled` says: on/off is the effect
+## ("off" <-> enabled=false), so a restore writes back the brightness that was there
+## (the Claw: 21 with enabled=false read 0 and a put-back wrote 0).
 static func brightness_pct(node: Dictionary) -> float:
-	var on: Variant = node.get("enabled")
-	if on == false:
-		return 0.0
 	return roundf(100.0 * float(node.get("brightness", 0)) / float(maxi(1, int(node.get("max", 1)))))
 
 
-## GameCove effect value of a node: off, solid or a kernel effect mapped through
-## KERNEL_EFFECTS.
+## GameCove effect value of a node: off (enabled=false or brightness 0), solid or a
+## kernel effect mapped through KERNEL_EFFECTS.
 static func effect_of(node: Dictionary) -> String:
-	if brightness_pct(node) <= 0.0:
+	if node.get("enabled") == false or brightness_pct(node) <= 0.0:
 		return "off"
 	var e := str(node.get("effect", ""))
 	return KERNEL_EFFECTS.get(e, e) if e != "" else "solid"
@@ -322,3 +322,16 @@ static func _already(node: Dictionary, s: String) -> bool:
 ## True when GameCove can change the node's colour and brightness without root.
 static func direct_capable(node: Dictionary) -> bool:
 	return writable(str(node.get("path", "")) + "/multi_intensity") and writable(str(node.get("path", "")) + "/brightness")
+
+
+## Sets only the brightness file of every node (world-writable ones), read back; false
+## when a node's file isn't writable for us (the caller uses the root action).
+static func set_brightness_direct(nodes: Array, pct: float) -> bool:
+	for n in nodes:
+		if not writable(str(n["path"]) + "/brightness"):
+			return false
+	for n in nodes:
+		var want := str(int((int(n["max"]) * clampi(int(roundf(pct)), 0, 100) + 50) / 100))
+		if not _write(str(n["path"]) + "/brightness", want):
+			return false
+	return true
