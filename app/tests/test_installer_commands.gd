@@ -47,15 +47,15 @@ func test_install_tasks_bazzite() -> void:
 	var t := F.target("bazzite")
 	var tasks := C.tasks_for("install", _choices(t), t, Paths.for_home("/h"))
 	eq(_ids(tasks), ["check_game", "package", "fix_install:claw8ex-buttons", "fix_install:claw8ex-vrr", "fix_install:claw8ex-gyro",
-		"user_files", "pending", "apply_now", "state"])
+		"fix_install:claw-kbd-wakeup", "user_files", "pending", "apply_now", "state"])
 	var pkg: Dictionary = tasks[1]
 	ok(pkg["privileged"], "package needs pkexec")
 	eq(pkg["undo"], C.rpm_uninstall(), "package can be undone")
 	eq(pkg["fallback"], C.rpm_install(t["package"], false), "staged install when live apply fails")
 	ok(tasks[2]["needs_live"], "fixes wait for the package")
 	eq(tasks[2]["undo"], ["pkexec", "/usr/libexec/gamecove/gamecove-fix", "claw8ex-buttons", "remove"])
-	eq(tasks[7]["cmd"], ["/usr/libexec/gamecove/gamecove-apply-choices"])
-	ok(tasks[7]["optional"] and tasks[7]["needs_live"])
+	eq(tasks[8]["cmd"], ["/usr/libexec/gamecove/gamecove-apply-choices"])
+	ok(tasks[8]["optional"] and tasks[8]["needs_live"])
 
 
 func test_install_tasks_steamos_and_other() -> void:

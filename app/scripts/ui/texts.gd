@@ -126,6 +126,7 @@ const FIX_STATES := {
 	"restart": "Restart needed",
 	"partial": "Partly working",
 	"not-needed": "Not needed",
+	"os-fixed": "Fixed by the system",
 	"unsupported": "Not supported here",
 	"other-override": "Another fix is in place",
 	"n/a": "Doesn't apply",
@@ -136,6 +137,7 @@ const FIX_STATES := {
 ## Shown under the explanation for states where you can't install.
 const FIX_STATE_NOTES := {
 	"not-needed": "This system already handles it, so there's nothing to fix.",
+	"os-fixed": "Your system already does this, so GameCove's copy isn't needed.",
 	"unsupported": "Your screen isn't one we've checked, so we won't touch it.",
 	"other-override": "Something else already changed this setting. Remove that first if you want ours.",
 	"n/a": "This fix isn't for this exact model.",
@@ -167,14 +169,25 @@ static func accel_result(on: bool, ok: bool, code: int) -> String:
 
 
 static func fix_title(fix: String) -> String:
-	return DEVICE_FIXES.get(fix, {}).get("title", fix.capitalize())
+	if DEVICE_FIXES.has(fix):
+		return DEVICE_FIXES[fix]["title"]
+	return str(_catalogue_entry(fix).get("title", fix.capitalize()))
 
 
 static func fix_explain(fix: String) -> String:
 	var d: Dictionary = DEVICE_FIXES.get(fix, {})
 	if d.is_empty():
-		return "A fix for this device from GameCove's fixes folder."
+		var e := _catalogue_entry(fix)
+		return str(e.get("line", "A fix for this device from GameCove's fixes folder."))
 	return "%s %s" % [d["explain"], d["after"]]
+
+
+## A fix's entry in app/data/fixes.json (the Fixes catalogue), {} when missing.
+static func _catalogue_entry(fix: String) -> Dictionary:
+	for e in load("res://scripts/device/fixes.gd").load_catalogue("res://data/fixes.json"):
+		if e["id"] == fix:
+			return e
+	return {}
 
 
 static func fix_state(state: String, fix := "") -> String:

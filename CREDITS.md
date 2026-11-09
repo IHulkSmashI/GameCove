@@ -50,6 +50,8 @@ GameCove stands on a lot of other people's work. Thank you.
 - **Bluetooth** Decky plugin (Outpox): BlueZ adapter power over D-Bus, and why hci0 isn't always the right adapter.
 
 - **ClawDeck**: the Claw 8 EX power backend findings, launch environment, face-button and EDID findings, ported here.
+- **ClawDeck**: the Claw 8 EX power backend findings, launch environment, face-button and EDID findings, ported here. Parts ported from ClawDeck (same author): the "quiet" fix (`quiet.py`) and the "what changed" check (`changes.py`) in `app/scripts/device/fixes.gd`.
+- **Device fixes** (each fix names its source in `app/data/fixes.json` and `docs/DEVICE-FIXES.md`): Bazzite's udev rules (Apache-2.0) for the AX210 D3cold, GPD fingerprint, ROG Ally X controller wakeup and Ally fingerprint drain fixes; aarron-lee's gpd-win-tricks (the Win Max 2 touch wakeup rule) and SimpleDeckyTDP (Ally MCU powersave, BSD-3-Clause); Matthew Schwartz's i8042 patch and Dmitry Torokhov's review (Claw keyboard wakeup as a udev rule); Handheld Daemon's Claw wakeup handling; alexl83's OneXFly F1 panel-type fix (Bazzite issue 5581, ChimeraOS/gamescope-session PR 128); the SteamOS issue reporters behind the Claw Wi-Fi D3cold workaround. Rules rewritten for GameCove, DMI-gated.
 - **DeckyTDPTuner**: ideas behind Auto TDP.
 - **Zendo-GIT Intel-Handheld-and-ARC-GPU-laboratory** (MIT, © 2026 ClawLab contributors): the VRR range fix and the checked panel list. Notice reproduced in [fixes/claw8ex-vrr/LICENSE.ClawLab-MIT](fixes/claw8ex-vrr/LICENSE.ClawLab-MIT).
 - **OpenGamepadUI** and **gamescope-x11-client**: how a gamescope main app sets its atoms and base layers.

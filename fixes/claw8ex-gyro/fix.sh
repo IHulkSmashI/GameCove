@@ -14,7 +14,7 @@
 #      3D, so the kernel creates gyro_3d; installed to /etc/udev-hid-bpf/.
 #   3. Two helper services: keep-alive (sensor power and report rate) and gyro bias correction.
 #   4. An imu source (gyro only; accelerometer optional) in the InputPlumber override for the board.
-# Bazzite (rpm-ostree) only for now. See README.md.
+# Bazzite (rpm-ostree) only for now. See fixes/README.md.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=fixes/lib/claw8ex-common.sh

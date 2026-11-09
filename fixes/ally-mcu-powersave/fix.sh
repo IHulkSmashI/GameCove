@@ -1,0 +1,53 @@
+#!/bin/sh
+# GameCove fix (optional): less battery drain while an ROG Ally sleeps (MCU powersave).
+# usage: fix.sh install|remove|status|set on|off
+#
+# The Ally's controller MCU can power down during sleep ("MCU powersave", asus-wmi mcu_powersave or
+# asus-armoury attributes/mcu_powersave). SimpleDeckyTDP turns it on by default on the Ally series
+# ("Asus extreme powersave": reduces power consumption during suspend; needs updated MCU firmware,
+# Ally 319+ / Ally X 314+). Optional because an old MCU firmware can leave the controller dead after
+# waking; update the firmware in Windows / Armoury Crate first. See fixes/README.md.
+set -eu
+NAME=ally-mcu-powersave
+DEVICES="asus-rog-ally asus-rog-ally-x asus-rog-xbox-ally asus-rog-xbox-ally-x asus-rog-xbox-ally-x20"
+RULE=/etc/udev/rules.d/60-gamecove-ally-mcu-powersave.rules
+FILES="$RULE"
+RELOAD=udev
+LEGACY=/sys/devices/platform/asus-nb-wmi/mcu_powersave
+ARMOURY=/sys/class/firmware-attributes/asus-armoury/attributes/mcu_powersave/current_value
+# shellcheck source=fixes/lib/gcfix.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/gcfix.sh"
+
+file_text() {
+	cat <<EOF2
+$GC_MARK
+# Lets the ROG Ally's controller MCU power down while the handheld sleeps.
+# Remove with: gamecove-fix $NAME remove
+ACTION=="add", SUBSYSTEM=="platform", KERNEL=="asus-nb-wmi", TEST=="mcu_powersave", ATTR{[dmi/id]board_name}=="RC71L|RC72LA|RC73YA|RC73XA|RC74XA", ATTR{mcu_powersave}="1"
+ACTION=="add", SUBSYSTEM=="firmware-attributes", KERNEL=="asus-armoury", TEST=="attributes/mcu_powersave/current_value", ATTR{[dmi/id]board_name}=="RC71L|RC72LA|RC73YA|RC73XA|RC74XA", ATTR{attributes/mcu_powersave/current_value}="1"
+EOF2
+}
+
+# The switch this kernel has, as a real path ("" without one).
+node() {
+	if [ -f "$ROOT$ARMOURY" ]; then echo "$ARMOURY"; elif [ -f "$ROOT$LEGACY" ]; then echo "$LEGACY"; fi
+}
+
+hw_present() { [ -n "$(node)" ]; }
+
+# Already on without our rule (Bazzite's own MCU handling, or set in Armoury Crate).
+os_fixed() {
+	gc_rule_elsewhere 'mcu_powersave' && return 0
+	gc_installed && return 1
+	n="$(node)"
+	[ -n "$n" ] && [ "$(cat "$ROOT$n" 2>/dev/null)" = 1 ]
+}
+
+apply_now() {
+	n="$(node)"
+	[ -n "$n" ] || return 0
+	save_value "$n"
+	write_value "$n" 1
+}
+
+gc_main "$@"

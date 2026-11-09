@@ -19,7 +19,7 @@
 # Takes effect at the next restart; remove undoes everything (also at the next restart), and the previous
 # boot entry always starts without it. Older installs used kernel arguments (drm.edid_firmware=...,
 # firmware_class.path=...); install, and status run as root, move them to the hook. Ported from
-# ClawDeck's edid.py. See README.md.
+# ClawDeck's edid.py. See fixes/README.md.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=fixes/lib/claw8ex-common.sh

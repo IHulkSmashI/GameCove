@@ -143,7 +143,7 @@ fi
 # polkit runs this one without a password, so it may only `set` (and `status`)
 # the low-risk fixes with fixed values, then hand over to gamecove-fix.
 FIXSET="$REPO/packaging/libexec/gamecove-fix-set"
-for n in fan charge-limit claw8ex-gyro claw8ex-vrr claw8ex-buttons; do
+for n in fan charge-limit claw8ex-gyro claw8ex-vrr claw8ex-buttons claw-kbd-wakeup; do
 	mkdir -p "$FIXES/$n"
 	cat >"$FIXES/$n/fix.sh" <<FIXEOF
 #!/bin/sh
@@ -197,13 +197,27 @@ expect_code 0 "set entry: status" gfs fan status
 contains "$T/out" "^state=on$" "status passed through"
 lacks "$ROOT/calls" "install" "no install reached a fix through the set entry"
 lacks "$ROOT/calls" "remove" "no remove reached a fix through the set entry"
+# The small file fixes (udev rules, session files): only on / off, never install / remove.
+: >"$ROOT/calls"
+expect_code 0 "set entry: file fix on" gfs claw-kbd-wakeup set on
+expect_code 0 "set entry: file fix off" gfs claw-kbd-wakeup set off
+contains "$ROOT/calls" "^claw-kbd-wakeup:set on$" "file fix on reached fix.sh"
+contains "$ROOT/calls" "^claw-kbd-wakeup:set off$" "file fix off reached fix.sh"
+expect_code 66 "set entry: file fix other value" gfs claw-kbd-wakeup set quiet
+expect_code 64 "set entry: file fix install" gfs claw-kbd-wakeup install
+expect_code 64 "set entry: file fix remove" gfs claw-kbd-wakeup remove
+expect_code 66 "set entry: fan on is not a file fix value" gfs fan set on
+# FILE_FIXES = exactly the fix folders built on gcfix.sh
+want=$(grep -l 'gcfix.sh"$' "$REPO"/fixes/*/fix.sh | sed 's|.*/fixes/\([^/]*\)/fix.sh|\1|' | sort | tr '\n' ' ')
+have=$(sed -n 's/^FILE_FIXES="\(.*\)"$/\1/p' "$FIXSET" | tr ' ' '\n' | sort | tr '\n' ' ')
+if [ "$want" = "$have" ]; then ok; else bad "FILE_FIXES in gamecove-fix-set ($have) must list the gcfix fixes ($want)"; fi
 # Under pkexec it hands over to the installed dispatcher; the caller's paths are ignored.
 : >"$ROOT/calls"
 PKEXEC_UID=1000 GAMECOVE_ROOT="$ROOT" GAMECOVE_FIXES_DIR="$FIXES" sh "$FIXSET" fan set quiet >"$T/out" 2>&1
 code=$?
 if [ "$code" -ne 0 ]; then ok; else bad "set entry under pkexec must not use the caller's fixes"; fi
 if [ ! -s "$ROOT/calls" ]; then ok; else bad "set entry ran a caller-chosen fix under pkexec"; fi
-rm -rf "$FIXES/fan" "$FIXES/charge-limit" "$FIXES/claw8ex-gyro" "$FIXES/claw8ex-vrr" "$FIXES/claw8ex-buttons"
+rm -rf "$FIXES/fan" "$FIXES/charge-limit" "$FIXES/claw8ex-gyro" "$FIXES/claw8ex-vrr" "$FIXES/claw8ex-buttons" "$FIXES/claw-kbd-wakeup"
 
 # ------------------------------------------------------------ session-select
 BIN="$T/bin"

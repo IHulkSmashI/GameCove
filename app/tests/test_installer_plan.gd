@@ -19,7 +19,7 @@ func test_easy_defaults_and_path() -> void:
 	eq(p.choices["startup"], "gamecove", "supported system boots into GameCove")
 	eq(p.choices["steam_mode"], "silent")
 	eq(p.choices["steam_control"], false, "Steam control is opt-in")
-	eq(p.choices["fixes"], ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro"], "all suggested fixes")
+	eq(p.choices["fixes"], ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "claw-kbd-wakeup"], "all suggested fixes")
 	eq(p.choices["auto_tdp"], true)
 	eq(p.choices["power_profile"], "balanced")
 	eq(p.choices["charge_limit"], 100, "no charge limit by default")

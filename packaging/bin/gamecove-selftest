@@ -303,10 +303,32 @@ fi
 
 # ---- fixes ----------------------------------------------------------------------------------------------
 section "Fixes"
+# The fixes GameCove applies on this handheld (devices.json "fixes", from the app's --selftest).
+AUTO_FIXES=$(sed -n 's/^selftest\.device\.fixes=//p' "$TMP/app" 2>/dev/null | head -n 1 | tr ',' ' ')
 if [ -x "$FIX" ]; then
-	for name in $("$FIX" --list 2>/dev/null); do
+	listed=" $("$FIX" --list 2>/dev/null | tr '\n' ' ') "
+	for name in $listed; do
 		st=$(with_timeout 20 "$FIX" "$name" status 2>/dev/null | tr '\n' ' ')
 		kv "fix.$name" "${st:-no answer}"
+		state=$(printf '%s\n' "$st" | tr ' ' '\n' | sed -n 's/^state=//p' | tail -n 1)
+		auto=no
+		case " $AUTO_FIXES " in *" $name "*) auto=yes ;; esac
+		case $state in
+		on) ok "fix $name: applied" ;;
+		os-fixed) ok "fix $name: already fixed by the system" ;;
+		not-needed) info "fix $name: not needed on this handheld" ;;
+		n/a) [ "$auto" = no ] || fail "fix $name: GameCove applies it here but it says it isn't for this handheld" ;;
+		restart) warn "fix $name: installed, takes effect after a restart" ;;
+		partial) warn "fix $name: only partly in place (undo and apply it again)" ;;
+		off)
+			if [ "$auto" = yes ]; then warn "fix $name: needed here but not applied (GameCove Installer, or the Fixes page)"; else info "fix $name: available, not applied"; fi
+			;;
+		"") warn "fix $name: no answer from its status" ;;
+		*) warn "fix $name: state $state" ;;
+		esac
+	done
+	for name in $AUTO_FIXES; do
+		case $listed in *" $name "*) ;; *) fail "fix $name is meant for this handheld but isn't installed with GameCove" ;; esac
 	done
 else
 	warn "fix helper not found ($FIX)"
