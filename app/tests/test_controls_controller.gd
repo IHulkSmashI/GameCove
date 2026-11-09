@@ -443,6 +443,34 @@ func test_claw_live_brightness_is_the_file_and_speed_needs_the_helper() -> void:
 	reg2.free()
 
 
+## Round 3: led_effect off -> solid -> off left the Claw at brightness 0 (enabled is root-only,
+## so "off" was brightness 0). Off keeps the brightness where the switch is already off,
+## remembers it where brightness 0 has to do, brings it back with the next "on", and the
+## probe puts the raw node back exactly.
+func test_claw_live_effect_off_keeps_the_brightness() -> void:
+	var t := _claw_live("claw_live_led_off")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	var n := "/sys/class/leds/go:rgb:joystick_rings"
+	var prov: Object = _c(reg, "controller.led_effect").get_meta("provider")
+	var snap: Dictionary = prov.probe_snapshot()
+	ok(_w(reg, "controller.led_effect", "off"), "off while already off")
+	eq(f.read(n + "/brightness"), "21", "brightness untouched")
+	# lit through the root action (enabled=true), then off without a writable switch
+	ok(_w(reg, "controller.led_effect", "solid"), "solid")
+	eq(f.read(n + "/enabled"), "true")
+	ok(_w(reg, "controller.led_effect", "off"), "off by brightness 0 (enabled is root-only)")
+	eq(f.read(n + "/brightness"), "0")
+	eq(_value(reg, "controller.led_effect"), "off")
+	ok(_w(reg, "controller.led_effect", "solid"), "on again")
+	eq(f.read(n + "/brightness"), "21", "the brightness from before off")
+	f.write(f.sys_root + n + "/multi_intensity", "50 50 50")
+	ok(prov.probe_restore(snap), "probe restore")
+	eq([f.read(n + "/brightness"), f.read(n + "/effect"), f.read(n + "/multi_intensity")], ["21", "monocolor", "1 90 100"],
+		"the writable attributes exactly as captured")
+	reg.free()
+
+
 ## Real sysfs files report a size of 4096 and /proc files 0: get_file_as_string()
 ## returns "" for both, which hid the Claw's LED node. Two of the node's files are
 ## links to a real /proc file here, so the regular-file fixture reads like the device.

@@ -131,11 +131,14 @@ func _make(spec: Dictionary, detect: Callable, read: Callable, write: Callable) 
 ## Also the live target list: another tool may have set it with SetTargetDevices
 ## (OpenGamepadUI's deck-uhid on the Claw), which the profile text doesn't carry.
 func probe_snapshot() -> Dictionary:
-	if be.controller_backend() != "inputplumber":
-		return {}
 	be.invalidate()
+	var out := {}
+	if be.rgb_backend() == "sysfs":
+		out["leds"] = Leds.raw_state(be.leds())
+	if be.controller_backend() != "inputplumber":
+		return out
 	var y := be.ip_profile_yaml()
-	var out := {"ip_targets": be.ip_live_targets().duplicate()}
+	out["ip_targets"] = be.ip_live_targets().duplicate()
 	if y != "":
 		out["ip_yaml"] = y
 	return out
@@ -150,6 +153,10 @@ func probe_restore(snap: Dictionary) -> bool:
 	var want: Array = snap.get("ip_targets", [])
 	if not want.is_empty() and be.ip_live_targets() != want:
 		ok = be.ip_set_targets(want) and ok
+	# the LED nodes exactly as captured, wherever the files are writable for us
+	if snap.has("leds"):
+		ok = Leds.raw_restore(snap["leds"]) and ok
+		be.invalidate()
 	return ok
 
 
@@ -787,8 +794,12 @@ func _led_effect() -> RefCounted:
 			if v == "off":
 				return be.led_apply("off", func(ls): return Leds.effect_of(ls[0]) == "off")
 			var pct := Leds.brightness_pct(n)
+			if pct <= 0.0:
+				# "off" may have been brightness 0 (root-only enabled): the brightness from before
+				var saved: float = be.led_saved_pct(n)
+				pct = saved if saved > 0.0 else 100.0
 			var kern := Leds.kernel_effect(n, str(v))
-			var spec := Leds.spec("all", Leds.color_of(n), pct if pct > 0.0 else 100.0, kern, Leds.speed_pct(n) if kern != "" and kern != "monocolor" else -1.0)
+			var spec := Leds.spec("all", Leds.color_of(n), pct, kern, Leds.speed_pct(n) if kern != "" and kern != "monocolor" else -1.0)
 			return be.led_apply(spec, func(ls): return Leds.effect_of(ls[0]) == str(v)))
 
 
@@ -901,7 +912,10 @@ func _led_brightness() -> RefCounted:
 				be.invalidate()
 				return absf(Leds.brightness_pct(be.leds()[0]) - pct) <= 1.0
 			if pct <= 0.0:
-				return be.led_apply("off", func(ls): return Leds.brightness_pct(ls[0]) == 0.0 or Leds.effect_of(ls[0]) == "off")
+				# brightness 0 itself (the root action's 0 % also switches enabled off)
+				var n0: Dictionary = be.leds()[0]
+				return be.led_apply(Leds.spec("all", Leds.color_of(n0), 0.0, Leds.kernel_effect(n0, Leds.effect_of(n0))),
+					func(ls): return Leds.brightness_pct(ls[0]) == 0.0)
 			var n: Dictionary = be.leds()[0]
 			var kern := Leds.kernel_effect(n, Leds.effect_of(n))
 			var spec := Leds.spec("all", Leds.color_of(n), pct, kern)

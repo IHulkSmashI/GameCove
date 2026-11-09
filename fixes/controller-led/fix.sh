@@ -26,7 +26,8 @@
 #
 #   fix.sh set <zone>,<rrggbb>,<percent>[,<effect>[,<speed percent>]]
 #                     zone: all, or the node's index in name order (0..9)
-#   fix.sh set off    every node dark (brightness 0, enabled=false where it exists)
+#   fix.sh set off    every node dark: enabled=false where it exists (brightness kept),
+#                     else brightness 0
 #   fix.sh status     applies=, leds=, per node ledN=name ledN_rgb=rrggbb
 #                     ledN_brightness=percent ledN_effect= ..., state=on|off
 #   fix.sh install    remember every node's current values (first set does it too)
@@ -217,8 +218,12 @@ do_set() {
 		do_install
 		for n in $all; do
 			d="$LEDS/$n"
+			# off is enabled=false where the node has it, so the brightness the user set
+			# survives (hid-msi, hid-lenovo-go); brightness 0 only where there is no switch
+			if [ -f "$d/enabled" ] && wr "$d/enabled" false && [ "$(rd "$d/enabled")" = false ]; then
+				continue
+			fi
 			wr "$d/brightness" 0 || die 1 "$n refused brightness 0"
-			[ -f "$d/enabled" ] && { wr "$d/enabled" false || true; }
 		done
 		log_change "set off"
 		echo "state=off"

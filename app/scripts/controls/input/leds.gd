@@ -270,7 +270,13 @@ static func plan(node: Dictionary, s: String) -> Array:
 		if eff != "":
 			out.append(["effect", eff])
 		want_on = pct > 0
+	elif node.get("enabled") == false:
+		return []   # already dark by its switch: keep the brightness as it is
+	elif node.get("enabled") != null and writable(path + "/enabled"):
+		out.append(["enabled", "false"])   # brightness kept for the next "on"
+		return out.filter(func(w): return _read(path + "/" + w[0]) != w[1])
 	else:
+		# no writable switch: dark by brightness 0 (the caller remembers the brightness)
 		out.append(["brightness", "0"])
 	if node.get("enabled") != null and bool(node["enabled"]) != want_on:
 		# brightness 0 is dark already: off needn't touch a root-only enabled
@@ -336,3 +342,33 @@ static func set_brightness_direct(nodes: Array, pct: float) -> bool:
 		if not _write(str(n["path"]) + "/brightness", want):
 			return false
 	return true
+
+
+## Every attribute a probe may change, as the node has it now (for an exact put-back).
+const RAW_ATTRS := ["effect", "speed", "multi_intensity", "brightness", "enabled"]
+
+
+static func raw_state(nodes: Array) -> Array:
+	var out: Array = []
+	for n in nodes:
+		var st := {"path": str(n["path"])}
+		for a in RAW_ATTRS:
+			if FileAccess.file_exists(str(n["path"]) + "/" + a):
+				st[a] = _read(str(n["path"]) + "/" + a)
+		out.append(st)
+	return out
+
+
+## Writes a raw_state() back wherever the file is writable for us (in RAW_ATTRS order,
+## brightness and enabled last); true when every writable attribute reads back.
+static func raw_restore(states: Array) -> bool:
+	var ok := true
+	for st in states:
+		for a in RAW_ATTRS:
+			if not st.has(a):
+				continue
+			var f: String = str(st["path"]) + "/" + str(a)
+			if _read(f) == str(st[a]) or not writable(f):
+				continue
+			ok = _write(f, str(st[a])) and ok
+	return ok
