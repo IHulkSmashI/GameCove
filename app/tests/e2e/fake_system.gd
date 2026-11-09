@@ -318,6 +318,9 @@ func _live_get(svc: String, _obj: String, iface: String, prop: String) -> Varian
 			"PerformanceProfile1.PerformanceProfile":
 				return _rd("/sys/firmware/acpi/platform_profile") if _exists("/sys/firmware/acpi/platform_profile") else null
 			"CpuBoost1.CpuBoostState":
+				# steamos-manager src/power.rs: intel_pstate's no_turbo (inverted), else cpufreq/boost
+				if _exists("/sys/devices/system/cpu/intel_pstate/no_turbo"):
+					return 1 - _rd("/sys/devices/system/cpu/intel_pstate/no_turbo").to_int()
 				return _rd("/sys/devices/system/cpu/cpufreq/boost").to_int() if _exists("/sys/devices/system/cpu/cpufreq/boost") else null
 			"CpuScaling1.CpuScalingGovernor":
 				return _rd("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
@@ -330,6 +333,13 @@ func _live_get(svc: String, _obj: String, iface: String, prop: String) -> Varian
 					return null   # reads -1 here (msi-claw-8-ex): the stored prop answers
 				var t := _charge_file()
 				return _rd(t).to_int() if t != "" else null
+	if svc == PS and iface == "org.shadowblip.GPU.Card.TDP" and prop in ["TDP", "Boost"]:
+		# Intel: PowerStation reads the RAPL package limits (PL1, PL2 - PL1)
+		var rapl := "/sys/class/powercap/intel-rapl-mmio:0/"
+		if _exists(rapl + "constraint_0_power_limit_uw"):
+			var pl1 := _rd(rapl + "constraint_0_power_limit_uw").to_float() / 1e6
+			var pl2 := _rd(rapl + "constraint_1_power_limit_uw").to_float() / 1e6
+			return pl1 if prop == "TDP" else maxf(0.0, pl2 - pl1)
 	if svc == PS and iface == "org.shadowblip.CPU":
 		match prop:
 			"SmtEnabled":
@@ -368,7 +378,10 @@ func _live_set(svc: String, obj: String, iface: String, prop: String, raw: Strin
 			"CpuBoost1.CpuBoostState":
 				if not raw in ["0", "1"]:
 					return "Invalid state"
-				_wr("/sys/devices/system/cpu/cpufreq/boost", raw)
+				if _exists("/sys/devices/system/cpu/intel_pstate/no_turbo"):
+					_wr("/sys/devices/system/cpu/intel_pstate/no_turbo", "1" if raw == "0" else "0")
+				else:
+					_wr("/sys/devices/system/cpu/cpufreq/boost", raw)
 			"CpuScaling1.CpuScalingGovernor":
 				if not raw in _rd("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors").split(" ", false):
 					return "Invalid governor"

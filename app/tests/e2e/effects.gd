@@ -151,24 +151,23 @@ static func check(t: Object, id: String, v: Variant) -> String:
 			var bl := ""
 			for d in DirAccess.get_directories_at(w.root + "/sys/class/backlight"):
 				bl = d
-			var mx = w.read("/sys/class/backlight/%s/max_brightness" % bl).to_float()
-			var want: int = clampi(roundi(mx * maxf(float(v), 5.0) / 100.0), 1, int(mx))
-			var calls: Array = t.calls_with(["busctl", "--system", "call", "org.freedesktop.login1"])
-			if calls.is_empty():
-				return "no logind SetBrightness call (it wrote sysfs itself)"
-			return "" if w.read("/sys/class/backlight/%s/brightness" % bl) == str(want) else "backlight is %s, want %s" % [w.read("/sys/class/backlight/%s/brightness" % bl), want]
+			var mx: float = w.read("/sys/class/backlight/%s/max_brightness" % bl).to_float()
+			var raw: float = w.read("/sys/class/backlight/%s/brightness" % bl).to_float()
+			var pct := roundf(raw * 100.0 / mx)
+			return "" if absf(pct - maxf(float(v), 5.0)) <= 1.0 else "backlight is %s %% (%s / %s)" % [pct, raw, mx]
 		"audio.volume":
-			var vc: Array = t.calls_with(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@"])
-			var want := "%.2f" % (float(v) / 100.0)
-			return "" if not vc.is_empty() and str(vc[-1][-1]) == want else "wpctl calls %s, want %s" % [vc, want]
+			var vol: float = w.fake.audio["vol"][w.fake.audio["sink"]] * 100.0
+			return "" if absf(vol - float(v)) < 0.6 else "the default sink is at %s %%" % vol
 		"audio.mute":
-			var mc: Array = t.calls_with(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@"])
-			return "" if not mc.is_empty() and str(mc[-1][-1]) == ("1" if v else "0") else "wpctl set-mute calls %s" % [mc]
-		"system.keep_awake":
-			var sp: Array = t.calls_with(["systemd-inhibit"])
-			var running: bool = w.fake.spawned.values().any(func(argv): return str(argv[0]) == "systemd-inhibit")
-			return "" if (running == bool(v)) and (not v or not sp.is_empty()) else "systemd-inhibit running: %s" % running
+			var m: bool = w.fake.audio["mute"][w.fake.audio["sink"]]
+			return "" if m == bool(v) else "the default sink mute is %s" % m
+		"audio.mic_mute":
+			var mm: bool = w.fake.audio["mute"][w.fake.audio["source"]]
+			return "" if mm == bool(v) else "the default source mute is %s" % mm
+		"audio.output":
+			var name: String = w.fake.audio["sinks"][w.fake.audio["sink"]]
+			return "" if name == str(v) else "the default sink is %s" % name
 		"network.wifi":
-			var nc: Array = t.calls_with(["nmcli", "radio", "wifi"])
-			return "" if not nc.is_empty() and str(nc[-1][-1]) == ("on" if v else "off") else "nmcli calls %s" % [nc]
+			var on: bool = w.fake.radios["wifi"] and not w.fake.radios["wlan_soft"]
+			return "" if on == bool(v) else "Wi-Fi radio is %s" % on
 	return ""

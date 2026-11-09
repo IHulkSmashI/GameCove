@@ -276,6 +276,8 @@ func reset() -> void:
 	var p := autoload("Profiles")
 	p.reset_all()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(PROFILES_FILE))
+	# a refresh unlock / rotation from an earlier test or process waits for "Keep this?"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://controls_confirm.json"))
 	var launcher := autoload("Launcher")
 	DirAccess.remove_absolute(launcher.settings_path)
 	_wire_services()
