@@ -1059,3 +1059,28 @@ def test_game_latency_reports_xells_own_average(tmp_path, monkeypatch):
     assert xess.game_latency(str(tmp_path), "1", False)["latency_ms"] == 31.0
 
 
+
+
+def test_uninstall_restores_igdext_in_prefixes_and_protons(tmp_path):
+    """review S2-2: every prefix copy back from .gamecove-stock, ours removed where the prefix had none, and the
+    .stock copies older builds left in Proton installs put back only while the Proton's file is still a shim."""
+    from gamecove_upscale import xess
+    steam = tmp_path / ".local/share/Steam"
+    a = steam / "steamapps/compatdata/10/pfx/drive_c/windows/system32/DriverStore/FileRepository/igd_faux.inf_1"
+    b = steam / "steamapps/compatdata/20/pfx/drive_c/windows/system32/driverstore/filerepository/igd_faux.inf_1"
+    _w(a / "igdext64.dll", "shim IGDEXT_")
+    _w(a / "igdext64.dll.gamecove-stock", "stock A")
+    _w(b / "igdext64.dll", "shim IGDEXT_")
+    _w(b / "igdext64.dll.gamecove-added", "")
+    p1 = steam / "steamapps/common/Proton - Experimental" / xess.PROTON_IGDEXT
+    p2 = steam / "compatibilitytools.d/GE-Proton11-12" / xess.PROTON_IGDEXT
+    p3 = steam / "steamapps/common/Proton 11.0" / xess.PROTON_IGDEXT
+    for p, now in ((p1, "shim IGDEXT_"), (p2, "shim IGDEXT_"), (p3, "newer intel")):
+        _w(p, now)
+        _w(str(p) + ".stock", "intel stock")
+    r = xess.restore_igdext(str(tmp_path))
+    assert r == {"prefixes": 2, "protons": 2}
+    assert (a / "igdext64.dll").read_text() == "stock A\n" and not (a / "igdext64.dll.gamecove-stock").exists()
+    assert not (b / "igdext64.dll").exists() and not (b / "igdext64.dll.gamecove-added").exists()
+    assert p1.read_text() == "intel stock\n" and p2.read_text() == "intel stock\n"
+    assert p3.read_text() == "newer intel\n", "a Proton updated since keeps its own file"

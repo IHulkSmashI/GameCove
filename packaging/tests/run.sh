@@ -744,7 +744,7 @@ else
 		"$REPO/packaging/sysext/build-sysext.sh" "$REPO/packaging/tests/run.sh" \
 		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" \
 		"$REPO/packaging/get-gamecove.sh" "$REPO/packaging/libexec/gamecove-apply-choices" \
-		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh" "$REPO/packaging/tests/session.sh"; do
+		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh" "$REPO/packaging/tests/session.sh" "$REPO/packaging/tests/wrapper.sh"; do
 		if "$SHELLCHECK" -S warning -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
@@ -756,6 +756,10 @@ else
 		if (cd "$REPO" && "$SHELLCHECK" -S warning -x -s sh "$f") >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 fi
+
+# ------------------------------------------------------- gamecove-run (launch wrapper)
+if sh "$REPO/packaging/tests/wrapper.sh" >"$T/out" 2>&1; then ok; else bad "wrapper.sh: $(grep FAIL "$T/out" | head -20)"; fi
+if "$SHELLCHECK" -S warning -s bash "$REPO/packaging/libexec/gamecove-run" >"$T/out" 2>&1; then ok; else bad "shellcheck gamecove-run: $(cat "$T/out")"; fi
 
 # ------------------------------------------------------- gamecove-selftest (fake root and commands)
 if sh "$REPO/packaging/tests/selftest.sh" >"$T/out" 2>&1; then ok; else bad "selftest: $(tail -20 "$T/out")"; fi
