@@ -69,5 +69,29 @@ for pat in CREDITS.md 'fonts/OFL-*.txt' addons/kenyoni/qr_code/LICENSE.md; do
 done
 if [ -L "$REPO/app/CREDITS.md" ] && cmp -s "$REPO/app/CREDITS.md" "$REPO/CREDITS.md"; then ok; else bad "app/CREDITS.md must link to the repo's CREDITS.md"; fi
 
+# ------------------------------------------------------------- release workflow supply chain (M5, M6, L26-L28)
+W="$REPO/.github/workflows/release.yml"
+GG="$REPO/packaging/get-gamecove.sh"
+# M5: the identity ends with this tag, identical in the installer and the workflow's self-check
+for f in "$GG" "$W"; do
+	id=$(sed -n 's/^[[:space:]]*ident="\(.*\)"$/\1/p' "$f")
+	case "$id" in *'@refs/tags/$(printf '"'"'%s'"'"' "$tag" |'*'\$') ok ;; *) bad "$f: identity must end with the escaped tag and \$ ($id)" ;; esac
+	# evaluate it for a tag and check what it accepts
+	REPO_=IHulkSmashI/GameCove
+	got=$(REPO=$REPO_ tag=v0.2.0-rc.1 sh -c "printf '%s' \"$id\"" 2>/dev/null)
+	python3 -I - "$got" >"$T/out" 2>&1 <<'PY' && ok || bad "$f identity regex: $(cat "$T/out")"
+import re, sys
+r = re.compile(sys.argv[1])
+base = "https://github.com/IHulkSmashI/GameCove/.github/workflows/release.yml@refs/tags/"
+assert r.search(base + "v0.2.0-rc.1"), "the requested tag must match"
+assert r.search(base.lower() + "v0.2.0-rc.1"), "any case"
+for other in ("v0.1.0", "v0.2.0-rc.10", "v0.2.0-rcX1", "v0.2.0-rc.1-evil"):
+    assert not r.search(base + other), "must not match " + other
+PY
+done
+# L28: CI signs and verifies with the cosign devices use
+grep -q 'cosign-release: ${{ steps.cosign.outputs.version }}' "$W" && ok || bad "cosign-installer must install get-gamecove.sh's COSIGN_VERSION"
+grep -q "COSIGN_SHA256=" "$W" && ok || bad "release.yml must check cosign against get-gamecove.sh's COSIGN_SHA256"
+
 echo "$PASS passed, $FAILS failed"
 [ "$FAILS" -eq 0 ]
