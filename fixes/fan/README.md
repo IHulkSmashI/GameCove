@@ -37,3 +37,7 @@ Every change is appended to `/var/lib/gamecove/fixes/fan/changes.log`. GameCove 
 Test (fake sysfs, never the real one): `sh fixes/fan/test.sh`. `GAMECOVE_ROOT` is the filesystem prefix.
 
 Only acts on the handhelds in `fixes/lib/handhelds.txt` (generated from `devices.json` by `tools/fixes/gen_handhelds.py`): MSI and ASUS laptops use the same `msi_wmi_platform` / `asus_custom_fan_curve` drivers, so on anything else `status` says `applies=no` and `set` exits 2. If a `set` fails halfway, every fan goes back to the firmware's automatic control before the error is returned. One run at a time (`/run/gamecove-fan.lock`).
+
+## One drive, several handhelds
+
+What the fix saved (the original values `remove` writes back) belongs to the handheld it was read on: `device` in its state folder names it. When the same drive boots another handheld, `install`, `set` and `remove` first park the other handheld's files in `devices/<id>/` and bring back this one's, so `remove` on a ROG Ally never writes values read on a Claw. `status` (unprivileged) reads this handheld's files wherever they are. State from before this change is taken as the current handheld's (fan: only when it was read from the same fan driver).

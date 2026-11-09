@@ -4,14 +4,22 @@
 #
 # The panel refreshes down to 30 Hz but its EDID says 48, so below 48 fps every frame is held for a whole
 # 48 Hz refresh, which judders. This writes a copy of the factory EDID with only the range bytes changed
-# (plus checksums), and only for the exact validated factory EDIDs in panels.txt (sha256). At boot, the way
-# Bazzite already overrides other handhelds' EDIDs:
+# (plus checksums), and only for the exact validated factory EDIDs in panels.txt (sha256).
+#
+# One drive may boot several handhelds, so nothing here is global (no kernel argument). A modprobe
+# "install" rule runs a tiny hook right before the Intel GPU driver (xe / i915) loads. Only when the board
+# in /sys/class/dmi/id is the one this was installed on does the hook set the drm module's edid_firmware
+# parameter (and firmware_class's search path, when unset) through /sys/module. Anywhere else it does
+# nothing, and the driver loads as usual.
 #   /etc/firmware/edid/gamecove-<panel>-30-120.bin    the patched EDID
-#   rpm-ostree initramfs-etc --track                   so the GPU driver finds it at its first probe
-#   rpm-ostree kargs                                   firmware_class.path=/etc/firmware (shared with
-#                                                      claw8ex-gyro) drm.edid_firmware=eDP-1:edid/<file>
-# Takes effect at the next restart; remove undoes all three (also at the next restart), and the previous
-# boot entry always starts without it. Ported from ClawDeck's edid.py. See README.md.
+#   /etc/gamecove/claw8ex-vrr/edid.conf               "<board> <connector>:edid/<file>"
+#   /etc/gamecove/claw8ex-vrr/edid-hook.sh            the board check (shell built-ins only)
+#   /etc/modprobe.d/gamecove-claw8ex-vrr.conf         install xe / i915 = hook, then the real modprobe
+#   rpm-ostree initramfs-etc --track (all four)        so it also works when the driver loads in the initramfs
+# Takes effect at the next restart; remove undoes everything (also at the next restart), and the previous
+# boot entry always starts without it. Older installs used kernel arguments (drm.edid_firmware=...,
+# firmware_class.path=...); install, and status run as root, move them to the hook. Ported from
+# ClawDeck's edid.py. See README.md.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=fixes/lib/claw8ex-common.sh
@@ -23,10 +31,23 @@ EDID_DIR=$FW_DIR/edid
 CONNECTOR=eDP-1
 LO=30
 HI=120
+CONF_DIR=/etc/gamecove/claw8ex-vrr
+HOOK=$CONF_DIR/edid-hook.sh
+HOOK_CONF=$CONF_DIR/edid.conf
+MODPROBE_CONF=/etc/modprobe.d/gamecove-claw8ex-vrr.conf
+DRM_PARAM=/sys/module/drm/parameters/edid_firmware
 m_init "$NAME"
 
 # edid_q <edid file> -v mode=... : run edid.awk on the file's bytes.
 edid_q() { f=$1; shift; od -An -v -tu1 "$f" | awk -f "$HERE/edid.awk" "$@"; }
+
+# Boards whose panels are in panels.txt (the MSI Claw family).
+claw_board() {
+	case $(board_name) in MS-1T*) return 0 ;; esac
+	return 1
+}
+
+is_root() { [ -n "$ROOT" ] || [ "$(id -u)" -eq 0 ]; }
 
 panel_edid() {
 	for p in "$ROOT"/sys/class/drm/card*-"$CONNECTOR"/edid; do
@@ -66,19 +87,102 @@ theirs() {
 	return 0
 }
 
+# The drm parameter as the running kernel has it ("" when unset or unreadable).
+drm_param() { tr -d '\n' <"$ROOT$DRM_PARAM" 2>/dev/null || true; }
+
+modprobe_text() {
+	cat <<EOF
+# GameCove claw8ex-vrr: right before the Intel GPU driver loads, $HOOK sets the corrected EDID,
+# but only on the board it was installed on (first word of $HOOK_CONF). On other hardware it does nothing.
+# Remove with: gamecove-fix $NAME remove
+install xe /bin/sh $HOOK || :; /sbin/modprobe --ignore-install xe \$CMDLINE_OPTS
+install i915 /bin/sh $HOOK || :; /sbin/modprobe --ignore-install i915 \$CMDLINE_OPTS
+EOF
+}
+
+# Another install rule for the GPU drivers would clash with ours (modprobe uses one): refuse.
+modprobe_taken() {
+	for f in "$ROOT"/etc/modprobe.d/*.conf "$ROOT"/usr/lib/modprobe.d/*.conf; do
+		[ -f "$f" ] || continue
+		[ "$f" = "$ROOT$MODPROBE_CONF" ] && continue
+		if grep -Eq '^[[:space:]]*install[[:space:]]+(xe|i915)([[:space:]]|$)' "$f"; then
+			printf '%s' "${f#"$ROOT"}"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# put_hook <board> <EDID file name>: the hook files, recorded, and tracked in the initramfs.
+put_hook() {
+	printf '%s %s:edid/%s\n' "$1" "$CONNECTOR" "$2" >"$GC_TMP/edid.conf"
+	modprobe_text >"$GC_TMP/modprobe.conf"
+	m_put "$GC_TMP/edid.conf" "$HOOK_CONF" 644 || return 1
+	m_put "$HERE/edid-hook.sh" "$HOOK" 755 || return 1
+	m_put "$GC_TMP/modprobe.conf" "$MODPROBE_CONF" 644 || return 1
+	for f in "$HOOK_CONF" "$HOOK" "$MODPROBE_CONF"; do
+		m_has initramfs "$f" && continue
+		rpm-ostree initramfs-etc --track="$f" >/dev/null || return 1
+		m_add initramfs "$f"
+	done
+}
+
+# Kernel arguments recorded by an install from before the hook.
+old_kargs() {
+	[ -f "$MANIFEST" ] || return 0
+	sed -n 's/^karg //p' "$MANIFEST"
+}
+
+# Older installs set drm.edid_firmware=... (and held firmware_class.path=...) on the kernel command line,
+# which every handheld booting this drive gets. Replace them with the hook; on another board (where the
+# old EDID must not be used at all) just take the kernel arguments and the rest away.
+migrate() {
+	m_installed || return 0
+	olds=$(old_kargs)
+	[ -n "$olds" ] || return 0
+	edid=$(sed -n 's|^file \(/etc/firmware/edid/gamecove-.*\.bin\)$|\1|p' "$MANIFEST" | head -n 1)
+	hook=no
+	if [ -n "$edid" ] && [ -f "$ROOT$edid" ] && claw_board; then
+		GC_TMP=$(mktemp -d)
+		put_hook "$(board_name)" "$(basename "$edid")" || { warn "could not set up the boot hook; the old kernel arguments stay"; return 1; }
+		hook=yes
+	fi
+	for a in $olds; do
+		if karg_release "$a" "$NAME"; then
+			grep -vxF "karg $a" "$MANIFEST" >"$MANIFEST.tmp" || true
+			mv -f "$MANIFEST.tmp" "$MANIFEST"
+		else
+			warn "could not remove the kernel argument $a"
+		fi
+	done
+	if [ "$hook" = no ]; then
+		m_undo || { warn "some changes could not be undone; run remove"; return 1; }
+		say "removed the old global kernel arguments (this isn't the Claw it was installed on); install again on the Claw"
+		return 0
+	fi
+	[ -z "$(old_kargs)" ] || return 1
+	say "moved from kernel arguments to the per-device boot hook (takes effect at the next restart)"
+}
+
 install() {
 	require_root
 	lock
 	if m_installed; then
-		say "already installed"
+		migrate || die "could not move the old kernel arguments to the boot hook; see the messages above"
+		m_installed && say "already installed"
 		return 0
 	fi
+	claw_board || die "this fix is only for the MSI Claw (boards MS-1T*); this board is '$(board_name)'"
 	has_rpm_ostree || die "this system has no rpm-ostree (Bazzite / Fedora Atomic only for now)"
 	raw=$(panel_edid) || die "no internal screen EDID found"
 	booted=$(karg_value drm.edid_firmware "$(cmdline)")
 	pending=$(karg_value drm.edid_firmware "$(karg_pending)")
 	theirs "$booted" && die "another EDID override is active ($booted); remove it first"
 	theirs "$pending" && die "another EDID override is set for the next boot ($pending); remove it first"
+	theirs "$(drm_param)" && die "another EDID override is active ($(drm_param)); remove it first"
+	if taken=$(modprobe_taken); then
+		die "$taken already has an install rule for the GPU driver; not changing it"
+	fi
 	require_fw_path_free
 	key=$(edid_q "$raw" -v mode=id) || die "the screen's EDID can't be read"
 	row=$(panel_row "$key")
@@ -90,7 +194,7 @@ install() {
 	offsets=$4
 	GC_TMP=$(mktemp -d)
 	if ! canonical "$raw" "$length" "$GC_TMP/factory.bin" || [ "$(sha_of "$GC_TMP/factory.bin")" != "$want_sha" ]; then
-		case $booted in
+		case $booted$(drm_param) in
 		*gamecove-*) die "started with GameCove's EDID already: restart once, then install again" ;;
 		esac
 		die "panel $key has an EDID that isn't the validated factory one; nothing changed"
@@ -112,12 +216,9 @@ install() {
 		die "rpm-ostree initramfs-etc failed"
 	fi
 	m_add initramfs "$dest"
-	karg_hold "$FW_KARG" "$NAME" || { m_undo || true; die "could not set $FW_KARG"; }
-	m_add karg "$FW_KARG"
-	edid_karg="drm.edid_firmware=$CONNECTOR:edid/$name"
-	karg_hold "$edid_karg" "$NAME" || { m_undo || true; die "could not set $edid_karg"; }
-	m_add karg "$edid_karg"
-	say "installed for panel $key: restart the Claw to get 30-120 Hz VRR"
+	put_hook "$(board_name)" "$name" || { m_undo || true; die "could not set up the boot hook"; }
+	say "installed for panel $key on board $(board_name): restart the Claw to get 30-120 Hz VRR"
+	say "other handhelds booting this drive are not affected"
 }
 
 remove() {
@@ -132,21 +233,37 @@ remove() {
 }
 
 status() {
-	raw=$(panel_edid) || { say "applies=no"; say "state=n/a"; return 0; }
+	if m_installed && [ -n "$(old_kargs)" ] && is_root; then
+		lock
+		migrate >&2 || true
+	fi
+	old=no
+	[ -n "$(old_kargs)" ] && old=yes
+	if ! claw_board; then
+		say "applies=no"
+		say "old_kernel_args=$old"
+		say "state=n/a"
+		return 0
+	fi
+	raw=$(panel_edid) || { say "applies=no"; say "old_kernel_args=$old"; say "state=n/a"; return 0; }
 	key=$(edid_q "$raw" -v mode=id || true)
 	row=$(panel_row "$key")
 	range=$(edid_q "$raw" -v mode=range || true)
 	booted=$(karg_value drm.edid_firmware "$(cmdline)")
+	[ -n "$booted" ] || booted=$(drm_param)
 	installed=no
 	m_installed && installed=yes
 	pending=no
-	karg_in "drm.edid_firmware=$CONNECTOR:edid/$(file_name "$key")" "$(karg_pending)" && pending=yes
+	if [ "$installed" = yes ] && grep -qF "$(board_name) $CONNECTOR:edid/$(file_name "$key")" "$ROOT$HOOK_CONF" 2>/dev/null; then
+		pending=yes
+	fi
 	say "applies=yes"
 	say "panel=${key:-unknown}"
 	say "validated=$([ -n "$row" ] && echo yes || echo no)"
 	say "range=$(printf '%s' "${range:-unknown}" | tr ' ' '-')"
 	say "installed=$installed"
 	say "pending=$pending"
+	say "old_kernel_args=$old"
 	if theirs "$booted"; then
 		say "state=other-override"
 	elif [ "$installed" = yes ] && [ "$range" = "$LO $HI" ] && [ -n "$booted" ]; then

@@ -29,6 +29,26 @@ extends "res://scripts/system/service.gd"
 ## Nothing polls. Everything runs on the worker; results come back on the main
 ## thread as `changed` and `applied`.
 ##
+## Two controller services exist on handhelds. InputPlumber (Bazzite's default)
+## is used when it has a gamepad; otherwise Handheld Daemon (hhd.gd, its local
+## HTTP API) when it answers. state()["backend"] says which, and
+## state()["capabilities"] what works with it, so the UI only shows those:
+##   InputPlumber: Guide/QAM intercept, paddle remapping, gyro modes, rumble,
+##                 per-game profiles; no RGB (no LED setter in its API).
+##   hhd:          gyro on/off, paddles as a whole (Steam Input / hhd shortcuts /
+##                 off, no per-paddle remap), vibration on/off, RGB (solid color),
+##                 per-game settings (a saved slice of hhd's state). Guide reaches
+##                 GameCove as the virtual pad's Guide button while our UI has
+##                 focus (main.gd), and hhd's Steam shortcuts arrive as Ctrl+1
+##                 (Steam menu -> home) and Ctrl+2 (QAM -> quick menu), which hhd
+##                 types on its own uinput keyboard into the focused window. Inside
+##                 a game hhd keeps its buttons (no intercept API).
+##
+## Layouts are kept per device (one drive can boot several handhelds):
+##   ~/.config/inputplumber/profiles/gamecove/<device id>/default.yaml, <game>.yaml
+##   ~/.config/inputplumber/profiles/gamecove/<device id>/<game>.hhd.json (hhd)
+## Files from before (straight in gamecove/) move to the device that starts first.
+##
 ## Guide / Quick Access inside GameCove's own gamescope session: the InputPlumber
 ## intercept in intercept.gd (activation button, InterceptMode 2 while our UI
 ## has focus and 1 while a game has focus, InputEvent signals read from a
@@ -50,6 +70,8 @@ const Busctl := preload("res://scripts/device/busctl.gd")
 const Yaml := preload("res://scripts/input/yaml_lite.gd")
 const Profile := preload("res://scripts/input/ip_profile.gd")
 const Intercept := preload("res://scripts/input/intercept.gd")
+const Hhd := preload("res://scripts/input/hhd.gd")
+const PerDevice := preload("res://scripts/device/per_device.gd")
 
 const SERVICE := "org.shadowblip.InputPlumber"
 const ROOT_PATH := "/org/shadowblip/InputPlumber"
@@ -61,7 +83,11 @@ const OM_IFACE := "org.freedesktop.DBus.ObjectManager"
 
 var bus: RefCounted
 var home := OS.get_environment("HOME")
+## gamecove/ under InputPlumber's user profile folder; profiles_dir is this device's folder in it.
+var profiles_root := ""
 var profiles_dir := ""
+## Handheld Daemon client (tests swap its transport).
+var hhd: RefCounted = Hhd.new()
 
 var _state := {}                  # main thread: what state() returns
 # Worker-side copies, set by _refresh() before it hands _state to the main thread.
@@ -69,6 +95,8 @@ var _active := ""
 var _profiles_ok := false
 var _rumble_ok := false
 var _profile: Dictionary = {}     # loaded profile of the active device
+var _backend := "none"            # "inputplumber" | "hhd" | "none"
+var _hhd_state: Variant = null    # last hhd state (worker)
 var _game := ""
 var _game_profile_loaded := false
 var _baseline: Dictionary = {}    # profile before a per-game one was loaded
@@ -86,14 +114,25 @@ var _intercept_mode := -1         # last mode sent (main thread copy)
 
 func _init() -> void:
 	bus = Busctl.new(runner, "--system")
-	profiles_dir = home + "/.config/inputplumber/profiles/gamecove"
+	profiles_root = home + "/.config/inputplumber/profiles/gamecove"
+	set_device(device_id)
 	_state = _blank()
 
 
+## Which handheld the layouts belong to (Device.id()). Moves layouts saved
+## before per-device folders into this device's folder once.
+func set_device(id: String) -> void:
+	device_id = id
+	profiles_dir = PerDevice.migrate_dir(profiles_root, id if id != "" else "unknown")
+	if DirAccess.open(profiles_root) != null:
+		PerDevice.migrate_dir(profiles_root, id if id != "" else "unknown", ".json")
+
+
 func _ready() -> void:
+	set_process_input(false)
 	var dev := get_node_or_null("/root/Device")
 	if dev != null and dev.has_method("id"):
-		device_id = dev.id()
+		set_device(dev.id())
 	var gs := get_node_or_null("/root/Gamescope")
 	if intercept_wanted(OS.get_environment("GAMECOVE_STEAM_MODE"), OS.get_environment("GAMECOVE_INTERCEPT"),
 			gs != null and gs.has_method("is_running") and gs.is_running()):
@@ -121,12 +160,22 @@ func _exit_tree() -> void:
 
 
 ## Tests: fake runner and a fixture home.
-func setup(command_runner: RefCounted, home_dir: String) -> void:
+func setup(command_runner: RefCounted, home_dir: String, hhd_transport: RefCounted = null) -> void:
 	runner = command_runner
 	bus = Busctl.new(runner, "--system")
 	home = home_dir
-	profiles_dir = home + "/.config/inputplumber/profiles/gamecove"
+	hhd = Hhd.new()
+	hhd.home = home_dir
+	hhd.root = home_dir + "/root"
+	if hhd_transport != null:
+		hhd.transport = hhd_transport
+	else:
+		hhd.transport = _NoHhd.new()
+	profiles_root = home + "/.config/inputplumber/profiles/gamecove"
+	set_device(device_id)
 	_state = _blank()
+	_backend = "none"
+	_hhd_state = null
 	_active = ""
 	_profiles_ok = false
 	_rumble_ok = false
@@ -135,8 +184,19 @@ func setup(command_runner: RefCounted, home_dir: String) -> void:
 	_game_profile_loaded = false
 
 
+## Tests without hhd: nothing answers.
+class _NoHhd extends RefCounted:
+	func request(_m: String, _p: String, _h: PackedStringArray, _b := "") -> Dictionary:
+		return {"code": 0, "body": ""}
+
+
+const NO_CAPS := {"guide_qam": false, "intercept": false, "paddles": "", "gyro": false, "rumble": false, "rgb": false, "per_game": false}
+
+
 func _blank() -> Dictionary:
 	return {
+		"backend": "none", "capabilities": NO_CAPS.duplicate(), "gyro_modes": [], "paddle_modes": [], "paddle_mode": "",
+		"rgb": null,
 		"available": false, "version": "", "devices": [], "active": "",
 		"profile": {"name": "", "path": "", "paddles": {}, "gyro": "off"},
 		"rumble": null, "led": false, "game": "", "game_profile": false,
@@ -144,7 +204,12 @@ func _blank() -> Dictionary:
 	}
 
 
-## {"available": InputPlumber running, "version", "devices": [{"path", "name",
+## {"backend": "inputplumber" | "hhd" | "none",
+##  "capabilities": {"guide_qam", "intercept", "paddles": "remap" | "mode" | "",
+##   "gyro", "rumble", "rgb", "per_game"} (what the UI may show for this backend),
+##  "gyro_modes": modes set_gyro_mode takes here, "paddle_modes" / "paddle_mode"
+##   (hhd: paddles as a whole), "rgb": {"hue", "saturation", "brightness"} or null,
+##  "available": InputPlumber running, "version", "devices": [{"path", "name",
 ##   "profile_name", "profile_path", "capabilities", "output_capabilities",
 ##   "paddles": [...], "gyro": bool, "rumble": bool, "led": bool}],
 ##  "active": path of the device we edit, "profile": {"name", "path",
@@ -161,7 +226,10 @@ func default_profile_path() -> String:
 
 
 func game_profile_path(key: String) -> String:
-	return profiles_dir + "/" + Profile.file_name_for(key)
+	var f := Profile.file_name_for(key)
+	if _state.get("backend", "") == "hhd" or _backend == "hhd":
+		f = f.get_basename() + ".hhd.json"
+	return profiles_dir + "/" + f
 
 
 func has_game_profile(key: String) -> bool:
@@ -177,14 +245,43 @@ func refresh() -> void:
 ## ("KeyW"); "" restores it. Saved to the game's profile when one is active,
 ## else to the everyday profile.
 func set_paddle(paddle: String, target: String) -> void:
-	if not (paddle in Profile.PADDLES and Profile.valid_target(target)):
-		applied.emit("paddle", false)
+	if _state["backend"] == "hhd" or not (paddle in Profile.PADDLES and Profile.valid_target(target)):
+		applied.emit("paddle", false)   # hhd has no per-paddle remap: set_paddle_mode()
 		return
 	_queue("paddle:" + paddle, func(): _change("paddle", func(p): return Profile.set_paddle(p, paddle, target)))
 
 
-## "off", "mouse" or "stick".
+## Paddles as a whole on hhd: "steam_input", "noob" (hhd shortcuts), "touchpad",
+## "both" or "disabled" (state()["paddle_modes"]). Reported as applied("paddle", ok).
+func set_paddle_mode(mode: String) -> void:
+	if _state["backend"] != "hhd" or not mode in Hhd.PADDLE_MODES:
+		applied.emit("paddle", false)
+		return
+	_queue("paddle_mode", func():
+		var key := Hhd.controller_key(_hhd_state)
+		var info := Hhd.paddle_info(key, _hhd_section(key))
+		var ok := false
+		if not info.is_empty():
+			ok = _hhd_set(Hhd.nest(info["path"], mode), info["path"], mode)
+		_hhd_done("paddle", ok))
+
+
+## InputPlumber: "off", "mouse" or "stick". hhd: "off" or "on" (Steam Input does
+## the rest; "mouse"/"stick" count as on). state()["gyro_modes"] lists them.
 func set_gyro_mode(mode: String) -> void:
+	if _state["backend"] == "hhd":
+		if not mode in ["off", "on", "mouse", "stick"]:
+			applied.emit("gyro", false)
+			return
+		_queue("gyro", func():
+			var key := Hhd.controller_key(_hhd_state)
+			var gk := Hhd.gyro_key(_hhd_section(key))
+			var ok := false
+			if gk != "":
+				var path := ["controllers", key, gk]
+				ok = _hhd_set(Hhd.nest(path, mode != "off"), path, mode != "off")
+			_hhd_done("gyro", ok))
+		return
 	if not mode in Profile.GYRO_MODES:
 		applied.emit("gyro", false)
 		return
@@ -192,6 +289,17 @@ func set_gyro_mode(mode: String) -> void:
 
 
 func set_rumble(enabled: bool) -> void:
+	if _state["backend"] == "hhd":
+		_queue("rumble", func():
+			var key := Hhd.controller_key(_hhd_state)
+			var ok := false
+			if key != "" and Hhd.has_rumble(_hhd_section(key)):
+				# hhd's manual limits start from its defaults; only vibration changes
+				var v := 100 if enabled else 0
+				var patch := {"controllers": {key: {"limits": {"mode": "manual", "manual": {"vibration": v}}}}}
+				ok = _hhd_set(patch, ["controllers", key, "limits", "manual", "vibration"], v)
+			_hhd_done("rumble", ok))
+		return
 	_queue("rumble", func():
 		var path := _active
 		var ok: bool = path != "" and _rumble_ok \
@@ -210,16 +318,23 @@ func set_rumble(enabled: bool) -> void:
 func test_rumble(strength := 0.6) -> void:
 	_queue("rumble_test", func():
 		var path := _active
-		if path == "" or not _rumble_ok:
-			return
+		if _backend != "inputplumber" or path == "" or not _rumble_ok:
+			return   # hhd has no "buzz now" call
 		_call_void(path, FF_IFACE, "Rumble", ["d", str(clampf(strength, 0.0, 1.0))])
 		OS.delay_msec(300)
 		_call_void(path, FF_IFACE, "Stop", []))
 
 
-## RGB is not in InputPlumber's D-Bus API (see header). Always false.
-func set_led(_color: Color, _brightness: float) -> bool:
-	return false
+## RGB: hhd only (InputPlumber's D-Bus API has no LED setter). Solid color;
+## true when queued, then applied("led", ok) once hhd confirmed it.
+func set_led(color: Color, brightness: float) -> bool:
+	if _state["backend"] != "hhd" or not _state["capabilities"].get("rgb", false):
+		return false
+	_queue("led", func():
+		var mode := Hhd.solid_rgb(color, brightness)
+		var ok := _hhd_set({"rgb": {"handheld": {"mode": mode}}}, ["rgb", "handheld", "mode", "mode"], "solid")
+		_hhd_done("led", ok))
+	return true
 
 
 ## Loads an InputPlumber profile file (YAML or JSON) onto the active device.
@@ -234,7 +349,9 @@ func load_profile_file(path: String) -> void:
 func set_game_profile(key: String, on: bool) -> void:
 	_queue("game_profile", func():
 		var ok := true
-		if on:
+		if on and _backend == "hhd":
+			ok = _write_text(game_profile_path(key), JSON.stringify(Hhd.game_slice(_hhd_state), "  ") + "\n")
+		elif on:
 			ok = _write(game_profile_path(key), _profile)
 		elif has_game_profile(key):
 			ok = DirAccess.remove_absolute(game_profile_path(key)) == OK
@@ -422,7 +539,12 @@ func start_game(key: String) -> void:
 		var has := has_game_profile(key)
 		var base: Dictionary = _profile.duplicate(true)
 		var loaded := false
-		if has and _active != "":
+		if has and _backend == "hhd":
+			base = Hhd.game_slice(_hhd_state)
+			var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(game_profile_path(key)))
+			loaded = saved is Dictionary and hhd.set_state(saved) != null
+			_refresh()
+		elif has and _active != "":
 			loaded = _load_file(game_profile_path(key))
 			_refresh()
 		_main(func():
@@ -445,7 +567,10 @@ func end_game() -> void:
 	_game_profile_loaded = false
 	_baseline = {}
 	_queue("game", func():
-		if was_loaded and _active != "":
+		if was_loaded and _backend == "hhd":
+			if not base.is_empty():
+				hhd.set_state(base)
+		elif was_loaded and _active != "":
 			if FileAccess.file_exists(default_profile_path()):
 				_load_file(default_profile_path())
 			elif not base.is_empty():
@@ -486,15 +611,105 @@ func _refresh() -> void:
 			st["rumble"] = bool(en) if en != null else null
 		st["supported"] = {"profiles": true, "paddles": not dev["paddles"].is_empty(), "gyro": dev["gyro"],
 			"rumble": dev["rumble"], "led": false, "per_game": true}
+	var backend := "inputplumber" if dev.get("gamepad", false) else "none"
+	var hs: Variant = null
+	if backend == "none":
+		hs = hhd.get_state()
+		if hs != null and Hhd.controller_key(hs) != "":
+			backend = "hhd"
+			_fill_hhd(st, hs)
+	if backend == "inputplumber":
+		st["capabilities"] = {"guide_qam": true, "intercept": true,
+			"paddles": "remap" if st["supported"]["paddles"] else "", "gyro": st["supported"]["gyro"],
+			"rumble": st["supported"]["rumble"], "rgb": false, "per_game": true}
+		st["gyro_modes"] = Profile.GYRO_MODES.duplicate() if st["supported"]["gyro"] else []
+	st["backend"] = backend
+	_backend = backend
+	_hhd_state = hs
 	_active = st["active"]
 	_profiles_ok = st["supported"]["profiles"]
 	_rumble_ok = st["supported"]["rumble"]
 	_profile = profile
 	_main(func():
 		st["game"] = _game
-		st["game_profile"] = has_game_profile(_game) if _game != "" else false
 		_state = st
+		st["game_profile"] = has_game_profile(_game) if _game != "" else false
+		if is_inside_tree():
+			set_process_input(st["backend"] == "hhd")
 		changed.emit(state()))
+
+
+## hhd's view into the state shape (worker).
+func _fill_hhd(st: Dictionary, hs: Dictionary) -> void:
+	var key := Hhd.controller_key(hs)
+	var section := _section_of(hs, key)
+	var caps := Hhd.capabilities(hs)
+	st["capabilities"] = caps
+	var gk := Hhd.gyro_key(section)
+	st["gyro_modes"] = ["off", "on"] if gk != "" else []
+	var pi := Hhd.paddle_info(key, section)
+	st["paddle_modes"] = pi.get("modes", [])
+	st["paddle_mode"] = pi.get("value", "")
+	var rgb: Variant = Hhd.dig(hs, ["rgb", "handheld", "mode", "solid"])
+	st["rgb"] = null
+	if rgb is Dictionary:
+		st["rgb"] = {"hue": int(rgb.get("hue", 0)), "saturation": int(rgb.get("saturation", 0)), "brightness": int(rgb.get("brightness", 0))}
+	var rum: Variant = Hhd.rumble_on(section)
+	st["rumble"] = true if rum == null and caps["rumble"] else rum
+	st["profile"] = {"name": "hhd:" + key, "path": "", "paddles": {},
+		"gyro": ("on" if section.get(gk, false) else "off") if gk != "" else "off"}
+	st["supported"] = {"profiles": false, "paddles": caps["paddles"] != "", "gyro": caps["gyro"],
+		"rumble": caps["rumble"], "led": caps["rgb"], "per_game": caps["per_game"]}
+	st["led"] = caps["rgb"]
+
+
+static func _section_of(hs: Variant, key: String) -> Dictionary:
+	var v: Variant = Hhd.dig(hs, ["controllers", key]) if key != "" else null
+	return v if v is Dictionary else {}
+
+
+func _hhd_section(key: String) -> Dictionary:
+	return _section_of(_hhd_state, key)
+
+
+## POST a change to hhd and check `path` reads back as `want` (worker).
+func _hhd_set(patch: Dictionary, path: Array, want: Variant) -> bool:
+	if _backend != "hhd":
+		return false
+	var after: Variant = hhd.set_state(patch)
+	if after == null:
+		return false
+	var got: Variant = Hhd.dig(after, path)
+	_hhd_state = after
+	if got == null:
+		return false
+	if (got is int or got is float) and (want is int or want is float):
+		return absf(float(got) - float(want)) < 0.01   # JSON numbers come back as floats
+	return str(got) == str(want)
+
+
+## After an hhd setter: read everything again, then report (worker).
+func _hhd_done(setting: String, ok: bool) -> void:
+	_refresh()
+	_main(func(): applied.emit(setting, ok))
+
+
+## Ctrl+1 / Ctrl+2: hhd's Steam shortcuts (its QAM handler types them on a uinput
+## keyboard), our home / quick menu. Only listened to while hhd is the backend.
+static func hhd_key_action(e: InputEvent) -> String:
+	if not (e is InputEventKey) or not e.pressed or e.echo or not e.ctrl_pressed:
+		return ""
+	match e.keycode:
+		KEY_1: return "home"
+		KEY_2: return "quick_menu"
+	return ""
+
+
+func _input(event: InputEvent) -> void:
+	var a := hhd_key_action(event)
+	if a != "":
+		get_viewport().set_input_as_handled()
+		ui_action.emit(a)
 
 
 ## Devices from GetManagedObjects' first out argument (busctl JSON).
@@ -607,6 +822,16 @@ func _call_void(path: String, iface: String, method: String, args: Array) -> boo
 		argv.append(str(a))
 	var r: Dictionary = runner.run("busctl", argv)
 	return int(r.get("code", -1)) == 0
+
+
+func _write_text(path: String, text: String) -> bool:
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(text)
+	f.close()
+	return true
 
 
 func _write(path: String, profile: Dictionary) -> bool:

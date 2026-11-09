@@ -1,0 +1,461 @@
+#!/bin/sh
+# gamecove-selftest: checks what GameCove needs on this handheld and writes one report file.
+# Run it from a terminal in Desktop Mode, as your normal user (not root):
+#
+#   gamecove-selftest                  automatic checks (reads only)
+#   gamecove-selftest --write          also sets the TDP to its current value and reads it back
+#   gamecove-selftest --interactive    then asks you to press the special buttons, paddles, move the device
+#   gamecove-selftest --no-network     skip the GitHub check
+#
+# The report is ~/gamecove-selftest-<device>-<date>.txt. It holds no personal data: no user or host
+# names, serial numbers, Steam ids, account names or tokens (they are never read, or are replaced).
+# Share it in a GitHub issue when something doesn't work on your handheld.
+#
+# Tests only: GAMECOVE_ROOT prefixes files read (/sys, /proc, /etc, /usr), GAMECOVE_APP is the app
+# binary, GAMECOVE_FIX the fix helper, GAMECOVE_SELFTEST_WATCH the command that watches input,
+# GAMECOVE_SELFTEST_TIMEOUT the seconds per interactive step (default 10).
+set -u
+
+ROOT=${GAMECOVE_ROOT:-}
+APP=${GAMECOVE_APP:-/usr/lib/gamecove/gamecove.x86_64}
+FIX=${GAMECOVE_FIX:-/usr/libexec/gamecove/gamecove-fix}
+STEP_S=${GAMECOVE_SELFTEST_TIMEOUT:-10}
+RELEASES=https://github.com/IHulkSmashI/gamecove/releases/latest
+
+WRITE=0
+INTERACTIVE=0
+NETWORK=1
+for a in "$@"; do
+	case $a in
+	--write) WRITE=1 ;;
+	--interactive) INTERACTIVE=1 ;;
+	--no-network) NETWORK=0 ;;
+	-h | --help)
+		sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+		exit 0
+		;;
+	*)
+		echo "usage: gamecove-selftest [--write] [--interactive] [--no-network]" >&2
+		exit 64
+		;;
+	esac
+done
+
+if [ "$(id -u)" -eq 0 ] && [ -z "$ROOT" ]; then
+	echo "gamecove-selftest: run it as your normal user, not root (it checks what GameCove sees)" >&2
+	exit 64
+fi
+
+TMP=$(mktemp -d) || exit 1
+trap 'rm -rf "$TMP"' EXIT
+trap 'exit 1' INT TERM HUP
+OUT=$TMP/report
+PASS=0
+WARN=0
+FAILS=0
+: >"$OUT"
+
+line() { printf '%s\n' "$*" >>"$OUT"; }
+section() { line ""; line "== $* =="; }
+kv() { line "$1: $2"; }
+ok() { PASS=$((PASS + 1)); line "[ok]   $*"; }
+warn() { WARN=$((WARN + 1)); line "[warn] $*"; }
+fail() { FAILS=$((FAILS + 1)); line "[fail] $*"; }
+info() { line "[info] $*"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+rd() { tr -d '\n' 2>/dev/null <"$ROOT$1" | sed 's/[[:space:]]*$//'; }
+
+# with_timeout <seconds> <command...>: never let a stuck service hold the test.
+with_timeout() {
+	t=$1
+	shift
+	if have timeout; then timeout "$t" "$@"; else "$@"; fi
+}
+
+# ---- device ---------------------------------------------------------------------------------------------
+section "Device"
+for k in sys_vendor product_name board_name board_vendor product_family; do
+	kv "dmi.$k" "$(rd "/sys/class/dmi/id/$k")"
+done
+DEVICE_ID=unknown
+if [ -x "$APP" ]; then
+	with_timeout 30 "$APP" --headless -- --selftest >"$TMP/app" 2>/dev/null || true
+	if grep -q '^selftest\.device\.id=' "$TMP/app"; then
+		sed -n 's/^selftest\.\([^=]*\)=\(.*\)$/\1: \2/p' "$TMP/app" >>"$OUT"
+		DEVICE_ID=$(sed -n 's/^selftest\.device\.id=//p' "$TMP/app" | head -n 1)
+		support=$(sed -n 's/^selftest\.device\.support=//p' "$TMP/app" | head -n 1)
+		case $DEVICE_ID in
+		"" | unknown) warn "GameCove doesn't know this handheld (generic settings from the CPU)"; DEVICE_ID=unknown ;;
+		*) ok "detected as $DEVICE_ID (support: ${support:-?})" ;;
+		esac
+	else
+		fail "the app's --selftest gave no answer ($APP)"
+	fi
+else
+	fail "GameCove app not found at $APP"
+fi
+
+# ---- system ---------------------------------------------------------------------------------------------
+section "System"
+os=$(sed -n 's/^PRETTY_NAME="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$ROOT/etc/os-release" 2>/dev/null | head -n 1)
+kv "os" "${os:-unknown}"
+img=$(sed -n 's/.*"image-name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/usr/share/ublue-os/image-info.json" 2>/dev/null | head -n 1)
+[ -z "$img" ] || kv "image" "$img"
+kv "kernel" "$(uname -r 2>/dev/null)"
+mesa=""
+if have rpm; then
+	mesa=$(rpm -q --qf '%{VERSION}' mesa-dri-drivers 2>/dev/null | head -n 1)
+	case $mesa in *"not installed"*) mesa="" ;; esac
+fi
+if [ -z "$mesa" ] && have glxinfo; then
+	mesa=$(glxinfo -B 2>/dev/null | sed -n 's/.*Mesa \([0-9][0-9.]*\).*/\1/p' | head -n 1)
+fi
+kv "mesa" "${mesa:-unknown}"
+drivers=""
+for d in "$ROOT"/sys/class/drm/card[0-9]*/device/driver; do
+	[ -e "$d" ] || continue
+	drv=$(basename "$(readlink "$d" 2>/dev/null || echo "$d")")
+	case " $drivers " in *" $drv "*) ;; *) drivers="$drivers $drv" ;; esac
+done
+drivers=${drivers# }
+kv "gpu_driver" "${drivers:-none}"
+if [ -n "$drivers" ]; then ok "GPU driver: $drivers"; else fail "no GPU driver bound under /sys/class/drm"; fi
+cmdline=$(cat "$ROOT/proc/cmdline" 2>/dev/null)
+case $cmdline in
+*drm.edid_firmware=*gamecove-*)
+	case $(rd /sys/class/dmi/id/board_name) in
+	MS-1T*) warn "old global Claw EDID kernel argument still set: run 'pkexec $FIX claw8ex-vrr status' once to move it to the per-device hook" ;;
+	*) fail "the Claw's EDID kernel argument is active on this handheld: run 'pkexec $FIX claw8ex-vrr status' and restart" ;;
+	esac
+	;;
+esac
+if have mokutil; then
+	kv "secure_boot" "$(mokutil --sb-state 2>/dev/null | head -n 1)"
+fi
+
+# ---- session and Steam --------------------------------------------------------------------------------
+section "Session"
+if pgrep -x gamescope >/dev/null 2>&1 || pgrep -f gamescope-session >/dev/null 2>&1; then
+	info "a gamescope session is running"
+else
+	info "no gamescope session (Desktop Mode)"
+fi
+if pgrep -x steam >/dev/null 2>&1; then
+	info "Steam is running"
+else
+	info "Steam is not running"
+fi
+lu="$HOME/.steam/steam/config/loginusers.vdf"
+[ -f "$lu" ] || lu="$HOME/.local/share/Steam/config/loginusers.vdf"
+if [ -f "$lu" ] && grep -q '"MostRecent"[[:space:]]*"1"' "$lu"; then
+	ok "Steam has a signed-in account"
+elif [ -f "$lu" ]; then
+	warn "Steam has no recent signed-in account"
+else
+	warn "Steam has never been signed in for this user"
+fi
+
+# ---- controller service -----------------------------------------------------------------------------------
+section "Controller"
+IP=no
+HHD=no
+if have busctl && with_timeout 5 busctl --system get-property org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/Manager org.shadowblip.InputManager Version >"$TMP/ipv" 2>/dev/null; then
+	IP=yes
+	kv "inputplumber" "running, version $(sed 's/^s //; s/"//g' "$TMP/ipv")"
+	with_timeout 5 busctl --system --list tree org.shadowblip.InputPlumber 2>/dev/null |
+		grep -E '^/org/shadowblip/InputPlumber/CompositeDevice[0-9]+$' >"$TMP/ipdevs" || true
+	n=0
+	while read -r p; do
+		n=$((n + 1))
+		name=$(with_timeout 5 busctl --system get-property org.shadowblip.InputPlumber "$p" org.shadowblip.Input.CompositeDevice Name 2>/dev/null | sed 's/^s //; s/"//g')
+		kv "inputplumber.device" "${p##*/}: ${name:-?}"
+	done <"$TMP/ipdevs"
+	if [ "$n" -gt 0 ]; then ok "InputPlumber sees $n device(s)"; else warn "InputPlumber runs but sees no device"; fi
+else
+	kv "inputplumber" "not running"
+fi
+hhd_token=""
+for f in "$ROOT/tmp/hhd/token" "$ROOT/etc/hhd/.token" "$HOME/.config/hhd/token"; do
+	[ -s "$f" ] && { hhd_token=$(tr -d '[:space:]' <"$f"); break; }
+done
+# hhd_get <path>: GET from hhd's local API (the token goes through a header file, not the command line).
+hhd_get() {
+	printf 'Authorization: Bearer %s\n' "$hhd_token" >"$TMP/hhd.h"
+	with_timeout 5 curl -sf --max-time 3 -H "@$TMP/hhd.h" "http://127.0.0.1:5335$1"
+}
+hhd_post() {
+	printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$hhd_token" >"$TMP/hhd.h"
+	with_timeout 8 curl -sf --max-time 6 -H "@$TMP/hhd.h" -X POST --data "$2" "http://127.0.0.1:5335$1"
+}
+# json <file> <dotted.path>: one value from a JSON file ("" when missing).
+json() {
+	python3 -I -c '
+import json, sys
+try:
+    v = json.load(open(sys.argv[1]))
+    for k in sys.argv[2].split("."):
+        v = v[k]
+    print(json.dumps(v) if isinstance(v, (dict, list)) else v)
+except Exception:
+    pass
+' "$1" "$2" 2>/dev/null
+}
+if have curl && hhd_get /api/v1/version >"$TMP/hhdv" 2>/dev/null; then
+	HHD=yes
+	kv "hhd" "running, API $(json "$TMP/hhdv" version)"
+	if hhd_get /api/v1/state >"$TMP/hhds" 2>/dev/null; then
+		ctl=$(python3 -I -c 'import json,sys; print(" ".join(sorted(json.load(open(sys.argv[1])).get("controllers", {}))))' "$TMP/hhds" 2>/dev/null)
+		kv "hhd.controllers" "${ctl:-none}"
+		if [ -n "$ctl" ]; then ok "Handheld Daemon handles: $ctl"; else warn "Handheld Daemon runs but handles no controller"; fi
+	else
+		warn "Handheld Daemon answers but its state couldn't be read (token?)"
+	fi
+else
+	kv "hhd" "not running"
+fi
+if [ "$IP" = yes ] && [ "$HHD" = yes ]; then
+	warn "InputPlumber and Handheld Daemon both run; they fight over the controller (keep one)"
+elif [ "$IP" = no ] && [ "$HHD" = no ]; then
+	fail "no controller service (InputPlumber or Handheld Daemon): special buttons won't reach GameCove"
+fi
+
+# ---- power ----------------------------------------------------------------------------------------------
+section "Power"
+TDP_VIA=""
+TDP=""
+PS_CARD=""
+hhd_tdp_path=""
+if [ "$HHD" = yes ] && [ -f "$TMP/hhds" ] && [ "$(json "$TMP/hhds" hhd.settings.tdp_enable)" = True ]; then
+	for p in tdp.asus.tdp_v2.custom.tdp tdp.lenovo.tdp.custom.tdp tdp.msi.tdp.custom.tdp tdp.qam.tdp; do
+		v=$(json "$TMP/hhds" "$p")
+		if [ -n "$v" ]; then TDP_VIA=hhd; TDP=$v; hhd_tdp_path=$p; break; fi
+	done
+fi
+if [ -z "$TDP_VIA" ] && have busctl; then
+	v=$(with_timeout 5 busctl --user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.TdpLimit1 TdpLimit 2>/dev/null | sed 's/^u //')
+	if [ -n "$v" ]; then
+		TDP_VIA=steamos-manager
+		TDP=$v
+	fi
+fi
+if [ -z "$TDP_VIA" ] && have busctl; then
+	PS_CARD=$(with_timeout 5 busctl --system call org.shadowblip.PowerStation /org/shadowblip/Performance/GPU org.shadowblip.GPU EnumerateCards 2>/dev/null | tr ' ' '\n' | grep '^"/' | head -n 1 | tr -d '"')
+	if [ -n "$PS_CARD" ]; then
+		v=$(with_timeout 5 busctl --system get-property org.shadowblip.PowerStation "$PS_CARD" org.shadowblip.GPU.Card.TDP TDP 2>/dev/null | sed 's/^d //')
+		if [ -n "$v" ]; then
+			TDP_VIA=powerstation
+			TDP=$v
+		fi
+	fi
+fi
+if [ -n "$TDP_VIA" ]; then
+	ok "TDP readable through $TDP_VIA: $TDP W"
+	kv "tdp.backend" "$TDP_VIA"
+	kv "tdp.watts" "$TDP"
+else
+	fail "no TDP service answered (PowerStation, steamos-manager or Handheld Daemon)"
+fi
+if [ "$WRITE" = 1 ] && [ -n "$TDP_VIA" ]; then
+	w=$(printf '%.0f' "$TDP" 2>/dev/null || echo "$TDP")
+	back=""
+	case $TDP_VIA in
+	steamos-manager)
+		with_timeout 10 busctl --user set-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.TdpLimit1 TdpLimit u "$w" 2>/dev/null &&
+			back=$(with_timeout 5 busctl --user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.TdpLimit1 TdpLimit 2>/dev/null | sed 's/^u //')
+		;;
+	powerstation)
+		with_timeout 10 busctl --system set-property org.shadowblip.PowerStation "$PS_CARD" org.shadowblip.GPU.Card.TDP TDP d "$TDP" 2>/dev/null &&
+			back=$(with_timeout 5 busctl --system get-property org.shadowblip.PowerStation "$PS_CARD" org.shadowblip.GPU.Card.TDP TDP 2>/dev/null | sed 's/^d //')
+		;;
+	hhd)
+		body=$(python3 -I -c '
+import json, sys
+path, w = sys.argv[1].split("."), int(sys.argv[2])
+out = w
+for k in reversed(path):
+    out = {k: out}
+if len(path) == 5:   # driver.tdp.custom.tdp: the mode must say custom
+    node = out
+    for k in path[:3]:
+        node = node[k]
+    node["mode"] = "custom"
+print(json.dumps(out))
+' "$hhd_tdp_path" "$w")
+		hhd_post /api/v1/state "$body" >"$TMP/hhds2" 2>/dev/null && back=$(json "$TMP/hhds2" "$hhd_tdp_path")
+		;;
+	esac
+	if [ -n "$back" ] && [ "$(printf '%.0f' "$back" 2>/dev/null)" = "$w" ]; then
+		ok "TDP write: set $w W, read back $back W"
+	else
+		fail "TDP write: set $w W, read back '${back:-nothing}'"
+	fi
+fi
+readable=""
+for f in "$ROOT"/sys/class/powercap/intel-rapl:0/energy_uj "$ROOT"/sys/class/drm/card*/device/hwmon/hwmon*/energy1_input \
+	"$ROOT"/sys/class/drm/card*/device/hwmon/hwmon*/power1_average "$ROOT"/sys/class/drm/card*/device/hwmon/hwmon*/power1_input; do
+	[ -r "$f" ] && cat "$f" >/dev/null 2>&1 && readable="$readable ${f#"$ROOT"}"
+done
+if [ -n "$readable" ]; then
+	ok "power readings readable (Auto TDP, overlay):$readable"
+else
+	warn "no package/GPU power reading is readable by this user (RAPL is root-only on some kernels); Auto TDP uses frame rate only"
+fi
+
+# ---- fixes ----------------------------------------------------------------------------------------------
+section "Fixes"
+if [ -x "$FIX" ]; then
+	for name in $("$FIX" --list 2>/dev/null); do
+		st=$(with_timeout 20 "$FIX" "$name" status 2>/dev/null | tr '\n' ' ')
+		kv "fix.$name" "${st:-no answer}"
+	done
+else
+	warn "fix helper not found ($FIX)"
+fi
+
+# ---- tools ----------------------------------------------------------------------------------------------
+section "Tools"
+for t in legendary gogdl nile umu-run mangohud mangohudctl gamescope; do
+	if have "$t"; then kv "tool.$t" yes; else kv "tool.$t" no; fi
+done
+if have flatpak && flatpak info com.heroicgameslauncher.hgl >/dev/null 2>&1; then
+	kv "tool.heroic" "flatpak"
+elif have heroic; then
+	kv "tool.heroic" yes
+else
+	kv "tool.heroic" no
+fi
+have mangohud || warn "MangoHud is missing: no performance overlay"
+have umu-run || info "umu-run is missing: GameCove uses its own copy for Epic/GOG/Amazon games, if bundled"
+
+# ---- network and disk ------------------------------------------------------------------------------------
+section "Network and disk"
+if [ "$NETWORK" = 1 ]; then
+	code=$(with_timeout 15 curl -s -o /dev/null -w '%{http_code}' -I --max-time 10 "$RELEASES" 2>/dev/null)
+	case $code in
+	2?? | 3??) ok "GitHub releases reachable (HTTP $code)" ;;
+	*) fail "GitHub releases not reachable (${code:-no answer}): updates and downloads won't work" ;;
+	esac
+else
+	info "network check skipped"
+fi
+for d in "$HOME" /; do
+	free=$(df -Pk "$d" 2>/dev/null | awk 'NR == 2 { printf "%.1f", $4 / 1048576 }')
+	label=home
+	[ "$d" = / ] && label=root
+	kv "disk.$label.free_gib" "${free:-?}"
+done
+
+# ---- interactive ---------------------------------------------------------------------------------------
+# watch_input <kind> <seconds>: waits for a button press (kind=button) or motion (kind=motion) on any
+# readable /dev/input device and prints "<device name>: <event>", "SKIP" when Enter was pressed, or
+# nothing on timeout.
+watch_input() {
+	python3 -I -c '
+import os, select, struct, sys, time
+kind, secs = sys.argv[1], float(sys.argv[2])
+fmt = "llHHi"
+size = struct.calcsize(fmt)
+names = {304: "BTN_SOUTH", 305: "BTN_EAST", 307: "BTN_NORTH", 308: "BTN_WEST", 310: "BTN_TL", 311: "BTN_TR",
+         314: "BTN_SELECT", 315: "BTN_START", 316: "BTN_MODE", 704: "BTN_TRIGGER_HAPPY1", 705: "BTN_TRIGGER_HAPPY2",
+         706: "BTN_TRIGGER_HAPPY3", 707: "BTN_TRIGGER_HAPPY4", 185: "KEY_F15", 186: "KEY_F16", 34: "KEY_G",
+         125: "KEY_LEFTMETA", 2: "KEY_1", 3: "KEY_2", 29: "KEY_LEFTCTRL"}
+fds = {}
+for e in sorted(os.listdir("/dev/input")):
+    if not e.startswith("event"):
+        continue
+    p = "/dev/input/" + e
+    try:
+        fd = os.open(p, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError:
+        continue
+    try:
+        name = open("/sys/class/input/%s/device/name" % e).read().strip()
+    except OSError:
+        name = e
+    fds[fd] = name
+if not fds:
+    print("ERROR: no readable input device (run from Desktop Mode as your user)")
+    sys.exit(0)
+# drain what is already queued
+for fd in fds:
+    try:
+        while os.read(fd, size * 64):
+            pass
+    except OSError:
+        pass
+end = time.time() + secs
+motion = {}
+watch = list(fds)
+if sys.stdin.isatty():
+    watch.append(sys.stdin.fileno())
+while time.time() < end:
+    r, _, _ = select.select(watch, [], [], max(0.0, end - time.time()))
+    for fd in r:
+        if fd == sys.stdin.fileno():
+            sys.stdin.readline()
+            print("SKIP")
+            sys.exit(0)
+        try:
+            data = os.read(fd, size * 64)
+        except OSError:
+            continue
+        for i in range(0, len(data) - size + 1, size):
+            _, _, t, code, value = struct.unpack(fmt, data[i:i + size])
+            n = fds[fd]
+            if kind == "button" and t == 1 and value == 1:
+                print("%s: %s" % (n, names.get(code, "key %d" % code)))
+                sys.exit(0)
+            if kind == "motion" and t == 3 and any(w in n.lower() for w in ("motion", "imu", "sensor", "gyro", "accel")):
+                motion[fd] = motion.get(fd, 0) + 1
+                if motion[fd] > 20:
+                    print("%s: motion" % n)
+                    sys.exit(0)
+' "$1" "$2" 2>/dev/null
+}
+WATCH=${GAMECOVE_SELFTEST_WATCH:-watch_input}
+
+# step <label> <kind>: one interactive check.
+step() {
+	printf '\n%s (%ss, Enter skips): ' "$1" "$STEP_S" >&2
+	got=$($WATCH "$2" "$STEP_S" 2>/dev/null | head -n 1)
+	case $got in
+	SKIP) info "$1: skipped"; printf 'skipped\n' >&2 ;;
+	ERROR:*) fail "$1: ${got#ERROR: }"; printf '%s\n' "${got#ERROR: }" >&2 ;;
+	"") fail "$1: nothing seen in ${STEP_S}s"; printf 'nothing seen\n' >&2 ;;
+	*) ok "$1: $got"; printf 'seen: %s\n' "$got" >&2 ;;
+	esac
+}
+
+if [ "$INTERACTIVE" = 1 ]; then
+	section "Buttons and motion (interactive)"
+	echo "Interactive part: press each button when asked. GameCove and Steam may react to the presses." >&2
+	step "Press the home / Guide button (MSI, Xbox, Legion L...)" button
+	step "Press the Quick Access button (... or Armoury Crate / Legion R)" button
+	step "Press the left back paddle" button
+	step "Press the right back paddle" button
+	step "Move or tilt the handheld (gyro)" motion
+fi
+
+# ---- report ---------------------------------------------------------------------------------------------
+section "Summary"
+line "ok=$PASS warn=$WARN fail=$FAILS"
+line "gamecove-selftest $(date -u +%Y-%m-%dT%H:%MZ) write=$WRITE interactive=$INTERACTIVE"
+
+# Nothing personal leaves the machine. Serials, MAC addresses, account names and tokens are never read
+# or printed; as a safety net, home paths, Steam ids and anything token-like are replaced.
+redact() {
+	sed -e 's/7656119[0-9]\{10\}/<steamid>/g' \
+		-e 's/\(token[^:=]*[:=][[:space:]]*\)[^[:space:]]*/\1<redacted>/g' \
+		-e 's|/home/[^/[:space:]]*|/home/<user>|g' \
+		-e 's|/var/home/[^/[:space:]]*|/var/home/<user>|g'
+}
+safe_id=$(printf '%s' "$DEVICE_ID" | tr -c 'a-z0-9-' '-')
+REPORT="$HOME/gamecove-selftest-$safe_id-$(date +%Y%m%d-%H%M).txt"
+{
+	echo "GameCove self-test report (no personal data: names, serials, ids and tokens are left out)"
+	cat "$OUT"
+} | redact >"$REPORT"
+cat "$REPORT"
+echo
+echo "Report saved: $REPORT"
+[ "$FAILS" -eq 0 ]

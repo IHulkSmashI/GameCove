@@ -98,6 +98,7 @@ install -Dpm0755 packaging/get-gamecove.sh            %{buildroot}%{_libexecdir}
 install -Dpm0644 packaging/installer/io.github.ihulksmashi.GameCoveInstaller.desktop \
     %{buildroot}%{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop
 install -Dpm0755 session/gamecove-session-select      %{buildroot}%{_bindir}/gamecove-session-select
+install -Dpm0755 packaging/bin/gamecove-selftest      %{buildroot}%{_bindir}/gamecove-selftest
 
 # Session
 install -Dpm0644 session/gamescope-session-plus/sessions.d/gamecove \
@@ -129,6 +130,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 %{_libexecdir}/gamecove/get-gamecove.sh
 %{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop
 %{_bindir}/gamecove-session-select
+%{_bindir}/gamecove-selftest
 %dir %{_datadir}/gamescope-session-plus
 %dir %{_datadir}/gamescope-session-plus/sessions.d
 %{_datadir}/gamescope-session-plus/sessions.d/gamecove

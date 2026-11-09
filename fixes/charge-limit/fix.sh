@@ -232,25 +232,28 @@ do_set() {
 }
 
 do_status() {
+	# another handheld's saved state (same drive) is not this one's
+	ORIG="$(state_file "$STATE" original)"
+	LIMIT="$(state_file "$STATE" limit)"
 	if [ -z "$PATH_T" ]; then
 		printf 'applies=no\nstate=n/a\n'
 		return 0
 	fi
 	printf 'applies=yes\nmode=%s\n' "$MODE"
-	if [ -f "$STATE/original" ]; then
-		printf 'installed=yes\noriginal=%s\n' "$(cat "$STATE/original")"
+	if [ -f "$ORIG" ]; then
+		printf 'installed=yes\noriginal=%s\n' "$(cat "$ORIG")"
 	else
 		printf 'installed=no\n'
 	fi
 	if [ "$MODE" = behaviour ]; then
 		limit=100
-		[ -f "$STATE/original" ] && [ -f "$STATE/limit" ] && limit="$(cat "$STATE/limit")"
+		[ -f "$ORIG" ] && [ -f "$LIMIT" ] && limit="$(cat "$LIMIT")"
 		printf 'path=%s\nvalue=%s\nlimit=%s\nbehaviour=%s\ncapacity=%s\nac=%s\n' "${PATH_T#"$ROOT"}" "$limit" "$limit" \
 			"$(behaviour_now)" "$(capacity)" "$(ac_online)"
 	else
 		printf 'path=%s\nvalue=%s\n' "${PATH_T#"$ROOT"}" "$(cat "$PATH_T")"
 	fi
-	if [ -f "$STATE/original" ]; then printf 'state=on\n'; else printf 'state=off\n'; fi
+	if [ -f "$ORIG" ]; then printf 'state=on\n'; else printf 'state=off\n'; fi
 }
 
 do_remove() {
@@ -279,6 +282,9 @@ do_remove() {
 	printf 'value=%s\n' "$original"
 }
 
+case "${1:-}" in
+	install | set | remove | guard) ! can_write_state || state_switch "$STATE" ;;
+esac
 case "${1:-}" in
 	install) [ -n "$PATH_T" ] || die 2 "this battery has no charge limit control"; fix_lock charge-limit; do_install; printf 'installed=yes\n' ;;
 	set) do_set "${2:-}" ;;

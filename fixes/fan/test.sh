@@ -170,4 +170,27 @@ rm -rf "$R/sys/class/dmi"
 set +e; sh "$FIX" set max 2>/dev/null; code=$?; set -e
 [ "$code" = "2" ] || fail "no DMI ids: refused (got $code)"
 rm -rf "$R"
+# ---- one drive, two handhelds: each keeps its own saved fan state -------------
+R="$(new_hw msi_wmi_platform 2)"; export GAMECOVE_ROOT="$R"; M="$R/sys/class/hwmon/hwmon3"
+dmi "$R" "Micro-Star International Co., Ltd." "Claw 8 AI+ A2VM" "MS-1T91"
+claw_orig="$(cat "$M/pwm1_auto_point2_pwm")"
+sh "$FIX" set max >/dev/null || fail "two devices: set max on the Claw"
+[ "$(cat "$R/var/lib/gamecove/fixes/fan/device")" = msi-claw-8-ex ] || fail "two devices: state owned by the Claw"
+# Same drive in a ROG Ally: other DMI, other fan driver.
+rm -rf "$M"; mkdir -p "$M"; echo asus_custom_fan_curve > "$M/name"
+for n in 1 2; do echo 2 > "$M/pwm${n}_enable"; for i in 1 2 3 4 5 6 7 8; do echo 7 > "$M/pwm${n}_auto_point${i}_pwm"; echo 50 > "$M/pwm${n}_auto_point${i}_temp"; done; done
+dmi "$R" "ASUSTeK COMPUTER INC." "ROG Ally RC71L_RC71L" "RC71L"
+sh "$FIX" status | grep -q '^installed=no$' || fail "two devices: the Claw's state isn't the Ally's"
+[ "$(sh "$FIX" remove)" = "nothing to undo" ] || fail "two devices: remove on the Ally leaves the Claw's values alone"
+sh "$FIX" set max >/dev/null || fail "two devices: set max on the Ally"
+sh "$FIX" remove >/dev/null || fail "two devices: remove on the Ally"
+[ "$(cat "$M/pwm1_auto_point1_pwm") $(cat "$M/pwm1_enable")" = "7 2" ] || fail "two devices: the Ally gets its own values back"
+# Back on the Claw: its saved state is there again.
+rm -rf "$M"; cp -R "$HERE/../../app/tests/fixtures/power/sys_claw/sys/class/hwmon/hwmon5" "$M"
+for n in 1 2; do echo 1 > "$M/pwm${n}_enable"; for i in 1 2 3 4 5 6; do echo 255 > "$M/pwm${n}_auto_point${i}_pwm"; done; done
+dmi "$R" "Micro-Star International Co., Ltd." "Claw 8 AI+ A2VM" "MS-1T91"
+sh "$FIX" status | grep -q '^installed=no$' && fail "two devices: status on the Claw sees its parked state"
+sh "$FIX" remove >/dev/null || fail "two devices: remove on the Claw"
+[ "$(cat "$M/pwm1_auto_point2_pwm")" = "$claw_orig" ] || fail "two devices: the Claw gets its own values back ($(cat "$M/pwm1_auto_point2_pwm") vs $claw_orig)"
+rm -rf "$R"
 echo "fan: all passed"

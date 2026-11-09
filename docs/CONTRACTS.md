@@ -19,7 +19,7 @@ How the parts of GameCove talk to each other. Change a contract only with a matc
 | `Updates` | `scripts/system/updates.gd` | `scripts/system/` | OS image, firmware (fwupd) and Flatpak updates |
 | `Storage` | `scripts/system/storage.gd` | `scripts/system/` | Drives, free space, game library folders, hot-plug while the page is open |
 | `Setup` | `scripts/system/setup.gd` | `scripts/system/` | First-run checklist, store sign-in, suggested device fixes |
-| `Controller` | `scripts/input/controller.gd` | `scripts/input/` | InputPlumber: paddles, gyro, rumble, per-game profiles (not named `Input`: that would hide Godot's `Input`) |
+| `Controller` | `scripts/input/controller.gd` | `scripts/input/` | InputPlumber or Handheld Daemon: paddles, gyro, rumble, RGB (hhd), per-game profiles (not named `Input`: that would hide Godot's `Input`) |
 
 The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these services; it never touches sysfs, D-Bus or store tools directly.
 
@@ -310,7 +310,7 @@ Grouped for an "About this device" panel. Cheap: reads files under `/sys`, `/pro
 
 ```
 {
-  "backend": "powerstation|steamos-manager|none",
+  "backend": "powerstation|steamos-manager|hhd|none",
   "tdp_w": 17.0, "tdp_min": 8.0, "tdp_max": 35.0,
   "profile": "balanced", "profiles": ["battery", "balanced", "performance"],
   "charge_limit": 80,             # percent, -1 if unknown
@@ -319,7 +319,7 @@ Grouped for an "About this device" panel. Cheap: reads files under `/sys`, `/pro
 }
 ```
 
-Setters (`set_tdp`, `set_profile`, `set_charge_limit`, `set_fan_mode`) return `true` only after reading the value back. `changed(state)` fires after any change. The UI hides any control whose `supported` flag is false.
+Setters (`set_tdp`, `set_profile`, `set_charge_limit`, `set_fan_mode`) return `true` only after reading the value back. `hhd`: Handheld Daemon's TDP plugin is on (`hhd.settings.tdp_enable`), so the TDP goes through its HTTP API (`scripts/input/hhd.gd`, driver path `tdp.asus.tdp_v2` / `tdp.lenovo.tdp` / `tdp.msi.tdp` switched to `custom`, or `tdp.qam.tdp`) and fan and charge limit are hhd's (`supported` false), so nothing fights it. Everything Power remembers in `user://power.cfg` is per device: sections `profile@<device id>`, `custom_w@<device id>`, `device@<device id>`; plain `[profile]` / `[custom_w]` / `[device]` (from older versions, or first-run setup) move to the device that reads them. `changed(state)` fires after any change. The UI hides any control whose `supported` flag is false.
 
 ## Auto TDP feed and "can't reach target" (`Power`)
 
@@ -388,7 +388,7 @@ Overlay: no gamescope atom. Like Steam and OpenGamepadUI, we rewrite the session
 {"goal": "battery|balanced|smooth", "fps_limit": 0, "upscaler": "auto|off|fsr|xess", "frame_gen": false, "low_latency": true}
 ```
 
-`Launcher.launch_env(game)` returns the environment variables to add for that game on this device.
+`Launcher.launch_env(game)` returns the environment variables to add for that game on this device. A game's settings are shared by every handheld the drive boots and resolve per device at launch: `auto` picks XeSS on Intel Xe with the XMX driver, FSR 4 on AMD where the Proton has it, else off; an explicit choice that can't work on this GPU (`xess` on AMD, anything on an unknown GPU) falls back for this launch with a note, and the saved choice stays (`LaunchEnv.choice_for_gpu`). Measured frame rates (`record_base_fps` / `base_fps`) are kept per device (`"measured": {device id: {game: fps}}`).
 
 Non-Steam games also have compatibility settings, stored in the same file under `"compat"`: `Launcher.compat_for(key)` → `{"proton": tool id ("" = umu default), "prefix": "", "extra_env": {}, "args": ""}`, `save_compat(key, dict)`, `compat_tools()`, `proton_path_for(id)`. The UI changes them through `Library.set_compat_tool` / `set_launch_options`. Steam games start through `steam://`, which takes no environment: for them the game page shows only goal and frame limit, plus a line pointing to Steam launch options. `Launcher.auto_tdp_for(key)` is true for goals `battery` and `balanced`. `Launcher.set_default_goal(goal)` / `default_goal()`: the goal for games without their own settings (`""` = the device default); the installer's Auto TDP choice sets `balanced` or `smooth`.
 
@@ -480,10 +480,11 @@ Stored in `user://setup.cfg` (`[steps]`, `[skipped]`, `[keys] steamgriddb`). The
 signal changed(state)
 signal applied(setting, ok)                   # paddle | gyro | rumble | profile | game_profile
 refresh()                                     # call when the controller page opens
-set_paddle(paddle, target)                    # paddle LeftPaddle1..3 / RightPaddle1..3; target a gamepad button, "Key…", or "" to reset
-set_gyro_mode(mode)                           # off | mouse | stick
-set_rumble(enabled) / test_rumble(strength := 0.6)
-set_led(color, brightness) -> false           # InputPlumber has no LED setter
+set_paddle(paddle, target)                    # InputPlumber: paddle LeftPaddle1..3 / RightPaddle1..3; target a gamepad button, "Key…", or "" to reset
+set_paddle_mode(mode)                         # hhd: paddles as a whole, one of state()["paddle_modes"] (steam_input | noob | touchpad | both | disabled)
+set_gyro_mode(mode)                           # one of state()["gyro_modes"]: InputPlumber off | mouse | stick; hhd off | on
+set_rumble(enabled) / test_rumble(strength := 0.6)   # test_rumble: InputPlumber only
+set_led(color, brightness) -> bool            # hhd: solid color, true when queued, then applied("led", ok); InputPlumber has no LED setter (false)
 load_profile_file(path)
 set_game_profile(key, on) / has_game_profile(key)
 start_game(key) / end_game()                  # main.gd from GameSession.started/ended (also set game focus on / off)
@@ -493,15 +494,27 @@ set_game_focused(on)                          # via SessionWiring (home_in_front
 release_intercept(done := Callable())          # before a session switch: stop intercepting, InterceptMode 0 on every composite device (worker), then done() on the main thread
 set_button_test(on)                           # controller page's button test: virtual pad straight to Godot (paddles show) when no game runs
 intercept_state() -> {"active", "listening", "mode", "game_focused", "activation": {"events", "target"}, "chords": {action: [modifier, button]}}
-state() -> {"available", "version", "devices": [{"path", "name", "profile_name", "profile_path", "capabilities",
+state() -> {"backend": "inputplumber" | "hhd" | "none",
+            "capabilities": {"guide_qam", "intercept", "paddles": "remap" | "mode" | "", "gyro", "rumble", "rgb", "per_game"},
+            "gyro_modes", "paddle_modes", "paddle_mode", "rgb": {"hue", "saturation", "brightness"} | null,
+            "available", "version", "devices": [{"path", "name", "profile_name", "profile_path", "capabilities",
             "output_capabilities", "paddles", "gyro", "rumble", "led", "gamepad"}], "active",
             "profile": {"name", "path", "paddles": {paddle: target or ""}, "gyro": off|mouse|stick|custom},
             "rumble": bool|null, "led", "game", "game_profile",
             "supported": {"profiles", "paddles", "gyro", "rumble", "led", "per_game"}}
 ```
 
-Profiles we write: `~/.config/inputplumber/profiles/gamecove/default.yaml` and `<store>_<id>.yaml`
-(JSON, InputPlumber profile schema v1).
+The UI shows a control only when `capabilities` says the backend can do it. Backend: InputPlumber
+when it has a gamepad composite device, else Handheld Daemon when its API answers
+(`http://127.0.0.1:5335/api/v1/state`, bearer token from `/tmp/hhd/token`, `/etc/hhd/.token` or
+`~/.config/hhd/token`), else none. With hhd there is no intercept: Guide reaches GameCove as the virtual
+pad's Guide button while our UI has focus (main.gd), and hhd's Steam shortcuts arrive as Ctrl+1 (home) and
+Ctrl+2 (quick menu); in a game hhd keeps its buttons.
+
+Profiles we write, per device (`<id>` = `Device.id()`): `~/.config/inputplumber/profiles/gamecove/<id>/default.yaml`
+and `<store>_<id>.yaml` (JSON, InputPlumber profile schema v1); with hhd, `<store>_<id>.hhd.json` (the
+controller section and LEDs of hhd's state, posted at game start, the old values posted back at the end).
+Files straight in `gamecove/` (older versions) move to the device that starts first.
 
 **Guide / Quick Access intercept** (`scripts/input/intercept.gd`, as OpenGamepadUI does it; why in
 [DEVICES.md](DEVICES.md#what-the-input-service-must-do)). Only inside GameCove's own gamescope session

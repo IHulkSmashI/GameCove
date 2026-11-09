@@ -58,6 +58,17 @@ static func proton_major(proton: Dictionary) -> int:
 	return int(proton.get("major", -1))
 
 
+## A per-game choice is shared by every handheld the drive boots, so one picked
+## on an Intel Claw can reach an AMD Ally. Choices that can't work on this GPU
+## fall back to "auto" for it (the saved choice stays): [choice, note or ""].
+static func choice_for_gpu(choice: String, gpu_family: String) -> Array:
+	if choice == "xess" and gpu_family in AMD:
+		return ["auto", "XeSS was picked on an Intel handheld; this AMD GPU uses Auto (FSR) instead. The game's own XeSS still works from its menu."]
+	if choice in ["xess", "fsr"] and gpu_family == "":
+		return ["off", "Unknown GPU: upscaler off."]
+	return [choice, ""]
+
+
 ## Turn the auto upscaler into a concrete one for this device.
 static func resolve_upscaler(choice: String, gpu_family: String, xmx_ready: bool, proton: Dictionary) -> String:
 	if choice != "auto":
@@ -86,7 +97,10 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 	var native := flavour == "native"
 	var xmx_ready: bool = family in INTEL and bool(device.get("xmx", false)) and bool(host.get("xess_xmx", false))
 	var anticheat: bool = game.get("anticheat", false)
-	var choice: String = settings.get("upscaler", "auto")
+	var picked := choice_for_gpu(str(settings.get("upscaler", "auto")), family)
+	var choice: String = picked[0]
+	if picked[1] != "":
+		notes.append(picked[1])
 	var upscaler := resolve_upscaler(choice, family, xmx_ready, proton)
 	var low_latency: bool = settings.get("low_latency", true)
 

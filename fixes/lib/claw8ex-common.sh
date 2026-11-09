@@ -47,7 +47,7 @@ lock() {
 		sleep 1
 	done
 	trap 'rmdir "$GC_LOCK" 2>/dev/null; [ -z "${GC_TMP:-}" ] || rm -rf "$GC_TMP"' EXIT
-	trap 'exit 1' INT TERM HUP
+	trap 'exit 1' INT TERM HUP PIPE
 }
 
 # ---- the change record -----------------------------------------------------------------------------------------

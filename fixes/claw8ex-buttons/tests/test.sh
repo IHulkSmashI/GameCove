@@ -22,6 +22,13 @@ ok '[ "$(snapshot)" = "$before" ]' "remove restores the fake root exactly"
 ok 'fix claw8ex-buttons status | grep -qx state=off' "status off"
 ok 'fix claw8ex-buttons remove | grep -q "not installed"' "second remove is a no-op"
 
+case_start override_is_device_matched
+fix claw8ex-buttons install >/dev/null 2>&1
+# InputPlumber only uses a device config whose matches fit the hardware; the override keeps the stock match.
+ok 'override | grep -A2 "^matches:" | grep -q "board_name: MS-1T91"' "override still matches only board MS-1T91"
+ok '[ "$(override | grep -c "dmi_data:")" = 1 ]' "one match block, unchanged"
+ok '! grep -rl "gamecove_claw8ex" "$R/etc/inputplumber/devices.d" | grep -v 50-msi_claw8_ex_ai_cg3em.yaml' "only the Claw's config points at the map"
+
 case_start other_board
 echo MS-1T52 >"$R/sys/class/dmi/id/board_name"
 before=$(snapshot)

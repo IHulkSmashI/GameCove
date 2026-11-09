@@ -4,6 +4,7 @@ extends Node
 ## Settings live in user:// as JSON. Nothing here writes outside user://.
 
 const LaunchEnv := preload("res://scripts/launch/launch_env.gd")
+const PerDevice := preload("res://scripts/device/per_device.gd")
 const Proton := preload("res://scripts/launch/proton.gd")
 
 const SETTINGS_PATH := "user://launch_settings.json"
@@ -25,6 +26,8 @@ var device_profile: Dictionary = {}
 var show_indicator := false
 
 var _games := {}
+## Frame rates measured per device: {device id: {game key: fps}} (a game runs
+## differently on a Claw and an Ally booting the same drive).
 var _measured := {}
 var _compat := {}
 ## Goal for games without their own settings ("" = the device default). Set by
@@ -197,13 +200,19 @@ func proton_path_for(tool_id: String) -> String:
 ## then base_fps() is -1 and frame generation is always offered.
 func record_base_fps(game_key: String, fps: int) -> void:
 	_load()
-	_measured[game_key] = clampi(fps, 0, 1000)
+	var mine: Dictionary = _measured.get(device_key(), {})
+	mine[game_key] = clampi(fps, 0, 1000)
+	_measured[device_key()] = mine
 	_write()
 
 
 func base_fps(game_key: String) -> int:
 	_load()
-	return int(_measured.get(game_key, -1))
+	return int((_measured.get(device_key(), {}) as Dictionary).get(game_key, -1))
+
+
+func device_key() -> String:
+	return PerDevice.key(str(profile().get("id", "unknown")))
 
 
 func frame_gen_available(game_key: String) -> bool:
@@ -312,7 +321,14 @@ func _load() -> void:
 		_games = games
 	var measured: Variant = parsed.get("measured", {})
 	if measured is Dictionary:
-		_measured = measured
+		for k in measured:
+			if measured[k] is Dictionary:
+				_measured[k] = measured[k]
+			elif measured[k] is float or measured[k] is int:
+				# saved before per-device frame rates: this device's
+				var mine: Dictionary = _measured.get(device_key(), {})
+				mine[k] = int(measured[k])
+				_measured[device_key()] = mine
 	var compat: Variant = parsed.get("compat", {})
 	if compat is Dictionary:
 		_compat = compat

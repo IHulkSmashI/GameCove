@@ -37,6 +37,10 @@ BIAS=gamecove-gyro-bias.service
 BIAS_STATE=/var/lib/ish-gyro-bias
 m_init "$NAME"
 
+# One drive may boot several handhelds: the services start only on this board (ExecCondition skips the
+# unit cleanly elsewhere, without a failure or a restart loop).
+board_condition() { printf 'ExecCondition=/usr/bin/grep -qx %s /sys/class/dmi/id/board_name\n' "$BOARD_WANTED"; }
+
 keepalive_unit() {
 	cat <<EOF
 [Unit]
@@ -44,6 +48,7 @@ Description=GameCove: MSI Claw 8 EX ISH IMU keep-alive (gyro power and report ra
 After=systemd-udev-settle.service
 
 [Service]
+$(board_condition)
 ExecStart=/usr/bin/python3 $HELPER_DIR/ish_imu_keepalive.py
 Restart=always
 RestartSec=3
@@ -61,6 +66,7 @@ After=$KEEPALIVE
 Wants=$KEEPALIVE
 
 [Service]
+$(board_condition)
 ExecStart=/usr/bin/python3 $HELPER_DIR/ish_gyro_bias.py
 Restart=always
 RestartSec=3
@@ -129,6 +135,25 @@ fetch_firmware() {
 	fi
 }
 
+# Installs from before the board check have units without ExecCondition: write the current ones.
+refresh_units() {
+	m_installed || return 0
+	if grep -q "^ExecCondition=" "$ROOT$UNIT_DIR/$KEEPALIVE" 2>/dev/null && grep -q "^ExecCondition=" "$ROOT$UNIT_DIR/$BIAS" 2>/dev/null; then
+		return 0
+	fi
+	t=$(mktemp -d)
+	keepalive_unit >"$t/$KEEPALIVE"
+	bias_unit >"$t/$BIAS"
+	ok=0
+	m_put "$t/$KEEPALIVE" "$UNIT_DIR/$KEEPALIVE" 644 && m_put "$t/$BIAS" "$UNIT_DIR/$BIAS" 644 || ok=1
+	rm -rf "$t"
+	systemctl daemon-reload >/dev/null 2>&1 || true
+	[ "$ok" = 0 ] && say "services now start only on board $BOARD_WANTED" >&2
+	return "$ok"
+}
+
+is_root() { [ -n "$ROOT" ] || [ "$(id -u)" -eq 0 ]; }
+
 fail() {
 	warn "$1; undoing what was done"
 	m_undo || warn "some changes could not be undone; run remove"
@@ -140,6 +165,7 @@ install() {
 	require_board
 	lock
 	if m_installed; then
+		refresh_units || die "could not update the services"
 		say "already installed"
 		return 0
 	fi
@@ -216,6 +242,10 @@ set_value() {
 }
 
 status() {
+	if m_installed && is_root; then
+		lock
+		refresh_units || true
+	fi
 	if [ "$(board_name)" != "$BOARD_WANTED" ] || ! has_ish; then
 		say "applies=no"
 		say "state=n/a"

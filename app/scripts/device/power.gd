@@ -3,6 +3,12 @@ extends Node
 ## that already exist instead of a daemon of our own:
 ##   steamos-manager  (user bus)   com.steampowered.SteamOSManager1
 ##   PowerStation     (system bus) org.shadowblip.PowerStation
+##   Handheld Daemon  (HTTP, 127.0.0.1:5335, scripts/input/hhd.gd) when its TDP
+##                    plugin (adjustor) manages TDP ("hhd.settings.tdp_enable"):
+##                    then hhd owns TDP, fan curves and charge limit, and writing
+##                    them through PowerStation, steamos-manager or our fixes would
+##                    fight it (it re-applies its own values). So the TDP goes
+##                    through hhd's API, and fan / charge limit are left to hhd.
 ## and, for fan curves and charge limits neither offers, to the root actions in
 ## fixes/ through `pkexec /usr/libexec/gamecove/gamecove-fix-set <name> set <value>`
 ## (the entry point polkit allows without a password; see docs/CONTRACTS.md).
@@ -37,6 +43,11 @@ const Runner := preload("res://scripts/device/command_runner.gd")
 const Busctl := preload("res://scripts/device/busctl.gd")
 const AutotuneScript := preload("res://scripts/device/autotune.gd")
 const DeviceScript := preload("res://scripts/device/device.gd")
+const Hhd := preload("res://scripts/input/hhd.gd")
+const HhdHttp := preload("res://scripts/input/hhd_http.gd")
+const PerDevice := preload("res://scripts/device/per_device.gd")
+## power.cfg sections kept per device ("<name>@<device id>", see per_device.gd).
+const DEVICE_SECTIONS: Array[String] = ["profile", "custom_w", "device"]
 
 # PowerStation (GPL-3.0): src/constants.rs, src/performance/gpu/dbus/{gpu,tdp}.rs
 const PS_SERVICE := "org.shadowblip.PowerStation"
@@ -90,6 +101,9 @@ var config_path := CONFIG_PATH
 var fix_helper := FIX_HELPER
 var fix_set_helper := FIX_SET_HELPER
 var autotune: RefCounted = AutotuneScript.new()
+## Handheld Daemon client; setup() swaps its transport in tests.
+var hhd: RefCounted = Hhd.new()
+var _hhd_tdp := {}      # Hhd.tdp_info() while backend == "hhd"
 
 var backend := "none"
 var plugged := false
@@ -123,7 +137,7 @@ var _quit := false
 
 func _ready() -> void:
 	var dev := get_node_or_null("/root/Device")
-	setup(Runner.new(), dev.profile if dev else {}, "")
+	setup(Runner.new(), dev.profile if dev else {}, "", HhdHttp.new())
 	_thread = Thread.new()
 	_thread.start(_worker)
 	# detection runs several busctl calls; restore may run a root action
@@ -276,22 +290,34 @@ func _emit_changed() -> void:
 
 
 ## Tests call this instead of _ready.
-func setup(command_runner: RefCounted, device_row: Dictionary, root: String) -> void:
+func setup(command_runner: RefCounted, device_row: Dictionary, root: String, hhd_transport: RefCounted = null) -> void:
 	runner = command_runner
 	device = device_row
 	sys_root = root
+	hhd = Hhd.new()
+	hhd.root = root
+	hhd.home = root + "/home" if root != "" else OS.get_environment("HOME")
+	# tests get no daemon unless they pass one; _ready passes the real HTTP transport
+	hhd.transport = hhd_transport if hhd_transport != null else _NoHhd.new()
 	system_bus = Busctl.new(runner, "--system")
 	user_bus = Busctl.new(runner, "--user")
 
 
 # ---- detection ----------------------------------------------------------------
 
-## Pick the backend for TDP, then for charge limit and fan. Order: the device
-## row's "tdp_backends" (default steamos-manager, then PowerStation).
+class _NoHhd extends RefCounted:
+	func request(_m: String, _p: String, _h: PackedStringArray, _b := "") -> Dictionary:
+		return {"code": 0, "body": ""}
+
+
+## Pick the backend for TDP, then for charge limit and fan. Handheld Daemon first
+## when it manages TDP (anything else would fight it), then the device row's
+## "tdp_backends" (default steamos-manager, then PowerStation).
 func detect() -> String:
 	backend = "none"
 	_ps_card = ""
 	_svc_range = {}
+	_hhd_tdp = {}
 	plugged = DeviceScript.ac_online(sys_root)
 	var t: Dictionary = device.get("tdp", {})
 	_range = {
@@ -300,6 +326,9 @@ func detect() -> String:
 		"plugged_max": float(t.get("plugged_max", t.get("battery_max", -1))),
 	}
 	var order: Array = device.get("tdp_backends", ["steamos-manager", "powerstation"])
+	if _detect_hhd():
+		backend = "hhd"
+		order = []
 	for b in order:
 		if b == "steamos-manager" and _detect_steamos_manager():
 			backend = b
@@ -314,9 +343,28 @@ func detect() -> String:
 		device = device.duplicate()
 		device["tdp"] = {"min": _range["min"], "battery_max": _range["battery_max"], "plugged_max": _range["plugged_max"]}
 	_profile = _profile_for(_tdp_w) if backend != "none" else ""
+	if backend == "hhd":
+		_charge_via = ""   # hhd keeps its own charge limit and fan curve
+		_charge = -1
+		_fan_via = ""
+		_fan_mode = ""
+		return backend
 	_detect_charge()
 	_detect_fan()
 	return backend
+
+
+## True when hhd answers and its TDP plugin is on.
+func _detect_hhd() -> bool:
+	var st: Variant = hhd.get_state()
+	if st == null:
+		return false
+	var info := Hhd.tdp_info(st)
+	if info.is_empty() or not info["enabled"]:
+		return false
+	_hhd_tdp = info
+	_tdp_w = float(info["value"])
+	return true
 
 
 ## The profile whose watts equal `watts` here, else "custom".
@@ -638,18 +686,31 @@ func _source() -> String:
 	return "plugged" if plugged else "battery"
 
 
-func _remember(section: String, key: String, value: Variant) -> void:
+## The device id power.cfg keys this handheld's values by.
+func device_key() -> String:
+	return PerDevice.key(str(device.get("id", "unknown")))
+
+
+## Everything here is per device: one drive can boot a Claw and a ROG Ally, and
+## 30 W or a quiet fan curve picked on one must never be applied to the other.
+## Values saved before (plain [profile]/[custom_w]/[device]) move to this device.
+func _load_cfg() -> ConfigFile:
 	var cfg := ConfigFile.new()
-	cfg.load(config_path)
-	cfg.set_value(section, key, value)
+	if cfg.load(config_path) != OK:
+		return cfg
+	if PerDevice.migrate_cfg(cfg, DEVICE_SECTIONS, device_key()):
+		cfg.save(config_path)
+	return cfg
+
+
+func _remember(section: String, key: String, value: Variant) -> void:
+	var cfg := _load_cfg()
+	cfg.set_value(PerDevice.section(section, device_key()), key, value)
 	cfg.save(config_path)
 
 
 func _recall(section: String, key: String, fallback: Variant) -> Variant:
-	var cfg := ConfigFile.new()
-	if cfg.load(config_path) != OK:
-		return fallback
-	return cfg.get_value(section, key, fallback)
+	return _load_cfg().get_value(PerDevice.section(section, device_key()), key, fallback)
 
 
 # ---- TDP ----------------------------------------------------------------------
@@ -661,6 +722,12 @@ func read_tdp() -> float:
 		v = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_TDP_IFACE, "TdpLimit")
 	elif backend == "powerstation":
 		v = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "TDP")
+	elif backend == "hhd":
+		var info := Hhd.tdp_info(hhd.get_state())
+		if info.is_empty() or float(info["value"]) < 0.0:
+			return -1.0
+		_hhd_tdp = info
+		return float(info["value"])
 	return float(v) if v != null else -1.0
 
 
@@ -678,6 +745,13 @@ func write_tdp(watts: float) -> bool:
 			if device.has("pl2_offset_w"):
 				system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % float(device["pl2_offset_w"]))
 			ok = absf(read_tdp() - watts) < 0.5
+	elif backend == "hhd" and not _hhd_tdp.is_empty():
+		var w := int(roundf(watts))
+		var after: Variant = hhd.set_state(Hhd.tdp_patch(_hhd_tdp, w))
+		var info := Hhd.tdp_info(after)
+		ok = not info.is_empty() and absf(float(info["value"]) - w) < 0.5
+		if ok:
+			_hhd_tdp = info
 	if ok:
 		_tdp_w = watts
 	return ok

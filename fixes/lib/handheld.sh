@@ -80,3 +80,58 @@ fix_unlock() {
 	[ -z "${FIX_LOCK:-}" ] || rmdir "$FIX_LOCK" 2>/dev/null || true
 	FIX_LOCK=""
 }
+
+# ---- per-device saved state ------------------------------------------------------------------------------
+# One drive can boot several handhelds. A fix's saved originals (fan tables, charge limit) belong to the
+# handheld they were read on, so <dir>/device names that handheld; another handheld's files are parked in
+# <dir>/devices/<id>/ and come back when that handheld runs the fix again. Without this, `remove` on a ROG
+# Ally would write back values read on a Claw.
+STATE_FILES="original limit"
+
+# Root (or a test root): only then is /var/lib/gamecove writable.
+can_write_state() { [ -n "$ROOT" ] || [ "$(id -u)" -eq 0 ]; }
+
+state_owner() { cat "$1/device" 2>/dev/null || true; }
+
+# state_mine <dir>: 0 when what <dir> holds (if anything) is this handheld's. Read-only (for status).
+state_mine() {
+	_o="$(state_owner "$1")"
+	[ -z "$_o" ] || [ "$_o" = "$(handheld_id)" ]
+}
+
+# state_file <dir> <name>: where this handheld's <name> is now (parked while another handheld owns <dir>).
+state_file() {
+	if state_mine "$1"; then printf '%s/%s\n' "$1" "$2"; else printf '%s/devices/%s/%s\n' "$1" "$(handheld_id)" "$2"; fi
+}
+
+# state_switch <dir> [legacy-check]: make <dir> hold this handheld's state (root only; install/set/remove).
+# State saved before this existed has no owner: it is taken as this handheld's when <legacy-check> (a
+# command) succeeds or none is given, else parked as "unknown".
+state_switch() {
+	_d="$1"
+	_cur="$(handheld_id)" || return 0
+	_o="$(state_owner "$_d")"
+	[ "$_o" = "$_cur" ] && return 0
+	if [ -z "$_o" ] && [ -f "$_d/original" ]; then
+		if [ -z "${2:-}" ] || "$2"; then
+			printf '%s\n' "$_cur" > "$_d/device"
+			return 0
+		fi
+		_o=unknown
+	fi
+	if [ -n "$_o" ]; then
+		mkdir -p "$_d/devices/$_o"
+		for _f in $STATE_FILES; do
+			if [ -f "$_d/$_f" ]; then mv -f "$_d/$_f" "$_d/devices/$_o/$_f"; fi
+		done
+	fi
+	if [ -d "$_d/devices/$_cur" ]; then
+		for _f in $STATE_FILES; do
+			if [ -f "$_d/devices/$_cur/$_f" ]; then mv -f "$_d/devices/$_cur/$_f" "$_d/$_f"; fi
+		done
+		rmdir "$_d/devices/$_cur" 2>/dev/null || true
+		rmdir "$_d/devices" 2>/dev/null || true
+	fi
+	mkdir -p "$_d"
+	printf '%s\n' "$_cur" > "$_d/device"
+}

@@ -218,13 +218,15 @@ do_set() {
 }
 
 do_status() {
+	# another handheld's saved state (same drive) is not this one's
+	ORIG="$(state_file "$STATE" original)"
 	if [ -z "$HW" ]; then
 		printf 'applies=no\nstate=n/a\n'
 		return 0
 	fi
 	echo "applies=yes"
 	printf 'driver=%s\nmodes=%s\n' "$DRIVER" "$(echo "$MODES" | tr ' ' ',')"
-	if [ -f "$STATE/original" ]; then echo "installed=yes"; else echo "installed=no"; fi
+	if [ -f "$ORIG" ]; then echo "installed=yes"; else echo "installed=no"; fi
 	for n in $(fans); do
 		printf 'pwm%s_enable=%s\n' "$n" "$(read_value "$HW/pwm${n}_enable")"
 		if [ "$KIND" = table ]; then
@@ -237,7 +239,7 @@ do_status() {
 			printf 'pwm%s=%s\n' "$n" "$(read_value "$HW/pwm$n")"
 		fi
 	done
-	if [ -f "$STATE/original" ]; then echo "state=on"; else echo "state=off"; fi
+	if [ -f "$ORIG" ]; then echo "state=on"; else echo "state=off"; fi
 }
 
 do_remove() {
@@ -264,6 +266,12 @@ do_remove() {
 	echo "restored"
 }
 
+# Saved state from before per-device state: this handheld's if it was read from the same fan driver.
+fan_legacy_ok() { grep -qx "driver=$DRIVER" "$STATE/original" 2>/dev/null; }
+
+case "${1:-}" in
+	install | set | remove) ! can_write_state || state_switch "$STATE" fan_legacy_ok ;;
+esac
 case "${1:-}" in
 	install) fix_lock fan; do_install; echo "installed=yes" ;;
 	set) do_set "${2:-}" ;;
