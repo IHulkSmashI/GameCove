@@ -732,6 +732,9 @@ func check_power_source() -> void:
 	_emit_changed()
 
 
+## Capacity only: Decky Battery Tracker (safijari/steam-deck-battery-tracker main.py) also reads
+## voltage_now * current_now, but current_now isn't credible on the Claw 8 EX (ClawDeck
+## docs/HARDWARE-FINDINGS.md §6: -65 A at idle), and battery saver needs only the level.
 func _report_battery(on_ac: bool) -> void:
 	var pct := -1
 	var dir := DirAccess.open(sys_root + "/sys/class/power_supply")
