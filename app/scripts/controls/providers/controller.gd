@@ -128,21 +128,29 @@ func _make(spec: Dictionary, detect: Callable, read: Callable, write: Callable) 
 
 ## Controls probe (hwtest/controls_cli.gd): what to put back byte for byte afterwards.
 ## InputPlumber's live profile text; {} where hhd or nothing drives the controller.
+## Also the live target list: another tool may have set it with SetTargetDevices
+## (OpenGamepadUI's deck-uhid on the Claw), which the profile text doesn't carry.
 func probe_snapshot() -> Dictionary:
 	if be.controller_backend() != "inputplumber":
 		return {}
 	be.invalidate()
 	var y := be.ip_profile_yaml()
-	return {"ip_yaml": y} if y != "" else {}
+	var out := {"ip_targets": be.ip_live_targets().duplicate()}
+	if y != "":
+		out["ip_yaml"] = y
+	return out
 
 
 func probe_restore(snap: Dictionary) -> bool:
-	if not snap.has("ip_yaml"):
-		return true
+	var ok := true
 	be.invalidate()
-	if be.ip_profile_yaml() == str(snap["ip_yaml"]):
-		return true
-	return be.ip_load_yaml(str(snap["ip_yaml"]))
+	if snap.has("ip_yaml") and be.ip_profile_yaml() != str(snap["ip_yaml"]):
+		ok = be.ip_load_yaml(str(snap["ip_yaml"]))
+	be.invalidate()
+	var want: Array = snap.get("ip_targets", [])
+	if not want.is_empty() and be.ip_live_targets() != want:
+		ok = be.ip_set_targets(want) and ok
+	return ok
 
 
 static func _opts(values: Array, labels: Dictionary) -> Array:
@@ -400,6 +408,10 @@ static func emulation_choice(targets: Array, conf: Array) -> String:
 	if targets.is_empty() or (not conf.is_empty() and targets == conf):
 		return "default"
 	var g := IpEdit.gamepad_target({"target_devices": targets})
+	# the config's own gamepad is "default" whatever extra virtual devices InputPlumber runs
+	# (the Ally read back "xbox-elite" after "default")
+	if not conf.is_empty() and g != "" and g == IpEdit.gamepad_target({"target_devices": conf}):
+		return "default"
 	if g == "":
 		return "default" if conf.is_empty() else "none"
 	return EMULATION_ALIASES.get(g, g)

@@ -244,8 +244,25 @@ func test_claw_live_emulation_reads_and_restores_the_live_targets() -> void:
 			var p: Variant = JSON.parse_string(cmd.get_slice(" LoadProfileFromYaml s ", 1))
 			if p is Dictionary and p.get("target_devices") is Array:
 				live["targets"] = (p["target_devices"] as Array).duplicate()
+		if cmd.contains(" SetTargetDevices as "):
+			var parts := cmd.get_slice(" SetTargetDevices as ", 1).split(" ")
+			live["targets"] = Array(parts.slice(1))
+			return {"code": 0, "out": ""}
 		return r
 	var reg := _setup(f, _row("msi-claw-8-ex"))
+	# round 2: the probe's put-back must leave OpenGamepadUI's exact targets
+	var prov: Object = _c(reg, "controller.emulation").get_meta("provider")
+	var snap: Dictionary = prov.probe_snapshot()
+	ok(_w(reg, "controller.emulation", "default"), "probe: default")
+	eq(_value(reg, "controller.emulation"), "default")
+	ok(prov.probe_restore(snap), "probe restore")
+	eq(live["targets"], ["deck-uhid", "mouse", "keyboard"], "the exact list again, by SetTargetDevices")
+	# extra virtual devices next to the config's gamepad still read as default (the Ally)
+	live["targets"] = ["xbox-elite", "mouse", "keyboard", "touchscreen"]
+	prov.be.invalidate()
+	eq(_value(reg, "controller.emulation"), "default", "config's gamepad = default")
+	live["targets"] = ["deck-uhid", "mouse", "keyboard"]
+	prov.be.invalidate()
 	eq(_value(reg, "controller.emulation"), "deck", "deck-uhid is the Steam Deck choice, not default")
 	ok(_w(reg, "controller.emulation", "xbox-series"), "probe: Xbox Series")
 	eq(live["targets"], ["xbox-series", "mouse", "keyboard"])
