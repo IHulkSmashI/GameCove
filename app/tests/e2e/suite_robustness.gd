@@ -110,6 +110,8 @@ func test_charger_flapping() -> void:
 	await w.idle()
 	await w.idle()
 	var tdp := float(ctl("power.tdp").value)
+	if OS.get_environment("E2E_DEBUG") != "":
+		print("  FLAP saver=", ctl("power.battery_saver").value, " profile=", ctl("power.profile").value, " autotune=", power().autotune_active(), " layer=", profiles().layer("", ""), " ac=", profiles().layer("", "ac"))
 	ok(tdp <= (ac_max if on else bat_max) + 0.01, "after flapping (plugged %s) the TDP %s is within the source's limit" % [on, tdp])
 	eq(tdp, ac_max if on else bat_max, "and it is the saved value clamped to that source")
 	if OS.get_environment("E2E_DEBUG") != "" and tdp != (ac_max if on else bat_max):
