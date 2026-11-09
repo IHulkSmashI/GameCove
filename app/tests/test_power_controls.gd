@@ -446,6 +446,40 @@ func test_ally_live_without_the_helper() -> void:
 	_free()
 
 
+## Battery saver off puts back the exact profile, watts and firmware limits (the Ally's
+## PPTs stayed at 10/15/15 W after a probe).
+func test_ally_battery_saver_puts_custom_watts_and_ppts_back() -> void:
+	var e := _setup(_ally_live(true), true)
+	var reg: Node = e["reg"]
+	var c: Dictionary = e["c"]
+	var a := "/sys/class/firmware-attributes/asus-armoury/attributes/"
+	var spl := FileAccess.open(e["root"] + a + "ppt_pl1_spl/current_value", FileAccess.WRITE)
+	spl.store_string("30\n")
+	spl.close()
+	for f in ["ppt_pl2_sppt", "ppt_pl3_fppt"]:
+		var mx := FileAccess.open(e["root"] + a + f + "/max_value", FileAccess.WRITE)
+		mx.store_string("35\n")
+		mx.close()
+	reg.set_value("power.tdp", 30)
+	reg.detect_all()
+	reg.set_value("power.sppt", 30)
+	reg.set_value("power.fppt", 30)
+	eq(e["power"].state()["profile"], "custom", "30 W on the charger is custom")
+	eq([_read(e["root"], a + "ppt_pl2_sppt/current_value"), _read(e["root"], a + "ppt_pl3_fppt/current_value")], ["30", "30"])
+	reg.set_value("power.battery_saver", true)
+	eq(e["power"].state()["profile"], "battery")
+	# the firmware lowers the boost limits with the SPL (what the Ally did)
+	for f in ["ppt_pl2_sppt", "ppt_pl3_fppt"]:
+		var w := FileAccess.open(e["root"] + a + f + "/current_value", FileAccess.WRITE)
+		w.store_string("15\n")
+		w.close()
+	reg.set_value("power.battery_saver", false)
+	eq(e["power"].state()["tdp_w"], 30.0, "30 W back")
+	eq(e["power"].state()["profile"], "custom", "custom back")
+	eq([_read(e["root"], a + "ppt_pl2_sppt/current_value"), _read(e["root"], a + "ppt_pl3_fppt/current_value")], ["30", "30"], "PPTs back")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)

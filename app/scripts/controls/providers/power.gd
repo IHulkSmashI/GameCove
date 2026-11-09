@@ -665,13 +665,22 @@ func _battery_saver() -> RefCounted:
 						_saver_prev[id] = other.value
 				if _saver_prev.has("power.profile") and str(_saver_prev["power.profile"]) == "custom":
 					_saver_prev.erase("power.profile")
-					var tdp: RefCounted = _ctl("power.tdp")
-					if tdp != null and tdp.value != null:
-						_saver_prev["power.tdp"] = tdp.value
+				# the exact watts and the firmware limits that follow them (the Ally's
+				# SPPT/FPPT went 30/30 -> 15/15 under the battery profile and stayed)
+				for id in ["power.tdp", "power.boost", "power.sppt", "power.fppt"]:
+					var other: RefCounted = _ctl(id)
+					if other != null and other.available:
+						other.detect()
+						var now: Variant = other.read()
+						if now != null:
+							_saver_prev[id] = now
 				registry.apply(want)
 			else:
 				_saver_auto = false
-				registry.apply(_saver_prev)
+				# forced: the controls' cached values may still show what was there before the
+				# saver (the TDP control never re-read after the profile wrote 12 W), and a
+				# plain apply would skip them as "unchanged"
+				registry.apply(_saver_prev, true)
 				_saver_prev = {}
 			return true)
 
