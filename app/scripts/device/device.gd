@@ -450,12 +450,23 @@ static func cpu_entry(cpus: Array, model: String) -> Dictionary:
 	return {}
 
 
+## "intel" / "amd" from the CPU's model name (/proc/cpuinfo), else the GPU's vendor, else "".
+static func vendor_from(model: String, gpu_dev: Dictionary) -> String:
+	var m := model.to_lower()
+	if "intel" in m:
+		return "intel"
+	if "amd" in m:
+		return "amd"
+	var g := str(gpu_dev.get("vendor", ""))
+	return g if g in ["intel", "amd"] else ""
+
+
 ## A row for hardware no specific row knows. Ranges are conservative.
 static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cpus: Array) -> Dictionary:
 	var c := cpu_entry(cpus, model)
 	var vendor := str(c.get("cpu_vendor", ""))
 	if vendor == "":
-		vendor = "intel" if "intel" in model.to_lower() else ("amd" if "amd" in model.to_lower() else str(gpu_dev.get("vendor", "")))
+		vendor = vendor_from(model, gpu_dev)
 	var family := str(c.get("gpu_family", ""))
 	var arch := str(c.get("gpu_arch", "unknown"))
 	if family == "" and str(gpu_dev.get("driver", "")) == "xe":
@@ -499,6 +510,12 @@ static func resolve(doc: Dictionary, dmi: Dictionary, model: String, gpu_dev: Di
 		return fallback_row(dmi, model, gpu_dev, cpus)
 	var c := cpu_entry(cpus, model)
 	var open_chip := str(row.get("chip", "")) == "Unknown" or bool(row.get("chip_from_cpu", false))
+	if c.is_empty() and open_chip and str(row.get("cpu_vendor", "")) == "":
+		# a family row (review S5-2: unlisted Claws are Intel and AMD) with a CPU we don't list: the
+		# vendor from the CPU itself, so Intel-only behaviour (thermald hold, ...) follows the hardware
+		row = row.duplicate(true)
+		row["cpu_vendor"] = vendor_from(model, gpu_dev)
+		return row
 	if c.is_empty() or not open_chip:
 		return row
 	row = row.duplicate(true)

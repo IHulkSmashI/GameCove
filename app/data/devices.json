@@ -791,7 +791,7 @@
         "board_name": ["MS-1T*"]
       },
       "chip": "Unknown",
-      "cpu_vendor": "amd",
+      "cpu_vendor": "",
       "gpu": "Unknown",
       "gpu_family": "",
       "gpu_arch": "unknown",
