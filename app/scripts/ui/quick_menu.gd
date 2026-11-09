@@ -611,8 +611,16 @@ func _on_goal_changed(goal: String) -> void:
 ## Push the new frame rate cap live only while a game is on screen; on the home
 ## screen it would stick to GameCove itself. (Launcher applies it at launch.)
 func _on_game_settings_saved(settings: Dictionary) -> void:
-	if _game_running():
-		gamescope.set_fps_limit(int(settings.get("fps_limit", 0)))
+	var fps := int(settings.get("fps_limit", 0))
+	if not gamescope.is_running():
+		return
+	if gamescope.has_method("focused_app_async") and gamescope.has_method("set_fps_limit_async"):
+		# Both xprop calls run on Gamescope's worker; nothing waits here.
+		gamescope.focused_app_async(func(app: int) -> void:
+			if app > 0 and app != HOME_APP_ID:
+				gamescope.set_fps_limit_async(fps))
+	elif _game_running():
+		gamescope.set_fps_limit(fps)
 
 
 ## gamescope's own home app id (Gamescope.MAIN_APP_ID).
@@ -748,13 +756,25 @@ func _build_screen() -> void:
 	if not rates.is_empty():
 		var r: VBoxContainer = ChoiceRow.new()
 		r.setup("refresh", Texts.TITLES["refresh"], rates, rates.map(func(x): return "%d Hz" % x), rates[-1])
-		r.changed.connect(func(v): _apply(gamescope.set_refresh_rate(v), r, "refresh"))
+		r.changed.connect(func(v): _set_screen("refresh", v, r))
 		_add_row(r)
 	var fps: Array = Texts.FPS_LIMITS
 	var f: VBoxContainer = ChoiceRow.new()
 	f.setup("screen_fps", Texts.TITLES["screen_fps"], fps, fps.map(func(x): return Texts.fps_label(x)), 0)
-	f.changed.connect(func(v): _apply(gamescope.set_fps_limit(v), f, "screen_fps"))
+	f.changed.connect(func(v): _set_screen("screen_fps", v, f))
 	_add_row(f)
+
+
+## Refresh rate / frame cap through gamescope. The async calls run xprop on
+## Gamescope's worker and report back; plain fakes answer right away.
+func _set_screen(setting: String, v: int, row: Control) -> void:
+	var name := "set_refresh_rate" if setting == "refresh" else "set_fps_limit"
+	if gamescope.has_method(name + "_async"):
+		gamescope.call(name + "_async", v, func(ok: bool) -> void:
+			if is_instance_valid(row):
+				_apply(ok, row, setting))
+	else:
+		_apply(bool(gamescope.call(name, v)), row, setting)
 
 
 func _build_controller() -> void:

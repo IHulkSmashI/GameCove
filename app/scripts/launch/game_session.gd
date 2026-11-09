@@ -9,9 +9,13 @@ extends Node
 ## id gone from the focusable list and our process gone, twice in a row. On the
 ## end: home in front, frame limit cleared, Auto TDP stopped.
 ##
-## Nothing waits: each tick is one short xprop read. Timers only run while a game
-## does. Services are passed in (the autoloads, or fakes in tests); tests call
-## poll_focus() / poll_exit() directly instead of running timers.
+## Nothing waits: each tick asks Gamescope for one xprop read on its worker
+## thread (focusable_apps_async) and handles the answer when it comes back; a
+## tick is skipped while the previous read is still out. Focus and frame-limit
+## writes go the same way. Timers only run while a game does. Services are
+## passed in (the autoloads, or fakes in tests); tests call poll_focus() /
+## poll_exit() directly instead of running timers. A Gamescope without the
+## async calls (simple fakes) is used synchronously.
 
 signal started(game: Dictionary)
 signal ended(game: Dictionary)
@@ -42,6 +46,8 @@ var _seen := false
 var _gone := 0
 var _focus_timer: Timer
 var _exit_timer: Timer
+var _reading := false   # a focusable-apps read is out
+var _gen := 0           # bumps per session so a late answer can't touch the next one
 
 
 func setup(gamescope_svc: Object, power_svc: Object, launcher_svc: Object) -> void:
@@ -55,7 +61,7 @@ func _ready() -> void:
 	_exit_timer = _make_timer(EXIT_CHECK_S, poll_exit)
 	# A frame limit left over from a crash or an earlier session shouldn't cap home.
 	if gamescope != null and gamescope.is_running():
-		gamescope.set_fps_limit(0)
+		_fps_limit(0)
 
 
 func is_active() -> bool:
@@ -75,13 +81,15 @@ func begin(g: Dictionary, launched: Dictionary) -> void:
 		return   # nothing we can follow (e.g. shell_open with no app id)
 	phase = "waiting"
 	focused = false
+	_gen += 1
+	_reading = false
 	_waited = 0.0
 	_seen = false
 	_gone = 0
 	var key := str(g.get("key", ""))
 	var s: Dictionary = launcher.settings_for(key) if launcher != null else {}
 	if gamescope != null and gamescope.is_running():
-		gamescope.set_fps_limit(int(s.get("fps_limit", 0)))
+		_fps_limit(int(s.get("fps_limit", 0)))
 	if power != null and launcher != null and launcher.auto_tdp_for(key):
 		autotune_on = true
 		_power_autotune(true)
@@ -97,9 +105,15 @@ func poll_focus() -> void:
 	if phase != "waiting":
 		_stop(_focus_timer)
 		return
-	if app_id in _focusable():
+	_read_focusable(_on_focus_read)
+
+
+func _on_focus_read(apps: Array) -> void:
+	if phase != "waiting":
+		return
+	if app_id in apps:
 		_seen = true
-		focused = gamescope.focus_app(app_id)
+		_focus_game()
 		_enter_running()
 		return
 	_waited += FOCUS_POLL_S
@@ -119,7 +133,13 @@ func poll_exit() -> void:
 	if phase != "running":
 		_stop(_exit_timer)
 		return
-	var listed := app_id > 0 and app_id in _focusable()
+	_read_focusable(_on_exit_read)
+
+
+func _on_exit_read(apps: Array) -> void:
+	if phase != "running":
+		return
+	var listed := app_id > 0 and app_id in apps
 	if listed:
 		_seen = true
 	var alive: bool = listed or (pid > 0 and bool(pid_running.call(pid)))
@@ -142,17 +162,19 @@ func stop() -> void:
 func bring_home() -> bool:
 	if not is_active() or gamescope == null or not gamescope.is_running():
 		return false
-	gamescope.focus_home()
+	_focus_home()
 	focused = false
 	return true
 
 
 ## Gives the screen back to the running game. False when it isn't known to
-## gamescope yet (still launching) or nothing runs.
+## gamescope yet (still launching) or nothing runs. The switch itself happens
+## on Gamescope's worker; `focused` turns false if xprop fails.
 func return_to_game() -> bool:
 	if phase != "running" or app_id <= 0 or gamescope == null or not gamescope.is_running():
 		return false
-	focused = gamescope.focus_app(app_id)
+	focused = true
+	_focus_game()
 	return focused
 
 
@@ -172,13 +194,15 @@ func _finish(go_home: bool) -> void:
 	_stop(_focus_timer)
 	_stop(_exit_timer)
 	phase = "idle"
+	_gen += 1
+	_reading = false
 	if autotune_on and power != null:
 		_power_autotune(false)
 	autotune_on = false
 	if gamescope != null and gamescope.is_running():
-		gamescope.set_fps_limit(0)
+		_fps_limit(0)
 		if go_home:
-			gamescope.focus_home()
+			_focus_home()
 	game = {}
 	app_id = 0
 	pid = 0
@@ -186,10 +210,49 @@ func _finish(go_home: bool) -> void:
 	ended.emit(g)
 
 
-func _focusable() -> Array:
+## One read of gamescope's focusable app list; `cb(apps)` on the main thread.
+## Skipped while the last read is still out.
+func _read_focusable(cb: Callable) -> void:
 	if gamescope == null or not gamescope.is_running():
-		return []
-	return gamescope.focusable_apps()
+		cb.call([])
+		return
+	if not gamescope.has_method("focusable_apps_async"):
+		cb.call(gamescope.focusable_apps())
+		return
+	if _reading:
+		return
+	_reading = true
+	var gen := _gen
+	gamescope.focusable_apps_async(func(apps: Array) -> void:
+		if gen != _gen:
+			return
+		_reading = false
+		cb.call(apps))
+
+
+func _focus_game() -> void:
+	if not gamescope.has_method("focus_app_async"):
+		focused = gamescope.focus_app(app_id)
+		return
+	focused = true
+	var gen := _gen
+	gamescope.focus_app_async(app_id, func(ok: bool) -> void:
+		if gen == _gen and not ok:
+			focused = false)
+
+
+func _focus_home() -> void:
+	if gamescope.has_method("focus_home_async"):
+		gamescope.focus_home_async()
+	else:
+		gamescope.focus_home()
+
+
+func _fps_limit(fps: int) -> void:
+	if gamescope.has_method("set_fps_limit_async"):
+		gamescope.set_fps_limit_async(fps)
+	else:
+		gamescope.set_fps_limit(fps)
 
 
 ## Auto TDP on or off through Power's worker (it runs busctl). Start and stop
