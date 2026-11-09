@@ -536,24 +536,38 @@ cat >"$GB/curl" <<EOF
 #!/bin/sh
 out=""
 url=""
+fmt=""
 while [ \$# -gt 0 ]; do
 	case "\$1" in
 	-o) out="\$2"; shift ;;
 	-H) shift ;;
+	-w) fmt="\$2"; shift ;;
 	-*) ;;
 	*) url="\$1" ;;
 	esac
 	shift
 done
 echo "\$url" >>"$T/curl.log"
-[ -f "$T/offline" ] && exit 6
+# -w '\\n%{http_code}': the answer, then the status (000 when unreachable), like curl
+code() { [ -n "\$fmt" ] && printf '\n%s' "\$1"; return 0; }
+if [ -f "$T/offline" ]; then code 000; exit 6; fi
+case "\$url" in
+*/releases/latest | */releases/tags/* | */releases\?*)
+	if [ -f "$T/api-status" ]; then [ -n "\$fmt" ] || exit 22; echo '{"message": "API rate limit exceeded"}'; code "\$(cat "$T/api-status")"; exit 0; fi ;;
+esac
 case "\$url" in
 */releases/latest) f="$SRV/latest.json" ;;
 */releases/tags/*) f="$SRV/tag.json" ;;
 *) f="$SRV/\${url##*/}" ;;
 esac
-[ -f "\$f" ] || exit 22
+if [ ! -f "\$f" ]; then
+	[ -n "\$fmt" ] || exit 22
+	echo '{"message": "Not Found"}'
+	code 404
+	exit 0
+fi
 if [ -n "\$out" ]; then cp "\$f" "\$out"; else cat "\$f"; fi
+code 200
 EOF
 cat >"$GB/badsum" <<'EOF'
 #!/bin/sh
@@ -648,11 +662,22 @@ mv "$SRV/latest.json" "$SRV/latest.off"
 { echo '['; cat "$SRV/tag.json"; echo ']'; } >"$SRV/releases?per_page=1"
 expect_code 0 "bootstrap with only a pre-release" gg "$R_DECK"
 contains "$T/curl.log" "/releases?per_page=1$" "falls back to the release list"
+contains "$T/out" "using the newest pre-release" "says a pre-release is used"
 contains "$GI/release.env" "^TAG=v0.2.0$" "pre-release picked"
 mv "$SRV/tag.json" "$SRV/tag.off"
 gg "$R_DECK" GAMECOVE_TAG=v9.9.9 >/dev/null 2>&1 || true
 lacks "$T/curl.log" "per_page" "a given tag is never replaced by another release"
 mv "$SRV/tag.off" "$SRV/tag.json"
+# review M7: only a 404 means "no stable release"; a rate limit or a 5xx must never install a pre-release
+rm -rf "$T/gghome"
+mkdir -p "$T/gghome"
+for st in 403 500; do
+	echo "$st" >"$T/api-status"
+	expect_code 1 "bootstrap stops on HTTP $st" gg "$R_DECK"
+	lacks "$T/curl.log" "per_page" "HTTP $st: no fallback to a pre-release"
+	contains "$T/out" "HTTP $st" "says what GitHub answered"
+done
+rm -f "$T/api-status"
 mv "$SRV/latest.off" "$SRV/latest.json"
 rm -f "$SRV/releases?per_page=1"
 rm -rf "$T/gghome"

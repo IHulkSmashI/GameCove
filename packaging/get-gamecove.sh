@@ -67,6 +67,14 @@ die() {
 	exit 1
 }
 
+# GitHub API GET: sets body (the answer) and status (the HTTP code; 000 when unreachable).
+api_get() { # <url>
+	out="$("$CURL" -sSL -H "Accept: application/vnd.github+json" -w '\n%{http_code}' "$1" 2>/dev/null)" || true
+	status="$(printf '%s\n' "$out" | tail -n 1 | tr -cd '0-9')"
+	[ -n "$status" ] || status=000
+	body="$(printf '%s\n' "$out" | sed '$d')"
+}
+
 # bazzite | fedora-atomic | steamos | other, from os-release (and ostree for Fedora).
 detect_os() {
 	rel=""
@@ -181,21 +189,31 @@ fi
 
 say "Looking up the ${TAG:-latest} GameCove release"
 json=""
-if ! json="$("$CURL" -fsSL -H "Accept: application/vnd.github+json" "$url" 2>/dev/null)" || [ -z "$json" ]; then
-	json=""
-	# releases/latest skips pre-releases, so it has nothing while only pre-releases exist
-	# (v0.1.0 is one): then the newest release of any kind. A given --tag is never replaced.
-	if [ -z "$TAG" ]; then
-		url="$API/repos/$REPO/releases?per_page=1"
-		json="$("$CURL" -fsSL -H "Accept: application/vnd.github+json" "$url" 2>/dev/null)" || json=""
-		[ -n "$json" ] && log "no stable release; using the newest pre-release"
+api_get "$url"
+if [ "$status" = 404 ] && [ -z "$TAG" ]; then
+	# releases/latest skips pre-releases, so it 404s while only pre-releases exist (v0.1.0 is
+	# one): then the newest release of any kind. Only on a 404 (review M7): a timeout, a 5xx or
+	# a rate limit must never swap a stable release for a pre-release. A given --tag is never
+	# replaced.
+	url="$API/repos/$REPO/releases?per_page=1"
+	api_get "$url"
+	if [ "$status" = 200 ] && [ -n "$body" ]; then
+		say "No stable GameCove release yet; using the newest pre-release"
 	fi
+fi
+if [ "$status" = 200 ]; then
+	json="$body"
+elif [ "$status" != 000 ]; then
+	log "GitHub answered HTTP $status for $url"
 fi
 if [ -z "$json" ]; then
 	if [ -x "$DEST/app/gamecove.x86_64" ]; then
 		say "Can't reach GitHub; using the copy downloaded before."
 		launch_app
 		exit 0
+	fi
+	if [ "$status" != 000 ] && [ -n "$status" ]; then
+		die "GitHub answered HTTP $status for $url. Try again in a while."
 	fi
 	die "can't reach GitHub ($url). Check the connection and try again."
 fi
