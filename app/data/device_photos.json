@@ -734,7 +734,7 @@
    "checked": "2026-11-09",
    "note": "Replaces a 375 x 210 promo banner.",
    "view": "best-available",
-   "view_note": "No head-on Blaze 8 image on any official Acer source: news.acer.com CES 2025 story and its .json image list (tilted renders and controller shots only), acer.com Nitro Blaze 8 pages in 28 regions (only KSP banners, no model gallery), Acer stores (not listed), Acer's image server (probed the naming used for the Blaze 7 / 11 galleries), Acer Community's launch post (same tilted renders). This tilted official render stays."
+   "view_note": "No head-on Blaze 8 image on any official Acer source: news.acer.com (its only Blaze 8 story, EN and ZH, and that story's .json image list: tilted renders and controller shots), acer.com Nitro Blaze 8 pages in 28 regions (KSP banners only, no model gallery), Acer stores (not listed), Acer's image server (probed the gallery naming used for the Blaze 7 and 11), and Acer's blog and community launch posts (lifestyle shots in hands, the same tilted renders). This tilted official render stays."
   }
  },
  "acer-nitro-blaze-11": {
