@@ -196,6 +196,44 @@ func test_settings_wait_for_steam_to_stop() -> void:
 	_done(b)
 
 
+func test_waiting_settings_survive_a_restart_and_never_clobber_steam() -> void:
+	# review S2-4: what waits is kept with the value it was based on; a change made in Steam since wins,
+	# and dropping ours is reported (setting_failed), never silent
+	var b := _backend("sb_pending_base", true)
+	b.set_launch_options("440", "-dx11")
+	b.set_compat_tool("440", "proton_experimental")
+	var saved_pending: Dictionary = b.pending.duplicate(true)
+	var saved_base: Dictionary = b.pending_base.duplicate(true)
+	ok(saved_base.get("440", {}).has("launch_options"), "the value it was based on is kept")
+	# GameCove exits; Steam runs on (Steam Gaming Mode) and the user changes the launch options there
+	var b2 := _backend("sb_pending_base2", false)
+	b2.pending = saved_pending
+	b2.pending_base = saved_base
+	SteamConfig.set_launch_options(b2.home, b2.steam_root.path_join("userdata/12345678"), "440", "-vulkan", b2.proc_root)
+	var failed := []
+	b2.setting_failed.connect(func(a, w, m): failed.append([a, w, m]))
+	eq(b2.apply_pending(), 1, "next start (Steam stopped): the untouched setting is written")
+	eq(SteamConfig.launch_options(b2.steam_root.path_join("userdata/12345678"), "440"), "-vulkan", "Steam's newer value stays")
+	eq(SteamConfig.compat_tool(b2.steam_root, "440"), "proton_experimental", "ours written where Steam didn't change it")
+	eq(failed.size(), 1, "the dropped one is reported")
+	eq(failed[0][1], "launch_options")
+	eq(b2.pending, {}, "nothing left waiting")
+	eq(b2.pending_base, {}, "nor its base")
+	_done(b)
+	_done(b2)
+
+
+func test_session_client_marker_after_waiting_settings() -> void:
+	var SM: GDScript = load("res://scripts/library/manage/store_manager.gd")
+	var d := TempTree.temp_dir("sb_ready")
+	DirAccess.make_dir_recursive_absolute(d)
+	SM.mark_steam_ready(d)
+	ok(FileAccess.file_exists(d.path_join("gamecove-steam-ready")), "tells the session client Steam may start")
+	SM.mark_steam_ready("")
+	ok(SM.default_settings("/h").has("steam_pending_base"), "the base values are saved with what waits")
+	TempTree.remove_tree(d)
+
+
 func test_compat_tools_list() -> void:
 	var b := _backend("sb_tools")
 	var ids: Array = b.compat_tools().map(func(t): return t["id"])

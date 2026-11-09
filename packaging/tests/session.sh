@@ -222,5 +222,37 @@ echo 3 >"$T/bounce"
 client
 hasnt "$T/client.log" "^app$" "forwarded session doesn't start the app"
 
+# --- review S2-4: Steam starts only after the app wrote the Steam settings that waited
+echo 0 >"$T/bounce"
+RUNDIR="$T/run"
+mkdir -p "$RUNDIR"
+cat >"$CB/slowapp" <<EOF
+#!/bin/sh
+sleep 0.5
+echo "settings written" >>"$T/order.log"
+: >"$RUNDIR/gamecove-steam-ready"
+sleep 0.5
+exit 0
+EOF
+cat >"$CB/steam" <<EOF
+#!/bin/sh
+echo "steam \$*" >>"$T/order.log"
+EOF
+chmod +x "$CB/slowapp" "$CB/steam"
+: >"$T/order.log"
+: >"$RUNDIR/gamecove-steam-ready" # a stale one from the last session must not count
+env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_RUNTIME_DIR="$RUNDIR" GAMECOVE_BIN="$CB/slowapp" \
+	GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=silent sh "$CLIENT" >/dev/null 2>&1
+sleep 0.3
+eqv "$(head -n 1 "$T/order.log")" "settings written" "Steam waits for the app's Steam settings"
+has "$T/order.log" "^steam -silent$" "then Steam starts"
+: >"$T/order.log"
+printf '#!/bin/sh\nsleep 1\n' >"$CB/mute"
+chmod +x "$CB/mute"
+env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_RUNTIME_DIR="$RUNDIR" GAMECOVE_BIN="$CB/mute" GAMECOVE_STEAM_WAIT_S=0 \
+	GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=silent sh "$CLIENT" >/dev/null 2>&1
+sleep 0.3
+has "$T/order.log" "^steam -silent$" "an app that never says ready doesn't keep Steam away (timeout)"
+
 echo "session: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

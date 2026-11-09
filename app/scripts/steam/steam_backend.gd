@@ -46,8 +46,13 @@ var open_uri: Callable
 ## func(args: Array) -> void. Runs `steam <args>` without waiting.
 var run_steam := func(args: Array) -> void: OS.create_process(_steam_cmd(), PackedStringArray(args))
 var cef: Node
-## appid -> {"launch_options": String?, "compat_tool": String?}
+## appid -> {"launch_options": String?, "compat_tool": String?}. Persisted by StoreManager
+## (settings "steam_pending") and written when Steam is stopped: at GameCove's start (the
+## session client starts Steam only after that), through restart_and_apply(), or now via CEF.
 var pending := {}
+## appid -> {what: value in Steam's files when the change was queued} (review S2-4): a value
+## changed in Steam since then wins; ours is dropped with a setting_failed, never silently.
+var pending_base := {}
 var _inflight := {}   # "<appid>/<what>" -> value being written on a thread
 
 var _watch := {}   # appid -> {"action", "t", "seen_busy", "last_done", "last_t", "rate", "target"}
@@ -398,8 +403,22 @@ func _set_setting(appid: String, what: String, value: String, js: String) -> Dic
 func _queue_pending(appid: String, what: String, value: String) -> void:
 	if not pending.has(appid):
 		pending[appid] = {}
+	if not (pending_base.get(appid, {}) as Dictionary).has(what):
+		if not pending_base.has(appid):
+			pending_base[appid] = {}
+		pending_base[appid][what] = _file_value(appid, what)
 	pending[appid][what] = value
 	pending_changed.emit()
+
+
+## The value in Steam's own files (not the pending one).
+func _file_value(appid: String, what: String) -> String:
+	if steam_root == "":
+		return ""
+	if what == "launch_options":
+		var user := SteamConfig.current_user_dir(steam_root)
+		return SteamConfig.launch_options(user, appid) if user != "" else ""
+	return SteamConfig.compat_tool(steam_root, appid)
 
 
 func _write_setting(appid: String, what: String, value: String) -> Error:
@@ -427,15 +446,28 @@ func apply_pending() -> int:
 	if pending.is_empty() or steam_running():
 		return 0
 	var n := 0
+	var changed := false
 	for appid in pending.keys():
 		var p: Dictionary = pending[appid]
+		var base: Dictionary = pending_base.get(appid, {})
 		for what in p.keys():
+			var now := _file_value(appid, what)
+			if base.has(what) and now != str(base[what]) and now != str(p[what]):
+				# changed in Steam since GameCove queued its change: Steam's value stays
+				p.erase(what)
+				base.erase(what)
+				changed = true
+				setting_failed.emit(appid, what, "Changed in Steam since; GameCove's change wasn't applied")
+				continue
 			if _write_setting(appid, what, p[what]) == OK:
 				p.erase(what)
+				base.erase(what)
 				n += 1
 		if p.is_empty():
 			pending.erase(appid)
-	if n > 0:
+		if base.is_empty():
+			pending_base.erase(appid)
+	if n > 0 or changed:
 		pending_changed.emit()
 	return n
 

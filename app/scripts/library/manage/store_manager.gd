@@ -90,6 +90,7 @@ func setup(home_dir := "") -> void:
 	queue.max_parallel = settings["max_parallel"]
 	steam.setup(home, settings["steam_cef"], settings["cef_flag_created"])
 	steam.pending = settings["steam_pending"]
+	steam.pending_base = settings["steam_pending_base"]
 	steam.apply_pending()
 	# review S2-1: older builds put the bare wrapper path in launch options, which stops the game if
 	# GameCove is gone; while Steam is stopped, move them to the fall-through form
@@ -97,11 +98,12 @@ func setup(home_dir := "") -> void:
 		var w := LaunchFiles.wrapper_path("")
 		if w != "":
 			LaunchFiles.upgrade_legacy_all(home, steam.steam_root, w, steam.proc_root)
+	mark_steam_ready(OS.get_environment("XDG_RUNTIME_DIR"))
 
 
 static func default_settings(home_dir: String) -> Dictionary:
 	return {"install_root": home_dir.path_join("Games"), "steam_cef": false, "cef_flag_created": false,
-		"auto_resume": true, "max_parallel": 1, "focus_steam_dialogs": true, "steam_pending": {}}
+		"auto_resume": true, "max_parallel": 1, "focus_steam_dialogs": true, "steam_pending": {}, "steam_pending_base": {}}
 
 
 func _load_settings() -> void:
@@ -117,8 +119,21 @@ func _load_settings() -> void:
 		settings["install_root"] = home.path_join("Games")
 
 
+## Tells session/gamecove-session-client that Steam's settings that waited are written, so it can
+## start Steam now (review S2-4: Steam writes its files back from memory, so they're written
+## before it starts). Written even when nothing waited.
+static func mark_steam_ready(runtime_dir: String) -> void:
+	if runtime_dir == "" or not DirAccess.dir_exists_absolute(runtime_dir):
+		return
+	var f := FileAccess.open(runtime_dir.path_join("gamecove-steam-ready"), FileAccess.WRITE)
+	if f != null:
+		f.store_string(str(Time.get_unix_time_from_system()))
+		f.close()
+
+
 func _save_settings() -> void:
 	settings["steam_pending"] = steam.pending
+	settings["steam_pending_base"] = steam.pending_base
 	var f := FileAccess.open(settings_path + ".tmp", FileAccess.WRITE)
 	if f == null:
 		return
@@ -133,6 +148,7 @@ func get_settings() -> Dictionary:
 	var s := settings.duplicate(true)
 	s.erase("cef_flag_created")
 	s.erase("steam_pending")
+	s.erase("steam_pending_base")
 	s["steam_cef_status"] = steam.cef.status
 	s["steam_pending_count"] = steam.pending.size()
 	return s

@@ -72,10 +72,9 @@ if [ -x "$SESSION_SELECT" ]; then
 	fi
 fi
 
-start_steam
-
 if [ ! -x "$GAMECOVE_BIN" ]; then
 	log "GameCove binary not found at $GAMECOVE_BIN"
+	start_steam
 	exit 1
 fi
 
@@ -115,8 +114,25 @@ record_crash() {
 
 # X11 on purpose: gamescope reads focus and overlay properties from X windows.
 # Not exec'd: when the app exits (or crashes) we still hand the controller back.
+# Steam writes its settings back from memory when it exits, so Steam settings GameCove changed
+# while Steam ran wait in GameCove's settings until Steam is stopped. They are written at the
+# app's start (StoreManager.setup), which then leaves $XDG_RUNTIME_DIR/gamecove-steam-ready:
+# Steam starts after that (or after GAMECOVE_STEAM_WAIT_S, or at once if the app dies).
+READY="${XDG_RUNTIME_DIR:-/nonexistent}/gamecove-steam-ready"
+rm -f "$READY" 2>/dev/null
 "$GAMECOVE_BIN" --display-driver x11 --rendering-driver opengl3 --fullscreen "$@" &
 app=$!
+if steam_running || [ ! -d "${XDG_RUNTIME_DIR:-/nonexistent}" ]; then
+	start_steam
+else
+	waited=0
+	limit=$(( ${GAMECOVE_STEAM_WAIT_S:-10} * 5 ))
+	while [ ! -e "$READY" ] && [ "$waited" -lt "$limit" ] && kill -0 "$app" 2>/dev/null; do
+		sleep 0.2
+		waited=$((waited + 1))
+	done
+	start_steam
+fi
 stopping=0
 trap 'stopping=1; kill -TERM "$app" 2>/dev/null' TERM INT HUP
 code=0
