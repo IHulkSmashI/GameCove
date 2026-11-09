@@ -846,6 +846,10 @@ func check_power_source() -> void:
 	var now := DeviceScript.ac_online(sys_root)
 	_report_battery(now)
 	if now == plugged:
+		# a clamp to this source's limit that failed (unplugged at 30 W, the write didn't
+		# land) is tried again on every check until it holds (review L11)
+		if backend != "none" and _tdp_w > tdp_max() + 0.01:
+			_clamp_to_source()
 		hold_charge()
 		return
 	plugged = now

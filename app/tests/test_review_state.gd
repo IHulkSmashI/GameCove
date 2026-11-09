@@ -554,3 +554,23 @@ func test_l10_guard_runs_when_thermald_was_already_held() -> void:
 	ok(p.write_tdp(20.0), "TDP 20 W")
 	eq(p._thermald_held, true, "held (by the earlier run): the temperature guard is on")
 	_free()
+
+
+# ---- L11: the unplug clamp is tried again when it failed ------------------------------------------
+
+func test_l11_unplug_clamp_retried() -> void:
+	var t: Dictionary = Trees.new().ally()
+	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "1")
+	var e := _setup(t)
+	var p: Node = e["power"]
+	ok(p.set_tdp(30.0), "30 W on the charger")
+	var hi: float = float(t["row"]["tdp"]["battery_max"])
+	ok(hi < 30.0, "battery limit is lower (%.0f W)" % hi)
+	e["runner"].frozen.append(SM_TDP)   # steamos-manager takes the write but nothing changes
+	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "0")
+	p.check_power_source()
+	eq(float(e["runner"].props[SM_TDP]["data"]), 30.0, "the clamp failed")
+	e["runner"].frozen.clear()
+	p.check_power_source()   # the next 15 s check, charger still out
+	eq(float(e["runner"].props[SM_TDP]["data"]), hi, "tried again: down to the battery limit")
+	_free()
