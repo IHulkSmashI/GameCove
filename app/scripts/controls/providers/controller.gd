@@ -22,6 +22,7 @@ const Caps := preload("res://scripts/controls/input/caps.gd")
 const Hhd := preload("res://scripts/controls/input/hhd_client.gd")
 const Profile := preload("res://scripts/input/ip_profile.gd")
 const Traits := preload("res://scripts/device/traits.gd")
+const Rumble := preload("res://scripts/controls/input/rumble.gd")
 
 const R_NONE := "Needs InputPlumber or Handheld Daemon running"
 const R_HHD_ONLY := "Needs Handheld Daemon (InputPlumber has no such setting)"
@@ -529,124 +530,27 @@ func _trackpad() -> RefCounted:
 				func(p): return IpEdit.pad_mode(p, pads[0]) == str(v)))
 
 
-# ---- rumble -----------------------------------------------------------------------------
+# ---- rumble (input/rumble.gd: InputPlumber, hhd and the controller firmware's own strength) ----
 
-## hhd's vibration setting for this handheld: {"path", "off" (value meaning
-## off, or null when it can't go off), "node", "kind": "limits" | "multiple"}.
-func _hhd_rumble() -> Dictionary:
-	var lim: Variant = be.hhd_ctl(["limits"])
-	if lim is Dictionary and lim.get("mode") is String:
-		return {"kind": "limits", "path": ["limits", "manual", "vibration"], "off": 0,
-			"node": be.hhd_ctl_schema(["limits", "manual", "vibration"])}
-	for k in ["vibration_strength", "vibration"]:
-		if be.hhd_ctl([k]) is String:
-			var node: Variant = be.hhd_ctl_schema([k])
-			var vals := Hhd.options_of(node)
-			return {"kind": "multiple", "path": [k], "off": "disabled" if "disabled" in vals else null, "node": node}
-	return {}
+var _rumble_impl: RefCounted = null
 
 
-func _hhd_rumble_value() -> Variant:
-	var r := _hhd_rumble()
-	if r["kind"] == "limits":
-		if str(be.hhd_ctl(["limits", "mode"])) != "manual":
-			return 100   # hhd's default limits vibrate at full strength
-		var v: Variant = be.hhd_ctl(r["path"])
-		return int(v) if v != null else 100
-	return str(be.hhd_ctl(r["path"]))
-
-
-func _hhd_rumble_patch(value: Variant) -> Dictionary:
-	var r := _hhd_rumble()
-	var key := be.hhd_key()
-	if r["kind"] == "limits":
-		return {"controllers": {key: {"limits": {"mode": "manual", "manual": {"vibration": value}}}}}
-	return Hhd.nest(["controllers", key] + r["path"], value)
+func _rumble_ctl() -> RefCounted:
+	if _rumble_impl == null:
+		_rumble_impl = Rumble.new(be)
+	return _rumble_impl
 
 
 func _rumble() -> RefCounted:
-	return _make({"id": "controller.rumble", "title": "Rumble", "kind": "toggle", "default_value": true,
-		"help": "Vibration in games."},
-		func(_c):
-			match be.controller_backend():
-				"inputplumber":
-					return "" if be.ip().get("device", {}).get("rumble", false) else "This handheld can't rumble through InputPlumber"
-				"hhd":
-					var r := _hhd_rumble()
-					if r.is_empty():
-						return "Handheld Daemon has no vibration setting for this handheld"
-					return "" if r["off"] != null else "This handheld can't turn rumble off; set its strength"
-			return R_NONE,
-		func(_c):
-			if be.controller_backend() == "hhd":
-				return _hhd_rumble_value() != _hhd_rumble()["off"]
-			return be.ip().get("rumble"),
-		func(_c, v):
-			if be.controller_backend() == "hhd":
-				var r := _hhd_rumble()
-				var want: Variant = r["off"]
-				if v:
-					var opts := Hhd.options_of(r["node"]).filter(func(o): return o != r["off"])
-					want = 100 if r["kind"] == "limits" else (opts[int(opts.size() / 2.0)] if not opts.is_empty() else null)
-				if want == null:
-					return false
-				return be.hhd_set(_hhd_rumble_patch(want), [[["controllers", be.hhd_key()] + r["path"], want]])
-			return be.ip_set_rumble(bool(v)))
+	return _rumble_ctl().toggle()
 
 
 func _rumble_strength() -> RefCounted:
-	return _make({"id": "controller.rumble_strength", "title": "Rumble strength", "kind": "choice", "default_value": 100,
-		"options": _opts([20, 40, 60, 80, 100], {20: "20%", 40: "40%", 60: "60%", 80: "80%", 100: "100%"}),
-		"help": "How strong the vibration is."},
-		func(c):
-			match be.controller_backend():
-				"inputplumber":
-					return "InputPlumber can only turn rumble on or off"
-				"hhd":
-					var r := _hhd_rumble()
-					if r.is_empty():
-						return "Handheld Daemon has no vibration setting for this handheld"
-					if r["kind"] == "limits":
-						var node: Variant = r["node"]
-						var lo := int(node.get("min", 0)) if node is Dictionary else 0
-						var hi := int(node.get("max", 100)) if node is Dictionary else 100
-						var st := maxi(1, int(node.get("step", 20)) if node is Dictionary else 20)
-						var vals: Array = []
-						var x := maxi(lo, st)
-						while x <= hi:
-							vals.append(x)
-							x += st
-						var labels := {}
-						for v in vals:
-							labels[v] = "%d%%" % v
-						c.options = _opts(vals, labels)
-					else:
-						var vals := Hhd.options_of(r["node"]).filter(func(o): return o != r["off"])
-						c.options = _opts(vals, Hhd.labels_of(r["node"]))
-					return ""
-			return R_NONE,
-		func(c):
-			var v: Variant = _hhd_rumble_value()
-			if v is int and not c.options.any(func(o): return o["value"] == v):
-				return null   # off, or a value between our steps
-			return v,
-		func(_c, v):
-			var r := _hhd_rumble()
-			return be.hhd_set(_hhd_rumble_patch(v), [[["controllers", be.hhd_key()] + r["path"], v]]))
+	return _rumble_ctl().strength()
 
 
 func _rumble_test() -> RefCounted:
-	return _make({"id": "controller.rumble_test", "title": "Test rumble", "kind": "action", "per_game": false,
-		"help": "A short buzz."},
-		func(_c):
-			match be.controller_backend():
-				"inputplumber":
-					return "" if be.ip().get("device", {}).get("rumble", false) else "This handheld can't rumble through InputPlumber"
-				"hhd":
-					return "Handheld Daemon can't buzz on request"
-			return R_NONE,
-		func(_c): return null,
-		func(_c, _v): return be.ip_rumble_test(0.6))
+	return _rumble_ctl().test()
 
 
 # ---- deadzones (hhd "Deadzones & Vibration": the ROG Ally family) ---------------------------

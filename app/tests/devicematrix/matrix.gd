@@ -934,11 +934,14 @@ static func _expect_one(c: Object, e: Dictionary, label: String) -> Array[String
 	if e.has("max_le") and c.max_value > float(e["max_le"]):
 		out.append("%s: max %s above %s" % [label, c.max_value, e["max_le"]])
 	var vals: Array = c.options.map(func(o): return o.get("value") if o is Dictionary else o)
+	# JSON numbers arrive as floats; int options (10, 50 ...) still match them
+	var offered := func(v: Variant) -> bool:
+		return vals.any(func(x): return (typeof(x) == typeof(v) and x == v) or ((x is int or x is float) and (v is int or v is float) and absf(float(x) - float(v)) < 0.001))
 	for v in e.get("options_include", []):
-		if not vals.has(v):
+		if not offered.call(v):
 			out.append("%s: option %s missing (has %s)" % [label, v, vals])
 	for v in e.get("options_exclude", []):
-		if vals.has(v):
+		if offered.call(v):
 			out.append("%s: option %s must not be offered" % [label, v])
 	if e.has("value") and str(c.value) != str(e["value"]) and not (c.value is float and absf(c.value - float(e["value"])) < 0.001):
 		out.append("%s: value %s, expected %s" % [label, c.value, e["value"]])
