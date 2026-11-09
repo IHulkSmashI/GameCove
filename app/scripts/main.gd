@@ -307,8 +307,8 @@ func _ready() -> void:
 		load("res://scripts/ui/boot_splash.gd").play(self)
 
 
-## Closes the running game (quick menu "Exit game"). Never blocks.
-func exit_game() -> void:
+## Closes the running game (quick menu "Exit game", whose signal passes the game). Never blocks.
+func exit_game(_game: Dictionary = {}) -> void:
 	if quick_menu.visible:
 		quick_menu.close()
 	if streaming != null and str(session.game.get("store", "")) == StreamingService.STORE:
