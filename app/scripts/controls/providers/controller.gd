@@ -27,6 +27,7 @@ const R_NONE := "Needs InputPlumber or Handheld Daemon running"
 const R_HHD_ONLY := "Needs Handheld Daemon (InputPlumber has no such setting)"
 const R_IP_ONLY := "Needs InputPlumber"
 const R_NO_GYRO_IP := "InputPlumber sees no gyro on this handheld"
+const R_GYRO_OLD_IP := "The gyro works, but InputPlumber %s can't switch it off; a newer InputPlumber can"
 const R_GYRO_FIX := "Needs the gyro fix first (Device, Fixes)"
 const R_GYRO_AIM := "Set gyro aiming in Steam's controller settings for the game"
 const R_DEADZONE_IP := "InputPlumber has no deadzone setting; Steam's controller settings have one per game"
@@ -144,6 +145,12 @@ func _hhd_gyro() -> Dictionary:
 
 
 func _ip_gyro_reason() -> String:
+	# Older InputPlumber (0.78 on SteamOS 3.10, the ROG Ally) reports the IMU as the legacy
+	# "Gamepad:Gyro" capability, and its profile matching ignores gamepad gyro source events
+	# (src/config/mod.rs: "Gyro was defined for source event! TODO"), so the gyro reaches
+	# games but can't be switched off from a profile; newer ones say "Gyroscope:<source>".
+	if be.ip_caps().any(func(c): return str(c) == "Gamepad:Gyro"):
+		return R_GYRO_OLD_IP % str(be.ip().get("version", "?"))
 	return R_GYRO_FIX if str(row.get("gyro", "")) == "fix" else R_NO_GYRO_IP
 
 

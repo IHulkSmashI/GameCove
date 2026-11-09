@@ -505,6 +505,16 @@ func test_ally_live_packed_rgb_zones() -> void:
 	reg2.free()
 
 
+## InputPlumber 0.78 (SteamOS 3.10, the Ally) lists the IMU as legacy Gamepad:Gyro: the
+## gyro works but a profile can't switch it off there. Say that, not "no gyro".
+func test_ally_legacy_gamepad_gyro() -> void:
+	var f: RefCounted = Fakes.new(_root("ally_legacy_gyro"))
+	f.with_ip("ASUS ROG Ally", ["Gamepad:Button:South", "Gamepad:Gyro", "Gamepad:Accelerometer"])
+	var reg := _setup(f, _row("asus-rog-ally"))
+	eq(_reason(reg, "controller.gyro"), Provider.R_GYRO_OLD_IP % "0.82.0", "the gyro is there, only not switchable")
+	reg.free()
+
+
 func test_ally_twelve_channel_leds() -> void:
 	var f: RefCounted = Fakes.new(_root("ally_led"))
 	f.with_ip("ASUS ROG Ally", ["Gamepad:Button:South", "Gyroscope:Center"])
