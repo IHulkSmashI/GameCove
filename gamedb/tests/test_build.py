@@ -70,3 +70,4 @@ def test_merge_attaches_badges_and_sorts_by_title():
     doc = document(games, {"wikidata": {"status": "ok"}})
     assert doc["count"] == 2 and doc["schema"] == 2
     assert "ODbL" in doc["credits"] and "not ProtonDB's official" in doc["credits"]
+    assert "Game data from IGDB (https://www.igdb.com)" in doc["credits"], "IGDB's attribution travels with the file (review M24)"

@@ -42,7 +42,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view gamedb >/dev/null 2>&1 || gh release create gamedb --title "Game database" --notes "Rebuilt nightly. Wikidata (CC0), AreWeAntiCheatYet (MIT), time to beat from IGDB.com. Compatibility tiers are GameCove's own summary of ProtonDB user reports (github.com/bdefore/protondb-data, ODbL 1.0), not ProtonDB's official ratings; the ProtonDB-derived data in this file is shared under the ODbL 1.0. upcoming.json.gz: release dates from Steam store data, Wikidata (CC0) and IGDB.com; exchange rates: Source: ECB statistics." --latest=false
+          # the notes and NOTICE.md carry IGDB's and ProtonDB's attribution (review M24); refreshed every run
+          gh release view gamedb >/dev/null 2>&1 || gh release create gamedb --title "Game database" --notes-file NOTICE.md --latest=false
+          gh release edit gamedb --notes-file NOTICE.md
+          gh release upload gamedb NOTICE.md --clobber
           gh release upload gamedb dist/gamedb.json.gz --clobber
           if [ -s dist/upcoming.json.gz ]; then
             gh release upload gamedb dist/upcoming.json.gz --clobber

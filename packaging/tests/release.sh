@@ -133,5 +133,11 @@ for sw in "Background lookups" "Look up deals and prices" "Show maker photos"; d
 	grep -q "$sw" "$REPO/README.md" && ok || bad "README must name the '$sw' switch"
 done
 
+# ------------------------------------------------------------- IGDB / ProtonDB attribution (M24)
+grep -q "Game data from IGDB" "$REPO/gamedb/NOTICE.md" && grep -q "ODbL" "$REPO/gamedb/NOTICE.md" && ok || bad "gamedb/NOTICE.md must credit IGDB and ProtonDB (ODbL)"
+grep -q "gh release upload gamedb NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && grep -q "gh release edit gamedb --notes-file NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && ok || bad "gamedb.yml must publish NOTICE.md as an asset and as the notes"
+grep -q "Game data from \[IGDB\](https://www.igdb.com)" "$REPO/README.md" && ok || bad "README must credit IGDB with a link"
+grep -q "Game data from IGDB" "$REPO/CREDITS.md" && ok || bad "CREDITS.md must credit IGDB"
+
 echo "$PASS passed, $FAILS failed"
 [ "$FAILS" -eq 0 ]
