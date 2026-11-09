@@ -209,45 +209,51 @@
   }
  },
  "onexplayer-x1-mini": {
-  "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 477.jpg",
-  "author": "RuinDig/Yuki Uchida",
-  "license": "CC BY 4.0",
-  "license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2024-Day4---2024-09-29_477.jpg",
-  "note": "Shown with its keyboard cover attached."
+  "maker_image": {
+   "url": "https://onexplayer.com/uploadFiles/X1%20M.webp",
+   "page_url": "https://www.onexplayer.com/product/X1%20mini",
+   "maker": "OneXPlayer",
+   "checked": "2026-11-09",
+   "note": "Front view with the controllers on; replaces an angled photo with the keyboard cover. Dark banner: the view crops the margin."
+  }
  },
  "onexplayer-2-pro": {
-  "file": "Tokyo-Game-Show-2023-Day3-2023-09-23 381.jpg",
-  "author": "RuinDig/Yuki Uchida",
-  "license": "CC BY 4.0",
-  "license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_381.jpg",
-  "note": "Show-floor unit, Tokyo Game Show 2023 (OneXPlayer 2 Pro stand)."
+  "maker_image": {
+   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/2pro_1.jpg?v=1776338724",
+   "page_url": "https://onexplayerstore.com/products/refurbished-2-pro-8-4",
+   "maker": "OneXPlayer",
+   "checked": "2026-11-09",
+   "note": "Store front view with the product name above it; replaces a show-floor photo on a desk with cables. The 2 has no page of its own any more."
+  }
  },
  "onexplayer-2": {
-  "file": "Tokyo-Game-Show-2023-Day3-2023-09-23 381.jpg",
-  "author": "RuinDig/Yuki Uchida",
-  "license": "CC BY 4.0",
-  "license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_381.jpg",
-  "family_of": "onexplayer-2-pro",
-  "note": "The 2 Pro is the same body as the 2."
+  "maker_image": {
+   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/2pro_1.jpg?v=1776338724",
+   "page_url": "https://onexplayerstore.com/products/refurbished-2-pro-8-4",
+   "maker": "OneXPlayer",
+   "checked": "2026-11-09",
+   "note": "The 2 Pro is the same body as the 2.",
+   "family_of": "onexplayer-2-pro"
+  }
  },
  "aokzoe-a1": {
-  "file": "AOKZOE A1.jpg",
-  "author": "Kyu3a",
-  "license": "CC BY-SA 4.0",
-  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:AOKZOE_A1.jpg"
+  "maker_image": {
+   "url": "https://cdn.shopify.com/s/files/1/0650/6879/4073/files/800-01.jpg?v=1685504786",
+   "page_url": "https://aokzoestore.com/products/aokzoe-a1-pro",
+   "maker": "AOKZOE",
+   "checked": "2026-11-09",
+   "note": "The A1 Pro is the A1's body with a newer chip; the A1 has no listing of its own any more.",
+   "family_of": "aokzoe-a1-pro"
+  }
  },
  "aokzoe-a1-pro": {
-  "file": "AOKZOE A1.jpg",
-  "author": "Kyu3a",
-  "license": "CC BY-SA 4.0",
-  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:AOKZOE_A1.jpg",
-  "family_of": "aokzoe-a1",
-  "note": "The A1 Pro is the A1's body with a newer chip."
+  "maker_image": {
+   "url": "https://cdn.shopify.com/s/files/1/0650/6879/4073/files/800-01.jpg?v=1685504786",
+   "page_url": "https://aokzoestore.com/products/aokzoe-a1-pro",
+   "maker": "AOKZOE",
+   "checked": "2026-11-09",
+   "note": "Store front view (800 px); replaces a 480 x 258 show-floor photo."
+  }
  },
  "ayaneo-slide": {
   "file": "Tokyo-Game-Show-2023-Day3-2023-09-23 390.jpg",
@@ -527,10 +533,11 @@
  },
  "onexplayer-x1-pro": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/onexplayer-x1-pro-front-view-2.jpg?v=1763625389",
-   "page_url": "https://onexplayerstore.com/products/refurbish-onexplayer-x1-pro-amd-ryzen%E2%84%A2-ai-9-hx-370-10-95-3-in-1-redefining-handheld-gaming-device-us-stocks",
+   "url": "https://onexplayer.com/uploadFiles/X1%20P.webp",
+   "page_url": "https://www.onexplayer.com/product/X1%20Pro",
    "maker": "OneXPlayer",
-   "checked": "2026-11-09"
+   "checked": "2026-11-09",
+   "note": "The official site's front view; replaces the store's dark hero shot."
   }
  },
  "onexplayer-g1-amd": {
