@@ -25,6 +25,11 @@ const FRAME_H := 336
 const FadeShader := preload("res://shaders/hero_fade.gdshader")
 
 var game: Dictionary = {}
+## Extra space above the hero card, set before setup_page(): the game page
+## leaves room for the top bar (Home's hero card starts at the same height).
+var top_inset := 0
+## What d-pad up from the action row goes to (the top bar tab); null: nothing.
+var top_target: Control
 var hero: TextureRect
 var hero_fallback: Control
 var header: VBoxContainer
@@ -61,8 +66,8 @@ func setup_page(g: Dictionary, line := "") -> void:
 	frame.anchor_right = 1.0
 	frame.offset_left = ThemeLib.EDGE
 	frame.offset_right = -ThemeLib.EDGE
-	frame.offset_top = FRAME_TOP
-	frame.offset_bottom = FRAME_TOP + FRAME_H
+	frame.offset_top = FRAME_TOP + top_inset
+	frame.offset_bottom = FRAME_TOP + top_inset + FRAME_H
 	add_child(frame)
 	hero_fallback = FallbackArt.new()
 	hero_fallback.setup(g, 0, float(ThemeLib.radius("xl")), false)
@@ -115,7 +120,7 @@ func setup_page(g: Dictionary, line := "") -> void:
 	scroll = ScrollContainer.new()
 	scroll.name = "Scroll"
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.offset_top = FRAME_TOP
+	scroll.offset_top = FRAME_TOP + top_inset
 	scroll.offset_bottom = -52
 	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -196,6 +201,10 @@ func _update_cue() -> void:
 	var more := bar.max_value - bar.page - bar.value > 24.0
 	cue.visible = more
 	_cue_fade.visible = more
+	# The hero art stays put while the cards scroll up over it: fade it out
+	# so text never sits on a busy picture (only on scroll, never per frame).
+	if frame != null:
+		frame.modulate.a = clampf(1.0 - bar.value / 260.0, 0.0, 1.0)
 
 
 func can_scroll_down() -> bool:
@@ -379,3 +388,17 @@ func finish() -> void:
 		a.focus_neighbor_bottom = a.get_path_to(focusables[0] if not focusables.is_empty() else a)
 		a.focus_neighbor_left = a.get_path_to(actions[i - 1])
 		a.focus_neighbor_right = a.get_path_to(actions[i + 1] if i + 1 < actions.size() else a)
+	_link_top_target()
+
+
+## D-pad up from the action row goes to `c` (main passes the top bar's tab).
+func set_top_target(c: Control) -> void:
+	top_target = c
+	_link_top_target()
+
+
+func _link_top_target() -> void:
+	if not is_instance_valid(top_target) or not is_inside_tree() or not top_target.is_inside_tree():
+		return
+	for a in actions:
+		a.focus_neighbor_top = a.get_path_to(top_target)

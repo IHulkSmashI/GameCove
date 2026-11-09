@@ -106,6 +106,11 @@ const STEAM_CHECK := "Check again"
 const STORES_TITLE := "Connect your stores"
 const STORES_LINE := "Sign in on the store's own page in your browser. GameCove never sees your password; it keeps only the store tool's sign-in token."
 const STORES_HEROIC := "Heroic is set up here: GameCove uses its sign-ins, so stores you signed in to there are ready."
+const BROWSER_SIGNIN := "Browser sign-in"
+const SIGN_IN_BROWSER := "Sign in (opens your browser)"
+const STORE_READY := "Ready: games show up in your library"
+const STORE_NOT_HERE := "Can't sign in from here"
+const STORES_LATER := "You can skip this and connect stores later in Settings."
 const STORE_ROW_LINE := {
 	"signed": "Signed in%s.",
 	"code": "Opens the sign-in page in your browser.",
@@ -138,10 +143,15 @@ const DEVICE_LINE := "Fixes for things that don't work out of the box. Installin
 const DEVICE_NO_FIXES := "This device needs no fixes."
 const DEVICE_GENERIC := "We don't have fixes for this device yet."
 const DEVICE_RESTART := "Some fixes only start working after a restart, and the gyro needs a full shutdown and power on. The last page reminds you."
-const POWER_HEADER := "Power"
+const PROGRESS_NOW := "Status"
+const DONE_EYEBROW := "Setup complete"
+const POWER_HEADER := "Power defaults"
+const FIXES_HEADER := "Recommended fixes"
+const FIXES_MATCHED := "Matched for %s"
+const DEVICE_REVERSIBLE := "Every fix can be removed later in Settings, Device."
 const AUTO_TDP := "Auto TDP"
 const AUTO_TDP_LINES := {true: "Games use only the power they need to hold their frame rate. Saves battery.", false: "Games get the full power limit of their profile."}
-const PROFILE := "Default power profile"
+const PROFILE := "Power profile"
 const PROFILES := {"battery": "Battery", "balanced": "Balanced", "performance": "Performance"}
 const PROFILE_LINES := {
 	"battery": "Lowest power. Longest battery, fine for older and 2D games.",

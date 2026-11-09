@@ -46,6 +46,23 @@ func test_about_shows_every_group() -> void:
 	_done(p, s)
 
 
+func test_about_cards_in_two_columns_when_wide() -> void:
+	var s := Fakes.services()
+	var p: Control = About.build(s)
+	eq(p._stacks.size(), 1, "narrow (not laid out): one column")
+	p.size = Vector2(1700, 900)
+	p._grid.set_meta("dealt", -1)
+	p._deal()
+	eq(p._stacks.size(), 2, "wide: two columns")
+	var a: Array = p._stacks[0].get_children()
+	var b: Array = p._stacks[1].get_children()
+	ok(not a.is_empty() and not b.is_empty(), "cards in both")
+	ok(absi(a.size() - b.size()) <= 2, "balanced")
+	eq(a[0].get_node(a[0].focus_neighbor_right), b[0], "right crosses to the next column")
+	eq(p.focus_chain().size(), a.size() + b.size(), "every card still in the chain")
+	_done(p, s)
+
+
 func test_about_generic_device() -> void:
 	var s := Fakes.services()
 	s["device"].device_id = "unknown"

@@ -175,6 +175,17 @@ func test_tile_card_layout() -> void:
 	eq(Tile.sub_text(Logic.g("gog", "1", "X", false)), "GOG · Not installed", "not installed")
 
 
+func test_tile_focus_ring_is_theme_accent() -> void:
+	var g := Logic.g("steam", "8", "Hollow Tide", true, 0)
+	var t: Button = Tile.new()
+	t.setup(g)   # no art: the generated cover's colour stands in for the art's
+	t._refresh_glow_color()
+	eq(t._glow_box.border_color, ThemeLib.color("accent"), "ring in the theme accent, not the art colour")
+	ok(t.accent() != ThemeLib.color("accent"), "the art colour differs here (so the test means something)")
+	ok(not t._glow_box.shadow_color.is_equal_approx(Color(ThemeLib.color("accent"), 0.45)), "the art colour tints the glow")
+	t.free()
+
+
 func test_choice_row_segments() -> void:
 	ok(ChoiceRow.segmented(["Battery", "Balanced", "Performance"]), "three short values: segments")
 	ok(not ChoiceRow.segmented(["A"]), "one value: no segments")

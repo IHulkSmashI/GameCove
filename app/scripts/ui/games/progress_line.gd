@@ -9,6 +9,9 @@ const Motion := preload("res://scripts/ui/motion.gd")
 var value := -1.0
 var fill_color := Color(0, 0, 0, 0)
 var track_alpha := 1.0
+## Fill with the theme's accent -> accent_2 gradient (the Downloads hero bar)
+## unless a colour is set.
+var gradient := false
 var _shown := -1.0
 
 
@@ -46,6 +49,9 @@ func _draw() -> void:
 		return
 	var w := maxf(h, size.x * _shown) if _shown > 0.0 else 0.0
 	if w <= 0.0:
+		return
+	if gradient and fill_color.a <= 0.0:
+		draw_style_box(ThemeLib.gradient_box(ThemeLib.color("accent"), ThemeLib.color("accent_2"), maxi(2, int(r))), Rect2(Vector2.ZERO, Vector2(maxf(w, h * 2.0), h)))
 		return
 	var col := fill_color if fill_color.a > 0.0 else ThemeLib.color("accent")
 	_pill(Rect2(Vector2.ZERO, Vector2(w, h)), col, r)

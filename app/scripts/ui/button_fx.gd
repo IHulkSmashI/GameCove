@@ -103,6 +103,10 @@ func _on_focus(on: bool) -> void:
 func _on_button_draw() -> void:
 	if not _drawing:
 		queue_redraw()
+	# The label is drawn here in capitals (wider than the button's own text):
+	# make sure the button is wide enough whenever it redraws (text changes).
+	if (caps or glyph != "") and _label() != _fitted_for:
+		_fit.call_deferred()
 
 
 func _notification(what: int) -> void:
@@ -154,10 +158,19 @@ func _icon_size() -> Vector2:
 	return Vector2(t.get_width() * h / maxf(1.0, t.get_height()), h)
 
 
+var _fitted_for := ""
+var _fitted_w := -1.0
+
+
 func _fit() -> void:
 	if not is_instance_valid(button) or not (caps or glyph != ""):
 		return
-	button.custom_minimum_size.x = maxf(_base_min.x, ceilf(content_width()))
+	# A minimum the caller set after attach() counts as the new floor.
+	if absf(button.custom_minimum_size.x - _fitted_w) > 0.5:
+		_base_min.x = button.custom_minimum_size.x
+	_fitted_for = _label()
+	_fitted_w = maxf(_base_min.x, ceilf(content_width()))
+	button.custom_minimum_size.x = _fitted_w
 
 
 func _draw() -> void:

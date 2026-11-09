@@ -7,6 +7,12 @@ extends Node
 ## them with the stock `xprop` tool, the same properties OpenGamepadUI sets
 ## through its gamescope-x11-client crate (GPL-3.0). Every call goes through
 ## `runner`, so tests use fake output and never touch a real display.
+##
+## Each xprop call takes a few milliseconds, so anything that runs while the UI
+## is up uses the *_async variants: the command runs on the runner's worker
+## thread and the callback comes back on the main thread. The plain versions
+## stay for tests and one-off checks. A fake runner without run_async() runs
+## the async variants synchronously (callback before they return).
 
 const CommandRunner := preload("res://scripts/gamescope/command_runner.gd")
 
@@ -43,7 +49,12 @@ var _running := -1   # -1 unknown, 0 no, 1 yes (cached: gamescope can't appear m
 
 func _ready() -> void:
 	if is_running():
-		claim_main_window.call_deferred()
+		claim_main_window_async.call_deferred()
+
+
+func _exit_tree() -> void:
+	if runner != null and runner.has_method("shutdown"):
+		runner.shutdown()
 
 
 ## True when we run inside a gamescope session. Cheap after the first call.
@@ -82,8 +93,9 @@ func set_overlay(open: bool) -> void:
 	if wid == 0:
 		return
 	var v := 1 if open else 0
-	_set_window(wid, ATOM_STEAM_OVERLAY, [v])
-	_set_window(wid, ATOM_STEAM_INPUT_FOCUS, [v])
+	# Fire and forget: the quick menu opens without waiting on xprop.
+	_run_async(set_args(wid, ATOM_STEAM_OVERLAY, [v]), Callable())
+	_run_async(set_args(wid, ATOM_STEAM_INPUT_FOCUS, [v]), Callable())
 
 
 ## Tells gamescope our window is the main launcher (what Steam's window is in
@@ -118,6 +130,62 @@ func focusable_apps() -> Array:
 func focused_app() -> int:
 	var v := read_root(ATOM_FOCUSED_APP)
 	return v[0] if v.size() > 0 else 0
+
+
+# --- Async variants (the command runs off the main thread) ---
+
+## done(values: Array) with read_root()'s result, on the main thread.
+func read_root_async(atom: String, done: Callable) -> void:
+	_run_async(get_args(atom), func(r: Dictionary) -> void:
+		done.call(parse_values(str(r.get("output", "")), atom) if int(r.get("exit", -1)) == 0 else []))
+
+
+## done(apps: Array): like focusable_apps(). [] outside gamescope.
+func focusable_apps_async(done: Callable) -> void:
+	if not is_running():
+		done.call([])
+		return
+	read_root_async(ATOM_FOCUSABLE_APPS, done)
+
+
+## done(app_id: int): like focused_app(). 0 outside gamescope or when unknown.
+func focused_app_async(done: Callable) -> void:
+	if not is_running():
+		done.call(0)
+		return
+	read_root_async(ATOM_FOCUSED_APP, func(v: Array) -> void: done.call(v[0] if v.size() > 0 else 0))
+
+
+## done(ok: bool) optional. Like focus_home().
+func focus_home_async(done := Callable()) -> void:
+	_set_root_async(ATOM_BASELAYER_APPID, [EXTRA_UNKNOWN_GAME_ID, MAIN_APP_ID], done)
+
+
+## done(ok: bool) optional. Like focus_app().
+func focus_app_async(app_id: int, done := Callable()) -> void:
+	if app_id <= 0:
+		_reply(done, false)
+		return
+	_set_root_async(ATOM_BASELAYER_APPID, [EXTRA_UNKNOWN_GAME_ID, app_id, MAIN_APP_ID], done)
+
+
+## done(ok: bool) optional. Like set_fps_limit(): true once read back.
+func set_fps_limit_async(fps: int, done := Callable()) -> void:
+	_set_checked_async(ATOM_FPS_LIMIT, fps, MAX_FPS, done)
+
+
+## done(ok: bool) optional. Like set_refresh_rate().
+func set_refresh_rate_async(hz: int, done := Callable()) -> void:
+	_set_checked_async(ATOM_DYNAMIC_REFRESH, hz, MAX_HZ, done)
+
+
+## Like claim_main_window(), without waiting.
+func claim_main_window_async() -> void:
+	var wid := _window()
+	if wid == 0:
+		return
+	_run_async(set_args(wid, ATOM_STEAM_GAME, [MAIN_APP_ID]), Callable())
+	focus_home_async()
 
 
 ## Values of a CARDINAL atom on the root window; [] if it isn't set.
@@ -178,6 +246,37 @@ func _set_root(atom: String, values: Array) -> bool:
 func _set_window(wid: int, atom: String, values: Array) -> bool:
 	var r: Dictionary = runner.run(XPROP, set_args(wid, atom, values))
 	return int(r.get("exit", -1)) == 0
+
+
+## Runs xprop on the runner's worker when it has one, else right here.
+func _run_async(args: PackedStringArray, done: Callable) -> void:
+	if runner.has_method("run_async"):
+		runner.run_async(XPROP, args, done)
+		return
+	var r: Dictionary = runner.run(XPROP, args)
+	if done.is_valid():
+		done.call(r)
+
+
+func _set_root_async(atom: String, values: Array, done: Callable) -> void:
+	_run_async(set_args("root", atom, values), func(r: Dictionary) -> void:
+		_reply(done, int(r.get("exit", -1)) == 0))
+
+
+## Set a one-value root atom, then read it back (both queued, in order).
+func _set_checked_async(atom: String, value: int, max_value: int, done: Callable) -> void:
+	if value < 0 or value > max_value or not is_running():
+		_reply(done, false)
+		return
+	var set_ok := [false]
+	_run_async(set_args("root", atom, [value]), func(r: Dictionary) -> void:
+		set_ok[0] = int(r.get("exit", -1)) == 0)
+	read_root_async(atom, func(v: Array) -> void: _reply(done, set_ok[0] and v == [value]))
+
+
+static func _reply(done: Callable, v) -> void:
+	if done.is_valid():
+		done.call(v)
 
 
 func _env(name: String) -> String:

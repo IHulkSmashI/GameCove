@@ -2,73 +2,110 @@
 
 GameCove is a console-style home screen, so the screen is about the games, not about us. The game's art fills the screen, everything else stays quiet, and focus is always obvious from arm's length on a 7 to 8 inch panel. The rules below hold everywhere, and every screen is built from the same few components.
 
-Regenerate screenshots with `tools/screenshots/shoot.sh [OUT] [WxH] [only,these]`. It paints its own placeholder art, so no game art is used.
+Regenerate screenshots with `tools/screenshots/shoot.sh [OUT] [WxH] [only,these]` (see "Screenshots" at the end). It paints its own placeholder art, so no game art is used.
 
 ## Principles
 
 - **Art first.** On Home the focused game's hero art is the stage: crisp and right-weighted across the top two thirds, dissolving (a mask, not a dark overlay) into the same picture blurred behind every screen, so there are no seams. Text sits on the quiet left side; shelves overlap the hero's bottom edge. A gradient scrim keeps text readable over any picture.
-- **One shape, one ring.** Rounded corners from the theme's radius tokens (`radius_s` chips, `radius_m` controls and tiles, `radius_l` cards, `radius_xl` glass sheets). Focus is either a solid light fill (plain buttons, keys) or one accent ring (tabs, chips, rows, sliders). Tiles lift instead.
-- **Colour means something.** Each game brings its own colour: the vibrant colour of its cover tints the backdrop, the tile's glow and the Play button ("Match game art colours", on by default). Badge colours always mean the same thing.
+- **One shape, one ring.** Rounded corners from the theme's radius tokens (`radius_s` chips, `radius_m` controls and tiles, `radius_l` cards, `radius_xl` glass sheets). Focus is always the theme accent ring with its glow (tabs, chips, rows, buttons, cards, tiles); keys on the on-screen keyboard fill instead, tiles also lift.
+- **Colour means something.** Each game brings its own colour: the vibrant colour of its cover tints the backdrop, the Play button and the glow under a focused tile ("Match game art colours", on by default); the focus ring itself stays the theme accent. Badge colours always mean the same thing.
 - **Nothing moves when nothing happens.** Animations answer input and stop. Idle CPU is zero (measured: 0 ticks over 10 s on the home screen under xvfb).
 - **One page layout.** Anything with art (game page now, deal and profile pages later) uses the page template: hero, logo or title, action row, cards.
 - **The hint bar never lies.** The bottom bar shows button glyphs for the control that has focus.
 
-## Themes and tokens
+## The Neon system
 
-Themes are data in `app/theme/themes.gd`. `ThemeLib.use(id)` then `ThemeLib.build()` on the root control switches live; nodes re-read tokens on `NOTIFICATION_THEME_CHANGED`. Tests check that every theme has every token and that text tokens reach 4.5:1 on panels.
+The look is called Neon: near-black glass, one electric accent (cyan `#00F0FF` in Cove) running into a second (violet `#7000FF`) for anything primary, mono micro-labels for facts and numbers, big caps display titles. The references are the owner's prototype renders; every screen, the first-run flow and the desktop installer share it.
 
-| Theme | Feel |
-| --- | --- |
-| Cove (default) | Teal `#4FD1C5` on deep navy `#0A1120` |
-| Midnight | True black, ice blue `#8AB0FF`, for OLED panels |
-| Sunset | Plum `#170C12` and apricot `#FF9E66` |
-| Light | Dark text on light panels, deep teal `#0A776F` |
+### Themes and tokens
+
+Themes are data in `app/theme/themes.gd`. `ThemeLib.use(id)` then `ThemeLib.build()` on the root control switches live; nodes re-read tokens on `NOTIFICATION_THEME_CHANGED`. Tests check that every theme has every token (`Themes.TOKENS`), that each pair in `Themes.TEXT_PAIRS` reaches 4.5:1 (translucent tokens composited over `bg`), and that the focus ring reaches 3:1 on `bg`.
+
+| Theme | Accent → accent_2 | Ground | Feel |
+| --- | --- | --- | --- |
+| Cove (default) | `#00F0FF` → `#7000FF` | `#040508`, surfaces `#0B0F18` / `#111724` | The GameCove look |
+| Midnight | `#4CC9FF` → `#8B5CFF` | pure black `#000000`, surfaces `#060609` / `#0D0E13` | Unlit pixels for OLED panels |
+| Sunset | `#FF8A3D` → `#FF2E88` | plum-black `#0C0508`, surfaces `#160A10` / `#211019` | Warm neon |
+| Light | `#007A8C` → `#6D28D9` | `#EEF1F6`, white surfaces | Dark ink on light glass for bright rooms |
 
 | Token | Use |
 | --- | --- |
 | `bg` | Screen behind the backdrop; also the clear colour |
-| `surface`, `surface_2`, `surface_3` | Panels, raised controls, hover and tracks |
-| `glass` | Frosted sheets (quick menu, keyboard, toasts, status panel), translucent |
-| `line` | Hairline borders, translucent |
+| `surface`, `surface_2`, `surface_3` | Cards, raised controls (rows, buttons), hover and tracks |
+| `glass`, `glass_2` | Frosted sheets (quick menu, keyboard, toasts); glass pills (secondary buttons, chips, top-bar pills) |
+| `line`, `line_2` | Hairlines; the brighter one for card edges on art and pill borders |
 | `text`, `text_2`, `text_3` | Primary, secondary, faint or disabled text |
-| `accent`, `accent_2`, `on_accent` | Brand accent, second accent, text on accent |
-| `focus_fill`, `on_focus` | Solid fill of a focused button and its text |
+| `accent`, `accent_2`, `accent_end`, `on_accent` | Brand accent (focus, selected tab, start of the primary gradient), second accent, end of the primary gradient, text on it |
+| `ring`, `glow`, `glow_size` | Focus ring, its soft halo and halo size |
+| `focus_fill`, `on_focus` | Focused on-screen key and its letter |
 | `good`, `warn`, `bad`, `info` | States |
-| `scrim`, `scrim_strength` | Colour and strength the backdrop is darkened by |
-| `chip` | Badge background; badges always sit on a dark chip |
-| `radius_s/m/l/xl`, `dark` | Corner radii; 1 for dark themes |
+| `face_a/b/x/y`, `on_face` | Controller glyph colours (A green, B red, X blue, Y yellow) |
+| `scrim`, `scrim_strength` | Colour and strength the backdrop art is pulled toward |
+| `chip` | Badge background; badges always sit on a chip |
+| `radius_s/m/l/xl`, `dark` | 8 / 12 / 16 / 24 px corners; 1 for dark themes |
 
-A handheld can set its own accent with an optional `"accent": "#RRGGBB"` on its `devices.json` row. It's made readable for the theme before use (`ArtColor.accent_for`).
+A handheld can set its own accent with `"accent": "#RRGGBB"` on its `devices.json` row; it's made readable for the theme first (`ArtColor.accent_for`). Art colours: `ArtColor.vibrant()` picks the heaviest saturated hue from the tiny blurred copy, `accent_for()` pushes it to 4.5:1 on `surface`. They tint the backdrop, the Play button and a focused tile's glow, never the focus ring.
 
-Art colours: `ArtColor.vibrant()` picks the heaviest saturated hue bucket from the tiny blurred copy, and `accent_for()` pushes it until it reads at 4.5:1 on `surface` and against dark text. `on_color()` picks dark or white text for any accent fill.
+### Type
 
-## Type
+Three OFL-1.1 families in `app/fonts/` (Latin subset): **Outfit** (SemiBold, Bold, ExtraBold) for display and headings, **Plus Jakarta Sans** (Regular to Bold) for interface text, **JetBrains Mono** (Medium, Bold) for telemetry, counts and micro-labels. `ThemeLib.font(weight, tabular, tracking)`; `ThemeLib.mono(bold, tracking)` for mono labels. Numbers that change use tabular figures.
 
-Inter 4.0 (OFL-1.1, `app/fonts/`, Latin subset): Regular, Medium, SemiBold for text, Inter Display Bold for titles, tracked 1 px tighter at title sizes. Numbers that change (clock, battery, slider values, counts) use tabular figures (`ThemeLib.font(weight, true)`).
+| Size (px at 1280x800) | Theme variation | Face | Use |
+| --- | --- | --- | --- |
+| 52 | `DisplayLabel` | Outfit ExtraBold, -1 tracking | Spotlight and page titles, always caps |
+| 36 | `TitleLabel` | Outfit ExtraBold | Screen titles (HOME, DOWNLOADS), empty states |
+| 26 | `HeaderLabel` | Outfit Bold | Card and section headings, caps |
+| 22 | `LeadLabel` | Outfit SemiBold | Shelf titles, option-card titles |
+| 19 | (default) | Plus Jakarta Sans | Body |
+| 17 | `QuietLabel`, `AccentLabel`, `ValueLabel` | Plus Jakarta Sans | Explanations, setting values |
+| 15 | `CaptionLabel`, `MonoLabel` | Jakarta / JetBrains Mono | Hint bar, mono facts |
+| 13 | `EyebrowLabel` | JetBrains Mono Bold, +3 tracking, accent | The line above a title (NOW DOWNLOADING, BOOT MODE) |
+| 12 | `MicroLabel` | JetBrains Mono, +2 tracking | Micro-labels, store and playtime lines, counts (use `Kit.micro()`, which uppercases) |
 
-| Size (px at 1280x800) | Theme variation | Use |
-| --- | --- | --- |
-| 54 | `DisplayLabel` | Spotlight and page titles |
-| 36 | `TitleLabel` | Screen titles, empty states |
-| 26 | `HeaderLabel` | Card headings |
-| 22 | `LeadLabel` | Shelf titles, emphasised lines |
-| 19 | (default) | Body |
-| 17 | `QuietLabel`, `AccentLabel`, `ValueLabel` | Explanations, the line above a title, setting values |
-| 15 | `CaptionLabel` | Hint bar, counts |
-| 13 | badge text | Tile badges |
+Density: the window keeps `canvas_items` stretch, but past 1280x800 the layout grows at half the rate (`main.gd base_size_for`: 1920x1200 lays out at 1536x960, 1.25x), so big panels get more room rather than just bigger text. The installer uses the same rule. Icons are `DPITexture` SVGs and re-rasterise at the screen's scale.
 
-The viewport stretches (`canvas_items`), so 1920x1200 renders the same layout at 1.5x with sharp text; icons are `DPITexture` SVGs and re-rasterise at the screen's scale.
+### Spacing
 
-## Motion
+`SPACE_1..7` = 4, 8, 12, 16, 24, 32, 48 px; screen edge `EDGE` 32, top bar 64, hint bar 52. Cards pad 20 x 18; rows 18 x 10; pills 22 x 11.
 
-All animation goes through `scripts/ui/motion.gd` (`Motion.to`, `Motion.method`, `Motion.fade`), which skips straight to the end under **Reduce motion** (Settings) or outside the tree.
+### Surfaces
+
+- **Glass card** (`CardPanel`, `ThemeLib.card()`): `glass` at 90 %, `line_2` hairline, `radius_l`. Content cards, side panels, device cards.
+- **Glass sheet** (`GlassPanel`, `ThemeLib.glass()`): `glass`, hairline, 28 px shadow, `radius_xl`. Quick menu, keyboard, dialogs.
+- **Hero frame**: art in a `radius_xl` frame with a hairline (Home spotlight, game page, Downloads' now card), dissolving left into the backdrop through `hero_fade.gdshader` (its `frame_radius` clips the corners).
+- **Pills**: secondary buttons are `glass_2` pills with a `line_2` hairline; chips (`Kit.chip`) are `chip`-filled pills with a toned hairline and icon; telemetry and step pills are mono.
+
+### Focus ring
+
+One language everywhere: a ring a pixel outside the control (`ThemeLib.focus_ring`, never shifts layout) in `ring`, with a `glow` halo of `glow_size`. Rows, list items and device cards use `row_focus()`: a 3 px ring hugging the card, the halo falling below it, the card's own fill kept so text keeps its contrast. Secondary buttons add a faint `ring` tint and scale 1.03 (`button_fx.gd`). Tiles lift to 1.06 with the ring in the theme accent; the art colour only tints the glow (mixed 60 % into the ring colour). A day in the calendar grid that is today carries a permanent 2 px accent outline.
+
+### Buttons
+
+- **Primary** (`Kit.primary(text, "A")`, `AccentButton`): a pill filled with the `accent` → `accent_end` gradient (`ThemeLib.gradient_pill`, or the art colour's pair via `Kit.accent_button`), caps label in `on_accent`, the controller glyph inside on a dark disc, an outer glow. `button_fx.gd` draws the caps label and keeps the button wide enough for it whenever the text changes.
+- **Secondary** (`Kit.secondary` / `Kit.button`): glass pill, icon optional, glyph optional.
+- **Icon** (`Kit.icon_button`): round glass button (search, settings, more).
+
+### Segmented rows
+
+`ChoiceRow` shows two to four short values (each at most 12 characters, 30 in all; `ChoiceRow.segmented()`) as a segmented control: a dark track with the current value as an accent-filled segment in mono caps. Longer or more values keep the chevrons and position dots; on / off is a switch. Left / right step the value either way; the focused row shows its explanation underneath.
+
+### Badges
+
+See "Badges" below for meanings. Visually: tile pills are small mono caps on a bright fill; chips on the spotlight and pages are `Kit.chip` (tone hairline, icon, Jakarta SemiBold). Tone colours come from `ThemeLib.tone()`: `TONES` on dark chips, `TONES_LIGHT` on light chips.
+
+### Motion
+
+All animation goes through `scripts/ui/motion.gd` (`Motion.to`, `Motion.method`, `Motion.fade`; FAST 150 ms, BASE 220 ms, SLOW 300 ms, cubic ease-out), which jumps to the end under **Reduce motion** or outside the tree. Tweens end; nothing runs per frame when idle.
 
 | Moment | Motion |
 | --- | --- |
-| Tile focus | Card lifts to 1.06 (back ease, 220 ms) and brightens from 0.86, ring and glow fade in, glow pulses from wide to settled (450 ms), cover pans in from the side focus came from (300 ms), badges and title fade in |
+| Boot splash (`boot_splash.gd`) | Logo mark and wordmark fade and scale in (450 ms), a light sweeps across, hold 450 ms, fade out 350 ms; never takes input, skipped under Reduce motion |
+| Tile focus | Lift to 1.06 (back ease, 220 ms), brighten from 0.82, ring and glow fade in, glow pulses wide to settled (450 ms), cover pans in from the side focus came from (300 ms), SELECTED pill fades in |
 | Shelf and grid | Glide to keep focus one tile in (220 ms) |
-| Hero and backdrop | 300 ms / 250 ms crossfades; the crisp hero drifts to 1.05 over 20 s per game, stopped by idle (30 s), a running game or Reduce motion |
+| Hero and backdrop | 300 / 250 ms crossfades; the Home hero drifts to 1.05 over 20 s, stopped by idle (30 s), a running game or Reduce motion |
 | Tabs | Old screen fades (150 ms), new one slides 28 px in from its side (220 ms) |
+| Pages and Downloads | Fade in over the screen (220 ms), the top bar stays |
+| Progress bars | Glide to the new value (220 ms) |
 | Quick menu | Dim fades, sheet slides 40 px in from its edge |
 | Back from a game | Screens settle in from 0.97 (300 ms) |
 
@@ -78,22 +115,24 @@ All in `app/scripts/ui/`. Build new screens from these.
 
 | Component | File | What it is |
 | --- | --- | --- |
-| Theme | `theme/gamecove_theme.gd`, `theme/themes.gd` | Tokens, type scale, theme variations (`AccentButton`, `TabButton`, `SectionTab`, `ChipButton`, `RowButton`, `KeyButton`, `TileButton`, `GlassPanel`, `CardPanel`, `RaisedPanel`, `BadgePanel`) |
-| Kit | `ui_kit.gd` | Builders: labels, boxes, buttons, `glyph()`, `prompts()`, `icon_label()`, `accent_button()`, focus linking, `drop()` |
+| Theme | `theme/gamecove_theme.gd`, `theme/themes.gd` | Tokens, type and spacing scales, `focus_ring()`, `row_focus()`, `gradient_pill()`, `gradient_box()`, theme variations (`AccentButton`, `IconButton`, `TabButton`, `SectionTab`, `ChipButton`, `RowButton`, `KeyButton`, `TileButton`, `GlassPanel`, `CardPanel`, `RaisedPanel`, `BadgePanel`, `PillPanel`, label variations above) |
+| Kit | `ui_kit.gd` | Builders: labels, `micro()`, boxes, `button()`, `primary()`, `secondary()`, `icon_button()`, `chip()`, `glyph()`, `prompts()`, `icon_label()`, `accent_button()`, focus linking, `drop()` |
+| Button fx | `button_fx.gd` | Caps label, glyph and glow drawn on primary pills; focus scale on secondary ones |
+| Boot splash | `boot_splash.gd` | The logo glow-in at start (see Motion) |
 | Icons | `icons.gd` | Original line icons on a 24 px grid (stores shown by name, no brand logos), battery with level and charge |
 | Illustrations | `illustrations.gd` | Empty-state pictures: library, no results, discover |
 | Backdrop | `backdrop.gd` | Art-first background, crossfade, scrim, art accent |
 | Art cache | `art_cache.gd` | Threaded loading; covers cropped to 2:3 at 360x540, heroes 1920 wide, logos, the 320 px blur; least recently used goes first |
 | Fallback art | `fallback_art.gd` | Generated cover for games without art: gradient from the key, a motif, the title |
-| Hero stage | `hero_stage.gd`, `shaders/hero_fade.gdshader` | Crisp key art behind the Home spotlight, masked into the backdrop; slow drift; welcome glow on first launch |
-| Tile | `game_tile.gd` | Cover, one corner pill, lift, glow in its own colour, title under it while focused; unfocused tiles sit slightly dimmed; loads art only near the screen |
+| Hero stage | `hero_stage.gd`, `shaders/hero_fade.gdshader` | Crisp key art masked into the backdrop or into a rounded frame (`frame_radius`): the Home spotlight and Downloads' now card; slow drift; welcome glow on first launch |
+| Tile | `game_tile.gd` | Cover, one corner pill, lift, accent ring with a glow tinted by the art, SELECTED pill and title while focused; unfocused tiles sit slightly dimmed; loads art only near the screen |
 | Glyph | `glyph.gd` | Controller button glyph, re-tinted on theme change |
 | Shelf | `shelf.gd` | Titled row of tiles with gliding scroll and row memory |
 | Game header | `game_header.gd` | Line above, logo or title, meta line with icons, badge chips |
-| Page template | `page_template.gd` | Hero, header, action row, cards, focus wiring |
+| Page template | `page_template.gd` | Hero, header, action row, cards, focus wiring; `top_inset` leaves room for the top bar, `set_top_target()` sends d-pad up from the actions to it |
 | Badge | `badges.gd`, `badge.gd` | Badge meanings and the chip that draws them |
 | Choice row, slider row | `choice_row.gd`, `slider_row.gd` | Settings rows: value with chevrons and position dots, a switch for on/off, explanation under each |
-| Top bar | `top_bar.gd` | Logo, tabs with LB/RB and "new" dots, status pill |
+| Top bar | `top_bar.gd` | Logo, segmented tab pill with LB / RB and "new" dots, search, telemetry pill (TDP, profile, temperature), downloads ring, status pill, settings |
 | Status panel | `status_panel.gd` | Battery detail, volume and brightness hooks |
 | Toasts | `toast.gd` | Top-right notes; never take focus, leave after 4 s, at most three |
 | Launch splash | `launch_overlay.gd` | Art, logo, spinner, "Launching…", B to cancel |
@@ -125,7 +164,8 @@ One list per game from `Badges.for_game(g)`. An unfocused tile shows at most one
 - **Settings**: a category list on the left (Appearance, Stores, Discover, Performance, Device, About GameCove), the category's tinted cards on the right. Moving through the list shows each page; A or right goes in, B comes back to the list. Store sign-in, credits and keys open as a sheet over the screen (it dims the top and hint bars too). Details below.
 - **Discover**: four sections under one header (LT / RT switch them): For you, Deals, Coming soon, Wishlist; store pages on the page template. Details in "Discover" below.
 - **Settings**: theme with swatches, Match game art colours, Reduce motion, Quick menu side, Interface sounds, About this device.
-- **Game page**: page template with Play / Install, Settings, Back; About this game; per-game settings.
+- **Game page**: page template under the top bar (LB / RB switch tabs and close the page, B goes back, up from the actions reaches the tabs) with Play / Install, Manage, Settings, Back; About this game, achievements and per-game settings in three columns.
+- **Downloads**: under the top bar too. A hero card for what's running (the game's art in the frame, NOW DOWNLOADING eyebrow, caps title, mono percent and numbers, a 12 px accent-to-violet bar, Pause / Cancel / Game page on the right), then two columns: UP NEXT (n) and FINISHED (n). Left / right cross the columns, up returns to the hero, then the tabs. The empty state keeps its illustration and "See games to install".
 - **Quick menu**: floating glass sheet on the right (or left), inset below the top bar so the clock and battery stay visible; slim header with the game's mini cover; section icons with the label under the active one only; rows stay compact and only the focused row shows its explanation; the TDP slider has ticks.
 - **Top bar**: underline tabs with small, muted LB / RB glyphs, the status pill (Wi-Fi when known, battery, clock) and the Settings button at the far right.
 - **First launch**: welcome glow and illustration, "Look again", three cards saying what happens next.
@@ -162,7 +202,7 @@ All in `app/scripts/ui/games/` (words in `texts_games.gd`).
 | Sheet | `sheet.gd` | Modal glass list: title, line, rows with icon, detail, value, current check; A picks, B closes |
 | Text keyboard | `text_keyboard.gd` | The search keyboard plus a symbol row and Shift, keeps case, 240 characters |
 | Achievements | `achievements_card.gd` | Count and bar, focused achievement line, icon grid (unlocked newest first, locked by rarity, hidden last and secret; locked dimmed; under 10% of players gets a gold ring) |
-| Downloads | `downloads_view.gd`, `downloads_button.gd` | Full-screen list (Now card, Up next rows, Finished) and the top bar's button with a progress ring and count; also a chip in the Library toolbar while anything downloads |
+| Downloads | `downloads_view.gd`, `downloads_button.gd` | The Downloads screen (hero now card, Up next and Finished columns) and the top bar's button with a progress ring and count; also a chip in the Library toolbar while anything downloads. `progress_line.gd` has a `gradient` option for the hero bar |
 | Steam needs you | `steam_overlay.gd` | Shown on `external_window_needed`; "Back to GameCove" calls `return_from_steam()` |
 | Session wiring | `session_wiring.gd` | Around a running game: PerfMonitor start/stop/focus, Achievements.invalidate, Updates.set_game_running, Controller start/end_game, Discover pause/resume |
 | Exit game | `game_closer.gd` | Steam: `pkill -f AppId=<id>` on Steam's launch wrapper (no steam://close exists), our scopes: `systemctl --user stop app-steam-app<id>-*.scope`, pids: TERM then KILL after 5 s. Never blocks |
@@ -170,20 +210,32 @@ All in `app/scripts/ui/games/` (words in `texts_games.gd`).
 Game page action row: the one thing to do now (Play, Install, Update, Pause / Resume while downloading, Downloads when it can't be paused here), Manage, Settings, Back; a live progress line under it. Library has Installed / Not installed chips; home's spotlight button follows install state.
 ## Device pages
 
-`app/scripts/ui/device/` holds the pages the Settings screen embeds: `about_panel.gd` (About this device), `controller_panel.gd`, `storage_panel.gd`, `updates_panel.gd`. Each is `static func build(services) -> Control` on `device_panel.gd`, which gives the host `default_focus()`, `focusables()`, `set_top_target(c)`, `hints()` / `hints_changed`, `opened()` / `closed()` and `toast_requested`. Layout: a summary column on the left (the device picture, a big free-space number, the system name), a scrolling column of tinted cards on the right. Read-only cards take focus themselves (`device_kit.gd` FocusCard, one accent ring) so the d-pad scrolls through information; settings inside cards are choice rows. `device_picture.gd` recolours the device SVG's `btn-*` parts as text: pressed buttons fill with the accent, the back button being edited is outlined. Strings live in `texts_device.gd`. Screenshots: `SHOOT_SCRIPT=shoot_device.gd tools/screenshots/shoot.sh`.
+`app/scripts/ui/device/` holds the pages the Settings screen embeds: `about_panel.gd` (About this device), `controller_panel.gd`, `storage_panel.gd`, `updates_panel.gd`. Each is `static func build(services) -> Control` on `device_panel.gd`, which gives the host `default_focus()`, `focusables()`, `set_top_target(c)`, `hints()` / `hints_changed`, `opened()` / `closed()` and `toast_requested`. Layout: a summary column on the left (the device picture or photo, name, support chips, three quick facts), a scrolling area of tinted cards on the right. About this device packs its cards into two columns where the area is at least 760 px wide (each card goes to the shorter column by an estimated height, so the columns end together and there are no gaps; left / right cross between them) and one column below that; its key / value lines use the compact size (`DKit.kv(pairs, width, true)`). Read-only cards take focus themselves (`device_kit.gd` FocusCard, one accent ring) so the d-pad scrolls through information; settings inside cards are choice rows. `device_picture.gd` recolours the device SVG's `btn-*` parts as text: pressed buttons fill with the accent, the back button being edited is outlined. Strings live in `texts_device.gd`. Screenshots: `SHOOT_SCRIPT=shoot_device.gd tools/screenshots/shoot.sh`.
 ## Discover
 
 Code: `scripts/ui/discover_screen.gd` (the hook; `DiscoverScreen.content_factory` still replaces everything) and `scripts/ui/discover/` (`root.gd` header, sections, input and hints; one file per section; `store_page.gd`; `model.gd` pure logic; `widgets.gd` shared builders). Strings: `texts_discover.gd`.
 
 - **For you**: a spotlight over the focused game's art, like Home (starts on a wishlisted game on sale, else a game out today, else the biggest real-price deal, else a release in the next two weeks), then shelves: Top deals, From your wishlist on sale, Coming soon, Free right now. Tiles are library tiles with a price plate and at most one extra pill (Lowest ever, Ends in…, Out today) stacked bottom-left, away from the title most covers carry at the top. Under the shelves: the optional gg.deals card (dismissable), the offline / loading card when there's nothing to show, and the credits.
 - **Deals**: Store and Sort choice rows, then one row per deal. A price only shows when it's the store's real price in the user's currency; otherwise the discount and "See price" with the store. X cycles the sort, Y wishlists.
-- **Coming soon**: List (Out now, This week, This month, Later, Date not announced) or Month (Monday-first grid; days with releases focus and show their first titles; the focused day's games in a side panel; month-only dates under "Sometime this month"). X switches, the choice is remembered. Each entry has a Notify me toggle (Y anywhere). A game out today is outlined in the good colour.
+- **Coming soon**: List (Out now, This week, This month, Later, Date not announced) or Month (Monday-first grid whose rows share the height; days with releases focus and, where the cell is at least 96 x 92 px, show small covers (one cover beside its title, or as many as fit with "+n"), else their first titles; a dot with the count; today carries a TODAY tag and an accent outline; the focused day's games in a side panel; month-only dates under "Sometime this month"). X switches, the choice is remembered. Each entry has a Notify me toggle (Y anywhere). A game out today is outlined in the accent.
 - **Wishlist**: Import from Steam (a sheet with the on-screen keyboard and the public-profile explanation), the alerts inbox with Mark all seen, then the list beside a details card (price alert target as a choice row, alert switches, Game page, Remove with a second press to confirm).
 - **Store page**: page template with our own chip row under the title (sale, lowest ever, ends, wishlisted, countdown, in your library). Actions: Open in library (when owned), Buy with the best local price (or See price on the store), Notify me (upcoming), Wishlist, Back. Cards: every store's price (each row opens that store through `Discover.open_link`), the price alert, the release date, credits.
 - **Credits**: `Discover.attributions()` plus any row's `attribution` are focusable link chips wherever their prices show (For you, Deals, store pages).
 - **Alerts**: `price_alert` / `release_alert` become toasts (they never take focus); waiting alerts put a dot on the Wishlist chip and on the Discover tab.
-- **Hints and input**: Discover redraws main's hint bar after main draws its generic one (`DiscoverScreen.request_hints`); X, Y, LT / RT and B (back within Discover first) are handled before main sees them. A store page hides the top bar and swallows LB / RB, like the game page.
+- **Hints and input**: Discover redraws main's hint bar after main draws its generic one (`DiscoverScreen.request_hints`); X, Y, LT / RT and B (back within Discover first) are handled before main sees them. A store page hides the top bar and swallows LB / RB (the game page and Downloads keep the top bar).
 - **Component additions** (backward compatible): `ChoiceRow.explain_fn` (custom line under a row; an empty line takes no space) and `Osk.placeholder`.
 ## Installer
 
-`scripts/ui/installer/` (words in `texts_installer.gd`), shown for `gamecove.x86_64 -- --installer` on the desktop. Layout from the owner's prototype: a top bar with the GAMECOVE lockup ("LINUX HANDHELD INSTALLER"), one step pill per step (done = good dot, current = accent) and a status pill when there's room; an accent eyebrow over a big caps title; the page; a hairline, a note on the left and Back / Continue on the right; a footer with "STEP n / N", "INSTALLER – STEP" and the working buttons (A, B, LB / RB switch step). Big choices (Easy / Custom, the three startup modes) are `option_card.gd`: icon tile, badge, time estimate, caps title, description, footer line that reads "• Selected" when chosen; styled from tokens only. Everything else is design-system rows (choice, slider, action), cards, notes and chips. The progress page is a card with the current step, a percentage, a bar and a two-column grid of steps (Queued / Running / Done / After restart / Failed). Screenshots: `SHOOT_SCRIPT=shoot_installer.gd tools/screenshots/shoot.sh`.
+`scripts/ui/installer/` (words in `texts_installer.gd`), shown for `gamecove.x86_64 -- --installer` on the desktop, laid out like the owner's installer renders in the Neon system and at the app's density. Top bar: the GAMECOVE lockup (icon tile with the gradient edge, "LINUX HANDHELD INSTALLER" in mono micro), one mono step pill per step (done = good dot, current = accent tint and dot) and a mono status pill when there's room. Page: a mono eyebrow over a big caps Outfit title and a lead line; the content; a hairline; a mono note (or a tinted note) on the left and Skip / Back / the gradient Continue pill with its A glyph on the right. Footer: the mono "STEP n / N" pill, "INSTALLER – STEP" and the working buttons.
+
+Big choices are `option_card.gd`: icon tile on the left and badge chip on the right (or badge left and a mono time estimate right), caps title, description, and a mono footer that turns accent with a dot when chosen ("● SELECTED BY DEFAULT"). They're used for Easy / Custom, the three startup modes, the three stores (badge Signed in / Browser sign-in, A opens the sign-in) and the four themes (each with a swatch of its gradient). The device step is two cards side by side: recommended fixes (with a "Matched for <device>" chip) and power defaults (profile, Auto TDP, charge limit). The progress page is a card with a ring (accent into violet, percent inside), STATUS eyebrow and the current task in caps, the gradient bar and a two-column grid of mono task rows (Queued / Running / Done / After restart / Failed). Done is a centred card: check ring, SETUP COMPLETE, the title, what happens next, notes, Restart later. Screenshots: `SHOOT_SCRIPT=shoot_installer.gd tools/screenshots/shoot.sh`.
+
+## Screenshots
+
+`tools/screenshots/shoot.sh [OUT] [WxH] [only,these]` renders inside the real main scene with fake services and painted art; 1280x800 files are `name.png`, other sizes `name_<width>.png`. Three shot lists:
+
+- `shoot.gd` (default): home, home_focus, home_focus2, home_empty, library, library_search, game_page, game_page_settings, game_no_art, launch, status, boot, toast, discover, quick_game, quick_power, quick_perf, quick_screen, quick_device, quick_device_partial, quick_session, settings and its pages (settings_appearance, _stores, _discover, _performance, _device, _about, _credits, _signin, _light), setup_welcome, _theme, _stores, _signin, _keys, _fixes, _done, _light, theme_cove / _midnight / _sunset / _light (plus _page and _quick each), the discover_* set (home, home_focus, deals, deals_store, calendar, calendar_month, calendar_empty, wishlist, wishlist_empty, import, page, page_prices, page_upcoming, offline, toast, light, midnight_page) and the games_* set (library, home, page, page_achievements, page_downloading, page_light, manage, install, launch_options, compat, downloads, downloads_empty, downloads_midnight, steam, toasts).
+- `SHOOT_SCRIPT=shoot_device.gd`: device_about, device_about_scrolled, device_about_light, device_about_generic, device_about_photo (needs a cached photo), device_controller, device_controller_test, device_controller_midnight, device_controller_missing, device_storage, device_storage_loading, device_updates.
+- `SHOOT_SCRIPT=shoot_installer.gd`: installer_welcome, _welcome_steamos, _welcome_other, _welcome_light, _startup, _steam, _stores, _signin, _device, _look, _extras, _summary, _progress, _failed, _done, _maintenance, _uninstall, _finish.
+
+The release set at both sizes lives in `ui-shots/release/` next to the worktrees (not in the repo).

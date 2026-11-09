@@ -1,9 +1,11 @@
 extends Control
-## Downloads: what's happening now (big card with progress, speed, time
-## left, Pause / Resume, Cancel, Game page), what's up next (rows; A for
-## options: pause, move up / down, cancel, game page; X pauses), and what
-## finished this session. Opens from the top bar's downloads button or the
-## Library. Live numbers update in place; nothing is rebuilt per tick.
+## Downloads, under the top bar: a hero card for what's happening now (the
+## game's art, title, big gradient progress bar, percent, size, speed, time
+## left, Pause / Resume, Cancel, Game page), then two columns: "Up next" (rows;
+## A for options: pause, move up / down, cancel, game page; X pauses) and
+## "Finished" this session (A opens the game page). Opens from the top bar's
+## downloads button or the Library. Live numbers update in place; nothing is
+## rebuilt per tick.
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
@@ -14,6 +16,11 @@ const Illustrations := preload("res://scripts/ui/illustrations.gd")
 const TG := preload("res://scripts/ui/texts_games.gd")
 const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 const ProgressLine := preload("res://scripts/ui/games/progress_line.gd")
+const HeroStage := preload("res://scripts/ui/hero_stage.gd")
+
+## Hero card height; the columns' rows.
+const HERO_H := 250
+const ROW_H := 88
 
 signal back_requested
 signal open_game(game: Dictionary)
@@ -36,6 +43,12 @@ var _live := {}
 var _scroll: ScrollContainer
 var empty_button: Button
 var _base: ColorRect
+## The two columns under the hero (children of `list`).
+var next_col: VBoxContainer
+var done_col: VBoxContainer
+var _next_rows: Array = []
+var _done_rows: Array = []
+var _top_target: Control
 
 
 func setup(install_state: Object, game_actions: Object, lookup: Callable) -> void:
@@ -51,21 +64,24 @@ func setup(install_state: Object, game_actions: Object, lookup: Callable) -> voi
 	add_child(_base)
 	var margin := Kit.margin(0)
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 48)
-	margin.add_theme_constant_override("margin_right", 48)
-	margin.add_theme_constant_override("margin_top", 40)
+	margin.add_theme_constant_override("margin_left", ThemeLib.EDGE)
+	margin.add_theme_constant_override("margin_right", ThemeLib.EDGE)
+	# The top bar stays: start where Home's hero card does.
+	margin.add_theme_constant_override("margin_top", ThemeLib.TOP_BAR_H + ThemeLib.SPACE_3)
 	margin.add_theme_constant_override("margin_bottom", 58)
 	add_child(margin)
-	var root := Kit.vbox(18)
+	var root := Kit.vbox(ThemeLib.SPACE_4)
 	margin.add_child(root)
-	var head := Kit.hbox(16)
-	head.add_child(GameIcons.rect("download", 34, ThemeLib.color("accent")))
-	title_label = Kit.label(TG.DL_TITLE, "TitleLabel")
+	# Title and queue summary, kept for the empty state and screen readers of
+	# the layout; the hero card carries the same numbers when something runs.
+	var head := Kit.hbox(ThemeLib.SPACE_3)
+	head.name = "Head"
+	head.add_child(GameIcons.rect("download", 26, ThemeLib.color("accent")))
+	title_label = Kit.label(TG.DL_TITLE.to_upper(), "HeaderLabel")
 	head.add_child(title_label)
-	summary_label = Kit.label("", "QuietLabel")
+	summary_label = Kit.micro("")
 	summary_label.name = "Summary"
-	summary_label.add_theme_font_override("font", ThemeLib.mono(false, 1))
-	summary_label.size_flags_vertical = Control.SIZE_SHRINK_END
+	summary_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	head.add_child(summary_label)
 	root.add_child(head)
 	_scroll = ScrollContainer.new()
@@ -75,10 +91,10 @@ func setup(install_state: Object, game_actions: Object, lookup: Callable) -> voi
 	_scroll.follow_focus = true
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(_scroll)
-	var pad := Kit.margin(0, 6, 6)
+	var pad := Kit.margin(0, 0, 6)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(pad)
-	list = Kit.vbox(12)
+	list = Kit.vbox(ThemeLib.SPACE_5)
 	list.name = "List"
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_child(list)
@@ -143,42 +159,116 @@ func refresh() -> void:
 	_live.clear()
 	now_buttons.clear()
 	focus_list.clear()
+	_next_rows.clear()
+	_done_rows.clear()
 	var queue: Array = state.queue if state != null else []
 	var done: Array = state.done if state != null else []
 	empty.visible = queue.is_empty() and done.is_empty()
 	_scroll.visible = not empty.visible
 	_summary(queue)
+	var first := -1
 	if not queue.is_empty():
-		list.add_child(_section(TG.DL_NOW))
-		var first := 0
+		first = 0
 		for i in queue.size():
 			if str(queue[i].get("state", "")) == "running":
 				first = i
 				break
 		list.add_child(_now_card(queue[first]))
-		if queue.size() > 1:
-			list.add_child(_section(TG.DL_NEXT))
-			for i in queue.size():
-				if i != first:
-					list.add_child(_job_row(queue[i], i, queue.size()))
-	if not done.is_empty():
-		list.add_child(_section(TG.DL_DONE))
+	if not empty.visible:
+		var cols := Kit.hbox(ThemeLib.SPACE_5)
+		cols.name = "Columns"
+		cols.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		list.add_child(cols)
+		next_col = _column(cols, "NextColumn", "%s (%d)" % [TG.DL_NEXT.to_upper(), maxi(queue.size() - 1, 0)], 1.35)
+		done_col = _column(cols, "DoneColumn", "%s (%d)" % [TG.DL_DONE.to_upper(), done.size()], 1.0)
+		for i in queue.size():
+			if i != first:
+				var r := _job_row(queue[i], i, queue.size())
+				next_col.add_child(r)
+				_next_rows.append(r)
 		for d in done:
-			list.add_child(_done_row(d))
-	Kit.link_vertical(focus_list)
+			var r := _done_row(d)
+			done_col.add_child(r)
+			_done_rows.append(r)
+		if _next_rows.is_empty():
+			next_col.add_child(_quiet_row(TG.DL_NEXT_NONE))
+		if _done_rows.is_empty():
+			done_col.add_child(_quiet_row(TG.DL_DONE_NONE))
+	focus_list.append_array(_next_rows)
+	focus_list.append_array(_done_rows)
+	_link()
+	if is_visible_in_tree():
+		_restore_focus(keep)
+
+
+## A column under the hero: caps header with a count, rows below.
+func _column(parent: HBoxContainer, node_name: String, head: String, ratio: float) -> VBoxContainer:
+	var col := Kit.vbox(ThemeLib.SPACE_3)
+	col.name = node_name
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_stretch_ratio = ratio
+	col.add_child(_section(head))
+	parent.add_child(col)
+	return col
+
+
+func _quiet_row(text: String) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.name = "None"
+	p.theme_type_variation = "CardPanel"
+	p.custom_minimum_size = Vector2(0, ROW_H)
+	var l := Kit.label(text, "QuietLabel")
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	p.add_child(l)
+	return p
+
+
+## Focus: left / right along the hero's buttons, down into "Up next" (or
+## "Finished"), up / down inside a column, left / right across the columns at
+## the same row, up from the top rows back to the hero, up from the hero to
+## the top bar.
+func _link() -> void:
+	Kit.link_vertical(_next_rows)
+	Kit.link_vertical(_done_rows)
+	var below_hero: Control = _next_rows[0] if not _next_rows.is_empty() else (_done_rows[0] if not _done_rows.is_empty() else null)
 	for i in now_buttons.size():
 		var b: Control = now_buttons[i]
 		b.focus_neighbor_left = b.get_path_to(now_buttons[i - 1] if i > 0 else b)
 		b.focus_neighbor_right = b.get_path_to(now_buttons[i + 1] if i + 1 < now_buttons.size() else b)
-		var below: Control = focus_list[focus_list.find(now_buttons[-1]) + 1] if focus_list.find(now_buttons[-1]) + 1 < focus_list.size() else b
-		b.focus_neighbor_bottom = b.get_path_to(below)
+		b.focus_neighbor_bottom = b.get_path_to(below_hero if below_hero != null else b)
 		b.focus_neighbor_top = b.get_path_to(b)
-	if not now_buttons.is_empty():
-		var after := focus_list.find(now_buttons[-1]) + 1
-		if after < focus_list.size():
-			focus_list[after].focus_neighbor_top = focus_list[after].get_path_to(now_buttons[0])
-	if is_visible_in_tree():
-		_restore_focus(keep)
+	var hero_first: Control = now_buttons[0] if not now_buttons.is_empty() else null
+	for rows in [_next_rows, _done_rows]:
+		if not rows.is_empty():
+			var top: Control = hero_first if hero_first != null else rows[0]
+			rows[0].focus_neighbor_top = rows[0].get_path_to(top)
+	for i in _next_rows.size():
+		if not _done_rows.is_empty():
+			_next_rows[i].focus_neighbor_right = _next_rows[i].get_path_to(_done_rows[mini(i, _done_rows.size() - 1)])
+	for i in _done_rows.size():
+		if not _next_rows.is_empty():
+			_done_rows[i].focus_neighbor_left = _done_rows[i].get_path_to(_next_rows[mini(i, _next_rows.size() - 1)])
+	_link_top()
+
+
+## D-pad up from the top of the view goes to `c` (the top bar's tab).
+func set_top_target(c: Control) -> void:
+	_top_target = c
+	_link_top()
+
+
+func _link_top() -> void:
+	if not is_instance_valid(_top_target) or not is_inside_tree() or not _top_target.is_inside_tree():
+		return
+	var tops: Array = now_buttons.duplicate()
+	if now_buttons.is_empty():
+		for rows in [_next_rows, _done_rows]:
+			if not rows.is_empty():
+				tops.append(rows[0])
+		if empty.visible and empty_button != null:
+			tops.append(empty_button)
+	for c in tops:
+		c.focus_neighbor_top = c.get_path_to(_top_target)
 
 
 func _summary(queue: Array) -> void:
@@ -194,7 +284,7 @@ func _summary(queue: Array) -> void:
 
 func _section(text: String) -> Label:
 	var l := Kit.label(text.to_upper(), "HeaderLabel")
-	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
+	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_LEAD)
 	l.add_theme_constant_override("line_spacing", 0)
 	return l
 
@@ -240,44 +330,69 @@ func _now_card(d: Dictionary) -> PanelContainer:
 	var g := _game(d)
 	var p := PanelContainer.new()
 	p.name = "Now"
-	p.theme_type_variation = "CardPanel"
-	var row := Kit.hbox(24)
-	p.add_child(row)
-	row.add_child(_thumb(g, Vector2(120, 180)))
-	var col := Kit.vbox(10)
+	p.custom_minimum_size = Vector2(0, HERO_H)
+	p.add_theme_stylebox_override("panel", _hero_box())
+	# The game's art on the right, dissolving toward the text on the left.
+	var art := HeroStage.new()
+	art.frame_radius = float(ThemeLib.radius("xl"))
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	p.add_child(art)
+	art.show_game(g)
+	var edge := Panel.new()
+	edge.name = "Edge"
+	edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	edge.add_theme_stylebox_override("panel", _hero_edge())
+	p.add_child(edge)
+	var pad := Kit.margin(0, 40, 32)
+	p.add_child(pad)
+	var row := Kit.hbox(ThemeLib.SPACE_6)
+	pad.add_child(row)
+	var col := Kit.vbox(ThemeLib.SPACE_3)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_stretch_ratio = 1.6
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(col)
-	var what := Kit.micro(_job_text(d), "EyebrowLabel")
+	var what := Kit.micro(_eyebrow(d), "EyebrowLabel")
 	what.name = "What"
 	col.add_child(what)
-	var t := Kit.label(str(g.get("title", d.get("title", ""))), "HeaderLabel")
+	var t := Kit.label(str(g.get("title", d.get("title", ""))), "TitleLabel")
+	t.name = "Title"
+	t.uppercase = true
 	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	t.clip_text = true
 	col.add_child(t)
-	var bar_row := Kit.hbox(16)
-	var bar := ProgressLine.new(10.0)
-	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	bar_row.add_child(bar)
+	var nums := Kit.hbox(ThemeLib.SPACE_4)
 	var pct := Kit.label("", "NumberLabel")
+	pct.name = "Percent"
 	pct.add_theme_font_override("font", ThemeLib.mono(true, 1))
+	pct.add_theme_font_size_override("font_size", ThemeLib.SIZE_LEAD)
 	pct.add_theme_color_override("font_color", ThemeLib.color("accent"))
-	pct.custom_minimum_size = Vector2(64, 0)
-	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	bar_row.add_child(pct)
-	col.add_child(bar_row)
-	var line := Kit.label("", "QuietLabel")
+	nums.add_child(pct)
+	var line := Kit.label("", "MonoLabel")
+	line.name = "Numbers"
 	line.add_theme_font_override("font", ThemeLib.mono(false, 1))
-	line.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
-	col.add_child(line)
+	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	line.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nums.add_child(line)
+	col.add_child(nums)
+	var bar := ProgressLine.new(12.0)
+	bar.gradient = true
+	bar.name = "Bar"
+	col.add_child(bar)
 	_live[key] = {"bar": bar, "line": line, "pct": pct}
 	_update_live(key)
-	var buttons := Kit.hbox(12)
-	col.add_child(buttons)
+	var buttons := Kit.hbox(ThemeLib.SPACE_3)
+	buttons.name = "Buttons"
+	buttons.alignment = BoxContainer.ALIGNMENT_END
+	buttons.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(buttons)
 	var c: Dictionary = actions.caps(g) if actions != null else {}
 	var paused: bool = state.state_of(key) == "paused" or str(d.get("state", "")) == "paused"
 	var can_toggle: bool = c.get("resume" if paused else "pause", false)
 	if can_toggle:
-		var pb := _button(TG.RESUME if paused else TG.PAUSE, "play" if paused else "pause", "Toggle_" + key, key, func(): actions.toggle_pause(g))
+		var pb := _button(TG.RESUME if paused else TG.PAUSE, "play" if paused else "pause", "Toggle_" + key, key, func(): actions.toggle_pause(g), true)
 		buttons.add_child(pb)
 	if c.get("cancel", false):
 		buttons.add_child(_button(TG.CANCEL, "x", "Cancel_" + key, key, func(): actions.cancel(g)))
@@ -294,10 +409,34 @@ func _now_card(d: Dictionary) -> PanelContainer:
 	return p
 
 
-func _button(text: String, icon: String, node_name: String, key: String, cb: Callable) -> Button:
-	var b := Kit.button(text)
+## "NOW DOWNLOADING", "NOW UPDATING", "PAUSED" ... over the title.
+func _eyebrow(d: Dictionary) -> String:
+	var t := _job_text(d)
+	if t == TG.STATE_LABEL["paused"]:
+		return t
+	return TG.DL_NOW_PREFIX + " " + t.to_lower()
+
+
+## The hero card: the page's glass behind the art, an accent hairline on top.
+func _hero_box() -> StyleBoxFlat:
+	var sb := ThemeLib.box(ThemeLib.color("surface"), ThemeLib.radius("xl"), 0, 0)
+	return sb
+
+
+func _hero_edge() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.draw_center = false
+	sb.border_color = Color(ThemeLib.color("accent"), 0.35)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(ThemeLib.radius("xl"))
+	sb.anti_aliasing = true
+	return sb
+
+
+func _button(text: String, icon: String, node_name: String, key: String, cb: Callable, primary := false) -> Button:
+	var b := Kit.button(text, "AccentButton" if primary else "")
 	b.name = node_name.validate_node_name()
-	b.custom_minimum_size = Vector2(140, 52)
+	b.custom_minimum_size = Vector2(150 if primary else 0, 52)
 	b.icon = GameIcons.tex(icon, 20)
 	b.add_theme_constant_override("h_separation", 10)
 	b.pressed.connect(cb)
@@ -311,23 +450,24 @@ func _job_row(d: Dictionary, index: int, count: int) -> Button:
 	var b := Kit.button("", "RowButton")
 	b.name = ("Job_" + key).validate_node_name()
 	b.set_meta("dl_key", key)
-	b.custom_minimum_size = Vector2(0, 84)
+	b.custom_minimum_size = Vector2(0, ROW_H)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var row := Kit.hbox(16)
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	row.offset_left = 12
-	row.offset_right = -18
+	row.offset_left = 16
+	row.offset_right = -20
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(row)
-	var th := _thumb(g, Vector2(42, 63))
+	var th := _thumb(g, Vector2(44, 64))
 	th.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(th)
-	var col := Kit.vbox(2)
+	var col := Kit.vbox(4)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var t := Kit.label(str(g.get("title", "")), "HeaderLabel")
 	t.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
+	t.uppercase = true
 	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	col.add_child(t)
 	var sub := _job_text(d)
@@ -340,7 +480,7 @@ func _job_row(d: Dictionary, index: int, count: int) -> Button:
 	row.add_child(col)
 	var right := Kit.vbox(6)
 	right.alignment = BoxContainer.ALIGNMENT_CENTER
-	right.custom_minimum_size = Vector2(200, 0)
+	right.custom_minimum_size = Vector2(120, 0)
 	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var pct := Kit.label("", "CaptionLabel")
 	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -355,7 +495,6 @@ func _job_row(d: Dictionary, index: int, count: int) -> Button:
 	if str(d.get("state", "")) == "queued" and state.fraction(key) < 0.0:
 		pct.text = "#%d" % (index + 1) if count > 2 else ""
 	b.pressed.connect(func(): _options(d, g, index, count))
-	focus_list.append(b)
 	return b
 
 
@@ -365,31 +504,39 @@ func _done_row(d: Dictionary) -> Button:
 	var b := Kit.button("", "RowButton")
 	b.name = ("Done_" + key + "_" + str(d.get("at", 0))).validate_node_name()
 	b.set_meta("dl_done", key)
-	b.custom_minimum_size = Vector2(0, 62)
+	b.custom_minimum_size = Vector2(0, ROW_H)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var row := Kit.hbox(14)
+	var row := Kit.hbox(16)
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	row.offset_left = 18
-	row.offset_right = -18
+	row.offset_left = 16
+	row.offset_right = -20
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(row)
 	var ok: bool = d.get("ok", false)
-	row.add_child(GameIcons.rect("check" if ok else "alert", 22, ThemeLib.color("good") if ok else ThemeLib.color("bad")))
+	var th := _thumb(g, Vector2(44, 64))
+	th.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(th)
+	var col := Kit.vbox(4)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(col)
 	var t := Kit.label(str(g.get("title", d.get("title", ""))), "HeaderLabel")
 	t.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
-	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.uppercase = true
 	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	row.add_child(t)
+	col.add_child(t)
 	var msg := str(d.get("message", ""))
 	var what: String = TG.ACTION_DONE.get(str(d.get("action", "")), "Done") if ok else TG.failed(str(d.get("action", "")), "").replace(" this game", "") + (": " + msg if msg != "" else "")
 	var when := TG.ago(int(d.get("at", 0)), int(state.clock.call()) if state != null else int(d.get("at", 0)))
 	var l := Kit.label(what + (" · " + when if when != "" else ""), "QuietLabel")
 	l.add_theme_font_override("font", ThemeLib.mono(false, 1))
-	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+	l.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION - 1)
 	l.add_theme_color_override("font_color", ThemeLib.color("good") if ok else ThemeLib.color("bad"))
-	row.add_child(l)
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	col.add_child(l)
+	row.add_child(GameIcons.rect("check" if ok else "alert", 22, ThemeLib.color("good") if ok else ThemeLib.color("bad")))
 	b.pressed.connect(func(): open_game.emit(g))
-	focus_list.append(b)
 	return b
 
 
