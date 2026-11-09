@@ -33,6 +33,8 @@ GameCove stands on a lot of other people's work. Thank you.
 | PowerStation APU and DMI-override databases (ShadowBlip) | TDP ranges and boost in `devices.json` and its `cpus` fallback table | GPL-3.0 |
 | steamos-manager device files (Valve, Collabora, Igalia) | DMI ids, TDP / fan / charge-limit methods per handheld | MIT |
 | Handheld Daemon adjustor (hhd-dev) | Per-device TDP tables and profile watts (ROG Ally family, Claw, Legion Go S cap, GPD); the ROG Ally fan curve points and minimum/default curves behind the ASUS "quiet" fan preset | GPL-3.0 (adjustor); hhd itself LGPL-2.1-or-later |
+| HueSync (honjow) | Which handhelds have RGB and their kernel LED names (`go:rgb:joystick_rings`, `ally`, `ayaneo:rgb:joystick_rings`, `oxp:rgb:*`), cited per device in `tools/devicematrix/expectations.json` | BSD-3-Clause (facts only, no code copied) |
+| SimpleDeckyTDP (aarron-lee) | Steam Deck TDP range, Intel TDP cap, Lenovo `lenovo-wmi-other-0` firmware-attribute name, cited in `tools/devicematrix/expectations.json` | BSD-3-Clause (facts only, no code copied) |
 | Bazzite (Universal Blue) | Acer Predator Atlas 8 InputPlumber config (DMI board `F900_PTG`, QAM / M1 / M2 buttons) | Apache-2.0 |
 | OpenGamepadUI (ShadowBlip) | How a gamescope main app takes Guide / QAM from InputPlumber (intercept mode) | GPL-3.0 |
 | Outfit (Outfit Project Authors, github.com/Outfitio/Outfit-Fonts) | Display and heading type (SemiBold, Bold, ExtraBold; Latin subset in `app/fonts/`, licence `app/fonts/OFL-Outfit.txt`) | OFL-1.1 |
@@ -43,7 +45,7 @@ GameCove stands on a lot of other people's work. Thank you.
 
 ## Ideas and findings we borrowed
 
-- **ClawDeck**: the Claw 8 EX power backend findings, launch environment, face-button and EDID findings, ported here.
+- **ClawDeck**: the Claw 8 EX power backend findings, launch environment, face-button and EDID findings, ported here. Parts ported from ClawDeck (same author): per-game / per-power-source profile layering (`app/scripts/controls/profiles.gd`), the Intel RAPL / xe GPU-clock / msi-wmi-platform sysfs layout the device matrix fakes.
 - **DeckyTDPTuner**: ideas behind Auto TDP.
 - **Zendo-GIT Intel-Handheld-and-ARC-GPU-laboratory** (MIT, © 2026 ClawLab contributors): the VRR range fix and the checked panel list. Notice reproduced in [fixes/claw8ex-vrr/LICENSE.ClawLab-MIT](fixes/claw8ex-vrr/LICENSE.ClawLab-MIT).
 - **OpenGamepadUI** and **gamescope-x11-client**: how a gamescope main app sets its atoms and base layers.
