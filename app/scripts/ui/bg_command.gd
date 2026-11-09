@@ -12,11 +12,11 @@ signal finished(id: String, code: int, output: String)
 
 
 class SystemRunner extends RefCounted:
+	const ExecSafe := preload("res://scripts/system/exec_safe.gd")
+
 	## Waits for the program; stdout and stderr together, so error lines show up.
 	func run(program: String, args: PackedStringArray) -> Dictionary:
-		var out: Array = []
-		var code := OS.execute(program, args, out, true)
-		return {"code": code, "out": str(out[0]) if out.size() > 0 else ""}
+		return ExecSafe.run(program, args, true)
 
 	## Starts the program and returns at once.
 	func spawn(program: String, args: PackedStringArray) -> int:
