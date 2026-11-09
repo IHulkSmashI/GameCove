@@ -384,3 +384,48 @@ func test_game_running_and_idle() -> void:
 	s.set_game_running(true)
 	ok(s._game_running, "flag")
 	after_each(s)
+
+
+## A job still running when the service leaves the tree (GameCove quits with the
+## Stream tab's network probe going) used to outlive the engine: a heap crash at
+## exit ("double free or corruption"). Leaving the tree now stops it and waits.
+## Found by the end-to-end suite (Stream tab visited, then the app quits).
+func test_leaving_the_tree_waits_for_a_running_job() -> void:
+	var s: Node = _make()
+	s.sync_mode = false
+	s.force_threads = true   # the test runner's root isn't "in the tree" yet
+	var box := {"started": false, "done": false, "stopped_early": false}
+	s._run(func():
+		box["started"] = true
+		var t0 := Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t0 < 3000:
+			if s._quitting:
+				box["stopped_early"] = true
+				break
+			OS.delay_msec(5)
+		box["done"] = true
+		return {})
+	s._run(func():
+		box["second"] = true
+		return {})
+	var t0 := Time.get_ticks_msec()
+	while not box["started"] and Time.get_ticks_msec() - t0 < 2000:
+		OS.delay_msec(5)
+	ok(box["started"], "the job runs on a worker")
+	s.stop_jobs()   # what _exit_tree does
+	ok(box["done"], "leaving the tree waited for the running job")
+	ok(box["stopped_early"], "and told it to stop early")
+	ok(not box.has("second"), "queued jobs don't start any more")
+	eq(s._task, -1, "no task left behind")
+	s.free()
+
+
+func test_probe_stops_when_asked() -> void:
+	var calls := [0]
+	var t0 := Time.get_ticks_msec()
+	var out: Array = Streaming.tcp_probe(PackedStringArray(["10.255.255.1"]), 47989, func():
+		calls[0] += 1
+		return true)
+	ok(Time.get_ticks_msec() - t0 < Streaming.PROBE_TIMEOUT_MS, "returns before its timeout")
+	eq(out, [], "nothing found")
+	ok(calls[0] >= 1, "asked whether to stop")

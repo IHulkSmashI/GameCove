@@ -55,6 +55,10 @@ var discovering := false
 
 var _jobs: Array = []
 var _busy := false
+var _task := -1          # the WorkerThreadPool task running a job, -1 when none
+var _quitting := false   # leaving the tree: running jobs stop early, none start
+## Tests: jobs on the worker pool even outside the scene tree.
+var force_threads := false
 var _active := false
 var _check_timer: Timer
 var _pair := {}            # {"host", "pid", "pin", "started", "timer"}
@@ -136,23 +140,26 @@ func _run(work: Callable, done: Callable = Callable()) -> void:
 
 
 func _pump() -> void:
-	if _busy or _jobs.is_empty():
+	if _busy or _jobs.is_empty() or _quitting:
 		return
 	var j: Array = _jobs.pop_front()
 	_busy = true
-	if sync_mode or not is_inside_tree():
+	if sync_mode or not (is_inside_tree() or force_threads):
 		var res: Variant = j[0].call()
 		_busy = false
 		if j[1].is_valid():
 			j[1].call(res)
 		_pump()
 		return
-	WorkerThreadPool.add_task(func():
+	_task = WorkerThreadPool.add_task(func():
 		var res: Variant = j[0].call()
-		_finish_job.call_deferred(j[1], res))
+		_finish_job.call_deferred(j[1], res), false, "GameCove streaming job")
 
 
 func _finish_job(done: Callable, res: Variant) -> void:
+	if _task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_task)
+		_task = -1
 	_busy = false
 	if done.is_valid():
 		done.call(res)
@@ -260,7 +267,20 @@ func _ensure_identity() -> Dictionary:
 
 
 func _exit_tree() -> void:
+	stop_jobs()
 	cancel_pair()
+
+
+## A job still running (a network probe takes seconds) would outlive the engine
+## and crash GameCove on its way out: tell it to stop early, drop the queued
+## ones and wait for it. Leaving the tree does this.
+func stop_jobs() -> void:
+	_quitting = true
+	_jobs.clear()
+	if _task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_task)
+		_task = -1
+	_busy = false
 	for k in _identity:
 		DirAccess.remove_absolute(str(_identity[k]))
 
@@ -397,10 +417,14 @@ func _probe_job() -> Array:
 		return out
 	var probe: Callable = ctx.get("probe", Callable())
 	if not probe.is_valid():
-		probe = tcp_probe
+		probe = func(addrs: PackedStringArray, port: int) -> Array: return tcp_probe(addrs, port, func(): return _quitting)
 	for net in GameStream.parse_ip_addr(str(r["out"])):
+		if _quitting:
+			break
 		var addrs := GameStream.subnet_hosts(str(net["address"]), int(net["prefix"]))
 		for a in probe.call(addrs, GameStream.HTTP_PORT):
+			if _quitting:
+				break
 			var info := _serverinfo_job(str(a), GameStream.HTTP_PORT)
 			if not info.is_empty():
 				out.append({"address": a, "uuid": info["uuid"], "name": info["name"], "port": GameStream.HTTP_PORT, "source": "probe"})
@@ -409,7 +433,7 @@ func _probe_job() -> Array:
 
 ## Which of `addresses` accept a TCP connection on `port`, all tried at once, for
 ## up to PROBE_TIMEOUT_MS. Runs on the worker.
-static func tcp_probe(addresses: PackedStringArray, port: int) -> Array:
+static func tcp_probe(addresses: PackedStringArray, port: int, should_stop := Callable()) -> Array:
 	var peers := {}
 	for a in addresses:
 		var p := StreamPeerTCP.new()
@@ -418,6 +442,8 @@ static func tcp_probe(addresses: PackedStringArray, port: int) -> Array:
 	var out: Array = []
 	var start := Time.get_ticks_msec()
 	while not peers.is_empty() and Time.get_ticks_msec() - start < PROBE_TIMEOUT_MS:
+		if should_stop.is_valid() and bool(should_stop.call()):
+			break
 		for a in peers.keys():
 			var p: StreamPeerTCP = peers[a]
 			p.poll()
