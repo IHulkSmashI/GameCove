@@ -39,7 +39,7 @@ Floats are IEEE bit patterns in a CARDINAL. Names from gamescope `src/steamcompm
 | `audio.mic_mute` | `wpctl set-mute @DEFAULT_AUDIO_SOURCE@` | a source |
 | per-app volume | `audio.gd streams(ctx)` / `set_stream_volume(ctx, id, pct)` for a UI list (not a Control) | |
 | `network.wifi` | `nmcli radio wifi on|off`; lifts an rfkill soft block first | `/sys/class/ieee80211/*` and nmcli |
-| `network.bluetooth` | BlueZ `Adapter1.Powered` via busctl; rfkill unblock first | `/sys/class/bluetooth/hci*` and BlueZ answering |
+| `network.bluetooth` | BlueZ `Adapter1.Powered` via busctl on the adapter that owns a paired device (BlueZ `GetManagedObjects`, as Outpox/Bluetooth does), else the lowest hciN; rfkill unblock first | `/sys/class/bluetooth/hci*` and BlueZ answering |
 | `network.airplane` | `rfkill block all`; off unblocks only the radios that were on (saved per device) | `/sys/class/rfkill` entries |
 | `network.wifi_power_save` | steamos-manager `WifiPowerManagement1.WifiPowerManagementState` (user bus) | Wi-Fi and steamos-manager |
 | `system.sleep` | `systemctl suspend` | `/sys/power/state` has mem or freeze |
@@ -49,8 +49,8 @@ Floats are IEEE bit patterns in a CARDINAL. Names from gamescope `src/steamcompm
 **Findings reused (cited in code):** vibrantDeck (`main.py`, gamut atom and encoding); ClawDeck
 `screen.py` (OXP3 SDR-on-HDR brightness, never switch HDR there); Rayekkk/LeGo2BrightnessFix release
 notes (Legion Go 2 ignores the backlight in PQ; gamescope drops the level after suspend);
-Outpox/Bluetooth `main.py` (BlueZ `Adapter1.Powered`; a dongle can own hci0 — with several adapters we
-still switch the lowest one, a known limit); gamescope-session-plus (environment.d order: device-quirks
+Outpox/Bluetooth `main.py` (BlueZ `Adapter1.Powered`; a dongle can own hci0, so the adapter owning a
+paired device is switched, the lowest one only when nothing is paired); gamescope-session-plus (environment.d order: device-quirks
 first, then user files, so ours wins; device-quirks' refresh lists aren't exported, hence
 `SESSION_QUIRK_REFRESH`). SimpleDeckyTDP and PowerTools have no display code; Decky-AudioLoader and
 the brightness-bar plugin only touch Steam's UI, so nothing to take from them.
@@ -216,15 +216,17 @@ Each area appends its own section.
   `pkexec gamecove-fix-set <fix> set on|off` for file fixes (no password, works in Gaming Mode),
   `pkexec gamecove-fix <fix> install|remove` for root fixes (Desktop Mode). The user's Apply /
   Undo is remembered per device in `~/.local/share/gamecove/fixes.cfg`
-  (`[fixes@<device>] <fix>="on"|"off"`): **the installer should skip re-installing a fix the
-  user undid there** (not wired yet; installer owner).
+  (`[fixes@<device>] <fix>="on"|"off"`): the installer reads it (`Target.read_fix_choices`) and
+  `Plan.start` leaves a fix the user undid off for repair, change and finish (the Device step can
+  still tick it again).
 - **quiet** (from ClawDeck `quiet.py`): `set_game_running(bool)` moves GameCove's threads to the
   LP-E cores at nice 10 while a game runs and back after (`taskset -a -p`, `renice`); on by
-  default, off with Undo on the page. The game-session owner must call `set_game_running`.
+  default, off with Undo on the page. main.gd owns the service (`main.fixes`, for the Fixes
+  page) and calls `set_game_running` on GameSession start / end.
 - **What changed** (from ClawDeck `changes.py`): `check_changes()` compares kernel, OS version and
   gamescope-session device-quirks with the last start (`system-snapshot.json`), re-checks every
   fix when something changed; `last_changes`, `now_os_fixed()` (GameCove fixes the system now
-  does itself, so they can be undone). Call it once at start.
+  does itself, so they can be undone). main.gd calls it once at start.
 - **Page** `app/scripts/ui/device/fixes_page.gd`: `build({"fixes": svc, "device": Device})`, a
   device page (`device_panel.gd`): summary and "what changed" on the left, one card per fix with
   status chip, one line, "Applied by GameCove" / "Optional", Undo / Apply / Check again.
@@ -310,9 +312,12 @@ fails with the reason ("remove it there first").
 - `font_scale` in mangoapp; the bar preset's look on 7-8" screens.
 - The wrapper in Steam launch options set through Steam's CEF API while Steam runs.
 - Not done: a Steam shader pre-caching on/off switch (Steam keeps it where no tested tool writes it; Steam's own
-  Settings > Downloads), installing the XeSS XMX driver from a control (ported in the helper, xess.install; one-time
-  setup belongs to the installer), the helper's launch file when the drive boots a handheld with another GPU vendor
+  Settings > Downloads), the helper's launch file when the drive boots a handheld with another GPU vendor
   (re-pick the upscaler there).
+- XeSS XMX driver: a one-time installer option on Intel Arc handhelds with XMX (`Plan.xess_offered`, choice
+  `xess_driver`, off by default): `gamecove-upscale xess-install --home H --gpu vendor=intel,xmx=1` runs ClawDeck's
+  `xess.install` (pinned release, its install.sh as the desktop user) once the package is live; change / uninstall
+  run `xess-remove`. The installer screen still needs its option card (UI wave).
 
 ## Profiles
 
@@ -364,7 +369,7 @@ Contract change: `Control.coerce()` for `choice` now compares like types only an
 
 Every provider is tested against every handheld in `app/data/devices.json` plus an unlisted AMD and an unlisted Intel handheld, without the hardware.
 
-- `tools/devicematrix/gen.py OUT` (stdlib Python, run with `-I`) builds `OUT/<id>/root/`: DMI ids from the row's `match`, `/proc/cpuinfo`, drm (amdgpu `pp_*` / `power_dpm_force_performance_level`, xe `tile0/gt0/freq0`, i915 `gt_*_freq_mhz`), power_supply (AC + battery, charge limit files per the row), backlight, hwmon (CPU/GPU temp, the row's fan driver), LED class nodes, firmware-attributes PPT limits (`asus-armoury`, `lenovo-wmi-other-0`, `msi-wmi-platform`), RAPL, cpufreq/SMT/`intel_pstate`, IIO IMU, `usr/bin` stand-ins for installed tools, `home/`. `OUT/<id>/backends.json` holds the fake D-Bus (steamos-manager, PowerStation, InputPlumber props and methods), hhd state and canned command answers. The test generates into `user://devicematrix` unless `DEVICEMATRIX_DIR` points at a generated folder (CI does that).
+- `tools/devicematrix/gen.py OUT` (stdlib Python, run with `-I`) builds `OUT/<id>/root/`: DMI ids from the row's `match`, `/proc/cpuinfo`, drm (amdgpu `pp_*` / `power_dpm_force_performance_level`, xe `tile0/gt0/freq0`, i915 `gt_*_freq_mhz`), power_supply (AC + battery, charge limit files per the row), backlight, hwmon (CPU/GPU temp, the row's fan driver), LED class nodes, firmware-attributes PPT limits (`asus-armoury`, `lenovo-wmi-other-0`, `msi-wmi-platform`), RAPL, cpufreq/SMT/`intel_pstate`, IIO IMU, `usr/bin` stand-ins for installed tools, `home/`. `OUT/<id>/backends.json` holds the fake D-Bus (steamos-manager, PowerStation, InputPlumber props and methods), hhd state and canned command answers. The test generates into its own `user://devicematrix-<pid>` (removed when the test file ends; folders other runs left behind are removed when they carry gen.py's marker and are over an hour old, so two runs at once never clobber each other) unless `DEVICEMATRIX_DIR` points at a folder (CI does that, and keeps it for its artifact).
 - `app/tests/devicematrix/matrix.gd` runs each provider in four scenarios: **battery** and **ac** (every available control written past both ends, the middle, every choice, invalid values, then put back), **failing** (services refuse writes, sysfs read-only when not root: value and hardware must stay), **bare** (nothing answers: detection must give a reason).
 - Checks: detect never crashes or takes over 1.5 s; available ⇔ reason ""; reasons one short line; ids `<group>.<name>`, no two providers share one; ranges inside `invariants.limits`; sysfs sane after every extreme write (backlight ≥ 1, PPT/RAPL inside the row's range, pwm 0–255, charge threshold 50–100, cpu0 online, governor/EPP from the offered list, Intel media GT untouched, GPU clocks inside RPn–RP0); D-Bus TDP/charge, hhd TDP and `gamecove-fix-set` numbers inside limits; no command argument names a real `/sys`, `/proc`, `/dev`... path; lint: provider sources never call `OS.execute`, `get_tree()`, `Timer.new()` or use an absolute system path without `sys_root`/`home` (`# devicematrix: allow` on a line waives it).
 
@@ -456,3 +461,27 @@ close the menu, `show_screen("settings")`, `settings.open_category(category, par
 menu does this itself through its parent); `settings.game_settings_requested(game)` and
 `game_page.game_settings.edit_requested(game)` → `quick_menu.open(game)` (fallback: they find the
 QuickMenu node); the Controller provider's `REAPPLY_AFTER_RESUME` ~5 s after wake (unchanged).
+
+## Integration rules (hardening pass)
+
+**One owner per setting.** Where two providers could set the same thing, one Control owns it and the other path is an internal helper:
+
+| Setting | Owner (Control) | Internal helper |
+| --- | --- | --- |
+| Frame limit | `display.fps_limit` (gamescope; per game through Profiles) | `PerfProvider.set_mangohud_limit(key, fps, method)` (MangoHud's in-game limiter, next launch); Launcher's old `fps_limit` is taken over by Profiles |
+| GPU clocks | `power.gpu_min` / `power.gpu_max` (min = max is a fixed clock) | `power.gpu_clock` (steamos-manager manual clock) only where min/max can't work; otherwise "Set by GPU minimum and maximum clock" |
+| Charge limit, fan preset, TDP | `power.charge_limit`, `power.fan_mode`, `power.tdp` (all through the `Power` service) | the quick menu's direct `Power.set_*` calls are the legacy UI path to the same service; the UI wave switches them to the controls |
+| Battery care on Lenovo | `power.battery_long_life` (no Lenovo row has `charge_limit`) | |
+| Firmware mode | `power.power_mode` when power-profiles-daemon runs | `power.platform_profile` greys out ("Set by Power mode") |
+
+**apply_order bands** (higher runs first when a profile applies): power 40-101 (TDP 100, boosts 97-99, CPU 70-82, GPU 60-66, fan 49-50, Auto TDP 40-41), display 10-30 (VRR 30, refresh 20, every other display control 11, frame limit 10), perf 0-5. Controller (0-20) and audio/network (0) don't depend on the others.
+
+**needs_root** is true where the only write path is the root helper (`gamecove-fix-set`, prompt-free): `power.sppt`, `power.fppt`, `power.epp`, `power.cpu_max`, `power.fan_curve`, `power.sleep_mode`, `power.mcu_powersave`, `power.battery_long_life`, `controller.gyro_accel`. Settings that use a service first (steamos-manager, PowerStation) and the helper only as a fallback stay false.
+
+**per_game** false for everything that belongs to the device or the moment: brightness, volume, outputs, Wi-Fi/Bluetooth/airplane, night light, HDR, rotation, timers, charge limit, battery care, fan curve, sleep mode, overlay look.
+
+**Safety.** `power.sppt` / `power.fppt` never exceed devices.json `tdp.sppt_max` / `fppt_max` (else `boost_max`) and follow Handheld Daemon's formulas against the current sustained limit (`*_ratio`, `*_over`), checked again at write time (`Control.normalize`); `fixes/power-tune/ppt-limits.txt` makes the root helper refuse anything above the static ceiling. Fan curves are raised to Quiet and never fall, in the control's value too. The device matrix checks both on every handheld (`curve_problems`, facts from hhd).
+
+**Contract additions (backward compatible):** `Control.normalize` (Callable run after coerce), kind `curve` in the matrix, `Controls.apply(values, force)`, `Controls.run_on_worker(job)`, `ctx.runner` always set (`NoRunner` when missing), `Power.request_resumed()` / `refresh(after_resume)`, providers use autoloads only when `sys_root == ""`. `GAMECOVE_TEST=<part of a name>` runs a subset of the test suite.
+
+**main.gd wiring:** Fixes service (`main.fixes`), `PerfProvider.set_game` + `Controls.detect_all()` around GameSession start/end (on the Controls worker, ordered with Profiles), `Profiles.attach_session`, `Power.request_resumed()` after a sleep and `controller.*` lights re-applied 5 s later (forced).

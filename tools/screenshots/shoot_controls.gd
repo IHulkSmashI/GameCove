@@ -49,7 +49,6 @@ static func claw_patch() -> Dictionary:
 		"perf.upscale_recommended": {"value": null},
 		"perf.upscale_undo": {"value": null},
 		"perf.low_latency": {"value": true},
-		"perf.mangohud_fps_limit": {"value": 0, "min": 0.0, "max": 120.0, "step": 1.0, "unit": "fps"},
 		"perf.proton": {"value": "proton_cachyos", "options": [{"value": "", "label": "Steam's default"},
 			{"value": "proton_cachyos", "label": "Proton-CachyOS 11"}, {"value": "GE-Proton10-25", "label": "GE-Proton 10-25"},
 			{"value": "proton_experimental", "label": "Proton Experimental"}]},

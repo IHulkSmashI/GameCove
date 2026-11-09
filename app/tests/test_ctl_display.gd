@@ -426,6 +426,16 @@ func test_dim_timers_stored_per_device() -> void:
 	eq(other["display.dim_after"].value, 60, "another handheld keeps its own")
 
 
+func test_store_keeps_the_old_value_when_the_save_fails() -> void:
+	var Store := load("res://scripts/controls/display/store.gd")
+	var good: RefCounted = Store.new({"config_path": OS.get_temp_dir().path_join("gc_store_ok.cfg")}, "display", "x")
+	ok(good.set_value("dim_after", 60), "saved")
+	var bad: RefCounted = Store.new({"config_path": "/nonexistent-gamecove-dir/store.cfg"}, "display", "x")
+	expect_error("")  # ConfigFile.save may report the missing folder
+	ok(not bad.set_value("dim_after", 120), "save into a missing folder fails")
+	eq(bad.get_value("dim_after", -1), -1, "nothing remembered from the failed write")
+
+
 # --- registry integration ---------------------------------------------------------------------
 
 func test_registry_apply_order_and_snapshot() -> void:

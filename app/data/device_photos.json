@@ -1,5 +1,5 @@
 {
- "_about": "Freely licensed Wikimedia Commons photos of each handheld (CC0, public domain, CC BY, CC BY-SA only). The device-photos workflow re-checks every license through the Commons API before publishing. family_of: this device reuses another model's photo because the two look the same from the front. See docs/DEVICES.md.",
+ "_about": "Freely licensed photos of each handheld (CC0, public domain, CC BY, CC BY-SA only). Default source is Wikimedia Commons (\"file\"); \"source\": \"openverse\" with \"openverse_id\" takes a Flickr photo through Openverse's metadata. The device-photos workflow re-checks every license on each run. family_of: this device reuses another model's photo because the two look the same from the front. _manual: free-license candidates that can't be fetched or re-checked automatically (YouTube frames); see docs/DEVICES.md.",
  "steam-deck-lcd": {
   "file": "Steam Deck (front).png",
   "author": "Liam Dawe/GamingOnLinux (PNG version by VulcanSphere)",
@@ -44,6 +44,15 @@
   "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
   "page_url": "https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY_X.jpg",
   "note": "Store demo unit. Not 'ROG Xbox Ally X.jpg' (unsourced press render, refused)."
+ },
+ "asus-rog-xbox-ally-x20": {
+  "file": "ROG XBOX ALLY X.jpg",
+  "author": "Kyu3a",
+  "license": "CC BY-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "page_url": "https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY_X.jpg",
+  "note": "The X20 uses the Xbox Ally X's shell; same front.",
+  "family_of": "asus-rog-xbox-ally-x"
  },
  "lenovo-legion-go": {
   "file": "Lenovo Legion Go.jpg",
@@ -120,12 +129,12 @@
   "note": "The A1 Pro is the A1's body with a newer chip."
  },
  "ayaneo-slide": {
-  "file": "Tokyo-Game-Show-2023-Day3-2023-09-23 393.jpg",
+  "file": "Tokyo-Game-Show-2023-Day3-2023-09-23 390.jpg",
   "author": "RuinDig/Yuki Uchida",
   "license": "CC BY 4.0",
   "license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_393.jpg",
-  "note": "Show-floor unit, screen closed over the keyboard."
+  "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_390.jpg",
+  "note": "Show-floor unit, Tokyo Game Show 2023, screen slid up over the keyboard."
  },
  "ayaneo-3": {
   "file": "Tokyo-Game-Show-2025 0728.jpg",
@@ -134,5 +143,208 @@
   "license_url": "https://creativecommons.org/licenses/by/4.0/",
   "page_url": "https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2025_0728.jpg",
   "note": "Angled show-floor shot, Tokyo Game Show 2025."
+ },
+ "_manual": {
+  "_how": "Each video below came up under YouTube's Creative Commons filter, but YouTube blocks scripted access from servers (GitHub Actions and our build box get 'confirm you're not a bot'), so neither the license nor a frame can be fetched automatically. To use one: open it, check the description says 'Creative Commons Attribution license (reuse allowed)', grab a clean front frame, upload it to Commons with {{From YouTube}} and {{YouTube CC-BY}} so it gets a license review, then add a normal Commons entry. Steps in docs/DEVICES.md.",
+  "lenovo-legion-go-s-z2go": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=b303d6EaAnE",
+    "channel": "Booredatwork.com",
+    "title": "Lenovo Legion Go S Steam OS: AWESOME, But..."
+   },
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=l5eaIUIyKd8",
+    "channel": "Tame That Tech",
+    "title": "Legion Go S SteamOS Unboxing & Review"
+   }
+  ],
+  "lenovo-legion-go-s-z1e": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=b303d6EaAnE",
+    "channel": "Booredatwork.com",
+    "title": "Lenovo Legion Go S Steam OS: AWESOME, But...",
+    "note": "Same body as the Z2 Go; one photo serves both (family_of)."
+   }
+  ],
+  "lenovo-legion-go-2": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=UE2cSVNPRbg",
+    "channel": "RetroBoy",
+    "title": "Legion go 2 30 days later"
+   },
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=OopFtn-pQ-s",
+    "channel": "RetroBoy",
+    "title": "One week after getting Legion Go 2"
+   }
+  ],
+  "lenovo-legion-go-2-z2": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=UE2cSVNPRbg",
+    "channel": "RetroBoy",
+    "title": "Legion go 2 30 days later",
+    "note": "Same body as the Legion Go 2; family_of."
+   }
+  ],
+  "msi-claw-8-ex": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=NWJaIdfAiJg",
+    "channel": "Booredatwork.com",
+    "title": "MSI Claw 8EX AI+ Review: A Gaming BEAST!"
+   },
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=2Gy0PqODe5k",
+    "channel": "Booredatwork.com",
+    "title": "MSI Claw 8 EX AI+ Hands-On: The New KING!"
+   }
+  ],
+  "msi-claw-8-ai-plus": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=6PDbuA0aQ18",
+    "channel": "MDee14",
+    "title": "Is the New MSI Claw 8 AI+ REALLY Worth the Hype?",
+    "note": "Same body as the 8 EX AI+ and the Claw A8; one photo can serve all three."
+   }
+  ],
+  "msi-claw-a8": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=NWJaIdfAiJg",
+    "channel": "Booredatwork.com",
+    "title": "MSI Claw 8EX AI+ Review",
+    "note": "Same body as the Claw 8 AI+ / 8 EX AI+ (family_of)."
+   }
+  ],
+  "msi-claw-7-ai-plus": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=6of6S00Cg80",
+    "channel": "Jukiper",
+    "title": "Will it run VR? MSI Claw 7 ai+ A2VM",
+    "note": "Check it shows the device from the front."
+   }
+  ],
+  "onexplayer-x1-amd": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=NgWoZpzA3Io",
+    "channel": "Channel Gado-Gado",
+    "title": "Unboxing Onexplayer X1 AMD Ryzen 7 8840",
+    "note": "X1 Intel and X1 Pro share this body."
+   }
+  ],
+  "onexplayer-x2-mini": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=cGDX13xiBj8",
+    "channel": "THE HEAT",
+    "title": "3-Way Transforming UMPC! OneXPlayer X2 Mini Pro Launch Details",
+    "note": "Launch event; check for a clean device shot."
+   }
+  ],
+  "ayaneo-2": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=WuB4OPM44m4",
+    "channel": "VICTOR IEMINI",
+    "title": "AYANEO 2 is the FUTURE!",
+    "note": "The 2S uses the same body (family_of)."
+   }
+  ],
+  "ayaneo-air-plus": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=msF-Jqkd4Mc",
+    "channel": "VICTOR IEMINI",
+    "title": "AYANEO AIR PLUS for $239!"
+   }
+  ],
+  "ayaneo-flip": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=ATtuQ81AN4M",
+    "channel": "Booredatwork.com",
+    "title": "AYANEO Flip KB Review"
+   }
+  ],
+  "ayaneo-flip-1s-ds": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=wmNcREuhFdk",
+    "channel": "Booredatwork.com",
+    "title": "Mind-Blowing Dual Display Gaming - AYANEO Flip 1S DS Review"
+   }
+  ],
+  "gpd-win-4": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=990T9mPBRik",
+    "channel": "GPD Game Console",
+    "title": "An Incredible handheld PC---GPD WIN4",
+    "note": "GPD's own channel."
+   }
+  ],
+  "gpd-win-mini": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=U9ZtGqCFLQI",
+    "channel": "GPD Game Console",
+    "title": "GPD WIN MINI unboxing and The King of Fighters XV"
+   },
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=_SM81Wc4uoo",
+    "channel": "Ookami Gaming",
+    "title": "GPD Win Mini 2025 Unboxing"
+   }
+  ],
+  "gpd-win-max-2": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=pyTlOSlk7vI",
+    "channel": "Tame That Tech",
+    "title": "GPD Win Max 2 2025 HX 370 Review"
+   },
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=0AOdRMpqn00",
+    "channel": "GPD Game Console",
+    "title": "All in one handheld gaming book--GPD WIN MAX 2"
+   }
+  ],
+  "gpd-win-5": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=o1F0AcyLzc4",
+    "channel": "GPD Game Console",
+    "title": "GPD WIN 5 AIMAX+395 Test"
+   }
+  ],
+  "zotac-zone": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=IdLtGUTcuQw",
+    "channel": "The Tech Update",
+    "title": "The Zotac Zone: Will it be able to dethrone the Steamdeck?",
+    "note": "May be commentary only; check for real device footage."
+   }
+  ],
+  "acer-predator-atlas-8": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=Vm7_Y7e8oWY",
+    "channel": "THE HEAT",
+    "title": "The First Predator: Acer's Atlas 8 Powered by Intel Arc G3 EX"
+   }
+  ]
  }
 }

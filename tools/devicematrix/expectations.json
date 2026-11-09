@@ -9,7 +9,7 @@
   "devices: exact checks your provider promises, keyed by device id or selector (*, generic, vendor:amd|intel, driver:amdgpu|xe|i915, stack:hhd|inputplumber|steamos-manager|powerstation).",
   "  keys: available, reason_contains, kind, unit, min, max, min_ge, max_le, step, options_include, options_exclude, value, note; 'ac': {...} overrides for the charger-plugged scenario.",
   "  A listed control id that no provider registers fails the test, so add entries in the same change as the provider.",
-  "_conflicts: where devices.json and these sources disagree (for whoever owns devices.json)."
+  "_resolved: how the devices.json / hhd / HueSync conflicts were settled (each row's 'notes' cites its source)."
  ],
  "_sources": {
   "hhd": "https://github.com/hhd-dev/hhd @ 6f6045a5c07b8cdb60b6abd7e811534874b06e95 (2026-11-08)",
@@ -737,7 +737,748 @@
    }
   }
  },
- "devices": {},
+ "devices": {
+  "msi-claw-8-ex": {
+   "display.brightness": {
+    "available": true,
+    "min": 5,
+    "max": 100,
+    "note": "logind SetBrightness; never under 5 % (docs/CONTROLS.md)"
+   },
+   "display.fps_limit": {
+    "available": true,
+    "note": "the one Frame limit (gamescope)"
+   },
+   "display.vrr": {
+    "available": true,
+    "note": "devices.json vrr_range"
+   },
+   "display.upscale_filter": {
+    "available": true
+   },
+   "display.upscale_scaler": {
+    "available": true
+   },
+   "display.sharpness": {
+    "available": true,
+    "min": 0,
+    "max": 20
+   },
+   "display.vibrance": {
+    "available": true
+   },
+   "display.color_temp": {
+    "available": true,
+    "min": 4500,
+    "max": 9500
+   },
+   "display.night_light": {
+    "available": true
+   },
+   "display.allow_tearing": {
+    "available": true
+   },
+   "display.effect": {
+    "available": true
+   },
+   "display.rotation": {
+    "available": true
+   },
+   "display.dim_after": {
+    "available": true
+   },
+   "display.screen_off_after": {
+    "available": true
+   },
+   "display.hdr": {
+    "available": false,
+    "reason_contains": "HDR",
+    "note": "IPS panel (devices.json panel.type)"
+   },
+   "audio.volume": {
+    "available": true,
+    "min": 0,
+    "max": 100
+   },
+   "audio.mute": {
+    "available": true
+   },
+   "audio.output": {
+    "available": true
+   },
+   "audio.input": {
+    "available": true
+   },
+   "audio.mic_mute": {
+    "available": true
+   },
+   "network.wifi": {
+    "available": true
+   },
+   "network.bluetooth": {
+    "available": true
+   },
+   "network.airplane": {
+    "available": true
+   },
+   "system.sleep": {
+    "available": true
+   },
+   "system.screenshot": {
+    "available": true
+   },
+   "system.keep_awake": {
+    "available": true
+   },
+   "perf.shader_threads": {
+    "available": true,
+    "min": 0,
+    "max": 16
+   },
+   "power.profile": {
+    "available": true,
+    "options_include": [
+     "battery",
+     "balanced",
+     "performance"
+    ]
+   },
+   "power.battery_saver": {
+    "available": true
+   },
+   "power.battery_saver_at": {
+    "available": true,
+    "min": 0,
+    "max": 50
+   },
+   "power.cpu_boost": {
+    "available": true
+   },
+   "power.cpu_max": {
+    "available": true,
+    "min": 30,
+    "max": 100
+   },
+   "power.epp": {
+    "available": true
+   },
+   "power.governor": {
+    "available": true
+   },
+   "power.gpu_min": {
+    "available": true
+   },
+   "power.gpu_max": {
+    "available": true
+   },
+   "power.autotune_target": {
+    "available": true
+   },
+   "power.autotune_floor": {
+    "available": true
+   },
+   "power.autotune_keep": {
+    "available": true,
+    "min": 2,
+    "max": 15
+   },
+   "_source": "MSI Claw 8 EX (MS-1T91, Core Ultra 7 258V, Arc 140V, 8\" IPS 120 Hz VRR). Fixture stack: PowerStation + Handheld Daemon (devices.json tdp_backends, rgb.via hhd). TDP 8-35 W: hhd core/const.py CLAW_EX_DATA (max 35) and ClawDeck docs; firmware ignores SPPT/FPPT (ClawDeck tests/test_hardware_findings.py §12); RGB via hhd (HueSync MSILEDDevice).",
+   "power.tdp": {
+    "available": true,
+    "min": 8,
+    "max": 35,
+    "unit": "W",
+    "ac": {
+     "max": 35
+    },
+    "note": "hhd CLAW_EX_DATA max_tdp 35 on battery and AC"
+   },
+   "power.sppt": {
+    "available": false,
+    "reason_contains": "Handheld Daemon",
+    "note": "hhd owns the limits here; without hhd the firmware ignores them (FW_IGNORED)"
+   },
+   "power.fppt": {
+    "available": false,
+    "reason_contains": "Handheld Daemon"
+   },
+   "power.smt": {
+    "available": false,
+    "reason_contains": "no SMT",
+    "note": "Lunar Lake has no SMT"
+   },
+   "power.gpu_profile": {
+    "available": true,
+    "options_include": [
+     "base",
+     "power_saving"
+    ],
+    "note": "xe power_profile"
+   },
+   "power.gpu_level": {
+    "available": false,
+    "reason_contains": "AMD"
+   },
+   "power.fan_mode": {
+    "available": false,
+    "reason_contains": "Handheld Daemon"
+   },
+   "power.fan_curve": {
+    "available": false,
+    "reason_contains": "Handheld Daemon"
+   },
+   "power.charge_limit": {
+    "available": false,
+    "reason_contains": "Handheld Daemon"
+   },
+   "controller.emulation": {
+    "available": true
+   },
+   "controller.gyro": {
+    "available": true,
+    "note": "devices.json gyro fix: hhd passes the IMU"
+   },
+   "controller.paddles_as": {
+    "available": true
+   },
+   "controller.rumble": {
+    "available": true
+   },
+   "controller.rumble_strength": {
+    "available": true
+   },
+   "controller.led_effect": {
+    "available": true,
+    "note": "HueSync py_modules/huesync.py#L110-L112 MSILEDDevice; hhd claw rgb"
+   },
+   "controller.led_color": {
+    "available": true
+   },
+   "controller.led_brightness": {
+    "available": true,
+    "min": 0,
+    "max": 100
+   },
+   "controller.gyro_accel": {
+    "available": false,
+    "reason_contains": "gyro fix",
+    "note": "claw8ex-gyro fix must be installed first"
+   },
+   "controller.trackpad": {
+    "available": false,
+    "reason_contains": "no trackpad"
+   },
+   "display.refresh_unlock": {
+    "available": true,
+    "note": "gamescope doesn't know this panel's range: unlock writes CUSTOM_REFRESH_RATES"
+   },
+   "perf.upscaler": {
+    "options_include": [
+     "own",
+     "xess",
+     "fsr4_xmx"
+    ],
+    "note": "Arc 140V has XMX (games.py INTEL_UPSCALERS)"
+   }
+  },
+  "lenovo-legion-go-s-z2go": {
+   "display.brightness": {
+    "available": true,
+    "min": 5,
+    "max": 100,
+    "note": "logind SetBrightness; never under 5 % (docs/CONTROLS.md)"
+   },
+   "display.fps_limit": {
+    "available": true,
+    "note": "the one Frame limit (gamescope)"
+   },
+   "display.vrr": {
+    "available": true,
+    "note": "devices.json vrr_range"
+   },
+   "display.upscale_filter": {
+    "available": true
+   },
+   "display.upscale_scaler": {
+    "available": true
+   },
+   "display.sharpness": {
+    "available": true,
+    "min": 0,
+    "max": 20
+   },
+   "display.vibrance": {
+    "available": true
+   },
+   "display.color_temp": {
+    "available": true,
+    "min": 4500,
+    "max": 9500
+   },
+   "display.night_light": {
+    "available": true
+   },
+   "display.allow_tearing": {
+    "available": true
+   },
+   "display.effect": {
+    "available": true
+   },
+   "display.rotation": {
+    "available": true
+   },
+   "display.dim_after": {
+    "available": true
+   },
+   "display.screen_off_after": {
+    "available": true
+   },
+   "display.hdr": {
+    "available": false,
+    "reason_contains": "HDR",
+    "note": "IPS panel (devices.json panel.type)"
+   },
+   "audio.volume": {
+    "available": true,
+    "min": 0,
+    "max": 100
+   },
+   "audio.mute": {
+    "available": true
+   },
+   "audio.output": {
+    "available": true
+   },
+   "audio.input": {
+    "available": true
+   },
+   "audio.mic_mute": {
+    "available": true
+   },
+   "network.wifi": {
+    "available": true
+   },
+   "network.bluetooth": {
+    "available": true
+   },
+   "network.airplane": {
+    "available": true
+   },
+   "system.sleep": {
+    "available": true
+   },
+   "system.screenshot": {
+    "available": true
+   },
+   "system.keep_awake": {
+    "available": true
+   },
+   "perf.shader_threads": {
+    "available": true,
+    "min": 0,
+    "max": 16
+   },
+   "power.profile": {
+    "available": true,
+    "options_include": [
+     "battery",
+     "balanced",
+     "performance"
+    ]
+   },
+   "power.battery_saver": {
+    "available": true
+   },
+   "power.battery_saver_at": {
+    "available": true,
+    "min": 0,
+    "max": 50
+   },
+   "power.cpu_boost": {
+    "available": true
+   },
+   "power.cpu_max": {
+    "available": true,
+    "min": 30,
+    "max": 100
+   },
+   "power.epp": {
+    "available": true
+   },
+   "power.governor": {
+    "available": true
+   },
+   "power.gpu_min": {
+    "available": true
+   },
+   "power.gpu_max": {
+    "available": true
+   },
+   "power.autotune_target": {
+    "available": true
+   },
+   "power.autotune_floor": {
+    "available": true
+   },
+   "power.autotune_keep": {
+    "available": true,
+    "min": 2,
+    "max": 15
+   },
+   "_source": "Lenovo Legion Go S (83L3, Z2 Go, 8\" IPS 120 Hz VRR). Fixture stack: steamos-manager + PowerStation + InputPlumber. TDP 5-30 W on battery, 33 W plugged (devices.json; hhd allows 40 W on AC, kept at 33). Boost: hhd lenovo/__init__.py L49-55 (gos) SPPT = SPL + 3, FPPT = min(53, SPL*53/40), capped at devices.json sppt_max 33 / fppt_max 41. RGB on Linux needs hhd or the hid-lenovo-go LED driver (HueSync LegionGoSLEDDevice); the fixture has neither.",
+   "power.tdp": {
+    "available": true,
+    "min": 5,
+    "max": 30,
+    "unit": "W",
+    "ac": {
+     "max": 33
+    }
+   },
+   "power.sppt": {
+    "available": true,
+    "max_le": 33,
+    "min_ge": 5,
+    "note": "fixture SPL 30 W: 30..33 (SPL + 3, sppt_max 33)"
+   },
+   "power.fppt": {
+    "available": true,
+    "max_le": 41,
+    "note": "fixture SPL 30 W: up to floor(30*1.325) = 39"
+   },
+   "power.smt": {
+    "available": true
+   },
+   "power.cpu_cores": {
+    "available": true
+   },
+   "power.gpu_level": {
+    "available": true
+   },
+   "power.platform_profile": {
+    "available": true,
+    "options_include": [
+     "low-power",
+     "balanced",
+     "performance"
+    ]
+   },
+   "power.sleep_mode": {
+    "available": true,
+    "options_include": [
+     "s2idle",
+     "deep"
+    ]
+   },
+   "power.gpu_clock": {
+    "available": false,
+    "reason_contains": "GPU minimum and maximum",
+    "note": "one owner for GPU clocks"
+   },
+   "power.charge_limit": {
+    "available": false,
+    "reason_contains": "no charge limit",
+    "note": "devices.json charge_limit false; Lenovo uses battery care"
+   },
+   "power.fan_curve": {
+    "available": false,
+    "reason_contains": "fan"
+   },
+   "controller.emulation": {
+    "available": true
+   },
+   "controller.rumble": {
+    "available": true
+   },
+   "controller.nintendo_layout": {
+    "available": true
+   },
+   "controller.desktop_mode": {
+    "available": true
+   },
+   "controller.paddle.LeftPaddle1": {
+    "available": true,
+    "note": "Y1/Y2 back buttons (buttons.gd legion-go-s)"
+   },
+   "controller.paddle.RightPaddle1": {
+    "available": true
+   },
+   "controller.led_effect": {
+    "available": false,
+    "reason_contains": "RGB driver",
+    "note": "no LED node and no hhd in this fixture"
+   },
+   "display.refresh_rate": {
+    "available": true,
+    "min": 48,
+    "max": 120,
+    "note": "devices.json panel_hz"
+   },
+   "perf.upscaler": {
+    "options_include": [
+     "own",
+     "fsr31"
+    ],
+    "options_exclude": [
+     "fsr4_amd"
+    ],
+    "note": "Z2 Go is RDNA2: no FSR 4 (games.py)"
+   }
+  },
+  "asus-rog-ally": {
+   "display.brightness": {
+    "available": true,
+    "min": 5,
+    "max": 100,
+    "note": "logind SetBrightness; never under 5 % (docs/CONTROLS.md)"
+   },
+   "display.fps_limit": {
+    "available": true,
+    "note": "the one Frame limit (gamescope)"
+   },
+   "display.vrr": {
+    "available": true,
+    "note": "devices.json vrr_range"
+   },
+   "display.upscale_filter": {
+    "available": true
+   },
+   "display.upscale_scaler": {
+    "available": true
+   },
+   "display.sharpness": {
+    "available": true,
+    "min": 0,
+    "max": 20
+   },
+   "display.vibrance": {
+    "available": true
+   },
+   "display.color_temp": {
+    "available": true,
+    "min": 4500,
+    "max": 9500
+   },
+   "display.night_light": {
+    "available": true
+   },
+   "display.allow_tearing": {
+    "available": true
+   },
+   "display.effect": {
+    "available": true
+   },
+   "display.rotation": {
+    "available": true
+   },
+   "display.dim_after": {
+    "available": true
+   },
+   "display.screen_off_after": {
+    "available": true
+   },
+   "display.hdr": {
+    "available": false,
+    "reason_contains": "HDR",
+    "note": "IPS panel (devices.json panel.type)"
+   },
+   "audio.volume": {
+    "available": true,
+    "min": 0,
+    "max": 100
+   },
+   "audio.mute": {
+    "available": true
+   },
+   "audio.output": {
+    "available": true
+   },
+   "audio.input": {
+    "available": true
+   },
+   "audio.mic_mute": {
+    "available": true
+   },
+   "network.wifi": {
+    "available": true
+   },
+   "network.bluetooth": {
+    "available": true
+   },
+   "network.airplane": {
+    "available": true
+   },
+   "system.sleep": {
+    "available": true
+   },
+   "system.screenshot": {
+    "available": true
+   },
+   "system.keep_awake": {
+    "available": true
+   },
+   "perf.shader_threads": {
+    "available": true,
+    "min": 0,
+    "max": 16
+   },
+   "power.profile": {
+    "available": true,
+    "options_include": [
+     "battery",
+     "balanced",
+     "performance"
+    ]
+   },
+   "power.battery_saver": {
+    "available": true
+   },
+   "power.battery_saver_at": {
+    "available": true,
+    "min": 0,
+    "max": 50
+   },
+   "power.cpu_boost": {
+    "available": true
+   },
+   "power.cpu_max": {
+    "available": true,
+    "min": 30,
+    "max": 100
+   },
+   "power.epp": {
+    "available": true
+   },
+   "power.governor": {
+    "available": true
+   },
+   "power.gpu_min": {
+    "available": true
+   },
+   "power.gpu_max": {
+    "available": true
+   },
+   "power.autotune_target": {
+    "available": true
+   },
+   "power.autotune_floor": {
+    "available": true
+   },
+   "power.autotune_keep": {
+    "available": true,
+    "min": 2,
+    "max": 15
+   },
+   "_source": "ASUS ROG Ally (RC71L, Z1 Extreme, 7\" IPS 120 Hz VRR). Fixture stack: steamos-manager + PowerStation + InputPlumber. TDP 5-25 W on battery, 30 W plugged (hhd ALLY_DATA max_tdp_dc 25, max_tdp 30). Boost: hhd asus/__init__.py L51-53, L370-380 SPPT <= min(35, SPL*1.2), FPPT <= min(35, SPL*1.4). Fan: asus_custom_fan_curve, 8 points, never under hhd's minimum curve. RGB: HueSync asus_ally.py (ally:rgb:joystick_rings).",
+   "power.tdp": {
+    "available": true,
+    "min": 5,
+    "max": 25,
+    "unit": "W",
+    "ac": {
+     "max": 30
+    }
+   },
+   "power.sppt": {
+    "available": true,
+    "max_le": 35,
+    "note": "fixture SPL 25 W: 25..30 (1.2 x SPL)"
+   },
+   "power.fppt": {
+    "available": true,
+    "max_le": 35,
+    "note": "fixture SPL 25 W: up to 35"
+   },
+   "power.smt": {
+    "available": true
+   },
+   "power.cpu_cores": {
+    "available": true
+   },
+   "power.gpu_level": {
+    "available": true
+   },
+   "power.platform_profile": {
+    "available": true
+   },
+   "power.charge_limit": {
+    "available": true,
+    "min": 50,
+    "max": 100,
+    "note": "steamos-manager MaxChargeLevel"
+   },
+   "power.fan_mode": {
+    "available": true,
+    "options_include": [
+     "quiet",
+     "auto",
+     "max"
+    ]
+   },
+   "power.fan_curve": {
+    "available": true,
+    "kind": "curve",
+    "min": 0,
+    "max": 100,
+    "note": "8 points (fixes/fan asus_custom_fan_curve)"
+   },
+   "power.sleep_mode": {
+    "available": true
+   },
+   "power.gpu_clock": {
+    "available": false,
+    "reason_contains": "GPU minimum and maximum"
+   },
+   "controller.emulation": {
+    "available": true
+   },
+   "controller.rumble": {
+    "available": true
+   },
+   "controller.nintendo_layout": {
+    "available": true
+   },
+   "controller.desktop_mode": {
+    "available": true
+   },
+   "controller.paddle.LeftPaddle1": {
+    "available": true,
+    "note": "M1/M2 (buttons.gd rog-ally)"
+   },
+   "controller.paddle.RightPaddle1": {
+    "available": true
+   },
+   "controller.led_effect": {
+    "available": true,
+    "note": "HueSync asus_ally.py SYSFS_LED_PATHS"
+   },
+   "controller.led_color": {
+    "available": true
+   },
+   "controller.led_brightness": {
+    "available": true,
+    "min": 0,
+    "max": 100
+   },
+   "controller.led_color_2": {
+    "available": false,
+    "reason_contains": "one zone"
+   },
+   "display.refresh_rate": {
+    "available": true,
+    "min": 48,
+    "max": 120
+   },
+   "perf.upscaler": {
+    "options_include": [
+     "own",
+     "fsr31",
+     "fsr4_amd"
+    ],
+    "note": "Z1 Extreme is RDNA3: FSR 4 opt-in"
+   }
+  }
+ },
  "_examples": {
   "lenovo-legion-go-s-z2go": {
    "power.tdp": {
@@ -759,26 +1500,11 @@
    }
   }
  },
- "_conflicts": [
-  "aokzoe-a1, aokzoe-a1-pro: devices.json rgb via oxp-ec, HueSync and hhd: no RGB (rgb=False)",
-  "aokzoe-a1x, onexplayer-g1-amd, onexplayer-g1-intel, gpd-win-4: devices.json rgb null, HueSync drives RGB on them",
-  "lenovo-legion-go-s-*: devices.json plugged_max 33; hhd allows 40 W on AC (33 W on battery) - devices.json is the safer side",
-  "steam-deck-*: devices.json max 15 W; SimpleDeckyTDP's slider goes to 20 W - devices.json is the safer side",
-  "msi-claw-a8: devices.json tdp.min 8, hhd min_tdp 7 - devices.json is the safer side",
-  "aokzoe-a1: devices.json plugged_max 33 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "asus-rog-xbox-ally-x: devices.json boost_max 45 W > 35 W known safe",
-  "asus-rog-xbox-ally-x20: devices.json boost_max 45 W > 35 W known safe",
-  "asus-rog-xbox-ally-x20: devices.json tdp.min 5 W < 7 W known to work",
-  "ayaneo-2: devices.json plugged_max 33 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "gpd-win-4: devices.json boost_max 33 W > 32 W known safe",
-  "gpd-win-max-2: devices.json boost_max 33 W > 32 W known safe",
-  "gpd-win-mini: devices.json boost_max 33 W > 32 W known safe",
-  "onexplayer-2: devices.json plugged_max 33 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "onexplayer-3: devices.json boost_max 52 W > 42 W known safe",
-  "onexplayer-g1-amd: devices.json plugged_max 35 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "onexplayer-g1-intel: devices.json plugged_max 35 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "onexplayer-g1-intel: devices.json boost_max 40 W > 32 W known safe",
-  "onexplayer-x1-intel: devices.json plugged_max 35 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "onexplayer-x1-intel: devices.json boost_max 40 W > 32 W known safe"
+ "_resolved": [
+  "2026-11-08: every devices.json / hhd / HueSync conflict reconciled in devices.json; each changed row has a 'notes' line with its source.",
+  "Lowered to hhd's safe values: asus-rog-xbox-ally-x and -x20 boost_max 45 -> 35 (x20 also min 5 -> 7); onexplayer-3 boost_max 52 -> 42; gpd-win-4 / -mini / -max-2 boost_max 33 -> 32; onexplayer-x1-intel and onexplayer-g1-intel plugged_max 35 -> 30 and boost_max 40 -> 32; onexplayer-g1-amd plugged_max 35 -> 30; aokzoe-a1, ayaneo-2, onexplayer-2 plugged_max 33 -> 30 (the makers advertise 33 W on AC; the conservative value stays the default ceiling).",
+  "SPPT / FPPT ceilings with hhd's formulas added for the ROG Ally family, Legion Go / Go 2 / Go S and the MSI Claws (tdp.sppt_max, fppt_max, *_ratio, *_over; docs/DEVICES.md).",
+  "RGB: aokzoe-a1 / -a1-pro have none (HueSync and hhd agree: rgb null); aokzoe-a1x, onexplayer-g1-amd / -intel and gpd-win-4 have it (rgb via hhd).",
+  "Kept on purpose, devices.json being the safer side: lenovo-legion-go-s-* plugged_max 33 (hhd 40 W on AC), steam-deck-* 15 W (SimpleDeckyTDP 20 W), msi-claw-a8 min 8 (hhd 7), Legion Go 2 FPPT 41 (hhd 45), Claw A8 FPPT 40 (hhd 48)."
  ]
 }

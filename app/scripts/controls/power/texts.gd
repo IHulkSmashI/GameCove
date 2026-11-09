@@ -7,8 +7,8 @@ const T := {
 	"power.profile": ["Power profile", "Battery, Balanced or Performance watts for this handheld."],
 	"power.boost": ["Boost", "Extra watts for short bursts above the TDP. 0 keeps power flat."],
 	"power.boost_on": ["TDP boost", "Lets the chip burst above the TDP for a moment (Handheld Daemon)."],
-	"power.sppt": ["Short boost limit (SPPT)", "Watts the chip may hold for a few seconds above the TDP."],
-	"power.fppt": ["Peak boost limit (FPPT)", "Watts for very short peaks. Never below the short boost limit."],
+	"power.sppt": ["Short boost limit (SPPT)", "Watts the chip may hold for up to about two minutes above the TDP. Kept within the safe limit for this handheld."],
+	"power.fppt": ["Peak boost limit (FPPT)", "Watts for peaks of a few seconds. Never below the short boost limit, never past the safe limit."],
 	"power.power_mode": ["Power mode", "The system's power mode: also sets CPU energy and firmware mode."],
 	"power.platform_profile": ["Firmware mode", "The maker's own power and fan mode for this handheld."],
 	"power.cpu_boost": ["CPU boost", "Lets the CPU clock above its base speed. Off is cooler and quieter."],
@@ -48,6 +48,7 @@ const NO_FAN := "No fan control on this kernel"
 const NO_CURVE := "This fan has no curve to set"
 const NO_CHARGE := "This battery has no charge limit"
 const NO_GPU_CLOCKS := "No GPU clock control here"
+const USE_GPU_MIN_MAX := "Set by GPU minimum and maximum clock"
 const AMD_ONLY := "An AMD GPU setting"
 const XE_ONLY := "Needs an Intel Arc (xe) GPU or steamos-manager"
 const NO_PPD := "No power-profiles-daemon or tuned-ppd running"

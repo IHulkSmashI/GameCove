@@ -55,6 +55,19 @@ body:
       options:
         - label: Test builds may have bugs, and you know how to get back to Steam's Gaming Mode.
           required: true
+  - type: dropdown
+    id: photo
+    attributes:
+      label: Would you share a front photo of your handheld under CC0 for the app?
+      description: |
+        Optional. GameCove shows a real photo of your handheld in "About this device", and many models don't have a free one yet. CC0 means anyone can use it, no credit needed.
+        If yes: front view, screen on, straight on at screen height, plain light or dark background, soft even light (no flash, no reflections of you on the screen), no people, at least 2000 px wide. Attach it in a comment after you sign up.
+      options:
+        - "Yes, I'll attach one"
+        - Maybe later
+        - "No, thanks"
+    validations:
+      required: false
   - type: textarea
     id: extra
     attributes:

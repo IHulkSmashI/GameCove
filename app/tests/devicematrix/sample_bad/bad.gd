@@ -50,4 +50,12 @@ func controls() -> Array:
 		# wrong group prefix
 		Ctl.make({"id": "fps.limit", "group": "perf", "kind": "toggle"},
 			func(_c): return "", func(_c): return false, func(_c, _v): return true),
+		# fan curve with the wrong point count, sent to the fan fix as given (falling, under Quiet)
+		Ctl.make({"id": "power.fan_curve", "group": "power", "kind": "curve", "min_value": 0.0, "max_value": 100.0, "points": 4},
+			func(_c): return "",
+			func(_c): return [50.0, 50.0, 50.0, 50.0],
+			func(_c, v):
+				var duties := ",".join((v as Array).map(func(x): return str(int(x))))
+				ctx["runner"].run("pkexec", PackedStringArray(["/usr/libexec/gamecove/gamecove-fix-set", "fan", "set", "curve:" + duties]))
+				return true),
 	]

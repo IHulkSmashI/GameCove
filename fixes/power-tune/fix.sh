@@ -329,6 +329,16 @@ fw_attr() {
 	return 1
 }
 
+# ppt_cap sppt|fppt: the most watts this handheld's row allows ("" when it has none)
+ppt_cap() {
+	_pid="$(handheld_id)" || return 0
+	while IFS='	' read -r _rid _s _f; do
+		[ "$_rid" = "$_pid" ] || continue
+		case "$1" in sppt) printf '%s\n' "${_s#sppt=}" ;; *) printf '%s\n' "${_f#fppt=}" ;; esac
+		return 0
+	done < "$HERE/ppt-limits.txt"
+}
+
 # set_ppt sppt|fppt <W>
 set_ppt() {
 	is_uint "$2" || die 2 "$1 needs watts"
@@ -353,6 +363,9 @@ set_ppt() {
 	if [ "$1" = fppt ] && s="$(fw_attr ppt_pl2_sppt)"; then
 		v="$(rd "$s/current_value")"; is_uint "$v" && [ "$v" -gt "$lo" ] && lo="$v"
 	fi
+	# never past the safe boost limit devices.json documents for this handheld (ppt-limits.txt)
+	cap="$(ppt_cap "$1")"
+	is_uint "$cap" && [ "$cap" -gt 0 ] && [ "$cap" -lt "$hi" ] && hi="$cap"
 	[ "$2" -ge "$lo" ] && [ "$2" -le "$hi" ] || die 2 "$1 must be $lo..$hi W here"
 	put "$a/current_value" "$2" "$1"
 }

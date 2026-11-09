@@ -16,6 +16,11 @@ static func fixes(node: Node) -> Node:
 		return _fixes
 	if Services.under_tests(node) or not ResourceLoader.exists(FIXES):
 		return null
+	# main.gd owns one ("Fixes"): use it rather than making a second
+	var owned := node.get_tree().root.find_child("Fixes", true, false)
+	if owned != null and owned.has_method("rows") and owned.has_method("counts"):
+		_fixes = owned
+		return _fixes
 	var dev := node.get_node_or_null("/root/Device")
 	_fixes = load(FIXES).new()
 	_fixes.name = "GameCoveFixes"

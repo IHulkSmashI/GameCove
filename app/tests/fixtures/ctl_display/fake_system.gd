@@ -25,6 +25,9 @@ var nmcli_ok := true
 var wifi_enabled := true
 var bluez_ok := true
 var bt_powered := true
+## BlueZ objects for GetManagedObjects: {"/org/bluez/hci1/dev_AA": true (paired)}
+var bt_devices: Dictionary = {}
+var bt_set_paths: Array = []         # adapters whose Powered was set
 var steamos_manager := true
 var wifi_pm := 1
 var logind_ok := true
@@ -216,7 +219,18 @@ func _busctl(a: Array) -> Dictionary:
 		f.store_string(str(a[9]))
 		f.close()
 		return {"code": 0, "out": ""}
+	if bus == "--system" and verb == "call" and a[2] == "org.bluez" and a[5] == "GetManagedObjects":
+		if not bluez_ok:
+			return {"code": 1, "out": ""}
+		var objs := {}
+		for n in DirAccess.get_directories_at(root + "/sys/class/bluetooth") if DirAccess.dir_exists_absolute(root + "/sys/class/bluetooth") else []:
+			objs["/org/bluez/" + n] = {"org.bluez.Adapter1": {"Powered": {"type": "b", "data": bt_powered}}}
+		for path in bt_devices:
+			objs[path] = {"org.bluez.Device1": {"Paired": {"type": "b", "data": bt_devices[path]}}}
+		return {"code": 0, "out": JSON.stringify({"type": "a{oa{sa{sv}}}", "data": [objs]})}
 	if bus == "--system" and a[2] == "org.bluez":
+		if verb == "set-property":
+			bt_set_paths.append(str(a[3]))
 		if not bluez_ok or not FileAccess.file_exists(root + "/sys/class/bluetooth/" + str(a[3]).get_file() + "/name"):
 			return {"code": 1, "out": ""}
 		if verb == "get-property":

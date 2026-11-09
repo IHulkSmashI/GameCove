@@ -82,6 +82,7 @@ func test_all_providers_on_all_devices() -> void:
 func test_harness_passes_a_careful_provider() -> void:
 	var m := _manifest()
 	var e := Matrix.expectations()
+	e["devices"] = {}   # per-device promises belong to the real providers, not this sample
 	var scripts := Matrix.provider_scripts(GOOD)
 	for id in ["msi-claw-8-ex", "asus-rog-ally", "lenovo-legion-go-2", "steam-deck-oled", "aokzoe-a1-pro", "onexplayer-2-pro", "onexplayer-3", "generic-amd", "generic-intel"]:
 		var r := Matrix.run_device(_info(m, id), scripts, e)
@@ -94,10 +95,12 @@ func test_harness_passes_a_careful_provider() -> void:
 func test_harness_catches_a_careless_provider() -> void:
 	var m := _manifest()
 	var e := Matrix.expectations()
+	e["devices"] = {}
 	var r := Matrix.run_device(_info(m, "asus-rog-ally"), Matrix.provider_scripts(BAD), e)
 	var text := "\n".join(r["problems"])
 	for needle in ["backlight", "one short line", "ppt_pl1_spl", "power.tdp range", "real path",
-			"id must be", "not restored", "above the 30 W known safe here"]:
+			"id must be", "not restored", "above the 30 W known safe here",
+			"power.fan_curve: 4 points, the asus_custom_fan_curve table has 8", "quieter than Quiet", "falls at point"]:
 		ok(needle in text, "caught: " + needle)
 	var r2 := Matrix.run_device(_info(m, "aokzoe-a1"), Matrix.provider_scripts(BAD), e)
 	ok("has no RGB" in "\n".join(r2["problems"]), "RGB offered where HueSync/hhd say there is none")
@@ -113,3 +116,49 @@ func test_expectations_are_enforced() -> void:
 	ok("power.tdp (lenovo-legion-go-s-z2go): max 33" in text, "max checked against the row's 33 W")
 	ok("controller.nope expected but no provider registers it" in text, "missing control reported")
 	ok(not "vendor:intel" in text, "selector skipped on AMD")
+
+
+## Fan curves: one duty per table point, 0-100 %, never falling, never under Quiet.
+func test_curve_rules() -> void:
+	var row := {"fan": "asus_custom_fan_curve"}
+	eq(Matrix.curve_problems([2, 5, 17, 35, 55, 75, 75, 75], null, row), [] as Array[String], "Quiet itself is fine")
+	eq(Matrix.curve_problems([100, 100, 100, 100, 100, 100, 100, 100], null, row), [] as Array[String], "Max is fine")
+	var t := "\n".join(Matrix.curve_problems([0, 5, 17, 35, 55, 75, 75, 75], null, row))
+	ok("point 1 = 0 is quieter than Quiet (2)" in t, "under Quiet caught: " + t)
+	t = "\n".join(Matrix.curve_problems([2, 5, 17, 35, 55, 80, 76, 101], null, row))
+	ok("falls at point 7" in t and "point 8 = 101 outside 0..100" in t, "falling and over 100 caught: " + t)
+	ok("has 3 points" in "\n".join(Matrix.curve_problems([50, 60, 70], null, row)), "point count")
+	eq(Matrix.fan_table({"fan": "oxp_ec"}), {}, "manual fan drivers have no curve")
+
+
+func after_all() -> void:
+	Matrix.cleanup()
+
+
+## Each run generates into its own folder; stale ones (marker, older than an hour) go.
+func test_runs_use_their_own_folder_and_stale_ones_go() -> void:
+	var m := _manifest()
+	var root := str(m.get("devices", [{}])[0].get("root", ""))
+	if OS.get_environment("DEVICEMATRIX_DIR") == "":
+		ok(("devicematrix-%d" % OS.get_process_id()) in root, "this run's folder: " + root)
+	var base := OS.get_user_data_dir()
+	var old := base.path_join("devicematrix-999999999")
+	var other := base.path_join("devicematrix-999999998")
+	for d in [old, other]:
+		DirAccess.make_dir_recursive_absolute(d.path_join("x"))
+	var f := FileAccess.open(old.path_join(Matrix.MARKER), FileAccess.WRITE)
+	f.store_string("")
+	f.close()
+	ok(not "devicematrix-999999999" in Matrix.clean_stale(3600), "a fresh one (another run going on) stays")
+	OS.execute("touch", PackedStringArray(["-d", "2 hours ago", old.path_join(Matrix.MARKER)]))
+	var gone := Matrix.clean_stale(3600)
+	ok("devicematrix-999999999" in gone and DirAccess.dir_exists_absolute(other), "only folders with gen.py's marker: %s" % [gone])
+	ok(not DirAccess.dir_exists_absolute(old), "removed")
+	Matrix._rm_tree(other)
+
+
+## The three test handhelds have their promises written down (tools/devicematrix/expectations.json).
+func test_test_handhelds_have_expectations() -> void:
+	var d: Dictionary = Matrix.expectations().get("devices", {})
+	for id in ["msi-claw-8-ex", "lenovo-legion-go-s-z2go", "asus-rog-ally"]:
+		ok(d.get(id, {}).size() > 30 and str(d.get(id, {}).get("_source", "")) != "", id + " covered with a source")

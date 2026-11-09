@@ -40,6 +40,10 @@ var apply_order := 0
 var needs_root := false
 ## Optional: ids this depends on; disabled while a dependency is off/unavailable.
 var requires: Array = []
+## Optional: makes an already coerced value safe for this device (a fan curve
+## raised to Quiet and never falling); returns null to reject it. Called by
+## coerce(), so profiles, imports and the UI all get the safe value.
+var normalize: Callable
 
 var ctx: Dictionary = {}           # {"sys_root", "runner", "home", "device"}
 var available := false
@@ -91,6 +95,13 @@ func write(v: Variant) -> bool:
 
 ## The value made valid for this control, or null when it can't be.
 func coerce(v: Variant) -> Variant:
+	var out: Variant = _coerce_kind(v)
+	if out != null and normalize.is_valid():
+		out = normalize.call(out)
+	return out
+
+
+func _coerce_kind(v: Variant) -> Variant:
 	match kind:
 		"slider":
 			if not (v is int or v is float):

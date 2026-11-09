@@ -51,7 +51,7 @@ const CARDS := {
 			["perf.overlay_opacity", "perf.overlay_scale", "perf.overlay_item.*"]],
 		["Upscaling", "upscale", ["perf.upscaler", "perf.frame_gen", "perf.upscale_recommended"], ["perf.upscale_undo"]],
 		["Frame generation", "frames", ["perf.lsfg", "perf.lsfg_multiplier"], ["perf.lsfg_flow_scale", "perf.lsfg_performance"]],
-		["Frame limit and latency", "latency", ["perf.mangohud_fps_limit", "perf.low_latency"], ["perf.mangohud_fps_limit_method"]],
+		["Latency", "latency", ["perf.low_latency"], []],
 		["Compatibility", "wrench", ["perf.proton"], ["perf.launch_wrapper"]],
 		["Shaders", "shader", ["perf.shader_threads"], ["perf.clear_shader_cache"]],
 	],

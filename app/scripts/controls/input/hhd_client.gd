@@ -21,6 +21,9 @@ const SOCKET := "/run/hhd/api"
 const PORT := 5335
 
 var runner: RefCounted
+## Optional HTTP transport with hhd_http.gd's request(method, path, headers, body)
+## -> {code, body} (ctx.hhd_transport: the device matrix's fake hhd); else curl.
+var transport: RefCounted
 var sys_root := ""
 var home := ""
 ## Seconds curl may take. hhd answers at once; a stuck daemon must not hold the
@@ -96,6 +99,15 @@ static func ints(v: Variant) -> Variant:
 func request(method: String, path: String, body := "") -> Dictionary:
 	if not present():
 		return {"code": 0, "body": ""}
+	if transport != null and transport.has_method("request"):
+		var headers := PackedStringArray()
+		var t := token()
+		if t != "":
+			headers.append("Authorization: Bearer " + t)
+		if method == "POST":
+			headers.append("Content-Type: application/json")
+		var tr: Variant = transport.request(method, path, headers, body)
+		return {"code": int(tr.get("code", 0)), "body": str(tr.get("body", ""))} if tr is Dictionary else {"code": 0, "body": ""}
 	var r := _curl(method, path, body, true)
 	if int(r["code"]) == 0:
 		r = _curl(method, path, body, false)

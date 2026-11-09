@@ -105,6 +105,11 @@ func fix_helper() -> String:
 	return root + "/usr/libexec/gamecove/gamecove-fix"
 
 
+## Per-game upscaling helper; also installs the XeSS XMX driver (Intel Arc, as the user).
+func upscale_helper() -> String:
+	return root + "/usr/libexec/gamecove/gamecove-upscale"
+
+
 func apply_helper() -> String:
 	return root + "/usr/libexec/gamecove/gamecove-apply-choices"
 
