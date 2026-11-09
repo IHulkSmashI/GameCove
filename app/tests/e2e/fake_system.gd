@@ -340,6 +340,8 @@ func _live_get(svc: String, _obj: String, iface: String, prop: String) -> Varian
 			var pl1 := _rd(rapl + "constraint_0_power_limit_uw").to_float() / 1e6
 			var pl2 := _rd(rapl + "constraint_1_power_limit_uw").to_float() / 1e6
 			return pl1 if prop == "TDP" else maxf(0.0, pl2 - pl1)
+	if svc == PS and iface == "org.shadowblip.CPU.Core" and prop == "Online":
+		return _rd("/sys/devices/system/cpu/cpu%d/online" % _obj.get_file().trim_prefix("Core").to_int()) != "0"
 	if svc == PS and iface == "org.shadowblip.CPU":
 		match prop:
 			"SmtEnabled":
@@ -416,6 +418,11 @@ func _live_set(svc: String, obj: String, iface: String, prop: String, raw: Strin
 				if _exists(rapl + "/constraint_0_power_limit_uw"):
 					_wr(rapl + "/constraint_0_power_limit_uw", str(int(tdp * 1000000.0)))
 					_wr(rapl + "/constraint_1_power_limit_uw", str(int((tdp + boost) * 1000000.0)))
+			"org.shadowblip.CPU.Core.Online":
+				var n := obj.get_file().trim_prefix("Core").to_int()
+				if n <= 0 or not _exists("/sys/devices/system/cpu/cpu%d/online" % n):
+					return "No such core"
+				_wr("/sys/devices/system/cpu/cpu%d/online" % n, "1" if raw == "true" else "0")
 			"org.shadowblip.CPU.SmtEnabled":
 				if _rd("/sys/devices/system/cpu/smt/control") in ["notsupported", "notimplemented", ""]:
 					return "SMT not supported"

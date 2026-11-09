@@ -790,6 +790,10 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "SmtEnabled", "b", smt)
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "CoresCount", "u", threads)
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "CoresEnabled", "u", threads)
+        # one object per logical CPU (src/performance/cpu/core.rs): Online b, Number u
+        for n in range(1, threads):
+            prop("--system", PS, f"{PS_CPU}/Core{n}", "org.shadowblip.CPU.Core", "Online", "b", True)
+            prop("--system", PS, f"{PS_CPU}/Core{n}", "org.shadowblip.CPU.Core", "Number", "u", n)
         # PowerStation lists /proc/cpuinfo flags (src/performance/cpu/cpu_features.rs): AMD core
         # performance boost is "cpb", SMT is "ht"
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "Features", "as",

@@ -85,6 +85,12 @@ func _run() -> void:
 				continue
 			if OS.get_environment("E2E_PHASE") != "2":
 				await world.reset()   # phase 2 of a restart starts from what phase 1 left
+				if OS.get_environment("E2E_DEBUG") != "":
+					var c: Node = world.autoload("Controls")
+					print("  RESET %s tdp=%s fw=%s autotune=%s user=%s" % [label, c.value("power.tdp"),
+						world.read("/sys/class/firmware-attributes/lenovo-wmi-other-0/attributes/ppt_pl1_spl/current_value"),
+						world.autoload("Power")._autotune_on, world.autoload("Power")._user_tdp])
+					print("    saver=", c.value("power.battery_saver"), " at=", c.value("power.battery_saver_at"), " cfg=", FileAccess.get_file_as_string(world.home + "/.config/gamecove/power_controls.cfg").replace("\n", " | "), " pcfg=", FileAccess.get_file_as_string(world.home + "/.config/gamecove/power.cfg").replace("\n", " | ").substr(0, 300))
 			else:
 				world.fake.reset_log()
 			errors.take()

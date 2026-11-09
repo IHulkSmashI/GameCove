@@ -323,25 +323,38 @@ func ui_clean() -> bool:
 	return main.find_child("KeepDialog", true, false) == null
 
 
-## Copies `from` over `to`: changed files rewritten, extra files removed.
+## Copies `from` over `to`: changed files rewritten, extra files removed. Hidden
+## files and folders too (~/.config holds the saved settings: DirAccess's
+## get_*_at() skip dot names, which once let the battery saver leak between tests).
 static func restore_tree(from: String, to: String) -> void:
-	for f in DirAccess.get_files_at(from):
+	var src := _entries(from)
+	var dst := _entries(to)
+	for f in src[0]:
 		var a := FileAccess.get_file_as_bytes(from.path_join(f))
-		var dst := to.path_join(f)
-		if not FileAccess.file_exists(dst) or FileAccess.get_file_as_bytes(dst) != a:
-			var w := FileAccess.open(dst, FileAccess.WRITE)
+		var p := to.path_join(f)
+		if not FileAccess.file_exists(p) or FileAccess.get_file_as_bytes(p) != a:
+			var w := FileAccess.open(p, FileAccess.WRITE)
 			if w != null:
 				w.store_buffer(a)
 				w.close()
-	for f in DirAccess.get_files_at(to):
-		if not FileAccess.file_exists(from.path_join(f)):
+	for f in dst[0]:
+		if not f in src[0]:
 			DirAccess.remove_absolute(to.path_join(f))
-	for d in DirAccess.get_directories_at(from):
+	for d in src[1]:
 		DirAccess.make_dir_recursive_absolute(to.path_join(d))
 		restore_tree(from.path_join(d), to.path_join(d))
-	for d in DirAccess.get_directories_at(to):
-		if not DirAccess.dir_exists_absolute(from.path_join(d)):
+	for d in dst[1]:
+		if not d in src[1]:
 			Matrix._rm_tree(to.path_join(d))
+
+
+## [files, folders] in `dir`, dot names included.
+static func _entries(dir: String) -> Array:
+	var d := DirAccess.open(dir)
+	if d == null:
+		return [PackedStringArray(), PackedStringArray()]
+	d.include_hidden = true
+	return [d.get_files(), d.get_directories()]
 
 
 # ---- waiting ------------------------------------------------------------------------
