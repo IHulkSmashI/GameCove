@@ -267,6 +267,24 @@ func _ensure_identity() -> Dictionary:
 	return _identity
 
 
+## The client identity plus the pin for one PC (review M27): the public key of the certificate Moonlight stored
+## for it when it paired. {} when Moonlight hasn't paired with this PC (or its certificate can't be read), so no
+## HTTPS call goes to a server we can't recognise.
+func _identity_for(uuid: String) -> Dictionary:
+	var ident := _ensure_identity()
+	if ident.is_empty() or uuid == "":
+		return {}
+	for h in Moonlight.read_conf(str(moonlight.get("config", "")))["hosts"]:
+		if str(h["uuid"]).to_upper() == uuid.to_upper():
+			var pin := HostApi.pin_for_pem(str(h.get("srvcert", "")))
+			if pin == "":
+				return {}
+			var out := ident.duplicate()
+			out["pin"] = pin
+			return out
+	return {}
+
+
 func _exit_tree() -> void:
 	stop_jobs()
 	cancel_pair()
@@ -499,7 +517,7 @@ func _check_job(addrs: Array, port: int, paired: bool) -> Dictionary:
 		if info.is_empty():
 			continue
 		var out := {"address": a, "info": info, "secure": {}}
-		var ident := _ensure_identity() if paired else {}
+		var ident := _identity_for(str(info.get("uuid", ""))) if paired else {}
 		if not ident.is_empty():
 			var s := HostApi.split(_rc(HostApi.serverinfo_https(str(a), int(info["https_port"]), ident)))
 			if s["ok"]:
@@ -627,7 +645,7 @@ func load_apps(id: String) -> void:
 
 func _apps_job(address: String, https_port: int, uuid: String, art_dir: String, m: Dictionary) -> Dictionary:
 	var apps: Array = []
-	var ident := _ensure_identity()
+	var ident := _identity_for(uuid)
 	var state := "error"
 	if not ident.is_empty():
 		var r := HostApi.split(_rc(HostApi.applist(address, https_port, ident)))
@@ -848,8 +866,9 @@ func sleep_pc(id: String) -> bool:
 	var h: Dictionary = hosts[id]
 	var address := str(h["address"])
 	var port := int(h["https_port"])
+	var uuid := str(h.get("uuid", ""))
 	_run(func():
-		var ident := _ensure_identity()
+		var ident := _identity_for(uuid)
 		return HostApi.split(_rc(HostApi.sleep_pc(address, port, ident))) if not ident.is_empty() else {"ok": false},
 		func(res: Dictionary):
 			if bool(res["ok"]) or int(res.get("code", 0)) == 202:

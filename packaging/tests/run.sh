@@ -627,7 +627,7 @@ rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
 expect_code 0 "signed release accepted" gg "$R_BAZ"
 contains "$T/cosign.log" "^verify-blob --bundle .*SHA256SUMS.sigstore.json --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp " "cosign checks the bundle and the GitHub OIDC issuer"
-contains "$T/cosign.log" 'IHulkSmashI/GameCove/\\.github/workflows/release\\.yml@refs/tags/v' "identity: this repo's release workflow on a v* tag"
+contains "$T/cosign.log" 'IHulkSmashI/GameCove/\\.github/workflows/release\\.yml@refs/tags/v0\\.2\\.0\$ ' "identity: this repo's release workflow for exactly this tag (review M5)"
 contains "$GI/release.env" "^SIGNATURE=verified$" "recorded for the installer"
 rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
@@ -725,13 +725,13 @@ if [ "$(grep -c "<allow_active>yes</allow_active>" "$POL")" -eq 1 ]; then ok; el
 
 # ------------------------------------------------------------------ RPM spec
 SPEC="$REPO/packaging/rpm/gamecove.spec"
-contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later$" "spec License tag"
+contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND OFL-1.1 AND CC0-1.0 AND " "spec License tag (GameCove, the bundled MIT / OFL / CC0 parts, review L36)"
 contains "$SPEC" "packaging/libexec/gamecove-fix-set" "spec installs the set entry point"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-fix-set$" "spec lists the set entry point"
 contains "$SPEC" "build-bpf.sh" "spec builds the gyro program"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-apply-choices$" "spec lists the installer's apply helper"
 contains "$SPEC" "^%{_libexecdir}/gamecove/get-gamecove.sh$" "spec lists the bootstrap"
-contains "$SPEC" "LICENSES/GPL-2.0-only.txt" "spec ships the GPL-2.0 text"
+contains "$SPEC" "done < packaging/licenses.list" "spec ships every licence text (GPL-2.0, OFL, Godot, ...)"
 uhb_spec="$(sed -n 's/^%global uhb_commit //p' "$SPEC")"
 uhb_script="$(sed -n 's/.*UHB_PIN:-\([0-9a-f]*\)}.*/\1/p' "$REPO/fixes/claw8ex-gyro/bpf/build-bpf.sh")"
 if [ -n "$uhb_spec" ] && [ "$uhb_spec" = "$uhb_script" ]; then ok; else bad "udev-hid-bpf pin differs: spec '$uhb_spec', build-bpf.sh '$uhb_script'"; fi
@@ -875,6 +875,10 @@ if "$SHELLCHECK" -S warning -s bash "$REPO/packaging/libexec/gamecove-run" >"$T/
 
 # ------------------------------------------------------- gamecove-selftest (fake root and commands)
 if sh "$REPO/packaging/tests/selftest.sh" >"$T/out" 2>&1; then ok; else bad "selftest: $(tail -20 "$T/out")"; fi
+
+# ------------------------------------------------------- release, licences, supply chain, privacy (packaging/tests/release.sh)
+if sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "release.sh: $(grep FAIL "$T/out" | head -30)"; fi
+if [ -n "$SHELLCHECK" ] && "$SHELLCHECK" -S warning -s sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "shellcheck release.sh: $(cat "$T/out")"; fi
 
 # ------------------------------------------------------- release workflow signs what the installer verifies
 W="$REPO/.github/workflows/release.yml"

@@ -40,8 +40,9 @@ RESTART_SUITE = "restart"
 
 
 def godot_path(arg: str) -> str:
-    for p in (arg, os.environ.get("GODOT", ""), "/home/claude/tools/Godot_v4.7.2-stable_linux.x86_64",
-              shutil.which("godot") or ""):
+    # --godot, $GODOT, a tools/ folder next to the checkout, then godot on PATH (no machine-specific paths)
+    beside = os.path.join(os.path.dirname(REPO), "tools", "Godot_v4.7.2-stable_linux.x86_64")
+    for p in (arg, os.environ.get("GODOT", ""), beside, shutil.which("godot") or ""):
         if p and os.path.exists(p):
             return p
     sys.exit("Godot not found: pass --godot or set GODOT")

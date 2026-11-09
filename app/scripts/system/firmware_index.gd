@@ -17,6 +17,52 @@ const MAX_UNPACKED := 8 * 1024 * 1024
 const MAX_AGE_S := 7 * 24 * 3600
 const DMI := "/sys/class/dmi/id/"
 
+## Where a maker's firmware may be downloaded from (review M21): the device's maker, from devices.json, picks the
+## list, never the index; the host must be one of these domains or a subdomain, over https on the default port. The
+## index is a public file, so a URL anywhere else is dropped and the item falls back to the maker's page.
+const DOWNLOAD_HOSTS := {
+	"asus": ["asus.com"], "msi": ["msi.com"], "lenovo": ["lenovo.com"],
+	"valve": ["steampowered.com", "steamdeck.com", "steamos.cloud", "valvesoftware.com", "steamstatic.com"],
+	"acer": ["acer.com"], "gpd": ["gpd.hk", "gpd.cn"], "ayaneo": ["ayaneo.com"],
+	"onexplayer": ["onexplayer.com", "one-netbook.com"], "aokzoe": ["aokzoe.com", "aokzoestore.com"],
+	"zotac": ["zotac.com"], "orange pi": ["orangepi.org", "orangepi.net"],
+}
+## The nightly workflow signs firmware.json.gz with cosign keyless (firmware.json.gz.sigstore.json); when a cosign
+## binary is on the device the app requires that signature from exactly this workflow on the default branch.
+const SIGNER_IDENTITY := "(?i)^https://github\\.com/IHulkSmashI/GameCove/\\.github/workflows/firmware\\.yml@refs/heads/main$"
+const OIDC_ISSUER := "https://token.actions.githubusercontent.com"
+
+
+## The host of a maker download URL when it's allowed for `maker` (see DOWNLOAD_HOSTS), else "".
+static func download_host(url: String, maker: String) -> String:
+	var allowed: Array = DOWNLOAD_HOSTS.get(maker.strip_edges().to_lower(), [])
+	if allowed.is_empty() or not url.begins_with("https://") or url.contains(" ") or url.contains("\\"):
+		return ""
+	var rest := url.substr(8)
+	var end := rest.length()
+	for sep in ["/", "?", "#"]:
+		var i := rest.find(sep)
+		if i >= 0 and i < end:
+			end = i
+	var host := rest.substr(0, end).to_lower()
+	if host.contains("@"):
+		return ""
+	if host.ends_with(":443"):
+		host = host.trim_suffix(":443")
+	if host.contains(":") or host.trim_suffix(".") == "":
+		return ""
+	host = host.trim_suffix(".")
+	for d in allowed:
+		if host == d or host.ends_with("." + str(d)):
+			return host
+	return ""
+
+
+## A page link from the index, kept only when it's https (it's shown as a QR code to open on a phone).
+static func https_or_empty(url: String) -> String:
+	return url if url.begins_with("https://") and not url.contains(" ") else ""
+
+
 ## Maker flash method -> how GameCove can help.
 const HOW := {
 	"ez-flash": "guided", "msi-usb": "guided", "steamos": "guided", "capsule": "guided",
@@ -221,6 +267,8 @@ static func firmware_items(index: Dictionary, row: Dictionary, installed: Dictio
 			continue  # another board's BIOS in the same listing
 		var c := compare(scheme, cur, latest)
 		var flash := str(it.get("flash", "link"))
+		var url := str(it.get("download_url", ""))
+		var host := download_host(url, str(row.get("maker", "")))
 		out.append({
 			"id": "index:%s:%s" % [kind, str(it.get("name", kind)).to_lower().replace(" ", "_")],
 			"section": "firmware", "kind": kind, "name": str(it.get("name", kind)),
@@ -228,9 +276,10 @@ static func firmware_items(index: Dictionary, row: Dictionary, installed: Dictio
 			"status": "unknown" if latest == "" or c == -2 else ("update" if c < 0 else "current"),
 			"severity": str(it.get("severity", "recommended")) if c < 0 else "info",
 			"how": HOW.get(flash, "link"), "flash": flash,
-			"notes": str(it.get("notes", "")), "notes_url": str(it.get("notes_url", entry.get("support_url", ""))),
-			"download_page": str(it.get("download_page", entry.get("support_url", ""))),
-			"download_url": str(it.get("download_url", "")), "sha256": str(it.get("sha256", "")),
+			"notes": str(it.get("notes", "")), "notes_url": https_or_empty(str(it.get("notes_url", entry.get("support_url", "")))),
+			"download_page": https_or_empty(str(it.get("download_page", entry.get("support_url", "")))),
+			"download_url": url if host != "" else "", "download_host": host,
+			"download_blocked": url != "" and host == "", "sha256": str(it.get("sha256", "")),
 			"date": str(it.get("date", "")), "source": "index", "stale": bool(entry.get("stale", false)),
 		})
 	return out

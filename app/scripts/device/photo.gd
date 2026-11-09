@@ -112,8 +112,9 @@ func _ready() -> void:
 		add_child(node)
 		http = node
 	# Background prefetch at start, so the picture is cached before anyone opens
-	# About (and before the next offline start).
-	prefetch_detected.call_deferred()
+	# About (and before the next offline start); not with "Background lookups" off (review M22).
+	if preload("res://scripts/system/privacy.gd").background_allowed(prefs_path):
+		prefetch_detected.call_deferred()
 
 
 # ---- the setting ----------------------------------------------------------------

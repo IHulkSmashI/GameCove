@@ -140,6 +140,9 @@ func test_moonlight_known_hosts_and_paired_check() -> void:
 	eq(h["apps"].size(), 3, "apps")
 	ok(FileAccess.file_exists(str(h["apps"][0]["art"])), "box art downloaded")
 	ok(runner.calls.any(func(c): return c.contains("--cert") and c.contains("client.pem")), "Moonlight's certificate used")
+	var https: Array = runner.calls.filter(func(c): return c.begins_with("curl") and c.contains("https://"))
+	ok(not https.is_empty() and https.all(func(c): return c.contains("--pinnedpubkey sha256//B3MbKcgJf0lgDvPJd+V8AxkMCntC8aoBkmuyCP+YXhg=")),
+		"every HTTPS call is pinned to the PC's certificate from pairing (M27)")
 	var pem := root + "/run/user/1000/gamecove-stream/client.pem"
 	ok(FileAccess.file_exists(pem), "identity written to the runtime folder")
 	eq(FileAccess.get_unix_permissions(pem) & 63, 0, "only the user can read it")
@@ -153,6 +156,20 @@ func test_moonlight_known_hosts_and_paired_check() -> void:
 	eq(again.host(UUID)["apps"].size(), 3, "apps cached on disk")
 	eq(again.host(UUID)["mac"], "D8:BB:C1:12:34:56", "MAC kept")
 	again.free()
+	after_each(s)
+
+
+func test_no_pinned_certificate_no_https() -> void:
+	answers = {"192.168.1.20:47989/serverinfo": "serverinfo_vibepollo_http.xml",
+		"192.168.1.20:47984/serverinfo": "serverinfo_vibepollo_https.xml",
+		"192.168.1.20:47984/applist": "applist.xml"}
+	var s := _make(true, true)
+	var text := FileAccess.get_file_as_string(_f("Moonlight.conf"))
+	var lines := Array(text.split("\n")).map(func(l): return "1\\srvcert=@ByteArray(-----BEGIN CERTIFICATE-----\\nMIIC\\n-----END CERTIFICATE-----\\n)" if str(l).begins_with("1\\srvcert=") else l)
+	_write_conf("\n".join(PackedStringArray(lines)))
+	s.refresh()
+	ok(not runner.calls.any(func(c): return c.begins_with("curl") and c.contains("https://")),
+		"a certificate we can't pin: no HTTPS call at all")
 	after_each(s)
 
 
