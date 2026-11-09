@@ -372,8 +372,15 @@ func test_sleep_pc() -> void:
 
 func test_game_running_and_idle() -> void:
 	var s := _make()
+	eq(runner.calls.size(), 0, "nothing runs at setup")
 	s.set_active(false)
-	eq(runner.calls.size(), 1, "only the one-time vainfo at setup")
+	eq(runner.calls.size(), 0, "nor while the tab is closed")
+	runner.responses["vainfo --display drm"] = {"code": 0, "file": _f("vainfo_rdna2.txt")}
+	runner.responses["avahi-browse -rpt _nvstream._tcp"] = {"code": 0, "out": ""}
+	s.set_active(true)
+	eq(s.decode["av1"], false, "vainfo read when the tab opens")
+	s.set_active(true)
+	eq(runner.calls.filter(func(c): return c.begins_with("vainfo")).size(), 1, "once")
 	s.set_game_running(true)
 	ok(s._game_running, "flag")
 	after_each(s)

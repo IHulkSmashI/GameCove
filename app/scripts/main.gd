@@ -161,8 +161,8 @@ func _ready() -> void:
 
 	streaming = StreamingService.new()
 	streaming.name = "Streaming"
+	add_child(streaming)   # in the tree first: its jobs then run off the main thread
 	streaming.setup(_streaming_ctx())
-	add_child(streaming)
 	stream_screen = StreamingScreen.new()
 	stream_screen.visible = false
 	_screen_layer.add_child(stream_screen)

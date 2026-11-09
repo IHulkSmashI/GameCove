@@ -64,6 +64,7 @@ var _picks := ConfigFile.new()
 var _identity := {}        # {"cert", "key"} file paths
 var _game_running := false
 var _stream_pid := 0
+var _decode_checked := false
 
 
 func setup(c: Dictionary) -> void:
@@ -80,6 +81,15 @@ func setup(c: Dictionary) -> void:
 	_load()
 	locate_moonlight()
 	decode = StreamSettings.decode_for_family(str(ctx.get("gpu_family", "")))
+	_decode_checked = false
+
+
+## What this handheld decodes, asked once (vainfo) the first time the tab opens;
+## the GPU family's table until then and where vainfo is missing.
+func _check_decode() -> void:
+	if _decode_checked:
+		return
+	_decode_checked = true
 	_run(func(): return _r("vainfo", ["--display", "drm"]), func(res: Dictionary):
 		if int(res.get("code", 1)) == 0 and str(res.get("out", "")).contains("VAProfile"):
 			decode = StreamSettings.parse_vainfo(str(res["out"])))
@@ -166,6 +176,7 @@ func set_active(on: bool) -> void:
 		else:
 			_check_timer.stop()
 	if on:
+		_check_decode()
 		refresh()
 
 

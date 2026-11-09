@@ -239,3 +239,15 @@ Big choices are `option_card.gd`: icon tile on the left and badge chip on the ri
 - `SHOOT_SCRIPT=shoot_installer.gd`: installer_welcome, _welcome_steamos, _welcome_other, _welcome_light, _startup, _steam, _stores, _signin, _device, _look, _extras, _summary, _progress, _failed, _done, _maintenance, _uninstall, _finish.
 
 The release set at both sizes lives in `ui-shots/release/` next to the worktrees (not in the repo).
+## Stream
+
+Code: `scripts/ui/streaming/` (`streaming_screen.gd` the tab, `host_card.gd`, `pair_sheet.gd`, `settings_sheet.gd`, `stream_icons.gd` icons and the empty-state picture). Strings: `texts_streaming.gd`. A top-level tab between Discover and Settings (it's a place you go, like Discover, not a store filter); with five tabs the top bar drops its wordmark below about 1300 px (`top_bar.fit_width()`).
+
+- **Header**: STREAM title and line, a Moonlight chip (ready / needed), Add PC (Y) and Search again pills.
+- **PC cards** (`host_card.gd`, 330 x 118): glass card, the PC icon on a tile tinted by state (good online, info in use, warn asleep, muted offline; a moon while asleep), name, a mono status line (dot, state, latency, REMOTE), and what A does now; a house or globe icon for home network / remote. The PC whose apps show keeps a 2 px accent outline; focus is the usual ring.
+- **The focused PC**: a running-now card (cover, RUNNING ON eyebrow, caps title, mono stream summary, Resume primary, Quit on PC); or a pair / wake / unreachable card (tinted icon tile, line, one primary button); then its apps as a shelf of box-art tiles (`shelf.gd`, 150 x 212, tile line "PC · HDR"), then "This stream: 1920x1200 · 120 fps · AV1 · 32 Mb/s" with the X glyph. Notes (`SKit.note`) for missing permissions, a hidden app list and how pairing works.
+- **Pairing sheet**: centred glass sheet; three numbered steps with the PC's web UI address in mono accent; the PIN in four 76 x 96 mono boxes with accent hairlines; a status line (waiting, paired with a check, failed with the reason); one primary button (Cancel, Done, New PIN).
+- **Settings drawer**: like the other sheets (right edge, under the hint bar): choice rows, "Own settings for this game" switch when opened from an app, the resolved stream in mono accent at the bottom.
+- **Setup guide** (no PCs): the PC-and-handheld picture, three numbered step cards (gradient number discs), a QR card to Vibepollo's releases page; with Moonlight missing, a card above with Install Moonlight (primary).
+- **Input**: A acts on the focus, X stream settings (the app's when an app has focus), Y Add PC (on-screen keyboard), Menu the More sheet (sleep the PC, quit what runs, pair again, check again, forget), B home. Screenshots: `SHOOT_SCRIPT=shoot_streaming.gd tools/screenshots/shoot.sh`.
+
