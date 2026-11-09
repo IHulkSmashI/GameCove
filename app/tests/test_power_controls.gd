@@ -295,6 +295,81 @@ func test_claw_live_gpu_clock_switches_to_manual() -> void:
 	_free()
 
 
+## PowerStation's CPU object as it behaves: CoreN.Online writes cpuN/online; CoresEnabled
+## halves the count when SmtEnabled is false (cpu_features.rs set_cores_enabled).
+class PsCores extends "res://tests/fixtures/power/fake_runner.gd":
+	var root := ""
+
+	func run(program: String, args: PackedStringArray) -> Dictionary:
+		var a := Array(args).filter(func(x): return not str(x).begins_with("--timeout="))
+		if program == "busctl" and a.size() >= 8 and a[1] == "set-property" and a[2] == "org.shadowblip.PowerStation":
+			calls.append("busctl " + " ".join(PackedStringArray(a)))
+			if a[4] == "org.shadowblip.CPU.Core" and a[5] == "Online":
+				var n := int(str(a[3]).get_slice("/Core", 1))
+				if n != 0:
+					var f := FileAccess.open(root + "/sys/devices/system/cpu/cpu%d/online" % n, FileAccess.WRITE)
+					f.store_string("1\n" if a[7] == "true" else "0\n")
+					f.close()
+				return {"code": 0, "out": ""}
+			if a[5] == "CoresEnabled":
+				var want := mini(int(a[7]), 7)   # SmtEnabled false: half of 14
+				for c in range(1, 14):
+					var f := FileAccess.open(root + "/sys/devices/system/cpu/cpu%d/online" % c, FileAccess.WRITE)
+					f.store_string("1\n" if c < want else "0\n")
+					f.close()
+				return {"code": 0, "out": ""}
+		return super.run(program, args)
+
+
+func _swap_runner(e: Dictionary, r: RefCounted) -> void:
+	r.props = e["runner"].props
+	r.methods = e["runner"].methods
+	r.exec_handler = e["runner"].exec_handler
+	for be in [e["power"].be, e["prov"].be]:
+		be.runner = r
+		be.user_bus.runner = r
+		be.system_bus.runner = r
+	e["power"].runner = r
+	e["power"].user_bus.runner = r
+	e["power"].system_bus.runner = r
+	e["runner"] = r
+
+
+func test_claw_live_cores_exact_count_and_restore() -> void:
+	var t := _claw_live(false)
+	var trees := Trees.new()
+	trees.root = t["root"]
+	for i in range(4, 14):
+		trees.w(Trees.CPU + "/cpu%d/online" % i, "1")
+		trees.w(Trees.CPU + "/cpu%d/cpufreq/energy_performance_preference" % i, "balance_performance")
+	t["props"][Trees.PS_CPU + "CoresCount"] = Trees.p("u", 14)
+	t["props"][Trees.PS_CPU + "CoresEnabled"] = Trees.p("u", 14)
+	t["props"][Trees.PS_CPU + "SmtEnabled"] = Trees.p("b", false)
+	t["props"][Trees.PS_CPU + "BoostEnabled"] = Trees.p("b", false)
+	var e := _setup(t)
+	var r: RefCounted = PsCores.new()
+	r.root = t["root"]
+	_swap_runner(e, r)
+	var c: Dictionary = e["c"]
+	e["reg"].detect_all()
+	ok(c["power.cpu_cores"].available, "cores (%s)" % c["power.cpu_cores"].reason)
+	eq(c["power.cpu_cores"].max_value, 14.0)
+	eq(c["power.cpu_cores"].read(), 14.0)
+	ok(c["power.cpu_cores"].write(13), "13")
+	eq(e["prov"].be.online_cpus(), range(13), "exactly cpus 0-12")
+	ok(c["power.cpu_cores"].write(14), "back to 14")
+	eq(e["prov"].be.online_cpus(), range(14), "every CPU back")
+	ok(c["power.cpu_cores"].write(1), "a floor of 2")
+	eq(e["prov"].be.online_cpus(), [0, 1], "never fewer than 2, cpu0 stays")
+	ok(not r.calls.any(func(x): return x.contains("CoresEnabled")), "PowerStation's CoresEnabled maths never used")
+	ok(not r.calls.any(func(x): return x.contains("/Core0 ")), "cpu0 never touched")
+	c["power.cpu_cores"].write(14)
+	# a service's boost flag never outranks the kernel's: PowerStation said false with turbo on
+	r.props[Trees.SM + "CpuBoost1 CpuBoostState"] = Trees.p("u", 0)
+	eq(e["prov"].be.get_boost(), true, "turbo on: intel_pstate/no_turbo 0 is the truth")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)
@@ -445,8 +520,11 @@ func test_ally_writes_each_backend() -> void:
 	eq(float(e["runner"].props[tkey]["data"]), 80.0, "Tctl lowered")
 	reg.set_value("power.mcu_powersave", false)
 	eq(_read(root, "/sys/class/firmware-attributes/asus-armoury/attributes/mcu_powersave/current_value"), "0", "MCU power saving off")
+	var pr: RefCounted = PsCores.new()
+	pr.root = root
+	_swap_runner(e, pr)
 	reg.set_value("power.cpu_cores", 1)
-	eq(int(e["runner"].props[Trees.PS_CPU + "CoresEnabled"]["data"]), 2, "never fewer than 2 cores")
+	eq(e["prov"].be.online_cpus(), [0, 1], "never fewer than 2 cores, through PowerStation's per-core Online")
 	reg.set_value("power.fan_curve", [0, 0, 0, 0, 0, 0, 0, 0])
 	eq(_read(root, "/sys/class/hwmon/hwmon6/pwm1_auto_point8_pwm"), "191", "a silent curve becomes Quiet")
 	ok(not cpb_key.is_empty(), "")
