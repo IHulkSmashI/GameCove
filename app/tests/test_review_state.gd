@@ -588,3 +588,25 @@ func test_l12_unknown_handheld_gets_conservative_tdp() -> void:
 	ok(float(deck["tdp"]["battery_max"]) <= 15.0, "a chip with a lower limit keeps its own (%s)" % [deck["tdp"]])
 	var intel: Dictionary = Dev.fallback_row({}, "Intel(R) Core(TM) Ultra 7 258V", {}, cpus)
 	ok(float(intel["tdp"]["plugged_max"]) <= 28.0, "Intel capped too (%s)" % [intel["tdp"]])
+
+
+# ---- L13: battery saver off on the other power source doesn't bring back the first one's TDP ------
+
+func test_l13_saver_off_on_the_charger_uses_the_charger_choice() -> void:
+	var t: Dictionary = Trees.new().ally()
+	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "1")
+	var e := _setup(t)
+	var p: Node = e["power"]
+	ok(p.set_profile("performance"), "the charger's choice: performance")
+	var charger_w := PowerScript.profile_watts(t["row"], "performance", true)
+	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "0")
+	p.check_power_source()
+	e["reg"].detect_all()
+	e["reg"].set_value("power.tdp", 22)
+	e["reg"].set_value("power.battery_saver", true)
+	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "1")
+	p.check_power_source()
+	e["reg"].detect_all()
+	e["reg"].set_value("power.battery_saver", false)
+	eq(float(e["runner"].props[SM_TDP]["data"]), charger_w, "the charger's own TDP, not the battery's 22 W")
+	_free()

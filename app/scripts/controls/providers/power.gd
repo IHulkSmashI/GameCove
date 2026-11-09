@@ -46,6 +46,7 @@ var cfg_path := CFG
 var _last := {}           # id -> last value written (re-applied after resume)
 var _saver_prev := {}
 var _saver_auto := false
+var _saver_src := ""      # "ac" | "battery": where the saver went on (its _saver_prev's source)
 var _thermal_top := -1.0
 var _by_id := {}
 var _replaying := {}       # ids the resume replay is writing (main thread sets, worker clears)
@@ -776,6 +777,7 @@ func _battery_saver() -> RefCounted:
 			if bool(saved.get("on", false)):
 				_saver_prev = saved.get("prev", {}) if saved.get("prev") is Dictionary else {}
 				_saver_auto = bool(saved.get("auto", false))
+				_saver_src = str(saved.get("source", ""))
 				return true
 			return false,
 		func(c, v):
@@ -801,17 +803,37 @@ func _battery_saver() -> RefCounted:
 						var now: Variant = other.read()
 						if now != null:
 							_saver_prev[id] = now
+				_saver_src = _source_now()
 				registry.apply(want)
 				_save_saver(true)
 			else:
 				_saver_auto = false
+				var prev := _saver_prev.duplicate()
+				if _saver_src != "" and _saver_src != _source_now():
+					# the TDP and its limits were recorded on the other power source: this
+					# source's own choice comes back instead (review L13)
+					for id in SOURCE_IDS:
+						prev.erase(id)
+					if power != null and power.has_method("restore"):
+						_p(func(): power.restore(); return true)
 				# forced: the controls' cached values may still show what was there before the
 				# saver (the TDP control never re-read after the profile wrote 12 W), and a
 				# plain apply would skip them as "unchanged"
-				registry.apply(_saver_prev, true)
+				registry.apply(prev, true)
 				_saver_prev = {}
+				_saver_src = ""
 				_save_saver(false)
 			return true)
+
+
+## Values that belong to the power source they were picked on (Power remembers them per source).
+const SOURCE_IDS := ["power.tdp", "power.profile", "power.boost", "power.sppt", "power.fppt"]
+
+
+func _source_now() -> String:
+	if power == null or not "plugged" in power:
+		return ""
+	return "ac" if bool(power.plugged) else "battery"
 
 
 ## Battery saver on / off and what it replaced, per handheld (survives a restart).
@@ -819,10 +841,12 @@ func _save_saver(on: bool) -> void:
 	var sec := PerDevice.section("saver", device_key())
 	var prev := _saver_prev.duplicate(true) if on else {}
 	var auto := _saver_auto and on
+	var src := _saver_src if on else ""
 	SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile):
 		cfg.set_value(sec, "on", on)
 		cfg.set_value(sec, "prev", prev)
-		cfg.set_value(sec, "auto", auto))
+		cfg.set_value(sec, "auto", auto)
+		cfg.set_value(sec, "source", src))
 
 
 func _saved_saver() -> Dictionary:
@@ -830,7 +854,8 @@ func _saved_saver() -> Dictionary:
 	var sec := PerDevice.section("saver", device_key())
 	if not cfg.has_section(sec):
 		return {}
-	return {"on": cfg.get_value(sec, "on", false), "prev": cfg.get_value(sec, "prev", {}), "auto": cfg.get_value(sec, "auto", false)}
+	return {"on": cfg.get_value(sec, "on", false), "prev": cfg.get_value(sec, "prev", {}), "auto": cfg.get_value(sec, "auto", false),
+		"source": cfg.get_value(sec, "source", "")}
 
 
 func _battery_saver_at() -> RefCounted:
