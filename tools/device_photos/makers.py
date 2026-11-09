@@ -20,8 +20,12 @@ picture stands in for them (photo.gd parse_representatives). The link check
 covers them through that model's link, and reports them by name, so a broken
 link shows every row that loses its picture.
 
-The rules here match app/scripts/device/photo.gd (parse_maker_sources); keep
-them in step.
+Bundled pictures ("bundled": "res://assets/device_photos/<id>.webp") ship
+inside the app: they have no link, so the link check and the maker-domain
+rules skip them; bundled_problems() checks the path and that the file exists.
+
+The rules here match app/scripts/device/photo.gd (parse_maker_sources,
+parse_bundled); keep them in step.
 """
 
 from __future__ import annotations
@@ -39,6 +43,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "app/data/device_photos.json"
 MAX_BYTES = 3 * 1024 * 1024
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+BUNDLED = re.compile(r"^res://assets/device_photos/[a-z0-9][a-z0-9._-]{0,80}\.(webp|png|jpg)$")
+BUNDLED_MAX_BYTES = 512 * 1024
 UA = "GameCove-link-check/1 (+https://github.com/IHulkSmashI/GameCove)"
 
 
@@ -80,6 +86,41 @@ def entry_problems(dev: str, m: object, makers: dict) -> list[str]:
     return out
 
 
+def bundled_file(path: str) -> Path:
+    """res://assets/device_photos/x.webp -> <repo>/app/assets/device_photos/x.webp"""
+    return ROOT / "app" / path[len("res://"):]
+
+
+def bundled_problems(dev: str, e: dict) -> list[str]:
+    """Why a "bundled" entry is not acceptable ([] when it is): path rule (same as
+    photo.gd parse_bundled), file present, a real image of its type, small, front view."""
+    path = str(e.get("bundled", ""))
+    if not BUNDLED.match(path) or ".." in path:
+        return [f"{dev}: bundled {path!r} must be res://assets/device_photos/<name>.webp|png|jpg"]
+    f = bundled_file(path)
+    if not f.is_file():
+        return [f"{dev}: bundled file {f} is missing"]
+    data = f.read_bytes()
+    kind = sniff(data[:16])
+    out = []
+    if kind != path.rsplit(".", 1)[1]:
+        out.append(f"{dev}: {f.name} is not a {path.rsplit('.', 1)[1]} image (looks like {kind or 'neither'})")
+    imp = f.with_name(f.name + ".import")
+    if not imp.is_file() or 'importer="keep"' not in imp.read_text(encoding="utf-8"):
+        out.append(f"{dev}: {imp.name} must say importer=\"keep\" (Godot otherwise exports only a texture, "
+                   "not the file the app reads)")
+    if len(data) > BUNDLED_MAX_BYTES:
+        out.append(f"{dev}: {f.name} is {len(data)} bytes; keep bundled pictures under {BUNDLED_MAX_BYTES}")
+    return out + view_problems(dev, e)
+
+
+def bundled_rows(path: Path = SRC) -> dict:
+    """{device_id: entry} for rows with a bundled picture."""
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    return {k: v for k, v in doc.items()
+            if not k.startswith("_") and isinstance(v, dict) and "bundled" in v}
+
+
 # Owner's rule: every picture is a flat, head-on front view (camera straight at the
 # screen; no angle, tilt, side or back view, no hands). "best-available" marks the few
 # rows where no such image exists anywhere we looked; view_note says why.
@@ -101,7 +142,7 @@ def load(path: Path = SRC) -> tuple[dict, dict]:
     doc = json.loads(path.read_text(encoding="utf-8"))
     makers = doc.get("_makers", {})
     entries = {k: v["maker_image"] for k, v in doc.items()
-               if not k.startswith("_") and isinstance(v, dict) and "maker_image" in v}
+               if not k.startswith("_") and isinstance(v, dict) and "maker_image" in v and "bundled" not in v}
     return makers, entries
 
 
@@ -114,7 +155,7 @@ def representatives(doc: dict) -> dict:
         rep = str(v["representative"])
         r = doc.get(rep)
         if rep != k and isinstance(r, dict) and "representative" not in r and \
-                any(x in r for x in ("file", "openverse_id", "maker_image")):
+                any(x in r for x in ("file", "openverse_id", "maker_image", "bundled")):
             out[k] = rep
     return out
 
@@ -129,7 +170,7 @@ def family_problems(doc: dict) -> list[str]:
 
 def checked_rows(path: Path = SRC) -> dict:
     """Every row the link check covers: {device_id: maker_image}, families through
-    their representative's link."""
+    their representative's link. Bundled pictures have no link and are skipped."""
     doc = json.loads(path.read_text(encoding="utf-8"))
     _, entries = load(path)
     out = dict(entries)
@@ -187,6 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     makers, entries = load(Path(a.src))
     problems = [p for dev, m in entries.items() for p in entry_problems(dev, m, makers)]
     problems += family_problems(json.loads(Path(a.src).read_text(encoding="utf-8")))
+    problems += [p for dev, e in bundled_rows(Path(a.src)).items() for p in bundled_problems(dev, e)]
     for p in problems:
         print("BAD ENTRY", p, file=sys.stderr)
     if problems:

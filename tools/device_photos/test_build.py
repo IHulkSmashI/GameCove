@@ -26,6 +26,10 @@ def test_source_file_is_valid():
             assert set(e) == {"representative"}, f"{dev}: a family row only names its representative"
             assert dev.endswith("-family"), f"{dev}: only '<maker> (unknown model)' rows stand in for another model"
             continue
+        if "bundled" in e:
+            assert set(e) <= {"bundled", "view", "note"}, f"{dev}: a bundled row carries only bundled, view and note"
+            assert makers.bundled_problems(dev, e) == [], dev
+            continue
         if not build.has_free_source(e):
             assert set(e) == {"maker_image"}, f"{dev}: a row without a free photo only carries maker_image"
             continue
@@ -103,11 +107,11 @@ def test_maker_images_are_well_formed():
 
 
 def _has_picture(e: dict) -> bool:
-    return build.has_free_source(e) or "maker_image" in e
+    return "bundled" in e or build.has_free_source(e) or "maker_image" in e
 
 
 def test_every_known_model_has_a_picture_source():
-    """Every row in devices.json has a real picture: a free photo or the maker's image,
+    """Every row in devices.json has a real picture: bundled in the app, a free photo or the maker's image,
     and every 'unknown model' row a representative model with one of those."""
     src = _src()
     devices = json.loads((ROOT / "app/data/devices.json").read_text())["devices"]
@@ -120,13 +124,23 @@ def test_every_known_model_has_a_picture_source():
             assert rep["maker"] == d["maker"], f"{dev}: the representative must be the same maker's model"
             assert not rep["id"].endswith("-family"), dev
             continue
-        assert dev in src and _has_picture(src[dev]), f"{dev}: no free photo and no maker image"
+        assert dev in src and _has_picture(src[dev]), f"{dev}: no bundled picture, free photo or maker image"
 
 
 # Rows allowed to keep a picture that isn't a flat head-on front view, because none
 # exists anywhere we looked (see each row's view_note). Adding a row here needs the
 # same search first; removing one is always welcome.
-BEST_AVAILABLE = {"acer-nitro-blaze-8"}
+BEST_AVAILABLE: set[str] = set()
+
+
+def test_every_picture_is_front():
+    """Owner's rule, now met everywhere: every picture (bundled, free photo, maker image)
+    says "view": "front"; nothing is left on "best-available"."""
+    for dev, e in _src().items():
+        if dev.startswith("_") or "representative" in e:
+            continue
+        pic = e["maker_image"] if "maker_image" in e else e
+        assert pic.get("view") == "front", f"{dev}: view is {pic.get('view')!r}, not a flat head-on front view"
 
 
 def test_every_picture_is_a_head_on_front_view():
@@ -160,6 +174,9 @@ def test_view_rules():
 def test_family_rows_are_checked_through_their_representative():
     rows = makers.checked_rows()
     src = _src()
+    for dev, e in src.items():
+        if not dev.startswith("_") and isinstance(e, dict) and "bundled" in e:
+            assert dev not in rows, f"{dev}: bundled pictures have no link to check"
     for fam, rep in makers.representatives(src).items():
         if "maker_image" in src[rep]:
             assert rows[fam]["url"] == src[rep]["maker_image"]["url"], fam
@@ -234,3 +251,51 @@ def test_build_never_fetches_maker_images(tmp_path, monkeypatch):
     out = sorted(x.name for x in (tmp_path / "out").iterdir())
     assert out == ["manifest.json"], out
     assert json.loads((tmp_path / "out" / "manifest.json").read_text())["devices"] == {}
+
+
+def _bundled_doc(tmp_path, name="x.webp"):
+    return {"_makers": {"MSI": {"image_prefixes": ["https://asset-us-store.msi.com/"], "page_domains": ["msi.com"]}},
+            "a": {"maker_image": {"url": "https://asset-us-store.msi.com/a.png", "page_url": "https://www.msi.com/a",
+                                  "maker": "MSI", "checked": "2026-11-09", "view": "front"}},
+            "acer-nitro-blaze-8": {"bundled": "res://assets/device_photos/acer-nitro-blaze-8.webp", "view": "front"},
+            "b-family": {"representative": "acer-nitro-blaze-8"}}
+
+
+def test_link_check_skips_bundled(tmp_path, monkeypatch):
+    p = tmp_path / "src.json"
+    p.write_text(json.dumps(_bundled_doc(tmp_path)))
+    asked = []
+    monkeypatch.setattr(makers, "check_url", lambda url, timeout=20.0: asked.append(url) or "")
+    assert makers.main(["--src", str(p), "--check"]) == 0
+    assert asked == ["https://asset-us-store.msi.com/a.png"], "only the maker link is requested"
+    assert set(makers.checked_rows(p)) == {"a"}, "bundled rows and their families have no link"
+    assert makers.representatives(json.loads(p.read_text()))["b-family"] == "acer-nitro-blaze-8"
+
+
+def test_bundled_rules():
+    good = {"bundled": "res://assets/device_photos/acer-nitro-blaze-8.webp", "view": "front"}
+    assert makers.bundled_problems("d", good) == []
+    for path in ("res://assets/device_photos/../data/x.webp", "res://assets/brand/acer.svg",
+                 "https://example.com/x.webp", "res://assets/device_photos/missing.webp",
+                 "res://assets/device_photos/acer-nitro-blaze-8.png"):
+        assert makers.bundled_problems("d", dict(good, bundled=path)), path
+    assert makers.bundled_problems("d", dict(good, view="angled"))
+
+
+def test_bundled_pictures_are_exported():
+    cfg = (ROOT / "app/export_presets.cfg").read_text()
+    line = next(x for x in cfg.splitlines() if x.startswith("include_filter="))
+    pats = [x.strip() for x in line.split("=", 1)[1].strip('"').split(",")]
+    import fnmatch
+    for dev, e in makers.bundled_rows().items():
+        rel = e["bundled"][len("res://"):]
+        assert any(fnmatch.fnmatch(rel, pat) for pat in pats), f"{dev}: {rel} not force-included by include_filter"
+
+
+def test_contact_sheet_renders_bundled(tmp_path):
+    import contact_sheet as contact
+    out = tmp_path / "sheet.png"
+    labels = contact.main([str(out)])
+    assert out.is_file()
+    acer = next(x for x in labels if x.startswith("acer-nitro-blaze-8 "))
+    assert "bundled" in acer and "MISSING" not in acer, acer
