@@ -36,6 +36,7 @@ sh "$FIX" status | grep -q '^original=0$' || fail "original recorded"
 sh "$FIX" set 100 >/dev/null || fail "set 100"
 [ "$(cat "$T")" = "100" ] || fail "no limit writes 100, never 0 (0|0x80 is a 0 % limit on MSI's EC)"
 if sh "$FIX" set 49 2>/dev/null; then fail "49 refused"; fi
+if sh "$FIX" set 080 2>/dev/null; then fail "leading zero refused (review M1)"; fi
 if sh "$FIX" set "80; reboot" 2>/dev/null; then fail "junk refused"; fi
 if sh "$FIX" bogus 2>/dev/null; then fail "unknown action refused"; fi
 sh "$FIX" set 90 >/dev/null

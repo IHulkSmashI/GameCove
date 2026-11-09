@@ -181,9 +181,14 @@ func _emit_detected(n: int) -> void:
 		detected_seq = maxi(detected_seq, n)
 		detected.emit()
 	else:
-		(func():
-			detected_seq = maxi(detected_seq, n)
-			detected.emit()).call_deferred()
+		# A deferred method, not a lambda: if this node is freed first, Godot drops
+		# the call (a lambda would run on whatever object reuses the memory).
+		call_deferred("_do_detected", n)
+
+
+func _do_detected(n: int) -> void:
+	detected_seq = maxi(detected_seq, n)
+	detected.emit()
 
 
 ## Sets one control (worker). Emits control_changed or control_failed.
@@ -317,7 +322,7 @@ func _emit(sig: Signal, args: Array) -> void:
 	if sync_mode:
 		_do_emit(sig, args)
 	else:
-		(func(): _do_emit(sig, args)).call_deferred()
+		call_deferred("_do_emit", sig, args)
 
 
 func _do_emit(sig: Signal, args: Array) -> void:

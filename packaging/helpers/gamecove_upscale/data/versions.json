@@ -4,6 +4,8 @@
   "repo": "HHHHanasak1/xess-xmx-linux",
   "tag": "20261104",
   "asset_glob": "xess-xmx-linux-*.zip",
+  "sha256": "4d97b77e44f22235a567d0b5317421e65566089dc08a6a0caf9fa16549433173",
+  "sha256_note": "xess-xmx-linux-20261104.zip (16508598 bytes), downloaded twice on 2026-11-09 with the same hash; its install.sh, uninstall.sh, enable.sh, disable.sh, xmx-launch.sh and LICENSE are byte-identical to the repo at tag 20261104 (a12948e2)",
   "note": "20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x"
  },
  "reframework": {

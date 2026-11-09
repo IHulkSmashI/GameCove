@@ -390,3 +390,108 @@ func test_every_device_row_gets_items_or_nothing_without_crashing() -> void:
 		for i in items:
 			ok(i["status"] in ["update", "current", "unknown"], "%s status" % r["id"])
 			ok(i["how"] in ["auto", "guided", "link"], "%s how" % r["id"])
+
+
+# ---- review M21: where maker downloads may come from ---------------------------------------
+
+func test_download_host_allow_list_per_maker() -> void:
+	eq(Index.download_host("https://dlcdnets.asus.com/pub/ASUS/RC71LAS343.zip", "ASUS"), "dlcdnets.asus.com")
+	eq(Index.download_host("https://download.msi.com/bos_exe/claw.zip", "MSI"), "download.msi.com")
+	eq(Index.download_host("https://download.lenovo.com/consumer/x.exe", "Lenovo"), "download.lenovo.com")
+	eq(Index.download_host("https://dlcdnets.asus.com/x.zip", "MSI"), "", "another maker's host isn't this device's maker")
+	eq(Index.download_host("http://dlcdnets.asus.com/x.zip", "ASUS"), "", "https only")
+	eq(Index.download_host("file:///etc/passwd", "ASUS"), "")
+	eq(Index.download_host("-o/tmp/x https://asus.com/x", "ASUS"), "", "no option-looking values")
+	eq(Index.download_host("https://asus.com.evil.example/x.zip", "ASUS"), "", "suffix must be the maker's domain")
+	eq(Index.download_host("https://evilasus.com/x.zip", "ASUS"), "", "not a lookalike")
+	eq(Index.download_host("https://asus.com@evil.example/x.zip", "ASUS"), "", "no user-info tricks")
+	eq(Index.download_host("https://dlcdnets.asus.com:8443/x.zip", "ASUS"), "", "no odd ports")
+	eq(Index.download_host("https://x.example/x.zip", "Nobody"), "", "unknown maker: nothing allowed")
+
+
+func test_index_download_url_outside_the_allow_list_is_dropped() -> void:
+	var idx := _index()
+	idx["devices"]["asus-rog-ally"]["items"][0]["download_url"] = "https://evil.example/RC71LAS343.zip"
+	idx["devices"]["asus-rog-ally"]["items"][0]["sha256"] = "a".repeat(64)
+	var items := Index.firmware_items(idx, _row("asus-rog-ally"), {"bios_version": "RC71L.341"}, [])
+	eq(items[0]["download_url"], "", "not the maker's domain: no download")
+	ok(bool(items[0]["download_blocked"]), "flagged")
+	var good := Index.firmware_items(_index(), _row("asus-rog-ally"), {"bios_version": "RC71L.341"}, [])
+	eq(good[0]["download_host"], "dlcdnets.asus.com", "the maker's host is shown to the user")
+	idx["devices"]["asus-rog-ally"]["items"][0]["download_page"] = "javascript:alert(1)"
+	eq(Index.firmware_items(idx, _row("asus-rog-ally"), {}, [])[0]["download_page"], "", "pages are https only")
+
+
+func test_prepare_usb_refuses_a_foreign_host_and_pins_https() -> void:
+	var zip_path := _tree({}) + "/bios.zip"
+	var zp := ZIPPacker.new()
+	zp.open(zip_path)
+	zp.start_file("RC71LAS343.CAP")
+	zp.write_file("CAPSULE".to_utf8_buffer())
+	zp.close_file()
+	zp.close()
+	var files := _dmi("RC71L.341", {"proc/self/mounts": "/dev/sda1 /run/media/deck/USB vfat rw 0 0\n"})
+	var root := _tree(files)
+	DirAccess.make_dir_recursive_absolute(root + "/run/media/deck/USB")
+	var idx := _index()
+	idx["devices"]["asus-rog-ally"]["items"][0]["sha256"] = FileAccess.get_sha256(zip_path)
+	var f := _fake_with_index(idx)
+	var base: Callable = f.handler
+	f.handler = func(cmd: String):
+		if cmd.begins_with("curl ") and cmd.ends_with("RC71LAS343.zip"):
+			var p := cmd.split(" ")
+			DirAccess.copy_absolute(zip_path, p[p.find("-o") + 1])
+			return {"code": 0, "out": ""}
+		return base.call(cmd)
+	var u := _upd(root, f, _row("asus-rog-ally"))
+	u.check("maker")
+	ok(u.prepare_usb("index:bios:bios", "/run/media/deck/USB"), "the maker's own host: started")
+	var dl: Array = f.calls.filter(func(c): return c.ends_with("RC71LAS343.zip"))
+	ok(dl.size() == 1 and "--proto =https" in dl[0] and "--proto-redir =https" in dl[0] and " -- https://" in dl[0],
+		"curl is held to https, redirects too, and the URL can't be read as an option")
+	# the same item edited behind our back (state replaced after the check) is refused at the last step
+	u._maker["items"][0]["download_url"] = "https://evil.example/RC71LAS343.zip"
+	var got: Array = []
+	u.finished.connect(func(k, o, m): got.append([k, o, m]))
+	ok(not u.prepare_usb("index:bios:bios", "/run/media/deck/USB"), "a foreign host is refused")
+	eq(got.back(), ["usb", false, "not_available"])
+	u.free()
+
+
+func test_index_signature_checked_when_cosign_is_there() -> void:
+	var root := _tree(_dmi("RC71L.341", {"usr/bin/cosign": ""}))
+	var f := _fake_with_index(_index())
+	var base: Callable = f.handler
+	f.handler = func(cmd: String):
+		if cmd.begins_with("curl ") and cmd.ends_with(Index.URL + ".sigstore.json"):
+			var p := cmd.split(" ")
+			_write_bytes(p[p.find("-o") + 1], "{}".to_utf8_buffer())
+			return {"code": 0, "out": ""}
+		if cmd.begins_with("/usr/bin/cosign verify-blob"):
+			return {"code": 1, "out": "none of the expected identities matched"}
+		return base.call(cmd)
+	var u := _upd(root, f, _row("asus-rog-ally"))
+	eq(u.load_index(), {}, "a bad signature: the new index isn't used")
+	var v: Array = f.calls.filter(func(c): return c.begins_with("/usr/bin/cosign verify-blob"))
+	ok(v.size() == 1 and Index.SIGNER_IDENTITY in v[0] and "--certificate-oidc-issuer https://token.actions.githubusercontent.com" in v[0],
+		"verified against the nightly workflow's identity")
+	u.free()
+	var f2 := _fake_with_index(_index())
+	var b2: Callable = f2.handler
+	f2.handler = func(cmd: String):
+		if cmd.begins_with("curl ") and cmd.ends_with(Index.URL + ".sigstore.json"):
+			var p := cmd.split(" ")
+			_write_bytes(p[p.find("-o") + 1], "{}".to_utf8_buffer())
+			return {"code": 0, "out": ""}
+		if cmd.begins_with("/usr/bin/cosign verify-blob"):
+			return {"code": 0, "out": "Verified OK"}
+		return b2.call(cmd)
+	var u2 := _upd(_tree(_dmi("RC71L.341", {"usr/bin/cosign": ""})), f2, _row("asus-rog-ally"))
+	eq(u2.load_index()["built"], "2026-11-09T05:41:00Z", "a good signature: used")
+	u2.free()
+	# without cosign the sha256 and the allow-list still hold, and no bundle is fetched
+	var f3 := _fake_with_index(_index())
+	var u3 := _upd(_tree(_dmi("RC71L.341")), f3, _row("asus-rog-ally"))
+	eq(u3.load_index()["built"], "2026-11-09T05:41:00Z")
+	ok(not f3.calls.any(func(c): return c.ends_with(".sigstore.json")), "no cosign: no bundle needed")
+	u3.free()

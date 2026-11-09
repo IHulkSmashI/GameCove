@@ -76,6 +76,25 @@ ok 'override | grep -q "name: accel_3d"' "accelerometer on"
 ok 'fix claw8ex-gyro status | grep -qx accelerometer=yes' "status: accelerometer on"
 fix claw8ex-gyro set accel-off >/dev/null
 ok '! override | grep -q "name: accel_3d"' "accelerometer off again"
+# review L4: the same value again changes nothing and doesn't restart InputPlumber; at most ten real
+# changes per ten minutes (any local process can call this without a password)
+restarts() { grep -c "systemctl restart inputplumber" "$FAKE/calls"; }
+n0=$(restarts)
+fix claw8ex-gyro set accel-off >/dev/null
+ok '[ "$(restarts)" = "$n0" ]' "accel-off again: no InputPlumber restart"
+rm -f "$R/run/gamecove/rate-claw8ex-gyro-accel"
+i=0
+while [ "$i" -lt 5 ]; do
+	fix claw8ex-gyro set accel-on >/dev/null 2>&1
+	fix claw8ex-gyro set accel-off >/dev/null 2>&1
+	i=$((i + 1))
+done
+ok '[ "$(restarts)" = "$((n0 + 10))" ]' "ten changes, ten restarts"
+ok '! fix claw8ex-gyro set accel-on 2>/dev/null' "the eleventh change in ten minutes is refused"
+ok '[ "$(restarts)" = "$((n0 + 10))" ]' "no restart for the refused change"
+ok '! override | grep -q "name: accel_3d"' "the refused change wrote nothing"
+ok 'fix claw8ex-gyro set accel-off >/dev/null' "the current value is still accepted (a no-op)"
+rm -f "$R/run/gamecove/rate-claw8ex-gyro-accel"
 ok '! fix claw8ex-gyro set accel on 2>/dev/null' "old two-token form refused"
 ok '! fix claw8ex-gyro set accel-maybe 2>/dev/null' "unknown value refused"
 fix claw8ex-gyro set accel-on >/dev/null

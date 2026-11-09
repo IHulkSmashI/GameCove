@@ -6,6 +6,7 @@ const SettingsScreen := preload("res://scripts/ui/settings_screen.gd")
 const SetupFlow := preload("res://scripts/ui/setup/setup_flow.gd")
 const QR := preload("res://scripts/ui/settings/qr.gd")
 const Credits := preload("res://scripts/ui/settings/credits.gd")
+const Privacy := preload("res://scripts/system/privacy.gd")
 const SignIn := preload("res://scripts/ui/settings/sign_in.gd")
 const DevicePage := preload("res://scripts/ui/settings/device_page.gd")
 const PerformancePage := preload("res://scripts/ui/settings/performance_page.gd")
@@ -108,8 +109,9 @@ class FakeDiscover extends RefCounted:
 		"steamgriddb_key": {"label": "SteamGridDB key (optional)", "help": "Artwork.", "setup": false},
 		"alerts": {"label": "Price and release alerts", "help": "Price drops.", "setup": false},
 		"affiliate_links": {"label": "Affiliate links", "help": "Supports GameCove.", "setup": false},
+		"price_lookups": {"label": "Look up deals and prices", "help": "Sends wishlist ids to CheapShark.", "setup": false},
 	}
-	var s := {"country": "", "steam_id": "", "steamgriddb_key": "", "ggdeals_key": "", "ggdeals_keyshops": false, "alerts": true, "affiliate_links": true}
+	var s := {"country": "", "steam_id": "", "steamgriddb_key": "", "ggdeals_key": "", "ggdeals_keyshops": false, "alerts": true, "affiliate_links": true, "price_lookups": true}
 	var links: Array = []
 	func get_settings() -> Dictionary:
 		var out := s.duplicate()
@@ -424,6 +426,24 @@ func test_about_page_checklist_and_links() -> void:
 	s.free()
 
 
+func test_credits_bundled_in_the_app() -> void:
+	# review H8: the page must read the copy exported into the pck (res://), not the checkout's ../CREDITS.md
+	eq(Credits.find(), "res://CREDITS.md", "CREDITS.md is part of the app (app/CREDITS.md, exported)")
+	var md := Credits.load_text()
+	ok(md.length() > 1000 and "## People" in md, "the real CREDITS.md")
+	var full := Credits.full_text()
+	ok("## Godot Engine" in full and "Permission is hereby granted" in full, "Godot's licence shown")
+	ok("### Components in Godot Engine" in full and "FreeType" in full, "the engine's third-party components listed")
+	for lf in Credits.LICENSE_FILES:
+		ok(FileAccess.file_exists(lf[1]), "bundled licence text exists: " + lf[1])
+	ok("SIL OPEN FONT LICENSE" in full and "Iceflower S" in full, "font and addon licence texts shown")
+	var bb := Credits.to_bbcode(full)
+	ok(bb.length() > 5000 and "[b][color=#ffffff]Godot Engine[/color][/b]" in bb, "renders with the Godot section")
+	var preset := FileAccess.get_file_as_string("res://export_presets.cfg")
+	for pat in ["CREDITS.md", "fonts/OFL-*.txt", "addons/kenyoni/qr_code/LICENSE.md"]:
+		ok(pat in preset, "export include_filter carries " + pat)
+
+
 func test_credits_markdown() -> void:
 	var md := "# Credits\n\n## People\n\n- **Kisenir**: gyro.\n\n| Project | What for | License |\n| --- | --- | --- |\n| gamescope | Display | BSD-2-Clause |\n\nSee [CREDITS](x.md) and `code`."
 	var bb := Credits.to_bbcode(md)
@@ -539,6 +559,28 @@ class FakePhoto extends RefCounted:
 		enabled = on
 	func set_maker_enabled(on: bool) -> void:
 		maker_enabled = on
+
+
+func test_about_page_network_and_privacy() -> void:
+	var svc := _svc()
+	var ph := FakePhoto.new()
+	svc["photo"] = ph
+	var s := _screen(svc)
+	var p: VBoxContainer = s.pages["about"]
+	var cfg := OS.get_user_data_dir().path_join("test_privacy_%d.cfg" % Time.get_ticks_usec())
+	p.privacy_path = cfg
+	ok(p.find_child("Card_privacy", true, false) != null, "Network and privacy card")
+	for k in ["background_lookups", "price_lookups", "privacy_maker_photo"]:
+		ok(p.rows.has(k), "switch: " + k)
+	ok(_has_text(p, "CheapShark") and _has_text(p, "maker") and _has_text(p, "GameStream"), "every network call is listed")
+	p.rows["background_lookups"].step(1)
+	eq(Privacy.background_allowed(cfg), false, "Background lookups saved off")
+	p.rows["price_lookups"].step(1)
+	eq(svc["discover"].s["price_lookups"], false, "deals switch goes to Discover")
+	p.rows["privacy_maker_photo"].step(1)
+	eq(ph.maker_enabled, false, "maker photo switch goes to DevicePhoto")
+	DirAccess.remove_absolute(cfg)
+	s.free()
 
 
 func test_device_page_photo_settings() -> void:

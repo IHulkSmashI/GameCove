@@ -246,6 +246,11 @@ func act(fix: String, verb: String) -> bool:
 	var e := entry(fix)
 	if e.is_empty() or _working.has(fix) or not verb in ["apply", "undo", "check"]:
 		return false
+	# Only Fixes-page entries have Apply / Undo / Check here. The Power-page ones (fan, charge-limit)
+	# are changed through their Power controls with real values: their no-password helper takes no
+	# on / off and refused it with exit 66 (review L8).
+	if str(e.get("page", "fixes")) != "fixes":
+		return false
 	if verb == "check":
 		_status.erase(fix)
 		changed.emit(rows())
@@ -255,11 +260,11 @@ func act(fix: String, verb: String) -> bool:
 		action_finished.emit(fix, verb, true, Texts.result(str(e.get("title", fix)), verb, true, 0))
 		changed.emit(rows())
 		return true
-	var args: PackedStringArray
-	if str(e.get("password", "admin")) == "none":
-		args = PackedStringArray([FIX_SET_HELPER, fix, "set", "on" if verb == "apply" else "off"])
-	else:
-		args = PackedStringArray([FIX_HELPER, fix, "install" if verb == "apply" else "remove"])
+	# A no-password fix has no generic apply / undo verb in gamecove-fix-set (only validated values),
+	# so only admin fixes (install / remove through gamecove-fix) are acted on here.
+	if str(e.get("password", "admin")) != "admin":
+		return false
+	var args := PackedStringArray([FIX_HELPER, fix, "install" if verb == "apply" else "remove"])
 	_working[fix] = verb
 	changed.emit(rows())
 	if not commands.run(verb + ":" + fix, "pkexec", args):

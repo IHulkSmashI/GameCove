@@ -15,6 +15,9 @@ const SHOW_LINK := "Open on phone"
 const HIDE_LINK := "Hide link"
 const PREPARE_USB := "Put it on the USB drive"
 const NEEDS_USB := "Plug in a FAT32 USB drive to have GameCove put the file on it."
+## Shown before anything is written to the drive (review M21): where the file comes from.
+const FROM_HOST := "Downloads from %s (the maker's own site) and checks it against the maker's checksum."
+const DOWNLOAD_BLOCKED := "The firmware list points somewhere other than the maker's site, so GameCove won't download it. Use the maker's page instead."
 const YOURS := "yours: %s"
 const NEW_AVAILABLE := "New %s %s available (%s)"
 const UPSTREAM_NOTE := "A newer SteamOS brings BIOS %s."
@@ -34,6 +37,7 @@ const REASONS := {
 	"bad_archive": "The maker's file didn't contain a BIOS image.",
 	"write_failed": "Couldn't write to the USB drive. Is it full or read-only?",
 	"guided": "This one is installed by hand: follow the steps.",
+	"not_available": "There's no checked download from the maker for this one. Use the maker's page.",
 }
 const USB_DONE := "Ready: %s is on the USB drive. Follow the steps to flash it."
 

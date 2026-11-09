@@ -16,6 +16,8 @@ var list_button: Button
 var month_button: Button
 var prev_button: Button
 var next_button: Button
+## "Game data from IGDB" (review M24): IGDB's release dates fill the calendar; opens igdb.com.
+var credit_button: Button
 var rows: Array = []            # list layout: [row, notify] pairs
 var day_buttons: Dictionary = {}   # day -> Button (month layout)
 var undated_button: Button
@@ -42,6 +44,7 @@ func build() -> void:
 	undated_button = null
 	prev_button = null
 	next_button = null
+	credit_button = null
 	empty_card = null
 	if not _ym_set:
 		var t := Model.ymd(ctx.now())
@@ -94,6 +97,12 @@ func build() -> void:
 		upd.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		upd.size_flags_vertical = Control.SIZE_FILL
 		bar.add_child(upd)
+	credit_button = Kit.button(T.IGDB_CREDIT, "ChipButton")
+	credit_button.name = "IgdbCredit"
+	credit_button.set_meta("url", T.IGDB_URL)
+	credit_button.set_meta("link", true)
+	credit_button.pressed.connect(func(): ctx.open_link({"kind": "url", "uri": T.IGDB_URL}))
+	bar.add_child(credit_button)
 	col.add_child(bar)
 	bar.visible = not cal.is_empty()
 
@@ -558,6 +567,8 @@ func _toolbar() -> Array:
 	var out: Array = [list_button, month_button]
 	if prev_button != null:
 		out.append_array([prev_button, next_button])
+	if credit_button != null:
+		out.append(credit_button)
 	return out
 
 

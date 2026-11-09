@@ -82,7 +82,8 @@ const CONFIG_PATH := "user://power.cfg"
 const PROFILES: Array[String] = ["battery", "balanced", "performance"]
 ## Fan presets for the msi_wmi_platform tables, in EC percent per point (ClawDeck's
 ## known-good Claw presets). Must match fixes/fan/fix.sh.
-const FAN_TABLES := {"quiet": [0, 40, 40, 45, 60, 75], "max": [100, 100, 100, 100, 100, 100]}
+# Quiet ends at full speed at the hottest point (review L6); must match fixes/fan/fix.sh table_for.
+const FAN_TABLES := {"quiet": [0, 40, 40, 45, 60, 100], "max": [100, 100, 100, 100, 100, 100]}
 const FIX_FAN_MODES: Array[String] = ["quiet", "auto", "max"]
 ## Fan drivers the `fan` fix drives, keyed by devices.json "fan". Must match
 ## fixes/fan/fix.sh. "hwmon": hwmon names to look for; "kind": table (duty
@@ -94,7 +95,7 @@ const FAN_DRIVERS := {
 		"modes": ["quiet", "auto", "max"], "tables": FAN_TABLES},
 	"asus_custom_fan_curve": {"hwmon": ["asus_custom_fan_curve"], "kind": "table", "points": 8,
 		"modes": ["quiet", "auto", "max"],
-		"tables": {"quiet": [2, 5, 17, 35, 55, 75, 75, 75], "max": [100, 100, 100, 100, 100, 100, 100, 100]}},
+		"tables": {"quiet": [2, 5, 17, 35, 55, 75, 75, 100], "max": [100, 100, 100, 100, 100, 100, 100, 100]}},
 	"oxp_ec": {"hwmon": ["oxp_ec", "oxpec"], "kind": "manual", "modes": ["auto", "max"],
 		"auto": {"oxpec": "0"}, "full": {"oxp_ec": "0"}},
 	"ayaneo_ec": {"hwmon": ["ayaneo_ec"], "kind": "manual", "modes": ["auto", "max"]},

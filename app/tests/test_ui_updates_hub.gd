@@ -32,7 +32,8 @@ func _hub_state() -> Dictionary:
 	st["hub"] = [
 		{"id": "index:bios:bios", "section": "firmware", "kind": "bios", "name": "BIOS", "current": "341", "latest": "343",
 			"status": "update", "how": "guided", "flash": "ez-flash", "notes": "Improves stability.\nMore", "source": "index",
-			"download_page": "https://www.asus.com/supportonly/RC71L/helpdesk_bios/", "notes_url": ""},
+			"download_page": "https://www.asus.com/supportonly/RC71L/helpdesk_bios/", "notes_url": "",
+			"download_url": "https://dlcdnets.asus.com/RC71LAS343.zip", "download_host": "dlcdnets.asus.com"},
 		{"id": "index:controller:mcu", "section": "firmware", "kind": "controller", "name": "Controller (MCU) firmware", "current": "",
 			"latest": "V321", "status": "unknown", "how": "link", "flash": "windows", "source": "index", "download_page": "https://x.invalid/"},
 		{"id": "fwupd:abc", "section": "firmware", "kind": "fwupd", "name": "System Firmware", "current": "1", "latest": "1", "status": "current", "how": "auto", "source": "fwupd"},
@@ -53,6 +54,7 @@ func test_maker_and_driver_rows() -> void:
 	ok(t.contains("New BIOS 343 available (yours: 341)"), "BIOS update line")
 	ok(t.contains(Hub.STEPS["ez-flash"][3]), "EZ Flash steps")
 	ok(t.contains("Improves stability.") and not t.contains("More"), "first line of the notes")
+	ok(t.contains(Hub.FROM_HOST % "dlcdnets.asus.com"), "the maker's download host is shown before writing to USB (M21)")
 	ok(t.contains("Mesa (graphics drivers)  ·  26.1.0  ·  upstream 26.2.6"), "driver row")
 	ok(t.contains(Hub.DRIVER_HOW["auto"]), "drivers come with the system")
 	ok(not t.contains("System Firmware  ·  1"), "fwupd devices stay in the Firmware card")
@@ -66,6 +68,21 @@ func test_maker_and_driver_rows() -> void:
 	ok(_texts(p).contains(Hub.REASONS["checksum_mismatch"]), "USB failure explained")
 	p.free()
 	Fakes.free_services(s)
+
+
+func test_blocked_download_has_no_usb_button() -> void:
+	var s := Fakes.services()
+	var u := UsbUpdates.new()
+	u.st = _hub_state()
+	u.st["hub"][0].erase("download_host")
+	u.st["hub"][0]["download_url"] = ""
+	u.st["hub"][0]["download_blocked"] = true
+	s["updates"].free()
+	s["updates"] = u
+	var p: Control = UpdatesPage.build(s)
+	ok(not p.buttons.has("usb:index:bios:bios"), "no USB button without a maker-domain download")
+	ok(_texts(p).contains(Hub.DOWNLOAD_BLOCKED), "says why")
+	p.free()
 
 
 func test_no_usb_and_power_block() -> void:

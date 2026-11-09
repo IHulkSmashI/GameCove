@@ -1,6 +1,8 @@
 # Godot
 app/.godot/
 *.import
+# Bundled device pictures must ship as raw files (importer "keep"), so their .import is tracked.
+!app/assets/device_photos/*.import
 
 # Python
 __pycache__/
@@ -11,3 +13,7 @@ gamedb/dist/
 
 # Export output (app/export_presets.cfg)
 app/build/
+
+# raw-read assets keep their tracked .import (importer="keep"); see packaging/tests/run.sh
+!app/assets/brand/*.svg.import
+!app/assets/device_photos/*.import

@@ -118,16 +118,17 @@ static func reject(path: String, why: String) -> void:
 	_lock.unlock()
 
 
-static func save_json(path: String, data: Variant, indent := "") -> Error:
-	return save_text(path, JSON.stringify(data, indent, true) + ("\n" if indent != "" else ""))
+## private: readable by this user only (0600 before any byte is written: API keys).
+static func save_json(path: String, data: Variant, indent := "", private := false) -> Error:
+	return save_text(path, JSON.stringify(data, indent, true) + ("\n" if indent != "" else ""), private)
 
 
-static func save_text(path: String, text: String) -> Error:
-	return save_bytes(path, text.to_utf8_buffer())
+static func save_text(path: String, text: String, private := false) -> Error:
+	return save_bytes(path, text.to_utf8_buffer(), private)
 
 
 ## Atomic write: <path>.tmp, flush, rename over <path>.
-static func save_bytes(path: String, data: PackedByteArray) -> Error:
+static func save_bytes(path: String, data: PackedByteArray, private := false) -> Error:
 	var p := abs_path(path)
 	_lock.lock()
 	if _blocked.has(p):
@@ -136,6 +137,11 @@ static func save_bytes(path: String, data: PackedByteArray) -> Error:
 	# never makes folders: an explicit path whose folder is missing fails; the owners of
 	# the app's own folders (user://, ~/.config/...) create them
 	var tmp := p + ".tmp"
+	if private:
+		var e0 := FileAccess.open(tmp, FileAccess.WRITE)
+		if e0 != null:
+			e0.close()
+			FileAccess.set_unix_permissions(tmp, FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER)
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		var e := FileAccess.get_open_error()

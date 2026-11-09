@@ -510,7 +510,7 @@ func open_credits() -> void:
 	for c in _sheet_body.get_children():
 		Kit.drop(_sheet_body, c)
 	_sheet_body.add_child(Kit.label(TS.ABOUT_CREDITS, "HeaderLabel"))
-	var text := Credits.load_text()
+	var text := Credits.full_text()
 	var r := RichTextLabel.new()
 	r.name = "Credits"
 	r.bbcode_enabled = true

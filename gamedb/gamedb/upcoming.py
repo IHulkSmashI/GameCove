@@ -28,7 +28,7 @@ from .sources import ecb, igdb, releases
 SCHEMA = 1
 PREVIOUS_URL = "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/upcoming.json.gz"
 CREDITS = (
-    "Release dates from Steam (store data via the Steam Web API), Wikidata (CC0) and IGDB.com; "
+    "Game data from IGDB (https://www.igdb.com); release dates also from Steam (store data via the Steam Web API) and Wikidata (CC0); "
     "exchange rates: Source: ECB statistics. Game art belongs to its publishers."
 )
 LIMITS = {"previous": 120, "steam": 300, "wikidata": 600, "igdb": 600, "ecb": 60}

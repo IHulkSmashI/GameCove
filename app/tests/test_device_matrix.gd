@@ -129,9 +129,11 @@ func test_expectations_are_enforced() -> void:
 ## Fan curves: one duty per table point, 0-100 %, never falling, never under Quiet.
 func test_curve_rules() -> void:
 	var row := {"fan": "asus_custom_fan_curve"}
-	eq(Matrix.curve_problems([2, 5, 17, 35, 55, 75, 75, 75], null, row), [] as Array[String], "Quiet itself is fine")
+	eq(Matrix.curve_problems([2, 5, 17, 35, 55, 75, 75, 100], null, row), [] as Array[String], "Quiet itself is fine")
+	# review L6: Quiet ends at full speed, so a curve that stops short of it at the hottest point is refused
+	ok("point 8 = 75 is quieter than Quiet (100)" in "\n".join(Matrix.curve_problems([2, 5, 17, 35, 55, 75, 75, 75], null, row)), "old 75 % top refused")
 	eq(Matrix.curve_problems([100, 100, 100, 100, 100, 100, 100, 100], null, row), [] as Array[String], "Max is fine")
-	var t := "\n".join(Matrix.curve_problems([0, 5, 17, 35, 55, 75, 75, 75], null, row))
+	var t := "\n".join(Matrix.curve_problems([0, 5, 17, 35, 55, 75, 75, 100], null, row))
 	ok("point 1 = 0 is quieter than Quiet (2)" in t, "under Quiet caught: " + t)
 	t = "\n".join(Matrix.curve_problems([2, 5, 17, 35, 55, 80, 76, 101], null, row))
 	ok("falls at point 7" in t and "point 8 = 101 outside 0..100" in t, "falling and over 100 caught: " + t)

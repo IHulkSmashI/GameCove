@@ -28,8 +28,16 @@ extends Node
 ## session at most (none while the cached copy is under a week old), 10 s
 ## timeout, 3 MB cap, PNG/JPEG/WebP only (checked from the bytes), no retry
 ## after a failure until the next start. Credit: "Image: <Maker>", linking to
-## the maker's product page. Order: free photo, then maker image, then the
-## drawing.
+## the maker's product page.
+##
+## Bundled images. A row may instead name a picture shipped inside the app:
+##   "bundled": "res://assets/device_photos/<id>.webp", "view": "front"
+## (WebP, PNG or JPEG under res://assets/device_photos/, force-included by
+## export_presets.cfg). It shows offline, needs no request and isn't affected
+## by "Show maker photos" (only by "Show a real photo of my device"); no credit
+## line (credit {}). To swap the picture, replace the file at that path.
+##
+## Order: bundled image, then free photo, then maker image, then the drawing.
 ##   maker_enabled / set_maker_enabled(on)  "Show maker photos" (default on;
 ##       ConfigFile user://settings.cfg [device] maker_photo). Off: no request
 ##       to any maker's site; free photo or drawing only.
@@ -63,6 +71,7 @@ const MAKER_MAX_BYTES := 3 * 1024 * 1024
 const MAKER_MAX_AGE := 7 * 24 * 3600
 const MAKER_TIMEOUT := 10.0
 const MAKER_EXTS := ["png", "jpg", "webp"]
+const BUNDLED_DIR := "res://assets/device_photos/"
 const COMMONS_PAGE := "https://commons.wikimedia.org/wiki/File:"
 const TPhoto := preload("res://scripts/ui/texts_photo.gd")
 ## Credit pages we accept: Commons files and Flickr photos (taken through
@@ -80,6 +89,8 @@ var sources_path := SOURCES_PATH
 var maker_sources: Variant = null
 ## device ids whose bundled entry names a free photo (Commons/Openverse).
 var _free := {}
+## device_id -> res:// path of a picture shipped in the app (parse_bundled); tests may set it.
+var bundled_sources: Variant = null
 ## Seconds since the epoch; tests replace it.
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 
@@ -113,8 +124,9 @@ func _ready() -> void:
 		add_child(node)
 		http = node
 	# Background prefetch at start, so the picture is cached before anyone opens
-	# About (and before the next offline start).
-	prefetch_detected.call_deferred()
+	# About (and before the next offline start); not with "Background lookups" off (review M22).
+	if preload("res://scripts/system/privacy.gd").background_allowed(prefs_path):
+		prefetch_detected.call_deferred()
 
 
 # ---- the setting ----------------------------------------------------------------
@@ -253,6 +265,9 @@ func photo_for(device_id: String) -> Dictionary:
 		if not device_id in _aliases.get(rid, []):
 			_aliases[rid] = _aliases.get(rid, []) + [device_id]
 		return _family_photo(device_id, rid, photo_for(rid))
+	var b := bundled(device_id)
+	if not b.is_empty():
+		return b
 	_load_manifest()
 	var got := cached(device_id)
 	if got.is_empty() and _use_maker(device_id):
@@ -274,6 +289,9 @@ func cached(device_id: String) -> Dictionary:
 	var rid := representative_of(device_id)
 	if rid != device_id:
 		return _family_photo(device_id, rid, cached(rid))
+	var b := bundled(device_id)
+	if not b.is_empty():
+		return b
 	_load_manifest()
 	var e: Dictionary = _manifest.get(device_id, {})
 	if e.is_empty():
@@ -452,7 +470,7 @@ func maker_entry(device_id: String) -> Dictionary:
 func _use_maker(device_id: String) -> bool:
 	# The bundled list decides: a row that moved from a free photo to a maker
 	# image switches at once, not when the weekly manifest catches up.
-	return not maker_entry(device_id).is_empty() and not _free.has(device_id)
+	return not maker_entry(device_id).is_empty() and not _free.has(device_id) and bundled_path(device_id) == ""
 
 
 func _maker_base(url: String) -> String:
@@ -538,6 +556,44 @@ func store_maker(url: String, body: PackedByteArray, ext: String) -> String:
 	return dest
 
 
+# ---- bundled images (shipped in the app) -----------------------------------------
+
+## device_photos.json -> {device_id: res:// path} for the "bundled" entries
+## whose path is a WebP, PNG or JPEG directly under BUNDLED_DIR (no "..").
+## Same rule as tools/device_photos/makers.py bundled_problems.
+static func parse_bundled(doc: Variant) -> Dictionary:
+	var out := {}
+	if not doc is Dictionary:
+		return out
+	var re := RegEx.create_from_string("^res://assets/device_photos/[a-z0-9][a-z0-9._-]{0,80}\\.(webp|png|jpg)$")
+	for id in doc:
+		var e: Variant = doc[id]
+		if str(id).begins_with("_") or not e is Dictionary or not e.has("bundled"):
+			continue
+		var path := str(e["bundled"])
+		if re.search(path) != null and not path.contains(".."):
+			out[str(id)] = path
+	return out
+
+
+## The res:// path of this device's bundled picture when the file is there, or "".
+func bundled_path(device_id: String) -> String:
+	if bundled_sources == null:
+		var doc: Variant = _json(FileAccess.get_file_as_string(sources_path)) if FileAccess.file_exists(sources_path) else null
+		bundled_sources = parse_bundled(doc)
+	var p := str(bundled_sources.get(device_id, "")) if bundled_sources is Dictionary else ""
+	return p if p != "" and FileAccess.file_exists(p) else ""
+
+
+## {"path": res:// path, "credit": {}} for a bundled picture, or {} (also when
+## "Show a real photo" is off). Never touches the network; ignores maker_enabled.
+func bundled(device_id: String) -> Dictionary:
+	if not enabled:
+		return {}
+	var p := bundled_path(device_id)
+	return {} if p == "" else {"path": p, "credit": {}}
+
+
 # ---- families ---------------------------------------------------------------------
 
 ## {family id: representative id} for the rows with "representative" whose
@@ -554,7 +610,7 @@ static func parse_representatives(doc: Variant) -> Dictionary:
 		var r: Variant = doc.get(rid)
 		if rid == str(id) or not r is Dictionary or r.has("representative"):
 			continue
-		if r.has("file") or r.has("openverse_id") or r.has("maker_image"):
+		if r.has("file") or r.has("openverse_id") or r.has("maker_image") or r.has("bundled"):
 			out[str(id)] = rid
 	return out
 
@@ -601,14 +657,18 @@ func _ready_for(device_id: String, path: String) -> void:
 ## for a family row). True when it's already cached or a download started;
 ## false when switched off, unknown, no source or no network object.
 func prefetch(device_id: String) -> bool:
-	if not enabled or device_id == "" or device_id == "unknown" or http == null:
+	if not enabled or device_id == "" or device_id == "unknown":
+		return false
+	if bundled_path(representative_of(device_id)) != "":
+		return true   # shipped in the app: nothing to fetch
+	if http == null:
 		return false
 	photo_for(device_id)
 	return has_cached(device_id) or _busy(representative_of(device_id))
 
 
-## True when this device's picture (free photo or maker image, the
-## representative's for a family) is in the cache. Never touches the network.
+## True when this device's picture (bundled, free photo or maker image, the
+## representative's for a family) is available locally. Never touches the network.
 func has_cached(device_id: String) -> bool:
 	var rid := representative_of(device_id)
 	if not cached(rid).is_empty():
@@ -633,8 +693,10 @@ func _busy(rid: String) -> bool:
 
 # ---- for the UI -----------------------------------------------------------------
 
-## "Photo: Jane Doe, CC BY-SA 4.0"
+## "Photo: Jane Doe, CC BY-SA 4.0"; "" for no credit (bundled pictures: {}).
 static func credit_line(credit: Dictionary) -> String:
+	if credit.is_empty():
+		return ""
 	if str(credit.get("kind", "")) == "maker":
 		return "Image: %s" % str(credit.get("maker", "")).strip_edges()
 	var who := str(credit.get("author", "")).strip_edges()

@@ -112,8 +112,21 @@ const DEVICE_PANEL_SOON := "Coming in the next build."
 
 const ABOUT_TAGLINE := "The all-in-one companion for Linux handhelds."
 const ABOUT_LICENSE := "Free and open source under GPL-3.0-or-later. Some parts carry their own licenses; see Credits."
-const ABOUT_DATA := "Compatibility tiers: our summary of ProtonDB community reports (protondb.com), ODbL 1.0. Time to beat: IGDB.com."
+const ABOUT_DATA := "Compatibility tiers: our summary of ProtonDB community reports (protondb.com), ODbL 1.0. Game data from IGDB (igdb.com): time to beat and release dates."
 const ABOUT_CREDITS := "Credits and licenses"
+
+# ---- Network and privacy (About; review M22)
+const PRIVACY_CARD := "Network and privacy"
+const PRIVACY_LINE := "What GameCove asks the internet for, and the switches for it."
+const PRIVACY_BACKGROUND := "Background lookups"
+const PRIVACY_BACKGROUND_HELP := {
+	true: "GameCove refreshes deals, the game database and your device's photo by itself, never while you play.",
+	false: "Nothing is requested unless you ask for it right then: opening a store page, searching, pressing Check.",
+}
+const PRIVACY_PRICES := "Look up deals and prices"
+const PRIVACY_PRICES_HELP := "Sends your wishlist's Steam app ids and titles to CheapShark and the Steam store for prices."
+const PRIVACY_CALLS := "What GameCove connects to"
+const PRIVACY_NEVER := "Never sent: analytics, crash reports, serial numbers or account details. Affiliate links (Discover settings, on by default, none set up yet) only change a link's address, never what you pay."
 const ABOUT_CREDITS_HELP := "Everyone whose work GameCove builds on."
 const ABOUT_SOURCE := "Source code"
 const ABOUT_ISSUE := "Report a problem"
