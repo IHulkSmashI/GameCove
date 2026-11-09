@@ -1145,7 +1145,9 @@ func _open_settings_category(category: String, part: String) -> void:
 		_close_page()
 	show_screen("settings")
 	if settings.has_method("open_category"):
-		settings.open_category(category, part)
+		# after show_screen's own deferred focus (the category it was last on), or
+		# that lands later and switches Settings back to it, focus lost
+		settings.open_category.call_deferred(category, part)
 
 
 ## Edit a game's settings: the quick menu opened on that game.
