@@ -113,6 +113,17 @@ func list(group := "") -> Array:
 	return out
 
 
+## Control.describe() as of the last finished worker job (a copy: safe while the
+## worker changes the control; the UI reads this, never the live fields, or a
+## detection replacing `options` mid-read crashes it).
+func describe_cached(id: String) -> Dictionary:
+	_cache_mutex.lock()
+	var e: Variant = _cache.get(id)
+	var d: Dictionary = e["desc"].duplicate(true) if e != null and e.has("desc") else {}
+	_cache_mutex.unlock()
+	return d
+
+
 ## The control's value as of the last finished worker job (safe on any thread).
 func value(id: String) -> Variant:
 	_cache_mutex.lock()
@@ -211,7 +222,8 @@ func _commit(ids: Array) -> void:
 	for id in ids:
 		var c = _controls.get(id)
 		if c != null:
-			_cache[id] = {"available": bool(c.available), "value": _copy(c.value), "per_game": bool(c.per_game)}
+			_cache[id] = {"available": bool(c.available), "value": _copy(c.value), "per_game": bool(c.per_game),
+				"desc": c.describe().duplicate(true)}
 	_cache_mutex.unlock()
 
 

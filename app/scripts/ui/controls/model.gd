@@ -137,7 +137,12 @@ func describe(id: String) -> Dictionary:
 	var c := control(id)
 	if c == null:
 		return {}
-	var d: Dictionary = c.describe()
+	# the registry's committed copy: the worker may be changing the live control now
+	var d: Dictionary = {}
+	if not _local.has(id) and controls != null and controls.has_method("describe_cached"):
+		d = controls.describe_cached(id)
+	if d.is_empty():
+		d = c.describe()
 	d["blocked"] = blocked_reason(c)
 	d["layer"] = layer_of(id)
 	d["pending"] = _pending.has(id)

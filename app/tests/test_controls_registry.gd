@@ -159,3 +159,25 @@ func test_a_write_rereads_what_it_affects() -> void:
 	reg.apply({"power.a": 5})
 	eq(reg.value("power.b"), 10.0, "the same through a profile apply")
 	reg.free()
+
+
+## The quick menu read Control fields straight from the main thread while the
+## worker's detection replaced them (options, value): GameCove crashed in
+## ControlView._shape_of during a charger change. The UI reads describe_cached(),
+## committed by the worker per job. Found by the end-to-end suite.
+func test_describe_cached_is_a_committed_copy() -> void:
+	var reg: Node = load("res://scripts/controls/controls.gd").new()
+	reg.sync_mode = true
+	reg.setup({"sys_root": "/nonexistent"})
+	var Ctl := load("res://scripts/controls/control.gd")
+	var c = Ctl.make({"id": "power.x", "group": "power", "kind": "choice", "options": [{"value": 1, "label": "1"}]},
+		func(_c): return "", func(_c): return 1, func(_c, _v): return true)
+	reg.register(c)
+	reg.detect_all()
+	var d: Dictionary = reg.describe_cached("power.x")
+	eq(d["value"], 1, "committed value")
+	c.options = [{"value": 2, "label": "2"}]   # the worker changing the live control
+	eq(reg.describe_cached("power.x")["options"][0]["value"], 1, "readers see the last committed state")
+	d["options"].clear()
+	eq(reg.describe_cached("power.x")["options"].size(), 1, "and get their own copy")
+	reg.free()
