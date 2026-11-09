@@ -169,3 +169,34 @@ func test_m10_layout_reloaded_when_inputplumber_restarts() -> void:
 	c.monitor_line({"kind": "added", "path": "/org/shadowblip/InputPlumber/CompositeDevice3"})
 	eq(f.calls.filter(func(cmd): return " LoadProfileFromYaml s " in cmd).size(), 1, "and onto a re-added composite device")
 	c.free()
+
+
+# ---- M12: mouse mode keeps the emulated controller and puts the targets back ---------------------
+
+## Another tool runs a Steam Deck pad (deck-uhid) while the device config says xbox-elite. Mouse mode
+## on pinned [xbox-elite, mouse, keyboard]; off and reset left it.
+func test_m12_mouse_mode_restores_the_exact_targets() -> void:
+	var t := _claw("m12_mouse")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	f.targets = ["deck-uhid"]
+	reg.detect_all()
+	ok(_w(reg, "controller.desktop_mode", true), "mouse mode on")
+	eq(f.targets.slice(0, 1), ["deck-uhid"], "still a Steam Deck pad")
+	ok("mouse" in f.targets, "with a mouse")
+	ok(_w(reg, "controller.desktop_mode", false), "mouse mode off")
+	eq(f.targets, ["deck-uhid"], "exactly the targets from before")
+	ok(not f.profile.has("target_devices"), "and the profile pins nothing")
+	reg.free()
+
+
+func test_m12_reset_puts_the_targets_back() -> void:
+	var t := _claw("m12_reset")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	f.targets = ["deck-uhid"]
+	reg.detect_all()
+	ok(_w(reg, "controller.desktop_mode", true), "mouse mode on")
+	ok(_w(reg, "controller.reset_layout", true), "reset")
+	eq(f.targets, ["deck-uhid"], "the targets from before GameCove changed them")
+	reg.free()

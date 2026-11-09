@@ -23,6 +23,7 @@ const Hhd := preload("res://scripts/controls/input/hhd_client.gd")
 const Profile := preload("res://scripts/input/ip_profile.gd")
 const Traits := preload("res://scripts/device/traits.gd")
 const Rumble := preload("res://scripts/controls/input/rumble.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 
 const R_NONE := "Needs InputPlumber or Handheld Daemon running"
 const R_HHD_ONLY := "Needs Handheld Daemon (InputPlumber has no such setting)"
@@ -532,14 +533,73 @@ func _desktop() -> RefCounted:
 					return "Handheld Daemon has no mouse mode; use the touchpad or Steam's desktop layout"
 			return R_NONE,
 		func(_c): return IpEdit.desktop_speed(be.ip_profile()) > 0,
-		func(_c, v):
-			var gp := _current_gamepad_target()
-			return be.ip_apply(func(p): return IpEdit.set_desktop(p, v, _desktop_speed, gp),
-				func(p): return (IpEdit.desktop_speed(p) > 0) == v))
+		func(_c, v): return _set_mouse_mode(bool(v)))
+
+
+## Mouse mode adds mouse and keyboard virtual devices. What was there before (the profile's
+## own target_devices or none, and InputPlumber's live list) is kept next to the layouts
+## until it goes off (or the layout is reset), then put back exactly (review M12): the
+## controller type never changes because of it.
+func _set_mouse_mode(on: bool) -> bool:
+	be.invalidate()
+	var live := _ip_targets_now()
+	var st := _mouse_state()
+	if on:
+		if st.is_empty() and IpEdit.desktop_speed(be.ip_profile()) == 0:
+			var p := be.ip_profile()
+			_save_mouse_state({"had": p.get("target_devices") is Array,
+				"profile_targets": p.get("target_devices", []) if p.get("target_devices") is Array else [], "live": live})
+		var gp := _current_gamepad_target()
+		return be.ip_apply(func(p): return IpEdit.set_desktop(p, true, _desktop_speed, gp, live),
+			func(p): return IpEdit.desktop_speed(p) > 0)
+	var ok: bool = be.ip_apply(func(p):
+			var q := IpEdit.set_desktop(p, false)
+			if not st.is_empty():
+				if st.get("had", false):
+					q["target_devices"] = (st.get("profile_targets", []) as Array).duplicate()
+				else:
+					q.erase("target_devices")
+			return q,
+		func(p): return IpEdit.desktop_speed(p) == 0)
+	if ok and not st.is_empty():
+		ok = _put_targets_back(st.get("live", []))
+		if ok:
+			_save_mouse_state({})
+	return ok
+
+
+## InputPlumber only changes its virtual devices when a profile names them: a profile
+## without target_devices leaves the mouse and keyboard running, so set the list itself.
+func _put_targets_back(want: Array) -> bool:
+	be.invalidate()
+	if want.is_empty() or be.ip_live_targets().is_empty() or be.ip_live_targets() == want:
+		return true
+	return be.ip_set_targets(want)
+
+
+func _mouse_state_path() -> String:
+	return be.profile_path().get_base_dir().path_join("mouse_mode.json")
+
+
+func _mouse_state() -> Dictionary:
+	var d: Variant = SettingsFile.load_json(_mouse_state_path())["data"]
+	return d if d is Dictionary else {}
+
+
+func _save_mouse_state(st: Dictionary) -> void:
+	if st.is_empty():
+		if FileAccess.file_exists(_mouse_state_path()):
+			DirAccess.remove_absolute(_mouse_state_path())
+		return
+	DirAccess.make_dir_recursive_absolute(_mouse_state_path().get_base_dir())
+	SettingsFile.save_json(_mouse_state_path(), st, "  ")
 
 
 func _current_gamepad_target() -> String:
 	var t := IpEdit.gamepad_target(be.ip_profile())
+	if t != "":
+		return t
+	t = IpEdit.gamepad_target({"target_devices": be.ip_live_targets()})
 	if t != "":
 		return t
 	for x in be.ip_config_targets():
@@ -563,7 +623,8 @@ func _desktop_speed_ctl() -> RefCounted:
 			if IpEdit.desktop_speed(be.ip_profile()) == 0:
 				return true   # used when mouse mode goes on
 			var gp := _current_gamepad_target()
-			return be.ip_apply(func(p): return IpEdit.set_desktop(p, true, int(v), gp),
+			var live := _ip_targets_now()
+			return be.ip_apply(func(p): return IpEdit.set_desktop(p, true, int(v), gp, live),
 				func(p): return IpEdit.desktop_speed(p) == int(v)))
 
 
@@ -986,8 +1047,19 @@ func _reset_layout() -> RefCounted:
 		"help": "Removes GameCove's button, gyro, trackpad and controller-type changes."},
 		func(_c): return "" if be.controller_backend() == "inputplumber" else (R_IP_ONLY if be.controller_backend() == "hhd" else R_NONE),
 		func(_c): return null,
-		func(_c, _v): return be.ip_apply(func(p): return IpEdit.reset(p),
-			func(p): return not _mapping_has_ours(p)))
+		func(_c, _v):
+			var st := _mouse_state()
+			if not be.ip_apply(func(p): return IpEdit.reset(p), func(p): return not _mapping_has_ours(p)):
+				return false
+			# the profile no longer names target_devices, which InputPlumber takes as "keep
+			# them": put back the list from before GameCove changed it (review M12)
+			var want: Array = st.get("live", []) if not st.is_empty() else _ip_first_targets
+			if want.is_empty():
+				want = be.ip_config_targets()
+			var ok := _put_targets_back(want)
+			if ok:
+				_save_mouse_state({})
+			return ok)
 
 
 static func _mapping_has_ours(p: Dictionary) -> bool:

@@ -27,6 +27,9 @@ var loads: Array = []           # every JSON sent with LoadProfileFromYaml
 var refuse_load := false        # LoadProfileFromYaml fails
 var ignore_load := false        # it "succeeds" but nothing changes
 var refuse_yaml := false        # GetProfileYaml fails (a busctl timeout)
+## Live virtual devices (TargetDevices -> DeviceType), [] = not listed. Like InputPlumber, a loaded
+## profile with target_devices replaces them and one without leaves them; SetTargetDevices sets them.
+var targets: Array = []
 var buzzes := 0
 
 # hhd
@@ -92,7 +95,15 @@ func _busctl(c: String) -> Dictionary:
 			"OutputCapabilities": {"type": "as", "data": ip_outs}}}
 		if ip_ff:
 			ifaces[FF] = {"Enabled": {"type": "b", "data": rumble}}
-		return {"code": 0, "out": JSON.stringify({"type": "a{oa{sa{sv}}}", "data": [{DEV: ifaces}]})}
+		var objs := {DEV: ifaces}
+		if not targets.is_empty():
+			var paths := []
+			for i in targets.size():
+				var tp := "/org/shadowblip/InputPlumber/devices/target/t%d" % i
+				paths.append(tp)
+				objs[tp] = {"org.shadowblip.Input.Target": {"DeviceType": {"type": "s", "data": targets[i]}}}
+			ifaces[DEV_IFACE]["TargetDevices"] = {"type": "ao", "data": paths}
+		return {"code": 0, "out": JSON.stringify({"type": "a{oa{sa{sv}}}", "data": [objs]})}
 	var dev := "call %s %s " % [SVC, DEV]
 	if c == dev + DEV_IFACE + " GetProfileYaml":
 		if refuse_yaml:
@@ -108,6 +119,12 @@ func _busctl(c: String) -> Dictionary:
 			return {"code": 1, "out": ""}
 		if not ignore_load:
 			profile = p
+			if p.get("target_devices") is Array and not targets.is_empty():
+				targets = (p["target_devices"] as Array).duplicate()
+		return {"code": 0, "out": ""}
+	if c.begins_with(dev + DEV_IFACE + " SetTargetDevices as "):
+		var parts := c.trim_prefix(dev + DEV_IFACE + " SetTargetDevices as ").split(" ")
+		targets = Array(parts.slice(1))
 		return {"code": 0, "out": ""}
 	if c == "get-property %s %s %s Enabled" % [SVC, DEV, FF] and ip_ff:
 		return _s(rumble, "b")
