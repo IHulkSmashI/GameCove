@@ -329,6 +329,15 @@ func test_calendar_month_layout() -> void:
 	ok(_texts(cal.day_buttons[10]).contains("Football Manager 27"), "title in the cell")
 	cal._show_panel(10)
 	ok(_texts(cal._panel).contains("Football Manager 27"), "panel lists the day")
+	var day: Button = cal.day_buttons[10]
+	ok(day.find_child("Dot", true, false) != null, "dot on a release day")
+	day.size = Vector2(70, 64)
+	day.resized.emit()   # outside the tree the signal doesn't fire by itself
+	ok(day.find_child("Covers", true, false) == null, "small cell: titles, no covers")
+	day.size = Vector2(130, 112)
+	day.resized.emit()
+	ok(day.find_child("Covers", true, false) != null, "big cell: small covers")
+	ok(not day.find_child("Titles", true, false).visible, "titles hidden behind the covers")
 	cal.shift_month(1)
 	cal = r.sections["calendar"]
 	eq(cal.ym, Vector2i(2026, 12), "next month")

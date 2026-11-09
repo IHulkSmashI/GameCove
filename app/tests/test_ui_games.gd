@@ -249,6 +249,17 @@ func test_primary_action() -> void:
 	eq(GamePage.primary_for(_steam_game(false), "queued", c)["id"], "downloads", "queued: downloads")
 
 
+func test_game_page_leaves_room_for_the_top_bar() -> void:
+	var r := _rig()
+	var p: Control = GamePage.new()
+	p.setup(_steam_game(), Screens.FakeLauncher.new(), {"library": r["lib"], "state": r["state"], "actions": r["actions"]})
+	eq(p.frame.offset_top, float(p.FRAME_TOP + GamePage.TOP_INSET), "hero card starts below the top bar")
+	eq(p.scroll.offset_top, float(p.FRAME_TOP + GamePage.TOP_INSET), "content too")
+	ok(p.has_method("set_top_target"), "main can link d-pad up to the tabs")
+	p.free()
+	_free(r)
+
+
 func test_game_page_v2() -> void:
 	var r := _rig()
 	var ach := FakeAchievements.new()
@@ -435,6 +446,14 @@ func test_downloads_view() -> void:
 	r["actions"].sheet.pick("up")
 	eq(r["lib"].calls[-1], ["reorder", "epic:Moss", -1], "reordered")
 	eq(v.hints_for_focus(v.focus_list[3])[0], ["A", TG.DL_OPTIONS], "row hints")
+	# Layout: hero card, then Up next and Finished side by side.
+	ok(v.list.get_child(0).name == "Now" and v.list.get_child(1).name == "Columns", "hero card above the two columns")
+	ok(v.next_col.find_child("Job_epic_Moss", true, false) != null, "queued job under Up next")
+	ok(v.done_col.get_child_count() == 2, "finished row under Finished")
+	ok(v.list.get_child(0).find_child("HeroStage", true, false) != null, "the game's art in the hero")
+	eq(v.focus_list[3].get_node(v.focus_list[3].focus_neighbor_right), v.focus_list[4], "right crosses to Finished")
+	eq(v.focus_list[3].get_node(v.focus_list[3].focus_neighbor_top), v.focus_list[0], "up goes back to the hero")
+	eq(v.focus_list[0].get_node(v.focus_list[0].focus_neighbor_bottom), v.focus_list[3], "down from the hero into Up next")
 	v.free()
 	r["lib"].queue = [] as Array[Dictionary]
 	r["state"].done = []
