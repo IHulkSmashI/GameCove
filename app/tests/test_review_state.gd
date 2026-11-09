@@ -198,3 +198,29 @@ func test_m16_resume_replay_does_not_pause_autotune() -> void:
 	e["power"].refresh(true)
 	eq(e["power"].autotune.session.paused, false, "not paused by the replay")
 	_free()
+
+
+# ---- M19: a resume while a game is in front is noticed (Power's 15 s check) -----------------------
+
+func test_m19_power_notices_a_resume_on_its_own_timer() -> void:
+	var t: Dictionary = Trees.new().ally()
+	var e := _setup(t)
+	var p: Node = e["power"]
+	e["reg"].set_value("power.tdp", 12)
+	var now := [100000.0, 50000]
+	p.clock = func(): return now.duplicate()
+	var seen := [0]
+	p.resumed.connect(func(): seen[0] += 1)
+	p.source_tick()    # first look: sets the mark
+	eq(seen[0], 0, "no resume on the first look")
+	now[0] += 15.0
+	now[1] += 15000
+	p.source_tick()
+	eq(seen[0], 0, "15 s awake: no resume")
+	e["runner"].props[SM_TDP]["data"] = 25   # the firmware put its own limit back while asleep
+	now[0] += 600.0
+	now[1] += 1000
+	p.source_tick()
+	eq(seen[0], 1, "slept 10 minutes: resumed once")
+	eq(float(e["runner"].props[SM_TDP]["data"]), 12.0, "our TDP back after the resume")
+	_free()

@@ -402,6 +402,8 @@ func _wire_services() -> void:
 	var power: Node = _svc("Power")
 	if power != null and power.has_signal("autotune_limit"):
 		power.autotune_limit.connect(_on_autotune_limit)
+	if power != null and power.has_signal("resumed"):
+		power.resumed.connect(_on_power_resumed)
 	# The s-hw Controller service may emit ui_action("home" | "quick_menu" | "osk")
 	# for Guide / QuickAccess / Keyboard buttons it intercepts in InputPlumber.
 	var ctl: Node = _svc("Controller")
@@ -732,6 +734,13 @@ static func resumed_between(before: Array, after: Array, gap_s: float) -> bool:
 	var wall: float = after[0] - before[0]
 	var mono: float = (after[1] - before[1]) / 1000.0
 	return wall - mono > gap_s
+
+
+## Power noticed a sleep itself (its 15 s check, review M19) or finished ours: the
+## controller lights follow, and our own clock mark moves so we don't report it twice.
+func _on_power_resumed() -> void:
+	_clock_mark = [Time.get_unix_time_from_system(), Time.get_ticks_msec()]
+	_schedule_resume_reapply()
 
 
 ## After a sleep: Power re-reads on its worker, puts the TDP back and emits

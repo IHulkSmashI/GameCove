@@ -194,8 +194,8 @@ func _start() -> bool:
 	detect()
 	load_autotune_opts()
 	restore()
-	if backend != "none":
-		_start_timer.call_deferred()
+	# always: besides the charger it notices a sleep while a game is in front (review M19)
+	_start_timer.call_deferred()
 	_emit_changed()
 	return true
 
@@ -203,7 +203,7 @@ func _start() -> bool:
 func _start_timer() -> void:
 	_timer = Timer.new()
 	_timer.wait_time = SOURCE_CHECK_S
-	_timer.timeout.connect(func(): _queue("source", func(): check_power_source(); return true))
+	_timer.timeout.connect(func(): _queue("source", func(): source_tick(); return true))
 	add_child(_timer)
 	_timer.start()
 
@@ -284,6 +284,43 @@ func autotune_limit_info() -> Dictionary:
 	var info: Dictionary = autotune.limit_info()
 	info["tdp_max"] = tdp_max()
 	return info
+
+
+## Clocks for noticing a sleep: [unix seconds, ticks msec] (tests swap it).
+var clock: Callable = func(): return [Time.get_unix_time_from_system(), Time.get_ticks_msec()]
+## Wall clock ahead of the monotonic one by more than this between two looks = the device slept.
+const RESUME_GAP_S := 20.0
+var _clock_mark := [0.0, 0]
+var _clock_mutex := Mutex.new()
+
+
+## The 15 s timer's job (worker): a sleep since the last look, else the charger. main.gd
+## only looks while its window or the quick menu is shown, so a sleep with a game in front
+## went unnoticed: a firmware-reset TDP, fan table or charge limit stayed reset (review M19).
+func source_tick() -> void:
+	if slept_since_last_look():
+		refresh(true)
+	else:
+		check_power_source()
+
+
+## True when the clocks say the device slept since the last look (and moves the mark).
+func slept_since_last_look() -> bool:
+	var now: Array = clock.call()
+	_clock_mutex.lock()
+	var before: Array = _clock_mark
+	_clock_mark = now
+	_clock_mutex.unlock()
+	if int(before[1]) == 0:
+		return false
+	return (float(now[0]) - float(before[0])) - (int(now[1]) - int(before[1])) / 1000.0 > RESUME_GAP_S
+
+
+func _mark_clock() -> void:
+	var now: Array = clock.call()
+	_clock_mutex.lock()
+	_clock_mark = now
+	_clock_mutex.unlock()
 
 
 ## refresh() on the worker (it runs busctl).
@@ -682,6 +719,7 @@ func fan_modes() -> Array:
 ## writes, and a `resumed` from there would re-apply everything again, forever.
 func refresh(after_resume := false) -> void:
 	if after_resume:
+		_mark_clock()   # main.gd noticed it first: the 15 s check mustn't do it again
 		# the charger may have come or gone while asleep: limits first (review S1-2)
 		check_power_source()
 	var v := read_tdp()
