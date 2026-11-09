@@ -18,9 +18,9 @@ No fixed "quiet" duty on the one-duty drivers: without a curve, a low fixed spee
 
 | Driver | Mode | Duty per point (%) |
 | --- | --- | --- |
-| `msi_wmi_platform` | quiet | 0 40 40 45 60 75 (ClawDeck's known-good Claw tables, from MSI's own presets) |
+| `msi_wmi_platform` | quiet | 0 40 40 45 60 100 (ClawDeck's known-good Claw tables, from MSI's own presets, with full speed at the hottest point, 100 °C) |
 | `msi_wmi_platform` | max | 100 x 6 |
-| `asus_custom_fan_curve` | quiet | at 30 40 50 60 70 80 90 100 °C: 2 5 17 35 55 75 75 75 (Handheld Daemon's minimum curve up to 50 °C, its default curve above) |
+| `asus_custom_fan_curve` | quiet | at 30 40 50 60 70 80 90 100 °C: 2 5 17 35 55 75 75 100 (Handheld Daemon's minimum curve up to 50 °C, its default curve above, full speed at 100 °C) |
 | `asus_custom_fan_curve` | max | 100 x 8 |
 
 The tables must match `FAN_DRIVERS` in `app/scripts/device/power.gd` (`packaging/tests/run.sh` checks the driver list and modes). On ASUS, changing the platform profile puts the factory curve back; GameCove re-applies the saved preset at start.

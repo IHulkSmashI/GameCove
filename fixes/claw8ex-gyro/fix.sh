@@ -277,6 +277,16 @@ set_value() {
 	require_root
 	lock
 	m_installed || die "install the gyro first"
+	# Review L4: every change rebuilds the override and restarts InputPlumber (the controller drops for a
+	# moment), and any local process may ask without a password: the same value again is a no-op, and at
+	# most ten real changes per ten minutes (counted in /run, lib/ratelimit.sh).
+	have="accel-off"
+	ip_flag accel && have="accel-on"
+	if [ "$1" = "$have" ]; then
+		say "accelerometer already ${1#accel-}"
+		return 0
+	fi
+	rate_take claw8ex-gyro-accel 10 600 || die "too many accelerometer changes in ten minutes (each one restarts InputPlumber); try again in a few minutes"
 	if [ "$1" = accel-on ]; then
 		mkdir -p "$IP_FLAGS" && : >"$IP_FLAGS/accel"
 	else

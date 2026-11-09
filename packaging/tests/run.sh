@@ -109,6 +109,12 @@ expect_code 3 "fix failure propagates" gf dummy set boom
 contains "$LOG" "action=set value=boom result=fail(3)" "failure logged"
 expect_code 7 "broken fix" gf broken install
 contains "$LOG" "fix=broken action=install value=- result=fail(7)" "broken logged"
+# review L1: the log is capped; over the limit it becomes changes.log.1 and a new one starts
+rm -f "$LOG.1"
+for i in 1 2 3 4 5 6; do GAMECOVE_LOG_MAX=300 gf dummy set "$i" >/dev/null 2>&1; done
+if [ -f "$LOG.1" ]; then ok; else bad "log rotated to changes.log.1 once over the cap"; fi
+if [ "$(wc -c <"$LOG")" -le 600 ]; then ok; else bad "log stays near the cap ($(wc -c <"$LOG") bytes)"; fi
+contains "$LOG" "value=6 result=ok" "newest line kept after rotation"
 
 lines_before="$(wc -l <"$LOG")"
 expect_code 0 "status" gf dummy status
@@ -227,10 +233,19 @@ expect_code 0 "set entry: status" gfs fan status
 contains "$T/out" "^state=on$" "status passed through"
 expect_code 0 "set entry: fan curve" gfs fan set curve:0,40,50,60,80,100
 contains "$ROOT/calls" "^fan:set curve:0,40,50,60,80,100$" "fan curve reached fix.sh"
+# review L2: the session's `timeout pkexec` can't stop a root child, so the set entry bounds the fix itself
+cp "$FIXES/charge-limit/fix.sh" "$T/charge-limit.fix.sh"
+printf '#!/bin/sh\nsleep 30\n' >"$FIXES/charge-limit/fix.sh"
+t0=$(date +%s)
+GAMECOVE_FIX_SET_TIMEOUT=1 expect_code 124 "set entry: a fix that hangs is stopped" gfs charge-limit set 80
+if [ $(($(date +%s) - t0)) -le 8 ]; then ok; else bad "set entry: hung fix stopped within the bound"; fi
+cp "$T/charge-limit.fix.sh" "$FIXES/charge-limit/fix.sh"
 expect_code 66 "set entry: fan curve letters" gfs fan set curve:0,40,x
 expect_code 66 "set entry: fan curve empty" gfs fan set curve:
 expect_code 66 "set entry: fan curve trailing comma" gfs fan set curve:1,2,
 expect_code 66 "set entry: fan curve shell" gfs fan set 'curve:1;reboot'
+expect_code 66 "set entry: fan curve leading zero (review M1)" gfs fan set curve:0,040,040,045,060,075
+expect_code 66 "set entry: fan curve leading zero first" gfs fan set curve:00,40,40,45,60,75
 for v in boost:off epp:balance_power governor:powersave cpumax:70 gpulevel:auto gpumin:600 \
 	gpumax:1800 gpuprofile:power_saving sppt:28 fppt:33 platform:low-power tau:8000000 tau:restore \
 	thermald:hold thermald:release battery:long-life restore; do
