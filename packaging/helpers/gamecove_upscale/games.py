@@ -345,7 +345,7 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
         if missing:
             return {"ok": False, "error": f"FSR 4.1.2 on XMX needs nitec's files in {os.path.join(home, optiscaler.FSR4_XMX_DIR)} (missing: {', '.join(missing)})"}
     if upscaler == "own":
-        out = optiscaler.unpatch(folder)
+        out = optiscaler.unpatch(folder, home)
         ref = reframework.remove(folder, _ref_shas())
         s = load_state(home)
         s["opti_games"].pop(str(key), None)
@@ -405,7 +405,7 @@ def undo(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
     d = _game_dir(home, key, game_dir)
     folder = load_state(home)["opti_games"].get(str(key)) or (optiscaler.main_exe_dir(d) if d else None)
     removed = reframework.remove(folder, _ref_shas()) if folder else {"ok": True}
-    opti = optiscaler.unpatch(folder) if folder else {"ok": True}
+    opti = optiscaler.unpatch(folder, home) if folder else {"ok": True}
     s = load_state(home)
     s["opti_games"].pop(str(key), None)
     save_state(home, s)

@@ -1084,3 +1084,64 @@ def test_uninstall_restores_igdext_in_prefixes_and_protons(tmp_path):
     assert not (b / "igdext64.dll").exists() and not (b / "igdext64.dll.gamecove-added").exists()
     assert p1.read_text() == "intel stock\n" and p2.read_text() == "intel stock\n"
     assert p3.read_text() == "newer intel\n", "a Proton updated since keeps its own file"
+
+
+def test_optiscaler_undo_keeps_files_changed_since(tmp_path, monkeypatch):
+    """review S2-3: undo removes only what still matches what GameCove put there, and never puts a stale backup
+    over a file a game update wrote; the user's own OptiScaler.ini edits stay."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x" * 100)
+    _w(g / "libxess.dll", "game-own-xess-1.0")
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]
+    m = json.loads((g / ".gamecove-optiscaler" / "manifest.json").read_text())
+    assert set(m["sha256"]) >= {"dxgi.dll", "libxess.dll", "OptiScaler.ini"}, "every file we put there has its sha256"
+    _w(g / "libxess.dll", "game-own-xess-2.0")                  # a game update replaces it
+    with open(g / "OptiScaler.ini", "a") as f:                     # the user tunes OptiScaler by hand
+        f.write("\n; mine\n")
+    r = optiscaler.unpatch(str(g), home)
+    assert r["ok"] and r["removed"]
+    assert (g / "libxess.dll").read_text().strip() == "game-own-xess-2.0", "the update's file is never deleted or overwritten"
+    assert "; mine" in (g / "OptiScaler.ini").read_text(), "the user's edits stay"
+    assert sorted(r["kept"]) == ["OptiScaler.ini", "libxess.dll"], "and both are reported"
+    assert not (g / "dxgi.dll").exists() and not (g / "D3D12_Optiscaler").exists(), "unchanged files of ours go"
+
+
+def test_optiscaler_repatch_after_a_game_update_backs_up_the_new_file(tmp_path, monkeypatch):
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x" * 100)
+    _w(g / "libxess.dll", "game-own-xess-1.0")
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]
+    _w(g / "libxess.dll", "game-own-xess-2.0")                  # update, then the user applies OptiScaler again
+    assert optiscaler.patch(home, str(g), "0.9.4", {"Upscalers_Dx12Upscaler": "xess"})["ok"]
+    assert (g / ".gamecove-optiscaler/backup/libxess.dll").read_text().strip() == "game-own-xess-2.0", "the new file is the backup now"
+    r = optiscaler.unpatch(str(g), home)
+    assert r["ok"] and (g / "libxess.dll").read_text().strip() == "game-own-xess-2.0" and r["kept"] == []
+
+
+def test_optiscaler_undo_of_an_older_manifest_checks_the_package(tmp_path, monkeypatch):
+    """Manifests from before the hashes: a file counts as ours only when it matches the package file it came from."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x" * 100)
+    _w(g / "libxess.dll", "game-own-xess-1.0")
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]
+    mp = g / ".gamecove-optiscaler" / "manifest.json"
+    m = json.loads(mp.read_text())
+    m.pop("sha256")
+    mp.write_text(json.dumps(m))
+    _w(g / "libxess.dll", "game-own-xess-2.0")
+    r = optiscaler.unpatch(str(g), home)
+    assert not (g / "dxgi.dll").exists(), "matches the package's OptiScaler.dll: removed"
+    assert (g / "libxess.dll").read_text().strip() == "game-own-xess-2.0" and "libxess.dll" in r["kept"]
+    assert (g / "OptiScaler.ini").exists() and "OptiScaler.ini" in r["kept"], "can't tell: kept"
