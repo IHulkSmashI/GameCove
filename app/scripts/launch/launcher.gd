@@ -41,10 +41,19 @@ var _default_goal := ""
 var _loaded := false
 
 
+func _ready() -> void:
+	# kept here: the per-game controls read settings_for() on the Controls worker,
+	# which may not look up nodes in the tree
+	if device_profile.is_empty():
+		var d := get_node_or_null("/root/Device")
+		if d != null and d.get("profile") is Dictionary:
+			device_profile = d.get("profile")
+
+
 func profile() -> Dictionary:
 	if not device_profile.is_empty():
 		return device_profile
-	if is_inside_tree():
+	if is_inside_tree() and OS.get_thread_caller_id() == OS.get_main_thread_id():
 		var d := get_node_or_null("/root/Device")
 		if d != null:
 			return d.get("profile")
