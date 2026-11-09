@@ -415,6 +415,9 @@ func _on_tile_focus(t: Control) -> void:
 	# rows above it as fits.
 	var bottom := (row + 1) * pitch + PAD.y + 40.0
 	var target := clampf(bottom - _scroll.size.y, 0.0, row * pitch)
+	# Start on a row boundary so no row sits half cut under the toolbar.
+	if target > 0.0:
+		target = minf(ceilf(target / pitch) * pitch, row * pitch)
 	Motion.method(_scroll, "vscroll", func(v: float): _scroll.scroll_vertical = int(v),
 		float(_scroll.scroll_vertical), target, Motion.BASE)
 	game_focused.emit(t.game)

@@ -388,9 +388,23 @@ func _settings_shots_controls() -> void:
 		await frames(4)
 		st.open_category("device", "about")
 		await frames(12)
+		# "What works here" is read-only (no focus): focus the nearest card
+		# with an action and bring the works card into view beside it.
 		var works: Node = st.find_child("Card_support", true, false)
 		if works is Control:
-			works.grab_focus()
+			var grabbed := false
+			for c in works.get_parent().get_children():
+				if c is Control and c.focus_mode != Control.FOCUS_NONE and c.get_index() > works.get_index():
+					c.set_meta("reveal_with", works)
+					c.grab_focus()
+					grabbed = true
+					break
+			if not grabbed:
+				var sc: Node = works.get_parent()
+				while sc != null and not sc is ScrollContainer:
+					sc = sc.get_parent()
+				if sc is ScrollContainer:
+					sc.ensure_control_visible(works)
 		await frames(8)
 		await shot("controls_settings_about_works")
 	if want(["controls_settings_about_photo"]) and FileAccess.file_exists(PHOTO):

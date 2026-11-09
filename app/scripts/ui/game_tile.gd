@@ -322,32 +322,43 @@ func set_price(text: String, quiet := false, icon: Texture2D = null) -> void:
 	price_icon.texture = icon
 	price_icon.visible = icon != null and text != ""
 	price_label.text = text
-	price_label.visible = text != ""
-	price_label.add_theme_font_override("font", ThemeLib.font("semibold" if quiet else "bold", true))
-	price_label.add_theme_font_size_override("font_size", SUB_PX + 1 if quiet else ThemeLib.SIZE_CAPTION)
-	price_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.82) if quiet else Color.WHITE)
-	# "Price on Green Man Gaming" may take two lines; the store line under it
-	# would only repeat the store, so it steps aside.
-	price_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if quiet else TextServer.AUTOWRAP_OFF
-	price_label.max_lines_visible = 2 if quiet else 1
-	price_label.clip_text = not quiet
-	price_label.custom_minimum_size.x = 60.0 if quiet else 0.0
+	price_label.add_theme_font_override("font", ThemeLib.font("bold", true))
+	price_label.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+	price_label.add_theme_color_override("font_color", Color.WHITE)
 	if quiet and text != "":
-		sub_label.visible = false
+		# No real local price: "Price on Green Man Gaming" takes the store
+		# line's place (it would only repeat the store), two lines at most.
+		price_label.visible = false
+		sub_label.text = text
+		sub_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sub_label.max_lines_visible = 2
+		sub_label.clip_text = false
+		sub_label.visible = true
+	else:
+		price_label.visible = text != ""
 	_update_pills()
 
 
-## One quiet extra after the sub-line ({"text", "tone"}; {} clears it).
+## One quiet extra after the store line ({"text", "tone"}; {} clears it): on
+## the same line when both fit the plate, else on a line of its own.
 func set_extra(spec: Dictionary) -> void:
 	var t := str(spec.get("text", ""))
-	sub_extra.text = (" · " if sub_label.visible and sub_label.text != "" else "") + t
-	sub_extra.visible = t != ""
 	var tone := str(spec.get("tone", ""))
 	sub_extra.add_theme_color_override("font_color", Themes.TONES.get(tone, Color(0.80, 0.84, 0.90)) if tone != "" else Color(0.80, 0.84, 0.90, 0.92))
-	# With an extra, the store keeps its natural width and the extra trims.
-	sub_label.clip_text = not sub_extra.visible
-	sub_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING if sub_extra.visible else TextServer.OVERRUN_TRIM_ELLIPSIS
-	sub_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if sub_extra.visible else Control.SIZE_EXPAND_FILL
+	sub_extra.visible = t != ""
+	var f: Font = sub_label.get_theme_font("font")
+	var room := tile_size.x - 20.0
+	var joined := sub_label.text + " · " + t
+	var fits := sub_label.visible and sub_label.autowrap_mode == TextServer.AUTOWRAP_OFF \
+		and f.get_string_size(joined, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_PX).x <= room
+	if sub_extra.get_parent() != (sub_row if fits else info_box):
+		sub_extra.get_parent().remove_child(sub_extra)
+		(sub_row if fits else info_box).add_child(sub_extra)
+	sub_extra.text = (" · " + t) if fits else t
+	# On one line the store keeps its natural width; alone, each trims.
+	sub_label.clip_text = not (fits and sub_extra.visible)
+	sub_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING if fits and sub_extra.visible else TextServer.OVERRUN_TRIM_ELLIPSIS
+	sub_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if fits and sub_extra.visible else Control.SIZE_EXPAND_FILL
 
 
 func _update_pills() -> void:

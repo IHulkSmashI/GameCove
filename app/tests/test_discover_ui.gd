@@ -210,9 +210,12 @@ func test_home_shelves_from_fixtures() -> void:
 	ok(home.shelves.any(func(s): return s.id == "free"), "Free right now (Flotsam is 100% off)")
 	ok(not home.spot_view.is_empty(), "spotlight picked")
 	var tile: Control = home.shelves[0].tiles[0]
-	ok(tile.price_label.visible and tile.price_label.get_parent() == tile.pill_row, "price in the deal tile's bottom plate")
-	var plates: Array = home.shelves[0].tiles.map(func(t): return t.price_label.text)
-	ok(plates.any(func(p): return String(p).begins_with("Price on ")), "no local price: names the store, never a guessed price (CheapShark rows in Canada)")
+	ok(tile.price_label.get_parent() == tile.pill_row, "price lives in the deal tile's bottom plate")
+	var tiles: Array = home.shelves[0].tiles
+	ok(tiles.all(func(t): return (t.price_label.visible and t.price_label.text != "") or t.sub_label.text.begins_with("Price on ")),
+		"every deal tile: a real local price, or the store named")
+	ok(tiles.any(func(t): return t.sub_label.text.begins_with("Price on ") and not t.price_label.visible),
+		"no local price: names the store, never a guessed price (CheapShark rows in Canada)")
 	var cards := _texts(home)
 	ok(cards.contains(T.GG_TITLE), "gg.deals card while there's no key and See-price rows show")
 	ok(cards.contains("Price data by CheapShark"), "credits shown")
