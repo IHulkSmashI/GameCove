@@ -444,6 +444,11 @@ func _restore_focus(ref: Array) -> void:
 		focus_later(default_focus())
 
 
+## Rebuilds the rows after the screen size changed the cover size.
+func _refit_rows() -> void:
+	set_games(games)
+
+
 ## Grabs focus next frame, skipping controls that were freed or left the tree
 ## in between (tiles are rebuilt when the library finishes loading).
 static func focus_later(c: Control) -> void:
@@ -464,4 +469,4 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_RESIZED and not _shelves.is_empty():
 		# Covers size to the screen (Tile.PER_ROW across): rebuild if that changed.
 		if Tile.size_for(Tile.row_width(), Shelf.GAP) != _shelves[0].tile_size:
-			(func(): if is_instance_valid(self): set_games(games)).call_deferred()
+			call_deferred("_refit_rows")

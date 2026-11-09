@@ -71,8 +71,10 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var margin := Kit.margin(0)
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 48)
-	margin.add_theme_constant_override("margin_right", 48)
+	# The scroll clips 24 px from the edge and its content pads another 24, so
+	# the app shelf can reach into that room for the focused cover's ring.
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_right", 24)
 	margin.add_theme_constant_override("margin_top", 88)
 	margin.add_theme_constant_override("margin_bottom", 58)
 	add_child(margin)
@@ -85,7 +87,11 @@ func _init() -> void:
 	_root = Kit.vbox(ThemeLib.SPACE_5)
 	_root.name = "Root"
 	_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_scroll.add_child(_root)
+	var inset := Kit.margin(0, 24, 0)
+	inset.name = "Inset"
+	inset.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inset.add_child(_root)
+	_scroll.add_child(inset)
 	_build_header()
 	_moon_card = Control.new()
 	_moon_card.name = "MoonlightSlot"

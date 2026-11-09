@@ -253,9 +253,9 @@ func _category_button(id: String) -> Button:
 	b.toggle_mode = true
 	b.custom_minimum_size = Vector2(0, 40)
 	b.tooltip_text = str(TC.CATEGORY_LINES.get(id, TS.CATEGORY_LINES.get(id, "")))
-	# The chosen category: a cyan-to-violet tint with an accent edge.
-	var acc := ThemeLib.color("accent")
-	var chosen := ThemeLib.gradient_box(Color(acc, 0.20), Color(ThemeLib.color("accent_2"), 0.30), ThemeLib.radius("m"), Color(acc, 0.55), 18, 6)
+	# The chosen category is active, not focused: a quiet surface fill and the
+	# accent bar on its left (no accent edge: focus wears the only ring).
+	var chosen := ThemeLib.active_box(ThemeLib.radius("m"), 18, 6)
 	b.add_theme_stylebox_override("pressed", chosen)
 	b.add_theme_stylebox_override("hover_pressed", chosen)
 	b.focus_entered.connect(func(): show_category(id))
