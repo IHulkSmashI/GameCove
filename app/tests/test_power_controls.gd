@@ -175,7 +175,10 @@ func _claw_live(helper: bool, max_charge := 0) -> Dictionary:
 	var t: Dictionary = trees.claw8ex()
 	var sm := Trees.SM
 	t["props"][sm + "FanControl1 FanControlState"] = Trees.p("u", 0)
-	t["props"][sm + "BatteryChargeLimit1 MaxChargeLevel"] = Trees.p("i", max_charge)
+	if max_charge >= -1:
+		t["props"][sm + "BatteryChargeLimit1 MaxChargeLevel"] = Trees.p("i", max_charge)
+	else:   # steamos-manager without the Claw's charge config: a D-Bus error
+		t["props"].erase(sm + "BatteryChargeLimit1 MaxChargeLevel")
 	t["props"][sm + "BatteryChargeLimit1 SuggestedMinimumLimit"] = Trees.p("i", 10)
 	var h := "/sys/class/hwmon/hwmon5/"
 	var duty := [153, 163, 173, 188, 204, 214]
@@ -233,7 +236,7 @@ func test_claw_live_charge_limit_through_steamos_manager() -> void:
 
 
 func test_claw_live_without_the_helper_says_so() -> void:
-	var e := _setup(_claw_live(false, -1))
+	var e := _setup(_claw_live(false, -2))
 	var c: Dictionary = e["c"]
 	for id in ["power.charge_limit", "power.fan_mode", "power.fan_curve", "power.gpu_profile"]:
 		eq(c[id].reason, Tx.NO_HELPER, id + ": the hardware has it, only the root helper can write it")
@@ -382,6 +385,64 @@ func test_profile_can_go_back_to_custom() -> void:
 	ok(c["power.profile"].write("custom"), "custom again (the probe's put-back)")
 	eq(c["power.profile"].read(), "custom")
 	eq(e["power"].state()["tdp_w"], 20.0, "the user's own 20 W back")
+	_free()
+
+
+# ---- the real ROG Ally (RC71L) on SteamOS 3.10 (kernel 7.2.4-valve1-1-neptune, BIOS RC71L.342) ----
+
+## ally() as the device showed it: steamos-manager only (no PowerStation), MaxChargeLevel -1
+## and charge_control_end_threshold 0 (no limit set), FanControl1 answering 0, an empty
+## GpuPowerProfile1 list, GpuPerformanceLevel1 auto with ManualGpuClock 800 (800-2700), and
+## asus-wmi's own hwmon next to asus_custom_fan_curve.
+func _ally_live(helper: bool) -> Dictionary:
+	var trees := Trees.new()
+	var t: Dictionary = trees.ally()
+	for k in t["props"].keys():
+		if str(k).begins_with(Trees.PS):
+			t["props"].erase(k)
+	t["methods"] = {}
+	var sm := Trees.SM
+	t["props"][sm + "BatteryChargeLimit1 MaxChargeLevel"] = Trees.p("i", -1)
+	t["props"][sm + "BatteryChargeLimit1 SuggestedMinimumLimit"] = Trees.p("i", 10)
+	t["props"][sm + "FanControl1 FanControlState"] = Trees.p("u", 0)
+	t["props"][sm + "GpuPowerProfile1 GpuPowerProfile"] = Trees.p("s", "")
+	t["props"][sm + "GpuPowerProfile1 AvailableGpuPowerProfiles"] = Trees.p("as", [])
+	t["props"][sm + "GpuPerformanceLevel1 GpuPerformanceLevel"] = Trees.p("s", "auto")
+	t["props"][sm + "GpuPerformanceLevel1 AvailableGpuPerformanceLevels"] = Trees.p("as", ["auto", "low", "high", "manual", "profile_peak"])
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClock"] = Trees.p("u", 800)
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClockMin"] = Trees.p("u", 800)
+	t["props"][sm + "GpuPerformanceLevel1 ManualGpuClockMax"] = Trees.p("u", 2700)
+	trees.w("/sys/class/power_supply/BAT1/charge_control_end_threshold", "0")
+	trees.w("/sys/class/hwmon/hwmon5/name", "asus")
+	trees.w("/sys/class/hwmon/hwmon5/pwm1_enable", "2")
+	trees.w("/sys/class/hwmon/hwmon5/pwm2_enable", "2")
+	if not helper:
+		DirAccess.remove_absolute(t["root"] + "/usr/libexec/gamecove/gamecove-fix-set")
+		DirAccess.remove_absolute(t["root"] + "/usr/libexec/gamecove/gamecove-fix")
+	return t
+
+
+func test_ally_live_charge_fan_and_gpu_profile() -> void:
+	var e := _setup(_ally_live(true))
+	var c: Dictionary = e["c"]
+	ok(c["power.charge_limit"].available, "charge limit through steamos-manager (%s)" % c["power.charge_limit"].reason)
+	eq(c["power.charge_limit"].value, 100.0, "MaxChargeLevel -1 = no limit set")
+	e["reg"].set_value("power.charge_limit", 80)
+	eq(c["power.charge_limit"].value, 80.0)
+	ok(not e["runner"].calls.any(func(x): return str(x).contains("charge-limit")), "no root helper for it")
+	ok(c["power.fan_curve"].available, "asus curve (%s)" % c["power.fan_curve"].reason)
+	eq(c["power.fan_curve"].points, 8)
+	eq(c["power.fan_mode"].options.map(func(o): return o["value"]), ["quiet", "auto", "max"], "the fan fix, not steamos-manager's switch")
+	eq(c["power.gpu_profile"].reason, Tx.SM_NO_GPU_PROFILES, "an empty list is steamos-manager's answer, not a missing GPU")
+	_free()
+
+
+func test_ally_live_without_the_helper() -> void:
+	var e := _setup(_ally_live(false))
+	var c: Dictionary = e["c"]
+	ok(c["power.charge_limit"].available, "steamos-manager needs no helper")
+	eq(c["power.fan_curve"].reason, Tx.NO_HELPER)
+	eq(c["power.fan_mode"].reason, Tx.NO_HELPER)
 	_free()
 
 

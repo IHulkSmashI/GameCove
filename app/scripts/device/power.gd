@@ -527,8 +527,12 @@ func _detect_charge() -> void:
 	# set (msi-wmi-platform reads the EC byte without its enable bit; steamos-manager
 	# data/devices/msi-claw-8ex.toml: battery_charge_limit method acpi_sb), so only
 	# where devices.json says this battery has a limit.
-	var sm := int(v) if v != null else -1
-	if sm > 0 and sm <= 100 or (sm == 0 and device.get("charge_limit", false)):
+	# -1: steamos-manager found the attribute but read ENODATA (asus-wmi until a limit is
+	# written; power.rs parse_max_charge_level): no limit set, and it can still write it.
+	# A missing attribute is a D-Bus error (null), never -1. So where devices.json says the
+	# battery has a limit, 0 and -1 both mean "charges to full" (the ROG Ally on SteamOS 3.10).
+	var sm := int(v) if v != null else -2
+	if sm > 0 and sm <= 100 or (sm in [0, -1] and device.get("charge_limit", false)):
 		_charge_via = "steamos-manager"
 		_charge = sm_charge(sm)
 		var m: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "SuggestedMinimumLimit")
@@ -549,10 +553,11 @@ func _detect_charge() -> void:
 			_charge = read_charge_sysfs()
 
 
-## steamos-manager's MaxChargeLevel as a percent: 0 (no limit set) is 100, anything
-## outside 0-100 is unknown (-1).
+## steamos-manager's MaxChargeLevel as a percent: 0 and -1 (no limit set, see
+## _detect_charge) are 100, anything else outside 1-100 is unknown (-1). Only used where
+## devices.json says the battery has a limit.
 static func sm_charge(v: int) -> int:
-	if v == 0:
+	if v == 0 or v == -1:
 		return 100
 	return v if v > 0 and v <= 100 else -1
 
