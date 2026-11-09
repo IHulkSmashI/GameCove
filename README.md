@@ -81,4 +81,6 @@ Gyro on the MSI Claw 8 EX was figured out by **Kisenir** (r/MSIClaw). Full list 
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
 
-A few parts carry their own licenses: the gyro fix's HID-BPF program is GPL-2.0-only and its helper scripts GPL-2.0-or-later ([LICENSES/GPL-2.0-only.txt](LICENSES/GPL-2.0-only.txt)); the VRR fix's panel list and EDID logic derive from MIT-licensed code ([fixes/claw8ex-vrr/LICENSE.ClawLab-MIT](fixes/claw8ex-vrr/LICENSE.ClawLab-MIT)). Details in [CREDITS.md](CREDITS.md).
+A few parts carry their own licenses: the gyro fix's HID-BPF program is GPL-2.0-only and its helper scripts GPL-2.0-or-later ([LICENSES/GPL-2.0-only.txt](LICENSES/GPL-2.0-only.txt)); the VRR fix's panel list and EDID logic derive from MIT-licensed code ([fixes/claw8ex-vrr/LICENSE.ClawLab-MIT](fixes/claw8ex-vrr/LICENSE.ClawLab-MIT)); and the Heroic Games Launcher icon in `app/assets/brand/` is GPL-3.0-only. Details in [CREDITS.md](CREDITS.md).
+
+Product and company names are trademarks of their respective owners; GameCove is not affiliated with or endorsed by them. See [CREDITS.md](CREDITS.md#trademarks).
