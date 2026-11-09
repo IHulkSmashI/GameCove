@@ -12,6 +12,8 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
 const Model := preload("res://scripts/ui/controls/model.gd")
+const SteamInput := preload("res://scripts/ui/controls/steam_input.gd")
+const BrandMark := preload("res://scripts/ui/brand_mark.gd")
 
 signal edit_requested(game: Dictionary)
 ## The buttons changed; the page relinks its focus chain.
@@ -26,6 +28,11 @@ var model: Object
 var game: Dictionary = {}
 var edit_button: Button
 var reset_button: Button
+## Steam games: gyro aiming, button layouts and the rest of Steam Input live
+## in Steam's controller settings for the game; this opens them.
+var steam_button: Button
+## `opener(uri) -> bool` instead of asking Steam (tests).
+var open_uri := Callable()
 var _armed := false
 
 
@@ -54,7 +61,7 @@ func _on_profiles_changed() -> void:
 
 func focusables() -> Array:
 	var out := []
-	for b in [edit_button, reset_button]:
+	for b in [edit_button, reset_button, steam_button]:
 		if b != null and is_instance_valid(b) and b.visible:
 			out.append(b)
 	return out
@@ -78,6 +85,7 @@ func rebuild() -> void:
 		c.queue_free()
 	edit_button = null
 	reset_button = null
+	steam_button = null
 	_armed = false
 	var on: bool = model.per_game()
 	var state := Kit.chip(TC.GAME_CARD_ON if on else TC.GAME_CARD_OFF, "layers" if on else "sliders", "accent" if on else "", false)
@@ -134,6 +142,18 @@ func rebuild() -> void:
 				reset_button.text = TC.GAME_CARD_RESET)
 		row.add_child(reset_button)
 	add_child(row)
+	if SteamInput.uri_for(game) != "":
+		steam_button = Kit.secondary(TC.GAME_CARD_STEAM_INPUT, "gamepad")
+		steam_button.name = "SteamInput"
+		steam_button.custom_minimum_size = Vector2(0, 48)
+		steam_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		var logo := BrandMark.texture("steam", 20)
+		if logo != null:
+			steam_button.icon = logo
+			steam_button.expand_icon = false
+		steam_button.tooltip_text = TC.GYRO_STEAM_LINE
+		steam_button.pressed.connect(_on_steam_input)
+		add_child(steam_button)
 	relinked.emit()
 	if had != null and is_inside_tree():
 		(reset_button if focus_reset and reset_button != null else edit_button).grab_focus.call_deferred()
@@ -159,3 +179,9 @@ func _on_reset() -> void:
 	_armed = false
 	model.reset_game()
 	rebuild()
+
+
+func _on_steam_input() -> void:
+	if steam_button == null:
+		return
+	steam_button.text = TC.GYRO_STEAM_OPENING if SteamInput.open(game, open_uri) else TC.GYRO_STEAM_FAILED

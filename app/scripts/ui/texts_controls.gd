@@ -185,6 +185,7 @@ const GAME_CARD_OFF_LINE := "Turn on its own settings to keep a TDP, frame limit
 const GAME_CARD_EDIT := "Edit"
 const GAME_CARD_ON_BUTTON := "Give it its own settings"
 const GAME_CARD_RESET := "Reset"
+const GAME_CARD_STEAM_INPUT := "Controller in Steam"
 const GAME_CARD_MORE := "+%d more"
 
 # ---- extra one-line explanations for jargon in titles -------------------------

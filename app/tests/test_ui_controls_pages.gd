@@ -170,10 +170,15 @@ func test_game_settings_card() -> void:
 	var g := {"key": "steam:1", "title": "Hades", "store": "steam", "id": "1"}
 	card.setup(g, e[0], e[1])
 	eq(card.get_node("State").get_node("HBoxContainer/Text").text if card.get_node("State").has_node("HBoxContainer/Text") else TC.GAME_CARD_OFF, TC.GAME_CARD_OFF, "everyday settings")
-	eq(card.focusables(), [card.edit_button], "one button: give it its own")
+	eq(card.focusables(), [card.edit_button, card.steam_button], "give it its own, and Steam's controller settings")
+	var opened := []
+	card.open_uri = func(u): opened.append(u); return true
+	card.steam_button.pressed.emit()
+	eq(opened, ["steam://controllerconfig/1"], "opens Steam's controller settings for the game")
+	eq(card.steam_button.text, TC.GYRO_STEAM_OPENING, "says it's opening")
 	card.edit_button.pressed.emit()
 	ok(e[1].has_profile("steam:1"), "own settings made")
-	eq(card.focusables().size(), 2, "Edit and Reset")
+	eq(card.focusables().size(), 3, "Edit, Reset, Steam controller settings")
 	ok(card.get_node_or_null("Values") != null, "saved values listed")
 	var asked := []
 	card.edit_requested.connect(func(x): asked.append(x["key"]))
@@ -185,6 +190,10 @@ func test_game_settings_card() -> void:
 	ok(not e[1].has_profile("steam:1"), "second press resets")
 	eq(e[0].detect_calls, 0, "the card never moves Controls' game")
 	card.free()
+	var epic: VBoxContainer = GameCard.new()
+	epic.setup({"key": "epic:x", "title": "Fortnite", "store": "epic", "id": "x"}, e[0], e[1])
+	ok(epic.steam_button == null, "no Steam button for other stores")
+	epic.free()
 	_done(e)
 
 

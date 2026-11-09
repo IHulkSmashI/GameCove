@@ -294,18 +294,12 @@ func _gyro_card() -> Array:
 	var c := DKit.card(Texts.GYRO_TITLE, "motion", "info", not _supported("gyro"))
 	c[0].name = "Card_gyro"
 	if _supported("gyro"):
-		var prof: Dictionary = state.get("profile", {}) if state.get("profile") is Dictionary else {}
-		var cur := str(prof.get("gyro", "off"))
-		var vals: Array = Texts.GYRO_MODES.duplicate()
-		if not cur in vals:
-			vals.append(cur)
-		var r := _row(c[1], "gyro", "Gyro aiming", vals, vals.map(func(v): return Texts.GYRO_LABELS.get(v, v)), cur, "",
-			func(_k, v): return Texts.GYRO_EXPLAIN.get(v, ""))
-		r.changed.connect(func(v):
-			if str(v) in Texts.GYRO_MODES:
-				svc("controller").set_gyro_mode(str(v)))
+		# No Controls here: the old "mouse" / "stick" modes would write a
+		# profile form current InputPlumber ignores, so no switch that does
+		# nothing. Aiming is Steam Input's; say where it lives.
+		c[1].add_child(DKit.quiet(TC.GYRO_STEAM_TITLE + ". " + TC.GYRO_STEAM_LINE))
 		_cards.add_child(c[0])
-		return [r.button]
+		return [c[0]]
 	if hw == "none":
 		c[0].free()
 		return []
