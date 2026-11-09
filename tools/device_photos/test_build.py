@@ -126,8 +126,7 @@ def test_every_known_model_has_a_picture_source():
 # Rows allowed to keep a picture that isn't a flat head-on front view, because none
 # exists anywhere we looked (see each row's view_note). Adding a row here needs the
 # same search first; removing one is always welcome.
-BEST_AVAILABLE = {"onexplayer-3", "onexplayer-x2-mini", "onexplayer-x2-mini-pro", "onexplayer-g1-amd",
-                  "onexplayer-g1-intel", "gpd-win-mini", "acer-nitro-blaze-8", "acer-nitro-blaze-11"}
+BEST_AVAILABLE = {"acer-nitro-blaze-8"}
 
 
 def test_every_picture_is_a_head_on_front_view():
