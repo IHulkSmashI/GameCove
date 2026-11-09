@@ -103,6 +103,11 @@ func test_shipped_list_is_all_allowed() -> void:
 		if e.has("representative"):
 			ok(PhotoSvc.parse_representatives(doc).has(id), "%s: representative has a picture" % id)
 			continue
+		if e.has("bundled"):
+			ok(PhotoSvc.parse_bundled(doc).has(id), "%s: bundled path follows the rules" % id)
+			ok(FileAccess.file_exists(str(e["bundled"])), "%s: bundled file is there" % id)
+			ok(not e.has("file") and not e.has("maker_image"), "%s: bundled is its only source" % id)
+			continue
 		ok(PhotoSvc.license_allowed(e["license"]), "%s license" % id)
 		ok(PhotoSvc.page_allowed(str(e["page_url"])), "%s page" % id)
 		ok(str(e["author"]) != "", "%s author" % id)
@@ -664,3 +669,113 @@ class FakeFamilyPhoto extends RefCounted:
 			"caption": "MSI Claw (model not identified)", "pictured": "Pictured: MSI Claw 8 AI+"}
 	func set_enabled(on: bool) -> void:
 		enabled = on
+
+
+# ---- bundled pictures (shipped in the app) ----------------------------------------
+
+const BUNDLED := "res://assets/device_photos/acer-nitro-blaze-8.webp"
+
+
+func test_bundled_rules_and_shipped_entry() -> void:
+	var doc := {"a": {"bundled": BUNDLED, "view": "front"},
+		"b": {"bundled": "res://assets/device_photos/../data/x.webp"},
+		"c": {"bundled": "res://assets/brand/acer.svg"}, "d": {"bundled": "https://example.com/x.webp"},
+		"e": {"bundled": "/tmp/x.webp"}, "_f": {"bundled": BUNDLED}}
+	eq(PhotoSvc.parse_bundled(doc), {"a": BUNDLED}, "only a WebP/PNG/JPEG directly under assets/device_photos/")
+	eq(PhotoSvc.parse_representatives({"x-family": {"representative": "a"}, "a": {"bundled": BUNDLED}}),
+		{"x-family": "a"}, "a bundled row can stand in for its family")
+	var s: Node = PhotoSvc.new()
+	eq(s.bundled_path("acer-nitro-blaze-8"), BUNDLED, "shipped list: the Blaze 8 is bundled")
+	ok(s.maker_entry("acer-nitro-blaze-8").is_empty(), "and has no maker link any more")
+	s.free()
+
+
+func _bundled_svc(http: Variant) -> Node:
+	var s := _svc(http)
+	s.bundled_sources = {"steam-deck-lcd": BUNDLED}
+	return s
+
+
+func test_bundled_wins_over_everything_with_no_request() -> void:
+	var http := FakeHttp.new()
+	var body := _photo_bytes()
+	_routes(http, body, _manifest(body))
+	http.route(MAKER_URL, {"bytes": _png_bytes()})
+	var s := _bundled_svc(http)
+	s.maker_sources = {"steam-deck-lcd": MAKER_SRC["msi-claw-8-ex"]}
+	s._free["steam-deck-lcd"] = true
+	var ready := []
+	s.photo_ready.connect(func(id, p): ready.append([id, p]))
+	var got: Dictionary = s.photo_for("steam-deck-lcd")
+	eq(got, {"path": BUNDLED, "credit": {}}, "bundled beats free photo and maker image; no credit")
+	eq(s.cached("steam-deck-lcd"), got, "cached() too")
+	ok(s.has_cached("steam-deck-lcd"), "counts as available")
+	ok(s.prefetch("steam-deck-lcd"), "prefetch: already there")
+	eq(http.requests.size(), 0, "no request to the release or the maker")
+	eq(ready, [], "nothing to wait for")
+	eq(PhotoSvc.credit_line(got["credit"]), "", "no credit line")
+	s.free()
+
+
+func test_bundled_offline_and_with_maker_photos_off() -> void:
+	var http := FakeHttp.new()
+	http.offline = true
+	var s := _bundled_svc(http)
+	s.set_maker_enabled(false)
+	eq(str(s.photo_for("steam-deck-lcd").get("path", "")), BUNDLED, "maker photos off: still shown")
+	ok(s.prefetch("steam-deck-lcd"), "prefetch true offline")
+	eq(http.requests.size(), 0, "offline: nothing asked")
+	var s2 := _bundled_svc(null)
+	eq(str(s2.photo_for("steam-deck-lcd").get("path", "")), BUNDLED, "no network object at all: shown")
+	s.set_enabled(false)
+	eq(s.photo_for("steam-deck-lcd"), {}, "\"Show a real photo\" off -> drawing")
+	ok(not s.prefetch("steam-deck-lcd"), "and no prefetch")
+	s.free()
+	s2.free()
+	_clean()
+
+
+func test_bundled_view_has_no_credit_line() -> void:
+	var opened := []
+	var v = PhotoView.make({"path": BUNDLED, "credit": {}}, 200, func(u): opened.append(u))
+	ok(v != null, "view built from the res:// file")
+	ok(v.image.texture != null and v.image.texture.get_width() > 100, "picture decoded")
+	ok(not v.credit.visible, "no credit line shown")
+	ok(v.credit.disabled and v.credit.focus_mode == Control.FOCUS_NONE, "and not focusable")
+	eq(v.credit.text, "", "no \"Image:\" text")
+	ok(not v.credit.text.contains("Image:"), "never an Image: line")
+	v.free()
+	var v2 = PhotoView.make({"path": BUNDLED}, 200, Callable())
+	ok(v2 != null and not v2.credit.visible, "no credit key at all: same")
+	v2.free()
+	eq(PhotoView.make({"path": "res://data/devices.json", "credit": {}}, 200, Callable()), null, "only res://assets/device_photos/")
+
+
+class FakeBundledPhoto extends RefCounted:
+	signal photo_ready(device_id: String, path: String)
+	var enabled := true
+	func photo_for(_id: String) -> Dictionary:
+		return {"path": BUNDLED, "credit": {}}
+	func set_enabled(on: bool) -> void:
+		enabled = on
+
+
+func test_about_and_welcome_with_bundled_picture() -> void:
+	var About: GDScript = load("res://scripts/ui/device/about_panel.gd")
+	var s: Dictionary = load("res://tests/fixtures/device_ui/fakes.gd").services()
+	s["photo"] = FakeBundledPhoto.new()
+	var p: Control = About.build(s)
+	ok(p.photo_view != null, "about: bundled picture shown")
+	ok(not p.photo_view.credit in p.focus_chain(), "about: no credit stop in the focus chain")
+	p.free()
+	var SetupFlow: GDScript = load("res://scripts/ui/setup/setup_flow.gd")
+	var svc: Dictionary = load("res://tests/test_ui_settings.gd").new()._svc()
+	svc["device"].profile["id"] = "acer-nitro-blaze-8"
+	svc["photo"] = FakeBundledPhoto.new()
+	var host := Control.new()
+	var f: Control = SetupFlow.open(host, svc, "")
+	var v = f.find_child("DevicePhoto", true, false)
+	ok(v != null, "welcome: bundled picture shown")
+	ok(v != null and not v.credit in f.focusables(), "welcome: no credit stop")
+	f.finish()
+	host.free()

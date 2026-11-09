@@ -42,7 +42,8 @@
 # sleep and mcu, and every fix that touches boot configuration, firmware or systemd units.
 #
 # After checking, it hands over to gamecove-fix (same validation, logging and
-# exit codes). Exit 64 bad usage, 65 fix not allowed here, 66 value not allowed.
+# exit codes), bounded in time (see run_bounded). Exit 64 bad usage, 65 fix not allowed
+# here, 66 value not allowed, 124 the fix took longer than FIX_SET_TIMEOUT seconds.
 set -eu
 
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -54,6 +55,22 @@ else
 	# Tests: the dispatcher next to this file.
 	DISPATCHER="$(cd "$(dirname "$0")" && pwd)/gamecove-fix"
 fi
+
+# Bounded on the root side (review L2): the session's `timeout 15 pkexec ...` can't stop a child that
+# runs as root (the user may not signal it), so a call stuck behind another run's lock (fixes wait up to
+# 30 s) held up the session's exit. Every call here ends within FIX_SET_TIMEOUT seconds: the fix gets
+# SIGTERM (its traps put the hardware back and drop the lock), then SIGKILL 5 s later. Exit 124 = timed
+# out. GAMECOVE_FIX_SET_TIMEOUT only counts in tests (pkexec clears the environment anyway).
+FIX_SET_TIMEOUT=20
+if [ -z "${PKEXEC_UID:-}" ]; then
+	case "${GAMECOVE_FIX_SET_TIMEOUT:-}" in "" | *[!0-9]* | 0*) ;; *) FIX_SET_TIMEOUT="$GAMECOVE_FIX_SET_TIMEOUT" ;; esac
+fi
+run_bounded() {
+	if command -v timeout >/dev/null 2>&1; then
+		exec timeout -k 5 "$FIX_SET_TIMEOUT" "$@"
+	fi
+	exec "$@"
+}
 
 usage() {
 	echo "usage: gamecove-fix-set charge-limit|fan|claw8ex-gyro|claw8ex-buttons|controller-led|controller-rumble|power-tune set <value>" >&2
@@ -79,7 +96,7 @@ esac
 case "$action" in
 status)
 	[ $# -eq 2 ] || usage
-	exec sh "$DISPATCHER" "$name" status
+	run_bounded sh "$DISPATCHER" "$name" status
 	;;
 set)
 	[ $# -eq 3 ] || usage
@@ -95,7 +112,7 @@ charge-limit:[5-9][0-9] | charge-limit:100 | charge-limit:release) ;;
 fan:auto | fan:quiet | fan:max) ;;
 fan:curve:*)
 	case "${value#curve:}" in
-	"" | *[!0-9,]* | ,* | *, | *,,*) die "value not allowed for $name" 66 ;;
+	"" | *[!0-9,]* | ,* | *, | *,,* | 0[0-9]* | *,0[0-9]*) die "value not allowed for $name" 66 ;;
 	esac
 	[ "${#value}" -le 64 ] || die "value not allowed for $name" 66
 	;;
@@ -119,4 +136,4 @@ controller-led:all,[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f],[0-9]* | con
 *) die "value not allowed for $name" 66 ;;
 esac
 
-exec sh "$DISPATCHER" "$name" set "$value"
+run_bounded sh "$DISPATCHER" "$name" set "$value"

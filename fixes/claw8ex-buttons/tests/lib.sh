@@ -146,8 +146,9 @@ EOF
 }
 
 # Every path and file checksum in the fake root, except what the kernel provides (sys, proc).
+# ./run/gamecove holds runtime counters only (tmpfs, emptied at boot: lib/ratelimit.sh), not state a fix leaves
 snapshot() {
-	(cd "$GAMECOVE_ROOT" && find . -path ./sys -prune -o -path ./proc -prune -o -print | sort | while read -r f; do
+	(cd "$GAMECOVE_ROOT" && find . -path ./sys -prune -o -path ./proc -prune -o -path ./run/gamecove -prune -o -print | sort | while read -r f; do
 		if [ -f "$f" ]; then printf '%s %s\n' "$f" "$(cksum <"$f")"; else printf '%s\n' "$f"; fi
 	done)
 	echo "kargs: $(tr '\n' ' ' <"$FAKE/kargs")"

@@ -109,6 +109,12 @@ expect_code 3 "fix failure propagates" gf dummy set boom
 contains "$LOG" "action=set value=boom result=fail(3)" "failure logged"
 expect_code 7 "broken fix" gf broken install
 contains "$LOG" "fix=broken action=install value=- result=fail(7)" "broken logged"
+# review L1: the log is capped; over the limit it becomes changes.log.1 and a new one starts
+rm -f "$LOG.1"
+for i in 1 2 3 4 5 6; do GAMECOVE_LOG_MAX=300 gf dummy set "$i" >/dev/null 2>&1; done
+if [ -f "$LOG.1" ]; then ok; else bad "log rotated to changes.log.1 once over the cap"; fi
+if [ "$(wc -c <"$LOG")" -le 600 ]; then ok; else bad "log stays near the cap ($(wc -c <"$LOG") bytes)"; fi
+contains "$LOG" "value=6 result=ok" "newest line kept after rotation"
 
 lines_before="$(wc -l <"$LOG")"
 expect_code 0 "status" gf dummy status
@@ -227,10 +233,19 @@ expect_code 0 "set entry: status" gfs fan status
 contains "$T/out" "^state=on$" "status passed through"
 expect_code 0 "set entry: fan curve" gfs fan set curve:0,40,50,60,80,100
 contains "$ROOT/calls" "^fan:set curve:0,40,50,60,80,100$" "fan curve reached fix.sh"
+# review L2: the session's `timeout pkexec` can't stop a root child, so the set entry bounds the fix itself
+cp "$FIXES/charge-limit/fix.sh" "$T/charge-limit.fix.sh"
+printf '#!/bin/sh\nsleep 30\n' >"$FIXES/charge-limit/fix.sh"
+t0=$(date +%s)
+GAMECOVE_FIX_SET_TIMEOUT=1 expect_code 124 "set entry: a fix that hangs is stopped" gfs charge-limit set 80
+if [ $(($(date +%s) - t0)) -le 8 ]; then ok; else bad "set entry: hung fix stopped within the bound"; fi
+cp "$T/charge-limit.fix.sh" "$FIXES/charge-limit/fix.sh"
 expect_code 66 "set entry: fan curve letters" gfs fan set curve:0,40,x
 expect_code 66 "set entry: fan curve empty" gfs fan set curve:
 expect_code 66 "set entry: fan curve trailing comma" gfs fan set curve:1,2,
 expect_code 66 "set entry: fan curve shell" gfs fan set 'curve:1;reboot'
+expect_code 66 "set entry: fan curve leading zero (review M1)" gfs fan set curve:0,040,040,045,060,075
+expect_code 66 "set entry: fan curve leading zero first" gfs fan set curve:00,40,40,45,60,75
 for v in boost:off epp:balance_power governor:powersave cpumax:70 gpulevel:auto gpumin:600 \
 	gpumax:1800 gpuprofile:power_saving sppt:28 fppt:33 platform:low-power tau:8000000 tau:restore \
 	thermald:hold thermald:release battery:long-life restore; do
@@ -698,7 +713,7 @@ rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
 expect_code 0 "signed release accepted" gg "$R_BAZ"
 contains "$T/cosign.log" "^verify-blob --bundle .*SHA256SUMS.sigstore.json --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp " "cosign checks the bundle and the GitHub OIDC issuer"
-contains "$T/cosign.log" 'IHulkSmashI/GameCove/\\.github/workflows/release\\.yml@refs/tags/v' "identity: this repo's release workflow on a v* tag"
+contains "$T/cosign.log" 'IHulkSmashI/GameCove/\\.github/workflows/release\\.yml@refs/tags/v0\\.2\\.0\$ ' "identity: this repo's release workflow for exactly this tag (review M5)"
 contains "$GI/release.env" "^SIGNATURE=verified$" "recorded for the installer"
 rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
@@ -836,13 +851,13 @@ if [ "$(grep -c "<allow_active>yes</allow_active>" "$POL")" -eq 1 ]; then ok; el
 
 # ------------------------------------------------------------------ RPM spec
 SPEC="$REPO/packaging/rpm/gamecove.spec"
-contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later$" "spec License tag"
+contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND OFL-1.1 AND CC0-1.0 AND " "spec License tag (GameCove, the bundled MIT / OFL / CC0 parts, review L36)"
 contains "$SPEC" "packaging/libexec/gamecove-fix-set" "spec installs the set entry point"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-fix-set$" "spec lists the set entry point"
 contains "$SPEC" "build-bpf.sh" "spec builds the gyro program"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-apply-choices$" "spec lists the installer's apply helper"
 contains "$SPEC" "^%{_libexecdir}/gamecove/get-gamecove.sh$" "spec lists the bootstrap"
-contains "$SPEC" "LICENSES/GPL-2.0-only.txt" "spec ships the GPL-2.0 text"
+contains "$SPEC" "done < packaging/licenses.list" "spec ships every licence text (GPL-2.0, OFL, Godot, ...)"
 uhb_spec="$(sed -n 's/^%global uhb_commit //p' "$SPEC")"
 uhb_script="$(sed -n 's/.*UHB_PIN:-\([0-9a-f]*\)}.*/\1/p' "$REPO/fixes/claw8ex-gyro/bpf/build-bpf.sh")"
 if [ -n "$uhb_spec" ] && [ "$uhb_spec" = "$uhb_script" ]; then ok; else bad "udev-hid-bpf pin differs: spec '$uhb_spec', build-bpf.sh '$uhb_script'"; fi
@@ -986,6 +1001,16 @@ if "$SHELLCHECK" -S warning -s bash "$REPO/packaging/libexec/gamecove-run" >"$T/
 
 # ------------------------------------------------------- gamecove-selftest (fake root and commands)
 if sh "$REPO/packaging/tests/selftest.sh" >"$T/out" 2>&1; then ok; else bad "selftest: $(tail -20 "$T/out")"; fi
+
+# ------------------------------------------------------- release, licences, supply chain, privacy (packaging/tests/release.sh)
+if sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "release.sh: $(grep FAIL "$T/out" | head -30)"; fi
+if [ -n "$SHELLCHECK" ] && "$SHELLCHECK" -S warning -s sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "shellcheck release.sh: $(cat "$T/out")"; fi
+
+# ------------------------------------------------------- raw assets the app reads with FileAccess must ship raw
+for f in "$REPO"/app/assets/brand/*.svg "$REPO"/app/assets/device_photos/*.webp; do
+	[ -f "$f" ] || continue
+	grep -q 'importer="keep"' "$f.import" 2>/dev/null && ok || bad "$f.import must use importer=keep (the app reads the raw file; a texture import leaves it out of exports)"
+done
 
 # ------------------------------------------------------- release workflow signs what the installer verifies
 W="$REPO/.github/workflows/release.yml"

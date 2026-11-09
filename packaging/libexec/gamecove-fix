@@ -70,8 +70,16 @@ valid_value() {
 	[ "${#1}" -le 128 ]
 }
 
+# Capped (review L1): every prompt-free call appends a line. Over 256 KiB the log becomes changes.log.1
+# (replacing the previous one) and a new one starts. GAMECOVE_LOG_MAX only reaches here in tests: pkexec
+# clears the environment.
 log_change() {
 	mkdir -p "$LOG_DIR"
+	_max="${GAMECOVE_LOG_MAX:-262144}"
+	case "$_max" in "" | *[!0-9]* | 0?*) _max=262144 ;; esac
+	_size="$(wc -c <"$LOG_FILE" 2>/dev/null | tr -d ' ')"
+	case "$_size" in "" | *[!0-9]*) _size=0 ;; esac
+	[ "$_size" -le "$_max" ] || mv -f "$LOG_FILE" "$LOG_FILE.1" 2>/dev/null || true
 	printf '%s uid=%s fix=%s action=%s value=%s result=%s\n' \
 		"$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${PKEXEC_UID:-$(id -u)}" \
 		"$1" "$2" "${3:--}" "$4" >>"$LOG_FILE"

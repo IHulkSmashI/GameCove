@@ -17,6 +17,10 @@ extends Node
 ##       "error": "" | "offline" | "timeout" | "backoff" | "http <code>" | "busy" | "too big",
 ##       "retry_after": int}
 ##   is_offline() -> bool: the last request failed for lack of network.
+##
+## Credentials (review L32): a request carrying an Authorization header (the SteamGridDB key) follows its redirects
+## here, not inside HTTPRequest, so the header goes only to the host it was meant for: a redirect to another host is
+## followed without it (and only over https).
 
 const REPO := "https://github.com/IHulkSmashI/GameCove"
 const MAX_PARALLEL := 3
@@ -28,6 +32,8 @@ var _active := 0
 var _queue: Array = []
 var _blocked := {}    # host -> {"until": unix, "wait": seconds}
 var _offline := false
+var _redirects := {}  # done callable -> redirects followed by hand (credentialed requests)
+var _opts_of := {}    # done callable -> the opts it was started with
 
 
 static func user_agent() -> String:
@@ -68,7 +74,38 @@ func _pump() -> void:
 		_start(job[0], job[1], job[2])
 
 
+## Whether a header list carries credentials.
+static func has_auth(headers: Array) -> bool:
+	for h in headers:
+		if str(h).to_lower().begins_with("authorization:"):
+			return true
+	return false
+
+
+## The headers to send after a redirect from `from_url` to `to_url`: unchanged on the same host over https,
+## without Authorization anywhere else (another host, or a downgrade to http).
+static func redirect_headers(headers: Array, from_url: String, to_url: String) -> Array:
+	if host_of(from_url) == host_of(to_url) and to_url.begins_with("https://"):
+		return headers.duplicate()
+	return headers.filter(func(h): return not str(h).to_lower().begins_with("authorization:"))
+
+
+## The absolute URL a 3xx answer points to ("" when there's no Location).
+static func location_of(headers: PackedStringArray, base: String) -> String:
+	for h in headers:
+		if h.to_lower().begins_with("location:"):
+			var loc := h.split(":", true, 1)[1].strip_edges()
+			if loc.begins_with("https://") or loc.begins_with("http://"):
+				return loc
+			if loc.begins_with("/"):
+				var scheme := base.split("://", true, 1)[0]
+				return "%s://%s%s" % [scheme, host_of(base), loc]
+			return ""
+	return ""
+
+
 func _start(url: String, opts: Dictionary, done: Callable) -> void:
+	_opts_of[done] = opts
 	var req := HTTPRequest.new()
 	req.use_threads = true
 	req.timeout = float(opts.get("timeout", 20.0))
@@ -78,6 +115,8 @@ func _start(url: String, opts: Dictionary, done: Callable) -> void:
 	if str(opts.get("download_file", "")) != "":
 		req.download_file = opts["download_file"]
 		req.accept_gzip = false
+	if has_auth(opts.get("headers", [])):
+		req.max_redirects = 0     # followed in _on_done, see redirect_headers()
 	add_child(req)
 	_active += 1
 	var headers := PackedStringArray(["User-Agent: " + user_agent(), "Accept: */*"])
@@ -104,6 +143,17 @@ func _on_done(result: int, code: int, headers: PackedStringArray, body: PackedBy
 		req: HTTPRequest, url: String, done: Callable) -> void:
 	_active -= 1
 	req.queue_free()
+	if req.max_redirects == 0 and code in [301, 302, 303, 307, 308] and int(_redirects.get(done, 0)) < 5:
+		var to := location_of(headers, url)
+		if to != "":
+			var opts: Dictionary = _opts_of.get(done, {}).duplicate()
+			opts["headers"] = redirect_headers(opts.get("headers", []), url, to)
+			_redirects[done] = int(_redirects.get(done, 0)) + 1
+			_opts_of[done] = opts
+			_start(to, opts, done)
+			return
+	_redirects.erase(done)
+	_opts_of.erase(done)
 	var res := classify(result, code, headers)
 	res["body"] = body
 	var host := host_of(url)

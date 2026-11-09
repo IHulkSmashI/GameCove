@@ -134,9 +134,11 @@ install -Dm0755 "$REPO/session/gamecove-autologin-guard" "$tree/usr/lib/gamecove
 install -Dm0644 "$REPO/session/systemd/gamecove-autologin-guard.service" "$tree/usr/lib/gamecove/session/gamecove-autologin-guard.service"
 install -Dm0644 "$REPO/packaging/polkit/io.github.ihulksmashi.gamecove.policy" \
 	"$tree/usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy"
-install -Dm0644 "$REPO/LICENSE" "$tree/usr/share/licenses/gamecove/LICENSE"
-install -Dm0644 "$REPO/LICENSES/GPL-2.0-only.txt" "$tree/usr/share/licenses/gamecove/GPL-2.0-only.txt"
-install -Dm0644 "$REPO/fixes/claw8ex-vrr/LICENSE.ClawLab-MIT" "$tree/usr/share/licenses/gamecove/LICENSE.ClawLab-MIT"
+# licence and notice texts: every file packaging/licenses.list names (review H8)
+while read -r src dest; do
+	case "$src" in '' | '#'*) continue ;; esac
+	install -Dm0644 "$REPO/$src" "$tree/usr/share/licenses/gamecove/$dest"
+done <"$REPO/packaging/licenses.list"
 
 # Tells systemd-sysext which OS this extension is for.
 mkdir -p "$tree/usr/lib/extension-release.d"

@@ -91,6 +91,8 @@ func test_catalogue_entries_are_complete_and_real() -> void:
 			ok(not FileAccess.get_file_as_string(_repo().path_join("packaging/libexec/gamecove-fix-set")).contains(" " + id), id + ": not in gamecove-fix-set")
 		if str(e.get("password", "admin")) == "none":
 			ok(FileAccess.get_file_as_string(_repo().path_join("packaging/libexec/gamecove-fix-set")).contains(id), id + ": a no-password fix is allowed in gamecove-fix-set")
+			# review L8: gamecove-fix-set has no on / off; such a fix is set from its own page, never Apply / Undo
+			ok(e["kind"] == "app" or str(e.get("page", "fixes")) != "fixes", id + ": a no-password fix isn't an Apply / Undo row")
 		if e["kind"] == "root":
 			ok(e["password"] == "admin", id + ": root fixes need the admin password")
 
@@ -195,6 +197,11 @@ func test_apply_and_undo_use_the_right_helper() -> void:
 	eq(s.choice("claw8ex-vrr"), "off", "the Undo is remembered per device")
 	eq(r.calls.filter(func(c): return c == "%s claw-kbd-wakeup status" % HELPER).size(), 2, "status checked again after the action")
 	ok(not s.act("nope", "apply"), "unknown fix refused")
+	# review L8: Power-page entries are set through their Power controls; their helper takes no on / off
+	for f in ["fan", "charge-limit"]:
+		for v in ["apply", "undo", "check"]:
+			ok(not s.act(f, v), "%s %s refused on the Fixes service" % [f, v])
+	ok(r.calls.filter(func(c): return c.contains(" set on") or c.contains(" set off")).is_empty(), "never sends set on / off")
 	ok(not s.act("claw-kbd-wakeup", "explode"), "unknown verb refused")
 	s.free()
 

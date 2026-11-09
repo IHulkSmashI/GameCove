@@ -31,7 +31,7 @@ from .sources import awacy, igdb, protondb, wikidata
 SCHEMA = 2
 PREVIOUS_URL = "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/gamedb.json.gz"
 CREDITS = (
-    "Wikidata (CC0); AreWeAntiCheatYet (MIT); time to beat from IGDB.com; "
+    "Game data from IGDB (https://www.igdb.com): time to beat; Wikidata (CC0); AreWeAntiCheatYet (MIT); "
     "compatibility tiers are GameCove's own summary of ProtonDB user reports "
     "(protondb.com, data from github.com/bdefore/protondb-data, ODbL 1.0) and "
     "are not ProtonDB's official ratings; this database's ProtonDB-derived "

@@ -314,6 +314,11 @@ func test_calendar_list_notify_and_today() -> void:
 	eq(again[0][1].text, T.NOTIFY_ON, "button shows it's on after the rebuild")
 	r.handle_input(_joy(JOY_BUTTON_Y), again[0][0])
 	ok(not d.get_item(v["data"]["key"]).get("notify_release", true), "Y turns it off")
+	# review M24: IGDB's release dates fill the calendar, so its credit (with a link) shows here
+	cal = r.sections["calendar"]
+	ok(cal.credit_button != null and cal.credit_button.text == T.IGDB_CREDIT, "Game data from IGDB")
+	eq(cal.credit_button.get_meta("url"), "https://www.igdb.com", "links to igdb.com")
+	ok(cal.credit_button in cal._toolbar(), "reachable with the controller")
 	_cleanup()
 
 

@@ -344,7 +344,7 @@ const PROTONDB_LABEL := "Community reports (ProtonDB data)"
 ## Time to beat comes from IGDB; credit it wherever the numbers show.
 const TTB_CREDIT := "data from IGDB.com"
 ## Shown with the numbers on the game page (ODbL needs the credit and licence).
-const DATA_CREDIT := "Compatibility tiers are our summary of ProtonDB's community reports (protondb.com), used under the ODbL 1.0. Time to beat by IGDB.com."
+const DATA_CREDIT := "Compatibility tiers are our summary of ProtonDB's community reports (protondb.com), used under the ODbL 1.0. Game data from IGDB (igdb.com): time to beat and release dates."
 
 
 static func protondb_line(info: Dictionary) -> String:

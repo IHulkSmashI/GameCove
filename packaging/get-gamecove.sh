@@ -297,8 +297,9 @@ signature="none"
 if [ -n "$bundle_url" ]; then
 	fetch "$bundle_url"
 	cos="$(cosign_bin)"
-	# the identity: this repository's release workflow, for a v* tag (any case: GitHub URLs aren't case-sensitive)
-	ident="(?i)^https://github\.com/$(printf '%s' "$REPO" | sed 's/[.]/\\./g')/\.github/workflows/release\.yml@refs/tags/v"
+	# the identity: this repository's release workflow, run for exactly this tag (review M5: an older, genuinely signed
+	# release can't be swapped in under a newer tag), any case (GitHub URLs aren't case-sensitive)
+	ident="(?i)^https://github\.com/$(printf '%s' "$REPO" | sed 's/[.]/\\./g')/\.github/workflows/release\.yml@refs/tags/$(printf '%s' "$tag" | sed 's/[][\\.*^$+?(){}|]/\\&/g')\$"
 	if "$cos" verify-blob --bundle "$work/SHA256SUMS.sigstore.json" \
 		--certificate-oidc-issuer "$OIDC_ISSUER" --certificate-identity-regexp "$ident" \
 		"$work/SHA256SUMS" >"$work/cosign.log" 2>&1; then

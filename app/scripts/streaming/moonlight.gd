@@ -126,7 +126,7 @@ static func install_commands(flatpak := "flatpak") -> Array:
 # ---------------------------------------------------------------- Moonlight.conf
 
 ## What Moonlight.conf (QSettings INI) says: {"hosts": [{"uuid", "name", "mac",
-## "addresses": [..], "paired": bool, "custom_name": bool}], "cert": PEM, "key": PEM}.
+## "addresses": [..], "paired": bool, "custom_name": bool, "srvcert": PEM}], "cert": PEM, "key": PEM}.
 ## Missing or unreadable file: empty lists and "".
 static func read_conf(path: String) -> Dictionary:
 	var out := {"hosts": [], "cert": "", "key": ""}
@@ -179,6 +179,8 @@ static func parse_conf(text: String) -> Dictionary:
 			"mac": mac_from_bytes(qsettings_bytes(str(h.get("mac", "")))),
 			"addresses": addrs,
 			"paired": qsettings_value(str(h.get("srvcert", ""))).contains("BEGIN CERTIFICATE"),
+			# the PC's certificate Moonlight pinned when it paired (trust on first use); HTTPS calls are held to it
+			"srvcert": qsettings_value(str(h.get("srvcert", ""))),
 			"custom_name": qsettings_value(str(h.get("customname", ""))) == "true",
 		})
 	return out
