@@ -107,10 +107,14 @@ static func tick_values(lo: float, hi: float, step: float) -> Array:
 		return [lo]
 	var span := hi - lo
 	var nice := step if step > 0.0 else 1.0
-	for n in [1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0]:
+	var found := false
+	for n in [1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0]:
 		if n >= step and span / n <= MAX_LABELS - 1:
 			nice = n
+			found = true
 			break
+	if not found:
+		nice = maxf(step, ceilf(span / (MAX_LABELS - 1)))
 	var out: Array = [lo]
 	var v := ceilf(lo / nice) * nice
 	while v < hi - 0.001:

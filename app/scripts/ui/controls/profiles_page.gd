@@ -66,6 +66,8 @@ func build() -> void:
 		var vals: Dictionary = p.layer("", str(l[0]))
 		var key: String = "layer_" + (str(l[0]) if str(l[0]) != "" else "global")
 		var r := action_row(base, key, l[1], _count(vals), l[2] + " " + _summary(vals), l[3])
+		if vals.is_empty():
+			r.set_value(_count(vals), "muted")
 		var src_id: String = l[0]
 		var title: String = l[1]
 		r.pressed.connect(func(): open_layer("", src_id, title))

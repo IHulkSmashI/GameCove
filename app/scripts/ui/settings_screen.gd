@@ -31,6 +31,7 @@ const TC := preload("res://scripts/ui/texts_controls.gd")
 const CIcons := preload("res://scripts/ui/controls/cicons.gd")
 const GroupPage := preload("res://scripts/ui/controls/group_page.gd")
 const SessionGuard := preload("res://scripts/ui/controls/session_guard.gd")
+const Shared := preload("res://scripts/ui/controls/shared.gd")
 const PAGES := {
 	"power": GroupPage,
 	"display": GroupPage,
@@ -138,6 +139,13 @@ func setup(ui_values: Dictionary, about: Array = []) -> void:
 ## "achievements", "device", plus anything the Device panels want}.
 func set_services(svc: Dictionary) -> void:
 	services = svc
+	# main.gd doesn't pass Controls / Profiles: the autoloads (none under tests)
+	for k in [["controls", "Controls"], ["profiles", "Profiles"]]:
+		if not services.has(k[0]):
+			var n := Shared.autoload(k[1])
+			if n != null:
+				services = services.duplicate()
+				services[k[0]] = n
 	_services_set = true
 	PerformancePage.restore_rarity(services.get("achievements"))
 	if _content != null:
@@ -187,7 +195,7 @@ func _build() -> void:
 	list_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	list_scroll.custom_minimum_size = Vector2(280, 0)
 	cols.add_child(list_scroll)
-	var list := Kit.vbox(4)
+	var list := Kit.vbox(3)
 	list.name = "Categories"
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_scroll.add_child(list)
@@ -197,7 +205,7 @@ func _build() -> void:
 		gl.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 		var gpad := Kit.margin(0)
 		gpad.add_theme_constant_override("margin_left", 16)
-		gpad.add_theme_constant_override("margin_top", 6 if list.get_child_count() == 0 else 14)
+		gpad.add_theme_constant_override("margin_top", 0 if list.get_child_count() == 0 else 10)
 		gpad.add_theme_constant_override("margin_bottom", 2)
 		gpad.add_child(gl)
 		list.add_child(gpad)
@@ -242,7 +250,7 @@ func _category_button(id: String) -> Button:
 	var b := Kit.button("", "RowButton")
 	b.name = "Cat_" + id
 	b.toggle_mode = true
-	b.custom_minimum_size = Vector2(0, 42)
+	b.custom_minimum_size = Vector2(0, 40)
 	b.tooltip_text = str(TC.CATEGORY_LINES.get(id, TS.CATEGORY_LINES.get(id, "")))
 	# The chosen category: a cyan-to-violet tint with an accent edge.
 	var acc := ThemeLib.color("accent")
@@ -339,6 +347,7 @@ func _link() -> void:
 	var list: Array = categories().map(func(k): return cat_buttons[k])
 	Kit.link_vertical(list, top_target)
 	var chain: Array = pages[category].focusables() if pages.has(category) else []
+	chain = chain.filter(func(c): return c != null and is_instance_valid(c))
 	var cat: Button = cat_buttons[category]
 	for b in list:
 		b.focus_neighbor_right = b.get_path_to(chain[0] if not chain.is_empty() else b)

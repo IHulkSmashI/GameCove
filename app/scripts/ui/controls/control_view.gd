@@ -272,7 +272,7 @@ func explanation() -> String:
 	var j := jargon_line(title(), h)
 	if j != "":
 		parts.append(j)
-	var layer := str(desc.get("layer", ""))
+	var layer := _shown_layer()
 	if TC.LAYER_HELP.has(layer):
 		parts.append(TC.LAYER_HELP[layer])
 	if bool(desc.get("editing", false)):
@@ -292,6 +292,15 @@ static func jargon_line(t: String, help: String) -> String:
 	return ""
 
 
+## The layer worth naming: none for everyday values, none for "this game"
+## when the game has its own settings (everything is then; the header says so).
+func _shown_layer() -> String:
+	var layer := str(desc.get("layer", ""))
+	if layer == "game" and model.has_method("per_game") and model.per_game():
+		return ""
+	return layer
+
+
 func _set_badges() -> void:
 	if row == null or not row.has_method("badge_slot"):
 		return
@@ -302,7 +311,7 @@ func _set_badges() -> void:
 	_badges = slot
 	if not bool(desc.get("available", false)):
 		return
-	var layer := str(desc.get("layer", ""))
+	var layer := _shown_layer()
 	if TC.LAYERS.has(layer) and layer != "global":
 		var tone := "accent" if layer.begins_with("game") else "info"
 		var chip := _chip(TC.LAYERS[layer], "layers" if layer.begins_with("game") else ("plug" if layer == "ac" else "battery_leaf"), tone)

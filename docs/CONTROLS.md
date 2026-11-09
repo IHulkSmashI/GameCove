@@ -427,3 +427,32 @@ Levers (`controls/power/levers.gd`), wherever the handheld allows: TDP (hhd / st
 ### Needs real hardware
 
 See the report in the merge request: firmware acceptance of the RAPL 8 s window, amdgpu clock read-back, xe `power_profile` and `mcu_powersave` writes, Lenovo custom mode timing, deep sleep on each model.
+
+## UI (quick menu, settings pages, profiles)
+
+Code: `app/scripts/ui/controls/` (words in `app/scripts/ui/texts_controls.gd`), the quick menu
+(`quick_menu.gd`), Settings (`settings_screen.gd`), the game page's Game settings card. Tests:
+`test_ui_controls.gd`, `test_ui_quick_menu.gd`, `test_ui_device_fixes.gd` with
+`tests/fixtures/ui_controls/fake_controls.gd` (same API as Controls, synchronous) and the real Profiles
+on a temporary file.
+
+| Piece | File | What it does |
+| --- | --- | --- |
+| Model | `model.gd` | One object over Controls + Profiles for the game in focus: `describe(id)` adds `blocked` (a `requires` that's off or missing), `layer` (`Profiles.explain`), `pending`, `failed`, `editing`; `set_value` saves a change that worked into the layer it came from (the game's when it has its own settings, else battery / plugged in when that layer holds it, else everyday). A game with its own settings that isn't running is edited in its profile only. UI-local controls (`add_local`): the quick menu's per-game Auto TDP switch (Launcher goal; Power starts / stops it while the game runs) |
+| View | `control_view.gd` | Any Control from `describe()`: toggle / choice on `ChoiceRow`, slider on `SliderRow`, action on `ActionRow`, `color_row.gd` (swatches + hue track), `curve_row.gd` (fan curve: A edits, left / right pick a point, up / down 5 %, never falling, never under the quiet floor, B puts it back). Unavailable: greyed with its reason; blocked: locked with "Turn on X first"; `needs_root`: SYSTEM lock chip; layer chip for battery / plugged-in values; APPLYING chip; failure line with the kept value |
+| List | `control_list.gd` | Main ids, then "More settings" (advanced, then everything this handheld can't use). `hide_unavailable` for the quick menu. Lays out again after detection |
+| Layout | `catalog.gd` | Cards per group and the quick menu tabs, ids only; `*` prefixes; anything not listed shows in "Other" |
+| Pages | `group_page.gd`, `perf_page.gd`, `group_cards.gd`, `profiles_page.gd` | Settings > Power, Display, Sound, Controller, Performance, System (built on first show; rebuilt when what's usable changes), Profiles (everyday / battery / plugged in / per game: save current, copy everyday, edit in the quick menu, export, reset with a second press; export / import `~/Documents/GameCove/gamecove-profiles-<device>.json`) |
+| Safety | `keep_dialog.gd`, `session_guard.gd` | "Keep this? Reverting in 15 s" after HDR and after a refresh rate change once we unlocked rates. The unlock and rotation take effect next session, so the change is remembered (`user://controls_confirm.json`) and the countdown runs at the next start; nobody pressing Keep puts the old value back |
+| Gyro | `steam_input.gd` | Gyro aiming is Steam Input's: the UI says so and opens `steam://controllerconfig/<appid>` for Steam games. Controller settings use `controller.gyro` / `controller.emulation` (the device Controller page too); the legacy Controller gyro modes are only a fallback without Controls |
+| Shared | `shared.gd` | One Fixes service for the quick menu's Device tab and Settings > Device > Fixes; `autoload(name)` |
+
+**Recovery if an unlocked refresh rate leaves the screen black:** wait 15 s at the next start (it
+reverts and the session after is normal), or sign in over SSH / a TTY and delete
+`~/.config/environment.d/80-gamecove-display.conf`, then restart the session.
+
+**Hooks for main.gd (not edited this round):** `quick_menu.settings_requested(category, part)` →
+close the menu, `show_screen("settings")`, `settings.open_category(category, part)` (until then the
+menu does this itself through its parent); `settings.game_settings_requested(game)` and
+`game_page.game_settings.edit_requested(game)` → `quick_menu.open(game)` (fallback: they find the
+QuickMenu node); the Controller provider's `REAPPLY_AFTER_RESUME` ~5 s after wake (unchanged).

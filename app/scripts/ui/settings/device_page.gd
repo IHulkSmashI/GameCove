@@ -113,6 +113,28 @@ func _placeholder(id: String) -> void:
 	box.add_child(Kit.label(TS.DEVICE_PANEL_SOON, "QuietLabel", true))
 
 
+## The chain now: panels rebuild their own buttons (Fixes after Apply / Undo),
+## so it's read from them each time rather than kept.
+func focusables() -> Array:
+	var out: Array = []
+	for id in ORDER:
+		var c: Control = panels.get(id)
+		if c == null or not is_instance_valid(c):
+			continue
+		out.append_array(c.focusables() if c.has_method("focusables") else focusable_children(c))
+	for f in _focusables:
+		if is_instance_valid(f) and not f in out and not _in_panel(f):
+			out.append(f)
+	return out.filter(func(f): return is_instance_valid(f))
+
+
+func _in_panel(f: Node) -> bool:
+	for c in panels.values():
+		if is_instance_valid(c) and c.is_ancestor_of(f):
+			return true
+	return false
+
+
 ## Settings asked for a part of this page ("fixes"): its first control.
 func focus_part(part: String) -> Control:
 	if not _built:

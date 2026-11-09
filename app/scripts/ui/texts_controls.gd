@@ -20,6 +20,7 @@ const NOTHING_HERE := "Nothing to change here on this handheld."
 # ---- per-game profile ---------------------------------------------------------
 
 const USE_GAME := "Use settings for this game"
+const OWN_SETTINGS := "own settings"
 const USE_GAME_ON := "Changes save for %s only."
 const USE_GAME_OFF := "Off: this game uses your everyday settings."
 const USE_GAME_EDIT := "Saved for next time. Nothing changes until it starts."

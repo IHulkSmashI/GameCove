@@ -340,6 +340,8 @@ func _set_header(g: Dictionary) -> void:
 	head_caption.visible = not g.is_empty()
 	var secs := session_seconds()
 	head_caption.text = (TS.QM_SESSION % TS.session_time(secs).to_lower()) if secs >= 60 else TC.QM_TITLE
+	if model != null and not g.is_empty() and model.per_game():
+		head_caption.text += "  ·  " + TC.OWN_SETTINGS
 	head_title.text = g.get("title", TC.QM_TITLE) if not g.is_empty() else TC.QM_TITLE
 	_style_head()
 
@@ -364,6 +366,7 @@ func _style_tabs() -> void:
 		tabs[t].set_pressed_no_signal(on)
 		tabs[t].text = SECTIONS[t] if on else ""
 		tabs[t].size_flags_stretch_ratio = 3.2 if on else 1.0
+		tabs[t].icon_alignment = HORIZONTAL_ALIGNMENT_LEFT if on else HORIZONTAL_ALIGNMENT_CENTER
 		var col: Color = ThemeLib.color("on_accent") if on else ThemeLib.color("text_2")
 		tabs[t].icon = CIcons.tex(SECTION_ICONS[t], 20, col)
 
@@ -568,6 +571,7 @@ func _build_game() -> void:
 	use.collapse_hint = false
 	use.changed.connect(func(v):
 		model.set_per_game(bool(v))
+		_set_header(game)
 		show_section(0, "UseGame"))
 	_style_use_row(use, per)
 	_add(use)
