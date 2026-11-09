@@ -370,6 +370,21 @@ func test_claw_live_cores_exact_count_and_restore() -> void:
 	_free()
 
 
+func test_profile_can_go_back_to_custom() -> void:
+	var e := _setup(Trees.new().claw8ex())
+	var c: Dictionary = e["c"]
+	e["reg"].set_value("power.tdp", 20)
+	e["reg"].detect_all()
+	eq(c["power.profile"].value, "custom", "20 W is no preset")
+	ok("custom" in c["power.profile"].options.map(func(o): return o["value"]), "custom offered")
+	ok(c["power.profile"].write("battery"), "battery")
+	eq(e["power"].state()["tdp_w"], 12.0)
+	ok(c["power.profile"].write("custom"), "custom again (the probe's put-back)")
+	eq(c["power.profile"].read(), "custom")
+	eq(e["power"].state()["tdp_w"], 20.0, "the user's own 20 W back")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)

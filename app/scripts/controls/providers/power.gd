@@ -214,9 +214,17 @@ func _profile() -> RefCounted:
 	for p in PowerScript.PROFILES:
 		opts.append({"value": p, "label": p.capitalize()})
 	return _make("power.profile", "choice", {"options": opts, "apply_order": 101, "per_game": false},
-		func(_c):
+		func(c):
 			var st := _pstate()
-			return "" if st.get("supported", {}).get("profiles", false) else Tx.NO_TDP,
+			if not st.get("supported", {}).get("profiles", false):
+				return Tx.NO_TDP
+			# "custom" (the watts the user set with the TDP slider) can be picked again
+			# once there are some; without it a probe or profile could never go back
+			var o: Array = opts.duplicate()
+			if str(st.get("profile", "")) == "custom" or (power.has_method("custom_watts") and float(_p(func(): return power.custom_watts())) > 0.0):
+				o.append({"value": "custom", "label": "Custom"})
+			c.options = o
+			return "",
 		func(_c): return str(_pstate().get("profile", "")),
 		func(_c, v): return bool(_p(func(): return power.set_profile(str(v)))))
 

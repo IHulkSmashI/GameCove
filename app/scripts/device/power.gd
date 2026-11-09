@@ -724,7 +724,13 @@ static func profile_watts(row: Dictionary, profile_name: String, on_charger: boo
 
 
 func set_profile(profile_name: String) -> bool:
-	if backend == "none" or not profile_name in PROFILES:
+	if backend == "none":
+		return false
+	if profile_name == "custom":
+		# back to the user's own watts for this power source (custom_w@<device>)
+		var cw := custom_watts()
+		return cw > 0.0 and set_tdp(cw)
+	if not profile_name in PROFILES:
 		return false
 	var w := profile_watts(device, profile_name, plugged)
 	if not _apply_user_tdp(w):
@@ -748,6 +754,11 @@ func set_tdp(watts: float) -> bool:
 		_remember("custom_w", _source(), w)
 	_emit_changed()
 	return true
+
+
+## The user's own watts for the power source we're on (set by the TDP slider), -1 when none.
+func custom_watts() -> float:
+	return float(_recall("custom_w", _source(), -1.0))
 
 
 func _apply_user_tdp(w: float) -> bool:

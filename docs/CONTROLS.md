@@ -391,7 +391,7 @@ Owner: ctl-power. 33 controls, group `power`. Each detects its backend on this e
 | id | kind | Backends, in order | Where it shows up |
 | --- | --- | --- | --- |
 | `power.tdp` | slider W | Handheld Daemon, devices.json `tdp_backends` (steamos-manager, PowerStation) | every row with a TDP range; range per power source |
-| `power.profile` | choice | Power (devices.json `profiles` watts) | same; not per game (the TDP is) |
+| `power.profile` | choice | Power (devices.json `profiles` watts); `custom` puts back the user's own watts for this power source (`custom_w@<device>`), offered once there are some | same; not per game (the TDP is) |
 | `power.boost` | slider W | PowerStation `Boost` (PL2-PL1 on Intel RAPL, SPPT/FPPT on ASUS/ryzenadj); max = `boost_max` - TDP | PowerStation TDP rows (Claw 8 EX, OneXPlayer, GPD…) |
 | `power.boost_on` | toggle | Handheld Daemon `<driver>.tdp.custom.boost` | hhd with its TDP plugin on |
 | `power.sppt`, `power.fppt` | slider W | firmware attributes via helper (asus-armoury, lenovo-wmi-other-0 in custom mode, msi-wmi-platform); range = attribute min/max, ≥ SPL (FPPT ≥ SPPT), ≤ `boost_max` | ROG Ally family, Legion Go family, Claws with steamos-manager TDP; off on the Claw 8 EX (firmware ignores them, ClawDeck §12), under hhd, and where PowerStation keeps them |
@@ -406,7 +406,7 @@ Owner: ctl-power. 33 controls, group `power`. Each detects its backend on this e
 | `power.gpu_level` | choice | steamos-manager `GpuPerformanceLevel1`, helper (`power_dpm_force_performance_level`) | AMD |
 | `power.gpu_clock` | slider MHz | steamos-manager `ManualGpuClock` (manual level) | Steam Deck |
 | `power.gpu_min`, `power.gpu_max` | slider MHz | PowerStation clocks (AMD `pp_od_clk_voltage`, i915), helper (xe `tile0/gt0/freq0`, amdgpu); hardware range, min ≤ max kept | AMD, Intel |
-| `power.gpu_profile` | choice | helper (xe `power_profile`), steamos-manager `GpuPowerProfile1` | Intel Arc (xe), Steam Deck |
+| `power.gpu_profile` | choice | helper (xe `power_profile`, 0644 root), steamos-manager `GpuPowerProfile1` (amdgpu only) | Intel Arc (xe) with the root helper, Steam Deck |
 | `power.thermal_limit` | slider °C | PowerStation `ThermalThrottleLimitC`; 60..the first-seen firmware value (kept per handheld) | AMD with ryzenadj |
 | `power.charge_limit` | slider % | Power (steamos-manager, charge-limit fix) | rows with `charge_limit` |
 | `power.battery_long_life` | toggle | helper (`charge_types` Long_Life = 80 %) | Lenovo Legion Go family (lenovo-wmi-other) |
