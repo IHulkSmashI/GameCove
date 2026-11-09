@@ -15,12 +15,33 @@ const RPM_OSTREE := "rpm-ostree"
 const PKEXEC := "pkexec"
 const STEAMOSCTL := "steamosctl"
 const SYSEXT_PATH := "/var/lib/extensions/gamecove.raw"
-## SteamOS: /var is writable even with the read-only /usr (steamos-readonly
-## stays on), so a sysext needs no unlock. systemd-sysext.service merges it at
-## every boot; refresh merges it now. polkit re-reads our policy on reload.
-const SYSEXT_INSTALL := "set -e; mkdir -p /var/lib/extensions; install -m 0644 \"$1\" " + SYSEXT_PATH \
-	+ "; systemctl enable systemd-sysext.service >/dev/null 2>&1 || true; systemd-sysext refresh; systemctl reload polkit >/dev/null 2>&1 || true"
-const SYSEXT_REMOVE := "set -e; rm -f " + SYSEXT_PATH + "; systemd-sysext refresh; systemctl reload polkit >/dev/null 2>&1 || true"
+## SteamOS: /usr is read-only, but a sysext needs no unlock (steamos-readonly stays on).
+## Three SteamOS details (docs/SESSION.md, "SteamOS"):
+##   - /var is a small partition per OS slot and SteamOS 3.6+ keeps only listed /etc
+##     changes across an OS update (/etc/atomic-update.conf.d), so the image lives on
+##     the big /home partition, root-owned, beside SteamOS's own offload folders
+##     (SYSEXT_STORE, as Determinate's Nix installer does with /home/.steamos/offload/nix),
+##     and is linked from /etc/extensions (a systemd-sysext search path);
+##   - systemd-sysext.service isn't enabled by default: we enable it, and list that link
+##     and ours in a keep list so the next OS update keeps both;
+##   - polkit reads our policy after a reload (Type=notify-reload polkit; older ones
+##     pick it up at the next boot).
+## Elsewhere (no /etc/atomic-update.conf.d) the image goes to /var/lib/extensions as before.
+const SYSEXT_STORE := "/home/.steamos/offload/gamecove"
+const SYSEXT_ETC_LINK := "/etc/extensions/gamecove.raw"
+const SYSEXT_KEEP := "/etc/atomic-update.conf.d/gamecove.conf"
+const SYSEXT_UNIT_LINK := "/etc/systemd/system/sysinit.target.wants/systemd-sysext.service"
+const SYSEXT_INSTALL := "set -e; " \
+	+ "if [ -d /etc/atomic-update.conf.d ] && [ -d /home/.steamos ]; then " \
+	+ "mkdir -p -m 0755 " + SYSEXT_STORE + " /etc/extensions; " \
+	+ "install -m 0644 \"$1\" " + SYSEXT_STORE + "/gamecove.raw.new; mv -f " + SYSEXT_STORE + "/gamecove.raw.new " + SYSEXT_STORE + "/gamecove.raw; " \
+	+ "ln -sfn " + SYSEXT_STORE + "/gamecove.raw " + SYSEXT_ETC_LINK + "; rm -f " + SYSEXT_PATH + "; " \
+	+ "printf '%s\\n' " + SYSEXT_ETC_LINK + " " + SYSEXT_UNIT_LINK + " > " + SYSEXT_KEEP + "; " \
+	+ "else mkdir -p /var/lib/extensions; install -m 0644 \"$1\" " + SYSEXT_PATH + "; fi; " \
+	+ "systemctl enable systemd-sysext.service >/dev/null 2>&1 || true; systemd-sysext refresh; " \
+	+ "systemctl reload polkit.service >/dev/null 2>&1 || true"
+const SYSEXT_REMOVE := "set -e; rm -f " + SYSEXT_ETC_LINK + " " + SYSEXT_PATH + " " + SYSEXT_KEEP + " " + SYSEXT_STORE + "/gamecove.raw; " \
+	+ "rmdir " + SYSEXT_STORE + " 2>/dev/null || true; systemd-sysext refresh; systemctl reload polkit.service >/dev/null 2>&1 || true"
 ## A Steam game (Steam's launch wrapper) or one of ours (app-steam-app<id> scope) is running.
 const GAME_PATTERN := "SteamLaunch AppId=|app-steam-app[0-9]"
 

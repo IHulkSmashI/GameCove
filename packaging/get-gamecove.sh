@@ -17,7 +17,8 @@
 # It needs no root and changes nothing outside your home folder. The installer
 # app asks for your admin password (pkexec) only for the steps that need it.
 #
-# Options: --no-launch (download only), --tag vX.Y.Z (a given release),
+# Options: --no-launch (download only), --tag vX.Y.Z (a given release; pre-releases need it
+#          while a stable release exists: GitHub's releases/latest skips them),
 #          --detect-os (print the system type and stop), --help
 # Environment (for tests and forks): GAMECOVE_REPO, GAMECOVE_API, GAMECOVE_TAG,
 #   GAMECOVE_HOME, GAMECOVE_ROOT (prefix for /etc/os-release, /run/ostree-booted),
@@ -115,7 +116,7 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	-h | --help)
-		sed -n '2,24p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+		sed -n '2,27p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
 		exit 0
 		;;
 	*) die "unknown option $1 (try --help)" ;;
@@ -162,6 +163,16 @@ fi
 say "Looking up the ${TAG:-latest} GameCove release"
 json=""
 if ! json="$("$CURL" -fsSL -H "Accept: application/vnd.github+json" "$url" 2>/dev/null)" || [ -z "$json" ]; then
+	json=""
+	# releases/latest skips pre-releases, so it has nothing while only pre-releases exist
+	# (v0.1.0 is one): then the newest release of any kind. A given --tag is never replaced.
+	if [ -z "$TAG" ]; then
+		url="$API/repos/$REPO/releases?per_page=1"
+		json="$("$CURL" -fsSL -H "Accept: application/vnd.github+json" "$url" 2>/dev/null)" || json=""
+		[ -n "$json" ] && log "no stable release; using the newest pre-release"
+	fi
+fi
+if [ -z "$json" ]; then
 	if [ -x "$DEST/app/gamecove.x86_64" ]; then
 		say "Can't reach GitHub; using the copy downloaded before."
 		launch_app

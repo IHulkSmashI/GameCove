@@ -109,7 +109,7 @@ static func read_installed(root := "") -> Dictionary:
 
 static func _read(path: String) -> String:
 	var f := FileAccess.open(path, FileAccess.READ)
-	return f.get_as_text().strip_edges() if f != null else ""
+	return preload("res://scripts/device/device.gd").read_all(f).strip_edges() if f != null else ""
 
 
 ## The part of a raw version string that the maker's listing shows.

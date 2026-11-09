@@ -27,6 +27,8 @@ static func fixes(node: Node) -> Node:
 	_fixes.setup({"sys_root": "", "home": OS.get_environment("HOME"), "device": dev})
 	node.get_tree().root.add_child.call_deferred(_fixes)
 	(func():
+		if not is_instance_valid(_fixes):
+			return
 		if _fixes.has_method("check_changes"):
 			_fixes.check_changes()
 		_fixes.refresh()).call_deferred()

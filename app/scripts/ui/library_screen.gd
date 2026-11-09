@@ -525,7 +525,9 @@ func _after_search() -> void:
 		_focus_later(search_button)
 
 
-func _focus_later(c: Control) -> void:
+static func _focus_later(c: Control) -> void:
+	if c == null:
+		return
 	var ref: WeakRef = weakref(c)
 	(func():
 		var n: Control = ref.get_ref()

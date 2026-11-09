@@ -257,9 +257,14 @@ func queue_rebuild() -> void:
 	if _rebuild_queued:
 		return
 	_rebuild_queued = true
-	(func():
-		_rebuild_queued = false
-		rebuild()).call_deferred()
+	# A deferred method (not a lambda): if the screen is freed first, Godot
+	# drops the call instead of running it on a dead instance.
+	call_deferred("_run_queued_rebuild")
+
+
+func _run_queued_rebuild() -> void:
+	_rebuild_queued = false
+	rebuild()
 
 
 ## Redraws everything from the service, keeping focus where it was (same PC,
