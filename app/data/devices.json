@@ -2539,8 +2539,8 @@
       "vrr_range": [48, 120],
       "tdp": {"min": 8, "battery_max": 28, "plugged_max": 28, "boost_max": 32},
       "tdp_backends": ["powerstation", "steamos-manager"],
-      "fan": null,
-      "fan_via": null,
+      "fan": "oxp_ec",
+      "fan_via": "fix",
       "charge_limit": false,
       "charge_limit_via": null,
       "gyro": "yes",
@@ -2554,7 +2554,8 @@
       "support": "partial",
       "verified": false,
       "unverified": ["panel.vrr"],
-      "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"]
+      "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)",
+    "Linux oxpec driver (drivers/platform/x86/oxpec.c: board NEO-01 -> orange_pi_neo, hwmon oxp_ec)"]
     }
   ],
   "_bodies": "One record per shell, keyed by the art name the rows use. Sizes in mm from the maker's spec sheet (else a named review): w_mm x h_mm is the front outline (with controllers attached; clamshells: closed footprint), d_mm the thickness. \"unverified\" = no published figure. docs/DEVICES.md, Drawings.",

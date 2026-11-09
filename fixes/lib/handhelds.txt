@@ -46,3 +46,4 @@ gpd-win-max-2	sys_vendor=GPD	product_name=G1619-04|G1619-05
 gpd-win-5	sys_vendor=GPD	product_name=G1618-05
 gpd-family	sys_vendor=GPD
 zotac-zone	sys_vendor=ZOTAC	board_name=G0A1W|G1A1W
+orangepi-neo	sys_vendor=OrangePi	product_name=NEO-01

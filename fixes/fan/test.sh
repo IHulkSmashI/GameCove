@@ -71,6 +71,7 @@ new_hw() {
 	case "$1" in
 		asus_custom_fan_curve) dmi "$R" "ASUSTeK COMPUTER INC." "ROG Ally RC71L" "RC71L" ;;
 		oxp_ec|oxpec) dmi "$R" "ONE-NETBOOK" "ONEXPLAYER X1 A" "X1A" ;;
+		orangepi) dmi "$R" "OrangePi" "NEO-01" "NEO-01" "OrangePi" ;;
 		ayaneo_ec) dmi "$R" "AYANEO" "AYANEO 3" "AB09" ;;
 		gpdfan) dmi "$R" "GPD" "G1618-05" "G1618-05" ;;
 		zotac_*) dmi "$R" "ZOTAC" "ZOTAC GAMING ZONE" "G0A1W" ;;
@@ -93,6 +94,16 @@ sh "$FIX" set auto >/dev/null || fail "asus: set auto"
 [ "$(cat "$A/pwm1_enable")" = "2" ] || fail "asus: factory curve"
 sh "$FIX" remove >/dev/null || fail "asus: remove"
 [ "$(cat "$A/pwm1_auto_point1_pwm") $(cat "$A/pwm1_auto_point1_temp")" = "20 30" ] || fail "asus: original curve back"
+rm -rf "$R"
+
+# traits: the Orange Pi Neo's fan is the same oxpec driver (board NEO-01 -> orange_pi_neo, hwmon oxp_ec)
+R="$(new_hw orangepi 1 manual)"; export GAMECOVE_ROOT="$R"; O="$R/sys/class/hwmon/hwmon3"
+echo oxp_ec > "$O/name"
+sh "$FIX" status | grep -q '^applies=yes$' || fail "neo: the fan fix applies"
+sh "$FIX" status | grep -q '^modes=auto,max$' || fail "neo: modes from oxp_ec"
+sh "$FIX" set max >/dev/null || fail "neo: set max"
+[ "$(cat "$O/pwm1_enable") $(cat "$O/pwm1")" = "1 255" ] || fail "neo: manual full duty"
+sh "$FIX" remove >/dev/null || fail "neo: remove"
 rm -rf "$R"
 
 # OneXPlayer, oxpec 6.16+ (oxp_ec): manual only, no quiet, auto = 2
