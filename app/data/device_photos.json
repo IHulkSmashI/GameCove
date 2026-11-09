@@ -304,15 +304,6 @@
     "note": "X1 Intel and X1 Pro share this body."
    }
   ],
-  "onexplayer-x2-mini": [
-   {
-    "source": "youtube",
-    "url": "https://www.youtube.com/watch?v=cGDX13xiBj8",
-    "channel": "THE HEAT",
-    "title": "3-Way Transforming UMPC! OneXPlayer X2 Mini Pro Launch Details",
-    "note": "Launch event; check for a clean device shot."
-   }
-  ],
   "ayaneo-2": [
    {
     "source": "youtube",
@@ -406,6 +397,15 @@
     "url": "https://www.youtube.com/watch?v=Vm7_Y7e8oWY",
     "channel": "THE HEAT",
     "title": "The First Predator: Acer's Atlas 8 Powered by Intel Arc G3 EX"
+   }
+  ],
+  "onexplayer-x2-mini-pro": [
+   {
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=cGDX13xiBj8",
+    "channel": "THE HEAT",
+    "title": "3-Way Transforming UMPC! OneXPlayer X2 Mini Pro Launch Details",
+    "note": "Launch event; check for a clean device shot."
    }
   ]
  },
