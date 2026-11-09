@@ -111,6 +111,13 @@ func _run() -> void:
 	lib.games.assign(games)
 	lib.changed.emit()
 	_status()
+	# SHOOT_THEME=midnight|sunset|light: the default shot list in that theme
+	# (pair with --only; the theme_* shots switch themes themselves).
+	var th := OS.get_environment("SHOOT_THEME")
+	if th != "" and get_script().resource_path.get_file() == "shoot.gd":
+		prefs.theme = th
+		prefs.match_art = th != "light"
+		main.apply_theme()
 	await frames(4)
 	main.home.play_button.grab_focus()
 	await shot("home")
@@ -452,7 +459,8 @@ func _status() -> void:
 		_home_ach = load("res://tests/test_ui_games.gd").FakeAchievements.new()
 		_home_ach.data = _ach_data()
 		root.add_child(_home_ach)
-		main.home.set_achievements(_home_ach)
+		# One service for Home and the game page (main.set_achievements), as in the app.
+		main.set_achievements(_home_ach)
 	main.status_panel.set_battery("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4, "time_left_min": 214})
 
 

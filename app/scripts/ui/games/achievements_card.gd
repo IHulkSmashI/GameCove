@@ -240,7 +240,9 @@ func _cell(a: Dictionary, i: int) -> Button:
 	var got: bool = a.get("unlocked", false)
 	var rare: bool = float(a.get("rarity", -1)) >= 0.0 and float(a.get("rarity", -1)) < RARE
 	if got and rare:
-		var sb: StyleBoxFlat = b.get_theme_stylebox("normal", "RowButton").duplicate() if b.has_theme_stylebox("normal", "RowButton") else ThemeLib.box(ThemeLib.soft(0.05), ThemeLib.radius("m"), 12, 6)
+		# The row's own fill (as the theme's RowButton draws it), with a gold edge.
+		var g2: Color = ThemeLib.color("glass_2")
+		var sb := ThemeLib.box(Color(g2, g2.a * 0.8) if ThemeLib.is_dark() else ThemeLib.color("surface"), ThemeLib.radius("m"), 18, 10)
 		sb.border_color = Color(ThemeLib.tone("gold"), 0.7)
 		sb.set_border_width_all(1)
 		for st in ["normal", "hover"]:

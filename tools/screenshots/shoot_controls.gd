@@ -279,7 +279,7 @@ func _open_quick(g: Dictionary, tab: int, focus_id := "") -> void:
 	qm.model.set_game(g)
 	qm._set_header(g)
 	qm.show_section(tab, focus_id)
-	await frames(3)
+	await frames(10)   # FocusScroll glides settle before the shot
 
 
 func _quick_shots() -> void:
