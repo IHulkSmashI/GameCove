@@ -125,6 +125,10 @@ Device data was taken as facts (DMI strings, wattages, capability names, which b
 | AYANEO Slide | [Tokyo-Game-Show-2023-Day3-2023-09-23 390.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_390.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | AYANEO 3 | [Tokyo-Game-Show-2025 0728.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2025_0728.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
+### Maker images (shown by link, not distributed)
+
+For handhelds with no free photo, the device panel shows the maker's own official product image, credited "Image: <Maker>" (Lenovo, MSI, ONEXPLAYER, AOKZOE, AYANEO, Acer). These images are the makers' property and are **not** distributed by GameCove: they are not in this repository, the app package or the `device-photos` release, and GPL-3.0 doesn't apply to them. The app only stores a link (`maker_image` in [`app/data/device_photos.json`](app/data/device_photos.json), with the maker's product page it came from) and downloads that one image from the maker's own site on the user's device, unchanged except for scaling on screen. It can be switched off ("Show maker photos", Settings > Device). A maker that wants its image removed can open an issue and we'll drop the link. Details: [docs/DEVICES.md](docs/DEVICES.md#maker-images-by-link-only).
+
 ## Trademarks
 
 Product and company names are trademarks of their respective owners; GameCove is not affiliated with or endorsed by them.
