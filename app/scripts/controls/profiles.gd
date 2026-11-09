@@ -237,7 +237,7 @@ func _refresh_source(apply_on_change: bool) -> void:
 func _on_detected() -> void:
 	var now := {}
 	for c in _all_controls():
-		if c.available:
+		if _available(c):
 			now[c.id] = true
 	# an older detection (from before the charger changed again) isn't the one we wait for
 	if _apply_after_detect != "" and "detected_seq" in controls and int(controls.detected_seq) < _apply_after_seq:
@@ -284,7 +284,8 @@ func sync_launcher_fps(key: String) -> bool:
 	var c = controls.control(FPS_ID) if controls != null and controls.has(FPS_ID) else null
 	if c != null and c.kind == "choice" and v > 0:
 		var best := 0
-		for o in c.options:
+		var opts: Array = _desc(c).get("options", [])
+		for o in opts:
 			var ov: Variant = o.get("value") if o is Dictionary else null
 			if (ov is int or ov is float) and int(ov) <= v and int(ov) > best:
 				best = int(ov)
@@ -345,12 +346,22 @@ func applicable(values: Dictionary) -> Dictionary:
 	var out := {}
 	for id in values:
 		var c = controls.control(id) if controls != null and controls.has(id) else null
-		if c == null or not c.available or not c.per_game:
+		if c == null or not _available(c) or not c.per_game:
 			continue
-		var v: Variant = c.coerce(values[id])
+		var v: Variant = controls.coerce(id, values[id]) if controls.has_method("coerce") else c.coerce(values[id])
 		if v != null:
 			out[id] = v
 	return out
+
+
+## Main thread: the registry's committed copy, never the fields the worker rewrites (review M14).
+func _available(c: RefCounted) -> bool:
+	return bool(controls.available(c.id)) if controls.has_method("available") else bool(c.available)
+
+
+func _desc(c: RefCounted) -> Dictionary:
+	var d: Dictionary = controls.describe_cached(c.id) if controls.has_method("describe_cached") else {}
+	return d if not d.is_empty() else c.describe()
 
 
 ## Puts back a game baseline left on disk by a run that never reached the game's end

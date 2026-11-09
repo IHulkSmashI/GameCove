@@ -379,3 +379,44 @@ func test_h2_boot_has_a_restore_entry_point() -> void:
 	var Boot := load("res://scripts/installer/boot.gd")
 	ok(Boot.wants_restore_baseline(PackedStringArray(["--restore-baseline"])), "--restore-baseline recognised")
 	ok(ProfilesScript.RESTORE_ARG == "--restore-baseline", "Profiles handles the same argument")
+
+
+# ---- M14: the main thread never reads Control fields the worker rewrites --------------------------
+
+## Stress (review proof options_race.gd): detections replace a control's options on the worker while
+## the main thread coerces values for it, as Profiles.applicable() does at every game start. Reading
+## the live `options` segfaulted; the committed copy is safe.
+func test_m14_coerce_while_the_worker_detects() -> void:
+	var Ctl := load("res://scripts/controls/control.gd")
+	var reg: Node = ControlsScript.new()
+	reg.setup({"sys_root": "/nonexistent"})
+	reg.register(Ctl.make({"id": "controller.t_choice", "group": "controller", "kind": "choice",
+		"options": [{"value": "a", "label": "A"}]},
+		func(ctl):
+			ctl.options = ["a", "b", "c", "d"].map(func(v): return {"value": v, "label": str(v).capitalize()})
+			return "",
+		func(_c): return "a", func(_c, _v): return true))
+	_nodes.append(reg)
+	var prof: Node = ProfilesScript.new()
+	var dir := OS.get_user_data_dir().path_join("test_review_state_m14")
+	DirAccess.make_dir_recursive_absolute(dir)
+	prof.setup(reg, "x", dir + "/profiles.json")
+	_nodes.append(prof)
+	reg.detect_all()
+	_drain(reg)
+	var n := 0
+	var good := 0
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 1500:
+		if n % 50 == 0:
+			for i in 20:
+				reg.detect_all()
+		var got: Dictionary = prof.applicable({"controller.t_choice": "d"})
+		if got.get("controller.t_choice") == "d":
+			good += 1
+		n += 1
+	_drain(reg)
+	ok(n > 100, "many coerce calls ran (%d)" % n)
+	eq(good, n, "every one saw a valid option list")
+	reg._exit_tree()
+	_free()

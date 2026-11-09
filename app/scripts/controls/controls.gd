@@ -124,6 +124,29 @@ func describe_cached(id: String) -> Dictionary:
 	return d
 
 
+## `v` made valid for the control as of the last finished worker job (Control.coerce on the
+## committed description): safe on the main thread while a detection replaces the live
+## control's options (that read crashed, review M14). null when unknown or invalid.
+func coerce(id: String, v: Variant) -> Variant:
+	var c = _controls.get(id)
+	var d := describe_cached(id)
+	if c == null or d.is_empty():
+		return null
+	var out: Variant = ControlScript.coerce_spec(d, v)
+	if out != null and c.normalize.is_valid():
+		out = c.normalize.call(out)
+	return out
+
+
+## Available as of the last finished worker job.
+func available(id: String) -> bool:
+	_cache_mutex.lock()
+	var e: Variant = _cache.get(id)
+	var a: bool = e != null and bool(e["available"])
+	_cache_mutex.unlock()
+	return a
+
+
 ## The control's value as of the last finished worker job (safe on any thread).
 func value(id: String) -> Variant:
 	_cache_mutex.lock()

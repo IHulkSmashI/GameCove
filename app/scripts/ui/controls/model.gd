@@ -151,7 +151,7 @@ func describe(id: String) -> Dictionary:
 	if d["editing"]:
 		var eff: Dictionary = profiles.effective(game_key(), "")
 		if eff.has(id):
-			var v: Variant = c.coerce(eff[id])
+			var v: Variant = _coerce(c, eff[id])
 			if v != null:
 				d["value"] = v
 	d["labels"] = c.get_meta("point_labels") if c.has_meta("point_labels") else []
@@ -248,6 +248,14 @@ func reset_game() -> void:
 
 # ---- writing ------------------------------------------------------------------
 
+## Against the registry's committed copy (a detection may be replacing the live control's
+## options on the worker right now, review M14); local controls are ours alone.
+func _coerce(c: RefCounted, v: Variant) -> Variant:
+	if not _local.has(c.id) and controls != null and controls.has_method("coerce") and controls.has(c.id):
+		return controls.coerce(c.id, v)
+	return c.coerce(v)
+
+
 ## Asks for a new value. Returns false when the control can't take one now.
 func set_value(id: String, v: Variant) -> bool:
 	var c := control(id)
@@ -262,7 +270,7 @@ func set_value(id: String, v: Variant) -> bool:
 			failed.emit(id, v)
 		return true
 	if editing_profile() and c.per_game:
-		var nv: Variant = c.coerce(v)
+		var nv: Variant = _coerce(c, v)
 		if nv == null:
 			return false
 		profiles.set_value(game_key(), "", id, nv)
