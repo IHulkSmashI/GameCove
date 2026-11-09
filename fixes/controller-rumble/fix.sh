@@ -34,9 +34,27 @@ ROOT="${GAMECOVE_ROOT:-}"
 STATE="$ROOT/var/lib/gamecove/fixes/controller-rumble"
 # shellcheck source=fixes/lib/logcap.sh
 . "$(cd "$(dirname "$0")/../lib" && pwd)/logcap.sh"
+# shellcheck source=fixes/lib/lockdir.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/lockdir.sh"
+# shellcheck source=fixes/lib/ratelimit.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/ratelimit.sh"
 DRIVERS="$ROOT/sys/bus/hid/drivers"
 
 die() { printf 'controller-rumble: %s\n' "$2" >&2; exit "$1"; }
+
+# One run at a time (lockdir.sh), so the change count below can't race.
+RUMBLE_LOCK=""
+rumble_lock() {
+	mkdir -p "$ROOT/run" 2>/dev/null || true
+	lockdir_take "$ROOT/run/gamecove-controller-rumble.lock" 30 || die 1 "another run is busy"
+	RUMBLE_LOCK="$ROOT/run/gamecove-controller-rumble.lock"
+}
+trap '[ -z "$RUMBLE_LOCK" ] || lockdir_drop "$RUMBLE_LOCK"' EXIT
+trap 'exit 1' INT TERM HUP
+
+# Every change is written to the controller's own memory (hid-msi and hid-lenovo-go store it in the
+# firmware), so at most this many real changes per ten minutes (review L4); unchanged values are free.
+RUMBLE_MAX_CHANGES=30
 
 log_change() {
 	mkdir -p "$STATE"
@@ -136,6 +154,14 @@ do_set() {
 			esac
 			;;
 	esac
+	same=1
+	for a in $(attrs_of "$drv"); do [ "$(rd "$dir/$a")" = "$v" ] || same=0; done
+	if [ "$same" = 1 ]; then
+		echo "value=$v"
+		return 0
+	fi
+	rate_take controller-rumble "$RUMBLE_MAX_CHANGES" 600 ||
+		die 1 "too many rumble changes in ten minutes (each one is stored in the controller); try again in a few minutes"
 	do_install "$drv" "$dir"
 	before="$(mktemp)"
 	snapshot "$drv" "$dir" > "$before"
@@ -188,6 +214,9 @@ do_remove() {
 	echo "restored"
 }
 
+case "${1:-}" in
+	install | set | remove) rumble_lock ;;
+esac
 case "${1:-}" in
 	install)
 		k="$(knob)"

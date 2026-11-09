@@ -38,6 +38,24 @@ run set 40 | grep -qx value=40 || fail "set 40"
 [ "$(cat "$D/rumble_intensity_left")" = 40 ] && [ "$(cat "$D/rumble_intensity_right")" = 40 ] || fail "both motors 40"
 run status | tail -n 1 | grep -qx state=on || fail "state on after set"
 grep -q "set 40 (hid-msi)" "$R/var/lib/gamecove/fixes/controller-rumble/changes.log" || fail "logged"
+# review L4: every change is stored in the controller: the same value is a no-op, and at most 30 real
+# changes per ten minutes (any local process can call this without a password)
+lines() { wc -l <"$R/var/lib/gamecove/fixes/controller-rumble/changes.log" | tr -d ' '; }
+l0=$(lines)
+run set 40 | grep -qx value=40 || fail "the same value again"
+[ "$(lines)" = "$l0" ] || fail "the same value again writes nothing"
+rm -f "$R/run/gamecove/rate-controller-rumble"
+i=0
+while [ "$i" -lt 15 ]; do
+	run set 41 >/dev/null || fail "change $i"
+	run set 40 >/dev/null || fail "change $i back"
+	i=$((i + 1))
+done
+[ "$(code run set 41)" = 1 ] || fail "the 31st change in ten minutes is refused"
+[ "$(cat "$D/rumble_intensity_left")" = 40 ] || fail "the refused change wrote nothing"
+run set 40 >/dev/null || fail "the current value is still accepted (a no-op)"
+rm -f "$R/run/gamecove/rate-controller-rumble"
+[ ! -e "$R/run/gamecove-controller-rumble.lock" ] || fail "lock released"
 run set off >/dev/null || fail "off"
 [ "$(cat "$D/rumble_intensity_left")" = 0 ] || fail "off = 0"
 for bad in 101 -1 abc 040 1000 low ""; do

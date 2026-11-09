@@ -17,6 +17,8 @@
 ROOT=${GAMECOVE_ROOT:-}
 # shellcheck source=fixes/lib/lockdir.sh
 . "$(cd "$(dirname "$0")/../lib" && pwd)/lockdir.sh"
+# shellcheck source=fixes/lib/ratelimit.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/ratelimit.sh"
 GC_STATE=/var/lib/gamecove
 BOARD_WANTED=MS-1T91
 FW_DIR=/etc/firmware
@@ -366,6 +368,11 @@ ip_regen() {
 		return 1
 	fi
 	rm -f "$IP_FLAGS/.snippet"
+	# the same override as now: nothing to write and no InputPlumber restart (review L4)
+	if cmp -s "$out" "$ROOT$IP_OVERRIDE"; then
+		rm -f "$out"
+		return 0
+	fi
 	chmod 644 "$out" && mv -f "$out" "$ROOT$IP_OVERRIDE" || return 1
 	ip_restart
 }
