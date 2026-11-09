@@ -129,9 +129,44 @@ static func fwupd_updates(code: int, text: String) -> Dictionary:
 			"needs_reboot": "needs-reboot" in dflags or "needs-shutdown" in dflags,
 			"trusted": "trusted-payload" in rflags or "trusted-metadata" in rflags,
 			"details_url": str(rel.get("DetailsUrl", rel.get("Homepage", ""))),
+			"notes": strip_markup(str(rel.get("Description", ""))),
 		})
 	out["available"] = not out["devices"].is_empty()
 	return out
+
+
+## `fwupdmgr get-devices --json`: every device fwupd can update, with its running version.
+## [{"id", "name", "current", "vendor", "plugin", "needs_reboot"}]; [] on anything else.
+static func fwupd_devices(text: String) -> Array:
+	var out: Array = []
+	var d: Variant = _json(text) if text.strip_edges().begins_with("{") else null
+	if not d is Dictionary:
+		return out
+	for dev in d.get("Devices", []):
+		if not dev is Dictionary:
+			continue
+		var flags: Array = dev.get("Flags", []) if dev.get("Flags") is Array else []
+		if not "updatable" in flags:
+			continue
+		out.append({
+			"id": str(dev.get("DeviceId", "")), "name": str(dev.get("Name", "")),
+			"current": str(dev.get("Version", "")), "vendor": str(dev.get("Vendor", "")),
+			"plugin": str(dev.get("Plugin", "")),
+			"needs_reboot": "needs-reboot" in flags or "needs-shutdown" in flags,
+		})
+	return out
+
+
+## fwupd's release descriptions are small XML/HTML ("<p>..</p><ul><li>..</li></ul>"): plain text.
+static func strip_markup(text: String) -> String:
+	var t := text.replace("</p>", "\n").replace("<li>", "• ").replace("</li>", "\n")
+	t = RegEx.create_from_string("<[^>]+>").sub(t, "", true)
+	t = t.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+	var lines := PackedStringArray()
+	for l in t.split("\n", false):
+		if l.strip_edges() != "":
+			lines.append(l.strip_edges())
+	return "\n".join(lines)
 
 
 ## `flatpak remote-ls --updates --<installation> --columns=application,name,version,branch,origin`.

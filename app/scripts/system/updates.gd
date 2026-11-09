@@ -1,12 +1,13 @@
 extends "res://scripts/system/service.gd"
-## Updates: the OS image, device firmware (fwupd) and Flatpak apps.
+## Updates: the OS image, device firmware (fwupd), the maker's own BIOS/EC/controller firmware
+## (firmware index), the driver stack and Flatpak apps.
 ##
 ## Nothing runs on its own: no timer, no check at start. The UI calls
 ## check(kind) / check_updates() and apply(kind) / apply_update(); work happens
 ## on the worker thread and comes back on the main thread as signals.
 ## apply() refuses while a game runs (set_game_running(), wired by main.gd).
 ##
-## kinds: "os", "firmware", "flatpak". Per kind, phase is one of
+## kinds: "os", "firmware", "flatpak", "maker", "drivers". Per kind, phase is one of
 ##   unsupported  no tool for it on this system
 ##   idle         not checked yet
 ##   checking     a check is running
@@ -21,6 +22,12 @@ extends "res://scripts/system/service.gd"
 ## password in the active session), rpm-ostree upgrade (Fedora Atomic 41+
 ## rule: no password for active local sessions), fwupd trusted updates and
 ## Flatpak app/runtime updates (both "yes" for active sessions upstream).
+##
+## The Updates hub (hub_items(), also state()["hub"]) is one list over fwupd devices, the maker's
+## firmware from the nightly index and the driver stack; see firmware_index.gd for the item shape.
+## "maker" and "drivers" are check-only: maker firmware is never flashed by GameCove (guided steps,
+## a prepared USB drive for ASUS EZ Flash, or the maker's page), drivers update with the OS.
+## Firmware installs (fwupd) and USB preparation need the charger in and the battery at 50% or more.
 
 signal changed(state: Dictionary)
 ## A check finished. result: os {"available", "version", "notes_url", "staged",
@@ -29,13 +36,24 @@ signal checked(kind: String, result: Dictionary)
 ## While applying. percent is 0..100, or -1 when the tool doesn't say.
 signal progress(kind: String, percent: float, line: String)
 ## An apply (or reboot) finished. message is "" on success, else a short reason:
-## "game_running", "busy", "not_available", "unsupported" or the tool's last line.
+## "game_running", "busy", "not_available", "unsupported", "needs_ac", "low_battery",
+## "guided" (maker firmware: GameCove never flashes it) or the tool's last line.
+## prepare_usb() finishes as kind "usb".
 signal finished(kind: String, ok: bool, message: String)
 
 const OsInfo := preload("res://scripts/system/os_info.gd")
 const Parse := preload("res://scripts/system/update_parse.gd")
+const Index := preload("res://scripts/system/firmware_index.gd")
+const Drivers := preload("res://scripts/system/driver_versions.gd")
+const Upscale := preload("res://scripts/controls/perf/upscale.gd")
 
-const KINDS: Array[String] = ["os", "firmware", "flatpak"]
+const KINDS: Array[String] = ["os", "firmware", "flatpak", "maker", "drivers"]
+## Firmware installs and USB preparation: charger in and at least this much battery.
+const MIN_BATTERY := 50
+## fwupd metadata refresh: at most this often, and only on AC or an unmetered network.
+const REFRESH_EVERY_S := 24 * 3600
+const POWER_SUPPLY := "/sys/class/power_supply/"
+const JUPITER_BIOSUPDATE := "/usr/bin/jupiter-biosupdate"
 const PROGRESS_EVERY_MS := 250
 
 ## Filesystem prefix for every file read ("" = real system; fixtures in tests).
@@ -43,12 +61,21 @@ var root := ""
 var home := OS.get_environment("HOME")
 var path_env := OS.get_environment("PATH")
 var game_running := false
+## Where the firmware index and stamps are kept ("" = user://firmware).
+var cache_dir := ""
+## The devices.json row of this handheld ({} = ask the Device autoload).
+var device_row: Dictionary = {}
+## Tests: a fixed clock (unix seconds); 0 = the real one.
+var now_unix := 0
 
 var os_info: Dictionary = {}
 var _phase := {}
 var _os := {"available": false, "version": "", "notes_url": "", "staged": false, "staged_version": "", "current": "", "error": ""}
 var _fw := {"available": false, "devices": [], "error": ""}
 var _fp := {"available": false, "pending": [], "error": ""}
+var _maker := {"available": false, "items": [], "error": "", "index_built": "", "stale": false}
+var _drv := {"available": false, "items": [], "error": ""}
+var _fw_devices: Array = []
 var _tools := {}
 var _detected := false
 var _last_progress_ms := 0
@@ -72,11 +99,16 @@ func detect() -> Dictionary:
 		"fwupdmgr": _which("fwupdmgr"),
 		"flatpak": _which("flatpak"),
 		"systemctl": _which("systemctl"),
+		"curl": _which("curl"),
+		"rpm": _which("rpm"),
+		"pacman": _which("pacman"),
 	}
 	_phase = {
 		"os": "idle" if os_info["backend"] != "none" else "unsupported",
 		"firmware": "idle" if _tools["fwupdmgr"] != "" else "unsupported",
 		"flatpak": "idle" if _tools["flatpak"] != "" else "unsupported",
+		"maker": "idle" if not _row().is_empty() else "unsupported",
+		"drivers": "idle",
 	}
 	_os["notes_url"] = os_info["notes_url"]
 	_os["current"] = os_info["version"]
@@ -114,7 +146,13 @@ func state() -> Dictionary:
 		"os": _os.duplicate(true),
 		"firmware": _fw.duplicate(true),
 		"flatpak": _fp.duplicate(true),
-		"supported": {"os": supported("os"), "firmware": supported("firmware"), "flatpak": supported("flatpak")},
+		"maker": _maker.duplicate(true),
+		"drivers": _drv.duplicate(true),
+		"hub": hub_items(),
+		"power": power_state(),
+		"usb_targets": usb_targets(),
+		"supported": {"os": supported("os"), "firmware": supported("firmware"), "flatpak": supported("flatpak"),
+			"maker": supported("maker"), "drivers": supported("drivers")},
 		"game_running": game_running,
 		"reboot_needed": _phase.get("os") == "staged" or (_phase.get("firmware") == "staged"),
 	}
@@ -151,6 +189,8 @@ func check(kind: String) -> bool:
 		"os": _queue("check_os", _check_os)
 		"firmware": _queue("check_firmware", _check_firmware)
 		"flatpak": _queue("check_flatpak", _check_flatpak)
+		"maker": _queue("check_maker", _check_maker)
+		"drivers": _queue("check_drivers", _check_drivers)
 	return true
 
 
@@ -167,8 +207,12 @@ func apply(kind: String, target := "") -> bool:
 		reason = "game_running"
 	elif p == "applying" or p == "checking":
 		reason = "busy"
+	elif kind == "maker" or kind == "drivers":
+		reason = "guided"
 	elif p != "available":
 		reason = "not_available"
+	elif kind == "firmware":
+		reason = power_block()
 	if reason != "":
 		finished.emit(kind, false, reason)
 		return false
@@ -316,10 +360,16 @@ func _progress(kind: String, line: String) -> void:
 func _check_firmware() -> void:
 	# Metadata refresh: polkit action refresh-remote is "yes" upstream. Exit 2 =
 	# already up to date; failures (offline) still let us read what we have.
-	runner.run("fwupdmgr", PackedStringArray(["refresh"]))
+	# At most daily, and only on AC or an unmetered network (no mobile data).
+	if _stamp_due("fwupd_refresh", REFRESH_EVERY_S) and network_ok():
+		runner.run("fwupdmgr", PackedStringArray(["refresh"]))
+		_touch_stamp("fwupd_refresh")
 	var r: Dictionary = runner.run("fwupdmgr", PackedStringArray(["get-updates", "--json", "--no-unreported-check", "--no-metadata-check"]))
 	var res := Parse.fwupd_updates(int(r.get("code", -1)), str(r.get("out", "")))
+	var all_r: Dictionary = runner.run("fwupdmgr", PackedStringArray(["get-devices", "--json"]))
+	var all := Parse.fwupd_devices(str(all_r.get("out", ""))) if int(all_r.get("code", -1)) == 0 else []
 	_main(func():
+		_fw_devices = all
 		_fw = res
 		_phase["firmware"] = "error" if res["error"] != "" else ("available" if res["available"] else "up_to_date")
 		checked.emit("firmware", res.duplicate(true))
@@ -414,3 +464,336 @@ func _apply_flatpak() -> void:
 			_phase["flatpak"] = "error"
 		finished.emit("flatpak", ok, msg)
 		changed.emit(state()))
+
+
+# ---- power / network gates ---------------------------------------------------------
+
+## {"ac": bool, "battery": int (-1 = no battery), "ok": bool, "reason": "" | "needs_ac" | "low_battery"}
+func power_state() -> Dictionary:
+	var why := power_block()
+	return {"ac": _ac(), "battery": battery_percent(), "ok": why == "", "reason": why}
+
+
+## "" when firmware may be written now, else "needs_ac" or "low_battery".
+func power_block() -> String:
+	if not _ac():
+		return "needs_ac"
+	var b := battery_percent()
+	if b >= 0 and b < MIN_BATTERY:
+		return "low_battery"
+	return ""
+
+
+func _ac() -> bool:
+	return preload("res://scripts/device/device.gd").ac_online(root)
+
+
+func battery_percent() -> int:
+	var dir := DirAccess.open(root + POWER_SUPPLY)
+	if dir == null:
+		return -1
+	var names := Array(dir.get_directories()) + Array(dir.get_files())
+	names.sort()
+	for n in names:
+		if str(n).begins_with("BAT"):
+			var cap := read_text(root + POWER_SUPPLY + n + "/capacity")
+			if cap.is_valid_int():
+				return cap.to_int()
+	return -1
+
+
+## Downloads (index, fwupd metadata) only on AC or a network NetworkManager doesn't call metered
+## (NMMetered: 1 yes, 3 guess-yes). No NetworkManager answer counts as unmetered.
+func network_ok() -> bool:
+	if _ac():
+		return true
+	var r: Dictionary = runner.run("busctl", PackedStringArray(["get-property", "org.freedesktop.NetworkManager",
+		"/org/freedesktop/NetworkManager", "org.freedesktop.NetworkManager", "Metered"]))
+	if int(r.get("code", -1)) != 0:
+		return true
+	var parts := str(r.get("out", "")).strip_edges().split(" ", false)
+	return not (parts.size() == 2 and parts[1] in ["1", "3"])
+
+
+func _now() -> int:
+	return now_unix if now_unix > 0 else int(Time.get_unix_time_from_system())
+
+
+func _cache() -> String:
+	var d := cache_dir if cache_dir != "" else ProjectSettings.globalize_path("user://firmware")
+	DirAccess.make_dir_recursive_absolute(d)
+	return d
+
+
+func _stamp_due(stamp: String, every_s: int) -> bool:
+	var t := read_text(_cache().path_join(stamp))
+	return not t.is_valid_int() or _now() - t.to_int() >= every_s
+
+
+func _touch_stamp(stamp: String) -> void:
+	var f := FileAccess.open(_cache().path_join(stamp), FileAccess.WRITE)
+	if f != null:
+		f.store_string(str(_now()))
+
+
+func _row() -> Dictionary:
+	if not device_row.is_empty():
+		return device_row
+	var d: Node = get_node_or_null("/root/Device") if is_inside_tree() else null
+	if d != null and d.get("profile") is Dictionary:
+		return d.get("profile")
+	return {}
+
+
+# ---- firmware index (maker BIOS / EC / controller) -----------------------------------
+
+## The cached index, downloaded first when it's over a week old and the network allows.
+## The download is accepted only when its sha256 matches the published .sha256 and it parses.
+func load_index() -> Dictionary:
+	var path := _cache().path_join("firmware.json.gz")
+	var mod := int(FileAccess.get_modified_time(path)) if FileAccess.file_exists(path) else 0
+	# A failed download is retried at most daily.
+	if Index.is_stale(mod, _now()) and _stamp_due("index_fetch", REFRESH_EVERY_S) and network_ok():
+		_touch_stamp("index_fetch")
+		var part := path + ".part"
+		var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "60", "-o", part, Index.URL]))
+		var s: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "20", Index.URL + ".sha256"]))
+		var want := Index.sha_from_text(str(s.get("out", "")))
+		var good := int(r.get("code", -1)) == 0 and int(s.get("code", -1)) == 0 and want != "" \
+			and FileAccess.file_exists(part) and FileAccess.get_sha256(part) == want \
+			and not Index.parse_gz(FileAccess.get_file_as_bytes(part)).is_empty()
+		if good:
+			DirAccess.rename_absolute(part, path)
+		elif FileAccess.file_exists(part):
+			DirAccess.remove_absolute(part)
+	return Index.parse_gz(FileAccess.get_file_as_bytes(path)) if FileAccess.file_exists(path) else {}
+
+
+func _check_maker() -> void:
+	var row := _row()
+	var index := load_index()
+	var installed := Index.read_installed(root)
+	var items := Index.firmware_items(index, row, installed, _fw_devices)
+	if str(row.get("family", "")) == "steam-deck":
+		items = _deck_local(items, installed)
+	var res := {"available": items.any(func(i): return i["status"] == "update"), "items": items,
+		"error": "" if not (index.is_empty() and items.is_empty()) else "index_unavailable",
+		"index_built": str(index.get("built", "")),
+		"stale": bool(Index.entries_for(index, row)["entry"].get("stale", false))}
+	_main(func():
+		_maker = res
+		_phase["maker"] = "error" if res["error"] != "" else ("available" if res["available"] else "up_to_date")
+		checked.emit("maker", res.duplicate(true))
+		changed.emit(state()))
+
+
+## Steam Deck: the OS image carries the BIOS and its updater, so "what this OS would install" is
+## read from its own jupiter-biosupdate, and whether that runs at boot from its service state.
+## The index (Valve's newest jupiter-hw-support) says what a newer OS image would bring.
+func _deck_local(items: Array, installed: Dictionary) -> Array:
+	var script := read_text(root + JUPITER_BIOSUPDATE)
+	if script == "":
+		return items
+	var cur := str(installed.get("bios_version", ""))
+	var target := Index.deck_bios_target(script, cur)
+	var svc := "unknown"
+	if _tools.get("systemctl", "") != "":
+		var r: Dictionary = runner.run("systemctl", PackedStringArray(["is-enabled", "jupiter-biosupdate.service"]))
+		svc = str(r.get("out", "")).strip_edges().get_slice("\n", 0) if str(r.get("out", "")).strip_edges() != "" else "unknown"
+	var upstream := ""
+	var out: Array = []
+	for it in items:
+		if it["kind"] == "bios":
+			upstream = it["latest"]
+		else:
+			out.append(it)
+	var latest := target if target != "" else cur
+	var item := {
+		"id": "local:bios", "section": "firmware", "kind": "bios", "name": "BIOS", "current": cur, "latest": latest,
+		"status": "update" if target != "" and Index.compare("valve", cur, target) < 0 else "current",
+		"severity": "recommended" if target != "" else "info", "how": "guided", "flash": "steamos",
+		"notes": "", "notes_url": "https://store.steampowered.com/news/app/1675200", "download_page": "",
+		"download_url": "", "sha256": "", "date": "", "source": "local", "service": svc,
+		"os_family": str(os_info.get("family", "")), "upstream": upstream,
+	}
+	if upstream != "" and Index.compare("valve", latest, upstream) < 0:
+		item["upstream_note"] = upstream
+	out.push_front(item)
+	return out
+
+
+# ---- driver stack ---------------------------------------------------------------------
+
+func _check_drivers() -> void:
+	var installed := {}
+	var k := read_text(root + "/proc/sys/kernel/osrelease")
+	if k != "":
+		installed["kernel"] = k
+	var pkg_names := {}
+	for name in Drivers.STACK:
+		var spec: Dictionary = Drivers.STACK[name]
+		if _tools.get("rpm", "") != "" and spec.has("rpm"):
+			pkg_names[spec["rpm"]] = name
+		elif _tools.get("pacman", "") != "" and spec.has("pacman"):
+			pkg_names[spec["pacman"]] = name
+	if not pkg_names.is_empty():
+		var vers := {}
+		if _tools.get("rpm", "") != "":
+			var r: Dictionary = runner.run("rpm", PackedStringArray(["-q", "--qf", "%{NAME} %{VERSION}\n"] + pkg_names.keys()))
+			vers = Drivers.rpm_versions(str(r.get("out", "")))
+		else:
+			var r2: Dictionary = runner.run("pacman", PackedStringArray(["-Q"] + pkg_names.keys()))
+			vers = Drivers.pacman_versions(str(r2.get("out", "")))
+		for p in vers:
+			if pkg_names.has(p):
+				installed[pkg_names[p]] = vers[p]
+	var decky := read_text(home + Drivers.DECKY_VERSION)
+	if decky != "":
+		installed["decky"] = decky
+	var up_cmd := Upscale.command(root)
+	if up_cmd != "":
+		var r3: Dictionary = runner.run(up_cmd, PackedStringArray(["state", "--home", home, "--gpu", Upscale.gpu_arg(Upscale.gpu(_row()))]))
+		var st := Drivers.helper_json(str(r3.get("out", "")))
+		var xe: Variant = st.get("xess")
+		if xe is Dictionary and str(xe.get("version", "")) not in ["", "<null>"]:
+			installed["xess-xmx"] = str(xe["version"])
+		var op: Variant = st.get("optiscaler")
+		if op is Dictionary and bool(op.get("installed", false)):
+			installed["optiscaler"] = str(op.get("version", ""))
+	var next := {}
+	if os_info.get("backend", "") == "rpm-ostree" and bool(_os.get("available", false)):
+		var r4: Dictionary = runner.run("rpm-ostree", PackedStringArray(["upgrade", "--preview"]))
+		var diff := Drivers.rpm_ostree_preview(str(r4.get("out", "")))
+		for p in diff:
+			if p == "kernel" or p == "kernel-core":
+				next["kernel"] = diff[p]
+			elif pkg_names.has(p):
+				next[pkg_names[p]] = diff[p]
+	var index := load_index()
+	var sw: Dictionary = index.get("software", {}) if index.get("software") is Dictionary else {}
+	var items := Drivers.items(installed, sw, next, str(os_info.get("family", "")))
+	var res := {"available": items.any(func(i): return i["status"] == "update"), "items": items, "error": ""}
+	_main(func():
+		_drv = res
+		_phase["drivers"] = "available" if res["available"] else "up_to_date"
+		checked.emit("drivers", res.duplicate(true))
+		changed.emit(state()))
+
+
+# ---- the hub ------------------------------------------------------------------------------
+
+## One list for everything on the handheld: fwupd devices, maker firmware, driver stack.
+## Updates first, then by section.
+func hub_items() -> Array:
+	var out: Array = []
+	var pending := {}
+	for d in _fw.get("devices", []):
+		pending[str(d.get("id", ""))] = d
+	var seen := {}
+	for d in _fw_devices:
+		var merged: Dictionary = d.duplicate()
+		if pending.has(d["id"]):
+			merged.merge(pending[d["id"]], true)
+		seen[d["id"]] = true
+		out.append(Index.fwupd_item(merged))
+	for id in pending:
+		if not seen.has(id):
+			out.append(Index.fwupd_item(pending[id]))
+	# fwupd covers a part the index also lists (e.g. the ROG MCU): keep fwupd's, it can install.
+	var fw_names := out.map(func(i): return str(i["name"]).to_lower())
+	for it in _maker.get("items", []):
+		if it["kind"] == "controller" and fw_names.any(func(n): return n.contains("mcu") or n.contains("controller")):
+			continue
+		out.append(it)
+	out.append_array(_drv.get("items", []))
+	var rank := {"update": 0, "unknown": 1, "upstream": 2, "current": 3}
+	var order := out.map(func(i): return i["id"])
+	out.sort_custom(func(a, b):
+		var ra: int = rank.get(a["status"], 4)
+		var rb: int = rank.get(b["status"], 4)
+		if a["section"] != b["section"]:
+			return a["section"] == "firmware"
+		return ra < rb if ra != rb else order.find(a["id"]) < order.find(b["id"]))
+	return out
+
+
+# ---- USB drive for a maker's UEFI flasher -----------------------------------------------
+
+## FAT32 drives mounted under /run/media (where the desktop and Steam mount USB sticks).
+## [{"mount", "label", "device"}]
+func usb_targets() -> Array:
+	var out: Array = []
+	for line in read_text(root + "/proc/self/mounts").split("\n", false):
+		var p := line.split(" ", false)
+		if p.size() < 3 or p[2] != "vfat":
+			continue
+		var mnt := p[1].replace("\\040", " ")
+		if mnt.begins_with("/run/media/") or mnt.begins_with("/media/"):
+			out.append({"mount": mnt, "label": mnt.get_file(), "device": p[0]})
+	return out
+
+
+## Puts a maker's UEFI-flasher file on a FAT32 USB drive: only for ASUS EZ Flash (a documented
+## route: EZ Flash in the UEFI reads the .CAP from a FAT32 drive). Downloads the maker's zip,
+## checks the sha256 the maker publishes, copies the .CAP files to the drive's root. Never flashes.
+## Refused during a game, without AC or under 50% battery. Ends with finished("usb", ok, message).
+func prepare_usb(item_id: String, mount: String) -> bool:
+	var it: Dictionary = {}
+	for i in _maker.get("items", []):
+		if i["id"] == item_id:
+			it = i
+	var reason := ""
+	if game_running:
+		reason = "game_running"
+	elif it.is_empty() or it.get("flash") != "ez-flash" or str(it.get("download_url", "")) == "" or str(it.get("sha256", "")).length() != 64:
+		reason = "not_available"
+	elif not usb_targets().any(func(t): return t["mount"] == mount):
+		reason = "no_usb"
+	else:
+		reason = power_block()
+	if reason != "":
+		finished.emit("usb", false, reason)
+		return false
+	_queue("prepare_usb", _prepare_usb.bind(it, mount))
+	return true
+
+
+func _prepare_usb(it: Dictionary, mount: String) -> void:
+	var zip := _cache().path_join("usb_download.zip")
+	if FileAccess.file_exists(zip):
+		DirAccess.remove_absolute(zip)
+	_main(func(): progress.emit("usb", -1.0, "Downloading " + str(it["name"])))
+	var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "600", "-o", zip, str(it["download_url"])]))
+	var msg := ""
+	var written: Array = []
+	if int(r.get("code", -1)) != 0 or not FileAccess.file_exists(zip):
+		msg = "download_failed"
+	elif FileAccess.get_sha256(zip) != str(it["sha256"]).to_lower():
+		msg = "checksum_mismatch"
+	else:
+		var zr := ZIPReader.new()
+		if zr.open(zip) != OK:
+			msg = "bad_archive"
+		else:
+			for f in zr.get_files():
+				var name := str(f).get_file()
+				if name.to_upper().ends_with(".CAP"):
+					var data := zr.read_file(f)
+					var dest := root + mount.path_join(name)
+					var out := FileAccess.open(dest, FileAccess.WRITE)
+					if out == null:
+						msg = "write_failed"
+						break
+					out.store_buffer(data)
+					out.close()
+					if FileAccess.get_file_as_bytes(dest).size() != data.size():
+						msg = "write_failed"
+						break
+					written.append(name)
+			zr.close()
+			if msg == "" and written.is_empty():
+				msg = "bad_archive"
+	DirAccess.remove_absolute(zip)
+	var ok := msg == ""
+	_main(func():
+		finished.emit("usb", ok, ", ".join(PackedStringArray(written)) if ok else msg))
