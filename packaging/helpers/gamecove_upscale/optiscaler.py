@@ -4,8 +4,10 @@ What Decky Framegen does on SteamOS, done by GameCove so one tap covers everythi
 recommended setup needs (FSR 4 on XMX, REFramework, the game's fixes from assets/games.json) and the OptiScaler
 version is GameCove's to choose:
 
-  install()  OptiScaler's release .7z (pinned in assets/versions.json with its sha256) unpacked into
-             ~/.local/share/gamecove/optiscaler/<version>. Optional extras with their own sha256 (OptiPatcher).
+  install()  OptiScaler's release .7z (the newest from the signed index, else the pin in data/versions.json; from
+             GameCove's mirror, then upstream; sha256 checked) unpacked into ~/.local/share/gamecove/optiscaler/<version>.
+             Optional extras with their own sha256 (OptiPatcher, fakenvapi); a newer extra for the same OptiScaler
+             replaces just that file. .gamecove-package.json in the package says what it is.
   patch()    into the folder of the game's main exe: OptiScaler.dll under a proxy name (dxgi.dll, or the next free
              one: winmm, version, dbghelp, winhttp; the usual order), OptiScaler.ini with the game's settings, the
              libraries it ships, OptiPatcher in plugins/, and for "FSR 4 on XMX" nitec's files from ~/fsr4-xmx with
@@ -37,9 +39,16 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import urllib.error
 
 from . import downloads, userexec
+from .mirror import VERSION_RE
+
+
+def mirror_version_ok(v: str) -> bool:
+    """A version names a folder (package_dir): plain characters only, never a path."""
+    return isinstance(v, str) and bool(VERSION_RE.match(v)) and ".." not in v
 
 log = logging.getLogger("gamecove.optiscaler")
 
@@ -67,7 +76,8 @@ def own_cabinet(home: str) -> str:
 
 
 # OptiScaler's package, minus what only Windows installs need
-SKIP = {"setup_linux.sh", "setup_windows.bat", "OptiScaler.dll", "OptiScaler.ini"}
+PACKAGE_RECORD = ".gamecove-package.json"
+SKIP = {"setup_linux.sh", "setup_windows.bat", "OptiScaler.dll", "OptiScaler.ini", PACKAGE_RECORD}
 SKIP_PREFIX = ("!!", "Licenses/")
 SKIP_SUFFIX = (".bat",)                  # v10: OptiScaler/Streamlined_fetcher_windows.bat (a Windows download helper)
 # always: OptiPatcher (plugins/) loads, and the HQ font stays off (its auto mode asserts on a missing font under
@@ -86,12 +96,36 @@ def installed(home: str, version: str) -> bool:
     return os.path.isfile(os.path.join(d, "OptiScaler.dll")) and os.path.isfile(os.path.join(d, "OptiScaler.ini"))
 
 
-def _get(url: str, sha256: str, dest: str) -> str:
-    downloads.download(url, dest)
-    if downloads.sha256_of(dest) != sha256.lower():
-        os.remove(dest)
-        raise ValueError(f"{os.path.basename(dest)} does not match its pinned sha256; not installed")
-    return dest
+def _get(item: dict, dest: str) -> str:
+    """One versions entry or extra ({url, mirror, sha256}) to dest: the mirror first, then upstream, sha256 checked."""
+    return downloads.get_verified(downloads.sources(item), item.get("sha256", ""), dest)
+
+
+def package_record(home: str, version: str) -> dict:
+    try:
+        with open(os.path.join(package_dir(home, version), PACKAGE_RECORD), "r", encoding="utf-8") as f:
+            r = json.load(f)
+        return r if isinstance(r, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def packages(home: str) -> list[dict]:
+    """Every OptiScaler package downloaded, newest install first: [{version, layout, sha256, installed, dir}]."""
+    root = os.path.join(home, ROOT)
+    out = []
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return []
+    for v in names:
+        if v.startswith(".") or v.endswith(".new") or not installed(home, v):
+            continue
+        r = package_record(home, v)
+        d = package_dir(home, v)
+        out.append({"version": v, "layout": r.get("layout") or ("subfolder" if os.path.isdir(os.path.join(d, "OptiScaler")) else "flat"),
+                    "sha256": r.get("sha256"), "installed": float(r.get("installed") or os.path.getmtime(d)), "dir": d})
+    return sorted(out, key=lambda p: p["installed"], reverse=True)
 
 
 def _unpack(arc: str, dest: str) -> str | None:
@@ -128,9 +162,34 @@ def extra_dests(x: dict) -> list[str]:
     return list((x.get("files") or {}).values()) + ([x["ini"]] if x.get("ini") else [])
 
 
+def extra_hashes(x: dict) -> dict[str, str]:
+    """{path in the package: the sha256 it must have} for one extra (its ini is GameCove's own text: not listed)."""
+    if "dest" in x:
+        return {x["dest"]: x.get("sha256", "").lower()}
+    return {to: ((x.get("file_sha256") or {}).get(src) or "").lower() for src, to in (x.get("files") or {}).items()}
+
+
 def extras_ready(home: str, entry: dict) -> bool:
+    """Every extra in place (any build: a game is patched with what's there, also offline)."""
     d = package_dir(home, entry["version"])
     return all(os.path.isfile(os.path.join(d, p)) for x in entry.get("extras", []) for p in extra_dests(x))
+
+
+def extras_current(home: str, entry: dict) -> bool:
+    """Every extra in place with the bytes this entry names (a newer OptiPatcher in the index: not current)."""
+    d = package_dir(home, entry["version"])
+    for x in entry.get("extras", []):
+        if not all(os.path.isfile(os.path.join(d, p)) for p in extra_dests(x)):
+            return False
+        for p, sha in extra_hashes(x).items():
+            if sha and downloads.sha256_of(os.path.join(d, p)) != sha:
+                return False
+    return True
+
+
+def _extra_ready(pkg: str, x: dict) -> bool:
+    return all(os.path.isfile(os.path.join(pkg, p)) for p in extra_dests(x)) and \
+        all(not sha or downloads.sha256_of(os.path.join(pkg, p)) == sha for p, sha in extra_hashes(x).items())
 
 
 def _extra(x: dict, pkg: str, work: str) -> None:
@@ -139,9 +198,9 @@ def _extra(x: dict, pkg: str, work: str) -> None:
     if "dest" in x:
         dest = os.path.join(pkg, x["dest"])
         os.makedirs(os.path.dirname(dest), exist_ok=True)
-        _get(x["url"], x["sha256"], dest)
+        _get(x, dest)
         return
-    arc = _get(x["url"], x["sha256"], os.path.join(work, os.path.basename(x["url"])))
+    arc = _get(x, os.path.join(work, os.path.basename(x["url"])))
     out = os.path.join(work, "extra-" + x["name"])
     shutil.rmtree(out, ignore_errors=True)
     err = _unpack(arc, out)
@@ -154,7 +213,8 @@ def _extra(x: dict, pkg: str, work: str) -> None:
             raise ValueError(f"{src} from {os.path.basename(x['url'])} is missing or doesn't match its pinned sha256")
         dest = os.path.join(pkg, to)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
-        shutil.copyfile(p, dest)
+        shutil.copyfile(p, dest + ".new")
+        os.replace(dest + ".new", dest)
     if x.get("ini"):
         dest = os.path.join(pkg, x["ini"])
         os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -163,16 +223,34 @@ def _extra(x: dict, pkg: str, work: str) -> None:
 
 
 def install(home: str, entry: dict) -> dict:
-    """entry (versions.json "optiscaler"): {version, url, sha256, extras: [{name, url, sha256, dest} or
-    {name, url, sha256, files: {in archive: in package}, file_sha256, ini}]}."""
+    """entry (versions.json "optiscaler", or the same with the index's newest): {version, url, mirror, sha256,
+    extras: [{name, url, mirror, sha256, dest} or {name, url, mirror, sha256, files: {in archive: in package},
+    file_sha256, ini}]}. The package already there with older extras: only those are fetched again."""
     ver = entry["version"]
+    if not mirror_version_ok(ver):
+        return {"ok": False, "error": f"bad OptiScaler version {ver!r}"}
     d = package_dir(home, ver)
-    if installed(home, ver) and extras_ready(home, entry):
+    if installed(home, ver) and extras_current(home, entry):
         return {"ok": True, "already": True, "version": ver, "dir": d}
     work = os.path.join(home, ROOT, ".download")
+    if installed(home, ver):              # same OptiScaler, a newer OptiPatcher / fakenvapi
+        try:
+            os.makedirs(work, exist_ok=True)
+            got = []
+            for x in entry.get("extras", []):
+                if not _extra_ready(d, x):
+                    _extra(x, d, work)
+                    got.append(x["name"])
+            userexec.chown_tree(d, home)
+        except (OSError, ValueError, subprocess.SubprocessError, urllib.error.URLError) as e:
+            return {"ok": False, "error": f"OptiScaler {ver}: {e}"}
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        log.info("OptiScaler %s: updated %s", ver, ", ".join(got))
+        return {"ok": True, "version": ver, "dir": d, "updated_extras": got}
     try:
         os.makedirs(work, exist_ok=True)
-        arc = _get(entry["url"], entry["sha256"], os.path.join(work, os.path.basename(entry["url"])))
+        arc = _get(entry, os.path.join(work, os.path.basename(entry["url"])))
         tmp = d + ".new"
         shutil.rmtree(tmp, ignore_errors=True)
         r = _unpack(arc, tmp)
@@ -182,6 +260,9 @@ def install(home: str, entry: dict) -> dict:
             return {"ok": False, "error": "the OptiScaler archive has no OptiScaler.dll"}
         for x in entry.get("extras", []):
             _extra(x, tmp, work)
+        with open(os.path.join(tmp, PACKAGE_RECORD), "w", encoding="utf-8") as f:
+            json.dump({"version": ver, "sha256": entry.get("sha256"), "layout": entry.get("layout") or "flat",
+                       "source": entry.get("source", "pins"), "installed": time.time()}, f)
         shutil.rmtree(d, ignore_errors=True)
         os.replace(tmp, d)
         userexec.chown_tree(os.path.join(home, ROOT), home)
@@ -380,20 +461,31 @@ def fsr4_xmx_download(home: str, entry: dict) -> dict:
         dest = os.path.join(xdir, name)
         if os.path.isfile(dest) and downloads.sha256_of(dest) == sha:
             continue
-        # a files-only branch pinned by commit (base): not on the Releases page, where the files looked like a second
-        # download users had to fetch themselves (maintainer, 2026-11-05); a release tag still works for old entries
+        # GameCove's mirror first, then where it came from: a files-only branch pinned by commit (base), not on the
+        # Releases page (maintainer, 2026-11-05); a release tag still works for old entries
         url = (entry["base"].rstrip("/") + "/" + name if entry.get("base")
                else f"https://github.com/{entry['repo']}/releases/download/{entry['tag']}/{name}")
-        tmp = downloads.download(url, dest + ".new", timeout=120.0)
-        if downloads.sha256_of(tmp) != sha:
-            os.unlink(tmp)
-            return {"ok": False, "error": f"{name}: the download doesn't match its sha256 (not used)"}
-        os.replace(tmp, dest)
+        err = _get_file(entry, name, url, dest)
+        if err:
+            return {"ok": False, "error": err}
         got.append(name)
     if got:
         userexec.chown_tree(xdir, home)
         log.info("FSR 4.1.2 XMX files downloaded: %s", ", ".join(got))
     return {"ok": True, "downloaded": got, "dir": xdir}
+
+
+def _get_file(entry: dict, name: str, base_url: str, dest: str) -> str | None:
+    """One FSR 4 file: the mirror, then the index's upstream URL or base_url; sha256 checked. An error text or None."""
+    up = (entry.get("upstream") or {}).get(name) or base_url
+    item = {"mirror": (entry.get("mirror") or {}).get(name), "url": up, "sha256": entry["files"][name]}
+    try:
+        downloads.get_verified(downloads.sources(item), item["sha256"], dest, timeout=120.0)
+    except ValueError:
+        return f"{name}: the download doesn't match its sha256 (not used)"
+    except (OSError, PermissionError) as e:
+        return f"{name}: {e}"
+    return None
 
 
 FSR4_BUNDLED = os.path.join("bin", "fsr4-xmx")      # inside the plugin: the build puts the files there
@@ -447,11 +539,9 @@ def fsr4_amd_download(home: str, entry: dict) -> dict:
         dest = os.path.join(d, name)
         if os.path.isfile(dest) and downloads.sha256_of(dest) == sha:
             continue
-        tmp = downloads.download(entry["base"].rstrip("/") + "/" + name, dest + ".new", timeout=120.0)
-        if downloads.sha256_of(tmp) != sha:
-            os.unlink(tmp)
-            return {"ok": False, "error": f"{name}: the download doesn't match its sha256 (not used)"}
-        os.replace(tmp, dest)
+        err = _get_file(entry, name, entry["base"].rstrip("/") + "/" + name, dest)
+        if err:
+            return {"ok": False, "error": err}
         got.append(name)
     return {"ok": True, "downloaded": got, "dir": d}
 

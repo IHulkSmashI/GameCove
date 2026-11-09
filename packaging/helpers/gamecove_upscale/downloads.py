@@ -1,6 +1,6 @@
-"""Fetch upstream releases GameCove installs on request: pinned in assets/versions.json, downloaded from the
-project's own GitHub releases at the moment the user taps Install (GameCove never redistributes upstream binaries,
-proprietary or not). Every pinned entry carries the sha256 of the exact asset that was tested, and fetch() refuses a
+"""Fetch the upscaler files GameCove installs on request: from GameCove's own mirror (the rolling "upscalers"
+release, mirror.py) first, then from the project's own release, at the moment the user taps Install. Which version:
+the newest from the signed index (mirror.versions), else the pins in data/versions.json. Every entry carries the sha256 of the exact asset that was tested, and fetch() refuses a
 pinned entry without one (never falling back to the digest from the same API answer that supplied the URL). Only
 "latest (untested)", which the user has to allow, may use GitHub's recorded digest instead, and it still needs one.
 Extraction refuses absolute paths, '..', links and device nodes, so an archive cannot write outside its folder."""
@@ -79,6 +79,47 @@ def download(url: str, dest: str, timeout: float = 60.0) -> str:
         shutil.copyfileobj(r, f, 1 << 20)
     os.replace(tmp, dest)
     return dest
+
+
+def sources(item: dict) -> list[str]:
+    """Where an item may come from, in order: GameCove's mirror (only a URL on GameCove's own release), then the
+    upstream URL. Both answer the same bytes; the sha256 decides either way."""
+    from . import mirror
+    out = []
+    m = item.get("mirror")
+    if isinstance(m, str) and mirror.is_mirror_url(m):
+        out.append(m)
+    u = item.get("url")
+    if isinstance(u, str) and u.startswith("https://"):
+        out.append(u)
+    return out
+
+
+def get_verified(urls: list[str], sha256: str, dest: str, timeout: float = 60.0) -> str:
+    """Download the first source whose bytes have `sha256` to dest (atomically: a good file already at dest stays
+    until the new one is checked). Raises ValueError when no source has those bytes, PermissionError without a pin."""
+    want = (sha256 or "").lower()
+    if len(want) != 64 or any(c not in "0123456789abcdef" for c in want):
+        raise PermissionError(f"{os.path.basename(dest)} has no sha256 pinned; not installed")
+    if not urls:
+        raise ValueError(f"{os.path.basename(dest)}: nowhere to download it from")
+    errors = []
+    tmp = dest + ".new"
+    for url in urls:
+        try:
+            download(url, tmp, timeout)
+        except Exception as e:          # this source is down or gone: the next one
+            errors.append(f"{url}: {type(e).__name__}: {e}")
+            continue
+        if sha256_of(tmp) == want:
+            os.replace(tmp, dest)
+            return dest
+        os.remove(tmp)
+        errors.append(f"{url}: does not match its pinned sha256")
+        log.warning("%s does not match its pinned sha256", url)
+    if any("does not match" in e for e in errors):
+        raise ValueError(f"{os.path.basename(dest)} does not match its pinned sha256; not installed ({'; '.join(errors)})")
+    raise OSError(f"{os.path.basename(dest)}: download failed ({'; '.join(errors)})")
 
 
 def _safe(name: str) -> bool:
@@ -175,7 +216,18 @@ def expected_sha256(entry: dict, tag: str, asset: dict) -> str:
 
 def fetch(entry: dict, workdir: str, allow_unpinned: bool = False, rel: dict | None = None) -> dict:
     """Download and unpack one versions.json entry. Returns {tag, archive, dir}. `rel`: the release, when the caller
-    has already looked it up."""
+    has already looked it up. An entry with a mirror and an asset name (every pinned one, every index one) is
+    fetched straight from the mirror (then upstream) with its sha256, no API call; "latest (untested)" asks the
+    API."""
+    if entry.get("mirror") and entry.get("asset") and is_pinned(entry) and not (rel and rel.get("tag_name") not in (None, entry.get("tag"))):
+        tag = entry["tag"]
+        if not _safe(entry["asset"]) or "/" in entry["asset"].replace("\\", "/"):
+            raise ValueError(f"unsafe asset name: {entry['asset']}")
+        urls = sources({**entry, "url": entry.get("url") or
+                        f"https://github.com/{entry['repo']}/releases/download/{tag}/{entry['asset']}"})
+        archive = get_verified(urls, expected_sha256(entry, tag, {}), os.path.join(workdir, "downloads", entry["asset"]))
+        out = extract(archive, os.path.join(workdir, f"{os.path.basename(entry['repo'])}-{tag}"))
+        return {"tag": tag, "archive": archive, "dir": out, "repo": entry["repo"]}
     if not is_pinned(entry) and not allow_unpinned:
         raise PermissionError(f"{entry['repo']} has no tested version pinned yet; allow 'latest (untested)' to continue")
     repo = (entry.get("fork") or entry["repo"]) if entry.get("use_fork") else entry["repo"]

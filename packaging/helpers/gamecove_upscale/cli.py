@@ -13,6 +13,13 @@ Prints one JSON object on stdout and exits 0 (also for {"ok": false, "error": ..
   xess-install  the XeSS XMX driver (xess-xmx-linux, pinned in versions.json): the installer's one-time
                 option on Intel Arc handhelds with XMX; --gpu must say xmx=1. Runs as the desktop user.
   xess-remove   take out a driver GameCove installed (its own uninstall.sh), as on uninstall
+  check       per component: the version here, the newest, "update" (upkeep.check); --online fetches the signed
+              upscalers index first (GameCove's background check, at most daily, and the Check button)
+  update      every downloaded component that has a newer version ([--component ID] for one); games keep theirs
+  game-update --key KEY: GameCove's OptiScaler in this game (and its REFramework) up to the newest, settings kept
+
+Which versions: the newest from GameCove's signed upscalers index (mirror.py), fetched before anything is
+installed; without a verified index, the tested pins in data/versions.json. Every file is sha256 checked.
 """
 from __future__ import annotations
 
@@ -21,20 +28,24 @@ import json
 import os
 import sys
 
-from . import framegen, games, launchenv, livedb, optiscaler, xess
+from . import framegen, games, launchenv, livedb, mirror, optiscaler, upkeep, xess
 
-COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency", "xess-install", "xess-remove")
+COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency", "xess-install", "xess-remove",
+            "check", "update", "game-update")
+# commands that may download: the signed index is fetched (at most every mirror.FRESH_S) before they run
+INSTALLS = ("choose", "apply", "xess-install", "game-update")
 
 
 def _state(home: str, gpu: dict) -> dict:
-    v = games.versions()
+    v = games.versions(home)
     e = v["optiscaler"]
     return {"optiscaler": {"version": e["version"], "installed": optiscaler.installed(home, e["version"])},
             "decky_framegen": framegen.state(home),
             "xess": xess.state(home) if games.vendor(gpu) == "intel" else None,
             "fsr4_xmx_missing": optiscaler.fsr4_xmx_missing(home),
             "fsr4_amd_missing": optiscaler.fsr4_amd_missing(home),
-            "upscalers": games.upscalers_for(gpu), "frame_gens": games.fg_for(gpu), "vendor": games.vendor(gpu)}
+            "upscalers": games.upscalers_for(gpu), "frame_gens": games.fg_for(gpu), "vendor": games.vendor(gpu),
+            "index": mirror.status(home)}
 
 
 def parse_gpu(text: str) -> dict:
@@ -68,11 +79,20 @@ def run(argv: list[str]) -> dict:
     p.add_argument("--overlay", type=int, default=None)
     p.add_argument("--online", action="store_true")
     p.add_argument("--allow-unpinned", action="store_true")
+    p.add_argument("--component", default=None, choices=sorted(mirror.NAMES))
     a = p.parse_args(argv)
     gpu = parse_gpu(a.gpu)
     home = a.home
-    if a.command in ("recommend", "status", "choose", "apply", "undo", "latency") and not a.key:
+    if a.command in ("recommend", "status", "choose", "apply", "undo", "latency", "game-update") and not a.key:
         raise ValueError(f"{a.command} needs --key")
+    if a.command in INSTALLS and not (a.command == "choose" and a.upscaler == "own"):
+        mirror.refresh(home)
+    if a.command == "check":
+        return upkeep.check(home, gpu, refresh=a.online)
+    if a.command == "update":
+        return upkeep.update(home, gpu, a.component)
+    if a.command == "game-update":
+        return games.game_update(home, a.key, gpu, a.dir)
     if a.command == "recommend":
         return {"ok": True, **games.recommend(home, a.key, gpu, a.dir, a.name, a.online)}
     if a.command == "status":
@@ -89,7 +109,7 @@ def run(argv: list[str]) -> dict:
         # same code path as ClawDeck's main.py xess_install (same author): pinned release, its install.sh as the user
         if games.vendor(gpu) != "intel" or not gpu.get("xmx"):
             return {"ok": False, "error": "this GPU has no XMX cores: XeSS runs on its general path without this driver"}
-        return xess.install(home, games.versions()["xess_xmx_linux"], a.allow_unpinned)
+        return xess.install(home, games.versions(home)["xess_xmx_linux"], a.allow_unpinned)
     if a.command == "xess-remove":
         return xess.remove_for_uninstall(home)
     if a.command == "refresh":
