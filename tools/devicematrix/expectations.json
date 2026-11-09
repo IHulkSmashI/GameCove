@@ -1,0 +1,784 @@
+{
+ "_doc": [
+  "Per-device expectations for the device matrix (app/tests/test_device_matrix.gd, harness app/tests/devicematrix/matrix.gd).",
+  "invariants: rules for every device. limits: slider ranges (ids are globs; numbers or devices.json row paths, a list = the largest present).",
+  "  dbus: values left in the fake steamos-manager/PowerStation props; hhd_tdp: hhd's TDP; root_set: numeric args of 'gamecove-fix-set <verb> set <n>'.",
+  "facts: what tested community projects know per handheld (cited). Checked whenever a matching control is registered and available:",
+  "  tdp: power.tdp* (not *boost*/*sppt*/*fppt*) min >= min, max <= max; *sppt*/*boost* max <= sppt_max (else max); *fppt* <= fppt_max (else sppt_max, max).",
+  "  rgb.present false: controller.rgb*/controller.led* must be unavailable. rgb.sysfs_leds: the LED class names gen.py creates (none = HID/EC only).",
+  "devices: exact checks your provider promises, keyed by device id or selector (*, generic, vendor:amd|intel, driver:amdgpu|xe|i915, stack:hhd|inputplumber|steamos-manager|powerstation).",
+  "  keys: available, reason_contains, kind, unit, min, max, min_ge, max_le, step, options_include, options_exclude, value, note; 'ac': {...} overrides for the charger-plugged scenario.",
+  "  A listed control id that no provider registers fails the test, so add entries in the same change as the provider.",
+  "_conflicts: where devices.json and these sources disagree (for whoever owns devices.json)."
+ ],
+ "_sources": {
+  "hhd": "https://github.com/hhd-dev/hhd @ 6f6045a5c07b8cdb60b6abd7e811534874b06e95 (2026-11-08)",
+  "huesync": "https://github.com/honjow/HueSync @ 7176803ce147d8bffef126720c21e4f42e0f3612 (2026-10-24)",
+  "sdtdp": "https://github.com/aarron-lee/SimpleDeckyTDP @ ab0128f04a9482b8154e660a61acbb3f760d4bba (2026-09-25)"
+ },
+ "invariants": {
+  "limits": [
+   {
+    "ids": [
+     "power.tdp*",
+     "power.*ppt*"
+    ],
+    "max_le": [
+     "tdp.boost_max",
+     "tdp.plugged_max"
+    ],
+    "min_ge": [
+     "tdp.min"
+    ],
+    "note": "never past devices.json's tested range"
+   },
+   {
+    "ids": [
+     "display.brightness"
+    ],
+    "min_gt": 0,
+    "note": "a 0 backlight is a black screen"
+   },
+   {
+    "ids": [
+     "power.charge_limit*"
+    ],
+    "min_ge": 50,
+    "max_le": 100
+   }
+  ],
+  "dbus": [
+   {
+    "prop": "TdpLimit",
+    "max_le": [
+     "tdp.boost_max",
+     "tdp.plugged_max"
+    ],
+    "min_ge": [
+     "tdp.min"
+    ]
+   },
+   {
+    "prop": "TDP",
+    "max_le": [
+     "tdp.boost_max",
+     "tdp.plugged_max"
+    ],
+    "min_ge": [
+     "tdp.min"
+    ]
+   },
+   {
+    "prop": "MaxChargeLevel",
+    "min_ge": 50,
+    "max_le": 100,
+    "allow": [
+     -1
+    ]
+   }
+  ],
+  "hhd_tdp": {
+   "max_le": [
+    "tdp.boost_max",
+    "tdp.plugged_max"
+   ],
+   "min_ge": [
+    "tdp.min"
+   ]
+  },
+  "root_set": {
+   "charge-limit": {
+    "min_ge": 50,
+    "max_le": 100
+   },
+   "tdp": {
+    "max_le": [
+     "tdp.boost_max",
+     "tdp.plugged_max"
+    ],
+    "min_ge": [
+     "tdp.min"
+    ]
+   }
+  }
+ },
+ "facts": {
+  "acer-predator-atlas-8": {
+   "tdp": {
+    "max": 40,
+    "source": "sdtdp:py_modules/cpu_utils.py#L30,L363-L393 (Intel max = RAPL constraint max, capped at INTEL_MAX_TDP 40)"
+   }
+  },
+  "aokzoe-a1": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": false,
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L149-L153 (AOKZOE_CONF rgb=False); hhd:src/hhd/device/oxp/const.py#L79-L85"
+   }
+  },
+  "aokzoe-a1-pro": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": false,
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L149-L153 (AOKZOE_CONF rgb=False); hhd:src/hhd/device/oxp/const.py#L79-L85"
+   }
+  },
+  "aokzoe-a1x": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L251-L254; hhd:src/hhd/device/oxp/const.py#L93-L96 (protocol hid_dual)"
+   }
+  },
+  "asus-rog-ally": {
+   "tdp": {
+    "min": 5,
+    "max": 30,
+    "max_dc": 25,
+    "sppt_max": 35,
+    "fppt_max": 35,
+    "source": "hhd:src/adjustor/core/const.py#L268-L281 ALLY_DATA, ASUS_DATA['ROG Ally RC71L']; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or sysfs (4 zones)",
+    "sysfs_leds": [
+     "ally:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/devices/asus_ally.py#L21,L44 (SYSFS_LED_PATHS ['ally','joystick_rings'], num_zones=4)"
+   }
+  },
+  "asus-rog-ally-x": {
+   "tdp": {
+    "min": 5,
+    "max": 30,
+    "max_dc": 25,
+    "sppt_max": 35,
+    "fppt_max": 35,
+    "source": "hhd:src/adjustor/core/const.py#L283-L296 ALLYX_DATA, ASUS_DATA['ROG Ally X RC72L']; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or sysfs (4 zones)",
+    "sysfs_leds": [
+     "ally:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/devices/asus_ally.py#L21,L44 (SYSFS_LED_PATHS ['ally','joystick_rings'], num_zones=4)"
+   }
+  },
+  "asus-rog-xbox-ally": {
+   "tdp": {
+    "min": 4,
+    "max": 20,
+    "sppt_max": 25,
+    "fppt_max": 25,
+    "source": "hhd:src/adjustor/core/const.py#L299-L312 XBOX_ALLY_DATA ('SPPT 20 FPPT 25')"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or sysfs (4 zones)",
+    "sysfs_leds": [
+     "ally:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/devices/asus_ally.py#L21,L44 (SYSFS_LED_PATHS ['ally','joystick_rings'], num_zones=4)"
+   }
+  },
+  "asus-rog-xbox-ally-x": {
+   "tdp": {
+    "min": 4,
+    "max": 35,
+    "sppt_max": 35,
+    "fppt_max": 35,
+    "source": "hhd:src/adjustor/core/const.py#L314-L327 XBOX_ALLYX_DATA; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or sysfs (4 zones)",
+    "sysfs_leds": [
+     "ally:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/devices/asus_ally.py#L21,L44 (SYSFS_LED_PATHS ['ally','joystick_rings'], num_zones=4)"
+   }
+  },
+  "asus-rog-xbox-ally-x20": {
+   "tdp": {
+    "min": 7,
+    "max": 35,
+    "sppt_max": 35,
+    "fppt_max": 35,
+    "source": "hhd:src/adjustor/core/const.py#L349 ASUS_DATA['ROG XBOX Ally X RC74X'] = XBOX_ALLYX_DATA with min_tdp 7; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or sysfs (4 zones)",
+    "sysfs_leds": [
+     "ally:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/devices/asus_ally.py#L21,L44 (SYSFS_LED_PATHS ['ally','joystick_rings'], num_zones=4)"
+   }
+  },
+  "ayaneo-2": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "ec or sysfs (ayaneo-platform)",
+    "sysfs_leds": [
+     "ayaneo:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/config.py#L54-L64 (LED_PATH_LIST), py_modules/devices/ayaneo.py"
+   }
+  },
+  "ayaneo-2s": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "ec or sysfs (ayaneo-platform)",
+    "sysfs_leds": [
+     "ayaneo:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/config.py#L54-L64 (LED_PATH_LIST), py_modules/devices/ayaneo.py"
+   }
+  },
+  "ayaneo-3": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "ec or sysfs (ayaneo-platform)",
+    "sysfs_leds": [
+     "ayaneo:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/config.py#L54-L64 (LED_PATH_LIST), py_modules/devices/ayaneo.py"
+   }
+  },
+  "ayaneo-air-1s": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "ec or sysfs (ayaneo-platform)",
+    "sysfs_leds": [
+     "ayaneo:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/config.py#L54-L64 (LED_PATH_LIST), py_modules/devices/ayaneo.py"
+   }
+  },
+  "ayaneo-air-plus": {
+   "rgb": {
+    "present": true,
+    "via": "ec or sysfs (ayaneo-platform)",
+    "sysfs_leds": [
+     "ayaneo:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/config.py#L54-L64 (LED_PATH_LIST), py_modules/devices/ayaneo.py"
+   }
+  },
+  "ayaneo-flip": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   }
+  },
+  "ayaneo-flip-1s-ds": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   }
+  },
+  "ayaneo-kun": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "ec or sysfs (ayaneo-platform)",
+    "sysfs_leds": [
+     "ayaneo:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/config.py#L54-L64 (LED_PATH_LIST), py_modules/devices/ayaneo.py"
+   }
+  },
+  "ayaneo-slide": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "ec or sysfs (ayaneo-platform)",
+    "sysfs_leds": [
+     "ayaneo:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/config.py#L54-L64 (LED_PATH_LIST), py_modules/devices/ayaneo.py"
+   }
+  },
+  "generic-intel": {
+   "tdp": {
+    "max": 40,
+    "source": "sdtdp:py_modules/cpu_utils.py#L30,L363-L393 (Intel max = RAPL constraint max, capped at INTEL_MAX_TDP 40)"
+   }
+  },
+  "gpd-win-4": {
+   "tdp": {
+    "min": 4,
+    "max": 28,
+    "fppt_max": 32,
+    "source": "hhd:src/adjustor/core/const.py#L175-L184 DEV_PARAMS_28W, DEV_DATA['G1618-04'/'G1617-01'/'G1619-04'] (L233-L235); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "ec",
+    "source": "huesync:py_modules/huesync.py#L116-L118 (GPD G1618-04 -> GPDLEDDevice)"
+   }
+  },
+  "gpd-win-5": {
+   "tdp": {
+    "min": 4,
+    "max": 85,
+    "fppt_max": 100,
+    "source": "hhd:src/adjustor/core/const.py#L198-L206 DEV_PARAMS_WIN5, DEV_DATA['G1618-05'] (L237); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   }
+  },
+  "gpd-win-max-2": {
+   "tdp": {
+    "min": 4,
+    "max": 28,
+    "fppt_max": 32,
+    "source": "hhd:src/adjustor/core/const.py#L175-L184 DEV_PARAMS_28W, DEV_DATA['G1618-04'/'G1617-01'/'G1619-04'] (L233-L235); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   }
+  },
+  "gpd-win-mini": {
+   "tdp": {
+    "min": 4,
+    "max": 28,
+    "fppt_max": 32,
+    "source": "hhd:src/adjustor/core/const.py#L175-L184 DEV_PARAMS_28W, DEV_DATA['G1618-04'/'G1617-01'/'G1619-04'] (L233-L235); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   }
+  },
+  "lenovo-legion-go": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "sppt_max": 32,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/drivers/lenovo/__init__.py#L62-L66 (go) and #L272 (steady clamped to >= 4)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid (tablet controllers)",
+    "source": "huesync:py_modules/huesync.py#L140-L150 (83E1 -> LegionGoTabletLEDDevice)"
+   }
+  },
+  "lenovo-legion-go-2": {
+   "tdp": {
+    "min": 4,
+    "max": 35,
+    "sppt_max": 37,
+    "fppt_max": 45,
+    "source": "hhd:src/adjustor/drivers/lenovo/__init__.py#L57-L60 (go2)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "sysfs (hid-lenovo-go)",
+    "sysfs_leds": [
+     "go:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/devices/legion_go2.py#L12; huesync.py#L140-L150"
+   }
+  },
+  "lenovo-legion-go-2-z2": {
+   "tdp": {
+    "min": 4,
+    "max": 35,
+    "sppt_max": 37,
+    "fppt_max": 45,
+    "source": "hhd:src/adjustor/drivers/lenovo/__init__.py#L57-L60 (go2)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "sysfs (hid-lenovo-go)",
+    "sysfs_leds": [
+     "go:rgb:joystick_rings"
+    ],
+    "source": "huesync:py_modules/devices/legion_go2.py#L12; huesync.py#L140-L150"
+   }
+  },
+  "lenovo-legion-go-s-z1e": {
+   "tdp": {
+    "min": 4,
+    "max": 40,
+    "max_dc": 33,
+    "sppt_max": 43,
+    "fppt_max": 53,
+    "source": "hhd:src/adjustor/drivers/lenovo/__init__.py#L49-L55 (gos: 'AC 40/43/53W, DC 33/33/43W')"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid",
+    "source": "huesync:py_modules/huesync.py#L151-L153 (LegionGoSLEDDevice)"
+   }
+  },
+  "lenovo-legion-go-s-z2go": {
+   "tdp": {
+    "min": 4,
+    "max": 40,
+    "max_dc": 33,
+    "sppt_max": 43,
+    "fppt_max": 53,
+    "source": "hhd:src/adjustor/drivers/lenovo/__init__.py#L49-L55 (gos: 'AC 40/43/53W, DC 33/33/43W')"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid",
+    "source": "huesync:py_modules/huesync.py#L151-L153 (LegionGoSLEDDevice)"
+   }
+  },
+  "msi-claw-7-ai-plus": {
+   "tdp": {
+    "min": 8,
+    "max": 30,
+    "sppt_max": 37,
+    "source": "hhd:src/adjustor/core/const.py#L371-L387 CLAW_AI_DATA, MSI_DATA['MS-1T42'/'MS-1T52']"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid",
+    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+   }
+  },
+  "msi-claw-8-ai-plus": {
+   "tdp": {
+    "min": 8,
+    "max": 30,
+    "sppt_max": 37,
+    "source": "hhd:src/adjustor/core/const.py#L371-L387 CLAW_AI_DATA, MSI_DATA['MS-1T42'/'MS-1T52']"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid",
+    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+   }
+  },
+  "msi-claw-8-ex": {
+   "tdp": {
+    "min": 8,
+    "max": 35,
+    "sppt_max": 45,
+    "source": "hhd:src/adjustor/core/const.py#L408-L414 CLAW_EX_DATA, MSI_DATA['MS-1T91']"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid",
+    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+   }
+  },
+  "msi-claw-a1m": {
+   "tdp": {
+    "min": 8,
+    "max": 43,
+    "sppt_max": 45,
+    "source": "hhd:src/adjustor/core/const.py#L353-L369 CLAW_DATA, MSI_DATA['MS-1T41']"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid",
+    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+   }
+  },
+  "msi-claw-a8": {
+   "tdp": {
+    "min": 7,
+    "max": 35,
+    "sppt_max": 40,
+    "fppt_max": 48,
+    "source": "hhd:src/adjustor/core/const.py#L389-L406 CLAW_8A_DATA, MSI_DATA['MS-1T8K']"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid",
+    "source": "huesync:py_modules/huesync.py#L110-L112 (MSILEDDevice); hhd:src/hhd/device/claw/const.py"
+   }
+  },
+  "onexplayer-2": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": false,
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L141-L145 (OXP_2_CONF rgb=False); hhd:src/hhd/device/oxp/const.py#L71-L77"
+   }
+  },
+  "onexplayer-2-pro": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": false,
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L141-L145 (OXP_2_CONF rgb=False); hhd:src/hhd/device/oxp/const.py#L71-L77"
+   }
+  },
+  "onexplayer-3": {
+   "tdp": {
+    "min": 3,
+    "max": 40,
+    "sppt_max": 42,
+    "source": "hhd:src/adjustor/core/const.py#L19-L25 INTEL_TDP_PRESETS['ONEXPLAYER 3'] (minTdp 3, pl1 40, pl2 42)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "sysfs (oxpec)",
+    "sysfs_leds": [
+     "oxp:rgb:joystick_rings",
+     "oxp:rgb:guide_button",
+     "oxp:rgb:rear_logo"
+    ],
+    "source": "huesync:py_modules/devices/onexplayer3.py#L16-L20 (ZONE_DIRS)"
+   }
+  },
+  "onexplayer-g1-amd": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or serial",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L160-L230 (device map, rgb=True)"
+   }
+  },
+  "onexplayer-g1-intel": {
+   "tdp": {
+    "max": 30,
+    "sppt_max": 32,
+    "source": "hhd:src/adjustor/core/const.py#L19-L25 INTEL_TDP_PRESETS (pl1 30, pl2 32)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or serial",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L160-L230 (device map, rgb=True)"
+   }
+  },
+  "onexplayer-onexfly-apex": {
+   "tdp": {
+    "min": 4,
+    "max": 120,
+    "fppt_max": 120,
+    "source": "hhd:src/adjustor/core/const.py#L186-L196 DEV_PARAMS_AIMAX via CPU_DATA['AMD RYZEN AI MAX+ 395'] (L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or serial",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L160-L230 (device map, rgb=True)"
+   }
+  },
+  "onexplayer-onexfly-f1": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or serial",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L160-L230 (device map, rgb=True)"
+   }
+  },
+  "onexplayer-onexfly-f1-pro": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W (= HX370), DEV_DATA['ONEXPLAYER F1Pro'] (L230); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or serial",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L160-L230 (device map, rgb=True)"
+   }
+  },
+  "onexplayer-super-x": {
+   "tdp": {
+    "min": 4,
+    "max": 120,
+    "fppt_max": 120,
+    "source": "hhd:src/adjustor/core/const.py#L186-L196 DEV_PARAMS_AIMAX via CPU_DATA['AMD RYZEN AI MAX+ 395'] (L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   }
+  },
+  "onexplayer-x1-amd": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or serial",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L160-L230 (device map, rgb=True)"
+   }
+  },
+  "onexplayer-x1-intel": {
+   "tdp": {
+    "max": 30,
+    "sppt_max": 32,
+    "source": "hhd:src/adjustor/core/const.py#L19-L25 INTEL_TDP_PRESETS (pl1 30, pl2 32)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or serial",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L160-L230 (device map, rgb=True)"
+   }
+  },
+  "onexplayer-x1-mini": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or serial",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L160-L230 (device map, rgb=True)"
+   }
+  },
+  "onexplayer-x1-pro": {
+   "tdp": {
+    "min": 4,
+    "max": 30,
+    "fppt_max": 41,
+    "source": "hhd:src/adjustor/core/const.py#L141-L150 DEV_PARAMS_30W via CPU_DATA (6800U/7840U/8840U/HX 370, L248-L265); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   },
+   "rgb": {
+    "present": true,
+    "via": "hid or serial",
+    "source": "huesync:py_modules/devices/onexplayer_configs.py#L160-L230 (device map, rgb=True)"
+   }
+  },
+  "orangepi-neo": {
+   "tdp": {
+    "min": 4,
+    "max": 28,
+    "fppt_max": 32,
+    "source": "hhd:src/adjustor/core/const.py#L175-L184 DEV_PARAMS_28W, DEV_DATA['NEO-01'] (L227); hhd:src/adjustor/drivers/smu/__init__.py#L107-L110 (QAM slider = stapm smin..smax)"
+   }
+  },
+  "steam-deck-lcd": {
+   "tdp": {
+    "min": 3,
+    "max": 20,
+    "source": "sdtdp:src/utils/constants.tsx#L11,L17 (MIN_TDP_RANGE 3, STEAM_DECK_MAX_TDP 20)"
+   }
+  },
+  "steam-deck-oled": {
+   "tdp": {
+    "min": 3,
+    "max": 20,
+    "source": "sdtdp:src/utils/constants.tsx#L11,L17 (MIN_TDP_RANGE 3, STEAM_DECK_MAX_TDP 20)"
+   }
+  },
+  "zotac-zone": {
+   "rgb": {
+    "present": true,
+    "via": "hid",
+    "source": "huesync:py_modules/devices/zotac.py#L61"
+   }
+  }
+ },
+ "devices": {},
+ "_examples": {
+  "lenovo-legion-go-s-z2go": {
+   "power.tdp": {
+    "available": true,
+    "min": 5,
+    "max": 33,
+    "unit": "W"
+   }
+  },
+  "stack:hhd": {
+   "controller.gyro": {
+    "available": true
+   }
+  },
+  "aokzoe-a1": {
+   "controller.rgb": {
+    "available": false,
+    "reason_contains": "no RGB"
+   }
+  }
+ },
+ "_conflicts": [
+  "aokzoe-a1, aokzoe-a1-pro: devices.json rgb via oxp-ec, HueSync and hhd: no RGB (rgb=False)",
+  "aokzoe-a1x, onexplayer-g1-amd, onexplayer-g1-intel, gpd-win-4: devices.json rgb null, HueSync drives RGB on them",
+  "lenovo-legion-go-s-*: devices.json plugged_max 33; hhd allows 40 W on AC (33 W on battery) - devices.json is the safer side",
+  "steam-deck-*: devices.json max 15 W; SimpleDeckyTDP's slider goes to 20 W - devices.json is the safer side",
+  "msi-claw-a8: devices.json tdp.min 8, hhd min_tdp 7 - devices.json is the safer side",
+  "aokzoe-a1: devices.json plugged_max 33 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
+  "asus-rog-xbox-ally-x: devices.json boost_max 45 W > 35 W known safe",
+  "asus-rog-xbox-ally-x20: devices.json boost_max 45 W > 35 W known safe",
+  "asus-rog-xbox-ally-x20: devices.json tdp.min 5 W < 7 W known to work",
+  "ayaneo-2: devices.json plugged_max 33 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
+  "gpd-win-4: devices.json boost_max 33 W > 32 W known safe",
+  "gpd-win-max-2: devices.json boost_max 33 W > 32 W known safe",
+  "gpd-win-mini: devices.json boost_max 33 W > 32 W known safe",
+  "onexplayer-2: devices.json plugged_max 33 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
+  "onexplayer-3: devices.json boost_max 52 W > 42 W known safe",
+  "onexplayer-g1-amd: devices.json plugged_max 35 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
+  "onexplayer-g1-intel: devices.json plugged_max 35 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
+  "onexplayer-g1-intel: devices.json boost_max 40 W > 32 W known safe",
+  "onexplayer-x1-intel: devices.json plugged_max 35 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
+  "onexplayer-x1-intel: devices.json boost_max 40 W > 32 W known safe"
+ ]
+}
