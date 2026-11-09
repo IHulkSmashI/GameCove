@@ -32,6 +32,7 @@ const MANAGER_IFACE := "org.shadowblip.InputManager"
 const DEVICE_IFACE := "org.shadowblip.Input.CompositeDevice"
 const FF_IFACE := "org.shadowblip.Output.ForceFeedback"
 const OM_IFACE := "org.freedesktop.DBus.ObjectManager"
+const TARGET_IFACE := "org.shadowblip.Input.Target"
 const CACHE_MS := 1500
 
 var ctx: Dictionary = {}
@@ -133,9 +134,12 @@ func _read_ip() -> Dictionary:
 	if version == null:
 		return {}
 	var objs: Variant = bus.call_method(SERVICE, ROOT_PATH, OM_IFACE, "GetManagedObjects")
-	var devices: Array = _parse_devices(objs[0] if objs is Array and objs.size() > 0 else {})
+	var tree: Variant = objs[0] if objs is Array and objs.size() > 0 else {}
+	var devices: Array = _parse_devices(tree)
 	var order: Variant = bus.get_prop(SERVICE, MANAGER_PATH, MANAGER_IFACE, "GamepadOrder")
 	var dev := _pick(devices, order if order is Array else [])
+	if not dev.is_empty():
+		dev["targets"] = live_targets(tree, dev["path"])
 	var out := {"version": str(version), "device": dev, "profile": {}, "rumble": null}
 	if dev.is_empty():
 		return out
@@ -146,6 +150,32 @@ func _read_ip() -> Dictionary:
 		var en: Variant = bus.get_prop(SERVICE, dev["path"], FF_IFACE, "Enabled")
 		out["rumble"] = bool(en) if en != null else null
 	return out
+
+
+## The kinds of virtual devices InputPlumber runs for a composite device now, in its
+## order: TargetDevices (paths) -> each target object's DeviceType ("deck-uhid", "mouse",
+## ...). What another tool set with SetTargetDevices (OpenGamepadUI, Steam) shows here,
+## not in the profile. [] when InputPlumber doesn't list them.
+static func live_targets(objs: Variant, dev_path: String) -> Array:
+	var out: Array = []
+	if not objs is Dictionary or not objs.get(dev_path) is Dictionary:
+		return out
+	var props: Variant = objs[dev_path].get(DEVICE_IFACE)
+	if not props is Dictionary:
+		return out
+	for p in _val(props, "TargetDevices", []):
+		var t: Variant = objs.get(str(p))
+		var tp: Variant = t.get(TARGET_IFACE) if t is Dictionary else null
+		if tp is Dictionary:
+			var kind := str(_val(tp, "DeviceType", ""))
+			if kind != "":
+				out.append(kind)
+	return out
+
+
+## Live target kinds of the picked device (see live_targets), [] when unknown.
+func ip_live_targets() -> Array:
+	return ip().get("device", {}).get("targets", [])
 
 
 static func _val(props: Dictionary, key: String, fallback: Variant) -> Variant:

@@ -41,9 +41,12 @@ const EMULATION_LABELS := {
 	"xbox-elite": "Xbox Elite", "xbox-series": "Xbox Series", "xb360": "Xbox 360", "hori-steam": "Steam Controller (HORI)",
 	"dualsense": "DualSense", "dualsense_edge": "DualSense Edge", "uinput": "Xbox", "xbox_elite": "Xbox Elite",
 	"hori_steam": "Steam Controller", "disabled": "Paused", "hidden": "Hidden",
+	"none": "No gamepad", "gamepad": "Generic gamepad",
 }
 ## InputPlumber gamepad types offered (the rest stay reachable through a profile file).
 const IP_EMULATION := ["default", "deck", "ds5-edge", "xbox-elite", "xbox-series", "ds5", "xb360"]
+## InputPlumber target kinds that are one of the choices above under another name.
+const EMULATION_ALIASES := {"deck-uhid": "deck"}
 const EFFECT_LABELS := {
 	"off": "Off", "disabled": "Off", "solid": "Solid", "pulse": "Pulse", "strobe": "Strobe", "rainbow": "Rainbow",
 	"spiral": "Spiral", "cycle": "Colour cycle", "duality": "Two colours", "frostfire": "Frostfire",
@@ -74,6 +77,8 @@ var row: Dictionary = {}
 var hw: Dictionary = {}
 ## Last non-off hhd gyro mode (Legion Go: left / right / both), for gyro on.
 var _hhd_imu_mode := "left"
+## InputPlumber's target kinds as GameCove first found them (controller.emulation put-back).
+var _ip_first_targets: Array = []
 var _desktop_speed := IpEdit.DESKTOP_SPEED_DEFAULT
 
 
@@ -287,7 +292,11 @@ func _emulation() -> RefCounted:
 		func(c):
 			match be.controller_backend():
 				"inputplumber":
-					c.options = _opts(IP_EMULATION, EMULATION_LABELS)
+					var vals: Array = IP_EMULATION.duplicate()
+					var now := _ip_emulation_now()
+					if not now in vals:
+						vals.append(now)   # what another tool set (hori-steam, gamepad...): shown, not lost
+					c.options = _opts(vals, EMULATION_LABELS)
 					c.default_value = "default"
 					return ""
 				"hhd":
@@ -309,12 +318,7 @@ func _emulation() -> RefCounted:
 		func(_c):
 			if be.controller_backend() == "hhd":
 				return str(be.hhd_ctl([_hhd_mode_key(), "mode"]))
-			var p: Dictionary = be.ip_profile()
-			var t := IpEdit.gamepad_target(p)
-			var conf := be.ip_config_targets()
-			if t == "" or (p.get("target_devices") is Array and p["target_devices"] == conf):
-				return "default"
-			return t if t in IP_EMULATION else "default",
+			return _ip_emulation_now(),
 		func(_c, v):
 			if be.controller_backend() == "hhd":
 				var path: Array = ["controllers", be.hhd_key(), _hhd_mode_key(), "mode"]
@@ -328,8 +332,45 @@ func _emulation() -> RefCounted:
 						q["target_devices"] = conf.duplicate()
 						return q,
 					func(p): return p.get("target_devices") is Array and p["target_devices"] == conf)
-			return be.ip_apply(func(p): return IpEdit.set_gamepad_target(p, v, conf),
-				func(p): return IpEdit.gamepad_target(p) == v))
+			# the exact list GameCove first found when it is that choice again (deck-uhid
+			# stays deck-uhid, mouse and keyboard stay): a put-back restores what was there
+			var want := str(v)
+			var base := conf
+			if _ip_first_targets.size() > 0 and emulation_choice(_ip_first_targets, conf) == want:
+				want = IpEdit.gamepad_target({"target_devices": _ip_first_targets})
+				base = _ip_first_targets
+			return be.ip_apply(func(p): return IpEdit.set_gamepad_target(p, want, base),
+				func(p): return IpEdit.gamepad_target(p) == want))
+
+
+## InputPlumber's live target kinds when it lists them, else the profile's.
+func _ip_targets_now() -> Array:
+	var live: Array = be.ip_live_targets()
+	if not live.is_empty():
+		return live
+	var p: Dictionary = be.ip_profile()
+	return p["target_devices"] if p.get("target_devices") is Array else []
+
+
+## The controller.emulation value for what InputPlumber emulates now; the first list seen
+## is kept so writing that choice again puts the very same targets back.
+func _ip_emulation_now() -> String:
+	var t := _ip_targets_now()
+	if _ip_first_targets.is_empty() and not t.is_empty():
+		_ip_first_targets = t.duplicate()
+	return emulation_choice(t, be.ip_config_targets())
+
+
+## "default" only when the targets are the device config's own; else the gamepad kind as a
+## GameCove choice (deck-uhid is a Steam Deck too). Kinds outside IP_EMULATION come back
+## as themselves (detect adds them as options) rather than a wrong "default".
+static func emulation_choice(targets: Array, conf: Array) -> String:
+	if targets.is_empty() or (not conf.is_empty() and targets == conf):
+		return "default"
+	var g := IpEdit.gamepad_target({"target_devices": targets})
+	if g == "":
+		return "default" if conf.is_empty() else "none"
+	return EMULATION_ALIASES.get(g, g)
 
 
 # ---- buttons ------------------------------------------------------------------------

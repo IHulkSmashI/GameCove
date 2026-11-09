@@ -214,6 +214,50 @@ func test_claw_nintendo_desktop_emulation_reset() -> void:
 	reg.free()
 
 
+## The live Claw: OpenGamepadUI had set TargetDevices deck-uhid ("Valve Steam Deck
+## Controller") + mouse + keyboard with SetTargetDevices; the device config's own targets
+## are xbox-elite, mouse, keyboard. GameCove read "default", and a probe's put-back to
+## "default" replaced the user's Steam Deck controller with an Xbox Elite pad.
+func test_claw_live_emulation_reads_and_restores_the_live_targets() -> void:
+	var f: RefCounted = Fakes.new(_root("claw_live_emulation"))
+	f.with_ip("MSI Claw 8 EX", CLAW_CAPS)
+	Fakes.write(f.sys_root + "/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml",
+		"version: 1\nkind: CompositeDevice\nname: MSI Claw 8 EX\ntarget_devices:\n  - xbox-elite\n  - mouse\n  - keyboard\n")
+	var live := {"targets": ["deck-uhid", "mouse", "keyboard"]}
+	var names := {"deck-uhid": "Valve Steam Deck Controller", "xbox-elite": "Microsoft X-Box One Elite pad",
+		"xbox-series": "Microsoft Xbox Series S|X Controller", "mouse": "InputPlumber Mouse", "keyboard": "InputPlumber Keyboard"}
+	var inner: Callable = f.runner.handler
+	f.runner.handler = func(cmd: String) -> Variant:
+		var r: Variant = inner.call(cmd)
+		if cmd.ends_with("org.freedesktop.DBus.ObjectManager GetManagedObjects") and r is Dictionary:
+			var j: Dictionary = JSON.parse_string(r["out"])
+			var objs: Dictionary = j["data"][0]
+			var paths := []
+			for i in live["targets"].size():
+				var tp := "/org/shadowblip/InputPlumber/devices/target/%s%d" % [live["targets"][i], i]
+				paths.append(tp)
+				objs[tp] = {"org.shadowblip.Input.Target": {"Name": {"type": "s", "data": names.get(live["targets"][i], "")},
+					"DeviceType": {"type": "s", "data": live["targets"][i]}}}
+			objs[Fakes.DEV][Fakes.DEV_IFACE]["TargetDevices"] = {"type": "as", "data": paths}
+			return {"code": 0, "out": JSON.stringify(j)}
+		if cmd.contains(" LoadProfileFromYaml s ") and r is Dictionary and int(r["code"]) == 0:
+			var p: Variant = JSON.parse_string(cmd.get_slice(" LoadProfileFromYaml s ", 1))
+			if p is Dictionary and p.get("target_devices") is Array:
+				live["targets"] = (p["target_devices"] as Array).duplicate()
+		return r
+	var reg := _setup(f, _row("msi-claw-8-ex"))
+	eq(_value(reg, "controller.emulation"), "deck", "deck-uhid is the Steam Deck choice, not default")
+	ok(_w(reg, "controller.emulation", "xbox-series"), "probe: Xbox Series")
+	eq(live["targets"], ["xbox-series", "mouse", "keyboard"])
+	ok(_w(reg, "controller.emulation", "deck"), "put back")
+	eq(live["targets"], ["deck-uhid", "mouse", "keyboard"], "the exact list that was there")
+	eq(_value(reg, "controller.emulation"), "deck")
+	ok(_w(reg, "controller.emulation", "default"), "default")
+	eq(live["targets"], ["xbox-elite", "mouse", "keyboard"], "the device config's own")
+	eq(_value(reg, "controller.emulation"), "default", "default only when equal to the config's targets")
+	reg.free()
+
+
 func test_claw_rumble() -> void:
 	var t := _claw("claw_rumble")
 	var reg: Node = t[0]
