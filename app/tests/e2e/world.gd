@@ -116,7 +116,10 @@ func _wire_services() -> void:
 	power.setup(fake, row, root, hhd)
 	power.config_path = home.path_join(".config/gamecove/power.cfg")
 	power.autotune_opts = power.AUTOTUNE_DEFAULTS.duplicate()
-	# what an earlier test left in Power's memory (a fresh start has none of it)
+	# what an earlier test left in Power's memory (a fresh start has none of it):
+	# Auto TDP from a game (Legion Go S: "battery" goal by default) stops first
+	if power._autotune_on:
+		power.run_sync(func(): power.autotune_stop(); return true)
 	power._autotune_on = false
 	power._autotune_stopping = false
 	power._user_tdp = -1.0
