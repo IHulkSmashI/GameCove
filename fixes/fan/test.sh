@@ -228,4 +228,13 @@ R="$(new_hw oxp_ec 1 manual)"; export GAMECOVE_ROOT="$R"
 set +e; sh "$FIX" set curve:50,60 2>/dev/null; code=$?; set -e
 [ "$code" = "2" ] || fail "oxp: no curve on a one-duty driver (got $code)"
 rm -rf "$R"
+# review L1: changes.log is capped (over GAMECOVE_LOG_MAX it becomes changes.log.1)
+R="$(new_hw msi_wmi_platform 2)"; export GAMECOVE_ROOT="$R"
+dmi "$R" "Micro-Star International Co., Ltd." "Claw A1M" "MS-1T41"
+for m in quiet max quiet max quiet max quiet max; do GAMECOVE_LOG_MAX=150 sh "$FIX" set "$m" >/dev/null || fail "log cap: set $m"; done
+L="$R/var/lib/gamecove/fixes/fan/changes.log"
+[ -f "$L.1" ] || fail "changes.log rotated to changes.log.1"
+[ "$(wc -c <"$L")" -le 300 ] || fail "changes.log stays near the cap ($(wc -c <"$L") bytes)"
+tail -n 1 "$L" | grep -q "set max" || fail "newest line kept after rotation"
+rm -rf "$R"
 echo "fan: all passed"

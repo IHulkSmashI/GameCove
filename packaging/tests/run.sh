@@ -109,6 +109,12 @@ expect_code 3 "fix failure propagates" gf dummy set boom
 contains "$LOG" "action=set value=boom result=fail(3)" "failure logged"
 expect_code 7 "broken fix" gf broken install
 contains "$LOG" "fix=broken action=install value=- result=fail(7)" "broken logged"
+# review L1: the log is capped; over the limit it becomes changes.log.1 and a new one starts
+rm -f "$LOG.1"
+for i in 1 2 3 4 5 6; do GAMECOVE_LOG_MAX=300 gf dummy set "$i" >/dev/null 2>&1; done
+if [ -f "$LOG.1" ]; then ok; else bad "log rotated to changes.log.1 once over the cap"; fi
+if [ "$(wc -c <"$LOG")" -le 600 ]; then ok; else bad "log stays near the cap ($(wc -c <"$LOG") bytes)"; fi
+contains "$LOG" "value=6 result=ok" "newest line kept after rotation"
 
 lines_before="$(wc -l <"$LOG")"
 expect_code 0 "status" gf dummy status

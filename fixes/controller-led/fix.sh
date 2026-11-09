@@ -41,12 +41,15 @@ set -eu
 
 ROOT="${GAMECOVE_ROOT:-}"
 STATE="$ROOT/var/lib/gamecove/fixes/controller-led"
+# shellcheck source=fixes/lib/logcap.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/logcap.sh"
 LEDS="$ROOT/sys/class/leds"
 
 die() { printf 'controller-led: %s\n' "$2" >&2; exit "$1"; }
 
 log_change() {
 	mkdir -p "$STATE"
+	log_cap "$STATE/changes.log"
 	printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$STATE/changes.log"
 }
 

@@ -78,6 +78,7 @@ die() { printf 'fan: %s\n' "$2" >&2; exit "$1"; }
 
 log_change() {
 	mkdir -p "$STATE"
+	log_cap "$STATE/changes.log"
 	printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$STATE/changes.log"
 }
 

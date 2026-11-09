@@ -53,6 +53,7 @@ gc_die() { printf '%s: %s\n' "$NAME" "$2" >&2; exit "$1"; }
 
 gc_log() {
 	mkdir -p "$STATE" 2>/dev/null || true
+	log_cap "$STATE/changes.log"
 	printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >>"$STATE/changes.log" 2>/dev/null || true
 	if [ -n "${GAMECOVE_CHANGES_LOG:-}" ]; then
 		printf '%s fix=%s detail=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$NAME" "$1" >>"$GAMECOVE_CHANGES_LOG" 2>/dev/null || true

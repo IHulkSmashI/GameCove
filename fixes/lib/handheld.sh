@@ -10,6 +10,8 @@
 #                  removed on exit. Waits up to 30 s, then fails.
 
 HANDHELDS="$(cd "$(dirname "$0")/../lib" && pwd)/handhelds.txt"
+# shellcheck source=fixes/lib/logcap.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/logcap.sh"
 
 _dmi() {
 	# lower case, outer spaces trimmed; fails when the file is missing
