@@ -1554,6 +1554,54 @@
     "reason_contains": "turn this screen off",
     "note": "switching HDR can leave this OLED dark"
    }
+  },
+  "asus-rog-ally@steamos-3.10": {
+   "_source": "tools/devicematrix/overrides.json asus-rog-ally@steamos-3.10 (read live)",
+   "power.charge_limit": {
+    "available": true,
+    "min": 50,
+    "max": 100,
+    "value": 100,
+    "note": "steamos-manager MaxChargeLevel -1 = no limit set; prompt-free"
+   },
+   "power.fan_mode": {
+    "available": true,
+    "options_include": [
+     "quiet",
+     "auto",
+     "max"
+    ],
+    "options_exclude": [
+     "firmware"
+    ]
+   },
+   "power.fan_curve": {
+    "available": true,
+    "note": "asus_custom_fan_curve, 8 points"
+   },
+   "power.gpu_profile": {
+    "available": false,
+    "reason_contains": "offers no GPU power profiles"
+   },
+   "controller.led_color": {
+    "available": true,
+    "value": "#ff8000",
+    "note": "packed 0xRRGGBB zones"
+   },
+   "controller.led_color_2": {
+    "available": false,
+    "reason_contains": "one zone"
+   },
+   "controller.gyro": {
+    "available": false,
+    "reason_contains": "can't switch it off",
+    "note": "InputPlumber 0.78 legacy Gamepad:Gyro"
+   },
+   "controller.emulation": {
+    "available": true,
+    "value": "deck",
+    "note": "TargetDevices gamepad1 = deck-uhid"
+   }
   }
  },
  "_examples": {

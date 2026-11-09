@@ -653,8 +653,10 @@ static func critical_problems(root: String, row: Dictionary) -> Array[String]:
 		var m := _num(lp + "/max_brightness")
 		if _num(lp + "/brightness") < 0 or _num(lp + "/brightness") > m:
 			out.append("led %s brightness out of 0..%s" % [led, m])
+		# a packed "rgb" channel (hid-asus-ally) holds 0xRRGGBB
+		var top := 0xffffff if _read(lp + "/multi_index").begins_with("rgb") else 255
 		for part in _read(lp + "/multi_intensity").split(" ", false):
-			if not part.is_valid_int() or part.to_int() < 0 or part.to_int() > 255:
+			if not part.is_valid_int() or part.to_int() < 0 or part.to_int() > top:
 				out.append("led %s multi_intensity %s" % [led, _read(lp + "/multi_intensity")])
 				break
 	# PPT firmware attributes
@@ -693,10 +695,10 @@ static func critical_problems(root: String, row: Dictionary) -> Array[String]:
 		var p := root + "/sys/class/power_supply/" + ps
 		if FileAccess.file_exists(p + "/charge_control_end_threshold"):
 			var v := _num(p + "/charge_control_end_threshold")
-			# msi-wmi-platform reads 0 while the EC has no limit set (gen.py); GameCove never
-			# writes 0 there (it would be a 0 % limit): "no limit" is written as 100
-			var msi_unset: bool = v == 0 and "msi-wmi-platform" in (row.get("traits", {}).get("ec", []) if row.get("traits") is Dictionary and row["traits"].get("ec") is Array else [])
-			if (v < 50 or v > 100) and not msi_unset:
+			# 0 is "never set" (msi-wmi-platform on the Claws, asus-wmi on the Ally); GameCove
+			# never writes it (on MSI's EC it would be a 0 % limit): "no limit" is written as 100,
+			# and writes are checked by the root_set / D-Bus rules
+			if (v < 50 or v > 100) and v != 0:
 				out.append("%s charge_control_end_threshold = %s (allowed 50..100)" % [ps, v])
 		if FileAccess.file_exists(p + "/charge_behaviour"):
 			var v := _read(p + "/charge_behaviour").replace("[", "").replace("]", "")

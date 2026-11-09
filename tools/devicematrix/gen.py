@@ -41,7 +41,11 @@ marked "stand-in" below; overrides.json next to this file corrects a single
 device without touching code: {"<device id>": {"cpu_model": "...", "threads": 16,
 "leds": ["name"], "backlight": "name", "files": {"/sys/...": "value"},
 "controller": "inputplumber" | "hhd" (the stack's controller service), "stack_add": ["steamos-manager"],
-"battery": "BAT1", "sm_charge": 0 (steamos-manager MaxChargeLevel)}}.
+"battery": "BAT1", "sm_charge": 0 (steamos-manager MaxChargeLevel), "stack_remove": ["powerstation"],
+"charge_threshold": 0, "os": "steamos-3.10", "ip_version": "0.78.0", "ip_targets": ["deck-uhid", ...],
+"led_abi": "hid-asus-ally", "sm_gpu_profiles": [], "hwmon_extra": {"asus": {"pwm1_enable": 2}}}}.
+A key "<row id>@<variant>" with "base": "<row id>" builds one more fixture of that row as it was
+seen on a real setup (expect_row is the base row), so a live finding gets its own fixture.
 
 Generic rules (from tested sources, so siblings get them through devices.json):
   * LED nodes whose expectations fact says "abi": "hid-msi" get hid-msi's attribute set
@@ -259,9 +263,14 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
     t.w("/sys/class/dmi/id/bios_vendor", dmi["sys_vendor"])
     t.w("/sys/class/dmi/id/bios_version", "DM1.00")
     t.w("/sys/class/dmi/id/chassis_type", "31")
-    t.w("/proc/sys/kernel/osrelease", "6.17.7-ba14.fc43.x86_64")
-    t.w("/etc/os-release", 'NAME="Bazzite"\nID=bazzite\nID_LIKE="fedora"\nVERSION_ID=43\nVARIANT_ID=bazzite-deck\n'
-        'PRETTY_NAME="Bazzite 43 (FROM Fedora Kinoite)"')
+    if override.get("os") == "steamos-3.10":
+        t.w("/proc/sys/kernel/osrelease", "7.2.4-valve1-1-neptune")
+        t.w("/etc/os-release", 'NAME="SteamOS"\nID=steamos\nID_LIKE=arch\nVERSION_ID=3.10\nBUILD_ID=20260924.1000\n'
+            'PRETTY_NAME="SteamOS"\nVARIANT_ID=steamdeck')
+    else:
+        t.w("/proc/sys/kernel/osrelease", "6.17.7-ba14.fc43.x86_64")
+        t.w("/etc/os-release", 'NAME="Bazzite"\nID=bazzite\nID_LIKE="fedora"\nVERSION_ID=43\nVARIANT_ID=bazzite-deck\n'
+            'PRETTY_NAME="Bazzite 43 (FROM Fedora Kinoite)"')
 
     # CPU
     lines = []
@@ -396,6 +405,13 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
             t.w(f"{hwmon}/pwm1_enable", "0" if name == "oxpec" else "2")
         hw += 1
 
+    for hname, files in (override.get("hwmon_extra") or {}).items():
+        hwmon = f"/sys/class/hwmon/hwmon{hw}"
+        t.w(f"{hwmon}/name", hname)
+        for k, v in files.items():
+            t.w(f"{hwmon}/{k}", v)
+        hw += 1
+
     # Power supply
     ac = "ACAD" if row["id"].startswith("steam-deck") else ("AC0" if maker.startswith("asus") else "ADP1")
     bat = override.get("battery") or ("BAT1" if row["id"].startswith("steam-deck") else "BAT0")
@@ -415,7 +431,9 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
     via = row.get("charge_limit_via")
     behaviour = via == "sysfs" and maker.startswith("ayaneo")
     msi_ec = "msi-wmi-platform" in ((row.get("traits") or {}).get("ec") or [])
-    if row.get("charge_limit") and (via in ("sysfs", "fix") or msi_ec) and not behaviour:
+    if "charge_threshold" in override:
+        t.w(f"{b}/charge_control_end_threshold", override["charge_threshold"])
+    elif row.get("charge_limit") and (via in ("sysfs", "fix") or msi_ec) and not behaviour:
         t.w(f"{b}/charge_control_end_threshold", 0 if msi_ec else 100)
     if behaviour or (via == "sysfs" and fan == "oxp_ec"):
         t.w(f"{b}/charge_behaviour", "[auto] inhibit-charge")
@@ -433,7 +451,7 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
     rgb = row.get("rgb") or {}
     leds = override.get("leds")
     fact = facts.get(did, {}).get("rgb") or {}
-    abi = fact.get("abi", "")
+    abi = override.get("led_abi") or fact.get("abi", "")
     if leds is None:
         fact = facts.get(did, {}).get("rgb")
         if fact is not None:
@@ -447,6 +465,11 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
         t.w(f"{lp}/multi_index", "red green blue")
         t.w(f"{lp}/multi_intensity", "255 255 255")
         t.w(f"{lp}/trigger", "[none]")
+        if abi == "hid-asus-ally":   # packed 0xRRGGBB per zone, 0644 root (SteamOS 3.10, original Ally)
+            t.w(f"{lp}/multi_index", "rgb rgb rgb rgb")
+            t.w(f"{lp}/multi_intensity", "16744448 16744448 16744448 16744448")
+            t.w(f"{lp}/sleep_animation", 0)
+            t.w(f"{lp}/sleep_animation_index", "0 1")
         if abi == "hid-msi":   # drivers/hid/hid-msi.c, values as read live on a Claw 8 EX
             for k, v in {"brightness": 21, "max_brightness": 100, "multi_intensity": "1 90 100",
                          "multi_max_intensity": "100 100 100", "effect": "monocolor",
@@ -530,6 +553,9 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
     order = row.get("tdp_backends") or ["steamos-manager", "powerstation"]
     for s in order:
         stack.append(s)
+    for s_rm in override.get("stack_remove") or []:
+        if s_rm in stack:
+            stack.remove(s_rm)
     for s_add in override.get("stack_add") or []:
         if s_add not in stack:
             stack.append(s_add)
@@ -593,6 +619,9 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
             prop("--user", SM, SM_PATH, f"{SM}.FanControl1", "FanControlState", "u", 1)
         elif row.get("fan_via") == "fix":   # Bazzite answers it on every handheld (jupiter-fan-control)
             prop("--user", SM, SM_PATH, f"{SM}.FanControl1", "FanControlState", "u", 0)
+        if "sm_gpu_profiles" in override:
+            prop("--user", SM, SM_PATH, f"{SM}.GpuPowerProfile1", "GpuPowerProfile", "s", "")
+            prop("--user", SM, SM_PATH, f"{SM}.GpuPowerProfile1", "AvailableGpuPowerProfiles", "as", override["sm_gpu_profiles"])
         prop("--user", SM, SM_PATH, f"{SM}.PerformanceProfile1", "PerformanceProfile", "s", "balanced")
         prop("--user", SM, SM_PATH, f"{SM}.PerformanceProfile1", "AvailablePerformanceProfiles", "as",
              ["low-power", "balanced", "performance"])
@@ -646,7 +675,7 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
         outs = ["ForceFeedback"] + (["LED:Color", "LED:Brightness"] if row.get("rgb") else [])
         name = f"{row.get('name', 'Handheld')} Controller"
         iface = "org.shadowblip.Input.CompositeDevice"
-        prop("--system", IP, f"{IP_ROOT}/Manager", "org.shadowblip.InputManager", "Version", "s", "0.62.0")
+        prop("--system", IP, f"{IP_ROOT}/Manager", "org.shadowblip.InputManager", "Version", "s", override.get("ip_version", "0.62.0"))
         prop("--system", IP, f"{IP_ROOT}/Manager", "org.shadowblip.InputManager", "GamepadOrder", "ao", [dev_path])
         prop("--system", IP, dev_path, iface, "Name", "s", name)
         prop("--system", IP, dev_path, iface, "ProfileName", "s", "Default")
@@ -655,11 +684,21 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
         prop("--system", IP, dev_path, iface, "OutputCapabilities", "as", outs)
         prop("--system", IP, dev_path, iface, "InterceptMode", "u", 0)
         prop("--system", IP, dev_path, "org.shadowblip.Output.ForceFeedback", "Enabled", "b", True)
-        methods[f"--system {IP} {IP_ROOT} org.freedesktop.DBus.ObjectManager GetManagedObjects"] = {
-            "type": "a{oa{sa{sv}}}", "data": [{dev_path: {
+        objs = {dev_path: {
                 iface: {"Name": {"type": "s", "data": name}, "ProfileName": {"type": "s", "data": "Default"},
                         "Capabilities": {"type": "as", "data": caps}, "OutputCapabilities": {"type": "as", "data": outs}},
-                "org.shadowblip.Output.ForceFeedback": {"Enabled": {"type": "b", "data": True}}}}]}
+                "org.shadowblip.Output.ForceFeedback": {"Enabled": {"type": "b", "data": True}}}}
+        if override.get("ip_targets"):
+            tpaths = []
+            for i, kind in enumerate(override["ip_targets"]):
+                tp = f"{IP_ROOT}/devices/target/{kind.replace('-', '_')}{i}"
+                tpaths.append(tp)
+                objs[tp] = {"org.shadowblip.Input.Target": {"DeviceType": {"type": "s", "data": kind}}}
+                prop("--system", IP, tp, "org.shadowblip.Input.Target", "DeviceType", "s", kind)
+            objs[dev_path][iface]["TargetDevices"] = {"type": "as", "data": tpaths}
+            prop("--system", IP, dev_path, iface, "TargetDevices", "as", tpaths)
+        methods[f"--system {IP} {IP_ROOT} org.freedesktop.DBus.ObjectManager GetManagedObjects"] = {
+            "type": "a{oa{sa{sv}}}", "data": [objs]}
     else:
         key = {"lenovo": "legion_go", "micro-star international co., ltd.": "claw", "msi": "claw"}.get(maker, "handheld")
         driver = "lenovo" if maker == "lenovo" else ("msi" if key == "claw" else "smu")
@@ -750,6 +789,23 @@ def main(argv=None) -> int:
         best = max(devices, key=lambda r: score(r, info["dmi"]))
         if score(best, info["dmi"]) < 0 or best["id"] != row["id"]:
             problems.append(f"{row['id']}: generated DMI resolves to {best['id'] if score(best, info['dmi']) >= 0 else 'nothing'}")
+        built.append(info)
+    by_id = {r["id"]: r for r in devices}
+    for vid, ov in overrides.items():
+        if "@" not in vid:
+            continue
+        base = by_id.get(str(ov.get("base", "")))
+        if base is None:
+            problems.append(f"{vid}: base row {ov.get('base')!r} not in devices.json")
+            continue
+        if only and vid not in only and base["id"] not in only:
+            continue
+        facts.setdefault(vid, facts.get(base["id"], {}))
+        info = build(dict(base, id=vid), out, ov, None, devices, facts)
+        info["expect_row"] = base["id"]
+        best = max(devices, key=lambda r: score(r, info["dmi"]))
+        if best["id"] != base["id"]:
+            problems.append(f"{vid}: generated DMI resolves to {best['id']}")
         built.append(info)
     for g in GENERIC:
         if only and g["id"] not in only:

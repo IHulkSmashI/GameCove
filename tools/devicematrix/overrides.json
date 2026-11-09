@@ -3,10 +3,37 @@
  "msi-claw-8-ex": {
   "_source": "read live 2026-11-09 on a Claw 8 EX AI+ (Bazzite 45, kernel 7.2.15-ogc1.1.fc45, board MS-1T91, BIOS E1T91IMS.10E) with `godot --headless --path app -- --controls list`: InputPlumber + PowerStation + steamos-manager (no hhd), BAT1 with charge_control_end_threshold 0, ADP1 + two ucsi supplies",
   "controller": "inputplumber",
-  "stack_add": ["steamos-manager"],
+  "stack_add": [
+   "steamos-manager"
+  ],
   "battery": "BAT1",
   "sm_charge": 0,
   "threads": 14,
   "cores": 14
+ },
+ "asus-rog-ally@steamos-3.10": {
+  "_source": "read live 2026-11-09 on an original ROG Ally RC71L: SteamOS 3.10 (BUILD_ID 20260924.1000), kernel 7.2.4-valve1-1-neptune, BIOS RC71L.342, InputPlumber 0.78.0 managing 'ASUS ROG Ally' (profile Default, gamepad1 = deck-uhid), steamos-manager running, no PowerStation or hhd; BAT0 threshold 0 with MaxChargeLevel -1; FanControlState 0; empty AvailableGpuPowerProfiles; ally:rgb:joystick_rings 'rgb rgb rgb rgb' 0644; hwmon5 asus + hwmon6 asus_custom_fan_curve",
+  "base": "asus-rog-ally",
+  "os": "steamos-3.10",
+  "stack_remove": [
+   "powerstation"
+  ],
+  "controller": "inputplumber",
+  "sm_charge": -1,
+  "charge_threshold": 0,
+  "ip_version": "0.78.0",
+  "ip_targets": [
+   "deck-uhid",
+   "mouse",
+   "keyboard"
+  ],
+  "led_abi": "hid-asus-ally",
+  "sm_gpu_profiles": [],
+  "hwmon_extra": {
+   "asus": {
+    "pwm1_enable": 2,
+    "pwm2_enable": 2
+   }
+  }
  }
 }
