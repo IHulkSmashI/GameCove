@@ -8,7 +8,9 @@ extends RefCounted
 ##
 ## Order, per brand:
 ## 1. A logo bundled in res://assets/brand/ (Simple Icons single-colour SVG,
-##    unmodified, or the project's own GPL icon for Bottles).
+##    unmodified; the project's own GPL icon for Bottles; the maker's own SVG
+##    for OneXPlayer; or a faithful trace of the maker's official PNG logo
+##    where no vector exists: see docs/BRANDS.md).
 ## 2. For stores and launchers, the icon the user's own system already has
 ##    installed (freedesktop hicolor theme in user, Flatpak and system icon
 ##    dirs, then /usr/share/pixmaps).
@@ -19,7 +21,7 @@ extends RefCounted
 ##   bundled_logo_for(name) -> res:// path or ""
 ##   system_icon_for(name) -> absolute path or ""
 ##   is_mono(name) -> true when the bundled logo is one flat colour (tint it)
-##   brand_color(name) -> the brand's own colour (Simple Icons hex) or Color(0,0,0,0)
+##   brand_color(name) -> the brand's own colour (hex in the table) or Color(0,0,0,0)
 ##   logo_texture(name, px, tint) -> Texture2D or null (mono logos filled with tint)
 ##   notice_for(name) -> the notice a shown logo needs, or ""
 ##   is_enabled(name) / general_notice() / key_for(name)
@@ -173,7 +175,7 @@ static func is_mono(maker_or_store: String) -> bool:
 	return bundled_logo_for(maker_or_store) != "" and _entry(maker_or_store).get("mono", false) == true
 
 
-## The brand's own colour from Simple Icons, or transparent when unknown.
+## The brand's own colour from the table, or transparent when unknown.
 static func brand_color(maker_or_store: String) -> Color:
 	var h := str(_entry(maker_or_store).get("hex", ""))
 	return Color.from_string("#" + h, Color(0, 0, 0, 0)) if h.length() == 6 else Color(0, 0, 0, 0)

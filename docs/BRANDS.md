@@ -3,17 +3,44 @@
 GameCove shows the real logos of handheld makers, chip makers, stores and launchers, only to say which device, chip, store or launcher something is. Heroic, Lutris and Playnite do the same for store logos. The logos remain their owners' trademarks. GameCove is not affiliated with or endorsed by any of them.
 
 - Table: [`app/data/brand_logos.json`](../app/data/brand_logos.json). For each brand it lists the name, aliases (including DMI vendor strings), `enabled`, `file`, `mono`, `hex`, `source`, `license` and `notice`.
-- Files: `app/assets/brand/*.svg`. These are unmodified copies, mostly single-colour SVGs from [Simple Icons](https://simpleicons.org) (the version is in `simple_icons_version`; `source` records `simple-icons@<version> <slug>`). The UI tints single-colour (`mono`) logos with one flat colour at render time.
+- Files: `app/assets/brand/*.svg`, one per brand (every brand has one). Three kinds:
+  - Unmodified single-colour SVGs from [Simple Icons](https://simpleicons.org) (the version is in `simple_icons_version`; `source` records `simple-icons@<version> <slug>`), plus the Bottles project's own icon.
+  - The maker's own SVG with only presentation removed (fills, ids, `<title>`), geometry untouched: OneXPlayer.
+  - Traces of the maker's official raster logo, for makers that publish no vector: AYANEO, AOKZOE, GPD, ZOTAC GAMING, Orange Pi and Amazon Games. `source` is the exact PNG/JPG and `license` gives the method and the overlap score.
+  The UI tints single-colour (`mono`) logos with one flat colour at render time, so mono files carry no fill of their own; `hex` is the brand colour.
 - Code: [`app/scripts/device/brand.gd`](../app/scripts/device/brand.gd). `logo_for(name)` returns the bundled logo first, then the icon the user's own system has installed (stores and launchers only), then `""`. When it returns `""`, the UI shows the name as text. `logo_texture(name, px, tint)` returns a ready-made texture.
-- Tests: `app/tests/test_device_brand.gd`. They check that every enabled file exists and is valid SVG, that disabled brands return nothing, and that every DMI vendor in `devices.json` maps to a brand.
+- Tests: `app/tests/test_device_brand.gd`. They check that every enabled file exists and is valid SVG, that disabled brands return nothing, that every DMI vendor in `devices.json` maps to a brand, and that every maker in `devices.json` and every store in the library has an enabled, pure-vector logo with a sensible viewBox that draws at 48 px (mono logos with no hard-coded fill).
 
 ## Adding a logo
 
-1. Copy the SVG unmodified from the `simple-icons` npm package (`icons/<slug>.svg`) into `app/assets/brand/<key>.svg`. If Simple Icons doesn't have the brand, use an official SVG from the maker's own site or press page.
-2. Fill in the brand's entry: `file`, `source` (`simple-icons@<version> <slug>` or the official URL), `license`, `mono`, `hex`, and `notice` if the owner requires one.
-3. Add a row to the Trademarks table in [CREDITS.md](../CREDITS.md#trademarks).
+Never redraw a logo from memory. In order of preference:
 
-There is no logo yet (they show text) for Amazon Games / Prime Gaming, Legion (it uses the Lenovo logo), OneXPlayer, AYANEO, AOKZOE, GPD, ZOTAC and Orange Pi. None of these is in Simple Icons, and none publishes an SVG on its own site that we could find (checked 2026-11-09).
+1. **Simple Icons**: copy the SVG unmodified from the `simple-icons` npm package (`icons/<slug>.svg`) into `app/assets/brand/<key>.svg`.
+2. **The maker's own vector**: their site's header logo (often an inline SVG or an `.svg` asset in the page's JS/CSS), press kit, GitHub, app packages, or Wikimedia Commons. For a mono logo, strip only presentation so tinting works: `python3 tools/brandlogos/normalize.py in.svg app/assets/brand/<key>.svg --title "<Name>"`.
+3. **A faithful trace of the maker's official raster logo** (largest copy you can find; check it is the current mark on their site):
+   ```sh
+   pip install potracer cairosvg            # potrace in pure Python
+   python3 tools/brandlogos/trace.py logo.png app/assets/brand/<key>.svg --title "<Name>" \
+       --ink alpha|dark|light --scale 4..12 --turdsize 40
+   python3 tools/brandlogos/compare.py logo.png app/assets/brand/<key>.svg --width <logo width in px> --diff /tmp/diff.png
+   ```
+   `compare.py` crops both to their ink, binarises them at the original's resolution and prints the overlap (IoU). Iterate on `--scale`, `--alphamax`, `--opttolerance` and `--level` until it reads **0.97 or more**, then look at the diff: differences should be one-pixel edges only. Record the score and the source URL in `license`.
+
+Then fill in the brand's entry (`file`, `source`, `license`, `mono`, `hex`, `notice` if the owner requires one), add a row to the Trademarks table in [CREDITS.md](../CREDITS.md#trademarks), and check every logo by eye: `python3 tools/brandlogos/contact.py . /tmp/contact.png` renders all of them on dark, light and brand-colour backgrounds.
+
+### Where each non-Simple-Icons logo came from (checked 2026-11-09)
+
+| Brand | Source | Method | Overlap |
+| --- | --- | --- | --- |
+| Amazon Games | 256x256 icon in Amazon's official `AmazonGamesSetup.exe` (the store is labelled Amazon Games, the launcher's name; the publisher is Amazon Game Studios again since 2025 and Prime Gaming moved into Luna, so neither of their marks fits) | potrace | 0.972 |
+| OneXPlayer | onexplayer.com header SVG (`/assets/Logo-03078c08.svg`) | fills removed, viewBox added | 1.000 |
+| AYANEO | Emblem PNG on shop.ayaneo.com; the same emblem as the current ayaneo.com header (0.994 against it) | potrace | 0.995 |
+| AOKZOE | Header PNG on aokzoestore.com (512x115, the largest published; aokzoe.com serves an expired certificate) | potrace | 0.979 |
+| GPD | Header PNG on gpd.hk (1424x525, purple-to-blue gradient) | potrace | 0.997 |
+| ZOTAC GAMING | ZOTAC GAMING logo JPG on ZOTAC's own store zotacstore.com (zotac.com refused automated access); the Zone is a ZOTAC GAMING product | potrace | 0.977 |
+| Orange Pi | Emblem PNG in Orange Pi's own boot theme (`orangepi-build`, `plymouth-theme-orangepi/orangepi-logo.png`); orangepi.org only has smaller copies | potrace | 0.973 |
+
+Not used: Wikimedia Commons (rate-limited from our build machine during this pass; it has an "Amazon Games" and an older ZOTAC SVG worth comparing next time) and Brandfetch (blocks automated access).
 
 ## Logo removal requests
 

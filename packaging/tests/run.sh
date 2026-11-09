@@ -664,7 +664,7 @@ uhb_spec="$(sed -n 's/^%global uhb_commit //p' "$SPEC")"
 uhb_script="$(sed -n 's/.*UHB_PIN:-\([0-9a-f]*\)}.*/\1/p' "$REPO/fixes/claw8ex-gyro/bpf/build-bpf.sh")"
 if [ -n "$uhb_spec" ] && [ "$uhb_spec" = "$uhb_script" ]; then ok; else bad "udev-hid-bpf pin differs: spec '$uhb_spec', build-bpf.sh '$uhb_script'"; fi
 # GameCove itself is GPL-3.0-or-later; GPL-3.0-only may appear only for the bundled Heroic icon.
-if grep -h "GPL-3.0-only" "$REPO/README.md" "$REPO/CREDITS.md" | grep -v "Heroic" | grep -qv "Bottles"; then bad "GPL-3.0-only mentioned for something other than the Heroic or Bottles icons; GameCove is GPL-3.0-or-later"; else ok; fi
+if grep -h "GPL-3.0-only" "$REPO/README.md" "$REPO/CREDITS.md" | grep -v -e "Heroic" -e "Bottles" | grep -q .; then bad "GPL-3.0-only mentioned for something other than the Heroic or Bottles icon; GameCove is GPL-3.0-or-later"; else ok; fi
 contains "$SPEC" "^License:.*GPL-3.0-or-later" "spec licence is GPL-3.0-or-later"
 
 # ------------------------------------------- devices.json "fixes" = fix folders

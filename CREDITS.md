@@ -133,7 +133,7 @@ For handhelds with no free photo, the device panel shows the maker's own officia
 
 Product and company names are trademarks of their respective owners; GameCove is not affiliated with or endorsed by them.
 
-GameCove shows these logos only to identify a device, chip, store or launcher. They are unmodified copies; single-colour logos are tinted one flat colour to match the theme. Most come from [Simple Icons](https://simpleicons.org) (simple-icons 16.37.0). Simple Icons releases its icon data under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), but the marks themselves still belong to their owners. Any company can ask for its logo to be removed: see [docs/BRANDS.md](docs/BRANDS.md#logo-removal-requests). The full table is [`app/data/brand_logos.json`](app/data/brand_logos.json).
+GameCove shows these logos only to identify a device, chip, store or launcher. Single-colour logos are tinted one flat colour to match the theme. Where a maker publishes no vector logo, its official PNG/JPG logo was traced into a single-colour SVG and checked pixel by pixel against the original (shapes and proportions kept; nothing redrawn). Most come from [Simple Icons](https://simpleicons.org) (simple-icons 16.37.0). Simple Icons releases its icon data under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), but the marks themselves still belong to their owners. Any company can ask for its logo to be removed: see [docs/BRANDS.md](docs/BRANDS.md#logo-removal-requests). The full table is [`app/data/brand_logos.json`](app/data/brand_logos.json).
 
 | Logo | Source | Licence of the file | Notice |
 | --- | --- | --- | --- |
@@ -157,3 +157,12 @@ Store and launcher icons other than these (Steam, Heroic, Lutris, Bottles) come 
 
 Not bundled because their terms need a licence or written permission, or publish no terms for third parties: Valve (Steam, Steam Deck), Epic Games, GOG, Amazon, MSI, ASUS / ROG, Lenovo / Legion, Acer / Predator, OneXPlayer, AYANEO, GPD, ZOTAC, Intel. AMD's brand terms cover only products that contain an AMD chip.
 - **ClawDeck** (same author): Parts ported from ClawDeck (same author). Its MSI BIOS check (`msibios.py`) as the MSI source of the firmware index (`gamedb/gamedb/firmware/sources/msi.py`).
+| Amazon Games (`app/assets/brand/amazon.svg`) | Traced from the 256 px icon in Amazon's official [Amazon Games app installer](https://gaming.amazon.com/aga/AmazonGamesSetup.exe) | Trademark; trace of the official icon | Amazon, Amazon Games and the smile logo are trademarks of Amazon.com, Inc. or its affiliates. |
+| OneXPlayer (`app/assets/brand/onexplayer.svg`) | [Official SVG](https://www.onexplayer.com/assets/Logo-03078c08.svg) from onexplayer.com, fills removed for tinting | Trademark of One-Netbook Technology | — |
+| AYANEO (`app/assets/brand/ayaneo.svg`) | Traced from the [official emblem PNG](https://shop.ayaneo.com/cdn/shop/files/AYA_logo__20210601_-02.png?v=1663762027) (matches the ayaneo.com header) | Trademark of AYANEO; trace of the official logo | — |
+| AOKZOE (`app/assets/brand/aokzoe.svg`) | Traced from the [official store logo PNG](https://aokzoestore.com/cdn/shop/files/aokzoe_logo115.png?v=1679997801) | Trademark of AOKZOE; trace of the official logo | — |
+| GPD (`app/assets/brand/gpd.svg`) | Traced from the [official gpd.hk logo PNG](https://img.website.xin/contents/sitefiles3601/18006016/images/176080729.png) | Trademark of Shenzhen GPD Technology Co., Ltd.; trace of the official logo | — |
+| ZOTAC GAMING (`app/assets/brand/zotac.svg`) | Traced from the [official ZOTAC GAMING logo](https://www.zotacstore.com/media/wysiwyg/zotac_gaming_logo_1.jpg) on ZOTAC's store | Trademark of ZOTAC International (MCO) Ltd.; trace of the official logo | — |
+| Orange Pi (`app/assets/brand/orangepi.svg`) | Traced from the emblem in Orange Pi's own boot theme ([orangepi-build](https://github.com/orangepi-xunlong/orangepi-build/blob/next/external/packages/plymouth-theme-orangepi/orangepi-logo.png)) | Trademark of Shenzhen Xunlong Software Co., Ltd.; trace of the official logo | — |
+
+Every brand ships a logo. For stores and launchers, GameCove can also show the icon the user's own system already has installed; nothing of that is copied or redistributed.
