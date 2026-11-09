@@ -355,8 +355,15 @@ static func same(got: Variant, want: Variant) -> bool:
 
 # ---- sysfs LEDs ----------------------------------------------------------------------
 
-## Runs the root action and re-reads the nodes; `verify` (leds -> bool) decides.
+## Writes the nodes directly where they're world-writable (Leds.apply_direct), else
+## runs the root action; re-reads the nodes and `verify` (leds -> bool) decides.
 func led_apply(spec: String, verify: Callable) -> bool:
+	var direct := Leds.apply_direct(leds(), spec)
+	if direct == Leds.DIRECT_OK:
+		invalidate()
+		if verify.call(leds()):
+			_changed()
+			return true
 	if not Leds.apply(ctx.get("runner"), spec):
 		invalidate()
 		return false

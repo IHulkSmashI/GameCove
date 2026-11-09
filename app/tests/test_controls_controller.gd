@@ -247,6 +247,86 @@ func test_claw_gyro_fix_states() -> void:
 	reg.free()
 
 
+# ---- MSI Claw 8 EX, hid-msi LED node as read live (Bazzite 45, kernel 7.2.15-ogc1.1) -------
+
+const LIVE_LEDS := preload("res://scripts/controls/input/leds.gd")
+
+
+## The node exactly as the Claw showed it: go:rgb:joystick_rings (OGC renames hid-msi's
+## msi_claw: node), lights disabled, effect/multi_intensity/brightness 0666 (no root),
+## enabled and speed 0644 root.
+func _claw_live(test_name: String) -> Array:
+	var f: RefCounted = Fakes.new(_root(test_name))
+	f.with_ip("MSI Claw 8 EX", CLAW_CAPS)
+	var d: String = f.led("go:rgb:joystick_rings", "red green blue", "1 90 100", 100, 21, {
+		"multi_max_intensity": "100 100 100", "effect": "monocolor",
+		"effect_index": "monocolor breathe chroma rainbow frostfire", "enabled": "false",
+		"enabled_index": "true false", "speed": "10", "speed_range": "0-20", "trigger": "[none]"})
+	for a in ["effect", "multi_intensity", "brightness"]:
+		FileAccess.set_unix_permissions(d + "/" + a, 438)   # 0666
+	for a in ["enabled", "speed"]:
+		FileAccess.set_unix_permissions(d + "/" + a, 420)   # 0644
+	return [_setup(f, _row("msi-claw-8-ex")), f]
+
+
+func test_claw_live_hid_msi_leds() -> void:
+	var t := _claw_live("claw_live_led")
+	var reg: Node = t[0]
+	var f: RefCounted = t[1]
+	var n := "/sys/class/leds/go:rgb:joystick_rings"
+	for id in ["controller.led_effect", "controller.led_color", "controller.led_brightness", "controller.led_speed"]:
+		ok(_avail(reg, id), id + " available (" + _reason(reg, id) + ")")
+	eq(_reason(reg, "controller.led_color_2"), "This handheld's lights have one zone")
+	eq(_opt_values(reg, "controller.led_effect"), ["off", "solid", "pulse", "rainbow", "spiral", "frostfire"])
+	eq(_value(reg, "controller.led_effect"), "off", "enabled=false is dark")
+	eq(_value(reg, "controller.led_speed"), 50.0, "10 of 0-20")
+	# turning on needs enabled=true (root only): the root action does it
+	ok(_w(reg, "controller.led_color", "#ff0000"), "red")
+	eq(f.pkexec_calls.size(), 1, "enabled is root-only: one root action")
+	eq(f.read(n + "/enabled"), "true")
+	eq(f.read(n + "/multi_intensity"), "100 0 0")
+	# lit now: colour, brightness, effect and off need no root
+	ok(_w(reg, "controller.led_brightness", 40.0), "brightness")
+	eq(f.read(n + "/brightness"), "40")
+	ok(_w(reg, "controller.led_color", "#00ff00"), "green")
+	eq(f.read(n + "/multi_intensity"), "0 100 0")
+	ok(_w(reg, "controller.led_effect", "pulse"), "pulse")
+	eq(f.read(n + "/effect"), "breathe")
+	ok(_w(reg, "controller.led_effect", "off"), "off")
+	eq(f.read(n + "/brightness"), "0", "dark by brightness")
+	eq(f.read(n + "/enabled"), "true", "root-only enabled left alone")
+	eq(_value(reg, "controller.led_effect"), "off")
+	eq(f.pkexec_calls.size(), 1, "every change after the first went direct: %s" % [f.pkexec_calls])
+	# speed is root-only
+	ok(_w(reg, "controller.led_brightness", 60.0), "on again, direct")
+	ok(_w(reg, "controller.led_effect", "rainbow"), "rainbow")
+	ok(_w(reg, "controller.led_speed", 100.0), "speed through the root action")
+	eq(f.read(n + "/speed"), "20")
+	eq(f.pkexec_calls.size(), 2)
+	reg.free()
+
+
+## Real sysfs files report a size of 4096 and /proc files 0: get_file_as_string()
+## returns "" for both, which hid the Claw's LED node. Two of the node's files are
+## links to a real /proc file here, so the regular-file fixture reads like the device.
+func test_led_node_reads_files_with_a_fake_size() -> void:
+	var src := "/proc/sys/kernel/pid_max"
+	if not FileAccess.file_exists(src):
+		ok(true, "no /proc here")
+		return
+	var f: RefCounted = Fakes.new(_root("led_fake_size"))
+	var d: String = f.led("go:rgb:joystick_rings", "red green blue", "1 90 100", 100, 21)
+	for a in ["max_brightness", "brightness"]:
+		DirAccess.remove_absolute(d + "/" + a)
+		eq(DirAccess.open(d).create_link(src, d + "/" + a), OK, "link " + a)
+	var want := int(LIVE_LEDS._read(src))
+	var nodes: Array = LIVE_LEDS.scan(f.sys_root)
+	eq(nodes.size(), 1, "the node is found")
+	if nodes.size() == 1:
+		eq(int(nodes[0]["max"]), want, "max_brightness read to its real end")
+	ok(want > 0, "pid_max read: %d" % want)
+
+
 # ---- Legion Go on InputPlumber with kernel LEDs ----------------------------------------------
 
 func _legion(test_name: String) -> Array:
