@@ -90,14 +90,10 @@ mkdir -p %{buildroot}%{_prefix}/lib/gamecove/fixes
 install -Dpm0755 packaging/libexec/gamecove-fix       %{buildroot}%{_libexecdir}/gamecove/gamecove-fix
 install -Dpm0755 packaging/libexec/gamecove-fix-set   %{buildroot}%{_libexecdir}/gamecove/gamecove-fix-set
 install -Dpm0755 session/gamecove-session-client      %{buildroot}%{_libexecdir}/gamecove/gamecove-session-client
-%{_libexecdir}/gamecove/gamecove-apply-choices
-%{_libexecdir}/gamecove/get-gamecove.sh
-%{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop
 install -Dpm0755 packaging/libexec/gamecove-apply-choices %{buildroot}%{_libexecdir}/gamecove/gamecove-apply-choices
 install -Dpm0755 packaging/get-gamecove.sh            %{buildroot}%{_libexecdir}/gamecove/get-gamecove.sh
 # Per-game launch wrapper and upscaling helper (perf controls)
 install -Dpm0755 packaging/libexec/gamecove-run       %{buildroot}%{_libexecdir}/gamecove/gamecove-run
-%{_libexecdir}/gamecove/reaper
 install -Dpm0755 packaging/libexec/reaper             %{buildroot}%{_libexecdir}/gamecove/reaper
 install -Dpm0755 packaging/libexec/gamecove-upscale   %{buildroot}%{_libexecdir}/gamecove/gamecove-upscale
 mkdir -p %{buildroot}%{_prefix}/lib/gamecove/helpers
@@ -137,6 +133,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 %{_libexecdir}/gamecove/gamecove-apply-choices
 %{_libexecdir}/gamecove/get-gamecove.sh
 %{_libexecdir}/gamecove/gamecove-run
+%{_libexecdir}/gamecove/reaper
 %{_libexecdir}/gamecove/gamecove-upscale
 %{_prefix}/lib/gamecove/helpers
 %{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop

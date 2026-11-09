@@ -724,6 +724,12 @@ if [ -n "$uhb_spec" ] && [ "$uhb_spec" = "$uhb_script" ]; then ok; else bad "ude
 # GameCove itself is GPL-3.0-or-later; GPL-3.0-only may appear only for the bundled Heroic icon.
 if grep -h "GPL-3.0-only" "$REPO/README.md" "$REPO/CREDITS.md" | grep -v -e "Heroic" -e "Bottles" | grep -q .; then bad "GPL-3.0-only mentioned for something other than the Heroic or Bottles icon; GameCove is GPL-3.0-or-later"; else ok; fi
 contains "$SPEC" "^License:.*GPL-3.0-or-later" "spec licence is GPL-3.0-or-later"
+# %install holds commands only; a %files-style path line there breaks rpmbuild
+if awk '/^%install/{f=1;next} /^%files/{f=0} f && /^%\{_/' "$SPEC" | grep -q .; then bad "spec: file-list lines inside %install: $(awk '/^%install/{f=1;next} /^%files/{f=0} f && /^%\{_/' "$SPEC" | head -3)"; else ok; fi
+# every helper the spec installs is listed in %files
+for h in $(sed -n 's|^install -Dpm0755 packaging/libexec/\([^ ]*\) .*|\1|p' "$SPEC"); do
+	contains "$SPEC" "^%{_libexecdir}/gamecove/$h$" "spec %files lists $h"
+done
 
 # ------------------------------------------- devices.json "fixes" = fix folders
 if python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY'
