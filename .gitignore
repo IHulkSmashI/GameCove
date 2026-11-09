@@ -13,3 +13,7 @@ gamedb/dist/
 
 # Export output (app/export_presets.cfg)
 app/build/
+
+# raw-read assets keep their tracked .import (importer="keep"); see packaging/tests/run.sh
+!app/assets/brand/*.svg.import
+!app/assets/device_photos/*.import
