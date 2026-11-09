@@ -112,6 +112,11 @@ func test_charger_flapping() -> void:
 	var tdp := float(ctl("power.tdp").value)
 	ok(tdp <= (ac_max if on else bat_max) + 0.01, "after flapping (plugged %s) the TDP %s is within the source's limit" % [on, tdp])
 	eq(tdp, ac_max if on else bat_max, "and it is the saved value clamped to that source")
+	if OS.get_environment("E2E_DEBUG") != "" and tdp != (ac_max if on else bat_max):
+		for x in w.fake.log_copy():
+			var s := " ".join(PackedStringArray(x["argv"].map(func(y): return str(y))))
+			if "TdpLimit " in s or "TDP " in s:
+				print("  ", x["t_ms"], " ", s.get_slice("SteamOSManager1.", 2).get_slice("PowerStation", 0))
 	consistent("after flapping")
 
 

@@ -40,6 +40,8 @@ func _before_restart() -> void:
 			"display.vibrance": target = 40.0
 		qm().model.set_value(id, target)   # same path the rows take
 		await w.idle()
+		if OS.get_environment("E2E_DEBUG") != "":
+			print("  after ", id, ": tdp=", ctl("power.tdp").value, " profile=", ctl("power.profile").value, " saver=", ctl("power.battery_saver").value, " failed=", qm().model.is_failed(id))
 		expect[id] = ctl(id).value
 	# what everything is now (the battery saver moves the TDP too)
 	for id in expect.keys():

@@ -116,6 +116,16 @@ func _wire_services() -> void:
 	power.setup(fake, row, root, hhd)
 	power.config_path = home.path_join(".config/gamecove/power.cfg")
 	power.autotune_opts = power.AUTOTUNE_DEFAULTS.duplicate()
+	# what an earlier test left in Power's memory (a fresh start has none of it)
+	power._autotune_on = false
+	power._autotune_stopping = false
+	power._user_tdp = -1.0
+	power._game_key = ""
+	power.boost_w = -1.0
+	power._limit_shown = false
+	var perf_mon := autoload("PerfMonitor")
+	if perf_mon != null and perf_mon.is_active():
+		perf_mon.stop()
 	power._queue("start", power._start)
 	var gs := autoload("Gamescope")
 	if gs.runner != null and gs.runner.has_method("shutdown"):
