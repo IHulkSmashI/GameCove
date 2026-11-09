@@ -258,3 +258,23 @@ func test_release_intercept_resets_every_device() -> void:
 	c.set_game_focused(true)
 	eq(f.calls.size(), n, "focus changes after release write nothing")
 	c.free()
+
+
+## Review M11: a monitor that exits by itself is no longer "running", so Controller's restart
+## timer (`not intercept.running()`) starts a new one.
+func test_monitor_that_died_is_not_running() -> void:
+	var ic := Intercept.new()
+	ok(ic.start_monitor("sh", ["-c", "echo 'Monitoring signals from all objects owned by org.shadowblip.InputPlumber'; exit 1"]), "started")
+	var pid: int = ic._pid
+	var waited := 0
+	while OS.is_process_running(pid) and waited < 3000:
+		OS.delay_msec(20)
+		waited += 20
+	ok(not OS.is_process_running(pid), "the child exited")
+	ok(not ic.running(), "running() says so")
+	ok(ic.start_monitor("sh", ["-c", "sleep 5"]), "a new monitor starts in its place")
+	ok(ic.running(), "and runs")
+	ok(ic._pid != pid, "a new process")
+	ic.stop_monitor()
+	ok(not ic.running(), "stopped")
+
