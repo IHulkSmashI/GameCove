@@ -17,7 +17,22 @@ extends Node
 ##       Never blocks. A miss starts the download; photo_ready follows.
 ##   signal photo_ready(device_id, path)
 ##   enabled: bool / set_enabled(on)   "Show a real photo of my device" (default on)
-##   credit_line(credit) -> "Photo: <author>, <license>"
+##   credit_line(credit) -> "Photo: <author>, <license>" | "Image: <Maker>"
+##
+## Maker images (by link only). A handheld with no free photo may have a
+## "maker_image" in res://data/device_photos.json: the maker's own official
+## product image on the maker's own site. GameCove never copies it; this
+## service downloads that one image from the maker on this device, only when
+## asked for the detected handheld, and keeps the bytes unchanged in
+## user://device_photos/maker-<url hash>.<png|jpg|webp>. One request per
+## session at most (none while the cached copy is under a week old), 10 s
+## timeout, 3 MB cap, PNG/JPEG/WebP only (checked from the bytes), no retry
+## after a failure until the next start. Credit: "Image: <Maker>", linking to
+## the maker's product page. Order: free photo, then maker image, then the
+## drawing.
+##   maker_enabled / set_maker_enabled(on)  "Show maker photos" (default on;
+##       ConfigFile user://settings.cfg [device] maker_photo). Off: no request
+##       to any maker's site; free photo or drawing only.
 
 signal photo_ready(device_id: String, path: String)
 
@@ -26,6 +41,11 @@ const PREFS_PATH := "user://settings.cfg"
 const MANIFEST_MAX_AGE := 7 * 24 * 3600
 const MAX_PHOTO_BYTES := 4 * 1024 * 1024
 const MAX_MANIFEST_BYTES := 512 * 1024
+const SOURCES_PATH := "res://data/device_photos.json"
+const MAKER_MAX_BYTES := 3 * 1024 * 1024
+const MAKER_MAX_AGE := 7 * 24 * 3600
+const MAKER_TIMEOUT := 10.0
+const MAKER_EXTS := ["png", "jpg", "webp"]
 const COMMONS_PAGE := "https://commons.wikimedia.org/wiki/File:"
 ## Credit pages we accept: Commons files and Flickr photos (taken through
 ## Openverse by the build). Same list as tools/device_photos/build.py.
@@ -36,6 +56,12 @@ var http: Variant = null
 var cache_dir := "user://device_photos"
 var prefs_path := PREFS_PATH
 var enabled := true
+var maker_enabled := true
+var sources_path := SOURCES_PATH
+## device_id -> {"url", "page_url", "maker"} (parse_maker_sources); tests may set it.
+var maker_sources: Variant = null
+## device ids whose bundled entry names a free photo (Commons/Openverse).
+var _free := {}
 ## Seconds since the epoch; tests replace it.
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 
@@ -47,10 +73,13 @@ var _waiting: Array = []     # device ids asked for while the manifest loads
 var _inflight := {}          # device_id -> true
 var _failed := {}            # device_id -> true: download failed, no retry this session
 var _checked := {}           # abs path -> sha256 already verified this session
+var _maker_tried := {}       # url -> true: one request per session at most
+var _maker_inflight := {}    # url -> [device ids]
 
 
 func _ready() -> void:
 	enabled = load_enabled(prefs_path)
+	maker_enabled = load_maker_enabled(prefs_path)
 	var main_script = get_tree().get_script()
 	if main_script != null and str(main_script.resource_path).begins_with("res://tests/"):
 		return
@@ -71,6 +100,21 @@ static func load_enabled(path := PREFS_PATH) -> bool:
 	if cfg.load(path) != OK:
 		return true
 	return bool(cfg.get_value("device", "real_photo", true))
+
+
+static func load_maker_enabled(path := PREFS_PATH) -> bool:
+	var cfg := ConfigFile.new()
+	if cfg.load(path) != OK:
+		return true
+	return bool(cfg.get_value("device", "maker_photo", true))
+
+
+func set_maker_enabled(on: bool) -> void:
+	maker_enabled = on
+	var cfg := ConfigFile.new()
+	cfg.load(prefs_path)
+	cfg.set_value("device", "maker_photo", on)
+	cfg.save(prefs_path)
 
 
 func set_enabled(on: bool) -> void:
@@ -194,6 +238,8 @@ func photo_for(device_id: String) -> Dictionary:
 		return {}
 	_load_manifest()
 	var got := cached(device_id)
+	if got.is_empty() and _use_maker(device_id):
+		return _maker_photo(device_id)
 	if not got.is_empty():
 		# A weekly look at the manifest still happens, so a photo whose license
 		# was withdrawn upstream drops out here too.
@@ -307,10 +353,176 @@ func store_part(part: String, e: Dictionary) -> String:
 	return dest
 
 
+# ---- maker images (by link only) ------------------------------------------------
+
+## device_photos.json -> {device_id: {"url", "page_url", "maker"}} for the
+## maker_image entries that follow the "_makers" rules: image URL on that
+## maker's own site or CDN (listed prefixes), product page on the maker's
+## domain, https only. Same rules as tools/device_photos/makers.py.
+static func parse_maker_sources(doc: Variant) -> Dictionary:
+	var out := {}
+	if not doc is Dictionary or not doc.get("_makers") is Dictionary:
+		return out
+	var rules: Dictionary = doc["_makers"]
+	for id in doc:
+		if str(id).begins_with("_") or not doc[id] is Dictionary:
+			continue
+		var m: Variant = doc[id].get("maker_image")
+		if not m is Dictionary:
+			continue
+		var maker := str(m.get("maker", "")).strip_edges()
+		var r: Variant = rules.get(maker)
+		if maker == "" or maker.length() > 40 or not r is Dictionary:
+			continue
+		var url := str(m.get("url", ""))
+		var page := str(m.get("page_url", ""))
+		var url_ok := false
+		for prefix in r.get("image_prefixes", []):
+			if str(prefix).begins_with("https://") and url.begins_with(str(prefix)):
+				url_ok = true
+		if not url_ok or not _page_on(page, r.get("page_domains", [])):
+			continue
+		out[str(id)] = {"url": url, "page_url": page, "maker": maker}
+	return out
+
+
+static func _page_on(url: String, domains: Variant) -> bool:
+	if not url.begins_with("https://") or not domains is Array:
+		return false
+	var host := url.substr(8).split("/", true, 1)[0].split("?", true, 1)[0].to_lower()
+	for d in domains:
+		var dd := str(d).to_lower()
+		if dd != "" and (host == dd or host.ends_with("." + dd)):
+			return true
+	return false
+
+
+## "png" | "jpg" | "webp" | "" from the first bytes (never trusts headers).
+static func sniff_image(b: PackedByteArray) -> String:
+	if b.size() >= 8 and b.slice(0, 8) == PackedByteArray([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
+		return "png"
+	if b.size() >= 3 and b[0] == 0xFF and b[1] == 0xD8 and b[2] == 0xFF:
+		return "jpg"
+	if b.size() >= 12 and b.slice(0, 4).get_string_from_ascii() == "RIFF" and b.slice(8, 12).get_string_from_ascii() == "WEBP":
+		return "webp"
+	return ""
+
+
+func _load_sources() -> void:
+	if maker_sources != null:
+		return
+	var doc: Variant = _json(FileAccess.get_file_as_string(sources_path)) if FileAccess.file_exists(sources_path) else null
+	maker_sources = parse_maker_sources(doc)
+	if doc is Dictionary:
+		for id in doc:
+			var e: Variant = doc[id]
+			if not str(id).begins_with("_") and e is Dictionary and (e.has("file") or e.has("openverse_id")):
+				_free[str(id)] = true
+
+
+## The maker entry for a device, or {} (also when the setting is off).
+func maker_entry(device_id: String) -> Dictionary:
+	_load_sources()
+	return maker_sources.get(device_id, {}) if maker_sources is Dictionary else {}
+
+
+## Maker image instead of the free-photo route: only for a device with a
+## maker entry and no free photo of its own (a free photo always wins).
+func _use_maker(device_id: String) -> bool:
+	if maker_entry(device_id).is_empty() or _free.has(device_id):
+		return false
+	return not _manifest.has(device_id)
+
+
+func _maker_base(url: String) -> String:
+	return _abs("maker-" + url.sha256_text().substr(0, 24))
+
+
+## The cached maker image only; never touches the network.
+func maker_cached(device_id: String) -> Dictionary:
+	if not enabled or not maker_enabled:
+		return {}
+	var m := maker_entry(device_id)
+	if m.is_empty():
+		return {}
+	var base := _maker_base(m["url"])
+	for ext in MAKER_EXTS:
+		var path: String = base + "." + ext
+		if FileAccess.file_exists(path):
+			return {"path": path, "credit": {"kind": "maker", "maker": m["maker"], "page_url": m["page_url"], "url": m["url"]}}
+	return {}
+
+
+func _maker_photo(device_id: String) -> Dictionary:
+	if not maker_enabled:
+		return {}
+	var got := maker_cached(device_id)
+	if got.is_empty():
+		_fetch_maker(device_id)
+	elif clock.call() - int(FileAccess.get_modified_time(got["path"])) > MAKER_MAX_AGE:
+		_fetch_maker(device_id)   # weekly refresh in the background; the old copy shows meanwhile
+	return got
+
+
+func _fetch_maker(device_id: String) -> void:
+	var m := maker_entry(device_id)
+	if http == null or m.is_empty():
+		return
+	var url: String = m["url"]
+	if _maker_inflight.has(url):
+		if not device_id in _maker_inflight[url]:
+			_maker_inflight[url].append(device_id)
+		return
+	if _maker_tried.has(url):
+		return
+	_maker_tried[url] = true
+	_maker_inflight[url] = [device_id]
+	http.request(url, {"timeout": MAKER_TIMEOUT, "max_bytes": MAKER_MAX_BYTES,
+		"headers": ["Accept: image/png, image/jpeg, image/webp"]}, _on_maker.bind(url))
+
+
+func _on_maker(res: Dictionary, url: String) -> void:
+	var ids: Array = _maker_inflight.get(url, [])
+	_maker_inflight.erase(url)
+	var body: PackedByteArray = res.get("body", PackedByteArray())
+	if not res.get("ok", false) or body.is_empty() or body.size() > MAKER_MAX_BYTES:
+		return
+	var ext := sniff_image(body)
+	if ext == "":
+		return
+	var path := store_maker(url, body, ext)
+	if path == "":
+		return
+	for id in ids:
+		photo_ready.emit(id, path)
+
+
+## Writes the image bytes as they came (no re-encoding) and drops older copies
+## of the same link in other formats. Returns the path or "".
+func store_maker(url: String, body: PackedByteArray, ext: String) -> String:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(cache_dir))
+	var base := _maker_base(url)
+	var part := base + ".part"
+	var f := FileAccess.open(part, FileAccess.WRITE)
+	if f == null:
+		return ""
+	f.store_buffer(body)
+	f.close()
+	for e in MAKER_EXTS:
+		if FileAccess.file_exists(base + "." + e):
+			DirAccess.remove_absolute(base + "." + e)
+	var dest := base + "." + ext
+	if DirAccess.rename_absolute(part, dest) != OK:
+		return _drop(part)
+	return dest
+
+
 # ---- for the UI -----------------------------------------------------------------
 
 ## "Photo: Jane Doe, CC BY-SA 4.0"
 static func credit_line(credit: Dictionary) -> String:
+	if str(credit.get("kind", "")) == "maker":
+		return "Image: %s" % str(credit.get("maker", "")).strip_edges()
 	var who := str(credit.get("author", "")).strip_edges()
 	var lic := str(credit.get("license", "")).strip_edges()
 	if who.length() > 60:

@@ -11,9 +11,10 @@ extends Node
 ##
 ## Interface shared with fake_http.gd (tests and UI previews use that one):
 ##   request(url: String, opts: Dictionary, done: Callable) -> void
-##     opts: {"headers": Array[String], "timeout": float, "download_file": String}
+##     opts: {"headers": Array[String], "timeout": float, "download_file": String,
+##       "max_bytes": int (0 = no cap; a bigger body fails with error "too big")}
 ##     done.call(res) with res = {"ok": bool, "code": int, "body": PackedByteArray,
-##       "error": "" | "offline" | "timeout" | "backoff" | "http <code>" | "busy",
+##       "error": "" | "offline" | "timeout" | "backoff" | "http <code>" | "busy" | "too big",
 ##       "retry_after": int}
 ##   is_offline() -> bool: the last request failed for lack of network.
 
@@ -72,6 +73,8 @@ func _start(url: String, opts: Dictionary, done: Callable) -> void:
 	req.use_threads = true
 	req.timeout = float(opts.get("timeout", 20.0))
 	req.max_redirects = 5
+	if int(opts.get("max_bytes", 0)) > 0:
+		req.body_size_limit = int(opts["max_bytes"])
 	if str(opts.get("download_file", "")) != "":
 		req.download_file = opts["download_file"]
 		req.accept_gzip = false
@@ -126,6 +129,8 @@ static func classify(result: int, code: int, headers: PackedStringArray) -> Dict
 				res["error"] = "http %d" % code
 		HTTPRequest.RESULT_TIMEOUT:
 			res["error"] = "timeout"
+		HTTPRequest.RESULT_BODY_SIZE_LIMIT_EXCEEDED:
+			res["error"] = "too big"
 		HTTPRequest.RESULT_CANT_RESOLVE, HTTPRequest.RESULT_CANT_CONNECT, HTTPRequest.RESULT_CONNECTION_ERROR, \
 		HTTPRequest.RESULT_NO_RESPONSE, HTTPRequest.RESULT_TLS_HANDSHAKE_ERROR:
 			res["error"] = "offline"
