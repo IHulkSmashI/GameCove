@@ -204,7 +204,7 @@ func _rebuild() -> void:
 	_show_value()
 	rebuilt.emit()
 	if had_focus and button != null and button.is_inside_tree():
-		button.grab_focus.call_deferred()
+		Kit.focus_later(button)
 
 
 static func _index_of(vals: Array, v: Variant) -> int:

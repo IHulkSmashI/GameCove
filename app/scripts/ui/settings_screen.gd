@@ -339,7 +339,7 @@ func open_category(id: String, part := "") -> void:
 		var f: Array = pages[id].focusables()
 		target = f[0] if not f.is_empty() else null
 	if target != null and is_inside_tree():
-		target.grab_focus.call_deferred()
+		Kit.focus_later(target)
 
 
 func _link() -> void:

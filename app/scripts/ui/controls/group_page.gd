@@ -106,7 +106,7 @@ func rebuild() -> void:
 			var n: Node = f
 			while n != null and n != self:
 				if "key" in n and str(n.get("key")) == keep:
-					f.grab_focus.call_deferred()
+					Kit.focus_later(f)
 					return
 				n = n.get_parent()
 

@@ -156,7 +156,7 @@ func rebuild() -> void:
 		add_child(steam_button)
 	relinked.emit()
 	if had != null and is_inside_tree():
-		(reset_button if focus_reset and reset_button != null else edit_button).grab_focus.call_deferred()
+		Kit.focus_later(reset_button if focus_reset and reset_button != null else edit_button)
 
 
 func _on_edit() -> void:

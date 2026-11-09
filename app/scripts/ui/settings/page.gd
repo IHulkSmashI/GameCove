@@ -52,7 +52,7 @@ func rebuild() -> void:
 	build()
 	rebuilt.emit()
 	if keep != "" and rows.has(keep) and is_inside_tree():
-		rows[keep].button.grab_focus.call_deferred()
+		Kit.focus_later(rows[keep].button)
 
 
 func focusables() -> Array:

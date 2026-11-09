@@ -111,7 +111,7 @@ func _layout() -> void:
 	if keep != "" and is_inside_tree():
 		var target: Control = views[keep].button if views.has(keep) else (more_row.button if more_row != null and keep == "<more>" else null)
 		if target != null:
-			target.grab_focus.call_deferred()
+			Kit.focus_later(target)
 
 
 func _view(id: String) -> Control:
@@ -151,7 +151,7 @@ func toggle_more() -> void:
 	expanded = not expanded
 	_layout()
 	if is_inside_tree() and more_row != null:
-		more_row.button.grab_focus.call_deferred()
+		Kit.focus_later(more_row.button)
 
 
 func focusables() -> Array:

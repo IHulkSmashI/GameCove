@@ -123,6 +123,21 @@ static func chip(text: String, icon_name := "", tone := "", mono := false) -> Pa
 
 ## Chain controls top to bottom. The ends point at `top` / themselves so focus
 ## can't wander off into whatever happens to be behind.
+## Focus `c` once the current frame's work is done, only if it is still in the
+## tree and visible then (a list or tab rebuilt meanwhile frees or detaches it:
+## grab_focus() on it is an engine error and focus is lost). Holds a weak ref,
+## so a freed node is simply skipped.
+static func focus_later(c: Control) -> void:
+	if c == null:
+		return
+	var ref: WeakRef = weakref(c)
+	(func():
+		var n: Control = ref.get_ref()
+		if n != null and n.is_inside_tree() and n.is_visible_in_tree():
+			n.grab_focus()
+	).call_deferred()
+
+
 static func link_vertical(controls: Array, top: Control = null) -> void:
 	for i in controls.size():
 		var c: Control = controls[i]
