@@ -3,8 +3,12 @@ extends "res://scripts/ui/device/device_panel.gd"
 ## state, Check / Update, a progress bar while installing, "Restart to finish"
 ## once staged, and a Restart button. Nothing installs while a game runs;
 ## kinds this system can't update say why. Checks only run when asked.
+## Below them: the maker's BIOS / EC / controller firmware (from the firmware index, guided steps,
+## an ASUS EZ Flash USB drive, a QR of the maker's page) and the driver stack.
 
 const Icons := preload("res://scripts/ui/icons.gd")
+const Hub := preload("res://scripts/system/firmware_texts.gd")
+const QR := preload("res://scripts/ui/settings/qr.gd")
 
 var state: Dictionary = {}
 var buttons := {}          # "check:os", "apply:os", "check_all", "reboot", "apply:firmware:<id>" -> Button
@@ -12,6 +16,7 @@ var _progress := {}        # kind -> [percent, line]
 var _messages := {}        # kind -> last finished message (shown under the card)
 var _side: VBoxContainer
 var _cards: VBoxContainer
+var _qr_for := ""          # hub item id whose maker-page QR is showing
 
 
 static func build(services_: Dictionary) -> Control:
@@ -53,10 +58,13 @@ func _on_progress(kind: String, percent: float, line: String) -> void:
 
 func _on_finished(kind: String, ok: bool, message: String) -> void:
 	_progress.erase(kind)
-	if ok:
+	if kind == "usb":
+		_messages["maker"] = Hub.USB_DONE % message if ok else str(Hub.REASONS.get(message, message))
+		toast_requested.emit(_messages["maker"], "check" if ok else "alert", "good" if ok else "warn")
+	elif ok:
 		_messages.erase(kind)
 	else:
-		_messages[kind] = Texts.finished_text(kind, message)
+		_messages[kind] = Hub.REASONS[message] if Hub.REASONS.has(message) else Texts.finished_text(kind, message)
 		toast_requested.emit(_messages[kind], "alert", "warn")
 	var up := svc("updates")
 	if up != null:
@@ -106,6 +114,8 @@ func _fill() -> void:
 	var focus: Array = []
 	for kind in Texts.KINDS:
 		focus.append_array(_kind_card(kind))
+	focus.append_array(_hub_card("maker"))
+	focus.append_array(_hub_card("drivers"))
 	chain(focus)
 
 
@@ -228,6 +238,152 @@ func _kind_card(kind: String) -> Array:
 	if focus.is_empty():
 		focus.append(c[0])
 	return focus
+
+
+func _hub_items(section: String) -> Array:
+	var hub: Array = state.get("hub", []) if state.get("hub") is Array else []
+	# fwupd devices already sit in the Firmware card above.
+	return hub.filter(func(i): return i is Dictionary and i.get("section") == section and i.get("source") != "fwupd")
+
+
+## Maker firmware ("maker") or driver stack ("drivers"): one row per hub item.
+func _hub_card(kind: String) -> Array:
+	var ph := _phase(kind)
+	var title := Hub.MAKER_TITLE if kind == "maker" else Hub.DRIVERS_TITLE
+	var c := DKit.card(title, "bolt" if kind == "maker" else "update", {"error": "bad", "available": "info"}.get(ph, "accent"))
+	c[0].name = "Card_" + kind
+	DKit.head_chip(c[1], DKit.chip(Texts.PHASES.get(ph, ph), Texts.PHASE_TONES.get(ph, ""),
+		{"up_to_date": "check", "error": "alert"}.get(ph, "")))
+	_cards.add_child(c[0])
+	if ph == "unsupported":
+		c[1].add_child(DKit.quiet(Hub.UNSUPPORTED_MAKER))
+		return [c[0]]
+	c[1].add_child(DKit.quiet(Hub.MAKER_LINE if kind == "maker" else Hub.DRIVERS_LINE))
+	var data: Dictionary = state.get(kind, {}) if state.get(kind) is Dictionary else {}
+	var focus: Array = []
+	var items := _hub_items("firmware" if kind == "maker" else "drivers")
+	if str(data.get("error", "")) == "index_unavailable":
+		c[1].add_child(DKit.check_line("maybe", Hub.INDEX_UNAVAILABLE))
+	elif bool(data.get("stale", false)):
+		c[1].add_child(DKit.quiet(Hub.STALE))
+	if items.is_empty() and ph in ["idle", "up_to_date"]:
+		c[1].add_child(DKit.quiet(Hub.NOTHING))
+	for it in items:
+		focus.append_array(_hub_row(c[1], it))
+	var msg := str(_messages.get(kind, ""))
+	if msg != "":
+		var m := DKit.check_line("maybe", msg)
+		m.name = "Message"
+		c[1].add_child(m)
+	if not ph in ["checking", "applying"]:
+		var ck := _btn("check:" + kind, Hub.CHECK)
+		ck.pressed.connect(func(): svc("updates").check(kind))
+		c[1].add_child(ck)
+		focus.append(ck)
+	if focus.is_empty():
+		focus.append(c[0])
+	return focus
+
+
+func _hub_row(col: VBoxContainer, it: Dictionary) -> Array:
+	var focus: Array = []
+	var row := Kit.vbox(4)
+	row.name = "Item_" + str(it["id"]).replace(":", "_")
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var head := Kit.hbox(10)
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var status := str(it.get("status", "unknown"))
+	var line := ""
+	if status == "update":
+		line = Hub.NEW_AVAILABLE % [it.get("name", ""), it.get("latest", ""), Hub.YOURS % (it.get("current", "") if str(it.get("current", "")) != "" else "?")]
+	else:
+		var parts := PackedStringArray([str(it.get("name", ""))])
+		if str(it.get("current", "")) != "":
+			parts.append(str(it["current"]))
+		if status == "upstream" and str(it.get("latest", "")) != "":
+			parts.append("upstream " + str(it["latest"]))
+		line = "  ·  ".join(parts)
+	var t := Kit.label(line, "", true)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.add_theme_font_override("font", ThemeLib.font("medium", true))
+	head.add_child(t)
+	if str(Hub.STATUS.get(status, "")) != "":
+		head.add_child(DKit.chip(Hub.STATUS[status], Hub.STATUS_TONES.get(status, "")))
+	row.add_child(head)
+	var how := str(it.get("how", "link"))
+	if it.get("section") == "drivers":
+		row.add_child(Kit.label(Hub.DRIVER_HOW.get(how, ""), "CaptionLabel", true))
+	else:
+		row.add_child(Kit.label(Hub.HOW.get(how, ""), "CaptionLabel", true))
+		if str(it.get("upstream_note", "")) != "":
+			row.add_child(Kit.label(Hub.UPSTREAM_NOTE % it["upstream_note"], "CaptionLabel", true))
+		if str(it.get("service", "")) in ["disabled", "masked"]:
+			row.add_child(DKit.check_line("maybe", Hub.SERVICE_OFF))
+		var notes := str(it.get("notes", "")).strip_edges()
+		if notes != "" and status == "update":
+			row.add_child(DKit.quiet(notes.get_slice("\n", 0).left(160)))
+		if status == "update" or how == "link":
+			var steps: Array = Hub.STEPS.get(str(it.get("flash", "link")), [])
+			for i in steps.size():
+				row.add_child(Kit.label("%d. %s" % [i + 1, steps[i]], "CaptionLabel", true))
+		var btns := Kit.hbox(12)
+		btns.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var up := svc("updates")
+		if it.get("flash") == "ez-flash" and status == "update" and up != null:
+			var targets: Array = state.get("usb_targets", []) if state.get("usb_targets") is Array else []
+			if targets.is_empty():
+				row.add_child(DKit.quiet(Hub.NEEDS_USB))
+			elif up.has_method("prepare_usb"):
+				var pb := _btn("usb:" + str(it["id"]), Hub.PREPARE_USB, true)
+				pb.disabled = _game_running() or not bool((state.get("power", {}) as Dictionary).get("ok", true))
+				var mount := str(targets[0]["mount"])
+				var id := str(it["id"])
+				pb.pressed.connect(func(): svc("updates").prepare_usb(id, mount))
+				btns.add_child(pb)
+				if not pb.disabled:
+					focus.append(pb)
+				var pw: Dictionary = state.get("power", {}) if state.get("power") is Dictionary else {}
+				if not bool(pw.get("ok", true)):
+					row.add_child(DKit.check_line("maybe", str(Hub.REASONS.get(str(pw.get("reason", "")), ""))))
+		var page := str(it.get("download_page", it.get("notes_url", "")))
+		var qr_box: VBoxContainer = null
+		if page != "":
+			var id2 := str(it["id"])
+			qr_box = Kit.vbox(4)
+			qr_box.name = "QRBox"
+			qr_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			qr_box.visible = _qr_for == id2
+			var lb := _btn("link:" + id2, Hub.HIDE_LINK if _qr_for == id2 else Hub.SHOW_LINK)
+			var box := qr_box
+			lb.pressed.connect(func():
+				_qr_for = "" if _qr_for == id2 else id2
+				box.visible = _qr_for == id2
+				lb.text = Hub.HIDE_LINK if box.visible else Hub.SHOW_LINK
+				if box.visible and box.get_child_count() == 0:
+					_fill_qr(box, page))
+			btns.add_child(lb)
+			focus.append(lb)
+			if qr_box.visible:
+				_fill_qr(qr_box, page)
+		if btns.get_child_count() > 0:
+			row.add_child(btns)
+		if qr_box != null:
+			row.add_child(qr_box)
+	col.add_child(row)
+	return focus
+
+
+## A phone-scannable QR of the maker's page, and the address under it.
+func _fill_qr(box: VBoxContainer, page: String) -> void:
+	var tex := QR.texture(page, 4)
+	if tex != null:
+		var qr := TextureRect.new()
+		qr.name = "QR"
+		qr.texture = tex
+		qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		qr.custom_minimum_size = Vector2(200, 200)
+		box.add_child(qr)
+	box.add_child(Kit.label(page, "CaptionLabel", true))
 
 
 func default_focus() -> Control:
