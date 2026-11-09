@@ -55,7 +55,7 @@ const PLAN := [
 	["sparkle", "Set up the device", "Fixes for things that don't work out of the box, and power defaults."],
 ]
 const MODE_EASY := "Easy"
-const MODE_EASY_CARD := "Easy (recommended)"
+const MODE_EASY_CARD := "Easy"
 const MODE_EASY_FOOT := "Recommended defaults"
 const SELECTED_DEFAULT := "Selected by default"
 const SELECTED := "Selected"

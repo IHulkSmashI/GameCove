@@ -101,6 +101,8 @@ func _run() -> void:
 	if flow_script.instance != null:
 		flow_script.instance.finish()
 	S = load("res://tests/test_ui_settings.gd")
+	if get_script().resource_path.get_file() == "shoot.gd":
+		_fake_controls()
 	if want(["home_empty"]):
 		_status()
 		await frames(2)
@@ -190,6 +192,8 @@ func _run() -> void:
 		qm.gamescope = gs
 		qm.device = dev
 		qm.commands.runner = r
+		qm.fixes = F.FakeFixes.new()
+		qm.fixes.list = [{"id": "a", "status": "applied"}, {"id": "b", "status": "applied"}, {"id": "c", "status": "available"}]
 		main._open_menu()
 		await shot("quick_game")
 		qm.show_section(1)
@@ -394,6 +398,24 @@ func _settings_shots() -> void:
 			await shot("quick_device_partial")
 		qm.close()
 		main.playing = {}
+
+
+## A set-up Claw 8 EX's Controls (shoot_controls.gd's snapshot and patch) in
+## place of the real registry, which finds nothing on the build machine and
+## would leave the quick menu and the Handheld settings pages empty.
+func _fake_controls() -> void:
+	var old := root.get_node_or_null("Controls")
+	if old != null:
+		old.name = "ControlsReal"
+	var fc: Node = load("res://tests/fixtures/ui_controls/fake_controls.gd").new()
+	fc.name = "Controls"
+	var here: String = get_script().resource_path.get_base_dir()
+	fc.load_snapshot("res://tests/fixtures/ui_controls/msi-claw-8-ex.json", load(here.path_join("shoot_controls.gd")).claw_patch())
+	root.add_child(fc)
+	main.quick_menu.use_controls(fc, null)
+	var svc: Dictionary = main.settings.services.duplicate()
+	svc["controls"] = fc
+	main.settings.set_services(svc)
 
 
 func _noop(_g = null) -> void:

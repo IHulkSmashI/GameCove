@@ -78,6 +78,7 @@ func _run() -> void:
 		flow_script.instance.finish()
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
 	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
+	main.hint_status.text = "● GameCove 0.4   MSI Claw 8 EX AI+"
 	svc = main.streaming
 	screen = main.stream_screen
 	svc.sync_mode = true
