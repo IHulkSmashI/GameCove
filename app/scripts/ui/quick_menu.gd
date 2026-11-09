@@ -52,7 +52,11 @@ signal settings_requested(category: String, part: String)
 const SECTIONS := TC.TABS
 const SECTION_ICONS := TC.TAB_ICONS
 const WIDTH := 580
-const TOP_INSET := 72.0
+## The sheet runs the full height: the scrim dims the top and hint bars, so
+## the sheet's own battery pill and prompts are the only ones that read.
+const TOP_INSET := 14.0
+## How dark the full-screen scrim is (it covers the top bar and hint bar too).
+const SCRIM_ALPHA := 0.82
 const SUPPORT_TEXT := {
 	"full": "Full support: tested on this device by the GameCove team.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
@@ -156,7 +160,7 @@ func use_controls(registry: Object, prof: Object = null) -> void:
 func _build_frame() -> void:
 	dim = ColorRect.new()
 	dim.name = "Dim"
-	dim.color = Color(0, 0, 0, 0.55)
+	dim.color = Color(0, 0, 0, SCRIM_ALPHA)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(e):
 		if e is InputEventMouseButton and e.pressed:
@@ -286,7 +290,6 @@ func _place_panel() -> void:
 	var m := 14.0
 	panel.anchor_top = 0.0
 	panel.anchor_bottom = 1.0
-	# Below the top bar, so the clock and battery stay in view.
 	panel.offset_top = TOP_INSET
 	panel.offset_bottom = -m
 	if side == "left":
@@ -380,11 +383,12 @@ func _style_tabs() -> void:
 		tabs[t].text = SECTIONS[t] if on else ""
 		tabs[t].size_flags_stretch_ratio = 3.2 if on else 1.0
 		tabs[t].icon_alignment = HORIZONTAL_ALIGNMENT_LEFT if on else HORIZONTAL_ALIGNMENT_CENTER
-		var col: Color = ThemeLib.color("on_accent") if on else ThemeLib.color("text_2")
+		var col: Color = ThemeLib.color("accent") if on else ThemeLib.color("text_2")
 		tabs[t].icon = CIcons.tex(SECTION_ICONS[t], 20, col)
 
 
 func _animate_in() -> void:
+	dim.color = Color(0, 0, 0, SCRIM_ALPHA) if ThemeLib.is_dark() else Color(0.08, 0.1, 0.14, 0.6)
 	dim.modulate.a = 0.0
 	Motion.to(dim, "modulate:a", 1.0, Motion.FAST)
 	var dx := Motion.slide(40.0) * (1.0 if side == "right" else -1.0)
@@ -617,8 +621,10 @@ func _style_use_row(r: VBoxContainer, on: bool) -> void:
 	if on:
 		var acc := ThemeLib.color("accent")
 		var sb := ThemeLib.gradient_box(Color(acc, 0.16), Color(ThemeLib.color("accent_2"), 0.22), ThemeLib.radius("m"), Color(acc, 0.5), 18, 10)
+		r.card_box = sb
 		r.button.add_theme_stylebox_override("normal", sb)
 		r.button.add_theme_stylebox_override("hover", sb)
+		r._refresh_focus()
 
 
 func _on_reset_pressed() -> void:

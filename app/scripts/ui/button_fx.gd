@@ -143,7 +143,7 @@ func content_width() -> float:
 	var sb := button.get_theme_stylebox("normal")
 	var w := sb.get_margin(SIDE_LEFT) + sb.get_margin(SIDE_RIGHT)
 	if glyph != "":
-		w += GLYPH + GAP
+		w += _glyph_w() + GAP
 	w += _font().get_string_size(_label(), HORIZONTAL_ALIGNMENT_LEFT, -1, _font_size()).x
 	if button.icon != null:
 		w += GAP + _icon_size().x
@@ -183,16 +183,17 @@ func _draw() -> void:
 	var text := _label()
 	var tw := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var total := tw
+	var gw := _glyph_w()
 	if glyph != "":
-		total += GLYPH + GAP
+		total += gw + GAP
 	var isz := _icon_size()
 	if button.icon != null:
 		total += GAP + isz.x
 	var x := (size.x - total) / 2.0
 	var cy := size.y / 2.0
 	if glyph != "":
-		_draw_glyph(Vector2(x + GLYPH / 2.0, cy))
-		x += GLYPH + GAP
+		_draw_glyph(Vector2(x + gw / 2.0, cy))
+		x += gw + GAP
 	var asc := f.get_ascent(fs)
 	var desc := f.get_descent(fs)
 	draw_string(f, Vector2(x, cy + (asc - desc) / 2.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
@@ -201,6 +202,16 @@ func _draw() -> void:
 		x += GAP
 		draw_texture_rect(button.icon, Rect2(Vector2(x, cy - isz.y / 2.0), isz), false, col)
 	_drawing = false
+
+
+## Width of the glyph: a disc for face buttons, wider for word buttons.
+func _glyph_w() -> float:
+	if glyph == "":
+		return 0.0
+	var label: String = load("res://scripts/ui/glyph.gd").label_for(glyph)
+	if label.length() <= 2:
+		return GLYPH
+	return maxf(GLYPH, ThemeLib.font("mono_bold").get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 14.0)
 
 
 ## The glyph inside a button: on a primary, a dark disc with a light letter;
@@ -220,9 +231,15 @@ func _draw_glyph(c: Vector2) -> void:
 		if bg.a <= 0.0:
 			bg = ThemeLib.soft(0.18)
 			ink = ThemeLib.color("text")
-	draw_circle(c, r, bg, true, -1.0, true)
 	var label: String = Glyph.label_for(glyph)
 	var f := ThemeLib.font("mono_bold")
-	var fs := 13
+	var fs := 13 if label.length() <= 2 else 11
 	var w := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var gw := _glyph_w()
+	if gw > GLYPH:
+		# Word buttons (View, Menu): a key cap instead of a disc.
+		var sb := ThemeLib.box(bg, 7, 0, 0)
+		draw_style_box(sb, Rect2(Vector2(c.x - gw / 2.0, c.y - r + 1.0), Vector2(gw, GLYPH - 2.0)))
+	else:
+		draw_circle(c, r, bg, true, -1.0, true)
 	draw_string(f, Vector2(c.x - w / 2.0, c.y + (f.get_ascent(fs) - f.get_descent(fs)) / 2.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)

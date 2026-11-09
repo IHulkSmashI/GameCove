@@ -179,6 +179,13 @@ static func row_focus(r := -1) -> StyleBoxFlat:
 	return s
 
 
+## The "active" look (open tab, chosen filter, the PC whose apps show): a
+## quiet surface fill, no ring, no glow. Focus is the only thing that wears
+## the accent ring, so the eye always finds the d-pad cursor.
+static func active_box(r := -1, pad_x := 16, pad_y := 10) -> StyleBoxFlat:
+	return box(soft(0.13) if is_dark() else soft(0.09), r, pad_x, pad_y)
+
+
 ## A pill (fully rounded) with an optional hairline border.
 static func pill(bg: Color, border: Color = Color(0, 0, 0, 0), pad_x := 20, pad_y := 10) -> StyleBoxFlat:
 	var s := box(bg, 999, pad_x, pad_y)
@@ -362,13 +369,11 @@ static func build(t: Dictionary = tokens) -> Theme:
 		ib.set_border_width_all(1)
 	th.set_stylebox("focus", "IconButton", bf)
 
-	# Top-bar tabs: quiet text inside the tab group; the chosen tab is a lifted
-	# glass pill, focus is the ring.
+	# Top-bar tabs: quiet text inside the tab group; the chosen tab is a quiet
+	# surface pill (active, not focus: only the d-pad focus wears the ring).
 	th.set_type_variation("TabButton", "Button")
 	_button(th, "TabButton", Color(0, 0, 0, 0), soft(0.05), Color(0, 0, 0, 0), color("text_2"), 999, 16, 7)
-	var chosen := pill(Color(acc, 0.15 if is_dark() else 0.10), Color(acc, 0.70), 16, 7)
-	chosen.shadow_color = Color(glow, glow.a * 0.35)
-	chosen.shadow_size = 8
+	var chosen := active_box(999, 16, 7)
 	th.set_stylebox("pressed", "TabButton", chosen)
 	th.set_stylebox("hover_pressed", "TabButton", chosen)
 	th.set_font("font", "TabButton", font("bold"))
@@ -378,20 +383,20 @@ static func build(t: Dictionary = tokens) -> Theme:
 	th.set_stylebox("focus", "TabButton", focus_ring(999, ring, 2, true))
 	th.set_color("font_focus_color", "TabButton", color("text"))
 
-	# Quick menu section tabs: segments of a pill group; the open one is a
-	# solid accent segment.
+	# Section tabs (quick menu, Settings > Device): segments of a pill group;
+	# the open one is a quiet surface segment with a short accent bar under it.
 	th.set_type_variation("SectionTab", "Button")
 	_button(th, "SectionTab", Color(0, 0, 0, 0), soft(0.06), soft(0.10), color("text_2"), radius("s"), 8, 6)
-	var sel := box(acc, radius("s"), 8, 6)
-	sel.shadow_color = Color(glow, glow.a * 0.5)
-	sel.shadow_size = 8
+	var sel := active_box(radius("s"), 8, 6)
+	sel.border_color = acc
+	sel.border_width_bottom = 2
 	th.set_stylebox("pressed", "SectionTab", sel)
 	th.set_stylebox("hover_pressed", "SectionTab", sel)
 	th.set_font("font", "SectionTab", font("semibold"))
 	th.set_font_size("font_size", "SectionTab", SIZE_CAPTION - 1)
 	th.set_constant("h_separation", "SectionTab", 4)
 	for c in ["font_pressed_color", "font_hover_pressed_color"]:
-		th.set_color(c, "SectionTab", color("on_accent"))
+		th.set_color(c, "SectionTab", color("text"))
 	th.set_color("font_hover_color", "SectionTab", color("text"))
 	th.set_stylebox("focus", "SectionTab", focus_ring(radius("s"), ring, 2, true))
 	th.set_color("font_focus_color", "SectionTab", color("text"))
@@ -403,7 +408,8 @@ static func build(t: Dictionary = tokens) -> Theme:
 		var cb: StyleBoxFlat = th.get_stylebox(st, "ChipButton")
 		cb.border_color = color("line_2")
 		cb.set_border_width_all(1)
-	var on_chip := pill(Color(acc, 0.16 if is_dark() else 0.12), Color(acc, 0.70), 16, 6)
+	# Chosen filter: a quiet surface fill and accent text, no accent edge.
+	var on_chip := active_box(999, 16, 6)
 	th.set_stylebox("pressed", "ChipButton", on_chip)
 	th.set_stylebox("hover_pressed", "ChipButton", on_chip)
 	th.set_font("font", "ChipButton", font("semibold"))

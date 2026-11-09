@@ -184,6 +184,15 @@ static func _cmp(a: int, b: int, ia: int, ib: int) -> bool:
 	return a < b if a != b else ia < ib
 
 
+## `views` with every view whose key is in `seen` moved to the end, so the
+## first tiles are ones not already on screen (`n`: how many the caller wants
+## fresh; a short list keeps the repeats rather than going empty).
+static func push_back(views: Array, seen: Dictionary, _n: int) -> Array:
+	var fresh: Array = views.filter(func(v): return not seen.has(str(v.get("key", ""))))
+	var again: Array = views.filter(func(v): return seen.has(str(v.get("key", ""))))
+	return fresh + again
+
+
 static func on_sale_wishlist(items: Array) -> Array:
 	return items.filter(func(i): return i.get("on_sale", false) and i.get("best_deal") is Dictionary and not i["best_deal"].is_empty())
 

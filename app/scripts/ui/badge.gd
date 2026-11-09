@@ -55,7 +55,7 @@ func setup(b: Dictionary, badge_style := "tile") -> void:
 	label.add_theme_color_override("font_color", fg)
 	# Tile pills are mono micro type; chips (spotlight, game page) are text.
 	label.add_theme_font_override("font", ThemeLib.font("bold", true) if chip else ThemeLib.font("mono_bold"))
-	label.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION - 1 if chip else 11)
+	label.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION - 1 if chip else 12)
 	row.add_child(label)
 	var bg: Color = flag if solid else (Color(tone_col, 0.12) if chip else Color(0.02, 0.03, 0.05, 0.78))
 	if chip and not ThemeLib.is_dark():

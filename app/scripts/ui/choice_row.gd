@@ -2,7 +2,7 @@ extends VBoxContainer
 ## One setting: a wide row "Title ...... [ A | B | C ]" with a segmented
 ## control (the chosen segment filled with the accent) when there are two to
 ## four short values, else "‹ Value ›" with position dots; and a line under it
-## (in the accent while focused). Left/right (d-pad, stick, arrow keys) step
+## (neutral text, inside the row's card while it shows). Left/right (d-pad, stick, arrow keys) step
 ## through values; A / click steps forward. Booleans are a switch (Off / On).
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
@@ -41,6 +41,9 @@ var locked := false
 var title_label: Label
 var _row: HBoxContainer
 var _badge_box: HBoxContainer
+## Optional card look for the row (and its line when carded) instead of the
+## theme's RowButton box, e.g. the quick menu's tinted per-game switch.
+var card_box: StyleBox
 
 
 func setup(setting_key: String, title: String, vals: Array, lbls: Array, current: Variant, icon := "") -> void:
@@ -275,9 +278,11 @@ func _refresh_focus() -> void:
 	# the ring wraps the row and its explanation as one card (see _draw).
 	var f := button.has_focus()
 	_hint.visible = (f or not collapse_hint) and _hint.text != ""
-	var hc: Color = ThemeLib.color("accent") if f and ThemeLib.is_dark() else ThemeLib.color("text_2")
-	_hint.add_theme_color_override("font_color", hc)
-	var carded := f and _hint.visible
+	# Helper text is neutral: the accent belongs to focus and values.
+	_hint.add_theme_color_override("font_color", ThemeLib.color("text_2"))
+	# A line that always shows (collapse_hint off) sits inside the row's card
+	# too, so it reads as part of the setting, not a loose caption.
+	var carded := _hint.visible
 	var sep := 0 if carded else 6
 	if get_theme_constant("separation") != sep:
 		_busy = true
@@ -295,6 +300,9 @@ func _refresh_focus() -> void:
 		for st in ["focus", "normal", "hover"]:
 			button.remove_theme_stylebox_override(st)
 		_hint.remove_theme_stylebox_override("normal")
+		if card_box != null:
+			button.add_theme_stylebox_override("normal", card_box)
+			button.add_theme_stylebox_override("hover", card_box)
 	queue_redraw()
 	if _left == null:
 		return
@@ -304,12 +312,13 @@ func _refresh_focus() -> void:
 
 
 func _draw() -> void:
-	if button == null or not button.has_focus() or not _hint.visible:
+	if button == null or not _hint.visible:
 		return
 	var r := Rect2(Vector2.ZERO, size)
 	var th := button.theme_type_variation
-	draw_style_box(get_theme_stylebox("normal", th if th != "" else &"Button"), r)
-	draw_style_box(ThemeLib.row_focus(), r)
+	draw_style_box(card_box if card_box != null else get_theme_stylebox("normal", th if th != "" else &"Button"), r)
+	if button.has_focus():
+		draw_style_box(ThemeLib.row_focus(), r)
 
 
 func _on_gui_input(event: InputEvent) -> void:

@@ -461,3 +461,7 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and play_button != null:
 		_style_play()
 		_style_frame()
+	elif what == NOTIFICATION_RESIZED and not _shelves.is_empty():
+		# Covers size to the screen (Tile.PER_ROW across): rebuild if that changed.
+		if Tile.size_for(Tile.row_width(), Shelf.GAP) != _shelves[0].tile_size:
+			(func(): if is_instance_valid(self): set_games(games)).call_deferred()

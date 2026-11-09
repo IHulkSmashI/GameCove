@@ -169,9 +169,22 @@ func test_tile_card_layout() -> void:
 	t.setup(g)
 	eq(t.custom_minimum_size, Tile.SIZE, "tile size")
 	eq(t.sub_label.text, "Steam · 10 h", "mono sub-line: store and playtime")
-	ok(t.selected_pill != null and t.selected_pill.modulate.a == 0.0, "SELECTED pill hidden until focus")
+	eq(t.selected_pill, null, "no SELECTED pill on the cover (ring, lift and details bar say it)")
 	eq(t.info_box.get_parent(), t.card, "title block on the card")
+	ok(t.title_label.visible, "a generated cover gets its title in the plate")
+	eq(t.fallback.get("title_label"), null, "and none in the art (no double title)")
+	ok(t.fallback.monogram, "a monogram watermark instead")
+	ok(t.sub_label.get_theme_font_size("font_size") >= 12, "sub-line at the readability floor")
 	t.free()
+	var u := Logic.g("steam", "9", "Neon", false, 0, {"anticheat": {"status": "denied", "anticheats": ["EAC"]}})
+	var t2: Button = Tile.new()
+	t2.setup(u)
+	ok(t2.corner_badge != null and t2.corner_badge.get_parent() == t2.pill_row, "status pill sits in the bottom plate")
+	eq(t2.corner_badge.label.text, "Linux denied", "the anti-cheat problem, not 'Not installed'")
+	t2.free()
+	eq(Tile.size_for(1216.0), Vector2(Tile.SIZE.x + 2, roundf((Tile.SIZE.x + 2) * Tile.SIZE.y / Tile.SIZE.x)), "1280x800: about the base size")
+	ok(Tile.size_for(1472.0).x > 180.0, "1920x1200: bigger covers, still seven across")
+	eq(Tile.size_for(800.0), Tile.SIZE, "never smaller than the base size")
 	eq(Tile.sub_text(Logic.g("gog", "1", "X", false)), "GOG · Not installed", "not installed")
 
 
@@ -205,9 +218,11 @@ func test_big_screens_get_more_room() -> void:
 	eq(MainScript.base_size_for(Vector2i(1920, 1200)), Vector2i(1536, 960), "1200p lays out at 1.25x")
 
 
-func test_slider_tick_labels_are_round() -> void:
+func test_slider_tick_labels_are_even() -> void:
 	var SliderRow = load("res://scripts/ui/slider_row.gd")
-	eq(SliderRow.tick_values(5.0, 30.0, 1.0), [5.0, 10.0, 15.0, 20.0, 25.0, 30.0], "every 5 W on 5-30 W")
+	eq(SliderRow.tick_values(5.0, 25.0, 1.0), [5.0, 10.0, 15.0, 20.0, 25.0], "even steps on 5-25 W")
+	eq(SliderRow.tick_values(8.0, 35.0, 1.0), [8.0, 15.0, 22.0, 28.0, 35.0], "even steps from an odd start")
+	eq(SliderRow.tick_values(0.0, 2.0, 1.0), [0.0, 1.0, 2.0], "no repeats on a short range")
 	var v: Array = SliderRow.tick_values(8.0, 35.0, 1.0)
 	eq(v[0], 8.0, "starts at the minimum")
 	eq(v[-1], 35.0, "ends at the maximum")

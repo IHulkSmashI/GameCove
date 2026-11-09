@@ -13,6 +13,7 @@ const Illustrations := preload("res://scripts/ui/illustrations.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const Osk := preload("res://scripts/ui/osk.gd")
+const ButtonFx := preload("res://scripts/ui/button_fx.gd")
 
 signal open_requested(game: Dictionary)
 signal game_focused(game: Dictionary)
@@ -53,6 +54,9 @@ var _empty: Control
 var _empty_text: Label
 var _tiles: Array = []
 var _memory_key := ""
+## Cover size for the current width: at most Tile.PER_ROW-ish (7) across.
+var tile_size := Tile.SIZE
+const MAX_COLS := 7
 
 
 func _init() -> void:
@@ -93,6 +97,8 @@ func _init() -> void:
 	search_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	search_button.add_theme_constant_override("h_separation", 10)
 	search_button.pressed.connect(open_search)
+	# The button that triggers it, right on the control (Y search, X sort).
+	ButtonFx.attach(search_button, {"glyph": "Y"})
 	bar.add_child(search_button)
 	var sep := Control.new()
 	sep.custom_minimum_size = Vector2(6, 0)
@@ -131,6 +137,7 @@ func _init() -> void:
 	sort_button.custom_minimum_size = Vector2(0, 44)
 	sort_button.add_theme_constant_override("h_separation", 8)
 	sort_button.pressed.connect(func(): cycle_sort(1))
+	ButtonFx.attach(sort_button, {"glyph": "X"})
 	bar.add_child(sort_button)
 	var bar_pad := Kit.margin(0, int(PAD.x), 0)
 	bar_pad.add_child(bar)
@@ -318,7 +325,7 @@ func _rebuild(keep_focus: bool) -> void:
 	_tiles.clear()
 	for g in shown:
 		var t: Button = Tile.new()
-		t.setup(g, true, Tile.SIZE, false)
+		t.setup(g, true, tile_size, false)
 		var game: Dictionary = g
 		t.pressed.connect(func(): open_requested.emit(game))
 		t.focus_entered.connect(_on_tile_focus.bind(t))
@@ -403,7 +410,7 @@ func _on_tile_focus(t: Control) -> void:
 	for b in _toolbar():
 		b.focus_neighbor_bottom = b.get_path_to(t)
 	var row := _tiles.find(t) / grid.columns
-	var pitch := Tile.SIZE.y + GAP.y
+	var pitch := tile_size.y + GAP.y
 	# Keep the focused row fully above the bottom fade, showing as much of the
 	# rows above it as fits.
 	var bottom := (row + 1) * pitch + PAD.y + 40.0
@@ -445,11 +452,11 @@ func _build_details() -> PanelContainer:
 	return p
 
 
-## The details bar: an accent-edged card with a solid SELECTED pill.
+## The details bar: a glass card (no accent edge: the focused tile wears the
+## only ring) with a solid SELECTED pill.
 func _style_details(p: PanelContainer) -> void:
 	var acc := ThemeLib.color("accent")
 	var sb := ThemeLib.card(22, 12)
-	sb.border_color = Color(acc, 0.45)
 	p.add_theme_stylebox_override("panel", sb)
 	var pill := p.find_child("SelectedPill", true, false) as PanelContainer
 	if pill != null:
@@ -551,10 +558,19 @@ func _notification(what: int) -> void:
 		_fade.texture = t
 	elif what == NOTIFICATION_RESIZED and grid != null:
 		var w := size.x - 48 - 24 - PAD.x
-		var cols := maxi(3, int((w + GAP.x) / (Tile.SIZE.x + GAP.x)))
+		var cols := clampi(int((w + GAP.x) / (Tile.SIZE.x + GAP.x)), 3, MAX_COLS)
+		# Seven across at most: wider screens get bigger covers, not more.
+		var want := Tile.SIZE
+		if cols == MAX_COLS:
+			var tw := floorf((w - 4.0 - (cols - 1) * GAP.x) / cols)
+			want = Vector2(tw, roundf(tw * Tile.SIZE.y / Tile.SIZE.x)) if tw > Tile.SIZE.x else Tile.SIZE
 		# Spread the leftover width into the gaps so the grid spans the row.
-		var gap := clampf((w - 4.0 - cols * Tile.SIZE.x) / maxf(1.0, cols - 1), GAP.x, GAP.x * 3.0)
+		var gap := clampf((w - 4.0 - cols * want.x) / maxf(1.0, cols - 1), GAP.x, GAP.x * 3.0)
 		grid.add_theme_constant_override("h_separation", int(gap))
-		if cols != grid.columns:
-			grid.columns = cols
+		var relink := cols != grid.columns
+		grid.columns = cols
+		if want != tile_size:
+			tile_size = want
+			_rebuild.call_deferred(true)
+		elif relink:
 			_link_grid()

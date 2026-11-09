@@ -152,7 +152,7 @@ func _show_part(id: String, animate: bool) -> void:
 		var t: Button = tabs.get(k)
 		if t != null:
 			t.set_pressed_no_signal(on)
-			t.icon = CIcons.tex(TAB_ICONS.get(k, "info"), 18, ThemeLib.color("on_accent") if on else ThemeLib.color("text_2"))
+			t.icon = CIcons.tex(TAB_ICONS.get(k, "info"), 18, ThemeLib.color("accent") if on else ThemeLib.color("text_2"))
 	if _photo_card != null:
 		_photo_card.visible = id == "about"
 	_fit()

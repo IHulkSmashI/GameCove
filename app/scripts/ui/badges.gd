@@ -105,6 +105,24 @@ static func for_tile(g: Dictionary, now := -1) -> Dictionary:
 	return {"corner": corner, "strip": strip}
 
 
+## The one pill a tile's bottom plate shows ({} for none): downloading, on
+## sale, update, an anti-cheat problem, new. "Not installed" is left out, the
+## tile's sub-line already says it (and the cover is dimmed).
+static func for_plate(g: Dictionary, now := -1) -> Dictionary:
+	var by := {}
+	for b in for_game(g, now):
+		by[b["kind"]] = b
+	for k in TILE_CORNER:
+		if k == "not_installed":
+			continue
+		if k == "anticheat_problem":
+			if by.has("anticheat") and by["anticheat"]["tone"] in ["warn", "bad"]:
+				return by["anticheat"]
+		elif by.has(k):
+			return by[k]
+	return {}
+
+
 ## Hours for the main story, else extras, else completionist; -1 if unknown.
 static func main_hours(info: Dictionary) -> float:
 	var t: Variant = info.get("time_to_beat")
