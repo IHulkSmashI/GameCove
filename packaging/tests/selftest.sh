@@ -173,6 +173,31 @@ check 'grep -q "no TDP service answered" "$(report)"' "no TDP service"
 check 'grep -q "GitHub releases not reachable" "$(report)"' "offline"
 
 # ---- the Claw's old EDID kernel argument seen on another handheld --------------------------------------
+# ---- each fix gets a verdict: applied, fixed by the system, needed but not applied, missing ----------
+setup RC71L fix_verdicts "ip ps"
+echo 'echo "selftest.device.fixes=ally-fingerprint-drain,ally-controller-wakeup,ally-gone"' >>"$B/gamecove.x86_64"
+cat >"$B/gamecove-fix" <<'FIXEOF'
+#!/bin/sh
+[ "$1" = --list ] && { printf 'ally-fingerprint-drain\nally-controller-wakeup\nally-mcu-powersave\nclaw-kbd-wakeup\nfan\n'; exit 0; }
+case $1 in
+ally-fingerprint-drain) printf 'applies=yes\ninstalled=no\nos_fixed=no\nhw=yes\nstate=off\n' ;;
+ally-controller-wakeup) printf 'applies=yes\ninstalled=no\nos_fixed=yes\nhw=yes\nstate=os-fixed\n' ;;
+ally-mcu-powersave) printf 'applies=yes\ninstalled=yes\nstate=on\n' ;;
+claw-kbd-wakeup) printf 'applies=no\nstate=n/a\n' ;;
+fan) printf 'applies=yes\ninstalled=no\nstate=partial\n' ;;
+esac
+FIXEOF
+chmod +x "$B/gamecove-fix"
+sh "$ST" --no-network >"$T/out" 2>&1
+rc=$?
+check '[ "$rc" -ne 0 ]' "a fix meant for the device but missing fails the run"
+check 'grep -q "\[warn\] fix ally-fingerprint-drain: needed here but not applied" "$(report)"' "needed but not applied"
+check 'grep -q "\[ok\]   fix ally-controller-wakeup: already fixed by the system" "$(report)"' "os-fixed"
+check 'grep -q "\[ok\]   fix ally-mcu-powersave: applied" "$(report)"' "applied"
+check 'grep -q "\[warn\] fix fan: only partly in place" "$(report)"' "partial"
+check '! grep -q "fix claw-kbd-wakeup:" "$(report)"' "another device's fix: no verdict"
+check 'grep -q "\[fail\] fix ally-gone is meant for this handheld but isn.t installed" "$(report)"' "missing fix"
+
 setup RC71L old_claw_karg "ip ps"
 echo "BOOT_IMAGE=/vmlinuz quiet drm.edid_firmware=eDP-1:edid/gamecove-csw0801-30-120.bin" >"$R/proc/cmdline"
 sh "$ST" --no-network >"$T/out" 2>&1
