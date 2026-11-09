@@ -374,7 +374,7 @@
    "owner_terms": "https://trademark.justia.com/owners/shenzhen-gpd-technology-co-ltd-4083602"
   },
   "zotac": {
-   "name": "ZOTAC",
+   "name": "ZOTAC GAMING",
    "kind": "maker",
    "owner": "ZOTAC International",
    "aliases": [
@@ -382,12 +382,12 @@
     "zotac gaming"
    ],
    "enabled": true,
-   "file": "",
-   "mono": false,
-   "hex": "",
-   "source": "",
-   "license": "",
-   "upstream": "",
+   "file": "res://assets/brand/zotac.svg",
+   "mono": true,
+   "hex": "FFD300",
+   "source": "https://www.zotacstore.com/media/wysiwyg/zotac_gaming_logo_1.jpg",
+   "license": "Traced from the official ZOTAC GAMING logo (1144x246 JPG, white on black) on ZOTAC's own store zotacstore.com; potrace, single colour, IoU 0.977 at the original's resolution. zotac.com refused automated access. Trademark of ZOTAC International (MCO) Ltd. Hex is ZOTAC's yellow from the same store's logo.",
+   "upstream": "https://www.zotac.com",
    "notice": "",
    "system_icons": [],
    "owner_terms": "https://www.zotac.com/pl/system/files/media_center/zotac_branding_guidelines.pdf"
