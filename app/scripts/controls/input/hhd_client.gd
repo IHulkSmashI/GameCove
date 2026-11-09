@@ -114,18 +114,47 @@ func request(method: String, path: String, body := "") -> Dictionary:
 	return r
 
 
+## Where the one-call header file goes (user data folder, only this user can read it).
+static func auth_header_path() -> String:
+	return ProjectSettings.globalize_path("user://hhd-auth.header")
+
+
+static func _write_auth_header(t: String) -> String:
+	var p := auth_header_path()
+	var f := FileAccess.open(p, FileAccess.WRITE)
+	if f == null:
+		return ""
+	f.close()
+	FileAccess.set_unix_permissions(p, FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER)
+	f = FileAccess.open(p, FileAccess.WRITE)
+	if f == null:
+		return ""
+	f.store_string("Authorization: Bearer " + t + "\n")
+	f.close()
+	FileAccess.set_unix_permissions(p, FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER)
+	return p
+
+
 func _curl(method: String, path: String, body: String, unix: bool) -> Dictionary:
 	var args := PackedStringArray(["-sS", "-m", str(timeout_s), "-X", method, "-w", "\n%{http_code}"])
+	var hdr := ""
 	if unix:
 		args.append_array(["--unix-socket", SOCKET])
 	else:
+		# the token goes in a 0600 header file (curl -H @file), never on the command line where any local
+		# process can read it in /proc (review L32); the file lives only for this call
 		var t := token()
 		if t != "":
-			args.append_array(["-H", "Authorization: Bearer " + t])
+			hdr = _write_auth_header(t)
+			if hdr == "":
+				return {"code": 0, "body": ""}
+			args.append_array(["-H", "@" + hdr])
 	if method == "POST":
 		args.append_array(["-H", "Content-Type: application/json", "--data-binary", body])
 	args.append(("http://localhost" if unix else "http://127.0.0.1:%d" % port()) + path)
 	var r: Dictionary = runner.run("curl", args)
+	if hdr != "":
+		DirAccess.remove_absolute(hdr)
 	if int(r.get("code", -1)) != 0:
 		return {"code": 0, "body": ""}
 	var out := str(r.get("out", ""))

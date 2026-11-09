@@ -128,3 +128,19 @@ func test_http_classify_and_user_agent() -> void:
 	ok(Http.classify(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray())["ok"], "200 ok")
 	ok(Http.user_agent().begins_with("GameCove/") and Http.user_agent().ends_with("(+https://github.com/IHulkSmashI/GameCove)"), "user agent")
 	eq(Http.host_of("https://www.cheapshark.com/api/1.0/deals"), "www.cheapshark.com", "host")
+
+
+# ---- review L32: credentials stay with their host ------------------------------------------------
+
+func test_http_drops_auth_on_cross_host_redirects() -> void:
+	var HttpScript := load("res://scripts/discover/http.gd")
+	var hs := ["User-Agent: x", "Authorization: Bearer KEY"]
+	ok(HttpScript.has_auth(hs) and not HttpScript.has_auth(["Accept: */*"]), "credentialed requests are spotted")
+	eq(HttpScript.redirect_headers(hs, "https://www.steamgriddb.com/api/v2/grids/1", "https://www.steamgriddb.com/api/v2/grids/2"), hs, "same host: kept")
+	eq(HttpScript.redirect_headers(hs, "https://www.steamgriddb.com/api/v2/x", "https://cdn2.steamgriddb.com/file/a.png"), ["User-Agent: x"], "another host: dropped")
+	eq(HttpScript.redirect_headers(hs, "https://www.steamgriddb.com/a", "http://www.steamgriddb.com/a"), ["User-Agent: x"], "downgrade to http: dropped")
+	eq(HttpScript.location_of(PackedStringArray(["Location: /api/v2/y"]), "https://www.steamgriddb.com/api/v2/x"), "https://www.steamgriddb.com/api/v2/y", "relative Location")
+	eq(HttpScript.location_of(PackedStringArray(["location: https://cdn.example/a.png"]), "https://a.example/"), "https://cdn.example/a.png")
+	eq(HttpScript.location_of(PackedStringArray(["Content-Type: x"]), "https://a.example/"), "", "no Location")
+	var src := FileAccess.get_file_as_string("res://scripts/discover/http.gd")
+	ok("req.max_redirects = 0" in src and "redirect_headers(" in src, "credentialed requests follow redirects by hand")
