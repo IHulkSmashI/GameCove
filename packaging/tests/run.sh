@@ -266,41 +266,18 @@ sel() {
 	PATH="$BIN:$PATH" sh "$SEL" "$@"
 }
 
-if [ "$(id -u)" -eq 0 ]; then
-	expect_code 1 "session-select refuses root" sel steam
-	echo "note: running as root, skipping session-select switch tests" >&2
-else
-	: >"$T/busctl.log"
-	expect_code 0 "switch to steam" sel steam
-	contains "$T/steamosctl.log" "^switch-to-game-mode$" "steam uses switch-to-game-mode"
+# switching, saved defaults, restore, guard, bounce and the crash-loop guard:
+# packaging/tests/session.sh (runs as root too, with a fake id)
+if sh "$REPO/packaging/tests/session.sh" >"$T/out" 2>&1; then ok; else bad "session.sh: $(grep FAIL "$T/out" | head -20)"; fi
+: >"$T/busctl.log"
+if [ "$(id -u)" -ne 0 ]; then
+	expect_code 0 "switch to steam resets InterceptMode" env XDG_DATA_HOME="$T/xdg" sel steam
 	contains "$T/busctl.log" "^$RESET0$" "switching resets InterceptMode on device 0"
 	contains "$T/busctl.log" "^$RESET1$" "switching resets InterceptMode on device 1"
 	lacks "$T/busctl.log" "dbus0 " "target devices left alone"
 	: >"$T/busctl.log"
 	expect_code 64 "unknown target, no reset" sel windows
 	lacks "$T/busctl.log" "set-property" "bad usage resets nothing"
-	expect_code 0 "switch to gamecove" sel gamecove
-	contains "$T/steamosctl.log" "^switch-to-desktop-mode gamecove.desktop$" "gamecove via desktop session"
-	expect_code 0 "gamecove default" sel gamecove --default
-	contains "$T/steamosctl.log" "^set-default-desktop-session gamecove.desktop$" "default session set"
-	contains "$T/steamosctl.log" "^set-default-login-mode desktop$" "login mode desktop"
-	expect_code 0 "steam default" sel steam --default
-	contains "$T/steamosctl.log" "^set-default-login-mode game$" "login mode game"
-	expect_code 0 "gamecove default without switching" sel gamecove --default --no-switch
-	contains "$T/steamosctl.log" "^set-default-desktop-session gamecove.desktop$" "no-switch still sets the session"
-	contains "$T/steamosctl.log" "^set-default-login-mode desktop$" "no-switch still sets the login mode"
-	lacks "$T/steamosctl.log" "switch-to" "no-switch doesn't switch"
-	expect_code 0 "steam default without switching" sel steam --default --no-switch
-	contains "$T/steamosctl.log" "^set-default-login-mode game$" "steam no-switch login mode"
-	lacks "$T/steamosctl.log" "switch-to" "steam no-switch doesn't switch"
-	expect_code 64 "no-switch without default" sel gamecove --no-switch
-	expect_code 64 "too many args" sel gamecove --default --no-switch extra
-	expect_code 0 "desktop" sel desktop
-	contains "$T/steamosctl.log" "^switch-to-desktop-mode$" "desktop default"
-	expect_code 64 "desktop --default" sel desktop --default
-	expect_code 64 "unknown target" sel windows
-	expect_code 64 "bad flag" sel steam --now
-	expect_code 2 "no steamosctl" env STEAMOSCTL=/nonexistent/steamosctl sh "$SEL" steam
 fi
 
 # ------------------------------------------------------------ session-client
@@ -763,7 +740,7 @@ else
 		"$REPO/packaging/sysext/build-sysext.sh" "$REPO/packaging/tests/run.sh" \
 		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" \
 		"$REPO/packaging/get-gamecove.sh" "$REPO/packaging/libexec/gamecove-apply-choices" \
-		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh"; do
+		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh" "$REPO/packaging/tests/session.sh"; do
 		if "$SHELLCHECK" -S warning -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"

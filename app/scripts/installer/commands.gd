@@ -78,9 +78,23 @@ static func session_default(select: String, startup: String) -> Array:
 	return [select, "steam", "--default", "--no-switch"]
 
 
-## Back to Steam Gaming Mode at boot; works with or without our package.
-static func session_restore() -> Array:
-	return [STEAMOSCTL, "set-default-login-mode", "game"]
+## Undo "Boot into GameCove": the default desktop session (Plasma/GNOME) and the
+## boot mode from before GameCove, so Steam's "Switch to Desktop" never names a
+## removed gamecove.desktop. Works with or without our package: the copy of
+## gamecove-session-select that `--default` keeps in the data folder first, then
+## the installed one, else steamosctl directly (desktop default back to a real
+## desktop session if it names GameCove, boot back to Steam Gaming Mode).
+const SESSION_RESTORE_SH := "for s in \"$1\" \"$2\"; do if [ -f \"$s\" ]; then sh \"$s\" restore && exit 0; fi; done; " \
+	+ "command -v steamosctl >/dev/null 2>&1 || exit 0; " \
+	+ "if [ \"$(steamosctl get-default-desktop-session 2>/dev/null)\" = gamecove.desktop ]; then " \
+	+ "for d in plasma.desktop gnome.desktop; do steamosctl set-default-desktop-session \"$d\" 2>/dev/null && break; done; fi; " \
+	+ "steamosctl set-default-login-mode game"
+
+
+static func session_restore(paths: RefCounted = null) -> Array:
+	var guard_copy: String = "" if paths == null else paths.data_dir() + "/gamecove-session-guard"
+	var select: String = "/usr/bin/gamecove-session-select" if paths == null else paths.session_select()
+	return ["sh", "-c", SESSION_RESTORE_SH, "sh", guard_copy, select]
 
 
 static func game_check() -> Array:
@@ -164,7 +178,7 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 			out.append(_internal("user_files"))
 			out.append(_internal("state"))
 		"uninstall":
-			out.append(_cmd("session_restore", session_restore(), {"optional": true}))
+			out.append(_cmd("session_restore", session_restore(paths), {"optional": true}))
 			if bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false)):
 				for f in had_fixes:
 					out.append(fix_task(paths, f, "remove"))

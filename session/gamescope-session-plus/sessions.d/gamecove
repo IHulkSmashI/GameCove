@@ -23,8 +23,14 @@ CLIENTCMD="/usr/libexec/gamecove/gamecove-session-client"
 CURSOR_FILE="${HOME}/.local/share/Steam/tenfoot/resource/images/cursors/arrow.png"
 
 # If GameCove keeps failing to start (5 short sessions in a row), fall back to
-# the distro's Steam Gaming Mode instead of looping on a black screen.
+# the distro's Steam Gaming Mode instead of looping on a black screen. (The
+# session client has its own, tighter guard: 3 app crashes in 2 minutes.)
+# Through gamecove-session-select so Steam's "Switch to Desktop" afterwards
+# reaches the real desktop, not GameCove.
 short_session_recover() {
+	if [ -x /usr/bin/gamecove-session-select ]; then
+		/usr/bin/gamecove-session-select steam && return 0
+	fi
 	if command -v steamosctl >/dev/null 2>&1; then
 		steamosctl switch-to-game-mode
 	fi

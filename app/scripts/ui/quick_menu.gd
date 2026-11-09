@@ -96,6 +96,8 @@ var _parts: Array = []        # Controls (focusable) and ControlLists, top to bo
 var _focusables: Array = []
 var _steam_armed := false
 var _steam_button: Button
+var _desktop_armed := false
+var _desktop_button: Button
 var _exit_armed := false
 var _exit_button: Button
 var _reset_armed := false
@@ -428,6 +430,8 @@ func show_section(i: int, keep_focus := "") -> void:
 	_exit_button = null
 	_steam_armed = false
 	_steam_button = null
+	_desktop_armed = false
+	_desktop_button = null
 	_reset_armed = false
 	_reset_row = null
 	_style_tabs()
@@ -933,6 +937,20 @@ func _build_device() -> void:
 	body.add_child(steam)
 	_parts.append(_steam_button)
 
+	# Always a way to the real desktop (the installer's Repair / Uninstall live there).
+	var desk := Kit.vbox(4)
+	desk.name = "DesktopMode"
+	_desktop_button = Kit.button(Texts.DESKTOP_TITLE)
+	_desktop_button.name = "Button"
+	_desktop_button.custom_minimum_size = Vector2(0, 54)
+	_desktop_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_desktop_button.pressed.connect(_on_desktop_pressed)
+	_desktop_button.focus_exited.connect(_disarm_desktop)
+	desk.add_child(_desktop_button)
+	desk.add_child(Kit.label(Texts.DESKTOP_EXPLAIN, "QuietLabel", true))
+	body.add_child(desk)
+	_parts.append(_desktop_button)
+
 
 ## The maker to show a logo for: the row's maker or DMI vendor, else the
 ## first word of the device's name ("MSI Claw 8 EX" -> "MSI").
@@ -976,6 +994,35 @@ func _spawn_steam_session() -> void:
 		status_label.text = Texts.STEAM_SWITCHING
 	else:
 		status_label.text = Texts.STEAM_FAILED
+
+
+func _on_desktop_pressed() -> void:
+	if not _desktop_armed:
+		_desktop_armed = true
+		_desktop_button.text = Texts.DESKTOP_CONFIRM
+		status_label.text = Texts.DESKTOP_CONFIRM_LINE
+		return
+	_desktop_armed = false
+	_desktop_button.text = Texts.DESKTOP_TITLE
+	if controller != null and controller.has_method("release_intercept"):
+		controller.release_intercept(_spawn_desktop_session)
+	else:
+		_spawn_desktop_session()
+
+
+func _spawn_desktop_session() -> void:
+	if commands.spawn(SESSION_SELECT, PackedStringArray(["desktop"])):
+		status_label.text = Texts.DESKTOP_SWITCHING
+	else:
+		status_label.text = Texts.DESKTOP_FAILED
+
+
+func _disarm_desktop() -> void:
+	if not _desktop_armed or _desktop_button == null:
+		return
+	_desktop_armed = false
+	_desktop_button.text = Texts.DESKTOP_TITLE
+	status_label.text = ""
 
 
 func _disarm_steam() -> void:

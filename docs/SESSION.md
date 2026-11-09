@@ -164,7 +164,8 @@ with `--xwayland-count 2`, exports `DISPLAY` and `GAMESCOPE_WAYLAND_DISPLAY`, so
 `~/.config/environment.d/*.conf` (so users can tune `CUSTOM_REFRESH_RATES`,
 `GAMECOVE_STEAM_MODE`, …), and runs `$CLIENTCMD`. After 5 sessions shorter than 60 s
 it calls `short_session_recover`; ours switches to Steam Gaming Mode so a broken
-GameCove never traps you on a black screen.
+GameCove never traps you on a black screen. The session client adds a tighter
+guard (3 app crashes in 2 minutes), see "If GameCove won't let you out".
 
 Bazzite today boots `gamescope-session-ogui-steam.desktop` (Steam as main client,
 OpenGamepadUI as overlay; Terra packages `gamescope-session`,
@@ -201,11 +202,50 @@ helper of our own:
   steamos-manager accepts any `wayland-sessions/*.desktop` whose **name has no
   "gamescope"** as a desktop session (`is_valid_desktop_session_name`), which is why
   our file is `gamecove.desktop`.
-- `--default` makes it stick across boots. Side effect: Steam's own "Switch to
-  Desktop" then lands in GameCove. Undo: `steamosctl set-default-login-mode game`.
+- `--default` makes it stick across boots. steamos-manager boots "desktop mode"
+  into its *default desktop session*, so GameCove has to be that default, and any
+  "switch to desktop" that doesn't name a session would then land in GameCove.
+  The rules that keep Desktop Mode reachable:
+  - `--default` first saves the default desktop session and boot mode it replaces
+    (`~/.local/share/gamecove/prev-desktop-session`, `prev-login-mode`).
+  - `gamecove-session-select desktop` (the quick menu's **Switch to Desktop Mode**)
+    always names the real desktop: the saved session, else Plasma/GNOME from
+    `get-valid-desktop-sessions`.
+  - Steam's "Switch to Desktop": on Bazzite it runs `os-session-select plasma`,
+    which names `plasma.desktop`/`gnome.desktop` itself. Where Steam asks
+    steamos-manager for the *default* desktop instead, the switch lands in our
+    session; `gamecove-session-select steam` left a marker (with the boot id), so
+    the session client sees that nothing asked for GameCove and forwards to the
+    real desktop before the app starts (`session-start`, exit 3).
+  - `steam --default` and `restore` put the saved desktop session and boot mode
+    back. The installer's Uninstall runs `restore`.
+  - `--default` also keeps a copy of the script in the data folder and enables a
+    user unit, `gamecove-session-guard.service`, that runs `guard` at every login:
+    if `gamecove.desktop` is gone (package removed, previous deployment booted) it
+    runs `restore`, then removes itself. Both live in the home folder, so they
+    survive the package.
 
-`gamecove-session-select steam|gamecove|desktop [--default]` wraps this. The UI's
-"Switch to Steam Gaming Mode" button should run `gamecove-session-select steam`.
+`gamecove-session-select steam|gamecove|desktop [--default] | restore | guard` wraps this.
+
+### If GameCove won't let you out
+
+- **Crash loop:** the session client counts app crashes (non-zero exits it didn't
+  cause) in `~/.local/share/gamecove/crash-starts`. Three within two minutes, across
+  sessions, and it switches to Steam Gaming Mode (the desktop if Steam isn't
+  installed). gamescope-session-plus's own guard (5 sessions under 60 s) also
+  switches to Steam, through `gamecove-session-select steam`.
+- **From a TTY** (Ctrl+Alt+F3 with a keyboard, or SSH), logged in as yourself, not root:
+
+  ```
+  gamecove-session-select restore    # boot and desktop defaults from before GameCove
+  gamecove-session-select desktop    # leave GameCove for the desktop now
+  ```
+
+  If steamos-manager doesn't answer (it starts it as a user unit when it can),
+  the root fallback is the autologin file it writes:
+  `printf '[Autologin]\nSession=plasma.desktop\n' | sudo tee /etc/sddm.conf.d/zz-holo-autologin.conf`
+  (`zz-steamos-autologin.conf` if that one exists), then `sudo systemctl restart sddm`.
+- **At the login screen** pick Plasma or Steam (touch works).
 
 ## Root fixes: `gamecove-fix`
 
@@ -304,7 +344,8 @@ a "GameCove" app entry switches with `gamecove-session-select gamecove`), **Desk
 (`GAMECOVE_STEAM_MODE`). The first-run setup steps the installer covered are marked in the Setup service, so the
 in-app setup shows nothing (it still runs for people who installed another way, and skips steps done elsewhere).
 
-Uninstall: `steamosctl set-default-login-mode game`, optionally `gamecove-fix <name> remove` for the fixes it
+Uninstall: `gamecove-session-select restore` (the copy in the data folder, else the installed one, else
+`steamosctl` directly: the default desktop session back from `gamecove.desktop`, boot to Steam Gaming Mode), optionally `gamecove-fix <name> remove` for the fixes it
 installed, `pkexec rpm-ostree uninstall gamecove` (next boot) or removing the sysext (`systemd-sysext refresh`),
 then every user file above; "Keep my settings" off also deletes GameCove's `user://` folder and the download.
 Store sign-ins belong to legendary / gogdl / nile and stay. Every step can be undone after a failure (Undo).

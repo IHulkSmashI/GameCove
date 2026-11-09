@@ -144,12 +144,29 @@ func test_switch_to_steam_needs_a_second_press() -> void:
 	m.free()
 
 
+func test_switch_to_desktop_reaches_the_real_desktop() -> void:
+	# review S1-1: GameCove itself must always offer a way to Desktop Mode
+	var r := FakeRunner.new()
+	var m := _menu(r, [])
+	var b: Button = m.body.get_node("DesktopMode/Button")
+	ok(b in m.focusables(), "Desktop button in the focus chain")
+	b.pressed.emit()
+	eq(r.spawned, [], "first press only asks")
+	b.focus_exited.emit()
+	eq(b.text, Texts.DESKTOP_TITLE, "moving away cancels")
+	b.pressed.emit()
+	b.pressed.emit()
+	eq(r.spawned, ["/usr/bin/gamecove-session-select desktop"], "second press switches to the desktop")
+	m.free()
+
+
 func test_focus_chain() -> void:
 	var m := _menu(FakeRunner.new())
 	var f: Array = m.focusables()
 	eq(f[0].get_node(f[0].focus_neighbor_top), m.tabs[DEVICE_TAB], "up from the first row reaches the tab")
-	eq(f[-1].get_node(f[-1].focus_neighbor_bottom), f[-1], "down from Steam stays put")
-	eq(f[-1], _steam(m), "Steam last")
+	eq(f[-1].get_node(f[-1].focus_neighbor_bottom), f[-1], "down from Desktop stays put")
+	eq(f[-2], _steam(m), "Steam, then")
+	eq(f[-1], m.body.get_node("DesktopMode/Button"), "Desktop last")
 	eq(m.tabs[DEVICE_TAB].get_node(m.tabs[DEVICE_TAB].focus_neighbor_bottom), f[0], "down from the tab enters the section")
 	m.free()
 
