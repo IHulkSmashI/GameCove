@@ -386,14 +386,20 @@ func _remove(b: Button, key: String) -> void:
 
 
 func _focus_later_key(k: String) -> void:
-	(func():
-		for b in W.buttons_in(self):
-			if key_of(b) == k:
-				b.grab_focus()
-				return
-		var d := default_focus()
-		if d != null:
-			d.grab_focus()).call_deferred()
+	# A deferred method, not a lambda: dropped safely if the view is freed first.
+	call_deferred("_focus_key_now", k)
+
+
+func _focus_key_now(k: String) -> void:
+	if not is_inside_tree():
+		return
+	for b in W.buttons_in(self):
+		if key_of(b) == k:
+			b.grab_focus()
+			return
+	var d := default_focus()
+	if d != null:
+		d.grab_focus()
 
 
 func _row_for(key: String) -> Control:
