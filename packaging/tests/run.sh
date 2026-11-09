@@ -876,6 +876,10 @@ if "$SHELLCHECK" -S warning -s bash "$REPO/packaging/libexec/gamecove-run" >"$T/
 # ------------------------------------------------------- gamecove-selftest (fake root and commands)
 if sh "$REPO/packaging/tests/selftest.sh" >"$T/out" 2>&1; then ok; else bad "selftest: $(tail -20 "$T/out")"; fi
 
+# ------------------------------------------------------- release, licences, supply chain, privacy (packaging/tests/release.sh)
+if sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "release.sh: $(grep FAIL "$T/out" | head -30)"; fi
+if [ -n "$SHELLCHECK" ] && "$SHELLCHECK" -S warning -s sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "shellcheck release.sh: $(cat "$T/out")"; fi
+
 # ------------------------------------------------------- release workflow signs what the installer verifies
 W="$REPO/.github/workflows/release.yml"
 grep -q "cosign sign-blob --yes --bundle dist/SHA256SUMS.sigstore.json dist/SHA256SUMS" "$W" && ok || bad "release.yml must sign SHA256SUMS into SHA256SUMS.sigstore.json (get-gamecove.sh refuses unsigned releases)"
