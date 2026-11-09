@@ -57,7 +57,7 @@ GameCove stands on a lot of other people's work. Thank you.
 
 | Source | Use | License |
 | --- | --- | --- |
-| Wikidata | Titles, dates, cross-store IDs | CC0 |
+| Wikidata | Titles, dates, cross-store IDs (queried through QLever, University of Freiburg, with the Wikidata Query Service as fallback) | CC0 |
 | AreWeAntiCheatYet | Anti-cheat status | MIT |
 | Steam Web API (`GetGlobalAchievementPercentagesForApp`) | Global achievement rarity, at most once per game per day | Steam Web API Terms of Use |
 | ProtonDB data dumps | Compatibility reports | ODbL (credit and share-alike) |

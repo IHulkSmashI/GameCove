@@ -353,6 +353,15 @@ func _on_autotune_limit(cant_reach: bool, info: Dictionary) -> void:
 func on_ui_action(action: String) -> void:
 	match action:
 		"home":
+			# In a game: Guide toggles between the game and GameCove's home,
+			# the way Steam's button does.
+			if session != null and session.is_active():
+				if not _window_focused and not quick_menu.visible:
+					session.bring_home()
+				elif current == "home" and not quick_menu.visible and session.return_to_game():
+					if wiring != null:
+						wiring.sync_focus()
+					return
 			if quick_menu.visible:
 				quick_menu.close()
 			if steam_overlay.is_open():
@@ -804,6 +813,9 @@ func _play(game: Dictionary) -> void:
 		return
 	if install_state.is_busy(str(game.get("key", ""))):
 		open_downloads()
+		return
+	if session.runs(str(game.get("key", ""))):
+		session.return_to_game()   # already running: back to it, no second launch
 		return
 	playing = game
 	launch_overlay.show_for(game, backdrop.current_accent())

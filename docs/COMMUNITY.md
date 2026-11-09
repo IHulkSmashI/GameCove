@@ -23,6 +23,7 @@ details on the existing issue help just as much.
 
 - [Q&A](https://github.com/IHulkSmashI/GameCove/discussions/categories/q-a): setup, "how do I", help with your handheld.
 - [Ideas](https://github.com/IHulkSmashI/GameCove/discussions/categories/ideas): talk an idea through before it becomes a [feature request](https://github.com/IHulkSmashI/GameCove/issues/new?template=feature_request.yml).
+- [Discord](https://discord.gg/tuUsn6sSZH): chat with other players and testers (#help, #bug-reports, #ideas, #testers).
 
 ## Test builds
 

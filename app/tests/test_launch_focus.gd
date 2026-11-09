@@ -338,3 +338,22 @@ func test_resume_detection_by_clock_gap() -> void:
 	ok(not MainScript.resumed_between([1000.0, 0], [5000.0, 9000], 20.0), "no mark yet")
 	ok(not MainScript.resumed_between([1000.0, 5000], [1005.0, 10000], 20.0), "clocks agree")
 	ok(MainScript.resumed_between([1000.0, 5000], [1600.0, 10000], 20.0), "wall clock 10 min ahead: slept")
+
+
+func test_guide_brings_home_and_back_without_ending_the_game() -> void:
+	var r := _gamescope()
+	var x: FakeXprop = r[1]
+	var s := _session(r[0], FakePower.new(), FakeLauncher.new())
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769, 976730]
+	s.poll_focus()
+	ok(s.bring_home(), "home brought forward")
+	eq(_base(x), [413091, 769], "GameCove in front")
+	eq(s.phase, "running", "game still running")
+	ok(s.runs(STEAM["key"]), "runs() knows the game")
+	ok(s.return_to_game(), "back to the game")
+	eq(_base(x), [413091, 976730, 769], "game in front again")
+	s.stop()
+	ok(not s.return_to_game(), "nothing to return to once stopped")
+	s.free()
+	r[0].free()

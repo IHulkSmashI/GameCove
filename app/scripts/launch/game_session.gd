@@ -137,6 +137,29 @@ func stop() -> void:
 		_finish(true)
 
 
+## Puts GameCove in front of the running game (Guide pressed in a game).
+## The game keeps running; return_to_game() brings it back.
+func bring_home() -> bool:
+	if not is_active() or gamescope == null or not gamescope.is_running():
+		return false
+	gamescope.focus_home()
+	focused = false
+	return true
+
+
+## Gives the screen back to the running game. False when it isn't known to
+## gamescope yet (still launching) or nothing runs.
+func return_to_game() -> bool:
+	if phase != "running" or app_id <= 0 or gamescope == null or not gamescope.is_running():
+		return false
+	focused = gamescope.focus_app(app_id)
+	return focused
+
+
+func runs(key: String) -> bool:
+	return is_active() and str(game.get("key", "")) == key
+
+
 func _enter_running() -> void:
 	phase = "running"
 	_gone = 0

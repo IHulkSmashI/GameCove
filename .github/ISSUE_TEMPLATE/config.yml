@@ -6,10 +6,10 @@ contact_links:
   - name: Ideas and feedback
     url: https://github.com/IHulkSmashI/GameCove/discussions/categories/ideas
     about: Talk through an idea with others before it becomes a request.
-  # Uncomment once they exist:
-  # - name: Discord
-  #   url: https://discord.gg/REPLACE_ME
-  #   about: Chat with other players and testers.
+  - name: Discord
+    url: https://discord.gg/tuUsn6sSZH
+    about: Chat with other players and testers.
+  # Uncomment once the subreddit exists:
   # - name: Reddit
   #   url: https://www.reddit.com/r/REPLACE_ME/
   #   about: News and community posts.

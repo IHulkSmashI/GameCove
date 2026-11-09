@@ -69,6 +69,10 @@ Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAnt
 - Bypass, spoof or tamper with anti-cheat.
 - Modify Steam or take over its interface.
 
+## Community
+
+Bugs and ideas: [GitHub issues](https://github.com/IHulkSmashI/GameCove/issues/new/choose) and [Discussions](https://github.com/IHulkSmashI/GameCove/discussions). Chat and testing: [Discord](https://discord.gg/tuUsn6sSZH). Want to test on your handheld? [Sign up here](https://github.com/IHulkSmashI/GameCove/issues/new?template=tester_signup.yml). More in [COMMUNITY.md](docs/COMMUNITY.md).
+
 ## Thanks
 
 Gyro on the MSI Claw 8 EX was figured out by **Kisenir** (r/MSIClaw). Full list in [CREDITS.md](CREDITS.md).
