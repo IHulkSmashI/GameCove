@@ -50,14 +50,19 @@ var _by_id := {}
 func setup(c: Dictionary) -> void:
 	ctx = c
 	be = Backend.new(str(c.get("sys_root", "")), c.get("runner"))
+	if c.has("config_path"):   # tests / device matrix: keep our file next to the fixture's settings
+		cfg_path = str(c["config_path"]).get_base_dir().path_join("power_controls.cfg")
 	if c.has("fix_set"):
 		be.fix_set = str(c["fix_set"])
 	power = c.get("power")
 	registry = c.get("registry")
+	# the autoloads only on the real system: a fixture context (tests, device
+	# matrix) must never drive the machine running the tests
+	var real := str(c.get("sys_root", "")) == ""
 	var tree := Engine.get_main_loop() as SceneTree
-	if power == null and tree != null and tree.root != null:
+	if real and power == null and tree != null and tree.root != null:
 		power = tree.root.get_node_or_null("Power")
-	if registry == null and tree != null and tree.root != null:
+	if real and registry == null and tree != null and tree.root != null:
 		registry = tree.root.get_node_or_null("Controls")
 	if power != null:
 		if power.has_signal("source_changed"):
@@ -249,7 +254,7 @@ func _boost_on() -> RefCounted:
 
 
 func _ppt(which: String) -> RefCounted:
-	return _make("power." + which, "slider", {"unit": "W", "step": 1.0, "apply_order": 98 if which == "sppt" else 97},
+	var c: RefCounted = _make("power." + which, "slider", {"unit": "W", "step": 1.0, "apply_order": 98 if which == "sppt" else 97},
 		func(c):
 			var backend := str(power.get("backend")) if power != null else "none"
 			if backend == "hhd":
@@ -270,16 +275,41 @@ func _ppt(which: String) -> RefCounted:
 				if not sp.is_empty():
 					lo = maxf(lo, float(sp["value"]))
 			var hi := float(a["max"])
-			var cap := float(row().get("tdp", {}).get("boost_max", -1.0))
+			var cap := ppt_ceiling(which, float(spl.get("value", -1)) if not spl.is_empty() else -1.0)
 			if cap > 0.0:
 				hi = minf(hi, cap)
-			if hi <= 0.0 or hi < lo:
+			if hi <= 0.0 or hi <= lo:
 				return Tx.NOT_HERE
 			c.min_value = lo
 			c.max_value = hi
 			return "",
 		func(_c): return float(be.ppt_info(which).get("value", -1)),
 		func(_c, v): return be.set_ppt(which, int(v)))
+	# the ceiling follows the sustained limit as it is now (it may have moved since detect)
+	c.normalize = func(v):
+		var spl: Dictionary = be.fw_attr("ppt_pl1_spl")
+		var cap := ppt_ceiling(which, float(spl["value"]) if not spl.is_empty() else -1.0)
+		return minf(float(v), cap) if cap > 0.0 else v
+	return c
+
+
+## The most watts SPPT / FPPT may get on this handheld with the sustained limit
+## at `spl` W (-1 = unknown), -1 when the row says nothing. devices.json tdp:
+## <which>_max (else boost_max) is the ceiling; <which>_ratio caps it at
+## floor(SPL x ratio) and <which>_over at SPL + over, Handheld Daemon's own
+## formulas (asus: min(max(SPL, 35), SPL*1.4/1.2); lenovo: SPL + 2..3 and
+## min(fppt_max, SPL*fppt_max/max); msi: SPL*sppt_max/max). Sources per row.
+func ppt_ceiling(which: String, spl: float) -> float:
+	var t: Dictionary = row().get("tdp", {}) if row().get("tdp") is Dictionary else {}
+	var top := float(t.get(which + "_max", t.get("boost_max", -1.0)))
+	if spl > 0.0:
+		if t.has(which + "_ratio"):
+			var r := floorf(spl * float(t[which + "_ratio"]) + 0.0001)
+			top = r if top <= 0.0 else minf(top, r)
+		if t.has(which + "_over"):
+			var o := spl + float(t[which + "_over"])
+			top = o if top <= 0.0 else minf(top, o)
+	return top
 
 
 func _choice_opts(words: Array) -> Array:
@@ -515,8 +545,20 @@ static func safe_curve(v: Array, quiet: Array) -> Array:
 	return out
 
 
+## A curve as the control keeps it: safe_curve() in floats, null when the point count is wrong.
+func _normalize_curve(v: Variant) -> Variant:
+	var t := _fan_table()
+	if t.is_empty() or not v is Array:
+		return v
+	var quiet: Array = t["quiet"]
+	if (v as Array).size() != quiet.size():
+		return null
+	return safe_curve(v, quiet).map(func(x): return float(x))
+
+
 func _fan_curve() -> RefCounted:
-	return _make("power.fan_curve", "curve", {"unit": "%", "min_value": 0.0, "max_value": 100.0, "step": 1.0, "apply_order": 49, "per_game": false},
+	return _make("power.fan_curve", "curve", {"unit": "%", "min_value": 0.0, "max_value": 100.0, "step": 1.0, "apply_order": 49, "per_game": false,
+			"normalize": _normalize_curve},
 		func(c):
 			var st := _pstate()
 			if str(st.get("backend", "")) == "hhd":

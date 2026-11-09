@@ -97,7 +97,8 @@ func test_harness_catches_a_careless_provider() -> void:
 	var r := Matrix.run_device(_info(m, "asus-rog-ally"), Matrix.provider_scripts(BAD), e)
 	var text := "\n".join(r["problems"])
 	for needle in ["backlight", "one short line", "ppt_pl1_spl", "power.tdp range", "real path",
-			"id must be", "not restored", "above the 30 W known safe here"]:
+			"id must be", "not restored", "above the 30 W known safe here",
+			"power.fan_curve: 4 points, the asus_custom_fan_curve table has 8", "quieter than Quiet", "falls at point"]:
 		ok(needle in text, "caught: " + needle)
 	var r2 := Matrix.run_device(_info(m, "aokzoe-a1"), Matrix.provider_scripts(BAD), e)
 	ok("has no RGB" in "\n".join(r2["problems"]), "RGB offered where HueSync/hhd say there is none")
@@ -113,3 +114,16 @@ func test_expectations_are_enforced() -> void:
 	ok("power.tdp (lenovo-legion-go-s-z2go): max 33" in text, "max checked against the row's 33 W")
 	ok("controller.nope expected but no provider registers it" in text, "missing control reported")
 	ok(not "vendor:intel" in text, "selector skipped on AMD")
+
+
+## Fan curves: one duty per table point, 0-100 %, never falling, never under Quiet.
+func test_curve_rules() -> void:
+	var row := {"fan": "asus_custom_fan_curve"}
+	eq(Matrix.curve_problems([2, 5, 17, 35, 55, 75, 75, 75], null, row), [] as Array[String], "Quiet itself is fine")
+	eq(Matrix.curve_problems([100, 100, 100, 100, 100, 100, 100, 100], null, row), [] as Array[String], "Max is fine")
+	var t := "\n".join(Matrix.curve_problems([0, 5, 17, 35, 55, 75, 75, 75], null, row))
+	ok("point 1 = 0 is quieter than Quiet (2)" in t, "under Quiet caught: " + t)
+	t = "\n".join(Matrix.curve_problems([2, 5, 17, 35, 55, 80, 76, 101], null, row))
+	ok("falls at point 7" in t and "point 8 = 101 outside 0..100" in t, "falling and over 100 caught: " + t)
+	ok("has 3 points" in "\n".join(Matrix.curve_problems([50, 60, 70], null, row)), "point count")
+	eq(Matrix.fan_table({"fan": "oxp_ec"}), {}, "manual fan drivers have no curve")

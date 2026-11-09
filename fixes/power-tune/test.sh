@@ -225,6 +225,7 @@ w "$L/ppt_pl1_spl/current_value" 15; w "$L/ppt_pl1_spl/min_value" 5; w "$L/ppt_p
 w "$L/ppt_pl2_sppt/current_value" 20; w "$L/ppt_pl2_sppt/min_value" 5; w "$L/ppt_pl2_sppt/max_value" 35
 w "$R/sys/firmware/acpi/platform_profile" balanced
 w "$R/sys/firmware/acpi/platform_profile_choices" "low-power balanced performance custom"
+expect 2 "lenovo sppt over hhd's 32 W for the Legion Go (ppt-limits.txt)" set sppt:33
 expect 0 "lenovo sppt" set sppt:25
 [ "$(r "$L/ppt_pl2_sppt/current_value") $(r "$R/sys/firmware/acpi/platform_profile")" = "25 custom" ] || fail "lenovo sppt in custom mode"
 expect 0 "restore lenovo" set restore

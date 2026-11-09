@@ -82,7 +82,8 @@ func setup(context: Dictionary) -> void:
 	row = be.row
 	hw = Caps.of(row)
 	var tree := Engine.get_main_loop() as SceneTree
-	var svc: Node = tree.root.get_node_or_null("Controller") if tree != null and tree.root != null else null
+	var real := str(context.get("sys_root", "")) == ""   # never the autoload from a fixture context
+	var svc: Node = tree.root.get_node_or_null("Controller") if real and tree != null and tree.root != null else null
 	if svc != null and svc.has_method("refresh"):
 		be.on_changed = Callable(svc, "refresh")
 

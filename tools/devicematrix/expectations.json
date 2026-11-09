@@ -9,7 +9,7 @@
   "devices: exact checks your provider promises, keyed by device id or selector (*, generic, vendor:amd|intel, driver:amdgpu|xe|i915, stack:hhd|inputplumber|steamos-manager|powerstation).",
   "  keys: available, reason_contains, kind, unit, min, max, min_ge, max_le, step, options_include, options_exclude, value, note; 'ac': {...} overrides for the charger-plugged scenario.",
   "  A listed control id that no provider registers fails the test, so add entries in the same change as the provider.",
-  "_conflicts: where devices.json and these sources disagree (for whoever owns devices.json)."
+  "_resolved: how the devices.json / hhd / HueSync conflicts were settled (each row's 'notes' cites its source)."
  ],
  "_sources": {
   "hhd": "https://github.com/hhd-dev/hhd @ 6f6045a5c07b8cdb60b6abd7e811534874b06e95 (2026-11-08)",
@@ -759,26 +759,11 @@
    }
   }
  },
- "_conflicts": [
-  "aokzoe-a1, aokzoe-a1-pro: devices.json rgb via oxp-ec, HueSync and hhd: no RGB (rgb=False)",
-  "aokzoe-a1x, onexplayer-g1-amd, onexplayer-g1-intel, gpd-win-4: devices.json rgb null, HueSync drives RGB on them",
-  "lenovo-legion-go-s-*: devices.json plugged_max 33; hhd allows 40 W on AC (33 W on battery) - devices.json is the safer side",
-  "steam-deck-*: devices.json max 15 W; SimpleDeckyTDP's slider goes to 20 W - devices.json is the safer side",
-  "msi-claw-a8: devices.json tdp.min 8, hhd min_tdp 7 - devices.json is the safer side",
-  "aokzoe-a1: devices.json plugged_max 33 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "asus-rog-xbox-ally-x: devices.json boost_max 45 W > 35 W known safe",
-  "asus-rog-xbox-ally-x20: devices.json boost_max 45 W > 35 W known safe",
-  "asus-rog-xbox-ally-x20: devices.json tdp.min 5 W < 7 W known to work",
-  "ayaneo-2: devices.json plugged_max 33 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "gpd-win-4: devices.json boost_max 33 W > 32 W known safe",
-  "gpd-win-max-2: devices.json boost_max 33 W > 32 W known safe",
-  "gpd-win-mini: devices.json boost_max 33 W > 32 W known safe",
-  "onexplayer-2: devices.json plugged_max 33 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "onexplayer-3: devices.json boost_max 52 W > 42 W known safe",
-  "onexplayer-g1-amd: devices.json plugged_max 35 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "onexplayer-g1-intel: devices.json plugged_max 35 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "onexplayer-g1-intel: devices.json boost_max 40 W > 32 W known safe",
-  "onexplayer-x1-intel: devices.json plugged_max 35 W > 30 W known safe (hhd:src/adjustor/core/const.py)",
-  "onexplayer-x1-intel: devices.json boost_max 40 W > 32 W known safe"
+ "_resolved": [
+  "2026-11-08: every devices.json / hhd / HueSync conflict reconciled in devices.json; each changed row has a 'notes' line with its source.",
+  "Lowered to hhd's safe values: asus-rog-xbox-ally-x and -x20 boost_max 45 -> 35 (x20 also min 5 -> 7); onexplayer-3 boost_max 52 -> 42; gpd-win-4 / -mini / -max-2 boost_max 33 -> 32; onexplayer-x1-intel and onexplayer-g1-intel plugged_max 35 -> 30 and boost_max 40 -> 32; onexplayer-g1-amd plugged_max 35 -> 30; aokzoe-a1, ayaneo-2, onexplayer-2 plugged_max 33 -> 30 (the makers advertise 33 W on AC; the conservative value stays the default ceiling).",
+  "SPPT / FPPT ceilings with hhd's formulas added for the ROG Ally family, Legion Go / Go 2 / Go S and the MSI Claws (tdp.sppt_max, fppt_max, *_ratio, *_over; docs/DEVICES.md).",
+  "RGB: aokzoe-a1 / -a1-pro have none (HueSync and hhd agree: rgb null); aokzoe-a1x, onexplayer-g1-amd / -intel and gpd-win-4 have it (rgb via hhd).",
+  "Kept on purpose, devices.json being the safer side: lenovo-legion-go-s-* plugged_max 33 (hhd 40 W on AC), steam-deck-* 15 W (SimpleDeckyTDP 20 W), msi-claw-a8 min 8 (hhd 7), Legion Go 2 FPPT 41 (hhd 45), Claw A8 FPPT 40 (hhd 48)."
  ]
 }

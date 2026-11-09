@@ -15,6 +15,13 @@ const ControlScript := preload("res://scripts/controls/control.gd")
 const PROVIDERS_DIR := "res://scripts/controls/providers"
 const GROUPS := ["power", "display", "perf", "audio", "controller", "system", "network"]
 
+## Stands in when a context comes without a runner (tests, previews): every
+## program "isn't installed", so hooks see a bare system and never run anything.
+class NoRunner extends RefCounted:
+	func run(_program: String, _args: PackedStringArray) -> Dictionary:
+		return {"code": 127, "out": ""}
+
+
 var ctx: Dictionary = {}
 var sync_mode := false
 var _controls: Dictionary = {}     # id -> Control
@@ -58,8 +65,12 @@ func _exit_tree() -> void:
 		_thread.wait_to_finish()
 
 
+## ctx.runner is always set afterwards (NoRunner when the context has none), so
+## providers and their helpers can call it without checking.
 func setup(context: Dictionary) -> void:
 	ctx = context
+	if ctx.get("runner") == null:
+		ctx["runner"] = NoRunner.new()
 	for id in _order:
 		_controls[id].ctx = ctx
 
