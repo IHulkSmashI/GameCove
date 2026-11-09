@@ -1493,3 +1493,5 @@ func apply_theme() -> void:
 		Home.focus_later(settings.rows[keep].button)
 	_on_accent(backdrop.current_accent())
 	_update_hints()
+	# Settings built its category list again: the top bar's "down" pointed at a freed button
+	_link_top()

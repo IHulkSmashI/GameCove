@@ -42,3 +42,13 @@ func test_main_methods_take_what_the_signals_send() -> void:
 		var takes: int = m.get("args", []).size()
 		var needs: int = takes - m.get("default_args", []).size()
 		ok(sent >= needs and sent <= takes, "%s(%d args) can take %s's %d (needs %d..%d)" % [w[2], takes, w[1], sent, needs, takes])
+
+
+## Changing the theme rebuilds Settings' category buttons; the top bar's down
+## neighbour kept pointing at the freed one (engine error on the next press).
+## apply_theme links the top bar again. Found by the end-to-end suite.
+func test_apply_theme_links_the_top_bar_again() -> void:
+	var src := FileAccess.get_file_as_string("res://scripts/main.gd")
+	var body := src.substr(src.find("func apply_theme()"))
+	body = body.substr(0, body.find("\nfunc ", 10))
+	ok("_link_top()" in body, "apply_theme ends with _link_top()")
