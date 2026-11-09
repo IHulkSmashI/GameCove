@@ -199,8 +199,11 @@ func _change(id: String, v: Node) -> String:
 				await right()
 			await w.frames(1)
 			await w.wait_s(0.35)   # SliderRow settles before it sends
-		"choice", "toggle", "color":
+		"choice", "toggle":
 			await right()
+		"color":
+			await right()
+			await w.wait_s(0.5)   # ColorRow settles before it sends
 		"curve":
 			await a()
 			# the first point up, or down when it's already at the top

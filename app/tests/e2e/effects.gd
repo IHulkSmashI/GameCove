@@ -17,6 +17,8 @@ const NO_FRESH_READ := ["system.keep_awake"]
 static func same(c: Object, a: Variant, b: Variant) -> bool:
 	if (a is float or a is int) and (b is float or b is int):
 		return absf(float(a) - float(b)) < 0.51 * maxf(0.0001, c.step if c.kind == "slider" else 0.01)
+	if a is String and b is String and a.is_valid_html_color() and b.is_valid_html_color():
+		return Color.html(a).is_equal_approx(Color.html(b))
 	if a is Array and b is Array and a.size() == b.size():
 		for i in a.size():
 			if absf(float(a[i]) - float(b[i])) > 0.51:
