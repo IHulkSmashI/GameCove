@@ -930,7 +930,7 @@
    "power.smt": {
     "available": false,
     "reason_contains": "no SMT",
-    "note": "Lunar Lake has no SMT"
+    "note": "Panther Lake has no SMT"
    },
    "power.gpu_profile": {
     "available": true,
@@ -946,8 +946,7 @@
      "auto",
      "manual"
     ],
-    "note": "steamos-manager's Intel driver (data/devices/msi-claw-8ex.toml gpu_performance intel)",
-    "reason_contains": "AMD"
+    "note": "steamos-manager's Intel driver (data/devices/msi-claw-8ex.toml gpu_performance intel)"
    },
    "power.fan_mode": {
     "available": true,
@@ -959,21 +958,18 @@
     "options_exclude": [
      "firmware"
     ],
-    "note": "msi_wmi_platform tables through the fan fix; steamos-manager's FanControl1 (jupiter-fan-control) never used on a fan_via fix row",
-    "reason_contains": "Handheld Daemon"
+    "note": "msi_wmi_platform tables through the fan fix; steamos-manager's FanControl1 (jupiter-fan-control) never used on a fan_via fix row"
    },
    "power.fan_curve": {
     "available": true,
-    "note": "both fans' six-point EC tables",
-    "reason_contains": "Handheld Daemon"
+    "note": "both fans' six-point EC tables"
    },
    "power.charge_limit": {
     "available": true,
     "min": 50,
     "max": 100,
     "value": 100,
-    "note": "steamos-manager acpi_sb (MaxChargeLevel 0 = EC limit never set = 100); EC honouring it unverified",
-    "reason_contains": "Handheld Daemon"
+    "note": "steamos-manager acpi_sb (MaxChargeLevel 0 = EC limit never set = 100); EC honouring it unverified"
    },
    "controller.emulation": {
     "available": true
@@ -991,8 +987,8 @@
     "available": true
    },
    "controller.rumble_strength": {
-    "available": false,
-    "reason_contains": "InputPlumber"
+    "available": true,
+    "note": "hid-msi rumble_intensity_left/right 0-100 (live: both 75, 0644 root, through the root helper)"
    },
    "controller.led_effect": {
     "available": true,
@@ -1050,9 +1046,8 @@
     "reason_contains": "one zone"
    },
    "controller.rumble_test": {
-    "available": false,
-    "reason_contains": "Handheld Daemon",
-    "note": "the matrix runs the Claw under hhd (devices.json rgb.via); live it runs InputPlumber 0.83.1, where the buzz works (test_controls_rumble.gd)"
+    "available": true,
+    "note": "InputPlumber ForceFeedback"
    }
   },
   "lenovo-legion-go-s-z2go": {
