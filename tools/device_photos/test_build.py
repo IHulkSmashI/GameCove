@@ -123,6 +123,41 @@ def test_every_known_model_has_a_picture_source():
         assert dev in src and _has_picture(src[dev]), f"{dev}: no free photo and no maker image"
 
 
+# Rows allowed to keep a picture that isn't a flat head-on front view, because none
+# exists anywhere we looked (see each row's view_note). Adding a row here needs the
+# same search first; removing one is always welcome.
+BEST_AVAILABLE = {"onexplayer-3", "onexplayer-x2-mini", "onexplayer-x2-mini-pro", "onexplayer-g1-amd",
+                  "onexplayer-g1-intel", "gpd-win-mini", "acer-nitro-blaze-8", "acer-nitro-blaze-11"}
+
+
+def test_every_picture_is_a_head_on_front_view():
+    """Every row with a picture of its own says "view": "front" (flat, head-on, camera straight
+    at the screen); only the listed rows may say "best-available", with a reason. Family rows
+    show their representative's picture, so the representative must be a front view."""
+    src = _src()
+    seen = set()
+    for dev, e in src.items():
+        if dev.startswith("_") or "representative" in e:
+            continue
+        pic = e["maker_image"] if "maker_image" in e else e
+        assert "view" in pic, f"{dev}: no 'view' field"
+        assert makers.view_problems(dev, pic) == [], dev
+        if pic["view"] == "best-available":
+            assert dev in BEST_AVAILABLE, f"{dev}: not head-on; find a flat front view or justify it in BEST_AVAILABLE"
+            seen.add(dev)
+    assert seen == BEST_AVAILABLE, f"stale BEST_AVAILABLE entries: {BEST_AVAILABLE - seen}"
+    for fam, rep in makers.representatives(src).items():
+        pic = src[rep]["maker_image"] if "maker_image" in src[rep] else src[rep]
+        assert pic["view"] == "front", f"{fam}: its representative {rep} isn't a head-on front view"
+
+
+def test_view_rules():
+    assert makers.view_problems("d", {"view": "front"}) == []
+    assert makers.view_problems("d", {"view": "best-available", "view_note": "none exists"}) == []
+    for bad in ({}, {"view": "angled"}, {"view": "best-available"}, {"view": "best-available", "view_note": " "}):
+        assert makers.view_problems("d", bad), bad
+
+
 def test_family_rows_are_checked_through_their_representative():
     rows = makers.checked_rows()
     src = _src()
@@ -156,11 +191,11 @@ def test_every_maker_url_is_on_its_makers_rules():
 def test_maker_entry_rules():
     rules = {"MSI": {"image_prefixes": ["https://asset-us-store.msi.com/"], "page_domains": ["msi.com"]}}
     good = {"url": "https://asset-us-store.msi.com/a.png", "page_url": "https://us-store.msi.com/x",
-            "maker": "MSI", "checked": "2026-11-09"}
+            "maker": "MSI", "checked": "2026-11-09", "view": "front"}
     assert makers.entry_problems("d", good, rules) == []
     for k, v in [("url", "https://retailer.example/a.png"), ("url", "http://asset-us-store.msi.com/a.png"),
                  ("page_url", "https://evilmsi.com/x"), ("page_url", "https://reviews.example/msi"),
-                 ("maker", "Nobody"), ("checked", "yesterday")]:
+                 ("maker", "Nobody"), ("checked", "yesterday"), ("view", "angled")]:
         assert makers.entry_problems("d", dict(good, **{k: v}), rules), (k, v)
 
 
@@ -174,9 +209,9 @@ def test_sniff():
 def test_link_check_reports_broken_without_storing(tmp_path, monkeypatch):
     src = {"_makers": {"MSI": {"image_prefixes": ["https://asset-us-store.msi.com/"], "page_domains": ["msi.com"]}},
            "a": {"maker_image": {"url": "https://asset-us-store.msi.com/a.png", "page_url": "https://www.msi.com/a",
-                                 "maker": "MSI", "checked": "2026-11-09"}},
+                                 "maker": "MSI", "checked": "2026-11-09", "view": "front"}},
            "b": {"maker_image": {"url": "https://asset-us-store.msi.com/b.png", "page_url": "https://www.msi.com/b",
-                                 "maker": "MSI", "checked": "2026-11-09"}}}
+                                 "maker": "MSI", "checked": "2026-11-09", "view": "front"}}}
     p = tmp_path / "src.json"
     p.write_text(json.dumps(src))
     src["c-family"] = {"representative": "b"}
