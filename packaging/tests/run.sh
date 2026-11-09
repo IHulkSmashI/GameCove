@@ -308,7 +308,7 @@ sel() {
 if sh "$REPO/packaging/tests/session.sh" >"$T/out" 2>&1; then ok; else bad "session.sh: $(grep FAIL "$T/out" | head -20)"; fi
 : >"$T/busctl.log"
 if [ "$(id -u)" -ne 0 ]; then
-	expect_code 0 "switch to steam resets InterceptMode" env XDG_DATA_HOME="$T/xdg" sel steam
+	expect_code 0 "switch to steam resets InterceptMode" env XDG_DATA_HOME="$T/xdg" PATH="$BIN:$PATH" sh "$SEL" steam
 	contains "$T/busctl.log" "^$RESET0$" "switching resets InterceptMode on device 0"
 	contains "$T/busctl.log" "^$RESET1$" "switching resets InterceptMode on device 1"
 	lacks "$T/busctl.log" "dbus0 " "target devices left alone"
