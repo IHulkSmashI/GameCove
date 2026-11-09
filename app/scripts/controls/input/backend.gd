@@ -55,6 +55,7 @@ func setup(context: Dictionary) -> void:
 	row = device_row(context.get("device"))
 	bus = Busctl.new(context.get("runner"), "--system")
 	hhd = Hhd.new(context.get("runner"), str(context.get("sys_root", "")), str(context.get("home", "")))
+	hhd.transport = context.get("hhd_transport")
 	invalidate()
 
 

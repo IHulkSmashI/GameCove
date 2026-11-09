@@ -283,6 +283,7 @@ func _emulation() -> RefCounted:
 			match be.controller_backend():
 				"inputplumber":
 					c.options = _opts(IP_EMULATION, EMULATION_LABELS)
+					c.default_value = "default"
 					return ""
 				"hhd":
 					var k := _hhd_mode_key()
@@ -295,6 +296,9 @@ func _emulation() -> RefCounted:
 					var labels := EMULATION_LABELS.duplicate()
 					labels.merge(Hhd.labels_of(node), true)
 					c.options = _opts(modes, labels)
+					# hhd's own default mode (its schema), else its first: "default" is InputPlumber's word
+					var dflt: Variant = node.get("default") if node is Dictionary else null
+					c.default_value = str(dflt) if dflt != null and str(dflt) in modes else str(modes[0])
 					return ""
 			return R_NONE,
 		func(_c):

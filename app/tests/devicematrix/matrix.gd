@@ -43,6 +43,10 @@ const EXPECT_KEYS: Array[String] = ["available", "reason_contains", "kind", "uni
 	"step", "options_include", "options_exclude", "value", "ac", "note"]
 
 static var _manifest_cache: Dictionary = {}
+static var _generated_dir := ""
+## gen.py's marker file (MARKER in tools/devicematrix/gen.py).
+const MARKER := ".devicematrix"
+const STALE_S := 3600
 
 
 # ---- fakes --------------------------------------------------------------------
@@ -217,14 +221,17 @@ class FakeHhd extends RefCounted:
 # ---- fixtures -----------------------------------------------------------------
 
 ## The generated matrix: DEVICEMATRIX_DIR when it holds one, else generated
-## now into user://devicematrix (once per run). {} + error on failure.
+## now into this run's user://devicematrix-<pid> (once per run). {} + error on failure.
 static func manifest() -> Dictionary:
 	if not _manifest_cache.is_empty():
 		return _manifest_cache
 	var dir := OS.get_environment("DEVICEMATRIX_DIR")
 	if dir == "" or not FileAccess.file_exists(dir.path_join("manifest.json")):
 		if dir == "":
-			dir = OS.get_user_data_dir().path_join("devicematrix")
+			# one folder per test run: two runs at once (worktrees, CI shards) never share one
+			clean_stale()
+			dir = OS.get_user_data_dir().path_join("devicematrix-%d" % OS.get_process_id())
+			_generated_dir = dir
 		var gen := ProjectSettings.globalize_path("res://").path_join("../tools/devicematrix/gen.py").simplify_path()
 		var out := []
 		var code := OS.execute("python3", PackedStringArray(["-I", gen, dir]), out, true)
@@ -235,6 +242,46 @@ static func manifest() -> Dictionary:
 		return {"error": "no manifest in " + dir}
 	_manifest_cache = m
 	return m
+
+
+## Removes the folder this run generated (never a DEVICEMATRIX_DIR given from
+## outside, as CI does for its artifact). test_device_matrix.gd after_all().
+static func cleanup() -> void:
+	if _generated_dir != "" and FileAccess.file_exists(_generated_dir.path_join(MARKER)):
+		_rm_tree(_generated_dir)
+	_generated_dir = ""
+	_manifest_cache = {}
+
+
+## Folders other runs left behind (killed mid-run): only ones gen.py made (they
+## carry its marker) and only when older than an hour, so a run still going
+## elsewhere keeps its own.
+static func clean_stale(max_age_s := STALE_S) -> Array[String]:
+	var removed: Array[String] = []
+	var base := OS.get_user_data_dir()
+	var now := Time.get_unix_time_from_system()
+	for d in DirAccess.get_directories_at(base):
+		if not (d == "devicematrix" or d.begins_with("devicematrix-")):
+			continue
+		var marker := base.path_join(d).path_join(MARKER)
+		if base.path_join(d) == _generated_dir:
+			continue
+		if FileAccess.file_exists(marker) and now - FileAccess.get_modified_time(marker) > max_age_s:
+			_rm_tree(base.path_join(d))
+			removed.append(d)
+	return removed
+
+
+static func _rm_tree(path: String) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		return
+	d.include_hidden = true
+	for f in d.get_files():
+		d.remove(f)
+	for sub in d.get_directories():
+		_rm_tree(path.path_join(sub))
+	DirAccess.remove_absolute(path)
 
 
 static func expectations() -> Dictionary:

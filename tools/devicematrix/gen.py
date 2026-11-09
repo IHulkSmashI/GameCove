@@ -514,6 +514,7 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
     t.d("/home/.local/share/Steam/steamapps")
     if controller == "hhd":
         t.w("/tmp/hhd/token", "devicematrix-token")
+        t.d("/run/hhd")   # hhd creates its runtime folder at start (hhd_client.present())
 
     for path, value in (override.get("files") or {}).items():
         t.w(path, value)

@@ -98,6 +98,8 @@ func _initialize() -> void:
 					printerr("FAIL ", msg)
 			else:
 				passed += 1
+		if t.has_method("after_all"):
+			t.after_all()   # per-file cleanup (generated fixture folders...)
 	OS.remove_logger(errors)
 	print("%d passed, %d failed" % [passed, failed])
 	quit(1 if failed > 0 else 0)
