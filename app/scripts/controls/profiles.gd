@@ -82,6 +82,7 @@ var _session: Object
 var _first_detect_done := false
 var _seen_available: Dictionary = {}   # ids available at the last detection
 var _apply_after_detect := ""          # a reason to apply once the detection asked for ends
+var _apply_after_seq := 0              # ... the Controls detection that has to have finished
 
 
 func _ready() -> void:
@@ -171,6 +172,7 @@ func set_plugged(on: bool) -> void:
 	if controls != null and controls.has_method("detect_all") and controls.has_signal("detected"):
 		_apply_after_detect = "power source"
 		controls.detect_all()
+		_apply_after_seq = int(controls.get("requested_seq")) if "requested_seq" in controls else 0
 	else:
 		apply_now("power source")
 
@@ -198,6 +200,9 @@ func _on_detected() -> void:
 	for c in _all_controls():
 		if c.available:
 			now[c.id] = true
+	# an older detection (from before the charger changed again) isn't the one we wait for
+	if _apply_after_detect != "" and "detected_seq" in controls and int(controls.detected_seq) < _apply_after_seq:
+		return
 	if _apply_after_detect != "":
 		var why := _apply_after_detect
 		_apply_after_detect = ""

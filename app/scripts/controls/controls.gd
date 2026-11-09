@@ -123,14 +123,33 @@ func value(id: String) -> Variant:
 
 
 ## Detects and reads everything (worker). Emits detected().
+## Detections asked for / finished (main thread): a caller that needs the state
+## after its own detection waits until detected_seq reaches the requested_seq
+## it saw (an older detection still running may emit `detected` first).
+var requested_seq := 0
+var detected_seq := 0
+
+
 func detect_all() -> void:
+	requested_seq += 1
+	var n := requested_seq
 	_queue(func():
 		for id in _order:
 			var c = _controls[id]
 			c.detect()
 			c.read()
 		_commit(_order)
-		_emit(detected, []))
+		_emit_detected(n))
+
+
+func _emit_detected(n: int) -> void:
+	if sync_mode:
+		detected_seq = maxi(detected_seq, n)
+		detected.emit()
+	else:
+		(func():
+			detected_seq = maxi(detected_seq, n)
+			detected.emit()).call_deferred()
 
 
 ## Sets one control (worker). Emits control_changed or control_failed.

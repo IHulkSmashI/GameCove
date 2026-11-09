@@ -449,3 +449,21 @@ func test_an_edit_reapplies_only_what_changed() -> void:
 	p.set_value("", "", "power.tdp", null)
 	p.free()
 	_cleanup()
+
+
+## The charger flapping: a detection queued before the last change finished
+## first and Profiles applied with the old range (30 W kept on the charger).
+## It waits for the detection it asked for now. Found by the end-to-end suite.
+func test_source_apply_waits_for_its_own_detection() -> void:
+	var p = _setup()
+	_reg.detect_all()
+	p._apply_after_detect = "power source"
+	p._apply_after_seq = _reg.requested_seq + 1
+	var applied := []
+	p.applied.connect(func(info): applied.append(info["reason"]))
+	_reg.detected.emit()   # an older detection
+	eq(applied, [], "an older detection doesn't apply")
+	_reg.detect_all()      # ours
+	eq(applied, ["power source"], "ours does")
+	p.free()
+	_cleanup()
