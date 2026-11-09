@@ -405,6 +405,10 @@ rmdir "$T/gcstate/fixes/power-tune/orig"
 : >"$T/gcstate/fixes/power-tune/thermald-held"
 expect_code 0 "post_client_shutdown with thermald held" post
 contains "$T/post.log" "^pkexec $T/fix-set power-tune set restore$" "session end starts thermald again"
+# busctl --list tree can hang on a stuck bus: every call has a timeout
+for f in "$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" "$REPO/session/gamescope-session-plus/sessions.d/gamecove"; do
+	if grep -n 'busctl --' "$f" | grep -v -- '--timeout=' | grep -q .; then bad "busctl without --timeout in $f"; else ok; fi
+done
 
 # ------------------------------------------------------------------ install.sh
 IB="$T/installbin"
