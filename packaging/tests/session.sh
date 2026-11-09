@@ -289,6 +289,44 @@ env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_RUNTIME_DIR="$RUNDIR" GAMECOVE_BIN=
 sleep 0.3
 has "$T/order.log" "^steam -silent$" "an app that never says ready doesn't keep Steam away (timeout)"
 
+# --- review H1: a hung GameCove (alive, but never ready or its heartbeat stopped) is killed and counted
+HR="$T/hrun"
+mkdir -p "$HR"
+printf '#!/bin/sh\nexec sleep 30\n' >"$CB/hang"
+printf '#!/bin/sh\necho "1 ui" >"$GAMECOVE_HEARTBEAT"\nexec sleep 30\n' >"$CB/stale"
+printf '#!/bin/sh\necho "1 game" >"$GAMECOVE_HEARTBEAT"\nsleep 4\nexit 0\n' >"$CB/ingame"
+printf '#!/bin/sh\ni=0\nwhile [ $i -lt 8 ]; do i=$((i+1)); echo "$i ui" >"$GAMECOVE_HEARTBEAT"; sleep 0.5; done\nexit 0\n' >"$CB/alive"
+printf '#!/bin/sh\n: >"$XDG_RUNTIME_DIR/gamecove-steam-ready"\nsleep 4\nexit 0\n' >"$CB/oldapp"
+chmod +x "$CB/hang" "$CB/stale" "$CB/ingame" "$CB/alive" "$CB/oldapp"
+watch() { # <app> [env...]: prints the client's exit code; never waits more than 20 s
+	a="$1"
+	shift
+	: >"$T/client.log"
+	env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" XDG_RUNTIME_DIR="$HR" \
+		GAMECOVE_BIN="$CB/$a" GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=off GAMECOVE_STEAM_WAIT_S=0 \
+		GAMECOVE_READY_TIMEOUT_S=2 GAMECOVE_HEARTBEAT_STALE_S=2 "$@" timeout 20 sh "$CLIENT" >/dev/null 2>&1
+	echo "$?"
+}
+fresh
+rm -rf "$DATA"
+started="$(date +%s)"
+code="$(watch hang)"
+[ "$code" -ne 0 ] && [ "$code" -ne 124 ] && ok || bad "an app that never gets ready is stopped by the client (exit $code)"
+[ $(($(date +%s) - started)) -lt 15 ] && ok || bad "readiness timeout ends a hung start quickly"
+eqv "$(cat "$DATA/crash-count" 2>/dev/null)" 1 "a hang at start counts as an unclean exit"
+code="$(watch stale)"
+[ "$code" -ne 0 ] && [ "$code" -ne 124 ] && ok || bad "a stale heartbeat stops the app (exit $code)"
+eqv "$(cat "$DATA/crash-count" 2>/dev/null)" 2 "a stale heartbeat counts as an unclean exit"
+watch hang >/dev/null
+has "$T/client.log" "^select steam$" "three hangs in a row: switch to Steam Gaming Mode"
+eqv "$(sed -n 2p "$DATA/crash-fallback")" hung "fallback says it was hung"
+rm -rf "$DATA"
+eqv "$(watch ingame)" 0 "an unchanging heartbeat during a game is never a hang (long loads)"
+eqv "$(watch alive)" 0 "a beating app runs on"
+eqv "$(watch oldapp)" 0 "an app with the ready file but no heartbeat is only checked for readiness"
+[ ! -e "$DATA/crash-count" ] && ok || bad "healthy runs count nothing"
+[ ! -e "$HR/gamecove-heartbeat" ] && ok || bad "heartbeat file removed when the app is gone"
+
 # --- traits: ZOTAC Zone board G1A1W, which Linux's orientation quirk misses (G0A1W only)
 SD="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
 orient() { # <vendor> <board> [preset]

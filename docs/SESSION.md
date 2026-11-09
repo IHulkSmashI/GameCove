@@ -245,6 +245,18 @@ helper of our own:
   in `/tmp`, so it forgets on reboot) also switches to Steam, through
   `gamecove-session-select steam`; it's the backstop for a session that never gets
   as far as our client.
+- **Hang** (review H1): the client also stops an app that is alive but stuck. If
+  neither `$XDG_RUNTIME_DIR/gamecove-steam-ready` nor the heartbeat file
+  (`$XDG_RUNTIME_DIR/gamecove-heartbeat`, `GAMECOVE_HEARTBEAT`) appears within 60 s
+  (`GAMECOVE_READY_TIMEOUT_S`), or the heartbeat stops changing for 30 s
+  (`GAMECOVE_HEARTBEAT_STALE_S`), it kills the app and counts an unclean exit.
+  The app (`scripts/system/session_health.gd`) rewrites the heartbeat every 5 s
+  from a main-loop Timer as `<sequence> ui|game`. While a game runs it says `game`
+  and is never killed, so a long load (or gamescope holding back frames from a
+  hidden window) can't end the session and the game with it.
+- **Telling you why:** after a fallback, the next GameCove start shows a notice
+  ("GameCove closed unexpectedly 3 times in a row, so Steam started instead") from
+  `crash-fallback`, then deletes it.
 - **From a TTY** (Ctrl+Alt+F3 with a keyboard, or SSH), logged in as yourself, not root:
 
   ```
