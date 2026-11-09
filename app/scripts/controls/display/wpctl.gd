@@ -79,3 +79,31 @@ static func _strip_tree(s: String) -> String:
 	for ch in ["│", "├", "└", "─"]:
 		out = out.replace(ch, " ")
 	return out.strip_edges()
+
+
+## `pactl -f json list sinks|sources` (pipewire-pulse) -> descriptions of the nodes whose
+## jack has nothing plugged in: the active port (else every port) reports availability
+## "not available". With UCM (Intel SOF/SoundWire, the MSI Claw) Headphones and Headset
+## Microphone are nodes of their own that wpctl lists even when no jack is connected.
+## Unknown availability counts as plugged. [] when the text isn't that JSON.
+static func parse_unplugged(json: String) -> Array:
+	var data: Variant = JSON.parse_string(json)
+	var out := []
+	if not data is Array:
+		return out
+	for n in data:
+		if not n is Dictionary or not n.get("ports") is Array or (n["ports"] as Array).is_empty():
+			continue
+		var ports: Array = n["ports"]
+		var active := str(n.get("active_port", ""))
+		var gone := false
+		var found := false
+		for p in ports:
+			if p is Dictionary and str(p.get("name", "")) == active:
+				found = true
+				gone = str(p.get("availability", "")) == "not available"
+		if not found:
+			gone = ports.all(func(p): return p is Dictionary and str(p.get("availability", "")) == "not available")
+		if gone:
+			out.append(str(n.get("description", n.get("name", ""))))
+	return out

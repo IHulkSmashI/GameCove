@@ -82,14 +82,30 @@ func _detect_list(c, kind: String) -> String:
 	if st[kind].is_empty():
 		return T.NO_SINK if kind == "sinks" else T.NO_SOURCE
 	# Values are the device names: stable across reboots, unlike PipeWire ids.
+	# Jacks with nothing plugged in aren't offered (they can't play or record; the
+	# Claw's Headphones / Headset Microphone choices failed with nothing connected),
+	# unless one is the default now.
+	var unplugged := _unplugged(c, kind)
 	var opts := []
 	var seen := {}
 	for n in st[kind]:
+		if n["name"] in unplugged and not n["default"]:
+			continue
 		if not seen.has(n["name"]):
 			seen[n["name"]] = true
 			opts.append({"value": n["name"], "label": n["name"]})
 	c.options = opts
 	return ""
+
+
+## Descriptions of sinks/sources whose jack is empty (pipewire-pulse's port availability);
+## [] when pactl isn't there.
+func _unplugged(c, kind: String) -> Array:
+	var runner = c.ctx.get("runner")
+	if runner == null:
+		return []
+	var r: Dictionary = runner.run("pactl", PackedStringArray(["-f", "json", "list", kind]))
+	return Wp.parse_unplugged(str(r.get("out", ""))) if int(r.get("code", -1)) == 0 else []
 
 
 func _read_vol(c, target: String) -> Variant:
@@ -123,6 +139,8 @@ func _set_default(c, kind: String, name) -> bool:
 	var st = status(c)
 	if st == null:
 		return false
+	if name in _unplugged(c, kind):
+		return false   # nothing plugged into that jack
 	for n in st[kind]:
 		if n["name"] == name:
 			return _wp(c, ["set-default", str(n["id"])])
