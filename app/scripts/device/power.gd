@@ -152,6 +152,9 @@ var _fan_mode := ""
 var _fan_driver := ""   # key of FAN_DRIVERS while _fan_via == "fix"
 var _fan_hwmon := ""    # its hwmon folder (with a trailing /)
 var _fan_hwmon_name := ""
+## Settings this handheld has but that only the root helper can write, while it isn't
+## installed (a source checkout, or before the installer ran): {"charge_limit": bool, "fan": bool}.
+var _needs_helper := {"charge_limit": false, "fan": false}
 var _svc_range := {}    # {"min", "max"} the TDP service reported, {} when none
 var _autotune_on := false
 var _autotune_stopping := false  # request_autotune(false) queued: drop samples until it runs
@@ -559,14 +562,40 @@ static func charge_control(root := "") -> Dictionary:
 	return {}
 
 
+## The handheld's own fan driver (devices.json "fan", driven by the fan fix) first.
+## steamos-manager's FanControl1 only switches the Steam Deck's jupiter-fan-control
+## service (platform.toml [fan_control]); Bazzite exposes it on every handheld, so on
+## the MSI Claw it answered "firmware" and hid the EC's fan tables. It is used only
+## where devices.json says so (fan_via "steamos-manager") or no driver of our own is there.
 func _detect_fan() -> void:
 	_fan_via = ""
 	_fan_mode = ""
+	_needs_helper["fan"] = false
+	_detect_fan_driver()
+	if _fan_via != "":
+		return
+	var drv := str(device.get("fan", ""))
+	if FAN_DRIVERS.has(drv) and _fan_hwmon_found(drv) != "" and not _helper_present():
+		_needs_helper["fan"] = true
+		return
+	if str(device.get("fan_via", "")) == "fix":
+		return
 	var v: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_FAN_IFACE, "FanControlState")
 	if v != null:
 		_fan_via = "steamos-manager"
 		_fan_mode = "auto" if int(v) == 1 else "firmware"
-		return
+
+
+## hwmon folder of a FAN_DRIVERS driver with a pwm1_enable, "" when none.
+func _fan_hwmon_found(drv: String) -> String:
+	for hw_name in FAN_DRIVERS[drv]["hwmon"]:
+		var h := DeviceScript.find_hwmon(hw_name, sys_root)
+		if h != "" and FileAccess.file_exists(h + "pwm1_enable"):
+			return h
+	return ""
+
+
+func _detect_fan_driver() -> void:
 	_fan_driver = ""
 	_fan_hwmon = ""
 	_fan_hwmon_name = ""
@@ -602,6 +631,7 @@ func state() -> Dictionary:
 		"charge_limit": _charge if _charge_via != "" else -1,
 		"fan_mode": _fan_mode,
 		"fan_modes": fan_modes(),
+		"needs_helper": _needs_helper.duplicate(),
 		"plugged": plugged,
 		"supported": {
 			"tdp": tdp_ok,

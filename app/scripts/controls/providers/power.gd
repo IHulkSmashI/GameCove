@@ -526,6 +526,8 @@ func _fan_mode() -> RefCounted:
 			var st := _pstate()
 			if str(st.get("backend", "")) == "hhd":
 				return Tx.HHD_OWNS
+			if st.get("needs_helper", {}).get("fan", false):
+				return Tx.NO_HELPER
 			if not st.get("supported", {}).get("fan", false):
 				return Tx.NO_FAN
 			c.options = _choice_opts(st.get("fan_modes", []))
@@ -575,6 +577,8 @@ func _fan_curve() -> RefCounted:
 			var st := _pstate()
 			if str(st.get("backend", "")) == "hhd":
 				return Tx.HHD_OWNS
+			if st.get("needs_helper", {}).get("fan", false):
+				return Tx.NO_HELPER
 			var t := _fan_table()
 			if t.is_empty():
 				return Tx.NO_CURVE if st.get("supported", {}).get("fan", false) else Tx.NO_FAN

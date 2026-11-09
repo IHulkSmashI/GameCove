@@ -165,6 +165,57 @@ func test_claw8ex_fan_curve_is_never_quieter_than_quiet() -> void:
 	_free()
 
 
+# ---- the real Claw 8 EX on Bazzite 45 (kernel 7.2.15-ogc1.1, BIOS E1T91IMS.10E), read live ----
+
+## claw8ex() plus what the device showed: steamos-manager answers FanControlState 0 (its
+## jupiter-fan-control switch, meaningless here) and MaxChargeLevel 0 (EC limit never set),
+## the EC's own fan tables (60-84 %), and GPU performance level auto with a manual clock.
+func _claw_live(helper: bool, max_charge := 0) -> Dictionary:
+	var trees := Trees.new()
+	var t: Dictionary = trees.claw8ex()
+	var sm := Trees.SM
+	t["props"][sm + "FanControl1 FanControlState"] = Trees.p("u", 0)
+	t["props"][sm + "BatteryChargeLimit1 MaxChargeLevel"] = Trees.p("i", max_charge)
+	t["props"][sm + "BatteryChargeLimit1 SuggestedMinimumLimit"] = Trees.p("i", 10)
+	var h := "/sys/class/hwmon/hwmon5/"
+	var duty := [153, 163, 173, 188, 204, 214]
+	var temp := [47, 50, 57, 64, 71, 78]
+	for n in [1, 2]:
+		for i in 6:
+			trees.w(h + "pwm%d_auto_point%d_pwm" % [n, i + 1], str(duty[i]))
+			trees.w(h + "pwm%d_auto_point%d_temp" % [n, i + 1], str(temp[i]))
+	trees.w(h + "fan1_input", "2900")
+	trees.w(h + "fan2_input", "2900")
+	for u in ["ucsi-source-psy-USBC000:001", "ucsi-source-psy-USBC000:002"]:
+		trees.w("/sys/class/power_supply/%s/type" % u, "USB")
+		trees.w("/sys/class/power_supply/%s/online" % u, "0")
+	if not helper:
+		DirAccess.remove_absolute(t["root"] + "/usr/libexec/gamecove/gamecove-fix-set")
+		DirAccess.remove_absolute(t["root"] + "/usr/libexec/gamecove/gamecove-fix")
+	return t
+
+
+func test_claw_live_fan_tables_win_over_steamos_manager() -> void:
+	var e := _setup(_claw_live(true))
+	var c: Dictionary = e["c"]
+	var root: String = e["root"]
+	var h := "/sys/class/hwmon/hwmon5/"
+	ok(c["power.fan_curve"].available, "fan curve offered (%s)" % c["power.fan_curve"].reason)
+	eq(c["power.fan_mode"].options.map(func(o): return o["value"]), ["quiet", "auto", "max"], "the EC's presets, not steamos-manager's")
+	eq(c["power.fan_mode"].value, "auto", "pwm1/2_enable 2 is MSI's automatic control")
+	eq(c["power.fan_curve"].value, [60.0, 64.0, 68.0, 74.0, 80.0, 84.0], "the EC's own table, 0-255 shown as percent")
+	e["reg"].set_value("power.fan_curve", [50.0, 55.0, 60.0, 70.0, 85.0, 100.0])
+	for n in [1, 2]:
+		var got := []
+		for i in 6:
+			got.append(_read(root, h + "pwm%d_auto_point%d_pwm" % [n, i + 1]))
+		eq(got, ["128", "140", "153", "179", "217", "255"], "fan %d gets the curve" % n)
+		eq(_read(root, h + "pwm%d_enable" % n), "1", "fan %d follows its table" % n)
+		eq(_read(root, h + "pwm%d_auto_point1_temp" % n), "47", "temperatures never written")
+	ok(not e["runner"].calls.any(func(x): return str(x).contains("FanControlState")), "steamos-manager's fan switch never set")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)
