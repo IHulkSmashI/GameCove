@@ -14,8 +14,8 @@ func _expected(tab: String) -> Array:
 	var out := []
 	for id in Catalog.QUICK.get(tab, []):
 		var c = qm().model.control(id) if qm().model != null else null
-		if c != null and c.available and qm().model.blocked_reason(c) == "":
-			out.append(id)
+		if c != null and c.available:
+			out.append(id)   # blocked ones ("Turn on X first") show, locked
 	return out
 
 
@@ -66,7 +66,12 @@ func test_quick_controls_change_the_system() -> void:
 				var id: String = v.key
 				done[id] = true
 				var c := ctl(id)
-				if c != null and c.available and c.kind != "action" and not id in ["network.airplane", "system.keep_awake"] \
+				if c != null and qm().model.blocked_reason(c) != "":
+					var b0: Variant = c.value
+					await right()
+					await w.idle()
+					ok(c.value == b0, "%s: %s is locked (%s) and stays" % [tab, id, qm().model.blocked_reason(c)])
+				elif c != null and c.available and c.kind != "action" and not id in ["network.airplane", "system.keep_awake"] \
 						and not (c.kind == "choice" and c.options.size() < 2) and qm().model.blocked_reason(c) == "":
 					var before: Variant = c.value
 					if c.kind == "slider":
@@ -77,6 +82,8 @@ func test_quick_controls_change_the_system() -> void:
 						await w.wait_s(0.35)
 					else:
 						await right()
+						if c.kind == "color":
+							await w.wait_s(0.5)   # ColorRow settles before it sends
 					await w.idle()
 					var model: Object = qm().model
 					ok(not model.is_failed(id) and not model.is_pending(id), "%s: %s applied (failed=%s)" % [tab, id, model.is_failed(id)])

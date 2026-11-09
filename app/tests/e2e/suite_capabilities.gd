@@ -10,7 +10,7 @@ const EXPECT := {
 		"power.gpu_profile": true, "perf.overlay": true, "controller.gyro": "gyro fix",
 		"power.sppt": "firmware ignores", "power.smt": "no SMT", "power.platform_profile": "Set by Power mode",
 		"power.gpu_level": "AMD", "power.sleep_mode": "only one sleep mode", "controller.trackpad": "no trackpad",
-		"display.hdr": "doesn't support HDR", "controller.led_effect": "No RGB driver",
+		"display.hdr": "doesn't support HDR", "controller.led_effect": true,
 	},
 	"ally-steamos": {
 		"power.tdp": [5.0, 25.0], "power.sppt": true, "power.fppt": true, "power.platform_profile": true,
