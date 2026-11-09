@@ -123,5 +123,15 @@ gg_cos=$(sed -n 's/^COSIGN_VERSION=//p' "$REPO/packaging/get-gamecove.sh")
 [ -n "$app_cos" ] && [ "$app_cos" = "$gg_cos" ] && ok || bad "updates.gd COSIGN_VERSION ($app_cos) must match get-gamecove.sh ($gg_cos)"
 grep -q 'workflows/firmware\\\\.yml@refs/heads/main\$' "$REPO/app/scripts/system/firmware_index.gd" && ok || bad "firmware_index.gd SIGNER_IDENTITY must name firmware.yml on main"
 
+# ------------------------------------------------------------- network disclosure (M22, L34)
+for host in cheapshark.com gg.deals GitHub GameStream "Wake-on-LAN" SteamGridDB "maker" "Affiliate links"; do
+	grep -q "$host" "$REPO/README.md" && ok || bad "README's Network and privacy section doesn't mention $host"
+	grep -qi "$host" "$REPO/docs/PRIVACY.md" && ok || bad "docs/PRIVACY.md doesn't mention $host"
+done
+grep -q "^## Network and privacy" "$REPO/README.md" && ok || bad "README needs a Network and privacy section"
+for sw in "Background lookups" "Look up deals and prices" "Show maker photos"; do
+	grep -q "$sw" "$REPO/README.md" && ok || bad "README must name the '$sw' switch"
+done
+
 echo "$PASS passed, $FAILS failed"
 [ "$FAILS" -eq 0 ]

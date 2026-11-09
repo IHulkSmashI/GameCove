@@ -42,6 +42,7 @@ const Alerts := preload("res://scripts/discover/alerts.gd")
 const Region := preload("res://scripts/discover/region.gd")
 const GG := preload("res://scripts/discover/ggdeals.gd")
 const Affiliates := preload("res://scripts/discover/affiliates.gd")
+const Privacy := preload("res://scripts/system/privacy.gd")
 
 const REFRESH_EVERY := 6 * 3600
 const CALENDAR_EVERY := 24 * 3600
@@ -62,6 +63,7 @@ const DEFAULT_SETTINGS := {
 	"steamgriddb_key": "",    # the user's own SteamGridDB API key (optional)
 	"ggdeals_key": "",        # the user's own GG.deals API key (optional)
 	"ggdeals_keyshops": false, # also show GG.deals key-shop prices
+	"price_lookups": true,    # "Look up deals and prices": CheapShark, Steam store and GG.deals calls (review M22)
 	"alerts": true,           # master switch for price and release alerts
 	"affiliate_links": true,  # allow affiliate ids on links we build (none configured yet)
 }
@@ -73,8 +75,9 @@ const SETTINGS_INFO := {
 	"ggdeals_key": {"label": "gg.deals key (optional)", "help": "For real local prices from every store. Free at gg.deals/api; stays on this device.", "setup": true},
 	"ggdeals_keyshops": {"label": "Show key-shop prices", "help": GG.KEYSHOP_NOTE, "setup": false},
 	"steamgriddb_key": {"label": "SteamGridDB key (optional)", "help": "Artwork for games Steam has none for. Free at steamgriddb.com; stays on this device.", "setup": false},
+	"price_lookups": {"label": "Look up deals and prices", "help": "Sends the Steam app ids and titles on your wishlist (and what you search for) to CheapShark and the Steam store, with your store country, to show deals and prices. Off: Discover shows no prices and nothing is sent.", "setup": false},
 	"alerts": {"label": "Price and release alerts", "help": "Tell me when a wishlisted game drops in price or comes out. Checks every 6 hours, never while you play.", "setup": false},
-	"affiliate_links": {"label": "Affiliate links", "help": "Some store links we build can carry a GameCove affiliate id, marked \"Supports GameCove\". Prices don't change.", "setup": false},
+	"affiliate_links": {"label": "Affiliate links", "help": "On by default. Some store links we build can carry a GameCove affiliate id, marked \"Supports GameCove\" (none are set up yet). Prices don't change, and nothing about you is sent.", "setup": false},
 }
 
 ## http.gd node (made in start()) or a fake_http.gd object in tests.
@@ -84,6 +87,8 @@ var data_dir := "user://discover"
 var home := OS.get_environment("HOME")
 ## Region detection result {"country", "source"}; filled on first use, tests may set it.
 var detected_region := {}
+## The "Background lookups" switch (Privacy, user://settings.cfg); tests point it at their own file.
+var privacy_path := Privacy.PREFS_PATH
 ## Unix time source; tests replace it.
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 ## Parse the calendar file on a worker thread (false in tests: synchronous).
@@ -155,6 +160,11 @@ func _tick() -> void:
 	refresh()
 
 
+## Deals and prices may be looked up (the "Look up deals and prices" switch).
+func prices_allowed() -> bool:
+	return bool(_settings.get("price_lookups", true))
+
+
 func _exit_tree() -> void:
 	if _task != -1:
 		WorkerThreadPool.wait_for_task_completion(_task)
@@ -186,7 +196,7 @@ func set_settings(patch: Dictionary) -> void:
 		if DEFAULT_SETTINGS.has(k):
 			var v = patch[k]
 			v = bool(v) if DEFAULT_SETTINGS[k] is bool else str(v).strip_edges()
-			if k in ["country", "ggdeals_key", "ggdeals_keyshops"] and v != _settings[k]:
+			if k in ["country", "ggdeals_key", "ggdeals_keyshops", "price_lookups"] and v != _settings[k]:
 				money_changed = true
 			_settings[k] = v
 	if money_changed:
@@ -281,8 +291,15 @@ func _save(name: String, data: Variant) -> void:
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		return
+	f.close()
+	# only this user can read Discover's files: settings.json holds the user's API keys (review L32)
+	FileAccess.set_unix_permissions(ProjectSettings.globalize_path(tmp), FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER)
+	f = FileAccess.open(tmp, FileAccess.WRITE)
+	if f == null:
+		return
 	f.store_string(JSON.stringify(data))
 	f.close()
+	FileAccess.set_unix_permissions(ProjectSettings.globalize_path(tmp), FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER)
 	DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(_path(name)))
 
 
@@ -391,8 +408,10 @@ func refresh(force := false) -> bool:
 	if is_paused() and not force:
 		_pending = true
 		return false
+	if not force and not Privacy.background_allowed(privacy_path):
+		return false   # "Background lookups" off: only what the user asks for
 	var now := _now()
-	var due := force or now - int(_state["last_refresh"]) >= REFRESH_EVERY
+	var due := prices_allowed() and (force or now - int(_state["last_refresh"]) >= REFRESH_EVERY)
 	var cal_due := force or now - int(_state["last_calendar"]) >= CALENDAR_EVERY
 	if not due and not cal_due:
 		return false
@@ -709,7 +728,7 @@ func prices_for(game: Variant) -> Array[Dictionary]:
 ## prices_ready(game_key, deals). Works while paused: the user asked.
 func request_prices(game: Variant) -> void:
 	var g := _ids_of(game)
-	if http == null:
+	if http == null or not prices_allowed():
 		prices_ready.emit(g["key"], prices_for(game))
 		return
 	var steam: String = g["ids"].get("steam", "")
@@ -775,7 +794,7 @@ func deal_for_title(title: String) -> Dictionary:
 ## "best_deal": Deal or {}, "on_wishlist", "release": Release or {}}.
 func search(query: String) -> void:
 	var q := query.strip_edges()
-	if q == "" or http == null:
+	if q == "" or http == null or not prices_allowed():
 		search_done.emit(query, [])
 		return
 	http.request(CheapShark.search_url(q, 20), {}, func(res: Dictionary):

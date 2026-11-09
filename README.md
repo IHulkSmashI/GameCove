@@ -63,6 +63,25 @@ GameCove writes its own front end and device layer and reuses proven open-source
 
 Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAntiCheatYet, ProtonDB, IGDB) and published as a download. See [`gamedb/`](gamedb/).
 
+Game data from [IGDB](https://www.igdb.com): time to beat and upcoming release dates. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0.
+
+## Network and privacy
+
+GameCove has no analytics, no crash reporting and no account of its own, and never sends serial numbers, Steam account ids or anything you type into its settings to us. It does talk to a few services to do its job. Everything it contacts:
+
+| What | Who | What is sent | When | Switch |
+| --- | --- | --- | --- | --- |
+| Game database and release calendar | GitHub (GameCove's own `gamedb` release) | Nothing about you | At start, at most daily | Background lookups |
+| Deals and prices (Discover, wishlist) | [CheapShark](https://www.cheapshark.com) and the Steam store API | The Steam app ids and titles on your wishlist and in Discover, what you search for, your store country | 45 s after start, then every 6 hours; when you search or open a game | Look up deals and prices |
+| Local prices (optional) | [GG.deals](https://gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
+| Your device's photo | GitHub (free photos) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your device model | At start until it's saved, then weekly | Show maker photos, Background lookups |
+| Firmware list and downloads | GitHub (`firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
+| Achievements and game art | Steam's API and CDN; SteamGridDB only with your own key | The game's app id (and your SteamGridDB key) | When you open a game page or a tile needs art | Settings > Performance; remove the key |
+| Game streaming | PCs on your own network (GameStream: Sunshine, Apollo, Vibepollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets | When you open the Stream tab or wake a PC | You start it |
+| Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in | You start it |
+
+Settings > About > **Network and privacy** has the switches: **Background lookups** (off: nothing is requested unless you ask for it right then), **Look up deals and prices** and **Show maker photos**, all on by default. Store links can carry a GameCove affiliate id (Settings > Discover > Affiliate links, on by default; none are set up yet); it changes only the link, never the price, and sends nothing about you. Details: [docs/PRIVACY.md](docs/PRIVACY.md).
+
 ## What we'll never do
 
 - Paywall a device fix, battery feature or safety setting.

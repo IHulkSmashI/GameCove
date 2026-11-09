@@ -6,6 +6,7 @@ const SettingsScreen := preload("res://scripts/ui/settings_screen.gd")
 const SetupFlow := preload("res://scripts/ui/setup/setup_flow.gd")
 const QR := preload("res://scripts/ui/settings/qr.gd")
 const Credits := preload("res://scripts/ui/settings/credits.gd")
+const Privacy := preload("res://scripts/system/privacy.gd")
 const SignIn := preload("res://scripts/ui/settings/sign_in.gd")
 const DevicePage := preload("res://scripts/ui/settings/device_page.gd")
 const PerformancePage := preload("res://scripts/ui/settings/performance_page.gd")
@@ -108,8 +109,9 @@ class FakeDiscover extends RefCounted:
 		"steamgriddb_key": {"label": "SteamGridDB key (optional)", "help": "Artwork.", "setup": false},
 		"alerts": {"label": "Price and release alerts", "help": "Price drops.", "setup": false},
 		"affiliate_links": {"label": "Affiliate links", "help": "Supports GameCove.", "setup": false},
+		"price_lookups": {"label": "Look up deals and prices", "help": "Sends wishlist ids to CheapShark.", "setup": false},
 	}
-	var s := {"country": "", "steam_id": "", "steamgriddb_key": "", "ggdeals_key": "", "ggdeals_keyshops": false, "alerts": true, "affiliate_links": true}
+	var s := {"country": "", "steam_id": "", "steamgriddb_key": "", "ggdeals_key": "", "ggdeals_keyshops": false, "alerts": true, "affiliate_links": true, "price_lookups": true}
 	var links: Array = []
 	func get_settings() -> Dictionary:
 		var out := s.duplicate()
@@ -557,6 +559,28 @@ class FakePhoto extends RefCounted:
 		enabled = on
 	func set_maker_enabled(on: bool) -> void:
 		maker_enabled = on
+
+
+func test_about_page_network_and_privacy() -> void:
+	var svc := _svc()
+	var ph := FakePhoto.new()
+	svc["photo"] = ph
+	var s := _screen(svc)
+	var p: VBoxContainer = s.pages["about"]
+	var cfg := OS.get_user_data_dir().path_join("test_privacy_%d.cfg" % Time.get_ticks_usec())
+	p.privacy_path = cfg
+	ok(p.find_child("Card_privacy", true, false) != null, "Network and privacy card")
+	for k in ["background_lookups", "price_lookups", "privacy_maker_photo"]:
+		ok(p.rows.has(k), "switch: " + k)
+	ok(_has_text(p, "CheapShark") and _has_text(p, "maker") and _has_text(p, "GameStream"), "every network call is listed")
+	p.rows["background_lookups"].step(1)
+	eq(Privacy.background_allowed(cfg), false, "Background lookups saved off")
+	p.rows["price_lookups"].step(1)
+	eq(svc["discover"].s["price_lookups"], false, "deals switch goes to Discover")
+	p.rows["privacy_maker_photo"].step(1)
+	eq(ph.maker_enabled, false, "maker photo switch goes to DevicePhoto")
+	DirAccess.remove_absolute(cfg)
+	s.free()
 
 
 func test_device_page_photo_settings() -> void:

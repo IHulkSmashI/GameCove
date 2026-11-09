@@ -4,6 +4,7 @@ extends "res://tests/test_case.gd"
 
 const H := preload("res://tests/fixtures/discover/helpers.gd")
 const FakeHttp := preload("res://scripts/discover/fake_http.gd")
+const Privacy := preload("res://scripts/system/privacy.gd")
 
 
 class Events:
@@ -331,3 +332,52 @@ func test_settings_country_override_and_currency() -> void:
 	eq(d2.get_settings()["country"], "CA", "saved (helpers set CA)")
 	d2.free()
 	H.wipe(dir)
+
+
+# ---- review M22: the network switches -----------------------------------------------------------
+
+func test_background_lookups_off_sends_nothing_by_itself() -> void:
+	var dir := H.temp_dir("disc_privacy_bg")
+	var http = H.online_http()
+	var d := H.make(http, dir)
+	d.add_to_wishlist({"title": "Borderlands 2", "appid": "49520"})
+	ok(Privacy.set_background_allowed(false, d.privacy_path), "switch saved")
+	ok(not d.refresh(), "no background refresh")
+	eq(http.requests.size(), 0, "nothing requested")
+	ok(d.refresh(true), "the user asking still works")
+	ok(http.requests.size() > 0, "requested when asked")
+	d.free()
+
+
+func test_price_lookups_off_never_calls_deal_sources() -> void:
+	var dir := H.temp_dir("disc_privacy_prices")
+	var http = H.online_http()
+	var d := H.make(http, dir)
+	var ev := Events.new()
+	ev.watch(d)
+	d.add_to_wishlist({"title": "Borderlands 2", "appid": "49520"})
+	eq(d.get_settings()["price_lookups"], true, "on by default")
+	d.set_settings({"price_lookups": false})
+	d.refresh(true)
+	d.request_prices({"title": "Borderlands 2", "appid": "49520"})
+	d.search("borderlands")
+	var deal_calls: Array = http.requests.filter(func(u): return "cheapshark" in u or "steampowered" in u or "gg.deals" in u)
+	eq(deal_calls, [], "no CheapShark, Steam store or GG.deals request")
+	ok(http.requests.all(func(u): return "github.com" in u), "only the calendar file (GameCove's own release)")
+	eq(ev.named("search").size(), 1, "search answers (empty) at once")
+	d.set_settings({"price_lookups": true})
+	d.refresh()
+	ok(http.requests.any(func(u): return "cheapshark" in u), "back on: prices are looked up again")
+	d.free()
+
+
+
+func test_discover_files_are_private() -> void:
+	# review L32: settings.json holds the user's API keys
+	var dir := H.temp_dir("disc_private")
+	var d := H.make(FakeHttp.new(), dir)
+	d.set_settings({"ggdeals_key": "abcdefghij12345"})
+	var p := ProjectSettings.globalize_path(dir.path_join("settings.json"))
+	ok(FileAccess.file_exists(p), "saved")
+	eq(FileAccess.get_unix_permissions(p) & 511, 384, "settings.json is 0600")
+	d.free()

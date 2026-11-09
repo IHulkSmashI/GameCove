@@ -60,6 +60,7 @@ static func make(http: Variant, dir: String) -> Node:
 	var d: Node = DiscoverScript.new()
 	d.http = http
 	d.data_dir = dir
+	d.privacy_path = dir.path_join("settings.cfg")          # "Background lookups" from the test's own file
 	d.clock = func() -> int: return now()
 	d.home = "/nonexistent"                                 # never the real home
 	d.detected_region = {"country": "US", "source": "default"}
