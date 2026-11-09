@@ -205,6 +205,8 @@ func _setup() -> void:
 	mangohud.log_dir = (rt + "/gamecove-mangohud") if rt != "" else ProjectSettings.globalize_path("user://mangohud")
 	mangohud.ctl = which("mangohudctl")
 	mangohud.level = int(_recall("overlay", "level", 0))
+	mangohud.override_lines = MangoHud._clean(_recall("overlay", "override", []))
+	mangohud.extra_lines = MangoHud._clean(_recall("overlay", "extra", []))
 
 
 # ---- sampling -------------------------------------------------------------------
@@ -372,6 +374,20 @@ func set_overlay_level(level: int) -> bool:
 	if not mangohud.set_level(level):
 		return false
 	_remember("overlay", "level", mangohud.level)
+	overlay_changed.emit(mangohud.level)
+	return true
+
+
+## The overlay's look beyond the level (perf controls: "bar" and "custom"
+## presets replace the level's lines; position / opacity / scale are added).
+## Remembered with the level. False when unsupported.
+func set_overlay_style(override: Array, extra: Array) -> bool:
+	if not overlay_supported():
+		return false
+	if not mangohud.set_style(override, extra):
+		return false
+	_remember("overlay", "override", mangohud.override_lines)
+	_remember("overlay", "extra", mangohud.extra_lines)
 	overlay_changed.emit(mangohud.level)
 	return true
 

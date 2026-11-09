@@ -1,0 +1,11 @@
+#!/bin/sh
+# gamecove-upscale: per-game upscaling (OptiScaler, XeSS, FSR, REFramework), run as the desktop user by GameCove.
+# The Python package lives next to GameCove's other files; -I keeps the user's Python paths out of it.
+here=$(dirname "$0")
+for d in "${GAMECOVE_HELPERS:-}" /usr/lib/gamecove/helpers "$here/../../lib/gamecove/helpers" "$here/../helpers"; do
+	if [ -n "$d" ] && [ -f "$d/gamecove_upscale/__main__.py" ]; then
+		exec python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from gamecove_upscale.cli import main; sys.exit(main(sys.argv[2:]))' "$d" "$@"
+	fi
+done
+echo '{"ok": false, "error": "gamecove_upscale helper not found"}'
+exit 0

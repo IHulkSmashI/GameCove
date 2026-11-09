@@ -1,0 +1,339 @@
+"""Per-game launch environment: the one file gamecove-run reads (<runtime>/launch/<appid>.env).
+
+Every per-game choice that has to be in the game's environment lands here, composed from the game's launch settings
+(profiles.py, key "launch"). The xess-xmx-linux variables are read by the package's Proton hook and shim
+(its docs/launch-options.md). The OptiScaler settings go into the game's OptiScaler.ini when GameCove's own
+OptiScaler is put in or re-applied (opti_ini, optiscaler.patch); the same Section_Key names are what Decky
+Framegen's fgmod reads from the environment, so a game Decky Framegen patched still gets the presets.
+
+  xmx          bool | unset         per-game scope (xmxscope.py, the default since 0.2): unset = automatic (the XMX
+                                    driver only for a game that ships XeSS or OptiScaler), on/off = GAMECOVE_XMX=1/0.
+                                    With the package still session-wide: off -> the stock Vulkan drivers (stock_env)
+  fg           0 | 2..8             XESS_FG=<n>: XeSS frame generation at n x whatever the game's menu offers
+                                    (5..8 experimental upstream); 0 = the game decides
+  fsr          off | xess | fg | inject
+                                    xess   -> FSR=xess: FSR 3.1+ upscaling on XeSS SR, its frame generation on XeSS-FG
+                                    fg     -> FSR_FG=xess: only FSR frame generation on XeSS-FG
+                                    inject -> FSR=xess FSR_FG=inject: XeSS-FG for a game with FSR upscaling and no
+                                              FSR frame generation
+  xess_latest  bool                 XESS=latest: Intel's current XeSS libraries instead of the game's older ones
+  cores        all | e              e -> GAMECOVE_CORES=e: the game runs on the E-cores only (the launch wrapper's
+                                    taskset), the P-cores left free; per game, live, undone when the game exits
+  low_latency  bool (default on)    off -> IGDEXT_XELL_CAP=off (the shim's low latency with frame generation)
+  opti         off | xess | fsr4 | fsr4_xmx | fsr4_xmx_lite
+                                    OptiScaler upscaler for this game: XeSS on XMX, FSR 4 INT8 (experimental on
+                                    Intel), or FSR 4.1.2 on XMX (nitec's build, regular or lite); takes effect when
+                                    GameCove's OptiScaler is in the game (or, for compatibility, through fgmod)
+  opti_xefg    bool                 OptiScaler's frame-generation output = XeSS-FG (on XMX through the shim)
+  reframework  bool                 a Capcom RE Engine game: REFramework (dinput8=n,b) and the Capcom setup
+                                    (capcom(): OptiScaler v10 in the OptiScaler/ subfolder, CAPCOM_INI)
+
+FSR 4.1.2 (fsr4_xmx, fsr4_xmx_lite) is refused for a game with XMX switched off (xmx = false): nitec's build needs
+the XMX cores and drew a black screen without them (Onimusha, Claw 8 EX, 2026-11-04).
+
+The plugin never edits Steam's launch options itself; the user adds the wrapper once per game (Per-game does it on
+the first change) and the file does the rest. An empty composition removes the file, so a game with nothing set
+runs exactly as without GameCove.
+"""
+from __future__ import annotations
+
+import os
+import re
+
+from . import xess
+
+KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+FSR_ROUTES = {
+    "off": {},
+    "xess": {"FSR": "xess"},
+    "fg": {"FSR_FG": "xess"},
+    "inject": {"FSR": "xess", "FSR_FG": "inject"},
+}
+OPTI_PRESETS = {
+    "off": {},
+    "xess": {"Dx12Upscaler": "xess"},
+    # OptiScaler 0.9.4+: FSR 4 on GPUs without official support, INT8 model (Decky Framegen README)
+    "fsr4": {"Dx12Upscaler": "fsr31", "FSR_Fsr4ForceEnableInt8": "true"},
+    # FSR 4.1.2 on the XMX cores: nitec's "B Boost" build of AMD's upscaler (OptiScaler Discord). The user puts its
+    # files in ~/fsr4-xmx; gamecove-run copies them over fgmod's FSR 4 after fgmod ran (GAMECOVE_FSR4_XMX).
+    # OptiScaler: the FSR 3.1 path with the FSR 4 provider. With the B Boost files OptiScaler lists 4.0.2 first (AMD's
+    # original, kept as fsr-original.dll) first. The FFX Upscaler list with nitec's file (CONTROL, Claw 8 EX, 2026-11-04):
+    # 0-5 FSR 4.0.2X (+ Skip, QSkip, Hybrid...), 6 FSR 4.1.2X, 7/8 its Skip/QSkip, 9 FSR 4.1.2X Lite, 10 Lite Skip,
+    # 11+ DLSS-EX/FX/EFX/KX/MX/LX (DLSS presets on XMX from the game's nvngx_dlss.dll). Lite is its own entry.
+    "fsr4_xmx": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "6", "FSR_Fsr4Update": "true",
+                 "GAMECOVE_FSR4_XMX": "regular", "FSR4_XMX_NO_DIALOG": "1"},
+    "fsr4_xmx_lite": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "9", "FSR_Fsr4Update": "true",
+                      "GAMECOVE_FSR4_XMX": "lite", "FSR4_XMX_LITE": "1", "FSR4_XMX_NO_DIALOG": "1"},
+}
+# GameCove, AMD handhelds (generalized from ClawDeck's Intel presets): OptiScaler's FSR 3.1 path, and FSR 4 through
+# the same FSR 3.1 path with the FSR 4 upgrade and AMD's own FSR SDK 2.4 upscaler (4.1.2, the model picked by GPU)
+# put in by optiscaler.patch (versions.json "fsr4_amd").
+OPTI_PRESETS["fsr31"] = {"Dx12Upscaler": "fsr31"}
+OPTI_PRESETS["fsr4_amd"] = {"Dx12Upscaler": "fsr31", "FSR_Fsr4Update": "true"}
+AMD_PRESETS = ("fsr31", "fsr4_amd")
+INTEL_PRESETS = ("xess", "fsr4", "fsr4_xmx", "fsr4_xmx_lite")
+FSR4_XMX = ("fsr4_xmx", "fsr4_xmx_lite")
+OPTI_XEFG = {"FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
+# OptiScaler's frame generation, always out through XeSS-FG (on XMX): where the frames come from
+OPTI_FG = {
+    "off": {"FrameGen_Enabled": "false", "FrameGen_FGInput": "nofg", "FrameGen_FGOutput": "nofg"},
+    "dlssg": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "dlssg", "FrameGen_FGOutput": "xefg"},      # the game's DLSS FG
+    "fsrfg": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "fsrfg", "FrameGen_FGOutput": "xefg"},      # the game's FSR FG
+    "upscaler": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "upscaler", "FrameGen_FGOutput": "xefg"},  # any game
+}
+# AMD: OptiScaler's frame generation goes out as FSR frame generation (OptiFG), not XeSS-FG (Intel only)
+OPTI_FG_AMD = {k: ({**v, "FrameGen_FGOutput": "fsrfg"} if v["FrameGen_FGOutput"] == "xefg" else dict(v)) for k, v in OPTI_FG.items()}
+CAPCOM_AMD = {"Upscalers_VulkanUpscaler": "fsr31", "FrameGen_FGOutput": "FSRFG"}
+CAPCOM_AMD_DROP = ("FrameGen_FGNvngxReplacement",)
+KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "opti_dll",
+        "opti_overlay", "cores"}
+# OptiScaler's own FPS overlay (OptiScaler.ini [Menu] FpsOverlayType): shows the upscaler and "(XeFG)" when frame
+# generation runs, which Steam's overlay can't tell. Top right, clear of Steam's performance overlay at the top left.
+OVERLAYS = {0: "FPS", 1: "Simple", 2: "Detailed", 3: "Detailed + graph", 4: "Full", 5: "Full + graph"}
+# OptiScaler.ini sections (0.9.4, plus v10's DLSSG and NvngxFG), for turning a preset into ini lines for GameCove's own OptiScaler (optiscaler.py)
+INI_SECTIONS = {"Upscalers", "FrameGen", "FSRFG", "XeFG", "DLSSG", "NvngxFG", "OptiFG", "Inputs", "FSRFGInputs", "Framerate", "XeSS", "FSR",
+                "DLSS", "DLSSD", "Nukems", "Libraries", "Menu", "Spoofing", "Plugins", "NvApi", "Dx11withDx12", "Hooks",
+                "fakenvapi", "Sharpness", "OutputScaling", "CAS", "Log", "InitFlags", "UpscaleRatio", "QualityOverrides", "DRS", "HDR",
+                "VSync", "Anisotropy", "Mipmap", "ProcessFilter", "Hotfix"}
+# Capcom RE Engine games, set up as a tested Windows Onimusha install (read 2026-11-04) with OptiScaler
+# v10: the game's own DLSS frame generation (DLSS-G, which needs the Nvidia spoofing OptiScaler does by default on
+# Intel, so no Spoofing_Dxgi=false here although OptiScaler's wiki lists it for Onimusha) turned into XeSS-FG;
+# OptiScaler's libraries in OptiScaler/ (OptiDllPath); plugins (OptiPatcher) loaded. The tested FramerateLimit was
+# the maintainer's own cap and isn't copied. The upscaler (Dx12Upscaler, FSR UpscalerIndex), the overlay and the
+# frame count come from the user's picks (opti_ini).
+CAPCOM_INI = {
+    "Upscalers_Dx11Upscaler": "fsr31_12", "Upscalers_VulkanUpscaler": "xess",
+    "FrameGen_Enabled": "true", "FrameGen_FGInput": "DLSSG", "FrameGen_FGOutput": "XeFG",
+    "FrameGen_FGNvngxReplacement": "XeFG_NVNGX",
+    "Libraries_OptiDllPath": ".\\OptiScaler", "Plugins_LoadAsiPlugins": "true", "NvngxFG_DisableHudless": "true",
+    "Hotfix_RestoreComputeSignature": "true",           # OptiScaler's wiki: generally required in Onimusha
+    # v10 has fakenvapi built in (the game's Reflex -> XeLL; may be what lets the game offer DLSS-G on Intel). It is
+    # the default on AMD/Intel; set anyway, since this setup depends on it. The fakenvapi.dll + fakenvapi.ini in
+    # OptiScaler/ (optiscaler_v10 extras) match the tested folder; v10 itself doesn't load that file.
+    "fakenvapi_UseFakenvapi": "true",
+}
+# not for the Capcom setup: the wiki's Dxgi=false (see above), 0.9.4-only FSR switches, XeFG's own count (DLSS-G's is used)
+CAPCOM_DROP = ("Spoofing_Dxgi", "FSR_Fsr4Update", "FSR_Fsr4ForceEnableInt8", "XeFG_InterpolationCount")
+# frames generated per rendered one when GameCove has no multiplier for the game: the tested value (OptiScaler caps it
+# at what the game's DLSS-G offers)
+CAPCOM_FG_COUNT = "2"
+
+
+def v10(launch: dict) -> bool:
+    """OptiScaler v10 (the OptiScaler/ subfolder layout) instead of 0.9.4: only for the Capcom setup, which was
+    tested with it. 3x / 4x in other games come from XESS_FG (xess-xmx-linux's ControlLib.dll answers XeSS frame
+    generation's override query, as Intel Graphics Software does on Windows), with any OptiScaler."""
+    return capcom(launch)
+
+
+def capcom(launch: dict) -> bool:
+    """the Capcom setup for this game (OptiScaler v10, subfolder layout, CAPCOM_INI): every game that gets
+    REFramework, i.e. Capcom's RE Engine games (gamedb.recommend)."""
+    return bool(launch.get("reframework"))
+
+
+UNPREFIXED = {"Dx12Upscaler": "Upscalers", "Dx11Upscaler": "Upscalers", "VulkanUpscaler": "Upscalers"}
+INI_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$")     # Decky Framegen's Section_Key form
+INI_VAL_RE = re.compile(r"^(true|false|auto|-?[0-9]+(\.[0-9]+)?)$")
+
+
+# 3x / 4x through OptiScaler's XeFG: Proton 11.0's DXVK reports the Claw's GPU as an AMD one as soon as a game loads
+# XeSS ("Detected XeSS usage, hiding Intel GPU Vendor" -> vendor 0x1002). XeSS frame generation then runs its
+# cross-vendor path, never asks the Control Library for the multi-frame override (xess-xmx-linux's ControlLib.dll,
+# XESS_FG), and caps itself at 2x: the game greys out 3x/4x. DXVK's own customVendorId wins over that hiding, so the
+# game sees the Intel GPU again and XeSS-FG offers 3x/4x, as with Intel Graphics Software's override (CONTROL
+# Resonant on the Claw 8 EX, 2026-11-05: 2x before, 3x with this). OptiScaler games only: they run OptiScaler's own
+# XeSS 2.0.2.68 set, which DXVK's upstream lists as safe to show the Intel GPU to; a game's own older XeSS-FG (1.1)
+# crashes with it (xess-xmx-linux docs/games.md, Cyberpunk 2077).
+SHOW_INTEL = "dxgi.customVendorId = 8086"
+
+
+def compose(launch: dict, per_game: bool = True, vendor: str = "intel") -> dict[str, str]:
+    """vendor (GameCove): "intel" is ClawDeck's composition unchanged; "amd" leaves out what only the XeSS XMX driver
+    reads (GAMECOVE_XMX, XESS_FG, FSR=xess routes) and refuses Intel-only presets."""
+    env: dict[str, str] = {}
+    x = launch.get("xmx")
+    if vendor != "intel":
+        return _compose_amd(launch)
+    if per_game:
+        if x is True:
+            env["GAMECOVE_XMX"] = "1"
+        elif x is False:
+            env["GAMECOVE_XMX"] = "0"
+    elif x is False:
+        env.update(xess.stock_env())
+    fg = launch.get("fg") or 0
+    # automatic + something that runs through xess-xmx-linux's hook (an FSR game on XeSS, frame generation, the
+    # latest XeSS): that game needs the XMX driver even though it ships no XeSS of its own (CONTROL Resonant: FSR
+    # only). OptiScaler games are found by the scope itself (optiscaler.ini).
+    if per_game and x is None and (fg or (launch.get("fsr") or "off") != "off" or launch.get("xess_latest")
+                                   or launch.get("opti") in (*FSR4_XMX, "fsr4", "xess")):
+        env["GAMECOVE_XMX"] = "1"
+    if not isinstance(fg, int) or isinstance(fg, bool) or not (fg == 0 or 2 <= fg <= 8):
+        raise ValueError(f"frame generation multiplier must be 2 to 8 (or 0 for the game's own), not {fg!r}")
+    if fg:
+        env["XESS_FG"] = str(fg)
+    if fg >= 3 and launch.get("opti") not in (None, "off") and (launch.get("opti_fg") not in (None, "off")
+                                                               or launch.get("opti_xefg")):
+        env["DXVK_CONFIG"] = SHOW_INTEL
+    route = launch.get("fsr") or "off"
+    if route not in FSR_ROUTES:
+        raise ValueError(f"unknown FSR route {route!r}")
+    env.update(FSR_ROUTES[route])
+    cores = launch.get("cores")
+    if cores not in (None, "all", "e"):
+        raise ValueError(f"cores must be all or e, not {cores!r}")
+    if cores == "e":
+        env["GAMECOVE_CORES"] = "e"
+    if launch.get("xess_latest"):
+        env["XESS"] = "latest"
+    # low latency (XeLL) is always on: an old "off" choice is ignored (maintainer, 2026-11-04)
+    opti = launch.get("opti") or "off"
+    if opti == "fsr4":                             # FSR 4 INT8 (not on XMX) was retired: everything runs on XMX
+        opti = "fsr4_xmx"
+    if opti not in OPTI_PRESETS:
+        raise ValueError(f"unknown OptiScaler preset {opti!r}")
+    if opti in FSR4_XMX and x is False:
+        raise ValueError("FSR 4.1.2 needs the XMX cores, and XMX is off for this game: pick XeSS 2, or switch XMX on first")
+    env.update(OPTI_PRESETS[opti])
+    if launch.get("opti_xefg"):
+        env.update(OPTI_XEFG)
+    ofg = launch.get("opti_fg")
+    if ofg is not None:
+        if ofg not in OPTI_FG:
+            raise ValueError(f"unknown OptiScaler frame generation {ofg!r}")
+        env.update(OPTI_FG[ofg])
+    ov = launch.get("opti_overlay")
+    if ov is not None and (isinstance(ov, bool) or ov not in OVERLAYS):
+        raise ValueError(f"unknown OptiScaler overlay {ov!r}")
+    ini = launch.get("opti_ini") or {}
+    if not isinstance(ini, dict):
+        raise ValueError("opti_ini must be a map of Section_Key to value")
+    for k, v in ini.items():                       # the game's OptiScaler settings (assets/games.json)
+        v = str(v)
+        if capcom(launch) and k in CAPCOM_DROP:
+            continue
+        if not INI_KEY_RE.match(k) or not INI_VAL_RE.match(v) or k in env:
+            raise ValueError(f"bad OptiScaler setting {k}={v}")
+        env[k] = v
+    # native DLLs instead of Wine's own: REFramework's dinput8.dll; the LZMS-capable cabinet.dll the FSR 4 XMX build
+    # needs (tools/cabinet-lzms). Ends in ";" because Decky Framegen's fgmod appends its proxy as ",dxgi=n,b"; Wine
+    # splits entries at ";", so the result still reads as separate entries.
+    od = launch.get("opti_dll")
+    if od is not None and (not isinstance(od, str) or not re.fullmatch(r"[a-z0-9_]+", od)):
+        raise ValueError(f"bad OptiScaler proxy name {od!r}")
+    dlls = ([od] if od else []) + (["dinput8"] if launch.get("reframework") else []) + (["cabinet"] if opti in FSR4_XMX else [])
+    if dlls:
+        env["WINEDLLOVERRIDES"] = "".join(f"{d}=n,b;" for d in dlls)
+    return env
+
+
+def _compose_amd(launch: dict) -> dict[str, str]:
+    """AMD handhelds: the OptiScaler preset, its frame generation (FSR-FG out), the game's OptiScaler settings and the
+    DLL overrides. The XeSS XMX switches (xmx, fg multiplier, fsr routes, xess_latest) don't exist here."""
+    env: dict[str, str] = {}
+    for k in ("fsr", "xess_latest"):
+        if launch.get(k) not in (None, "off", False):
+            raise ValueError(f"{k} is for the XeSS XMX driver on Intel Arc, not this AMD GPU")
+    fg = launch.get("fg") or 0
+    if fg not in (0, 2) or isinstance(fg, bool):
+        raise ValueError("frame generation on AMD is 2x (FSR frame generation) or 0 for the game's own")
+    opti = launch.get("opti") or "off"
+    if opti in INTEL_PRESETS:
+        raise ValueError(f"OptiScaler preset {opti!r} needs Intel Arc (XMX); on AMD pick FSR 3.1 or FSR 4")
+    if opti not in OPTI_PRESETS:
+        raise ValueError(f"unknown OptiScaler preset {opti!r}")
+    env.update(OPTI_PRESETS[opti])
+    ofg = launch.get("opti_fg")
+    if ofg is not None:
+        if ofg not in OPTI_FG_AMD:
+            raise ValueError(f"unknown OptiScaler frame generation {ofg!r}")
+        env.update(OPTI_FG_AMD[ofg])
+    ini = launch.get("opti_ini") or {}
+    if not isinstance(ini, dict):
+        raise ValueError("opti_ini must be a map of Section_Key to value")
+    for k, v in ini.items():
+        v = str(v)
+        if capcom(launch) and k in CAPCOM_DROP:
+            continue
+        if not INI_KEY_RE.match(k) or not INI_VAL_RE.match(v) or k in env:
+            raise ValueError(f"bad OptiScaler setting {k}={v}")
+        env[k] = v
+    od = launch.get("opti_dll")
+    if od is not None and (not isinstance(od, str) or not re.fullmatch(r"[a-z0-9_]+", od)):
+        raise ValueError(f"bad OptiScaler proxy name {od!r}")
+    dlls = ([od] if od else []) + (["dinput8"] if launch.get("reframework") else [])
+    if dlls:
+        env["WINEDLLOVERRIDES"] = "".join(f"{d}=n,b;" for d in dlls)
+    return env
+
+
+def render(env: dict[str, str]) -> str:
+    lines = ["# Written by GameCove for gamecove-run. KEY=VALUE, one per line."]
+    for k, v in sorted(env.items()):
+        if not KEY_RE.match(k) or "\n" in v:
+            raise ValueError(f"bad launch variable {k!r}")
+        lines.append(f"{k}={v}")
+    return "\n".join(lines) + "\n"
+
+
+def path_for(runtime_dir: str, appid: str) -> str:
+    if not str(appid).isdigit():
+        raise ValueError("appid must be numeric")
+    return os.path.join(runtime_dir, "launch", f"{appid}.env")
+
+
+def write(runtime_dir: str, appid: str, launch: dict, per_game: bool = True, vendor: str = "intel") -> dict:
+    env = compose(launch, per_game, vendor)
+    p = path_for(runtime_dir, appid)
+    if not env:
+        try:
+            os.remove(p)
+        except FileNotFoundError:
+            pass
+        return {"path": None, "env": {}}
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(render(env))
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, p)
+    return {"path": p, "env": env}
+
+
+def opti_ini(launch: dict, vendor: str = "intel") -> dict[str, str]:
+    """The OptiScaler.ini lines for GameCove's own OptiScaler: the preset, XeSS frame generation, the game's settings.
+    Variables that aren't ini settings (FSR 4 XMX's own switches, GameCove's) stay in the launch environment."""
+    o = "fsr4_xmx" if launch.get("opti") == "fsr4" else launch.get("opti") or "off"
+    env = {**OPTI_PRESETS.get(o, {}), **(OPTI_XEFG if launch.get("opti_xefg") else {}),
+           **(OPTI_FG if vendor == "intel" else OPTI_FG_AMD).get(launch.get("opti_fg") or "", {}),
+           **(launch.get("opti_ini") or {})}
+    fg = launch.get("fg") or 0                     # XeSS-FG's multiplier: 2x-4x through OptiScaler (1-3 extra frames)
+    if vendor == "intel" and fg and (launch.get("opti_fg") not in (None, "off") or launch.get("opti_xefg")):
+        env["XeFG_InterpolationCount"] = str(min(max(fg - 1, 1), 3))
+    ov = launch.get("opti_overlay")
+    if isinstance(ov, int) and not isinstance(ov, bool) and ov in OVERLAYS:
+        env.update({"Menu_ShowFps": "true", "Menu_FpsOverlayType": str(ov), "Menu_FpsOverlayPos": "1"})
+    if capcom(launch):
+        for k in CAPCOM_DROP:
+            env.pop(k, None)
+        for k in [k for k in env if k.startswith("FrameGen_")]:
+            env.pop(k)
+        env.update(CAPCOM_INI)
+        if vendor != "intel":                              # GameCove: FSR 3.1 and FSR-FG on AMD (untested there)
+            for k in CAPCOM_AMD_DROP:
+                env.pop(k, None)
+            env.update(CAPCOM_AMD)
+        if launch.get("opti_fg") == "off":                # the user picked frame generation off
+            env["FrameGen_Enabled"] = "false"
+        else:                                              # DLSS-G's count: 1 = 2x, 2 = 3x, 3 = 4x (OptiScaler)
+            env["DLSSG_OverrideInterpolationCount"] = ("1" if vendor != "intel" else      # FSR-FG: 2x only
+                                                       str(min(max(fg - 1, 1), 3)) if fg else CAPCOM_FG_COUNT)
+    out = {}
+    for k, v in env.items():
+        if k in UNPREFIXED:
+            out[f"{UNPREFIXED[k]}_{k}"] = str(v)
+        elif "_" in k and k.split("_", 1)[0] in INI_SECTIONS:
+            out[k] = str(v)
+    return out

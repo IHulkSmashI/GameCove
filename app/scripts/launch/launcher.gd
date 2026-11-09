@@ -24,6 +24,11 @@ var root_prefix := ""
 var device_profile: Dictionary = {}
 ## Show the active upscaler on screen (Proton's FSR 4 watermark). For testing a game.
 var show_indicator := false
+## More environment for a game at launch, from other areas (perf controls: the
+## MangoHud frame limiter, lsfg-vk profile, OptiScaler's DLL override). Each
+## callable takes (game_key: String, game: Dictionary) and returns {NAME: value};
+## their variables join ours like the user's extra_env (LaunchEnv.merge).
+var env_hooks: Array[Callable] = []
 
 var _games := {}
 ## Frame rates measured per device: {device id: {game key: fps}} (a game runs
@@ -247,6 +252,11 @@ func launch_plan(game: Dictionary) -> Dictionary:
 		"extra_env": game.get("extra_env", {}),
 	}
 	var plan := LaunchEnv.compose(settings_for(key), device, proton, host_facts(), facts, {"indicator": show_indicator})
+	for hook in env_hooks:
+		if hook.is_valid():
+			var more: Variant = hook.call(key, game)
+			if more is Dictionary and not more.is_empty():
+				plan["env"] = LaunchEnv.merge(plan["env"], more)
 	plan["proton"] = proton
 	return plan
 

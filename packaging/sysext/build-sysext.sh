@@ -98,6 +98,12 @@ install -Dm0755 "$REPO/packaging/libexec/gamecove-fix-set" "$tree/usr/libexec/ga
 install -Dm0755 "$REPO/session/gamecove-session-client" "$tree/usr/libexec/gamecove/gamecove-session-client"
 install -Dm0755 "$REPO/packaging/libexec/gamecove-apply-choices" "$tree/usr/libexec/gamecove/gamecove-apply-choices"
 install -Dm0755 "$REPO/packaging/get-gamecove.sh" "$tree/usr/libexec/gamecove/get-gamecove.sh"
+# per-game launch wrapper and upscaling helper (perf controls)
+install -Dm0755 "$REPO/packaging/libexec/gamecove-run" "$tree/usr/libexec/gamecove/gamecove-run"
+install -Dm0755 "$REPO/packaging/libexec/gamecove-upscale" "$tree/usr/libexec/gamecove/gamecove-upscale"
+mkdir -p "$tree/usr/lib/gamecove/helpers"
+cp -a "$REPO/packaging/helpers/gamecove_upscale" "$tree/usr/lib/gamecove/helpers/"
+find "$tree/usr/lib/gamecove/helpers" -depth -type d -name __pycache__ -exec rm -rf {} +
 install -Dm0644 "$REPO/packaging/installer/io.github.ihulksmashi.GameCoveInstaller.desktop" \
 	"$tree/usr/share/applications/io.github.ihulksmashi.GameCoveInstaller.desktop"
 install -Dm0755 "$REPO/session/gamecove-session-select" "$tree/usr/bin/gamecove-session-select"
