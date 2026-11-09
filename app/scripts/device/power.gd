@@ -946,10 +946,11 @@ func write_tdp(watts: float) -> bool:
 			ok = absf(read_tdp() - w) < 0.5
 	elif backend == "powerstation":
 		if system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "TDP", "d", "%.1f" % watts):
-			if boost_w >= 0.0:
+			var boost := boost_for(watts)
+			if boost >= 0.0:
 				var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
-				if live == null or absf(float(live) - boost_w) >= 0.05:
-					system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % boost_w)
+				if live == null or absf(float(live) - boost) >= 0.05:
+					system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % boost)
 			ok = absf(read_tdp() - watts) < 0.5
 	elif backend == "hhd" and not _hhd_tdp.is_empty():
 		var w := int(roundf(watts))
@@ -965,6 +966,16 @@ func write_tdp(watts: float) -> bool:
 
 
 # ---- charge limit -------------------------------------------------------------
+## The boost to write with a TDP of `watts` (review H6): the user's boost_w, never past the
+## device's boost_max for that TDP (TDP + boost <= boost_max), for whatever power source and
+## TDP we're at now. -1 = leave PowerStation's own.
+func boost_for(watts: float) -> float:
+	if boost_w < 0.0:
+		return -1.0
+	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
+	return minf(boost_w, maxf(0.0, cap - watts)) if cap > 0.0 else boost_w
+
+
 
 ## steamos-manager's charge limit lands about a second after set-property.
 const CHARGE_SETTLE_MAX_MS := 3000
@@ -1160,6 +1171,10 @@ func set_hhd_boost(on: bool) -> bool:
 func load_autotune_opts() -> void:
 	boost_w = float(_recall("device", "boost_w", -1.0))
 	autotune_opts = AUTOTUNE_DEFAULTS.duplicate()
+	# a stale or hand-edited value: never more than the largest boost any TDP here allows
+	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
+	if boost_w >= 0.0 and cap > 0.0:
+		boost_w = minf(boost_w, maxf(0.0, cap - maxf(_range["min"], 0.0)))
 	var saved: Variant = _recall("device", "autotune_opts", {})
 	if saved is Dictionary:
 		for k in saved:

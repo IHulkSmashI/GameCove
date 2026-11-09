@@ -1,0 +1,86 @@
+extends "res://tests/test_case.gd"
+## Regression tests for the pre-release review's state, persistence and hardware-state
+## findings (H2, H3, H5, H6, M16-M19, M25 and the low ones). Built on the review's
+## proof scripts (proof_power.gd, proof_switch.gd) with the power_controls fixture trees.
+
+const Trees := preload("res://tests/fixtures/power_controls/trees.gd")
+const ControlsScript := preload("res://scripts/controls/controls.gd")
+const ProviderScript := preload("res://scripts/controls/providers/power.gd")
+const PowerScript := preload("res://scripts/device/power.gd")
+const ProfilesScript := preload("res://scripts/controls/profiles.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
+
+const CARD := "/org/shadowblip/Performance/GPU/card1"
+
+var _nodes: Array = []
+
+
+## {"reg", "power", "prov", "runner", "root", "row"}; `t` may carry "props" from an earlier run.
+func _setup(t: Dictionary, row_override := {}) -> Dictionary:
+	SettingsFile.reset_for_tests()
+	Trees.make_bin()
+	var runner: RefCounted = Trees.runner(t)
+	var row: Dictionary = t["row"] if row_override.is_empty() else row_override
+	var power: Node = PowerScript.new()
+	power.setup(runner, row, t["root"])
+	power.config_path = t["root"] + "/power.cfg"
+	power.charge_settle_ms = 0
+	power.detect()
+	power.load_autotune_opts()
+	power.restore()
+	var reg: Node = ControlsScript.new()
+	reg.sync_mode = true
+	var ctx := {"sys_root": t["root"], "runner": runner, "home": t["root"], "device": row, "power": power, "registry": reg}
+	reg.setup(ctx)
+	var prov: RefCounted = ProviderScript.new()
+	prov.cfg_path = t["root"] + "/power_controls.cfg"
+	prov.setup(ctx)
+	reg.register_provider(prov)
+	reg.detect_all()
+	_nodes.append(reg)
+	_nodes.append(power)
+	return {"reg": reg, "power": power, "prov": prov, "runner": runner, "root": t["root"], "row": row}
+
+
+func _free() -> void:
+	for n in _nodes:
+		if is_instance_valid(n):
+			n.free()
+	_nodes.clear()
+
+
+func _wr(p: String, v: String) -> void:
+	var f := FileAccess.open(p, FileAccess.WRITE)
+	f.store_string(v + "\n")
+	f.close()
+
+
+func _ps(e: Dictionary, prop: String) -> float:
+	return float(e["runner"].props[Trees.PS + CARD + " org.shadowblip.GPU.Card.TDP " + prop]["data"])
+
+
+# ---- H6: PowerStation boost re-clamped for every TDP write ----------------------------------------
+
+func test_h6_boost_never_exceeds_boost_max_after_plugging_in() -> void:
+	for id in ["acer-predator-atlas-8", "gpd-win-5", "onexplayer-super-x"]:
+		var t: Dictionary = Trees.new().claw8ex()
+		var row := Trees.row(id)
+		var e := _setup(t, row)
+		var cap := float(row["tdp"]["boost_max"])
+		var b: RefCounted = e["reg"].control("power.boost")
+		ok(b.available, "%s: boost offered" % id)
+		e["reg"].set_value("power.boost", b.max_value)   # the slider's top, on battery
+		_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "1")
+		e["power"].check_power_source()
+		e["reg"].detect_all()
+		e["reg"].set_value("power.tdp", float(row["tdp"]["plugged_max"]))
+		var tdp := _ps(e, "TDP")
+		eq(tdp, float(row["tdp"]["plugged_max"]), "%s: TDP at the charger's max" % id)
+		ok(tdp + _ps(e, "Boost") <= cap + 0.01, "%s: TDP %.0f + boost %.0f within boost_max %.0f" % [id, tdp, _ps(e, "Boost"), cap])
+		# a hand-edited / stale boost_w is clamped too
+		e["power"]._remember("device", "boost_w", 60.0)
+		e["power"].load_autotune_opts()
+		ok(e["power"].boost_w <= cap - float(row["tdp"]["min"]) + 0.01, "%s: boost_w=60 clamped on load (%.0f)" % [id, e["power"].boost_w])
+		e["power"].set_tdp(float(row["tdp"]["plugged_max"]))
+		ok(_ps(e, "TDP") + _ps(e, "Boost") <= cap + 0.01, "%s: hand-edited boost within boost_max (boost %.0f)" % [id, _ps(e, "Boost")])
+		_free()
