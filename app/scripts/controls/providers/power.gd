@@ -531,7 +531,7 @@ func _thermal_limit() -> RefCounted:
 
 
 func _charge_limit() -> RefCounted:
-	return _make("power.charge_limit", "slider", {"unit": "%", "step": 5.0, "min_value": 50.0, "max_value": 100.0, "per_game": false},
+	return _make("power.charge_limit", "slider", {"affects": ["power.battery_long_life"], "unit": "%", "step": 5.0, "min_value": 50.0, "max_value": 100.0, "per_game": false},
 		func(_c):
 			var st := _pstate()
 			if st.is_empty():
@@ -563,7 +563,7 @@ func _long_life_via() -> String:
 
 
 func _battery_long_life() -> RefCounted:
-	return _make("power.battery_long_life", "toggle", {"per_game": false},
+	return _make("power.battery_long_life", "toggle", {"affects": ["power.charge_limit"], "per_game": false},
 		func(_c):
 			match _long_life_via():
 				"charge_types":

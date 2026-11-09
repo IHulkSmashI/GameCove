@@ -124,7 +124,10 @@ static func check(t: Object, id: String, v: Variant) -> String:
 			for bat in ["BAT0", "BAT1"]:
 				var cf := "/sys/class/power_supply/%s/charge_control_end_threshold" % bat
 				if FileAccess.file_exists(w.root + cf):
-					return "" if w.read(cf) == f.call(v) else "battery stops at %s %%" % w.read(cf)
+					var hw: String = w.read(cf)
+					if hw == "0":
+						hw = "100"   # never set: full charge
+					return "" if hw == f.call(v) else "battery stops at %s %%" % hw
 		"power.battery_long_life":
 			for bat in ["BAT0", "BAT1"]:
 				var tf := "/sys/class/power_supply/%s/charge_types" % bat

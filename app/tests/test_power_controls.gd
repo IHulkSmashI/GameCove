@@ -989,3 +989,12 @@ func test_every_device_row_detects_without_a_crash_and_stays_in_range() -> void:
 		if boost.available and r.get("tdp", {}).has("boost_max"):
 			ok(boost.max_value <= float(r["tdp"]["boost_max"]) - float(r["tdp"]["min"]), "%s: boost inside boost_max" % r["id"])
 		_free()
+
+
+## Battery care on the Claw / Ally sets the charge limit to 80 % through the same
+## backend; the charge limit control kept showing the old value (95 %). They
+## declare each other in `affects`. Found by the end-to-end suite.
+func test_battery_care_and_charge_limit_affect_each_other() -> void:
+	var src := FileAccess.get_file_as_string("res://scripts/controls/providers/power.gd")
+	ok(src.contains('_make("power.battery_long_life", "toggle", {"affects": ["power.charge_limit"]'), "battery care re-reads the charge limit")
+	ok(src.contains('_make("power.charge_limit", "slider", {"affects": ["power.battery_long_life"]'), "and the other way round")

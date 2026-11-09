@@ -101,7 +101,9 @@ static func battery_limit(w: RefCounted) -> Array[String]:
 			f = "/sys/class/power_supply/%s/charge_control_end_threshold" % b
 	if f == "":
 		return out
-	var hw = w.read(f).to_int()
+	var hw: int = w.read(f).to_int()
+	if hw == 0:
+		hw = 100   # 0 = the EC's limit was never set: charges to full (msi-wmi-platform, live on a Claw 8 EX)
 	if hw != int(c.value) and not w.readonly_files.size() > 0:
 		out.append("charge limit control says %s %% but the battery has %s %%" % [c.value, hw])
 	return out
