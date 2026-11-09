@@ -141,6 +141,11 @@ func _ctl(id: String) -> RefCounted:
 
 
 func _wrote(id: String, v: Variant) -> void:
+	if _limit_alias(id):
+		# Battery care done through the charge limit is the charge limit (Power remembers
+		# it): saving the toggle too re-applied 80 or 100 over the slider (review M18)
+		_forget(id)
+		return
 	_last[id] = v
 	if id in DEVICE_IDS:
 		SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile): cfg.set_value(PerDevice.section("set", device_key()), id, v))
@@ -165,7 +170,14 @@ func saved_device_values() -> Dictionary:
 	if cfg.has_section(sec):
 		for k in cfg.get_section_keys(sec):
 			out[k] = cfg.get_value(sec, k)
+	if out.has("power.battery_long_life") and _limit_alias("power.battery_long_life"):
+		out.erase("power.battery_long_life")   # saved by an older build (review M18)
 	return out
+
+
+## power.battery_long_life where it is only a preset charge limit (no firmware mode).
+func _limit_alias(id: String) -> bool:
+	return id == "power.battery_long_life" and _long_life_via() == "limit"
 
 
 # ---- events --------------------------------------------------------------------------------------

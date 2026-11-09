@@ -126,3 +126,25 @@ func test_h5_preset_picked_after_a_curve_stays() -> void:
 	e2["prov"]._on_detected()
 	eq(_duty(t["root"]), [100, 100, 100, 100, 100, 100], "max after the next start")
 	_free()
+
+
+# ---- M18: a saved "Battery care" no longer overrides the charge-limit slider ---------------------
+
+## Proof G: Battery care on then off, later the slider at 80 %: the next start / resume wrote 100.
+func test_m18_battery_care_does_not_override_the_slider() -> void:
+	var t: Dictionary = Trees.new().ally()
+	var key := Trees.SM + "BatteryChargeLimit1 MaxChargeLevel"
+	var e := _setup(t)
+	e["reg"].set_value("power.battery_long_life", true)
+	e["reg"].set_value("power.battery_long_life", false)
+	e["reg"].set_value("power.charge_limit", 80)
+	eq(int(e["runner"].props[key]["data"]), 80, "slider 80 %")
+	ok(not e["prov"].saved_device_values().has("power.battery_long_life"), "battery care through the limit isn't saved on its own")
+	e["power"].refresh(true)
+	eq(int(e["runner"].props[key]["data"]), 80, "still 80 % after resume")
+	var props: Dictionary = e["runner"].props
+	_free()
+	var e2 := _setup({"root": t["root"], "row": t["row"], "props": props, "methods": t["methods"]})
+	e2["prov"]._on_detected()
+	eq(int(e2["runner"].props[key]["data"]), 80, "still 80 % at the next start")
+	_free()
