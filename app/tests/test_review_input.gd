@@ -138,3 +138,34 @@ func test_m13_one_lock_for_both_workers() -> void:
 	ok(Lock != null and Lock.mutex is Mutex, "a shared profile lock exists")
 	for f in ["res://scripts/controls/input/backend.gd", "res://scripts/input/controller.gd"]:
 		ok("ProfileLock.mutex.lock()" in FileAccess.get_file_as_string(f), "%s takes it" % f)
+
+
+# ---- M10: the layout comes back when InputPlumber restarts ----------------------------------------
+
+const ControllerScript := preload("res://scripts/input/controller.gd")
+const FakeRunner := preload("res://tests/fixtures/system/fake_runner.gd")
+const IPTest := preload("res://tests/test_input_controller.gd")
+
+
+func test_m10_layout_reloaded_when_inputplumber_restarts() -> void:
+	var f: RefCounted = FakeRunner.new()
+	var _ip = IPTest.FakeIP.new(f, fixture("system/inputplumber"))
+	var c: Node = ControllerScript.new()
+	var home := _root("m10") + "/home"
+	c.setup(f, home)
+	c.device_id = "msi-claw-8-ex"
+	c.set_device("msi-claw-8-ex")
+	var layout := "{\"version\": 1, \"kind\": \"DeviceProfile\", \"name\": \"Mine\", \"mapping\": []}"
+	Fakes.write(c.default_profile_path(), layout)
+	c.refresh()
+	c.setup_intercept_for_tests()
+	c.monitor_line({"kind": "started"})
+	f.calls.clear()
+	c.monitor_line({"kind": "owner", "owner": ":1.77"})
+	var loads: Array = f.calls.filter(func(cmd): return " LoadProfileFromYaml s " in cmd)
+	eq(loads.size(), 1, "the everyday layout is loaded onto the new device")
+	ok(not loads.is_empty() and "\"Mine\"" in str(loads[0]), "the saved one: %s" % [loads])
+	f.calls.clear()
+	c.monitor_line({"kind": "added", "path": "/org/shadowblip/InputPlumber/CompositeDevice3"})
+	eq(f.calls.filter(func(cmd): return " LoadProfileFromYaml s " in cmd).size(), 1, "and onto a re-added composite device")
+	c.free()

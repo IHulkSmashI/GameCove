@@ -504,9 +504,11 @@ func _on_monitor_line(d: Dictionary) -> void:
 		"owner":
 			if str(d.get("owner", "")) != "":
 				_apply_intercept()   # InputPlumber (re)started: its devices are new
+				_reload_layout()
 		"added":
 			if str(d.get("path", "")).begins_with(ROOT_PATH + "/CompositeDevice"):
 				_apply_intercept()
+				_reload_layout()
 		"event":
 			intercept.handle(str(d["event"]), float(d["value"]))
 		"exited":
@@ -515,6 +517,26 @@ func _on_monitor_line(d: Dictionary) -> void:
 			if _intercepting:
 				_send_mode(Intercept.MODE_NONE)
 				_restart_monitor_later()
+
+
+## A new composite device (InputPlumber restarted: GameCove does it on the gyro accelerometer
+## toggle; or the pad dropped and came back) starts with the stock profile: load ours again,
+## the running game's own layout or the everyday one, and let Controls read what's live
+## (review M10). One job: several "added" lines in a row load once.
+func _reload_layout() -> void:
+	_queue("reload_layout", func():
+		_refresh()
+		if _active != "":
+			var own := _game != "" and _game_profile_loaded and has_game_profile(_game) and _backend != "hhd"
+			if own:
+				_load_file(game_profile_path(_game))
+			elif FileAccess.file_exists(default_profile_path()):
+				_load_file(default_profile_path())
+			_refresh()
+		_main(func():
+			var controls := get_node_or_null("/root/Controls") if is_inside_tree() else null
+			if controls != null and controls.has_method("detect_all"):
+				controls.detect_all()))
 
 
 func _restart_monitor_later() -> void:
