@@ -98,8 +98,12 @@ changes the base layer, so a launched game would stay behind us. The flow
    exists; otherwise the game starts plainly, with a warning: it runs but gamescope
    can't focus it.
 3. **Focus:** a 0.5 s timer reads `GAMESCOPE_FOCUSABLE_APPS` until the app id is
-   listed (the game has a window), then `focus_app(id)`. It gives up after 60 s
-   (Steam: session over; our own launch: keep following the process).
+   listed (the game has a window), then `focus_app(id)`. After 60 s without a
+   window, our own launch keeps following its process; a Steam launch keeps waiting
+   while Steam's reaper for it runs (`pgrep -f "SteamLaunch AppId=<id>( |$)"`, every
+   3 s): shader pre-caching, an update or a launcher can take minutes. The profile and
+   Auto TDP stay on and the window gets focus when it appears. The session ends when
+   the reaper is gone twice in a row (Controller.end_game hands input back).
 4. **While it runs:** the game's `fps_limit` is on `GAMESCOPE_FPS_LIMIT`, Auto TDP
    runs for goals battery/balanced. A 3 s timer (only while a game runs) checks
    the focusable list and our process.

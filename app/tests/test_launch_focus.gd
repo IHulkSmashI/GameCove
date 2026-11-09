@@ -196,6 +196,7 @@ func test_steam_game_never_appears_gives_up_after_wait() -> void:
 	launcher.s["fps_limit"] = 0
 	var power := FakePower.new()
 	var s := _session(r[0], power, launcher)
+	s.steam_alive = func(_id: int) -> bool: return false   # Steam's launch never started (no reaper)
 	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0, "scoped": false})
 	eq(power.calls, [], "smooth goal: no Auto TDP")
 	var polls := int(GameSession.FOCUS_WAIT_S / GameSession.FOCUS_POLL_S)
@@ -203,9 +204,52 @@ func test_steam_game_never_appears_gives_up_after_wait() -> void:
 		s.poll_focus()
 	eq(s.phase, "waiting", "still waiting just before the limit")
 	s.poll_focus()
-	eq(s.phase, "idle", "gave up after %d s" % int(GameSession.FOCUS_WAIT_S))
+	eq(s.phase, "waiting", "no reaper once: checked again")
+	for i in int(GameSession.REAPER_CHECK_S / GameSession.FOCUS_POLL_S):
+		s.poll_focus()
+	eq(s.phase, "idle", "gave up after %d s and no Steam launch twice" % int(GameSession.FOCUS_WAIT_S))
 	eq(_base(x), [413091, 769], "home in front")
 	eq(power.calls, [], "no stop without a start")
+	s.free()
+	r[0].free()
+
+
+func test_slow_steam_launch_keeps_the_session_while_its_reaper_runs() -> void:
+	# review S5-1: shader pre-caching / an update / a launcher take minutes; never give up while Steam runs it
+	var r := _gamescope()
+	var x: FakeXprop = r[1]
+	var power := QueuedPower.new()
+	var launcher := FakeLauncher.new()
+	var s := _session(r[0], power, launcher)
+	var alive := [true]
+	var asked := [0]
+	s.steam_alive = func(_id: int) -> bool:
+		asked[0] += 1
+		return alive[0]
+	var ended := []
+	s.ended.connect(func(g): ended.append(g))
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
+	power.flush()
+	eq(power.calls, ["start"], "battery goal: Auto TDP on")
+	for i in int(5 * 60 / GameSession.FOCUS_POLL_S):    # five minutes of shader pre-caching
+		s.poll_focus()
+	eq(s.phase, "waiting", "still waiting after five minutes: the reaper runs")
+	ok(asked[0] > 0 and asked[0] <= int(4 * 60 / GameSession.REAPER_CHECK_S) + 2, "reaper checked every %d s, not every poll" % int(GameSession.REAPER_CHECK_S))
+	eq(ended, [], "the session (profile, Auto TDP) was kept")
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769, 976730]
+	s.poll_focus()
+	eq(s.phase, "running", "the window came")
+	eq(_base(x), [413091, 976730, 769], "and got focus")
+	s.stop()
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769]
+	# the launch dies before any window: the session ends (InterceptMode back with Controller.end_game)
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
+	alive[0] = false
+	for i in int((GameSession.FOCUS_WAIT_S + 2 * GameSession.REAPER_CHECK_S) / GameSession.FOCUS_POLL_S) + 2:
+		s.poll_focus()
+	eq(s.phase, "idle", "the reaper went away: session over")
+	eq(ended.size(), 2, "ended both times")
+	eq(_base(x), [413091, 769], "home in front")
 	s.free()
 	r[0].free()
 

@@ -22,6 +22,11 @@ signal ended(game: Dictionary)
 
 const FOCUS_POLL_S := 0.5
 const FOCUS_WAIT_S := 60.0
+## Past FOCUS_WAIT_S a Steam launch is followed by its process tree (Steam's reaper,
+## `reaper SteamLaunch AppId=<id> -- ...`) instead of given up (review S5-1): shader
+## pre-caching, a Steam update, an EULA or cloud-sync dialog often take longer. Checked
+## this often, and the session ends only after it's gone GONE_TICKS times in a row.
+const REAPER_CHECK_S := 3.0
 const EXIT_CHECK_S := 3.0
 ## Ticks in a row the game must look gone before we call it ended (a launcher
 ## window closing before the game's opens shouldn't send you home).
@@ -37,6 +42,8 @@ var launcher: Object
 var controls: Object
 ## func(pid: int) -> bool. Swapped in tests.
 var pid_running: Callable = func(pid: int) -> bool: return OS.is_process_running(pid)
+## func(app_id: int) -> bool: Steam's launch of this app is still alive (its reaper). Swapped in tests.
+var steam_alive: Callable = steam_launch_alive
 
 var game: Dictionary = {}
 var app_id := 0
@@ -47,6 +54,8 @@ var focused := false
 var autotune_on := false
 
 var _waited := 0.0
+var _reaper_wait := 0.0
+var _reaper_gone := 0
 var _seen := false
 var _gone := 0
 var _focus_timer: Timer
@@ -91,6 +100,8 @@ func begin(g: Dictionary, launched: Dictionary) -> void:
 	_gen += 1
 	_reading = false
 	_waited = 0.0
+	_reaper_wait = 0.0
+	_reaper_gone = 0
 	_seen = false
 	_gone = 0
 	var key := str(g.get("key", ""))
@@ -127,12 +138,39 @@ func _on_focus_read(apps: Array) -> void:
 	if _waited < FOCUS_WAIT_S:
 		return
 	# Never got a window with our app id. With a process to watch, keep the
-	# session going (settings stay applied) and end when it exits; otherwise
-	# (a Steam launch that never came up) give up now.
+	# session going (settings stay applied) and end when it exits.
 	if pid > 0 and bool(pid_running.call(pid)):
 		_enter_running()
-	else:
-		_finish(true)
+		return
+	# A Steam launch: keep waiting for its window (and keep the profile and Auto TDP)
+	# while Steam's reaper for it runs; the window gets focus when it appears.
+	if pid <= 0 and app_id > 0:
+		_reaper_wait += FOCUS_POLL_S
+		if _reaper_wait < REAPER_CHECK_S and _waited > FOCUS_WAIT_S:
+			return
+		_reaper_wait = 0.0
+		if bool(steam_alive.call(app_id)):
+			_reaper_gone = 0
+			return
+		_reaper_gone += 1
+		if _reaper_gone < GONE_TICKS:
+			return
+	_finish(true)
+
+
+## True while a process of ours runs Steam's launch of this app: Steam's reaper
+## (`reaper SteamLaunch AppId=<id> -- ...`), the same match game_closer.gd uses.
+static func steam_launch_alive(id: int) -> bool:
+	if id <= 0:
+		return false
+	var uid := ""
+	for line in FileAccess.get_file_as_string("/proc/self/status").split("\n"):
+		if line.begins_with("Uid:"):
+			uid = line.substr(4).strip_edges().split("\t", false)[0]
+	var args := ["-f", "SteamLaunch AppId=%d( |$)" % id]
+	if uid.is_valid_int():
+		args = ["-u", uid] + args
+	return OS.execute("pgrep", PackedStringArray(args)) == 0
 
 
 ## One look for the end of the game.
