@@ -59,9 +59,14 @@ const SOURCES: Array[String] = ["ac", "battery"]
 const LAYERS: Array[String] = ["global", "source", "game", "game+source"]
 ## Imports larger than this are refused (a profile is a few KB).
 const MAX_IMPORT_BYTES := 1 << 20
+## The frame limit control Profiles owns (see sync_launcher_fps()).
+const FPS_ID := "display.fps_limit"
 
 var controls: Object       # the Controls registry (autoload or a test instance)
 var power: Object          # Power autoload (signal changed, var plugged) or null
+## Launcher (settings_for(key)["fps_limit"]): its per-game frame limit is moved
+## into the game's profile (display.fps_limit); Profiles alone applies it.
+var launcher: Object
 var device_id := "unknown"
 var path := PATH
 ## "ac" or "battery"; set_plugged() changes it.
@@ -84,6 +89,7 @@ func _ready() -> void:
 	var dev := get_node_or_null("/root/Device")
 	setup(get_node_or_null("/root/Controls"), str(dev.id()) if dev != null and dev.has_method("id") else "unknown", PATH)
 	attach_power(get_node_or_null("/root/Power"))
+	launcher = get_node_or_null("/root/Launcher")
 	# GameSession belongs to main.gd (not an autoload): pick it up when it joins.
 	var existing := get_tree().root.find_child("GameSession", true, false)
 	if existing != null:
@@ -137,6 +143,7 @@ func game_started(game: Dictionary) -> void:
 	_pre_game = controls.snapshot(true) if controls != null else {}
 	game_title = str(game.get("title", ""))
 	_remember_title(key, game_title)
+	sync_launcher_fps(key)
 	_refresh_source(false)
 	apply_now("game started")
 
@@ -193,6 +200,40 @@ func _on_detected() -> void:
 	_seen_available = now
 	if not fresh.is_empty():
 		apply_now("controls appeared", fresh)
+
+
+## The frame limit used to live in Launcher's per-game settings (applied by
+## GameSession). Profiles owns it now: whenever Launcher's stored value for
+## this game differs from the one last taken over (the old settings form still
+## writes there), it becomes the game's display.fps_limit, snapped to the
+## nearest choice at or below it. GameSession stops applying its own while
+## Controls has display.fps_limit (GameSession.profiles_own_fps()).
+## True when the profile changed.
+func sync_launcher_fps(key: String) -> bool:
+	if launcher == null or not launcher.has_method("settings_for") or key == "":
+		return false
+	var v := int(launcher.settings_for(key).get("fps_limit", 0))
+	var dflt := 0
+	if launcher.has_method("defaults_for") and launcher.has_method("profile"):
+		dflt = int(launcher.defaults_for(launcher.profile()).get("fps_limit", 0))
+	var g: Dictionary = _dev().get("games", {}).get(key, {})
+	var last := int(g.get("launcher_fps", dflt))
+	if v == last:
+		return false
+	var c = controls.control(FPS_ID) if controls != null and controls.has(FPS_ID) else null
+	if c != null and c.kind == "choice" and v > 0:
+		var best := 0
+		for o in c.options:
+			var ov: Variant = o.get("value") if o is Dictionary else null
+			if (ov is int or ov is float) and int(ov) <= v and int(ov) > best:
+				best = int(ov)
+		v = best if best > 0 else v
+	_layer_ref(key, "", true)[FPS_ID] = v
+	_dev(true)["games"][key]["launcher_fps"] = int(launcher.settings_for(key).get("fps_limit", 0))
+	_dev()["games"][key]["updated"] = int(Time.get_unix_time_from_system())
+	save_file()
+	changed.emit()
+	return true
 
 
 # ---- applying -----------------------------------------------------------------
@@ -559,6 +600,8 @@ static func _clean_device(d: Dictionary) -> Dictionary:
 				continue
 			out["games"][key] = {"title": str(g.get("title", "")), "updated": int(g.get("updated", 0)),
 				"all": _clean(g.get("all", {})), "ac": _clean(g.get("ac", {})), "battery": _clean(g.get("battery", {}))}
+			if g.get("launcher_fps") is int or g.get("launcher_fps") is float:
+				out["games"][key]["launcher_fps"] = int(g["launcher_fps"])
 	return out
 
 

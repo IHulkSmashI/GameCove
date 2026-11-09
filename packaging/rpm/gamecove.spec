@@ -26,7 +26,7 @@ Summary:        Controller-first home screen for Linux handhelds
 # GPL-2.0-or-later. The VRR panel list and EDID logic derive from MIT-licensed code
 # (notice in fixes/claw8ex-vrr/LICENSE.ClawLab-MIT); MIT is GPL-compatible and
 # absorbed into the GPL-3.0-or-later work.
-License:        GPL-3.0-or-later AND GPL-2.0-only AND GPL-2.0-or-later
+License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later
 URL:            https://github.com/IHulkSmashI/gamecove
 Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 Source1:        %{url}/releases/download/v%{version}/%{name}-%{version}-x86_64.tar.gz

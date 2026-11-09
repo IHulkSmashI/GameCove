@@ -311,3 +311,94 @@ func test_import_from_another_handheld_is_clamped_on_apply() -> void:
 	eq(_store["power.tdp"], 30.0, "85 W from a Win 5 becomes this device's 30 W max")
 	p.free()
 	_cleanup()
+
+
+# ---- frame limit: Profiles owns it, GameSession defers --------------------------
+
+const GameSessionScript := preload("res://scripts/launch/game_session.gd")
+
+
+class FakeLauncher extends RefCounted:
+	var fps := {}
+	func settings_for(key: String) -> Dictionary:
+		return {"fps_limit": fps.get(key, 0), "goal": "balanced"}
+	func defaults_for(_row: Dictionary) -> Dictionary:
+		return {"fps_limit": 0}
+	func profile() -> Dictionary:
+		return {}
+	func auto_tdp_for(_key: String) -> bool:
+		return false
+
+
+class FakeGamescope extends RefCounted:
+	var limits: Array = []
+	func is_running() -> bool:
+		return true
+	func set_fps_limit(f: int) -> bool:
+		limits.append(f)
+		return true
+	func focusable_apps() -> Array:
+		return []
+	func focus_app(_id: int) -> bool:
+		return true
+	func focus_home() -> bool:
+		return true
+
+
+func _with_fps(p) -> void:
+	_store["display.fps_limit"] = 0
+	_reg.register(_ctl("display.fps_limit", {"group": "display", "kind": "choice", "apply_order": 10,
+		"options": [{"value": 0, "label": "Off"}, {"value": 30, "label": "30"}, {"value": 40, "label": "40"}, {"value": 60, "label": "60"}]}))
+	_reg.detect_all()
+
+
+func test_launcher_frame_limit_moves_into_the_profile() -> void:
+	var p = _setup()
+	_with_fps(p)
+	var l := FakeLauncher.new()
+	l.fps = {"g:1": 40, "g:2": 45}
+	p.launcher = l
+	p.game_started({"key": "g:1"})
+	eq(p.layer("g:1", "")["display.fps_limit"], 40, "taken over from Launcher")
+	eq(_store["display.fps_limit"], 40, "applied by Profiles")
+	p.game_ended()
+	eq(_store["display.fps_limit"], 0, "pre-game value back")
+	p.set_value("g:1", "", "display.fps_limit", 30)
+	p.game_started({"key": "g:1"})
+	eq(_store["display.fps_limit"], 30, "a profile edit isn't overwritten by the old value again")
+	p.game_ended()
+	l.fps["g:1"] = 60
+	p.game_started({"key": "g:1"})
+	eq(_store["display.fps_limit"], 60, "a new value saved through Launcher is taken over")
+	p.game_ended()
+	p.game_started({"key": "g:2"})
+	eq(p.layer("g:2", "")["display.fps_limit"], 40, "45 snaps to the nearest choice below")
+	p.game_ended()
+	ok(not p.has_profile("g:3"), "games without a stored limit get no profile")
+	p.game_started({"key": "g:3"})
+	ok(not p.has_profile("g:3"), "still none")
+	p.free()
+	_cleanup()
+
+
+func test_game_session_defers_frame_limit_to_profiles() -> void:
+	var p = _setup()
+	var gs := FakeGamescope.new()
+	var l := FakeLauncher.new()
+	l.fps = {"g:1": 40}
+	var s = GameSessionScript.new()
+	s.setup(gs, null, l)
+	s.controls = _reg
+	ok(not s.profiles_own_fps(), "no display.fps_limit yet: GameSession keeps doing it")
+	s.begin({"key": "g:1"}, {"ok": true, "app_id": 0, "pid": 4242})
+	s.stop()
+	eq(gs.limits, [40, 0], "old path: set on start, cleared on end")
+	_with_fps(p)
+	ok(s.profiles_own_fps(), "Profiles owns it once the control is there")
+	gs.limits.clear()
+	s.begin({"key": "g:1"}, {"ok": true, "app_id": 0, "pid": 4242})
+	s.stop()
+	eq(gs.limits, [], "GameSession leaves gamescope's limit alone")
+	s.free()
+	p.free()
+	_cleanup()

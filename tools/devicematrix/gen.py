@@ -31,7 +31,8 @@ loaded against every handheld without the hardware:
        "commands": [{"argv": [glob, ...], "code": 0, "out": "...", "write": bool}],
                      first match wins, "**" matches the rest; "write" rules fail in the
                      test's "failing" scenario
-       "hhd": state dict or null, "stack": [...], "tools": [...]}
+       "hhd": state dict or null, "xprop_root": {atom: "values"} (gamescope's root window),
+       "stack": [...], "tools": [...]}
 
 Values come from devices.json (TDP ranges, fan driver, charge limit, RGB, IMU,
 panel) and from the tables below for facts devices.json doesn't carry (CPU
@@ -461,6 +462,18 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
         t.w("/sys/class/powercap/intel-rapl:0/name", "package-0")
         t.w("/sys/class/powercap/intel-rapl:0/energy_uj", 123456789)
 
+    # radios and sleep states
+    t.w("/sys/class/ieee80211/phy0/name", "phy0")
+    t.w("/sys/class/bluetooth/hci0/name", "hci0")
+    for i, (kind, name) in enumerate((("wlan", "phy0"), ("bluetooth", "hci0"))):
+        t.w(f"/sys/class/rfkill/rfkill{i}/type", kind)
+        t.w(f"/sys/class/rfkill/rfkill{i}/name", name)
+        t.w(f"/sys/class/rfkill/rfkill{i}/soft", 0)
+        t.w(f"/sys/class/rfkill/rfkill{i}/hard", 0)
+        t.w(f"/sys/class/rfkill/rfkill{i}/state", 1)
+    t.w("/sys/power/state", "freeze mem disk")
+    t.w("/sys/power/mem_sleep", "s2idle [deep]" if not intel else "[s2idle]")
+
     # IMU
     imu = (row.get("imu") or "").lower()
     names = []
@@ -490,6 +503,9 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
                                   if s in ("steamos-manager", "powerstation", "inputplumber", "hhd")]
     for tool in tools:
         t.w(f"/usr/bin/{tool}", "#!/bin/sh\n# devicematrix stand-in\nexit 0")
+    t.w("/usr/share/gamescope-session-plus/gamescope-session-plus", "#!/bin/sh\n# devicematrix stand-in")
+    t.d("/home/.config/environment.d")
+    t.d("/home/.config/gamecove")
     t.w("/usr/libexec/gamecove/gamecove-fix", "#!/bin/sh\n# devicematrix stand-in\nexit 0")
     t.w("/usr/libexec/gamecove/gamecove-fix-set", "#!/bin/sh\n# devicematrix stand-in\nexit 0")
     t.w("/run/dbus/system_bus_socket", "")
@@ -564,6 +580,8 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "CoresCount", "u", threads)
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "CoresEnabled", "u", threads)
         prop("--system", PS, PS_CPU, "org.shadowblip.CPU", "Features", "as", ["boost"] + (["smt"] if smt else []))
+    prop("--system", "org.bluez", "/org/bluez/hci0", "org.bluez.Adapter1", "Powered", "b", True)
+    prop("--system", "org.bluez", "/org/bluez/hci0", "org.bluez.Adapter1", "Name", "s", "devicematrix")
     hhd = None
     if controller == "inputplumber":
         dev_path = f"{IP_ROOT}/CompositeDevice0"
@@ -604,11 +622,8 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
                "hhd": {"settings": {"tdp_enable": True}, "http": {"enable": True, "token": True}},
                "info": {"device": row.get("name", "")}}
     commands = [
-        {"argv": ["xprop", "-root", "-notype", "GAMESCOPE_FOCUSABLE_APPS"], "code": 0, "out": "GAMESCOPE_FOCUSABLE_APPS = 769"},
-        {"argv": ["xprop", "-root", "-f", "**"], "code": 0, "out": "", "write": True},
         {"argv": ["xprop", "-id", "*", "-f", "**"], "code": 0, "out": "", "write": True},
-        {"argv": ["xprop", "-root", "**"], "code": 0, "out": ""},
-        {"argv": ["xprop", "**"], "code": 0, "out": ""},
+        {"argv": ["xprop", "-id", "**"], "code": 0, "out": ""},
         {"argv": ["wpctl", "status"], "code": 0, "out": "Audio\n ├─ Sinks:\n │  *   50. Speaker                    [vol: 0.50]\n │      51. HDMI / DisplayPort        [vol: 1.00]\n ├─ Sources:\n │  *   60. Digital Microphone        [vol: 0.80]\n"},
         {"argv": ["wpctl", "get-volume", "**"], "code": 0, "out": "Volume: 0.50"},
         {"argv": ["wpctl", "set-volume", "**"], "code": 0, "out": "", "write": True},
@@ -627,9 +642,21 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
         {"argv": ["/usr/libexec/gamecove/gamecove-fix", "--list"], "code": 0, "out": ""},
         {"argv": ["pkexec", "/usr/libexec/gamecove/gamecove-fix-set", "**"], "code": 0, "out": "", "write": True},
         {"argv": ["systemctl", "is-active", "**"], "code": 0, "out": "active"},
+        {"argv": ["grep", "-q", "-a", "-F", "*", "*/usr/bin/gamescope"], "code": 0, "out": ""},
         {"argv": ["sh", "-c", "command -v *"], "code": 0, "out": "/usr/bin/tool"},
     ]
-    return {"dbus": {"props": props, "methods": methods}, "commands": commands, "hhd": hhd,
+    # gamescope root-window atoms (xprop -root): the fake runner keeps them as
+    # state, so reads after writes see the new value (names: gamescope steamcompmgr.cpp)
+    panel = row.get("panel") or {}
+    xprop_root = {
+        "GAMESCOPE_FOCUSABLE_APPS": "769", "GAMESCOPE_FOCUSED_APP": "769", "GAMESCOPE_FPS_LIMIT": "0",
+        "GAMESCOPE_DYNAMIC_REFRESH": "0", "GAMESCOPE_VRR_CAPABLE": "1" if row.get("vrr_range") else "0",
+        "GAMESCOPE_VRR_ENABLED": "0", "GAMESCOPE_ALLOW_TEARING": "0", "GAMESCOPE_NEW_SCALING_FILTER": "0",
+        "GAMESCOPE_NEW_SCALING_SCALER": "0", "GAMESCOPE_SHARPNESS": "2",
+        "GAMESCOPE_DISPLAY_SUPPORTS_HDR": "1" if panel.get("type") == "OLED" else "0",
+        "GAMESCOPE_DISPLAY_HDR_ENABLED": "0", "GAMESCOPE_HDR_OUTPUT_FEEDBACK": "0",
+    }
+    return {"dbus": {"props": props, "methods": methods}, "commands": commands, "hhd": hhd, "xprop_root": xprop_root,
             "stack": stack, "tools": sorted(set(COMMON_TOOLS))}
 
 

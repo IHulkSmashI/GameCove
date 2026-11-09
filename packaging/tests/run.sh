@@ -611,7 +611,7 @@ if [ "$(grep -c "<allow_active>yes</allow_active>" "$POL")" -eq 1 ]; then ok; el
 
 # ------------------------------------------------------------------ RPM spec
 SPEC="$REPO/packaging/rpm/gamecove.spec"
-contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-2.0-only AND GPL-2.0-or-later$" "spec License tag"
+contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later$" "spec License tag"
 contains "$SPEC" "packaging/libexec/gamecove-fix-set" "spec installs the set entry point"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-fix-set$" "spec lists the set entry point"
 contains "$SPEC" "build-bpf.sh" "spec builds the gyro program"
@@ -621,7 +621,9 @@ contains "$SPEC" "LICENSES/GPL-2.0-only.txt" "spec ships the GPL-2.0 text"
 uhb_spec="$(sed -n 's/^%global uhb_commit //p' "$SPEC")"
 uhb_script="$(sed -n 's/.*UHB_PIN:-\([0-9a-f]*\)}.*/\1/p' "$REPO/fixes/claw8ex-gyro/bpf/build-bpf.sh")"
 if [ -n "$uhb_spec" ] && [ "$uhb_spec" = "$uhb_script" ]; then ok; else bad "udev-hid-bpf pin differs: spec '$uhb_spec', build-bpf.sh '$uhb_script'"; fi
-if grep -q "GPL-3.0-only" "$SPEC" "$REPO/README.md" "$REPO/CREDITS.md"; then bad "GPL-3.0-only mentioned; GameCove is GPL-3.0-or-later"; else ok; fi
+# GameCove itself is GPL-3.0-or-later; GPL-3.0-only may appear only for the bundled Heroic icon.
+if grep -h "GPL-3.0-only" "$REPO/README.md" "$REPO/CREDITS.md" | grep -qv "Heroic"; then bad "GPL-3.0-only mentioned for something other than the Heroic icon; GameCove is GPL-3.0-or-later"; else ok; fi
+contains "$SPEC" "^License:.*GPL-3.0-or-later" "spec licence is GPL-3.0-or-later"
 
 # ------------------------------------------- devices.json "fixes" = fix folders
 if python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY'

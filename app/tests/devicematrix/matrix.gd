@@ -29,6 +29,8 @@ const DeviceScript := preload("res://scripts/device/device.gd")
 const PROVIDERS_DIR := "res://scripts/controls/providers"
 const SCENARIOS: Array[String] = ["battery", "ac", "failing", "bare"]
 const REAL_PREFIXES: Array[String] = ["/sys/", "/proc/", "/dev/", "/etc/", "/var/", "/run/", "/tmp/", "/home/", "/root/"]
+## Real paths that are fine to name ("tail -f /dev/null" keeps a process alive).
+const HARMLESS_PATHS: Array[String] = ["/dev/null", "/dev/zero"]
 const SLOW_HOOK_MS := 1500
 const REASON_MAX := 100
 const INVALID := "__devicematrix_invalid__"
@@ -50,7 +52,10 @@ class FakeRunner extends RefCounted:
 	var unmatched: Array[String] = []
 	var _mutex := Mutex.new()
 
+	var xroot: Dictionary = {}     # gamescope root atoms: name -> "v1, v2"
+
 	func _init(backends: Dictionary, run_mode: String) -> void:
+		xroot = backends.get("xprop_root", {}).duplicate()
 		props = backends.get("dbus", {}).get("props", {}).duplicate(true)
 		methods = backends.get("dbus", {}).get("methods", {}).duplicate(true)
 		commands = backends.get("commands", [])
@@ -64,6 +69,8 @@ class FakeRunner extends RefCounted:
 			return {"code": 127, "out": ""}
 		if program == "busctl":
 			return _busctl(args)
+		if program == "xprop" and args.size() > 0 and args[0] == "-root":
+			return _xprop(args)
 		var argv: Array = [program] + Array(args)
 		for rule in commands:
 			if _match(rule.get("argv", []), argv):
@@ -74,6 +81,50 @@ class FakeRunner extends RefCounted:
 		unmatched.append(" ".join(PackedStringArray(argv)))
 		_mutex.unlock()
 		return {"code": 127, "out": ""}
+
+	## xprop -root -notype [ATOM] / xprop -root -f ATOM 32c -set ATOM v,v
+	func _xprop(args: PackedStringArray) -> Dictionary:
+		var a := Array(args)
+		if a.has("-set"):
+			if mode == "failing":
+				return {"code": 1, "out": ""}
+			var i := a.find("-set")
+			if i + 2 >= a.size():
+				return {"code": 1, "out": ""}
+			_mutex.lock()
+			xroot[str(a[i + 1])] = ", ".join(str(a[i + 2]).split(","))
+			_mutex.unlock()
+			return {"code": 0, "out": ""}
+		if a.has("-remove"):
+			if mode == "failing":
+				return {"code": 1, "out": ""}
+			xroot.erase(str(a[a.find("-remove") + 1]))
+			return {"code": 0, "out": ""}
+		var atoms := a.filter(func(x): return not str(x).begins_with("-"))
+		var lines := PackedStringArray()
+		for k in (atoms if not atoms.is_empty() else xroot.keys()):
+			lines.append("%s = %s" % [k, xroot[k]] if xroot.has(k) else "%s:  not found." % k)
+		return {"code": 0, "out": "\n".join(lines)}
+
+	## Background processes (systemd-inhibit...): recorded, never started.
+	var spawned: Dictionary = {}   # pid -> argv
+
+	func spawn(program: String, args: PackedStringArray) -> int:
+		_mutex.lock()
+		calls.append([program, args])
+		var pid := 0
+		if mode != "bare":
+			pid = 90000 + spawned.size()
+			spawned[pid] = [program] + Array(args)
+		_mutex.unlock()
+		return pid
+
+	func kill(pid: int) -> int:
+		spawned.erase(pid)
+		return OK
+
+	func is_running(pid: int) -> bool:
+		return spawned.has(pid)
 
 	func _busctl(args: PackedStringArray) -> Dictionary:
 		var a := Array(args).filter(func(x): return not str(x).begins_with("--timeout") and not str(x).begins_with("--json"))
@@ -245,7 +296,8 @@ static func _run_scenario(info: Dictionary, scripts: Array, backends: Dictionary
 	if dev.id() != str(info["expect_row"]):
 		problems.append("DMI resolved to %s, expected %s" % [dev.id(), info["expect_row"]])
 	var ctx := {"sys_root": root, "runner": runner, "home": str(info["home"]), "device": dev,
-		"hhd_transport": hhd, "devicematrix": scenario}
+		"hhd_transport": hhd, "devicematrix": scenario, "env": session_env(info, scenario),
+		"config_path": str(info["home"]).path_join(".config/gamecove/devicematrix-%s.cfg" % scenario)}
 	var reg: Node = ControlsScript.new()
 	reg.sync_mode = true
 	reg.setup(ctx)
@@ -311,6 +363,17 @@ static func _run_scenario(info: Dictionary, scripts: Array, backends: Dictionary
 	reg.free()
 	dev.free()
 	return {"problems": problems, "report": desc, "unmatched": unmatched}
+
+
+## The session environment providers see (ctx.env), so the machine running the
+## test never leaks in: a gamescope session, or nothing in "bare".
+static func session_env(info: Dictionary, scenario: String) -> Dictionary:
+	var on := scenario != "bare"
+	var root := str(info["root"])
+	return {"GAMESCOPE_WAYLAND_DISPLAY": "gamescope-0" if on else "", "DISPLAY": ":0" if on else "",
+		"XDG_RUNTIME_DIR": root + "/run/user/1000", "HOME": str(info["home"]), "XDG_SESSION_TYPE": "x11" if on else "",
+		"STEAM_DISPLAY_REFRESH_LIMITS": "", "CUSTOM_REFRESH_RATES": "", "WAYLAND_DISPLAY": "",
+		"DBUS_SESSION_BUS_ADDRESS": "unix:path=" + root + "/run/user/1000/bus"}
 
 
 static func _describe(c: Object) -> Dictionary:
@@ -602,7 +665,7 @@ static func real_path_args(runner: FakeRunner, root: String) -> Array[String]:
 		for a in call[1]:
 			var s := str(a)
 			for p in REAL_PREFIXES:
-				if s.begins_with(p) and not s.begins_with(root) and not seen.has(s):
+				if s.begins_with(p) and not s.begins_with(root) and not seen.has(s) and not s in HARMLESS_PATHS:
 					seen[s] = true
 					out.append("command %s got a real path %s (prefix it with ctx.sys_root)" % [call[0], s])
 	return out
@@ -806,21 +869,33 @@ static func lint(dir := "res://scripts/controls") -> Array[String]:
 	for f in _gd_files(dir):
 		if f.get_file() in ["control.gd", "controls.gd", "profiles.gd"]:
 			continue
-		var n := 0
-		for raw in FileAccess.get_file_as_string(f).split("\n"):
-			n += 1
-			var line := raw.strip_edges()
+		var lines := FileAccess.get_file_as_string(f).split("\n")
+		for n in lines.size():
+			var line := lines[n].strip_edges()
 			if line.begins_with("#") or "devicematrix: allow" in line:
 				continue
+			# a fallback right after `if runner.has_method(...)` (runners may lack spawn/kill)
+			var guarded := false
+			for k in range(maxi(0, n - 3), n):
+				if "has_method(" in lines[k]:
+					guarded = true
 			for bad in ["OS.execute", "OS.create_process", "OS.execute_with_pipe", "OS.shell_open", "get_tree()", "Timer.new()"]:
-				if bad in line:
-					out.append("%s:%d uses %s (go through ctx.runner / signals)" % [f, n, bad])
+				if bad in line and not (guarded and bad.begins_with("OS.")):
+					out.append("%s:%d uses %s (go through ctx.runner / signals)" % [f, n + 1, bad])
 			if line.begins_with("const ") or line.begins_with("static var ") or line.begins_with("var "):
 				continue
 			for p in REAL_PREFIXES:
-				if ("\"" + p) in line and not ("root" in line or "ctx" in line or "home" in line or "prefix" in line):
-					out.append("%s:%d absolute path without sys_root: %s" % [f, n, line])
-					break
+				var at := line.find("\"" + p)
+				var harmless := false
+				for h in HARMLESS_PATHS:
+					harmless = harmless or line.find("\"" + h + "\"") == at
+				if at < 0 or harmless or ("root" in line or "ctx" in line or "home" in line or "prefix" in line):
+					continue
+				var before := line.substr(0, at).strip_edges()
+				if before.ends_with("+"):
+					continue   # <prefix expression> + "/sys/..."
+				out.append("%s:%d absolute path without sys_root: %s" % [f, n + 1, line])
+				break
 	return out
 
 

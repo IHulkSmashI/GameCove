@@ -41,9 +41,15 @@ GameCove stands on a lot of other people's work. Thank you.
 | Plus Jakarta Sans (Plus Jakarta Sans Project Authors, github.com/tokotype/PlusJakartaSans) | Interface text (Regular to Bold; Latin subset, `app/fonts/OFL-PlusJakartaSans.txt`) | OFL-1.1 |
 | JetBrains Mono (JetBrains Mono Project Authors, github.com/JetBrains/JetBrainsMono) | Telemetry, counts and micro labels (Medium, Bold; Latin subset, `app/fonts/OFL-JetBrainsMono.txt`) | OFL-1.1 |
 | Inter typeface | Banner lettering (`assets/banner.png` only; not bundled) | OFL-1.1 |
+| CRT-Lottes ReShade effect (Timothy Lottes; ReShade port in Matsilagi/RSRetroArch `Shaders/CRTLottes.fx`) | Bundled CRT screen effect (`app/scripts/controls/display/reshade_shaders.gd`, unchanged) | Public domain |
+| ReShade.fxh (crosire/reshade-shaders, slim branch) | Header the bundled ReShade effects include | CC0-1.0 |
 | QR Code encoder, kenyoni-software godot-addons (Iceflower S) | QR codes for store sign-in, vendored in `app/addons/kenyoni/qr_code/` (Kanji mode removed; see its README.GameCove.md) | MIT |
 
 ## Ideas and findings we borrowed
+
+- **vibrantDeck** (libvibrant, Sefa Eyeoglu, GPL-3.0): colour vibrance through gamescope's SDR gamut atom. No code copied.
+- **LeGo2BrightnessFix** (Rayekkk): Legion Go 2 OLED ignores its backlight in PQ; brightness via gamescope's SDR-on-HDR level, re-applied after suspend.
+- **Bluetooth** Decky plugin (Outpox): BlueZ adapter power over D-Bus, and why hci0 isn't always the right adapter.
 
 - **ClawDeck**: the Claw 8 EX power backend findings, launch environment, face-button and EDID findings, ported here. Parts ported from ClawDeck (same author): per-game / per-power-source profile layering (`app/scripts/controls/profiles.gd`), the Intel RAPL / xe GPU-clock / msi-wmi-platform sysfs layout the device matrix fakes.
 - **DeckyTDPTuner**: ideas behind Auto TDP.
