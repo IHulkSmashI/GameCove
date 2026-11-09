@@ -129,12 +129,23 @@ Device data was taken as facts (DMI strings, wattages, capability names, which b
 
 Product and company names are trademarks of their respective owners; GameCove is not affiliated with or endorsed by them.
 
-GameCove shows a company's logo only when that company's own published terms let a free, unaffiliated app do so without asking (checked 2026-11-08; the table and its sources are in [`app/data/brand_logos.json`](app/data/brand_logos.json)). Everyone else's name is shown as plain text.
+GameCove shows these logos only to identify a device, chip, store or launcher. They are unmodified copies; single-colour logos are tinted one flat colour to match the theme. Most come from [Simple Icons](https://simpleicons.org) (simple-icons 16.37.0). Simple Icons releases its icon data under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), but the marks themselves still belong to their owners. Any company can ask for its logo to be removed: see [docs/BRANDS.md](docs/BRANDS.md#logo-removal-requests). The full table is [`app/data/brand_logos.json`](app/data/brand_logos.json).
 
-| Logo | Notice |
-| --- | --- |
-| Heroic Games Launcher icon (`app/assets/brand/heroic.svg`) | Heroic Games Launcher icon © Heroic Games Launcher contributors, GPL-3.0-only ([github.com/Heroic-Games-Launcher/HeroicGamesLauncher](https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher)). Unmodified. |
+| Logo | Source | Licence of the file | Notice |
+| --- | --- | --- | --- |
+| Steam (`app/assets/brand/steam.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `steam` | CC0-1.0 (Simple Icons) | Steam and the Steam logo are trademarks and/or registered trademarks of Valve Corporation in the U.S. and/or other countries. |
+| Epic Games Store (`app/assets/brand/epic.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `epicgames` | CC0-1.0 (Simple Icons) | — |
+| GOG (`app/assets/brand/gog.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `gogdotcom` | CC0-1.0 (Simple Icons) | — |
+| Heroic Games Launcher (`app/assets/brand/heroic.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `heroicgameslauncher` | GPL-3.0-only (Heroic icon, via Simple Icons) | Heroic Games Launcher icon © Heroic Games Launcher contributors, GPL-3.0-only (github.com/Heroic-Games-Launcher/HeroicGamesLauncher). Unmodified Simple Icons rendering. |
+| Lutris (`app/assets/brand/lutris.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `lutris` | GPL-3.0 (Lutris icon, via Simple Icons) | Lutris icon © Lutris contributors, GPL-3.0 (github.com/lutris/lutris). Unmodified Simple Icons rendering. |
+| Bottles (`app/assets/brand/bottles.svg`) | [official](https://github.com/bottlesdevs/Bottles/blob/main/data/icons/hicolor/scalable/apps/com.usebottles.bottles.svg) | GPL-3.0-only | Bottles icon © Bottles contributors, GPL-3.0-only (github.com/bottlesdevs/Bottles). Unmodified. |
+| Valve (`app/assets/brand/valve.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `valve` | CC0-1.0 (Simple Icons) | — |
+| MSI (`app/assets/brand/msi.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `msi` | CC0-1.0 (Simple Icons) | — |
+| ASUS (`app/assets/brand/asus.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `asus` | CC0-1.0 (Simple Icons) | — |
+| ROG (`app/assets/brand/rog.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `republicofgamers` | CC0-1.0 (Simple Icons) | — |
+| Lenovo (`app/assets/brand/lenovo.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `lenovo` | CC0-1.0 (Simple Icons) | — |
+| Acer (`app/assets/brand/acer.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `acer` | CC0-1.0 (Simple Icons) | — |
+| Intel (`app/assets/brand/intel.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `intel` | CC0-1.0 (Simple Icons) | — |
+| AMD (`app/assets/brand/amd.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `amd` | CC0-1.0 (Simple Icons) | — |
 
-Store and launcher icons other than these (Steam, Heroic, Lutris, Bottles) come from the user's own system: GameCove shows the icon that app installed into the desktop icon theme, the same way any Linux desktop does. Nothing is copied into GameCove or redistributed. Steam is a trademark of Valve Corporation.
-
-Not bundled because their terms need a licence or written permission, or publish no terms for third parties: Valve (Steam, Steam Deck), Epic Games, GOG, Amazon, MSI, ASUS / ROG, Lenovo / Legion, Acer / Predator, OneXPlayer, AYANEO, GPD, ZOTAC, Intel. AMD's brand terms cover only products that contain an AMD chip.
+Shown as text (no logo bundled yet): Amazon Games, OneXPlayer, AYANEO, AOKZOE, GPD, ZOTAC, Orange Pi. For stores and launchers without a bundled logo, GameCove shows the icon the user's own system already has installed, if there is one; nothing is copied or redistributed.
