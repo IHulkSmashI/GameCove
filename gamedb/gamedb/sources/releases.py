@@ -248,8 +248,8 @@ def parse_earlier(data: dict) -> set[str]:
 
 
 def _sparql(client: Client, query: str) -> dict:
-    url = WIKIDATA_ENDPOINT + "?" + urllib.parse.urlencode({"query": query, "format": "json"})
-    return json.loads(client.get(url, headers={"Accept": "application/sparql-results+json"}))
+    from . import sparql
+    return sparql.run(client, query)
 
 
 def fetch_wikidata(client: Client, today: dt.date) -> list[dict]:

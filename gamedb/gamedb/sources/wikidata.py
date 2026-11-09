@@ -10,11 +10,13 @@ query fails the whole source, so a half-fetched list is never published.
 from __future__ import annotations
 
 import json
-import urllib.parse
 
 from ..net import Client
+from . import sparql
 
-ENDPOINT = "https://query.wikidata.org/sparql"
+ENDPOINT = sparql.WDQS
+# QLever answers a whole property in one go; WDQS needs small pages.
+QLEVER_PAGE = 500000
 
 # Wikidata property -> our id key
 STORE_PROPERTIES = {
@@ -44,9 +46,8 @@ LIMIT {limit} OFFSET {offset}
 """
 
 
-def run_query(client: Client, sparql: str) -> dict:
-    url = ENDPOINT + "?" + urllib.parse.urlencode({"query": sparql, "format": "json"})
-    return json.loads(client.get(url, headers={"Accept": "application/sparql-results+json"}))
+def run_query(client: Client, query: str, endpoint: str = ENDPOINT) -> dict:
+    return sparql.run_at(client, endpoint, query)
 
 
 def parse_bindings(data: dict, key: str, items: dict[str, dict]) -> int:
@@ -68,12 +69,12 @@ def parse_bindings(data: dict, key: str, items: dict[str, dict]) -> int:
     return len(rows)
 
 
-def fetch_page(client: Client, prop: str, size: int, offset: int) -> tuple[dict, int]:
+def fetch_page(client: Client, prop: str, size: int, offset: int, endpoint: str = ENDPOINT) -> tuple[dict, int]:
     """One page; on a cut-off (unparseable) answer, retry with half the page
     size down to MIN_PAGE. Returns (data, page size used)."""
     while True:
         try:
-            return run_query(client, query_for(prop, size, offset)), size
+            return run_query(client, query_for(prop, size, offset), endpoint), size
         except json.JSONDecodeError:
             if size <= MIN_PAGE:
                 raise
@@ -81,12 +82,20 @@ def fetch_page(client: Client, prop: str, size: int, offset: int) -> tuple[dict,
 
 
 def fetch(client: Client) -> dict[str, dict]:
+    """QLever first (whole properties at once); WDQS in small pages if QLever fails."""
+    try:
+        return _fetch_from(client, sparql.QLEVER, QLEVER_PAGE)
+    except Exception:  # noqa: BLE001
+        return _fetch_from(client, sparql.WDQS, PAGE)
+
+
+def _fetch_from(client: Client, endpoint: str, first_page: int) -> dict[str, dict]:
     items: dict[str, dict] = {}
     for prop, key in {**STORE_PROPERTIES, **EXTRA_PROPERTIES}.items():
         offset = 0
-        size = PAGE
+        size = first_page
         while True:
-            data, size = fetch_page(client, prop, size, offset)
+            data, size = fetch_page(client, prop, size, offset, endpoint)
             n = parse_bindings(data, key, items)
             if n < size:
                 break
