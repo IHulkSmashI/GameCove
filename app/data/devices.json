@@ -2,12 +2,14 @@
   "_about": "One row per handheld. Matched on DMI ids (/sys/class/dmi/id). 'support': full = tested on the device by us, partial = matched from tested upstream data (InputPlumber, steamos-manager, PowerStation, Handheld Daemon) but not tested by us, generic = matched but mostly guessed. Power ranges in watts. 'profiles': watts (TDP = PL1) for the battery / balanced / performance profiles; rows without it get a spread of their range. 'pl2_offset_w': boost limit PL2 = TDP + this (Intel). 'tdp_backends': which power services to try, in order (default steamos-manager, then powerstation). 'fixes': root fixes offered on this device, each the name of a folder in fixes/ (as `gamecove-fix --list` prints it); charge-limit and fan are driven by 'charge_limit' and 'fan' instead (docs/CONTRACTS.md, Root actions). Field reference: docs/DEVICES.md.",
   "_schema": "docs/DEVICES.md describes every field. 'tier': specific beats family; unknown hardware gets a generic row built from the CPU ('cpus' below). 'match': one object or a list of objects; every key in an object must match (glob patterns, case-insensitive), any object may match. 'verified': false when any value in 'unverified' is a best guess.",
   "version": 2,
+  "_trait_sources": {"_doc": "Where each row's traits come from (traits.sources). Values in traits.unverified are best guesses from maker spec sheets or reviews, not read from a device or a tested config. Field reference: docs/DEVICES.md, Traits.", "ip": "InputPlumber rootfs/usr/share/inputplumber/devices/50-*.yaml @ 6aca920 (2026-11-07): controller USB ids, IMU iio names", "hhd": "Handheld Daemon src/hhd/device/* @ 6f6045a (2026-11-08)", "gs": "gamescope scripts/00-gamescope/displays/*.lua @ 89b9e6e (2026-11-07): panel EDID vendor/product", "gss": "ChimeraOS gamescope-session usr/share/gamescope-session-plus/device-quirks @ 73d2da8: PANEL_TYPE, ORIENTATION, refresh limits", "pq": "Linux drivers/gpu/drm/drm_panel_orientation_quirks.c (master, 2026-11-09): native panel orientation", "oxpec": "Linux drivers/platform/x86/oxpec.c (master, 2026-11-09): OneXPlayer / AOKZOE / Orange Pi EC DMI table", "gpd-fan": "Linux drivers/hwmon/gpd-fan.c (master, 2026-11-09)", "ayaneo-ec": "Linux drivers/platform/x86/ayaneo-ec.c (master, 2026-11-09)", "bz": "Bazzite system_files @ de2198d (2026-11-08): udev rules, pipewire/wireplumber hardware-profiles, bazzite-hardware-setup", "bz5867": "https://github.com/ublue-os/bazzite/issues/5867 (GPD Win 5 AX210)", "clawlab": "fixes/claw8ex-vrr/panels.txt (Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory validated panel catalogue): Claw panel EDIDs", "clawdeck": "ClawDeck docs/HARDWARE-FINDINGS.md (measured on a Claw 8 EX, BIOS E1T91IMS.10D)", "fix": "fixes/claw8ex-gyro/README.md (Claw 8 EX ISH IMU)", "dfix": "docs/DEVICE-FIXES.md (issue tracker research, 2026-11-08)", "spec": "maker spec sheet / reviews (not read from a device)"},
   "devices": [
     {
       "id": "steam-deck-lcd",
       "name": "Steam Deck (LCD)",
       "maker": "Valve",
       "family": "steam-deck",
+      "traits": {"platform": "steam-deck-lcd", "soc": ["van-gogh"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["steamdeck-hwmon"], "controller": "steam-deck", "imu": "steam-deck-hid", "wifi": ["rtl8822ce"], "panel": {"id": "valve-lcd-800x1280", "orientation": "right-up", "touch": true, "type": "ips", "hz": [40, 60]}, "audio": ["nau8821", "cs35l41"], "fingerprint": null, "firmware": "valve-jupiter", "session_quirk": "steam-deck", "sources": ["ip", "pq", "gss", "spec"], "unverified": ["wifi", "audio"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["Valve"],
@@ -52,6 +54,7 @@
       "name": "Steam Deck (OLED)",
       "maker": "Valve",
       "family": "steam-deck",
+      "traits": {"platform": "steam-deck-oled", "soc": ["sephiroth"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["steamdeck-hwmon"], "controller": "steam-deck", "imu": "steam-deck-hid", "wifi": ["qca2066"], "panel": {"id": "valve-oled-800x1280", "vendor": "VLV/BOE", "orientation": "right-up", "touch": true, "type": "oled", "hz": [45, 90]}, "audio": ["nau8821", "max98388"], "fingerprint": null, "firmware": "valve-galileo", "session_quirk": "steam-deck", "sources": ["ip", "pq", "gs", "gss", "dfix"], "unverified": ["wifi"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["Valve"],
@@ -96,6 +99,7 @@
       "name": "ASUS ROG Ally",
       "maker": "ASUS",
       "family": "rog-ally",
+      "traits": {"platform": "rog-ally", "soc": ["phoenix", "phoenix2"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally", "imu": "bmi323", "wifi": ["mt7922"], "panel": {"id": "asus-ally-7in-lcd", "vendor": "TMX/BOE", "model": "TL070FVXS01-0/TS070FHM-LU0", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": ["alc294", "cs35l41"], "fingerprint": "1c7a:0588", "firmware": "asus-rc71l", "session_quirk": "ally", "sources": ["ip", "gs", "gss", "bz", "hhd"], "unverified": ["wifi", "audio"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ASUSTeK COMPUTER INC."],
@@ -141,6 +145,7 @@
       "name": "ASUS ROG Ally X",
       "maker": "ASUS",
       "family": "rog-ally",
+      "traits": {"platform": "rog-ally-x", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally-x", "imu": "bmi323", "wifi": ["mt7922"], "panel": {"id": "asus-ally-7in-lcd", "vendor": "TMX/BOE", "model": "TL070FVXS01-0/TS070FHM-LU0", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": ["alc294", "cs35l41"], "fingerprint": "1c7a:0588", "firmware": "asus-rc72la", "session_quirk": "ally", "sources": ["ip", "gs", "gss", "bz", "hhd"], "unverified": ["wifi", "audio"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ASUSTeK COMPUTER INC."],
@@ -185,6 +190,7 @@
       "name": "ASUS ROG Xbox Ally",
       "maker": "ASUS",
       "family": "rog-xbox-ally",
+      "traits": {"platform": "rog-xbox-ally", "soc": ["van-gogh-z2a"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally-x", "imu": "bmi323", "wifi": ["mt7922"], "panel": {"id": "asus-xbox-ally-7in-lcd", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": "asus-power-button", "firmware": "asus-rc73", "session_quirk": null, "sources": ["ip", "hhd", "spec"], "unverified": ["wifi", "fingerprint", "panel"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ASUSTeK COMPUTER INC."],
@@ -229,6 +235,7 @@
       "name": "ASUS ROG Xbox Ally X",
       "maker": "ASUS",
       "family": "rog-xbox-ally",
+      "traits": {"platform": "rog-xbox-ally", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally-x", "imu": "bmi323", "wifi": ["mt7922"], "panel": {"id": "asus-xbox-ally-7in-lcd", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": "asus-power-button", "firmware": "asus-rc73", "session_quirk": null, "sources": ["ip", "hhd", "spec"], "unverified": ["wifi", "fingerprint", "panel"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ASUSTeK COMPUTER INC."],
@@ -273,6 +280,7 @@
       "name": "ASUS ROG Xbox Ally X20",
       "maker": "ASUS",
       "family": "rog-xbox-ally",
+      "traits": {"platform": "rog-xbox-ally-x20", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["asus-wmi", "asus-armoury"], "controller": "asus-ally-x", "imu": "bmi323", "wifi": null, "panel": {"id": "asus-ally-x20-oled", "vendor": "SDC", "model": "0x4501", "touch": true, "type": "oled", "hz": [48, 120]}, "audio": null, "fingerprint": "asus-power-button", "firmware": "asus-rc74", "session_quirk": null, "sources": ["ip", "gs", "hhd"], "unverified": ["fingerprint"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ASUS"],
@@ -317,6 +325,7 @@
       "name": "Lenovo Legion Go",
       "maker": "Lenovo",
       "family": "legion-go",
+      "traits": {"platform": "legion-go", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-controllers", "imu": "legion-controller+amd-sfh", "wifi": ["mt7922"], "panel": {"id": "lenovo-go-8.8in-lcd", "vendor": "LEN", "model": "Go Display", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": "lenovo-n3cn", "session_quirk": "legion-go", "sources": ["ip", "gs", "gss", "pq", "bz"], "unverified": ["wifi", "firmware"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -361,6 +370,7 @@
       "name": "Lenovo Legion Go 2",
       "maker": "Lenovo",
       "family": "legion-go",
+      "traits": {"platform": "legion-go-2", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-controllers", "imu": "legion-controller+amd-sfh", "wifi": null, "panel": {"id": "lenovo-go2-oled", "vendor": "SDC", "model": "AMS881KB01-0 (0x4301)", "touch": true, "type": "oled", "hz": [30, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "bz"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -405,6 +415,7 @@
       "name": "Lenovo Legion Go 2 (Z2)",
       "maker": "Lenovo",
       "family": "legion-go",
+      "traits": {"platform": "legion-go-2", "soc": ["hawk-point-z2"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-controllers", "imu": "legion-controller+amd-sfh", "wifi": null, "panel": {"id": "lenovo-go2-oled", "vendor": "SDC", "model": "AMS881KB01-0 (0x4301)", "touch": true, "type": "oled", "hz": [30, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "bz"], "unverified": ["soc"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -450,6 +461,7 @@
       "name": "Lenovo Legion Go S (Z2 Go)",
       "maker": "Lenovo",
       "family": "legion-go-s",
+      "traits": {"platform": "legion-go-s", "soc": ["rembrandt-z2go"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-s", "imu": "amd-sfh", "wifi": null, "panel": {"id": "lenovo-gos-8in-lcd", "vendor": "CSW/BOE", "model": "PN8007QB1-1/NS080WUM-LX1", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "dfix"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -494,6 +506,7 @@
       "name": "Lenovo Legion Go S (Z1 Extreme)",
       "maker": "Lenovo",
       "family": "legion-go-s",
+      "traits": {"platform": "legion-go-s", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["lenovo-wmi-gamezone", "lenovo-wmi-other"], "controller": "legion-go-s", "imu": "amd-sfh", "wifi": null, "panel": {"id": "lenovo-gos-8in-lcd", "vendor": "CSW/BOE", "model": "PN8007QB1-1/NS080WUM-LX1", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "dfix"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["LENOVO"],
@@ -557,6 +570,7 @@
       "support": "full",
       "maker": "MSI",
       "family": "msi-claw",
+      "traits": {"platform": "claw-8", "soc": ["panther-lake"], "gpu_arch": ["xe3"], "gpu_driver": ["xe"], "cpu_vendor": "intel", "ec": ["msi-wmi-platform"], "controller": "msi-claw", "imu": "ish-hid-sensor", "wifi": ["intel-be200"], "panel": {"id": "csw-pn8007qb1-2", "vendor": "CSW", "model": "PN8007QB1-2 (EDID CSW0801)", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": "msi-e1t91", "session_quirk": null, "sources": ["ip", "clawlab", "clawdeck", "fix"], "unverified": ["wifi"]},
       "tier": "specific",
       "cpu_vendor": "intel",
       "gpu_arch": "Xe3",
@@ -583,6 +597,7 @@
       "name": "MSI Claw 8 AI+",
       "maker": "MSI",
       "family": "msi-claw",
+      "traits": {"platform": "claw-8", "soc": ["lunar-lake"], "gpu_arch": ["xe2"], "gpu_driver": ["xe"], "cpu_vendor": "intel", "ec": ["msi-wmi-platform"], "controller": "msi-claw", "imu": null, "wifi": ["intel-be200"], "panel": {"id": "csw-pn8007qb1-2", "vendor": "CSW", "model": "PN8007QB1-2 (EDID CSW0801)", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": "msi-e1t52", "session_quirk": null, "sources": ["ip", "clawlab", "bz"], "unverified": ["wifi", "imu"]},
       "tier": "specific",
       "match": {
         "board_vendor": ["Micro-Star International Co., Ltd."],
@@ -629,6 +644,7 @@
       "name": "MSI Claw 7 AI+",
       "maker": "MSI",
       "family": "msi-claw",
+      "traits": {"platform": "claw-7", "soc": ["lunar-lake"], "gpu_arch": ["xe2"], "gpu_driver": ["xe"], "cpu_vendor": "intel", "ec": ["msi-wmi-platform"], "controller": "msi-claw", "imu": null, "wifi": ["intel-be200"], "panel": {"id": "tmx-tl070fvxs02-0", "vendor": "TMX", "model": "TL070FVXS02-0 (EDID TMA2027)", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": "msi-e1t42", "session_quirk": null, "sources": ["ip", "clawlab", "bz"], "unverified": ["wifi", "imu"]},
       "tier": "specific",
       "match": {
         "board_vendor": ["Micro-Star International Co., Ltd."],
@@ -675,6 +691,7 @@
       "name": "MSI Claw A1M",
       "maker": "MSI",
       "family": "msi-claw",
+      "traits": {"platform": "claw-a1m", "soc": ["meteor-lake"], "gpu_arch": ["xe-lpg"], "gpu_driver": ["i915"], "cpu_vendor": "intel", "ec": ["msi-wmi-platform"], "controller": "msi-claw", "imu": "iio-hid-sensor", "wifi": ["intel-be200"], "panel": {"id": "tmx-tl070fvxs02-0", "vendor": "TMX", "model": "TL070FVXS02-0 (EDID TMA2027)", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": "msi-e1t41", "session_quirk": null, "sources": ["ip", "clawlab", "bz", "spec"], "unverified": ["wifi"]},
       "tier": "specific",
       "match": {
         "board_vendor": ["Micro-Star International Co., Ltd."],
@@ -721,6 +738,7 @@
       "name": "MSI Claw A8",
       "maker": "MSI",
       "family": "msi-claw",
+      "traits": {"platform": "claw-8", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["msi-wmi-platform"], "controller": "msi-claw", "imu": "iio-hid-sensor", "wifi": ["mt7925"], "panel": {"id": "claw-8in-lcd-amd", "vendor": "CSW", "model": "8in 1920x1200 (EDID not checked)", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": "msi-e1t8k", "session_quirk": null, "sources": ["ip", "spec"], "unverified": ["wifi", "panel", "platform"]},
       "tier": "specific",
       "match": {
         "board_vendor": ["Micro-Star International Co., Ltd."],
@@ -766,6 +784,7 @@
       "name": "MSI Claw (unknown model)",
       "maker": "MSI",
       "family": "msi-claw",
+      "traits": {"platform": null, "soc": null, "gpu_arch": null, "gpu_driver": null, "cpu_vendor": null, "ec": ["msi-wmi-platform"], "controller": "msi-claw", "imu": null, "wifi": null, "panel": null, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip"], "unverified": ["controller", "ec"]},
       "tier": "family",
       "match": {
         "board_vendor": ["Micro-Star International Co., Ltd."],
@@ -804,6 +823,7 @@
       "name": "OneXFly F1",
       "maker": "OneXPlayer",
       "family": "onexfly",
+      "traits": {"platform": "onexfly", "soc": ["phoenix", "hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-f1-7in-oled", "orientation": "left-up", "touch": true, "type": "oled", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-120-external-left", "sources": ["ip", "gs", "gss", "oxpec", "bz"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -847,6 +867,7 @@
       "name": "OneXFly F1 Pro",
       "maker": "OneXPlayer",
       "family": "onexfly",
+      "traits": {"platform": "onexfly", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-f1-7in-oled", "orientation": "left-up", "touch": true, "type": "oled", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gss", "oxpec"], "unverified": ["panel"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -891,6 +912,7 @@
       "name": "OneXPlayer X1 (AMD)",
       "maker": "OneXPlayer",
       "family": "onexplayer-x1",
+      "traits": {"platform": "onexplayer-x1", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-fe00", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-x1-10.95in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-x1-external-left", "sources": ["ip", "gss", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -933,6 +955,7 @@
       "name": "OneXPlayer X1 (Intel)",
       "maker": "OneXPlayer",
       "family": "onexplayer-x1",
+      "traits": {"platform": "onexplayer-x1", "soc": ["meteor-lake"], "gpu_arch": ["xe-lpg"], "gpu_driver": ["i915"], "cpu_vendor": "intel", "ec": ["oxpec"], "controller": "oxp-xpad-fe00", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-x1-10.95in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-x1i-internal-left", "sources": ["ip", "gss", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -978,6 +1001,7 @@
       "name": "OneXPlayer X1 Mini",
       "maker": "OneXPlayer",
       "family": "onexplayer-x1",
+      "traits": {"platform": "onexplayer-x1-mini", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-fe00", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-x1mini-8.8in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-x1mini-external-left", "sources": ["ip", "gss", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1020,6 +1044,7 @@
       "name": "OneXPlayer X1 Pro",
       "maker": "OneXPlayer",
       "family": "onexplayer-x1",
+      "traits": {"platform": "onexplayer-x1", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-fe00", "imu": null, "wifi": null, "panel": {"id": "oxp-x1-10.95in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["oxpec", "gss"], "unverified": ["controller", "panel", "platform"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1062,6 +1087,7 @@
       "name": "OneXPlayer 2",
       "maker": "OneXPlayer",
       "family": "onexplayer-2",
+      "traits": {"platform": "onexplayer-2", "soc": ["rembrandt"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp2-8.4in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-60-external-left", "sources": ["ip", "gss", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1105,6 +1131,7 @@
       "name": "OneXPlayer 2 Pro",
       "maker": "OneXPlayer",
       "family": "onexplayer-2",
+      "traits": {"platform": "onexplayer-2", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp2-8.4in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-60-external-left", "sources": ["ip", "gss", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1147,6 +1174,7 @@
       "name": "OneXPlayer G1 (AMD)",
       "maker": "OneXPlayer",
       "family": "onexplayer-g1",
+      "traits": {"platform": "onexplayer-g1", "soc": ["strix-point", "hawk-point"], "gpu_arch": ["rdna3.5", "rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-g1", "imu": null, "wifi": null, "panel": {"id": "oxp-g1-8.8in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-g1-internal-left", "sources": ["ip", "gss", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1191,6 +1219,7 @@
       "name": "OneXPlayer G1 (Intel)",
       "maker": "OneXPlayer",
       "family": "onexplayer-g1",
+      "traits": {"platform": "onexplayer-g1", "soc": ["arrow-lake-h"], "gpu_arch": ["xe-lpg"], "gpu_driver": ["i915"], "cpu_vendor": "intel", "ec": ["oxpec"], "controller": "oxp-g1", "imu": null, "wifi": null, "panel": {"id": "oxp-g1-8.8in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-g1-internal-left", "sources": ["ip", "gss", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1236,6 +1265,7 @@
       "name": "OneXPlayer 3",
       "maker": "OneXPlayer",
       "family": "onexplayer-3",
+      "traits": {"platform": "onexplayer-x2", "soc": ["panther-lake"], "gpu_arch": ["xe3"], "gpu_driver": ["xe"], "cpu_vendor": "intel", "ec": ["oxpec"], "controller": "oxp-xpad-fe00", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp3-8.8in-oled", "touch": true, "type": "oled", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1282,6 +1312,7 @@
       "name": "OneXPlayer X2 Mini",
       "maker": "OneXPlayer",
       "family": "onexplayer-x1",
+      "traits": {"platform": "onexplayer-x2", "soc": ["panther-lake"], "gpu_arch": ["xe3"], "gpu_driver": ["xe"], "cpu_vendor": "intel", "ec": ["oxpec"], "controller": "oxp-xpad-fe00", "imu": "bmi260", "wifi": null, "panel": null, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "oxpec"], "unverified": ["soc", "gpu_arch", "gpu_driver", "platform"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1320,6 +1351,7 @@
       "name": "OneXFly Apex",
       "maker": "OneXPlayer",
       "family": "onexfly",
+      "traits": {"platform": "onexfly-apex", "soc": ["strix-halo"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-fe00", "imu": "bmi260", "wifi": null, "panel": {"id": "oxp-apex-8in-lcd", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1362,6 +1394,7 @@
       "name": "OneXPlayer Super X",
       "maker": "OneXPlayer",
       "family": "onexplayer-x1",
+      "traits": {"platform": "onexplayer-super-x", "soc": ["strix-halo"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": null, "imu": null, "wifi": null, "panel": {"id": "oxp-superx-14in-oled", "touch": true, "type": "oled", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"],
@@ -1404,6 +1437,7 @@
       "name": "OneXPlayer (unknown model)",
       "maker": "OneXPlayer",
       "family": "onexplayer",
+      "traits": {"platform": null, "soc": null, "gpu_arch": null, "gpu_driver": null, "cpu_vendor": null, "ec": ["oxpec"], "controller": null, "imu": null, "wifi": null, "panel": null, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["oxpec"], "unverified": ["ec"]},
       "tier": "family",
       "match": {
         "sys_vendor": ["ONE-NETBOOK"]
@@ -1441,6 +1475,7 @@
       "name": "AOKZOE A1",
       "maker": "AOKZOE",
       "family": "aokzoe",
+      "traits": {"platform": "aokzoe-a1", "soc": ["rembrandt"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "aokzoe-a1-8in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-60-external-left", "sources": ["ip", "gss", "oxpec", "bz"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AOKZOE"],
@@ -1484,6 +1519,7 @@
       "name": "AOKZOE A1 Pro",
       "maker": "AOKZOE",
       "family": "aokzoe",
+      "traits": {"platform": "aokzoe-a1", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "aokzoe-a1-8in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "oxp-60-external-left", "sources": ["ip", "gss", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AOKZOE"],
@@ -1527,6 +1563,7 @@
       "name": "AOKZOE A1X",
       "maker": "AOKZOE",
       "family": "aokzoe",
+      "traits": {"platform": "aokzoe-a1x", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "oxp-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "aokzoe-a1x-8in-lcd", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AOKZOE"],
@@ -1571,6 +1608,7 @@
       "name": "AOKZOE (unknown model)",
       "maker": "AOKZOE",
       "family": "aokzoe",
+      "traits": {"platform": null, "soc": null, "gpu_arch": null, "gpu_driver": null, "cpu_vendor": null, "ec": ["oxpec"], "controller": null, "imu": null, "wifi": null, "panel": null, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["oxpec"], "unverified": ["ec"]},
       "tier": "family",
       "match": {
         "sys_vendor": ["AOKZOE"]
@@ -1608,6 +1646,7 @@
       "name": "AYANEO 2S",
       "maker": "AYANEO",
       "family": "ayaneo",
+      "traits": {"platform": "ayaneo-2", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": "ayaneo-xpad-at", "imu": "bmi260", "wifi": ["ax210"], "panel": {"id": "ayaneo-2-7in-lcd", "orientation": "right-up", "touch": true, "type": "ips", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "pq", "ayaneo-ec"], "unverified": ["wifi"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AYANEO"],
@@ -1650,6 +1689,7 @@
       "name": "AYANEO 2",
       "maker": "AYANEO",
       "family": "ayaneo",
+      "traits": {"platform": "ayaneo-2", "soc": ["rembrandt"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": "ayaneo-xpad-at", "imu": "bmi260", "wifi": ["ax210"], "panel": {"id": "ayaneo-2-7in-lcd", "orientation": "right-up", "touch": true, "type": "ips", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "pq", "ayaneo-ec"], "unverified": ["wifi"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AYANEO"],
@@ -1693,6 +1733,7 @@
       "name": "AYANEO KUN",
       "maker": "AYANEO",
       "family": "ayaneo",
+      "traits": {"platform": "ayaneo-kun", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": "ayaneo-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "ayaneo-kun-8.4in-lcd", "orientation": "right-up", "touch": true, "type": "ips", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "pq", "ayaneo-ec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AYANEO"],
@@ -1735,6 +1776,7 @@
       "name": "AYANEO AIR 1S",
       "maker": "AYANEO",
       "family": "ayaneo-air",
+      "traits": {"platform": "ayaneo-air", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": "ayaneo-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "ayaneo-air-5.5in-oled", "orientation": "left-up", "touch": true, "type": "oled", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "pq", "ayaneo-ec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AYANEO"],
@@ -1777,6 +1819,7 @@
       "name": "AYANEO AIR Plus",
       "maker": "AYANEO",
       "family": "ayaneo-air",
+      "traits": {"platform": "ayaneo-air-plus", "soc": ["rembrandt", "mendocino", "alder-lake-u"], "gpu_arch": ["rdna2"], "gpu_driver": ["amdgpu", "i915"], "cpu_vendor": "amd", "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": "ayaneo-xpad-at", "imu": "bmi323", "wifi": null, "panel": {"id": "ayaneo-airplus-6in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "ayaneo-external-left", "sources": ["ip", "pq", "gss", "ayaneo-ec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AYANEO"],
@@ -1821,6 +1864,7 @@
       "name": "AYANEO Flip",
       "maker": "AYANEO",
       "family": "ayaneo-flip",
+      "traits": {"platform": "ayaneo-flip", "soc": ["phoenix", "hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": "ayaneo-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "ayaneo-flip-7in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "ayaneo-external-left", "sources": ["ip", "pq", "gss", "ayaneo-ec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AYANEO"],
@@ -1864,6 +1908,7 @@
       "name": "AYANEO Flip 1S DS",
       "maker": "AYANEO",
       "family": "ayaneo-flip",
+      "traits": {"platform": "ayaneo-flip-1s", "soc": ["strix-point"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": "ayaneo-composite", "imu": "bmi323", "wifi": null, "panel": {"id": "ayaneo-flip1s-7in-oled", "touch": true, "type": "oled", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip"], "unverified": ["ec"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AYANEO"],
@@ -1907,6 +1952,7 @@
       "name": "AYANEO 3",
       "maker": "AYANEO",
       "family": "ayaneo",
+      "traits": {"platform": "ayaneo-3", "soc": ["strix-point", "hawk-point"], "gpu_arch": ["rdna3.5", "rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": "ayaneo-composite", "imu": "bmi323", "wifi": null, "panel": {"id": "ayaneo-3-7in-oled", "touch": true, "type": "oled", "hz": [60, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "ayaneo-ec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AYANEO"],
@@ -1950,6 +1996,7 @@
       "name": "AYANEO Slide",
       "maker": "AYANEO",
       "family": "ayaneo",
+      "traits": {"platform": "ayaneo-slide", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": "ayaneo-xpad-at", "imu": "bmi260", "wifi": null, "panel": {"id": "ayaneo-slide-6in-lcd", "orientation": "left-up", "touch": true, "type": "ips", "hz": [60, 60]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": "ayaneo-external-left", "sources": ["ip", "pq", "gss", "bz"], "unverified": ["ec"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["AYANEO"],
@@ -1992,6 +2039,7 @@
       "name": "AYANEO (unknown model)",
       "maker": "AYANEO",
       "family": "ayaneo",
+      "traits": {"platform": null, "soc": null, "gpu_arch": null, "gpu_driver": null, "cpu_vendor": null, "ec": ["ayaneo-ec", "ayaneo-platform"], "controller": null, "imu": null, "wifi": null, "panel": null, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ayaneo-ec"], "unverified": ["ec"]},
       "tier": "family",
       "match": {
         "sys_vendor": ["AYANEO", "AYADEVICE", "AYA NEO"]
@@ -2029,6 +2077,7 @@
       "name": "GPD WIN 4",
       "maker": "GPD",
       "family": "gpd-win",
+      "traits": {"platform": "gpd-win-4", "soc": ["rembrandt", "phoenix", "hawk-point"], "gpu_arch": ["rdna2", "rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["gpd-fan"], "controller": "gpd-xpad", "imu": "bmi260", "wifi": null, "panel": {"id": "gpd-win4-6in-lcd", "touch": true, "type": "ips", "hz": [40, 60]}, "audio": null, "fingerprint": "2808:9338", "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "gss", "gpd-fan", "bz"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["GPD"],
@@ -2073,6 +2122,7 @@
       "name": "GPD WIN Mini",
       "maker": "GPD",
       "family": "gpd-win",
+      "traits": {"platform": "gpd-win-mini", "soc": ["phoenix", "hawk-point", "strix-point"], "gpu_arch": ["rdna3", "rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["gpd-fan"], "controller": "gpd-xpad", "imu": "bmi260", "wifi": null, "panel": {"id": "gpd-winmini-7in-lcd", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "pq", "gpd-fan", "bz"], "unverified": ["fingerprint"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["GPD"],
@@ -2117,6 +2167,7 @@
       "name": "GPD WIN Max 2",
       "maker": "GPD",
       "family": "gpd-win-max",
+      "traits": {"platform": "gpd-win-max-2", "soc": ["phoenix", "hawk-point", "strix-point"], "gpu_arch": ["rdna3", "rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["gpd-fan"], "controller": "gpd-xpad", "imu": "bmi260", "wifi": null, "panel": {"id": "gpd-wm2-10.1in-lcd", "touch": true, "type": "ips", "hz": [40, 60]}, "audio": null, "fingerprint": "2541:9711", "firmware": null, "session_quirk": null, "sources": ["ip", "gss", "gpd-fan", "bz"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["GPD"],
@@ -2161,6 +2212,7 @@
       "name": "GPD WIN 5",
       "maker": "GPD",
       "family": "gpd-win",
+      "traits": {"platform": "gpd-win-5", "soc": ["strix-halo"], "gpu_arch": ["rdna3.5"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["gpd-fan"], "controller": "gpd-xpad", "imu": "bmi260", "wifi": ["ax210"], "panel": {"id": "gpd-win5-7in-lcd", "touch": true, "type": "ips", "hz": [60, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gpd-fan", "bz5867"], "unverified": ["fingerprint"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["GPD"],
@@ -2205,6 +2257,7 @@
       "name": "GPD (unknown model)",
       "maker": "GPD",
       "family": "gpd-win",
+      "traits": {"platform": null, "soc": null, "gpu_arch": null, "gpu_driver": null, "cpu_vendor": null, "ec": ["gpd-fan"], "controller": null, "imu": null, "wifi": null, "panel": null, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["gpd-fan"], "unverified": ["ec"]},
       "tier": "family",
       "match": {
         "sys_vendor": ["GPD"]
@@ -2242,6 +2295,7 @@
       "name": "ZOTAC Gaming Zone",
       "maker": "ZOTAC",
       "family": "zotac-zone",
+      "traits": {"platform": "zotac-zone", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["zotac-zone-platform"], "controller": "zotac-zone", "imu": "bmi260", "wifi": null, "panel": {"id": "zotac-zone-7in-oled", "orientation": "left-up", "touch": true, "type": "oled", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "gs", "pq", "dfix"], "unverified": ["ec"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["ZOTAC"],
@@ -2284,6 +2338,7 @@
       "name": "Acer Predator Atlas 8",
       "maker": "Acer",
       "family": "acer",
+      "traits": {"platform": "acer-atlas-8", "soc": ["panther-lake"], "gpu_arch": ["xe3"], "gpu_driver": ["xe"], "cpu_vendor": "intel", "ec": null, "controller": "acer-atlas-8", "imu": null, "wifi": null, "panel": {"id": "acer-atlas8-8in-lcd", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["bz"], "unverified": []},
       "tier": "specific",
       "match": [
         {
@@ -2334,6 +2389,7 @@
       "name": "Acer Nitro Blaze 7",
       "maker": "Acer",
       "family": "acer",
+      "traits": {"platform": "acer-blaze-7", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": null, "controller": "acer-blaze", "imu": null, "wifi": null, "panel": {"id": "acer-blaze7-7in-lcd", "touch": true, "type": "ips", "hz": [48, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["spec"], "unverified": ["controller", "panel"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["Acer"],
@@ -2376,6 +2432,7 @@
       "name": "Acer Nitro Blaze 8",
       "maker": "Acer",
       "family": "acer",
+      "traits": {"platform": "acer-blaze-8", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": null, "controller": "acer-blaze", "imu": null, "wifi": null, "panel": {"id": "acer-blaze8-8.8in-lcd", "touch": true, "type": "ips", "hz": [48, 144]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["spec"], "unverified": ["controller", "panel"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["Acer"],
@@ -2418,6 +2475,7 @@
       "name": "Acer Nitro Blaze 11",
       "maker": "Acer",
       "family": "acer",
+      "traits": {"platform": "acer-blaze-11", "soc": ["hawk-point"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": null, "controller": "acer-blaze", "imu": null, "wifi": null, "panel": {"id": "acer-blaze11-10.95in-lcd", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["spec"], "unverified": ["controller", "panel"]},
       "tier": "specific",
       "match": {
         "sys_vendor": ["Acer"],
@@ -2460,6 +2518,7 @@
       "name": "Orange Pi Neo",
       "maker": "Orange Pi",
       "family": "orangepi",
+      "traits": {"platform": "orangepi-neo", "soc": ["phoenix"], "gpu_arch": ["rdna3"], "gpu_driver": ["amdgpu"], "cpu_vendor": "amd", "ec": ["oxpec"], "controller": "orangepi-neo", "imu": "bmi260", "wifi": null, "panel": {"id": "orangepi-neo-7in-lcd", "orientation": "right-up", "touch": true, "type": "ips", "hz": [48, 120]}, "audio": null, "fingerprint": null, "firmware": null, "session_quirk": null, "sources": ["ip", "pq", "oxpec"], "unverified": []},
       "tier": "specific",
       "match": {
         "sys_vendor": ["OrangePi"],
