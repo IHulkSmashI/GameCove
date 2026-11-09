@@ -682,6 +682,12 @@ then ok; else bad "devices.json fixes must name folders in fixes/: $(cat "$T/out
 
 # ------------------------- fixes/lib/handhelds.txt is generated from devices.json
 if python3 -I "$REPO/tools/fixes/gen_handhelds.py" --check >"$T/out" 2>&1; then ok; else bad "$(cat "$T/out")"; fi
+# ------------------- traits, fix / quirk / matrix selectors (tools/traits/traits.py)
+if python3 -I "$REPO/tools/traits/traits.py" check >"$T/out" 2>&1; then ok; else bad "traits: $(cat "$T/out")"; fi
+python3 -I "$REPO/tools/traits/traits.py" trait controller:asus-ally-x >"$T/out" 2>&1
+contains "$T/out" "asus-rog-xbox-ally-x20" "trait report lists every model sharing the controller"
+python3 -I "$REPO/tools/traits/traits.py" model msi-claw-8-ai-plus >"$T/out" 2>&1
+contains "$T/out" "claw8ex-vrr  *auto  *because panel csw-pn8007qb1-2" "model report says why a fix applies"
 contains "$REPO/fixes/lib/handhelds.txt" "^msi-claw-8-ex	board_name=MS-1T91$" "Claw 8 EX in the handheld list"
 lacks "$REPO/fixes/lib/handhelds.txt" "^steam-deck" "Steam Deck uses steamos-manager, not these fixes"
 

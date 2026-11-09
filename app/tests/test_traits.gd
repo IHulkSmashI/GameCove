@@ -242,3 +242,20 @@ func test_quirks_follow_traits() -> void:
 	ok(Traits.has_quirk("fw-ppt-ignored", _row("msi-claw-8-ex")) and not Traits.has_quirk("fw-ppt-ignored", _row("msi-claw-a8")),
 		"firmware PPT quirk: Panther Lake Claw firmware only")
 	ok(not Traits.has_quirk("hdr-switch-blocked", {}), "no row: no quirk")
+
+
+# ------------------------------------------------------------ device matrix
+
+func test_matrix_expectations_take_trait_selectors() -> void:
+	var Matrix: GDScript = load("res://tests/devicematrix/matrix.gd")
+	var lnl := _row("msi-claw-8-ai-plus")
+	ok(Matrix.selector_matches("soc:lunar-lake|panther-lake", lnl["id"], {}, lnl), "trait selector on a sibling")
+	ok(not Matrix.selector_matches("soc:lunar-lake|panther-lake", "msi-claw-a8", {}, _row("msi-claw-a8")), "not on the AMD Claw")
+	ok(Matrix.selector_matches("controller:msi-claw+vendor:intel", lnl["id"], {"vendor": "intel"}, lnl), "a+b: trait and fixture")
+	ok(not Matrix.selector_matches("controller:msi-claw+vendor:amd", lnl["id"], {"vendor": "intel"}, lnl), "a+b: both must hold")
+	ok(Matrix.selector_matches("vendor:intel", lnl["id"], {"vendor": "intel"}, lnl), "fixture selectors still work")
+	var ids := _rows().map(func(r): return r["id"])
+	var bad := {"invariants": {}, "devices": {"soc:x": {}, "bogus:y": {}, "nope": {}}}
+	var p: Array = Matrix.expectation_file_problems(bad, ids)
+	ok(not p.any(func(x): return "soc:x" in x), "trait keys are known selectors")
+	ok(p.any(func(x): return "bogus:y" in x) and p.any(func(x): return "nope" in x), "unknown keys and ids are reported")

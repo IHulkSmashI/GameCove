@@ -6,7 +6,7 @@
   "facts: what tested community projects know per handheld (cited). Checked whenever a matching control is registered and available:",
   "  tdp: power.tdp* (not *boost*/*sppt*/*fppt*) min >= min, max <= max; *sppt*/*boost* max <= sppt_max (else max); *fppt* <= fppt_max (else sppt_max, max).",
   "  rgb.present false: controller.rgb*/controller.led* must be unavailable. rgb.sysfs_leds: the LED class names gen.py creates (none = HID/EC only).",
-  "devices: exact checks your provider promises, keyed by device id or selector (*, generic, vendor:amd|intel, driver:amdgpu|xe|i915, stack:hhd|inputplumber|steamos-manager|powerstation).",
+  "devices: exact checks your provider promises, keyed by device id or selector (*, generic, vendor:amd|intel, driver:amdgpu|xe|i915, stack:hhd|inputplumber|steamos-manager|powerstation, or a devices.json trait selector such as soc:lunar-lake|panther-lake, controller:msi-claw, panel:<id>; 'a+b' = both). Prefer a trait selector when the behaviour comes from a shared part, so siblings are checked too (python3 tools/traits/traits.py trait <selector> lists them).",
   "  keys: available, reason_contains, kind, unit, min, max, min_ge, max_le, step, options_include, options_exclude, value, note; 'ac': {...} overrides for the charger-plugged scenario.",
   "  A listed control id that no provider registers fails the test, so add entries in the same change as the provider.",
   "_resolved: how the devices.json / hhd / HueSync conflicts were settled (each row's 'notes' cites its source)."
@@ -1476,6 +1476,22 @@
      "fsr4_amd"
     ],
     "note": "Z1 Extreme is RDNA3: FSR 4 opt-in"
+   }
+  },
+  "soc:lunar-lake|panther-lake": {
+   "_source": "Trait selector (devices.json traits.soc): Intel Lunar Lake and Panther Lake have no SMT (Intel ARK, Core Ultra 200V / Series 3), so every handheld with them, not just the Claw 8 EX.",
+   "power.smt": {
+    "available": false,
+    "reason_contains": "no SMT",
+    "note": "no SMT on Lunar Lake / Panther Lake"
+   }
+  },
+  "panel:oxp3-8.8in-oled": {
+   "_source": "Trait selector (devices.json traits.panel): quirk hdr-switch-blocked in app/data/quirks.json.",
+   "display.hdr": {
+    "available": false,
+    "reason_contains": "turn this screen off",
+    "note": "switching HDR can leave this OLED dark"
    }
   }
  },

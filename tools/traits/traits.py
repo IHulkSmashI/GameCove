@@ -34,6 +34,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 DEVICES = os.path.join(REPO, "app", "data", "devices.json")
 FIXES = os.path.join(REPO, "app", "data", "fixes.json")
 QUIRKS = os.path.join(REPO, "app", "data", "quirks.json")
+EXPECT = os.path.join(REPO, "tools", "devicematrix", "expectations.json")
+MATRIX_RUNTIME = ("vendor", "driver", "stack")  # matrix selectors read from the fixture, not traits
 
 # trait -> (kind, allowed values or None). kind: str | list | panel
 TRAIT_KEYS = {
@@ -311,6 +313,16 @@ def all_problems(all_rows=None, cat=None, qs=None, src_keys=None):
                     out.append("fixes.json %s.exclude.%s needs a reason" % (e["id"], i))
         if e.get("kind") in ("root", "file") and not e.get("why"):
             out.append("fixes.json %s: needs \"why\" (the shared part that makes it apply)" % e["id"])
+    if os.path.exists(EXPECT):
+        for sel in load_json(EXPECT).get("devices", {}):
+            for part in sel.split("+"):
+                k = part.split(":", 1)[0] if ":" in part else ""
+                if part in ("*", "generic") or part in ids or k in MATRIX_RUNTIME:
+                    continue
+                if not k or k not in SELECTOR_KEYS:
+                    out.append("expectations.json devices: unknown device or selector %s" % sel)
+                elif not resolve(part, all_rows):
+                    out.append("expectations.json devices: %s picks no device" % sel)
     for q in qs:
         out += selector_problems(q.get("applies"), "quirks.json %s.applies" % q.get("id"))
         out += _unknown_ids(q.get("applies"), ids, "quirks.json %s.applies" % q.get("id"))
@@ -397,7 +409,33 @@ def report_model(rid, all_rows, cat, qs):
     for q in qs:
         if matches(q["applies"], r):
             lines.append("  %-24s %s (because %s)" % (q["id"], q["what"], why(q["applies"], r)))
+    if os.path.exists(EXPECT):
+        lines.append("device-matrix expectations (tools/devicematrix/expectations.json):")
+        for sel, per in load_json(EXPECT).get("devices", {}).items():
+            hit, runtime = matrix_selector(sel, r)
+            if hit:
+                n = len([k for k in per if not k.startswith("_")])
+                lines.append("  %-34s %d control check(s)%s" % (sel, n, " (if the fixture's stack/driver matches)" if runtime else ""))
     return lines
+
+
+def matrix_selector(sel, row):
+    """(applies, depends on the fixture) for an expectations.json "devices" key."""
+    runtime = False
+    for part in sel.split("+"):
+        k = part.split(":", 1)[0] if ":" in part else ""
+        if k in MATRIX_RUNTIME:
+            runtime = True
+            if k == "vendor" and not matches(part, row):
+                return False, False
+            continue
+        if part == "generic":
+            if row.get("tier") != "generic":
+                return False, False
+            continue
+        if not matches(part, row):
+            return False, False
+    return True, runtime
 
 
 def report_fixes(all_rows, cat):

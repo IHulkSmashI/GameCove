@@ -25,6 +25,7 @@ extends RefCounted
 
 const ControlsScript := preload("res://scripts/controls/controls.gd")
 const DeviceScript := preload("res://scripts/device/device.gd")
+const Traits := preload("res://scripts/device/traits.gd")
 const PowerService := preload("res://scripts/device/power.gd")
 
 const PROVIDERS_DIR := "res://scripts/controls/providers"
@@ -869,7 +870,7 @@ static func check_expectations(dev_id: String, info: Dictionary, row: Dictionary
 					out.append("%s range %s..%s: %s %s" % [c.id, c.min_value, c.max_value, edge, msg])
 	out.append_array(check_facts(expect.get("facts", {}).get(dev_id, {}), reg))
 	for sel in expect.get("devices", {}):
-		if not selector_matches(str(sel), dev_id, info):
+		if not selector_matches(str(sel), dev_id, info, row):
 			continue
 		var per: Dictionary = expect["devices"][sel]
 		for id in per:
@@ -944,8 +945,18 @@ static func _expect_one(c: Object, e: Dictionary, label: String) -> Array[String
 	return out
 
 
-## "*", a device id, "vendor:amd|intel", "driver:amdgpu|xe|i915", "stack:hhd", "generic".
-static func selector_matches(sel: String, dev_id: String, info: Dictionary) -> bool:
+## "*", a device id, "vendor:amd|intel", "driver:amdgpu|xe|i915", "stack:hhd", "generic", or a
+## devices.json trait selector ("soc:lunar-lake|panther-lake", "controller:msi-claw",
+## "panel:lenovo-go2-oled", app/scripts/device/traits.gd), so an expectation found on one model
+## covers every sibling with the same part. "a+b" = both must hold.
+static func selector_matches(sel: String, dev_id: String, info: Dictionary, row: Dictionary = {}) -> bool:
+	if "+" in sel:
+		for part in sel.split("+"):
+			if not selector_matches(part, dev_id, info, row):
+				return false
+		return true
+	if is_trait_selector(sel):
+		return Traits.matches(sel, row)
 	if sel == "*" or sel == dev_id:
 		return true
 	if sel == "generic":
@@ -957,6 +968,13 @@ static func selector_matches(sel: String, dev_id: String, info: Dictionary) -> b
 		"driver": return str(info.get("gpu_driver", "")) == v
 		"stack": return v in info.get("stack", [])
 	return false
+
+
+static func is_trait_selector(sel: String) -> bool:
+	if not ":" in sel:
+		return false
+	var k := sel.get_slice(":", 0)
+	return k in Traits.TRAIT_KEYS or k in ["platform", "family", "maker"] or k.begins_with("panel.")
 
 
 static func _id_matches(id: String, patterns: Array) -> bool:
@@ -988,7 +1006,10 @@ static func expectation_file_problems(expect: Dictionary, ids: Array) -> Array[S
 			out.append("expectations.json needs an object \"%s\"" % k)
 	for sel in expect.get("devices", {}):
 		var s := str(sel)
-		var known := s == "*" or s == "generic" or s in ids or (s.get_slice(":", 0) in ["vendor", "driver", "stack"] and ":" in s)
+		var known := true
+		for part in s.split("+"):
+			known = known and (part == "*" or part == "generic" or part in ids or is_trait_selector(part) \
+				or (part.get_slice(":", 0) in ["vendor", "driver", "stack"] and ":" in part))
 		if not known:
 			out.append("expectations.json: unknown device or selector %s" % s)
 			continue
