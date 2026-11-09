@@ -508,6 +508,27 @@ func test_ally_battery_saver_puts_custom_watts_and_ppts_back() -> void:
 	_free()
 
 
+## Round 2 (Ally, steamos-manager's amdgpu level auto, ManualGpuClock 800): the probe's
+## put-back is clock first (switching to manual), then the level back to auto; afterwards
+## the control reads 800 again and the level is auto.
+func test_ally_live_gpu_clock_put_back_order() -> void:
+	var e := _setup(_ally_live(true))
+	var r: RefCounted = SmIntelGpu.new()
+	_swap_runner(e, r)
+	var c: Dictionary = e["c"]
+	var sm := Trees.SM + "GpuPerformanceLevel1 "
+	# the helper's amdgpu min/max own the clocks here: use steamos-manager's path directly
+	var be: RefCounted = e["prov"].be
+	ok(be.set_sm_manual_clock(850), "probe 850 (switches to manual)")
+	eq(str(r.props[sm + "GpuPerformanceLevel"]["data"]), "manual")
+	ok(be.set_sm_manual_clock(800), "put-back 800 while manual")
+	ok(be.set_gpu_level("auto"), "then the level back to auto")
+	eq(int(be.sm_manual_clock()["value"]), 800, "800 again")
+	eq(str(r.props[sm + "GpuPerformanceLevel"]["data"]), "auto", "auto again")
+	ok(c.has("power.gpu_clock"), "")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)

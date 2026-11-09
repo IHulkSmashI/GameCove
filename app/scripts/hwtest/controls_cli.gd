@@ -133,15 +133,24 @@ func _probe(id: String) -> void:
 			req[r] = await _fresh(rc)
 	var ok := await _write(id, to)
 	var back: Variant = await _fresh(c)
-	var put_back := await _write(id, from)
-	var restored: Variant = await _fresh(c)
-	if not snap.is_empty():
-		prov.probe_restore(snap)
-		restored = await _fresh(c)
-	for r in req:
-		var rc = controls.control(r)
-		if req[r] != null and not same(rc, await _fresh(rc), req[r]):
-			await _write(r, req[r])
+	# order matters: the probed value first (gpu_clock goes back while the GPU is still in
+	# manual), then what it required (gpu_level back to auto), and only then the read
+	# that decides "restored" (the Ally read 850 before the level went back)
+	var put_back := false
+	var restored: Variant = null
+	for step in restore_steps(id, req.keys()):
+		match step[0]:
+			"write":
+				put_back = await _write(id, from)
+			"provider":
+				if not snap.is_empty():
+					prov.probe_restore(snap)
+			"required":
+				var rc = controls.control(step[1])
+				if req[step[1]] != null and not same(rc, await _fresh(rc), req[step[1]]):
+					await _write(step[1], req[step[1]])
+			"read":
+				restored = await _fresh(c)
 	# a put-back leaves no trace: GameCove's saved InputPlumber layout as it was
 	restore_files(saved_dir(), saved)
 	var result := "ok"
@@ -252,6 +261,18 @@ func _write(id: String, v: Variant) -> bool:
 
 
 # ---- pure helpers (tested) --------------------------------------------------------
+
+## How a probe puts things back, in order: the probed control's own value first (a GPU
+## clock goes back while the GPU is still in manual), then the provider's exact snapshot,
+## then the controls it required (the GPU level back to auto), and only then the read that
+## decides "restored" (the Ally read 850 because it read before the level went back).
+static func restore_steps(id: String, required: Array) -> Array:
+	var out: Array = [["write", id], ["provider"]]
+	for r in required:
+		out.append(["required", r])
+	out.append(["read", id])
+	return out
+
 
 ## Where controller writes save the everyday InputPlumber layout (input/backend.gd profile_path()).
 static func saved_dir(home := "") -> String:
