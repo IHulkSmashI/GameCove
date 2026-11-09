@@ -428,7 +428,7 @@ func test_dim_timers_stored_per_device() -> void:
 
 func test_store_keeps_the_old_value_when_the_save_fails() -> void:
 	var Store := load("res://scripts/controls/display/store.gd")
-	var good: RefCounted = Store.new({"config_path": OS.get_temp_dir().path_join("gc_store_ok.cfg")}, "display", "x")
+	var good: RefCounted = Store.new({"config_path": OS.get_temp_dir().path_join("gc_store_ok_%d.cfg" % OS.get_process_id())}, "display", "x")
 	ok(good.set_value("dim_after", 60), "saved")
 	var bad: RefCounted = Store.new({"config_path": "/nonexistent-gamecove-dir/store.cfg"}, "display", "x")
 	expect_error("")  # ConfigFile.save may report the missing folder

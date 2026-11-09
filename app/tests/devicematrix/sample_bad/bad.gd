@@ -21,7 +21,8 @@ func controls() -> Array:
 			func(_c, v):
 				for n in DirAccess.get_directories_at(root + "/sys/class/backlight"):
 					var f := FileAccess.open(root + "/sys/class/backlight/" + n + "/brightness", FileAccess.WRITE)
-					f.store_string(str(int(v)))
+					if f != null:   # read-only in the "failing" scenario when not root (CI)
+						f.store_string(str(int(v)))
 				return true),
 		# 200 W slider straight into the PPT attributes
 		Ctl.make({"id": "power.tdp", "group": "power", "kind": "slider", "min_value": 1.0, "max_value": 200.0},
