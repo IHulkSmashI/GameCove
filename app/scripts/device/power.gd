@@ -794,7 +794,8 @@ func restore() -> void:
 		if _charge_via != "fix" or fix_installed("charge-limit"):
 			set_charge_limit(c)
 	var f := str(_recall("device", "fan_mode", ""))
-	if f != "" and _fan_via != "" and f != _fan_mode:
+	# "custom": a fan curve (power.fan_curve) is the setting; the power controls put it back
+	if f != "" and f != "custom" and _fan_via != "" and f != _fan_mode:
 		if _fan_via != "fix" or fix_installed("fan"):
 			set_fan_mode(f)
 
@@ -965,7 +966,6 @@ func write_tdp(watts: float) -> bool:
 	return ok
 
 
-# ---- charge limit -------------------------------------------------------------
 ## The boost to write with a TDP of `watts` (review H6): the user's boost_w, never past the
 ## device's boost_max for that TDP (TDP + boost <= boost_max), for whatever power source and
 ## TDP we're at now. -1 = leave PowerStation's own.
@@ -976,6 +976,7 @@ func boost_for(watts: float) -> float:
 	return minf(boost_w, maxf(0.0, cap - watts)) if cap > 0.0 else boost_w
 
 
+# ---- charge limit -------------------------------------------------------------
 
 ## steamos-manager's charge limit lands about a second after set-property.
 const CHARGE_SETTLE_MAX_MS := 3000
@@ -1170,11 +1171,11 @@ func set_hhd_boost(on: bool) -> bool:
 
 func load_autotune_opts() -> void:
 	boost_w = float(_recall("device", "boost_w", -1.0))
-	autotune_opts = AUTOTUNE_DEFAULTS.duplicate()
 	# a stale or hand-edited value: never more than the largest boost any TDP here allows
 	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
 	if boost_w >= 0.0 and cap > 0.0:
 		boost_w = minf(boost_w, maxf(0.0, cap - maxf(_range["min"], 0.0)))
+	autotune_opts = AUTOTUNE_DEFAULTS.duplicate()
 	var saved: Variant = _recall("device", "autotune_opts", {})
 	if saved is Dictionary:
 		for k in saved:

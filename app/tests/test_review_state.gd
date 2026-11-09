@@ -84,3 +84,45 @@ func test_h6_boost_never_exceeds_boost_max_after_plugging_in() -> void:
 		e["power"].set_tdp(float(row["tdp"]["plugged_max"]))
 		ok(_ps(e, "TDP") + _ps(e, "Boost") <= cap + 0.01, "%s: hand-edited boost within boost_max (boost %.0f)" % [id, _ps(e, "Boost")])
 		_free()
+
+
+# ---- H5: fan preset and fan curve no longer overwrite each other ---------------------------------
+
+func _duty(root: String) -> Array:
+	var out := []
+	for i in 6:
+		var raw := FileAccess.get_file_as_string(root + "/sys/class/hwmon/hwmon5/pwm1_auto_point%d_pwm" % (i + 1)).strip_edges()
+		out.append(roundi(int(raw) * 100.0 / 255.0))
+	return out
+
+
+## Proof A: Quiet once, later a 60-100 % curve, then the charger: the fans went back to Quiet.
+func test_h5_curve_survives_plugging_in() -> void:
+	var t: Dictionary = Trees.new().claw8ex()
+	var e := _setup(t)
+	e["reg"].set_value("power.fan_mode", "quiet")
+	e["reg"].set_value("power.fan_curve", [60, 70, 80, 90, 100, 100])
+	eq(_duty(t["root"]), [60, 70, 80, 90, 100, 100], "curve written")
+	eq(e["power"]._recall("device", "fan_mode", ""), "custom", "the curve is what's remembered")
+	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "1")
+	e["power"].check_power_source()
+	eq(_duty(t["root"]), [60, 70, 80, 90, 100, 100], "still the curve after plugging in")
+	_free()
+
+
+## Proof B1: an old curve, then Max: resume / the next start put the old curve back.
+func test_h5_preset_picked_after_a_curve_stays() -> void:
+	var t: Dictionary = Trees.new().claw8ex()
+	var e := _setup(t)
+	e["reg"].set_value("power.fan_curve", [0, 40, 40, 45, 60, 75])
+	e["reg"].set_value("power.fan_mode", "max")
+	ok(not e["prov"].saved_device_values().has("power.fan_curve"), "saved curve dropped when a preset is picked")
+	e["power"].refresh(true)
+	eq(_duty(t["root"]), [100, 100, 100, 100, 100, 100], "max after resume")
+	eq(e["reg"].control("power.fan_mode").value, "max", "control still max")
+	var props: Dictionary = e["runner"].props
+	_free()
+	var e2 := _setup({"root": t["root"], "row": t["row"], "props": props, "methods": t["methods"]})
+	e2["prov"]._on_detected()
+	eq(_duty(t["root"]), [100, 100, 100, 100, 100, 100], "max after the next start")
+	_free()

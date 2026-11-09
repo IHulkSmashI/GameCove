@@ -148,6 +148,16 @@ func _wrote(id: String, v: Variant) -> void:
 		power.request_autotune_pause("manual " + id)
 
 
+## Drops a device-level value from memory and from the file (it no longer applies).
+func _forget(id: String) -> void:
+	_last.erase(id)
+	SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile):
+		var sec := PerDevice.section("set", device_key())
+		if not cfg.has_section_key(sec, id):
+			return false
+		cfg.erase_section_key(sec, id))
+
+
 func saved_device_values() -> Dictionary:
 	var cfg := SettingsFile.load_cfg(cfg_path)
 	var sec := PerDevice.section("set", device_key())
@@ -609,7 +619,11 @@ func _fan_mode() -> RefCounted:
 			c.options = _choice_opts(st.get("fan_modes", []))
 			return "",
 		func(_c): return str(_pstate().get("fan_mode", "")),
-		func(_c, v): return bool(_p(func(): return power.set_fan_mode(str(v)))))
+		func(_c, v):
+			if not bool(_p(func(): return power.set_fan_mode(str(v)))):
+				return false
+			_forget("power.fan_curve")   # a preset replaces the curve, also at the next start (review H5)
+			return true)
 
 
 ## {"driver", "points", "quiet": [...], "hwmon"} for table fan drivers driven by the fan fix, {}.
@@ -678,6 +692,9 @@ func _fan_curve() -> RefCounted:
 			return bool(_p(func():
 				if not power._run_fix("fan", "curve:" + ",".join(curve.map(func(x): return str(x)))):
 					return false
+				# the curve is the fan setting now: Power must not put a remembered preset back
+				# over it on the next charger change or start (review H5)
+				power._remember("device", "fan_mode", "custom")
 				power.refresh()
 				return true)))
 
