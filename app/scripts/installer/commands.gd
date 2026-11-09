@@ -179,6 +179,8 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 			out.append(_internal("state"))
 		"uninstall":
 			out.append(_cmd("session_restore", session_restore(paths), {"optional": true}))
+			# GameCove's launcher out of every Steam game's launch options (stops Steam first)
+			out.append(_internal("steam_unwrap", {"optional": true}))
 			if bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false)):
 				for f in had_fixes:
 					out.append(fix_task(paths, f, "remove"))

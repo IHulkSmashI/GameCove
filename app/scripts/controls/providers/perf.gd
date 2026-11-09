@@ -467,6 +467,13 @@ func _launch_controls() -> Array:
 			_wrapper_reason,
 			func(): return Files.has_wrapper(str(library.launch_options(game())), _wrapper()),
 			func(v): return set_wrapper(game(), bool(v))),
+		# Repair (review S2-1): GameCove's launcher out of every Steam game, every account
+		_mk({"id": "perf.wrapper_remove_all", "title": "Remove GameCove from all Steam games",
+			"help": "Takes GameCove's launcher out of every Steam game's launch options. Steam closes for a moment and starts again. Per-game upscaling and frame limits stop until you turn them on again.",
+			"kind": "action", "per_game": false},
+			func(): return "" if _steam_root() != "" else "Needs Steam",
+			func(): return null,
+			func(_v): return remove_wrapper_everywhere()),
 	]
 
 
@@ -525,6 +532,31 @@ func set_wrapper(g: Dictionary, on: bool) -> bool:
 	var lib := library
 	_main(func(): lib.set_launch_options(g, next))
 	return true
+
+
+## Closes Steam if it runs (it writes its settings back on exit), strips the wrapper from every
+## game of every account, then starts Steam again in the session's mode. Worker thread.
+func remove_wrapper_everywhere() -> bool:
+	var root := _steam_root()
+	if root == "":
+		return false
+	var proc := str(ctx.get("proc_root", "/proc"))
+	var was_running := Files.SteamConfig.is_running(_home(), proc)
+	var runner: Object = ctx.get("runner")
+	if was_running and runner != null:
+		runner.run("steam", PackedStringArray(["-shutdown"]))
+		var waited := 0
+		while Files.SteamConfig.is_running(_home(), proc) and waited < 60:
+			OS.delay_msec(500)
+			waited += 1
+	var r: Dictionary = Files.unwrap_all(_home(), root, proc)
+	if was_running and runner != null and not Files.SteamConfig.is_running(_home(), proc):
+		var mode := OS.get_environment("GAMECOVE_STEAM_MODE")
+		var args := ["-silent"] if mode in ["", "silent"] else (["-silent", "-gamepadui", "-steamos3", "-steampal", "-steamdeck"] if mode == "gamepadui" else [])
+		if mode != "off":
+			# in the background: the runner waits only for this little shell
+			runner.run("sh", PackedStringArray(["-c", "steam \"$@\" >/dev/null 2>&1 &", "sh"] + args))
+	return int(r["error"]) == OK
 
 
 # ---- Steam's shader pre-caching -------------------------------------------------

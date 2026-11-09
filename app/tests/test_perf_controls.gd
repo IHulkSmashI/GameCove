@@ -10,6 +10,8 @@ const PerfProvider := preload("res://scripts/controls/providers/perf.gd")
 const Fakes := preload("res://tests/fixtures/perf_controls/fakes.gd")
 const Overlay := preload("res://scripts/controls/perf/overlay.gd")
 const Lsfg := preload("res://scripts/controls/perf/lsfg.gd")
+const SC := preload("res://scripts/steam/steam_config.gd")
+const VdfW := preload("res://scripts/steam/vdf_writer.gd")
 const Files := preload("res://scripts/controls/perf/launch_files.gd")
 const Upscale := preload("res://scripts/controls/perf/upscale.gd")
 const MangoHud := preload("res://scripts/perf/mangohud.gd")
@@ -198,7 +200,7 @@ func test_limiter_writes_the_steam_file_and_adds_the_wrapper() -> void:
 	eq(env.get("MANGOHUD"), "1", "layer on")
 	eq(env.get("MANGOHUD_CONFIG"), "no_display,fps_limit=40,fps_limit_method=early", "limit and method")
 	eq(env.get("LOW_LATENCY_LAYER"), "1", "Launcher's variables reach the Steam game too")
-	eq(w["library"].options.get("steam:42"), "/usr/libexec/gamecove/gamecove-run %command%", "wrapper in the launch options")
+	eq(w["library"].options.get("steam:42"), Files.launch_prefix("/usr/libexec/gamecove/gamecove-run") + " %command%", "wrapper in the launch options")
 	reg.detect_all()
 	eq(reg.value("perf.launch_wrapper"), true, "wrapper reads back")
 	w["p"].set_mangohud_limit("steam:42", 0)
@@ -364,7 +366,7 @@ func test_low_latency_and_proton_and_wrapper() -> void:
 	ok("compat steam:42 proton_cachyos_11" in w["library"].calls, "through Library")
 	w["library"].options["steam:42"] = "PROTON_LOG=1 ~/fgmod/fgmod %command% -dx11"
 	reg.set_value("perf.launch_wrapper", true)
-	eq(w["library"].options["steam:42"], "PROTON_LOG=1 /usr/libexec/gamecove/gamecove-run ~/fgmod/fgmod %command% -dx11", "in front of fgmod, after variables")
+	eq(w["library"].options["steam:42"], "PROTON_LOG=1 " + Files.launch_prefix("/usr/libexec/gamecove/gamecove-run") + " ~/fgmod/fgmod %command% -dx11", "in front of fgmod, after variables")
 	reg.set_value("perf.launch_wrapper", false)
 	eq(w["library"].options["steam:42"], "PROTON_LOG=1 ~/fgmod/fgmod %command% -dx11", "taken out again")
 	_with_game(w, EPIC)
@@ -374,11 +376,69 @@ func test_low_latency_and_proton_and_wrapper() -> void:
 
 func test_wrapper_text() -> void:
 	var wr := "/usr/libexec/gamecove/gamecove-run"
-	eq(Files.with_wrapper("", wr), wr + " %command%", "empty")
-	eq(Files.with_wrapper("-dx11", wr), wr + " %command% -dx11", "arguments only")
-	eq(Files.with_wrapper(wr + " %command%", wr), wr + " %command%", "already there")
-	eq(Files.without_wrapper(wr + " %command%", wr), "", "back to nothing")
+	var sh := Files.launch_prefix(wr)
+	eq(sh, "/bin/sh -c '[ -x %s ] && exec %s \"$@\"; exec \"$@\"' gamecove-run" % [wr, wr], "fall-through shim")
+	eq(Files.with_wrapper("", wr), sh + " %command%", "empty")
+	eq(Files.with_wrapper("-dx11", wr), sh + " %command% -dx11", "arguments only")
+	eq(Files.with_wrapper(sh + " %command%", wr), sh + " %command%", "already there")
+	eq(Files.without_wrapper(sh + " %command%", wr), "", "back to nothing")
 	ok(not Files.has_wrapper("/opt/x/gamecove-run-old %command%", wr), "whole words only")
+	# review S2-1: an old bare path (a missing file stops the game) is recognised and replaced
+	ok(Files.has_legacy_wrapper(wr + " %command%", wr), "legacy form seen")
+	ok(not Files.has_legacy_wrapper(sh + " %command%", wr), "the shim isn't legacy")
+	eq(Files.with_wrapper("DXVK_HUD=1 " + wr + " %command% -dx11", wr), "DXVK_HUD=1 " + sh + " %command% -dx11", "legacy upgraded in place")
+	eq(Files.without_wrapper("DXVK_HUD=1 " + wr + " %command%", wr), "DXVK_HUD=1 %command%", "legacy taken out")
+	eq(Files.strip_all_wrappers(Files.launch_prefix("/opt/old/gamecove-run") + " %command% -dx11"), "%command% -dx11", "any path's shim stripped")
+	eq(Files.strip_all_wrappers("/usr/libexec/gamecove/gamecove-run ~/fgmod/fgmod %command%"), "~/fgmod/fgmod %command%", "any bare path stripped")
+
+
+func test_wrapper_shim_falls_through_when_gamecove_is_gone() -> void:
+	# review S2-1: run the exact launch options the way Steam does (through sh) with the wrapper missing.
+	# (From a script file: OS.execute with output goes through popen, whose quoting expands "$@".)
+	var dir := ProjectSettings.globalize_path("user://test_perf/shim")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var gone := dir + "/missing/gamecove-run"
+	eq(_run_launch(dir, Files.with_wrapper("", gone)), "game-started", "the game still starts without the wrapper")
+	var real := dir + "/gamecove-run"
+	_w(real, "#!/bin/sh\necho wrapped\nexec \"$@\"\n")
+	OS.execute("chmod", PackedStringArray(["+x", real]))
+	eq(_run_launch(dir, Files.with_wrapper("", real)), "wrapped game-started", "with the wrapper: through it")
+
+
+func _run_launch(dir: String, options: String) -> String:
+	_w(dir + "/launch.sh", options.replace("%command%", "echo game-started") + "\n")
+	var out := []
+	OS.execute("/bin/sh", PackedStringArray([dir + "/launch.sh"]), out, true)
+	return " ".join(str(out[0]).split("\n", false)) if not out.is_empty() else ""
+
+
+func test_unwrap_every_steam_game() -> void:
+	# review S2-1: uninstall / Repair take the wrapper out of every game of every account
+	var home := ProjectSettings.globalize_path("user://test_perf/unwrap")
+	var root := home.path_join(".local/share/Steam")
+	DirAccess.remove_absolute(home.path_join(".steam/steam.pid"))  # a previous run's
+	var wr := "/usr/libexec/gamecove/gamecove-run"
+	var vdf := "\"UserLocalConfigStore\"\n{\n\t\"Software\"\n\t{\n\t\t\"Valve\"\n\t\t{\n\t\t\t\"Steam\"\n\t\t\t{\n\t\t\t\t\"apps\"\n\t\t\t\t{\n" \
+		+ "\t\t\t\t\t\"10\"\n\t\t\t\t\t{\n\t\t\t\t\t\t\"LaunchOptions\"\t\t\"%s\"\n\t\t\t\t\t}\n" % VdfW.escape(Files.with_wrapper("-dx11", wr)) \
+		+ "\t\t\t\t\t\"20\"\n\t\t\t\t\t{\n\t\t\t\t\t\t\"LaunchOptions\"\t\t\"%s\"\n\t\t\t\t\t}\n" % VdfW.escape(wr + " %command%") \
+		+ "\t\t\t\t\t\"30\"\n\t\t\t\t\t{\n\t\t\t\t\t\t\"LaunchOptions\"\t\t\"gamemoderun %command%\"\n\t\t\t\t\t}\n" \
+		+ "\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n"
+	for uid in ["111", "222"]:
+		_w(root.path_join("userdata/%s/config/localconfig.vdf" % uid), vdf)
+	var up: Dictionary = Files.upgrade_legacy_all(home, root, wr, home)
+	eq(up["error"], OK)
+	eq(up["changed"], ["20", "20"], "only the bare-path entry is upgraded, in both accounts")
+	eq(SC.launch_options(root.path_join("userdata/111"), "20"), Files.launch_prefix(wr) + " %command%", "now the fall-through form")
+	var r: Dictionary = Files.unwrap_all(home, root, home)
+	eq(r["error"], OK)
+	eq(r["changed"].size(), 4, "two games x two accounts")
+	eq(SC.launch_options(root.path_join("userdata/222"), "10"), "%command% -dx11", "game arguments kept")
+	eq(SC.launch_options(root.path_join("userdata/222"), "20"), "", "nothing left")
+	eq(SC.launch_options(root.path_join("userdata/111"), "30"), "gamemoderun %command%", "others untouched")
+	# Steam running: refused (it would write the file back from memory)
+	_w(home.path_join(".steam/steam.pid"), "4242")
+	_w(home.path_join("4242/comm"), "steam")
+	eq(Files.unwrap_all(home, root, home)["error"], ERR_BUSY, "refused while Steam runs")
 
 
 # ---- shader pre-caching ------------------------------------------------------------------

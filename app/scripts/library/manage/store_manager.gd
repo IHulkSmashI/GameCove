@@ -19,6 +19,7 @@ signal external_window_needed(key: String, app: String, reason: String)
 signal store_changed(store: String)
 signal settings_changed
 
+const LaunchFiles := preload("res://scripts/controls/perf/launch_files.gd")
 const JobRunner := preload("res://scripts/library/manage/job_runner.gd")
 const DownloadQueue := preload("res://scripts/library/manage/download_queue.gd")
 const StoreCommands := preload("res://scripts/library/manage/store_commands.gd")
@@ -90,6 +91,12 @@ func setup(home_dir := "") -> void:
 	steam.setup(home, settings["steam_cef"], settings["cef_flag_created"])
 	steam.pending = settings["steam_pending"]
 	steam.apply_pending()
+	# review S2-1: older builds put the bare wrapper path in launch options, which stops the game if
+	# GameCove is gone; while Steam is stopped, move them to the fall-through form
+	if steam.steam_root != "" and not steam.steam_running():
+		var w := LaunchFiles.wrapper_path("")
+		if w != "":
+			LaunchFiles.upgrade_legacy_all(home, steam.steam_root, w, steam.proc_root)
 
 
 static func default_settings(home_dir: String) -> Dictionary:

@@ -15,6 +15,8 @@ extends RefCounted
 ##       rebuilt on the next launch (decky-storage-cleaner, mcarlucci,
 ##       main.py delete_cache, removes the same folder).
 
+const SteamConfig := preload("res://scripts/steam/steam_config.gd")
+
 const DATA := ".local/share/gamecove"
 const WRAPPER_PATHS := ["/usr/libexec/gamecove/gamecove-run"]
 const SHADER_KEY := "unShaderBackgroundProcessingThreads"
@@ -90,37 +92,90 @@ static func wrapper_path(sys_root: String, extra: Array = []) -> String:
 	return ""
 
 
+## What goes in front of %command% (review S2-1): a fall-through shim, so a game still starts
+## when GameCove is removed or the system boots a deployment without it (Steam runs launch
+## options through a shell, as the common `bash -c '...' -- %command%` recipes rely on):
+##   /bin/sh -c '[ -x <w> ] && exec <w> "$@"; exec "$@"' gamecove-run %command%
+static func launch_prefix(wrapper: String) -> String:
+	return "/bin/sh -c '[ -x %s ] && exec %s \"$@\"; exec \"$@\"' gamecove-run" % [wrapper, wrapper]
+
+
+## Older GameCove builds put the bare wrapper path in front of %command%: a missing file then
+## stops the game. True when `options` has that form.
+static func has_legacy_wrapper(options: String, wrapper: String) -> bool:
+	if wrapper == "":
+		return false
+	var rest := options.replace(launch_prefix(wrapper), " ")
+	return (" " + rest + " ").contains(" " + wrapper + " ")
+
+
 static func has_wrapper(options: String, wrapper: String) -> bool:
-	return wrapper != "" and (" " + options + " ").contains(" " + wrapper + " ")
+	return wrapper != "" and (options.contains(launch_prefix(wrapper)) or has_legacy_wrapper(options, wrapper))
+
+
+## Any GameCove wrapper at all (the shim or a bare gamecove-run path, from any install path).
+static func mentions_gamecove(options: String) -> bool:
+	return options.contains("gamecove-run")
 
 
 ## Steam launch options with the wrapper in front of the game's command (after
-## any VAR=value assignments, before other wrappers): "" -> "<w> %command%",
-## "PROTON_LOG=1 %command%" -> "PROTON_LOG=1 <w> %command%",
-## "~/fgmod/fgmod %command%" -> "<w> ~/fgmod/fgmod %command%",
-## "-dx11" (game arguments only) -> "<w> %command% -dx11".
+## any VAR=value assignments, before other wrappers): "" -> "<shim> %command%",
+## "PROTON_LOG=1 %command%" -> "PROTON_LOG=1 <shim> %command%",
+## "~/fgmod/fgmod %command%" -> "<shim> ~/fgmod/fgmod %command%",
+## "-dx11" (game arguments only) -> "<shim> %command% -dx11". A legacy bare path is replaced.
 static func with_wrapper(options: String, wrapper: String) -> String:
-	var o := options.strip_edges()
-	if wrapper == "" or has_wrapper(o, wrapper):
+	if wrapper == "":
+		return options.strip_edges()
+	var o := without_wrapper(options, wrapper) if has_legacy_wrapper(options, wrapper) else options.strip_edges()
+	if o.contains(launch_prefix(wrapper)):
 		return o
+	var shim := launch_prefix(wrapper)
 	if not "%command%" in o:
-		return ("%s %%command%% %s" % [wrapper, o]).strip_edges()
+		return ("%s %%command%% %s" % [shim, o]).strip_edges()
 	var words := o.split(" ", false)
 	var assign := RegEx.create_from_string("^[A-Za-z_][A-Za-z0-9_]*=")
 	var i := 0
 	while i < words.size() and words[i] != "%command%" and assign.search(words[i]) != null:
 		i += 1
-	words.insert(i, wrapper)
-	return " ".join(words)
+	var head := " ".join(words.slice(0, i))
+	var tail := " ".join(words.slice(i))
+	return ("%s %s %s" % [head, shim, tail]).strip_edges()
 
 
-## The options without our wrapper; "%command%" alone becomes "".
+## The options without our wrapper (shim or legacy path); "%command%" alone becomes "".
 static func without_wrapper(options: String, wrapper: String) -> String:
 	if wrapper == "":
 		return options.strip_edges()
-	var words := Array(options.strip_edges().split(" ", false)).filter(func(w): return w != wrapper)
+	var o := options.replace(launch_prefix(wrapper), " ")
+	var words := Array(o.strip_edges().split(" ", false)).filter(func(w): return w != wrapper)
 	var out := " ".join(PackedStringArray(words))
 	return "" if out == "%command%" else out
+
+
+## Every GameCove wrapper out, whatever path it named (a removed install, another prefix):
+## the shim for any path, then any bare word ending in /gamecove-run.
+static func strip_all_wrappers(options: String) -> String:
+	var o := options
+	var shim := RegEx.create_from_string("/bin/sh -c '\\[ -x (\\S+/gamecove-run) \\] && exec \\S+ \"\\$@\"; exec \"\\$@\"' gamecove-run")
+	o = shim.sub(o, " ", true)
+	var words := Array(o.strip_edges().split(" ", false)).filter(func(w): return not str(w).ends_with("/gamecove-run"))
+	var out := " ".join(PackedStringArray(words))
+	return "" if out == "%command%" else out
+
+
+## Takes GameCove's wrapper out of every Steam game of every account (uninstall, Repair).
+## Steam must be stopped. {"error", "changed": [appid...]}
+static func unwrap_all(home: String, steam_root: String, proc_root := "/proc") -> Dictionary:
+	return SteamConfig.rewrite_launch_options(home, steam_root,
+		func(_id: String, o: String) -> String: return strip_all_wrappers(o) if mentions_gamecove(o) else o, proc_root)
+
+
+## Moves old bare-path entries to the fall-through form (Steam stopped; at GameCove's start).
+static func upgrade_legacy_all(home: String, steam_root: String, wrapper: String, proc_root := "/proc") -> Dictionary:
+	if wrapper == "":
+		return {"error": OK, "changed": []}
+	return SteamConfig.rewrite_launch_options(home, steam_root,
+		func(_id: String, o: String) -> String: return with_wrapper(o, wrapper) if has_legacy_wrapper(o, wrapper) else o, proc_root)
 
 
 # ---- Steam's shader pre-caching -------------------------------------------------

@@ -101,6 +101,63 @@ static func set_launch_options(home: String, user_dir: String, appid: String, op
 	return VdfWriter.save(path, root)
 
 
+## Every account's launch options through fn(appid: String, options: String) -> String; only the
+## ones that change are written ("" removes them). Refuses while Steam runs (it writes the file
+## back from memory). Used to take GameCove's wrapper out of every game (uninstall, Repair) and to
+## move old bare-path entries to the fall-through form. {"error": Error, "changed": [appid, ...]}
+static func rewrite_launch_options(home: String, steam_root: String, fn: Callable, proc_root := "/proc") -> Dictionary:
+	if is_running(home, proc_root):
+		return {"error": ERR_BUSY, "changed": []}
+	var changed: Array = []
+	var err := OK
+	var d := DirAccess.open(steam_root.path_join("userdata"))
+	if d == null:
+		return {"error": OK, "changed": []}
+	for sub in d.get_directories():
+		if not sub.is_valid_int() or sub == "0":
+			continue
+		var path := localconfig_path(steam_root.path_join("userdata").path_join(sub))
+		if not FileAccess.file_exists(path):
+			continue
+		var parsed: Variant = VDF.parse_file_strict(path)
+		if not parsed is Dictionary or parsed.is_empty():
+			err = ERR_PARSE_ERROR
+			continue
+		var root: Dictionary = parsed
+		var before := VDF.count_keys(root)
+		var apps := _walk(root, LOCALCONFIG_PATH)
+		var mine: Array = []
+		var erased := 0
+		for appid in apps:
+			var app: Variant = apps[appid]
+			if not app is Dictionary:
+				continue
+			var cur := str(VDF.get_ci(app, "LaunchOptions", ""))
+			if cur == "":
+				continue
+			var next := str(fn.call(str(appid), cur)).strip_edges()
+			if next == cur.strip_edges():
+				continue
+			if next == "":
+				VdfWriter.erase_ci(app, "LaunchOptions")
+				erased += 1
+			else:
+				VdfWriter.set_ci(app, "LaunchOptions", next)
+			mine.append(str(appid))
+		if mine.is_empty():
+			continue
+		# only LaunchOptions values changed or went away: anything else means a misparse
+		if before - VDF.count_keys(root) != erased:
+			err = ERR_PARSE_ERROR
+			continue
+		var e := VdfWriter.save(path, root)
+		if e != OK:
+			err = e
+		else:
+			changed.append_array(mine)
+	return {"error": err, "changed": changed}
+
+
 ## The tool chosen for this one game ("" = Steam's default).
 static func compat_tool(steam_root: String, appid: String) -> String:
 	var mapping := _walk(VDF.parse_file(config_path(steam_root)), COMPAT_PATH)
