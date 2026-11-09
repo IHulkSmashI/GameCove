@@ -363,12 +363,12 @@
     "gpd technology"
    ],
    "enabled": true,
-   "file": "",
-   "mono": false,
-   "hex": "",
-   "source": "",
-   "license": "",
-   "upstream": "",
+   "file": "res://assets/brand/gpd.svg",
+   "mono": true,
+   "hex": "5E7DF5",
+   "source": "https://img.website.xin/contents/sitefiles3601/18006016/images/176080729.png",
+   "license": "Traced from GPD's official 1424x525 PNG logo on gpd.hk (header image linking to www.gpd.hk); potrace, single colour, IoU 0.997 against the original. Trademark of Shenzhen GPD Technology Co., Ltd. The original is a gradient 6E6BFA to 4E8FF0; hex is its middle.",
+   "upstream": "https://www.gpd.hk",
    "notice": "",
    "system_icons": [],
    "owner_terms": "https://trademark.justia.com/owners/shenzhen-gpd-technology-co-ltd-4083602"

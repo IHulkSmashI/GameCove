@@ -137,16 +137,16 @@ func test_bundled_logos_for_makers_chips_and_stores() -> void:
 			"Intel", "AMD", "Heroic", "Lutris", "Bottles"]:
 		ok(Brand.bundled_logo_for(name) != "", name + " has a bundled logo")
 		eq(Brand.logo_for(name), Brand.bundled_logo_for(name), name + " bundled wins")
-	for name in ["Amazon", "AYANEO", "AOKZOE", "GPD", "ZOTAC", "Orange Pi"]:
+	for name in ["Amazon", "AYANEO", "AOKZOE", "ZOTAC", "Orange Pi"]:
 		eq(Brand.bundled_logo_for(name), "", name + " has no bundled logo yet")
 		eq(Brand.logo_for(name), "", name + " shows text")
 	ok(Brand.is_mono("Steam"), "Simple Icons logo is mono")
 	ok(not Brand.is_mono("Bottles"), "Bottles icon is multi-colour")
 	eq(Brand.brand_color("MSI"), Color.from_string("#FF0000", Color.BLACK))
-	eq(Brand.brand_color("GPD"), Color(0, 0, 0, 0), "no colour without a logo")
+	eq(Brand.brand_color("Unknown Maker"), Color(0, 0, 0, 0), "no colour for an unknown brand")
 	ok(Brand.notice_for("Heroic").contains("GPL-3.0"), "heroic notice names its license")
 	ok(Brand.notice_for("Steam").contains("Valve Corporation"), "Valve's notice")
-	eq(Brand.notice_for("GPD"), "", "no logo, no notice")
+	eq(Brand.notice_for("Unknown Maker"), "", "no logo, no notice")
 	_done()
 
 
@@ -168,7 +168,7 @@ func test_logo_texture_tints_mono_and_keeps_colour_logos() -> void:
 				break
 		ok(red, "some opaque pixels")
 	ok(Brand.logo_texture("Bottles", 32) != null, "colour logo loads")
-	eq(Brand.logo_texture("GPD"), null, "no logo")
+	eq(Brand.logo_texture("Unknown Maker"), null, "no logo")
 
 
 func test_disabled_brand_returns_nothing() -> void:
