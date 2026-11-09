@@ -361,6 +361,8 @@ func _smt() -> RefCounted:
 		func(_c):
 			if not be.smt_control() in ["on", "off"]:
 				return Tx.NO_SMT
+			if be.smt_via() == "sysfs" and _admin_blocked():
+				return Tx.NEEDS_ADMIN
 			return "" if be.smt_via() != "" else Tx.NO_HELPER,
 		func(_c): return be.get_smt(),
 		func(_c, v): return be.set_smt(bool(v)))
@@ -371,6 +373,8 @@ func _cores() -> RefCounted:
 		func(c):
 			if be.cores_via() == "":
 				return Tx.NOT_HERE if not be.can_offline() else Tx.NO_HELPER
+			if be.cores_via() == "sysfs" and _admin_blocked():
+				return Tx.NEEDS_ADMIN
 			var n: int = be.cpu_numbers().size()
 			c.min_value = 2.0
 			c.max_value = float(n)
@@ -676,10 +680,20 @@ func _sleep_mode() -> RefCounted:
 				return Tx.ONE_SLEEP
 			if not be.helper_present():
 				return Tx.NO_HELPER
+			if _admin_blocked():
+				return Tx.NEEDS_ADMIN
 			c.options = _choice_opts(offered)
 			return "",
 		func(_c): return str(be.mem_sleep().get("active", "")),
 		func(_c, v): return be.set_mem_sleep(str(v)))
+
+
+## SMT, cores, sleep mode and MCU power saving need the admin password (review S3-2), which Gaming
+## Mode can't ask for. Tests set ctx["password_prompt"].
+func _admin_blocked() -> bool:
+	if ctx.has("password_prompt"):
+		return not bool(ctx["password_prompt"])
+	return Backend.no_password_prompt()
 
 
 func _mcu() -> RefCounted:
@@ -691,6 +705,8 @@ func _mcu() -> RefCounted:
 			var why: String = be.mcu_blocked()
 			if why != "" and Backend.read(be.mcu_file()) != "1":
 				return why
+			if be.helper_present() and _admin_blocked():
+				return Tx.NEEDS_ADMIN
 			return "" if be.helper_present() else Tx.NO_HELPER,
 		func(_c): return Backend.read(be.mcu_file()) == "1",
 		func(_c, v): return be.set_mcu(bool(v)))

@@ -123,6 +123,11 @@ func test_claw8ex_writes_through_the_root_verbs_and_reads_back() -> void:
 	eq(_read(root, "/sys/power/mem_sleep"), "deep", "deep sleep")
 	reg.set_value("power.cpu_cores", 2)
 	eq(_read(root, "/sys/devices/system/cpu/cpu3/online"), "0", "cores through the helper (PowerStation can't here: no CoresEnabled write)")
+	# review S3-2: cores and sleep mode go through the admin helper, the day-to-day ones through the prompt-free one
+	var calls: Array = e["runner"].calls
+	ok(calls.any(func(x): return str(x).contains("/gamecove-fix power-tune set cores:2")), "cores: gamecove-fix (admin password)")
+	ok(calls.any(func(x): return str(x).contains("/gamecove-fix power-tune set sleep:deep")), "sleep: gamecove-fix (admin password)")
+	ok(calls.any(func(x): return str(x).contains("/gamecove-fix-set power-tune set epp:")), "EPP: gamecove-fix-set (no password)")
 	reg.set_value("power.governor", "performance")
 	eq(_read(root, "/sys/devices/system/cpu/cpufreq/policy0/scaling_governor"), "performance", "governor")
 	reg.set_value("power.epp", "turbo")
@@ -256,6 +261,29 @@ func test_ally_mcu_powersave_needs_new_enough_firmware() -> void:
 	f.close()
 	e = _setup(t)
 	ok(e["c"]["power.mcu_powersave"].available, "319: available")
+	_free()
+
+
+func test_admin_only_levers_say_so_in_gaming_mode() -> void:
+	# review S3-2: SMT, cores, sleep mode and MCU power saving need the admin password; Gaming Mode can't ask
+	var t := Trees.new().claw8ex()
+	Trees.make_bin()
+	var runner: RefCounted = Trees.runner(t)
+	var reg: Node = ControlsScript.new()
+	reg.sync_mode = true
+	var ctx := {"sys_root": t["root"], "runner": runner, "home": t["root"], "device": t["row"], "registry": reg, "password_prompt": false}
+	reg.setup(ctx)
+	var prov: RefCounted = ProviderScript.new()
+	prov.cfg_path = t["root"] + "/power_controls.cfg"
+	prov.setup(ctx)
+	reg.register_provider(prov)
+	reg.detect_all()
+	_nodes.append(reg)
+	var c: Object = reg.control("power.sleep_mode")
+	ok(not c.available and c.reason == Tx.NEEDS_ADMIN, "sleep mode: admin password, Desktop Mode (%s)" % c.reason)
+	c = reg.control("power.cpu_cores")
+	ok(not c.available and c.reason == Tx.NEEDS_ADMIN, "cores through sysfs: admin password (%s)" % c.reason)
+	ok(reg.control("power.epp").available, "EPP stays prompt-free")
 	_free()
 
 

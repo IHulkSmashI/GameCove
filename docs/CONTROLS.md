@@ -213,8 +213,8 @@ Each area appends its own section.
   signals `changed(rows)` and `action_finished(fix, verb, ok, message)`. Status words: `applied`,
   `restart`, `partial`, `needed` (auto fix that is off), `available` (optional, off),
   `not-needed`, `os-fixed`, `blocked`, `checking`, `working`, `unknown`. Apply / Undo:
-  `pkexec gamecove-fix-set <fix> set on|off` for file fixes (no password, works in Gaming Mode),
-  `pkexec gamecove-fix <fix> install|remove` for root fixes (Desktop Mode). The user's Apply /
+  `pkexec gamecove-fix <fix> install|remove` for every fix, file fixes included (administrator
+  password, Desktop Mode; review S3-2). The user's Apply /
   Undo is remembered per device in `~/.local/share/gamecove/fixes.cfg`
   (`[fixes@<device>] <fix>="on"|"off"`): the installer reads it (`Target.read_fix_choices`) and
   `Plan.start` leaves a fix the user undid off for repair, change and finish (the Device step can

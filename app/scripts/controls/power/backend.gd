@@ -40,7 +40,12 @@ const PS_TDP_IF := "org.shadowblip.GPU.Card.TDP"
 const PPD := "org.freedesktop.UPower.PowerProfiles"
 const PPD_PATH := "/org/freedesktop/UPower/PowerProfiles"
 const FIX_SET := "/usr/libexec/gamecove/gamecove-fix-set"
+const FIX_ADMIN := "/usr/libexec/gamecove/gamecove-fix"
 const FIX_NAME := "power-tune"
+## power-tune keys that need the administrator password (review S3-2: not needed day to day, and
+## risky enough that the prompt-free entry point doesn't take them): through gamecove-fix, which
+## asks in Desktop Mode; Gaming Mode has no polkit agent, so there the controls say so.
+const ADMIN_KEYS := ["smt", "cores", "sleep", "mcu"]
 const FW_ATTR_DRIVERS := ["asus-armoury", "lenovo-wmi-other", "msi-wmi-platform"]
 const EPP_ORDER := ["performance", "balance_performance", "default", "balance_power", "power"]
 
@@ -122,13 +127,20 @@ func helper_present() -> bool:
 	return FileAccess.file_exists(root + fix_set)
 
 
-## pkexec gamecove-fix-set power-tune set <key>:<value>; true on exit 0.
+## pkexec gamecove-fix-set power-tune set <key>:<value> (ADMIN_KEYS: gamecove-fix, which asks for
+## the administrator password); true on exit 0.
 func root_set(key: String, value: String) -> bool:
 	if not helper_present():
 		return false
 	var arg := key + ":" + value if key != "" else value
-	var r: Dictionary = runner.run("pkexec", PackedStringArray([fix_set, FIX_NAME, "set", arg]))
+	var helper := fix_set.get_base_dir().path_join("gamecove-fix") if key in ADMIN_KEYS else fix_set
+	var r: Dictionary = runner.run("pkexec", PackedStringArray([helper, FIX_NAME, "set", arg]))
 	return int(r.get("code", -1)) == 0
+
+
+## True in GameCove's gamescope session (no polkit agent: a password can't be asked for).
+static func no_password_prompt() -> bool:
+	return OS.get_environment("GAMESCOPE_WAYLAND_DISPLAY") != "" or OS.get_environment("XDG_CURRENT_DESKTOP").to_lower() == "gamescope"
 
 
 # ---- services ------------------------------------------------------------------------------------

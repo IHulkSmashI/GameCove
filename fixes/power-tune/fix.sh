@@ -30,7 +30,10 @@
 #     tau:<us>|tau:restore    RAPL package PL1 time window, 1 s .. the firmware's own value
 #     thermald:hold|release   stop / start thermald.service (never disabled): on Intel it puts
 #                             the firmware's power limits back every few seconds (ClawDeck,
-#                             findings §21)
+#                             findings §21). A hold is bounded (review S3-2): a watcher starts
+#                             thermald again once no game runs (a game has 60 s to show up,
+#                             then two checks 10 s apart without one), so a hold never outlives
+#                             the game even when GameCove's own restore doesn't run
 #     sleep:s2idle|deep       /sys/power/mem_sleep, from what it offers
 #     mcu:on|off              ROG Ally controller MCU power saving in sleep (mcu_powersave); handhelds only;
 #                             on only with new enough MCU firmware (../lib/ally-mcu.sh), exit 3 otherwise
@@ -413,12 +416,63 @@ set_tau() {
 	[ "$d" -le $(($1 / 4)) ] || die 1 "the time window reads $got us after $1"
 }
 
+# A running game of the caller (Steam's reaper, or a GameCove launch's app-steam-app<id> scope).
+GAME_PATTERN='SteamLaunch AppId=|app-steam-app[0-9]'
+game_running() {
+	if [ -n "${1:-}" ]; then
+		pgrep -u "$1" -f "$GAME_PATTERN" >/dev/null 2>&1
+	else
+		pgrep -f "$GAME_PATTERN" >/dev/null 2>&1
+	fi
+}
+
+# The watcher behind a hold: runs detached as root until thermald is running again.
+thermald_watch() {
+	uid="${1:-}"
+	case "$uid" in *[!0-9]*) uid="" ;; esac
+	sleep "${GAMECOVE_THERMALD_GRACE_S:-60}"
+	gone=0
+	while [ -f "$STATE/thermald-held" ]; do
+		if game_running "$uid"; then gone=0; else gone=$((gone + 1)); fi
+		[ "$gone" -ge 2 ] && break
+		sleep "${GAMECOVE_THERMALD_CHECK_S:-10}"
+	done
+	if [ -f "$STATE/thermald-held" ]; then
+		fix_lock power-tune
+		if systemctl start thermald.service; then
+			rm -f "$STATE/thermald-held"
+			log_change "thermald released: no game running"
+		fi
+		fix_unlock
+	fi
+	[ "$(cat "$STATE/thermald-watch" 2>/dev/null)" = "$$" ] && rm -f "$STATE/thermald-watch"
+	return 0
+}
+
+start_watch() {
+	# tests of other parts (a fake root) may switch it off; never on a real system
+	[ -n "$ROOT" ] && [ "${GAMECOVE_THERMALD_WATCH:-}" = off ] && return 0
+	w="$STATE/thermald-watch"
+	# one watcher, for the latest hold (and its caller)
+	if [ -f "$w" ]; then
+		old="$(cat "$w" 2>/dev/null)"
+		case "$old" in "" | *[!0-9]*) ;; *) kill "$old" 2>/dev/null || true ;; esac
+	fi
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh "$HERE/fix.sh" thermald-watch "${PKEXEC_UID:-}" </dev/null >/dev/null 2>&1 &
+	else
+		nohup sh "$HERE/fix.sh" thermald-watch "${PKEXEC_UID:-}" </dev/null >/dev/null 2>&1 &
+	fi
+	echo "$!" >"$w"
+}
+
 set_thermald() {
 	case "$1" in
 		hold)
 			[ "$(systemctl is-active thermald.service 2>/dev/null || true)" = active ] || return 0
 			systemctl stop thermald.service || die 1 "could not stop thermald"
 			mkdir -p "$STATE"; : > "$STATE/thermald-held"
+			start_watch
 			;;
 		release)
 			[ -f "$STATE/thermald-held" ] || return 0
@@ -580,5 +634,7 @@ case "${1:-}" in
 	set) do_set "${2:-}" ;;
 	status) do_status ;;
 	remove) fix_lock power-tune; do_restore; rm -rf "$ORIG"; printf 'restored\n' ;;
+	# internal: the hold's watcher (start_watch); gamecove-fix never passes this action
+	thermald-watch) trap - EXIT; thermald_watch "${2:-}" ;;
 	*) die 2 "usage: fix.sh install|remove|status|set <key>:<value>|set restore" ;;
 esac

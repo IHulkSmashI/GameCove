@@ -231,10 +231,14 @@ expect_code 66 "set entry: fan curve letters" gfs fan set curve:0,40,x
 expect_code 66 "set entry: fan curve empty" gfs fan set curve:
 expect_code 66 "set entry: fan curve trailing comma" gfs fan set curve:1,2,
 expect_code 66 "set entry: fan curve shell" gfs fan set 'curve:1;reboot'
-for v in boost:off smt:on cores:4 epp:balance_power governor:powersave cpumax:70 gpulevel:auto gpumin:600 \
+for v in boost:off epp:balance_power governor:powersave cpumax:70 gpulevel:auto gpumin:600 \
 	gpumax:1800 gpuprofile:power_saving sppt:28 fppt:33 platform:low-power tau:8000000 tau:restore \
-	thermald:hold thermald:release sleep:deep battery:long-life mcu:off restore; do
+	thermald:hold thermald:release battery:long-life restore; do
 	expect_code 0 "set entry: power-tune $v" gfs power-tune set "$v"
+done
+# review S3-2: not day-to-day, or risky: the administrator password (gamecove-fix)
+for v in smt:on cores:4 sleep:deep mcu:on mcu:off; do
+	expect_code 66 "set entry refuses power-tune $v" gfs power-tune set "$v"
 done
 contains "$ROOT/calls" "^power-tune:set epp:balance_power$" "power-tune set reached fix.sh"
 expect_code 66 "set entry: power-tune unknown key" gfs power-tune set fan:max
@@ -247,20 +251,23 @@ expect_code 64 "set entry refuses power-tune install" gfs power-tune install
 expect_code 64 "set entry refuses power-tune remove" gfs power-tune remove
 lacks "$ROOT/calls" "install" "no install reached a fix through the set entry"
 lacks "$ROOT/calls" "remove" "no remove reached a fix through the set entry"
-# The small file fixes (udev rules, session files): only on / off, never install / remove.
+# review S3-2: the small file fixes (udev rules, session files) need the administrator password now
 : >"$ROOT/calls"
-expect_code 0 "set entry: file fix on" gfs claw-kbd-wakeup set on
-expect_code 0 "set entry: file fix off" gfs claw-kbd-wakeup set off
-contains "$ROOT/calls" "^claw-kbd-wakeup:set on$" "file fix on reached fix.sh"
-contains "$ROOT/calls" "^claw-kbd-wakeup:set off$" "file fix off reached fix.sh"
-expect_code 66 "set entry: file fix other value" gfs claw-kbd-wakeup set quiet
-expect_code 64 "set entry: file fix install" gfs claw-kbd-wakeup install
-expect_code 64 "set entry: file fix remove" gfs claw-kbd-wakeup remove
-expect_code 66 "set entry: fan on is not a file fix value" gfs fan set on
-# FILE_FIXES = exactly the fix folders built on gcfix.sh
-want=$(grep -l 'gcfix.sh"$' "$REPO"/fixes/*/fix.sh | sed 's|.*/fixes/\([^/]*\)/fix.sh|\1|' | sort | tr '\n' ' ')
-have=$(sed -n 's/^FILE_FIXES="\(.*\)"$/\1/p' "$FIXSET" | tr ' ' '\n' | sort | tr '\n' ' ')
-if [ "$want" = "$have" ]; then ok; else bad "FILE_FIXES in gamecove-fix-set ($have) must list the gcfix fixes ($want)"; fi
+expect_code 65 "set entry refuses a file fix on" gfs claw-kbd-wakeup set on
+expect_code 65 "set entry refuses a file fix off" gfs claw-kbd-wakeup set off
+expect_code 65 "set entry refuses a file fix status" gfs claw-kbd-wakeup status
+expect_code 66 "set entry: fan on is not a value" gfs fan set on
+if [ ! -s "$ROOT/calls" ]; then ok; else bad "refused file-fix calls must not run a fix"; fi
+# the policy text names exactly the power-tune keys the set entry takes, and none it refuses
+keys=$(sed -n 's/.*power-tune:\([a-z]*\):\*.*/\1/p; s/.*| power-tune:\([a-z]*\):\*.*/\1/p' "$FIXSET" | tr ' |\\' '\n\n\n' | grep -o 'power-tune:[a-z]*' | sed 's/power-tune://' | sort -u)
+[ -z "$keys" ] && keys=$(grep -o 'power-tune:[a-z]*:\*' "$FIXSET" | sed 's/power-tune:\([a-z]*\):\*/\1/' | sort -u)
+POLICY="$REPO/packaging/polkit/io.github.ihulksmashi.gamecove.policy"
+for k in $keys; do
+	if grep -q "\b$k\b" "$POLICY"; then ok; else bad "policy text doesn't mention power-tune $k, which gamecove-fix-set allows"; fi
+done
+for k in smt cores sleep mcu; do
+	if printf '%s\n' "$keys" | grep -qx "$k"; then bad "gamecove-fix-set must not take power-tune $k"; else ok; fi
+done
 # Under pkexec it hands over to the installed dispatcher; the caller's paths are ignored.
 : >"$ROOT/calls"
 PKEXEC_UID=1000 GAMECOVE_ROOT="$ROOT" GAMECOVE_FIXES_DIR="$FIXES" sh "$FIXSET" fan set quiet >"$T/out" 2>&1
@@ -649,7 +656,8 @@ for a in doc.getElementsByTagName("action"):
              if n.getAttribute("key") == "org.freedesktop.policykit.exec.path"]
     acts[a.getAttribute("id")] = (get("allow_any"), get("allow_inactive"), get("allow_active"), paths)
 want = {
-    "io.github.ihulksmashi.gamecove.fix-set": ("auth_admin", "auth_admin", "yes", ["/usr/libexec/gamecove/gamecove-fix-set"]),
+    # review S3-2: the prompt-free action is for the active local session only
+    "io.github.ihulksmashi.gamecove.fix-set": ("no", "no", "yes", ["/usr/libexec/gamecove/gamecove-fix-set"]),
     "io.github.ihulksmashi.gamecove.fix": ("auth_admin", "auth_admin", "auth_admin_keep", ["/usr/libexec/gamecove/gamecove-fix"]),
 }
 assert acts == want, acts

@@ -274,10 +274,12 @@ pkexec /usr/libexec/gamecove/gamecove-fix <name> set <value>
 
 polkit has two actions, picked by the program pkexec runs:
 
-| Action | Program | Active session | Allows |
+| Action | Program | Who | Allows |
 | --- | --- | --- | --- |
-| `io.github.ihulksmashi.gamecove.fix-set` | `/usr/libexec/gamecove/gamecove-fix-set` | `yes` (no password) | only `charge-limit set 50..100`, `fan set auto\|quiet\|max`, `claw8ex-gyro set accel-on\|accel-off`, and `status` |
-| `io.github.ihulksmashi.gamecove.fix` | `/usr/libexec/gamecove/gamecove-fix` | `auth_admin_keep` | everything else, including every install and remove |
+| `io.github.ihulksmashi.gamecove.fix-set` | `/usr/libexec/gamecove/gamecove-fix-set` | active local session: `yes` (no password); inactive / remote: `no` | `set` and `status` only: `charge-limit` 50-100 / release, `fan` auto / quiet / max / curve, `power-tune` boost, epp, governor, cpumax, gpulevel, gpumin, gpumax, gpuprofile, sppt, fppt, platform, tau, battery, restore and thermald hold / release (a hold ends by itself when no game runs), `controller-led`, `claw8ex-gyro` accel-on / accel-off, `claw8ex-gyro` / `claw8ex-buttons` refresh |
+| `io.github.ihulksmashi.gamecove.fix` | `/usr/libexec/gamecove/gamecove-fix` | `auth_admin_keep` | everything else: every install and remove (the small udev-rule / session-file fixes too), `power-tune` smt, cores, sleep, mcu, `--remove-all` |
+
+Why each setting is on one side or the other: [SYSTEM.md](SYSTEM.md), "GameCove's root actions".
 
 The gamescope session has no polkit agent, so it can't ask for a password: in
 Gaming Mode only the `fix-set` actions work, and pkexec on the full helper fails

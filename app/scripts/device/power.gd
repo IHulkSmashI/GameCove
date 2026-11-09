@@ -123,6 +123,8 @@ var autotune_opts := AUTOTUNE_DEFAULTS.duplicate()
 var _game_key := ""
 var _thermald_checked := false
 var _thermald_held := false
+var _thermald_try_ms := 0
+const THERMALD_RETRY_MS := 30000
 var _guard_timer: Timer
 var _busy := -1
 var _busy_at := -1000.0
@@ -1209,10 +1211,19 @@ func _check_limit() -> void:
 # thermald running, thermald is held (stopped, never disabled; started again by the session when
 # GameCove exits: power-tune set restore) and the guard watches the package temperature instead.
 
+## The helper bounds a hold to a running game (review S3-2): thermald starts again by itself when no
+## game runs. So a hold is asked for again (at most every THERMALD_RETRY_MS) once thermald runs again.
 func _hold_thermald() -> void:
-	if _thermald_checked or backend != "powerstation" or str(device.get("cpu_vendor", "")) != "intel":
+	if backend != "powerstation" or str(device.get("cpu_vendor", "")) != "intel":
+		return
+	if _thermald_held and not be.thermald_active():
+		return
+	_thermald_held = false
+	var now := Time.get_ticks_msec()
+	if _thermald_checked and now - _thermald_try_ms < THERMALD_RETRY_MS:
 		return
 	_thermald_checked = true
+	_thermald_try_ms = now
 	if not be.helper_present() or not be.thermald_active():
 		return
 	if be.root_set("thermald", "hold"):

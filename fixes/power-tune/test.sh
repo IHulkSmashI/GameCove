@@ -33,6 +33,15 @@ start) echo active > "$f"; echo "start" >> "$GAMECOVE_ROOT/systemctl.log" ;;
 esac
 EOF
 chmod +x "$T/bin/systemctl"
+# pgrep stub: a game runs while $T/game exists (the thermald hold's watcher asks)
+cat > "$T/bin/pgrep" <<EOF
+#!/bin/sh
+echo "pgrep \$*" >> "$T/pgrep.log"
+[ -f "$T/game" ]
+EOF
+chmod +x "$T/bin/pgrep"
+: > "$T/game"
+GAMECOVE_THERMALD_GRACE_S=0.3 GAMECOVE_THERMALD_CHECK_S=0.2; export GAMECOVE_THERMALD_GRACE_S GAMECOVE_THERMALD_CHECK_S
 PATH="$T/bin:$PATH"; export PATH
 
 # ---- Intel handheld (MSI Claw 8 EX): intel_pstate, xe, RAPL, no SMT ------------------------------------------
@@ -121,6 +130,23 @@ expect 0 "restore" set restore
 sh "$FIX" status | grep -q '^installed=no$' || fail "nothing recorded after restore"
 expect 0 "restore again is a no-op" set restore
 grep -q 'set epp=balance_power' "$R/var/lib/gamecove/fixes/power-tune/changes.log" || fail "changes logged"
+# review S3-2: a hold never outlives the game: the watcher starts thermald again once no game runs
+echo active > "$R/thermald.state"
+PKEXEC_UID=1000 expect 0 "thermald hold during a game" set thermald:hold
+[ "$(r "$R/thermald.state")" = inactive ] || fail "thermald stopped for the game"
+sleep 1
+[ "$(r "$R/thermald.state")" = inactive ] || fail "still held while the game runs"
+grep -q "pgrep -u 1000 -f" "$T/pgrep.log" || fail "the watcher looks only at the caller's games"
+PKEXEC_UID=1000 expect 0 "a second hold replaces the watcher" set thermald:hold
+rm -f "$T/game"
+n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 30 ]; do sleep 0.2; n=$((n + 1)); done
+[ "$(r "$R/thermald.state")" = active ] || fail "thermald starts again by itself when the game is gone"
+[ ! -e "$R/var/lib/gamecove/fixes/power-tune/thermald-held" ] || fail "hold marker cleared"
+grep -q "thermald released: no game running" "$R/var/lib/gamecove/fixes/power-tune/changes.log" || fail "the release is logged"
+expect 0 "hold at home (no game)" set thermald:hold
+n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 30 ]; do sleep 0.2; n=$((n + 1)); done
+[ "$(r "$R/thermald.state")" = active ] || fail "without a game the hold ends after the start-up grace"
+: > "$T/game"
 # thermald already stopped by someone else: hold changes nothing, release doesn't start it
 echo inactive > "$R/thermald.state"; : > "$R/systemctl.log"
 expect 0 "hold when inactive" set thermald:hold

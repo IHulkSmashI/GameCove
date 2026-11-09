@@ -20,8 +20,9 @@
 #   blocked            optional: prints why it can't be applied on this machine now ("" = it can);
 #                      install refuses (exit 3) and status says state=unsupported, reason=<text>
 #
-# Commands: install | remove | status | set on | set off ("set" is the no-password path through
-# gamecove-fix-set; on = install, off = remove). status prints applies=, installed=, os_fixed=,
+# Commands: install | remove | status | set on | set off (on = install, off = remove; all through
+# gamecove-fix with the administrator password since review S3-2: a udev rule that acts on every
+# boot isn't a day-to-day setting). status prints applies=, installed=, os_fixed=,
 # hw=, then state= (on | off | os-fixed | not-needed | partial | n/a).
 #
 # Only the handhelds in DEVICES: the id comes from fixes/lib/devices.txt (generated from
