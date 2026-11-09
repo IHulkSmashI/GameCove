@@ -32,7 +32,7 @@ var _card_list: Array = []
 ## Below this width (the scrolling column's) the cards stack in one column.
 const TWO_COLUMNS_W := 760.0
 ## Rough height of each card in rows, to deal them into balanced columns.
-const CARD_WEIGHT := {"device": 7.0, "chip": 7.5, "memory": 4.5, "storage": 4.0, "screen": 6.0,
+const CARD_WEIGHT := {"device": 4.0, "chip": 6.0, "memory": 4.5, "storage": 4.0, "screen": 6.0,
 	"battery": 8.5, "software": 4.5, "support": 9.0, "fixes": 3.0}
 
 
@@ -144,12 +144,8 @@ func _fill_side() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", ThemeLib.font("display"))
 	col.add_child(title)
-	var maker_line := " · ".join(PackedStringArray([str(d.get("maker", "")), str(d.get("model", ""))].filter(func(x): return x != "" and x != str(d.get("name", "")))))
-	if maker_line != "":
-		var ml := Kit.label(maker_line, "QuietLabel", true)
-		ml.name = "MakerLine"
-		ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		col.add_child(ml)
+	# No maker / model line here: the logo says the maker and the Device card
+	# has the model, so the name isn't printed twice.
 	var level := str(sup.get("level", "generic"))
 	var chips := HFlowContainer.new()
 	chips.name = "Chips"
@@ -253,12 +249,6 @@ func _photo_focus() -> Array:
 	return [photo_view.credit] if photo_view != null and not photo_view.credit.disabled else []
 
 
-func hints_for(c: Control) -> Array:
-	if photo_view != null and c == photo_view.credit:
-		return [["A", PhotoView.TPhoto.PHOTO_SOURCE], ["B", "Back"]]
-	return super(c)
-
-
 func _open_photo_link(url: String) -> void:
 	var d := svc("discover")
 	if d != null and d.has_method("open_link") and d.open_link({"kind": "url", "uri": url}):
@@ -296,6 +286,8 @@ func _fill_cards() -> void:
 	cards.append(_support_card())
 	cards.append(_fixes_card())
 	_card_list = cards.filter(func(c): return c != null)
+	for c in _card_list:
+		_card_action(c)
 	_grid.set_meta("dealt", -1)
 	_deal()
 	# Only while Device is still looking (its slow lookups finish in a second or two).
@@ -345,7 +337,14 @@ func _deal() -> void:
 		heights[k] += float(CARD_WEIGHT.get(String(c.name).trim_prefix("Card_"), 5.0)) + 1.0
 	var order: Array = []
 	for st in _stacks:
-		order.append_array(st.get_children())
+		var kids: Array = st.get_children()
+		var acts: Array = kids.filter(func(k): return k.focus_mode != Control.FOCUS_NONE)
+		if acts.is_empty():
+			continue
+		# Read-only cards come into view beside the nearest card with a job.
+		acts[0].set_meta("reveal_with", kids[0])
+		acts[-1].set_meta("reveal_with", kids[-1])
+		order.append_array(acts)
 	chain(order + _photo_focus())
 
 
@@ -353,8 +352,8 @@ func _link() -> void:
 	super()
 	if _stacks.size() < 2:
 		return
-	var a: Array = _stacks[0].get_children()
-	var b: Array = _stacks[1].get_children()
+	var a: Array = _stacks[0].get_children().filter(func(k): return k.focus_mode != Control.FOCUS_NONE)
+	var b: Array = _stacks[1].get_children().filter(func(k): return k.focus_mode != Control.FOCUS_NONE)
 	if a.is_empty() or b.is_empty():
 		return
 	for i in a.size():
@@ -366,21 +365,61 @@ func _link() -> void:
 	a[-1].focus_neighbor_bottom = a[-1].get_path_to(b[0])
 
 
+## A read-only card; set_action() makes the ones with a job focusable.
 func _section(key: String, tint := "accent") -> Array:
-	var c := DKit.card(Texts.SECTIONS[key], Texts.SECTION_ICONS[key], tint)
+	var c := DKit.card(Texts.SECTIONS[key], Texts.SECTION_ICONS[key], tint, false)
 	c[0].name = "Card_" + key
 	return c
+
+
+## What A does on each card that has a job; the rest are read-only.
+func _card_action(c: Control) -> void:
+	match String(c.name).trim_prefix("Card_"):
+		"device": c.set_action(Texts.ACT_COPY, copy_info)
+		"storage": c.set_action(Texts.ACT_STORAGE, func(): part_requested.emit("storage"))
+		"software": c.set_action(Texts.ACT_UPDATES, func(): part_requested.emit("updates"))
+		"fixes": c.set_action(Texts.ACT_FIXES, func(): part_requested.emit("fixes"))
+		"battery": c.set_action(Texts.ACT_POWER, func(): category_requested.emit("power"))
+		"screen": c.set_action(Texts.ACT_DISPLAY, func(): category_requested.emit("display"))
+
+
+## The essentials as plain text on the clipboard, for a bug report.
+func info_text() -> String:
+	var d := _g("device")
+	var ch := _g("chip")
+	var sw := _g("software")
+	var lines := PackedStringArray()
+	for pair in [["Device", d.get("name", "")], ["Model", d.get("model", "")], ["Board", d.get("board", "")],
+			["BIOS", " ".join(PackedStringArray([str(d.get("bios_version", "")), str(d.get("bios_date", ""))])).strip_edges()],
+			["Processor", ch.get("cpu", "")], ["Graphics", ch.get("gpu", "")], ["Driver", ch.get("gpu_driver", "")],
+			["Mesa", ch.get("mesa", "")], ["Kernel", ch.get("kernel", "")],
+			["System", " ".join(PackedStringArray([str(sw.get("os", "")), str(sw.get("os_version", ""))])).strip_edges()],
+			["GameCove", sw.get("gamecove_version", "")]]:
+		if str(pair[1]) != "":
+			lines.append("%s: %s" % [pair[0], pair[1]])
+	return "\n".join(lines)
+
+
+func copy_info() -> void:
+	DisplayServer.clipboard_set(info_text())
+	toast_requested.emit(Texts.ACT_COPIED, "check", "good")
+
+
+func hints_for(c: Control) -> Array:
+	if c is DKit.FocusCard and c.action_text != "":
+		return [["A", c.action_text], ["B", "Back"]]
+	if photo_view != null and c == photo_view.credit:
+		return [["A", PhotoView.TPhoto.PHOTO_SOURCE], ["B", "Back"]]
+	return super(c)
 
 
 func _device_card() -> Control:
 	var d := _g("device")
 	var c := _section("device")
 	var bios := " ".join(PackedStringArray([str(d.get("bios_version", "")), "(%s)" % d["bios_date"] if str(d.get("bios_date", "")) != "" else ""])).strip_edges()
-	c[1].add_child(_kv([
-		["Name", d.get("name", "")], ["Maker", d.get("maker", d.get("vendor", ""))], ["Model", d.get("model", "")],
-		["Board", d.get("board", "")], ["Family", d.get("family", "")], ["BIOS", bios],
-		["Serial number", Texts.SERIAL_HIDDEN],
-	]))
+	# The name is the hero's title; maker, family and the (always hidden)
+	# serial added nothing a player needs.
+	c[1].add_child(_kv([["Model", d.get("model", "")], ["Board", d.get("board", "")], ["BIOS", bios]]))
 	return c[0]
 
 
@@ -401,7 +440,7 @@ func _chip_card() -> Control:
 		return null   # nothing known yet: no empty card
 	c[1].add_child(_kv([
 		["Processor", ch.get("cpu", "")], ["Cores", cores], ["Graphics", gpu], ["Graphics driver", driver],
-		["PCI id", ch.get("gpu_pci_id", "")], ["Mesa", ch.get("mesa", "")], ["Kernel", ch.get("kernel", "")],
+		["Mesa", ch.get("mesa", "")], ["Kernel", ch.get("kernel", "")],
 	]))
 	return c[0]
 

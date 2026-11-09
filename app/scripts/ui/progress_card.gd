@@ -10,7 +10,8 @@ const Icons := preload("res://scripts/ui/icons.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 
-const WIDTH := 300
+## Wide enough that "Rarest: Lighthouse Keeper" fits on one line.
+const WIDTH := 372
 
 var service: Object = null
 var game: Dictionary = {}
@@ -73,11 +74,13 @@ func _init() -> void:
 	rare_name = Kit.label("", "")
 	rare_name.add_theme_font_override("font", ThemeLib.font("bold"))
 	rare_name.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+	# Long names take a second line rather than an ellipsis.
+	rare_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rare_name.max_lines_visible = 2
 	rare_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	rare_name.clip_text = true
 	rt.add_child(rare_name)
 	rare_line = Kit.label("", "MonoLabel")
-	rare_line.add_theme_font_size_override("font_size", 11)
+	rare_line.add_theme_font_size_override("font_size", 12)
 	rt.add_child(rare_line)
 	rr.add_child(rt)
 	rare_box.add_child(rr)

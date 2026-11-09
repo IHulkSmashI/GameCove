@@ -6,13 +6,63 @@ extends RefCounted
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
+## Card padding: tight enough that About this device's cards fit at 1280x800.
+const PAD_X := 18
+const PAD_Y := 14
 
 
-## A card that can take focus (so the d-pad scrolls through read-only info),
-## tinted by its section's colour, with one accent ring when focused.
+## A card tinted by its section's colour, with one accent ring when focused.
+## Read-only cards on About this device don't take focus; one with something
+## to do (set_action) does, shows "(A) Copy info" in its header, and runs it
+## on A.
 class FocusCard extends PanelContainer:
 	var tint := ""        # theme token ("accent", "info", "good", "warn") or ""
 	var focusable := true
+	var action_text := ""
+	var action: Callable
+	var _pill: Control
+
+	## Gives the card a real job: focusable, a quiet "(A) text" pill at the
+	## right of its header, `fn` on A.
+	func set_action(text: String, fn: Callable) -> void:
+		action_text = text
+		action = fn
+		focusable = true
+		focus_mode = Control.FOCUS_ALL
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		if not gui_input.is_connected(_on_input):
+			gui_input.connect(_on_input)
+		var head: Node = find_child("Head", true, false)
+		if head == null:
+			return
+		if _pill != null and is_instance_valid(_pill):
+			_pill.queue_free()
+		var p := PanelContainer.new()
+		p.name = "Action"
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var row := Kit.hbox(6)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(Kit.glyph("A", false, true))
+		var l := Kit.label(text, "CaptionLabel")
+		l.name = "Text"
+		row.add_child(l)
+		p.add_child(row)
+		head.add_child(p)
+		_pill = p
+		_style_pill()
+
+	func _on_input(e: InputEvent) -> void:
+		if e.is_action_pressed("ui_accept") and action.is_valid():
+			accept_event()
+			action.call()
+
+	func _style_pill() -> void:
+		if _pill == null or not is_instance_valid(_pill):
+			return
+		var on := has_focus()
+		_pill.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.soft(0.10 if on else 0.05), 999, 10, 3))
+		_pill.modulate.a = 1.0 if on else 0.7
 
 	func _init(tint_token := "", can_focus := true) -> void:
 		tint = tint_token
@@ -22,6 +72,8 @@ class FocusCard extends PanelContainer:
 		size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		focus_entered.connect(queue_redraw)
 		focus_exited.connect(queue_redraw)
+		focus_entered.connect(_style_pill)
+		focus_exited.connect(_style_pill)
 		_restyle()
 
 	var _styling := false
@@ -35,7 +87,7 @@ class FocusCard extends PanelContainer:
 		if tint != "":
 			var t: Color = ThemeLib.color(tint)
 			col = Color(col.lerp(t, 0.03), col.a)
-		var sb := ThemeLib.box(col, ThemeLib.radius("l"), 22, 18)
+		var sb := ThemeLib.box(col, ThemeLib.radius("l"), PAD_X, PAD_Y)
 		sb.border_color = ThemeLib.color("line")
 		sb.set_border_width_all(1)
 		add_theme_stylebox_override("panel", sb)
@@ -135,7 +187,7 @@ static func kv(pairs: Array, key_width := 150, compact := false) -> GridContaine
 	g.name = "Lines"
 	g.columns = 2
 	g.add_theme_constant_override("h_separation", 16)
-	g.add_theme_constant_override("v_separation", 8)
+	g.add_theme_constant_override("v_separation", 4 if compact else 8)
 	g.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for p in pairs:
@@ -244,12 +296,47 @@ static func empty_state(icon: String, title: String, line: String) -> VBoxContai
 static func scroller() -> ScrollContainer:
 	var s := ScrollContainer.new()
 	s.name = "Scroll"
-	load("res://scripts/ui/focus_scroll.gd").attach(s)
+	load("res://scripts/ui/focus_scroll.gd").attach(s, 48.0)
 	s.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	s.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	s.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return s
+
+
+## A fade over the bottom of `holder` (the scroll's parent) while `s` can
+## scroll further; updated from the scroll bar's signals, never per frame.
+static func foot_fade(holder: Control, s: ScrollContainer) -> TextureRect:
+	var f := TextureRect.new()
+	f.name = "FootFade"
+	f.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	f.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	f.stretch_mode = TextureRect.STRETCH_SCALE
+	f.anchor_top = 1.0
+	f.anchor_right = 1.0
+	f.anchor_bottom = 1.0
+	f.offset_top = -56
+	var paint := func():
+		var g := Gradient.new()
+		var sc: Color = ThemeLib.color("scrim")
+		g.colors = PackedColorArray([Color(sc, 0.0), Color(sc, 0.92)])
+		var t := GradientTexture2D.new()
+		t.gradient = g
+		t.width = 4
+		t.height = 64
+		t.fill_to = Vector2(0, 1)
+		f.texture = t
+	paint.call()
+	f.theme_changed.connect(paint)
+	holder.add_child(f)
+	var bar := s.get_v_scroll_bar()
+	var upd := func(_v = 0.0):
+		if is_instance_valid(f):
+			f.visible = bar.max_value - bar.page - bar.value > 8.0
+	bar.value_changed.connect(upd)
+	bar.changed.connect(upd)
+	upd.call()
+	return f
 
 
 ## Padding around the scroller's content so focus rings aren't clipped.

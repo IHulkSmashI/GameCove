@@ -703,6 +703,7 @@ static func release_caches() -> void:
 	ThemeLib._knobs.clear()
 	ThemeLib._gradients.clear()
 	Kit._art_cache.clear()
+	Backdrop._glow_tex = null
 
 
 func _on_live_tick() -> void:
@@ -908,8 +909,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif _shoulder(event, JOY_BUTTON_RIGHT_SHOULDER, KEY_E):
 		cycle_screen(1)
 		get_viewport().set_input_as_handled()
-	elif current == "library" and _trigger(event) != 0:
-		library_screen.jump_letter(_trigger(event))
+	elif current in ["library", "settings"] and _trigger_once(event) != 0:
+		# Read the trigger once: _trigger() tracks the press edge, so a second
+		# call for the same event would read 0.
+		var d := _last_trigger
+		if current == "library":
+			library_screen.jump_letter(d)
+		else:
+			settings.cycle_tabs(d)
 		get_viewport().set_input_as_handled()
 	elif current == "library" and _pressed(event, JOY_BUTTON_Y, KEY_SLASH):
 		library_screen.open_search()
@@ -948,6 +955,13 @@ static func _shoulder(event: InputEvent, button: JoyButton, key: Key) -> bool:
 
 
 var _trigger_held := {}
+var _last_trigger := 0
+
+
+## _trigger() for this event, remembered in _last_trigger.
+func _trigger_once(event: InputEvent) -> int:
+	_last_trigger = _trigger(event)
+	return _last_trigger
 
 ## -1 for LT (or Page Up), +1 for RT (or Page Down), on the press only.
 func _trigger(event: InputEvent) -> int:

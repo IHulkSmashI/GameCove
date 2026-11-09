@@ -392,3 +392,42 @@ func test_sounds_synthesised() -> void:
 	s.play("move")
 	eq(s.get_child_count(), 0, "off: no players created")
 	s.free()
+
+
+func test_ambient_glow_follows_the_game() -> void:
+	var Backdrop = load("res://scripts/ui/backdrop.gd")
+	var was := Motion.reduce
+	var was_match := UiPrefs.match_art
+	Motion.reduce = true
+	UiPrefs.match_art = true
+	var b: Control = Backdrop.new()
+	eq(b.glow.modulate.a, 0.0, "no glow without a game")
+	b.show_game(Logic.g("steam", "77", "Artless", true, 0))
+	ok(b.glow.modulate.a > 0.2, "an art-less game still tints the room (its generated colours)")
+	var c: Color = b.glow.modulate
+	b.show_game(Logic.g("steam", "78", "Another One", true, 0))
+	ok(b.glow.modulate != c, "the colour follows focus")
+	eq(b.glow.texture, Backdrop.glow_texture(), "one shared gradient texture")
+	UiPrefs.match_art = false
+	b.show_game(Logic.g("steam", "79", "Third", true, 0))
+	eq(b.glow.modulate.a, 0.0, "off with Match game art colours")
+	b.free()
+	var p: Control = PageTemplate.new()
+	p.setup_page(Logic.g("steam", "80", "Paged", true, 0))
+	UiPrefs.match_art = true
+	p.set_accent(Color(0.9, 0.4, 0.1))
+	ok(p.glow.modulate.a > 0.2, "game page glows in the game's colour")
+	p.free()
+	Motion.reduce = was
+	UiPrefs.match_art = was_match
+
+
+func test_shelf_fades_its_edges() -> void:
+	var games: Array = []
+	for i in 14:
+		games.append(Logic.g("steam", str(200 + i), "Game %d" % i, true, 0))
+	var s: VBoxContainer = Shelf.new()
+	s.setup("t", "Test", games)
+	eq(s.tile_size, Tile.size_for(Tile.row_width(), Shelf.GAP), "tiles sized for the screen")
+	eq(s.faded_edges(), [false, false], "nothing faded before layout")
+	s.free()

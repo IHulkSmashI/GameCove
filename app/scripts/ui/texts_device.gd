@@ -24,6 +24,14 @@ const SECTION_ICONS := {
 }
 const UNKNOWN := "Unknown"
 const SERIAL_HIDDEN := "Hidden"
+## What A does on About this device's cards (read-only cards don't take focus).
+const ACT_COPY := "Copy info"
+const ACT_COPIED := "Device info copied, ready to paste into a bug report"
+const ACT_STORAGE := "Manage"
+const ACT_UPDATES := "Updates"
+const ACT_FIXES := "Open Fixes"
+const ACT_POWER := "Power settings"
+const ACT_DISPLAY := "Display settings"
 const GTT_NOTE := "Shared graphics memory: system RAM the GPU can borrow."
 const VRAM_NOTE := "Set aside for graphics at boot (change it in the BIOS on some handhelds)."
 const HEALTH_NOTE := "How much the battery holds now, compared with new."

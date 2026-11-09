@@ -47,8 +47,15 @@ static func tile(view: Dictionary, plate: String, plate_quiet := false, extras: 
 ## Adds the price plate and extra pills to an existing tile (e.g. a Shelf's):
 ## stacked at the bottom-left, over the darker end of the cover, away from
 ## the title most covers carry at the top.
-static func decorate(t: Button, plate: String, plate_quiet := false, extras: Array = []) -> void:
+static func decorate(t: Button, plate: String, plate_quiet := false, extras: Array = [], store := "") -> void:
 	if plate == "" and extras.is_empty():
+		return
+	# Library tiles: the price joins the sale pill in the bottom plate and one
+	# extra follows the store line, so the cover's top stays clean.
+	if t.has_method("set_price"):
+		t.set_price(plate, plate_quiet, store_icon(store) if plate_quiet else null)
+		if not extras.is_empty():
+			t.set_extra(extras[0])
 		return
 	var box := Kit.vbox(4)
 	box.name = "BottomStack"
@@ -88,6 +95,12 @@ static func decorate(t: Button, plate: String, plate_quiet := false, extras: Arr
 		info.move_child(box, 0)
 		return
 	t.card.add_child(box)
+
+
+## The store's logo (single colour, light, for dark plates), else the store icon.
+static func store_icon(store: String, px := 14) -> Texture2D:
+	var tex: Texture2D = load("res://scripts/ui/brand_mark.gd").texture(store, px, Color(1, 1, 1, 0.82)) if store != "" else null
+	return tex if tex != null else Icons.tex("store", px, Color(1, 1, 1, 0.82))
 
 
 ## A small rounded cover that loads its art off the main thread.

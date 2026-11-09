@@ -1,7 +1,7 @@
 extends VBoxContainer
 ## A labelled slider in a card: "Power limit (TDP) ...... 17 W", a gradient
-## track, labelled ticks (5W 10W 15W ... with the current one lit) and the
-## explanation, in the accent, while focused. Focused, the card gets the
+## track, evenly spaced tick marks with labels (8W 15W 22W ... with the
+## current one lit) and the explanation, in neutral text, while focused. Focused, the card gets the
 ## selected-row ring. Emits `changed` once the value has settled for a moment,
 ## so holding the d-pad doesn't send a write per step.
 
@@ -13,7 +13,9 @@ signal changed(value: float)
 
 const SETTLE_S := 0.3
 ## At most this many tick labels under the track.
-const MAX_LABELS := 6
+const MAX_LABELS := 5
+## Height of the tick marks under the track.
+const TICK_H := 6
 
 var key := ""
 var slider: HSlider
@@ -21,6 +23,7 @@ var unit := ""
 var _value_label: Label
 var _settle: Timer
 var _hint: Label
+var _hint_gap: Control
 var _ticks: Control
 var _tick_values: Array = []
 ## Hide the explanation unless the slider has focus.
@@ -77,13 +80,26 @@ func setup(setting_key: String, title: String, lo: float, hi: float, current: fl
 	_ticks = Control.new()
 	_ticks.name = "Ticks"
 	_ticks.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ticks.custom_minimum_size = Vector2(0, 16)
+	_ticks.custom_minimum_size = Vector2(0, TICK_H + 18)
 	_tick_values = tick_values(lo, hi, step)
 	for v in _tick_values:
-		_ticks.add_child(Kit.label(_fmt(v).replace(" ", ""), "MicroLabel"))
+		var l := Kit.label(_fmt(v).replace(" ", ""), "MicroLabel")
+		l.add_theme_font_size_override("font_size", 13)
+		_ticks.add_child(l)
+	for v in _tick_values:
+		var m := ColorRect.new()
+		m.name = "Mark"
+		m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		m.size = Vector2(2, TICK_H)
+		_ticks.add_child(m)
 	_ticks.resized.connect(_place_ticks)
 	col.add_child(_ticks)
 
+	_hint_gap = Control.new()
+	_hint_gap.name = "HintGap"
+	_hint_gap.custom_minimum_size = Vector2(0, 8)
+	_hint_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(_hint_gap)
 	_hint = Kit.label(Texts.explain(key), "QuietLabel", true)
 	_hint.name = "Hint"
 	_hint.visible = false
@@ -100,28 +116,24 @@ func setup(setting_key: String, title: String, lo: float, hi: float, current: fl
 	_refresh_focus()
 
 
-## Label values for the track: both ends plus round numbers between them
-## (every 5 W on a 4-30 W range), at most MAX_LABELS, none crowding an end.
+## Label values for the track: evenly spaced from end to end (8, 15, 22, 28,
+## 35 W on an 8-35 W range), each rounded to the slider's step so it names a
+## value the slider really has. Round-number grids looked lopsided when the
+## range didn't start on one (8, 20, 30, 35).
 static func tick_values(lo: float, hi: float, step: float) -> Array:
 	if hi <= lo:
 		return [lo]
-	var span := hi - lo
-	var nice := step if step > 0.0 else 1.0
-	var found := false
-	for n in [1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0]:
-		if n >= step and span / n <= MAX_LABELS - 1:
-			nice = n
-			found = true
-			break
-	if not found:
-		nice = maxf(step, ceilf(span / (MAX_LABELS - 1)))
-	var out: Array = [lo]
-	var v := ceilf(lo / nice) * nice
-	while v < hi - 0.001:
-		if v - lo >= nice * 0.5 and hi - v >= nice * 0.5:
+	var st := step if step > 0.0 else 1.0
+	var steps := roundi((hi - lo) / st)
+	var n := clampi(steps, 1, MAX_LABELS - 1)
+	var out: Array = []
+	for i in n + 1:
+		var v := lo + roundf(float(steps) * i / n) * st
+		v = clampf(v, lo, hi)
+		if out.is_empty() or v - float(out[-1]) > st * 0.5:
 			out.append(v)
-		v += nice
-	out.append(hi)
+	if float(out[-1]) < hi:
+		out[-1] = hi
 	return out
 
 
@@ -134,11 +146,20 @@ func _place_ticks() -> void:
 	if g != null:
 		knob = g.get_width()
 	var w := _ticks.size.x - knob
-	for i in _ticks.get_child_count():
+	var n := _tick_values.size()
+	for i in n:
+		var cx := knob / 2.0 + w * (float(_tick_values[i]) - lo) / span
 		var l: Label = _ticks.get_child(i)
 		l.size = l.get_minimum_size()
-		var x := knob / 2.0 + w * (float(_tick_values[i]) - lo) / span - l.size.x / 2.0
-		l.position = Vector2(clampf(x, 0.0, maxf(0.0, _ticks.size.x - l.size.x)), 0)
+		var x := cx - l.size.x / 2.0
+		# The end labels line up with the ends instead of hanging over them.
+		if i == 0:
+			x = maxf(0.0, cx - 4.0)
+		elif i == n - 1:
+			x = minf(_ticks.size.x - l.size.x, cx - l.size.x + 4.0)
+		l.position = Vector2(clampf(x, 0.0, maxf(0.0, _ticks.size.x - l.size.x)), TICK_H + 2)
+		var m: ColorRect = _ticks.get_child(n + i)
+		m.position = Vector2(cx - 1.0, 0)
 
 
 func set_value_quiet(v: float) -> void:
@@ -206,18 +227,21 @@ func _show(v: float) -> void:
 		if d < dist:
 			dist = d
 			best = i
-	for i in _ticks.get_child_count():
+	for i in _tick_values.size():
 		var l: Label = _ticks.get_child(i)
 		var on := i == best
-		l.add_theme_color_override("font_color", ThemeLib.color("accent") if on else ThemeLib.color("text_3"))
+		l.add_theme_color_override("font_color", ThemeLib.color("accent") if on else ThemeLib.color("text_2"))
 		l.add_theme_font_override("font", ThemeLib.mono(on, 1))
+		var m: ColorRect = _ticks.get_child(_tick_values.size() + i)
+		m.color = ThemeLib.color("accent") if on else ThemeLib.soft(0.28)
 	_place_ticks()
 
 
 func _refresh_focus() -> void:
 	var f := slider.has_focus()
 	_hint.visible = (f or not collapse_hint) and _hint.text != ""
-	_hint.add_theme_color_override("font_color", ThemeLib.color("accent") if ThemeLib.is_dark() else ThemeLib.color("text_2"))
+	_hint_gap.visible = _hint.visible
+	_hint.add_theme_color_override("font_color", ThemeLib.color("text_2"))
 	queue_redraw()
 
 

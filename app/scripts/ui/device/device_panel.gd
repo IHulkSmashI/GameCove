@@ -22,6 +22,10 @@ const ThemeLib := preload("res://theme/gamecove_theme.gd")
 
 signal hints_changed(hints: Array)
 signal toast_requested(text: String, icon: String, tone: String)
+## A card's action wants another device section ("storage", "fixes", ...).
+signal part_requested(id: String)
+## A card's action wants another Settings category ("power", "display").
+signal category_requested(id: String)
 
 var services: Dictionary = {}
 var top_target: Control
@@ -139,8 +143,18 @@ func side_column(ratio := 0.82) -> VBoxContainer:
 ## The scrolling column of cards on the right. Returns the VBox to fill.
 func main_column(ratio := 1.18) -> VBoxContainer:
 	var s := DKit.scroller()
-	s.size_flags_stretch_ratio = ratio
-	add_child(s)
+	# The column sits in a holder with a fade at its foot while more cards
+	# wait below, so the last card never looks sliced off.
+	var holder := Control.new()
+	holder.name = "MainColumn"
+	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	holder.size_flags_stretch_ratio = ratio
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(holder)
+	s.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.add_child(s)
+	DKit.foot_fade(holder, s)
 	var col := Kit.vbox(16)
 	col.name = "Cards"
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL

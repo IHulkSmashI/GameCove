@@ -29,6 +29,11 @@ var _hero: Dictionary = {}
 var _cards_pad: Control
 
 
+## Top deals shows nothing from the spotlight or the wishlist shelf in its
+## first this-many tiles.
+const TOP_UNIQUE := 8
+
+
 func setup(c: RefCounted) -> void:
 	super.setup(c)
 	name = "Home"
@@ -111,7 +116,7 @@ func build() -> void:
 	_spot.add_child(price_box)
 	var buttons := Kit.hbox(14)
 	buttons.name = "SpotButtons"
-	primary = Kit.button(T.VIEW_DEAL, "AccentButton")
+	primary = Kit.primary(T.VIEW_DEAL, "A")
 	primary.name = "SpotPrimary"
 	primary.custom_minimum_size = Vector2(196, 56)
 	primary.add_theme_constant_override("h_separation", 10)
@@ -145,9 +150,19 @@ func build() -> void:
 	var soon := cal.filter(func(r): return not r.get("released", false) or (r.get("days_until") != null and int(r["days_until"]) == 0))
 	var free := Model.free_now(deals)
 	var top := deals.filter(func(x): return not Model.is_free(x))
+	# No game twice on the first screen: the spotlight's game leaves the
+	# shelves, and Top deals pushes what the wishlist shelf shows past its
+	# first TOP_UNIQUE tiles.
+	_hero = Model.pick_hero(deals, wish, cal)
+	var hero_key := Model.art_key(_hero.get("data", {})) if not _hero.is_empty() else ""
+	var wish_views: Array = ws.map(func(x): return Model.wish_view(x)).filter(func(v): return v["key"] != hero_key)
+	var shown := {hero_key: true}
+	for v in wish_views:
+		shown[v["key"]] = true
+	var top_views: Array = Model.push_back(top.map(func(x): return Model.deal_view(x)), shown, TOP_UNIQUE)
 	var specs := [
-		["deals", T.SHELF_DEALS, top.map(func(x): return Model.deal_view(x))],
-		["wish_sale", T.SHELF_WISH_SALE, ws.map(func(x): return Model.wish_view(x))],
+		["deals", T.SHELF_DEALS, top_views],
+		["wish_sale", T.SHELF_WISH_SALE, wish_views],
 		["soon", T.SHELF_SOON, soon.slice(0, 20).map(func(x): return Model.release_view(x))],
 		["free", T.SHELF_FREE, free.map(func(x): return Model.deal_view(x))],
 	]
@@ -168,7 +183,6 @@ func build() -> void:
 		_rows.add_child(shelf)
 		shelves.append(shelf)
 
-	_hero = Model.pick_hero(deals, wish, cal)
 	var nothing := shelves.is_empty()
 	_build_cards(deals, nothing)
 	var spacer := Control.new()
@@ -232,7 +246,9 @@ func _decorate(t: Button, now: int, cur: String) -> void:
 		"deal":
 			plate = T.price(d)
 			if plate == "":
-				plate = T.SEE_PRICE
+				# No real local price: never convert or estimate one, name the store.
+				var sn := str(d.get("store_name", ""))
+				plate = T.PRICE_ON % sn if sn != "" else T.SEE_PRICE
 				quiet = true
 			extras = W.deal_badges(d, cur, now).slice(0, 1)
 		"wish":
@@ -247,7 +263,7 @@ func _decorate(t: Button, now: int, cur: String) -> void:
 				plate = T.release_when(d, now)
 			if ctx.is_notifying(v):
 				extras.append({"kind": "notify", "text": "Notify", "tone": "new", "icon": "check"})
-	W.decorate(t, plate, quiet, extras)
+	W.decorate(t, plate, quiet, extras, str(v.get("store", "")))
 
 
 # ---- spotlight -----------------------------------------------------------------
@@ -305,18 +321,17 @@ func _fill_price(v: Dictionary) -> void:
 	var side := Kit.vbox(6)
 	side.alignment = BoxContainer.ALIGNMENT_CENTER
 	side.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The header's meta line already names the store; say it here only when
+	# the deal is on a different one.
 	var store := str(deal.get("store_name", ""))
-	if store != "":
+	if store != "" and store != str(v.get("store", "")):
 		var where := Kit.icon_label("store", "on " + store, "QuietLabel", Color(0, 0, 0, 0), 18, false)
 		side.add_child(where)
 	var chips := Kit.hbox(8)
 	chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for b in W.deal_badges(deal, cur, now):
 		chips.add_child(W.badge(b["kind"], b["text"], b["tone"], b["icon"], "chip"))
-	if ctx.is_wishlisted(v):
-		chips.add_child(W.badge("wish", T.WISHLISTED, "wish", "star", "chip"))
-	if not ctx.owned(v).is_empty():
-		chips.add_child(W.badge("owned", T.OWNED, "info", "library", "chip"))
+	# Wishlisted / owned are said by the second button, not a chip as well.
 	if chips.get_child_count() > 0:
 		side.add_child(chips)
 	price_box.add_child(side)

@@ -26,6 +26,8 @@ const SEE_ALL_DEALS := "All deals"
 
 # Prices
 const SEE_PRICE := "See price"
+## Tiles without a real local price name the store instead of guessing one.
+const PRICE_ON := "Price on %s"
 const SEE_PRICE_WHY := "Shown on the store's own page in your currency."
 const HIST_LOW := "Lowest ever"
 const HIST_LOW_LONG := "Lowest price ever"

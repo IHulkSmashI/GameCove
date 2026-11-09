@@ -1,7 +1,7 @@
 extends RefCounted
-## Puts install state on a game tile from outside (game_tile.gd stays as is):
-## the corner pill says "45%", "Queued", "Paused", "Update"..., and a slim
-## progress bar sits along the bottom of the cover while bytes move.
+## Puts install state on a game tile from outside: the plate's status pill
+## says "45%", "Queued", "Paused", "Update"..., and a slim progress bar sits
+## along the bottom of the cover while bytes move.
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const TG := preload("res://scripts/ui/texts_games.gd")
@@ -47,15 +47,8 @@ static func apply(tile: Control, state: Object) -> void:
 	bar.set_color(Color(0.62, 0.7, 0.78) if st == "paused" else Color(0, 0, 0, 0))
 
 
-## The focus strip sits under the SELECTED pill at the top of the card and the
-## bar along its bottom edge, so they never meet; kept for callers.
+## The plate moves up while the bar shows along the card's bottom edge.
 static func _lift_badges(tile: Control, _lifted: bool) -> void:
-	var box: Control = tile.get("badges_box")
-	if box == null:
-		return
-	box.offset_top = 32
-	box.offset_bottom = 32
-	# The title block moves up while the bar shows.
 	var info: Control = tile.get("info_box")
 	if info != null:
 		info.offset_top = -20 if _lifted else -10
@@ -80,6 +73,10 @@ static func corner_for(st: String, f: float) -> Dictionary:
 
 
 static func _set_corner(tile: Control, spec: Dictionary) -> void:
+	# The pill lives in the tile's bottom plate, never over the cover's logo.
+	if tile.has_method("set_status_pill"):
+		tile.set_status_pill(spec)
+		return
 	var card: Control = tile.get("card")
 	if card == null:
 		return

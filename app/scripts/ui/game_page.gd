@@ -3,9 +3,9 @@ extends "res://scripts/ui/page_template.gd"
 ## badges, then the action row: the one thing to do now (Play, Install,
 ## Update, Pause / Resume while it downloads), Manage (everything else:
 ## uninstall, check files, move, launch options, compatibility tool, Steam
-## pages), Settings and Back. Under it a live progress line while something
-## runs. Cards: Steam changes waiting (Restart Steam), About this game,
-## Achievements, per-game settings. B goes back.
+## pages) and Achievements. Under it a live progress line while something
+## runs. Cards: Steam changes waiting (Restart Steam), then a bento of About
+## this game | Achievements | Game settings. B goes back.
 ##
 ## setup(game, launcher, services): services are optional, so the page still
 ## works with only a launcher (tests, previews):
@@ -36,8 +36,12 @@ signal downloads_requested
 
 var play_button: Button
 var manage_button: Button
+## Gone from the action row (B goes back; the settings card is on screen);
+## kept null for callers.
 var settings_button: Button
 var back_button: Button
+## Jumps into the achievements grid (Steam games with achievements).
+var ach_button: Button
 var form: VBoxContainer
 var info_lines: Array[Label] = []
 var library: Object
@@ -72,11 +76,64 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 		_build_pending()
 
 	var info: Dictionary = g.get("info", {})
-	var about := add_card(TG.ABOUT, "info", "", true)
-	var specs := [["clock", Texts.ttb_line(info), ""], ["shield", Texts.anticheat_line(info), "anticheat"], ["gauge", Texts.protondb_line(info), ""],
-		["info", Texts.DATA_CREDIT, ""]]
+	# A bento under the hero: About | Achievements | Game settings, side by
+	# side, so nothing sits below the fold while a column stands empty.
+	var about := add_card(TG.ABOUT, "info", "", true, 0)
+	_fill_about(about, g, info)
+
+	if achievements != null and _is_steam():
+		var body := add_card(TG.ACH_TITLE, "star", "", true, 1)
+		ach_card = AchievementsCard.new()
+		ach_card.cells_changed.connect(_relink)
+		ach_card.cells_changed.connect(_refresh_ach_button)
+		ach_card.cell_focused.connect(func(): _reveal(body.get_parent()))
+		body.add_child(ach_card)
+		columns_laid_out.connect(func(_n, inner): ach_card.fit_width(inner))
+		ach_card.setup(str(g.get("id", "")), achievements)
+
+	# Game settings: this game's own profile first, then its launch settings.
+	var gbody := add_card(TC.GAME_CARD, "layers", "", true, 2)
+	var ctl: Object = services.get("controls", Shared.autoload("Controls"))
+	if ctl != null and str(g.get("key", "")) != "":
+		game_settings = GameSettingsCard.new()
+		game_settings.setup(g, ctl, services.get("profiles", Shared.autoload("Profiles")))
+		game_settings.relinked.connect(func(): if is_instance_valid(self): _relink())
+		gbody.add_child(game_settings)
+		var rule := HSeparator.new()
+		rule.name = "LaunchRule"
+		rule.add_theme_constant_override("separation", 10)
+		gbody.add_child(rule)
+	var launch := Kit.label(TG.SETTINGS_TITLE, "")
+	launch.name = "LaunchTitle"
+	launch.add_theme_font_override("font", ThemeLib.font("semibold"))
+	gbody.add_child(launch)
+	form = SettingsForm.new()
+	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam")
+	gbody.add_child(form)
+
+	if state != null:
+		state.changed.connect(_on_state_changed)
+		state.progress.connect(_on_progress)
+	if game_actions != null:
+		game_actions.pending_changed.connect(func(_n): _refresh_pending())
+	_refresh_status()
+	_relink()
+
+
+## About this game: a short synopsis when the metadata has one, time to
+## beat as three stat chips, anti-cheat and community reports, and the data
+## credits small and dim at the foot.
+func _fill_about(about: VBoxContainer, g: Dictionary, info: Dictionary) -> void:
+	var summary := str(info.get("summary", g.get("summary", ""))).strip_edges()
+	if summary != "" and summary != "<null>":
+		var syn := Kit.label(summary, "QuietLabel", true)
+		syn.name = "Synopsis"
+		syn.max_lines_visible = 3
+		syn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		about.add_child(syn)
+	about.add_child(_ttb_chips(info))
 	var ac := Texts.anticheat_badge(info)
-	for s in specs:
+	for s in [["shield", Texts.anticheat_line(info), "anticheat"], ["gauge", Texts.protondb_line(info), ""]]:
 		var tone: String = ac.get("tone", "") if s[2] == "anticheat" else ""
 		var col: Color = ThemeLib.color("text_2")
 		if tone == "warn":
@@ -91,36 +148,45 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 			l.add_theme_color_override("font_color", col)
 		info_lines.append(l)
 		about.add_child(row)
+	var credit := Kit.label(Texts.DATA_CREDIT, "CaptionLabel", true)
+	credit.name = "Credit"
+	credit.add_theme_font_size_override("font_size", 12)
+	credit.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+	info_lines.append(credit)
+	about.add_child(credit)
 
-	if achievements != null and _is_steam():
-		var body := add_card(TG.ACH_TITLE, "star", "", true)
-		ach_card = AchievementsCard.new()
-		ach_card.cells_changed.connect(_relink)
-		ach_card.cell_focused.connect(func(): _reveal(body.get_parent()))
-		body.add_child(ach_card)
-		columns_laid_out.connect(func(_n, inner): ach_card.fit_width(inner))
-		ach_card.setup(str(g.get("id", "")), achievements)
 
-	var sbody := add_card(TG.SETTINGS_TITLE, "settings", TG.SETTINGS_SUB, true)
-	form = SettingsForm.new()
-	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam")
-	sbody.add_child(form)
-
-	var ctl: Object = services.get("controls", Shared.autoload("Controls"))
-	if ctl != null and str(g.get("key", "")) != "":
-		var gbody := add_card(TC.GAME_CARD, "layers", "", true)
-		game_settings = GameSettingsCard.new()
-		game_settings.setup(g, ctl, services.get("profiles", Shared.autoload("Profiles")))
-		game_settings.relinked.connect(func(): if is_instance_valid(self): _relink())
-		gbody.add_child(game_settings)
-
-	if state != null:
-		state.changed.connect(_on_state_changed)
-		state.progress.connect(_on_progress)
-	if game_actions != null:
-		game_actions.pending_changed.connect(func(_n): _refresh_pending())
-	_refresh_status()
-	_relink()
+## Main / Extras / 100% as three chips with a mono label over the hours,
+## and how many players the numbers come from.
+func _ttb_chips(info: Dictionary) -> Control:
+	var col := Kit.vbox(6)
+	col.name = "TimeToBeat"
+	var t: Variant = info.get("time_to_beat")
+	if typeof(t) != TYPE_DICTIONARY:
+		var none := Kit.icon_label("clock", Texts.ttb_line(info), "", ThemeLib.color("text_2"), 22)
+		info_lines.append(none.get_child(1))
+		col.add_child(none)
+		return col
+	var row := Kit.hbox(8)
+	for spec in [[TG.TTB_MAIN, t.get("main_h")], [TG.TTB_EXTRAS, t.get("extra_h")], [TG.TTB_ALL, t.get("complete_h")]]:
+		var p := PanelContainer.new()
+		p.name = "Ttb_" + str(spec[0]).validate_node_name()
+		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		p.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.soft(0.06), ThemeLib.radius("m"), 12, 8))
+		var c := Kit.vbox(2)
+		c.add_child(Kit.micro(str(spec[0])))
+		var v := Kit.label(Texts.format_hours(spec[1]), "LeadLabel")
+		v.add_theme_font_override("font", ThemeLib.font("semibold", true))
+		c.add_child(v)
+		p.add_child(c)
+		row.add_child(p)
+	col.add_child(row)
+	var n := int(t.get("count", 0)) if t.get("count") != null else 0
+	if n > 0:
+		var who := Kit.label(TG.TTB_FROM % [n, "player" if n == 1 else "players"], "CaptionLabel")
+		who.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+		col.add_child(who)
+	return col
 
 
 func _is_steam() -> bool:
@@ -174,10 +240,16 @@ func _build_actions() -> void:
 	manage_button.visible = game_actions != null
 	if not manage_button.visible:
 		actions.erase(manage_button)
-	settings_button = add_action("Settings", "settings", false, "SettingsJump")
-	settings_button.pressed.connect(_jump_to_settings)
-	back_button = add_action("Back", "chevron_left", false, "Back")
-	back_button.pressed.connect(func(): back_requested.emit())
+	# No Back here (B does it) and no jump to the settings card (it's on
+	# screen): Achievements jumps into the grid when the game has some.
+	settings_button = null
+	back_button = null
+	if achievements != null and _is_steam():
+		ach_button = add_action(TG.ACH_TITLE, "star", false, "AchievementsJump")
+		ach_button.pressed.connect(_jump_to_achievements)
+		ach_button.visible = ach_card != null and not ach_card.cells.is_empty()
+		if not ach_button.visible:
+			actions.erase(ach_button)
 	if _accent.a > 0.0:
 		set_accent(_accent)
 
@@ -208,6 +280,26 @@ func _jump_to_settings() -> void:
 	var f: Array = form.focusables() if form != null else []
 	if not f.is_empty():
 		f[0].grab_focus()
+
+
+## The Achievements jump shows only while there's a grid to jump into.
+func _refresh_ach_button() -> void:
+	if ach_button == null or not is_instance_valid(ach_button):
+		return
+	var want: bool = ach_card != null and not ach_card.cells.is_empty()
+	if want == ach_button.visible:
+		return
+	ach_button.visible = want
+	if want and not ach_button in actions:
+		actions.append(ach_button)
+	elif not want:
+		actions.erase(ach_button)
+	_relink()
+
+
+func _jump_to_achievements() -> void:
+	if ach_card != null and not ach_card.cells.is_empty():
+		ach_card.cells[0].grab_focus()
 
 
 func set_accent(c: Color) -> void:

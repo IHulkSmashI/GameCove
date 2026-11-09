@@ -8,7 +8,7 @@ const ThemeLib := preload("res://theme/gamecove_theme.gd")
 ## title, store, installed, played days ago (-1 never), playtime h, ttb h,
 ## anticheat, protondb, palette [top, bottom, glow, ink], motif, art "chl", extra
 const GAMES := [
-	["Hollow Tide", "steam", true, 0.05, 13, 18, "", "platinum", ["#0B2B4A", "#2B8C9E", "#F7D58B", "#06121F"], "ocean", "chl", {}],
+	["Hollow Tide", "steam", true, 0.05, 13, 18, "", "platinum", ["#0B2B4A", "#2B8C9E", "#F7D58B", "#06121F"], "ocean", "chl", {"summary": "A lighthouse keeper rows out each night to relight the beacons a drowned town left behind. Quiet exploration, tide puzzles and one very patient seal."}],
 	["Ember Circuit", "steam", true, 2, 42, 35, "works", "gold", ["#1A0630", "#C2185B", "#FF9E40", "#12021F"], "neon", "chl", {}],
 	["Starfall Drift", "epic", true, 5, 6, 7, "", "silver", ["#050816", "#3B2A7A", "#B8A6FF", "#04040C"], "planet", "ch", {}],
 	["Kingdom of Ash", "gog", false, -1, 0, 60, "", "platinum", ["#2A1208", "#C46A2B", "#FFD27A", "#140804"], "mountains", "ch", {}],
@@ -63,6 +63,8 @@ static func make_library(tree: SceneTree, dir: String) -> Array:
 			g["update_available"] = true
 		if extra.has("cut"):
 			g["deal"] = {"cut": extra["cut"]}
+		if extra.has("summary"):
+			g["info"]["summary"] = extra["summary"]
 		out.append(g)
 	return out
 

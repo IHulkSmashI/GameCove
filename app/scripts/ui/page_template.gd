@@ -17,6 +17,8 @@ const GameHeader := preload("res://scripts/ui/game_header.gd")
 const FallbackArt := preload("res://scripts/ui/fallback_art.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
+const Backdrop := preload("res://scripts/ui/backdrop.gd")
+const UiPrefs := preload("res://scripts/ui/ui_prefs.gd")
 
 const HERO_FRACTION := 0.66
 ## The hero card: EDGE from the sides, FRAME_TOP from the top, FRAME_H tall.
@@ -40,6 +42,7 @@ var scroll: ScrollContainer
 ## Focusable controls inside cards, top to bottom (add_focusable / finish).
 var focusables: Array = []
 var _fade: TextureRect
+var glow: TextureRect
 var frame: Control
 var _frame_edge: Panel
 var _side: TextureRect
@@ -59,6 +62,16 @@ func setup_page(g: Dictionary, line := "") -> void:
 	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	base.color = ThemeLib.color("scrim")
 	add_child(base)
+	# The game's colour as a soft light behind the cards (see backdrop.gd).
+	glow = TextureRect.new()
+	glow.name = "AmbientGlow"
+	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	glow.stretch_mode = TextureRect.STRETCH_SCALE
+	glow.texture = Backdrop.glow_texture()
+	glow.modulate = Color(1, 1, 1, 0)
+	add_child(glow)
 	# The hero sits in a rounded glass card at the top, art on the right.
 	frame = Control.new()
 	frame.name = "HeroFrame"
@@ -284,9 +297,11 @@ func add_action(text: String, icon := "", primary := false, node_name := "") -> 
 	return b
 
 
-## Cards added with `column = true` sit side by side under the hero: three
-## columns on wide screens, two (the first two stacked) below COLUMNS_3_W.
-const COLUMNS_3_W := 1350.0
+## Cards added with `column = true` sit side by side under the hero, as a
+## bento: three columns (two below COLUMNS_3_W). A card can ask for its column
+## (`col`: About | Achievements | Game settings on the game page), so no
+## column stands empty while another runs off the screen.
+const COLUMNS_3_W := 1080.0
 ## After the column cards are dealt: how many columns, and each one's inner
 ## width (inside the card's padding), so content can fit itself.
 signal columns_laid_out(count: int, inner_width: float)
@@ -296,7 +311,7 @@ var _column_cards: Array = []
 
 ## A tinted content card with an icon heading; returns its body. `column`:
 ## put it in the side-by-side row instead of the full-width stack.
-func add_card(title: String, icon := "", subtitle := "", column := false) -> VBoxContainer:
+func add_card(title: String, icon := "", subtitle := "", column := false, column_index := -1) -> VBoxContainer:
 	var p := PanelContainer.new()
 	p.theme_type_variation = "CardPanel"
 	p.name = "Card_" + title.validate_node_name()
@@ -312,6 +327,7 @@ func add_card(title: String, icon := "", subtitle := "", column := false) -> VBo
 		head.add_child(Kit.label(subtitle, "QuietLabel", true))
 	col.add_child(head)
 	if column:
+		p.set_meta("col", column_index)
 		_add_column_card(p)
 	else:
 		cards_box.add_child(p)
@@ -356,19 +372,32 @@ func _layout_columns() -> void:
 		st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		columns.add_child(st)
 		stacks.append(st)
+	var asked := _column_cards.any(func(c): return int(c.get_meta("col", -1)) >= 0)
 	for i in _column_cards.size():
-		# Two columns: everything but the last card stacks on the left.
-		var k := i if n >= _column_cards.size() else (0 if i < _column_cards.size() - 1 else n - 1)
 		var card: PanelContainer = _column_cards[i]
-		card.size_flags_vertical = Control.SIZE_EXPAND_FILL if n == _column_cards.size() else Control.SIZE_FILL
+		var k: int
+		if asked:
+			# The column the card asked for (the last one when there are fewer).
+			k = clampi(int(card.get_meta("col", i)) if int(card.get_meta("col", -1)) >= 0 else i, 0, n - 1)
+		else:
+			# Two columns: everything but the last card stacks on the left.
+			k = i if n >= _column_cards.size() else (0 if i < _column_cards.size() - 1 else n - 1)
 		stacks[k].add_child(card)
+	# A card alone in its column fills it, so the bento's bottoms line up.
+	for st in stacks:
+		for c in st.get_children():
+			c.size_flags_vertical = Control.SIZE_EXPAND_FILL if st.get_child_count() == 1 else Control.SIZE_FILL
 
 
-## Tint the primary action with the art's colour (from the backdrop).
+## Tint the primary action with the art's colour (from the backdrop), and
+## the ambient glow behind the cards ("Match game art colours" only).
 func set_accent(c: Color) -> void:
 	for b in actions:
 		if b.theme_type_variation == "AccentButton":
 			Kit.accent_button(b, c)
+	if glow != null:
+		var on: bool = UiPrefs.match_art and c.a > 0.0
+		Motion.to(glow, "modulate", Backdrop.glow_color(c) if on else Color(1, 1, 1, 0), Motion.SLOW)
 
 
 func add_focusables(list: Array) -> void:

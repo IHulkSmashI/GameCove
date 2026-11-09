@@ -12,6 +12,8 @@ extends Node
 ##    below it, so a page opens at its top;
 ##  - otherwise scrolls the least distance that shows the control with a
 ##    little room around it;
+##  - shows a neighbour with it when the control names one (meta
+##    "reveal_with": the read-only card before or after it);
 ##  - and never stops with a focusable row partly cut off at the top edge:
 ##    it moves up to show that row whole, or past it when there's no room.
 ## Nothing runs while focus stays put; one short glide under Motion (instant
@@ -116,6 +118,14 @@ func target_for(c: Control) -> float:
 		return float(scroll.scroll_vertical)
 	var max_v := maxf(0.0, content.size.y - view)
 	var r := _rect_in_content(_row_of(c, content))
+	# A control can ask for a neighbour to show with it (meta "reveal_with"):
+	# read-only cards that don't take focus come into view next to the
+	# nearest one that does.
+	var extra: Variant = c.get_meta("reveal_with") if c.has_meta("reveal_with") else null
+	if extra is Control and is_instance_valid(extra) and content.is_ancestor_of(extra):
+		var u := r.merge(_rect_in_content(extra))
+		if u.size.y + MARGIN + margin_bottom <= view:
+			r = u
 	var top := r.position.y
 	var bottom := r.end.y
 	var v := float(scroll.scroll_vertical)

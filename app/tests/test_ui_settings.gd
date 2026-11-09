@@ -388,6 +388,17 @@ func test_device_page_loader() -> void:
 	d.on_hidden()
 	eq(panel.closed_count, 2, "closed() on hide")
 	ok(d.find_child("Placeholder_about", true, false) != null, "missing panels still get placeholders")
+	# LT / RT switch the sub-tabs (LB / RB stay on the top sections), and the
+	# Controller section has no tab: Controller is its own category.
+	eq(d.tabs.keys(), ["about", "storage", "updates"], "no Controller tab under Device")
+	ok(d.sections.has("controller"), "the controller section still exists (linked from Controller)")
+	ok(d.tab_row.get_node_or_null("TabsLT") != null and d.tab_row.get_node_or_null("TabsRT") != null, "LT / RT glyphs beside the tabs")
+	d.select_part("about")
+	eq(d.cycle_tabs(1), d.tabs["storage"], "RT: next tab")
+	eq(d.part, "storage", "storage open")
+	d.cycle_tabs(-1)
+	d.cycle_tabs(-1)
+	eq(d.part, "updates", "LT wraps around")
 	d.free()
 
 

@@ -33,11 +33,24 @@ func test_about_shows_every_group() -> void:
 	for key in ["device", "chip", "memory", "storage", "screen", "battery", "software", "support", "fixes"]:
 		ok(p.find_child("Card_" + key, true, false) != null, "card " + key)
 	for want in ["MSI Claw 8 EX AI+", "Arc B390 (Xe3)", "93% health", "41", "1920 × 1200", "48–120 Hz", "Full support",
-			"Bazzite 44.20261101", "MSI buttons", "Hidden", "Shared (GTT)"]:
+			"Bazzite 44.20261101", "MSI buttons", "Shared (GTT)"]:
 		ok(t.contains(want), "shows " + want)
+	for gone in ["Maker", "Family", "PCI id", "Serial number", "Name"]:
+		ok(not t.contains(gone + "\n") and not (gone in t.split("\n")), "no %s row" % gone)
 	eq(s["device"].slow_requested, 1, "asks for slow details once")
 	ok(p.picture.texture != null, "picture drawn")
-	ok(p.focus_chain().size() >= 8, "every card can take focus (d-pad scrolls)")
+	# Read-only cards don't take focus; the ones with a job do, and say it.
+	var chain: Array = p.focus_chain()
+	eq(chain.map(func(c): return String(c.name)).filter(func(n): return n.begins_with("Card_")).size(), 6, "six cards with an action")
+	ok(p.find_child("Card_chip", true, false).focus_mode == Control.FOCUS_NONE, "chip card is read-only")
+	var dev: Control = p.find_child("Card_device", true, false)
+	eq(dev.action_text, Texts.ACT_COPY, "Device card copies its info")
+	eq(p.hints_for(dev), [["A", Texts.ACT_COPY], ["B", "Back"]], "hint bar names the action")
+	ok(p.info_text().contains("Kernel:"), "copied text has the details")
+	var asked := []
+	p.part_requested.connect(func(id): asked.append(id))
+	p.find_child("Card_fixes", true, false).action.call()
+	eq(asked, ["fixes"], "Fixes card opens the Fixes tab")
 	eq(p.hints(), [], "no hints until focus")
 	var info: Dictionary = Fakes.claw_info()
 	info["software"]["steam_version"] = "1762999999"
@@ -58,8 +71,10 @@ func test_about_cards_in_two_columns_when_wide() -> void:
 	var b: Array = p._stacks[1].get_children()
 	ok(not a.is_empty() and not b.is_empty(), "cards in both")
 	ok(absi(a.size() - b.size()) <= 2, "balanced")
-	eq(a[0].get_node(a[0].focus_neighbor_right), b[0], "right crosses to the next column")
-	eq(p.focus_chain().size(), a.size() + b.size(), "every card still in the chain")
+	var fa: Array = a.filter(func(c): return c.focus_mode != Control.FOCUS_NONE)
+	var fb: Array = b.filter(func(c): return c.focus_mode != Control.FOCUS_NONE)
+	eq(fa[0].get_node(fa[0].focus_neighbor_right), fb[0], "right crosses to the next column")
+	eq(p.focus_chain().size(), fa.size() + fb.size(), "every card with an action in the chain")
 	_done(p, s)
 
 

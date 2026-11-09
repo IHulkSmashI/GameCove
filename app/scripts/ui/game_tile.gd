@@ -1,9 +1,17 @@
 extends Button
-## A library tile: the game's cover (or a generated cover), badges, and the
-## focus treatment: the card lifts to 1.06, a ring in the theme accent (the
-## same focus colour everywhere) with a glow tinted by the cover's colour
-## pulses in, and the art pans a few pixels against the direction focus
-## came from. Art loads only while the tile is near the screen.
+## A library tile: the game's cover (or a generated cover) and the focus
+## treatment: the card lifts, a ring in the theme accent (the same focus
+## colour everywhere) with a glow tinted by the cover's colour pulses in, and
+## the art pans a few pixels against the direction focus came from. Art loads
+## only while the tile is near the screen.
+##
+## The top three quarters of a cover stay clean (covers carry their own logo
+## there). Everything we add sits in one plate along the bottom:
+##   title      only where the art doesn't carry one: generated covers, and
+##              the focused tile (so a stylised logo still gets a plain name)
+##   pill row   one status pill (sale, update, downloading, Linux denied...)
+##              and, on Discover, the price
+##   sub row    store and playtime (or "Not installed"), plus one quiet extra
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
@@ -17,11 +25,19 @@ const Motion := preload("res://scripts/ui/motion.gd")
 const FallbackArt := preload("res://scripts/ui/fallback_art.gd")
 const UiPrefs := preload("res://scripts/ui/ui_prefs.gd")
 const ArtShader := preload("res://shaders/rounded_art.gdshader")
+const Themes := preload("res://theme/themes.gd")
 
 const SIZE := Vector2(150, 204)
 const LIFT := 1.05
-## Height of the gradient at the bottom where the title and sub-line sit.
-const INFO_H := 0.52
+## Height of the gradient at the bottom where the plate sits.
+const INFO_H := 0.42
+## Portrait shelves and grids show at most this many covers across (a little
+## of the next one peeks in, faded, so the row reads as scrollable).
+const PER_ROW := 7.3
+## Readability floor (px at the 1280x800 layout; 1920x1200 draws them 1.25x):
+## sub-lines 12 (15 on the big panel), titles 14-15 (17.5-19).
+const SUB_PX := 12
+const TITLE_PX := 14
 
 var game: Dictionary = {}
 var tile_size := SIZE
@@ -30,14 +46,23 @@ var art: TextureRect
 var glow: Panel
 var shadow: Panel
 var fallback: Control
+## Kept for callers; tiles no longer show a focus strip.
 var badges_box: VBoxContainer
+## The status pill in the plate (sale, update, downloading, Linux denied).
 var corner_badge: Control
-## Bottom block over the gradient: extra pills (Discover), title, sub-line.
+## The plate over the bottom gradient: title, pill row, sub row.
 var info_box: VBoxContainer
 var title_label: Label
+var pill_row: HBoxContainer
+## Discover's price, next to the status pill.
+var price_label: Label
+var price_icon: TextureRect
+var sub_row: HBoxContainer
 var sub_label: Label
-## "SELECTED" pill shown while focused.
-var selected_pill: PanelContainer
+## One quiet extra after the sub-line, in its tone ("Lowest ever").
+var sub_extra: Label
+## Gone: the ring, lift and details bar already say which tile is selected.
+var selected_pill: PanelContainer = null
 var show_label := true
 var _glow_box: StyleBoxFlat
 var _mat: ShaderMaterial
@@ -103,7 +128,9 @@ func setup(g: Dictionary, with_badges := true, tile := SIZE, label_under := true
 	card.add_child(_base)
 
 	fallback = FallbackArt.new()
-	fallback.setup(g, 19 if tile.x < 170 else 24, r)
+	# No title in the art: the plate carries it, like every other cover.
+	fallback.setup(g, 19 if tile.x < 170 else 24, r, false)
+	fallback.monogram = true
 	Kit.fill(fallback)
 	card.add_child(fallback)
 
@@ -139,7 +166,7 @@ func setup(g: Dictionary, with_badges := true, tile := SIZE, label_under := true
 	Kit.fill(_edge)
 	card.add_child(_edge)
 
-	info_box = Kit.vbox(2)
+	info_box = Kit.vbox(3)
 	info_box.name = "Info"
 	info_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_box.anchor_top = 1.0
@@ -158,58 +185,64 @@ func setup(g: Dictionary, with_badges := true, tile := SIZE, label_under := true
 	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_label.clip_text = true
 	title_label.add_theme_font_override("font", ThemeLib.font("heading_bold", false, 0))
-	title_label.add_theme_font_size_override("font_size", 15 if tile.x < 170 else 18)
+	title_label.add_theme_font_size_override("font_size", TITLE_PX if tile.x < 170 else TITLE_PX + 1)
 	title_label.add_theme_color_override("font_color", Color("#F8FAFC"))
 	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_box.add_child(title_label)
+	pill_row = Kit.hbox(6)
+	pill_row.name = "Pills"
+	pill_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill_row.visible = false
+	info_box.add_child(pill_row)
+	price_label = Label.new()
+	price_label.name = "Price"
+	price_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	price_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	price_label.clip_text = true
+	price_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	price_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	price_label.add_theme_font_override("font", ThemeLib.font("bold", true))
+	price_label.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+	price_label.add_theme_color_override("font_color", Color.WHITE)
+	price_label.visible = false
+	pill_row.add_child(price_label)
+	sub_row = Kit.hbox(0)
+	sub_row.name = "SubRow"
+	sub_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_box.add_child(sub_row)
 	sub_label = Label.new()
 	sub_label.name = "Sub"
 	sub_label.text = sub_text(g)
 	sub_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	sub_label.clip_text = true
 	sub_label.add_theme_font_override("font", ThemeLib.mono(false, 0))
-	sub_label.add_theme_font_size_override("font_size", 11)
-	sub_label.add_theme_color_override("font_color", Color(0.80, 0.84, 0.90, 0.85))
+	sub_label.add_theme_font_size_override("font_size", SUB_PX)
+	sub_label.add_theme_color_override("font_color", Color(0.80, 0.84, 0.90, 0.92))
 	sub_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sub_label.visible = sub_label.text != ""
-	info_box.add_child(sub_label)
-	# The art-less cover already carries the title.
-	title_label.visible = cover_path() != ""
+	sub_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sub_row.add_child(sub_label)
+	sub_extra = Label.new()
+	sub_extra.name = "SubExtra"
+	sub_extra.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	sub_extra.clip_text = true
+	sub_extra.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sub_extra.add_theme_font_override("font", ThemeLib.mono(true, 0))
+	sub_extra.add_theme_font_size_override("font_size", SUB_PX)
+	sub_extra.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sub_extra.visible = false
+	sub_row.add_child(sub_extra)
+	_update_title()
 
 	badges_box = Kit.vbox(4)
 	badges_box.name = "Badges"
 	badges_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badges_box.offset_left = 8
-	badges_box.offset_top = 32
-	badges_box.offset_bottom = 32
+	badges_box.visible = false
 	card.add_child(badges_box)
-	# Unfocused: one corner pill at most. Focused: up to two more under SELECTED.
-	badges_box.modulate.a = 0.0
 	if with_badges:
-		var tb := Badges.for_tile(g)
-		for b in tb["strip"]:
-			badges_box.add_child(Badge.make(b, "tile"))
-		if not tb["corner"].is_empty():
-			var solid: bool = tb["corner"]["kind"] in ["sale", "new", "update", "download"]
-			corner_badge = Badge.make(tb["corner"], "solid" if solid else "tile")
-			corner_badge.anchor_left = 1.0
-			corner_badge.anchor_right = 1.0
-			corner_badge.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-			corner_badge.offset_right = -8
-			corner_badge.offset_left = -8
-			corner_badge.offset_top = 8
-			card.add_child(corner_badge)
-	selected_pill = PanelContainer.new()
-	selected_pill.name = "Selected"
-	selected_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	selected_pill.position = Vector2(8, 8)
-	var sl := Kit.micro("● Selected", "MicroLabel")
-	sl.name = "Text"
-	sl.add_theme_font_override("font", ThemeLib.mono(true, 1))
-	sl.add_theme_font_size_override("font_size", 10)
-	selected_pill.add_child(sl)
-	selected_pill.modulate.a = 0.0
-	card.add_child(selected_pill)
+		var pill := Badges.for_plate(g)
+		if not pill.is_empty():
+			set_status_pill(pill)
 	_style_card()
 	card.modulate = Color(0.82, 0.82, 0.82) if ThemeLib.is_dark() else Color(0.94, 0.94, 0.94)
 	if not g.get("installed", false):
@@ -230,6 +263,106 @@ func setup(g: Dictionary, with_badges := true, tile := SIZE, label_under := true
 	var cached := ArtCache.cached("cover", cover_path())
 	if cached != null:
 		_show_art(cached, false)
+
+
+## Tile size for a row `avail_w` px wide: PER_ROW covers across, never
+## smaller than SIZE (the 1280x800 layout), 2:3-ish like SIZE.
+static func size_for(avail_w: float, gap := 16.0) -> Vector2:
+	var w := floorf((avail_w + gap) / PER_ROW - gap)
+	w = maxf(SIZE.x, w)
+	return Vector2(w, roundf(w * SIZE.y / SIZE.x))
+
+
+## Width a full-width row of covers gets on this screen (layout px), from the
+## window's visible rect; 1280x800 when there's no window yet (tests).
+static func row_width() -> float:
+	var ml := Engine.get_main_loop()
+	var w := 1280.0
+	if ml is SceneTree and (ml as SceneTree).root != null:
+		w = maxf(w, (ml as SceneTree).root.get_visible_rect().size.x)
+	return w - 2.0 * ThemeLib.EDGE
+
+
+## The plate's title: generated covers always (the art has none), covers with
+## art only while focused (the art carries its own logo).
+func _update_title() -> void:
+	if title_label == null:
+		return
+	# Library (show_label off) names the focused game in its details bar.
+	title_label.visible = not has_cover() or (show_label and has_focus())
+
+
+## The status pill in the plate ({} clears it). Spec as Badges gives it.
+func set_status_pill(spec: Dictionary) -> void:
+	if corner_badge != null and is_instance_valid(corner_badge):
+		if not spec.is_empty() and corner_badge.get("spec") is Dictionary \
+				and corner_badge.spec.get("short", "") == spec.get("short", "") and corner_badge.spec.get("tone", "") == spec.get("tone", ""):
+			return
+		Kit.drop(pill_row, corner_badge)
+		corner_badge = null
+	if not spec.is_empty():
+		var solid: bool = spec.get("kind", "") in ["sale", "new", "update", "download"] or spec.get("tone", "") in ["info", "bad"]
+		corner_badge = Badge.make(spec, "solid" if solid else "tile")
+		pill_row.add_child(corner_badge)
+		pill_row.move_child(corner_badge, 0)
+	_update_pills()
+
+
+## Discover's price next to the pill. `quiet`: there's no real local price,
+## so the line names the store instead ("Price on Fanatical").
+func set_price(text: String, quiet := false, icon: Texture2D = null) -> void:
+	if price_icon == null:
+		price_icon = TextureRect.new()
+		price_icon.name = "PriceIcon"
+		price_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		price_icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		price_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pill_row.add_child(price_icon)
+		pill_row.move_child(price_icon, price_label.get_index())
+	price_icon.texture = icon
+	price_icon.visible = icon != null and text != ""
+	price_label.text = text
+	price_label.add_theme_font_override("font", ThemeLib.font("bold", true))
+	price_label.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+	price_label.add_theme_color_override("font_color", Color.WHITE)
+	if quiet and text != "":
+		# No real local price: "Price on Green Man Gaming" takes the store
+		# line's place (it would only repeat the store), two lines at most.
+		price_label.visible = false
+		sub_label.text = text
+		sub_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sub_label.max_lines_visible = 2
+		sub_label.clip_text = false
+		sub_label.visible = true
+	else:
+		price_label.visible = text != ""
+	_update_pills()
+
+
+## One quiet extra after the store line ({"text", "tone"}; {} clears it): on
+## the same line when both fit the plate, else on a line of its own.
+func set_extra(spec: Dictionary) -> void:
+	var t := str(spec.get("text", ""))
+	var tone := str(spec.get("tone", ""))
+	sub_extra.add_theme_color_override("font_color", Themes.TONES.get(tone, Color(0.80, 0.84, 0.90)) if tone != "" else Color(0.80, 0.84, 0.90, 0.92))
+	sub_extra.visible = t != ""
+	var f: Font = sub_label.get_theme_font("font")
+	var room := tile_size.x - 20.0
+	var joined := sub_label.text + " · " + t
+	var fits := sub_label.visible and sub_label.autowrap_mode == TextServer.AUTOWRAP_OFF \
+		and f.get_string_size(joined, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_PX).x <= room
+	if sub_extra.get_parent() != (sub_row if fits else info_box):
+		sub_extra.get_parent().remove_child(sub_extra)
+		(sub_row if fits else info_box).add_child(sub_extra)
+	sub_extra.text = (" · " + t) if fits else t
+	# On one line the store keeps its natural width; alone, each trims.
+	sub_label.clip_text = not (fits and sub_extra.visible)
+	sub_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING if fits and sub_extra.visible else TextServer.OVERRUN_TRIM_ELLIPSIS
+	sub_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if fits and sub_extra.visible else Control.SIZE_EXPAND_FILL
+
+
+func _update_pills() -> void:
+	pill_row.visible = (corner_badge != null and is_instance_valid(corner_badge)) or price_label.visible
 
 
 ## The mono line under the title: store and playtime, or "Not installed".
@@ -265,9 +398,6 @@ func _style_card() -> void:
 	gt.height = 128
 	gt.fill_to = Vector2(0, 1)
 	_shade.texture = gt
-	var acc := ThemeLib.color("accent")
-	selected_pill.add_theme_stylebox_override("panel", ThemeLib.box(acc, 999, 8, 2))
-	selected_pill.get_node("Text").add_theme_color_override("font_color", ThemeLib.color("on_accent"))
 
 
 func cover_path() -> String:
@@ -300,7 +430,7 @@ func _show_art(tex: Texture2D, animate: bool) -> void:
 	art.texture = tex
 	art.visible = true
 	fallback.visible = false
-	title_label.visible = true
+	_update_title()
 	# Cover-crop to the card's shape, keeping a little more of the top.
 	var ta := float(tex.get_width()) / maxf(1.0, tex.get_height())
 	var ca := tile_size.x / tile_size.y
@@ -350,9 +480,7 @@ func _on_focus() -> void:
 	Motion.to(card, "scale", Vector2(LIFT, LIFT), Motion.BASE, Tween.TRANS_BACK)
 	Motion.to(card, "modulate", Color.WHITE, Motion.FAST)
 	Motion.to(glow, "modulate:a", 1.0, Motion.FAST)
-	# The focused tile shows SELECTED and its corner pill; the strip's facts
-	# (Platinum, time to beat) sit in the hero / details bar instead.
-	Motion.to(selected_pill, "modulate:a", 1.0, Motion.FAST)
+	_update_title()
 	# Glow pulse: starts wide and settles.
 	Motion.method(self, "glow", func(v: float): _set_glow(v), 30.0, 18.0, 0.45)
 	# Parallax: the art drifts in from the side focus came from.
@@ -370,8 +498,7 @@ func _on_blur() -> void:
 	Motion.to(card, "scale", Vector2.ONE, Motion.FAST)
 	Motion.to(card, "modulate", Color(0.82, 0.82, 0.82) if ThemeLib.is_dark() else Color(0.94, 0.94, 0.94), Motion.FAST)
 	Motion.to(glow, "modulate:a", 0.0, Motion.FAST)
-	Motion.to(badges_box, "modulate:a", 0.0, Motion.FAST)
-	Motion.to(selected_pill, "modulate:a", 0.0, Motion.FAST)
+	_update_title()
 	Motion.method(self, "pan", func(t: float): _set_pan(Vector2.ZERO, 1.0 + 0.045 * t), 1.0, 0.0, Motion.FAST)
 
 
@@ -385,7 +512,7 @@ func _set_pan(p: Vector2, z: float) -> void:
 	_mat.set_shader_parameter("zoom", z)
 
 
-## Tile badges as [{"text", "tone", ...}]: the focus strip, then the corner pill.
+## Tile badges as [{"text", "tone", ...}]: the strip, then the corner pill (older callers).
 static func badge_specs(g: Dictionary) -> Array:
 	var tb := Badges.for_tile(g)
 	var out: Array = tb["strip"].duplicate()

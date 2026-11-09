@@ -108,14 +108,29 @@ static func stores_present(games: Array) -> Array:
 
 ## The home screen's shelves: [{"id", "title", "games"}], empty ones left out.
 ## Store shelves only when games come from more than one store.
+## Home's rows never repeat each other on the first screen: the "Continue"
+## game owns the spotlight, so Recently played starts after it, and Installed
+## leaves out what the first RECENT_VISIBLE recent tiles already show, newest
+## install first.
+const RECENT_VISIBLE := 7
+
+
 static func shelves(games: Array) -> Array:
 	var out: Array = []
 	var add := func(id: String, title: String, list: Array):
 		if not list.is_empty():
 			out.append({"id": id, "title": title, "games": list})
-	add.call("recent", "Recently played", recently_played(games))
-	var inst := installed(games)
-	inst.sort_custom(title_order)
+	var hero_key := str(continue_game(games).get("key", ""))
+	var recent := recently_played(games).filter(func(g): return str(g.get("key", "")) != hero_key)
+	add.call("recent", "Recently played", recent)
+	var seen := {hero_key: true}
+	for g in recent.slice(0, RECENT_VISIBLE):
+		seen[str(g.get("key", ""))] = true
+	var inst := installed(games).filter(func(g): return not seen.has(str(g.get("key", ""))))
+	inst.sort_custom(func(a, b):
+		var aa := int(a.get("added", 0))
+		var ab := int(b.get("added", 0))
+		return aa > ab if aa != ab else title_order(a, b))
 	add.call("installed", "Installed", inst)
 	add.call("short", "Short games, under %d h" % int(SHORT_MAX_H), short_games(games))
 	var ac := anticheat_friendly(games)

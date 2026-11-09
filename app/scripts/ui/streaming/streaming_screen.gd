@@ -33,7 +33,8 @@ const Settings := preload("res://scripts/streaming/stream_settings.gd")
 const GameStream := preload("res://scripts/streaming/gamestream.gd")
 const T := preload("res://scripts/ui/texts_streaming.gd")
 
-const TILE := Vector2(150, 212)
+## Box art size: Vector2.ZERO sizes them like every other shelf (seven across).
+const TILE := Vector2.ZERO
 
 var services := {}
 var service: Object
@@ -70,8 +71,10 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var margin := Kit.margin(0)
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 48)
-	margin.add_theme_constant_override("margin_right", 48)
+	# The scroll clips 24 px from the edge and its content pads another 24, so
+	# the app shelf can reach into that room for the focused cover's ring.
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_right", 24)
 	margin.add_theme_constant_override("margin_top", 88)
 	margin.add_theme_constant_override("margin_bottom", 58)
 	add_child(margin)
@@ -84,7 +87,11 @@ func _init() -> void:
 	_root = Kit.vbox(ThemeLib.SPACE_5)
 	_root.name = "Root"
 	_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_scroll.add_child(_root)
+	var inset := Kit.margin(0, 24, 0)
+	inset.name = "Inset"
+	inset.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inset.add_child(_root)
+	_scroll.add_child(inset)
 	_build_header()
 	_moon_card = Control.new()
 	_moon_card.name = "MoonlightSlot"
@@ -101,8 +108,10 @@ func _init() -> void:
 	hscroll.custom_minimum_size = Vector2(0, HostCard.SIZE.y + 16)
 	hosts_box.add_child(hscroll)
 	var pad := Kit.margin(0, 6, 6)
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hscroll.add_child(pad)
 	_hosts_row = Kit.hbox(ThemeLib.SPACE_4)
+	_hosts_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hosts_row.name = "Row"
 	pad.add_child(_hosts_row)
 	_root.add_child(hosts_box)
@@ -134,7 +143,8 @@ func _build_header() -> void:
 	add_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	add_button.pressed.connect(open_add)
 	_head_row.add_child(add_button)
-	refresh_button = Kit.secondary(T.SEARCH_AGAIN, "update")
+	# Its own button (View), shown right on it like every other shortcut.
+	refresh_button = Kit.secondary(T.SEARCH_AGAIN, "update", "VIEW")
 	refresh_button.name = "Refresh"
 	refresh_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	refresh_button.pressed.connect(func(): service.refresh())
@@ -385,6 +395,9 @@ func _build_hosts(list: Array) -> void:
 		var card: Button = HostCard.new()
 		card.set_host(h, host_line(h, service.has_moonlight()), h["id"] == selected_id)
 		var id: String = h["id"]
+		# Three or more PCs share the row's width (no dead space at its end).
+		if list.size() >= 3:
+			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.pressed.connect(func(): host_action(id))
 		card.focus_entered.connect(func(): _select(id))
 		_hosts_row.add_child(card)
@@ -569,18 +582,25 @@ func _add_apps(h: Dictionary) -> void:
 	for t in shelf.tiles:
 		t.sub_label.text = service.display_name(h) + (" · HDR" if bool(t.game["stream"].get("hdr", false)) and service.hdr_available(selected_id) else "")
 		if asleep:
+			t.set_meta("base_alpha", 0.55)
 			t.modulate = Color(1, 1, 1, 0.55)
 	shelf.tile_pressed.connect(func(g): play(selected_id, service.app_by_id(selected_id, int(g["stream"]["app_id"]))))
 	shelf.tile_focused.connect(func(_g, _i): _hints_changed())
-	_detail.add_child(shelf)
+	# The shelf pads its tiles for the focus glow: pull it out by that much so
+	# the first cover lines up with the PC cards above.
+	var align := Kit.margin(0)
+	align.name = "ShelfAlign"
+	align.add_theme_constant_override("margin_left", -int(Shelf.PAD.x))
+	align.add_theme_constant_override("margin_right", -int(Shelf.PAD.x))
+	align.add_child(shelf)
+	_detail.add_child(align)
 	var foot := Kit.hbox(ThemeLib.SPACE_3)
 	foot.name = "Foot"
 	foot.add_child(SIcons.rect("signal", 18, ThemeLib.color("accent")))
 	var sum := Kit.label(T.WILL_STREAM % Settings.summary(service.resolved(selected_id)), "MonoLabel")
 	sum.name = "Summary"
 	foot.add_child(sum)
-	foot.add_child(Kit.spacer())
-	foot.add_child(Kit.prompts([["X", T.SETTINGS]]))
+	# No floating "(X) Stream settings" here: X is in the hint bar already.
 	_detail.add_child(foot)
 	for t in shelf.tiles:
 		detail_focus.append(t)
@@ -904,6 +924,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif _pressed(event, JOY_BUTTON_START, KEY_M):
 		open_more()
 		get_viewport().set_input_as_handled()
+	elif _pressed(event, JOY_BUTTON_BACK, KEY_R):
+		service.refresh()
+		_toast(T.SEARCHING, "search")
+		get_viewport().set_input_as_handled()
 
 
 static func _pressed(event: InputEvent, button: JoyButton, key: Key) -> bool:
@@ -941,5 +965,6 @@ func hints(f: Control) -> Array:
 	out.append(["Y", T.H_ADD])
 	if selected_id != "":
 		out.append(["MENU", T.H_MORE])
+	out.append(["VIEW", T.SEARCH_AGAIN])
 	out.append(["B", T.H_HOME])
 	return out

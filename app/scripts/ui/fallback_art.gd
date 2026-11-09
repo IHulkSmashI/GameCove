@@ -1,8 +1,10 @@
 extends Control
 ## Generated cover for a game without art: a gradient picked from the game key
 ## (ArtColor.fallback_colors), one of three quiet motifs (waves, peaks, rings)
-## and the title set in the display face. Drawn once with canvas calls, no
-## textures; the renderer caches it until the size changes.
+## and either the title set in the display face (older callers) or, on tiles,
+## a centred monogram with the store as a faint watermark (the tile's bottom
+## plate carries the title, like every other cover). Drawn once with canvas
+## calls, no textures; the renderer caches it until the size changes.
 
 const ArtColor := preload("res://theme/art_color.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
@@ -16,6 +18,11 @@ var colors: Array[Color] = []
 var motif := "waves"
 var title_label: Label
 var store_label: Label
+## Draw the monogram and store watermark (tiles set this; no title labels).
+var monogram := false:
+	set(v):
+		monogram = v
+		queue_redraw()
 
 
 func setup(g: Dictionary, title_size := 22, radius := 12.0, with_title := true) -> void:
@@ -120,10 +127,47 @@ func _draw() -> void:
 		shade.append(p)
 		shade_cols.append(Color(0, 0, 0, clampf((p.y / h - 0.45) * 0.9, 0.0, 0.45)))
 	draw_polygon(shade, shade_cols)
+	if monogram:
+		_draw_monogram(w, h)
 	# Hairline inner border for a printed-card feel.
 	var border := shape.duplicate()
 	border.append(shape[0])
 	draw_polyline(border, Color(1, 1, 1, 0.10), 1.0, true)
+
+
+## The initials, big and faint, centred in the top of the card, and the store
+## under them in spaced caps: a watermark, not a second title.
+func _draw_monogram(w: float, h: float) -> void:
+	var mono := initials(str(game.get("title", "")))
+	if mono == "":
+		return
+	var f: Font = ThemeLib.font("display")
+	var fs := int(w * (0.36 if mono.length() < 2 else 0.30))
+	var cy := h * 0.36
+	var asc := f.get_ascent(fs)
+	var desc := f.get_descent(fs)
+	draw_string(f, Vector2(0, cy + (asc - desc) / 2.0), mono, HORIZONTAL_ALIGNMENT_CENTER, w, fs, Color(1, 1, 1, 0.34))
+	var store := View.store_name(str(game.get("store", ""))).to_upper()
+	if store != "":
+		var mf: Font = ThemeLib.mono(true, 3)
+		var ms := maxi(9, int(w * 0.062))
+		draw_string(mf, Vector2(0, cy + (asc - desc) / 2.0 + desc + ms * 1.9), store, HORIZONTAL_ALIGNMENT_CENTER, w, ms, Color(1, 1, 1, 0.42))
+
+
+## "Moss & Marrow" -> "MM", "The Last Lighthouse" -> "LL", "Desktop" -> "D".
+static func initials(title: String) -> String:
+	var words: Array = []
+	for wd in title.replace("&", " ").replace(":", " ").replace("-", " ").split(" ", false):
+		var lw := String(wd).to_lower()
+		if lw in ["the", "a", "an", "of", "and"] and not words.is_empty() or (lw == "the" and words.is_empty()):
+			continue
+		words.append(String(wd))
+	if words.is_empty():
+		return title.substr(0, 1).to_upper()
+	var out := ""
+	for wd in words.slice(0, 2):
+		out += String(wd).substr(0, 1).to_upper()
+	return out
 
 
 static func rounded_rect(r: Rect2, radius: float, seg := 6) -> PackedVector2Array:

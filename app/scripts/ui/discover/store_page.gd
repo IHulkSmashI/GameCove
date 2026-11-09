@@ -63,8 +63,8 @@ func setup_store(v: Dictionary, c: RefCounted) -> void:
 		notify_button.pressed.connect(func(): toggle_notify())
 	wish_button = add_action(T.WISHLISTED if ctx.is_wishlisted(view) else T.WISHLIST_ADD, "star", false, "Wishlist")
 	wish_button.pressed.connect(func(): toggle_wishlist())
-	back_button = add_action(T.BACK, "chevron_left", false, "Back")
-	back_button.pressed.connect(func(): back_requested.emit())
+	# No Back button: B goes back on every page, and the hint bar says so.
+	back_button = null
 	if buy_button.text.length() > 16:
 		buy_button.custom_minimum_size.x = 280
 
