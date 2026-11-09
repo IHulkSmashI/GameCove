@@ -62,6 +62,14 @@ const LAYERS: Array[String] = ["global", "source", "game", "game+source"]
 const MAX_IMPORT_BYTES := 1 << 20
 ## The frame limit control Profiles owns (see sync_launcher_fps()).
 const FPS_ID := "display.fps_limit"
+## The values from before the running game, kept on disk next to profiles.json while it
+## runs (review H2): a crash, a SIGTERM at a session switch or a power-off leaves them
+## there, and the next start (or `gamecove.x86_64 --headless -- --restore-baseline`, run by
+## the session on a switch) puts them back instead of keeping the game's.
+const BASELINE_FILE := "game_baseline.json"
+## Headless run that only puts the everyday values back (and a leftover game baseline), then quits.
+const RESTORE_ARG := "--restore-baseline"
+const RESTORE_TIMEOUT_S := 30.0
 
 var controls: Object       # the Controls registry (autoload or a test instance)
 var power: Object          # Power autoload (signal changed, var plugged) or null
@@ -70,6 +78,7 @@ var power: Object          # Power autoload (signal changed, var plugged) or nul
 var launcher: Object
 var device_id := "unknown"
 var path := PATH
+var baseline_path := "user://" + BASELINE_FILE
 ## "ac" or "battery"; set_plugged() changes it.
 var source := "battery"
 ## Key of the game in front ("" at home) and its title.
@@ -84,9 +93,18 @@ var _first_detect_done := false
 var _seen_available: Dictionary = {}   # ids available at the last detection
 var _apply_after_detect := ""          # a reason to apply once the detection asked for ends
 var _apply_after_seq := 0              # ... the Controls detection that has to have finished
+var _layer_gen := 0
+var _game_gen := 0                     # game starts so far
+var _ended_baseline: Dictionary = {}   # the last ended game's baseline ...
+var _restore_gen := 0                  # ... its restore, queued (main thread) ...
+var _restore_done := 0                 # ... and run (Controls worker)
+var _restore_and_quit := false         # --restore-baseline: quit once the start values are applied
 
 
 func _ready() -> void:
+	if RESTORE_ARG in OS.get_cmdline_user_args():
+		_restore_and_quit = true
+		get_tree().create_timer(RESTORE_TIMEOUT_S).timeout.connect(func(): get_tree().quit(1))
 	if controls != null:
 		return   # set up by a test
 	var dev := get_node_or_null("/root/Device")
@@ -105,6 +123,7 @@ func setup(registry: Object, device: String, file_path := PATH) -> void:
 	controls = registry
 	device_id = PerDevice.key(device)
 	path = file_path
+	baseline_path = file_path.get_base_dir().path_join(BASELINE_FILE)
 	load_file()
 	if controls != null and controls.has_signal("detected") and not controls.detected.is_connected(_on_detected):
 		controls.detected.connect(_on_detected)
@@ -141,9 +160,15 @@ func game_started(game: Dictionary) -> void:
 	if key == "":
 		return
 	if game_key != "" and game_key != key:
-		game_ended({"key": game_key})
+		_end_game()
+	# The game before may have ended a moment ago (GameSession: ended(A), started(B)) and
+	# its restore still be queued: then the snapshot below still shows its values. What it
+	# changed goes back to the values from before it (review M17).
+	var carry: Dictionary = _ended_baseline if _restore_done < _restore_gen else {}
+	_game_gen += 1
 	game_key = key
 	_pre_game = controls.snapshot(true) if controls != null else {}
+	_pre_game.merge(carry, true)
 	game_title = str(game.get("title", ""))
 	_remember_title(key, game_title)
 	sync_launcher_fps(key)
@@ -152,14 +177,27 @@ func game_started(game: Dictionary) -> void:
 
 
 func game_ended(_game: Dictionary = {}) -> void:
+	_end_game()
+
+
+func _end_game() -> void:
 	if game_key == "":
 		return
 	game_key = ""
 	game_title = ""
 	_refresh_source(false)
+	_set_game_layer(false)
 	apply_now("game ended")
+	_ended_baseline = _baseline.duplicate()
 	_baseline.clear()
 	_pre_game.clear()
+	_restore_gen += 1
+	var rg := _restore_gen
+	var gg := _game_gen
+	_after_worker(func():
+		_restore_done = rg
+		if _game_gen == gg:   # no other game started since: its own file is the one there now
+			_drop_baseline_file())
 
 
 ## The charger was plugged in (true) or unplugged.
@@ -214,7 +252,10 @@ func _on_detected() -> void:
 	if not _first_detect_done:
 		_first_detect_done = true
 		_seen_available = now
-		apply_now("start")
+		if game_key != "" or not restore_baseline():
+			apply_now("start")
+		if _restore_and_quit:
+			_after_worker(func(): get_tree().quit.call_deferred(0))
 		return
 	var fresh := now.keys().filter(func(id): return not _seen_available.has(id))
 	_seen_available = now
@@ -266,6 +307,7 @@ func apply_now(reason := "", only: Array = []) -> Dictionary:
 	var eff := effective(game_key, source)
 	var from := explain(game_key, source)
 	if game_key != "":
+		var grew := false
 		for id in game_ids(game_key):
 			if not _baseline.has(id) and _registered(id):
 				# a layer added mid-game (save, import) restores to the value
@@ -273,6 +315,10 @@ func apply_now(reason := "", only: Array = []) -> Dictionary:
 				var v: Variant = _pre_game.get(id, controls.value(id))
 				if v != null:
 					_baseline[id] = v
+					grew = true
+		if grew:
+			_save_baseline_file()
+		_set_game_layer(not _baseline.is_empty())
 	var target := {}
 	for id in _baseline:
 		if not eff.has(id):
@@ -305,6 +351,63 @@ func applicable(values: Dictionary) -> Dictionary:
 		if v != null:
 			out[id] = v
 	return out
+
+
+## Puts back a game baseline left on disk by a run that never reached the game's end
+## (crash, SIGTERM, power-off), together with the everyday values, and drops it once
+## that ran. Only with no game running and only this device's. True when there was one.
+func restore_baseline() -> bool:
+	if game_key != "" or controls == null:
+		return false
+	var d: Variant = SettingsFile.load_json(baseline_path)["data"]
+	if not d is Dictionary or str(d.get("device", "")) != device_id or not d.get("values") is Dictionary:
+		if FileAccess.file_exists(baseline_path):
+			DirAccess.remove_absolute(SettingsFile.abs_path(baseline_path))
+		return false
+	_baseline = _clean(d["values"])
+	apply_now("restore baseline")
+	_baseline.clear()
+	var gg := _game_gen
+	_after_worker(func():
+		if _game_gen == gg:
+			_drop_baseline_file())
+	return true
+
+
+func _save_baseline_file() -> void:
+	DirAccess.make_dir_recursive_absolute(SettingsFile.abs_path(baseline_path).get_base_dir())
+	SettingsFile.save_json(baseline_path, {"device": device_id, "game": game_key, "values": _baseline}, "  ")
+
+
+func _drop_baseline_file() -> void:
+	if FileAccess.file_exists(baseline_path):
+		DirAccess.remove_absolute(SettingsFile.abs_path(baseline_path))
+
+
+## Power must not remember what a game layer writes as the user's own (review H2). Set
+## from the main thread before the game's values are queued; cleared on the Controls
+## worker, in order, before the restore at the game's end is written.
+func _set_game_layer(on: bool) -> void:
+	if power == null or not "game_layer" in power:
+		return
+	if on:
+		_layer_gen += 1
+		power.game_layer = true
+	else:
+		var p := power
+		var gen := _layer_gen
+		# not when the next game turned it on again meanwhile (a switch from one game to another)
+		_after_worker(func():
+			if _layer_gen == gen:
+				p.game_layer = false)
+
+
+## Runs `fn` once everything queued on the Controls worker so far has run (inline in tests).
+func _after_worker(fn: Callable) -> void:
+	if controls != null and controls.has_method("run_on_worker") and controls.get("sync_mode") != true:
+		controls.run_on_worker(fn)
+	else:
+		fn.call()
 
 
 # ---- reading ------------------------------------------------------------------

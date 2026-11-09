@@ -149,7 +149,9 @@ func _wrote(id: String, v: Variant) -> void:
 		_forget(id)
 		return
 	_last[id] = v
-	if id in DEVICE_IDS:
+	var c := _ctl(id)
+	var from_game: bool = power != null and power.get("game_layer") == true and c != null and c.per_game
+	if id in DEVICE_IDS and not from_game:
 		SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile): cfg.set_value(PerDevice.section("set", device_key()), id, v))
 	_replay_mutex.lock()
 	var replay := _replaying.has(id)

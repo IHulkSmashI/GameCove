@@ -133,6 +133,9 @@ var _battery_pct := -1
 ## Boost watts above the TDP the user picked on PowerStation (PL2 - PL1 / SPPT above SPL);
 ## -1 = the device's default (devices.json pl2_offset_w, else what PowerStation keeps).
 var boost_w := -1.0
+## True while a game's profile layer is in effect (Profiles sets it): what it writes is
+## applied but not remembered as the everyday value (review H2).
+var game_layer := false
 ## Handheld Daemon client; setup() swaps its transport in tests.
 var hhd: RefCounted = Hhd.new()
 var _hhd_tdp := {}      # Hhd.tdp_info() while backend == "hhd"
@@ -939,9 +942,22 @@ func _load_cfg() -> ConfigFile:
 	return cfg
 
 
+## Values a game's profile can set (power.tdp, power.profile, power.boost, power.fan_mode, the
+## Auto TDP options): not the user's own while a game layer is in effect (review H2). What
+## Auto TDP learned per game, the charge limit and a fan curve the user draws are.
+func _game_value(section: String, key: String, value: Variant) -> bool:
+	if section in ["profile", "custom_w"]:
+		return true
+	if section == "device":
+		return key in ["boost_w", "autotune_opts"] or (key == "fan_mode" and str(value) != "custom")
+	return false
+
+
 ## One load-modify-save under SettingsFile's lock (Power's worker, the Controls worker and
 ## the installer all write power.cfg).
 func _remember(section: String, key: String, value: Variant) -> void:
+	if game_layer and _game_value(section, key, value):
+		return
 	SettingsFile.update_cfg(config_path, func(cfg: ConfigFile):
 		PerDevice.migrate_cfg(cfg, DEVICE_SECTIONS, device_key())
 		if value == null:

@@ -226,7 +226,127 @@ func test_m19_power_notices_a_resume_on_its_own_timer() -> void:
 	_free()
 
 
-# ---- H2 (part): quitting drains the worker queues ------------------------------------------------
+# ---- H2: a game's values never become the everyday ones; the pre-game baseline survives a crash ----
+
+func _profiles(e: Dictionary, dev := "asus-rog-ally") -> Node:
+	var prof: Node = ProfilesScript.new()
+	prof.setup(e["reg"], dev, e["root"] + "/profiles.json")
+	prof.power = e["power"]
+	_nodes.append(prof)
+	return prof
+
+
+## Proof D: GameCove dies while a 7 W game profile runs: the next start kept 7 W, boost off and
+## powersave as the everyday setting, and power.cfg remembered 7 W as the user's own.
+func test_h2_crash_mid_game_restores_the_pre_game_values() -> void:
+	var t: Dictionary = Trees.new().ally()
+	var e := _setup(t)
+	e["power"].set_profile("balanced")
+	var prof := _profiles(e)
+	prof._on_detected()
+	e["reg"].detect_all()
+	var before_w := float(e["runner"].props[SM_TDP]["data"])
+	var before_boost: Variant = e["reg"].control("power.cpu_boost").value
+	var before_gov: Variant = e["reg"].control("power.governor").value
+	eq([before_boost, before_gov], [true, "powersave"], "fixture: boost on, powersave")
+	prof.set_layer("steam:1", "", {"power.tdp": 7, "power.cpu_boost": false, "power.governor": "performance"})
+	prof.game_started({"key": "steam:1", "title": "Light game"})
+	eq(float(e["runner"].props[SM_TDP]["data"]), 7.0, "the game's 7 W")
+	eq(e["reg"].control("power.governor").value, "performance", "the game's governor")
+	eq(e["power"]._recall("profile", "battery", ""), "balanced", "the game's TDP isn't remembered as the user's")
+	eq(float(e["power"]._recall("custom_w", "battery", -1.0)), -1.0, "nor its watts")
+	# crash / SIGTERM: nothing runs. A new process on the same files:
+	var props: Dictionary = e["runner"].props
+	_free()
+	var e2 := _setup({"root": t["root"], "row": t["row"], "props": props, "methods": t["methods"]})
+	var prof2 := _profiles(e2)
+	prof2._on_detected()
+	eq(float(e2["runner"].props[SM_TDP]["data"]), before_w, "TDP back to before the game")
+	eq(e2["reg"].control("power.cpu_boost").value, before_boost, "CPU boost back")
+	eq(e2["reg"].control("power.governor").value, before_gov, "governor back")
+	ok(not FileAccess.file_exists(t["root"] + "/game_baseline.json"), "baseline used once and dropped")
+	_free()
+
+
+## The same through the headless entry point the session runs on a switch (--restore-baseline).
+func test_h2_restore_baseline_entry_point() -> void:
+	var t: Dictionary = Trees.new().ally()
+	var e := _setup(t)
+	e["power"].set_profile("balanced")
+	var prof := _profiles(e)
+	prof._on_detected()
+	e["reg"].detect_all()
+	var before_w := float(e["runner"].props[SM_TDP]["data"])
+	prof.set_layer("steam:1", "", {"power.tdp": 7})
+	prof.game_started({"key": "steam:1", "title": "Light game"})
+	var props: Dictionary = e["runner"].props
+	_free()
+	var e2 := _setup({"root": t["root"], "row": t["row"], "props": props, "methods": t["methods"]})
+	var prof2 := _profiles(e2)
+	eq(prof2.restore_baseline(), true, "a baseline was put back")
+	eq(float(e2["runner"].props[SM_TDP]["data"]), before_w, "TDP back to before the game")
+	eq(prof2.restore_baseline(), false, "nothing left the second time")
+	_free()
+
+
+## A clean game end drops the persisted baseline once its restore ran.
+func test_h2_clean_end_drops_the_baseline_file() -> void:
+	var t: Dictionary = Trees.new().ally()
+	var e := _setup(t)
+	var prof := _profiles(e)
+	prof._on_detected()
+	prof.set_layer("steam:1", "", {"power.tdp": 7})
+	prof.game_started({"key": "steam:1"})
+	ok(FileAccess.file_exists(t["root"] + "/game_baseline.json"), "baseline kept on disk while the game runs")
+	prof.game_ended({"key": "steam:1"})
+	ok(not FileAccess.file_exists(t["root"] + "/game_baseline.json"), "dropped after the restore")
+	_free()
+
+
+# ---- M17: a second game doesn't make the first game's values the baseline -------------------------
+
+## Proof E with the threaded registry: home 15 W, game A 8 W, game B started while A runs (30 W),
+## then home: 8 W instead of 15 W.
+func test_m17_second_game_keeps_the_home_baseline() -> void:
+	var Ctl := load("res://scripts/controls/control.gd")
+	var hw := {"power.tdp": 15.0}
+	var reg: Node = ControlsScript.new()
+	reg.setup({"sys_root": "/nonexistent"})
+	reg.register(Ctl.make({"id": "power.tdp", "group": "power", "kind": "slider", "min_value": 5.0, "max_value": 30.0, "step": 1.0},
+		func(_c): return "",
+		func(_c): return hw["power.tdp"],
+		func(_c, v): OS.delay_msec(60); hw["power.tdp"] = v; return true))
+	_nodes.append(reg)
+	var dir := OS.get_user_data_dir().path_join("test_review_state_m17")
+	DirAccess.make_dir_recursive_absolute(dir)
+	DirAccess.remove_absolute(dir + "/profiles.json")
+	var prof: Node = ProfilesScript.new()
+	prof.setup(reg, "asus-rog-ally", dir + "/profiles.json")
+	_nodes.append(prof)
+	reg.detect_all()
+	_drain(reg)
+	prof.set_layer("steam:A", "", {"power.tdp": 8})
+	prof.set_layer("steam:B", "", {"power.tdp": 30})
+	prof.game_started({"key": "steam:A", "title": "A"})
+	_drain(reg)
+	eq(hw["power.tdp"], 8.0, "game A")
+	prof.game_ended({"key": "steam:A"})
+	prof.game_started({"key": "steam:B", "title": "B"})
+	_drain(reg)
+	eq(hw["power.tdp"], 30.0, "game B")
+	prof.game_ended({"key": "steam:B"})
+	_drain(reg)
+	eq(hw["power.tdp"], 15.0, "home again: the value from before both games")
+	reg._exit_tree()
+	_free()
+
+
+## Blocks until everything queued on the Controls worker so far has run.
+func _drain(reg: Node) -> void:
+	var done := Semaphore.new()
+	reg.run_on_worker(func(): done.post())
+	done.wait()
+
 
 ## Quitting finishes what the workers have queued (a game's restore queued right before the quit).
 func test_h2_workers_drain_their_queue_before_quitting() -> void:
@@ -253,3 +373,9 @@ func test_h2_workers_drain_their_queue_before_quitting() -> void:
 	p._exit_tree()
 	eq(float(e["runner"].props[SM_TDP]["data"]), 11.0, "Power: the queued TDP write ran before the worker stopped")
 	_free()
+
+
+func test_h2_boot_has_a_restore_entry_point() -> void:
+	var Boot := load("res://scripts/installer/boot.gd")
+	ok(Boot.wants_restore_baseline(PackedStringArray(["--restore-baseline"])), "--restore-baseline recognised")
+	ok(ProfilesScript.RESTORE_ARG == "--restore-baseline", "Profiles handles the same argument")
