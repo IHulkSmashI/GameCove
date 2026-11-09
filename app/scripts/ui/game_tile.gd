@@ -1,7 +1,8 @@
 extends Button
 ## A library tile: the game's cover (or a generated cover), badges, and the
-## focus treatment: the card lifts to 1.06, a ring and glow in the cover's own
-## colour pulse in, and the art pans a few pixels against the direction focus
+## focus treatment: the card lifts to 1.06, a ring in the theme accent (the
+## same focus colour everywhere) with a glow tinted by the cover's colour
+## pulses in, and the art pans a few pixels against the direction focus
 ## came from. Art loads only while the tile is near the screen.
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
@@ -312,7 +313,8 @@ func _show_art(tex: Texture2D, animate: bool) -> void:
 	_refresh_glow_color()
 
 
-## The colour this tile glows in: its art's colour when "match art" is on.
+## The colour this tile's glow is tinted with: its art's colour when "match
+## art" is on. The ring itself is always the theme accent.
 func accent() -> Color:
 	if UiPrefs.match_art:
 		var p := cover_path()
@@ -326,8 +328,11 @@ func accent() -> Color:
 
 func _refresh_glow_color() -> void:
 	_accent = accent()
-	_glow_box.border_color = _accent
-	_glow_box.shadow_color = Color(_accent, 0.45)
+	var ring: Color = ThemeLib.color("accent")
+	_glow_box.border_color = ring
+	# The art colour only tints the shadow, mixed with the ring so the glow
+	# still reads as focus.
+	_glow_box.shadow_color = Color(ring.lerp(_accent, 0.6), 0.45)
 
 
 func _notification(what: int) -> void:
