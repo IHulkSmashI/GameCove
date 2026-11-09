@@ -496,8 +496,8 @@ func open_downloads() -> void:
 		move_child(downloads_view, top_bar.get_index())
 	downloads_view.visible = false
 	screens[current].visible = false
-	top_bar.visible = false
 	downloads_view.open()
+	_link_top()
 	_sound("select")
 	_update_hints.call_deferred()
 
@@ -506,11 +506,11 @@ func close_downloads() -> void:
 	if downloads_view == null or not downloads_view.visible:
 		return
 	downloads_view.visible = false
-	top_bar.visible = true
 	var s: Control = screens[current]
 	s.visible = true
 	s.modulate.a = 0.0
 	Motion.to(s, "modulate:a", 1.0, Motion.FAST)
+	_link_top()
 	if downloads_button.is_visible_in_tree():
 		downloads_button.grab_focus()
 	_update_hints.call_deferred()
@@ -779,6 +779,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_sound("back")
 			close_downloads()
 			get_viewport().set_input_as_handled()
+		elif _overlay_shoulder(event):
+			get_viewport().set_input_as_handled()
 		elif _pressed(event, JOY_BUTTON_X, KEY_P):
 			downloads_view.toggle_focused()
 			get_viewport().set_input_as_handled()
@@ -793,6 +795,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed("ui_cancel"):
 			_sound("back")
 			_close_page()
+			get_viewport().set_input_as_handled()
+		elif _overlay_shoulder(event):
 			get_viewport().set_input_as_handled()
 	elif _shoulder(event, JOY_BUTTON_LEFT_SHOULDER, KEY_Q):
 		cycle_screen(-1)
@@ -823,6 +827,16 @@ func _unhandled_input(event: InputEvent) -> void:
 					f.grab_focus()
 				get_viewport().set_input_as_handled()
 				return
+
+
+## LB / RB on the game page or Downloads: the top bar is showing, so they
+## switch tabs like everywhere else (the page closes first). True if handled.
+func _overlay_shoulder(event: InputEvent) -> bool:
+	var d := -1 if _shoulder(event, JOY_BUTTON_LEFT_SHOULDER, KEY_Q) else (1 if _shoulder(event, JOY_BUTTON_RIGHT_SHOULDER, KEY_E) else 0)
+	if d == 0:
+		return false
+	cycle_screen(d)
+	return true
 
 
 static func _shoulder(event: InputEvent, button: JoyButton, key: Key) -> bool:
@@ -873,6 +887,10 @@ func cycle_screen(d: int) -> void:
 func show_screen(id: String) -> void:
 	if not screens.has(id):
 		return
+	# A tab picked from the top bar over the game page or Downloads.
+	if page != null:
+		_close_page()
+	close_downloads()
 	var old: Control = screens[current]
 	var dir := signf(SCREENS.find(id) - SCREENS.find(current))
 	current = id
@@ -901,7 +919,11 @@ func _link_top() -> void:
 	for s in screens.values():
 		if s.has_method("set_top_target"):
 			s.set_top_target(tab)
-	var f: Control = screens[current].default_focus() if page == null else null
+	# The game page and Downloads keep the top bar: down from it goes into them.
+	var f: Control = _screen().default_focus()
+	for extra in [page, downloads_view]:
+		if extra != null and is_instance_valid(extra) and extra.has_method("set_top_target"):
+			extra.set_top_target(tab)
 	for t in top_bar.tab_buttons():
 		t.focus_neighbor_bottom = t.get_path_to(f if f != null else t)
 		t.focus_neighbor_top = t.get_path_to(t)
@@ -980,7 +1002,7 @@ func _open_page(game: Dictionary) -> void:
 	page.modulate.a = 0.0
 	Motion.to(page, "modulate:a", 1.0, Motion.BASE)
 	screens[current].visible = false
-	top_bar.visible = false
+	_link_top()
 	backdrop.show_game(game)
 	page.set_accent(backdrop.current_accent())
 	page.focus_first()
@@ -993,7 +1015,7 @@ func _close_page() -> void:
 	var key: String = page.game.get("key", "")
 	page.queue_free()
 	page = null
-	top_bar.visible = true
+	_link_top()
 	var s: Control = screens[current]
 	s.visible = true
 	s.modulate.a = 0.0

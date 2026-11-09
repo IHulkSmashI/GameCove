@@ -129,7 +129,8 @@ static func chip(text: String, tone := "", icon := "") -> PanelContainer:
 ## Two-column lines: quiet key on the left, value on the right. `pairs` =
 ## [[key, value], ...]; empty values are skipped. Optional third item: a
 ## quiet note under the value.
-static func kv(pairs: Array, key_width := 150) -> GridContainer:
+## `compact`: a size smaller (About this device packs its cards in two columns).
+static func kv(pairs: Array, key_width := 150, compact := false) -> GridContainer:
 	var g := GridContainer.new()
 	g.name = "Lines"
 	g.columns = 2
@@ -142,6 +143,8 @@ static func kv(pairs: Array, key_width := 150) -> GridContainer:
 		if v == "" or v == "-1":
 			continue
 		var k := Kit.label(str(p[0]), "QuietLabel")
+		if compact:
+			k.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION + 1)
 		k.custom_minimum_size = Vector2(key_width, 0)
 		k.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		g.add_child(k)
@@ -151,6 +154,8 @@ static func kv(pairs: Array, key_width := 150) -> GridContainer:
 		var val := Kit.label(v, "", true)
 		val.name = "Value_" + str(p[0]).validate_node_name().replace(" ", "")
 		val.add_theme_font_override("font", ThemeLib.font("semibold", true))
+		if compact:
+			val.add_theme_font_size_override("font_size", ThemeLib.SIZE_SMALL)
 		box.add_child(val)
 		if p.size() > 2 and str(p[2]) != "":
 			var note := Kit.label(str(p[2]), "CaptionLabel", true)

@@ -4,8 +4,10 @@ extends "res://scripts/ui/discover/section.gd"
 ##          one row per game with its date and a countdown, and a Notify me
 ##          toggle beside it.
 ##   Month: a Monday-first month grid (days with releases are focusable and
-##          show the first titles), with the focused day's games in a panel on
-##          the right; month and quarter dates go under "Sometime this month".
+##          show small covers where the cell is big enough, else the first
+##          titles and a dot with the count; today is ringed in the accent),
+##          with the focused day's games in a panel on the right; month and
+##          quarter dates go under "Sometime this month".
 ## A game coming out today is highlighted. Y toggles Notify me anywhere.
 
 var layout := "list"
@@ -225,9 +227,10 @@ static func _sub(r: Dictionary) -> String:
 	return "  ·  ".join(bits)
 
 
+## Today (and a game out today in the list): ringed in the accent.
 func _highlight(b: Button) -> void:
-	var sb := ThemeLib.box(Color(ThemeLib.color("good"), 0.12), ThemeLib.radius("m"), 18, 10)
-	sb.border_color = Color(ThemeLib.color("good"), 0.6)
+	var sb := ThemeLib.box(Color(ThemeLib.color("accent"), 0.08), ThemeLib.radius("m"), 18, 10)
+	sb.border_color = ThemeLib.color("accent")
 	sb.set_border_width_all(2)
 	b.add_theme_stylebox_override("normal", sb)
 	b.set_meta("today", true)
@@ -331,25 +334,34 @@ func _build_month(col: VBoxContainer, cal: Array) -> void:
 	_show_panel(_panel_day if _panel_day != 0 else (first_day if first_day > 0 else -1))
 
 
+## Covers show in cells at least this big (cells grow with the grid, so on
+## big screens they have room); smaller cells list titles with a dot count.
+const COVER_CELL_H := 92.0
+const COVER_CELL_W := 96.0
+
+
 func _day_cell(day: int, rels: Array, h: int, is_today: bool) -> Control:
 	if day == 0:
 		var pad := Control.new()
 		pad.custom_minimum_size = Vector2(0, h)
 		pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pad.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		return pad
 	var b := Kit.button("", "RowButton")
 	b.name = "Day_%d" % day
 	b.custom_minimum_size = Vector2(0, h)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Rows share the grid's height: big screens get taller cells (with covers).
+	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	b.set_meta("role", "day_%d" % day)
 	b.set_meta("day", day)
-	var col := Kit.vbox(2)
+	var col := Kit.vbox(4)
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	col.offset_left = 10
 	col.offset_top = 6
-	col.offset_right = -6
-	col.offset_bottom = -4
+	col.offset_right = -8
+	col.offset_bottom = -6
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(col)
 	var top := Kit.hbox(6)
@@ -359,27 +371,45 @@ func _day_cell(day: int, rels: Array, h: int, is_today: bool) -> Control:
 	if is_today:
 		n.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	top.add_child(n)
+	if is_today:
+		var tag := Kit.micro(T.TODAY_TAG, "EyebrowLabel")
+		tag.name = "Today"
+		tag.add_theme_font_size_override("font_size", 10)
+		tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		top.add_child(tag)
 	if not rels.is_empty():
 		top.add_child(Kit.spacer())
+		# Dot with the count: how many games come out that day.
+		if rels.size() > 1:
+			var count := Kit.label(str(rels.size()), "MicroLabel")
+			count.name = "Count"
+			count.add_theme_color_override("font_color", ThemeLib.color("accent"))
+			top.add_child(count)
 		var dot := Panel.new()
+		dot.name = "Dot"
 		dot.custom_minimum_size = Vector2(8, 8)
 		dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var any_today := rels.any(func(r): return r.get("days_until") != null and int(r["days_until"]) == 0)
-		dot.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("good") if any_today else ThemeLib.color("accent"), 999, 0, 0))
+		dot.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("accent"), 999, 0, 0))
 		top.add_child(dot)
 	col.add_child(top)
+	var titles := Kit.vbox(2)
+	titles.name = "Titles"
+	titles.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(titles)
 	for r in rels.slice(0, 2 if h >= 70 else 1):
 		var t := Kit.label(str(r.get("title", "")), "CaptionLabel")
 		t.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO)
 		t.add_theme_color_override("font_color", ThemeLib.color("text"))
 		t.clip_text = true
 		t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		col.add_child(t)
+		titles.add_child(t)
 	if rels.size() > (2 if h >= 70 else 1):
 		var more := Kit.label("+%d more" % (rels.size() - (2 if h >= 70 else 1)), "CaptionLabel")
 		more.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO)
-		col.add_child(more)
+		titles.add_child(more)
+	if not rels.is_empty():
+		b.resized.connect(func(): _fit_cell(b, col, titles, rels))
 	if rels.is_empty():
 		b.focus_mode = Control.FOCUS_NONE
 		b.modulate.a = 0.55
@@ -393,15 +423,70 @@ func _day_cell(day: int, rels: Array, h: int, is_today: bool) -> Control:
 				ctx.open_page(_view_for(rels[0]))
 			else:
 				_enter_panel())
-		if rels.any(func(r): return r.get("days_until") != null and int(r["days_until"]) == 0):
-			_highlight(b)
 	if is_today:
-		var ring := ThemeLib.box(Color(0, 0, 0, 0), ThemeLib.radius("m"), 0, 0)
-		ring.border_color = Color(ThemeLib.color("accent"), 0.55)
-		ring.set_border_width_all(1)
-		if not b.has_meta("today"):
-			b.add_theme_stylebox_override("normal", ring)
+		_highlight(b)
 	return b
+
+
+## After layout: covers when the cell has room, titles otherwise. Rebuilt only
+## when the cell's size changes enough to matter (never per frame).
+func _fit_cell(b: Button, col: VBoxContainer, titles: Control, rels: Array) -> void:
+	var big := b.size.y >= COVER_CELL_H and b.size.x >= COVER_CELL_W
+	var bucket := Vector2i(int(b.size.x / 8.0), int(b.size.y / 8.0)) if big else Vector2i.ZERO
+	if b.get_meta("cover_bucket", Vector2i(-1, -1)) == bucket:
+		return
+	b.set_meta("cover_bucket", bucket)
+	var old := col.get_node_or_null("Covers")
+	if old != null:
+		col.remove_child(old)
+		old.queue_free()
+	titles.visible = not big
+	if big:
+		_cell_covers(col, rels, b.size.y, b.size.x)
+
+
+## Small covers in a big cell: one cover beside its title, or as many covers
+## as fit side by side (the last one says "+n" when more don't fit).
+func _cell_covers(col: VBoxContainer, rels: Array, h: float, w: float) -> void:
+	var ch := floorf(h - 42.0)
+	var cw := floorf(ch * 2.0 / 3.0)
+	var row := Kit.hbox(6)
+	row.name = "Covers"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(row)
+	var inner := w - 18.0
+	if rels.size() == 1:
+		row.add_child(W.thumb(_view_for(rels[0]), Vector2(cw, ch)))
+		var t := Kit.label(str(rels[0].get("title", "")), "CaptionLabel", true)
+		t.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO)
+		t.add_theme_color_override("font_color", ThemeLib.color("text"))
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t.size_flags_vertical = Control.SIZE_SHRINK_END
+		t.max_lines_visible = 3
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD
+		t.clip_text = true
+		t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		if inner - cw - 6.0 >= 40.0:
+			row.add_child(t)
+		return
+	var fits := maxi(1, int((inner + 6.0) / (cw + 6.0)))
+	var shown := mini(rels.size(), fits)
+	for i in shown:
+		row.add_child(W.thumb(_view_for(rels[i]), Vector2(cw, ch)))
+	if rels.size() > shown:
+		var more := Kit.label("+%d" % (rels.size() - shown + 1), "MicroLabel")
+		more.name = "More"
+		more.add_theme_color_override("font_color", ThemeLib.color("text"))
+		more.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		more.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		var shade := PanelContainer.new()
+		shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		shade.add_theme_stylebox_override("panel", ThemeLib.box(Color(ThemeLib.color("scrim"), 0.72), ThemeLib.radius("s"), 0, 0))
+		shade.add_child(more)
+		var last: Control = row.get_child(row.get_child_count() - 1)
+		Kit.fill(shade)
+		last.add_child(shade)
 
 
 func _view_for(r: Dictionary) -> Dictionary:

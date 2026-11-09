@@ -21,6 +21,8 @@ const SettingsForm := preload("res://scripts/ui/settings_form.gd")
 const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 const ProgressLine := preload("res://scripts/ui/games/progress_line.gd")
 const AchievementsCard := preload("res://scripts/ui/games/achievements_card.gd")
+## Room for the top bar above the hero card (it starts where Home's does).
+const TOP_INSET := 56
 
 signal play_requested(game: Dictionary)
 signal back_requested
@@ -54,6 +56,7 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 	state = services.get("state")
 	game_actions = services.get("actions")
 	achievements = services.get("achievements")
+	top_inset = TOP_INSET
 	setup_page(g, "")
 	_build_actions()
 	_build_status()
