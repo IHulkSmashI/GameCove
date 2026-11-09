@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/IHulkSmashI/GameCove/main/packaging
 It downloads the latest release (checked against its SHA256SUMS), adds **GameCove Installer** to your app menu and opens it. The installer walks you through it, like EmuDeck: Easy (recommended defaults, one summary page) or Custom (every option). It can make GameCove what your handheld boots into, or keep Steam Gaming Mode as the default with GameCove as a choice, signs in your stores in the browser, installs device fixes and sets everything up so the first start needs nothing. It asks for your admin password only for the system package and device fixes.
 
 - **Bazzite / Fedora Atomic:** installs as a layered package (`rpm-ostree`); a restart finishes it, and your previous system stays in the boot menu.
-- **SteamOS:** installs as a system extension in `/var/lib/extensions`.
+- **SteamOS:** installs as a system extension (sysext) kept on the home partition and linked from `/etc/extensions`, so SteamOS updates keep it; `steamos-readonly` stays on.
 - **Anything else:** you can try GameCove in a window.
 
 Run **GameCove Installer** again any time to change options, repair, update or remove GameCove (removing makes Steam Gaming Mode the default again). Everything it does is logged to `~/.local/share/gamecove/installer.log`. If GameCove ever fails to start five times in a row, your handheld goes back to Steam Gaming Mode by itself. Manual install: [docs/SESSION.md](docs/SESSION.md).

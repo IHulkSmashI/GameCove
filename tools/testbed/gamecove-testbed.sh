@@ -1,14 +1,28 @@
 #!/bin/sh
-# gamecove-testbed: get one external Bazzite SSD ready for testing GameCove on
-# several handhelds, one device at a time.
+# gamecove-testbed: get handhelds ready for testing GameCove on real hardware, one
+# device at a time (an external Bazzite SSD moved between handhelds, or a handheld's
+# own SteamOS install). docs/TESTING-HARDWARE.md is the test plan.
 #
-#   sh gamecove-testbed.sh prepare        once per SSD: tools, repo, terminal link
-#   sh gamecove-testbed.sh console        start the browser terminal (127.0.0.1:7681 under a random path)
+#   sh gamecove-testbed.sh prepare        once per drive: tools, repo, terminal link
+#   sh gamecove-testbed.sh console [--keep]
+#                                         start the browser terminal (127.0.0.1:7681 under a
+#                                         random path). --keep runs it as a temporary user unit
+#                                         so it stays up while you switch to GameCove or Steam
+#                                         Gaming Mode and back (still gone at reboot)
 #   sh gamecove-testbed.sh console-stop   stop it (reset does this too)
-#   sh gamecove-testbed.sh status         which device this is and what's installed
-#   sh gamecove-testbed.sh report         save logs + self-test for this device
+#   sh gamecove-testbed.sh status         which device and OS this is and what's installed
+#   sh gamecove-testbed.sh install [tag]  run the real installer (get-gamecove.sh + the
+#                                         installer app) for a release, logging everything.
+#                                         tag: the argument, else $GAMECOVE_TAG, else the newest
+#                                         release including pre-releases (releases/latest skips them)
+#   sh gamecove-testbed.sh uninstall      open the installer to uninstall (you pick Uninstall), logged
+#   sh gamecove-testbed.sh check [--detach] [name...]
+#                                         run the machine checks in checks/ (all when no name);
+#                                         results in ~/gamecove-tests/results/<device>/
+#   sh gamecove-testbed.sh report         one bundle for this device: logs, self-test, check
+#                                         results, versions (no secrets); prints where it is
 #   sh gamecove-testbed.sh reset [--full] [--yes]
-#                                         before moving the SSD to the next device:
+#                                         before moving the drive to the next device:
 #                                         save a report, remove this device's fixes,
 #                                         check nothing device-specific is left.
 #                                         --full also uninstalls GameCove so the next
@@ -23,29 +37,45 @@
 # served under an unguessable random path (ttyd -b /<128-bit token>) that
 # `console` prints and keeps in ~/gamecove-tests/console-url (mode 600). No
 # password prompt (Claude drives it through the browser and can't type one).
-# It runs only while `console` does: never a service, gone at reboot, and
-# `reset` / `console-stop` stop it.
+# It runs only while `console` does (or, with --keep, as a transient user unit
+# that `console-stop` / `reset` stop): never an installed service, gone at reboot.
 # Every step is printed and logged to ~/gamecove-tests/testbed.log.
 set -eu
 
 TTYD_VERSION=1.7.7
 TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
 TTYD_URL="https://github.com/tsl0922/ttyd/releases/download/$TTYD_VERSION/ttyd.x86_64"
-REPO_URL="https://github.com/IHulkSmashI/GameCove.git"
+REPO="${GAMECOVE_REPO:-IHulkSmashI/GameCove}"
+REPO_URL="https://github.com/$REPO.git"
+# The source the checks come from: a branch or tag (use the release tag under test).
+REF="${GAMECOVE_TESTBED_REF:-main}"
 PORT=7681
+CONSOLE_UNIT=gamecove-testbed-console
 
 # Overridable for tests.
 HOME_DIR="${GAMECOVE_TESTBED_HOME:-$HOME}"
 DMI_DIR="${GAMECOVE_TESTBED_DMI:-/sys/class/dmi/id}"
+OS_RELEASE="${GAMECOVE_TESTBED_OS_RELEASE:-/etc/os-release}"
 FIX="${GAMECOVE_TESTBED_FIX:-/usr/libexec/gamecove/gamecove-fix}"
 PKEXEC="${GAMECOVE_TESTBED_PKEXEC:-pkexec}"
 RPM_OSTREE="${GAMECOVE_TESTBED_RPM_OSTREE:-rpm-ostree}"
 SELFTEST="${GAMECOVE_TESTBED_SELFTEST:-gamecove-selftest}"
+CURL="${GAMECOVE_TESTBED_CURL:-curl}"
+API="${GAMECOVE_API:-https://api.github.com}"
+RAW="${GAMECOVE_TESTBED_RAW:-https://raw.githubusercontent.com}"
+SYSTEMD_RUN="${GAMECOVE_TESTBED_SYSTEMD_RUN:-systemd-run}"
+SYSTEMCTL="${GAMECOVE_TESTBED_SYSTEMCTL:-systemctl}"
+SYSEXT="${GAMECOVE_TESTBED_SYSEXT:-systemd-sysext}"
+READONLY="${GAMECOVE_TESTBED_READONLY:-steamos-readonly}"
+GET_SCRIPT="${GAMECOVE_TESTBED_GET:-}"     # a local get-gamecove.sh instead of the tag's
+ETC="${GAMECOVE_TESTBED_ETC:-/etc}"
 
 BIN="$HOME_DIR/.local/bin"
 TESTS="$HOME_DIR/gamecove-tests"
 SRC="$HOME_DIR/src/GameCove"
 LOG="$TESTS/testbed.log"
+GC_DATA="$HOME_DIR/.local/share/gamecove"
+INSTALLER_APP="$GC_DATA/installer/app/gamecove.x86_64"
 
 say() { printf '%s\n' "$*"; mkdir -p "$TESTS"; printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >>"$LOG"; }
 die() { say "error: $*"; exit 1; }
@@ -64,6 +94,26 @@ confirm() {
 	printf '%s [y/N] ' "$1"
 	read -r a || a=""
 	[ "$a" = y ] || [ "$a" = Y ]
+}
+
+os_field() { sed -n "s/^$1=//p" "$OS_RELEASE" 2>/dev/null | tr -d '"' | head -n 1; }
+os_id() { i="$(os_field ID)"; printf '%s' "${i:-unknown}"; }
+
+# Writes "$ <command>" and everything it prints (stdout and stderr) to the log as well as
+# the screen; returns the command's exit code.
+run_logged() {
+	rl_log="$1"
+	shift
+	printf '$ %s\n' "$*" >>"$rl_log"
+	rl_rc="$rl_log.rc"
+	{
+		rc=0
+		"$@" || rc=$?
+		echo "$rc" >"$rl_rc"
+	} 2>&1 | tee -a "$rl_log"
+	rc="$(cat "$rl_rc" 2>/dev/null || echo 1)"
+	rm -f "$rl_rc"
+	return "$rc"
 }
 
 fix_list() { [ -x "$FIX" ] && "$FIX" --list 2>/dev/null || true; }
@@ -85,16 +135,26 @@ cmd_prepare() {
 		chmod +x "$tmp" && mv "$tmp" "$BIN/ttyd"
 	fi
 	if [ -d "$SRC/.git" ]; then
-		say "updating the GameCove source in $SRC"
-		git -C "$SRC" pull --ff-only -q || say "note: couldn't fast-forward $SRC; left as is"
-	else
-		say "cloning GameCove into $SRC"
+		say "updating the GameCove source in $SRC ($REF)"
+		git -C "$SRC" fetch -q --tags origin 2>/dev/null || true
+		git -C "$SRC" checkout -q "$REF" 2>/dev/null || say "note: couldn't check out $REF in $SRC"
+		git -C "$SRC" pull --ff-only -q 2>/dev/null || true
+	elif command -v git >/dev/null 2>&1; then
+		say "cloning GameCove ($REF) into $SRC"
 		git clone -q "$REPO_URL" "$SRC"
+		git -C "$SRC" checkout -q "$REF" || die "no branch or tag $REF in $REPO"
+	else
+		# SteamOS may not have git: the same tree as a tarball
+		say "git isn't installed; downloading GameCove ($REF) as a tarball into $SRC"
+		mkdir -p "$SRC"
+		"$CURL" -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" | tar -xz -C "$SRC" --strip-components=1 ||
+			die "couldn't download the GameCove source ($REF)"
 	fi
+	say "this is $(os_field PRETTY_NAME) on $(dmi sys_vendor) $(dmi product_name)"
 	if command -v flatpak >/dev/null 2>&1 && ! flatpak info com.google.Chrome >/dev/null 2>&1 && ! command -v google-chrome >/dev/null 2>&1; then
-		say "Chrome isn't installed. Install it from Discover (Google Chrome), sign in, and add the Claude extension."
+		say "Chrome isn't installed. Install it from Discover (Google Chrome, a Flatpak on Bazzite and SteamOS), sign in, and add the Claude extension."
 	fi
-	say "ready. Next: sh $0 console, then open Chrome on this handheld and tell Claude 'go'."
+	say "ready. Next: sh $0 console --keep, then open Chrome on this handheld and tell Claude 'go'."
 }
 
 # --------------------------------------------------------------------- console
@@ -107,6 +167,13 @@ random_token() {
 }
 
 cmd_console() {
+	keep=0
+	for a in "$@"; do
+		case "$a" in
+		--keep) keep=1 ;;
+		*) die "unknown option: $a" ;;
+		esac
+	done
 	[ -x "$BIN/ttyd" ] || die "run 'prepare' first"
 	stop_console
 	token="$(random_token)"
@@ -114,6 +181,25 @@ cmd_console() {
 	url="http://127.0.0.1:$PORT/$token/"
 	mkdir -p "$TESTS"
 	(umask 077 && printf '%s\n' "$url" >"$URLFILE")
+	if [ "$keep" = 1 ]; then
+		# A transient user unit: outlives this window and a switch between GameCove, Steam
+		# Gaming Mode and the desktop (the user manager stays while the next session logs in),
+		# never written to disk, gone at reboot. Same ttyd options.
+		envs=""
+		for v in DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS PATH; do
+			eval "val=\${$v:-}"
+			[ -n "$val" ] && envs="$envs --setenv=$v"
+		done
+		# shellcheck disable=SC2086  # envs is a list of options
+		"$SYSTEMD_RUN" --user --quiet --collect --unit="$CONSOLE_UNIT" $envs \
+			--working-directory="$HOME_DIR" \
+			"$BIN/ttyd" -i 127.0.0.1 -p "$PORT" -b "/$token" --check-origin -W bash ||
+			die "couldn't start the browser terminal as a user unit"
+		echo "unit:$CONSOLE_UNIT" >"$PIDFILE"
+		say "browser terminal started and kept running across session switches (this handheld only; the link is also in $URLFILE). Stop it with: sh $0 console-stop"
+		printf 'open: %s\n' "$url"   # printed, not logged
+		return 0
+	fi
 	echo "$$" >"$PIDFILE"
 	say "browser terminal started (this handheld only; the link is also in $URLFILE). Leave this window open; Ctrl+C to stop."
 	printf 'open: %s\n' "$url"   # printed, not logged
@@ -124,7 +210,14 @@ cmd_console() {
 stop_console() {
 	[ -f "$PIDFILE" ] || { rm -f "$URLFILE"; return 0; }
 	pid="$(cat "$PIDFILE" 2>/dev/null || true)"
-	case "$pid" in "" | *[!0-9]*) pid="" ;; esac
+	case "$pid" in
+	unit:*)
+		"$SYSTEMCTL" --user stop "$CONSOLE_UNIT" >/dev/null 2>&1 || true
+		say "browser terminal stopped"
+		pid=""
+		;;
+	"" | *[!0-9]*) pid="" ;;
+	esac
 	if [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = ttyd ]; then
 		kill "$pid" 2>/dev/null || true
 		say "browser terminal stopped"
@@ -135,11 +228,31 @@ stop_console() {
 # ---------------------------------------------------------------------- status
 cmd_status() {
 	say "device: $(dmi sys_vendor) $(dmi product_name) (board $(dmi board_name))"
+	say "system: $(os_field PRETTY_NAME) (ID=$(os_id), VERSION_ID=$(os_field VERSION_ID))"
+	if [ -f "$GC_DATA/installer/release.env" ]; then
+		say "downloaded release: $(sed -n 's/^TAG=//p' "$GC_DATA/installer/release.env") for $(sed -n 's/^OS=//p' "$GC_DATA/installer/release.env"), signature $(sed -n 's/^SIGNATURE=//p' "$GC_DATA/installer/release.env")"
+	fi
 	if command -v gamecove-session-select >/dev/null 2>&1 || [ -x "$FIX" ]; then
 		say "GameCove: installed"
 	else
 		say "GameCove: not installed"
 	fi
+	case "$(os_id)" in
+	steamos)
+		if command -v "$READONLY" >/dev/null 2>&1; then
+			say "steamos-readonly: $("$READONLY" status 2>/dev/null | head -n 1) (GameCove never changes it)"
+		fi
+		if [ -L "$ETC/extensions/gamecove.raw" ]; then
+			say "sysext: $ETC/extensions/gamecove.raw -> $(readlink "$ETC/extensions/gamecove.raw")"
+		elif [ -e /var/lib/extensions/gamecove.raw ]; then
+			say "sysext: /var/lib/extensions/gamecove.raw (an older GameCove's place: lost at the next SteamOS update; reinstall)"
+		fi
+		[ -f "$ETC/atomic-update.conf.d/gamecove.conf" ] && say "kept across SteamOS updates: $(tr '\n' ' ' <"$ETC/atomic-update.conf.d/gamecove.conf")"
+		if command -v "$SYSEXT" >/dev/null 2>&1; then
+			if "$SYSEXT" status 2>/dev/null | grep -q gamecove; then say "sysext merged: yes"; else say "sysext merged: no"; fi
+		fi
+		;;
+	esac
 	for f in $(fix_list); do
 		if fix_installed "$f"; then say "fix $f: installed"; else say "fix $f: not installed"; fi
 	done
@@ -150,6 +263,68 @@ cmd_status() {
 		*) say "boot settings: no device-specific kernel arguments" ;;
 		esac
 	fi
+}
+
+# --------------------------------------------------------------------- install
+# The release to install: the argument, $GAMECOVE_TAG, else the newest release including
+# pre-releases (the GitHub API's releases/latest skips pre-releases, so ask the list).
+resolve_tag() {
+	t="${1:-${GAMECOVE_TAG:-}}"
+	if [ -z "$t" ]; then
+		t="$("$CURL" -fsSL -H "Accept: application/vnd.github+json" "$API/repos/$REPO/releases?per_page=1" 2>/dev/null |
+			sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)" || t=""
+	fi
+	case "$t" in
+	v[0-9]*) printf '%s' "$t" ;;
+	"") die "no GameCove release found; give the tag: install v0.1.0" ;;
+	*) die "not a release tag: $t (expected vX.Y.Z)" ;;
+	esac
+}
+
+run_installer_app() { # <log>
+	[ -x "$INSTALLER_APP" ] || die "the installer app isn't there ($INSTALLER_APP); run install first"
+	if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+		die "no desktop here: run this from Konsole (or a console started there) in Desktop Mode"
+	fi
+	run_logged "$1" "$INSTALLER_APP" -- --installer || say "note: the installer app exited with an error (see the log)"
+	if [ -f "$GC_DATA/installer.log" ]; then
+		{
+			echo "---- installer.log (last 200 lines)"
+			tail -n 200 "$GC_DATA/installer.log"
+		} >>"$1"
+	fi
+}
+
+cmd_install() {
+	tag="$(resolve_tag "${1:-}")"
+	mkdir -p "$TESTS"
+	log="$TESTS/install-$(date +%Y%m%d-%H%M%S)-$(device_slug).log"
+	say "== install GameCove $tag on $(os_field PRETTY_NAME); everything goes to $log"
+	script="$GET_SCRIPT"
+	if [ -z "$script" ]; then
+		script="$TESTS/get-gamecove-$tag.sh"
+		if ! "$CURL" -fsSL -o "$script" "$RAW/$REPO/$tag/packaging/get-gamecove.sh"; then
+			[ -f "$SRC/packaging/get-gamecove.sh" ] || die "couldn't download get-gamecove.sh for $tag"
+			say "note: couldn't download get-gamecove.sh for $tag; using the copy in $SRC"
+			script="$SRC/packaging/get-gamecove.sh"
+		fi
+	fi
+	# get-gamecove.sh checks the release's Sigstore signature and every checksum itself.
+	run_logged "$log" env GAMECOVE_TAG="$tag" GAMECOVE_REPO="$REPO" sh "$script" --tag "$tag" --no-launch ||
+		die "the download step failed; see $log"
+	say "the installer opens now: go through it (Easy or Custom, as Claude asks); approve the password prompts yourself"
+	run_installer_app "$log"
+	cmd_status >>"$log" 2>&1 || true
+	say "install log: $log"
+}
+
+cmd_uninstall() {
+	mkdir -p "$TESTS"
+	log="$TESTS/uninstall-$(date +%Y%m%d-%H%M%S)-$(device_slug).log"
+	say "== uninstall: the installer opens; choose Uninstall (Claude says which options). Log: $log"
+	run_installer_app "$log"
+	cmd_status >>"$log" 2>&1 || true
+	say "uninstall log: $log"
 }
 
 # ---------------------------------------------------------------------- report
@@ -197,9 +372,8 @@ cmd_reset() {
 	[ "$removed" -gt 0 ] && say "$removed fix(es) removed"
 	if [ "$full" = 1 ]; then
 		if confirm "Uninstall GameCove completely so the next device gets a fresh install test?"; then
-			if [ -x "$HOME_DIR/.local/share/gamecove/installer/gamecove.x86_64" ]; then
-				say "running the GameCove installer's uninstall"
-				"$HOME_DIR/.local/share/gamecove/installer/gamecove.x86_64" -- --installer --uninstall || say "note: installer uninstall reported a problem"
+			if [ -x "$INSTALLER_APP" ]; then
+				cmd_uninstall
 			elif command -v "$RPM_OSTREE" >/dev/null 2>&1; then
 				say "removing the GameCove package (asks for your password)"
 				"$PKEXEC" "$RPM_OSTREE" uninstall gamecove || say "note: rpm-ostree uninstall reported a problem"
@@ -226,13 +400,15 @@ cmd_reset() {
 
 case "${1:-}" in
 prepare) cmd_prepare ;;
-console) cmd_console ;;
+console) shift; cmd_console "$@" ;;
 console-stop) stop_console ;;
 status) cmd_status ;;
+install) shift; cmd_install "$@" ;;
+uninstall) cmd_uninstall ;;
 report) cmd_report ;;
 reset) shift; cmd_reset "$@" ;;
 *)
-	sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
 	exit 64
 	;;
 esac

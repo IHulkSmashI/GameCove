@@ -80,6 +80,81 @@ kill -0 "$cpid" 2>/dev/null && bad "reset stops the browser terminal" || ok
 [ ! -e "$T/home/gamecove-tests/console-url" ] && ok || bad "reset forgets the link"
 kill "$cpid" 2>/dev/null || true
 
+# ---- SteamOS status, install [tag], uninstall, console --keep ------------------------------
+printf 'ID=steamos\nVERSION_ID=3.8.10\nPRETTY_NAME="SteamOS"\n' >"$T/os-release"
+mkdir -p "$T/etc/extensions" "$T/etc/atomic-update.conf.d"
+ln -sf /home/.steamos/offload/gamecove/gamecove.raw "$T/etc/extensions/gamecove.raw"
+printf '/etc/extensions/gamecove.raw\n' >"$T/etc/atomic-update.conf.d/gamecove.conf"
+printf '#!/bin/sh\necho enabled\n' >"$T/bin/readonly"
+printf '#!/bin/sh\necho "HIERARCHY EXTENSIONS SINCE"; echo "/usr gamecove Mon"\n' >"$T/bin/sysext"
+chmod +x "$T/bin/readonly" "$T/bin/sysext"
+export GAMECOVE_TESTBED_OS_RELEASE="$T/os-release" GAMECOVE_TESTBED_ETC="$T/etc" \
+	GAMECOVE_TESTBED_READONLY="$T/bin/readonly" GAMECOVE_TESTBED_SYSEXT="$T/bin/sysext"
+out="$(sh "$S" status)"
+case "$out" in *"ID=steamos"*) ok ;; *) bad "status names the OS" ;; esac
+case "$out" in *"steamos-readonly: enabled"*) ok ;; *) bad "status shows steamos-readonly" ;; esac
+case "$out" in *"sysext: $T/etc/extensions/gamecove.raw -> /home/.steamos/offload/gamecove/gamecove.raw"*) ok ;; *) bad "status shows where the sysext lives" ;; esac
+case "$out" in *"sysext merged: yes"*) ok ;; *) bad "status shows the merge" ;; esac
+case "$out" in *"kept across SteamOS updates"*) ok ;; *) bad "status shows the keep list" ;; esac
+
+# fake GitHub: the releases list (a pre-release first), a get-gamecove.sh that records its
+# arguments and drops a fake installer app that logs how it was started
+cat >"$T/bin/curl" <<EOF
+#!/bin/sh
+echo "curl \$*" >>"$T/curl-calls"
+out=""
+while [ \$# -gt 0 ]; do case "\$1" in -o) out="\$2"; shift ;; esac; url="\$1"; shift; done
+case "\$url" in
+*/releases\?per_page=1) printf '[{"tag_name": "v0.1.0", "prerelease": true}]\n' ;;
+*/packaging/get-gamecove.sh) cp "$T/get.sh" "\$out" ;;
+*) exit 22 ;;
+esac
+EOF
+cat >"$T/get.sh" <<EOF
+#!/bin/sh
+echo "get-gamecove tag=\$GAMECOVE_TAG args=\$*"
+mkdir -p "$T/home/.local/share/gamecove/installer/app"
+printf '#!/bin/sh\necho "installer app \$*"\necho "install ok" >>"$T/home/.local/share/gamecove/installer.log"\n' >"$T/home/.local/share/gamecove/installer/app/gamecove.x86_64"
+chmod +x "$T/home/.local/share/gamecove/installer/app/gamecove.x86_64"
+echo "a line on stderr" >&2
+EOF
+chmod +x "$T/bin/curl" "$T/get.sh"
+export GAMECOVE_TESTBED_CURL="$T/bin/curl" GAMECOVE_API=https://api.example GAMECOVE_TESTBED_RAW=https://raw.example
+out="$(DISPLAY=:9 sh "$S" install 2>&1)" && ok || bad "install runs ($out)"
+grep -q "releases?per_page=1" "$T/curl-calls" && ok || bad "no tag: asks the release list (pre-releases included)"
+grep -q "raw.example/IHulkSmashI/GameCove/v0.1.0/packaging/get-gamecove.sh" "$T/curl-calls" && ok || bad "downloads the tag's own get-gamecove.sh"
+ilog="$(ls "$T"/home/gamecove-tests/install-*.log 2>/dev/null | head -n 1)"
+[ -n "$ilog" ] && ok || bad "install writes a log"
+grep -q "get-gamecove tag=v0.1.0 args=--tag v0.1.0 --no-launch" "$ilog" && ok || bad "GAMECOVE_TAG and --tag passed to the bootstrap"
+grep -q "a line on stderr" "$ilog" && ok || bad "stderr is logged too"
+grep -q "installer app -- --installer" "$ilog" && ok || bad "the real installer app runs in the foreground"
+grep -q "install ok" "$ilog" && ok || bad "installer.log is appended"
+rm -f "$T/curl-calls"
+GAMECOVE_TAG=v0.2.0-rc1 DISPLAY=:9 sh "$S" install >/dev/null 2>&1 || true
+grep -q "releases?per_page" "$T/curl-calls" 2>/dev/null && bad "GAMECOVE_TAG skips the lookup" || ok
+grep -q "/v0.2.0-rc1/packaging" "$T/curl-calls" && ok || bad "GAMECOVE_TAG picks the release"
+DISPLAY=:9 sh "$S" install v0.1.1 >/dev/null 2>&1 || true
+grep -q "/v0.1.1/packaging" "$T/curl-calls" && ok || bad "the argument picks the release"
+sh "$S" install ../../evil >/dev/null 2>&1 && bad "a tag must look like vX.Y.Z" || ok
+env -u DISPLAY -u WAYLAND_DISPLAY sh "$S" uninstall >/dev/null 2>&1 && bad "uninstall needs a desktop" || ok
+DISPLAY=:9 sh "$S" uninstall >/dev/null 2>&1 && ok || bad "uninstall opens the installer"
+ls "$T"/home/gamecove-tests/uninstall-*.log >/dev/null 2>&1 && ok || bad "uninstall is logged"
+
+printf '#!/bin/sh\necho "$*" >"%s/run-args"\n' "$T" >"$T/bin/systemd-run"
+printf '#!/bin/sh\necho "systemctl $*" >>"%s/systemctl-calls"\n' "$T" >"$T/bin/systemctl"
+chmod +x "$T/bin/systemd-run" "$T/bin/systemctl"
+export GAMECOVE_TESTBED_SYSTEMD_RUN="$T/bin/systemd-run" GAMECOVE_TESTBED_SYSTEMCTL="$T/bin/systemctl"
+out="$(sh "$S" console --keep 2>&1)" && ok || bad "console --keep starts ($out)"
+args="$(cat "$T/run-args")"
+case " $args " in *" --user "*"--unit=gamecove-testbed-console"*) ok ;; *) bad "--keep: a transient user unit ($args)" ;; esac
+case " $args " in *" -i 127.0.0.1 "*"--check-origin"*) ok ;; *) bad "--keep: same safe ttyd options" ;; esac
+case " $args " in *"--collect"*) ok ;; *) bad "--keep: nothing left behind" ;; esac
+case "$args" in *" enable "* | *"WantedBy"*) bad "--keep: never enabled" ;; *) ok ;; esac
+grep -q "$(cat "$T/home/gamecove-tests/console-url" | sed 's|.*/\([0-9a-f]*\)/$|\1|')" "$T/home/gamecove-tests/testbed.log" && bad "--keep: the token stays out of the log" || ok
+sh "$S" console-stop >/dev/null 2>&1
+grep -q "systemctl --user stop gamecove-testbed-console" "$T/systemctl-calls" && ok || bad "console-stop stops the unit"
+[ ! -e "$T/home/gamecove-tests/console-url" ] && ok || bad "console-stop forgets the link"
+
 sh "$S" bogus >/dev/null 2>&1 && bad "unknown command exits non-zero" || ok
 echo "testbed: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
