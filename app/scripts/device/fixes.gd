@@ -322,6 +322,7 @@ func choice(fix: String) -> String:
 
 
 func _remember_choice(fix: String, verb: String) -> void:
+	DirAccess.make_dir_recursive_absolute(data_dir)
 	SettingsFile.update_cfg(_choices_path(), func(c: ConfigFile):
 		c.set_value(PerDevice.section("fixes", device_id), fix, "on" if verb == "apply" else "off"))
 
@@ -483,6 +484,7 @@ func check_changes() -> Dictionary:
 		old = SettingsFile.load_json(path)["data"]
 	var now := system_snapshot()
 	var changes: Array = diff(old, now) if old is Dictionary else []
+	DirAccess.make_dir_recursive_absolute(data_dir)
 	SettingsFile.save_json(path, now, "  ")
 	last_changes = {"first_run": not old is Dictionary, "changed": changes}
 	# every start, not only after a change: cheap, and the update may have come before this check existed

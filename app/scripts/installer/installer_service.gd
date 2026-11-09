@@ -279,6 +279,7 @@ func _write_state() -> void:
 		keep = st.get("choices", {})
 	st["choices"] = keep
 	st["updated"] = _clock.call()
+	DirAccess.make_dir_recursive_absolute(paths.data_dir())
 	SettingsFile.save_json(paths.state_file(), st, "\t")
 
 

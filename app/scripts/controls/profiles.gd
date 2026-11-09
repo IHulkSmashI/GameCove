@@ -514,6 +514,7 @@ func load_file() -> void:
 
 ## Writes the file through a temporary one, so a crash never leaves half a file.
 func save_file() -> bool:
+	DirAccess.make_dir_recursive_absolute(SettingsFile.abs_path(path).get_base_dir())
 	return SettingsFile.save_json(path, _data, "  ") == OK
 
 

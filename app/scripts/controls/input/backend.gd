@@ -320,6 +320,7 @@ func _load(path: String, json: String) -> bool:
 
 
 func _save(profile: Dictionary) -> void:
+	DirAccess.make_dir_recursive_absolute(profile_path().get_base_dir())
 	SettingsFile.save_text(profile_path(), JSON.stringify(Profile.clean(Profile.normalize(profile)), "  ") + "\n")
 
 
@@ -441,6 +442,7 @@ func led_saved_pct(node: Dictionary) -> float:
 
 func _led_remember(nodes: Array) -> void:
 	var sec := PerDevice.section("leds", device_id())
+	DirAccess.make_dir_recursive_absolute(_led_cfg().get_base_dir())
 	SettingsFile.update_cfg(_led_cfg(), func(cfg: ConfigFile):
 		for n in nodes:
 			if Leds.brightness_pct(n) > 0.0:

@@ -279,6 +279,7 @@ func _path(name: String) -> String:
 ## Atomic; refused for a file that was damaged when it loaded (kept as <name>.bad),
 ## so the refresh 45 s after start never writes an empty wishlist over a damaged one.
 func _save(name: String, data: Variant) -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(data_dir))
 	SettingsFile.save_json(_path(name), data)
 
 

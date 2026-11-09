@@ -133,7 +133,8 @@ static func save_bytes(path: String, data: PackedByteArray) -> Error:
 	if _blocked.has(p):
 		_lock.unlock()
 		return ERR_LOCKED
-	DirAccess.make_dir_recursive_absolute(p.get_base_dir())
+	# never makes folders: an explicit path whose folder is missing fails; the owners of
+	# the app's own folders (user://, ~/.config/...) create them
 	var tmp := p + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:

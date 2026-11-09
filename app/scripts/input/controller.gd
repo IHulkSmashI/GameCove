@@ -826,6 +826,7 @@ func _call_void(path: String, iface: String, method: String, args: Array) -> boo
 
 
 func _write_text(path: String, text: String) -> bool:
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	return SettingsFile.save_text(path, text) == OK
 
 
