@@ -128,7 +128,7 @@ func test_every_enabled_logo_file_exists_and_is_valid_svg() -> void:
 		if str(e.get("source", "")).begins_with("simple-icons@"):
 			ok(e.get("mono", false) == true, key + " Simple Icons logos are single-colour")
 			eq(str(e.get("hex", "")).length(), 6, key + " brand colour")
-	ok(shipped >= 14, "at least 14 logos ship, got %d" % shipped)
+	eq(shipped, brands.size(), "every brand ships a logo")
 
 
 func test_bundled_logos_for_makers_chips_and_stores() -> void:
@@ -137,9 +137,10 @@ func test_bundled_logos_for_makers_chips_and_stores() -> void:
 			"Intel", "AMD", "Heroic", "Lutris", "Bottles"]:
 		ok(Brand.bundled_logo_for(name) != "", name + " has a bundled logo")
 		eq(Brand.logo_for(name), Brand.bundled_logo_for(name), name + " bundled wins")
-	for name in ["Amazon"]:
-		eq(Brand.bundled_logo_for(name), "", name + " has no bundled logo yet")
-		eq(Brand.logo_for(name), "", name + " shows text")
+	for name in ["Amazon Games", "Prime Gaming", "OneXPlayer", "ONE-NETBOOK", "AYANEO", "AOKZOE",
+			"GPD", "ZOTAC", "ZOTAC GAMING", "Orange Pi"]:
+		ok(Brand.bundled_logo_for(name) != "", name + " has a bundled logo")
+		eq(Brand.logo_for(name), Brand.bundled_logo_for(name), name + " bundled wins")
 	ok(Brand.is_mono("Steam"), "Simple Icons logo is mono")
 	ok(not Brand.is_mono("Bottles"), "Bottles icon is multi-colour")
 	eq(Brand.brand_color("MSI"), Color.from_string("#FF0000", Color.BLACK))
@@ -235,7 +236,7 @@ func test_logo_for_order_bundled_then_system_then_empty() -> void:
 	var heroic_sys := _put("flatpak/hicolor/scalable/apps/com.heroicgameslauncher.hgl.svg")
 	eq(Brand.logo_for("Heroic"), "res://assets/brand/heroic.svg", "bundled first")
 	eq(Brand.system_icon_for("Heroic"), heroic_sys, "system icon still found")
-	eq(Brand.logo_for("Amazon Games"), "", "no bundled, no system icon")
+	eq(Brand.logo_for("Amazon Games"), "res://assets/brand/amazon.svg", "bundled Amazon Games logo")
 	var steam := _put("flatpak/hicolor/scalable/apps/com.valvesoftware.Steam.svg")
 	eq(Brand.logo_for("steam"), "res://assets/brand/steam.svg", "bundled beats system")
 	eq(Brand.system_icon_for("steam"), steam, "system icon path still available")
@@ -264,3 +265,67 @@ func test_default_dirs_cover_xdg_flatpak_and_system() -> void:
 
 func test_general_notice_text() -> void:
 	eq(Brand.general_notice(), "Product and company names are trademarks of their respective owners; GameCove is not affiliated with or endorsed by them.")
+
+
+## The viewBox of a bundled logo: [x, y, w, h], or [] when missing/bad.
+func _viewbox(svg: String) -> Array:
+	var re := RegEx.create_from_string("<svg[^>]*\\sviewBox=\"([^\"]+)\"")
+	var m := re.search(svg)
+	if m == null:
+		return []
+	var out: Array = []
+	for part in m.get_string(1).replace(",", " ").split(" ", false):
+		if not part.is_valid_float():
+			return []
+		out.append(part.to_float())
+	return out if out.size() == 4 else []
+
+
+## Owner's rule: every maker in devices.json and every store GameCove lists
+## shows a real logo (enabled, valid SVG, sensible viewBox), not text.
+func test_every_maker_and_store_has_a_real_logo() -> void:
+	var names: Array = []
+	var j := JSON.new()
+	ok(j.parse(FileAccess.get_file_as_string("res://data/devices.json")) == OK, "devices.json parses")
+	for row in j.data.get("devices", []):
+		var maker := str(row.get("maker", ""))
+		if maker != "" and not maker in names:
+			names.append(maker)
+	var LibraryView = load("res://scripts/ui/library_view.gd")
+	for pair in LibraryView.STORES:
+		if str(pair[0]) != "":
+			names.append(str(pair[0]))
+	ok(names.size() >= 15, "makers and stores found: %d" % names.size())
+	for name in names:
+		var key := Brand.key_for(name)
+		ok(key != "", name + " maps to a brand")
+		ok(Brand.is_enabled(name), name + " enabled")
+		var file := Brand.bundled_logo_for(name)
+		ok(file != "", name + " has a bundled logo")
+		if file == "":
+			continue
+		var svg := FileAccess.get_file_as_string(file)
+		var vb := _viewbox(svg)
+		eq(vb.size(), 4, name + " has a numeric viewBox")
+		if vb.size() == 4:
+			ok(vb[2] > 0.0 and vb[3] > 0.0, name + " viewBox has a size")
+			var aspect: float = vb[2] / vb[3]
+			ok(aspect > 0.2 and aspect < 16.0, "%s viewBox aspect %.2f is sensible" % [name, aspect])
+			ok(vb[2] >= 16.0 and vb[3] >= 16.0 or vb[2] * vb[3] >= 256.0, name + " viewBox not degenerate")
+		ok(svg.contains("<path") or svg.contains("<polygon"), name + " has shapes")
+		ok(not svg.contains("<image"), name + " is pure vector (no embedded raster)")
+		var img := Image.new()
+		eq(img.load_svg_from_string(svg, 1.0), OK, name + " renders")
+		var tex := Brand.logo_texture(name, 48, Color.WHITE)
+		ok(tex != null and tex.get_height() == 48, name + " texture at 48 px")
+		if tex != null:
+			var opaque := 0
+			var im := tex.get_image()
+			for y in range(0, im.get_height(), 2):
+				for x in range(0, im.get_width(), 2):
+					if im.get_pixel(x, y).a > 0.5:
+						opaque += 1
+			ok(opaque > 20, name + " draws visible ink (%d samples)" % opaque)
+		if Brand.is_mono(name):
+			eq(str(_brands()[key].get("hex", "")).length(), 6, name + " mono logo records the brand hex")
+			ok(not svg.contains("fill=\"#"), name + " mono logo has no hard-coded fill (tint works)")
