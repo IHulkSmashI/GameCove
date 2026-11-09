@@ -27,6 +27,7 @@ const ActionRow := preload("res://scripts/ui/settings/action_row.gd")
 const SignIn := preload("res://scripts/ui/settings/sign_in.gd")
 const Appearance := preload("res://scripts/ui/settings/appearance_page.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
+const PhotoView := preload("res://scripts/ui/device/device_photo_view.gd")
 
 signal setting_changed(key: String, value: Variant)
 signal closed
@@ -298,7 +299,9 @@ func _device_name() -> String:
 
 func _build_welcome() -> void:
 	var d := _device()
-	var pic := _device_picture(d)
+	var pic := _device_photo_hook(d)
+	if pic == null:
+		pic = _device_picture(d)
 	if pic != null:
 		body.add_child(pic)
 	_heading(TS.WELCOME_TITLE, TS.WELCOME_LINE % _device_name())
@@ -324,6 +327,43 @@ func _build_welcome() -> void:
 		row.add_child(col)
 		plan.add_child(row)
 	body.add_child(plan)
+
+
+# ---- real device photo (DevicePhoto service) ---------------------------------------
+# Kept apart so the restyle merges cleanly. With a freely licensed photo cached
+# for this device it replaces the drawing, with its credit under it (focusable,
+# opens the Commons page). No photo, offline or the setting off: null, and the
+# drawing shows as before. A photo that lands while Welcome is up rebuilds it.
+
+func _device_photo_hook(d: Object) -> Control:
+	var ph: Object = services.get("photo")
+	if ph == null or d == null or not ph.has_method("photo_for"):
+		return null
+	var device_id := ""
+	if d.has_method("id"):
+		device_id = str(d.id())
+	elif "profile" in d and d.profile is Dictionary:
+		device_id = str(d.profile.get("id", ""))
+	if device_id == "" or device_id == "unknown":
+		return null
+	if ph.has_signal("photo_ready") and not ph.photo_ready.is_connected(_on_photo_ready):
+		ph.photo_ready.connect(_on_photo_ready)
+	var view: Control = PhotoView.make(ph.photo_for(device_id), 190, _open_photo_link)
+	if view != null and not view.credit.disabled:
+		_focusables.append(view.credit)
+	return view
+
+
+func _on_photo_ready(_device_id: String, _path: String) -> void:
+	if step == "welcome" and is_inside_tree() and body != null and not body.has_node("DevicePhoto"):
+		_build()
+
+
+func _open_photo_link(url: String) -> void:
+	var d: Object = services.get("discover")
+	if d != null and d.has_method("open_link") and d.open_link({"kind": "url", "uri": url}):
+		return
+	OS.shell_open(url)
 
 
 ## The device's front picture (Device.picture_for), if there is one.

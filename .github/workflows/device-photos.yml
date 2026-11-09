@@ -1,0 +1,43 @@
+name: Device photos
+
+# Real photos of each handheld for "About this device" and the first-run welcome.
+# Only freely licensed Wikimedia Commons files listed in app/data/device_photos.json;
+# every license is re-checked through the Commons API on each run (see
+# tools/device_photos/build.py and docs/DEVICES.md).
+
+on:
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pillow pytest
+      - run: python -m pytest -q tools/device_photos
+      - name: Last published manifest (keeps photos when Commons is briefly down)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p prev
+          gh release download device-photos --pattern manifest.json --dir prev 2>/dev/null || true
+      - name: Build (licenses re-checked, ~1200 px WebP)
+        run: python tools/device_photos/build.py --out dist --previous prev/manifest.json
+      - name: Publish to the rolling "device-photos" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view device-photos >/dev/null 2>&1 || gh release create device-photos --title "Device photos" --notes "Photos of supported handhelds from Wikimedia Commons, each under its own free license (CC0, public domain, CC BY or CC BY-SA). Author, license and source for every file are in manifest.json. Rebuilt weekly; licenses are re-checked on every run." --latest=false
+          if ls dist/*.webp >/dev/null 2>&1; then
+            gh release upload device-photos dist/*.webp --clobber
+          fi
+          gh release upload device-photos dist/manifest.json --clobber

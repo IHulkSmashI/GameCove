@@ -8,6 +8,7 @@ extends "res://scripts/ui/device/device_panel.gd"
 const Picture := preload("res://scripts/ui/device/device_picture.gd")
 const FixTexts := preload("res://scripts/ui/texts.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
+const PhotoView := preload("res://scripts/ui/device/device_photo_view.gd")
 
 var info: Dictionary = {}
 var picture: TextureRect
@@ -75,6 +76,7 @@ func _fill_side() -> void:
 	picture.setup(pic_path)
 	picture.custom_minimum_size = Vector2(0, 230)
 	col.add_child(picture)
+	_device_photo_hook(col, str(d.get("id", "")))
 	var title := Kit.label(str(d.get("name", Texts.UNKNOWN)), "HeaderLabel", true)
 	title.name = "DeviceName"
 	title.add_theme_font_override("font", ThemeLib.font("display"))
@@ -113,6 +115,57 @@ func _fill_side() -> void:
 		_side.add_child(facts)
 
 
+# ---- real device photo (DevicePhoto service) ---------------------------------------
+# Kept apart so the panel restyle merges cleanly: with a freely licensed photo
+# cached for this device, it stands in for the drawing (which stays in the tree,
+# hidden, for the controller highlights) with its credit under it. No photo,
+# offline or the setting off: nothing changes. A photo that arrives later
+# (photo_ready) rebuilds the side column once.
+
+var photo_view: Control
+
+
+func _device_photo_hook(col: VBoxContainer, device_id: String) -> void:
+	photo_view = null
+	var ph := svc("photo")
+	if ph == null or not ph.has_method("photo_for") or device_id == "":
+		return
+	if ph.has_signal("photo_ready"):
+		listen(ph.photo_ready, _on_photo_ready)
+	var got: Dictionary = ph.photo_for(device_id)
+	if got.is_empty():
+		return
+	photo_view = PhotoView.make(got, 230, _open_photo_link)
+	if photo_view == null:
+		return
+	col.add_child(photo_view)
+	col.move_child(photo_view, picture.get_index())
+	picture.visible = false
+
+
+func _on_photo_ready(device_id: String, _path: String) -> void:
+	if photo_view != null or device_id != str(_g("device").get("id", "")):
+		return
+	_on_info(info)
+
+
+func _photo_focus() -> Array:
+	return [photo_view.credit] if photo_view != null and not photo_view.credit.disabled else []
+
+
+func hints_for(c: Control) -> Array:
+	if photo_view != null and c == photo_view.credit:
+		return [["A", PhotoView.TPhoto.PHOTO_SOURCE], ["B", "Back"]]
+	return super(c)
+
+
+func _open_photo_link(url: String) -> void:
+	var d := svc("discover")
+	if d != null and d.has_method("open_link") and d.open_link({"kind": "url", "uri": url}):
+		return
+	OS.shell_open(url)
+
+
 func _fact(icon: String, value: String, what: String) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.theme_type_variation = "RaisedPanel"
@@ -149,7 +202,7 @@ func _fill_cards() -> void:
 		_loading = DKit.quiet(Texts.LOADING)
 		_loading.name = "Loading"
 		_cards.add_child(_loading)
-	chain(cards.filter(func(c): return c != null))
+	chain(cards.filter(func(c): return c != null) + _photo_focus())
 
 
 func _section(key: String, tint := "accent") -> Array:
