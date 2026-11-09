@@ -240,6 +240,51 @@ No free photo of your handheld? Take one and upload it to Commons as your own wo
 5. Credit new sources in CREDITS.md.
 6. Optional: add a real photo (see "Real photos" above).
 
+## One drive, several handhelds
+
+Bazzite on an external SSD boots on more than one handheld (for example an MSI Claw 8 EX AI+, a ROG Ally and a Legion Go S). GameCove detects the handheld at every start (`Device.detect()`, DMI) and is built so that nothing set up for one handheld acts on another.
+
+### Secure Boot, per handheld
+
+Each handheld keeps its own Secure Boot keys in its own firmware, not on the drive. With Secure Boot on, enroll Bazzite's key once on **each** handheld: boot the drive on it, run `ujust enroll-secure-boot-key` (password `universalblue`), restart, and confirm in the blue MokManager screen. Until then that handheld refuses the drive's kernel. Boot order (USB/SSD first) is also set per handheld in its firmware setup. Nothing GameCove installs changes this: the drive's boot entries and kernel arguments are shared, so GameCove adds no device-specific kernel argument.
+
+### What is per handheld
+
+| What | How it's kept apart |
+| --- | --- |
+| Claw VRR fix (`claw8ex-vrr`) | No kernel argument. A modprobe hook gives the Intel GPU driver the patched EDID only when `board_name` is the board it was installed on. The Ally and Legion Go S use AMD's driver, so the hook never even runs there. Older installs (kernel arguments) are moved over by `install` or a root `status`; seen from another handheld, the old install is removed. |
+| Claw gyro fix (`claw8ex-gyro`) | Its two services have `ExecCondition` on board MS-1T91 and are skipped elsewhere. The firmware search path (`firmware_class.path=/etc/firmware`) and the HID-BPF program (matched to the Claw's sensor hub id) do nothing on other hardware. |
+| Claw buttons fix (`claw8ex-buttons`) | InputPlumber override with the stock `dmi_data: board_name: MS-1T91` match, so InputPlumber only uses it on the Claw. |
+| Fan and charge-limit fixes | Only act on handhelds in `fixes/lib/handhelds.txt`. What they saved (the values `remove` writes back) is kept per handheld (`/var/lib/gamecove/fixes/<fix>/device`, others parked in `devices/<id>/`). |
+| TDP profile, custom watts, charge limit, fan preset | `user://power.cfg`, sections `<name>@<device id>`. |
+| Controller layouts and per-game controller profiles | `~/.config/inputplumber/profiles/gamecove/<device id>/`. |
+| Measured frame rates (frame generation hint) | `user://launch_settings.json`, `measured.<device id>`. |
+| Controller service | Detected at start: InputPlumber (Bazzite's default on every handheld today) or Handheld Daemon if you installed it. The controller page only shows what that service can do on this handheld (`Controller.state()["capabilities"]`). |
+| TDP service | Detected at start: Handheld Daemon when its TDP plugin is on (then GameCove sets TDP through it and leaves fan and charge limit to it), else steamos-manager / PowerStation. |
+
+Values saved by an older GameCove belong to no handheld yet; the first handheld that starts the new version takes them over. Start the update on the handheld you set them on.
+
+### What is shared
+
+- Library, store sign-ins, Discover, wishlist, achievements, theme and look, the overlay level, Steam itself.
+- A game's settings (goal, frame limit, upscaler, frame generation, low latency). They resolve per handheld at launch: upscaler **Auto** is XeSS on the Claw (Intel Xe, with the XeSS XMX driver), FSR 4 on the Ally and Legion Go S (AMD, with a Proton that has it). An explicit **XeSS** picked on the Claw falls back to Auto on an AMD handheld, with a note on the launch screen; the saved choice stays XeSS for the Claw.
+- The drive's OS, kernel arguments, initramfs and boot entries. Root fixes are installed once per drive but only act on their handheld (above).
+- Handheld Daemon, if installed, keeps its own settings per device type in `/etc/hhd`.
+
+### Handheld Daemon (hhd) or InputPlumber
+
+Bazzite enables InputPlumber and PowerStation on every non-Valve handheld (`bazzite-hardware-setup`) and no longer ships Handheld Daemon; you can still install hhd, which replaces InputPlumber. GameCove works with either:
+
+| | InputPlumber | Handheld Daemon |
+| --- | --- | --- |
+| Guide / Quick Access in GameCove | Intercept over D-Bus, also inside games | Virtual pad's Guide while GameCove has focus; hhd's Steam shortcuts arrive as Ctrl+1 (home) and Ctrl+2 (quick menu). Inside a game hhd keeps its buttons (its own overlay). |
+| Back paddles | Remap each paddle | As a whole: Steam Input, hhd shortcuts, touchpad, or off |
+| Gyro | Off, mouse, stick | On / off (Steam Input maps it) |
+| Rumble | On / off, test buzz | On / off (vibration intensity 0 or 100) |
+| RGB | Not settable (no API) | Solid color and brightness (ROG Ally, Legion Go) |
+| Per-game | InputPlumber profile per game | Controller section and LEDs of hhd's state per game |
+| TDP | PowerStation / steamos-manager | hhd's API (when its TDP plugin is on) |
+
 ## Known issues per device
 
 - **Steam Deck (LCD)**: Steam Deck controller is a HID device; InputPlumber's deck driver exposes L4/L5/R4/R5 as paddles and both trackpads.

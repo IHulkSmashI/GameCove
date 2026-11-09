@@ -83,6 +83,10 @@ func test_refresh_reads_devices_profile_and_caps() -> void:
 	ok(st["led"], "device reports LEDs")
 	eq(st["supported"], {"profiles": true, "paddles": true, "gyro": true, "rumble": true, "led": false, "per_game": true})
 	ok(not c.set_led(Color.RED, 1.0), "no LED setter in InputPlumber")
+	eq(st["backend"], "inputplumber")
+	eq(st["capabilities"], {"guide_qam": true, "intercept": true, "paddles": "remap", "gyro": true,
+		"rumble": true, "rgb": false, "per_game": true}, "what the UI may show with InputPlumber")
+	eq(st["gyro_modes"], ["off", "mouse", "stick"])
 	c.free()
 
 
