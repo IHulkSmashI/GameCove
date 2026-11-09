@@ -50,6 +50,8 @@ setup() {
 	mkdir -p "$R/sys/class/dmi/id" "$R/proc" "$R/run" "$R/var/lib" "$R/etc/systemd/system" "$R/usr/share/inputplumber/devices" \
 		"$R/sys/bus/pci/devices/0000:00:12.0" "$FAKE/active" "$BIN"
 	echo MS-1T91 >"$R/sys/class/dmi/id/board_name"
+	echo "Micro-Star International Co., Ltd." >"$R/sys/class/dmi/id/sys_vendor"
+	echo "Claw 8 EX AI+ CG3EM" >"$R/sys/class/dmi/id/product_name"
 	echo "BOOT_IMAGE=/vmlinuz root=UUID=x quiet splash" >"$R/proc/cmdline"
 	echo 0x8086 >"$R/sys/bus/pci/devices/0000:00:12.0/vendor"
 	echo 0xe445 >"$R/sys/bus/pci/devices/0000:00:12.0/device"

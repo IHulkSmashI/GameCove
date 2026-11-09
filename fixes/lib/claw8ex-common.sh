@@ -26,7 +26,7 @@ IP_OVERRIDE=/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml
 IP_MARK="# GameCove override of $IP_STOCK"
 IP_MAP_ID=gamecove_claw8ex
 
-say() { printf '%s\n' "$*"; }
+say() { printf '%s\n' "$*" 2>/dev/null || :; } # a reader that stopped early (grep -q) is fine
 warn() { printf 'warning: %s\n' "$*" >&2; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 

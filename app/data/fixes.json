@@ -68,7 +68,7 @@
     ]
    },
    "optional": [],
-   "why": "MSI's Panther Lake ISH firmware (ish_ptl.bin) and the 2247-byte sensor descriptor of board MS-1T91; Lunar Lake and Meteor Lake Claws use other sensor hubs.",
+   "why": "MSI's Panther Lake ISH firmware (installed under this model's own ish_ptl_<vendor>_<product>.bin name) and the 2247-byte sensor descriptor of board MS-1T91; Lunar Lake and Meteor Lake Claws use other sensor hubs.",
    "bazzite": "Not fixed.",
    "steamos": "Not supported on SteamOS.",
    "sources": [

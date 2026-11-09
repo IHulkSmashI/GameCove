@@ -8,6 +8,9 @@ set -u
 . "$(dirname "$0")/../../claw8ex-buttons/tests/lib.sh"
 
 FW_SHA=8194475367978c473d17e7e777fe196d99383f80f51b433927ea9afd0e9e661b
+# review S1-6: the name the kernel's ISH loader tries for this vendor + product only (zlib CRC-32)
+FWP=/etc/firmware/intel/ish/$(python3 -I -c 'import zlib; print("ish_ptl_%08x_%08x.bin" % (zlib.crc32(b"Micro-Star International Co., Ltd."), zlib.crc32(b"Claw 8 EX AI+ CG3EM")))')
+GENERIC=/etc/firmware/intel/ish/ish_ptl.bin
 MEMBER="ISH_Kit/Drivers/Win10/IshHeci/x64/FWImage/0004/ishS_SI_5.8.1.7782.bin"
 
 # make_kit <size>: a zip shaped like MSI's kit, with a stand-in firmware of <size> bytes.
@@ -25,7 +28,7 @@ with zipfile.ZipFile(sys.argv[1], "w") as z:
 gyro_ready() {
 	make_kit 432640
 	echo BPF >"$T/fake.bpf.o"
-	export GAMECOVE_GYRO_BPF_OBJ="$T/fake.bpf.o" FAKE_SHA_NAME="ish_ptl.bin*" FAKE_SHA_VALUE=$FW_SHA
+	export GAMECOVE_GYRO_BPF_OBJ="$T/fake.bpf.o" FAKE_SHA_NAME="ish_ptl*.bin*" FAKE_SHA_VALUE=$FW_SHA
 }
 
 # The kernel side after a cold boot: argument on the command line, hub and gyro_3d present.
@@ -53,9 +56,9 @@ fix claw8ex-gyro install >"$T/out" 2>&1
 rc=$?
 ok "[ $rc -eq 0 ]" "install succeeds ($(tail -n 1 "$T/out"))"
 ok 'grep -q "cold boot" "$T/out"' "tells the user to cold boot"
-ok '[ -f "$R/etc/firmware/intel/ish/ish_ptl.bin" ]' "firmware installed"
-ok '[ "$(wc -c <"$R/etc/firmware/intel/ish/ish_ptl.bin" | tr -d " ")" = 432640 ]' "the verified file"
-ok 'grep -qxF /etc/firmware/intel/ish/ish_ptl.bin "$FAKE/initramfs"' "firmware tracked in the initramfs"
+ok '[ -f "$R$FWP" ]' "firmware installed"
+ok '[ "$(wc -c <"$R$FWP" | tr -d " ")" = 432640 ]' "the verified file"
+ok 'grep -qxF "$FWP" "$FAKE/initramfs"' "firmware tracked in the initramfs"
 ok '[ -f "$R/etc/udev-hid-bpf/MSI__Claw-ISH-IMU.bpf.o" ]' "HID-BPF program installed"
 ok '[ -x "$R/etc/gamecove/claw8ex-gyro/ish_gyro_bias.py" ]' "helpers installed"
 ok 'grep -q "StateDirectory=ish-gyro-bias" "$R/etc/systemd/system/gamecove-gyro-bias.service"' "bias unit has its state dir"
@@ -98,7 +101,29 @@ ok '! disp "$GF" claw8ex-gyro set "accel on" >/dev/null 2>&1' "the dispatcher re
 ok 'disp "$GFS" claw8ex-gyro status | grep -qx installed=yes' "status through gamecove-fix-set"
 ok '! disp "$GFS" claw8ex-gyro remove >/dev/null 2>&1' "gamecove-fix-set refuses remove"
 ok 'disp "$GF" claw8ex-gyro remove >/dev/null 2>&1' "remove through gamecove-fix"
-ok '[ ! -e "$R/etc/firmware/intel/ish/ish_ptl.bin" ]' "removed"
+ok '[ ! -e "$R$FWP" ]' "removed"
+
+case_start firmware_only_for_this_model
+gyro_ready
+fix claw8ex-gyro install >/dev/null 2>&1
+ok '[ ! -e "$R$GENERIC" ]' "never the generic ish_ptl.bin every Panther Lake machine would load"
+ok 'case "$FWP" in */ish_ptl_[0-9a-f]*_[0-9a-f]*.bin) true ;; *) false ;; esac' "vendor + product name file"
+ok '[ "$(python3 -I -c "import zlib; print(\"%08x\" % zlib.crc32(b\"123456789\"))")" = cbf43926 ]' "CRC-32 check value (kernel crc32(~0) ^ ~0)"
+fix claw8ex-gyro remove >/dev/null 2>&1
+# an install from before: generic name in the manifest and the initramfs; install / root status move it
+before=$(snapshot)
+fix claw8ex-gyro install >/dev/null 2>&1
+M=$R/var/lib/gamecove/fixes/claw8ex-gyro/manifest
+mv "$R$FWP" "$R$GENERIC"
+sed -i "s|$FWP|$GENERIC|" "$M" "$FAKE/initramfs"
+fix claw8ex-gyro status >/dev/null 2>&1
+ok '[ -f "$R$FWP" ] && [ ! -e "$R$GENERIC" ]' "root status moves the firmware to the model-specific name"
+ok 'grep -qxF "$FWP" "$FAKE/initramfs" && ! grep -qxF "$GENERIC" "$FAKE/initramfs"' "and the initramfs tracking"
+ok '! grep -qF "$GENERIC" "$M"' "manifest follows"
+fix claw8ex-gyro remove >/dev/null 2>&1
+ok '[ "$(snapshot)" = "$before" ]' "remove after the move restores everything"
+echo >"$R/sys/class/dmi/id/product_name"
+ok '! fix claw8ex-gyro install 2>/dev/null' "no DMI product name: refused (can't scope the firmware)"
 
 case_start karg_failure_keeps_firmware
 gyro_ready
@@ -107,9 +132,9 @@ fix claw8ex-gyro install >/dev/null 2>&1
 export FAKE_FAIL=kargs
 ok '! fix claw8ex-gyro remove >/dev/null 2>&1' "remove reports the failed kernel argument"
 ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 1 ]' "argument still set"
-ok '[ -f "$R/etc/firmware/intel/ish/ish_ptl.bin" ]' "firmware stays"
-ok 'grep -qxF /etc/firmware/intel/ish/ish_ptl.bin "$FAKE/initramfs"' "and stays in the initramfs"
-ok 'grep -qxF "file /etc/firmware/intel/ish/ish_ptl.bin" "$R/var/lib/gamecove/fixes/claw8ex-gyro/manifest"' "firmware still recorded"
+ok '[ -f "$R$FWP" ]' "firmware stays"
+ok 'grep -qxF "$FWP" "$FAKE/initramfs"' "and stays in the initramfs"
+ok 'grep -qxF "file $FWP" "$R/var/lib/gamecove/fixes/claw8ex-gyro/manifest"' "firmware still recorded"
 ok '[ ! -e "$FAKE/active/gamecove-gyro-keepalive.service" ]' "services still stopped"
 unset FAKE_FAIL
 fix claw8ex-gyro remove >/dev/null 2>&1
