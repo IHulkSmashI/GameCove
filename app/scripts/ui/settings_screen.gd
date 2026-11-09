@@ -16,6 +16,7 @@ extends Control
 ## Overlays it owns: the store sign-in sheet (QR code + code entry), the credits
 ## viewer and the on-screen keyboard for keys and codes.
 
+const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
@@ -216,7 +217,7 @@ func _build() -> void:
 
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"
-	_scroll.follow_focus = true
+	FocusScroll.attach(_scroll)
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL

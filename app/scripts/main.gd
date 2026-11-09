@@ -630,6 +630,12 @@ func device_accent() -> Color:
 
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_THEME_CHANGED:
+		# The band and its shade bake theme colours: any theme switch (not only
+		# apply_theme) restyles them, or Light would keep a dark band.
+		if hint_band != null and _hint_shade != null:
+			_style_hint_shade()
+		return
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_window_focused = false
 		if wiring != null:

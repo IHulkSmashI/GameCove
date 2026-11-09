@@ -243,7 +243,7 @@ static func empty_state(icon: String, title: String, line: String) -> VBoxContai
 static func scroller() -> ScrollContainer:
 	var s := ScrollContainer.new()
 	s.name = "Scroll"
-	s.follow_focus = true
+	load("res://scripts/ui/focus_scroll.gd").attach(s)
 	s.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	s.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	s.size_flags_vertical = Control.SIZE_EXPAND_FILL

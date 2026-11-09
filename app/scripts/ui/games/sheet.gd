@@ -11,6 +11,7 @@ extends Control
 ##
 ## Disabled rows stay focusable so their reason (detail) can be read.
 
+const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
@@ -74,7 +75,7 @@ func _init() -> void:
 	_scroll.name = "Scroll"
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	_scroll.follow_focus = true
+	FocusScroll.attach(_scroll)
 	col.add_child(_scroll)
 	_list = Kit.vbox(6)
 	_list.name = "Rows"

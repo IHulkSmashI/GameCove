@@ -14,6 +14,7 @@ extends Control
 ## overlay, frame limit, TDP, Auto TDP, upscaler and frame generation, Reset
 ## this game, how long you've played and Exit game (press twice).
 
+const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
@@ -247,7 +248,7 @@ func _build_frame() -> void:
 
 	var scroll := ScrollContainer.new()
 	scroll.name = "Scroll"
-	scroll.follow_focus = true
+	FocusScroll.attach(scroll)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
