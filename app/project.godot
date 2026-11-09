@@ -33,6 +33,7 @@ Storage="*res://scripts/system/storage.gd"
 Setup="*res://scripts/system/setup.gd"
 Controller="*res://scripts/input/controller.gd"
 Controls="*res://scripts/controls/controls.gd"
+Profiles="*res://scripts/controls/profiles.gd"
 
 [display]
 

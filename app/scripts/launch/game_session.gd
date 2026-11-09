@@ -30,6 +30,11 @@ const GONE_TICKS := 2
 var gamescope: Object
 var power: Object
 var launcher: Object
+## The Controls registry (autoload when in the tree; tests set it). While it has
+## an available display.fps_limit, Profiles owns the frame limit (it migrates
+## the Launcher's per-game value into the game's profile, applies it and puts
+## the pre-game value back) and GameSession leaves gamescope's limit alone.
+var controls: Object
 ## func(pid: int) -> bool. Swapped in tests.
 var pid_running: Callable = func(pid: int) -> bool: return OS.is_process_running(pid)
 
@@ -59,8 +64,10 @@ func setup(gamescope_svc: Object, power_svc: Object, launcher_svc: Object) -> vo
 func _ready() -> void:
 	_focus_timer = _make_timer(FOCUS_POLL_S, poll_focus)
 	_exit_timer = _make_timer(EXIT_CHECK_S, poll_exit)
+	if controls == null:
+		controls = get_node_or_null("/root/Controls")
 	# A frame limit left over from a crash or an earlier session shouldn't cap home.
-	if gamescope != null and gamescope.is_running():
+	if gamescope != null and gamescope.is_running() and not profiles_own_fps():
 		_fps_limit(0)
 
 
@@ -88,7 +95,7 @@ func begin(g: Dictionary, launched: Dictionary) -> void:
 	_gone = 0
 	var key := str(g.get("key", ""))
 	var s: Dictionary = launcher.settings_for(key) if launcher != null else {}
-	if gamescope != null and gamescope.is_running():
+	if gamescope != null and gamescope.is_running() and not profiles_own_fps():
 		_fps_limit(int(s.get("fps_limit", 0)))
 	if power != null and launcher != null and launcher.auto_tdp_for(key):
 		autotune_on = true
@@ -178,6 +185,14 @@ func return_to_game() -> bool:
 	return focused
 
 
+## True when Profiles applies the frame limit (Controls has display.fps_limit).
+func profiles_own_fps() -> bool:
+	if controls == null or not controls.has_method("has") or not controls.has("display.fps_limit"):
+		return false
+	var c: Object = controls.control("display.fps_limit")
+	return c != null and bool(c.available)
+
+
 func runs(key: String) -> bool:
 	return is_active() and str(game.get("key", "")) == key
 
@@ -200,7 +215,8 @@ func _finish(go_home: bool) -> void:
 		_power_autotune(false)
 	autotune_on = false
 	if gamescope != null and gamescope.is_running():
-		_fps_limit(0)
+		if not profiles_own_fps():
+			_fps_limit(0)
 		if go_home:
 			_focus_home()
 	game = {}

@@ -100,9 +100,14 @@ func coerce(v: Variant) -> Variant:
 		"toggle":
 			return bool(v) if (v is bool or v is int) else null
 		"choice":
+			# compare like types only: "fsr" == 30 is a script error in GDScript,
+			# and a profile or import may hand over a value of the wrong type
+			var num := v is int or v is float
 			for o in options:
-				if o.get("value") == v:
-					return v
+				var ov: Variant = o.get("value") if o is Dictionary else null
+				var onum := ov is int or ov is float
+				if (typeof(ov) == typeof(v) or (num and onum)) and ov == v:
+					return ov
 			return null
 		"color":
 			return v if v is String and v.is_valid_html_color() else null

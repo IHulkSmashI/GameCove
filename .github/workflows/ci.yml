@@ -41,11 +41,23 @@ jobs:
           # must also exit 0: a crash at shutdown (e.g. static caches outliving the renderer) fails here
           ./godot --headless --path app --quit-after 120 2>&1 | tee run.log
           ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log run.log
+      - name: Device matrix fixtures (every devices.json row + generic AMD/Intel)
+        run: |
+          python3 -I tools/devicematrix/gen.py "$RUNNER_TEMP/devicematrix"
+          echo "DEVICEMATRIX_DIR=$RUNNER_TEMP/devicematrix" >> "$GITHUB_ENV"
+          echo "DEVICEMATRIX_REPORT=$RUNNER_TEMP/devicematrix-report.json" >> "$GITHUB_ENV"
       - name: GDScript tests (fail on failures, script errors and unexpected engine errors)
         run: |
           set -o pipefail
           ./godot --headless --path app -s res://tests/run_tests.gd 2>&1 | tee tests.log
           ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" tests.log
+      - name: Device matrix report (what every control detected on every handheld)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: devicematrix-report
+          path: ${{ runner.temp }}/devicematrix-report.json
+          if-no-files-found: ignore
       - name: Export preset packs the app
         run: |
           mkdir -p app/build

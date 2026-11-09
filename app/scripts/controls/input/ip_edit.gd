@@ -281,8 +281,8 @@ static func reset(profile: Dictionary) -> Dictionary:
 ## Device config (InputPlumber's devices/*.yaml, /etc overrides first) whose
 ## `name:` is `device_name`: its target_devices list, [] when not found.
 static func config_targets(sys_root: String, device_name: String) -> Array:
-	for dir in ["/etc/inputplumber/devices.d", "/usr/share/inputplumber/devices"]:
-		var d := DirAccess.open(sys_root + dir)
+	for dir in [sys_root + "/etc/inputplumber/devices.d", sys_root + "/usr/share/inputplumber/devices"]:
+		var d := DirAccess.open(dir)
 		if d == null:
 			continue
 		var files := d.get_files()
@@ -290,7 +290,7 @@ static func config_targets(sys_root: String, device_name: String) -> Array:
 		for f in files:
 			if not (f.ends_with(".yaml") or f.ends_with(".yml")):
 				continue
-			var parsed := parse_config_head(FileAccess.get_file_as_string(sys_root + dir + "/" + f))
+			var parsed := parse_config_head(FileAccess.get_file_as_string(dir + "/" + f))
 			if parsed["name"] == device_name and not parsed["targets"].is_empty():
 				return parsed["targets"]
 	return []
