@@ -519,3 +519,28 @@ func test_texts_helpers() -> void:
 	eq(TS.masked("abcdef1234"), "••••1234", "masked key")
 	eq(TS.store_line({"signed_in": true, "account": "x"}), "Signed in as x", "account")
 	ok(TS.can_sign_in({"signed_in": false, "how": "code"}) and not TS.can_sign_in({"signed_in": false, "how": "heroic"}), "who can sign in here")
+
+
+class FakePhoto extends RefCounted:
+	var enabled := true
+	var maker_enabled := true
+	func set_enabled(on: bool) -> void:
+		enabled = on
+	func set_maker_enabled(on: bool) -> void:
+		maker_enabled = on
+
+
+func test_device_page_photo_settings() -> void:
+	var ph := FakePhoto.new()
+	var d: VBoxContainer = DevicePage.new()
+	d.panel_dir = "res://tests/fixtures/settings/device/"
+	d.setup("device", {"photo": ph}, null)
+	d.on_shown()
+	ok(d.rows.has("real_photo"), "real photo switch")
+	ok(d.rows.has("maker_photo"), "Show maker photos switch")
+	d.rows["maker_photo"].step(1)
+	eq(ph.maker_enabled, false, "turned off through DevicePhoto.set_maker_enabled")
+	ok(d.find_child("Card_photo", true, false).visible, "shown under About")
+	d.select_part("storage")
+	ok(not d.find_child("Card_photo", true, false).visible, "hidden on other sections")
+	d.free()

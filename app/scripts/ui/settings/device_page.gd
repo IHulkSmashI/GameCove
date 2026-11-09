@@ -198,6 +198,12 @@ func _photo_setting() -> void:
 	r.changed.connect(func(v):
 		ph.set_enabled(bool(v))
 		rebuild.call_deferred())
+	# Maker's own product picture when there's no free photo (one request).
+	if ph.has_method("set_maker_enabled") and "maker_enabled" in ph:
+		var m := toggle(box, "maker_photo", TPhoto.MAKER_SETTING_TITLE, bool(ph.maker_enabled), by_value(TPhoto.MAKER_SETTING_HELP), "download")
+		m.changed.connect(func(v):
+			ph.set_maker_enabled(bool(v))
+			rebuild.call_deferred())
 
 
 ## Focusable controls under `n`, in tree order.
