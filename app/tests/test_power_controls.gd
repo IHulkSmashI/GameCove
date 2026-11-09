@@ -529,6 +529,109 @@ func test_ally_live_gpu_clock_put_back_order() -> void:
 	_free()
 
 
+## steamos-manager's Intel driver on xe as it behaves (src/gpu.rs): "manual" writes
+## min_freq = max_freq = the clock, "auto" writes RPe..RPa, ManualGpuClock reads min_freq; a
+## clock set in auto is only remembered. PowerStation's card keeps ManualClock and clock values.
+class SmXe extends "res://tests/fixtures/power/fake_runner.gd":
+	const K := "--user get-property com.steampowered.SteamOSManager1 /com/steampowered/SteamOSManager1 com.steampowered.SteamOSManager1.GpuPerformanceLevel1 "
+	var freq := ""
+	var saved := -1
+
+	func _w(f: String, v: int) -> void:
+		var h := FileAccess.open(freq + f, FileAccess.WRITE)
+		h.store_string(str(v) + "\n")
+		h.close()
+
+	func _r(f: String) -> int:
+		return FileAccess.get_file_as_string(freq + f).strip_edges().to_int()
+
+	func run(program: String, args: PackedStringArray) -> Dictionary:
+		var a := Array(args).filter(func(x): return not str(x).begins_with("--timeout=") and x != "--json=short")
+		if program == "busctl" and a.size() >= 6 and str(a[4]).ends_with("GpuPerformanceLevel1"):
+			if a[1] == "get-property" and a[5] == "ManualGpuClock":
+				calls.append("busctl " + " ".join(PackedStringArray(a)))
+				return {"code": 0, "out": JSON.stringify({"type": "u", "data": _r("min_freq")})}
+			if a[1] == "set-property" and a[5] == "ManualGpuClock":
+				calls.append("busctl " + " ".join(PackedStringArray(a)))
+				saved = int(a[7])
+				if str(props[K + "GpuPerformanceLevel"]["data"]) == "manual":
+					_w("max_freq", saved)
+					_w("min_freq", saved)
+				return {"code": 0, "out": ""}
+			if a[1] == "set-property" and a[5] == "GpuPerformanceLevel":
+				var r := super.run(program, args)
+				if a[7] == "manual":
+					var f := saved if saved > 0 else int((_r("rpe_freq") + _r("rpa_freq")) / 2)
+					_w("max_freq", f)
+					_w("min_freq", f)
+				else:
+					_w("min_freq", _r("rpe_freq"))
+					_w("max_freq", _r("rpa_freq"))
+				return r
+		return super.run(program, args)
+
+
+## The Claw's xe GPU as found in round 3: level auto, min_freq 900 / max 2300 (RPe 850),
+## PowerStation card1 ManualClock false with clock values 900/2300.
+func _claw_gpu_raw() -> Dictionary:
+	var t := Trees.new()
+	var tree: Dictionary = t.claw8ex()
+	var g := "/sys/class/drm/card1/device/tile0/gt0/freq0/"
+	for kv in [["min_freq", "900"], ["max_freq", "2300"], ["rpe_freq", "850"], ["rpa_freq", "2300"]]:
+		t.w(g + kv[0], kv[1])
+	var sm := Trees.SM + "GpuPerformanceLevel1 "
+	tree["props"][sm + "GpuPerformanceLevel"] = Trees.p("s", "auto")
+	tree["props"][sm + "AvailableGpuPerformanceLevels"] = Trees.p("as", ["auto", "manual"])
+	tree["props"][sm + "ManualGpuClockMin"] = Trees.p("u", 100)
+	tree["props"][sm + "ManualGpuClockMax"] = Trees.p("u", 2300)
+	var card := Trees.PS + "/org/shadowblip/Performance/GPU/card1 org.shadowblip.GPU.Card "
+	tree["props"][card + "ManualClock"] = Trees.p("b", false)
+	tree["props"][card + "ClockValueMhzMin"] = Trees.p("d", 900.0)
+	tree["props"][card + "ClockValueMhzMax"] = Trees.p("d", 2300.0)
+	var e := _setup(tree)
+	var r: RefCounted = SmXe.new()
+	r.freq = tree["root"] + g
+	_swap_runner(e, r)
+	return e
+
+
+## Round 3: gpu_clock 900 -> 950 -> put back left min_freq 850 and ManualClock on. The probe's
+## raw snapshot puts the level, xe min/max_freq and PowerStation's state back exactly.
+func test_claw_gpu_probe_restores_the_raw_state() -> void:
+	var e := _claw_gpu_raw()
+	var be: RefCounted = e["prov"].be
+	var root: String = e["root"]
+	var g := "/sys/class/drm/card1/device/tile0/gt0/freq0/"
+	var card := Trees.PS + "/org/shadowblip/Performance/GPU/card1 org.shadowblip.GPU.Card "
+	var snap: Dictionary = e["prov"].probe_snapshot()
+	eq(snap["gpu"]["xe"], [900, 2300], "captured")
+	ok(be.set_sm_manual_clock(950), "probe 950")
+	eq(_read(root, g + "min_freq"), "950")
+	e["runner"].props[card + "ManualClock"]["data"] = true   # something switched PowerStation's manual on
+	ok(be.set_sm_manual_clock(900), "put back 900")
+	e["runner"].props[Trees.SM + "GpuPerformanceLevel1 GpuPerformanceLevel"]["data"] = "manual"
+	ok(e["prov"].probe_restore(snap), "raw restore")
+	eq(str(e["runner"].props[Trees.SM + "GpuPerformanceLevel1 GpuPerformanceLevel"]["data"]), "auto", "level auto")
+	eq([_read(root, g + "min_freq"), _read(root, g + "max_freq")], ["900", "2300"], "min/max exactly as found")
+	eq(e["runner"].props[card + "ManualClock"]["data"], false, "PowerStation ManualClock off again")
+	_free()
+
+
+## Going back to level auto by itself restores the pre-manual window and ManualClock.
+func test_claw_gpu_auto_returns_the_pre_manual_window() -> void:
+	var e := _claw_gpu_raw()
+	var be: RefCounted = e["prov"].be
+	var root: String = e["root"]
+	var g := "/sys/class/drm/card1/device/tile0/gt0/freq0/"
+	var card := Trees.PS + "/org/shadowblip/Performance/GPU/card1 org.shadowblip.GPU.Card "
+	ok(be.set_sm_manual_clock(950), "manual 950")
+	e["runner"].props[card + "ManualClock"]["data"] = true
+	ok(be.set_gpu_level("auto"), "auto")
+	eq([_read(root, g + "min_freq"), _read(root, g + "max_freq")], ["900", "2300"], "900/2300, not steamos-manager's 850")
+	eq(e["runner"].props[card + "ManualClock"]["data"], false, "ManualClock off")
+	_free()
+
+
 func test_claw8ex_boost_and_thermald_hold_with_the_guard() -> void:
 	var t := Trees.new().claw8ex()
 	var f := FileAccess.open(t["root"] + "/thermald.state", FileAccess.WRITE)

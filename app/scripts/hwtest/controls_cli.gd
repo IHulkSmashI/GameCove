@@ -263,13 +263,16 @@ func _write(id: String, v: Variant) -> bool:
 # ---- pure helpers (tested) --------------------------------------------------------
 
 ## How a probe puts things back, in order: the probed control's own value first (a GPU
-## clock goes back while the GPU is still in manual), then the provider's exact snapshot,
-## then the controls it required (the GPU level back to auto), and only then the read that
-## decides "restored" (the Ally read 850 because it read before the level went back).
+## clock goes back while the GPU is still in manual), then the controls it required (the
+## GPU level back to auto), then the provider's exact raw snapshot, and only then the read
+## that decides "restored" (the Ally read 850 because it read before the level went back).
 static func restore_steps(id: String, required: Array) -> Array:
-	var out: Array = [["write", id], ["provider"]]
+	var out: Array = [["write", id]]
 	for r in required:
 		out.append(["required", r])
+	# the provider's raw snapshot last: going back to GPU level auto makes steamos-manager
+	# write its own window, which the snapshot then corrects (min_freq 850 -> 900 on the Claw)
+	out.append(["provider"])
 	out.append(["read", id])
 	return out
 

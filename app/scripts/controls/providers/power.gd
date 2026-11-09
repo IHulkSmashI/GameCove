@@ -105,6 +105,21 @@ func _pstate() -> Dictionary:
 	return _p(func(): return power.state())
 
 
+## Controls probe (hwtest/controls_cli.gd): the raw GPU clock state, put back exactly after
+## a GPU probe (level, xe min/max_freq, PowerStation ManualClock and clock values).
+func probe_snapshot() -> Dictionary:
+	be.reset()
+	var g: Dictionary = be.gpu_raw_state()
+	return {"gpu": g} if not g.is_empty() else {}
+
+
+func probe_restore(snap: Dictionary) -> bool:
+	if not snap.has("gpu"):
+		return true
+	be.reset()
+	return be.gpu_raw_restore(snap["gpu"])
+
+
 func _make(id: String, kind: String, spec: Dictionary, detect: Callable, read: Callable, write: Callable) -> RefCounted:
 	var base := {"id": id, "title": Tx.title(id), "help": Tx.help(id), "group": "power", "kind": kind}
 	base.merge(spec, true)
@@ -115,6 +130,7 @@ func _make(id: String, kind: String, spec: Dictionary, detect: Callable, read: C
 				_wrote(id, v)
 			return ok)
 	_by_id[id] = weakref(c)  # controls hold callables bound to us: no strong ref back (no cycle)
+	c.set_meta("provider", self)   # control -> provider only (probe_snapshot/probe_restore)
 	return c
 
 

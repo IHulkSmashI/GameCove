@@ -135,4 +135,4 @@ func test_probe_put_back_leaves_no_saved_layout() -> void:
 ## gpu_clock requires gpu_level: clock back first, then the level, then the deciding read.
 func test_probe_restore_order() -> void:
 	eq(Cli.restore_steps("power.gpu_clock", ["power.gpu_level"]),
-		[["write", "power.gpu_clock"], ["provider"], ["required", "power.gpu_level"], ["read", "power.gpu_clock"]])
+		[["write", "power.gpu_clock"], ["required", "power.gpu_level"], ["provider"], ["read", "power.gpu_clock"]])

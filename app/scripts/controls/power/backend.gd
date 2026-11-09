@@ -836,7 +836,78 @@ func set_gpu_level(word: String) -> bool:
 	if info.is_empty() or not word in info["offered"]:
 		return false
 	var ok := sm_set("GpuPerformanceLevel1", "GpuPerformanceLevel", "s", word) if info["via"] == "steamos-manager" else root_set("gpulevel", word)
-	return ok and str(gpu_level_info().get("active", "")) == word
+	ok = ok and str(gpu_level_info().get("active", "")) == word
+	if ok and word == "auto" and not _pre_manual.is_empty():
+		# steamos-manager's auto writes its own window (RPe..RPa) and leaves PowerStation's
+		# ManualClock alone: put back exactly what was there before manual (the Claw kept
+		# ManualClock true and min_freq 850 instead of 900)
+		gpu_raw_restore(_pre_manual, false)
+		_pre_manual = {}
+	return ok
+
+
+# ---- raw GPU clock state (controls probe, leaving manual) -------------------------------
+
+## What was there before GameCove switched the GPU to manual (gpu_raw_state()).
+var _pre_manual := {}
+
+
+## The raw clock state, every place one can live: steamos-manager's level, xe's
+## tile0/gt0/freq0 min/max_freq, and each PowerStation card's ManualClock and
+## ClockValueMhzMin/Max (PowerStation answers these even where ClockLimit* errors, the xe
+## Claw). Missing parts are left out.
+func gpu_raw_state() -> Dictionary:
+	var out := {}
+	var lvl: Variant = sm_get("GpuPerformanceLevel1", "GpuPerformanceLevel")
+	if lvl != null:
+		out["level"] = str(lvl)
+	var f := xe_freq()
+	if f != "":
+		out["xe"] = [read_int(f + "/min_freq"), read_int(f + "/max_freq")]
+	var cards := []
+	for c in ps_cards():
+		var man: Variant = ps_get(c, PS_CARD_IF, "ManualClock")
+		if man == null:
+			continue
+		cards.append({"card": c, "manual": bool(man), "min": ps_get(c, PS_CARD_IF, "ClockValueMhzMin"),
+			"max": ps_get(c, PS_CARD_IF, "ClockValueMhzMax")})
+	if not cards.is_empty():
+		out["ps"] = cards
+	return out
+
+
+## Puts a gpu_raw_state() back: the level first (steamos-manager rewrites min/max when it
+## changes it), then xe min/max_freq (the root helper, else PowerStation's clock values),
+## then each PowerStation card's values and ManualClock last. True when everything that
+## can be read back matches.
+func gpu_raw_restore(st: Dictionary, with_level := true) -> bool:
+	if with_level and st.has("level") and str(sm_get("GpuPerformanceLevel1", "GpuPerformanceLevel")) != str(st["level"]):
+		sm_set("GpuPerformanceLevel1", "GpuPerformanceLevel", "s", str(st["level"]))
+	var ok := true
+	var f := xe_freq()
+	if st.has("xe") and f != "":
+		var want: Array = st["xe"]
+		var now := [read_int(f + "/min_freq"), read_int(f + "/max_freq")]
+		if now != want:
+			if helper_present():
+				# order keeps min <= max at every step
+				var steps := [["gpumax", want[1]], ["gpumin", want[0]]] if int(want[1]) >= now[1] else [["gpumin", want[0]], ["gpumax", want[1]]]
+				for s2 in steps:
+					root_set(s2[0], str(s2[1]))
+			else:
+				for c in st.get("ps", []):
+					ps_set(c["card"], PS_CARD_IF, "ClockValueMhzMax", "d", str(want[1]))
+					ps_set(c["card"], PS_CARD_IF, "ClockValueMhzMin", "d", str(want[0]))
+			ok = [read_int(f + "/min_freq"), read_int(f + "/max_freq")] == want and ok
+	for c in st.get("ps", []):
+		if c["min"] != null and ps_get(c["card"], PS_CARD_IF, "ClockValueMhzMin") != c["min"]:
+			ps_set(c["card"], PS_CARD_IF, "ClockValueMhzMin", "d", str(c["min"]))
+		if c["max"] != null and ps_get(c["card"], PS_CARD_IF, "ClockValueMhzMax") != c["max"]:
+			ps_set(c["card"], PS_CARD_IF, "ClockValueMhzMax", "d", str(c["max"]))
+		if bool(ps_get(c["card"], PS_CARD_IF, "ManualClock")) != bool(c["manual"]):
+			ps_set(c["card"], PS_CARD_IF, "ManualClock", "b", "true" if c["manual"] else "false")
+		ok = bool(ps_get(c["card"], PS_CARD_IF, "ManualClock")) == bool(c["manual"]) and ok
+	return ok
 
 
 ## steamos-manager's fixed manual GPU clock (Steam Deck), {} when it has none.
@@ -862,12 +933,19 @@ func set_sm_manual_clock(mhz: int) -> bool:
 	var lvl := gpu_level_info()
 	var was := str(lvl.get("active", ""))
 	if lvl.get("via", "") == "steamos-manager" and was != "manual" and "manual" in lvl.get("offered", []):
+		if _pre_manual.is_empty():
+			_pre_manual = gpu_raw_state()
 		if not sm_set("GpuPerformanceLevel1", "GpuPerformanceLevel", "s", "manual"):
+			_pre_manual = {}
 			return false
 	if sm_set("GpuPerformanceLevel1", "ManualGpuClock", "u", str(mhz)) and int(sm_manual_clock().get("value", -1)) == mhz:
 		return true
 	if was != "" and str(gpu_level_info().get("active", "")) != was:
-		sm_set("GpuPerformanceLevel1", "GpuPerformanceLevel", "s", was)
+		if was == "auto" and not _pre_manual.is_empty():
+			gpu_raw_restore(_pre_manual)
+			_pre_manual = {}
+		else:
+			sm_set("GpuPerformanceLevel1", "GpuPerformanceLevel", "s", was)
 	return false
 
 
