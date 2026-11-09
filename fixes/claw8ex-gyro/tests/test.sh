@@ -39,7 +39,7 @@ cold_boot() {
 
 # A synthetic EDID shaped like the Claw 8 panel's, registered as validated for the test.
 vrr_ready() {
-	mkdir -p "$R/sys/class/drm/card1-eDP-1"
+	mkdir -p "$R/sys/class/drm/card1-eDP-1" "$R/sys/module/drm/parameters"
 	sh "$FIXES/claw8ex-vrr/tests/make-edid.sh" >"$R/sys/class/drm/card1-eDP-1/edid"
 	sha=$("$REAL_SHA256SUM" "$R/sys/class/drm/card1-eDP-1/edid" | cut -d ' ' -f 1)
 	echo "CSW0801 $sha 256 95,96,142,143 test panel" >"$T/panels.txt"
@@ -203,29 +203,49 @@ ok 'override | grep -qx "capability_map_id: gamecove_claw8ex"' "gyro removed: bu
 fix claw8ex-buttons remove >/dev/null
 ok '[ "$(snapshot)" = "$before" ]' "both removed: fake root restored"
 
-case_start shared_kernel_argument
+case_start vrr_and_gyro_coexist
 gyro_ready
 vrr_ready
 before=$(snapshot)
 fix claw8ex-gyro install >/dev/null 2>&1
 fix claw8ex-vrr install >/dev/null 2>&1
-ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 1 ]' "set once for both"
+ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 1 ]' "set once (by the gyro; the VRR fix needs no kernel argument)"
 fix claw8ex-gyro remove >/dev/null
-ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 1 ]' "kept while the VRR fix needs it"
+ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 0 ]' "removed with the gyro"
+ok '[ -f "$R/etc/firmware/edid/gamecove-csw0801-30-120.bin" ]' "the VRR fix's EDID stays in /etc/firmware"
 fix claw8ex-vrr remove >/dev/null
-ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 0 ]' "removed with the last holder"
 ok '[ "$(snapshot)" = "$before" ]' "fake root restored"
 
-case_start shared_kernel_argument_vrr_first
+case_start services_only_on_the_claw
 gyro_ready
-vrr_ready
-before=$(snapshot)
-fix claw8ex-vrr install >/dev/null 2>&1
 fix claw8ex-gyro install >/dev/null 2>&1
-fix claw8ex-vrr remove >/dev/null
-ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 1 ]' "kept while the gyro needs it"
+for u in gamecove-gyro-keepalive.service gamecove-gyro-bias.service; do
+	ok "grep -qx 'ExecCondition=/usr/bin/grep -qx MS-1T91 /sys/class/dmi/id/board_name' \"\$R/etc/systemd/system/$u\"" "$u starts only on board MS-1T91"
+done
+# The unit's condition, run against another handheld's DMI and the Claw's (the command systemd runs).
+cond() { sed -n 's|^ExecCondition=/usr/bin/grep -qx \([^ ]*\) /sys/class/dmi/id/board_name$|\1|p' "$R/etc/systemd/system/gamecove-gyro-keepalive.service"; }
+echo RC71L >"$R/sys/class/dmi/id/board_name"
+ok '! grep -qx "$(cond)" "$R/sys/class/dmi/id/board_name"' "ROG Ally: condition fails, so systemd skips the services"
+echo MS-1T91 >"$R/sys/class/dmi/id/board_name"
+ok 'grep -qx "$(cond)" "$R/sys/class/dmi/id/board_name"' "Claw: condition passes"
+echo RC71L >"$R/sys/class/dmi/id/board_name"
+snap=$(snapshot)
+ok 'fix claw8ex-gyro status | grep -qx applies=no' "ROG Ally: status says it doesn't apply"
+ok '! fix claw8ex-gyro install 2>/dev/null' "ROG Ally: install refused"
+ok '[ "$(snapshot)" = "$snap" ]' "ROG Ally: nothing changed"
+
+case_start old_units_get_the_board_check
+gyro_ready
+before=$(snapshot)
+fix claw8ex-gyro install >/dev/null 2>&1
+for u in gamecove-gyro-keepalive.service gamecove-gyro-bias.service; do
+	grep -v '^ExecCondition=' "$R/etc/systemd/system/$u" >"$T/u" && cat "$T/u" >"$R/etc/systemd/system/$u"
+done
+fix claw8ex-gyro status >/dev/null 2>&1
+ok 'grep -q "^ExecCondition=" "$R/etc/systemd/system/gamecove-gyro-keepalive.service"' "status (root) adds the board check to an old install"
+ok 'grep -q "^ExecCondition=" "$R/etc/systemd/system/gamecove-gyro-bias.service"' "both services"
 fix claw8ex-gyro remove >/dev/null
-ok '[ "$(snapshot)" = "$before" ]' "fake root restored"
+ok '[ "$(snapshot)" = "$before" ]' "remove still restores everything"
 
 case_start preexisting_kernel_argument
 gyro_ready

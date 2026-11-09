@@ -718,7 +718,7 @@ else
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
 	if "$SHELLCHECK" -S warning -s bash "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	for f in "$REPO"/fixes/*/fix.sh "$REPO"/fixes/*/test.sh "$REPO"/fixes/*/tests/*.sh "$REPO"/fixes/lib/*.sh \
-		"$REPO"/fixes/*/bpf/*.sh; do
+		"$REPO"/fixes/*/bpf/*.sh "$REPO"/fixes/*/*-hook.sh; do
 		[ -f "$f" ] || continue
 		# -x from the repo root so "# shellcheck source=fixes/..." paths resolve
 		if (cd "$REPO" && "$SHELLCHECK" -S warning -x -s sh "$f") >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi

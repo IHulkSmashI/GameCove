@@ -27,3 +27,7 @@ Every change is appended to `/var/lib/gamecove/fixes/charge-limit/changes.log`. 
 The limit lives in the battery controller; whether it survives a reboot depends on the firmware. GameCove puts your saved limit back at start when the value read differs.
 
 Test (fake sysfs, never the real one): `sh fixes/charge-limit/test.sh`. `GAMECOVE_ROOT` is the filesystem prefix.
+
+## One drive, several handhelds
+
+What the fix saved (the original values `remove` writes back) belongs to the handheld it was read on: `device` in its state folder names it. When the same drive boots another handheld, `install`, `set` and `remove` first park the other handheld's files in `devices/<id>/` and bring back this one's, so `remove` on a ROG Ally never writes values read on a Claw. `status` (unprivileged) reads this handheld's files wherever they are. State from before this change is taken as the current handheld's (fan: only when it was read from the same fan driver).
