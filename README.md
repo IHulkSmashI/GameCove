@@ -100,6 +100,8 @@ Gyro on the MSI Claw 8 EX was figured out by **Kisenir** (r/MSIClaw). Full list 
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
 
-A few parts carry their own licenses: the gyro fix's HID-BPF program is GPL-2.0-only and its helper scripts GPL-2.0-or-later ([LICENSES/GPL-2.0-only.txt](LICENSES/GPL-2.0-only.txt)); the VRR fix's panel list and EDID logic derive from MIT-licensed code ([fixes/claw8ex-vrr/LICENSE.ClawLab-MIT](fixes/claw8ex-vrr/LICENSE.ClawLab-MIT)); and the Heroic Games Launcher icon in `app/assets/brand/` is GPL-3.0-only. Details in [CREDITS.md](CREDITS.md).
+A few parts carry their own licenses: the gyro fix's HID-BPF program is GPL-2.0-only and its helper scripts GPL-2.0-or-later ([LICENSES/GPL-2.0-only.txt](LICENSES/GPL-2.0-only.txt)); the VRR fix's panel list and EDID logic derive from MIT-licensed code ([fixes/claw8ex-vrr/LICENSE.ClawLab-MIT](fixes/claw8ex-vrr/LICENSE.ClawLab-MIT)); the app is built on Godot Engine (MIT, with its third-party notices in [LICENSES/](LICENSES/)); the bundled fonts are OFL-1.1 (`app/fonts/OFL-*.txt`); the QR code encoder is MIT; and the Heroic Games Launcher icon in `app/assets/brand/` is GPL-3.0-only. Every release artefact carries these texts (`packaging/licenses.list`), and the app shows them under Settings > About > Credits and licenses. Details in [CREDITS.md](CREDITS.md).
+
+**The brand logos in `app/assets/brand/` are not GPL-licensed.** They are the makers' and stores' trademarks, shown only to identify a device, chip, store or launcher, and removed on request ([docs/BRANDS.md](docs/BRANDS.md), [app/assets/brand/LICENSE.md](app/assets/brand/LICENSE.md)). Maker product photos are never bundled: the app links to them on the maker's site.
 
 Product and company names are trademarks of their respective owners; GameCove is not affiliated with or endorsed by them. See [CREDITS.md](CREDITS.md#trademarks).

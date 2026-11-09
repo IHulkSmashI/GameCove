@@ -123,6 +123,29 @@ gg_cos=$(sed -n 's/^COSIGN_VERSION=//p' "$REPO/packaging/get-gamecove.sh")
 [ -n "$app_cos" ] && [ "$app_cos" = "$gg_cos" ] && ok || bad "updates.gd COSIGN_VERSION ($app_cos) must match get-gamecove.sh ($gg_cos)"
 grep -q 'workflows/firmware\\\\.yml@refs/heads/main\$' "$REPO/app/scripts/system/firmware_index.gd" && ok || bad "firmware_index.gd SIGNER_IDENTITY must name firmware.yml on main"
 
+# ------------------------------------------------------------- brand logos (M23)
+python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY' && ok || bad "brand logos: $(cat "$T/out")"
+import json, os, sys
+repo = sys.argv[1]
+doc = json.load(open(os.path.join(repo, "app/data/brand_logos.json")))
+bad, files = [], set()
+for key, b in doc["brands"].items():
+    for f in ("owner", "source", "license"):
+        if not str(b.get(f, "")).strip():
+            bad.append("%s has no %s" % (key, f))
+    if b.get("file"):
+        files.add(b["file"].replace("res://", "app/"))
+for f in sorted(os.listdir(os.path.join(repo, "app/assets/brand"))):
+    if f.endswith(".svg") and "app/assets/brand/" + f not in files:
+        bad.append("app/assets/brand/%s has no entry in brand_logos.json" % f)
+assert not bad, bad
+PY
+[ -s "$REPO/app/assets/brand/LICENSE.md" ] && grep -q "not\*\* licensed under GameCove's GPL" "$REPO/app/assets/brand/LICENSE.md" && ok || bad "app/assets/brand/LICENSE.md must say the logos aren't GPL"
+grep -q "^app/assets/brand/LICENSE.md " "$REPO/packaging/licenses.list" && ok || bad "licenses.list must ship the brand licence note"
+grep -q "Trademark use" "$REPO/docs/BRANDS.md" && grep -q "Logo removal requests" "$REPO/docs/BRANDS.md" && ok || bad "docs/BRANDS.md must document trademark use and removal"
+grep -q "not GPL-licensed" "$REPO/README.md" && ok || bad "README must say the brand logos aren't GPL"
+grep -q "LicenseRef-.*[Tt]rademark" "$REPO/packaging/rpm/gamecove.spec" && ok || bad "spec License must name the logos' trademark status"
+
 # ------------------------------------------------------------- network disclosure (M22, L34)
 for host in cheapshark.com gg.deals GitHub GameStream "Wake-on-LAN" SteamGridDB "maker" "Affiliate links"; do
 	grep -q "$host" "$REPO/README.md" && ok || bad "README's Network and privacy section doesn't mention $host"

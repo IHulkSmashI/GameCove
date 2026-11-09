@@ -143,12 +143,6 @@ GameCove shows these logos only to identify a device, chip, store or launcher. S
 | Acer (`app/assets/brand/acer.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `acer` | CC0-1.0 (Simple Icons) | — |
 | Intel (`app/assets/brand/intel.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `intel` | CC0-1.0 (Simple Icons) | — |
 | AMD (`app/assets/brand/amd.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `amd` | CC0-1.0 (Simple Icons) | — |
-
-Shown as text (no logo bundled yet): Amazon Games, OneXPlayer, AYANEO, AOKZOE, GPD, ZOTAC, Orange Pi. For stores and launchers without a bundled logo, GameCove shows the icon the user's own system already has installed, if there is one; nothing is copied or redistributed.
-Store and launcher icons other than these (Steam, Heroic, Lutris, Bottles) come from the user's own system: GameCove shows the icon that app installed into the desktop icon theme, the same way any Linux desktop does. Nothing is copied into GameCove or redistributed. Steam is a trademark of Valve Corporation.
-
-Not bundled because their terms need a licence or written permission, or publish no terms for third parties: Valve (Steam, Steam Deck), Epic Games, GOG, Amazon, MSI, ASUS / ROG, Lenovo / Legion, Acer / Predator, OneXPlayer, AYANEO, GPD, ZOTAC, Intel. AMD's brand terms cover only products that contain an AMD chip.
-- **ClawDeck** (same author): Parts ported from ClawDeck (same author). Its MSI BIOS check (`msibios.py`) as the MSI source of the firmware index (`gamedb/gamedb/firmware/sources/msi.py`).
 | Amazon Games (`app/assets/brand/amazon.svg`) | Traced from the 256 px icon in Amazon's official [Amazon Games app installer](https://gaming.amazon.com/aga/AmazonGamesSetup.exe) | Trademark; trace of the official icon | Amazon, Amazon Games and the smile logo are trademarks of Amazon.com, Inc. or its affiliates. |
 | OneXPlayer (`app/assets/brand/onexplayer.svg`) | [Official SVG](https://www.onexplayer.com/assets/Logo-03078c08.svg) from onexplayer.com, fills removed for tinting | Trademark of One-Netbook Technology | — |
 | AYANEO (`app/assets/brand/ayaneo.svg`) | Traced from the [official emblem PNG](https://shop.ayaneo.com/cdn/shop/files/AYA_logo__20210601_-02.png?v=1663762027) (matches the ayaneo.com header) | Trademark of AYANEO; trace of the official logo | — |
@@ -156,5 +150,7 @@ Not bundled because their terms need a licence or written permission, or publish
 | GPD (`app/assets/brand/gpd.svg`) | Traced from the [official gpd.hk logo PNG](https://img.website.xin/contents/sitefiles3601/18006016/images/176080729.png) | Trademark of Shenzhen GPD Technology Co., Ltd.; trace of the official logo | — |
 | ZOTAC GAMING (`app/assets/brand/zotac.svg`) | Traced from the [official ZOTAC GAMING logo](https://www.zotacstore.com/media/wysiwyg/zotac_gaming_logo_1.jpg) on ZOTAC's store | Trademark of ZOTAC International (MCO) Ltd.; trace of the official logo | — |
 | Orange Pi (`app/assets/brand/orangepi.svg`) | Traced from the emblem in Orange Pi's own boot theme ([orangepi-build](https://github.com/orangepi-xunlong/orangepi-build/blob/next/external/packages/plymouth-theme-orangepi/orangepi-logo.png)) | Trademark of Shenzhen Xunlong Software Co., Ltd.; trace of the official logo | — |
+
+**These logos are not GPL-licensed.** The files in `app/assets/brand/` are their owners' trademarks (or, for Heroic, Lutris and Bottles, those projects' GPL icons), shipped only to identify a device, chip, store or launcher: nominative use, never as GameCove's branding or to suggest endorsement. GameCove's GPL-3.0-or-later licence doesn't cover them, and Simple Icons' CC0 dedication covers the path data, not the marks. A maker that wants its logo removed only has to ask: it's switched off in `app/data/brand_logos.json` and the file deleted in the next release ([docs/BRANDS.md](docs/BRANDS.md#logo-removal-requests)). Licence note: [app/assets/brand/LICENSE.md](app/assets/brand/LICENSE.md).
 
 Every brand ships a logo. For stores and launchers, GameCove can also show the icon the user's own system already has installed; nothing of that is copied or redistributed.
