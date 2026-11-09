@@ -228,7 +228,11 @@ func test_settings_open_category() -> void:
 
 
 func test_brand_mark_falls_back_to_text() -> void:
-	ok(BrandMark.rect("AYANEO", 22) == null, "a maker without a logo: callers keep the name")
+	ok(BrandMark.rect("Some Unknown Maker", 22) == null, "a maker without a logo: callers keep the name")
+	var aya := BrandMark.rect("AYANEO", 22)
+	ok(aya != null and aya.texture != null, "every listed maker has a logo now")
+	if aya != null:
+		aya.free()
 	ok(BrandMark.rect("", 22) == null, "no name, no logo")
 	ok(BrandMark.rect("Some Unknown Store", 22) == null, "unknown brand: text")
 	var msi := BrandMark.rect("Micro-Star International Co., Ltd.", 22)
@@ -270,7 +274,7 @@ func test_installer_store_cards_show_logos() -> void:
 	var epic: Node = s.body.find_child("Card_store_epic", true, false)
 	ok(epic != null and epic.find_child("BrandLogo", true, false) != null, "Epic card carries the Epic logo")
 	var amazon: Node = s.body.find_child("Card_store_amazon", true, false)
-	ok(amazon != null and amazon.find_child("BrandLogo", true, false) == null, "Amazon has no logo: the store icon")
+	ok(amazon != null and amazon.find_child("BrandLogo", true, false) != null, "Amazon card carries the Amazon Games logo")
 	T._free(s)
 
 
@@ -281,7 +285,7 @@ func test_game_header_store_logo_keeps_the_name() -> void:
 	ok(h.meta.find_child("StoreLogo", true, false) != null, "Steam logo leads the meta line")
 	ok(h.meta_text().contains("Steam"), "the store's name stays in the text")
 	h.show_game({"key": "amazon:1", "title": "Hades", "store": "amazon"})
-	ok(h.meta.find_child("StoreLogo", true, false) == null, "no logo for Amazon: text only")
+	ok(h.meta.find_child("StoreLogo", true, false) != null, "Amazon Games logo leads the meta line")
 	ok(h.meta_text().contains("Amazon"), "name shown")
 	h.free()
 

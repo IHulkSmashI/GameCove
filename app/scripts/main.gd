@@ -159,6 +159,8 @@ func _ready() -> void:
 	settings.changed.connect(_on_setting_changed)
 	if settings.has_signal("setup_requested"):
 		settings.setup_requested.connect(func(): open_setup(true))
+	if settings.has_signal("game_settings_requested"):
+		settings.game_settings_requested.connect(_open_game_settings)
 	_screen_layer.add_child(settings)
 	screens = {"home": home, "library": library_screen, "discover": discover, "settings": settings}
 
@@ -232,7 +234,13 @@ func _ready() -> void:
 	add_child(launch_overlay)
 
 	quick_menu = QuickMenu.new()
-	quick_menu.setup({"device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")})
+	var qm_services := {"device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
+	if _svc("Controls") != null:
+		qm_services["controls"] = _svc("Controls")
+		qm_services["profiles"] = _svc("Profiles")
+	quick_menu.setup(qm_services)
+	if quick_menu.has_signal("settings_requested"):
+		quick_menu.settings_requested.connect(_open_settings_category)
 	quick_menu.set_side(menu_side)
 	quick_menu.closed.connect(_on_menu_closed)
 	if quick_menu.has_signal("notice"):
@@ -392,6 +400,8 @@ func _wire_controls() -> void:
 	add_child(fixes)
 	fixes.setup({"sys_root": "", "runner": CommandRunner.new(), "home": OS.get_environment("HOME"), "device": Device})
 	fixes.check_changes()
+	if quick_menu != null and "fixes" in quick_menu:
+		quick_menu.fixes = fixes
 
 
 ## The game is the scope of the per-game controls (perf.*): set it, then detect
@@ -1061,6 +1071,23 @@ func _return_home() -> void:
 	Motion.to(_screen_layer, "modulate:a", 1.0, Motion.SLOW)
 
 
+## Quick menu "All settings" → the matching Settings page.
+func _open_settings_category(category: String, part: String) -> void:
+	if quick_menu != null and quick_menu.visible:
+		quick_menu.close()
+	if page != null:
+		_close_page()
+	show_screen("settings")
+	if settings.has_method("open_category"):
+		settings.open_category(category, part)
+
+
+## Edit a game's settings: the quick menu opened on that game.
+func _open_game_settings(game: Dictionary) -> void:
+	if quick_menu != null:
+		quick_menu.open(game)
+
+
 func _open_page(game: Dictionary) -> void:
 	if page != null:
 		_close_page()
@@ -1071,6 +1098,8 @@ func _open_page(game: Dictionary) -> void:
 	page.play_requested.connect(_play)
 	page.back_requested.connect(_close_page)
 	page.downloads_requested.connect(open_downloads)
+	if page.game_settings != null and page.game_settings.has_signal("edit_requested"):
+		page.game_settings.edit_requested.connect(_open_game_settings)
 	add_child(page)
 	move_child(page, top_bar.get_index())
 	page.modulate.a = 0.0
