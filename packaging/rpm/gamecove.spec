@@ -95,6 +95,12 @@ install -Dpm0755 session/gamecove-session-client      %{buildroot}%{_libexecdir}
 %{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop
 install -Dpm0755 packaging/libexec/gamecove-apply-choices %{buildroot}%{_libexecdir}/gamecove/gamecove-apply-choices
 install -Dpm0755 packaging/get-gamecove.sh            %{buildroot}%{_libexecdir}/gamecove/get-gamecove.sh
+# Per-game launch wrapper and upscaling helper (perf controls)
+install -Dpm0755 packaging/libexec/gamecove-run       %{buildroot}%{_libexecdir}/gamecove/gamecove-run
+install -Dpm0755 packaging/libexec/gamecove-upscale   %{buildroot}%{_libexecdir}/gamecove/gamecove-upscale
+mkdir -p %{buildroot}%{_prefix}/lib/gamecove/helpers
+cp -a packaging/helpers/gamecove_upscale %{buildroot}%{_prefix}/lib/gamecove/helpers/
+find %{buildroot}%{_prefix}/lib/gamecove/helpers -depth -type d -name __pycache__ -exec rm -rf {} +
 install -Dpm0644 packaging/installer/io.github.ihulksmashi.GameCoveInstaller.desktop \
     %{buildroot}%{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop
 install -Dpm0755 session/gamecove-session-select      %{buildroot}%{_bindir}/gamecove-session-select
@@ -128,6 +134,9 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 %{_libexecdir}/gamecove/gamecove-session-client
 %{_libexecdir}/gamecove/gamecove-apply-choices
 %{_libexecdir}/gamecove/get-gamecove.sh
+%{_libexecdir}/gamecove/gamecove-run
+%{_libexecdir}/gamecove/gamecove-upscale
+%{_prefix}/lib/gamecove/helpers
 %{_datadir}/applications/io.github.ihulksmashi.GameCoveInstaller.desktop
 %{_bindir}/gamecove-session-select
 %{_bindir}/gamecove-selftest
