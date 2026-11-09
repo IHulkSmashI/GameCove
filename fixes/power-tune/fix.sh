@@ -180,16 +180,28 @@ set_cores() {
 		done
 		printf '%s\n' "$on" > "$ORIG/cores"
 	fi
+	online_cores "$1" || die 1 "not every CPU took the change"
+}
+
+# online_cores <n>: the first n logical CPUs online, the rest offline. Tries every CPU and returns 1
+# if any refused (never exits: restore calls it too, review M2).
+online_cores() {
+	_bad=0
 	i=0
 	for n in $(cpus); do
 		i=$((i + 1))
 		[ "$n" = 0 ] && continue
 		f="$CPU/cpu$n/online"
-		[ -f "$f" ] || die 1 "cpu$n can't be switched off"
 		want=0; [ "$i" -le "$1" ] && want=1
-		[ "$(rd "$f")" = "$want" ] || wr "$f" "$want" || die 1 "cpu$n refused online=$want"
-		[ "$(rd "$f")" = "$want" ] || die 1 "cpu$n reads $(rd "$f") after online=$want"
+		if [ ! -f "$f" ]; then
+			printf 'power-tune: cpu%s has no online switch\n' "$n" >&2; _bad=1; continue
+		fi
+		[ "$(rd "$f")" = "$want" ] || wr "$f" "$want" || true
+		if [ "$(rd "$f")" != "$want" ]; then
+			printf 'power-tune: cpu%s reads %s after online=%s\n' "$n" "$(rd "$f")" "$want" >&2; _bad=1
+		fi
 	done
+	return "$_bad"
 }
 
 set_epp() {
@@ -540,7 +552,7 @@ restore_key() {
 		boost-intel) wr "$CPU/intel_pstate/no_turbo" "$v" ;;
 		boost) wr "$CPU/cpufreq/boost" "$v" ;;
 		smt) wr "$CPU/smt/control" "$v" ;;
-		cores) set_cores "$v" ;;
+		cores) is_uint "$v" && [ "$v" -ge 1 ] && online_cores "$v" ;;
 		epp-*) wr "$CPU/cpu${k#epp-}/cpufreq/energy_performance_preference" "$v" ;;
 		gov-*) for p in $(policies); do if [ "gov-${p##*/}" = "$k" ]; then wr "$p/scaling_governor" "$v" || return 1; fi; done ;;
 		cpumax-intel) wr "$CPU/intel_pstate/max_perf_pct" "$v" ;;
@@ -564,26 +576,37 @@ restore_key() {
 }
 
 do_restore() {
-	left=0
 	if [ -f "$STATE/device" ] && [ "$(cat "$STATE/device")" != "$(this_device)" ]; then
 		# read on another handheld (same drive): never written here
 		rm -rf "$ORIG"
 		log_change "dropped values recorded on $(cat "$STATE/device")"
 	fi
 	rm -f "$STATE/device"
+	failed=""
 	if [ -d "$ORIG" ]; then
-		# floors before ceilings come back in the order that keeps min <= max: ceilings first
-		for f in "$ORIG/gpumax" "$ORIG/gpumin" "$ORIG"/*; do
+		# Best effort per key (review M2): a refused key is reported and kept for the next restore,
+		# the others still come back. Order matters:
+		#  - smt before cores: the kernel won't bring an SMT sibling online while SMT is off;
+		#  - GPU ceiling before floor, so min <= max holds at every step;
+		order="smt cores gpumax gpumin"; last=""
+		keys="$order"
+		for f in "$ORIG"/*; do
 			[ -f "$f" ] || continue
-			k="${f##*/}"
-			if restore_key "$k"; then rm -f "$ORIG/$k"; else left=1; printf 'power-tune: could not put back %s\n' "$k" >&2; fi
-			[ "$left" = 0 ] || [ -f "$STATE/device" ] || printf '%s\n' "$(this_device)" > "$STATE/device"
+			case " $order $last " in *" ${f##*/} "*) ;; *) keys="$keys ${f##*/}" ;; esac
 		done
+		for k in $keys $last; do
+			[ -f "$ORIG/$k" ] || continue
+			if restore_key "$k"; then rm -f "$ORIG/$k"; else failed="$failed $k"; printf 'power-tune: could not put back %s\n' "$k" >&2; fi
+		done
+		[ -z "$failed" ] || [ -f "$STATE/device" ] || printf '%s\n' "$(this_device)" > "$STATE/device"
 		rmdir "$ORIG" 2>/dev/null || true
 	fi
-	set_thermald release || left=1
-	log_change "restore (left=$left)"
-	[ "$left" = 0 ] || die 1 "some values could not be put back; run restore again"
+	# always, even when a key above failed
+	if [ -f "$STATE/thermald-held" ]; then
+		if systemctl start thermald.service; then rm -f "$STATE/thermald-held"; else failed="$failed thermald"; fi
+	fi
+	log_change "restore${failed:+ (could not put back:$failed)}"
+	[ -z "$failed" ] || die 1 "could not put back:$failed; run restore again"
 }
 
 do_set() {

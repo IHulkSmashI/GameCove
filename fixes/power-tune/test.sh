@@ -233,6 +233,39 @@ dmi "$R" "ASUSTeK COMPUTER INC." "ROG Zephyrus G14" "GA403UV"
 expect 2 "laptop sppt refused" set sppt:25
 [ "$(r "$A/ppt_pl2_sppt/current_value")" = 20 ] || fail "laptop untouched"
 
+# review M2 (proof 9.2 A): restore never stops halfway. cores:N then smt:off; at restore the kernel won't
+# online an SMT sibling (a fake file can't refuse a write, so the node is made unusable). Every other key
+# still comes back, SMT comes back BEFORE the cores (so on real hardware the siblings can come online),
+# thermald is released, and the failure names what is left.
+R="$T/m2"; export GAMECOVE_ROOT="$R"; C="$R/sys/devices/system/cpu"
+dmi "$R" "Micro-Star International Co., Ltd." "Claw 8 EX AI+ CG3EM" "MS-1T91"
+for n in 0 1 2 3; do w "$C/cpu$n/online" 1; done
+w "$C/smt/control" on; w "$C/intel_pstate/max_perf_pct" 100; w "$C/intel_pstate/min_perf_pct" 10; w "$C/intel_pstate/no_turbo" 0
+echo active > "$R/thermald.state"
+GAMECOVE_THERMALD_WATCH=off expect 0 "m2 cores" set cores:2
+expect 0 "m2 cpumax" set cpumax:30
+expect 0 "m2 smt off" set smt:off
+expect 0 "m2 boost off" set boost:off
+GAMECOVE_THERMALD_WATCH=off expect 0 "m2 thermald hold" set thermald:hold
+rm "$C/cpu3/online"; mkdir "$C/cpu3/online"
+expect 1 "m2 restore with a CPU that won't come online" set restore
+grep -q "could not put back: cores" "$T/out" || fail "m2: the failure names the key left ($(cat "$T/out"))"
+[ "$(r "$C/intel_pstate/max_perf_pct") $(r "$C/intel_pstate/no_turbo")" = "100 0" ] || fail "m2: keys after cores still come back"
+[ "$(r "$C/smt/control")" = on ] || fail "m2: SMT back"
+[ "$(r "$C/cpu2/online")" = 1 ] || fail "m2: the CPUs that can come online do"
+[ "$(r "$R/thermald.state")" = active ] || fail "m2: thermald released even though a key failed"
+[ "$(ls "$R/var/lib/gamecove/fixes/power-tune/orig")" = cores ] || fail "m2: only the failed key stays recorded"
+rmdir "$C/cpu3/online"; w "$C/cpu3/online" 0
+expect 0 "m2 restore again once the CPU can come online" set restore
+[ "$(r "$C/cpu3/online")" = 1 ] || fail "m2: cores back on the second restore"
+# order: SMT before cores (the failure list is in the order keys were tried)
+expect 0 "m2 cores again" set cores:2
+expect 0 "m2 smt again" set smt:off
+rm "$C/cpu3/online"; mkdir "$C/cpu3/online"; rm "$C/smt/control"; mkdir "$C/smt/control"
+expect 1 "m2 both refused" set restore
+grep -q "could not put back: smt cores" "$T/out" || fail "m2: smt is restored before cores ($(cat "$T/out"))"
+rmdir "$C/cpu3/online" "$C/smt/control"
+
 # amd-pstate: boost per policy, no global switch
 R="$T/pstate"; export GAMECOVE_ROOT="$R"; C="$R/sys/devices/system/cpu"
 dmi "$R" "ASUSTeK COMPUTER INC." "ROG Ally X RC72LA" "RC72LA"
@@ -277,7 +310,6 @@ expect 0 "lenovo sppt" set sppt:25
 [ "$(r "$L/ppt_pl2_sppt/current_value") $(r "$R/sys/firmware/acpi/platform_profile")" = "25 custom" ] || fail "lenovo sppt in custom mode"
 expect 0 "restore lenovo" set restore
 [ "$(r "$L/ppt_pl2_sppt/current_value") $(r "$R/sys/firmware/acpi/platform_profile")" = "20 balanced" ] || fail "lenovo sppt and mode back"
-
 # ---- Lenovo Legion Go S: charge_types (Long Life = 80 %), i915-style GPU clocks -------------------------------
 R="$T/legion"; export GAMECOVE_ROOT="$R"
 dmi "$R" "LENOVO" "83L3" "83L3"
