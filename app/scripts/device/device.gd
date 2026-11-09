@@ -523,7 +523,16 @@ static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cp
 	if family == "" and str(gpu_dev.get("driver", "")) == "xe":
 		family = "intel-xe2"  # the xe driver is the default from Lunar Lake on
 		arch = "Xe2"
-	var tdp: Dictionary = c.get("tdp", {"min": 5, "battery_max": 20, "plugged_max": 25} if vendor != "intel" else {"min": 8, "battery_max": 25, "plugged_max": 28})
+	# The chip table's range is what the chip can do in the biggest handheld that has it (a
+	# Ryzen AI Max: 45/80 W); an unlisted handheld may be a small one, so never more than
+	# these conservative limits (review L12). A chip with lower limits keeps its own.
+	var safe: Dictionary = {"min": 5, "battery_max": 20, "plugged_max": 25} if vendor != "intel" else {"min": 8, "battery_max": 25, "plugged_max": 28}
+	var tdp: Dictionary = (c.get("tdp", safe) as Dictionary).duplicate()
+	for k in ["battery_max", "plugged_max"]:
+		tdp[k] = minf(float(tdp.get(k, safe[k])), float(safe[k]))
+	tdp["min"] = minf(float(tdp.get("min", safe["min"])), float(tdp["battery_max"]))
+	if tdp.has("boost_max"):
+		tdp["boost_max"] = minf(float(tdp["boost_max"]), float(tdp["plugged_max"]))
 	var name := str(dmi.get("product_name", ""))
 	var row := {
 		"id": "unknown",

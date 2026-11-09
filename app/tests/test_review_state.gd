@@ -574,3 +574,17 @@ func test_l11_unplug_clamp_retried() -> void:
 	p.check_power_source()   # the next 15 s check, charger still out
 	eq(float(e["runner"].props[SM_TDP]["data"]), hi, "tried again: down to the battery limit")
 	_free()
+
+
+# ---- L12: hardware devices.json doesn't know gets conservative limits ----------------------------
+
+func test_l12_unknown_handheld_gets_conservative_tdp() -> void:
+	var Dev := load("res://scripts/device/device.gd")
+	var cpus: Array = Dev.load_doc().get("cpus", [])
+	var big: Dictionary = Dev.fallback_row({"product_name": "Tiny X1"}, "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S", {}, cpus)
+	ok(float(big["tdp"]["battery_max"]) <= 20.0 and float(big["tdp"]["plugged_max"]) <= 25.0,
+		"a 45/80 W chip in an unknown handheld is capped (%s)" % [big["tdp"]])
+	var deck: Dictionary = Dev.fallback_row({}, "AMD Custom APU 0405", {}, cpus)
+	ok(float(deck["tdp"]["battery_max"]) <= 15.0, "a chip with a lower limit keeps its own (%s)" % [deck["tdp"]])
+	var intel: Dictionary = Dev.fallback_row({}, "Intel(R) Core(TM) Ultra 7 258V", {}, cpus)
+	ok(float(intel["tdp"]["plugged_max"]) <= 28.0, "Intel capped too (%s)" % [intel["tdp"]])
