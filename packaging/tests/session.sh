@@ -170,7 +170,7 @@ eqv "$?" 0 "guard without steamosctl"
 env PATH="$BIN:$PATH" HOME="$T/home" STEAMOSCTL=/nonexistent sh "$SEL" steam >/dev/null 2>&1
 eqv "$?" 2 "steam without steamosctl"
 
-# --- session client: crash-loop guard (3 crashes in 2 minutes) and the bounce
+# --- session client: crash-loop guard (3 unclean exits in a row) and the bounce
 CB="$T/cbin"
 mkdir -p "$CB"
 cat >"$CB/gamecove.x86_64" <<EOF
@@ -197,23 +197,58 @@ echo 139 >"$T/app-code"
 client
 client
 hasnt "$T/client.log" "select steam" "two crashes: keep trying"
+eqv "$(cat "$DATA/crash-count")" 2 "two unclean exits counted"
 client
-has "$T/client.log" "^select steam$" "third crash in 2 minutes: switch to Steam Gaming Mode"
+has "$T/client.log" "^select steam$" "third crash in a row: switch to Steam Gaming Mode"
 [ -f "$DATA/crash-fallback" ] && ok || bad "fallback recorded for the next start"
-[ ! -e "$DATA/crash-starts" ] && ok || bad "counter reset after falling back"
+eqv "$(sed -n 2p "$DATA/crash-fallback")" crashes "fallback says why"
+[ ! -e "$DATA/crash-count" ] && ok || bad "counter reset after falling back"
 client
 hasnt "$T/client.log" "select steam" "counting starts over"
 echo 0 >"$T/app-code"
 client
-[ ! -e "$DATA/crash-starts" ] && ok || bad "a clean exit clears the count"
-# old crashes outside the window don't count
+[ ! -e "$DATA/crash-count" ] && ok || bad "a clean exit clears the count"
+# review M4: crashes count however long apart they are and however long each run lasted
 echo 139 >"$T/app-code"
 mkdir -p "$DATA"
-printf '%s\n%s\n' 1000 2000 >"$DATA/crash-starts"
+echo 2 >"$DATA/crash-count"
+touch -d '1 day ago' "$DATA/crash-count" 2>/dev/null || true
 client
-hasnt "$T/client.log" "select steam" "crashes older than 2 minutes don't count"
+has "$T/client.log" "^select steam$" "slow crashes (a day apart) still trip the guard"
+printf '#!/bin/sh\nsleep 2.5\nexit 139\n' >"$CB/slowcrash"
+chmod +x "$CB/slowcrash"
+slow() { # an app that crashes after 2.5 s
+	: >"$T/client.log"
+	env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" GAMECOVE_BIN="$CB/slowcrash" \
+		GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=off "$@" sh "$CLIENT" >/dev/null 2>&1
+}
+echo 2 >"$DATA/crash-count"
+slow
+has "$T/client.log" "^select steam$" "a crash after some uptime counts too (no time window)"
+echo 2 >"$DATA/crash-count"
+slow GAMECOVE_HEALTHY_S=1
+hasnt "$T/client.log" "select steam" "a run that stayed up the healthy time starts the count over"
+eqv "$(cat "$DATA/crash-count")" 1 "only the crash after the healthy run counts"
+# the count can't be saved: fall back at once instead of never reaching the limit
+rm -rf "$DATA"
+mkdir -p "$DATA/crash-count.tmp" # a directory: the temp file can't be written, even as root
+client
+has "$T/client.log" "^select steam$" "unsaved crash count: switch away at once"
+eqv "$(sed -n 2p "$DATA/crash-fallback")" unsaved "fallback says the count couldn't be saved"
+rm -rf "$DATA"
+# a missing binary counts as an unclean exit
+: >"$T/client.log"
+for i in 1 2 3; do
+	env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" GAMECOVE_BIN="$T/nonexistent$i" \
+		GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=off sh "$CLIENT" >/dev/null 2>&1
+done
+has "$T/client.log" "^select steam$" "a missing binary three times: switch away"
+eqv "$(sed -n 2p "$DATA/crash-fallback")" missing "fallback says the binary is missing"
+rm -rf "$DATA"
+echo 139 >"$T/app-code"
 # no Steam: the desktop instead
 rm "$CB/steam"
+client
 client
 client
 has "$T/client.log" "^select desktop$" "no Steam: fall back to the desktop"

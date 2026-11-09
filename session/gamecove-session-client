@@ -11,19 +11,23 @@
 #   GAMECOVE_STEAM_MODE  silent (default) | gamepadui (experimental) | off
 #   GAMECOVE_BIN         path of the GameCove binary
 #
-# 3. Crash-loop guard: if the app crashes 3 times within 2 minutes (counted
-#    across sessions in ~/.local/share/gamecove/crash-starts), it gives up on
-#    GameCove for now and switches to Steam Gaming Mode (or the desktop when
-#    Steam isn't installed), so a broken update never traps the device.
+# 3. Crash-loop guard: after 3 unclean exits in a row (a crash, a missing
+#    binary; counted across sessions in ~/.local/share/gamecove/crash-count,
+#    however long each run lasted), it gives up on GameCove for this boot and
+#    switches to Steam Gaming Mode (or the desktop when Steam isn't installed),
+#    so a broken update never traps the device. A clean exit, or a run that
+#    stays up GAMECOVE_HEALTHY_S (10 min), clears the count. If the count can't
+#    be saved (full or read-only home), it switches away at once. The reason is
+#    left in crash-fallback; GameCove shows it at its next start.
 set -u
 
 GAMECOVE_BIN="${GAMECOVE_BIN:-/usr/lib/gamecove/gamecove.x86_64}"
 GAMECOVE_STEAM_MODE="${GAMECOVE_STEAM_MODE:-silent}"
 SESSION_SELECT="${GAMECOVE_SESSION_SELECT:-/usr/bin/gamecove-session-select}"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}/gamecove"
-CRASHES="$DATA/crash-starts"
+CRASHES="$DATA/crash-count"
 CRASH_LIMIT="${GAMECOVE_CRASH_LIMIT:-3}"
-CRASH_WINDOW_S="${GAMECOVE_CRASH_WINDOW_S:-120}"
+HEALTHY_S="${GAMECOVE_HEALTHY_S:-600}"
 
 log() {
 	echo "gamecove-session-client: $*" >&2
@@ -72,8 +76,47 @@ if [ -x "$SESSION_SELECT" ]; then
 	fi
 fi
 
+# Crash-loop guard. A crash is an exit we didn't cause (a session switch or
+# logout sends us TERM: that's not a crash). Counts unclean exits in a row,
+# whatever the uptime; at the limit, leave GameCove for this boot.
+crash_count() {
+	n="$(head -n 1 "$CRASHES" 2>/dev/null | tr -cd '0-9')"
+	echo "${n:-0}"
+}
+
+fall_back() { # <reason: crashes | unsaved | missing | hung>
+	rm -f "$CRASHES" "$DATA/crash-starts" 2>/dev/null
+	printf '%s\n%s\n' "$(date +%s)" "$1" >"$DATA/crash-fallback" 2>/dev/null || true
+	log "GameCove failed ($1); switching away so the device stays usable"
+	[ -x "$SESSION_SELECT" ] || return 0
+	if command -v steam >/dev/null 2>&1; then
+		"$SESSION_SELECT" steam || "$SESSION_SELECT" desktop || true
+	else
+		"$SESSION_SELECT" desktop || true
+	fi
+}
+
+record_crash() { # [reason]
+	n=$(($(crash_count) + 1))
+	if ! { mkdir -p "$DATA" && printf '%s\n' "$n" >"$CRASHES.tmp" && mv -f "$CRASHES.tmp" "$CRASHES"; } 2>/dev/null ||
+		[ "$(crash_count)" != "$n" ]; then
+		# a count we can't keep would never reach the limit: don't loop on it
+		log "can't save the crash count in $CRASHES"
+		fall_back unsaved
+		return 0
+	fi
+	log "unclean exit $n of $CRASH_LIMIT${1:+ ($1)}"
+	[ "$n" -ge "$CRASH_LIMIT" ] || return 0
+	if [ "${1:-}" = "" ]; then fall_back crashes; else fall_back "$1"; fi
+}
+
+clear_crashes() {
+	rm -f "$CRASHES" "$DATA/crash-starts" 2>/dev/null || true
+}
+
 if [ ! -x "$GAMECOVE_BIN" ]; then
 	log "GameCove binary not found at $GAMECOVE_BIN"
+	record_crash missing
 	start_steam
 	exit 1
 fi
@@ -87,29 +130,6 @@ reset_input_intercept() {
 		busctl --system --timeout=2 set-property org.shadowblip.InputPlumber "$dev" \
 			org.shadowblip.Input.CompositeDevice InterceptMode u 0 >/dev/null 2>&1 || true
 	done
-}
-
-# Crash-loop guard. A crash is a non-zero exit we didn't cause (a session
-# switch or logout sends us TERM: that's not a crash). Keeps the times of the
-# crashes in the last window; at the limit, leave GameCove for now.
-record_crash() {
-	mkdir -p "$DATA" 2>/dev/null || return 0
-	now="$(date +%s)"
-	{
-		[ -f "$CRASHES" ] && awk -v now="$now" -v win="$CRASH_WINDOW_S" '$1 ~ /^[0-9]+$/ && now - $1 < win' "$CRASHES"
-		echo "$now"
-	} >"$CRASHES.tmp" 2>/dev/null && mv -f "$CRASHES.tmp" "$CRASHES"
-	n="$(wc -l <"$CRASHES" | tr -d ' ')"
-	[ "$n" -ge "$CRASH_LIMIT" ] || return 0
-	rm -f "$CRASHES"
-	date +%s >"$DATA/crash-fallback" 2>/dev/null || true
-	log "GameCove crashed $n times in ${CRASH_WINDOW_S}s; switching away so the device stays usable"
-	[ -x "$SESSION_SELECT" ] || return 0
-	if command -v steam >/dev/null 2>&1; then
-		"$SESSION_SELECT" steam || "$SESSION_SELECT" desktop || true
-	else
-		"$SESSION_SELECT" desktop || true
-	fi
 }
 
 # X11 on purpose: gamescope reads focus and overlay properties from X windows.
@@ -135,16 +155,20 @@ else
 fi
 stopping=0
 trap 'stopping=1; kill -TERM "$app" 2>/dev/null' TERM INT HUP
+# Watch the app once a second: a run that stays up HEALTHY_S clears the count.
+up=0
+while kill -0 "$app" 2>/dev/null; do
+	sleep 1
+	up=$((up + 1))
+	if [ "$up" -eq "$HEALTHY_S" ]; then
+		clear_crashes
+	fi
+done
 code=0
 wait "$app" || code=$?
-# a signal interrupts wait before the app is gone: wait for the real exit
-while kill -0 "$app" 2>/dev/null; do
-	code=0
-	wait "$app" || code=$?
-done
 reset_input_intercept
 if [ "$code" -eq 0 ]; then
-	rm -f "$CRASHES"
+	clear_crashes
 elif [ "$stopping" -eq 0 ]; then
 	record_crash
 fi

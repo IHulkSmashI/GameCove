@@ -169,7 +169,7 @@ with `--xwayland-count 2`, exports `DISPLAY` and `GAMESCOPE_WAYLAND_DISPLAY`, so
 `GAMECOVE_STEAM_MODE`, …), and runs `$CLIENTCMD`. After 5 sessions shorter than 60 s
 it calls `short_session_recover`; ours switches to Steam Gaming Mode so a broken
 GameCove never traps you on a black screen. The session client adds a tighter
-guard (3 app crashes in 2 minutes), see "If GameCove won't let you out".
+guard (3 unclean exits in a row), see "If GameCove won't let you out".
 
 Bazzite today boots `gamescope-session-ogui-steam.desktop` (Steam as main client,
 OpenGamepadUI as overlay; Terra packages `gamescope-session`,
@@ -233,11 +233,18 @@ helper of our own:
 
 ### If GameCove won't let you out
 
-- **Crash loop:** the session client counts app crashes (non-zero exits it didn't
-  cause) in `~/.local/share/gamecove/crash-starts`. Three within two minutes, across
-  sessions, and it switches to Steam Gaming Mode (the desktop if Steam isn't
-  installed). gamescope-session-plus's own guard (5 sessions under 60 s) also
-  switches to Steam, through `gamecove-session-select steam`.
+- **Crash loop:** the session client counts unclean exits in a row (a non-zero
+  exit it didn't cause, a missing binary) in `~/.local/share/gamecove/crash-count`,
+  across sessions and however long each run lasted (review M4: a crash a minute
+  after every start used to slip through a 2-minute window). Three in a row and it
+  switches to Steam Gaming Mode for this boot (the desktop if Steam isn't
+  installed). A clean exit, or a run that stays up 10 minutes
+  (`GAMECOVE_HEALTHY_S`), starts the count over. If the count can't be saved
+  (home full or read-only) it switches away at once. The reason goes to
+  `crash-fallback`. gamescope-session-plus's own guard (5 sessions under 60 s,
+  in `/tmp`, so it forgets on reboot) also switches to Steam, through
+  `gamecove-session-select steam`; it's the backstop for a session that never gets
+  as far as our client.
 - **From a TTY** (Ctrl+Alt+F3 with a keyboard, or SSH), logged in as yourself, not root:
 
   ```
@@ -412,7 +419,7 @@ Do these in order; note results in an issue.
 1. Install via `install.sh`, reboot, `gamecove-session-select gamecove`. GameCove
    appears (not a black screen). `xprop -root GAMESCOPECTRL_BASELAYER_APPID` from a
    terminal in the session (or SSH with `DISPLAY=:0`) shows `413091, 769`.
-2. Kill the app 5 times quickly: session falls back to Steam Gaming Mode.
+2. Kill the app (`pkill -SEGV -f gamecove.x86_64`) 3 times: session falls back to Steam Gaming Mode.
 3. "Switch to Steam" lands in Bazzite's Gaming Mode; Steam's "Switch to Desktop"
    still goes to the desktop (without `--default`).
 4. **Steam, `silent` mode:** Play on a Steam game runs `steam steam://rungameid/<id>`,
