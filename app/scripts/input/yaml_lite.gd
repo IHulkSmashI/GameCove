@@ -1,8 +1,8 @@
 extends RefCounted
 ## Reads the YAML InputPlumber hands back from GetProfileYaml (serde_yaml
-## output: block mappings and sequences, plain or quoted scalars, `[]`/`{}`).
-## Not a general YAML parser: no anchors, multi-line strings or flow
-## collections with content. We never write YAML: InputPlumber's
+## output: block mappings and sequences, plain or quoted scalars, `[]`/`{}`,
+## block scalars `|` / `>` with chomping, plain scalars continued on deeper lines).
+## Not a general YAML parser: no anchors or flow collections with content. We never write YAML: InputPlumber's
 ## LoadProfileFromYaml takes JSON too (JSON is YAML), so profiles go back as JSON.
 
 
@@ -15,7 +15,8 @@ static func parse(text: String) -> Variant:
 		var line := _strip_comment(raw).strip_edges(false, true)
 		if line.strip_edges() == "" or line.strip_edges() == "---":
 			continue
-		lines.append([_indent(line), line.strip_edges()])
+		# [indent, text, the raw line: a block scalar's content keeps its '#' and spacing]
+		lines.append([_indent(line), line.strip_edges(), raw.strip_edges(false, true)])
 	if lines.is_empty():
 		return null
 	var pos: Array[int] = [0]
@@ -68,7 +69,7 @@ static func _seq(lines: Array, pos: Array[int], indent: int) -> Array:
 			out.append(_block(lines, pos, lines[pos[0]][0]) if pos[0] < lines.size() and lines[pos[0]][0] > indent else null)
 		elif _key_split(rest).size() == 2:
 			# "- key: value" starts a mapping indented at the key's column
-			lines[pos[0]] = [indent + (text.length() - rest.length()), rest]
+			lines[pos[0]] = [indent + (text.length() - rest.length()), rest, lines[pos[0]][2]]
 			out.append(_map(lines, pos, lines[pos[0]][0]))
 		else:
 			pos[0] += 1
@@ -88,8 +89,11 @@ static func _map(lines: Array, pos: Array[int], indent: int) -> Dictionary:
 			break
 		pos[0] += 1
 		var key := str(scalar(kv[0]))
+		if _BLOCK.search(kv[1]) != null:
+			out[key] = _block_scalar(lines, pos, indent, kv[1])
+			continue
 		if kv[1] != "":
-			out[key] = scalar(kv[1])
+			out[key] = _plain_more(lines, pos, indent, kv[1])
 			continue
 		# nested block: deeper indent, or a sequence at the same indent (serde_yaml style)
 		if pos[0] < lines.size():
@@ -100,6 +104,42 @@ static func _map(lines: Array, pos: Array[int], indent: int) -> Dictionary:
 				continue
 		out[key] = null
 	return out
+
+
+static var _BLOCK := RegEx.create_from_string("^[|>][-+0-9]*$")
+
+
+## A `|` (literal) or `>` (folded) block scalar: every following line indented deeper than
+## its key, from the raw text (a '#' inside is content), with YAML's chomping: "-" strips
+## the final newline, "+" keeps them, none keeps one (review L14: everything after a
+## `description: |-` was dropped).
+static func _block_scalar(lines: Array, pos: Array[int], indent: int, head: String) -> String:
+	var body: Array = []
+	var base := -1
+	while pos[0] < lines.size() and int(lines[pos[0]][0]) > indent:
+		var raw: String = lines[pos[0]][2]
+		var ind := _indent(raw)
+		if base < 0:
+			base = ind
+		body.append(raw.substr(mini(base, ind)))
+		pos[0] += 1
+	var text := ("\n" if head.begins_with("|") else " ").join(PackedStringArray(body))
+	if head.contains("-"):
+		return text
+	return text + "\n"
+
+
+## A plain scalar that goes on over deeper lines (folded with spaces); a deeper line that
+## starts a mapping or a sequence isn't a continuation.
+static func _plain_more(lines: Array, pos: Array[int], indent: int, first: String) -> Variant:
+	var parts: Array = [first]
+	while pos[0] < lines.size() and int(lines[pos[0]][0]) > indent:
+		var t: String = lines[pos[0]][1]
+		if t == "-" or t.begins_with("- ") or _key_split(t).size() == 2:
+			break
+		parts.append(t)
+		pos[0] += 1
+	return scalar(first) if parts.size() == 1 else " ".join(PackedStringArray(parts))
 
 
 ## ["key", "value"] for "key: value" / "key:", else [].

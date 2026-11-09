@@ -236,3 +236,26 @@ func test_m26_unknown_escapes_round_trip() -> void:
 	var back: Variant = V.parse_strict(W.dump(d))
 	eq(back, d, "dump reads back the same")
 	ok("x\\py" in W.dump(d), "and writes \\p as it was")
+
+
+# ---- L14: the YAML reader keeps everything after a multi-line string ------------------------------
+
+func test_l14_yaml_multiline_strings() -> void:
+	var Yaml := load("res://scripts/input/yaml_lite.gd")
+	var lit := "version: 1\nkind: DeviceProfile\nname: X\ndescription: |-\n  Line one # not a comment\n    indented two\nmapping:\n- name: m1\n  source_event:\n    gamepad:\n      button: South\n  target_events: []\n"
+	var d: Variant = Yaml.parse(lit)
+	ok(d is Dictionary, "parses")
+	eq(d.get("description"), "Line one # not a comment\n  indented two", "literal block kept as written")
+	eq((d.get("mapping", []) as Array).size(), 1, "the mappings after it are there")
+	var folded := "name: X\ndescription: >\n  one\n  two\nmapping: []\n"
+	var f: Variant = Yaml.parse(folded)
+	eq(f.get("description"), "one two\n", "folded block")
+	eq(f.get("mapping"), [], "the key after it")
+	var plain := "name: X\ndescription: a long line\n  that goes on\nmapping: []\n"
+	var g: Variant = Yaml.parse(plain)
+	eq(g.get("description"), "a long line that goes on", "plain multi-line scalar")
+	eq(g.get("mapping"), [], "the key after it")
+	var inseq := "mapping:\n- name: |-\n    two\n    lines\n  source_event:\n    gamepad:\n      button: North\n"
+	var h: Variant = Yaml.parse(inseq)
+	eq(h["mapping"][0].get("name"), "two\nlines", "block scalar inside a sequence item")
+	eq(h["mapping"][0].get("source_event"), {"gamepad": {"button": "North"}}, "and the item's other keys")
