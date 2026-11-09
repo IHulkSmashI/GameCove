@@ -137,6 +137,7 @@ func _wire_services() -> void:
 	launcher.settings_path = home.path_join(".config/gamecove/launch_settings.json")
 	if "env_hooks" in launcher:
 		launcher.env_hooks.clear()
+	launcher.device_profile = row
 	launcher._loaded = false
 	launcher._load()
 	var lib := autoload("Library")
@@ -200,10 +201,48 @@ func boot_main() -> void:
 	if main.fixes != null:
 		main.fixes.setup({"sys_root": root, "runner": fake, "home": home, "device": autoload("Device")})
 	main.quick_menu.commands.runner = Fake.BgRunner.new(fake)
+	# the Stream tab's discovery: the fake answers (no mDNS, no network), nothing is probed
+	if main.streaming != null:
+		main.streaming.ctx["runner"] = fake
+		main.streaming.ctx["probe"] = func(_a, _p) -> Array: return []
 	if main.session != null:
 		main.session.pid_running = func(pid: int) -> bool: return fake_pids.has(pid)
 		main.session.steam_alive = func(id: int) -> bool: return fake_apps.has(id)
+	# Exit game: GameCloser's kill commands go to the fake; a TERM to a Steam game's
+	# reaper ends that game the way the real one would (window gone, reaper gone)
+	main.closer.run = func(cmd: Array) -> int:
+		fake.spawn(str(cmd[0]), PackedStringArray(cmd.slice(1).map(func(x): return str(x))))
+		if cmd.size() >= 7 and str(cmd[4]) == "TERM" and str(cmd[5]) == "steam":
+			end_app(str(cmd[6]).to_int())
+		return 4242
+	main.closer.alive = func(_pid: int) -> bool: return false
 	await idle()
+
+
+## A game's window and Steam launch go away (it quit, or was closed).
+func end_app(app: int) -> void:
+	fake_apps.erase(app)
+	fake._mutex.lock()
+	var ids: Array = Array(str(fake.xroot.get("GAMESCOPE_FOCUSABLE_APPS", "769")).split(",", false)).map(func(x): return x.strip_edges())
+	ids.erase(str(app))
+	fake.xroot["GAMESCOPE_FOCUSABLE_APPS"] = ", ".join(PackedStringArray(ids))
+	fake._mutex.unlock()
+
+
+## Gamescope gives the screen to whatever GAMESCOPECTRL_BASELAYER_APPID puts first
+## after its placeholder; our window loses focus when that isn't us (769), the way
+## gamescope's focus change reaches the app. Called from idle().
+func sync_window_focus() -> void:
+	if main == null or fake == null:
+		return
+	fake._mutex.lock()
+	var base := str(fake.xroot.get("GAMESCOPECTRL_BASELAYER_APPID", ""))
+	fake._mutex.unlock()
+	var ids := Array(base.split(",", false)).map(func(x): return str(x).strip_edges().to_int())
+	ids.erase(413091)
+	var ours: bool = ids.is_empty() or int(ids[0]) == 769
+	if ours != main._window_focused:
+		main.notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN if ours else Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
 
 
 var fake_pids := {}
@@ -270,6 +309,10 @@ static func restore_tree(from: String, to: String) -> void:
 
 # ---- waiting ------------------------------------------------------------------------
 
+func wait_s(s: float) -> void:
+	await tree.create_timer(s).timeout
+
+
 func frames(n := 1) -> void:
 	for i in n:
 		await tree.process_frame
@@ -288,6 +331,7 @@ func idle(max_ms := 10000) -> bool:
 		while gs.runner != null and gs.runner.has_method("pending") and gs.runner.pending() > 0 and Time.get_ticks_msec() < deadline:
 			await tree.process_frame
 		await frames(2)
+		sync_window_focus()
 		var n: int = fake.log.size() if fake != null else 0
 		if n == last:
 			return true

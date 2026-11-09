@@ -16,6 +16,9 @@ const Matrix := preload("res://tests/devicematrix/matrix.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
 const Fake := preload("res://tests/e2e/fake_system.gd")
 
+## Orphan nodes a test may leave behind (none expected; see run_e2e.gd).
+const ORPHAN_SLACK := 0
+
 ## Engine messages the headless renderer prints that aren't the app's doing.
 const KNOWN_ENGINE_NOISE: Array[String] = []
 
@@ -41,6 +44,9 @@ static func now(w: RefCounted) -> Array[String]:
 	out.append_array(Matrix.real_path_args(w.fake, w.root))
 	out.append_array(wiring(w))
 	for e in w.fake.main_thread_calls():
+		# starting a process that carries on by itself (OS.create_process) doesn't wait
+		if bool(e.get("spawn", false)):
+			continue
 		if not _allowed_on_main(e["argv"]):
 			out.append("command on the main thread (the UI waited for it): %s" % " ".join(PackedStringArray(e["argv"].map(func(x): return str(x)))))
 	return out

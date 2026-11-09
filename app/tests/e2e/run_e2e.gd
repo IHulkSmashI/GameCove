@@ -16,8 +16,9 @@ extends SceneTree
 
 const ErrorCounter := preload("res://tests/run_tests.gd").ErrorCounter
 const RunTests := preload("res://tests/run_tests.gd")
-const World := preload("res://tests/e2e/world.gd")
-const Checks := preload("res://tests/e2e/checks.gd")
+# loaded at run time: a harness that doesn't compile quits at once instead of hanging
+var World: GDScript
+var Checks: GDScript
 
 var world: RefCounted
 var errors: Logger
@@ -28,6 +29,12 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	World = load("res://tests/e2e/world.gd")
+	Checks = load("res://tests/e2e/checks.gd")
+	if World == null or not World.can_instantiate() or Checks == null or not Checks.can_instantiate():
+		printerr("E2E FAIL setup: the harness doesn't compile")
+		quit(2)
+		return
 	set_meta(&"gamecove_e2e", true)   # Services.E2E_META: production service lookups
 	errors = ErrorCounter.new()
 	OS.add_logger(errors)
@@ -39,9 +46,12 @@ func _run() -> void:
 		_finish(1, {"error": err})
 		return
 	await world.boot_main()
+	# the fixtures are regular files, real sysfs / procfs aren't (sizes 4096 / 0):
+	# no size-trusting read may reach them (tests/test_sysfs_lint.gd)
 	var boot_errors := RunTests.unexpected(Checks.drop_noise(errors.take()), [] as Array[String])
 	var results := {"setup": world.setup_name, "passed": 0, "failed": 0, "failures": [], "tests": [],
 		"boot_errors": boot_errors}
+	boot_errors.append_array(load("res://tests/test_sysfs_lint.gd").problems())
 	for e in boot_errors:
 		printerr("E2E FAIL boot: " + e)
 		results["failed"] += 1
@@ -81,9 +91,17 @@ func _run() -> void:
 			t._current = label
 			t._expected_errors.clear()
 			var before: int = t.failures.size()
+			var orphans0 := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
 			var t0 := Time.get_ticks_msec()
 			await t.call(name)
 			await world.idle()
+			await world.frames(3)
+			# nodes taken out of the tree and never freed (leaks); tests that leave
+			# a screen open may hold a few, more is a leak
+			var grown := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)) - orphans0
+			if grown > Checks.ORPHAN_SLACK:
+				t.failures.append("%s: %d nodes left out of the tree and never freed (leak)" % [label, grown])
+			print("E2E ORPHANS %s %d" % [label, grown])
 			for p in await Checks.after_test(world):
 				t.failures.append("%s: invariant: %s" % [label, p])
 			for msg in RunTests.unexpected(Checks.drop_noise(errors.take()), t._expected_errors):
@@ -104,6 +122,9 @@ func _run() -> void:
 		results["failed"] += 1
 		results["failures"].append("exit: " + p)
 		printerr("E2E FAIL exit: " + p)
+	if OS.get_environment("E2E_UNMATCHED") != "":
+		for u in world.fake.unmatched:
+			print("E2E UNMATCHED " + u)
 	results["ms"] = Time.get_ticks_msec() - t_start
 	_finish(1 if results["failed"] > 0 else 0, results)
 

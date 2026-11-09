@@ -48,7 +48,8 @@ def godot_path(arg: str) -> str:
 
 
 def private_env(work: str, info_path: str, extra: dict) -> dict:
-    env = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG", "LC_ALL", "TERM", "USER", "LOGNAME", "TZ")}
+    env = {k: v for k, v in os.environ.items()
+           if k in ("PATH", "LANG", "LC_ALL", "TERM", "USER", "LOGNAME", "TZ") or k.startswith("E2E_")}
     home = os.path.join(work, "home-real")
     run = os.path.join(work, "xdg", "run")
     for d in (home, run, os.path.join(work, "xdg", "data"), os.path.join(work, "xdg", "config"),

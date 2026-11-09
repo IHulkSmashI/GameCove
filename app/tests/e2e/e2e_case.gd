@@ -10,6 +10,7 @@ extends "res://tests/test_case.gd"
 const TC := preload("res://scripts/ui/texts_controls.gd")
 const Matrix := preload("res://tests/devicematrix/matrix.gd")
 const Buttons := preload("res://scripts/device/buttons.gd")
+const ControlView := preload("res://scripts/ui/controls/control_view.gd")
 
 var w: RefCounted   # world.gd
 
@@ -56,11 +57,8 @@ func setup_name() -> String:
 # ---- input --------------------------------------------------------------------
 
 func _send(e: InputEvent) -> void:
-	# Input.parse_input_event() drops events on the headless display server (it has
-	# no window to dispatch to); the root viewport takes them the same way a window
-	# would hand them over, and Input's action state follows.
 	Input.parse_input_event(e)
-	w.tree.root.push_input(e)
+	Input.flush_buffered_events()
 
 
 ## One press and release of a pad button (JOY_BUTTON_*), as the pad sends it.
@@ -185,7 +183,7 @@ func view(id: String, under: Node = null) -> Node:
 
 
 static func _find_view(n: Node, id: String) -> Node:
-	if n.has_method("explanation") and "key" in n and str(n.get("key")) == id:
+	if n.get_script() == ControlView and str(n.get("key")) == id:
 		return n
 	for c in n.get_children():
 		var r := _find_view(c, id)
@@ -218,7 +216,7 @@ func reachable_ids(limit := 80) -> Array:
 		seen[f] = true
 		var n: Node = f
 		while n != null and n != w.main:
-			if n.has_method("explanation") and "key" in n:
+			if n.get_script() == ControlView:
 				if not out.has(str(n.get("key"))):
 					out.append(str(n.get("key")))
 				break

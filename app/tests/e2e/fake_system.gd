@@ -25,6 +25,7 @@ extends "res://tests/devicematrix/matrix.gd".FakeRunner
 ##
 ## Every call is logged with the thread it ran on: `log` [{t_ms, argv, main, code}].
 
+const Matrix := preload("res://tests/devicematrix/matrix.gd")
 const SM := "com.steampowered.SteamOSManager1"
 const SM_PATH := "/com/steampowered/SteamOSManager1"
 const PS := "org.shadowblip.PowerStation"
@@ -66,6 +67,7 @@ func _init(backends: Dictionary, sys_root: String, repo_dir: String, device_row:
 		f.store_string("#!/bin/sh\n# e2e stand-in: records nothing, changes nothing\nexit 0\n")
 		f.close()
 		FileAccess.set_unix_permissions(stub_dir.path_join(prog), 493)
+	_kernel_settle([], -1)   # what the bracketed files and clock tables offer, before any write
 
 
 func reset_log() -> void:
@@ -74,7 +76,7 @@ func reset_log() -> void:
 	helper_runs.clear()
 	events.clear()
 	calls.clear()
-	unmatched.clear()
+	pass   # unmatched commands stay for the whole run (E2E_UNMATCHED)
 	_log_mutex.unlock()
 
 
@@ -90,8 +92,23 @@ func main_thread_calls() -> Array:
 	return log_copy().filter(func(e): return e["main"])
 
 
+## Calls the harness itself makes (a fresh read to compare with) are answered but
+## not logged: hold() / release() around them, on the main thread only.
+var _held_by_harness := 0
+
+
+func hold() -> void:
+	_held_by_harness += 1
+
+
+func release() -> void:
+	_held_by_harness = maxi(0, _held_by_harness - 1)
+
+
 func run(program: String, args: PackedStringArray) -> Dictionary:
 	var main := OS.get_thread_caller_id() == OS.get_main_thread_id()
+	if main and _held_by_harness > 0:
+		return _dispatch(program, args)
 	var lat := int(faults.get("latency_ms", 0))
 	if lat > 0 and not main:
 		OS.delay_msec(lat)
@@ -125,6 +142,14 @@ func _dispatch(program: String, args: PackedStringArray) -> Dictionary:
 			return _pkexec(args)
 		"busctl":
 			return _bus(args)
+		"wpctl":
+			var w := _wpctl(args)
+			if not w.is_empty():
+				return w
+		"nmcli", "rfkill":
+			var r := _radio(program, args)
+			if not r.is_empty():
+				return r
 		"systemctl":
 			if args.size() > 0 and args[0] in ["suspend", "hibernate", "poweroff", "reboot"]:
 				_event(str(args[0]))
@@ -164,10 +189,51 @@ func _pkexec(args: PackedStringArray) -> Dictionary:
 	var out := []
 	var code := OS.execute("env", argv, out, true)
 	var text := "".join(PackedStringArray(out.map(func(x): return str(x))))
+	_kernel_settle(Array(args.slice(1)), code)
 	_log_mutex.lock()
 	helper_runs.append([Array(args.slice(1)), code, text])
 	_log_mutex.unlock()
 	return {"code": code, "out": text}
+
+
+## What the kernel shows after the helper wrote a word or a command into a file
+## that isn't a plain value: "[active] other" lists, and amdgpu's clock table,
+## which takes "s <idx> <MHz>" / "c" / "r" commands.
+const BRACKETED := ["/sys/power/mem_sleep", "/tile0/gt0/freq0/power_profile", "/charge_types", "/charge_behaviour"]
+var _choices := {}   # rel path -> words offered (from the pristine file)
+var _od := {}        # rel path -> [min, max, lo, hi]
+
+
+func _kernel_settle(args: Array, code: int) -> void:
+	var files := {}
+	Matrix._walk(root, "/sys", files)
+	for rel in files:
+		var text: String = files[rel]
+		for suffix in BRACKETED:
+			if rel.ends_with(suffix):
+				if "[" in text:
+					_choices[rel] = Array(text.replace("[", "").replace("]", "").split(" ", false))
+				elif _choices.has(rel) and text in _choices[rel]:
+					_wr(rel, " ".join(PackedStringArray(_choices[rel].map(func(x): return "[%s]" % x if x == text else x))))
+		if rel.ends_with("/pp_od_clk_voltage"):
+			if text.begins_with("OD_SCLK"):
+				var nums := []
+				for line in text.split("\n"):
+					var m := RegEx.create_from_string("([0-9]+)Mhz").search_all(line)
+					for x in m:
+						nums.append(x.get_string(1).to_int())
+				if nums.size() >= 4:
+					_od[rel] = [nums[0], nums[1], nums[2], nums[3]]
+			elif _od.has(rel):
+				var st: Array = _od[rel]
+				if code == 0 and args.size() >= 3 and str(args[2]).begins_with("gpumin:"):
+					st[0] = str(args[2]).trim_prefix("gpumin:").to_int()
+				elif code == 0 and args.size() >= 3 and str(args[2]).begins_with("gpumax:"):
+					st[1] = str(args[2]).trim_prefix("gpumax:").to_int()
+				elif text == "r":
+					st[0] = st[2]
+					st[1] = st[3]
+				_wr(rel, "OD_SCLK:\n0:        %dMhz\n1:       %dMhz\nOD_RANGE:\nSCLK:     %dMhz       %dMhz" % st)
 
 
 # ---- D-Bus services ----------------------------------------------------------------
@@ -186,11 +252,33 @@ func _bus(args: PackedStringArray) -> Dictionary:
 		if OS.get_thread_caller_id() != OS.get_main_thread_id():
 			OS.delay_msec(timeout_ms)
 		return {"code": 1, "out": "Failed to get property: Connection timed out"}
+	# logind: the active session sets its own backlight (Session.SetBrightness ssu)
+	if a.size() >= 10 and str(a[1]) == "call" and str(a[2]) == "org.freedesktop.login1" and str(a[5]) == "SetBrightness":
+		_mutex.lock()
+		calls.append(["busctl", args])
+		_mutex.unlock()
+		var bl := "/sys/class/backlight/%s/brightness" % str(a[8])
+		var mx := _rd("/sys/class/backlight/%s/max_brightness" % str(a[8])).to_int()
+		var raw := str(a[9]).to_int()
+		if mode != "ok" or not _exists(bl) or raw < 0 or raw > mx:
+			return {"code": 1, "out": "Call failed: Invalid argument"}
+		_wr(bl, str(raw))
+		if _rd(bl) != str(raw):
+			return {"code": 1, "out": "Call failed: Read-only file system"}
+		return {"code": 0, "out": ""}
+	if a.size() >= 6 and str(a[1]) == "call" and str(a[2]) == "org.shadowblip.InputPlumber":
+		var ipr := _ip_call(str(a[3]), str(a[4]), str(a[5]), a.slice(6))
+		if not ipr.is_empty():
+			_mutex.lock()
+			calls.append(["busctl", args])
+			_mutex.unlock()
+			return ipr
 	if a.size() >= 6 and str(a[1]) in ["get-property", "set-property"]:
 		var svc := str(a[2])
 		var iface := str(a[4])
 		var prop := str(a[5])
-		if a[1] == "get-property":
+		var stored := props.has(" ".join(PackedStringArray([str(a[0]), svc, str(a[3]), iface, prop])))
+		if a[1] == "get-property" and stored:
 			var live: Variant = _live_get(svc, str(a[3]), iface, prop)
 			if live != null:
 				_mutex.lock()
@@ -201,7 +289,7 @@ func _bus(args: PackedStringArray) -> Dictionary:
 				var key := " ".join(PackedStringArray([str(a[0]), svc, str(a[3]), iface, prop]))
 				var typ: String = props[key]["type"] if props.has(key) else "s"
 				return {"code": 0, "out": JSON.stringify({"type": typ, "data": live})}
-		elif a.size() >= 8 and mode == "ok":
+		elif a[1] == "set-property" and a.size() >= 8 and mode == "ok" and stored:
 			var err := _live_set(svc, str(a[3]), iface, prop, str(a[7]))
 			if err != "":
 				_mutex.lock()
@@ -433,3 +521,187 @@ class BgRunner extends RefCounted:
 
 	func spawn(program: String, args: PackedStringArray) -> int:
 		return fake.spawn(program, args)
+
+
+# ---- PipeWire (wpctl), NetworkManager / rfkill ----------------------------------------
+
+## WirePlumber's state: volume and mute per default sink / source, the defaults.
+var audio := {"sinks": {50: "Speaker", 51: "HDMI / DisplayPort"}, "sources": {60: "Digital Microphone"},
+	"sink": 50, "source": 60, "vol": {50: 0.5, 51: 1.0, 60: 0.8}, "mute": {50: false, 51: false, 60: false}}
+var radios := {"wifi": true, "bluetooth": true, "wlan_soft": false, "bt_soft": false}
+
+
+func _wpctl(args: PackedStringArray) -> Dictionary:
+	var a := Array(args)
+	if a.is_empty() or mode == "bare":
+		return {}
+	_mutex.lock()
+	calls.append(["wpctl", args])
+	var out := {}
+	var target := func(x: String) -> int:
+		if x == "@DEFAULT_AUDIO_SINK@" or x == "@DEFAULT_SINK@":
+			return int(audio["sink"])
+		if x == "@DEFAULT_AUDIO_SOURCE@" or x == "@DEFAULT_SOURCE@":
+			return int(audio["source"])
+		return x.to_int() if x.is_valid_int() else -1
+	match str(a[0]):
+		"status":
+			var lines := PackedStringArray(["Audio", " ├─ Sinks:"])
+			for id in audio["sinks"]:
+				lines.append(" │  %s %d. %-28s [vol: %.2f]" % ["*" if id == audio["sink"] else " ", id, audio["sinks"][id], audio["vol"][id]])
+			lines.append(" ├─ Sources:")
+			for id in audio["sources"]:
+				lines.append(" │  %s %d. %-28s [vol: %.2f]" % ["*" if id == audio["source"] else " ", id, audio["sources"][id], audio["vol"][id]])
+			out = {"code": 0, "out": "\n".join(lines) + "\n"}
+		"get-volume":
+			var id: int = target.call(str(a[1])) if a.size() > 1 else -1
+			out = {"code": 0, "out": "Volume: %.2f%s" % [audio["vol"].get(id, 0.0), " [MUTED]" if audio["mute"].get(id, false) else ""]} \
+				if audio["vol"].has(id) else {"code": 1, "out": "Object not found"}
+		"set-volume":
+			if mode == "failing":
+				out = {"code": 1, "out": ""}
+			else:
+				var words := a.slice(1)
+				if words.size() >= 2 and words[0] == "-l":
+					words = words.slice(2)   # -l <limit>
+				var id: int = target.call(str(words[0])) if words.size() > 0 else -1
+				var v := str(words[1]) if words.size() > 1 else ""
+				if not audio["vol"].has(id) or not v.is_valid_float():
+					out = {"code": 1, "out": "bad volume"}
+				else:
+					audio["vol"][id] = clampf(v.to_float(), 0.0, 1.0)
+					out = {"code": 0, "out": ""}
+		"set-mute":
+			var id: int = target.call(str(a[1])) if a.size() > 1 else -1
+			if mode == "failing" or not audio["mute"].has(id):
+				out = {"code": 1, "out": ""}
+			else:
+				var m := str(a[2]) if a.size() > 2 else "toggle"
+				audio["mute"][id] = (not audio["mute"][id]) if m == "toggle" else m == "1"
+				out = {"code": 0, "out": ""}
+		"set-default":
+			var id := str(a[1]).to_int() if a.size() > 1 else -1
+			if mode == "failing":
+				out = {"code": 1, "out": ""}
+			elif audio["sinks"].has(id):
+				audio["sink"] = id
+				out = {"code": 0, "out": ""}
+			elif audio["sources"].has(id):
+				audio["source"] = id
+				out = {"code": 0, "out": ""}
+			else:
+				out = {"code": 1, "out": "Object not found"}
+	_mutex.unlock()
+	return out
+
+
+func _radio(program: String, args: PackedStringArray) -> Dictionary:
+	var a := Array(args)
+	if mode == "bare":
+		return {}
+	_mutex.lock()
+	calls.append([program, args])
+	var out := {}
+	if program == "nmcli":
+		if a == ["-t", "-f", "WIFI", "radio"] or a == ["radio", "wifi"]:
+			out = {"code": 0, "out": "enabled" if radios["wifi"] and not radios["wlan_soft"] else "disabled"}
+		elif a.size() == 3 and a[0] == "radio" and a[1] == "wifi" and a[2] in ["on", "off"]:
+			if mode == "failing":
+				out = {"code": 1, "out": ""}
+			else:
+				radios["wifi"] = a[2] == "on"
+				out = {"code": 0, "out": ""}
+	else:
+		if a == ["--json"]:
+			var devs := [{"id": 0, "type": "wlan", "device": "phy0", "soft": "blocked" if radios["wlan_soft"] else "unblocked", "hard": "unblocked"},
+				{"id": 1, "type": "bluetooth", "device": "hci0", "soft": "blocked" if radios["bt_soft"] else "unblocked", "hard": "unblocked"}]
+			out = {"code": 0, "out": JSON.stringify({"rfkilldevices": devs})}
+		elif a.size() >= 2 and a[0] in ["block", "unblock"]:
+			if mode == "failing":
+				out = {"code": 1, "out": ""}
+			else:
+				var on: bool = a[0] == "block"
+				for t in a.slice(1):
+					if t in ["all", "wlan", "wifi", "0"]:
+						radios["wlan_soft"] = on
+					if t in ["all", "bluetooth", "1"]:
+						radios["bt_soft"] = on
+				for i in 2:
+					_wr("/sys/class/rfkill/rfkill%d/soft" % i, "1" if radios["wlan_soft" if i == 0 else "bt_soft"] else "0")
+				out = {"code": 0, "out": ""}
+	_mutex.unlock()
+	return out
+
+
+# ---- InputPlumber's composite device ------------------------------------------------------
+
+## The profile InputPlumber has loaded (what GetProfileYaml serializes).
+var ip_profile: Dictionary = {"version": 1, "kind": "DeviceProfile", "name": "Default", "mapping": []}
+var ip_loads := 0
+
+
+func _ip_call(path: String, iface: String, method: String, a: Array) -> Dictionary:
+	if not path.begins_with("/org/shadowblip/InputPlumber/CompositeDevice"):
+		return {}
+	match method:
+		"GetProfileYaml":
+			return {"code": 0, "out": JSON.stringify({"type": "s", "data": [to_yaml(ip_profile)]})}
+		"LoadProfileFromYaml":
+			if mode == "failing":
+				return {"code": 1, "out": "Call failed: refused"}
+			var p: Variant = JSON.parse_string(str(a[1])) if a.size() > 1 else null
+			if not p is Dictionary or not p.has("version"):
+				return {"code": 1, "out": "Call failed: invalid profile"}
+			ip_profile = p
+			ip_loads += 1
+			var key := "--system org.shadowblip.InputPlumber %s org.shadowblip.Input.CompositeDevice ProfileName" % path
+			if props.has(key):
+				props[key]["data"] = str(p.get("name", ""))
+			return {"code": 0, "out": ""}
+		"SetInterceptActivation", "Rumble", "Stop":
+			return {"code": 0 if mode != "failing" else 1, "out": ""}
+	return {}
+
+
+## serde_yaml-style block YAML (what InputPlumber hands back), enough for profiles.
+static func to_yaml(v: Variant, indent := 0) -> String:
+	var pad := "  ".repeat(indent)
+	if v is Dictionary:
+		if v.is_empty():
+			return pad + "{}\n"
+		var out := ""
+		for k in v:
+			var x: Variant = v[k]
+			if (x is Dictionary and not x.is_empty()) or (x is Array and not x.is_empty()):
+				out += "%s%s:\n%s" % [pad, k, to_yaml(x, indent + 1 if x is Dictionary else indent)]
+			else:
+				out += "%s%s: %s\n" % [pad, k, _scalar(x)]
+		return out
+	if v is Array:
+		if v.is_empty():
+			return pad + "[]\n"
+		var out := ""
+		for x in v:
+			if x is Dictionary and not x.is_empty():
+				var inner := to_yaml(x, indent + 1).trim_prefix("  ".repeat(indent + 1))
+				out += "%s- %s" % [pad, inner]
+			elif x is Array and not x.is_empty():
+				out += "%s-\n%s" % [pad, to_yaml(x, indent + 1)]
+			else:
+				out += "%s- %s\n" % [pad, _scalar(x)]
+		return out
+	return pad + _scalar(v) + "\n"
+
+
+static func _scalar(x: Variant) -> String:
+	if x == null:
+		return "null"
+	if x is bool:
+		return "true" if x else "false"
+	if x is int or x is float:
+		return str(int(x)) if x is float and x == floorf(x) else str(x)
+	if x is Dictionary:
+		return "{}"
+	if x is Array:
+		return "[]"
+	return JSON.stringify(str(x))
