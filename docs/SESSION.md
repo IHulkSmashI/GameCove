@@ -344,7 +344,9 @@ Where the image lives on SteamOS, and why (checked against SteamOS 3.8 / steamos
 The guided install (README "Install"). Three parts:
 
 1. **`packaging/get-gamecove.sh`** (POSIX sh, no root): detects the OS from `os-release` (+ `/run/ostree-booted`
-   for Fedora Atomic), asks the GitHub API for the latest release, downloads the app tarball, the package for this
+   for Fedora Atomic), asks the GitHub API for the latest release (`--tag` / `GAMECOVE_TAG` for a given one;
+   `releases/latest` skips pre-releases, so while only pre-releases exist it takes the newest of the release
+   list, and a given tag is never replaced), downloads the app tarball, the package for this
    system (RPM, or the `.raw` sysext on SteamOS), its own copy and `SHA256SUMS` into
    `~/.local/share/gamecove/installer/`, checks `SHA256SUMS`'s Sigstore signature (`SHA256SUMS.sigstore.json`, made
    by the Release workflow with its GitHub OIDC identity, no key or secret; verified with cosign from the system or a
