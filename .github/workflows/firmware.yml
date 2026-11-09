@@ -1,0 +1,41 @@
+name: Nightly firmware index
+
+# The newest BIOS / EC / controller firmware each maker lists for every handheld in
+# app/data/devices.json, plus upstream versions of the Linux driver stack, published as
+# firmware.json.gz (+ .sha256) on the rolling "firmware" release. GameCove reads it at most
+# weekly (app/scripts/system/firmware_index.gd). Nothing is mirrored: only versions and links.
+
+on:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: gamedb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e '.[test]'
+      - run: pytest -q tests/test_firmware.py
+      - name: Build
+        # Each maker falls back to the previously published entry when its site fails, so
+        # this only fails when there is nothing at all to publish (the old file then stays).
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m gamedb.firmware.build --out dist/firmware.json.gz --max-minutes 12
+      - name: Publish to the rolling "firmware" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view firmware >/dev/null 2>&1 || gh release create firmware --title "Firmware index" --notes "Rebuilt nightly from each handheld maker's public support listings (ASUS, Lenovo, MSI, Valve's jupiter-hw-support) and upstream release pages. Versions, dates and links only; no firmware is hosted here." --latest=false
+          gh release upload firmware dist/firmware.json.gz dist/firmware.json.gz.sha256 --clobber
