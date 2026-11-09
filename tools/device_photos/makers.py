@@ -2,7 +2,7 @@
 """Maker images: the makers' own official product images, used BY LINK ONLY.
 
 For a handheld with no freely licensed photo, app/data/device_photos.json may
-carry "maker_image": {url, page_url, maker, checked}. GameCove never copies
+carry "maker_image": {url, page_url, maker, checked, view}. GameCove never copies
 these images: they are not in the repo and build.py never downloads them for
 the device-photos release. The app fetches that one image from the maker's
 site on the user's device and credits "Image: <Maker>".
@@ -76,7 +76,24 @@ def entry_problems(dev: str, m: object, makers: dict) -> list[str]:
         out.append(f"{dev}: page_url {m.get('page_url')!r} is not a {maker} page")
     if not DATE.match(str(m.get("checked", ""))):
         out.append(f"{dev}: checked must be YYYY-MM-DD")
+    out += view_problems(dev, m)
     return out
+
+
+# Owner's rule: every picture is a flat, head-on front view (camera straight at the
+# screen; no angle, tilt, side or back view, no hands). "best-available" marks the few
+# rows where no such image exists anywhere we looked; view_note says why.
+VIEWS = ("front", "best-available")
+
+
+def view_problems(dev: str, e: dict) -> list[str]:
+    """Why a picture entry's "view" is not acceptable ([] when it is)."""
+    view = e.get("view")
+    if view not in VIEWS:
+        return [f"{dev}: view must be one of {VIEWS} (a flat, head-on front view), got {view!r}"]
+    if view == "best-available" and not str(e.get("view_note", "")).strip():
+        return [f"{dev}: view 'best-available' needs a view_note saying why no head-on image exists"]
+    return []
 
 
 def load(path: Path = SRC) -> tuple[dict, dict]:
