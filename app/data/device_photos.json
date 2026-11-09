@@ -93,6 +93,24 @@
     "manjaro.org"
    ],
    "note": "The Neo was made by Orange Pi with Manjaro as its OS partner; orangepi.org could not be reached when the links were collected, so the official render from Manjaro's own development thread (posted by Manjaro's project lead) is used. Only that one file is accepted."
+  },
+  "ASUS": {
+   "image_prefixes": [
+    "https://dlcdnwebimgs.asus.com/files/media/"
+   ],
+   "page_domains": [
+    "asus.com"
+   ],
+   "note": "ASUS's own image CDN; only the product-page media folders (files/media/), where rog.asus.com keeps its official renders"
+  },
+  "Valve": {
+   "image_prefixes": [
+    "https://cdn.fastly.steamstatic.com/steamdeck/images/press/"
+   ],
+   "page_domains": [
+    "steamdeck.com"
+   ],
+   "note": "Valve's Steam Deck press kit (steamdeck.com/en/press) on Steam's CDN; only its press/ folder"
   }
  },
  "steam-deck-lcd": {
@@ -103,18 +121,22 @@
   "page_url": "https://commons.wikimedia.org/wiki/File:Steam_Deck_(front).png"
  },
  "steam-deck-oled": {
-  "file": "Steam Deck OLED framsida hemskärm.jpg",
-  "author": "SparklesTrainNerd",
-  "license": "CC BY-SA 4.0",
-  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Steam_Deck_OLED_framsida_hemsk%C3%A4rm.jpg"
+  "maker_image": {
+   "url": "https://cdn.fastly.steamstatic.com/steamdeck/images/press/renderings/press_oled_front_english.png",
+   "page_url": "https://www.steamdeck.com/en/press",
+   "maker": "Valve",
+   "checked": "2026-11-09",
+   "note": "Press-kit front render (1.7 MB PNG); replaces a dark room photo."
+  }
  },
  "asus-rog-ally": {
-  "file": "Asus ROG Ally.jpg",
-  "author": "TheHDGamer2008",
-  "license": "CC BY-SA 4.0",
-  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:Asus_ROG_Ally.jpg"
+  "maker_image": {
+   "url": "https://dlcdnwebimgs.asus.com/files/media/92A296C4-BA56-40C2-A462-AE2729261A0B/main/v2/images/large/2x/nr2301_front.webp",
+   "page_url": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-ally-2023/",
+   "maker": "ASUS",
+   "checked": "2026-11-09",
+   "note": "Official front render; replaces a room photo."
+  }
  },
  "asus-rog-ally-x": {
   "file": "Tokyo-Game-Show-2024-Day4---2024-09-29 235.jpg",
@@ -125,29 +147,31 @@
   "note": "Show-floor unit, Tokyo Game Show 2024."
  },
  "asus-rog-xbox-ally": {
-  "file": "ROG XBOX ALLY.jpg",
-  "author": "Kyu3a",
-  "license": "CC BY-SA 4.0",
-  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY.jpg",
-  "note": "Store demo unit. Not 'ROG Xbox Ally.jpg' (unsourced press render, refused)."
+  "maker_image": {
+   "url": "https://dlcdnwebimgs.asus.com/files/media/42f3c150-02f1-419a-a30d-f7d773456ea1/v7/images/control-box-front@2x.webp",
+   "page_url": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-xbox-ally-2025/",
+   "maker": "ASUS",
+   "checked": "2026-11-09",
+   "note": "Official front render; replaces a store demo photo with signage."
+  }
  },
  "asus-rog-xbox-ally-x": {
-  "file": "ROG XBOX ALLY X.jpg",
-  "author": "Kyu3a",
-  "license": "CC BY-SA 4.0",
-  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY_X.jpg",
-  "note": "Store demo unit. Not 'ROG Xbox Ally X.jpg' (unsourced press render, refused)."
+  "maker_image": {
+   "url": "https://dlcdnwebimgs.asus.com/files/media/0cb01c7f-25af-4e9b-b7da-3a9a8f5e7d31/v6/images/control-box-front@2x.webp",
+   "page_url": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-xbox-ally-x-2025/",
+   "maker": "ASUS",
+   "checked": "2026-11-09",
+   "note": "Official front render; replaces a store demo photo with signage."
+  }
  },
  "asus-rog-xbox-ally-x20": {
-  "file": "ROG XBOX ALLY X.jpg",
-  "author": "Kyu3a",
-  "license": "CC BY-SA 4.0",
-  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "page_url": "https://commons.wikimedia.org/wiki/File:ROG_XBOX_ALLY_X.jpg",
-  "note": "The X20 uses the Xbox Ally X's shell; same front.",
-  "family_of": "asus-rog-xbox-ally-x"
+  "maker_image": {
+   "url": "https://dlcdnwebimgs.asus.com/files/media/202607/e671a4a7-3325-4a83-9fbe-e1c7792b6a02/v2/images/large/2x/control_ally_front.webp",
+   "page_url": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-xbox-ally-x20-2026/",
+   "maker": "ASUS",
+   "checked": "2026-11-09",
+   "note": "The X20's own front render (translucent shell); replaces the Xbox Ally X store photo it borrowed."
+  }
  },
  "lenovo-legion-go": {
   "maker_image": {
