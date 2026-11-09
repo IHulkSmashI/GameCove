@@ -4,12 +4,26 @@
 #   package  in a Fedora container: the gyro fix's HID-BPF object (fixes/claw8ex-gyro/bpf/build-bpf.sh),
 #            the RPM (rpmbuild, which builds the HID-BPF object again from source in %build) and the
 #            SteamOS sysext (gamecove.raw, with the object copied in under fixes/)
-#   release  only for tags v*: attaches everything to the GitHub release
-# Every run uploads the files as workflow artifacts.
+#   tag      manual run with publish=true on a branch: creates the v<spec Version> tag on that commit
+#            and starts this workflow on the tag (GITHUB_TOKEN can start workflow_dispatch runs);
+#            nothing else runs in that first run
+#   release  only for tags v*: signs SHA256SUMS with cosign (keyless, this workflow's GitHub OIDC
+#            identity for the tag: what packaging/get-gamecove.sh verifies), then publishes the
+#            GitHub release with packaging/release-notes/<tag>.md and every file attached
+# Every build run uploads the files as workflow artifacts.
 name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Create the v<spec Version> tag on this commit and publish the release"
+        type: boolean
+        default: false
+      prerelease:
+        description: "Mark the release as a pre-release"
+        type: boolean
+        default: true
   push:
     tags: ["v*"]
 
@@ -20,7 +34,36 @@ env:
   GODOT: "4.7.2"
 
 jobs:
+  tag:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag this commit and start the release run on the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PRE: ${{ inputs.prerelease }}
+        run: |
+          ver="$(sed -n 's/^Version:[[:space:]]*//p' packaging/rpm/gamecove.spec)"
+          [ -n "$ver" ] || { echo "no Version in the spec" >&2; exit 1; }
+          tag="v$ver"
+          test -s "packaging/release-notes/$tag.md" || { echo "missing packaging/release-notes/$tag.md" >&2; exit 1; }
+          have="$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq .object.sha 2>/dev/null || true)"
+          if [ -n "$have" ] && [ "$have" != "$GITHUB_SHA" ]; then
+            echo "$tag already exists on $have (this run is $GITHUB_SHA); bump Version in the spec" >&2
+            exit 1
+          fi
+          [ -n "$have" ] || gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
+          gh workflow run release.yml --ref "$tag" -f prerelease="$PRE"
+          echo "started the release run for $tag on $GITHUB_SHA"
+
   app:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'branch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -137,17 +180,45 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      id-token: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: packaging/release-notes
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - name: Attach to the release
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign SHA256SUMS (keyless; the identity get-gamecove.sh requires)
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          cosign sign-blob --yes --bundle dist/SHA256SUMS.sigstore.json dist/SHA256SUMS
+          # the same check the installer makes
+          ident="(?i)^https://github\.com/$(printf '%s' "$REPO" | sed 's/[.]/\\./g')/\.github/workflows/release\.yml@refs/tags/v"
+          cosign verify-blob --bundle dist/SHA256SUMS.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$ident" dist/SHA256SUMS
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+          PRE_INPUT: ${{ inputs.prerelease }}
         run: |
           ls -la dist
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "GameCove $TAG" --notes "Built by the Release workflow." --draft
+          notes="packaging/release-notes/$TAG.md"
+          test -s "$notes" || { echo "missing $notes" >&2; exit 1; }
+          pre=""
+          case "$PRE_INPUT" in
+          true) pre="--prerelease" ;;
+          false) ;;
+          *) case "$TAG" in v0.* | *-*) pre="--prerelease" ;; esac ;;
+          esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file "$notes" --draft=false $pre
+          else
+            gh release create "$TAG" --verify-tag --title "GameCove $TAG" --notes-file "$notes" $pre
+          fi
           gh release upload "$TAG" dist/* --clobber
