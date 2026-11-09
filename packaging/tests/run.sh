@@ -513,7 +513,13 @@ cat >"$GB/badsum" <<'EOF'
 #!/bin/sh
 echo "0000000000000000000000000000000000000000000000000000000000000000  $1"
 EOF
-chmod +x "$GB/curl" "$GB/badsum"
+# fake cosign: logs its arguments; fails while $T/cosign-fail exists
+cat >"$GB/cosign" <<EOF
+#!/bin/sh
+echo "\$*" >>"$T/cosign.log"
+[ ! -f "$T/cosign-fail" ]
+EOF
+chmod +x "$GB/curl" "$GB/badsum" "$GB/cosign"
 mkdir -p "$T/ggapp"
 printf '#!/bin/sh\necho "app $*" >>"%s/launch.log"\n' "$T" >"$T/ggapp/gamecove.x86_64"
 echo pck >"$T/ggapp/gamecove.pck"
@@ -524,12 +530,13 @@ echo raw >"$SRV/gamecove-0.2.0-x86_64.raw"
 cp "$GG" "$SRV/get-gamecove.sh"
 (cd "$SRV" && sha256sum gamecove-0.2.0-x86_64.tar.gz gamecove-0.2.0-1.fc43.x86_64.rpm gamecove-0.2.0-1.fc43.src.rpm \
 	gamecove-0.2.0-x86_64.raw get-gamecove.sh >SHA256SUMS)
+echo '{"bundle": "fake"}' >"$SRV/SHA256SUMS.sigstore.json"
 {
 	echo '{'
 	echo '  "tag_name": "v0.2.0",'
 	echo '  "assets": ['
 	for a in gamecove-0.2.0-1.fc43.src.rpm gamecove-0.2.0-1.fc43.x86_64.rpm gamecove-0.2.0-x86_64.raw \
-		gamecove-0.2.0-x86_64.tar.gz get-gamecove.sh SHA256SUMS; do
+		gamecove-0.2.0-x86_64.tar.gz get-gamecove.sh SHA256SUMS SHA256SUMS.sigstore.json; do
 		echo "    { \"name\": \"$a\", \"browser_download_url\": \"https://example.test/dl/$a\" },"
 	done
 	echo '  ]'
@@ -556,8 +563,9 @@ gg() {
 	root="$1"
 	shift
 	: >"$T/curl.log"
+	: >"$T/cosign.log"
 	env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$root" GAMECOVE_ARCH=x86_64 \
-		GAMECOVE_API=https://api.example.test "$@" sh "$GG" --no-launch
+		GAMECOVE_API=https://api.example.test COSIGN="$GB/cosign" "$@" sh "$GG" --no-launch
 }
 for pair in "$R_BAZ:bazzite" "$R_FED:fedora-atomic" "$R_FEDWS:other" "$R_DECK:steamos" "$R_ARCH:other" "$T/os-none:other"; do
 	got="$(GAMECOVE_ROOT="${pair%%:*}" sh "$GG" --detect-os)"
@@ -601,6 +609,41 @@ grep -v "x86_64.rpm" "$SRV/SUMS.keep" >"$SRV/SHA256SUMS"
 expect_code 1 "bootstrap refuses a file missing from SHA256SUMS" gg "$R_BAZ"
 mv "$SRV/SUMS.keep" "$SRV/SHA256SUMS"
 expect_code 1 "bootstrap needs x86_64" gg "$R_BAZ" GAMECOVE_ARCH=aarch64
+# review S3-3: SHA256SUMS must carry a Sigstore signature from this repository's release workflow
+rm -rf "$T/gghome"
+mkdir -p "$T/gghome"
+expect_code 0 "signed release accepted" gg "$R_BAZ"
+contains "$T/cosign.log" "^verify-blob --bundle .*SHA256SUMS.sigstore.json --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp " "cosign checks the bundle and the GitHub OIDC issuer"
+contains "$T/cosign.log" 'IHulkSmashI/GameCove/\\.github/workflows/release\\.yml@refs/tags/v' "identity: this repo's release workflow on a v* tag"
+contains "$GI/release.env" "^SIGNATURE=verified$" "recorded for the installer"
+rm -rf "$T/gghome"
+mkdir -p "$T/gghome"
+touch "$T/cosign-fail"
+expect_code 1 "a bad signature is refused" gg "$R_BAZ"
+contains "$T/out" "signature doesn't check out" "said why"
+if [ ! -e "$GI/app" ] && [ ! -e "$GI/release.env" ]; then ok; else bad "nothing installed after a bad signature"; fi
+rm -f "$T/cosign-fail"
+mv "$SRV/SHA256SUMS.sigstore.json" "$SRV/bundle.off"
+cp "$SRV/latest.json" "$SRV/latest.keep"
+grep -v "sigstore.json" "$SRV/latest.keep" >"$SRV/latest.json"
+expect_code 1 "an unsigned release is refused" gg "$R_BAZ"
+contains "$T/out" "has no signature" "said why"
+expect_code 0 "unsigned accepted only when asked" gg "$R_BAZ" GAMECOVE_ALLOW_UNSIGNED=1
+contains "$GI/release.env" "^SIGNATURE=unsigned$" "and recorded as unsigned"
+mv "$SRV/bundle.off" "$SRV/SHA256SUMS.sigstore.json"
+mv "$SRV/latest.keep" "$SRV/latest.json"
+# no cosign anywhere: the pinned release is downloaded and its sha256 checked (a fake one here: refused)
+printf 'not cosign\n' >"$SRV/cosign-linux-amd64"
+mkdir -p "$T/ggbin2"
+cp "$GB/curl" "$T/ggbin2/curl"
+if command -v cosign >/dev/null 2>&1; then
+	echo "note: a real cosign is installed here, skipped the pinned-download test" >&2
+else
+	expect_code 1 "a cosign download that isn't the pinned one is refused" env PATH="$T/ggbin2:/usr/bin:/bin" GAMECOVE_HOME="$T/gghome" \
+		GAMECOVE_ROOT="$R_BAZ" GAMECOVE_ARCH=x86_64 GAMECOVE_API=https://api.example.test sh "$GG" --no-launch
+	contains "$T/out" "doesn't match its pinned sha256" "said why"
+	contains "$T/curl.log" "sigstore/cosign/releases/download/v2.5.3/cosign-linux-amd64" "the pinned cosign release"
+fi
 expect_code 0 "bootstrap again" gg "$R_BAZ"
 touch "$T/offline"
 : >"$T/launch.log"

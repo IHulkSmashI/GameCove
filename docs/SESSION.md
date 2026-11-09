@@ -314,7 +314,11 @@ The guided install (README "Install"). Three parts:
 1. **`packaging/get-gamecove.sh`** (POSIX sh, no root): detects the OS from `os-release` (+ `/run/ostree-booted`
    for Fedora Atomic), asks the GitHub API for the latest release, downloads the app tarball, the package for this
    system (RPM, or the `.raw` sysext on SteamOS), its own copy and `SHA256SUMS` into
-   `~/.local/share/gamecove/installer/`, refuses anything that isn't listed in or doesn't match `SHA256SUMS`,
+   `~/.local/share/gamecove/installer/`, checks `SHA256SUMS`'s Sigstore signature (`SHA256SUMS.sigstore.json`, made
+   by the Release workflow with its GitHub OIDC identity, no key or secret; verified with cosign from the system or a
+   pinned, sha256-checked download, and only accepted for `.github/workflows/release.yml` on a `v*` tag of this
+   repository; a release without one is refused unless `GAMECOVE_ALLOW_UNSIGNED=1`; review S3-3), refuses anything
+   that isn't listed in or doesn't match `SHA256SUMS`,
    unpacks the app, writes `release.env`, adds the "GameCove Installer" app entry and an "Install GameCove" desktop
    shortcut, and starts `gamecove.x86_64 -- --installer`. Offline, it starts the copy it has.
 2. **Installer mode in the app.** `scenes/boot.tscn` is the main scene; `scripts/installer/boot.gd` reads
