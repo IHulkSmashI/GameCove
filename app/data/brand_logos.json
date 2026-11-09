@@ -303,12 +303,12 @@
     "one netbook"
    ],
    "enabled": true,
-   "file": "",
-   "mono": false,
-   "hex": "",
-   "source": "",
-   "license": "",
-   "upstream": "",
+   "file": "res://assets/brand/onexplayer.svg",
+   "mono": true,
+   "hex": "FF4D00",
+   "source": "https://www.onexplayer.com/assets/Logo-03078c08.svg",
+   "license": "Official logo from onexplayer.com (header asset); trademark of One-Netbook Technology. Fills, <title> and layer ids removed, viewBox added; geometry unchanged.",
+   "upstream": "https://www.onexplayer.com",
    "notice": "",
    "system_icons": [],
    "owner_terms": "https://onexplayerstore.com/pages/about-us"
