@@ -224,3 +224,29 @@ func test_tab_wired() -> void:
 	var tb: HBoxContainer = TopBar.new()
 	ok(tb.tabs.has("stream"), "tab button")
 	tb.free()
+
+
+class LinkHost extends Control:
+	var hint_bar := Control.new()
+	var links := 0
+	func _link_top() -> void:
+		links += 1
+
+
+## The top bar's down neighbour was set to the screen's first button (Install,
+## a host card); a rebuild freed that button and left the path dangling: an
+## engine error ("Neighbor focus node path is invalid") on the next press and
+## no way down from the tab. Rebuild asks the host to link again. Found by the
+## end-to-end suite (random pad bursts).
+func test_rebuild_relinks_the_top_bar() -> void:
+	var s := _service(false)
+	var host := LinkHost.new()
+	var sc := _screen(s)
+	host.add_child(sc)
+	var before: int = host.links
+	sc.rebuild()
+	ok(host.links > before, "the host linked the top bar again")
+	host.remove_child(sc)
+	host.hint_bar.free()
+	host.free()
+	_done(sc, s)

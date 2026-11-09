@@ -287,6 +287,11 @@ func rebuild() -> void:
 		if target != null and target != f:
 			target.grab_focus()
 	_hints_changed()
+	# the top bar's "down" pointed at a button this rebuild just freed (Install,
+	# a host card): the host links it again to the new one
+	var h := host()
+	if h != null and h.has_method("_link_top"):
+		h.call("_link_top")
 
 
 func _default_host(list: Array) -> String:
