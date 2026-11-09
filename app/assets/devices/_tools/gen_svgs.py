@@ -295,203 +295,393 @@ def art_generic():
     return a.render("Handheld")
 
 
-def art_steam_deck():
-    a = Art(500, 260)
-    a.body("M60 60 H440 Q490 60 492 110 L494 170 Q494 222 450 222 L380 222 Q350 200 320 200 H180 Q150 200 120 222 L50 222 Q6 222 6 170 L8 110 Q10 60 60 60 Z")
-    a.shoulders(30, 470, 60, 62)
-    a.screen(150, 74, 200, 125)
-    a.dpad(56, 104); a.stick(110, 100, "L")
-    a.face(444, 104); a.stick(390, 100, "R")
-    a.pad(66, 140, 64, 58, "Left"); a.pad(370, 140, 64, 58, "Right")
-    a.small("Select", 132, 80, 4.5, "rect"); a.small("Start", 368, 80, 4.5, "rect")
-    a.small("Guide", 132, 212, 6, "rect"); a.small("QuickAccess", 368, 212, 5, "rect")
-    a.paddles([("LeftPaddle1", "L4"), ("LeftPaddle2", "L5"), ("RightPaddle1", "R4"), ("RightPaddle2", "R5")], 236)
-    return a.render("Steam Deck layout")
+
+# ---------------------------------------------------------------- true-scale device drawings
+# Every drawing below uses the same scale, so their sizes compare truthfully:
+# 1 mm of the real device = UNITS_PER_MM SVG units (Device.UNITS_PER_MM in GDScript).
+# Outline sizes come from "bodies" in app/data/devices.json (maker spec sheets);
+# control positions are fractions of that outline, placed from the makers'
+# layout descriptions and product views (never traced). No logos or wordmarks.
+import json
+import math
+
+UNITS_PER_MM = 1.6
+MX = 14            # side margin (units)
+TOP = 30           # strip above the body for triggers and bumpers
+PAD_STRIP = 30     # strip below the body for back buttons
+GAP = 30           # clamshells: lid to base (the hinge), holds the shoulders
+
+TABLE = os.path.join(OUT, "..", "..", "data", "devices.json")
+BODIES = json.load(open(TABLE))["bodies"]
 
 
-def art_ally(xbox=False):
-    a = Art()
-    if xbox:
-        classic(a, 46, 434, 52, 196, grip=40)
+def num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def screen_mm(diag, aspect):
+    aw, ah = [float(x) for x in aspect.split(":")]
+    k = diag * 25.4 / math.hypot(aw, ah)
+    return aw * k, ah * k
+
+
+class Scaled(Art):
+    """Art in millimetres: bx, by is the body's top-left corner in units."""
+
+    def __init__(self, w_units, h_units):
+        Art.__init__(self, int(math.ceil(w_units)), int(math.ceil(h_units)))
+        self.bx = MX
+        self.by = TOP
+
+    def X(self, mm):
+        return round(self.bx + mm * UNITS_PER_MM, 2)
+
+    def Y(self, mm):
+        return round(self.by + mm * UNITS_PER_MM, 2)
+
+    def path_mm(self, cmds):
+        """cmds: [("M", x, y), ("Q", cx, cy, x, y), ...] in mm -> path data in units."""
+        out = []
+        for c in cmds:
+            op, vals = c[0], c[1:]
+            if op == "H":
+                out.append("H%g" % self.X(vals[0]))
+            elif op == "Z":
+                out.append("Z")
+            else:
+                pts = ["%g %g" % (self.X(vals[i]), self.Y(vals[i + 1])) for i in range(0, len(vals), 2)]
+                out.append(op + " ".join(pts))
+        return " ".join(out)
+
+
+def grip_outline(w, h, rt, rb, hc, gw, inset=0.0):
+    """Front outline: straight top, grips reaching the full height at both ends,
+    the middle's lower edge at hc * h. All control points stay inside w x h."""
+    yc = hc * h
+    if hc >= 0.999:
+        return [("M", inset + rt, 0), ("H", w - inset - rt), ("Q", w - inset, 0, w - inset, rt),
+                ("L", w, h - rb), ("Q", w, h, w - rb, h), ("H", rb), ("Q", 0, h, 0, h - rb),
+                ("L", inset, rt), ("Q", inset, 0, inset + rt, 0), ("Z",)]
+    t = 0.35 * gw
+    rb = min(rb, gw - t - 1)
+    return [("M", inset + rt, 0), ("H", w - inset - rt), ("Q", w - inset, 0, w - inset, rt),
+            ("L", w, h - rb), ("Q", w, h, w - rb, h), ("L", w - gw + t, h),
+            ("C", w - gw, h, w - gw, yc, w - gw - t, yc), ("H", gw + t),
+            ("C", gw, yc, gw, h, gw - t, h), ("L", rb, h), ("Q", 0, h, 0, h - rb),
+            ("L", inset, rt), ("Q", inset, 0, inset + rt, 0), ("Z",)]
+
+
+def controller_half(x0, x1, h, side, r_out, r_in=3.0):
+    """Detachable controller: rounded on the outer side, square-ish where it meets the tablet."""
+    if side == "left":
+        return [("M", x1, 0), ("H", x0 + r_out), ("Q", x0, 0, x0, r_out), ("L", x0, h - r_out),
+                ("Q", x0, h, x0 + r_out, h), ("H", x1), ("Z",)]
+    return [("M", x0, 0), ("H", x1 - r_out), ("Q", x1, 0, x1, r_out), ("L", x1, h - r_out),
+            ("Q", x1, h, x1 - r_out, h), ("H", x0), ("Z",)]
+
+
+def draw(art, spec):
+    b = BODIES[art]
+    shape = spec.get("shape", "grips")
+    h = float(b["h_mm"])
+    core = b.get("core_w_mm")
+    sw, sh = screen_mm(spec.get("screen_in", b["screen_in"]), b["aspect"])
+    # overall width: published, else core + drawn controllers (flagged unverified in devices.json)
+    if num(b["w_mm"]):
+        w = float(b["w_mm"])
     else:
-        a.rect_body(40, 52, 400, 150, 60)
-    a.shoulders(52, 428, 52)
-    lc, rc, cx = std_layout(a, 40, 440, 52, 200, 236)
-    if xbox:
-        a.small("Guide", lc - 24, 74, 7)
-        a.small("Select", lc + 26, 74, 4.5, "rect"); a.small("Start", rc - 26, 74, 4.5, "rect")
-        a.small("Keyboard", lc + 24, 186, 5, "rect"); a.small("QuickAccess", rc - 24, 186, 5, "rect")
+        w = float(core) + 2 * spec["controller_mm"]
+    if shape == "detach":
+        core = float(core) if num(core) else sw + 2 * spec.get("bezel_mm", 8)
+    paddles = spec.get("paddles", [])
+    clam = shape == "clam"
+    body_top = (h * UNITS_PER_MM + GAP) if clam else 0
+    height = TOP + body_top + h * UNITS_PER_MM + (PAD_STRIP if paddles else 12)
+    a = Scaled(w * UNITS_PER_MM + 2 * MX, height + (0 if not clam else 0))
+    if clam:
+        a.by = 10
+    lid_by = a.by
+    # ------------------------------------------------ body
+    if clam:
+        a.add('<path id="part-lid" d="%s" fill="%s" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>'
+              % (a.path_mm(grip_outline(w, h, 7, 7, 1, 0)), BODY, EDGE))
+        scy = spec.get("scr_cy", 0.47) * h
+        a.screen(a.X(w / 2 - sw / 2), a.Y(scy - sh / 2), sw * UNITS_PER_MM, sh * UNITS_PER_MM, 4)
+        a.by = lid_by + h * UNITS_PER_MM + GAP
+        a.add('<path id="part-body" d="%s" fill="%s" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>'
+              % (a.path_mm(grip_outline(w, h, spec.get("r_top", 6), spec.get("r_bot", 10), 1, 0)), BODY, EDGE))
+    elif shape == "detach":
+        x0, x1 = (w - core) / 2, (w + core) / 2
+        r_out = spec.get("r_out", 26)
+        a.add('<path id="part-controller-left" d="%s" fill="%s" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>'
+              % (a.path_mm(controller_half(0, x0 - 0.6, h, "left", r_out)), BODY, EDGE))
+        a.add('<path id="part-controller-right" d="%s" fill="%s" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>'
+              % (a.path_mm(controller_half(x1 + 0.6, w, h, "right", r_out)), BODY, EDGE))
+        a.add('<rect id="part-body" x="%g" y="%g" width="%g" height="%g" rx="%g" fill="%s" stroke="%s" stroke-width="2.5"/>'
+              % (a.X(x0), a.Y(0), core * UNITS_PER_MM, h * UNITS_PER_MM, 5 * UNITS_PER_MM, BODY, EDGE))
     else:
-        a.small("Guide", lc + 28, 68, 5, "rect"); a.small("QuickAccess", rc - 28, 68, 5, "rect")
-        a.small("Select", lc + 26, 186, 4.5, "rect"); a.small("Start", rc - 26, 186, 4.5, "rect")
-    a.paddles([("LeftPaddle1", "M1"), ("RightPaddle1", "M2")], 232)
-    return a.render("ROG Xbox Ally layout" if xbox else "ROG Ally layout")
+        inset = (w - float(b["w_top_mm"])) / 2 if num(b.get("w_top_mm")) else 0.0
+        hc = spec.get("hc", 1)
+        if hc < 0.999:
+            # the middle's lower edge sits below the screen (a body never cuts into its panel)
+            scy0 = spec.get("scr_cy", 0.45) * h
+            hc = min(0.999, max(hc, (scy0 + sh / 2 + 4) / h))
+            spec["hc"] = hc
+        a.add('<path id="part-body" d="%s" fill="%s" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>'
+              % (a.path_mm(grip_outline(w, h, spec.get("r_top", 18), spec.get("r_bot", 26), hc,
+                                        spec.get("gw", 0), inset)), BODY, EDGE))
+    # ------------------------------------------------ shoulders (slim strip above the body)
+    tw = spec.get("trigger_mm", min(36.0, 0.15 * w))
+    ti = spec.get("trigger_in_mm", 0.05 * w)
+    ty = a.by - 20
+    for cap, x in (("LeftTrigger", ti), ("RightTrigger", w - ti - tw)):
+        a.add('<rect id="btn-%s" x="%g" y="%g" width="%g" height="10" rx="5" fill="%s" stroke="%s" stroke-width="1.3"/>'
+              % (cap, a.X(x), ty, tw * UNITS_PER_MM, RAISED, QUIET))
+    for cap, x in (("LeftBumper", ti + 3), ("RightBumper", w - ti - tw + 3)):
+        a.add('<rect id="btn-%s" x="%g" y="%g" width="%g" height="7" rx="3.5" fill="%s" stroke="%s" stroke-width="1.3"/>'
+              % (cap, a.X(x), a.by - 8, (tw - 6) * UNITS_PER_MM, BODY, QUIET))
+    # ------------------------------------------------ screens and grilles
+    if not clam:
+        scx = w / 2
+        scy = spec.get("scr_cy", 0.5 if spec.get("hc", 1) >= 0.999 else 0.45) * h
+        a.screen(a.X(scx - sw / 2), a.Y(scy - sh / 2), sw * UNITS_PER_MM, sh * UNITS_PER_MM, 4)
+        sl, sr = scx - sw / 2, scx + sw / 2
+    else:
+        sl, sr = w / 2 - spec.get("mid_mm", sw) / 2, w / 2 + spec.get("mid_mm", sw) / 2
+    if "second_screen" in spec:
+        d2, ar2, cy2 = spec["second_screen"]
+        w2, h2 = screen_mm(d2, ar2)
+        a.screen(a.X(w / 2 - w2 / 2), a.Y(cy2 * h - h2 / 2), w2 * UNITS_PER_MM, h2 * UNITS_PER_MM, 3, "part-screen-2")
+    if spec.get("keyboard"):
+        kx, ky, kw, kh = spec["keyboard"]
+        cols, rows = int(kw // 11), int(kh // 9)
+        for r in range(rows):
+            for c in range(cols - (r == rows - 1) * 2):
+                a.add('<rect x="%g" y="%g" width="%g" height="%g" rx="1.6" fill="%s"/>' % (
+                    a.X(kx + c * kw / cols + r * 1.5), a.Y(ky + r * kh / rows), (kw / cols - 1.6) * UNITS_PER_MM,
+                    (kh / rows - 1.6) * UNITS_PER_MM, RAISED))
+    if spec.get("slider"):
+        y = a.Y(spec["slider"] * h)
+        a.add('<path d="M%g %g H%g" stroke="%s" stroke-width="1.4" stroke-dasharray="5 4" opacity="0.7"/>'
+              % (a.X(sl), y, a.X(sr), QUIET))
+    for fx, fy, gw_mm in spec.get("grille", []):
+        n = int(gw_mm // 3)
+        for i in range(n):
+            a.add('<circle cx="%g" cy="%g" r="1" fill="%s" opacity="0.6"/>' % (a.X(fx * w - gw_mm / 2 + i * 3 + 1.5), a.Y(fy * h), QUIET))
+    for fx, fy, vw in spec.get("vents", []):
+        a.add('<path d="M%g %g H%g M%g %g H%g" stroke="%s" stroke-width="1.6" stroke-linecap="round" opacity="0.5"/>'
+              % (a.X(fx * w - vw / 2), a.Y(fy * h), a.X(fx * w + vw / 2), a.X(fx * w - vw / 2), a.Y(fy * h) + 4, a.X(fx * w + vw / 2), QUIET))
+    # ------------------------------------------------ main controls
+    if shape == "detach":
+        lc, rc = (w - core) / 4, w - (w - core) / 4
+    else:
+        lc, rc = sl / 2, (w + sr) / 2
+    lc += spec.get("col_dx", 0)
+    rc -= spec.get("col_dx", 0)
+    k = spec.get("k", 1.0)
+    up, lo = spec.get("fy", (0.3, 0.64))
+    S = UNITS_PER_MM
+    stick_r, gap, fr, ds = 10.6 * S * k, 9.4 * S * k, 4.7 * S * k, 6.9 * S * k
+    layout = spec.get("layout", "xbox")
+    if layout == "xbox":
+        a.stick(a.X(lc), a.Y(up * h), "L", stick_r); a.dpad(a.X(lc), a.Y(lo * h), ds)
+        a.face(a.X(rc), a.Y(up * h), gap, fr); a.stick(a.X(rc), a.Y(lo * h), "R", stick_r)
+    elif layout == "inboard":    # D-pad/ABXY outboard, sticks inboard (Steam Deck, ZOTAC Zone)
+        dx = spec.get("spread_mm", 14)
+        a.dpad(a.X(lc - dx), a.Y(up * h), ds); a.stick(a.X(lc + dx), a.Y(up * h), "L", stick_r)
+        a.face(a.X(rc + dx), a.Y(up * h), gap, fr); a.stick(a.X(rc - dx), a.Y(up * h), "R", stick_r)
+        if spec.get("dials"):
+            a.dial(a.X(lc + dx), a.Y(up * h), "Left", stick_r * 1.3)
+            a.dial(a.X(rc - dx), a.Y(up * h), "Right", stick_r * 1.3)
+    for side, fx, fy, pw, ph in spec.get("pads", []):
+        a.pad(a.X(fx * w - pw / 2), a.Y(fy * h - ph / 2), pw * S, ph * S, side)
+    for item in spec.get("small", []):
+        cap, fx, fy, r = item[:4]
+        shape_ = item[4] if len(item) > 4 else "circle"
+        x, y = fx * w, fy * h
+        half = r * (1.3 if shape_ == "rect" else 1.0) + 2.0
+        if not clam and scy - sh / 2 - half < y < scy + sh / 2 + half and sl - half < x < sr + half:
+            x = sl - half if x < w / 2 else sr + half   # keep buttons off the panel
+        a.small(cap, a.X(x), a.Y(y), r * S, shape_)
+    # ------------------------------------------------ back buttons
+    py = a.by + h * S + 8
+    left = [p for p in paddles if p[0].startswith("Left")]
+    right = [p for p in paddles if not p[0].startswith("Left")]
+    for group, x0, step in ((left, a.X(lc), -40), (right, a.X(rc), 40)):
+        for i, (cap, lab) in enumerate(group):
+            cx = x0 + step * i
+            a.add('<g id="btn-%s"><rect x="%g" y="%g" width="34" height="16" rx="8" fill="none" stroke="%s" stroke-width="1.5" stroke-dasharray="4 3"/>%s</g>'
+                  % (cap, cx - 17, py, QUIET, text_path(lab.upper(), cx, py + 8, 7, QUIET, 1.1)))
+    return a.render(spec["title"] + " (1 mm = %g units)" % UNITS_PER_MM)
 
 
-def art_legion_go(go2=False):
-    a = Art(500, 260)
-    a.rect_body(118, 48, 264, 168, 14, "part-body")
-    a.screen(130, 58, 240, 148)
-    # detachable halves
-    a.add('<path id="part-controller-left" d="M112 48 H70 Q30 48 30 90 V196 Q30 222 58 222 H112 Z" fill="%s" stroke="%s" stroke-width="2.5"/>' % (BODY, EDGE))
-    a.add('<path id="part-controller-right" d="M388 48 H430 Q470 48 470 90 V196 Q470 222 442 222 H388 Z" fill="%s" stroke="%s" stroke-width="2.5"/>' % (BODY, EDGE))
-    a.shoulders(36, 464, 48, 58)
-    a.stick(72, 88, "L"); a.dpad(72, 150)
-    a.face(428, 88); a.stick(428, 166, "R")
-    a.pad(410, 120, 36, 22, "Right")
-    a.small("Guide", 96, 196, 5.5, "rect", None); a.small("QuickAccess", 404, 196, 5.5, "rect")
-    a.small("Select", 52, 196, 4); a.small("Start", 448, 196, 4)
-    if go2:
-        a.small("Keyboard", 96, 62, 4); a.small("QuickAccess2", 404, 62, 4)
-    a.paddles([("LeftPaddle1", "Y1"), ("LeftPaddle2", "Y2"), ("RightPaddle1", "Y3"), ("RightPaddle2", "M3")], 236)
-    return a.render("Legion Go layout (detachable controllers)")
+# Shared small-button sets (fractions of the outline; radius in mm).
+def menu_pair(fx_l, fx_r, fy, r=2.6):
+    return [("Select", fx_l, fy, r), ("Start", fx_r, fy, r)]
 
 
-def art_legion_go_s():
-    a = Art()
-    classic(a, 40, 440, 50, 200, grip=34)
-    a.shoulders(50, 430, 50)
-    lc, rc, cx = std_layout(a, 40, 440, 50, 200, 236)
-    a.pad(rc - 16, 150, 32, 22, "Right")
-    a.small("Guide", lc - 20, 76, 5.5, "rect"); a.small("QuickAccess", rc + 20, 76, 5.5, "rect")
-    a.small("Select", lc + 24, 188, 4); a.small("Start", rc - 24, 188, 4)
-    a.paddles([("LeftPaddle1", "Y1"), ("RightPaddle1", "Y2")], 236)
-    return a.render("Legion Go S layout")
+P_ALLY = [("LeftPaddle1", "M1"), ("RightPaddle1", "M2")]
+P_LEGION = [("LeftPaddle1", "Y1"), ("LeftPaddle2", "Y2"), ("RightPaddle1", "Y3"), ("RightPaddle2", "M3")]
+P_CLAW = [("LeftPaddle1", "M2"), ("RightPaddle1", "M1")]
+P_DECK = [("LeftPaddle1", "L4"), ("LeftPaddle2", "L5"), ("RightPaddle1", "R4"), ("RightPaddle2", "R5")]
+P_M12 = [("LeftPaddle1", "M1"), ("RightPaddle1", "M2")]
 
-
-def art_claw():
-    a = Art()
-    classic(a, 44, 436, 50, 196, grip=42)
-    a.shoulders(54, 426, 50)
-    lc, rc, cx = std_layout(a, 44, 436, 50, 196, 230)
-    a.small("Guide", lc + 26, 70, 5, "rect"); a.small("QuickAccess", rc - 26, 70, 5, "rect")
-    a.small("Select", lc + 26, 184, 4); a.small("Start", rc - 26, 184, 4)
-    a.paddles([("LeftPaddle1", "M2"), ("RightPaddle1", "M1")], 236)
-    return a.render("MSI Claw layout")
-
-
-def art_onexfly():
-    a = Art()
-    a.rect_body(40, 56, 400, 144, 56)
-    a.shoulders(52, 428, 56)
-    lc, rc, cx = std_layout(a, 40, 440, 56, 200, 240)
-    a.small("Guide", rc - 2, 184, 6)
-    a.small("QuickAccess", lc - 2, 184, 5, "rect")
-    a.small("Keyboard", rc + 22, 184, 4.5, "rect")
-    a.small("Select", lc + 26, 70, 4); a.small("Start", rc - 26, 70, 4)
-    return a.render("OneXFly layout")
-
-
-def art_tablet_detachable(title, scr_w=290):
-    a = Art(520, 260)
-    a.rect_body(260 - scr_w / 2 - 10, 44, scr_w + 20, 176, 12)
-    a.screen(260 - scr_w / 2, 54, scr_w, 156)
-    lx0, rx1 = 260 - scr_w / 2 - 16, 260 + scr_w / 2 + 16
-    a.add('<path id="part-controller-left" d="M%g 44 H%g Q%g 44 %g 84 V196 Q%g 220 %g 220 H%g Z" fill="%s" stroke="%s" stroke-width="2.5"/>' % (lx0, lx0 - 44, lx0 - 74, lx0 - 74, lx0 - 74, lx0 - 50, lx0, BODY, EDGE))
-    a.add('<path id="part-controller-right" d="M%g 44 H%g Q%g 44 %g 84 V196 Q%g 220 %g 220 H%g Z" fill="%s" stroke="%s" stroke-width="2.5"/>' % (rx1, rx1 + 44, rx1 + 74, rx1 + 74, rx1 + 74, rx1 + 50, rx1, BODY, EDGE))
-    a.shoulders(lx0 - 70, rx1 + 70, 44, 56)
-    a.stick(lx0 - 36, 88, "L"); a.dpad(lx0 - 36, 150)
-    a.face(rx1 + 36, 88); a.stick(rx1 + 36, 158, "R")
-    a.small("Guide", lx0 - 36, 202, 5); a.small("QuickAccess", rx1 + 36, 202, 5, "rect")
-    a.small("Select", lx0 - 14, 202, 3.5); a.small("Start", rx1 + 14, 202, 3.5)
-    return a.render(title)
-
-
-def art_clamshell(title, second_screen=False, keyboard=True, touchpad=False):
-    a = Art(480, 300)
-    a.rect_body(70, 10, 340, 130, 14, "part-lid")
-    a.screen(90, 20, 300, 110)
-    a.rect_body(40, 148, 400, 144, 30)
-    a.shoulders(48, 432, 148, 50)
-    a.stick(92, 182, "L"); a.dpad(92, 248)
-    a.face(388, 182); a.stick(388, 248, "R")
-    if second_screen:
-        a.screen(180, 166, 120, 80, 4, "part-screen-2")
-    if keyboard:
-        for row in range(4):
-            for col in range(10 - (row == 3) * 2):
-                a.add('<rect x="%g" y="%g" width="13" height="10" rx="2" fill="%s"/>' % (162 + col * 16 + row * 4, 168 + row * 14, RAISED))
-    if touchpad:
-        a.pad(204, 228, 72, 40, "Touch")
-    a.small("Guide", 136, 164, 5); a.small("QuickAccess", 344, 164, 5, "rect")
-    a.small("Select", 136, 276, 3.5); a.small("Start", 344, 276, 3.5)
-    return a.render(title)
-
-
-def art_ayaneo():
-    a = Art()
-    a.rect_body(44, 56, 392, 144, 50)
-    a.shoulders(54, 426, 56)
-    lc, rc, cx = std_layout(a, 44, 436, 56, 200, 236)
-    a.small("LeftTop", 92, 62, 4.5, "rect"); a.small("RightTop", 388, 62, 4.5, "rect")
-    a.small("Guide", rc - 24, 186, 5.5); a.small("QuickAccess", lc + 24, 186, 4.5, "rect")
-    a.small("Select", lc - 18, 186, 3.5); a.small("Start", rc + 18, 186, 3.5)
-    return a.render("AYANEO layout")
-
-
-def art_gpd_win():
-    a = Art()
-    a.rect_body(70, 46, 340, 160, 28)
-    a.shoulders(80, 400, 46, 50)
-    a.screen(150, 58, 180, 112)
-    a.stick(112, 88, "L"); a.dpad(112, 148)
-    a.face(368, 88); a.stick(368, 148, "R")
-    a.small("Select", 112, 190, 3.5); a.small("Start", 368, 190, 3.5)
-    a.add('<path d="M150 186 H330" stroke="%s" stroke-width="2" stroke-dasharray="6 4"/>' % QUIET)
-    a.paddles([("LeftPaddle1", "L4"), ("RightPaddle1", "R4")], 228)
-    return a.render("GPD WIN layout (slide-out keyboard)")
-
-
-def art_zone():
-    a = Art(500, 260)
-    classic(a, 44, 456, 50, 200, grip=34)
-    a.shoulders(54, 446, 50)
-    a.screen(150, 64, 200, 124)
-    a.dial(112, 92, "Left"); a.stick(112, 92, "L"); a.dpad(70, 92, 9)
-    a.dial(388, 92, "Right"); a.stick(388, 92, "R"); a.face(432, 92, 12, 6)
-    a.pad(72, 132, 64, 50, "Left"); a.pad(364, 132, 64, 50, "Right")
-    a.small("Guide", 132, 196, 5); a.small("QuickAccess", 368, 196, 5)
-    a.small("QuickAccess2", 250, 204, 5, "rect")
-    a.paddles([("LeftPaddle1", "M1"), ("RightPaddle1", "M2")], 236)
-    return a.render("ZOTAC Zone layout")
-
-
-def art_neo():
-    a = Art(500, 260)
-    a.rect_body(30, 56, 440, 150, 50)
-    a.shoulders(40, 460, 56)
-    a.screen(150, 68, 200, 126)
-    a.stick(96, 90, "L"); a.dpad(60, 140, 9)
-    a.face(404, 96, 13, 6.5); a.stick(440, 140, "R", 14)
-    a.pad(84, 130, 52, 50, "Left"); a.pad(364, 130, 52, 50, "Right")
-    a.small("Guide", 132, 196, 5); a.small("QuickAccess", 368, 196, 5)
-    a.small("LeftTop", 66, 64, 4, "rect"); a.small("RightTop", 434, 64, 4, "rect")
-    return a.render("Orange Pi Neo layout")
-
-
-ARTS = {
-    "generic": art_generic(),
-    "steam-deck": art_steam_deck(),
-    "rog-ally": art_ally(False),
-    "rog-xbox-ally": art_ally(True),
-    "legion-go": art_legion_go(False),
-    "legion-go-2": art_legion_go(True),
-    "legion-go-s": art_legion_go_s(),
-    "msi-claw": art_claw(),
-    "onexfly": art_onexfly(),
-    "onexplayer-x1": art_tablet_detachable("OneXPlayer tablet layout (detachable controllers)"),
-    "onexplayer-2": art_tablet_detachable("OneXPlayer 2 layout (detachable controllers)", 260),
-    "onexplayer-g1": art_clamshell("OneXPlayer G1 layout (clamshell)"),
-    "aokzoe": art_onexfly(),
-    "ayaneo": art_ayaneo(),
-    "ayaneo-flip": art_clamshell("AYANEO Flip layout (clamshell)", second_screen=True, keyboard=False),
-    "gpd-win-4": art_gpd_win(),
-    "gpd-win-mini": art_clamshell("GPD WIN Mini layout (clamshell)", touchpad=True),
-    "gpd-win-max": art_clamshell("GPD WIN Max layout (laptop)", touchpad=True),
-    "zotac-zone": art_zone(),
-    "acer": art_generic(),
-    "orangepi-neo": art_neo(),
+SPECS = {
+    "steam-deck": dict(title="Steam Deck", layout="inboard", hc=0.9, gw=62, r_top=30, r_bot=32, scr_cy=0.45,
+                       fy=(0.26, 0.6), spread_mm=13, trigger_mm=38,
+                       pads=[("Left", 0.2, 0.66, 32.5, 32.5), ("Right", 0.8, 0.66, 32.5, 32.5)],
+                       small=menu_pair(0.215, 0.785, 0.075, 2.4) + [("Guide", 0.215, 0.87, 2.8, "rect"), ("QuickAccess", 0.785, 0.87, 2.6, "rect")],
+                       paddles=P_DECK),
+    "rog-ally": dict(title="ROG Ally / Ally X", hc=1, r_top=34, r_bot=40, fy=(0.3, 0.66),
+                     small=[("Guide", 0.205, 0.12, 2.7, "rect"), ("QuickAccess", 0.795, 0.12, 2.7, "rect")] + menu_pair(0.205, 0.795, 0.88),
+                     paddles=P_ALLY),
+    "rog-xbox-ally": dict(title="ROG Xbox Ally / Xbox Ally X", hc=0.8, gw=68, r_top=26, r_bot=34, fy=(0.27, 0.6),
+                          small=[("Guide", 0.06, 0.14, 3.6)] + menu_pair(0.2, 0.8, 0.1) +
+                                [("Keyboard", 0.2, 0.84, 2.7, "rect"), ("QuickAccess", 0.8, 0.84, 2.7, "rect")],
+                          paddles=P_ALLY),
+    "rog-xbox-ally-x20": dict(title="ROG Xbox Ally X20", hc=0.8, gw=70, r_top=26, r_bot=34, fy=(0.27, 0.6), screen_in=7.4,
+                              small=[("Guide", 0.06, 0.14, 3.6)] + menu_pair(0.2, 0.8, 0.1) +
+                                    [("Keyboard", 0.2, 0.84, 2.7, "rect"), ("QuickAccess", 0.8, 0.84, 2.7, "rect")],
+                              paddles=P_ALLY),
+    "legion-go": dict(title="Legion Go (detachable controllers)", shape="detach", r_out=30, fy=(0.27, 0.53),
+                      pads=[("Right", 0.926, 0.78, 28.5, 28.5)],
+                      small=[("Guide", 0.074, 0.9, 2.6, "rect"), ("QuickAccess", 0.926, 0.97, 2.4, "rect"),
+                             ("Select", 0.12, 0.76, 2.2), ("Start", 0.88, 0.6, 2.2),
+                             ("LeftStickTouch", 0.035, 0.76, 2.2), ("RightStickTouch", 0.965, 0.6, 2.2)],
+                      paddles=P_LEGION),
+    "legion-go-2": dict(title="Legion Go 2 (detachable controllers)", shape="detach", r_out=32, fy=(0.27, 0.53),
+                        pads=[("Right", 0.922, 0.78, 24, 24)],
+                        small=[("Guide", 0.075, 0.9, 2.6, "rect"), ("QuickAccess", 0.925, 0.97, 2.4, "rect"),
+                               ("Select", 0.12, 0.76, 2.2), ("Start", 0.88, 0.62, 2.2),
+                               ("Keyboard", 0.12, 0.09, 2.2), ("QuickAccess2", 0.88, 0.09, 2.2)],
+                        paddles=P_LEGION),
+    "legion-go-s": dict(title="Legion Go S", hc=0.82, gw=66, r_top=24, r_bot=34, fy=(0.27, 0.6),
+                        pads=[("Right", 0.885, 0.86, 10, 10)],
+                        small=[("Guide", 0.2, 0.08, 2.6, "rect"), ("QuickAccess", 0.8, 0.08, 2.6, "rect")] + menu_pair(0.19, 0.81, 0.84),
+                        paddles=[("LeftPaddle1", "Y1"), ("RightPaddle1", "Y2")]),
+    "msi-claw-8": dict(title="MSI Claw 8 AI+ / Claw A8", hc=0.82, gw=64, r_top=24, r_bot=34, fy=(0.27, 0.6),
+                       small=[("Guide", 0.2, 0.08, 2.6, "rect"), ("QuickAccess", 0.8, 0.08, 2.6, "rect")] + menu_pair(0.2, 0.8, 0.82),
+                       paddles=P_CLAW),
+    "msi-claw-8-ex": dict(title="MSI Claw 8 EX AI+", hc=0.78, gw=76, r_top=22, r_bot=38, fy=(0.27, 0.6),
+                          small=[("Guide", 0.21, 0.08, 2.6, "rect"), ("QuickAccess", 0.79, 0.08, 2.6, "rect")] + menu_pair(0.215, 0.785, 0.8),
+                          paddles=P_CLAW),
+    "msi-claw-a1m": dict(title="MSI Claw A1M", hc=0.82, gw=64, r_top=24, r_bot=32, fy=(0.28, 0.62),
+                         small=[("Guide", 0.2, 0.09, 2.6, "rect"), ("QuickAccess", 0.8, 0.09, 2.6, "rect")] + menu_pair(0.2, 0.8, 0.84),
+                         paddles=P_CLAW),
+    "msi-claw-7": dict(title="MSI Claw 7 AI+", hc=0.82, gw=62, r_top=24, r_bot=32, fy=(0.28, 0.62),
+                       small=[("Guide", 0.2, 0.09, 2.6, "rect"), ("QuickAccess", 0.8, 0.09, 2.6, "rect")] + menu_pair(0.2, 0.8, 0.84),
+                       paddles=P_CLAW),
+    "onexfly-f1": dict(title="OneXFly F1 / F1 Pro", hc=1, r_top=30, r_bot=36, fy=(0.3, 0.66), k=0.9,
+                       small=menu_pair(0.2, 0.8, 0.11, 2.3) + [("QuickAccess", 0.12, 0.9, 2.4, "rect"), ("Keyboard", 0.2, 0.9, 2.4, "rect"),
+                                                               ("Guide", 0.86, 0.9, 3)],
+                       paddles=[("RightPaddle1", "M2")]),
+    "onexfly-apex": dict(title="OneXFly Apex", hc=0.84, gw=62, r_top=26, r_bot=32, fy=(0.28, 0.62),
+                         small=menu_pair(0.2, 0.8, 0.09) + [("QuickAccess", 0.1, 0.86, 2.5, "rect"), ("Keyboard", 0.16, 0.92, 2.5, "rect"),
+                                                            ("Guide", 0.85, 0.88, 3.2)],
+                         paddles=P_M12),
+    "onexplayer-x1": dict(title="OneXPlayer X1 (detachable controllers)", shape="detach", controller_mm=44, r_out=24, fy=(0.24, 0.48),
+                          small=[("Keyboard", 0.06, 0.88, 2.6, "rect"), ("QuickAccess", 0.94, 0.88, 2.6, "rect"),
+                                 ("Select", 0.08, 0.68, 2.2), ("Start", 0.92, 0.68, 2.2)],
+                          paddles=P_M12),
+    "onexplayer-x1-mini": dict(title="OneXPlayer X1 Mini (detachable controllers)", shape="detach", controller_mm=40, r_out=22, fy=(0.27, 0.55),
+                               small=[("Keyboard", 0.07, 0.88, 2.5, "rect"), ("QuickAccess", 0.93, 0.88, 2.5, "rect"),
+                                      ("Select", 0.09, 0.74, 2.1), ("Start", 0.91, 0.74, 2.1)],
+                               paddles=P_M12),
+    "onexplayer-2": dict(title="OneXPlayer 2 / 2 Pro (detachable controllers)", shape="detach", r_out=26, fy=(0.27, 0.6),
+                         small=[("QuickAccess", 0.93, 0.88, 2.6, "rect"), ("Select", 0.1, 0.84, 2.2), ("Start", 0.9, 0.12, 2.2)]),
+    "onexplayer-3": dict(title="OneXPlayer 3 (detachable controllers)", shape="detach", r_out=28, fy=(0.27, 0.6),
+                         small=[("QuickAccess", 0.075, 0.88, 2.6), ("QuickAccess2", 0.925, 0.88, 2.6, "rect"),
+                                ("Select", 0.11, 0.1, 2.2), ("Start", 0.89, 0.1, 2.2)],
+                         paddles=P_M12),
+    "onexplayer-super-x": dict(title="OneXPlayer Super X (tablet, detachable controllers)", shape="detach", controller_mm=44, r_out=24,
+                               fy=(0.22, 0.44), small=[("Guide", 0.04, 0.86, 2.6), ("Select", 0.06, 0.66, 2.2), ("Start", 0.94, 0.66, 2.2)]),
+    "onexplayer-g1": dict(title="OneXPlayer G1 (clamshell)", shape="clam", fy=(0.22, 0.52), k=0.85, mid_mm=118,
+                          keyboard=(48, 16, 112, 58), small=[("Guide", 0.9, 0.9, 2.8), ("QuickAccess", 0.1, 0.9, 2.6, "rect")] + menu_pair(0.1, 0.9, 0.72, 2.2)),
+    "aokzoe-a1": dict(title="AOKZOE A1 / A1 Pro / A1X", hc=0.84, gw=62, r_top=24, r_bot=32, fy=(0.28, 0.62), scr_cy=0.44,
+                      grille=[(0.5, 0.9, 30)],
+                      small=menu_pair(0.2, 0.8, 0.09) + [("QuickAccess", 0.1, 0.86, 2.5, "rect"), ("Keyboard", 0.155, 0.91, 2.5, "rect"),
+                                                         ("Guide", 0.84, 0.86, 3.2)]),
+    "ayaneo-2": dict(title="AYANEO 2 / 2S", hc=1, r_top=32, r_bot=38, fy=(0.3, 0.64), k=0.92,
+                     small=[("LeftTop", 0.13, 0.035, 2.4, "rect"), ("RightTop", 0.87, 0.035, 2.4, "rect"),
+                            ("Select", 0.12, 0.86, 2.2), ("Start", 0.2, 0.9, 2.2),
+                            ("QuickAccess", 0.8, 0.9, 2.4, "rect"), ("Guide", 0.88, 0.86, 2.8)]),
+    "ayaneo-kun": dict(title="AYANEO KUN", hc=0.84, gw=66, r_top=26, r_bot=34, fy=(0.24, 0.5),
+                       pads=[("Left", 0.13, 0.78, 26, 22), ("Right", 0.87, 0.78, 26, 22)],
+                       small=[("LeftTop", 0.12, 0.03, 2.4, "rect"), ("RightTop", 0.88, 0.03, 2.4, "rect"),
+                              ("Select", 0.2, 0.08, 2.2), ("Start", 0.8, 0.08, 2.2),
+                              ("QuickAccess", 0.17, 0.62, 2.4, "rect"), ("QuickAccess2", 0.83, 0.62, 2.8)]),
+    "ayaneo-air-1s": dict(title="AYANEO AIR 1S", hc=1, r_top=28, r_bot=32, fy=(0.3, 0.66), k=0.8,
+                          small=[("LeftTop", 0.13, 0.04, 2.2, "rect"), ("RightTop", 0.87, 0.04, 2.2, "rect"),
+                                 ("Select", 0.2, 0.9, 2), ("Start", 0.8, 0.12, 2),
+                                 ("QuickAccess", 0.09, 0.9, 2.2, "rect"), ("Guide", 0.91, 0.9, 2.6)]),
+    "ayaneo-air-plus": dict(title="AYANEO AIR Plus", hc=1, r_top=28, r_bot=32, fy=(0.3, 0.66), k=0.8,
+                            small=[("LeftTop", 0.13, 0.04, 2.2, "rect"), ("RightTop", 0.87, 0.04, 2.2, "rect"),
+                                   ("Select", 0.2, 0.9, 2), ("Start", 0.8, 0.12, 2),
+                                   ("QuickAccess", 0.09, 0.9, 2.2, "rect"), ("Guide", 0.91, 0.9, 2.6)]),
+    "ayaneo-flip-ds": dict(title="AYANEO Flip DS (clamshell)", shape="clam", fy=(0.3, 0.68), k=0.78, mid_mm=84,
+                           second_screen=(3.5, "3:2", 0.42),
+                           small=[("LeftTop", 0.14, 0.05, 2.2, "rect"), ("RightTop", 0.86, 0.05, 2.2, "rect"),
+                                  ("Select", 0.33, 0.85, 2), ("Start", 0.67, 0.85, 2),
+                                  ("Keyboard", 0.42, 0.93, 2, "rect"), ("QuickAccess", 0.58, 0.93, 2, "rect"), ("Guide", 0.9, 0.92, 2.4)]),
+    "ayaneo-flip-1s-ds": dict(title="AYANEO Flip 1S DS (clamshell)", shape="clam", fy=(0.3, 0.68), k=0.78, mid_mm=96,
+                              second_screen=(4.5, "3:2", 0.44),
+                              small=[("LeftTop", 0.14, 0.05, 2.2, "rect"), ("RightTop", 0.86, 0.05, 2.2, "rect"),
+                                     ("Select", 0.12, 0.93, 2), ("Start", 0.88, 0.93, 2), ("QuickAccess", 0.62, 0.95, 2.2)],
+                              paddles=[("LeftPaddle2", "L"), ("RightPaddle2", "R")]),
+    "ayaneo-3": dict(title="AYANEO 3", hc=0.86, gw=60, r_top=26, r_bot=32, fy=(0.27, 0.58),
+                     pads=[("Left", 0.2, 0.84, 16, 12), ("Right", 0.8, 0.84, 16, 12)],
+                     small=[("LeftTop", 0.12, 0.035, 2.4, "rect"), ("RightTop", 0.88, 0.035, 2.4, "rect"),
+                            ("Select", 0.2, 0.09, 2.2), ("Start", 0.8, 0.09, 2.2),
+                            ("QuickAccess", 0.07, 0.84, 2.4, "rect"), ("Guide", 0.93, 0.84, 2.8)],
+                     paddles=[]),
+    "ayaneo-slide": dict(title="AYANEO Slide (slide-out keyboard)", hc=1, r_top=26, r_bot=30, fy=(0.3, 0.66), k=0.8, slider=0.93,
+                         small=[("LeftTop", 0.13, 0.04, 2.2, "rect"), ("RightTop", 0.87, 0.04, 2.2, "rect"),
+                                ("Select", 0.2, 0.9, 2), ("Start", 0.8, 0.12, 2),
+                                ("QuickAccess", 0.09, 0.9, 2.2, "rect"), ("Guide", 0.97, 0.5, 2.8)]),
+    "gpd-win-4": dict(title="GPD WIN 4 (slide-out keyboard)", hc=1, r_top=20, r_bot=24, fy=(0.3, 0.68), k=0.82, slider=0.94,
+                      small=menu_pair(0.2, 0.8, 0.9, 2), paddles=[("LeftPaddle1", "L4"), ("QuickAccess", "R4")]),
+    "gpd-win-mini": dict(title="GPD WIN Mini (clamshell)", shape="clam", fy=(0.2, 0.46), k=0.72, mid_mm=96,
+                         keyboard=(36, 6, 96, 42), pads=[("Touch", 0.5, 0.78, 46, 26)],
+                         small=menu_pair(0.1, 0.9, 0.72, 1.9), paddles=[("LeftPaddle1", "L4"), ("QuickAccess", "R4")]),
+    "gpd-win-max": dict(title="GPD WIN Max 2 (laptop)", shape="clam", fy=(0.11, 0.28), k=0.7, mid_mm=130,
+                        keyboard=(22, 62, 183, 52), pads=[("Touch", 0.5, 0.875, 60, 28)],
+                        small=menu_pair(0.2, 0.8, 0.06, 2), paddles=[("LeftPaddle1", "L4"), ("RightPaddle1", "R4")]),
+    "gpd-win-5": dict(title="GPD WIN 5", hc=0.86, gw=58, r_top=24, r_bot=30, fy=(0.28, 0.62),
+                      small=[("QuickAccess", 0.93, 0.08, 2.4, "rect"), ("Select", 0.12, 0.88, 2.2), ("Start", 0.86, 0.86, 2.2),
+                             ("Guide", 0.2, 0.9, 2.6), ("Keyboard", 0.8, 0.9, 2.4, "rect")],
+                      paddles=[("LeftPaddle1", "L4"), ("RightPaddle1", "R4")]),
+    "zotac-zone": dict(title="ZOTAC Gaming Zone", layout="inboard", hc=0.84, gw=66, r_top=26, r_bot=34, fy=(0.27, 0.6),
+                       spread_mm=17, dials=True, k=0.9,
+                       pads=[("Left", 0.18, 0.66, 24, 22), ("Right", 0.82, 0.66, 24, 22)],
+                       small=[("Guide", 0.25, 0.9, 2.6), ("QuickAccess", 0.75, 0.9, 2.6), ("QuickAccess2", 0.5, 0.92, 2.6, "rect")] +
+                             menu_pair(0.25, 0.75, 0.08, 2.2),
+                       paddles=P_M12),
+    "acer-atlas-8": dict(title="Acer Predator Atlas 8", hc=0.8, gw=68, r_top=24, r_bot=36, fy=(0.27, 0.6),
+                         small=[("Guide", 0.2, 0.08, 2.6), ("QuickAccess", 0.8, 0.08, 2.6, "rect")] + menu_pair(0.2, 0.8, 0.82),
+                         paddles=P_CLAW),
+    "acer-nitro-blaze-7": dict(title="Acer Nitro Blaze 7", hc=0.86, gw=58, r_top=24, r_bot=30, fy=(0.28, 0.62),
+                               small=[("Guide", 0.2, 0.08, 2.6), ("QuickAccess", 0.8, 0.08, 2.6, "rect")] + menu_pair(0.2, 0.8, 0.84)),
+    "acer-nitro-blaze-8": dict(title="Acer Nitro Blaze 8", hc=0.86, gw=64, r_top=24, r_bot=32, fy=(0.27, 0.6),
+                               small=[("Guide", 0.2, 0.08, 2.6), ("QuickAccess", 0.8, 0.08, 2.6, "rect")] + menu_pair(0.2, 0.8, 0.84)),
+    "acer-nitro-blaze-11": dict(title="Acer Nitro Blaze 11 (detachable controllers)", shape="detach", r_out=26, fy=(0.24, 0.48),
+                                small=[("Guide", 0.07, 0.86, 2.6), ("QuickAccess", 0.93, 0.86, 2.6, "rect")] + menu_pair(0.07, 0.93, 0.7, 2.2)),
+    "orangepi-neo": dict(title="Orange Pi Neo", hc=0.86, gw=58, r_top=26, r_bot=30, fy=(0.26, 0.5), k=0.9, scr_cy=0.44,
+                         pads=[("Left", 0.14, 0.76, 24, 22), ("Right", 0.86, 0.76, 24, 22)],
+                         small=[("LeftTop", 0.12, 0.035, 2.2, "rect"), ("RightTop", 0.88, 0.035, 2.2, "rect"),
+                                ("Guide", 0.25, 0.92, 2.6), ("QuickAccess", 0.75, 0.92, 2.6, "rect")] + menu_pair(0.24, 0.76, 0.08, 2.1)),
 }
+
+ARTS = {"generic": art_generic()}
+for name, spec in SPECS.items():
+    ARTS[name] = draw(name, spec)
+missing = sorted(set(BODIES) - set(SPECS))
+if missing:
+    sys.exit("bodies without a drawing: %s" % missing)
+for f in os.listdir(os.path.join(OUT, "art")):
+    if f.endswith(".svg") and f[:-4] not in ARTS:
+        os.remove(os.path.join(OUT, "art", f))
+        if os.path.exists(os.path.join(OUT, "art", f + ".import")):
+            os.remove(os.path.join(OUT, "art", f + ".import"))
 for name, content in ARTS.items():
     write("art/%s.svg" % name, content)
 print(len(GLYPHS), "glyphs,", len(ARTS), "pictures")

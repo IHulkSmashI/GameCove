@@ -11,9 +11,12 @@ extends RefCounted
 ## A route is {"file": path} | {"text": String} | {"bytes": PackedByteArray}
 ## plus optional "code" (default 200) and "retry_after"; or {"error": "..."}.
 ## Unrouted URLs fail with error "offline". The longest matching prefix wins.
+## opts["max_bytes"] is honoured like http.gd: a bigger body fails with "too big".
+## opts are recorded in `options` (same order as `requests`).
 
 var routes := {}
 var requests: Array[String] = []
+var options: Array = []
 var offline := false
 
 
@@ -35,6 +38,7 @@ func count(prefix: String) -> int:
 
 func request(url: String, opts: Dictionary, done: Callable) -> void:
 	requests.append(url)
+	options.append(opts)
 	var best := ""
 	for p in routes:
 		if url.begins_with(p) and p.length() > best.length():
@@ -55,6 +59,9 @@ func request(url: String, opts: Dictionary, done: Callable) -> void:
 			elif a.has("bytes"):
 				body = a["bytes"]
 			var code := int(a.get("code", 200))
+			if int(opts.get("max_bytes", 0)) > 0 and body.size() > int(opts["max_bytes"]):
+				done.call({"ok": false, "code": code, "body": PackedByteArray(), "error": "too big", "retry_after": 0})
+				return
 			res = {"ok": code >= 200 and code < 300, "code": code, "body": body,
 				"error": "" if code >= 200 and code < 300 else "http %d" % code, "retry_after": int(a.get("retry_after", 0))}
 			if res["ok"] and str(opts.get("download_file", "")) != "":

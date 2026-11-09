@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="450" height="218" viewBox="0 0 450 218">
+<title>OneXFly F1 / F1 Pro (1 mm = 1.6 units)</title>
+<path id="part-body" d="M62 30 H387.76 Q435.76 30 435.76 78 L435.76 129.52 Q435.76 187.12 378.16 187.12 H71.6 Q14 187.12 14 129.52 L14 78 Q14 30 62 30 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="btn-LeftTrigger" x="35.09" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightTrigger" x="357.07" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-LeftBumper" x="39.89" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightBumper" x="361.87" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="part-screen" x="100.91" y="38.83" width="247.946" height="139.47" rx="4" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
+<path d="M254.636 46.83 L299.267 46.83" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<g id="axis-LeftStick"><circle cx="57.45" cy="77.14" r="15.264" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="57.45" cy="77.14" r="9.46368" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-DPad"><rect id="btn-DPadUp" x="52.482" y="116.312" width="9.936" height="12.42" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="52.482" y="138.668" width="9.936" height="12.42" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="40.062" y="128.732" width="12.42" height="9.936" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="62.418" y="128.732" width="12.42" height="9.936" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="52.482" y="128.732" width="9.936" height="9.936" fill="#1F2630"/></g>
+<g id="btn-North"><circle cx="392.31" cy="63.604" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M390.17 60.39 L392.31 63.60 L394.45 60.39 M392.31 63.60 L392.31 66.82" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-East"><circle cx="405.846" cy="77.14" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M403.70 73.93 L403.70 80.35 L406.92 80.35 L407.99 79.28 L407.99 78.21 L406.92 77.14 L403.70 77.14 M403.70 73.93 L406.92 73.93 L407.77 74.78 L407.77 76.28 L406.92 77.14" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-South"><circle cx="392.31" cy="90.676" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M390.17 93.89 L392.31 87.46 L394.45 93.89 M390.92 91.75 L393.70 91.75" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-West"><circle cx="378.774" cy="77.14" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M376.63 73.93 L380.92 80.35 M380.92 73.93 L376.63 80.35" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="axis-RightStick"><circle cx="392.31" cy="133.7" r="15.264" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="392.31" cy="133.7" r="9.46368" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-Select"><circle cx="94.03" cy="47.28" r="3.68" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Start"><circle cx="355.73" cy="47.28" r="3.68" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-QuickAccess"><rect x="59.618" y="168.338" width="9.984" height="6.144" rx="2.304" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Keyboard"><rect x="87.728" y="168.338" width="9.984" height="6.144" rx="2.304" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Guide"><circle cx="376.71" cy="171.41" r="4.8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-RightPaddle1"><rect x="375.31" y="195.12" width="34" height="16" rx="8" fill="none" stroke="#9AA4B0" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M386.83 206.62 L386.83 199.62 L389.16 203.70 L391.49 199.62 L391.49 206.62 M393.13 200.79 L394.29 199.62 L396.63 199.62 L397.79 200.79 L397.79 201.95 L393.13 206.62 L397.79 206.62" fill="none" stroke="#9AA4B0" stroke-width="1.10" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>

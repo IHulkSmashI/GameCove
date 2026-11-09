@@ -4,7 +4,7 @@ GameCove stands on a lot of other people's work. Thank you.
 
 ## People
 
-- **Kisenir** (r/MSIClaw): found and tested how to bring up the MSI Claw 8 EX gyro on Linux (sensor-hub firmware, HID-BPF descriptor fix, keepalive and bias calibration). He gave us permission to use his work (2026-11-08). His HID-BPF program is GPL-2.0-only; his helper scripts are GPL-2.0-or-later once he confirms. GPL-2.0 text: [LICENSES/GPL-2.0-only.txt](LICENSES/GPL-2.0-only.txt).
+- **Kisenir** (r/MSIClaw): found and tested how to bring up the MSI Claw 8 EX gyro on Linux (sensor-hub firmware, HID-BPF descriptor fix, keepalive and bias calibration). He gave us permission to use his work (2026-11-08). His HID-BPF program is GPL-2.0-only; his helper scripts are GPL-2.0-or-later, as he confirmed (2026-11-09). GPL-2.0 text: [LICENSES/GPL-2.0-only.txt](LICENSES/GPL-2.0-only.txt).
 - **HHHHanasak1**: xess-xmx-linux, XeSS on the XMX cores under Proton.
 
 ## Projects we use or build on
@@ -125,6 +125,10 @@ Device data was taken as facts (DMI strings, wattages, capability names, which b
 | AYANEO Slide | [Tokyo-Game-Show-2023-Day3-2023-09-23 390.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2023-Day3-2023-09-23_390.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | AYANEO 3 | [Tokyo-Game-Show-2025 0728.jpg](https://commons.wikimedia.org/wiki/File:Tokyo-Game-Show-2025_0728.jpg) | RuinDig/Yuki Uchida | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
+### Maker images (shown by link, not distributed)
+
+For handhelds with no free photo, the device panel shows the maker's own official product image, credited "Image: <Maker>" (Lenovo, MSI, ONEXPLAYER, AOKZOE, AYANEO, Acer). These images are the makers' property and are **not** distributed by GameCove: they are not in this repository, the app package or the `device-photos` release, and GPL-3.0 doesn't apply to them. The app only stores a link (`maker_image` in [`app/data/device_photos.json`](app/data/device_photos.json), with the maker's product page it came from) and downloads that one image from the maker's own site on the user's device, unchanged except for scaling on screen. It can be switched off ("Show maker photos", Settings > Device). A maker that wants its image removed can open an issue and we'll drop the link. Details: [docs/DEVICES.md](docs/DEVICES.md#maker-images-by-link-only).
+
 ## Trademarks
 
 Product and company names are trademarks of their respective owners; GameCove is not affiliated with or endorsed by them.
@@ -149,3 +153,7 @@ GameCove shows these logos only to identify a device, chip, store or launcher. T
 | AMD (`app/assets/brand/amd.svg`) | [Simple Icons](https://simpleicons.org) 16.37.0, slug `amd` | CC0-1.0 (Simple Icons) | — |
 
 Shown as text (no logo bundled yet): Amazon Games, OneXPlayer, AYANEO, AOKZOE, GPD, ZOTAC, Orange Pi. For stores and launchers without a bundled logo, GameCove shows the icon the user's own system already has installed, if there is one; nothing is copied or redistributed.
+Store and launcher icons other than these (Steam, Heroic, Lutris, Bottles) come from the user's own system: GameCove shows the icon that app installed into the desktop icon theme, the same way any Linux desktop does. Nothing is copied into GameCove or redistributed. Steam is a trademark of Valve Corporation.
+
+Not bundled because their terms need a licence or written permission, or publish no terms for third parties: Valve (Steam, Steam Deck), Epic Games, GOG, Amazon, MSI, ASUS / ROG, Lenovo / Legion, Acer / Predator, OneXPlayer, AYANEO, GPD, ZOTAC, Intel. AMD's brand terms cover only products that contain an AMD chip.
+- **ClawDeck** (same author): Parts ported from ClawDeck (same author). Its MSI BIOS check (`msibios.py`) as the MSI source of the firmware index (`gamedb/gamedb/firmware/sources/msi.py`).

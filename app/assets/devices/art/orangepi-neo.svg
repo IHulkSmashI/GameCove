@@ -1,23 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="500" height="260" viewBox="0 0 500 260">
-<title>Orange Pi Neo layout</title>
-<rect id="part-body" x="30" y="56" width="440" height="150" rx="50" fill="#262E3A" stroke="#5A6678" stroke-width="2.5"/>
-<rect id="btn-LeftTrigger" x="40" y="38" width="54" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="btn-RightTrigger" x="406" y="38" width="54" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="btn-LeftBumper" x="46" y="50" width="42" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="btn-RightBumper" x="412" y="50" width="42" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
-<rect id="part-screen" x="150" y="68" width="200" height="126" rx="6" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
-<path d="M274 76 L310 76" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
-<g id="axis-LeftStick"><circle cx="96" cy="90" r="17" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="96" cy="90" r="10.54" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
-<g id="btn-DPad"><rect id="btn-DPadUp" x="55.5" y="124.25" width="9" height="11.25" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="55.5" y="144.5" width="9" height="11.25" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="44.25" y="135.5" width="11.25" height="9" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="64.5" y="135.5" width="11.25" height="9" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="55.5" y="135.5" width="9" height="9" fill="#1F2630"/></g>
-<g id="btn-North"><circle cx="404" cy="83" r="6.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M401.94 79.91 L404.00 83.00 L406.06 79.91 M404.00 83.00 L404.00 86.09" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-East"><circle cx="417" cy="96" r="6.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M414.94 92.91 L414.94 99.09 L418.03 99.09 L419.06 98.06 L419.06 97.03 L418.03 96.00 L414.94 96.00 M414.94 92.91 L418.03 92.91 L418.85 93.74 L418.85 95.18 L418.03 96.00" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-South"><circle cx="404" cy="109" r="6.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M401.94 112.09 L404.00 105.91 L406.06 112.09 M402.66 110.03 L405.34 110.03" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="btn-West"><circle cx="391" cy="96" r="6.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M388.94 92.91 L393.06 99.09 M393.06 92.91 L388.94 99.09" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
-<g id="axis-RightStick"><circle cx="440" cy="140" r="14" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="440" cy="140" r="8.68" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
-<rect id="pad-Left" x="84" y="130" width="52" height="50" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
-<rect id="pad-Right" x="364" y="130" width="52" height="50" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
-<g id="btn-Guide"><circle cx="132" cy="196" r="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
-<g id="btn-QuickAccess"><circle cx="368" cy="196" r="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
-<g id="btn-LeftTop"><rect x="60.8" y="60.8" width="10.4" height="6.4" rx="2.4" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
-<g id="btn-RightTop"><rect x="428.8" y="60.8" width="10.4" height="6.4" rx="2.4" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" width="443" height="214" viewBox="0 0 443 214">
+<title>Orange Pi Neo (1 mm = 1.6 units)</title>
+<path id="part-body" d="M55.6 30 H386.8 Q428.4 30 428.4 71.6 L428.4 153.2 Q428.4 201.2 380.4 201.2 L368.08 201.2 C335.6 201.2 335.6 187.12 303.12 187.12 H139.28 C106.8 187.12 106.8 201.2 74.32 201.2 L62 201.2 Q14 201.2 14 153.2 L14 71.6 Q14 30 55.6 30 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="btn-LeftTrigger" x="34.72" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightTrigger" x="350.08" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-LeftBumper" x="39.52" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightBumper" x="354.88" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="part-screen" x="100.58" y="29.94" width="241.239" height="150.774" rx="4" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
+<path d="M250.148 37.94 L293.571 37.94" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<g id="axis-LeftStick"><circle cx="57.29" cy="74.51" r="15.264" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="57.29" cy="74.51" r="9.46368" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-DPad"><rect id="btn-DPadUp" x="52.322" y="98.212" width="9.936" height="12.42" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="52.322" y="120.568" width="9.936" height="12.42" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="39.902" y="110.632" width="12.42" height="9.936" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="62.258" y="110.632" width="12.42" height="9.936" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="52.322" y="110.632" width="9.936" height="9.936" fill="#1F2630"/></g>
+<g id="btn-North"><circle cx="385.11" cy="60.974" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M382.97 57.76 L385.11 60.97 L387.25 57.76 M385.11 60.97 L385.11 64.19" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-East"><circle cx="398.646" cy="74.51" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M396.50 71.30 L396.50 77.72 L399.72 77.72 L400.79 76.65 L400.79 75.58 L399.72 74.51 L396.50 74.51 M396.50 71.30 L399.72 71.30 L400.57 72.15 L400.57 73.65 L399.72 74.51" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-South"><circle cx="385.11" cy="88.046" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M382.97 91.26 L385.11 84.83 L387.25 91.26 M383.72 89.12 L386.50 89.12" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-West"><circle cx="371.574" cy="74.51" r="6.768" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M369.43 71.30 L373.72 77.72 M373.72 71.30 L369.43 77.72" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="axis-RightStick"><circle cx="385.11" cy="115.6" r="15.264" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="385.11" cy="115.6" r="9.46368" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<rect id="pad-Left" x="52.82" y="142.51" width="38.4" height="35.2" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
+<rect id="pad-Right" x="351.18" y="142.51" width="38.4" height="35.2" rx="8" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
+<g id="btn-LeftTop"><rect x="59.154" y="33.174" width="9.152" height="5.632" rx="2.112" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-RightTop"><rect x="374.094" y="33.174" width="9.152" height="5.632" rx="2.112" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Guide"><circle cx="93.22" cy="187.5" r="4.16" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-QuickAccess"><rect x="345.022" y="184.172" width="10.816" height="6.656" rx="2.496" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Select"><circle cx="94.02" cy="43.7" r="3.36" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Start"><circle cx="348.38" cy="43.7" r="3.36" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
 </svg>

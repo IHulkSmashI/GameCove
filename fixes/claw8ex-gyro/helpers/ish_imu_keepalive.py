@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Kisenir (r/MSIClaw). Packaged in GameCove's claw8ex-gyro fix (permission given 2026-11-08).
-# Author: Kisenir (r/MSIClaw). Used with permission; license GPL-2.0-or-later pending his confirmation.
+# Author: Kisenir (r/MSIClaw). Used with permission; license GPL-2.0-or-later, confirmed by him (2026-11-09).
 """
 ISH IMU keep-alive for the MSI Claw 8 EX AI+ (Linux), v4.
 

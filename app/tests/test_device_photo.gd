@@ -45,6 +45,7 @@ func _svc(http: Variant) -> Node:
 	s.cache_dir = _dir
 	s.prefs_path = _prefs
 	s.http = http
+	s.maker_sources = {}   # free-photo tests: no maker links (maker tests set their own)
 	return s
 
 
@@ -95,6 +96,10 @@ func test_shipped_list_is_all_allowed() -> void:
 			continue
 		var e: Dictionary = doc[id]
 		ok(ids.has(id), "%s is a known device" % id)
+		if e.has("maker_image"):
+			ok(not e.has("file") and not e.has("openverse_id"), "%s: maker link only where no free photo" % id)
+			ok(PhotoSvc.parse_maker_sources(doc).has(id), "%s: maker link follows the _makers rules" % id)
+			continue
 		ok(PhotoSvc.license_allowed(e["license"]), "%s license" % id)
 		ok(PhotoSvc.page_allowed(str(e["page_url"])), "%s page" % id)
 		ok(str(e["author"]) != "", "%s author" % id)
@@ -201,6 +206,151 @@ func test_setting_off() -> void:
 	eq(http.requests.size(), before, "off -> nothing downloaded")
 	s.set_enabled(true)
 	ok(not s.photo_for("steam-deck-lcd").is_empty(), "back on")
+	s.free()
+
+
+# ---- maker images (by link only) ----------------------------------------------
+
+const MAKER_URL := "https://asset-us-store.msi.com/claw.png"
+const MAKER_SRC := {"msi-claw-8-ex": {"url": MAKER_URL, "page_url": "https://us-store.msi.com/claw", "maker": "MSI"}}
+
+
+func _png_bytes() -> PackedByteArray:
+	var img := Image.create(32, 20, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.5, 0.2, 0.7))
+	return img.save_png_to_buffer()
+
+
+func _maker_svc(http: Variant) -> Node:
+	var s := _svc(http)
+	s.maker_sources = MAKER_SRC.duplicate(true)
+	return s
+
+
+func test_maker_sources_follow_the_rules() -> void:
+	var rules := {"MSI": {"image_prefixes": ["https://asset-us-store.msi.com/"], "page_domains": ["msi.com"]}}
+	var good := {"url": MAKER_URL, "page_url": "https://us-store.msi.com/claw", "maker": "MSI", "checked": "2026-11-09"}
+	var doc := {"_makers": rules, "a": {"maker_image": good}}
+	for pair in [["url", "https://retailer.example/claw.png"], ["url", "http://asset-us-store.msi.com/claw.png"],
+			["page_url", "https://evilmsi.com/x"], ["page_url", "https://review.example/msi"], ["maker", "Nobody"]]:
+		var bad := good.duplicate()
+		bad[pair[0]] = pair[1]
+		doc[str(pair)] = {"maker_image": bad}
+	eq(PhotoSvc.parse_maker_sources(doc).keys(), ["a"], "only the entry on the maker's own site survives")
+	eq(PhotoSvc.parse_maker_sources({"a": {"maker_image": good}}), {}, "no _makers rules -> nothing")
+	var shipped: Dictionary = PhotoSvc.parse_maker_sources(JSON.parse_string(FileAccess.get_file_as_string("res://data/device_photos.json")))
+	ok(shipped.size() >= 25, "shipped maker links parse (%d)" % shipped.size())
+	ok(not shipped.has("msi-claw-family"), "unknown-model rows keep the drawing")
+
+
+func test_sniff_image() -> void:
+	eq(PhotoSvc.sniff_image(_png_bytes()), "png", "png")
+	eq(PhotoSvc.sniff_image(_photo_bytes()), "webp", "webp")
+	var img := Image.create(8, 8, false, Image.FORMAT_RGB8)
+	eq(PhotoSvc.sniff_image(img.save_jpg_to_buffer()), "jpg", "jpg")
+	eq(PhotoSvc.sniff_image("<!doctype html>".to_utf8_buffer()), "", "html refused")
+
+
+func test_maker_image_downloads_once_and_credits_maker() -> void:
+	var http := FakeHttp.new()
+	var body := _png_bytes()
+	http.route(MAKER_URL, {"bytes": body})
+	var s := _maker_svc(http)
+	var ready := []
+	s.photo_ready.connect(func(id, path): ready.append([id, path]))
+	eq(s.photo_for("msi-claw-8-ex"), {}, "first ask is a miss")
+	eq(ready.size(), 1, "photo_ready once")
+	var got: Dictionary = s.photo_for("msi-claw-8-ex")
+	ok(str(got.get("path", "")).ends_with(".png"), "cached with the sniffed type")
+	eq(FileAccess.get_file_as_bytes(got["path"]), body, "bytes kept exactly as the maker served them")
+	eq(PhotoSvc.credit_line(got["credit"]), "Image: MSI", "credit line")
+	eq(got["credit"]["page_url"], "https://us-store.msi.com/claw", "credit links the maker's page")
+	eq(http.count(MAKER_URL), 1, "one request")
+	eq(http.count(PhotoSvc.RELEASE), 0, "maker rows never ask the photo release")
+	var o: Dictionary = http.options[0]
+	eq(int(o.get("max_bytes", 0)), PhotoSvc.MAKER_MAX_BYTES, "size cap")
+	ok(float(o.get("timeout", 99)) <= 10.0, "short timeout")
+	ok(PhotoView.make(got, 200, Callable()) != null, "view builds from the cached file")
+	s.free()
+
+
+func test_maker_refetch_at_most_weekly() -> void:
+	var http := FakeHttp.new()
+	http.route(MAKER_URL, {"bytes": _png_bytes()})
+	var s := _maker_svc(http)
+	s.photo_for("msi-claw-8-ex")
+	var now := int(Time.get_unix_time_from_system())
+	var s2 := PhotoSvc.new()
+	s2.cache_dir = _dir
+	s2.prefs_path = _prefs
+	s2.http = http
+	s2.maker_sources = MAKER_SRC.duplicate(true)
+	s2.clock = func() -> int: return now + 3 * 24 * 3600
+	ok(not s2.photo_for("msi-claw-8-ex").is_empty(), "new session: cached copy shown")
+	eq(http.count(MAKER_URL), 1, "under a week old: no request")
+	var s3 := PhotoSvc.new()
+	s3.cache_dir = _dir
+	s3.prefs_path = _prefs
+	s3.http = http
+	s3.maker_sources = MAKER_SRC.duplicate(true)
+	s3.clock = func() -> int: return now + 8 * 24 * 3600
+	ok(not s3.photo_for("msi-claw-8-ex").is_empty(), "stale copy still shown")
+	eq(http.count(MAKER_URL), 2, "over a week: one background refresh")
+	s3.photo_for("msi-claw-8-ex")
+	eq(http.count(MAKER_URL), 2, "refresh once per session")
+	s.free()
+	s2.free()
+	s3.free()
+
+
+func test_maker_refuses_non_images_big_bodies_and_does_not_retry() -> void:
+	var http := FakeHttp.new()
+	http.route(MAKER_URL, {"text": "<!doctype html><title>moved</title>"})
+	var s := _maker_svc(http)
+	eq(s.photo_for("msi-claw-8-ex"), {}, "html -> drawing")
+	eq(s.photo_for("msi-claw-8-ex"), {}, "still drawing")
+	eq(http.count(MAKER_URL), 1, "no retry until next start")
+	var left := Array(DirAccess.get_files_at(ProjectSettings.globalize_path(_dir))).filter(func(f): return f.begins_with("maker-"))
+	eq(left, [], "nothing cached")
+	var big := PackedByteArray(_png_bytes())
+	big.resize(PhotoSvc.MAKER_MAX_BYTES + 10)
+	var http2 := FakeHttp.new()
+	http2.route(MAKER_URL, {"bytes": big})
+	var s2 := _maker_svc(http2)
+	eq(s2.photo_for("msi-claw-8-ex"), {}, "over 3 MB -> drawing")
+	var http3 := FakeHttp.new()
+	http3.offline = true
+	var s3 := _maker_svc(http3)
+	eq(s3.photo_for("msi-claw-8-ex"), {}, "offline -> drawing")
+	s3.photo_for("msi-claw-8-ex")
+	eq(http3.requests.size(), 1, "offline: one try per session")
+	s.free()
+	s2.free()
+	s3.free()
+
+
+func test_maker_setting_off_and_free_photo_wins() -> void:
+	var http := FakeHttp.new()
+	http.route(MAKER_URL, {"bytes": _png_bytes()})
+	var s := _maker_svc(http)
+	ok(PhotoSvc.load_maker_enabled(_prefs), "default on")
+	s.set_maker_enabled(false)
+	ok(not PhotoSvc.load_maker_enabled(_prefs), "saved off")
+	eq(s.photo_for("msi-claw-8-ex"), {}, "off -> drawing")
+	eq(http.requests.size(), 0, "off -> no request to the maker (nor the release)")
+	s.set_maker_enabled(true)
+	s.set_enabled(false)
+	eq(s.photo_for("msi-claw-8-ex"), {}, "real photos off -> drawing")
+	eq(http.requests.size(), 0, "real photos off -> no request at all")
+	s.set_enabled(true)
+	# A device with a free photo never asks the maker, even with a maker entry.
+	var body := _photo_bytes()
+	_routes(http, body, _manifest(body))
+	s.maker_sources = {"steam-deck-lcd": MAKER_SRC["msi-claw-8-ex"]}
+	s._free["steam-deck-lcd"] = true
+	s.photo_for("steam-deck-lcd")
+	ok(not s.photo_for("steam-deck-lcd").is_empty(), "free photo shown")
+	eq(http.count(MAKER_URL), 0, "maker not asked when a free photo exists")
 	s.free()
 
 

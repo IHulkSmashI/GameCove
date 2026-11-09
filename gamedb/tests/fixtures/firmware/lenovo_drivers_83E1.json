@@ -1,0 +1,190 @@
+{
+ "message": "succeed",
+ "body": {
+  "DownloadItems": [
+   {
+    "OperatingSystemKeys": [
+     "Windows 11 (64-bit)"
+    ],
+    "Title": "BIOS Update for Windows 11 (64-bit) - Legion Go 8APU1",
+    "Date": {
+     "Unix": 1785895800000
+    },
+    "Updated": {
+     "Unix": 1785895862000
+    },
+    "DocId": "DS565491",
+    "Files": [
+     {
+      "Name": "BIOS Update",
+      "TypeString": "EXE",
+      "Version": "N3CN40WW",
+      "URL": "https://download.lenovo.com/consumer/mobiles/n3cn40ww.exe",
+      "Size": "11.95 MB",
+      "SHA1": "9a7d9dc0534ea0f0092e0d369d29798e46aa92b5",
+      "SHA256": "3c9bf6dabf4b36afb767c56811624bd385520a56116bb38dbca288f6ec12bab6",
+      "MD5": "d12cf3984b505e1c21e4c33836096dcb",
+      "Priority": "Recommended",
+      "PriorityWeight": 2,
+      "ReadmeUrl": "",
+      "HasReadme": false,
+      "OperatingSystemKeys": [],
+      "TypeEnString": "",
+      "FileName": "",
+      "DataIndicator": "",
+      "Date": {
+       "Unix": 1767691620000
+      },
+      "Released": null
+     },
+     {
+      "Name": "BIOS Update README",
+      "TypeString": "TXT README",
+      "Version": "N3CN40WW",
+      "URL": "https://download.lenovo.com/consumer/mobiles/n3cn40ww.txt",
+      "Size": "2.75 KB",
+      "SHA1": "ff5335434674c41ea53028c39e21683b964a6419",
+      "SHA256": "ff3be20f599194dbf715510d6acdcc05c0fd3fb228cf418716514dd4f1ab1d71",
+      "MD5": "6b0359aecdfdc9ea3bc14a5cea0d9d98",
+      "Priority": "Recommended",
+      "PriorityWeight": 2,
+      "ReadmeUrl": "",
+      "HasReadme": false,
+      "OperatingSystemKeys": [],
+      "TypeEnString": "",
+      "FileName": "",
+      "DataIndicator": "",
+      "Date": {
+       "Unix": 1767691620000
+      },
+      "Released": null
+     }
+    ],
+    "Hit": "514",
+    "Audiences": [
+     {
+      "Id": "ANONYMOUS",
+      "Name": "Anonymous"
+     }
+    ],
+    "InWarranty": false,
+    "RequireLogin": false,
+    "FixID": "",
+    "AlertDataLoss": false,
+    "LanguageCode": "en",
+    "Countries": [],
+    "RebootRequired": 0,
+    "PNCheck": false,
+    "Brocade": false,
+    "Eods": "",
+    "RestrictedCountries": [],
+    "RedirectCode": 0,
+    "RedirectTo": "",
+    "ID": [
+     "DS565491",
+     "DEB6E2B0-65A9-11EE-91F1-DB7A6C7E0029",
+     "DS565491-BIOS-UPDATE-FOR-WINDOWS-11-64-BIT-LEGION-GO-8APU1"
+    ],
+    "OEMOnly": false,
+    "rolePass": true,
+    "Category": {
+     "Name": "BIOS/UEFI",
+     "Classify": "dl-category-bios",
+     "ID": "5AC6A815-321D-440E-8833-B07A93E0428C"
+    }
+   },
+   {
+    "OperatingSystemKeys": [
+     "Windows 11 (64-bit)"
+    ],
+    "Title": " Legion Space Application  for Windows 11 (64-bit) - Legion Go 8APU1",
+    "Date": {
+     "Unix": 1744091460000
+    },
+    "Updated": {
+     "Unix": 1744092375000
+    },
+    "DocId": "DS565675",
+    "Files": [
+     {
+      "Name": "Legion Space Readme",
+      "TypeString": "TXT README",
+      "Version": "v1.1.2.11",
+      "URL": "https://download.lenovo.com/consumer/mobiles/legionspace_v1.1.2.11_en_240723.txt",
+      "Size": "559 B",
+      "SHA1": "41e3c1cdc94cb5bbefe1f9526763cb8ed1ddfc9d",
+      "SHA256": "871fc1ebadecac7e3ddc652ef9975b0d5519638eda6e71ba191efe431704fd1d",
+      "MD5": "e102330381133e202e9bfd42765ba5a4",
+      "Priority": "Recommended",
+      "PriorityWeight": 2,
+      "ReadmeUrl": "",
+      "HasReadme": false,
+      "OperatingSystemKeys": [],
+      "TypeEnString": "",
+      "FileName": "",
+      "DataIndicator": "",
+      "Date": {
+       "Unix": 1721810700000
+      },
+      "Released": null
+     },
+     {
+      "Name": "Legion Space Application",
+      "TypeString": "EXE",
+      "Version": "1.2.3.8(RTM)",
+      "URL": "https://download.lenovo.com/consumer/mobiles/wwls0a1ewyx3aff0.exe",
+      "Size": "440.3 MB",
+      "SHA1": "31acc7745ad608535636e2e6d4385cbccd243bb0",
+      "SHA256": "b23eee296404f876448e7d5ebbe65d4bd36af39c9f174d39f10f2ea89b9cf5ee",
+      "MD5": "892814acc5568c23ad9b1009b6a5ade9",
+      "Priority": "Recommended",
+      "PriorityWeight": 2,
+      "ReadmeUrl": "",
+      "HasReadme": false,
+      "OperatingSystemKeys": [],
+      "TypeEnString": "",
+      "FileName": "",
+      "DataIndicator": "",
+      "Date": {
+       "Unix": 1744092300000
+      },
+      "Released": null
+     }
+    ],
+    "Hit": "505",
+    "Audiences": [
+     {
+      "Id": "ANONYMOUS",
+      "Name": "Anonymous"
+     }
+    ],
+    "InWarranty": false,
+    "RequireLogin": false,
+    "FixID": "",
+    "AlertDataLoss": false,
+    "LanguageCode": "en",
+    "Countries": [],
+    "RebootRequired": 0,
+    "PNCheck": false,
+    "Brocade": false,
+    "Eods": "",
+    "RestrictedCountries": [],
+    "RedirectCode": 0,
+    "RedirectTo": "",
+    "ID": [
+     "DS565675-LEGION-SPACE-FOR-WINDOWS-11-64-BIT-LEGION-GO-8APU1",
+     "DS565675",
+     "D06E3950-7C70-11EE-A4C6-5996F6B250DD"
+    ],
+    "OEMOnly": false,
+    "rolePass": true,
+    "Category": {
+     "Name": "Software and Utilities",
+     "Classify": "dl-category-software",
+     "ID": "156BE23F-B536-4320-B35C-2F67EBDD9242"
+    }
+   }
+  ],
+  "ProductId": "A688B108-4F6B-47F3-96B6-BAC46B59FD4E"
+ }
+}

@@ -80,3 +80,10 @@ python -m gamedb.upcoming --out dist/upcoming.json.gz [--max-minutes 12]
 Records are merged by Steam id, then by normalised title; the date comes from Steam, else IGDB, else Wikidata, whichever isn't TBA. Precision is `day`, `month`, `quarter`, `year` or `tba`; dates are `2026-12-04`, `2026-12`, `2027-Q1`, `2027` or `""`. Entries stay for 14 days after release ("Out now"). Like the main build, a failing source is replaced by what it contributed to last night's file, and the exchange rates fall back to last night's. Shape: see docs/CONTRACTS.md ("Discover").
 
 The Wikidata query avoids `EXISTS` / `NOT EXISTS`: with them the public endpoint times out. The "already out" check is a second query over the matching items only.
+
+## Firmware index
+
+`python -m gamedb.firmware.build --out dist/firmware.json.gz` builds the handheld firmware index
+(maker BIOS/EC/controller versions and driver-stack upstream versions) published nightly on the
+`firmware` release by `.github/workflows/firmware.yml`. Sources and schema: `gamedb/firmware/`;
+app side: docs/SYSTEM.md "Firmware, BIOS and drivers".

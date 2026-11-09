@@ -69,6 +69,54 @@ SteamOS <https://store.steampowered.com/news/app/1675200>, Fedora Atomic
   `app-update`, `runtime-update`, `appstream-update` are `allow_active=yes`, so system
   updates need no password in the active session (verified in Flatpak's policy file).
 
+## Firmware, BIOS and drivers (Updates hub)
+
+`Updates` (`scripts/system/updates.gd`) gained two check-only kinds, `maker` and `drivers`, and
+`hub_items()` (also `state()["hub"]`): one list of `{id, section, kind, name, current, latest,
+status, severity, how, flash, notes, notes_url, download_page, download_url, sha256, source}` over
+fwupd devices, the maker's firmware and the driver stack (item shape: `firmware_index.gd`).
+`how`: `auto` (GameCove installs: fwupd, OS update), `guided` (steps, maybe a prepared USB drive),
+`link` (maker's page only). GameCove never flashes maker firmware.
+
+### Coverage
+
+| Maker / devices | Source | Flash route shown |
+| --- | --- | --- |
+| ASUS ROG Ally, Ally X, Xbox Ally, Xbox Ally X, X20 | index: ASUS support API (`GetPDBIOS`, the JSON ASUS's own page loads): BIOS (+ the maker's sha256), ROG MCU (controller), touch panel | EZ Flash from a FAT32 USB drive; GameCove can download the zip, check ASUS's sha256 and put the `.CAP` on the drive. MCU/touch: Windows tool, or fwupd when it lists the MCU (asus-hid plugin, community support since fwupd 2.0.2) |
+| Lenovo Legion Go, Go 2 (both), Go S (both) | index: Lenovo PC Support download list (BIOS/UEFI) | Windows `.exe` (link + steps). Legion Go controllers: fwupd `legion-hid` / `legion-hid2` plugins when the OS's fwupd has them |
+| MSI Claw 8 EX, 8 AI+, 7 AI+, A1M, A8 | index: MSI support panel API (ported from ClawDeck `msibios.py`), newest revision per board | MSI's steps (Windows or MSI's USB method) + link. msi.com refuses some cloud networks: the job keeps last night's entry |
+| Valve Steam Deck LCD / OLED | local: the OS image's own `/usr/bin/jupiter-biosupdate` map (what this image installs) and `systemctl is-enabled jupiter-biosupdate.service`; index: Valve's newest jupiter-hw-support (what a newer image brings); controller firmware shared by family | SteamOS at boot; Bazzite `ujust enable-deck-bios-firmware-updates`; Desktop Mode `sudo jupiter-biosupdate` |
+| OneXPlayer, AOKZOE, AYANEO, GPD (per-model pages), ZOTAC, Acer, Orange Pi | link-only (no readable listing) | maker's page + current BIOS version to compare |
+| Docks, SSDs, Wi-Fi, other USB parts | fwupd/LVFS (whatever the LVFS lists for them) | `fwupdmgr update` (LVFS-signed: no password) |
+
+LVFS public metadata (checked 2026-11-09) has no handheld BIOS (no Steam Deck, Ally, Legion Go,
+Claw entries), so fwupd covers controllers via plugins and accessories only.
+
+### Rules
+
+- Index: `firmware.json.gz` + `.sha256` on the rolling `firmware` release, built nightly by
+  `gamedb/gamedb/firmware/` (`.github/workflows/firmware.yml`). The app downloads it with `curl`
+  when the copy is over 7 days old (a failed try is retried at most daily), only on AC or an
+  unmetered network (NetworkManager `Metered`), and keeps it only when the sha256 matches.
+- fwupd metadata refresh: at most daily, same network rule. `fwupdmgr get-devices --json` lists
+  every updatable part with its running version.
+- Installs (fwupd) and USB preparation are refused while a game runs, without AC
+  (`needs_ac`) or under 50% battery (`low_battery`).
+- Shared firmware: index `shared[].traits` matched against the row's `traits` (filled from
+  maker/family/cpu_vendor/chip/buttons/gpu_family when a row has none), so siblings get it.
+- Drivers: kernel (`/proc/sys/kernel/osrelease`), Mesa, linux-firmware, InputPlumber,
+  PowerStation, hhd (`rpm -q` or `pacman -Q`), Decky (`~/homebrew/services/.loader.version`), XeSS
+  XMX and OptiScaler (`gamecove-upscale state`), against upstream (index) and, on rpm-ostree with
+  an update pending, `rpm-ostree upgrade --preview`'s "Upgraded:" list (**assumed** to list
+  packages for container images). OS-level items update through the OS kind.
+
+### Needs a handheld
+
+ASUS EZ Flash steps and that ASUS's `sha256` is the zip's (tests assume so; a mismatch refuses);
+DMI `bios_version` formats on Lenovo/ASUS (assumed `N3CN40WW` / `RC71L.343`); fwupd naming of the
+Ally MCU and Legion controllers; `jupiter-biosupdate.service` state on Bazzite deck images;
+whether msi.com answers GitHub's runners.
+
 ## Storage (`Storage`, `scripts/system/storage.gd`)
 
 - `findmnt --json --list -b -o SOURCE,TARGET,FSTYPE,SIZE,USED,AVAIL,OPTIONS` (falls back

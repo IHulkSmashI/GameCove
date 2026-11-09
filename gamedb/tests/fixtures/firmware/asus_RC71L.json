@@ -1,0 +1,239 @@
+{
+ "Result": {
+  "Count": 4,
+  "Obj": [
+   {
+    "Name": "BIOS Update(Windows)",
+    "Count": 1,
+    "Files": [
+     {
+      "Id": "67@3@0@1@-1@62@ASUS_RC71L_343_BIOS_Update.exe",
+      "Version": "343",
+      "Title": "BIOS Update for Windows",
+      "Lang": null,
+      "Description": "Description :<br/>It is recommended to download and update the BIOS and firmware for system performance optimization. The update takes a few minutes, please do not turn off your computer during the process to avoid critical problem that system cannot be turned on.<br/>Caution! Active updates are pos",
+      "FileSize": "12.94 MB",
+      "ReleaseDate": "2026/10/14",
+      "IsRelease": "1",
+      "PosType": null,
+      "DownloadUrl": {
+       "Global": "https://dlcdnets.asus.com/pub/ASUS/IOTHMD/Image/BIOS/127465/ASUS_RC71L_343_BIOS_Update.exe?model=RC71L",
+       "China": null
+      },
+      "HardwareInfoList": null,
+      "INFDate": null,
+      "SWID": "",
+      "ExeModule": "ASUS_RC71L_343_BIOS_Update.exe%%/SUPPRESSMSGBOXES /VERYSILENT /NORESTART",
+      "Reboot": "1",
+      "Ac_power": "True",
+      "Usefor": "5",
+      "Severity": "0",
+      "UserSession": "False",
+      "Sign": "AEE8F3B84F291718C6EBD96FA900DD36E92AC98B4F4293BED2753EB452A6D7BA48B3219B99569C003E3EB4AE403AE372013D614EEBEBD796940E9608F584F1FE339BDBFC3B3F1A8B370BE195BC5A4AE6FE2A268F02C096B15D59D146AA956946394FFFBCA73130B9D7E55DE6A940F45A31CD10E6FBDCDAEAC59D768492C438928CC15EDA4179B1F65A89EDA4DEF865352BE215F90EB6EA38EBF7A6ED398596861C097939B5F5203685C747A4BF8F2C7AD56F15E10D955635151DD17AB3AF29A1286A8CD11CA0E4EDF9F9A29342442D293443BB2F7D82C7048B92E76226A387B72208499E4D55619465584D5C4831E735ADF9652498D202A616E73FF0D551F477",
+      "Tid": "62",
+      "assistant_key": "",
+      "sha256": "A9C5FCFDCAF05CDF1946DDCE998B263C9C67B6165DCB2BCF34B6529F90328CED",
+      "severityTitleWording": "Severity",
+      "severityContentWording": "",
+      "comboPackage": false,
+      "installTime": -1
+     },
+     {
+      "Id": "67@3@0@1@-1@62@ASUS_RC71L_342_BIOS_Update_1.exe",
+      "Version": "342",
+      "Title": "BIOS Update for Windows",
+      "Lang": null,
+      "Description": "Description :<br/>It is recommended to download and update the BIOS and firmware for system performance optimization. The update takes a few minutes, please do not turn off your computer during the process to avoid critical problem that system cannot be turned on.<br/>Caution! Active updates are pos",
+      "FileSize": "12.94 MB",
+      "ReleaseDate": "2025/03/07",
+      "IsRelease": "1",
+      "PosType": null,
+      "DownloadUrl": {
+       "Global": "https://dlcdnets.asus.com/pub/ASUS/IOTHMD/Image/BIOS/119926/ASUS_RC71L_342_BIOS_Update_1.exe?model=RC71L",
+       "China": null
+      },
+      "HardwareInfoList": null,
+      "INFDate": null,
+      "SWID": "",
+      "ExeModule": "ASUS_RC71L_342_BIOS_Update_1.exe%%/SUPPRESSMSGBOXES /VERYSILENT /NORESTART",
+      "Reboot": "1",
+      "Ac_power": "True",
+      "Usefor": "5",
+      "Severity": "0",
+      "UserSession": "False",
+      "Sign": "5E831EA082C413D304113EA919D9274D03FF71E98475F01ED0AC992CCB8F53AFF8DE0E8A11ED637DEE8381AA2B7A5CFC30CA54DBE328545140993BFB2102C130ED329218EE6FFCC12C09A1DEB3A363D87677F038E59F02F67FEDBA490FC9F25EFEFE61B3E67449EA8ADB61C78213D4FB353D61DC624AD46CA62180377FBB67E07BB23C11691AE87B7F9D297481BA8D456775FE03C43BBDEFE447E054C4E37E59E1BF23A35A5AB6734E61DC0602AEC09B21324FD7061045FDE5E5E70528000E50B12A8F5B4E0714A1FBC2B567D296BA82C658FF11DB64475D8448876B68CB0A233C3F07B92674151FFFB5870E55C5920EE49C089C0B41D1CD6B475622371F3506",
+      "Tid": "62",
+      "assistant_key": "",
+      "sha256": "F6EFE1FE3DEAE4967C8F78BC8B7372DB44BF806B86543EA8BAE4E27009550670",
+      "severityTitleWording": "Severity",
+      "severityContentWording": "",
+      "comboPackage": false,
+      "installTime": -1
+     }
+    ],
+    "LangOptions": null,
+    "IsDescShow": false
+   },
+   {
+    "Name": "BIOS",
+    "Count": 1,
+    "Files": [
+     {
+      "Id": "67@3@0@1@-1@3@RC71LAS343.zip",
+      "Version": "343",
+      "Title": "BIOS for ASUS EZ Flash Utility",
+      "Lang": null,
+      "Description": "Description :<br/>It is recommended to download and update the BIOS and firmware for system performance optimization. The update takes a few minutes, please do not turn off your computer during the process to avoid critical problem that system cannot be turned on.<br/>Caution! Active updates are pos",
+      "FileSize": "11.39 MB",
+      "ReleaseDate": "2026/10/14",
+      "IsRelease": "1",
+      "PosType": null,
+      "DownloadUrl": {
+       "Global": "https://dlcdnets.asus.com/pub/ASUS/IOTHMD/Image/BIOS/127465/RC71LAS343.zip?model=RC71L",
+       "China": null
+      },
+      "HardwareInfoList": null,
+      "INFDate": null,
+      "SWID": "",
+      "ExeModule": "",
+      "Reboot": "1",
+      "Ac_power": "True",
+      "Usefor": "5",
+      "Severity": "0",
+      "UserSession": "False",
+      "Sign": "CE5A092E323D39BF06342EB89180A035A6E55E35FE45CE8570204779DF94859DF7C704F413917846122114F7B86186BA2211984CC0395C5F94A2740EB4B7231ECDBEE6F9F6CC142DF5FB3CCF2E316C832AD75EB4209CD700E4042AAC4728A81FDE5871BA3367064CB04F03413BF6647F525CCC638971F9A2CE68B2AEC6FDACD39CD14A2518CD15884F90D9FE26DE685B1BDC587C8B1A18AF9F7C4DF78FDD9847CF832A05A136BEBCA26C5BB0190F2E36D9B0730C7527A45CC0C3E41FBF8BC3FEF87FC4DB44A9D1C8A38729B303269864A19E5312B88C9BF35BF70EAF5A5FB181990E2DDEEDF3D191EBFDA2C08FBE74B60D6D84F2B830992424D2F39F64B00F7A",
+      "Tid": "3",
+      "assistant_key": "",
+      "sha256": "9C39E7681E6E2ECA82F2B5E531F7E02FF324894133361E857459901A428F30EE",
+      "severityTitleWording": "Severity",
+      "severityContentWording": "",
+      "comboPackage": false,
+      "installTime": -1
+     },
+     {
+      "Id": "67@3@0@1@-1@3@RC71LAS342.zip",
+      "Version": "342",
+      "Title": "BIOS for ASUS EZ Flash Utility",
+      "Lang": null,
+      "Description": "Description :<br/>It is recommended to download and update the BIOS and firmware for system performance optimization. The update takes a few minutes, please do not turn off your computer during the process to avoid critical problem that system cannot be turned on.<br/>Caution! Active updates are pos",
+      "FileSize": "11.39 MB",
+      "ReleaseDate": "2025/03/07",
+      "IsRelease": "1",
+      "PosType": null,
+      "DownloadUrl": {
+       "Global": "https://dlcdnets.asus.com/pub/ASUS/IOTHMD/Image/BIOS/119926/RC71LAS342.zip?model=RC71L",
+       "China": null
+      },
+      "HardwareInfoList": null,
+      "INFDate": null,
+      "SWID": "",
+      "ExeModule": "",
+      "Reboot": "1",
+      "Ac_power": "True",
+      "Usefor": "5",
+      "Severity": "0",
+      "UserSession": "True",
+      "Sign": "5613B6FAAB667C5BD87FA71AABC5E988DF83C616A98D2039893C059FA66AA57C2743CBD1AF1F98D89E63024B2877CF2CB63495A00D1987B32779284C380DE1BAB0DC60D9C4D4FA063BBEA456D40D0B6DF63A8A5A5BFD0AB5CBFF824181A37C41D72C35495D0DBE4B309B4E291A63E3C205307DB6F3743952CD7D2C87B7F66F0D7D76C0D35B39702EEFC0609891475B2087AE460E42AC12C9D8593FEE509008F0A447261799AC1E30AA5A93DB669EE70A4A2BC7C4BD5619D7547A9CBEA0002C4535503A1EBF071DB93664FB9F1B7AD34B5468C3E1971F20A588F1BB50776FE4A5C103FAF5D616FCE80D4C7FF1E783035F6F45EA382C352E08173740BD5BC21445",
+      "Tid": "3",
+      "assistant_key": "",
+      "sha256": "CF9D62E09C4D18261B8592577A74482423ACFBE31183AD4DB9F1428C7D64FD8E",
+      "severityTitleWording": "Severity",
+      "severityContentWording": "",
+      "comboPackage": false,
+      "installTime": -1
+     }
+    ],
+    "LangOptions": null,
+    "IsDescShow": false
+   },
+   {
+    "Name": "Firmware",
+    "Count": 1,
+    "Files": [
+     {
+      "Id": "67@3@0@1@-1@20@ROGMCUFWupdate_V321_18139_1.zip",
+      "Version": "V321",
+      "Title": "ROG MCU Firmware Update tool",
+      "Lang": null,
+      "Description": "<br/>Description :<br/>This app updated MCU firmware to fix MCU related issues.  Please keep your device plugged to a power source and do not turn it off until the update process is completed.<br/><br/>Important Information :<br/>XBOX Experience Mode : Switch hotkeys between the Default button layou",
+      "FileSize": "2.06 MB",
+      "ReleaseDate": "2026/10/19",
+      "IsRelease": "1",
+      "PosType": null,
+      "DownloadUrl": {
+       "Global": "https://dlcdnets.asus.com/pub/ASUS/IOTHMD/Image/Software/Firmware/18139/ROGMCUFWupdate_V321_18139_1.zip?model=RC71L",
+       "China": null
+      },
+      "HardwareInfoList": null,
+      "INFDate": null,
+      "SWID": "",
+      "ExeModule": "",
+      "Reboot": "0",
+      "Ac_power": "False",
+      "Usefor": "5",
+      "Severity": "2",
+      "UserSession": "False",
+      "Sign": "6203883E41CD38843B219EFD74083685AC17D99EB016C9CD1EBBDDF8D966261A0F94A323405F17FD55729BCE233715906A1D67B2C2AAFBA3E8DBE663277494FD0B03B0A84E9DEAE27F18ECAC3FE443305A63A8A65F9042F23A63D28B39F170DB192F8B0B06EFC7625665822FDF4089562EF4A99F9897065ACA2A0FC0E8152FCC8BD8269AB6144EE491B81A9D2FD9263AF62106568B161F5551827652C63CBDEAA86916AD7118D194736153AE7879C985504C99D71E958CF533D71F2E5E972B9E008EB40AA4B2DC48AEEF8ABF3662A5D08D17CCC5A1615F9EB9FAF11268B26B41EB1786CB3639E141B041C842E25108622E8CA9FDF2C7C395CFB10E1FC9A6A73B",
+      "Tid": "20",
+      "assistant_key": "",
+      "sha256": "371A99EC66FEEF22ADD57F9E862EFC50A647EFD1EA2A9C8DCE5E320ACA546404",
+      "severityTitleWording": "Severity",
+      "severityContentWording": "Recommended",
+      "comboPackage": false,
+      "installTime": -1
+     },
+     {
+      "Id": "67@3@0@1@-1@20@ROGMCUFWupdate_ASUS_Z_V320_17039.exe",
+      "Version": "V320",
+      "Title": "ROG MCU Firmware Update tool",
+      "Lang": null,
+      "Description": "<br/>Description :<br/>This app updated MCU firmware to fix MCU related issues.  Please keep your device plugged to a power source and do not turn it off until the update process is completed.<br/><br/>Important Information :<br/>Bug Fix: Fixed an issue where the device\u2019s left vibrator makes an abno",
+      "FileSize": "6.15 MB",
+      "ReleaseDate": "2025/10/03",
+      "IsRelease": "1",
+      "PosType": null,
+      "DownloadUrl": {
+       "Global": "https://dlcdnets.asus.com/pub/ASUS/IOTHMD/Image/Software/Firmware/17039/ROGMCUFWupdate_ASUS_Z_V320_17039.exe?model=RC71L",
+       "China": null
+      },
+      "HardwareInfoList": null,
+      "INFDate": null,
+      "SWID": "",
+      "ExeModule": "",
+      "Reboot": "0",
+      "Ac_power": "False",
+      "Usefor": "5",
+      "Severity": "2",
+      "UserSession": "False",
+      "Sign": "C1D256E166830B2E10037FA6CC431911D440DA4F312630FA8E9FEDCDD28B0E46E6CC08C094E5F97FAC955CB7CFE7B213903FA8624360CF58BEA1EFE71D29C1A50ACDE4B62D5F454A7BDFF58B402FADE1F37486DD1B12A8AA107973040D1BC809D92CCCD37E0A7CED31BA6A732BA35AFF95D05EEA7C85EB114CCD8C98D70A039E016D969866A02EA6E4B0498B2BE215E8E7F55F55DA9557C175DE9D4C0713792C60FD2D1B6B4093864CAAA385E5D5B001234EBB0BB47028D58F761CAA6A055603A9C25A0F76E30FC9DE1E7885A752294F4221138002D85AE33128A1A9A43DC93DD4A2C828BB932DC11FA7CEB6C3B1C11F95D4407FEB9A7F9D8ABCB23F880DAA48",
+      "Tid": "20",
+      "assistant_key": "",
+      "sha256": "C578C85BAB4B9AC1CEB6F3253F02F319C3EA0D27372D4EF8C1BD5E2C613B91B7",
+      "severityTitleWording": "Severity",
+      "severityContentWording": "Recommended",
+      "comboPackage": false,
+      "installTime": -1
+     }
+    ],
+    "LangOptions": null,
+    "IsDescShow": false
+   },
+   {
+    "Name": "Utilities",
+    "Count": 1,
+    "Files": [
+     {
+      "Version": "1.0",
+      "Title": "Armoury Crate",
+      "ReleaseDate": "2026/01/01",
+      "DownloadUrl": {
+       "Global": "https://example.invalid/x.exe"
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "Status": "SUCCESS",
+ "Message": "SUCCESS"
+}

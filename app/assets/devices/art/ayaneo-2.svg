@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="452" height="211" viewBox="0 0 452 211">
+<title>AYANEO 2 / 2S (1 mm = 1.6 units)</title>
+<path id="part-body" d="M65.2 30 H386 Q437.2 30 437.2 81.2 L437.2 138 Q437.2 198.8 376.4 198.8 H74.8 Q14 198.8 14 138 L14 81.2 Q14 30 65.2 30 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="btn-LeftTrigger" x="35.16" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightTrigger" x="358.44" y="10" width="57.6" height="10" rx="5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-LeftBumper" x="39.96" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="btn-RightBumper" x="363.24" y="22" width="48" height="7" rx="3.5" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="part-screen" x="104.98" y="39.01" width="241.239" height="150.774" rx="4" fill="#0B0E13" stroke="#1F2630" stroke-width="2"/>
+<path d="M254.548 47.01 L297.971 47.01" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<g id="axis-LeftStick"><circle cx="59.49" cy="80.64" r="15.6032" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-LeftStick" cx="59.49" cy="80.64" r="9.67398" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-DPad"><rect id="btn-DPadUp" x="54.4116" y="120.256" width="10.1568" height="12.696" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadDown" x="54.4116" y="143.108" width="10.1568" height="12.696" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadLeft" x="41.7156" y="132.952" width="12.696" height="10.1568" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect id="btn-DPadRight" x="64.5684" y="132.952" width="12.696" height="10.1568" rx="2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.2"/><rect x="54.4116" y="132.952" width="10.1568" height="10.1568" fill="#1F2630"/></g>
+<g id="btn-North"><circle cx="391.71" cy="66.8032" r="6.9184" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M389.52 63.52 L391.71 66.80 L393.90 63.52 M391.71 66.80 L391.71 70.09" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-East"><circle cx="405.547" cy="80.64" r="6.9184" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M403.36 77.35 L403.36 83.93 L406.64 83.93 L407.74 82.83 L407.74 81.74 L406.64 80.64 L403.36 80.64 M403.36 77.35 L406.64 77.35 L407.52 78.23 L407.52 79.76 L406.64 80.64" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-South"><circle cx="391.71" cy="94.4768" r="6.9184" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M389.52 97.76 L391.71 91.19 L393.90 97.76 M390.29 95.57 L393.13 95.57" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="btn-West"><circle cx="377.873" cy="80.64" r="6.9184" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/><path d="M375.68 77.35 L380.06 83.93 M380.06 77.35 L375.68 83.93" fill="none" stroke="#E8ECF1" stroke-width="1.30" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="axis-RightStick"><circle cx="391.71" cy="138.03" r="15.6032" fill="#1F2630" stroke="#5A6678" stroke-width="2"/><circle id="btn-RightStick" cx="391.71" cy="138.03" r="9.67398" fill="#262E3A" stroke="#9AA4B0" stroke-width="1.5"/></g>
+<g id="btn-LeftTop"><rect x="64.028" y="32.838" width="9.984" height="6.144" rx="2.304" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-RightTop"><rect x="377.188" y="32.838" width="9.984" height="6.144" rx="2.304" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Select"><circle cx="64.78" cy="175.17" r="3.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Start"><circle cx="98.26" cy="181.92" r="3.52" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-QuickAccess"><rect x="349.418" y="178.848" width="9.984" height="6.144" rx="2.304" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+<g id="btn-Guide"><circle cx="386.42" cy="175.17" r="4.48" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.3"/></g>
+</svg>

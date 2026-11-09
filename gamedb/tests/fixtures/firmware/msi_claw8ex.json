@@ -1,0 +1,5 @@
+{"result": {"downloads": {"BIOS": [
+ {"download_title": "BIOS", "download_version": "E1T91IMS.10E", "download_release": "2026-10-30", "download_url": "https://download.msi.com/bos_exe/nb/E1T91IMS.10E.zip", "download_description": "- Improved fan behaviour.<br>- Better battery life."},
+ {"download_title": "BIOS", "download_version": "E1T91IMS.10D", "download_release": "2026-09-12", "download_url": "https://download.msi.com/bos_exe/nb/E1T91IMS.10D.zip", "download_description": "- First release"},
+ {"download_title": "ME firmware", "download_version": "ME 19.0.0.1854", "download_release": "2026-08-01", "download_url": "x"}
+]}}}
