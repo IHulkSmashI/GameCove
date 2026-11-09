@@ -1,0 +1,5 @@
+Name, ID, HDR Support, App Collection Game, Hidden, Direct Launch, Boxart URL
+"Desktop",881448767,true,false,false,false,"qrc:/res/no_app_image.png"
+"Steam Big Picture",1093255277,true,false,false,false,"file:///home/deck/.var/app/com.moonlight_stream.Moonlight/cache/Moonlight%20Game%20Streaming%20Project/Moonlight/boxart/A1B2/1093255277.png"
+"Elden Ring ""Nightreign""",1450239418,false,false,false,true,"qrc:/res/no_app_image.png"
+"Hidden Tool",12,false,false,true,false,"qrc:/res/no_app_image.png"

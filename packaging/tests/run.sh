@@ -757,6 +757,7 @@ else
 		"$REPO/packaging/sysext/build-sysext.sh" "$REPO/packaging/tests/run.sh" \
 		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" \
 		"$REPO/packaging/get-gamecove.sh" "$REPO/packaging/libexec/gamecove-apply-choices" \
+		"$REPO/packaging/libexec/reaper" \
 		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh"; do
 		if "$SHELLCHECK" -S warning -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
@@ -769,6 +770,20 @@ else
 		if (cd "$REPO" && "$SHELLCHECK" -S warning -x -s sh "$f") >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 fi
+
+# ------------------------------------------------------- reaper (stream app-id wrapper)
+REAPER="$REPO/packaging/libexec/reaper"
+expect_code 64 "reaper without a command" sh "$REAPER" SteamLaunch AppId=5
+expect_code 3 "reaper passes the exit status" "$REAPER" SteamLaunch AppId=5 -- sh -c 'exit 3'
+"$REAPER" SteamLaunch AppId=1234 -- sh -c 'cat /proc/$PPID/comm; tr "\0" " " </proc/$PPID/cmdline' >"$T/reaper" 2>&1
+contains "$T/reaper" "^reaper$" "gamescope sees a parent named reaper"
+contains "$T/reaper" "SteamLaunch AppId=1234 --" "gamescope reads SteamLaunch AppId= from its command line"
+"$REAPER" SteamLaunch AppId=1 -- sh -c 'trap "echo got-term; exit 0" TERM; while :; do sleep 0.1; done' >"$T/reaper2" 2>&1 &
+rp=$!
+sleep 0.5
+kill -TERM "$rp"
+wait "$rp"
+contains "$T/reaper2" "got-term" "reaper passes TERM on to the program"
 
 # ------------------------------------------------------- gamecove-selftest (fake root and commands)
 if sh "$REPO/packaging/tests/selftest.sh" >"$T/out" 2>&1; then ok; else bad "selftest: $(tail -20 "$T/out")"; fi

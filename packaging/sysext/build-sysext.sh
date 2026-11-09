@@ -100,6 +100,7 @@ install -Dm0755 "$REPO/packaging/libexec/gamecove-apply-choices" "$tree/usr/libe
 install -Dm0755 "$REPO/packaging/get-gamecove.sh" "$tree/usr/libexec/gamecove/get-gamecove.sh"
 # per-game launch wrapper and upscaling helper (perf controls)
 install -Dm0755 "$REPO/packaging/libexec/gamecove-run" "$tree/usr/libexec/gamecove/gamecove-run"
+install -Dm0755 "$REPO/packaging/libexec/reaper" "$tree/usr/libexec/gamecove/reaper"
 install -Dm0755 "$REPO/packaging/libexec/gamecove-upscale" "$tree/usr/libexec/gamecove/gamecove-upscale"
 mkdir -p "$tree/usr/lib/gamecove/helpers"
 cp -a "$REPO/packaging/helpers/gamecove_upscale" "$tree/usr/lib/gamecove/helpers/"

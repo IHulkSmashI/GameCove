@@ -1,0 +1,5 @@
++;wlan0;IPv4;GAMING-PC;_nvstream._tcp;local
+=;wlan0;IPv6;GAMING-PC;_nvstream._tcp;local;GAMING-PC.local;fe80::1c2d:3e4f:5a6b:7c8d;47989;
+=;wlan0;IPv4;GAMING-PC;_nvstream._tcp;local;GAMING-PC.local;192.168.1.20;47989;
+=;wlan0;IPv4;GAMING-PC;_nvstream._tcp;local;GAMING-PC.local;192.168.1.20;47989;
+=;wlan0;IPv6;Living\032Room\046PC;_nvstream._tcp;local;living-room.local;fd00::31;48989;

@@ -97,6 +97,8 @@ install -Dpm0755 packaging/libexec/gamecove-apply-choices %{buildroot}%{_libexec
 install -Dpm0755 packaging/get-gamecove.sh            %{buildroot}%{_libexecdir}/gamecove/get-gamecove.sh
 # Per-game launch wrapper and upscaling helper (perf controls)
 install -Dpm0755 packaging/libexec/gamecove-run       %{buildroot}%{_libexecdir}/gamecove/gamecove-run
+%{_libexecdir}/gamecove/reaper
+install -Dpm0755 packaging/libexec/reaper             %{buildroot}%{_libexecdir}/gamecove/reaper
 install -Dpm0755 packaging/libexec/gamecove-upscale   %{buildroot}%{_libexecdir}/gamecove/gamecove-upscale
 mkdir -p %{buildroot}%{_prefix}/lib/gamecove/helpers
 cp -a packaging/helpers/gamecove_upscale %{buildroot}%{_prefix}/lib/gamecove/helpers/
