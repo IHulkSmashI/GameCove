@@ -200,3 +200,39 @@ func test_m12_reset_puts_the_targets_back() -> void:
 	ok(_w(reg, "controller.reset_layout", true), "reset")
 	eq(f.targets, ["deck-uhid"], "the targets from before GameCove changed them")
 	reg.free()
+
+
+# ---- M26: localconfig.vdf is never rewritten with replaced bytes ---------------------------------
+
+## Proof 9.11 C: a persona name with a Latin-1 byte (not UTF-8) came back as U+FFFD after setting
+## one game's launch options.
+func test_m26_non_utf8_localconfig_is_left_alone() -> void:
+	var SC := load("res://scripts/steam/steam_config.gd")
+	var base := _root("m26")
+	var home := base + "/home"
+	var ud := home + "/.local/share/Steam/userdata/42"
+	DirAccess.make_dir_recursive_absolute(ud + "/config")
+	var lc := ud + "/config/localconfig.vdf"
+	var bytes := "\"UserLocalConfigStore\"\n{\n\t\"friends\"\n\t{\n\t\t\"123\"\n\t\t{\n\t\t\t\"name\"\t\t\"Ren".to_utf8_buffer()
+	bytes.append(0xE9)
+	bytes.append_array("\"\n\t\t}\n\t}\n\t\"Software\"\n\t{\n\t\t\"Valve\"\n\t\t{\n\t\t\t\"Steam\"\n\t\t\t{\n\t\t\t\t\"apps\"\n\t\t\t\t{\n\t\t\t\t\t\"620\"\n\t\t\t\t\t{\n\t\t\t\t\t\t\"LaunchOptions\"\t\t\"-novid\"\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n".to_utf8_buffer())
+	var w := FileAccess.open(lc, FileAccess.WRITE)
+	w.store_buffer(bytes)
+	w.close()
+	var err: int = SC.set_launch_options(home, ud, "620", "-novid -dx11", base + "/noproc")
+	ok(err != OK, "refused (the file isn't UTF-8)")
+	eq(FileAccess.get_file_as_bytes(lc), bytes, "every byte as it was")
+
+
+## An escape the reader doesn't know (\p) is kept as written, not turned into "p".
+func test_m26_unknown_escapes_round_trip() -> void:
+	var V := load("res://scripts/launch/vdf.gd")
+	var W := load("res://scripts/steam/vdf_writer.gd")
+	var text := "\"a\"\n{\n\t\"path\"\t\t\"C:\\\\Games\\\\x\"\n\t\"odd\"\t\t\"x\\py\"\n\t\"q\"\t\t\"say \\\"hi\\\"\\n\"\n}\n"
+	var d: Variant = V.parse_strict(text)
+	ok(d is Dictionary, "parses")
+	eq(d["a"]["odd"], "x\\py", "unknown escape kept verbatim")
+	eq(d["a"]["path"], "C:\\Games\\x", "known escapes decoded")
+	var back: Variant = V.parse_strict(W.dump(d))
+	eq(back, d, "dump reads back the same")
+	ok("x\\py" in W.dump(d), "and writes \\p as it was")

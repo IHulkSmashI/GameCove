@@ -13,8 +13,24 @@ const BACKUP_SUFFIX := ".gamecove.bak"
 const ORIGINAL_SUFFIX := ".gamecove-orig"
 
 
+## A backslash is doubled only where it would read as an escape (before n, t, \\ or a quote,
+## or at the end), so one the reader kept verbatim (\p) is written back as it was (review M26).
 static func escape(s: String) -> String:
-	return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t")
+	if not "\\" in s:   # nearly every value: no per-character loop
+		return s.replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t")
+	var out := ""
+	var n := s.length()
+	for i in n:
+		var c := s[i]
+		match c:
+			"\\":
+				var nxt := s[i + 1] if i + 1 < n else ""
+				out += "\\\\" if nxt in ["", "n", "t", "\\", "\"", "\n", "\t"] else "\\"
+			"\"": out += "\\\""
+			"\n": out += "\\n"
+			"\t": out += "\\t"
+			_: out += c
+	return out
 
 
 ## Nested Dictionaries of Strings back to text. Key order is kept.

@@ -59,9 +59,19 @@ static func parse_strict(text: String) -> Variant:
 
 
 static func parse_file_strict(path: String) -> Variant:
+	var text: Variant = read_utf8_exact(path)
+	return parse_strict(text) if text is String else null
+
+
+## The file as text only when it is valid UTF-8 byte for byte, else null. A file we
+## write back must never go through a decode that replaces bytes (a persona name in a
+## legacy encoding came back as U+FFFD, review M26): such a file is left alone.
+static func read_utf8_exact(path: String) -> Variant:
 	if not FileAccess.file_exists(path):
 		return null
-	return parse_strict(FileAccess.get_file_as_string(path))
+	var bytes := FileAccess.get_file_as_bytes(path)
+	var text := bytes.get_string_from_utf8()
+	return text if text.to_utf8_buffer() == bytes else null
 
 
 ## Every key at every level.
@@ -119,7 +129,12 @@ static func tokenize(text: String, errors: Array = []) -> PackedStringArray:
 			while i < n and text[i] != "\"":
 				if text[i] == "\\" and i + 1 < n:
 					var e := text[i + 1]
-					s += "\n" if e == "n" else ("\t" if e == "t" else e)
+					# \n \t \\ \" are escapes; any other (\p) is kept as written (review M26)
+					match e:
+						"n": s += "\n"
+						"t": s += "\t"
+						"\\", "\"": s += e
+						_: s += "\\" + e
 					i += 2
 				else:
 					s += text[i]
