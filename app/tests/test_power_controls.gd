@@ -437,6 +437,17 @@ func test_ally_live_charge_fan_and_gpu_profile() -> void:
 	_free()
 
 
+## Round 2: on the Ally steamos-manager's GPU profile property didn't answer (no driver
+## configured); it still runs (GPU level works), so the reason names it, not a missing GPU.
+func test_ally_live_gpu_profile_reason_when_steamos_manager_errors() -> void:
+	var t := _ally_live(true)
+	t["props"].erase(Trees.SM + "GpuPowerProfile1 GpuPowerProfile")
+	t["props"].erase(Trees.SM + "GpuPowerProfile1 AvailableGpuPowerProfiles")
+	var e := _setup(t)
+	eq(e["c"]["power.gpu_profile"].reason, Tx.SM_NO_GPU_PROFILES)
+	_free()
+
+
 func test_ally_live_without_the_helper() -> void:
 	var e := _setup(_ally_live(false))
 	var c: Dictionary = e["c"]
@@ -539,7 +550,7 @@ func test_ally_offers_what_this_handheld_has() -> void:
 			"power.fan_mode", "power.fan_curve", "power.mcu_powersave"]:
 		ok(c[id].available, "ally offers %s (%s)" % [id, c[id].reason])
 	eq(c["power.platform_profile"].reason, Tx.PPD_OWNS, "PPD owns the firmware mode")
-	eq(c["power.gpu_profile"].reason, Tx.XE_ONLY, "no xe")
+	eq(c["power.gpu_profile"].reason, Tx.SM_NO_GPU_PROFILES, "no xe; steamos-manager runs but has none")
 	eq(c["power.sleep_mode"].reason, Tx.NOT_HERE, "no mem_sleep file")
 	# hhd's ASUS rule at SPL 15 W: SPPT <= min(35, 15 x 1.2) = 18, FPPT <= min(35, 15 x 1.4) = 21
 	eq([c["power.sppt"].min_value, c["power.sppt"].max_value], [15.0, 18.0], "SPPT: not under SPL, hhd's ASUS ceiling")

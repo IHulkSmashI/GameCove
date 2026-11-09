@@ -149,6 +149,15 @@ func sm_get(iface: String, prop: String) -> Variant:
 	return user_bus.get_prop(SM, SM_PATH, SM_IF + iface, prop)
 
 
+## steamos-manager answers on the user bus (any of its everyday properties).
+func sm_present() -> bool:
+	for ip in [["GpuPerformanceLevel1", "GpuPerformanceLevel"], ["PerformanceProfile1", "PerformanceProfile"],
+			["TdpLimit1", "TdpLimit"], ["CpuScaling1", "CpuScalingGovernor"]]:
+		if sm_get(ip[0], ip[1]) != null:
+			return true
+	return false
+
+
 func sm_set(iface: String, prop: String, sig: String, value: String) -> bool:
 	return user_bus.set_prop(SM, SM_PATH, SM_IF + iface, prop, sig, value)
 

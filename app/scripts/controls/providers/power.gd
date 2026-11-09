@@ -482,7 +482,9 @@ func _gpu_profile() -> RefCounted:
 					return Tx.NO_HELPER
 				# steamos-manager answers with an empty list where its config has no GPU
 				# power profiles (the ROG Ally on SteamOS 3.10)
-				if be.sm_get("GpuPowerProfile1", "AvailableGpuPowerProfiles") is Array:
+				# (or errors where its config names no GPU power profile driver): any answer
+				# from steamos-manager means it runs and simply has none to offer
+				if be.sm_get("GpuPowerProfile1", "AvailableGpuPowerProfiles") is Array or be.sm_present():
 					return Tx.SM_NO_GPU_PROFILES
 				return Tx.XE_ONLY
 			c.options = _choice_opts(info["offered"])
