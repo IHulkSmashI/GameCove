@@ -67,9 +67,9 @@ const LATENCY := "%d ms"
 const EMPTY_TITLE := "Set up streaming from your PC"
 const EMPTY_LINE := "Your PC runs the game, this handheld shows it. Here's how to set it up once:"
 const STEPS := [
-	["Install Vibepollo on your PC", "It's free. Scan the code for the download page, or go to github.com/Nonary/Vibepollo."],
-	["Open its web UI and add your games", "On the PC, open https://localhost:47990, make a username and password, then add games under Applications."],
-	["Come back here and pick your PC", "Same Wi-Fi as the PC? It shows up on its own. Otherwise press Y and type its address."],
+	["Install Vibepollo on your PC", "Free. Scan the code, or go to github.com/Nonary/Vibepollo."],
+	["Open its web UI and add your games", "On the PC: https://localhost:47990, set a password, add games under Applications."],
+	["Come back here and pick your PC", "Same Wi-Fi? It shows up here. Otherwise press Y and type its address."],
 ]
 const QR_CAPTION := "Vibepollo download"
 const SCAN := "Scan with your phone"
@@ -86,7 +86,7 @@ const ADD_HINT := "IP or name, e.g. 192.168.1.20 or a Tailscale address"
 const PAIR_TITLE := "Pair with %s"
 const PAIR_ENTER := "Enter this PIN on your PC"
 const PAIR_STEPS := [
-	"On the PC, open Vibepollo's web UI (%s)",
+	"On the PC, open Vibepollo's web UI:",
 	"Go to PIN, type the code below and name this handheld",
 	"Press Send. This screen moves on by itself.",
 ]
@@ -94,6 +94,7 @@ const PAIR_WAITING := "Waiting for your PC…"
 const PAIR_DONE := "Paired with %s"
 const PAIR_FAILED_TITLE := "Pairing didn't finish"
 const PAIR_NEW_PIN := "New PIN"
+const PAIR_ONCE := "Pairing happens once per handheld. Vibepollo's web UI is at %s"
 const PAIR_PERMS := "Then allow \"Launch apps\" and controller input for this handheld under Clients."
 
 # settings sheet

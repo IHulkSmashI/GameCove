@@ -174,6 +174,8 @@ const REDUCE_MOTION_LINES := {false: "Smooth movement when you move around.", tr
 # ---- extras
 const EXTRAS_TITLE := "Extras"
 const EXTRAS_LINE := "All optional. Each one stays on this device."
+const MOONLIGHT := "Moonlight, for streaming from your PC"
+const MOONLIGHT_LINES := {true: "Installs the free Moonlight player from Flathub, so the Stream tab can play games from a PC running Vibepollo.", false: "You can install it later from the Stream tab."}
 const GGDEALS := "gg.deals key"
 const GGDEALS_LINE := "Real prices from every store in your country. Free at gg.deals/api (sign in, then API key)."
 const SGDB := "SteamGridDB key"
@@ -220,6 +222,8 @@ const TASKS := {
 	"remove_user_files": "Remove GameCove's shortcuts and startup files",
 	"remove_settings": "Remove GameCove's settings",
 	"forget": "Forget the install",
+	"moonlight_remote": "Add Flathub for this user",
+	"moonlight_install": "Install Moonlight for PC streaming",
 }
 const TASK_WHY := {
 	"package": "Asks for your admin password.",
@@ -227,6 +231,7 @@ const TASK_WHY := {
 	"package_remove": "Asks for your admin password.",
 	"fix_install": "Asks for your admin password.",
 	"fix_remove": "Asks for your admin password.",
+	"moonlight_install": "No password: it installs for this user only.",
 }
 const STATE := {"": "", "running": "Working…", "ok": "Done", "failed": "Failed", "skipped": "Skipped",
 	"pending": "After restart", "undone": "Undone"}

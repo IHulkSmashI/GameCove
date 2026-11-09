@@ -42,17 +42,22 @@ const FixesService := preload("res://scripts/device/fixes.gd")
 const CommandRunner := preload("res://scripts/device/command_runner.gd")
 const ControllerProvider := preload("res://scripts/controls/providers/controller.gd")
 const PerfProvider := preload("res://scripts/controls/providers/perf.gd")
+const StreamingScreen := preload("res://scripts/ui/streaming/streaming_screen.gd")
+const StreamingService := preload("res://scripts/streaming/streaming.gd")
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
 const RESUME_GAP_S := 20.0
 ## No input for this long: the backdrop's slow zoom stops.
 const IDLE_S := 30.0
-const SCREENS := ["home", "library", "discover", "settings"]
+const SCREENS := ["home", "library", "discover", "stream", "settings"]
 
 var home: Control
 var library_screen: Control
 var discover: Control
+## The Stream tab and its service (scripts/streaming/): games from a PC through Moonlight.
+var stream_screen: Control
+var streaming: Node
 var settings: Control
 var page: Control
 var quick_menu: Control
@@ -154,13 +159,22 @@ func _ready() -> void:
 	_screen_layer.add_child(discover)
 	discover.setup({"library": Library, "open_game": _open_page, "toast": toast})
 
+	streaming = StreamingService.new()
+	streaming.name = "Streaming"
+	streaming.setup(_streaming_ctx())
+	add_child(streaming)
+	stream_screen = StreamingScreen.new()
+	stream_screen.visible = false
+	_screen_layer.add_child(stream_screen)
+	stream_screen.setup({"streaming": streaming, "toast": toast, "play": _play_stream})
+
 	settings = SettingsScreen.new()
 	settings.visible = false
 	settings.changed.connect(_on_setting_changed)
 	if settings.has_signal("setup_requested"):
 		settings.setup_requested.connect(func(): open_setup(true))
 	_screen_layer.add_child(settings)
-	screens = {"home": home, "library": library_screen, "discover": discover, "settings": settings}
+	screens = {"home": home, "library": library_screen, "discover": discover, "stream": stream_screen, "settings": settings}
 
 	_hint_shade = TextureRect.new()
 	_hint_shade.name = "HintShade"
@@ -289,6 +303,8 @@ func _ready() -> void:
 func exit_game() -> void:
 	if quick_menu.visible:
 		quick_menu.close()
+	if streaming != null and str(session.game.get("store", "")) == StreamingService.STORE:
+		streaming.stop_stream()   # Moonlight's Flatpak sits outside our scope
 	if not closer.close(session):
 		toast("No game is running", "info", "", "")
 
@@ -995,8 +1011,8 @@ func _link_top() -> void:
 		t.focus_neighbor_bottom = t.get_path_to(f if f != null else t)
 		t.focus_neighbor_top = t.get_path_to(t)
 	top_bar.link_bar()
-	# The downloads button sits between Discover and the status pill.
-	Kit.link_horizontal([top_bar.tabs["home"], top_bar.tabs["library"], top_bar.tabs["discover"], downloads_button, top_bar.status_button, top_bar.tabs["settings"]])
+	# The downloads button sits between the tabs and the status pill.
+	Kit.link_horizontal([top_bar.tabs["home"], top_bar.tabs["library"], top_bar.tabs["discover"], top_bar.tabs["stream"], downloads_button, top_bar.status_button, top_bar.tabs["settings"]])
 	downloads_button.focus_neighbor_bottom = downloads_button.get_path_to(f if f != null else top_bar.tabs[current])
 	downloads_button.focus_neighbor_top = downloads_button.get_path_to(downloads_button)
 	top_bar.status_button.focus_neighbor_bottom = top_bar.status_button.get_path_to(f if f != null else top_bar.tabs[current])
@@ -1024,6 +1040,46 @@ func _play(game: Dictionary) -> void:
 	session.begin(game, Library.launch(game))
 
 
+## A stream from the Stream tab: Moonlight starts, then the GameSession follows
+## it like a game (focus, Guide to home and back, quick menu, Exit game).
+func _play_stream(game: Dictionary, host_id: String, app: Dictionary) -> void:
+	if session.runs(str(game.get("key", ""))):
+		session.return_to_game()
+		return
+	var launched: Dictionary = streaming.launch(host_id, app)
+	if not bool(launched.get("ok", false)):
+		toast(str(launched.get("why", "")), "alert", "bad")
+		return
+	playing = game
+	launch_overlay.show_for(game, backdrop.current_accent())
+	_pause_motion()
+	session.begin(game, launched)
+
+
+## What the Streaming service needs from this handheld: how to run things, its
+## GPU family, and its screen (asked again whenever the Stream tab opens).
+func _streaming_ctx() -> Dictionary:
+	var prof: Dictionary = Device.profile if Device.get("profile") is Dictionary else {}
+	return {"runner": CommandRunner.new(), "home": OS.get_environment("HOME"), "path_env": OS.get_environment("PATH"),
+		"runtime_dir": OS.get_environment("XDG_RUNTIME_DIR"), "display": stream_display(),
+		"display_fn": stream_display, "gpu_family": str(prof.get("gpu_family", ""))}
+
+
+## The panel's size, top refresh rate and whether HDR is on now (display.hdr).
+func stream_display() -> Dictionary:
+	var prof: Dictionary = Device.profile if Device.get("profile") is Dictionary else {}
+	var panel: Variant = prof.get("panel")
+	var res: Array = panel.get("resolution", []) if panel is Dictionary and panel.get("resolution") is Array else []
+	var hz: Array = prof.get("panel_hz", []) if prof.get("panel_hz") is Array else []
+	var win := DisplayServer.screen_get_size() if DisplayServer.get_name() != "headless" else Vector2i(1280, 800)
+	var controls := _svc("Controls")
+	var hdr := false
+	if controls != null and controls.has_method("has") and controls.has("display.hdr"):
+		hdr = controls.value("display.hdr") == true
+	return {"width": int(res[0]) if res.size() == 2 else win.x, "height": int(res[1]) if res.size() == 2 else win.y,
+		"hz": int(hz[hz.size() - 1]) if not hz.is_empty() else 60, "hdr": hdr}
+
+
 func _on_launch_cancelled(_game: Dictionary) -> void:
 	_sound("back")
 	if session.is_active():
@@ -1032,6 +1088,8 @@ func _on_launch_cancelled(_game: Dictionary) -> void:
 
 func _on_game_started(game: Dictionary) -> void:
 	launch_overlay.finish()
+	if streaming != null:
+		streaming.set_game_running(true)
 	wiring.game_started(game, int(session.app_id))
 	if fixes != null:
 		fixes.set_game_running(true)
@@ -1040,6 +1098,8 @@ func _on_game_started(game: Dictionary) -> void:
 
 func _on_game_ended(game: Dictionary) -> void:
 	wiring.game_ended(game)
+	if streaming != null:
+		streaming.set_game_running(false)
 	if fixes != null:
 		fixes.set_game_running(false)
 	# after Profiles has put the pre-game values back (its handler runs after ours)

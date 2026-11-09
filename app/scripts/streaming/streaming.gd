@@ -63,6 +63,7 @@ var _wake_timer: Timer
 var _picks := ConfigFile.new()
 var _identity := {}        # {"cert", "key"} file paths
 var _game_running := false
+var _stream_pid := 0
 
 
 func setup(c: Dictionary) -> void:
@@ -157,6 +158,8 @@ func is_busy() -> bool:
 ## The Streaming page is showing: check the PCs now and every CHECK_INTERVAL_S.
 func set_active(on: bool) -> void:
 	_active = on
+	if on:
+		_refresh_display()
 	if _check_timer != null and _check_timer.is_inside_tree():
 		if on:
 			_check_timer.start()
@@ -839,6 +842,7 @@ func launch(id: String, app: Dictionary) -> Dictionary:
 	if not bool(h["paired"]):
 		out["why"] = T.NOT_PAIRED
 		return out
+	_refresh_display()
 	var s := resolved(id, int(app.get("id", 0)))
 	out["settings"] = s
 	var cmd: Array = Moonlight.command(moonlight, Moonlight.stream_args(str(h["address"]), str(app.get("title", "")), s))
@@ -854,6 +858,7 @@ func launch(id: String, app: Dictionary) -> Dictionary:
 			"--unit=app-steam-app%d-%d" % [app_id, now() % 100000000], "--"] + cmd
 		out["scoped"] = true
 	var pid := int(ctx["spawn"].spawn(cmd))
+	_stream_pid = maxi(pid, 0)
 	out["ok"] = pid > 0
 	out["pid"] = maxi(pid, 0)
 	out["app_id"] = app_id if (pid > 0 and (out["scoped"] or reaper != "")) else 0
@@ -873,6 +878,24 @@ func _which(name: String) -> String:
 ## The same ids Library gives games it starts itself (bit 30 set, from sha256).
 static func app_id_for(key: String) -> int:
 	return (key.sha256_text().substr(0, 8).hex_to_int() & 0x3FFFFFFF) | 0x40000000
+
+
+## Ends the stream (Exit game): stops our wrapper and, for the Flatpak, which
+## moved itself out of our scope, `flatpak kill`. The game keeps running on the
+## PC, so it can be resumed; quit_app() ends it there.
+func stop_stream() -> void:
+	if _stream_pid > 0 and bool(ctx["spawn"].running(_stream_pid)):
+		ctx["spawn"].kill(_stream_pid)
+	_stream_pid = 0
+	if str(moonlight.get("kind", "")) == "flatpak":
+		ctx["spawn"].spawn([str(moonlight["program"]), "kill", Moonlight.FLATPAK_ID])
+
+
+## The screen as it is now (HDR may have been switched since start-up).
+func _refresh_display() -> void:
+	var fn: Variant = ctx.get("display_fn")
+	if fn is Callable and fn.is_valid():
+		ctx["display"] = fn.call()
 
 
 ## Quit the app running on the PC (the stream itself ends with Exit game).
