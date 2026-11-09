@@ -8,6 +8,7 @@ extends "res://scripts/ui/device/device_panel.gd"
 ## refreshes on Device.info_updated.
 
 const BrandMark := preload("res://scripts/ui/brand_mark.gd")
+const QuickMenu := preload("res://scripts/ui/quick_menu.gd")
 const Picture := preload("res://scripts/ui/device/device_picture.gd")
 const FixTexts := preload("res://scripts/ui/texts.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
@@ -108,7 +109,7 @@ func _fill_side() -> void:
 	picture.visible = picture.texture != null
 	_device_photo_hook(col, str(d.get("id", "")))
 	# The maker's logo over the name (text only when there's no logo).
-	var maker_logo := BrandMark.rect(str(d.get("maker", d.get("vendor", ""))), 26)
+	var maker_logo := BrandMark.rect(QuickMenu.maker_name(d, str(d.get("name", ""))), 26)
 	if maker_logo != null:
 		maker_logo.name = "MakerLogo"
 		col.add_child(maker_logo)
