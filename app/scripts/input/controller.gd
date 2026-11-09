@@ -150,14 +150,16 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	if _intercepting:
-		# never leave a device in Always/Pass with nobody listening (synchronous:
-		# the worker is about to stop)
-		_intercepting = false
-		intercept.on_line = Callable()
+	var was := _intercepting
+	_intercepting = false
+	intercept.on_line = Callable()
+	# the worker finishes its queue first (a queued mode change would otherwise land
+	# after the safe mode below, review L18) ...
+	super._exit_tree()
+	if was:
+		# ... then never leave a device in Always/Pass with nobody listening
 		_set_devices_mode(MODE_NONE_SAFE, Intercept.activation_for(device_id))
 		intercept.stop_monitor()
-	super._exit_tree()
 
 
 ## Tests: fake runner and a fixture home.

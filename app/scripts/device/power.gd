@@ -352,12 +352,12 @@ func _worker() -> void:
 	while true:
 		_job_sem.wait()
 		_job_mutex.lock()
-		if _quit:
-			_job_mutex.unlock()
-			return
 		if _job_order.is_empty():  # coalesced: this post's job already ran
 			_job_mutex.unlock()
+			if _quit:
+				return
 			continue
+		# quitting: what's queued (a restore, a TDP write) still runs first (review H2)
 		var job_name: String = _job_order.pop_front()
 		var entry: Array = _jobs[job_name]
 		_jobs.erase(job_name)

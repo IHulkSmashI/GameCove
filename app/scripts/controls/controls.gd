@@ -279,7 +279,9 @@ func _worker() -> void:
 	while true:
 		_sem.wait()
 		_mutex.lock()
-		if _quit:
+		# quitting: finish what's queued first (a game's restore queued just before the
+		# quit must still be written, review H2), then stop
+		if _quit and _jobs.is_empty():
 			_mutex.unlock()
 			return
 		var job: Callable = _jobs.pop_front() if not _jobs.is_empty() else Callable()

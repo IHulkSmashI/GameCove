@@ -224,3 +224,32 @@ func test_m19_power_notices_a_resume_on_its_own_timer() -> void:
 	eq(seen[0], 1, "slept 10 minutes: resumed once")
 	eq(float(e["runner"].props[SM_TDP]["data"]), 12.0, "our TDP back after the resume")
 	_free()
+
+
+# ---- H2 (part): quitting drains the worker queues ------------------------------------------------
+
+## Quitting finishes what the workers have queued (a game's restore queued right before the quit).
+func test_h2_workers_drain_their_queue_before_quitting() -> void:
+	var Ctl := load("res://scripts/controls/control.gd")
+	var hw := {"v": 15.0}
+	var reg: Node = ControlsScript.new()
+	reg.setup({"sys_root": "/nonexistent"})
+	reg.register(Ctl.make({"id": "power.tdp", "group": "power", "kind": "slider", "min_value": 5.0, "max_value": 30.0, "step": 1.0},
+		func(_c): return "", func(_c): return hw["v"],
+		func(_c, v): OS.delay_msec(80); hw["v"] = v; return true))
+	reg.detect_all()
+	reg.apply({"power.tdp": 7.0})
+	reg.apply({"power.tdp": 9.0})
+	reg._exit_tree()
+	eq(hw["v"], 9.0, "Controls: every queued apply ran before the worker stopped")
+	reg.free()
+	var t: Dictionary = Trees.new().ally()
+	var e := _setup(t)
+	var p: Node = e["power"]
+	p._thread = Thread.new()
+	p._thread.start(p._worker)
+	p._queue("slow", func(): OS.delay_msec(100); return true)
+	p.request_set("tdp", 11.0)
+	p._exit_tree()
+	eq(float(e["runner"].props[SM_TDP]["data"]), 11.0, "Power: the queued TDP write ran before the worker stopped")
+	_free()
