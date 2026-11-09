@@ -1,6 +1,6 @@
 extends Node
 ## A real photo of the detected handheld, for About this device and the
-## first-run welcome. Only freely licensed Wikimedia Commons photos (CC0,
+## first-run welcome. Only freely licensed Commons or Flickr photos (CC0,
 ## CC BY, CC BY-SA, public domain) are used; the weekly device-photos workflow
 ## checks each license through the Commons API and publishes the converted
 ## photos plus manifest.json (sha256, size, credit) to the rolling
@@ -27,6 +27,9 @@ const MANIFEST_MAX_AGE := 7 * 24 * 3600
 const MAX_PHOTO_BYTES := 4 * 1024 * 1024
 const MAX_MANIFEST_BYTES := 512 * 1024
 const COMMONS_PAGE := "https://commons.wikimedia.org/wiki/File:"
+## Credit pages we accept: Commons files and Flickr photos (taken through
+## Openverse by the build). Same list as tools/device_photos/build.py.
+const PAGE_PREFIXES := [COMMONS_PAGE, "https://www.flickr.com/photos/"]
 
 ## http.gd node or fake_http.gd object (made in _ready unless tests set one).
 var http: Variant = null
@@ -100,10 +103,18 @@ static func license_allowed(short_name: String) -> bool:
 	return re.search(s) != null
 
 
+## True when a credit link points at a source we accept (PAGE_PREFIXES).
+static func page_allowed(url: String) -> bool:
+	for prefix in PAGE_PREFIXES:
+		if url.begins_with(prefix):
+			return true
+	return false
+
+
 # ---- manifest -------------------------------------------------------------------
 
 ## manifest.json -> {device_id: {"asset", "sha256", "size", "credit": {...}}}.
-## Entries with an unsafe asset name, a bad hash or size, a non-Commons page
+## Entries with an unsafe asset name, a bad hash or size, a page not on Commons or Flickr
 ## or a license we don't accept are dropped (the app double-checks the build).
 static func parse_manifest(text: String) -> Dictionary:
 	var out := {}
@@ -135,7 +146,7 @@ static func parse_manifest(text: String) -> Dictionary:
 			continue
 		if not license_allowed(entry["credit"]["license"]) or entry["credit"]["author"] == "":
 			continue
-		if not str(entry["credit"]["page_url"]).begins_with(COMMONS_PAGE):
+		if not page_allowed(str(entry["credit"]["page_url"])):
 			continue
 		var lu := str(entry["credit"]["license_url"])
 		if lu != "" and not lu.begins_with("https://"):

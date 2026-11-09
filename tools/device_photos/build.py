@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
 """Build the "device-photos" release: real photos of each handheld.
 
-Reads app/data/device_photos.json, re-checks every photo's license through the
-Wikimedia Commons API (extmetadata LicenseShortName must be CC0, public domain,
-CC BY or CC BY-SA; anything else is skipped with a loud warning), downloads a
-~1200 px rendition, converts it to WebP and writes the files plus
-manifest.json (sha256, size, credit) to --out.
+Reads app/data/device_photos.json, re-checks every photo's license at its
+source, downloads a ~1200 px rendition, converts it to WebP and writes the
+files plus manifest.json (sha256, size, credit) to --out. Sources:
+
+- Wikimedia Commons (default; "file"): license from the Commons API
+  (extmetadata LicenseShortName).
+- Openverse ("source": "openverse", "openverse_id"): Flickr and other photos
+  Openverse indexes. License, author and the original file URL come from
+  Openverse's image API (Flickr's own API needs a key). Only Flickr landing
+  pages are accepted, so the credit always links to the photographer's page.
+
+The license must be CC0, public domain, CC BY or CC BY-SA; anything else is
+skipped with a loud warning. Entries with any other source (YouTube frames,
+Unsplash, Pexels) can't be re-checked automatically and are skipped with a
+warning; "_manual" lists such candidates for a person to handle.
 
     python tools/device_photos/build.py --out dist [--previous prev/manifest.json]
 
@@ -34,6 +44,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 API = "https://commons.wikimedia.org/w/api.php"
 PAGE = "https://commons.wikimedia.org/wiki/File:"
+OPENVERSE = "https://api.openverse.org/v1/images/"
+FLICKR_PAGE = "https://www.flickr.com/photos/"
+# Credit links the app accepts (photo.gd PAGE_PREFIXES); keep in step.
+PAGE_PREFIXES = (PAGE, FLICKR_PAGE)
 WIDTH = 1200
 MAX_BYTES = 4 * 1024 * 1024
 BAD = (" nc", " nd", "noncommercial", "non commercial", "noderiv", "no deriv",
@@ -115,6 +129,49 @@ def commons_info(file: str) -> dict:
     }
 
 
+def openverse_license_name(lic: str, version: str) -> str:
+    """Openverse's license code + version -> a short name license_allowed() reads."""
+    lic = (lic or "").strip().lower()
+    version = (version or "").strip()
+    if lic == "cc0":
+        return "CC0"
+    if lic in ("pdm", "pd"):
+        return "Public domain"
+    if lic in ("by", "by-sa", "by-nc", "by-nd", "by-nc-sa", "by-nc-nd"):
+        return f"CC {lic.upper()} {version}".strip()
+    return lic
+
+
+def openverse_info(image_id: str) -> dict:
+    if not re.fullmatch(r"[0-9a-f-]{36}", image_id or ""):
+        return {}
+    doc = json.loads(get(OPENVERSE + image_id + "/"))
+    landing = str(doc.get("foreign_landing_url") or "")
+    return {
+        "license": openverse_license_name(doc.get("license", ""), str(doc.get("license_version") or "")),
+        "license_url": str(doc.get("license_url") or ""),
+        "non_free": False,
+        "artist": str(doc.get("creator") or ""),
+        "thumb": str(doc.get("url") or ""),
+        "page_url": landing if landing.startswith(FLICKR_PAGE) else "",
+        "mime": str(doc.get("filetype") or ""),
+    }
+
+
+def source_key(e: dict) -> tuple[str, str]:
+    """(source, id) for an entry: ("commons", file) or ("openverse", uuid)."""
+    src = str(e.get("source", "commons")).lower()
+    if src == "commons":
+        return src, str(e.get("file", ""))
+    if src == "openverse":
+        return src, str(e.get("openverse_id", ""))
+    return src, ""
+
+
+def commons_page(file: str) -> str:
+    return PAGE + urllib.parse.quote(file.replace(" ", "_"), safe="()_,-.!'")
+
+
 def to_webp(raw: bytes) -> bytes:
     from PIL import Image
     im = Image.open(io.BytesIO(raw))
@@ -154,19 +211,27 @@ def main(argv=None) -> int:
     for dev_id, e in src.items():
         if dev_id.startswith("_") or not isinstance(e, dict):
             continue
-        file = str(e.get("file", ""))
+        src, file = source_key(e)
+        if src not in ("commons", "openverse"):
+            warn(f"SKIPPED {dev_id}: source {src!r} can't be re-checked automatically; "
+                 "upload the photo to Commons first (docs/DEVICES.md)")
+            refused.append(dev_id)
+            continue
         if not file:
             continue
         if file not in built:
             try:
-                info = commons_info(file)
+                info = commons_info(file) if src == "commons" else openverse_info(file)
             except Exception as ex:  # network: keep last week's entry
                 warn(f"{dev_id}: Commons API failed for {file!r} ({ex}); keeping the previous entry if any")
                 if dev_id in prev and prev[dev_id].get("credit", {}).get("file") == file:
                     devices[dev_id] = prev[dev_id]
                 continue
+            if src == "openverse" and info and not info["page_url"]:
+                warn(f"SKIPPED {dev_id}: Openverse image {file!r} isn't from Flickr; only Flickr pages are accepted")
+                info = {}
             if not info:
-                warn(f"SKIPPED {dev_id}: {file!r} not found on Commons")
+                warn(f"SKIPPED {dev_id}: {file!r} not found ({src})")
                 refused.append(dev_id)
                 continue
             if info["non_free"] or not license_allowed(info["license"]):
@@ -190,8 +255,9 @@ def main(argv=None) -> int:
             name = asset_name(e.get("family_of") or dev_id)
             (out / name).write_bytes(data)
             built[file] = {"asset": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data),
-                           "license": info["license"], "license_url": info["license_url"] or e.get("license_url", "")}
-            time.sleep(1.0)  # be gentle with Commons
+                           "license": info["license"], "license_url": info["license_url"] or e.get("license_url", ""),
+                           "page_url": commons_page(file) if src == "commons" else info["page_url"]}
+            time.sleep(1.0)  # be gentle with Commons and Openverse
         b = built.get(file)
         if b is None:
             continue
@@ -201,7 +267,7 @@ def main(argv=None) -> int:
                 "author": str(e.get("author", "")),
                 "license": b["license"],
                 "license_url": b["license_url"] if str(b["license_url"]).startswith("https://") else "",
-                "page_url": PAGE + urllib.parse.quote(file.replace(" ", "_"), safe="()_,-.!'"),
+                "page_url": b["page_url"],
                 "file": file,
             },
         }

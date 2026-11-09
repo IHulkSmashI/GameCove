@@ -71,13 +71,15 @@ func test_manifest_parsing_drops_bad_entries() -> void:
 	traversal["asset"] = "../evil.webp"
 	var offsite := good.duplicate(true)
 	offsite["credit"]["page_url"] = "https://example.com/deck"
+	var flickr := good.duplicate(true)
+	flickr["credit"]["page_url"] = "https://www.flickr.com/photos/someone/123"
 	var no_author := good.duplicate(true)
 	no_author["credit"]["author"] = " "
 	var bad_sha := good.duplicate(true)
 	bad_sha["sha256"] = "xyz"
 	var m := PhotoSvc.parse_manifest(JSON.stringify({"devices": {"a": good, "b": nc, "c": traversal,
-		"d": offsite, "e": no_author, "f": bad_sha, "g": "junk"}}))
-	eq(m.keys(), ["a"], "only the valid entry survives")
+		"d": offsite, "e": no_author, "f": bad_sha, "g": "junk", "h": flickr}}))
+	eq(m.keys(), ["a", "h"], "only the valid entries survive (Commons and Flickr pages)")
 	eq(m["a"]["credit"]["author"], "Jane Doe", "credit kept")
 	eq(PhotoSvc.parse_manifest("not json"), {}, "garbage -> empty")
 	eq(PhotoSvc.parse_manifest("[]"), {}, "wrong shape -> empty")
@@ -94,7 +96,7 @@ func test_shipped_list_is_all_allowed() -> void:
 		var e: Dictionary = doc[id]
 		ok(ids.has(id), "%s is a known device" % id)
 		ok(PhotoSvc.license_allowed(e["license"]), "%s license" % id)
-		ok(str(e["page_url"]).begins_with(PhotoSvc.COMMONS_PAGE), "%s page" % id)
+		ok(PhotoSvc.page_allowed(str(e["page_url"])), "%s page" % id)
 		ok(str(e["author"]) != "", "%s author" % id)
 
 
