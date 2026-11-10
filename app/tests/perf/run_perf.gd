@@ -199,23 +199,35 @@ func _latency(runs: int) -> void:
 func _resume(runs: int) -> void:
 	var power: Node = world.autoload("Power")
 	var controls: Node = world.autoload("Controls")
-	var timer: Timer = power._timer
-	if timer == null:
+	# Power's check timers (one in production; the e2e world starts Power twice): the first due
+	var timers: Array = power.get_children().filter(func(n): return n is Timer and is_equal_approx(n.wait_time, power.SOURCE_CHECK_S))
+	if timers.is_empty():
 		printerr("PERF FAIL resume: Power's check timer isn't running")
 		return
 	var offset := [0.0]
 	var real_clock: Callable = power.clock
 	power.clock = func(): return [Time.get_unix_time_from_system() + offset[0], Time.get_ticks_msec()]
+	var bg: Node = world.main.get("background")
+	var real_bg_clock: Variant = bg.clock if bg != null else null
+	if bg != null:
+		bg.clock = func() -> Array: return [Time.get_unix_time_from_system() + offset[0], Time.get_ticks_msec()]
 	for i in runs:
 		# right after a check, so the jump lands well before the next one
-		await timer.timeout
-		await _wait(timer.time_left - 0.6)
+		await timers[0].timeout
+		var next := func() -> float:
+			var best := 1e9
+			for t in timers:
+				if not t.is_stopped():
+					best = minf(best, t.time_left)
+			return best
+		await _wait(float(next.call()) - 0.6)
 		var box := {"resumed": 0, "replayed": 0}
 		var on_resumed := func():
 			box["resumed"] = Time.get_ticks_usec()
 			controls.run_on_worker(func(): box["replayed"] = Time.get_ticks_usec())
 		power.resumed.connect(on_resumed, CONNECT_ONE_SHOT)
-		var due := Time.get_ticks_usec() + int(timer.time_left * 1e6)
+		var due := Time.get_ticks_usec() + int(float(next.call()) * 1e6)
+		# the device sleeps (the wall clock jumps; the monotonic one stood still)
 		offset[0] += 60.0
 		var deadline := Time.get_ticks_msec() + 20000
 		while box["replayed"] == 0 and Time.get_ticks_msec() < deadline:
@@ -230,4 +242,6 @@ func _resume(runs: int) -> void:
 		result["resume"].append(r)
 		print("PERF RESUME " + JSON.stringify(r))
 		await world.idle()
+	if bg != null:
+		bg.clock = real_bg_clock
 	power.clock = real_clock
