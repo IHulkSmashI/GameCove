@@ -84,8 +84,12 @@ static func load_cfg(path: String) -> ConfigFile:
 
 
 ## Writes `cfg` atomically. ERR_LOCKED when the file was damaged this run.
+## Always private (0600): a settings file is this user's alone, and
+## user://settings.cfg holds a key (the OpenCritic one, [metadata]) next to
+## everything else. Every write replaces the file, so a mode set once from
+## outside wouldn't last past the next setting changed: it's set here, each time.
 static func save_cfg(cfg: ConfigFile, path: String) -> Error:
-	return save_text(path, cfg.encode_to_text())
+	return save_text(path, cfg.encode_to_text(), true)
 
 
 ## Loads, calls fn(cfg) and saves, all under the lock; fn returning false skips
