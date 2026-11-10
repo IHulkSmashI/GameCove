@@ -610,3 +610,27 @@ func test_l13_saver_off_on_the_charger_uses_the_charger_choice() -> void:
 	e["reg"].set_value("power.battery_saver", false)
 	eq(float(e["runner"].props[SM_TDP]["data"]), charger_w, "the charger's own TDP, not the battery's 22 W")
 	_free()
+
+
+# ---- L35: one JSON null doesn't abort a store scan -----------------------------------------------
+
+func test_l35_json_nulls_do_not_abort_store_scans() -> void:
+	var Epic := load("res://scripts/library/stores/epic.gd")
+	var Gog := load("res://scripts/library/stores/gog.gd")
+	var Common := load("res://scripts/library/stores/common.gd")
+	eq(Epic.key_images({"metadata": {"keyImages": null}}), {}, "Epic: keyImages null")
+	var e := {"id": "x", "last_played": 0, "playtime_min": 0}
+	Common.apply_heroic_playtime(e, {"x": {"totalPlayed": null, "lastPlayed": null}})
+	eq(e["playtime_min"], 0, "Heroic playtime null")
+	var home := _mkdir("l35")
+	var root := home + "/.config/heroic"
+	DirAccess.make_dir_recursive_absolute(root + "/gog_store")
+	DirAccess.make_dir_recursive_absolute(root + "/store_cache")
+	var f := FileAccess.open(root + "/gog_store/installed.json", FileAccess.WRITE)
+	f.store_string("{\"installed\": null}")
+	f.close()
+	f = FileAccess.open(root + "/store_cache/gog_library.json", FileAccess.WRITE)
+	f.store_string("{\"games\": null}")
+	f.close()
+	eq(Gog.scan(home), [], "GOG: installed and games null: an empty scan, not an abort")
+	eq(Gog.primary_task("/nonexistent-l35", "1"), {}, "GOG task info missing")

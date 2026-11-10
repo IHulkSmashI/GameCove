@@ -36,7 +36,7 @@ static func key_images(meta: Dictionary) -> Dictionary:
 	var out := {}
 	var m = meta.get("metadata", {})
 	if m is Dictionary:
-		for img in m.get("keyImages", []):
+		for img in Common.arr(m.get("keyImages")):
 			if img is Dictionary and not out.has(img.get("type", "")):
 				out[img.get("type", "")] = img.get("url", "")
 	return out
@@ -116,7 +116,7 @@ static func scan(home: String) -> Array[Dictionary]:
 			seen[app] = true
 			var e := {
 				"store": "epic", "id": app,
-				"title": str(meta.get("app_title", meta.get("metadata", {}).get("title", app))),
+				"title": str(meta.get("app_title", Common.dict(meta.get("metadata")).get("title", app))),
 				"installed": inst is Dictionary,
 				"art": art_from_heroic(meta, cfg["heroic_root"]),
 				"last_played": 0, "playtime_min": 0,
