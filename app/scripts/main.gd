@@ -20,6 +20,7 @@ const Backdrop := preload("res://scripts/ui/backdrop.gd")
 const TopBar := preload("res://scripts/ui/top_bar.gd")
 const Toasts := preload("res://scripts/ui/toast.gd")
 const LaunchOverlay := preload("res://scripts/ui/launch_overlay.gd")
+const SteamTrip := preload("res://scripts/ui/steam_trip.gd")
 const StatusPanel := preload("res://scripts/ui/status_panel.gd")
 const Sounds := preload("res://scripts/ui/sounds.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
@@ -88,6 +89,8 @@ var hint_band: PanelContainer
 var hint_status: Label
 var toasts: VBoxContainer
 var launch_overlay: Control
+## The trip to Steam's controller settings and back (ui/steam_trip.gd).
+var steam_trip: Control
 var status_panel: PanelContainer
 var sounds: Node
 var screens := {}
@@ -294,6 +297,10 @@ func _ready() -> void:
 	status_panel.setup({})
 	status_panel.closed.connect(func(): top_bar.status_button.grab_focus())
 	add_child(status_panel)
+
+	steam_trip = SteamTrip.new()
+	add_child(steam_trip)
+	steam_trip.setup(self, _svc("Gamescope"))
 
 	launch_overlay = LaunchOverlay.new()
 	launch_overlay.cancel_requested.connect(_on_launch_cancelled)
@@ -647,6 +654,10 @@ func _on_autotune_limit(cant_reach: bool, info: Dictionary) -> void:
 
 ## Guide -> Home, QuickAccess -> quick menu, Keyboard -> search keyboard.
 func on_ui_action(action: String) -> void:
+	# Steam's controller settings are in front: the handheld's own button brings GameCove back, and does nothing else
+	if steam_trip != null and steam_trip.service.active():
+		steam_trip.service.back("guide")
+		return
 	match action:
 		"home":
 			# In a game: Guide toggles between the game and GameCove's home,
@@ -934,6 +945,8 @@ func _notification(what: int) -> void:
 		_update_timer()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_window_focused = true
+		if steam_trip != null:
+			steam_trip.service.arrived()   # back from Steam's controller settings
 		if background != null:
 			background.set_front(true)   # first: everything below runs at full speed
 		if wiring != null:
@@ -1199,6 +1212,10 @@ func _sound(kind: String) -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton or event is InputEventKey or event is InputEventJoypadMotion:
+		# Steam's controller settings are on their way, in front, or just closed: nothing here takes the pad
+		if steam_trip != null and steam_trip.blocks() and steam_trip.take(event):
+			get_viewport().set_input_as_handled()
+			return
 		# The launch splash is up: nothing under it takes the pad or the keys. The
 		# focused button under it would still get A (focus input comes before any
 		# _unhandled_input), so a blind D-pad then A started a second game and left

@@ -18,6 +18,7 @@ const KNOWN := {
 	"scripts/library/art/art_service.gd": [1, "auto fill paused while a game runs (Library.set_background_paused)"],
 	"scripts/streaming/streaming.gd": [4, "checks stop while a game or stream runs; pairing / wake polls only in a flow the user started"],
 	"scripts/system/storage.gd": [1, "mount watch only while the Storage page is open"],
+	"scripts/steam/steam_handoff.gd": [1, "looks for Steam's controller settings window, only during a trip there the user started; stopped when it ends"],
 	"scripts/steam/steam_backend.gd": [2, "polls only while an install / setting it started is watched"],
 	# one-shot, started by something the user did (or a rare event)
 	"scripts/library/library.gd": [1, "one-shot batch of library change signals"],
