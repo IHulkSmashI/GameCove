@@ -24,6 +24,8 @@ const NETWORK_CALLS := [
 		"when": "At start until the picture is saved, then weekly", "switch": "Show maker photos / Background lookups"},
 	{"who": "GitHub (firmware index), then the maker's own site", "what": "The list of the newest BIOS and firmware; the firmware file itself only when you ask for a USB drive.",
 		"when": "When you check for updates", "switch": "You start it"},
+	{"who": "Steam (insights on a game's page)", "what": "The game's app id, for players now, reviews, the Steam Deck rating, the last update and its DLC (DLC prices: also your store country). GameCove never contacts SteamDB; it only shows a QR code for it.",
+		"when": "When you open a Steam game's page; players at most every 10 minutes, the rest every 12 hours", "switch": "Background lookups (prices: Look up deals and prices)"},
 	{"who": "Steam store (game details)", "what": "The Steam app id of a library game (or of the Steam edition of a GOG, Epic or Amazon game) whose description, genres, screenshots or Metacritic score are missing. Cached for a week.",
 		"when": "In the background after start, one request every 2 s; at once for the game page you open", "switch": "Look up game details (+ Background lookups for the background fill)"},
 	{"who": "OpenCritic (through RapidAPI)", "what": "A game's title, then its OpenCritic id, with your own API key.",

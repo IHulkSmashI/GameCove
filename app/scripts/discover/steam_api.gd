@@ -31,7 +31,7 @@ static func items_url(appids: Array, country: String) -> String:
 	var body := {
 		"ids": ids,
 		"context": {"language": "english", "country_code": country.to_upper()},
-		"data_request": {"include_assets": true, "include_release": true},
+		"data_request": {"include_assets": true, "include_release": true, "include_reviews": true},
 	}
 	return API + "IStoreBrowseService/GetItems/v1/?input_json=" + JSON.stringify(body).uri_encode()
 
@@ -131,7 +131,8 @@ static func release_from(rel: Variant, is_coming_soon: bool) -> Dictionary:
 ## GetItems answer -> {appid: info}. info = {"appid", "title", "price": float or
 ## null (null: free, not for sale or unknown), "regular_price", "savings_pct",
 ## "price_text", "regular_text", "sale_ends_at": unix or null, "art": {...},
-## "release": {...}, "free": bool}. Prices are in the currency of the
+## "release": {...}, "free": bool, "reviews": {label, percent, count, score} or
+## {} (the review summary rides along on the same call; insights_api.gd)}. Prices are in the currency of the
 ## country asked for. Apps Steam doesn't know (success != 1) are left out.
 static func parse_items(body: Variant) -> Dictionary:
 	var d = _json(body)
@@ -148,6 +149,7 @@ static func parse_items(body: Variant) -> Dictionary:
 			"sale_ends_at": null, "free": bool(it.get("is_free", false)),
 			"art": art_from_assets(it.get("assets")),
 			"release": release_from(it.get("release"), bool(it.get("is_coming_soon", false))),
+			"reviews": preload("res://scripts/steam/insights_api.gd").reviews_from(it),
 		}
 		var bpo = it.get("best_purchase_option")
 		if bpo is Dictionary and bpo.has("final_price_in_cents"):

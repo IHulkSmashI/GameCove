@@ -32,6 +32,11 @@ static func deal_badges(deal: Dictionary, currency: String, now: int) -> Array:
 		out.append({"kind": "ends", "text": e, "tone": "warn", "icon": "clock"})
 	if deal.get("keyshop", false):
 		out.append({"kind": "keyshop", "text": T.KEYSHOP, "tone": "warn", "icon": "alert"})
+	# Steam's review summary (it comes with the Steam price call, nothing extra is asked)
+	var rv = deal.get("reviews")
+	if rv is Dictionary and not rv.is_empty():
+		var IA := preload("res://scripts/steam/insights_api.gd")
+		out.append({"kind": "reviews", "text": IA.review_short(rv), "tone": IA.review_tone(rv), "icon": "star"})
 	return out
 
 
