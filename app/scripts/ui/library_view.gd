@@ -5,7 +5,8 @@ extends RefCounted
 ## [store id, button label]. "" means every store.
 const STORES := [["", "All"], ["steam", "Steam"], ["epic", "Epic"], ["gog", "GOG"], ["amazon", "Amazon"]]
 ## "stream": apps streamed from a PC (Stream tab), not a store of the Library.
-const STORE_NAMES := {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "amazon": "Amazon", "stream": "PC"}
+## "app": desktop apps (scripts/library/apps.gd), not a store of the Library either.
+const STORE_NAMES := {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "amazon": "Amazon", "stream": "PC", "app": "App"}
 const RECENT_MAX := 12
 
 

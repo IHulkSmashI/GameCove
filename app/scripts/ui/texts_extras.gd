@@ -100,3 +100,18 @@ const AUTO_APPS_HELP := {
 	false: "Off: apps update when you press Update here.",
 	true: "Once a day, when no game is running, Flatpak apps update quietly in the background. Needs Background lookups on, and waits for the charger or Wi-Fi that isn't metered.",
 }
+
+# ---- apps -------------------------------------------------------------------------------
+const APPS_TITLE := "Apps"
+const APPS_SHELF := "Apps"
+const APPS_ALL := "All apps"
+const APPS_ALL_LINE := "Every app on this handheld"
+const APPS_LINE := "Desktop apps, full screen. Pin the ones you use to Home with X."
+const APPS_LOADING := "Finding your apps…"
+const APPS_EMPTY := "No apps found. Apps you install from Flathub or your system show up here."
+const APPS_PIN := "Pin to Home"
+const APPS_UNPIN := "Unpin"
+const APPS_PINNED := "%s pinned to Home"
+const APPS_UNPINNED := "%s unpinned"
+const APPS_PROMPT_OPEN := "Open"
+const APPS_FAILED := "%s didn't start"

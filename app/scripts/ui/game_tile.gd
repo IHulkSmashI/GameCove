@@ -137,6 +137,7 @@ func setup(g: Dictionary, with_badges := true, tile := SIZE, label_under := true
 	fallback.monogram = true
 	Kit.fill(fallback)
 	card.add_child(fallback)
+	_add_app_icon(g, tile)
 
 	art = TextureRect.new()
 	art.name = "Cover"
@@ -266,6 +267,41 @@ func setup(g: Dictionary, with_badges := true, tile := SIZE, label_under := true
 		_show_art(cached, false)
 
 
+## Desktop apps (store "app") have no cover: their icon sits in the middle of
+## the generated card instead of the monogram, loaded off the main thread.
+var app_icon: TextureRect
+
+
+func _add_app_icon(g: Dictionary, tile: Vector2) -> void:
+	var a: Variant = g.get("art", {})
+	var icon := str(a.get("icon", "")) if a is Dictionary else ""
+	if icon == "" or not ArtCache.usable(icon):
+		return
+	fallback.monogram = false
+	app_icon = TextureRect.new()
+	app_icon.name = "AppIcon"
+	app_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	app_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	app_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var side := roundf(minf(tile.x * 0.52, 132.0))
+	app_icon.anchor_left = 0.5
+	app_icon.anchor_right = 0.5
+	app_icon.anchor_top = 0.40
+	app_icon.anchor_bottom = 0.40
+	app_icon.offset_left = -side / 2.0
+	app_icon.offset_right = side / 2.0
+	app_icon.offset_top = -side / 2.0
+	app_icon.offset_bottom = side / 2.0
+	card.add_child(app_icon)
+	var me: WeakRef = weakref(self)
+	var tex := ArtCache.request("logo", icon, func(t: Texture2D):
+		var o: Object = me.get_ref()
+		if o != null and is_instance_valid(o.app_icon):
+			o.app_icon.texture = t, self)
+	if tex != null:
+		app_icon.texture = tex
+
+
 ## Tile size for a row `avail_w` px wide: PER_ROW covers across, never
 ## smaller than SIZE (the 1280x800 layout), 2:3-ish like SIZE.
 static func size_for(avail_w: float, gap := 16.0) -> Vector2:
@@ -393,6 +429,8 @@ func _update_pills() -> void:
 
 ## The mono line under the title: store and playtime, or "Not installed".
 static func sub_text(g: Dictionary) -> String:
+	if g.has("sub"):
+		return str(g["sub"])   # apps: "Flatpak", "App", "Every app on this handheld"
 	var parts: Array[String] = [View.store_name(String(g.get("store", "")))]
 	if not g.get("installed", false):
 		parts.append("Not installed")

@@ -36,6 +36,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | Avahi (avahi-browse) | Finding PCs on the network (`_nvstream._tcp`) | LGPL-2.1-or-later |
 | curl | The Stream tab's HTTP(S) calls with Moonlight's client certificate | curl (MIT-style) |
 | Flathub | Moonlight's Flatpak, installed for the user from the Stream tab or the installer | — |
+| freedesktop.org Desktop Entry and Icon Theme specs | Reading installed apps (.desktop files, Exec field codes, hicolor icons) for the Apps view | — |
 | InputPlumber device configs and capability maps (ShadowBlip) | DMI matches, special-button and paddle capabilities, IMU and LED presence for every handheld in `devices.json` / `buttons.gd`; D-Bus intercept mode documented in DEVICES.md | GPL-3.0 |
 | PowerStation APU and DMI-override databases (ShadowBlip) | TDP ranges and boost in `devices.json` and its `cpus` fallback table | GPL-3.0 |
 | steamos-manager device files (Valve, Collabora, Igalia) | DMI ids, TDP / fan / charge-limit methods per handheld | MIT |

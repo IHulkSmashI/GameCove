@@ -115,6 +115,10 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 - **Change artwork.** Pick any cover, banner, logo or icon from SteamGridDB's community for any game, Steam or not (it
   can update Steam's own library art too). Free with your own SteamGridDB key, which setup gets you in about a minute.
 - **Store sign-in with your phone.** Scan a QR code and sign in there. No typing passwords on the handheld.
+- **Your desktop apps too.** Browsers, Discord, Spotify, a video player, emulator front-ends: every Flatpak and desktop
+  app on the handheld (minus settings tools and terminal programs) in an **Apps** view, reached from the Library's
+  header or Home. Pin your favourites to Home's Apps shelf with X; they open full screen like a game, with the quick
+  menu over them, and closing one brings you back.
 - **Four themes:** Cove, Midnight, Sunset and Light.
 
 <table>

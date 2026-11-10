@@ -13,6 +13,7 @@ const SIZE_TRUSTING := ["get_as_text()", "get_file_as_string(", "get_as_utf8_str
 ## "<script path>|<text on the line>": why that read is a regular file.
 const REGULAR_FILES := {
 	"res://scripts/streaming/streaming.gd|JSON.parse_string(FileAccess.get_file_as_string(path))": "GameCove's own JSON in its data folder",
+	"res://scripts/library/apps.gd|parse_desktop(FileAccess.get_file_as_string(abs.path_join(f))": ".desktop files under share/applications",
 	"res://scripts/controls/providers/controller.gd|\"gyro_3d\" in FileAccess.get_file_as_string(f)": "InputPlumber override under /etc",
 	"res://scripts/controls/providers/controller.gd|FileAccess.get_file_as_string(str(ctx.get(\"sys_root\", \"\")) + CLAW8EX_OVERRIDE)": "InputPlumber override under /etc",
 	"res://scripts/controls/input/hhd_client.gd|var t := FileAccess.get_file_as_string(f)": "hhd token file",
