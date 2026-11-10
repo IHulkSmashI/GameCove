@@ -130,6 +130,7 @@ func test_card_rows_and_sheet_actions() -> void:
 	c.act(c.state["devices"][1], "connect")
 	eq(notes[-1], [TX.BT_DONE["connect"] % "Galaxy Buds", "good"], "connected toast")
 	eq(c.rows[BUDS].value_label.text, TX.BT_CONNECTED, "row reads again")
+	ok(c._had_state and c._was_on.has(BUDS), "remembered as on (its row popped this once)")
 	c.act(c.state["devices"][2], "pair")
 	eq(notes[-1], [TX.BT_DONE["pair"] % "JBL Flip 6", "good"], "paired")
 	bz.ok_calls["Connect"] = false
