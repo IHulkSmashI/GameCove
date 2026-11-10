@@ -237,6 +237,20 @@ func test_heroic_time_is_not_a_fallback_for_another_folder() -> void:
 	w["s"].before_launch(w["gog"], func(r): got.append(r))
 	ok(str(w["calls"][-1]).contains("--ts 0 "), "our own folder: Heroic's time isn't used (%s)" % str(w["calls"][-1]))
 	_done(w)
+	# the folder Heroic itself syncs: its time is where we start, so that game isn't a conflict at first
+	var h := _world("heroic_ts_own")
+	_json(h["gog"]["heroic_root"].path_join("gog_store/saveTimestamps.json"), {"1207": {"saves": "1762050000.0"}})
+	_json(h["gog"]["heroic_root"].path_join("GamesConfig/1207.json"), {"1207": {"gogSaves": [{"name": "saves", "location": h["gsaves"]}]}})
+	Fakes.put(h["gsaves"].path_join("slot1.sav"), "progress", T0)
+	h["gog_cloud"].seed("saves", "slot1.sav", "progress", T0 + 10)
+	h["s"].before_launch(h["gog"], func(_r): pass)
+	ok(str(h["calls"][-1]).contains("--ts 1762050000.0 "), "Heroic's folder: Heroic's time")
+	eq(h["s"].status(h["gog"])["state"], "synced", "and no conflict")
+	# once we dropped ours (a new prefix), Heroic's is never picked up again
+	h["s"].forget("gog:1207")
+	h["s"].before_launch(h["gog"], func(_r): pass)
+	ok(str(h["calls"][-1]).contains("--ts 0 "), "after a forget: never Heroic's again")
+	_done(h)
 
 
 ## An upload that would delete cloud files this handheld doesn't have keeps a copy of the
