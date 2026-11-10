@@ -70,10 +70,16 @@ costs far more:
   read only when their page opens or you press something: no timers. GE-Proton won't start an
   install while a game runs, and one already running carries on at nice 19 and idle I/O.
 - **Collections and emulation** add no timer. Steam's collections file, Steam ROM Manager's
-  `shortcuts.vdf`, EmuDeck / RetroDECK / ES-DE settings, the ROM folder counts and ES-DE's
-  gamelists are read on the Library's scan thread: at start, after a rescan, and once more
-  (the emulation entries only) when ES-DE, RetroDECK or an emulated game ends, to add its
-  play time. Nothing of it runs while a game is in front.
+  `shortcuts.vdf`, EmuDeck / RetroDECK / ES-DE settings, the ROM folders and ES-DE's
+  gamelists and downloaded art are read on the Library's scan thread: at start, after a rescan,
+  when the Library or the Emulation page opens (at most every 20 s, never while a game runs),
+  and once more (the emulation entries only) when ES-DE, RetroDECK or an emulated game ends, to
+  add its play time. Nothing of it runs while a game is in front.
+- **Thousands of ROMs.** The ROM list is cached per system folder with every folder's
+  modification time (`user://emu/roms.cache`): a later scan only compares those times. A rescan
+  that finds what's already shown redraws nothing. Home's shelves hold 60 tiles at most and the
+  Library grid makes its tiles 140 at a time as you scroll. Measured with a 160-system,
+  5,440-ROM folder (e2e `suite_emulation`, headless, 2-core box): see "ROM folders" below.
 - **Cloud saves** run before a launch and after a game ends, never during one. **Battery
   history** writes one small file at game start and end, sleep, wake and the charger (a few
   sysfs reads each); **Sleep at low battery** reacts to Power's 15 s check. None adds a timer;
@@ -130,6 +136,22 @@ the hint bar (under the scrim) alone. Opening still waits for the main loop's sl
 the menu's first frame runs at full speed (`set_menu`).
 
 To be measured again on real hardware.
+
+## ROM folders
+
+A 160-system, 5,440-ROM EmuDeck folder (e2e `suite_emulation`, headless, 2-core box, measured twice):
+
+| | before (every tile at once) | now |
+| --- | --- | --- |
+| Library rescan, every store, on its thread | - | 1.4-1.6 s (the ROM part ~0.25 s cached, ~0.8 s first) |
+| Library opened on Filter > Emulation | - | 360-700 ms |
+| Godot's own memory with the 5,440 games and the Library open | - | 270 MB (peak 335 MB) |
+| Process memory (RSS), peak | over 4 GB, killed | 1.9 GB (250 MB with an empty library; the rest isn't Godot's own allocations, to be checked on a device) |
+
+The first numbers had every tile made at once (Home's All games shelf and the Library grid):
+the app ran out of memory. Now Home's shelves hold 60 tiles and the Library grid makes 140 at a
+time as focus nears the end (LT / RT letter jumps make what they land on). None of this runs
+behind a game: the rescan waits until the game ends.
 
 ## Nothing waits on a slow job
 

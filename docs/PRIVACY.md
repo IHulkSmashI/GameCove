@@ -117,9 +117,14 @@ art your games are missing (row 9).
   `~/.local/share/Steam/userdata/<account>/config/cloudstorage/cloud-storage-namespace-1.json` (the account that
   signed in last) and Steam ROM Manager's games from `config/shortcuts.vdf` in the same folder. GameCove never writes
   either file.
-- The Emulation page reads EmuDeck's `~/.config/EmuDeck/settings.sh`, RetroDECK's `retrodeck.cfg` /
-  `retrodeck.json`, ES-DE's `es_settings.xml`, `es_systems.xml` and `gamelist.xml` files, and counts the files in the
-  ROM folders (it doesn't open them). It never writes their files and never downloads or bundles games or BIOS files.
+- The Emulation page and the Library read EmuDeck's `~/.config/EmuDeck/settings.sh`, RetroDECK's `retrodeck.cfg` /
+  `retrodeck.json`, ES-DE's `es_settings.xml`, `custom_systems/es_systems.xml`, `custom_systems/es_find_rules.xml` and
+  `gamelist.xml` files, list the files in the ROM folders they point at (names and folder times; a `.m3u` playlist is
+  read for its disc names, a `.desktop` shortcut for its command, an `%INJECT%` file ES-DE's command names), and list
+  ES-DE's `downloaded_media` folder for art. ROMs themselves are never opened. What was found is cached on the device
+  in `user://emu/roms.cache` and the "Show emulated games" switch in `user://emulation.json`. Nothing is sent
+  anywhere, no art is looked up online for a ROM, and GameCove never writes their files and never downloads or bundles
+  games or BIOS files.
   Its EmuDeck QR code is drawn on the handheld; showing it contacts nothing.
 
 ## Files GameCove writes for cloud saves and battery history

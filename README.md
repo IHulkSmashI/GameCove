@@ -43,8 +43,9 @@ a script or a Windows app for is built in.
 - 🔥 **Upscaling and frame generation picked for your chip:** XeSS and FSR 4 on Intel's XMX cores, FSR 4 and 3.1 on
   AMD, Lossless Scaling frame generation on anything, with low latency on by default.
 - 🛠️ **Fixes for your exact model,** applied at install, each with one line on what it does and an **Undo**.
-- 🕹️ **Emulation with EmuDeck:** your ROMs show up as games with their art and console, and ES-DE, EmuDeck and
-  Steam ROM Manager open from one Emulation page. Favourites, hidden games and collections work for every store.
+- 🕹️ **Emulation with EmuDeck:** every ROM in your ROM folders is a real game in the Library, like your Steam games:
+  ES-DE's art and details, its own page, Play, play time, filters by console. ES-DE, EmuDeck and Steam ROM Manager
+  open from one Emulation page. Favourites, hidden games and collections work for every store.
 - 🎯 **Profiles per game and per power source.** Change it in a game and it's saved for that game, with different
   values on battery and plugged in.
 - 🏷️ **Discover:** deals in your real local prices, wishlist price alerts and a release calendar.
@@ -156,12 +157,21 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 GameCove works with what EmuDeck (or RetroDECK, or ES-DE on its own) already set up, so your console games live in the
 same interface as everything else.
 
-- **Your ROMs in the library.** Steam ROM Manager's games show up as games, with the art it picked, a badge for the
-  console, and play time. They start through Steam, exactly as Steam starts them.
-- **One Emulation page** (Library > Filter > Emulation page, or ES-DE's tile): open ES-DE or RetroDECK full screen
-  like a game (the quick menu works over it), open EmuDeck for emulator updates and settings, and **Add or update ROMs
-  in the library** with Steam ROM Manager. It shows your systems with how many games each has, and what you played
-  last in ES-DE.
+- **Every ROM is a game.** We read every ROM folder your setup points at (EmuDeck's, also on an SD card, ES-DE's own,
+  RetroDECK's) and list each game the way ES-DE does: one entry per game (a `.m3u` for its discs, a `.cue` for its
+  tracks, a `Game.ps3` folder as one game), a clean title ("Super Game (USA) [!]" reads "Super Game"), ES-DE's
+  description, developer, genres, players and rating from its `gamelist.xml`, and the box art, fan art and marquee
+  ES-DE downloaded. No art yet? A card in the console's colours with its name on it.
+- **Plays the way your setup plays it.** Play starts the emulator ES-DE would pick (your alternative emulator for the
+  system or the game included) through EmuDeck's own launcher scripts, RetroDECK's command line, or ES-DE's command,
+  in its own scope like any game: the quick menu, sleep, recording and play time all work.
+- **Like your Steam games.** Filter > Emulation, then any console; search finds ROM titles; favourites, hidden games
+  and collections work (ES-DE's favourites and hidden games are where we start; your changes stay ours); what you
+  played last is on Home. A game Steam ROM Manager also added to Steam shows once.
+- **One Emulation page** (Library > Filter > Emulation page, or ES-DE's tile): every console with its game count
+  (pick one and the Library opens on it), what you played last, each ROM folder, open ES-DE or RetroDECK full screen
+  like a game, open EmuDeck for emulator updates and settings, and add ROMs to Steam too with Steam ROM Manager.
+  Settings > Stores > **Show emulated games in the Library** turns the ROM games off.
 - **Nothing installed yet?** The page shows a QR code to emudeck.com and three short steps.
 - GameCove never downloads or ships games or BIOS files. Play backups of games you own.
 
