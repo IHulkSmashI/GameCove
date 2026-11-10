@@ -33,9 +33,10 @@ costs far more:
 | write syscalls/min | 34 000 | 34 000 | **7 500** |
 
 - Quick menu over a game (the handheld's button arriving the way InputPlumber's intercept
-  delivers it, at a random moment of the main loop's sleep): median 57 ms, worst 99 ms over
-  15 presses (before: median 65 ms, worst 116 ms). Most of it is building the menu; the
-  sleep adds at most 33 ms.
+  delivers it, at a random moment of the main loop's sleep, to the menu's first frame):
+  see "The quick menu over a game" below. Now a median of ~20-30 ms headless, worst ~45 ms,
+  and still under 50 ms with a CPU hog on both cores; most of what's left is the main loop's
+  sleep behind the game (at most 33 ms).
 - Sleep and wake: from Power's resume check being due to `resumed` (TDP, charge limit put
   back) 7 ms, and to the controls' replay done 8 ms, worst of 5, the same as before (7 ms).
 - Home sitting idle draws nothing (0.2 frames/s: the clock and battery labels); the slow
@@ -84,11 +85,51 @@ costs far more:
   controller batteries (UPower) are read on events while GameCove is in front, never behind
   a game. The Send to phone page runs per frame only while its code shows on screen.
 
+- **The quick menu's This game** is built once when a game starts and brought up to date
+  once when the game's window takes the screen, then waits hidden. Hidden, its rows do no
+  work: a change behind the game (Auto TDP moving the TDP, say) only marks the row out of
+  date, and it reads the value when the menu shows it.
+
 `tests/e2e/suite_perf.gd` fails if the main loop runs more than 50 iterations or 70
 main-thread wake-ups a second behind a game, a Timer outside that list runs there, the
-quick menu takes over 250 ms, or a resume while throttled is handled later than 60 ms after
+quick menu takes over 250 ms at worst or over 100 ms for the median of 10 presses, the
+closed menu's rows do work on a change behind the game, or a resume while throttled is handled later than 60 ms after
 Power's check is due. `tests/test_timer_lint.gd` makes every new Timer say what it does
 behind a game.
+
+## The quick menu over a game
+
+It has to feel instant. Measured headless on a 2-core box (`suite_perf.gd`, 10 presses,
+button event to the menu's first frame), with `open()` instrumented step by step:
+
+| | before | now |
+| --- | --- | --- |
+| press to first frame, median / worst | 54 / 83 ms | 21 / 40 ms |
+| the same, with a CPU hog on both cores | 136 / 184 ms | 30 / 49 ms |
+| `open()` in all, median | 28 ms (91 loaded) | 3.4 ms (2.9 loaded) |
+| Model.set_game (every row re-read) | 10 ms | 0.3 ms |
+| building This game | 12 ms | 0.4 ms (shown as kept) |
+| first focus (rebuilt the hint bar under the scrim) | 4 ms | 0.5 ms |
+| waiting out the main loop's sleep behind the game | 0-33 ms | 0-33 ms |
+
+No process or D-Bus call runs when it opens: the controller batteries (UPower) are read on
+a worker after it shows, Now playing and per-app volume are on the Audio tab and read on
+the Controls worker when that tab opens, the Record row's state is the Recording service's
+own state plus a file check, and the battery pill reads two sysfs files (all of `refresh_live`
+is 0.5 ms).
+
+What changed: This game (the tab the menu always opens on) lives in its own box and is kept,
+hidden, between opens and while another tab shows; it is built again only when something it
+is built from changes (the game, its own settings switch, Favourite, the game starting, the
+theme). `main.gd` builds it when a game starts and lets its rows catch up once when the
+game takes the screen. Hidden control rows only mark themselves out of date
+(`control_view.gd`, `control_list.gd`), so nothing runs for them behind the game, and the
+same game again no longer makes every row read itself. Focus moving inside the menu leaves
+the hint bar (under the scrim) alone. Opening still waits for the main loop's sleep to end
+(BackgroundMode, at most 33 ms): Godot's sleep can't be cut short from another thread, and
+the menu's first frame runs at full speed (`set_menu`).
+
+To be measured again on real hardware.
 
 ## Nothing waits on a slow job
 
