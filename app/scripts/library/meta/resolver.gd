@@ -59,6 +59,8 @@ func _ready() -> void:
 	_timer.one_shot = true
 	_timer.timeout.connect(_next)
 	add_child(_timer)
+	# game details nobody refreshed in a year (games long gone from the library)
+	preload("res://scripts/system/cache_prune.gd").prune_later(abs_dir(), 365 * 86400)
 
 
 func _now() -> int:

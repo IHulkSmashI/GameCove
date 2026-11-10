@@ -68,6 +68,8 @@ func _ready() -> void:
 	_timer.one_shot = true
 	_timer.timeout.connect(_auto_next)
 	add_child(_timer)
+	# picker thumbnails are only for browsing: a month is plenty
+	preload("res://scripts/system/cache_prune.gd").prune_later(_abs(thumbs_dir), 30 * 86400)
 
 
 func _abs(p: String) -> String:
