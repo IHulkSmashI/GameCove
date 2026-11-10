@@ -164,6 +164,25 @@ func test_cancelled_launch_that_shows_up_late_is_closed_again() -> void:
 	await w.idle()
 
 
+## High 4: Play from Home, the game takes the screen, Guide: Home is there to see.
+func test_home_is_visible_after_guide_in_a_game_launched_from_home() -> void:
+	var m: Control = w.main
+	await _press_play(GAME_A)
+	ok(m.home.modulate.a < 0.01, "Home stepped back under the splash")
+	_set_focusable(int(GAME_A["id"]), true)
+	ok(await until(func(): return m.session.phase == "running", 4000), "the game's window shows")
+	await w.idle()
+	ok(not m._window_focused, "the game has the screen")
+	await guide()
+	await w.idle()
+	eq(_base(), [413091, 769], "Guide: home in front")
+	eq(m.current, "home", "on Home")
+	eq(m.home.modulate.a, 1.0, "and Home is visible")
+	eq(m.home.position.y, 0.0, "in place")
+	ok(m.home.is_visible_in_tree(), "shown")
+	await end_game()
+
+
 
 ## High 7: an emulated game Steam ROM Manager added runs under Steam (store
 ## "emu", shortcut true). Exit game stops Steam's launch of it, by the shortcut's id.

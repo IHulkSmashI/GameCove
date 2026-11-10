@@ -916,6 +916,11 @@ func _notification(what: int) -> void:
 			wiring.home_in_front(false)
 		if launch_overlay != null:
 			launch_overlay.finish()
+			# The screen that stepped back under the splash is back at once (finish()
+			# here doesn't say `revealing`): Guide in the game shows this screen long
+			# before the game ends, and it used to be there with alpha 0, focus
+			# moving over tiles nobody could see.
+			_launch_restore()
 		# the game took the screen: the quick menu's This game catches up with
 		# what changed since it started, once, so the first press is quick
 		if session != null and session.is_active() and not playing.is_empty() and quick_menu != null \
@@ -1575,6 +1580,18 @@ func _launch_reveal() -> void:
 	Motion.to(n, "modulate:a", 1.0, launch_overlay.BACK_S)
 
 
+## The screen that stepped back under the splash, in place and shown, at once
+## (no tween: this also runs as the game takes the screen, and nothing of ours
+## animates behind a game).
+func _launch_restore() -> void:
+	var n := _receded
+	_receded = null
+	if n == null or not is_instance_valid(n):
+		return
+	Motion.to(n, "position:y", 0.0, 0.0)
+	Motion.to(n, "modulate:a", 1.0, 0.0)
+
+
 ## Where the launch zoom starts: the art Play was pressed on (Home's hero, the
 ## game page's hero, the focused cover). {} = it grows from the middle.
 func _launch_source(game: Dictionary) -> Dictionary:
@@ -1702,10 +1719,7 @@ func _on_game_ended(game: Dictionary) -> void:
 ## Coming back from a game: the screens settle in from slightly smaller.
 func _return_home() -> void:
 	_resume_motion()
-	if _receded != null and is_instance_valid(_receded):
-		Motion.to(_receded, "position:y", 0.0, 0.0)
-		Motion.to(_receded, "modulate:a", 1.0, 0.0)
-	_receded = null
+	_launch_restore()
 	_screen_layer.pivot_offset = size / 2.0
 	_screen_layer.scale = Vector2.ONE * (1.0 if Motion.reduce else 0.97)
 	_screen_layer.modulate.a = 0.0
