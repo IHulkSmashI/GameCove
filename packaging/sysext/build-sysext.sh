@@ -18,7 +18,8 @@
 #
 # Build the gyro fix's HID-BPF object first (sh fixes/claw8ex-gyro/bpf/build-bpf.sh);
 # it is copied in with fixes/. .github/workflows/release.yml does both.
-#   --session-src DIR  unpacked gamescope-session tree (else downloaded from GitHub)
+#   --session-src DIR  gamescope-session tree (else fetched with git at SESSION_COMMIT); its files must
+#                      match gamescope-session.sha256 (or SESSION_SUMS)
 #   --out DIR          where to write gamecove.raw (default ./dist)
 #   --tree-only        stop after building the file tree (no mksquashfs)
 #
@@ -41,6 +42,9 @@ set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 SESSION_COMMIT="${SESSION_COMMIT:-08e65a62ed3d7acc6ae17db637091d402a55ae2a}"
+SESSION_REPO="${SESSION_REPO:-https://github.com/OpenGamingCollective/gamescope-session.git}"
+# sha256 of each file taken from the session tree (review M6); a different SESSION_COMMIT needs its own list
+SESSION_SUMS="${SESSION_SUMS:-$HERE/gamescope-session.sha256}"
 # _any: the image holds no libraries tied to a SteamOS release, so don't break on
 # every OS update (a VERSION_ID match would). Override for a stricter build.
 SYSEXT_ID="${SYSEXT_ID:-_any}"
@@ -73,11 +77,12 @@ trap 'rm -rf "$work"' EXIT
 tree="$work/gamecove"
 
 if [ -z "$session_src" ]; then
-	url="https://github.com/OpenGamingCollective/gamescope-session/archive/$SESSION_COMMIT.tar.gz"
-	echo "Downloading gamescope-session $SESSION_COMMIT"
-	curl -fsSL "$url" -o "$work/session.tar.gz"
-	mkdir -p "$work/session"
-	tar -xzf "$work/session.tar.gz" -C "$work/session" --strip-components=1
+	# by git at the exact commit (GitHub's archive tarballs aren't byte-stable, so they can't be pinned)
+	echo "Fetching gamescope-session $SESSION_COMMIT"
+	git init -q "$work/session"
+	git -C "$work/session" fetch -q --depth 1 "$SESSION_REPO" "$SESSION_COMMIT" || die "couldn't fetch $SESSION_REPO at $SESSION_COMMIT"
+	git -C "$work/session" -c advice.detachedHead=false checkout -q FETCH_HEAD
+	[ "$(git -C "$work/session" rev-parse HEAD)" = "$SESSION_COMMIT" ] || die "$SESSION_REPO gave another commit than $SESSION_COMMIT"
 	session_src="$work/session"
 fi
 [ -f "$session_src/usr/bin/gamescope-session-plus" ] || die "$session_src is not a gamescope-session tree"
@@ -91,12 +96,22 @@ SESSION_FILES="usr/bin/gamescope-session-plus
 usr/share/gamescope-session-plus/gamescope-session-plus
 usr/share/gamescope-session-plus/device-quirks
 usr/lib/systemd/user/gamescope-session-plus@.service"
-for f in $SESSION_FILES; do
+# every file taken, and LICENSE, must match SESSION_SUMS (review M6)
+[ -f "$SESSION_SUMS" ] || die "no checksum list $SESSION_SUMS"
+for f in $SESSION_FILES LICENSE; do
+	want="$(awk -v n="$f" '$1 !~ /^#/ && $2 == n { print $1; exit }' "$SESSION_SUMS")"
+	case "$want" in
+	[0-9a-f]*) [ "${#want}" -eq 64 ] || die "$SESSION_SUMS: bad sha256 for $f" ;;
+	*) die "$SESSION_SUMS has no sha256 for $f" ;;
+	esac
 	[ -f "$session_src/$f" ] || die "$session_src has no $f"
+	[ "$(sha256sum "$session_src/$f" | cut -d ' ' -f 1)" = "$want" ] || die "$f doesn't match its pinned sha256 (gamescope-session $SESSION_COMMIT); not building"
+done
+for f in $SESSION_FILES; do
 	install -D -m "$(if [ -x "$session_src/$f" ]; then echo 0755; else echo 0644; fi)" "$session_src/$f" "$tree/$f"
 done
 mkdir -p "$tree/usr/share/licenses/gamescope-session"
-[ -f "$session_src/LICENSE" ] && cp "$session_src/LICENSE" "$tree/usr/share/licenses/gamescope-session/"
+cp "$session_src/LICENSE" "$tree/usr/share/licenses/gamescope-session/"
 
 # GameCove
 install -Dm0755 "$app/gamecove.x86_64" "$tree/usr/lib/gamecove/gamecove.x86_64"

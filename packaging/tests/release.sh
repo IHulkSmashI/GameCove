@@ -55,7 +55,11 @@ printf '#!/bin/sh\n' >"$T/ss/usr/bin/gamescope-session-plus"
 printf '#!/bin/bash\n' >"$T/ss/usr/share/gamescope-session-plus/gamescope-session-plus"
 echo quirks >"$T/ss/usr/share/gamescope-session-plus/device-quirks"
 printf '[Unit]\n' >"$T/ss/usr/lib/systemd/user/gamescope-session-plus@.service"
-if sh "$REPO/packaging/sysext/build-sysext.sh" --app "$T/app" --session-src "$T/ss" --out "$T/sx" --tree-only >"$T/out" 2>&1; then ok; else bad "sysext tree: $(cat "$T/out")"; fi
+echo MIT >"$T/ss/LICENSE"
+# a fake session tree: its own checksum list (build-sysext.sh checks every file against one, review M6)
+(cd "$T/ss" && sha256sum usr/bin/gamescope-session-plus usr/share/gamescope-session-plus/gamescope-session-plus \
+	usr/share/gamescope-session-plus/device-quirks usr/lib/systemd/user/gamescope-session-plus@.service LICENSE) >"$T/ss.sums"
+if SESSION_SUMS="$T/ss.sums" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$T/app" --session-src "$T/ss" --out "$T/sx" --tree-only >"$T/out" 2>&1; then ok; else bad "sysext tree: $(cat "$T/out")"; fi
 while read -r d; do [ -s "$T/sx/gamecove/usr/share/licenses/gamecove/$d" ] && ok || bad "sysext lacks /usr/share/licenses/gamecove/$d"; done <"$T/dests"
 # RPM: run the spec's %prep licence loop against the repo and check %files takes the result
 SPEC="$REPO/packaging/rpm/gamecove.spec"
@@ -190,11 +194,19 @@ on = doc.get("on", doc.get(True))
 assert "schedule" in on and "workflow_dispatch" in on, "nightly and by hand (gh workflow run upscalers.yml)"
 assert doc.get("permissions") == {}, "least privilege: nothing at the top level"
 jobs = doc["jobs"]
-assert list(jobs) == ["build"], "one job"
-job = jobs["build"]
-assert job.get("permissions") == {"contents": "write", "id-token": "write"}, job.get("permissions")
-assert job.get("if") == "github.ref == 'refs/heads/main'", "publish only from main (the signing identity)"
-steps = job["steps"]
+# review problem 2 pattern: build (tests, builder, third-party downloads) read-only; publish signs and uploads
+assert list(jobs) == ["build", "publish"], list(jobs)
+b, p = jobs["build"], jobs["publish"]
+assert b.get("permissions") == {"contents": "read"}, b.get("permissions")
+assert b.get("if") == "github.ref == 'refs/heads/main'", "build for publishing only on main (the signing identity)"
+assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write", "id-token": "write"}, p.get("permissions")
+brun = "\n".join(x.get("run", "") for x in b["steps"])
+prun = "\n".join(x.get("run", "") for x in p["steps"])
+assert "sign-blob" not in brun and "gh release upload" not in brun and "gh release create" not in brun, "build must not sign or publish"
+assert "pip install" not in prun and "tools/upscalers" not in prun and "pytest" not in prun, "publish must not run the builder or third-party packages"
+assert any(x.get("uses", "").startswith("actions/upload-artifact@") for x in b["steps"])
+assert any(x.get("uses", "").startswith("actions/download-artifact@") for x in p["steps"])
+steps = b["steps"] + p["steps"]
 bad = [s.get("name", s.get("uses", "?")) for s in steps if "${{" in s.get("run", "")]
 assert not bad, "${{ }} inside run: " + str(bad)
 for s in steps:
