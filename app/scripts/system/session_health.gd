@@ -8,7 +8,9 @@ extends Node
 ## window) and counts it as a crash. While a game runs it says "game" and the client never
 ## kills it: the main loop keeps beating behind a game, but a slow game load or gamescope
 ## holding back frames to a hidden window must never end the session (and the game with it).
-## The Timer runs even while the tree is paused.
+## The Timer runs even while the tree is paused. Behind a game it writes nothing: once the
+## file says "game" the client never counts it stale, so a beat is written only when the
+## mode changes (the game ended: "ui" within BEAT_S), never every 5 s to a tmpfs file.
 ##
 ## Fallback notice: the client leaves crash-fallback ("<unix time>\n<reason>") in the data
 ## folder when it gave up on GameCove for a boot; the next start shows why, once.
@@ -20,6 +22,8 @@ const FALLBACK_FILE := "crash-fallback"
 var game_running: Callable = func() -> bool: return false
 var path := ""
 var seq := 0
+## The mode the file says now ("" before the first beat).
+var written_mode := ""
 var _timer: Timer
 
 
@@ -33,7 +37,7 @@ func _ready() -> void:
 	_timer = Timer.new()
 	_timer.wait_time = BEAT_S
 	_timer.process_mode = Node.PROCESS_MODE_ALWAYS
-	_timer.timeout.connect(beat)
+	_timer.timeout.connect(tick)
 	add_child(_timer)
 	_timer.start()
 	beat()
@@ -41,6 +45,13 @@ func _ready() -> void:
 
 func mode() -> String:
 	return "game" if game_running.is_valid() and bool(game_running.call()) else "ui"
+
+
+## The Timer's beat: skipped while the file already says "game" and a game still runs.
+func tick() -> bool:
+	if written_mode == "game" and mode() == "game":
+		return false
+	return beat()
 
 
 ## One beat: the file replaced in one rename, so the client never reads half a line.
@@ -52,9 +63,13 @@ func beat() -> bool:
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		return false
-	f.store_string("%d %s\n" % [seq, mode()])
+	var m := mode()
+	f.store_string("%d %s\n" % [seq, m])
 	f.close()
-	return DirAccess.rename_absolute(tmp, path) == OK
+	if DirAccess.rename_absolute(tmp, path) != OK:
+		return false
+	written_mode = m
+	return true
 
 
 ## $XDG_DATA_HOME/gamecove (the session client's data folder).
