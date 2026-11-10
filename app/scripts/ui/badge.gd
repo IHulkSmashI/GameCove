@@ -69,7 +69,10 @@ func setup(b: Dictionary, badge_style := "tile") -> void:
 	label.visible = label.text != ""
 	var bg: Color = flag if solid else (Color(tone_col, 0.12) if chip else Color(0.02, 0.03, 0.05, 0.78))
 	if chip and not ThemeLib.is_dark():
-		bg = Color(tone_col, 0.10)
+		# Opaque: chips on hero art keep their text readable now that Light
+		# shows the art at full colour (a see-through tint failed AA there).
+		bg = ThemeLib.color("surface").lerp(tone_col, 0.10)
+		bg.a = 1.0
 	var px := 6 if not chip else 12
 	var py := 2 if not chip else 5
 	var sb := ThemeLib.box(bg, 999 if chip else 6, px, py)

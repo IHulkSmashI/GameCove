@@ -124,6 +124,10 @@ Device data was taken as facts (DMI strings, wattages, capability names, which b
 
 The GameCove mark (`assets/logo.svg`, `app/assets/logo-mark.svg`, `assets/app-icon.svg`, `app/icon.svg`) and the boot intro clip (`app/assets/boot/intro.ogv`: the mark scaling in with a cyan glow sweep, 3 s, no audio) are our own, made for GameCove with Google Gemini from our own artwork and edited by us; they're part of GameCove and ship under its licence. How the clip is made and swapped: [docs/BOOT_INTRO.md](docs/BOOT_INTRO.md).
 
+## README screenshots
+
+The screenshots in `docs/images/` are the real app (`tools/showcase/`) with a made-up player's library of real games. The game art in them comes from each game's Steam store page (Valve's CDN), the emulated games' box art and in-game pictures from [libretro-thumbnails](https://github.com/libretro-thumbnails/libretro-thumbnails) (the set RetroArch and ES-DE scrapers use), and Discover's deals and giveaways from CheapShark as fetched on the day. That art belongs to the games' publishers and isn't covered by GameCove's GPL; none of it is in the app package.
+
 ## Device photos
 
 "About this device" and the first-run welcome show a real photo of your handheld when a freely licensed one exists on [Wikimedia Commons](https://commons.wikimedia.org/) (or on Flickr, found through [Openverse](https://openverse.org/)). The photos aren't in the app: the weekly `device-photos` workflow re-checks each license at its source, scales the photo to 1200 px wide, converts it to WebP and publishes it to the `device-photos` release; the app downloads only your device's photo, once. Converting and resizing is the only change made. Each photo stays under its own license (below), not GameCove's GPL; the credit line under the photo in the app links to its source page. Where a row lists more than one device, the models look the same from the front and share the photo.

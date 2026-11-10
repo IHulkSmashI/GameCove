@@ -1,24 +1,43 @@
 extends "../screenshots/shoot_controls.gd"
-## The showcase set: every main screen with a real, lived-in profile (real
-## games, their Steam art and achievements, GameCove's own gamedb data, live
-## Discover prices for Canada from snapshot/). Run through shoot.sh:
+## The showcase set: every screen with a real, lived-in profile (real games,
+## their Steam art and achievements, GameCove's own gamedb data, live Discover
+## prices for Canada from snapshot/), favourites and collections, an EmuDeck
+## setup, pinned apps, clips, cloud saves, a week of battery history,
+## Bluetooth devices, GE-Proton builds and music playing. Everything the app
+## would read from the system is a fake in a temp folder: nothing real is
+## installed, run or changed. Run through shoot.sh:
 ##   tools/showcase/shoot.sh            (every shot, both sizes, both themes)
 ## or directly (needs a display):
 ##   godot --path app --resolution 1920x1200 -s ../tools/showcase/showcase.gd -- --out DIR [--only a,b] [--suffix _x]
 ## SHOWCASE_THEME=light renders the light theme (default: Cove).
 
-const SHOTS_ALL := ["home", "library", "game", "game_achievements", "discover", "discover_deals", "discover_calendar",
-	"discover_wishlist", "discover_calendar_month", "quick_game", "quick_power", "quick_display", "quick_controller", "quick_leds",
-	"settings_power", "settings_about", "settings_fixes", "settings_updates", "settings_privacy", "settings_profiles", "setup_art"]
+const SHOTS_ALL := ["home", "home_shelves", "library", "library_filter", "library_apps", "game", "game_achievements",
+	"game_saves", "emulation", "apps_view", "discover", "discover_free", "discover_deals", "discover_calendar",
+	"discover_calendar_month", "discover_wishlist", "quick_game", "quick_power", "quick_display", "quick_audio",
+	"quick_controller", "quick_leds", "quick_device", "settings_power", "settings_performance", "settings_system",
+	"settings_profiles", "settings_saves", "settings_media", "media_clip_sheet", "media_share", "settings_about",
+	"settings_battery", "settings_storage", "settings_fixes", "settings_updates", "settings_privacy", "setup_art"]
 
-## The phone page's address in the Game art shot: a typical home Wi-Fi address
-## (the render machine's own network isn't a handheld's).
+const Recorder := preload("res://scripts/system/recorder.gd")
+const Clips := preload("res://scripts/system/clips.gd")
+const Apps := preload("res://scripts/library/apps.gd")
+const FakeRunner := preload("res://tests/fixtures/system/fake_runner.gd")
+
+## The phone page's address in the Game art and Send to phone shots: a typical
+## home Wi-Fi address (the render machine's own network isn't a handheld's).
 const LAN_IP := "192.168.1.42"
+## The game page with cloud saves: Cyberpunk 2077 from GOG.
+const SAVES_KEY := "gog:1423049311"
+## Favourites (Steam's own favourites would bring these in on a real device).
+const FAVOURITES := ["steam:1245620", "steam:1145350", "steam:2379780", "steam:413150", "gog:1423049311",
+	"steam:367520", "epic:celeste"]
 
 var here := ""
 var lib_doc: Dictionary = {}
 var ach_svc: Node
 var now := 0
+## Temp home for everything faked from the system (clips, apps, saves, ...).
+var fake_home := ""
 
 
 ## Achievements for every game from library.json (the real Steam lists).
@@ -34,20 +53,31 @@ class ShowcaseAchievements extends Node:
 		invalidated.append(str(appid))
 
 
-## The maker's own product picture (device_photos.json "maker_image"), fetched
-## by shoot.sh the way the app fetches it on the device.
-class MakerPhoto extends RefCounted:
-	signal photo_ready(device_id: String, path: String)
-	var enabled := true
-	var maker_enabled := true
-	var path := ""
-	var page_url := ""
-	func photo_for(_id: String) -> Dictionary:
-		return {"path": path, "credit": {"kind": "maker", "maker": "MSI", "page_url": page_url, "url": ""}}
-	func set_enabled(on: bool) -> void:
-		enabled = on
-	func set_maker_enabled(on: bool) -> void:
-		maker_enabled = on
+## The fake Controls with the Controls worker the Audio tab's cards use (here
+## the jobs run on the next idle frame, after the card is in the menu, as a
+## worker's would).
+class ShowcaseControls extends "res://tests/fixtures/ui_controls/fake_controls.gd":
+	func run_on_worker(job: Callable) -> void:
+		job.call_deferred()
+
+
+## PipeWire's per-app streams while Elden Ring runs with music and a voice chat.
+class Mixer extends RefCounted:
+	var list := [{"id": 61, "name": "ELDEN RING", "volume": 100.0, "muted": false},
+		{"id": 74, "name": "Spotify", "volume": 35.0, "muted": false},
+		{"id": 88, "name": "Discord", "volume": 80.0, "muted": false}]
+	func app_mixer(_ctx: Dictionary) -> Array:
+		return list.duplicate(true)
+	func set_stream_volume(_ctx: Dictionary, _id: int, _pct: float) -> bool:
+		return true
+
+
+## Storage with Clean up: shader caches of four games that aren't installed.
+class ShowcaseStorage extends "res://tests/fixtures/device_ui/fakes.gd".FakeStorage:
+	func leftovers() -> void:
+		calls.append("leftovers")
+	func clean_leftovers() -> bool:
+		return false
 
 
 func theme_id() -> String:
@@ -71,6 +101,9 @@ func _run() -> void:
 	ach_svc.name = "ShowcaseAchievements"
 	ach_svc.by_appid = _achievements()
 	root.add_child(ach_svc)
+	fake_home = OS.get_cache_dir().path_join("gamecove-showcase-home")
+	_wipe(fake_home)
+	_fake_clips()
 
 	var prefs = load("res://scripts/ui/ui_prefs.gd")
 	prefs.path = OS.get_cache_dir().path_join("gamecove-showcase-ui.cfg")
@@ -101,47 +134,56 @@ func _run() -> void:
 	var db: Node = lib.get("_db")
 	if db != null and db.updated.is_connected(lib.refresh):
 		db.updated.disconnect(lib.refresh)
-	lib.games.assign(games)
-	lib.changed.emit()
+	_collections(lib)
+	_emulation(lib)
+	_relibrary(lib)
 	_seed_shots(lib)
 	_status()
 	await frames(4)
 	await _use_device("msi-claw-8-ex", claw_patch())
 	_photo()
+	_fake_apps()
+	_saves_and_battery()
+	_media_services()
+	_pads()
 
 	# Home: Elden Ring in the spotlight.
 	main.show_screen("home")
 	await frames(4)
 	main.home.play_button.grab_focus()
 	await shot("home")
-
-	if want(["library"]):
+	await _library_shots()
+	await _game_shots()
+	if want(["emulation"]):
 		main.show_screen("library")
-		await frames(4)
-		for t in main.library_screen.tiles():
-			if t.game["key"] == "steam:1086940":
-				t.grab_focus()
-		await shot("library")
-		main.show_screen("home")
-
-	if want(["game", "game_achievements"]):
-		main._open_page(_find_key("steam:1245620"))
-		await frames(6)
-		await shot("game")
-		if want(["game_achievements"]) and main.page.ach_card != null and main.page.ach_card.cells.size() > 2:
-			main.page.ach_card.cells[1].grab_focus()
-			await frames(10)
-			await shot("game_achievements")
+		await frames(2)
+		main.open_emulation()
+		await shot("emulation")
 		main._close_page()
+		main.show_screen("home")
+	await _apps_view()
 
-	if want(["discover", "discover_deals", "discover_calendar", "discover_calendar_month", "discover_wishlist"]):
+	if want(["discover", "discover_free", "discover_deals", "discover_calendar", "discover_calendar_month", "discover_wishlist"]):
 		await _discover(lib)
 
 	_relibrary(lib)
 	await _quick()
 	_relibrary(lib)
 	await _settings()
+	await _media()
+	if want(["home_shelves"]):
+		main.show_screen("home")
+		await frames(4)
+		# Further down: Favourites, Installed, Emulation and the Apps shelf.
+		var em: Array = main.home.tiles("emulation")
+		for t in em:
+			if t.game.get("title", "") == "Super Metroid":
+				t.grab_focus()
+		await frames(10)
+		await shot("home_shelves")
+
 	await _setup_art()
+	_wipe(fake_home)
 	await finish()
 
 
@@ -251,31 +293,120 @@ func _find_key(k: String) -> Dictionary:
 	return {}
 
 
+## Favourites and two collections of this player's own, on a temp file.
+func _collections(lib: Node) -> void:
+	var cols: RefCounted = lib.collections
+	cols.path = fake_home.path_join("collections.json")
+	cols.reload()
+	for k in FAVOURITES:
+		cols.set_favourite(k, true)
+	var couch: String = cols.create("Couch co-op")
+	for k in ["steam:553850", "steam:413150", "steam:1551360"]:
+		cols.add(couch, k)
+	var next: String = cols.create("Up next")
+	for k in ["steam:1030300", "steam:1903340", "steam:2246340"]:
+		cols.add(next, k)
+
+
+## An EmuDeck setup: ES-DE, ROMs for seven systems, recently played ones, and
+## four Steam ROM Manager shortcuts with their box art (fetch.py's cache/emu/).
+func _emulation(lib: Node) -> void:
+	# EmuDeck's usual place, ~/Emulation (only shown, never read).
+	var home := OS.get_environment("HOME")
+	var roms := home.path_join("Emulation/roms")
+	lib.emulation = {"kind": "emudeck", "name": "EmuDeck",
+		"frontend": {"name": "ES-DE", "command": ["/home/deck/Applications/ES-DE.AppImage"]},
+		"app": {"name": "EmuDeck", "command": ["/home/deck/Applications/EmuDeck.AppImage"]},
+		"srm": {"command": ["/home/deck/Applications/srm/Steam-ROM-Manager.AppImage"]},
+		"roms_dir": roms, "esde_dir": home.path_join("ES-DE"), "rom_total": 214,
+		"systems": [{"id": "snes", "name": "Nintendo SNES (Super Nintendo)", "short": "SNES", "count": 64},
+			{"id": "gba", "name": "Nintendo Game Boy Advance", "short": "GBA", "count": 48},
+			{"id": "psx", "name": "Sony PlayStation", "short": "PS1", "count": 37},
+			{"id": "genesis", "name": "Sega Genesis", "short": "Genesis", "count": 29},
+			{"id": "n64", "name": "Nintendo 64", "short": "N64", "count": 18},
+			{"id": "ps2", "name": "Sony PlayStation 2", "short": "PS2", "count": 11},
+			{"id": "gc", "name": "Nintendo GameCube", "short": "GameCube", "count": 7}],
+		"recent": [{"title": "Super Metroid", "system": "SNES", "last_played": now - 86400 * 10},
+			{"title": "Pokémon Emerald", "system": "GBA", "last_played": now - 86400 * 13},
+			{"title": "Castlevania: Symphony of the Night", "system": "PS1", "last_played": now - 86400 * 19},
+			{"title": "Sonic the Hedgehog 2", "system": "Genesis", "last_played": now - 86400 * 26}]}
+	var none := {"cover": "", "hero": "", "logo": "", "icon": ""}
+	games.append({"key": "emu:frontend", "store": "emu", "id": "frontend", "title": "ES-DE", "installed": true,
+		"art": none.duplicate(), "info": {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null},
+		"last_played": now - 86400 * 10, "playtime_min": 1840, "command": lib.emulation["frontend"]["command"], "frontend": true,
+		"emulated": {"system": "", "system_name": "", "system_short": "", "emulator": "", "via": "emudeck"}})
+	var specs := [["Super Metroid", "snes", "Nintendo SNES (Super Nintendo)", "SNES", "Snes9x", "super-metroid", 10, 612],
+		["Pokémon Emerald", "gba", "Nintendo Game Boy Advance", "GBA", "mGBA", "pokemon-emerald", 13, 1490],
+		["Castlevania: Symphony of the Night", "psx", "Sony PlayStation", "PS1", "SwanStation", "castlevania-sotn", 19, 538],
+		["Sonic the Hedgehog 2", "genesis", "Sega Genesis", "Genesis", "Genesis Plus GX", "sonic-2", 26, 205]]
+	var i := 0
+	for s in specs:
+		i += 1
+		var art := none.duplicate()
+		art["cover"] = _cache("emu/%s-cover.png" % s[5])
+		art["hero"] = _cache("emu/%s-snap.png" % s[5])
+		games.append({"key": "emu:30000000%02d" % i, "store": "emu", "id": "30000000%02d" % i, "title": s[0], "installed": true,
+			"art": art, "info": {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null,
+			"summary": "From your %s ROM folder, added to Steam by Steam ROM Manager through EmuDeck. Runs in RetroArch (%s)." % [s[3], s[4]]},
+			"last_played": now - 86400 * int(s[6]), "playtime_min": int(s[7]), "shortcut": true,
+			"emulated": {"system": s[1], "system_name": s[2], "system_short": s[3], "emulator": "RetroArch", "via": "emudeck"}})
+
+
 func _status() -> void:
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "8:42 PM", {"connected": true, "strength": 0.8})
 	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
 	main.home.set_battery_left("~2 h 45 min")
 	main.hint_status.text = "● GameCove %s   MSI Claw 8 EX AI+" % _short_version()
+	# About GameCove's Version line, as a release build has it (the spec's Version).
+	main.settings.version = _short_version()
 	main.achievements_api = ach_svc
 	main.home.set_achievements(ach_svc)
 	main.status_panel.set_battery("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4, "time_left_min": 165})
 
 
+## The render machine has no UPower: a DualSense at 62 % (after main's own read).
+func _pads() -> void:
+	main.top_bar.set_pads([{"name": "DualSense Wireless Controller", "percent": 62, "charging": false}])
+
+
 func _photo() -> void:
-	var p := _cache("device/msi-claw-8-ex.png")
-	if p == "":
+	var dp := seed_device_photo(root, fake_home.path_join("device_photos"), _cache("device/msi-claw-8-ex.png"))
+	if dp == null:
 		return
-	var mp := MakerPhoto.new()
-	mp.path = p
-	mp.page_url = "https://us-store.msi.com/Claw-8-EX-AI-CG3EM-024US"
 	var svc: Dictionary = main.settings.services.duplicate()
-	svc["photo"] = mp
+	svc["photo"] = dp
 	main.settings.set_services(svc)
+
+
+## GameCove's own DevicePhoto service with the Claw 8 EX's maker image already
+## in its cache, exactly where and as it keeps a successful download
+## (maker-<url hash>.png, fresh, so nothing is fetched): every screen that shows
+## the device then shows it as on the handheld, credit line included. The
+## picture is the one app/data/device_photos.json links to (fetch.py downloads
+## it into cache/device/; it's never bundled). Null without it.
+static func seed_device_photo(tree_root: Node, cache_dir: String, src: String) -> Node:
+	var dp: Node = tree_root.get_node_or_null("DevicePhoto")
+	if dp == null or src == "" or not FileAccess.file_exists(src):
+		return null
+	dp.cache_dir = cache_dir
+	dp.enabled = true
+	dp.maker_enabled = true
+	var m: Dictionary = dp.maker_entry("msi-claw-8-ex")
+	if m.is_empty():
+		return null
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(cache_dir))
+	DirAccess.copy_absolute(src, dp._maker_base(str(m["url"])) + ".png")
+	return dp
+
+
+func _make_controls() -> Node:
+	return ShowcaseControls.new()
 
 
 ## Profiles: this player's own per-game layers (games from the library).
 func _use_device(id: String, patch: Dictionary) -> void:
 	await super(id, patch)
+	_extra_controls()
 	profiles.reset("steam:892970")
 	profiles.reset("epic:fn")
 	_device_details()
@@ -286,6 +417,46 @@ func _use_device(id: String, patch: Dictionary) -> void:
 	profiles.set_layer("steam:1086940", "", {"power.tdp": 22, "display.fps_limit": 40, "perf.frame_gen": 2})
 	profiles._remember_title("steam:1086940", "Baldur's Gate 3")
 	profiles.save_file()
+
+
+## What the device snapshot predates: Sleep at low battery (on, at 5 %), the
+## music playing (MPRIS) and each app's volume (PipeWire), all fakes.
+func _extra_controls() -> void:
+	var PT = load("res://scripts/controls/power/texts.gd")
+	var low: Array = PT.T["power.low_battery_sleep"]
+	var at: Array = PT.T["power.low_battery_sleep_at"]
+	fake.add({"id": "power.low_battery_sleep", "title": low[0], "help": low[1], "kind": "toggle", "per_game": false,
+		"default_value": false, "value": true})
+	fake.add({"id": "power.low_battery_sleep_at", "title": at[0], "help": at[1], "kind": "slider", "unit": "%",
+		"min_value": 3.0, "max_value": 10.0, "step": 1.0, "per_game": false, "default_value": 5.0, "value": 5})
+	# Battery saver turns itself on at 20 % on this handheld.
+	var saver: RefCounted = fake.control("power.battery_saver_at")
+	if saver != null:
+		saver.get_meta("fake_state")["value"] = 20
+		saver.read()
+	fake.ctx["runner"] = _media_runner()
+	var vol: RefCounted = fake.control("audio.volume")
+	if vol != null:
+		vol.set_meta("provider", Mixer.new())
+
+
+## Spotify playing over the game (busctl answers as test_extras_media.gd's).
+func _media_runner() -> RefCounted:
+	var f: RefCounted = FakeRunner.new()
+	var spot := "org.mpris.MediaPlayer2.spotify"
+	var prop := func(iface: String, name: String) -> String:
+		return "busctl --user get-property %s /org/mpris/MediaPlayer2 %s %s" % [spot, iface, name]
+	var p := "org.mpris.MediaPlayer2.Player"
+	f.responses["busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ListNames"] = {"code": 0,
+		"out": JSON.stringify({"type": "as", "data": [["org.freedesktop.DBus", ":1.12", spot]]})}
+	f.responses[prop.call(p, "PlaybackStatus")] = {"code": 0, "out": JSON.stringify({"type": "s", "data": "Playing"})}
+	f.responses[prop.call(p, "Metadata")] = {"code": 0, "out": JSON.stringify({"type": "a{sv}", "data": {
+		"xesam:title": {"type": "s", "data": "Midnight City"}, "xesam:album": {"type": "s", "data": "Hurry Up, We're Dreaming"},
+		"xesam:artist": {"type": "as", "data": ["M83"]}}})}
+	f.responses[prop.call("org.mpris.MediaPlayer2", "Identity")] = {"code": 0, "out": JSON.stringify({"type": "s", "data": "Spotify"})}
+	f.responses[prop.call(p, "CanGoNext")] = {"code": 0, "out": JSON.stringify({"type": "b", "data": true})}
+	f.responses[prop.call(p, "CanGoPrevious")] = {"code": 0, "out": JSON.stringify({"type": "b", "data": true})}
+	return f
 
 
 ## The Claw 8 EX as read live on the device (tools/devicematrix/overrides.json:
@@ -299,9 +470,17 @@ func _device_details() -> void:
 	info["chip"]["kernel"] = "7.2.15-ogc1.1.fc45.x86_64"
 	info["software"]["os_version"] = "45"
 	info["software"]["os"] = "Bazzite"
+	info["software"]["gamecove_version"] = release_version()
 	var svc: Dictionary = main.settings.services.duplicate()
 	var F = DeviceFakes.services()
 	F["device"].free()
+	F["storage"].free()
+	var st := ShowcaseStorage.new()
+	st.st = DeviceFakes.storage_state()
+	# Shader caches left by four games that were uninstalled.
+	st.st["cleanup"] = {"ready": true, "cleaning": false, "missing": [], "bytes": 3_870_000_000,
+		"dirs": ["shadercache/1174180", "shadercache/1817070", "shadercache/2344520", "shadercache/814380"]}
+	F["storage"] = st
 	var u = F["updates"]
 	u.st["os_info"] = {"id": "bazzite", "name": "Bazzite", "version": "45", "variant": "deck", "atomic": true}
 	u.st["os"]["current"] = "45"
@@ -327,7 +506,317 @@ func _device_details() -> void:
 	setup.status["epic"] = {"signed_in": true, "account": "player", "how": "code"}
 	setup.status["gog"] = {"signed_in": true, "account": "player", "how": "heroic"}
 	svc["setup"] = setup
+	svc["bluetooth_runner"] = _bluetooth_runner()
+	var ph := _proton_home()
+	svc["proton_runner"] = ph[1]
+	svc["proton_home"] = ph[0]
 	main.settings.set_services(svc)
+
+
+## BlueZ with the DualSense connected (62 %), paired earbuds and a speaker
+## nearby (test_extras_bluetooth.gd's fake bus).
+func _bluetooth_runner() -> RefCounted:
+	var BT = load("res://tests/test_extras_bluetooth.gd")
+	var bz: RefCounted = BT.Bluez.new()
+	var pad: Dictionary = bz.tree[BT.PAD]
+	pad["org.bluez.Device1"]["Name"] = {"type": "s", "data": "DualSense Wireless Controller"}
+	pad["org.bluez.Device1"]["Alias"] = {"type": "s", "data": "DualSense Wireless Controller"}
+	pad["org.bluez.Battery1"]["Percentage"] = {"type": "y", "data": 62}
+	var buds: Dictionary = bz.tree[BT.BUDS]["org.bluez.Device1"]
+	buds["Name"] = {"type": "s", "data": "Galaxy Buds2 Pro"}
+	var f: RefCounted = FakeRunner.new()
+	f.handler = bz.answer
+	f.set_meta("bluez", bz)
+	return f
+
+
+## Steam's compatibility tools with GE-Proton10-25 (Cyberpunk 2077 set to it)
+## and GE-Proton9-20 installed; GitHub's newest release is GE-Proton10-26.
+## [home, runner]
+func _proton_home() -> Array:
+	var PT = load("res://tests/test_extras_proton.gd")
+	var home := fake_home.path_join("proton")
+	var steam := home.path_join(".local/share/Steam")
+	for t in ["GE-Proton10-25", "GE-Proton9-20"]:
+		_write(steam.path_join("compatibilitytools.d").path_join(t).path_join("compatibilitytool.vdf"), PT._tool_vdf(t))
+	_write(steam.path_join("config/config.vdf"), "\"InstallConfigStore\"\n{\n \"Software\"\n {\n  \"Valve\"\n  {\n   \"Steam\"\n   {\n    \"CompatToolMapping\"\n    {\n     \"1091500\"\n     {\n      \"name\" \"GE-Proton10-25\"\n      \"config\" \"\"\n      \"priority\" \"250\"\n     }\n    }\n   }\n  }\n }\n}\n")
+	var ProtonGE = load("res://scripts/launch/proton_ge.gd")
+	var release: String = PT.release_json("GE-Proton10-26")
+	var f: RefCounted = FakeRunner.new()
+	f.handler = func(full: String) -> Variant:
+		var cmd := full.trim_prefix("nice -n 19 ionice -c 3 ").trim_prefix("nice -n 19 ")
+		if cmd.begins_with("curl ") and cmd.ends_with(ProtonGE.API):
+			return {"code": 0, "out": release}
+		return null
+	return [home, f]
+
+
+func _write(path: String, text: String) -> void:
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(text)
+	f.close()
+
+
+func _wipe(dir: String) -> void:
+	if not DirAccess.dir_exists_absolute(dir):
+		return
+	for f in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute(dir.path_join(f))
+	for d in DirAccess.get_directories_at(dir):
+		_wipe(dir.path_join(d))
+	DirAccess.remove_absolute(dir)
+
+
+# ------------------------------------------------------- saves and battery
+
+## Cloud saves in sync for Cyberpunk 2077 (GOG) and Celeste (Epic), and a week
+## of battery history on an 80 Wh battery (games, sleep, the charger).
+func _saves_and_battery() -> void:
+	var tmp := fake_home.path_join("saves")
+	DirAccess.make_dir_recursive_absolute(tmp)
+	var bat := tmp + "/sys/class/power_supply/BAT0/"
+	for f in [["type", "Battery"], ["capacity", "72"], ["energy_now", "53700000"], ["energy_full", "74600000"]]:
+		_write(bat + f[0], f[1] + "\n")
+	var sv: Node = main.saves
+	sv.cfg_path = tmp + "/saves.cfg"
+	sv.backup_dir = tmp + "/backups"
+	sv.backups.base_dir = sv.backup_dir
+	var cfg := ConfigFile.new()
+	for k in [[SAVES_KEY, 47 * 60 + 300], ["epic:celeste", 60 * 86400]]:
+		cfg.set_value("game:" + k[0], "state", "synced")
+		cfg.set_value("game:" + k[0], "at", now - int(k[1]))
+		cfg.set_value("game:" + k[0], "last_sync", now - int(k[1]))
+	cfg.save(sv.cfg_path)
+	# Copies GameCove took before cloud downloads (the last three syncs that brought saves down).
+	var bdir: String = sv.backups.dir_for(SAVES_KEY)
+	for b in [[53 * 60 + 40, 18_400_000], [2 * 86400 + 5200, 18_100_000], [6 * 86400 + 900, 17_600_000]]:
+		var when := now - int(b[0])
+		var stamp := Time.get_datetime_string_from_unix_time(when).replace("-", "").replace(":", "").replace("T", "-")
+		_write(bdir.path_join(stamp + ".json"), JSON.stringify({"time": when, "reason": "before_download", "title": "Cyberpunk 2077",
+			"parts": [{"name": "saves", "path": "", "file": stamp + "-0.tar.gz", "bytes": int(b[1])}], "fingerprint": stamp}, "\t"))
+	var bl: Node = main.battery_log
+	bl.path = tmp + "/battery.json"
+	bl.sys_root = tmp
+	var plan := [["steam:1245620", "ELDEN RING", 34], [SAVES_KEY, "Cyberpunk 2077", 41], ["steam:2379780", "Balatro", 12],
+		["steam:1086940", "Baldur's Gate 3", 37], ["steam:1145350", "Hades II", 22], ["steam:1245620", "ELDEN RING", 30],
+		["steam:413150", "Stardew Valley", 14]]
+	bl.data = {"v": 1, "open": {}, "samples": [], "games": {
+		"steam:1245620": {"title": "ELDEN RING", "wh": 62.4, "s": 15600, "n": 4},
+		SAVES_KEY: {"title": "Cyberpunk 2077", "wh": 49.8, "s": 9900, "n": 3},
+		"steam:1086940": {"title": "Baldur's Gate 3", "wh": 41.2, "s": 8700, "n": 2},
+		"steam:2379780": {"title": "Balatro", "wh": 9.6, "s": 6300, "n": 3},
+		"steam:1145350": {"title": "Hades II", "wh": 18.1, "s": 5400, "n": 2}}}
+	var full := 74.6 / 100.0
+	var t := now - 7 * 86400 + 18 * 3600
+	for day in plan.size():
+		var pct := 100
+		var s: Array = bl.data["samples"]
+		s.append([t, pct, pct * full, "unplug", ""])
+		s.append([t + 900, pct - 1, (pct - 1) * full, "start", day_key(plan[day])])
+		pct -= int(plan[day][2]) + 1
+		s.append([t + 900 + int(plan[day][2]) * 190, pct, pct * full, "end", day_key(plan[day])])
+		s.append([t + 9000, pct - 2, (pct - 2) * full, "suspend", ""])
+		s.append([t + 46000, pct - 4, (pct - 4) * full, "resume", ""])
+		pct -= 4
+		if day < plan.size() - 1:
+			s.append([t + 47000, pct, pct * full, "plug", ""])
+			s.append([t + 52000, 100, 100 * full, "suspend", ""])
+		t += 86400
+
+
+static func day_key(p: Array) -> String:
+	return str(p[0])
+
+
+# ------------------------------------------------------- clips and apps
+
+static func _u32(n: int) -> PackedByteArray:
+	var b := PackedByteArray([0, 0, 0, 0])
+	b.encode_u32(0, n)
+	b.reverse()
+	return b
+
+
+static func _box(kind: String, body: PackedByteArray) -> PackedByteArray:
+	var out := _u32(body.size() + 8)
+	out.append_array(kind.to_ascii_buffer())
+	out.append_array(body)
+	return out
+
+
+## A small MP4 whose header says `seconds` (what the Clips list reads) and
+## whose size is `mb` (sparse padding).
+static func _mp4(path: String, seconds: int, mb: int) -> void:
+	var mvhd := PackedByteArray([0, 0, 0, 0])
+	for v in [0, 0, 1000, seconds * 1000]:
+		mvhd.append_array(_u32(v))
+	var pad := PackedByteArray()
+	pad.resize(80)
+	mvhd.append_array(pad)
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_buffer(_box("ftyp", "isom\u0000\u0000\u0002\u0000".to_ascii_buffer()))
+	var size := mb * 1_000_000
+	f.store_buffer(_u32(size + 8))
+	f.store_buffer("mdat".to_ascii_buffer())
+	f.seek(f.get_position() + size)
+	f.store_buffer(_box("moov", _box("mvhd", mvhd)))
+	f.close()
+
+
+## Clips from the showcase library's games, each with its hero art as the
+## picture, and a recorder that's set up (in a temp root).
+func _fake_clips() -> void:
+	var root_dir := fake_home.path_join("root")
+	DirAccess.make_dir_recursive_absolute(root_dir + Recorder.SYSTEM_APP_DIR)
+	DirAccess.make_dir_recursive_absolute(root_dir + "/usr/bin")
+	FileAccess.open(root_dir + "/usr/bin/flatpak", FileAccess.WRITE).close()
+	var clips := [["1245620", "ELDEN RING", 94, 71, 0], ["1145350", "Hades II", 42, 33, 49], ["1086940", "Baldur's Gate 3", 185, 140, 74],
+		["1091500", "Cyberpunk 2077", 61, 47, 146], ["2379780", "Balatro", 28, 12, 170]]
+	# Times to go with the top bar's clock (8:42 PM today): the newest clip is 8:15 PM.
+	var d := Time.get_datetime_dict_from_system()
+	var shown := Time.get_unix_time_from_datetime_dict({"year": d["year"], "month": d["month"], "day": d["day"], "hour": 20, "minute": 15, "second": 0})
+	for c in clips:
+		var at: int = shown - int(c[4]) * 3600
+		var when := Time.get_datetime_dict_from_unix_time(at)
+		var p := Recorder.clip_path(fake_home, str(c[1]), when)
+		_mp4(p, int(c[2]), int(c[3]))
+		OS.execute("touch", ["-d", "@%d" % (at - int(Time.get_time_zone_from_system()["bias"]) * 60), p])
+		var hero := here.path_join("cache").path_join(str(c[0])).path_join("hero.jpg")
+		if FileAccess.file_exists(hero):
+			Clips.save_thumb(p, Image.load_from_file(hero))
+
+
+func _media_services() -> void:
+	var f: RefCounted = FakeRunner.new()
+	f.responses[Recorder.KMS_PROXY + " is-setup " + fake_home] = {"code": 0, "out": ""}
+	f.responses["/usr/bin/flatpak list --app --columns=application"] = {"code": 0, "out": Clips.MPV_FLATPAK + "\n"}
+	var svc: Dictionary = main.settings.services
+	svc["media_runner"] = f
+	svc["media_env"] = {"home": fake_home, "path_env": "/usr/bin", "sys_root": fake_home.path_join("root")}
+	svc["drop_bind"] = "127.0.0.1"
+	main.recording.env = {"home": fake_home, "path_env": "/usr/bin", "sys_root": fake_home.path_join("root"), "proc_root": fake_home}
+
+
+## Simple original icons (no brand marks) for a handful of everyday apps.
+func _fake_apps() -> void:
+	var specs := [
+		["org.mozilla.firefox", "Firefox", "#FF7139", "<circle cx='32' cy='32' r='20' fill='none' stroke='white' stroke-width='5'/><path d='M12 32h40M32 12c-8 8-8 32 0 40M32 12c8 8 8 32 0 40' stroke='white' stroke-width='4' fill='none'/>"],
+		["com.discordapp.Discord", "Discord", "#5865F2", "<path d='M14 20h36v20H30l-10 8v-8h-6z' fill='white'/>"],
+		["io.mpv.Mpv", "mpv", "#6A1B9A", "<path d='M24 18v28l22-14z' fill='white'/>"],
+		["com.spotify.Client", "Spotify", "#1DB954", "<path d='M18 26c10-4 20-3 28 2M20 33c8-3 16-2 22 2M22 40c6-2 12-1 16 2' stroke='white' stroke-width='4' fill='none' stroke-linecap='round'/>"],
+		["org.libretro.RetroArch", "RetroArch", "#4A4A4A", "<rect x='14' y='22' width='36' height='20' rx='10' fill='white'/><circle cx='24' cy='32' r='3' fill='#4A4A4A'/><circle cx='40' cy='32' r='3' fill='#4A4A4A'/>"],
+		["org.videolan.VLC", "VLC media player", "#FF8800", "<path d='M32 12l14 36H18z' fill='white'/>"],
+		["com.obsproject.Studio", "OBS Studio", "#302E31", "<circle cx='32' cy='32' r='18' fill='white'/><circle cx='32' cy='32' r='7' fill='#302E31'/>"],
+		["net.davidotek.pupgui2", "ProtonUp-Qt", "#C2185B", "<path d='M32 14v26M22 30l10 10 10-10M18 48h28' stroke='white' stroke-width='5' fill='none'/>"],
+		["org.kde.dolphin", "Dolphin", "#1D99F3", "<path d='M14 22h14l4 4h18v20H14z' fill='white'/>"],
+		["com.heroicgameslauncher.hgl", "Heroic Games Launcher", "#0E1A2B", "<path d='M32 12l18 8v12c0 10-8 18-18 20-10-2-18-10-18-20V20z' fill='white'/>"],
+		["org.chromium.Chromium", "Chromium", "#4285F4", "<circle cx='32' cy='32' r='20' fill='white'/><circle cx='32' cy='32' r='8' fill='#4285F4'/>"],
+		["md.obsidian.Obsidian", "Obsidian", "#7C3AED", "<path d='M32 12l16 14-6 26H22l-6-26z' fill='white'/>"],
+	]
+	var list: Array = []
+	var dir := fake_home.path_join("icons")
+	DirAccess.make_dir_recursive_absolute(dir)
+	for s in specs:
+		var svg := "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' rx='14' fill='%s'/>%s</svg>" % [s[2], s[3]]
+		var img := Image.new()
+		img.load_svg_from_buffer(svg.to_utf8_buffer(), 4.0)
+		var p := dir.path_join(str(s[0]) + ".png")
+		img.save_png(p)
+		list.append({"key": "app:" + str(s[0]), "id": s[0], "store": "app", "title": s[1], "exec": ["/usr/bin/flatpak", "run", s[0]],
+			"icon": p, "flatpak": s[0], "installed": true, "art": {"icon": p}})
+	var pins := fake_home.path_join("apps.json")
+	for i in [1, 3, 0, 2]:
+		Apps.set_pinned(list[i], true, pins)
+	main.home.set_apps(Apps.pinned(pins))
+	main.set_meta("fake_apps", list)
+	main.set_meta("fake_pins", pins)
+
+
+# ------------------------------------------------------------------ library and game
+
+func _library_shots() -> void:
+	if not want(["library", "library_filter", "library_apps"]):
+		return
+	main.show_screen("library")
+	await frames(4)
+	for t in main.library_screen.tiles():
+		if t.game["key"] == "steam:1086940":
+			t.grab_focus()
+	await shot("library")
+	if want(["library_filter"]):
+		main.open_library_filter()
+		await shot("library_filter")
+		main.game_actions.sheet.close()
+		await frames(4)
+	if want(["library_apps"]):
+		main.library_screen.apps_button.grab_focus()
+		await frames(6)
+		await shot("library_apps")
+	main.show_screen("home")
+	await frames(3)
+
+
+func _game_shots() -> void:
+	if want(["game", "game_achievements"]):
+		main._open_page(_find_key("steam:1245620"))
+		await frames(6)
+		await shot("game")
+		if want(["game_achievements"]) and main.page.ach_card != null and main.page.ach_card.cells.size() > 2:
+			main.page.ach_card.cells[1].grab_focus()
+			await frames(10)
+			await shot("game_achievements")
+		main._close_page()
+	if want(["game_saves"]):
+		# Cyberpunk 2077 (GOG): a favourite, saves in sync, what it drains.
+		main._open_page(_find_key(SAVES_KEY))
+		await frames(20)
+		var card: Control = main.page.saves_card
+		if card != null:
+			card.toggle_button.grab_focus()
+		await frames(10)
+		# Down to the About card's last lines (what the game drains on battery),
+		# as far as the saves card stays in view.
+		var drain: Control = main.page.drain_label
+		if drain != null and card != null:
+			var n: Node = drain
+			while n != null and not n is ScrollContainer:
+				n = n.get_parent()
+			var sc := n as ScrollContainer
+			if sc != null:
+				var bottom := sc.global_position.y + sc.size.y - 110.0
+				var need := drain.get_global_rect().end.y - bottom
+				var room := card.get_global_rect().position.y - sc.global_position.y - 70.0
+				sc.scroll_vertical += int(maxf(0.0, minf(need, room)))
+			await frames(10)
+		await shot("game_saves")
+		main._close_page()
+	await frames(3)
+
+
+func _apps_view() -> void:
+	if not want(["apps_view"]):
+		return
+	main.open_apps()
+	main.apps_view.pins_path = main.get_meta("fake_pins")
+	var list: Array = main.get_meta("fake_apps")
+	main.apps_view.scan_fn = func() -> Array: return list
+	main.apps_view.loading = false
+	main.apps_view.open()
+	for i in 120:
+		if not main.apps_view.loading:
+			break
+		await process_frame
+	await frames(6)
+	if main.apps_view.tiles.size() > 5:
+		main.apps_view.tiles[5].grab_focus()
+	await frames(8)
+	main._update_hints()
+	await frames(2)
+	await shot("apps_view")
+	main.close_apps()
+	await frames(4)
 
 
 # ------------------------------------------------------------------ Discover
@@ -356,6 +845,15 @@ func _discover(lib: Node) -> void:
 	var r = main.discover.content
 	await frames(6)
 	await shot("discover")
+	if want(["discover_free"]):
+		# Free to keep (CheapShark's giveaways, recorded with the rest).
+		var home_view: Node = main.discover.find_child("Home", true, false)
+		if home_view != null:
+			for s in home_view.shelves:
+				if s.id == "free" and not s.tiles.is_empty():
+					s.tiles[0].grab_focus()
+		await frames(14)
+		await shot("discover_free")
 	if want(["discover_deals"]):
 		r.show_section("deals")
 		await frames(4)
@@ -399,7 +897,7 @@ func _discover(lib: Node) -> void:
 # ------------------------------------------------------------------ quick menu
 
 func _quick() -> void:
-	if not want(["quick_game", "quick_power", "quick_display", "quick_controller", "quick_leds"]):
+	if not want(["quick_game", "quick_power", "quick_display", "quick_audio", "quick_controller", "quick_leds", "quick_device"]):
 		return
 	var qm = main.quick_menu
 	var g := _find_key("steam:1245620")
@@ -416,18 +914,32 @@ func _quick() -> void:
 	sess.started.emit(g)
 	profiles.game_started(g)
 	qm._session_start_ms = Time.get_ticks_msec() - 47 * 60 * 1000
+	# Recording the boss fight for 1:23 (the REC chip in the top bar).
+	var rec = main.recording
+	rec.state = "recording"
+	rec._started_ms = Time.get_ticks_msec() - 83 * 1000
+	main.top_bar.set_recording(true)
 	main._open_menu()
 	qm.game = g
 	await _open_quick(g, 0)
-	var top: Array = qm.focusables()
-	if not top.is_empty():
-		top[0].grab_focus()
-		await frames(3)
+	var row: Node = qm.body.find_child("Record", true, false)
+	if row != null:
+		row.button.grab_focus()
+	await frames(6)
+	_pads()
 	await shot("quick_game")
 	await _open_quick(g, 1, "power.tdp")
 	await shot("quick_power")
 	await _open_quick(g, 2, "display.brightness")
 	await shot("quick_display")
+	await _open_quick(g, 3, "audio.volume")
+	await frames(6)
+	# Down to Now playing and each app's own volume.
+	var mx: Node = qm.body.find_child("AppMixer", true, false)
+	if mx != null and not mx.focusables().is_empty():
+		mx.focusables()[0].grab_focus()
+	await frames(10)
+	await shot("quick_audio")
 	await _open_quick(g, 4, "controller.gyro")
 	await shot("quick_controller")
 	await _open_quick(g, 4, "controller.led_color")
@@ -435,7 +947,11 @@ func _quick() -> void:
 	if led != null:
 		led.button.grab_focus()
 	await shot("quick_leds")
+	await _open_quick(g, 5)
+	await shot("quick_device")
 	qm.close()
+	rec.state = "idle"
+	main.top_bar.set_recording(false)
 	main.playing = {}
 	# The game ends here: its own values go back to the everyday ones, so the
 	# Settings shots show those (17 W, as the top bar says), not Elden Ring's 20 W.
@@ -445,25 +961,116 @@ func _quick() -> void:
 
 # ------------------------------------------------------------------ settings
 
+## Focuses `row`, lets the page glide to it, then scrolls so the card around
+## it starts near the top (or, for a card taller than the page, the row sits
+## a third of the way down).
+func _focus_row(row: Control) -> void:
+	if row == null:
+		return
+	var b: Control = row.get("button") if row.get("button") is Control else row
+	b.grab_focus()
+	await frames(24)
+	var n: Node = row
+	while n != null and not n is ScrollContainer:
+		n = n.get_parent()
+	var sc := n as ScrollContainer
+	if sc == null:
+		return
+	var card: Control = null
+	var p: Node = row.get_parent()
+	while p != null and p != sc:
+		if p is PanelContainer:
+			card = p
+			break
+		p = p.get_parent()
+	var top := sc.global_position.y
+	if card != null and card.size.y <= sc.size.y - 24:
+		sc.scroll_vertical += int(card.global_position.y - top - 12)
+	else:
+		sc.scroll_vertical += int(row.global_position.y - top - sc.size.y / 3.0)
+	await frames(12)
+
+
 func _settings() -> void:
 	var st = main.settings
+	var svc: Dictionary = main.settings.services.duplicate()
+	svc["saves"] = main.saves
+	svc["battery"] = main.battery_log
+	main.settings.set_services(svc)
 	if want(["settings_power"]):
-		await _settings_page("power", "power.tdp")
+		# The battery card: Sleep at low battery (on, at 5 %).
+		await _settings_page("power")
+		await _focus_row(st.pages["power"].find_child("power_low_battery_sleep", true, false))
 		await shot("settings_power")
+	if want(["settings_performance"]):
+		await _settings_page("performance")
+		var pp = st.pages["performance"]
+		for i in 60:
+			if pp.get("proton_card") != null and pp.proton_card.busy == "":
+				break
+			await process_frame
+		# What GitHub says is newest (the fake answers GE-Proton10-26).
+		if pp.get("proton_card") != null:
+			pp.proton_card.check()
+			for i in 120:
+				if pp.proton_card.busy == "":
+					break
+				await process_frame
+			await frames(6)
+		if pp.get("proton_card") != null and not pp.proton_card.focusables().is_empty():
+			await _focus_row(pp.proton_card.focusables()[0])
+		await shot("settings_performance")
+	if want(["settings_system"]):
+		await _settings_page("system")
+		var bt: Node = st.pages["system"].find_child("BluetoothDevices", true, false)
+		for i in 60:
+			if bt == null or bt.busy == "":
+				break
+			await process_frame
+		if bt != null and not bt.focusables().is_empty():
+			await _focus_row(bt.focusables()[0])
+		await shot("settings_system")
 	if want(["settings_profiles"]):
 		await _settings_page("profiles")
 		var f: Array = st.pages["profiles"].focusables()
 		if f.size() > 3:
 			f[3].grab_focus()
 		await shot("settings_profiles")
-	for p in [["settings_about", "about"], ["settings_fixes", "fixes"], ["settings_updates", "updates"]]:
+	if want(["settings_saves"]):
+		main.show_screen("settings")
+		await frames(4)
+		st.cat_buttons["saves"].grab_focus()
+		await frames(2)
+		st.enter_page()
+		var sp = st.pages["saves"]
+		var gk := "game_" + SAVES_KEY.validate_node_name()
+		if sp.rows.has(gk):
+			sp.rows[gk].button.grab_focus()
+		await shot("settings_saves")
+	for p in [["settings_about", "about"], ["settings_storage", "storage"], ["settings_fixes", "fixes"], ["settings_updates", "updates"]]:
 		if not want([p[0]]):
 			continue
 		main.show_screen("settings")
 		await frames(4)
 		st.open_category("device", p[1])
 		await frames(14)
+		if p[1] == "storage":
+			var cb: Control = st.find_child("CleanButton", true, false)
+			if cb != null:
+				cb.grab_focus()
+				await frames(10)
 		await shot(p[0])
+	if want(["settings_battery"]):
+		# About this device, further down: the week's battery history.
+		main.show_screen("settings")
+		await frames(4)
+		st.open_category("device", "about")
+		await frames(14)
+		var hist: Node = st.find_child("Card_history", true, false)
+		if hist != null:
+			hist.grab_focus()
+		await frames(12)
+		await shot("settings_battery")
 	if want(["settings_privacy"]):
 		main.show_screen("settings")
 		await frames(4)
@@ -481,6 +1088,44 @@ func _settings() -> void:
 		await frames(8)
 		await shot("settings_privacy")
 	main.show_screen("home")
+
+
+## Settings > Media: the recorder set up, clips with pictures, a clip's sheet
+## and its Send to phone page.
+func _media() -> void:
+	if not want(["settings_media", "media_clip_sheet", "media_share"]):
+		return
+	main.show_screen("settings")
+	await frames(4)
+	var st = main.settings
+	st.open_category("media")
+	await frames(4)
+	var page = st.pages["media"]
+	for i in 200:
+		if page.busy == "":
+			break
+		await process_frame
+	await frames(6)
+	if not page.clip_rows.is_empty():
+		page.clip_rows[0].button.grab_focus()
+	await frames(8)
+	await shot("settings_media")
+	if not page.clip_rows.is_empty() and want(["media_clip_sheet"]):
+		page.open_clip(page.clip_rows[0].clip)
+		await frames(12)
+		await shot("media_clip_sheet")
+		page.sheet.close()
+		await frames(4)
+	if not page.clip_rows.is_empty() and want(["media_share"]):
+		page.share_clip(page.clip_rows[0].clip)
+		await frames(2)
+		if page.share != null and page.share.drop.is_running():
+			page.share.qr_rect.texture = load("res://scripts/ui/settings/qr.gd").texture(page.share.drop.url.replace("127.0.0.1", LAN_IP), 6)
+		await frames(12)
+		await shot("media_share")
+		page.share.close()
+	main.show_screen("home")
+	await frames(4)
 
 
 # ------------------------------------------------------------ first-run setup

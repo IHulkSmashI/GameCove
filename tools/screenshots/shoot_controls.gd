@@ -183,6 +183,11 @@ func _run() -> void:
 	quit()
 
 
+## The fake Controls registry (the showcase adds a worker for the Audio cards).
+func _make_controls() -> Node:
+	return FakeControls.new()
+
+
 ## Swaps the Controls / Profiles autoloads for fakes of one handheld.
 func _use_device(id: String, patch: Dictionary) -> void:
 	for n in ["Controls", "Profiles"]:
@@ -196,7 +201,7 @@ func _use_device(id: String, patch: Dictionary) -> void:
 		profiles.name = "ProfilesOld"
 		profiles.queue_free()
 	await frames(1)
-	fake = FakeControls.new()
+	fake = _make_controls()
 	fake.name = "Controls"
 	fake.load_snapshot(SNAP % id, patch)
 	root.add_child(fake)

@@ -67,6 +67,53 @@ func test_welcome_shows_device_and_modes() -> void:
 	_free(s)
 
 
+## A DevicePhoto stand-in: one cached maker image for every device.
+class OnePhoto extends RefCounted:
+	signal photo_ready(device_id: String, path: String)
+	var path := ""
+	var asked: Array = []
+	func photo_for(id: String) -> Dictionary:
+		asked.append(id)
+		return {"path": path, "credit": {"kind": "maker", "maker": "MSI", "page_url": "https://www.msi.com/", "url": ""}}
+	func prefetch(_id: String) -> bool:
+		return false
+
+
+## The Detected handheld card shows the real photo DevicePhoto has cached (with
+## its credit), as About this device does, and the drawing without one.
+func test_welcome_shows_the_cached_device_photo() -> void:
+	var s := _screen(F.target("bazzite"))
+	ok(s.body.find_child("DevicePicture", true, false) != null, "no photo service: the drawing")
+	ok(s.body.find_child("DevicePhoto", true, false) == null, "and no photo")
+	_free(s)
+	var png := ProjectSettings.globalize_path("user://test_installer_ui_photo.png")
+	var img := Image.create(64, 32, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	img.fill_rect(Rect2i(8, 6, 48, 20), Color(0.2, 0.3, 0.8))
+	img.save_png(png)
+	var ph := OnePhoto.new()
+	ph.path = png
+	var d := ProjectSettings.globalize_path("user://test_installer_ui")
+	var r := Fake.new()
+	r.handler = func(_cmd: String): return {"code": 0, "out": ""}
+	var dev := F.claw()
+	var t := F.target("bazzite")
+	var inst: Node = Service.new()
+	inst.setup(r, Paths.for_home(d + "/home", d + "/root"), t, "/opt/gc/gamecove.x86_64")
+	var svc := F.services(dev, F.FakeSetup.new(), F.Recorder.new(), d + "/power.cfg")
+	svc["photo"] = ph
+	var s2 := Screen.create(svc, t, Plan.start(t, dev.profile, {"theme": "cove"}), inst)
+	_keep.append(s2)
+	var view: Node = s2.body.find_child("DevicePhoto", true, false)
+	ok(view != null, "the cached photo replaces the drawing")
+	ok(s2.body.find_child("DevicePicture", true, false) == null, "no drawing then")
+	ok(ph.asked.has(str(dev.profile.get("id", ""))), "asked for this handheld's photo")
+	if view != null:
+		eq(view.credit.text, "Image: MSI", "with the maker's credit")
+	_free(s2)
+	DirAccess.remove_absolute(png)
+
+
 func test_custom_walk_and_choices() -> void:
 	var s := _screen(F.target("bazzite"))
 	s.pick_mode("custom")

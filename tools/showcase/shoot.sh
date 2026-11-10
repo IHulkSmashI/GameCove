@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Renders the showcase screenshots: every main screen with a real, lived-in
+# Renders the showcase screenshots: every screen with a real, lived-in
 # profile (real games, Steam art, achievements, gamedb data, live Discover
-# prices for Canada from snapshot/). Needs xvfb-run, Godot 4.7, python3 and
+# prices for Canada from snapshot/, favourites, an EmuDeck setup, apps, clips,
+# cloud saves, battery history; see showcase.gd). Needs xvfb-run, Godot 4.7, python3 and
 # network the first time (the art cache is downloaded into cache/, git-ignored).
 #
 #   tools/showcase/shoot.sh [OUT_DIR] [only,these,shots]
@@ -50,11 +51,16 @@ done
 
 # README copies: docs/images/<readme name>.webp from <shot name>.
 README_NAMES=(
-	home:home library:library game:game game_achievements:achievements
-	discover:discover discover_deals:deals discover_calendar:calendar discover_wishlist:wishlist
-	quick_game:quick-menu quick_power:quick-power quick_display:quick-display quick_controller:quick-controller
-	quick_leds:quick-leds settings_power:settings-power settings_about:device settings_fixes:fixes
-	settings_updates:updates settings_privacy:privacy settings_profiles:profiles stream:stream installer:installer setup_art:game-art-setup
+	home:home library:library library_filter:library-filter game:game game_achievements:achievements
+	game_saves:game-saves home_shelves:home-emulation emulation:emulation apps_view:apps
+	discover:discover discover_free:discover-free discover_deals:deals discover_calendar:calendar
+	discover_calendar_month:calendar-month discover_wishlist:wishlist
+	quick_game:quick-menu quick_power:quick-power quick_display:quick-display quick_audio:quick-audio
+	quick_controller:quick-controller quick_leds:quick-leds quick_device:quick-device
+	settings_power:settings-power settings_performance:settings-performance settings_system:settings-system
+	settings_media:settings-media settings_saves:settings-saves settings_storage:settings-storage
+	settings_battery:battery-history settings_about:device settings_fixes:fixes settings_updates:updates
+	settings_privacy:privacy settings_profiles:profiles stream:stream installer:installer setup_art:game-art-setup
 )
 src="$out/1920x1200-cove"
 if [[ "${DOCS:-1}" == "1" && -d "$src" ]]; then
@@ -64,8 +70,9 @@ if [[ "${DOCS:-1}" == "1" && -d "$src" ]]; then
 		pairs+=("$src/${p%%:*}.png=$repo/docs/images/${p##*:}")
 	done
 	python3 -I "$here/optimise.py" "${pairs[@]}"
-	# The light theme, once, for the README's theme line.
+	# The light theme, for the README's theme shots.
 	[[ -f "$out/1920x1200-light/home.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/home.png=$repo/docs/images/home-light.png"
 	[[ -f "$out/1920x1200-light/quick_power.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/quick_power.png=$repo/docs/images/quick-power-light.png"
+	[[ -f "$out/1920x1200-light/game.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/game.png=$repo/docs/images/game-light.png"
 fi
 echo "showcase: $out"
