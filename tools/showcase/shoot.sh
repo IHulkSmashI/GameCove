@@ -12,8 +12,8 @@
 #   DOCS=0                    skip the README copies in docs/images/
 #   REFRESH=1                 re-fetch the data first (fetch.py, then record_discover.gd)
 #
-# docs/images/<name>.png (and .webp) are the README copies: the 1920x1200 Cove
-# set, resized to 1600 px wide and compressed. Their names are stable; see
+# docs/images/<name>.webp are the README copies: the 1920x1200 Cove set,
+# resized to 1600 px wide and compressed. Their names are stable; see
 # README_NAMES below.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -48,13 +48,13 @@ for res in $sizes; do
 	done
 done
 
-# README copies: docs/images/<readme name>.png from <shot name>.
+# README copies: docs/images/<readme name>.webp from <shot name>.
 README_NAMES=(
 	home:home library:library game:game game_achievements:achievements
 	discover:discover discover_deals:deals discover_calendar:calendar discover_wishlist:wishlist
 	quick_game:quick-menu quick_power:quick-power quick_display:quick-display quick_controller:quick-controller
 	quick_leds:quick-leds settings_power:settings-power settings_about:device settings_fixes:fixes
-	settings_updates:updates settings_privacy:privacy settings_profiles:profiles stream:stream installer:installer
+	settings_updates:updates settings_privacy:privacy settings_profiles:profiles stream:stream installer:installer setup_art:game-art-setup
 )
 src="$out/1920x1200-cove"
 if [[ "${DOCS:-1}" == "1" && -d "$src" ]]; then

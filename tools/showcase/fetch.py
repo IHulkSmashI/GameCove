@@ -18,7 +18,11 @@ Writes, next to this file:
   pinned/           the two Discover feeds GameCove reads, as fetched now, cut
                     to well-known games (prices untouched): CheapShark's top
                     deals and GameCove's upcoming.json.gz release calendar.
-  cache/            (git-ignored) art from Steam's CDN, achievement icons.
+  cache/            (git-ignored) art from Steam's CDN, achievement icons, each
+                    game's Steam store details (appdetails, the answer GameCove's
+                    own game-details lookup reads: genres, developers, release
+                    date, Metacritic score, screenshots) and its screenshot
+                    thumbnails.
 
 Nothing here invents a price, a name or a number a store published: values come
 from the sources above as fetched; the profile's own play history is the only
@@ -330,8 +334,36 @@ def maker_photo_job():
     return (os.path.join(CACHE, "device", "msi-claw-8-ex.png"), [m["url"]])
 
 
+def details_jobs(lib):
+    """Each game's Steam store details, unfiltered and as Steam sends them (the
+    showcase reads them with GameCove's own Metadata.steam_layer), and the
+    screenshot thumbnails the game page shows."""
+    jobs = []
+    for g in lib["games"]:
+        a = g["steam_appid"]
+        path = os.path.join(CACHE, "appdetails", a + ".json")
+        if not os.path.exists(path):
+            b = get("https://store.steampowered.com/api/appdetails?appids=%s&cc=ca&l=english" % a, binary=True)
+            if b:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "wb") as f:
+                    f.write(b)
+        try:
+            with open(path) as f:
+                d = json.load(f).get(a, {}).get("data", {})
+        except (OSError, ValueError):
+            print("  no details: " + a)
+            continue
+        for s in (d.get("screenshots") or [])[:8]:
+            u = s.get("path_thumbnail", "")
+            if u:
+                name = re.sub(r"[^A-Za-z0-9_.-]", "_", u.split("/")[-1].split("?")[0])
+                jobs.append((os.path.join(CACHE, "shots", a, name), [u]))
+    return jobs
+
+
 def fetch_art(lib):
-    jobs = art_jobs(lib) + [maker_photo_job()]
+    jobs = art_jobs(lib) + [maker_photo_job()] + details_jobs(lib)
     missing = [j for j in jobs if not os.path.exists(j[0])]
     print("art: %d files, %d to download" % (len(jobs), len(missing)), flush=True)
     with cf.ThreadPoolExecutor(12) as ex:

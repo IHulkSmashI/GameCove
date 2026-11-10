@@ -9,7 +9,11 @@ extends "../screenshots/shoot_controls.gd"
 
 const SHOTS_ALL := ["home", "library", "game", "game_achievements", "discover", "discover_deals", "discover_calendar",
 	"discover_wishlist", "discover_calendar_month", "quick_game", "quick_power", "quick_display", "quick_controller", "quick_leds",
-	"settings_power", "settings_about", "settings_fixes", "settings_updates", "settings_privacy", "settings_profiles"]
+	"settings_power", "settings_about", "settings_fixes", "settings_updates", "settings_privacy", "settings_profiles", "setup_art"]
+
+## The phone page's address in the Game art shot: a typical home Wi-Fi address
+## (the render machine's own network isn't a handheld's).
+const LAN_IP := "192.168.1.42"
 
 var here := ""
 var lib_doc: Dictionary = {}
@@ -99,6 +103,7 @@ func _run() -> void:
 		db.updated.disconnect(lib.refresh)
 	lib.games.assign(games)
 	lib.changed.emit()
+	_seed_shots(lib)
 	_status()
 	await frames(4)
 	await _use_device("msi-claw-8-ex", claw_patch())
@@ -136,6 +141,7 @@ func _run() -> void:
 	await _quick()
 	_relibrary(lib)
 	await _settings()
+	await _setup_art()
 	await finish()
 
 
@@ -155,6 +161,9 @@ func _library() -> Array:
 			info["released"] = int(info["released"])
 		if info.get("time_to_beat") is Dictionary and info["time_to_beat"].has("count"):
 			info["time_to_beat"]["count"] = int(info["time_to_beat"]["count"])
+		var meta := _meta(a)
+		if not meta.is_empty():
+			info["meta"] = meta
 		var e := {"key": "%s:%s" % [g["store"], g["id"]], "store": g["store"], "id": g["id"], "title": g["title"],
 			"installed": g["installed"],
 			"art": {"cover": _cache(a + "/cover.jpg"), "hero": _cache(a + "/hero.jpg"), "logo": _cache(a + "/logo.png"), "icon": ""},
@@ -167,6 +176,44 @@ func _library() -> Array:
 			e["update_available"] = true
 		out.append(e)
 	return out
+
+
+## Game details as GameCove's own lookup builds them: the game's real Steam
+## store answer (cache/appdetails/, fetched by fetch.py) read by
+## Metadata.steam_layer and merged.
+func _meta(appid: String) -> Dictionary:
+	var p := _cache("appdetails/%s.json" % appid)
+	if p == "":
+		return {}
+	var M = load("res://scripts/library/meta/metadata.gd")
+	var l: Dictionary = M.steam_layer(appid, FileAccess.get_file_as_bytes(p))
+	return M.merge([l]) if not l.is_empty() else {}
+
+
+## The game page asks the Library's details resolver for each screenshot
+## thumbnail; put the cached ones where it looks, so nothing is fetched mid-shot.
+func _seed_shots(lib: Node) -> void:
+	var res: Object = lib.get("metadata")
+	if res == null:
+		return
+	var dir: String = res.abs_dir().path_join("shots")
+	DirAccess.make_dir_recursive_absolute(dir)
+	for g in games:
+		var m: Variant = g["info"].get("meta")
+		if not m is Dictionary:
+			continue
+		var appid := str(g["key"]).get_slice(":", 1) if g["store"] == "steam" else ""
+		for x in lib_doc["games"]:
+			if "%s:%s" % [x["store"], x["id"]] == g["key"]:
+				appid = x["steam_appid"]
+		for s in m.get("screenshots", []):
+			var url := str(s.get("thumb", ""))
+			var name := url.get_file().get_slice("?", 0)
+			var re := RegEx.create_from_string("[^A-Za-z0-9_.-]")
+			name = re.sub(name, "_", true)
+			var src := _cache("shots/%s/%s" % [appid, name])
+			if src != "":
+				DirAccess.copy_absolute(src, dir.path_join(url.sha1_text().substr(0, 24) + ".jpg"))
 
 
 func _achievements() -> Dictionary:
@@ -430,3 +477,39 @@ func _settings() -> void:
 		await frames(8)
 		await shot("settings_privacy")
 	main.show_screen("home")
+
+
+# ------------------------------------------------------------ first-run setup
+
+## First-run setup at its Game art step, the way a new player sees it after
+## Welcome, Look and Stores: the QR opens GameCove's one-time page for the
+## phone (KeyDrop, really serving here on 127.0.0.1; the address shown is a
+## home Wi-Fi one).
+func _setup_art() -> void:
+	if not want(["setup_art"]):
+		return
+	main.show_screen("home")
+	await frames(3)
+	var setup = S.FakeSetup.new()
+	setup.done = {"welcome": true, "theme": true, "stores": true}
+	setup.status["epic"] = {"signed_in": true, "account": "player", "how": "code"}
+	setup.status["gog"] = {"signed_in": true, "account": "player", "how": "heroic"}
+	var flow_script = load("res://scripts/ui/setup/setup_flow.gd")
+	var svc := {"setup": setup, "device": main.settings.services.get("device"), "library": root.get_node("Library"),
+		"photo": main.settings.services.get("photo"), "lan": func() -> Array: return []}
+	var flow: Control = flow_script.open(main, svc, "art")
+	await frames(4)
+	var step: Node = flow.art_step
+	if step != null:
+		step.stop()
+		step._ensure_drop()
+		step.drop.bind_address = "127.0.0.1"
+		step._open_phone()
+		if step.drop.is_running():
+			step.drop.url = step.drop.url.replace("127.0.0.1", LAN_IP)
+			step._show_mode()
+	flow.focus_first()
+	await frames(6)
+	await shot("setup_art")
+	flow.finish()
+	await frames(3)

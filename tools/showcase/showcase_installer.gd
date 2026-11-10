@@ -1,7 +1,18 @@
 extends "../screenshots/shoot_installer.gd"
 ## The installer on the showcase's MSI Claw 8 EX (Bazzite): welcome, the
 ## device step and the finished install. Shots: installer, installer_device,
-## installer_done. SHOWCASE_THEME=light renders the light theme.
+## installer_done. SHOWCASE_THEME=light renders the light theme. The top bar's clock reads 20:42, the time the
+## other showcase screens show (8:42 PM), not the time it was rendered.
+
+const CLOCK := "20:42"
+
+
+func shot(name: String) -> void:
+	if screen != null and screen.status_pill != null:
+		var l: Label = screen.status_pill.find_child("Text", true, false)
+		if l != null:
+			l.text = l.text.left(l.text.rfind("·") + 1) + "  " + CLOCK if l.text.contains("·") else CLOCK
+	await super(name)
 
 
 func _run() -> void:
