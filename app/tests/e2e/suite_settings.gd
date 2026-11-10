@@ -128,6 +128,43 @@ func test_every_page_shows_every_control_with_reasons() -> void:
 		await w.frames(1)
 
 
+# ---- no white blocks ------------------------------------------------------------
+
+## Godot can't nest clip-children masks: an inner one draws its white mask
+## texture as a solid block instead of its children (it hid the first cards of
+## Settings > Device > About). In the live app every mask inside another one
+## must have stood down (fade_mask.gd), and the About tab's first card shows.
+func test_device_about_has_no_white_block() -> void:
+	ok(await open_settings("power"), "Settings reached with the pad")
+	settings().open_category("device", "about")
+	await w.frames(6)
+	var bad: Array = []
+	for n in main().find_children("*", "CanvasItem", true, false):
+		var c := n as CanvasItem
+		if not c.is_visible_in_tree():
+			continue
+		if c.clip_children != CanvasItem.CLIP_CHILDREN_DISABLED:
+			var p := c.get_parent()
+			while p != null:
+				if p is CanvasItem and (p as CanvasItem).clip_children != CanvasItem.CLIP_CHILDREN_DISABLED:
+					bad.append(String(main().get_path_to(c)))
+					break
+				p = p.get_parent()
+		elif c is TextureRect and c.get("nested") == true and c.self_modulate.a > 0.0:
+			bad.append(String(main().get_path_to(c)) + " (texture shown)")
+	eq(bad, [], "no mask inside a mask anywhere on screen")
+	var first: Node = null
+	for n in settings().find_children("Stack0", "VBoxContainer", true, false):
+		if n.is_visible_in_tree() and n.get_child_count() > 0:
+			first = n.get_child(0)
+	ok(first != null and String(first.name) == "Card_device" and first.is_visible_in_tree(), "first card on the right is the Device card")
+	if first != null:
+		var t: Label = first.find_child("Title", true, false)
+		ok(t != null and t.text.to_upper().contains("DEVICE"), "with its title")
+	await b()
+	await w.frames(1)
+
+
 # ---- every available control changes the system -------------------------------------
 
 func test_every_available_control_applies_and_reads_back() -> void:

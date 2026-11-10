@@ -8,6 +8,9 @@ const StoragePage := preload("res://scripts/ui/device/storage_panel.gd")
 const UpdatesPage := preload("res://scripts/ui/device/updates_panel.gd")
 const Picture := preload("res://scripts/ui/device/device_picture.gd")
 const Texts := preload("res://scripts/ui/texts_device.gd")
+const SettingsScreen := preload("res://scripts/ui/settings_screen.gd")
+const FadeMask := preload("res://scripts/ui/fade_mask.gd")
+const DKit := preload("res://scripts/ui/device/device_kit.gd")
 
 
 func _texts(n: Node) -> String:
@@ -253,3 +256,103 @@ func test_every_page_builds_in_every_theme() -> void:
 			p.free()
 		Fakes.free_services(s)
 	ThemeLib.use("cove")
+
+
+## Everything under `n` that would draw as a plain white block: a clip-children
+## mask inside another one (Godot draws the inner mask's own white texture and
+## none of its children), or a stood-down mask whose white texture still shows.
+func _white_blocks(n: Node) -> Array:
+	var out: Array = []
+	if n is CanvasItem and not (n as CanvasItem).visible:
+		return out   # hidden, with everything under it
+	if n is TextureRect:
+		var t := n as TextureRect
+		if t.clip_children != CanvasItem.CLIP_CHILDREN_DISABLED and _under_clip(t):
+			out.append("%s: mask inside a mask" % t.name)
+		elif t.clip_children == CanvasItem.CLIP_CHILDREN_DISABLED and t.texture is GradientTexture2D \
+				and t.self_modulate.a > 0.0 and t.modulate.a > 0.0 and t.get_child_count() > 0:
+			out.append("%s: white mask texture drawn over its children" % t.name)
+	for k in n.get_children():
+		out.append_array(_white_blocks(k))
+	return out
+
+
+func _under_clip(n: Node) -> bool:
+	var p := n.get_parent()
+	while p != null:
+		if p is CanvasItem and (p as CanvasItem).clip_children != CanvasItem.CLIP_CHILDREN_DISABLED:
+			return true
+		p = p.get_parent()
+	return false
+
+
+## The About tab inside Settings sits in Settings' own fade mask: its card
+## column's mask must stand down there (it drew as a big white rectangle in
+## place of the first cards), and the first card on the right is a real card.
+func test_about_inside_settings_has_no_white_block() -> void:
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var s := Fakes.services()
+	var st: Control = SettingsScreen.new()
+	st.set_services(s)
+	st.setup({"theme": "cove", "match_art": true, "reduce_motion": false, "menu_side": "right", "ui_sounds": "low"}, [])
+	st.size = Vector2(1536, 960)
+	root.add_child(st)
+	st.open_category("device", "about")
+	# Unit tests run outside a live tree, so enter_tree never comes: do what
+	# it does (outer masks first). The e2e suite checks the live app.
+	for m in st.find_children("*", "TextureRect", true, false):
+		if m.get_script() == FadeMask and m.has_method("fit_nesting"):
+			m.fit_nesting()
+	var panel: Control = null
+	for c in st.find_children("*", "Control", true, false):
+		if c.get_script() == About:
+			panel = c
+			break
+	ok(panel != null, "About panel built in Settings")
+	if panel != null:
+		var masks: Array = panel.find_children("*", "TextureRect", true, false).filter(func(m): return m.get_script() == FadeMask)
+		ok(not masks.is_empty(), "the card column has its fade mask")
+		ok(masks.all(func(m): return m.get("nested") == true), "inside Settings' mask it stands down")
+		eq(_white_blocks(st), [], "nothing in Settings draws as a white block")
+		var first: Control = panel._stacks[0].get_child(0)
+		eq(String(first.name), "Card_device", "first card on the right is the Device card")
+		ok(first is DKit.FocusCard, "a real card")
+		var title: Label = first.find_child("Title", true, false)
+		ok(title != null and title.text.to_upper().contains("DEVICE"), "with its title")
+	# The same mask on its own (no outer mask) still clips: the fade works.
+	var p: Control = About.build(s)
+	root.add_child(p)
+	for m in p.find_children("*", "TextureRect", true, false):
+		if m.get_script() == FadeMask and m.has_method("fit_nesting"):
+			m.fit_nesting()
+	var own: Array = p.find_children("*", "TextureRect", true, false).filter(func(m): return m.get_script() == FadeMask)
+	ok(own.size() == 1 and own[0].get("nested") != true and own[0].clip_children == CanvasItem.CLIP_CHILDREN_ONLY, "alone, the mask clips")
+	eq(_white_blocks(p), [], "and draws no white block")
+	root.remove_child(p)
+	p.free()
+	root.remove_child(st)
+	st.free()
+	Fakes.free_services(s)
+
+
+## A mask wrapped around content that already holds a mask: the inner one
+## stands down at once.
+func test_fade_mask_wrapping_a_mask_later() -> void:
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var host := Control.new()
+	root.add_child(host)
+	var outer_scroll := ScrollContainer.new()
+	host.add_child(outer_scroll)
+	var box := VBoxContainer.new()
+	outer_scroll.add_child(box)
+	var inner_scroll := ScrollContainer.new()
+	box.add_child(inner_scroll)
+	var inner: TextureRect = FadeMask.wrap(inner_scroll, 20.0)
+	ok(inner.get("nested") != true and inner.clip_children == CanvasItem.CLIP_CHILDREN_ONLY, "on its own it clips")
+	var outer: TextureRect = FadeMask.wrap(outer_scroll, 20.0)
+	ok(outer.get("nested") != true and outer.clip_children == CanvasItem.CLIP_CHILDREN_ONLY, "the outer one clips")
+	ok(inner.get("nested") == true and inner.clip_children == CanvasItem.CLIP_CHILDREN_DISABLED and inner.self_modulate.a == 0.0,
+		"the inner one stands down, texture hidden")
+	eq(_white_blocks(host), [], "no white block")
+	root.remove_child(host)
+	host.free()
