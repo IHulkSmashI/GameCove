@@ -191,6 +191,10 @@ func test_target_choices_and_hero() -> void:
 	eq(Model.pick_hero([deal], [], [today])["kind"], "release", "a release out today beats deals")
 	eq(Model.pick_hero([], [], [{"title": "S", "days_until": 5}])["line"], "release", "upcoming release when there are no deals")
 	eq(Model.pick_hero([], [], []), {}, "nothing")
+	var cal := [{"title": "Out today", "days_until": 0, "released": true}, {"title": "Out last week", "days_until": -7, "released": true},
+		{"title": "Old date", "days_until": -8000, "released": true}, {"title": "Q1", "days_until": null, "released": false},
+		{"title": "Tomorrow", "days_until": 1, "released": false}, {"title": "Today, not flagged", "days_until": 0, "released": false}]
+	eq(Model.coming_soon(cal).map(func(r): return r["title"]), ["Q1", "Tomorrow"], "Coming soon: nothing already out, nothing out today")
 	var lib := [{"key": "steam:49520", "title": "Borderlands 2"}, {"key": "gog:9", "title": "Witcher 3"}]
 	eq(Model.owned_game({"appid": "49520", "title": "x"}, lib)["key"], "steam:49520", "owned by appid")
 	eq(Model.owned_game({"appid": "", "title": "The Witcher 3"}, lib), {}, "different title isn't owned")

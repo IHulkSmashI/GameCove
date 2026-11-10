@@ -2,6 +2,9 @@ extends RefCounted
 ## What has to happen around a running game, in one place (main.gd calls it
 ## from GameSession.started / ended and from window focus changes):
 ##   started: PerfMonitor.start(app id, frame limit, frame-gen multiplier),
+##            the frame limit being the game's profile's (display.fps_limit) when
+##            Profiles owns it, and followed while the game runs, so Auto TDP's
+##            target and "can't reach" never work from an older value,
 ##            Updates.set_game_running(true), Controller.start_game(key),
 ##            Discover.pause() (no background refresh while you play)
 ##   ended:   PerfMonitor.stop(), Achievements.invalidate(appid) (Steam just
@@ -22,6 +25,8 @@ var updates: Object
 var controller: Object
 var discover: Object
 var launcher: Object
+var controls: Object
+var profiles: Object
 var game: Dictionary = {}
 var running := false
 var _front := true       # GameCove's window has focus (it has at start)
@@ -36,6 +41,35 @@ func setup(svc: Dictionary) -> void:
 	controller = svc.get("controller")
 	discover = svc.get("discover")
 	launcher = svc.get("launcher")
+	controls = svc.get("controls")
+	profiles = svc.get("profiles")
+	if controls != null and controls.has_signal("control_changed"):
+		controls.control_changed.connect(_on_control_changed)
+
+
+const FPS_ID := "display.fps_limit"
+
+
+## True while Profiles owns the frame limit (as GameSession.profiles_own_fps).
+func _profiles_own_fps() -> bool:
+	if profiles == null or controls == null or not controls.has_method("has") or not controls.has(FPS_ID):
+		return false
+	var c: Object = controls.control(FPS_ID) if controls.has_method("control") else null
+	return c != null and bool(c.get("available"))
+
+
+## The frame limit the game runs with: its profile's when Profiles owns it.
+func frame_limit_for(key: String, settings: Dictionary) -> int:
+	if _profiles_own_fps() and profiles.has_method("effective"):
+		var v: Variant = profiles.effective(key).get(FPS_ID)
+		if v is int or v is float:
+			return int(v)
+	return int(settings.get("fps_limit", 0))
+
+
+func _on_control_changed(id: String, v: Variant) -> void:
+	if running and id == FPS_ID and (v is int or v is float):
+		_call(perf, "set_target_fps", [float(v)])
 
 
 ## PerfMonitor.start options from the game's settings.
@@ -54,7 +88,9 @@ func game_started(g: Dictionary, app_id: int) -> void:
 	_menu = false
 	var key := str(g.get("key", ""))
 	var s: Dictionary = launcher.settings_for(key) if launcher != null and launcher.has_method("settings_for") else {}
-	_call(perf, "start", [app_id, perf_opts(s)])
+	var opts := perf_opts(s)
+	opts["target_fps"] = frame_limit_for(key, s)
+	_call(perf, "start", [app_id, opts])
 	_call(updates, "set_game_running", [true])
 	_call(controller, "start_game", [key])
 	_call(discover, "pause")

@@ -98,6 +98,7 @@ class Recorder extends RefCounted:
 	func pause(): calls.append(["pause"])
 	func resume(): calls.append(["resume"])
 	func invalidate(a): calls.append(["invalidate", a])
+	func set_target_fps(f): calls.append(["set_target_fps", f])
 	func settings_for(_k): return {"fps_limit": 40, "frame_gen": true}
 
 
@@ -274,11 +275,12 @@ func test_game_page_v2() -> void:
 	ok(TG.RESTART_STEAM in t, "restart button")
 	eq(p.focusables[0], p.restart_button, "restart is the first stop below the actions")
 	eq(p.ach_card.summary.text, "2 of 4 unlocked", "achievement count")
-	eq(p.ach_card.cells.size(), 4, "a row each (four fit without Show all)")
-	ok(p.ach_card.show_all == null, "no Show all for four")
-	eq(p.ach_card.items[0]["id"], "b", "newest unlock first")
-	eq(p.ach_card.items[3]["id"], "c", "hidden last")
-	p.ach_card.show_item(p.ach_card.items[3])
+	eq(p.ach_card.detail_name.text, "Deep Dive", "the rarest in the gold box")
+	eq(p.ach_card.cells.size(), 3, "a row each, the rarest not repeated under its box")
+	ok(p.ach_card.show_all == null, "no Show all for a short list")
+	eq(p.ach_card.items[0]["id"], "a", "newest unlock first (after the rarest)")
+	eq(p.ach_card.items[2]["id"], "c", "hidden last")
+	p.ach_card.show_item(p.ach_card.items[2])
 	eq(p.ach_card.detail_name.text, TG.ACH_HIDDEN, "hidden name stays secret")
 	ok(not p.ach_card.detail_line.text.contains("Spoiler"), "and its description")
 	ok(p.ach_card.cells[2].find_child("Icon", true, false).modulate.a < 0.5, "locked dimmed")
@@ -314,9 +316,17 @@ func test_achievements_card_rarest_and_show_all() -> void:
 	eq(c.rarest["id"], "x3", "the rarest unlocked one")
 	ok(c.detail_eyebrow.visible and c.detail_name.text == "Ach 3", "shown gold-edged over the list")
 	eq(c.cells.size(), AchievementsCard.LIST_ROWS + 1, "four rows, then Show all")
+	for i in AchievementsCard.LIST_ROWS:
+		ok(c.cells[i].tooltip_text != "Ach 3", "the rarest isn't repeated in row %d" % i)
+	eq(c.items.map(func(a): return a["id"]).slice(0, 4), ["x2", "x1", "x0", "x3"], "the rarest moves past the rows shown first")
+	ok(c.detail_line.text.contains("35% of players"), "rounded like the rows")
 	ok(c.show_all != null and c.show_all.text == TG.ACH_SHOW_ALL % 9, "names how many")
 	c.show_all.pressed.emit()
 	eq(c.cells.size(), 9, "every row after Show all")
+	var few: Array = items.slice(0, 3)
+	eq(AchievementsCard.without_rarest(AchievementsCard.ordered(few), few[2]).map(func(a): return a["id"]), ["x1", "x0"], "a short list leaves it to the box")
+	var small := {"rarity": 41.8, "unlocked": true, "unlock_time": 1762000000, "name": "A"}
+	ok(AchievementsCard.describe(small).contains("42% of players"), "41.8 reads 42%, as in the row")
 	c.free()
 	ach.free()
 
@@ -579,6 +589,30 @@ func test_session_wiring() -> void:
 	empty.game_started(_steam_game(), 1)
 	empty.game_ended(_steam_game())
 	ok(true, "missing services are fine")
+
+
+## Profiles owns the frame limit: Auto TDP and PerfMonitor get the profile's,
+## not the Launcher's older value, and follow a change while the game runs.
+func test_session_wiring_uses_the_profiles_frame_limit() -> void:
+	var c: Node = load("res://tests/test_ui_controls.gd").fake()
+	var file := "user://test_wiring_profiles.json"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(file))
+	var p: Node = load("res://scripts/controls/profiles.gd").new()
+	p.setup(c, "msi-claw-8-ex", file)
+	p.set_value("steam:42", "", "display.fps_limit", 30)
+	var perf := Recorder.new()
+	var w := SessionWiring.new()
+	w.setup({"perf": perf, "launcher": Recorder.new(), "controls": c, "profiles": p})
+	w.game_started(_steam_game(), 42)
+	eq(perf.calls[0][2]["target_fps"], 30, "the profile's 30 fps, not the Launcher's 40")
+	c.set_value("display.fps_limit", 60)
+	eq(perf.calls[-1], ["set_target_fps", 60.0], "a new frame limit reaches Auto TDP at once")
+	w.game_ended(_steam_game())
+	c.set_value("display.fps_limit", 30)
+	ok(perf.calls[-1][0] != "set_target_fps", "not after the game")
+	p.free()
+	c.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(file))
 
 
 func test_game_closer_plan() -> void:

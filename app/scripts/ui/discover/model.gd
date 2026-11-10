@@ -104,6 +104,13 @@ static func is_free(deal: Dictionary) -> bool:
 	return int(deal.get("savings_pct", 0)) >= 100
 
 
+## The Coming soon shelf: only what isn't out yet. A release out today (or
+## in the calendar's two-week "Out now" tail) is a released game: it leads
+## the spotlight and the calendar, never a shelf named Coming soon.
+static func coming_soon(cal: Array) -> Array:
+	return cal.filter(func(r): return not r.get("released", false) and (r.get("days_until") == null or int(r["days_until"]) > 0))
+
+
 static func free_now(deals: Array) -> Array:
 	return deals.filter(func(d): return is_free(d))
 

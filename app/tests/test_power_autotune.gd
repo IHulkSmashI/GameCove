@@ -593,6 +593,20 @@ func test_set_target_switches_modes() -> void:
 	eq(at.session.phase, "measure", "off: most frames again")
 
 
+func test_target_follows_the_frame_limit() -> void:
+	eq([AutotuneScript.effective_target(60, 45.0), AutotuneScript.effective_target(30, 45.0), AutotuneScript.effective_target(60, 0.0), AutotuneScript.effective_target(0, 45.0)],
+		[45, 30, 60, 0], "never above the limit; no limit or most frames: as picked")
+	var at := _tuner()
+	at.set_frame_limit(45.0)
+	at.set_target(60)
+	ok(at.session.target == 45.0 and at.session.user_target == 45 and at.wanted_target == 60, "a 60 fps target under a 45 fps cap holds 45")
+	eq(at.limit_info()["target_fps"], 45.0, "and says so")
+	at.set_frame_limit(0.0)
+	eq(at.session.user_target, 60, "cap lifted: back to the user's 60")
+	at.set_frame_limit(30.0)
+	eq(at.session.user_target, 30, "a lower cap pulls it down again")
+
+
 # ---- ClawDeck: thermal guard --------------------------------------------------------------------
 
 func test_thermal_guard_steps_from_95_to_under_90_never_below_floor() -> void:

@@ -232,6 +232,11 @@ func test_slider_tick_labels_are_even() -> void:
 	eq(r.value_text(), "17 W", "value shown")
 	ok(r.find_child("Ticks", true, false) != null, "labelled ticks")
 	r.free()
+	var t: Array = SliderRow.tick_values(8.0, 35.0, 1.0)
+	eq(SliderRow.lit_tick(t, 20.0, 1.0), -1, "20 W lights no tick (not the nearest, 22 W)")
+	eq(SliderRow.lit_tick(t, 22.0, 1.0), 2, "22 W lights 22 W")
+	eq(SliderRow.lit_tick([2.0, 5.0, 8.0], 6.0, 1.0), -1, "Boost 6 W lights no tick")
+	eq(SliderRow.lit_tick([0.0, 0.5, 1.0], 0.5, 0.5), 1, "half steps")
 
 
 func test_selected_row_ring_is_opaque() -> void:

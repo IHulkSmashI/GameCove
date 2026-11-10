@@ -32,6 +32,10 @@ signal pending_changed(id: String, on: bool)
 signal refreshed()
 
 const PERF_PROVIDER := "res://scripts/controls/providers/perf.gd"
+## Auto TDP's target follows the frame limit: it is never set above it (Auto
+## TDP could never reach it and would only pin the TDP at the ceiling).
+const FPS_ID := "display.fps_limit"
+const TARGET_ID := "power.autotune_target"
 
 var controls: Object
 var profiles: Object
@@ -155,6 +159,10 @@ func describe(id: String) -> Dictionary:
 			if v != null:
 				d["value"] = v
 	d["labels"] = c.get_meta("point_labels") if c.has_meta("point_labels") else []
+	# A target saved above the frame limit (before it was set, or by an older
+	# version) shows what Auto TDP really holds: the capped one.
+	if id == TARGET_ID and (d.get("value") is int or d.get("value") is float):
+		d["value"] = capped_target(int(d["value"]), _fps_limit(), d.get("options", []))
 	return d
 
 
@@ -256,8 +264,52 @@ func _coerce(c: RefCounted, v: Variant) -> Variant:
 	return c.coerce(v)
 
 
+## `target` held under a frame limit of `limit` fps (0 = none): the highest
+## of `options` (choice options, {value, label}) at or under it; 0 (most
+## frames, which the cap bounds anyway) when none is.
+static func capped_target(target: int, limit: int, options: Array) -> int:
+	if limit <= 0 or target <= limit:
+		return target
+	var best := 0
+	for o in options:
+		var ov: Variant = o.get("value") if o is Dictionary else o
+		if (ov is int or ov is float) and int(ov) > best and int(ov) <= limit:
+			best = int(ov)
+	return best
+
+
+func _fps_limit() -> int:
+	var f: Variant = value(FPS_ID) if has(FPS_ID) else null
+	return int(f) if f is int or f is float else 0
+
+
+## The line the Auto TDP target row adds while a frame limit holds it.
+func follow_note(id: String) -> String:
+	if id != TARGET_ID or not has(FPS_ID):
+		return ""
+	var lim := _fps_limit()
+	return TC.TARGET_FOLLOWS % lim if lim > 0 else ""
+
+
 ## Asks for a new value. Returns false when the control can't take one now.
 func set_value(id: String, v: Variant) -> bool:
+	var c := control(id)
+	if c == null or not c.available or blocked_reason(c) != "":
+		return false
+	if id == TARGET_ID and (v is int or v is float):
+		v = capped_target(int(v), _fps_limit(), describe(id).get("options", []))
+	elif id == FPS_ID and (v is int or v is float) and int(v) > 0 and has(TARGET_ID):
+		var t: Variant = value(TARGET_ID)
+		if (t is int or t is float) and int(t) > int(v):
+			var to := capped_target(int(t), int(v), describe(TARGET_ID).get("options", []))
+			var ok := _set_value(id, v)
+			if ok:
+				_set_value(TARGET_ID, to)
+			return ok
+	return _set_value(id, v)
+
+
+func _set_value(id: String, v: Variant) -> bool:
 	var c := control(id)
 	if c == null or not c.available or blocked_reason(c) != "":
 		return false

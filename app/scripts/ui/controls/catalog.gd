@@ -83,7 +83,7 @@ const QUICK := {
 const SHORT_TITLES := {
 	"power.autotune_target": "Auto TDP target",
 	"perf.lsfg": "Lossless frame gen",
-	"display.upscale_filter": "Screen upscaler",
+	"display.upscale_filter": "Scaling filter",
 	"display.fps_limit": "Frame limit",
 }
 

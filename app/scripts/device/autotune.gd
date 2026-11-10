@@ -173,6 +173,9 @@ var session: Session
 var plugged := false
 ## frame limit "can't reach"
 var frame_limit := 0.0
+## The Auto TDP target the user picked (0 = most frames). What runs is
+## effective_target(): never above the game's frame limit, which it can't reach.
+var wanted_target := 0
 var cant_reach := false
 var last_fps := 0.0
 var _short := 0
@@ -224,7 +227,8 @@ func start(appid: String, learned: Dictionary, floor_tdp: int, ceiling_tdp: int,
 	s.settled = reuse
 	s.fg = int(opts.get("fg", 0))
 	session = s
-	var target := int(opts.get("target", 0))
+	wanted_target = int(opts.get("target", 0))
+	var target := effective_target(wanted_target, frame_limit)
 	if target > 0:
 		_start_target(s, known, target, bool(opts.get("auto_fps", true)))
 	_apply(l)
@@ -275,8 +279,22 @@ func _start_target(s: Session, known: Dictionary, target: int, auto_fps: bool) -
 	s.last_action = "holding %d fps from %d W" % [int(s.target), l.tdp]
 
 
+## The target Auto TDP holds: the user's, but never above the game's frame limit
+## (a 60 fps target under a 45 fps cap could never be met and would only pin
+## the TDP at the ceiling). 0 stays 0 (most frames, which the cap bounds anyway).
+static func effective_target(target: int, limit: float) -> int:
+	if target > 0 and limit > 0.0 and float(target) > limit:
+		return int(limit)
+	return target
+
+
 ## The target was changed while a game runs (0 = back to most-frames mode).
 func set_target(target: int, auto_fps := true) -> void:
+	wanted_target = target
+	_retarget(effective_target(target, frame_limit), auto_fps)
+
+
+func _retarget(target: int, auto_fps: bool) -> void:
 	var s := session
 	if s == null:
 		return
@@ -390,6 +408,7 @@ func stop() -> Dictionary:
 	var s := session
 	session = null
 	frame_limit = 0.0
+	wanted_target = 0
 	_clear_limit()
 	if s == null:
 		return {}
@@ -1006,9 +1025,15 @@ func _epp(l: Learned, value: String) -> bool:
 # ---- frame limit (GameCove UI only) --------------------------------------------------------------
 
 ## The game's frame limit (0 = none): feeds `cant_reach`, never the TDP rule.
+## A target above it follows it down (and back up to the user's when it's raised).
 func set_frame_limit(fps: float) -> void:
 	frame_limit = maxf(0.0, fps)
 	_clear_limit()
+	var s := session
+	if s != null and wanted_target > 0 and s.phase == "target":
+		var eff := effective_target(wanted_target, frame_limit)
+		if eff != s.user_target:
+			_retarget(eff, s.auto_fps)
 
 
 func _clear_limit() -> void:

@@ -25,7 +25,10 @@ const STEAM_ENV_NOTE := "Steam starts this game, so upscaling, frame generation 
 
 ## with_env_settings false (Steam games): no upscaler / frame generation / low
 ## latency rows, since we can't pass a steam:// launch any environment; one line says so.
-func setup(key: String, launcher: Object, with_low_latency: bool, with_env_settings := true) -> void:
+## with_fps false: no frame limit row; the game's profile owns the frame limit
+## (Controls' display.fps_limit, shown in the Game settings card above), so a
+## second, older value here would only contradict it.
+func setup(key: String, launcher: Object, with_low_latency: bool, with_env_settings := true, with_fps := true) -> void:
 	name = "SettingsForm"
 	game_key = key
 	_launcher = launcher
@@ -34,11 +37,12 @@ func setup(key: String, launcher: Object, with_low_latency: bool, with_env_setti
 
 	var goals: Array = Texts.GOALS
 	_add(_choice("goal", goals, goals.map(func(g): return Texts.GOAL_LABELS[g])))
-	var fps: Array = Texts.FPS_LIMITS.duplicate()
-	if int(settings.get("fps_limit", 0)) not in fps:
-		fps.append(int(settings["fps_limit"]))
-		fps.sort()
-	_add(_choice("fps_limit", fps, fps.map(func(f): return Texts.fps_label(f))))
+	if with_fps:
+		var fps: Array = Texts.FPS_LIMITS.duplicate()
+		if int(settings.get("fps_limit", 0)) not in fps:
+			fps.append(int(settings["fps_limit"]))
+			fps.sort()
+		_add(_choice("fps_limit", fps, fps.map(func(f): return Texts.fps_label(f))))
 	if not with_env_settings:
 		var note := Kit.label(STEAM_ENV_NOTE, "QuietLabel", true)
 		note.name = "SteamNote"

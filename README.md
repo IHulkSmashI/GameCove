@@ -87,9 +87,9 @@ Press the Quick Access button (or Guide) and the quick menu slides in, in a game
 
 | Tab | What you control |
 | --- | --- |
-| **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, the screen upscaler |
+| **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, the scaling filter |
 | **Power** | Power profile, TDP, boost, fan mode, battery saver, charge limit, CPU boost, energy preference |
-| **Display** | Brightness, refresh rate, frame limit, VRR, night light, colour vibrance, screen upscaler and sharpness, screen effects |
+| **Display** | Brightness, refresh rate, frame limit, VRR, night light, colour vibrance, scaling filter and sharpness, screen effects |
 | **Audio** | Volume, mute, output device, microphone mute and input |
 | **Controller** | Controller type, gyro, Nintendo button layout, rumble, stick lights (effect, colour, brightness), mouse mode |
 | **Device** | Wi-Fi, Bluetooth, airplane mode, keep awake, screenshot, plus your device's fixes |

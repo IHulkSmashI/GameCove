@@ -220,6 +220,9 @@ func test_game_page_launch_settings_fold() -> void:
 	ok(not p.form.visible, "closed, so nothing is cut off at the card's foot")
 	ok(p.launch_button.text.begins_with(TG.SETTINGS_TITLE) and p.launch_button.text.contains("Balanced"),
 		"the row says what they are: " + p.launch_button.text)
+	ok(not p.launch_button.text.contains("limit") and not p.launch_button.text.contains("fps"),
+		"no second frame limit to contradict the card's: " + p.launch_button.text)
+	ok(not p.form.rows.has("fps_limit"), "the card's Frame limit is the only one")
 	ok(p.focusables.has(p.launch_button), "and takes focus")
 	ok(not p.focusables.has(p.form.rows["goal"].button), "closed rows aren't in the focus chain")
 	p.launch_button.pressed.emit()

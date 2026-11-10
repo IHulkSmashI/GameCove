@@ -152,7 +152,7 @@ func build() -> void:
 	var now: int = ctx.now()
 	var cur: String = ctx.currency()
 	var ws := Model.on_sale_wishlist(wish)
-	var soon := cal.filter(func(r): return not r.get("released", false) or (r.get("days_until") != null and int(r["days_until"]) == 0))
+	var soon := Model.coming_soon(cal)
 	var free := Model.free_now(deals)
 	var top := deals.filter(func(x): return not Model.is_free(x))
 	# No game twice: the spotlight's game leaves the shelves, and Top deals

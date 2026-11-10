@@ -105,6 +105,28 @@ func test_model_pending_failed_and_saving() -> void:
 	_done([c, p])
 
 
+func test_model_auto_tdp_target_follows_the_frame_limit() -> void:
+	var c := fake()
+	c.add({"id": "power.autotune_target", "title": "Auto TDP target", "kind": "choice", "value": 60,
+		"options": [{"value": 0, "label": "Most frames"}, {"value": 30, "label": "30 fps"}, {"value": 45, "label": "45 fps"}, {"value": 60, "label": "60 fps"}]})
+	var p := _profiles(c)
+	p._first_detect_done = true
+	var m = _model(c, p)
+	eq(Model.capped_target(60, 45, [0, 30, 45, 60]), 45, "held at the limit")
+	eq(Model.capped_target(60, 40, [0, 30, 45, 60]), 30, "the highest choice under it")
+	eq(Model.capped_target(60, 0, [0, 30, 45, 60]), 60, "no limit: as picked")
+	m.set_value("display.fps_limit", 30)
+	eq(c.value("power.autotune_target"), 30, "a 30 fps cap brings a 60 fps target down with it")
+	eq(m.follow_note("power.autotune_target"), TC.TARGET_FOLLOWS % 30, "and the row says why")
+	m.set_value("power.autotune_target", 60)
+	eq(c.value("power.autotune_target"), 30, "can't be set above the cap")
+	m.set_value("display.fps_limit", 0)
+	eq(m.follow_note("power.autotune_target"), "", "no cap, no note")
+	m.set_value("power.autotune_target", 60)
+	eq(c.value("power.autotune_target"), 60, "free again without a cap")
+	_done([c, p])
+
+
 func test_model_game_profile_and_layers() -> void:
 	var c := fake()
 	var p := _profiles(c)
@@ -385,6 +407,16 @@ func test_low_latency_is_only_an_override() -> void:
 	var card: Array = cards.filter(func(cd): return "perf.low_latency" in cd[2] + cd[3])[0]
 	ok("troubleshooting" in str(card[0]).to_lower(), "under troubleshooting")
 	ok("perf.low_latency" in card[3], "behind More settings, not in the main list")
+
+
+## The screen's scaling filter (gamescope) and the game's upscaler (XeSS / FSR)
+## sit in the same quick menu tab: they must never read alike.
+func test_scaling_filter_is_not_called_an_upscaler() -> void:
+	var TD = load("res://scripts/controls/display/texts_display.gd")
+	eq(Catalog.SHORT_TITLES["display.upscale_filter"], "Scaling filter", "quick menu title")
+	eq(TD.TEXT["display.upscale_filter"][0], "Scaling filter", "full title")
+	for t in [Catalog.SHORT_TITLES["display.upscale_filter"], TD.TEXT["display.upscale_filter"][0]]:
+		ok(not t.to_lower().contains("upscaler"), t)
 
 
 func test_catalog_covers_everything() -> void:

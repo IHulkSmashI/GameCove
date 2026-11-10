@@ -10,7 +10,7 @@ const TEXT := {
 	"display.fps_limit": ["Frame limit", "Caps the game's frame rate. Steadier and cooler; pick a whole fraction of the refresh rate."],
 	"display.vrr": ["Variable refresh rate (VRR)", "The screen follows the game's frame rate, so uneven frame rates look smooth."],
 	"display.allow_tearing": ["Allow tearing", "Shows each frame as soon as it's ready. A little less input lag, some tearing."],
-	"display.upscale_filter": ["Upscaler", "How a game running below the screen's resolution is scaled up. FSR and NIS sharpen; Nearest and Pixel keep pixel art crisp."],
+	"display.upscale_filter": ["Scaling filter", "How the screen scales up a game running below its resolution (not the game's own upscaler). FSR and NIS sharpen; Nearest and Pixel keep pixel art crisp."],
 	"display.upscale_scaler": ["Scaling", "How the game's picture fits the screen."],
 	"display.sharpness": ["Sharpness", "How much FSR, NIS or SGSR sharpen the picture."],
 	"display.vibrance": ["Colour vibrance", "Richer colours. 0 is the most natural."],

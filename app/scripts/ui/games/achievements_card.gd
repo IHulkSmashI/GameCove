@@ -145,6 +145,27 @@ static func ordered(list: Array) -> Array:
 	return un + locked + hidden
 
 
+## The list under the gold RAREST box never repeats it in its first rows:
+## it moves past the rows shown before "Show all" (still in the full list),
+## and leaves a list short enough to show whole (the box already shows it).
+static func without_rarest(list: Array, best: Dictionary) -> Array:
+	if best.is_empty():
+		return list
+	var at := -1
+	for i in list.size():
+		if str(list[i].get("id", "")) == str(best.get("id", "")) and str(list[i].get("name", "")) == str(best.get("name", "")):
+			at = i
+			break
+	if at < 0:
+		return list
+	var out := list.duplicate()
+	var it = out.pop_at(at)
+	if out.size() < LIST_ROWS + 1:
+		return out
+	out.insert(maxi(at, LIST_ROWS), it)
+	return out
+
+
 func show_data(result: Dictionary) -> void:
 	data = result
 	for c in cells:
@@ -172,8 +193,8 @@ func show_data(result: Dictionary) -> void:
 	percent_label.text = "%d%%" % roundi(100.0 * unlocked / total)
 	bar.set_value(float(unlocked) / total, false)
 	bar.set_color(ThemeLib.tone("gold") if unlocked == total else Color(0, 0, 0, 0))
-	items = ordered(result.get("items", []))
 	rarest = ProgressCard.rarest(result)
+	items = without_rarest(ordered(result.get("items", [])), rarest)
 	var n := mini(items.size(), MAX_CELLS)
 	var shown := n if expanded or n <= LIST_ROWS + 1 else LIST_ROWS
 	for i in shown:
@@ -340,7 +361,8 @@ static func describe(a: Dictionary) -> String:
 		tail.append(TG.ACH_LOCKED)
 	var r := float(a.get("rarity", -1))
 	if r >= 0.0:
-		tail.append(("%.1f%% of players" % r) + (" · rare" if r < RARE else ""))
+		# Rounded like the rows' percentages (ProgressCard._pct), so one achievement never reads two ways.
+		tail.append(("%s%% of players" % ProgressCard._pct(r)) + (" · rare" if r < RARE else ""))
 	parts.append(" · ".join(tail))
 	return "  ".join(parts) if parts.size() == 1 else parts[0] + "\n" + parts[1]
 

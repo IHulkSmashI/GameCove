@@ -32,6 +32,8 @@ const SAVED_FOR := "Saved for %s"
 
 const AUTO_TDP := "Auto TDP"
 const AUTO_TDP_HELP := "Lowers the power limit by itself while the game holds its frame rate. Saves battery."
+## Under the Auto TDP target while the game has a frame limit.
+const TARGET_FOLLOWS := "Follows the frame limit: never above %d fps."
 const AUTO_TDP_RUNNING := "Running now"
 
 ## Where a value comes from (Profiles.explain layers).

@@ -136,7 +136,10 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 	launch_button.focus_entered.connect(func(): _reveal(gbody.get_parent()))
 	gbody.add_child(launch_button)
 	form = SettingsForm.new()
-	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam")
+	# With the Game settings card and Controls' frame limit, the card shows the
+	# real one: the launch settings leave theirs out (and so does their row).
+	var card_fps: bool = game_settings != null and ctl.has_method("has") and ctl.has("display.fps_limit")
+	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam", not card_fps)
 	form.saved.connect(func(_s): _label_launch_button())
 	gbody.add_child(form)
 	_show_launch_settings()
@@ -539,7 +542,7 @@ func _label_launch_button() -> void:
 		var bits := [TG.SETTINGS_TITLE]
 		if Texts.GOAL_LABELS.has(goal):
 			bits.append(Texts.GOAL_LABELS[goal])
-		if st.has("fps_limit"):
+		if form != null and form.rows.has("fps_limit") and st.has("fps_limit"):
 			bits.append(Texts.fps_label(int(st["fps_limit"])))
 		launch_button.text = "  ·  ".join(bits)
 	launch_button.icon = GameIcons.tex("chevron_down" if launch_open else "chevron_right", 18, ThemeLib.color("text_2"))

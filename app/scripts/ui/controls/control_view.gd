@@ -272,6 +272,10 @@ func explanation() -> String:
 	var h := str(opts.get("help", desc.get("help", "")))
 	if h != "":
 		parts.append(h)
+	if model != null and model.has_method("follow_note"):
+		var f: String = model.follow_note(id)
+		if f != "":
+			parts.append(f)
 	var j := jargon_line(title(), h)
 	if j != "":
 		parts.append(j)
@@ -378,7 +382,7 @@ func _needs_confirm() -> bool:
 
 func _on_changed(cid: String, _v: Variant) -> void:
 	if cid != id:
-		if cid in desc.get("requires", []):
+		if cid in desc.get("requires", []) or (cid == Model.FPS_ID and id == Model.TARGET_ID):
 			refresh()
 		return
 	status_label.text = ""

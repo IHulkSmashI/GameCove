@@ -219,14 +219,9 @@ func _fmt(v: float) -> String:
 
 func _show(v: float) -> void:
 	_value_label.text = _fmt(v)
-	# Light the tick label nearest the value.
-	var best := -1
-	var dist := INF
-	for i in _tick_values.size():
-		var d := absf(float(_tick_values[i]) - v)
-		if d < dist:
-			dist = d
-			best = i
+	# A tick lights only when the value is exactly on it (a "nearest" tick
+	# lit under 20 W read as 22 W, an off-by-one bug).
+	var best := lit_tick(_tick_values, v, slider.step)
 	for i in _tick_values.size():
 		var l: Label = _ticks.get_child(i)
 		var on := i == best
@@ -235,6 +230,15 @@ func _show(v: float) -> void:
 		var m: ColorRect = _ticks.get_child(_tick_values.size() + i)
 		m.color = ThemeLib.color("accent") if on else ThemeLib.soft(0.28)
 	_place_ticks()
+
+
+## Index of the tick the value sits on (within half a step), or -1.
+static func lit_tick(ticks: Array, v: float, step: float) -> int:
+	var tol := maxf(0.0001, (step if step > 0.0 else 1.0) * 0.5 - 0.0001)
+	for i in ticks.size():
+		if absf(float(ticks[i]) - v) < tol:
+			return i
+	return -1
 
 
 func _refresh_focus() -> void:

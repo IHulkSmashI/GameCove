@@ -1344,7 +1344,7 @@
    "reason": "",
    "requires": [],
    "step": 1.0,
-   "title": "Upscaler",
+   "title": "Scaling filter",
    "unit": "",
    "value": 0
   },
