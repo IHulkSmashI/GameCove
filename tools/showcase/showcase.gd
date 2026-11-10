@@ -12,7 +12,7 @@ extends "../screenshots/shoot_controls.gd"
 ## SHOWCASE_THEME=light renders the light theme (default: Cove).
 
 const SHOTS_ALL := ["home", "home_shelves", "library", "library_filter", "library_apps", "game", "game_achievements",
-	"game_saves", "emulation", "apps_view", "discover", "discover_free", "discover_deals", "discover_calendar",
+	"game_saves", "emulation", "library_emulation", "game_rom", "apps_view", "discover", "discover_free", "discover_deals", "discover_calendar",
 	"discover_calendar_month", "discover_wishlist", "quick_game", "quick_power", "quick_display", "quick_audio",
 	"quick_controller", "quick_leds", "quick_device", "settings_power", "settings_performance", "settings_system",
 	"settings_profiles", "settings_saves", "settings_media", "media_clip_sheet", "media_share", "settings_about",
@@ -154,13 +154,33 @@ func _run() -> void:
 	await shot("home")
 	await _library_shots()
 	await _game_shots()
+	lib.set("_last_emu_scan", 1 << 40)   # no rescan of this machine's ROM folders while the shots run
 	if want(["emulation"]):
 		main.show_screen("library")
 		await frames(2)
 		main.open_emulation()
+		await frames(4)
 		await shot("emulation")
 		main._close_page()
 		main.show_screen("home")
+	if want(["library_emulation"]):
+		main.show_screen("library")
+		main.library_screen.set_view("emulation")
+		await frames(4)
+		for t in main.library_screen.tiles():
+			if t.game.get("title", "") == "Super Metroid":
+				t.grab_focus()
+		await frames(4)
+		await shot("library_emulation")
+		main.library_screen.set_view("")
+		main.show_screen("home")
+	if want(["game_rom"]):
+		for g in games:
+			if g.get("title", "") == "Super Metroid":
+				main._open_page(g)
+		await frames(6)
+		await shot("game_rom")
+		main._close_page()
 	await _apps_view()
 
 	if want(["discover", "discover_free", "discover_deals", "discover_calendar", "discover_calendar_month", "discover_wishlist"]):
@@ -318,14 +338,10 @@ func _emulation(lib: Node) -> void:
 		"frontend": {"name": "ES-DE", "command": ["/home/deck/Applications/ES-DE.AppImage"]},
 		"app": {"name": "EmuDeck", "command": ["/home/deck/Applications/EmuDeck.AppImage"]},
 		"srm": {"command": ["/home/deck/Applications/srm/Steam-ROM-Manager.AppImage"]},
-		"roms_dir": roms, "esde_dir": home.path_join("ES-DE"), "rom_total": 214,
-		"systems": [{"id": "snes", "name": "Nintendo SNES (Super Nintendo)", "short": "SNES", "count": 64},
-			{"id": "gba", "name": "Nintendo Game Boy Advance", "short": "GBA", "count": 48},
-			{"id": "psx", "name": "Sony PlayStation", "short": "PS1", "count": 37},
-			{"id": "genesis", "name": "Sega Genesis", "short": "Genesis", "count": 29},
-			{"id": "n64", "name": "Nintendo 64", "short": "N64", "count": 18},
-			{"id": "ps2", "name": "Sony PlayStation 2", "short": "PS2", "count": 11},
-			{"id": "gc", "name": "Nintendo GameCube", "short": "GameCube", "count": 7}],
+		"roms_dir": roms, "esde_dir": home.path_join("ES-DE"), "rom_total": 0, "roms_shown": true,
+		"roots": [{"path": roms, "real": roms, "online": true, "from": "EmuDeck"}],
+		# Filled in below from the ROM games themselves (the page's counts are the Library's games).
+		"systems": [],
 		"recent": [{"title": "Super Metroid", "system": "SNES", "last_played": now - 86400 * 10},
 			{"title": "Pokémon Emerald", "system": "GBA", "last_played": now - 86400 * 13},
 			{"title": "Castlevania: Symphony of the Night", "system": "PS1", "last_played": now - 86400 * 19},
@@ -335,21 +351,42 @@ func _emulation(lib: Node) -> void:
 		"art": none.duplicate(), "info": {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null},
 		"last_played": now - 86400 * 10, "playtime_min": 1840, "command": lib.emulation["frontend"]["command"], "frontend": true,
 		"emulated": {"system": "", "system_name": "", "system_short": "", "emulator": "", "via": "emudeck"}})
-	var specs := [["Super Metroid", "snes", "Nintendo SNES (Super Nintendo)", "SNES", "Snes9x", "super-metroid", 10, 612],
-		["Pokémon Emerald", "gba", "Nintendo Game Boy Advance", "GBA", "mGBA", "pokemon-emerald", 13, 1490],
-		["Castlevania: Symphony of the Night", "psx", "Sony PlayStation", "PS1", "SwanStation", "castlevania-sotn", 19, 538],
-		["Sonic the Hedgehog 2", "genesis", "Sega Genesis", "Genesis", "Genesis Plus GX", "sonic-2", 26, 205]]
+	# [title, system, system name, short, core, art name, days since played, minutes, ROM file, genres, developer, released, players, rating]
+	var specs := [["Super Metroid", "snes", "Nintendo SNES (Super Nintendo)", "SNES", "Snes9x - Current", "super-metroid", 10, 612,
+			"Super Metroid (Japan, USA) (En,Ja).sfc", ["Action", "Platform"], "Nintendo R&D1", "1994-03-19", "1", 0.95],
+		["Pokémon Emerald", "gba", "Nintendo Game Boy Advance", "GBA", "mGBA", "pokemon-emerald", 13, 1490,
+			"Pokemon - Emerald Version (USA, Europe).gba", ["Role-playing"], "Game Freak", "2004-09-16", "1-4", 0.9],
+		["Castlevania: Symphony of the Night", "psx", "Sony PlayStation", "PS1", "SwanStation", "castlevania-sotn", 19, 538,
+			"Castlevania - Symphony of the Night (USA).chd", ["Action", "Platform"], "Konami", "1997-03-20", "1", 0.95],
+		["Sonic the Hedgehog 2", "genesis", "Sega Genesis", "Genesis", "Genesis Plus GX", "sonic-2", 26, 205,
+			"Sonic The Hedgehog 2 (World) (Rev A).md", ["Platform"], "Sonic Team", "1992-11-21", "1-2", 0.85]]
 	var i := 0
 	for s in specs:
 		i += 1
 		var art := none.duplicate()
 		art["cover"] = _cache("emu/%s-cover.png" % s[5])
 		art["hero"] = _cache("emu/%s-snap.png" % s[5])
-		games.append({"key": "emu:30000000%02d" % i, "store": "emu", "id": "30000000%02d" % i, "title": s[0], "installed": true,
-			"art": art, "info": {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null,
-			"summary": "From your %s ROM folder, added to Steam by Steam ROM Manager through EmuDeck. Runs in RetroArch (%s)." % [s[3], s[4]]},
-			"last_played": now - 86400 * int(s[6]), "playtime_min": int(s[7]), "shortcut": true,
-			"emulated": {"system": s[1], "system_name": s[2], "system_short": s[3], "emulator": "RetroArch", "via": "emudeck"}})
+		# Every ROM is a game of its own (scripts/library/stores/roms.gd): ES-DE's details, its art, our play time.
+		var id := "rom:%s/%s" % [s[1], s[8]]
+		var summary := "From your %s ROM folder. It runs in RetroArch (%s) through EmuDeck." % [s[3], s[4]]
+		var M = load("res://scripts/library/meta/metadata.gd")
+		var meta: Dictionary = M.merge([M.layer("esde", {"summary": summary, "genres": s[9], "developers": [s[10]], "release_date": s[11]})])
+		games.append({"key": "emu:" + id, "store": "emu", "id": id, "title": s[0], "installed": true,
+			"art": art, "info": {"released": int(str(s[11]).substr(0, 4)), "time_to_beat": null, "anticheat": null, "protondb": null,
+			"summary": summary, "meta": meta},
+			"last_played": now - 86400 * int(s[6]), "playtime_min": int(s[7]), "shortcut": false,
+			"emulated": {"system": s[1], "system_name": s[2], "system_short": s[3], "emulator": "RetroArch (%s)" % s[4], "via": "emudeck",
+				"rom": true, "players": s[12], "rating": float(s[13]), "playcount": 0, "root": roms}})
+
+	var by := {}
+	for g in games:
+		var e: Variant = g.get("emulated")
+		if e is Dictionary and e.get("rom", false):
+			if not by.has(e["system"]):
+				by[e["system"]] = {"id": e["system"], "name": e["system_name"], "short": e["system_short"], "count": 0, "roots": [roms], "known": true}
+			by[e["system"]]["count"] += 1
+	lib.emulation["systems"] = by.values()
+	lib.emulation["rom_total"] = games.filter(func(g): return g.get("emulated", {}).get("rom", false)).size()
 
 
 func _status() -> void:
