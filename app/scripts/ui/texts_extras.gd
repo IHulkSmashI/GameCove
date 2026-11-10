@@ -61,3 +61,35 @@ const CLEAN_RUNNING := "Cleaning up…"
 const CLEAN_DONE := "Freed %s"
 const CLEAN_FAILED := "Some folders couldn't be removed. Close Steam's download page and try again."
 const CLEAN_SAVES := "Your saves and Proton prefixes are never touched."
+
+# ---- GE-Proton ---------------------------------------------------------------------------
+const GE_TITLE := "GE-Proton"
+const GE_LINE := "A community Proton with extra fixes and codecs some games need. Install it here, then pick it in a game's Proton version."
+const GE_CHECK := "Check for the latest GE-Proton"
+const GE_CHECK_HINT := "Asks GitHub for the newest release. Nothing about you is sent."
+const GE_CHECKING := "Checking…"
+const GE_LATEST := "%s is out"
+const GE_HAVE_LATEST := "You have the latest: %s"
+const GE_INSTALL := "Install %s"
+const GE_INSTALL_HINT := "Downloads about %s from GloriousEggroll's GitHub page, checks it, and unpacks it for Steam."
+const GE_INSTALLING := "Downloading and checking… this takes a few minutes"
+const GE_INSTALLED := "%s installed. Steam games can use it after Steam restarts."
+const GE_ROW_HINT := "Press A to remove it."
+const GE_ROW_IN_USE := "Used by %d %s"
+const GE_REMOVE := "Remove %s"
+const GE_REMOVE_DETAIL := "Frees the space it takes (about 1.5 GB). Versions a game is set to stay until you pick another for it."
+const GE_REMOVED := "Removed %s"
+const GE_NONE := "No GE-Proton installed yet."
+const GE_NO_STEAM := "Steam isn't set up on this handheld yet, so there's nowhere to install Proton."
+const GE_ERRORS := {
+	"offline": "Couldn't reach GitHub. Check the internet connection and try again.",
+	"bad_release": "GitHub's answer didn't look like a GE-Proton release. Try again later.",
+	"exists": "That version is already installed.",
+	"download": "The download stopped. Check the internet connection and try again.",
+	"checksum": "The download didn't match its checksum, so it wasn't installed. Try again.",
+	"unpack": "Couldn't unpack it. Is there enough free space?",
+	"no_steam": "Steam isn't set up on this handheld yet, so there's nowhere to install Proton.",
+	"in_use": "A game is set to this version. Pick another Proton for it first.",
+	"not_found": "That version isn't installed any more.",
+	"failed": "Couldn't remove it. Try again.",
+}

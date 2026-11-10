@@ -23,6 +23,8 @@ const NETWORK_CALLS := [
 		"when": "With the deals refresh, only if you added a key", "switch": "Look up deals and prices"},
 	{"who": "Your handheld's maker (or GitHub for free photos)", "what": "One request for your device model's picture; the address tells the site which model you have.",
 		"when": "At start until the picture is saved, then weekly", "switch": "Show maker photos / Background lookups"},
+	{"who": "GitHub (GE-Proton releases)", "what": "Which GE-Proton release is newest; the release itself and its checksum when you install it. Nothing about you is sent.",
+		"when": "When you press Check or Install in Settings > Performance > GE-Proton", "switch": "You start it"},
 	{"who": "GitHub (firmware index), then the maker's own site", "what": "The list of the newest BIOS and firmware; the firmware file itself only when you ask for a USB drive.",
 		"when": "When you check for updates", "switch": "You start it"},
 	{"who": "Steam (insights on a game's page)", "what": "The game's app id, for players now, reviews, the Steam Deck rating, the last update and its DLC (DLC prices: also your store country). GameCove never contacts SteamDB; it only shows a QR code for it.",
