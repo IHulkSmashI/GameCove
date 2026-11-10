@@ -354,6 +354,8 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 			_drop_sync(key, true)
 		return _set_status(key, str(plan["why"]))
 	var app := str(entry.get("id", ""))
+	if bool(plan.get("moved", false)):
+		_drop_sync(key, true)   # another prefix's folder: the old sync time isn't about it
 	_epic_folder_check(key, str(plan["save_path"]))
 	var look := _legendary(plan, app, "check")
 	if look["state"] in ["offline", "failed", "unsupported", "no_path"]:
@@ -399,7 +401,9 @@ func _epic_folder_check(key: String, folder: String) -> void:
 ## Backs the save folder up, downloads (step download or force_download), and puts the
 ## backup back if the download didn't finish.
 func _epic_download(key: String, entry: Dictionary, plan: Dictionary, app: String, look: Dictionary, step: String, times: Dictionary) -> Dictionary:
-	var folder := CloudSaves.epic_save_path(str(entry.get("config_dir", "")), app)
+	var folder := str(plan.get("save_path", ""))   # where legendary will write (a changed prefix: the new folder)
+	if folder == "":
+		folder = CloudSaves.epic_save_path(str(entry.get("config_dir", "")), app)
 	if folder == "":
 		folder = str(look.get("save_path", ""))
 	if folder == "":
@@ -423,8 +427,10 @@ func _put_back(key: String, b: Dictionary) -> String:
 	return "" if r["ok"] else " (" + str(r["why"]) + ")"
 
 
+## A plan with "moved" (a changed prefix) tells legendary the folder on every call until
+## legendary keeps it.
 func _legendary(plan: Dictionary, app: String, step: String) -> Dictionary:
-	var argv := CloudSaves.with_timeout(plan["cmd"], CloudSaves.legendary_args(app, step))
+	var argv := CloudSaves.with_timeout(plan["cmd"], CloudSaves.legendary_args(app, step, str(plan["save_path"]) if bool(plan.get("moved", false)) else ""))
 	var r: Dictionary = run.call(argv[0], PackedStringArray(argv.slice(1)))
 	return CloudSaves.parse_legendary(str(r.get("out", "")), int(r.get("code", -1)))
 
@@ -581,7 +587,7 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 			if not plan["ok"]:
 				return _set_status(key, str(plan["why"]))
 			var app := str(entry.get("id", ""))
-			var folder := CloudSaves.epic_save_path(str(entry.get("config_dir", "")), app)
+			var folder := str(plan["save_path"]) if str(plan["save_path"]) != "" else CloudSaves.epic_save_path(str(entry.get("config_dir", "")), app)
 			if choice == "cloud":
 				return _epic_download(key, entry, plan, app, {}, "force_download", {"epic_path": folder})
 			# Epic keeps the earlier cloud saves next to the new one, so uploading loses nothing there

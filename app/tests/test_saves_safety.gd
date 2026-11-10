@@ -359,3 +359,38 @@ func test_epic_not_set_up_drops_the_last_sync() -> void:
 	eq(w["s"].status(w["epic"])["state"], "not_set_up", "no prefix yet")
 	eq(int(_cfg(w, "epic:Min", "last_sync", -1)), 0, "an old sync time doesn't outlive the prefix")
 	_done(w)
+
+
+# ---- Epic: a changed prefix ---------------------------------------------------------------------
+
+## legendary keeps the save folder it computed once. After a prefix change we hand it the
+## same folder inside the prefix the game runs in now.
+func test_epic_follows_a_changed_prefix() -> void:
+	var w := _world("epic_prefix_changed")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "40 hours", T0)
+	w["s"].sync_now(w["epic"])
+	var other: String = w["root"].path_join("prefix2")
+	Fakes.put(other.path_join("user.reg"), "reg")
+	DirAccess.make_dir_recursive_absolute(other.path_join("drive_c/users/steamuser"))
+	w["entries"]["epic:Min"]["prefix"] = other
+	var want := other.path_join("drive_c/users/steamuser/Saved Games/Min")
+	eq(CloudSaves.epic_moved_save_path(w["esaves"], other), want, "the same folder in the new prefix")
+	eq(CloudSaves.epic_moved_save_path(w["esaves"], w["prefix"]), "", "same prefix: nothing to move")
+	eq(CloudSaves.epic_moved_save_path("/games/Min/save", other), "", "a folder outside any prefix stays")
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	ok(str(w["calls"][-1]).contains("--save-path " + want) or str(w["calls"][-2]).contains("--save-path " + want), "legendary is told the new folder")
+	eq(cloud.save_path(), want, "and keeps it")
+	eq(FileAccess.get_file_as_string(want.path_join("world.sav")), "40 hours", "the cloud save came down into the new prefix")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "40 hours", "the old prefix's save is left alone")
+	# a different Windows user name in the new prefix
+	var third: String = w["root"].path_join("prefix3")
+	DirAccess.make_dir_recursive_absolute(third.path_join("drive_c/users/deck"))
+	eq(CloudSaves.epic_moved_save_path(w["esaves"], third), third.path_join("drive_c/users/deck/Saved Games/Min"), "the prefix's own user folder")
+	# the play session in the new prefix then syncs there
+	w["now"][0] += 900
+	Fakes.put(want.path_join("world.sav"), "41 hours", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	eq(cloud.saves[-1]["files"]["world.sav"], "41 hours", "the next save goes up from the new prefix")
+	_done(w)

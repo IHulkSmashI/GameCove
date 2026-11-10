@@ -30,6 +30,7 @@ extends RefCounted
 ## Amazon: nile has no save sync (github.com/imLinguin/nile), so Amazon games aren't covered.
 
 const Common := preload("res://scripts/library/stores/common.gd")
+const SteamGrid := preload("res://scripts/library/art/steam_grid.gd")
 
 const HEROIC_FLATPAK_ID := "com.heroicgameslauncher.hgl"
 ## A clock difference smaller than this is the same moment (legendary SAME_AGE uses 60 s).
@@ -121,8 +122,11 @@ static func with_timeout(base: Array, args: Array, secs := TIMEOUT_S) -> Array[S
 
 
 ## legendary's arguments for one sync step. step: check | download | upload | force_download | force_upload.
-static func legendary_args(app: String, step: String) -> Array:
+## save_path: the folder legendary should keep for the app from now on ("" = the one it has).
+static func legendary_args(app: String, step: String, save_path := "") -> Array:
 	var a: Array = ["-y", "sync-saves", app, "--accept-path"]
+	if save_path != "":
+		a.append_array(["--save-path", save_path])
 	match step:
 		"check": a.append_array(["--skip-upload", "--skip-download"])
 		"download": a.append("--skip-upload")
@@ -178,7 +182,31 @@ static func epic_save_path(config_dir: String, app: String) -> String:
 	return str(v) if v is String else ""
 
 
-## What's needed to sync an Epic game: {"ok", "why", "cmd", "save_path", "needs_prefix"}.
+## The save folder legendary keeps (`saved`), as the same folder inside the prefix the game
+## runs in now (`pfx`, from wine_prefix()). legendary works the folder out once and keeps it,
+## so after a prefix change it would go on syncing the old prefix's folder. "" when `saved`
+## isn't inside a prefix, or is in `pfx` already.
+static func epic_moved_save_path(saved: String, pfx: String) -> String:
+	if saved == "" or pfx == "":
+		return ""
+	var s := saved.simplify_path()
+	var at := s.find("/drive_c/")
+	if at <= 0:
+		return ""
+	var root := pfx.simplify_path()
+	if s.substr(0, at) == root or SteamGrid.resolve(s.substr(0, at)) == SteamGrid.resolve(root):
+		return ""
+	var parts := s.substr(at + 1).split("/")   # drive_c / users / <user> / ...
+	if parts.size() >= 3 and parts[1].to_lower() == "users" and parts[2].to_lower() != "public":
+		var user := prefix_user_dir(root)
+		if user != "":
+			parts[2] = user.get_file()
+	return case_insensitive(root.path_join("/".join(parts)))
+
+
+## What's needed to sync an Epic game: {"ok", "why", "cmd", "save_path", "moved"}.
+## save_path is the folder that will be synced; moved is true when that isn't the one
+## legendary keeps yet (a changed prefix: pass it to legendary_args).
 ## why: no_tool | signed_out | unsupported | not_set_up.
 static func epic_plan(entry: Dictionary, tools: Dictionary) -> Dictionary:
 	var cfg := str(entry.get("config_dir", ""))
@@ -202,7 +230,8 @@ static func epic_plan(entry: Dictionary, tools: Dictionary) -> Dictionary:
 	var base := tool_base("legendary", entry, tools, env)
 	if not base["ok"]:
 		return {"ok": false, "why": "no_tool"}
-	return {"ok": true, "why": "", "cmd": base["cmd"], "save_path": saved}
+	var moved := epic_moved_save_path(saved, pfx) if windows else ""
+	return {"ok": true, "why": "", "cmd": base["cmd"], "save_path": moved if moved != "" else saved, "moved": moved != ""}
 
 
 ## "2026-11-10 12:30:00" (UTC, as legendary prints it) -> unix seconds; 0 for N/A.
