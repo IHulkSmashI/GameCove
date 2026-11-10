@@ -133,6 +133,8 @@ var _guard_base_w := -1.0   # the TDP before the guard's first step (no user pic
 var _busy := -1
 var _busy_at := -1000.0
 var _battery_pct := -1
+var _battery_status := ""     # the battery's own "status" (Charging, Discharging, ...)
+var _battery_resend := false
 ## Boost watts above the TDP the user picked on PowerStation (PL2 - PL1 / SPPT above SPL);
 ## -1 = the device's default (devices.json pl2_offset_w, else what PowerStation keeps).
 var boost_w := -1.0
@@ -1053,10 +1055,25 @@ func _report_battery(on_ac: bool) -> void:
 				var c := DeviceScript.read_text(d + "capacity")
 				if c.is_valid_int():
 					pct = c.to_int()
+				_battery_status = DeviceScript.read_text(d + "status")
 				break
-	if pct >= 0 and pct != _battery_pct:
+	if pct >= 0 and (pct != _battery_pct or _battery_resend):
+		_battery_resend = false
 		_battery_pct = pct
 		_emit_main(battery_level, [pct, on_ac])
+
+
+## True while the battery itself says it is charging. Some chargers aren't listed as "Mains"
+## or "USB" (ac_online()), so on those handhelds `plugged` stays false with the cable in; the
+## low-battery sleep must not count that as running on battery.
+func battery_charging() -> bool:
+	return _battery_status == "Charging"
+
+
+## The next 15 s check reports the level again even if it didn't change (the low-battery
+## watcher asks for a second reading before it believes a sudden low one).
+func request_battery_report() -> void:
+	_battery_resend = true
 
 
 func battery_percent() -> int:
