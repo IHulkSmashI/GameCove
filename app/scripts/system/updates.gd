@@ -44,6 +44,7 @@ signal finished(kind: String, ok: bool, message: String)
 const OsInfo := preload("res://scripts/system/os_info.gd")
 const Parse := preload("res://scripts/system/update_parse.gd")
 const Index := preload("res://scripts/system/firmware_index.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Drivers := preload("res://scripts/system/driver_versions.gd")
 const Upscale := preload("res://scripts/controls/perf/upscale.gd")
 
@@ -561,10 +562,15 @@ func load_index() -> Dictionary:
 		var want := Index.sha_from_text(str(s.get("out", "")))
 		var good := int(r.get("code", -1)) == 0 and int(s.get("code", -1)) == 0 and want != "" \
 			and FileAccess.file_exists(part) and FileAccess.get_sha256(part) == want \
-			and not Index.parse_gz(FileAccess.get_file_as_bytes(part)).is_empty() \
-			and _index_signature_ok(part)
-		if good:
+			and not Index.parse_gz(FileAccess.get_file_as_bytes(part)).is_empty()
+		var sig := _index_signature(part) if good else "bad"
+		if good and sig != "bad":
 			DirAccess.rename_absolute(part, path)
+			# the sha256 of the file cosign accepted; any other file at `path` counts as unverified
+			if sig == "verified":
+				SettingsFile.save_text(path + VERIFIED_SUFFIX, want + "\n")
+			elif FileAccess.file_exists(path + VERIFIED_SUFFIX):
+				DirAccess.remove_absolute(path + VERIFIED_SUFFIX)
 		elif FileAccess.file_exists(part):
 			DirAccess.remove_absolute(part)
 	return Index.parse_gz(FileAccess.get_file_as_bytes(path)) if FileAccess.file_exists(path) else {}
@@ -573,6 +579,10 @@ func load_index() -> Dictionary:
 ## cosign on this device: the system's, else the copy the installer downloaded (get-gamecove.sh's pinned
 ## COSIGN_VERSION and sha256); "" when there is none.
 const COSIGN_VERSION := "v2.5.3"
+const VERIFIED_SUFFIX := ".verified"
+## A maker's firmware download: redirects and size are capped (review problem 1).
+const MAX_FW_REDIRS := 5
+const MAX_FW_BYTES := 512 * 1024 * 1024
 
 
 func _cosign() -> String:
@@ -583,13 +593,23 @@ func _cosign() -> String:
 	return mine if home != "" and FileAccess.file_exists(mine) else ""
 
 
-## The index's Sigstore signature (review M21): with cosign on the device, the download is used only when
-## firmware.json.gz.sigstore.json proves it was made by the nightly workflow. Without cosign, the published sha256
-## and the per-maker download allow-list (Index.download_host) still apply.
-func _index_signature_ok(part: String) -> bool:
+## The cached index's signature was checked on this device (review problem 1): only then are maker downloads
+## offered. Checking a Sigstore keyless bundle needs the Fulcio chain, the Rekor entry and the certificate's
+## identity extensions; that is cosign's job (the copy get-gamecove.sh pins, or the system's), not GDScript's.
+func index_verified() -> bool:
+	var path := _cache().path_join("firmware.json.gz")
+	if not FileAccess.file_exists(path) or not FileAccess.file_exists(path + VERIFIED_SUFFIX):
+		return false
+	return FileAccess.get_file_as_string(path + VERIFIED_SUFFIX).strip_edges() == FileAccess.get_sha256(path)
+
+
+## The index's Sigstore signature (review M21): "verified" when firmware.json.gz.sigstore.json proves it was made by
+## the nightly workflow on main, "bad" when cosign refuses it (the download isn't used), "unverified" without cosign
+## (the index is shown, but firmware_items drops every download URL).
+func _index_signature(part: String) -> String:
 	var cos := _cosign()
 	if cos == "":
-		return true
+		return "unverified"
 	var bundle := part + ".sigstore.json"
 	var b: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "20", "-o", bundle, "--", Index.URL + ".sigstore.json"]))
 	var ok := int(b.get("code", -1)) == 0 and FileAccess.file_exists(bundle) and int(runner.run(cos, PackedStringArray([
@@ -597,14 +617,14 @@ func _index_signature_ok(part: String) -> bool:
 		"--certificate-identity-regexp", Index.SIGNER_IDENTITY, part])).get("code", -1)) == 0
 	if FileAccess.file_exists(bundle):
 		DirAccess.remove_absolute(bundle)
-	return ok
+	return "verified" if ok else "bad"
 
 
 func _check_maker() -> void:
 	var row := _row()
 	var index := load_index()
 	var installed := Index.read_installed(root)
-	var items := Index.firmware_items(index, row, installed, _fw_devices)
+	var items := Index.firmware_items(index, row, installed, _fw_devices, index_verified())
 	if str(row.get("family", "")) == "steam-deck":
 		items = _deck_local(items, installed)
 	var res := {"available": items.any(func(i): return i["status"] == "update"), "items": items,
@@ -795,11 +815,16 @@ func _prepare_usb(it: Dictionary, mount: String) -> void:
 	if FileAccess.file_exists(zip):
 		DirAccess.remove_absolute(zip)
 	_main(func(): progress.emit("usb", -1.0, "Downloading " + str(it["name"])))
-	var r: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "600", "-o", zip, "--", str(it["download_url"])]))
+	# curl prints the URL it ended up at (after redirects): that host must be on the maker's list too
+	var r: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL",
+		"--max-redirs", str(MAX_FW_REDIRS), "--max-filesize", str(MAX_FW_BYTES), "--max-time", "600",
+		"-w", "%{url_effective}", "-o", zip, "--", str(it["download_url"])]))
 	var msg := ""
 	var written: Array = []
 	if int(r.get("code", -1)) != 0 or not FileAccess.file_exists(zip):
 		msg = "download_failed"
+	elif Index.download_host(str(r.get("out", "")).strip_edges(), str(_row().get("maker", ""))) == "":
+		msg = "not_available"
 	elif FileAccess.get_sha256(zip) != str(it["sha256"]).to_lower():
 		msg = "checksum_mismatch"
 	else:

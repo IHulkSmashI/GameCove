@@ -93,6 +93,31 @@ func _fake_with_index(doc: Dictionary, sha_override := "") -> RefCounted:
 	return f
 
 
+## The fake runner also has a cosign that accepts the index's signature (the device checked it).
+func _with_cosign(f: RefCounted) -> RefCounted:
+	var base: Callable = f.handler
+	f.handler = func(cmd: String):
+		if cmd.begins_with("curl ") and cmd.ends_with(Index.URL + ".sigstore.json"):
+			var p := cmd.split(" ")
+			_write_bytes(p[p.find("-o") + 1], "{}".to_utf8_buffer())
+			return {"code": 0, "out": ""}
+		if cmd.begins_with("/usr/bin/cosign verify-blob"):
+			return {"code": 0, "out": "Verified OK"}
+		return base.call(cmd)
+	return f
+
+
+## curl serving `zip_path` for a URL ending in `suffix`; it prints `final` (curl -w %{url_effective}), else the URL.
+func _serve_zip(f: RefCounted, suffix: String, zip_path: String, final := "") -> void:
+	var base: Callable = f.handler
+	f.handler = func(cmd: String):
+		if cmd.begins_with("curl ") and cmd.ends_with(suffix):
+			var p := cmd.split(" ")
+			DirAccess.copy_absolute(zip_path, p[p.find("-o") + 1])
+			return {"code": 0, "out": final if final != "" else p[p.size() - 1]}
+		return base.call(cmd)
+
+
 func _upd(root: String, fake: RefCounted, row: Dictionary) -> Node:
 	var u: Node = UpdatesScript.new()
 	u.device_row = row
@@ -340,16 +365,11 @@ func test_prepare_usb_for_ez_flash_checks_sha_and_copies_cap() -> void:
 	var idx := _index()
 	idx["devices"]["asus-rog-ally"]["items"][0]["sha256"] = FileAccess.get_sha256(zip_path)
 	var files := _dmi("RC71L.341", {"proc/self/mounts": "/dev/sda1 /run/media/deck/BIOS\\040USB vfat rw 0 0\n/dev/nvme0n1p3 /home btrfs rw 0 0\n"})
+	files["usr/bin/cosign"] = ""
 	var root := _tree(files)
 	DirAccess.make_dir_recursive_absolute(root + "/run/media/deck/BIOS USB")
-	var f := _fake_with_index(idx)
-	var base: Callable = f.handler
-	f.handler = func(cmd: String):
-		if cmd.begins_with("curl ") and cmd.ends_with("RC71LAS343.zip"):
-			var p := cmd.split(" ")
-			DirAccess.copy_absolute(zip_path, p[p.find("-o") + 1])
-			return {"code": 0, "out": ""}
-		return base.call(cmd)
+	var f := _with_cosign(_fake_with_index(idx))
+	_serve_zip(f, "RC71LAS343.zip", zip_path)
 	var u := _upd(root, f, _row("asus-rog-ally"))
 	var got: Array = []
 	u.finished.connect(func(k, o, m): got.append([k, o, m]))
@@ -364,14 +384,8 @@ func test_prepare_usb_for_ez_flash_checks_sha_and_copies_cap() -> void:
 	u.free()
 	# a tampered download is refused
 	idx["devices"]["asus-rog-ally"]["items"][0]["sha256"] = "1".repeat(64)
-	var f2 := _fake_with_index(idx)
-	var b2: Callable = f2.handler
-	f2.handler = func(cmd: String):
-		if cmd.begins_with("curl ") and cmd.ends_with("RC71LAS343.zip"):
-			var p := cmd.split(" ")
-			DirAccess.copy_absolute(zip_path, p[p.find("-o") + 1])
-			return {"code": 0, "out": ""}
-		return b2.call(cmd)
+	var f2 := _with_cosign(_fake_with_index(idx))
+	_serve_zip(f2, "RC71LAS343.zip", zip_path)
 	var root2 := _tree(files)
 	DirAccess.make_dir_recursive_absolute(root2 + "/run/media/deck/BIOS USB")
 	var u2 := _upd(root2, f2, _row("asus-rog-ally"))
@@ -430,19 +444,13 @@ func test_prepare_usb_refuses_a_foreign_host_and_pins_https() -> void:
 	zp.write_file("CAPSULE".to_utf8_buffer())
 	zp.close_file()
 	zp.close()
-	var files := _dmi("RC71L.341", {"proc/self/mounts": "/dev/sda1 /run/media/deck/USB vfat rw 0 0\n"})
+	var files := _dmi("RC71L.341", {"proc/self/mounts": "/dev/sda1 /run/media/deck/USB vfat rw 0 0\n", "usr/bin/cosign": ""})
 	var root := _tree(files)
 	DirAccess.make_dir_recursive_absolute(root + "/run/media/deck/USB")
 	var idx := _index()
 	idx["devices"]["asus-rog-ally"]["items"][0]["sha256"] = FileAccess.get_sha256(zip_path)
-	var f := _fake_with_index(idx)
-	var base: Callable = f.handler
-	f.handler = func(cmd: String):
-		if cmd.begins_with("curl ") and cmd.ends_with("RC71LAS343.zip"):
-			var p := cmd.split(" ")
-			DirAccess.copy_absolute(zip_path, p[p.find("-o") + 1])
-			return {"code": 0, "out": ""}
-		return base.call(cmd)
+	var f := _with_cosign(_fake_with_index(idx))
+	_serve_zip(f, "RC71LAS343.zip", zip_path)
 	var u := _upd(root, f, _row("asus-rog-ally"))
 	u.check("maker")
 	ok(u.prepare_usb("index:bios:bios", "/run/media/deck/USB"), "the maker's own host: started")
@@ -495,3 +503,73 @@ func test_index_signature_checked_when_cosign_is_there() -> void:
 	eq(u3.load_index()["built"], "2026-11-09T05:41:00Z")
 	ok(not f3.calls.any(func(c): return c.ends_with(".sigstore.json")), "no cosign: no bundle needed")
 	u3.free()
+
+
+# ---- review problem 1: downloads only from a checked index, and curl's final host is checked too -------------
+
+func _usb_zip() -> String:
+	var zip_path := _tree({}) + "/bios.zip"
+	var zp := ZIPPacker.new()
+	zp.open(zip_path)
+	zp.start_file("RC71LAS343.CAP")
+	zp.write_file("CAPSULE".to_utf8_buffer())
+	zp.close_file()
+	zp.close()
+	return zip_path
+
+
+func test_unverified_index_offers_no_download() -> void:
+	var zip_path := _usb_zip()
+	var idx := _index()
+	idx["devices"]["asus-rog-ally"]["items"][0]["sha256"] = FileAccess.get_sha256(zip_path)
+	var root := _tree(_dmi("RC71L.341", {"proc/self/mounts": "/dev/sda1 /run/media/deck/USB vfat rw 0 0\n"}))
+	DirAccess.make_dir_recursive_absolute(root + "/run/media/deck/USB")
+	var f := _fake_with_index(idx)   # no cosign on this device
+	_serve_zip(f, "RC71LAS343.zip", zip_path)
+	var u := _upd(root, f, _row("asus-rog-ally"))
+	u.check("maker")
+	ok(not u.index_verified(), "nothing checked the signature")
+	var it: Dictionary = u.hub_items().filter(func(i): return i["id"] == "index:bios:bios")[0]
+	eq([it["status"], it["download_url"], it["download_host"]], ["update", "", ""], "listed, but no download")
+	ok(bool(it["download_unverified"]) and not bool(it["download_blocked"]), "flagged as unverified")
+	ok(str(it["download_page"]).begins_with("https://"), "the maker's page is still offered")
+	var got: Array = []
+	u.finished.connect(func(k, o, m): got.append([k, o, m]))
+	ok(not u.prepare_usb("index:bios:bios", "/run/media/deck/USB"), "refused")
+	eq(got.back(), ["usb", false, "not_available"])
+	ok(not f.calls.any(func(c): return c.ends_with("RC71LAS343.zip")), "nothing downloaded")
+	u.free()
+	# the same index checked by cosign: the download is offered and recorded as verified
+	var f2 := _with_cosign(_fake_with_index(idx))
+	var u2 := _upd(_tree(_dmi("RC71L.341", {"usr/bin/cosign": ""})), f2, _row("asus-rog-ally"))
+	u2.check("maker")
+	ok(u2.index_verified(), "verified")
+	eq(u2.hub_items()[0]["download_host"], "dlcdnets.asus.com")
+	# a cached file that isn't the one cosign accepted doesn't count
+	var cached: String = u2.cache_dir.path_join("firmware.json.gz")
+	_write_bytes(cached, _gz(idx).slice(0) + PackedByteArray([0]))
+	ok(not u2.index_verified(), "a different file isn't the verified one")
+	u2.free()
+	eq(Index.firmware_items(idx, _row("asus-rog-ally"), {"bios_version": "RC71L.341"}, [], false)[0]["download_url"], "")
+
+
+func test_redirect_off_the_makers_site_is_refused() -> void:
+	var zip_path := _usb_zip()
+	var idx := _index()
+	idx["devices"]["asus-rog-ally"]["items"][0]["sha256"] = FileAccess.get_sha256(zip_path)
+	var root := _tree(_dmi("RC71L.341", {"proc/self/mounts": "/dev/sda1 /run/media/deck/USB vfat rw 0 0\n", "usr/bin/cosign": ""}))
+	DirAccess.make_dir_recursive_absolute(root + "/run/media/deck/USB")
+	var f := _with_cosign(_fake_with_index(idx))
+	# an asus.com redirector that sent curl to another host (with a matching file)
+	_serve_zip(f, "RC71LAS343.zip", zip_path, "https://files.evil.example/RC71LAS343.zip")
+	var u := _upd(root, f, _row("asus-rog-ally"))
+	var got: Array = []
+	u.finished.connect(func(k, o, m): got.append([k, o, m]))
+	u.check("maker")
+	ok(u.prepare_usb("index:bios:bios", "/run/media/deck/USB"), "started (the index names the maker's host)")
+	eq(got.back(), ["usb", false, "not_available"], "curl's final host isn't the maker's")
+	ok(not FileAccess.file_exists(root + "/run/media/deck/USB/RC71LAS343.CAP"), "nothing written to the drive")
+	var dl: Array = f.calls.filter(func(c): return c.ends_with("RC71LAS343.zip"))
+	ok("--max-redirs 5" in dl[0] and ("--max-filesize %d" % u.MAX_FW_BYTES) in dl[0] and "-w %{url_effective}" in dl[0],
+		"redirects and size capped, final URL reported")
+	u.free()
