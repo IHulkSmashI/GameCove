@@ -796,7 +796,40 @@ printf '[Unit]\nPartOf=gamescope-session.target\n' >"$SS/usr/lib/systemd/user/ga
 printf '[Unit]\nDescription=Gamescope Session\n' >"$SS/usr/lib/systemd/user/gamescope-session.target"
 echo lua >"$SS/usr/share/gamescope/scripts/50-custom/50-disable-explicit-sync.lua"
 echo MIT >"$SS/LICENSE"
-expect_code 0 "sysext tree" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$APP" --session-src "$SS" --out "$T/dist" --tree-only
+# review M6: the session files are checked against pinned sha256s; the fake tree gets its own list
+(cd "$SS" && sha256sum usr/bin/gamescope-session-plus usr/share/gamescope-session-plus/gamescope-session-plus \
+	usr/share/gamescope-session-plus/device-quirks usr/lib/systemd/user/gamescope-session-plus@.service LICENSE) >"$T/gs.sums"
+expect_code 1 "sysext refuses a session tree that doesn't match the pinned sha256s" sh "$REPO/packaging/sysext/build-sysext.sh" \
+	--app "$APP" --session-src "$SS" --out "$T/dist-pinned" --tree-only
+contains "$T/out" "doesn't match its pinned sha256" "said which file"
+if [ ! -e "$T/dist-pinned/gamecove" ]; then ok; else bad "no tree from an unverified session"; fi
+cp "$SS/usr/share/gamescope-session-plus/device-quirks" "$T/quirks.keep"
+echo tampered >"$SS/usr/share/gamescope-session-plus/device-quirks"
+expect_code 1 "sysext refuses a changed session file" env SESSION_SUMS="$T/gs.sums" sh "$REPO/packaging/sysext/build-sysext.sh" \
+	--app "$APP" --session-src "$SS" --out "$T/dist-bad" --tree-only
+contains "$T/out" "device-quirks doesn't match its pinned sha256" "names the changed file"
+cp "$T/quirks.keep" "$SS/usr/share/gamescope-session-plus/device-quirks"
+grep -v " LICENSE$" "$T/gs.sums" >"$T/gs-nolic.sums"
+expect_code 1 "sysext refuses a list without LICENSE" env SESSION_SUMS="$T/gs-nolic.sums" sh "$REPO/packaging/sysext/build-sysext.sh" \
+	--app "$APP" --session-src "$SS" --out "$T/dist-nolic" --tree-only
+# the shipped list: exactly the files build-sysext.sh takes, plus LICENSE, each with a sha256
+PIN="$REPO/packaging/sysext/gamescope-session.sha256"
+want="LICENSE usr/bin/gamescope-session-plus usr/lib/systemd/user/gamescope-session-plus@.service usr/share/gamescope-session-plus/device-quirks usr/share/gamescope-session-plus/gamescope-session-plus"
+got="$(awk '$1 !~ /^#/ && NF == 2 && $1 ~ /^[0-9a-f]+$/ && length($1) == 64 { print $2 }' "$PIN" | sort | tr '\n' ' ' | sed 's/ $//')"
+[ "$got" = "$want" ] && ok || bad "gamescope-session.sha256 must pin exactly the session files and LICENSE ($got)"
+grep -q "^# 08e65a62ed3d7acc6ae17db637091d402a55ae2a\| 08e65a62ed3d7acc6ae17db637091d402a55ae2a " "$PIN" && \
+	grep -q "SESSION_COMMIT:-08e65a62ed3d7acc6ae17db637091d402a55ae2a" "$REPO/packaging/sysext/build-sysext.sh" && ok || bad "gamescope-session.sha256 must name the commit build-sysext.sh pins"
+# fetched by git at the commit (a local repository here, never the network), and checked
+GR="$T/gs-git"
+git init -q "$GR" && cp -a "$SS/." "$GR/" && git -C "$GR" add -A && \
+	git -C "$GR" -c user.name=t -c user.email=t@example.invalid commit -q -m session && ok || bad "fake session repository"
+gc="$(git -C "$GR" rev-parse HEAD)"
+expect_code 0 "sysext fetches the session by git at the commit" env SESSION_REPO="file://$GR" SESSION_COMMIT="$gc" SESSION_SUMS="$T/gs.sums" \
+	sh "$REPO/packaging/sysext/build-sysext.sh" --app "$APP" --out "$T/dist-git" --tree-only
+if [ -x "$T/dist-git/gamecove/usr/bin/gamescope-session-plus" ]; then ok; else bad "session files from the git fetch"; fi
+expect_code 1 "sysext refuses a commit the repository doesn't have" env SESSION_REPO="file://$GR" SESSION_COMMIT="0123456789abcdef0123456789abcdef01234567" \
+	SESSION_SUMS="$T/gs.sums" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$APP" --out "$T/dist-git2" --tree-only
+expect_code 0 "sysext tree" env SESSION_SUMS="$T/gs.sums" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$APP" --session-src "$SS" --out "$T/dist" --tree-only
 TREE="$T/dist/gamecove"
 for f in usr/bin/gamescope-session-plus usr/bin/gamecove-session-select usr/bin/gamecove-selftest \
 	usr/lib/gamecove/gamecove.x86_64 usr/lib/gamecove/gamecove.pck \

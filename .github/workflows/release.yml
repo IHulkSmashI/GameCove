@@ -14,7 +14,8 @@
 #            uploaded, then published, so nobody sees a release without its files
 # Every build run uploads the files as workflow artifacts.
 # Supply chain (review M6): actions are pinned by commit (tag in the comment), the Fedora container by
-# digest, and the Godot editor, its export template and Source2 (udev-hid-bpf) by sha256 below.
+# digest, the Godot editor, its export template and Source2 (udev-hid-bpf) by sha256 below, and the bundled
+# gamescope-session files per file (packaging/sysext/gamescope-session.sha256, fetched by git at a commit).
 name: Release
 
 on:
