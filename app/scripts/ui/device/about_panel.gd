@@ -15,6 +15,7 @@ const FixTexts := preload("res://scripts/ui/texts.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 const PhotoView := preload("res://scripts/ui/device/device_photo_view.gd")
 const Caps := preload("res://scripts/device/capabilities.gd")
+const BatteryHistory := preload("res://scripts/ui/device/battery_history.gd")
 
 var info: Dictionary = {}
 var picture: TextureRect
@@ -34,7 +35,7 @@ var _card_list: Array = []
 const TWO_COLUMNS_W := 760.0
 ## Rough height of each card in rows, to deal them into balanced columns.
 const CARD_WEIGHT := {"device": 4.0, "chip": 6.0, "memory": 4.5, "storage": 4.0, "screen": 6.0,
-	"battery": 8.5, "software": 4.5, "support": 9.0, "fixes": 3.0}
+	"battery": 8.5, "software": 4.5, "support": 9.0, "fixes": 3.0, "history": 10.0}
 
 
 static func build(services_: Dictionary) -> Control:
@@ -284,6 +285,7 @@ func _fill_cards() -> void:
 	# the free space (it was a second "(A)" card sliced off at the foot).
 	cards.append(_screen_card())
 	cards.append(_battery_card())
+	cards.append(_history_card())
 	cards.append(_software_card())
 	cards.append(_support_card())
 	cards.append(_fixes_card())
@@ -381,6 +383,7 @@ func _card_action(c: Control) -> void:
 		"software": c.set_action(Texts.ACT_UPDATES, func(): part_requested.emit("updates"))
 		"fixes": c.set_action(Texts.ACT_FIXES, func(): part_requested.emit("fixes"))
 		"battery": c.set_action(Texts.ACT_POWER, func(): category_requested.emit("power"))
+		"history": c.set_action(Texts.ACT_POWER, func(): category_requested.emit("power"))
 		"screen": c.set_action(Texts.ACT_DISPLAY, func(): category_requested.emit("display"))
 
 
@@ -500,6 +503,18 @@ func _battery_card() -> Control:
 		["Charge limit", "Supported" if bool(b.get("charge_limit_supported", false)) else "Not on this battery"],
 		["Battery", made], ["Type", b.get("technology", "")],
 	]))
+	return c[0]
+
+
+## Battery history (7 days) and drain per game, from battery_log.gd; only with a battery.
+func _history_card() -> Control:
+	var log_svc := svc("battery")
+	if log_svc == null or not bool(_g("battery").get("present", false)):
+		return null
+	var c := _section("history", "good")
+	var body := BatteryHistory.new()
+	body.setup(log_svc, int(Time.get_unix_time_from_system()))
+	c[1].add_child(body)
 	return c[0]
 
 

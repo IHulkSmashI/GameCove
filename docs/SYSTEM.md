@@ -255,7 +255,7 @@ Device fixes: `devices.json` `"fixes"` ∩ `gamecove-fix --list`, each with its 
 ## Everyday extras (what people otherwise add with plugins)
 
 Small helpers that cover what the most-installed Decky Loader plugins do, built on tools every Bazzite and SteamOS
-install already has. None of them runs a timer or polls: each reads when its page or tab opens and after you press
+install already has (recording needs GPU Screen Recorder, which Settings > Media installs from Flathub when you ask). None of them runs a timer or polls: each reads when its page or tab opens and after you press
 something, so nothing costs anything behind a game. All run as the user; none needs the root helper.
 
 | Extra | Where | How | Code |
@@ -265,6 +265,49 @@ something, so nothing costs anything behind a game. All run as the user; none ne
 | Bluetooth devices | Settings > System (Quick menu > Device links there) | BlueZ on the system bus through `busctl --system`: `GetManagedObjects` (devices, `Battery1.Percentage`), `Device1.Connect` / `Disconnect` / `Pair` (+ `Trusted`), `Adapter1.RemoveDevice`. Finding new devices runs `bluetoothctl --timeout 10 scan on`, because BlueZ ends a scan as soon as the client that started it leaves the bus. Pairing asks for no code (controllers, headphones, speakers); a keyboard that wants one pairs from Desktop Mode | `system/bluetooth.gd`, `ui/settings/bluetooth_card.gd` |
 | Clean up | Settings > Device > Storage | Finds `steamapps/shadercache/<appid>` folders in every Steam library whose game has no `appmanifest_<appid>.acf` in any library (non-Steam shortcuts, ids from 2^31, are skipped), sizes them with `du -sbc` and removes them through `launch_files.gd`'s guarded remover (the same one that clears a single game's cache). Measured when the Storage page opens. Proton prefixes (`compatdata`) are never touched: they can hold saves that aren't in the cloud | `system/storage.gd` (`leftovers`, `clean_leftovers`), `ui/device/storage_panel.gd` |
 | GE-Proton | Settings > Performance | GitHub's latest-release API for `GloriousEggroll/proton-ge-custom` (only when you press Check), then the release's `.tar.gz` and `.sha512sum` with `curl` (only from that release page), `sha512sum` compared before anything is unpacked, `tar -xzf` into Steam's `compatibilitytools.d` (the folder Steam reads custom Protons from; Steam's own files aren't touched). A version a Steam game is set to (`config.vdf` `CompatToolMapping`) can't be removed. Steam lists a new version after it restarts | `launch/proton_ge.gd`, `ui/settings/proton_card.gd` |
+| Recording | Quick menu > This game (Record / Stop recording), Settings > Media | GPU Screen Recorder: the host `gpu-screen-recorder` (its `gsr-kms-server` has `cap_sys_admin` from the package) or the **system-wide** Flatpak `com.dec05eba.gpu_screen_recorder` run as `flatpak run --command=gpu-screen-recorder`. Gamescope has no desktop portal, so capture is KMS: `-w screen -c mp4 -k h264 -f 60\|30 -q very_high -cursor no -v no [-a default_output] -o ~/Videos/GameCove/<game>/<game> <date>.mp4`; H.264 for every phone and browser, the hardware encoder (VA-API on AMD/Intel) picked by the recorder. Stop is SIGINT to the recorder's own process (found under the Flatpak's bwrap through `/proc/<pid>/stat`), which finishes the file; a game ending stops it too. The Flatpak's KMS helper needs a one-time `pkexec`: `kms-server-proxy setup-gsr-ui ~` (what the official UI runs) from Desktop Mode, checked with `kms-server-proxy is-setup ~`. Install: `flatpak install --system --noninteractive -y flathub com.dec05eba.gpu_screen_recorder` (Flatpak's polkit rule lets a local admin do this without a password; otherwise we say Desktop Mode). The clip's picture is a gamescope screenshot (base plane) taken right after recording starts; clips without one get a frame from `ffmpeg` when it's installed. Nothing records until you press Record; no replay buffer | `system/recorder.gd`, `system/recording.gd`, `system/clips.gd`, `ui/settings/media_page.gd` |
+| Clips | Settings > Media | Lists `~/Videos/GameCove/*/` (mp4, mkv, webm, mov), reads the length from the MP4 `mvhd` box, deletes only inside that folder. Watch opens the first installed player (mpv with `--fs --input-gamepad=yes`, then VLC, Celluloid; host or Flatpak) as an app (below); no player: `flatpak install --user flathub io.mpv.Mpv`. Send to phone serves a one-time LAN page (docs/PRIVACY.md, Clips) | `system/clips.gd`, `system/clip_drop.gd`, `ui/settings/share_sheet.gd` |
+| Apps | Home > Apps shelf (pinned), Library header > Apps | `.desktop` files from `~/.local/share/applications`, both Flatpak export folders and `$XDG_DATA_DIRS/applications` (a user copy hides the system one). Skipped: not `Type=Application`, `NoDisplay`, `Hidden`, `Terminal`, `OnlyShowIn`, a missing `TryExec`, Settings / System / ConsoleOnly / Screensaver / PackageManager / TerminalEmulator without Game, Steam and GameCove itself. `Exec` field codes per the Desktop Entry spec (file and URL codes dropped). Icons from hicolor (PNG, or SVG rasterised to 256 px) into `user://apps/icons/`. Started like a game: `systemd-run --user --scope --unit=app-steam-app<id>-<n>` around `/usr/libexec/gamecove/reaper SteamLaunch AppId=<id> --` around the app (Flatpaks move into their own scope, so gamescope finds them by the reaper), followed by GameSession without a frame limit or Auto TDP. Pins in `user://apps.json` | `library/apps.gd`, `library/library.gd` (`launch_app`), `ui/apps_view.gd`, `ui/home.gd` |
+| Controller battery | Top bar (status pill) | UPower on the system bus through `busctl --system`: `EnumerateDevices`, then `Properties.GetAll` of each; kept: `Type` 12 (gaming input), not `PowerSupply`; `Percentage`, or `BatteryLevel` turned into a rough percentage. Read when GameCove comes to the front, when the quick menu opens, when a controller connects or disconnects, and at most every 2 minutes on the live refresh that only runs while GameCove is in front: never behind a game | `system/upower.gd`, `ui/top_bar.gd` |
+
+## Cloud saves (`scripts/system/saves_service.gd`, `cloud_saves.gd`, `save_backup.gd`)
+
+Epic and GOG games sync with the stores' own clouds, through the tools that already hold the sign-in, the same calls
+Heroic makes. Steam games keep Steam Cloud. Amazon games aren't covered: nile has no save sync.
+
+| Store | Tool | Look / before a launch / after a game / a conflict |
+| --- | --- | --- |
+| Epic | legendary (native, Heroic's bundled one, or `flatpak run --command=legendary com.heroicgameslauncher.hgl`) | `legendary -y sync-saves <app> --accept-path --skip-upload --skip-download` to look; `--skip-upload` downloads, `--skip-download` uploads, `--force-download` / `--force-upload` settle a conflict. `LEGENDARY_CONFIG_PATH` is the game's legendary folder, `WINEPREFIX` its prefix (`<prefix>/pfx` for Proton layouts) so legendary finds the save folder; it keeps it in `installed.json` `save_path` |
+| GOG | heroic-gogdl (native or Heroic's Flatpak) | `gogdl --auth-config-path <heroic>/gog_store/auth.json save-sync <folder> <id> --os windows --ts <last> --name <location>` with `--skip-upload` before a launch, `--skip-download` after, `--force-*` for a conflict. Folders from Heroic's `GamesConfig/<id>.json` `gogSaves`, else `store_cache/gog_library.json` `gog_save_location` with GOG's `<?VARIABLES?>` resolved in the prefix, else GOG's remote config for the game's client id; the timestamps start from Heroic's `gog_store/saveTimestamps.json` |
+
+Rules: never while a game runs (one worker thread, before `Library.launch()` and after `GameSession.ended`; a restore
+is refused while one runs). Epic: a side counts as changed when its newest save is past our last sync (60 s slack, as
+legendary's own same-age check); both changed, or never synced with saves on both sides, is a conflict the user
+settles (the launch waits; B starts nothing; "Decide later" plays without syncing). GOG: gogdl's own classification;
+the fresh timestamp it prints on a conflict is never kept. Before anything may overwrite saves on the handheld
+(legendary's download empties the folder first, gogdl's deletes files the cloud doesn't have) the folders are backed
+up with `tar` into `user://saves/backups/<game>/`; a download that fails puts the backup back. Settling a GOG conflict
+for this handheld first fetches the cloud's files into a scratch folder and keeps them as a backup too (gogdl's forced
+upload deletes cloud files the handheld doesn't have); Epic keeps earlier cloud saves itself. A save folder over 1 GiB
+(a game that saves into its install folder) isn't backed up, so nothing is downloaded over it. Offline, signed out or a
+failed step: the game starts, nothing is deleted, the status says so and the next launch or exit tries again. Every
+step runs under `timeout 90`. Status per game in `user://saves.cfg`; the game page's Cloud saves card and Settings >
+Saves show it.
+
+## Battery history and Sleep at low battery
+
+`scripts/system/battery_log.gd` records battery percent, energy (`energy_now`, else `charge_now` x
+`voltage_min_design`) and the time at game starts and ends, sleep (when GameCove puts it to sleep), wake and charger
+plug / unplug, the events GameSession and Power already send; no timer and no polling. Time in a game on battery adds
+to that game; a sleep only seen at the wake ends the stretch at the last level Power reported before it (`Power.slept_at`
+marks the last 15 s look before the sleep). After 20 minutes on battery a game's page shows "Drains about X W, ~Y h on a
+full charge" (energy_full / watts); About this device has a 7-day chart and the drain per game.
+
+`scripts/system/low_battery.gd` acts on Power's existing 15 s check (`battery_level`, `source_changed`): with
+**Sleep at low battery** on (Settings > Power > Battery, `power.low_battery_sleep` / `power.low_battery_sleep_at`,
+3 to 10 %, off by default, kept per handheld) and on battery at or below the level, a 30 s warning shows over
+everything (a running game too, as gamescope's overlay); any button stays awake (until the level drops 2 % more, the
+charger goes in or the level climbs back), the charger closes it, otherwise `systemctl suspend`.
 
 ## Sources
 
@@ -283,6 +326,12 @@ something, so nothing costs anything behind a game. All run as the user; none ne
   `src/dbus/polkit.rs`, `rootfs/usr/share/polkit-1/`, `rootfs/usr/share/inputplumber/schema/device_profile_v1.json`,
   `profiles/test.yaml`, `src/cli/device.rs` (<https://github.com/ShadowBlip/InputPlumber>, `6aca920`)
 - legendary `cli.py` (auth), heroic-gogdl `auth.py`/`args.py`, nile `cli.py`, `api/authorization.py`, `arguments.py`
+- Cloud saves: legendary `cli.py` `sync_saves`, `core.py` `get_save_path` / `check_savegame_state` / `download_saves`
+  (<https://github.com/legendary-gl/legendary>); heroic-gogdl `saves.py`, `args.py`
+  (<https://github.com/Heroic-Games-Launcher/heroic-gogdl>); Heroic `src/backend/save_sync.ts`,
+  `storeManagers/gog/games.ts` `syncSaves`, `storeManagers/gog/library.ts` `getSaveSyncLocation`,
+  `storeManagers/gog/electronStores.ts` (<https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher>); nile has no
+  save command (<https://github.com/imLinguin/nile>)
 
 
 ## GameCove's root actions (polkit)

@@ -34,6 +34,7 @@ const Metadata := preload("res://scripts/library/meta/metadata.gd")
 const MetaResolver := preload("res://scripts/library/meta/resolver.gd")
 const ArtService := preload("res://scripts/library/art/art_service.gd")
 const ArtOverrides := preload("res://scripts/library/art/art_overrides.gd")
+const Apps := preload("res://scripts/library/apps.gd")
 ## How long to gather detail / art updates before one `changed`.
 const BATCH_S := 2.0
 
@@ -370,6 +371,26 @@ static func append_args(cmd: Array, args: String) -> Array[String]:
 	return out
 
 
+## The full store entry of a game (install path, prefix, config folders), with the user's
+## own prefix from the game's compatibility settings applied. {} when unknown. Cloud saves
+## (scripts/system/saves_service.gd) read it.
+func entry_for(key: String) -> Dictionary:
+	var entry: Dictionary = _entries.get(key, {})
+	if entry.is_empty():
+		return {}
+	var launcher := get_node_or_null("/root/Launcher") if is_inside_tree() else null
+	if launcher != null and launcher.has_method("compat_for") and entry.get("store", "") != "steam":
+		entry = apply_compat(entry, launcher.compat_for(key), "")
+	return entry.duplicate(true)
+
+
+## Store tools on this machine (legendary, gogdl, nile, umu-run, Heroic), looked up once.
+func tools() -> Dictionary:
+	if _tools.is_empty():
+		_tools = Common.find_tools(home, OS.get_environment("PATH"))
+	return _tools
+
+
 ## Starts the game through its store. Returns {"ok", "app_id", "pid", "scoped"}:
 ## app_id is what gamescope will know the game by (its Steam app id, or our own
 ## id for a scoped launch; 0 when gamescope can't tell), pid the process we
@@ -381,6 +402,8 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 	var entry: Dictionary = _entries.get(game.get("key", ""), game)
 	var path_env := OS.get_environment("PATH")
 	var once := str(options.get("args", ""))
+	if str(game.get("store", "")) == Apps.STORE:
+		return launch_app(game, path_env)
 	if entry.get("store", "") == "steam":
 		if once != "" and store != null:
 			result["ok"] = store.steam.launch(str(entry["id"]), once)["ok"]
@@ -418,6 +441,31 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 	result["pid"] = maxi(pid, 0)
 	if not result["ok"]:
 		result["app_id"] = 0
+	return result
+
+
+## A desktop app (apps.gd), or a clip's video player: started in its own
+## scope behind the reaper, so gamescope focuses it and GameSession follows it
+## like a game. Same result shape as launch().
+func launch_app(app: Dictionary, path_env := OS.get_environment("PATH")) -> Dictionary:
+	var result := {"ok": false, "app_id": 0, "pid": 0, "scoped": false}
+	var systemd_run := Common.which("systemd-run", path_env)
+	var scoped := can_scope(systemd_run, OS.get_environment("XDG_RUNTIME_DIR"))
+	_launch_n += 1
+	var n := (int(Time.get_unix_time_from_system()) % 100000000) * 10 + _launch_n % 10
+	var reaper := Apps.REAPER if FileAccess.file_exists(Apps.REAPER) else ""
+	var plan := Apps.launch_command(app, n, systemd_run, scoped, reaper)
+	var cmd: Array = plan["cmd"]
+	if cmd.is_empty():
+		return result
+	var args := PackedStringArray()
+	for c in cmd.slice(1):
+		args.append(str(c))
+	var pid := OS.create_process(str(cmd[0]), args)
+	result["ok"] = pid > 0
+	result["pid"] = maxi(pid, 0)
+	result["scoped"] = scoped and pid > 0
+	result["app_id"] = int(plan["app_id"]) if pid > 0 else 0
 	return result
 
 

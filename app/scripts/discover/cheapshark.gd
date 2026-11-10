@@ -23,6 +23,12 @@ static func deals_url(page_size := 30) -> String:
 	return API + "deals?onSale=1&sortBy=Deal%20Rating&pageSize=" + str(clampi(page_size, 1, 60))
 
 
+## Games that are free to keep right now: on sale at a price of 0 (a store's
+## giveaway). Always-free games have no sale, so onSale=1 leaves them out.
+static func free_url(page_size := 30) -> String:
+	return API + "deals?onSale=1&upperPrice=0&sortBy=Recent&pageSize=" + str(clampi(page_size, 1, 60))
+
+
 static func search_url(title: String, limit := 20) -> String:
 	return API + "games?title=%s&limit=%d" % [title.uri_encode(), clampi(limit, 1, 60)]
 

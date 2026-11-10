@@ -25,6 +25,8 @@ signal refresh_requested
 signal game_focused(game: Dictionary)
 ## The spotlight game is downloading: its button opens the downloads list.
 signal downloads_requested
+## The Apps shelf's "All apps" tile was pressed.
+signal apps_requested
 
 ## Kept for callers that walk rows; Home.shelves() has the real list.
 const ROWS := [["recent", "Recently played"], ["installed", "Installed"], ["all", "All games"]]
@@ -55,6 +57,8 @@ var _empty: Control
 var _scroll: ScrollContainer
 var _rows_box: VBoxContainer
 var _shelves: Array = []        # Shelf nodes, top to bottom
+## Pinned desktop apps (apps.gd) for the Apps shelf; [] = no shelf.
+var apps: Array = []
 var _hero_buttons: Array = []
 var _accent := Color(0, 0, 0, 0)
 ## Called with every new tile (install badges and progress).
@@ -383,19 +387,24 @@ func _on_hero_focus() -> void:
 # ------------------------------------------------------------ shelves
 
 func _build_rows() -> void:
-	for c in _rows_box.get_children():
-		Kit.drop(_rows_box, c)
 	var memory := {}
 	for s in _shelves:
-		memory[s.id] = s.memory
+		if is_instance_valid(s):
+			memory[s.id] = s.memory
+	for c in _rows_box.get_children():
+		Kit.drop(_rows_box, c)
 	_shelves.clear()
 	var fresh := 0
-	for spec in View.shelves(games):
+	for spec in shelf_specs(games, apps):
 		var s: VBoxContainer = Shelf.new()
 		s.setup(spec["id"], spec["title"], spec["games"])
 		s.memory = mini(memory.get(spec["id"], 0), s.tiles.size() - 1)
 		s.tile_focused.connect(_on_tile_focus.bind(s))
-		s.tile_pressed.connect(func(g): open_requested.emit(g))
+		if spec["id"] == "apps":
+			s.count_label.text = "%d %s" % [apps.size(), "app" if apps.size() == 1 else "apps"]
+			s.tile_pressed.connect(_on_app_pressed)
+		else:
+			s.tile_pressed.connect(func(g): open_requested.emit(g))
 		_rows_box.add_child(s)
 		_shelves.append(s)
 		# A shelf seen for the first time eases in (rebuilds after an install don't).
@@ -413,6 +422,32 @@ func _build_rows() -> void:
 	_rows_box.add_child(spacer)
 
 
+## Library shelves, with the Apps shelf (pinned apps, then All apps) third
+## when anything is pinned.
+static func shelf_specs(list: Array, pinned: Array) -> Array:
+	var specs: Array = View.shelves(list)
+	if not pinned.is_empty():
+		var AppsView = load("res://scripts/ui/apps_view.gd")
+		var TX = load("res://scripts/ui/texts_extras.gd")
+		specs.insert(mini(2, specs.size()), {"id": "apps", "title": TX.APPS_SHELF, "games": pinned + [AppsView.all_tile()]})
+	return specs
+
+
+## Pinned apps for the Apps shelf (main.gd: at start and when pins change).
+func set_apps(list: Array) -> void:
+	var keep := _focused_tile_ref()
+	apps = list
+	_build_rows()
+	_restore_focus(keep)
+
+
+func _on_app_pressed(g: Dictionary) -> void:
+	if str(g.get("key", "")) == "app:__all__":
+		apps_requested.emit()
+	else:
+		play_requested.emit(g)
+
+
 func _on_tile_focus(g: Dictionary, i: int, s: Control) -> void:
 	var r := _shelves.find(s)
 	var t: Control = s.tiles[i]
@@ -423,7 +458,9 @@ func _on_tile_focus(g: Dictionary, i: int, s: Control) -> void:
 	for b in _hero_buttons:
 		b.focus_neighbor_bottom = b.get_path_to(t)
 	_scroll_to(s.position.y)
-	_set_spotlight(g, "", true)
+	# an app isn't a game: the spotlight keeps the last game
+	if str(g.get("store", "")) != "app":
+		_set_spotlight(g, "", true)
 
 
 func _scroll_to(y: float) -> void:

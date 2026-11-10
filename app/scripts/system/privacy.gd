@@ -6,7 +6,8 @@ extends RefCounted
 ## the user asks for it right then (opening a store page, pressing Check, searching). Each feature keeps its own
 ## switch too: "Look up deals and prices" (Discover settings price_lookups), "Show maker photos"
 ## (DevicePhoto, [device] maker_photo) and "Look up game details" ([privacy] metadata: Steam store details,
-## OpenCritic with the user's key, SteamGridDB art for games missing it).
+## OpenCritic with the user's key, SteamGridDB art for games missing it) and "Sync cloud saves" ([privacy]
+## cloud_saves: Epic and GOG save sync around a game, Settings > Saves).
 
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const PREFS_PATH := "user://settings.cfg"
@@ -17,7 +18,7 @@ const NETWORK_CALLS := [
 		"when": "At start, at most once a day", "switch": "Background lookups"},
 	{"who": "GitHub (GameCove's upscalers list and mirror)", "what": "The signed list of the newest OptiScaler, OptiPatcher, fakenvapi, XeSS driver and FSR 4 files; the files themselves only when you install or update them. Nothing about you is sent.",
 		"when": "At most once a day, 90 s after start; when you install, update or press Check", "switch": "Background lookups (the daily check)"},
-	{"who": "CheapShark and the Steam store", "what": "The Steam app ids and titles on your wishlist and in Discover, and your store country, to get deals and prices.",
+	{"who": "CheapShark and the Steam store", "what": "The Steam app ids and titles on your wishlist and in Discover, and your store country, to get deals and prices; and the list of games free to keep right now (nothing about you).",
 		"when": "45 s after start, then every 6 hours; when you search or open a game", "switch": "Look up deals and prices"},
 	{"who": "GG.deals", "what": "Steam app ids, your region and your own API key, for local prices.",
 		"when": "With the deals refresh, only if you added a key", "switch": "Look up deals and prices"},
@@ -37,14 +38,18 @@ const NETWORK_CALLS := [
 		"when": "When you open Change artwork; in the background for games missing art", "switch": "Look up game details (+ Background lookups for the automatic fill)"},
 	{"who": "Your phone, on your own network (Game art step)", "what": "A one-time page your phone opens to send GameCove your SteamGridDB key; then one SteamGridDB request checks the key.",
 		"when": "Only while the Game art step is open, 10 minutes at most", "switch": "You start it"},
+	{"who": "Your phone, on your own network (Send to phone)", "what": "The one clip you picked, from a one-time page your phone opens to watch and download it.",
+		"when": "Only while the Send to phone code shows: until it's downloaded, or 10 minutes at most", "switch": "You start it"},
 	{"who": "Steam (achievements, art)", "what": "The app id of the game whose page you open.",
 		"when": "When you open a game page", "switch": "Settings > Performance"},
 	{"who": "Steam's, IGDB's and SteamGridDB's image servers (no others)", "what": "The address of a game picture Discover, the calendar or your wishlist shows; it names the game, nothing about you.",
 		"when": "When a tile shows a picture that isn't saved yet", "switch": "None (SteamGridDB lookups: Look up game details)"},
 	{"who": "PCs on your own network (GameStream)", "what": "A fixed client id and Moonlight's certificate; Wake-on-LAN packets to your PC. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network (up to 1,022), then GameStream's serverinfo to those that answer.",
 		"when": "When you open the Stream tab or wake a PC", "switch": "You start it"},
+	{"who": "Epic and GOG (through legendary and heroic-gogdl)", "what": "Your save files for the Epic or GOG game you start or just closed, with your store sign-in: the stores' own cloud saves, as Heroic does. For a GOG game Heroic doesn't know, GOG's remote config is asked once for where the game keeps its saves (its client id only).",
+		"when": "Just before an Epic or GOG game starts and just after it ends; when you press Sync now", "switch": "Sync cloud saves (Settings > Saves; also per game)"},
 	{"who": "OS, Flatpak, fwupd and store tools", "what": "Their own update and sign-in requests.",
-		"when": "When you update or sign in; Flatpak apps also once a day, with no game running, if you turned on Update apps by themselves", "switch": "You start it (automatic app updates: off by default, and Background lookups)"},
+		"when": "When you update or sign in, or install GPU Screen Recorder or mpv in Settings > Media; Flatpak apps also once a day, with no game running, if you turned on Update apps by themselves", "switch": "You start it (automatic app updates: off by default, and Background lookups)"},
 ]
 
 
@@ -78,6 +83,16 @@ static func set_background_allowed(on: bool, path := PREFS_PATH) -> bool:
 ## SteamGridDB requests at all, background or not.
 static func metadata_allowed(path := PREFS_PATH) -> bool:
 	return _switch(path, "metadata")
+
+
+## "Sync cloud saves" ([privacy] cloud_saves, default on): off = legendary and gogdl never sync saves, and
+## GOG's remote config is never asked.
+static func cloud_saves_allowed(path := PREFS_PATH) -> bool:
+	return _switch(path, "cloud_saves")
+
+
+static func set_cloud_saves_allowed(on: bool, path := PREFS_PATH) -> bool:
+	return SettingsFile.update_cfg(path, func(cfg: ConfigFile): cfg.set_value("privacy", "cloud_saves", on)) == OK
 
 
 static func set_metadata_allowed(on: bool, path := PREFS_PATH) -> bool:

@@ -97,6 +97,8 @@ var threaded := false
 
 ## Current top deals (Deal dicts), best first.
 var deals: Array[Dictionary] = []
+## Games free to keep right now (CheapShark sales at 0), same shape as deals.
+var free_deals: Array[Dictionary] = []
 ## source -> "ok" | "offline" | "rate_limited" | "missing" | "error: <why>"
 var status := {}
 ## Alerts not yet marked seen, newest first: {"id", "kind", "key", "title", "at", ...}.
@@ -118,7 +120,7 @@ var game_running := false:
 var _settings := DEFAULT_SETTINGS.duplicate()
 var _items := {}            # key -> stored wishlist item
 var _state := {"seen": {}, "last_refresh": 0, "last_calendar": 0, "last_stores": 0, "cs_ids": {}, "last_prices": {}}
-var _cache := {"stores": {}, "steam": {}, "lookup": {}, "top": [], "gg": {}}
+var _cache := {"stores": {}, "steam": {}, "lookup": {}, "top": [], "free": [], "gg": {}}
 ## Store -> affiliate config (res://data/affiliates.json); tests replace it.
 var affiliates := Affiliates.load_file()
 var _upcoming := {}         # parsed upcoming.json.gz
@@ -413,7 +415,7 @@ func refresh(force := false) -> bool:
 	if cal_due:
 		steps.append(_step_calendar)
 	if due:
-		steps.append_array([_step_stores, _step_deals, _step_resolve, _step_lookup, _step_steam, _step_ggdeals])
+		steps.append_array([_step_stores, _step_deals, _step_free, _step_resolve, _step_lookup, _step_steam, _step_ggdeals])
 	steps.append(_step_finish.bind(due))
 	_run(steps)
 	return true
@@ -479,6 +481,16 @@ func _step_deals(next: Callable) -> void:
 			_set_status("cheapshark", "ok")
 		else:
 			_set_status("cheapshark", _status_from(res) if not res["ok"] else "error: unreadable answer")
+		next.call())
+
+
+## Free-to-keep games (one more request per deals refresh, same switch). A
+## failed answer keeps the last list.
+func _step_free(next: Callable) -> void:
+	http.request(CheapShark.free_url(), {}, func(res: Dictionary):
+		var parsed = CheapShark.parse_deals(res["body"]) if res["ok"] else null
+		if parsed != null:
+			_cache["free"] = (parsed as Array).filter(func(o): return float(o.get("price", 1.0)) <= 0.0 and float(o.get("regular_price", 0.0)) > 0.0)
 		next.call())
 
 
@@ -684,6 +696,14 @@ func _rebuild_deals() -> void:
 					and d["price"]["amount"] <= d["historical_low"]["amount"] + 0.005
 		out.append(d)
 	deals = out
+	var free: Array[Dictionary] = []
+	var seen := {}
+	for o in _cache.get("free", []):
+		if not o is Dictionary or seen.has(str(o.get("deal_id", ""))):
+			continue
+		seen[str(o.get("deal_id", ""))] = true
+		free.append(Prices.from_cheapshark(o, _cache["stores"], ctx, null, _cache["steam"].get(o.get("appid", ""), null)))
+	free_deals = free
 
 
 func _ids_of(game: Variant) -> Dictionary:

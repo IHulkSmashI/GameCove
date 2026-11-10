@@ -27,7 +27,11 @@ const PowerScript := preload("res://scripts/device/power.gd")
 const CFG := "user://power_controls.cfg"
 ## Device-level settings remembered per handheld and put back at start.
 const DEVICE_IDS := ["power.sleep_mode", "power.mcu_powersave", "power.battery_long_life", "power.fan_curve",
-	"power.battery_saver_at", "power.thermal_limit"]
+	"power.battery_saver_at", "power.thermal_limit", "power.low_battery_sleep", "power.low_battery_sleep_at"]
+## "Sleep at N %" (low_battery.gd acts on it): range and default.
+const LOW_SLEEP_MIN := 3
+const LOW_SLEEP_MAX := 10
+const LOW_SLEEP_DEFAULT := 5
 ## Levers Auto TDP moves: a manual change pauses it for the game (ClawDeck main.py).
 const LEVER_IDS := ["power.cpu_boost", "power.cpu_max", "power.epp", "power.gpu_min", "power.gpu_max",
 	"power.gpu_profile", "power.gpu_level", "power.gpu_clock"]
@@ -269,7 +273,7 @@ func controls() -> Array:
 		_power_mode(), _platform(), _cpu_boost(), _smt(), _cores(), _epp(), _governor(), _cpu_max(),
 		_gpu_level(), _gpu_clock(), _gpu_min_max("min"), _gpu_min_max("max"), _gpu_profile(), _thermal_limit(),
 		_charge_limit(), _battery_long_life(), _fan_mode(), _fan_curve(), _battery_saver(), _battery_saver_at(),
-		_sleep_mode(), _mcu(),
+		_low_battery_sleep(), _low_battery_sleep_at(), _sleep_mode(), _mcu(),
 		_autotune_target(), _autotune_auto_fps(), _autotune_keep(), _autotune_floor(), _autotune_plugged(),
 	]
 
@@ -862,6 +866,23 @@ func _battery_saver_at() -> RefCounted:
 	return _make("power.battery_saver_at", "slider", {"unit": "%", "min_value": 0.0, "max_value": 50.0, "step": 5.0, "per_game": false, "default_value": 0.0},
 		func(_c): return "" if Backend.read_int(_battery_capacity_file()) >= 0 else Tx.NO_BATTERY,
 		func(_c): return float(saved_device_values().get("power.battery_saver_at", 0.0)),
+		func(_c, _v): return true)
+
+
+## "Sleep at low battery": off by default. Only remembered here (per handheld); the
+## low-battery watcher (scripts/system/low_battery.gd) reads it on Power's 15 s check.
+func _low_battery_sleep() -> RefCounted:
+	return _make("power.low_battery_sleep", "toggle", {"per_game": false, "default_value": false},
+		func(_c): return "" if Backend.read_int(_battery_capacity_file()) >= 0 else Tx.NO_BATTERY,
+		func(_c): return bool(saved_device_values().get("power.low_battery_sleep", false)),
+		func(_c, _v): return true)
+
+
+func _low_battery_sleep_at() -> RefCounted:
+	return _make("power.low_battery_sleep_at", "slider", {"unit": "%", "min_value": float(LOW_SLEEP_MIN), "max_value": float(LOW_SLEEP_MAX),
+			"step": 1.0, "per_game": false, "default_value": float(LOW_SLEEP_DEFAULT)},
+		func(_c): return "" if Backend.read_int(_battery_capacity_file()) >= 0 else Tx.NO_BATTERY,
+		func(_c): return float(clampi(int(saved_device_values().get("power.low_battery_sleep_at", LOW_SLEEP_DEFAULT)), LOW_SLEEP_MIN, LOW_SLEEP_MAX)),
 		func(_c, _v): return true)
 
 

@@ -123,7 +123,8 @@ func begin(g: Dictionary, launched: Dictionary) -> void:
 	var s: Dictionary = launcher.settings_for(key) if launcher != null else {}
 	# A stream from a PC (store "stream"): the game's frame rate and power are the
 	# PC's business; here only the decoder runs, so no frame limit and no Auto TDP.
-	var streamed := str(g.get("store", "")) == "stream"
+	# A desktop app or a clip's player (store "app") isn't a game either.
+	var streamed := str(g.get("store", "")) in ["stream", "app"]
 	if gamescope != null and gamescope.is_running() and not profiles_own_fps() and not streamed:
 		_fps_limit(int(s.get("fps_limit", 0)))
 	if power != null and launcher != null and not streamed and launcher.auto_tdp_for(key):

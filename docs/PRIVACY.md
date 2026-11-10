@@ -14,6 +14,7 @@ the app itself shows under Settings > About > Network and privacy.
 | Look up deals and prices | Same card, and Discover's settings (`price_lookups`) | On | No request to CheapShark, the Steam store API or GG.deals at all, background or not. Discover shows no prices. |
 | Look up game details | Same card (`user://settings.cfg` `[privacy] metadata`) | On | No Steam store details, OpenCritic or SteamGridDB request at all, background or not. Game pages show what the store and GameCove's game database already have. |
 | Show maker photos | Same card, and Settings > Device (`[device] maker_photo`) | On | Your handheld's picture is never requested from its maker's site; the free photo or our drawing is used. |
+| Sync cloud saves | Settings > Saves (`user://settings.cfg` `[privacy] cloud_saves`), and a switch per game on its page and in Settings > Saves (`user://saves.cfg`) | On | legendary and gogdl never sync saves, and GOG's remote config is never asked. Saves stay on the handheld. |
 | Affiliate links | Settings > Discover | On | Store links GameCove builds carry no affiliate id. None are configured today. It only changes a link's address; prices are the same and nothing is sent. |
 
 All switches are on by default. A settings file that can't be read never turns them on: the damaged copy is kept
@@ -26,7 +27,7 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 | --- | --- | --- | --- | --- | --- |
 | 1 | github.com (`gamedb/gamedb.json.gz`) | Nothing personal | Start, at most daily | Background lookups | `app/scripts/library/gamedb.gd` |
 | 2 | github.com (`gamedb/upcoming.json.gz`) | Nothing personal | Deals refresh, at most daily | Background lookups | `app/scripts/discover/discover.gd` |
-| 3 | www.cheapshark.com | Wishlist Steam app ids and titles; search text | 45 s after start, every 6 h; search; game page | Look up deals and prices (+ Background lookups for the timer) | `discover.gd`, `cheapshark.gd` |
+| 3 | www.cheapshark.com | Wishlist Steam app ids and titles; search text; nothing for the free-to-keep list (`deals?onSale=1&upperPrice=0`, one more request per refresh) | 45 s after start, every 6 h; search; game page | Look up deals and prices (+ Background lookups for the timer) | `discover.gd`, `cheapshark.gd` |
 | 4 | api.steampowered.com `IStoreBrowseService/GetItems` | Wishlist and top-deal app ids, store country | Same | Same | `steam_api.gd` |
 | 5 | api.gg.deals | App ids, region, your API key (in the query, as GG.deals requires) | Same, only with a key | Same | `ggdeals.gd` |
 | 6 | github.com (`device-photos` release) | The asset name, i.e. your device model | Start until cached, weekly manifest; About or the welcome page showing the picture | Background lookups (every request; a cached picture still shows) | `app/scripts/device/photo.gd` |
@@ -51,8 +52,12 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 | 16 | LAN broadcast (Wake-on-LAN) | Your PC's MAC address | You wake a PC | You start it | `wol.gd` |
 | 17 | 127.0.0.1 (Steam's CEF debugger; Handheld Daemon) | Local only | Opt-in Steam control; controller settings | — | `app/scripts/steam/`, `hhd_client.gd` |
 | 18 | legendary.gl, auth.gog.com, Amazon | The sign-in code you type back | You sign in to a store | You start it | `app/scripts/library/stores/` |
+| 18a | Epic (through legendary `sync-saves`), GOG cloud storage (through heroic-gogdl `save-sync`) | Your save files for that game and your store sign-in (legendary's / Heroic's own tokens; GameCove never reads them) | Just before an installed Epic or GOG game starts and just after it ends; Sync now on its page or in Settings > Saves; a conflict you settle. Never while a game runs | Sync cloud saves (also per game) | `app/scripts/system/saves_service.gd`, `cloud_saves.gd` |
+| 18b | remote-config.gog.com (`components/galaxy_client/clients/<client id>`) | The game's GOG client id (from its `goggame-<id>.info`), nothing about you | Once per game, the first sync of a GOG game whose save folders Heroic doesn't list (games GameCove installed with gogdl); the answer is cached in `user://saves.cfg` | Sync cloud saves | `saves_service.gd` (`_gog_plan`) |
 | 19 | www.steamgriddb.com (`games/steam/400`) | Your SteamGridDB key (bearer header), once | You send or type your key in the Game art step: one request checks it before it is saved | You start it (needs Look up game details) | `app/scripts/ui/setup/art_key_step.gd`, `sgdb.gd` (`check_url`) |
 | 20 | Inbound, on your LAN only: your phone opens GameCove's one-time page | Your phone sends the key you paste; GameCove sends the page (no scripts, nothing from outside) | Only while the Game art step is open, 10 minutes at most | You start it | `app/scripts/system/key_drop.gd` |
+| 21 | Inbound, on your LAN only: your phone opens a clip's one-time page | GameCove sends the page and the one clip you picked; your phone sends nothing but its requests | Only while the Send to phone code shows: until the clip is downloaded in full, you close it, or 10 minutes pass | You start it | `app/scripts/system/clip_drop.gd` |
+| 22 | Flathub (dl.flathub.org) through `flatpak install` | Flatpak's own requests | You press Install GPU Screen Recorder (system-wide) or Get a video player (mpv, for your user) in Settings > Media | You start it | `app/scripts/ui/settings/media_page.gd` |
 
 Helpers and scripts outside the app: the upscaling helper downloads OptiScaler, OptiPatcher, fakenvapi,
 REFramework, xess-xmx-linux and the FSR 4 files only when you install or update them: the newest versions from
@@ -65,7 +70,20 @@ from download.msi.com (size and sha256 pinned); the installer (`get-gamecove.sh`
 release, checks its Sigstore signature and every file's sha256, and fetches a pinned cosign if the system has
 none.
 
-## Game art: the phone page (the only thing GameCove listens for)
+## Clips: the phone page
+
+Send to phone (Settings > Media > a clip) works like the Game art page below, with the same rules
+(`app/scripts/system/clip_drop.gd` reuses `key_drop.gd`'s address picking, token and request parsing): only while
+the code shows, only on this device's private LAN address, a random port, a 128-bit one-time token in the address,
+wrong requests throttled, no scripts or outside resources, `no-store` and `no-referrer`. It serves exactly one file,
+read-only: the clip you picked. The page lets the phone watch it (byte ranges, so it can seek) and download it; the
+first complete download closes the page, and so do closing the code or 10 minutes with nothing being sent. The clip
+crosses your Wi-Fi once in plain HTTP and never leaves your network through GameCove.
+
+Recording itself sends nothing anywhere: GPU Screen Recorder writes the file to `~/Videos/GameCove/`. Controller
+batteries (UPower) and the Apps list (.desktop files) are read on the device only.
+
+## Game art: the phone page (the other thing GameCove listens for)
 
 GameCove doesn't ship a SteamGridDB key. The Game art step of setup (and of the installer, and Settings > Discover >
 SteamGridDB key) walks you through getting your own, free, by signing in to SteamGridDB with Steam on your phone.
@@ -89,6 +107,16 @@ on your own network (`app/scripts/system/key_drop.gd`):
 GameCove then checks the key with one SteamGridDB request and saves it only if SteamGridDB accepts it, in
 `user://setup.cfg` and Discover's settings file, both readable by your user only (0600). After that it fills in the
 art your games are missing (row 9).
+
+## Files GameCove writes for cloud saves and battery history
+
+- `user://saves.cfg`: per game, its sync switch, the last sync time, how it stands, and gogdl's timestamps; GOG's
+  remote-config answers per client id.
+- `user://saves/backups/<game>/`: the local backups (`<time>-<n>.tar.gz` per save folder and `<time>.json` listing
+  them), at most 10 per game. Taken before a cloud save replaces one on the handheld, before a restore, and of the
+  cloud's copy before a GOG conflict is settled for this handheld's save.
+- `user://battery_history.json`: battery level, energy and time at game starts and ends, sleep, wake and the
+  charger (30 days, at most 3,000 entries), and the battery each game used. Nothing about this leaves the device.
 
 ## Files GameCove writes for game details and art
 

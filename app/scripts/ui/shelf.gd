@@ -11,6 +11,7 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Tile := preload("res://scripts/ui/game_tile.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
+const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 
 signal tile_focused(game: Dictionary, index: int)
 signal tile_pressed(game: Dictionary)
@@ -193,13 +194,7 @@ func _notification(what: int) -> void:
 func _check_nested_mask() -> void:
 	if _mask == null:
 		return
-	var nested := false
-	var n := get_parent()
-	while n != null:
-		if n is CanvasItem and (n as CanvasItem).clip_children != CanvasItem.CLIP_CHILDREN_DISABLED:
-			nested = true
-			break
-		n = n.get_parent()
+	var nested := FadeMask.inside_mask(_mask)
 	_mask.clip_children = CanvasItem.CLIP_CHILDREN_DISABLED if nested else CanvasItem.CLIP_CHILDREN_ONLY
 	_mask.self_modulate.a = 0.0 if nested else 1.0
 

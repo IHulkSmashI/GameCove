@@ -100,7 +100,7 @@ static func wish_view(item: Dictionary) -> Dictionary:
 static func is_free(deal: Dictionary) -> bool:
 	var p: Variant = deal.get("price")
 	if p is Dictionary:
-		return float(p.get("amount", 1.0)) <= 0.0 and float(p.get("regular", 0.0)) > 0.0
+		return float(p.get("amount", 1.0)) <= 0.0 and (float(p.get("regular", 0.0)) > 0.0 or p.get("giveaway", false) == true)
 	return int(deal.get("savings_pct", 0)) >= 100
 
 
@@ -113,6 +113,20 @@ static func coming_soon(cal: Array) -> Array:
 
 static func free_now(deals: Array) -> Array:
 	return deals.filter(func(d): return is_free(d))
+
+
+## The Free to keep shelf: free games from the top deals and from the
+## free-to-keep lookup, each game once (the first offer wins).
+static func free_to_keep(deals: Array, free_deals: Array) -> Array:
+	var out: Array = []
+	var seen := {}
+	for d in free_now(deals) + free_now(free_deals):
+		var k := str(d.get("appid", "")) if str(d.get("appid", "")) != "" else str(d.get("title", "")).to_lower()
+		if seen.has(k):
+			continue
+		seen[k] = true
+		out.append(d)
+	return out
 
 
 ## Key-shop rows only when the user turned them on.

@@ -15,6 +15,8 @@ extends "res://scripts/ui/page_template.gd"
 ##   "achievements" Achievements service
 ##   "controls", "profiles"  Controls / Profiles for the Game settings card
 ##                  (the autoloads when not passed; none under tests)
+##   "saves"        cloud saves (saves_service.gd): the Cloud saves card, Epic and GOG games
+##   "battery"      battery history (battery_log.gd): "Drains about X W" under About
 
 const Texts := preload("res://scripts/ui/texts.gd")
 const TG := preload("res://scripts/ui/texts_games.gd")
@@ -32,6 +34,8 @@ const TI := preload("res://scripts/ui/texts_insights.gd")
 const MetadataCard := preload("res://scripts/ui/games/metadata_card.gd")
 const LinkHandoff := preload("res://scripts/ui/games/link_handoff.gd")
 const ArtPicker := preload("res://scripts/ui/games/art_picker.gd")
+const SavesCard := preload("res://scripts/ui/games/saves_card.gd")
+const TSaves := preload("res://scripts/ui/texts_saves.gd")
 ## Room for the top bar above the hero card (it starts where Home's does).
 const TOP_INSET := 56
 
@@ -74,6 +78,11 @@ var insights_card: VBoxContainer
 var meta_card: VBoxContainer
 var handoff: Control
 var art_picker: Control
+## "Cloud saves" (Epic and GOG games): status, switch, Sync now, conflicts, backups.
+var saves_card: VBoxContainer
+var battery: Object
+## "Drains about 9 W, ~5 h on a full charge" once the game has enough time on battery.
+var drain_label: Label
 var _accent := Color(0, 0, 0, 0)
 
 
@@ -83,6 +92,7 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 	state = services.get("state")
 	game_actions = services.get("actions")
 	achievements = services.get("achievements")
+	battery = services.get("battery")
 	top_inset = TOP_INSET
 	setup_page(g, "")
 	_build_actions()
@@ -109,6 +119,15 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 
 	if InsightsCard.visible_for(g):
 		_build_insights(g, services.get("insights"))
+
+	var saves: Object = services.get("saves")
+	if saves != null and saves.applies(g):
+		var sbody := add_card(TSaves.CARD, "cloud", "", true, 1)
+		saves_card = SavesCard.new()
+		saves_card.setup(g, saves, game_actions)
+		saves_card.relinked.connect(func(): if is_instance_valid(self) and is_inside_tree(): _relink())
+		saves_card.row_focused.connect(func(): _reveal(sbody.get_parent()))
+		sbody.add_child(saves_card)
 
 	# Game settings: a switch for the game's own settings; off shows the
 	# everyday profile it runs with, on its saved values, Edit and its launch
@@ -195,12 +214,27 @@ func _fill_about(about: VBoxContainer, g: Dictionary, info: Dictionary) -> void:
 			l.add_theme_color_override("font_color", col)
 		info_lines.append(l)
 		about.add_child(row)
+	_add_drain(about, g)
 	var credit := Kit.label(Texts.DATA_CREDIT, "CaptionLabel", true)
 	credit.name = "Credit"
 	credit.add_theme_font_size_override("font_size", 12)
 	credit.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 	info_lines.append(credit)
 	about.add_child(credit)
+
+
+## "Drains about 9 W, ~5 h on a full charge" from battery history, when there's enough of it.
+func _add_drain(about: VBoxContainer, g: Dictionary) -> void:
+	if battery == null or not battery.has_method("drain_for"):
+		return
+	var line := TSaves.drain_line(battery.drain_for(str(g.get("key", ""))))
+	if line == "":
+		return
+	var row := Kit.icon_label("bolt", line, "", ThemeLib.color("text_2"), 22)
+	row.name = "Drain"
+	drain_label = row.get_child(1)
+	info_lines.append(drain_label)
+	about.add_child(row)
 
 
 ## Game details under the synopsis, with their own overlays (phone hand-off, artwork picker).
@@ -542,6 +576,8 @@ func _relink() -> void:
 		list.append(first_cell)
 	if insights_card != null:
 		list.append_array(insights_card.focusables())
+	if saves_card != null:
+		list.append_array(saves_card.focusables())
 	if game_settings != null:
 		list.append_array(game_settings.focusables())
 	if launch_button != null and launch_button.visible:
@@ -589,6 +625,8 @@ func hints_for_focus(f: Control) -> Array:
 		return [["DPAD", "Browse"], ["B", "Back"]]
 	if f == manage_button:
 		return [["A", TG.MANAGE], ["B", "Back"]]
+	if f != null and saves_card != null and f in saves_card.focusables():
+		return [["A", saves_card.a_hint(f)], ["B", "Back"]]
 	return []
 
 

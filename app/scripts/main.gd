@@ -47,6 +47,18 @@ const ControllerProvider := preload("res://scripts/controls/providers/controller
 const PerfProvider := preload("res://scripts/controls/providers/perf.gd")
 const StreamingScreen := preload("res://scripts/ui/streaming/streaming_screen.gd")
 const StreamingService := preload("res://scripts/streaming/streaming.gd")
+const SavesService := preload("res://scripts/system/saves_service.gd")
+const BatteryLog := preload("res://scripts/system/battery_log.gd")
+const LowBattery := preload("res://scripts/system/low_battery.gd")
+const LowBatteryDialog := preload("res://scripts/ui/low_battery_dialog.gd")
+const TSaves := preload("res://scripts/ui/texts_saves.gd")
+const SavesCardScript := preload("res://scripts/ui/games/saves_card.gd")
+const Recording := preload("res://scripts/system/recording.gd")
+const UPower := preload("res://scripts/system/upower.gd")
+const Proc := preload("res://scripts/system/proc.gd")
+const AppsView := preload("res://scripts/ui/apps_view.gd")
+const Apps := preload("res://scripts/library/apps.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
@@ -95,6 +107,17 @@ var _screen_layer: Control
 var _hint_shade: TextureRect
 var _last_input_ms := 0
 var _battery_warned := false
+## Epic and GOG cloud saves around a game (saves_service.gd).
+var saves: Node
+## Battery history and per-game drain (battery_log.gd).
+var battery_log: Node
+## Sleep at low battery (low_battery.gd) and its warning while it shows.
+var low_battery: Node
+var low_dialog: Control
+## Key of the game waiting for its cloud save before it starts ("" when none).
+var _launch_wait := ""
+## Key of the game whose save conflict sheet is open before its launch ("" when none).
+var _conflict_for := ""
 var _seen_new := {}
 ## Install state and live progress for every game (Library store signals).
 var install_state: Node
@@ -114,6 +137,13 @@ var closer: Node
 var setup_flow: Node
 ## Main-loop pacing: near idle while a game (or any other window) is in front.
 var background: Node
+## Record / Stop recording (quick menu) and the REC chip.
+var recording: Node
+## Desktop apps (Home's Apps shelf "All apps", the Library header's Apps).
+var apps_view: Control
+## Controller batteries: the last UPower read (ticks msec) and whether one is out.
+var _pads_at := -1000000
+var _pads_task := -1
 
 
 ## Play the boot splash at start (screenshots and tests turn it off).
@@ -150,6 +180,7 @@ func _ready() -> void:
 	home.refresh_requested.connect(func(): Library.refresh())
 	home.game_focused.connect(_follow.bind("home"))
 	home.downloads_requested.connect(open_downloads)
+	home.apps_requested.connect(open_apps)
 	home.tile_hook = _hook_tile
 	_screen_layer.add_child(home)
 
@@ -157,6 +188,7 @@ func _ready() -> void:
 	library_screen.open_requested.connect(_open_page)
 	library_screen.game_focused.connect(_follow.bind("library"))
 	library_screen.downloads_requested.connect(open_downloads)
+	library_screen.apps_requested.connect(open_apps)
 	library_screen.tile_hook = _hook_tile
 	library_screen.visible = false
 	_screen_layer.add_child(library_screen)
@@ -184,6 +216,7 @@ func _ready() -> void:
 		settings.setup_requested.connect(_on_setup_requested)
 	if settings.has_signal("game_settings_requested"):
 		settings.game_settings_requested.connect(_open_game_settings)
+	settings.app_launch_requested.connect(_play_app)
 	_screen_layer.add_child(settings)
 	screens = {"home": home, "library": library_screen, "discover": discover, "stream": stream_screen, "settings": settings}
 
@@ -257,8 +290,17 @@ func _ready() -> void:
 	launch_overlay.revealing.connect(_launch_reveal)
 	add_child(launch_overlay)
 
+	recording = Recording.new()
+	add_child(recording)
+	recording.changed.connect(func(): top_bar.set_recording(recording.is_recording()))
+	recording.saved.connect(func(path: String, info: Dictionary):
+		toast(TX.REC_SAVED % (str(info.get("game", "")) if str(info.get("game", "")) != "" else path.get_file()), "check", "good",
+			Recording.clock(int(info.get("seconds", 0))) + " · " + path.get_base_dir().replace(OS.get_environment("HOME"), "~")))
+	recording.failed.connect(func(kind: String, detail: String):
+		toast(str(TX.REC_ERRORS.get(kind, TX.REC_ERRORS["failed"])), "alert", "bad", detail))
+
 	quick_menu = QuickMenu.new()
-	var qm_services := {"device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
+	var qm_services := {"recording": recording, "device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
 	if _svc("Controls") != null:
 		qm_services["controls"] = _svc("Controls")
 		qm_services["profiles"] = _svc("Profiles")
@@ -291,6 +333,7 @@ func _ready() -> void:
 	_wire_games()
 	_wire_services()
 	_wire_controls()
+	_wire_saves_and_battery()
 	closer = GameCloser.new()
 	closer.name = "GameCloser"
 	add_child(closer)
@@ -319,6 +362,9 @@ func _ready() -> void:
 	_refresh_live()
 	_update_timer()
 	_link_top()
+	home.set_apps(_pinned_apps())
+	Input.joy_connection_changed.connect(func(_d, _c): read_pads(true))
+	read_pads(true)
 	_last_input_ms = Time.get_ticks_msec()
 	home.focus_later(home.default_focus())
 	open_setup(false)
@@ -453,6 +499,71 @@ func _wire_controls() -> void:
 	fixes.check_changes()
 	if quick_menu != null and "fixes" in quick_menu:
 		quick_menu.fixes = fixes
+
+
+## Cloud saves, battery history and Sleep at low battery: each follows events that happen
+## anyway (a game starts or ends, the charger, a wake, Power's 15 s battery check).
+func _wire_saves_and_battery() -> void:
+	saves = SavesService.new()
+	saves.name = "CloudSaves"
+	saves.setup_library(_svc("Library"))
+	saves.game_running = func() -> bool: return session != null and session.is_active()
+	saves.finished.connect(_on_saves_finished)
+	add_child(saves)
+	battery_log = BatteryLog.new()
+	battery_log.name = "BatteryLog"
+	if Device.get("root") is String:
+		battery_log.sys_root = str(Device.get("root"))
+	battery_log.attach_power(_svc("Power"))
+	battery_log.attach_session(session)
+	add_child(battery_log)
+	low_battery = LowBattery.new()
+	low_battery.name = "LowBattery"
+	low_battery.setup(_svc("Power"), _svc("Controls"))
+	low_battery.warn_requested.connect(_on_low_battery)
+	low_battery.warn_cancelled.connect(func():
+		if low_dialog != null and is_instance_valid(low_dialog):
+			low_dialog.dismiss()
+		_low_dialog_closed())
+	low_battery.sleeping.connect(func(): battery_log.record("suspend"))
+	add_child(low_battery)
+
+
+## A cloud save job ended: after a game, only trouble is worth a toast (the page shows the rest).
+func _on_saves_finished(key: String, phase: String, state: String) -> void:
+	if phase != "post":
+		return
+	var g := View.find_by_key(_decorated(), key)
+	var title := str(g.get("title", key))
+	if state == "conflict":
+		toast(TSaves.CONFLICT_TOAST % title, "alert", "warn")
+	elif state in ["failed", "offline", "backup_failed"]:
+		toast(TSaves.SYNC_FAILED_TOAST % title, "alert", "warn")
+
+
+## Sleep at low battery: the 30 s warning, over a running game too.
+func _on_low_battery(percent: int) -> void:
+	if low_dialog != null and is_instance_valid(low_dialog):
+		return
+	low_dialog = LowBatteryDialog.open(_modal_layer, percent)
+	low_dialog.decided.connect(func(stay: bool):
+		if stay:
+			low_battery.cancel()
+		else:
+			low_battery.confirm()
+		_low_dialog_closed())
+	background.set_menu(true)
+	if session.is_active() and not quick_menu.visible:
+		Gamescope.set_overlay(true)
+	_update_hints.call_deferred()
+
+
+func _low_dialog_closed() -> void:
+	low_dialog = null
+	background.set_menu(quick_menu.visible)
+	if session.is_active() and not quick_menu.visible:
+		Gamescope.set_overlay(false)
+	_update_hints.call_deferred()
 
 
 ## The game is the scope of the per-game controls (perf.*): set it, then detect
@@ -643,6 +754,98 @@ func _downloads_open() -> bool:
 	return downloads_view != null and downloads_view.visible
 
 
+# ------------------------------------------------------------ apps
+
+## Pinned apps for Home's Apps shelf (saved with their icons: no scan at start).
+func _pinned_apps() -> Array:
+	return Apps.pinned()
+
+
+## The Apps view over the current screen (desktop apps; A starts one, X pins it).
+func open_apps() -> void:
+	if quick_menu.visible:
+		quick_menu.close()
+	if page != null:
+		_close_page()
+	close_downloads()
+	if apps_view == null:
+		apps_view = AppsView.new()
+		apps_view.launch_requested.connect(func(app: Dictionary):
+			close_apps()
+			_play_app(app))
+		apps_view.pins_changed.connect(func(): home.set_apps(_pinned_apps()))
+		apps_view.notice.connect(func(text: String, tone: String): toast(text, "check" if tone == "good" else "info", tone))
+		add_child(apps_view)
+		move_child(apps_view, top_bar.get_index())
+	apps_view.top_target = top_bar.tabs[current]
+	screens[current].visible = false
+	apps_view.open()
+	_link_top()
+	_sound("select")
+	_update_hints.call_deferred()
+
+
+func close_apps() -> void:
+	if not _apps_open():
+		return
+	apps_view.close()
+	var s: Control = screens[current]
+	s.visible = true
+	s.modulate.a = 0.0
+	Motion.to(s, "modulate:a", 1.0, Motion.FAST)
+	_link_top()
+	var f := _screen_default_focus()
+	if f != null:
+		f.grab_focus()
+	_update_hints.call_deferred()
+
+
+func _apps_open() -> bool:
+	return apps_view != null and apps_view.visible
+
+
+## Starts a desktop app or a clip's player like a game.
+func _play_app(app: Dictionary) -> void:
+	if session.runs(str(app.get("key", ""))):
+		session.return_to_game()
+		return
+	var launched: Dictionary = Library.launch(app)
+	if not bool(launched.get("ok", false)):
+		toast(TX.APPS_FAILED % str(app.get("title", "")), "alert", "bad")
+		return
+	playing = app
+	launch_overlay.show_for(app, backdrop.current_accent())
+	_pause_motion()
+	session.begin(app, launched)
+
+
+# ------------------------------------------------------------ controller batteries
+
+## Reads the controllers' batteries from UPower on a worker. `now`: an event
+## (focus back, quick menu, a pad connected); else only when the last read is
+## older than UPower.READ_EVERY_S (the live refresh, which only runs while
+## GameCove is in front). Never behind a game.
+func read_pads(now: bool) -> void:
+	if _pads_task != -1 or DisplayServer.get_name() == "headless":
+		return
+	if not now and Time.get_ticks_msec() - _pads_at < UPower.READ_EVERY_S * 1000:
+		return
+	_pads_at = Time.get_ticks_msec()
+	var me: WeakRef = weakref(self)
+	_pads_task = WorkerThreadPool.add_task(func():
+		var list := UPower.pads(Proc.new())
+		var o: Object = me.get_ref()
+		if o != null:
+			o.call_deferred("_on_pads", list), false, "GameCove controller batteries")
+
+
+func _on_pads(list: Array) -> void:
+	if _pads_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_pads_task)
+		_pads_task = -1
+	top_bar.set_pads(list)
+
+
 func _on_accent(c: Color) -> void:
 	home.set_accent(c)
 	if page != null:
@@ -693,6 +896,7 @@ func _notification(what: int) -> void:
 		_check_resume()
 		_refresh_live()
 		_update_timer()
+		read_pads(true)
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST and session != null:
 		session.stop()
 
@@ -728,6 +932,9 @@ static func base_size_for(win: Vector2i) -> Vector2i:
 
 ## Static caches hold textures and fonts; let them go so nothing leaks at exit.
 func _exit_tree() -> void:
+	if _pads_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_pads_task)
+		_pads_task = -1
 	release_caches()
 
 
@@ -746,6 +953,7 @@ static func release_caches() -> void:
 func _on_live_tick() -> void:
 	_check_resume()
 	_refresh_live()
+	read_pads(false)
 	if Time.get_ticks_msec() - _last_input_ms > IDLE_S * 1000.0:
 		_pause_motion()
 
@@ -970,6 +1178,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			downloads_view.toggle_focused()
 			get_viewport().set_input_as_handled()
 		return
+	if _apps_open():
+		if event.is_action_pressed("ui_cancel"):
+			_sound("back")
+			close_apps()
+			get_viewport().set_input_as_handled()
+		elif _overlay_shoulder(event):
+			get_viewport().set_input_as_handled()
+		elif _pressed(event, JOY_BUTTON_X, KEY_X):
+			apps_view.toggle_focused()
+			_update_hints()
+			get_viewport().set_input_as_handled()
+		return
 	if status_panel.visible:
 		if event.is_action_pressed("ui_cancel"):
 			status_panel.close()
@@ -1066,6 +1286,8 @@ static func _pressed(event: InputEvent, button: JoyButton, key: Key) -> bool:
 func _screen() -> Control:
 	if _downloads_open():
 		return downloads_view
+	if _apps_open():
+		return apps_view
 	return page if page != null else screens[current]
 
 
@@ -1093,6 +1315,7 @@ func show_screen(id: String, dir := 0) -> void:
 	if page != null:
 		_close_page()
 	close_downloads()
+	close_apps()
 	var old: Control = screens[current]
 	var d := float(signi(dir)) if dir != 0 else signf(SCREENS.find(id) - SCREENS.find(current))
 	current = id
@@ -1157,7 +1380,7 @@ func _link_top() -> void:
 			s.set_top_target(tab)
 	# The game page and Downloads keep the top bar: down from it goes into them.
 	var f: Control = _screen().default_focus()
-	for extra in [page, downloads_view]:
+	for extra in [page, downloads_view, apps_view]:
 		if extra != null and is_instance_valid(extra) and extra.has_method("set_top_target"):
 			extra.set_top_target(tab)
 	for t in top_bar.tab_buttons():
@@ -1175,6 +1398,9 @@ func _link_top() -> void:
 ## Home's and the page's main button. Owned games that aren't installed get
 ## installed; ones waiting for an update get updated; the rest start.
 func _play(game: Dictionary) -> void:
+	if str(game.get("store", "")) == Apps.STORE:
+		_play_app(game)
+		return
 	if not game.get("installed", false):
 		game_actions.install(game)
 		return
@@ -1187,10 +1413,66 @@ func _play(game: Dictionary) -> void:
 	if session.runs(str(game.get("key", ""))):
 		session.return_to_game()   # already running: back to it, no second launch
 		return
+	if _launch_wait != "":
+		return   # another game is still getting its cloud save
 	playing = game
 	launch_overlay.show_for(game, backdrop.current_accent(), _launch_source(game))
 	_launch_recede()
 	_pause_motion()
+	if saves == null or not saves.applies(game):
+		_launch_now(game)
+		return
+	# Epic / GOG: the newest cloud save comes down first (never while the game runs)
+	_launch_wait = str(game.get("key", ""))
+	launch_overlay.status.text = TSaves.SYNC_LAUNCH
+	saves.before_launch(game, func(r: Dictionary): _after_cloud_check(game, r))
+
+
+## The cloud save check before a launch finished: start, or let the user pick a side first.
+func _after_cloud_check(game: Dictionary, r: Dictionary) -> void:
+	if _launch_wait != str(game.get("key", "")):
+		return   # cancelled meanwhile
+	if r.has("conflict"):
+		launch_overlay.finish()
+		var key := str(game.get("key", ""))
+		_conflict_for = key
+		game_actions.open_menu(TSaves.CONFLICT_TITLE, TSaves.CONFLICT_LINE % str(game.get("title", "")),
+			SavesCardScript.conflict_rows(r["conflict"], int(Time.get_unix_time_from_system()), true),
+			func(id: String) -> void:
+				_conflict_for = ""
+				launch_overlay.show_for(game, backdrop.current_accent(), _launch_source(game))
+				if id in ["local", "cloud"]:
+					launch_overlay.status.text = TSaves.SYNC_LAUNCH
+					saves.resolve(game, id, func(_st): _start_after_sync(game))
+				else:
+					_start_after_sync(game))
+		game_actions.sheet.closed.connect(func(): call_deferred("_conflict_closed", key), CONNECT_ONE_SHOT)
+		return
+	_start_after_sync(game)
+
+
+## The conflict sheet closed: without a pick (B), the game doesn't start.
+func _conflict_closed(key: String) -> void:
+	if _conflict_for != key:
+		return
+	_conflict_for = ""
+	if _launch_wait == key:
+		_launch_wait = ""
+		playing = {}
+		_resume_motion()
+
+
+func _start_after_sync(game: Dictionary) -> void:
+	if _launch_wait != str(game.get("key", "")):
+		return
+	_launch_wait = ""
+	if not launch_overlay.is_open():
+		launch_overlay.show_for(game, backdrop.current_accent(), _launch_source(game))   # its timeout ran out meanwhile
+	launch_overlay.status.text = "Launching…"
+	_launch_now(game)
+
+
+func _launch_now(game: Dictionary) -> void:
 	var launched: Dictionary = Library.launch(game)
 	session.begin(game, launched)
 	if not bool(launched.get("ok", false)):
@@ -1283,6 +1565,9 @@ func stream_display() -> Dictionary:
 
 func _on_launch_cancelled(_game: Dictionary) -> void:
 	_sound("back")
+	if _launch_wait != "":
+		_launch_wait = ""   # still getting the cloud save: the game won't start
+		playing = {}
 	_resume_motion()
 	if session.is_active():
 		session.stop()
@@ -1301,6 +1586,11 @@ func _on_game_started(game: Dictionary) -> void:
 
 func _on_game_ended(game: Dictionary) -> void:
 	wiring.game_ended(game)
+	if saves != null:
+		saves.after_exit(game)   # what the game just saved goes up
+	# a clip belongs to its game: the game ending stops (and saves) it
+	if recording != null and recording.is_recording():
+		recording.stop()
 	if streaming != null:
 		streaming.set_game_running(false)
 	if fixes != null:
@@ -1360,7 +1650,8 @@ func _open_page(game: Dictionary) -> void:
 	_page_return = f if f != null and screens[current].is_ancestor_of(f) else null
 	page = GamePage.new()
 	var g := View.find_by_key(_decorated(), str(game.get("key", "")))
-	page.setup(g if not g.is_empty() else game, Launcher, {"library": store_api, "state": install_state, "actions": game_actions, "achievements": achievements_api})
+	page.setup(g if not g.is_empty() else game, Launcher, {"library": store_api, "state": install_state, "actions": game_actions,
+		"achievements": achievements_api, "saves": saves, "battery": battery_log})
 	page.play_requested.connect(_play)
 	page.back_requested.connect(_close_page)
 	page.downloads_requested.connect(open_downloads)
@@ -1492,6 +1783,7 @@ func _open_menu() -> void:
 	if g.is_empty():
 		g = home.spotlight_game if not home.spotlight_game.is_empty() else home.hero_game
 	quick_menu.open(g)
+	read_pads(true)
 	if wiring != null:
 		wiring.menu_over_game(true)
 	_sound("select")
@@ -1587,12 +1879,16 @@ func _update_hints(f: Control = null) -> void:
 ## Hints from whatever sits on top: a sheet, the Steam overlay, the downloads
 ## list, or the game page's own (achievement grid, Manage). [] = the usual.
 func _special_hints(f: Control) -> Array:
+	if low_dialog != null and is_instance_valid(low_dialog):
+		return LowBatteryDialog.hints()
 	if game_actions != null and game_actions.is_modal():
 		return game_actions.modal_hints()
 	if steam_overlay != null and steam_overlay.is_open():
 		return [["A", TG.BACK_TO_COVE]]
 	if _downloads_open():
 		return downloads_view.hints_for_focus(f)
+	if _apps_open():
+		return apps_view.hints_for_focus(f)
 	if page != null and page.has_method("hints_for_focus"):
 		return page.hints_for_focus(f)
 	if page == null and screens[current].has_method("hints"):
@@ -1701,7 +1997,7 @@ func _build_settings() -> void:
 		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
 			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
-			"photo": _svc("DevicePhoto")})
+			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log, "recording": recording})
 
 
 static func _version() -> String:
