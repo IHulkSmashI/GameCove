@@ -15,9 +15,10 @@ const URL := "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/g
 const CACHE_PATH := "user://gamedb.json.gz"
 const MAX_AGE_S := 24 * 60 * 60
 ## Upper bound for the unpacked file, so a bad download can't eat all memory.
-## The real file is compact JSON, roughly 100-200 bytes per game: even 200,000
-## games stay well under this.
-const MAX_UNPACKED := 64 * 1024 * 1024
+## With game details and critic scores the published file unpacks to about
+## 73 MB (November 2026), past the old 64 MB cap: the whole database was
+## refused at start ("Decompression failed"). 128 MB leaves room to grow.
+const MAX_UNPACKED := 128 * 1024 * 1024
 const STORES := ["steam", "gog", "epic"]
 
 ## Where the copy lives; tests point it at a temp file.
