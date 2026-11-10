@@ -1,7 +1,9 @@
 extends Node
 ## PerfMonitor: the running game's frame rate and frame time, package and GPU
 ## power, CPU/GPU load, temperatures and clocks, once a second, ONLY while a
-## game runs and has focus. At idle nothing runs: no timer, no file open.
+## game runs, has focus and someone uses the numbers: Auto TDP (Power), or a
+## listener on `sample`. At idle, and behind a game nobody measures, nothing
+## runs: no timer, no file open, no mangoapp log started.
 ##
 ## Who calls what (docs/CONTRACTS.md "Performance"):
 ##   start(app_id, opts) / stop()   the screens agent, on GameSession
@@ -66,6 +68,7 @@ var _busy := false
 ## after any game had been measured).
 var _tasks: Array[int] = []
 var _auto_started := false   # started for Auto TDP, not by start()
+var _autotune := false       # Power's Auto TDP is on (autotune_changed)
 var _setup_done := false
 
 
@@ -310,11 +313,19 @@ func _begin() -> void:
 func _update_timer() -> void:
 	if _timer == null or not _timer.is_inside_tree():
 		return
-	if active and focused:
+	if active and focused and wanted():
 		if _timer.is_stopped():
 			_timer.start()
 	else:
 		_timer.stop()
+
+
+## Someone uses the samples: Auto TDP is on (it is fed every one), or something listens
+## to `sample` (connect before start(), or call set_focused() again after connecting).
+func wanted() -> bool:
+	if _autotune or (power != null and power.has_method("autotune_active") and power.autotune_active()):
+		return true
+	return not get_signal_connection_list("sample").is_empty()
 
 
 func _tick() -> void:
@@ -343,6 +354,7 @@ func _publish(d: Dictionary, s: Sampler) -> void:
 
 
 func _on_autotune_changed(on: bool) -> void:
+	_autotune = on
 	if on and target_fps > 0.0:
 		set_target_fps(target_fps)  # Power forgets the target between games
 	if on and not active:
@@ -351,6 +363,7 @@ func _on_autotune_changed(on: bool) -> void:
 		_auto_started = true
 	elif not on and _auto_started:
 		stop()
+	_update_timer()
 
 
 # ---- overlay --------------------------------------------------------------------

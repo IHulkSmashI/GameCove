@@ -289,3 +289,27 @@ func test_tasks_are_waited_for() -> void:
 	eq(pm._tasks.size(), 1, "finished tasks are freed when the next one starts")
 	pm._exit_tree()
 	pm.free()
+
+
+func test_samples_only_while_someone_uses_them() -> void:
+	var m := _monitor(_tree("sys_claw", "wanted"))
+	var p := FakePower.new()
+	m.power = p
+	m.start(5)
+	ok(not m.wanted(), "a game with nobody using the numbers: no sampling behind it")
+	p.on = true
+	ok(m.wanted(), "Auto TDP on: every sample feeds it")
+	p.on = false
+	m._on_autotune_changed(true)
+	ok(m.wanted(), "told Auto TDP started (its state may lag on Power's worker)")
+	m._on_autotune_changed(false)
+	ok(not m.wanted(), "Auto TDP stopped")
+	var got := []
+	var listener := func(d): got.append(d)
+	m.sample.connect(listener)
+	ok(m.wanted(), "a listener on `sample` keeps it sampling")
+	m.sample.disconnect(listener)
+	ok(not m.wanted(), "and only while it listens")
+	m.stop()
+	p.free()
+	m.free()
