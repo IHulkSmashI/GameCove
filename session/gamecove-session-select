@@ -268,6 +268,14 @@ leave_session() {
 	fi
 }
 
+# Left GameCove this boot: from here a switch that names no session means the real desktop.
+# Best effort: on a full or read-only home the switch itself must still happen (the crash-loop
+# fallback relies on it; review 2, problem 6).
+mark_left() {
+	{ mkdir -p "$DATA" && boot_id >"$STEAM_MARK"; } 2>/dev/null ||
+		echo "gamecove-session-select: couldn't write $STEAM_MARK; switching anyway" >&2
+}
+
 # --default: remember what the desktop and boot defaults were, once (a second
 # --default must not save GameCove as "the previous one").
 save_previous() {
@@ -411,8 +419,7 @@ steam)
 		sm_set default-login-mode game
 	fi
 	[ "$switch" -eq 1 ] || exit 0
-	mkdir -p "$DATA"
-	boot_id >"$STEAM_MARK"
+	mark_left
 	leave_session
 	exec "$STEAMOSCTL" switch-to-game-mode
 	;;
@@ -425,15 +432,13 @@ gamecove)
 		sm_set default-desktop-session "$SESSION_FILE"
 		sm_set default-login-mode desktop
 	fi
-	rm -f "$STEAM_MARK"
+	rm -f "$STEAM_MARK" 2>/dev/null || true
 	[ "$switch" -eq 1 ] || exit 0
 	exec "$STEAMOSCTL" switch-to-desktop-mode "$SESSION_FILE"
 	;;
 desktop)
 	[ "$default" -eq 0 ] || die "--default is only for steam or gamecove" 64
-	# left GameCove: from here a switch that names no session means the real desktop
-	mkdir -p "$DATA"
-	boot_id >"$STEAM_MARK"
+	mark_left
 	desk="$(real_desktop)"
 	leave_session
 	exec "$STEAMOSCTL" switch-to-desktop-mode "$desk"

@@ -563,6 +563,17 @@ code="$(watch hang XDG_RUNTIME_DIR= TMPDIR="$T/tmpd")"
 eqv "$(ls -A "$T/tmpd")" "" "the private heartbeat folder is removed"
 rm -rf "$DATA"
 
+# --- review 2, problem 6: on a full or read-only home the crash-loop fallback still switches away
+# (session-select's boot marker write aborted it under set -e). The real client and select.
+echo 139 >"$T/app-code"
+: >"$T/rofile" # a file where the data folder's parent should be: nothing under it can be written
+rm -f "$ST/switched"
+env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/rofile" XDG_CONFIG_HOME="$T/home/.config" \
+	GAMECOVE_SESSIONS_DIRS="$T/sessions" GAMECOVE_BOOT_ID_FILE="$T/boot_id" GAMECOVE_OSTREE_BOOTED="$T/not-ostree" \
+	GAMECOVE_BIN="$CB/gamecove.x86_64" GAMECOVE_SESSION_SELECT="$SEL" GAMECOVE_STEAM_MODE=off \
+	sh "$CLIENT" >"$T/ro.out" 2>&1
+eqv "$(cat "$ST/switched" 2>/dev/null)" game "unwritable home: the fallback still switches to Steam Gaming Mode"
+
 # --- traits: ZOTAC Zone board G1A1W, which Linux's orientation quirk misses (G0A1W only)
 SD="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
 orient() { # <vendor> <board> [preset]
