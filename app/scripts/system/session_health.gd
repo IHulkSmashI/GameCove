@@ -41,6 +41,19 @@ func _ready() -> void:
 	beat()
 
 
+## Beats at once when a game starts or ends (review 2, low 13): the mode must not wait for
+## the next Timer tick, or a stall right after a launch reads as a hang in "ui".
+## `session` has started(game) and ended(game) signals (GameSession).
+func watch_session(session: Object) -> void:
+	for sig in ["started", "ended"]:
+		if session != null and session.has_signal(sig) and not session.is_connected(sig, _on_game_change):
+			session.connect(sig, _on_game_change)
+
+
+func _on_game_change(_game: Dictionary) -> void:
+	beat()
+
+
 func mode() -> String:
 	return "game" if game_running.is_valid() and bool(game_running.call()) else "ui"
 

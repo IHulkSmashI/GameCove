@@ -288,6 +288,7 @@ func _ready() -> void:
 	health.name = "SessionHealth"
 	health.game_running = func() -> bool: return session != null and session.is_active()
 	add_child(health)
+	health.watch_session(session)
 	if quick_menu.has_method("attach_session"):
 		quick_menu.attach_session(session)
 	if quick_menu.has_signal("exit_game_requested"):

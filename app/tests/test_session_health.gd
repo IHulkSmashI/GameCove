@@ -43,3 +43,27 @@ func test_fallback_notice_is_shown_once() -> void:
 	ok(SessionHealth.notice_text("hung").contains("stopped responding"), "a hang")
 	ok(SessionHealth.notice_text("missing").contains("Repair"), "missing files: points at Repair")
 	ok(SessionHealth.notice_text("unsaved").contains("full"), "unsaved count")
+
+
+class FakeSession extends RefCounted:
+	signal started(game: Dictionary)
+	signal ended(game: Dictionary)
+	var active := false
+
+
+## Review 2, low 13: the mode was sampled only every 5 s, so a stall right after a
+## launch could read as a hung UI. A game start or end beats at once.
+func test_game_start_and_end_beat_at_once() -> void:
+	var d := _dir()
+	var p := d.path_join("gamecove-heartbeat")
+	var h: Node = SessionHealth.new(p)
+	var s := FakeSession.new()
+	h.game_running = func() -> bool: return s.active
+	h.watch_session(s)
+	s.active = true
+	s.started.emit({})
+	eq(FileAccess.get_file_as_string(p), "1 game\n", "beat with the game mode on start")
+	s.active = false
+	s.ended.emit({})
+	eq(FileAccess.get_file_as_string(p), "2 ui\n", "and back to ui on end")
+	h.free()
