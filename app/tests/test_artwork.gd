@@ -266,3 +266,75 @@ func test_auto_fill_waits_behind_a_game() -> void:
 	ok(http.requests.size() >= 3, "the game ended: filled")
 	s.free()
 	wipe(dir)
+
+
+## Final review, medium (other data): art the user set in Steam after GameCove's pick is
+## theirs. A second pick backs it up (it used to be overwritten with no copy) and Reset
+## leaves it alone (it used to be deleted and replaced by the older original).
+func test_art_the_user_set_in_steam_later_is_kept() -> void:
+	var dir := tmp("grid_later")
+	var grid := dir.path_join("steam/userdata/123/config/grid")
+	var backup := dir.path_join("backup/123")
+	var cover := FileAccess.get_file_as_bytes(fixture("discover/cover_jpg.bin"))
+	var hero := FileAccess.get_file_as_bytes(fixture("discover/hero_png.bin"))
+	var users := hero.duplicate()
+	users.append_array(PackedByteArray([1, 2, 3]))   # stands for another image the user chose later
+	put(grid.path_join("400p.png"), hero)                      # the original, before GameCove
+	put(dir.path_join("pick1.jpg"), cover)
+	put(dir.path_join("pick2.jpg"), cover)
+	SteamGrid.apply(grid, backup, "400", "cover", dir.path_join("pick1.jpg"))
+	# in Steam the user replaces GameCove's cover with one of their own
+	DirAccess.remove_absolute(grid.path_join("400p.jpg"))
+	put(grid.path_join("400p.png"), users)
+	# a second pick in GameCove: the user's later art is what Reset must bring back
+	SteamGrid.apply(grid, backup, "400", "cover", dir.path_join("pick2.jpg"))
+	eq(FileAccess.get_file_as_bytes(backup.path_join("400p.png")), users, "the user's later art was backed up before the second pick")
+	ok(SteamGrid.reset(grid, backup, "400p"), "reset")
+	eq(FileAccess.get_file_as_bytes(grid.path_join("400p.png")), users, "and Reset puts the user's later art back")
+	ok(not FileAccess.file_exists(grid.path_join("400p.jpg")), "ours is gone")
+	# Reset when the user changed it after the pick: their art stays, nothing older comes back
+	put(grid.path_join("400p.png"), hero)
+	SteamGrid.apply(grid, backup, "400", "cover", dir.path_join("pick1.jpg"))
+	DirAccess.remove_absolute(grid.path_join("400p.jpg"))
+	put(grid.path_join("400p.jpg"), users)                     # same name as ours, different picture
+	ok(SteamGrid.reset(grid, backup, "400p"), "reset")
+	eq(FileAccess.get_file_as_bytes(grid.path_join("400p.jpg")), users, "the user's art is left exactly as it is")
+	ok(not FileAccess.file_exists(grid.path_join("400p.png")), "the older original isn't put on top of it")
+	eq(SteamGrid.read_manifest(backup), {}, "and we no longer track that game")
+	# the user removed the art in Steam after our pick: Reset doesn't bring the old one back either
+	put(grid.path_join("500p.png"), hero)
+	SteamGrid.apply(grid, backup, "500", "cover", dir.path_join("pick1.jpg"))
+	DirAccess.remove_absolute(grid.path_join("500p.jpg"))
+	ok(SteamGrid.reset(grid, backup, "500p"), "reset")
+	eq(SteamGrid.existing(grid, "500p"), [] as Array[String], "no art, as the user left it")
+	# the logo position file follows the same rule
+	ok(SteamGrid.set_logo_position(grid, backup, "400", "UpperCenter", 60, 40), "logo position")
+	put(grid.path_join("400.json"), "{\"nVersion\":1,\"logoPosition\":{\"pinnedPosition\":\"BottomLeft\",\"nWidthPct\":33,\"nHeightPct\":33}}".to_utf8_buffer())
+	ok(SteamGrid.reset(grid, backup, "400.json"), "reset")
+	eq(SteamGrid.logo_position(grid, "400")["pin"], "BottomLeft", "the position the user set in Steam stays")
+	wipe(dir)
+
+
+## Final review, low: two threads changing art at once (the automatic fill and a pick) each
+## read the manifest, added their entry and wrote it back; one entry was lost and with it
+## the way to put that game's original back.
+func test_grid_manifest_survives_two_threads() -> void:
+	var dir := tmp("grid_threads")
+	var grid := dir.path_join("steam/userdata/123/config/grid")
+	var backup := dir.path_join("backup/123")
+	var cover := FileAccess.get_file_as_bytes(fixture("discover/cover_jpg.bin"))
+	put(dir.path_join("pick.jpg"), cover)
+	var per := 40
+	for i in per * 4:
+		put(grid.path_join("%dp.png" % (1000 + i)), cover)
+	var threads: Array = []
+	for t in 4:
+		var th := Thread.new()
+		th.start(func():
+			for i in per:
+				SteamGrid.apply(grid, backup, str(1000 + t * per + i), "cover", dir.path_join("pick.jpg")))
+		threads.append(th)
+	for th in threads:
+		th.wait_to_finish()
+	eq(SteamGrid.read_manifest(backup).size(), per * 4, "every game's original is still listed")
+	wipe(dir)
