@@ -57,6 +57,8 @@ const NO_RESHADE := "This gamescope has no ReShade support"
 const NO_SGSR := "SGSR needs a newer gamescope"
 const NO_WPCTL := "Needs PipeWire (wpctl)"
 const NO_SINK := "No sound output found"
+## An app stream PipeWire gave no name.
+const APP_UNNAMED := "Unnamed app"
 const NO_SOURCE := "No microphone found"
 const NO_NMCLI := "Needs NetworkManager"
 const NO_WIFI := "No Wi-Fi adapter"

@@ -37,6 +37,7 @@ const Shared := preload("res://scripts/ui/controls/shared.gd")
 const ControlScript := preload("res://scripts/controls/control.gd")
 const Caps := preload("res://scripts/device/capabilities.gd")
 const BrandMark := preload("res://scripts/ui/brand_mark.gd")
+const AppMixer := preload("res://scripts/ui/controls/app_mixer.gd")
 
 signal closed
 ## A result worth a toast: text, tone (good / bad).
@@ -477,7 +478,7 @@ func show_section(i: int, keep_focus := "") -> void:
 		"game": _build_game()
 		"power": _build_power()
 		"display": _build_list("display")
-		"audio": _build_list("audio")
+		"audio": _build_audio()
 		"controller": _build_controller()
 		"device": _build_device()
 	_relink()
@@ -576,6 +577,21 @@ func _build_list(tab: String) -> void:
 	if l.focusables().is_empty():
 		_line(TC.NOTHING_HERE, "QuietLabel", "Nothing")
 	_all_link(tab)
+
+
+## Audio: the quick sound controls, then each app's own volume.
+func _build_audio() -> void:
+	if model == null:
+		return
+	var l := _list(Catalog.QUICK["audio"])
+	var mixer: VBoxContainer = AppMixer.new()
+	mixer.setup(controls)
+	mixer.rebuilt.connect(_relink)
+	mixer.failed.connect(func(t: String): status_label.text = t)
+	_add(mixer)
+	if l.focusables().is_empty() and mixer.focusables().is_empty():
+		_line(TC.NOTHING_HERE, "QuietLabel", "Nothing")
+	_all_link("audio")
 
 
 ## The last row of a tab: "All power settings ›".

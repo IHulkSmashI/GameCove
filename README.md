@@ -136,7 +136,7 @@ Switch to Desktop Mode live here too.
 | **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, Lossless frame gen, the scaling filter |
 | **Power** | Power profile, TDP, boost, fan mode, battery saver, charge limit, CPU boost, energy preference |
 | **Display** | Brightness, refresh rate, frame limit, VRR, night light, colour vibrance, scaling filter and sharpness, screen effects |
-| **Audio** | Volume, mute, output device, microphone mute and input |
+| **Audio** | Volume, mute, output device, microphone mute and input, and each app's own volume |
 | **Controller** | Controller type, gyro, Nintendo button layout, rumble, stick lights (effect, colour, brightness), mouse mode |
 | **Device** | Wi-Fi, Bluetooth, airplane mode, keep awake, screenshot, plus your device's fixes |
 
@@ -164,7 +164,8 @@ it does.
 - **Display:** refresh rate (and extra refresh rates where the panel allows), VRR, allow tearing, colour temperature,
   night light with a schedule, vibrance, **HDR** with inverse tone mapping and SDR brightness, screen effects, rotation,
   dim and screen-off timers.
-- **Sound:** volume, output device, microphone and input.
+- **Sound:** volume, output device, microphone and input, plus a volume for each app playing sound (turn the game
+  down under your music or a voice chat).
 - **Controller:** controller type (Xbox, DualSense, Steam Deck and more), **back buttons** remapped to any button, a key
   or a mouse click, gyro on/off and which sensor, stick and trigger deadzones, trackpad mode, **rumble on/off and
   strength**, a rumble test, **lights** (effect, colours, brightness, speed), mouse mode with pointer speed, a button

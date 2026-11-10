@@ -11,6 +11,8 @@ extends "res://scripts/ui/settings/page.gd"
 const TC := preload("res://scripts/ui/texts_controls.gd")
 const Model := preload("res://scripts/ui/controls/model.gd")
 const GroupCards := preload("res://scripts/ui/controls/group_cards.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
+const AppMixer := preload("res://scripts/ui/controls/app_mixer.gd")
 
 var groups: Array = []
 var model: Object
@@ -19,6 +21,9 @@ var cards: Object
 var lazy := true
 var _built := false
 var _sig := ""
+## Widgets after the generated cards with a focusables() of their own that can
+## change after a build (the per-app mixer fills in from the worker).
+var extras: Array = []
 
 
 func setup(page_id: String, svc_: Dictionary, host_obj: Object) -> void:
@@ -36,6 +41,7 @@ func _connect() -> void:
 
 func build() -> void:
 	cards = null
+	extras.clear()
 	if lazy and not _built:
 		return
 	if model == null:
@@ -54,7 +60,27 @@ func build() -> void:
 ## Controller links to the button map and test (the device's controller
 ## panel), which used to be a second "Controller" tab under Device.
 func build_extra() -> void:
-	if id != "controller" or host == null or not host.has_method("open_category"):
+	match id:
+		"audio": _mixer_card()
+		"controller": _buttons_card()
+
+
+## Sound: each app's own volume.
+func _mixer_card() -> void:
+	if AppMixer.provider_of(svc("controls")) == null:
+		return
+	var box := add_card(TX.MIXER_TITLE, "volume", TX.MIXER_LINE)
+	var m: VBoxContainer = AppMixer.new()
+	m.show_title = false
+	m.setup(svc("controls"))
+	m.rebuilt.connect(func(): rebuilt.emit())
+	m.failed.connect(func(t: String): notify(t, "bad"))
+	box.add_child(m)
+	extras.append(m)
+
+
+func _buttons_card() -> void:
+	if host == null or not host.has_method("open_category"):
 		return
 	var box := add_card(TC.BUTTONS_CARD, "gamepad")
 	var r := action_row(box, "button_map", TC.BUTTONS_ROW, "", TC.BUTTONS_ROW_HINT, "gamepad")
@@ -76,6 +102,9 @@ func _profiles_note() -> void:
 func focusables() -> Array:
 	var out: Array = cards.focusables() if cards != null else []
 	out.append_array(_focusables)
+	for e in extras:
+		if is_instance_valid(e):
+			out.append_array(e.focusables())
 	return out
 
 
@@ -83,6 +112,11 @@ func on_shown() -> void:
 	if not _built:
 		_built = true
 		rebuild()
+		return
+	# what's playing changes between visits: read the apps again
+	for e in extras:
+		if is_instance_valid(e) and e.has_method("refresh"):
+			e.refresh()
 
 
 func on_hidden() -> void:
