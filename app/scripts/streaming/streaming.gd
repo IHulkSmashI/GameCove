@@ -713,6 +713,27 @@ func app_by_id(id: String, app_id: int) -> Dictionary:
 
 # ---------------------------------------------------------------- pairing
 
+## A fresh 4-digit pairing PIN from the system's cryptographic generator
+## (Crypto: mbedTLS seeded by the OS), every value equally likely. The PIN is
+## the only secret in GameStream pairing, and it has just 10,000 values, so it
+## must not come from randi(), whose whole future can be worked out from a few
+## of its past values. Two random bytes give 0..65535; values from 60000 up are
+## drawn again so that no PIN is likelier than another.
+## `bytes`: func(n) -> PackedByteArray, for tests.
+static func new_pin(bytes: Callable = Callable()) -> String:
+	var crypto: Crypto = null if bytes.is_valid() else Crypto.new()
+	for attempt in 64:
+		var b: PackedByteArray = bytes.call(2) if bytes.is_valid() else crypto.generate_random_bytes(2)
+		if b.size() < 2:
+			continue
+		var v := (int(b[0]) << 8) | int(b[1])
+		if v < 60000:
+			return "%04d" % (v % 10000)
+	# 64 rejections in a row has a chance of 1 in 10^68: only a generator that's broken gets here
+	push_error("GameCove: no random bytes for the pairing PIN")
+	return "%04d" % (int(Time.get_ticks_usec()) % 10000)
+
+
 ## Starts pairing: a fresh 4-digit PIN to type into the PC's web UI. Moonlight
 ## runs `pair --pin` without a window; we watch its settings for the PC's
 ## certificate. pair_changed reports each step.
@@ -720,7 +741,7 @@ func pair(id: String) -> bool:
 	if not hosts.has(id) or not has_moonlight() or not _pair.is_empty():
 		return false
 	var h: Dictionary = hosts[id]
-	var pin := "%04d" % (randi() % 10000)
+	var pin := new_pin()
 	var cmd := Moonlight.command(moonlight, Moonlight.pair_args(str(h["address"]), pin), {"QT_QPA_PLATFORM": "offscreen"})
 	var pid := int(ctx["spawn"].spawn(cmd))
 	if pid <= 0:

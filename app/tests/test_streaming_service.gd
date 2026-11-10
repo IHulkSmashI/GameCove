@@ -173,6 +173,29 @@ func test_no_pinned_certificate_no_https() -> void:
 	after_each(s)
 
 
+## Final review (Low): the pairing PIN came from randi(), which is predictable.
+func test_pairing_pin_comes_from_the_crypto_generator() -> void:
+	var Streaming = load("res://scripts/streaming/streaming.gd")
+	var queue := [PackedByteArray([0xFF, 0xFF]), PackedByteArray([0xEA, 0x60]), PackedByteArray([0x00, 0x2A])]
+	var asked := []
+	var pin: String = Streaming.new_pin(func(n: int) -> PackedByteArray:
+		asked.append(n)
+		return queue.pop_front())
+	eq(pin, "0042", "two bytes make the PIN, zero-padded")
+	eq(asked, [2, 2, 2], "65535 and 60000 are drawn again (they'd make some PINs likelier)")
+	eq(Streaming.new_pin(func(_n): return PackedByteArray([0xEA, 0x5F])), "9999", "59999 is the last value kept")
+	eq(Streaming.new_pin(func(_n): return PackedByteArray([0x27, 0x10])), "0000", "10000 wraps to 0000")
+	var seen := {}
+	for i in 3000:
+		var p: String = Streaming.new_pin()
+		ok(p.length() == 4 and p.is_valid_int(), "four digits: " + p) if not (p.length() == 4 and p.is_valid_int()) else null
+		seen[p] = true
+	ok(seen.size() > 2300, "3000 real PINs spread over the whole range (%d different)" % seen.size())
+	var src := FileAccess.get_file_as_string("res://scripts/streaming/streaming.gd")
+	ok(not "randi()" in src.replace("must not come from randi()", ""), "no randi() left near the PIN")
+	ok("generate_random_bytes" in src, "Crypto's generator is used")
+
+
 func test_apps_fallback_to_moonlight_list_and_denied() -> void:
 	answers = {"192.168.1.20:47989/serverinfo": "serverinfo_vibepollo_http.xml",
 		"192.168.1.20:47984/serverinfo": "serverinfo_vibepollo_https.xml"}
