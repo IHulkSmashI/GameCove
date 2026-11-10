@@ -6,9 +6,17 @@ Thanks for helping. A few rules keep GameCove fast, honest and easy to maintain.
 2. **Explain every setting.** Every control gets one short line saying what it does and what it costs. No jargon without a plain-words line under it.
 3. **Light on the battery.** Nothing polls while a game has focus unless a feature needs it. The UI stops redrawing when nothing changes.
 4. **Every change can be undone.** Anything we write to the system (kernel arguments, firmware, config) is recorded and has a remove path.
-5. **Tested means tested on hardware.** A device only gets "full" status after someone ran it on that device. Untested devices stay "beta" or "generic".
+5. **Tested means tested on hardware.** A device only gets "Tested on hardware" after someone ran it on that device. Others stay "Supported" or "Basic".
 6. **Never bypass anti-cheat, never modify Steam.** We show status and offer honest options (cloud, boot to Windows); we never spoof or patch.
 7. **Credit people.** If an idea or fix came from someone, they go in CREDITS.md.
+
+## Contributor License Agreement
+
+Before your first pull request is merged, the CLA bot asks you to read [docs/CLA.md](docs/CLA.md) and sign it by posting one comment. You keep the copyright in your work; the agreement lets the project owner license GameCove under other terms in the future (for example for a handheld maker) without tracking down every contributor. You sign once and it covers all your contributions.
+
+If part of a contribution comes from another project, say so in the pull request with its source and licence.
+
+The GameCove name and logo are covered by [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Layout
 

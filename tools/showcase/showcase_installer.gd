@@ -1,0 +1,61 @@
+extends "../screenshots/shoot_installer.gd"
+## The installer on the showcase's MSI Claw 8 EX (Bazzite): welcome, the
+## device step and the finished install. Shots: installer, installer_device,
+## installer_done. SHOWCASE_THEME=light renders the light theme. The top bar's clock reads 20:42, the time the
+## other showcase screens show (8:42 PM), not the time it was rendered.
+
+const CLOCK := "20:42"
+
+
+func shot(name: String) -> void:
+	if screen != null and screen.status_pill != null:
+		var l: Label = screen.status_pill.find_child("Text", true, false)
+		if l != null:
+			l.text = l.text.left(l.text.rfind("·") + 1) + "  " + CLOCK if l.text.contains("·") else CLOCK
+	await super(name)
+
+
+func _run() -> void:
+	OS.low_processor_usage_mode = false
+	F = load("res://tests/fixtures/installer/fakes.gd")
+	Screen = load("res://scripts/ui/installer/installer_screen.gd")
+	Plan = load("res://scripts/installer/plan.gd")
+	Service = load("res://scripts/installer/installer_service.gd")
+	Paths = load("res://scripts/installer/paths.gd")
+	Commands = load("res://scripts/installer/commands.gd")
+	ThemeLib = load("res://theme/gamecove_theme.gd")
+	home = OS.get_cache_dir().path_join("gamecove-showcase-installer")
+	var theme_id := OS.get_environment("SHOWCASE_THEME")
+	if theme_id == "":
+		theme_id = "cove"
+	# The Claw as read live: Bazzite 45 (tools/devicematrix/overrides.json).
+	var _ver: String = release_version()
+	var t: Dictionary = F.target("bazzite", {"os": {"name": "Bazzite 45", "family": "bazzite"},
+		"release": {"tag": "v" + _ver, "version": _ver, "os": "bazzite", "package": "/dl/gamecove-%s-1.fc45.x86_64.rpm" % _ver},
+		"package": "/dl/gamecove-%s-1.fc45.x86_64.rpm" % _ver})
+	await make(t, theme_id)
+	await shot("installer")
+	if want("installer_device"):
+		at("device")
+		await shot("installer_device")
+	if want("installer_done"):
+		at("summary")
+		progress(["ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok", "ok"], "ok")
+		screen.installer.deferred_fixes = ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro"]
+		screen.plan.ran = true
+		screen.plan.step = "done"
+		screen.show_step()
+		screen.focus_first()
+		await shot("installer_done")
+	quit()
+
+
+## The version a release build shows: packaging/rpm/gamecove.spec's Version.
+static func release_version() -> String:
+	var f := FileAccess.open(ProjectSettings.globalize_path("res://").path_join("../packaging/rpm/gamecove.spec"), FileAccess.READ)
+	if f == null:
+		return "0.1.0"
+	for line in f.get_as_text().split("\n"):
+		if line.begins_with("Version:"):
+			return line.trim_prefix("Version:").strip_edges()
+	return "0.1.0"

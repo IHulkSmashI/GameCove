@@ -20,3 +20,6 @@ app/build/
 
 # Project API keys are written by the release workflow from secrets, never committed
 app/data/project_keys.json
+
+# Showcase art cache (tools/showcase/shoot.sh downloads it)
+tools/showcase/cache/

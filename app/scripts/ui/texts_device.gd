@@ -5,11 +5,11 @@ extends RefCounted
 # ---- About this device ----------------------------------------------------------
 
 const ABOUT_TITLE := "About this device"
-const SUPPORT_LABELS := {"full": "Full support", "partial": "Partial support", "beta": "Beta support", "generic": "Basic support"}
+const SUPPORT_LABELS := {"full": "Tested on hardware", "partial": "Supported", "beta": "Beta support", "generic": "Basic support"}
 const SUPPORT_TONES := {"full": "good", "partial": "info", "beta": "info", "generic": "warn"}
 const SUPPORT_LINES := {
 	"full": "Tested on this handheld by the GameCove team. Everything below should just work.",
-	"partial": "Set up from tested data by InputPlumber, steamos-manager and friends, but we haven't run GameCove on one yet.",
+	"partial": "Built from tested data by InputPlumber, steamos-manager and friends. We haven't run GameCove on one ourselves yet.",
 	"beta": "People with this handheld have tried GameCove and told us it works.",
 	"generic": "We know the maker or the chip, not the exact model. Power limits are safe guesses.",
 }

@@ -19,7 +19,7 @@ bad() {
 # Only these files may sit in the repo root; anything else is a stray download or a leftover.
 for f in $(git -C "$REPO" ls-files | grep -v /); do
 	case "$f" in
-	.gitignore | CONTRIBUTING.md | CREDITS.md | LICENSE | README.md) ok ;;
+	.gitignore | CONTRIBUTING.md | CREDITS.md | LICENSE | README.md | TRADEMARKS.md) ok ;;
 	*) bad "unexpected file in the repo root: $f" ;;
 	esac
 done
@@ -99,7 +99,7 @@ PY
 done
 # M6: actions pinned by commit with the tag in a comment, container by digest, downloads by sha256
 for f in "$REPO"/.github/workflows/*.yml; do
-	grep -n 'uses:' "$f" | grep -v 'uses: [^ ]*@[0-9a-f]\{40\} # v[0-9]' >"$T/unpinned"
+	grep -nE '^[[:space:]]*(- )?uses:' "$f" | grep -v 'uses: [^ ]*@[0-9a-f]\{40\} # v[0-9]' >"$T/unpinned"
 	if [ -s "$T/unpinned" ]; then bad "$f: actions not pinned by commit: $(tr '\n' ' ' <"$T/unpinned")"; else ok; fi
 	if grep -n 'container:\|image:' "$f" | grep -v '@sha256:[0-9a-f]\{64\}' | grep -v '^[0-9]*:[[:space:]]*#' | grep -q .; then bad "$f: container not pinned by digest"; else ok; fi
 done
