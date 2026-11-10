@@ -439,9 +439,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		close()
 	elif _is_shoulder(event, JOY_BUTTON_LEFT_SHOULDER, KEY_Q):
-		show_section(posmod(section - 1, SECTIONS.size()))
+		switch_tab(-1)
 	elif _is_shoulder(event, JOY_BUTTON_RIGHT_SHOULDER, KEY_E):
-		show_section(posmod(section + 1, SECTIONS.size()))
+		switch_tab(1)
 	elif _is_shoulder(event, JOY_BUTTON_Y, KEY_Y):
 		open_all_settings()
 	else:
@@ -462,9 +462,23 @@ static func _is_shoulder(event: InputEvent, button: JoyButton, key: Key) -> bool
 
 var _scroll: ScrollContainer
 var scroll_mask: TextureRect
+## A tab's cards fade in this fast when LB / RB switch tabs.
+const TAB_FADE_S := 0.14
+
+
+## LB / RB: the next tab, its cards fading in (every tab the same; opening
+## the menu doesn't, the panel's own slide is the motion there).
+func switch_tab(d: int) -> void:
+	_switching = true
+	show_section(posmod(section + d, SECTIONS.size()))
+	_switching = false
+
+
+var _switching := false
 
 
 func show_section(i: int, keep_focus := "") -> void:
+	var switching := _switching and is_inside_tree()
 	section = i
 	status_label.text = ""
 	_exit_armed = false
@@ -490,6 +504,10 @@ func show_section(i: int, keep_focus := "") -> void:
 		"controller": _build_controller()
 		"device": _build_device()
 	_relink()
+	if switching:
+		Motion.enter(body, "modulate:a", 0.0, 1.0, TAB_FADE_S, 0.0, Tween.TRANS_SINE, Tween.EASE_OUT)
+	else:
+		Motion.to(body, "modulate:a", 1.0, 0.0)
 	# A new tab opens at its top (the old tab's scroll would carry over).
 	if _scroll != null:
 		_scroll.scroll_vertical = 0

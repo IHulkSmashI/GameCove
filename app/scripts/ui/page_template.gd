@@ -283,6 +283,14 @@ func _load_hero() -> void:
 		_show_hero(tex)
 
 
+## Where Play's launch zoom starts: the hero card and its art.
+func launch_source(g: Dictionary) -> Dictionary:
+	if g.get("key", "") != game.get("key", "-") or frame == null or not frame.is_visible_in_tree():
+		return {}
+	var tex: Texture2D = hero.texture if hero != null and hero.visible else null
+	return {"node": frame, "tex": tex, "radius": float(ThemeLib.radius("xl"))}
+
+
 func _show_hero(tex: Texture2D) -> void:
 	if not is_instance_valid(hero):
 		return
