@@ -333,6 +333,7 @@ func _ready() -> void:
 	session.name = "GameSession"
 	session.setup(Gamescope, Power, Launcher)
 	session.ended.connect(_on_game_ended)
+	session.unwanted.connect(_close_running)
 	if session.has_signal("started"):
 		session.started.connect(_on_game_started)
 	add_child(session)
@@ -391,10 +392,25 @@ func _ready() -> void:
 func exit_game(_game: Dictionary = {}) -> void:
 	if quick_menu.visible:
 		quick_menu.close()
+	if not _close_running():
+		toast("No game is running", "info", "", "")
+
+
+## Asks what the session follows to close (Exit game; a cancelled launch, each
+## time the session finds something of it alive). False when nothing runs.
+func _close_running(_game: Dictionary = {}) -> bool:
 	if streaming != null and str(session.game.get("store", "")) == StreamingService.STORE:
 		streaming.stop_stream()   # Moonlight's Flatpak sits outside our scope
-	if not closer.close(session):
-		toast("No game is running", "info", "", "")
+	return closer.close(session)
+
+
+## A cancelled launch is still being closed: nothing else starts meanwhile (a
+## second Play would start a second copy, or leave the first one unfollowed).
+func _closing_guard() -> bool:
+	if session == null or not session.is_active() or not session.dismissed:
+		return false
+	toast(TG.STILL_CLOSING % str(session.game.get("title", "")), "info", "", "")
+	return true
 
 
 ## Settings > Run setup again (it names a step; setup opens at the first unfinished one).
@@ -824,6 +840,8 @@ func _apps_open() -> bool:
 
 ## Starts a desktop app or a clip's player like a game.
 func _play_app(app: Dictionary) -> void:
+	if _closing_guard():
+		return
 	if session.runs(str(app.get("key", ""))):
 		session.return_to_game()
 		return
@@ -1458,6 +1476,8 @@ func _play(game: Dictionary) -> void:
 	if install_state.is_busy(str(game.get("key", ""))):
 		open_downloads()
 		return
+	if _closing_guard():
+		return
 	if session.runs(str(game.get("key", ""))):
 		session.return_to_game()   # already running: back to it, no second launch
 		return
@@ -1573,6 +1593,8 @@ func _launch_source(game: Dictionary) -> Dictionary:
 ## A stream from the Stream tab: Moonlight starts, then the GameSession follows
 ## it like a game (focus, Guide to home and back, quick menu, Exit game).
 func _play_stream(game: Dictionary, host_id: String, app: Dictionary) -> void:
+	if _closing_guard():
+		return
 	if session.runs(str(game.get("key", ""))):
 		session.return_to_game()
 		return
@@ -1611,6 +1633,15 @@ func stream_display() -> Dictionary:
 		"hz": int(hz[hz.size() - 1]) if not hz.is_empty() else 60, "hdr": hdr}
 
 
+## B on the launch splash. A game that was already started is really closed
+## (GameCloser, like Exit game, when the session says there's something to
+## close) and stays "running" here until it's gone: the
+## session ends through its own exit check, so the cloud-save upload, Profiles'
+## restore and the play time only happen once, when the game has ended, and Play
+## can't start a second copy meanwhile.
+var _cancelled_key := ""
+
+
 func _on_launch_cancelled(_game: Dictionary) -> void:
 	_sound("back")
 	if _launch_wait != "":
@@ -1618,7 +1649,8 @@ func _on_launch_cancelled(_game: Dictionary) -> void:
 		playing = {}
 	_resume_motion()
 	if session.is_active():
-		session.stop()
+		_cancelled_key = str(session.game.get("key", ""))
+		session.dismiss()   # its `unwanted` closes the game (_close_running): now, or once Steam has started it
 
 
 ## GameSession follows the game now. The launch splash stays until the game's
@@ -1656,11 +1688,13 @@ func _on_game_ended(game: Dictionary) -> void:
 	if not playing.is_empty() and playing.get("key", "") == game.get("key", ""):
 		playing = {}
 	_check_resume()
+	var cancelled := _cancelled_key != "" and _cancelled_key == str(game.get("key", ""))
+	_cancelled_key = ""
 	if launch_overlay.is_open():
 		launch_overlay.back()   # it never got the screen: back into the art it came from
 		_resume_motion()
-	elif launch_overlay.phase == "closing":
-		_resume_motion()        # cancelled: already on its way back
+	elif launch_overlay.phase == "closing" or (cancelled and _window_focused):
+		_resume_motion()        # cancelled: already back (or on its way), nothing to replay
 	else:
 		_return_home()
 

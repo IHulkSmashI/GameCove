@@ -53,7 +53,6 @@ exit 0"""
 var run: Callable = func(cmd: Array) -> int: return OS.create_process(str(cmd[0]), PackedStringArray(cmd.slice(1)))
 ## func(pid: int) -> bool. Swapped in tests.
 var alive: Callable = func(pid: int) -> bool: return pid > 0 and OS.is_process_running(pid)
-var _pending: Array = []
 
 
 static func _kill(sig: String, mode: String, arg: String) -> Array:
@@ -91,19 +90,20 @@ func close(session: Object) -> bool:
 	var p := plan(session.game, int(session.app_id), int(session.pid))
 	for cmd in p[0]:
 		run.call(cmd)
-	_pending = p[1]
+	var later: Array = p[1]
 	var pid := int(session.pid)
-	if _pending.is_empty():
+	if later.is_empty():
 		return true
 	if not is_inside_tree():
 		return true
-	get_tree().create_timer(GRACE_S).timeout.connect(_hard.bind(session, pid))
+	# each close carries its own forced step (a second close, e.g. of a cancelled
+	# launch whose game showed up late, must not lose or cut short the first one's)
+	get_tree().create_timer(GRACE_S).timeout.connect(_hard.bind(session, pid, later))
 	return true
 
 
 ## After the grace period: force it, unless it's already gone.
-func _hard(session: Object, pid: int) -> void:
+func _hard(session: Object, pid: int, cmds: Array) -> void:
 	if (is_instance_valid(session) and session.is_active()) or alive.call(pid):
-		for cmd in _pending:
+		for cmd in cmds:
 			run.call(cmd)
-	_pending = []

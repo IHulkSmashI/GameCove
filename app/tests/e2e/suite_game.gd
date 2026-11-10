@@ -88,9 +88,80 @@ func test_exit_game_from_the_menu() -> void:
 	ok(not qm().visible, "menu closed")
 	for p in Checks.now(w):
 		ok(false, "after exit: " + p)
+
+
+# ---- the launch splash (final review: High 3, High 4, input under the splash) ----
+
+## Play as main._play() does it up to the launch itself: the splash over the
+## screen it was pressed on, that screen stepped back, the session following
+## Steam's launch (its reaper runs; no window yet).
+func _press_play(g: Dictionary) -> void:
+	var m: Control = w.main
+	m.playing = g
+	m.launch_overlay.show_for(g, Color.CYAN, {"node": m.home.frame})
+	m._launch_recede()
+	m._pause_motion()
+	w.fake_apps[int(g["id"])] = true
+	m.session.begin(g, {"ok": true, "app_id": int(g["id"]), "pid": 0})
+	await w.wait_s(0.3)
+
+
 func _closes(sig: String, app: String) -> int:
 	return calls_with(["sh", "-c", "*", "gamecove-close", sig, "steam", app]).size()
 
+
+## High 3: B on the splash really stops the game, and nothing treats it as ended
+## before it is.
+func test_cancel_on_the_splash_closes_the_game() -> void:
+	var m: Control = w.main
+	var ended := []
+	var on_end := func(g: Dictionary) -> void: ended.append(g.get("key", ""))
+	m.session.ended.connect(on_end)
+	await _press_play(GAME_A)
+	ok(m.launch_overlay.is_open() and m.session.is_active(), "starting")
+	await b()
+	ok(not m.launch_overlay.is_open(), "B: the splash goes back")
+	ok(m.session.is_active(), "still followed: it isn't gone yet")
+	eq(ended, [], "no `ended` on B: no save upload, no Profiles restore while it's still starting")
+	ok(await until(func(): return _closes("TERM", str(GAME_A["id"])) == 1, 3000), "and the game is told to close (GameCloser, like Exit game)")
+	ok(m.session.is_active(), "closing isn't ended either")
+	eq(m.playing.get("key", ""), GAME_A["key"], "the UI still says it runs (Exit game stays available)")
+	# Play again meanwhile: no second copy, the first stays followed
+	m._play(GAME_A)
+	m._play(GAME_B)
+	await w.frames(2)
+	ok(not m.launch_overlay.is_open(), "Play while it closes starts nothing")
+	eq(m.session.game.get("key", ""), GAME_A["key"], "the session still follows the first game")
+	ok(await until(func(): return not m.session.is_active(), 20000), "it ends once Steam's launch is gone")
+	eq(ended, [GAME_A["key"]], "ended once, through the session's own check")
+	ok(m.playing.is_empty(), "nothing running any more")
+	await w.idle()
+	eq(m.home.modulate.a, 1.0, "Home shown")
+	eq(m._screen_layer.modulate.a, 1.0, "and not faded out and in again: it never left")
+	m.session.ended.disconnect(on_end)
+	for p in Checks.now(w):
+		ok(false, "after a cancelled launch: " + p)
+
+
+## High 3: Steam hadn't started the game yet when B was pressed; it shows up
+## later, never gets the screen, and is closed again.
+func test_cancelled_launch_that_shows_up_late_is_closed_again() -> void:
+	var m: Control = w.main
+	await _press_play(GAME_B)
+	var app := int(GAME_B["id"])
+	w.fake_apps.erase(app)   # Steam hasn't started its reaper yet
+	await b()
+	await w.wait_s(1.0)
+	eq(_closes("TERM", str(app)), 0, "nothing of it to close yet")
+	ok(m.session.is_active(), "and no reaper yet isn't 'ended'")
+	# Steam gets to it now: the window appears
+	w.fake_apps[app] = true
+	_set_focusable(app, true)
+	ok(await until(func(): return _closes("TERM", str(app)) >= 1, 8000), "there it is: closed")
+	ok(not app in _base(), "and it never got the screen")
+	ok(m._window_focused, "GameCove stays in front")
+	ok(await until(func(): return not m.session.is_active(), 20000), "then it ends")
+	await w.idle()
 
 
 
