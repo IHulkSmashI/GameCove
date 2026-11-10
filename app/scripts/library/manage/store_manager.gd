@@ -32,6 +32,8 @@ const GamescopeScript := preload("res://scripts/gamescope/gamescope.gd")
 
 const CAPS := ["install", "uninstall", "update", "verify", "move", "launch_options", "compat_tool", "progress", "pause", "resume", "cancel"]
 ## install_state_changed states.
+## Why an action on a running game is refused.
+const RUNNING_WHY := "Close the game first"
 const STATE_FOR_ACTION := {"install": "installing", "update": "updating", "verify": "verifying", "move": "moving", "uninstall": "uninstalling"}
 
 var home := OS.get_environment("HOME")
@@ -48,6 +50,10 @@ var entry_lookup := func(_key: String) -> Dictionary: return {}
 var launcher: Object
 ## func(cmd: Array) -> bool. Starts a store's GUI (Heroic) without waiting.
 var open_external := func(cmd: Array) -> bool: return OS.create_process(str(cmd[0]), PackedStringArray(cmd.slice(1))) > 0
+## func(key) -> bool: that game is running right now (main.gd: the game session). Its
+## files aren't uninstalled, moved, updated or verified under it; Steam looks after its
+## own games.
+var game_running: Callable = func(_key: String) -> bool: return false
 ## Bring Steam's dialogs forward under gamescope (StoreSettings "focus_steam_dialogs").
 var under_gamescope := OS.get_environment("GAMESCOPE_WAYLAND_DISPLAY") != ""
 
@@ -222,6 +228,11 @@ func capabilities(game: Dictionary) -> Dictionary:
 				c["needs_window"].append(action)
 		else:
 			c["why"][action] = p["why"]
+		if c[action] and action != "install" and game_running.call(_key(e)):
+			c[action] = false
+			c["how"].erase(action)
+			c["needs_window"].erase(action)
+			c["why"][action] = RUNNING_WHY
 	var queued := not queue.job_for(str(e.get("store", "")) + ":" + str(e.get("id", ""))).is_empty()
 	var ours: bool = installed and tools.get("umu", "") != ""
 	c["launch_options"] = installed
@@ -298,6 +309,9 @@ func _do(action: String, game: Dictionary, options: Dictionary) -> Dictionary:
 	var key := _key(e)
 	if str(e.get("store", "")) == "steam":
 		return _steam_do(action, e, options)
+	if action != "install" and game_running.call(key):
+		# rm -rf, mv or a repair under the live game (and, for some, its saves)
+		return _fail(key, action, RUNNING_WHY)
 	if not queue.job_for(key).is_empty():
 		return _fail(key, action, "Already in the download queue")
 	var p := StoreCommands.plan(action, e, tools, _facts(e, options))
