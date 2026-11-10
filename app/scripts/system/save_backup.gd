@@ -125,7 +125,9 @@ func find(key: String, id: String) -> Dictionary:
 	return {}
 
 
-## Puts a backup back into its folders (over what's there; nothing else is deleted).
+## Puts a backup back: each folder becomes exactly what the backup holds (files made since
+## don't stay; callers back the current state up first). The backup is unpacked next to the
+## folder and swapped in, so a backup that can't be unpacked changes nothing.
 ## -> {"ok", "why"}.
 func restore(key: String, id: String) -> Dictionary:
 	var b := find(key, id)
@@ -133,12 +135,59 @@ func restore(key: String, id: String) -> Dictionary:
 		return {"ok": false, "why": "missing"}
 	var dir := dir_for(key)
 	for p in b["parts"]:
-		var path := str(p["path"])
-		DirAccess.make_dir_recursive_absolute(path)
-		var r: Dictionary = run.call("tar", PackedStringArray(["-xzf", dir.path_join(str(p["file"])), "-C", path]))
+		var path := str(p["path"]).simplify_path()
+		var staged := path + ".gamecove-restore"
+		var old := path + ".gamecove-old"
+		remove_tree(staged)
+		if DirAccess.make_dir_recursive_absolute(staged) != OK:
+			return {"ok": false, "why": "couldn't make a folder next to the saves"}
+		var r: Dictionary = run.call("tar", PackedStringArray(["-xzf", dir.path_join(str(p["file"])), "-C", staged]))
 		if int(r.get("code", -1)) != 0:
+			remove_tree(staged)
 			return {"ok": false, "why": "tar: " + str(r.get("out", "")).strip_edges().left(200)}
+		remove_tree(old)
+		var had := DirAccess.dir_exists_absolute(path)
+		if had and DirAccess.rename_absolute(path, old) != OK:
+			# a folder that can't be renamed (a mount point): emptied and filled in place
+			empty_dir(path)
+			var m: Dictionary = run.call("tar", PackedStringArray(["-xzf", dir.path_join(str(p["file"])), "-C", path]))
+			remove_tree(staged)
+			if int(m.get("code", -1)) != 0:
+				return {"ok": false, "why": "tar: " + str(m.get("out", "")).strip_edges().left(200)}
+			continue
+		if DirAccess.rename_absolute(staged, path) != OK:
+			if had:
+				DirAccess.rename_absolute(old, path)
+			remove_tree(staged)
+			return {"ok": false, "why": "couldn't put the saves in place"}
+		remove_tree(old)
 	return {"ok": true, "why": ""}
+
+
+## Deletes a folder tree. A symlink is removed as a link, never followed (a Wine prefix
+## links folders out to the home folder).
+static func remove_tree(path: String) -> void:
+	var parent := DirAccess.open(path.get_base_dir())
+	if parent != null and parent.is_link(path.get_file()):
+		DirAccess.remove_absolute(path)
+		return
+	empty_dir(path)
+	DirAccess.remove_absolute(path)
+
+
+## Deletes everything inside a folder and keeps the folder (links removed, not followed).
+static func empty_dir(path: String) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		return
+	d.include_hidden = true
+	for f in d.get_files():
+		DirAccess.remove_absolute(path.path_join(f))
+	for sub in d.get_directories():
+		if d.is_link(sub):
+			DirAccess.remove_absolute(path.path_join(sub))
+		else:
+			remove_tree(path.path_join(sub))
 
 
 ## Keeps the newest KEEP backups of a game.

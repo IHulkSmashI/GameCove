@@ -674,15 +674,7 @@ func _point_parts(key: String, id: String, parts: Array) -> void:
 
 
 static func _remove_tree(path: String) -> void:
-	var d := DirAccess.open(path)
-	if d == null:
-		return
-	d.include_hidden = true
-	for f in d.get_files():
-		DirAccess.remove_absolute(path.path_join(f))
-	for sub in d.get_directories():
-		_remove_tree(path.path_join(sub))
-	DirAccess.remove_absolute(path)
+	SaveBackup.remove_tree(path)
 
 
 func _restore(key: String, title: String, id: String) -> Dictionary:

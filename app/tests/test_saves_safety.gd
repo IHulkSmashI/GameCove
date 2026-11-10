@@ -422,3 +422,35 @@ func test_resolve_waits_while_a_game_runs() -> void:
 	ok(w["s"].resolve(w["gog"], "cloud"), "after the game: goes ahead")
 	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "cloud", "the cloud save is in place")
 	_done(w)
+
+
+# ---- backups ------------------------------------------------------------------------------------
+
+## Restoring a backup makes the folder what the backup holds: slots made since don't stay
+## (they were merged in before), and a restore that can't unpack changes nothing.
+func test_restore_replaces_the_folder() -> void:
+	var w := _world("restore_replace")
+	var bk: RefCounted = w["s"].backups
+	Fakes.put(w["esaves"].path_join("slot1.sav"), "one", T0)
+	Fakes.put(w["esaves"].path_join("sub/meta.dat"), "meta", T0)
+	var b: Dictionary = bk.backup("epic:Min", "M", "before_download", [{"name": "saves", "path": w["esaves"]}])
+	Fakes.put(w["esaves"].path_join("slot1.sav"), "one, later", T0 + 500)
+	Fakes.put(w["esaves"].path_join("slot2.sav"), "made after the backup", T0 + 500)
+	Fakes.put(w["esaves"].path_join("newdir/x.dat"), "also after", T0 + 500)
+	# a link out of the folder must never be followed when the old contents go
+	var outside: String = w["root"].path_join("outside")
+	Fakes.put(outside.path_join("keep.txt"), "not ours")
+	OS.execute("ln", ["-s", outside, w["esaves"].path_join("link")])
+	var r: Dictionary = bk.restore("epic:Min", str(b["id"]))
+	ok(r["ok"], "restored")
+	eq(Fakes.walk(w["esaves"]), ["slot1.sav", "sub/meta.dat"], "exactly what the backup holds")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("slot1.sav")), "one", "the backed up content")
+	eq(FileAccess.get_file_as_string(outside.path_join("keep.txt")), "not ours", "what a link pointed at is untouched")
+	ok(not DirAccess.dir_exists_absolute(w["esaves"] + ".gamecove-restore") and not DirAccess.dir_exists_absolute(w["esaves"] + ".gamecove-old"), "no working folders left")
+	# a damaged backup file: the folder stays as it is
+	Fakes.put(w["esaves"].path_join("slot3.sav"), "current", T0 + 900)
+	Fakes.put(bk.dir_for("epic:Min").path_join(str(bk.find("epic:Min", str(b["id"]))["parts"][0]["file"])), "not a tar file")
+	var bad: Dictionary = bk.restore("epic:Min", str(b["id"]))
+	ok(not bad["ok"], "a damaged backup doesn't restore")
+	eq(Fakes.walk(w["esaves"]), ["slot1.sav", "slot3.sav", "sub/meta.dat"], "and the folder is as it was")
+	_done(w)
