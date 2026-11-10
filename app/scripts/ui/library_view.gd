@@ -14,6 +14,14 @@ static func store_name(store: String) -> String:
 	return STORE_NAMES.get(store, store.capitalize())
 
 
+## What a game's store line says: the store, or an emulated game's console ("SNES").
+static func store_label(g: Dictionary) -> String:
+	var sys := system_of(g)
+	if sys != "":
+		return str(g["emulated"].get("system_short", sys))
+	return store_name(String(g.get("store", "")))
+
+
 static func filter_by_store(games: Array, store: String) -> Array:
 	if store == "":
 		return games.duplicate()
@@ -51,7 +59,8 @@ static func continue_game(all_games: Array) -> Dictionary:
 
 ## The library views the filter sheet picks: "" every game you haven't hidden,
 ## "favourites", "hidden" (only those), "emulation" (store "emu"),
-## "collection:<id>". Reads the fields Collections.decorate() adds.
+## "emulation:<system>" (one console's games), "collection:<id>". Reads the
+## fields Collections.decorate() adds.
 const VIEWS := ["", "favourites", "emulation", "hidden"]
 
 
@@ -75,6 +84,9 @@ static func filter_view(games: Array, view: String) -> Array:
 			return games.filter(func(g): return g.get("hidden", false))
 		"emulation":
 			return games.filter(func(g): return g.get("store", "") == "emu" and not g.get("hidden", false))
+	if view.begins_with("emulation:"):
+		var sys := view.substr(10)
+		return games.filter(func(g): return system_of(g) == sys and not g.get("hidden", false))
 	if view.begins_with("collection:"):
 		var id := view.substr(11)
 		return games.filter(func(g): return id in g.get("collections", []) and not g.get("hidden", false))
@@ -82,13 +94,43 @@ static func filter_view(games: Array, view: String) -> Array:
 
 
 ## Emulated games and the frontend for the Home shelf: ES-DE / RetroDECK
-## first, then the games A to Z.
+## first, then what you played last, then the rest A to Z; at most
+## EMU_SHELF_MAX (a ROM folder can hold thousands: the Library lists them all).
+const EMU_SHELF_MAX := 40
+
+
 static func emulation_shelf(games: Array) -> Array:
 	var out := games.filter(func(g): return g.get("store", "") == "emu")
 	out.sort_custom(func(a, b):
 		var fa := str(a.get("id", "")) == "frontend"
 		var fb := str(b.get("id", "")) == "frontend"
-		return fa if fa != fb else title_order(a, b))
+		if fa != fb:
+			return fa
+		var la := int(a.get("last_played", 0))
+		var lb := int(b.get("last_played", 0))
+		return la > lb if la != lb else title_order(a, b))
+	return out.slice(0, EMU_SHELF_MAX)
+
+
+## The console an emulated game is for ("" for anything else, ES-DE itself included).
+static func system_of(g: Dictionary) -> String:
+	var e: Variant = g.get("emulated")
+	return str(e.get("system", "")) if e is Dictionary and g.get("store", "") == "emu" else ""
+
+
+## Consoles with games you haven't hidden: [{"id", "name", "short", "count"}], most games first.
+static func systems_in(games: Array) -> Array:
+	var by := {}
+	for g in games:
+		var sys := system_of(g)
+		if sys == "" or g.get("hidden", false):
+			continue
+		if not by.has(sys):
+			var e: Dictionary = g["emulated"]
+			by[sys] = {"id": sys, "name": str(e.get("system_name", sys)), "short": str(e.get("system_short", sys)), "count": 0}
+		by[sys]["count"] += 1
+	var out := by.values()
+	out.sort_custom(func(a, b): return a["count"] > b["count"] if a["count"] != b["count"] else String(a["name"]).naturalnocasecmp_to(b["name"]) < 0)
 	return out
 
 
@@ -165,6 +207,9 @@ static func stores_present(games: Array) -> Array:
 
 ## Tiles a Home shelf shows at once (7 and the faded eighth).
 const SHELF_VISIBLE := 8
+## Tiles a Home shelf holds at most: a library with thousands of games (a big
+## ROM folder) keeps Home light; the Library lists everything.
+const SHELF_MAX := 60
 
 
 static func shelves(all_games: Array) -> Array:
@@ -173,7 +218,7 @@ static func shelves(all_games: Array) -> Array:
 	var out: Array = []
 	var add := func(id: String, title: String, list: Array):
 		if not list.is_empty():
-			out.append({"id": id, "title": title, "games": list})
+			out.append({"id": id, "title": title, "games": list.slice(0, SHELF_MAX), "total": list.size()})
 	var hero_key := str(continue_game(games).get("key", ""))
 	var recent := recently_played(games).filter(func(g): return str(g.get("key", "")) != hero_key)
 	add.call("recent", "Recently played", recent)
