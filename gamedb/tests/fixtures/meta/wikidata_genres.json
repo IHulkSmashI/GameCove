@@ -1,0 +1,6 @@
+{"results": {"bindings": [
+  {"item": {"value": "http://www.wikidata.org/entity/Q107393"}, "label": {"value": "action role-playing video game"}},
+  {"item": {"value": "http://www.wikidata.org/entity/Q107393"}, "label": {"value": "open world"}},
+  {"item": {"value": "http://www.wikidata.org/entity/Q107393"}, "mul": {"value": "Q12345"}},
+  {"item": {"value": "http://www.wikidata.org/entity/Q900"}, "mul": {"value": "roguelike"}}
+]}}

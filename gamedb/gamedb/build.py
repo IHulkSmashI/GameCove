@@ -2,8 +2,10 @@
 
     python -m gamedb.build --out dist/gamedb.json.gz
 
-Sources: Wikidata (CC0), AreWeAntiCheatYet (MIT), IGDB time to beat (when the
-nightly job has credentials) and our own tiers summarised from ProtonDB's
+Sources: Wikidata (CC0), AreWeAntiCheatYet (MIT), IGDB time to beat, game
+details and critic averages (when the nightly job has credentials), the Steam
+store's appdetails (game details and Steam's official Metacritic score for the
+popular games, a slice each night) and our own tiers summarised from ProtonDB's
 report dumps (ODbL).
 
 Every source runs inside its own time budget, all inside one overall cap. A
@@ -28,19 +30,24 @@ from typing import Callable
 from . import coverage, net
 from . import ttb as ttb_rules
 from .ids import steam_id
-from .sources import awacy, igdb, protondb, steamtop, wikidata
+from .sources import awacy, igdb, protondb, steamstore, steamtop, wikidata, wikidata_meta
 
-SCHEMA = 2
+SCHEMA = 2  # game details and critic scores were added as optional fields: old readers ignore them
 PREVIOUS_URL = "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/gamedb.json.gz"
 CREDITS = (
-    "Game data from IGDB (https://www.igdb.com): time to beat; Wikidata (CC0); AreWeAntiCheatYet (MIT); "
+    "Game data from IGDB (https://www.igdb.com): time to beat, summaries, genres, themes, game modes, companies, "
+    "release dates, screenshots and critic averages; Wikidata (CC0); AreWeAntiCheatYet (MIT); "
+    "Steam store data (Valve): descriptions, genres, companies, release dates, controller support; "
+    "Metacritic scores as published by Valve on the Steam store, each linking to its Metacritic page "
+    "(Metacritic is a trademark of Fandom, Inc.; not affiliated); "
     "compatibility tiers are GameCove's own summary of ProtonDB user reports "
     "(protondb.com, data from github.com/bdefore/protondb-data, ODbL 1.0) and "
     "are not ProtonDB's official ratings; this database's ProtonDB-derived "
     "data is shared under the ODbL 1.0"
 )
 # Seconds each source may take (also capped by --max-minutes overall).
-LIMITS = {"previous": 180, "wikidata": 1800, "steam": 300, "areweanticheatyet": 180, "igdb": 1200, "protondb": 1200}
+LIMITS = {"previous": 180, "wikidata": 1800, "steam": 300, "areweanticheatyet": 180, "igdb": 1500, "protondb": 1200,
+          "steamstore": 660, "wikidata_meta": 600}
 # Fresh source data shorter than this share of last night's is treated as a failure.
 MIN_KEEP = 0.9
 
@@ -54,7 +61,20 @@ def steam_ids_of(rec: dict) -> list[str]:
     return ([main] if main else []) + rest
 
 
-def _game(rec: dict, anticheat: dict, ttb: dict, proton: dict, top: dict) -> dict | None:
+def _details_key(rec: dict, details: dict) -> str | None:
+    """The key a record's IGDB details are under: a Steam id first, then GOG, then Epic."""
+    for sid in steam_ids_of(rec):
+        if f"steam:{sid}" in details:
+            return f"steam:{sid}"
+    for store in ("gog", "epic"):
+        v = rec["ids"].get(store)
+        if v and f"{store}:{v}" in details:
+            return f"{store}:{v}"
+    return None
+
+
+def _game(rec: dict, anticheat: dict, ttb: dict, proton: dict, top: dict,
+          details: dict | None = None, store_meta: dict | None = None, wd_meta: dict | None = None) -> dict | None:
     steams = steam_ids_of(rec)
 
     def first(m: dict):
@@ -85,11 +105,33 @@ def _game(rec: dict, anticheat: dict, ttb: dict, proton: dict, top: dict) -> dic
     tier = first(proton)
     if tier:
         g["protondb"] = tier
+    details, store_meta, wd_meta = details or {}, store_meta or {}, wd_meta or {}
+    dk = _details_key(rec, details)
+    d = details.get(dk) if dk else None
+    sm = first(store_meta)
+    w = wd_meta.get(rec.get("wikidata") or "")
+    block, critics = {}, {}
+    if d and d.get("meta"):
+        block["igdb"] = d["meta"]
+    if sm:
+        block["steam"] = {**(sm.get("meta") or {}), "at": sm.get("at")}
+        if sm.get("metacritic"):
+            critics["metacritic"] = sm["metacritic"]
+    if w:
+        block["wikidata"] = w
+    if d and d.get("critic"):
+        critics["igdb_critic"] = d["critic"]
+    if block:
+        g["meta"] = block
+    if critics:
+        g["critics"] = critics
     return g
 
 
 def merge(items: dict[str, dict], anticheat: dict[str, dict], ttb: dict[str, dict],
-          proton: dict[str, str] | None = None, top: dict[str, dict] | None = None) -> list[dict]:
+          proton: dict[str, str] | None = None, top: dict[str, dict] | None = None,
+          details: dict[str, dict] | None = None, store_meta: dict[str, dict] | None = None,
+          wd_meta: dict[str, dict] | None = None) -> list[dict]:
     """One record per Wikidata item, plus one per popular Steam game (`top`)
     that no item covers. Time to beat goes through gamedb.ttb's checks.
     Sorted by title; on equal titles the more popular game comes first, so
@@ -100,13 +142,13 @@ def merge(items: dict[str, dict], anticheat: dict[str, dict], ttb: dict[str, dic
     covered: set[str] = set()
     for rec in items.values():
         covered.update(steam_ids_of(rec))
-        g = _game(rec, anticheat, ttb, proton, top)
+        g = _game(rec, anticheat, ttb, proton, top, details, store_meta, wd_meta)
         if g:
             games.append(g)
     for sid in sorted(set(top) - covered, key=int):
         rec = {"wikidata": None, "title": top[sid].get("title", ""), "released": top[sid].get("released"),
                "ids": {"steam": sid}}
-        g = _game(rec, anticheat, ttb, proton, top)
+        g = _game(rec, anticheat, ttb, proton, top, details, store_meta, wd_meta)
         if g:
             games.append(g)
     games.sort(key=lambda g: (g["title"].casefold(), g["popular"] if g["popular"] is not None else 1 << 30,
@@ -150,7 +192,8 @@ def parse_previous(raw: bytes) -> dict | None:
 
 def from_previous(prev: dict | None) -> dict[str, dict]:
     """Split a published document back into the per-source maps merge() takes."""
-    out = {"items": {}, "anticheat": {}, "ttb": {}, "protondb": {}, "top": {}}
+    out = {"items": {}, "anticheat": {}, "ttb": {}, "protondb": {}, "top": {},
+           "details": {}, "store_meta": {}, "wd_meta": {}}
     if not prev:
         return out
     for g in prev.get("games", []):
@@ -158,6 +201,22 @@ def from_previous(prev: dict | None) -> dict[str, dict]:
             continue
         steam = steam_id(g["ids"].get("steam"))
         more = [s for s in (steam_id(x) for x in g["ids"].get("steam_more") or []) if s]
+        block = g.get("meta") if isinstance(g.get("meta"), dict) else {}
+        critics = g.get("critics") if isinstance(g.get("critics"), dict) else {}
+        dkey = f"steam:{steam}" if steam else next(
+            (f"{s}:{g['ids'][s]}" for s in ("gog", "epic") if g["ids"].get(s)), None)
+        if dkey and (isinstance(block.get("igdb"), dict) or isinstance(critics.get("igdb_critic"), dict)):
+            d = {"meta": block.get("igdb") or {}}
+            if isinstance(critics.get("igdb_critic"), dict):
+                d["critic"] = critics["igdb_critic"]
+            out["details"][dkey] = d
+        if steam and isinstance(block.get("steam"), dict):
+            sm = {"meta": {k: v for k, v in block["steam"].items() if k != "at"}, "at": block["steam"].get("at")}
+            if isinstance(critics.get("metacritic"), dict):
+                sm["metacritic"] = critics["metacritic"]
+            out["store_meta"][steam] = sm
+        if g.get("wikidata") and isinstance(block.get("wikidata"), dict):
+            out["wd_meta"][g["wikidata"]] = block["wikidata"]
         if g.get("wikidata"):
             ids = {k: v for k, v in g["ids"].items() if k != "steam_more"}
             out["items"][g["wikidata"]] = {"wikidata": g["wikidata"], "title": g.get("title", ""),
@@ -264,12 +323,26 @@ def build(budget: net.Budget, client_factory: Callable[..., net.Client] = net.Cl
     steam_ids = {s for r in items.values() for s in steam_ids_of(r)} | set(top)
     slugs = {s: r["ids"]["igdb_slug"] for r in items.values() if r["ids"].get("igdb_slug") for s in steam_ids_of(r)}
     titles = igdb_titles(items, top)
+    # GOG / Epic ids of games with no Steam id: IGDB details by those stores' ids
+    stores = {s: sorted({r["ids"][s] for r in items.values() if r["ids"].get(s) and not steam_ids_of(r)})
+              for s in ("gog", "epic")}
+    details = None
     if igdb.credentials():
-        ttb = run.source("igdb", lambda: igdb.fetch_for_steam(
-            run.client("igdb", timeout=60), sorted(steam_ids, key=int), slugs, titles, set(top)))
+        def get_igdb():
+            try:
+                return igdb.fetch_all(run.client("igdb", timeout=60), sorted(steam_ids, key=int), slugs, titles,
+                                      set(top), stores)
+            except igdb.PartialDetails as e:
+                return e.ttb, None
+
+        both = run.source("igdb", get_igdb)
+        ttb, details = both if both is not None else (None, None)
+        run.status["igdb_details"] = {"status": "ok"} if details is not None else {"status": "failed"}
     else:
         run.status["igdb"] = {"status": "skipped", "error": "no TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET"}
+        run.status["igdb_details"] = {"status": "skipped", "error": "no TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET"}
         ttb = None
+    details = run.fall_back("igdb_details", details, prev["details"])
     # Compare against (and fall back to) only last night's values that pass the
     # same checks, so a fresh run isn't judged "short" for dropping bogus ones.
     prev_ttb = {s: c for s, t in prev["ttb"].items() if (c := ttb_rules.clean(t, big=s in top))}
@@ -287,7 +360,17 @@ def build(budget: net.Budget, client_factory: Callable[..., net.Client] = net.Cl
     if "dump" in pdb:
         run.status["protondb"]["dump"] = pdb["dump"]
 
-    games = merge(items, anticheat, ttb, proton, top)
+    # Steam store details: tonight's slice of the popular games, last night's for the rest.
+    tonight = steamstore.pick(top, prev["store_meta"])
+    fresh_store = run.source("steamstore", lambda: steamstore.fetch(
+        run.client("steamstore", timeout=30, attempts=3, min_interval=steamstore.REQUEST_GAP), tonight))
+    store_meta = {**prev["store_meta"], **(fresh_store or {})}
+    run.status["steamstore"].update(count=len(store_meta), refreshed=len(fresh_store or {}), asked=len(tonight))
+
+    wd_meta = run.source("wikidata_meta", lambda: wikidata_meta.fetch(run.client("wikidata_meta", min_interval=2.0)))
+    wd_meta = run.fall_back("wikidata_meta", wd_meta, prev["wd_meta"])
+
+    games = merge(items, anticheat, ttb, proton, top, details, store_meta, wd_meta)
     if not games:
         return None
     return document(games, run.status)

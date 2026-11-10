@@ -1,0 +1,16 @@
+[
+  {"id": 113112, "slug": "hades--1", "summary": "Defy the god of the dead as you hack and slash out of the Underworld in this rogue-like dungeon crawler from the creators of Bastion and Transistor.",
+   "first_release_date": 1600300800, "aggregated_rating": 93.4567, "aggregated_rating_count": 37, "total_rating_count": 2400,
+   "genres": [{"id": 12, "name": "Role-playing (RPG)"}, {"id": 25, "name": "Hack and slash/Beat 'em up"}, {"id": 31, "name": "Adventure"}, {"id": 32, "name": "Indie"}],
+   "themes": [{"id": 1, "name": "Action"}, {"id": 17, "name": "Fantasy"}],
+   "game_modes": [{"id": 1, "name": "Single player"}],
+   "involved_companies": [{"id": 1, "developer": true, "publisher": true, "company": {"id": 9, "name": "Supergiant Games"}}],
+   "screenshots": [{"id": 1, "image_id": "sc8ivc"}, {"id": 2, "image_id": "sc8ivd"}, {"id": 3, "image_id": "bad id!"}]},
+  {"id": 5000, "slug": "hades-edition", "total_rating_count": 3},
+  {"id": 1942, "slug": "the-witcher-3-wild-hunt", "summary": "<p>RPG &amp; open world.</p>", "first_release_date": 1431993600,
+   "aggregated_rating": 92.2, "aggregated_rating_count": 80,
+   "genres": [{"id": 12, "name": "Role-playing (RPG)"}],
+   "involved_companies": [{"developer": true, "publisher": false, "company": {"name": "CD Projekt RED"}},
+                          {"developer": false, "publisher": true, "company": {"name": "CD Projekt"}},
+                          {"developer": false, "publisher": true, "company": {"name": "Warner Bros. Interactive"}}]}
+]
