@@ -411,7 +411,7 @@ func _build_rows() -> void:
 		if not _revealed.has(s.id):
 			_revealed[s.id] = true
 			if is_visible_in_tree() and fresh < 4:
-				s.reveal(fresh * 0.06)
+				s.reveal(fresh * Shelf.REVEAL_SHELF_STAGGER_S)
 				fresh += 1
 		if tile_hook.is_valid():
 			for t in s.tiles:

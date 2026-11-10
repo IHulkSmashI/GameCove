@@ -102,13 +102,18 @@ All animation goes through `scripts/ui/motion.gd` (`Motion.to`, `Motion.method`,
 
 | Moment | Motion |
 | --- | --- |
-| Boot splash (`boot_splash.gd`) | Logo mark and wordmark fade and scale in (450 ms), a light sweeps across, hold 450 ms, fade out 350 ms; never takes input, skipped under Reduce motion |
+| Boot splash (`boot_splash.gd`) | The intro clip plays 2.0 s (stopped ~0.3 s after its glow settles), or the code animation: mark and wordmark scale in (550 ms), a light sweeps across, hold to 1.6 s. Then the mark flies into the top bar's logo (scale + move, 280 ms, expo ease-out) as the slate fades, and one ring pulses on the focused control (200 ms). Presses skip it (and go to Home once the mark flies); skipped under Reduce motion |
+| Launch (`launch_overlay.gd`) | The pressed art zooms to full screen (200 ms, expo ease-out) while the screen under it drops 32 px and fades (120 ms); the hero art pushes 1.00 → 1.04 and darkens as the logo settles (220 ms); "B Cancel" fades in only if the game hasn't shown after 2 s; failed or cancelled: the zoom runs back in 200 ms. The game starts on the press: none of this delays it |
 | Tile focus | Lift to 1.05 (back ease, 220 ms), brighten from 0.82, ring and glow fade in, glow pulses wide to settled (450 ms), cover pans in from the side focus came from (300 ms), a cover with art shows its name in the plate |
 | Ambient glow | The focused game's colour eases in over 300 ms when the game changes (instant under Reduce motion); nothing runs while it sits |
 | Shelf and grid | Glide to keep focus one tile in (220 ms) |
 | Hero and backdrop | 300 / 250 ms crossfades; the Home hero drifts to 1.05 over 20 s, stopped by idle (30 s), a running game or Reduce motion |
-| Tabs | Old screen fades (150 ms), new one slides 28 px in from its side (220 ms) |
-| Pages and Downloads | Fade in over the screen (220 ms), the top bar stays |
+| Tabs | New screen slides 36 px in from the side the press went (160 ms, expo ease-out) and is opaque in 120 ms; the old one slides 36 px the other way and is gone in 90 ms |
+| Game page | From Home's hero on the same game the hero stays put and only the cards slide up 48 px (220 ms); from elsewhere the page fades in (140 ms) with the same card slide. Back: the screen under it is there at once while the page drops its cards 48 px and fades (140 ms) |
+| Downloads | Fades in over the screen (150 ms), the top bar stays |
+| Toasts | Slide in 40 px from the right with a slight spring (180 ms), stay 3.5 s, slide out (140 ms) |
+| Shelves | First show: each shelf 40 ms after the one above, its covers rise 24 px one after another (30 ms apart, 220 ms each) |
+| Back from sleep | The screen comes up out of a soft dark in 200 ms |
 | Progress bars | Glide to the new value (220 ms) |
 | Quick menu | Dim fades, sheet slides 40 px in from its edge |
 | Back from a game | Screens settle in from 0.97 (300 ms) |
@@ -139,8 +144,8 @@ All in `app/scripts/ui/`. Build new screens from these.
 | Choice row, slider row | `choice_row.gd`, `slider_row.gd` | Settings rows: value with chevrons and position dots, a switch for on/off, explanation under each |
 | Top bar | `top_bar.gd` | Logo, segmented tab pill with LB / RB and "new" dots, search, telemetry pill (TDP, profile, temperature), downloads ring, status pill, settings |
 | Status panel | `status_panel.gd` | Battery detail, volume and brightness hooks |
-| Toasts | `toast.gd` | Top-right notes; never take focus, leave after 4 s, at most three |
-| Launch splash | `launch_overlay.gd` | Art, logo, spinner, "Launching…", B to cancel |
+| Toasts | `toast.gd` | Top-right notes; never take focus, leave after 3.5 s, at most three |
+| Launch splash | `launch_overlay.gd` | Art, logo, shimmer, "Launching…", B to cancel (its hint shows after 2 s) |
 | Keyboard | `osk.gd` | On-screen keyboard; physical keys work too |
 | Sounds | `sounds.gd` | Synthesised move, select, back and toast sounds; Off, Low (default), Medium, High |
 

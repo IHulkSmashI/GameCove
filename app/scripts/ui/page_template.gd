@@ -38,6 +38,11 @@ var header: VBoxContainer
 var actions_row: HBoxContainer
 var actions: Array = []
 var cards_box: VBoxContainer
+## The space between the action row and the cards (CARDS_GAP tall). The cards
+## slide by growing it for a moment (see slide_cards): they sit in a container,
+## which would put a moved position back on its next layout pass.
+var cards_gap: Control
+const CARDS_GAP := 30.0
 var scroll: ScrollContainer
 ## Focusable controls inside cards, top to bottom (add_focusable / finish).
 var focusables: Array = []
@@ -160,10 +165,10 @@ func setup_page(g: Dictionary, line := "") -> void:
 	actions_row = Kit.hbox(14)
 	actions_row.name = "Actions"
 	col.add_child(actions_row)
-	_gap = Control.new()
-	_gap.name = "CardsGap"
-	_gap.custom_minimum_size = Vector2(0, GAP_MIN)
-	col.add_child(_gap)
+	cards_gap = Control.new()
+	cards_gap.name = "CardsGap"
+	cards_gap.custom_minimum_size = Vector2(0, CARDS_GAP)
+	col.add_child(cards_gap)
 	cards_box = Kit.vbox(18)
 	cards_box.name = "Cards"
 	col.add_child(cards_box)
@@ -172,19 +177,23 @@ func setup_page(g: Dictionary, line := "") -> void:
 	_build_scroll_cue()
 
 
-const GAP_MIN := 30.0
-var _gap: Control
+## The gap's resting height: at least CARDS_GAP, and enough that the cards start
+## below the hero card (its bottom is FRAME_H down the scroll content). A short
+## header (no badges) would otherwise pull the cards up into the hero card.
+var _gap_base := CARDS_GAP
+var _gap_tween: Tween
 
 
-## The gap above the cards: at least GAP_MIN, and enough that the cards start
-## below the hero card (its bottom is FRAME_H down the scroll content).
 func _fit_gap() -> void:
-	if _gap == null or actions_row == null:
+	if cards_gap == null or actions_row == null:
 		return
 	var above := actions_row.position.y + actions_row.size.y + 18.0
-	var want := maxf(GAP_MIN, FRAME_H + 14.0 - above - 18.0)
-	if absf(want - _gap.custom_minimum_size.y) > 0.5:
-		_gap.custom_minimum_size.y = want
+	_gap_base = maxf(CARDS_GAP, FRAME_H + 14.0 - above - 18.0)
+	# a card slide animates the gap: leave it to the slide, which ends on the base
+	if _gap_tween != null and _gap_tween.is_running():
+		return
+	if absf(_gap_base - cards_gap.custom_minimum_size.y) > 0.5:
+		cards_gap.custom_minimum_size.y = _gap_base
 
 
 ## A fade and a "More below" cue at the bottom while there's more to scroll.
@@ -486,3 +495,19 @@ func _link_top_target() -> void:
 		return
 	for a in actions:
 		a.focus_neighbor_top = a.get_path_to(top_target)
+
+
+## The cards (everything under the action row) slide: from `from_px` lower
+## to their place, fading in, or (`leaving`) down by `from_px` as they fade
+## out. Returns the tween (null: set at once, e.g. under reduce motion).
+func slide_cards(from_px: float, dur: float, leaving := false) -> Tween:
+	if cards_box == null or cards_gap == null:
+		return null
+	_fit_gap()
+	var a := Vector2(0, _gap_base + (0.0 if leaving else Motion.slide(from_px)))
+	var b := Vector2(0, _gap_base + (Motion.slide(from_px) if leaving else 0.0))
+	var ease := Tween.EASE_IN if leaving else Tween.EASE_OUT
+	var trans := Tween.TRANS_CUBIC if leaving else Tween.TRANS_EXPO
+	Motion.enter(cards_box, "modulate:a", 1.0 if leaving else 0.0, 0.0 if leaving else 1.0, dur * (1.0 if leaving else 0.7))
+	_gap_tween = Motion.enter(cards_gap, "custom_minimum_size", a, b, dur, 0.0, trans, ease)
+	return _gap_tween

@@ -12,11 +12,14 @@ const Motion := preload("res://scripts/ui/motion.gd")
 signal shown(text: String)
 
 const MAX := 3
-const STAY_S := 4.0
+const STAY_S := 3.5
 const WIDTH := 360
-## Slide-in from the right edge.
-const SLIDE_PX := 56.0
-const IN_S := 0.28
+## Slides in SLIDE_PX from the right over IN_S with a slight spring past its
+## place, then out to the right over OUT_S.
+const SLIDE_PX := 40.0
+const IN_S := 0.18
+const FADE_IN_S := 0.1
+const OUT_S := 0.14
 ## Tones whose badge pops bigger: deals, releases, achievements.
 const BIG_POP := ["sale", "new", "gold"]
 
@@ -67,8 +70,8 @@ func show_toast(text: String, icon := "info", tone := "", detail := "") -> Contr
 	# Slides in from the right edge as it fades in; its badge pops (a new deal,
 	# a release, a fresh unlock get a bigger one).
 	p.modulate.a = 0.0
-	Motion.to(p, "modulate:a", 1.0, Motion.BASE)
-	Motion.enter(p, "position:x", SLIDE_PX, 0.0, IN_S, 0.0, Tween.TRANS_QUART, Tween.EASE_OUT)
+	Motion.to(p, "modulate:a", 1.0, FADE_IN_S)
+	Motion.enter(p, "position:x", SLIDE_PX, 0.0, IN_S, 0.0, Tween.TRANS_BACK, Tween.EASE_OUT)
 	Motion.pop(badge, 0.55 if tone in BIG_POP else 0.8, 0.4, 0.06)
 	var timer := Timer.new()
 	timer.one_shot = true
@@ -84,8 +87,8 @@ func show_toast(text: String, icon := "info", tone := "", detail := "") -> Contr
 func _dismiss(p: Control) -> void:
 	if not is_instance_valid(p):
 		return
-	var tw := Motion.to(p, "modulate:a", 0.0, Motion.BASE)
-	Motion.to(p, "position:x", SLIDE_PX * 0.6, Motion.BASE, Tween.TRANS_CUBIC, Tween.EASE_IN)
+	var tw := Motion.to(p, "modulate:a", 0.0, OUT_S, Tween.TRANS_CUBIC, Tween.EASE_IN)
+	Motion.to(p, "position:x", SLIDE_PX, OUT_S, Tween.TRANS_CUBIC, Tween.EASE_IN)
 	if tw == null:
 		p.queue_free()
 	else:
