@@ -7,6 +7,8 @@ extends RefCounted
 ## gamescope-session-plus). We keep ours in one file of our own; a user's own
 ## higher-numbered file still wins. The file goes away when it's empty.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
+
 const REL_PATH := ".config/environment.d/80-gamecove-display.conf"
 const HEADER := "# Written by GameCove (Display settings). Read by gamescope-session-plus at session start.\n"
 const SESSION_SCRIPT := "/usr/share/gamescope-session-plus/gamescope-session-plus"
@@ -64,13 +66,7 @@ static func set_values(ctx: Dictionary, values: Dictionary) -> bool:
 	var text := HEADER
 	for k in keys:
 		text += "%s=%s\n" % [k, cur[k]]
-	var tmp := p + ".tmp"
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(text)
-	f.close()
-	return DirAccess.rename_absolute(tmp, p) == OK
+	return SettingsFile.save_text(p, text) == OK
 
 
 static func _safe(s: String) -> bool:

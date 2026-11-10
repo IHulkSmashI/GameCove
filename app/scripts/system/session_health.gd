@@ -13,6 +13,8 @@ extends Node
 ## Fallback notice: the client leaves crash-fallback ("<unix time>\n<reason>") in the data
 ## folder when it gave up on GameCove for a boot; the next start shows why, once.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
+
 const BEAT_S := 5.0
 const FALLBACK_FILE := "crash-fallback"
 
@@ -48,13 +50,7 @@ func beat() -> bool:
 	if path == "":
 		return false
 	seq += 1
-	var tmp := path + ".tmp"
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string("%d %s\n" % [seq, mode()])
-	f.close()
-	return DirAccess.rename_absolute(tmp, path) == OK
+	return SettingsFile.save_text(path, "%d %s\n" % [seq, mode()]) == OK
 
 
 ## $XDG_DATA_HOME/gamecove (the session client's data folder).

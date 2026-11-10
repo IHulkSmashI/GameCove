@@ -20,6 +20,8 @@ extends RefCounted
 
 static var _lock := Mutex.new()
 static var _blocked := {}   # absolute path -> true: damaged on load, never saved this run
+## Tests only: when >= 0, at most this many bytes reach the .tmp file (a full disk).
+static var test_write_limit := -1
 
 
 static func abs_path(path: String) -> String:
@@ -37,6 +39,7 @@ static func blocked(path: String) -> bool:
 static func reset_for_tests() -> void:
 	_lock.lock()
 	_blocked.clear()
+	test_write_limit = -1
 	_lock.unlock()
 
 
@@ -128,6 +131,9 @@ static func save_text(path: String, text: String, private := false) -> Error:
 
 
 ## Atomic write: <path>.tmp, flush, rename over <path>.
+## A short write (a full disk: the kernel can accept the bytes into the page cache
+## and still drop them, and Godot's close() reports nothing) never replaces the
+## file: the .tmp must hold exactly `data` before the rename (review 2, problem 2).
 static func save_bytes(path: String, data: PackedByteArray, private := false) -> Error:
 	var p := abs_path(path)
 	_lock.lock()
@@ -147,16 +153,31 @@ static func save_bytes(path: String, data: PackedByteArray, private := false) ->
 		var e := FileAccess.get_open_error()
 		_lock.unlock()
 		return e if e != OK else ERR_CANT_OPEN
-	f.store_buffer(data)
+	var stored := f.store_buffer(data if test_write_limit < 0 else data.slice(0, mini(test_write_limit, data.size())))
 	f.flush()
 	var werr := f.get_error()
 	f.close()
+	if werr == OK and not stored:
+		werr = ERR_FILE_CANT_WRITE
+	if werr == OK and _size_of(tmp) != data.size():
+		werr = ERR_FILE_CANT_WRITE
 	if werr != OK:
 		DirAccess.remove_absolute(tmp)
 		_lock.unlock()
+		push_warning("GameCove: couldn't write %s (%s); kept the old file" % [p, error_string(werr)])
 		return werr
 	var err := DirAccess.rename_absolute(tmp, p)
 	if err != OK:
 		DirAccess.remove_absolute(tmp)
 	_lock.unlock()
 	return err
+
+
+## Bytes in `path` as the file system reports them after close (-1 when unreadable).
+static func _size_of(path: String) -> int:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return -1
+	var n := f.get_length()
+	f.close()
+	return n

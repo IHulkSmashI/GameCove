@@ -7,6 +7,8 @@ extends RefCounted
 ## exit, so edits made while it runs are lost. Callers must check that Steam is
 ## stopped first (SteamConfig does).
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
+
 const VDF := preload("res://scripts/launch/vdf.gd")
 
 const BACKUP_SUFFIX := ".gamecove.bak"
@@ -64,13 +66,7 @@ static func save(path: String, data: Dictionary) -> Error:
 		var e2 := DirAccess.copy_absolute(path, path + BACKUP_SUFFIX)
 		if e2 != OK:
 			return e2
-	var tmp := path + ".gamecove.tmp"
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		return FileAccess.get_open_error()
-	f.store_string(text)
-	f.close()
-	return DirAccess.rename_absolute(tmp, path)
+	return SettingsFile.save_text(path, text)
 
 
 ## Puts the .gamecove.bak copy back. Returns OK or an error.
