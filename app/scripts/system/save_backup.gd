@@ -3,9 +3,12 @@ extends RefCounted
 ## download, a restore, a forced choice in a conflict). Plain tar.gz files under
 ## <data>/saves/backups/<game>/ with a small JSON next to them:
 ##   <stamp>.json            {"time", "reason", "title", "parts": [{"name", "path", "file", "bytes"}],
-##                            "fingerprint"}
+##                            "fingerprint", "pinned"}
 ##   <stamp>-<n>.tar.gz      one per save folder, its contents relative to the folder
-## Up to KEEP per game; the oldest go first. A backup whose folders didn't change since the
+## Up to KEEP everyday backups per game (the copy before each cloud download) and, apart from
+## those, up to KEEP pinned ones (before a conflict choice, a copy of the cloud, before a
+## restore): ten launches never rotate out the one copy of a save a choice replaced. The
+## oldest of each kind go first. A backup whose folders didn't change since the
 ## last one isn't taken again (same fingerprint). Commands go through `run`
 ## (func(program, args) -> {"code", "out"}), so tests use a fake or the real tar.
 
@@ -43,7 +46,8 @@ static func fingerprint(parts: Array) -> String:
 ## Backs up `parts` ([{name, path}]). -> {"ok", "id", "skipped": "" | "empty" | "same" , "why"}.
 ## ok is false only when a copy was needed and couldn't be made (then nothing may overwrite
 ## the folders). `force` takes a copy even when the last one has the same fingerprint.
-func backup(key: String, title: String, reason: String, parts: Array, force := false) -> Dictionary:
+## `pinned`: counted apart from the everyday backups when the oldest are dropped.
+func backup(key: String, title: String, reason: String, parts: Array, force := false, pinned := false) -> Dictionary:
 	var with_files: Array = []
 	for p in parts:
 		var st := CloudSaves.dir_stats(str(p["path"]))
@@ -77,7 +81,7 @@ func backup(key: String, title: String, reason: String, parts: Array, force := f
 			fa.close()
 		out_parts.append({"name": str(p["name"]), "path": str(p["path"]), "file": file, "bytes": size})
 	var meta := {"time": int(Time.get_unix_time_from_system()), "reason": reason, "title": title,
-		"parts": out_parts, "fingerprint": fp}
+		"parts": out_parts, "fingerprint": fp, "pinned": pinned}
 	if SettingsFile.save_json(dir.path_join(stamp + ".json"), meta, "\t") != OK:
 		return {"ok": false, "id": "", "skipped": "", "why": "couldn't write the backup list"}
 	prune(key)
@@ -190,11 +194,15 @@ static func empty_dir(path: String) -> void:
 			remove_tree(path.path_join(sub))
 
 
-## Keeps the newest KEEP backups of a game.
+## Keeps the newest `keep` everyday backups of a game and the newest `keep` pinned ones.
 func prune(key: String, keep := KEEP) -> void:
-	var all := list(key)
 	var dir := dir_for(key)
-	for i in range(keep, all.size()):
-		for p in all[i]["parts"]:
+	var seen := {false: 0, true: 0}
+	for b in list(key):
+		var kind := bool(b.get("pinned", false))
+		seen[kind] += 1
+		if seen[kind] <= keep:
+			continue
+		for p in b["parts"]:
 			DirAccess.remove_absolute(dir.path_join(str(p["file"])))
-		DirAccess.remove_absolute(dir.path_join(str(all[i]["id"]) + ".json"))
+		DirAccess.remove_absolute(dir.path_join(str(b["id"]) + ".json"))

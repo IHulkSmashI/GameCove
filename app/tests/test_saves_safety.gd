@@ -454,3 +454,43 @@ func test_restore_replaces_the_folder() -> void:
 	ok(not bad["ok"], "a damaged backup doesn't restore")
 	eq(Fakes.walk(w["esaves"]), ["slot1.sav", "slot3.sav", "sub/meta.dat"], "and the folder is as it was")
 	_done(w)
+
+
+## Ten launches don't rotate out the backup of a conflict choice or a copy of the cloud:
+## those have their own ten.
+func test_rotation_keeps_conflict_and_cloud_copies() -> void:
+	var w := _world("rotation")
+	var bk: RefCounted = w["s"].backups
+	var parts := [{"name": "saves", "path": w["esaves"]}]
+	Fakes.put(w["esaves"].path_join("slot1.sav"), "the save a conflict choice replaced", T0)
+	var kept: Dictionary = bk.backup("epic:Min", "M", "before_upload", parts, true, true)
+	var copy: Dictionary = bk.backup("epic:Min", "M", "cloud_copy", parts, true, true)
+	for i in 14:
+		Fakes.put(w["esaves"].path_join("slot1.sav"), "launch %d" % i, T0 + 100 + i)
+		bk.backup("epic:Min", "M", "before_download", parts)
+	var all: Array = bk.list("epic:Min")
+	eq(all.filter(func(b): return not bool(b.get("pinned", false))).size(), 10, "ten everyday backups")
+	ok(not bk.find("epic:Min", str(kept["id"])).is_empty(), "the conflict backup outlives fourteen launches")
+	ok(not bk.find("epic:Min", str(copy["id"])).is_empty(), "so does the cloud copy")
+	for i in 12:
+		bk.backup("epic:Min", "M", "before_upload", parts, true, true)
+	eq(bk.list("epic:Min").filter(func(b): return bool(b.get("pinned", false))).size(), 10, "and those are capped at ten of their own")
+	eq(bk.list("epic:Min").size(), 20, "twenty at most per game")
+	_done(w)
+
+
+## The service marks the backups a choice or a restore made.
+func test_choice_backups_are_kept_apart() -> void:
+	var w := _world("pinned")
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "local", T0)
+	w["gog_cloud"].seed("saves", "slot1.sav", "cloud", T0 + 50)
+	w["s"].sync_now(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "conflict", "a conflict")
+	w["s"].resolve(w["gog"], "local")
+	var by_reason := {}
+	for b in w["s"].backup_list("gog:1207"):
+		by_reason[b["reason"]] = bool(b.get("pinned", false))
+	eq(by_reason.get("before_upload"), true, "the choice's backup")
+	eq(by_reason.get("cloud_copy"), true, "the cloud copy")
+	eq(by_reason.get("before_download"), false, "the everyday one from the sync")
+	_done(w)

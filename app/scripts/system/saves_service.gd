@@ -417,7 +417,9 @@ func _epic_download(key: String, entry: Dictionary, plan: Dictionary, app: Strin
 	if folder == "":
 		return _set_status(key, "no_path", "", times)
 	var title := str(entry.get("title", key))
-	var b: Dictionary = backups.backup(key, title, "before_download", [{"name": "saves", "path": folder}])
+	# a conflict choice: its backup is the one copy of the side not kept, so it's pinned
+	var chosen := step == "force_download"
+	var b: Dictionary = backups.backup(key, title, "before_download", [{"name": "saves", "path": folder}], chosen, chosen)
 	if not b["ok"]:
 		return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]), times)
 	var down := _legendary(plan, app, step)
@@ -608,7 +610,7 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 			if not plan["ok"]:
 				return _set_status(key, str(plan["why"]))
 			var locs: Array = plan["locations"]
-			var b: Dictionary = backups.backup(key, title, "before_download" if choice == "cloud" else "before_upload", locs, true)
+			var b: Dictionary = backups.backup(key, title, "before_download" if choice == "cloud" else "before_upload", locs, true, true)
 			if not b["ok"]:
 				return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]))
 			if choice == "local":
@@ -653,7 +655,7 @@ func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictio
 					_remove_tree(scratch)
 					return ""   # an upload that failed after its copy: the copy is already kept
 				break
-	var b: Dictionary = backups.backup(key, title, "cloud_copy", parts, true)
+	var b: Dictionary = backups.backup(key, title, "cloud_copy", parts, true, true)
 	if b["ok"] and str(b["id"]) != "":
 		_point_parts(key, str(b["id"]), parts)
 	_remove_tree(scratch)
@@ -684,7 +686,7 @@ func _restore(key: String, title: String, id: String) -> Dictionary:
 	var parts: Array = []
 	for p in b["parts"]:
 		parts.append({"name": p["name"], "path": p["path"]})
-	var before: Dictionary = backups.backup(key, title, "before_restore", parts, true)
+	var before: Dictionary = backups.backup(key, title, "before_restore", parts, true, true)
 	if not before["ok"]:
 		return {"ok": false, "why": str(before["why"])}
 	var r: Dictionary = backups.restore(key, id)

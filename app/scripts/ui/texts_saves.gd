@@ -84,7 +84,7 @@ const SWITCH_HELP := {true: "On: Epic games sync through legendary, GOG games th
 const HOW_TITLE := "How it works"
 const HOW_LINES := [
 	"Before a game starts we get the newest save from the store's cloud; after it ends we send yours up.",
-	"Before anything replaces a save on this handheld, we back it up here. The last 10 backups per game are kept.",
+	"Before anything replaces a save on this handheld, we back it up here. We keep the last 10 per game, plus the last 10 from a choice or a restore.",
 	"When both sides changed, you choose. The newest one is highlighted.",
 	"No connection? The game starts anyway and we sync next time.",
 ]
