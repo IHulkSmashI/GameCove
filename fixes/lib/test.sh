@@ -44,4 +44,16 @@ lockdir_break "$L" "$dead" || true
 [ -d "$L" ] || fail "a fresh lock without a PID yet is left alone"
 rm -r "$L"
 
+# ---- ratelimit: at most <max> changes per window; stamps from the future (a clock stepped back) don't count
+# shellcheck source=fixes/lib/ratelimit.sh
+. "$HERE/ratelimit.sh"
+ROOT="$T/rate"
+rate_take t 2 600 || fail "first change"
+rate_take t 2 600 || fail "second change"
+if rate_take t 2 600; then fail "the third change in the window is refused"; fi
+future=$(($(date +%s) + 7200))
+mkdir -p "$ROOT/run/gamecove"
+printf '%s\n%s\n' "$future" "$future" >"$ROOT/run/gamecove/rate-f"
+rate_take f 2 600 || fail "stamps later than now (clock stepped back) don't lock changes out"
+
 echo "lib tests passed"

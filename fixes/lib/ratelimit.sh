@@ -9,11 +9,13 @@
 # loop of claw8ex-gyro accel-on/accel-off restarted InputPlumber on every call. Callers count only real
 # changes (an unchanged value is a no-op before this is asked). The count lives in /run (tmpfs), so the
 # bookkeeping itself never writes to flash, and it starts empty after a reboot.
+# Stamps later than now (left by a clock that was then stepped back) are dropped: they used to count
+# for the whole jump and lock changes out until a reboot.
 rate_take() {
 	_rf="$ROOT/run/gamecove/rate-$1"
 	_now="$(date +%s)"
 	mkdir -p "${_rf%/*}" 2>/dev/null || true
-	_keep="$(awk -v now="$_now" -v w="$3" '$1 ~ /^[0-9]+$/ && $1 > now - w' "$_rf" 2>/dev/null || true)"
+	_keep="$(awk -v now="$_now" -v w="$3" '$1 ~ /^[0-9]+$/ && $1 > now - w && $1 <= now' "$_rf" 2>/dev/null || true)"
 	_n=0
 	[ -z "$_keep" ] || _n="$(printf '%s\n' "$_keep" | wc -l | tr -d ' ')"
 	[ "$_n" -lt "$2" ] || return 1
