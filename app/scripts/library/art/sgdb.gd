@@ -37,6 +37,33 @@ static func valid_key(k: String) -> bool:
 	return k.length() == 32 and k.is_valid_hex_number()
 
 
+## Where a person gets their key (signed in with Steam): Generate API key there.
+const API_KEY_PAGE := "https://www.steamgriddb.com/profile/preferences/api"
+
+
+## One small request that needs a key: Portal's SteamGridDB game entry.
+static func check_url() -> String:
+	return API + "games/steam/400"
+
+
+## What a check_url() answer says about the key: "ok" | "wrong" (401 / 403:
+## SteamGridDB doesn't know it) | "offline" (no network, timed out) | "error"
+## (SteamGridDB answered something else, e.g. it's down).
+static func check_result(res: Dictionary) -> String:
+	if bool(res.get("ok", false)):
+		var j := JSON.new()
+		var body: PackedByteArray = res.get("body", PackedByteArray())
+		if j.parse(body.get_string_from_utf8()) == OK and j.data is Dictionary and bool(j.data.get("success", false)):
+			return "ok"
+		return "error"
+	var code := int(res.get("code", 0))
+	if code == 401 or code == 403:
+		return "wrong"
+	if str(res.get("error", "")) in ["offline", "timeout", "backoff"] or code == 0:
+		return "offline"
+	return "error"
+
+
 static func headers(k: String) -> Array:
 	return ["Authorization: Bearer " + k]
 

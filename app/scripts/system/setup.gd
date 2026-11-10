@@ -70,8 +70,9 @@ func _load() -> void:
 	_loaded = true
 
 
+## Private (0600): the file holds the user's SteamGridDB key.
 func _save() -> void:
-	SettingsFile.save_cfg(_cfg, config_path)
+	SettingsFile.save_text(config_path, _cfg.encode_to_text(), true)
 
 
 func is_done(step: String) -> bool:

@@ -33,6 +33,8 @@ const NETWORK_CALLS := [
 		"when": "Same as game details, only if you added a key; at most 20 searches and 180 requests a day", "switch": "Look up game details / remove the key"},
 	{"who": "SteamGridDB", "what": "A game's Steam app id or title, for artwork you browse in Change artwork, and for covers, banners and logos a game has none of.",
 		"when": "When you open Change artwork; in the background for games missing art", "switch": "Look up game details (+ Background lookups for the automatic fill)"},
+	{"who": "Your phone, on your own network (Game art step)", "what": "A one-time page your phone opens to send GameCove your SteamGridDB key; then one SteamGridDB request checks the key.",
+		"when": "Only while the Game art step is open, 10 minutes at most", "switch": "You start it"},
 	{"who": "Steam (achievements, art)", "what": "The app id of the game whose page you open.",
 		"when": "When you open a game page", "switch": "Settings > Performance"},
 	{"who": "PCs on your own network (GameStream)", "what": "A fixed client id and Moonlight's certificate; Wake-on-LAN packets to your PC.",

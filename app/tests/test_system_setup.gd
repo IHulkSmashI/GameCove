@@ -76,6 +76,8 @@ func test_steamgriddb_key() -> void:
 	ok(s.set_steamgriddb_key("0123456789abcdef0123456789ABCDEF"), "32 hex")
 	eq(s.steamgriddb_key(), "0123456789abcdef0123456789ABCDEF")
 	ok(s.steps()[4]["status"]["has_key"], "status")
+	var perms := FileAccess.get_unix_permissions(ProjectSettings.globalize_path(s.config_path))
+	eq(perms & 0x3F, 0, "setup.cfg (it holds the key) is readable by this user only")
 	ok(s.set_steamgriddb_key(""), "removed")
 	eq(s.steamgriddb_key(), "")
 	s.free()
