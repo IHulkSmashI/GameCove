@@ -55,7 +55,12 @@ static func load_trimmed(path: String) -> Texture2D:
 	var key := "%s@%d" % [path, FileAccess.get_modified_time(path)]
 	if _trim_cache.has(key):
 		return _trim_cache[key]
-	var img := _load_bundled(path) if bundled else Image.load_from_file(path)
+	# the header's size is checked before decoding (this runs on the main thread): no decompression bombs
+	# (review problem 9)
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if not Photo.size_ok(bytes):
+		return null
+	var img := _decode(bytes)
 	if img == null or img.is_empty():
 		return null
 	var r := subject_rect(img)
@@ -69,11 +74,10 @@ static func load_trimmed(path: String) -> Texture2D:
 	return tex
 
 
-## A picture shipped in the pck: read the raw bytes (export_presets.cfg
-## force-includes them) and decode by sniffed type, so it works the same in
-## the editor and an exported build.
-static func _load_bundled(path: String) -> Image:
-	var b := FileAccess.get_file_as_bytes(path)
+## Decodes by sniffed type from raw bytes: a picture shipped in the pck is read
+## raw too (export_presets.cfg force-includes it), so it works the same in the
+## editor and an exported build.
+static func _decode(b: PackedByteArray) -> Image:
 	var img := Image.new()
 	var err := ERR_FILE_UNRECOGNIZED
 	match Photo.sniff_image(b):
