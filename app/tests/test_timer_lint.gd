@@ -24,6 +24,7 @@ const KNOWN := {
 	"scripts/input/controller.gd": [1, "one-shot restart backoff when the intercept monitor died"],
 	"scripts/controls/providers/perf.gd": [1, "one-shot daily upscaler update check (privacy-gated)"],
 	"scripts/ui/toast.gd": [1, "one-shot: a toast's stay time"],
+	"scripts/system/updates.gd": [1, "one-shot 3 min after start: the opt-in automatic app update (refused while a game runs)"],
 	"scripts/ui/slider_row.gd": [1, "one-shot settle after a slider change"],
 	"scripts/ui/controls/color_row.gd": [1, "one-shot settle after a colour change"],
 	"scripts/ui/controls/keep_dialog.gd": [1, "countdown only while the Keep this? dialog is open"],

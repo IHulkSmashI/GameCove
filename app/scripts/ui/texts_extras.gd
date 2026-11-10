@@ -93,3 +93,10 @@ const GE_ERRORS := {
 	"not_found": "That version isn't installed any more.",
 	"failed": "Couldn't remove it. Try again.",
 }
+
+# ---- automatic app updates -------------------------------------------------------------
+const AUTO_APPS := "Update apps by themselves"
+const AUTO_APPS_HELP := {
+	false: "Off: apps update when you press Update here.",
+	true: "Once a day, when no game is running, Flatpak apps update quietly in the background. Needs Background lookups on, and waits for the charger or Wi-Fi that isn't metered.",
+}

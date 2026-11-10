@@ -2,7 +2,12 @@ extends "res://scripts/system/service.gd"
 ## Updates: the OS image, device firmware (fwupd), the maker's own BIOS/EC/controller firmware
 ## (firmware index), the driver stack and Flatpak apps.
 ##
-## Nothing runs on its own: no timer, no check at start. The UI calls
+## Nothing runs on its own except one opt-in: "Update apps by themselves" (Settings >
+## Device > Updates, off by default) updates Flatpak apps at most once a day, 3 minutes
+## after start and after a game ends, never while a game runs, only with Background
+## lookups on and on AC or an unmetered network; the update runs at the lowest CPU and
+## disk priority (nice 19, ionice idle), so a game started meanwhile isn't held up.
+## Otherwise there's no timer and no check at start. The UI calls
 ## check(kind) / check_updates() and apply(kind) / apply_update(); work happens
 ## on the worker thread and comes back on the main thread as signals.
 ## apply() refuses while a game runs (set_game_running(), wired by main.gd).
@@ -56,6 +61,11 @@ const REFRESH_EVERY_S := 24 * 3600
 const POWER_SUPPLY := "/sys/class/power_supply/"
 const JUPITER_BIOSUPDATE := "/usr/bin/jupiter-biosupdate"
 const PROGRESS_EVERY_MS := 250
+## Automatic app updates (opt-in): first try this long after start, then at most daily.
+const AUTO_FIRST_S := 180.0
+const AUTO_EVERY_S := 24 * 3600
+const AUTO_STAMP := "auto_apps.stamp"
+const Privacy := preload("res://scripts/system/privacy.gd")
 
 ## Filesystem prefix for every file read ("" = real system; fixtures in tests).
 var root := ""
@@ -80,6 +90,10 @@ var _fw_devices: Array = []
 var _tools := {}
 var _detected := false
 var _last_progress_ms := 0
+## Where "Update apps by themselves" is kept ([updates] auto_apps).
+var prefs_path := "user://settings.cfg"
+## Tests: the Background lookups answer ({} = ask privacy.gd).
+var background_override: Variant = null
 
 
 ## Tests: point at a fixture root and a fake runner. Detection runs at once.
@@ -155,8 +169,14 @@ func state() -> Dictionary:
 		"supported": {"os": supported("os"), "firmware": supported("firmware"), "flatpak": supported("flatpak"),
 			"maker": supported("maker"), "drivers": supported("drivers")},
 		"game_running": game_running,
+		"auto_apps": auto_apps(),
 		"reboot_needed": _phase.get("os") == "staged" or (_phase.get("firmware") == "staged"),
 	}
+
+
+func _ready() -> void:
+	# one-shot: the opt-in automatic app update, once the first minutes after start are over
+	get_tree().create_timer(AUTO_FIRST_S).timeout.connect(func(): maybe_auto_update_apps())
 
 
 ## main.gd / GameSession: true while a game runs. apply() refuses meanwhile.
@@ -165,6 +185,71 @@ func set_game_running(on: bool) -> void:
 		return
 	game_running = on
 	changed.emit(state())
+	if not on:
+		maybe_auto_update_apps()
+
+
+# ---- automatic app updates (opt-in) ------------------------------------------------
+
+var _auto: Variant = null   # cached [updates] auto_apps
+
+
+func auto_apps() -> bool:
+	if _auto == null:
+		_auto = bool(SettingsFile.load_cfg(prefs_path).get_value("updates", "auto_apps", false))
+	return bool(_auto)
+
+
+func set_auto_apps(on: bool) -> void:
+	_auto = on
+	SettingsFile.update_cfg(prefs_path, func(cfg: ConfigFile): cfg.set_value("updates", "auto_apps", on))
+	changed.emit(state())
+	if on:
+		maybe_auto_update_apps()
+
+
+func _background_allowed() -> bool:
+	return bool(background_override) if background_override != null else Privacy.background_allowed()
+
+
+## Starts the automatic app update when everything allows it. "" when it started, else
+## why not: "off", "unsupported", "game_running", "privacy", "busy", "not_due".
+func maybe_auto_update_apps() -> String:
+	if not auto_apps():
+		return "off"
+	_ensure()
+	if not supported("flatpak"):
+		return "unsupported"
+	if game_running:
+		return "game_running"
+	if not _background_allowed():
+		return "privacy"
+	if phase("flatpak") in ["checking", "applying"]:
+		return "busy"
+	if not _stamp_due(AUTO_STAMP, AUTO_EVERY_S):
+		return "not_due"
+	_set_phase("flatpak", "checking")
+	_queue("auto_apps", _auto_apps)
+	return ""
+
+
+func _auto_apps() -> void:
+	if not network_ok():
+		_main(func(): _set_phase("flatpak", "idle"))
+		return
+	var found := _flatpak_pending()
+	if found["pending"].is_empty():
+		if found["error"] == "":
+			_touch_stamp(AUTO_STAMP)
+		_main(func():
+			_fp = {"available": false, "pending": [], "error": found["error"]}
+			_set_phase("flatpak", "error" if found["error"] != "" else "up_to_date"))
+		return
+	_main(func():
+		_fp = {"available": true, "pending": found["pending"], "error": ""}
+		_set_phase("flatpak", "applying"))
+	if _flatpak_update(found["pending"], true):
+		_touch_stamp(AUTO_STAMP)
 
 
 ## Checks every supported kind. Results arrive as `checked` and `changed`.
@@ -419,7 +504,8 @@ func _installations() -> Array[String]:
 	return out
 
 
-func _check_flatpak() -> void:
+## Pending Flatpak updates of every installation: {"pending": [...], "error": ""}. Worker.
+func _flatpak_pending() -> Dictionary:
 	var pending: Array = []
 	var err := ""
 	for inst in _installations():
@@ -429,7 +515,12 @@ func _check_flatpak() -> void:
 			err = Parse.last_line(str(r.get("out", "")))
 			continue
 		pending.append_array(Parse.flatpak_updates(str(r.get("out", "")), inst))
-	var res := {"available": not pending.is_empty(), "pending": pending, "error": err if pending.is_empty() else ""}
+	return {"pending": pending, "error": err if pending.is_empty() else ""}
+
+
+func _check_flatpak() -> void:
+	var found := _flatpak_pending()
+	var res := {"available": not found["pending"].is_empty(), "pending": found["pending"], "error": found["error"]}
 	_main(func():
 		_fp = res
 		_phase["flatpak"] = "error" if res["error"] != "" else ("available" if res["available"] else "up_to_date")
@@ -438,16 +529,32 @@ func _check_flatpak() -> void:
 
 
 func _apply_flatpak() -> void:
+	_flatpak_update(_fp.get("pending", []), false)
+
+
+## Updates every installation with something pending. `background`: lowest CPU and
+## disk priority (the automatic update). Worker; finishes like apply("flatpak").
+func _flatpak_update(pending: Array, background: bool) -> bool:
 	var ok := true
 	var msg := ""
 	var tail: Array = []
 	var done := {}
-	for item in _fp.get("pending", []):
+	for item in pending:
 		var inst: String = item["installation"]
 		if done.has(inst):
 			continue
 		done[inst] = true
-		var code: int = runner.stream("flatpak", PackedStringArray(["update", "--" + inst, "--noninteractive", "-y"]),
+		var prog := "flatpak"
+		var args := PackedStringArray(["update", "--" + inst, "--noninteractive", "-y"])
+		if background:
+			var pre := PackedStringArray(["-n", "19"])
+			if _which("ionice") != "":
+				pre.append_array(["ionice", "-c", "3"])
+			pre.append("flatpak")
+			pre.append_array(args)
+			prog = "nice"
+			args = pre
+		var code: int = runner.stream(prog, args,
 			func(line: String):
 				tail.append(line)
 				if tail.size() > 5:
@@ -465,6 +572,7 @@ func _apply_flatpak() -> void:
 			_phase["flatpak"] = "error"
 		finished.emit("flatpak", ok, msg)
 		changed.emit(state()))
+	return ok
 
 
 # ---- power / network gates ---------------------------------------------------------

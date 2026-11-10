@@ -257,7 +257,8 @@ One page for everything that can be updated:
   makers get a link and your current version to compare. Controllers, docks and other parts update through fwupd.
 - **Drivers:** kernel, Mesa, firmware, InputPlumber and friends, the XeSS XMX driver and OptiScaler, compared with the
   latest versions.
-- **Apps:** Flatpak updates.
+- **Apps:** Flatpak updates, by hand or **by themselves** once a day when no game is running (turn it on in
+  Updates; it runs at the lowest priority, so a game you start meanwhile doesn't feel it).
 
 GameCove never flashes a BIOS by itself, and firmware installs wait until you're on the charger with at least 50%
 battery and no game running.
@@ -351,7 +352,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Artwork | [SteamGridDB](https://www.steamgriddb.com) | A game's Steam app id or title, with your own key | When you open Change artwork; in the background for games with no cover, hero or logo | Look up game details (+ Background lookups for the automatic fill) |
 | Game art setup | Your phone, on your own network, then SteamGridDB | Your SteamGridDB key: pasted on a one-time page GameCove serves on your LAN, then checked once with SteamGridDB | Only while the Game art step is open, 10 minutes at most | You start it |
 | Game streaming | PCs on your own network (GameStream: Vibepollo, Sunshine, Apollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network | When you open the Stream tab or wake a PC | You start it |
-| Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in | You start it |
+| Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in; Flatpak apps also once a day if you turned on "Update apps by themselves" | You start it (automatic app updates: off by default, and Background lookups) |
 
 </details>
 

@@ -68,6 +68,11 @@ SteamOS <https://store.steampowered.com/news/app/1675200>, Fedora Atomic
 - Apply: `flatpak update --user|--system --noninteractive -y`. Flatpak's polkit:
   `app-update`, `runtime-update`, `appstream-update` are `allow_active=yes`, so system
   updates need no password in the active session (verified in Flatpak's policy file).
+- Automatically (opt-in, "Update apps by themselves" on the Updates page, `[updates] auto_apps` in
+  `user://settings.cfg`, off by default): at most once a day (`user://firmware/auto_apps.stamp`), 3 min after start
+  (one one-shot timer) or when a game ends; refused while a game runs, with Background lookups off, or on battery on
+  a metered network. It runs `nice -n 19 ionice -c 3 flatpak update ...` (ionice only when present), so a game
+  started meanwhile keeps the CPU and disk.
 
 ## Firmware, BIOS and drivers (Updates hub)
 
