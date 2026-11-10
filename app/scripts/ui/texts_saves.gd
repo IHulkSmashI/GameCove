@@ -67,7 +67,8 @@ const KEPT_CLOUD := "Kept the cloud save."
 const BACKUPS_TITLE := "Restore a backup"
 const BACKUPS_LINE := "Your saves right now are backed up first, so you can always come back."
 const REASONS := {"before_download": "Before a cloud download", "before_upload": "Before keeping this handheld's save",
-	"cloud_copy": "The cloud's save, before it was replaced", "before_restore": "Before a restore"}
+	"cloud_copy": "The cloud's save, before it was replaced", "before_restore": "Before a restore",
+	"interrupted": "Found after a download was cut off"}
 const RESTORED := "Backup restored."
 const RESTORE_FAILED := "Couldn't restore that backup: %s"
 const RESTORE_RUNNING := "Close the game first."

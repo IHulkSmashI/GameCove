@@ -42,6 +42,7 @@ func _world(name: String) -> Dictionary:
 	_json(heroic.path_join("store_cache/gog_library.json"), {"games": [{"app_name": "1207", "cloud_save_enabled": true,
 		"gog_save_location": [{"name": "saves", "location": "<?DOCUMENTS?>/Witcher"}]}]})
 	Fakes.put(prefix.path_join("user.reg"), "reg")
+	DirAccess.make_dir_recursive_absolute(user.path_join("Documents"))
 	var gog := {"key": "gog:1207", "store": "gog", "id": "1207", "title": "The Witcher", "installed": true, "heroic_root": heroic,
 		"install_path": root.path_join("gog/game"), "prefix": prefix, "platform": "windows"}
 	var cfg := root.path_join("legendary")
@@ -655,4 +656,96 @@ func test_gog_a_failed_location_after_play_keeps_what_was_uploaded() -> void:
 	w["s"].after_exit(w["gog"])
 	eq(w["s"].status(w["gog"])["state"], "uploaded", "the retry finishes location 2 without calling location 1 a conflict")
 	eq(cloud.cloud["cfg/keys.ini"]["data"], "esdf", "location 2 went up")
+	_done(w)
+
+
+# ---- high 10: a download cut short ------------------------------------------------------------------
+
+## An empty folder, the first download killed by the timeout: the half file used to stay,
+## look newer than the cloud, and send the post-game upload deleting cloud files.
+func test_gog_cut_first_download_leaves_nothing_behind() -> void:
+	var w := _world("gog_cut")
+	var cloud: Object = w["gog_cloud"]
+	for slot in ["slot1.sav", "slot2.sav", "slot3.sav"]:
+		cloud.seed("saves", slot, "progress " + slot, T0)
+	cloud.cut_download_after = 1
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the game still starts")
+	eq(Fakes.walk(w["gsaves"]), [], "what the cut download wrote is gone (the folder was empty before)")
+	eq(str(Dictionary(_cfg(w, "gog:1207", "gog_ts", {})).get("saves", "0")), "0", "and no sync time is kept")
+	ok(w["s"].status(w["gog"])["state"] in ["offline", "failed"], "the status says it didn't sync")
+	eq(_cfg(w, "gog:1207", "pending", {}), {}, "nothing left to put right")
+	# the game didn't save anything; after it, the download simply happens
+	cloud.cut_download_after = -1
+	cloud.did.clear()
+	w["s"].after_exit(w["gog"])
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav", "slot3.sav"], "the cloud is whole")
+	ok(cloud.did.filter(func(x): return str(x).begins_with("delete") or str(x).begins_with("upload")).is_empty(), "nothing was uploaded or deleted")
+	_done(w)
+
+
+## The same for Epic: legendary empties the folder, then writes; cut short with nothing to
+## put back, the half file would be "local newer" and go up as the newest cloud save.
+func test_epic_cut_first_download_leaves_nothing_behind() -> void:
+	var w := _world("epic_cut")
+	var cloud: Object = w["epic_cloud"]
+	cloud.saves.append({"t": T0, "files": {"world.sav": "40 hours"}})
+	cloud.cut_download = true
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the game still starts")
+	eq(Fakes.walk(w["esaves"]), [], "the half-written file is gone")
+	cloud.cut_download = false
+	w["s"].after_exit(w["epic"])
+	eq(cloud.saves.size(), 1, "nothing was uploaded after the game")
+	eq(cloud.saves[-1]["files"]["world.sav"], "40 hours", "the cloud save is intact")
+	_done(w)
+
+
+## The app (or the handheld) dies in the middle of a download: no code of ours runs to put
+## the backup back. The next sync finds the note left before the download and does it then,
+## keeping what it found first.
+func test_a_download_cut_by_a_crash_is_put_right_at_the_next_sync() -> void:
+	var w := _world("crash")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "second slot", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 5000
+	cloud.cloud["saves/slot1.sav"] = {"data": "hour 9", "t": int(w["now"][0]), "lt": int(w["now"][0]), "hash": "h9"}
+	cloud.cloud["saves/slot2.sav"] = {"data": "second slot, later", "t": int(w["now"][0]), "lt": int(w["now"][0]), "hash": "s2"}
+	w["now"][0] += 100
+	# the crash: the tool is cut after one file and the service never gets to clean up
+	var inner: Callable = w["s"].run
+	var frozen := [""]
+	w["s"].run = func(program: String, args: PackedStringArray) -> Dictionary:
+		if program != "tar" and "--skip-upload" in args and frozen[0] == "":
+			cloud.cut_download_after = 1
+			inner.call(program, args)
+			cloud.cut_download_after = -1
+			frozen[0] = FileAccess.get_file_as_string(w["s"].cfg_path)
+			return {"code": 124, "out": ""}
+		return inner.call(program, args)
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(frozen[0].contains("pending"), "a note is written before the download starts")
+	# put the world back to the instant of the crash: the note on disk, the folder half replaced
+	Fakes.put(w["s"].cfg_path, frozen[0])
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 9", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "s")
+	w["s"].run = inner
+	cloud.offline = true   # and the next launch has no connection
+	got.clear()
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the game starts")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot2.sav")), "second slot", "the half-written slot is whole again (the backup from before the download)")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "hour 1", "the folder is as it was before the download")
+	ok(w["s"].backup_list("gog:1207").any(func(b): return b["reason"] == "interrupted"), "what was found is kept as a backup too")
+	eq(_cfg(w, "gog:1207", "pending", {}), {}, "the note is gone")
+	cloud.offline = false
+	got.clear()
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got[0].has("conflict") or FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")) == "hour 9", "and the next sync asks or downloads: it never uploads over the cloud")
+	eq(cloud.cloud["saves/slot2.sav"]["data"], "second slot, later", "the cloud is untouched")
 	_done(w)

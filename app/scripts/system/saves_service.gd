@@ -13,7 +13,9 @@ extends Node
 ## the backup taken just before it back.
 ##
 ## Status per game in user://saves.cfg [game:<key>]: enabled, last_sync, state, at, detail,
-## local, remote, restored_at (a backup was put back and not synced since), prefer (the side
+## local, remote, pending ({"backup": id, "empty": [folders]}: a download is replacing the save folders right
+## now; still there at the next sync means it was cut off by a crash or power loss and is put
+## right first), restored_at (a backup was put back and not synced since), prefer (the side
 ## a conflict sheet offers first: "local" after a restore), gog_ts ({location: gogdl timestamp}), gog_paths ({location: the folder that
 ## timestamp is about}), own (we keep our own sync times: Heroic's are no longer a fallback);
 ## [gog_remote] caches GOG's answer per client id.
@@ -368,6 +370,9 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 	var app := str(entry.get("id", ""))
 	if bool(plan.get("moved", false)):
 		_drop_sync(key, true)   # another prefix's folder: the old sync time isn't about it
+	var cut := _recover(key, str(entry.get("title", key)), [{"name": "saves", "path": str(plan["save_path"])}] if str(plan["save_path"]) != "" else [])
+	if cut != "":
+		return _set_status(key, "backup_failed", cut)
 	_epic_folder_check(key, str(plan["save_path"]))
 	var look := _legendary(plan, app, "check")
 	if look["state"] in ["offline", "failed", "unsupported", "no_path"]:
@@ -426,22 +431,84 @@ func _epic_download(key: String, entry: Dictionary, plan: Dictionary, app: Strin
 	var title := str(entry.get("title", key))
 	# a conflict choice: its backup is the one copy of the side not kept, so it's pinned
 	var chosen := step == "force_download"
-	var b: Dictionary = backups.backup(key, title, "before_download", [{"name": "saves", "path": folder}], chosen, chosen)
+	var parts := [{"name": "saves", "path": folder}]
+	var b: Dictionary = backups.backup(key, title, "before_download", parts, chosen, chosen)
 	if not b["ok"]:
 		return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]), times)
+	var empty := _mark_download(key, b, parts)
 	var down := _legendary(plan, app, step)
 	if down["state"] in ["offline", "failed"]:
-		var back := _put_back(key, b)
+		var back := _put_back(key, b, empty)
 		return _set_status(key, down["state"], str(down.get("error", "")) + back, times)
+	_clear_mark(key)
 	return _set_status(key, "downloaded", "", times.merged({"synced": true}, true))
 
 
-## After a failed download: the backup goes back. Text for the status detail.
-func _put_back(key: String, b: Dictionary) -> String:
-	if str(b.get("id", "")) == "" or str(b.get("skipped", "")) == "empty":
+## Before a tool may write into the save folders: notes it in the status file (the backup to
+## put back and the folders that had no files), so a download cut off by a crash or power
+## loss, when none of our code runs, is found and put right by the next sync (_recover).
+## -> the folders that are empty now.
+func _mark_download(key: String, b: Dictionary, parts: Array) -> Array:
+	var empty: Array = []
+	for p in parts:
+		if int(CloudSaves.dir_stats(str(p["path"]))["files"]) == 0:
+			empty.append(str(p["path"]))
+	var id := "" if str(b.get("skipped", "")) == "empty" else str(b.get("id", ""))
+	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(_sec(key), "pending", {"backup": id, "empty": empty}))
+	return empty
+
+
+func _clear_mark(key: String) -> void:
+	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
+		if not c.has_section_key(_sec(key), "pending"):
+			return false
+		c.erase_section_key(_sec(key), "pending")
+		return true)
+
+
+## After a failed download: the backup goes back, and a folder that had no files before
+## (`empty`, from _mark_download) is emptied again: everything in it is what the cut
+## download wrote, and a half file there would look like a newer local save (final review,
+## high 10). Text for the status detail.
+func _put_back(key: String, b: Dictionary, empty: Array) -> String:
+	for path in empty:
+		SaveBackup.empty_dir(str(path))
+	var why := ""
+	if str(b.get("id", "")) != "" and str(b.get("skipped", "")) != "empty":
+		var r: Dictionary = backups.restore(key, str(b["id"]))
+		why = "" if r["ok"] else " (" + str(r["why"]) + ")"
+	if why == "":
+		_clear_mark(key)
+	return why
+
+
+## A download that was cut off with no chance to clean up (the note from _mark_download is
+## still there): what's in the folders now is kept as a backup first (someone may have
+## played since), then the backup from before the download goes back and the folders that
+## were empty are emptied. The sync times are dropped, so the sync that follows asks or
+## downloads and never uploads on the strength of a half-written file.
+## "" when there was nothing to do or it's done, else why it couldn't (then nothing may sync).
+func _recover(key: String, title: String, parts: Array) -> String:
+	var note: Variant = _cfg_value(key, "pending", {})
+	if not note is Dictionary or note.is_empty():
 		return ""
-	var r: Dictionary = backups.restore(key, str(b["id"]))
-	return "" if r["ok"] else " (" + str(r["why"]) + ")"
+	var found: Dictionary = backups.backup(key, title, "interrupted", parts, true, true)
+	if not found["ok"]:
+		return str(found["why"])
+	var mine := {}
+	for p in parts:
+		mine[str(p["path"])] = true
+	for path in note.get("empty", []):
+		if mine.has(str(path)):   # only ever this game's own save folders
+			SaveBackup.empty_dir(str(path))
+	var id := str(note.get("backup", ""))
+	if id != "" and not backups.find(key, id).is_empty():
+		var r: Dictionary = backups.restore(key, id)
+		if not r["ok"]:
+			return str(r["why"])
+	_drop_sync(key, true)
+	_clear_mark(key)
+	return ""
 
 
 ## A plan with "moved" (a changed prefix) tells legendary the folder on every call until
@@ -523,6 +590,9 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 		return _set_status(key, str(plan["why"]))
 	var locs: Array = plan["locations"]
 	var title := str(entry.get("title", key))
+	var cut := _recover(key, title, locs)
+	if cut != "":
+		return _set_status(key, "backup_failed", cut)
 	var b := {"ok": true, "id": "", "skipped": "empty"}
 	if mode != "post":
 		# gogdl's download deletes local files the cloud doesn't have: a copy first
@@ -531,6 +601,8 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 			return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]))
 	var ts := _gog_ts(key, entry, locs)
 	var before := ts.duplicate()
+	# gogdl downloads into an empty folder whatever it was asked (after a game too)
+	var empty := _mark_download(key, b, locs)
 	var step := str({"pre": "pre", "post": "post", "now": ""}[mode])
 	var acted := ""
 	var conflict := false
@@ -543,6 +615,7 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 			# this run may upload, and gogdl's upload deletes cloud files the folder lacks
 			var guard := _gog_upload_guard(key, title, plan, entry, l, cur)
 			if guard.has("stop"):
+				_clear_mark(key)
 				return _set_status(key, "backup_failed", str(guard["stop"]), {"gog_ts": ts})
 			r = guard.get("result", {})
 		if r.is_empty():
@@ -550,7 +623,12 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 		cloud_newest = maxi(cloud_newest, int(r["cloud_newest"]))
 		match r["action"]:
 			"failed":
-				var back := _put_back(key, b) if mode != "post" else ""
+				# after a game no backup was taken (an upload changes nothing here), but a folder that
+				# was empty may have been half filled
+				var back := _put_back(key, b if mode != "post" else {}, empty)
+				for l2 in locs:
+					if str(l2["path"]) in empty:
+						ts[l2["name"]] = "0"
 				if mode != "post":
 					# the backup put every folder back as it was: a location that had downloaded is
 					# at its old state again, so its old sync time is the true one (an upload that
@@ -572,6 +650,7 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 	var local_newest := 0
 	for l in locs:
 		local_newest = maxi(local_newest, int(CloudSaves.dir_stats(str(l["path"]))["newest"]))
+	_clear_mark(key)
 	var times := {"local": local_newest, "remote": cloud_newest, "gog_ts": ts, "gog_paths": _gog_paths(locs)}
 	if conflict:
 		return _set_status(key, "conflict", "", times)
@@ -615,6 +694,9 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 				return _set_status(key, str(plan["why"]))
 			var app := str(entry.get("id", ""))
 			var folder := str(plan["save_path"]) if str(plan["save_path"]) != "" else CloudSaves.epic_save_path(str(entry.get("config_dir", "")), app)
+			var cut := _recover(key, title, [{"name": "saves", "path": folder}] if folder != "" else [])
+			if cut != "":
+				return _set_status(key, "backup_failed", cut)
 			if choice == "cloud":
 				return _epic_download(key, entry, plan, app, {}, "force_download", {"epic_path": folder})
 			# Epic keeps the earlier cloud saves next to the new one, so uploading loses nothing there.
@@ -635,6 +717,9 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 			if not plan["ok"]:
 				return _set_status(key, str(plan["why"]))
 			var locs: Array = plan["locations"]
+			var cut := _recover(key, title, locs)
+			if cut != "":
+				return _set_status(key, "backup_failed", cut)
 			var b: Dictionary = backups.backup(key, title, "before_download" if choice == "cloud" else "before_upload", locs, true, true)
 			if not b["ok"]:
 				return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]))
@@ -646,15 +731,17 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 					return _set_status(key, "backup_failed", cloud)
 			var ts := _gog_ts(key, entry, locs)
 			var before := ts.duplicate()
+			var empty: Array = _mark_download(key, b, locs) if choice == "cloud" else []
 			for l in locs:
 				var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_download" if choice == "cloud" else "force_upload")
 				if r["action"] == "failed":
-					var back := _put_back(key, b) if choice == "cloud" else ""
+					var back := _put_back(key, b, empty) if choice == "cloud" else ""
 					if choice == "cloud":
 						ts = before   # every folder is back as it was
 					return _set_status(key, "offline" if r["offline"] else "failed", str(r["error"]) + back, {"gog_ts": ts})
 				if r["ts"] != "":
 					ts[l["name"]] = r["ts"]
+			_clear_mark(key)
 			return _set_status(key, "downloaded" if choice == "cloud" else "uploaded", "", {"synced": true, "gog_ts": ts, "gog_paths": _gog_paths(locs)})
 	return _set_status(key, "unsupported")
 
