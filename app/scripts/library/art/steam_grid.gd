@@ -52,12 +52,8 @@ static func read_manifest(backup_dir: String) -> Dictionary:
 
 static func _save_manifest(backup_dir: String, m: Dictionary) -> bool:
 	DirAccess.make_dir_recursive_absolute(backup_dir)
-	var f := FileAccess.open(_manifest_path(backup_dir), FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(JSON.stringify(m, "\t"))
-	f.close()
-	return true
+	# atomic: a torn manifest would forget which originals to put back (review 2, low 23)
+	return preload("res://scripts/system/settings_file.gd").save_json(_manifest_path(backup_dir), m, "\t") == OK
 
 
 ## Files in `grid` that are this base name with any image extension.

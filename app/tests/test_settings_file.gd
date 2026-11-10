@@ -258,3 +258,21 @@ func test_second_damaged_file_keeps_the_first_copy() -> void:
 	SettingsFile.load_json(p)
 	eq(FileAccess.get_file_as_string(p + ".bad"), "{first", "the first copy kept")
 	eq(FileAccess.get_file_as_string(p + ".bad.1"), "{second", "the second beside it")
+
+
+## Review 2, low 23: the Steam grid manifest and the OpenCritic quota were written in place.
+func test_grid_manifest_and_quota_are_written_atomically() -> void:
+	var d := _dir("grid_quota")
+	var Grid := preload("res://scripts/library/art/steam_grid.gd")
+	var Resolver := preload("res://scripts/library/meta/resolver.gd")
+	ok(Grid._save_manifest(d, {"400p": {"had": ["400p.png"]}}), "manifest saved")
+	var q := d.path_join("opencritic_quota.json")
+	ok(Resolver._write(q, {"day": "2026-11-10", "searches": 1}), "quota saved")
+	var before_m := FileAccess.get_file_as_string(d.path_join("manifest.json"))
+	var before_q := FileAccess.get_file_as_string(q)
+	SettingsFile.test_write_limit = 0
+	ok(not Grid._save_manifest(d, {}), "a short manifest write fails")
+	ok(not Resolver._write(q, {"day": "2026-11-11"}), "a short quota write fails")
+	SettingsFile.test_write_limit = -1
+	eq(FileAccess.get_file_as_string(d.path_join("manifest.json")), before_m, "manifest kept")
+	eq(FileAccess.get_file_as_string(q), before_q, "quota kept")

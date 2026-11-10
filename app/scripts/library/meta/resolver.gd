@@ -88,12 +88,10 @@ static func _read(path: String) -> Dictionary:
 	return j.data
 
 
-static func _write(path: String, data: Dictionary) -> void:
+## Atomic (the OpenCritic quota and the caches; review 2, low 23).
+static func _write(path: String, data: Dictionary) -> bool:
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify(data))
-		f.close()
+	return preload("res://scripts/system/settings_file.gd").save_json(path, data) == OK
 
 
 ## The cached live Steam layer for `appid` ({} if none), whatever its age.
