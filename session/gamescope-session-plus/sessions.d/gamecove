@@ -39,7 +39,8 @@ CURSOR_FILE="${HOME}/.local/share/Steam/tenfoot/resource/images/cursors/arrow.pn
 
 # If GameCove keeps failing to start (5 short sessions in a row), fall back to
 # the distro's Steam Gaming Mode instead of looping on a black screen. (The
-# session client has its own, tighter guard: 3 app crashes in 2 minutes.)
+# session client has its own, tighter guard: 3 unclean exits of the app in a row,
+# whatever the time between them; a clean exit or 10 healthy minutes clears it.)
 # Through gamecove-session-select so Steam's "Switch to Desktop" afterwards
 # reaches the real desktop, not GameCove.
 short_session_recover() {
@@ -70,7 +71,10 @@ reset_input_intercept() {
 #    backstop.
 #  - CPU / GPU / platform values GameCove's power-tune verbs changed (and thermald, held while
 #    GameCove sets the TDP on Intel) back to what they were, so Steam's session or the desktop
-#    get the system as they left it.
+#    get the system as they left it. Not the ones set with an administrator password (SMT,
+#    core count, sleep mode, MCU power saving): those stay until the fix is removed.
+# Each stands alone (`set +e`, and no `&&` chains): a release that fails must not skip the
+# power restore or keep the flag from being written (the wait would then run to its limit).
 # Both run in one background job that the session waits for at most GAMECOVE_ROOT_WAIT_S
 # (10 s). `timeout 15 pkexec` only killed pkexec, not its root child, so the session could
 # wait 15 s per call while the helper went on holding its lock.
@@ -86,8 +90,9 @@ root_restores() {
 	flag="$(mktemp "${TMPDIR:-/tmp}/gamecove-wait.XXXXXX")" || return 0
 	rm -f "$flag"
 	(
-		[ "$charge" = 1 ] && pkexec "$helper" charge-limit set release
-		[ "$tune" = 1 ] && pkexec "$helper" power-tune set restore
+		set +e
+		if [ "$charge" = 1 ]; then pkexec "$helper" charge-limit set release; fi
+		if [ "$tune" = 1 ]; then pkexec "$helper" power-tune set restore; fi
 		: >"$flag"
 	) </dev/null >/dev/null 2>&1 &
 	while [ ! -e "$flag" ] && [ "$i" -lt "$limit" ]; do

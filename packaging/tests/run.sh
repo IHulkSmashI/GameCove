@@ -437,6 +437,23 @@ contains "$T/post.log" "^pkexec $T/fix-set charge-limit set release$" "the resto
 cp "$T/pkexec.keep" "$PB/pkexec"
 printf '#!/bin/sh\nshift\nexec "$@"\n' >"$PB/timeout"
 chmod +x "$PB/pkexec" "$PB/timeout"
+# final review, session: a root restore that FAILS (in a session script running under set -e) must not skip
+# the next one, nor leave the session waiting for the whole limit
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/post.log"\nexit 126\n' "$T" >"$PB/pkexec"
+mkdir -p "$T/gcstate/fixes/power-tune/orig"
+: >"$T/busctl.log"
+: >"$T/post.log"
+started="$(date +%s)"
+# shellcheck disable=SC2016  # expanded by the inner bash
+PATH="$PB:/usr/bin:/bin" GAMECOVE_STATE_DIR="$T/gcstate" GAMECOVE_FIX_SET="$T/fix-set" GAMECOVE_ROOT_WAIT_S=20 \
+	bash -c 'set -a; . "$1"; set -e; root_restores' _ "$REPO/session/gamescope-session-plus/sessions.d/gamecove"
+if [ $(($(date +%s) - started)) -lt 10 ]; then ok; else bad "session end waited the whole limit on a failed root restore"; fi
+contains "$T/post.log" "^pkexec $T/fix-set charge-limit set release$" "the release was tried"
+contains "$T/post.log" "^pkexec $T/fix-set power-tune set restore$" "a failed charge-limit release doesn't skip the power restore (session end)"
+rmdir "$T/gcstate/fixes/power-tune/orig"
+cp "$T/pkexec.keep" "$PB/pkexec"
+chmod +x "$PB/pkexec"
+if grep -q "3 app crashes in 2 minutes" "$REPO/session/gamescope-session-plus/sessions.d/gamecove"; then bad "sessions.d/gamecove still describes the old crash guard"; else ok; fi
 # busctl --list tree can hang on a stuck bus: every call has a timeout
 for f in "$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" "$REPO/session/gamescope-session-plus/sessions.d/gamecove"; do
 	if grep -n 'busctl --' "$f" | grep -v -- '--timeout=' | grep -q .; then bad "busctl without --timeout in $f"; else ok; fi
