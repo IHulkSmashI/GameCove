@@ -8,11 +8,11 @@
 
 <p align="center">
   <a href="https://github.com/IHulkSmashI/GameCove/releases"><img src="https://img.shields.io/github/v/release/IHulkSmashI/GameCove?include_prereleases&filter=v*&label=Latest%20Release&logo=github&color=7c3aed" alt="Latest release"></a>
-  <a href="https://github.com/IHulkSmashI/GameCove/releases"><img src="https://img.shields.io/github/downloads/IHulkSmashI/GameCove/total?label=Downloads&color=4caf50" alt="Downloads"></a>
+  <!-- Downloads badge goes back once v0.1.0 is out, filtered to the GameCove release (the total counts the app's own data downloads): https://img.shields.io/github/downloads/IHulkSmashI/GameCove/v0.1.0/total -->
   <a href="https://github.com/IHulkSmashI/GameCove/commits/main"><img src="https://img.shields.io/github/last-commit/IHulkSmashI/GameCove?label=Last%20update" alt="Last update"></a>
   <br>
   <a href="#contents"><img src="https://img.shields.io/badge/Guide%20%26%20FAQ-Read%20the%20docs-2563eb?logo=readthedocs&logoColor=white" alt="Guide and FAQ"></a>
-  <a href="https://discord.gg/tuUsn6sSZH"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FtuUsn6sSZH%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&suffix=%20members&label=Discord&logo=discord&logoColor=white&color=5865F2" alt="Discord"></a>
+  <a href="https://discord.gg/tuUsn6sSZH"><img src="https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?logo=discord&logoColor=white" alt="Join the Discord"></a>
   <a href="https://www.reddit.com/r/GameCoveLinux/"><img src="https://img.shields.io/badge/Reddit-r%2FGameCoveLinux-FF4500?logo=reddit&logoColor=white" alt="Reddit: r/GameCoveLinux"></a>
   <a href="https://github.com/IHulkSmashI/GameCove/discussions"><img src="https://img.shields.io/badge/Community-Discussions-5865F2?logo=github&logoColor=white" alt="Community: GitHub Discussions"></a>
   <a href="https://github.com/IHulkSmashI/GameCove/issues/new?template=tester_signup.yml"><img src="https://img.shields.io/badge/Test%20it-on%20your%20handheld-0ea5e9" alt="Sign up to test on your handheld"></a>
