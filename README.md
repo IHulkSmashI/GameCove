@@ -77,7 +77,7 @@ Press the Quick Access button (or Guide) and the quick menu slides in, in a game
 
 | Tab | What you control |
 | --- | --- |
-| **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, low latency, the screen upscaler |
+| **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, the screen upscaler |
 | **Power** | Power profile, TDP, boost, fan mode, battery saver, charge limit, CPU boost, energy preference |
 | **Display** | Brightness, refresh rate, frame limit, VRR, night light, colour vibrance, screen upscaler and sharpness, screen effects |
 | **Audio** | Volume, mute, output device, microphone mute and input |
@@ -105,7 +105,7 @@ Everything else is one press away in **Settings**, grouped the same way.
 - **Intel Arc:** XeSS on the XMX cores, FSR 4 on XMX, and XeSS frame generation (2x to 4x), through OptiScaler and the XeSS XMX driver.
 - **AMD:** FSR 4 on newer chips (using AMD's own files), FSR 3.1 everywhere, FSR frame generation.
 - **Any GPU:** Lossless Scaling frame generation through lsfg-vk (2x to 4x, with your own copy of Lossless Scaling).
-- **Low latency** is on by default (Anti-Lag on AMD, XeLL on Intel Arc), and on Intel Arc it kicks in by itself while frame generation runs.
+- **Low latency** (Anti-Lag on AMD, XeLL on Intel Arc) is on by default, and always on while frame generation runs.
 - Everything GameCove adds to a game folder is recorded and removed exactly on Undo. Folders set up by other tools are left alone.
 
 ### Profiles: per game and per power source
@@ -180,9 +180,11 @@ No analytics, no crash reports, no telemetry, no GameCove account. GameCove neve
 
 ## Supported handhelds
 
-GameCove recognises your exact model and sets itself up for it. In the app, About this device shows a real photo of your handheld; below are our own drawings of every model.
+GameCove recognises your exact model and sets itself up for it. Here's every model, and About this device in the app shows the same photo of yours.
 
 <p align="center"><img src="docs/images/devices.png" alt="Every handheld GameCove supports" width="100%"></p>
+
+<sub>Photos: the makers' official product images (their property, removed on request), except Steam Deck (LCD) by Liam Dawe/GamingOnLinux, <a href="https://commons.wikimedia.org/wiki/File:Steam_Deck_(front).png">CC BY-SA 4.0</a>.</sub>
 
 | Maker | Tested on hardware | Supported | Basic |
 | --- | --- | --- | --- |
@@ -260,4 +262,4 @@ GPL-3.0-or-later. See [LICENSE](LICENSE).
 
 A few parts carry their own licences: the Claw 8 EX gyro fix's HID-BPF program is GPL-2.0-only and its helper scripts GPL-2.0-or-later; the VRR fix's panel list derives from MIT-licensed code; the app is built on Godot Engine (MIT); the fonts are OFL-1.1. Every release carries these texts, and the app shows them under Settings > About > Credits and licenses. Details in [CREDITS.md](CREDITS.md) and [LICENSES/](LICENSES/).
 
-**The brand logos in `app/assets/brand/` are not GPL-licensed.** They're the makers' and stores' trademarks, shown only to identify a device, chip, store or launcher, and removed on request ([docs/BRANDS.md](docs/BRANDS.md), [app/assets/brand/LICENSE.md](app/assets/brand/LICENSE.md)). Maker product photos are never bundled; the app links to them on the maker's site. GameCove isn't affiliated with or endorsed by any of these companies.
+**The brand logos in `app/assets/brand/` are not GPL-licensed.** They're the makers' and stores' trademarks, shown only to identify a device, chip, store or launcher, and removed on request ([docs/BRANDS.md](docs/BRANDS.md), [app/assets/brand/LICENSE.md](app/assets/brand/LICENSE.md)). Device photos are the makers' property: most are fetched from the maker's own site when the app needs them, one (the Acer Nitro Blaze 8) is bundled, and the README's device grid shows them all. Any of them is removed on request. GameCove isn't affiliated with or endorsed by any of these companies.

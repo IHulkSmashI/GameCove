@@ -62,3 +62,9 @@ Any company that doesn't want its logo shown in GameCove can ask, and we remove 
 ```
 
 With that flag off, `brand.gd` returns `""` for that brand from every lookup: no bundled logo, no system icon, no notice. The name shows as plain text everywhere. In the same commit, delete the SVG from `app/assets/brand/`, clear `file`, update the CREDITS.md Trademarks table, and link the issue. Ship it in the next release.
+
+## Device photos (maker product images)
+
+Same rule as the logos. Most handhelds' photos are the makers' own official product images: the app fetches each one by link from the maker's site on the user's device (`maker_image` in [`app/data/device_photos.json`](../app/data/device_photos.json)), and "Show maker photos" in Settings > Device turns that off. The Acer Nitro Blaze 8's picture, made from Acer's official render, is bundled in the app (`app/assets/device_photos/`). The README's device grid (`docs/images/devices.png`, built by `tools/device_photos/readme_grid.py`) is the one committed composite that shows every model's photo, maker images included. These images stay their makers' property and aren't covered by the GPL.
+
+**Removal:** a maker that asks gets its images removed everywhere, through the same channels as a logo request: drop the `maker_image` link (or the bundled file and its `bundled` entry), then rebuild the README grid (`python3 -I tools/device_photos/readme_grid.py docs/images/devices.png --photos <cache>`; a model without a photo falls back to GameCove's own drawing) and ship both in the next release.
