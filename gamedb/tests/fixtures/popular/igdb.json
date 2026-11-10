@@ -1,0 +1,151 @@
+{
+ "_note": "Synthetic IGDB API v4 answers in the documented response shape (no credentials here to record real ones). IGDB game ids are illustrative. external_games: Steam uid -> IGDB game ids; games_by_slug: slug -> id; search: title -> rows of POST /games with `search`; game_time_to_beats: rows as returned (seconds).",
+ "external_games": {
+  "1086940": [
+   119171
+  ],
+  "367520": [
+   14593,
+   900001
+  ],
+  "2050650": [
+   191692
+  ],
+  "2358720": [
+   135243
+  ],
+  "1903340": [
+   305152
+  ],
+  "1030300": [
+   115289,
+   900002
+  ],
+  "1551360": [
+   147221
+  ],
+  "254700": [
+   974
+  ]
+ },
+ "games_by_slug": {
+  "god-of-war--1": 19560
+ },
+ "search": {
+  "Hogwarts Legacy": [
+   {
+    "id": 900003,
+    "name": "Hogwarts Legacy: Digital Deluxe Edition",
+    "first_release_date": 1675987200
+   },
+   {
+    "id": 900004,
+    "name": "Hogwarts Legacy",
+    "first_release_date": 1893456000
+   },
+   {
+    "id": 115060,
+    "name": "Hogwarts Legacy",
+    "first_release_date": 1675987200
+   }
+  ]
+ },
+ "game_time_to_beats": [
+  {
+   "id": 5119171,
+   "game_id": 119171,
+   "hastily": 270000,
+   "normally": 414000,
+   "completely": 576000,
+   "count": 120
+  },
+  {
+   "id": 5014593,
+   "game_id": 14593,
+   "hastily": 97200,
+   "normally": 151200,
+   "completely": 226800,
+   "count": 90
+  },
+  {
+   "id": 5900001,
+   "game_id": 900001,
+   "hastily": 3600,
+   "normally": 3600,
+   "completely": 3600,
+   "count": 3
+  },
+  {
+   "id": 5019560,
+   "game_id": 19560,
+   "hastily": 75600,
+   "normally": 115200,
+   "completely": 187200,
+   "count": 80
+  },
+  {
+   "id": 5191692,
+   "game_id": 191692,
+   "hastily": 57600,
+   "normally": 79200,
+   "completely": 133200,
+   "count": 40
+  },
+  {
+   "id": 5000974,
+   "game_id": 974,
+   "hastily": 55800,
+   "normally": 72000,
+   "completely": 108000,
+   "count": 30
+  },
+  {
+   "id": 5135243,
+   "game_id": 135243,
+   "hastily": 136800,
+   "normally": 172800,
+   "completely": 252000,
+   "count": 30
+  },
+  {
+   "id": 5305152,
+   "game_id": 305152,
+   "hastily": 118800,
+   "normally": 172800,
+   "completely": 252000,
+   "count": 50
+  },
+  {
+   "id": 5115289,
+   "game_id": 115289,
+   "hastily": 10800,
+   "normally": 7200,
+   "completely": 3600,
+   "count": 50
+  },
+  {
+   "id": 5900002,
+   "game_id": 900002,
+   "hastily": 108000,
+   "normally": 162000,
+   "completely": 234000,
+   "count": 20
+  },
+  {
+   "id": 5147221,
+   "game_id": 147221,
+   "hastily": 3600,
+   "normally": 3600,
+   "completely": 475200,
+   "count": 4
+  },
+  {
+   "id": 5115060,
+   "game_id": 115060,
+   "hastily": 93600,
+   "normally": 144000,
+   "completely": 234000,
+   "count": 60
+  }
+ ]
+}

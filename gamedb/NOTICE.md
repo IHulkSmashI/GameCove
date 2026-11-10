@@ -14,7 +14,9 @@ and `upcoming.json.gz` (release calendar). This notice is uploaded next to them 
   under the ODbL.
 - **Wikidata** (CC0 1.0): titles, release years, cross-store ids, release dates.
 - **AreWeAntiCheatYet** (MIT): anti-cheat status.
-- **Steam store data** (Valve): release dates and coming-soon state in `upcoming.json.gz`.
+- **Steam store data** (Valve, Steam Web API): which games are most popular (`popular` rank in `gamedb.json.gz`,
+  with the store's title and release year for popular games Wikidata doesn't cover), and release dates and
+  coming-soon state in `upcoming.json.gz`.
 - **Exchange rates** in `upcoming.json.gz`: Source: ECB statistics (European Central Bank, reused unmodified).
 
 Not affiliated with or endorsed by IGDB, Twitch, ProtonDB, Valve or Wikimedia.

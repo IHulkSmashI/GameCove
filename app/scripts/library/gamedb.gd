@@ -161,7 +161,8 @@ static func normalise(title: String) -> String:
 
 
 ## Lookup tables: one per store id plus normalised title. On duplicate titles
-## the first record (the database is sorted by title) wins.
+## the first record wins (the database is sorted by title, the more popular
+## game first, so "Resident Evil 4" finds the 2023 remake).
 static func build_index(doc: Dictionary) -> Dictionary:
 	var index := {"title": {}}
 	for s in STORES:
@@ -174,6 +175,13 @@ static func build_index(doc: Dictionary) -> Dictionary:
 			for s in STORES:
 				if ids.has(s):
 					index[s][str(ids[s]).to_lower()] = g
+			# extra Steam apps of the same game (the builder keeps the lowest id in "steam")
+			var more = ids.get("steam_more", [])
+			if more is Array:
+				for m in more:
+					var k := str(m).to_lower()
+					if k != "" and not index["steam"].has(k):
+						index["steam"][k] = g
 		var t := normalise(str(g.get("title", "")))
 		if t != "" and not index["title"].has(t):
 			index["title"][t] = g

@@ -29,6 +29,10 @@ EXTRA_PROPERTIES = {
     "P5794": "igdb_slug",  # IGDB game ID (a slug)
     "P2816": "hltb",       # HowLongToBeat ID
 }
+# Titles: the English label, else the "mul" (default for all languages) label.
+# Since 2024 many big games carry their name only as "mul" (Baldur's Gate 3,
+# Hollow Knight, God of War...): an English-only query left them untitled, and
+# untitled items were dropped from the database.
 PAGE = 5000
 MIN_PAGE = 500
 # The public endpoint stops streaming at its 60 s limit and the JSON arrives
@@ -37,9 +41,10 @@ MIN_PAGE = 500
 
 def query_for(prop: str, limit: int, offset: int) -> str:
     return f"""
-SELECT ?item ?value ?label ?date WHERE {{
+SELECT ?item ?value ?label ?mul ?date WHERE {{
   ?item wdt:{prop} ?value .
   OPTIONAL {{ ?item rdfs:label ?label . FILTER(LANG(?label) = "en") }}
+  OPTIONAL {{ ?item rdfs:label ?mul . FILTER(LANG(?mul) = "mul") }}
   OPTIONAL {{ ?item wdt:P577 ?date }}
 }}
 ORDER BY ?item
@@ -62,9 +67,22 @@ def parse_bindings(data: dict, key: str, items: dict[str, dict]) -> int:
             if value is None:
                 continue
         rec = items.setdefault(qid, {"wikidata": qid, "title": "", "released": None, "ids": {}})
-        rec["ids"].setdefault(key, value)
-        if not rec["title"] and "label" in row:
+        if key == "steam":
+            # An item can list several Steam apps (49 do); keep them all and make
+            # the lowest id the main one, so the choice doesn't depend on row order.
+            alls = rec.setdefault("steam_all", [])
+            if value not in alls:
+                alls.append(value)
+                alls.sort(key=int)
+            rec["ids"]["steam"] = alls[0]
+        else:
+            rec["ids"].setdefault(key, value)
+        if "label" in row:
             rec["title"] = row["label"]["value"]
+            rec["title_lang"] = "en"
+        elif "mul" in row and rec.get("title_lang") != "en":
+            rec["title"] = row["mul"]["value"]
+            rec["title_lang"] = "mul"
         if "date" in row:
             year = row["date"]["value"][:4]
             if year.isdigit():
