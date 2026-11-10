@@ -18,6 +18,8 @@ var colors: Array[Color] = []
 var motif := "waves"
 var title_label: Label
 var store_label: Label
+## A ROM's console ("SNES"), printed at the top of its card; "" for other games.
+var system_text := ""
 ## Draw the monogram (tiles set this; no title labels).
 var monogram := false:
 	set(v):
@@ -31,7 +33,10 @@ func setup(g: Dictionary, title_size := 22, radius := 12.0, with_title := true) 
 	corner = radius
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var key: String = g.get("key", g.get("title", ""))
-	colors = ArtColor.fallback_colors(key)
+	# A ROM without art: every game of a console shares its colours and carries its name.
+	var sys := View.system_of(g)
+	system_text = str(g.get("emulated", {}).get("system_short", sys)) if sys != "" else ""
+	colors = ArtColor.fallback_colors("system:" + sys if sys != "" else key)
 	motif = MOTIFS[ArtColor._stable_hash(key + "#m") % MOTIFS.size()]
 	if not with_title:
 		return
@@ -60,7 +65,7 @@ func setup(g: Dictionary, title_size := 22, radius := 12.0, with_title := true) 
 
 	store_label = Label.new()
 	store_label.name = "Store"
-	store_label.text = View.store_name(g.get("store", ""))
+	store_label.text = system_text if system_text != "" else View.store_name(g.get("store", ""))
 	store_label.add_theme_font_override("font", ThemeLib.font("semibold"))
 	store_label.add_theme_font_size_override("font_size", maxi(12, int(title_size * 0.55)))
 	store_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.78))
@@ -139,6 +144,8 @@ func _draw() -> void:
 ## under them: the plate's store line already names it (and on Stream every
 ## app is on the same PC).
 func _draw_monogram(w: float, h: float) -> void:
+	if system_text != "":
+		_draw_system(w, h)
 	var mono := initials(str(game.get("title", "")))
 	if mono == "":
 		return
@@ -148,6 +155,20 @@ func _draw_monogram(w: float, h: float) -> void:
 	var asc := f.get_ascent(fs)
 	var desc := f.get_descent(fs)
 	draw_string(f, Vector2(0, cy + (asc - desc) / 2.0), mono, HORIZONTAL_ALIGNMENT_CENTER, w, fs, Color(1, 1, 1, 0.34))
+
+
+## A ROM's console in a pill at the top of the card, like a cartridge label.
+func _draw_system(w: float, h: float) -> void:
+	var f: Font = ThemeLib.font("semibold")
+	var fs := maxi(11, int(w * 0.075))
+	var tw := f.get_string_size(system_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var pad := fs * 0.7
+	var r := Rect2((w - tw) / 2.0 - pad, h * 0.07, tw + pad * 2.0, fs * 1.7)
+	draw_colored_polygon(rounded_rect(r, r.size.y / 2.0), Color(0, 0, 0, 0.28))
+	draw_polyline(rounded_rect(r, r.size.y / 2.0) + PackedVector2Array([rounded_rect(r, r.size.y / 2.0)[0]]), Color(1, 1, 1, 0.22), 1.0, true)
+	var asc := f.get_ascent(fs)
+	var desc := f.get_descent(fs)
+	draw_string(f, Vector2(0, r.position.y + (r.size.y + asc - desc) / 2.0), system_text, HORIZONTAL_ALIGNMENT_CENTER, w, fs, Color(1, 1, 1, 0.86))
 
 
 ## "Moss & Marrow" -> "MM", "The Last Lighthouse" -> "LL", "Desktop" -> "D".

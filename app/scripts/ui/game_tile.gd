@@ -431,7 +431,7 @@ func _update_pills() -> void:
 static func sub_text(g: Dictionary) -> String:
 	if g.has("sub"):
 		return str(g["sub"])   # apps: "Flatpak", "App", "Every app on this handheld"
-	var parts: Array[String] = [View.store_name(String(g.get("store", "")))]
+	var parts: Array[String] = [View.store_label(g)]
 	if not g.get("installed", false):
 		parts.append("Not installed")
 	else:
