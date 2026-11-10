@@ -86,7 +86,7 @@ func refresh() -> void:
 	sync_button.disabled = busy
 	_set_row(sync_button, TS.SYNC_NOW, TS.SYNCING if busy else "", "")
 	var n: int = service.backup_list(key()).size()
-	_set_row(backups_button, TS.BACKUPS, TS.backup_count(n).capitalize() if n > 0 else TS.NO_BACKUPS, "")
+	_set_row(backups_button, TS.BACKUPS, TS.backup_count(n) if n > 0 else TS.NO_BACKUPS, "")
 	backups_button.disabled = n == 0
 	_maybe_relink()
 

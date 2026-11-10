@@ -11,10 +11,11 @@ uniform float fade_bottom_from = 0.50;
 uniform float fade_top = 0.10;
 // Inside a rounded frame: corner radius in px (0 = no frame).
 uniform float frame_radius = 0.0;
-// Readability shade behind text on the left: the art darkens toward
-// shade_color.rgb by shade_color.a at the left edge, to nothing at shade_to
-// (the art itself stays at full brightness everywhere else).
+// Readability shade behind text on the left: the art moves toward
+// shade_color.rgb by shade_color.a from the left edge to shade_from, then to
+// nothing at shade_to (the art itself stays at full colour everywhere else).
 uniform vec4 shade_color = vec4(0.0, 0.0, 0.0, 0.0);
+uniform float shade_from = 0.0;
 uniform float shade_to = 0.55;
 
 varying vec2 local;
@@ -27,7 +28,7 @@ void fragment() {
 	// COLOR already holds texture(TEXTURE, UV) times the modulate: sampling
 	// again and multiplying would square every pixel (darker, crushed art).
 	vec4 c = COLOR;
-	c.rgb = mix(c.rgb, shade_color.rgb, shade_color.a * (1.0 - smoothstep(0.0, shade_to, local.x)));
+	c.rgb = mix(c.rgb, shade_color.rgb, shade_color.a * (1.0 - smoothstep(shade_from, shade_to, local.x)));
 	float a = smoothstep(fade_left_from, fade_left_to, local.x);
 	a *= 1.0 - smoothstep(fade_bottom_from, 1.0, local.y);
 	a *= mix(0.35, 1.0, smoothstep(0.0, fade_top, local.y));

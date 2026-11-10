@@ -340,6 +340,33 @@ func test_covers_are_never_dimmed() -> void:
 		t.free()
 
 
+## Hero art keeps its full colour in every theme: Light only gets a narrow
+## light band behind the title (gone by 40 % of the width), never a veil over
+## the picture, and its chips are opaque so their text stays readable on art.
+func test_light_hero_art_is_never_washed_out() -> void:
+	var HeroStage = load("res://scripts/ui/hero_stage.gd")
+	var Page = load("res://scripts/ui/page_template.gd")
+	var Badge = load("res://scripts/ui/badge.gd")
+	for id in ["light", "cove"]:
+		ThemeLib.use(id)
+		var st: Control = HeroStage.new()
+		st.frame_radius = 24.0
+		st._apply_fade()
+		eq(st.modulate.a, 1.0, "%s: the stage isn't faded" % id)
+		var m := (st.layers[0] as TextureRect).material as ShaderMaterial
+		ok(float(m.get_shader_parameter("fade_left_from")) < 0.0, "%s: the framed art is opaque across its width" % id)
+		ok(float(m.get_shader_parameter("shade_to")) <= (0.40 if id == "light" else 0.58), "%s: the title shade stays on the text side" % id)
+		ok((m.get_shader_parameter("shade_color") as Color).a <= 0.9, "%s: the shade never fully hides the art" % id)
+		st.free()
+		var chip: Control = Badge.make({"kind": "time", "text": "46 h to beat", "tone": "info", "icon": "clock"}, "chip")
+		var sb := chip.get_theme_stylebox("panel") as StyleBoxFlat
+		if id == "light":
+			eq(sb.bg_color.a, 1.0, "light: hero chips are opaque")
+		chip.free()
+	ok(float(Page.LIGHT_SIDE[2]) <= 0.40, "game page: Light's title shade is gone by 40 % of the width")
+	ThemeLib.use("cove")
+
+
 ## A store hero with black bars baked into its sides (Frostpunk's) is shown
 ## without them, so the art never ends in a hard vertical edge.
 func test_hero_stage_trims_baked_side_bars() -> void:

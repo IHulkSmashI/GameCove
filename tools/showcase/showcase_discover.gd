@@ -28,6 +28,7 @@ static func here() -> String:
 static func pinned() -> Dictionary:
 	var h := here()
 	return {"https://www.cheapshark.com/api/1.0/deals?": h.path_join("pinned/cs_deals.json"),
+		"https://www.cheapshark.com/api/1.0/deals?onSale=1&upperPrice=0&": h.path_join("pinned/cs_free.json"),
 		"https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/upcoming.json.gz": h.path_join("pinned/upcoming.json.gz")}
 
 
