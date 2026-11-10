@@ -43,6 +43,7 @@ var _game_ids := {}     # normalised title -> SteamGridDB game id
 var _auto: Array = []   # [game, kind]
 var _auto_tried := {}   # "key|kind" -> unix (kept in auto_tried_path between runs)
 var _auto_loaded := false
+var _tasks: Array[int] = []   # WorkerThreadPool tasks writing picks into Steam
 ## The automatic fill's "already tried" list, so a restart doesn't ask SteamGridDB again
 ## for every game that has no art there (review 2, low 23).
 var auto_tried_path := "user://art/auto_tried.json"
@@ -206,16 +207,33 @@ func apply(game: Dictionary, kind: String, asset: Dictionary, to_steam: bool, do
 			return
 		var rec := {"path": path, "source": source, "id": int(asset.get("id", 0)), "author": str(asset.get("author", "")),
 			"author_url": str(asset.get("author_url", "")), "steam": []}
-		var msg := "Artwork changed."
-		if to_steam and str(game.get("store", "")) == "steam":
-			var written := write_to_steam(str(game.get("id", "")), kind, path)
-			rec["steam"] = written
-			if not written.is_empty():
-				msg = "Artwork changed here and in Steam (Steam shows it after it restarts)."
-		Overrides.set_override(dir, key, kind, rec)
-		art_changed.emit(key)
-		if done.is_valid():
-			done.call(true, msg))
+		if not (to_steam and str(game.get("store", "")) == "steam"):
+			_apply_finish(dir, key, kind, rec, [], done)
+		elif sync_mode or not is_inside_tree():
+			_apply_finish(dir, key, kind, rec, write_to_steam(str(game.get("id", "")), kind, path), done)
+		else:
+			# a WebP pick is decoded and saved as PNG for Steam: off the main thread (review 2, low 23)
+			var appid := str(game.get("id", ""))
+			_tasks.append(WorkerThreadPool.add_task(func():
+				call_deferred("_apply_finish", dir, key, kind, rec, write_to_steam(appid, kind, path), done),
+				false, "Art to Steam")))
+
+
+func _apply_finish(dir: String, key: String, kind: String, rec: Dictionary, written: Array, done: Callable) -> void:
+	rec["steam"] = written
+	var msg := "Artwork changed."
+	if not written.is_empty():
+		msg = "Artwork changed here and in Steam (Steam shows it after it restarts)."
+	Overrides.set_override(dir, key, kind, rec)
+	art_changed.emit(key)
+	if done.is_valid():
+		done.call(true, msg)
+
+
+func _exit_tree() -> void:
+	for t in _tasks:
+		WorkerThreadPool.wait_for_task_completion(t)
+	_tasks.clear()
 
 
 ## Writes an image into every Steam account's grid folder; returns the files written.

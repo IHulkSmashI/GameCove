@@ -180,6 +180,68 @@ static func load_art(path: String, max_size: Vector2i) -> Texture2D:
 	return tex
 
 
+## load_art() without decoding on the main thread (review 2, low 23: a big hero or a
+## page of thumbnails stalled the UI): the file is decoded and scaled on a
+## WorkerThreadPool thread, then `target.<property>` is set on the main thread (if
+## `target` is still there). A cached texture is set at once.
+static var _art_jobs: Array = []
+
+
+class _ArtJob extends RefCounted:
+	var kit: Script
+	var key := ""
+	var target: Object
+	var property := ""
+	var task := -1
+
+	func finish(img: Image) -> void:
+		kit.art_finished(self, img)
+
+
+## Main thread: the decoded image becomes a texture, is cached and set on the target.
+static func art_finished(job: RefCounted, img: Image) -> void:
+	var tex: Texture2D = ImageTexture.create_from_image(img) if img != null and not img.is_empty() else null
+	_art_cache[job.key] = tex
+	if is_instance_valid(job.target):
+		job.target.set(job.property, tex)
+	_art_jobs.erase(job)
+
+
+## Worker thread: the image at `path` scaled down to fit `max_size` (null if unreadable).
+static func decode_art(path: String, max_size: Vector2i) -> Image:
+	var img := Image.load_from_file(path) if FileAccess.file_exists(path) else null
+	if img == null or img.is_empty():
+		return null
+	var s := minf(1.0, minf(float(max_size.x) / img.get_width(), float(max_size.y) / img.get_height()))
+	if s < 1.0:
+		img.resize(maxi(1, int(img.get_width() * s)), maxi(1, int(img.get_height() * s)), Image.INTERPOLATE_LANCZOS)
+	return img
+
+
+static func load_art_async(path: String, max_size: Vector2i, target: Object, property := "texture") -> void:
+	if path == "" or path.contains("://"):
+		return
+	var key := "%s@%dx%d" % [path, max_size.x, max_size.y]
+	if _art_cache.has(key):
+		target.set(property, _art_cache[key])
+		return
+	var job := _ArtJob.new()
+	job.kit = load("res://scripts/ui/ui_kit.gd")
+	job.key = key
+	job.target = target
+	job.property = property
+	_art_jobs.append(job)
+	job.task = WorkerThreadPool.add_task(func(): job.call_deferred("finish", decode_art(path, max_size)), false, "Art decode")
+
+
+## Tests: waits until every decode started so far has finished (their results then wait for the next frame).
+static func wait_art_jobs() -> void:
+	for j in _art_jobs.duplicate():
+		if j.task >= 0:
+			WorkerThreadPool.wait_for_task_completion(j.task)
+			j.task = -1
+
+
 ## A small badge with coloured text (older call; see badge.gd / badges.gd).
 static func badge(text: String, tone := "") -> PanelContainer:
 	return load("res://scripts/ui/badge.gd").make({"kind": "text", "text": text, "short": text, "tone": tone, "icon": ""}, "tile")

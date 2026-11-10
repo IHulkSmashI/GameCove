@@ -121,3 +121,22 @@ func test_formatting() -> void:
 	eq(Texts.last_played_text(1_000_000 - 86400 * 3, 1_000_000), "Played 3 days ago", "days ago")
 	eq(MainScript.clock_text({"hour": 0, "minute": 5}), "12:05 AM", "midnight")
 	eq(MainScript.clock_text({"hour": 13, "minute": 30}), "1:30 PM", "afternoon")
+
+
+## Review 2, low 23: cover and screenshot art was decoded and scaled on the main thread.
+func test_art_is_decoded_off_the_main_thread() -> void:
+	var Kit := load("res://scripts/ui/ui_kit.gd")
+	var p := OS.get_temp_dir().path_join("gc_art_%d.png" % Time.get_ticks_usec())
+	Image.create(64, 32, false, Image.FORMAT_RGB8).save_png(p)
+	var img: Image = Kit.decode_art(p, Vector2i(16, 16))
+	eq(img.get_size(), Vector2i(16, 8), "decoded and scaled by the worker function")
+	ok(Kit.decode_art(p + ".missing", Vector2i(16, 16)) == null, "missing file: nothing")
+	var tr := TextureRect.new()
+	Kit.load_art_async(p, Vector2i(16, 16), tr)
+	ok(tr.texture == null, "nothing decoded on the calling thread")
+	Kit.wait_art_jobs()
+	var src := FileAccess.get_file_as_string("res://scripts/ui/games/metadata_card.gd") + FileAccess.get_file_as_string("res://scripts/ui/games/art_picker.gd") \
+		+ FileAccess.get_file_as_string("res://scripts/ui/streaming/streaming_screen.gd")
+	ok(not "Kit.load_art(" in src, "the screens use load_art_async")
+	tr.free()
+	DirAccess.remove_absolute(p)
