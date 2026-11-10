@@ -218,6 +218,17 @@ chmod +x "$T/bin/systemctl.fail"; mv "$T/bin/systemctl" "$T/bin/systemctl.ok"; m
 GAMECOVE_THERMALD_WATCH=off expect 1 "hold whose stop fails" set thermald:hold
 mv "$T/bin/systemctl.ok" "$T/bin/systemctl"
 [ ! -e "$R/var/lib/gamecove/fixes/power-tune/thermald-held" ] || fail "p7: no marker when thermald couldn't be stopped"
+# review problem 9: a hold while thermald is already held by us starts a watcher again when the last one died
+echo active > "$R/thermald.state"; : > "$T/game"
+PKEXEC_UID=1000 expect 0 "hold during a game (watcher)" set thermald:hold
+wp="$(cat "$R/run/gamecove/power-tune-thermald-watch.pid")"
+kill "$wp"; n=0; while kill -0 "$wp" 2>/dev/null && [ "$n" -lt 30 ]; do sleep 0.1; n=$((n + 1)); done
+PKEXEC_UID=1000 expect 0 "hold again with the watcher gone" set thermald:hold
+wp2="$(cat "$R/run/gamecove/power-tune-thermald-watch.pid" 2>/dev/null || true)"
+[ -n "$wp2" ] && [ "$wp2" != "$wp" ] && kill -0 "$wp2" 2>/dev/null || fail "p9: a new watcher runs for the hold"
+rm -f "$T/game"
+n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 30 ]; do sleep 0.2; n=$((n + 1)); done
+[ "$(r "$R/thermald.state")" = active ] || fail "p9: the new watcher releases thermald once the game is gone"
 # tau restore alone
 expect 0 "tau" set tau:8000000
 expect 0 "tau restore" set tau:restore
