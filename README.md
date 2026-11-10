@@ -138,7 +138,7 @@ Switch to Desktop Mode live here too.
 | **Display** | Brightness, refresh rate, frame limit, VRR, night light, colour vibrance, scaling filter and sharpness, screen effects |
 | **Audio** | Volume, mute, output device, microphone mute and input, each app's own volume, and play/pause and skip for the music playing behind your game |
 | **Controller** | Controller type, gyro, Nintendo button layout, rumble, stick lights (effect, colour, brightness), mouse mode |
-| **Device** | Wi-Fi, Bluetooth, airplane mode, keep awake, screenshot, plus your device's fixes |
+| **Device** | Wi-Fi, Bluetooth and your Bluetooth devices, airplane mode, keep awake, screenshot, plus your device's fixes |
 
 <table>
 <tr>
@@ -173,7 +173,8 @@ it does.
 - **Performance:** the overlay (FPS only, compact, a bar, full, or pick your own items, with position, size and
   opacity), upscaling and frame generation with installed versions and updates, Lossless Scaling frame generation,
   Proton version, low latency, shader threads and clearing a game's shader cache.
-- **System:** Wi-Fi, Bluetooth, airplane mode, Wi-Fi power saving, keep awake, sleep, screenshots.
+- **System:** Wi-Fi, Bluetooth, airplane mode, Wi-Fi power saving, keep awake, sleep, screenshots, and **Bluetooth
+  devices**: connect your controller or headphones, see their battery, pair new ones and forget old ones.
 - **Profiles, Appearance, Stores, Discover, Device and About GameCove:** your saved profiles, themes, store sign-ins and
   downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage and updates, and the
   network and privacy switches.

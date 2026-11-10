@@ -39,6 +39,7 @@ const Caps := preload("res://scripts/device/capabilities.gd")
 const BrandMark := preload("res://scripts/ui/brand_mark.gd")
 const AppMixer := preload("res://scripts/ui/controls/app_mixer.gd")
 const MediaCard := preload("res://scripts/ui/controls/media_card.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
 
 signal closed
 ## A result worth a toast: text, tone (good / bad).
@@ -999,6 +1000,11 @@ func _build_device() -> void:
 	fx.setup("Fixes", TC.DEVICE_FIXES, fixes_summary(), TC.FIXES_OPEN + ".", "wrench")
 	fx.pressed.connect(func(): request_settings("device", "fixes"))
 	_add(fx)
+	if model != null and bool(model.describe("network.bluetooth").get("available", false)):
+		var bt := ActionRow.new()
+		bt.setup("BluetoothDevices", TX.BT_TITLE, "", TX.BT_QUICK_HINT, "bluetooth")
+		bt.pressed.connect(func(): request_settings("system", "bluetooth"))
+		_add(bt)
 	if model != null:
 		_section_label(TC.QUICK_TOGGLES, "TogglesLabel")
 		_list(Catalog.QUICK["device"], "Toggles")

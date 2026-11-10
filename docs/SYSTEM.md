@@ -247,6 +247,18 @@ Device fixes: `devices.json` `"fixes"` ∩ `gamecove-fix --list`, each with its 
 4. Controller: InputPlumber is not on SteamOS by default → `available: false`, all
    controls hidden.
 
+## Everyday extras (what people otherwise add with plugins)
+
+Small helpers that cover what the most-installed Decky Loader plugins do, built on tools every Bazzite and SteamOS
+install already has. None of them runs a timer or polls: each reads when its page or tab opens and after you press
+something, so nothing costs anything behind a game. All run as the user; none needs the root helper.
+
+| Extra | Where | How | Code |
+| --- | --- | --- | --- |
+| Per-app volume | Quick menu > Audio, Settings > Sound | PipeWire: `wpctl status` for the app streams, `wpctl get-volume` / `set-volume -l 1.0 <id>` per app, on the Controls worker | `controls/providers/audio.gd` (`app_mixer`), `ui/controls/app_mixer.gd` |
+| Now playing | Quick menu > Audio | MPRIS on the session bus through `busctl --user`: `ListNames` for `org.mpris.MediaPlayer2.*`, `PlaybackStatus` / `Metadata` / `Identity`, then `PlayPause`, `Next`, `Previous` | `system/media.gd`, `ui/controls/media_card.gd` |
+| Bluetooth devices | Settings > System (Quick menu > Device links there) | BlueZ on the system bus through `busctl --system`: `GetManagedObjects` (devices, `Battery1.Percentage`), `Device1.Connect` / `Disconnect` / `Pair` (+ `Trusted`), `Adapter1.RemoveDevice`. Finding new devices runs `bluetoothctl --timeout 10 scan on`, because BlueZ ends a scan as soon as the client that started it leaves the bus. Pairing asks for no code (controllers, headphones, speakers); a keyboard that wants one pairs from Desktop Mode | `system/bluetooth.gd`, `ui/settings/bluetooth_card.gd` |
+
 ## Sources
 
 - Bazzite: `system_files/deck/shared/usr/libexec/ogc/os-update`, `usr/share/polkit-1/…gamescope-session.policy`,

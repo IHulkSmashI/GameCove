@@ -13,6 +13,8 @@ const Model := preload("res://scripts/ui/controls/model.gd")
 const GroupCards := preload("res://scripts/ui/controls/group_cards.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
 const AppMixer := preload("res://scripts/ui/controls/app_mixer.gd")
+const BluetoothCard := preload("res://scripts/ui/settings/bluetooth_card.gd")
+const Services := preload("res://scripts/ui/settings/services.gd")
 
 var groups: Array = []
 var model: Object
@@ -63,6 +65,26 @@ func build_extra() -> void:
 	match id:
 		"audio": _mixer_card()
 		"controller": _buttons_card()
+		"system": _bluetooth_card()
+
+
+## System: Bluetooth devices (only where there's Bluetooth to switch).
+func _bluetooth_card() -> void:
+	var c := svc("controls")
+	if c == null or not c.has_method("has") or not c.has("network.bluetooth"):
+		return
+	var on: bool = c.available("network.bluetooth") if c.has_method("available") else bool(c.control("network.bluetooth").get("available"))
+	var runner: RefCounted = svc("bluetooth_runner") as RefCounted
+	# unit tests pass a fake runner; without one nothing real may run under them
+	if not on or (runner == null and Services.under_tests(self)):
+		return
+	var box := add_card(TX.BT_TITLE, "bluetooth", TX.BT_LINE)
+	var b: VBoxContainer = BluetoothCard.new()
+	b.setup(runner, host if host is Node else null)
+	b.rebuilt.connect(func(): rebuilt.emit())
+	b.notice.connect(func(t: String, tone: String): notify(t, tone))
+	box.add_child(b)
+	extras.append(b)
 
 
 ## Sound: each app's own volume.
@@ -165,7 +187,13 @@ func _focused_key() -> String:
 	return ""
 
 
-## Settings asked to open this page at `part` (unused here).
-func focus_part(_part: String) -> Control:
+## Settings asked to open this page at `part` ("bluetooth": the devices card).
+func focus_part(part: String) -> Control:
+	if part == "bluetooth":
+		if not _built:
+			on_shown()
+		for e in extras:
+			if is_instance_valid(e) and e.name == "BluetoothDevices" and not e.focusables().is_empty():
+				return e.focusables()[0]
 	var f := focusables()
 	return f[0] if not f.is_empty() else null
