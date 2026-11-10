@@ -35,6 +35,8 @@ const NETWORK_CALLS := [
 		"when": "When you open Change artwork; in the background for games missing art", "switch": "Look up game details (+ Background lookups for the automatic fill)"},
 	{"who": "Steam (achievements, art)", "what": "The app id of the game whose page you open.",
 		"when": "When you open a game page", "switch": "Settings > Performance"},
+	{"who": "Steam's, IGDB's and SteamGridDB's image servers (no others)", "what": "The address of a game picture Discover, the calendar or your wishlist shows; it names the game, nothing about you.",
+		"when": "When a tile shows a picture that isn't saved yet", "switch": "None (SteamGridDB lookups: Look up game details)"},
 	{"who": "PCs on your own network (GameStream)", "what": "A fixed client id and Moonlight's certificate; Wake-on-LAN packets to your PC.",
 		"when": "When you open the Stream tab or wake a PC", "switch": "You start it"},
 	{"who": "OS, Flatpak, fwupd and store tools", "what": "Their own update and sign-in requests.",
