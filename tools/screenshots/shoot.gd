@@ -264,6 +264,7 @@ func _run() -> void:
 	if want(["boot"]):
 		# The splash at its hold point (not started, so it stays put).
 		var sp: Control = load("res://scripts/ui/boot_splash.gd").new()
+		sp.build("code")
 		main.add_child(sp)
 		await shot("boot")
 		sp.queue_free()

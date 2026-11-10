@@ -14,6 +14,11 @@ signal shown(text: String)
 const MAX := 3
 const STAY_S := 4.0
 const WIDTH := 360
+## Slide-in from the right edge.
+const SLIDE_PX := 56.0
+const IN_S := 0.28
+## Tones whose badge pops bigger: deals, releases, achievements.
+const BIG_POP := ["sale", "new", "gold"]
 
 
 func _init() -> void:
@@ -58,8 +63,12 @@ func show_toast(text: String, icon := "info", tone := "", detail := "") -> Contr
 	add_child(p)
 	while get_child_count() > MAX:
 		Kit.drop(self, get_child(0))
+	# Slides in from the right edge as it fades in; its badge pops (a new deal,
+	# a release, a fresh unlock get a bigger one).
 	p.modulate.a = 0.0
 	Motion.to(p, "modulate:a", 1.0, Motion.BASE)
+	Motion.enter(p, "position:x", SLIDE_PX, 0.0, IN_S, 0.0, Tween.TRANS_QUART, Tween.EASE_OUT)
+	Motion.pop(badge, 0.55 if tone in BIG_POP else 0.8, 0.4, 0.06)
 	var timer := Timer.new()
 	timer.one_shot = true
 	timer.wait_time = STAY_S
@@ -75,6 +84,7 @@ func _dismiss(p: Control) -> void:
 	if not is_instance_valid(p):
 		return
 	var tw := Motion.to(p, "modulate:a", 0.0, Motion.BASE)
+	Motion.to(p, "position:x", SLIDE_PX * 0.6, Motion.BASE, Tween.TRANS_CUBIC, Tween.EASE_IN)
 	if tw == null:
 		p.queue_free()
 	else:

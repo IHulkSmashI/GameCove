@@ -204,6 +204,24 @@ func _check_nested_mask() -> void:
 	_mask.self_modulate.a = 0.0 if nested else 1.0
 
 
+## Covers that rise in on reveal (the ones on screen, and one more).
+const REVEAL_TILES := 7
+const REVEAL_RISE_PX := 18.0
+const REVEAL_S := 0.34
+const REVEAL_STAGGER_S := 0.035
+
+
+## First show: the row fades in and its covers rise into place one after
+## another. Instant under reduce motion; a focus lift takes over cleanly.
+func reveal(delay := 0.0) -> void:
+	Motion.enter(self, "modulate:a", 0.0, 1.0, REVEAL_S, delay)
+	for i in mini(tiles.size(), REVEAL_TILES):
+		var card: Variant = tiles[i].get("card")
+		if card is Control:
+			Motion.enter(card, "position:y", REVEAL_RISE_PX, 0.0, REVEAL_S, delay + i * REVEAL_STAGGER_S,
+				Tween.TRANS_QUART, Tween.EASE_OUT)
+
+
 func remembered() -> Control:
 	return tiles[clampi(memory, 0, tiles.size() - 1)] if not tiles.is_empty() else null
 
