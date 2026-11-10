@@ -1034,13 +1034,17 @@ func _screen_default_focus() -> Control:
 
 # ------------------------------------------------------------ screens
 
+## LB / RB: the next tab along, wrapping (RB from Settings slides Home in from
+## the right, the way the press went).
 func cycle_screen(d: int) -> void:
-	show_screen(SCREENS[posmod(SCREENS.find(current) + d, SCREENS.size())])
+	show_screen(SCREENS[posmod(SCREENS.find(current) + d, SCREENS.size())], d)
 
 
-## Switch tabs: the old screen fades out, the new one slides in from the side
-## it sits on in the tab row.
-func show_screen(id: String) -> void:
+## Switch tabs: the new screen slides in from the side the press went (`dir`:
+## +1 RB, -1 LB; 0 = from where it sits in the tab row), the old one drifts the
+## other way as it fades. Never holds input: the new screen takes focus at once,
+## and a press mid-way just retargets both (Motion kills the earlier tweens).
+func show_screen(id: String, dir := 0) -> void:
 	if not screens.has(id):
 		return
 	# A tab picked from the top bar over the game page or Downloads.
@@ -1048,17 +1052,13 @@ func show_screen(id: String) -> void:
 		_close_page()
 	close_downloads()
 	var old: Control = screens[current]
-	var dir := signf(SCREENS.find(id) - SCREENS.find(current))
+	var d := float(signi(dir)) if dir != 0 else signf(SCREENS.find(id) - SCREENS.find(current))
 	current = id
 	top_bar.select(id)
 	var new: Control = screens[id]
 	if old != new:
-		Motion.fade(old, false, Motion.FAST)
-		new.visible = true
-		new.modulate.a = 0.0
-		new.position.x = Motion.slide(28.0) * dir
-		Motion.to(new, "modulate:a", 1.0, Motion.BASE)
-		Motion.to(new, "position:x", 0.0, Motion.BASE)
+		_screen_out(old, d)
+		_screen_in(new, d)
 		_sound("move")
 	if id == "library":
 		_mark_new_seen()
@@ -1068,6 +1068,42 @@ func show_screen(id: String) -> void:
 		Home.focus_later(f)
 	if id == "home":
 		backdrop.show_game(home.spotlight_game)
+
+
+## Screen change timings: the old screen is mostly gone within ~120 ms while
+## the new one fades in slowly at first (no double exposure) and slides for
+## ~240 ms, easing out.
+const SCREEN_IN_S := 0.24
+const SCREEN_FADE_IN_S := 0.2
+const SCREEN_OUT_S := 0.12
+const SCREEN_SLIDE_PX := 48.0
+
+
+func _screen_in(s: Control, d: float) -> void:
+	if not s.visible:
+		s.modulate.a = 0.0
+	s.visible = true   # a screen still fading out (pressed back quickly) turns around from where it is
+	s.scale = Vector2.ONE
+	s.position.x = Motion.slide(SCREEN_SLIDE_PX) * d
+	Motion.to(s, "modulate:a", 1.0, SCREEN_FADE_IN_S, Tween.TRANS_SINE, Tween.EASE_IN)
+	Motion.to(s, "position:x", 0.0, SCREEN_IN_S, Tween.TRANS_QUART, Tween.EASE_OUT)
+
+
+func _screen_out(s: Control, d: float) -> void:
+	var t := Motion.to(s, "modulate:a", 0.0, SCREEN_OUT_S)
+	Motion.to(s, "position:x", -Motion.slide(SCREEN_SLIDE_PX * 0.5) * d, SCREEN_OUT_S, Tween.TRANS_CUBIC, Tween.EASE_OUT)
+	if t == null:
+		_screen_hidden(s)
+	else:
+		t.finished.connect(_screen_hidden.bind(s))
+
+
+## The old screen's fade ended: hide it, back in place (unless it came back meanwhile).
+func _screen_hidden(s: Control) -> void:
+	if not is_instance_valid(s) or s == screens.get(current) or s.modulate.a > 0.01:
+		return
+	s.visible = false
+	Motion.to(s, "position:x", 0.0, 0.0)
 
 
 func _link_top() -> void:
@@ -1253,14 +1289,23 @@ func _open_page(game: Dictionary) -> void:
 		page.game_settings.edit_requested.connect(_open_game_settings)
 	add_child(page)
 	move_child(page, top_bar.get_index())
+	# The page rises into place as it fades in.
 	page.modulate.a = 0.0
-	Motion.to(page, "modulate:a", 1.0, Motion.BASE)
+	page.position.y = Motion.slide(PAGE_RISE_PX)
+	Motion.to(page, "modulate:a", 1.0, SCREEN_IN_S)
+	Motion.to(page, "position:y", 0.0, SCREEN_IN_S, Tween.TRANS_QUART, Tween.EASE_OUT)
 	screens[current].visible = false
 	_link_top()
 	backdrop.show_game(game)
 	page.set_accent(backdrop.current_accent())
 	page.focus_first()
 	_sound("select")
+
+
+## The game page rises this far as it opens; the screen under it settles back
+## from a touch smaller when it closes.
+const PAGE_RISE_PX := 22.0
+const PAGE_BACK_SCALE := 0.985
 
 
 func _close_page() -> void:
@@ -1273,7 +1318,11 @@ func _close_page() -> void:
 	var s: Control = screens[current]
 	s.visible = true
 	s.modulate.a = 0.0
-	Motion.to(s, "modulate:a", 1.0, Motion.FAST)
+	s.position.x = 0.0
+	s.pivot_offset = s.size / 2.0
+	s.scale = Vector2.ONE * (1.0 if Motion.reduce else PAGE_BACK_SCALE)
+	Motion.to(s, "modulate:a", 1.0, SCREEN_IN_S)
+	Motion.to(s, "scale", Vector2.ONE, SCREEN_IN_S, Tween.TRANS_QUART, Tween.EASE_OUT)
 	# Land back on the tile that opened the page, else the default.
 	var target: Control = null
 	if current == "home":

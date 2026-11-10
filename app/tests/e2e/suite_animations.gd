@@ -64,3 +64,98 @@ func test_launch_that_ends_early_goes_back() -> void:
 	await rb()
 	eq(m.current, "library", "input works at once")
 	await lb()
+
+
+func _visible_screens() -> Array:
+	var m: Control = w.main
+	return m.SCREENS.filter(func(id): return m.screens[id].visible)
+
+
+## RB slides the next screen in from the right, LB from the left, and the
+## new screen has focus while it's still moving.
+func test_screen_changes_follow_the_press_and_never_block_input() -> void:
+	var m: Control = w.main
+	var mot = load("res://scripts/ui/motion.gd")
+	mot.reduce = false
+	await rb()
+	var lib: Control = m.screens["library"]
+	eq(m.current, "library", "RB: Library")
+	ok(lib.position.x > 0.0 and lib.modulate.a < 1.0, "slides in from the right (x %.1f, a %.2f)" % [lib.position.x, lib.modulate.a])
+	ok(m.screens["home"].visible, "Home still fading out under it")
+	await w.frames(2)
+	var f: Control = focus()
+	ok(f != null and (lib.is_ancestor_of(f) or m.top_bar.is_ancestor_of(f)), "focus already on Library (%s)" % [f.get_path() if f != null else "none"])
+	await w.wait_s(0.4)
+	eq(lib.position.x, 0.0, "in place")
+	eq(lib.modulate.a, 1.0, "fully shown")
+	eq(_visible_screens(), ["library"], "Home hidden once it faded")
+	eq(m.screens["home"].position.x, 0.0, "and put back in place")
+	# Wrap-around: LB from Home goes to Settings, sliding in from the left.
+	await lb()
+	await lb()
+	eq(m.current, "settings", "LB twice: Settings (wrapped)")
+	ok(m.screens["settings"].position.x < 0.0, "came from the left, the way LB points")
+	await w.wait_s(0.4)
+	await rb()
+	eq(m.current, "home", "RB from Settings: Home")
+	ok(m.screens["home"].position.x > 0.0, "from the right, though Home is first in the row")
+	await w.wait_s(0.4)
+
+
+## Pressing through screens faster than they animate leaves exactly the last
+## one showing, in place, with focus in it.
+func test_interrupted_screen_changes_settle_cleanly() -> void:
+	var m: Control = w.main
+	for i in 3:
+		await rb()
+	await lb()
+	await rb()
+	await rb()
+	await lb()
+	eq(m.current, "stream", "the presses all counted (3 right, 1 left, 2 right, 1 left)")
+	await w.wait_s(0.5)
+	eq(_visible_screens(), ["stream"], "only Stream shows")
+	for id in m.SCREENS:
+		eq(m.screens[id].position.x, 0.0, "%s back in place" % id)
+	eq(m.screens["stream"].modulate.a, 1.0, "Stream fully shown")
+	var f: Control = focus()
+	ok(f != null and (m.screens["stream"].is_ancestor_of(f) or m.top_bar.is_ancestor_of(f)), "focus on Stream")
+	await b()
+	await w.wait_s(0.4)
+	eq(_visible_screens(), ["home"], "B: home")
+
+
+## Reduce motion: tabs switch at once, nothing animates.
+func test_screen_changes_under_reduce_motion_are_instant() -> void:
+	var m: Control = w.main
+	var mot = load("res://scripts/ui/motion.gd")
+	mot.reduce = true
+	await rb()
+	eq(m.screens["library"].position.x, 0.0, "no slide")
+	eq(m.screens["library"].modulate.a, 1.0, "no fade")
+	eq(_visible_screens(), ["library"], "Home gone at once")
+	await b()
+	mot.reduce = false
+
+
+## The game page rises in over the screen; closing it lands focus back on the tile.
+func test_game_page_opens_and_closes_smoothly() -> void:
+	var m: Control = w.main
+	await w.idle()
+	var tiles: Array = m.home.shelves()[0].tiles if not m.home.shelves().is_empty() else []
+	if tiles.is_empty():
+		ok(true, "no shelves on this setup")
+		return
+	tiles[0].grab_focus()
+	await w.frames(2)
+	await a()
+	ok(m.page != null, "A on a tile: the game page")
+	ok(m.page.position.y > 0.0 and m.page.modulate.a < 1.0, "rising in")
+	await w.wait_s(0.4)
+	eq(m.page.position.y, 0.0, "in place")
+	await b()
+	ok(m.page == null, "B closes it at once")
+	eq(focus(), tiles[0], "focus back on the tile")
+	await w.wait_s(0.4)
+	eq(m.home.scale, Vector2.ONE, "Home settled back")
+	eq(m.home.modulate.a, 1.0, "fully shown")
