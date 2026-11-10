@@ -15,6 +15,7 @@ const ArtCache := preload("res://scripts/ui/art_cache.gd")
 const TG := preload("res://scripts/ui/texts_games.gd")
 const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 const ProgressLine := preload("res://scripts/ui/games/progress_line.gd")
+const Motion := preload("res://scripts/ui/motion.gd")
 
 ## Focusable cells changed (built or rebuilt): the page relinks focus.
 signal cells_changed
@@ -197,10 +198,15 @@ func show_data(result: Dictionary) -> void:
 	items = without_rarest(ordered(result.get("items", [])), rarest)
 	var n := mini(items.size(), MAX_CELLS)
 	var shown := n if expanded or n <= LIST_ROWS + 1 else LIST_ROWS
+	var fresh := newly_unlocked(appid, items, int(Time.get_unix_time_from_system()))
+	var popped := 0
 	for i in shown:
 		var b := _cell(items[i], i)
 		list.add_child(b)
 		cells.append(b)
+		if str(items[i].get("id", "")) in fresh and popped < 3:
+			_pop(b, popped * 0.08)
+			popped += 1
 	if shown < n:
 		show_all = Kit.button(TG.ACH_SHOW_ALL % items.size(), "RowButton")
 		show_all.name = "ShowAll"
@@ -217,6 +223,38 @@ func show_data(result: Dictionary) -> void:
 	show_rarest()
 	_link()
 	cells_changed.emit()
+
+
+## Unlocked achievements per app id the last time a card showed them.
+static var _seen_unlocked := {}
+## The first time a game's list shows (this run), unlocks this recent count as new.
+const NEW_S := 2 * 86400
+
+
+## Ids of the achievements in `list` unlocked since this app's list last
+## showed (or in the last NEW_S the first time), and remembers them as seen.
+static func newly_unlocked(app: String, list: Array, now: int) -> Array:
+	var got: Array = list.filter(func(a): return a.get("unlocked", false)).map(func(a): return str(a.get("id", "")))
+	var out: Array = []
+	if _seen_unlocked.has(app):
+		var before: Array = _seen_unlocked[app]
+		out = got.filter(func(id): return not id in before)
+	else:
+		for a in list:
+			if a.get("unlocked", false) and int(a.get("unlock_time", 0)) >= now - NEW_S:
+				out.append(str(a.get("id", "")))
+	_seen_unlocked[app] = got
+	return out
+
+
+## A fresh unlock: the row pops and glows gold for a moment.
+func _pop(b: Control, delay: float) -> void:
+	var row: Control = b.get_child(0) if b.get_child_count() > 0 else null
+	if row != null:
+		Motion.pop(row, 0.86, 0.42, delay)
+	if not Motion.reduce and b.is_inside_tree():
+		var gold: Color = ThemeLib.tone("gold")
+		Motion.enter(b, "modulate", Color(1.0 + gold.r * 0.35, 1.0 + gold.g * 0.35, 1.0 + gold.b * 0.2), Color.WHITE, 0.9, delay)
 
 
 ## "Show all": add the rest of the rows in its place (it's pressed right now,

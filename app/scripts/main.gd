@@ -753,6 +753,7 @@ func _check_resume() -> void:
 	var now := [Time.get_unix_time_from_system(), Time.get_ticks_msec()]
 	if resumed_between(_clock_mark, now, RESUME_GAP_S):
 		_power_refresh()
+		call_deferred("_wake_fade")   # after the resume handling, purely visual
 	_clock_mark = now
 
 
@@ -769,6 +770,38 @@ static func resumed_between(before: Array, after: Array, gap_s: float) -> bool:
 func _on_power_resumed() -> void:
 	_clock_mark = [Time.get_unix_time_from_system(), Time.get_ticks_msec()]
 	_schedule_resume_reapply()
+	call_deferred("_wake_fade")
+
+
+## Back from sleep: the screen comes up out of a soft dark (and the screens
+## settle from a touch smaller), only when it's ours that shows. Never before a
+## suspend, never in the way of the resume work (it's called after it), never
+## blocks input, once per wake.
+const WAKE_FADE_S := 0.6
+var _wake_shade: ColorRect
+var _last_wake_ms := -1_000_000
+
+
+func _wake_fade() -> void:
+	if Motion.reduce or not _window_focused or not is_inside_tree():
+		return
+	var now := Time.get_ticks_msec()
+	if now - _last_wake_ms < 10_000:
+		return
+	_last_wake_ms = now
+	if _wake_shade == null or not is_instance_valid(_wake_shade):
+		_wake_shade = ColorRect.new()
+		_wake_shade.name = "WakeShade"
+		_wake_shade.color = Color("#05070B")
+		Kit.fill(_wake_shade)
+		add_child(_wake_shade)
+	move_child(_wake_shade, -1)
+	_wake_shade.visible = true
+	var t := Motion.enter(_wake_shade, "modulate:a", 0.9, 0.0, WAKE_FADE_S, 0.0, Tween.TRANS_SINE, Tween.EASE_OUT)
+	if t != null:
+		t.finished.connect(_wake_shade.hide)
+	_screen_layer.pivot_offset = size / 2.0
+	Motion.enter(_screen_layer, "scale", Vector2.ONE * 0.985, Vector2.ONE, WAKE_FADE_S + 0.1, 0.0, Tween.TRANS_QUART, Tween.EASE_OUT)
 
 
 ## After a sleep: Power re-reads on its worker, puts the TDP back and emits
@@ -898,6 +931,9 @@ func _input(event: InputEvent) -> void:
 			if Time.get_ticks_msec() - _last_input_ms > IDLE_S * 1000.0:
 				_resume_motion()
 			_last_input_ms = Time.get_ticks_msec()
+			# the first press after a wake notices it at once (two clock reads, at most every 2 s)
+			if _last_input_ms - int(_clock_mark[1]) > 2000:
+				_check_resume()
 
 
 func _unhandled_input(event: InputEvent) -> void:

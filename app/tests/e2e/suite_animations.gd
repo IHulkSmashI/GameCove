@@ -159,3 +159,55 @@ func test_game_page_opens_and_closes_smoothly() -> void:
 	await w.wait_s(0.4)
 	eq(m.home.scale, Vector2.ONE, "Home settled back")
 	eq(m.home.modulate.a, 1.0, "fully shown")
+
+
+## Toasts slide in from the right and settle; their timers and tweens end.
+func test_toast_slides_in_and_settles() -> void:
+	var m: Control = w.main
+	var p: Control = m.toasts.show_toast("Paper Lanterns is 60% off", "tag", "sale", "Wishlist price drop")
+	await w.frames(2)
+	ok(p.position.x > 1.0, "slides in from the right (x %.1f)" % p.position.x)
+	await w.wait_s(0.5)
+	eq(p.position.x, 0.0, "in place")
+	eq(p.modulate.a, 1.0, "shown")
+	p.queue_free()
+	await w.frames(2)
+
+
+## A wake (the wall clock jumped ahead) fades the screen up from dark after
+## Power has been asked to re-read, and leaves nothing running.
+func test_wake_fade_after_a_resume() -> void:
+	var m: Control = w.main
+	m._last_wake_ms = -1_000_000
+	m._clock_mark = [Time.get_unix_time_from_system() - 600.0, Time.get_ticks_msec()]
+	m._check_resume()
+	await w.frames(2)
+	var shade: Control = m._wake_shade
+	ok(shade != null and shade.visible and shade.modulate.a > 0.3, "fading up from dark")
+	eq(shade.mouse_filter, Control.MOUSE_FILTER_IGNORE, "never takes input")
+	await rb()
+	eq(m.current, "library", "input works during the fade")
+	await w.wait_s(0.9)
+	ok(not shade.visible, "gone after the fade")
+	eq(m._screen_layer.scale, Vector2.ONE, "screens settled")
+	await lb()
+	await w.idle()
+
+
+## Shelves seen for the first time ease in; rebuilt ones don't.
+func test_shelves_ease_in_once() -> void:
+	var h: Control = w.main.home
+	if h.games.is_empty():
+		ok(true, "no games on this setup")
+		return
+	h._revealed.clear()
+	h.set_games(h.games)
+	await w.frames(1)
+	var s: Control = h.shelves()[0]
+	ok(s.modulate.a < 1.0 or s.tiles[0].card.position.y > 0.0, "first show: easing in")
+	await w.wait_s(0.7)
+	eq(s.modulate.a, 1.0, "shown")
+	eq(s.tiles[0].card.position.y, 0.0, "covers in place")
+	h.set_games(h.games)
+	await w.frames(1)
+	eq(h.shelves()[0].modulate.a, 1.0, "a rebuild doesn't animate again")

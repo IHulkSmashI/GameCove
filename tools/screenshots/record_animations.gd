@@ -124,9 +124,12 @@ func _run() -> void:
 		await secs(0.8)
 		main.toast("Hades is ready to play", "check", "good")
 		await secs(1.0)
-		if main.has_method("_wake_fade"):
-			main._wake_fade()
-			await secs(1.0)
+		main._last_wake_ms = -1_000_000
+		main._wake_fade()
+		await secs(1.0)
+		main.home._revealed.clear()
+		main.home.set_games(main.home.games)
+		await secs(1.0)
 		mark("moments", f)
 
 	if want("boot"):

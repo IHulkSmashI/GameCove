@@ -163,3 +163,53 @@ func test_drawn_rect_includes_the_focus_lift() -> void:
 	ok(r.position.distance_to(Vector2(90, 85)) < 0.01, "lifted rect starts up-left (%s)" % r.position)
 	ok(r.size.distance_to(Vector2(220, 330)) < 0.01, "and is bigger")
 	host.free()
+
+
+func test_motion_enter_and_pop_are_instant_when_they_cant_play() -> void:
+	var was: bool = Motion.reduce
+	var c := Control.new()
+	Motion.reduce = false
+	eq(Motion.enter(c, "position:x", 50.0, 0.0), null, "out of the tree: set at once")
+	eq(c.position.x, 0.0, "at its target")
+	Motion.reduce = true
+	eq(Motion.pop(c, 0.5), null, "reduce motion: no pop")
+	eq(c.scale, Vector2.ONE, "full size")
+	eq(Motion.enter(c, "modulate:a", 0.0, 1.0), null, "reduce motion: no entrance")
+	eq(c.modulate.a, 1.0, "shown")
+	c.free()
+	Motion.reduce = was
+
+
+func test_newly_unlocked_achievements() -> void:
+	var Card = load("res://scripts/ui/games/achievements_card.gd")
+	var now := 1_000_000
+	var list := [
+		{"id": "a", "unlocked": true, "unlock_time": now - 3600},
+		{"id": "b", "unlocked": true, "unlock_time": now - 30 * 86400},
+		{"id": "c", "unlocked": false},
+	]
+	Card._seen_unlocked.erase("t1")
+	eq(Card.newly_unlocked("t1", list, now), ["a"], "first look: only the recent unlock is new")
+	eq(Card.newly_unlocked("t1", list, now), [], "seen: nothing new the second time")
+	list[2] = {"id": "c", "unlocked": true, "unlock_time": now}
+	eq(Card.newly_unlocked("t1", list, now), ["c"], "unlocked since: new")
+	Card._seen_unlocked.erase("t1")
+
+
+func test_toast_and_shelf_entrances_end_in_place() -> void:
+	var was: bool = Motion.reduce
+	Motion.reduce = true
+	var Toasts = load("res://scripts/ui/toast.gd")
+	var t: VBoxContainer = Toasts.new()
+	var p: Control = t.show_toast("Paper Lanterns is 60% off", "tag", "sale")
+	eq(p.position.x, 0.0, "in place at once")
+	eq(p.modulate.a, 1.0, "shown")
+	t.free()
+	var Shelf = load("res://scripts/ui/shelf.gd")
+	var s: VBoxContainer = Shelf.new()
+	s.setup("x", "X", [{"key": "a", "title": "A"}, {"key": "b", "title": "B"}])
+	s.reveal()
+	eq(s.modulate.a, 1.0, "shelf shown at once")
+	eq(s.tiles[1].card.position.y, 0.0, "covers in place")
+	s.free()
+	Motion.reduce = was
