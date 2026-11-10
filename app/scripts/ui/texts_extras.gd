@@ -61,6 +61,7 @@ const CLEAN_RUNNING := "Cleaning up…"
 const CLEAN_DONE := "Freed %s"
 const CLEAN_FAILED := "Some folders couldn't be removed. Close Steam's download page and try again."
 const CLEAN_SAVES := "Your saves and Proton prefixes are never touched."
+const CLEAN_MISSING := "A drive with Steam games isn't there right now (%s), so we can't tell which caches are left over. Put it back in and open this page again."
 
 # ---- GE-Proton ---------------------------------------------------------------------------
 const GE_TITLE := "GE-Proton"

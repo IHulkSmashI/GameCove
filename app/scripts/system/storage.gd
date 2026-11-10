@@ -189,9 +189,19 @@ func steam_library_paths() -> Array:
 	return out
 
 
+## Libraries in `libs` whose steamapps folder can't be read right now (an SD card
+## or drive that isn't mounted). Their games' manifests can't be seen, so while
+## any is missing no cache counts as left over (review 3, medium 4).
+static func missing_libraries(libs: Array) -> Array:
+	return libs.filter(func(lib): return DirAccess.open(str(lib).path_join("steamapps")) == null)
+
+
 ## steamapps/shadercache/<appid> folders whose game has no appmanifest in any of
-## `libs` (uninstalled, or moved away and back without its cache).
+## `libs` (uninstalled, or moved away and back without its cache). [] while a
+## library is missing (missing_libraries()).
 static func leftover_dirs(libs: Array) -> Array:
+	if not missing_libraries(libs).is_empty():
+		return []
 	var installed := {}
 	for lib in libs:
 		for f in DirAccess.get_files_at(str(lib).path_join("steamapps")):
@@ -211,15 +221,20 @@ static func leftover_dirs(libs: Array) -> Array:
 ## Finds and measures the leftovers on the worker; `changed` follows.
 func leftovers() -> void:
 	_queue("leftovers", func():
-		var dirs := leftover_dirs(steam_library_paths())
+		var libs := steam_library_paths()
+		var missing := missing_libraries(libs)
+		var dirs := leftover_dirs(libs)
 		var bytes := _du_total(dirs)
 		_main(func():
-			_state["cleanup"] = {"ready": true, "dirs": dirs, "bytes": bytes, "cleaning": false}
+			_state["cleanup"] = {"ready": true, "dirs": dirs, "bytes": bytes, "cleaning": false, "missing": missing}
 			changed.emit(state())))
 
 
 ## Removes the leftovers found by the last leftovers(), then measures again.
 ## Returns false when there's nothing to remove or a clean-up is running.
+## The worker looks again first and removes only folders that are still left
+## over now and were in the list shown (a game installed meanwhile keeps its
+## cache), and nothing at all while a library is missing.
 func clean_leftovers() -> bool:
 	var dirs: Array = _state["cleanup"].get("dirs", [])
 	if dirs.is_empty() or bool(_state["cleanup"].get("cleaning", false)):
@@ -229,16 +244,23 @@ func clean_leftovers() -> bool:
 	_queue("clean_leftovers", func():
 		var freed := 0
 		var failed := 0
+		var libs := steam_library_paths()
+		var now := leftover_dirs(libs)
 		for d in dirs:
+			if not d in now:
+				continue
+			if ExecSafe.stopped(GROUP):
+				break   # app exit: the rest waits for next time
 			var b := _du_total([d])
 			if LaunchFiles.remove_shader_cache(str(d)):
 				freed += maxi(b, 0)
 			else:
 				failed += 1
-		var left := leftover_dirs(steam_library_paths())
+		var left := leftover_dirs(libs)
+		var missing := missing_libraries(libs)
 		var bytes := _du_total(left)
 		_main(func():
-			_state["cleanup"] = {"ready": true, "dirs": left, "bytes": bytes, "cleaning": false, "freed": freed, "failed": failed}
+			_state["cleanup"] = {"ready": true, "dirs": left, "bytes": bytes, "cleaning": false, "freed": freed, "failed": failed, "missing": missing}
 			changed.emit(state())))
 	return true
 

@@ -110,3 +110,52 @@ func test_panel_card() -> void:
 	p.free()
 	t.s.free()
 	_rm(t.root)
+
+
+# ---- review 3, medium 4 ---------------------------------------------------------------------
+
+## The SD card isn't mounted: its games' manifests can't be seen, so the cache of
+## game 30 (kept on internal storage) must not count as left over.
+func test_unmounted_library_blocks_the_clean_up() -> void:
+	var t := _tree("unmounted")
+	_rm(t.sd)   # card out: libraryfolders.vdf still lists it
+	eq(StorageScript.missing_libraries(t.s.steam_library_paths()), [t.sd], "the missing library is noticed")
+	eq(StorageScript.leftover_dirs(t.s.steam_library_paths()), [], "nothing counts as left over meanwhile")
+	t.s.leftovers()
+	var cl: Dictionary = t.s.state()["cleanup"]
+	eq(cl["dirs"], [], "nothing offered")
+	eq(cl["missing"], [t.sd], "and why")
+	ok(not t.s.clean_leftovers(), "nothing to clean")
+	ok(DirAccess.dir_exists_absolute(t.steam.path_join("steamapps/shadercache/30")), "the card game's cache stays")
+	var p: Control = StoragePanel.build({"storage": t.s})
+	p.opened()
+	var note := p.find_child("CleanMissing", true, false)
+	ok(note != null and note.text == TX.CLEAN_MISSING % t.sd, "the page says a drive is missing")
+	ok(p.clean_button == null, "no Clean up button")
+	p.closed()
+	p.free()
+	t.s.free()
+	_rm(t.root)
+
+
+## A game installed between the scan and the button keeps its cache; a library
+## unmounted in between stops the clean-up.
+func test_clean_rechecks_on_the_worker() -> void:
+	var t := _tree("recheck")
+	t.s.leftovers()
+	eq(t.s.state()["cleanup"]["dirs"].size(), 2, "20 and 40 shown")
+	_touch(t.steam.path_join("steamapps/appmanifest_20.acf"))   # 20 installed again meanwhile
+	ok(t.s.clean_leftovers(), "clean started")
+	ok(DirAccess.dir_exists_absolute(t.steam.path_join("steamapps/shadercache/20")), "the reinstalled game's cache stays")
+	ok(not DirAccess.dir_exists_absolute(t.sd.path_join("steamapps/shadercache/40")), "the real leftover went")
+	# shown, then the card was pulled: nothing is removed
+	var t2 := _tree("recheck2")
+	t2.s.leftovers()
+	_rm(t2.sd)
+	ok(t2.s.clean_leftovers(), "clean started")
+	ok(DirAccess.dir_exists_absolute(t2.steam.path_join("steamapps/shadercache/20")), "nothing removed while a library is missing")
+	eq(t2.s.state()["cleanup"]["missing"], [t2.sd], "and the page learns why")
+	t.s.free()
+	t2.s.free()
+	_rm(t.root)
+	_rm(t2.root)

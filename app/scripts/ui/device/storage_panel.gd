@@ -193,8 +193,13 @@ func _clean_card() -> void:
 	c[0].name = "CleanUp"
 	var dirs: Array = cl.get("dirs", []) if cl.get("dirs") is Array else []
 	var bytes := float(cl.get("bytes", 0))
+	var missing: Array = cl.get("missing", []) if cl.get("missing") is Array else []
 	if not bool(cl.get("ready", false)):
 		c[1].add_child(DKit.quiet(TX.CLEAN_MEASURING))
+	elif not missing.is_empty():
+		var m := DKit.quiet(TX.CLEAN_MISSING % ", ".join(PackedStringArray(missing)))
+		m.name = "CleanMissing"
+		c[1].add_child(m)
 	elif dirs.is_empty():
 		c[1].add_child(DKit.quiet(TX.CLEAN_NONE))
 	else:
