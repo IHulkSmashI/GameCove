@@ -491,6 +491,25 @@ env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_RUNTIME_DIR="$RUNDIR" GAMECOVE_BIN=
 sleep 0.3
 has "$T/order.log" "^steam -silent$" "an app that never says ready doesn't keep Steam away (timeout)"
 
+# review 2, low 21: a session switch (TERM) during the Steam wait stops the app too, and Steam
+# isn't started for a session that is ending
+printf '#!/bin/sh\necho $$ >"%s/app.pid"\nexec sleep 30\n' "$T" >"$CB/waiter"
+chmod +x "$CB/waiter"
+: >"$T/order.log"
+rm -f "$RUNDIR/gamecove-steam-ready" "$T/app.pid"
+env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_RUNTIME_DIR="$RUNDIR" GAMECOVE_BIN="$CB/waiter" GAMECOVE_STEAM_WAIT_S=10 \
+	GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=silent sh "$CLIENT" >/dev/null 2>&1 &
+cpid=$!
+sleep 1
+kill -TERM "$cpid"
+i=0
+while kill -0 "$cpid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
+sleep 0.2
+apid="$(cat "$T/app.pid" 2>/dev/null)"
+[ -n "$apid" ] && ! kill -0 "$apid" 2>/dev/null && ok || { bad "TERM during the Steam wait stops the app"; [ -z "$apid" ] || kill -KILL "$apid" 2>/dev/null; }
+hasnt "$T/order.log" "^steam" "no Steam start for a session that is ending"
+kill -KILL "$cpid" 2>/dev/null
+
 # --- review H1: a hung GameCove (alive, but never ready or its heartbeat stopped) is killed and counted
 HR="$T/hrun"
 mkdir -p "$HR"

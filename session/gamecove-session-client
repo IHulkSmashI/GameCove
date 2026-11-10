@@ -165,20 +165,22 @@ uptime_s() {
 started_at="$(uptime_s)"
 "$GAMECOVE_BIN" --display-driver x11 --rendering-driver opengl3 --fullscreen "$@" &
 app=$!
+# set before the Steam wait: a session switch or logout during it must stop the app too, not
+# leave it running without us (review 2, low 21)
+stopping=0
+trap 'stopping=1; kill -TERM "$app" 2>/dev/null' TERM INT HUP
 waited=0
 if steam_running || [ ! -d "${XDG_RUNTIME_DIR:-/nonexistent}" ]; then
 	start_steam
 else
 	waited=0
 	limit=$(( ${GAMECOVE_STEAM_WAIT_S:-10} * 5 ))
-	while [ ! -e "$READY" ] && [ "$waited" -lt "$limit" ] && kill -0 "$app" 2>/dev/null; do
+	while [ ! -e "$READY" ] && [ "$waited" -lt "$limit" ] && [ "$stopping" -eq 0 ] && kill -0 "$app" 2>/dev/null; do
 		sleep 0.2
 		waited=$((waited + 1))
 	done
-	start_steam
+	[ "$stopping" -eq 1 ] || start_steam
 fi
-stopping=0
-trap 'stopping=1; kill -TERM "$app" 2>/dev/null' TERM INT HUP
 # Watch the app once a second (counted from its start, the Steam wait included):
 #  - not ready after READY_TIMEOUT_S: hung at start (ready = the first heartbeat, or
 #    the ready file only when no heartbeat is expected);
