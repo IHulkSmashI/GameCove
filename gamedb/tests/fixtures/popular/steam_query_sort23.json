@@ -1,0 +1,119 @@
+{
+ "response": {
+  "metadata": {
+   "total_matching_records": 9,
+   "start": 0,
+   "count": 9
+  },
+  "store_items": [
+   {
+    "item_type": 0,
+    "id": 1086940,
+    "success": 1,
+    "visible": true,
+    "name": "Baldur's Gate 3",
+    "appid": 1086940,
+    "type": 0,
+    "release": {
+     "steam_release_date": 1691074826
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 1903340,
+    "success": 1,
+    "visible": true,
+    "name": "Clair Obscur: Expedition 33",
+    "appid": 1903340,
+    "type": 0,
+    "release": {
+     "steam_release_date": 1745478027
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 2358720,
+    "success": 1,
+    "visible": true,
+    "name": "Black Myth: Wukong",
+    "appid": 2358720,
+    "type": 0,
+    "release": {
+     "steam_release_date": 1724119114
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 1030300,
+    "success": 1,
+    "visible": true,
+    "name": "Hollow Knight: Silksong",
+    "appid": 1030300,
+    "type": 0,
+    "release": {
+     "steam_release_date": 1756994412
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 1593500,
+    "success": 1,
+    "visible": true,
+    "name": "God of War",
+    "appid": 1593500,
+    "type": 0,
+    "release": {
+     "steam_release_date": 1642175940
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 990080,
+    "success": 1,
+    "visible": true,
+    "name": "Hogwarts Legacy",
+    "appid": 990080,
+    "type": 0,
+    "release": {
+     "steam_release_date": 1676052000
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 1551360,
+    "success": 1,
+    "visible": true,
+    "name": "Forza Horizon 5",
+    "appid": 1551360,
+    "type": 0,
+    "release": {
+     "steam_release_date": 1636433940
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 2050650,
+    "success": 1,
+    "visible": true,
+    "name": "Resident Evil 4",
+    "appid": 2050650,
+    "type": 0,
+    "release": {
+     "steam_release_date": 1679616000
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 367520,
+    "success": 1,
+    "visible": true,
+    "name": "Hollow Knight",
+    "appid": 367520,
+    "type": 0,
+    "release": {
+     "steam_release_date": 1487959251
+    }
+   }
+  ]
+ }
+}

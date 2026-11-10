@@ -4,7 +4,8 @@ Builds GameCove's open game database every night and publishes it as a GitHub re
 
 | Field | Source | License |
 | --- | --- | --- |
-| Title, release year, Steam / GOG / Epic ids | Wikidata | CC0 |
+| Title, release year, Steam / GOG / Epic ids | Wikidata (English label, else the `mul` label) | CC0 |
+| `popular` rank; title and year for popular games Wikidata doesn't cover | Steam Web API (keyless store lists) | [Steam Web API Terms of Use](https://steamcommunity.com/dev/apiterms) |
 | Anti-cheat status (works / blocked / denied) | AreWeAntiCheatYet | MIT |
 | Time to beat (main, main + extras, 100%, submission count) | IGDB `game_time_to_beats` | IGDB terms, credit IGDB.com |
 | `protondb` compatibility tier | Our summary of ProtonDB user reports from [bdefore/protondb-data](https://github.com/bdefore/protondb-data) | ODbL 1.0 |
@@ -16,6 +17,31 @@ python -m gamedb.build --out dist/gamedb.json.gz [--max-minutes 50]
 ```
 
 IGDB needs `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` in the environment; without them time to beat is marked `skipped` and last night's values are kept. `GITHUB_TOKEN` (optional) is used to list the ProtonDB dumps.
+
+## Popular games are always covered
+
+The games players open first must never be missing, so (`gamedb/sources/steamtop.py`, `gamedb/coverage.py`):
+
+- **Titles:** Wikidata's English label, else its `mul` ("all languages") label. Since 2024 editors move proper names
+  to `mul`, and an English-only query left Baldur's Gate 3, Hollow Knight, God of War, Hogwarts Legacy and about
+  1,700 other Steam games untitled, and untitled items were dropped.
+- **Popular list:** the store's top 1000 released games by reviews (`IStoreQueryService/Query` sort 23) and by
+  popularity (sort 11), plus the top 100 by players right now (`ISteamChartsService/GetMostPlayedGames`). Every one
+  gets an entry, from Steam's own title and year when Wikidata has no item for it, and a `popular` rank (0 = most
+  popular). On equal titles the more popular game sorts first, so the app's title fallback finds Resident Evil 4
+  (2023) before the 2005 original. `coverage.MUST_HAVE` (54 hand-checked app ids) is always added to the list.
+- **Every Steam id:** an item listing several Steam apps keeps the lowest as `ids.steam` and the rest in
+  `ids.steam_more`; the app indexes both.
+- **Time to beat, three routes to IGDB:** `external_games` by Steam uid (paged, as one uid can map to several IGDB
+  games), then Wikidata's IGDB id (P5794 slug) for ids that found nothing, then, for popular games still without a
+  value, an IGDB title search kept only on an exact normalised title within a year of the release (at most 400 a
+  night). With several IGDB games for one Steam app, the sane value with the most submissions wins.
+- **Sanity checks** (`gamedb/ttb.py`): a record out of order (main > main + extras > 100%) is dropped; values under
+  15 min or over 1000 h are dropped; for popular games a value under 2 h is dropped unless 10+ players submitted it
+  and the 100% time is within 10x (Portal is 1.9 h, Forza Horizon 5 isn't 1 h); a main under 1/40 of the 100% time
+  is dropped. Last night's values go through the same checks.
+- **Coverage check:** `python -m gamedb.coverage dist/gamedb.json.gz` exits 1 naming any `MUST_HAVE` game without an
+  entry. The nightly runs it before publishing, so a regression fails loudly and last night's file stays.
 
 ## ProtonDB tiers
 
@@ -50,13 +76,14 @@ Gzipped compact JSON, schema 2. Null fields are left out, so a missing field mea
   "sources": {
     "previous": {"status": "ok", "seconds": 1, "count": 61234},
     "wikidata": {"status": "fallback", "error": "GiveUp: HTTP 429 ...", "kept_previous": true, "previous_built": "2026-11-07T06:41:12Z", "count": 61234},
+    "steam": {"status": "ok", "seconds": 3, "count": 1518},
     "areweanticheatyet": {"status": "ok", "seconds": 1, "count": 1120},
     "igdb": {"status": "skipped", "error": "no TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET", "kept_previous": true, "count": 20311},
     "protondb": {"status": "ok", "seconds": 12, "count": 5936, "dump": "reports_nov1_2026.tar.gz"}
   },
   "credits": "...",
   "count": 61000,
-  "games": [{"title": "Brotato", "wikidata": "Q...", "released": 2023, "ids": {"steam": "1942280"}, "protondb": "platinum"}]
+  "games": [{"title": "Brotato", "wikidata": "Q...", "released": 2023, "ids": {"steam": "1942280"}, "popular": 412, "protondb": "platinum"}]
 }
 ```
 

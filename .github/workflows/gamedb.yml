@@ -30,6 +30,10 @@ jobs:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
           GITHUB_TOKEN: ${{ github.token }}
         run: python -m gamedb.build --out dist/gamedb.json.gz --max-minutes 55
+      - name: Coverage check (the most popular games must all be in it)
+        # Fails the job (so nothing is published and last night's file stays) if any
+        # game on gamedb/coverage.py's MUST_HAVE list has no entry.
+        run: python -m gamedb.coverage dist/gamedb.json.gz
       - name: Build the Discover calendar (upcoming releases + ECB exchange rates)
         # Separate file and budget: a failure here never blocks gamedb.json.gz,
         # and the previous upcoming.json.gz then stays on the release.

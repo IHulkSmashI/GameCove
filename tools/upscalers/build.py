@@ -46,9 +46,11 @@ ASSETS_PER_TAG = 950          # GitHub allows 1000 assets per release; then "ups
 # where each component comes from upstream (versions.json keeps how it's installed)
 SOURCES = {
     "optiscaler": {"kind": "release", "repo": "optiscaler/OptiScaler", "asset": "optiscaler_*.7z", "prerelease": False,
-                   "version": "tag", "require_root": ["OptiScaler.dll", "OptiScaler.ini"], "gpl_source": True},
+                   "version": "tag", "require_root": ["OptiScaler.dll", "OptiScaler.ini"],
+                   "gpl": True, "source_repo": "optiscaler/OptiScaler"},
     "optiscaler_v10": {"kind": "release", "repo": "optiscaler/OptiScaler-nightly", "asset": "optiscaler_v*.7z",
-                       "prerelease": True, "version": "asset", "require_root": ["OptiScaler.dll", "OptiScaler.ini"]},
+                       "prerelease": True, "version": "asset", "require_root": ["OptiScaler.dll", "OptiScaler.ini"],
+                       "gpl": True, "source_repo": "optiscaler/OptiScaler"},
     "optipatcher": {"kind": "rolling", "repo": "xXJSONDeruloXx/OptiScaler-Bleeding-Edge",
                     "tag": "bins-for-optipatcher-rolling", "asset": "OptiPatcher_rolling.asi"},
     "fakenvapi": {"kind": "release", "repo": "FakeMichau/fakenvapi", "asset": "fakenvapi-*.7z", "prerelease": False,
@@ -206,50 +208,97 @@ def today() -> str:
 
 # ---- the newest upstream build ----------------------------------------------------------------------------------
 def newest_release(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work: str, prev: dict | None) -> dict:
+    """The newest release with a matching asset. A GPL component (spec "gpl") also needs the exact commit its build
+    came from, so its source can sit next to it: a build whose commit can't be determined is skipped and the next
+    older release is tried (the newest whose source is known, down to the latest stable)."""
     rels = net.json(f"/repos/{spec['repo']}/releases?per_page=15")
+    skipped = []
     for rel in rels:
         if rel.get("draft") or (rel.get("prerelease") and not spec.get("prerelease")):
             continue
         asset = next((a for a in rel.get("assets", []) if fnmatch.fnmatch(a.get("name", "").lower(), spec["asset"].lower())), None)
-        if asset:
-            break
-    else:
-        raise ValueError(f"no release of {spec['repo']} has an asset matching {spec['asset']}")
+        if not asset:
+            continue
+        digest = downloads.asset_digest(asset)
+        if prev and prev.get("tag") == rel["tag_name"] and prev.get("asset") == asset["name"] and \
+                (not spec.get("gpl") or prev.get("source")) and (not digest or digest == prev.get("sha256")) and \
+                mir.url_of(prev["mirror_url"].rsplit("/", 1)[1]):
+            return prev                                        # nothing new: no download
+        commit = source_commit(net, spec, rel) if spec.get("gpl") else None
+        if spec.get("gpl") and not commit:
+            skipped.append(rel["tag_name"])
+            log(f"warning: {comp} {rel['tag_name']}: the commit it was built from isn't known; not mirrored")
+            continue
+        entry = release_entry(net, comp, spec, rel, asset, mir, out, work, commit, (prev or {}).get("source"))
+        if skipped:
+            entry["skipped_without_source"] = skipped
+        return entry
+    raise ValueError(f"no release of {spec['repo']} has an asset matching {spec['asset']}"
+                     + (f" with a known source commit (skipped {', '.join(skipped)})" if skipped else ""))
+
+
+def release_entry(net: Net, comp: str, spec: dict, rel: dict, asset: dict, mir: Mirror, out: str, work: str,
+                  commit: str | None, prev_source: dict | None = None) -> dict:
+    """Download, check and mirror one release asset; for GPL, its source at `commit` first (no source, no binary)."""
     tag, aname = rel["tag_name"], asset["name"]
     version = version_of(spec, tag, aname)
     digest = downloads.asset_digest(asset)
-    if prev and prev.get("tag") == tag and prev.get("asset") == aname and (not digest or digest == prev.get("sha256")) \
-            and mir.url_of(prev["mirror_url"].rsplit("/", 1)[1]):
-        return prev                                            # nothing new: no download
     path = fetch_checked(net, asset["browser_download_url"], aname, work, digest=digest)
     sha = sha256_of(path)
     inner = check_archive(path, aname, spec, work)
+    source = gpl_source(net, comp, spec["source_repo"], commit, version, mir, out, work, prev_source) if spec.get("gpl") else None
     entry = {"version": version, "tag": tag, "asset": aname, "date": (rel.get("published_at") or today())[:10],
              "upstream_url": asset["browser_download_url"], "sha256": sha, "size": os.path.getsize(path),
              "upstream_digest": bool(digest), "release_url": rel.get("html_url", ""),
              "mirror_url": mir.add(mirror.mirror_name(comp, version, sha, aname), path, out)}
     if inner:
         entry["inner"] = inner
-    if spec.get("gpl_source"):
-        entry.update(gpl_source(net, comp, spec["repo"], tag, version, mir, out, work))
+    if source:
+        entry["source"] = source
     return entry
 
 
-def gpl_source(net: Net, comp: str, repo: str, tag: str, version: str, mir: Mirror, out: str, work: str) -> dict:
-    """The tag's source archive next to the binary (GPL-3.0 §6: the source stays available as long as the binary).
-    GitHub regenerates these archives, so one per version is kept, whatever its hash."""
-    url = f"https://github.com/{repo}/archive/refs/tags/{tag}.tar.gz"
-    prefix = "-".join((mirror.safe_part(comp), mirror.safe_part(version), "source")) + "-"
-    have = mir.has_prefix(prefix)
-    if have:
-        return {"source_url": url, "source_mirror_url": mir.url_of(have)}
-    try:
-        p = fetch_checked(net, url, f"{repo.split('/')[1]}-{tag}.tar.gz", work)
-    except (OSError, ValueError, urllib.error.URLError) as e:
-        log(f"warning: {comp} {version}: source archive: {e}")
-        return {"source_url": url}
-    name = prefix + sha256_of(p)[:8] + ".tar.gz"
-    return {"source_url": url, "source_mirror_url": mir.add(name, p, out)}
+HEX_SHA = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def source_commit(net: Net, spec: dict, rel: dict) -> str | None:
+    """The full sha of the commit in spec["source_repo"] a release was built from, or None. Tried in order: the tag
+    itself (stable releases are tagged in the source repo), the release's target_commitish when it is a sha, then
+    commit references in its name and notes (".../commit/<sha>", "commit <sha>", a bare short sha). Each candidate
+    must resolve in the source repository through the API, so a sha from somewhere else never counts."""
+    text = " ".join(str(rel.get(k) or "") for k in ("name", "body"))
+    cands = [str(rel.get("tag_name") or "")]
+    tc = str(rel.get("target_commitish") or "")
+    if HEX_SHA.match(tc):
+        cands.append(tc)
+    repo = re.escape(spec["source_repo"])
+    cands += re.findall(rf"(?i)github\.com/{repo}/(?:commit|tree)/([0-9a-f]{{7,40}})\b", text)
+    cands += re.findall(r"(?i)\bcommit\b[^0-9a-z]{0,20}([0-9a-f]{7,40})\b", text)
+    cands += re.findall(r"(?<![0-9a-zA-Z])([0-9a-f]{7,40})(?![0-9a-zA-Z])", text)
+    for c in dict.fromkeys(x for x in cands if x):
+        try:
+            got = net.json(f"/repos/{spec['source_repo']}/commits/{c}")
+        except (OSError, ValueError, urllib.error.URLError):
+            continue
+        full = str((got or {}).get("sha", "")) if isinstance(got, dict) else ""
+        if re.match(r"^[0-9a-f]{40}$", full) and (full.startswith(c) or not HEX_SHA.match(c)):
+            return full
+    return None
+
+
+def gpl_source(net: Net, comp: str, repo: str, commit: str, version: str, mir: Mirror, out: str, work: str,
+               prev: dict | None = None) -> dict:
+    """GPL-3.0 §6: the corresponding source next to the binary for as long as the binary is offered: GitHub's
+    source archive of `repo` at exactly `commit`, mirrored as <comp>-<version>-<sha8>-source-<commit12>.tar.gz.
+    GitHub regenerates archives, so the copy already mirrored for this commit is reused. Raises when it can't be
+    had (the caller then doesn't mirror the binary)."""
+    if prev and prev.get("commit") == commit and mir.url_of(prev["mirror_url"].rsplit("/", 1)[1]):
+        return prev
+    url = f"https://github.com/{repo}/archive/{commit}.tar.gz"
+    p = fetch_checked(net, url, f"{repo.split('/')[1]}-{commit[:12]}.tar.gz", work)
+    sha = sha256_of(p)
+    return {"commit": commit, "repo": repo, "url": url, "sha256": sha, "size": os.path.getsize(p),
+            "mirror_url": mir.add(mirror.mirror_name(comp, version, sha, f"source-{commit[:12]}.tar.gz"), p, out)}
 
 
 def newest_rolling(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work: str, prev: dict | None) -> dict:
@@ -324,9 +373,27 @@ def pin_items(v: dict) -> list[dict]:
     return out
 
 
-def mirror_pins(net: Net, v: dict, mir: Mirror, out: str, work: str) -> list[str]:
-    """Copy every tested file to the mirror under the name versions.json expects; returns warnings."""
+def mirror_pins(net: Net, v: dict, mir: Mirror, out: str, work: str, sources: dict) -> list[str]:
+    """Copy every tested file to the mirror under the name versions.json expects; returns warnings. A GPL pin goes
+    only with its source at the exact commit it was built from (sources[component], kept in the index's
+    "pin_sources" so it isn't fetched again); one whose commit can't be determined isn't mirrored."""
     warnings = []
+    for comp in ("optiscaler", "optiscaler_v10"):
+        e, spec = v.get(comp) or {}, SOURCES[comp]
+        if not e.get("mirror"):
+            continue
+        prev = sources.get(comp)
+        if prev and prev.get("pin") == e["mirror"] and mir.url_of(prev["mirror_url"].rsplit("/", 1)[1]):
+            continue
+        sources.pop(comp, None)
+        try:
+            rel = net.json(f"/repos/{e.get('repo') or spec['repo']}/releases/tags/{e['tag']}")
+            commit = source_commit(net, spec, rel)
+            if not commit:
+                raise ValueError("the commit it was built from isn't known")
+            sources[comp] = {**gpl_source(net, comp, spec["source_repo"], commit, e["version"], mir, out, work), "pin": e["mirror"]}
+        except (OSError, ValueError, KeyError, urllib.error.URLError) as ex:
+            warnings.append(f"tested {comp} {e.get('version')}: no source for it ({ex}); its binary isn't mirrored")
     seen = set()
     for it in pin_items(v):
         if it["mirror"] in seen:
@@ -338,6 +405,8 @@ def mirror_pins(net: Net, v: dict, mir: Mirror, out: str, work: str) -> list[str
         tag, name = it["mirror"].rsplit("/", 2)[-2:]
         if mir.url_of(name):
             continue
+        if SOURCES.get(it["component"], {}).get("gpl") and it["component"] not in sources:
+            continue                                            # GPL without its source: never mirrored
         try:
             notice = None
             if it["component"] == "fsr4_amd" and it["entry"].get("notice"):    # AMD's notice first: none, no copy
@@ -354,14 +423,14 @@ def mirror_pins(net: Net, v: dict, mir: Mirror, out: str, work: str) -> list[str
             mir.add(mirror.mirror_name("fsr4_amd", it["entry"]["version"], sha256_of(notice),
                                        os.path.basename(it["entry"]["notice"])), notice, out, tag)
         mir.add(name, p, out, tag)
-    if "optiscaler" in v and v["optiscaler"].get("tag"):
-        gpl_source(net, "optiscaler", v["optiscaler"].get("repo", "optiscaler/OptiScaler"), v["optiscaler"]["tag"],
-                   v["optiscaler"]["version"], mir, out, work)
     return warnings
 
 
-def pin_entry(comp: str, v: dict, mir: Mirror) -> dict | None:
-    """The index entry for a component from its pin, when the pin's file is on the mirror."""
+def pin_entry(comp: str, v: dict, mir: Mirror, sources: dict | None = None) -> dict | None:
+    """The index entry for a component from its pin, when the pin's file is on the mirror (and, for GPL, its
+    source too)."""
+    if SOURCES.get(comp, {}).get("gpl") and comp not in (sources or {}):
+        return None
     for it in pin_items(v):
         if it["component"] != comp:
             continue
@@ -385,6 +454,8 @@ def pin_entry(comp: str, v: dict, mir: Mirror) -> dict | None:
             out["inner"] = {"dinput8.dll": e["dll_sha256"]}
         if comp == "fakenvapi" and e.get("file_sha256"):
             out["inner"] = dict(e["file_sha256"])
+        if SOURCES.get(comp, {}).get("gpl"):
+            out["source"] = {k: x for k, x in sources[comp].items() if k != "pin"}
         return out
     return None
 
@@ -393,19 +464,23 @@ def pin_entry(comp: str, v: dict, mir: Mirror) -> dict | None:
 def build(net: Net, versions_path: str, out: str, have: str | None = None, previous: str | None = None,
           now: str | None = None) -> dict:
     v = json.load(open(versions_path, encoding="utf-8"))
-    prev_comps = {}
+    prev_comps, pin_sources = {}, {}
     if previous and os.path.exists(previous):
         try:
-            prev_comps = mirror.parse(open(previous, "rb").read())["components"]
+            prev_idx = mirror.parse(open(previous, "rb").read())
+            prev_comps = prev_idx["components"]
+            pin_sources = {k: x for k, x in (prev_idx.get("pin_sources") or {}).items() if isinstance(x, dict)}
         except ValueError as e:
             log(f"warning: previous index ignored: {e}")
     os.makedirs(out, exist_ok=True)
     work = tempfile.mkdtemp(prefix="upscalers-")
     mir = Mirror(have)
-    report = {"warnings": mirror_pins(net, v, mir, out, work), "components": {}}
+    report = {"warnings": mirror_pins(net, v, mir, out, work, pin_sources), "components": {}}
     comps = {}
     for comp, spec in SOURCES.items():
         prev = prev_comps.get(comp)
+        if prev and SOURCES[comp].get("gpl") and not prev.get("source"):
+            prev = None                         # a GPL build without its source is never carried
         if prev and not mir.url_of((prev.get("mirror_url") or next(iter(prev.get("files", {}).values()), {}).get("mirror_url", "")).rsplit("/", 1)[-1]):
             prev = None                         # its file isn't on the mirror (a hand-edited release): not carried
         try:
@@ -413,7 +488,7 @@ def build(net: Net, versions_path: str, out: str, have: str | None = None, previ
             comps[comp] = fn(net, comp, spec, mir, out, work, prev)
             report["components"][comp] = comps[comp]["version"]
         except Exception as e:                  # one upstream failing never takes the others down
-            fallback = prev or pin_entry(comp, v, mir)
+            fallback = prev or pin_entry(comp, v, mir, pin_sources)
             report["warnings"].append(f"{comp}: {type(e).__name__}: {e}; kept {fallback['version'] if fallback else 'nothing'}")
             if fallback:
                 comps[comp] = fallback
@@ -423,7 +498,7 @@ def build(net: Net, versions_path: str, out: str, have: str | None = None, previ
            "repo": mirror.REPO, "note": "Newest upstream build of each upscaler GameCove installs, mirrored on this "
            "repository's 'upscalers' releases under immutable names. Signed with cosign keyless by "
            ".github/workflows/upscalers.yml on main; GameCove checks that signature and every file's sha256.",
-           "components": comps}
+           "components": comps, "pin_sources": pin_sources}
     raw = json.dumps(idx, indent=1, sort_keys=True).encode() + b"\n"
     mirror.parse(raw)                            # what devices will accept, or this run fails before publishing
     with open(os.path.join(out, mirror.INDEX_NAME), "wb") as f:

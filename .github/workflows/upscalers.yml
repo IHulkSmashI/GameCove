@@ -103,7 +103,7 @@ jobs:
           ensure() {
             gh release view "$1" >/dev/null 2>&1 || gh release create "$1" --latest=false \
               --title "Upscaler files ($1)" \
-              --notes "Copies of the upscaler files GameCove installs (OptiScaler, OptiPatcher, fakenvapi, xess-xmx-linux, REFramework, FSR 4), each under a name with its version and sha256, so a file moved or replaced upstream never breaks an install. Nothing here is ever deleted. Each file keeps its own licence: see CREDITS.md and upscalers.json (upstream URL, release and source links). OptiScaler (GPL-3.0) has its source archive next to it. AMD's FidelityFX DLL is redistributed under AMD's binary licence, whose notice is next to it. upscalers.json is signed by .github/workflows/upscalers.yml (cosign keyless)."
+              --notes "Copies of the upscaler files GameCove installs (OptiScaler, OptiPatcher, fakenvapi, xess-xmx-linux, REFramework, FSR 4), each under a name with its version and sha256, so a file moved or replaced upstream never breaks an install. Nothing here is ever deleted. Each file keeps its own licence: see CREDITS.md and upscalers.json (upstream URL, release and source links). Every OptiScaler build (GPL-3.0) has the source archive of the exact commit it was built from next to it. AMD's FidelityFX DLL is redistributed under AMD's binary licence, whose notice is next to it. upscalers.json is signed by .github/workflows/upscalers.yml (cosign keyless)."
           }
           ensure upscalers
           tab="$(printf '\t')"

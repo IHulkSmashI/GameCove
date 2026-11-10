@@ -67,6 +67,8 @@ NAMES = {
 }
 ARCHIVE_COMPONENTS = ("optiscaler", "optiscaler_v10", "optipatcher", "fakenvapi", "xess_xmx_linux", "reframework")
 FILES_COMPONENTS = ("fsr4_xmx", "fsr4_amd")
+# GPL-3.0 binaries: the index must name their corresponding source (tools/upscalers/build.py mirrors it)
+GPL_COMPONENTS = ("optiscaler", "optiscaler_v10")
 
 
 # ---- names ------------------------------------------------------------------------------------------------------
@@ -191,6 +193,11 @@ def parse(raw: bytes) -> dict:
             _check_file(name, e)
             if not FILE_RE.match(str(e.get("asset", ""))):
                 raise ValueError(f"{name}: bad asset name")
+            if name in GPL_COMPONENTS or "source" in e:   # GPL: its source at the exact commit, next to it
+                src = e.get("source")
+                if not isinstance(src, dict) or not re.match(r"^[0-9a-f]{40}$", str(src.get("commit", ""))):
+                    raise ValueError(f"{name}: no source at an exact commit")
+                _check_file(f"{name}/source", {**src, "upstream_url": src.get("url", "")})
             inner = e.get("inner") or {}
             if not isinstance(inner, dict) or not all(FILE_RE.match(k) and HEX64.match(str(v)) for k, v in inner.items()):
                 raise ValueError(f"{name}: bad inner hashes")
