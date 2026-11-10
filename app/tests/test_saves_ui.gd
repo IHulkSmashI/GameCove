@@ -7,6 +7,7 @@ const SavesCard := preload("res://scripts/ui/games/saves_card.gd")
 const GamePage := preload("res://scripts/ui/game_page.gd")
 const SavesPage := preload("res://scripts/ui/settings/saves_page.gd")
 const TS := preload("res://scripts/ui/texts_saves.gd")
+const TG := preload("res://scripts/ui/texts_games.gd")
 const Screens := preload("res://tests/test_ui_screens.gd")
 
 
@@ -235,3 +236,17 @@ func test_conflict_rows_after_a_restore_offer_the_restored_side_first() -> void:
 	ok(not rows[1].has("value"), "the cloud's isn't called newer next to it")
 	var plain := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "prefer": "", "store": "epic"}, 2030)
 	eq(plain.map(func(r): return r["id"]), ["cloud", "local"], "without a restore: newest first, as before")
+
+
+## GOG's time for the cloud side is when the files were uploaded, not when they were played,
+## so it can't be compared with the local save's time: no side is called "Newer".
+func test_gog_conflict_rows_dont_claim_a_newer_side() -> void:
+	var rows := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "store": "gog"}, 2030, true)
+	eq(rows.map(func(r): return r["id"]), ["local", "cloud", "later"], "a fixed order: this handheld, the cloud")
+	ok(not rows[0].has("value") and not rows[1].has("value"), "no Newer badge on either")
+	ok(not rows[0].has("tone") and not rows[1].has("tone"), "and no highlight")
+	eq(rows[1]["detail"], TS.UPLOADED_AT % TG.ago(2000, 2030), "the cloud side says when it was uploaded")
+	eq(rows[0]["detail"], TS.saved_at(1000, 2030), "the local side when it was saved")
+	eq(SavesCard.conflict_rows({"local": 1000, "remote": 0, "store": "gog"}, 2030)[1]["detail"], TS.UNKNOWN_TIME, "no time: unknown")
+	var epic := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "store": "epic"}, 2030)
+	eq(epic[0].get("value", ""), TS.NEWER, "Epic's times are both save times: Newer stays")

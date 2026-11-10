@@ -123,7 +123,8 @@ func _maybe_relink() -> void:
 
 # ---- sheets ------------------------------------------------------------------------------------
 
-## The two sides of a conflict, newest first and highlighted. A picks; both are kept as a backup.
+## The two sides of a conflict, newest first and highlighted (Epic; for GOG a fixed order and
+## no "Newer", see below). A picks; both are kept as a backup.
 ## After a restore (st "prefer": "local") the restored save comes first whatever its age:
 ## it is the one the user just asked for.
 static func conflict_rows(st: Dictionary, now: int, with_later := false) -> Array:
@@ -133,9 +134,14 @@ static func conflict_rows(st: Dictionary, now: int, with_later := false) -> Arra
 		{"id": "local", "text": TS.KEEP_LOCAL, "detail": TS.saved_at(local, now), "icon": "drive", "t": local},
 		{"id": "cloud", "text": TS.KEEP_CLOUD, "detail": TS.saved_at(remote, now), "icon": "download", "t": remote},
 	]
+	var gog := str(st.get("store", "")) == "gog"
+	if gog:
+		# GOG's time is the upload's, not the play session's: it says nothing about which save
+		# is further on, so it's shown for what it is and neither side is called newer
+		rows[1]["detail"] = TS.uploaded_at(remote, now)
 	if str(st.get("prefer", "")) == "local":
 		rows[0].merge({"tone": "good", "value": TS.RESTORED_BADGE, "detail": TS.RESTORED_DETAIL}, true)
-	else:
+	elif not gog:
 		if remote > local:
 			rows.reverse()
 		if local != remote and maxi(local, remote) > 0:
