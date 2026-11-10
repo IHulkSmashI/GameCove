@@ -29,9 +29,10 @@ func _run() -> void:
 	if theme_id == "":
 		theme_id = "cove"
 	# The Claw as read live: Bazzite 45 (tools/devicematrix/overrides.json).
+	var _ver: String = release_version()
 	var t: Dictionary = F.target("bazzite", {"os": {"name": "Bazzite 45", "family": "bazzite"},
-		"release": {"tag": "v0.4.0", "version": "0.4.0", "os": "bazzite", "package": "/dl/gamecove-0.4.0-1.fc45.x86_64.rpm"},
-		"package": "/dl/gamecove-0.4.0-1.fc45.x86_64.rpm"})
+		"release": {"tag": "v" + _ver, "version": _ver, "os": "bazzite", "package": "/dl/gamecove-%s-1.fc45.x86_64.rpm" % _ver},
+		"package": "/dl/gamecove-%s-1.fc45.x86_64.rpm" % _ver})
 	await make(t, theme_id)
 	await shot("installer")
 	if want("installer_device"):
@@ -47,3 +48,14 @@ func _run() -> void:
 		screen.focus_first()
 		await shot("installer_done")
 	quit()
+
+
+## The version a release build shows: packaging/rpm/gamecove.spec's Version.
+static func release_version() -> String:
+	var f := FileAccess.open(ProjectSettings.globalize_path("res://").path_join("../packaging/rpm/gamecove.spec"), FileAccess.READ)
+	if f == null:
+		return "0.1.0"
+	for line in f.get_as_text().split("\n"):
+		if line.begins_with("Version:"):
+			return line.trim_prefix("Version:").strip_edges()
+	return "0.1.0"

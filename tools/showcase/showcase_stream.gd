@@ -36,7 +36,7 @@ func _run() -> void:
 	main.apply_theme()
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "8:42 PM", {"connected": true, "strength": 0.8})
 	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
-	main.hint_status.text = "● GameCove 0.4   MSI Claw 8 EX AI+"
+	main.hint_status.text = "● GameCove %s   MSI Claw 8 EX AI+" % _short_version()
 	svc = main.streaming
 	screen = main.stream_screen
 	svc.sync_mode = true
@@ -87,3 +87,20 @@ func _hosts() -> void:
 		"status": "asleep", "paired": true, "remote": true, "mac": "AA:BB:CC:00:11:22", "flavor": "vibepollo", "apps_state": "ready",
 		"apps": apps.slice(2, 6), "info": {"hevc": true, "av1": true, "hdr": false}}, true)
 	svc.hosts = {UUID: h, u["id"]: u, a["id"]: a}
+
+
+func _short_version() -> String:
+	var v := release_version()
+	var parts := v.split(".")
+	return ".".join(parts.slice(0, 2)) if parts.size() >= 2 and parts[2] == "0" else v
+
+
+## The version a release build shows: packaging/rpm/gamecove.spec's Version.
+static func release_version() -> String:
+	var f := FileAccess.open(ProjectSettings.globalize_path("res://").path_join("../packaging/rpm/gamecove.spec"), FileAccess.READ)
+	if f == null:
+		return "0.1.0"
+	for line in f.get_as_text().split("\n"):
+		if line.begins_with("Version:"):
+			return line.trim_prefix("Version:").strip_edges()
+	return "0.1.0"
