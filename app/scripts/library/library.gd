@@ -20,6 +20,8 @@ signal action_failed(key: String, action: String, message: String)
 ## bring forward under gamescope) or "heroic"; reason install | uninstall | page | manage.
 signal external_window_needed(key: String, app: String, reason: String)
 signal store_settings_changed
+## A game's details (info.meta) were filled in or refreshed; `changed` follows, batched.
+signal metadata_changed(key: String)
 
 const Steam := preload("res://scripts/library/stores/steam.gd")
 const Epic := preload("res://scripts/library/stores/epic.gd")
@@ -28,6 +30,12 @@ const Amazon := preload("res://scripts/library/stores/amazon.gd")
 const Common := preload("res://scripts/library/stores/common.gd")
 const GameDB := preload("res://scripts/library/gamedb.gd")
 const StoreManager := preload("res://scripts/library/manage/store_manager.gd")
+const Metadata := preload("res://scripts/library/meta/metadata.gd")
+const MetaResolver := preload("res://scripts/library/meta/resolver.gd")
+const ArtService := preload("res://scripts/library/art/art_service.gd")
+const ArtOverrides := preload("res://scripts/library/art/art_overrides.gd")
+## How long to gather detail / art updates before one `changed`.
+const BATCH_S := 2.0
 
 var games: Array[Dictionary] = []
 ## Home folder the stores are read from.
@@ -42,6 +50,11 @@ var _db: Node
 var _task_store := ""
 ## Does the store work; null until _ready (and in tests that don't make one).
 var store: Node
+## Fills in missing game details (scripts/library/meta/resolver.gd); null in tests that don't make one.
+var metadata: Node
+## Change artwork and the automatic art fill (scripts/library/art/art_service.gd).
+var artwork: Node
+var _batch: Timer
 
 
 func _ready() -> void:
@@ -55,6 +68,7 @@ func _ready() -> void:
 	_db.name = "GameDB"
 	add_child(_db)
 	_db.updated.connect(refresh)
+	attach_metadata(MetaResolver.new(), ArtService.new())
 	refresh()
 	if preload("res://scripts/system/privacy.gd").background_allowed():   # "Background lookups" (review M22)
 		_db.update_if_stale()
@@ -75,6 +89,69 @@ func attach_store(manager: Node) -> void:
 	store.external_window_needed.connect(func(k, a, r): external_window_needed.emit(k, a, r))
 	store.settings_changed.connect(func(): store_settings_changed.emit())
 	store.store_changed.connect(refresh_store)
+
+
+## Uses these detail and art services (tests pass their own) and follows their updates.
+func attach_metadata(resolver: Node, art: Node) -> void:
+	metadata = resolver
+	metadata.name = "Metadata"
+	add_child(metadata)
+	metadata.resolved.connect(_on_meta_resolved)
+	artwork = art
+	artwork.name = "Artwork"
+	add_child(artwork)
+	artwork.art_changed.connect(_on_art_changed)
+	_batch = Timer.new()
+	_batch.one_shot = true
+	_batch.timeout.connect(func(): changed.emit())
+	add_child(_batch)
+
+
+## The game, by key, as Library.games has it ({} if unknown).
+func game_by_key(key: String) -> Dictionary:
+	for g in games:
+		if g["key"] == key:
+			return g
+	return {}
+
+
+## Its page opened: fetch what's missing for this game now (it jumps the queue).
+func request_metadata(game: Dictionary) -> void:
+	if metadata != null:
+		var g := game_by_key(str(game.get("key", "")))
+		metadata.request(game if g.is_empty() else g)
+
+
+func _changed_soon() -> void:
+	if _batch != null and _batch.is_inside_tree():
+		if _batch.is_stopped():
+			_batch.start(BATCH_S)
+	else:
+		changed.emit()
+
+
+func _on_meta_resolved(key: String) -> void:
+	var e: Dictionary = _entries.get(key, {})
+	var g := game_by_key(key)
+	if e.is_empty() or g.is_empty():
+		return
+	var meta := MetaResolver.assemble(e.get("meta_layers", {}), str(g["info"]["meta"].get("steam_twin", "")),
+		str(e.get("title", "")), ProjectSettings.globalize_path(metadata.cache_dir))
+	g["info"]["meta"] = meta
+	g["info"]["summary"] = meta["summary"]
+	metadata_changed.emit(key)
+	_changed_soon()
+
+
+func _on_art_changed(key: String) -> void:
+	var e: Dictionary = _entries.get(key, {})
+	var g := game_by_key(key)
+	if e.is_empty() or g.is_empty():
+		return
+	var ov: Dictionary = ArtOverrides.read(ProjectSettings.globalize_path(artwork.picked_dir)).get(key, {})
+	g["art"] = ArtOverrides.apply(e.get("store_art", g["art"]), ov)
+	e["art"] = g["art"]
+	_changed_soon()
 
 
 ## Re-reads every store in the background; emits `changed` when done.
@@ -113,6 +190,10 @@ func _apply(result: Dictionary) -> void:
 	changed.emit()
 	if store != null:
 		store.on_library_scanned(_entries)
+	if metadata != null:
+		metadata.queue_games(games)
+	if artwork != null:
+		artwork.auto_fill(games)
 	if _again:
 		_again = false
 		refresh()
@@ -162,6 +243,8 @@ static func collect(home_dir: String, db_path: String, only: Array = []) -> Dict
 	if only.is_empty() or "amazon" in only:
 		all.append_array(Amazon.scan(home_dir))
 	var index := GameDB.build_index(GameDB.load_file(db_path))
+	var meta_dir := ProjectSettings.globalize_path(MetaResolver.CACHE_DIR)
+	var overrides := ArtOverrides.read(ProjectSettings.globalize_path(ArtOverrides.DIR))
 	var entries := {}
 	for e in all:
 		var key := "%s:%s" % [e["store"], e["id"]]
@@ -172,6 +255,14 @@ static func collect(home_dir: String, db_path: String, only: Array = []) -> Dict
 		var steam_id = rec.get("ids", {}).get("steam", null) if rec.get("ids") is Dictionary else null
 		if steam_id != null and e["store"] != "steam":
 			e["umu_id"] = "umu-%s" % steam_id
+		# Details: the store's own, then the database's, then cached live fetches (Metadata).
+		var twin := str(e["id"]) if e["store"] == "steam" else (str(steam_id) if steam_id != null else "")
+		e["meta_layers"] = {"local": e.get("local_meta", {}), "db": Metadata.gamedb_layers(rec)}
+		e["info"]["meta"] = MetaResolver.assemble(e["meta_layers"], twin, str(e.get("title", "")), meta_dir)
+		e["info"]["summary"] = e["info"]["meta"]["summary"]
+		# Art: picked or auto-filled art over (or in place of) the store's.
+		e["store_art"] = e.get("art", Common.empty_art())
+		e["art"] = ArtOverrides.apply(e["store_art"], overrides.get(key, {}))
 		entries[key] = e
 	var out: Array[Dictionary] = []
 	for key in entries:
@@ -189,7 +280,8 @@ static func make_game(entry: Dictionary) -> Dictionary:
 		"title": entry.get("title", ""),
 		"installed": entry.get("installed", false),
 		"art": entry.get("art", Common.empty_art()),
-		"info": entry.get("info", {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null}),
+		"info": entry.get("info", {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null,
+			"summary": "", "meta": Metadata.empty()}),
 		"last_played": entry.get("last_played", 0),
 		"playtime_min": entry.get("playtime_min", 0),
 	}

@@ -234,4 +234,7 @@ static func info_for(rec: Dictionary) -> Dictionary:
 		"time_to_beat": ttb,
 		"anticheat": ac,
 		"protondb": proton if proton in ["platinum", "gold", "silver", "bronze", "borked"] else null,
+		# game details: the Library fills these in (scripts/library/meta/metadata.gd)
+		"summary": "",
+		"meta": preload("res://scripts/library/meta/metadata.gd").empty(),
 	}

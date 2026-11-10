@@ -51,7 +51,8 @@ func test_extra_steam_ids_and_popular_first() -> void:
 
 
 func test_info_fills_missing_keys_as_null() -> void:
-	eq(GameDB.info_for({}), {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null}, "empty record")
+	eq(GameDB.info_for({}), {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null,
+		"summary": "", "meta": preload("res://scripts/library/meta/metadata.gd").empty()}, "empty record")
 	var halo := GameDB.info_for(GameDB.find(_index(), {"steam": "976730"}, ""))
 	eq(halo["released"], 2014, "year as int")
 	eq(halo["protondb"], "platinum", "protondb tier")

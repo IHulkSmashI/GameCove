@@ -4,8 +4,9 @@ extends RefCounted
 ##
 ## "Background lookups" (user://settings.cfg [privacy] background, default on): off = nothing is requested unless
 ## the user asks for it right then (opening a store page, pressing Check, searching). Each feature keeps its own
-## switch too: "Look up deals and prices" (Discover settings price_lookups) and "Show maker photos"
-## (DevicePhoto, [device] maker_photo).
+## switch too: "Look up deals and prices" (Discover settings price_lookups), "Show maker photos"
+## (DevicePhoto, [device] maker_photo) and "Look up game details" ([privacy] metadata: Steam store details,
+## OpenCritic with the user's key, SteamGridDB art for games missing it).
 
 const PREFS_PATH := "user://settings.cfg"
 
@@ -23,10 +24,14 @@ const NETWORK_CALLS := [
 		"when": "At start until the picture is saved, then weekly", "switch": "Show maker photos / Background lookups"},
 	{"who": "GitHub (firmware index), then the maker's own site", "what": "The list of the newest BIOS and firmware; the firmware file itself only when you ask for a USB drive.",
 		"when": "When you check for updates", "switch": "You start it"},
+	{"who": "Steam store (game details)", "what": "The Steam app id of a library game (or of the Steam edition of a GOG, Epic or Amazon game) whose description, genres, screenshots or Metacritic score are missing. Cached for a week.",
+		"when": "In the background after start, one request every 2 s; at once for the game page you open", "switch": "Look up game details (+ Background lookups for the background fill)"},
+	{"who": "OpenCritic (through RapidAPI)", "what": "A game's title, then its OpenCritic id, with your own API key.",
+		"when": "Same as game details, only if you added a key; at most 20 searches and 180 requests a day", "switch": "Look up game details / remove the key"},
+	{"who": "SteamGridDB", "what": "A game's Steam app id or title, for artwork you browse in Change artwork, and for covers, banners and logos a game has none of.",
+		"when": "When you open Change artwork; in the background for games missing art", "switch": "Look up game details (+ Background lookups for the automatic fill)"},
 	{"who": "Steam (achievements, art)", "what": "The app id of the game whose page you open.",
 		"when": "When you open a game page", "switch": "Settings > Performance"},
-	{"who": "SteamGridDB", "what": "A game's app id or title and your own API key, for missing art.",
-		"when": "Only if you added a key", "switch": "Remove the key"},
 	{"who": "PCs on your own network (GameStream)", "what": "A fixed client id and Moonlight's certificate; Wake-on-LAN packets to your PC.",
 		"when": "When you open the Stream tab or wake a PC", "switch": "You start it"},
 	{"who": "OS, Flatpak, fwupd and store tools", "what": "Their own update and sign-in requests.",
@@ -45,4 +50,20 @@ static func set_background_allowed(on: bool, path := PREFS_PATH) -> bool:
 	var cfg := ConfigFile.new()
 	cfg.load(path)
 	cfg.set_value("privacy", "background", on)
+	return cfg.save(path) == OK
+
+
+## "Look up game details" ([privacy] metadata, default on): off = no Steam store details, OpenCritic or
+## SteamGridDB requests at all, background or not.
+static func metadata_allowed(path := PREFS_PATH) -> bool:
+	var cfg := ConfigFile.new()
+	if cfg.load(path) != OK:
+		return true
+	return bool(cfg.get_value("privacy", "metadata", true))
+
+
+static func set_metadata_allowed(on: bool, path := PREFS_PATH) -> bool:
+	var cfg := ConfigFile.new()
+	cfg.load(path)
+	cfg.set_value("privacy", "metadata", on)
 	return cfg.save(path) == OK

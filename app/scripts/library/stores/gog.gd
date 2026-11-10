@@ -8,6 +8,7 @@ extends RefCounted
 ## `launch` picks (gogdl/launch.py), so no GOG login or gogdl binary is needed.
 
 const Common := preload("res://scripts/library/stores/common.gd")
+const Metadata := preload("res://scripts/library/meta/metadata.gd")
 ## GameCove's own record of GOG games it installed with gogdl (see StoreCommands).
 const GOG_RECORD := "/.local/share/gamecove/gog/installed.json"
 
@@ -85,6 +86,7 @@ static func scan(home: String) -> Array[Dictionary]:
 				"art": art_from_heroic(library[id], root),
 				"last_played": 0, "playtime_min": 0,
 				"ids": {"gog": id},
+				"local_meta": Metadata.local_layer("gog", library[id]),
 				"source": "heroic", "heroic_root": root, "heroic_flatpak": h["flatpak"],
 				"install_path": inst.get("install_path", "") if inst is Dictionary else "",
 				"platform": platform,
@@ -107,6 +109,7 @@ static func scan(home: String) -> Array[Dictionary]:
 			"art": art_from_heroic(lib, auth_root) if auth_root != "" else Common.empty_art(),
 			"last_played": 0, "playtime_min": 0,
 			"ids": {"gog": id},
+			"local_meta": Metadata.local_layer("gog", lib),
 			# heroic_root: where the GOG sign-in (gog_store/auth.json) lives, for gogdl.
 			"source": "gamecove", "heroic_root": auth_root, "heroic_flatpak": auth_flatpak,
 			"install_path": str(rec.get("install_path", "")),

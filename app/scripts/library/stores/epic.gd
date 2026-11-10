@@ -6,6 +6,7 @@ extends RefCounted
 ## login. Windows games run through `legendary launch --no-wine --wrapper umu-run`.
 
 const Common := preload("res://scripts/library/stores/common.gd")
+const Metadata := preload("res://scripts/library/meta/metadata.gd")
 
 
 ## Every legendary config folder under this home, Heroic's first.
@@ -121,6 +122,7 @@ static func scan(home: String) -> Array[Dictionary]:
 				"art": art_from_heroic(meta, cfg["heroic_root"]),
 				"last_played": 0, "playtime_min": 0,
 				"ids": {"epic": ids_for(app, meta)},
+				"local_meta": Metadata.local_layer("epic", meta),
 				"source": cfg["source"], "heroic_root": cfg["heroic_root"], "heroic_flatpak": cfg["heroic_flatpak"],
 				"config_dir": dir,
 				"install_path": inst.get("install_path", "") if inst is Dictionary else "",
