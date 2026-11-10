@@ -67,6 +67,7 @@ func _initialize() -> void:
 	emu.path_env = ""
 	# ES-DE's find rules name /var/lib/flatpak and /usr paths: never this machine's
 	load("res://scripts/library/stores/esde_launch.gd").abs_root = "/nonexistent-gamecove-test-root"
+	load("res://scripts/ui/emulation_page.gd")._sync_jobs = true   # its hero collage is drawn at once in tests
 	var failed := 0
 	var passed := 0
 	var dir := DirAccess.open("res://tests")

@@ -23,6 +23,7 @@ const QR := preload("res://scripts/ui/settings/qr.gd")
 const LinkHandoff := preload("res://scripts/ui/games/link_handoff.gd")
 const View := preload("res://scripts/ui/library_view.gd")
 const Tile := preload("res://scripts/ui/game_tile.gd")
+const CardJobs := preload("res://scripts/system/card_jobs.gd")
 const TOP_INSET := 56
 ## System chips shown before "+N more" (read-only chips; buttons all show).
 const SYSTEMS_SHOWN := 18
@@ -228,7 +229,8 @@ const COLLAGE_SIZE := Vector2i(1800, 420)
 const COLLAGE_FROM := 0.5
 ## Its left edge fades in over this part of the width (no hard cut beside the buttons).
 const COLLAGE_FADE := 0.14
-var _collage_task := -1
+## Tests: draw the collage at once instead of on a worker.
+static var _sync_jobs := false
 
 
 ## The hero: your own ROM covers side by side, through the page template's hero
@@ -245,8 +247,8 @@ func _hero_art() -> void:
 			hero_fallback.set_pattern(shorts)
 		return
 	var size := COLLAGE_SIZE
-	_wait_collage()
-	_collage_task = WorkerThreadPool.add_task(func(): call_deferred("_collage_done", collage(covers, size)), false, "Emulation hero")
+	# Off the main thread, owned by CardJobs: the page never waits for it, and a page that's gone is skipped.
+	CardJobs.shared().run_for(self, func(): return collage(covers, size), "_collage_done", [], not _sync_jobs)
 
 
 ## Covers for the collage: the ROM games played last first, then A to Z.
@@ -313,26 +315,8 @@ static func _load_image(path: String) -> Image:
 
 
 func _collage_done(img: Image) -> void:
-	if _collage_task != -1:
-		WorkerThreadPool.wait_for_task_completion(_collage_task)
-		_collage_task = -1
 	if img != null and is_instance_valid(hero):
 		_show_hero(ImageTexture.create_from_image(img))
-
-
-func _wait_collage() -> void:
-	if _collage_task != -1:
-		WorkerThreadPool.wait_for_task_completion(_collage_task)
-		_collage_task = -1
-
-
-func _exit_tree() -> void:
-	_wait_collage()
-
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_PREDELETE:
-		_wait_collage()
 
 
 # ------------------------------------------------------------ the games, on the page
