@@ -67,6 +67,11 @@ costs far more:
   while one runs, Flatpak carries on at nice 19 and idle I/O priority, so it only gets what
   the game leaves over. Per-app volume, Now playing, Bluetooth devices, Clean up and GE-Proton
   read only when their page opens or you press something: no timers.
+- **Collections and emulation** add no timer. Steam's collections file, Steam ROM Manager's
+  `shortcuts.vdf`, EmuDeck / RetroDECK / ES-DE settings, the ROM folder counts and ES-DE's
+  gamelists are read on the Library's scan thread: at start, after a rescan, and once more
+  (the emulation entries only) when ES-DE, RetroDECK or an emulated game ends, to add its
+  play time. Nothing of it runs while a game is in front.
 
 `tests/e2e/suite_perf.gd` fails if the main loop runs more than 50 iterations or 70
 main-thread wake-ups a second behind a game, a Timer outside that list runs there, the

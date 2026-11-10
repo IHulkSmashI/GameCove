@@ -43,6 +43,8 @@ a script or a Windows app for is built in.
 - 🔥 **Upscaling and frame generation picked for your chip:** XeSS and FSR 4 on Intel's XMX cores, FSR 4 and 3.1 on
   AMD, Lossless Scaling frame generation on anything, with low latency on by default.
 - 🛠️ **Fixes for your exact model,** applied at install, each with one line on what it does and an **Undo**.
+- 🕹️ **Emulation with EmuDeck:** your ROMs show up as games with their art and console, and ES-DE, EmuDeck and
+  Steam ROM Manager open from one Emulation page. Favourites, hidden games and collections work for every store.
 - 🎯 **Profiles per game and per power source.** Change it in a game and it's saved for that game, with different
   values on battery and plugged in.
 - 🏷️ **Discover:** deals in your real local prices, wishlist price alerts and a release calendar.
@@ -78,22 +80,23 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 ## Contents
 
 1. [Home and library](#home-and-library)
-2. [Quick menu and settings](#quick-menu-and-settings)
-3. [Auto TDP, upscaling and frame generation](#auto-tdp-upscaling-and-frame-generation)
-4. [Profiles](#profiles)
-5. [Device fixes](#device-fixes)
-6. [Updates](#updates)
-7. [Streaming from your PC](#streaming-from-your-pc)
-8. [Discover](#discover)
-9. [Safety and reliability](#safety-and-reliability)
-10. [Performance](#performance)
-11. [Network and privacy](#network-and-privacy)
-12. [Supported handhelds](#supported-handhelds)
-13. [Install](#install)
-14. [FAQ](#faq)
-15. [Community](#community)
-16. [Credits](#credits)
-17. [Licence](#licence)
+2. [Emulation](#emulation)
+3. [Quick menu and settings](#quick-menu-and-settings)
+4. [Auto TDP, upscaling and frame generation](#auto-tdp-upscaling-and-frame-generation)
+5. [Profiles](#profiles)
+6. [Device fixes](#device-fixes)
+7. [Updates](#updates)
+8. [Streaming from your PC](#streaming-from-your-pc)
+9. [Discover](#discover)
+10. [Safety and reliability](#safety-and-reliability)
+11. [Performance](#performance)
+12. [Network and privacy](#network-and-privacy)
+13. [Supported handhelds](#supported-handhelds)
+14. [Install](#install)
+15. [FAQ](#faq)
+16. [Community](#community)
+17. [Credits](#credits)
+18. [Licence](#licence)
 
 ---
 
@@ -101,6 +104,10 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 
 - **Every store in one library.** Steam, Epic, GOG and Amazon side by side. Filter by store, genre, critic score (75+)
   or what's installed, sort by Top rated, and search with the on-screen keyboard.
+- **Favourites, hidden games and collections.** Press Menu on any game (or the star on its page) to make it a
+  favourite, put it in a collection or hide it. Favourites get their own shelf on Home; View opens the Library's Filter
+  sheet for favourites, a collection, emulated games or hidden games. Your Steam collections, favourites and hidden
+  games show up too (read-only: GameCove never changes them).
 - **Install, update and manage from the handheld.** A download queue with pause and resume, check and repair files,
   move games to an SD card or USB drive, uninstall, launch options and the Proton version per game. Steam games launch
   through Steam, so cloud saves and Steam Input keep working. Already use Heroic? GameCove reuses its sign-ins and games.
@@ -124,6 +131,22 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 <td width="33%"><img src="docs/images/home-light.webp" alt="Home in the Light theme"><br><sub>The Light theme</sub></td>
 </tr>
 </table>
+
+## Emulation
+
+GameCove works with what EmuDeck (or RetroDECK, or ES-DE on its own) already set up, so your console games live in the
+same interface as everything else.
+
+- **Your ROMs in the library.** Steam ROM Manager's games show up as games, with the art it picked, a badge for the
+  console, and play time. They start through Steam, exactly as Steam starts them.
+- **One Emulation page** (Library > Filter > Emulation page, or ES-DE's tile): open ES-DE or RetroDECK full screen
+  like a game (the quick menu works over it), open EmuDeck for emulator updates and settings, and **Add or update ROMs
+  in the library** with Steam ROM Manager. It shows your systems with how many games each has, and what you played
+  last in ES-DE.
+- **Nothing installed yet?** The page shows a QR code to emudeck.com and three short steps.
+- GameCove never downloads or ships games or BIOS files. Play backups of games you own.
+
+<p align="center"><img src="docs/images/emulation.webp" alt="The Emulation page" width="70%"></p>
 
 ## Quick menu and settings
 
@@ -351,6 +374,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Critic scores (optional) | [OpenCritic](https://opencritic.com) through RapidAPI | A game's title, then its OpenCritic id, with your own key | Same as game details, only if you added a key; at most 20 searches and 180 requests a day | Look up game details, or remove the key |
 | Artwork | [SteamGridDB](https://www.steamgriddb.com) | A game's Steam app id or title, with your own key | When you open Change artwork; in the background for games with no cover, hero or logo | Look up game details (+ Background lookups for the automatic fill) |
 | Game art setup | Your phone, on your own network, then SteamGridDB | Your SteamGridDB key: pasted on a one-time page GameCove serves on your LAN, then checked once with SteamGridDB | Only while the Game art step is open, 10 minutes at most | You start it |
+| Emulation tools | Whatever EmuDeck, RetroDECK, ES-DE and Steam ROM Manager contact themselves | Those tools' own requests (GameCove only reads their files, on the device) | Only while you have them open from the Emulation page | You start it |
 | Game streaming | PCs on your own network (GameStream: Vibepollo, Sunshine, Apollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network | When you open the Stream tab or wake a PC | You start it |
 | Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in; Flatpak apps also once a day if you turned on "Update apps by themselves" | You start it (automatic app updates: off by default, and Background lookups) |
 

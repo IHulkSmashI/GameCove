@@ -46,6 +46,7 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 | 12 | github.com (`firmware/firmware.json.gz`, `.sha256`, `.sigstore.json`) | Nothing | Checking for updates | You start it | `app/scripts/system/updates.gd` |
 | 13 | The maker's own download site (allow-listed per maker, https only, redirects included; at most 5 redirects, and the address the download ends on must be on the maker's site (the hops in between are https but not host-checked); the file must match the sha256 in the signed list; offered only when cosign on this device checked the list's signature) | Nothing | You prepare a USB drive | You start it | `updates.gd`, `firmware_index.gd` |
 | 14 | LVFS, rpm-ostree / steamos-update, Flatpak, Flathub | Those tools' own | You update or install Moonlight; Flatpak apps also at most daily (3 min after start or when a game ends, never while one runs, on AC or an unmetered network) if you turned on "Update apps by themselves" | You start it; the automatic app update is off by default and also needs Background lookups | `updates.gd`, `app/scripts/streaming/` |
+| 14a | Whatever EmuDeck, RetroDECK, ES-DE and Steam ROM Manager contact (Steam ROM Manager: SteamGridDB, with its own settings) | Those tools' own requests | Only while you have them open: you open them from the Emulation page | You start it | `app/scripts/ui/emulation_page.gd` |
 | 15 | PCs on your LAN (GameStream 47989 http, 47984 https pinned to the PC's certificate) | Fixed client id, Moonlight's client certificate | Stream tab | You start it | `app/scripts/streaming/host_api.gd` |
 | 15a | Every address of your local IPv4 networks (each network from /22 to /30, so at most 1,022 addresses; larger networks are skipped), TCP port 47989 | A TCP connection attempt (no data), then a GameStream `serverinfo` request to each address that answers | Opening the Stream tab when no PC is saved and mDNS (avahi) finds none | You start it (opening the tab) | `app/scripts/streaming/streaming.gd` (`_probe_job`), `gamestream.gd` (`subnet_hosts`) |
 | 16 | LAN broadcast (Wake-on-LAN) | Your PC's MAC address | You wake a PC | You start it | `wol.gd` |
@@ -89,6 +90,19 @@ on your own network (`app/scripts/system/key_drop.gd`):
 GameCove then checks the key with one SteamGridDB request and saves it only if SteamGridDB accepts it, in
 `user://setup.cfg` and Discover's settings file, both readable by your user only (0600). After that it fills in the
 art your games are missing (row 9).
+
+## Collections and emulation: read on the device only
+
+- Favourites, hidden games and your collections live in `user://collections.json`; play time for ES-DE, RetroDECK
+  and emulated games in `user://playtime.json`. Neither leaves the device.
+- Steam's collections, favourites and hidden games are **read** from
+  `~/.local/share/Steam/userdata/<account>/config/cloudstorage/cloud-storage-namespace-1.json` (the account that
+  signed in last) and Steam ROM Manager's games from `config/shortcuts.vdf` in the same folder. GameCove never writes
+  either file.
+- The Emulation page reads EmuDeck's `~/.config/EmuDeck/settings.sh`, RetroDECK's `retrodeck.cfg` /
+  `retrodeck.json`, ES-DE's `es_settings.xml`, `es_systems.xml` and `gamelist.xml` files, and counts the files in the
+  ROM folders (it doesn't open them). It never writes their files and never downloads or bundles games or BIOS files.
+  Its EmuDeck QR code is drawn on the handheld; showing it contacts nothing.
 
 ## Files GameCove writes for game details and art
 
