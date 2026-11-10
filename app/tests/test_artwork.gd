@@ -101,6 +101,32 @@ func test_steam_grid_backup_and_restore() -> void:
 	wipe(dir)
 
 
+## Review 2, problem 9: native and Flatpak Steam with the same account id shared one
+## backup folder; after apply then reset one root lost its original.
+func test_two_steam_roots_with_one_account_keep_their_own_backups() -> void:
+	var dir := tmp("tworoots")
+	var native := dir.path_join("native/userdata/123/config/grid")
+	var flatpak := dir.path_join("flatpak/userdata/123/config/grid")
+	var a := FileAccess.get_file_as_bytes(fixture("discover/cover_jpg.bin"))
+	var b := FileAccess.get_file_as_bytes(fixture("discover/hero_png.bin"))
+	put(native.path_join("400p.jpg"), a)
+	put(flatpak.path_join("400p.png"), b)
+	put(dir.path_join("new.png"), b)
+	var root := dir.path_join("backup")
+	var bn := SteamGrid.backup_dir_for(root, native)
+	var bf := SteamGrid.backup_dir_for(root, flatpak)
+	ok(bn != bf, "one backup folder per grid folder")
+	SteamGrid.apply(native, bn, "400", "cover", dir.path_join("new.png"))
+	SteamGrid.apply(flatpak, bf, "400", "cover", dir.path_join("new.png"))
+	ok(SteamGrid.reset(native, bn, "400p") and SteamGrid.reset(flatpak, bf, "400p"), "both reset")
+	eq(FileAccess.get_file_as_bytes(native.path_join("400p.jpg")), a, "native original back")
+	eq(FileAccess.get_file_as_bytes(flatpak.path_join("400p.png")), b, "flatpak original back")
+	# the same folder through a symlink is the same backup
+	DirAccess.open(dir).create_link(dir.path_join("native"), dir.path_join("link"))
+	eq(SteamGrid.backup_dir_for(root, dir.path_join("link/userdata/123/config/grid")), bn, "symlinked path, same backup")
+	wipe(dir)
+
+
 func _service(http: Variant, dir: String) -> Node:
 	var s: Node = ArtService.new()
 	s.http = http
