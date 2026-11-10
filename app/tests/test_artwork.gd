@@ -61,15 +61,12 @@ func test_parse_and_best() -> void:
 	eq(Sgdb.parse_assets(FileAccess.get_file_as_bytes(fx("sgdb_error.json"))), [], "error answer")
 
 
-func test_keys_user_then_project() -> void:
-	var dir := tmp("keys")
-	var pk := dir.path_join("project_keys.json")
-	eq(Sgdb.key("", pk), "", "no key anywhere")
-	put(pk, JSON.stringify({"steamgriddb": "fedcba9876543210fedcba9876543210"}).to_utf8_buffer())
-	eq(Sgdb.key("", pk), "fedcba9876543210fedcba9876543210", "project key")
-	eq(Sgdb.key(KEY, pk), KEY, "the user's key wins")
-	eq(Sgdb.key("not-a-key", pk), "fedcba9876543210fedcba9876543210", "a bad user key is ignored")
-	wipe(dir)
+func test_only_the_users_own_key() -> void:
+	eq(Sgdb.key(""), "", "no key: nothing to fall back on (none ships with GameCove)")
+	eq(Sgdb.key(KEY), KEY, "the user's key")
+	eq(Sgdb.key(" " + KEY + "\n"), KEY, "pasted with spaces")
+	eq(Sgdb.key("not-a-key"), "", "a bad key is ignored")
+	ok(not "PROJECT_KEYS" in Sgdb.new().get_script().get_script_constant_map(), "no project key path")
 
 
 func test_steam_grid_backup_and_restore() -> void:
@@ -111,7 +108,6 @@ func _service(http: Variant, dir: String) -> Node:
 	s.thumbs_dir = dir.path_join("thumbs")
 	s.backup_root = dir.path_join("backup")
 	s.prefs_path = dir.path_join("settings.cfg")
-	s.project_keys = dir.path_join("none.json")
 	s.steam_roots = [dir.path_join("steam")]
 	s.user_key_fn = func() -> String: return KEY
 	s.sync_mode = true

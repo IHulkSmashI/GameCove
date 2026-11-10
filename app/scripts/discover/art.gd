@@ -11,8 +11,8 @@ extends Node
 ##    data / the calendar (remember()); newer Steam apps keep art under hashed
 ##    paths that only the store data knows;
 ## 2. Steam's public CDN by appid (store_item_assets/steam/apps/<id>/...);
-## 3. SteamGridDB, with the user's own API key, else GameCove's project key
-##    when the build has one (scripts/library/art/sgdb.gd), and only while
+## 3. SteamGridDB, with the user's own API key (scripts/library/art/sgdb.gd;
+##    none ships with GameCove), and only while
 ##    "Look up game details" is on (scripts/system/privacy.gd).
 ## A game with nothing found isn't asked about again for a day.
 

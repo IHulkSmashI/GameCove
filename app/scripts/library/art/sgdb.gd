@@ -4,15 +4,13 @@ extends RefCounted
 ## styles and filters as SteamGridDB's own Decky plugin (decky-steamgriddb,
 ## src/hooks/useSGDB.tsx and src/constants.ts).
 ##
-## Keys, first that's set:
-##   1. the user's own key (Settings > Discover > Keys, or first-run setup),
-##   2. GameCove's project key, written into res://data/project_keys.json by
-##      the release workflow from the STEAMGRIDDB_API_KEY secret (never in git).
-## The Decky plugin's own key is reserved for that plugin and is never used.
+## Key: always the user's own, from the Game art step of setup or the
+## installer (signing in to SteamGridDB with Steam is free). No key ships with
+## GameCove: a key inside a public build could be pulled out and abused. The
+## Decky plugin's own key is reserved for that plugin and is never used.
 ## Every image is credited to SteamGridDB and its author.
 
 const API := "https://www.steamgriddb.com/api/v2/"
-const PROJECT_KEYS := "res://data/project_keys.json"
 const SITE := "https://www.steamgriddb.com"
 
 ## Our kinds -> SteamGridDB endpoint, default dimensions and styles.
@@ -28,20 +26,9 @@ const STYLE_NAMES := {"alternate": "Alternate", "white_logo": "White logo", "no_
 	"material": "Minimal", "official": "Official", "white": "White", "black": "Black", "custom": "Custom"}
 
 
-## The key to use: the user's, else the project's, else "".
-static func key(user_key: String, project_path := PROJECT_KEYS) -> String:
-	if valid_key(user_key) and user_key != "":
-		return user_key
-	return project_key(project_path)
-
-
-static func project_key(path := PROJECT_KEYS) -> String:
-	if not FileAccess.file_exists(path):
-		return ""
-	var j := JSON.new()
-	if j.parse(FileAccess.get_file_as_string(path)) != OK or not j.data is Dictionary:
-		return ""
-	var k := str(j.data.get("steamgriddb", ""))
+## The key to use: the user's own when it looks right, else "".
+static func key(user_key: String) -> String:
+	var k := user_key.strip_edges()
 	return k if valid_key(k) else ""
 
 
