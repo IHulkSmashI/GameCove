@@ -237,6 +237,7 @@ func _run() -> void:
 		main.status_panel.close()
 
 	await _games_shots()
+	await _saves_shots()
 
 	for id in ["midnight", "sunset", "light", "cove"]:
 		if not want(["theme_" + id, "theme_%s_page" % id, "theme_%s_quick" % id]):
@@ -425,6 +426,143 @@ func _settings_shots() -> void:
 
 
 ## The Device service with a fully resolved Claw 8 EX info() (About this device).
+## Cloud saves (game page card, the conflict choice, Settings > Saves), battery drain and
+## history (game page line, About this device) and the Sleep at low battery warning.
+func _saves_shots() -> void:
+	var names := ["game_saves", "game_saves_conflict", "settings_saves", "about_battery", "battery_card", "low_battery"]
+	if not want(names):
+		return
+	var tmp := "/tmp/gamecove-shots/saves"
+	DirAccess.make_dir_recursive_absolute(tmp)
+	var now := int(Time.get_unix_time_from_system())
+	# a battery the log can read (49.3 Wh full, like a Claw 8 EX)
+	var bat := tmp + "/sys/class/power_supply/BAT0/"
+	DirAccess.make_dir_recursive_absolute(bat)
+	for f in [["type", "Battery"], ["capacity", "64"], ["energy_now", "31500000"], ["energy_full", "49300000"]]:
+		var fa := FileAccess.open(bat + f[0], FileAccess.WRITE)
+		fa.store_string(f[1] + "\n")
+		fa.close()
+	var epic: Dictionary = {}
+	for g in games:
+		if str(g.get("store", "")) == "epic" and bool(g.get("installed", false)):
+			epic = g
+			break
+	if epic.is_empty():
+		epic = games[1].duplicate(true)
+		epic["store"] = "epic"
+		epic["key"] = "epic:" + str(epic["id"])
+		epic["installed"] = true
+	var key := str(epic["key"])
+	var sv: Node = main.saves
+	sv.cfg_path = tmp + "/saves.cfg"
+	sv.backup_dir = tmp + "/backups"
+	sv.backups.base_dir = sv.backup_dir
+	var cfg := ConfigFile.new()
+	cfg.set_value("game:" + key, "state", "synced")
+	cfg.set_value("game:" + key, "at", now - 120)
+	cfg.set_value("game:" + key, "last_sync", now - 120)
+	cfg.save(sv.cfg_path)
+	var bl: Node = main.battery_log
+	bl.path = tmp + "/battery.json"
+	bl.sys_root = tmp
+	bl.data = {"v": 1, "open": {}, "samples": [], "games": {
+		key: {"title": str(epic["title"]), "wh": 21.6, "s": 9000, "n": 3},
+		str(games[0]["key"]): {"title": str(games[0]["title"]), "wh": 30.0, "s": 7200, "n": 2},
+		str(games[2]["key"]): {"title": str(games[2]["title"]), "wh": 9.5, "s": 5400, "n": 2}}}
+	# seven days of game starts and ends, sleep and the charger
+	var pct := 100
+	var t := now - 7 * 86400 + 3600
+	var day := 0
+	while t < now - 1800:
+		bl.data["samples"].append([t, pct, pct * 0.493, "unplug", ""])
+		bl.data["samples"].append([t + 600, pct - 2, (pct - 2) * 0.493, "start", key])
+		pct = maxi(18, pct - 34 - (day % 3) * 9)
+		bl.data["samples"].append([t + 6000, pct, pct * 0.493, "end", key])
+		bl.data["samples"].append([t + 9000, pct - 3, (pct - 3) * 0.493, "suspend", ""])
+		bl.data["samples"].append([t + 30000, pct - 5, (pct - 5) * 0.493, "resume", ""])
+		bl.data["samples"].append([t + 31000, pct - 6, (pct - 6) * 0.493, "plug", ""])
+		pct = 100
+		bl.data["samples"].append([t + 40000, pct, pct * 0.493, "suspend", ""])
+		t += 86400
+		day += 1
+	if want(["game_saves", "game_saves_conflict"]):
+		main._open_page(epic)
+		var card: Control = main.page.saves_card
+		await frames(20)
+		if card != null:
+			card.toggle_button.grab_focus()
+		await shot("game_saves")
+		if want(["game_saves_conflict"]) and card != null:
+			cfg.set_value("game:" + key, "state", "conflict")
+			cfg.set_value("game:" + key, "local", now - 3 * 3600)
+			cfg.set_value("game:" + key, "remote", now - 25 * 60)
+			cfg.save(sv.cfg_path)
+			card.refresh()
+			card.open_conflict()
+			await shot("game_saves_conflict")
+			main.game_actions.sheet.close()
+			cfg.set_value("game:" + key, "state", "synced")
+			cfg.save(sv.cfg_path)
+		main._close_page()
+	if want(["settings_saves", "about_battery"]):
+		var lib = S.FakeLibrary.new()
+		lib.games = games
+		var svc: Dictionary = main.settings.services.duplicate()
+		svc["saves"] = sv
+		svc["battery"] = bl
+		svc["library"] = lib
+		svc["device"] = _claw_device()
+		main.settings.set_services(svc)
+		main.show_screen("settings")
+		await frames(4)
+		var st = main.settings
+		if want(["settings_saves"]):
+			st.cat_buttons["saves"].grab_focus()
+			await frames(2)
+			st.enter_page()
+			var sp = st.pages["saves"]
+			var gk := "game_" + key.validate_node_name()
+			if sp.rows.has(gk):
+				sp.rows[gk].button.grab_focus()
+			await shot("settings_saves")
+		if want(["about_battery"]):
+			st.cat_buttons["device"].grab_focus()
+			await frames(2)
+			st.enter_page()
+			await frames(10)
+			var hist: Node = st.find_child("Card_history", true, false)
+			if hist != null:
+				hist.grab_focus()
+			await shot("about_battery")
+		main.show_screen("home")
+	if want(["battery_card"]):
+		# the card on its own, at the About page's column width
+		var DKit = load("res://scripts/ui/device/device_kit.gd")
+		var TD = load("res://scripts/ui/texts_device.gd")
+		var bg := ColorRect.new()
+		bg.color = load("res://theme/gamecove_theme.gd").color("bg")
+		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+		bg.z_index = 50
+		main.add_child(bg)   # main's theme (fonts, colours)
+		var c: Array = DKit.card(TD.SECTIONS["history"], TD.SECTION_ICONS["history"], "good", false)
+		c[0].position = Vector2(48, 48)
+		c[0].custom_minimum_size = Vector2(root.size.x * 0.5, 0)
+		var body = load("res://scripts/ui/device/battery_history.gd").new()
+		body.setup(bl, now)
+		c[1].add_child(body)
+		bg.add_child(c[0])
+		await shot("battery_card")
+		bg.free()
+	if want(["low_battery"]):
+		main._on_low_battery(5)
+		main.low_dialog.seconds_left = 23
+		main.low_dialog._show()
+		main.low_dialog._timer.stop()
+		await shot("low_battery")
+		main.low_dialog.dismiss()
+		main._low_dialog_closed()
+
+
 func _claw_device() -> Node:
 	var here: String = get_script().resource_path.get_base_dir()
 	var d: Node = load(here.path_join("shoot_controls.gd")).ClawDevice.new()

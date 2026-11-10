@@ -114,6 +114,14 @@ tested data. GameCove recognises your exact model and only shows what it can do:
   with its patch notes, DLC with prices, and a SteamDB link you open on your phone.
 - **Change artwork.** Pick any cover, banner, logo or icon from SteamGridDB's community for any game, Steam or not (it
   can update Steam's own library art too). Free with your own SteamGridDB key, which setup gets you in about a minute.
+- **Cloud saves for Epic and GOG.** Just before an Epic or GOG game starts, GameCove gets your newest save from the
+  store's own cloud (through legendary and Heroic's gogdl, with your sign-in); just after it ends, yours goes up. The
+  game page says how it stands ("Saves synced 2 min ago"), with a switch per game, Sync now, and a local backup before
+  anything replaces a save on the handheld. Changed on both sides? You pick, with the newer one highlighted. No
+  connection? The game starts anyway. Steam games keep Steam Cloud; Amazon games aren't covered (nile has no save sync).
+- **Battery drain per game.** "Drains about 9 W, ~5 h on a full charge" on a game's page once you've played it on
+  battery for a while, and a 7-day battery chart with every game's drain in About this device. Recorded only when a
+  game starts or ends, the handheld sleeps or wakes, or the charger goes in or out.
 - **Store sign-in with your phone.** Scan a QR code and sign in there. No typing passwords on the handheld.
 - **Four themes:** Cove, Midnight, Sunset and Light.
 
@@ -134,7 +142,7 @@ Switch to Desktop Mode live here too.
 | Tab | What you control |
 | --- | --- |
 | **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, Lossless frame gen, the scaling filter |
-| **Power** | Power profile, TDP, boost, fan mode, battery saver, charge limit, CPU boost, energy preference |
+| **Power** | Power profile, TDP, boost, fan mode, battery saver, charge limit, CPU boost, energy preference (Settings > Power also has **Sleep at low battery**: at 3 to 10 % on battery, a 30 s warning any button cancels, then sleep; off by default) |
 | **Display** | Brightness, refresh rate, frame limit, VRR, night light, colour vibrance, scaling filter and sharpness, screen effects |
 | **Audio** | Volume, mute, output device, microphone mute and input, each app's own volume, and play/pause and skip for the music playing behind your game |
 | **Controller** | Controller type, gyro, Nintendo button layout, rumble, stick lights (effect, colour, brightness), mouse mode |
@@ -304,6 +312,9 @@ over Tailscale. More in [docs/STREAMING.md](docs/STREAMING.md).
   model is rated for, and checked again by the system helper.
 - **Risky screen changes revert by themselves.** After HDR or a new refresh rate you get "Keep this?" with a 15-second
   countdown.
+- **Saves are never overwritten without a copy.** Before a cloud save replaces one on the handheld (or a backup is
+  restored), the current one is backed up locally; a download that fails half way puts it straight back. The last 10
+  backups per game are kept, and the game page restores any of them.
 - **Undo everything:** fixes, upscaling files, launch options, profiles. Uninstalling puts Steam Gaming Mode back as the
   default.
 - **Signed releases.** The installer checks every download against a signed checksum list before anything runs.
@@ -328,7 +339,7 @@ IDs or anything you type into its settings to us. It only talks to the services 
 
 **Settings > About > Network and privacy** has the switches: **Background lookups** (off: nothing is requested unless
 you ask for it right then), **Look up deals and prices**, **Look up game details** and **Show maker photos**, all on by
-default. Some store links can carry a GameCove affiliate id (Settings > Discover > **Affiliate links**; none are set up
+default; **Sync cloud saves** is in Settings > Saves (and per game). Some store links can carry a GameCove affiliate id (Settings > Discover > **Affiliate links**; none are set up
 yet). It only changes the link, never the price, and sends nothing about you. Every call is listed in
 [docs/PRIVACY.md](docs/PRIVACY.md).
 
@@ -352,6 +363,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Artwork | [SteamGridDB](https://www.steamgriddb.com) | A game's Steam app id or title, with your own key | When you open Change artwork; in the background for games with no cover, hero or logo | Look up game details (+ Background lookups for the automatic fill) |
 | Game art setup | Your phone, on your own network, then SteamGridDB | Your SteamGridDB key: pasted on a one-time page GameCove serves on your LAN, then checked once with SteamGridDB | Only while the Game art step is open, 10 minutes at most | You start it |
 | Game streaming | PCs on your own network (GameStream: Vibepollo, Sunshine, Apollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network | When you open the Stream tab or wake a PC | You start it |
+| Cloud saves (Epic, GOG) | Epic and GOG, through legendary and heroic-gogdl (GOG's remote config once for a game Heroic doesn't know) | Your save files for the game you start or just closed, with your store sign-in; for GOG's remote config only the game's client id | Just before an Epic or GOG game starts and just after it ends; when you press Sync now | Sync cloud saves (Settings > Saves; also per game) |
 | Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in; Flatpak apps also once a day if you turned on "Update apps by themselves" | You start it (automatic app updates: off by default, and Background lookups) |
 
 </details>

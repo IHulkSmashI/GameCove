@@ -16,7 +16,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | InputPlumber | Controller input, button and gyro routing; device profiles and D-Bus API for paddles, gyro, rumble | GPL-3.0 |
 | PowerStation | TDP, GPU clocks over D-Bus | GPL-3.0 |
 | steamos-manager | TDP, GPU, charge limit over D-Bus | MIT |
-| legendary, heroic-gogdl, nile | Epic, GOG, Amazon libraries, launch, install / update / repair / uninstall, progress output | GPL-3.0 |
+| legendary, heroic-gogdl, nile | Epic, GOG, Amazon libraries, launch, install / update / repair / uninstall, progress output; Epic and GOG cloud saves (`sync-saves`, `save-sync`) | GPL-3.0 |
 | Heroic Games Launcher | Library, playtime, prefixes and art for games installed through Heroic | GPL-3.0 |
 | gamescope-session-plus | The session GameCove runs in | see project |
 | xprop (X.Org) | Setting gamescope atoms | MIT |
@@ -77,6 +77,7 @@ GameCove stands on a lot of other people's work. Thank you.
 - **node-vdf** (Anthony Beaumont, MIT): the binary KeyValues type table our parser follows. **Achievement Watcher** / **celes** (GPL) and **Steam Achievement Manager** (gibbed, zlib): where Steam keeps achievement stats and how the schema is laid out. Our code is our own.
 - **Bazzite** (Apache-2.0): its Gaming Mode update path (`os-update`, polkit rules) shows which update commands work without a password.
 - **Heroic Games Launcher**: the GOG sign-in URL and where gogdl keeps its login.
+- **Heroic Games Launcher**: how it syncs cloud saves (`save_sync.ts`, GOG `syncSaves` and `getSaveSyncLocation`): legendary's save path from `--skip-upload --skip-download --accept-path`, GOG's save-folder variables and default Galaxy folder, its saved gogdl timestamps.
 - **HueSync** (honjow, BSD-3-Clause): tested RGB handling for handheld LED nodes (Legion Go ring profile/mode/enabled order and 0-100 channels, the Ally's 12-channel layout, kernel effect names, re-applying lights after resume), followed in `fixes/controller-led` and `app/scripts/controls/input/leds.gd`. **hhd-decky** (hhd-dev): where Handheld Daemon's HTTP port and token live. Our code is our own.
 - **proton-cachyos** (CachyOS), **GE-Proton** (GloriousEggroll) and **low_latency_layer** (Korthos-Software): their docs for the launch variables we set.
 
