@@ -164,6 +164,31 @@ func streams(ctx: Dictionary) -> Array:
 	return Wp.parse_status(str(r.get("out", "")))["streams"]
 
 
+## Apps playing or recording now, with their volume, for the per-app mixer
+## (ui/controls/app_mixer.gd): [{"id", "name", "volume" (0-100), "muted"}].
+## Two apps with the same name get " 2", " 3"... so each row can be told apart.
+## Worker only (runs wpctl once per app).
+func app_mixer(ctx: Dictionary) -> Array:
+	var out := []
+	if ctx.get("runner") == null:
+		return out
+	var seen := {}
+	for s in streams(ctx):
+		var r: Dictionary = ctx.runner.run(Wp.WPCTL, PackedStringArray(["get-volume", str(s["id"])]))
+		var v := Wp.parse_volume(str(r.get("out", ""))) if int(r.get("code", -1)) == 0 else {}
+		if v.is_empty():
+			continue   # gone between status and get-volume
+		var name := str(s["name"]).strip_edges()
+		if name == "":
+			name = T.APP_UNNAMED
+		seen[name] = int(seen.get(name, 0)) + 1
+		if int(seen[name]) > 1:
+			name = "%s %d" % [name, seen[name]]
+		out.append({"id": int(s["id"]), "name": name,
+			"volume": roundf(clampf(float(v["volume"]), 0.0, 1.0) * 100.0), "muted": bool(v.get("muted", false))})
+	return out
+
+
 ## Sets one app stream's volume (0-100 %). Worker only.
 func set_stream_volume(ctx: Dictionary, stream_id: int, pct: float) -> bool:
 	if ctx.get("runner") == null or stream_id <= 0:

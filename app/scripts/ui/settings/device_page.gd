@@ -99,6 +99,10 @@ func build() -> void:
 			continue
 		c.name = "Panel_" + id
 		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# a panel that rebuilds its own buttons (Fixes after Apply / Undo): the
+		# settings screen relinks its focus chain, or neighbours point at freed buttons
+		if c.has_signal("rebuilt"):
+			c.rebuilt.connect(func(): rebuilt.emit())
 		if c.has_signal("part_requested"):
 			c.part_requested.connect(func(to: String):
 				var f := focus_part(to)

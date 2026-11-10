@@ -11,6 +11,10 @@ extends "res://scripts/ui/settings/page.gd"
 const TC := preload("res://scripts/ui/texts_controls.gd")
 const Model := preload("res://scripts/ui/controls/model.gd")
 const GroupCards := preload("res://scripts/ui/controls/group_cards.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
+const AppMixer := preload("res://scripts/ui/controls/app_mixer.gd")
+const BluetoothCard := preload("res://scripts/ui/settings/bluetooth_card.gd")
+const Services := preload("res://scripts/ui/settings/services.gd")
 
 var groups: Array = []
 var model: Object
@@ -19,6 +23,9 @@ var cards: Object
 var lazy := true
 var _built := false
 var _sig := ""
+## Widgets after the generated cards with a focusables() of their own that can
+## change after a build (the per-app mixer fills in from the worker).
+var extras: Array = []
 
 
 func setup(page_id: String, svc_: Dictionary, host_obj: Object) -> void:
@@ -36,6 +43,7 @@ func _connect() -> void:
 
 func build() -> void:
 	cards = null
+	extras.clear()
 	if lazy and not _built:
 		return
 	if model == null:
@@ -54,7 +62,47 @@ func build() -> void:
 ## Controller links to the button map and test (the device's controller
 ## panel), which used to be a second "Controller" tab under Device.
 func build_extra() -> void:
-	if id != "controller" or host == null or not host.has_method("open_category"):
+	match id:
+		"audio": _mixer_card()
+		"controller": _buttons_card()
+		"system": _bluetooth_card()
+
+
+## System: Bluetooth devices (only where there's Bluetooth to switch).
+func _bluetooth_card() -> void:
+	var c := svc("controls")
+	if c == null or not c.has_method("has") or not c.has("network.bluetooth"):
+		return
+	var on: bool = c.available("network.bluetooth") if c.has_method("available") else bool(c.control("network.bluetooth").get("available"))
+	var runner: RefCounted = svc("bluetooth_runner") as RefCounted
+	# unit tests pass a fake runner; without one nothing real may run under them
+	if not on or (runner == null and Services.under_tests(self)):
+		return
+	var box := add_card(TX.BT_TITLE, "bluetooth", TX.BT_LINE)
+	var b: VBoxContainer = BluetoothCard.new()
+	b.setup(runner, host if host is Node else null)
+	b.rebuilt.connect(func(): rebuilt.emit())
+	b.notice.connect(func(t: String, tone: String): notify(t, tone))
+	box.add_child(b)
+	extras.append(b)
+
+
+## Sound: each app's own volume.
+func _mixer_card() -> void:
+	if AppMixer.provider_of(svc("controls")) == null:
+		return
+	var box := add_card(TX.MIXER_TITLE, "volume", TX.MIXER_LINE)
+	var m: VBoxContainer = AppMixer.new()
+	m.show_title = false
+	m.setup(svc("controls"))
+	m.rebuilt.connect(func(): rebuilt.emit())
+	m.failed.connect(func(t: String): notify(t, "bad"))
+	box.add_child(m)
+	extras.append(m)
+
+
+func _buttons_card() -> void:
+	if host == null or not host.has_method("open_category"):
 		return
 	var box := add_card(TC.BUTTONS_CARD, "gamepad")
 	var r := action_row(box, "button_map", TC.BUTTONS_ROW, "", TC.BUTTONS_ROW_HINT, "gamepad")
@@ -76,6 +124,9 @@ func _profiles_note() -> void:
 func focusables() -> Array:
 	var out: Array = cards.focusables() if cards != null else []
 	out.append_array(_focusables)
+	for e in extras:
+		if is_instance_valid(e):
+			out.append_array(e.focusables())
 	return out
 
 
@@ -83,6 +134,11 @@ func on_shown() -> void:
 	if not _built:
 		_built = true
 		rebuild()
+		return
+	# what's playing changes between visits: read the apps again
+	for e in extras:
+		if is_instance_valid(e) and e.has_method("refresh"):
+			e.refresh()
 
 
 func on_hidden() -> void:
@@ -131,7 +187,13 @@ func _focused_key() -> String:
 	return ""
 
 
-## Settings asked to open this page at `part` (unused here).
-func focus_part(_part: String) -> Control:
+## Settings asked to open this page at `part` ("bluetooth": the devices card).
+func focus_part(part: String) -> Control:
+	if part == "bluetooth":
+		if not _built:
+			on_shown()
+		for e in extras:
+			if is_instance_valid(e) and e.name == "BluetoothDevices" and not e.focusables().is_empty():
+				return e.focusables()[0]
 	var f := focusables()
 	return f[0] if not f.is_empty() else null

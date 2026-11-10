@@ -68,6 +68,11 @@ SteamOS <https://store.steampowered.com/news/app/1675200>, Fedora Atomic
 - Apply: `flatpak update --user|--system --noninteractive -y`. Flatpak's polkit:
   `app-update`, `runtime-update`, `appstream-update` are `allow_active=yes`, so system
   updates need no password in the active session (verified in Flatpak's policy file).
+- Automatically (opt-in, "Update apps by themselves" on the Updates page, `[updates] auto_apps` in
+  `user://settings.cfg`, off by default): at most once a day (`user://firmware/auto_apps.stamp`), 3 min after start
+  (one one-shot timer) or when a game ends; refused while a game runs, with Background lookups off, or on battery on
+  a metered network. It runs `nice -n 19 ionice -c 3 flatpak update ...` (ionice only when present), so a game
+  started meanwhile keeps the CPU and disk.
 
 ## Firmware, BIOS and drivers (Updates hub)
 
@@ -246,6 +251,20 @@ Device fixes: `devices.json` `"fixes"` ∩ `gamecove-fix --list`, each with its 
 3. Storage: internal NVMe on `/home`, SD on `/run/media/deck/<label>` as `sd`.
 4. Controller: InputPlumber is not on SteamOS by default → `available: false`, all
    controls hidden.
+
+## Everyday extras (what people otherwise add with plugins)
+
+Small helpers that cover what the most-installed Decky Loader plugins do, built on tools every Bazzite and SteamOS
+install already has. None of them runs a timer or polls: each reads when its page or tab opens and after you press
+something, so nothing costs anything behind a game. All run as the user; none needs the root helper.
+
+| Extra | Where | How | Code |
+| --- | --- | --- | --- |
+| Per-app volume | Quick menu > Audio, Settings > Sound | PipeWire: `wpctl status` for the app streams, `wpctl get-volume` / `set-volume -l 1.0 <id>` per app, on the Controls worker | `controls/providers/audio.gd` (`app_mixer`), `ui/controls/app_mixer.gd` |
+| Now playing | Quick menu > Audio | MPRIS on the session bus through `busctl --user`: `ListNames` for `org.mpris.MediaPlayer2.*`, `PlaybackStatus` / `Metadata` / `Identity`, then `PlayPause`, `Next`, `Previous` | `system/media.gd`, `ui/controls/media_card.gd` |
+| Bluetooth devices | Settings > System (Quick menu > Device links there) | BlueZ on the system bus through `busctl --system`: `GetManagedObjects` (devices, `Battery1.Percentage`), `Device1.Connect` / `Disconnect` / `Pair` (+ `Trusted`), `Adapter1.RemoveDevice`. Finding new devices runs `bluetoothctl --timeout 10 scan on`, because BlueZ ends a scan as soon as the client that started it leaves the bus. Pairing asks for no code (controllers, headphones, speakers); a keyboard that wants one pairs from Desktop Mode | `system/bluetooth.gd`, `ui/settings/bluetooth_card.gd` |
+| Clean up | Settings > Device > Storage | Finds `steamapps/shadercache/<appid>` folders in every Steam library whose game has no `appmanifest_<appid>.acf` in any library (non-Steam shortcuts, ids from 2^31, are skipped), sizes them with `du -sbc` and removes them through `launch_files.gd`'s guarded remover (the same one that clears a single game's cache). Measured when the Storage page opens. Proton prefixes (`compatdata`) are never touched: they can hold saves that aren't in the cloud | `system/storage.gd` (`leftovers`, `clean_leftovers`), `ui/device/storage_panel.gd` |
+| GE-Proton | Settings > Performance | GitHub's latest-release API for `GloriousEggroll/proton-ge-custom` (only when you press Check), then the release's `.tar.gz` and `.sha512sum` with `curl` (only from that release page), `sha512sum` compared before anything is unpacked, `tar -xzf` into Steam's `compatibilitytools.d` (the folder Steam reads custom Protons from; Steam's own files aren't touched). A version a Steam game is set to (`config.vdf` `CompatToolMapping`) can't be removed. Steam lists a new version after it restarts | `launch/proton_ge.gd`, `ui/settings/proton_card.gd` |
 
 ## Sources
 

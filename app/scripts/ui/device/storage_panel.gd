@@ -5,6 +5,7 @@ extends "res://scripts/ui/device/device_panel.gd"
 ## watch(false) when it leaves.
 
 const Icons := preload("res://scripts/ui/icons.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
 
 var state: Dictionary = {}
 var measure_buttons := {}    # library path -> Button
@@ -12,6 +13,8 @@ var _measuring := {}
 var _side: VBoxContainer
 var _cards: VBoxContainer
 var _watching := false
+var clean_button: Button
+var _last_freed := -1
 
 
 static func build(services_: Dictionary) -> Control:
@@ -50,6 +53,8 @@ func opened() -> void:
 	if st != null and not _watching:
 		st.watch(true)
 		_watching = true
+		if st.has_method("leftovers"):
+			st.leftovers()
 
 
 func _leave() -> void:
@@ -64,11 +69,20 @@ func _on_changed(s: Dictionary) -> void:
 	for path in measure_buttons:
 		if measure_buttons[path] == f:
 			keep = "measure:" + str(path)
+	if clean_button != null and clean_button == f:
+		keep = "CleanButton"
+	var cl: Dictionary = s.get("cleanup", {}) if s.get("cleanup") is Dictionary else {}
+	if cl.has("freed") and int(cl["freed"]) != _last_freed:
+		_last_freed = int(cl["freed"])
+		var bad := int(cl.get("failed", 0)) > 0
+		toast_requested.emit(TX.CLEAN_FAILED if bad else TX.CLEAN_DONE % Texts.bytes(float(cl["freed"])), "alert" if bad else "check", "warn" if bad else "good")
 	_measuring.clear()
 	clear_box(_side)
 	clear_box(_cards)
 	_fill()
-	if keep.begins_with("measure:") and measure_buttons.has(keep.substr(8)):
+	if keep == "CleanButton" and clean_button != null:
+		clean_button.grab_focus()
+	elif keep.begins_with("measure:") and measure_buttons.has(keep.substr(8)):
 		measure_buttons[keep.substr(8)].grab_focus()
 	elif keep != "":
 		var n := _cards.find_child(keep, true, false)
@@ -86,21 +100,24 @@ func _libraries() -> Array:
 
 func _fill() -> void:
 	measure_buttons.clear()
+	clean_button = null
 	_fill_side()
 	var focus: Array = []
+	if clean_button != null:
+		focus.append(clean_button)
 	if not bool(state.get("ready", false)) and str(state.get("error", "")) == "":
 		var c := DKit.card(Texts.DRIVES_TITLE, "download", "info")
 		c[0].name = "Card_loading"
 		c[1].add_child(DKit.quiet(Texts.STORAGE_LOADING))
 		_cards.add_child(c[0])
-		chain([c[0]])
+		chain(focus + [c[0]])
 		return
 	if str(state.get("error", "")) != "" and _drives().is_empty():
 		var e := DKit.card(Texts.STORAGE_ERROR, "alert", "bad")
 		e[0].name = "Card_error"
 		e[1].add_child(DKit.quiet(str(state["error"])))
 		_cards.add_child(e[0])
-		chain([e[0]])
+		chain(focus + [e[0]])
 		return
 	if _drives().is_empty():
 		var n := DKit.card(Texts.STORAGE_EMPTY, "download", "warn")
@@ -157,6 +174,41 @@ func _fill_side() -> void:
 		c[1].add_child(DKit.quiet(Texts.STORAGE_LOADING if not bool(state.get("ready", false)) else Texts.STORAGE_EMPTY))
 	var note := DKit.check_line("dot", Texts.HOTPLUG_NOTE)
 	c[1].add_child(note)
+	_side.add_child(c[0])
+	_clean_card()
+
+
+## Clean up: leftover shader caches of uninstalled games, one button.
+func _clean_card() -> void:
+	var st := svc("storage")
+	if st == null or not st.has_method("clean_leftovers"):
+		return
+	var cl: Dictionary = state.get("cleanup", {}) if state.get("cleanup") is Dictionary else {}
+	var c := DKit.card(TX.CLEAN_TITLE, "sparkle", "good", false)
+	c[0].name = "CleanUp"
+	var dirs: Array = cl.get("dirs", []) if cl.get("dirs") is Array else []
+	var bytes := float(cl.get("bytes", 0))
+	if not bool(cl.get("ready", false)):
+		c[1].add_child(DKit.quiet(TX.CLEAN_MEASURING))
+	elif dirs.is_empty():
+		c[1].add_child(DKit.quiet(TX.CLEAN_NONE))
+	else:
+		var found := Kit.label(TX.CLEAN_FOUND % [Texts.bytes(bytes), dirs.size(), "game" if dirs.size() == 1 else "games"], "")
+		found.name = "CleanFound"
+		found.add_theme_font_override("font", ThemeLib.font("medium", true))
+		c[1].add_child(found)
+		var b := Kit.button(TX.CLEAN_RUNNING if bool(cl.get("cleaning", false)) else TX.CLEAN_BUTTON % Texts.bytes(bytes))
+		b.name = "CleanButton"
+		b.custom_minimum_size = Vector2(0, 46)
+		b.disabled = bool(cl.get("cleaning", false))
+		# deferred: the clean-up rebuilds this card, which frees the button
+		b.pressed.connect(start_clean, CONNECT_DEFERRED)
+		c[1].add_child(b)
+		clean_button = b
+	var why := DKit.quiet(TX.CLEAN_LINE)
+	why.name = "CleanWhy"
+	c[1].add_child(why)
+	c[1].add_child(DKit.check_line("yes", TX.CLEAN_SAVES))
 	_side.add_child(c[0])
 
 
@@ -233,6 +285,13 @@ func _library_card(lib: Dictionary, i: int) -> Array:
 		measure_buttons[path] = mb
 		focus = [mb]
 	return [c[0], focus]
+
+
+## Clean up pressed: the Storage service removes the leftovers (the card rebuilds).
+func start_clean() -> void:
+	var st := svc("storage")
+	if st != null and st.has_method("clean_leftovers"):
+		st.clean_leftovers()
 
 
 func hints_for(c: Control) -> Array:

@@ -8,6 +8,12 @@ extends "res://scripts/system/service.gd"
 ## seconds (one small file read on the main thread, no process) and refreshes
 ## when a card or drive comes or goes. watch(false) when the page closes.
 ##
+## Clean up: shader caches Steam leaves behind for games that are no longer
+## installed (leftovers() measures, clean_leftovers() removes them through
+## launch_files.gd's guarded remover), the same folders the Storage Cleaner
+## Decky plugin clears. Proton prefixes (compatdata) are never touched: they can
+## hold saves that aren't in the cloud.
+##
 ## Formatting an SD card is not offered yet (docs/SYSTEM.md, future work).
 
 signal changed(state: Dictionary)
@@ -15,6 +21,7 @@ signal changed(state: Dictionary)
 const Parse := preload("res://scripts/system/storage_parse.gd")
 const SteamStore := preload("res://scripts/library/stores/steam.gd")
 const Common := preload("res://scripts/library/stores/common.gd")
+const LaunchFiles := preload("res://scripts/controls/perf/launch_files.gd")
 
 const WATCH_S := 4.0
 const FINDMNT_ARGS := ["--json", "--list", "-b", "-o", "SOURCE,TARGET,FSTYPE,SIZE,USED,AVAIL,OPTIONS"]
@@ -23,7 +30,8 @@ const LSBLK_ARGS := ["--json", "-b", "-o", "NAME,PATH,PKNAME,TYPE,SIZE,RM,HOTPLU
 var home := OS.get_environment("HOME")
 var proc_mounts := "/proc/self/mounts"
 
-var _state := {"drives": [], "libraries": [], "watching": false, "ready": false, "error": ""}
+var _state := {"drives": [], "libraries": [], "watching": false, "ready": false, "error": "",
+	"cleanup": {"ready": false, "dirs": [], "bytes": 0, "cleaning": false}}
 var _timer: Timer
 var _signature := ""
 
@@ -159,3 +167,92 @@ func measure(path: String) -> void:
 				if lib["path"] == path:
 					lib["bytes"] = bytes
 			changed.emit(state())))
+
+
+# ---- clean up ------------------------------------------------------------------------
+
+## Non-Steam shortcuts get app ids from 2^31 up: they never have a manifest, so
+## their caches are never "left over".
+const SHORTCUT_IDS := 2147483648
+
+
+## Every Steam library folder (libraryfolders.vdf of each Steam install).
+func steam_library_paths() -> Array:
+	var out: Array = []
+	for root in SteamStore.STEAM_ROOTS:
+		var vdf := SteamStore.expand(root, home) + "/steamapps/libraryfolders.vdf"
+		if not FileAccess.file_exists(vdf):
+			continue
+		for lib in Parse.steam_libraries(FileAccess.get_file_as_string(vdf)):
+			if not lib["path"] in out:
+				out.append(lib["path"])
+	return out
+
+
+## steamapps/shadercache/<appid> folders whose game has no appmanifest in any of
+## `libs` (uninstalled, or moved away and back without its cache).
+static func leftover_dirs(libs: Array) -> Array:
+	var installed := {}
+	for lib in libs:
+		for f in DirAccess.get_files_at(str(lib).path_join("steamapps")):
+			if f.begins_with("appmanifest_") and f.ends_with(".acf"):
+				installed[f.trim_prefix("appmanifest_").trim_suffix(".acf")] = true
+	var out: Array = []
+	for lib in libs:
+		var base := str(lib).path_join("steamapps/shadercache")
+		for id in DirAccess.get_directories_at(base):
+			if not id.is_valid_int() or int(id) <= 0 or int(id) >= SHORTCUT_IDS or installed.has(id):
+				continue
+			out.append(base.path_join(id))
+	out.sort()
+	return out
+
+
+## Finds and measures the leftovers on the worker; `changed` follows.
+func leftovers() -> void:
+	_queue("leftovers", func():
+		var dirs := leftover_dirs(steam_library_paths())
+		var bytes := _du_total(dirs)
+		_main(func():
+			_state["cleanup"] = {"ready": true, "dirs": dirs, "bytes": bytes, "cleaning": false}
+			changed.emit(state())))
+
+
+## Removes the leftovers found by the last leftovers(), then measures again.
+## Returns false when there's nothing to remove or a clean-up is running.
+func clean_leftovers() -> bool:
+	var dirs: Array = _state["cleanup"].get("dirs", [])
+	if dirs.is_empty() or bool(_state["cleanup"].get("cleaning", false)):
+		return false
+	_state["cleanup"]["cleaning"] = true
+	changed.emit(state())
+	_queue("clean_leftovers", func():
+		var freed := 0
+		var failed := 0
+		for d in dirs:
+			var b := _du_total([d])
+			if LaunchFiles.remove_shader_cache(str(d)):
+				freed += maxi(b, 0)
+			else:
+				failed += 1
+		var left := leftover_dirs(steam_library_paths())
+		var bytes := _du_total(left)
+		_main(func():
+			_state["cleanup"] = {"ready": true, "dirs": left, "bytes": bytes, "cleaning": false, "freed": freed, "failed": failed}
+			changed.emit(state())))
+	return true
+
+
+## Total size of folders in bytes (du -sbc), 0 for none.
+func _du_total(dirs: Array) -> int:
+	if dirs.is_empty():
+		return 0
+	var args := PackedStringArray(["-sbc"])
+	for d in dirs:
+		args.append(str(d))
+	var r: Dictionary = runner.run("du", args)
+	if not int(r.get("code", -1)) in [0, 1]:
+		return 0
+	var lines := str(r.get("out", "")).strip_edges().split("\n", false)
+	var last := lines[lines.size() - 1].split("\t", false) if lines.size() > 0 else PackedStringArray()
+	return int(last[0]) if last.size() > 0 and last[0].is_valid_int() else 0

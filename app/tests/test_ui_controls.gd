@@ -21,6 +21,8 @@ const PROFILE_FILE := "user://test_ui_controls_profiles.json"
 
 static func fake() -> Node:
 	var c: Node = FakeControls.new()
+	# never the real /sys: a plugged-in handheld must not decide which power layer a test sees
+	c.ctx = {"sys_root": "/proc/gamecove-no-such-root"}
 	c.add({"id": "power.tdp", "title": "TDP", "kind": "slider", "min_value": 4.0, "max_value": 30.0, "step": 1.0, "unit": "W",
 		"value": 15, "help": "How much power the chip may use.", "apply_order": 50})
 	c.add({"id": "power.profile", "title": "Power profile", "kind": "choice", "per_game": false, "value": "balanced",
@@ -46,6 +48,9 @@ func _profiles(c: Node) -> Node:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(PROFILE_FILE))
 	var p: Node = ProfilesScript.new()
 	p.setup(c, "msi-claw-8-ex", PROFILE_FILE)
+	# setup() reads the charger from the real /sys when the fake has no sys_root: on a
+	# plugged-in handheld that made the "battery" layer checks fail (seen on the Claw)
+	p.source = "battery"
 	return p
 
 
