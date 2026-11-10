@@ -338,3 +338,36 @@ func test_grid_manifest_survives_two_threads() -> void:
 		th.wait_to_finish()
 	eq(SteamGrid.read_manifest(backup).size(), per * 4, "every game's original is still listed")
 	wipe(dir)
+
+
+## Final review, low: a damaged index.json read as "no picks", and the next pick wrote an
+## index with just that one, dropping every other game's art for good.
+func test_a_damaged_art_index_doesnt_drop_the_other_picks() -> void:
+	var dir := tmp("index")
+	var a := dir.path_join("a.png")
+	var b := dir.path_join("b.png")
+	var c := dir.path_join("c.png")
+	for p in [a, b, c]:
+		put(p, PackedByteArray([1, 2, 3]))
+	ok(Overrides.set_override(dir, "steam:1", "cover", {"path": a, "source": "user"}), "first pick")
+	ok(Overrides.set_override(dir, "steam:2", "cover", {"path": b, "source": "user"}), "second pick")
+	# a power cut or a full disk leaves half an index
+	var f := FileAccess.open(Overrides.index_path(dir), FileAccess.WRITE)
+	f.store_string("{\"steam:1\": {\"cover\": {\"pa")
+	f.close()
+	var got := Overrides.read(dir)
+	ok(got.has("steam:1"), "the picks from the last good index are still read")
+	ok(Overrides.set_override(dir, "steam:3", "cover", {"path": c, "source": "user"}), "a new pick")
+	var after := Overrides.read(dir)
+	eq(after.keys().size(), 3, "and nobody's art was dropped by it")
+	ok(after.has("steam:1") and after.has("steam:2") and after.has("steam:3"), "all three games")
+	ok(FileAccess.file_exists(Overrides.index_path(dir) + ".bad"), "the damaged file is kept for a look")
+	# both the index and its copy unreadable: nothing is written over them
+	for p in [Overrides.index_path(dir), Overrides.index_path(dir) + ".bak"]:
+		f = FileAccess.open(p, FileAccess.WRITE)
+		f.store_string("not json")
+		f.close()
+	eq(Overrides.read(dir), {}, "nothing can be read")
+	ok(not Overrides.set_override(dir, "steam:4", "cover", {"path": c, "source": "user"}), "and a pick isn't saved over what can't be read")
+	eq(FileAccess.get_file_as_string(Overrides.index_path(dir) + ".bak"), "not json", "the copy is left for repair")
+	wipe(dir)
