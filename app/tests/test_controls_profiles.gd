@@ -467,3 +467,57 @@ func test_source_apply_waits_for_its_own_detection() -> void:
 	eq(applied, ["power source"], "ours does")
 	p.free()
 	_cleanup()
+
+
+func _write_baseline(p: Node, data: Dictionary) -> String:
+	var bp: String = p.baseline_path
+	data["device"] = p.device_id
+	var f := FileAccess.open(bp, FileAccess.WRITE)
+	f.store_string(JSON.stringify(data))
+	f.close()
+	return bp
+
+
+## Review 2, low 14: a leftover baseline was dropped whole when one of its controls
+## wasn't available yet; it is kept for that control and put back when it appears.
+func test_leftover_baseline_waits_for_a_late_control() -> void:
+	var p = _setup()
+	var up := [false]
+	_store["audio.volume"] = 90.0
+	var store := _store
+	_reg.register(Ctl.make({"id": "audio.volume", "title": "v", "group": "audio", "kind": "slider",
+			"min_value": 0.0, "max_value": 100.0, "step": 1.0},
+		func(_c): return "" if up[0] else "not yet",
+		func(_c): return store.get("audio.volume"),
+		func(_c, v): store["audio.volume"] = v; return true))
+	_store["power.tdp"] = 25.0
+	var bp := _write_baseline(p, {"game": "g:1", "values": {"power.tdp": 12, "audio.volume": 30}})
+	_reg.detect_all()
+	eq(_store["power.tdp"], 12.0, "the available control is put back at start")
+	var left: Variant = JSON.parse_string(FileAccess.get_file_as_string(bp))
+	eq(left.get("values") if left is Dictionary else null, {"audio.volume": 30.0}, "the rest is kept for later")
+	up[0] = true
+	_reg.detect_all()
+	eq(_store["audio.volume"], 30.0, "put back when the control appears")
+	ok(not FileAccess.file_exists(bp), "and then the baseline is gone")
+	p.free()
+	_cleanup()
+
+
+## Review 2, low 14: a stale baseline overrode a value the user chose after the game set its own.
+func test_leftover_baseline_leaves_a_newer_choice() -> void:
+	var p = _setup()
+	_store["power.tdp"] = 20.0   # the game set 25; the user picked 20 since
+	var bp := _write_baseline(p, {"game": "g:1", "values": {"power.tdp": 12}, "game_values": {"power.tdp": 25}})
+	_reg.detect_all()
+	eq(_store["power.tdp"], 20.0, "the newer choice stays")
+	ok(not FileAccess.file_exists(bp), "baseline used up")
+	p.free()
+	_cleanup()
+	p = _setup()
+	_store["power.tdp"] = 25.0   # still the game's value: put back
+	_write_baseline(p, {"game": "g:1", "values": {"power.tdp": 12}, "game_values": {"power.tdp": 25}})
+	_reg.detect_all()
+	eq(_store["power.tdp"], 12.0, "the game's value is undone")
+	p.free()
+	_cleanup()
