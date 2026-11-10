@@ -134,6 +134,7 @@ func _service(http: Variant, dir: String) -> Node:
 	s.thumbs_dir = dir.path_join("thumbs")
 	s.backup_root = dir.path_join("backup")
 	s.prefs_path = dir.path_join("settings.cfg")
+	s.auto_tried_path = dir.path_join("auto_tried.json")
 	s.steam_roots = [dir.path_join("steam")]
 	s.user_key_fn = func() -> String: return KEY
 	s.sync_mode = true
@@ -217,4 +218,36 @@ func test_non_steam_game_by_title_and_auto_fill() -> void:
 	s.user_key_fn = func() -> String: return ""
 	ok(s.unavailable_reason().contains("SteamGridDB key"), "no key: says how to add one")
 	s.free()
+	wipe(dir)
+
+
+## Review 2, low 23: the automatic fill forgot what it had tried at every start, and its
+## queue kept draining after a switch went off.
+func test_auto_fill_remembers_tries_and_stops_with_the_switch() -> void:
+	var dir := tmp("auto2")
+	var http := FakeHttp.new()
+	_routes(http)
+	var s := _service(http, dir)
+	var steam_game := {"key": "steam:400", "store": "steam", "id": "400", "title": "Portal", "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	eq(s.auto_fill([steam_game]), 3, "tried")
+	s.free()
+	var s2 := _service(http, dir)
+	eq(s2.auto_fill([steam_game]), 0, "a new run remembers the tries")
+	s2.clock = func() -> int: return int(Time.get_unix_time_from_system()) + 8 * 86400
+	s2.free()
+	var s3 := _service(http, dir)
+	s3.clock = func() -> int: return int(Time.get_unix_time_from_system()) + 8 * 86400
+	eq(s3.auto_fill([steam_game]), 3, "a week later it tries again")
+	s3.free()
+	# queued, then Background lookups goes off: the rest isn't asked
+	var s4 := _service(http, dir)
+	s4.sync_mode = false
+	var other := {"key": "steam:401", "store": "steam", "id": "401", "title": "Portal 2", "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	eq(s4.auto_fill([other]), 3, "queued")
+	var before := http.requests.size()
+	Privacy.set_background_allowed(false, s4.prefs_path)
+	s4._auto_next()
+	eq(http.requests.size(), before, "nothing asked after the switch went off")
+	eq(s4._auto.size(), 0, "queue dropped")
+	s4.free()
 	wipe(dir)

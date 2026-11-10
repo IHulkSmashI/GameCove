@@ -190,6 +190,7 @@ func queue_games(games: Array) -> int:
 				break
 			if not _queued.has(_job_id(j)):
 				_queued[_job_id(j)] = true
+				j["bg"] = true   # a background job: dropped when "Background lookups" goes off
 				_queue.append(j)
 				n += 1
 	_kick()
@@ -211,6 +212,13 @@ func request(game: Dictionary) -> int:
 		_queue.push_front(j)
 	_kick()
 	return js.size()
+
+
+func _drop_background() -> void:
+	for i in range(_queue.size() - 1, -1, -1):
+		if bool(_queue[i].get("bg", false)):
+			_queued.erase(_job_id(_queue[i]))
+			_queue.remove_at(i)
 
 
 func pending() -> int:
@@ -243,6 +251,12 @@ func _done(gap: float) -> void:
 
 func _run(j: Dictionary) -> void:
 	_queued.erase(_job_id(j))
+	if bool(j.get("bg", false)) and not Privacy.background_allowed(prefs_path):
+		# "Background lookups" went off after these were queued: the rest of the background queue goes too
+		# (review 2, low 23); a page the user opens still asks for its own game
+		_drop_background()
+		_done(0.1)
+		return
 	if http == null or not Privacy.metadata_allowed(prefs_path):
 		_done(0.1)
 		return

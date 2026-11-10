@@ -20,6 +20,7 @@ const Sgdb := preload("res://scripts/library/art/sgdb.gd")
 const SteamGrid := preload("res://scripts/library/art/steam_grid.gd")
 const Overrides := preload("res://scripts/library/art/art_overrides.gd")
 const Privacy := preload("res://scripts/system/privacy.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ArtScript := preload("res://scripts/discover/art.gd")
 const MAX_FILE := 12 * 1024 * 1024
 const AUTO_GAP := 1.5
@@ -40,7 +41,11 @@ var sync_mode := false
 
 var _game_ids := {}     # normalised title -> SteamGridDB game id
 var _auto: Array = []   # [game, kind]
-var _auto_tried := {}   # "key|kind" -> unix
+var _auto_tried := {}   # "key|kind" -> unix (kept in auto_tried_path between runs)
+var _auto_loaded := false
+## The automatic fill's "already tried" list, so a restart doesn't ask SteamGridDB again
+## for every game that has no art there (review 2, low 23).
+var auto_tried_path := "user://art/auto_tried.json"
 var _timer: Timer
 
 
@@ -286,6 +291,7 @@ func auto_fill(games: Array) -> int:
 	if not Privacy.background_allowed(prefs_path) or unavailable_reason() != "":
 		return 0
 	var now := int(clock.call())
+	_load_auto_tried(now)
 	var n := 0
 	for g in games:
 		for k in missing_kinds(g):
@@ -295,6 +301,8 @@ func auto_fill(games: Array) -> int:
 			_auto_tried[id] = now
 			_auto.append([g, k])
 			n += 1
+	if n > 0:
+		SettingsFile.save_json(_abs(auto_tried_path), _auto_tried)
 	if sync_mode:
 		while not _auto.is_empty():
 			_auto_next()
@@ -303,8 +311,24 @@ func auto_fill(games: Array) -> int:
 	return n
 
 
+## Reads the tried list once; entries past RETRY_AUTO_S are dropped (pruned).
+func _load_auto_tried(now: int) -> void:
+	if _auto_loaded:
+		return
+	_auto_loaded = true
+	var d: Variant = SettingsFile.load_json(_abs(auto_tried_path))["data"]
+	if d is Dictionary:
+		for id in d:
+			var t := int(d[id]) if (d[id] is int or d[id] is float) else 0
+			if now - t < RETRY_AUTO_S and not _auto_tried.has(id):
+				_auto_tried[id] = t
+
+
 func _auto_next() -> void:
 	if _auto.is_empty():
+		return
+	if not Privacy.background_allowed(prefs_path) or unavailable_reason() != "":
+		_auto.clear()   # a switch went off (or the key went away) after these were queued (review 2, low 23)
 		return
 	var job: Array = _auto.pop_front()
 	var g: Dictionary = job[0]

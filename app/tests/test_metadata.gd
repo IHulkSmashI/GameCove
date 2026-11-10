@@ -157,6 +157,24 @@ func test_resolver_fetches_caches_and_merges() -> void:
 	wipe(dir)
 
 
+## Review 2, low 23: the background queue kept draining after "Background lookups" went off.
+func test_background_queue_stops_with_the_switch() -> void:
+	var dir := tmp("bgoff")
+	var prefs := dir.path_join("settings.cfg")
+	var http := FakeHttp.new()
+	http.route(STEAM, {"file": fx("appdetails_1145360.json")})
+	var r := _resolver(http, dir, prefs)
+	r.sync_mode = false   # not in the tree: nothing runs until _next()
+	eq(r.queue_games([_game("gog", "1", "1145360"), _game("gog", "2", "1145361")]), 2, "queued")
+	Privacy.set_background_allowed(false, prefs)
+	r._next()
+	eq(http.requests, [], "nothing asked after the switch went off")
+	eq(r.pending(), 0, "the background queue is dropped")
+	eq(r.request(_game("gog", "3", "1145360")), 1, "a page the user opens still asks")
+	r.free()
+	wipe(dir)
+
+
 ## Review 2, low 11: a captive portal's HTTP 200 page was cached as "no such app" for a week.
 func test_junk_200_is_not_cached_as_missing() -> void:
 	var dir := tmp("junk")
