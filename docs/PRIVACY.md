@@ -30,6 +30,7 @@ the app itself shows under Settings > About > Network and privacy.
 | 9 | www.steamgriddb.com | App id or title; your key (bearer header, dropped on cross-host redirects) | Art missing, only with a key | Remove the key | `art.gd` |
 | 10 | api.steampowered.com achievements, Steam CDN icons | App id | Opening a game page | Settings > Performance | `app/scripts/achievements/` |
 | 11 | steamcommunity.com, `IWishlistService` | Your Steam profile name or SteamID64 | You import your wishlist | You start it | `discover.gd` |
+| 12a | github.com (`upscalers/upscalers.json`, `.sigstore.json`; the upscaler files on `upscalers*` releases, then their upstream release) | Nothing personal | The list: at most daily, 90 s after start (background check), and before any upscaler install or update; files: only when you install or update | Background lookups (the daily check); installs and updates: you start them | `app/scripts/controls/providers/perf.gd`, `packaging/helpers/gamecove_upscale/mirror.py` |
 | 12 | github.com (`firmware/firmware.json.gz`, `.sha256`, `.sigstore.json`) | Nothing | Checking for updates | You start it | `app/scripts/system/updates.gd` |
 | 13 | The maker's own download site (allow-listed per maker, https only) | Nothing | You prepare a USB drive | You start it | `updates.gd`, `firmware_index.gd` |
 | 14 | LVFS, rpm-ostree / steamos-update, Flatpak, Flathub | Those tools' own | You update or install Moonlight | You start it | `updates.gd`, `app/scripts/streaming/` |
@@ -39,8 +40,12 @@ the app itself shows under Settings > About > Network and privacy.
 | 18 | legendary.gl, auth.gog.com, Amazon | The sign-in code you type back | You sign in to a store | You start it | `app/scripts/library/stores/` |
 
 Helpers and scripts outside the app: the upscaling helper downloads OptiScaler, OptiPatcher, fakenvapi,
-REFramework, xess-xmx-linux and the FSR 4 files from their own releases only when you install them, each pinned by
-sha256 (`packaging/helpers/gamecove_upscale/data/versions.json`); the gyro fix downloads MSI's sensor firmware
+REFramework, xess-xmx-linux and the FSR 4 files only when you install or update them: the newest versions from
+GameCove's signed `upscalers.json` (row 12a; its signature is checked with the cosign the installer pins, which it
+downloads once from sigstore's GitHub release if the system has none; cosign itself may refresh Sigstore's public
+trust root from tuf-repo-cdn.sigstore.dev, sending nothing about you), else the tested pins in
+`packaging/helpers/gamecove_upscale/data/versions.json`; each file from GameCove's own mirror first, then its upstream
+release, always sha256 checked; the gyro fix downloads MSI's sensor firmware
 from download.msi.com (size and sha256 pinned); the installer (`get-gamecove.sh`) downloads GameCove's own
 release, checks its Sigstore signature and every file's sha256, and fetches a pinned cosign if the system has
 none.
