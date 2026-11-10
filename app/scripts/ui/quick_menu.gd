@@ -57,7 +57,7 @@ const WIDTH := 580
 ## the sheet's own battery pill and prompts are the only ones that read.
 const TOP_INSET := 14.0
 ## How dark the full-screen scrim is (it covers the top bar and hint bar too).
-const SCRIM_ALPHA := 0.82
+const SCRIM_ALPHA := 0.58
 const SUPPORT_TEXT := {
 	"full": "Full support: tested on this device by the GameCove team.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",

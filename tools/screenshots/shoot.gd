@@ -171,7 +171,13 @@ func _run() -> void:
 		main._open_page(games[0])
 		await shot("game_page")
 		if want(["game_page_settings"]):
-			main.page.form.focusables()[1].grab_focus()
+			# The Game settings card's switch (launch settings show once it's on).
+			var gs: Node = main.page.game_settings
+			if gs != null and gs.toggle != null:
+				gs.toggle.button.grab_focus()
+			else:
+				main.page.form.focusables()[1].grab_focus()
+			await frames(6)
 			await shot("game_page_settings")
 		main._close_page()
 

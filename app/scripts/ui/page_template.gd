@@ -254,8 +254,11 @@ func _show_hero(tex: Texture2D) -> void:
 func _restyle() -> void:
 	var bg: Color = ThemeLib.color("scrim")
 	var g := Gradient.new()
-	g.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
-	g.colors = PackedColorArray([Color(bg, 0.0), Color(bg, 0.15), Color(bg, 0.70)])
+	# Key art at full brightness: a short fade at the foot only, and a shade
+	# behind the title on the left (Light keeps its stronger wash).
+	var dark := ThemeLib.is_dark()
+	g.offsets = PackedFloat32Array([0.0, 0.72, 1.0])
+	g.colors = PackedColorArray([Color(bg, 0.0), Color(bg, 0.0), Color(bg, 0.55 if dark else 0.70)])
 	var t := GradientTexture2D.new()
 	t.gradient = g
 	t.width = 4
@@ -263,8 +266,8 @@ func _restyle() -> void:
 	t.fill_to = Vector2(0, 1)
 	_fade.texture = t
 	var g2 := Gradient.new()
-	g2.offsets = PackedFloat32Array([0.0, 0.40, 0.75])
-	g2.colors = PackedColorArray([Color(bg, 0.92), Color(bg, 0.70), Color(bg, 0.0)])
+	g2.offsets = PackedFloat32Array([0.0, 0.30, 0.58] if dark else [0.0, 0.40, 0.75])
+	g2.colors = PackedColorArray([Color(bg, 0.86 if dark else 0.92), Color(bg, 0.55 if dark else 0.70), Color(bg, 0.0)])
 	var t2 := GradientTexture2D.new()
 	t2.gradient = g2
 	t2.width = 256

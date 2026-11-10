@@ -71,10 +71,21 @@ func _fade_layer(l: TextureRect) -> void:
 	m.set_shader_parameter("fade_top", 0.10 if dark else 0.35)
 	m.set_shader_parameter("fade_bottom_from", (0.50 if dark else 0.40) if frame_radius <= 0.0 else 0.70)
 	m.set_shader_parameter("frame_radius", frame_radius)
+	m.set_shader_parameter("shade_color", Color(0, 0, 0, 0))
 	if frame_radius > 0.0:
 		m.set_shader_parameter("fade_left_from", 0.22 if dark else 0.40)
 		m.set_shader_parameter("fade_left_to", 0.68 if dark else 0.85)
 		m.set_shader_parameter("fade_top", 0.0)
+		if dark:
+			# Key art at full brightness in its frame: no fade into the dark
+			# backdrop, only a shade behind the text on the left and a short
+			# fade at the foot.
+			var sc: Color = load("res://theme/gamecove_theme.gd").color("scrim")
+			m.set_shader_parameter("fade_left_from", -1.0)
+			m.set_shader_parameter("fade_left_to", 0.0)
+			m.set_shader_parameter("fade_bottom_from", 0.84)
+			m.set_shader_parameter("shade_color", Color(sc, 0.80))
+			m.set_shader_parameter("shade_to", 0.58)
 	if l.get_meta("poster", false):
 		m.set_shader_parameter("fade_left_from", 0.0)
 		m.set_shader_parameter("fade_left_to", 0.55)

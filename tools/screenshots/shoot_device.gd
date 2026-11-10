@@ -87,7 +87,7 @@ func _run() -> void:
 	if only.is_empty() or "device_about_scrolled" in only:
 		var p: Control = frame.get_meta("panel")
 		var chain: Array = p.focus_chain()
-		chain[5].grab_focus()
+		chain[mini(5, chain.size() - 1)].grab_focus()
 		await shot("device_about_scrolled")
 	var cp: Control = await _page("controller_panel.gd", "Controller", s, "device_controller", 1)
 	if only.is_empty() or "device_controller_test" in only:

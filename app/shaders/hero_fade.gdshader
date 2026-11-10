@@ -11,6 +11,11 @@ uniform float fade_bottom_from = 0.50;
 uniform float fade_top = 0.10;
 // Inside a rounded frame: corner radius in px (0 = no frame).
 uniform float frame_radius = 0.0;
+// Readability shade behind text on the left: the art darkens toward
+// shade_color.rgb by shade_color.a at the left edge, to nothing at shade_to
+// (the art itself stays at full brightness everywhere else).
+uniform vec4 shade_color = vec4(0.0, 0.0, 0.0, 0.0);
+uniform float shade_to = 0.55;
 
 varying vec2 local;
 
@@ -20,6 +25,7 @@ void vertex() {
 
 void fragment() {
 	vec4 c = texture(TEXTURE, UV) * COLOR;
+	c.rgb = mix(c.rgb, shade_color.rgb, shade_color.a * (1.0 - smoothstep(0.0, shade_to, local.x)));
 	float a = smoothstep(fade_left_from, fade_left_to, local.x);
 	a *= 1.0 - smoothstep(fade_bottom_from, 1.0, local.y);
 	a *= mix(0.35, 1.0, smoothstep(0.0, fade_top, local.y));
