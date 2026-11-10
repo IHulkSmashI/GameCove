@@ -65,6 +65,8 @@ func _initialize() -> void:
 	var emu: GDScript = load("res://scripts/library/stores/emu.gd")
 	emu.flatpak_dirs = []
 	emu.path_env = ""
+	# ES-DE's find rules name /var/lib/flatpak and /usr paths: never this machine's
+	load("res://scripts/library/stores/esde_launch.gd").abs_root = "/nonexistent-gamecove-test-root"
 	var failed := 0
 	var passed := 0
 	var dir := DirAccess.open("res://tests")
