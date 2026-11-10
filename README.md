@@ -315,7 +315,9 @@ Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAnt
 
 ## Licence
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+GPL-3.0-or-later. See [LICENSE](LICENSE). Copyright © 2026 Mena Hanna.
+
+"GameCove" and the GameCove logo are trademarks of Mena Hanna. Forks are welcome under the GPL but need their own name and logo; see [TRADEMARKS.md](TRADEMARKS.md). Contributors sign a short [CLA](docs/CLA.md) once (you keep your copyright); details in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 A few parts carry their own licences: the Claw 8 EX gyro fix's HID-BPF program is GPL-2.0-only and its helper scripts GPL-2.0-or-later; the VRR fix's panel list derives from MIT-licensed code; the app is built on Godot Engine (MIT); the fonts are OFL-1.1. Every release carries these texts, and the app shows them under Settings > About > Credits and licenses. Details in [CREDITS.md](CREDITS.md) and [LICENSES/](LICENSES/).
 
