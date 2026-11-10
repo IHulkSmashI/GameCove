@@ -21,6 +21,7 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
 const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
+const CardJobs := preload("res://scripts/system/card_jobs.gd")
 
 var registry: Object
 var provider: Object
@@ -66,25 +67,12 @@ func refresh() -> void:
 	var gen := _gen
 	var p: Object = provider
 	var ctx: Dictionary = registry.ctx
-	var me: WeakRef = weakref(self)
+	var me := get_instance_id()
+	var courier: RefCounted = CardJobs.shared()
 	registry.run_on_worker(func():
 		var list: Array = p.app_mixer(ctx)
-		_hand_back(me, "_on_apps", [gen, list]))
-
-
-## Calls `method` on the widget on the main thread, if it still exists.
-static func _hand_back(me: WeakRef, method: String, args: Array) -> void:
-	var o: Object = me.get_ref()
-	if o == null:
-		return
-	if OS.get_thread_caller_id() == OS.get_main_thread_id():
-		o.callv(method, args)
-	else:
-		o.call_deferred("_deliver", method, args)
-
-
-func _deliver(method: String, args: Array) -> void:
-	callv(method, args)
+		# the worker never touches the widget: it's looked up on the main thread
+		courier.hand_back(me, "_on_apps", [gen, list]))
 
 
 func _on_apps(gen: int, list: Array) -> void:
@@ -139,10 +127,11 @@ func set_volume(stream_id: int, pct: float) -> void:
 			a["volume"] = pct
 	var p: Object = provider
 	var ctx: Dictionary = registry.ctx
-	var me: WeakRef = weakref(self)
+	var me := get_instance_id()
+	var courier: RefCounted = CardJobs.shared()
 	registry.run_on_worker(func():
 		if not p.set_stream_volume(ctx, stream_id, pct):
-			_hand_back(me, "_on_failed", []))
+			courier.hand_back(me, "_on_failed", []))
 
 
 func _on_failed() -> void:

@@ -126,6 +126,19 @@ func run_for(obj: Object, fn: Callable, method: String, extra: Array = [], threa
 		false, "GameCove job"))
 
 
+## From any thread: `method(args...)` on the object with instance id `id`, on
+## the main thread (at once when called there), if it still exists then. For
+## workers that aren't ours (the Controls worker): they never touch a Node.
+func hand_back(id: int, method: String, args: Array) -> void:
+	if OS.get_thread_caller_id() == OS.get_main_thread_id():
+		_to_instance(id, method, args)
+		return
+	_lock.lock()
+	_done.append([id, method, args])
+	_lock.unlock()
+	call_deferred("_drain")
+
+
 ## Main thread: hands every finished job's result over.
 func _drain() -> void:
 	_reap()

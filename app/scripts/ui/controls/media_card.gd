@@ -14,6 +14,7 @@ const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Media := preload("res://scripts/system/media.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
 const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
+const CardJobs := preload("res://scripts/system/card_jobs.gd")
 
 var registry: Object
 ## Media.now_playing() from the last read ({} = nothing playing).
@@ -50,24 +51,12 @@ func refresh() -> void:
 	_gen += 1
 	var gen := _gen
 	var runner: RefCounted = registry.ctx["runner"]
-	var me: WeakRef = weakref(self)
+	var me := get_instance_id()
+	var courier: RefCounted = CardJobs.shared()
 	registry.run_on_worker(func():
 		var st: Dictionary = Media.now_playing(runner)
-		_hand_back(me, "_on_state", [gen, st]))
-
-
-static func _hand_back(me: WeakRef, method: String, args: Array) -> void:
-	var o: Object = me.get_ref()
-	if o == null:
-		return
-	if OS.get_thread_caller_id() == OS.get_main_thread_id():
-		o.callv(method, args)
-	else:
-		o.call_deferred("_deliver", method, args)
-
-
-func _deliver(method: String, args: Array) -> void:
-	callv(method, args)
+		# the worker never touches the card: it's looked up on the main thread
+		courier.hand_back(me, "_on_state", [gen, st]))
 
 
 func _on_state(gen: int, st: Dictionary) -> void:
@@ -144,13 +133,14 @@ func press(action: String) -> void:
 	var runner: RefCounted = registry.ctx["runner"]
 	var player := str(state.get("player", ""))
 	var app := str(state.get("app", ""))
-	var me: WeakRef = weakref(self)
+	var me := get_instance_id()
+	var courier: RefCounted = CardJobs.shared()
 	_gen += 1
 	var gen := _gen
 	registry.run_on_worker(func():
 		var ok := Media.send(runner, player, action)
 		var st: Dictionary = Media.now_playing(runner)
-		_hand_back(me, "_after_press", [gen, ok, app, st]))
+		courier.hand_back(me, "_after_press", [gen, ok, app, st]))
 
 
 func _after_press(gen: int, ok: bool, app: String, st: Dictionary) -> void:
