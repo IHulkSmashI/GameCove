@@ -150,8 +150,16 @@ reset_input_intercept() {
 READY="${XDG_RUNTIME_DIR:-/nonexistent}/gamecove-steam-ready"
 rm -f "$READY" 2>/dev/null
 HEARTBEAT=""
+OWN_RUNDIR=""
 if [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ]; then
 	HEARTBEAT="$XDG_RUNTIME_DIR/gamecove-heartbeat"
+else
+	# no $XDG_RUNTIME_DIR: the heartbeat goes to a private temp folder instead, so a healthy
+	# app isn't killed as "not ready" after a minute (review 2, low 21)
+	OWN_RUNDIR="$(mktemp -d "${TMPDIR:-/tmp}/gamecove-run.XXXXXX" 2>/dev/null)" || OWN_RUNDIR=""
+	[ -z "$OWN_RUNDIR" ] || HEARTBEAT="$OWN_RUNDIR/gamecove-heartbeat"
+fi
+if [ -n "$HEARTBEAT" ]; then
 	rm -f "$HEARTBEAT" 2>/dev/null
 	export GAMECOVE_HEARTBEAT="$HEARTBEAT"
 fi
@@ -189,6 +197,8 @@ fi
 #  - ready and up HEALTHY_S with a live heartbeat (or none expected): clears the count.
 up=$((waited / 5))
 ready=0
+# neither a heartbeat nor a ready file can appear: readiness can't be checked
+[ -n "$HEARTBEAT" ] || [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] || ready=1
 beat=""
 stale=0
 hung=""
@@ -235,7 +245,8 @@ ran=$(( $(uptime_s) - started_at ))
 if [ -z "$hung" ] && [ "$ready" -eq 1 ] && [ "$ran" -ge "$HEALTHY_S" ] && [ "$stale" -lt 10 ]; then
 	clear_crashes
 fi
-rm -f "$HEARTBEAT" 2>/dev/null
+[ -z "$HEARTBEAT" ] || rm -f "$HEARTBEAT" "$HEARTBEAT.tmp" 2>/dev/null
+[ -z "$OWN_RUNDIR" ] || rm -rf "$OWN_RUNDIR" 2>/dev/null
 reset_input_intercept
 if [ -n "$hung" ]; then
 	record_crash hung

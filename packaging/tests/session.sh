@@ -554,6 +554,14 @@ code="$(watch oldapp GAMECOVE_HEALTHY_S=1)"
 has "$T/client.log" "^select steam$" "and counted (third in a row): the count wasn't cleared"
 rm -rf "$DATA"
 [ ! -e "$HR/gamecove-heartbeat" ] && ok || bad "heartbeat file removed when the app is gone"
+# review 2, low 21: without $XDG_RUNTIME_DIR a healthy app was killed as "not ready" every minute;
+# the heartbeat goes to a private temp folder (removed afterwards), and a hang is still caught
+mkdir -p "$T/tmpd"
+eqv "$(watch alive XDG_RUNTIME_DIR= TMPDIR="$T/tmpd")" 0 "no XDG_RUNTIME_DIR: a beating app runs on"
+code="$(watch hang XDG_RUNTIME_DIR= TMPDIR="$T/tmpd")"
+[ "$code" -ne 0 ] && [ "$code" -ne 124 ] && ok || bad "no XDG_RUNTIME_DIR: a hang is still stopped (exit $code)"
+eqv "$(ls -A "$T/tmpd")" "" "the private heartbeat folder is removed"
+rm -rf "$DATA"
 
 # --- traits: ZOTAC Zone board G1A1W, which Linux's orientation quirk misses (G0A1W only)
 SD="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
