@@ -228,3 +228,31 @@ func test_exit_game_for_a_steam_rom_manager_game() -> void:
 	ok(await until(func(): return not w.main.session.is_active(), 15000), "the game ended")
 	await w.idle()
 	eq(_base(), [413091, 769], "home in front")
+
+
+## Medium: a stream (or a desktop app, an emulation tool) isn't in Library.games.
+## A library change while it runs must not forget what's running.
+func test_what_runs_is_kept_when_the_library_changes() -> void:
+	var m: Control = w.main
+	var stream := {"key": "stream:host1:42", "title": "Desktop", "store": "stream", "id": "42", "installed": true}
+	w.fake_pids[7001] = true
+	m.playing = stream
+	m.session.begin(stream, {"ok": true, "app_id": 0, "pid": 7001})
+	await w.frames(2)
+	ok(m.session.is_active(), "the stream runs")
+	w.autoload("Library").changed.emit()
+	await w.frames(2)
+	eq(m.playing.get("key", ""), stream["key"], "a library change keeps what's running")
+	await qam()
+	ok(qm().visible, "the quick menu opens")
+	eq(qm().head_title.text, stream["title"], "and This game is still the stream")
+	await b()
+	w.fake_pids.erase(7001)
+	ok(await until(func(): return not m.session.is_active(), 15000), "the stream ends")
+	ok(m.playing.is_empty(), "then nothing is playing")
+	# nothing follows it (no session): a stale `playing` still goes with the next library change
+	m.playing = stream
+	w.autoload("Library").changed.emit()
+	await w.frames(2)
+	ok(m.playing.is_empty(), "not running and not in the library: forgotten")
+	await w.idle()

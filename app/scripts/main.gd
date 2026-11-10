@@ -2016,8 +2016,16 @@ func _mark_new_seen() -> void:
 func _on_library_changed() -> void:
 	_set_games(Library.games)
 	if not playing.is_empty():
-		var fresh := View.find_by_key(Library.games, playing["key"])
-		playing = fresh
+		# What runs isn't always a Library game: a stream, a desktop app, a clip's
+		# player or an emulation tool is never in Library.games. Dropping `playing`
+		# for those (any rescan, a download finishing) made the quick menu's "This
+		# game" edit another game. Only a fresh copy replaces it; without one it
+		# stays for as long as the session follows it.
+		var fresh := View.find_by_key(Library.games, str(playing.get("key", "")))
+		if not fresh.is_empty():
+			playing = fresh
+		elif not (session != null and session.is_active()):
+			playing = {}
 	if page != null and page.has_method("refresh_from"):
 		page.refresh_from(Library.emulation, _decorated())
 	elif page != null:
