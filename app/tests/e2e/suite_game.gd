@@ -88,3 +88,27 @@ func test_exit_game_from_the_menu() -> void:
 	ok(not qm().visible, "menu closed")
 	for p in Checks.now(w):
 		ok(false, "after exit: " + p)
+func _closes(sig: String, app: String) -> int:
+	return calls_with(["sh", "-c", "*", "gamecove-close", sig, "steam", app]).size()
+
+
+
+
+## High 7: an emulated game Steam ROM Manager added runs under Steam (store
+## "emu", shortcut true). Exit game stops Steam's launch of it, by the shortcut's id.
+const ROM := {"key": "emu:2789567361", "title": "Chrono Trigger", "store": "emu", "id": "2789567361", "installed": true,
+	"shortcut": true, "emulated": {"system": "snes"}}
+
+
+func test_exit_game_for_a_steam_rom_manager_game() -> void:
+	await start_game(ROM)
+	ok(await open_menu_tab("game"), "This game")
+	var btn := qm().body.get_node("ExitGame/Button") as Button
+	ok(await focus_on(btn), "Exit game reachable with the pad")
+	await a()
+	await a()
+	eq(_closes("TERM", str(ROM["id"])), 1, "Steam's launch of the shortcut is stopped")
+	eq(calls_with(["systemctl", "--user", "stop"]).size(), 0, "not a scope that doesn't exist")
+	ok(await until(func(): return not w.main.session.is_active(), 15000), "the game ended")
+	await w.idle()
+	eq(_base(), [413091, 769], "home in front")
