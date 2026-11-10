@@ -726,6 +726,7 @@ func _exit_tree() -> void:
 
 
 static func release_caches() -> void:
+	load("res://scripts/system/cache_prune.gd").wait_all()
 	load("res://scripts/ui/icons.gd")._cache.clear()
 	load("res://scripts/ui/games/game_icons.gd").clear()
 	load("res://scripts/ui/art_cache.gd").shutdown()

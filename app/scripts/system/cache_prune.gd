@@ -33,7 +33,18 @@ static func _maybe(path: String, max_age_s: int, now: int, exts: Array) -> int:
 	return 0
 
 
-## prune() on a WorkerThreadPool thread (fire and forget).
+static var _tasks: Array[int] = []
+
+
+## prune() on a WorkerThreadPool thread. main.gd calls wait_all() before quitting:
+## a task still running when the engine shuts down aborts the process (CI caught it).
 static func prune_later(dir: String, max_age_s: int) -> void:
 	var now := int(Time.get_unix_time_from_system())
-	WorkerThreadPool.add_task(func(): prune(dir, max_age_s, now), false, "Cache prune")
+	_tasks.append(WorkerThreadPool.add_task(func(): prune(dir, max_age_s, now), false, "Cache prune"))
+
+
+## Waits for every prune started with prune_later (each one is quick).
+static func wait_all() -> void:
+	for id in _tasks:
+		WorkerThreadPool.wait_for_task_completion(id)
+	_tasks.clear()
