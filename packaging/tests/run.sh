@@ -109,6 +109,12 @@ expect_code 3 "fix failure propagates" gf dummy set boom
 contains "$LOG" "action=set value=boom result=fail(3)" "failure logged"
 expect_code 7 "broken fix" gf broken install
 contains "$LOG" "fix=broken action=install value=- result=fail(7)" "broken logged"
+# review problem 9: the very first log line (no changes.log yet) prints no "cannot open" error
+rm -f "$LOG" "$LOG.1"
+gf dummy set 81 >/dev/null 2>"$T/err1"
+lacks "$T/err1" "cannot open" "first log write has no error about the missing log"
+lacks "$T/err1" "No such file" "first log write has no error about the missing log"
+contains "$LOG" "fix=dummy action=set value=81 result=ok" "first log line written"
 # review L1: the log is capped; over the limit it becomes changes.log.1 and a new one starts
 rm -f "$LOG.1"
 for i in 1 2 3 4 5 6; do GAMECOVE_LOG_MAX=300 gf dummy set "$i" >/dev/null 2>&1; done
