@@ -138,6 +138,9 @@ var boost_w := -1.0
 ## True while a game's profile layer is in effect (Profiles sets it): what it writes is
 ## applied but not remembered as the everyday value (review H2).
 var game_layer := false
+## PowerStation's boost as last seen awake (detect, TDP writes): put back after a sleep when the
+## user never picked one (-1 unknown).
+var _live_boost := -1.0
 ## Handheld Daemon client; setup() swaps its transport in tests.
 var hhd: RefCounted = Hhd.new()
 var _hhd_tdp := {}      # Hhd.tdp_info() while backend == "hhd"
@@ -539,6 +542,8 @@ func _detect_powerstation() -> bool:
 			continue
 		_ps_card = str(path)
 		_tdp_w = float(v)
+		var b: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
+		_live_boost = float(b) if b != null else -1.0
 		# PowerStation reports MinTdp = MaxTdp = 0 for chips missing from its
 		# database (Panther Lake today); then devices.json's range stands.
 		var lo: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "MinTdp")
@@ -723,6 +728,7 @@ func fan_modes() -> Array:
 ## `resumed` only when after_resume: controls call refresh() after their own
 ## writes, and a `resumed` from there would re-apply everything again, forever.
 func refresh(after_resume := false) -> void:
+	var boost_before := _live_boost   # before sleep: what the firmware may have reset
 	if after_resume:
 		_mark_clock()   # main.gd noticed it first: the 15 s check mustn't do it again
 		# the charger may have come or gone while asleep: limits first (review S1-2)
@@ -740,6 +746,8 @@ func refresh(after_resume := false) -> void:
 		_tdp_w = v
 	if v >= 0.0 and backend != "none" and _tdp_w > tdp_max() + 0.01:
 		_clamp_to_source()
+	if after_resume:
+		_reassert_boost(boost_before)
 	if _charge_via == "steamos-manager":
 		var c: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
 		_charge = sm_charge(int(c)) if c != null else -1
@@ -1008,10 +1016,13 @@ func write_tdp(watts: float) -> bool:
 	elif backend == "powerstation":
 		if system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "TDP", "d", "%.1f" % watts):
 			var boost := boost_for(watts)
+			var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
 			if boost >= 0.0:
-				var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
 				if live == null or absf(float(live) - boost) >= 0.05:
 					system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % boost)
+				_live_boost = boost
+			elif live != null:
+				_live_boost = float(live)
 			ok = absf(read_tdp() - watts) < 0.5
 	elif backend == "hhd" and not _hhd_tdp.is_empty():
 		var w := int(roundf(watts))
@@ -1024,6 +1035,25 @@ func write_tdp(watts: float) -> bool:
 		_tdp_w = watts
 		_hold_thermald()
 	return ok
+
+
+## After a resume: the firmware may have reset PL2 while the TDP itself survived, so the user's
+## boost goes back even when refresh() didn't rewrite the TDP (the power controls no longer
+## replay power.boost, review M16).
+func _reassert_boost(before: float) -> void:
+	if backend != "powerstation" or _ps_card == "":
+		return
+	var want := boost_for(_tdp_w)
+	if want < 0.0 and before >= 0.0:
+		# no boost of the user's: the one PowerStation had before the sleep
+		var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
+		want = minf(before, maxf(0.0, cap - _tdp_w)) if cap > 0.0 else before
+	if want < 0.0:
+		return
+	var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
+	if live == null or absf(float(live) - want) >= 0.05:
+		system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % want)
+	_live_boost = want
 
 
 ## The boost to write with a TDP of `watts` (review H6): the user's boost_w, never past the
@@ -1203,6 +1233,7 @@ func set_boost_w(watts: float) -> bool:
 	if not be.set_ps_boost(w):
 		return false
 	boost_w = w
+	_live_boost = w
 	_remember("device", "boost_w", w)
 	return true
 

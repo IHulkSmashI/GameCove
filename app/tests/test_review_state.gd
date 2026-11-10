@@ -659,3 +659,34 @@ func test_l19_reaper_check_off_the_main_thread() -> void:
 	eq(calls[0], 1, "one pgrep at a time")
 	eq(s.phase, "waiting", "Steam's launch alive: still waiting for the window")
 	s.free()
+
+
+## M16 follow-up: the boost is no longer replayed by the controls after a resume, so Power puts
+## back its own (the firmware may have reset PL2) even when the TDP itself didn't change.
+func test_m16_resume_puts_the_boost_back() -> void:
+	var t: Dictionary = Trees.new().claw8ex()
+	var e := _setup(t, Trees.row("acer-predator-atlas-8"))
+	var p: Node = e["power"]
+	ok(p.set_tdp(20.0), "TDP 20 W")
+	ok(p.set_boost_w(10.0), "boost 10 W")
+	e["runner"].props[Trees.PS + CARD + " org.shadowblip.GPU.Card.TDP Boost"]["data"] = 0.0   # reset over sleep
+	p.refresh(true)
+	eq(_ps(e, "Boost"), 10.0, "boost back after resume")
+	eq(_ps(e, "TDP"), 20.0, "TDP unchanged")
+	_free()
+
+
+## No boost picked by the user: the one PowerStation had before the sleep comes back.
+func test_m16_resume_puts_powerstations_own_boost_back() -> void:
+	var t: Dictionary = Trees.new().claw8ex()
+	var e := _setup(t, Trees.row("acer-predator-atlas-8"))
+	var p: Node = e["power"]
+	ok(p.set_tdp(20.0), "TDP 20 W")
+	var before := _ps(e, "Boost")
+	ok(before > 0.0, "PowerStation keeps a boost of its own (%.0f W)" % before)
+	e["runner"].props[Trees.PS + CARD + " org.shadowblip.GPU.Card.TDP Boost"]["data"] = 0.0
+	e["runner"].props[Trees.PS + CARD + " org.shadowblip.GPU.Card.TDP TDP"]["data"] = 30.0   # firmware limits after sleep
+	p.refresh(true)
+	eq(_ps(e, "TDP"), 20.0, "TDP back")
+	eq(_ps(e, "Boost"), minf(before, 40.0 - 20.0), "boost back too")
+	_free()
