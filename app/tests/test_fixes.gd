@@ -337,6 +337,23 @@ func test_page_shows_every_fix_with_status_and_actions() -> void:
 	s.free()
 
 
+## CI e2e (seed 60): after Apply / Undo rebuilt the cards, the settings screen still
+## pointed focus at the freed Undo button. The page now says it rebuilt, so the host relinks.
+func test_page_says_when_it_rebuilt() -> void:
+	var h := _tmp("rebuilt")
+	var s := _svc("msi-claw-8-ex", {"claw8ex-buttons": "on", "claw8ex-vrr": "off"}, h)
+	s.refresh()
+	var dev := FakeDevice.new()
+	var p: Control = Page.build({"fixes": s, "device": dev})
+	var n := [0]
+	p.rebuilt.connect(func(): n[0] += 1)
+	p.press("claw8ex-vrr", "apply")
+	ok(n[0] >= 1, "rebuilt emitted after an action")
+	p.free()
+	dev.free()
+	s.free()
+
+
 func test_page_shows_os_fixed_and_changes() -> void:
 	var h := _tmp("page2")
 	var s := _svc("asus-rog-ally-x", {"ally-controller-wakeup": "os-fixed", "ally-fingerprint-drain": "off", "ally-mcu-powersave": "off"}, h)

@@ -10,6 +10,9 @@ extends "res://scripts/ui/device/device_panel.gd"
 ## signals changed(rows), action_finished(fix, verb, ok, message)) and
 ## "device" (display_name(), support_level()). Nothing polls.
 
+## Emitted after the cards were rebuilt (Apply / Undo / a refresh): the host relinks focus.
+signal rebuilt
+
 const Icons := preload("res://scripts/ui/icons.gd")
 const TF := preload("res://scripts/ui/texts_fixes.gd")
 
@@ -53,6 +56,11 @@ func _on_action_finished(_fix: String, _verb: String, ok: bool, message: String)
 
 
 func _rebuild() -> void:
+	_rebuild_cards()
+	rebuilt.emit()
+
+
+func _rebuild_cards() -> void:
 	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
 	var keep := ""
 	for k in buttons:
