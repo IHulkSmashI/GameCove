@@ -31,6 +31,11 @@ var sort := "recent"
 var query := ""
 ## "" (all) | "installed" | "not_installed"
 var install_filter := ""
+## Genre filter ("" = all) and "critic score 75+" filter.
+var genre := ""
+var critic_filter := false
+var genre_button: Button
+var critic_button: Button
 ## Called with every new tile (install badges and progress).
 var tile_hook: Callable = Callable()
 var filter_buttons: Array = []
@@ -124,6 +129,19 @@ func _init() -> void:
 		fb.pressed.connect(func(): set_install_filter("" if install_filter == fid else fid))
 		bar.add_child(fb)
 		filter_buttons.append(fb)
+	# Genre (A cycles the library's most common genres) and critic score 75+.
+	genre_button = Kit.button("", "ChipButton")
+	genre_button.name = "Genre"
+	genre_button.custom_minimum_size = Vector2(0, 44)
+	genre_button.pressed.connect(func(): cycle_genre(1))
+	bar.add_child(genre_button)
+	critic_button = Kit.button("%d+" % View.CRITIC_MIN, "ChipButton")
+	critic_button.name = "Critic"
+	critic_button.toggle_mode = true
+	critic_button.custom_minimum_size = Vector2(0, 44)
+	critic_button.tooltip_text = "Critic score %d or more" % View.CRITIC_MIN
+	critic_button.pressed.connect(func(): set_critic_filter(not critic_filter))
+	bar.add_child(critic_button)
 	bar.add_child(Kit.spacer())
 	downloads_chip = Kit.button("", "ChipButton")
 	downloads_chip.name = "DownloadsChip"
@@ -251,6 +269,22 @@ func set_sort(mode: String) -> void:
 	_rebuild(false)
 
 
+## "" = every genre.
+func set_genre(g: String) -> void:
+	genre = g
+	_rebuild(false)
+
+
+func cycle_genre(d := 1) -> void:
+	var list: Array = [""] + View.top_genres(games)
+	set_genre(list[posmod(list.find(genre) + d, list.size())] if genre in list else "")
+
+
+func set_critic_filter(on: bool) -> void:
+	critic_filter = on
+	_rebuild(false)
+
+
 func set_install_filter(f: String) -> void:
 	install_filter = f if f in ["installed", "not_installed"] else ""
 	_rebuild(false)
@@ -319,7 +353,8 @@ func _rebuild(keep_focus: bool) -> void:
 		var f := get_viewport().gui_get_focus_owner()
 		if f != null and f in _tiles:
 			focused_key = f.game.get("key", "")
-	shown = View.sort_games(View.search(filter_install(View.filter_by_store(games, store), install_filter), query), sort)
+	var picked := View.filter_meta(filter_install(View.filter_by_store(games, store), install_filter), genre, View.CRITIC_MIN if critic_filter else 0)
+	shown = View.sort_games(View.search(picked, query), sort)
 	for t in _tiles:
 		Kit.drop(grid, t)
 	_tiles.clear()
@@ -342,6 +377,8 @@ func _rebuild(keep_focus: bool) -> void:
 		_empty_text.text = "Your games will show up here once a store has some installed."
 	elif query != "":
 		_empty_text.text = "No games match \"%s\". Try fewer letters or another store." % query
+	elif shown.is_empty() and (genre != "" or critic_filter):
+		_empty_text.text = "No games match these filters. Clear the genre or the %d+ filter to see more." % View.CRITIC_MIN
 	elif shown.is_empty() and install_filter != "":
 		_empty_text.text = ("Nothing installed here yet. Clear the Installed filter to see everything you own." if install_filter == "installed"
 			else "Everything here is installed. Clear the filter to see all your games.")
@@ -363,6 +400,10 @@ func _refresh_toolbar() -> void:
 		filter_buttons[i].set_pressed_no_signal(INSTALL_FILTERS[i][0] == install_filter)
 	search_button.text = query if query != "" else "Search"
 	search_button.icon = Icons.tex("search", 20)
+	genre_button.text = genre if genre != "" else "All genres"
+	genre_button.visible = genre != "" or not View.top_genres(games, 1).is_empty()
+	critic_button.set_pressed_no_signal(critic_filter)
+	critic_button.visible = critic_filter or games.any(func(g): return View.critic_score(g) > 0)
 	sort_button.text = View.SORT_NAMES[sort]
 	sort_button.icon = Icons.tex("sort", 20)
 	_link_toolbar()
@@ -372,6 +413,9 @@ func _toolbar() -> Array:
 	var out: Array = [search_button]
 	out.append_array(store_buttons)
 	out.append_array(filter_buttons)
+	for b in [genre_button, critic_button]:
+		if b != null and b.visible:
+			out.append(b)
 	if downloads_chip != null and downloads_chip.visible:
 		out.append(downloads_chip)
 	out.append(sort_button)

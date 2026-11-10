@@ -74,7 +74,7 @@ const SETTINGS_INFO := {
 	"steam_id": {"label": "Steam profile", "help": "Your profile link or name, to import your Steam wishlist (needs public game details).", "setup": true},
 	"ggdeals_key": {"label": "gg.deals key (optional)", "help": "For real local prices from every store. Free at gg.deals/api; stays on this device.", "setup": true},
 	"ggdeals_keyshops": {"label": "Show key-shop prices", "help": GG.KEYSHOP_NOTE, "setup": false},
-	"steamgriddb_key": {"label": "SteamGridDB key (optional)", "help": "Artwork for games Steam has none for. Free at steamgriddb.com; stays on this device.", "setup": false},
+	"steamgriddb_key": {"label": "SteamGridDB key (optional)", "help": "Artwork for games Steam has none for, and more to choose from in Change artwork. Free at steamgriddb.com; stays on this device.", "setup": false},
 	"price_lookups": {"label": "Look up deals and prices", "help": "Sends the Steam app ids and titles on your wishlist (and what you search for) to CheapShark and the Steam store, with your store country, to show deals and prices. Off: Discover shows no prices and nothing is sent.", "setup": false},
 	"alerts": {"label": "Price and release alerts", "help": "Tell me when a wishlisted game drops in price or comes out. Checks every 6 hours, never while you play.", "setup": false},
 	"affiliate_links": {"label": "Affiliate links", "help": "On by default. Some store links we build can carry a GameCove affiliate id, marked \"Supports GameCove\" (none are set up yet). Prices don't change, and nothing about you is sent.", "setup": false},

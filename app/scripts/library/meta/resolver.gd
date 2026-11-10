@@ -336,3 +336,34 @@ func _oc(j: Dictionary) -> void:
 			_done(OC_GAP)
 			return
 		fetch_game.call(id))
+
+
+# ------------------------------------------------------------ screenshots
+
+## A screenshot (or any detail image) on disk: done(path), "" on failure. Only
+## the image hosts Metadata allows; cached in user://metadata/shots/. Asked by
+## the game page that shows it (needs "Look up game details").
+func image(url: String, done: Callable) -> void:
+	if http == null or Metadata.https_on(url, Metadata.IMAGE_HOSTS) == "" or not Privacy.metadata_allowed(prefs_path):
+		done.call("")
+		return
+	var dir := abs_dir().path_join("shots")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var base := dir.path_join(url.sha1_text().substr(0, 24))
+	for e in ["jpg", "png", "webp"]:
+		if FileAccess.file_exists(base + "." + e):
+			done.call(base + "." + e)
+			return
+	var part := base + ".part"
+	http.request(url, {"download_file": part, "timeout": 30.0, "max_bytes": 6 * 1024 * 1024}, func(res: Dictionary):
+		var ext := ""
+		if res["ok"] and FileAccess.file_exists(part):
+			var f := FileAccess.open(part, FileAccess.READ)
+			ext = preload("res://scripts/discover/art.gd").sniff(f.get_buffer(12))
+			f.close()
+		if ext == "" or DirAccess.rename_absolute(part, base + "." + ext) != OK:
+			if FileAccess.file_exists(part):
+				DirAccess.remove_absolute(part)
+			done.call("")
+			return
+		done.call(base + "." + ext))
