@@ -136,7 +136,10 @@ def has_low_latency(pkg: str, name: str) -> bool:
 
 
 def _latest(entry: dict) -> tuple[str, dict, str | None]:
-    """(repo, release, note) for the pinned tag (or the latest, when the user allowed an untested one)."""
+    """(repo, release, note) for the entry's tag: the index's newest or the pin, both on GameCove's mirror (no API
+    call: fetch() takes it from the mirror by name); the API only for "latest (untested)" without a mirror entry."""
+    if entry.get("mirror") and entry.get("asset") and downloads.is_pinned(entry):
+        return entry["repo"], {"tag_name": entry["tag"], "assets": []}, None
     return entry["repo"], downloads.release(entry["repo"], entry.get("tag")), None
 
 

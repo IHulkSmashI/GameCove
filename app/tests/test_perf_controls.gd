@@ -17,6 +17,11 @@ const Files := preload("res://scripts/controls/perf/launch_files.gd")
 const Upscale := preload("res://scripts/controls/perf/upscale.gd")
 const MangoHud := preload("res://scripts/perf/mangohud.gd")
 const LauncherScript := preload("res://scripts/launch/launcher.gd")
+const PrivacyScript := preload("res://scripts/system/privacy.gd")
+const UpscaleUpdates := preload("res://scripts/controls/perf/upscale_updates.gd")
+const Model := preload("res://scripts/ui/controls/model.gd")
+const ControlView := preload("res://scripts/ui/controls/control_view.gd")
+const Catalog := preload("res://scripts/ui/controls/catalog.gd")
 
 const CLAW := {"id": "msi-claw-8-ex", "gpu_family": "intel-xe3", "gpu_arch": "Xe3", "xmx": true, "panel_hz": [60, 120]}
 const ALLY_X := {"id": "asus-rog-xbox-ally-x", "gpu_family": "amd-rdna3", "gpu_arch": "RDNA3.5", "xmx": false, "panel_hz": [48, 120]}
@@ -113,7 +118,8 @@ func test_every_control_is_perf_and_explains_itself() -> void:
 	for want in ["perf.overlay", "perf.overlay_position", "perf.overlay_opacity", "perf.overlay_scale",
 			"perf.overlay_item.fps", "perf.lsfg",
 			"perf.lsfg_multiplier", "perf.lsfg_flow_scale", "perf.lsfg_performance", "perf.upscaler",
-			"perf.frame_gen", "perf.upscale_recommended", "perf.upscale_undo", "perf.low_latency", "perf.proton",
+			"perf.frame_gen", "perf.upscale_recommended", "perf.upscale_undo", "perf.upscaler_update",
+			"perf.upscale_game_update", "perf.low_latency", "perf.proton",
 			"perf.launch_wrapper", "perf.shader_threads", "perf.clear_shader_cache"]:
 		ok(want in ids, want + " registered")
 	# per-game controls wait for a game
@@ -350,6 +356,140 @@ func test_python_helper_tests_pass() -> void:
 	var out := []
 	var code := OS.execute("python3", ["-m", "pytest", "-q", "-p", "no:cacheprovider", helpers.path_join("tests")], out, true)
 	eq(code, 0, "pytest: " + str(out[0]).right(600))
+
+
+# ---- upscaler updates (helper check / update / game-update) ---------------------------
+
+const CHECK_UPDATE := {"ok": true, "update": true, "index": {"verified": true, "generated": "2026-11-09T04:23:00Z"},
+	"components": [
+		{"id": "optiscaler", "name": "OptiScaler", "installed": "0.9.4", "latest": "0.9.5", "update": true},
+		{"id": "optipatcher", "name": "OptiPatcher", "installed": "rolling-20261020", "latest": "rolling-20261020", "update": false},
+		{"id": "fsr4_amd", "name": "FSR 4 (AMD)", "installed": "20261028-7539ae8b", "latest": "20261028-7539ae8b", "update": false}]}
+const CHECK_CURRENT := {"ok": true, "update": false, "index": {"verified": true},
+	"components": [
+		{"id": "optiscaler", "name": "OptiScaler", "installed": "0.9.5", "latest": "0.9.5", "update": false},
+		{"id": "optipatcher", "name": "OptiPatcher", "installed": "rolling-20261020", "latest": "rolling-20261020", "update": false}]}
+
+
+func _calls_with(runner, verb: String) -> Array:
+	return runner.calls.filter(func(c): return (" %s --home " % verb) in c)
+
+
+func test_upscaler_updates_summary() -> void:
+	var s := UpscaleUpdates.summary(CHECK_UPDATE)
+	ok(s["update"] and s["reason"] == "", "update available")
+	ok(s["help"].begins_with("Update available: OptiScaler 0.9.4 → 0.9.5."), s["help"])
+	ok(not "OptiPatcher" in s["help"], "only what has an update")
+	var u := UpscaleUpdates.summary(CHECK_CURRENT)
+	ok(not u["update"] and u["reason"] == "", "up to date stays usable (press: check now)")
+	eq(u["help"], "Up to date: OptiScaler 0.9.5 · OptiPatcher rolling-20261020. Press to check now.", "installed versions shown")
+	var pins := CHECK_CURRENT.duplicate(true)
+	pins["index"]["verified"] = false
+	ok("tested versions" in UpscaleUpdates.summary(pins)["help"], "says when the newest list isn't verified")
+	ok(UpscaleUpdates.summary({"ok": true, "components": []})["reason"].begins_with("Nothing downloaded yet"), "nothing yet")
+	ok(UpscaleUpdates.summary({"ok": false, "error": "boom"})["reason"].ends_with("boom"), "helper error")
+	ok(UpscaleUpdates.summary({})["reason"] != "", "no answer")
+	var g := UpscaleUpdates.game_summary({"ok": true, "owner": "gamecove", "opti_version": "0.9.4", "opti_latest": "0.9.5", "game_update": true})
+	ok(g["reason"] == "" and "OptiScaler 0.9.4 → 0.9.5" in g["help"], "game: " + g["help"])
+	ok("add-ons" in UpscaleUpdates.game_summary({"ok": true, "owner": "gamecove", "opti_version": "0.9.5", "opti_latest": "0.9.5", "game_update": true})["help"], "same OptiScaler, newer OptiPatcher")
+	ok("up to date" in UpscaleUpdates.game_summary({"ok": true, "owner": "gamecove", "opti_version": "0.9.5", "opti_latest": "0.9.5", "game_update": false})["reason"], "game current")
+	eq(UpscaleUpdates.game_summary({"ok": true, "owner": "decky-framegen"})["reason"], "GameCove's OptiScaler isn't in this game", "not ours")
+
+
+func test_upscaler_update_row_shows_and_runs_the_update() -> void:
+	var w := _world("upscale_updates", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["check"] = CHECK_UPDATE
+	w["p"]._forget_check()
+	reg.detect_all()
+	var c: RefCounted = reg.control("perf.upscaler_update")
+	ok(c.available, "available: " + c.reason)
+	ok(c.help.begins_with("Update available: OptiScaler 0.9.4 → 0.9.5"), c.help)
+	eq(_calls_with(runner, "check").filter(func(x): return "--online" in x), [], "detecting never goes online")
+	# the Upscaling card shows it, with its line
+	var m = Model.new()
+	m.setup(reg, null)
+	var v: Control = ControlView.make(m, "perf.upscaler_update")
+	eq(str(v.row.get_script().resource_path).get_file(), "action_row.gd", "an action row")
+	ok("Update available: OptiScaler 0.9.4 → 0.9.5" in v.explanation(), "the row says so: " + v.explanation())
+	var card: Array = Catalog.cards_for(["perf"], reg.list().map(func(x): return x.id)).filter(func(cd): return cd[0] == "Upscaling")[0]
+	ok("perf.upscaler_update" in card[2] and "perf.upscale_game_update" in card[2], "on the Upscaling card")
+	# pressing it updates, then reads again
+	runner.answers["update"] = {"ok": true, "results": {}, "games": ["epic:abc"]}
+	var n_check := _calls_with(runner, "check").size()
+	runner.answers["check"] = CHECK_CURRENT
+	reg.set_value("perf.upscaler_update", true)
+	eq(_calls_with(runner, "update").size(), 1, "update ran once")
+	ok(_calls_with(runner, "check").size() > n_check, "checked again after")
+	ok(c.help.begins_with("Up to date: OptiScaler 0.9.5"), "now: " + c.help)
+	v.refresh()
+	ok("Up to date: OptiScaler 0.9.5" in v.explanation(), "the row follows: " + v.explanation())
+	# up to date, pressing it checks right away (online)
+	reg.set_value("perf.upscaler_update", true)
+	eq(_calls_with(runner, "update").size(), 1, "nothing to update: no update call")
+	ok(_calls_with(runner, "check")[-1].ends_with("--online"), "checks the signed list now: " + str(_calls_with(runner, "check")[-1]))
+	v.free()
+	m.setup(null, null)
+	_done(w)
+
+
+func test_upscaler_update_reasons() -> void:
+	var w := _world("upscale_updates_none", ALLY_X, ["helper"])
+	eq(w["reg"].control("perf.upscaler_update").reason, "Needs GameCove's upscaling helper", "no helper")
+	_done(w)
+	var w2 := _world("upscale_updates_empty", ALLY_X)
+	w2["runner"].answers["check"] = {"ok": true, "components": [], "update": false}
+	w2["p"]._forget_check()
+	w2["reg"].detect_all()
+	ok(w2["reg"].control("perf.upscaler_update").reason.begins_with("Nothing downloaded yet"), "nothing downloaded")
+	_done(w2)
+
+
+func test_game_update_row_updates_the_games_copy() -> void:
+	var w := _world("upscale_game_update", ALLY_X)
+	var runner = w["runner"]
+	runner.answers["status"] = {"ok": true, "upscaler": "fsr31", "fg": 0, "owner": "gamecove", "opti_version": "0.9.4",
+		"opti_latest": "0.9.5", "game_update": true}
+	runner.answers["game-update"] = {"ok": true, "version": "0.9.5", "was": "0.9.4", "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
+	eq(w["reg"].control("perf.upscale_game_update").reason, PerfProvider.NO_GAME, "needs a game")
+	_with_game(w, EPIC)
+	var c: RefCounted = w["reg"].control("perf.upscale_game_update")
+	ok(c.available and "OptiScaler 0.9.4 → 0.9.5" in c.help, c.help + " / " + c.reason)
+	runner.answers["status"] = {"ok": true, "upscaler": "fsr31", "fg": 0, "owner": "gamecove", "opti_version": "0.9.5",
+		"opti_latest": "0.9.5", "game_update": false}
+	w["reg"].set_value("perf.upscale_game_update", true)
+	var last: Array = _calls_with(runner, "game-update")
+	ok(last.size() == 1 and "--key epic:abc --dir /games/abc" in last[0], "game-update call: " + str(last))
+	ok(not c.available and "up to date" in c.reason, "current afterwards: " + c.reason)
+	eq(w["p"].launch_env_hook("epic:abc", EPIC).get("WINEDLLOVERRIDES"), "dxgi=n,b;", "launch env kept")
+	_done(w)
+
+
+func test_background_check_is_daily_and_follows_the_privacy_switch() -> void:
+	var w := _world("upscale_bg", ALLY_X)
+	var base := ProjectSettings.globalize_path("user://test_perf_controls/upscale_bg")
+	var prefs := base.path_join("settings.cfg")
+	var stamp := base.path_join("upscalers.cfg")
+	w["ctx"]["privacy_path"] = prefs
+	w["ctx"]["upscale_stamp_path"] = stamp
+	var runner = w["runner"]
+	runner.answers["check"] = CHECK_UPDATE
+	var p = w["p"]
+	var now := 1_800_000_000
+	ok(PrivacyScript.set_background_allowed(false, prefs), "switch off")
+	ok(not p.background_check(now), "off: no background check")
+	eq(_calls_with(runner, "check").filter(func(x): return "--online" in x), [], "nothing went online")
+	eq(UpscaleUpdates.last_check(stamp), 0, "and nothing recorded")
+	PrivacyScript.set_background_allowed(true, prefs)
+	ok(p.background_check(now), "on: checks")
+	eq(_calls_with(runner, "check").filter(func(x): return "--online" in x).size(), 1, "one online check")
+	eq(UpscaleUpdates.last_check(stamp), now, "recorded")
+	ok(not p.background_check(now + 3600), "not again within a day")
+	ok(p.background_check(now + UpscaleUpdates.INTERVAL_S), "again a day later")
+	ok(UpscaleUpdates.due(now, now - 10, true), "a clock set back doesn't block it forever")
+	ok(not UpscaleUpdates.due(0, now, false), "never with the switch off")
+	_done(w)
 
 
 # ---- low latency, Proton, wrapper ------------------------------------------------------

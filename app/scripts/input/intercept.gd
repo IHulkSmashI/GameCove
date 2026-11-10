@@ -239,14 +239,18 @@ var _thread: Thread
 var on_line: Callable
 
 
+## True while the monitor process is alive (review M11: not just "was started": a gdbus that
+## died by itself left _pid set, so Controller never restarted it).
 func running() -> bool:
-	return _pid > 0
+	return _pid > 0 and OS.is_process_running(_pid)
 
 
 ## Starts gdbus monitor. False when it can't run (no gdbus).
 func start_monitor(program := MONITOR_PROGRAM, args: Array = MONITOR_ARGS) -> bool:
-	if _pid > 0:
+	if running():
 		return true
+	if _pid > 0:
+		stop_monitor()   # the last one exited by itself: reap its reader first
 	var r: Dictionary = OS.execute_with_pipe(program, PackedStringArray(args), true)
 	if r.is_empty() or int(r.get("pid", 0)) <= 0:
 		return false

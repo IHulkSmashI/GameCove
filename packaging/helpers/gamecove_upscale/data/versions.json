@@ -1,12 +1,16 @@
 {
- "_comment": "Pinned on purpose (ported from ClawDeck's assets/versions.json, same author): everything is downloaded from its upstream at the moment the user asks, checked by sha256; GameCove ships none of these files.",
+ "_comment": "The tested versions (ported from ClawDeck's assets/versions.json, same author), the fallback when the signed upscalers.json can't be fetched or verified (mirror.py). Every file is pinned by sha256 and copied to GameCove's rolling 'upscalers' release under an immutable name (\"mirror\"), so a file moved or replaced upstream never breaks an install; the upstream URL (\"url\") is the second source, same sha256. .github/workflows/upscalers.yml puts these files on the mirror on its first run and keeps them.",
  "xess_xmx_linux": {
   "repo": "HHHHanasak1/xess-xmx-linux",
   "tag": "20261104",
   "asset_glob": "xess-xmx-linux-*.zip",
   "sha256": "4d97b77e44f22235a567d0b5317421e65566089dc08a6a0caf9fa16549433173",
   "sha256_note": "xess-xmx-linux-20261104.zip (16508598 bytes), downloaded twice on 2026-11-09 with the same hash; its install.sh, uninstall.sh, enable.sh, disable.sh, xmx-launch.sh and LICENSE are byte-identical to the repo at tag 20261104 (a12948e2)",
-  "note": "20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x"
+  "note": "20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x",
+  "version": "20261104",
+  "asset": "xess-xmx-linux-20261104.zip",
+  "url": "https://github.com/HHHHanasak1/xess-xmx-linux/releases/download/20261104/xess-xmx-linux-20261104.zip",
+  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/xess_xmx_linux-20261104-4d97b77e-xess-xmx-linux-20261104.zip"
  },
  "reframework": {
   "repo": "onehoon/REFramework",
@@ -14,7 +18,11 @@
   "asset_glob": "REFramework.zip",
   "sha256": "538666f011a9ca54d38e87815a6227066daa32bb0349c392c98543268aaa9a64",
   "dll_sha256": "ac1901b02e475bd335f7055789c351b843804964e90d111247f0b671439dbc98",
-  "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, REFramework 0.1.0.69) next to the game's exe. onehoon's fork (the fork's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: a working Windows Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Releases 16 and 17 exist; not tested yet."
+  "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, REFramework 0.1.0.69) next to the game's exe. onehoon's fork (the fork's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: a working Windows Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Releases 16 and 17 exist; not tested yet.",
+  "version": "fork-release-15-854e42d5",
+  "asset": "REFramework.zip",
+  "url": "https://github.com/onehoon/REFramework/releases/download/fork-release-15-854e42d58b97be792c8ce441e4bdc691684e5866/REFramework.zip",
+  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/reframework-fork-release-15-854e42d5-538666f0-REFramework.zip"
  },
  "optiscaler": {
   "version": "0.9.4",
@@ -25,10 +33,16 @@
     "name": "OptiPatcher",
     "url": "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/bins-for-optipatcher-rolling/OptiPatcher_rolling.asi",
     "sha256": "88b9e1be3559737cd205fdf5f2c8550cf1923fb1def4c603e5bf03c3e84131b1",
-    "dest": "plugins/OptiPatcher.asi"
+    "dest": "plugins/OptiPatcher.asi",
+    "version": "rolling-dfg017",
+    "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/optipatcher-rolling-dfg017-88b9e1be-OptiPatcher_rolling.asi"
    }
   ],
-  "note": "ClawDeck's own OptiScaler (optiscaler.py): the same release and OptiPatcher build Decky Framegen v0.17 pins, with the same sha256."
+  "note": "ClawDeck's own OptiScaler (optiscaler.py): the same release and OptiPatcher build Decky Framegen v0.17 pins, with the same sha256.",
+  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/optiscaler-0.9.4-575cb4df-Optiscaler_0.9.4-final.20260718._MM.7z",
+  "asset": "Optiscaler_0.9.4-final.20260718._MM.7z",
+  "tag": "v0.9.4",
+  "repo": "optiscaler/OptiScaler"
  },
  "optiscaler_v10": {
   "version": "10.0.0-pre1-20261030",
@@ -43,7 +57,9 @@
     "name": "OptiPatcher",
     "url": "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/bins-for-optipatcher-rolling/OptiPatcher_rolling.asi",
     "sha256": "88b9e1be3559737cd205fdf5f2c8550cf1923fb1def4c603e5bf03c3e84131b1",
-    "dest": "OptiScaler/plugins/OptiPatcher.asi"
+    "dest": "OptiScaler/plugins/OptiPatcher.asi",
+    "version": "rolling-dfg017",
+    "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/optipatcher-rolling-dfg017-88b9e1be-OptiPatcher_rolling.asi"
    },
    {
     "name": "fakenvapi",
@@ -55,10 +71,13 @@
     "file_sha256": {
      "fakenvapi.dll": "373e73dc06e2d66e90083fde3bc99ef5c1ed0bef98d1f7eda56c8b073269c3f1"
     },
-    "ini": "OptiScaler/fakenvapi.ini"
+    "ini": "OptiScaler/fakenvapi.ini",
+    "version": "1.4.1",
+    "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fakenvapi-1.4.1-e1239f74-fakenvapi-v1.4.1.7z"
    }
   ],
-  "note": "Capcom RE Engine games only (optiscaler.py layout 'subfolder'): OptiScaler.dll as the proxy and OptiScaler.ini next to the exe, everything else in OptiScaler\\ (OptiDllPath), OptiPatcher in OptiScaler\\plugins. a working Windows Onimusha install uses 0.9.5-pre4, which isn't published on GitHub; this public v10 nightly ran Onimusha with onehoon's REFramework on a Claw 8 EX on Bazzite (2026-11-04). Every other game stays on 'optiscaler' (0.9.4). fakenvapi v1.4.1 (FakeMichau) goes in OptiScaler\\ with the tested fakenvapi.ini, as in the tested folder: its fakenvapi.dll (415232 bytes) is byte-identical to the one OptiScaler 0.9.4 ships. OptiScaler v10 has fakenvapi built in ([fakenvapi] UseFakenvapi, set to true) and doesn't load the file; it is there to match the setup tested on the Claw."
+  "note": "Capcom RE Engine games only (optiscaler.py layout 'subfolder'): OptiScaler.dll as the proxy and OptiScaler.ini next to the exe, everything else in OptiScaler\\ (OptiDllPath), OptiPatcher in OptiScaler\\plugins. a working Windows Onimusha install uses 0.9.5-pre4, which isn't published on GitHub; this public v10 nightly ran Onimusha with onehoon's REFramework on a Claw 8 EX on Bazzite (2026-11-04). Every other game stays on 'optiscaler' (0.9.4). fakenvapi v1.4.1 (FakeMichau) goes in OptiScaler\\ with the tested fakenvapi.ini, as in the tested folder: its fakenvapi.dll (415232 bytes) is byte-identical to the one OptiScaler 0.9.4 ships. OptiScaler v10 has fakenvapi built in ([fakenvapi] UseFakenvapi, set to true) and doesn't load the file; it is there to match the setup tested on the Claw.",
+  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/optiscaler_v10-10.0.0-pre1-20261030-db4fe2de-OptiScaler_v10.0.0-pre1_20261030.7z"
  },
  "fsr4_xmx": {
   "repo": "IHulkSmashI/ClawDeck",
@@ -67,7 +86,12 @@
    "amd_fidelityfx_upscaler_dx12.dll": "a609f609a3ef29ddff59adfbd27dc417bf68fcd865383b2529987a7eff1081ac",
    "fsr-original.dll": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace"
   },
-  "note": "nitec's FSR 4.1.2 build for the XMX cores (OptiScaler community), shared with ClawDeck with nitec's OK (maintainer, 2026-11-05), the same files the tested setup installs on Intel (its Archives/Custom/FSR4_XMX). Hosted on ClawDeck's fsr4-xmx-files branch, pinned by commit (not on the Releases page); downloaded into ~/fsr4-xmx when missing, each sha256 checked (the maintainer's working copy on the Claw 8 EX, 2026-11-04)."
+  "note": "nitec's FSR 4.1.2 build for the XMX cores (OptiScaler community), shared with ClawDeck with nitec's OK (maintainer, 2026-11-05), the same files the tested setup installs on Intel (its Archives/Custom/FSR4_XMX). Hosted on ClawDeck's fsr4-xmx-files branch, pinned by commit (not on the Releases page); downloaded into ~/fsr4-xmx when missing, each sha256 checked (the maintainer's working copy on the Claw 8 EX, 2026-11-04).",
+  "version": "4.1.2-34a8210e",
+  "mirror": {
+   "amd_fidelityfx_upscaler_dx12.dll": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fsr4_xmx-4.1.2-34a8210e-a609f609-amd_fidelityfx_upscaler_dx12.dll",
+   "fsr-original.dll": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fsr4_xmx-4.1.2-34a8210e-aad4fccc-fsr-original.dll"
+  }
  },
  "fsr4_amd": {
   "repo": "GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
@@ -76,6 +100,11 @@
    "amd_fidelityfx_upscaler_dx12.dll": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace"
   },
   "license": "AMD FidelityFX SDK binary licence (Kits/FidelityFX/docs/license.md): binary redistribution allowed with its notice; GameCove downloads it from AMD at the user's request instead of shipping it",
-  "note": "AMD FSR SDK 2.4.0 (2026-10-28): FSR Upscaling 4.1.2, ML model picked by GPU (FP8 RDNA4, INT8 RDNA3/RDNA2 dGPU and Strix Halo, lightweight INT8 for Z2 Extreme / 890M / Z2 A). The same file ClawDeck keeps as fsr-original.dll next to nitec's XMX build. Under Proton FSR 4 needs a Proton with AMD's driver extension shim (Proton-CachyOS, GE-Proton)."
+  "note": "AMD FSR SDK 2.4.0 (2026-10-28): FSR Upscaling 4.1.2, ML model picked by GPU (FP8 RDNA4, INT8 RDNA3/RDNA2 dGPU and Strix Halo, lightweight INT8 for Z2 Extreme / 890M / Z2 A). The same file ClawDeck keeps as fsr-original.dll next to nitec's XMX build. Under Proton FSR 4 needs a Proton with AMD's driver extension shim (Proton-CachyOS, GE-Proton).",
+  "version": "sdk2.4.0-7539ae8b",
+  "mirror": {
+   "amd_fidelityfx_upscaler_dx12.dll": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fsr4_amd-sdk2.4.0-7539ae8b-aad4fccc-amd_fidelityfx_upscaler_dx12.dll"
+  },
+  "notice": "Kits/FidelityFX/docs/license.md"
  }
 }

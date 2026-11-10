@@ -49,9 +49,10 @@ def test_every_versions_entry_is_hash_pinned():
             assert _hex(x.get("sha256")), f"{key}/{x.get('name')} has no sha256 pin"
 
 
-# The tested OptiPatcher build is only published on a rolling tag (no immutable release carries the same bytes; the
-# official optiscaler/OptiPatcher v0.20-v0.42 assets all differ). The hash still protects it: when upstream rolls, the
-# install stops with "does not match" instead of running something else. Re-host it pinned by commit to drop this.
+# The tested OptiPatcher build is only published upstream on a rolling tag (no immutable release carries the same
+# bytes; the official optiscaler/OptiPatcher v0.20-v0.42 assets all differ). Its "mirror" (GameCove's own release,
+# immutable name, mirror.py) is tried first; the rolling upstream URL is only the second source, and the hash still
+# protects it: when upstream rolls, that source answers "does not match" instead of running something else.
 ROLLING_ALLOWED = {"https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/"
                    "bins-for-optipatcher-rolling/OptiPatcher_rolling.asi"}
 

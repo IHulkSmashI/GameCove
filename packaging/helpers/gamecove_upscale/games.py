@@ -23,8 +23,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 
-from . import framegen, gamedb, launchenv, livedb, optiscaler, reframework, xess
+from . import framegen, gamedb, launchenv, livedb, mirror, optiscaler, reframework, xess
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 BUNDLED_GAMES = os.path.join(HERE, "data", "games.json")
@@ -38,9 +39,16 @@ AMD_UPSCALERS = ("own", "fsr31", "fsr4_amd")
 FSR4_AMD_ARCHS = ("RDNA3", "RDNA3.5")
 
 
-def versions() -> dict:
+def pins() -> dict:
+    """data/versions.json: the tested versions, the fallback when no verified index is at hand."""
     with open(VERSIONS, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def versions(home: str | None = None) -> dict:
+    """What to install: the pins with the newest entries of the verified upscalers index (mirror.py) in their place.
+    Without home, or without a verified index, the pins."""
+    return mirror.versions(home, pins())
 
 
 def games_path(home: str) -> str:
@@ -241,30 +249,36 @@ def recommend(home: str, key: str, gpu: dict, game_dir: str | None = None, name:
 
 
 # ---- putting it in ----------------------------------------------------------------------------------------------
-def _opti_entry(launch: dict) -> dict:
-    v = versions()
+def _opti_entry(launch: dict, home: str | None = None) -> dict:
+    v = versions(home)
     return v["optiscaler_v10"] if launchenv.v10(launch) and v.get("optiscaler_v10") else v["optiscaler"]
 
 
-def _ref_shas() -> tuple[str, ...]:
-    e = versions().get("reframework") or {}
-    return tuple(x for x in (e.get("dll_sha256"),) if x)
+def _ref_shas(home: str | None = None) -> tuple[str, ...]:
+    """REFramework builds GameCove installs: the tested one and the index's newest."""
+    shas = [(e.get("reframework") or {}).get("dll_sha256") for e in (pins(), versions(home))]
+    return tuple(dict.fromkeys(x for x in shas if x))
 
 
 def _opti_into(home: str, key: str, folder: str, launch: dict, gpu: dict, proxies: list[str] | None = None) -> dict:
     """ClawDeck's _opti_into: the pinned OptiScaler (downloaded once) into the game with `launch`'s settings."""
-    entry = _opti_entry(launch)
+    entry = _opti_entry(launch, home)
     if not optiscaler.installed(home, entry["version"]) or not optiscaler.extras_ready(home, entry):
         r = optiscaler.install(home, entry)
         if not r.get("ok"):
-            return r
+            # the newest can't be downloaded now (offline): an OptiScaler of the same kind already here still works
+            layout = entry.get("layout") or "flat"
+            alt = next((p for p in optiscaler.packages(home) if p["layout"] == layout and p["version"] != entry["version"]), None)
+            if not alt:
+                return r
+            entry = {"version": alt["version"], "layout": layout}
     v = vendor(gpu)
     opti = launch.get("opti") or ("xess" if v == "intel" else "fsr31")
     opti = "fsr4_xmx" if opti == "fsr4" else opti
     if opti in launchenv.FSR4_XMX and launch.get("xmx") is False:
         return {"ok": False, "error": "FSR 4.1.2 needs the XMX cores, and XMX is off for this game: pick XeSS 2, or switch XMX on first"}
     if opti == "fsr4_amd" and optiscaler.fsr4_amd_missing(home):
-        r = optiscaler.fsr4_amd_download(home, versions()["fsr4_amd"])
+        r = optiscaler.fsr4_amd_download(home, versions(home)["fsr4_amd"])
         if not r.get("ok"):
             return r
     r = optiscaler.patch(home, folder, entry["version"], launchenv.opti_ini({**launch, "opti": opti}, v), opti,
@@ -346,7 +360,7 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
             return {"ok": False, "error": f"FSR 4.1.2 on XMX needs nitec's files in {os.path.join(home, optiscaler.FSR4_XMX_DIR)} (missing: {', '.join(missing)})"}
     if upscaler == "own":
         out = optiscaler.unpatch(folder, home)
-        ref = reframework.remove(folder, _ref_shas())
+        ref = reframework.remove(folder, _ref_shas(home))
         s = load_state(home)
         s["opti_games"].pop(str(key), None)
         save_state(home, s)
@@ -364,7 +378,7 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
         return r
     launch["opti_dll"] = r["dll_override"]
     if rec["re_engine"]:
-        rf = reframework.install(home, folder, versions()["reframework"], bool(allow_unpinned))
+        rf = reframework.install(home, folder, versions(home)["reframework"], bool(allow_unpinned))
         if not rf.get("ok"):
             return rf
     out = set_launch(home, key, launch, gpu)
@@ -391,7 +405,7 @@ def apply_recommended(home: str, key: str, gpu: dict, game_dir: str | None = Non
             return r
         launch["opti_dll"] = r["dll_override"]
     if rec["re_engine"]:
-        r = reframework.install(home, folder, versions()["reframework"], bool(allow_unpinned))
+        r = reframework.install(home, folder, versions(home)["reframework"], bool(allow_unpinned))
         if not r.get("ok"):
             return r
     clean = {k: None for k in REC_KEYS}
@@ -404,7 +418,7 @@ def undo(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
     """ClawDeck's game_undo_recommended: REFramework and OptiScaler out, the launch settings cleared."""
     d = _game_dir(home, key, game_dir)
     folder = load_state(home)["opti_games"].get(str(key)) or (optiscaler.main_exe_dir(d) if d else None)
-    removed = reframework.remove(folder, _ref_shas()) if folder else {"ok": True}
+    removed = reframework.remove(folder, _ref_shas(home)) if folder else {"ok": True}
     opti = optiscaler.unpatch(folder, home) if folder else {"ok": True}
     s = load_state(home)
     s["opti_games"].pop(str(key), None)
@@ -429,5 +443,75 @@ def status(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
         env = launchenv.compose(launch, True, vendor(gpu))
     except ValueError:
         pass
-    return {"dir": d, "folder": folder, "owner": who["owner"], "upscaler": upscaler, "fg": fg, "launch": launch,
-            "env": env, "upscalers": upscalers_for(gpu), "frame_gens": fg_for(gpu)}
+    out = {"dir": d, "folder": folder, "owner": who["owner"], "upscaler": upscaler, "fg": fg, "launch": launch,
+           "env": env, "upscalers": upscalers_for(gpu), "frame_gens": fg_for(gpu)}
+    if who["owner"] == "gamecove":
+        entry = _opti_entry(launch, home)
+        out.update({"opti_version": who.get("version"), "opti_latest": entry["version"],
+                    "game_update": game_outdated(folder, entry)})
+    return out
+
+
+# ---- keeping a game's copy current ------------------------------------------------------------------------------
+def game_outdated(folder: str | None, entry: dict) -> bool:
+    """GameCove's OptiScaler in this game folder is older than `entry`: another OptiScaler version, or an extra
+    (OptiPatcher, fakenvapi) whose bytes in the game aren't the entry's."""
+    m = optiscaler._manifest(folder) if folder else None
+    if not m:
+        return False
+    if m.get("version") != entry.get("version"):
+        return True
+    hashes = m.get("sha256") or {}
+    for x in entry.get("extras", []):
+        for rel, sha in optiscaler.extra_hashes(x).items():
+            if sha and rel in hashes and hashes[rel] != sha:
+                return True
+    return False
+
+
+def game_update(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
+    """Bring GameCove's OptiScaler in this game up to the newest (and its REFramework, if GameCove put one there),
+    with the game's own settings kept. patch() takes the older version out first exactly as undo does (only files
+    whose sha256 is still what GameCove put there; backups never over newer game files), or, for the same
+    OptiScaler, replaces only GameCove's own files."""
+    d = _game_dir(home, key, game_dir)
+    folder = load_state(home)["opti_games"].get(str(key)) or (optiscaler.main_exe_dir(d) if d else None)
+    who = optiscaler.owner(folder)
+    if who["owner"] != "gamecove":
+        return {"ok": False, "error": "GameCove's OptiScaler isn't in this game"}
+    launch = get_launch(home, key)
+    entry = _opti_entry(launch, home)
+    if not game_outdated(folder, entry):
+        return {"ok": True, "up_to_date": True, "version": who.get("version"), "folder": folder}
+    r = _opti_into(home, key, folder, launch, gpu, [who["dll"]] if who.get("dll") else None)
+    if not r.get("ok"):
+        return r
+    out = {"ok": True, "version": r.get("version"), "was": who.get("version"), "folder": folder}
+    if r.get("dll_override") and r["dll_override"] != launch.get("opti_dll"):
+        out["launch"] = set_launch(home, key, {"opti_dll": r["dll_override"]}, gpu)
+    if launch.get("reframework") and reframework.status(folder).get("ours"):
+        rf = reframework.install(home, folder, versions(home)["reframework"])
+        out["reframework"] = rf
+        if not rf.get("ok"):
+            out.update(ok=False, error=f"OptiScaler is updated; REFramework: {rf.get('error')}")
+    prune(home)
+    return out
+
+
+def prune(home: str) -> list[str]:
+    """Delete downloaded OptiScaler packages nothing needs any more: not the newest of either kind, and not the
+    version any game GameCove patched still runs (its undo compares against the package files)."""
+    if mirror.load(home) is None:        # only with the verified newest known: never prune on the pins alone
+        return []
+    v = versions(home)
+    keep = {(v.get(k) or {}).get("version") for k in ("optiscaler", "optiscaler_v10")}
+    for folder in load_state(home)["opti_games"].values():
+        m = optiscaler._manifest(folder) if folder else None
+        if m:
+            keep.add(m.get("version"))
+    gone = []
+    for p in optiscaler.packages(home):
+        if p["version"] not in keep:
+            shutil.rmtree(p["dir"], ignore_errors=True)
+            gone.append(p["version"])
+    return gone

@@ -22,7 +22,7 @@ It downloads the latest release (checked against its SHA256SUMS), adds **GameCov
 - **SteamOS:** installs as a system extension (sysext) kept on the home partition and linked from `/etc/extensions`, so SteamOS updates keep it; `steamos-readonly` stays on.
 - **Anything else:** you can try GameCove in a window.
 
-Run **GameCove Installer** again any time to change options, repair, update or remove GameCove (removing makes Steam Gaming Mode the default again). Everything it does is logged to `~/.local/share/gamecove/installer.log`. If GameCove ever fails to start five times in a row, your handheld goes back to Steam Gaming Mode by itself. Manual install: [docs/SESSION.md](docs/SESSION.md).
+Run **GameCove Installer** again any time to change options, repair, update or remove GameCove (removing makes Steam Gaming Mode the default again). Everything it does is logged to `~/.local/share/gamecove/installer.log`. If GameCove crashes, hangs or fails to start three times in a row, your handheld goes back to Steam Gaming Mode for the rest of that boot, and GameCove tells you why the next time it opens. Manual install: [docs/SESSION.md](docs/SESSION.md).
 
 ## What it does
 
@@ -75,6 +75,7 @@ GameCove has no analytics, no crash reporting and no account of its own, and nev
 | Deals and prices (Discover, wishlist) | [CheapShark](https://www.cheapshark.com) and the Steam store API | The Steam app ids and titles on your wishlist and in Discover, what you search for, your store country | 45 s after start, then every 6 hours; when you search or open a game | Look up deals and prices |
 | Local prices (optional) | [GG.deals](https://gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
 | Your device's photo | GitHub (free photos) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your device model | At start until it's saved, then weekly | Show maker photos, Background lookups |
+| Upscaler list and downloads (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and before an install; files only when you install or update | Background lookups (daily check); installs: you start them |
 | Firmware list and downloads | GitHub (`firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
 | Achievements and game art | Steam's API and CDN; SteamGridDB only with your own key | The game's app id (and your SteamGridDB key) | When you open a game page or a tile needs art | Settings > Performance; remove the key |
 | Game streaming | PCs on your own network (GameStream: Sunshine, Apollo, Vibepollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets | When you open the Stream tab or wake a PC | You start it |

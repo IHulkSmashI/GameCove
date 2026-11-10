@@ -49,8 +49,12 @@ for f in gamecove.x86_64 gamecove.pck; do grep -qx "$f" "$T/tar" && ok || bad "t
 while read -r d; do grep -qx "licenses/$d" "$T/tar" && ok || bad "tarball lacks licenses/$d"; done <"$T/dests"
 grep -q "sh packaging/make-app-tarball.sh app/build" "$REPO/.github/workflows/release.yml" && ok || bad "release.yml must build the tarball with make-app-tarball.sh"
 # sysext tree
-mkdir -p "$T/ss/usr/bin"
+mkdir -p "$T/ss/usr/bin" "$T/ss/usr/share/gamescope-session-plus" "$T/ss/usr/lib/systemd/user"
 printf '#!/bin/sh\n' >"$T/ss/usr/bin/gamescope-session-plus"
+# the files build-sysext.sh's allow-list copies (review H10)
+printf '#!/bin/bash\n' >"$T/ss/usr/share/gamescope-session-plus/gamescope-session-plus"
+echo quirks >"$T/ss/usr/share/gamescope-session-plus/device-quirks"
+printf '[Unit]\n' >"$T/ss/usr/lib/systemd/user/gamescope-session-plus@.service"
 if sh "$REPO/packaging/sysext/build-sysext.sh" --app "$T/app" --session-src "$T/ss" --out "$T/sx" --tree-only >"$T/out" 2>&1; then ok; else bad "sysext tree: $(cat "$T/out")"; fi
 while read -r d; do [ -s "$T/sx/gamecove/usr/share/licenses/gamecove/$d" ] && ok || bad "sysext lacks /usr/share/licenses/gamecove/$d"; done <"$T/dests"
 # RPM: run the spec's %prep licence loop against the repo and check %files takes the result
@@ -122,6 +126,59 @@ app_cos=$(sed -n 's/^const COSIGN_VERSION := "\(.*\)"$/\1/p' "$REPO/app/scripts/
 gg_cos=$(sed -n 's/^COSIGN_VERSION=//p' "$REPO/packaging/get-gamecove.sh")
 [ -n "$app_cos" ] && [ "$app_cos" = "$gg_cos" ] && ok || bad "updates.gd COSIGN_VERSION ($app_cos) must match get-gamecove.sh ($gg_cos)"
 grep -q 'workflows/firmware\\\\.yml@refs/heads/main\$' "$REPO/app/scripts/system/firmware_index.gd" && ok || bad "firmware_index.gd SIGNER_IDENTITY must name firmware.yml on main"
+
+# ------------------------------------------------------------- upscalers index and mirror (owner decision 2026-11-09)
+UW="$REPO/.github/workflows/upscalers.yml"
+MP="$REPO/packaging/helpers/gamecove_upscale/mirror.py"
+python3 -I - "$UW" "$MP" "$GG" >"$T/out" 2>&1 <<'PY' && ok || bad "upscalers.yml / mirror.py: $(cat "$T/out")"
+import re, subprocess, sys, yaml
+wf, mp, gg = sys.argv[1:4]
+doc = yaml.safe_load(open(wf))
+on = doc.get("on", doc.get(True))
+assert "schedule" in on and "workflow_dispatch" in on, "nightly and by hand (gh workflow run upscalers.yml)"
+assert doc.get("permissions") == {}, "least privilege: nothing at the top level"
+jobs = doc["jobs"]
+assert list(jobs) == ["build"], "one job"
+job = jobs["build"]
+assert job.get("permissions") == {"contents": "write", "id-token": "write"}, job.get("permissions")
+assert job.get("if") == "github.ref == 'refs/heads/main'", "publish only from main (the signing identity)"
+steps = job["steps"]
+bad = [s.get("name", s.get("uses", "?")) for s in steps if "${{" in s.get("run", "")]
+assert not bad, "${{ }} inside run: " + str(bad)
+for s in steps:
+    if "uses" in s:
+        assert re.match(r"^[^@ ]+@[0-9a-f]{40}$", s["uses"]), "unpinned: " + s["uses"]
+    if s.get("uses", "").startswith("actions/checkout@"):
+        assert s.get("with", {}).get("persist-credentials") is False, "checkout keeps no token"
+runs = "\n".join(s.get("run", "") for s in steps)
+assert "cosign sign-blob --yes --bundle dist/upscalers.json.sigstore.json dist/upscalers.json" in runs
+assert runs.count("--clobber") == 1 and "dist/upscalers.json.sigstore.json dist/upscalers.json.sha256 --clobber" in runs, \
+    "only the index is replaced; mirror files never"
+assert runs.index('gh release upload "$tag" "dist/$path"') < runs.index("--clobber"), "files first, the index last"
+assert "--latest=false" in runs, "the mirror release must never become 'latest' (get-gamecove.sh reads releases/latest)"
+assert "cosign-release: ${{ steps.cosign.outputs.version }}" in open(wf).read()
+# the workflow's own check, for this repository, is the identity the helper requires
+ident = [l.strip()[len('ident="'):-1] for l in runs.splitlines() if l.strip().startswith('ident="')]
+assert len(ident) == 2 and ident[0] == ident[1], ident
+got = subprocess.run(["sh", "-c", 'printf "%s" "' + ident[0] + '"'], env={"REPO": "IHulkSmashI/GameCove", "PATH": "/usr/bin:/bin"},
+                     capture_output=True, text=True, check=True).stdout
+src = open(mp).read()
+helper = re.search(r'^SIGNER_IDENTITY = r"(.*)"$', src, re.M).group(1)
+assert got == helper, (got, helper)
+r = re.compile(helper)
+base = "https://github.com/IHulkSmashI/GameCove/.github/workflows/"
+assert r.search(base + "upscalers.yml@refs/heads/main") and r.search(base.lower() + "upscalers.yml@refs/heads/main")
+for other in ("firmware.yml@refs/heads/main", "upscalers.yml@refs/heads/dev", "upscalers.yml@refs/tags/v1.0.0",
+              "upscalers.yml@refs/heads/main2"):
+    assert not r.search(base + other), other
+assert not r.search("https://github.com/fork/GameCove/.github/workflows/upscalers.yml@refs/heads/main")
+# the helper checks signatures with the cosign the installer pins
+ggs = open(gg).read()
+for k in ("COSIGN_VERSION", "COSIGN_SHA256"):
+    a = re.search(r"^%s=(\S+)$" % k, ggs, re.M).group(1)
+    b = re.search(r'^%s = "(\S+)"$' % k, src, re.M).group(1)
+    assert a == b, (k, a, b)
+PY
 
 # ------------------------------------------------------------- brand logos (M23)
 python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY' && ok || bad "brand logos: $(cat "$T/out")"

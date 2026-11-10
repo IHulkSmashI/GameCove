@@ -149,13 +149,15 @@ const STEAM_EXPLAIN := "Closes GameCove and starts Steam's own full-screen mode.
 const STEAM_CONFIRM := "Press again to switch"
 const STEAM_CONFIRM_LINE := "Sure? Press A again to switch to Steam, or move away to cancel."
 const STEAM_SWITCHING := "Switching to Steam…"
-const STEAM_FAILED := "Couldn't start the switch to Steam. Is gamecove-session-select installed?"
 const DESKTOP_TITLE := "Switch to Desktop Mode"
 const DESKTOP_EXPLAIN := "Closes GameCove and starts the desktop (Plasma). Use it to repair or remove GameCove. Save first."
 const DESKTOP_CONFIRM := "Press again to switch"
 const DESKTOP_CONFIRM_LINE := "Sure? Press A again to switch to the desktop, or move away to cancel."
 const DESKTOP_SWITCHING := "Switching to the desktop…"
-const DESKTOP_FAILED := "Couldn't start the switch to the desktop. Is gamecove-session-select installed?"
+## Review M8: the switch's own result. %s is the reason it gave (its last line).
+const SWITCH_FAILED := "The switch didn't happen: %s. The controller works here again."
+const SWITCH_FAILED_NO_REASON := "The switch didn't happen. The controller works here again."
+const SWITCH_STUCK := "Still here after the switch was asked for. The controller works here again; try once more, or use the desktop's login screen."
 const NO_PASSWORD := "No admin password given, so nothing changed."
 ## Gaming Mode has no password prompt, so installs and removes need the desktop.
 const NEEDS_DESKTOP := "Nothing changed: this needs your admin password, and Gaming Mode can't ask for it. Switch to Desktop Mode, open GameCove there and try again."

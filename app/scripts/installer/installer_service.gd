@@ -212,6 +212,7 @@ func _internal(id: String) -> Array:
 			if user_dir.ends_with("/GameCove") or user_dir.ends_with("/gamecove"):
 				UserFiles.remove_tree(user_dir, user_dir.get_base_dir())
 			UserFiles.remove_tree(paths.installer_dir(), paths.data_dir())
+			UserFiles.remove_settings_files(paths)
 			log_line("removed settings")
 			return [true, ""]
 		"forget":

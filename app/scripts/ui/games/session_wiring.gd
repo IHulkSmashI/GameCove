@@ -11,7 +11,9 @@ extends RefCounted
 ##   who has the controller: Controller.set_game_focused(game in front and no
 ##            quick menu over it), sent again on every change (InputPlumber
 ##            moves itself from Pass to Always when Guide is pressed, so the
-##            last mode we sent can't be trusted)
+##            last mode we sent can't be trusted). With no game, any other
+##            window in front (Steam's install dialog, a login prompt) gets the
+##            controller the same way (review M15).
 ## Services are passed in (autoloads, or fakes in tests); any may be missing.
 
 var perf: Object
@@ -22,8 +24,9 @@ var discover: Object
 var launcher: Object
 var game: Dictionary = {}
 var running := false
-var _front := false      # GameCove's window has focus
+var _front := true       # GameCove's window has focus (it has at start)
 var _menu := false       # the quick menu is open over the game
+var _other_sent := false # no game: we last told the Controller another window is in front
 
 
 func setup(svc: Dictionary) -> void:
@@ -66,6 +69,7 @@ func game_ended(g: Dictionary) -> void:
 	_call(updates, "set_game_running", [false])
 	_call(controller, "end_game")
 	_call(discover, "resume")
+	_other_sent = false   # end_game put our UI in charge; the next focus change says otherwise
 
 
 ## GameCove's window gained (true) or lost (false) focus while a game runs.
@@ -84,12 +88,23 @@ func menu_over_game(open: bool) -> void:
 
 
 ## Tells the Controller again who has focus (also after a special button:
-## InputPlumber may have switched modes by itself). Only while a game runs;
-## with no game Controller.end_game already put our UI in charge.
+## InputPlumber may have switched modes by itself). While a game runs, every
+## time. With no game, when another window comes in front or goes (review M15:
+## Steam's dialogs got no pad input while GameCove kept Always).
 func sync_focus() -> void:
 	if running:
 		_call(controller, "set_game_focused", [game_focused()])
+		return
+	var other := other_window_focused()
+	if other != _other_sent:
+		_other_sent = other
+		_call(controller, "set_game_focused", [other])
 
 
 func game_focused() -> bool:
 	return running and not (_front or _menu)
+
+
+## No game, and a window that isn't GameCove's has focus (the quick menu means ours does).
+func other_window_focused() -> bool:
+	return not running and not (_front or _menu)

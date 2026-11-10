@@ -14,6 +14,8 @@ const PREFS_PATH := "user://settings.cfg"
 const NETWORK_CALLS := [
 	{"who": "GitHub (GameCove's own releases)", "what": "The game database (time to beat, release dates, compatibility) and the upcoming-releases calendar. Nothing about you is sent.",
 		"when": "At start, at most once a day", "switch": "Background lookups"},
+	{"who": "GitHub (GameCove's upscalers list and mirror)", "what": "The signed list of the newest OptiScaler, OptiPatcher, fakenvapi, XeSS driver and FSR 4 files; the files themselves only when you install or update them. Nothing about you is sent.",
+		"when": "At most once a day, 90 s after start; when you install, update or press Check", "switch": "Background lookups (the daily check)"},
 	{"who": "CheapShark and the Steam store", "what": "The Steam app ids and titles on your wishlist and in Discover, and your store country, to get deals and prices.",
 		"when": "45 s after start, then every 6 hours; when you search or open a game", "switch": "Look up deals and prices"},
 	{"who": "GG.deals", "what": "Steam app ids, your region and your own API key, for local prices.",

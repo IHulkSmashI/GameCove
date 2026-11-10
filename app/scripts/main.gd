@@ -36,6 +36,7 @@ const TileProgress := preload("res://scripts/ui/games/tile_progress.gd")
 const SessionWiring := preload("res://scripts/ui/games/session_wiring.gd")
 const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 const GameCloser := preload("res://scripts/ui/games/game_closer.gd")
+const SessionHealth := preload("res://scripts/system/session_health.gd")
 ## First-run setup (s-settings); loaded at runtime only when it exists.
 const SETUP_FLOW := "res://scripts/ui/setup/setup_flow.gd"
 const Glyph := preload("res://scripts/ui/glyph.gd")
@@ -282,6 +283,11 @@ func _ready() -> void:
 	closer = GameCloser.new()
 	closer.name = "GameCloser"
 	add_child(closer)
+	# heartbeat for the session client's hang check, and why it left GameCove last time
+	var health := SessionHealth.new()
+	health.name = "SessionHealth"
+	health.game_running = func() -> bool: return session != null and session.is_active()
+	add_child(health)
 	if quick_menu.has_method("attach_session"):
 		quick_menu.attach_session(session)
 	if quick_menu.has_signal("exit_game_requested"):
@@ -304,6 +310,9 @@ func _ready() -> void:
 	_last_input_ms = Time.get_ticks_msec()
 	home.focus_later(home.default_focus())
 	open_setup(false)
+	var fallback_notice := SessionHealth.take_fallback_notice(SessionHealth.data_dir())
+	if fallback_notice != "":
+		toast(fallback_notice, "info", "warn")
 	if boot_splash and DisplayServer.get_name() != "headless":
 		load("res://scripts/ui/boot_splash.gd").play(self)
 

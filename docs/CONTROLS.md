@@ -309,12 +309,27 @@ another handheld, the files are rewritten from that device's values (stamp `laun
 | `perf.mangohud_fps_limit` (0 = off, up to the panel's top Hz), `perf.mangohud_fps_limit_method` (late / early) | the game's environment: `MANGOHUD=1 MANGOHUD_CONFIG=no_display,fps_limit=N,fps_limit_method=M`. With `MANGOHUD_CONFIG` set, MangoHud's layer reads no config file (overlay_params.cpp), so the session overlay isn't drawn twice | a MangoHud Vulkan layer JSON in an implicit_layer.d |
 | `perf.lsfg`, `perf.lsfg_multiplier` (2-4x), `perf.lsfg_flow_scale` (0.25-1.0), `perf.lsfg_performance` | `~/.config/lsfg-vk/conf.toml`: one `[[profile]]` per game named `GameCove <key>` (Steam games by `active_in = [ "<appid>" ]`, others by `LSFGVK_PROFILE`); every other line kept; a 1.x file is moved to `conf.toml.v1.bak`. The game also gets `ENABLE_GAMESCOPE_WSI=0 DXVK_HDR=0` | lsfg-vk 2 layer (`VkLayer_LSFGVK_frame_generation.json`) and the user's own `lsfg-vk.dll` in `steamapps/common/Lossless Scaling` (Steam beta branch `lsfg-vk`). Never bundled |
 | `perf.upscaler`, `perf.frame_gen`, `perf.upscale_recommended`, `perf.upscale_undo` | `gamecove-upscale choose/apply/undo --home --key --gpu vendor=..,family=..,arch=..,xmx=.. [--dir]` (JSON out). OptiScaler (pinned, sha256) into the folder of the game's exe with the game's fixes, REFramework for Capcom RE Engine games, everything recorded and undone exactly | a known GPU, the helper installed, a game whose folder is known |
+| `perf.upscaler_update` (action, not per game) | `gamecove-upscale check` (versions here vs the newest; cached 10 min) and, when pressed, `update` (an update is waiting) or `check --online` (everything current: check now). Shows "Update available: OptiScaler 0.9.4 → 0.9.5" or "Up to date: ..." with each downloaded component's version | a known GPU and the helper; something downloaded |
+| `perf.upscale_game_update` (action, the open game) | `gamecove-upscale game-update --key`: the newest OptiScaler (and REFramework) into this game with its launch settings kept; patch() takes the older copy out with undo's hash checks first | GameCove's OptiScaler in the game and older than the newest |
 | `perf.low_latency` (per game) | `Launcher.save_settings(key, {low_latency})`: `LOW_LATENCY_LAYER=1` (Anti-Lag 2 / Reflex through low_latency_layer, bundled in Proton-CachyOS 11) on AMD, XeLL (`IGDEXT_XELL_CAP`) on Intel with the XeSS XMX driver | Launcher and a known GPU |
 | `perf.proton` (per game) | `Library.set_compat_tool` (Steam's own API or config.vdf; umu's PROTONPATH for other stores); options from `Library.compat_tools(game)` | Library and a game |
 | `perf.launch_wrapper` (Steam games) | adds / removes `gamecove-run` in the launch options, in a fall-through form: `/bin/sh -c '[ -x <w> ] && exec <w> "$@"; exec "$@"' gamecove-run %command%`, so the game still starts when GameCove is removed or the previous deployment boots (review S2-1). Older bare-path entries are moved to this form at start while Steam is stopped | the wrapper installed |
 | `perf.wrapper_remove_all` (action) | takes GameCove out of every Steam game's launch options, every account (Steam closes and starts again). The installer's Uninstall does the same | Steam |
 | `perf.shader_threads` (0 = Steam's default, 1-16; not per game) | `steam_dev.cfg` `unShaderBackgroundProcessingThreads N` (Bazzite's bazzite-steam sets the same), next Steam start | Steam installed |
 | `perf.clear_shader_cache` (action, Steam games) | deletes `steamapps/shadercache/<appid>` in every library (only that path shape, never following links) | a cache folder exists |
+
+**Keeping upscalers current** (owner decision 2026-11-09: always the newest, never broken by upstream moving a
+file). `.github/workflows/upscalers.yml` (nightly, `gh workflow run upscalers.yml`) runs `tools/upscalers/build.py`:
+the newest upstream build of each component (releases API, the rolling OptiPatcher hashed, the newest commit of the
+FSR 4 files), upstream digest and the helper's archive checks, copied to the rolling `upscalers` release under
+`<component>-<version>-<sha8>-<name>` (never deleted or replaced; `upscalers-2`... near GitHub's 1000-asset limit),
+plus every versions.json pin under the name it expects; then `upscalers.json` signed with cosign keyless. The helper
+(`mirror.py`) fetches it before any install, accepts it only from that workflow on main (the cosign get-gamecove.sh
+pins, `~/.local/share/gamecove/tools`), never takes an older list over a newer one, and uses the pins when it can't
+verify. Files come from the mirror first, then upstream, always sha256 checked. The app's background check
+(`perf.gd` `background_check`, `upscale_updates.gd`) runs `check --online` at most daily, 90 s after start, only
+with Background lookups on (stamp `user://upscalers.cfg`). Tests: `test_upscalers_index.py`, `test_upscalers_build.py`,
+`test_perf_controls.gd` (update rows, privacy gate), `packaging/tests/release.sh` (workflow pins and permissions).
 
 **Upscaling per GPU** (games.py, generalized from ClawDeck's Claw-only logic):
 
