@@ -42,6 +42,26 @@ costs far more:
 - Home sitting idle draws nothing (0.2 frames/s: the clock and battery labels); the slow
   backdrop and hero drift stop after 30 s without input, in a game and under Reduce motion.
 
+### Home with a big library
+
+Home is rebuilt on every library change (a rescan, an install starting or finishing), and
+every tile is a small node tree built on the main thread. Its shelves had no cap, so each
+ROM that Steam ROM Manager added sat in three of them (Installed, Emulation, All games).
+`Home.set_games()` on a desktop CPU, headless, best of 5, 120 Steam games plus the ROMs:
+
+| ROMs | tiles before | rebuild before | tiles now | rebuild now |
+| --- | --- | --- | --- | --- |
+| 0 | 159 | 47 ms | 50 | 38 ms |
+| 500 | 1,659 | 517 ms | 75 | 37 ms |
+| 1,500 | 4,659 | 2,355 ms | 75 | 111 ms |
+
+A Home shelf now shows at most 24 games (`Home.SHELF_MAX`) and ends with a "See all" tile
+that opens the Library on the same list; its count still says how many it holds. What's
+left at 1,500 ROMs is mostly sorting the lists (`View.shelves`, about 55 ms). A handheld's
+CPU is slower than the one measured, so read the table as a ratio. The Library grid itself
+still builds one tile per game shown: that's the list you asked for, and it's built when
+the library changes, not while a game runs.
+
 ## What runs behind a game, and why
 
 - **The main loop, slowed down.** `scripts/system/background_mode.gd` makes the main loop

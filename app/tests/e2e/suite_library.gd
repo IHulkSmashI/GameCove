@@ -128,3 +128,44 @@ func test_menu_on_an_app_tile_offers_no_game_options() -> void:
 	lib.games.assign(before)
 	lib.changed.emit()
 	await w.frames(3)
+
+
+## Final review (Medium): Home's shelves are capped; "See all" at the end of a
+## long one opens the Library on that shelf's list.
+func test_see_all_on_a_long_shelf_opens_the_library() -> void:
+	var m: Control = main()
+	var lib: Node = w.autoload("Library")
+	var before: Array = lib.games.duplicate()
+	var Home := preload("res://scripts/ui/home.gd")
+	var games := _games()
+	for i in 60:
+		games.append({"key": "emu:%d" % (3000000000 + i), "store": "emu", "id": str(3000000000 + i), "title": "Rom %03d" % i,
+			"installed": true, "shortcut": true, "art": {"cover": "", "hero": "", "logo": "", "icon": ""},
+			"info": {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null, "summary": ""},
+			"last_played": 0, "playtime_min": 0, "emulated": {"system": "snes", "system_short": "SNES"}})
+	lib.games.assign(games)
+	lib.changed.emit()
+	await w.frames(4)
+	var row: Node = m.home.find_child("Row_emulation", true, false)
+	ok(row != null, "the Emulation shelf")
+	eq(row.tiles.size(), Home.SHELF_MAX + 1, "capped, with See all at the end")
+	eq(row.count_label.text, "60 games", "the count says how many there are")
+	var total := 0
+	for s in m.home.shelves():
+		total += s.tiles.size()
+	ok(total <= m.home.shelves().size() * (Home.SHELF_MAX + 1), "Home holds %d tiles for 62 games in %d shelves" % [total, m.home.shelves().size()])
+	var more: Control = row.tiles[-1]
+	more.grab_focus()
+	await w.frames(2)
+	ok(not _hints().contains("Options"), "See all isn't a game: no Options")
+	await a()
+	await w.frames(6)
+	eq(m.current, "library", "A on See all: the Library")
+	eq(m.library_screen.view, "emulation", "on the Emulation view")
+	eq(m.library_screen.tiles().size(), 60, "with every one of them")
+	ok(m.page == null, "and no game page opened for the tile")
+	m.library_screen.show_shelf("all")
+	lib.games.assign(before)
+	lib.changed.emit()
+	m.show_screen("home")
+	await w.frames(3)

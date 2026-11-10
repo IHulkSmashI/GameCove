@@ -189,6 +189,7 @@ func _ready() -> void:
 	home.game_focused.connect(_follow.bind("home"))
 	home.downloads_requested.connect(open_downloads)
 	home.apps_requested.connect(open_apps)
+	home.see_all_requested.connect(_see_all)
 	home.tile_hook = _hook_tile
 	_screen_layer.add_child(home)
 
@@ -1844,6 +1845,12 @@ func open_emulation() -> void:
 
 
 ## The Library's Filter sheet (its header button, or View).
+## A Home shelf's "See all" tile: the Library, on that shelf's list.
+func _see_all(shelf_id: String) -> void:
+	library_screen.show_shelf(shelf_id)
+	show_screen("library")
+
+
 func open_library_filter() -> void:
 	collection_actions.filter(library_screen)
 
