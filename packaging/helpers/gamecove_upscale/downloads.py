@@ -235,7 +235,15 @@ def fetch(entry: dict, workdir: str, allow_unpinned: bool = False, rel: dict | N
     asset = pick_asset(rel, entry.get("asset_glob", "*"))
     if asset is None:
         raise FileNotFoundError(f"no asset matching {entry.get('asset_glob')} in {repo} {rel.get('tag_name')}")
-    tag = rel.get("tag_name", "unknown")
+    tag = str(rel.get("tag_name", "unknown"))
+    # review problem 9: a pinned entry takes exactly its tag unless the user allowed "latest (untested)" (a
+    # release answer naming another tag used to fall back to GitHub's own digest), and the API's asset name and
+    # tag only become file names when they are plain names
+    if is_pinned(entry) and tag != entry.get("tag") and not allow_unpinned:
+        raise PermissionError(f"{repo} answered {tag}, not the tested {entry.get('tag')}; not installed")
+    for what, name in (("asset name", str(asset.get("name", ""))), ("tag", tag)):
+        if not name or name in (".", "..") or not _safe(name) or "/" in name.replace("\\", "/"):
+            raise ValueError(f"unsafe {what} from the release: {name!r}")
     want = expected_sha256(entry, tag, asset)
     archive = download(asset["browser_download_url"], os.path.join(workdir, "downloads", asset["name"]))
     if sha256_of(archive) != want:
