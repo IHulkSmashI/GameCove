@@ -17,3 +17,6 @@ app/build/
 # raw-read assets keep their tracked .import (importer="keep"); see packaging/tests/run.sh
 !app/assets/brand/*.svg.import
 !app/assets/device_photos/*.import
+
+# Showcase art cache (tools/showcase/shoot.sh downloads it)
+tools/showcase/cache/
