@@ -11,6 +11,8 @@ test = ["pytest>=8"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# bare `pytest` inside gamedb/ finds the package without PYTHONPATH (review 2)
+pythonpath = ["."]
 
 [build-system]
 requires = ["setuptools>=69"]
