@@ -120,7 +120,7 @@ const QUICK_TOGGLES := "Quick toggles"
 ## Settings categories in the order they're listed, in two groups.
 const CATEGORY_GROUPS := [
 	["HANDHELD", ["power", "display", "audio", "controller", "performance", "system", "profiles"]],
-	["GAMECOVE", ["appearance", "stores", "discover", "device", "about"]],
+	["GAMECOVE", ["appearance", "stores", "discover", "media", "device", "about"]],
 ]
 const CATEGORY_NAMES := {
 	"power": "Power", "display": "Display", "audio": "Sound", "controller": "Controller",

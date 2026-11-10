@@ -47,6 +47,7 @@ const ControllerProvider := preload("res://scripts/controls/providers/controller
 const PerfProvider := preload("res://scripts/controls/providers/perf.gd")
 const StreamingScreen := preload("res://scripts/ui/streaming/streaming_screen.gd")
 const StreamingService := preload("res://scripts/streaming/streaming.gd")
+const Recording := preload("res://scripts/system/recording.gd")
 const AppsView := preload("res://scripts/ui/apps_view.gd")
 const Apps := preload("res://scripts/library/apps.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
@@ -117,6 +118,8 @@ var closer: Node
 var setup_flow: Node
 ## Main-loop pacing: near idle while a game (or any other window) is in front.
 var background: Node
+## Record / Stop recording (quick menu) and the REC chip.
+var recording: Node
 ## Desktop apps (Home's Apps shelf "All apps", the Library header's Apps).
 var apps_view: Control
 
@@ -189,6 +192,7 @@ func _ready() -> void:
 		settings.setup_requested.connect(_on_setup_requested)
 	if settings.has_signal("game_settings_requested"):
 		settings.game_settings_requested.connect(_open_game_settings)
+	settings.app_launch_requested.connect(_play_app)
 	_screen_layer.add_child(settings)
 	screens = {"home": home, "library": library_screen, "discover": discover, "stream": stream_screen, "settings": settings}
 
@@ -261,8 +265,17 @@ func _ready() -> void:
 	launch_overlay.cancel_requested.connect(_on_launch_cancelled)
 	add_child(launch_overlay)
 
+	recording = Recording.new()
+	add_child(recording)
+	recording.changed.connect(func(): top_bar.set_recording(recording.is_recording()))
+	recording.saved.connect(func(path: String, info: Dictionary):
+		toast(TX.REC_SAVED % (str(info.get("game", "")) if str(info.get("game", "")) != "" else path.get_file()), "check", "good",
+			Recording.clock(int(info.get("seconds", 0))) + " · " + path.get_base_dir().replace(OS.get_environment("HOME"), "~")))
+	recording.failed.connect(func(kind: String, detail: String):
+		toast(str(TX.REC_ERRORS.get(kind, TX.REC_ERRORS["failed"])), "alert", "bad", detail))
+
 	quick_menu = QuickMenu.new()
-	var qm_services := {"device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
+	var qm_services := {"recording": recording, "device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
 	if _svc("Controls") != null:
 		qm_services["controls"] = _svc("Controls")
 		qm_services["profiles"] = _svc("Profiles")
@@ -1262,6 +1275,9 @@ func _on_game_started(game: Dictionary) -> void:
 
 func _on_game_ended(game: Dictionary) -> void:
 	wiring.game_ended(game)
+	# a clip belongs to its game: the game ending stops (and saves) it
+	if recording != null and recording.is_recording():
+		recording.stop()
 	if streaming != null:
 		streaming.set_game_running(false)
 	if fixes != null:
@@ -1575,7 +1591,7 @@ func _build_settings() -> void:
 		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
 			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
-			"photo": _svc("DevicePhoto")})
+			"photo": _svc("DevicePhoto"), "recording": recording})
 
 
 static func _version() -> String:

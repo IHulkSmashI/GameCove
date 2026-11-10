@@ -53,6 +53,8 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 | 18 | legendary.gl, auth.gog.com, Amazon | The sign-in code you type back | You sign in to a store | You start it | `app/scripts/library/stores/` |
 | 19 | www.steamgriddb.com (`games/steam/400`) | Your SteamGridDB key (bearer header), once | You send or type your key in the Game art step: one request checks it before it is saved | You start it (needs Look up game details) | `app/scripts/ui/setup/art_key_step.gd`, `sgdb.gd` (`check_url`) |
 | 20 | Inbound, on your LAN only: your phone opens GameCove's one-time page | Your phone sends the key you paste; GameCove sends the page (no scripts, nothing from outside) | Only while the Game art step is open, 10 minutes at most | You start it | `app/scripts/system/key_drop.gd` |
+| 21 | Inbound, on your LAN only: your phone opens a clip's one-time page | GameCove sends the page and the one clip you picked; your phone sends nothing but its requests | Only while the Send to phone code shows: until the clip is downloaded in full, you close it, or 10 minutes pass | You start it | `app/scripts/system/clip_drop.gd` |
+| 22 | Flathub (dl.flathub.org) through `flatpak install` | Flatpak's own requests | You press Install GPU Screen Recorder (system-wide) or Get a video player (mpv, for your user) in Settings > Media | You start it | `app/scripts/ui/settings/media_page.gd` |
 
 Helpers and scripts outside the app: the upscaling helper downloads OptiScaler, OptiPatcher, fakenvapi,
 REFramework, xess-xmx-linux and the FSR 4 files only when you install or update them: the newest versions from
@@ -65,7 +67,20 @@ from download.msi.com (size and sha256 pinned); the installer (`get-gamecove.sh`
 release, checks its Sigstore signature and every file's sha256, and fetches a pinned cosign if the system has
 none.
 
-## Game art: the phone page (the only thing GameCove listens for)
+## Clips: the phone page
+
+Send to phone (Settings > Media > a clip) works like the Game art page below, with the same rules
+(`app/scripts/system/clip_drop.gd` reuses `key_drop.gd`'s address picking, token and request parsing): only while
+the code shows, only on this device's private LAN address, a random port, a 128-bit one-time token in the address,
+wrong requests throttled, no scripts or outside resources, `no-store` and `no-referrer`. It serves exactly one file,
+read-only: the clip you picked. The page lets the phone watch it (byte ranges, so it can seek) and download it; the
+first complete download closes the page, and so do closing the code or 10 minutes with nothing being sent. The clip
+crosses your Wi-Fi once in plain HTTP and never leaves your network through GameCove.
+
+Recording itself sends nothing anywhere: GPU Screen Recorder writes the file to `~/Videos/GameCove/`. Controller
+batteries (UPower) and the Apps list (.desktop files) are read on the device only.
+
+## Game art: the phone page (the other thing GameCove listens for)
 
 GameCove doesn't ship a SteamGridDB key. The Game art step of setup (and of the installer, and Settings > Discover >
 SteamGridDB key) walks you through getting your own, free, by signing in to SteamGridDB with Steam on your phone.

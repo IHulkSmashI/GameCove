@@ -10,6 +10,7 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
 
 signal tab_pressed(id: String)
 signal status_pressed
@@ -39,6 +40,8 @@ var _counts := {}        # id -> PanelContainer
 var _tab_group: PanelContainer
 var _telemetry_data := {}
 var _status_seps: Array = []
+## The red REC chip (shown while recording).
+var rec_chip: PanelContainer
 
 
 func _init() -> void:
@@ -122,6 +125,28 @@ func _init() -> void:
 	search_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	search_button.pressed.connect(func(): search_pressed.emit())
 	add_child(search_button)
+
+	rec_chip = PanelContainer.new()
+	rec_chip.name = "RecChip"
+	rec_chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rec_chip.custom_minimum_size = Vector2(0, 32)
+	rec_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rec_chip.visible = false
+	var rrow := Kit.hbox(6)
+	rrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rec_chip.add_child(rrow)
+	var rdot := Panel.new()
+	rdot.name = "RecDot"
+	rdot.custom_minimum_size = Vector2(9, 9)
+	rdot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rdot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rrow.add_child(rdot)
+	var rl := Kit.label(TX.REC_CHIP, "MonoLabel")
+	rl.name = "RecText"
+	rl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	rl.add_theme_font_override("font", ThemeLib.font("mono_bold"))
+	rrow.add_child(rl)
+	add_child(rec_chip)
 
 	telemetry = PanelContainer.new()
 	telemetry.name = "Telemetry"
@@ -330,6 +355,12 @@ func _fit_pill() -> void:
 	fit_width.call_deferred()
 
 
+## The REC chip: on while a recording runs.
+func set_recording(on: bool) -> void:
+	rec_chip.visible = on
+	fit_width.call_deferred()
+
+
 static func is_low(bat: Dictionary) -> bool:
 	var pct := int(bat.get("percent", -1))
 	return pct >= 0 and pct <= LOW_BATTERY and bat.get("status", "") not in ["Charging", "Full"]
@@ -380,6 +411,11 @@ func _restyle() -> void:
 	status_button.add_theme_stylebox_override("pressed", status_hover)
 	for sep in find_children("Sep", "Panel", true, false):
 		sep.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("line_2"), 0, 0, 0))
+	var rec_box := ThemeLib.pill(Color(ThemeLib.color("bad"), 0.16), Color(ThemeLib.color("bad"), 0.55), 12, 4)
+	rec_chip.add_theme_stylebox_override("panel", rec_box)
+	var rdot: Panel = rec_chip.find_child("RecDot", true, false)
+	rdot.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("bad"), 999, 0, 0))
+	(rec_chip.find_child("RecText", true, false) as Label).add_theme_color_override("font_color", ThemeLib.color("bad"))
 	var live: Panel = telemetry.find_child("LiveDot", true, false)
 	var ld := ThemeLib.box(ThemeLib.color("accent"), 999, 0, 0)
 	ld.shadow_color = ThemeLib.color("glow")

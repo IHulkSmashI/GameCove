@@ -101,6 +101,87 @@ const AUTO_APPS_HELP := {
 	true: "Once a day, when no game is running, Flatpak apps update quietly in the background. Needs Background lookups on, and waits for the charger or Wi-Fi that isn't metered.",
 }
 
+# ---- recording (quick menu + Settings > Media) ------------------------------------------
+const REC_START := "Record"
+const REC_START_HINT := "Records the screen and sound until you stop it here. Saved to Videos/GameCove."
+const REC_STOP := "Stop recording"
+const REC_STOP_HINT := "Saves the clip. You'll find it in Settings > Media > Clips."
+const REC_STARTING := "Starting…"
+const REC_SAVING := "Saving…"
+const REC_SET_UP := "Set up recording"
+const REC_SET_UP_HINT := "Recording needs GPU Screen Recorder. Press A to open Settings > Media."
+const REC_STARTED := "Recording. Open the quick menu to stop."
+const REC_SAVED := "Clip saved: %s"
+const REC_CHIP := "REC"
+const REC_ERRORS := {
+	"needs_setup": "Recording needs a one-time OK first. Open Settings > Media and press Allow screen capture.",
+	"no_encoder": "This handheld's video encoder didn't answer, so nothing was recorded.",
+	"missing": "GPU Screen Recorder isn't installed any more. Install it again in Settings > Media.",
+	"no_screen": "GPU Screen Recorder couldn't find the screen to record.",
+	"not_ready": "Recording isn't set up yet. Open Settings > Media.",
+	"empty": "The recording stopped before anything was saved.",
+	"failed": "Recording stopped unexpectedly.",
+}
+
+const MEDIA_REC_TITLE := "Recording"
+const MEDIA_REC_LINE := "Record what's on screen from the quick menu. GPU Screen Recorder does the work on the graphics chip, so games barely notice. Nothing records until you press Record."
+const MEDIA_RECORDER := "GPU Screen Recorder"
+const MEDIA_READY := "Ready"
+const MEDIA_CHECKING := "Checking…"
+const MEDIA_READY_HINT := {
+	"host": "Installed on this system. Record from the quick menu (Guide button).",
+	"flatpak": "Installed from Flathub. Record from the quick menu (Guide button).",
+}
+const MEDIA_MISSING := "Not installed"
+const MEDIA_INSTALL := "Install GPU Screen Recorder"
+const MEDIA_INSTALL_HINT := "Downloads it from Flathub for everyone on this handheld (about 150 MB). Free and open source."
+const MEDIA_INSTALLING := "Installing… this takes a minute or two"
+const MEDIA_INSTALLED := "GPU Screen Recorder installed"
+const MEDIA_NO_FLATPAK := "Flatpak isn't on this system, so we can't install it from here. Install gpu-screen-recorder with your system's package manager."
+const MEDIA_INSTALL_FAILED := "The install didn't finish: %s"
+const MEDIA_INSTALL_DESKTOP := "Installing for everyone needs your admin password here, and Gaming Mode can't ask for it. Switch to Desktop Mode, open GameCove there and press Install again."
+const MEDIA_USER_ONLY := "Installed for this user only"
+const MEDIA_USER_ONLY_HINT := "Recording the screen needs the install for everyone (the screen-capture helper runs from there). Press A to add it; your settings stay."
+const MEDIA_SETUP := "Allow screen capture"
+const MEDIA_SETUP_STATE := "One-time OK needed"
+const MEDIA_SETUP_HINT := "A small helper needs permission to read the screen, once. It asks for your admin password, so do this in Desktop Mode: switch there, open GameCove and press this again."
+const MEDIA_SETUP_RUNNING := "Waiting for your password…"
+const MEDIA_SETUP_DONE := "Screen capture allowed. Record from the quick menu."
+const MEDIA_SETUP_DESKTOP := "Gaming Mode can't ask for your admin password. Switch to Desktop Mode, open GameCove there and press Allow screen capture."
+const MEDIA_SETUP_FAILED := "That didn't work: %s"
+const MEDIA_AUDIO := "Record sound"
+const MEDIA_AUDIO_HELP := {true: "On: the game's sound goes in the clip.", false: "Off: clips are silent."}
+const MEDIA_FPS := "Frame rate"
+const MEDIA_FPS_HELP := {30: "30 frames a second: smaller files, a little less work while you play.", 60: "60 frames a second: smoother clips."}
+const MEDIA_FPS_LABELS := ["30 fps", "60 fps"]
+
+const CLIPS_TITLE := "Clips"
+const CLIPS_LINE := "What you've recorded, newest first. Watch, send to your phone or delete."
+const CLIPS_EMPTY := "No clips yet. Open the quick menu while you play and press Record."
+const CLIPS_LOADING := "Looking for clips…"
+const CLIPS_ROW_HINT := "Press A to watch, send to your phone or delete it."
+const CLIPS_MORE := "%d more in Videos/GameCove"
+const CLIPS_PLAY := "Watch"
+const CLIPS_PLAY_WITH := "Opens in %s. Close it to come back."
+const CLIPS_NO_PLAYER := "Get a video player to watch"
+const CLIPS_NO_PLAYER_DETAIL := "Installs mpv from Flathub for you (no password). It plays clips full screen with the controller."
+const CLIPS_PLAYER_INSTALLING := "Installing mpv…"
+const CLIPS_PLAYER_FAILED := "mpv didn't install: %s"
+const CLIPS_SHARE := "Send to phone"
+const CLIPS_SHARE_DETAIL := "A QR code: your phone downloads it over your Wi-Fi."
+const CLIPS_DELETE := "Delete clip"
+const CLIPS_DELETE_DETAIL := "Removes it from Videos/GameCove for good."
+const CLIPS_DELETED := "Deleted %s"
+const CLIPS_DELETE_FAILED := "Couldn't delete it"
+const CLIPS_LAUNCH_FAILED := "The player didn't start"
+const SHARE_TITLE := "Send to your phone"
+const SHARE_STEPS := "Scan this with your phone's camera. It opens a page on your own network where you can watch the clip and tap Download."
+const SHARE_SAME_WIFI := "Your phone needs to be on the same Wi-Fi."
+const SHARE_LEFT := "Closes in %d:%02d, or once it's downloaded."
+const SHARE_SENT := "Clip sent to your phone"
+const SHARE_EXPIRED := "The page closed after 10 minutes"
+const SHARE_OFFLINE := "Connect to Wi-Fi first: the phone downloads the clip over your own network."
+
 # ---- apps -------------------------------------------------------------------------------
 const APPS_TITLE := "Apps"
 const APPS_SHELF := "Apps"

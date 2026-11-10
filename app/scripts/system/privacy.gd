@@ -37,6 +37,8 @@ const NETWORK_CALLS := [
 		"when": "When you open Change artwork; in the background for games missing art", "switch": "Look up game details (+ Background lookups for the automatic fill)"},
 	{"who": "Your phone, on your own network (Game art step)", "what": "A one-time page your phone opens to send GameCove your SteamGridDB key; then one SteamGridDB request checks the key.",
 		"when": "Only while the Game art step is open, 10 minutes at most", "switch": "You start it"},
+	{"who": "Your phone, on your own network (Send to phone)", "what": "The one clip you picked, from a one-time page your phone opens to watch and download it.",
+		"when": "Only while the Send to phone code shows: until it's downloaded, or 10 minutes at most", "switch": "You start it"},
 	{"who": "Steam (achievements, art)", "what": "The app id of the game whose page you open.",
 		"when": "When you open a game page", "switch": "Settings > Performance"},
 	{"who": "Steam's, IGDB's and SteamGridDB's image servers (no others)", "what": "The address of a game picture Discover, the calendar or your wishlist shows; it names the game, nothing about you.",
@@ -44,7 +46,7 @@ const NETWORK_CALLS := [
 	{"who": "PCs on your own network (GameStream)", "what": "A fixed client id and Moonlight's certificate; Wake-on-LAN packets to your PC. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network (up to 1,022), then GameStream's serverinfo to those that answer.",
 		"when": "When you open the Stream tab or wake a PC", "switch": "You start it"},
 	{"who": "OS, Flatpak, fwupd and store tools", "what": "Their own update and sign-in requests.",
-		"when": "When you update or sign in; Flatpak apps also once a day, with no game running, if you turned on Update apps by themselves", "switch": "You start it (automatic app updates: off by default, and Background lookups)"},
+		"when": "When you update or sign in, or install GPU Screen Recorder or mpv in Settings > Media; Flatpak apps also once a day, with no game running, if you turned on Update apps by themselves", "switch": "You start it (automatic app updates: off by default, and Background lookups)"},
 ]
 
 

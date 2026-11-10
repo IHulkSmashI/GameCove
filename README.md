@@ -137,7 +137,7 @@ Switch to Desktop Mode live here too.
 
 | Tab | What you control |
 | --- | --- |
-| **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, Lossless frame gen, the scaling filter |
+| **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, Lossless frame gen, the scaling filter, and **Record** (screen and sound, until you stop it) |
 | **Power** | Power profile, TDP, boost, fan mode, battery saver, charge limit, CPU boost, energy preference |
 | **Display** | Brightness, refresh rate, frame limit, VRR, night light, colour vibrance, scaling filter and sharpness, screen effects |
 | **Audio** | Volume, mute, output device, microphone mute and input, each app's own volume, and play/pause and skip for the music playing behind your game |
@@ -180,6 +180,10 @@ it does.
   newest release in one press (checked against its checksum) and remove old ones.
 - **System:** Wi-Fi, Bluetooth, airplane mode, Wi-Fi power saving, keep awake, sleep, screenshots, and **Bluetooth
   devices**: connect your controller or headphones, see their battery, pair new ones and forget old ones.
+- **Media:** recording with GPU Screen Recorder (install it from here, the one-time screen-capture OK, sound on or
+  off, 30 or 60 fps) and **Clips**: everything you recorded, with a picture, its length and size. Watch one full
+  screen (in mpv, VLC or Celluloid; no player yet? one press installs mpv), **send it to your phone** with a QR code
+  (a one-time page on your own Wi-Fi to watch and download it), or delete it.
 - **Profiles, Appearance, Stores, Discover, Device and About GameCove:** your saved profiles, themes, store sign-ins and
   downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage (with one-press
   **clean-up** of the shader caches uninstalled games leave behind), updates, and the network and privacy switches.
@@ -355,6 +359,8 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Critic scores (optional) | [OpenCritic](https://opencritic.com) through RapidAPI | A game's title, then its OpenCritic id, with your own key | Same as game details, only if you added a key; at most 20 searches and 180 requests a day | Look up game details, or remove the key |
 | Artwork | [SteamGridDB](https://www.steamgriddb.com) | A game's Steam app id or title, with your own key | When you open Change artwork; in the background for games with no cover, hero or logo | Look up game details (+ Background lookups for the automatic fill) |
 | Game art setup | Your phone, on your own network, then SteamGridDB | Your SteamGridDB key: pasted on a one-time page GameCove serves on your LAN, then checked once with SteamGridDB | Only while the Game art step is open, 10 minutes at most | You start it |
+| Sending a clip to your phone | Your phone, on your own network | The clip itself, from a one-time page GameCove serves on your LAN; nothing leaves your network | Only while the Send to phone code shows, until it's downloaded or 10 minutes pass | You start it |
+| GPU Screen Recorder and a video player (Settings > Media) | Flathub, through Flatpak | Flatpak's own requests | When you press Install (the recorder, or mpv to watch clips) | You start it |
 | Game streaming | PCs on your own network (GameStream: Vibepollo, Sunshine, Apollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network | When you open the Stream tab or wake a PC | You start it |
 | Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in; Flatpak apps also once a day if you turned on "Update apps by themselves" | You start it (automatic app updates: off by default, and Background lookups) |
 
@@ -484,6 +490,17 @@ paywall. Game art and critic scores use free keys that are yours, not ours.
 <summary><b>What about CachyOS or other distros?</b></summary>
 
 Bazzite and SteamOS come first. On other systems GameCove runs in a window, and a CachyOS package is planned.
+</details>
+
+<details>
+<summary><b>How does recording work, and does it slow games down?</b></summary>
+
+Press **Record** in the quick menu (This game) and GameCove starts [GPU Screen Recorder](https://git.dec05eba.com/gpu-screen-recorder/about/),
+which captures the screen and encodes H.264 on your handheld's video engine (VA-API on AMD and Intel), so a game loses
+a frame here and there at most. It only runs while you record; there's no always-on replay buffer. Clips go to
+**Videos/GameCove/&lt;game&gt;**. The first time, Settings > Media installs it from Flathub, and screen capture needs a
+one-time OK with your admin password, which only Desktop Mode can ask for: switch there once, open GameCove and press
+**Allow screen capture**.
 </details>
 
 <details>
