@@ -4,7 +4,8 @@ extends Node
 ##   before_launch(game, done)  pulls a newer cloud save down (a local backup first), or
 ##                              reports a conflict for the user to settle, then calls done
 ##   after_exit(game)           pushes what the game just saved up
-##   resolve(game, "local"|"cloud", done)  settles a conflict (both sides backed up first)
+##   resolve(game, "local"|"cloud", done)  settles a conflict (both sides backed up first;
+##                              refused while a game runs, like sync_now and restore)
 ##   sync_now(game, done)       both ways, from the game page or Settings > Saves
 ##   restore(game, id, done)    puts a local backup back (the current saves backed up first)
 ## Offline, signed out or a failed step: the game still starts, nothing is deleted, and the
@@ -227,11 +228,18 @@ func sync_now(game: Dictionary, done: Callable = Callable()) -> void:
 
 ## Settles a conflict: "local" keeps this handheld's saves (uploads them), "cloud" keeps the
 ## cloud's (downloads them). Both sides are backed up locally first. done(status).
-func resolve(game: Dictionary, choice: String, done: Callable = Callable()) -> void:
+## Never while a game runs (a forced download empties the folder under it): then nothing
+## happens, done gets the status as it stands and this returns false.
+func resolve(game: Dictionary, choice: String, done: Callable = Callable()) -> bool:
 	var key := str(game.get("key", ""))
+	if game_running.call() or not choice in ["local", "cloud"]:
+		if done.is_valid():
+			done.call(status(game))
+		return false
 	_queue(game, "resolve", func(e, t): return _resolve(key, e, t, choice), func(_r):
 		if done.is_valid():
 			done.call(status(game)))
+	return true
 
 
 ## Puts local backup `id` back (the current saves are backed up first). done({"ok", "why"}).

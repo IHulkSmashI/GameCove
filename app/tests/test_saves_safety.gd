@@ -394,3 +394,31 @@ func test_epic_follows_a_changed_prefix() -> void:
 	w["s"].after_exit(w["epic"])
 	eq(cloud.saves[-1]["files"]["world.sav"], "41 hours", "the next save goes up from the new prefix")
 	_done(w)
+
+
+# ---- high 5: no conflict choice under a running game -----------------------------------------
+
+## "Decide later" at launch, Guide, the game page, "Keep the cloud save": the forced
+## download would empty the folder under the live game.
+func test_resolve_waits_while_a_game_runs() -> void:
+	var w := _world("resolve_running")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "local", T0)
+	cloud.seed("saves", "slot1.sav", "cloud", T0 + 50)
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got[0].has("conflict"), "a conflict at launch")
+	w["running"][0] = true
+	w["calls"].clear()
+	var answers := []
+	for choice in ["cloud", "local"]:
+		ok(not w["s"].resolve(w["gog"], choice, func(st): answers.append(st["state"])), choice + ": refused while the game runs")
+	eq(w["calls"], [], "no tool ran")
+	eq(answers, ["conflict", "conflict"], "the caller hears the conflict still stands")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "local", "the folder is untouched")
+	eq(w["s"].status(w["gog"])["state"], "conflict", "still a conflict to settle")
+	ok(not w["s"].busy("gog:1207"), "not marked busy")
+	w["running"][0] = false
+	ok(w["s"].resolve(w["gog"], "cloud"), "after the game: goes ahead")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "cloud", "the cloud save is in place")
+	_done(w)

@@ -147,8 +147,8 @@ func open_conflict() -> void:
 	var st: Dictionary = service.status(game)
 	actions.open_menu(TS.CONFLICT_TITLE, TS.CONFLICT_LINE % str(game.get("title", "")), conflict_rows(st, clock.call()),
 		func(id: String):
-			if id in ["local", "cloud"]:
-				service.resolve(game, id))
+			if id in ["local", "cloud"] and service.resolve(game, id) == false and actions.get("toast") is Callable:
+				actions.toast.call(TS.RESOLVE_RUNNING, "info", "warn"))
 
 
 ## Local backups, newest first: date, why it was made, size.

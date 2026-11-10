@@ -113,7 +113,8 @@ func _on_game_pick(g: Dictionary, st: Dictionary, id: String) -> void:
 	var s := svc("saves")
 	match id:
 		"local", "cloud":
-			s.resolve(g, id)
+			if s.resolve(g, id) == false:
+				notify(TSaves.RESOLVE_RUNNING, "warn")
 		"sync":
 			s.sync_now(g)
 		"toggle":

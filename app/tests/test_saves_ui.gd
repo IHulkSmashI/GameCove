@@ -53,8 +53,14 @@ class FakeSaves:
 	func sync_now(_g: Dictionary, _d := Callable()) -> void:
 		calls.append("sync")
 
-	func resolve(_g: Dictionary, c: String, _d := Callable()) -> void:
+	## A game runs: resolve refuses, as saves_service.gd does.
+	var running := false
+
+	func resolve(_g: Dictionary, c: String, _d := Callable()) -> bool:
+		if running:
+			return false
 		calls.append("resolve " + c)
+		return true
 
 	func restore(_g: Dictionary, id: String, _d := Callable()) -> void:
 		calls.append("restore " + id)
@@ -193,3 +199,27 @@ func test_settings_page_lists_games_and_the_switch() -> void:
 	page.free()
 	lib.free()
 	s.free()
+
+
+## High 5: the conflict choice from the game page while a game runs is refused, and the
+## card says why instead of looking as if it worked.
+func test_conflict_choice_while_a_game_runs_says_close_the_game() -> void:
+	var s := FakeSaves.new()
+	var a := FakeActions.new()
+	var toasts := []
+	a.toast = func(t, _i = "info", tone = "", _d = ""): toasts.append([t, tone])
+	var c: VBoxContainer = SavesCard.new()
+	s.st["state"] = "conflict"
+	c.setup(EPIC, s, a)
+	s.running = true
+	c.choose_button.pressed.emit()
+	a.cb.call("cloud")
+	eq(s.calls, [], "nothing was started")
+	eq(toasts, [[TS.RESOLVE_RUNNING, "warn"]], "the card says to close the game first")
+	s.running = false
+	a.cb.call("cloud")
+	eq(s.calls, ["resolve cloud"], "after the game it goes through")
+	eq(toasts.size(), 1, "with no warning")
+	c.free()
+	s.free()
+	a.free()

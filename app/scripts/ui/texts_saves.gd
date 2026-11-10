@@ -69,6 +69,7 @@ const REASONS := {"before_download": "Before a cloud download", "before_upload":
 const RESTORED := "Backup restored."
 const RESTORE_FAILED := "Couldn't restore that backup: %s"
 const RESTORE_RUNNING := "Close the game first."
+const RESOLVE_RUNNING := "Close the game first, then choose. We never swap saves under a running game."
 
 const SYNC_FAILED_TOAST := "%s: saves didn't sync. They're safe on this handheld."
 const CONFLICT_TOAST := "%s: saves changed here and in the cloud. Open the game to choose."
