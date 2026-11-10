@@ -104,6 +104,8 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 
 - **Every store in one library.** Steam, Epic, GOG and Amazon side by side. Filter by store, genre, critic score (75+)
   or what's installed, sort by Top rated, and search with the on-screen keyboard.
+- **Home stays quick with a big library.** Each Home shelf shows its first 24 games and ends with **See all**, which
+  opens the Library on the same list. Thousands of ROMs don't slow Home down.
 - **Favourites, hidden games and collections.** Press Menu on any game (or the star on its page) to make it a
   favourite, put it in a collection or hide it. Favourites get their own shelf on Home; the Library's Filter button (or View) opens its Filter
   sheet for favourites, a collection, emulated games or hidden games. Your Steam collections, favourites and hidden
