@@ -16,8 +16,8 @@ name: Nightly upscalers index
 # Two jobs (review problem 2 pattern, as firmware.yml and release.yml): "build" runs the tests and the builder
 # (third-party downloads, archives, 7-Zip) with a read-only token and no OIDC, and hands dist/ over as an
 # artifact; only "publish", which runs nothing but pinned cosign, gh and a standard-library check of the plan,
-# can mint the signing identity and write the releases. "publish" runs in the "release" environment, so every
-# signing run waits for the owner's approval (docs/RELEASING.md). It re-checks the artifact first
+# can mint the signing identity and write the releases. "publish" runs in the "nightly" environment, which only main
+# can deploy to (docs/RELEASING.md). It re-checks the artifact first
 # (tools/upscalers/check_plan.py: standard library and mirror.py only).
 #
 # Promotion (review 2, problem 8): only official upstream repos (mirror.UPSTREAM), only full releases at least
@@ -103,8 +103,8 @@ jobs:
 
   publish:
     needs: build
-    # waits for the owner's approval (the "release" environment's required reviewer; docs/RELEASING.md)
-    environment: release
+    # runs in the "nightly" environment: only main may deploy to it, no daily approval (docs/RELEASING.md)
+    environment: nightly
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

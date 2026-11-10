@@ -23,8 +23,8 @@ A re-run of a release that is already published fails without changing it; a rel
 run is finished by re-running.
 
 The nightly firmware and upscaler lists work the same way: their `build` job runs the scrapers and the builder with
-a read-only token and no OIDC, and their `publish` job (which signs) waits for the owner's approval in the `release`
-environment. The game database and device photos aren't signed; their `build` jobs are read-only too and only their
+a read-only token and no OIDC, and their `publish` job (which signs) runs in the `nightly` environment, which only `main` can deploy to. They run
+every night, so they don't wait for an approval. The game database and device photos aren't signed; their `build` jobs are read-only too and only their
 `publish` jobs (which run nothing but `gh` and a standard-library check of the files) can write the release.
 
 ## Repository settings (owner)
@@ -51,9 +51,19 @@ Settings > Environments > New environment, name **`release`** (exactly; the work
 - **Deployment branches and tags:** "Selected branches and tags", with two rules: branch `main` and tag `v*`.
 - No environment secrets are needed (signing is keyless).
 
-Jobs that use it: `release` in `release.yml`, `publish` in `firmware.yml` and `publish` in `upscalers.yml`. Until
-the environment exists, GitHub creates it on the first run **without** protection rules, so create it before the next
-run. `packaging/tests/release.sh` checks that every job with `id-token: write` names this environment.
+Job that uses it: `release` in `release.yml`.
+
+### Environment "nightly" (owner: create it)
+
+Settings > Environments > New environment, name **`nightly`**:
+
+- **No required reviewers** (it runs every night).
+- **Deployment branches and tags:** "Selected branches and tags", one rule: branch `main`.
+
+Jobs that use it: `publish` in `firmware.yml` and `publish` in `upscalers.yml`.
+
+Until an environment exists, GitHub creates it on the first run **without** protection rules, so create both before
+the next run. `packaging/tests/release.sh` checks that every job with `id-token: write` names one of them.
 
 ### Branch protection for `main`
 

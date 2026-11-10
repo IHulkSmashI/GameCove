@@ -296,14 +296,15 @@ import os, re, sys, yaml
 d = sys.argv[1]
 def load(n):
     return yaml.safe_load(open(os.path.join(d, n)))
-# every job that can mint the signing identity runs in the "release" environment (required reviewer: the owner)
+# every job that can mint the signing identity runs in a protected environment: "release" (owner approves) for
+# GameCove releases, "nightly" (main only, no daily approval) for the firmware and upscaler lists
 for n in sorted(os.listdir(d)):
     for name, j in load(n)["jobs"].items():
         if (j.get("permissions") or {}).get("id-token") == "write":
-            assert j.get("environment") == "release", f"{n}:{name} signs without the release environment"
+            assert j.get("environment") in ("release", "nightly"), f"{n}:{name} signs without a protected environment"
 assert load("release.yml")["jobs"]["release"].get("environment") == "release"
 for n in ("firmware.yml", "upscalers.yml"):
-    assert load(n)["jobs"]["publish"].get("environment") == "release", n
+    assert load(n)["jobs"]["publish"].get("environment") == "nightly", n
 # gamedb and device photos: scrapers in a read-only job, the release written only by a job that runs gh
 for n, scraper in (("gamedb.yml", "gamedb.build"), ("device-photos.yml", "tools/device_photos/build.py")):
     doc = load(n)
