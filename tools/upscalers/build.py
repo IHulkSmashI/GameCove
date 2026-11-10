@@ -311,17 +311,18 @@ HEX_SHA = re.compile(r"^[0-9a-f]{7,40}$")
 def source_commit(net: Net, spec: dict, rel: dict) -> str | None:
     """The full sha of the commit in spec["source_repo"] a release was built from, or None. Tried in order: the tag
     itself (stable releases are tagged in the source repo), the release's target_commitish when it is a sha, then
-    commit references in its name and notes (".../commit/<sha>", "commit <sha>", a bare short sha). Each candidate
-    must resolve in the source repository through the API, so a sha from somewhere else never counts."""
+    in its name and notes only an explicit link to a commit of the source repo (".../<repo>/commit/<sha>") or a full
+    40-character sha. A short sha or "commit abc1234" in free text is never guessed from (review 2, low 22: a short
+    hex word in the notes could name some other commit). Each candidate must resolve in the source repository through
+    the API, so a sha from somewhere else never counts."""
     text = " ".join(str(rel.get(k) or "") for k in ("name", "body"))
     cands = [str(rel.get("tag_name") or "")]
     tc = str(rel.get("target_commitish") or "")
     if HEX_SHA.match(tc):
         cands.append(tc)
     repo = re.escape(spec["source_repo"])
-    cands += re.findall(rf"(?i)github\.com/{repo}/(?:commit|tree)/([0-9a-f]{{7,40}})\b", text)
-    cands += re.findall(r"(?i)\bcommit\b[^0-9a-z]{0,20}([0-9a-f]{7,40})\b", text)
-    cands += re.findall(r"(?<![0-9a-zA-Z])([0-9a-f]{7,40})(?![0-9a-zA-Z])", text)
+    cands += re.findall(rf"(?i)github\.com/{repo}/commit/([0-9a-f]{{7,40}})\b", text)
+    cands += re.findall(r"(?<![0-9a-zA-Z])([0-9a-f]{40})(?![0-9a-zA-Z])", text)
     for c in dict.fromkeys(x for x in cands if x):
         try:
             got = net.json(f"/repos/{spec['source_repo']}/commits/{c}")

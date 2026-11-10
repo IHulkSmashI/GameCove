@@ -382,3 +382,14 @@ def test_every_source_is_the_pinned_official_repo():
     bad["reframework"]["repo"] = "someone/REFramework"
     with pytest.raises(ValueError):
         build.check_sources(bad)
+
+
+def test_a_short_sha_in_free_text_is_never_taken_as_the_source_commit():
+    """Review 2, low 22: the GPL source commit was guessed from any short hex word in the release notes."""
+    api = {"/repos/optiscaler/OptiScaler/commits/deadbee": {"sha": "deadbee" + "0" * 33},
+           "/repos/optiscaler/OptiScaler/commits/cafe123": {"sha": "cafe123" + "1" * 33}}
+    net = FakeNet({}, api)
+    spec = build.SOURCES["optiscaler_v10"]
+    assert build.source_commit(net, spec, {"tag_name": "nightly-1", "body": "Fixed deadbee crash; commit cafe123"}) is None
+    link = {"tag_name": "nightly-2", "body": "Built from https://github.com/optiscaler/OptiScaler/commit/cafe123"}
+    assert build.source_commit(net, spec, link) == "cafe123" + "1" * 33
