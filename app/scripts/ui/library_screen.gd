@@ -101,11 +101,13 @@ func _init() -> void:
 	head_pad.add_child(head)
 	root.add_child(head_pad)
 
-	var bar := Kit.hbox(10)
+	# Tight enough that every chip (and the star on the critic one) fits a
+	# 1280 px screen.
+	var bar := Kit.hbox(6)
 	bar.name = "Toolbar"
 	search_button = Kit.button("", "ChipButton")
 	search_button.name = "Search"
-	search_button.custom_minimum_size = Vector2(164, 44)
+	search_button.custom_minimum_size = Vector2(148, 44)
 	search_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	search_button.add_theme_constant_override("h_separation", 10)
 	search_button.pressed.connect(open_search)
@@ -113,7 +115,7 @@ func _init() -> void:
 	ButtonFx.attach(search_button, {"glyph": "Y"})
 	bar.add_child(search_button)
 	var sep := Control.new()
-	sep.custom_minimum_size = Vector2(6, 0)
+	sep.custom_minimum_size = Vector2(4, 0)
 	bar.add_child(sep)
 	for s in View.STORES:
 		var b := Kit.button(s[1], "ChipButton")
@@ -125,7 +127,7 @@ func _init() -> void:
 		bar.add_child(b)
 		store_buttons.append(b)
 	var sep2 := Control.new()
-	sep2.custom_minimum_size = Vector2(6, 0)
+	sep2.custom_minimum_size = Vector2(4, 0)
 	bar.add_child(sep2)
 	for f in INSTALL_FILTERS:
 		var fb := Kit.button(f[1], "ChipButton")

@@ -182,6 +182,9 @@ func test_library_critic_sort_and_filters() -> void:
 	eq(s.critic_button.text, "75+", "short enough for the 1280 px toolbar")
 	ok(s.critic_button.tooltip_text.contains("Critic score"), "and named in full")
 	ok(s.critic_button.icon != null, "with a star")
+	var bar: Control = s.find_child("Toolbar", true, false)
+	var w := bar.get_combined_minimum_size().x
+	ok(w <= 1280 - 2 * (LibraryScreen.PAD.x + 24), "the toolbar fits a 1280 px screen (%d px)" % w)
 	s.critic_button.pressed.emit()
 	eq(s.shown.map(func(g): return g["title"]), ["Bravo"], "and 75+")
 	ok(s.genre_button in s._toolbar() and s.critic_button in s._toolbar(), "both reachable with the d-pad")
