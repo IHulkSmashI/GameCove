@@ -169,7 +169,7 @@ with `--xwayland-count 2`, exports `DISPLAY` and `GAMESCOPE_WAYLAND_DISPLAY`, so
 `GAMECOVE_STEAM_MODE`, …), and runs `$CLIENTCMD`. After 5 sessions shorter than 60 s
 it calls `short_session_recover`; ours switches to Steam Gaming Mode so a broken
 GameCove never traps you on a black screen. The session client adds a tighter
-guard (3 app crashes in 2 minutes), see "If GameCove won't let you out".
+guard (3 unclean exits in a row), see "If GameCove won't let you out".
 
 Bazzite today boots `gamescope-session-ogui-steam.desktop` (Steam as main client,
 OpenGamepadUI as overlay; Terra packages `gamescope-session`,
@@ -218,26 +218,88 @@ helper of our own:
   - Steam's "Switch to Desktop": on Bazzite it runs `os-session-select plasma`,
     which names `plasma.desktop`/`gnome.desktop` itself. Where Steam asks
     steamos-manager for the *default* desktop instead, the switch lands in our
-    session; `gamecove-session-select steam` left a marker (with the boot id), so
-    the session client sees that nothing asked for GameCove and forwards to the
-    real desktop before the app starts (`session-start`, exit 3).
+    session; `gamecove-session-select steam` (or `desktop`) left a marker (with the
+    boot id), so the session client sees that nothing asked for GameCove and
+    forwards to the real desktop before the app starts (`session-start`, exit 3).
+    The marker lasts the whole boot (review L22: Desktop, back to Gaming Mode, then
+    "Switch to Desktop" again still reaches the desktop) until `gamecove` is asked for.
   - `steam --default` and `restore` put the saved desktop session and boot mode
     back. The installer's Uninstall runs `restore`.
   - `--default` also keeps a copy of the script in the data folder and enables a
     user unit, `gamecove-session-guard.service`, that runs `guard` at every login:
     if `gamecove.desktop` is gone (package removed, previous deployment booted) it
-    runs `restore`, then removes itself. Both live in the home folder, so they
-    survive the package.
+    puts the previous defaults back but stays, marked `default-suspended`: when
+    GameCove's session is back at a later login (it was only missing for a boot, e.g.
+    a SteamOS update that didn't merge the sysext) it makes GameCove the default
+    again (review L24). `restore` (uninstall) and `steam --default` remove it. Both
+    live in the home folder, so they survive the package.
 
 `gamecove-session-select steam|gamecove|desktop [--default] | restore | guard` wraps this.
 
+### The boot default never names a missing session (review H4)
+
+SDDM looks the autologin `Session=` up in its session folders; if the file isn't
+there it logs "Unable to find autologin session entry" and shows the login screen
+(`src/daemon/Display.cpp`), which on a handheld is a password prompt with no
+keyboard. The login guard above can't help, it runs after a login. So:
+
+- **Bazzite:** `rpm-ostree install --apply-live` only overlays the running `/usr`;
+  the deployment that boots next is staged. `gamecove-session-select gamecove
+  --default` refuses (exit 4) until the booted deployment holds `gamecove.desktop`
+  (`ostree admin --print-current-dir`, else `rpm-ostree status --booted --json`),
+  so the installer's `STARTUP=gamecove` stays in `pending-choices` and the login
+  unit applies it after the reboot. Each ostree deployment has its own `/etc`, so a
+  rollback boots the `/etc` from before, which never named GameCove.
+- **Uninstall:** the installer's `session_restore` and `fix_remove_all` must succeed
+  before the package goes (a failure stops the uninstall); `install.sh --uninstall`
+  runs `gamecove-session-select restore` and `gamecove-fix --remove-all` first and
+  stops if either fails.
+- **SteamOS:** the installer copies `gamecove-autologin-guard` and its unit out of
+  the sysext into `/etc/gamecove/` and `/etc/systemd/system/` (listed in
+  `/etc/atomic-update.conf.d/gamecove.conf`). It runs as root after
+  `systemd-sysext.service` and before the display manager, and if an autologin entry
+  names `gamecove.desktop` while no session folder holds it, points it at
+  `gamescope-wayland.desktop` (Steam Gaming Mode), else the desktop. Uninstall
+  removes it.
+
+### Leaving GameCove's session (review H2)
+
+A switch logs the session out, which stops gamescope-session-plus with a signal, so
+`post_client_shutdown` never runs and Godot gets no `_exit_tree`. So
+`gamecove-session-select steam|desktop`, when run from GameCove's session (the session
+file exports `GAMECOVE_SESSION=1`), first runs `gamecove.x86_64 --headless --
+--restore-baseline` (the everyday values back in place of a running game's, bounded to
+35 s), then the charge-limit release and power-tune restore through the no-password
+helper, then `steam -shutdown`, then switches. The root restores run in one background
+job waited for at most `GAMECOVE_ROOT_WAIT_S` (10 s), here and in
+`post_client_shutdown`: `timeout pkexec` only killed pkexec, never its root child.
+
 ### If GameCove won't let you out
 
-- **Crash loop:** the session client counts app crashes (non-zero exits it didn't
-  cause) in `~/.local/share/gamecove/crash-starts`. Three within two minutes, across
-  sessions, and it switches to Steam Gaming Mode (the desktop if Steam isn't
-  installed). gamescope-session-plus's own guard (5 sessions under 60 s) also
-  switches to Steam, through `gamecove-session-select steam`.
+- **Crash loop:** the session client counts unclean exits in a row (a non-zero
+  exit it didn't cause, a missing binary) in `~/.local/share/gamecove/crash-count`,
+  across sessions and however long each run lasted (review M4: a crash a minute
+  after every start used to slip through a 2-minute window). Three in a row and it
+  switches to Steam Gaming Mode for this boot (the desktop if Steam isn't
+  installed). A clean exit, or a run that stays up 10 minutes
+  (`GAMECOVE_HEALTHY_S`), starts the count over. If the count can't be saved
+  (home full or read-only) it switches away at once. The reason goes to
+  `crash-fallback`. gamescope-session-plus's own guard (5 sessions under 60 s,
+  in `/tmp`, so it forgets on reboot) also switches to Steam, through
+  `gamecove-session-select steam`; it's the backstop for a session that never gets
+  as far as our client.
+- **Hang** (review H1): the client also stops an app that is alive but stuck. If
+  neither `$XDG_RUNTIME_DIR/gamecove-steam-ready` nor the heartbeat file
+  (`$XDG_RUNTIME_DIR/gamecove-heartbeat`, `GAMECOVE_HEARTBEAT`) appears within 60 s
+  (`GAMECOVE_READY_TIMEOUT_S`), or the heartbeat stops changing for 30 s
+  (`GAMECOVE_HEARTBEAT_STALE_S`), it kills the app and counts an unclean exit.
+  The app (`scripts/system/session_health.gd`) rewrites the heartbeat every 5 s
+  from a main-loop Timer as `<sequence> ui|game`. While a game runs it says `game`
+  and is never killed, so a long load (or gamescope holding back frames from a
+  hidden window) can't end the session and the game with it.
+- **Telling you why:** after a fallback, the next GameCove start shows a notice
+  ("GameCove closed unexpectedly 3 times in a row, so Steam started instead") from
+  `crash-fallback`, then deletes it.
 - **From a TTY** (Ctrl+Alt+F3 with a keyboard, or SSH), logged in as yourself, not root:
 
   ```
@@ -412,7 +474,7 @@ Do these in order; note results in an issue.
 1. Install via `install.sh`, reboot, `gamecove-session-select gamecove`. GameCove
    appears (not a black screen). `xprop -root GAMESCOPECTRL_BASELAYER_APPID` from a
    terminal in the session (or SSH with `DISPLAY=:0`) shows `413091, 769`.
-2. Kill the app 5 times quickly: session falls back to Steam Gaming Mode.
+2. Kill the app (`pkill -SEGV -f gamecove.x86_64`) 3 times: session falls back to Steam Gaming Mode.
 3. "Switch to Steam" lands in Bazzite's Gaming Mode; Steam's "Switch to Desktop"
    still goes to the desktop (without `--default`).
 4. **Steam, `silent` mode:** Play on a Steam game runs `steam steam://rungameid/<id>`,

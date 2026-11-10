@@ -16,8 +16,8 @@ jobs:
       run:
         working-directory: gamedb
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
       - run: pip install -e '.[test]'
@@ -30,6 +30,10 @@ jobs:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
           GITHUB_TOKEN: ${{ github.token }}
         run: python -m gamedb.build --out dist/gamedb.json.gz --max-minutes 55
+      - name: Coverage check (the most popular games must all be in it)
+        # Fails the job (so nothing is published and last night's file stays) if any
+        # game on gamedb/coverage.py's MUST_HAVE list has no entry.
+        run: python -m gamedb.coverage dist/gamedb.json.gz
       - name: Build the Discover calendar (upcoming releases + ECB exchange rates)
         # Separate file and budget: a failure here never blocks gamedb.json.gz,
         # and the previous upcoming.json.gz then stays on the release.
@@ -42,7 +46,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view gamedb >/dev/null 2>&1 || gh release create gamedb --title "Game database" --notes "Rebuilt nightly. Wikidata (CC0), AreWeAntiCheatYet (MIT), time to beat from IGDB.com. Compatibility tiers are GameCove's own summary of ProtonDB user reports (github.com/bdefore/protondb-data, ODbL 1.0), not ProtonDB's official ratings; the ProtonDB-derived data in this file is shared under the ODbL 1.0. upcoming.json.gz: release dates from Steam store data, Wikidata (CC0) and IGDB.com; exchange rates: Source: ECB statistics." --latest=false
+          # the notes and NOTICE.md carry IGDB's and ProtonDB's attribution (review M24); refreshed every run
+          gh release view gamedb >/dev/null 2>&1 || gh release create gamedb --title "Game database" --notes-file NOTICE.md --latest=false
+          gh release edit gamedb --notes-file NOTICE.md
+          gh release upload gamedb NOTICE.md --clobber
           gh release upload gamedb dist/gamedb.json.gz --clobber
           if [ -s dist/upcoming.json.gz ]; then
             gh release upload gamedb dist/upcoming.json.gz --clobber

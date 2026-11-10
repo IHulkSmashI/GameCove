@@ -1,0 +1,37 @@
+{
+ "response": {
+  "rollup_date": 1794096000,
+  "ranks": [
+   {
+    "rank": 1,
+    "appid": 730,
+    "last_week_rank": 1,
+    "peak_in_game": 1269367
+   },
+   {
+    "rank": 2,
+    "appid": 578080,
+    "last_week_rank": 3,
+    "peak_in_game": 801513
+   },
+   {
+    "rank": 3,
+    "appid": 570,
+    "last_week_rank": 2,
+    "peak_in_game": 832011
+   },
+   {
+    "rank": 4,
+    "appid": 431960,
+    "last_week_rank": 4,
+    "peak_in_game": 118429
+   },
+   {
+    "rank": 5,
+    "appid": 4115450,
+    "last_week_rank": 5,
+    "peak_in_game": 518476
+   }
+  ]
+ }
+}

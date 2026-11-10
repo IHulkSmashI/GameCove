@@ -56,7 +56,8 @@ func _ready() -> void:
 	add_child(_db)
 	_db.updated.connect(refresh)
 	refresh()
-	_db.update_if_stale()
+	if preload("res://scripts/system/privacy.gd").background_allowed():   # "Background lookups" (review M22)
+		_db.update_if_stale()
 
 
 ## Uses `manager` (a StoreManager, or a fake with the same methods and signals)

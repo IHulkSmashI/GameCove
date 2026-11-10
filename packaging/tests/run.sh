@@ -109,6 +109,12 @@ expect_code 3 "fix failure propagates" gf dummy set boom
 contains "$LOG" "action=set value=boom result=fail(3)" "failure logged"
 expect_code 7 "broken fix" gf broken install
 contains "$LOG" "fix=broken action=install value=- result=fail(7)" "broken logged"
+# review L1: the log is capped; over the limit it becomes changes.log.1 and a new one starts
+rm -f "$LOG.1"
+for i in 1 2 3 4 5 6; do GAMECOVE_LOG_MAX=300 gf dummy set "$i" >/dev/null 2>&1; done
+if [ -f "$LOG.1" ]; then ok; else bad "log rotated to changes.log.1 once over the cap"; fi
+if [ "$(wc -c <"$LOG")" -le 600 ]; then ok; else bad "log stays near the cap ($(wc -c <"$LOG") bytes)"; fi
+contains "$LOG" "value=6 result=ok" "newest line kept after rotation"
 
 lines_before="$(wc -l <"$LOG")"
 expect_code 0 "status" gf dummy status
@@ -227,10 +233,19 @@ expect_code 0 "set entry: status" gfs fan status
 contains "$T/out" "^state=on$" "status passed through"
 expect_code 0 "set entry: fan curve" gfs fan set curve:0,40,50,60,80,100
 contains "$ROOT/calls" "^fan:set curve:0,40,50,60,80,100$" "fan curve reached fix.sh"
+# review L2: the session's `timeout pkexec` can't stop a root child, so the set entry bounds the fix itself
+cp "$FIXES/charge-limit/fix.sh" "$T/charge-limit.fix.sh"
+printf '#!/bin/sh\nsleep 30\n' >"$FIXES/charge-limit/fix.sh"
+t0=$(date +%s)
+GAMECOVE_FIX_SET_TIMEOUT=1 expect_code 124 "set entry: a fix that hangs is stopped" gfs charge-limit set 80
+if [ $(($(date +%s) - t0)) -le 8 ]; then ok; else bad "set entry: hung fix stopped within the bound"; fi
+cp "$T/charge-limit.fix.sh" "$FIXES/charge-limit/fix.sh"
 expect_code 66 "set entry: fan curve letters" gfs fan set curve:0,40,x
 expect_code 66 "set entry: fan curve empty" gfs fan set curve:
 expect_code 66 "set entry: fan curve trailing comma" gfs fan set curve:1,2,
 expect_code 66 "set entry: fan curve shell" gfs fan set 'curve:1;reboot'
+expect_code 66 "set entry: fan curve leading zero (review M1)" gfs fan set curve:0,040,040,045,060,075
+expect_code 66 "set entry: fan curve leading zero first" gfs fan set curve:00,40,40,45,60,75
 for v in boost:off epp:balance_power governor:powersave cpumax:70 gpulevel:auto gpumin:600 \
 	gpumax:1800 gpuprofile:power_saving sppt:28 fppt:33 platform:low-power tau:8000000 tau:restore \
 	thermald:hold thermald:release battery:long-life restore; do
@@ -387,7 +402,7 @@ post() {
 	: >"$T/busctl.log"
 	: >"$T/post.log"
 	# shellcheck disable=SC2016  # expanded by the inner bash
-	PATH="$PB:/usr/bin:/bin" GAMECOVE_STATE_DIR="$T/gcstate" GAMECOVE_FIX_SET="$T/fix-set" \
+	PATH="$PB:/usr/bin:/bin" GAMECOVE_STATE_DIR="$T/gcstate" GAMECOVE_FIX_SET="$T/fix-set" GAMECOVE_ROOT_WAIT_S="${ROOT_WAIT:-10}" \
 		bash -c 'set -a; . "$1"; post_client_shutdown' _ "$REPO/session/gamescope-session-plus/sessions.d/gamecove"
 }
 expect_code 0 "post_client_shutdown without a charge limit" post
@@ -405,6 +420,21 @@ rmdir "$T/gcstate/fixes/power-tune/orig"
 : >"$T/gcstate/fixes/power-tune/thermald-held"
 expect_code 0 "post_client_shutdown with thermald held" post
 contains "$T/post.log" "^pkexec $T/fix-set power-tune set restore$" "session end starts thermald again"
+# low (review): a root restore that hangs must not hold up the session's end (timeout only killed pkexec)
+cp "$PB/pkexec" "$T/pkexec.keep"
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/post.log"\nsleep 20\n' "$T" >"$PB/pkexec"
+rm -f "$PB/timeout"
+started="$(date +%s)"
+ROOT_WAIT=1 post
+if [ $(($(date +%s) - started)) -lt 6 ]; then ok; else bad "session end waited $(($(date +%s) - started)) s on a hung root restore"; fi
+contains "$T/post.log" "^pkexec $T/fix-set charge-limit set release$" "the restore was still started"
+cp "$T/pkexec.keep" "$PB/pkexec"
+printf '#!/bin/sh\nshift\nexec "$@"\n' >"$PB/timeout"
+chmod +x "$PB/pkexec" "$PB/timeout"
+# busctl --list tree can hang on a stuck bus: every call has a timeout
+for f in "$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" "$REPO/session/gamescope-session-plus/sessions.d/gamecove"; do
+	if grep -n 'busctl --' "$f" | grep -v -- '--timeout=' | grep -q .; then bad "busctl without --timeout in $f"; else ok; fi
+done
 
 # ------------------------------------------------------------------ install.sh
 IB="$T/installbin"
@@ -420,8 +450,37 @@ inst() {
 }
 expect_code 0 "install.sh install" inst "$T/gamecove-0.1.0-1.x86_64.rpm"
 contains "$T/install.log" "rpm-ostree install $T/gamecove-0.1.0-1.x86_64.rpm" "rpm-ostree install"
-expect_code 0 "install.sh uninstall" inst --uninstall
+# review H4: --uninstall puts the boot default back and undoes every fix first, and stops if either fails
+cat >"$IB/select" <<EOF
+#!/bin/sh
+echo "select \$*" >>"$T/install.log"
+exit \$(cat "$T/select-code" 2>/dev/null || echo 0)
+EOF
+cat >"$IB/pkexec" <<EOF
+#!/bin/sh
+echo "pkexec \$*" >>"$T/install.log"
+exit \$(cat "$T/pkexec-code" 2>/dev/null || echo 0)
+EOF
+printf '#!/bin/sh\n' >"$IB/fixhelper"
+chmod +x "$IB/select" "$IB/pkexec" "$IB/fixhelper"
+uninst() {
+	: >"$T/install.log"
+	PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" SESSION_SELECT="$IB/select" GUARD_COPY="$T/no-guard" \
+		FIX_HELPER="$IB/fixhelper" PKEXEC="$IB/pkexec" sh "$REPO/packaging/install.sh" --uninstall
+}
+expect_code 0 "install.sh uninstall" uninst
 contains "$T/install.log" "rpm-ostree uninstall gamecove" "rpm-ostree uninstall"
+contains "$T/install.log" "^select restore$" "uninstall restores the boot default"
+contains "$T/install.log" "^pkexec $IB/fixhelper --remove-all$" "uninstall undoes every fix"
+if [ "$(head -n 1 "$T/install.log")" = "select restore" ] && [ "$(tail -n 1 "$T/install.log")" = "rpm-ostree uninstall gamecove" ]; then ok; else bad "restore and fixes before the package goes: $(cat "$T/install.log")"; fi
+echo 1 >"$T/select-code"
+expect_code 1 "install.sh uninstall stops when restore fails" uninst
+lacks "$T/install.log" "rpm-ostree uninstall" "package kept when the boot default couldn't go back"
+rm -f "$T/select-code"
+echo 126 >"$T/pkexec-code"
+expect_code 1 "install.sh uninstall stops when the fixes can't be undone" uninst
+lacks "$T/install.log" "rpm-ostree uninstall" "package kept when the fixes couldn't be undone"
+rm -f "$T/pkexec-code"
 expect_code 64 "install.sh missing rpm" inst "$T/none.rpm"
 expect_code 1 "install.sh says no" sh -c "echo n | PATH='$IB:$PATH' IMAGE_INFO='$T/image-info.json' sh '$REPO/packaging/install.sh' '$T/gamecove-0.1.0-1.x86_64.rpm'"
 
@@ -482,6 +541,8 @@ rm -f "$T/steam-mode-on"
 
 # --------------------------------------------------- get-gamecove.sh bootstrap
 GG="$REPO/packaging/get-gamecove.sh"
+# review L29: curl | bash safety: nothing runs until the last line calls main
+if [ "$(tail -n 1 "$GG")" = 'main "$@"' ] && grep -q '^main() {$' "$GG"; then ok; else bad "get-gamecove.sh must run everything from main on its last line"; fi
 GB="$T/ggbin"
 SRV="$T/ggsrv"
 mkdir -p "$GB" "$SRV"
@@ -490,24 +551,38 @@ cat >"$GB/curl" <<EOF
 #!/bin/sh
 out=""
 url=""
+fmt=""
 while [ \$# -gt 0 ]; do
 	case "\$1" in
 	-o) out="\$2"; shift ;;
 	-H) shift ;;
+	-w) fmt="\$2"; shift ;;
 	-*) ;;
 	*) url="\$1" ;;
 	esac
 	shift
 done
 echo "\$url" >>"$T/curl.log"
-[ -f "$T/offline" ] && exit 6
+# -w '\\n%{http_code}': the answer, then the status (000 when unreachable), like curl
+code() { [ -n "\$fmt" ] && printf '\n%s' "\$1"; return 0; }
+if [ -f "$T/offline" ]; then code 000; exit 6; fi
+case "\$url" in
+*/releases/latest | */releases/tags/* | */releases\?*)
+	if [ -f "$T/api-status" ]; then [ -n "\$fmt" ] || exit 22; echo '{"message": "API rate limit exceeded"}'; code "\$(cat "$T/api-status")"; exit 0; fi ;;
+esac
 case "\$url" in
 */releases/latest) f="$SRV/latest.json" ;;
 */releases/tags/*) f="$SRV/tag.json" ;;
 *) f="$SRV/\${url##*/}" ;;
 esac
-[ -f "\$f" ] || exit 22
+if [ ! -f "\$f" ]; then
+	[ -n "\$fmt" ] || exit 22
+	echo '{"message": "Not Found"}'
+	code 404
+	exit 0
+fi
 if [ -n "\$out" ]; then cp "\$f" "\$out"; else cat "\$f"; fi
+code 200
 EOF
 cat >"$GB/badsum" <<'EOF'
 #!/bin/sh
@@ -602,11 +677,22 @@ mv "$SRV/latest.json" "$SRV/latest.off"
 { echo '['; cat "$SRV/tag.json"; echo ']'; } >"$SRV/releases?per_page=1"
 expect_code 0 "bootstrap with only a pre-release" gg "$R_DECK"
 contains "$T/curl.log" "/releases?per_page=1$" "falls back to the release list"
+contains "$T/out" "using the newest pre-release" "says a pre-release is used"
 contains "$GI/release.env" "^TAG=v0.2.0$" "pre-release picked"
 mv "$SRV/tag.json" "$SRV/tag.off"
 gg "$R_DECK" GAMECOVE_TAG=v9.9.9 >/dev/null 2>&1 || true
 lacks "$T/curl.log" "per_page" "a given tag is never replaced by another release"
 mv "$SRV/tag.off" "$SRV/tag.json"
+# review M7: only a 404 means "no stable release"; a rate limit or a 5xx must never install a pre-release
+rm -rf "$T/gghome"
+mkdir -p "$T/gghome"
+for st in 403 500; do
+	echo "$st" >"$T/api-status"
+	expect_code 1 "bootstrap stops on HTTP $st" gg "$R_DECK"
+	lacks "$T/curl.log" "per_page" "HTTP $st: no fallback to a pre-release"
+	contains "$T/out" "HTTP $st" "says what GitHub answered"
+done
+rm -f "$T/api-status"
 mv "$SRV/latest.off" "$SRV/latest.json"
 rm -f "$SRV/releases?per_page=1"
 rm -rf "$T/gghome"
@@ -627,7 +713,7 @@ rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
 expect_code 0 "signed release accepted" gg "$R_BAZ"
 contains "$T/cosign.log" "^verify-blob --bundle .*SHA256SUMS.sigstore.json --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp " "cosign checks the bundle and the GitHub OIDC issuer"
-contains "$T/cosign.log" 'IHulkSmashI/GameCove/\\.github/workflows/release\\.yml@refs/tags/v' "identity: this repo's release workflow on a v* tag"
+contains "$T/cosign.log" 'IHulkSmashI/GameCove/\\.github/workflows/release\\.yml@refs/tags/v0\\.2\\.0\$ ' "identity: this repo's release workflow for exactly this tag (review M5)"
 contains "$GI/release.env" "^SIGNATURE=verified$" "recorded for the installer"
 rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
@@ -673,10 +759,19 @@ expect_code 1 "bootstrap offline without a cache" env PATH="$GB:$PATH" GAMECOVE_
 # ------------------------------------------------------- sysext tree (offline)
 APP="$T/app"
 SS="$T/gs-session"
-mkdir -p "$APP" "$SS/usr/bin" "$SS/usr/share/gamescope-session-plus"
+mkdir -p "$APP" "$SS/usr/bin" "$SS/usr/share/gamescope-session-plus" "$SS/usr/lib/systemd/user" \
+	"$SS/usr/share/gamescope/scripts/50-custom"
 echo bin >"$APP/gamecove.x86_64"
 echo pck >"$APP/gamecove.pck"
+# upstream gamescope-session's usr/ at the pinned commit, file for file
 printf '#!/bin/sh\n' >"$SS/usr/bin/gamescope-session-plus"
+chmod +x "$SS/usr/bin/gamescope-session-plus"
+printf '#!/bin/sh\n' >"$SS/usr/bin/export-gpu"
+printf '#!/bin/bash\n' >"$SS/usr/share/gamescope-session-plus/gamescope-session-plus"
+echo quirks >"$SS/usr/share/gamescope-session-plus/device-quirks"
+printf '[Unit]\nPartOf=gamescope-session.target\n' >"$SS/usr/lib/systemd/user/gamescope-session-plus@.service"
+printf '[Unit]\nDescription=Gamescope Session\n' >"$SS/usr/lib/systemd/user/gamescope-session.target"
+echo lua >"$SS/usr/share/gamescope/scripts/50-custom/50-disable-explicit-sync.lua"
 echo MIT >"$SS/LICENSE"
 expect_code 0 "sysext tree" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$APP" --session-src "$SS" --out "$T/dist" --tree-only
 TREE="$T/dist/gamecove"
@@ -688,10 +783,41 @@ for f in usr/bin/gamescope-session-plus usr/bin/gamecove-session-select usr/bin/
 	usr/share/licenses/gamecove/LICENSE usr/share/licenses/gamecove/GPL-2.0-only.txt usr/share/licenses/gamecove/LICENSE.ClawLab-MIT \
 	usr/share/gamescope-session-plus/sessions.d/gamecove usr/share/wayland-sessions/gamecove.desktop \
 	usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy \
-	usr/lib/systemd/user/gamescope-session-plus@gamecove.service.d/10-gamecove.conf; do
+	usr/lib/systemd/user/gamescope-session-plus@gamecove.service.d/10-gamecove.conf \
+	usr/lib/gamecove/session/gamecove-autologin-guard usr/lib/gamecove/session/gamecove-autologin-guard.service; do
 	if [ -e "$TREE/$f" ]; then ok; else bad "sysext tree missing $f"; fi
 done
 contains "$TREE/usr/lib/extension-release.d/extension-release.gamecove" "^ID=_any$" "extension-release ID"
+# review H10: a sysext overlays /usr, so it must never hold a file SteamOS already has. These exist on
+# SteamOS 3.10 (gamescope 3.16.30, owned by the gamescope package; checked on a ROG Ally):
+for f in usr/lib/systemd/user/gamescope-session.target usr/share/wayland-sessions/gamescope-wayland.desktop \
+	usr/lib/systemd/user/gamescope-session.service usr/lib/systemd/user/gamescope-session.service.d \
+	usr/lib/systemd/user/gamescope-session.service.wants usr/lib/systemd/user/gamescope-mangoapp.service \
+	usr/lib/systemd/user/ibus-gamescope.service usr/lib/systemd/user/xdg-desktop-portal-gamescope.service \
+	usr/share/gamescope usr/bin/export-gpu; do
+	if [ ! -e "$TREE/$f" ]; then ok; else bad "sysext would shadow SteamOS's $f"; fi
+done
+# ...and nothing outside the allow-list: GameCove's own folders, licences, and the named files
+(cd "$TREE" && find . \( -type f -o -type l \) | sed 's|^\./||' | sort) >"$T/sysext-files"
+while IFS= read -r f; do
+	case "$f" in
+	usr/lib/gamecove/* | usr/libexec/gamecove/* | usr/share/licenses/*) ;;
+	usr/bin/gamescope-session-plus | usr/share/gamescope-session-plus/gamescope-session-plus | \
+		usr/share/gamescope-session-plus/device-quirks | usr/lib/systemd/user/gamescope-session-plus@.service) ;;
+	usr/bin/gamecove-session-select | usr/bin/gamecove-selftest | usr/share/gamescope-session-plus/sessions.d/gamecove | \
+		usr/share/wayland-sessions/gamecove.desktop | usr/share/applications/io.github.ihulksmashi.GameCoveInstaller.desktop | \
+		usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy | \
+		usr/lib/systemd/user/gamescope-session-plus@gamecove.service.d/10-gamecove.conf | \
+		usr/lib/extension-release.d/extension-release.gamecove) ;;
+	*) echo "$f" >>"$T/sysext-extra" ;;
+	esac
+done <"$T/sysext-files"
+if [ ! -s "$T/sysext-extra" ]; then ok; else bad "sysext holds files outside the allow-list: $(cat "$T/sysext-extra")"; fi
+for f in usr/share/gamescope-session-plus/gamescope-session-plus usr/share/gamescope-session-plus/device-quirks \
+	usr/lib/systemd/user/gamescope-session-plus@.service; do
+	if [ -e "$TREE/$f" ]; then ok; else bad "sysext tree missing upstream $f"; fi
+done
+if [ -x "$TREE/usr/bin/gamescope-session-plus" ]; then ok; else bad "gamescope-session-plus must stay executable"; fi
 if [ ! -e "$TREE/etc" ] && [ ! -e "$TREE/var" ]; then ok; else bad "sysext must only hold /usr"; fi
 if [ -z "$(find "$TREE" -name test.sh -o -type d -name tests)" ]; then ok; else bad "fix tests must not ship"; fi
 if [ -f "$TREE/usr/lib/gamecove/fixes/lib/claw8ex-common.sh" ]; then ok; else bad "shared fix code must ship"; fi
@@ -725,13 +851,13 @@ if [ "$(grep -c "<allow_active>yes</allow_active>" "$POL")" -eq 1 ]; then ok; el
 
 # ------------------------------------------------------------------ RPM spec
 SPEC="$REPO/packaging/rpm/gamecove.spec"
-contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later$" "spec License tag"
+contains "$SPEC" "^License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND OFL-1.1 AND CC0-1.0 AND " "spec License tag (GameCove, the bundled MIT / OFL / CC0 parts, review L36)"
 contains "$SPEC" "packaging/libexec/gamecove-fix-set" "spec installs the set entry point"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-fix-set$" "spec lists the set entry point"
 contains "$SPEC" "build-bpf.sh" "spec builds the gyro program"
 contains "$SPEC" "^%{_libexecdir}/gamecove/gamecove-apply-choices$" "spec lists the installer's apply helper"
 contains "$SPEC" "^%{_libexecdir}/gamecove/get-gamecove.sh$" "spec lists the bootstrap"
-contains "$SPEC" "LICENSES/GPL-2.0-only.txt" "spec ships the GPL-2.0 text"
+contains "$SPEC" "done < packaging/licenses.list" "spec ships every licence text (GPL-2.0, OFL, Godot, ...)"
 uhb_spec="$(sed -n 's/^%global uhb_commit //p' "$SPEC")"
 uhb_script="$(sed -n 's/.*UHB_PIN:-\([0-9a-f]*\)}.*/\1/p' "$REPO/fixes/claw8ex-gyro/bpf/build-bpf.sh")"
 if [ -n "$uhb_spec" ] && [ "$uhb_spec" = "$uhb_script" ]; then ok; else bad "udev-hid-bpf pin differs: spec '$uhb_spec', build-bpf.sh '$uhb_script'"; fi
@@ -842,7 +968,7 @@ else
 		"$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" \
 		"$REPO/packaging/get-gamecove.sh" "$REPO/packaging/libexec/gamecove-apply-choices" \
 		"$REPO/packaging/libexec/reaper" \
-		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh" "$REPO/packaging/tests/session.sh" "$REPO/packaging/tests/wrapper.sh"; do
+		"$REPO/packaging/bin/gamecove-selftest" "$REPO/packaging/tests/selftest.sh" "$REPO/packaging/tests/session.sh" "$REPO/session/gamecove-autologin-guard" "$REPO/packaging/tests/wrapper.sh"; do
 		if "$SHELLCHECK" -S warning -s sh "$f" >"$T/out" 2>&1; then ok; else bad "shellcheck $f: $(cat "$T/out")"; fi
 	done
 	f="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
@@ -875,6 +1001,16 @@ if "$SHELLCHECK" -S warning -s bash "$REPO/packaging/libexec/gamecove-run" >"$T/
 
 # ------------------------------------------------------- gamecove-selftest (fake root and commands)
 if sh "$REPO/packaging/tests/selftest.sh" >"$T/out" 2>&1; then ok; else bad "selftest: $(tail -20 "$T/out")"; fi
+
+# ------------------------------------------------------- release, licences, supply chain, privacy (packaging/tests/release.sh)
+if sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "release.sh: $(grep FAIL "$T/out" | head -30)"; fi
+if [ -n "$SHELLCHECK" ] && "$SHELLCHECK" -S warning -s sh "$REPO/packaging/tests/release.sh" >"$T/out" 2>&1; then ok; else bad "shellcheck release.sh: $(cat "$T/out")"; fi
+
+# ------------------------------------------------------- raw assets the app reads with FileAccess must ship raw
+for f in "$REPO"/app/assets/brand/*.svg "$REPO"/app/assets/device_photos/*.webp; do
+	[ -f "$f" ] || continue
+	grep -q 'importer="keep"' "$f.import" 2>/dev/null && ok || bad "$f.import must use importer=keep (the app reads the raw file; a texture import leaves it out of exports)"
+done
 
 # ------------------------------------------------------- release workflow signs what the installer verifies
 W="$REPO/.github/workflows/release.yml"

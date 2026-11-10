@@ -1,0 +1,700 @@
+{
+ "head": {
+  "vars": [
+   "item",
+   "value",
+   "label",
+   "mul",
+   "date"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q107214683"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1551360"
+    },
+    "label": {
+     "type": "literal",
+     "value": "Forza Horizon 5",
+     "xml:lang": "en"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Forza Horizon 5",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2021-11-09T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q107214683"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1551360"
+    },
+    "label": {
+     "type": "literal",
+     "value": "Forza Horizon 5",
+     "xml:lang": "en"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Forza Horizon 5",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2025-04-29T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q112231148"
+    },
+    "value": {
+     "type": "literal",
+     "value": "2050650"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2023-03-24T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q112231148"
+    },
+    "value": {
+     "type": "literal",
+     "value": "2050650"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2023-12-20T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q126462072"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1903340"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Clair Obscur: Expedition 33",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2025-04-24T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q18345138"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1593500"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "God of War",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2018-04-20T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q18345138"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1593500"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "God of War",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2022-01-14T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q275950"
+    },
+    "value": {
+     "type": "literal",
+     "value": "254700"
+    },
+    "label": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "en"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2005-01-11T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q275950"
+    },
+    "value": {
+     "type": "literal",
+     "value": "254700"
+    },
+    "label": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "en"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2005-10-25T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q275950"
+    },
+    "value": {
+     "type": "literal",
+     "value": "254700"
+    },
+    "label": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "en"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2007-05-31T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q275950"
+    },
+    "value": {
+     "type": "literal",
+     "value": "254700"
+    },
+    "label": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "en"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2007-06-19T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q275950"
+    },
+    "value": {
+     "type": "literal",
+     "value": "254700"
+    },
+    "label": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "en"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2007-06-29T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q275950"
+    },
+    "value": {
+     "type": "literal",
+     "value": "254700"
+    },
+    "label": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "en"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2007-07-05T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q275950"
+    },
+    "value": {
+     "type": "literal",
+     "value": "254700"
+    },
+    "label": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "en"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Resident Evil 4",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2014-02-28T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q29300592"
+    },
+    "value": {
+     "type": "literal",
+     "value": "367520"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hollow Knight",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2017-02-24T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q29300592"
+    },
+    "value": {
+     "type": "literal",
+     "value": "367520"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hollow Knight",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2017-04-11T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q29300592"
+    },
+    "value": {
+     "type": "literal",
+     "value": "367520"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hollow Knight",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2018-06-12T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q29300592"
+    },
+    "value": {
+     "type": "literal",
+     "value": "367520"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hollow Knight",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2018-09-25T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q29300592"
+    },
+    "value": {
+     "type": "literal",
+     "value": "367520"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hollow Knight",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2026-02-05T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63294487"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1030300"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hollow Knight: Silksong",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2025-09-04T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q64441774"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1086940"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Baldur's Gate 3",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2023-08-03T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q64441774"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1086940"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Baldur's Gate 3",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2023-09-06T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q64441774"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1086940"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Baldur's Gate 3",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2023-09-21T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q64441774"
+    },
+    "value": {
+     "type": "literal",
+     "value": "1086940"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Baldur's Gate 3",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2023-12-08T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q98582386"
+    },
+    "value": {
+     "type": "literal",
+     "value": "2358720"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Black Myth: Wukong",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2024-08-20T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q98582386"
+    },
+    "value": {
+     "type": "literal",
+     "value": "2358720"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Black Myth: Wukong",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2024-11-01T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q98582386"
+    },
+    "value": {
+     "type": "literal",
+     "value": "2358720"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Black Myth: Wukong",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2025-01-16T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q98582386"
+    },
+    "value": {
+     "type": "literal",
+     "value": "2358720"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Black Myth: Wukong",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2025-08-20T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q99397854"
+    },
+    "value": {
+     "type": "literal",
+     "value": "990080"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hogwarts Legacy",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2023-02-10T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q99397854"
+    },
+    "value": {
+     "type": "literal",
+     "value": "990080"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hogwarts Legacy",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2023-05-05T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q99397854"
+    },
+    "value": {
+     "type": "literal",
+     "value": "990080"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hogwarts Legacy",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2023-11-14T00:00:00Z"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q99397854"
+    },
+    "value": {
+     "type": "literal",
+     "value": "990080"
+    },
+    "mul": {
+     "type": "literal",
+     "value": "Hogwarts Legacy",
+     "xml:lang": "mul"
+    },
+    "date": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2025-06-05T00:00:00Z"
+    }
+   }
+  ]
+ }
+}

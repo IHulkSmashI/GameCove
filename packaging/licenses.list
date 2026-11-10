@@ -1,0 +1,16 @@
+# Licence and notice files every GameCove artefact carries (review H8): the release tarball (licenses/), the RPM
+# (%license, /usr/share/licenses/gamecove/), the SteamOS sysext (/usr/share/licenses/gamecove/) and, where marked
+# pck, the exported app itself (export_presets.cfg include_filter, read by Settings > About > Credits and licenses).
+# <path in the repo> <installed name>
+LICENSE LICENSE
+CREDITS.md CREDITS.md
+LICENSES/GPL-2.0-only.txt GPL-2.0-only.txt
+fixes/claw8ex-vrr/LICENSE.ClawLab-MIT LICENSE.ClawLab-MIT
+app/fonts/OFL-Outfit.txt OFL-Outfit.txt
+app/fonts/OFL-PlusJakartaSans.txt OFL-PlusJakartaSans.txt
+app/fonts/OFL-JetBrainsMono.txt OFL-JetBrainsMono.txt
+app/addons/kenyoni/qr_code/LICENSE.md LICENSE.kenyoni-qr_code-MIT.md
+LICENSES/Godot-LICENSE.txt Godot-LICENSE.txt
+LICENSES/Godot-COPYRIGHT.txt Godot-COPYRIGHT.txt
+LICENSES/Godot-AUTHORS.md Godot-AUTHORS.md
+app/assets/brand/LICENSE.md LICENSE.brand-logos.md

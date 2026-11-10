@@ -38,6 +38,15 @@ A="$R/sys/class/leds/ally:rgb:joystick_rings"
 run status | grep -qx 'led0_rgb=ff8000' || fail "status colour"
 run status | grep -qx 'led0_brightness=50' || fail "status brightness"
 run status | tail -n 1 | grep -qx 'state=on' || fail "state on after set"
+# review L7: one run at a time, released after; a live holder's lock is waited for, not ignored
+[ ! -e "$R/run/gamecove-controller-led.lock" ] || fail "lock released after a set"
+sleep 30 & live=$!
+mkdir -p "$R/run/gamecove-controller-led.lock"; echo "$live" > "$R/run/gamecove-controller-led.lock/pid"
+set +e; GAMECOVE_ROOT="$R" timeout 3 sh "$FIX" set all,00ff00,50 >/dev/null 2>&1; c=$?; set -e
+[ "$c" = 124 ] || fail "a set waits while another run holds the lock (exit $c)"
+[ "$(cat "$A/multi_intensity")" = "255 128 0 255 128 0 255 128 0 255 128 0" ] || fail "nothing written while locked out"
+kill "$live"
+run set all,ff8000,50 >/dev/null || fail "a dead holder's lock is taken over"
 run set off >/dev/null || fail "off"
 [ "$(cat "$A/brightness")" = "0" ] || fail "off = brightness 0"
 run remove >/dev/null || fail "remove"
@@ -46,7 +55,7 @@ run status | tail -n 1 | grep -qx 'state=off' || fail "state off after remove"
 grep -q 'set all,ff8000,50' "$R/var/lib/gamecove/fixes/controller-led/changes.log" || fail "changes logged"
 
 # ---- bad values
-for bad in "all,FF0000,50" "all,ff00,50" "all,ff0000,101" "x,ff0000,50" "all,ff0000,50,bad-name" "all,ff0000" "all,ff0000,50,monocolor,500"; do
+for bad in "all,FF0000,50" "all,ff00,50" "all,ff0000,101" "x,ff0000,50" "all,ff0000,50,bad-name" "all,ff0000" "all,ff0000,50,monocolor,500" "all,ff0000,077" "all,ff0000,50,monocolor,077"; do
 	set +e; run set "$bad" 2>/dev/null; c=$?; set -e
 	[ "$c" = 2 ] || fail "'$bad' refused with 2 (got $c)"
 done

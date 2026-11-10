@@ -38,6 +38,18 @@ func test_id_beats_title() -> void:
 	eq(GameDB.find(real, {}, "Alan Wake 2™").get("wikidata"), "Q1", "title without ™")
 
 
+func test_extra_steam_ids_and_popular_first() -> void:
+	var idx := GameDB.build_index({"games": [
+		{"title": "Resident Evil 4", "ids": {"steam": "2050650"}, "released": 2023, "popular": 86},
+		{"title": "Resident Evil 4", "ids": {"steam": "254700"}, "released": 2005},
+		{"title": "Some Game", "ids": {"steam": "20", "steam_more": ["500", 501]}, "released": 2010},
+	]})
+	eq(GameDB.find(idx, {"steam": "500"}, "").get("title"), "Some Game", "extra Steam id found")
+	eq(GameDB.find(idx, {"steam": 501}, "").get("title"), "Some Game", "extra Steam id as a number")
+	eq(GameDB.find(idx, {"steam": "254700"}, "Resident Evil 4").get("released"), 2005, "id beats the shared title")
+	eq(GameDB.find(idx, {}, "Resident Evil 4").get("released"), 2023, "title alone finds the popular one")
+
+
 func test_info_fills_missing_keys_as_null() -> void:
 	eq(GameDB.info_for({}), {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null}, "empty record")
 	var halo := GameDB.info_for(GameDB.find(_index(), {"steam": "976730"}, ""))

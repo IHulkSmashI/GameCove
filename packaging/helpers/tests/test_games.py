@@ -142,7 +142,9 @@ def test_fsr4_on_amd_uses_amds_own_upscaler_and_puts_the_packages_back(tmp_path,
     monkeypatch.setattr(optiscaler.downloads, "download", fake_download)
     r = games.choose(home, "200", "fsr4_amd", 0, RDNA35)
     assert not r["ok"] and "sha256" in r["error"] and not os.path.exists(os.path.join(d, "OptiScaler.ini"))
-    assert calls and calls[0].startswith("https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/7539ae8b")
+    # GameCove's mirror first, then AMD's own repository at the pinned commit; both refused on the hash
+    assert calls[0].startswith("https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fsr4_amd-")
+    assert calls[1].startswith("https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/7539ae8b")
     _w(os.path.join(home, optiscaler.FSR4_AMD_DIR, optiscaler.FSR4_AMD_FILE), "amd-sdk-4.1.2")
     r = games.choose(home, "200", "fsr4_amd", 0, RDNA35)
     assert r["ok"], r

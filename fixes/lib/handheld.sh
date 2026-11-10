@@ -7,9 +7,14 @@
 #                  never write anything on hardware that isn't on that list.
 # handheld_id      prints the matching row's id ("" when none)
 # fix_lock <name>  one run of this fix at a time ($ROOT/run/gamecove-<name>.lock);
-#                  removed on exit. Waits up to 30 s, then fails.
+#                  removed on exit. Waits up to 30 s, then fails; a lock left by a run that was
+#                  killed (its PID is gone) is taken over (lockdir.sh).
 
 HANDHELDS="$(cd "$(dirname "$0")/../lib" && pwd)/handhelds.txt"
+# shellcheck source=fixes/lib/logcap.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/logcap.sh"
+# shellcheck source=fixes/lib/lockdir.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/lockdir.sh"
 
 _dmi() {
 	# lower case, outer spaces trimmed; fails when the file is missing
@@ -69,18 +74,16 @@ handheld_ok() {
 }
 
 fix_lock() {
-	FIX_LOCK="$ROOT/run/gamecove-$1.lock"
+	# FIX_LOCK is only set once the lock is ours: a run stopped while it waits must not remove the
+	# holder's lock on its way out
+	_fl="$ROOT/run/gamecove-$1.lock"
 	mkdir -p "$ROOT/run" 2>/dev/null || true
-	n=0
-	while ! mkdir "$FIX_LOCK" 2>/dev/null; do
-		n=$((n + 1))
-		[ "$n" -lt 30 ] || { printf '%s: another run is busy (%s)\n' "$1" "$FIX_LOCK" >&2; FIX_LOCK=""; exit 1; }
-		sleep 1
-	done
+	lockdir_take "$_fl" 30 || { printf '%s: another run is busy (%s)\n' "$1" "$_fl" >&2; exit 1; }
+	FIX_LOCK="$_fl"
 }
 
 fix_unlock() {
-	[ -z "${FIX_LOCK:-}" ] || rmdir "$FIX_LOCK" 2>/dev/null || true
+	[ -z "${FIX_LOCK:-}" ] || lockdir_drop "$FIX_LOCK"
 	FIX_LOCK=""
 }
 

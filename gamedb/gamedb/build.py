@@ -25,47 +25,92 @@ import time
 import traceback
 from typing import Callable
 
-from . import net
-from .sources import awacy, igdb, protondb, wikidata
+from . import coverage, net
+from . import ttb as ttb_rules
+from .ids import steam_id
+from .sources import awacy, igdb, protondb, steamtop, wikidata
 
 SCHEMA = 2
 PREVIOUS_URL = "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/gamedb.json.gz"
 CREDITS = (
-    "Wikidata (CC0); AreWeAntiCheatYet (MIT); time to beat from IGDB.com; "
+    "Game data from IGDB (https://www.igdb.com): time to beat; Wikidata (CC0); AreWeAntiCheatYet (MIT); "
     "compatibility tiers are GameCove's own summary of ProtonDB user reports "
     "(protondb.com, data from github.com/bdefore/protondb-data, ODbL 1.0) and "
     "are not ProtonDB's official ratings; this database's ProtonDB-derived "
     "data is shared under the ODbL 1.0"
 )
 # Seconds each source may take (also capped by --max-minutes overall).
-LIMITS = {"previous": 180, "wikidata": 1800, "areweanticheatyet": 180, "igdb": 900, "protondb": 1200}
+LIMITS = {"previous": 180, "wikidata": 1800, "steam": 300, "areweanticheatyet": 180, "igdb": 1200, "protondb": 1200}
 # Fresh source data shorter than this share of last night's is treated as a failure.
 MIN_KEEP = 0.9
 
 
 # ---- merge -----------------------------------------------------------------
 
+def steam_ids_of(rec: dict) -> list[str]:
+    """Every Steam app id of a record, the main one first."""
+    main = rec["ids"].get("steam")
+    rest = [s for s in rec.get("steam_all") or [] if s != main]
+    return ([main] if main else []) + rest
+
+
+def _game(rec: dict, anticheat: dict, ttb: dict, proton: dict, top: dict) -> dict | None:
+    steams = steam_ids_of(rec)
+
+    def first(m: dict):
+        return next((m[s] for s in steams if s in m), None)
+
+    ranks = [top[s]["rank"] for s in steams if s in top and isinstance(top[s].get("rank"), int)]
+    rank = min(ranks) if ranks else None
+    popular = first(top) or {}
+    ac = first(anticheat)
+    title = rec.get("title") or popular.get("title") or (ac or {}).get("name") or ""
+    if not title:
+        return None
+    ids = {k: v for k, v in rec["ids"].items() if k != "steam_more"}
+    if len(steams) > 1:
+        ids["steam_more"] = steams[1:]
+    g = {
+        "title": title,
+        "wikidata": rec.get("wikidata"),
+        "released": rec.get("released") if rec.get("released") is not None else popular.get("released"),
+        "ids": ids,
+        "popular": rank,
+    }
+    if ac:
+        g["anticheat"] = {k: ac[k] for k in ("status", "anticheats")}
+    t = ttb_rules.pick([ttb.get(s) for s in steams], big=rank is not None)
+    if t:
+        g["time_to_beat"] = t
+    tier = first(proton)
+    if tier:
+        g["protondb"] = tier
+    return g
+
+
 def merge(items: dict[str, dict], anticheat: dict[str, dict], ttb: dict[str, dict],
-          proton: dict[str, str] | None = None) -> list[dict]:
+          proton: dict[str, str] | None = None, top: dict[str, dict] | None = None) -> list[dict]:
+    """One record per Wikidata item, plus one per popular Steam game (`top`)
+    that no item covers. Time to beat goes through gamedb.ttb's checks.
+    Sorted by title; on equal titles the more popular game comes first, so
+    the app's title fallback finds it (Resident Evil 4 (2023) before 2005)."""
     proton = proton or {}
+    top = top or {}
     games = []
+    covered: set[str] = set()
     for rec in items.values():
-        steam = rec["ids"].get("steam")
-        g = {
-            "title": rec["title"] or (anticheat.get(steam, {}).get("name") if steam else "") or "",
-            "wikidata": rec["wikidata"],
-            "released": rec["released"],
-            "ids": rec["ids"],
-        }
-        if steam and steam in anticheat:
-            g["anticheat"] = {k: anticheat[steam][k] for k in ("status", "anticheats")}
-        if steam and steam in ttb:
-            g["time_to_beat"] = ttb[steam]
-        if steam and steam in proton:
-            g["protondb"] = proton[steam]
-        if g["title"]:
+        covered.update(steam_ids_of(rec))
+        g = _game(rec, anticheat, ttb, proton, top)
+        if g:
             games.append(g)
-    games.sort(key=lambda g: g["title"].casefold())
+    for sid in sorted(set(top) - covered, key=int):
+        rec = {"wikidata": None, "title": top[sid].get("title", ""), "released": top[sid].get("released"),
+               "ids": {"steam": sid}}
+        g = _game(rec, anticheat, ttb, proton, top)
+        if g:
+            games.append(g)
+    games.sort(key=lambda g: (g["title"].casefold(), g["popular"] if g["popular"] is not None else 1 << 30,
+                              g["wikidata"] or "", g["ids"].get("steam", "")))
     return games
 
 
@@ -105,17 +150,23 @@ def parse_previous(raw: bytes) -> dict | None:
 
 def from_previous(prev: dict | None) -> dict[str, dict]:
     """Split a published document back into the per-source maps merge() takes."""
-    out = {"items": {}, "anticheat": {}, "ttb": {}, "protondb": {}}
+    out = {"items": {}, "anticheat": {}, "ttb": {}, "protondb": {}, "top": {}}
     if not prev:
         return out
     for g in prev.get("games", []):
-        if not isinstance(g, dict) or not g.get("wikidata") or not isinstance(g.get("ids"), dict):
+        if not isinstance(g, dict) or not isinstance(g.get("ids"), dict):
             continue
-        out["items"][g["wikidata"]] = {"wikidata": g["wikidata"], "title": g.get("title", ""),
-                                       "released": g.get("released"), "ids": g["ids"]}
-        steam = g["ids"].get("steam")
+        steam = steam_id(g["ids"].get("steam"))
+        more = [s for s in (steam_id(x) for x in g["ids"].get("steam_more") or []) if s]
+        if g.get("wikidata"):
+            ids = {k: v for k, v in g["ids"].items() if k != "steam_more"}
+            out["items"][g["wikidata"]] = {"wikidata": g["wikidata"], "title": g.get("title", ""),
+                                           "released": g.get("released"), "ids": ids,
+                                           "steam_all": ([steam] if steam else []) + more}
         if not steam:
             continue
+        if isinstance(g.get("popular"), int) and not isinstance(g.get("popular"), bool):
+            out["top"][steam] = {"title": g.get("title", ""), "released": g.get("released"), "rank": g["popular"]}
         ac = g.get("anticheat")
         if isinstance(ac, dict) and ac.get("status"):
             out["anticheat"][steam] = {"status": ac["status"], "anticheats": ac.get("anticheats", []),
@@ -172,6 +223,19 @@ class Run:
         return {}
 
 
+def igdb_titles(items: dict[str, dict], top: dict[str, dict]) -> dict[str, tuple[str, int | None]]:
+    """Popular games -> (title, release year) for IGDB's last-resort title search,
+    most popular first."""
+    by_steam = {s: r for r in items.values() for s in steam_ids_of(r)}
+    out = {}
+    for sid in sorted(top, key=lambda s: (top[s].get("rank", 1 << 30), int(s))):
+        rec = by_steam.get(sid, {})
+        title = rec.get("title") or top[sid].get("title")
+        if title:
+            out[sid] = (title, rec.get("released") or top[sid].get("released"))
+    return out
+
+
 def build(budget: net.Budget, client_factory: Callable[..., net.Client] = net.Client,
           previous_url: str = PREVIOUS_URL) -> dict | None:
     run = Run(budget, client_factory)
@@ -188,17 +252,28 @@ def build(budget: net.Budget, client_factory: Callable[..., net.Client] = net.Cl
     items = run.source("wikidata", lambda: wikidata.fetch(run.client("wikidata", min_interval=2.0)))
     items = run.fall_back("wikidata", items, prev["items"])
 
+    top = run.source("steam", lambda: steamtop.fetch(run.client("steam", timeout=60)))
+    top = run.fall_back("steam", top, prev["top"])
+    for sid in coverage.MUST_HAVE:  # never left out, even with Steam's lists down
+        top.setdefault(sid, {"title": "", "released": None, "rank": len(top)})
+
     ac_raw = run.source("areweanticheatyet", lambda: awacy.fetch(run.client("areweanticheatyet", timeout=60)))
     anticheat = run.fall_back("areweanticheatyet", awacy.by_steam_id(ac_raw) if ac_raw is not None else None,
                               prev["anticheat"])
 
-    steam_ids = sorted({r["ids"]["steam"] for r in items.values() if "steam" in r["ids"]})
+    steam_ids = {s for r in items.values() for s in steam_ids_of(r)} | set(top)
+    slugs = {s: r["ids"]["igdb_slug"] for r in items.values() if r["ids"].get("igdb_slug") for s in steam_ids_of(r)}
+    titles = igdb_titles(items, top)
     if igdb.credentials():
-        ttb = run.source("igdb", lambda: igdb.fetch_for_steam(run.client("igdb", timeout=60), steam_ids))
+        ttb = run.source("igdb", lambda: igdb.fetch_for_steam(
+            run.client("igdb", timeout=60), sorted(steam_ids, key=int), slugs, titles, set(top)))
     else:
         run.status["igdb"] = {"status": "skipped", "error": "no TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET"}
         ttb = None
-    ttb = run.fall_back("igdb", ttb, prev["ttb"])
+    # Compare against (and fall back to) only last night's values that pass the
+    # same checks, so a fresh run isn't judged "short" for dropping bogus ones.
+    prev_ttb = {s: c for s, t in prev["ttb"].items() if (c := ttb_rules.clean(t, big=s in top))}
+    ttb = run.fall_back("igdb", ttb, prev_ttb)
 
     pdb = {}
 
@@ -212,7 +287,7 @@ def build(budget: net.Budget, client_factory: Callable[..., net.Client] = net.Cl
     if "dump" in pdb:
         run.status["protondb"]["dump"] = pdb["dump"]
 
-    games = merge(items, anticheat, ttb, proton)
+    games = merge(items, anticheat, ttb, proton, top)
     if not games:
         return None
     return document(games, run.status)

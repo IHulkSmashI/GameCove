@@ -155,7 +155,7 @@ func test_claw8ex_fan_curve_is_never_quieter_than_quiet() -> void:
 	eq(got, ["0", "102", "128", "128", "230", "255"], "lifted to Quiet (40 %) and never falling")
 	eq(_read(root, h + "pwm1_enable"), "1", "table mode")
 	eq(e["c"]["power.fan_curve"].value, [0.0, 40.0, 50.0, 50.0, 90.0, 100.0], "the control keeps the safe curve it sent, not what was asked")
-	eq(e["c"]["power.fan_curve"].coerce([0, 0, 0, 0, 0, 0]), [0.0, 40.0, 40.0, 45.0, 60.0, 75.0], "a profile or import gets the same safe curve")
+	eq(e["c"]["power.fan_curve"].coerce([0, 0, 0, 0, 0, 0]), [0.0, 40.0, 40.0, 45.0, 60.0, 100.0], "a profile or import gets the same safe curve")
 	eq(e["c"]["power.fan_curve"].coerce([0, 0, 0]), null, "wrong point count refused")
 	reg.detect_all()
 	eq(e["c"]["power.fan_curve"].value, [0.0, 40.0, 50.0, 50.0, 90.0, 100.0], "read back from the EC table")
@@ -788,7 +788,7 @@ func test_ally_writes_each_backend() -> void:
 	reg.set_value("power.cpu_cores", 1)
 	eq(e["prov"].be.online_cpus(), [0, 1], "never fewer than 2 cores, through PowerStation's per-core Online")
 	reg.set_value("power.fan_curve", [0, 0, 0, 0, 0, 0, 0, 0])
-	eq(_read(root, "/sys/class/hwmon/hwmon6/pwm1_auto_point8_pwm"), "191", "a silent curve becomes Quiet")
+	eq(_read(root, "/sys/class/hwmon/hwmon6/pwm1_auto_point8_pwm"), "255", "a silent curve becomes Quiet (full speed at the hottest point, review L6)")
 	ok(not cpb_key.is_empty(), "")
 	_free()
 

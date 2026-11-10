@@ -23,6 +23,8 @@ const Overlay := preload("res://scripts/controls/perf/overlay.gd")
 const Lsfg := preload("res://scripts/controls/perf/lsfg.gd")
 const Files := preload("res://scripts/controls/perf/launch_files.gd")
 const Upscale := preload("res://scripts/controls/perf/upscale.gd")
+const UpscaleUpdates := preload("res://scripts/controls/perf/upscale_updates.gd")
+const Privacy := preload("res://scripts/system/privacy.gd")
 const Proton := preload("res://scripts/launch/proton.gd")
 
 const NO_GAME := "Open a game first"
@@ -33,6 +35,9 @@ const LOW_LATENCY_HELP := "Leave on. Turn off only if a game stutters or won't s
 const MANGOHUD_LAYER_DIRS := ["/usr/share/vulkan/implicit_layer.d", "/etc/vulkan/implicit_layer.d",
 	"/usr/local/share/vulkan/implicit_layer.d"]
 const STATUS_TTL_MS := 3000
+## The helper's check hashes the downloaded files (FSR 4 DLLs are ~100 MB): read again at most this often.
+const CHECK_TTL_MS := 600000
+const UPSCALE_STAMP := "user://upscalers.cfg"
 
 var ctx: Dictionary = {}
 var store: RefCounted
@@ -40,6 +45,8 @@ var perf: Object
 var launcher: Object
 var library: Object
 var _status_cache := {}           # game key -> {"t": ms, "r": Dictionary}
+var _check := {}                  # the helper's last "check" answer
+var _check_t := -1
 var _mutex := Mutex.new()
 
 
@@ -64,6 +71,8 @@ func setup(c: Dictionary) -> void:
 	if launcher != null and "frame_gen_hooks" in launcher:
 		launcher.frame_gen_hooks.append(frame_gen_on)
 	refresh_device_files()
+	if real:
+		_schedule_background_check(UpscaleUpdates.FIRST_DELAY_S)
 
 
 func _autoload(name: String) -> Object:
@@ -438,7 +447,130 @@ func _upscale_controls() -> Array:
 			"help": "Takes OptiScaler (and REFramework) out of the game folder, exactly as it was.",
 			"kind": "action", "per_game": false},
 			_upscale_reason, func(): return null, func(_v): return _after_upscale(_upscale_run("undo"))),
+		_updates_control(),
+		_game_update_control(),
 	]
+
+
+# ---- keeping the upscalers current (helper check / update / game-update) -------------
+
+## The helper's "check" (what's downloaded, the newest, updates), cached for
+## CHECK_TTL_MS. online: it fetches GameCove's signed list of the newest first.
+func upscale_check(online := false) -> Dictionary:
+	_mutex.lock()
+	var fresh := not online and _check_t >= 0 and Time.get_ticks_msec() - _check_t < CHECK_TTL_MS
+	var c := _check
+	_mutex.unlock()
+	if fresh:
+		return c
+	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "check", _home(), "", _gpu(), "", ["--online"] if online else [])
+	_mutex.lock()
+	_check = r
+	_check_t = Time.get_ticks_msec()
+	_mutex.unlock()
+	return r
+
+
+func _forget_check() -> void:
+	_mutex.lock()
+	_check_t = -1
+	_mutex.unlock()
+
+
+func _updates_reason() -> String:
+	if _gpu()["vendor"] == "other":
+		return "Unknown GPU: use the game's own settings"
+	if upscale_cmd() == "":
+		return "Needs GameCove's upscaling helper"
+	return ""
+
+
+## "Upscaler downloads": the versions on this handheld and "Update available"
+## when GameCove's signed list has newer ones. Pressing it updates, or checks
+## right away when everything is current.
+func _updates_control() -> RefCounted:
+	return Ctl.make({"id": "perf.upscaler_update", "group": "perf", "title": "Upscaler downloads",
+		"help": "OptiScaler, OptiPatcher, the XeSS driver and FSR 4 files GameCove downloaded, kept at the newest.",
+		"kind": "action", "per_game": false, "affects": ["perf.upscale_game_update"]},
+		_updates_detect, func(_c): return null, _updates_write)
+
+
+func _updates_detect(c: RefCounted) -> String:
+	var why := _updates_reason()
+	if why != "":
+		return why
+	var s := UpscaleUpdates.summary(upscale_check())
+	if s["help"] != "":
+		c.help = s["help"]
+	return s["reason"]
+
+
+func _updates_write(c: RefCounted, _v: Variant) -> bool:
+	var r: Dictionary
+	if UpscaleUpdates.summary(upscale_check())["update"]:
+		r = Upscale.run(ctx.get("runner"), upscale_cmd(), "update", _home(), "", _gpu())
+		_forget_check()
+		_forget_status()
+		upscale_check()
+	else:
+		r = upscale_check(true)
+	if not bool(r.get("ok", false)):
+		push_warning("Upscaler update: %s" % str(r.get("error", "failed")))
+	c.detect()
+	return bool(r.get("ok", false))
+
+
+## The open game's own copy: "Update available" when the game runs an older
+## OptiScaler (or older add-ons) than GameCove now has.
+func _game_update_control() -> RefCounted:
+	return Ctl.make({"id": "perf.upscale_game_update", "group": "perf", "title": "Update this game's upscaler",
+		"help": "Puts the newest OptiScaler into this game, with its settings kept.",
+		"kind": "action", "per_game": false},
+		_game_update_detect, func(_c): return null, _game_update_write)
+
+
+func _game_update_detect(c: RefCounted) -> String:
+	var why := _upscale_reason()
+	if why != "":
+		return why
+	var s := UpscaleUpdates.game_summary(upscale_status())
+	if s["help"] != "":
+		c.help = s["help"]
+	return s["reason"]
+
+
+func _game_update_write(c: RefCounted, _v: Variant) -> bool:
+	var done := _after_upscale(_upscale_run("game-update"))
+	c.detect()
+	return done
+
+
+## The daily background check (Settings > About > "Background lookups" decides).
+## Runs on Controls' worker; true when it asked the helper.
+func background_check(now_unix: int) -> bool:
+	var stamp := str(ctx.get("upscale_stamp_path", UPSCALE_STAMP))
+	var allowed := Privacy.background_allowed(str(ctx.get("privacy_path", Privacy.PREFS_PATH)))
+	if not UpscaleUpdates.due(UpscaleUpdates.last_check(stamp), now_unix, allowed) or _updates_reason() != "":
+		return false
+	UpscaleUpdates.save_check(stamp, now_unix)      # at most daily, also when the network is down
+	upscale_check(true)
+	return true
+
+
+func _schedule_background_check(delay_s: float) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return
+	tree.create_timer(delay_s).timeout.connect(_on_background_timer)
+
+
+func _on_background_timer() -> void:
+	var reg: Object = _autoload("Controls")
+	if reg != null and reg.has_method("run_on_worker"):
+		reg.run_on_worker(func():
+			if background_check(int(Time.get_unix_time_from_system())):
+				_main(func(): reg.detect_all()))
+	_schedule_background_check(float(UpscaleUpdates.INTERVAL_S))
 
 
 # ---- low latency, Proton, the launch wrapper ------------------------------------

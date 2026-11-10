@@ -33,7 +33,10 @@
 #                             findings §21). A hold is bounded (review S3-2): a watcher starts
 #                             thermald again once no game runs (a game has 60 s to show up,
 #                             then two checks 10 s apart without one), so a hold never outlives
-#                             the game even when GameCove's own restore doesn't run
+#                             the game even when GameCove's own restore doesn't run. The watcher
+#                             runs as a transient system unit (gamecove-thermald-watch.service,
+#                             systemd-run) so stopping the user's session can't kill it; without
+#                             systemd it is a setsid process whose PID is kept in /run (review M3)
 #     sleep:s2idle|deep       /sys/power/mem_sleep, from what it offers
 #     mcu:on|off              ROG Ally controller MCU power saving in sleep (mcu_powersave); handhelds only;
 #                             on only with new enough MCU firmware (../lib/ally-mcu.sh), exit 3 otherwise
@@ -72,6 +75,7 @@ die() { printf 'power-tune: %s\n' "$2" >&2; exit "$1"; }
 
 log_change() {
 	mkdir -p "$STATE"
+	log_cap "$STATE/changes.log"
 	printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$STATE/changes.log"
 }
 
@@ -79,7 +83,9 @@ rd() { [ -f "$1" ] && tr -d '\n' < "$1" 2>/dev/null || true; }
 
 wr() { printf '%s\n' "$2" 2>/dev/null > "$1"; }
 
-is_uint() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; [ "${#1}" -le 9 ]; }
+# A plain decimal: no leading zeros, because `[ -ge ]` reads "050" as 50 but $((...)) reads it as
+# octal 40, so a checked value could change after the check (review M1).
+is_uint() { case "$1" in ''|*[!0-9]*|0?*) return 1 ;; esac; [ "${#1}" -le 9 ]; }
 
 # The active word of "[a] b c" (or the only word).
 active() {
@@ -178,16 +184,28 @@ set_cores() {
 		done
 		printf '%s\n' "$on" > "$ORIG/cores"
 	fi
+	online_cores "$1" || die 1 "not every CPU took the change"
+}
+
+# online_cores <n>: the first n logical CPUs online, the rest offline. Tries every CPU and returns 1
+# if any refused (never exits: restore calls it too, review M2).
+online_cores() {
+	_bad=0
 	i=0
 	for n in $(cpus); do
 		i=$((i + 1))
 		[ "$n" = 0 ] && continue
 		f="$CPU/cpu$n/online"
-		[ -f "$f" ] || die 1 "cpu$n can't be switched off"
 		want=0; [ "$i" -le "$1" ] && want=1
-		[ "$(rd "$f")" = "$want" ] || wr "$f" "$want" || die 1 "cpu$n refused online=$want"
-		[ "$(rd "$f")" = "$want" ] || die 1 "cpu$n reads $(rd "$f") after online=$want"
+		if [ ! -f "$f" ]; then
+			printf 'power-tune: cpu%s has no online switch\n' "$n" >&2; _bad=1; continue
+		fi
+		[ "$(rd "$f")" = "$want" ] || wr "$f" "$want" || true
+		if [ "$(rd "$f")" != "$want" ]; then
+			printf 'power-tune: cpu%s reads %s after online=%s\n' "$n" "$(rd "$f")" "$want" >&2; _bad=1
+		fi
 	done
+	return "$_bad"
 }
 
 set_epp() {
@@ -416,14 +434,37 @@ set_tau() {
 	[ "$d" -le $(($1 / 4)) ] || die 1 "the time window reads $got us after $1"
 }
 
-# A running game of the caller (Steam's reaper, or a GameCove launch's app-steam-app<id> scope).
+# A running game of the caller:
+#  - a Steam game, or one GameCove starts behind its reaper wrapper (streaming): a process whose command
+#    line is "reaper SteamLaunch AppId=<id> ..." (pgrep);
+#  - a game from GameCove's library (Heroic, umu, GOG, Amazon, emulators): library.gd scope_command runs
+#    `systemd-run --user --scope --unit=app-steam-app<id>-<n> -- <cmd>`, which execs the game, so no command
+#    line names it (review M20); its scope does, while it has processes (cgroup v2 "populated 1").
 GAME_PATTERN='SteamLaunch AppId=|app-steam-app[0-9]'
 game_running() {
 	if [ -n "${1:-}" ]; then
-		pgrep -u "$1" -f "$GAME_PATTERN" >/dev/null 2>&1
+		pgrep -u "$1" -f "$GAME_PATTERN" >/dev/null 2>&1 && return 0
 	else
-		pgrep -f "$GAME_PATTERN" >/dev/null 2>&1
+		pgrep -f "$GAME_PATTERN" >/dev/null 2>&1 && return 0
 	fi
+	game_scope_running "${1:-}"
+}
+
+# game_scope_running [uid]: a populated app-steam-app<id>-<n>.scope in that user's (or any user's) systemd tree
+game_scope_running() {
+	base="$ROOT/sys/fs/cgroup/user.slice"
+	[ -z "${1:-}" ] || base="$base/user-$1.slice"
+	[ -d "$base" ] || return 1
+	find "$base" -maxdepth 5 -type d -name 'app-steam-app[0-9]*.scope' 2>/dev/null | {
+		while IFS= read -r sc; do
+			if [ -f "$sc/cgroup.events" ]; then
+				grep -qx 'populated 1' "$sc/cgroup.events" 2>/dev/null && exit 0
+			elif [ -s "$sc/cgroup.procs" ]; then
+				exit 0
+			fi
+		done
+		exit 1
+	}
 }
 
 # The watcher behind a hold: runs detached as root until thermald is running again.
@@ -445,25 +486,55 @@ thermald_watch() {
 		fi
 		fix_unlock
 	fi
-	[ "$(cat "$STATE/thermald-watch" 2>/dev/null)" = "$$" ] && rm -f "$STATE/thermald-watch"
+	[ "$(cat "$WATCH_PID" 2>/dev/null)" = "$$" ] && rm -f "$WATCH_PID"
+	return 0
+}
+
+# Review M3: the watcher's PID lives in /run (gone after a reboot, so a PID from before a hard power-off is
+# never reused), and is only signalled when that process really is a watcher.
+WATCH_PID="$ROOT/run/gamecove/power-tune-thermald-watch.pid"
+WATCH_UNIT=gamecove-thermald-watch
+is_watcher() {
+	[ -r "/proc/$1/cmdline" ] && tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null | grep -q "power-tune/fix.sh thermald-watch"
+}
+# systemd is running here (the fake root of a test only when it says so): the watcher becomes a
+# transient system unit, outside the session's cgroup, so ending the session can't take it down
+use_systemd_run() { [ -d "$ROOT/run/systemd/system" ] && command -v systemd-run >/dev/null 2>&1; }
+
+stop_watch() {
+	# a PID file from before (it was under /var/lib and survived reboots): dropped, never signalled
+	rm -f "$STATE/thermald-watch"
+	if [ -f "$WATCH_PID" ]; then
+		old="$(cat "$WATCH_PID" 2>/dev/null)"
+		case "$old" in "" | *[!0-9]*) ;; *) if is_watcher "$old"; then kill "$old" 2>/dev/null || true; fi ;; esac
+		rm -f "$WATCH_PID"
+	fi
+	if use_systemd_run; then
+		systemctl stop "$WATCH_UNIT.service" >/dev/null 2>&1 || true
+		systemctl reset-failed "$WATCH_UNIT.service" >/dev/null 2>&1 || true
+	fi
 	return 0
 }
 
 start_watch() {
 	# tests of other parts (a fake root) may switch it off; never on a real system
 	[ -n "$ROOT" ] && [ "${GAMECOVE_THERMALD_WATCH:-}" = off ] && return 0
-	w="$STATE/thermald-watch"
 	# one watcher, for the latest hold (and its caller)
-	if [ -f "$w" ]; then
-		old="$(cat "$w" 2>/dev/null)"
-		case "$old" in "" | *[!0-9]*) ;; *) kill "$old" 2>/dev/null || true ;; esac
+	stop_watch
+	uid="${PKEXEC_UID:-}"
+	case "$uid" in *[!0-9]*) uid="" ;; esac
+	if use_systemd_run && systemd-run --unit="$WATCH_UNIT" --collect --quiet \
+		--description="GameCove: start thermald again once no game runs" \
+		sh "$HERE/fix.sh" thermald-watch "$uid" </dev/null >/dev/null 2>&1; then
+		return 0
 	fi
 	if command -v setsid >/dev/null 2>&1; then
-		setsid sh "$HERE/fix.sh" thermald-watch "${PKEXEC_UID:-}" </dev/null >/dev/null 2>&1 &
+		setsid sh "$HERE/fix.sh" thermald-watch "$uid" </dev/null >/dev/null 2>&1 &
 	else
-		nohup sh "$HERE/fix.sh" thermald-watch "${PKEXEC_UID:-}" </dev/null >/dev/null 2>&1 &
+		nohup sh "$HERE/fix.sh" thermald-watch "$uid" </dev/null >/dev/null 2>&1 &
 	fi
-	echo "$!" >"$w"
+	mkdir -p "${WATCH_PID%/*}"
+	echo "$!" >"$WATCH_PID"
 }
 
 set_thermald() {
@@ -538,7 +609,7 @@ restore_key() {
 		boost-intel) wr "$CPU/intel_pstate/no_turbo" "$v" ;;
 		boost) wr "$CPU/cpufreq/boost" "$v" ;;
 		smt) wr "$CPU/smt/control" "$v" ;;
-		cores) set_cores "$v" ;;
+		cores) is_uint "$v" && [ "$v" -ge 1 ] && online_cores "$v" ;;
 		epp-*) wr "$CPU/cpu${k#epp-}/cpufreq/energy_performance_preference" "$v" ;;
 		gov-*) for p in $(policies); do if [ "gov-${p##*/}" = "$k" ]; then wr "$p/scaling_governor" "$v" || return 1; fi; done ;;
 		cpumax-intel) wr "$CPU/intel_pstate/max_perf_pct" "$v" ;;
@@ -562,26 +633,47 @@ restore_key() {
 }
 
 do_restore() {
-	left=0
 	if [ -f "$STATE/device" ] && [ "$(cat "$STATE/device")" != "$(this_device)" ]; then
 		# read on another handheld (same drive): never written here
 		rm -rf "$ORIG"
 		log_change "dropped values recorded on $(cat "$STATE/device")"
 	fi
 	rm -f "$STATE/device"
+	failed=""
 	if [ -d "$ORIG" ]; then
-		# floors before ceilings come back in the order that keeps min <= max: ceilings first
-		for f in "$ORIG/gpumax" "$ORIG/gpumin" "$ORIG"/*; do
+		# Best effort per key (review M2): a refused key is reported and kept for the next restore,
+		# the others still come back. Order matters:
+		#  - smt before cores: the kernel won't bring an SMT sibling online while SMT is off;
+		#  - GPU ceiling before floor, so min <= max holds at every step;
+		#  - firmware power limits vs platform profile as Handheld Daemon does it
+		#    (hhd adjustor/drivers): Lenovo takes PPT values only in its "custom" profile, so they
+		#    go back while it is still custom and the profile last; ASUS sets the thermal profile
+		#    first and the PPT values after it.
+		lenovo=""
+		for d in "$ROOT"/sys/class/firmware-attributes/lenovo-wmi-other*; do [ -d "$d" ] && lenovo=1; done
+		if [ -n "$lenovo" ]; then
+			order="smt cores gpumax gpumin sppt fppt"; last="platform"
+		else
+			order="smt cores gpumax gpumin platform sppt fppt"; last=""
+		fi
+		keys="$order"
+		for f in "$ORIG"/*; do
 			[ -f "$f" ] || continue
-			k="${f##*/}"
-			if restore_key "$k"; then rm -f "$ORIG/$k"; else left=1; printf 'power-tune: could not put back %s\n' "$k" >&2; fi
-			[ "$left" = 0 ] || [ -f "$STATE/device" ] || printf '%s\n' "$(this_device)" > "$STATE/device"
+			case " $order $last " in *" ${f##*/} "*) ;; *) keys="$keys ${f##*/}" ;; esac
 		done
+		for k in $keys $last; do
+			[ -f "$ORIG/$k" ] || continue
+			if restore_key "$k"; then rm -f "$ORIG/$k"; else failed="$failed $k"; printf 'power-tune: could not put back %s\n' "$k" >&2; fi
+		done
+		[ -z "$failed" ] || [ -f "$STATE/device" ] || printf '%s\n' "$(this_device)" > "$STATE/device"
 		rmdir "$ORIG" 2>/dev/null || true
 	fi
-	set_thermald release || left=1
-	log_change "restore (left=$left)"
-	[ "$left" = 0 ] || die 1 "some values could not be put back; run restore again"
+	# always, even when a key above failed
+	if [ -f "$STATE/thermald-held" ]; then
+		if systemctl start thermald.service; then rm -f "$STATE/thermald-held"; else failed="$failed thermald"; fi
+	fi
+	log_change "restore${failed:+ (could not put back:$failed)}"
+	[ -z "$failed" ] || die 1 "could not put back:$failed; run restore again"
 }
 
 do_set() {

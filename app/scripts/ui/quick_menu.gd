@@ -65,6 +65,9 @@ const SUPPORT_TEXT := {
 	"generic": "Generic: device-specific settings stay hidden until someone tests this device.",
 }
 const SESSION_SELECT := "/usr/bin/gamecove-session-select"
+## Review M8: a session switch that hasn't taken GameCove away after this long gave up or hung;
+## the controller is handed back to GameCove's UI so Guide works again.
+const SWITCH_REARM_S := 20.0
 
 var device: Object
 var power: Object
@@ -105,6 +108,8 @@ var _steam_armed := false
 var _steam_button: Button
 var _desktop_armed := false
 var _desktop_button: Button
+var _switch_rearm := false    # intercept was on before the switch released it
+var _switch_gen := 0          # one per switch, so a late timer can't touch the next one
 var _exit_armed := false
 var _exit_button: Button
 var _reset_armed := false
@@ -1042,18 +1047,64 @@ func _on_steam_pressed() -> void:
 		return
 	_steam_armed = false
 	_steam_button.text = Texts.STEAM_TITLE
-	# InterceptMode 0 on every device first (gamecove-session-select does it too)
+	_begin_switch("steam")
+
+
+## Hands the controller back (InterceptMode 0 on every device; gamecove-session-select does it
+## too), then runs the switch off the main thread. If it worked, the session logs out and
+## GameCove goes. If it fails, its reason shows and GameCove takes the controller again; if
+## GameCove is still here SWITCH_REARM_S later, the same (review M8).
+func _begin_switch(target: String) -> void:
+	_switch_gen += 1
+	_switch_rearm = controller != null and controller.has_method("intercept_state") \
+		and bool(controller.intercept_state().get("active", false))
 	if controller != null and controller.has_method("release_intercept"):
-		controller.release_intercept(_spawn_steam_session)
+		controller.release_intercept(_run_switch.bind(target, _switch_gen))
 	else:
-		_spawn_steam_session()
+		_run_switch(target, _switch_gen)
 
 
-func _spawn_steam_session() -> void:
-	if commands.spawn(SESSION_SELECT, PackedStringArray(["steam"])):
-		status_label.text = Texts.STEAM_SWITCHING
-	else:
-		status_label.text = Texts.STEAM_FAILED
+func _run_switch(target: String, gen: int) -> void:
+	if gen != _switch_gen:
+		return
+	if not commands.finished.is_connected(_on_switch_finished):
+		commands.finished.connect(_on_switch_finished)
+	if commands.busy("session_switch"):
+		return
+	status_label.text = Texts.STEAM_SWITCHING if target == "steam" else Texts.DESKTOP_SWITCHING
+	if not commands.run("session_switch", SESSION_SELECT, PackedStringArray([target])):
+		return
+	if is_inside_tree() and gen == _switch_gen:
+		get_tree().create_timer(SWITCH_REARM_S).timeout.connect(switch_timed_out.bind(gen))
+
+
+## SWITCH_REARM_S after a switch started and GameCove is still here: give the controller back.
+func switch_timed_out(gen: int) -> void:
+	if gen != _switch_gen:
+		return
+	_switch_gen += 1
+	status_label.text = Texts.SWITCH_STUCK
+	_rearm_after_switch()
+
+
+func _on_switch_finished(id: String, code: int, output: String) -> void:
+	if id != "session_switch" or code == 0:
+		return   # 0: the logout is on its way (the timer covers a switch that never came)
+	var reason := BgCommand.error_line(output)
+	if reason == "":
+		var lines := output.strip_edges().split("\n", false)
+		reason = lines[-1].strip_edges().trim_prefix("gamecove-session-select: ") if not lines.is_empty() else ""
+	if reason == "" and (code == 127 or not FileAccess.file_exists(SESSION_SELECT)):
+		reason = "gamecove-session-select isn't installed"
+	status_label.text = Texts.SWITCH_FAILED % reason if reason != "" else Texts.SWITCH_FAILED_NO_REASON
+	_switch_gen += 1   # the timer has nothing left to do
+	_rearm_after_switch()
+
+
+func _rearm_after_switch() -> void:
+	if _switch_rearm and controller != null and controller.has_method("start_intercept"):
+		controller.start_intercept()
+	_switch_rearm = false
 
 
 func _on_desktop_pressed() -> void:
@@ -1064,17 +1115,7 @@ func _on_desktop_pressed() -> void:
 		return
 	_desktop_armed = false
 	_desktop_button.text = Texts.DESKTOP_TITLE
-	if controller != null and controller.has_method("release_intercept"):
-		controller.release_intercept(_spawn_desktop_session)
-	else:
-		_spawn_desktop_session()
-
-
-func _spawn_desktop_session() -> void:
-	if commands.spawn(SESSION_SELECT, PackedStringArray(["desktop"])):
-		status_label.text = Texts.DESKTOP_SWITCHING
-	else:
-		status_label.text = Texts.DESKTOP_FAILED
+	_begin_switch("desktop")
 
 
 func _disarm_desktop() -> void:

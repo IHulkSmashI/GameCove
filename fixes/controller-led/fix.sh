@@ -41,12 +41,27 @@ set -eu
 
 ROOT="${GAMECOVE_ROOT:-}"
 STATE="$ROOT/var/lib/gamecove/fixes/controller-led"
+# shellcheck source=fixes/lib/logcap.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/logcap.sh"
+# shellcheck source=fixes/lib/lockdir.sh
+. "$(cd "$(dirname "$0")/../lib" && pwd)/lockdir.sh"
 LEDS="$ROOT/sys/class/leds"
 
 die() { printf 'controller-led: %s\n' "$2" >&2; exit "$1"; }
 
+# One run at a time (review L7: two first calls raced on original.tmp), like the other fixes' locks.
+LED_LOCK=""
+led_lock() {
+	mkdir -p "$ROOT/run" 2>/dev/null || true
+	lockdir_take "$ROOT/run/gamecove-controller-led.lock" 30 || die 1 "another run is busy"
+	LED_LOCK="$ROOT/run/gamecove-controller-led.lock"
+}
+trap '[ -z "$LED_LOCK" ] || lockdir_drop "$LED_LOCK"' EXIT
+trap 'exit 1' INT TERM HUP
+
 log_change() {
 	mkdir -p "$STATE"
+	log_cap "$STATE/changes.log"
 	printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$STATE/changes.log"
 }
 
@@ -237,10 +252,11 @@ do_set() {
 	zone="$1"; hex="$2"; pct="$3"; eff="${4:-}"; spd="${5:-}"
 	case "$zone" in all|[0-9]) ;; *) die 2 "zone must be all or 0-9" ;; esac
 	case "$hex" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;; *) die 2 "colour must be rrggbb (lower case)" ;; esac
-	case "$pct" in ''|*[!0-9]*) die 2 "percent must be 0-100" ;; esac
+	# no leading zeros: $((...)) would read "077" as octal (review M1)
+	case "$pct" in ''|*[!0-9]*|0?*) die 2 "percent must be 0-100" ;; esac
 	[ "$pct" -le 100 ] || die 2 "percent must be 0-100"
 	case "$eff" in ''|*[!a-z]*) [ -z "$eff" ] || die 2 "bad effect name" ;; esac
-	case "$spd" in ''|*[!0-9]*) [ -z "$spd" ] || die 2 "speed must be 0-100" ;; esac
+	case "$spd" in ''|*[!0-9]*|0?*) [ -z "$spd" ] || die 2 "speed must be 0-100" ;; esac
 	[ -z "$spd" ] || [ "$spd" -le 100 ] || die 2 "speed must be 0-100"
 	targets=""
 	i=0
@@ -292,6 +308,9 @@ do_remove() {
 	echo "restored"
 }
 
+case "${1:-}" in
+	install | set | remove) led_lock ;;
+esac
 case "${1:-}" in
 	install) [ -n "$(nodes)" ] || die 2 "no RGB LED node on this kernel"; do_install; echo "installed=yes" ;;
 	set) [ $# -eq 2 ] || die 2 "usage: fix.sh set <spec>|off"; do_set "$2" ;;

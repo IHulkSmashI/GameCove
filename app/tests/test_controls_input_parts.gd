@@ -47,12 +47,24 @@ func test_hhd_socket_first_then_tcp_with_token_and_port() -> void:
 	Fakes.write(root + "/home/.config/hhd/state.yml", "hhd:\n  http:\n    enable: true\n    port: 5400\n")
 	var r: RefCounted = Runner.new()
 	r.responses["curl -sS -m 2 -X GET -w \n%{http_code} --unix-socket /run/hhd/api http://localhost/api/v1/state"] = {"code": 7, "out": ""}
-	r.responses["curl -sS -m 2 -X GET -w \n%{http_code} -H Authorization: Bearer s3cret http://127.0.0.1:5400/api/v1/state"] = {"code": 0, "out": "{\"controllers\":{\"claw\":{}}}\n200"}
+	var hdr := HhdClient.auth_header_path()
+	var seen := {}
+	r.handler = func(cmd: String):
+		if cmd == "curl -sS -m 2 -X GET -w \n%{http_code} -H @" + hdr + " http://127.0.0.1:5400/api/v1/state":
+			seen["text"] = FileAccess.get_file_as_string(hdr)
+			seen["mode"] = FileAccess.get_unix_permissions(hdr) & 511
+			return {"code": 0, "out": "{\"controllers\":{\"claw\":{}}}\n200"}
+		return null
 	var h := HhdClient.new(r, root, root + "/home")
 	eq(h.port(), 5400, "port from state.yml")
 	var st: Variant = h.get_state()
 	eq(HhdClient.controller_key(st), "claw")
 	eq(r.calls.size(), 2, "socket tried, then TCP")
+	# review L32: the token is never on curl's command line; it's in a 0600 file that's gone afterwards
+	ok(not r.calls.any(func(c): return c.contains("s3cret")), "no token in argv")
+	eq(seen.get("text", ""), "Authorization: Bearer s3cret\n", "header file holds the token during the call")
+	eq(seen.get("mode", -1), 384, "only this user can read it")
+	ok(not FileAccess.file_exists(hdr), "removed after the call")
 	r.responses["curl -sS -m 2 -X GET -w \n%{http_code} --unix-socket /run/hhd/api http://localhost/api/v1/state"] = {"code": 0, "out": "Unauthorized\n401"}
 	eq(h.get_state(), null, "a non-200 answer is no state")
 

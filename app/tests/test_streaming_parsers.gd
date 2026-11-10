@@ -222,3 +222,24 @@ func test_host_api() -> void:
 	eq(sp, {"ok": true, "code": 200, "body": "<root/>", "ms": 4}, "split")
 	var down := HostApi.split({"code": 7, "out": "curl: (7) Failed to connect\n@@gamecove 000 0.000000"})
 	eq([down["ok"], down["code"], down["ms"]], [false, 0, -1], "no answer")
+
+
+## review M27: GameStream HTTPS is pinned to the certificate Moonlight stored when it paired
+func test_host_api_pins_the_paired_certificate() -> void:
+	var conf := Moonlight.parse_conf(_f("Moonlight.conf"))
+	var pem := str(conf["hosts"][0]["srvcert"])
+	ok(pem.begins_with("-----BEGIN CERTIFICATE-----"), "srvcert read from Moonlight.conf")
+	# openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64
+	eq(HostApi.pin_for_pem(pem), "sha256//B3MbKcgJf0lgDvPJd+V8AxkMCntC8aoBkmuyCP+YXhg=", "SPKI sha256 like curl and openssl")
+	eq(HostApi.pin_for_pem(""), "", "no certificate: no pin")
+	eq(HostApi.pin_for_pem("-----BEGIN CERTIFICATE-----\nMIIC\n-----END CERTIFICATE-----"), "", "truncated: no pin")
+	var pin := HostApi.pin_for_pem(pem)
+	for cmd in [HostApi.serverinfo_https("10.0.0.2", 47984, {"cert": "c", "key": "k", "pin": pin}),
+			HostApi.applist("10.0.0.2", 47984, {"cert": "c", "key": "k", "pin": pin}),
+			HostApi.appasset("10.0.0.2", 47984, {"cert": "c", "key": "k", "pin": pin}, 5, "/tmp/x.png"),
+			HostApi.sleep_pc("10.0.0.2", 47984, {"cert": "c", "key": "k", "pin": pin})]:
+		var i: int = cmd.find("--pinnedpubkey")
+		ok(i > 0 and cmd[i + 1] == pin, "every HTTPS call carries the pin: " + str(cmd[cmd.size() - 1]))
+	var nopin := HostApi.applist("10.0.0.2", 47984, {"cert": "c", "key": "k"})
+	var j: int = nopin.find("--pinnedpubkey")
+	ok(j > 0 and nopin[j + 1] != pin and str(nopin[j + 1]).begins_with("sha256//AAAA"), "no pin: fails closed")

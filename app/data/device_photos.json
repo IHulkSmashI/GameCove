@@ -1,5 +1,5 @@
 {
- "_about": "Freely licensed photos of each handheld (CC0, public domain, CC BY, CC BY-SA only). Default source is Wikimedia Commons (\"file\"); \"source\": \"openverse\" with \"openverse_id\" takes a Flickr photo through Openverse's metadata. The device-photos workflow re-checks every license on each run. family_of: this device reuses another model's photo because the two look the same from the front. _manual: free-license candidates that can't be fetched or re-checked automatically (YouTube frames); see docs/DEVICES.md. maker_image: for a handheld with no free photo, the maker's own official product image, BY LINK ONLY: url (on the maker's own site or image CDN), page_url (the maker's product page it was read from), maker, checked (date the link was last confirmed). GameCove never copies these images into the repo or the device-photos release; the app downloads that one image from the maker on the user's device and credits \"Image: <Maker>\". _makers lists, per maker, the only image URL prefixes and product-page domains accepted (app, build and weekly link check all read it). representative: a family row ('<maker> (unknown model)', GameCove knows the maker but not the model) shows the picture of that maker's most common current model, captioned as not identified.",
+ "_about": "Freely licensed photos of each handheld (CC0, public domain, CC BY, CC BY-SA only). Default source is Wikimedia Commons (\"file\"); \"source\": \"openverse\" with \"openverse_id\" takes a Flickr photo through Openverse's metadata. The device-photos workflow re-checks every license on each run. family_of: this device reuses another model's photo because the two look the same from the front. _manual: free-license candidates that can't be fetched or re-checked automatically (YouTube frames); see docs/DEVICES.md. maker_image: for a handheld with no free photo, the maker's own official product image, BY LINK ONLY: url (on the maker's own site or image CDN), page_url (the maker's product page it was read from), maker, checked (date the link was last confirmed). GameCove never copies these images into the repo or the device-photos release; the app downloads that one image from the maker on the user's device and credits \"Image: <Maker>\". _makers lists, per maker, the only image URL prefixes and product-page domains accepted (app, build and weekly link check all read it). bundled: a picture shipped inside the app (res://assets/device_photos/<id>.webp, PNG or JPEG also accepted), shown offline with no request and no credit line; it wins over every other source and isn't affected by the 'Show maker photos' switch. Swap it by replacing the file. representative: a family row ('<maker> (unknown model)', GameCove knows the maker but not the model) shows the picture of that maker's most common current model, captioned as not identified.",
  "_makers": {
   "Lenovo": {
    "image_prefixes": [
@@ -58,22 +58,23 @@
    "image_prefixes": [
     "https://images.acer.com/is/image/acer/",
     "https://static2-ecemea.acer.com/media/catalog/product/",
-    "https://cdn.assets.prezly.com/b96853cc-de7c-474d-9e1b-e3e4bdff2e01/",
-    "https://cdn.assets.prezly.com/7aa9da80-c326-4ca1-ba33-40ba7d75f9db/"
+    "https://cdn.assets.prezly.com/b96853cc-de7c-474d-9e1b-e3e4bdff2e01/"
    ],
    "page_domains": [
     "acer.com"
    ],
-   "note": "Acer's newsroom (news.acer.com) serves its press images from Prezly; only the two Nitro Blaze 8 / 11 product renders are accepted, by their asset folders"
+   "note": "Acer's own image server images.acer.com (acer.com product pages) and the EMEA store's catalogue; Acer's newsroom (news.acer.com) serves its press images from Prezly, where only the Nitro Blaze 8 product render is accepted, by its asset folder"
   },
   "GPD": {
    "image_prefixes": [
-    "https://img.website.xin/contents/sitefiles3601/18006016/images/"
+    "https://img.website.xin/contents/sitefiles3601/18006016/images/",
+    "https://cdn.images.indiegogo.com/projectgallery/projects/18430/"
    ],
    "page_domains": [
-    "gpd.hk"
+    "gpd.hk",
+    "indiegogo.com"
    ],
-   "note": "GPD's own site gpd.hk serves its pictures from its site builder's CDN; only GPD's site folder (sitefiles3601/18006016) is accepted"
+   "note": "GPD's own site gpd.hk serves its pictures from its site builder's CDN; only GPD's site folder (sitefiles3601/18006016) is accepted. Also GPD's own crowdfunding campaign on Indiegogo (run by GPD HK, linked from gpd.hk's distributors page): only that campaign's gallery folder (projectgallery/projects/18430), which holds GPD's studio photos of the WIN Mini 2025"
   },
   "ZOTAC": {
    "image_prefixes": [
@@ -574,45 +575,42 @@
  },
  "onexplayer-g1-amd": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/ONEXPLAYERG1Ultimategaminghandheldlaptop-2.jpg?v=1763625246",
-   "page_url": "https://onexplayerstore.com/products/onexplayer-g1-amd-ryzen-ai-9-hx-370-ultimate-gaming-handheld-console-versatile-laptop",
+   "url": "https://onexplayer.com/uploadFiles/0cfd943b11bb828d690df00d79501f7d.webp",
+   "page_url": "https://www.onexplayer.com/product/G1",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "view": "best-available",
-   "view_note": "No head-on G1 image on onexplayer.com or onexplayerstore.com; this open-clamshell store shot is the cleanest."
+   "note": "Open, straight-on render from the official G1 page (game library on screen, dimmed game art behind).",
+   "view": "front"
   }
  },
  "onexplayer-3": {
   "maker_image": {
-   "url": "https://onexplayer.com/uploadFiles/1786085541450-1.webp",
+   "url": "https://onexplayer.com/uploadFiles/1786088354836-%E8%A7%84%E6%A0%BC%E8%AF%A6%E6%83%85.webp",
    "page_url": "https://www.onexplayer.com/product/ONEXPLAYER%203",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "The store's images are text-heavy promo cards; this is the official site's front view.",
-   "view": "best-available",
-   "view_note": "No flat head-on image of the OneXPlayer 3 exists on onexplayer.com, onexplayerstore.com or the maker's Amazon listing (all hands, angles or promo cards); this is the official front view."
+   "note": "Head-on front render from the official product page's spec-details section (black background, device right of centre).",
+   "view": "front"
   }
  },
  "onexplayer-x2-mini": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/ONEXPLAYER_X2_Mini_with_Intel_Arc_G3_Extreme_8.8_OLED_3-in-1_Gaming_Handheld_3.png?v=1783316564",
-   "page_url": "https://onexplayerstore.com/products/onexplayer-x2-mini-with-intel%C2%AE-arc%E2%84%A2-g3-extreme-8-8-oled-3-in-1-gaming-handheld",
+   "url": "https://onexplayer.com/uploadFiles/1786081041334-%E8%A7%84%E6%A0%BC%E8%AF%A6%E6%83%85.webp",
+   "page_url": "https://www.onexplayer.com/product/X2%20Mini",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "Replaces the 'Page_1' promo card (big title text, hands).",
-   "view": "best-available",
-   "view_note": "Same body as the OneXPlayer 3; every official image (site, store, Amazon) shows hands or an angle. Front view held in hands."
+   "note": "Head-on front render from the official X2 Mini page's spec-details section.",
+   "view": "front"
   }
  },
  "onexplayer-x2-mini-pro": {
   "maker_image": {
-   "url": "https://onexplayer.com/uploadFiles/4%E5%85%A8%E6%96%B0%E5%8F%AF%E6%8B%86%E5%8D%B8%20%E5%88%86%E4%BD%93%E5%BC%8F%E6%89%8B%E6%9F%84-%E7%82%B9%E5%87%BB_.webp",
+   "url": "https://onexplayer.com/uploadFiles/%E8%A7%84%E6%A0%BC%E8%AF%A6%E6%83%85_.webp",
    "page_url": "https://www.onexplayer.com/product/X2%20Mini%20Pro",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "note": "Replaces the 'Page_1' promo card; every store image of the Pro is a text card.",
-   "view": "best-available",
-   "view_note": "Same body as the OneXPlayer 3; every official image shows hands or an angle. Front view held in hands."
+   "note": "Head-on front render from the official X2 Mini Pro page's spec-details section.",
+   "view": "front"
   }
  },
  "onexplayer-onexfly-apex": {
@@ -729,25 +727,18 @@
   }
  },
  "acer-nitro-blaze-8": {
-  "maker_image": {
-   "url": "https://cdn.assets.prezly.com/b96853cc-de7c-474d-9e1b-e3e4bdff2e01/-/resize/1600/Nitro-Blaze-8-GN782U-01.png",
-   "page_url": "https://news.acer.com/acer-expands-handheld-gaming-portfolio-with-new-nitro-blaze-8-and-nitro-blaze-11",
-   "maker": "Acer",
-   "checked": "2026-11-09",
-   "note": "Replaces a 375 x 210 promo banner.",
-   "view": "best-available",
-   "view_note": "Acer publishes only tilted renders of the Blaze 8 (news.acer.com, acer.com); not sold on Acer's store or Amazon US."
-  }
+  "bundled": "res://assets/device_photos/acer-nitro-blaze-8.webp",
+  "view": "front",
+  "note": "Flat head-on 2400 x 1350 front view made by the owner from Acer's official render (no credit line needed, owner's decision). Shipped in the app; replace the file to swap it. Was a maker_image by link: https://cdn.assets.prezly.com/b96853cc-de7c-474d-9e1b-e3e4bdff2e01/-/resize/1600/Nitro-Blaze-8-GN782U-01.png (from https://news.acer.com/acer-expands-handheld-gaming-portfolio-with-new-nitro-blaze-8-and-nitro-blaze-11, checked 2026-11-09), a tilted render."
  },
  "acer-nitro-blaze-11": {
   "maker_image": {
-   "url": "https://cdn.assets.prezly.com/7aa9da80-c326-4ca1-ba33-40ba7d75f9db/-/resize/1600/Nitro-Blaze-11-GN7112U-SA01_high.png",
-   "page_url": "https://news.acer.com/acer-expands-handheld-gaming-portfolio-with-new-nitro-blaze-8-and-nitro-blaze-11",
+   "url": "https://images.acer.com/is/image/acer/acer-nitro-blaze-11-gn7112u-wp-logo-black-01?wid=1600",
+   "page_url": "https://www.acer.com/nitro-blaze-11",
    "maker": "Acer",
    "checked": "2026-11-09",
-   "note": "Replaces a 375 x 210 promo banner; shown with its controllers detached.",
-   "view": "best-available",
-   "view_note": "Acer publishes only tilted renders of the Blaze 11 (news.acer.com, acer.com); not sold on Acer's store or Amazon US."
+   "note": "Head-on front render from acer.com's Nitro Blaze 11 page.",
+   "view": "front"
   }
  },
  "lenovo-legion-go-2-z2": {
@@ -782,13 +773,13 @@
  },
  "onexplayer-g1-intel": {
   "maker_image": {
-   "url": "https://cdn.shopify.com/s/files/1/0557/8535/7492/files/ONEXPLAYERG1Ultimategaminghandheldlaptop-2.jpg?v=1763625246",
-   "page_url": "https://onexplayerstore.com/products/onexplayer-g1-amd-ryzen-ai-9-hx-370-ultimate-gaming-handheld-console-versatile-laptop",
+   "url": "https://onexplayer.com/uploadFiles/0cfd943b11bb828d690df00d79501f7d.webp",
+   "page_url": "https://www.onexplayer.com/product/G1",
    "maker": "OneXPlayer",
    "checked": "2026-11-09",
-   "family_of": "onexplayer-g1-amd",
-   "view": "best-available",
-   "view_note": "Same body as the G1 AMD; see there."
+   "note": "Same body as the G1 AMD; the official G1 page covers both.",
+   "view": "front",
+   "family_of": "onexplayer-g1-amd"
   }
  },
  "gpd-win-4": {
@@ -803,13 +794,12 @@
  },
  "gpd-win-mini": {
   "maker_image": {
-   "url": "https://img.website.xin/contents/sitefiles3601/18006016/images/10179576.png",
-   "page_url": "https://www.gpd.hk/gpdwinmini2025",
+   "url": "https://cdn.images.indiegogo.com/projectgallery/projects/18430/5a4bef05-d874-494f-880c-4f21047d5273.png",
+   "page_url": "https://www.indiegogo.com/projects/gpd-win-mini-2025-120hz-vrr-landscape-game-console",
    "maker": "GPD",
    "checked": "2026-11-09",
-   "note": "Open, from the front; the WIN Mini 2024 and 2025 share this body.",
-   "view": "best-available",
-   "view_note": "gpd.hk's WIN Mini pages only show the device held in hands or angled; this is its front view."
+   "note": "Open, straight-on studio photo (white WIN Mini 2025 with its optional grip) from GPD's own Indiegogo campaign gallery; the WIN Mini 2024 and 2025 share this body.",
+   "view": "front"
   }
  },
  "gpd-win-max-2": {

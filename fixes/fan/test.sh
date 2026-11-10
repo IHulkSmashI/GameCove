@@ -25,7 +25,7 @@ sh "$FIX" status | tail -n 1 | grep -q '^state=off$' || fail "status ends state=
 sh "$FIX" set quiet >/dev/null || fail "set quiet"
 sh "$FIX" status | tail -n 1 | grep -q '^state=on$' || fail "status ends state=on after set"
 for n in 1 2; do
-	[ "$(table $n)" = "0 102 102 115 153 191" ] || fail "fan $n quiet table ($(table $n))"
+	[ "$(table $n)" = "0 102 102 115 153 255" ] || fail "fan $n quiet table (full speed at the hottest point, review L6) ($(table $n))"
 	[ "$(cat "$H/pwm${n}_enable")" = "1" ] || fail "fan $n table mode"
 	[ "$(cat "$H/pwm${n}_auto_point3_temp")" = "70000" ] || fail "temperatures untouched"
 done
@@ -85,7 +85,7 @@ R="$(new_hw asus_custom_fan_curve 2)"; export GAMECOVE_ROOT="$R"; A="$R/sys/clas
 sh "$FIX" status | grep -q '^driver=asus_custom_fan_curve$' || fail "asus: driver in status"
 sh "$FIX" status | grep -q '^modes=quiet,auto,max$' || fail "asus: modes in status"
 sh "$FIX" set quiet >/dev/null || fail "asus: set quiet"
-[ "$(cat "$A/pwm2_auto_point1_pwm") $(cat "$A/pwm2_auto_point8_pwm")" = "5 191" ] || fail "asus: quiet duty"
+[ "$(cat "$A/pwm2_auto_point1_pwm") $(cat "$A/pwm2_auto_point8_pwm")" = "5 255" ] || fail "asus: quiet duty (full speed at 100 C, review L6)"
 [ "$(cat "$A/pwm1_auto_point1_temp") $(cat "$A/pwm1_auto_point8_temp")" = "30 100" ] || fail "asus: curve temperatures"
 [ "$(cat "$A/pwm1_enable")" = "1" ] || fail "asus: custom curve on"
 sh "$FIX" set max >/dev/null || fail "asus: set max"
@@ -153,6 +153,18 @@ set +e; sh "$FIX" set quiet 2>/dev/null; code=$?; set -e
 [ "$(cat "$M/pwm1_enable") $(cat "$M/pwm2_enable")" = "2 2" ] || fail "failed set leaves both fans on automatic ($(cat "$M/pwm1_enable") $(cat "$M/pwm2_enable"))"
 grep -q 'set failed' "$R/var/lib/gamecove/fixes/fan/changes.log" || fail "failed set logged"
 [ ! -e "$R/run/gamecove-fan.lock" ] || fail "lock released after a failure"
+# review L3: a lock left by a run killed with SIGKILL (its PID gone) is taken over; a live holder's is not
+sh -c 'exit 0' & dead=$!; wait "$dead" || true
+mkdir -p "$R/run/gamecove-fan.lock"; echo "$dead" > "$R/run/gamecove-fan.lock/pid"
+set +e; timeout 10 sh "$FIX" set auto >"$ROOT/l3.out" 2>&1; code=$?; set -e
+[ "$code" != "124" ] || fail "a dead holder's lock blocks the fix ($(cat "$ROOT/l3.out"))"
+[ ! -e "$R/run/gamecove-fan.lock" ] || fail "taken-over lock released"
+sleep 30 & live=$!
+mkdir -p "$R/run/gamecove-fan.lock"; echo "$live" > "$R/run/gamecove-fan.lock/pid"
+set +e; timeout 3 sh "$FIX" set auto >/dev/null 2>&1; code=$?; set -e
+[ "$code" = "124" ] || fail "a live holder's lock is respected (exit $code)"
+[ "$(cat "$R/run/gamecove-fan.lock/pid" 2>/dev/null)" = "$live" ] || fail "a run stopped while waiting leaves the holder's lock alone"
+kill "$live"; rm -r "$R/run/gamecove-fan.lock"
 rm -rf "$R"
 R="$(new_hw oxp_ec 1 manual)"; export GAMECOVE_ROOT="$R"; O="$R/sys/class/hwmon/hwmon3"
 rm -f "$O/pwm1"; mkdir "$O/pwm1"
@@ -212,11 +224,12 @@ sh "$FIX" set curve:0,40,50,60,80,100 >/dev/null || fail "msi: custom curve"
 [ "$(cat "$M/pwm2_auto_point3_pwm") $(cat "$M/pwm2_auto_point6_pwm") $(cat "$M/pwm1_enable")" = "128 255 1" ] || fail "msi: curve written to both fans"
 grep -q 'set curve 0 40 50 60 80 100' "$R/var/lib/gamecove/fixes/fan/changes.log" || fail "msi: curve logged"
 before="$(cat "$M/pwm1_auto_point5_pwm")"
-for bad in curve:0,40,40,45,59,75 curve:0,40,50,45,60,75 curve:0,40,40,45,60 curve:0,40,40,45,60,75,80 curve:0,40,40,45,60,101 curve:0,,40,45,60,75 curve:a,b curve:; do
+for bad in curve:0,40,40,45,59,75 curve:0,40,50,45,60,75 curve:0,40,40,45,60 curve:0,40,40,45,60,75,80 curve:0,40,40,45,60,101 curve:0,,40,45,60,75 curve:a,b curve: curve:0,040,040,045,060,075 curve:00,40,40,45,60,75; do
 	set +e; sh "$FIX" set "$bad" 2>/dev/null; code=$?; set -e
 	[ "$code" = "2" ] || fail "msi: $bad refused with exit 2 (got $code)"
 done
 [ "$(cat "$M/pwm1_auto_point5_pwm")" = "$before" ] || fail "msi: refused curves write nothing"
+# review M1: "040" passes [ -ge 40 ] but is octal 32 in $((...)); leading zeros are refused (above)
 sh "$FIX" set auto >/dev/null
 rm -rf "$R"
 R="$(new_hw asus_custom_fan_curve 2)"; export GAMECOVE_ROOT="$R"; A="$R/sys/class/hwmon/hwmon3"
@@ -226,5 +239,14 @@ rm -rf "$R"
 R="$(new_hw oxp_ec 1 manual)"; export GAMECOVE_ROOT="$R"
 set +e; sh "$FIX" set curve:50,60 2>/dev/null; code=$?; set -e
 [ "$code" = "2" ] || fail "oxp: no curve on a one-duty driver (got $code)"
+rm -rf "$R"
+# review L1: changes.log is capped (over GAMECOVE_LOG_MAX it becomes changes.log.1)
+R="$(new_hw msi_wmi_platform 2)"; export GAMECOVE_ROOT="$R"
+dmi "$R" "Micro-Star International Co., Ltd." "Claw A1M" "MS-1T41"
+for m in quiet max quiet max quiet max quiet max; do GAMECOVE_LOG_MAX=150 sh "$FIX" set "$m" >/dev/null || fail "log cap: set $m"; done
+L="$R/var/lib/gamecove/fixes/fan/changes.log"
+[ -f "$L.1" ] || fail "changes.log rotated to changes.log.1"
+[ "$(wc -c <"$L")" -le 300 ] || fail "changes.log stays near the cap ($(wc -c <"$L") bytes)"
+tail -n 1 "$L" | grep -q "set max" || fail "newest line kept after rotation"
 rm -rf "$R"
 echo "fan: all passed"

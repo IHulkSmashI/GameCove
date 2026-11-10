@@ -122,6 +122,9 @@ const LOADING_TITLE := "Finding deals…"
 const LOADING := "Checking the stores. This takes a few seconds the first time."
 const RETRY := "Try again"
 const CREDITS_LEAD := "Credits"
+## IGDB's attribution (review M24): wherever IGDB data (release dates, time to beat) shows, with a link.
+const IGDB_CREDIT := "Game data from IGDB"
+const IGDB_URL := "https://www.igdb.com"
 
 # Toasts
 const TOAST_IMPORTED := "Imported %d games from Steam"
