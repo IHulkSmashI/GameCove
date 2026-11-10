@@ -531,6 +531,12 @@ func _show_art(tex: Texture2D, animate: bool) -> void:
 	_refresh_glow_color()
 
 
+## Where a launch zoom from this tile starts: its card (as lifted) and cover.
+func launch_source() -> Dictionary:
+	var tex: Texture2D = art.texture if art != null and art.visible else null
+	return {"node": card, "tex": tex, "radius": float(ThemeLib.radius("m"))}
+
+
 ## The colour this tile's glow is tinted with: its art's colour when "match
 ## art" is on. The ring itself is always the theme accent.
 func accent() -> Color:

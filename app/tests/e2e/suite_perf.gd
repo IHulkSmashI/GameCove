@@ -36,6 +36,10 @@ func _bg() -> Node:
 
 
 func _behind_game() -> void:
+	# launched the way Play does it: the splash's zoom, shimmer and drift must stop
+	# the moment the game takes the screen
+	w.main.launch_overlay.show_for(GAME_A, Color.CYAN, {"node": w.main.home.frame})
+	await w.wait_s(0.2)
 	await start_game(GAME_A)
 	await w.idle()
 	await w.wait_s(1.5)
@@ -69,6 +73,9 @@ func test_behind_a_game_the_main_loop_is_near_idle() -> void:
 	eq(d["children"], [], "no child process of ours behind the game (here: no xprop watch, the fake polls)")
 	for f in _running_timers():
 		ok(ALLOWED_BEHIND_GAME.has(f), "a Timer in %s runs behind the game: stop it there (see ALLOWED_BEHIND_GAME)" % f)
+	var tweens: Array = w.tree.get_processed_tweens().filter(func(t): return t.is_valid() and t.is_running())
+	eq(tweens.size(), 0, "no Tween runs behind the game (animations stop when it takes the screen)")
+	ok(not w.main.launch_overlay.visible, "the launch splash is gone")
 	var perf: Node = w.autoload("PerfMonitor")
 	var pw: Node = power()
 	if perf != null and pw != null and not pw.autotune_active():

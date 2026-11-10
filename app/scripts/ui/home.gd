@@ -69,6 +69,8 @@ var spotlight_action: Dictionary = {}
 var frame: Panel
 ## Achievements and battery for the spotlight game (hidden without data).
 var progress: Control
+## Shelf ids already shown once (their first build eased in).
+var _revealed := {}
 
 
 func _init() -> void:
@@ -363,6 +365,13 @@ static func action_for(g: Dictionary) -> Dictionary:
 	return {"id": "install", "text": "Install", "icon": "download"}
 
 
+## Where Play's launch zoom starts: the hero card and its art, when it shows `g`.
+func launch_source(g: Dictionary) -> Dictionary:
+	if g.get("key", "") != spotlight_game.get("key", "-") or not frame.is_visible_in_tree():
+		return {}
+	return {"node": frame, "tex": hero_stage.front_texture(), "radius": float(ThemeLib.radius("xl"))}
+
+
 func _on_play() -> void:
 	if spotlight_action.get("id", "play") == "downloads":
 		downloads_requested.emit()
@@ -385,6 +394,7 @@ func _build_rows() -> void:
 	for c in _rows_box.get_children():
 		Kit.drop(_rows_box, c)
 	_shelves.clear()
+	var fresh := 0
 	for spec in shelf_specs(games, apps):
 		var s: VBoxContainer = Shelf.new()
 		s.setup(spec["id"], spec["title"], spec["games"])
@@ -397,6 +407,12 @@ func _build_rows() -> void:
 			s.tile_pressed.connect(func(g): open_requested.emit(g))
 		_rows_box.add_child(s)
 		_shelves.append(s)
+		# A shelf seen for the first time eases in (rebuilds after an install don't).
+		if not _revealed.has(s.id):
+			_revealed[s.id] = true
+			if is_visible_in_tree() and fresh < 4:
+				s.reveal(fresh * 0.06)
+				fresh += 1
 		if tile_hook.is_valid():
 			for t in s.tiles:
 				tile_hook.call(t)

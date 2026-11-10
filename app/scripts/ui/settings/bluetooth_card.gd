@@ -16,6 +16,7 @@ const Bluetooth := preload("res://scripts/system/bluetooth.gd")
 const ActionRow := preload("res://scripts/ui/settings/action_row.gd")
 const Sheet := preload("res://scripts/ui/games/sheet.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const Motion := preload("res://scripts/ui/motion.gd")
 const SKit := preload("res://scripts/ui/settings/kit.gd")
 const Proc := preload("res://scripts/system/proc.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
@@ -27,6 +28,9 @@ var sheet_host: Node
 ## Bluetooth.snapshot() from the last read; {} before the first one.
 var state: Dictionary = {}
 var rows := {}           # device path -> ActionRow
+## Devices paired or connected at the last build (newly on ones pop).
+var _was_on := {}
+var _had_state := false
 var find_row: VBoxContainer
 var sheet: Control
 var busy := ""           # "read" / "scan" / an action id, "" when idle
@@ -132,6 +136,7 @@ func _build() -> void:
 		rebuilt.emit()
 		return
 	var devs: Array = state.get("devices", [])
+	var now_on := {}
 	if not devs.any(func(d): return d["paired"]):
 		add_child(SKit.note(TX.BT_EMPTY, "info", "BtEmpty"))
 	for d in devs:
@@ -144,6 +149,14 @@ func _build() -> void:
 		r.pressed.connect(func(): open_device(dev))
 		add_child(r)
 		rows[d["path"]] = r
+		# Just paired or connected since the last read: the row pops.
+		var on: bool = d["connected"] or d["paired"]
+		if on and _had_state and not _was_on.has(d["path"]):
+			Motion.pop(r, 0.9, 0.36, 0.05)
+		if on:
+			now_on[d["path"]] = true
+	_was_on = now_on
+	_had_state = true
 	find_row = ActionRow.new()
 	find_row.setup("bt_find", TX.BT_FIND, TX.BT_FINDING if busy == "scan" else "", TX.BT_FIND_HINT, "search")
 	find_row.pressed.connect(find_new)

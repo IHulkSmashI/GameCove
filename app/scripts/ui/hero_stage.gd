@@ -147,6 +147,11 @@ func has_art() -> bool:
 	return layers[_front].texture != null
 
 
+## The art showing now (the launch zoom starts from it), null without.
+func front_texture() -> Texture2D:
+	return layers[_front].texture
+
+
 func _crossfade(tex: Texture2D, poster := false) -> void:
 	var old := layers[_front]
 	_front = 1 - _front
