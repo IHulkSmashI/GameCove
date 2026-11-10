@@ -61,7 +61,7 @@ static func _mp4(seconds: float, mdat_size := 5000) -> PackedByteArray:
 	mvhd.append_array(pad)
 	var data := PackedByteArray()
 	data.resize(mdat_size)
-	var out := _box("ftyp", "isom\u0000\u0000\u0002\u0000".to_ascii_buffer())
+	var out := _box("ftyp", "isom".to_ascii_buffer() + PackedByteArray([0, 0, 2, 0]))
 	out.append_array(_box("mdat", data))
 	out.append_array(_box("moov", _box("mvhd", mvhd)))
 	return out

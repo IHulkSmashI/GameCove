@@ -76,6 +76,14 @@ static func parse_strict_raw(text: String) -> Variant:
 	return {"tree": d, "raw": raw}
 
 
+## In front of an unquoted token in tokenize()'s raw_out. A bare quote: the text between a
+## quoted string's quotes can never start with one (the string would have ended there), so
+## the two can't be mixed up. It used to be a NUL, which Godot complains about each time the
+## script is compiled ("Unicode parsing error ... Unexpected NUL character", four lines on
+## every start).
+const UNQUOTED := "\""
+
+
 ## What the reader makes of the text between a string's quotes (see tokenize()).
 static func decode(raw: String) -> String:
 	if not "\\" in raw:
@@ -160,7 +168,7 @@ static func _object_strict(tokens: PackedStringArray, pos: Array[int], depth: in
 
 
 ## raw_out (when given) gets each token as written: a quoted string's text between its
-## quotes, undecoded; an unquoted one with a NUL in front (it can never be put back as
+## quotes, undecoded; an unquoted one with UNQUOTED in front (it can never be put back as
 ## written, since writers always quote); a brace as itself.
 static func tokenize(text: String, errors: Array = [], raw_out = null) -> PackedStringArray:
 	var out := PackedStringArray()
@@ -209,7 +217,7 @@ static func tokenize(text: String, errors: Array = [], raw_out = null) -> Packed
 				i += 1
 			out.append("\"" + s)
 			if raw_out != null:
-				raw_out.append(char(0) + s)
+				raw_out.append(UNQUOTED + s)
 	return out
 
 

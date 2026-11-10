@@ -61,6 +61,8 @@ jobs:
           # must also exit 0: a crash at shutdown (e.g. static caches outliving the renderer) fails here
           ./godot --headless --path app --quit-after 120 2>&1 | tee run.log
           ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log run.log
+          # a NUL in a script's text or constants (char(0)) logs this on every start
+          ! grep -F "Unicode parsing error" run.log
       - name: Device matrix fixtures (every devices.json row + generic AMD/Intel)
         run: |
           python3 -I tools/devicematrix/gen.py "$RUNNER_TEMP/devicematrix" --setups all
