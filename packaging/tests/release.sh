@@ -203,7 +203,8 @@ assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write
 brun = "\n".join(x.get("run", "") for x in b["steps"])
 prun = "\n".join(x.get("run", "") for x in p["steps"])
 assert "sign-blob" not in brun and "gh release upload" not in brun and "gh release create" not in brun, "build must not sign or publish"
-assert "pip install" not in prun and "tools/upscalers" not in prun and "pytest" not in prun, "publish must not run the builder or third-party packages"
+assert "pip install" not in prun and "tools/upscalers/build.py" not in prun and "pytest" not in prun, "publish must not run the builder or third-party packages"
+assert set(re.findall(r"tools/upscalers/[A-Za-z_./]+", prun)) <= {"tools/upscalers/check_plan.py"}, "publish runs only check_plan.py of ours"
 assert any(x.get("uses", "").startswith("actions/upload-artifact@") for x in b["steps"])
 assert any(x.get("uses", "").startswith("actions/download-artifact@") for x in p["steps"])
 steps = b["steps"] + p["steps"]
@@ -289,9 +290,59 @@ for sw in "Background lookups" "Look up deals and prices" "Show maker photos"; d
 	grep -q "$sw" "$REPO/README.md" && ok || bad "README must name the '$sw' switch"
 done
 
+# ------------------------------------------------------------- signing waits for the owner; scrapers can't write (review 2, problem 10)
+python3 -I - "$REPO/.github/workflows" >"$T/out" 2>&1 <<'PY' && ok || bad "workflow jobs: $(cat "$T/out")"
+import os, re, sys, yaml
+d = sys.argv[1]
+def load(n):
+    return yaml.safe_load(open(os.path.join(d, n)))
+# every job that can mint the signing identity runs in the "release" environment (required reviewer: the owner)
+for n in sorted(os.listdir(d)):
+    for name, j in load(n)["jobs"].items():
+        if (j.get("permissions") or {}).get("id-token") == "write":
+            assert j.get("environment") == "release", f"{n}:{name} signs without the release environment"
+assert load("release.yml")["jobs"]["release"].get("environment") == "release"
+for n in ("firmware.yml", "upscalers.yml"):
+    assert load(n)["jobs"]["publish"].get("environment") == "release", n
+# gamedb and device photos: scrapers in a read-only job, the release written only by a job that runs gh
+for n, scraper in (("gamedb.yml", "gamedb.build"), ("device-photos.yml", "tools/device_photos/build.py")):
+    doc = load(n)
+    assert doc.get("permissions") == {}, n + ": nothing at the top level"
+    b, p = doc["jobs"]["build"], doc["jobs"]["publish"]
+    assert b.get("permissions") == {"contents": "read"}, (n, b.get("permissions"))
+    assert b.get("if") == "github.ref == 'refs/heads/main'", n + ": build for publishing only on main"
+    assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write"}, (n, p.get("permissions"))
+    brun = "\n".join(s.get("run", "") for s in b["steps"])
+    prun = "\n".join(s.get("run", "") for s in p["steps"])
+    assert scraper in brun and "gh release upload" not in brun and "gh release create" not in brun, n + ": build must not publish"
+    assert "pip install" not in prun and scraper not in prun and "pytest" not in prun, n + ": publish must not run the scrapers"
+    assert not any(s.get("uses", "").startswith("actions/checkout@") for s in p["steps"]), n + ": publish needs no code"
+    assert any(s.get("uses", "").startswith("actions/upload-artifact@") for s in b["steps"])
+    assert any(s.get("uses", "").startswith("actions/download-artifact@") for s in p["steps"])
+    for j in doc["jobs"].values():
+        for s in j["steps"]:
+            if s.get("uses", "").startswith("actions/checkout@"):
+                assert s.get("with", {}).get("persist-credentials") is False, n + ": checkout keeps no token"
+            assert "${{" not in s.get("run", ""), n + ": ${{ }} inside run:"
+mk = load("device-photos.yml")["jobs"]["maker-links"]
+assert mk.get("permissions") == {"contents": "read", "issues": "write"}, mk.get("permissions")
+# the upscalers publish job re-checks the artifact with GameCove's own code before signing (review 2, problem 15)
+up = load("upscalers.yml")["jobs"]["publish"]
+runs = [s.get("run", "") for s in up["steps"]]
+chk = [i for i, r in enumerate(runs) if "tools/upscalers/check_plan.py dist" in r]
+sig = [i for i, r in enumerate(runs) if "cosign sign-blob" in r]
+assert chk and sig and chk[0] < sig[0], "check_plan.py must run before signing"
+# the tag job starts the release run on the full tag ref; a re-run never unpublishes a release (review 2, low 22)
+rel = load("release.yml")["jobs"]
+assert 'gh workflow run release.yml --ref "refs/tags/$tag"' in "\n".join(s.get("run", "") for s in rel["tag"]["steps"])
+pub = "\n".join(s.get("run", "") for s in rel["release"]["steps"])
+assert "--draft=true" not in pub and "isDraft" in pub, "a published release must not go back to draft"
+PY
+test -s "$REPO/docs/RELEASING.md" && grep -q "Release tags" "$REPO/docs/RELEASING.md" && grep -q "environment" "$REPO/docs/RELEASING.md" && ok || bad "docs/RELEASING.md must describe the tag ruleset and the release environment"
+
 # ------------------------------------------------------------- IGDB / ProtonDB attribution (M24)
 grep -q "Game data from IGDB" "$REPO/gamedb/NOTICE.md" && grep -q "ODbL" "$REPO/gamedb/NOTICE.md" && ok || bad "gamedb/NOTICE.md must credit IGDB and ProtonDB (ODbL)"
-grep -q "gh release upload gamedb NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && grep -q "gh release edit gamedb --notes-file NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && ok || bad "gamedb.yml must publish NOTICE.md as an asset and as the notes"
+grep -q "gh release upload gamedb dist/NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && grep -q "gh release edit gamedb --notes-file dist/NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && ok || bad "gamedb.yml must publish NOTICE.md as an asset and as the notes"
 grep -q "Game data from \[IGDB\](https://www.igdb.com)" "$REPO/README.md" && ok || bad "README must credit IGDB with a link"
 # ------------------------------------------------------------- no SteamGridDB key in any build
 # Users sign in to SteamGridDB in the Game art step; a key inside a public build could be pulled out.

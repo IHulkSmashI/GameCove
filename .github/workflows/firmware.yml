@@ -54,6 +54,8 @@ jobs:
 
   publish:
     needs: build
+    # waits for the owner's approval (the "release" environment's required reviewer; docs/RELEASING.md)
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

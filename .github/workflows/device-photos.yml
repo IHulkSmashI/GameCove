@@ -8,22 +8,29 @@ name: Device photos
 # app shows by link only and nobody copies) and keeps ONE issue listing the broken ones, so a
 # maker's site redesign is noticed within a week. Family rows ("<maker> (unknown model)") are
 # covered through their representative model's link and listed by name. No image is stored anywhere.
+#
+# Two jobs for the photos (review problem 2 pattern, as firmware.yml; review 2, problem 10): "build" runs the tests
+# and the builder (Commons, Openverse, pip packages) with a read-only token and hands dist/ over as an artifact; only
+# "publish", which runs nothing but gh and a standard-library check of the files, can write the release.
 
 on:
   schedule:
     - cron: "41 4 * * 1"
   workflow_dispatch:
 
-permissions:
-  contents: write
-  issues: write
+permissions: {}
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
@@ -32,14 +39,52 @@ jobs:
       - name: Last published manifest (keeps photos when Commons is briefly down)
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           mkdir -p prev
           gh release download device-photos --pattern manifest.json --dir prev 2>/dev/null || true
       - name: Build (licenses re-checked, ~1200 px WebP)
         run: python tools/device_photos/build.py --out dist --previous prev/manifest.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: device-photos-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # the rolling "device-photos" release
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: device-photos-dist
+          path: dist
+      - name: Check the files (Python's standard library only)
+        run: |
+          python3 -I - dist <<'PY'
+          import json, os, re, sys
+          d = sys.argv[1]
+          names = sorted(os.listdir(d))
+          assert "manifest.json" in names, names
+          json.load(open(os.path.join(d, "manifest.json"), encoding="utf-8"))
+          for n in names:
+              p = os.path.join(d, n)
+              assert os.path.isfile(p) and not os.path.islink(p), n
+              if n == "manifest.json":
+                  continue
+              assert re.fullmatch(r"[a-z0-9_][a-z0-9._-]{0,99}\.webp", n), "unexpected file: " + n
+              head = open(p, "rb").read(12)
+              assert head[:4] == b"RIFF" and head[8:12] == b"WEBP", n + " isn't a WebP"
+              assert os.path.getsize(p) <= 3 * 1024 * 1024, n + ": too large"
+          PY
       - name: Publish to the rolling "device-photos" release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release view device-photos >/dev/null 2>&1 || gh release create device-photos --title "Device photos" --notes "Photos of supported handhelds from Wikimedia Commons and Flickr, each under its own free license (CC0, public domain, CC BY or CC BY-SA). Author, license and source for every file are in manifest.json. Rebuilt weekly; licenses are re-checked on every run." --latest=false
           if ls dist/*.webp >/dev/null 2>&1; then
@@ -50,8 +95,13 @@ jobs:
   maker-links:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
@@ -67,11 +117,13 @@ jobs:
       - name: Open, update or close the single "Broken maker image links" issue
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TITLE: Broken maker image links
+          BROKEN: ${{ steps.check.outputs.broken }}
         run: |
           num=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title \
                 --jq ".[] | select(.title == env.TITLE) | .number" | head -n1)
-          if [ "${{ steps.check.outputs.broken }}" = yes ]; then
+          if [ "$BROKEN" = yes ]; then
             if [ -n "$num" ]; then
               gh issue edit "$num" --body-file broken.md
             else
