@@ -38,6 +38,7 @@ const ControlScript := preload("res://scripts/controls/control.gd")
 const Caps := preload("res://scripts/device/capabilities.gd")
 const BrandMark := preload("res://scripts/ui/brand_mark.gd")
 const AppMixer := preload("res://scripts/ui/controls/app_mixer.gd")
+const MediaCard := preload("res://scripts/ui/controls/media_card.gd")
 
 signal closed
 ## A result worth a toast: text, tone (good / bad).
@@ -579,11 +580,17 @@ func _build_list(tab: String) -> void:
 	_all_link(tab)
 
 
-## Audio: the quick sound controls, then each app's own volume.
+## Audio: the quick sound controls, what's playing in the background, then
+## each app's own volume.
 func _build_audio() -> void:
 	if model == null:
 		return
 	var l := _list(Catalog.QUICK["audio"])
+	var media: PanelContainer = MediaCard.new()
+	media.setup(controls)
+	media.rebuilt.connect(_relink)
+	media.failed.connect(func(t: String): status_label.text = t)
+	_add(media)
 	var mixer: VBoxContainer = AppMixer.new()
 	mixer.setup(controls)
 	mixer.rebuilt.connect(_relink)

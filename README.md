@@ -136,7 +136,7 @@ Switch to Desktop Mode live here too.
 | **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, Lossless frame gen, the scaling filter |
 | **Power** | Power profile, TDP, boost, fan mode, battery saver, charge limit, CPU boost, energy preference |
 | **Display** | Brightness, refresh rate, frame limit, VRR, night light, colour vibrance, scaling filter and sharpness, screen effects |
-| **Audio** | Volume, mute, output device, microphone mute and input, and each app's own volume |
+| **Audio** | Volume, mute, output device, microphone mute and input, each app's own volume, and play/pause and skip for the music playing behind your game |
 | **Controller** | Controller type, gyro, Nintendo button layout, rumble, stick lights (effect, colour, brightness), mouse mode |
 | **Device** | Wi-Fi, Bluetooth, airplane mode, keep awake, screenshot, plus your device's fixes |
 
