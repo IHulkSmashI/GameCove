@@ -143,3 +143,26 @@ func test_lru_cleanup() -> void:
 	ok(b.path_for("steam:3", "cover") != "", "index reloaded")
 	b.free()
 	H.wipe(dir)
+
+
+## Review 2, problem 3: with "Look up game details" off, a GOG tile still sent
+## SteamGridDB's title search with the user's own key (from Discover's settings).
+func test_steamgriddb_off_with_the_metadata_switch() -> void:
+	var dir := H.temp_dir("art_sgdb_off")
+	var prefs := dir.path_join("settings.cfg")
+	var http := FakeHttp.new()
+	http.route("https://www.steamgriddb.com/api/v2/search/autocomplete/", {"file": H.fx("sgdb_search.json")})
+	http.route("https://www.steamgriddb.com/api/v2/grids/game/5551", {"file": H.fx("sgdb_grids.json")})
+	http.route("https://cdn2.steamgriddb.com/grid/abc.png", {"file": H.fx("hero_png.bin")})
+	var a := _make(http, dir)
+	a.privacy_path = prefs
+	a.settings_source = func() -> Dictionary: return {"steamgriddb_key": "0123456789abcdef0123456789abcdef"}
+	var Privacy := preload("res://scripts/system/privacy.gd")
+	ok(Privacy.set_metadata_allowed(false, prefs), "switch off")
+	a.request("gog:1", "cover", {"title": "Some Game"})
+	eq(http.requests.filter(func(u): return "steamgriddb.com" in u), [], "no SteamGridDB request with the switch off")
+	ok(Privacy.set_metadata_allowed(true, prefs), "switch on")
+	a.request("gog:2", "cover", {"title": "Some Game"})
+	ok(http.requests.any(func(u): return u.begins_with("https://www.steamgriddb.com/api/v2/search/autocomplete/Some%20Game")), "the user's key is used with it on")
+	a.free()
+	H.wipe(dir)

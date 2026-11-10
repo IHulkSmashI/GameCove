@@ -35,6 +35,10 @@ var max_bytes := DEFAULT_MAX_BYTES
 ## The user's SteamGridDB key; "" = read it from Discover's settings.
 var api_key := ""
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
+## Where the privacy switches live; tests point it at a temp file.
+var privacy_path: String = preload("res://scripts/system/privacy.gd").PREFS_PATH
+## Returns Discover's settings ({"steamgriddb_key": ...}); unset = the /root/Discover node.
+var settings_source := Callable()
 
 var _known := {}      # key -> {kind: url}
 var _index := {}      # file name -> {"size": int, "used": int}
@@ -134,15 +138,20 @@ func candidates(key: String, kind: String, hints: Dictionary) -> Array:
 	return out
 
 
+## The SteamGridDB key to send, or "" when there is none or "Look up game details"
+## is off (review 2, problem 3: the user's raw key was sent with the switch off).
 func _key() -> String:
+	if not preload("res://scripts/system/privacy.gd").metadata_allowed(privacy_path):
+		return ""
 	if api_key != "":
 		return api_key
 	var user := ""
-	var d := get_node_or_null("/root/Discover") if is_inside_tree() else null
-	if d != null and d.has_method("get_settings"):
-		user = str(d.get_settings().get("steamgriddb_key", ""))
-	if not is_inside_tree() or not preload("res://scripts/system/privacy.gd").metadata_allowed():
-		return user
+	if settings_source.is_valid():
+		user = str(settings_source.call().get("steamgriddb_key", ""))
+	elif is_inside_tree():
+		var d := get_node_or_null("/root/Discover")
+		if d != null and d.has_method("get_settings"):
+			user = str(d.get_settings().get("steamgriddb_key", ""))
 	return preload("res://scripts/library/art/sgdb.gd").key(user)
 
 
