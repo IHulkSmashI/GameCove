@@ -325,7 +325,13 @@ FSR 4 files), upstream digest and the helper's archive checks, copied to the rol
 `<component>-<version>-<sha8>-<name>` (never deleted or replaced; `upscalers-2`... near GitHub's 1000-asset limit),
 plus every versions.json pin under the name it expects. GPL builds (OptiScaler, also the v10 nightlies) go only with
 GitHub's source archive at the exact commit they came from (the tag, or a commit named in the release resolved in
-optiscaler/OptiScaler), recorded as `source`; otherwise the next older build with a known commit is used. Then `upscalers.json` signed with cosign keyless. The helper
+optiscaler/OptiScaler), recorded as `source`; otherwise the next older build with a known commit is used. Guards
+(review 2, problem 8): only each component's official repository (`mirror.UPSTREAM`), only full releases (never
+pre-releases; the v10 nightly repo publishes only pre-releases, so v10 stays on its tested pin) published at least 72
+hours ago, and rolling or git files only once unchanged for 72 hours; xess-xmx-linux's index entry lists every
+script's sha256 and devices take a newer build only when they match the ones reviewed in versions.json (the helper
+checks again before running install.sh). The publish job re-checks the artifact (`tools/upscalers/check_plan.py`)
+and waits for the owner's approval (`release` environment, docs/RELEASING.md). Then `upscalers.json` signed with cosign keyless. The helper
 (`mirror.py`) fetches it before any install, accepts it only from that workflow on main (the cosign get-gamecove.sh
 pins, `~/.local/share/gamecove/tools`), never takes an older list over a newer one, and uses the pins when it can't
 verify. Files come from the mirror first, then upstream, always sha256 checked. The app's background check
