@@ -276,3 +276,25 @@ func test_grid_manifest_and_quota_are_written_atomically() -> void:
 	SettingsFile.test_write_limit = -1
 	eq(FileAccess.get_file_as_string(d.path_join("manifest.json")), before_m, "manifest kept")
 	eq(FileAccess.get_file_as_string(q), before_q, "quota kept")
+
+
+## Review 2, low 18: achievement rarity and maker photos still read as on after a damaged file.
+func test_damaged_settings_turn_rarity_and_photos_off() -> void:
+	var d := _dir("privacy2")
+	var p := d.path_join("settings.cfg")
+	var Photo := preload("res://scripts/device/photo.gd")
+	var Perf := preload("res://scripts/ui/settings/performance_page.gd")
+	ok(Photo.load_maker_enabled(p) and Photo.load_enabled(p), "no file: on")
+	_write(p, "[device\nmaker_photo=tru")
+	expect_error("ConfigFile parse error")
+	ok(not Photo.load_maker_enabled(p), "damaged: maker photos off")
+	ok(not Photo.load_enabled(p), "damaged: real photo off")
+	SettingsFile.reset_for_tests()
+	var holder := RarityHolder.new()
+	Perf.restore_rarity(holder, p)
+	ok(not holder.fetch_rarity, "next start: rarity off")
+	ok(not Photo.load_maker_enabled(p), "maker photos still off")
+
+
+class RarityHolder extends RefCounted:
+	var fetch_rarity := true

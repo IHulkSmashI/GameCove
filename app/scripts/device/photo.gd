@@ -134,11 +134,11 @@ func _ready() -> void:
 # ---- the setting ----------------------------------------------------------------
 
 static func load_enabled(path := PREFS_PATH) -> bool:
-	return bool(SettingsFile.load_cfg(path).get_value("device", "real_photo", true))
+	return preload("res://scripts/system/privacy.gd").switch_value(path, "device", "real_photo")
 
 
 static func load_maker_enabled(path := PREFS_PATH) -> bool:
-	return bool(SettingsFile.load_cfg(path).get_value("device", "maker_photo", true))
+	return preload("res://scripts/system/privacy.gd").switch_value(path, "device", "maker_photo")
 
 
 func set_maker_enabled(on: bool) -> void:

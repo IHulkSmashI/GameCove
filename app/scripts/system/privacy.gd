@@ -53,11 +53,18 @@ static func background_allowed(path := PREFS_PATH) -> bool:
 ## A switch's value; on by default, but off when the settings file couldn't be read (this run it's quarantined,
 ## later starts find <path>.bad) until the user sets that switch again (review problem 4: no failing open).
 static func _switch(path: String, key: String) -> bool:
+	return switch_value(path, "privacy", key)
+
+
+## Any network switch kept in a settings file ([device] maker_photo, [achievements]
+## fetch_rarity, ...): its saved value, else on, but off when the file couldn't be read
+## (review 2, low 18: those two still read as on after a damaged file).
+static func switch_value(path: String, section: String, key: String) -> bool:
 	var cfg := SettingsFile.load_cfg(path)
 	if SettingsFile.blocked(path):
 		return false
-	if cfg.has_section_key("privacy", key):
-		return bool(cfg.get_value("privacy", key))
+	if cfg.has_section_key(section, key):
+		return bool(cfg.get_value(section, key))
 	return not FileAccess.file_exists(SettingsFile.abs_path(path) + ".bad")
 
 
