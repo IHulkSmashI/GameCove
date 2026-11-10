@@ -393,3 +393,42 @@ def test_a_short_sha_in_free_text_is_never_taken_as_the_source_commit():
     assert build.source_commit(net, spec, {"tag_name": "nightly-1", "body": "Fixed deadbee crash; commit cafe123"}) is None
     link = {"tag_name": "nightly-2", "body": "Built from https://github.com/optiscaler/OptiScaler/commit/cafe123"}
     assert build.source_commit(net, spec, link) == "cafe123" + "1" * 33
+
+
+# ---- review 2, problem 15: the publish job re-checks the artifact before signing ------------------------------------
+import check_plan  # noqa: E402
+
+
+def _dist(tmp_path):
+    v, net = world()
+    _rep, _idx, plan, out = _run(tmp_path, v, net)
+    vp = tmp_path / "versions.json"
+    return out, vp, plan
+
+
+def test_publish_check_accepts_what_the_builder_made(tmp_path):
+    out, vp, plan = _dist(tmp_path)
+    assert plan and check_plan.check(str(out), str(vp)) == []
+
+
+def test_publish_check_refuses_a_swapped_file(tmp_path):
+    out, vp, plan = _dist(tmp_path)
+    _t, _n, p = next(x for x in plan if x[1].startswith("xess_xmx_linux-20261120"))
+    (out / p).write_bytes(b"something else")
+    assert any("sha256" in e for e in check_plan.check(str(out), str(vp)))
+
+
+def test_publish_check_refuses_a_foreign_upstream_and_unnamed_files(tmp_path):
+    out, vp, plan = _dist(tmp_path)
+    idx = json.loads((out / "upscalers.json").read_text())
+    idx["components"]["reframework"]["upstream_url"] = "https://github.com/someone/REFramework/releases/download/x/REFramework.zip"
+    (out / "upscalers.json").write_text(json.dumps(idx))
+    assert any("official" in e for e in check_plan.check(str(out), str(vp)))
+    (tmp_path / "b").mkdir()
+    out, vp, plan = _dist(tmp_path / "b")
+    extra = b"extra"
+    name = mirror.mirror_name("reframework", "x", sha(extra), "REFramework.zip")
+    (out / "upload" / "upscalers" / name).write_bytes(extra)
+    with open(out / "upload-plan.tsv", "a") as f:
+        f.write(f"upscalers\t{name}\tupload/upscalers/{name}\n")
+    assert any("names this file" in e for e in check_plan.check(str(out), str(vp)))
