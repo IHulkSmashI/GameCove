@@ -587,6 +587,36 @@ func test_page_is_the_hub() -> void:
 	eq(opened, [p.game_tiles[0].game["key"]], "Menu opens its game page")
 	eq(p.hints_for_focus(p.game_tiles[0])[0], ["A", TL.EMU_HINT_PLAY], "the hints say so")
 	ok(p.game_tiles[0].focus_neighbor_top != NodePath(""), "linked for the d-pad")
+	ok(p.find_child("Recent", true, false).find_child("Title", true, false).size_flags_horizontal & Control.SIZE_EXPAND, "a recent title has the row's whole width")
+	p.free()
+
+
+func test_page_hero() -> void:
+	var home := _dir("hero")
+	var a := Image.create(30, 40, false, Image.FORMAT_RGBA8)
+	a.fill(Color.RED)
+	a.save_png(home.path_join("a.png"))
+	var b := Image.create(80, 40, false, Image.FORMAT_RGBA8)
+	b.fill(Color.BLUE)
+	b.save_png(home.path_join("b.png"))
+	var games := [
+		{"key": "emu:rom:snes/a", "store": "emu", "title": "A", "last_played": 5, "art": {"cover": home.path_join("a.png")}, "emulated": {"rom": true, "system": "snes", "system_short": "SNES"}},
+		{"key": "emu:rom:gba/b", "store": "emu", "title": "B", "last_played": 9, "art": {"cover": home.path_join("b.png")}, "emulated": {"rom": true, "system": "gba", "system_short": "GBA"}},
+		{"key": "emu:rom:gba/c", "store": "emu", "title": "C", "last_played": 0, "art": {"cover": ""}, "emulated": {"rom": true, "system": "gba", "system_short": "GBA"}},
+		{"key": "emu:rom:gba/d", "store": "emu", "title": "D", "hidden": true, "art": {"cover": home.path_join("a.png")}, "emulated": {"rom": true, "system": "gba"}}]
+	eq(EmulationPage.collage_covers(games), [home.path_join("b.png"), home.path_join("a.png")], "your own covers, played last first; hidden games left out")
+	var img: Image = EmulationPage.collage([home.path_join("b.png"), home.path_join("a.png")], Vector2i(400, 120))
+	eq(img.get_size(), Vector2i(400, 120), "drawn at the hero's size")
+	ok(img.get_pixel(399, 60).is_equal_approx(Color.BLUE), "the latest cover at the right edge, filling its cell (cut, not stretched)")
+	var red := img.get_pixel(400 - 90 - 10 - 2, 60)
+	ok(red.r > 0.99 and red.a > 0.9, "then the next, while it starts right of COLLAGE_FROM")
+	ok(img.get_pixel(400 - 90 - 10 - 89, 60).a < 0.2, "its left end fades in")
+	eq(img.get_pixel(5, 60).a, 0.0, "clear where the title sits (the theme's card shows through)")
+	var p: Control = EmulationPage.new()
+	var setup := Emu.empty_setup()
+	setup["kind"] = "emudeck"
+	p.setup(setup, [games[2]])
+	eq(p.hero_fallback.pattern_systems, ["GBA"], "no covers yet: a pattern of your consoles")
 	p.free()
 
 

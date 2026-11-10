@@ -86,6 +86,7 @@ func setup(setup_info: Dictionary, games: Array) -> void:
 		_build_empty()
 	else:
 		_build_setup()
+		_hero_art()
 	finish()
 
 
@@ -193,16 +194,145 @@ func _fill_recent(body: VBoxContainer, fe: Dictionary) -> void:
 		return
 	var now := int(Time.get_unix_time_from_system())
 	for r in list:
-		var row := Kit.hbox(12)
+		var row := _title_meta(str(r["title"]), "%s · %s" % [r["system"], TG.ago(int(r["last_played"]), now)])
 		row.name = "Recent"
-		var t := Kit.label(str(r["title"]), "")
-		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		row.add_child(t)
-		var meta := Kit.label("%s · %s" % [r["system"], TG.ago(int(r["last_played"]), now)], "CaptionLabel")
-		meta.add_theme_color_override("font_color", ThemeLib.color("text_2"))
-		row.add_child(meta)
 		body.add_child(row)
+
+
+## A list row: the title on its own line with the whole width (cut only when it
+## truly doesn't fit), the console and when under it.
+func _title_meta(title: String, meta_text: String) -> VBoxContainer:
+	var col := Kit.vbox(0)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var t := Kit.label(title, "")
+	t.name = "Title"
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(t)
+	var meta := Kit.label(meta_text, "CaptionLabel")
+	meta.name = "Meta"
+	meta.add_theme_color_override("font_color", ThemeLib.color("text_2"))
+	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(meta)
+	return col
+
+
+# ------------------------------------------------------------ the hero
+
+## Covers in the hero collage at most, and the size it's drawn at.
+const COLLAGE_MAX := 8
+const COLLAGE_SIZE := Vector2i(1800, 420)
+## The collage starts this far across (the shared scrim fades it in from there).
+const COLLAGE_FROM := 0.5
+## Its left edge fades in over this part of the width (no hard cut beside the buttons).
+const COLLAGE_FADE := 0.14
+var _collage_task := -1
+
+
+## The hero: your own ROM covers side by side, through the page template's hero
+## art and its shared scrims (dark at the left behind the title, fading out);
+## before any ROM has art, a pattern of your consoles (FallbackArt.set_pattern).
+## Never console makers' art or logos.
+func _hero_art() -> void:
+	var covers := collage_covers(emu_games)
+	if covers.is_empty():
+		var shorts: Array = View.systems_in(emu_games).map(func(sy): return sy["short"])
+		if shorts.is_empty():
+			shorts = (emu.get("systems", []) as Array).map(func(sy): return sy["short"])
+		if not shorts.is_empty() and hero_fallback != null:
+			hero_fallback.set_pattern(shorts)
+		return
+	var size := COLLAGE_SIZE
+	_wait_collage()
+	_collage_task = WorkerThreadPool.add_task(func(): call_deferred("_collage_done", collage(covers, size)), false, "Emulation hero")
+
+
+## Covers for the collage: the ROM games played last first, then A to Z.
+static func collage_covers(games: Array) -> Array:
+	var roms := games.filter(func(g): return g.get("emulated", {}).get("rom", false) and not g.get("hidden", false))
+	var out: Array = []
+	for g in View.sort_games(roms, "recent"):
+		var c := str(g.get("art", {}).get("cover", ""))
+		if c != "" and FileAccess.file_exists(c) and not c in out:
+			out.append(c)
+			if out.size() >= COLLAGE_MAX:
+				break
+	return out
+
+
+## The covers in a row from the right edge, each cut to fill a 3:4 cell (no
+## stretching), as far left as COLLAGE_FROM; clear elsewhere. Off the main thread.
+static func collage(paths: Array, size: Vector2i) -> Image:
+	var img := Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))   # the theme's own card shows through where the title sits
+	var ch := size.y
+	var cw := int(ch * 0.75)
+	var gap := 10
+	var x := size.x - cw
+	for p in paths:
+		if x < int(size.x * COLLAGE_FROM):
+			break   # the left of the hero stays clear for the title and buttons
+		var src := _load_image(str(p))
+		if src == null or src.is_empty():
+			continue
+		src.convert(Image.FORMAT_RGBA8)
+		var sc := maxf(float(cw) / src.get_width(), float(ch) / src.get_height())
+		src.resize(maxi(cw, int(ceil(src.get_width() * sc))), maxi(ch, int(ceil(src.get_height() * sc))), Image.INTERPOLATE_BILINEAR)
+		var from := Vector2i((src.get_width() - cw) / 2, (src.get_height() - ch) / 2)
+		img.blit_rect(src, Rect2i(from, Vector2i(cw, ch)), Vector2i(x, 0))
+		x -= cw + gap
+	# Fade the collage in from its left end.
+	var left := x + cw + gap
+	var fade := int(size.x * COLLAGE_FADE)
+	for px in range(maxi(0, left), mini(size.x, left + fade)):
+		var k := smoothstep(0.0, 1.0, float(px - left) / fade)
+		for py in size.y:
+			var c := img.get_pixel(px, py)
+			c.a *= k
+			img.set_pixel(px, py, c)
+	return img
+
+
+## A PNG, JPEG or WebP file as an Image; null for anything else (a broken
+## download stays out of the collage without an error in the log).
+static func _load_image(path: String) -> Image:
+	var b := FileAccess.get_file_as_bytes(path)
+	if b.size() < 12:
+		return null
+	var img := Image.new()
+	var err := ERR_FILE_UNRECOGNIZED
+	if b[0] == 0x89 and b[1] == 0x50 and b[2] == 0x4E and b[3] == 0x47:
+		err = img.load_png_from_buffer(b)
+	elif b[0] == 0xFF and b[1] == 0xD8:
+		err = img.load_jpg_from_buffer(b)
+	elif b.slice(0, 4).get_string_from_ascii() == "RIFF" and b.slice(8, 12).get_string_from_ascii() == "WEBP":
+		err = img.load_webp_from_buffer(b)
+	return img if err == OK else null
+
+
+func _collage_done(img: Image) -> void:
+	if _collage_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_collage_task)
+		_collage_task = -1
+	if img != null and is_instance_valid(hero):
+		_show_hero(ImageTexture.create_from_image(img))
+
+
+func _wait_collage() -> void:
+	if _collage_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_collage_task)
+		_collage_task = -1
+
+
+func _exit_tree() -> void:
+	_wait_collage()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		_wait_collage()
 
 
 # ------------------------------------------------------------ the games, on the page
@@ -352,21 +482,13 @@ func _fill_recent_games(body: VBoxContainer, roms: Array) -> void:
 		b.name = "Recent"
 		b.theme_type_variation = "RowButton"
 		b.focus_mode = Control.FOCUS_ALL
-		b.custom_minimum_size = Vector2(0, 44)
-		var row := Kit.hbox(12)
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.custom_minimum_size = Vector2(0, 60)
+		var row := _title_meta(str(g.get("title", "")), "%s · %s" % [g.get("emulated", {}).get("system_short", ""), TG.ago(int(g["last_played"]), now)])
 		row.set_anchors_preset(Control.PRESET_FULL_RECT)
-		row.offset_left = 10
-		row.offset_right = -10
-		var t := Kit.label(str(g.get("title", "")), "")
-		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(t)
-		var meta := Kit.label("%s · %s" % [g.get("emulated", {}).get("system_short", ""), TG.ago(int(g["last_played"]), now)], "CaptionLabel")
-		meta.add_theme_color_override("font_color", ThemeLib.color("text_2"))
-		meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(meta)
+		row.offset_left = 14
+		row.offset_right = -14
+		row.offset_top = 7
+		row.offset_bottom = -7
 		b.add_child(row)
 		var game: Dictionary = g
 		b.pressed.connect(func(): game_requested.emit(game))
