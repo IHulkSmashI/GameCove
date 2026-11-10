@@ -421,6 +421,11 @@ func test_download_host_allow_list_per_maker() -> void:
 	eq(Index.download_host("https://asus.com@evil.example/x.zip", "ASUS"), "", "no user-info tricks")
 	eq(Index.download_host("https://dlcdnets.asus.com:8443/x.zip", "ASUS"), "", "no odd ports")
 	eq(Index.download_host("https://x.example/x.zip", "Nobody"), "", "unknown maker: nothing allowed")
+	# review problem 9: only a plain host name is ever shown as the maker's host
+	for bad in ["https://dl\tcdnets.asus.com/x.zip", "https://evil.example\n.asus.com/x.zip", "https://evil.example%2f.asus.com/x.zip",
+			"https://evil.example%2F.asus.com/x.zip", "https://x_y.asus.com/x.zip", "https://-x.asus.com/x.zip", "https://x..asus.com/x.zip"]:
+		eq(Index.download_host(bad, "ASUS"), "", "refused: " + bad.c_escape())
+	eq(Index.download_host("https://dl-cdn.asus.com./x.zip", "ASUS"), "dl-cdn.asus.com", "a trailing dot is still fine")
 
 
 func test_index_download_url_outside_the_allow_list_is_dropped() -> void:

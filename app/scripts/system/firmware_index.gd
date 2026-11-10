@@ -52,6 +52,10 @@ static func download_host(url: String, maker: String) -> String:
 	if host.contains(":") or host.trim_suffix(".") == "":
 		return ""
 	host = host.trim_suffix(".")
+	# letters, digits, dots and hyphens only: a tab, a newline or a %2f would be shown as a bogus "maker's host"
+	# (curl refuses them, but the UI would still name them) (review problem 9)
+	if not RegEx.create_from_string("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$").search(host):
+		return ""
 	for d in allowed:
 		if host == d or host.ends_with("." + str(d)):
 			return host
