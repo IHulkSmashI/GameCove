@@ -262,9 +262,14 @@ func test_gog_keeps_timestamps_only_after_a_real_sync() -> void:
 	ok(not DirAccess.dir_exists_absolute(w["s"].backup_dir.path_join(".cloud-gog_1207")), "scratch folder gone")
 	# after play: upload with the stored timestamp
 	w["handler"] = func(tool: String, args: Array) -> Dictionary:
+		if tool == "gogdl" and "9999999999" in args:
+			# the look before an upload: the cloud holds what the folder holds, nothing would be deleted
+			return {"code": 0, "out": "[SAVES] INFO: Files in cloud: 1\n[SAVES] DEBUG: Files: [{'name': '__default/save0.dat', 'hash': 'abc', 'last_modified': '2025-11-10T18:00:00+00:00'}]\n[SAVES] INFO: Nothing to do\n1762800050.0"}
 		return {"code": 0, "out": "[SAVES] INFO: Uploading files\n1762800100.0"} if tool == "gogdl" and "--skip-download" in args else {"code": 1, "out": ""}
 	w["s"].after_exit(w["gog"])
+	ok(w["calls"][-2].contains("--ts 9999999999") and not w["calls"][-2].contains("--skip") and not w["calls"][-2].contains("--force"), "first a look that changes nothing")
 	ok(w["calls"][-1].contains("--ts 1762800001.2"), "the kept timestamp goes back to gogdl")
+	eq(w["s"].backup_list("gog:1207").filter(func(b): return b["reason"] == "cloud_copy").size(), 1, "no second cloud copy: the upload deletes nothing")
 	eq(w["s"].status(w["gog"])["state"], "uploaded", "uploaded after play")
 	_done(w)
 

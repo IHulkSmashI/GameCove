@@ -12,8 +12,15 @@ extends Node
 ## the backup taken just before it back.
 ##
 ## Status per game in user://saves.cfg [game:<key>]: enabled, last_sync, state, at, detail,
-## local, remote, gog_ts ({location: gogdl timestamp}); [gog_remote] caches GOG's answer per
-## client id. One worker thread runs the tools in order (a launch waits for the last exit's
+## local, remote, gog_ts ({location: gogdl timestamp}), gog_paths ({location: the folder that
+## timestamp is about}), own (we keep our own sync times: Heroic's are no longer a fallback);
+## [gog_remote] caches GOG's answer per client id.
+##
+## A sync time is only worth something for the folder it was made with. When the folder is
+## empty or isn't there (a deleted or new prefix), moved (another prefix), or the game was
+## uninstalled, the time is dropped: the next sync then sees both sides as changed and asks,
+## where gogdl with the old time would upload a fresh default save and delete every cloud
+## file the new folder lacks (final review, blocker 1). One worker thread runs the tools in order (a launch waits for the last exit's
 ## upload of the same game). Tests run jobs inline (no tree) with a fake `run`.
 
 signal status_changed(key: String)
@@ -82,6 +89,22 @@ func setup_library(lib: Object) -> void:
 		entry_lookup = func(k: String) -> Dictionary: return lib.entry_for(k)
 	if lib.has_method("tools"):
 		tools_lookup = func() -> Dictionary: return lib.tools()
+	if lib.has_signal("install_state_changed"):
+		lib.install_state_changed.connect(_on_install_state)
+
+
+## An uninstalled game's sync times are forgotten: its folders may be gone or new when it
+## comes back.
+func _on_install_state(key: String, state: String) -> void:
+	if state == "not_installed":
+		forget(key)
+
+
+## Forgets what the last sync knew about a game (sync times and the folders they were for).
+## The next sync asks instead of picking a side. The game's switch and backups stay.
+func forget(key: String) -> void:
+	if _drop_sync(key, false):
+		status_changed.emit(key)
 
 
 func _ready() -> void:
@@ -289,8 +312,29 @@ func _set_status(key: String, state: String, detail := "", extra := {}) -> Dicti
 		if bool(extra.get("synced", false)):
 			c.set_value(sec, "last_sync", now)
 		if extra.has("gog_ts"):
-			c.set_value(sec, "gog_ts", extra["gog_ts"]))
+			c.set_value(sec, "gog_ts", extra["gog_ts"])
+			c.set_value(sec, "own", true)
+		if extra.has("gog_paths"):
+			c.set_value(sec, "gog_paths", extra["gog_paths"]))
 	return {"state": state, "conflict": state == "conflict"}
+
+
+## Drops the game's sync times (worker or main thread). `create`: also for a game with no
+## section yet (so Heroic's times aren't picked up later). True when something was written.
+func _drop_sync(key: String, create: bool) -> bool:
+	var wrote := [false]
+	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
+		var sec := _sec(key)
+		if not c.has_section(sec) and not create:
+			return false
+		for name in ["gog_ts", "gog_paths"]:
+			if c.has_section_key(sec, name):
+				c.erase_section_key(sec, name)
+		c.set_value(sec, "last_sync", 0)
+		c.set_value(sec, "own", true)
+		wrote[0] = true
+		return true)
+	return wrote[0]
 
 
 func _sync(key: String, entry: Dictionary, tools: Dictionary, mode: String) -> Dictionary:
@@ -385,18 +429,52 @@ func _gog_plan(entry: Dictionary, tools: Dictionary) -> Dictionary:
 	return CloudSaves.gog_plan(entry, tools, cached)
 
 
-## gogdl timestamps: ours, else Heroic's (so a game Heroic synced isn't a conflict at first).
-func _gog_ts(key: String, entry: Dictionary) -> Dictionary:
-	var ours: Variant = _cfg_value(key, "gog_ts", {})
-	if ours is Dictionary and not ours.is_empty():
-		return ours.duplicate()
+## gogdl timestamps per location: ours, else Heroic's for a folder Heroic itself synced (so
+## that game isn't a conflict at first), and "0" (never synced: gogdl then asks when both
+## sides have files) for a location whose folder is empty, isn't there, or isn't the folder
+## the time was kept for. What was dropped is written down at once, so it holds when this
+## sync fails and the game runs anyway.
+func _gog_ts(key: String, entry: Dictionary, locs: Array) -> Dictionary:
+	var cfg := SettingsFile.load_cfg(cfg_path)
+	var sec := _sec(key)
+	var ours: Variant = cfg.get_value(sec, "gog_ts", {})
+	var paths: Variant = cfg.get_value(sec, "gog_paths", {})
+	var ts: Dictionary = ours.duplicate() if ours is Dictionary else {}
+	var heroic := {}
 	var root := str(entry.get("heroic_root", ""))
-	return CloudSaves.heroic_gog_timestamps(root, str(entry.get("id", ""))) if root != "" else {}
+	if ts.is_empty() and root != "" and not bool(cfg.get_value(sec, "own", false)):
+		heroic = CloudSaves.heroic_gog_timestamps(root, str(entry.get("id", "")))
+	var dropped := false
+	for l in locs:
+		var name := str(l["name"])
+		if not ts.has(name) and heroic.has(name) and bool(l.get("heroic", false)):
+			ts[name] = heroic[name]
+		var moved: bool = paths is Dictionary and paths.has(name) and str(paths[name]) != str(l["path"])
+		if (moved or int(CloudSaves.dir_stats(str(l["path"]))["files"]) == 0) and str(ts.get(name, "0")) != "0":
+			ts[name] = "0"
+			dropped = true
+	if dropped:
+		SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
+			c.set_value(sec, "gog_ts", ts)
+			c.set_value(sec, "gog_paths", _gog_paths(locs))
+			c.set_value(sec, "last_sync", 0)
+			c.set_value(sec, "own", true))
+	return ts
+
+
+static func _gog_paths(locs: Array) -> Dictionary:
+	var out := {}
+	for l in locs:
+		out[str(l["name"])] = str(l["path"])
+	return out
 
 
 func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) -> Dictionary:
 	var plan := _gog_plan(entry, tools)
 	if not plan["ok"]:
+		if plan["why"] == "not_set_up":
+			# no folder to sync yet (no prefix): whatever the game makes there is new to us
+			_drop_sync(key, true)
 		return _set_status(key, str(plan["why"]))
 	var locs: Array = plan["locations"]
 	var title := str(entry.get("title", key))
@@ -406,13 +484,22 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 		b = backups.backup(key, title, "before_download", locs)
 		if not b["ok"]:
 			return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]))
-	var ts := _gog_ts(key, entry)
+	var ts := _gog_ts(key, entry, locs)
 	var step := str({"pre": "pre", "post": "post", "now": ""}[mode])
 	var acted := ""
 	var conflict := false
 	var cloud_newest := 0
 	for l in locs:
-		var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), step)
+		var cur := str(ts.get(l["name"], "0"))
+		var r := {}
+		if mode != "pre":
+			# this run may upload, and gogdl's upload deletes cloud files the folder lacks
+			var guard := _gog_upload_guard(key, title, plan, entry, l, cur)
+			if guard.has("stop"):
+				return _set_status(key, "backup_failed", str(guard["stop"]), {"gog_ts": ts})
+			r = guard.get("result", {})
+		if r.is_empty():
+			r = _gogdl(plan, entry, l, cur, step)
 		cloud_newest = maxi(cloud_newest, int(r["cloud_newest"]))
 		match r["action"]:
 			"failed":
@@ -430,11 +517,31 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 	var local_newest := 0
 	for l in locs:
 		local_newest = maxi(local_newest, int(CloudSaves.dir_stats(str(l["path"]))["newest"]))
-	var times := {"local": local_newest, "remote": cloud_newest, "gog_ts": ts}
+	var times := {"local": local_newest, "remote": cloud_newest, "gog_ts": ts, "gog_paths": _gog_paths(locs)}
 	if conflict:
 		return _set_status(key, "conflict", "", times)
 	var state := str({"upload": "uploaded", "download": "downloaded", "both": "synced", "": "synced"}[acted])
 	return _set_status(key, state, "", times.merged({"synced": true}, true))
+
+
+## Before a run that may upload location `loc`: lists the cloud (gogdl "look") and, when the
+## upload would delete cloud files the folder doesn't have, keeps a copy of the cloud first.
+## -> {} to go on, {"result": r} when gogdl already did the whole sync during the look (one
+## side had no files), {"stop": why} when the copy couldn't be made (then nothing is uploaded).
+func _gog_upload_guard(key: String, title: String, plan: Dictionary, entry: Dictionary, loc: Dictionary, ts: String) -> Dictionary:
+	var stats := CloudSaves.dir_stats(str(loc["path"]))
+	if float(ts) <= 0.0 or int(stats["files"]) == 0:
+		return {}   # never synced: gogdl asks when both sides have files; no files: nothing to upload
+	if int(stats["newest"]) < int(float(ts)):
+		return {}   # nothing changed here since the last sync: gogdl won't upload
+	var look := _gogdl(plan, entry, loc, ts, "look")
+	if look["action"] in ["failed", "upload", "download"]:
+		return {"result": look}
+	var only: Variant = CloudSaves.gog_cloud_only(look["cloud_files"], str(loc["name"]), str(loc["path"]))
+	if only is Array and only.is_empty():
+		return {}
+	var why := _gog_cloud_copy(key, title, plan, entry, [loc], false)
+	return {} if why == "" else {"stop": why}
 
 
 func _gogdl(plan: Dictionary, entry: Dictionary, loc: Dictionary, ts: String, step: String) -> Dictionary:
@@ -470,10 +577,10 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 			if choice == "local":
 				# gogdl's forced upload deletes cloud files this handheld doesn't have: fetch a copy of
 				# the cloud into an empty folder and keep it as a backup first
-				var cloud := _gog_cloud_copy(key, title, plan, entry, locs)
+				var cloud := _gog_cloud_copy(key, title, plan, entry, locs, true)
 				if cloud != "":
 					return _set_status(key, "backup_failed", cloud)
-			var ts := _gog_ts(key, entry)
+			var ts := _gog_ts(key, entry, locs)
 			for l in locs:
 				var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_download" if choice == "cloud" else "force_upload")
 				if r["action"] == "failed":
@@ -481,13 +588,14 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 					return _set_status(key, "offline" if r["offline"] else "failed", str(r["error"]) + back, {"gog_ts": ts})
 				if r["ts"] != "":
 					ts[l["name"]] = r["ts"]
-			return _set_status(key, "downloaded" if choice == "cloud" else "uploaded", "", {"synced": true, "gog_ts": ts})
+			return _set_status(key, "downloaded" if choice == "cloud" else "uploaded", "", {"synced": true, "gog_ts": ts, "gog_paths": _gog_paths(locs)})
 	return _set_status(key, "unsupported")
 
 
 ## Downloads every cloud file of each location into a scratch folder and backs that up
-## ("cloud copy"). "" when done (or the cloud is empty), else why it couldn't.
-func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictionary, locs: Array) -> String:
+## ("cloud copy"). "" when done (or the cloud is empty), else why it couldn't. `again`:
+## keep a copy even when the last cloud copy holds the same files.
+func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictionary, locs: Array, again: bool) -> String:
 	var scratch := backup_dir.path_join(".cloud-" + SaveBackup.game_dir_name(key))
 	_remove_tree(scratch)
 	var parts: Array = []
@@ -500,6 +608,14 @@ func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictio
 			return str(r["error"]) if r["error"] != "" else "couldn't reach GOG"
 		# restored into the real folder, should anyone want the cloud's version back
 		parts.append({"name": l["name"], "path": dir, "restore_path": l["path"]})
+	if not again:
+		var fp: String = SaveBackup.fingerprint(parts.filter(func(p): return int(CloudSaves.dir_stats(str(p["path"]))["files"]) > 0))
+		for old in backups.list(key):
+			if str(old.get("reason", "")) == "cloud_copy":
+				if str(old.get("fingerprint", "")) == fp:
+					_remove_tree(scratch)
+					return ""   # an upload that failed after its copy: the copy is already kept
+				break
 	var b: Dictionary = backups.backup(key, title, "cloud_copy", parts, true)
 	if b["ok"] and str(b["id"]) != "":
 		_point_parts(key, str(b["id"]), parts)
