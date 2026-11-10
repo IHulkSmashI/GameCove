@@ -17,3 +17,6 @@ app/build/
 # raw-read assets keep their tracked .import (importer="keep"); see packaging/tests/run.sh
 !app/assets/brand/*.svg.import
 !app/assets/device_photos/*.import
+
+# Project API keys are written by the release workflow from secrets, never committed
+app/data/project_keys.json

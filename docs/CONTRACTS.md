@@ -37,12 +37,42 @@ The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these 
     "released": 2014,             # int or null
     "time_to_beat": {"main_h": 10.0, "extra_h": 20.0, "complete_h": null, "count": 17, "source": "igdb"} or null,
     "anticheat": {"status": "works|blocked|denied|unknown", "anticheats": ["Easy Anti-Cheat"]} or null,
-    "protondb": "platinum|gold|silver|bronze|borked" or null
+    "protondb": "platinum|gold|silver|bronze|borked" or null,
+    "summary": "",                # the merged synopsis (= meta.summary)
+    "meta": { ... }               # game details, see "Game details" below
   },
   "last_played": 0,               # unix seconds
   "playtime_min": 0
 }
 ```
+
+### Game details (`info.meta`)
+
+Filled for every game, whatever the store (`scripts/library/meta/metadata.gd`):
+
+```
+{
+  "summary": "", "genres": [], "themes": [], "modes": [], "developers": [], "publishers": [],
+  "release_date": "2020-09-17" or "", "controller": "full|partial|",
+  "screenshots": [{"thumb": "https://...", "full": "https://..."}],
+  "critics": {"metacritic": {"score": 93, "url": "https://www.metacritic.com/game/hades"} or null,
+              "opencritic": {"score": 93, "percent_recommended": 98, "tier": "Mighty", "url": "https://opencritic.com/game/9136/hades", "count": 120} or null,
+              "igdb_critic": {"score": 93, "count": 37} or null},
+  "sources": {"summary": "store|steam|igdb|wikidata|opencritic", ...},
+  "steam_twin": "1145360"         # the Steam app id whose store data a GOG/Epic/Amazon game uses, or ""
+}
+```
+
+Each field comes from the first source that has it: the store's own files (Epic, GOG, Amazon), the game database's
+Steam store block, a live Steam store fetch (cached a week), the database's IGDB block, then Wikidata. OpenCritic
+fills only its score, and only with the user's key. Show `Metadata.credits(meta)` wherever details appear.
+
+`Library.metadata_changed(key)` fires when a game's details arrive (`changed` follows, batched every 2 s);
+`Library.request_metadata(game)` fetches one game's missing details now (its page opened);
+`Library.game_by_key(key)`. `Library.metadata` is the resolver, `Library.artwork` the artwork service
+(`search`, `thumb`, `apply`, `reset`, `logo_position`, `set_logo_position`, `override_for`, `unavailable_reason`,
+signal `art_changed(key)`). `art` paths already include art picked in Change artwork (always) and art the automatic
+fill found (only where the store has none).
 
 `Library` emits `changed` after every refresh. `Library.launch(game)` starts it through the right store and returns `{"ok": bool, "app_id": int, "pid": int, "scoped": bool}`: `app_id` is the id gamescope knows the game by (the Steam app id, or `Library.app_id_for(key)` for a game we start in an `app-steam-app<id>-<n>` scope; 0 when gamescope can't tell), `pid` the process we started (0 for Steam).
 

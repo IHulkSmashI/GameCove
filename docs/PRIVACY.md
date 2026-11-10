@@ -12,6 +12,7 @@ the app itself shows under Settings > About > Network and privacy.
 | --- | --- | --- | --- |
 | Background lookups | Settings > About > Network and privacy (`user://settings.cfg` `[privacy] background`) | On | Nothing is requested on GameCove's own initiative: no deals refresh, no game-database or calendar download, no device-photo prefetch at start. What you ask for right then (searching, opening a store page, pressing Check) still works. |
 | Look up deals and prices | Same card, and Discover's settings (`price_lookups`) | On | No request to CheapShark, the Steam store API or GG.deals at all, background or not. Discover shows no prices. |
+| Look up game details | Same card (`user://settings.cfg` `[privacy] metadata`) | On | No Steam store details, OpenCritic or SteamGridDB request at all, background or not. Game pages show what the store and GameCove's game database already have. |
 | Show maker photos | Same card, and Settings > Device (`[device] maker_photo`) | On | Your handheld's picture is never requested from its maker's site; the free photo or our drawing is used. |
 | Affiliate links | Settings > Discover | On | Store links GameCove builds carry no affiliate id. None are configured today. It only changes a link's address; prices are the same and nothing is sent. |
 
@@ -27,7 +28,10 @@ the app itself shows under Settings > About > Network and privacy.
 | 6 | github.com (`device-photos` release) | The asset name, i.e. your device model | Start until cached, weekly manifest | Background lookups (prefetch) | `app/scripts/device/photo.gd` |
 | 7 | Your maker's site (MSI, Lenovo, ASUS, OneXPlayer, AOKZOE, AYANEO, Acer, GPD, ...) | The image URL implies your model; your IP address | Same, when there's no free photo | Show maker photos, Background lookups | `photo.gd` |
 | 8 | Steam art CDN | App id | A tile needs art | — | `app/scripts/discover/art.gd` |
-| 9 | www.steamgriddb.com | App id or title; your key (bearer header, dropped on cross-host redirects) | Art missing, only with a key | Remove the key | `art.gd` |
+| 9 | www.steamgriddb.com, cdn*.steamgriddb.com | A Steam app id or title; your key, else GameCove's project key (bearer header, dropped on cross-host redirects) | Change artwork (when you open it); automatic fill for library games with no cover, hero or logo, one request every 1.5 s, each game and kind at most weekly; Discover art Steam has none of | Look up game details (+ Background lookups for the automatic fill) | `app/scripts/library/art/art_service.gd`, `sgdb.gd`, `art.gd` |
+| 9a | store.steampowered.com `api/appdetails` | The Steam app id of a library game, or of a GOG / Epic / Amazon game's Steam edition (from the game database) | After a library scan, for games whose details or Metacritic score are missing, one request every 1.6 s, cached a week (`user://metadata/steam/`); at once for the game page you open | Look up game details (+ Background lookups for the background queue) | `app/scripts/library/meta/resolver.gd` |
+| 9b | opencritic-api.p.rapidapi.com | A game's title (search, once per game), then its OpenCritic id; your own RapidAPI key in the `X-RapidAPI-Key` header (dropped on cross-host redirects) | Same as 9a, only if you added a key; at most 20 searches and 180 requests a day, stops for the day on HTTP 429; cached a week | Look up game details; remove the key (Settings > Discover > Keys) | `resolver.gd`, `opencritic.gd` |
+| 9c | Steam CDN (`*.steamstatic.com`), images.igdb.com | A screenshot's address | When a game page shows its screenshots (cached in `user://metadata/shots/`) | Look up game details | `resolver.gd` (`image`) |
 | 10 | api.steampowered.com achievements, Steam CDN icons | App id | Opening a game page | Settings > Performance | `app/scripts/achievements/` |
 | 11 | steamcommunity.com, `IWishlistService` | Your Steam profile name or SteamID64 | You import your wishlist | You start it | `discover.gd` |
 | 12a | github.com (`upscalers/upscalers.json`, `.sigstore.json`; the upscaler files on `upscalers*` releases, then their upstream release) | Nothing personal | The list: at most daily, 90 s after start (background check), and before any upscaler install or update; files: only when you install or update | Background lookups (the daily check); installs and updates: you start them | `app/scripts/controls/providers/perf.gd`, `packaging/helpers/gamecove_upscale/mirror.py` |
@@ -49,3 +53,14 @@ release, always sha256 checked; the gyro fix downloads MSI's sensor firmware
 from download.msi.com (size and sha256 pinned); the installer (`get-gamecove.sh`) downloads GameCove's own
 release, checks its Sigstore signature and every file's sha256, and fetches a pinned cosign if the system has
 none.
+
+## Files GameCove writes for game details and art
+
+- `user://metadata/` (Steam store answers, OpenCritic answers and daily quota, screenshots) and
+  `user://art/picked/` (art you picked or the automatic fill found), `user://art/thumbs/` (artwork picker
+  thumbnails).
+- Steam's own art folder, `~/.local/share/Steam/userdata/<account>/config/grid`, **only** when you pick art for a
+  Steam game in Change artwork with "Also change in Steam" on (the default): `<appid>p`, `<appid>_hero`,
+  `<appid>_logo` images and `<appid>.json` (logo position). Every file replaced there is first copied to
+  `user://art/steam_backup/<account>/` with a manifest; "Reset to default" removes ours and restores the originals.
+  The automatic fill never writes there. Nothing about this leaves the device.
