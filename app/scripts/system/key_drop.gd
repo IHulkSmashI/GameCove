@@ -198,9 +198,16 @@ static func new_token() -> String:
 	return Crypto.new().generate_random_bytes(16).hex_encode()
 
 
+## Interfaces that are never the phone's network: loopback, containers and VMs
+## (Waydroid's bridge included), and VPNs/tunnels (WireGuard, Tailscale, ZeroTier,
+## OpenVPN, PPP) whose private addresses aren't on the Wi-Fi (review 2, low 17).
+const SKIP_IFACES := ["docker", "br-", "virbr", "veth", "tun", "tap", "podman", "waydroid", "wg", "vpn",
+	"tailscale", "zt", "ppp", "nordlynx", "proton", "lxc", "lxd", "incus", "vmnet", "vnet", "cni", "flannel", "utun"]
+
+
 ## The LAN address to listen on: a private IPv4 (10/8, 172.16/12, 192.168/16)
 ## of a real interface, Wi-Fi first, then Ethernet, then anything else that
-## isn't a container or VM bridge. "" when there's none (offline).
+## isn't a container, VM bridge or VPN. "" when there's none (offline).
 static func pick_lan_ip(interfaces: Array) -> String:
 	var best := ""
 	var best_rank := 99
@@ -208,8 +215,7 @@ static func pick_lan_ip(interfaces: Array) -> String:
 		if not i is Dictionary:
 			continue
 		var nm := str(i.get("name", "")).to_lower()
-		if nm == "lo" or nm.begins_with("docker") or nm.begins_with("br-") or nm.begins_with("virbr") \
-				or nm.begins_with("veth") or nm.begins_with("tun") or nm.begins_with("tap") or nm.begins_with("podman"):
+		if nm == "lo" or SKIP_IFACES.any(func(p: String) -> bool: return nm.begins_with(p)):
 			continue
 		var rank := 0 if nm.begins_with("wl") else (1 if nm.begins_with("en") or nm.begins_with("eth") else 2)
 		for a in i.get("addresses", []):

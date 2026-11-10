@@ -20,6 +20,16 @@ func test_picks_a_private_lan_address() -> void:
 	eq(KeyDrop.pick_lan_ip(ifs.slice(0, 3)), "192.168.1.20", "Ethernet next")
 	eq(KeyDrop.pick_lan_ip([{"name": "wlan0", "addresses": ["8.8.8.8", "fe80::2"]}]), "", "public or IPv6-only: none")
 	eq(KeyDrop.pick_lan_ip([]), "", "offline: none")
+	# review 2, low 17: Waydroid, WireGuard and VPN addresses are private too, but not the Wi-Fi
+	var vpn := [
+		{"name": "waydroid0", "addresses": ["192.168.240.1"]},
+		{"name": "wg0", "addresses": ["10.8.0.2"]},
+		{"name": "tailscale0", "addresses": ["100.64.0.1"]},
+		{"name": "proton0", "addresses": ["10.2.0.2"]},
+		{"name": "vpn0", "addresses": ["10.9.0.2"]},
+	]
+	eq(KeyDrop.pick_lan_ip(vpn), "", "no tunnel or Waydroid address")
+	eq(KeyDrop.pick_lan_ip(vpn + [{"name": "wlp1s0", "addresses": ["192.168.1.44"]}]), "192.168.1.44", "the Wi-Fi among them")
 	ok(KeyDrop.is_private_ipv4("172.31.255.1") and not KeyDrop.is_private_ipv4("172.32.0.1"), "172.16/12 only")
 	ok(not KeyDrop.is_private_ipv4("192.168.1") and not KeyDrop.is_private_ipv4("192.168.1.300"), "malformed")
 
