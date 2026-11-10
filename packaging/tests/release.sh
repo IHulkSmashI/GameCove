@@ -252,6 +252,10 @@ for host in cheapshark.com gg.deals GitHub GameStream "Wake-on-LAN" SteamGridDB 
 	grep -qi "$host" "$REPO/docs/PRIVACY.md" && ok || bad "docs/PRIVACY.md doesn't mention $host"
 done
 grep -q "^## Network and privacy" "$REPO/README.md" && ok || bad "README needs a Network and privacy section"
+# review problem 4: the Stream tab's subnet probe is described as what it is, not just "PCs on your LAN"
+for f in "$REPO/README.md" "$REPO/docs/PRIVACY.md" "$REPO/app/scripts/system/privacy.gd"; do
+	grep -qi "47989 on every address\|every address of your local IPv4 networks" "$f" && ok || bad "$f must describe the Stream tab's probe of every local address on port 47989"
+done
 for sw in "Background lookups" "Look up deals and prices" "Show maker photos"; do
 	grep -q "$sw" "$REPO/README.md" && ok || bad "README must name the '$sw' switch"
 done
