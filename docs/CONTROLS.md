@@ -607,3 +607,23 @@ on whole fake handhelds, driven with the pad only, checked at the system layer.
   `SETUPS` + `setup_extras`; a new service behaviour in `fake_system.gd` (`_live_get` / `_live_set`).
 - **Contract addition**: `Control.affects` (ids a write moves on the system; Controls reads them again
   after a write or apply that worked).
+
+## State that survives (review fixes, state and persistence)
+
+- **Settings files** go through `scripts/system/settings_file.gd`: written to `<path>.tmp`, flushed and
+  renamed; a damaged non-empty file is moved to `<path>.bad` and that path is never saved again in the same
+  run. It never creates folders: the owner of a folder makes it. `update_cfg()` is the one load-modify-save
+  (process-wide lock). A lint test fails on a raw `.save(` anywhere else.
+- **A game's values are never the everyday ones.** Profiles writes the values from before the game (the ids
+  its layers touch) to `game_baseline.json` next to `profiles.json` while it runs; the next start puts them
+  back with the everyday values and drops the file. `gamecove.x86_64 --headless -- --restore-baseline` does
+  only that and quits (the session runs it before switching away; Godot gets no callback on SIGTERM).
+  While a game layer is in effect `Power.game_layer` is set: Power doesn't remember profile, watts, boost,
+  fan preset or Auto TDP options, and controller edits aren't saved to `default.yaml` (a game's own legacy
+  layout file gets them, else nothing).
+- **Workers drain** their queue before quitting (Controls, Power, every system service).
+- **Resume**: Power notices a sleep on its own 15 s check too and re-asserts the TDP and boost; the power
+  controls replay the rest but never power.tdp/profile/boost, and the replay doesn't pause Auto TDP.
+- **Per device**: settings saved under `@unknown` move to the device's id once a release knows it.
+- **Threads**: the main thread coerces with `Controls.coerce()` / `available()` (the committed copy), never
+  the live Control fields; both InputPlumber profile editors take `scripts/input/profile_lock.gd`.
