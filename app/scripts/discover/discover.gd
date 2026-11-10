@@ -1008,7 +1008,7 @@ func _import_for(steam_id: String, typed: String) -> void:
 		var appids: Array = []
 		for r in rows:
 			appids.append(r["appid"])
-		_steam_batches(appids, MAX_IMPORT_BATCHES, func(_ok):
+		var finish := func(_ok):
 			var titles := {}
 			for a in appids:
 				if _cache["steam"].has(a):
@@ -1019,7 +1019,13 @@ func _import_for(steam_id: String, typed: String) -> void:
 			_rebuild_deals()
 			wishlist_changed.emit()
 			deals_changed.emit()
-			import_done.emit(true, added, "")))
+			import_done.emit(true, added, "")
+		# titles and prices come from the Steam store's GetItems: only with "Look up deals and prices" on
+		# (review M22, problem 4); off, the games are added by app id alone
+		if prices_allowed():
+			_steam_batches(appids, MAX_IMPORT_BATCHES, finish)
+		else:
+			finish.call(true))
 
 
 # ---- alerts -----------------------------------------------------------------
