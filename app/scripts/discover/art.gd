@@ -26,7 +26,7 @@ const DEFAULT_MAX_BYTES := 256 * 1024 * 1024
 const MAX_FILE_BYTES := 8 * 1024 * 1024
 ## The only hosts art is downloaded from (review M22, problem 4): Steam's CDN, IGDB's image CDN (the calendar)
 ## and SteamGridDB's CDN. A URL from upcoming.json.gz or a store answer naming anything else is skipped.
-const IMAGE_HOSTS := ["steamstatic.com", "akamaihd.net", "images.igdb.com", "steamgriddb.com"]
+const IMAGE_HOSTS := ["steamstatic.com", "steamcdn-a.akamaihd.net", "images.igdb.com", "steamgriddb.com"]
 
 ## http.gd node or fake_http.gd object (made in _ready unless tests set one).
 var http: Variant = null

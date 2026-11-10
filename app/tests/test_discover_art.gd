@@ -104,6 +104,15 @@ func test_only_known_image_hosts() -> void:
 	# IGDB's and SteamGridDB's image CDNs are asked
 	var dir := H.temp_dir("art_hosts")
 	var http := FakeHttp.new()
+	var Meta := preload("res://scripts/library/meta/metadata.gd")
+	# review 2, low 12: a fragment, a backslash, a port or another Akamai customer
+	for bad in ["https://evil.example#.steamstatic.com/x.jpg", "https://evil.example\\.steamstatic.com/x.jpg",
+			"https://cdn.steamstatic.com:8443/x.jpg", "https://other-customer.akamaihd.net/x.jpg",
+			"https://cdn.steamstatic.com/x.jpg#frag", "http://cdn.steamstatic.com/x.jpg"]:
+		eq(Meta.https_on(bad, ArtScript.IMAGE_HOSTS), "", "refused: " + bad)
+	for good in ["https://shared.akamai.steamstatic.com/a/b.jpg?t=1", "https://steamcdn-a.akamaihd.net/steam/apps/1/header.jpg",
+			"https://images.igdb.com/igdb/image/upload/t_cover_big/x.jpg", "https://cdn2.steamgriddb.com/grid/abc.png"]:
+		eq(Meta.https_on(good, ArtScript.IMAGE_HOSTS), good, "allowed: " + good)
 	for u in ["https://tracker.example/x.jpg", "https://images.igdb.com.evil.example/x.jpg", "https://user@images.igdb.com/x.jpg"]:
 		http.route(u, {"file": H.fx("cover_jpg.bin")})
 	var a := _make(http, dir)
