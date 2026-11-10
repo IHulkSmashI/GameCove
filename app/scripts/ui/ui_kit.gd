@@ -2,6 +2,7 @@ extends RefCounted
 ## Small builders shared by every screen.
 
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
+const ImageGuard := preload("res://scripts/ui/image_guard.gd")
 
 
 ## Label styles shown in capitals.
@@ -168,7 +169,7 @@ static func load_art(path: String, max_size: Vector2i) -> Texture2D:
 	var key := "%s@%dx%d" % [path, max_size.x, max_size.y]
 	if _art_cache.has(key):
 		return _art_cache[key]
-	var img := Image.load_from_file(path)
+	var img := ImageGuard.load(path)
 	if img == null or img.is_empty():
 		_art_cache[key] = null
 		return null
@@ -209,7 +210,7 @@ static func art_finished(job: RefCounted, img: Image) -> void:
 
 ## Worker thread: the image at `path` scaled down to fit `max_size` (null if unreadable).
 static func decode_art(path: String, max_size: Vector2i) -> Image:
-	var img := Image.load_from_file(path) if FileAccess.file_exists(path) else null
+	var img := ImageGuard.load(path)   # size-checked before any decode (image_guard.gd)
 	if img == null or img.is_empty():
 		return null
 	var s := minf(1.0, minf(float(max_size.x) / img.get_width(), float(max_size.y) / img.get_height()))
