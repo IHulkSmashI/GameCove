@@ -130,6 +130,7 @@ func _measure(state: String) -> void:
 	d["window_focused"] = world.main._window_focused
 	var bg: Node = world.main.get("background")
 	d["throttled"] = bg.throttled() if bg != null else false
+	d["watched_timers"] = bg._timers.size() if bg != null else -1
 	d["menu_open"] = world.main.quick_menu.visible
 	result["states"][state] = d
 	print("PERF STATE %s %s" % [state, JSON.stringify(d)])
@@ -213,6 +214,10 @@ func _resume(runs: int) -> void:
 	var real_bg_clock: Variant = bg.clock if bg != null else null
 	if bg != null:
 		bg.clock = func() -> Array: return [Time.get_unix_time_from_system() + offset[0], Time.get_ticks_msec()]
+	# Power counts a sleep only between two looks: its first look after (re)starting only marks
+	while int(power._clock_mark[1]) == 0:
+		await timers[0].timeout
+		await world.idle()
 	for i in runs:
 		# right after a check, so the jump lands well before the next one
 		await timers[0].timeout
@@ -228,7 +233,12 @@ func _resume(runs: int) -> void:
 			box["resumed"] = Time.get_ticks_usec()
 			controls.run_on_worker(func(): box["replayed"] = Time.get_ticks_usec())
 		power.resumed.connect(on_resumed, CONNECT_ONE_SHOT)
-		var due := Time.get_ticks_usec() + int(float(next.call()) * 1e6)
+		# each check's own due time; the one that fires first after the jump is the one timed
+		var inject := Time.get_ticks_usec()
+		var fired := []
+		for t in timers:
+			var t_due := inject + int(t.time_left * 1e6)
+			t.timeout.connect(func(): fired.append(t_due), CONNECT_ONE_SHOT)
 		# the device sleeps (the wall clock jumps; the monotonic one stood still)
 		offset[0] += 60.0
 		var deadline := Time.get_ticks_msec() + 20000
@@ -239,6 +249,7 @@ func _resume(runs: int) -> void:
 			if power.resumed.is_connected(on_resumed):
 				power.resumed.disconnect(on_resumed)
 			continue
+		var due: int = fired[0] if not fired.is_empty() else inject
 		var r := {"resumed_ms": snappedf((int(box["resumed"]) - due) / 1000.0, 0.1),
 			"replayed_ms": snappedf((int(box["replayed"]) - due) / 1000.0, 0.1)}
 		result["resume"].append(r)
