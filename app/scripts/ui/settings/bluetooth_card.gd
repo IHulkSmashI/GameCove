@@ -3,7 +3,9 @@ extends VBoxContainer
 ## their battery, a row to find new ones, and a sheet per device (Connect /
 ## Disconnect / Pair / Forget). BlueZ work (scripts/system/bluetooth.gd) runs on
 ## a WorkerThreadPool task, never the main thread; a 10 s scan doesn't hold up
-## the Controls worker either.
+## the Controls worker either. The jobs belong to scripts/system/card_jobs.gd:
+## leaving or rebuilding the page mid-pair never waits, and the card that is
+## there when the job ends gets the result.
 ##
 ## Reads when built and when the page is shown again (refresh()), and after an
 ## action. No polling.
@@ -20,27 +22,42 @@ const Motion := preload("res://scripts/ui/motion.gd")
 const SKit := preload("res://scripts/ui/settings/kit.gd")
 const Proc := preload("res://scripts/system/proc.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const CardJobs := preload("res://scripts/system/card_jobs.gd")
+## card_jobs.gd channel.
+const CH := "bluetooth"
 
-## Runs busctl / bluetoothctl (proc.gd, or a fake in tests).
-var runner: RefCounted = Proc.new()
+## Runs busctl / bluetoothctl (proc.gd in the jobs' stop group, or a fake in tests).
+var runner: RefCounted
+## The owner of the jobs (CardJobs.shared(); tests pass their own).
+var jobs: RefCounted
 ## Where the action sheet goes (the settings screen); self when unset.
 var sheet_host: Node
-## Bluetooth.snapshot() from the last read; {} before the first one.
-var state: Dictionary = {}
+## Bluetooth.snapshot() from the last read; {} before the first one. Kept by
+## `jobs`, so a rebuilt card shows the devices at once.
+var state: Dictionary:
+	get: return jobs.memo(CH).get("state", {}) if jobs != null else {}
+	set(v): jobs.memo(CH)["state"] = v
 var rows := {}           # device path -> ActionRow
 ## Devices paired or connected at the last build (newly on ones pop).
 var _was_on := {}
 var _had_state := false
 var find_row: VBoxContainer
 var sheet: Control
-var busy := ""           # "read" / "scan" / an action id, "" when idle
-var _tasks: Array = []
+## "read" / "scan" / an action id, "" when idle (the job running in `jobs`).
+var busy: String:
+	get: return jobs.busy(CH) if jobs != null else ""
 
 
-func setup(command_runner: RefCounted = null, host: Node = null) -> void:
+## command_runner: a fake in tests (then the jobs get an owner of their own unless
+## job_host is given); null = the real programs, owned by CardJobs.shared().
+func setup(command_runner: RefCounted = null, host: Node = null, job_host: RefCounted = null) -> void:
 	name = "BluetoothDevices"
-	if command_runner != null:
-		runner = command_runner
+	if job_host != null:
+		jobs = job_host
+	else:
+		jobs = CardJobs.shared() if command_runner == null else CardJobs.new()
+	runner = command_runner if command_runner != null else jobs.runner()
+	jobs.subscribe(CH, self)
 	sheet_host = host
 	add_theme_constant_override("separation", 8)
 	refresh()
@@ -49,49 +66,33 @@ func setup(command_runner: RefCounted = null, host: Node = null) -> void:
 ## Reads the devices again.
 func refresh() -> void:
 	if busy != "":
+		_build()   # a job from before a rebuild: its result comes to us
 		return
-	busy = "read"
-	_build()
 	var r := runner
-	_job(func(): return Bluetooth.snapshot(r), "_on_snapshot", [])
+	if _job("read", func(): return {"snap": Bluetooth.snapshot(r), "scan": false}, "_on_snapshot", []):
+		_build()
 
 
-## Runs `fn` off the main thread and hands its result to `done` (with `extra`
-## after it). Outside the tree (tests) it runs at once.
-func _job(fn: Callable, done: String, extra: Array) -> void:
-	if not is_inside_tree():
-		callv(done, [fn.call()] + extra)
-		return
-	var me: WeakRef = weakref(self)
-	_tasks.append(WorkerThreadPool.add_task(func():
-		var res: Variant = fn.call()
-		var o: Object = me.get_ref()
-		if o != null:
-			o.call_deferred("_deliver", done, [res] + extra),
-		false, "GameCove Bluetooth"))
+## Hands `fn` to the job owner; `done` gets its result (then `extra`) on whichever
+## card is there then. Outside the scene tree (tests) it runs at once.
+func _job(job_name: String, fn: Callable, done: String, extra: Array) -> bool:
+	return jobs.start(CH, job_name, fn, done, extra, is_inside_tree() or jobs.force_threads)
 
 
-func _deliver(method: String, args: Array) -> void:
-	_reap()
-	callv(method, args)
+func _enter_tree() -> void:
+	if jobs != null:
+		jobs.subscribe(CH, self)
 
 
-func _reap() -> void:
-	for t in _tasks.duplicate():
-		if WorkerThreadPool.is_task_completed(t):
-			WorkerThreadPool.wait_for_task_completion(t)
-			_tasks.erase(t)
-
-
+## Leaving never waits for a job (it isn't ours): we just stop listening.
 func _exit_tree() -> void:
-	for t in _tasks:
-		WorkerThreadPool.wait_for_task_completion(t)
-	_tasks.clear()
+	if jobs != null:
+		jobs.unsubscribe(CH, self)
 
 
-func _on_snapshot(st: Dictionary) -> void:
-	var was_scan := busy == "scan"
-	busy = ""
+func _on_snapshot(res: Dictionary) -> void:
+	var was_scan := bool(res.get("scan", false))
+	var st: Dictionary = res.get("snap", {})
 	var before: Array = state.get("devices", []).map(func(d): return d["path"]) if state.get("devices") is Array else []
 	state = st
 	_build()
@@ -172,11 +173,10 @@ func _build() -> void:
 func find_new() -> void:
 	if busy != "":
 		return
-	busy = "scan"
 	if find_row != null:
 		find_row.set_value(TX.BT_FINDING, "muted")
 	var r := runner
-	_job(func(): return Bluetooth.scan(r), "_on_snapshot", [])
+	_job("scan", func(): return {"snap": Bluetooth.scan(r), "scan": true}, "_on_snapshot", [])
 
 
 func _sheet() -> Control:
@@ -206,12 +206,11 @@ func open_device(d: Dictionary) -> void:
 func act(d: Dictionary, action: String) -> void:
 	if busy != "" or not action in ["connect", "disconnect", "pair", "forget"]:
 		return
-	busy = action
 	if rows.has(d["path"]):
 		rows[d["path"]].set_value(TX.BT_WORKING, "muted")
 	var r := runner
 	var path := str(d["path"])
-	_job(func():
+	_job(action, func():
 		var ok := false
 		match action:
 			"connect": ok = Bluetooth.connect_device(r, path)
@@ -222,7 +221,6 @@ func act(d: Dictionary, action: String) -> void:
 
 
 func _on_action(res: Dictionary, action: String, dev_name: String) -> void:
-	busy = ""
 	var ok := bool(res.get("ok", false))
 	notice.emit((TX.BT_DONE if ok else TX.BT_FAILED)[action] % dev_name, "good" if ok else "bad")
 	state = res.get("snap", state)

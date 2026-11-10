@@ -9,8 +9,14 @@ extends Node
 
 const Proc := preload("res://scripts/system/proc.gd")
 
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
+## exec_safe.gd stop group of the real runner: at app exit a long run (an OS or
+## app update, du over a big library, a sign-in) ends instead of holding the
+## exit up. Firmware flashes and systemctl are never stopped (ExecSafe.NEVER_STOP).
+const GROUP := "services"
+
 ## The command runner (proc.gd, or a fake in tests).
-var runner: RefCounted = Proc.new()
+var runner: RefCounted = Proc.new(GROUP)
 
 var _thread: Thread
 var _jobs := {}          # name -> Callable
@@ -21,12 +27,15 @@ var _quit := false
 var _running := ""       # job name the worker is on, "" when idle
 
 
+## Services are autoloads: this is real app exit. Queued jobs still run (review
+## H2), but their programs are stopped first, so they finish at once.
 func _exit_tree() -> void:
 	if _thread == null:
 		return
 	_mutex.lock()
 	_quit = true
 	_mutex.unlock()
+	ExecSafe.stop_group(GROUP)
 	_sem.post()
 	_thread.wait_to_finish()
 	_thread = null

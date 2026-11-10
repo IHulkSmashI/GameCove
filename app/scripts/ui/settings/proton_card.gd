@@ -3,6 +3,9 @@ extends VBoxContainer
 ## one to remove it), and a row that checks for the newest release and then
 ## installs it (scripts/launch/proton_ge.gd). Network only when the user
 ## presses; the work runs on a WorkerThreadPool task, never the main thread.
+## The job belongs to scripts/system/card_jobs.gd, not to the card: the page can
+## be rebuilt (theme change) or left mid-install and nothing waits; the card that
+## is there when it's done gets the result.
 
 signal rebuilt
 signal notice(text: String, tone: String)
@@ -17,15 +20,25 @@ const SKit := preload("res://scripts/ui/settings/kit.gd")
 const Proc := preload("res://scripts/system/proc.gd")
 const Texts := preload("res://scripts/ui/texts_device.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const CardJobs := preload("res://scripts/system/card_jobs.gd")
+## card_jobs.gd channel.
+const CH := "ge_proton"
 
-var runner: RefCounted = Proc.new()
+var runner: RefCounted
+## The owner of the jobs (CardJobs.shared(); tests pass their own).
+var jobs: RefCounted
 var home := OS.get_environment("HOME")
 var sheet_host: Node
 ## [{"name", "internal", "dir", "major", "minor", "games"}], newest first.
 var builds: Array = []
-## The last check: ProtonGE.latest() ({} = not checked yet).
-var release: Dictionary = {}
-var busy := ""        # "check" / "install" / "remove" / ""
+## The last check: ProtonGE.latest() ({} = not checked yet). Kept by `jobs`, so
+## a rebuilt card still knows what it found.
+var release: Dictionary:
+	get: return jobs.memo(CH).get("release", {}) if jobs != null else {}
+	set(v): jobs.memo(CH)["release"] = v
+## "check" / "install" / "remove" / "" (the job running in `jobs`).
+var busy: String:
+	get: return jobs.busy(CH) if jobs != null else ""
 var rows := {}        # build name -> ActionRow
 ## Builds listed at the last build (a new one pops).
 var _listed := {}
@@ -35,13 +48,18 @@ var sheet: Control
 ## Called after an install or removal (Controls.detect_all, so the per-game
 ## Proton list picks it up).
 var on_changed: Callable
-var _tasks: Array = []
 
 
-func setup(command_runner: RefCounted = null, home_dir := "", host: Node = null) -> void:
+## command_runner: a fake in tests (then the jobs get an owner of their own unless
+## job_host is given); null = the real programs, owned by CardJobs.shared().
+func setup(command_runner: RefCounted = null, home_dir := "", host: Node = null, job_host: RefCounted = null) -> void:
 	name = "GeProton"
-	if command_runner != null:
-		runner = command_runner
+	if job_host != null:
+		jobs = job_host
+	else:
+		jobs = CardJobs.shared() if command_runner == null else CardJobs.new()
+	runner = command_runner if command_runner != null else jobs.runner()
+	jobs.subscribe(CH, self)
 	if home_dir != "":
 		home = home_dir
 	sheet_host = host
@@ -63,31 +81,21 @@ func read_installed() -> void:
 	_build()
 
 
-func _job(fn: Callable, done: String) -> void:
-	if not is_inside_tree():
-		call(done, fn.call())
-		return
-	var me: WeakRef = weakref(self)
-	_tasks.append(WorkerThreadPool.add_task(func():
-		var res: Variant = fn.call()
-		var o: Object = me.get_ref()
-		if o != null:
-			o.call_deferred("_deliver", done, res),
-		false, "GameCove GE-Proton"))
+## Hands `fn` to the job owner; `done` gets its result on whichever card is
+## there then. Outside the tree (tests) it runs at once.
+func _job(job_name: String, fn: Callable, done: String) -> bool:
+	return jobs.start(CH, job_name, fn, done, [], is_inside_tree() or jobs.force_threads)
 
 
-func _deliver(method: String, res: Variant) -> void:
-	for t in _tasks.duplicate():
-		if WorkerThreadPool.is_task_completed(t):
-			WorkerThreadPool.wait_for_task_completion(t)
-			_tasks.erase(t)
-	call(method, res)
+func _enter_tree() -> void:
+	if jobs != null:
+		jobs.subscribe(CH, self)
 
 
+## Leaving never waits for a job (it isn't ours): we just stop listening.
 func _exit_tree() -> void:
-	for t in _tasks:
-		WorkerThreadPool.wait_for_task_completion(t)
-	_tasks.clear()
+	if jobs != null:
+		jobs.unsubscribe(CH, self)
 
 
 func _newest_installed() -> String:
@@ -168,14 +176,12 @@ func press_main() -> void:
 
 
 func check() -> void:
-	busy = "check"
-	_build()
 	var r := runner
-	_job(func(): return ProtonGE.latest(r), "_on_checked")
+	if _job("check", func(): return ProtonGE.latest(r), "_on_checked"):
+		_build()
 
 
 func _on_checked(res: Dictionary) -> void:
-	busy = ""
 	if res.has("error"):
 		notice.emit(TX.GE_ERRORS.get(res["error"], TX.GE_ERRORS["offline"]), "bad")
 	else:
@@ -184,16 +190,14 @@ func _on_checked(res: Dictionary) -> void:
 
 
 func install() -> void:
-	busy = "install"
-	_build()
 	var r := runner
 	var rel := release.duplicate()
 	var dir := compat_dir()
-	_job(func(): return ProtonGE.install(r, rel, dir), "_on_installed")
+	if _job("install", func(): return ProtonGE.install(r, rel, dir), "_on_installed"):
+		_build()
 
 
 func _on_installed(res: Dictionary) -> void:
-	busy = ""
 	if bool(res.get("ok", false)):
 		notice.emit(TX.GE_INSTALLED % str(release.get("tag", "")), "good")
 		if on_changed.is_valid():
@@ -223,14 +227,12 @@ func open_build(b: Dictionary) -> void:
 func remove(build_name: String) -> void:
 	if busy != "":
 		return
-	busy = "remove"
 	var dir := compat_dir()
 	var root := Proton.steam_root(home)
-	_job(func(): return {"name": build_name, "error": ProtonGE.remove(dir, build_name, root)}, "_on_removed")
+	_job("remove", func(): return {"name": build_name, "error": ProtonGE.remove(dir, build_name, root)}, "_on_removed")
 
 
 func _on_removed(res: Dictionary) -> void:
-	busy = ""
 	if str(res.get("error", "")) == "":
 		notice.emit(TX.GE_REMOVED % str(res["name"]), "good")
 		if on_changed.is_valid():

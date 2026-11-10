@@ -814,6 +814,9 @@ func _exit_tree() -> void:
 
 
 static func release_caches() -> void:
+	# real exit: the cards' downloads and scans end first (their programs are
+	# stopped), so the wait for their threads is short
+	load("res://scripts/system/card_jobs.gd").shutdown_shared()
 	load("res://scripts/system/cache_prune.gd").wait_all()
 	load("res://scripts/ui/icons.gd")._cache.clear()
 	load("res://scripts/ui/games/game_icons.gd").clear()

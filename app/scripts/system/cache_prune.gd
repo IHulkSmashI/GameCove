@@ -5,6 +5,8 @@ extends RefCounted
 
 ## Files in `dir` (and one level below) last modified more than `max_age_s` before
 ## `now`, and only those whose name ends with one of `exts`. Returns how many went.
+## Stops between files once wait_all() was called (app exit): a big cache never
+## holds the exit up; what's left goes next time.
 static func prune(dir: String, max_age_s: int, now: int, exts: Array = [".json", ".jpg", ".png", ".webp"]) -> int:
 	var n := 0
 	var da := DirAccess.open(dir)
@@ -12,6 +14,8 @@ static func prune(dir: String, max_age_s: int, now: int, exts: Array = [".json",
 		return 0
 	da.include_hidden = false
 	for f in da.get_files():
+		if stopping():
+			return n
 		n += _maybe(dir.path_join(f), max_age_s, now, exts)
 	for sub in da.get_directories():
 		if da.is_link(sub):
@@ -20,6 +24,8 @@ static func prune(dir: String, max_age_s: int, now: int, exts: Array = [".json",
 		if sd == null:
 			continue
 		for f in sd.get_files():
+			if stopping():
+				return n
 			n += _maybe(dir.path_join(sub).path_join(f), max_age_s, now, exts)
 	return n
 
@@ -34,6 +40,15 @@ static func _maybe(path: String, max_age_s: int, now: int, exts: Array) -> int:
 
 
 static var _tasks: Array[int] = []
+static var _lock := Mutex.new()
+static var _stop := false
+
+
+static func stopping() -> bool:
+	_lock.lock()
+	var s := _stop
+	_lock.unlock()
+	return s
 
 
 ## prune() on a WorkerThreadPool thread. main.gd calls wait_all() before quitting:
@@ -43,8 +58,16 @@ static func prune_later(dir: String, max_age_s: int) -> void:
 	_tasks.append(WorkerThreadPool.add_task(func(): prune(dir, max_age_s, now), false, "Cache prune"))
 
 
-## Waits for every prune started with prune_later (each one is quick).
+## Waits for every prune started with prune_later. They stop at the next file
+## first, so this is quick however big the cache is. Later prunes run again
+## (tests call this between cases).
 static func wait_all() -> void:
+	_lock.lock()
+	_stop = true
+	_lock.unlock()
 	for id in _tasks:
 		WorkerThreadPool.wait_for_task_completion(id)
 	_tasks.clear()
+	_lock.lock()
+	_stop = false
+	_lock.unlock()

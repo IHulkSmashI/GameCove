@@ -29,13 +29,20 @@ const Privacy := preload("res://scripts/system/privacy.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 
 const CFG := "user://saves.cfg"
+## exec_safe.gd stop group of legendary and gogdl: at app exit they're ended so the
+## exit never waits on a sync (a download cut short puts its backup back, which
+## is never stopped).
+const GROUP := "saves"
 
 var cfg_path := CFG
 var privacy_path := Privacy.PREFS_PATH
 ## Where backups go (an absolute folder).
 var backup_dir := ""
 ## func(program, args: PackedStringArray) -> {"code", "out"} with stderr folded in.
-var run: Callable = func(program: String, args: PackedStringArray) -> Dictionary: return ExecSafe.run(program, args, true)
+## The real one puts the store tools in GROUP; backups go through the same call
+## outside it (tests swap this for one fake that sees both).
+var run: Callable = func(program: String, args: PackedStringArray) -> Dictionary: return ExecSafe.run(program, args, true, GROUP)
+var _real_run: Callable
 ## func(key) -> store entry (Library.entry_for); func() -> tools (Library.tools).
 var entry_lookup: Callable = func(_k: String) -> Dictionary: return {}
 var tools_lookup: Callable = func() -> Dictionary: return {}
@@ -55,7 +62,16 @@ var _quit := false
 
 func _init() -> void:
 	backup_dir = ProjectSettings.globalize_path("user://saves/backups")
-	backups = SaveBackup.new(backup_dir, func(p, a): return run.call(p, a))
+	_real_run = run
+	backups = SaveBackup.new(backup_dir, func(p, a): return _backup_run(p, a))
+
+
+## Backups and put-backs: never stopped (a download cut short at exit must get its
+## backup back).
+func _backup_run(program: String, args: PackedStringArray) -> Dictionary:
+	if run == _real_run:
+		return ExecSafe.run(program, args, true)
+	return run.call(program, args)
 
 
 ## Wires to the Library autoload (entries, tools) when there is one.
@@ -73,12 +89,15 @@ func _ready() -> void:
 	_thread.start(_worker)
 
 
+## main.gd owns us for the app's whole life: this is real app exit. The running
+## sync's tool is ended (queued jobs are dropped), so the wait is short.
 func _exit_tree() -> void:
 	if _thread == null:
 		return
 	_mutex.lock()
 	_quit = true
 	_mutex.unlock()
+	ExecSafe.stop_group(GROUP)
 	_sem.post()
 	_thread.wait_to_finish()
 	_thread = null

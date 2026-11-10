@@ -14,7 +14,6 @@ signal warn_cancelled
 ## About to sleep (battery history records it first).
 signal sleeping
 
-const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 ## Percent the battery must drop after a cancel (or a wake) before the warning comes back.
 const REWARN_DROP := 2
 
@@ -23,8 +22,10 @@ var settings: Callable = func() -> Dictionary: return {"on": false, "at": 5}
 ## func() -> bool: on the charger now.
 var plugged_now: Callable = func() -> bool: return false
 ## func() -> void: puts the handheld to sleep (tests swap it).
+## Started and left (OS.create_process passes argv untouched): no worker task that
+## the app's exit would have to wait for.
 var suspend: Callable = func() -> void:
-	WorkerThreadPool.add_task(func(): ExecSafe.run("systemctl", PackedStringArray(["suspend"])), false, "GameCove sleep")
+	OS.create_process("systemctl", PackedStringArray(["suspend"]))
 
 var warning := false
 var suppressed := false

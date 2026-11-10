@@ -10,13 +10,18 @@ extends Node
 
 signal finished(id: String, code: int, output: String)
 
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
+## exec_safe.gd stop group of the real runner.
+const GROUP := "bg_command"
+
 
 class SystemRunner extends RefCounted:
 	const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 
 	## Waits for the program; stdout and stderr together, so error lines show up.
+	## In the stop group: app exit ends it (pkexec itself is never signalled).
 	func run(program: String, args: PackedStringArray) -> Dictionary:
-		return ExecSafe.run(program, args, true)
+		return ExecSafe.run(program, args, true, GROUP)
 
 	## Starts the program and returns at once.
 	func spawn(program: String, args: PackedStringArray) -> int:
@@ -59,7 +64,11 @@ func _done(id: String, code: int, output: String) -> void:
 	finished.emit(id, code, output)
 
 
+## Real app exit only (the quick menu and the fixes service own us for the app's
+## whole life): the programs end first, so the wait is short.
 func _exit_tree() -> void:
+	if not _tasks.is_empty():
+		ExecSafe.stop_group(GROUP)
 	for id in _tasks:
 		WorkerThreadPool.wait_for_task_completion(_tasks[id])
 	_tasks.clear()

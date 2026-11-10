@@ -128,7 +128,13 @@ var _busy := false
 var _again := false
 var _pending := false
 var _paused := false
-var _task := -1
+## Calendar parses on the WorkerThreadPool; finished ones are freed as results
+## come in, the rest only at app exit (each parse is short).
+var _tasks: Array[int] = []
+## Every parse gets a number; an older one finishing late never replaces a newer
+## calendar (the start-up parse of the old copy vs. a fresh download).
+var _cal_seq := 0
+var _cal_shown := 0
 var _timer: Timer
 
 
@@ -169,9 +175,22 @@ func prices_allowed() -> bool:
 
 
 func _exit_tree() -> void:
-	if _task != -1:
-		WorkerThreadPool.wait_for_task_completion(_task)
-		_task = -1
+	for t in _tasks:
+		WorkerThreadPool.wait_for_task_completion(t)
+	_tasks.clear()
+
+
+## Frees the finished parses (the wait returns at once for those).
+func _reap() -> void:
+	for t in _tasks.duplicate():
+		if WorkerThreadPool.is_task_completed(t):
+			WorkerThreadPool.wait_for_task_completion(t)
+			_tasks.erase(t)
+
+
+func _parse_later(job: Callable) -> void:
+	_reap()
+	_tasks.append(WorkerThreadPool.add_task(job, false, "Discover calendar"))
 
 
 func _now() -> int:
@@ -336,18 +355,21 @@ func load_all() -> void:
 				_cache[k] = c[k]
 	var cal_path := ProjectSettings.globalize_path(_path("upcoming.json.gz"))
 	if threaded and FileAccess.file_exists(cal_path):
-		_task = WorkerThreadPool.add_task(func(): _calendar_loaded.call_deferred(Cal.load_file(cal_path), false),
-			false, "Discover calendar")
+		_cal_seq += 1
+		var seq := _cal_seq
+		_parse_later(func(): _calendar_loaded.call_deferred(Cal.load_file(cal_path), false, seq))
 	else:
 		_upcoming = Cal.load_file(cal_path)
 		_cal_day = -1
 	_rebuild_deals()
 
 
-func _calendar_loaded(doc: Dictionary, _fresh: bool) -> void:
-	if _task != -1:
-		WorkerThreadPool.wait_for_task_completion(_task)
-		_task = -1
+func _calendar_loaded(doc: Dictionary, _fresh: bool, seq := 0) -> void:
+	_reap()
+	if seq > 0:
+		if seq < _cal_shown:
+			return   # an older parse finishing after a newer one
+		_cal_shown = seq
 	if not doc.is_empty():
 		_upcoming = doc
 		_cal_day = -1
@@ -440,6 +462,8 @@ func _step_calendar(next: Callable) -> void:
 			_set_status("calendar", st)
 			next.call()
 			return
+		_cal_seq += 1
+		var seq := _cal_seq
 		var finish := func(doc: Dictionary):
 			if doc.is_empty():
 				DirAccess.remove_absolute(part)
@@ -447,12 +471,11 @@ func _step_calendar(next: Callable) -> void:
 			else:
 				DirAccess.rename_absolute(part, path)
 				_set_status("calendar", "ok")
-				_calendar_loaded(doc, false)
+				_calendar_loaded(doc, false, seq)
 			next.call()
 		if threaded:
-			if _task != -1:   # the start-up parse of the old copy; it's quick
-				WorkerThreadPool.wait_for_task_completion(_task)
-			_task = WorkerThreadPool.add_task(func(): finish.call_deferred(Cal.load_file(part)), false, "Discover calendar")
+			# never waits for the start-up parse of the old copy: both run, the newer wins
+			_parse_later(func(): finish.call_deferred(Cal.load_file(part)))
 		else:
 			finish.call(Cal.load_file(part)))
 
