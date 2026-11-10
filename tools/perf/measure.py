@@ -15,7 +15,7 @@ Then the quick menu's latency over a game and the resume handling's timing.
 
 The app is measured from inside (/proc/self, tests/perf/proc_stats.gd) so the
 numbers line up with the states exactly. Real GPU cost can't be seen here: see
-docs/performance.md for measuring on the handheld.
+docs/PERFORMANCE.md for measuring on the handheld.
 
 Env: GODOT (path to the Godot binary).
 """

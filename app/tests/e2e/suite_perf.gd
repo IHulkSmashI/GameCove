@@ -1,5 +1,5 @@
 extends "res://tests/e2e/e2e_case.gd"
-## Performance gate behind a game (docs/performance.md): with a game in front GameCove's main
+## Performance gate behind a game (docs/PERFORMANCE.md): with a game in front GameCove's main
 ## loop must stay near idle, only the Timers that have to run behind a game may run, the
 ## quick-menu button must still open the menu fast, and a resume from sleep must be handled
 ## as promptly as in front (BackgroundMode never makes Power's resume check late).

@@ -38,6 +38,10 @@ Run **GameCove Installer** again any time to change options, repair, update or r
 - **Settings in one place:** appearance and four themes, stores and downloads, Discover, performance, device and updates.
 - **Steam stays a store:** Steam games launch through Steam, so your Steam library keeps working. "Switch to Steam Gaming Mode" is always one press away.
 
+## Performance
+
+GameCove stays running behind your games (for the quick menu, power and TDP, and game tracking) and is built to cost next to nothing there. With a game in front its main loop wakes about 31 times a second instead of 145, nothing polls for the game's window (one idle `xprop -spy` watches it), the session heartbeat writes nothing, and Discover, the metadata and art fill and update checks wait until you stop playing. Only safety work keeps running: the 15 s charger and sleep check that puts your TDP and charge limit back after a resume, the thermal guard, and Auto TDP's once-a-second sample while it's on. The quick menu still opens over a game in under 100 ms. On our test box that cut GameCove's wake-ups behind a game from about 2240 to 1190 a second and its CPU time in half; most of what's left is Godot's own X11 event thread. Numbers, what runs and why, and how to measure it on your handheld: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+
 ## Devices
 
 **Full** = tested on the device by us. **Partial** = built from upstream data that was tested on the device, but we haven't run GameCove on it yet. Anything else (or an unknown model) gets the generic path, with device-specific settings hidden.

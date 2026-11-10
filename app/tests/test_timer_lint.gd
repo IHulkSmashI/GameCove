@@ -1,5 +1,5 @@
 extends "res://tests/test_case.gd"
-## Every Timer in the app says what it does behind a game (docs/performance.md). Behind a game
+## Every Timer in the app says what it does behind a game (docs/PERFORMANCE.md). Behind a game
 ## GameCove must sleep: BackgroundMode wakes the main loop for every running Timer, so a
 ## Timer that keeps running there costs wake-ups for the whole game. A new Timer.new() or
 ## create_timer() fails this test until it's listed here with how it behaves behind a game;
