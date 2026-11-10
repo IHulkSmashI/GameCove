@@ -280,6 +280,16 @@ static func local_layer(store: String, raw: Variant) -> Dictionary:
 	return layer("store", m)
 
 
+## True only for Steam's own "no such app" answer ({"<appid>": {"success": false}}). A
+## captive portal's or a proxy's HTTP 200 page is not that (review 2, low 11).
+static func steam_says_missing(appid: String, body: PackedByteArray) -> bool:
+	var j := JSON.new()
+	if j.parse(body.get_string_from_utf8()) != OK or not j.data is Dictionary:
+		return false
+	var entry = j.data.get(appid)
+	return entry is Dictionary and entry.get("success") == false
+
+
 ## A Steam store appdetails answer for `appid` as a layer, or {} if Steam has
 ## no such app or the answer is junk.
 static func steam_layer(appid: String, body: PackedByteArray) -> Dictionary:

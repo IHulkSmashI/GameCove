@@ -157,6 +157,22 @@ func test_resolver_fetches_caches_and_merges() -> void:
 	wipe(dir)
 
 
+## Review 2, low 11: a captive portal's HTTP 200 page was cached as "no such app" for a week.
+func test_junk_200_is_not_cached_as_missing() -> void:
+	var dir := tmp("junk")
+	var prefs := dir.path_join("settings.cfg")
+	var http := FakeHttp.new()
+	http.route(STEAM, {"text": "<html>Sign in to the hotel Wi-Fi</html>"})
+	var r := _resolver(http, dir, prefs)
+	r.queue_games([_game("gog", "1", "1145360")])
+	ok(not FileAccess.file_exists(Resolver.steam_cache_path(dir, "1145360")), "nothing cached")
+	eq(r.jobs_for(_game("gog", "1", "1145360")).size(), 1, "asked again next time")
+	ok(Metadata.steam_says_missing("9", '{"9":{"success":false}}'.to_utf8_buffer()), "Steam's own no-such-app answer")
+	ok(not Metadata.steam_says_missing("9", "<html>".to_utf8_buffer()), "not a portal page")
+	r.free()
+	wipe(dir)
+
+
 func test_resolver_privacy_gates() -> void:
 	var dir := tmp("gate")
 	var prefs := dir.path_join("settings.cfg")

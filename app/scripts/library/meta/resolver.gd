@@ -260,9 +260,11 @@ func _steam(j: Dictionary) -> void:
 	http.request(STEAM_URL + appid.uri_encode(), {"timeout": 20.0, "max_bytes": MAX_BODY}, func(res: Dictionary):
 		if res["ok"]:
 			var l := Metadata.steam_layer(appid, res["body"])
-			# "No such app" is cached too, so it isn't asked again for a week.
-			_write(steam_cache_path(abs_dir(), appid), {"at": _now(), "appid": appid, "layer": l})
-			resolved.emit(j["key"])
+			# Steam's "no such app" is cached too, so it isn't asked again for a week; a
+			# page that isn't Steam's answer at all (a captive portal) is not (review 2, low 11).
+			if not l.is_empty() or Metadata.steam_says_missing(appid, res["body"]):
+				_write(steam_cache_path(abs_dir(), appid), {"at": _now(), "appid": appid, "layer": l})
+				resolved.emit(j["key"])
 		_done(STEAM_GAP if res.get("error", "") != "backoff" else 30.0))
 
 
