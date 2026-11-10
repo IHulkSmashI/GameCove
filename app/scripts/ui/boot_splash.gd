@@ -1,10 +1,14 @@
 extends Control
 ## The boot intro over the home screen. If res://assets/boot/intro.ogv exists
-## (the owner's clip, Theora, no audio) it plays that; otherwise a code
-## animation of the GameCove mark (assets/logo-mark.svg, the same file as the
-## repo's assets/logo.svg): it scales in, one soft cyan glow sweeps across the
-## wordmark, then everything fades away, under 2 s, on the clip's slate
-## background so the two look the same. To swap the clip see docs/BOOT_INTRO.md.
+## (the owner's clip, Theora, no audio) it plays that, stopped VIDEO_END_S in
+## (~0.3 s after its glow settles; the file itself is untouched); otherwise a
+## code animation of the GameCove mark (assets/logo-mark.svg, the same file as
+## the repo's assets/logo.svg): it scales in and one soft cyan glow sweeps
+## across the wordmark, on the clip's slate background so the two look the
+## same. Either way it ends the same: the mark flies into the top bar's logo
+## (scale + move, MORPH_S) as the slate fades off the home screen, then one
+## soft ring pulses on the control that has focus (Home's Play): ready.
+## To swap the clip see docs/BOOT_INTRO.md.
 ##
 ## It never delays anything: main.gd adds it last in _ready, after the session
 ## client's heartbeat/ready file is set up, and nothing waits for it; the home
@@ -19,17 +23,24 @@ const Motion := preload("res://scripts/ui/motion.gd")
 ## The clip's background (#0F1723), also the code animation's.
 const BG := Color("#0F1723")
 const GLOW := Color("#00F0FF")
-## Code animation: scale-in, glow sweep, hold, fade out (1.9 s in all).
+## Code animation: scale-in, glow sweep (the halo settles by ~1.37 s), a
+## short hold, then the fly-in (MORPH_S): about 1.9 s in all.
 const IN_S := 0.55
 const SWEEP_AT := 0.45
 const SWEEP_S := 0.7
-const HOLD_UNTIL := 1.5
-const OUT_S := 0.4
+const HOLD_UNTIL := 1.6
+## The clip plays this long (its glow settles at ~1.7 s), then the fly-in.
+const VIDEO_END_S := 2.0
+## Where the mark sits in the clip: centred, the SVG's 512-px box drawn this
+## wide as a share of the clip's width (the mark is 640 px of a 1920x1200 frame).
+const CLIP_MARK_FRAC := 805.0 / 1920.0
+## The mark flies into the top bar's logo while the slate fades.
+const MORPH_S := 0.28
+## Then one ring pulse on the focused control.
+const PULSE_S := 0.2
+const PULSE_GROW := 0.08
 ## Skipped: fade out this fast.
 const SKIP_S := 0.15
-## A clip runs at most this long, whatever its length.
-const MAX_VIDEO_S := 6.0
-const VIDEO_OUT_S := 0.3
 
 ## Where the clip is looked for (tests point it elsewhere).
 static var video_path := "res://assets/boot/intro.ogv"
@@ -41,6 +52,12 @@ var _shade: ColorRect
 var _mark: Control
 var _halo: Panel
 var _sweep: TextureRect
+## The code animation's mark inside its halo.
+var _logo: TextureRect
+## The mark that flies into the top bar, and the top bar's logo (hidden meanwhile).
+var flyer: TextureRect
+var _header_logo: CanvasItem
+var _host: Control
 var _tw: Tween
 var _done := false
 
@@ -51,6 +68,7 @@ static func play(host: Control) -> Control:
 		return null
 	var s: Control = load("res://scripts/ui/boot_splash.gd").new()
 	s.build(pick_mode())
+	s._host = host
 	host.add_child(s)
 	s._start()
 	return s
@@ -94,7 +112,7 @@ func _build_video() -> void:
 		st = VideoStreamTheora.new()
 		st.file = video_path
 	player.stream = st
-	player.finished.connect(_finish.bind(VIDEO_OUT_S))
+	player.finished.connect(_morph)   # a clip shorter than VIDEO_END_S
 	add_child(player)
 
 
@@ -125,6 +143,7 @@ func _build_code() -> void:
 	logo.set_anchors_preset(Control.PRESET_FULL_RECT)
 	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_halo.add_child(logo)
+	_logo = logo
 	row.add_child(_halo)
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(26, 0)
@@ -169,8 +188,8 @@ func _start() -> void:
 	if mode == "video":
 		player.play()
 		_tw = create_tween()
-		_tw.tween_interval(MAX_VIDEO_S)
-		_tw.tween_callback(_finish.bind(VIDEO_OUT_S))
+		_tw.tween_interval(VIDEO_END_S)
+		_tw.tween_callback(_morph)
 		return
 	_mark.modulate.a = 0.0
 	_mark.scale = Vector2(0.82, 0.82)
@@ -187,14 +206,135 @@ func _start() -> void:
 	_tw.tween_method(_set_halo, 0.35, 0.6, SWEEP_S * 0.5).set_delay(SWEEP_AT + 0.15)
 	_tw.tween_method(_set_halo, 0.6, 0.35, SWEEP_S * 0.6).set_delay(SWEEP_AT + 0.15 + SWEEP_S * 0.5)
 	_tw.chain().tween_interval(maxf(0.0, HOLD_UNTIL - (SWEEP_AT + SWEEP_S)))
-	_tw.chain().tween_property(self, "modulate:a", 0.0, OUT_S)
-	_tw.chain().tween_callback(queue_free)
+	_tw.chain().tween_callback(_morph)
 
 
 func _set_halo(a: float) -> void:
 	var sb := _halo.get_theme_stylebox("panel") as StyleBoxFlat
 	if sb != null:
 		sb.shadow_color = Color(GLOW, a)
+
+
+## The mark's rect now, in our coordinates: the clip's (centred, a share of
+## its width) or the code animation's logo.
+func mark_rect() -> Rect2:
+	if mode == "video":
+		var r := Rect2(player.position, player.size)
+		var side := minf(r.size.x * CLIP_MARK_FRAC, r.size.y * CLIP_MARK_FRAC * 1920.0 / 1200.0)
+		return Rect2(r.get_center() - Vector2(side, side) / 2.0, Vector2(side, side))
+	return _local_rect(_logo)
+
+
+## A control's drawn rect (with its and its parents' scale) in our coordinates.
+func _local_rect(c: Control) -> Rect2:
+	var xf := c.get_global_transform()
+	return get_global_transform().affine_inverse() * Rect2(xf.origin, c.size * xf.get_scale())
+
+
+## The top bar's logo (host.top_bar's "Logo"), when it's on screen.
+func header_logo() -> Control:
+	var tb: Variant = _host.get("top_bar") if _host != null and is_instance_valid(_host) else null
+	var l: Node = (tb as Node).get_node_or_null("Logo") if tb is Node else null
+	if not l is Control:
+		return null
+	var c := l as Control
+	return c if c.is_visible_in_tree() or (not c.is_inside_tree() and c.visible) else null
+
+
+## The end: the mark flies into the top bar's logo as the slate fades off the
+## home screen (input already goes to it), then the focus pulse. No top bar
+## logo to fly to: a plain fade.
+func _morph() -> void:
+	if _done:
+		return
+	_done = true   # presses go to the home screen from here
+	if _tw != null and _tw.is_valid():
+		_tw.kill()
+	var target := header_logo()
+	if target == null:
+		_done = false
+		_finish(SKIP_S * 2.0)
+		return
+	var from := mark_rect()
+	var to := _local_rect(target)
+	flyer = TextureRect.new()
+	flyer.name = "Flyer"
+	flyer.texture = load("res://assets/logo-mark.svg")
+	flyer.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	flyer.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	flyer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flyer.position = from.position
+	flyer.size = from.size
+	add_child(flyer)
+	if player != null:
+		player.stop()
+		player.visible = false
+	if _logo != null:
+		_logo.visible = false
+	_header_logo = target
+	target.modulate.a = 0.0
+	_tw = create_tween().set_parallel(true)
+	_tw.tween_property(flyer, "position", to.position, MORPH_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	_tw.tween_property(flyer, "size", to.size, MORPH_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	_tw.tween_property(_shade, "modulate:a", 0.0, MORPH_S * 0.8).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	if _mark != null:   # the wordmark and halo give way to the top bar's own
+		_tw.tween_property(_mark, "modulate:a", 0.0, MORPH_S * 0.5)
+	if _sweep != null:
+		_tw.tween_property(_sweep, "modulate:a", 0.0, MORPH_S * 0.5)
+	_tw.chain().tween_callback(_landed)
+
+
+## The mark is on the top bar's logo: show that one, pulse the focused control
+## (`focused`: that control; default: whatever has focus now).
+func _landed(focused: Control = null) -> void:
+	_restore_header()
+	if flyer != null:
+		flyer.visible = false
+	if focused == null and is_inside_tree():
+		focused = get_viewport().gui_get_focus_owner()
+	var ring := _pulse_ring(focused)
+	if ring == null:
+		queue_free()
+		return
+	_tw = create_tween().set_parallel(true)
+	_tw.tween_property(ring, "scale", Vector2.ONE * (1.0 + PULSE_GROW), PULSE_S).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_tw.tween_property(ring, "modulate:a", 0.0, PULSE_S).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_tw.chain().tween_callback(queue_free)
+
+
+## A ring in the accent colour around the focused control, its own shape.
+func _pulse_ring(f: Control) -> Panel:
+	if f == null or not is_instance_valid(f) or (f.is_inside_tree() and not f.is_visible_in_tree()):
+		return null
+	var r := _local_rect(f).grow(3.0)
+	var radius := r.size.y / 2.0
+	for sb_name in ["focus", "normal", "panel"]:
+		var sb := f.get_theme_stylebox(sb_name) if f.has_theme_stylebox(sb_name) else null
+		if sb is StyleBoxFlat and (sb as StyleBoxFlat).corner_radius_top_left > 0:
+			radius = (sb as StyleBoxFlat).corner_radius_top_left + 3.0
+			break
+	var box := StyleBoxFlat.new()
+	box.draw_center = false
+	box.set_border_width_all(3)
+	box.border_color = ThemeLib.color("accent")
+	box.set_corner_radius_all(int(minf(radius, r.size.y / 2.0)))
+	box.anti_aliasing = true
+	var ring := Panel.new()
+	ring.name = "FocusPulse"
+	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ring.add_theme_stylebox_override("panel", box)
+	ring.position = r.position
+	ring.size = r.size
+	ring.pivot_offset = r.size / 2.0
+	ring.modulate.a = 0.9
+	add_child(ring)
+	return ring
+
+
+func _restore_header() -> void:
+	if _header_logo != null and is_instance_valid(_header_logo):
+		_header_logo.modulate.a = 1.0
+	_header_logo = null
 
 
 ## Any button skips it. `now`: gone this frame (our window lost focus).
@@ -205,6 +345,7 @@ func skip(now := false) -> void:
 			_tw.kill()
 		if player != null:
 			player.stop()
+		_restore_header()
 		queue_free()
 		return
 	_finish(SKIP_S)
@@ -216,12 +357,14 @@ func _finish(out_s: float) -> void:
 	_done = true
 	if _tw != null and _tw.is_valid():
 		_tw.kill()
+	_restore_header()
 	_tw = create_tween()
 	_tw.tween_property(self, "modulate:a", 0.0, out_s)
 	_tw.tween_callback(queue_free)
 
 
 func _exit_tree() -> void:
+	_restore_header()
 	if player != null:
 		player.stop()
 
