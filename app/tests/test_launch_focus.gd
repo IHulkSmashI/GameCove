@@ -401,3 +401,139 @@ func test_guide_brings_home_and_back_without_ending_the_game() -> void:
 	ok(not s.return_to_game(), "nothing to return to once stopped")
 	s.free()
 	r[0].free()
+
+
+## xprop with `-spy`: the watch GameSession keeps while a game runs (lines pushed by the test).
+class SpyXprop:
+	extends FakeXprop
+	var watches: Array = []
+
+	func spawn_watch(program: String, args: PackedStringArray, on_line: Callable, on_exit := Callable()) -> RefCounted:
+		calls.append(program + " " + " ".join(args))
+		var w := SpyWatch.new()
+		w.on_line = on_line
+		w.on_exit = on_exit
+		watches.append(w)
+		return w
+
+
+class SpyWatch:
+	extends RefCounted
+	var on_line: Callable
+	var on_exit: Callable
+	var running := true
+
+	func alive() -> bool:
+		return running
+
+	func stop() -> void:
+		running = false
+
+	func say(line: String) -> void:
+		on_line.call(line)
+
+
+func test_no_polling_behind_a_listed_game() -> void:
+	var x := SpyXprop.new()
+	var g = GamescopeScript.new()
+	g.runner = x
+	g.env = {"GAMESCOPE_WAYLAND_DISPLAY": "gamescope-0", "DISPLAY": ""}
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769, 976730]
+	var s := _session(g, FakePower.new(), FakeLauncher.new())
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
+	s.poll_focus()
+	eq(s.phase, "running", "the game's window came")
+	eq(x.watches.size(), 1, "one watch on the focusable list")
+	ok(x.calls.has("xprop -spy -root -notype GAMESCOPE_FOCUSABLE_APPS"), "xprop -spy on the root window")
+	ok(s.exit_polling, "polling until the watch reports")
+	var w: SpyWatch = x.watches[0]
+	w.say("GAMESCOPE_FOCUSABLE_APPS = 769, 976730")
+	ok(not s.exit_polling, "the game is listed and watched: no exit polling at all")
+	w.say("something else = 1")
+	ok(not s.exit_polling, "other lines are ignored")
+	w.say("GAMESCOPE_FOCUSABLE_APPS = 769, 976730, 12")
+	ok(not s.exit_polling and s.phase == "running", "another window came: still running, still no polling")
+	# the game quits: the watch says so at once, one confirming look ends it (as before: twice gone)
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769]
+	w.say("GAMESCOPE_FOCUSABLE_APPS = 769")
+	eq(s.phase, "running", "gone once: not ended yet (a launcher closing before the game's window)")
+	ok(s.exit_polling, "the exit check polls to confirm")
+	s.poll_exit()
+	eq(s.phase, "idle", "gone twice: ended")
+	ok(not w.running, "the watch stopped with the session")
+	eq(_base(x), [413091, 769], "home")
+	s.free()
+	g.free()
+
+
+func test_a_window_back_before_the_confirming_look_keeps_the_game() -> void:
+	var x := SpyXprop.new()
+	var g = GamescopeScript.new()
+	g.runner = x
+	g.env = {"GAMESCOPE_WAYLAND_DISPLAY": "gamescope-0", "DISPLAY": ""}
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769, 976730]
+	var s := _session(g, FakePower.new(), FakeLauncher.new())
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
+	s.poll_focus()
+	var w: SpyWatch = x.watches[0]
+	w.say("GAMESCOPE_FOCUSABLE_APPS = 769")
+	w.say("GAMESCOPE_FOCUSABLE_APPS = 769, 976730")
+	s.poll_exit()
+	eq(s.phase, "running", "back in the list: still running")
+	ok(not s.exit_polling, "and no polling again")
+	s.stop()
+	s.free()
+	g.free()
+
+
+func test_polling_comes_back_when_the_watch_ends() -> void:
+	var x := SpyXprop.new()
+	var g = GamescopeScript.new()
+	g.runner = x
+	g.env = {"GAMESCOPE_WAYLAND_DISPLAY": "gamescope-0", "DISPLAY": ""}
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769, 976730]
+	var s := _session(g, FakePower.new(), FakeLauncher.new())
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
+	s.poll_focus()
+	var w: SpyWatch = x.watches[0]
+	w.say("GAMESCOPE_FOCUSABLE_APPS = 769, 976730")
+	ok(not s.exit_polling, "watched")
+	w.running = false
+	w.on_exit.call()
+	ok(s.exit_polling, "xprop -spy died: the 3 s exit check polls again")
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769]
+	s.poll_exit()
+	s.poll_exit()
+	eq(s.phase, "idle", "and still notices the end")
+	s.free()
+	g.free()
+
+
+func test_spy_lines() -> void:
+	eq(GamescopeScript.spy_values("GAMESCOPE_FOCUSABLE_APPS = 769, 5", "GAMESCOPE_FOCUSABLE_APPS"), [769, 5], "values")
+	eq(GamescopeScript.spy_values("GAMESCOPE_FOCUSABLE_APPS:  not found.", "GAMESCOPE_FOCUSABLE_APPS"), [], "removed: empty")
+	eq(GamescopeScript.spy_values("OTHER = 1", "GAMESCOPE_FOCUSABLE_APPS"), null, "other atoms ignored")
+	eq(GamescopeScript.spy_values("", "GAMESCOPE_FOCUSABLE_APPS"), null, "blank ignored")
+	var g = GamescopeScript.new()
+	g.runner = FakeXprop.new()
+	g.env = {"GAMESCOPE_WAYLAND_DISPLAY": "gamescope-0", "DISPLAY": ""}
+	eq(g.watch_focusable(func(_a): pass), null, "a runner that can't keep a program running: no watch (GameSession polls)")
+	g.free()
+
+
+func test_a_real_watch_stops_and_is_reaped() -> void:
+	var CR := preload("res://scripts/gamescope/command_runner.gd")
+	var r = CR.new()
+	var w: RefCounted = r.spawn_watch("/bin/sh", PackedStringArray(["-c", "echo a; exec sleep 30"]), func(_l): pass)
+	ok(w != null, "started")
+	ok(w.alive(), "running")
+	var pid: int = w.pid
+	w.stop()
+	ok(not w.alive(), "stopped")
+	ok(not DirAccess.dir_exists_absolute("/proc/%d" % pid), "and reaped: no zombie left")
+	w.stop()
+	var gone: RefCounted = r.spawn_watch("/nonexistent/xprop", PackedStringArray(), func(_l): pass)
+	if gone != null:
+		OS.delay_msec(100)
+		ok(not gone.alive(), "a missing program ends at once (GameSession polls then)")
+		gone.stop()
