@@ -12,6 +12,7 @@ const UserFiles := preload("res://scripts/installer/user_files.gd")
 const Fake := preload("res://tests/fixtures/system/fake_runner.gd")
 const F := preload("res://tests/fixtures/installer/fakes.gd")
 const SetupFlow := preload("res://scripts/ui/setup/setup_flow.gd")
+const TI := preload("res://scripts/ui/installer/texts_installer.gd")
 
 var _keep: Array = []
 
@@ -56,6 +57,9 @@ func test_welcome_shows_device_and_modes() -> void:
 	ok(easy.selected, "Easy is the default")
 	eq(s.focusables()[0], easy)
 	easy.pressed.emit()
+	eq(s.plan.step, "stores", "Easy offers store sign-in first (the welcome card promises it)")
+	eq(s.skip_button.text, "Skip for now", "one press to skip")
+	s.skip_step()
 	eq(s.plan.step, "art", "Easy asks for game art (no key ships with GameCove)")
 	eq(s.skip_button.text, "Skip, use Steam art only")
 	ok(s.skip_button.visible, "skippable")
@@ -164,6 +168,7 @@ func test_install_runs_to_done() -> void:
 	var s := _screen(F.target("bazzite"), setup)
 	s.pick_mode("easy")
 	s.skip_step()
+	s.skip_step()
 	s.next_step()
 	eq(s.plan.step, "done", "the run finished synchronously with the fake runner")
 	eq(s.next_button.text, "Restart now")
@@ -261,6 +266,7 @@ func test_uninstall_asks_about_save_backups_separately() -> void:
 func test_art_step_on_the_desktop() -> void:
 	var s := _screen(F.target("bazzite"))
 	s.pick_mode("easy")
+	s.next_step()
 	eq(s.plan.step, "art")
 	var a: Control = s.art_step
 	ok(a.find_child("OpenHere", true, false) != null, "Open the page here on the desktop")
@@ -336,3 +342,55 @@ func test_rail_compact_with_many_steps() -> void:
 	s.show_step()
 	ok(s.rail.get_children().all(func(p): return p.find_child("Text", true, false).visible), "Easy names every step")
 	_free(s)
+
+
+## Owner item: Easy never offered Epic / GOG / Amazon sign-in although the welcome card promises it.
+## The store step is in Easy now: skippable with one press, Continue focused, stores that are
+## already signed in (Heroic's sign-ins included) shown as done, and the summary names them.
+func test_easy_offers_store_sign_in() -> void:
+	var setup := F.FakeSetup.new()
+	var s := _screen(F.target("bazzite"), setup)
+	eq(s.plan.steps(), ["welcome", "stores", "art", "summary", "progress", "done"], "Easy: stores after welcome, before Game art")
+	s.pick_mode("easy")
+	eq(s.plan.step, "stores", "the store step")
+	for store in ["epic", "gog", "amazon"]:
+		ok(s.body.find_child("Card_store_" + store, true, false) != null, store + " has a card")
+	ok(s.skip_button.visible and s.skip_button.text == TI.SKIP_STORES, "Skip for now")
+	eq(s.next_button.text, TI.NEXT, "and Continue")
+	ok(_has_text(s.nav_note, "Settings > Stores"), "says where to sign in later, with a controller")
+	eq(s.rail.get_child_count(), 6, "six step pills")
+	ok(s.rail.get_children().all(func(p): return p.find_child("Text", true, false).visible), "Easy still names every step")
+	setup.status["gog"]["signed_in"] = true   # e.g. signed in through Heroic before
+	s.show_step()
+	var want_done: Array = ["gog"]
+	for store in want_done:
+		ok(s.body.find_child("Card_store_" + store, true, false).selected, store + " is already signed in: shown as done")
+	s.open_sign_in("epic")
+	ok(s.sign_in != null, "signing in works from Easy")
+	s.go("stores")
+	s.next_step()
+	eq(s.plan.step, "art", "Continue moves on")
+	s.skip_step()
+	eq(s.plan.step, "summary")
+	ok(s.body.find_child("sum_stores", true, false) != null, "the summary has the stores line")
+	_free(s)
+	# one press on Skip for now, from a fresh start
+	var s2 := _screen(F.target("bazzite"))
+	s2.pick_mode("easy")
+	s2.skip_step()
+	eq(s2.plan.step, "art", "Skip for now: straight to Game art")
+	s2.skip_step()
+	eq(s2.plan.summary()[2]["value"], "skipped", "the summary knows stores were skipped")
+	_free(s2)
+	var screen_src := FileAccess.get_file_as_string("res://scripts/ui/installer/installer_screen.gd")
+	ok(screen_src.contains("plan.step == \"stores\" and plan.mode == \"easy\""), "Easy's store step starts with the focus on Continue")
+	ok(TI.MODE_EASY_LINE.contains("sign in to Epic, GOG and Amazon"), "the Easy card says so")
+
+
+func _has_text(n: Node, part: String) -> bool:
+	if (n is Label or n is Button) and str(n.text).contains(part):
+		return true
+	for c in n.get_children():
+		if _has_text(c, part):
+			return true
+	return false

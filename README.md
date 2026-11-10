@@ -481,7 +481,7 @@ that's how a model moves up. Details per device: [docs/DEVICES.md](docs/DEVICES.
    curl -fsSL https://raw.githubusercontent.com/IHulkSmashI/GameCove/main/packaging/get-gamecove.sh | bash
    ```
    It downloads the latest release, checks its signature, adds **GameCove Installer** to your app menu and opens it.
-3. The installer walks you through it: **Easy** (recommended settings, one summary page) or **Custom** (every option).
+3. The installer walks you through it: **Easy** (recommended settings: sign in to your stores or skip that, get free game art, one summary page) or **Custom** (every option).
    Choose whether your handheld boots into GameCove or keeps Steam Gaming Mode as the default with GameCove one tap
    away, sign in to your stores, get free game art, pick your fixes and extras (like Moonlight for streaming), and
    you're done.

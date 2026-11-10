@@ -541,7 +541,7 @@ func _update_nav() -> void:
 	var s: String = plan.step
 	back_button.visible = not s in ["welcome", "maintenance", "finish", "progress", "done"] or plan.return_to != ""
 	skip_button.visible = plan.can_skip() and plan.return_to == ""
-	skip_button.text = ArtKeyStep.SKIP_TEXT if s == "art" else TI.SKIP
+	skip_button.text = ArtKeyStep.SKIP_TEXT if s == "art" else (TI.SKIP_STORES if s == "stores" else TI.SKIP)
 	next_button.visible = not s in ["maintenance", "progress"]
 	next_button.disabled = false
 	next_button.text = TI.NEXT
@@ -1709,7 +1709,9 @@ func focus_first() -> void:
 		if c is Control and c.is_visible_in_tree() and not (c is BaseButton and c.disabled):
 			f = c
 			break
-	if f == null or plan.step in ["summary", "uninstall", "finish", "done"] and next_button.visible:
+	# Easy mode's store step starts on Continue: one press moves on, signing in is a step up
+	var on_next: bool = plan.step in ["summary", "uninstall", "finish", "done"] or (plan.step == "stores" and plan.mode == "easy" and sign_in == null)
+	if f == null or on_next and next_button.visible:
 		f = next_button if next_button.visible else f
 	if f != null:
 		f.grab_focus()
