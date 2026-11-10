@@ -140,10 +140,10 @@ const SETUP_OPEN := "Open setup"
 
 # ---- Setup flow
 
-const SETUP_STEPS := ["welcome", "theme", "stores", "keys", "fixes", "done"]
+const SETUP_STEPS := ["welcome", "theme", "stores", "art", "keys", "fixes", "done"]
 ## Our step -> the Setup service's step id.
-const SETUP_SERVICE_IDS := {"welcome": "welcome", "theme": "theme", "stores": "stores", "keys": "steamgriddb", "fixes": "device_fixes", "done": "done"}
-const SETUP_STEP_NAMES := {"welcome": "Welcome", "theme": "Look", "stores": "Stores", "keys": "Keys", "fixes": "Device fixes", "done": "Done"}
+const SETUP_SERVICE_IDS := {"welcome": "welcome", "theme": "theme", "stores": "stores", "art": "steamgriddb", "keys": "keys", "fixes": "device_fixes", "done": "done"}
+const SETUP_STEP_NAMES := {"welcome": "Welcome", "theme": "Look", "stores": "Stores", "art": "Game art", "keys": "Keys", "fixes": "Device fixes", "done": "Done"}
 const SETUP_STATE := {"done": "Done", "skipped": "Skipped", "todo": "To do"}
 
 const WELCOME_TITLE := "Welcome to GameCove"
@@ -158,10 +158,10 @@ const THEME_TITLE := "Pick a look"
 const THEME_LINE := "Changes right away. You can switch any time in Settings."
 const STORES_TITLE := "Connect your stores"
 const STORES_LINE := "Every store's games land in one library. Sign in with your phone: no typing passwords on the handheld."
-const KEYS_TITLE := "Optional keys"
-const KEYS_LINE := "Two free keys make GameCove a bit better. Both stay on this device. Skip this if you like."
+const KEYS_TITLE := "Optional key"
+const KEYS_LINE := "A free gg.deals key makes prices better. It stays on this device. Skip this if you like."
 const KEY_GGDEALS_WHY := "Real prices from every store in your country, not just Steam's. Get a free key at gg.deals/api."
-const KEY_SGDB_WHY := "Cover art for games Steam has none for. Get a free key at steamgriddb.com under Preferences, API."
+const KEY_SGDB_WHY := "Covers, banners and logos for every game. Choose to sign in to SteamGridDB with your phone: free, about a minute."
 const FIXES_TITLE := "Fixes for your %s"
 const FIXES_LINE := "Things that don't work out of the box on this device, and what we can do about them."
 const FIXES_DESKTOP := "Installing a fix needs your admin password, and Gaming Mode can't ask for it. Switch to Desktop Mode, open GameCove there and install them from Quick menu, Device."
@@ -171,10 +171,11 @@ const FIXES_GENERIC := "We don't have device fixes for this handheld yet."
 const WELCOME_PLAN := {
 	"theme": "Pick colours you like.",
 	"stores": "Sign in with your phone.",
-	"keys": "Two free extras, optional.",
+	"art": "Free covers for every game.",
+	"keys": "A free extra, optional.",
 	"fixes": "What this device needs.",
 }
-const WELCOME_PLAN_ICONS := {"theme": "palette", "stores": "store", "keys": "shield", "fixes": "sparkle"}
+const WELCOME_PLAN_ICONS := {"theme": "palette", "stores": "store", "art": "library", "keys": "shield", "fixes": "sparkle"}
 const DONE_TITLE := "You're all set"
 const DONE_LINE := "Your games are on the home screen. Press %s any time for power, screen and game settings."
 const DONE_TIPS := [

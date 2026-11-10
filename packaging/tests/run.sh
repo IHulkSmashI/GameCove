@@ -109,6 +109,12 @@ expect_code 3 "fix failure propagates" gf dummy set boom
 contains "$LOG" "action=set value=boom result=fail(3)" "failure logged"
 expect_code 7 "broken fix" gf broken install
 contains "$LOG" "fix=broken action=install value=- result=fail(7)" "broken logged"
+# review problem 9: the very first log line (no changes.log yet) prints no "cannot open" error
+rm -f "$LOG" "$LOG.1"
+gf dummy set 81 >/dev/null 2>"$T/err1"
+lacks "$T/err1" "cannot open" "first log write has no error about the missing log"
+lacks "$T/err1" "No such file" "first log write has no error about the missing log"
+contains "$LOG" "fix=dummy action=set value=81 result=ok" "first log line written"
 # review L1: the log is capped; over the limit it becomes changes.log.1 and a new one starts
 rm -f "$LOG.1"
 for i in 1 2 3 4 5 6; do GAMECOVE_LOG_MAX=300 gf dummy set "$i" >/dev/null 2>&1; done
@@ -744,6 +750,23 @@ else
 	contains "$T/curl.log" "sigstore/cosign/releases/download/v2.5.3/cosign-linux-amd64" "the pinned cosign release"
 fi
 expect_code 0 "bootstrap again" gg "$R_BAZ"
+# review problem 9: "latest" never installs an older release over a newer one; --tag (GAMECOVE_TAG) may
+cp "$GI/release.env" "$T/release.env.keep"
+sed 's/^TAG=.*/TAG=v0.10.0/' "$T/release.env.keep" >"$GI/release.env"
+expect_code 1 "an older latest isn't installed over a newer one" gg "$R_BAZ"
+contains "$T/out" "older than the installed v0.10.0" "said why"
+contains "$GI/release.env" "^TAG=v0.10.0$" "the newer install is left alone"
+expect_code 0 "an older release on purpose (--tag)" gg "$R_BAZ" GAMECOVE_TAG=v0.2.0
+sed 's/^TAG=.*/TAG=v0.2.0-rc.1/' "$T/release.env.keep" >"$GI/release.env"
+expect_code 0 "the final release over its own pre-release" gg "$R_BAZ"
+contains "$GI/release.env" "^TAG=v0.2.0$" "updated"
+sed -n '/^version_lt() {$/,/^}$/p' "$GG" >"$T/version_lt.sh"
+for pair in "v0.2.0 v0.10.0 0" "v0.10.0 v0.2.0 1" "v1.2.0 v1.2.0 1" "v1.2.0-rc.1 v1.2.0 0" "v1.2.0 v1.2.0-rc.1 1" \
+	"v1.2.0-rc.1 v1.2.0-rc.2 0" "v1.2 v1.2.1 0" "vX v1.0.0 1"; do
+	set -- $pair
+	got="$(sh -c '. "$1"; version_lt "$2" "$3"; echo $?' sh "$T/version_lt.sh" "$1" "$2" 2>/dev/null)"
+	[ "$got" = "$3" ] && ok || bad "version_lt $1 $2: $got, want $3"
+done
 touch "$T/offline"
 : >"$T/launch.log"
 expect_code 0 "bootstrap offline uses the cached app" env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$R_BAZ" \

@@ -275,7 +275,7 @@ func photo_for(device_id: String) -> Dictionary:
 	if not got.is_empty():
 		# A weekly look at the manifest still happens, so a photo whose license
 		# was withdrawn upstream drops out here too.
-		if http != null and _manifest_stale() and not _manifest_tried:
+		if http != null and _manifest_stale() and not _manifest_tried and _net_allowed():
 			_fetch_manifest()
 		return got
 	_fetch(device_id)
@@ -307,8 +307,14 @@ func cached(device_id: String) -> Dictionary:
 	return {"path": path, "credit": e["credit"].duplicate()}
 
 
+## Every request here is on GameCove's own initiative (a page showing the picture, the start-up prefetch), so
+## none is made with "Background lookups" off; what's cached still shows (review M22, problem 4).
+func _net_allowed() -> bool:
+	return preload("res://scripts/system/privacy.gd").background_allowed(prefs_path)
+
+
 func _fetch(device_id: String) -> void:
-	if http == null or _inflight.has(device_id):
+	if http == null or _inflight.has(device_id) or not _net_allowed():
 		return
 	if _manifest_stale() and not _manifest_tried:
 		if not device_id in _waiting:
@@ -435,6 +441,51 @@ static func _page_on(url: String, domains: Variant) -> bool:
 	return false
 
 
+## The largest picture decoded (review problem 9): a few hundred KB of PNG or WebP can claim a 50000 x 50000
+## canvas, and the view decodes on the main thread. Real photos and maker images are under 4000 px.
+const MAX_SIDE := 6000
+const MAX_PIXELS := 24 * 1000 * 1000
+
+
+## Width and height from a PNG, JPEG or WebP header, without decoding; Vector2i.ZERO when unreadable.
+static func image_size(b: PackedByteArray) -> Vector2i:
+	var n := b.size()
+	match sniff_image(b):
+		"png":
+			if n >= 24:
+				return Vector2i((b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19],
+					(b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23])
+		"jpg":
+			var i := 2
+			while i + 9 < n:
+				if b[i] != 0xFF:
+					i += 1
+					continue
+				var m := b[i + 1]
+				if m == 0xFF or m == 0x01 or (m >= 0xD0 and m <= 0xD8):
+					i += 1 if m == 0xFF else 2
+					continue
+				if m >= 0xC0 and m <= 0xCF and m != 0xC4 and m != 0xC8 and m != 0xCC:
+					return Vector2i((b[i + 7] << 8) | b[i + 8], (b[i + 5] << 8) | b[i + 6])
+				i += 2 + ((b[i + 2] << 8) | b[i + 3])
+		"webp":
+			if n >= 30:
+				var kind := b.slice(12, 16).get_string_from_ascii()
+				if kind == "VP8 " and b[23] == 0x9D and b[24] == 0x01 and b[25] == 0x2A:
+					return Vector2i((b[26] | (b[27] << 8)) & 0x3FFF, (b[28] | (b[29] << 8)) & 0x3FFF)
+				if kind == "VP8L" and b[20] == 0x2F:
+					return Vector2i(1 + (((b[22] & 0x3F) << 8) | b[21]), 1 + (((b[24] & 0x0F) << 10) | (b[23] << 2) | ((b[22] & 0xC0) >> 6)))
+				if kind == "VP8X":
+					return Vector2i(1 + (b[24] | (b[25] << 8) | (b[26] << 16)), 1 + (b[27] | (b[28] << 8) | (b[29] << 16)))
+	return Vector2i.ZERO
+
+
+## True when the header names a size that may be decoded (MAX_SIDE, MAX_PIXELS).
+static func size_ok(b: PackedByteArray) -> bool:
+	var sz := image_size(b)
+	return sz.x > 0 and sz.y > 0 and sz.x <= MAX_SIDE and sz.y <= MAX_SIDE and sz.x * sz.y <= MAX_PIXELS
+
+
 ## "png" | "jpg" | "webp" | "" from the first bytes (never trusts headers).
 static func sniff_image(b: PackedByteArray) -> String:
 	if b.size() >= 8 and b.slice(0, 8) == PackedByteArray([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
@@ -505,7 +556,7 @@ func _maker_photo(device_id: String) -> Dictionary:
 
 func _fetch_maker(device_id: String) -> void:
 	var m := maker_entry(device_id)
-	if http == null or m.is_empty():
+	if http == null or m.is_empty() or not _net_allowed():
 		return
 	var url: String = m["url"]
 	if _maker_inflight.has(url):
@@ -527,7 +578,7 @@ func _on_maker(res: Dictionary, url: String) -> void:
 	if not res.get("ok", false) or body.is_empty() or body.size() > MAKER_MAX_BYTES:
 		return
 	var ext := sniff_image(body)
-	if ext == "":
+	if ext == "" or not size_ok(body):
 		return
 	var path := store_maker(url, body, ext)
 	if path == "":

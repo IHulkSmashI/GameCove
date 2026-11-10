@@ -16,12 +16,9 @@ const MAX_AGE_S := 7 * 24 * 3600
 
 ## A next-session setting changed from `old` to `now` (labels for the dialog).
 static func remember(id: String, title: String, old: Variant, now: Variant, now_label: String) -> void:
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		return
-	f.store_string(JSON.stringify({"id": id, "title": title, "old": old, "new": now, "label": now_label,
-		"pid": OS.get_process_id(), "time": int(Time.get_unix_time_from_system())}))
-	f.close()
+	# atomic (review H9): a half-written file would lose the "keep or undo" question after a crash
+	preload("res://scripts/system/settings_file.gd").save_text(path, JSON.stringify({"id": id, "title": title,
+		"old": old, "new": now, "label": now_label, "pid": OS.get_process_id(), "time": int(Time.get_unix_time_from_system())}))
 
 
 static func pending() -> Dictionary:

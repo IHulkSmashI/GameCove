@@ -197,7 +197,8 @@ source_event, target_events[]}]}`. Events: `{gamepad: {button: South}}`,
 
 ## Setup (`Setup`, `scripts/system/setup.gd`)
 
-Steps `welcome, theme, stores, device_fixes, steamgriddb, done` in `user://setup.cfg`.
+Steps `welcome, theme, stores, steamgriddb, keys, device_fixes, done` in `user://setup.cfg` (0600: it holds the
+user's SteamGridDB key; `steamgriddb` is the Game art step, `keys` the optional gg.deals key).
 Store sign-in, read from each tool's source:
 
 | Store | Signed in when | `start_login` gives | `finish_login(text)` runs |

@@ -204,6 +204,23 @@ func test_import_steam_wishlist_by_vanity() -> void:
 	H.wipe(dir)
 
 
+func test_import_with_price_lookups_off_asks_only_for_the_wishlist() -> void:
+	var dir := H.temp_dir("disc_imp_off")
+	var http = H.online_http()
+	var d := H.make(http, dir)
+	var ev := Events.new()
+	ev.watch(d)
+	d.set_settings({"price_lookups": false})
+	var n0: int = http.requests.size()
+	d.import_steam_wishlist("76561197972611406")
+	eq(ev.named("import")[-1], ["import", true, 3, ""], "the games are added")
+	var sent: Array = http.requests.slice(n0)
+	ok(sent.any(func(u): return u.contains("steamid=76561197972611406")), "the wishlist itself is fetched (the user asked)")
+	ok(not sent.any(func(u): return u.contains("GetItems")), "no Steam store lookups with prices off (review problem 4): %s" % [sent])
+	d.free()
+	H.wipe(dir)
+
+
 func test_import_errors() -> void:
 	var dir := H.temp_dir("disc_imperr")
 	var http = H.online_http()

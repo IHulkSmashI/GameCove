@@ -99,6 +99,26 @@ func test_hint_url_and_sniff() -> void:
 	H.wipe(dir)
 
 
+func test_only_known_image_hosts() -> void:
+	# review problem 4: a URL from upcoming.json.gz or a store answer can name any https host; only Steam's,
+	# IGDB's and SteamGridDB's image CDNs are asked
+	var dir := H.temp_dir("art_hosts")
+	var http := FakeHttp.new()
+	for u in ["https://tracker.example/x.jpg", "https://images.igdb.com.evil.example/x.jpg", "https://user@images.igdb.com/x.jpg"]:
+		http.route(u, {"file": H.fx("cover_jpg.bin")})
+	var a := _make(http, dir)
+	var got := []
+	a.art_ready.connect(func(k, kind, p): got.append(p))
+	a.request("title:a", "cover", {"url": "https://tracker.example/x.jpg"})
+	a.remember("title:b", {"cover": "https://images.igdb.com.evil.example/x.jpg"})
+	a.request("title:b", "cover")
+	a.request("title:c", "cover", {"url": "https://user@images.igdb.com/x.jpg"})
+	eq(http.requests, [], "nothing asked of another host")
+	eq(got, ["", "", ""], "no art")
+	a.free()
+	H.wipe(dir)
+
+
 func test_lru_cleanup() -> void:
 	var dir := H.temp_dir("art_lru")
 	var http := FakeHttp.new()

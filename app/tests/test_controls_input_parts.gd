@@ -47,10 +47,13 @@ func test_hhd_socket_first_then_tcp_with_token_and_port() -> void:
 	Fakes.write(root + "/home/.config/hhd/state.yml", "hhd:\n  http:\n    enable: true\n    port: 5400\n")
 	var r: RefCounted = Runner.new()
 	r.responses["curl -sS -m 2 -X GET -w \n%{http_code} --unix-socket /run/hhd/api http://localhost/api/v1/state"] = {"code": 7, "out": ""}
-	var hdr := HhdClient.auth_header_path()
 	var seen := {}
+	var hdrs: Array = []
+	var pre := "curl -sS -m 2 -X GET -w \n%{http_code} -H @"
 	r.handler = func(cmd: String):
-		if cmd == "curl -sS -m 2 -X GET -w \n%{http_code} -H @" + hdr + " http://127.0.0.1:5400/api/v1/state":
+		if cmd.begins_with(pre) and cmd.ends_with(" http://127.0.0.1:5400/api/v1/state"):
+			var hdr := cmd.substr(pre.length()).split(" ")[0]
+			hdrs.append(hdr)
 			seen["text"] = FileAccess.get_file_as_string(hdr)
 			seen["mode"] = FileAccess.get_unix_permissions(hdr) & 511
 			return {"code": 0, "out": "{\"controllers\":{\"claw\":{}}}\n200"}
@@ -64,7 +67,11 @@ func test_hhd_socket_first_then_tcp_with_token_and_port() -> void:
 	ok(not r.calls.any(func(c): return c.contains("s3cret")), "no token in argv")
 	eq(seen.get("text", ""), "Authorization: Bearer s3cret\n", "header file holds the token during the call")
 	eq(seen.get("mode", -1), 384, "only this user can read it")
-	ok(not FileAccess.file_exists(hdr), "removed after the call")
+	ok(hdrs.size() == 1 and hdrs[0].begins_with(OS.get_user_data_dir()), "in the user data folder")
+	ok(not FileAccess.file_exists(hdrs[0]), "removed after the call")
+	h.get_state()
+	ok(hdrs.size() == 2 and hdrs[0] != hdrs[1], "review problem 9: every call has its own header file")
+	ok(HhdClient.auth_header_path() != HhdClient.auth_header_path(), "never the same name twice")
 	r.responses["curl -sS -m 2 -X GET -w \n%{http_code} --unix-socket /run/hhd/api http://localhost/api/v1/state"] = {"code": 0, "out": "Unauthorized\n401"}
 	eq(h.get_state(), null, "a non-200 answer is no state")
 

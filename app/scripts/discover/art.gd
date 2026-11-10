@@ -11,10 +11,10 @@ extends Node
 ##    data / the calendar (remember()); newer Steam apps keep art under hashed
 ##    paths that only the store data knows;
 ## 2. Steam's public CDN by appid (store_item_assets/steam/apps/<id>/...);
-## 3. SteamGridDB, with the user's own API key, else GameCove's project key
-##    when the build has one (scripts/library/art/sgdb.gd), and only while
+## 3. SteamGridDB, with the user's own API key (scripts/library/art/sgdb.gd;
+##    none ships with GameCove), and only while
 ##    "Look up game details" is on (scripts/system/privacy.gd).
-## A game with nothing found isn't asked about again for a day.
+## A game with nothing found isn't asked about again for a day. Images come only from IMAGE_HOSTS.
 
 signal art_ready(key: String, kind: String, path: String)
 
@@ -24,6 +24,9 @@ const SGDB := "https://www.steamgriddb.com/api/v2/"
 const RETRY_FAILED_S := 86400
 const DEFAULT_MAX_BYTES := 256 * 1024 * 1024
 const MAX_FILE_BYTES := 8 * 1024 * 1024
+## The only hosts art is downloaded from (review M22, problem 4): Steam's CDN, IGDB's image CDN (the calendar)
+## and SteamGridDB's CDN. A URL from upcoming.json.gz or a store answer naming anything else is skipped.
+const IMAGE_HOSTS := ["steamstatic.com", "akamaihd.net", "images.igdb.com", "steamgriddb.com"]
 
 ## http.gd node or fake_http.gd object (made in _ready unless tests set one).
 var http: Variant = null
@@ -221,7 +224,7 @@ func _abs(name: String) -> String:
 
 
 func _download(key: String, kind: String, url: String, done: Callable) -> void:
-	if not url.begins_with("https://"):
+	if preload("res://scripts/library/meta/metadata.gd").https_on(url, IMAGE_HOSTS) == "":
 		done.call("")
 		return
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(cache_dir))

@@ -4,10 +4,12 @@ extends RefCounted
 ## the screen drives it and the service carries it out.
 ##
 ## Modes and their steps:
-##   easy       welcome, summary, progress, done              (recommended defaults)
-##   custom     welcome, startup, steam, stores, device, look, extras, summary, progress, done
+##   easy       welcome, art, summary, progress, done         (recommended defaults)
+##   custom     welcome, startup, steam, stores, device, look, art, extras, summary, progress, done
 ##   maintenance  maintenance                                 (already installed: pick below)
-##   change     maintenance, startup … extras, summary, progress, done
+##   change     maintenance, startup … art, extras, summary, progress, done
+## "art" is the Game art step (the user's own SteamGridDB key): shown in Easy
+## mode too, since GameCove ships no key; skippable ("Steam art only").
 ##   repair / update  maintenance, progress, done
 ##   uninstall  maintenance, uninstall, progress, done
 ##   finish     finish, progress, done                       (after a reboot: fixes left to install)
@@ -16,12 +18,12 @@ extends RefCounted
 const Themes := preload("res://theme/themes.gd")
 const Traits := preload("res://scripts/device/traits.gd")
 
-const OPTION_STEPS: Array[String] = ["startup", "steam", "stores", "device", "look", "extras"]
+const OPTION_STEPS: Array[String] = ["startup", "steam", "stores", "device", "look", "art", "extras"]
 const STEPS := {
-	"easy": ["welcome", "summary", "progress", "done"],
-	"custom": ["welcome", "startup", "steam", "stores", "device", "look", "extras", "summary", "progress", "done"],
+	"easy": ["welcome", "art", "summary", "progress", "done"],
+	"custom": ["welcome", "startup", "steam", "stores", "device", "look", "art", "extras", "summary", "progress", "done"],
 	"maintenance": ["maintenance"],
-	"change": ["maintenance", "startup", "steam", "stores", "device", "look", "extras", "summary", "progress", "done"],
+	"change": ["maintenance", "startup", "steam", "stores", "device", "look", "art", "extras", "summary", "progress", "done"],
 	"repair": ["maintenance", "progress", "done"],
 	"update": ["maintenance", "progress", "done"],
 	"uninstall": ["maintenance", "uninstall", "progress", "done"],
@@ -30,7 +32,7 @@ const STEPS := {
 ## mode -> what the progress step runs (InstallerService.start action).
 const ACTIONS := {"easy": "install", "custom": "install", "change": "change", "repair": "repair",
 	"update": "update", "uninstall": "uninstall", "finish": "finish"}
-const SKIPPABLE: Array[String] = ["stores", "device", "look", "extras"]
+const SKIPPABLE: Array[String] = ["stores", "device", "look", "art", "extras"]
 
 const STARTUPS := ["gamecove", "steam", "desktop"]
 const STEAM_MODES := ["silent", "gamepadui", "off"]
@@ -259,5 +261,6 @@ func summary() -> Array:
 		{"step": "stores", "key": "stores", "value": "skipped" if skipped.has("stores") else ""},
 		{"step": "device", "key": "fixes", "value": choices["fixes"]},
 		{"step": "look", "key": "theme", "value": choices["theme"]},
+		{"step": "art", "key": "steamgriddb_key", "value": "skipped" if skipped.has("art") and str(choices["steamgriddb_key"]) == "" else ("set" if str(choices["steamgriddb_key"]) != "" else "")},
 		{"step": "extras", "key": "extras", "value": "skipped" if skipped.has("extras") else ""},
 	]

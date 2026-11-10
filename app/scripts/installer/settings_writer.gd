@@ -74,8 +74,12 @@ static func mark_setup(setup: Object, choices: Dictionary, skipped: Dictionary, 
 		setup.skip("device_fixes")
 	else:
 		setup.complete("device_fixes")
-	if str(choices.get("steamgriddb_key", "")) != "" or str(choices.get("ggdeals_key", "")) != "":
+	if str(choices.get("steamgriddb_key", "")) != "":
 		setup.complete("steamgriddb")
 	else:
 		setup.skip("steamgriddb")
+	if str(choices.get("ggdeals_key", "")) != "":
+		setup.complete("keys")
+	else:
+		setup.skip("keys")
 	setup.complete("done")

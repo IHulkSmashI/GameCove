@@ -181,6 +181,27 @@ launch_app() {
 	nohup "$bin" -- --installer >/dev/null 2>&1 &
 }
 
+# version_lt <a> <b>: tag a (vX.Y.Z[-pre]) is older than b; numeric parts first, then a pre-release is older than
+# the same version without one, pre-release labels compared as text. Anything unparsable is never "older".
+version_lt() {
+	awk -v a="${1#v}" -v b="${2#v}" 'BEGIN {
+		pa = index(a, "-"); pb = index(b, "-")
+		ra = pa ? substr(a, pa + 1) : ""; rb = pb ? substr(b, pb + 1) : ""
+		if (pa) a = substr(a, 1, pa - 1)
+		if (pb) b = substr(b, 1, pb - 1)
+		if (a !~ /^[0-9]+(\.[0-9]+)*$/ || b !~ /^[0-9]+(\.[0-9]+)*$/) exit 1
+		na = split(a, x, "."); nb = split(b, y, ".")
+		n = na > nb ? na : nb
+		for (i = 1; i <= n; i++) {
+			if ((x[i] + 0) < (y[i] + 0)) exit 0
+			if ((x[i] + 0) > (y[i] + 0)) exit 1
+		}
+		if (ra != "" && rb == "") exit 0
+		if (ra == "" || rb == "") exit 1
+		exit !(ra < rb)
+	}'
+}
+
 if [ -n "$TAG" ]; then
 	url="$API/repos/$REPO/releases/tags/$TAG"
 else
@@ -220,6 +241,12 @@ fi
 
 tag="$(printf '%s\n' "$json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
 [ -n "$tag" ] || die "no release found at $url"
+# review problem 9: "latest" never moves an install backwards (an older, validly signed release served as latest,
+# by a replayed or stale API answer); a given --tag or GAMECOVE_ALLOW_DOWNGRADE=1 may
+have_tag="$(sed -n 's/^TAG=//p' "$DEST/release.env" 2>/dev/null | head -n 1)"
+if [ -z "$TAG" ] && [ -n "$have_tag" ] && [ "${GAMECOVE_ALLOW_DOWNGRADE:-}" != 1 ] && version_lt "$tag" "$have_tag"; then
+	die "the latest release GitHub reports ($tag) is older than the installed $have_tag; not going back. --tag $tag (or GAMECOVE_ALLOW_DOWNGRADE=1) does it on purpose"
+fi
 urls="$(printf '%s\n' "$json" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')"
 
 # pick <pattern> [exclude]: the first asset URL whose file name matches

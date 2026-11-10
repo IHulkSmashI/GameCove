@@ -496,7 +496,7 @@ signal changed(steps)
 signal login_started(store, info)             # {"store", "url", "needs": steam|code|redirect_url|heroic|unavailable, "param"}
 signal login_finished(store, ok, message)
 signal fixes_checked(fixes)                   # [{"name", "applies", "installed", "state", "status": {k: v}}]
-steps() -> [{"id", "optional", "done", "skipped", "status"}]   # welcome, theme, stores, device_fixes, steamgriddb, done
+steps() -> [{"id", "optional", "done", "skipped", "status"}]   # welcome, theme, stores, steamgriddb (Game art), keys (gg.deals), device_fixes, done
 is_first_run() -> bool                        # until complete("done")
 next_step() -> String
 complete(step) -> bool / skip(step) -> bool (optional steps only) / reset()
@@ -508,7 +508,11 @@ suggested_fixes() -> Array / check_fixes()    # devices.json "fixes" that `gamec
 steamgriddb_key() -> String / set_steamgriddb_key(key) -> bool   # 32 hex chars, "" removes
 ```
 
-Stored in `user://setup.cfg` (`[steps]`, `[skipped]`, `[keys] steamgriddb`). The installer (docs/SESSION.md, "Installer") marks the steps it covered after a successful install, so the first-run flow opens only for what's left; on a first run its Next skips steps already done or skipped.
+Stored in `user://setup.cfg` (`[steps]`, `[skipped]`, `[keys] steamgriddb`), written 0600 since it holds the key.
+GameCove ships no SteamGridDB key: the Game art step (`scripts/ui/setup/art_key_step.gd`, in first-run setup and the
+installer) gets the user's own, over a one-time LAN page (`scripts/system/key_drop.gd`, docs/PRIVACY.md) or typed /
+pasted, checks it with one SteamGridDB request (`Sgdb.check_url()` / `check_result()`), saves it only when it works
+(Setup and Discover's `steamgriddb_key`) and then runs `Library.artwork.auto_fill(Library.games)`. The installer (docs/SESSION.md, "Installer") marks the steps it covered after a successful install, so the first-run flow opens only for what's left; on a first run its Next skips steps already done or skipped.
 
 ### `Controller`
 

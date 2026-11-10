@@ -52,6 +52,10 @@ static func download_host(url: String, maker: String) -> String:
 	if host.contains(":") or host.trim_suffix(".") == "":
 		return ""
 	host = host.trim_suffix(".")
+	# letters, digits, dots and hyphens only: a tab, a newline or a %2f would be shown as a bogus "maker's host"
+	# (curl refuses them, but the UI would still name them) (review problem 9)
+	if not RegEx.create_from_string("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$").search(host):
+		return ""
 	for d in allowed:
 		if host == d or host.ends_with("." + str(d)):
 			return host
@@ -243,7 +247,9 @@ static func deck_bios_target(script: String, running: String) -> String:
 ## Hub items for this row from the index and what the hardware reports.
 ## fw_devices: fwupd devices from `fwupdmgr get-devices --json` (Parse.fwupd_devices), used to read
 ## the running controller/MCU version when fwupd sees that part.
-static func firmware_items(index: Dictionary, row: Dictionary, installed: Dictionary, fw_devices: Array = []) -> Array:
+## verified: the index's signature was checked on this device (review problem 1); without that, no item keeps a
+## download URL (the maker's page is still offered) and "download_unverified" says why.
+static func firmware_items(index: Dictionary, row: Dictionary, installed: Dictionary, fw_devices: Array = [], verified := true) -> Array:
 	var got := entries_for(index, row)
 	var entry: Dictionary = got["entry"]
 	var out: Array = []
@@ -269,6 +275,9 @@ static func firmware_items(index: Dictionary, row: Dictionary, installed: Dictio
 		var flash := str(it.get("flash", "link"))
 		var url := str(it.get("download_url", ""))
 		var host := download_host(url, str(row.get("maker", "")))
+		var unverified := url != "" and host != "" and not verified
+		if unverified:
+			host = ""
 		out.append({
 			"id": "index:%s:%s" % [kind, str(it.get("name", kind)).to_lower().replace(" ", "_")],
 			"section": "firmware", "kind": kind, "name": str(it.get("name", kind)),
@@ -279,7 +288,8 @@ static func firmware_items(index: Dictionary, row: Dictionary, installed: Dictio
 			"notes": str(it.get("notes", "")), "notes_url": https_or_empty(str(it.get("notes_url", entry.get("support_url", "")))),
 			"download_page": https_or_empty(str(it.get("download_page", entry.get("support_url", "")))),
 			"download_url": url if host != "" else "", "download_host": host,
-			"download_blocked": url != "" and host == "", "sha256": str(it.get("sha256", "")),
+			"download_blocked": url != "" and host == "" and not unverified, "download_unverified": unverified,
+			"sha256": str(it.get("sha256", "")),
 			"date": str(it.get("date", "")), "source": "index", "stale": bool(entry.get("stale", false)),
 		})
 	return out

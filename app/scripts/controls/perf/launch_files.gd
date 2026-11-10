@@ -16,6 +16,7 @@ extends RefCounted
 ##       main.py delete_cache, removes the same folder).
 
 const SteamConfig := preload("res://scripts/steam/steam_config.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 
 const DATA := ".local/share/gamecove"
 const WRAPPER_PATHS := ["/usr/libexec/gamecove/gamecove-run"]
@@ -205,12 +206,8 @@ static func set_shader_threads(steam_root: String, n: int) -> bool:
 				lines.append(line)
 	if n > 0:
 		lines.append("%s %d" % [SHADER_KEY, clampi(n, 1, 16)])
-	var f := FileAccess.open(p, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string("\n".join(PackedStringArray(lines)) + ("\n" if not lines.is_empty() else ""))
-	f.close()
-	return true
+	# atomic (review H9): a crash mid-write never leaves Steam half a steam_dev.cfg
+	return SettingsFile.save_text(p, "\n".join(PackedStringArray(lines)) + ("\n" if not lines.is_empty() else "")) == OK
 
 
 ## The game's shader cache folders in every Steam library.

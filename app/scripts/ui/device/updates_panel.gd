@@ -331,6 +331,8 @@ func _hub_row(col: VBoxContainer, it: Dictionary) -> Array:
 		var up := svc("updates")
 		if bool(it.get("download_blocked", false)) and status == "update":
 			row.add_child(DKit.check_line("maybe", Hub.DOWNLOAD_BLOCKED))
+		elif bool(it.get("download_unverified", false)) and status == "update":
+			row.add_child(DKit.check_line("maybe", Hub.DOWNLOAD_UNVERIFIED))
 		if it.get("flash") == "ez-flash" and status == "update" and up != null and str(it.get("download_host", "")) != "":
 			row.add_child(DKit.quiet(Hub.FROM_HOST % str(it["download_host"])))
 			var targets: Array = state.get("usb_targets", []) if state.get("usb_targets") is Array else []

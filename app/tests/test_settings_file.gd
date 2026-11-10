@@ -135,3 +135,61 @@ func _scan(dir: String, out: Array) -> void:
 					out.append("%s:%d %s" % [dir.path_join(f), i + 1, l])
 	for s in DirAccess.get_directories_at(dir):
 		_scan(dir.path_join(s), out)
+
+
+func test_damaged_settings_turn_the_privacy_switches_off() -> void:
+	# review problem 4: a settings.cfg that can't be read used to give every privacy switch its default (on)
+	var Privacy := preload("res://scripts/system/privacy.gd")
+	var d := _dir("privacy")
+	var p := d.path_join("settings.cfg")
+	ok(Privacy.background_allowed(p) and Privacy.metadata_allowed(p), "no file yet: the defaults (on)")
+	_write(p, "[privacy\nbackground=fals")
+	expect_error("ConfigFile parse error")
+	ok(not Privacy.background_allowed(p), "damaged: Background lookups off")
+	ok(not Privacy.metadata_allowed(p), "damaged: game details off")
+	SettingsFile.reset_for_tests()   # the next start: the damaged copy sits at settings.cfg.bad
+	ok(not Privacy.background_allowed(p), "still off on the next start")
+	_write(p, "[device]\nreal_photo=true\n")   # another setting saved meanwhile
+	ok(not Privacy.metadata_allowed(p), "a new file without the switch doesn't turn it back on")
+	ok(Privacy.set_background_allowed(true, p) and Privacy.background_allowed(p), "the user turns it on again")
+	ok(not Privacy.metadata_allowed(p), "the other switch stays off until it's set")
+
+
+func test_damaged_discover_settings_turn_price_lookups_off() -> void:
+	var dir := "user://test_settings_file_disc_%d" % Time.get_ticks_usec()
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
+	_write(ProjectSettings.globalize_path(dir.path_join("settings.json")), "{\"price_lookups\": tr")
+	var d: Node = Discover.new()
+	d.data_dir = dir
+	expect_error("couldn't be read")
+	d.load_all()
+	ok(not d.prices_allowed(), "damaged settings.json: no price lookups")
+	d.free()
+	_wipe(ProjectSettings.globalize_path(dir))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir))
+
+
+## Review H9 follow-up: steam_dev.cfg and the next-session question are written atomically too. A write through
+## a symlink shows the difference: in place it changes the link's target, atomically it replaces the link.
+func _linked(d: String, name: String, text: String) -> String:
+	var target := d.path_join(name + ".target")
+	_write(target, text)
+	var p := d.path_join(name)
+	DirAccess.open(d).create_link(target, p)
+	return target
+
+
+func test_steam_dev_cfg_and_session_question_written_atomically() -> void:
+	var d := _dir("more_atomic")
+	var target := _linked(d, "steam_dev.cfg", "keep me\n")
+	ok(preload("res://scripts/controls/perf/launch_files.gd").set_shader_threads(d, 4), "written")
+	eq(FileAccess.get_file_as_string(target), "keep me\n", "steam_dev.cfg replaced, not written in place")
+	ok(FileAccess.get_file_as_string(d.path_join("steam_dev.cfg")).contains("unShaderBackgroundProcessingThreads 4"), "new value")
+	var Guard := preload("res://scripts/ui/controls/session_guard.gd")
+	var old_path: String = Guard.path
+	var t2 := _linked(d, "controls_confirm.json", "{}")
+	Guard.path = d.path_join("controls_confirm.json")
+	Guard.remember("display.x", "X", 1, 2, "two")
+	eq(FileAccess.get_file_as_string(t2), "{}", "the question file replaced, not written in place")
+	eq(Guard.pending().get("id"), "display.x", "and readable")
+	Guard.path = old_path

@@ -33,9 +33,13 @@ const NETWORK_CALLS := [
 		"when": "Same as game details, only if you added a key; at most 20 searches and 180 requests a day", "switch": "Look up game details / remove the key"},
 	{"who": "SteamGridDB", "what": "A game's Steam app id or title, for artwork you browse in Change artwork, and for covers, banners and logos a game has none of.",
 		"when": "When you open Change artwork; in the background for games missing art", "switch": "Look up game details (+ Background lookups for the automatic fill)"},
+	{"who": "Your phone, on your own network (Game art step)", "what": "A one-time page your phone opens to send GameCove your SteamGridDB key; then one SteamGridDB request checks the key.",
+		"when": "Only while the Game art step is open, 10 minutes at most", "switch": "You start it"},
 	{"who": "Steam (achievements, art)", "what": "The app id of the game whose page you open.",
 		"when": "When you open a game page", "switch": "Settings > Performance"},
-	{"who": "PCs on your own network (GameStream)", "what": "A fixed client id and Moonlight's certificate; Wake-on-LAN packets to your PC.",
+	{"who": "Steam's, IGDB's and SteamGridDB's image servers (no others)", "what": "The address of a game picture Discover, the calendar or your wishlist shows; it names the game, nothing about you.",
+		"when": "When a tile shows a picture that isn't saved yet", "switch": "None (SteamGridDB lookups: Look up game details)"},
+	{"who": "PCs on your own network (GameStream)", "what": "A fixed client id and Moonlight's certificate; Wake-on-LAN packets to your PC. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network (up to 1,022), then GameStream's serverinfo to those that answer.",
 		"when": "When you open the Stream tab or wake a PC", "switch": "You start it"},
 	{"who": "OS, Flatpak, fwupd and store tools", "what": "Their own update and sign-in requests.",
 		"when": "When you update or sign in", "switch": "You start it"},
@@ -43,7 +47,18 @@ const NETWORK_CALLS := [
 
 
 static func background_allowed(path := PREFS_PATH) -> bool:
-	return bool(SettingsFile.load_cfg(path).get_value("privacy", "background", true))
+	return _switch(path, "background")
+
+
+## A switch's value; on by default, but off when the settings file couldn't be read (this run it's quarantined,
+## later starts find <path>.bad) until the user sets that switch again (review problem 4: no failing open).
+static func _switch(path: String, key: String) -> bool:
+	var cfg := SettingsFile.load_cfg(path)
+	if SettingsFile.blocked(path):
+		return false
+	if cfg.has_section_key("privacy", key):
+		return bool(cfg.get_value("privacy", key))
+	return not FileAccess.file_exists(SettingsFile.abs_path(path) + ".bad")
 
 
 static func set_background_allowed(on: bool, path := PREFS_PATH) -> bool:
@@ -53,10 +68,7 @@ static func set_background_allowed(on: bool, path := PREFS_PATH) -> bool:
 ## "Look up game details" ([privacy] metadata, default on): off = no Steam store details, OpenCritic or
 ## SteamGridDB requests at all, background or not.
 static func metadata_allowed(path := PREFS_PATH) -> bool:
-	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
-		return true
-	return bool(cfg.get_value("privacy", "metadata", true))
+	return _switch(path, "metadata")
 
 
 static func set_metadata_allowed(on: bool, path := PREFS_PATH) -> bool:

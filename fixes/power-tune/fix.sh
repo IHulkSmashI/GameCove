@@ -516,6 +516,17 @@ stop_watch() {
 	return 0
 }
 
+# a watcher for the current hold is running (its unit, or the process its PID file names)
+watch_alive() {
+	if use_systemd_run && systemctl is-active --quiet "$WATCH_UNIT.service" 2>/dev/null; then
+		return 0
+	fi
+	[ -f "$WATCH_PID" ] || return 1
+	_wp="$(cat "$WATCH_PID" 2>/dev/null)"
+	case "$_wp" in "" | *[!0-9]*) return 1 ;; esac
+	is_watcher "$_wp"
+}
+
 start_watch() {
 	# tests of other parts (a fake root) may switch it off; never on a real system
 	[ -n "$ROOT" ] && [ "${GAMECOVE_THERMALD_WATCH:-}" = off ] && return 0
@@ -540,9 +551,19 @@ start_watch() {
 set_thermald() {
 	case "$1" in
 		hold)
-			[ "$(systemctl is-active thermald.service 2>/dev/null || true)" = active ] || return 0
-			systemctl stop thermald.service || die 1 "could not stop thermald"
+			if [ "$(systemctl is-active thermald.service 2>/dev/null || true)" != active ]; then
+				# already held by us and its watcher died: start another, so the hold still ends with the game
+				# (review problem 9); stopped by someone else: left alone
+				[ ! -f "$STATE/thermald-held" ] || watch_alive || start_watch
+				return 0
+			fi
+			# recorded before the stop, so a run killed right after it (gamecove-fix-set's time limit) still
+			# leaves a hold that restore and the watcher release (review problem 7)
 			mkdir -p "$STATE"; : > "$STATE/thermald-held"
+			if ! systemctl stop thermald.service; then
+				rm -f "$STATE/thermald-held"
+				die 1 "could not stop thermald"
+			fi
 			start_watch
 			;;
 		release)

@@ -32,7 +32,9 @@ Summary:        Controller-first home screen for Linux handhelds
 # (public domain), Simple Icons path data (CC0-1.0) and the Heroic / Lutris / Bottles
 # icons (GPL-3.0). The maker and store logos in app/assets/brand are their owners'
 # trademarks, not GPL-licensed (app/assets/brand/LICENSE.md): LicenseRef-Trademarked-logos.
-License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND OFL-1.1 AND CC0-1.0 AND LicenseRef-Fedora-Public-Domain AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND Zlib AND MPL-2.0 AND BSL-1.0 AND FTL AND IJG AND Unlicense AND CC-BY-4.0 AND LicenseRef-Godot-thirdparty AND LicenseRef-Trademarked-logos
+# The one bundled device picture (app/assets/device_photos/acer-nitro-blaze-8.webp, bundled because no
+# linkable head-on image exists) is the maker's, not GPL-licensed (CREDITS.md): LicenseRef-Maker-image.
+License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND OFL-1.1 AND CC0-1.0 AND LicenseRef-Fedora-Public-Domain AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND Zlib AND MPL-2.0 AND BSL-1.0 AND FTL AND IJG AND Unlicense AND CC-BY-4.0 AND LicenseRef-Godot-thirdparty AND LicenseRef-Trademarked-logos AND LicenseRef-Maker-image
 URL:            https://github.com/IHulkSmashI/gamecove
 Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 Source1:        %{url}/releases/download/v%{version}/%{name}-%{version}-x86_64.tar.gz

@@ -75,7 +75,7 @@ const SETTINGS_INFO := {
 	"steam_id": {"label": "Steam profile", "help": "Your profile link or name, to import your Steam wishlist (needs public game details).", "setup": true},
 	"ggdeals_key": {"label": "gg.deals key (optional)", "help": "For real local prices from every store. Free at gg.deals/api; stays on this device.", "setup": true},
 	"ggdeals_keyshops": {"label": "Show key-shop prices", "help": GG.KEYSHOP_NOTE, "setup": false},
-	"steamgriddb_key": {"label": "SteamGridDB key (optional)", "help": "Artwork for games Steam has none for, and more to choose from in Change artwork. Free at steamgriddb.com; stays on this device.", "setup": false},
+	"steamgriddb_key": {"label": "SteamGridDB key (optional)", "help": "Covers, banners and logos for every game, Steam or not, and Change artwork. Choose it to sign in to SteamGridDB with your phone: free, about a minute. The key stays on this device.", "setup": false},
 	"price_lookups": {"label": "Look up deals and prices", "help": "Sends the Steam app ids and titles on your wishlist and on game pages you open (and what you search for) to CheapShark and the Steam store, with your store country, to show deals and prices. Off: Discover shows no prices and nothing is sent.", "setup": false},
 	"alerts": {"label": "Price and release alerts", "help": "Tell me when a wishlisted game drops in price or comes out. Checks every 6 hours, never while you play.", "setup": false},
 	"affiliate_links": {"label": "Affiliate links", "help": "On by default. Some store links we build can carry a GameCove affiliate id, marked \"Supports GameCove\" (none are set up yet). Prices don't change, and nothing about you is sent.", "setup": false},
@@ -305,6 +305,10 @@ func load_all() -> void:
 		for k in DEFAULT_SETTINGS:
 			if s.has(k):
 				_settings[k] = s[k]
+	if not (s is Dictionary and s.has("price_lookups")) and FileAccess.file_exists(_path("settings.json") + ".bad"):
+		# a settings file that couldn't be read (kept as .bad): no price lookups until the user turns them on
+		# again, never the default (review problem 4: no failing open)
+		_settings["price_lookups"] = false
 	var w = _load("wishlist.json")
 	_items = {}
 	if w is Dictionary and w.get("items") is Array:
@@ -1008,7 +1012,7 @@ func _import_for(steam_id: String, typed: String) -> void:
 		var appids: Array = []
 		for r in rows:
 			appids.append(r["appid"])
-		_steam_batches(appids, MAX_IMPORT_BATCHES, func(_ok):
+		var finish := func(_ok):
 			var titles := {}
 			for a in appids:
 				if _cache["steam"].has(a):
@@ -1019,7 +1023,13 @@ func _import_for(steam_id: String, typed: String) -> void:
 			_rebuild_deals()
 			wishlist_changed.emit()
 			deals_changed.emit()
-			import_done.emit(true, added, "")))
+			import_done.emit(true, added, "")
+		# titles and prices come from the Steam store's GetItems: only with "Look up deals and prices" on
+		# (review M22, problem 4); off, the games are added by app id alone
+		if prices_allowed():
+			_steam_batches(appids, MAX_IMPORT_BATCHES, finish)
+		else:
+			finish.call(true))
 
 
 # ---- alerts -----------------------------------------------------------------

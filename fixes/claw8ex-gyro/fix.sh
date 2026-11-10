@@ -287,12 +287,21 @@ set_value() {
 		return 0
 	fi
 	rate_take claw8ex-gyro-accel 10 600 || die "too many accelerometer changes in ten minutes (each one restarts InputPlumber); try again in a few minutes"
+	# the flag is what ip_regen renders from; when the override can't be written it goes back to what
+	# it was, so the change isn't reported as done (and a retry isn't a no-op) (review problem 6)
 	if [ "$1" = accel-on ]; then
 		mkdir -p "$IP_FLAGS" && : >"$IP_FLAGS/accel"
 	else
 		rm -f "$IP_FLAGS/accel"
 	fi
-	ip_regen || die "could not update the InputPlumber override"
+	if ! ip_regen; then
+		if [ "$have" = accel-on ]; then
+			mkdir -p "$IP_FLAGS" && : >"$IP_FLAGS/accel"
+		else
+			rm -f "$IP_FLAGS/accel"
+		fi
+		die "could not update the InputPlumber override"
+	fi
 	say "accelerometer ${1#accel-}; recalibrate the gyro in Steam"
 }
 

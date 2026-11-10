@@ -130,3 +130,34 @@ def test_extract_rejects_links(tmp_path):
         z.writestr(zi, "/etc/passwd")
     with pytest.raises(ValueError):
         downloads.extract(str(zl), str(tmp_path / "o2"))
+
+
+def test_fetch_pinned_entry_refuses_another_tag(tmp_path, monkeypatch):
+    """Review problem 9: a pinned entry whose release answer names another tag fell back to GitHub's digest."""
+    z = _evil_zip(tmp_path / "pkg.zip")
+    monkeypatch.setattr(downloads, "download", _fake_download(z))
+    entry = {"repo": "a/b", "tag": "t1", "asset_glob": "*.zip", "sha256": "0" * 64}
+    rel = {"tag_name": "t2", "assets": [{"name": "pkg.zip", "browser_download_url": "https://example.invalid/p.zip",
+                                         "digest": "sha256:" + downloads.sha256_of(str(z))}]}
+    with pytest.raises(PermissionError):
+        downloads.fetch(entry, str(tmp_path / "w"), rel=rel)
+    assert not (tmp_path / "w" / "b-t2").exists()
+
+
+@pytest.mark.parametrize("field,value", [("name", "../../evil.zip"), ("name", "ABS"), ("name", ".."),
+                                         ("tag", "../x"), ("tag", "a/b")])
+def test_fetch_refuses_unsafe_asset_names_and_tags(tmp_path, monkeypatch, field, value):
+    z = _evil_zip(tmp_path / "pkg.zip")
+    monkeypatch.setattr(downloads, "download", _fake_download(z))
+    entry = {"repo": "a/b", "tag": "latest", "asset_glob": "*"}
+    asset = {"name": "pkg.zip", "browser_download_url": "https://example.invalid/p.zip",
+             "digest": "sha256:" + downloads.sha256_of(str(z))}
+    rel = {"tag_name": "t1", "assets": [asset]}
+    if value == "ABS":
+        value = str(tmp_path / "abs-evil.zip")   # an absolute path, inside this test's folder
+    if field == "name":
+        asset["name"] = value
+    else:
+        rel["tag_name"] = value
+    with pytest.raises(ValueError):
+        downloads.fetch(entry, str(tmp_path / "w"), allow_unpinned=True, rel=rel)

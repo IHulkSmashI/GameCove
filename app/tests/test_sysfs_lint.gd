@@ -31,6 +31,7 @@ const REGULAR_FILES := {
 	"res://scripts/controls/perf/launch_files.gd|FileAccess.get_file_as_string(p)": "a launch env file GameCove writes",
 	"res://scripts/system/storage.gd|get_file_as_string(vdf)": "Steam libraryfolders.vdf",
 	"res://scripts/system/storage.gd|get_file_as_string(cfg)": "Heroic's config JSON",
+	"res://scripts/system/updates.gd|FileAccess.get_file_as_string(path + VERIFIED_SUFFIX)": "GameCove's firmware index stamp in its cache",
 	"res://scripts/device/fixes.gd|JSON.parse_string(f.get_as_text())": "GameCove's JSON catalogues / state",
 	"res://scripts/device/fixes.gd|get_file_as_string(DEVICE_TABLE)": "devices.json",
 	"res://scripts/device/fixes.gd|var text := FileAccess.get_file_as_string(o)": "an os-release / quirks text file",

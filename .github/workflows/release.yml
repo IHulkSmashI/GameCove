@@ -4,10 +4,11 @@
 #   package  in a Fedora container: the gyro fix's HID-BPF object (fixes/claw8ex-gyro/bpf/build-bpf.sh),
 #            the RPM (rpmbuild, which builds the HID-BPF object again from source in %build) and the
 #            SteamOS sysext (gamecove.raw, with the object copied in under fixes/)
-#   tag      manual run with publish=true on a branch: creates the v<spec Version> tag on that commit
-#            and starts this workflow on the tag (GITHUB_TOKEN can start workflow_dispatch runs);
-#            nothing else runs in that first run
-#   release  only for tags v*: signs SHA256SUMS with cosign (keyless, this workflow's GitHub OIDC
+#   tag      manual run with publish=true on main (only main: review problem 8): creates the v<spec Version>
+#            tag on that commit and starts this workflow on the tag (GITHUB_TOKEN can start
+#            workflow_dispatch runs); nothing else runs in that first run. publish=true on any other
+#            branch fails.
+#   release  only for tags v* on a commit that is on main: signs SHA256SUMS with cosign (keyless, this workflow's GitHub OIDC
 #            identity for the tag: what packaging/get-gamecove.sh verifies), then publishes the
 #            GitHub release with packaging/release-notes/<tag>.md: created as a draft, every file
 #            uploaded, then published, so nobody sees a release without its files
@@ -44,7 +45,8 @@ env:
 
 jobs:
   tag:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'branch'
+    # releases are tagged from main only (review problem 8); see also the release job's main check
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -72,7 +74,7 @@ jobs:
           echo "started the release run for $tag on $GITHUB_SHA"
 
   app:
-    if: github.event_name != 'workflow_dispatch' || !inputs.publish || github.ref_type != 'branch'
+    if: github.event_name != 'workflow_dispatch' || !inputs.publish || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -81,7 +83,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Version (spec Version; a tag must match it)
         id: version
+        env:
+          PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
         run: |
+          if [ "$PUBLISH" = true ]; then
+            echo "publish=true only tags from main; this run is on $GITHUB_REF" >&2
+            exit 1
+          fi
           ver="$(sed -n 's/^Version:[[:space:]]*//p' packaging/rpm/gamecove.spec)"
           [ -n "$ver" ] || { echo "no Version in the spec" >&2; exit 1; }
           if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "v$ver" ]; then
@@ -103,18 +111,6 @@ jobs:
           unzip -q -j templates.tpz templates/linux_release.x86_64 templates/version.txt -d "$dest"
           rm templates.tpz
           [ "$(cat "$dest/version.txt")" = "${GODOT}.stable" ]
-      - name: Project API keys (SteamGridDB), only when the secret is set
-        # GameCove's own SteamGridDB key for Change artwork and the automatic art fill. Users' own keys
-        # override it. Never committed (app/data/project_keys.json is in .gitignore); without the secret
-        # the build simply has no project key and asks users for theirs.
-        env:
-          STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
-        run: |
-          if printf '%s' "$STEAMGRIDDB_API_KEY" | grep -Eq '^[0-9a-fA-F]{32}$'; then
-            printf '{"steamgriddb": "%s"}\n' "$STEAMGRIDDB_API_KEY" > app/data/project_keys.json
-          else
-            echo "No STEAMGRIDDB_API_KEY secret: building without a project key"
-          fi
       - name: Export (fails on script errors)
         run: |
           set -o pipefail
@@ -236,6 +232,17 @@ jobs:
             packaging/release-notes
             packaging/get-gamecove.sh
           sparse-checkout-cone-mode: false
+      - name: The tagged commit is on main (review problem 8)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # "identical" or "behind": the tag's commit is main's head or one of its ancestors
+          st="$(gh api "repos/$GH_REPO/compare/main...$GITHUB_SHA" --jq .status)"
+          case "$st" in
+          identical | behind) echo "$GITHUB_SHA is on main ($st)" ;;
+          *) echo "$GITHUB_REF_NAME ($GITHUB_SHA) is not on main ($st); only commits on main are released" >&2; exit 1 ;;
+          esac
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist

@@ -17,6 +17,7 @@ const PREPARE_USB := "Put it on the USB drive"
 const NEEDS_USB := "Plug in a FAT32 USB drive to have GameCove put the file on it."
 ## Shown before anything is written to the drive (review M21): where the file comes from.
 const FROM_HOST := "Downloads from %s (the maker's own site) and checks it against the maker's checksum."
+const DOWNLOAD_UNVERIFIED := "GameCove couldn't check the firmware list's signature on this device (cosign isn't installed), so it won't download the file. Use the maker's page instead."
 const DOWNLOAD_BLOCKED := "The firmware list points somewhere other than the maker's site, so GameCove won't download it. Use the maker's page instead."
 const YOURS := "yours: %s"
 const NEW_AVAILABLE := "New %s %s available (%s)"

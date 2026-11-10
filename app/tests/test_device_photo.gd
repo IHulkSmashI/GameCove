@@ -142,6 +142,39 @@ func test_miss_downloads_once_then_hits_cache() -> void:
 	s2.free()
 
 
+func test_background_lookups_off_requests_nothing() -> void:
+	# review problem 4: About and the welcome page ask photo_for on their own; with "Background lookups" off
+	# nothing is requested (free photo, manifest or maker image), and a cached picture still shows
+	var http := FakeHttp.new()
+	var body := _photo_bytes()
+	_routes(http, body, _manifest(body))
+	var s := _svc(http)
+	preload("res://scripts/system/privacy.gd").set_background_allowed(false, _prefs)
+	eq(s.photo_for("steam-deck-lcd"), {}, "nothing cached")
+	ok(not s.prefetch("steam-deck-lcd"), "no prefetch either")
+	s.free()
+	var m := FakeHttp.new()
+	m.route(MAKER_URL, {"bytes": _png_bytes()})
+	var sm := _maker_svc(m)
+	preload("res://scripts/system/privacy.gd").set_background_allowed(false, _prefs)
+	eq(sm.photo_for("msi-claw-8-ex"), {}, "no maker image")
+	eq(m.requests.size(), 0, "no maker request")
+	sm.free()
+	eq(http.requests.size(), 0, "no request at all")
+	# switched back on, the same call downloads; then off again, the cached copy shows
+	preload("res://scripts/system/privacy.gd").set_background_allowed(true, _prefs)
+	var s2: Node = PhotoSvc.new()
+	s2.cache_dir = _dir
+	s2.prefs_path = _prefs
+	s2.http = http
+	s2.maker_sources = {}
+	s2.photo_for("steam-deck-lcd")
+	ok(http.requests.size() > 0, "on: downloaded")
+	preload("res://scripts/system/privacy.gd").set_background_allowed(false, _prefs)
+	ok(not s2.photo_for("steam-deck-lcd").is_empty(), "off: the cached picture still shows")
+	s2.free()
+
+
 func test_other_device_downloads_nothing() -> void:
 	var http := FakeHttp.new()
 	var body := _photo_bytes()
@@ -779,3 +812,40 @@ func test_about_and_welcome_with_bundled_picture() -> void:
 	ok(v != null and not v.credit in f.focusables(), "welcome: no credit stop")
 	f.finish()
 	host.free()
+
+
+# ---- review problem 9: a picture's size is read from its header before anything decodes it ------------------
+
+func _bomb_png() -> PackedByteArray:
+	var b := _png_bytes()
+	for i in 8:   # IHDR width and height: 50000 x 50000 (the pixel data stays 32 x 20)
+		b[16 + i] = [0, 0, 0xC3, 0x50, 0, 0, 0xC3, 0x50][i]
+	return b
+
+
+func test_image_size_from_headers_and_cap() -> void:
+	var img := Image.create(321, 123, false, Image.FORMAT_RGB8)
+	img.fill(Color(0.3, 0.6, 0.2))
+	eq(PhotoSvc.image_size(img.save_png_to_buffer()), Vector2i(321, 123), "png")
+	eq(PhotoSvc.image_size(img.save_jpg_to_buffer(0.8)), Vector2i(321, 123), "jpg")
+	eq(PhotoSvc.image_size(img.save_webp_to_buffer(false, 0.8)), Vector2i(321, 123), "webp lossy")
+	eq(PhotoSvc.image_size(img.save_webp_to_buffer(true)), Vector2i(321, 123), "webp lossless")
+	eq(PhotoSvc.image_size("<html>".to_utf8_buffer()), Vector2i.ZERO, "not an image")
+	ok(PhotoSvc.size_ok(img.save_png_to_buffer()), "a normal picture is fine")
+	eq(PhotoSvc.image_size(_bomb_png()), Vector2i(50000, 50000), "the forged header is read")
+	ok(not PhotoSvc.size_ok(_bomb_png()), "and refused")
+	# the view never decodes it
+	_clean()
+	var p := ProjectSettings.globalize_path(_dir).path_join("bomb.png")
+	var f := FileAccess.open(p, FileAccess.WRITE)
+	f.store_buffer(_bomb_png())
+	f.close()
+	eq(PhotoView.load_trimmed(p), null, "the view refuses a picture that claims a huge size")
+	# and a maker answer like that is never cached
+	var http := FakeHttp.new()
+	http.route(MAKER_URL, {"bytes": _bomb_png()})
+	var s := _maker_svc(http)
+	s.photo_for("msi-claw-8-ex")
+	eq(http.count(MAKER_URL), 1, "asked once")
+	ok(s.maker_cached("msi-claw-8-ex").is_empty(), "not kept")
+	s.free()

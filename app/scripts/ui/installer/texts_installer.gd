@@ -3,12 +3,12 @@ extends RefCounted
 
 const STEP_NAMES := {
 	"welcome": "Welcome", "startup": "Startup", "steam": "Steam", "stores": "Stores", "device": "Device",
-	"look": "Look", "extras": "Extras", "summary": "Summary", "progress": "Install", "done": "Done",
+	"look": "Look", "art": "Art", "extras": "Extras", "summary": "Summary", "progress": "Install", "done": "Done",
 	"maintenance": "GameCove", "uninstall": "Remove", "finish": "Finish",
 }
 const STEP_ICONS := {
 	"welcome": "handheld", "startup": "power", "steam": "gamepad", "stores": "store", "device": "sparkle",
-	"look": "palette", "extras": "tag", "summary": "check", "progress": "download", "done": "check",
+	"look": "palette", "art": "library", "extras": "tag", "summary": "check", "progress": "download", "done": "check",
 	"maintenance": "settings", "uninstall": "x", "finish": "sparkle",
 }
 
@@ -65,9 +65,9 @@ const DETECTED := "DETECTED HANDHELD"
 const WHAT_WILL_HAPPEN := "WHAT WILL HAPPEN"
 const LOCKUP_LINE := "LINUX HANDHELD INSTALLER"
 const SWITCH_STEP := "Switch step"
-const MODE_EASY_LINE := "Tested defaults for your %s on %s: boots into GameCove with Steam quietly in the background, adds the device fixes, keeps your store sign-ins. You see a summary before anything changes."
+const MODE_EASY_LINE := "Tested defaults for your %s on %s: boots into GameCove with Steam quietly in the background, adds the device fixes, keeps your store sign-ins, and helps you get free game art. You see a summary before anything changes."
 const MODE_CUSTOM := "Custom"
-const MODE_CUSTOM_LINE := "Go through every option yourself: startup, how Steam runs, each device fix, power defaults, theme and the optional extras."
+const MODE_CUSTOM_LINE := "Go through every option yourself: startup, how Steam runs, each device fix, power defaults, theme, game art and the optional extras."
 const NO_PACKAGE := "The download for this system is missing. Run the install command again to fetch it."
 
 # ---- startup
@@ -179,7 +179,9 @@ const MOONLIGHT_LINES := {true: "Installs the free Moonlight player from Flathub
 const GGDEALS := "gg.deals key"
 const GGDEALS_LINE := "Real prices from every store in your country. Free at gg.deals/api (sign in, then API key)."
 const SGDB := "SteamGridDB key"
-const SGDB_LINE := "Cover art for games that have none. Free at steamgriddb.com, Preferences, API."
+const SGDB_LINE := "Covers, banners and logos for every game, from your own free SteamGridDB key."
+const ART_SET := "Your SteamGridDB key"
+const ART_NONE := "Steam art only"
 const STEAM_PROFILE := "Steam profile"
 const STEAM_PROFILE_LINE := "Your profile link or name, to bring in your Steam wishlist. Your game details must be public."
 const REGION := "Store country"
@@ -190,7 +192,7 @@ const NOT_SET := "Not set"
 
 # ---- summary
 const SUMMARY_TITLE := "Ready to install"
-const EYEBROWS := {"welcome": "Welcome to GameCove setup", "startup": "Boot mode", "steam": "Steam integration", "stores": "Game libraries", "device": "Hardware", "look": "Appearance", "extras": "Extras", "summary": "Review", "progress": "Installation", "done": "All done", "maintenance": "Installed", "uninstall": "Remove", "finish": "After restart"}
+const EYEBROWS := {"welcome": "Welcome to GameCove setup", "startup": "Boot mode", "steam": "Steam integration", "stores": "Game libraries", "device": "Hardware", "look": "Appearance", "art": "Artwork", "extras": "Extras", "summary": "Review", "progress": "Installation", "done": "All done", "maintenance": "Installed", "uninstall": "Remove", "finish": "After restart"}
 const SUMMARY_LINE := "This is what happens. Press any row to change it."
 const SUMMARY_CHANGE_TITLE := "Ready to apply"
 const SUMMARY_STORES := {"none": "None signed in", "skipped": "Skipped"}

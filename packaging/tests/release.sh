@@ -103,6 +103,23 @@ for v in GODOT_EDITOR_SHA256 GODOT_TEMPLATES_SHA256 UHB_SHA256; do
 	grep -q "^  $v: [0-9a-f]\{64\}$" "$W" && ok || bad "release.yml lacks the $v pin"
 	grep -q "\${$v}  .*| sha256sum -c -" "$W" && ok || bad "release.yml doesn't check $v"
 done
+# M6: every pip install is hash-pinned; CI's Godot download is checked against release.yml's pin
+for f in "$REPO"/.github/workflows/*.yml; do
+	if grep -n 'pip install' "$f" | grep -v 'pip install --require-hashes --no-deps -r [./]*tools/ci/requirements-[a-z]*\.txt$' | grep -q .; then
+		bad "$f: pip install without hashes: $(grep -n 'pip install' "$f" | tr '\n' ' ')"
+	else ok; fi
+done
+for r in "$REPO"/tools/ci/requirements-*.txt; do
+	if grep -v '^[[:space:]]*#' "$r" | grep -v '^[[:space:]]*$' | grep -v '^-r ' | grep -v '^[[:space:]]*--hash=sha256:[0-9a-f]\{64\}' |
+		grep -v '^[A-Za-z0-9_.-]*==[0-9][^ ]* \(--hash=sha256:[0-9a-f]\{64\}\|\\\)$' | grep -q .; then
+		bad "$r: every requirement needs ==version and --hash=sha256"
+	else ok; fi
+done
+CI="$REPO/.github/workflows/ci.yml"
+ci_pin=$(sed -n 's/^  GODOT_EDITOR_SHA256: \([0-9a-f]\{64\}\)$/\1/p' "$CI")
+rel_pin=$(sed -n 's/^  GODOT_EDITOR_SHA256: \([0-9a-f]\{64\}\)$/\1/p' "$W")
+[ -n "$ci_pin" ] && [ "$ci_pin" = "$rel_pin" ] && ok || bad "ci.yml must pin the same Godot editor sha256 as release.yml ($ci_pin vs $rel_pin)"
+[ "$(grep -c 'godot.zip "https://' "$CI")" = "$(grep -c '${GODOT_EDITOR_SHA256}  godot.zip" | sha256sum -c -' "$CI")" ] && ok || bad "ci.yml must check every Godot download"
 # L26: draft, upload, publish
 awk '/gh release create/{c=NR} /gh release upload/{u=NR} /gh release edit "\$TAG" --draft=false/{p=NR} END{exit !(c && u && p && c<u && u<p)}' "$W" && ok || bad "release.yml must create a draft, upload, then publish"
 grep -q 'gh release create "$TAG" --draft' "$W" && ok || bad "the release must start as a draft"
@@ -113,6 +130,19 @@ doc = yaml.safe_load(open(sys.argv[1]))
 bad = [s.get("name", "?") for j in doc["jobs"].values() for s in j.get("steps", []) if "${{" in s.get("run", "")]
 assert not bad, bad
 PY
+# review problem 8: only main is tagged and released
+python3 -I - "$W" >"$T/out" 2>&1 <<'PY' && ok || bad "release.yml main-only release: $(cat "$T/out")"
+import sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+assert "github.ref == 'refs/heads/main'" in jobs["tag"]["if"], "the tag job must require refs/heads/main: " + jobs["tag"]["if"]
+assert "ref_type == 'branch'" not in jobs["tag"]["if"], "any branch may not tag"
+runs = [s.get("run", "") for s in jobs["release"]["steps"]]
+main = [i for i, r in enumerate(runs) if "compare/main...$GITHUB_SHA" in r]
+sign = [i for i, r in enumerate(runs) if "cosign sign-blob" in r]
+assert main and sign and main[0] < sign[0], "the release job must check the tag's commit is on main before signing"
+ver = [s for s in jobs["app"]["steps"] if s.get("id") == "version"][0]
+assert "PUBLISH" in ver.get("env", {}) and 'if [ "$PUBLISH" = true ]' in ver["run"], "publish=true off main must fail"
+PY
 # L28: CI signs and verifies with the cosign devices use
 grep -q 'cosign-release: ${{ steps.cosign.outputs.version }}' "$W" && ok || bad "cosign-installer must install get-gamecove.sh's COSIGN_VERSION"
 grep -q "COSIGN_SHA256=" "$W" && ok || bad "release.yml must check cosign against get-gamecove.sh's COSIGN_SHA256"
@@ -122,6 +152,28 @@ FW="$REPO/.github/workflows/firmware.yml"
 grep -q "cosign sign-blob --yes --bundle dist/firmware.json.gz.sigstore.json dist/firmware.json.gz" "$FW" && ok || bad "firmware.yml must sign the index"
 grep -q "dist/firmware.json.gz.sigstore.json --clobber" "$FW" && ok || bad "firmware.yml must publish the signature"
 grep -q "id-token: write" "$FW" && ok || bad "firmware.yml needs id-token: write"
+# review problem 2: build (scrapers, pip packages) can't sign or publish; publish runs only pinned cosign and gh
+python3 -I - "$FW" >"$T/out" 2>&1 <<'PY' && ok || bad "firmware.yml jobs: $(cat "$T/out")"
+import re, sys, yaml
+doc = yaml.safe_load(open(sys.argv[1]))
+assert doc.get("permissions") == {}, "nothing at the top level"
+jobs = doc["jobs"]
+assert set(jobs) == {"build", "publish"}, list(jobs)
+b, p = jobs["build"], jobs["publish"]
+assert b.get("permissions") == {"contents": "read"}, b.get("permissions")
+assert b.get("if") == "github.ref == 'refs/heads/main'", "build for publishing only on main"
+assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write", "id-token": "write"}, p.get("permissions")
+brun = "\n".join(s.get("run", "") for s in b["steps"])
+prun = "\n".join(s.get("run", "") for s in p["steps"])
+assert "cosign" not in brun and "gh release" not in brun, "build must not sign or publish"
+assert "pip install" not in prun and "gamedb" not in prun, "publish must not run the scrapers or third-party packages"
+assert "cosign sign-blob" in prun and "COSIGN_SHA256=" in prun
+for j in (b, p):
+    for s in j["steps"]:
+        if s.get("uses", "").startswith("actions/checkout@"):
+            assert s.get("with", {}).get("persist-credentials") is False, "checkout keeps no token"
+        assert "${{" not in s.get("run", ""), "${{ }} inside run:"
+PY
 app_cos=$(sed -n 's/^const COSIGN_VERSION := "\(.*\)"$/\1/p' "$REPO/app/scripts/system/updates.gd")
 gg_cos=$(sed -n 's/^COSIGN_VERSION=//p' "$REPO/packaging/get-gamecove.sh")
 [ -n "$app_cos" ] && [ "$app_cos" = "$gg_cos" ] && ok || bad "updates.gd COSIGN_VERSION ($app_cos) must match get-gamecove.sh ($gg_cos)"
@@ -202,6 +254,14 @@ grep -q "^app/assets/brand/LICENSE.md " "$REPO/packaging/licenses.list" && ok ||
 grep -q "Trademark use" "$REPO/docs/BRANDS.md" && grep -q "Logo removal requests" "$REPO/docs/BRANDS.md" && ok || bad "docs/BRANDS.md must document trademark use and removal"
 grep -q "not GPL-licensed" "$REPO/README.md" && ok || bad "README must say the brand logos aren't GPL"
 grep -q "LicenseRef-.*[Tt]rademark" "$REPO/packaging/rpm/gamecove.spec" && ok || bad "spec License must name the logos' trademark status"
+# review problem 3: a bundled maker picture is named in CREDITS and the spec, and no notice says none are bundled
+for f in "$REPO"/app/assets/device_photos/*.webp "$REPO"/app/assets/device_photos/*.png "$REPO"/app/assets/device_photos/*.jpg; do
+	[ -f "$f" ] || continue
+	rel="app/assets/device_photos/${f##*/}"
+	grep -qF "$rel" "$REPO/CREDITS.md" && ok || bad "CREDITS.md must name the bundled picture $rel"
+	grep -q "^License:.*LicenseRef-Maker-image" "$SPEC" && ok || bad "spec License must cover the bundled maker picture ($rel): LicenseRef-Maker-image"
+done
+if grep -n -i "never bundled\|not in this repository, the app package" "$REPO/README.md" "$REPO/CREDITS.md" "$REPO/docs/DEVICES.md" >"$T/out"; then bad "a notice still says maker photos are never bundled: $(cat "$T/out")"; else ok; fi
 
 # ------------------------------------------------------------- network disclosure (M22, L34)
 for host in cheapshark.com gg.deals GitHub GameStream "Wake-on-LAN" SteamGridDB "maker" "Affiliate links"; do
@@ -209,6 +269,10 @@ for host in cheapshark.com gg.deals GitHub GameStream "Wake-on-LAN" SteamGridDB 
 	grep -qi "$host" "$REPO/docs/PRIVACY.md" && ok || bad "docs/PRIVACY.md doesn't mention $host"
 done
 grep -q "^## Network and privacy" "$REPO/README.md" && ok || bad "README needs a Network and privacy section"
+# review problem 4: the Stream tab's subnet probe is described as what it is, not just "PCs on your LAN"
+for f in "$REPO/README.md" "$REPO/docs/PRIVACY.md" "$REPO/app/scripts/system/privacy.gd"; do
+	grep -qi "47989 on every address\|every address of your local IPv4 networks" "$f" && ok || bad "$f must describe the Stream tab's probe of every local address on port 47989"
+done
 for sw in "Background lookups" "Look up deals and prices" "Show maker photos"; do
 	grep -q "$sw" "$REPO/README.md" && ok || bad "README must name the '$sw' switch"
 done
@@ -217,6 +281,11 @@ done
 grep -q "Game data from IGDB" "$REPO/gamedb/NOTICE.md" && grep -q "ODbL" "$REPO/gamedb/NOTICE.md" && ok || bad "gamedb/NOTICE.md must credit IGDB and ProtonDB (ODbL)"
 grep -q "gh release upload gamedb NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && grep -q "gh release edit gamedb --notes-file NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && ok || bad "gamedb.yml must publish NOTICE.md as an asset and as the notes"
 grep -q "Game data from \[IGDB\](https://www.igdb.com)" "$REPO/README.md" && ok || bad "README must credit IGDB with a link"
+# ------------------------------------------------------------- no SteamGridDB key in any build
+# Users sign in to SteamGridDB in the Game art step; a key inside a public build could be pulled out.
+if grep -rn "STEAMGRIDDB_API_KEY\|project_keys" "$REPO/.github/workflows" "$REPO/packaging" --include=*.yml --include=*.sh --include=*.spec 2>/dev/null | grep -v "packaging/tests/" >"$T/sgdbkey"; then bad "a build reads a SteamGridDB key: $(head -3 "$T/sgdbkey" | tr '\n' ' ')"; else ok; fi
+if git -C "$REPO" grep -nI "project_keys\|PROJECT_KEYS" -- app/scripts >"$T/sgdbkey" 2>/dev/null; then bad "the app reads a bundled key: $(head -3 "$T/sgdbkey" | tr '\n' ' ')"; else ok; fi
+
 grep -q "Game data from IGDB" "$REPO/CREDITS.md" && ok || bad "CREDITS.md must credit IGDB"
 
 # ------------------------------------------------------------- no personal data or machine paths in tests (L37)
