@@ -12,6 +12,8 @@ extends RefCounted
 ##   g.update_available = true         -> "Update"
 ##   g.download = {"progress": 0.45}   -> "Downloading 45%"
 ##   g.info.device_rating = "great" | "playable" | "unsupported"
+##   g.favourite = true                -> "Favourite" (Collections.decorate)
+##   g.emulated.system_short / system_name -> the console ("SNES", "Nintendo SNES (Super Nintendo)")
 
 const Texts := preload("res://scripts/ui/texts.gd")
 const View := preload("res://scripts/ui/library_view.gd")
@@ -21,12 +23,12 @@ const SHORT_H := 10.0
 const LONG_H := 30.0
 
 ## Display order on the game page.
-const ORDER := ["download", "sale", "wish", "new", "update", "device", "protondb", "anticheat", "ttb", "not_installed", "store"]
+const ORDER := ["download", "sale", "wish", "new", "update", "favourite", "system", "device", "protondb", "anticheat", "ttb", "not_installed", "store"]
 ## Tiles show one corner pill when unfocused (first match; anti-cheat only
 ## when it's a problem) ...
-const TILE_CORNER := ["download", "sale", "update", "not_installed", "anticheat_problem", "new"]
+const TILE_CORNER := ["download", "sale", "update", "not_installed", "anticheat_problem", "new", "favourite"]
 ## ... and up to two more along the bottom only while focused.
-const TILE_STRIP := ["anticheat", "ttb", "protondb"]
+const TILE_STRIP := ["system", "anticheat", "ttb", "protondb"]
 
 const PROTON_TONE := {"platinum": "platinum", "gold": "gold", "silver": "silver", "bronze": "bronze", "borked": "borked"}
 const DEVICE := {
@@ -57,6 +59,11 @@ static func for_game(g: Dictionary, now := -1) -> Array:
 		out["new"] = _b("new", "New", "New", "new", "sparkle")
 	if g.get("update_available", false):
 		out["update"] = _b("update", "Update ready", "Update", "info", "update")
+	if g.get("favourite", false):
+		out["favourite"] = _b("favourite", "Favourite", "", "gold", "star")
+	var emu: Variant = g.get("emulated")
+	if emu is Dictionary and str(emu.get("system", "")) != "":
+		out["system"] = _b("system", str(emu.get("system_name", emu["system"])), str(emu.get("system_short", emu["system"])), "info", "gamepad")
 	var dr: Variant = info.get("device_rating")
 	if dr is String and DEVICE.has(dr):
 		var d: Dictionary = DEVICE[dr]

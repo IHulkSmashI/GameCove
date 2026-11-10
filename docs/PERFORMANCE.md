@@ -68,6 +68,11 @@ costs far more:
   the game leaves over. Per-app volume, Now playing, Bluetooth devices, Clean up and GE-Proton
   read only when their page opens or you press something: no timers. GE-Proton won't start an
   install while a game runs, and one already running carries on at nice 19 and idle I/O.
+- **Collections and emulation** add no timer. Steam's collections file, Steam ROM Manager's
+  `shortcuts.vdf`, EmuDeck / RetroDECK / ES-DE settings, the ROM folder counts and ES-DE's
+  gamelists are read on the Library's scan thread: at start, after a rescan, and once more
+  (the emulation entries only) when ES-DE, RetroDECK or an emulated game ends, to add its
+  play time. Nothing of it runs while a game is in front.
 - **Cloud saves** run before a launch and after a game ends, never during one. **Battery
   history** writes one small file at game start and end, sleep, wake and the charger (a few
   sysfs reads each); **Sleep at low battery** reacts to Power's 15 s check. None adds a timer;

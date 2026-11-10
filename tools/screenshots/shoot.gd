@@ -237,6 +237,7 @@ func _run() -> void:
 		main.status_panel.close()
 
 	await _games_shots()
+	await _library2_shots(lib)
 	await _saves_shots()
 
 	for id in ["midnight", "sunset", "light", "cove"]:
@@ -269,6 +270,165 @@ func _run() -> void:
 		await shot("boot")
 		sp.queue_free()
 	await finish()
+
+
+## Favourites, hidden games, collections and the Emulation page.
+func _library2_shots(lib: Node) -> void:
+	if not want(["library_options", "library_filter", "library_favourites", "home_favourites", "game_favourite",
+			"emulation_empty", "emulation", "library_emulation", "home_emulation", "settings_collections"]):
+		return
+	var cols: RefCounted = lib.collections
+	cols.path = "/tmp/gamecove-shots/collections.json"
+	DirAccess.remove_absolute(cols.path)
+	cols.reload()
+	for t in ["Hollow Tide", "Northbound", "Paper Lanterns", "Quiet Orchard"]:
+		cols.set_favourite(_find(t)["key"], true)
+	var party: String = cols.create("Couch co-op")
+	for t in ["Ember Circuit", "Velvet Arcade", "Dune Runners"]:
+		cols.add(party, _find(t)["key"])
+	var backlog: String = cols.create("Backlog")
+	for t in ["Kingdom of Ash", "Crimson Vale"]:
+		cols.add(backlog, _find(t)["key"])
+	cols.set_hidden(_find("Sky Harbor")["key"], true)
+	# Two pinned desktop apps, so Home shows its Apps shelf where it goes.
+	main.home.set_apps([{"key": "app:org.videolan.VLC", "store": "app", "id": "org.videolan.VLC", "title": "VLC", "installed": true,
+		"exec": ["vlc"], "art": {"cover": "", "hero": "", "logo": "", "icon": ""}, "info": {}, "last_played": 0, "playtime_min": 0},
+		{"key": "app:org.mozilla.firefox", "store": "app", "id": "org.mozilla.firefox", "title": "Firefox", "installed": true,
+		"exec": ["firefox"], "art": {"cover": "", "hero": "", "logo": "", "icon": ""}, "info": {}, "last_played": 0, "playtime_min": 0}])
+	await frames(4)
+	main.show_screen("library")
+	await frames(4)
+	var tiles: Array = main.library_screen.tiles()
+	if tiles.size() > 2:
+		tiles[2].grab_focus()
+	if want(["library_options"]):
+		main.collection_actions.options(main.get_viewport().gui_get_focus_owner().game)
+		await shot("library_options")
+		main.game_actions.sheet.close()
+	if want(["library_filter"]):
+		main.open_library_filter()
+		await shot("library_filter")
+		main.game_actions.sheet.close()
+	if want(["library_favourites"]):
+		main.library_screen.set_view("favourites")
+		await frames(4)
+		await shot("library_favourites")
+		main.library_screen.set_view("")
+	if want(["home_favourites"]):
+		main.show_screen("home")
+		await frames(4)
+		var fav: Array = main.home.tiles("favourites")
+		if not fav.is_empty():
+			fav[0].grab_focus()
+		await shot("home_favourites")
+	if want(["game_favourite"]):
+		main._open_page(_find("Hollow Tide"))
+		await frames(4)
+		if main.page.favourite_button != null:
+			main.page.favourite_button.grab_focus()
+		await shot("game_favourite")
+		main._close_page()
+	if want(["settings_collections"]):
+		main.show_screen("settings")
+		await frames(4)
+		main.settings.open_category("stores", "")
+		await frames(30)
+		var rows: Dictionary = main.settings.pages["stores"].rows
+		if rows.has("steam_collections"):
+			var row: Control = rows["steam_collections"]
+			row.button.grab_focus()
+			var n: Node = row
+			while n != null and not n is ScrollContainer:
+				n = n.get_parent()
+			if n != null:
+				await frames(2)
+				(n as ScrollContainer).ensure_control_visible(row)
+			await frames(20)
+		await shot("settings_collections")
+	if want(["emulation_empty"]):
+		main.show_screen("library")
+		await frames(2)
+		main.open_emulation()
+		await shot("emulation_empty")
+		main._close_page()
+	if want(["emulation", "library_emulation", "home_emulation"]):
+		await _emulation_shots(lib)
+	main.show_screen("home")
+	await frames(2)
+
+
+## A believable EmuDeck setup: ES-DE, four systems' worth of ROMs, recently
+## played games, and three Steam ROM Manager shortcuts with painted covers.
+func _emulation_shots(lib: Node) -> void:
+	var now := int(Time.get_unix_time_from_system())
+	var home := OS.get_environment("HOME")
+	lib.emulation = {"kind": "emudeck", "name": "EmuDeck",
+		"frontend": {"name": "ES-DE", "command": ["/home/deck/Applications/ES-DE.AppImage"]},
+		"app": {"name": "EmuDeck", "command": ["/home/deck/Applications/EmuDeck.AppImage"]},
+		"srm": {"command": ["/home/deck/Applications/srm/Steam-ROM-Manager.AppImage"]},
+		"roms_dir": home.path_join("Emulation/roms"), "esde_dir": home.path_join("ES-DE"), "rom_total": 214,
+		"systems": [{"id": "snes", "name": "Nintendo SNES (Super Nintendo)", "short": "SNES", "count": 64},
+			{"id": "gba", "name": "Nintendo Game Boy Advance", "short": "GBA", "count": 48},
+			{"id": "psx", "name": "Sony PlayStation", "short": "PS1", "count": 37},
+			{"id": "genesis", "name": "Sega Genesis", "short": "Genesis", "count": 29},
+			{"id": "n64", "name": "Nintendo 64", "short": "N64", "count": 18},
+			{"id": "ps2", "name": "Sony PlayStation 2", "short": "PS2", "count": 11},
+			{"id": "gc", "name": "Nintendo GameCube", "short": "GameCube", "count": 7}],
+		"recent": [{"title": "Star Courier", "system": "SNES", "last_played": now - 3600 * 5},
+			{"title": "Pixel Knights II", "system": "GBA", "last_played": now - 86400},
+			{"title": "Neon Highway", "system": "PS1", "last_played": now - 86400 * 3},
+			{"title": "Harbor Racer", "system": "Genesis", "last_played": now - 86400 * 9}]}
+	var emu_games: Array = []
+	var art := func(t: String) -> Dictionary: return _find(t)["art"].duplicate()
+	var fe := {"key": "emu:frontend", "store": "emu", "id": "frontend", "title": "ES-DE", "installed": true,
+		"art": {"cover": "", "hero": "", "logo": "", "icon": ""}, "info": {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null},
+		"last_played": now - 3600 * 5, "playtime_min": 640, "command": lib.emulation["frontend"]["command"], "frontend": true,
+		"emulated": {"system": "", "system_name": "", "system_short": "", "emulator": "", "via": "emudeck"}}
+	emu_games.append(fe)
+	var specs := [["Star Courier", "snes", "Nintendo SNES (Super Nintendo)", "SNES", "Velvet Arcade"],
+		["Pixel Knights II", "gba", "Nintendo Game Boy Advance", "GBA", "Quiet Orchard"],
+		["Neon Highway", "psx", "Sony PlayStation", "PS1", "Neon Ronin"]]
+	var i := 0
+	for s in specs:
+		i += 1
+		emu_games.append({"key": "emu:30000000%02d" % i, "store": "emu", "id": "30000000%02d" % i, "title": s[0], "installed": true,
+			"art": art.call(s[4]), "info": {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null,
+			"summary": "A %s game from your ROM folder, added to Steam by Steam ROM Manager through EmuDeck. It runs in RetroArch." % s[2]},
+			"last_played": now - 86400 * i, "playtime_min": 90 * i, "shortcut": true,
+			"emulated": {"system": s[1], "system_name": s[2], "system_short": s[3], "emulator": "RetroArch", "via": "emudeck"}})
+	var all: Array = games.duplicate()
+	all.append_array(emu_games)
+	lib.games.assign(all)
+	lib.changed.emit()
+	await frames(4)
+	if want(["emulation"]):
+		main.show_screen("library")
+		await frames(2)
+		main.open_emulation()
+		await shot("emulation")
+		main._close_page()
+	if want(["library_emulation"]):
+		main.show_screen("library")
+		main.library_screen.set_view("emulation")
+		await frames(4)
+		var t: Array = main.library_screen.tiles()
+		for x in t:
+			if x.game["key"] == "emu:3000000001":
+				x.grab_focus()
+		await shot("library_emulation")
+		main.library_screen.set_view("")
+	if want(["home_emulation"]):
+		main.show_screen("home")
+		await frames(4)
+		var em: Array = main.home.tiles("emulation")
+		if not em.is_empty():
+			em[0].grab_focus()
+		await frames(10)
+		await shot("home_emulation")
+	lib.games.assign(games)
+	lib.emulation = load("res://scripts/library/stores/emu.gd").empty_setup()
+	lib.changed.emit()
+	await frames(2)
 
 
 ## Free main and every static cache before quitting, or the engine aborts at

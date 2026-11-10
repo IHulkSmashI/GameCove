@@ -46,6 +46,8 @@ const NETWORK_CALLS := [
 		"when": "When a tile shows a picture that isn't saved yet", "switch": "None (SteamGridDB lookups: Look up game details)"},
 	{"who": "PCs on your own network (GameStream)", "what": "A fixed client id and Moonlight's certificate; Wake-on-LAN packets to your PC. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network (up to 1,022), then GameStream's serverinfo to those that answer.",
 		"when": "When you open the Stream tab or wake a PC", "switch": "You start it"},
+	{"who": "EmuDeck, RetroDECK, ES-DE and Steam ROM Manager", "what": "Their own requests (Steam ROM Manager looks up art on SteamGridDB with its own settings). GameCove only reads their files on the handheld.",
+		"when": "Only while you have them open from the Emulation page", "switch": "You start it"},
 	{"who": "Epic and GOG (through legendary and heroic-gogdl)", "what": "Your save files for the Epic or GOG game you start or just closed, with your store sign-in: the stores' own cloud saves, as Heroic does. For a GOG game Heroic doesn't know, GOG's remote config is asked once for where the game keeps its saves (its client id only).",
 		"when": "Just before an Epic or GOG game starts and just after it ends; when you press Sync now", "switch": "Sync cloud saves (Settings > Saves; also per game)"},
 	{"who": "OS, Flatpak, fwupd and store tools", "what": "Their own update and sign-in requests.",

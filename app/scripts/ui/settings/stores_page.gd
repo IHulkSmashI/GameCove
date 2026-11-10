@@ -9,6 +9,8 @@ func _connect() -> void:
 	var lib := svc("library")
 	if lib != null and lib.has_signal("store_settings_changed"):
 		lib.store_settings_changed.connect(_later_rebuild)
+	if lib != null and lib.get("collections") != null:
+		lib.collections.changed.connect(_later_rebuild)
 	var st := svc("setup")
 	if st != null and st.has_signal("login_finished"):
 		st.login_finished.connect(func(_s, ok, _m):
@@ -25,6 +27,8 @@ func _later_rebuild() -> void:
 func build() -> void:
 	_build_sign_in()
 	var lib := svc("library")
+	if lib != null and lib.get("collections") != null:
+		_build_collections(lib.collections, lib.games if lib.get("games") is Array else [])
 	if not SvcLib.has_all(lib, ["store_settings", "set_store_setting"]):
 		return
 	var s: Dictionary = lib.store_settings()
@@ -117,6 +121,28 @@ func _build_steam(lib: Object, s: Dictionary) -> void:
 			var r: Dictionary = lib.apply_pending_steam_changes(true)
 			notify(TS.STEAM_RESTARTING if r.get("ok", false) else str(r.get("why", "")), "" if r.get("ok", false) else "bad"))
 		add_focusable(box, b)
+
+
+## Favourites, hidden games and collections: the Steam import switch and counts.
+func _build_collections(cols: RefCounted, games: Array) -> void:
+	var box := add_card(TL.COLLECTIONS_CARD, "star", TL.COLLECTIONS_CARD_LINE)
+	var keys: Array = games.map(func(g): return str(g.get("key", "")))
+	var hidden := keys.filter(func(k): return cols.is_hidden(k)).size()
+	var own: int = cols.collections().filter(func(c): return not c["read_only"]).size()
+	var fact := Kit.label(TL.collections_fact(cols.favourite_count(keys), hidden, own), "QuietLabel")
+	fact.name = "CollectionsFact"
+	box.add_child(fact)
+	var t := toggle(box, "steam_collections", TL.STEAM_COLLECTIONS, cols.steam_enabled(), by_value(TL.STEAM_COLLECTIONS_HELP), "layers")
+	t.changed.connect(func(v):
+		if not cols.set_steam_enabled(bool(v)):
+			notify(TL.COULDNT_SAVE, "bad")
+		_later_rebuild())
+	var dyn: int = cols.dynamic_count()
+	if cols.steam_enabled() and dyn > 0:
+		box.add_child(SKit.note(TL.STEAM_DYNAMIC % [dyn, TL.plural(dyn)], "info", "SteamDynamic"))
+
+
+const TL := preload("res://scripts/ui/texts_library.gd")
 
 
 func _store_set(lib: Object, key: String, value: Variant) -> void:

@@ -6,7 +6,7 @@ extends RefCounted
 const STORES := [["", "All"], ["steam", "Steam"], ["epic", "Epic"], ["gog", "GOG"], ["amazon", "Amazon"]]
 ## "stream": apps streamed from a PC (Stream tab), not a store of the Library.
 ## "app": desktop apps (scripts/library/apps.gd), not a store of the Library either.
-const STORE_NAMES := {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "amazon": "Amazon", "stream": "PC", "app": "App"}
+const STORE_NAMES := {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "amazon": "Amazon", "stream": "PC", "app": "App", "emu": "Emulation"}
 const RECENT_MAX := 12
 
 
@@ -38,12 +38,58 @@ static func recently_played(games: Array, limit := RECENT_MAX) -> Array:
 
 ## The "Continue" hero: most recently played installed game, else the first
 ## installed game, else {} (empty library).
-static func continue_game(games: Array) -> Dictionary:
+static func continue_game(all_games: Array) -> Dictionary:
+	var games := not_hidden(all_games)
 	var recent := recently_played(installed(games), 1)
 	if not recent.is_empty():
 		return recent[0]
 	var inst := installed(games)
 	return inst[0] if not inst.is_empty() else {}
+
+
+# ------------------------------------------------------------ favourites, hidden, collections
+
+## The library views the filter sheet picks: "" every game you haven't hidden,
+## "favourites", "hidden" (only those), "emulation" (store "emu"),
+## "collection:<id>". Reads the fields Collections.decorate() adds.
+const VIEWS := ["", "favourites", "emulation", "hidden"]
+
+
+static func not_hidden(games: Array) -> Array:
+	return games.filter(func(g): return not g.get("hidden", false))
+
+
+static func favourites(games: Array) -> Array:
+	var out := games.filter(func(g): return g.get("favourite", false) and not g.get("hidden", false))
+	out.sort_custom(title_order)
+	return out
+
+
+static func filter_view(games: Array, view: String) -> Array:
+	match view:
+		"":
+			return not_hidden(games)
+		"favourites":
+			return games.filter(func(g): return g.get("favourite", false) and not g.get("hidden", false))
+		"hidden":
+			return games.filter(func(g): return g.get("hidden", false))
+		"emulation":
+			return games.filter(func(g): return g.get("store", "") == "emu" and not g.get("hidden", false))
+	if view.begins_with("collection:"):
+		var id := view.substr(11)
+		return games.filter(func(g): return id in g.get("collections", []) and not g.get("hidden", false))
+	return not_hidden(games)
+
+
+## Emulated games and the frontend for the Home shelf: ES-DE / RetroDECK
+## first, then the games A to Z.
+static func emulation_shelf(games: Array) -> Array:
+	var out := games.filter(func(g): return g.get("store", "") == "emu")
+	out.sort_custom(func(a, b):
+		var fa := str(a.get("id", "")) == "frontend"
+		var fb := str(b.get("id", "")) == "frontend"
+		return fa if fa != fb else title_order(a, b))
+	return out
 
 
 static func find_by_key(games: Array, key: String) -> Dictionary:
@@ -121,7 +167,9 @@ static func stores_present(games: Array) -> Array:
 const SHELF_VISIBLE := 8
 
 
-static func shelves(games: Array) -> Array:
+static func shelves(all_games: Array) -> Array:
+	# Hidden games stay out of Home (the Library's filter sheet shows them).
+	var games := not_hidden(all_games)
 	var out: Array = []
 	var add := func(id: String, title: String, list: Array):
 		if not list.is_empty():
@@ -129,6 +177,7 @@ static func shelves(games: Array) -> Array:
 	var hero_key := str(continue_game(games).get("key", ""))
 	var recent := recently_played(games).filter(func(g): return str(g.get("key", "")) != hero_key)
 	add.call("recent", "Recently played", recent)
+	add.call("favourites", "Favourites", favourites(games))
 	var inst := installed(games).filter(func(g): return str(g.get("key", "")) != hero_key)
 	inst.sort_custom(func(a, b):
 		var aa := int(a.get("added", 0))
@@ -141,6 +190,7 @@ static func shelves(games: Array) -> Array:
 		on_screen[str(g.get("key", ""))] = true
 	inst = inst.filter(func(g): return not on_screen.has(str(g.get("key", "")))) + inst.filter(func(g): return on_screen.has(str(g.get("key", ""))))
 	add.call("installed", "Installed", inst)
+	add.call("emulation", "Emulation", emulation_shelf(games))
 	add.call("short", "Short games, under %d h" % int(SHORT_MAX_H), short_games(games))
 	var ac := anticheat_friendly(games)
 	ac.sort_custom(title_order)

@@ -54,6 +54,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | Inter typeface | Banner lettering (`assets/banner.png` only; not bundled) | OFL-1.1 |
 | CRT-Lottes ReShade effect (Timothy Lottes; ReShade port in Matsilagi/RSRetroArch `Shaders/CRTLottes.fx`) | Bundled CRT screen effect (`app/scripts/controls/display/reshade_shaders.gd`, unchanged) | Public domain |
 | ReShade.fxh (crosire/reshade-shaders, slim branch) | Header the bundled ReShade effects include | CC0-1.0 |
+| EmuDeck (dragoonDorise), RetroDECK, ES-DE, Steam ROM Manager (SteamGridDB) | The Emulation page starts them (ES-DE / RetroDECK full screen, EmuDeck's app or RetroDECK's configurator, Steam ROM Manager); we read EmuDeck's `settings.sh`, RetroDECK's `retrodeck.cfg`, ES-DE's `es_settings.xml` and `gamelist.xml`, and the Steam shortcuts Steam ROM Manager makes. None of them ships with GameCove, and GameCove never ships or downloads ROMs or BIOS files | GPL-3.0 (EmuDeck, RetroDECK, Steam ROM Manager), MIT (ES-DE) |
 | QR Code encoder, kenyoni-software godot-addons (Iceflower S) | QR codes for store sign-in, vendored in `app/addons/kenyoni/qr_code/` (Kanji mode removed; see its README.GameCove.md) | MIT |
 
 ## Ideas and findings we borrowed
@@ -106,6 +107,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | [GG.deals](https://gg.deals/) | Optional: best official-store price and historical low in your region's currency for Steam games, with your own free API key | [API terms](https://gg.deals/api/): free plan for personal, hobby and open-source use; credit GG.deals with an active link wherever its data is shown; its referral links are never altered or removed (rows open its URLs unchanged); 100 ids/min, 1,000/hour per key. No key ships with GameCove. |
 | European Central Bank | Euro reference exchange rates, published in the nightly upcoming.json.gz; not used for any price the app shows | [ECB reuse policy](https://www.ecb.europa.eu/stats/ecb_statistics/governance_and_quality_framework/html/usage_policy.en.html): free for any use, unmodified, with credit. Source: ECB statistics. |
 | Wikidata | Upcoming release dates for the calendar; genres, developers and publishers as the last fallback for game details | CC0 |
+| ES-DE's system list (`resources/systems/linux/es_systems.xml`, Leon Styhre and contributors) | System ids and full names in `app/data/emu_systems.json` (short names are ours), used when the installed ES-DE's own file can't be read | MIT |
 | Maker spec pages and launch coverage (ASUS, Lenovo, MSI, OneXPlayer, AYANEO, GPD, Acer, ZOTAC) | Panel size, resolution and refresh in `devices.json` | facts, cited per row in `sources` |
 
 We looked at PCGamingWiki (Cargo API) for controller support and engine facts and don't use it: its content is CC BY-NC-SA 3.0, and its non-commercial and share-alike terms would attach to the nightly `gamedb.json.gz`, which is shared under CC0-compatible terms and the ODbL and may be redistributed commercially by anyone (GameCove is GPL-3.0). Controller support comes from the Steam store instead. We also don't scrape Metacritic, OpenCritic or SteamDB (SteamDB forbids it).

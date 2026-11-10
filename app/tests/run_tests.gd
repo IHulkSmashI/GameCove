@@ -61,6 +61,10 @@ static func unexpected(seen: Array[Dictionary], expected: Array[String]) -> Arra
 func _initialize() -> void:
 	var errors := ErrorCounter.new()
 	OS.add_logger(errors)
+	# Library scans never see this machine's Flatpaks or programs (EmuDeck, RetroDECK, ES-DE).
+	var emu: GDScript = load("res://scripts/library/stores/emu.gd")
+	emu.flatpak_dirs = []
+	emu.path_env = ""
 	var failed := 0
 	var passed := 0
 	var dir := DirAccess.open("res://tests")

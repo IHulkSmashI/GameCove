@@ -422,14 +422,22 @@ func _build_rows() -> void:
 	_rows_box.add_child(spacer)
 
 
-## Library shelves, with the Apps shelf (pinned apps, then All apps) third
-## when anything is pinned.
+## Library shelves, with the Apps shelf (pinned apps, then All apps) when
+## anything is pinned: after Recently played, Favourites, Installed and
+## Emulation (whichever of them show), before the rest.
+const BEFORE_APPS := ["recent", "favourites", "installed", "emulation"]
+
+
 static func shelf_specs(list: Array, pinned: Array) -> Array:
 	var specs: Array = View.shelves(list)
 	if not pinned.is_empty():
 		var AppsView = load("res://scripts/ui/apps_view.gd")
 		var TX = load("res://scripts/ui/texts_extras.gd")
-		specs.insert(mini(2, specs.size()), {"id": "apps", "title": TX.APPS_SHELF, "games": pinned + [AppsView.all_tile()]})
+		var at := 0
+		for i in specs.size():
+			if specs[i]["id"] in BEFORE_APPS:
+				at = i + 1
+		specs.insert(at, {"id": "apps", "title": TX.APPS_SHELF, "games": pinned + [AppsView.all_tile()]})
 	return specs
 
 

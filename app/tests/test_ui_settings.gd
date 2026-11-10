@@ -2,6 +2,7 @@ extends "res://tests/test_case.gd"
 ## Settings screen, its pages, QR sign-in, first-run setup and the quick menu
 ## additions, all with fake services. Nothing touches the real system.
 
+const TL := preload("res://scripts/ui/texts_library.gd")
 const SettingsScreen := preload("res://scripts/ui/settings_screen.gd")
 const SetupFlow := preload("res://scripts/ui/setup/setup_flow.gd")
 const QR := preload("res://scripts/ui/settings/qr.gd")
@@ -95,6 +96,8 @@ class FakeArtwork extends RefCounted:
 class FakeLibrary extends RefCounted:
 	signal store_settings_changed
 	var artwork := FakeArtwork.new()
+	## Favourites and collections (scripts/library/collections.gd); null: no Collections card.
+	var collections: RefCounted
 	var games: Array = [{"key": "gog:1", "title": "Hades"}, {"key": "epic:2", "title": "Control"}]
 	var s := {"install_root": "/home/deck/Games", "steam_cef": false, "auto_resume": true, "max_parallel": 1,
 		"focus_steam_dialogs": true, "steam_cef_status": "off", "steam_pending_count": 0}
@@ -767,3 +770,29 @@ func test_device_page_photo_settings() -> void:
 	d.select_part("storage")
 	ok(not d.find_child("Card_photo", true, false).visible, "hidden on other sections")
 	d.free()
+
+
+func test_stores_page_collections_card() -> void:
+	load("res://scripts/system/settings_file.gd").reset_for_tests()
+	var file := ProjectSettings.globalize_path("user://test_settings_collections.json")
+	DirAccess.remove_absolute(file)
+	var cols: RefCounted = load("res://scripts/library/collections.gd").new(file)
+	cols.set_favourite("gog:1", true)
+	cols.set_hidden("epic:2", true)
+	cols.create("Backlog")
+	cols.set_imported({"collections": [{"id": "steam-x", "name": "RPGs", "games": [], "source": "steam"}], "dynamic": 2})
+	var svc := _svc()
+	var plain := _screen(_svc())
+	ok(not plain.pages["stores"].rows.has("steam_collections"), "no collections service: no card")
+	plain.free()
+	svc["library"].collections = cols
+	var s := _screen(svc)
+	var p: VBoxContainer = s.pages["stores"]
+	ok(p.rows.has("steam_collections"), "Show Steam's collections")
+	ok(p.rows["steam_collections"].hint_text().length() > 20, "with a plain line")
+	eq(p.find_child("CollectionsFact", true, false).text, TL.collections_fact(1, 1, 1), "counts: favourites, hidden, ours")
+	ok(_has_text(p, TL.STEAM_DYNAMIC % [2, "s"]), "dynamic collections stay in Steam, said plainly")
+	p.rows["steam_collections"].step(-1)
+	ok(not cols.steam_enabled(), "switched off")
+	s.free()
+	DirAccess.remove_absolute(file)

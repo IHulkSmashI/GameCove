@@ -65,6 +65,8 @@ func setup(b: Dictionary, badge_style := "tile") -> void:
 	label.add_theme_font_override("font", ThemeLib.font("bold", true) if chip else ThemeLib.font("mono_bold"))
 	label.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION - 1 if chip else 12)
 	row.add_child(label)
+	# An icon-only pill (a favourite's star on a tile) has no text.
+	label.visible = label.text != ""
 	var bg: Color = flag if solid else (Color(tone_col, 0.12) if chip else Color(0.02, 0.03, 0.05, 0.78))
 	if chip and not ThemeLib.is_dark():
 		bg = Color(tone_col, 0.10)

@@ -13,6 +13,7 @@ extends "res://scripts/ui/page_template.gd"
 ##   "state"        InstallState (live install state and progress)
 ##   "actions"      GameActions (flows with sheets, keyboard, toasts)
 ##   "achievements" Achievements service
+##   "collections"  CollectionActions (the Favourite star; Manage lists collections and hide)
 ##   "controls", "profiles"  Controls / Profiles for the Game settings card
 ##                  (the autoloads when not passed; none under tests)
 ##   "saves"        cloud saves (saves_service.gd): the Cloud saves card, Epic and GOG games
@@ -34,6 +35,7 @@ const TI := preload("res://scripts/ui/texts_insights.gd")
 const MetadataCard := preload("res://scripts/ui/games/metadata_card.gd")
 const LinkHandoff := preload("res://scripts/ui/games/link_handoff.gd")
 const ArtPicker := preload("res://scripts/ui/games/art_picker.gd")
+const TL := preload("res://scripts/ui/texts_library.gd")
 const SavesCard := preload("res://scripts/ui/games/saves_card.gd")
 const TSaves := preload("res://scripts/ui/texts_saves.gd")
 ## Room for the top bar above the hero card (it starts where Home's does).
@@ -46,6 +48,9 @@ signal downloads_requested
 
 var play_button: Button
 var manage_button: Button
+## Favourite (star): on Home's Favourites shelf and the Library's Favourites view.
+var favourite_button: Button
+var collection_actions: Object
 ## Gone from the action row (B goes back; the settings card is on screen);
 ## kept null for callers.
 var settings_button: Button
@@ -92,6 +97,7 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 	state = services.get("state")
 	game_actions = services.get("actions")
 	achievements = services.get("achievements")
+	collection_actions = services.get("collections")
 	battery = services.get("battery")
 	top_inset = TOP_INSET
 	setup_page(g, "")
@@ -156,7 +162,8 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 	# With the Game settings card and Controls' frame limit, the card shows the
 	# real one: the launch settings leave theirs out (and so does their row).
 	var card_fps: bool = game_settings != null and ctl.has_method("has") and ctl.has("display.fps_limit")
-	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam", not card_fps)
+	# Steam games and emulated games Steam starts (Steam ROM Manager's shortcuts) take no environment.
+	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam" and not g.get("shortcut", false), not card_fps)
 	form.saved.connect(func(_s): _label_launch_button())
 	gbody.add_child(form)
 	_show_launch_settings()
@@ -339,12 +346,28 @@ func _build_actions() -> void:
 	manage_button.visible = game_actions != null
 	if not manage_button.visible:
 		actions.erase(manage_button)
+	favourite_button = null
+	if collection_actions != null:
+		favourite_button = add_action("", "", false, "Favourite")
+		favourite_button.pressed.connect(func():
+			collection_actions.toggle_favourite(game)
+			refresh_favourite())
+		refresh_favourite()
 	# Play and Manage only: no Back (B does it), no jump to the settings or
 	# achievements cards (both are on screen right below; down reaches them).
 	settings_button = null
 	back_button = null
 	if _accent.a > 0.0:
 		set_accent(_accent)
+
+
+## The star's look: filled and "Favourited" when it's a favourite.
+func refresh_favourite() -> void:
+	if favourite_button == null or collection_actions == null or not is_instance_valid(favourite_button):
+		return
+	var on: bool = collection_actions.collections.is_favourite(_key())
+	favourite_button.text = TL.FAVOURITED if on else TL.FAVOURITE
+	favourite_button.icon = GameIcons.tex("star" if on else "star_line", 20, ThemeLib.tone("gold") if on else Color.WHITE)
 
 
 func _on_primary() -> void:
@@ -625,6 +648,8 @@ func hints_for_focus(f: Control) -> Array:
 		return [["DPAD", "Browse"], ["B", "Back"]]
 	if f == manage_button:
 		return [["A", TG.MANAGE], ["B", "Back"]]
+	if f != null and f == favourite_button:
+		return [["A", TL.REMOVE_FAVOURITE if collection_actions.collections.is_favourite(_key()) else TL.ADD_FAVOURITE], ["B", "Back"]]
 	if f != null and saves_card != null and f in saves_card.focusables():
 		return [["A", saves_card.a_hint(f)], ["B", "Back"]]
 	return []

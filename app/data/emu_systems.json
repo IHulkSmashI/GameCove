@@ -1,0 +1,757 @@
+{
+ "_source": "System names from ES-DE's resources/systems/linux/es_systems.xml (MIT, https://gitlab.com/es-de/emulationstation-de); short names are ours. Used when the installed ES-DE's own file can't be read.",
+ "systems": {
+  "3do": {
+   "name": "3DO Interactive Multiplayer",
+   "short": "3DO"
+  },
+  "adam": {
+   "name": "Coleco Adam",
+   "short": "Adam"
+  },
+  "ags": {
+   "name": "Adventure Game Studio Game Engine",
+   "short": "AGS"
+  },
+  "amiga": {
+   "name": "Commodore Amiga",
+   "short": "Amiga"
+  },
+  "amiga1200": {
+   "name": "Commodore Amiga 1200",
+   "short": "Amiga 1200"
+  },
+  "amiga600": {
+   "name": "Commodore Amiga 600",
+   "short": "Amiga 600"
+  },
+  "amigacd32": {
+   "name": "Commodore Amiga CD32",
+   "short": "Amiga CD32"
+  },
+  "amstradcpc": {
+   "name": "Amstrad CPC",
+   "short": "CPC"
+  },
+  "android": {
+   "name": "Google Android",
+   "short": "Android"
+  },
+  "androidgames": {
+   "name": "Android Games",
+   "short": "Android"
+  },
+  "apple2": {
+   "name": "Apple II",
+   "short": "Apple II"
+  },
+  "apple2gs": {
+   "name": "Apple IIGS",
+   "short": "Apple IIGS"
+  },
+  "arcade": {
+   "name": "Arcade",
+   "short": "Arcade"
+  },
+  "arcadia": {
+   "name": "Emerson Arcadia 2001",
+   "short": "Arcadia 2001"
+  },
+  "archimedes": {
+   "name": "Acorn Archimedes",
+   "short": "Archimedes"
+  },
+  "arduboy": {
+   "name": "Arduboy Miniature Game System",
+   "short": "Arduboy"
+  },
+  "astrocde": {
+   "name": "Bally Astrocade",
+   "short": "Astrocade"
+  },
+  "atari2600": {
+   "name": "Atari 2600",
+   "short": "2600"
+  },
+  "atari5200": {
+   "name": "Atari 5200",
+   "short": "5200"
+  },
+  "atari7800": {
+   "name": "Atari 7800 ProSystem",
+   "short": "7800"
+  },
+  "atari800": {
+   "name": "Atari 800",
+   "short": "Atari 800"
+  },
+  "atarijaguar": {
+   "name": "Atari Jaguar",
+   "short": "Jaguar"
+  },
+  "atarijaguarcd": {
+   "name": "Atari Jaguar CD",
+   "short": "Jaguar CD"
+  },
+  "atarilynx": {
+   "name": "Atari Lynx",
+   "short": "Lynx"
+  },
+  "atarist": {
+   "name": "Atari ST",
+   "short": "Atari ST"
+  },
+  "atarixe": {
+   "name": "Atari XE",
+   "short": "Atari XE"
+  },
+  "atomiswave": {
+   "name": "Sammy Corporation Atomiswave",
+   "short": "Atomiswave"
+  },
+  "bbcmicro": {
+   "name": "Acorn Computers BBC Micro",
+   "short": "BBC Micro"
+  },
+  "c64": {
+   "name": "Commodore 64",
+   "short": "C64"
+  },
+  "cdimono1": {
+   "name": "Philips CD-i",
+   "short": "CD-i"
+  },
+  "cdtv": {
+   "name": "Commodore CDTV",
+   "short": "CDTV"
+  },
+  "chailove": {
+   "name": "ChaiLove Game Engine",
+   "short": "ChaiLove"
+  },
+  "channelf": {
+   "name": "Fairchild Channel F",
+   "short": "Channel F"
+  },
+  "coco": {
+   "name": "Tandy Color Computer",
+   "short": "CoCo"
+  },
+  "colecovision": {
+   "name": "Coleco ColecoVision",
+   "short": "Coleco"
+  },
+  "consolearcade": {
+   "name": "Console Arcade Systems",
+   "short": "Arcade"
+  },
+  "cps": {
+   "name": "Capcom Play System",
+   "short": "CPS"
+  },
+  "cps1": {
+   "name": "Capcom Play System I",
+   "short": "CPS1"
+  },
+  "cps2": {
+   "name": "Capcom Play System II",
+   "short": "CPS2"
+  },
+  "cps3": {
+   "name": "Capcom Play System III",
+   "short": "CPS3"
+  },
+  "crvision": {
+   "name": "VTech CreatiVision",
+   "short": "CreatiVision"
+  },
+  "daphne": {
+   "name": "Daphne Arcade LaserDisc Emulator",
+   "short": "Daphne"
+  },
+  "doom": {
+   "name": "Doom",
+   "short": "Doom"
+  },
+  "dos": {
+   "name": "DOS (PC)",
+   "short": "DOS"
+  },
+  "dragon32": {
+   "name": "Dragon Data Dragon 32",
+   "short": "Dragon 32"
+  },
+  "dreamcast": {
+   "name": "Sega Dreamcast",
+   "short": "Dreamcast"
+  },
+  "easyrpg": {
+   "name": "EasyRPG Game Engine",
+   "short": "EasyRPG"
+  },
+  "electron": {
+   "name": "Acorn Electron",
+   "short": "Electron"
+  },
+  "famicom": {
+   "name": "Nintendo Family Computer",
+   "short": "Famicom"
+  },
+  "fba": {
+   "name": "FinalBurn Alpha",
+   "short": "FB Alpha"
+  },
+  "fbneo": {
+   "name": "FinalBurn Neo",
+   "short": "FBNeo"
+  },
+  "fds": {
+   "name": "Nintendo Famicom Disk System",
+   "short": "FDS"
+  },
+  "flash": {
+   "name": "Adobe Flash",
+   "short": "Flash"
+  },
+  "fm7": {
+   "name": "Fujitsu FM-7",
+   "short": "FM-7"
+  },
+  "fmtowns": {
+   "name": "Fujitsu FM Towns",
+   "short": "FM Towns"
+  },
+  "fpinball": {
+   "name": "Future Pinball",
+   "short": "Future Pinball"
+  },
+  "gamate": {
+   "name": "Bit Corporation Gamate",
+   "short": "Gamate"
+  },
+  "gameandwatch": {
+   "name": "Nintendo Game and Watch",
+   "short": "Game and Watch"
+  },
+  "gamecom": {
+   "name": "Tiger Electronics Game.com",
+   "short": "Game.com"
+  },
+  "gamegear": {
+   "name": "Sega Game Gear",
+   "short": "Game Gear"
+  },
+  "gb": {
+   "name": "Nintendo Game Boy",
+   "short": "Game Boy"
+  },
+  "gba": {
+   "name": "Nintendo Game Boy Advance",
+   "short": "GBA"
+  },
+  "gbc": {
+   "name": "Nintendo Game Boy Color",
+   "short": "GBC"
+  },
+  "gc": {
+   "name": "Nintendo GameCube",
+   "short": "GameCube"
+  },
+  "genesis": {
+   "name": "Sega Genesis",
+   "short": "Genesis"
+  },
+  "gmaster": {
+   "name": "Hartung Game Master",
+   "short": "Game Master"
+  },
+  "gx4000": {
+   "name": "Amstrad GX4000",
+   "short": "GX4000"
+  },
+  "intellivision": {
+   "name": "Mattel Electronics Intellivision",
+   "short": "Intellivision"
+  },
+  "j2me": {
+   "name": "Java 2 Micro Edition (J2ME)",
+   "short": "J2ME"
+  },
+  "laserdisc": {
+   "name": "LaserDisc Games",
+   "short": "LaserDisc"
+  },
+  "lcdgames": {
+   "name": "LCD Handheld Games",
+   "short": "LCD Games"
+  },
+  "lowresnx": {
+   "name": "LowRes NX Fantasy Console",
+   "short": "LowRes NX"
+  },
+  "lutro": {
+   "name": "Lutro Game Engine",
+   "short": "Lutro"
+  },
+  "macintosh": {
+   "name": "Apple Macintosh",
+   "short": "Macintosh"
+  },
+  "mame": {
+   "name": "Multiple Arcade Machine Emulator",
+   "short": "MAME"
+  },
+  "mame-advmame": {
+   "name": "AdvanceMAME",
+   "short": "AdvanceMAME"
+  },
+  "mark3": {
+   "name": "Sega Mark III",
+   "short": "Mark III"
+  },
+  "mastersystem": {
+   "name": "Sega Master System",
+   "short": "Master System"
+  },
+  "megacd": {
+   "name": "Sega Mega-CD",
+   "short": "Mega-CD"
+  },
+  "megacdjp": {
+   "name": "Sega Mega-CD",
+   "short": "Mega-CD"
+  },
+  "megadrive": {
+   "name": "Sega Mega Drive",
+   "short": "Mega Drive"
+  },
+  "megadrivejp": {
+   "name": "Sega Mega Drive",
+   "short": "Mega Drive"
+  },
+  "megaduck": {
+   "name": "Creatronic Mega Duck",
+   "short": "Mega Duck"
+  },
+  "mess": {
+   "name": "Multi Emulator Super System",
+   "short": "MESS"
+  },
+  "model2": {
+   "name": "Sega Model 2",
+   "short": "Model 2"
+  },
+  "model3": {
+   "name": "Sega Model 3",
+   "short": "Model 3"
+  },
+  "moto": {
+   "name": "Thomson MO/TO Series",
+   "short": "MO/TO"
+  },
+  "msx": {
+   "name": "MSX",
+   "short": "MSX"
+  },
+  "msx1": {
+   "name": "MSX1",
+   "short": "MSX1"
+  },
+  "msx2": {
+   "name": "MSX2",
+   "short": "MSX2"
+  },
+  "msxturbor": {
+   "name": "MSX Turbo R",
+   "short": "MSX Turbo R"
+  },
+  "mugen": {
+   "name": "M.U.G.E.N Game Engine",
+   "short": "M.U.G.E.N"
+  },
+  "multivision": {
+   "name": "Othello Multivision",
+   "short": "Multivision"
+  },
+  "n3ds": {
+   "name": "Nintendo 3DS",
+   "short": "3DS"
+  },
+  "n64": {
+   "name": "Nintendo 64",
+   "short": "N64"
+  },
+  "n64dd": {
+   "name": "Nintendo 64DD",
+   "short": "64DD"
+  },
+  "naomi": {
+   "name": "Sega NAOMI",
+   "short": "NAOMI"
+  },
+  "naomi2": {
+   "name": "Sega NAOMI 2",
+   "short": "NAOMI 2"
+  },
+  "naomigd": {
+   "name": "Sega NAOMI GD-ROM",
+   "short": "NAOMI GD"
+  },
+  "nds": {
+   "name": "Nintendo DS",
+   "short": "DS"
+  },
+  "neogeo": {
+   "name": "SNK Neo Geo",
+   "short": "Neo Geo"
+  },
+  "neogeocd": {
+   "name": "SNK Neo Geo CD",
+   "short": "Neo Geo CD"
+  },
+  "neogeocdjp": {
+   "name": "SNK Neo Geo CD",
+   "short": "Neo Geo CD"
+  },
+  "nes": {
+   "name": "Nintendo Entertainment System",
+   "short": "NES"
+  },
+  "ngage": {
+   "name": "Nokia N-Gage",
+   "short": "N-Gage"
+  },
+  "ngp": {
+   "name": "SNK Neo Geo Pocket",
+   "short": "NGP"
+  },
+  "ngpc": {
+   "name": "SNK Neo Geo Pocket Color",
+   "short": "NGPC"
+  },
+  "odyssey2": {
+   "name": "Magnavox Odyssey 2",
+   "short": "Odyssey 2"
+  },
+  "openbor": {
+   "name": "OpenBOR Game Engine",
+   "short": "OpenBOR"
+  },
+  "oric": {
+   "name": "Tangerine Computer Systems Oric",
+   "short": "Oric"
+  },
+  "palm": {
+   "name": "Palm OS",
+   "short": "Palm OS"
+  },
+  "pc": {
+   "name": "IBM PC",
+   "short": "PC"
+  },
+  "pc88": {
+   "name": "NEC PC-8800 Series",
+   "short": "PC-88"
+  },
+  "pc98": {
+   "name": "NEC PC-9800 Series",
+   "short": "PC-98"
+  },
+  "pcarcade": {
+   "name": "PC Arcade Systems",
+   "short": "PC Arcade"
+  },
+  "pcengine": {
+   "name": "NEC PC Engine",
+   "short": "PC Engine"
+  },
+  "pcenginecd": {
+   "name": "NEC PC Engine CD",
+   "short": "PCE CD"
+  },
+  "pcfx": {
+   "name": "NEC PC-FX",
+   "short": "PC-FX"
+  },
+  "pico8": {
+   "name": "PICO-8 Fantasy Console",
+   "short": "PICO-8"
+  },
+  "plus4": {
+   "name": "Commodore Plus/4",
+   "short": "Plus/4"
+  },
+  "pokemini": {
+   "name": "Nintendo Pokémon Mini",
+   "short": "Poké Mini"
+  },
+  "ports": {
+   "name": "Ports",
+   "short": "Ports"
+  },
+  "ps2": {
+   "name": "Sony PlayStation 2",
+   "short": "PS2"
+  },
+  "ps3": {
+   "name": "Sony PlayStation 3",
+   "short": "PS3"
+  },
+  "ps4": {
+   "name": "Sony PlayStation 4",
+   "short": "PS4"
+  },
+  "psp": {
+   "name": "Sony PlayStation Portable",
+   "short": "PSP"
+  },
+  "psvita": {
+   "name": "Sony PlayStation Vita",
+   "short": "Vita"
+  },
+  "psx": {
+   "name": "Sony PlayStation",
+   "short": "PS1"
+  },
+  "pv1000": {
+   "name": "Casio PV-1000",
+   "short": "PV-1000"
+  },
+  "quake": {
+   "name": "Quake",
+   "short": "Quake"
+  },
+  "samcoupe": {
+   "name": "MGT SAM Coupé",
+   "short": "SAM Coupé"
+  },
+  "satellaview": {
+   "name": "Nintendo Satellaview",
+   "short": "Satellaview"
+  },
+  "saturn": {
+   "name": "Sega Saturn",
+   "short": "Saturn"
+  },
+  "saturnjp": {
+   "name": "Sega Saturn",
+   "short": "Saturn"
+  },
+  "scummvm": {
+   "name": "ScummVM Game Engine",
+   "short": "ScummVM"
+  },
+  "scv": {
+   "name": "Epoch Super Cassette Vision",
+   "short": "SCV"
+  },
+  "sega32x": {
+   "name": "Sega Mega Drive 32X",
+   "short": "32X"
+  },
+  "sega32xjp": {
+   "name": "Sega Super 32X",
+   "short": "Super 32X"
+  },
+  "sega32xna": {
+   "name": "Sega Genesis 32X",
+   "short": "Genesis 32X"
+  },
+  "segacd": {
+   "name": "Sega CD",
+   "short": "Sega CD"
+  },
+  "sfc": {
+   "name": "Nintendo SFC (Super Famicom)",
+   "short": "Super Famicom"
+  },
+  "sg-1000": {
+   "name": "Sega SG-1000",
+   "short": "SG-1000"
+  },
+  "sgb": {
+   "name": "Nintendo Super Game Boy",
+   "short": "SGB"
+  },
+  "snes": {
+   "name": "Nintendo SNES (Super Nintendo)",
+   "short": "SNES"
+  },
+  "snesna": {
+   "name": "Nintendo SNES (Super Nintendo)",
+   "short": "SNES"
+  },
+  "solarus": {
+   "name": "Solarus Game Engine",
+   "short": "Solarus"
+  },
+  "spectravideo": {
+   "name": "Spectravideo",
+   "short": "Spectravideo"
+  },
+  "stv": {
+   "name": "Sega Titan Video Game System",
+   "short": "STV"
+  },
+  "sufami": {
+   "name": "Bandai SuFami Turbo",
+   "short": "SuFami Turbo"
+  },
+  "supergrafx": {
+   "name": "NEC SuperGrafx",
+   "short": "SuperGrafx"
+  },
+  "supervision": {
+   "name": "Watara Supervision",
+   "short": "Supervision"
+  },
+  "supracan": {
+   "name": "Funtech Super A'Can",
+   "short": "Super A'Can"
+  },
+  "switch": {
+   "name": "Nintendo Switch",
+   "short": "Switch"
+  },
+  "symbian": {
+   "name": "Symbian",
+   "short": "Symbian"
+  },
+  "tanodragon": {
+   "name": "Tano Dragon",
+   "short": "Tano Dragon"
+  },
+  "tg16": {
+   "name": "NEC TurboGrafx-16",
+   "short": "TG-16"
+  },
+  "tg-cd": {
+   "name": "NEC TurboGrafx-CD",
+   "short": "TG-CD"
+  },
+  "ti99": {
+   "name": "Texas Instruments TI-99",
+   "short": "TI-99"
+  },
+  "tic80": {
+   "name": "TIC-80 Fantasy Computer",
+   "short": "TIC-80"
+  },
+  "to8": {
+   "name": "Thomson TO8",
+   "short": "TO8"
+  },
+  "triforce": {
+   "name": "Namco-Sega-Nintendo Triforce",
+   "short": "Triforce"
+  },
+  "trs-80": {
+   "name": "Tandy TRS-80",
+   "short": "TRS-80"
+  },
+  "type-x": {
+   "name": "Taito Type X",
+   "short": "Type X"
+  },
+  "uzebox": {
+   "name": "Uzebox Open Source Console",
+   "short": "Uzebox"
+  },
+  "vectrex": {
+   "name": "GCE Vectrex",
+   "short": "Vectrex"
+  },
+  "vic20": {
+   "name": "Commodore VIC-20",
+   "short": "VIC-20"
+  },
+  "videopac": {
+   "name": "Philips Videopac G7000",
+   "short": "Videopac"
+  },
+  "vircon32": {
+   "name": "Vircon32 Virtual Console",
+   "short": "Vircon32"
+  },
+  "virtualboy": {
+   "name": "Nintendo Virtual Boy",
+   "short": "Virtual Boy"
+  },
+  "vpinball": {
+   "name": "Visual Pinball",
+   "short": "Visual Pinball"
+  },
+  "vsmile": {
+   "name": "VTech V.Smile",
+   "short": "V.Smile"
+  },
+  "wasm4": {
+   "name": "WASM-4 Fantasy Console",
+   "short": "WASM-4"
+  },
+  "wii": {
+   "name": "Nintendo Wii",
+   "short": "Wii"
+  },
+  "wiiu": {
+   "name": "Nintendo Wii U",
+   "short": "Wii U"
+  },
+  "windows": {
+   "name": "Microsoft Windows",
+   "short": "Windows"
+  },
+  "windows3x": {
+   "name": "Microsoft Windows 3.x",
+   "short": "Windows 3.x"
+  },
+  "windows9x": {
+   "name": "Microsoft Windows 9x",
+   "short": "Windows 9x"
+  },
+  "wonderswan": {
+   "name": "Bandai WonderSwan",
+   "short": "WonderSwan"
+  },
+  "wonderswancolor": {
+   "name": "Bandai WonderSwan Color",
+   "short": "WSC"
+  },
+  "x1": {
+   "name": "Sharp X1",
+   "short": "X1"
+  },
+  "x68000": {
+   "name": "Sharp X68000",
+   "short": "X68000"
+  },
+  "xbox": {
+   "name": "Microsoft Xbox",
+   "short": "Xbox"
+  },
+  "xbox360": {
+   "name": "Microsoft Xbox 360",
+   "short": "Xbox 360"
+  },
+  "xboxone": {
+   "name": "Microsoft Xbox One",
+   "short": "Xbox One"
+  },
+  "zmachine": {
+   "name": "Infocom Z-machine",
+   "short": "Z-machine"
+  },
+  "zx81": {
+   "name": "Sinclair ZX81",
+   "short": "ZX81"
+  },
+  "zxnext": {
+   "name": "Sinclair ZX Spectrum Next",
+   "short": "ZX Next"
+  },
+  "zxspectrum": {
+   "name": "Sinclair ZX Spectrum",
+   "short": "ZX Spectrum"
+  }
+ }
+}

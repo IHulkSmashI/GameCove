@@ -41,6 +41,7 @@ const BrandMark := preload("res://scripts/ui/brand_mark.gd")
 const AppMixer := preload("res://scripts/ui/controls/app_mixer.gd")
 const MediaCard := preload("res://scripts/ui/controls/media_card.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const TL := preload("res://scripts/ui/texts_library.gd")
 
 signal closed
 ## A result worth a toast: text, tone (good / bad).
@@ -130,6 +131,10 @@ var _limit := {"cant_reach": false, "info": {}}
 ## fakes in tests), optional "perf", "controller", "session", "controls",
 ## "profiles", "fixes" and "command_runner" (a fake for bg_command.gd).
 ## Controls and Profiles come from the autoloads when not passed.
+## Favourites (scripts/library/collections.gd): This game's Favourite switch; null hides it.
+var collections: RefCounted
+
+
 func setup(services: Dictionary) -> void:
 	name = "QuickMenu"
 	commands = BgCommand.new()
@@ -144,6 +149,7 @@ func setup(services: Dictionary) -> void:
 	perf = services.get("perf")
 	controller = services.get("controller")
 	fixes = services.get("fixes")
+	collections = services.get("collections")
 	recording = services.get("recording")
 	if recording != null and recording.has_signal("changed"):
 		recording.changed.connect(_update_record_row)
@@ -691,6 +697,7 @@ func _build_game() -> void:
 		var n := SKitNote.make(TC.USE_GAME_EDIT, "info")
 		body.add_child(n)
 	_list(Catalog.QUICK["game"])
+	_favourite_row()
 	_autotune_line()
 	if per:
 		_reset_row = ActionRow.new()
@@ -701,6 +708,17 @@ func _build_game() -> void:
 	_record_row()
 	_all_link("game")
 	_build_session()
+
+
+## "Favourite": puts the game on Home's Favourites shelf (any store, emulated games too).
+func _favourite_row() -> void:
+	if collections == null or str(game.get("key", "")) == "":
+		return
+	var key := str(game["key"])
+	var fav := ChoiceRow.bool_row("Favourite", TL.QM_FAVOURITE, bool(collections.is_favourite(key)), "")
+	fav.set_explainer(func(v): return TL.QM_FAVOURITE_ON if v else TL.QM_FAVOURITE_OFF)
+	fav.changed.connect(func(v): collections.set_favourite(key, bool(v)))
+	_add(fav)
 
 
 ## The per-game switch reads as the tab's headline: a tinted card when on.

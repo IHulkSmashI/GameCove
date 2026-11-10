@@ -316,3 +316,28 @@ func test_partial_support_and_no_controls() -> void:
 	eq(m.body.get_node("Support").text, TS.QM_SUPPORT_PARTIAL, "partial support explained")
 	eq(m.body.get_node("Unverified").text, "Not confirmed yet: power limits, VRR range.", "unverified fields named")
 	m.free()
+
+
+func test_this_game_favourite() -> void:
+	load("res://scripts/system/settings_file.gd").reset_for_tests()
+	var file := ProjectSettings.globalize_path("user://test_qm_collections.json")
+	DirAccess.remove_absolute(file)
+	var cols: RefCounted = load("res://scripts/library/collections.gd").new(file)
+	var x := _menu({"collections": cols})
+	var m: Control = x["m"]
+	var emu := {"key": "emu:3000000001", "title": "Super Game", "store": "emu", "id": "3000000001"}
+	m.open(emu)
+	var fav: Node = m.body.get_node_or_null("Favourite")
+	ok(fav != null, "Favourite on This game, emulated games too")
+	eq(fav.value(), false, "not yet")
+	fav.step(1)
+	ok(cols.is_favourite("emu:3000000001"), "saved")
+	m.close()
+	m.open(emu)
+	eq(m.body.get_node("Favourite").value(), true, "shows it next time")
+	_done(x)
+	var y := _menu()
+	y["m"].open(HADES)
+	ok(y["m"].body.get_node_or_null("Favourite") == null, "no collections service: no row")
+	_done(y)
+	DirAccess.remove_absolute(file)

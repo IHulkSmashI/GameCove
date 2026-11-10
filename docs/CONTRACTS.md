@@ -28,7 +28,7 @@ The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these 
 ```
 {
   "key": "steam:976730",          # "<store>:<id>", unique
-  "store": "steam",               # steam | epic | gog | amazon
+  "store": "steam",               # steam | epic | gog | amazon | emu
   "id": "976730",
   "title": "Halo: The Master Chief Collection",
   "installed": true,
@@ -42,9 +42,23 @@ The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these 
     "meta": { ... }               # game details, see "Game details" below
   },
   "last_played": 0,               # unix seconds
-  "playtime_min": 0
+  "playtime_min": 0,
+  "emulated": {},                 # store "emu" only: {"system": "snes", "system_name", "system_short": "SNES",
+                                  #   "emulator": "RetroArch", "via": "emudeck|retrodeck|emulator"}
+  "shortcut": false               # true: a Steam ROM Manager shortcut, started through Steam
 }
 ```
+
+Store `emu` (`scripts/library/stores/emu.gd`): id `frontend` is ES-DE or RetroDECK (opens the Emulation page;
+started by us in a scope), any other id is a Steam shortcut app id from Steam ROM Manager (started with
+`steam://rungameid/<64-bit id>`). `Library.emulation` is the setup the last scan found (`Emu.detect`):
+`{"kind": "emudeck|retrodeck|esde|", "name", "frontend": {"name", "command"}, "app": {...}, "srm": {"command"},
+"roms_dir", "systems": [{"id", "name", "short", "count"}], "rom_total", "recent": [{"title", "system", "last_played"}]}`.
+`Library.record_playtime(game, started, ended)` adds a session for an `emu` game (`user://playtime.json`).
+
+Screens decorate games with `Library.collections.decorate()` (`scripts/library/collections.gd`): `favourite`,
+`hidden` (bool) and `collections` (ids). `library_view.gd` `filter_view(games, view)` picks `""` (not hidden),
+`favourites`, `hidden`, `emulation` or `collection:<id>`; Home's shelves leave hidden games out.
 
 ### Game details (`info.meta`)
 
