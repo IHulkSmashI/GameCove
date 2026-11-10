@@ -235,7 +235,8 @@ func test_m26_unknown_escapes_round_trip() -> void:
 	eq(d["a"]["path"], "C:\\Games\\x", "known escapes decoded")
 	var back: Variant = V.parse_strict(W.dump(d))
 	eq(back, d, "dump reads back the same")
-	ok("x\\py" in W.dump(d), "and writes \\p as it was")
+	var r: Variant = V.parse_strict_raw(text)
+	eq(W.dump(r["tree"], 0, r["raw"]), text, "and writes everything as it was, \\p included (review 2, problem 7)")
 
 
 # ---- L14: the YAML reader keeps everything after a multi-line string ------------------------------
