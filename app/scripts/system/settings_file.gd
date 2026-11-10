@@ -49,8 +49,14 @@ static func _quarantine(path: String, why: String) -> void:
 	_lock.lock()
 	_blocked[p] = true
 	_lock.unlock()
-	DirAccess.rename_absolute(p, p + ".bad")
-	push_warning("GameCove: %s couldn't be read (%s); kept it as %s.bad and won't save it until the next start" % [p, why, p])
+	var bad := p + ".bad"
+	# a second damaged file never replaces the first copy (review 2, low 23)
+	var n := 1
+	while FileAccess.file_exists(bad) and n < 10:
+		bad = "%s.bad.%d" % [p, n]
+		n += 1
+	DirAccess.rename_absolute(p, bad)
+	push_warning("GameCove: %s couldn't be read (%s); kept it as %s and won't save it until the next start" % [p, why, bad])
 
 
 static func _non_empty(path: String) -> bool:

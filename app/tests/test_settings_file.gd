@@ -246,3 +246,15 @@ func test_hand_rolled_writers_keep_the_old_file_on_a_short_write() -> void:
 		eq(FileAccess.get_file_as_bytes(p), before, "%s: the old file is kept" % name)
 	h.free()
 
+
+## Review 2, low 23: a second damaged file overwrote the first .bad copy.
+func test_second_damaged_file_keeps_the_first_copy() -> void:
+	var d := _dir("bad2")
+	var p := d + "/x.json"
+	_write(p, "{first")
+	SettingsFile.load_json(p)
+	SettingsFile.reset_for_tests()
+	_write(p, "{second")
+	SettingsFile.load_json(p)
+	eq(FileAccess.get_file_as_string(p + ".bad"), "{first", "the first copy kept")
+	eq(FileAccess.get_file_as_string(p + ".bad.1"), "{second", "the second beside it")
