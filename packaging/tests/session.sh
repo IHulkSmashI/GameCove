@@ -402,13 +402,14 @@ echo 2 >"$DATA/crash-count"
 touch -d '1 day ago' "$DATA/crash-count" 2>/dev/null || true
 client
 has "$T/client.log" "^select steam$" "slow crashes (a day apart) still trip the guard"
-printf '#!/bin/sh\nsleep 2.5\nexit 139\n' >"$CB/slowcrash"
+printf '#!/bin/sh\n[ -z "${GAMECOVE_HEARTBEAT:-}" ] || echo "1 ui" >"$GAMECOVE_HEARTBEAT"\nsleep 2.5\nexit 139\n' >"$CB/slowcrash"
 chmod +x "$CB/slowcrash"
 slow() { # an app that crashes after 2.5 s
 	: >"$T/client.log"
 	env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" GAMECOVE_BIN="$CB/slowcrash" \
-		GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=off "$@" sh "$CLIENT" >/dev/null 2>&1
+		XDG_RUNTIME_DIR="$T/srun" GAMECOVE_STEAM_WAIT_S=0 GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=off "$@" sh "$CLIENT" >/dev/null 2>&1
 }
+mkdir -p "$T/srun"
 echo 2 >"$DATA/crash-count"
 slow
 has "$T/client.log" "^select steam$" "a crash after some uptime counts too (no time window)"
@@ -510,8 +511,15 @@ eqv "$(sed -n 2p "$DATA/crash-fallback")" hung "fallback says it was hung"
 rm -rf "$DATA"
 eqv "$(watch ingame)" 0 "an unchanging heartbeat during a game is never a hang (long loads)"
 eqv "$(watch alive)" 0 "a beating app runs on"
-eqv "$(watch oldapp)" 0 "an app with the ready file but no heartbeat is only checked for readiness"
 [ ! -e "$DATA/crash-count" ] && ok || bad "healthy runs count nothing"
+# review 2, problem 4: the ready file comes early (Library autoload); a hang before the first
+# beat (building the main scene) is a hang, and its healthy time clears nothing
+mkdir -p "$DATA"
+echo 2 >"$DATA/crash-count"
+code="$(watch oldapp GAMECOVE_HEALTHY_S=1)"
+[ "$code" -ne 0 ] && [ "$code" -ne 124 ] && ok || bad "ready file but no heartbeat: stopped as not ready (exit $code)"
+has "$T/client.log" "^select steam$" "and counted (third in a row): the count wasn't cleared"
+rm -rf "$DATA"
 [ ! -e "$HR/gamecove-heartbeat" ] && ok || bad "heartbeat file removed when the app is gone"
 
 # --- traits: ZOTAC Zone board G1A1W, which Linux's orientation quirk misses (G0A1W only)

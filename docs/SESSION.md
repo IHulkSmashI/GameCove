@@ -289,9 +289,10 @@ job waited for at most `GAMECOVE_ROOT_WAIT_S` (10 s), here and in
   `gamecove-session-select steam`; it's the backstop for a session that never gets
   as far as our client.
 - **Hang** (review H1): the client also stops an app that is alive but stuck. If
-  neither `$XDG_RUNTIME_DIR/gamecove-steam-ready` nor the heartbeat file
-  (`$XDG_RUNTIME_DIR/gamecove-heartbeat`, `GAMECOVE_HEARTBEAT`) appears within 60 s
-  (`GAMECOVE_READY_TIMEOUT_S`), or the heartbeat stops changing for 30 s
+  the first heartbeat (`$XDG_RUNTIME_DIR/gamecove-heartbeat`, `GAMECOVE_HEARTBEAT`,
+  written at the end of the main scene's start) doesn't appear within 60 s
+  (`GAMECOVE_READY_TIMEOUT_S`; the earlier `gamecove-steam-ready` file counts only
+  when no heartbeat is expected), or the heartbeat stops changing for 30 s
   (`GAMECOVE_HEARTBEAT_STALE_S`), it kills the app and counts an unclean exit.
   The app (`scripts/system/session_health.gd`) rewrites the heartbeat every 5 s
   from a main-loop Timer as `<sequence> ui|game`. While a game runs it says `game`
