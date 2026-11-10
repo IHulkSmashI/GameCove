@@ -135,6 +135,28 @@ FW="$REPO/.github/workflows/firmware.yml"
 grep -q "cosign sign-blob --yes --bundle dist/firmware.json.gz.sigstore.json dist/firmware.json.gz" "$FW" && ok || bad "firmware.yml must sign the index"
 grep -q "dist/firmware.json.gz.sigstore.json --clobber" "$FW" && ok || bad "firmware.yml must publish the signature"
 grep -q "id-token: write" "$FW" && ok || bad "firmware.yml needs id-token: write"
+# review problem 2: build (scrapers, pip packages) can't sign or publish; publish runs only pinned cosign and gh
+python3 -I - "$FW" >"$T/out" 2>&1 <<'PY' && ok || bad "firmware.yml jobs: $(cat "$T/out")"
+import re, sys, yaml
+doc = yaml.safe_load(open(sys.argv[1]))
+assert doc.get("permissions") == {}, "nothing at the top level"
+jobs = doc["jobs"]
+assert set(jobs) == {"build", "publish"}, list(jobs)
+b, p = jobs["build"], jobs["publish"]
+assert b.get("permissions") == {"contents": "read"}, b.get("permissions")
+assert b.get("if") == "github.ref == 'refs/heads/main'", "build for publishing only on main"
+assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write", "id-token": "write"}, p.get("permissions")
+brun = "\n".join(s.get("run", "") for s in b["steps"])
+prun = "\n".join(s.get("run", "") for s in p["steps"])
+assert "cosign" not in brun and "gh release" not in brun, "build must not sign or publish"
+assert "pip install" not in prun and "gamedb" not in prun, "publish must not run the scrapers or third-party packages"
+assert "cosign sign-blob" in prun and "COSIGN_SHA256=" in prun
+for j in (b, p):
+    for s in j["steps"]:
+        if s.get("uses", "").startswith("actions/checkout@"):
+            assert s.get("with", {}).get("persist-credentials") is False, "checkout keeps no token"
+        assert "${{" not in s.get("run", ""), "${{ }} inside run:"
+PY
 app_cos=$(sed -n 's/^const COSIGN_VERSION := "\(.*\)"$/\1/p' "$REPO/app/scripts/system/updates.gd")
 gg_cos=$(sed -n 's/^COSIGN_VERSION=//p' "$REPO/packaging/get-gamecove.sh")
 [ -n "$app_cos" ] && [ "$app_cos" = "$gg_cos" ] && ok || bad "updates.gd COSIGN_VERSION ($app_cos) must match get-gamecove.sh ($gg_cos)"
