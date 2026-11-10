@@ -1014,12 +1014,19 @@ func write_tdp(watts: float) -> bool:
 		if user_bus.set_prop(SM_SERVICE, SM_PATH, SM_TDP_IFACE, "TdpLimit", "u", str(w)):
 			ok = absf(read_tdp() - w) < 0.5
 	elif backend == "powerstation":
+		# PL2 = TDP + boost. A smaller boost goes in before the TDP, a larger one after, so TDP + boost never
+		# passes the new total on the way (a raised TDP with the old, larger boost overshot boost_max;
+		# review 2, low 23)
+		var boost := boost_for(watts)
+		var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
+		var change := boost >= 0.0 and (live == null or absf(float(live) - boost) >= 0.05)
+		var first := change and live != null and boost < float(live)
+		if first:
+			system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % boost)
 		if system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "TDP", "d", "%.1f" % watts):
-			var boost := boost_for(watts)
-			var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
+			if change and not first:
+				system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % boost)
 			if boost >= 0.0:
-				if live == null or absf(float(live) - boost) >= 0.05:
-					system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % boost)
 				_live_boost = boost
 			elif live != null:
 				_live_boost = float(live)
