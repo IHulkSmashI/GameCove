@@ -1,0 +1,11 @@
+"compatibilitytools"
+{
+  "compat_tools"
+  {
+    "-xzf"
+    {
+      "install_path" "."
+      "display_name" "-xzf"
+    }
+  }
+}

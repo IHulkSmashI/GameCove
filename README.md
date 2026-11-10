@@ -136,9 +136,9 @@ Switch to Desktop Mode live here too.
 | **This game** | Performance overlay, frame limit, TDP, Auto TDP and its target, upscaling, frame generation, Lossless frame gen, the scaling filter |
 | **Power** | Power profile, TDP, boost, fan mode, battery saver, charge limit, CPU boost, energy preference |
 | **Display** | Brightness, refresh rate, frame limit, VRR, night light, colour vibrance, scaling filter and sharpness, screen effects |
-| **Audio** | Volume, mute, output device, microphone mute and input |
+| **Audio** | Volume, mute, output device, microphone mute and input, each app's own volume, and play/pause and skip for the music playing behind your game |
 | **Controller** | Controller type, gyro, Nintendo button layout, rumble, stick lights (effect, colour, brightness), mouse mode |
-| **Device** | Wi-Fi, Bluetooth, airplane mode, keep awake, screenshot, plus your device's fixes |
+| **Device** | Wi-Fi, Bluetooth and your Bluetooth devices, airplane mode, keep awake, screenshot, plus your device's fixes |
 
 <table>
 <tr>
@@ -164,18 +164,21 @@ it does.
 - **Display:** refresh rate (and extra refresh rates where the panel allows), VRR, allow tearing, colour temperature,
   night light with a schedule, vibrance, **HDR** with inverse tone mapping and SDR brightness, screen effects, rotation,
   dim and screen-off timers.
-- **Sound:** volume, output device, microphone and input.
+- **Sound:** volume, output device, microphone and input, plus a volume for each app playing sound (turn the game
+  down under your music or a voice chat).
 - **Controller:** controller type (Xbox, DualSense, Steam Deck and more), **back buttons** remapped to any button, a key
   or a mouse click, gyro on/off and which sensor, stick and trigger deadzones, trackpad mode, **rumble on/off and
   strength**, a rumble test, **lights** (effect, colours, brightness, speed), mouse mode with pointer speed, a button
   tester, and one press to start over.
 - **Performance:** the overlay (FPS only, compact, a bar, full, or pick your own items, with position, size and
   opacity), upscaling and frame generation with installed versions and updates, Lossless Scaling frame generation,
-  Proton version, low latency, shader threads and clearing a game's shader cache.
-- **System:** Wi-Fi, Bluetooth, airplane mode, Wi-Fi power saving, keep awake, sleep, screenshots.
+  Proton version, low latency, shader threads and clearing a game's shader cache, plus **GE-Proton**: install the
+  newest release in one press (checked against its checksum) and remove old ones.
+- **System:** Wi-Fi, Bluetooth, airplane mode, Wi-Fi power saving, keep awake, sleep, screenshots, and **Bluetooth
+  devices**: connect your controller or headphones, see their battery, pair new ones and forget old ones.
 - **Profiles, Appearance, Stores, Discover, Device and About GameCove:** your saved profiles, themes, store sign-ins and
-  downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage and updates, and the
-  network and privacy switches.
+  downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage (with one-press
+  **clean-up** of the shader caches uninstalled games leave behind), updates, and the network and privacy switches.
 
 <p align="center"><img src="docs/images/settings-power.webp" alt="Settings, Power" width="70%"></p>
 
@@ -254,7 +257,8 @@ One page for everything that can be updated:
   makers get a link and your current version to compare. Controllers, docks and other parts update through fwupd.
 - **Drivers:** kernel, Mesa, firmware, InputPlumber and friends, the XeSS XMX driver and OptiScaler, compared with the
   latest versions.
-- **Apps:** Flatpak updates.
+- **Apps:** Flatpak updates, by hand or **by themselves** once a day when no game is running (turn it on in
+  Updates; it runs at the lowest priority, so a game you start meanwhile doesn't feel it).
 
 GameCove never flashes a BIOS by itself, and firmware installs wait until you're on the charger with at least 50%
 battery and no game running.
@@ -338,6 +342,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Local prices (optional) | [GG.deals](https://gg.deals) (gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
 | Your device's photo | GitHub (free photos) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
 | Upscaler list and downloads (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and before an install; files only when you install or update | Background lookups (daily check); installs: you start them |
+| GE-Proton (Settings > Performance) | GitHub (GloriousEggroll's `proton-ge-custom` releases) | Nothing about you | When you press Check or Install | You start it |
 | BIOS and firmware list and downloads | GitHub (`firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
 | Steam insights on a game's page (players now, reviews, Steam Deck rating, last update, DLC) | Steam's public API and store | The game's app id (DLC prices: also your store country) | When you open a Steam game's page; players at most every 10 min, the rest every 12 h | Background lookups (prices: Look up deals and prices) |
 | Achievements | Steam's API and CDN | The game's app id | When you open a game page | Settings > Performance |
@@ -347,7 +352,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Artwork | [SteamGridDB](https://www.steamgriddb.com) | A game's Steam app id or title, with your own key | When you open Change artwork; in the background for games with no cover, hero or logo | Look up game details (+ Background lookups for the automatic fill) |
 | Game art setup | Your phone, on your own network, then SteamGridDB | Your SteamGridDB key: pasted on a one-time page GameCove serves on your LAN, then checked once with SteamGridDB | Only while the Game art step is open, 10 minutes at most | You start it |
 | Game streaming | PCs on your own network (GameStream: Vibepollo, Sunshine, Apollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network | When you open the Stream tab or wake a PC | You start it |
-| Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in | You start it |
+| Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in; Flatpak apps also once a day if you turned on "Update apps by themselves" | You start it (automatic app updates: off by default, and Background lookups) |
 
 </details>
 

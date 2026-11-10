@@ -9,6 +9,8 @@ extends "res://scripts/ui/device/device_panel.gd"
 const Icons := preload("res://scripts/ui/icons.gd")
 const Hub := preload("res://scripts/system/firmware_texts.gd")
 const QR := preload("res://scripts/ui/settings/qr.gd")
+const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
 
 var state: Dictionary = {}
 var buttons := {}          # "check:os", "apply:os", "check_all", "reboot", "apply:firmware:<id>" -> Button
@@ -233,6 +235,14 @@ func _kind_card(kind: String) -> Array:
 		focus.append(ck)
 	if row_b.get_child_count() > 0:
 		c[1].add_child(row_b)
+	if kind == "flatpak" and svc("updates") != null and svc("updates").has_method("set_auto_apps"):
+		var auto: VBoxContainer = ChoiceRow.bool_row("auto_apps", TX.AUTO_APPS, bool(state.get("auto_apps", false)), "update")
+		auto.collapse_hint = false
+		auto.set_explainer(func(v): return str(TX.AUTO_APPS_HELP.get(bool(v), "")))
+		auto.changed.connect(func(v): svc("updates").set_auto_apps.call_deferred(bool(v)))
+		c[1].add_child(auto)
+		buttons["auto_apps"] = auto.button
+		focus.append(auto.button)
 	if _game_running() and ph == "available":
 		c[1].add_child(DKit.quiet(Texts.GAME_RUNNING))
 	if focus.is_empty():

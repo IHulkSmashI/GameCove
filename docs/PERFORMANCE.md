@@ -62,6 +62,11 @@ costs far more:
 - **Performance sampling** (1 s) only while Auto TDP runs; it is what Auto TDP steers by.
 - Paused while a game runs: Discover refreshes, the metadata and art fill, update checks,
   Streaming's PC checks. The live top-bar refresh stops whenever our window is hidden.
+- **Automatic app updates** (opt-in, off by default) start only with no game running: 3 min
+  after start (one one-shot timer) or when a game ends, at most daily. If you start a game
+  while one runs, Flatpak carries on at nice 19 and idle I/O priority, so it only gets what
+  the game leaves over. Per-app volume, Now playing, Bluetooth devices, Clean up and GE-Proton
+  read only when their page opens or you press something: no timers.
 
 `tests/e2e/suite_perf.gd` fails if the main loop runs more than 50 iterations or 70
 main-thread wake-ups a second behind a game, a Timer outside that list runs there, the

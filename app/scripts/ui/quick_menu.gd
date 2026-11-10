@@ -37,6 +37,9 @@ const Shared := preload("res://scripts/ui/controls/shared.gd")
 const ControlScript := preload("res://scripts/controls/control.gd")
 const Caps := preload("res://scripts/device/capabilities.gd")
 const BrandMark := preload("res://scripts/ui/brand_mark.gd")
+const AppMixer := preload("res://scripts/ui/controls/app_mixer.gd")
+const MediaCard := preload("res://scripts/ui/controls/media_card.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
 
 signal closed
 ## A result worth a toast: text, tone (good / bad).
@@ -477,7 +480,7 @@ func show_section(i: int, keep_focus := "") -> void:
 		"game": _build_game()
 		"power": _build_power()
 		"display": _build_list("display")
-		"audio": _build_list("audio")
+		"audio": _build_audio()
 		"controller": _build_controller()
 		"device": _build_device()
 	_relink()
@@ -576,6 +579,27 @@ func _build_list(tab: String) -> void:
 	if l.focusables().is_empty():
 		_line(TC.NOTHING_HERE, "QuietLabel", "Nothing")
 	_all_link(tab)
+
+
+## Audio: the quick sound controls, what's playing in the background, then
+## each app's own volume.
+func _build_audio() -> void:
+	if model == null:
+		return
+	var l := _list(Catalog.QUICK["audio"])
+	var media: PanelContainer = MediaCard.new()
+	media.setup(controls)
+	media.rebuilt.connect(_relink)
+	media.failed.connect(func(t: String): status_label.text = t)
+	_add(media)
+	var mixer: VBoxContainer = AppMixer.new()
+	mixer.setup(controls)
+	mixer.rebuilt.connect(_relink)
+	mixer.failed.connect(func(t: String): status_label.text = t)
+	_add(mixer)
+	if l.focusables().is_empty() and mixer.focusables().is_empty():
+		_line(TC.NOTHING_HERE, "QuietLabel", "Nothing")
+	_all_link("audio")
 
 
 ## The last row of a tab: "All power settings ›".
@@ -976,6 +1000,11 @@ func _build_device() -> void:
 	fx.setup("Fixes", TC.DEVICE_FIXES, fixes_summary(), TC.FIXES_OPEN + ".", "wrench")
 	fx.pressed.connect(func(): request_settings("device", "fixes"))
 	_add(fx)
+	if model != null and bool(model.describe("network.bluetooth").get("available", false)):
+		var bt := ActionRow.new()
+		bt.setup("BluetoothDevices", TX.BT_TITLE, "", TX.BT_QUICK_HINT, "bluetooth")
+		bt.pressed.connect(func(): request_settings("system", "bluetooth"))
+		_add(bt)
 	if model != null:
 		_section_label(TC.QUICK_TOGGLES, "TogglesLabel")
 		_list(Catalog.QUICK["device"], "Toggles")
