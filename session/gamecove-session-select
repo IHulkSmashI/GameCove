@@ -220,12 +220,16 @@ reset_input_intercept() {
 # Runs "$@" in the background and waits for it at most <seconds>; past that it goes on by
 # itself. A root child of pkexec can't be stopped from here anyway (`timeout pkexec` only
 # killed pkexec while the helper went on), so the session never waits on it for long.
+# The command runs with `set +e`: under this script's `set -e` a command that failed ended
+# the subshell before the flag was written, so every failure waited the full limit (final
+# review, session).
 bounded() { # <seconds> <command...>
 	limit=$(($1 * 10))
 	shift
 	flag="$(mktemp "${TMPDIR:-/tmp}/gamecove-wait.XXXXXX")" || return 0
 	rm -f "$flag"
 	(
+		set +e
 		"$@" </dev/null >/dev/null 2>&1
 		: >"$flag"
 	) &
@@ -237,12 +241,14 @@ bounded() { # <seconds> <command...>
 	rm -f "$flag"
 }
 
+# Each restore stands alone: a charge limit that can't be released must never stop the power
+# values from going back (`|| true`: this also runs under `set -e`).
 root_restores() {
 	if [ -f "$STATE_DIR/fixes/charge-limit/limit" ]; then
-		"$PKEXEC" "$FIX_SET" charge-limit set release
+		"$PKEXEC" "$FIX_SET" charge-limit set release || true
 	fi
 	if [ -d "$STATE_DIR/fixes/power-tune/orig" ] || [ -f "$STATE_DIR/fixes/power-tune/thermald-held" ]; then
-		"$PKEXEC" "$FIX_SET" power-tune set restore
+		"$PKEXEC" "$FIX_SET" power-tune set restore || true
 	fi
 }
 
@@ -255,7 +261,9 @@ leave_session() {
 	[ "${GAMECOVE_SESSION:-}" = 1 ] || return 0
 	if [ -x "$GAMECOVE_BIN" ]; then
 		if command -v timeout >/dev/null 2>&1; then
-			timeout 35 "$GAMECOVE_BIN" --headless -- --restore-baseline </dev/null >/dev/null 2>&1 || true
+			# -k: a GameCove that ignores TERM (stuck in a driver call) is killed 5 s later, so the switch
+			# never waits on it for good
+			timeout -k 5 35 "$GAMECOVE_BIN" --headless -- --restore-baseline </dev/null >/dev/null 2>&1 || true
 		else
 			bounded 35 "$GAMECOVE_BIN" --headless -- --restore-baseline
 		fi

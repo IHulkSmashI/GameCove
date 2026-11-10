@@ -346,12 +346,31 @@ has "$T/leave.log" "^app --headless -- --restore-baseline$" "leaving for the des
 eqv "$(tail -n 1 "$T/leave.log")" "steamosctl switch-to-desktop-mode plasma.desktop" "and switches last"
 leave sh "$SEL" steam
 eqv "$(cat "$T/leave.log")" "steamosctl switch-to-game-mode" "outside GameCove's session (desktop, Steam): only the switch"
+# final review, session: a root restore that FAILS (password dialog dismissed, helper error) must not
+# skip the next one, and must not be waited on for the whole limit. (Before the hang test below: its
+# helper is still running in the background afterwards and would write to the same log.)
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/leave.log"\nexit 126\n' "$T" >"$LB/pkexec"
+started="$(date +%s)"
+leave GAMECOVE_SESSION=1 GAMECOVE_ROOT_WAIT_S=20 sh "$SEL" steam
+took=$(($(date +%s) - started))
+has "$T/leave.log" "^pkexec $LB/fix-set charge-limit set release$" "the charge limit release is tried"
+has "$T/leave.log" "^pkexec $LB/fix-set power-tune set restore$" "a failed charge-limit release doesn't skip the power restore"
+[ "$took" -lt 10 ] && ok || bad "a failing root restore was waited on for the whole limit (${took}s of 20)"
+has "$T/leave.log" "^steamosctl switch-to-game-mode$" "the switch still happens after failed restores"
+# a failing command in bounded() ends the wait at once (the flag is written under set +e)
+sed -n '/^bounded() {/,/^}$/p' "$SEL" >"$T/bounded.sh"
+started="$(date +%s)"
+sh -c 'set -eu; . "$1"; bounded 15 false' sh "$T/bounded.sh"
+[ $(($(date +%s) - started)) -lt 5 ] && ok || bad "bounded waits the full limit when its command fails"
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/leave.log"\n[ -f "%s/pkexec-hangs" ] && sleep 20\nexit 0\n' "$T" "$T" >"$LB/pkexec"
 touch "$T/pkexec-hangs"
 started="$(date +%s)"
 leave GAMECOVE_SESSION=1 sh "$SEL" steam
 [ $(($(date +%s) - started)) -lt 8 ] && ok || bad "a hung root restore holds the switch up only briefly"
 has "$T/leave.log" "^steamosctl switch-to-game-mode$" "the switch still happens"
 rm -f "$T/pkexec-hangs"
+# a baseline run that ignores TERM is killed (timeout -k), so the switch isn't held for good
+grep -q 'timeout -k [0-9]* 35 "\$GAMECOVE_BIN"' "$SEL" && ok || bad "the baseline run's timeout needs -k (a process that ignores TERM would hang the switch)"
 rm "$LB/gamecove.x86_64"
 leave GAMECOVE_SESSION=1 sh "$SEL" steam
 has "$T/leave.log" "^steamosctl switch-to-game-mode$" "no GameCove binary: the rest still runs"
