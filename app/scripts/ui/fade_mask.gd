@@ -6,6 +6,14 @@ extends TextureRect
 ## art, light themes). The fade shows only while more content waits below.
 ##
 ##   var mask := FadeMask.wrap(scroll, 20)   # puts `scroll` inside the mask
+##
+## Godot can't nest clip-children masks: an inner mask inside an outer one
+## draws its own (white) gradient as a solid block and none of its children,
+## on real GPUs as well as llvmpipe (it's the Compatibility renderer's canvas
+## group). So a mask that finds itself inside another one stands down: no
+## clipping, its texture hidden, its children drawn as usual; the outer mask
+## still fades the foot, and a card the cut would have hidden is hidden by
+## its own alpha instead.
 
 ## Height of the fade, in layout px.
 var px := 20.0
@@ -42,7 +50,63 @@ static func wrap(s: ScrollContainer, fade_px := 20.0) -> TextureRect:
 	m.add_child(s)
 	s.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	m.attach(s)
+	# Masks already inside `s` (wrapped before this one) are nested now; one
+	# put inside another mask later finds out when it enters the tree.
+	m.fit_nesting()
+	for k in m.find_children("*", "TextureRect", true, false):
+		if k.has_method("fit_nesting"):
+			k.fit_nesting()
 	return m
+
+
+## True when an ancestor of `n` already clips its children (a mask of any kind).
+static func inside_mask(n: Node) -> bool:
+	var p := n.get_parent()
+	while p != null:
+		if p is CanvasItem and (p as CanvasItem).clip_children != CanvasItem.CLIP_CHILDREN_DISABLED:
+			return true
+		p = p.get_parent()
+	return false
+
+
+## True while this mask stands down because it sits inside another one.
+var nested := false
+
+
+## Clips (the fade) on its own; inside another mask, no clipping and no
+## texture, so it never shows as a white block.
+func fit_nesting() -> void:
+	var was := nested
+	nested = inside_mask(self)
+	clip_children = CanvasItem.CLIP_CHILDREN_DISABLED if nested else CanvasItem.CLIP_CHILDREN_ONLY
+	self_modulate.a = 0.0 if nested else 1.0
+	if was != nested:
+		_paint()
+
+
+## Cards hidden by alpha while nested (the cut without a mask).
+var _alpha_hidden: Array = []
+
+
+## Nested: cards whose top is below `cut` (the ones the mask would have hidden)
+## go transparent; every other card it hid comes back.
+func _hide_below(cut: float) -> void:
+	var keep: Array = []
+	if cut > 0.0 and cut_fn.is_valid():
+		for c in cut_fn.call():
+			if c is CanvasItem and is_instance_valid(c) and (c as Control).get_global_rect().position.y - global_position.y > cut:
+				keep.append(c)
+	for c in _alpha_hidden:
+		if is_instance_valid(c) and not c in keep:
+			c.modulate.a = 1.0
+	for c in keep:
+		c.modulate.a = 0.0
+	_alpha_hidden = keep
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_ENTER_TREE:
+		fit_nesting()
 
 
 func _init() -> void:
@@ -90,6 +154,8 @@ func _update() -> void:
 func _paint() -> void:
 	var h := maxf(size.y, 1.0)
 	var cut := cut_at() if _on else -1.0
+	if nested or not _alpha_hidden.is_empty():
+		_hide_below(cut if nested else -1.0)
 	if cut > 0.0:
 		var e := clampf(cut / h, 0.0, 1.0)
 		_grad.offsets = PackedFloat32Array([0.0, e, minf(1.0, e + 1.0 / h), 1.0])
