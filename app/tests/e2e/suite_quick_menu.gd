@@ -140,6 +140,11 @@ func test_desktop_mode_switch_releases_the_controller() -> void:
 	ok("desktop" in w.fake.events, "the desktop session was asked for")
 	for m in w.fake.prop_value("InterceptMode"):
 		eq(int(m), 0, "InterceptMode released before the switch")
+	# review M8: the fake switch "worked" but GameCove is still here: once the wait is over the
+	# controller comes back (done now, so the timer doesn't fire in a later test)
+	qm().switch_timed_out(qm()._switch_gen)
+	await w.idle()
+	eq(qm().status_label.text, preload("res://scripts/ui/texts.gd").SWITCH_STUCK, "says the switch didn't take GameCove away")
 
 
 func test_steam_mode_switch_releases_the_controller() -> void:

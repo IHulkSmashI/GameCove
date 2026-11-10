@@ -1,0 +1,16 @@
+# GameCove: never let the login screen autologin into a missing gamecove.desktop (review H4).
+# Copied to /etc/systemd/system by the SteamOS installer, with the script in /etc/gamecove,
+# so it still runs when the GameCove sysext isn't merged. See session/gamecove-autologin-guard.
+[Unit]
+Description=Keep autologin off a missing GameCove session
+DefaultDependencies=no
+After=local-fs.target systemd-sysext.service
+Before=display-manager.service sddm.service
+ConditionPathExists=/etc/gamecove/autologin-guard
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /etc/gamecove/autologin-guard
+
+[Install]
+WantedBy=multi-user.target

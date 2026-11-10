@@ -23,9 +23,14 @@ class FakeRunner extends RefCounted:
 	var states := {"claw8ex-buttons": "off", "claw8ex-vrr": "on", "claw8ex-gyro": "on"}
 	var accel := false
 	var pkexec_code := 0   # 126 = password dialog dismissed
+	var switch_code := 0   # gamecove-session-select's exit code
+	var switch_out := ""
 
 	func run(program: String, args: PackedStringArray) -> Dictionary:
 		var a := Array(args)
+		if program == "/usr/bin/gamecove-session-select":
+			spawned.append(" ".join([program] + a))   # the session switch (run, so its result is read)
+			return {"code": switch_code, "out": switch_out}
 		calls.append(" ".join([program] + a))
 		if program == HELPER_PATH and a.size() == 2 and a[1] == "status":
 			if not states.has(a[0]):
@@ -136,10 +141,13 @@ func test_switch_to_steam_needs_a_second_press() -> void:
 	b.pressed.emit()
 	b.pressed.emit()
 	eq(r.spawned, ["/usr/bin/gamecove-session-select steam"], "second press switches")
-	r.spawn_pid = -1
+	eq(m.status_label.text, Texts.STEAM_SWITCHING, "switching (the logout takes GameCove away)")
+	r.switch_code = 2
+	r.switch_out = "gamecove-session-select: steamosctl (steamos-manager) not found; switch sessions from the login screen instead\n"
 	b.pressed.emit()
 	b.pressed.emit()
-	eq(m.status_label.text, Texts.STEAM_FAILED, "failure explained")
+	eq(m.status_label.text, Texts.SWITCH_FAILED % "steamosctl (steamos-manager) not found; switch sessions from the login screen instead",
+		"review M8: the switch's own reason shown")
 	eq(r.calls, [], "nothing else ran")
 	m.free()
 
@@ -192,10 +200,47 @@ func test_bg_command_helpers() -> void:
 
 class FakeController extends RefCounted:
 	var released := 0
+	var started := 0
+	var active := true
 	var done := Callable()
 	func release_intercept(cb := Callable()) -> void:
 		released += 1
+		active = false
 		done = cb
+	func start_intercept() -> bool:
+		started += 1
+		active = true
+		return true
+	func intercept_state() -> Dictionary:
+		return {"active": active}
+
+
+## Review M8: a failed switch gives GameCove the controller back (Guide was dead until a restart).
+func test_failed_switch_takes_the_controller_back() -> void:
+	var r := FakeRunner.new()
+	var ctl := FakeController.new()
+	var m := _menu(r, [], {"controller": ctl})
+	r.switch_code = 1
+	r.switch_out = "gamecove-session-select: steamosctl set-default-login-mode game didn't take (reads back 'desktop')\n"
+	var b: Button = m.body.get_node("DesktopMode/Button")
+	b.pressed.emit()
+	b.pressed.emit()
+	ctl.done.call()
+	eq(r.spawned, ["/usr/bin/gamecove-session-select desktop"], "switch ran")
+	eq(ctl.started, 1, "intercept on again")
+	ok(m.status_label.text.contains("didn't take"), "reason shown: " + m.status_label.text)
+	r.switch_code = 0
+	ctl.started = 0
+	_steam(m).pressed.emit()
+	_steam(m).pressed.emit()
+	ctl.done.call()
+	eq(ctl.started, 0, "a switch that worked leaves the controller to the next session")
+	m.switch_timed_out(m._switch_gen)
+	eq(ctl.started, 1, "still here after the wait: the controller comes back")
+	eq(m.status_label.text, Texts.SWITCH_STUCK, "and says so")
+	m.switch_timed_out(m._switch_gen - 1)
+	eq(ctl.started, 1, "a stale timer does nothing")
+	m.free()
 
 
 func test_switch_to_steam_hands_the_controller_back_first() -> void:

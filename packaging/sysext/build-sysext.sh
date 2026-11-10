@@ -82,9 +82,19 @@ if [ -z "$session_src" ]; then
 fi
 [ -f "$session_src/usr/bin/gamescope-session-plus" ] || die "$session_src is not a gamescope-session tree"
 
-# gamescope-session-plus (bundled, MIT)
-mkdir -p "$tree/usr"
-cp -a "$session_src/usr/." "$tree/usr/"
+# gamescope-session-plus (bundled, MIT): only the files GameCove's session needs (review H10).
+# A sysext overlays /usr, so anything else from upstream's usr/ would shadow SteamOS's own:
+# its usr/lib/systemd/user/gamescope-session.target (a bare Description=) over Valve's, owned
+# by the gamescope package; usr/share/gamescope/scripts/50-custom/50-disable-explicit-sync.lua
+# would change Valve's Steam session too; usr/bin/export-gpu isn't used by the session.
+SESSION_FILES="usr/bin/gamescope-session-plus
+usr/share/gamescope-session-plus/gamescope-session-plus
+usr/share/gamescope-session-plus/device-quirks
+usr/lib/systemd/user/gamescope-session-plus@.service"
+for f in $SESSION_FILES; do
+	[ -f "$session_src/$f" ] || die "$session_src has no $f"
+	install -D -m "$(if [ -x "$session_src/$f" ]; then echo 0755; else echo 0644; fi)" "$session_src/$f" "$tree/$f"
+done
 mkdir -p "$tree/usr/share/licenses/gamescope-session"
 [ -f "$session_src/LICENSE" ] && cp "$session_src/LICENSE" "$tree/usr/share/licenses/gamescope-session/"
 
@@ -119,6 +129,9 @@ install -Dm0644 "$REPO/session/gamescope-session-plus/sessions.d/gamecove" "$tre
 install -Dm0644 "$REPO/session/wayland-sessions/gamecove.desktop" "$tree/usr/share/wayland-sessions/gamecove.desktop"
 install -Dm0644 "$REPO/session/systemd/gamescope-session-plus@gamecove.service.d/10-gamecove.conf" \
 	"$tree/usr/lib/systemd/user/gamescope-session-plus@gamecove.service.d/10-gamecove.conf"
+# the root autologin guard: the installer copies both into /etc (review H4), never enabled from here
+install -Dm0755 "$REPO/session/gamecove-autologin-guard" "$tree/usr/lib/gamecove/session/gamecove-autologin-guard"
+install -Dm0644 "$REPO/session/systemd/gamecove-autologin-guard.service" "$tree/usr/lib/gamecove/session/gamecove-autologin-guard.service"
 install -Dm0644 "$REPO/packaging/polkit/io.github.ihulksmashi.gamecove.policy" \
 	"$tree/usr/share/polkit-1/actions/io.github.ihulksmashi.gamecove.policy"
 # licence and notice texts: every file packaging/licenses.list names (review H8)

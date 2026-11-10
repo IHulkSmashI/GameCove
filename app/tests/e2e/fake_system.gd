@@ -137,6 +137,10 @@ func _event(e: String) -> void:
 
 
 func _dispatch(program: String, args: PackedStringArray) -> Dictionary:
+	# the quick menu runs the session switch to read its result (review M8): the switch "works"
+	if program.ends_with("session-select") and args.size() > 0:
+		_event(str(args[0]))
+		return {"code": 0, "out": ""}
 	match program:
 		"pkexec":
 			return _pkexec(args)

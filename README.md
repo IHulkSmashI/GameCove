@@ -22,7 +22,7 @@ It downloads the latest release (checked against its SHA256SUMS), adds **GameCov
 - **SteamOS:** installs as a system extension (sysext) kept on the home partition and linked from `/etc/extensions`, so SteamOS updates keep it; `steamos-readonly` stays on.
 - **Anything else:** you can try GameCove in a window.
 
-Run **GameCove Installer** again any time to change options, repair, update or remove GameCove (removing makes Steam Gaming Mode the default again). Everything it does is logged to `~/.local/share/gamecove/installer.log`. If GameCove ever fails to start five times in a row, your handheld goes back to Steam Gaming Mode by itself. Manual install: [docs/SESSION.md](docs/SESSION.md).
+Run **GameCove Installer** again any time to change options, repair, update or remove GameCove (removing makes Steam Gaming Mode the default again). Everything it does is logged to `~/.local/share/gamecove/installer.log`. If GameCove crashes, hangs or fails to start three times in a row, your handheld goes back to Steam Gaming Mode for the rest of that boot, and GameCove tells you why the next time it opens. Manual install: [docs/SESSION.md](docs/SESSION.md).
 
 ## What it does
 

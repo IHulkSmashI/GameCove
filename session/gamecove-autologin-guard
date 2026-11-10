@@ -1,0 +1,55 @@
+#!/bin/sh
+# GameCove autologin guard (review H4). Runs as root before the login screen starts, from
+# /etc/systemd/system/gamecove-autologin-guard.service, which the SteamOS installer copies,
+# with this script (to /etc/gamecove/autologin-guard), out of the GameCove sysext into /etc,
+# so both stay when the sysext doesn't merge (removed by hand, an OS update that dropped it).
+#
+# Why: SDDM looks the autologin Session= up in its session folders and, when the file isn't
+# there, logs "Unable to find autologin session entry" and shows the login screen instead
+# (sddm src/daemon/Display.cpp). On a handheld that is a password prompt with no keyboard.
+# The user unit gamecove-session-guard.service can't help: it only runs after a login.
+#
+# What: every autologin entry (steamos-manager's zz-*-autologin.conf and the temporary
+# zzt-*-temp-login.conf, or sddm.conf) that names gamecove.desktop while no session folder
+# holds it is pointed at Steam Gaming Mode (gamescope-wayland.desktop, what steamos-manager
+# writes for "game"), else the desktop. Nothing else is ever touched. Once logged in,
+# gamecove-session-guard puts steamos-manager's own defaults back the same way.
+#
+#   GAMECOVE_ROOT  prefix for every path (tests)
+set -u
+
+ROOT="${GAMECOVE_ROOT:-}"
+# SDDM's default SessionDir lists (Wayland first, as SDDM looks)
+SESSION_DIRS="/usr/local/share/wayland-sessions /usr/share/wayland-sessions /usr/local/share/xsessions /usr/share/xsessions"
+OURS="gamecove.desktop"
+
+present() { # <name.desktop>
+	for d in $SESSION_DIRS; do
+		[ -f "$ROOT$d/$1" ] && return 0
+	done
+	return 1
+}
+
+fallback() {
+	for s in gamescope-wayland.desktop gamescope-session-steam.desktop plasma.desktop plasmawayland.desktop gnome.desktop; do
+		if present "$s"; then
+			echo "$s"
+			return 0
+		fi
+	done
+	return 1
+}
+
+present "$OURS" && exit 0
+for f in "$ROOT/etc/sddm.conf.d"/*.conf "$ROOT/etc/sddm.conf"; do
+	[ -f "$f" ] || continue
+	grep -Eq '^Session=gamecove(\.desktop)?[[:space:]]*$' "$f" || continue
+	s="$(fallback)" || {
+		echo "gamecove-autologin-guard: $f names the missing $OURS and no other session was found" >&2
+		exit 0
+	}
+	tmp="$f.gamecove-tmp"
+	sed -E "s/^Session=gamecove(\\.desktop)?[[:space:]]*$/Session=$s/" "$f" >"$tmp" && mv -f "$tmp" "$f"
+	echo "gamecove-autologin-guard: $f named the missing $OURS; it now starts $s" >&2
+done
+exit 0

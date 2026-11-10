@@ -31,17 +31,42 @@ const SYSEXT_STORE := "/home/.steamos/offload/gamecove"
 const SYSEXT_ETC_LINK := "/etc/extensions/gamecove.raw"
 const SYSEXT_KEEP := "/etc/atomic-update.conf.d/gamecove.conf"
 const SYSEXT_UNIT_LINK := "/etc/systemd/system/sysinit.target.wants/systemd-sysext.service"
+## Review H4: SDDM shows its login screen when the autologin session file is missing (a
+## sysext that didn't merge). This root guard, copied out of the image into /etc so it
+## outlives it, points autologin back at Steam before the login screen starts.
+const GUARD_SRC := "/usr/lib/gamecove/session"
+const GUARD_SCRIPT := "/etc/gamecove/autologin-guard"
+const GUARD_UNIT := "/etc/systemd/system/gamecove-autologin-guard.service"
+const GUARD_LINK := "/etc/systemd/system/multi-user.target.wants/gamecove-autologin-guard.service"
+## systemd-sysext.service was off before GameCove turned it on (review L25: uninstall turns it
+## off again only then, and only when no other extension is left).
+const SYSEXT_ENABLED_MARK := "/etc/gamecove/sysext-enabled"
+## The root helper's state (fix originals, logs). Removed on uninstall only with the fixes.
+const STATE_DIR := "/var/lib/gamecove"
 const SYSEXT_INSTALL := "set -e; " \
 	+ "if [ -d /etc/atomic-update.conf.d ] && [ -d /home/.steamos ]; then " \
 	+ "mkdir -p -m 0755 " + SYSEXT_STORE + " /etc/extensions; " \
 	+ "install -m 0644 \"$1\" " + SYSEXT_STORE + "/gamecove.raw.new; mv -f " + SYSEXT_STORE + "/gamecove.raw.new " + SYSEXT_STORE + "/gamecove.raw; " \
 	+ "ln -sfn " + SYSEXT_STORE + "/gamecove.raw " + SYSEXT_ETC_LINK + "; rm -f " + SYSEXT_PATH + "; " \
-	+ "printf '%s\\n' " + SYSEXT_ETC_LINK + " " + SYSEXT_UNIT_LINK + " > " + SYSEXT_KEEP + "; " \
+	+ "printf '%s\\n' " + SYSEXT_ETC_LINK + " " + SYSEXT_UNIT_LINK + " " + GUARD_SCRIPT + " " + GUARD_UNIT + " " + GUARD_LINK + " " + SYSEXT_ENABLED_MARK + " > " + SYSEXT_KEEP + "; " \
 	+ "else mkdir -p /var/lib/extensions; install -m 0644 \"$1\" " + SYSEXT_PATH + "; fi; " \
+	+ "if ! systemctl is-enabled -q systemd-sysext.service 2>/dev/null; then mkdir -p /etc/gamecove && : > " + SYSEXT_ENABLED_MARK + "; fi; " \
 	+ "systemctl enable systemd-sysext.service >/dev/null 2>&1 || true; systemd-sysext refresh; " \
+	+ "install -D -m 0755 " + GUARD_SRC + "/gamecove-autologin-guard " + GUARD_SCRIPT + " && " \
+	+ "install -D -m 0644 " + GUARD_SRC + "/gamecove-autologin-guard.service " + GUARD_UNIT + " && " \
+	+ "mkdir -p /etc/systemd/system/multi-user.target.wants && ln -sfn " + GUARD_UNIT + " " + GUARD_LINK + " && " \
+	+ "systemctl daemon-reload >/dev/null 2>&1 || true; " \
 	+ "systemctl reload polkit.service >/dev/null 2>&1 || true"
-const SYSEXT_REMOVE := "set -e; rm -f " + SYSEXT_ETC_LINK + " " + SYSEXT_PATH + " " + SYSEXT_KEEP + " " + SYSEXT_STORE + "/gamecove.raw; " \
-	+ "rmdir " + SYSEXT_STORE + " 2>/dev/null || true; systemd-sysext refresh; systemctl reload polkit.service >/dev/null 2>&1 || true"
+const SYSEXT_REMOVE := "set -e; rm -f " + SYSEXT_ETC_LINK + " " + SYSEXT_PATH + " " + SYSEXT_KEEP + " " + SYSEXT_STORE + "/gamecove.raw " \
+	+ GUARD_LINK + " " + GUARD_UNIT + " " + GUARD_SCRIPT + "; " \
+	+ "rmdir " + SYSEXT_STORE + " 2>/dev/null || true; systemd-sysext refresh; " \
+	+ "if [ -f " + SYSEXT_ENABLED_MARK + " ]; then rm -f " + SYSEXT_ENABLED_MARK + "; " \
+	+ "other=0; for e in /etc/extensions/* /var/lib/extensions/* /run/extensions/* /usr/local/lib/extensions/*; do " \
+	+ "if [ -e \"$e\" ]; then other=1; fi; done; " \
+	+ "if [ \"$other\" = 0 ]; then systemctl disable systemd-sysext.service >/dev/null 2>&1 || true; fi; fi; " \
+	+ "rmdir /etc/gamecove 2>/dev/null || true; " \
+	+ "if [ \"${1:-}\" = purge ]; then rm -rf " + STATE_DIR + "; fi; " \
+	+ "systemctl reload polkit.service >/dev/null 2>&1 || true"
 ## A Steam game (Steam's launch wrapper) or one of ours (app-steam-app<id> scope) is running.
 const GAME_PATTERN := "SteamLaunch AppId=|app-steam-app[0-9]"
 
@@ -65,6 +90,13 @@ static func rpm_uninstall() -> Array:
 	return pkexec([RPM_OSTREE, "uninstall", "gamecove"])
 
 
+## Uninstall with the fixes undone: the root helper's state goes too (review L25), one password.
+static func rpm_remove(purge: bool) -> Array:
+	if not purge:
+		return rpm_uninstall()
+	return pkexec(["sh", "-c", "rm -rf " + STATE_DIR + " && exec " + RPM_OSTREE + " uninstall gamecove"])
+
+
 ## A newer local RPM in place of the layered one, in one transaction (next boot).
 static func rpm_update(rpm: String) -> Array:
 	return pkexec([RPM_OSTREE, "uninstall", "gamecove", "--install", rpm])
@@ -74,8 +106,11 @@ static func sysext_install(raw: String) -> Array:
 	return pkexec(["sh", "-c", SYSEXT_INSTALL, "sh", raw])
 
 
-static func sysext_remove() -> Array:
-	return pkexec(["sh", "-c", SYSEXT_REMOVE])
+static func sysext_remove(purge := false) -> Array:
+	var c := ["sh", "-c", SYSEXT_REMOVE, "sh"]
+	if purge:
+		c.append("purge")
+	return pkexec(c)
 
 
 static func fix(helper: String, fix_name: String, verb: String) -> Array:
@@ -113,7 +148,7 @@ static func session_default(select: String, startup: String) -> Array:
 ## desktop session if it names GameCove, boot back to Steam Gaming Mode).
 const SESSION_RESTORE_SH := "for s in \"$1\" \"$2\"; do if [ -f \"$s\" ]; then sh \"$s\" restore && exit 0; fi; done; " \
 	+ "command -v steamosctl >/dev/null 2>&1 || exit 0; " \
-	+ "if [ \"$(steamosctl get-default-desktop-session 2>/dev/null)\" = gamecove.desktop ]; then " \
+	+ "if [ \"$(steamosctl get-default-desktop-session 2>/dev/null | head -n 1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '[:space:]')\" = gamecove.desktop ]; then " \
 	+ "for d in plasma.desktop gnome.desktop; do steamosctl set-default-desktop-session \"$d\" 2>/dev/null && break; done; fi; " \
 	+ "steamosctl set-default-login-mode game"
 
@@ -222,18 +257,22 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 			out.append(_internal("user_files"))
 			out.append(_internal("state"))
 		"uninstall":
-			out.append(_cmd("session_restore", session_restore(paths), {"optional": true}))
+			# review H4: both must work before the package goes, or the boot default could name a
+			# session that no longer exists, and kernel arguments, rules and services would stay
+			# with no helper left to undo them. A failure stops the uninstall (retry from the UI).
+			out.append(_cmd("session_restore", session_restore(paths)))
 			# GameCove's launcher out of every Steam game's launch options (stops Steam first)
 			out.append(_internal("steam_unwrap", {"optional": true}))
 			if bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false)):
 				# not only what the installer recorded: every fix and device setting in use
-				out.append(_cmd("fix_remove_all", fix_remove_all(paths.fix_helper()), {"optional": true}))
+				out.append(_cmd("fix_remove_all", fix_remove_all(paths.fix_helper())))
 			if had_xess and bool(target.get("installed", false)):
 				out.append(_cmd("xess_remove", xess_remove(paths.upscale_helper(), paths.home), {"optional": true}))
+			var purge := bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false))
 			if method == "rpm-ostree":
-				out.append(_cmd("package_remove", rpm_uninstall()))
+				out.append(_cmd("package_remove", rpm_remove(purge)))
 			elif method == "sysext":
-				out.append(_cmd("package_remove", sysext_remove()))
+				out.append(_cmd("package_remove", sysext_remove(purge)))
 			out.append(_internal("remove_user_files"))
 			if not bool(choices.get("keep_settings", true)):
 				out.append(_internal("remove_settings"))
