@@ -10,6 +10,13 @@ extends RefCounted
 ## the job fails before downloading anything. A probe that fails (offline, old
 ## tool) doesn't stop the job: the tools check space themselves too.
 ##
+## A move across drives (StoreCommands.move_steps) is a copy, a rename and a delete. Only
+## the copy may be paused or cancelled: a step marked "no_stop" can't be, and neither can a
+## job that has reached one (can_stop()), so a game is never left half in each place. A
+## step's "cleanup" command runs when the job is cancelled or fails on that step (the half
+## copy goes); a step with "done_if" {"gone", "there"} is skipped when it already happened
+## (the app ended right after the rename).
+##
 ## Steam downloads aren't here: Steam runs its own queue (SteamBackend reports it).
 ##
 ## Job: {"id", "key", "action", "title", "state", "steps", "step", "progress",
@@ -95,9 +102,33 @@ static func public(j: Dictionary) -> Dictionary:
 		"progress": j["progress"].duplicate(), "error": j["error"], "size": j["size"]}
 
 
-func pause(key: String) -> bool:
+## False once the job has reached a step that must run to the end (the rename and what
+## follows in a move): pausing or cancelling there would leave the game half moved.
+func can_stop(key: String) -> bool:
 	var j := job_for(key)
 	if j.is_empty():
+		return false
+	var steps: Array = j["steps"]
+	for i in mini(int(j["step"]) + 1, steps.size()):
+		if steps[i] is Dictionary and bool(steps[i].get("no_stop", false)):
+			return false
+	return true
+
+
+## Runs the current step's clean-up command, if it has one (not followed: it's quick, and
+## failing leaves a folder whose name says what it is).
+func _cleanup(j: Dictionary) -> void:
+	var steps: Array = j["steps"]
+	if int(j["step"]) >= steps.size() or not steps[j["step"]] is Dictionary:
+		return
+	var c: Variant = steps[j["step"]].get("cleanup")
+	if c is Array and not c.is_empty():
+		runner.start(c, {})
+
+
+func pause(key: String) -> bool:
+	var j := job_for(key)
+	if j.is_empty() or not can_stop(key):
 		return false
 	if j["state"] == QUEUED:
 		_set_state(j, PAUSED)
@@ -122,12 +153,13 @@ func resume(key: String) -> bool:
 ## install of the same game continues from it.
 func cancel(key: String) -> bool:
 	var j := job_for(key)
-	if j.is_empty():
+	if j.is_empty() or not can_stop(key):
 		return false
 	if j["state"] == RUNNING:
 		j["stopping"] = CANCELLED
 		runner.stop(j["handle"])
 		return true
+	_cleanup(j)   # a copy that was paused half way
 	_finish(j, CANCELLED)
 	return true
 
@@ -170,6 +202,13 @@ func _start_step(j: Dictionary) -> void:
 		_finish(j, DONE)
 		return
 	var s: Dictionary = steps[j["step"]]
+	var done_if: Variant = s.get("done_if")
+	if done_if is Dictionary and not DirAccess.dir_exists_absolute(str(done_if.get("gone", ""))) \
+			and DirAccess.dir_exists_absolute(str(done_if.get("there", ""))):
+		# it already happened (the app ended right after): on to the next step
+		j["step"] += 1
+		_start_step(j)
+		return
 	j["probe_out"] = ""
 	j["stopping"] = ""
 	j["state"] = RUNNING
@@ -209,6 +248,7 @@ func _on_exit(handle: int, code: int) -> void:
 		return
 	j["handle"] = 0
 	if j["stopping"] == CANCELLED:
+		_cleanup(j)
 		_finish(j, CANCELLED)
 		return
 	if j["stopping"] == PAUSED:
@@ -231,6 +271,7 @@ func _on_exit(handle: int, code: int) -> void:
 	elif code != 0:
 		var tail: Array = j["tail"]
 		j["error"] = last_error(tail) if not tail.is_empty() else "Exited with code %d" % code
+		_cleanup(j)
 		_finish(j, FAILED)
 		return
 	j["step"] += 1

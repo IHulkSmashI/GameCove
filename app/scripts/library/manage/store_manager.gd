@@ -34,6 +34,8 @@ const CAPS := ["install", "uninstall", "update", "verify", "move", "launch_optio
 ## install_state_changed states.
 ## Why an action on a running game is refused.
 const RUNNING_WHY := "Close the game first"
+## Why a move past its copy can't be paused or cancelled.
+const MOVE_FINISHING_WHY := "Finishing the move: it can't be stopped now"
 const STATE_FOR_ACTION := {"install": "installing", "update": "updating", "verify": "verifying", "move": "moving", "uninstall": "uninstalling"}
 
 var home := OS.get_environment("HOME")
@@ -203,6 +205,8 @@ func _facts(entry: Dictionary, options: Dictionary) -> Dictionary:
 		"home": home,
 		"options": options,
 		"gog_auth_exists": root != "" and FileAccess.file_exists(root.path_join("gog_store/auth.json")),
+		# a move on one drive is a rename; across drives it's a copy that can be picked up again
+		"same_drive": options.has("path") and path != "" and Disk.same_drive(path, str(options["path"])),
 		"gog_marker_exists": StoreCommands.gog_folder_is(path, id),
 	}
 
@@ -251,6 +255,10 @@ func capabilities(game: Dictionary) -> Dictionary:
 		for cap in ["pause", "resume", "cancel"]:
 			c[cap] = false
 			c["why"][cap] = "Nothing running for this game"
+	elif not queue.can_stop(_key(e)):
+		for cap in ["pause", "cancel"]:
+			c[cap] = false
+			c["why"][cap] = MOVE_FINISHING_WHY
 	return c
 
 
@@ -324,6 +332,8 @@ func _do(action: String, game: Dictionary, options: Dictionary) -> Dictionary:
 		return _ok("heroic")
 	if action == "move" and DirAccess.dir_exists_absolute(str(p["finalize"].get("new_path", ""))):
 		return _fail(key, action, "There's already a folder with that name there")
+	if action == "move" and StoreCommands.is_inside(str(options.get("path", "")), str(e.get("install_path", ""))):
+		return _fail(key, action, "That folder is inside the game's own folder")
 	if action == "install":
 		var base := str(p["finalize"].get("base", ""))
 		DirAccess.make_dir_recursive_absolute(base)
@@ -377,6 +387,8 @@ func _control(what: String, game: Dictionary) -> Dictionary:
 	if str(e.get("store", "")) == "steam":
 		var r: Dictionary = steam.call(what, str(e["id"]))
 		return r if r["ok"] else _fail(key, what, r["why"])
+	if what in ["pause", "cancel"] and not queue.job_for(key).is_empty() and not queue.can_stop(key):
+		return _fail(key, what, MOVE_FINISHING_WHY)
 	var ok: bool = queue.call(what, key)
 	return _ok("queue") if ok else _fail(key, what, "Nothing to %s for this game" % what)
 
