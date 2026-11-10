@@ -23,6 +23,8 @@ signal open_game(game: Dictionary)
 const LOW_FREE := 10 * 1024 * 1024 * 1024
 
 var library: Object
+## CollectionActions: Manage also lists favourite, collections and hide.
+var collection_actions: Node
 var state: Object
 var storage: Object
 var toast: Callable = func(_t, _i = "info", _tone = "", _d = ""): pass
@@ -286,6 +288,8 @@ func open_steam(game: Dictionary, page: String) -> void:
 ## unavailable rows stay, greyed, with the store's reason as their detail.
 static func manage_rows(game: Dictionary, c: Dictionary, st: String) -> Array:
 	var rows: Array = []
+	if str(game.get("store", "")) == "emu":
+		return rows   # EmuDeck / RetroDECK / Steam ROM Manager manage these (the Emulation page)
 	var installed: bool = game.get("installed", false)
 	var steam := str(game.get("store", "")) == "steam"
 	var busy := st in TG.BUSY
@@ -323,7 +327,10 @@ static func manage_rows(game: Dictionary, c: Dictionary, st: String) -> Array:
 
 func manage(game: Dictionary) -> void:
 	var st: String = state.state_of(str(game.get("key", ""))) if state != null else ""
-	open_menu(TG.MANAGE, _title(game), manage_rows(game, caps(game), st), func(id: String): run(id, game))
+	var rows := manage_rows(game, caps(game), st)
+	if collection_actions != null:
+		rows = collection_actions.game_rows(game, false) + rows
+	open_menu(TG.MANAGE, _title(game), rows, func(id: String): run(id, game))
 
 
 ## Runs a Manage row (also used by tests and the downloads list).
@@ -345,6 +352,9 @@ func run(id: String, game: Dictionary) -> void:
 		"page": open_game.emit(game)
 		"up": reorder(game, -1)
 		"down": reorder(game, 1)
+		_:
+			if collection_actions != null:
+				collection_actions.run(id, game)
 
 
 # ------------------------------------------------------------ modals

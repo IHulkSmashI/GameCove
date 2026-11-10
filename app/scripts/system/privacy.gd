@@ -43,6 +43,8 @@ const NETWORK_CALLS := [
 		"when": "When a tile shows a picture that isn't saved yet", "switch": "None (SteamGridDB lookups: Look up game details)"},
 	{"who": "PCs on your own network (GameStream)", "what": "A fixed client id and Moonlight's certificate; Wake-on-LAN packets to your PC. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network (up to 1,022), then GameStream's serverinfo to those that answer.",
 		"when": "When you open the Stream tab or wake a PC", "switch": "You start it"},
+	{"who": "EmuDeck, RetroDECK, ES-DE and Steam ROM Manager", "what": "Their own requests (Steam ROM Manager looks up art on SteamGridDB with its own settings). GameCove only reads their files on the handheld.",
+		"when": "Only while you have them open from the Emulation page", "switch": "You start it"},
 	{"who": "OS, Flatpak, fwupd and store tools", "what": "Their own update and sign-in requests.",
 		"when": "When you update or sign in; Flatpak apps also once a day, with no game running, if you turned on Update apps by themselves", "switch": "You start it (automatic app updates: off by default, and Background lookups)"},
 ]

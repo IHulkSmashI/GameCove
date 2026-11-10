@@ -29,6 +29,8 @@ const GameSession := preload("res://scripts/launch/game_session.gd")
 const TG := preload("res://scripts/ui/texts_games.gd")
 const InstallState := preload("res://scripts/ui/games/install_state.gd")
 const GameActions := preload("res://scripts/ui/games/game_actions.gd")
+const CollectionActions := preload("res://scripts/ui/games/collection_actions.gd")
+const EmulationPage := preload("res://scripts/ui/emulation_page.gd")
 const DownloadsView := preload("res://scripts/ui/games/downloads_view.gd")
 const DownloadsButton := preload("res://scripts/ui/games/downloads_button.gd")
 const SteamOverlay := preload("res://scripts/ui/games/steam_overlay.gd")
@@ -100,6 +102,10 @@ var _seen_new := {}
 var install_state: Node
 ## Install / uninstall / move / launch options... flows with sheets.
 var game_actions: Node
+## Favourites, hidden games and collections flows (Menu on a tile, the Library's filter sheet).
+var collection_actions: Node
+## When the running game started (unix), for play time GameCove keeps itself.
+var _game_started_at := 0
 var downloads_view: Control
 var downloads_button: Button
 var steam_overlay: Control
@@ -155,6 +161,7 @@ func _ready() -> void:
 	library_screen.open_requested.connect(_open_page)
 	library_screen.game_focused.connect(_follow.bind("library"))
 	library_screen.downloads_requested.connect(open_downloads)
+	library_screen.filter_requested.connect(open_library_filter)
 	library_screen.tile_hook = _hook_tile
 	library_screen.visible = false
 	_screen_layer.add_child(library_screen)
@@ -259,6 +266,7 @@ func _ready() -> void:
 	if _svc("Controls") != null:
 		qm_services["controls"] = _svc("Controls")
 		qm_services["profiles"] = _svc("Profiles")
+	qm_services["collections"] = Library.collections
 	quick_menu.setup(qm_services)
 	if quick_menu.has_signal("settings_requested"):
 		quick_menu.settings_requested.connect(_open_settings_category)
@@ -388,6 +396,13 @@ func _wire_games() -> void:
 		close_downloads()
 		_open_page(g))
 	game_actions.modal_changed.connect(func(_o): _update_hints.call_deferred())
+	collection_actions = CollectionActions.new()
+	add_child(collection_actions)
+	collection_actions.setup(Library.collections, game_actions)
+	collection_actions.open_game.connect(_open_page)
+	collection_actions.open_emulation.connect(open_emulation)
+	game_actions.collection_actions = collection_actions
+	Library.collections.changed.connect(_on_collections_changed)
 	steam_overlay = SteamOverlay.new()
 	steam_overlay.back_requested.connect(func(): store_api.return_from_steam())
 	_modal_layer.add_child(steam_overlay)
@@ -956,6 +971,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			settings.cycle_tabs(d)
 		get_viewport().set_input_as_handled()
+	elif current in ["home", "library"] and _pressed(event, JOY_BUTTON_START, KEY_M) and _focused_tile() != null:
+		collection_actions.options(_focused_tile().game)
+		get_viewport().set_input_as_handled()
+	elif current == "library" and _pressed(event, JOY_BUTTON_BACK, KEY_F):
+		open_library_filter()
+		get_viewport().set_input_as_handled()
 	elif current == "library" and _pressed(event, JOY_BUTTON_Y, KEY_SLASH):
 		library_screen.open_search()
 		get_viewport().set_input_as_handled()
@@ -976,6 +997,14 @@ func _unhandled_input(event: InputEvent) -> void:
 					f.grab_focus()
 				get_viewport().set_input_as_handled()
 				return
+
+
+## The game tile with focus on Home or in the Library, or null.
+func _focused_tile() -> Control:
+	var f := get_viewport().gui_get_focus_owner()
+	if f is Button and f.theme_type_variation == "TileButton" and f.get("game") is Dictionary and not f.game.is_empty():
+		return f
+	return null
 
 
 ## LB / RB on the game page or Downloads: the top bar is showing, so they
@@ -1160,6 +1189,7 @@ func _on_launch_cancelled(_game: Dictionary) -> void:
 
 
 func _on_game_started(game: Dictionary) -> void:
+	_game_started_at = int(Time.get_unix_time_from_system())
 	launch_overlay.finish()
 	if streaming != null:
 		streaming.set_game_running(true)
@@ -1171,6 +1201,9 @@ func _on_game_started(game: Dictionary) -> void:
 
 func _on_game_ended(game: Dictionary) -> void:
 	wiring.game_ended(game)
+	if _game_started_at > 0 and Library.has_method("record_playtime"):
+		Library.record_playtime(game, _game_started_at, int(Time.get_unix_time_from_system()))
+	_game_started_at = 0
 	if streaming != null:
 		streaming.set_game_running(false)
 	if fixes != null:
@@ -1214,12 +1247,17 @@ func _open_game_settings(game: Dictionary) -> void:
 
 
 func _open_page(game: Dictionary) -> void:
+	# ES-DE / RetroDECK's tile opens the Emulation page.
+	if str(game.get("store", "")) == "emu" and str(game.get("id", "")) in ["frontend", "page"]:
+		open_emulation()
+		return
 	if page != null:
 		_close_page()
 	close_downloads()
 	page = GamePage.new()
 	var g := View.find_by_key(_decorated(), str(game.get("key", "")))
-	page.setup(g if not g.is_empty() else game, Launcher, {"library": store_api, "state": install_state, "actions": game_actions, "achievements": achievements_api})
+	page.setup(g if not g.is_empty() else game, Launcher, {"library": store_api, "state": install_state, "actions": game_actions,
+		"achievements": achievements_api, "collections": collection_actions})
 	page.play_requested.connect(_play)
 	page.back_requested.connect(_close_page)
 	page.downloads_requested.connect(open_downloads)
@@ -1235,6 +1273,43 @@ func _open_page(game: Dictionary) -> void:
 	page.set_accent(backdrop.current_accent())
 	page.focus_first()
 	_sound("select")
+
+
+## The Emulation page (EmuDeck, RetroDECK or ES-DE), from the Library's filter
+## sheet or ES-DE's tile. Its buttons start things through _play.
+func open_emulation() -> void:
+	if page != null:
+		_close_page()
+	close_downloads()
+	page = EmulationPage.new()
+	page.setup(Library.emulation, _decorated())
+	page.play_requested.connect(_play)
+	page.library_requested.connect(func():
+		_close_page()
+		show_screen("library")
+		library_screen.set_view("emulation"))
+	add_child(page)
+	move_child(page, top_bar.get_index())
+	page.modulate.a = 0.0
+	Motion.to(page, "modulate:a", 1.0, Motion.BASE)
+	screens[current].visible = false
+	_link_top()
+	backdrop.show_game(page.game)
+	page.set_accent(backdrop.current_accent())
+	page.focus_first()
+	_sound("select")
+
+
+## The Library's Filter sheet (its order chip, or View).
+func open_library_filter() -> void:
+	collection_actions.filter(library_screen)
+
+
+## Favourites, hidden or collections changed: every screen shows it.
+func _on_collections_changed() -> void:
+	_set_games.call_deferred(Library.games)
+	if page != null and page.has_method("refresh_favourite"):
+		page.refresh_favourite.call_deferred()
 
 
 func _close_page() -> void:
@@ -1286,7 +1361,7 @@ func _on_menu_closed() -> void:
 	top_bar.focus_behavior_recursive = Control.FOCUS_BEHAVIOR_INHERITED
 	_update_timer()
 	_sound("back")
-	if page != null:
+	if page != null and page.get("form") != null:
 		page.form.reload()
 	if _focus_before_menu != null and is_instance_valid(_focus_before_menu) and _focus_before_menu.is_visible_in_tree():
 		_focus_before_menu.grab_focus()
@@ -1305,17 +1380,24 @@ func _open_status() -> void:
 
 
 func _decorated() -> Array:
-	return install_state.decorate(Library.games) if install_state != null else Library.games
+	var list: Array = install_state.decorate(Library.games) if install_state != null else Library.games
+	return Library.collections.decorate(list)
 
 
 func _set_games(list: Array) -> void:
 	if install_state != null:
 		list = install_state.decorate(list)
+	list = Library.collections.decorate(list)
+	var names := {}
+	for c in Library.collections.collections():
+		names[c["id"]] = c["name"]
+	library_screen.set_collection_names(names)
 	home.set_games(list)
 	library_screen.set_games(list)
 	var fresh := View.newly_added(list, int(Time.get_unix_time_from_system()))
 	top_bar.set_dot("library", fresh.any(func(g): return not _seen_new.has(g.get("key", ""))))
-	top_bar.set_count("library", list.size() if not list.is_empty() else -1)
+	var shown := View.not_hidden(list).size()
+	top_bar.set_count("library", shown if shown > 0 else -1)
 
 
 func _mark_new_seen() -> void:
@@ -1329,12 +1411,14 @@ func _on_library_changed() -> void:
 	if not playing.is_empty():
 		var fresh := View.find_by_key(Library.games, playing["key"])
 		playing = fresh
-	if page != null:
+	if page != null and page.has_method("refresh_from"):
+		page.refresh_from(Library.emulation, _decorated())
+	elif page != null:
 		var fresh_page := View.find_by_key(Library.games, page.game["key"])
 		if fresh_page.is_empty():
 			_close_page()
 		else:
-			page.update_game(install_state.decorate([fresh_page])[0])
+			page.update_game(Library.collections.decorate(install_state.decorate([fresh_page]))[0])
 	_link_top()
 
 
@@ -1406,7 +1490,10 @@ static func hints_for(ctx: Dictionary) -> Array:
 	var kind: String = ctx.get("kind", "")
 	var out: Array = []
 	match kind:
-		"tile": out.append(["A", "Open"])
+		"tile":
+			out.append(["A", "Open"])
+			if not ctx.get("page", false):
+				out.append(["MENU", "Options"])
 		"play": out.append(["A", ctx.get("label", "Play")])
 		"row": out.append(["LR", "Change"])
 		"slider": out.append(["LR", "Adjust"])
@@ -1421,6 +1508,7 @@ static func hints_for(ctx: Dictionary) -> Array:
 		if screen == "library":
 			out.append(["Y", "Search"])
 			out.append(["X", "Sort"])
+			out.append(["VIEW", "Filter"])
 			out.append([["LT", "RT"], "Jump"])
 		if screen != "home":
 			out.append(["B", "Home"])

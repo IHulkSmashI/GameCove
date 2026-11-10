@@ -4,6 +4,9 @@ extends Control
 ## on-screen keyboard (Y) or a physical one. X cycles the sort. Installed /
 ## Not installed chips narrow it down; a Downloads chip shows while anything
 ## is in the queue. Tiles show install state (main passes a tile_hook).
+## The order chip (A) and View open the Filter sheet (main, through
+## CollectionActions): all games, favourites, a collection, emulation or hidden
+## games, and the order. The toolbar fills 1280 px, so views live in that sheet.
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const View := preload("res://scripts/ui/library_view.gd")
@@ -14,10 +17,13 @@ const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const Osk := preload("res://scripts/ui/osk.gd")
 const ButtonFx := preload("res://scripts/ui/button_fx.gd")
+const TL := preload("res://scripts/ui/texts_library.gd")
 
 signal open_requested(game: Dictionary)
 signal game_focused(game: Dictionary)
 signal downloads_requested
+## The order chip was pressed: main opens the Filter sheet.
+signal filter_requested
 
 const INSTALL_FILTERS := [["installed", "Installed"], ["not_installed", "Not installed"]]
 
@@ -31,6 +37,9 @@ var sort := "recent"
 var query := ""
 ## "" (all) | "installed" | "not_installed"
 var install_filter := ""
+## Library view (View.VIEWS or "collection:<id>"): "" = every game not hidden.
+var view := ""
+var view_label: Label
 ## The critic filter chip: a star and "75+" (a critic score: the star says so;
 ## "Critics 75+" didn't fit the 1280 px toolbar).
 const CRITIC_LABEL := "%d+"
@@ -96,6 +105,11 @@ func _init() -> void:
 	count_label = Kit.label("", "TitleLabel")
 	count_label.name = "Count"
 	count_label.add_theme_color_override("font_color", ThemeLib.color("accent"))
+	# The view the filter sheet picked ("Favourites  ·"), before the count.
+	view_label = Kit.label("", "TitleLabel")
+	view_label.name = "ViewName"
+	view_label.visible = false
+	head.add_child(view_label)
 	head.add_child(count_label)
 	var head_pad := Kit.margin(0, int(PAD.x), 0)
 	head_pad.add_child(head)
@@ -170,7 +184,8 @@ func _init() -> void:
 	sort_button.name = "Sort"
 	sort_button.custom_minimum_size = Vector2(0, 44)
 	sort_button.add_theme_constant_override("h_separation", 8)
-	sort_button.pressed.connect(func(): cycle_sort(1))
+	sort_button.tooltip_text = TL.FILTER_TITLE
+	sort_button.pressed.connect(func(): filter_requested.emit())
 	ButtonFx.attach(sort_button, {"glyph": "X"})
 	bar.add_child(sort_button)
 	var bar_pad := Kit.margin(0, int(PAD.x), 0)
@@ -303,6 +318,32 @@ func set_critic_filter(on: bool) -> void:
 	_rebuild(false)
 
 
+## A view from the filter sheet; an unknown collection falls back to all games.
+func set_view(v: String) -> void:
+	view = v if (v in View.VIEWS or v.begins_with("collection:")) else ""
+	_rebuild(false)
+	if is_inside_tree() and is_visible_in_tree():
+		_focus_later(default_focus())
+
+
+## The view's name for the heading ("" for all games).
+func view_name() -> String:
+	if view.begins_with("collection:"):
+		return _collection_names.get(view.substr(11), "")
+	return TL.VIEW_NAMES.get(view, "")
+
+
+## Collection id -> name, for the heading (main passes it with the games).
+var _collection_names := {}
+
+
+func set_collection_names(names: Dictionary) -> void:
+	_collection_names = names
+	if view.begins_with("collection:") and not _collection_names.has(view.substr(11)):
+		view = ""
+	_refresh_toolbar()
+
+
 func set_install_filter(f: String) -> void:
 	install_filter = f if f in ["installed", "not_installed"] else ""
 	_rebuild(false)
@@ -371,7 +412,8 @@ func _rebuild(keep_focus: bool) -> void:
 		var f := get_viewport().gui_get_focus_owner()
 		if f != null and f in _tiles:
 			focused_key = f.game.get("key", "")
-	var picked := View.filter_meta(filter_install(View.filter_by_store(games, store), install_filter), genre, View.CRITIC_MIN if critic_filter else 0)
+	var in_view := View.filter_view(games, view)
+	var picked := View.filter_meta(filter_install(View.filter_by_store(in_view, store), install_filter), genre, View.CRITIC_MIN if critic_filter else 0)
 	shown = View.sort_games(View.search(picked, query), sort)
 	for t in _tiles:
 		Kit.drop(grid, t)
@@ -393,6 +435,8 @@ func _rebuild(keep_focus: bool) -> void:
 	details.get_parent().visible = not shown.is_empty()
 	if games.is_empty():
 		_empty_text.text = "Your games will show up here once a store has some installed."
+	elif in_view.is_empty() and view != "":
+		_empty_text.text = {"favourites": TL.EMPTY_FAVOURITES, "hidden": TL.EMPTY_HIDDEN, "emulation": TL.EMPTY_EMULATION}.get(view, TL.EMPTY_COLLECTION)
 	elif query != "":
 		_empty_text.text = "No games match \"%s\". Try fewer letters or another store." % query
 	elif shown.is_empty() and (genre != "" or critic_filter):
@@ -402,7 +446,8 @@ func _rebuild(keep_focus: bool) -> void:
 			else "Everything here is installed. Clear the filter to see all your games.")
 	elif shown.is_empty():
 		_empty_text.text = "No %s games found. Pick another store or All." % View.store_name(store)
-	count_label.text = ("%d of %d" % [shown.size(), games.size()]) if shown.size() != games.size() else ("%d games" % games.size() if games.size() != 1 else "1 game")
+	var total := View.not_hidden(games).size() if view != "hidden" else in_view.size()
+	count_label.text = ("%d of %d" % [shown.size(), total]) if shown.size() != total else ("%d games" % total if total != 1 else "1 game")
 	if focused_key != "":
 		for t in _tiles:
 			if t.game.get("key", "") == focused_key:
@@ -416,6 +461,9 @@ func _refresh_toolbar() -> void:
 		store_buttons[i].set_pressed_no_signal(ids[i] == store)
 	for i in filter_buttons.size():
 		filter_buttons[i].set_pressed_no_signal(INSTALL_FILTERS[i][0] == install_filter)
+	var vn := view_name()
+	view_label.text = vn + "  ·" if vn != "" else ""
+	view_label.visible = vn != ""
 	search_button.text = query if query != "" else "Search"
 	search_button.icon = Icons.tex("search", 20)
 	genre_button.text = genre if genre != "" else "All genres"
