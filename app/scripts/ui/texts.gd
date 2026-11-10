@@ -83,7 +83,7 @@ const EXPLAIN_VALUE := {
 }
 
 const THEME_LINES := {
-	"cove": "Electric cyan and violet on near-black. The GameCove look.",
+	"cove": "Electric cyan and violet on deep slate. The GameCove look.",
 	"midnight": "Pure black with ice-cyan and violet. Saves power on OLED screens.",
 	"sunset": "Warm orange into magenta on deep plum.",
 	"light": "Dark text on light glass, highest contrast in bright rooms.",

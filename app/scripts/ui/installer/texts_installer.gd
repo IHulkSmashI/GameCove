@@ -59,6 +59,8 @@ const MODE_EASY_CARD := "Easy"
 const MODE_EASY_FOOT := "Recommended defaults"
 const SELECTED_DEFAULT := "Selected by default"
 const SELECTED := "Selected"
+## The hint bar's A while something other than Continue has focus.
+const SELECT := "Select"
 const STEP_BY_STEP := "Step-by-step"
 const MODE_CUSTOM_FOOT := "Choose every setting"
 const DETECTED := "DETECTED HANDHELD"

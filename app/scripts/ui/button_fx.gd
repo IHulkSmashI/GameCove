@@ -17,6 +17,9 @@ var button: Button
 var caps := false
 ## Controller glyph drawn first inside the button ("" = none).
 var glyph := ""
+## Only draw the glyph while the button has focus (its place is kept), so a
+## screen never shows an (A) on a button A wouldn't press.
+var glyph_on_focus := false
 ## Glow behind the button (primary buttons).
 var glow := false
 ## Text / icon colour override (art-coloured primaries); a = 0 uses the theme.
@@ -92,6 +95,8 @@ func _style_glow() -> void:
 
 
 func _on_focus(on: bool) -> void:
+	if glyph_on_focus:
+		queue_redraw()
 	if button.disabled:
 		return
 	button.pivot_offset = button.size / 2.0
@@ -192,7 +197,8 @@ func _draw() -> void:
 	var x := (size.x - total) / 2.0
 	var cy := size.y / 2.0
 	if glyph != "":
-		_draw_glyph(Vector2(x + gw / 2.0, cy))
+		if not glyph_on_focus or button.has_focus():
+			_draw_glyph(Vector2(x + gw / 2.0, cy))
 		x += gw + GAP
 	var asc := f.get_ascent(fs)
 	var desc := f.get_descent(fs)
