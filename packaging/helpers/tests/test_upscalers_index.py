@@ -67,6 +67,14 @@ def comp(version, payload: bytes, asset, upstream, inner=None, tag=None):
     return e
 
 
+def with_source(e, commit="c" * 40):
+    """A GPL entry names its source at the exact commit (tools/upscalers/build.py mirrors it next to the binary)."""
+    src = b"source of " + e["version"].encode()
+    return {**e, "source": {"commit": commit, "repo": "optiscaler/OptiScaler", "sha256": sha(src), "size": len(src),
+                            "url": f"https://github.com/optiscaler/OptiScaler/archive/{commit}.tar.gz",
+                            "mirror_url": M + mirror.mirror_name("optiscaler", e["version"], sha(src), f"source-{commit[:12]}.tar.gz")}}
+
+
 def index(generated="2026-11-09T05:00:00Z", **components) -> bytes:
     return json.dumps({"schema": 1, "generated": generated, "components": components}).encode()
 
@@ -84,7 +92,7 @@ PATCHER = b"optipatcher new build"
 
 
 def newest():
-    return index(optiscaler=comp("0.9.5", OPTI, "Optiscaler_0.9.5.7z", "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.5/Optiscaler_0.9.5.7z", tag="v0.9.5"),
+    return index(optiscaler=with_source(comp("0.9.5", OPTI, "Optiscaler_0.9.5.7z", "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.5/Optiscaler_0.9.5.7z", tag="v0.9.5")),
                  optipatcher=comp("rolling-20261108", PATCHER, "OptiPatcher_rolling.asi",
                                   "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/bins-for-optipatcher-rolling/OptiPatcher_rolling.asi"))
 
@@ -201,6 +209,9 @@ def test_an_older_signed_index_never_replaces_a_newer_one(tmp_path, monkeypatch,
     lambda e: e.update(sha256="abc"),
     lambda e: e.update(upstream_url="http://plain/x"),
     lambda e: e.update(asset="../x.7z"),
+    lambda e: e.pop("source"),                                  # a GPL binary without its source
+    lambda e: e["source"].update(commit="abc1234"),             # not an exact commit
+    lambda e: e["source"].update(mirror_url="https://evil.example/src.tar.gz"),
 ])
 def test_parse_checks_every_field(mutate):
     d = json.loads(newest())

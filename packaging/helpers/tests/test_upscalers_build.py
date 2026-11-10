@@ -45,6 +45,8 @@ FSR_AMD = b"amd dll"
 FSR_XMX = b"nitec dll"
 NOTICE = b"AMD licence text"
 AMD_COMMIT = "7539ae8b6568ad29ed78a753404351daf3b5cca7"
+OPTI_094_COMMIT = "a094" + "0" * 36                 # what v0.9.4 points at in optiscaler/OptiScaler
+NIGHTLY_COMMIT = "b10a" + "1" * 36                  # the commit the tested v10 nightly was built from
 XMX_COMMIT = "34a8210e75962eaa3b7b1bf55c6f915eb036c3f6"
 
 
@@ -118,7 +120,7 @@ def world(xess_new=XESS_NEW, patcher=PATCHER_NOW, xess_digest=True):
         v["fsr4_amd"]["base"] + "/amd_fidelityfx_upscaler_dx12.dll": FSR_AMD,
         f"https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/{AMD_COMMIT}/Kits/FidelityFX/docs/license.md": NOTICE,
         v["fsr4_xmx"]["base"] + "/fsr-original.dll": FSR_AMD, v["fsr4_xmx"]["base"] + "/amd_fidelityfx_upscaler_dx12.dll": FSR_XMX,
-        "https://github.com/optiscaler/OptiScaler/archive/refs/tags/v0.9.4.tar.gz": b"source 0.9.4",
+        f"https://github.com/optiscaler/OptiScaler/archive/{OPTI_094_COMMIT}.tar.gz": b"source 0.9.4",
     }
     api = {}
     r, u, d = rel("20261120", "xess-xmx-linux-20261120.zip", xess_new, digest=xess_digest)
@@ -137,8 +139,18 @@ def world(xess_new=XESS_NEW, patcher=PATCHER_NOW, xess_digest=True):
         {"sha": AMD_COMMIT, "commit": {"committer": {"date": "2026-10-28T00:00:00Z"}}}]
     api["/repos/IHulkSmashI/ClawDeck/commits?per_page=1&sha=fsr4-xmx-files"] = [
         {"sha": XMX_COMMIT, "commit": {"committer": {"date": "2026-11-05T00:00:00Z"}}}]
-    # OptiScaler (both kinds): the API is down tonight -> the pin (stable) and nothing (v10, no pin here)
+    # the pins' releases: v0.9.4 is a tag in the source repo; nothing says which commit the v10 pin came from
+    api["/repos/optiscaler/OptiScaler/releases/tags/v0.9.4"] = {"tag_name": "v0.9.4", "body": "0.9.4 final"}
+    api["/repos/optiscaler/OptiScaler/commits/v0.9.4"] = {"sha": OPTI_094_COMMIT}
+    # OptiScaler (both kinds): the releases API is down tonight -> the pin (stable) and nothing (v10, not pinned here)
     return v, FakeNet(files, api)
+
+
+def nightly(tag, body, data, pre=True, date="2026-11-08T00:00:00Z"):
+    asset = f"OptiScaler_v10.0.0-pre2_{tag[-8:]}.zip"
+    url = f"https://github.com/optiscaler/OptiScaler-nightly/releases/download/{tag}/{asset}"
+    return {"tag_name": tag, "prerelease": pre, "draft": False, "published_at": date, "html_url": "https://x",
+            "body": body, "assets": [{"name": asset, "browser_download_url": url, "digest": "sha256:" + sha(data)}]}, url
 
 
 @pytest.fixture(autouse=True)
@@ -175,7 +187,8 @@ def test_first_run_fills_the_mirror_with_every_pin_and_the_newest(tmp_path):
         if it["component"] != "optipatcher":
             assert it["mirror"].rsplit("/", 1)[1] in names, it["mirror"]
     assert any(n.startswith("fsr4_amd-sdk2.4.0-7539ae8b-") and n.endswith("license.md") for n in names), "AMD's notice"
-    assert any(n.startswith("optiscaler-0.9.4-source-") for n in names), "the GPL source next to OptiScaler"
+    src = [n for n in names if n.startswith("optiscaler-0.9.4-") and n.endswith(f"-source-{OPTI_094_COMMIT[:12]}.tar.gz")]
+    assert len(src) == 1, "OptiScaler's source at the exact commit of v0.9.4, next to the binary"
     # ... except the rolled OptiPatcher, which is reported with how to upload it by hand
     assert any("optipatcher" in w and "gh release upload upscalers" in w for w in rep["warnings"])
     # part B: the newest of each
@@ -186,6 +199,8 @@ def test_first_run_fills_the_mirror_with_every_pin_and_the_newest(tmp_path):
     assert c["reframework"]["inner"] == {"dinput8.dll": sha(b"ref15")}
     assert c["fsr4_amd"]["version"] == "20261028-7539ae8b" and c["fsr4_amd"]["notice_url"].endswith("license.md")
     assert c["optiscaler"]["version"] == "0.9.4" and c["optiscaler"]["pinned"] is True, "API down: the pin, mirrored"
+    assert c["optiscaler"]["source"]["commit"] == OPTI_094_COMMIT and c["optiscaler"]["source"]["sha256"] == sha(b"source 0.9.4")
+    assert c["optiscaler"]["source"]["mirror_url"].rsplit("/", 1)[1] == src[0]
     assert "optiscaler_v10" not in c
     for e in c.values():
         for f in [e] if "mirror_url" in e else e["files"].values():
@@ -245,3 +260,80 @@ def test_amd_dll_without_its_notice_is_not_mirrored(tmp_path):
     rep, idx, plan, _o = _run(tmp_path, v, net)
     assert not any(n.startswith("fsr4_amd-") for _t, n, _p in plan)
     assert "fsr4_amd" not in idx["components"]
+
+
+V10 = zbytes({"OptiScaler.dll": "o10", "OptiScaler.ini": "[x]", "OptiScaler/libxess.dll": "x"})
+
+
+def _v10_world(releases, resolvable):
+    """The v10 nightly repo with `releases`; `resolvable` maps commit candidates to the full sha the source repo
+    answers for them (anything else: 404)."""
+    v, net = world()
+    build.SOURCES["optiscaler_v10"]["asset"] = "optiscaler_v*.zip"          # zip here: no 7z needed
+    net.api["/repos/optiscaler/OptiScaler-nightly/releases?per_page=15"] = [r for r, _u in releases]
+    for _r, u in releases:
+        net.files[u] = V10
+    for cand, full in resolvable.items():
+        net.api[f"/repos/optiscaler/OptiScaler/commits/{cand}"] = {"sha": full}
+        net.files[f"https://github.com/optiscaler/OptiScaler/archive/{full}.tar.gz"] = b"src " + full.encode()
+    return v, net
+
+
+def test_a_nightly_goes_only_with_its_source_at_the_exact_commit(tmp_path):
+    full = "d" * 40
+    newest = nightly("nightly-20261109", "Automated build.", V10)             # no commit anywhere: skipped
+    older = nightly("nightly-20261108", f"Built from https://github.com/optiscaler/OptiScaler/commit/{full[:7]}", V10)
+    v, net = _v10_world([newest, older], {full[:7]: full})
+    rep, idx, plan, out = _run(tmp_path, v, net)
+    e = idx["components"]["optiscaler_v10"]
+    assert e["tag"] == "nightly-20261108" and e["skipped_without_source"] == ["nightly-20261109"]
+    assert e["source"]["commit"] == full and e["source"]["url"] == f"https://github.com/optiscaler/OptiScaler/archive/{full}.tar.gz"
+    assert e["source"]["sha256"] == sha(b"src " + full.encode())
+    names = {n for _t, n, _p in plan}
+    assert e["source"]["mirror_url"].rsplit("/", 1)[1] in names and e["mirror_url"].rsplit("/", 1)[1] in names
+    assert not any("20261109" in n for n in names), "the build without a known commit isn't mirrored"
+    # the next night: same build, nothing downloaded again
+    v, net2 = _v10_world([newest, older], {full[:7]: full})
+    _r, idx2, plan2, _o = _run(tmp_path, v, net2, "d2", _have(tmp_path, [plan]), str(out / "upscalers.json"))
+    assert idx2["components"]["optiscaler_v10"] == e and plan2 == []
+
+
+def test_a_sha_that_isnt_in_the_source_repo_doesnt_count_and_the_latest_stable_is_used(tmp_path):
+    stable_full = "e" * 40
+    n1 = nightly("nightly-20261109", "commit 1234567 (a fork)", V10)           # 1234567 isn't in optiscaler/OptiScaler
+    stable = nightly("v10.0.0-pre1", "Pre-release 1", V10, pre=False, date="2026-10-20T00:00:00Z")
+    v, net = _v10_world([n1, stable], {"v10.0.0-pre1": stable_full})
+    rep, idx, plan, _o = _run(tmp_path, v, net)
+    e = idx["components"]["optiscaler_v10"]
+    assert e["tag"] == "v10.0.0-pre1" and e["source"]["commit"] == stable_full
+
+
+def test_no_build_with_a_known_commit_mirrors_nothing(tmp_path):
+    v, net = _v10_world([nightly("nightly-20261109", "Automated build.", V10)], {})
+    rep, idx, plan, _o = _run(tmp_path, v, net)
+    assert "optiscaler_v10" not in idx["components"]
+    assert not any(n.startswith("optiscaler_v10-") for _t, n, _p in plan)
+    assert any("optiscaler_v10" in w and "source commit" in w for w in rep["warnings"]), rep["warnings"]
+
+
+def test_a_gpl_pin_without_a_known_commit_isnt_mirrored(tmp_path):
+    v, net = world()
+    v["optiscaler_v10"] = {"version": "10.0.0-pre1-20261030", "repo": "optiscaler/OptiScaler-nightly", "tag": "nightly-20261030",
+                           "asset": "OptiScaler_v10.0.0-pre1_20261030.zip", "sha256": sha(V10), "layout": "subfolder",
+                           "url": "https://github.com/optiscaler/OptiScaler-nightly/releases/download/nightly-20261030/OptiScaler_v10.0.0-pre1_20261030.zip",
+                           "mirror": murl("optiscaler_v10", "10.0.0-pre1-20261030", V10, "OptiScaler_v10.0.0-pre1_20261030.zip"), "extras": []}
+    net.files[v["optiscaler_v10"]["url"]] = V10
+    net.api["/repos/optiscaler/OptiScaler-nightly/releases/tags/nightly-20261030"] = {"tag_name": "nightly-20261030", "body": "nightly"}
+    rep, idx, plan, _o = _run(tmp_path, v, net)
+    assert not any(n.startswith("optiscaler_v10-") for _t, n, _p in plan)
+    assert any("tested optiscaler_v10" in w and "no source" in w for w in rep["warnings"]), rep["warnings"]
+    # the same pin with the commit in its notes: binary and source both go
+    net.api["/repos/optiscaler/OptiScaler-nightly/releases/tags/nightly-20261030"]["body"] = f"commit {NIGHTLY_COMMIT}"
+    net.api[f"/repos/optiscaler/OptiScaler/commits/{NIGHTLY_COMMIT}"] = {"sha": NIGHTLY_COMMIT}
+    net.files[f"https://github.com/optiscaler/OptiScaler/archive/{NIGHTLY_COMMIT}.tar.gz"] = b"nightly source"
+    rep, idx, plan, _o = _run(tmp_path, v, net, "d2")
+    names = {n for _t, n, _p in plan}
+    assert v["optiscaler_v10"]["mirror"].rsplit("/", 1)[1] in names
+    assert any(n.endswith(f"-source-{NIGHTLY_COMMIT[:12]}.tar.gz") for n in names)
+    assert idx["pin_sources"]["optiscaler_v10"]["commit"] == NIGHTLY_COMMIT
+    assert idx["components"]["optiscaler_v10"]["pinned"] and idx["components"]["optiscaler_v10"]["source"]["commit"] == NIGHTLY_COMMIT
