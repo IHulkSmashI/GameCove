@@ -20,8 +20,14 @@ const USER_PRIORITY := "250"
 
 
 ## True when the Steam client is running: a pid file whose process still exists
-## and is called steam. `proc_root` is "/proc" except in tests.
-static func is_running(home: String, proc_root := "/proc") -> bool:
+## and is called steam. `proc_root` is "/proc" except in tests; `names` is what the
+## process may be called (tests stand in for Steam with their own process).
+##
+## Flatpak Steam's pid file holds the pid inside the sandbox's own pid namespace, which on
+## the host is another process or none. For that file a process called steam that lives in
+## a pid namespace (its NSpid line in /proc/<pid>/status has more than one number) is
+## Steam; the scan of /proc only happens when the Flatpak pid file is there.
+static func is_running(home: String, proc_root := "/proc", names: Array = ["steam"]) -> bool:
 	for rel in PID_FILES:
 		var p: String = home + rel
 		if not FileAccess.file_exists(p):
@@ -29,9 +35,48 @@ static func is_running(home: String, proc_root := "/proc") -> bool:
 		var pid := FileAccess.get_file_as_string(p).strip_edges()
 		if not pid.is_valid_int() or pid.to_int() <= 0:
 			continue
-		var comm_path := proc_root.path_join(pid).path_join("comm")
-		if FileAccess.file_exists(comm_path) and "steam" in FileAccess.get_file_as_string(comm_path).to_lower():
+		if _named(read_proc(proc_root.path_join(pid).path_join("comm")), names):
 			return true
+		if rel.begins_with("/.var/app/") and _sandboxed(proc_root, names):
+			return true
+	return false
+
+
+## A /proc file's whole text. /proc files report a size of 0, so anything that trusts the
+## size (get_as_text, get_file_as_string) reads "": chunks until a short read.
+static func read_proc(path: String) -> String:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return ""
+	var buf := PackedByteArray()
+	while buf.size() < 1024 * 1024:
+		var chunk := f.get_buffer(4096)
+		buf.append_array(chunk)
+		if chunk.size() < 4096:
+			break
+	return buf.get_string_from_utf8()
+
+
+static func _named(comm: String, names: Array) -> bool:
+	var c := comm.strip_edges().to_lower()
+	if c == "":
+		return false
+	for n in names:
+		if str(n).to_lower() in c:
+			return true
+	return false
+
+
+## A process with one of `names` that runs inside a pid namespace (a Flatpak sandbox).
+static func _sandboxed(proc_root: String, names: Array) -> bool:
+	for d in DirAccess.get_directories_at(proc_root):
+		if not d.is_valid_int() or not _named(read_proc(proc_root.path_join(d).path_join("comm")), names):
+			continue
+		for line in read_proc(proc_root.path_join(d).path_join("status")).split("\n"):
+			if line.begins_with("NSpid:"):
+				if line.trim_prefix("NSpid:").split("\t", false).size() > 1 or line.trim_prefix("NSpid:").strip_edges().split(" ", false).size() > 1:
+					return true
+				break
 	return false
 
 
