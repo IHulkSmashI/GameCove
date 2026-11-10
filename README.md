@@ -18,6 +18,8 @@ curl -fsSL https://raw.githubusercontent.com/IHulkSmashI/GameCove/main/packaging
 
 It downloads the latest release (checked against its SHA256SUMS), adds **GameCove Installer** to your app menu and opens it. The installer walks you through it, like EmuDeck: Easy (recommended defaults, one summary page) or Custom (every option). It can make GameCove what your handheld boots into, or keep Steam Gaming Mode as the default with GameCove as a choice, signs in your stores in the browser, installs device fixes and sets everything up so the first start needs nothing. It asks for your admin password only for the system package and device fixes.
 
+**Game art:** setup (the installer's Game art step, or GameCove's own first-run setup) helps you sign in to [SteamGridDB](https://www.steamgriddb.com) with your Steam account and make your own free API key. It takes about a minute: scan the QR code with your phone, sign in with Steam, tap Generate API key, then paste the key on the page your phone opened and it lands on the handheld (no typing with a controller; typing or pasting it works too). GameCove checks the key, then fills in covers, banners and logos for every game, Steam or not. GameCove ships no key of its own, so this step is what turns on the art picker and art for non-Steam games. Skip it and you get Steam's art only; add the key later in Settings > Discover > SteamGridDB key.
+
 - **Bazzite / Fedora Atomic:** installs as a layered package (`rpm-ostree`); a restart finishes it, and your previous system stays in the boot menu.
 - **SteamOS:** installs as a system extension (sysext) kept on the home partition and linked from `/etc/extensions`, so SteamOS updates keep it; `steamos-readonly` stays on.
 - **Anything else:** you can try GameCove in a window.
@@ -28,11 +30,11 @@ Run **GameCove Installer** again any time to change options, repair, update or r
 
 - **One library:** Steam, Epic, GOG and Amazon in one place, with installs, updates and a download queue. EA, Ubisoft, Battle.net, emulators and cloud come later.
 - **Game info on every tile:** cover art, time to beat, compatibility and anti-cheat status before you hit play.
-- **Complete game details for every store:** missing descriptions, genres, developers, publishers, release dates, screenshots and art are filled in for Steam, Epic, GOG and Amazon games alike, with Metacritic and OpenCritic scores on the game page, Top rated sorting and genre filters, and a SteamGridDB artwork picker (it can update Steam's own library art too).
+- **Complete game details for every store:** missing descriptions, genres, developers, publishers, release dates, screenshots and art are filled in for Steam, Epic, GOG and Amazon games alike, with Metacritic and OpenCritic scores on the game page, Top rated sorting and genre filters, and a SteamGridDB artwork picker (it can update Steam's own library art too). The picker and art for non-Steam games use your own free SteamGridDB key, which setup helps you get by signing in with Steam on your phone.
 - **A quick menu that makes sense:** one button, five sections (This game, Power, Screen, Controller, Device), and a short line under every setting saying what it does. Performance overlay, Auto TDP status and Exit game are right there.
 - **Your handheld, set up properly:** power profiles, auto TDP, fan, charge limit, VRR, device fixes, and the right upscaling and frame generation for your chip, picked per game.
 - **Discover:** deals, real local prices, your wishlist with price alerts, and a release calendar.
-- **Two-minute setup:** pick a look, sign in to stores with your phone (scan a QR code, no typing passwords on the handheld), add optional free keys, see what your device needs.
+- **Two-minute setup:** pick a look, sign in to stores with your phone (scan a QR code, no typing passwords on the handheld), get free game art by signing in to SteamGridDB, add an optional gg.deals key, see what your device needs.
 - **Settings in one place:** appearance and four themes, stores and downloads, Discover, performance, device and updates.
 - **Steam stays a store:** Steam games launch through Steam, so your Steam library keeps working. "Switch to Steam Gaming Mode" is always one press away.
 
@@ -64,7 +66,7 @@ GameCove writes its own front end and device layer and reuses proven open-source
 
 Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAntiCheatYet, ProtonDB, IGDB, the Steam store) and published as a download. See [`gamedb/`](gamedb/).
 
-Game data from [IGDB](https://www.igdb.com): time to beat, game details, critic averages and upcoming release dates. [Metacritic](https://www.metacritic.com) scores as Valve publishes them on the Steam store, each linked to its Metacritic page. Critic scores from [OpenCritic](https://opencritic.com), fetched by the app only with your own key. Artwork from [SteamGridDB](https://www.steamgriddb.com) and its artists. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0.
+Game data from [IGDB](https://www.igdb.com): time to beat, game details, critic averages and upcoming release dates. [Metacritic](https://www.metacritic.com) scores as Valve publishes them on the Steam store, each linked to its Metacritic page. Critic scores from [OpenCritic](https://opencritic.com), fetched by the app only with your own key. Artwork from [SteamGridDB](https://www.steamgriddb.com) and its artists, fetched with your own free key (made during setup by signing in with Steam). Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0.
 
 ## Network and privacy
 
