@@ -142,6 +142,39 @@ func test_miss_downloads_once_then_hits_cache() -> void:
 	s2.free()
 
 
+func test_background_lookups_off_requests_nothing() -> void:
+	# review problem 4: About and the welcome page ask photo_for on their own; with "Background lookups" off
+	# nothing is requested (free photo, manifest or maker image), and a cached picture still shows
+	var http := FakeHttp.new()
+	var body := _photo_bytes()
+	_routes(http, body, _manifest(body))
+	var s := _svc(http)
+	preload("res://scripts/system/privacy.gd").set_background_allowed(false, _prefs)
+	eq(s.photo_for("steam-deck-lcd"), {}, "nothing cached")
+	ok(not s.prefetch("steam-deck-lcd"), "no prefetch either")
+	s.free()
+	var m := FakeHttp.new()
+	m.route(MAKER_URL, {"bytes": _png_bytes()})
+	var sm := _maker_svc(m)
+	preload("res://scripts/system/privacy.gd").set_background_allowed(false, _prefs)
+	eq(sm.photo_for("msi-claw-8-ex"), {}, "no maker image")
+	eq(m.requests.size(), 0, "no maker request")
+	sm.free()
+	eq(http.requests.size(), 0, "no request at all")
+	# switched back on, the same call downloads; then off again, the cached copy shows
+	preload("res://scripts/system/privacy.gd").set_background_allowed(true, _prefs)
+	var s2: Node = PhotoSvc.new()
+	s2.cache_dir = _dir
+	s2.prefs_path = _prefs
+	s2.http = http
+	s2.maker_sources = {}
+	s2.photo_for("steam-deck-lcd")
+	ok(http.requests.size() > 0, "on: downloaded")
+	preload("res://scripts/system/privacy.gd").set_background_allowed(false, _prefs)
+	ok(not s2.photo_for("steam-deck-lcd").is_empty(), "off: the cached picture still shows")
+	s2.free()
+
+
 func test_other_device_downloads_nothing() -> void:
 	var http := FakeHttp.new()
 	var body := _photo_bytes()

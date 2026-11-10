@@ -10,7 +10,7 @@ the app itself shows under Settings > About > Network and privacy.
 
 | Switch | Where | Default | Off means |
 | --- | --- | --- | --- |
-| Background lookups | Settings > About > Network and privacy (`user://settings.cfg` `[privacy] background`) | On | Nothing is requested on GameCove's own initiative: no deals refresh, no game-database or calendar download, no device-photo prefetch at start, no Steam insights on game pages (what's cached still shows). What you ask for right then (searching, opening a store page, pressing Check) still works. |
+| Background lookups | Settings > About > Network and privacy (`user://settings.cfg` `[privacy] background`) | On | Nothing is requested on GameCove's own initiative: no deals refresh, no game-database or calendar download, no device-photo request (a cached picture still shows), no Steam insights on game pages (what's cached still shows). What you ask for right then (searching, opening a store page, pressing Check) still works. |
 | Look up deals and prices | Same card, and Discover's settings (`price_lookups`) | On | No request to CheapShark, the Steam store API or GG.deals at all, background or not. Discover shows no prices. |
 | Look up game details | Same card (`user://settings.cfg` `[privacy] metadata`) | On | No Steam store details, OpenCritic or SteamGridDB request at all, background or not. Game pages show what the store and GameCove's game database already have. |
 | Show maker photos | Same card, and Settings > Device (`[device] maker_photo`) | On | Your handheld's picture is never requested from its maker's site; the free photo or our drawing is used. |
@@ -25,7 +25,7 @@ the app itself shows under Settings > About > Network and privacy.
 | 3 | www.cheapshark.com | Wishlist Steam app ids and titles; search text | 45 s after start, every 6 h; search; game page | Look up deals and prices (+ Background lookups for the timer) | `discover.gd`, `cheapshark.gd` |
 | 4 | api.steampowered.com `IStoreBrowseService/GetItems` | Wishlist and top-deal app ids, store country | Same | Same | `steam_api.gd` |
 | 5 | api.gg.deals | App ids, region, your API key (in the query, as GG.deals requires) | Same, only with a key | Same | `ggdeals.gd` |
-| 6 | github.com (`device-photos` release) | The asset name, i.e. your device model | Start until cached, weekly manifest | Background lookups (prefetch) | `app/scripts/device/photo.gd` |
+| 6 | github.com (`device-photos` release) | The asset name, i.e. your device model | Start until cached, weekly manifest; About or the welcome page showing the picture | Background lookups (every request; a cached picture still shows) | `app/scripts/device/photo.gd` |
 | 7 | Your maker's site (MSI, Lenovo, ASUS, OneXPlayer, AOKZOE, AYANEO, Acer, GPD, ...) | The image URL implies your model; your IP address | Same, when there's no free photo | Show maker photos, Background lookups | `photo.gd` |
 | 8 | Steam art CDN | App id | A tile needs art | — | `app/scripts/discover/art.gd` |
 | 9 | www.steamgriddb.com, cdn*.steamgriddb.com | A Steam app id or title; your key, else GameCove's project key (bearer header, dropped on cross-host redirects) | Change artwork (when you open it); automatic fill for library games with no cover, hero or logo, one request every 1.5 s, each game and kind at most weekly; Discover art Steam has none of | Look up game details (+ Background lookups for the automatic fill) | `app/scripts/library/art/art_service.gd`, `sgdb.gd`, `art.gd` |

@@ -275,7 +275,7 @@ func photo_for(device_id: String) -> Dictionary:
 	if not got.is_empty():
 		# A weekly look at the manifest still happens, so a photo whose license
 		# was withdrawn upstream drops out here too.
-		if http != null and _manifest_stale() and not _manifest_tried:
+		if http != null and _manifest_stale() and not _manifest_tried and _net_allowed():
 			_fetch_manifest()
 		return got
 	_fetch(device_id)
@@ -307,8 +307,14 @@ func cached(device_id: String) -> Dictionary:
 	return {"path": path, "credit": e["credit"].duplicate()}
 
 
+## Every request here is on GameCove's own initiative (a page showing the picture, the start-up prefetch), so
+## none is made with "Background lookups" off; what's cached still shows (review M22, problem 4).
+func _net_allowed() -> bool:
+	return preload("res://scripts/system/privacy.gd").background_allowed(prefs_path)
+
+
 func _fetch(device_id: String) -> void:
-	if http == null or _inflight.has(device_id):
+	if http == null or _inflight.has(device_id) or not _net_allowed():
 		return
 	if _manifest_stale() and not _manifest_tried:
 		if not device_id in _waiting:
@@ -505,7 +511,7 @@ func _maker_photo(device_id: String) -> Dictionary:
 
 func _fetch_maker(device_id: String) -> void:
 	var m := maker_entry(device_id)
-	if http == null or m.is_empty():
+	if http == null or m.is_empty() or not _net_allowed():
 		return
 	var url: String = m["url"]
 	if _maker_inflight.has(url):
