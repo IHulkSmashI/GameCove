@@ -279,3 +279,13 @@ func test_l21_game_file_names_are_unique_and_path_safe() -> void:
 	ok(c.has_game_profile("steam:12"), "legacy file found")
 	ok(FileAccess.file_exists(c.game_profile_path("steam:12")), "and moved to the unique name")
 	c.free()
+
+
+## e2e test_worker_races (seed 1015): switching the output left audio.volume showing the old sink's.
+func test_audio_output_switch_rereads_volume_and_mute() -> void:
+	var A := load("res://scripts/controls/providers/audio.gd")
+	var by := {}
+	for c in A.new().controls():
+		by[c.id] = c
+	ok("audio.volume" in by["audio.output"].affects and "audio.mute" in by["audio.output"].affects, "output affects volume and mute")
+	ok("audio.mic_mute" in by["audio.input"].affects, "input affects the mic mute")
