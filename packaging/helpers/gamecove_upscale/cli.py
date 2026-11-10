@@ -39,7 +39,10 @@ INSTALLS = ("choose", "apply", "xess-install", "game-update")
 def _state(home: str, gpu: dict) -> dict:
     v = games.versions(home)
     e = v["optiscaler"]
-    return {"optiscaler": {"version": e["version"], "installed": optiscaler.installed(home, e["version"])},
+    # the newest downloaded (an older one still runs games until it's updated); "latest": what GameCove would get now
+    pk = [p["version"] for p in optiscaler.packages(home) if p["layout"] == (e.get("layout") or "flat")]
+    have = e["version"] if optiscaler.installed(home, e["version"]) else (pk[0] if pk else None)
+    return {"optiscaler": {"version": have or e["version"], "installed": bool(have), "latest": e["version"]},
             "decky_framegen": framegen.state(home),
             "xess": xess.state(home) if games.vendor(gpu) == "intel" else None,
             "fsr4_xmx_missing": optiscaler.fsr4_xmx_missing(home),

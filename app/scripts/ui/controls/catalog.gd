@@ -49,7 +49,8 @@ const CARDS := {
 	"perf": [
 		["Overlay", "overlay", ["perf.overlay", "perf.overlay_position"],
 			["perf.overlay_opacity", "perf.overlay_scale", "perf.overlay_item.*"]],
-		["Upscaling", "upscale", ["perf.upscaler", "perf.frame_gen", "perf.upscale_recommended"], ["perf.upscale_undo"]],
+		["Upscaling", "upscale", ["perf.upscaler", "perf.frame_gen", "perf.upscale_recommended", "perf.upscale_game_update",
+			"perf.upscaler_update"], ["perf.upscale_undo"]],
 		["Frame generation", "frames", ["perf.lsfg", "perf.lsfg_multiplier"], ["perf.lsfg_flow_scale", "perf.lsfg_performance"]],
 		["Latency", "latency", ["perf.low_latency"], []],
 		["Compatibility", "wrench", ["perf.proton"], ["perf.launch_wrapper"]],
