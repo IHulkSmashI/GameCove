@@ -12,6 +12,7 @@ const Proton := preload("res://scripts/launch/proton.gd")
 const ActionRow := preload("res://scripts/ui/settings/action_row.gd")
 const Sheet := preload("res://scripts/ui/games/sheet.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const Motion := preload("res://scripts/ui/motion.gd")
 const SKit := preload("res://scripts/ui/settings/kit.gd")
 const Proc := preload("res://scripts/system/proc.gd")
 const Texts := preload("res://scripts/ui/texts_device.gd")
@@ -26,6 +27,9 @@ var builds: Array = []
 var release: Dictionary = {}
 var busy := ""        # "check" / "install" / "remove" / ""
 var rows := {}        # build name -> ActionRow
+## Builds listed at the last build (a new one pops).
+var _listed := {}
+var _listed_once := false
 var main_row: VBoxContainer
 var sheet: Control
 ## Called after an install or removal (Controls.detect_all, so the per-game
@@ -141,6 +145,13 @@ func _build() -> void:
 		r.pressed.connect(func(): open_build(build))
 		add_child(r)
 		rows[b["name"]] = r
+		# A build that wasn't there at the last read (just installed) pops.
+		if _listed_once and not _listed.has(b["name"]):
+			Motion.pop(r, 0.9, 0.36, 0.05)
+	_listed = {}
+	for b in builds:
+		_listed[b["name"]] = true
+	_listed_once = true
 	rebuilt.emit()
 	if keep == "main" and is_inside_tree():
 		Kit.focus_later(main_row.button)

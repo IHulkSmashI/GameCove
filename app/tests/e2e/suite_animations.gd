@@ -211,3 +211,27 @@ func test_shelves_ease_in_once() -> void:
 	h.set_games(h.games)
 	await w.frames(1)
 	eq(h.shelves()[0].modulate.a, 1.0, "a rebuild doesn't animate again")
+
+
+## The quick menu's tabs (Audio included) fade their cards in on LB / RB;
+## opening the menu itself adds nothing (its latency budget is suite_perf's).
+func test_quick_menu_tabs_fade_in() -> void:
+	await qam()
+	var q: Control = qm()
+	ok(q.visible, "menu open")
+	eq(q.body.modulate.a, 1.0, "on open: no fade on the cards")
+	var ids: Array = TC.TAB_IDS
+	var target := ids.find("audio")
+	if target < 0:
+		target = 1
+	for i in target:
+		await rb()
+	eq(ids[q.section], ids[target], "on the %s tab" % ids[target])
+	await w.frames(1)
+	ok(q.body.modulate.a < 1.0, "its cards fade in (a %.2f)" % q.body.modulate.a)
+	await w.wait_s(0.3)
+	eq(q.body.modulate.a, 1.0, "then fully shown")
+	var f: Control = focus()
+	ok(f != null and q.is_ancestor_of(f), "focus stays in the menu")
+	await b()
+	await w.idle()

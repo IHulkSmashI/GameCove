@@ -155,6 +155,7 @@ func test_card_check_install_remove() -> void:
 	eq(notes[-1], [TX.GE_INSTALLED % "GE-Proton10-26", "good"], "installed")
 	eq(changed.size(), 1, "Proton list refreshed")
 	ok(c.rows.has("GE-Proton10-26"), "new build listed")
+	ok(c._listed_once and c._listed.has("GE-Proton10-26"), "remembered as listed (it pops this once, not on later reads)")
 	eq(c.main_row.value_label.text, TX.GE_HAVE_LATEST % "GE-Proton10-26", "up to date")
 	c.remove("GE-Proton9-20")
 	eq(notes[-1], [TX.GE_REMOVED % "GE-Proton9-20", "good"], "removed")
