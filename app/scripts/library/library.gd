@@ -411,6 +411,26 @@ static func append_args(cmd: Array, args: String) -> Array[String]:
 	return out
 
 
+## The full store entry of a game (install path, prefix, config folders), with the user's
+## own prefix from the game's compatibility settings applied. {} when unknown. Cloud saves
+## (scripts/system/saves_service.gd) read it.
+func entry_for(key: String) -> Dictionary:
+	var entry: Dictionary = _entries.get(key, {})
+	if entry.is_empty():
+		return {}
+	var launcher := get_node_or_null("/root/Launcher") if is_inside_tree() else null
+	if launcher != null and launcher.has_method("compat_for") and entry.get("store", "") != "steam":
+		entry = apply_compat(entry, launcher.compat_for(key), "")
+	return entry.duplicate(true)
+
+
+## Store tools on this machine (legendary, gogdl, nile, umu-run, Heroic), looked up once.
+func tools() -> Dictionary:
+	if _tools.is_empty():
+		_tools = Common.find_tools(home, OS.get_environment("PATH"))
+	return _tools
+
+
 ## Starts the game through its store. Returns {"ok", "app_id", "pid", "scoped"}:
 ## app_id is what gamescope will know the game by (its Steam app id, or our own
 ## id for a scoped launch; 0 when gamescope can't tell), pid the process we

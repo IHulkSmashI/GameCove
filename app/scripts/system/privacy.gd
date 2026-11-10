@@ -6,7 +6,8 @@ extends RefCounted
 ## the user asks for it right then (opening a store page, pressing Check, searching). Each feature keeps its own
 ## switch too: "Look up deals and prices" (Discover settings price_lookups), "Show maker photos"
 ## (DevicePhoto, [device] maker_photo) and "Look up game details" ([privacy] metadata: Steam store details,
-## OpenCritic with the user's key, SteamGridDB art for games missing it).
+## OpenCritic with the user's key, SteamGridDB art for games missing it) and "Sync cloud saves" ([privacy]
+## cloud_saves: Epic and GOG save sync around a game, Settings > Saves).
 
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const PREFS_PATH := "user://settings.cfg"
@@ -45,6 +46,8 @@ const NETWORK_CALLS := [
 		"when": "When you open the Stream tab or wake a PC", "switch": "You start it"},
 	{"who": "EmuDeck, RetroDECK, ES-DE and Steam ROM Manager", "what": "Their own requests (Steam ROM Manager looks up art on SteamGridDB with its own settings). GameCove only reads their files on the handheld.",
 		"when": "Only while you have them open from the Emulation page", "switch": "You start it"},
+	{"who": "Epic and GOG (through legendary and heroic-gogdl)", "what": "Your save files for the Epic or GOG game you start or just closed, with your store sign-in: the stores' own cloud saves, as Heroic does. For a GOG game Heroic doesn't know, GOG's remote config is asked once for where the game keeps its saves (its client id only).",
+		"when": "Just before an Epic or GOG game starts and just after it ends; when you press Sync now", "switch": "Sync cloud saves (Settings > Saves; also per game)"},
 	{"who": "OS, Flatpak, fwupd and store tools", "what": "Their own update and sign-in requests.",
 		"when": "When you update or sign in; Flatpak apps also once a day, with no game running, if you turned on Update apps by themselves", "switch": "You start it (automatic app updates: off by default, and Background lookups)"},
 ]
@@ -80,6 +83,16 @@ static func set_background_allowed(on: bool, path := PREFS_PATH) -> bool:
 ## SteamGridDB requests at all, background or not.
 static func metadata_allowed(path := PREFS_PATH) -> bool:
 	return _switch(path, "metadata")
+
+
+## "Sync cloud saves" ([privacy] cloud_saves, default on): off = legendary and gogdl never sync saves, and
+## GOG's remote config is never asked.
+static func cloud_saves_allowed(path := PREFS_PATH) -> bool:
+	return _switch(path, "cloud_saves")
+
+
+static func set_cloud_saves_allowed(on: bool, path := PREFS_PATH) -> bool:
+	return SettingsFile.update_cfg(path, func(cfg: ConfigFile): cfg.set_value("privacy", "cloud_saves", on)) == OK
 
 
 static func set_metadata_allowed(on: bool, path := PREFS_PATH) -> bool:

@@ -72,6 +72,10 @@ costs far more:
   gamelists are read on the Library's scan thread: at start, after a rescan, and once more
   (the emulation entries only) when ES-DE, RetroDECK or an emulated game ends, to add its
   play time. Nothing of it runs while a game is in front.
+- **Cloud saves** run before a launch and after a game ends, never during one. **Battery
+  history** writes one small file at game start and end, sleep, wake and the charger (a few
+  sysfs reads each); **Sleep at low battery** reacts to Power's 15 s check. None adds a timer;
+  the warning's 30 s countdown runs only while it shows.
 
 `tests/e2e/suite_perf.gd` fails if the main loop runs more than 50 iterations or 70
 main-thread wake-ups a second behind a game, a Timer outside that list runs there, the

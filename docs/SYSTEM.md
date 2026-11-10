@@ -268,6 +268,45 @@ something, so nothing costs anything behind a game. All run as the user; none ne
 | Favourites, hidden games, collections | Menu on any tile, the game page's star and Manage, Library > Filter (View), Home's Favourites shelf, Quick menu > This game, Settings > Stores > Collections | Ours in `user://collections.json` through `settings_file.gd`; Steam's collections, favourites and hidden games read (never written) from `userdata/<account>/config/cloudstorage/cloud-storage-namespace-1.json` of the account that signed in last (static collections; dynamic ones stay in Steam). Turning off a Steam favourite or hidden game records an override in our file | `library/collections.gd`, `ui/games/collection_actions.gd` |
 | Emulation | Library > Filter > Emulation page, ES-DE's / RetroDECK's tile | Reads EmuDeck's `settings.sh`, RetroDECK's `retrodeck.cfg` / `.json`, ES-DE's `es_settings.xml`, `es_systems.xml` (names) and `gamelist.xml` (recently played); counts ROM folder files. Starts ES-DE / RetroDECK, EmuDeck's app (or RetroDECK's configurator) and Steam ROM Manager through `Library.launch` like any game (scope, launch overlay, quick menu, play time in `user://playtime.json`). Steam ROM Manager's shortcuts (`shortcuts.vdf`, launch lines through EmuDeck's launchers, RetroDECK, RetroArch or a known emulator, ROMs under `roms/<system>/`) become store `emu` games with Steam's grid art and start through `steam://rungameid/<64-bit id>`. Never writes their files; never bundles or downloads ROMs or BIOS | `library/stores/emu.gd`, `library/playtime.gd`, `ui/emulation_page.gd` |
 
+## Cloud saves (`scripts/system/saves_service.gd`, `cloud_saves.gd`, `save_backup.gd`)
+
+Epic and GOG games sync with the stores' own clouds, through the tools that already hold the sign-in, the same calls
+Heroic makes. Steam games keep Steam Cloud. Amazon games aren't covered: nile has no save sync.
+
+| Store | Tool | Look / before a launch / after a game / a conflict |
+| --- | --- | --- |
+| Epic | legendary (native, Heroic's bundled one, or `flatpak run --command=legendary com.heroicgameslauncher.hgl`) | `legendary -y sync-saves <app> --accept-path --skip-upload --skip-download` to look; `--skip-upload` downloads, `--skip-download` uploads, `--force-download` / `--force-upload` settle a conflict. `LEGENDARY_CONFIG_PATH` is the game's legendary folder, `WINEPREFIX` its prefix (`<prefix>/pfx` for Proton layouts) so legendary finds the save folder; it keeps it in `installed.json` `save_path` |
+| GOG | heroic-gogdl (native or Heroic's Flatpak) | `gogdl --auth-config-path <heroic>/gog_store/auth.json save-sync <folder> <id> --os windows --ts <last> --name <location>` with `--skip-upload` before a launch, `--skip-download` after, `--force-*` for a conflict. Folders from Heroic's `GamesConfig/<id>.json` `gogSaves`, else `store_cache/gog_library.json` `gog_save_location` with GOG's `<?VARIABLES?>` resolved in the prefix, else GOG's remote config for the game's client id; the timestamps start from Heroic's `gog_store/saveTimestamps.json` |
+
+Rules: never while a game runs (one worker thread, before `Library.launch()` and after `GameSession.ended`; a restore
+is refused while one runs). Epic: a side counts as changed when its newest save is past our last sync (60 s slack, as
+legendary's own same-age check); both changed, or never synced with saves on both sides, is a conflict the user
+settles (the launch waits; B starts nothing; "Decide later" plays without syncing). GOG: gogdl's own classification;
+the fresh timestamp it prints on a conflict is never kept. Before anything may overwrite saves on the handheld
+(legendary's download empties the folder first, gogdl's deletes files the cloud doesn't have) the folders are backed
+up with `tar` into `user://saves/backups/<game>/`; a download that fails puts the backup back. Settling a GOG conflict
+for this handheld first fetches the cloud's files into a scratch folder and keeps them as a backup too (gogdl's forced
+upload deletes cloud files the handheld doesn't have); Epic keeps earlier cloud saves itself. A save folder over 1 GiB
+(a game that saves into its install folder) isn't backed up, so nothing is downloaded over it. Offline, signed out or a
+failed step: the game starts, nothing is deleted, the status says so and the next launch or exit tries again. Every
+step runs under `timeout 90`. Status per game in `user://saves.cfg`; the game page's Cloud saves card and Settings >
+Saves show it.
+
+## Battery history and Sleep at low battery
+
+`scripts/system/battery_log.gd` records battery percent, energy (`energy_now`, else `charge_now` x
+`voltage_min_design`) and the time at game starts and ends, sleep (when GameCove puts it to sleep), wake and charger
+plug / unplug, the events GameSession and Power already send; no timer and no polling. Time in a game on battery adds
+to that game; a sleep only seen at the wake ends the stretch at the last level Power reported before it (`Power.slept_at`
+marks the last 15 s look before the sleep). After 20 minutes on battery a game's page shows "Drains about X W, ~Y h on a
+full charge" (energy_full / watts); About this device has a 7-day chart and the drain per game.
+
+`scripts/system/low_battery.gd` acts on Power's existing 15 s check (`battery_level`, `source_changed`): with
+**Sleep at low battery** on (Settings > Power > Battery, `power.low_battery_sleep` / `power.low_battery_sleep_at`,
+3 to 10 %, off by default, kept per handheld) and on battery at or below the level, a 30 s warning shows over
+everything (a running game too, as gamescope's overlay); any button stays awake (until the level drops 2 % more, the
+charger goes in or the level climbs back), the charger closes it, otherwise `systemctl suspend`.
+
 ## Sources
 
 - Bazzite: `system_files/deck/shared/usr/libexec/ogc/os-update`, `usr/share/polkit-1/…gamescope-session.policy`,
@@ -285,6 +324,12 @@ something, so nothing costs anything behind a game. All run as the user; none ne
   `src/dbus/polkit.rs`, `rootfs/usr/share/polkit-1/`, `rootfs/usr/share/inputplumber/schema/device_profile_v1.json`,
   `profiles/test.yaml`, `src/cli/device.rs` (<https://github.com/ShadowBlip/InputPlumber>, `6aca920`)
 - legendary `cli.py` (auth), heroic-gogdl `auth.py`/`args.py`, nile `cli.py`, `api/authorization.py`, `arguments.py`
+- Cloud saves: legendary `cli.py` `sync_saves`, `core.py` `get_save_path` / `check_savegame_state` / `download_saves`
+  (<https://github.com/legendary-gl/legendary>); heroic-gogdl `saves.py`, `args.py`
+  (<https://github.com/Heroic-Games-Launcher/heroic-gogdl>); Heroic `src/backend/save_sync.ts`,
+  `storeManagers/gog/games.ts` `syncSaves`, `storeManagers/gog/library.ts` `getSaveSyncLocation`,
+  `storeManagers/gog/electronStores.ts` (<https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher>); nile has no
+  save command (<https://github.com/imLinguin/nile>)
 
 
 ## GameCove's root actions (polkit)
