@@ -273,6 +273,24 @@ file exports `GAMECOVE_SESSION=1`), first runs `gamecove.x86_64 --headless --
 helper, then `steam -shutdown`, then switches. The root restores run in one background
 job waited for at most `GAMECOVE_ROOT_WAIT_S` (10 s), here and in
 `post_client_shutdown`: `timeout pkexec` only killed pkexec, never its root child.
+A restore that fails never holds the next one up: each runs by itself, and a failure ends
+the wait at once.
+
+What goes back, in order:
+
+1. In the app, before the switch starts (quick menu): Power stops everything that keeps
+   writing (`Power.request_leave`: Auto TDP with its levers put back, the charge hold, the
+   thermald hold, the 15 s check, the thermal guard), so nothing of ours lands after the
+   restores. If the switch fails or never comes, `request_cancel_leave` turns it back on. The
+   quick menu waits up to 75 s for `gamecove-session-select` and 20 s more for the logout.
+2. `--restore-baseline`: the everyday values in place of a running game's (Profiles), then
+   **the TDP, boost and fan mode the handheld had before GameCove** (`Power.restore_before`).
+   Power notes them at every start, before it applies GameCove's own
+   (`power_before.json` next to `power.cfg`, once per boot, so a GameCove that restarts
+   keeps the first record). The TDP is never put past the current power source's limit, a
+   fan curve from another tool ("custom") can't be put back, and nothing is remembered as
+   your choice: GameCove's own profile is what it applies the next time it starts.
+3. The root helper: the charge limit released, power-tune values restored, thermald started.
 
 ### If GameCove won't let you out
 
