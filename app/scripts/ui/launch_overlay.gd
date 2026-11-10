@@ -1,8 +1,12 @@
 extends Control
 ## Launch splash. Play zooms the art it was pressed on (Home's hero, the game
-## page's hero, a cover) up to full screen, crossfades it to the game's hero
-## art with the logo (or title) centred and a soft shimmer under it while the
-## game starts, then hands off: the moment our window loses focus (the game's
+## page's hero, a cover) up to full screen in about 0.2 s (quick off the mark,
+## a long soft landing), crossfades it to the game's hero art and pushes that
+## art in a touch (1.00 -> 1.04, darkening under the scrim) as the logo (or
+## title) settles in the middle with a soft shimmer under it. The game is
+## started the moment Play is pressed: none of this delays it. The "B Cancel"
+## hint only fades in when the game takes longer than HINT_AT to show. Then it
+## hands off: the moment our window loses focus (the game's
 ## window took the screen) everything stops and hides at once, so nothing of
 ## ours animates behind the game. A failed or cancelled launch plays the zoom
 ## backwards into where it came from.
@@ -20,26 +24,36 @@ const Backdrop := preload("res://scripts/ui/backdrop.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 
 signal cancel_requested(game: Dictionary)
+## On its way out with our window still in front (back(), or the timeout's
+## fade): the screen under it can come back.
+signal revealing
 
 const LAUNCH_TIMEOUT_S := 45.0
-## The zoom from the pressed art to full screen.
-const ZOOM_S := 0.5
+## The zoom from the pressed art to full screen (expo ease-out: most of the
+## way in the first few frames, then a long soft landing).
+const ZOOM_S := 0.2
 ## The pressed art's copy fades in over the original this fast (it drops the
 ## original's text and shading, so it doesn't pop).
-const CARD_IN_S := 0.08
+const CARD_IN_S := 0.05
 ## The hero art crossfades over the pressed art from ART_AT for ART_S.
-const ART_AT := 0.12
-const ART_S := 0.36
-## Logo, shimmer and "Launching…" settle in from TEXT_AT for TEXT_S.
-const TEXT_AT := 0.30
-const TEXT_S := 0.36
+const ART_AT := 0.04
+const ART_S := 0.16
+## Logo, shimmer and "Launching…" settle in from TEXT_AT for TEXT_S; the hero
+## art pushes in to PUSH_SCALE over the same time, so the two move together.
+const TEXT_AT := 0.06
+const TEXT_S := 0.22
+const PUSH_SCALE := 1.04
 ## One pass of the shimmer.
 const SHIMMER_S := 1.4
-## The slow push-in on the hero art while the game starts.
+## The slow push-in on the hero art while the game starts (on from PUSH_SCALE).
 const DRIFT_S := 14.0
-const DRIFT_SCALE := 1.05
+const DRIFT_SCALE := 1.07
+## The "B Cancel" hint fades in only once the launch has taken this long
+## (most games take the screen before it shows).
+const HINT_AT := 2.0
+const HINT_S := 0.3
 ## Back into the pressed art (failed or cancelled launch).
-const BACK_S := 0.32
+const BACK_S := 0.2
 ## Fade out after the timeout.
 const OUT_S := 0.25
 ## Corners of the zooming card when the source gives none.
@@ -279,20 +293,21 @@ func show_for(g: Dictionary, accent: Color = Color(0, 0, 0, 0), src: Dictionary 
 	art.modulate.a = 0.0 if crossfade else 1.0
 	for c in [_scrim, center, prompts]:
 		c.modulate.a = 0.0
-	center.scale = Vector2(0.94, 0.94)
+	center.scale = Vector2(0.96, 0.96)
 	_tw = create_tween().set_parallel(true)
-	# Quick off the mark (the press answers at once), soft landing.
-	_tw.tween_property(card, "position", full.position, ZOOM_S).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
-	_tw.tween_property(card, "size", full.size, ZOOM_S).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
-	_tw.tween_method(_set_radius, _from_radius, 0.0, ZOOM_S).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	# Quick off the mark (the press answers at once), long soft landing.
+	_tw.tween_property(card, "position", full.position, ZOOM_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	_tw.tween_property(card, "size", full.size, ZOOM_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	_tw.tween_method(_set_radius, _from_radius, 0.0, ZOOM_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	_tw.tween_property(base, "modulate:a", 1.0, ZOOM_S * 0.6)
 	_tw.tween_property(card, "modulate:a", 1.0, CARD_IN_S if from_tex != null else ZOOM_S * 0.6)
 	if crossfade:
 		_tw.tween_property(art, "modulate:a", 1.0, ART_S).set_delay(ART_AT)
-	_tw.tween_property(_scrim, "modulate:a", 1.0, TEXT_S).set_delay(TEXT_AT - 0.1)
-	_tw.tween_property(center, "modulate:a", 1.0, TEXT_S).set_delay(TEXT_AT)
-	_tw.tween_property(center, "scale", Vector2.ONE, TEXT_S + 0.1).set_delay(TEXT_AT).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_tw.tween_property(prompts, "modulate:a", 1.0, TEXT_S).set_delay(TEXT_AT + 0.1)
+	# The art pushes in and darkens (the scrim) while the title settles: one move.
+	_tw.tween_property(art, "scale", Vector2(PUSH_SCALE, PUSH_SCALE), TEXT_S).set_delay(TEXT_AT).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	_tw.tween_property(_scrim, "modulate:a", 1.0, TEXT_S).set_delay(TEXT_AT)
+	_tw.tween_property(center, "modulate:a", 1.0, TEXT_S * 0.8).set_delay(TEXT_AT)
+	_tw.tween_property(center, "scale", Vector2.ONE, TEXT_S).set_delay(TEXT_AT).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 	_tw.chain().tween_callback(_opened)
 	_loop = create_tween().set_loops()
 	_loop.tween_property(shimmer, "phase", 1.0, SHIMMER_S).from(0.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -300,12 +315,19 @@ func show_for(g: Dictionary, accent: Color = Color(0, 0, 0, 0), src: Dictionary 
 		_timer.start()
 
 
+## How long the way in takes (the longest of its parts).
+static func open_s() -> float:
+	return maxf(ZOOM_S, maxf(ART_AT + ART_S, TEXT_AT + TEXT_S))
+
+
 func _opened() -> void:
 	phase = "waiting"
 	_set_card(_full_rect(), 0.0)
 	card.clip_children = CanvasItem.CLIP_CHILDREN_DISABLED   # full screen, square: no mask pass
-	_drift = create_tween()
+	_drift = create_tween().set_parallel(true)
 	_drift.tween_property(art, "scale", Vector2(DRIFT_SCALE, DRIFT_SCALE), DRIFT_S).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	# Still waiting after HINT_AT: say B cancels (counted from Play).
+	_drift.tween_property(prompts, "modulate:a", 1.0, HINT_S).set_delay(maxf(0.0, HINT_AT - open_s()))
 
 
 ## The game took the screen (our window lost focus), or it timed out. Hides at
@@ -315,6 +337,8 @@ func finish(animate := false) -> void:
 	if phase == "idle":
 		return
 	_stop_all()
+	if animate:
+		revealing.emit()
 	if not animate or Motion.reduce:
 		_hide_now()
 		return
@@ -331,6 +355,7 @@ func back() -> void:
 	if phase == "idle" or phase == "closing":
 		return
 	_stop_all()
+	revealing.emit()   # the screen under it back in place first: the zoom goes back into its art
 	if Motion.reduce:
 		_hide_now()
 		return
@@ -344,18 +369,18 @@ func back() -> void:
 	card.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
 	_tw = create_tween().set_parallel(true)
 	for c in [center, prompts]:
-		_tw.tween_property(c, "modulate:a", 0.0, 0.12)
-	_tw.tween_property(_scrim, "modulate:a", 0.0, 0.2)
+		_tw.tween_property(c, "modulate:a", 0.0, BACK_S * 0.4)
+	_tw.tween_property(_scrim, "modulate:a", 0.0, BACK_S * 0.6)
 	if src_art.texture != null and src_art.texture != art.texture:
-		_tw.tween_property(art, "modulate:a", 0.0, 0.2)
+		_tw.tween_property(art, "modulate:a", 0.0, BACK_S * 0.6)
 	_tw.tween_property(art, "scale", Vector2.ONE, BACK_S).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_tw.tween_property(card, "position", to.position, BACK_S).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_tw.tween_property(card, "size", to.size, BACK_S).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_tw.tween_property(card, "position", to.position, BACK_S).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	_tw.tween_property(card, "size", to.size, BACK_S).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 	_tw.tween_method(_set_radius, _card_box.corner_radius_top_left, _from_radius, BACK_S)
 	_tw.tween_property(base, "modulate:a", 0.0, BACK_S)
 	if not has_to:
 		_tw.tween_property(card, "modulate:a", 0.0, BACK_S)
-	_tw.chain().tween_property(card, "modulate:a", 0.0, 0.08)
+	_tw.chain().tween_property(card, "modulate:a", 0.0, 0.05)
 	_tw.chain().tween_callback(_hide_now)
 
 
