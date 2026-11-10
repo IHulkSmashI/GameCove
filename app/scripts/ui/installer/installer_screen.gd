@@ -37,6 +37,7 @@ const Plan := preload("res://scripts/installer/plan.gd")
 const Target := preload("res://scripts/installer/target.gd")
 const Paths := preload("res://scripts/installer/paths.gd")
 const Service := preload("res://scripts/installer/installer_service.gd")
+const UserData := preload("res://scripts/installer/user_data.gd")
 const SettingsWriter := preload("res://scripts/installer/settings_writer.gd")
 const Login := preload("res://scripts/system/store_login.gd")
 
@@ -1572,12 +1573,51 @@ func _build_uninstall() -> void:
 	var had: Array = target.get("state", {}).get("fixes", []) if target.get("state", {}).get("fixes", []) is Array else []
 	if not had.is_empty():
 		var f := _bool("remove_fixes", TI.REMOVE_FIXES, bool(plan.choices["remove_fixes"]), TI.REMOVE_FIXES_LINES, "sparkle")
-		f.collapse_hint = false
+		_always_explain(f, TI.REMOVE_FIXES_LINES)
 		f.changed.connect(func(v): plan.set_choice("remove_fixes", v))
-	var k := _bool("keep_settings", TI.KEEP_SETTINGS, bool(plan.choices["keep_settings"]), TI.KEEP_SETTINGS_LINES, "settings")
-	k.collapse_hint = false
-	k.changed.connect(func(v): plan.set_choice("keep_settings", v))
+	# Save backups aren't settings (final review, high 9): they stay unless their own switch, which says how
+	# many and how big, is turned on. It only shows with "Keep my settings" off and when there are any.
+	var stats: Dictionary = UserData.save_backup_stats(installer.user_dir if installer != null else OS.get_user_data_dir())
+	var has_backups := int(stats["backups"]) > 0
+	var keep_lines: Dictionary = TI.KEEP_SETTINGS_LINES.duplicate()
+	if has_backups:
+		keep_lines[false] = str(keep_lines[false]) + TI.KEEP_SETTINGS_SAVES
+	var k := _bool("keep_settings", TI.KEEP_SETTINGS, bool(plan.choices["keep_settings"]), keep_lines, "settings")
+	_always_explain(k, keep_lines)
+	k.changed.connect(_on_keep_settings)
+	if has_backups and not bool(plan.choices["keep_settings"]):
+		var what: String = TI.backups_text(int(stats["backups"]), int(stats["games"]), UserData.size_text(int(stats["bytes"])))
+		var where: String = (installer.user_dir if installer != null else OS.get_user_data_dir()).path_join(UserData.SAVE_BACKUPS)
+		var home_dir := OS.get_environment("HOME")
+		if home_dir.length() > 1 and where.begins_with(home_dir + "/"):
+			where = "~" + where.substr(home_dir.length())
+		var lines := {false: TI.REMOVE_SAVE_BACKUPS_LINES[false] % [what, where], true: TI.REMOVE_SAVE_BACKUPS_LINES[true] % what}
+		var b := _bool("remove_save_backups", TI.REMOVE_SAVE_BACKUPS, bool(plan.choices["remove_save_backups"]), lines, "x")
+		_always_explain(b, lines)
+		b.changed.connect(func(v): plan.set_choice("remove_save_backups", v))
 	body.add_child(SKit.note(TI.SUMMARY_PASSWORD, "info", "Password"))
+
+
+## The line under a switch stays visible, focused or not: on this page it says what gets deleted.
+## (collapse_hint alone changes nothing until the row redraws, so these lines never showed
+## while the Remove button had the focus, which is where this page starts.)
+func _always_explain(row: VBoxContainer, lines: Dictionary) -> void:
+	row.collapse_hint = false
+	row.set_explainer(func(v): return lines.get(v, ""))
+
+
+## "Keep my settings" changed: the save-backups switch comes and goes with it, and deleting
+## them is never left on from an earlier visit.
+func _on_keep_settings(v: Variant) -> void:
+	plan.set_choice("keep_settings", v)
+	plan.set_choice("remove_save_backups", false)
+	if plan.step != "uninstall":
+		return
+	show_step()
+	var row := body.find_child("keep_settings", true, false)
+	if row != null and row.get("button") is Control and is_inside_tree():
+		row.button.grab_focus()
+		_update_hints()
 
 
 func _build_finish() -> void:

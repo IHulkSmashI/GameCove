@@ -127,6 +127,8 @@ static func defaults(target: Dictionary, device_row: Dictionary, prefs: Dictiona
 		"country": "",
 		"remove_fixes": true,
 		"keep_settings": true,
+		# only read when keep_settings is off: save backups go only when asked for by name (final review, high 9)
+		"remove_save_backups": false,
 		"xess_driver": false,
 		"moonlight": false,
 	}
@@ -230,7 +232,7 @@ func set_choice(key: String, value: Variant) -> bool:
 		"theme":
 			if not Themes.has_theme(str(value)):
 				return false
-		"steam_control", "auto_tdp", "match_art", "reduce_motion", "remove_fixes", "keep_settings", "moonlight":
+		"steam_control", "auto_tdp", "match_art", "reduce_motion", "remove_fixes", "keep_settings", "remove_save_backups", "moonlight":
 			if not value is bool:
 				return false
 		"xess_driver":

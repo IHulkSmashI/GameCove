@@ -175,6 +175,42 @@ func test_maintenance_and_uninstall_pages() -> void:
 	_free(s)
 
 
+## Final review, high 9: save backups have their own switch, with how many and how big; it only shows
+## with "Keep my settings" off, starts off, and the text says what really happens.
+func test_uninstall_asks_about_save_backups_separately() -> void:
+	var t := F.target("bazzite", {"installed": true, "maintenance": true, "state": {"version": "0.2.0", "method": "rpm-ostree", "fixes": []}})
+	var s := _screen(t)
+	var user: String = ProjectSettings.globalize_path("user://test_installer_ui/userdata/GameCove")
+	s.installer.user_dir = user
+	for g in ["epic_a", "gog_b"]:
+		DirAccess.make_dir_recursive_absolute(user + "/saves/backups/" + g)
+		FileAccess.open(user + "/saves/backups/%s/20261110-120000.json" % g, FileAccess.WRITE).store_string("{}")
+		FileAccess.open(user + "/saves/backups/%s/20261110-120000-0.tar.gz" % g, FileAccess.WRITE).store_string("save")
+	FileAccess.open(user + "/saves/backups/epic_a/20261110-130000.json", FileAccess.WRITE).store_string("{}")
+	s.maintenance("uninstall")
+	ok(s.body.find_child("remove_save_backups", true, false) == null, "kept settings: no question about backups")
+	ok(s.body.find_child("keep_settings", true, false)._hint.visible, "what a switch does is shown without focusing it")
+	var keep: Node = s.body.find_child("keep_settings", true, false)
+	keep.step(1)
+	eq(s.plan.choices["keep_settings"], false, "settings off")
+	var row: Node = s.body.find_child("remove_save_backups", true, false)
+	ok(row != null, "the save-backups switch shows")
+	eq(s.plan.choices["remove_save_backups"], false, "and starts off")
+	ok(row._hint.visible, "the count and size are on screen before Remove is pressed")
+	var hint := str(row.hint_text())
+	ok(hint.contains("3 save backups of 2 games") and hint.contains("KB") and hint.contains(user + "/saves/backups"), "says how many, how big and where: " + hint)
+	var off_line := str(s.body.find_child("keep_settings", true, false).hint_text())
+	ok(off_line.contains("Art we changed in Steam goes back") and off_line.contains("save backups stay unless"), "the Off line says what happens: " + off_line)
+	ok(not off_line.contains("downloads are deleted too"), "the old line is gone")
+	row.step(1)
+	eq(s.plan.choices["remove_save_backups"], true, "turned on by the user")
+	ok(str(s.body.find_child("remove_save_backups", true, false).hint_text()).contains("deleted for good"), "says it can't be undone")
+	s.body.find_child("keep_settings", true, false).step(1)
+	eq(s.plan.choices["remove_save_backups"], false, "keeping settings again forgets the delete choice")
+	ok(s.body.find_child("remove_save_backups", true, false) == null, "and hides the switch")
+	_free(s)
+
+
 func test_art_step_on_the_desktop() -> void:
 	var s := _screen(F.target("bazzite"))
 	s.pick_mode("easy")
