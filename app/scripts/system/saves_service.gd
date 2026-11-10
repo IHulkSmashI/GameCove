@@ -600,7 +600,15 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 			var folder := str(plan["save_path"]) if str(plan["save_path"]) != "" else CloudSaves.epic_save_path(str(entry.get("config_dir", "")), app)
 			if choice == "cloud":
 				return _epic_download(key, entry, plan, app, {}, "force_download", {"epic_path": folder})
-			# Epic keeps the earlier cloud saves next to the new one, so uploading loses nothing there
+			# Epic keeps the earlier cloud saves next to the new one, so uploading loses nothing there.
+			# legendary names the upload by the newest local file's time and every device takes the
+			# newest name, so an older save kept on purpose would lose again: its newest file is
+			# stamped now (the content isn't touched).
+			var newest := CloudSaves.newest_file(folder)
+			if newest != "":
+				var touched: Dictionary = run.call("touch", PackedStringArray(["-c", "--", newest]))
+				if int(touched.get("code", -1)) != 0:
+					return _set_status(key, "failed", "couldn't mark this handheld's save as the newest")
 			var up := _legendary(plan, app, "force_upload")
 			if up["state"] in ["offline", "failed"]:
 				return _set_status(key, up["state"], str(up.get("error", "")))

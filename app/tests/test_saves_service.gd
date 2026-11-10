@@ -68,8 +68,8 @@ func _world(name: String) -> Dictionary:
 	s.tools_lookup = func() -> Dictionary: return {"legendary": "/bin/legendary", "gogdl": "/bin/gogdl", "heroic_flatpak": []}
 	w["handler"] = func(_tool: String, _args: Array) -> Dictionary: return {"code": 0, "out": ""}
 	s.run = func(program: String, args: PackedStringArray) -> Dictionary:
-		if program == "tar":
-			return ExecSafe.run("tar", args)
+		if program in ["tar", "touch"]:
+			return ExecSafe.run(program, args)
 		var a := Array(args)
 		# timeout -k 5 90 env ... /bin/tool args
 		var i := a.find("/bin/legendary")

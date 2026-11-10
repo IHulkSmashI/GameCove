@@ -494,3 +494,29 @@ func test_choice_backups_are_kept_apart() -> void:
 	eq(by_reason.get("cloud_copy"), true, "the cloud copy")
 	eq(by_reason.get("before_download"), false, "the everyday one from the sync")
 	_done(w)
+
+
+# ---- Epic: "Keep this handheld's save" holds ------------------------------------------------------
+
+## legendary names an upload by the newest local file's time, and "the" cloud save is the
+## newest name. An older local save, kept on purpose, went up and still lost to the cloud's.
+func test_epic_keep_local_becomes_the_newest_cloud_save() -> void:
+	var w := _world("epic_keep_local")
+	var cloud: Object = w["epic_cloud"]
+	cloud.saves.append({"t": T0 + 9000, "files": {"world.sav": "the other device's later save"}})
+	Fakes.put(w["esaves"].path_join("world.sav"), "this handheld's older save", T0)
+	Fakes.put(w["esaves"].path_join("options.ini"), "older still", T0 - 500)
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	ok(got[0].has("conflict"), "never synced, both have saves: a conflict")
+	w["s"].resolve(w["epic"], "local")
+	eq(cloud.saves[-1]["files"]["world.sav"], "this handheld's older save", "the kept save is the cloud's newest")
+	eq(cloud.saves.size(), 2, "the other one is still there in Epic's history")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "this handheld's older save", "the file's content is untouched")
+	eq(int(FileAccess.get_modified_time(w["esaves"].path_join("options.ini"))), T0 - 500, "only the newest file's time moved")
+	# another device (or this one's next launch) now gets the kept save
+	got.clear()
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the next launch starts")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "this handheld's older save", "and nothing came down over it")
+	_done(w)
