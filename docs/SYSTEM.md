@@ -310,6 +310,10 @@ full charge" (energy_full / watts); About this device has a 7-day chart and the 
 3 to 10 %, off by default, kept per handheld) and on battery at or below the level, a 30 s warning shows over
 everything (a running game too, as gamescope's overlay); any button stays awake (until the level drops 2 % more, the
 charger goes in or the level climbs back), the charger closes it, otherwise `systemctl suspend`.
+Two things never start the countdown: one odd reading (a level that lands at the line from more than 2 % above,
+or with no reading before it, is read again from the battery 5 s later and only counts if it's still there),
+and a charger the kernel doesn't list as `Mains` or `USB` (the battery's own `status` saying `Charging` or
+`Full` is believed, at the warning and again before the sleep).
 
 ## Sources
 

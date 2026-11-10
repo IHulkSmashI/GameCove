@@ -96,8 +96,9 @@ the library changes, not while a game runs.
   play time. Nothing of it runs while a game is in front.
 - **Cloud saves** run before a launch and after a game ends, never during one. **Battery
   history** writes one small file at game start and end, sleep, wake and the charger (a few
-  sysfs reads each); **Sleep at low battery** reacts to Power's 15 s check. None adds a timer;
-  the warning's 30 s countdown runs only while it shows.
+  sysfs reads each); **Sleep at low battery** reacts to Power's 15 s check. None adds a timer that
+  keeps running; the warning's 30 s countdown runs only while it shows, and a low reading that
+  comes out of nowhere gets one 5 s one-shot to be read again.
 - **Recording**, only while you record (you start it; there is no always-on replay buffer):
   GPU Screen Recorder captures through KMS and encodes H.264 on the GPU's video engine, so
   the game's own frame time barely moves; GameCove's part is one thread blocked on the

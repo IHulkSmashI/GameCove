@@ -91,7 +91,29 @@ func test_low_battery_warns_and_any_button_stays_awake() -> void:
 	low.suspend = func() -> void: slept[0] += 1
 	low.settings = func() -> Dictionary: return {"on": true, "at": 5}
 	low.suppressed = false
+	low.confirm_s = 0.2
+	# final review (Low): one odd reading must not start the countdown. The battery
+	# file still says what it said; only the report says 5.
+	var bat: String = preload("res://scripts/system/battery_log.gd").battery_dir(w.root)
+	ok(bat != "", "the fixture has a battery")
+	var real := FileAccess.get_file_as_string(bat + "capacity").strip_edges()
+	ok(real.to_int() > 10, "which isn't low (%s %%)" % real)
 	power().battery_level.emit(5, false)
+	await w.wait_s(0.6)
+	await w.idle()
+	ok(main().low_dialog == null, "a 5 %% report out of nowhere, with the battery really at %s %%: no warning" % real)
+	eq(slept[0], 0, "and no sleep")
+	# the battery really is at 5 %, on battery: read again, then the warning
+	var f := FileAccess.open(bat + "capacity", FileAccess.WRITE)
+	f.store_string("5\n")
+	f.close()
+	var st := FileAccess.open(bat + "status", FileAccess.WRITE)
+	st.store_string("Discharging\n")
+	st.close()
+	power().battery_level.emit(40, false)
+	power().battery_level.emit(5, false)
+	ok(main().low_dialog == null, "not before the second look")
+	ok(await until(func(): return main().low_dialog != null and is_instance_valid(main().low_dialog), 3000), "then the 30 s warning shows")
 	await w.idle()
 	ok(main().low_dialog != null and is_instance_valid(main().low_dialog), "the 30 s warning shows")
 	await press(JOY_BUTTON_X)

@@ -28,6 +28,7 @@ const KNOWN := {
 	"scripts/ui/slider_row.gd": [1, "one-shot settle after a slider change"],
 	"scripts/ui/controls/color_row.gd": [1, "one-shot settle after a colour change"],
 	"scripts/ui/controls/keep_dialog.gd": [1, "countdown only while the Keep this? dialog is open"],
+	"scripts/system/low_battery.gd": [1, "one-shot 5 s re-read, only when a battery reading lands at the sleep line out of nowhere (a glitch must not start the countdown)"],
 	"scripts/ui/low_battery_dialog.gd": [1, "30 s countdown only while the Sleep at low battery warning is open (started by Power's 15 s check)"],
 	"scripts/ui/device/controller_panel.gd": [1, "only while a button is held"],
 	"scripts/ui/launch_overlay.gd": [1, "launch timeout; the overlay finishes when the game takes focus"],

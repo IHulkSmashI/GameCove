@@ -14,8 +14,10 @@ const Catalog := preload("res://scripts/ui/controls/catalog.gd")
 
 ## A watcher with settings `s` and a suspend that only counts.
 func _low(s: Dictionary) -> Dictionary:
-	var w := {"slept": 0, "warned": [], "cancelled": 0, "plugged": false}
+	var w := {"slept": 0, "warned": [], "cancelled": 0, "plugged": false, "level": -1, "status": "Discharging"}
 	var l: Node = Low.new()
+	l.level_now = func() -> int: return int(w["level"])
+	l.battery_status = func() -> String: return str(w["status"])
 	l.settings = func() -> Dictionary: return s
 	l.plugged_now = func() -> bool: return bool(w["plugged"])
 	l.suspend = func() -> void: w["slept"] = int(w["slept"]) + 1
@@ -52,6 +54,7 @@ func test_warns_only_on_battery_at_the_level_when_on() -> void:
 func test_a_button_holds_it_off_and_the_charger_cancels() -> void:
 	var w := _low({"on": true, "at": 8})
 	var l: Node = w["l"]
+	l.on_level(9, false)
 	l.on_level(8, false)
 	l.cancel()
 	eq(w["slept"], 0, "a button: stays awake")
@@ -70,17 +73,108 @@ func test_a_button_holds_it_off_and_the_charger_cancels() -> void:
 	l.free()
 
 
+## Final review (Low): one reading of 0 started the 30 s countdown to sleep.
+func test_one_odd_reading_never_starts_the_countdown() -> void:
+	var w := _low({"on": true, "at": 5})
+	var l: Node = w["l"]
+	l.on_level(62, false)
+	l.on_level(0, false)     # the gauge says 0 for a moment
+	eq(w["warned"], [], "a fall from 62 to 0 isn't believed at once")
+	w["level"] = 62
+	l.confirm_reading()      # read again a few seconds later: it's 62
+	eq(w["warned"], [], "it was a glitch: no warning")
+	l.on_level(62, false)
+	eq(w["warned"], [], "and none when the level comes back")
+	eq(w["slept"], 0, "nothing sleeps")
+	# a real fall (a long sleep on a low battery, then awake): confirmed by the second look
+	l.on_level(4, false)
+	eq(w["warned"], [], "not at once")
+	w["level"] = 4
+	l.confirm_reading()
+	eq(w["warned"], [4], "still 4 % a few seconds later: the warning")
+	l.cancel()
+	# the first reading after the start has nothing before it
+	var w2 := _low({"on": true, "at": 5})
+	var l2: Node = w2["l"]
+	l2.on_level(3, false)
+	eq(w2["warned"], [], "the very first reading is looked at twice too")
+	l2.on_source(false)
+	eq(w2["warned"], [], "and an unplug meanwhile doesn't jump the check")
+	w2["level"] = 3
+	l2.confirm_reading()
+	eq(w2["warned"], [3], "then it counts")
+	# a second low report before the second look is its own confirmation
+	var w3 := _low({"on": true, "at": 5})
+	var l3: Node = w3["l"]
+	l3.on_level(40, false)
+	l3.on_level(1, false)
+	l3.on_level(0, false)
+	eq(w3["warned"], [0], "two low reports in a row: believed")
+	# a battery that can't be read when the second look comes: nothing happens on a guess
+	var w4 := _low({"on": true, "at": 5})
+	var l4: Node = w4["l"]
+	l4.on_level(40, false)
+	l4.on_level(0, false)
+	w4["level"] = -1
+	l4.confirm_reading()
+	eq(w4["warned"], [], "unreadable: no warning on a guess")
+	for x in [l, l2, l3, l4]:
+		x.free()
+
+
+## Final review (Low): a charger the kernel doesn't list as Mains or USB left
+## `plugged` false, and the countdown started while charging.
+func test_a_charger_the_kernel_doesnt_list_never_starts_the_countdown() -> void:
+	var w := _low({"on": true, "at": 5})
+	var l: Node = w["l"]
+	w["status"] = "Charging"
+	l.on_level(6, false)
+	l.on_level(5, false)     # Power says "not plugged": it knows no charger
+	eq(w["warned"], [], "the battery says Charging: no warning")
+	l.on_level(4, false)
+	eq(w["warned"], [], "nor a percent later")
+	w["status"] = "Discharging"
+	l.on_level(3, false)
+	eq(w["warned"], [3], "really on battery: the warning")
+	w["status"] = "Charging"
+	l.confirm()
+	eq(w["slept"], 0, "the charger went in during the countdown (unlisted): no sleep")
+	w["status"] = "Full"
+	ok(l.on_external_power(), "Full counts as powered too")
+	w["status"] = "Not charging"
+	ok(not l.on_external_power(), "anything else leaves it to Power's own answer")
+	l.free()
+	# the real readers, on a fixture battery
+	var root := ProjectSettings.globalize_path("user://test_low_battery_sys")
+	var bat := root + "/sys/class/power_supply/BAT0/"
+	DirAccess.make_dir_recursive_absolute(bat)
+	for pair in [["type", "Battery"], ["capacity", "7"], ["status", "Charging"]]:
+		var f := FileAccess.open(bat + pair[0], FileAccess.WRITE)
+		f.store_string(pair[1] + "\n")
+		f.close()
+	eq(Low.read_level(root), 7, "the level, straight from the battery")
+	eq(Low.read_status(root), "Charging", "and its status")
+	eq(Low.read_level(root + "/nope"), -1, "no battery: unknown")
+	eq(Low.read_status(root + "/nope"), "", "no status")
+	for n in ["type", "capacity", "status"]:
+		DirAccess.remove_absolute(bat + n)
+	for d in [bat, root + "/sys/class/power_supply", root + "/sys/class", root + "/sys", root]:
+		DirAccess.remove_absolute(d)
+
+
 func test_follows_powers_signals() -> void:
 	var w := _low({"on": true, "at": 5})
 	var l: Node = w["l"]
 	var power: Node = PowerScript.new()
 	l.setup(power, null)
 	l.settings = func() -> Dictionary: return {"on": true, "at": 5}
+	l.battery_status = func() -> String: return "Discharging"
+	power.battery_level.emit(6, false)
 	power.battery_level.emit(4, false)
 	eq(w["warned"], [4], "Power's 15 s check reports the level")
 	power.source_changed.emit(true)
 	eq(w["cancelled"], 1, "and the charger")
-	ok(not FileAccess.get_file_as_string("res://scripts/system/low_battery.gd").contains("Timer.new()"), "no timer of its own")
+	ok(not FileAccess.get_file_as_string("res://scripts/system/low_battery.gd").contains("Timer.new()"), "no timer that keeps running")
 	power.free()
 	l.free()
 
