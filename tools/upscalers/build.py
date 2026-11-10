@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """Build upscalers.json and the mirror's new files (.github/workflows/upscalers.yml runs this nightly).
 
+Promotion rules (review 2, problem 8; the owner wants the newest builds, with these guards):
+  - only from each component's official upstream repository (gamecove_upscale.mirror.UPSTREAM, reviewed in-repo);
+  - only a full release (never a pre-release or draft) published at least MIN_AGE_H (72) hours ago; a rolling
+    asset or a git file only once it has been unchanged that long. A newer build simply waits;
+  - xess-xmx-linux's index entry lists the sha256 of every shell script in it; devices take a newer build only when
+    those match the scripts reviewed in versions.json, and the helper checks them again before running install.sh.
+
 For every upscaler component GameCove installs:
   1. find the newest upstream build: the GitHub releases API (OptiScaler, the OptiScaler v10 nightly, fakenvapi,
      xess-xmx-linux, REFramework), the rolling OptiPatcher asset (downloaded and hashed: a new hash is a new build),
@@ -42,6 +49,7 @@ from gamecove_upscale import downloads, mirror  # noqa: E402
 API = "https://api.github.com"
 MAX_FILE = 1 << 30
 ASSETS_PER_TAG = 950          # GitHub allows 1000 assets per release; then "upscalers-2", ...
+MIN_AGE_H = 72                # a build is promoted only once it has been out this long (owner, 2026-11-10)
 
 # where each component comes from upstream (versions.json keeps how it's installed)
 SOURCES = {
@@ -56,7 +64,7 @@ SOURCES = {
     "fakenvapi": {"kind": "release", "repo": "FakeMichau/fakenvapi", "asset": "fakenvapi-*.7z", "prerelease": False,
                   "version": "tag", "require": ["fakenvapi.dll"], "inner": ["fakenvapi.dll"]},
     "xess_xmx_linux": {"kind": "release", "repo": "HHHHanasak1/xess-xmx-linux", "asset": "xess-xmx-linux-*.zip",
-                       "prerelease": False, "version": "tag", "require": ["install.sh", "uninstall.sh"]},
+                       "prerelease": False, "version": "tag", "require": ["install.sh", "uninstall.sh"], "scripts": True},
     "reframework": {"kind": "release", "repo": "onehoon/REFramework", "asset": "REFramework.zip", "prerelease": False,
                     "version": "tag", "require": ["dinput8.dll"], "inner": ["dinput8.dll"]},
     "fsr4_amd": {"kind": "git-files", "repo": "GPUOpen-LibrariesAndSDKs/FidelityFX-SDK", "ref": "",
@@ -66,6 +74,31 @@ SOURCES = {
                  "files": ["amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll"]},
 }
 ARCHIVES = (".7z", ".zip", ".tar.gz", ".tgz", ".tar.xz", ".tar")
+
+
+def upstream_prefix(comp: str, spec: dict) -> str:
+    """Where `comp` may come from by its spec; must be exactly mirror.UPSTREAM's pin for it."""
+    if spec["kind"] in ("release", "rolling"):
+        return f"https://github.com/{spec['repo']}/releases/download/"
+    return f"https://raw.githubusercontent.com/{spec['repo']}/"
+
+
+def check_sources(sources: dict | None = None) -> None:
+    """Every component's repository is the official one pinned in mirror.UPSTREAM (raises otherwise)."""
+    for comp, spec in (sources or SOURCES).items():
+        if upstream_prefix(comp, spec) != mirror.UPSTREAM.get(comp):
+            raise ValueError(f"{comp}: {spec['repo']} isn't the official upstream pinned in mirror.UPSTREAM")
+
+
+def _need_upstream(comp: str, url: str) -> None:
+    if not mirror.from_upstream(comp, url):
+        raise ValueError(f"{comp}: {url} isn't from its official upstream ({mirror.UPSTREAM.get(comp)})")
+
+
+def cutoff_for(now: str | None) -> str:
+    """The newest publish time a build may have to be promoted (now - MIN_AGE_H), as GitHub writes times."""
+    t = dt.datetime.strptime(now, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc) if now else dt.datetime.now(dt.timezone.utc)
+    return (t - dt.timedelta(hours=MIN_AGE_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class Net:
@@ -163,9 +196,10 @@ class Mirror:
 
 
 # ---- checking a file ------------------------------------------------------------------------------------------------
-def check_archive(path: str, name: str, spec: dict, work: str) -> dict:
+def check_archive(path: str, name: str, spec: dict, work: str, scripts_out: dict | None = None) -> dict:
     """The helper's extraction checks, then what GameCove needs must be in it. Returns {relative path: sha256} of
-    the files listed in spec["inner"]."""
+    the files listed in spec["inner"]. With spec["scripts"], scripts_out gets {path relative to the folder holding
+    install.sh: sha256} of every .sh."""
     if not name.lower().endswith(ARCHIVES):
         return {}
     out = tempfile.mkdtemp(dir=work)
@@ -187,6 +221,11 @@ def check_archive(path: str, name: str, spec: dict, work: str) -> dict:
         if not any(k.rsplit("/", 1)[-1] == req for k in files):
             raise ValueError(f"{name}: no {req} in it")
     inner = {k: sha256_of(p) for k, p in files.items() if k.rsplit("/", 1)[-1] in spec.get("inner", [])}
+    if spec.get("scripts") and scripts_out is not None:
+        top = min((k.rsplit("/", 1)[0] if "/" in k else "" for k in files if k.rsplit("/", 1)[-1] == "install.sh"), key=len)
+        for k, p in files.items():
+            if k.endswith(".sh") and (top == "" or k.startswith(top + "/")):
+                scripts_out[k[len(top) + 1:] if top else k] = sha256_of(p)
     shutil.rmtree(out, ignore_errors=True)
     return inner
 
@@ -207,18 +246,23 @@ def today() -> str:
 
 
 # ---- the newest upstream build ----------------------------------------------------------------------------------
-def newest_release(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work: str, prev: dict | None) -> dict:
-    """The newest release with a matching asset. A GPL component (spec "gpl") also needs the exact commit its build
-    came from, so its source can sit next to it: a build whose commit can't be determined is skipped and the next
-    older release is tried (the newest whose source is known, down to the latest stable)."""
+def newest_release(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work: str, prev: dict | None,
+                   cutoff: str = "") -> dict:
+    """The newest full release, published before `cutoff` (MIN_AGE_H ago), with a matching asset from the official
+    repository. Pre-releases and drafts never count. A GPL component (spec "gpl") also needs the exact commit its
+    build came from, so its source can sit next to it: a build whose commit can't be determined is skipped and the
+    next older release is tried."""
     rels = net.json(f"/repos/{spec['repo']}/releases?per_page=15")
     skipped = []
     for rel in rels:
-        if rel.get("draft") or (rel.get("prerelease") and not spec.get("prerelease")):
+        if rel.get("draft") or rel.get("prerelease"):
             continue
+        if not rel.get("published_at") or (cutoff and str(rel["published_at"]) > cutoff):
+            continue                                           # too new: it waits until it has been out MIN_AGE_H
         asset = next((a for a in rel.get("assets", []) if fnmatch.fnmatch(a.get("name", "").lower(), spec["asset"].lower())), None)
         if not asset:
             continue
+        _need_upstream(comp, asset.get("browser_download_url", ""))
         digest = downloads.asset_digest(asset)
         if prev and prev.get("tag") == rel["tag_name"] and prev.get("asset") == asset["name"] and \
                 (not spec.get("gpl") or prev.get("source")) and (not digest or digest == prev.get("sha256")) and \
@@ -245,7 +289,8 @@ def release_entry(net: Net, comp: str, spec: dict, rel: dict, asset: dict, mir: 
     digest = downloads.asset_digest(asset)
     path = fetch_checked(net, asset["browser_download_url"], aname, work, digest=digest)
     sha = sha256_of(path)
-    inner = check_archive(path, aname, spec, work)
+    scripts: dict = {}
+    inner = check_archive(path, aname, spec, work, scripts)
     source = gpl_source(net, comp, spec["source_repo"], commit, version, mir, out, work, prev_source) if spec.get("gpl") else None
     entry = {"version": version, "tag": tag, "asset": aname, "date": (rel.get("published_at") or today())[:10],
              "upstream_url": asset["browser_download_url"], "sha256": sha, "size": os.path.getsize(path),
@@ -253,6 +298,8 @@ def release_entry(net: Net, comp: str, spec: dict, rel: dict, asset: dict, mir: 
              "mirror_url": mir.add(mirror.mirror_name(comp, version, sha, aname), path, out)}
     if inner:
         entry["inner"] = inner
+    if scripts:
+        entry["scripts"] = scripts
     if source:
         entry["source"] = source
     return entry
@@ -301,29 +348,37 @@ def gpl_source(net: Net, comp: str, repo: str, commit: str, version: str, mir: M
             "mirror_url": mir.add(mirror.mirror_name(comp, version, sha, f"source-{commit[:12]}.tar.gz"), p, out)}
 
 
-def newest_rolling(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work: str, prev: dict | None) -> dict:
+def newest_rolling(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work: str, prev: dict | None,
+                   cutoff: str = "") -> dict:
     url = f"https://github.com/{spec['repo']}/releases/download/{spec['tag']}/{spec['asset']}"
-    digest, date = None, today()
+    _need_upstream(comp, url)
+    digest, date, updated = None, today(), ""
     try:
         rel = net.json(f"/repos/{spec['repo']}/releases/tags/{spec['tag']}")
         a = next((x for x in rel.get("assets", []) if x.get("name") == spec["asset"]), None)
         if a:
-            digest, date = downloads.asset_digest(a), (a.get("updated_at") or date)[:10]
+            digest, updated = downloads.asset_digest(a), str(a.get("updated_at") or "")
+            date = (updated or date)[:10]
     except (OSError, ValueError, urllib.error.URLError) as e:
         log(f"note: {comp}: release API: {e}; hashing the download")
     path = fetch_checked(net, url, spec["asset"], work, digest=digest)
     sha = sha256_of(path)
     if prev and prev.get("sha256") == sha:                     # the same bytes: the same build
         return prev
+    if not updated or (cutoff and updated > cutoff):
+        # a new upload isn't promoted until it has been there MIN_AGE_H (unknown age: not at all)
+        raise ValueError(f"the rolling build uploaded {updated or 'at an unknown time'} is newer than {MIN_AGE_H} h; it waits")
     version = "rolling-" + date.replace("-", "")
     return {"version": version, "tag": spec["tag"], "asset": spec["asset"], "date": date, "upstream_url": url,
             "sha256": sha, "size": os.path.getsize(path), "upstream_digest": bool(digest),
             "mirror_url": mir.add(mirror.mirror_name(comp, version, sha, spec["asset"]), path, out)}
 
 
-def newest_files(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work: str, prev: dict | None) -> dict:
+def newest_files(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work: str, prev: dict | None,
+                 cutoff: str = "") -> dict:
+    # the newest commit at least MIN_AGE_H old
     q = f"/repos/{spec['repo']}/commits?per_page=1" + (f"&sha={spec['ref']}" if spec.get("ref") else "") + \
-        (f"&path={spec['dir']}" if spec.get("dir") else "")
+        (f"&path={spec['dir']}" if spec.get("dir") else "") + (f"&until={cutoff}" if cutoff else "")
     c = net.json(q)[0]
     commit, date = c["sha"], c["commit"]["committer"]["date"][:10]
     if prev and prev.get("commit") == commit:
@@ -342,6 +397,7 @@ def files_entry(net, comp, spec, commit, version, date, mir, out, work, pinned: 
         notice = mir.add(mirror.mirror_name(comp, version, sha256_of(p), os.path.basename(spec["notice"])), p, out)
     for fn in spec["files"]:
         up = f"{base}/{fn}"
+        _need_upstream(comp, up)
         p = fetch_checked(net, up, fn, work, want_sha=(pinned or {}).get(fn))
         sha = sha256_of(p)
         files[fn] = {"sha256": sha, "size": os.path.getsize(p), "upstream_url": up,
@@ -463,6 +519,8 @@ def pin_entry(comp: str, v: dict, mir: Mirror, sources: dict | None = None) -> d
 # ---- all of it --------------------------------------------------------------------------------------------------
 def build(net: Net, versions_path: str, out: str, have: str | None = None, previous: str | None = None,
           now: str | None = None) -> dict:
+    check_sources()
+    cutoff = cutoff_for(now)
     v = json.load(open(versions_path, encoding="utf-8"))
     prev_comps, pin_sources = {}, {}
     if previous and os.path.exists(previous):
@@ -485,7 +543,7 @@ def build(net: Net, versions_path: str, out: str, have: str | None = None, previ
             prev = None                         # its file isn't on the mirror (a hand-edited release): not carried
         try:
             fn = {"release": newest_release, "rolling": newest_rolling, "git-files": newest_files}[spec["kind"]]
-            comps[comp] = fn(net, comp, spec, mir, out, work, prev)
+            comps[comp] = fn(net, comp, spec, mir, out, work, prev, cutoff=cutoff)
             report["components"][comp] = comps[comp]["version"]
         except Exception as e:                  # one upstream failing never takes the others down
             fallback = prev or pin_entry(comp, v, mir, pin_sources)

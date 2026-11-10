@@ -103,8 +103,11 @@ class FakeNet(build.Net):
             f.write(self.files[url])
 
 
-def rel(tag, asset, data, digest=True, pre=False, date="2026-11-08T00:00:00Z"):
-    url = f"https://github.com/x/y/releases/download/{tag}/{asset}"
+CUTOFF = "2026-11-06T05:41:00Z"        # _run's now (2026-11-09T05:41:00Z) minus build.MIN_AGE_H
+
+
+def rel(tag, asset, data, digest=True, pre=False, date="2026-11-05T00:00:00Z", repo="x/y"):
+    url = f"https://github.com/{repo}/releases/download/{tag}/{asset}"
     a = {"name": asset, "browser_download_url": url}
     if digest:
         a["digest"] = "sha256:" + sha(data)
@@ -123,21 +126,21 @@ def world(xess_new=XESS_NEW, patcher=PATCHER_NOW, xess_digest=True):
         f"https://github.com/optiscaler/OptiScaler/archive/{OPTI_094_COMMIT}.tar.gz": b"source 0.9.4",
     }
     api = {}
-    r, u, d = rel("20261120", "xess-xmx-linux-20261120.zip", xess_new, digest=xess_digest)
+    r, u, d = rel("20261120", "xess-xmx-linux-20261120.zip", xess_new, digest=xess_digest, repo="HHHHanasak1/xess-xmx-linux")
     files[u] = d
     api["/repos/HHHHanasak1/xess-xmx-linux/releases?per_page=15"] = [r]
-    r, u, d = rel("fork-release-15", "REFramework.zip", REF_PIN)
+    r, u, d = rel("fork-release-15", "REFramework.zip", REF_PIN, repo="onehoon/REFramework")
     files[u] = d
     api["/repos/onehoon/REFramework/releases?per_page=15"] = [r]
-    r, u, d = rel("v1.4.1", "fakenvapi-v1.4.1.zip", FNV)
+    r, u, d = rel("v1.4.1", "fakenvapi-v1.4.1.zip", FNV, repo="FakeMichau/fakenvapi")
     files[u] = d
     api["/repos/FakeMichau/fakenvapi/releases?per_page=15"] = [r]
     build.SOURCES["fakenvapi"]["asset"] = "fakenvapi-*.zip"            # zip here: no 7z on the test machine
     api["/repos/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/tags/bins-for-optipatcher-rolling"] = {
-        "assets": [{"name": "OptiPatcher_rolling.asi", "updated_at": "2026-11-07T10:00:00Z", "digest": "sha256:" + sha(patcher)}]}
-    api["/repos/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/commits?per_page=1&path=Kits/FidelityFX/signedbin"] = [
+        "assets": [{"name": "OptiPatcher_rolling.asi", "updated_at": "2026-11-05T10:00:00Z", "digest": "sha256:" + sha(patcher)}]}
+    api[f"/repos/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/commits?per_page=1&path=Kits/FidelityFX/signedbin&until={CUTOFF}"] = [
         {"sha": AMD_COMMIT, "commit": {"committer": {"date": "2026-10-28T00:00:00Z"}}}]
-    api["/repos/IHulkSmashI/ClawDeck/commits?per_page=1&sha=fsr4-xmx-files"] = [
+    api[f"/repos/IHulkSmashI/ClawDeck/commits?per_page=1&sha=fsr4-xmx-files&until={CUTOFF}"] = [
         {"sha": XMX_COMMIT, "commit": {"committer": {"date": "2026-11-05T00:00:00Z"}}}]
     # the pins' releases: v0.9.4 is a tag in the source repo; nothing says which commit the v10 pin came from
     api["/repos/optiscaler/OptiScaler/releases/tags/v0.9.4"] = {"tag_name": "v0.9.4", "body": "0.9.4 final"}
@@ -146,7 +149,7 @@ def world(xess_new=XESS_NEW, patcher=PATCHER_NOW, xess_digest=True):
     return v, FakeNet(files, api)
 
 
-def nightly(tag, body, data, pre=True, date="2026-11-08T00:00:00Z"):
+def nightly(tag, body, data, pre=False, date="2026-11-05T00:00:00Z"):
     asset = f"OptiScaler_v10.0.0-pre2_{tag[-8:]}.zip"
     url = f"https://github.com/optiscaler/OptiScaler-nightly/releases/download/{tag}/{asset}"
     return {"tag_name": tag, "prerelease": pre, "draft": False, "published_at": date, "html_url": "https://x",
@@ -194,7 +197,8 @@ def test_first_run_fills_the_mirror_with_every_pin_and_the_newest(tmp_path):
     # part B: the newest of each
     c = idx["components"]
     assert c["xess_xmx_linux"]["version"] == "20261120" and c["xess_xmx_linux"]["upstream_digest"] is True
-    assert c["optipatcher"]["version"] == "rolling-20261107" and c["optipatcher"]["sha256"] == sha(PATCHER_NOW)
+    assert c["optipatcher"]["version"] == "rolling-20261105" and c["optipatcher"]["sha256"] == sha(PATCHER_NOW)
+    assert c["xess_xmx_linux"]["scripts"] == {"install.sh": sha(b"echo new"), "uninstall.sh": sha(b"echo")}
     assert c["fakenvapi"]["inner"] == {"fakenvapi.dll": sha(b"fnv")}
     assert c["reframework"]["inner"] == {"dinput8.dll": sha(b"ref15")}
     assert c["fsr4_amd"]["version"] == "20261028-7539ae8b" and c["fsr4_amd"]["notice_url"].endswith("license.md")
@@ -337,3 +341,44 @@ def test_a_gpl_pin_without_a_known_commit_isnt_mirrored(tmp_path):
     assert any(n.endswith(f"-source-{NIGHTLY_COMMIT[:12]}.tar.gz") for n in names)
     assert idx["pin_sources"]["optiscaler_v10"]["commit"] == NIGHTLY_COMMIT
     assert idx["components"]["optiscaler_v10"]["pinned"] and idx["components"]["optiscaler_v10"]["source"]["commit"] == NIGHTLY_COMMIT
+
+
+# ---- review 2, problem 8: promotion guards that keep "always the newest" -------------------------------------------
+def test_only_full_releases_at_least_72_hours_old_are_promoted(tmp_path):
+    v, net = world()
+    xr = "/repos/HHHHanasak1/xess-xmx-linux/releases?per_page=15"
+    fresh, u1, _ = rel("20261108", "xess-xmx-linux-20261108.zip", XESS_NEW, date="2026-11-08T00:00:00Z", repo="HHHHanasak1/xess-xmx-linux")
+    pre, u2, _ = rel("20261107", "xess-xmx-linux-20261107.zip", XESS_NEW, pre=True, date="2026-11-01T00:00:00Z", repo="HHHHanasak1/xess-xmx-linux")
+    net.files[u1] = net.files[u2] = XESS_NEW
+    net.api[xr] = [fresh, pre] + net.api[xr]
+    rep, idx, plan, _o = _run(tmp_path, v, net)
+    assert idx["components"]["xess_xmx_linux"]["tag"] not in ("20261108", "20261107"), "too new / pre-release: waits"
+    assert u1 not in net.got and u2 not in net.got, "never even downloaded"
+
+
+def test_a_rolling_build_newer_than_72_hours_waits(tmp_path):
+    v, net = world()
+    net.api["/repos/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/tags/bins-for-optipatcher-rolling"]["assets"][0]["updated_at"] = "2026-11-08T22:00:00Z"
+    rep, idx, plan, _o = _run(tmp_path, v, net)
+    assert "optipatcher" not in idx["components"] or idx["components"]["optipatcher"]["sha256"] != sha(PATCHER_NOW)
+    assert any("optipatcher" in w and "waits" in w for w in rep["warnings"]), rep["warnings"]
+
+
+def test_an_asset_outside_the_official_repo_is_refused(tmp_path):
+    v, net = world()
+    xr = "/repos/HHHHanasak1/xess-xmx-linux/releases?per_page=15"
+    evil, u, _ = rel("20261121", "xess-xmx-linux-20261121.zip", XESS_NEW, repo="someone/else")
+    net.files[u] = XESS_NEW
+    net.api[xr] = [evil]
+    rep, idx, plan, _o = _run(tmp_path, v, net)
+    assert idx["components"]["xess_xmx_linux"]["version"] == "20261104", "the pin"
+    assert any("official upstream" in w for w in rep["warnings"]), rep["warnings"]
+    assert u not in net.got
+
+
+def test_every_source_is_the_pinned_official_repo():
+    build.check_sources()
+    bad = json.loads(json.dumps(build.SOURCES))
+    bad["reframework"]["repo"] = "someone/REFramework"
+    with pytest.raises(ValueError):
+        build.check_sources(bad)

@@ -185,6 +185,9 @@ def install(home: str, entry: dict, allow_unpinned: bool = False) -> dict:
     pkg = _find_package(got["dir"])
     if not pkg:
         return {"ok": False, "error": f"install.sh not found in {os.path.basename(got['archive'])} (unpacked into {got['dir']})", **got}
+    bad = scripts_check(pkg)
+    if bad:
+        return {"ok": False, "error": f"not run: {bad}. GameCove runs only the install script it was tested with.", **got}
     try:
         with open(os.path.join(pkg, SOURCE_FILE), "w", encoding="utf-8") as f:
             json.dump({"repo": got["repo"], "tag": got["tag"]}, f)
@@ -281,6 +284,35 @@ def remove_for_uninstall(home: str) -> dict:
             pass
     return {"ok": r["rc"] == 0, "ours": True, "package_dir": pkg, "igdext": restored,
             **({} if r["rc"] == 0 else {"error": f"uninstall.sh exited {r['rc']}: {r['out'].strip()[-200:]}"})}
+
+
+PINS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "versions.json")
+
+
+def reviewed_scripts() -> dict:
+    """{relative path: sha256} of every shell script in the tested package, from the bundled versions.json (never
+    from the downloaded index)."""
+    try:
+        return dict(downloads.load_versions(PINS).get("xess_xmx_linux", {}).get("scripts") or {})
+    except (OSError, ValueError):
+        return {}
+
+
+def scripts_check(pkg: str, reviewed: dict | None = None) -> str | None:
+    """None when every .sh in the unpacked package is byte for byte one reviewed in versions.json and none is
+    missing; else what differs. install.sh runs other scripts of the package, so all of them count (review 2,
+    problem 8: never run an install script that wasn't reviewed in-repo)."""
+    want = reviewed_scripts() if reviewed is None else reviewed
+    if not want:
+        return "no reviewed script hashes in versions.json"
+    have = {}
+    for root, _dirs, files in os.walk(pkg):
+        for f in files:
+            if f.endswith(".sh"):
+                p = os.path.join(root, f)
+                have[os.path.relpath(p, pkg).replace(os.sep, "/")] = downloads.sha256_of(p)
+    changed = sorted(k for k in set(have) | set(want) if have.get(k) != want.get(k))
+    return None if not changed else "scripts differ from the reviewed ones: " + ", ".join(changed[:5])
 
 
 def _find_package(d: str) -> str | None:

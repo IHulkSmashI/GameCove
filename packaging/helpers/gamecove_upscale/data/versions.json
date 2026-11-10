@@ -10,7 +10,25 @@
   "version": "20261104",
   "asset": "xess-xmx-linux-20261104.zip",
   "url": "https://github.com/HHHHanasak1/xess-xmx-linux/releases/download/20261104/xess-xmx-linux-20261104.zip",
-  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/xess_xmx_linux-20261104-4d97b77e-xess-xmx-linux-20261104.zip"
+  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/xess_xmx_linux-20261104-4d97b77e-xess-xmx-linux-20261104.zip",
+  "scripts": {
+   "install.sh": "346dd50958fdcbe38f4727180a15b43250d69e8d6e87acc859f49de499ea0f84",
+   "uninstall.sh": "5e848d6644df941ead21695f21ca519864aae5246c8fac715e11503e55295bfe",
+   "enable.sh": "8425a556238d8277b82debe124525b39c69292c2413130cadd04dc7c588cdaf0",
+   "disable.sh": "ebf96e6294375e7804acaf6b3c4ef631bb4507ebbbddc5c6ef5f75888714cb22",
+   "xmx-launch.sh": "2ad1d493fac575eddd5f64f12eb89ff3337105d388286aeae5cd66f664d62bcc",
+   "tools/cm-compile.sh": "51fab0d58688f7f005aaa10290e1aa660a1a54d75f50c34512f1da2e16ac4f49",
+   "tools/get-igc.sh": "17feaa695dd442738c1ea8b15089532fb816ceed536dc770414c2b936bb59222",
+   "tools/get-xess.sh": "6e6fd385911d0cd00fe726bc42f81a6a6ab15461b1f5cbcffeaf9c1b2cf5189f",
+   "tools/get-ffx.sh": "369c918fe4d14a7d4cbe2a99258eba8af7ed7e92ceb536c849072d690ff431ed",
+   "tools/fsr-fg.sh": "b447df9d960a29d0dce86203f70be8f22af735abe3a3c98babad68e1f9b2bf58",
+   "tools/steam-libraries.sh": "31c5fd7bbbdb9a952cadc03ee417b6d8438cc24e7eb126aa51cf7b416f93e3a7",
+   "tools/session-check.sh": "536414b9a089d8b48fb36db253256f2ef9d510c4ce1525f828ab26e1cebbbf70",
+   "tools/rebuild-driver.sh": "f00f1af76e3f512e71eef158ea743f4589b428244a8e24bff965988ce66edb74",
+   "tools/switch-driver.sh": "65992240e568bdd57f99469f5c147719cfed986412832166c788c70027eb264d",
+   "tools/xell-probe.sh": "c9d4dd569397dc580ab9a130099f6976c67bfbffcb06638c03da42d774150fff"
+  },
+  "scripts_note": "Every shell script in the tested package (relative to its folder), read from xess-xmx-linux-20261104.zip on 2026-11-10. The helper runs install.sh only when every .sh in the unpacked package matches this list, and the signed index replaces this pin only with a build whose scripts are the same (review 2, problem 8)."
  },
  "reframework": {
   "repo": "onehoon/REFramework",
