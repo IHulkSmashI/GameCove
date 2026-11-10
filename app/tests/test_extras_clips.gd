@@ -5,6 +5,7 @@ extends "res://tests/test_case.gd"
 
 const Clips := preload("res://scripts/system/clips.gd")
 const ClipDrop := preload("res://scripts/system/clip_drop.gd")
+const KeyDrop := preload("res://scripts/system/key_drop.gd")
 const Recorder := preload("res://scripts/system/recorder.gd")
 const MediaPage := preload("res://scripts/ui/settings/media_page.gd")
 const ClipRow := preload("res://scripts/ui/settings/clip_row.gd")
@@ -228,6 +229,87 @@ func test_sends_the_clip_over_the_network_and_closes() -> void:
 	eq(whole.slice(end + 4), data, "unchanged")
 	eq(done, [true], "sent")
 	ok(not d.is_running(), "the page closed after the download")
+	d.free()
+	_wipe(root)
+
+
+## Final review, low: the clip page had no idle-socket eviction (eight silent connections kept the
+## phone out for good), one wrong-request count for everybody, and a lifetime in frame time.
+func test_clip_page_cant_be_shut_by_someone_else_on_the_wifi() -> void:
+	var root := _tmp("dos")
+	_bytes(root + "/clip.mp4", _mp4(1.0))
+	var d: Node = ClipDrop.new()
+	d.bind_address = "127.0.0.1"
+	var who := ["10.0.0.66"]
+	d.peer_address = func(_peer: StreamPeerTCP) -> String: return who[0]
+	var now := [5000.0]
+	d.clock = func() -> float: return now[0]
+	ok(d.start(root + "/clip.mp4", "Hades"), "listening")
+	# silent sockets in every slot
+	var idle: Array = []
+	for i in ClipDrop.MAX_CLIENTS + 2:
+		var c := StreamPeerTCP.new()
+		c.connect_to_host("127.0.0.1", d.port)
+		idle.append(c)
+	for i in 50:
+		for c in idle:
+			c.poll()
+		d.poll(0.01)
+		OS.delay_msec(2)
+	who[0] = "10.0.0.7"
+	ok(_fetch(d, "/c/" + d.token).get_string_from_utf8().begins_with("HTTP/1.1 200"), "the phone still gets the page with every slot taken")
+	d.poll(ClipDrop.IDLE_TIMEOUT)
+	d.poll(0.01)
+	eq(d._clients.size(), 0, "silent connections are closed after the idle timeout")
+	for c in idle:
+		c.disconnect_from_host()
+	# wrong requests from one device hold off that device only
+	who[0] = "10.0.0.66"
+	for i in KeyDrop.MAX_BAD:
+		_fetch(d, "/c/guess")
+	ok(d.throttled("10.0.0.66") and not d.throttled("10.0.0.7"), "the guessing device is held off, the phone isn't")
+	eq(_fetch(d, "/c/" + d.token).size(), 0, "the guessing device gets no answer")
+	who[0] = "10.0.0.7"
+	ok(_fetch(d, "/c/" + d.token).get_string_from_utf8().begins_with("HTTP/1.1 200"), "the phone still gets the page")
+	# the lifetime runs by the clock
+	var why := []
+	d.expired.connect(func(w): why.append(w))
+	now[0] += 700.0
+	d.poll(0.016)
+	eq(why, ["timeout"], "closed by the clock (a sleep counts)")
+	d.free()
+	_wipe(root)
+
+
+## A download that stops taking bytes gives its slot and the file back (and no longer keeps the
+## page from closing).
+func test_a_stalled_download_is_closed() -> void:
+	var root := _tmp("stall")
+	var data := PackedByteArray()
+	data.resize(8_000_000)
+	_bytes(root + "/clip.mp4", data)
+	var d: Node = ClipDrop.new()
+	d.bind_address = "127.0.0.1"
+	ok(d.start(root + "/clip.mp4"), "listening")
+	var peer := StreamPeerTCP.new()
+	peer.connect_to_host("127.0.0.1", d.port)
+	var asked := false
+	for i in 300:
+		d.poll(0.016)
+		peer.poll()
+		if peer.get_status() == StreamPeerTCP.STATUS_CONNECTED and not asked:
+			peer.put_data(("GET /c/%s/clip.mp4?dl=1 HTTP/1.1\r\nHost: x\r\n\r\n" % d.token).to_utf8_buffer())
+			asked = true
+		if asked and d._clients.size() == 1 and d._clients[0]["file"] != null and i > 150:
+			break
+		OS.delay_msec(2)
+	eq(d._clients.size(), 1, "a download is under way and the phone has stopped reading")
+	ok(d._clients[0]["file"] != null, "the file is open for it")
+	d.poll(ClipDrop.STALL_TIMEOUT)
+	d.poll(0.016)
+	eq(d._clients.size(), 0, "no bytes taken for the stall timeout: closed")
+	ok(d.is_running(), "the page itself stays for the phone to try again")
+	peer.disconnect_from_host()
 	d.free()
 	_wipe(root)
 

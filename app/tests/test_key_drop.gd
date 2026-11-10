@@ -221,3 +221,49 @@ func test_key_check_result() -> void:
 	eq(Sgdb.check_result({"ok": false, "code": 0, "error": "timeout"}), "offline", "timed out")
 	eq(Sgdb.check_result({"ok": false, "code": 503, "error": "http 503"}), "error", "SteamGridDB down")
 	eq(Sgdb.check_result({"ok": true, "code": 200, "body": "<html>".to_utf8_buffer()}), "error", "not the API")
+
+
+## Final review, low: the wrong-request count was one for everybody, so anyone on the Wi-Fi
+## could keep the page closed to the phone by sending 30 wrong requests a minute.
+func test_one_device_guessing_doesnt_lock_the_phone_out() -> void:
+	var d := _drop()
+	var who := ["10.0.0.66"]
+	d.peer_address = func(_peer: StreamPeerTCP) -> String: return who[0]
+	ok(d.start(), "listening")
+	for i in KeyDrop.MAX_BAD:
+		_ask(d, "GET /k/guess HTTP/1.1\r\n\r\n")
+	ok(d.throttled("10.0.0.66"), "the guessing device is held off")
+	eq(_ask(d, "GET /k/%s HTTP/1.1\r\n\r\n" % d.token), "", "it gets no answer, even with the right address")
+	who[0] = "10.0.0.7"
+	ok(not d.throttled("10.0.0.7"), "the phone isn't")
+	ok(_ask(d, "GET /k/%s HTTP/1.1\r\n\r\n" % d.token).begins_with("HTTP/1.1 200"), "the phone still gets the page")
+	d.free()
+	# the table of devices is bounded, and forgets what is over a minute old
+	var t := {}
+	for i in KeyDrop.MAX_TRACKED + 10:
+		KeyDrop.bad_note(t, "10.0.1.%d" % i, float(i))
+	eq(t.size(), KeyDrop.MAX_TRACKED, "at most MAX_TRACKED devices are remembered")
+	ok(not t.has("10.0.1.0") and t.has("10.0.1.%d" % (KeyDrop.MAX_TRACKED + 9)), "the oldest make room")
+	KeyDrop.bad_prune(t, 1000.0, KeyDrop.BAD_WINDOW)
+	eq(t.size(), 0, "and old ones are forgotten")
+
+
+## Final review, low: the 10 minutes counted frame time, so a page stayed open through a sleep
+## (or while the main loop ran slowly behind something else).
+func test_lifetime_runs_by_the_clock() -> void:
+	var d := _drop()
+	var now := [1000.0]
+	d.clock = func() -> float: return now[0]
+	var why: Array = []
+	d.expired.connect(func(w): why.append(w))
+	ok(d.start(), "listening")
+	d.poll(0.016)
+	ok(d.is_running() and d.seconds_left() > 590, "just opened")
+	now[0] += 700.0   # the handheld slept: no frames, but the clock moved
+	eq(d.seconds_left(), 0, "the time is up by the clock")
+	d.poll(0.016)
+	eq(why, ["timeout"], "closed on the first frame after the wake")
+	ok(not d.is_running(), "not listening any more")
+	eq(KeyDrop.elapsed(50.0, 1000.0, 400.0), 50.0, "a clock set back never makes the page younger than its frames")
+	eq(KeyDrop.elapsed(5.0, 1000.0, 1300.0), 300.0, "the clock counts when it is ahead of the frames")
+	d.free()
