@@ -5,6 +5,7 @@ extends SceneTree
 ## Shots: device_about, device_about_scrolled, device_controller, device_controller_test,
 ## device_storage, device_updates, device_about_light, device_controller_midnight,
 ## device_about_generic, device_storage_loading, device_controller_missing,
+## device_storage_cleanup_missing (an SD library listed but not mounted),
 ## device_about_photo (needs a photo at /tmp/gamecove-shots/device_photo.webp, e.g. one
 ## built by tools/device_photos/build.py; skipped otherwise).
 
@@ -17,6 +18,14 @@ var Kit: GDScript
 var frame: Control
 
 const PHOTO := "/tmp/gamecove-shots/device_photo.webp"
+
+
+## Storage with Clean up: the SD card's library is listed but not mounted.
+class ShotStorage extends "res://tests/fixtures/device_ui/fakes.gd".FakeStorage:
+	func leftovers() -> void:
+		calls.append("leftovers")
+	func clean_leftovers() -> bool:
+		return false
 
 
 ## Stand-in for DevicePhoto with one cached photo for every device.
@@ -125,6 +134,13 @@ func _run() -> void:
 	await _page("about_panel.gd", "About this device", g, "device_about_generic")
 	g["storage"].st = {"ready": false, "error": "", "drives": [], "libraries": []}
 	await _page("storage_panel.gd", "Storage", g, "device_storage_loading")
+	if only.is_empty() or "device_storage_cleanup_missing" in only:
+		var ms: Node = ShotStorage.new()
+		ms.st = s["storage"].st.duplicate(true)
+		ms.st["cleanup"] = {"ready": true, "dirs": [], "bytes": 0, "cleaning": false, "missing": ["/run/media/deck/SD/SteamLibrary"]}
+		var sm: Dictionary = s.duplicate()
+		sm["storage"] = ms
+		await _page("storage_panel.gd", "Storage", sm, "device_storage_cleanup_missing")
 	g["controller"].st = {"available": false, "supported": {}}
 	var mp: Control = await _page("controller_panel.gd", "Controller", g, "", 0)
 	g["controller"].changed.emit({"available": false, "supported": {}})
