@@ -167,3 +167,29 @@ func test_damaged_discover_settings_turn_price_lookups_off() -> void:
 	d.free()
 	_wipe(ProjectSettings.globalize_path(dir))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir))
+
+
+## Review H9 follow-up: steam_dev.cfg and the next-session question are written atomically too. A write through
+## a symlink shows the difference: in place it changes the link's target, atomically it replaces the link.
+func _linked(d: String, name: String, text: String) -> String:
+	var target := d.path_join(name + ".target")
+	_write(target, text)
+	var p := d.path_join(name)
+	DirAccess.open(d).create_link(target, p)
+	return target
+
+
+func test_steam_dev_cfg_and_session_question_written_atomically() -> void:
+	var d := _dir("more_atomic")
+	var target := _linked(d, "steam_dev.cfg", "keep me\n")
+	ok(preload("res://scripts/controls/perf/launch_files.gd").set_shader_threads(d, 4), "written")
+	eq(FileAccess.get_file_as_string(target), "keep me\n", "steam_dev.cfg replaced, not written in place")
+	ok(FileAccess.get_file_as_string(d.path_join("steam_dev.cfg")).contains("unShaderBackgroundProcessingThreads 4"), "new value")
+	var Guard := preload("res://scripts/ui/controls/session_guard.gd")
+	var old_path: String = Guard.path
+	var t2 := _linked(d, "controls_confirm.json", "{}")
+	Guard.path = d.path_join("controls_confirm.json")
+	Guard.remember("display.x", "X", 1, 2, "two")
+	eq(FileAccess.get_file_as_string(t2), "{}", "the question file replaced, not written in place")
+	eq(Guard.pending().get("id"), "display.x", "and readable")
+	Guard.path = old_path
