@@ -341,3 +341,72 @@ func test_this_game_favourite() -> void:
 	ok(y["m"].body.get_node_or_null("Favourite") == null, "no collections service: no row")
 	_done(y)
 	DirAccess.remove_absolute(file)
+
+
+## Opening over a game must feel instant (docs/PERFORMANCE.md): This game isn't built again
+## on every press. Its rows come back as they were (hidden in between) unless what they're
+## built from changed; main.gd builds it once when the game starts (prepare). That hidden
+## rows do no work is checked in the tree, in e2e suite_perf.
+func test_this_game_kept_between_opens() -> void:
+	load("res://scripts/system/settings_file.gd").reset_for_tests()
+	var file := ProjectSettings.globalize_path("user://test_qm_kept_collections.json")
+	DirAccess.remove_absolute(file)
+	var cols: RefCounted = load("res://scripts/library/collections.gd").new(file)
+	var x := _menu({"collections": cols})
+	var m: Control = x["m"]
+	var c: Node = x["c"]
+	var sess: Node = x["session"]
+	m.prepare(HADES)
+	ok(not m.visible, "built out of sight")
+	var use: Node = m.body.get_node_or_null("UseGame")
+	ok(use != null, "This game is ready before the first press")
+	m.open(HADES)
+	ok(m.body.get_node("UseGame") == use, "the first press shows what was built")
+	var tdp: Control = m.body.get_node("List").views["power.tdp"]
+	m.close()
+	c.set_value("power.tdp", 9)
+	m.open(HADES)
+	ok(m.body.get_node("UseGame") == use, "opened again: the same rows")
+	eq(int(tdp.desc["value"]), 9, "showing what changed")
+	eq(_ids(m).slice(0, 3), ["perf.overlay", "display.fps_limit", "power.tdp"], "focus chain as built")
+	# LB / RB away and back: kept too, and nothing armed carries over
+	m.switch_tab(1)
+	ok(m.body.get_node_or_null("PowerLive") != null and m.body.get_node_or_null("UseGame") == null, "Power shows alone")
+	m.switch_tab(-1)
+	ok(m.body.get_node("UseGame") == use, "back on This game: the same rows")
+	# what the rows are built from changes: built again
+	m.close()
+	cols.set_favourite("steam:1", true)
+	m.open(HADES)
+	ok(m.body.get_node("UseGame") != use, "favourited elsewhere: built again")
+	eq(m.body.get_node("Favourite").value(), true, "and shows it")
+	use = m.body.get_node("UseGame")
+	m.close()
+	m.model.set_per_game(true)
+	m.open(HADES)
+	ok(m.body.get_node("UseGame") != use, "own settings turned on: built again")
+	eq(m.body.get_node("UseGame").value(), true, "and shows it")
+	use = m.body.get_node("UseGame")
+	var reset: Node = m.body.get_node("ResetGame")
+	reset.pressed.emit()
+	eq(reset.title_label.text, TC.RESET_CONFIRM, "Reset armed")
+	m.close()
+	m.open(HADES)
+	ok(m.body.get_node("UseGame") == use, "kept")
+	eq(reset.title_label.text, TC.RESET_GAME, "an armed Reset doesn't carry over to the next open")
+	reset.pressed.emit()
+	ok(m.model.per_game(), "the first press after reopening only asks again")
+	m.close()
+	sess.started.emit(HADES)
+	m.open(HADES)
+	ok(m.body.get_node("UseGame") != use, "the game started: built again (session time)")
+	ok(m.body.get_node_or_null("SessionTime") != null, "session time shown")
+	use = m.body.get_node("UseGame")
+	m.close()
+	m.open({"key": "steam:2", "title": "Celeste", "store": "steam", "id": "2"})
+	ok(m.body.get_node("UseGame") != use, "another game: built again")
+	m.close()
+	m.prepare(HADES)
+	ok(m.body.get_node_or_null("UseGame") != null and str(m.game.get("key")) == "steam:1", "prepare builds for the game it's given")
+	_done(x)
+	DirAccess.remove_absolute(file)

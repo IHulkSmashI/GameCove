@@ -292,10 +292,22 @@ func _build_frame() -> void:
 	for side_name in ["top", "bottom"]:
 		pad.add_theme_constant_override("margin_" + side_name, 10)
 	scroll.add_child(pad)
-	body = Kit.vbox(8)
-	body.name = "Body"
-	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pad.add_child(body)
+	# This game's rows live in their own box, kept (hidden) while another tab
+	# shows or the menu is closed; the other tabs share one box, built each time.
+	var bodies := Kit.vbox(0)
+	bodies.name = "Bodies"
+	bodies.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pad.add_child(bodies)
+	_game_body = Kit.vbox(8)
+	_game_body.name = "GameBody"
+	_game_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_game_body.visible = false
+	bodies.add_child(_game_body)
+	_tab_body = Kit.vbox(8)
+	_tab_body.name = "Body"
+	_tab_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bodies.add_child(_tab_body)
+	body = _tab_body
 
 	status_label = Kit.label("", "AccentLabel", true)
 	status_label.name = "Status"
@@ -350,7 +362,7 @@ func open(for_game: Dictionary) -> void:
 	_animate_in()
 	if gamescope != null:
 		gamescope.set_overlay(true)
-	show_section(0)
+	show_section(0, "", true)
 	refresh_live()
 
 
@@ -476,14 +488,16 @@ const TAB_FADE_S := 0.14
 ## the menu doesn't, the panel's own slide is the motion there).
 func switch_tab(d: int) -> void:
 	_switching = true
-	show_section(posmod(section + d, SECTIONS.size()))
+	show_section(posmod(section + d, SECTIONS.size()), "", true)
 	_switching = false
 
 
 var _switching := false
 
 
-func show_section(i: int, keep_focus := "") -> void:
+## `reuse`: This game may come back as it was last built when nothing it's
+## built from changed (opening the menu, LB / RB); a plain call builds afresh.
+func show_section(i: int, keep_focus := "", reuse := false) -> void:
 	var switching := _switching and is_inside_tree()
 	section = i
 	status_label.text = ""
@@ -497,19 +511,27 @@ func show_section(i: int, keep_focus := "") -> void:
 	_reset_row = null
 	_record = null
 	_style_tabs()
-	for c in body.get_children():
-		body.remove_child(c)
-		c.queue_free()
+	var tab: String = TC.TAB_IDS[i]
+	_free_rows(_tab_body)
 	_parts.clear()
-	if model == null:
-		_line(TC.NO_CONTROLS, "QuietLabel", "NoControls")
-	match TC.TAB_IDS[i]:
-		"game": _build_game()
-		"power": _build_power()
-		"display": _build_list("display")
-		"audio": _build_audio()
-		"controller": _build_controller()
-		"device": _build_device()
+	_game_body.visible = tab == "game"
+	_tab_body.visible = tab != "game"
+	body = _game_body if tab == "game" else _tab_body
+	if not (reuse and tab == "game" and _reuse_game_tab()):
+		if tab == "game":
+			_free_rows(_game_body)
+			_game_sig = ""
+		if model == null:
+			_line(TC.NO_CONTROLS, "QuietLabel", "NoControls")
+		match tab:
+			"game": _build_game()
+			"power": _build_power()
+			"display": _build_list("display")
+			"audio": _build_audio()
+			"controller": _build_controller()
+			"device": _build_device()
+		if tab == "game":
+			_keep_game_tab()
 	_relink()
 	if switching:
 		Motion.enter(body, "modulate:a", 0.0, 1.0, TAB_FADE_S, 0.0, Tween.TRANS_SINE, Tween.EASE_OUT)
@@ -518,8 +540,109 @@ func show_section(i: int, keep_focus := "") -> void:
 	# A new tab opens at its top (the old tab's scroll would carry over).
 	if _scroll != null:
 		_scroll.scroll_vertical = 0
-	if is_inside_tree():
+	if is_visible_in_tree():
 		focus_target(keep_focus).grab_focus()
+
+
+# ------------------------------------------------------------ This game, kept
+
+## Opening the menu over a game must feel instant, so This game (the tab it
+## always opens on) isn't built again on every press: its rows stay in their
+## own box, hidden while another tab shows or the menu is closed, and the next
+## open shows them again as long as nothing they're built from changed
+## (_game_tab_sig). Hidden, they do no work: a control row that hears of a
+## change only notes it and reads the value again when it's shown
+## (control_view.gd). main.gd builds it once when a game starts (prepare), so
+## the first press over the game is quick too.
+var _game_body: VBoxContainer
+var _tab_body: VBoxContainer
+var _game_sig := ""          # what This game was built from ("" = not built)
+var _game_kept := {}         # This game's parts, exit, reset and record rows
+
+
+## Everything This game's rows are built from (values the rows read
+## themselves when they're shown are left out).
+func _game_tab_sig() -> String:
+	var key := str(game.get("key", ""))
+	var on := model != null and not game.is_empty()
+	return var_to_str([key, str(game.get("title", "")), game.is_empty(), model != null,
+		model.per_game() if on else false, model.editing_profile() if on else false,
+		bool(collections.is_favourite(key)) if collections != null and key != "" else false,
+		session_seconds() >= 0, exit_game_requested.get_connections().size(),
+		recording != null, power != null and power.has_method("autotune_active"),
+		ThemeLib.theme_id, ThemeLib.tokens.hash()])   # rows bake theme colours (a theme switch rebuilds)
+
+
+func _free_rows(box: VBoxContainer) -> void:
+	for c in box.get_children():
+		box.remove_child(c)
+		c.queue_free()
+
+
+func _keep_game_tab() -> void:
+	_game_sig = _game_tab_sig()
+	_game_kept = {"parts": _parts.duplicate(), "exit": _exit_button, "reset": _reset_row, "record": _record}
+
+
+## Shows the kept This game when it's still right; false = build it.
+func _reuse_game_tab() -> bool:
+	if _game_sig == "" or _game_sig != _game_tab_sig() or _game_body.get_child_count() == 0:
+		return false
+	var k := _game_kept
+	_parts = (k.get("parts", []) as Array).filter(func(p): return is_instance_valid(p))
+	_exit_button = k.get("exit") if is_instance_valid(k.get("exit")) else null
+	_reset_row = k.get("reset") if is_instance_valid(k.get("reset")) else null
+	_record = k.get("record") if is_instance_valid(k.get("record")) else null
+	# what changes between opens without changing the rows
+	if _exit_button != null:
+		_exit_button.text = TS.QM_EXIT
+	if _reset_row != null:
+		_reset_row.title_label.text = TC.RESET_GAME
+	var st := body.get_node_or_null("SessionTime") as Label
+	var secs := session_seconds()
+	if st != null and secs >= 0:
+		st.text = TS.QM_SESSION % TS.session_time(secs).to_lower() if secs >= 60 else TS.session_time(secs)
+	_update_autotune_line()
+	_update_record_row()
+	return true
+
+
+## Builds This game for `for_game` out of sight, or brings the kept one up to
+## date, so a press of the quick menu over the game only has to show it.
+## main.gd calls it when a game starts and when its window takes the screen
+## (one-time work then; nothing of it runs while the game plays).
+func prepare(for_game: Dictionary) -> void:
+	if visible or body == null:
+		return
+	game = for_game
+	if model == null:
+		var found := Services.from_tree(self)
+		if found.has("controls"):
+			use_controls(found["controls"], found.get("profiles"))
+	if model != null:
+		model.set_game(game, false)   # main.gd has Controls detect again for the game already
+	show_section(0, "", true)
+	# Rows that heard of a change while hidden (Controls detecting for the
+	# game, its profile applied) read it now rather than on the first press.
+	_catch_up(_game_body)
+	# Shape every label's text now (a Label shapes on its first size query),
+	# so the first press doesn't pay for it; line breaks at the real width are
+	# all that's left for its first frame.
+	_shape_text(_game_body)
+
+
+static func _catch_up(n: Node) -> void:
+	for c in n.get_children():
+		if c.has_method("catch_up"):
+			c.catch_up()
+		_catch_up(c)
+
+
+static func _shape_text(n: Node) -> void:
+	for c in n.get_children():
+		if c is Control:
+			(c as Control).get_combined_minimum_size()
+		_shape_text(c)
 
 
 ## The current tab's focus chain, top to bottom.

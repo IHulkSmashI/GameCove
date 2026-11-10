@@ -898,6 +898,11 @@ func _notification(what: int) -> void:
 			wiring.home_in_front(false)
 		if launch_overlay != null:
 			launch_overlay.finish()
+		# the game took the screen: the quick menu's This game catches up with
+		# what changed since it started, once, so the first press is quick
+		if session != null and session.is_active() and not playing.is_empty() and quick_menu != null \
+				and not quick_menu.visible and quick_menu.has_method("prepare"):
+			quick_menu.prepare(playing)
 		if _boot_intro != null and is_instance_valid(_boot_intro):
 			_boot_intro.skip(true)   # a game (or anything) in front: gone, nothing left playing
 		if backdrop != null:
@@ -1626,6 +1631,10 @@ func _on_game_started(game: Dictionary) -> void:
 	if fixes != null:
 		fixes.set_game_running(true)
 	_controls_follow_game(game)
+	# the quick menu's This game, built once now so every press over the game only shows it
+	# (deferred: after the menu's own `started` handler has seen the session)
+	if quick_menu != null and quick_menu.has_method("prepare"):
+		quick_menu.prepare.call_deferred(game)
 
 
 func _on_game_ended(game: Dictionary) -> void:
@@ -1957,7 +1966,11 @@ func _on_library_changed() -> void:
 # ------------------------------------------------------------ hint bar
 
 func _on_focus_changed(f: Control) -> void:
-	_update_hints(f)
+	# Inside the quick menu the hint bar sits under its scrim (the sheet shows
+	# its own prompts): no rebuilding it on every move there, nor on the menu's
+	# first frame. Closing the menu puts focus back, which updates it.
+	if not (quick_menu != null and quick_menu.visible and f != null and quick_menu.is_ancestor_of(f)):
+		_update_hints(f)
 	_sound("move")
 
 
