@@ -212,7 +212,7 @@ Every drawing is to scale, and all use the same scale: **1 mm of the real handhe
 - Owner's rule: a flat, head-on front view (camera straight at the screen; no angle, tilt or perspective, no side or back view, no hands), screen visible, plain background, no faces. Every row says so with `"view": "front"` (in `maker_image` for maker rows); see `view` under Maker images.
 - `family_of` reuses another model's photo only when the two look the same from the front (same shell; e.g. AOKZOE A1 Pro and A1). Different shells (Claw A1M vs Claw 8 AI+, Legion Go vs Legion Go 2) don't share.
 
-### Maker images (by link; one bundled exception)
+### Maker images (by link)
 
 Free photos exist for only some handhelds. For an exact model with none, `device_photos.json` carries `"maker_image": {url, page_url, maker, checked}`: the maker's own official front-view product image, read from the `<img>`/`og:image` of the maker's own product page (`page_url`) and checked on the `checked` date. Only the maker's own domains and image CDNs count (no retailers, no review sites); `_makers` in the same file lists, per maker, the accepted image URL prefixes and product-page domains, and the app, the build and the link check all enforce it.
 
