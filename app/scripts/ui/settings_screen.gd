@@ -44,6 +44,7 @@ const PAGES := {
 	"profiles": preload("res://scripts/ui/controls/profiles_page.gd"),
 	"appearance": preload("res://scripts/ui/settings/appearance_page.gd"),
 	"stores": preload("res://scripts/ui/settings/stores_page.gd"),
+	"saves": preload("res://scripts/ui/settings/saves_page.gd"),
 	"discover": preload("res://scripts/ui/settings/discover_page.gd"),
 	"device": preload("res://scripts/ui/settings/device_page.gd"),
 	"about": preload("res://scripts/ui/settings/about_page.gd"),
@@ -398,6 +399,9 @@ func hints(f: Control) -> Array:
 		return [["A", "Type"], ["Y", "Space"], ["X", "Delete"], ["B", "Done"]]
 	if sheet != null and sheet.visible:
 		return [["A", "Select"], ["B", TS.CLOSE]]
+	var pg_m: Control = pages.get(category)
+	if pg_m != null and pg_m.has_method("modal_hints") and not pg_m.modal_hints().is_empty():
+		return pg_m.modal_hints()
 	if f == null:
 		return []
 	var cat := cat_buttons.values().has(f)

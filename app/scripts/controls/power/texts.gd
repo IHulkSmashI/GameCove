@@ -29,6 +29,8 @@ const T := {
 	"power.fan_curve": ["Fan curve", "Your own fan speed per temperature point. Never quieter than Quiet."],
 	"power.battery_saver": ["Battery saver", "Lowest power settings this handheld allows, until you turn it off or plug in."],
 	"power.battery_saver_at": ["Battery saver at", "Turns battery saver on by itself at this battery level. 0 = never."],
+	"power.low_battery_sleep": ["Sleep at low battery", "Puts the handheld to sleep on battery at the level below, after a 30 s warning any button cancels. Off by default."],
+	"power.low_battery_sleep_at": ["Sleep at", "The battery level for Sleep at low battery, 3 to 10 %."],
 	"power.sleep_mode": ["Sleep mode", "s2idle wakes fastest; deep uses less battery while asleep where the firmware supports it."],
 	"power.mcu_powersave": ["Controller power saving in sleep", "Less battery used while asleep. Turn off if the device won't wake from a button."],
 	"power.autotune_target": ["Auto TDP target", "Off finds the most frames at your TDP; a number holds that frame rate with the fewest watts."],

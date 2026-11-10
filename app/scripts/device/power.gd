@@ -300,6 +300,9 @@ var clock: Callable = func(): return [Time.get_unix_time_from_system(), Time.get
 const RESUME_GAP_S := 20.0
 var _clock_mark := [0.0, 0]
 var _clock_mutex := Mutex.new()
+## Unix time of the last look before the latest sleep (within SOURCE_CHECK_S of falling
+## asleep), 0 before any. Battery history closes a game's stretch on battery there.
+var slept_at := 0
 
 
 ## The 15 s timer's job (worker): a sleep since the last look, else the charger. main.gd
@@ -321,7 +324,10 @@ func slept_since_last_look() -> bool:
 	_clock_mutex.unlock()
 	if int(before[1]) == 0:
 		return false
-	return (float(now[0]) - float(before[0])) - (int(now[1]) - int(before[1])) / 1000.0 > RESUME_GAP_S
+	var slept := (float(now[0]) - float(before[0])) - (int(now[1]) - int(before[1])) / 1000.0 > RESUME_GAP_S
+	if slept:
+		slept_at = int(before[0])
+	return slept
 
 
 func _mark_clock() -> void:
@@ -730,7 +736,14 @@ func fan_modes() -> Array:
 func refresh(after_resume := false) -> void:
 	var boost_before := _live_boost   # before sleep: what the firmware may have reset
 	if after_resume:
-		_mark_clock()   # main.gd noticed it first: the 15 s check mustn't do it again
+		_clock_mutex.lock()
+		var mark: Array = _clock_mark
+		_clock_mutex.unlock()
+		var now: Array = clock.call()
+		# main.gd noticed it first: the last 15 s look before the sleep is when it began
+		if int(mark[1]) != 0 and (float(now[0]) - float(mark[0])) - (int(now[1]) - int(mark[1])) / 1000.0 > RESUME_GAP_S:
+			slept_at = int(mark[0])
+		_mark_clock()   # the 15 s check mustn't report it again
 		# the charger may have come or gone while asleep: limits first (review S1-2)
 		check_power_source()
 	var v := read_tdp()

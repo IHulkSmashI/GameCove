@@ -16,11 +16,11 @@ const SUPPORT_LINES := {
 const SECTIONS := {
 	"device": "Device", "chip": "Chip and drivers", "memory": "Memory", "storage": "Storage",
 	"screen": "Screen", "battery": "Battery", "software": "Software", "support": "What works here",
-	"fixes": "Recommended fixes",
+	"fixes": "Recommended fixes", "history": "Battery history",
 }
 const SECTION_ICONS := {
 	"device": "handheld", "chip": "bolt", "memory": "gauge", "storage": "download", "screen": "screen",
-	"battery": "power", "software": "info", "support": "shield", "fixes": "sparkle",
+	"battery": "power", "software": "info", "support": "shield", "fixes": "sparkle", "history": "clock",
 }
 const UNKNOWN := "Unknown"
 const SERIAL_HIDDEN := "Hidden"

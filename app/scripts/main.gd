@@ -47,6 +47,12 @@ const ControllerProvider := preload("res://scripts/controls/providers/controller
 const PerfProvider := preload("res://scripts/controls/providers/perf.gd")
 const StreamingScreen := preload("res://scripts/ui/streaming/streaming_screen.gd")
 const StreamingService := preload("res://scripts/streaming/streaming.gd")
+const SavesService := preload("res://scripts/system/saves_service.gd")
+const BatteryLog := preload("res://scripts/system/battery_log.gd")
+const LowBattery := preload("res://scripts/system/low_battery.gd")
+const LowBatteryDialog := preload("res://scripts/ui/low_battery_dialog.gd")
+const TSaves := preload("res://scripts/ui/texts_saves.gd")
+const SavesCardScript := preload("res://scripts/ui/games/saves_card.gd")
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
@@ -95,6 +101,17 @@ var _screen_layer: Control
 var _hint_shade: TextureRect
 var _last_input_ms := 0
 var _battery_warned := false
+## Epic and GOG cloud saves around a game (saves_service.gd).
+var saves: Node
+## Battery history and per-game drain (battery_log.gd).
+var battery_log: Node
+## Sleep at low battery (low_battery.gd) and its warning while it shows.
+var low_battery: Node
+var low_dialog: Control
+## Key of the game waiting for its cloud save before it starts ("" when none).
+var _launch_wait := ""
+## Key of the game whose save conflict sheet is open before its launch ("" when none).
+var _conflict_for := ""
 var _seen_new := {}
 ## Install state and live progress for every game (Library store signals).
 var install_state: Node
@@ -288,6 +305,7 @@ func _ready() -> void:
 	_wire_games()
 	_wire_services()
 	_wire_controls()
+	_wire_saves_and_battery()
 	closer = GameCloser.new()
 	closer.name = "GameCloser"
 	add_child(closer)
@@ -449,6 +467,71 @@ func _wire_controls() -> void:
 	fixes.check_changes()
 	if quick_menu != null and "fixes" in quick_menu:
 		quick_menu.fixes = fixes
+
+
+## Cloud saves, battery history and Sleep at low battery: each follows events that happen
+## anyway (a game starts or ends, the charger, a wake, Power's 15 s battery check).
+func _wire_saves_and_battery() -> void:
+	saves = SavesService.new()
+	saves.name = "CloudSaves"
+	saves.setup_library(_svc("Library"))
+	saves.game_running = func() -> bool: return session != null and session.is_active()
+	saves.finished.connect(_on_saves_finished)
+	add_child(saves)
+	battery_log = BatteryLog.new()
+	battery_log.name = "BatteryLog"
+	if Device.get("root") is String:
+		battery_log.sys_root = str(Device.get("root"))
+	battery_log.attach_power(_svc("Power"))
+	battery_log.attach_session(session)
+	add_child(battery_log)
+	low_battery = LowBattery.new()
+	low_battery.name = "LowBattery"
+	low_battery.setup(_svc("Power"), _svc("Controls"))
+	low_battery.warn_requested.connect(_on_low_battery)
+	low_battery.warn_cancelled.connect(func():
+		if low_dialog != null and is_instance_valid(low_dialog):
+			low_dialog.dismiss()
+		_low_dialog_closed())
+	low_battery.sleeping.connect(func(): battery_log.record("suspend"))
+	add_child(low_battery)
+
+
+## A cloud save job ended: after a game, only trouble is worth a toast (the page shows the rest).
+func _on_saves_finished(key: String, phase: String, state: String) -> void:
+	if phase != "post":
+		return
+	var g := View.find_by_key(_decorated(), key)
+	var title := str(g.get("title", key))
+	if state == "conflict":
+		toast(TSaves.CONFLICT_TOAST % title, "alert", "warn")
+	elif state in ["failed", "offline", "backup_failed"]:
+		toast(TSaves.SYNC_FAILED_TOAST % title, "alert", "warn")
+
+
+## Sleep at low battery: the 30 s warning, over a running game too.
+func _on_low_battery(percent: int) -> void:
+	if low_dialog != null and is_instance_valid(low_dialog):
+		return
+	low_dialog = LowBatteryDialog.open(_modal_layer, percent)
+	low_dialog.decided.connect(func(stay: bool):
+		if stay:
+			low_battery.cancel()
+		else:
+			low_battery.confirm()
+		_low_dialog_closed())
+	background.set_menu(true)
+	if session.is_active() and not quick_menu.visible:
+		Gamescope.set_overlay(true)
+	_update_hints.call_deferred()
+
+
+func _low_dialog_closed() -> void:
+	low_dialog = null
+	background.set_menu(quick_menu.visible)
+	if session.is_active() and not quick_menu.visible:
+		Gamescope.set_overlay(false)
+	_update_hints.call_deferred()
 
 
 ## The game is the scope of the per-game controls (perf.*): set it, then detect
@@ -1107,9 +1190,59 @@ func _play(game: Dictionary) -> void:
 	if session.runs(str(game.get("key", ""))):
 		session.return_to_game()   # already running: back to it, no second launch
 		return
+	if _launch_wait != "":
+		return   # another game is still getting its cloud save
 	playing = game
 	launch_overlay.show_for(game, backdrop.current_accent())
 	_pause_motion()
+	if saves == null or not saves.applies(game):
+		session.begin(game, Library.launch(game))
+		return
+	# Epic / GOG: the newest cloud save comes down first (never while the game runs)
+	_launch_wait = str(game.get("key", ""))
+	launch_overlay.status.text = TSaves.SYNC_LAUNCH
+	saves.before_launch(game, func(r: Dictionary): _after_cloud_check(game, r))
+
+
+## The cloud save check before a launch finished: start, or let the user pick a side first.
+func _after_cloud_check(game: Dictionary, r: Dictionary) -> void:
+	if _launch_wait != str(game.get("key", "")):
+		return   # cancelled meanwhile
+	if r.has("conflict"):
+		launch_overlay.finish()
+		var key := str(game.get("key", ""))
+		_conflict_for = key
+		game_actions.open_menu(TSaves.CONFLICT_TITLE, TSaves.CONFLICT_LINE % str(game.get("title", "")),
+			SavesCardScript.conflict_rows(r["conflict"], int(Time.get_unix_time_from_system()), true),
+			func(id: String) -> void:
+				_conflict_for = ""
+				launch_overlay.show_for(game, backdrop.current_accent())
+				if id in ["local", "cloud"]:
+					launch_overlay.status.text = TSaves.SYNC_LAUNCH
+					saves.resolve(game, id, func(_st): _start_after_sync(game))
+				else:
+					_start_after_sync(game))
+		game_actions.sheet.closed.connect(func(): call_deferred("_conflict_closed", key), CONNECT_ONE_SHOT)
+		return
+	_start_after_sync(game)
+
+
+## The conflict sheet closed: without a pick (B), the game doesn't start.
+func _conflict_closed(key: String) -> void:
+	if _conflict_for != key:
+		return
+	_conflict_for = ""
+	if _launch_wait == key:
+		_launch_wait = ""
+		playing = {}
+		_resume_motion()
+
+
+func _start_after_sync(game: Dictionary) -> void:
+	if _launch_wait != str(game.get("key", "")):
+		return
+	_launch_wait = ""
+	launch_overlay.status.text = "Launching…"
 	session.begin(game, Library.launch(game))
 
 
@@ -1155,6 +1288,10 @@ func stream_display() -> Dictionary:
 
 func _on_launch_cancelled(_game: Dictionary) -> void:
 	_sound("back")
+	if _launch_wait != "":
+		_launch_wait = ""   # still getting the cloud save: the game won't start
+		playing = {}
+		_resume_motion()
 	if session.is_active():
 		session.stop()
 
@@ -1171,6 +1308,8 @@ func _on_game_started(game: Dictionary) -> void:
 
 func _on_game_ended(game: Dictionary) -> void:
 	wiring.game_ended(game)
+	if saves != null:
+		saves.after_exit(game)   # what the game just saved goes up
 	if streaming != null:
 		streaming.set_game_running(false)
 	if fixes != null:
@@ -1219,7 +1358,8 @@ func _open_page(game: Dictionary) -> void:
 	close_downloads()
 	page = GamePage.new()
 	var g := View.find_by_key(_decorated(), str(game.get("key", "")))
-	page.setup(g if not g.is_empty() else game, Launcher, {"library": store_api, "state": install_state, "actions": game_actions, "achievements": achievements_api})
+	page.setup(g if not g.is_empty() else game, Launcher, {"library": store_api, "state": install_state, "actions": game_actions,
+		"achievements": achievements_api, "saves": saves, "battery": battery_log})
 	page.play_requested.connect(_play)
 	page.back_requested.connect(_close_page)
 	page.downloads_requested.connect(open_downloads)
@@ -1368,6 +1508,8 @@ func _update_hints(f: Control = null) -> void:
 ## Hints from whatever sits on top: a sheet, the Steam overlay, the downloads
 ## list, or the game page's own (achievement grid, Manage). [] = the usual.
 func _special_hints(f: Control) -> Array:
+	if low_dialog != null and is_instance_valid(low_dialog):
+		return LowBatteryDialog.hints()
 	if game_actions != null and game_actions.is_modal():
 		return game_actions.modal_hints()
 	if steam_overlay != null and steam_overlay.is_open():
@@ -1482,7 +1624,7 @@ func _build_settings() -> void:
 		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
 			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
-			"photo": _svc("DevicePhoto")})
+			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log})
 
 
 static func _version() -> String:

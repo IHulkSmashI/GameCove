@@ -2,18 +2,19 @@ extends RefCounted
 ## Words for Settings, the quick menu additions and first-run setup. Plain,
 ## short, casual; jargon gets one line of explanation.
 
-const CATEGORIES := ["appearance", "stores", "discover", "performance", "device", "about"]
+const CATEGORIES := ["appearance", "stores", "saves", "discover", "performance", "device", "about"]
 const CATEGORY_NAMES := {
-	"appearance": "Appearance", "stores": "Stores", "discover": "Discover",
+	"appearance": "Appearance", "stores": "Stores", "saves": "Saves", "discover": "Discover",
 	"performance": "Performance", "device": "Device", "about": "About GameCove",
 }
 const CATEGORY_ICONS := {
-	"appearance": "palette", "stores": "store", "discover": "discover",
+	"appearance": "palette", "stores": "store", "saves": "cloud", "discover": "discover",
 	"performance": "gauge", "device": "handheld", "about": "info",
 }
 const CATEGORY_LINES := {
 	"appearance": "Colours, motion and sounds.",
 	"stores": "Sign-ins, downloads, Steam.",
+	"saves": "Epic and GOG cloud saves.",
 	"discover": "Prices, keys and alerts.",
 	"performance": "Overlay and achievements.",
 	"device": "Controller, storage, updates.",
