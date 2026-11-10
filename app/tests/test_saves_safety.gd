@@ -593,3 +593,66 @@ func test_gog_restore_holds_too() -> void:
 	w["s"].after_exit(w["gog"])
 	eq(cloud.cloud["saves/slot1.sav"]["data"], "good, continued", "and what was played from it goes up")
 	_done(w)
+
+
+# ---- GOG: two save locations ----------------------------------------------------------------------
+
+## A second location on the game (settings next to saves).
+func _two_locations(w: Dictionary) -> String:
+	_json(w["gog"]["heroic_root"].path_join("store_cache/gog_library.json"), {"games": [{"app_name": "1207", "cloud_save_enabled": true,
+		"gog_save_location": [{"name": "saves", "location": "<?DOCUMENTS?>/Witcher"}, {"name": "cfg", "location": "<?APPLICATION_DATA_LOCAL?>/Witcher"}]}]})
+	return w["user"].path_join("AppData/Local/Witcher")
+
+
+## Location 1 downloads, location 2 fails, the backup of both goes back. Location 1's sync
+## time used to move on anyway: its newer cloud files were then never fetched again, and
+## the next upload put the old local ones over them.
+func test_gog_a_failed_location_rolls_the_sync_times_back_too() -> void:
+	var w := _world("gog_two")
+	var cloud: Object = w["gog_cloud"]
+	var cfgdir := _two_locations(w)
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(cfgdir.path_join("keys.ini"), "wasd", T0)
+	w["s"].sync_now(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "uploaded", "both locations synced")
+	var before: Dictionary = _cfg(w, "gog:1207", "gog_ts", {})
+	# another device plays on: both locations are newer in the cloud
+	w["now"][0] += 5000
+	cloud.cloud["saves/slot1.sav"] = {"data": "hour 9", "t": int(w["now"][0]), "lt": int(w["now"][0]), "hash": "h9"}
+	cloud.cloud["cfg/keys.ini"] = {"data": "arrows", "t": int(w["now"][0]), "lt": int(w["now"][0]), "hash": "ar"}
+	w["now"][0] += 100
+	cloud.fail_names = ["cfg"]
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the game still starts")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "hour 1", "everything was put back as it was")
+	eq(_cfg(w, "gog:1207", "gog_ts", {}), before, "and so were the sync times")
+	# next time GOG answers: location 1's cloud save still comes down
+	cloud.fail_names = []
+	got.clear()
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "hour 9", "the other device's progress arrives")
+	eq(FileAccess.get_file_as_string(cfgdir.path_join("keys.ini")), "arrows", "in both locations")
+	_done(w)
+
+
+## After a game it's the other way round: an upload that went through stays through.
+func test_gog_a_failed_location_after_play_keeps_what_was_uploaded() -> void:
+	var w := _world("gog_two_post")
+	var cloud: Object = w["gog_cloud"]
+	var cfgdir := _two_locations(w)
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(cfgdir.path_join("keys.ini"), "wasd", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	Fakes.put(cfgdir.path_join("keys.ini"), "esdf", int(w["now"][0]))
+	cloud.fail_names = ["cfg"]
+	w["s"].after_exit(w["gog"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 2", "location 1 went up")
+	cloud.fail_names = []
+	w["now"][0] += 100
+	w["s"].after_exit(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "uploaded", "the retry finishes location 2 without calling location 1 a conflict")
+	eq(cloud.cloud["cfg/keys.ini"]["data"], "esdf", "location 2 went up")
+	_done(w)

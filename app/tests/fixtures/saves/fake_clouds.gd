@@ -47,6 +47,8 @@ class Gog extends RefCounted:
 	## Leave the cloud's file list out of the log (a gogdl that words it differently).
 	var hide_listing := false
 	var offline := false
+	## Location names whose runs fail (GOG answers with an error for that one).
+	var fail_names: Array = []
 
 	func seed(name: String, rel: String, data: String, t: int) -> void:
 		cloud[name + "/" + rel] = {"data": data, "t": t, "lt": t, "hash": data.md5_text()}
@@ -67,6 +69,8 @@ class Gog extends RefCounted:
 		var path := str(args[i + 1])
 		var ts := float(str(args[args.find("--ts") + 1]))
 		var name := str(args[args.find("--name") + 1])
+		if name in fail_names:
+			return {"code": 1, "out": "[SAVES] ERROR: 500 Server Error for location %s\n" % name}
 		var prefer := ""
 		for a in args:
 			prefer = str({"--skip-download": "upload", "--skip-upload": "download", "--force-upload": "forceupload",

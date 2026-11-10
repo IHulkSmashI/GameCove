@@ -530,10 +530,12 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 		if not b["ok"]:
 			return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]))
 	var ts := _gog_ts(key, entry, locs)
+	var before := ts.duplicate()
 	var step := str({"pre": "pre", "post": "post", "now": ""}[mode])
 	var acted := ""
 	var conflict := false
 	var cloud_newest := 0
+	var downloaded: Array = []
 	for l in locs:
 		var cur := str(ts.get(l["name"], "0"))
 		var r := {}
@@ -549,11 +551,19 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 		match r["action"]:
 			"failed":
 				var back := _put_back(key, b) if mode != "post" else ""
+				if mode != "post":
+					# the backup put every folder back as it was: a location that had downloaded is
+					# at its old state again, so its old sync time is the true one (an upload that
+					# went through stays through, and keeps its new time)
+					for name in downloaded:
+						ts[name] = before.get(name, "0")
 				return _set_status(key, "offline" if r["offline"] else "failed", str(r["error"]) + back, {"gog_ts": ts})
 			"conflict":
 				conflict = true
 			"upload", "download":
 				acted = r["action"] if acted == "" or acted == r["action"] else "both"
+				if r["action"] == "download":
+					downloaded.append(str(l["name"]))
 				if r["ts"] != "":
 					ts[l["name"]] = r["ts"]
 			"none":
@@ -635,10 +645,13 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 				if cloud != "":
 					return _set_status(key, "backup_failed", cloud)
 			var ts := _gog_ts(key, entry, locs)
+			var before := ts.duplicate()
 			for l in locs:
 				var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_download" if choice == "cloud" else "force_upload")
 				if r["action"] == "failed":
 					var back := _put_back(key, b) if choice == "cloud" else ""
+					if choice == "cloud":
+						ts = before   # every folder is back as it was
 					return _set_status(key, "offline" if r["offline"] else "failed", str(r["error"]) + back, {"gog_ts": ts})
 				if r["ts"] != "":
 					ts[l["name"]] = r["ts"]
