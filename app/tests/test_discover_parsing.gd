@@ -27,6 +27,38 @@ func test_cheapshark_deals() -> void:
 	eq(CheapShark.parse_deals("[]".to_utf8_buffer()), [], "empty list")
 
 
+## Final review (Low): CheapShark sends null for what it doesn't know. int(null)
+## was a script error inside the parser, which stopped the request's callback
+## and left the Discover refresh waiting for ever.
+func test_cheapshark_null_fields_never_stop_the_parser() -> void:
+	var deals: Variant = CheapShark.parse_deals(('[{"dealID":"a1","storeID":null,"gameID":null,"steamAppID":null,"title":null,'
+		+ '"salePrice":null,"normalPrice":null,"savings":null,"dealRating":null,"thumb":null,"releaseDate":null},'
+		+ '{"dealID":null,"title":"no id"},{"dealID":"b2","title":"Fine","salePrice":"1.50","normalPrice":"3.00","savings":"50.0",'
+		+ '"releaseDate":{"odd":1},"thumb":["x"],"storeID":7}]').to_utf8_buffer())
+	ok(deals is Array, "still a list")
+	eq(deals.size(), 2, "the entry without an id is left out, the others stay")
+	eq([deals[0]["deal_id"], deals[0]["store_id"], deals[0]["title"], deals[0]["thumb"], deals[0]["released"], deals[0]["price"], deals[0]["rating"]],
+		["a1", "", "", "", 0, 0.0, null], "nulls read as empty, never as \"<null>\"")
+	eq([deals[1]["released"], deals[1]["thumb"], deals[1]["store_id"], deals[1]["price"]], [0, "", "7", 1.5], "odd types too")
+	var stores := CheapShark.parse_stores('[{"storeID":"1","storeName":null,"isActive":null,"images":null},{"storeID":null},{"storeID":2,"storeName":"B","isActive":1,"images":{"icon":null}}]'.to_utf8_buffer())
+	eq(stores, {"1": {"name": "", "active": false, "icon": ""}, "2": {"name": "B", "active": true, "icon": ""}}, "stores with nulls")
+	var found: Variant = CheapShark.parse_search('[{"gameID":"5","steamAppID":null,"external":null,"cheapest":null,"cheapestDealID":null,"thumb":null},{"gameID":null}]'.to_utf8_buffer())
+	eq(found, [{"game_id": "5", "appid": "", "title": "", "cheapest": 0.0, "cheapest_deal_id": "", "thumb": ""}] as Array[Dictionary], "search with nulls")
+	var look := CheapShark.parse_lookup('{"7":{"info":{"title":null,"steamAppID":null,"thumb":null},"cheapestPriceEver":{"price":null,"date":null},"deals":null},"8":{"info":null,"cheapestPriceEver":null,"deals":[null,{"dealID":null},{"dealID":"d","storeID":null,"price":null,"retailPrice":null,"savings":null}]}}'.to_utf8_buffer())
+	eq(look["7"], {"game_id": "7", "appid": "", "title": "", "thumb": "", "historical_low": {"price": 0.0, "currency": "USD", "date": 0}, "offers": [] as Array[Dictionary]}, "a lookup whose deals are null")
+	eq(look["8"]["offers"].size(), 1, "null entries in the list are skipped")
+	eq(look["8"]["offers"][0]["store_id"], "", "and a null store reads as empty")
+	# Steam's own answers get the same care
+	var SteamApi = load("res://scripts/discover/steam_api.gd")
+	var items: Dictionary = SteamApi.parse_items('{"response":{"store_items":[{"success":1,"appid":10,"name":null,"is_free":null,"assets":null,"release":{"steam_release_date":null,"is_coming_soon":null},"best_purchase_option":{"final_price_in_cents":"999","original_price_in_cents":null,"discount_pct":null,"active_discounts":null,"formatted_final_price":null}},{"success":null,"appid":11}]}}'.to_utf8_buffer())
+	eq(items.keys(), ["10"], "an item full of nulls still parses; one without success is left out")
+	eq([items["10"]["price"], items["10"]["regular_price"], items["10"]["savings_pct"], items["10"]["title"], items["10"]["free"]], [9.99, 9.99, 0, "", false], "with what it does know")
+	eq(SteamApi.parse_items('{"response":{"store_items":null}}'.to_utf8_buffer()), {}, "no item list")
+	eq(SteamApi.parse_wishlist('{"response":{"items":[{"appid":20,"priority":null,"date_added":null},{"appid":null},null]}}'.to_utf8_buffer()),
+		[{"appid": "20", "priority": 0, "added": 0}] as Array[Dictionary], "a wishlist with nulls")
+	eq(SteamApi.parse_wishlist('{"response":{"items":null}}'.to_utf8_buffer()), [] as Array[Dictionary], "a null wishlist is an empty one")
+
+
 func test_cheapshark_stores_search_lookup() -> void:
 	var stores := CheapShark.parse_stores(_bytes("cs_stores.json"))
 	eq(stores["1"]["name"], "Steam", "store name")
