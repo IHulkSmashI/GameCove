@@ -14,6 +14,7 @@ const Motion := preload("res://scripts/ui/motion.gd")
 const Illustrations := preload("res://scripts/ui/illustrations.gd")
 const Apps := preload("res://scripts/library/apps.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const CardJobs := preload("res://scripts/system/card_jobs.gd")
 
 ## A was pressed on an app.
 signal launch_requested(app: Dictionary)
@@ -37,7 +38,6 @@ var status_label: Label
 var top_target: Control
 var _scroll: ScrollContainer
 var _empty: Control
-var _task := -1
 var _gen := 0
 
 
@@ -156,23 +156,9 @@ func refresh() -> void:
 	if not is_inside_tree():
 		_on_scanned(fn.call(), gen)
 		return
-	_reap()
-	var me: WeakRef = weakref(self)
-	_task = WorkerThreadPool.add_task(func():
-		var list: Array = fn.call()
-		var o: Object = me.get_ref()
-		if o != null:
-			o.call_deferred("_on_scanned", list, gen), false, "GameCove apps")
-
-
-func _reap() -> void:
-	if _task != -1:
-		WorkerThreadPool.wait_for_task_completion(_task)
-		_task = -1
-
-
-func _exit_tree() -> void:
-	_reap()
+	# the scan belongs to card_jobs.gd: leaving the view never waits for it, and
+	# the result finds us by instance id (on the main thread) if we're still here
+	CardJobs.shared().run_for(self, fn, "_on_scanned", [gen])
 
 
 func _on_scanned(list: Array, gen: int) -> void:
@@ -180,7 +166,6 @@ func _on_scanned(list: Array, gen: int) -> void:
 		return
 	loading = false
 	status_label.text = ""
-	_reap_if_done()
 	var before := Apps.pinned(pins_path)
 	var after := Apps.refresh_pins(list, pins_path)
 	if before != after:
@@ -194,12 +179,6 @@ func _on_scanned(list: Array, gen: int) -> void:
 				return
 	if visible and (get_viewport() == null or get_viewport().gui_get_focus_owner() == null or not is_ancestor_of(get_viewport().gui_get_focus_owner())):
 		focus_first()
-
-
-func _reap_if_done() -> void:
-	if _task != -1 and WorkerThreadPool.is_task_completed(_task):
-		WorkerThreadPool.wait_for_task_completion(_task)
-		_task = -1
 
 
 func _focused_key() -> String:

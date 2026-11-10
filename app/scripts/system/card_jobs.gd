@@ -105,6 +105,27 @@ func start(channel: String, job_name: String, fn: Callable, method: String, extr
 	return true
 
 
+## A one-off for one object, no channel (a page's scan): `fn` on the worker,
+## then `method(result, extra...)` on `obj` on the main thread if it still
+## exists (looked up by instance id). Nothing waits for it but app exit.
+## threaded = false runs it at once.
+func run_for(obj: Object, fn: Callable, method: String, extra: Array = [], threaded := true) -> void:
+	if _closed:
+		return
+	if not threaded:
+		obj.callv(method, [fn.call()] + extra)
+		return
+	_reap()
+	var id := obj.get_instance_id()
+	_tasks.append(WorkerThreadPool.add_task(func():
+		var res: Variant = fn.call()
+		_lock.lock()
+		_done.append([id, method, [res] + extra])
+		_lock.unlock()
+		call_deferred("_drain"),
+		false, "GameCove job"))
+
+
 ## Main thread: hands every finished job's result over.
 func _drain() -> void:
 	_reap()
@@ -113,7 +134,19 @@ func _drain() -> void:
 	_done.clear()
 	_lock.unlock()
 	for d in list:
-		_finish(d[0], d[1], d[2])
+		if d[0] is int:
+			_to_instance(d[0], d[1], d[2])
+		else:
+			_finish(d[0], d[1], d[2])
+
+
+func _to_instance(id: int, method: String, args: Array) -> void:
+	if _closed:
+		return
+	var o: Object = instance_from_id(id)
+	if o == null or (o is Node and (o as Node).is_queued_for_deletion()):
+		return
+	o.callv(method, args)
 
 
 func _finish(channel: String, method: String, args: Array) -> void:

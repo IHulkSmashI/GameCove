@@ -6,6 +6,9 @@ extends "res://scripts/ui/settings/page.gd"
 ## Built the first time it's shown and read again each time it's shown or a
 ## clip is saved. Everything that touches the disk or runs a program happens
 ## on a WorkerThreadPool task, never the main thread. Nothing runs by itself.
+## The jobs (a read, installing the recorder or a player, allowing capture)
+## belong to scripts/system/card_jobs.gd: leaving or rebuilding the page never
+## waits for one, and the page that is there when it ends gets the result.
 ##
 ## services: "recording" (the Recording node; the page reads its locate() /
 ## options()), "media_runner" (proc.gd or a fake), "media_env" ({"home",
@@ -21,17 +24,27 @@ const ShareSheet := preload("res://scripts/ui/settings/share_sheet.gd")
 const ClipRow := preload("res://scripts/ui/settings/clip_row.gd")
 const Services := preload("res://scripts/ui/settings/services.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const CardJobs := preload("res://scripts/system/card_jobs.gd")
+## card_jobs.gd channel.
+const CH := "media"
 ## Clips listed at once (the rest are counted); pictures made per read with ffmpeg.
 const MAX_ROWS := 40
 const THUMBS_PER_READ := 6
 
 ## {"loc", "status", "clips", "player", "ffmpeg"} from the last read; {} before it.
-var state: Dictionary = {}
-var busy := ""          # "read" / "install" / "setup" / "player" / "", while a job runs
+## Kept by `jobs`, so a rebuilt page shows it at once.
+var state: Dictionary:
+	get: return _jobs().memo(CH).get("state", {})
+	set(v): _jobs().memo(CH)["state"] = v
+## "read" / "install" / "setup" / "player" / "", while a job runs (in `jobs`).
+var busy: String:
+	get: return _jobs().busy(CH)
+## The owner of the jobs: CardJobs.shared(), or one of its own under tests
+## ("media_runner" given) unless "card_jobs" is.
+var jobs: RefCounted
 var sheet: Control
 var share: Control
 var clip_rows: Array = []
-var _tasks: Array = []
 var _built := false
 var _textures := {}     # clip path -> Texture2D
 
@@ -44,7 +57,20 @@ func _connect() -> void:
 
 func _runner() -> RefCounted:
 	var r: Variant = services.get("media_runner")
-	return r if r is RefCounted else Proc.new()
+	return r if r is RefCounted else _jobs().runner()
+
+
+func _jobs() -> RefCounted:
+	if jobs == null:
+		var j: Variant = services.get("card_jobs") if services is Dictionary else null
+		if j is RefCounted:
+			jobs = j
+		elif services is Dictionary and services.get("media_runner") != null:
+			jobs = CardJobs.new()
+		else:
+			jobs = CardJobs.shared()
+		jobs.subscribe(CH, self)
+	return jobs
 
 
 func _env() -> Dictionary:
@@ -65,11 +91,10 @@ func refresh() -> void:
 		return
 	if services.get("media_runner") == null and Services.under_tests(self):
 		return   # unit tests pass a fake; nothing real may run under them
-	busy = "read"
-	rebuild()
 	var r := _runner()
 	var env := _env()
-	_job(func(): return read_state(r, env), "_on_state")
+	if _job("read", func(): return read_state(r, env), "_on_state"):
+		rebuild()
 
 
 ## Worker: everything the page shows. Static so tests can call it.
@@ -102,37 +127,25 @@ static func read_state(r: RefCounted, env: Dictionary) -> Dictionary:
 	return {"loc": loc, "status": st, "clips": clips, "pictures": pictures, "player": player, "flatpak": flatpak}
 
 
-## Runs `fn` off the main thread, then `done(result)` here. Outside the tree
-## (tests) it runs at once.
-func _job(fn: Callable, done: String, extra: Array = []) -> void:
-	if not is_inside_tree():
-		callv(done, [fn.call()] + extra)
-		return
-	var me: WeakRef = weakref(self)
-	_tasks.append(WorkerThreadPool.add_task(func():
-		var res: Variant = fn.call()
-		var o: Object = me.get_ref()
-		if o != null:
-			o.call_deferred("_deliver", done, [res] + extra),
-		false, "GameCove media"))
+## Hands `fn` to the job owner; `done(result, extra...)` runs on whichever page is
+## there when it ends. Outside the tree (tests) it runs at once.
+func _job(job_name: String, fn: Callable, done: String, extra: Array = []) -> bool:
+	var j := _jobs()
+	return j.start(CH, job_name, fn, done, extra, is_inside_tree() or j.force_threads)
 
 
-func _deliver(method: String, args: Array) -> void:
-	for t in _tasks.duplicate():
-		if WorkerThreadPool.is_task_completed(t):
-			WorkerThreadPool.wait_for_task_completion(t)
-			_tasks.erase(t)
-	callv(method, args)
+func _enter_tree() -> void:
+	if jobs != null:
+		jobs.subscribe(CH, self)
 
 
+## Leaving never waits for a job (it isn't ours): we just stop listening.
 func _exit_tree() -> void:
-	for t in _tasks:
-		WorkerThreadPool.wait_for_task_completion(t)
-	_tasks.clear()
+	if jobs != null:
+		jobs.unsubscribe(CH, self)
 
 
 func _on_state(st: Dictionary) -> void:
-	busy = ""
 	state = st
 	_textures.clear()
 	var pics: Dictionary = st.get("pictures", {})
@@ -223,10 +236,8 @@ func install_recorder() -> void:
 	if flatpak == "":
 		notify(TX.MEDIA_NO_FLATPAK, "bad")
 		return
-	busy = "install"
-	rebuild()
 	var r := _runner()
-	_job(func():
+	var started := _job("install", func():
 		var remotes: Dictionary = r.run(flatpak, PackedStringArray(["remotes", "--system", "--columns=name"]))
 		for cmd in Recorder.install_commands(flatpak, Recorder.has_flathub(str(remotes.get("out", "")))):
 			var args := PackedStringArray()
@@ -236,6 +247,8 @@ func install_recorder() -> void:
 			if int(res.get("code", -1)) != 0:
 				return {"ok": false, "out": str(res.get("out", ""))}
 		return {"ok": true, "out": ""}, "_on_installed")
+	if started and busy == "install":
+		rebuild()
 
 
 ## Flatpak says "not allowed" / "authentication" when polkit wanted a password.
@@ -245,7 +258,6 @@ static func install_needs_desktop(out: String) -> bool:
 
 
 func _on_installed(res: Dictionary) -> void:
-	busy = ""
 	if bool(res.get("ok", false)):
 		notify(TX.MEDIA_INSTALLED, "good")
 	elif install_needs_desktop(str(res.get("out", ""))):
@@ -256,18 +268,17 @@ func _on_installed(res: Dictionary) -> void:
 
 
 func allow_capture() -> void:
-	busy = "setup"
-	rebuild()
 	var r := _runner()
 	var home := str(_env().get("home", ""))
-	_job(func():
+	var started := _job("setup", func():
 		var cmd := Recorder.setup_command(home)
 		var res: Dictionary = r.run(cmd[0], cmd.slice(1))
 		return {"code": int(res.get("code", -1)), "out": str(res.get("out", ""))}, "_on_setup")
+	if started and busy == "setup":
+		rebuild()
 
 
 func _on_setup(res: Dictionary) -> void:
-	busy = ""
 	var code := int(res.get("code", -1))
 	if code == 0:
 		notify(TX.MEDIA_SETUP_DONE, "good")
@@ -352,11 +363,10 @@ func install_player(clip: Dictionary) -> void:
 	if flatpak == "" or busy != "":
 		notify(TX.MEDIA_NO_FLATPAK if flatpak == "" else TX.CLIPS_PLAYER_INSTALLING, "bad" if flatpak == "" else "")
 		return
-	busy = "player"
 	notify(TX.CLIPS_PLAYER_INSTALLING)
 	var r := _runner()
 	var env := _env()
-	_job(func():
+	_job("player", func():
 		for cmd in Clips.player_install_commands(flatpak):
 			var args := PackedStringArray()
 			for c in cmd.slice(1):
@@ -368,7 +378,6 @@ func install_player(clip: Dictionary) -> void:
 
 
 func _on_player(res: Dictionary, clip: Dictionary) -> void:
-	busy = ""
 	if not bool(res.get("ok", false)):
 		notify(TX.CLIPS_PLAYER_FAILED % Recorder.last_line(Array(str(res.get("out", "")).split("\n"))), "bad")
 		return

@@ -57,7 +57,12 @@ var setup_needed := false
 var _started_ms := 0
 var _lines: Array = []
 var _thread: Thread
-var _stop_task := -1
+## Pool tasks (stop, clip picture) not yet freed; finished ones go as new ones start.
+var _tasks: Array[int] = []
+## The recorder's pid as the worker knows it (before _on_pid reaches the main thread).
+var _child := 0
+## App exit: how long the recorder gets to finish the file after SIGINT, then SIGTERM.
+var exit_grace_ms := 3000
 var _mutex := Mutex.new()
 
 
@@ -155,7 +160,11 @@ func start(for_game: Dictionary) -> bool:
 
 ## Worker: runs the recorder until it ends.
 func _run(argv: PackedStringArray) -> void:
-	var code: int = spawner.run_blocking(argv, func(p: int): _deliver("_on_pid", [p]), func(line: String):
+	var code: int = spawner.run_blocking(argv, func(p: int):
+		_mutex.lock()
+		_child = p
+		_mutex.unlock()
+		_deliver("_on_pid", [p]), func(line: String):
 		_mutex.lock()
 		_lines.append(line)
 		if _lines.size() > KEEP_LINES:
@@ -163,6 +172,7 @@ func _run(argv: PackedStringArray) -> void:
 		_mutex.unlock())
 	_mutex.lock()
 	var lines := _lines.duplicate()
+	_child = 0
 	_mutex.unlock()
 	_deliver("_on_exit", [code, lines])
 
@@ -189,7 +199,8 @@ func _on_pid(p: int) -> void:
 		var clip := path
 		var fn := thumb_fn
 		if threaded:
-			WorkerThreadPool.add_task(func(): fn.call(clip), false, "GameCove clip picture")
+			_reap_tasks()
+			_tasks.append(WorkerThreadPool.add_task(func(): fn.call(clip), false, "GameCove clip picture"))
 		else:
 			fn.call(clip)
 
@@ -253,16 +264,19 @@ func _send_stop() -> void:
 		if OS.is_process_running(root):
 			r.run("kill", PackedStringArray(["-TERM", str(target)]))
 	if threaded:
-		_reap_stop()
-		_stop_task = WorkerThreadPool.add_task(job, false, "GameCove stop recording")
+		_reap_tasks()
+		_tasks.append(WorkerThreadPool.add_task(job, false, "GameCove stop recording"))
 	else:
 		job.call()
 
 
-func _reap_stop() -> void:
-	if _stop_task != -1:
-		WorkerThreadPool.wait_for_task_completion(_stop_task)
-		_stop_task = -1
+## Frees finished tasks only (the wait returns at once for those): a stop still
+## in its grace never holds the main thread.
+func _reap_tasks() -> void:
+	for t in _tasks.duplicate():
+		if WorkerThreadPool.is_task_completed(t):
+			WorkerThreadPool.wait_for_task_completion(t)
+			_tasks.erase(t)
 
 
 func _join() -> void:
@@ -271,16 +285,41 @@ func _join() -> void:
 		_thread = null
 
 
-## GameCove is closing: finish the file first.
+## GameCove is closing (main.gd owns us for the app's whole life, so this is real
+## exit): the recorder gets SIGINT to finish the file, SIGTERM after
+## exit_grace_ms, SIGKILL a second later; only then is its thread joined, so a
+## recorder that hangs never holds the exit up. Works before _on_pid reached us
+## too (the worker's own copy of the pid).
 func _exit_tree() -> void:
-	if state in ["starting", "recording"] and pid > 0:
-		var target := Recorder.recorder_pid(pid, Recorder.proc_table(str(env.get("proc_root", "/proc"))))
-		if target > 0:
-			runner.run("kill", PackedStringArray(["-INT", str(target)]))
+	_mutex.lock()
+	var root := _child if _child > 0 else pid
+	_mutex.unlock()
+	if root > 0 and _thread != null and _thread.is_alive():
+		var target := Recorder.recorder_pid(root, Recorder.proc_table(str(env.get("proc_root", "/proc"))))
+		if target <= 0:
+			target = root
+		runner.run("kill", PackedStringArray(["-INT", str(target)]))
+		if not _wait_thread(exit_grace_ms):
+			runner.run("kill", PackedStringArray(["-TERM", str(target)]))
+			if not _wait_thread(1000):
+				OS.kill(target)
+				if target != root:
+					OS.kill(root)
 	if _thread != null:
 		_thread.wait_to_finish()
 		_thread = null
-	_reap_stop()
+	for t in _tasks:
+		WorkerThreadPool.wait_for_task_completion(t)
+	_tasks.clear()
+
+
+## True once the recorder's thread has ended (within `ms`).
+func _wait_thread(ms: int) -> bool:
+	var waited := 0
+	while _thread != null and _thread.is_alive() and waited < ms:
+		OS.delay_msec(20)
+		waited += 20
+	return _thread == null or not _thread.is_alive()
 
 
 ## Runs a program, hands its pid over as soon as it has one, then its output

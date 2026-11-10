@@ -145,7 +145,7 @@ var recording: Node
 var apps_view: Control
 ## Controller batteries: the last UPower read (ticks msec) and whether one is out.
 var _pads_at := -1000000
-var _pads_task := -1
+var _pads_busy := false   # a UPower read is out (card_jobs.gd)
 
 
 ## Play the boot splash at start (screenshots and tests turn it off).
@@ -828,23 +828,21 @@ func _play_app(app: Dictionary) -> void:
 ## older than UPower.READ_EVERY_S (the live refresh, which only runs while
 ## GameCove is in front). Never behind a game.
 func read_pads(now: bool) -> void:
-	if _pads_task != -1 or DisplayServer.get_name() == "headless":
+	if _pads_busy or DisplayServer.get_name() == "headless":
 		return
 	if not now and Time.get_ticks_msec() - _pads_at < UPower.READ_EVERY_S * 1000:
 		return
 	_pads_at = Time.get_ticks_msec()
-	var me: WeakRef = weakref(self)
-	_pads_task = WorkerThreadPool.add_task(func():
-		var list := UPower.pads(Proc.new())
-		var o: Object = me.get_ref()
-		if o != null:
-			o.call_deferred("_on_pads", list), false, "GameCove controller batteries")
+	_pads_busy = true
+	# on card_jobs.gd's pool: the result comes back by instance id on the main
+	# thread, and the busctl calls end at exit (its stop group)
+	var jobs: RefCounted = CardJobs.shared()
+	var r: RefCounted = jobs.runner()
+	jobs.run_for(self, func(): return UPower.pads(r), "_on_pads")
 
 
 func _on_pads(list: Array) -> void:
-	if _pads_task != -1:
-		WorkerThreadPool.wait_for_task_completion(_pads_task)
-		_pads_task = -1
+	_pads_busy = false
 	top_bar.set_pads(list)
 
 
@@ -946,9 +944,6 @@ func _clean_ge_leftovers() -> void:
 
 ## Static caches hold textures and fonts; let them go so nothing leaks at exit.
 func _exit_tree() -> void:
-	if _pads_task != -1:
-		WorkerThreadPool.wait_for_task_completion(_pads_task)
-		_pads_task = -1
 	release_caches()
 
 

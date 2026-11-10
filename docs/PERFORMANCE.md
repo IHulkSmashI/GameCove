@@ -88,7 +88,8 @@ behind a game.
 
 The main thread never joins a worker that may still be busy: leaving a page, a theme
 change (which rebuilds every Settings page) or a quick-menu tab switch never waits for a
-download, an unpack, a Bluetooth scan or pairing. Those jobs belong to
+download, an unpack, a Bluetooth scan or pairing, a recorder or player install (Settings >
+Media) or the Apps scan. Those jobs belong to
 `scripts/system/card_jobs.gd`, not to the card that started them; the card that is there
 when one ends gets the result (looked up by instance id), and a result nobody was there for
 waits for the next card. Workers hand results back with `call_deferred` and never touch a
@@ -97,7 +98,9 @@ Node themselves.
 Only real app exit joins, and only after the programs are stopped: long runs (GE-Proton's
 `curl`/`tar`, `bluetoothctl`, `legendary`/`gogdl`, OS and app updates, `du`) run in a stop
 group (`exec_safe.gd`), and `ExecSafe.stop_group()` sends them SIGTERM, then SIGKILL after
-1.5 s, so the threads waiting on them return at once. Firmware flashes (`fwupdmgr`), `pkexec`
+1.5 s, so the threads waiting on them return at once. A recording still running at exit
+gets SIGINT to finish its file, SIGTERM after 3 s and SIGKILL a second later before its
+thread is joined. Firmware flashes (`fwupdmgr`), `pkexec`
 and `systemctl` are never signalled. Cache pruning at exit stops at the next file.
 `tests/test_card_jobs.gd` fails if an `_exit_tree` outside the app-lifetime owners, or a page
 rebuild path, joins a worker.

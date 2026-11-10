@@ -184,6 +184,7 @@ const REAL_EXIT_OWNERS := {
 	"res://scripts/controls/controls.gd": "autoload; its worker",
 	"res://scripts/input/intercept.gd": "kills its monitor before joining the reader",
 	"res://scripts/gamescope/command_runner.gd": "kills its program before joining the reader",
+	"res://scripts/system/recording.gd": "owned by main.gd; SIGINT/TERM/KILL to the recorder before joining",
 }
 ## Functions that run when a page or card is built or rebuilt.
 const REBUILD_RE := "^(_?re)?build\\w*$|^_show\\w*$|^refresh$|^on_shown$|^_on_snapshot$|^_on_apps$|^_on_state$"
@@ -237,6 +238,19 @@ static func _blocking_joins(body: Array) -> Array:
 	return out
 
 
+## Joins in `fn` and in the same script's functions it calls (one level: a
+## `_reap()` helper called from _exit_tree counts).
+static func _joins_in(fns: Dictionary, fn: String) -> Array:
+	var out := _blocking_joins(fns[fn])
+	var call := RegEx.create_from_string("\\b(\\w+)\\(")
+	for l in fns[fn]:
+		for m in call.search_all(l):
+			var callee := m.get_string(1)
+			if callee != fn and fns.has(callee):
+				out.append_array(_blocking_joins(fns[callee]))
+	return out
+
+
 func test_lint_no_join_when_a_page_goes() -> void:
 	var files := []
 	_scripts("res://scripts", files)
@@ -245,7 +259,7 @@ func test_lint_no_join_when_a_page_goes() -> void:
 	for f in files:
 		var fns := _functions(FileAccess.get_file_as_string(f))
 		for fn in fns:
-			var joins := _blocking_joins(fns[fn])
+			var joins := _joins_in(fns, fn)
 			if joins.is_empty():
 				continue
 			if fn == "_exit_tree" and not REAL_EXIT_OWNERS.has(f):
@@ -262,3 +276,5 @@ func test_lint_catches_the_old_pattern() -> void:
 	var fns := _functions(old)
 	eq(_blocking_joins(fns["_exit_tree"]).size(), 1, "a join in _exit_tree is found")
 	eq(_blocking_joins(fns["_reap"]), [], "freeing a finished task is fine")
+	var helper := _functions("func _reap() -> void:\n\tif _task != -1:\n\t\tWorkerThreadPool.wait_for_task_completion(_task)\n\n\nfunc _exit_tree() -> void:\n\t_reap()\n")
+	eq(_joins_in(helper, "_exit_tree").size(), 1, "a join in a helper _exit_tree calls is found too")

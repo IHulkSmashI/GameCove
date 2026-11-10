@@ -347,3 +347,33 @@ func test_quick_menu_without_recording_has_no_row() -> void:
 	qm.open({})
 	ok(qm.body.find_child("Record", true, false) == null, "no service, no row")
 	qm.free()
+
+
+## A real child that ignores SIGINT (a recorder that hangs on its way out).
+class HangSpawner extends "res://scripts/system/recording.gd".PipeSpawner:
+	func run_blocking(_a: PackedStringArray, on_pid: Callable, on_line: Callable) -> int:
+		return super.run_blocking(PackedStringArray(["sh", "-c", "trap '' INT; exec sleep 30"]), on_pid, on_line)
+
+
+## Review 3, high 1 (sweep): quitting while recording never waits on a recorder
+## that won't stop, even before its pid reached the main thread.
+func test_exit_ends_a_hung_recorder_instead_of_waiting() -> void:
+	var home := _tmp("exit")
+	var r := _service(home, FakeSpawner.new(), preload("res://scripts/system/proc.gd").new())
+	r.spawner = HangSpawner.new()
+	r.threaded = true
+	r.exit_grace_ms = 300
+	ok(r.start({"title": "Hades"}), "started")
+	var waited := 0
+	while r._child <= 0 and waited < 3000:
+		OS.delay_msec(10)
+		waited += 10
+	ok(r._child > 0, "the recorder runs")
+	eq(r.pid, 0, "the main thread hasn't heard its pid yet")
+	var t0 := Time.get_ticks_msec()
+	r._exit_tree()
+	var took := Time.get_ticks_msec() - t0
+	ok(took < 2500, "exit didn't wait the 30 s (%d ms)" % took)
+	eq(r._thread, null, "its thread joined")
+	r.free()
+	_wipe(home)
