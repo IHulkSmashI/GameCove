@@ -407,9 +407,14 @@ Where the image lives on SteamOS, and why (checked against SteamOS 3.8 / steamos
 The guided install (README "Install"). Three parts:
 
 1. **`packaging/get-gamecove.sh`** (POSIX sh, no root): detects the OS from `os-release` (+ `/run/ostree-booted`
-   for Fedora Atomic), asks the GitHub API for the latest release (`--tag` / `GAMECOVE_TAG` for a given one;
-   `releases/latest` skips pre-releases, so while only pre-releases exist it takes the newest of the release
-   list, and a given tag is never replaced), downloads the app tarball, the package for this
+   for Fedora Atomic), asks the GitHub API for the release list and takes the highest `vX.Y.Z` tag that isn't a draft
+   (`--tag` / `GAMECOVE_TAG` for a given one, which is never replaced). `releases/latest` is never asked: it
+   answers with whichever release GitHub marks "latest", and that is one of the data releases (`upscalers`,
+   `firmware`, `gamedb`, `device-photos`), not the app. A stable release wins over a pre-release; while only
+   pre-releases exist (v0.1.0 is one) the highest of those is used. If the lookup fails (offline, a rate limit, no
+   app release listed, or the newest listed is older than the installed one) and a copy was downloaded before, that
+   copy opens instead, so the "GameCove Installer" entry always works; an error away from a terminal is also shown
+   as a desktop notification. Then it downloads the app tarball, the package for this
    system (RPM, or the `.raw` sysext on SteamOS), its own copy and `SHA256SUMS` into
    `~/.local/share/gamecove/installer/`, checks `SHA256SUMS`'s Sigstore signature (`SHA256SUMS.sigstore.json`, made
    by the Release workflow with its GitHub OIDC identity, no key or secret; verified with cosign from the system or a

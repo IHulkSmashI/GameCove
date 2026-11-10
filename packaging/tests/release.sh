@@ -223,7 +223,7 @@ assert "cosign sign-blob --yes --bundle dist/upscalers.json.sigstore.json dist/u
 assert runs.count("--clobber") == 1 and "dist/upscalers.json.sigstore.json dist/upscalers.json.sha256 --clobber" in runs, \
     "only the index is replaced; mirror files never"
 assert runs.index('gh release upload "$tag" "dist/$path"') < runs.index("--clobber"), "files first, the index last"
-assert "--latest=false" in runs, "the mirror release must never become 'latest' (get-gamecove.sh reads releases/latest)"
+assert "--latest=false" in runs, "the mirror release must never become 'latest' (GitHub would hide the app release behind it; get-gamecove.sh reads the release list and only takes vX... tags)"
 assert "cosign-release: ${{ steps.cosign.outputs.version }}" in open(wf).read()
 # the workflow's own check, for this repository, is the identity the helper requires
 ident = [l.strip()[len('ident="'):-1] for l in runs.splitlines() if l.strip().startswith('ident="')]

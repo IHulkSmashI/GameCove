@@ -552,7 +552,10 @@ if [ "$(tail -n 1 "$GG")" = 'main "$@"' ] && grep -q '^main() {$' "$GG"; then ok
 GB="$T/ggbin"
 SRV="$T/ggsrv"
 mkdir -p "$GB" "$SRV"
-# Fake curl: serves $SRV/<last path part> ($SRV/latest.json for the API), logs every URL.
+# Fake curl: serves $SRV/<last path part>, logs every URL. The API is modelled on the real
+# repository (final review, blocker 2): releases/latest answers with a DATA release ("upscalers",
+# not a pre-release, so GitHub marks it latest), the app release is only in the release list
+# ($SRV/releases?per_page=100) and under releases/tags/<tag> ($SRV/tag.json).
 cat >"$GB/curl" <<EOF
 #!/bin/sh
 out=""
@@ -600,7 +603,8 @@ cat >"$GB/cosign" <<EOF
 echo "\$*" >>"$T/cosign.log"
 [ ! -f "$T/cosign-fail" ]
 EOF
-chmod +x "$GB/curl" "$GB/badsum" "$GB/cosign"
+printf '#!/bin/sh\necho "$*" >>"%s/notify.log"\n' "$T" >"$GB/notify"
+chmod +x "$GB/curl" "$GB/badsum" "$GB/cosign" "$GB/notify"
 mkdir -p "$T/ggapp"
 printf '#!/bin/sh\necho "app $*" >>"%s/launch.log"\n' "$T" >"$T/ggapp/gamecove.x86_64"
 echo pck >"$T/ggapp/gamecove.pck"
@@ -622,8 +626,34 @@ echo '{"bundle": "fake"}' >"$SRV/SHA256SUMS.sigstore.json"
 	done
 	echo '  ]'
 	echo '}'
-} >"$SRV/latest.json"
-cp "$SRV/latest.json" "$SRV/tag.json"
+} >"$SRV/tag.json"
+# what GitHub's releases/latest really answers here: a data release, never the app
+cat >"$SRV/latest.json" <<'EOF'
+{
+  "tag_name": "upscalers",
+  "draft": false,
+  "prerelease": false,
+  "body": "notes that try to look like a release: \"tag_name\": \"v9.9.9\", \"prerelease\": false } ] and a backslash \\",
+  "assets": [
+    { "name": "index.json", "uploader": { "login": "bot", "browser_download_url": "https://example.test/dl/not-an-asset" }, "browser_download_url": "https://example.test/dl/index.json" },
+    { "name": "gamecove-9.9.9-x86_64.tar.gz", "browser_download_url": "https://example.test/dl/gamecove-9.9.9-x86_64.tar.gz" }
+  ]
+}
+EOF
+LIST="$SRV/releases?per_page=100"
+# mklist <draft> <prerelease> [more releases, each ending with a comma]: the release list, newest first as GitHub
+# sends it: the data release, then the app release from tag.json with these flags
+mklist() {
+	{
+		echo '['
+		cat "$SRV/latest.json"
+		echo ','
+		printf '%s' "${3:-}"
+		sed "s/^  \"tag_name\": \"v0.2.0\",\$/  \"tag_name\": \"v0.2.0\", \"draft\": $1, \"prerelease\": $2,/" "$SRV/tag.json"
+		echo ']'
+	} >"$LIST"
+}
+mklist false false
 osroot() {
 	d="$T/os-$1"
 	mkdir -p "$d/etc" "$d/run"
@@ -646,7 +676,7 @@ gg() {
 	: >"$T/curl.log"
 	: >"$T/cosign.log"
 	env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$root" GAMECOVE_ARCH=x86_64 \
-		GAMECOVE_API=https://api.example.test COSIGN="$GB/cosign" "$@" sh "$GG" --no-launch
+		GAMECOVE_API=https://api.example.test COSIGN="$GB/cosign" GAMECOVE_NOTIFY="$GB/notify" "$@" sh "$GG" --no-launch
 }
 for pair in "$R_BAZ:bazzite" "$R_FED:fedora-atomic" "$R_FEDWS:other" "$R_DECK:steamos" "$R_ARCH:other" "$T/os-none:other"; do
 	got="$(GAMECOVE_ROOT="${pair%%:*}" sh "$GG" --detect-os)"
@@ -662,7 +692,9 @@ lacks "$T/curl.log" "x86_64.raw" "no sysext on Bazzite"
 contains "$GI/release.env" "^TAG=v0.2.0$" "release tag"
 contains "$GI/release.env" "^OS=bazzite$" "release os"
 contains "$GI/release.env" "^PACKAGE=$GI/packages/gamecove-0.2.0-1.fc43.x86_64.rpm$" "release package"
-contains "$T/curl.log" "^https://api.example.test/repos/IHulkSmashI/GameCove/releases/latest$" "latest release API"
+contains "$T/curl.log" "^https://api.example.test/repos/IHulkSmashI/GameCove/releases?per_page=100$" "asks the release list"
+lacks "$T/curl.log" "/releases/latest" "never asks releases/latest (it answers with a data release)"
+lacks "$T/curl.log" "9.9.9\|not-an-asset\|index.json" "nothing of the data release is downloaded"
 if [ -x "$GI/get-gamecove.sh" ]; then ok; else bad "bootstrap keeps a checked copy of itself"; fi
 GE="$T/gghome/.local/share/applications/io.github.ihulksmashi.GameCoveInstaller.desktop"
 contains "$GE" "^Name=GameCove Installer$" "installer app entry"
@@ -678,29 +710,69 @@ expect_code 0 "bootstrap elsewhere (app only)" gg "$R_ARCH"
 contains "$GI/release.env" "^PACKAGE=$" "no package on other systems"
 expect_code 0 "bootstrap with a tag" gg "$R_BAZ" GAMECOVE_TAG=v0.2.0
 contains "$T/curl.log" "/releases/tags/v0.2.0$" "tag API"
-# only pre-releases published (v0.1.0): releases/latest 404s, the newest release of any kind is used
-mv "$SRV/latest.json" "$SRV/latest.off"
-{ echo '['; cat "$SRV/tag.json"; echo ']'; } >"$SRV/releases?per_page=1"
-expect_code 0 "bootstrap with only a pre-release" gg "$R_DECK"
-contains "$T/curl.log" "/releases?per_page=1$" "falls back to the release list"
-contains "$T/out" "using the newest pre-release" "says a pre-release is used"
+# final review, blocker 2: v0.1.0 is a pre-release while a data release is GitHub's "latest": the app release is
+# still found (and said to be a pre-release); the old lookup took "upscalers" and stopped with "no app download"
+mklist false true
+expect_code 0 "bootstrap with only a pre-release, a data release being latest" gg "$R_DECK"
+contains "$T/out" "using the newest pre-release v0.2.0" "says a pre-release is used"
+lacks "$T/out" "upscalers" "the data release is never picked"
 contains "$GI/release.env" "^TAG=v0.2.0$" "pre-release picked"
+lacks "$T/curl.log" "/releases/latest" "pre-release: releases/latest still isn't asked"
+# the same list the way GitHub sends it to clients that aren't curl: all on one line
+tr -d '\n' <"$LIST" >"$T/list.min" && cp "$T/list.min" "$LIST"
+expect_code 0 "bootstrap from a one-line release list" gg "$R_DECK"
+contains "$GI/release.env" "^TAG=v0.2.0$" "one-line list: release picked"
+# the highest version wins whatever the list order; a stable release beats a newer pre-release; drafts and tags
+# that aren't vX... never count (v0.1.9 has no downloads, so picking it would fail)
+old='{ "tag_name": "v0.1.9", "draft": false, "prerelease": true, "assets": [] },'
+mklist false true "$old"
+expect_code 0 "the highest pre-release, not the first listed" gg "$R_DECK"
+contains "$GI/release.env" "^TAG=v0.2.0$" "v0.2.0 over v0.1.9"
+mklist false false '{ "tag_name": "v0.3.0-rc.1", "draft": false, "prerelease": true, "assets": [] },'
+expect_code 0 "a stable release beats a newer pre-release" gg "$R_DECK"
+contains "$GI/release.env" "^TAG=v0.2.0$" "stable picked"
+lacks "$T/out" "pre-release" "and not called a pre-release"
+mklist false false '{ "tag_name": "v0.9.0", "draft": true, "prerelease": false, "assets": [] }, { "tag_name": "version-7", "draft": false, "prerelease": false, "assets": [] },'
+expect_code 0 "drafts and other tags are skipped" gg "$R_DECK"
+contains "$GI/release.env" "^TAG=v0.2.0$" "v0.2.0, not the draft"
+# no app release in the list at all: the installed copy opens (the app menu entry keeps working) ...
+printf '[\n%s\n]\n' "$(cat "$SRV/latest.json")" >"$LIST"
+: >"$T/launch.log"
+expect_code 0 "no app release listed: the installed copy is used" gg "$R_DECK"
+contains "$T/out" "GitHub lists no GameCove release; using the copy downloaded before" "says so"
+contains "$T/launch.log" "prefetch-photo" "the installed app is what runs"
+# ... and so does a rate limit or a 5xx; nothing is downloaded
+for st in 403 500; do
+	echo "$st" >"$T/api-status"
+	expect_code 0 "HTTP $st with an installed copy" gg "$R_DECK"
+	contains "$T/out" "GitHub answered HTTP $st; using the copy downloaded before" "HTTP $st: says what GitHub answered"
+	lacks "$T/curl.log" "example.test/dl/" "HTTP $st: nothing downloaded"
+done
+rm -f "$T/api-status"
+mklist false true
 mv "$SRV/tag.json" "$SRV/tag.off"
-gg "$R_DECK" GAMECOVE_TAG=v9.9.9 >/dev/null 2>&1 || true
+: >"$T/notify.log"
+expect_code 1 "a given tag that doesn't exist" gg "$R_DECK" GAMECOVE_TAG=v9.9.9
 lacks "$T/curl.log" "per_page" "a given tag is never replaced by another release"
+contains "$T/out" "no GameCove release v9.9.9" "says the tag doesn't exist"
+contains "$T/notify.log" "no GameCove release v9.9.9" "an error away from a terminal is also a desktop notification"
 mv "$SRV/tag.off" "$SRV/tag.json"
-# review M7: only a 404 means "no stable release"; a rate limit or a 5xx must never install a pre-release
+# without an installed copy the same failures stop with the reason (review M7: an error never installs anything)
 rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
 for st in 403 500; do
 	echo "$st" >"$T/api-status"
 	expect_code 1 "bootstrap stops on HTTP $st" gg "$R_DECK"
-	lacks "$T/curl.log" "per_page" "HTTP $st: no fallback to a pre-release"
+	lacks "$T/curl.log" "example.test/dl/" "HTTP $st: nothing downloaded"
 	contains "$T/out" "HTTP $st" "says what GitHub answered"
 done
 rm -f "$T/api-status"
-mv "$SRV/latest.off" "$SRV/latest.json"
-rm -f "$SRV/releases?per_page=1"
+printf '[\n%s\n]\n' "$(cat "$SRV/latest.json")" >"$LIST"
+expect_code 1 "no app release listed and nothing installed" gg "$R_DECK"
+contains "$T/out" "no GameCove release found" "says why"
+mklist false false
+# --help also when piped into a shell (there is no file to read then)
+if sh -s -- --help <"$GG" 2>/dev/null | grep -q -- "--no-launch"; then ok; else bad "get-gamecove.sh --help prints nothing when piped"; fi
 rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
 expect_code 1 "bootstrap refuses a bad checksum" gg "$R_BAZ" SHA256SUM="$GB/badsum"
@@ -729,14 +801,16 @@ contains "$T/out" "signature doesn't check out" "said why"
 if [ ! -e "$GI/app" ] && [ ! -e "$GI/release.env" ]; then ok; else bad "nothing installed after a bad signature"; fi
 rm -f "$T/cosign-fail"
 mv "$SRV/SHA256SUMS.sigstore.json" "$SRV/bundle.off"
-cp "$SRV/latest.json" "$SRV/latest.keep"
-grep -v "sigstore.json" "$SRV/latest.keep" >"$SRV/latest.json"
+cp "$SRV/tag.json" "$SRV/tag.keep"
+grep -v "sigstore.json" "$SRV/tag.keep" >"$SRV/tag.json"
+mklist false false
 expect_code 1 "an unsigned release is refused" gg "$R_BAZ"
 contains "$T/out" "has no signature" "said why"
 expect_code 0 "unsigned accepted only when asked" gg "$R_BAZ" GAMECOVE_ALLOW_UNSIGNED=1
 contains "$GI/release.env" "^SIGNATURE=unsigned$" "and recorded as unsigned"
 mv "$SRV/bundle.off" "$SRV/SHA256SUMS.sigstore.json"
-mv "$SRV/latest.keep" "$SRV/latest.json"
+mv "$SRV/tag.keep" "$SRV/tag.json"
+mklist false false
 # no cosign anywhere: the pinned release is downloaded and its sha256 checked (a fake one here: refused)
 printf 'not cosign\n' >"$SRV/cosign-linux-amd64"
 mkdir -p "$T/ggbin2"
@@ -753,8 +827,11 @@ expect_code 0 "bootstrap again" gg "$R_BAZ"
 # review problem 9: "latest" never installs an older release over a newer one; --tag (GAMECOVE_TAG) may
 cp "$GI/release.env" "$T/release.env.keep"
 sed 's/^TAG=.*/TAG=v0.10.0/' "$T/release.env.keep" >"$GI/release.env"
-expect_code 1 "an older latest isn't installed over a newer one" gg "$R_BAZ"
+: >"$T/launch.log"
+expect_code 0 "an older newest release isn't installed over a newer one; the installed copy opens" gg "$R_BAZ"
 contains "$T/out" "older than the installed v0.10.0" "said why"
+lacks "$T/curl.log" "example.test/dl/" "nothing of the older release is downloaded"
+contains "$T/launch.log" "prefetch-photo" "the installed copy runs instead"
 contains "$GI/release.env" "^TAG=v0.10.0$" "the newer install is left alone"
 expect_code 0 "an older release on purpose (--tag)" gg "$R_BAZ" GAMECOVE_TAG=v0.2.0
 sed 's/^TAG=.*/TAG=v0.2.0-rc.1/' "$T/release.env.keep" >"$GI/release.env"
