@@ -2,8 +2,8 @@
 """Maker images: the makers' own official product images, used BY LINK ONLY.
 
 For a handheld with no freely licensed photo, app/data/device_photos.json may
-carry "maker_image": {url, page_url, maker, checked, view}. GameCove never copies
-these images: they are not in the repo and build.py never downloads them for
+carry "maker_image": {url, page_url, maker, checked, view}. The app never copies
+these images (only the README grid, readme_grid.py, composites them) and build.py never downloads them for
 the device-photos release. The app fetches that one image from the maker's
 site on the user's device and credits "Image: <Maker>".
 

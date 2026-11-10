@@ -194,6 +194,12 @@ func test_shelves() -> void:
 	var s := View.shelves(_lib())
 	eq(s.map(func(x): return x["id"]), ["recent", "installed", "short", "anticheat", "store_steam", "store_epic", "store_gog", "all"], "shelf order")
 	eq(s[2]["games"].map(func(g): return g["title"]), ["Alpha", "Delta Force"], "short games, shortest first")
+	var hero := str(View.continue_game(_lib()).get("key", ""))
+	var inst: Array = s[1]["games"]
+	eq(inst.size(), View.installed(_lib()).size() - (1 if hero != "" else 0), "Installed: every installed game but the spotlight's")
+	ok(inst.all(func(g): return str(g["key"]) != hero), "the spotlight game isn't repeated")
+	var recent_keys: Array = s[0]["games"].map(func(g): return g["key"])
+	ok(inst.any(func(g): return g["key"] in recent_keys) or recent_keys.is_empty(), "recently played installed games stay in Installed")
 	eq(s[3]["games"].map(func(g): return g["title"]), ["bravo"], "anti-cheat friendly")
 	eq(s[-1]["games"].map(func(g): return g["title"]), ["Alpha", "bravo", "Charlie: Ünïcode", "Delta Force"], "all games A to Z")
 	var one_store := View.shelves([Logic.g("steam", "1", "A"), Logic.g("steam", "2", "B")])

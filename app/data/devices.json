@@ -136,11 +136,11 @@
       "art": "rog-ally",
       "fixes": ["ally-fingerprint-drain"],
       "quirks": ["TDP through the asus-armoury firmware attributes (steamos-manager); older kernels only have asus-wmi ppt_* files.", "Fan curves live in the asus_custom_fan_curve hwmon (GameCove's fan fix); changing the platform profile puts the factory curve back."],
-      "support": "partial",
+      "support": "full",
       "verified": true,
       "unverified": [],
       "sources": ["InputPlumber", "steamos-manager", "PowerStation", "Handheld Daemon (adjustor)"],
-      "notes": ["Boost limits follow Handheld Daemon's ASUS rule: hhd-dev/hhd@6f6045a src/adjustor/drivers/asus/__init__.py L51-53, L370-380: FPPT = min(max(SPL, 35), SPL*35/25), SPPT = min(max(SPL, 35), SPL*30/25)."],
+      "notes": ["Boost limits follow Handheld Daemon's ASUS rule: hhd-dev/hhd@6f6045a src/adjustor/drivers/asus/__init__.py L51-53, L370-380: FPPT = min(max(SPL, 35), SPL*35/25), SPPT = min(max(SPL, 35), SPL*30/25).", "Tested on hardware 2026-11-09: original ROG Ally RC71L (Z1 Extreme) on SteamOS 3.10; every GameCove setting changed, read back from the hardware and restored."],
       "chip_from_cpu": true
     },
     {
@@ -603,7 +603,8 @@
       "quirks": ["MSI buttons need the claw8ex-buttons fix on older InputPlumber.", "VRR floor is 48 Hz until the claw8ex-vrr fix.", "Gyro needs the sensor-hub firmware (claw8ex-gyro fix)."],
       "verified": true,
       "unverified": [],
-      "sources": ["InputPlumber", "ClawDeck (tested on the device)", "PowerStation"]
+      "sources": ["InputPlumber", "ClawDeck (tested on the device)", "PowerStation"],
+      "notes": ["Tested on hardware 2026-11-09: MSI Claw 8 EX AI+ on Bazzite; every GameCove setting changed, read back from the hardware and restored."]
     },
     {
       "id": "msi-claw-8-ai-plus",

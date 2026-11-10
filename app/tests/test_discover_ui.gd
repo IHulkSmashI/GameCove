@@ -212,10 +212,14 @@ func test_home_shelves_from_fixtures() -> void:
 	var tile: Control = home.shelves[0].tiles[0]
 	ok(tile.price_label.get_parent() == tile.pill_row, "price lives in the deal tile's bottom plate")
 	var tiles: Array = home.shelves[0].tiles
-	ok(tiles.all(func(t): return (t.price_label.visible and t.price_label.text != "") or t.sub_label.text.begins_with("Price on ")),
-		"every deal tile: a real local price, or the store named")
-	ok(tiles.any(func(t): return t.sub_label.text.begins_with("Price on ") and not t.price_label.visible),
-		"no local price: names the store, never a guessed price (CheapShark rows in Canada)")
+	ok(tiles.all(func(t): return t.price_label.visible and t.price_label.text != "" and t.sub_label.text != ""),
+		"every deal tile: the same two-line plate (price or See price, then the store)")
+	var quiet: Array = tiles.filter(func(t): return t.price_label.text == T.SEE_PRICE)
+	ok(not quiet.is_empty(), "no local price: See price, never a guessed price (CheapShark rows in Canada)")
+	ok(quiet.all(func(t): return t.sub_label.autowrap_mode == TextServer.AUTOWRAP_OFF and not t.sub_label.text.begins_with("Price on")),
+		"the store on one line that never wraps")
+	ok(quiet.all(func(t): return t.price_icon != null and t.price_icon.visible and t.price_icon.custom_minimum_size.y == t.SUB_PX),
+		"the store's logo at the line's height, not a big white block")
 	var cards := _texts(home)
 	ok(cards.contains(T.GG_TITLE), "gg.deals card while there's no key and See-price rows show")
 	ok(cards.contains("Price data by CheapShark"), "credits shown")

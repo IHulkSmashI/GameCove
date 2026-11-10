@@ -2,8 +2,8 @@ extends Control
 ## Generated cover for a game without art: a gradient picked from the game key
 ## (ArtColor.fallback_colors), one of three quiet motifs (waves, peaks, rings)
 ## and either the title set in the display face (older callers) or, on tiles,
-## a centred monogram with the store as a faint watermark (the tile's bottom
-## plate carries the title, like every other cover). Drawn once with canvas
+## a centred monogram alone (the tile's bottom plate carries the title and
+## the store line, so the store isn't printed twice). Drawn once with canvas
 ## calls, no textures; the renderer caches it until the size changes.
 
 const ArtColor := preload("res://theme/art_color.gd")
@@ -18,7 +18,7 @@ var colors: Array[Color] = []
 var motif := "waves"
 var title_label: Label
 var store_label: Label
-## Draw the monogram and store watermark (tiles set this; no title labels).
+## Draw the monogram (tiles set this; no title labels).
 var monogram := false:
 	set(v):
 		monogram = v
@@ -135,8 +135,9 @@ func _draw() -> void:
 	draw_polyline(border, Color(1, 1, 1, 0.10), 1.0, true)
 
 
-## The initials, big and faint, centred in the top of the card, and the store
-## under them in spaced caps: a watermark, not a second title.
+## The initials, big and faint, centred in the top of the card. No store
+## under them: the plate's store line already names it (and on Stream every
+## app is on the same PC).
 func _draw_monogram(w: float, h: float) -> void:
 	var mono := initials(str(game.get("title", "")))
 	if mono == "":
@@ -147,11 +148,6 @@ func _draw_monogram(w: float, h: float) -> void:
 	var asc := f.get_ascent(fs)
 	var desc := f.get_descent(fs)
 	draw_string(f, Vector2(0, cy + (asc - desc) / 2.0), mono, HORIZONTAL_ALIGNMENT_CENTER, w, fs, Color(1, 1, 1, 0.34))
-	var store := View.store_name(str(game.get("store", ""))).to_upper()
-	if store != "":
-		var mf: Font = ThemeLib.mono(true, 3)
-		var ms := maxi(9, int(w * 0.062))
-		draw_string(mf, Vector2(0, cy + (asc - desc) / 2.0 + desc + ms * 1.9), store, HORIZONTAL_ALIGNMENT_CENTER, w, ms, Color(1, 1, 1, 0.42))
 
 
 ## "Moss & Marrow" -> "MM", "The Last Lighthouse" -> "LL", "Desktop" -> "D".

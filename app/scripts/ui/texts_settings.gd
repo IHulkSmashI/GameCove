@@ -149,7 +149,7 @@ const SETUP_STATE := {"done": "Done", "skipped": "Skipped", "todo": "To do"}
 const WELCOME_TITLE := "Welcome to GameCove"
 const WELCOME_LINE := "Let's set up your %s. It takes about two minutes, and you can skip anything."
 const WELCOME_SUPPORT := {
-	"full": "Fully supported: we test GameCove on this exact device.",
+	"full": "Tested on hardware: we run GameCove on this exact device.",
 	"partial": "Supported from tested community data. A few things may need a nudge.",
 	"beta": "Beta: testers say it works; we haven't tried it ourselves.",
 	"generic": "We don't know this device well yet, so device-specific settings stay hidden.",
@@ -234,7 +234,7 @@ static func masked(key: String) -> String:
 
 # ---- Quick menu additions
 
-const QM_SUPPORT_PARTIAL := "Partial: built from community data tested on this device, but we haven't run GameCove on it ourselves."
+const QM_SUPPORT_PARTIAL := "Supported: built from community data tested on this device. We haven't run GameCove on it ourselves yet."
 const QM_UNVERIFIED := "Not confirmed yet: %s."
 const UNVERIFIED_NAMES := {"tdp": "power limits", "panel": "screen details", "panel.vrr": "VRR range", "panel.resolution": "screen resolution",
 	"charge_limit": "charge limit", "chip": "chip name", "buttons": "button layout", "dmi": "device detection", "tdp.battery_max": "battery power limit", "all": "everything"}

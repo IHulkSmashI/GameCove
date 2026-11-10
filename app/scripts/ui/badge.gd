@@ -42,6 +42,14 @@ func setup(b: Dictionary, badge_style := "tile") -> void:
 	# Solid flags: the dark-theme tone as fill with near-black text in every theme.
 	var flag: Color = Themes.TONES.get(b.get("tone", ""), Themes.TONES[""])
 	var fg := Color("#0A0F16") if solid else tone_col
+	# Tile pills always sit on their own dark chip (over art, or in a light
+	# theme's list rows), so their text takes the bright dark-theme tones in
+	# every theme: Light's deep tones on that chip were unreadable.
+	if style == "tile":
+		if tone_name == "accent":
+			fg = tone_col if ThemeLib.is_dark() else tone_col.lightened(0.55)
+		else:
+			fg = Themes.TONES.get(tone_name, Themes.TONES[""])
 	var chip := style == "chip"
 	var icon_px := 12 if not chip else 16
 	if b.get("icon", "") != "" and (chip or not solid):

@@ -15,10 +15,12 @@ extends Control
 ## this game, how long you've played and Exit game (press twice).
 
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
+const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
+const TD := preload("res://scripts/ui/texts_device.gd")
 const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
 const ActionRow := preload("res://scripts/ui/settings/action_row.gd")
 const BgCommand := preload("res://scripts/ui/bg_command.gd")
@@ -56,12 +58,12 @@ const WIDTH := 580
 ## the sheet's own battery pill and prompts are the only ones that read.
 const TOP_INSET := 14.0
 ## How dark the full-screen scrim is (it covers the top bar and hint bar too).
-const SCRIM_ALPHA := 0.82
+const SCRIM_ALPHA := 0.55
 const SUPPORT_TEXT := {
-	"full": "Full support: tested on this device by the GameCove team.",
+	"full": "Tested on hardware: the GameCove team runs it on this device.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
 	"partial": TS.QM_SUPPORT_PARTIAL,
-	"generic": "Generic: device-specific settings stay hidden until someone tests this device.",
+	"generic": "Basic support: device-specific settings stay hidden until someone tests this device.",
 }
 const SESSION_SELECT := "/usr/bin/gamecove-session-select"
 ## Review M8: a session switch that hasn't taken GameCove away after this long gave up or hung;
@@ -263,6 +265,11 @@ func _build_frame() -> void:
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(scroll)
+	# A 20 px alpha fade at the foot: the next card's top edge never pokes
+	# out above the prompts.
+	scroll_mask = FadeMask.wrap(scroll, 20.0)
+	# A card only a sliver of which shows is cut off whole instead of faded.
+	scroll_mask.cut_fn = _cut_cards
 	var pad := MarginContainer.new()
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for side_name in ["left", "right"]:
@@ -270,7 +277,7 @@ func _build_frame() -> void:
 	for side_name in ["top", "bottom"]:
 		pad.add_theme_constant_override("margin_" + side_name, 10)
 	scroll.add_child(pad)
-	body = Kit.vbox(12)
+	body = Kit.vbox(8)
 	body.name = "Body"
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_child(body)
@@ -445,6 +452,7 @@ static func _is_shoulder(event: InputEvent, button: JoyButton, key: Key) -> bool
 # ------------------------------------------------------------ tabs
 
 var _scroll: ScrollContainer
+var scroll_mask: TextureRect
 
 
 func show_section(i: int, keep_focus := "") -> void:
@@ -513,6 +521,20 @@ func focus_target(keep := "") -> Control:
 
 func focusables() -> Array:
 	return _focusables
+
+
+## The cards in the drawer, a control list's rows one by one (for the foot
+## mask's cut).
+func _cut_cards() -> Array:
+	var out: Array = []
+	if not is_instance_valid(body):
+		return out
+	for c in body.get_children():
+		if c is ControlList:
+			out.append_array(c.get_children())
+		else:
+			out.append(c)
+	return out
 
 
 func _add(c: Control) -> Control:
@@ -633,8 +655,12 @@ func _build_game() -> void:
 func _style_use_row(r: VBoxContainer, on: bool) -> void:
 	r.title_label.add_theme_font_override("font", ThemeLib.font("semibold"))
 	if on:
+		# A quiet tint of the accent (the switch and tab bar's colour), not
+		# the violet gradient that read as a second theme.
 		var acc := ThemeLib.color("accent")
-		var sb := ThemeLib.gradient_box(Color(acc, 0.16), Color(ThemeLib.color("accent_2"), 0.22), ThemeLib.radius("m"), Color(acc, 0.5), 18, 10)
+		var sb := ThemeLib.box(Color(acc, 0.06) if ThemeLib.is_dark() else Color(acc, 0.08), ThemeLib.radius("m"), 18, 10)
+		sb.border_color = Color(acc, 0.25)
+		sb.set_border_width_all(1)
 		r.card_box = sb
 		r.button.add_theme_stylebox_override("normal", sb)
 		r.button.add_theme_stylebox_override("hover", sb)
@@ -937,7 +963,7 @@ func _build_device() -> void:
 	facts.name = "Facts"
 	names.add_child(facts)
 	head.add_child(names)
-	head.add_child(Kit.chip(level.capitalize(), "check" if level == "full" else "info", "good" if level == "full" else ("warn" if level == "partial" else ""), true))
+	head.add_child(Kit.chip(TD.SUPPORT_LABELS.get(level, level.capitalize()), "check" if level == "full" else "info", "good" if level == "full" else ("warn" if level == "partial" else ""), true))
 	body.add_child(head)
 	var support := _line(SUPPORT_TEXT.get(level, SUPPORT_TEXT["generic"]), "QuietLabel", "Support")
 	support.add_theme_color_override("font_color", ThemeLib.color("text_3"))

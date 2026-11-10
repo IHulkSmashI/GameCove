@@ -23,7 +23,7 @@ const CROSSFADE := 0.25
 const KEN_BURNS_S := 20.0
 const KEN_BURNS_SCALE := 1.05
 ## Strength of the ambient glow on dark themes.
-const GLOW_ALPHA := 0.32
+const GLOW_ALPHA := 0.44
 static var _glow_tex: GradientTexture2D
 
 var game: Dictionary = {}
@@ -244,7 +244,7 @@ func current_accent() -> Color:
 
 func _apply_accent() -> void:
 	var a := accent if (UiPrefs.match_art and accent.a > 0.0) else ThemeLib.color("accent")
-	tint.color = Color(a, 0.10 if ThemeLib.is_dark() else 0.05)
+	tint.color = Color(a, 0.13 if ThemeLib.is_dark() else 0.05)
 	if glow != null:
 		var on := UiPrefs.match_art and accent.a > 0.0
 		Motion.to(glow, "modulate", glow_color(accent) if on else Color(1, 1, 1, 0), Motion.SLOW)

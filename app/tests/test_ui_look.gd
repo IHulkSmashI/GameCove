@@ -272,3 +272,63 @@ func test_boot_splash_skipped_under_reduce_motion() -> void:
 	eq(s.mouse_filter, Control.MOUSE_FILTER_IGNORE, "never takes input")
 	s.free()
 	host.free()
+
+
+func test_tile_pills_readable_in_every_theme() -> void:
+	# Tile pills sit on their own dark chip (over art, or in Light's list rows
+	# like Discover's wishlist "In 106 days" / "Target"): readable in all themes.
+	var Badge = load("res://scripts/ui/badge.gd")
+	var chip := Color(0.02, 0.03, 0.05)
+	for id in Themes.ORDER:
+		ThemeLib.use(id)
+		for tone in ["", "good", "warn", "bad", "info", "accent", "new", "sale", "wish", "gold"]:
+			var b: PanelContainer = Badge.make({"kind": "x", "text": "In 106 days", "tone": tone}, "tile")
+			var fg: Color = b.label.get_theme_color("font_color")
+			ok(Themes.contrast(fg, chip) >= 4.5, "%s: %s tile pill readable (%.2f)" % [id, tone, Themes.contrast(fg, chip)])
+			b.free()
+	ThemeLib.use("cove")
+
+
+func test_synopsis_in_sentence_case() -> void:
+	var Texts = load("res://scripts/ui/texts.gd")
+	eq(Texts.calm_caps("THE CRITICALLY ACCLAIMED FANTASY ACTION RPG. Rise, Tarnished, and be guided by grace."),
+		"The critically acclaimed fantasy action RPG. Rise, Tarnished, and be guided by grace.", "a shouted sentence calmed, acronyms kept")
+	eq(Texts.calm_caps("A lighthouse keeper rows out. NASA helps."), "A lighthouse keeper rows out. NASA helps.", "mixed case and short words untouched")
+
+
+## In a canvas_item fragment(), COLOR already holds the texture at UV times
+## the modulate: multiplying a fresh sample by it squares every pixel (the
+## covers and heroes rendered at well under half their real brightness).
+func test_art_shaders_keep_art_at_full_brightness() -> void:
+	for p in ["res://shaders/rounded_art.gdshader", "res://shaders/hero_fade.gdshader"]:
+		var src := FileAccess.get_file_as_string(p)
+		ok(src != "", "%s readable" % p)
+		var code := ""
+		for line in src.split("\n"):
+			if not line.strip_edges().begins_with("//"):
+				code += line + "\n"
+		ok(not code.contains(") * COLOR"), "%s doesn't multiply a texture sample by COLOR" % p)
+
+
+## Dark themes stand on a lifted ground (not near-black) with cards a step
+## above it; Midnight stays OLED black; Light stays light.
+func test_grounds_are_lifted_and_cards_step_up() -> void:
+	var lum := func(c: Color) -> float: return c.get_luminance()
+	for id in ["cove", "sunset"]:
+		var t: Dictionary = Themes.get_theme(id)
+		ok(lum.call(t["bg"]) >= lum.call(Color("#121826")) - 0.005, "%s: ground lifted off black" % id)
+		ok(lum.call(t["surface"]) > lum.call(t["bg"]), "%s: cards a step above the ground" % id)
+		ok(lum.call(t["surface_2"]) > lum.call(t["surface"]), "%s: raised controls above cards" % id)
+		ok(float(t["scrim_strength"]) <= 0.70, "%s: backdrop art shows through" % id)
+	eq(Themes.get_theme("midnight")["bg"], Color("#000000"), "Midnight keeps true black for OLED")
+	ok(lum.call(Themes.get_theme("light")["bg"]) > 0.8, "Light stays light")
+
+
+func test_covers_are_never_dimmed() -> void:
+	for installed in [true, false]:
+		var t: Button = Tile.new()
+		t.setup(Logic.g("steam", "9", "Game", installed, 0), true)
+		eq(t.card.modulate, Color.WHITE, "cover at full brightness (installed %s)" % installed)
+		eq(t.art.self_modulate, Color.WHITE, "art not dimmed (installed %s)" % installed)
+		ok(Tile.INFO_H <= 0.25, "the plate shades only the bottom quarter")
+		t.free()

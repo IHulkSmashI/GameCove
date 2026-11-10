@@ -348,6 +348,10 @@ func _build() -> void:
 	# The gradient primary pill with the A glyph, like Play on the game page.
 	next_button = Kit.primary(TI.NEXT, "A")
 	next_button.name = "Next"
+	# Its (A) shows only while it has focus: A presses whatever has focus.
+	load("res://scripts/ui/button_fx.gd").attach(next_button, {"glyph_on_focus": true})
+	next_button.focus_entered.connect(func(): _update_hints.call_deferred())
+	next_button.focus_exited.connect(func(): _update_hints.call_deferred())
 	next_button.custom_minimum_size = Vector2(200, 50)
 	next_button.pressed.connect(next_step)
 	nav.add_child(next_button)
@@ -410,6 +414,11 @@ func _hairline() -> ColorRect:
 	l.color = ThemeLib.color("line")
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
+
+
+## Steps shown by name in the top bar; more than this and only the current
+## one is named (the rest are dots), so 11 Custom steps fit at 1280 px.
+const RAIL_NAMED := 8
 
 
 ## A rounded pill: optional dot, mono caps text. `accent`: tinted with the accent.
@@ -495,6 +504,10 @@ func _build_rail() -> void:
 		Kit.drop(rail, c)
 	var steps: Array = plan.steps()
 	var at: int = steps.find(plan.step)
+	# Past RAIL_NAMED steps (Custom and Change have 11) the names don't fit a
+	# 1280 px top bar: only the current step keeps its name, the others are
+	# status dots (green done, grey to come); "STEP n / N" is in the footer.
+	var compact := steps.size() > RAIL_NAMED
 	for i in steps.size():
 		var k: String = steps[i]
 		var on: bool = k == plan.step
@@ -502,6 +515,13 @@ func _build_rail() -> void:
 		var tone := "accent" if on else ("good" if passed and not plan.skipped.has(k) else "muted")
 		var p := _pill(TI.STEP_NAMES.get(k, k), tone, on)
 		p.name = "Step_" + k
+		if compact and not on:
+			var dsb: StyleBoxFlat = p.get_theme_stylebox("panel").duplicate()
+			dsb.content_margin_left = 8
+			dsb.content_margin_right = 8
+			p.add_theme_stylebox_override("panel", dsb)
+			(p.find_child("Text", true, false) as Label).visible = false
+			p.tooltip_text = str(TI.STEP_NAMES.get(k, k))
 		if passed and not on:
 			var sb: StyleBoxFlat = p.get_theme_stylebox("panel").duplicate()
 			sb.border_color = Color(ThemeLib.tone("good"), 0.45)
@@ -532,13 +552,23 @@ func _update_nav() -> void:
 		"done": next_button.text = TI.RESTART if _wants_restart() else TI.CLOSE
 	nav.visible = true
 	back_button.visible = back_button.visible and not (s == "progress")
+	_update_hints()
+
+
+## The hint bar says what A does now: Continue (or Install...) while that
+## has focus, else Select for whatever does.
+func _update_hints() -> void:
+	if prompts_box == null or not is_instance_valid(next_button):
+		return
+	var s: String = plan.step
 	for c in prompts_box.get_children():
 		Kit.drop(prompts_box, c)
 	var hints: Array = []
-	if next_button.visible and not next_button.disabled:
+	var f: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if next_button.visible and not next_button.disabled and (f == null or f == next_button):
 		hints.append(["A", next_button.text])
-	elif s in ["welcome", "maintenance"]:
-		hints.append(["A", "Select"])
+	elif f != null or s in ["welcome", "maintenance"]:
+		hints.append(["A", TI.SELECT])
 	if back_button.visible:
 		hints.append(["B", TI.BACK])
 	if s != "progress" and s != "done":
@@ -1618,6 +1648,7 @@ func focus_first() -> void:
 		f = next_button if next_button.visible else f
 	if f != null:
 		f.grab_focus()
+	_update_hints()
 
 
 func focusables() -> Array:

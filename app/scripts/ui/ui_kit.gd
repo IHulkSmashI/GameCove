@@ -284,8 +284,8 @@ static func accent_button(b: Button, col: Color) -> void:
 	b.add_theme_stylebox_override("hover_pressed", ThemeLib.gradient_pill(a.darkened(0.12), e.darkened(0.12), 40, 26, 11))
 	var glow: Color = ThemeLib.color("glow")
 	b.set_meta("glow_color", Color(a, glow.a))
-	var f := ThemeLib.focus_ring(999, a.lerp(Color.WHITE, 0.55) if ThemeLib.is_dark() else a.darkened(0.2), 2)
-	b.add_theme_stylebox_override("focus", f)
+	# Focus stays the theme's ring (white edge, dark gap, accent ring), whatever the art colour.
+	b.add_theme_stylebox_override("focus", ThemeLib.primary_focus())
 	var fx: Control = b.get_node_or_null("Fx")
 	if fx != null:
 		fx.fg = on

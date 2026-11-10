@@ -28,6 +28,7 @@ const ART := [
 	["Moonlit Harbor", "ocean", "forest", false], ["Glasswing", "mountains", "ice", false], ["Winter Keep", "forest", "ice", false],
 	["Frostline", "mountains", "ice", false], ["Ironveil", "city", "crimson", false], ["Echo Protocol", "neon", "neon", false],
 	["Crown of Thorns", "mountains", "crimson", true], ["Neon Ronin", "city", "city", false],
+	["Velvet Arcade", "neon", "lanterns", false], ["Crimson Vale", "mountains", "crimson", false],
 ]
 
 
@@ -139,6 +140,8 @@ class FakeDiscover extends Node:
 			_deal("Lumen Deep", "704", "steam", "Steam", 4.19, 20.99, 80, {"is_historical_low": true, "historical_low": {"amount": 4.19, "currency": "CAD"}, "sale_ends_at": now + 9 * 86400, "rating": 9.3}),
 			_deal("Pixel Pilgrims", "705", "cs:15", "Fanatical", null, 0.0, 70, {"rating": 7.9}),
 			_deal("Brass Monarch", "706", "cs:11", "Humble Store", null, 0.0, 33, {"rating": 7.4}),
+			_deal("Velvet Arcade", "708", "steam", "Steam", 11.99, 29.99, 60, {"rating": 8.1}),
+			_deal("Crimson Vale", "709", "steam", "Steam", 22.49, 44.99, 50, {"sale_ends_at": now + 4 * 86400, "rating": 8.0}),
 			_deal("Garden of Echoes", "", "cs:25", "Epic Games Store", null, 0.0, 100, {"rating": 9.0}),
 			_deal("Orbital Crew", "707", "steam", "Steam", 0.0, 19.99, 100, {"sale_ends_at": now + 2 * 86400}),
 		]

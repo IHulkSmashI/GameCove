@@ -52,8 +52,9 @@ const CARDS := {
 		["Upscaling", "upscale", ["perf.upscaler", "perf.frame_gen", "perf.upscale_recommended", "perf.upscale_game_update",
 			"perf.upscaler_update"], ["perf.upscale_undo"]],
 		["Frame generation", "frames", ["perf.lsfg", "perf.lsfg_multiplier"], ["perf.lsfg_flow_scale", "perf.lsfg_performance"]],
-		["Latency", "latency", ["perf.low_latency"], []],
-		["Compatibility", "wrench", ["perf.proton"], ["perf.launch_wrapper"]],
+		# Low latency is automatic (on by default, forced on with frame generation):
+		# only an override for a game that misbehaves with it, so it sits here.
+		["Compatibility and troubleshooting", "wrench", ["perf.proton"], ["perf.launch_wrapper", "perf.low_latency"]],
 		["Shaders", "shader", ["perf.shader_threads"], ["perf.clear_shader_cache"]],
 	],
 	"network": [
@@ -67,7 +68,7 @@ const CARDS := {
 ## Quick menu tabs: the most used first. Unavailable ones are left out there.
 const QUICK := {
 	"game": ["perf.overlay", "display.fps_limit", "power.tdp", "power.autotune", "power.autotune_target",
-		"perf.upscaler", "perf.frame_gen", "perf.lsfg", "perf.lsfg_multiplier", "perf.low_latency", "display.upscale_filter"],
+		"perf.upscaler", "perf.frame_gen", "perf.lsfg", "perf.lsfg_multiplier", "display.upscale_filter"],
 	"power": ["power.profile", "power.tdp", "power.fan_mode", "power.battery_saver", "power.charge_limit",
 		"power.cpu_boost", "power.boost", "power.epp"],
 	"display": ["display.brightness", "display.refresh_rate", "display.fps_limit", "display.vrr", "display.night_light",

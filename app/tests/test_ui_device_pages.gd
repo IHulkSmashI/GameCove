@@ -30,9 +30,10 @@ func test_about_shows_every_group() -> void:
 	var s := Fakes.services()
 	var p: Control = About.build(s)
 	var t := _texts(p)
-	for key in ["device", "chip", "memory", "storage", "screen", "battery", "software", "support", "fixes"]:
+	for key in ["device", "chip", "memory", "screen", "battery", "software", "support", "fixes"]:
 		ok(p.find_child("Card_" + key, true, false) != null, "card " + key)
-	for want in ["MSI Claw 8 EX AI+", "Arc B390 (Xe3)", "93% health", "41", "1920 × 1200", "48–120 Hz", "Full support",
+	ok(p.find_child("Card_storage", true, false) == null, "no Storage card: the Storage tab and the free-space tile have it")
+	for want in ["MSI Claw 8 EX AI+", "Arc B390 (Xe3)", "93% health", "41", "1920 × 1200", "48–120 Hz", "Tested on hardware",
 			"Bazzite 44.20261101", "MSI buttons", "Shared (GTT)"]:
 		ok(t.contains(want), "shows " + want)
 	for gone in ["Maker", "Family", "PCI id", "Serial number", "Name"]:
@@ -41,7 +42,14 @@ func test_about_shows_every_group() -> void:
 	ok(p.picture.texture != null, "picture drawn")
 	# Read-only cards don't take focus; the ones with a job do, and say it.
 	var chain: Array = p.focus_chain()
-	eq(chain.map(func(c): return String(c.name)).filter(func(n): return n.begins_with("Card_")).size(), 6, "six cards with an action")
+	eq(chain.map(func(c): return String(c.name)).filter(func(n): return n.begins_with("Card_")).size(), 5, "five cards with an action")
+	var pills: Array = chain.filter(func(c): return c.get("_pill") != null).map(func(c): return c._pill)
+	ok(not pills.is_empty() and pills.all(func(pl): return pl.modulate.a == 0.0), "no (A) pill on an unfocused card")
+	var keys: Array = []
+	for card_name in ["Card_device", "Card_chip", "Card_memory"]:
+		var lines: GridContainer = p.find_child(card_name, true, false).find_child("Lines", true, false)
+		keys.append(lines.get_child(0).custom_minimum_size.x)
+	eq(keys, [float(p.KEY_W), float(p.KEY_W), float(p.KEY_W)], "one fixed key column, so values line up")
 	ok(p.find_child("Card_chip", true, false).focus_mode == Control.FOCUS_NONE, "chip card is read-only")
 	var dev: Control = p.find_child("Card_device", true, false)
 	eq(dev.action_text, Texts.ACT_COPY, "Device card copies its info")

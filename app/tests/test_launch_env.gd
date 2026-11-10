@@ -83,6 +83,19 @@ func test_low_latency_layer() -> void:
 	ok(not _env("intel-xe3", "cachy11")["env"].has("LOW_LATENCY_LAYER_REFLEX"), "Anti-Lag 2 by default")
 
 
+func test_low_latency_forced_on_with_frame_generation() -> void:
+	# An old per-game "off" loses to frame generation, here or elsewhere (lsfg-vk / OptiScaler).
+	var amd := _env("amd-rdna3", "cachy11", {"low_latency": false, "frame_gen": true})
+	eq(amd["env"].get("LOW_LATENCY_LAYER"), "1", "Anti-Lag 2 with frame generation")
+	ok(amd["low_latency"] and amd["low_latency_forced"], "reported as forced")
+	var lsfg := _env("amd-rdna3", "cachy11", {"low_latency": false}, {}, {"frame_gen_on": true})
+	eq(lsfg["env"].get("LOW_LATENCY_LAYER"), "1", "with lsfg-vk / OptiScaler frame generation too")
+	var intel := _env("intel-xe3", "valve11", {"low_latency": false, "frame_gen": true})
+	ok(not intel["env"].has("IGDEXT_XELL_CAP"), "XeLL stays on with frame generation")
+	var plain := _env("amd-rdna3", "cachy11", {"low_latency": false})
+	ok(not plain["env"].has("LOW_LATENCY_LAYER") and not plain["low_latency_forced"], "without frame generation the override holds")
+
+
 func test_intel_xmx_variables() -> void:
 	var fsr: Dictionary = _env("intel-xe3", "valve11", {"upscaler": "fsr", "frame_gen": true})["env"]
 	eq(fsr.get("FSR"), "xess", "FSR on XeSS")

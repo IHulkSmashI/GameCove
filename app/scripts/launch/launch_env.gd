@@ -84,9 +84,11 @@ static func resolve_upscaler(choice: String, gpu_family: String, xmx_ready: bool
 ## device:   {"gpu_family": String, "xmx": bool}
 ## proton:   Proton.classify()/resolve() result
 ## host:     {"xess_xmx": bool, "low_latency_layer": bool}
-## game:     {"anticheat": bool, "base_fps": int (-1 unknown), "extra_env": Dictionary}
+## game:     {"anticheat": bool, "base_fps": int (-1 unknown), "extra_env": Dictionary,
+##            "frame_gen_on": bool (lsfg-vk / OptiScaler frame generation is on)}
 ## options:  {"indicator": bool}
-## Returns {"env", "upscaler", "frame_gen", "low_latency", "conflicts": [{id, message}], "notes": [String]}.
+## Returns {"env", "upscaler", "frame_gen", "low_latency", "low_latency_forced",
+## "conflicts": [{id, message}], "notes": [String]}.
 static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary, host: Dictionary,
 		game: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
 	var env := {}
@@ -102,10 +104,14 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 	if picked[1] != "":
 		notes.append(picked[1])
 	var upscaler := resolve_upscaler(choice, family, xmx_ready, proton)
-	var low_latency: bool = settings.get("low_latency", true)
-
 	# Frame generation only pays off with enough real frames underneath.
 	var frame_gen: bool = settings.get("frame_gen", false)
+	# Low latency is on by default and forced on whenever frame generation is
+	# asked for (here, or lsfg-vk / OptiScaler: facts.frame_gen_on), whatever
+	# an old per-game "off" says: generated frames add lag that Anti-Lag 2 /
+	# XeLL win back.
+	var low_latency_forced: bool = frame_gen or bool(game.get("frame_gen_on", false))
+	var low_latency: bool = bool(settings.get("low_latency", true)) or low_latency_forced
 	if frame_gen:
 		var base: int = game.get("base_fps", -1)
 		var limit: int = settings.get("fps_limit", 0)
@@ -166,6 +172,7 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 		"upscaler": upscaler,
 		"frame_gen": frame_gen,
 		"low_latency": low_latency,
+		"low_latency_forced": low_latency_forced,
 		"conflicts": conflicts(env, family, proton, anticheat, xmx_ready),
 		"notes": notes,
 	}

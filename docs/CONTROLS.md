@@ -311,7 +311,7 @@ another handheld, the files are rewritten from that device's values (stamp `laun
 | `perf.upscaler`, `perf.frame_gen`, `perf.upscale_recommended`, `perf.upscale_undo` | `gamecove-upscale choose/apply/undo --home --key --gpu vendor=..,family=..,arch=..,xmx=.. [--dir]` (JSON out). OptiScaler (pinned, sha256) into the folder of the game's exe with the game's fixes, REFramework for Capcom RE Engine games, everything recorded and undone exactly | a known GPU, the helper installed, a game whose folder is known |
 | `perf.upscaler_update` (action, not per game) | `gamecove-upscale check` (versions here vs the newest; cached 10 min) and, when pressed, `update` (an update is waiting) or `check --online` (everything current: check now). Shows "Update available: OptiScaler 0.9.4 → 0.9.5" or "Up to date: ..." with each downloaded component's version | a known GPU and the helper; something downloaded |
 | `perf.upscale_game_update` (action, the open game) | `gamecove-upscale game-update --key`: the newest OptiScaler (and REFramework) into this game with its launch settings kept; patch() takes the older copy out with undo's hash checks first | GameCove's OptiScaler in the game and older than the newest |
-| `perf.low_latency` (per game) | `Launcher.save_settings(key, {low_latency})`: `LOW_LATENCY_LAYER=1` (Anti-Lag 2 / Reflex through low_latency_layer, bundled in Proton-CachyOS 11) on AMD, XeLL (`IGDEXT_XELL_CAP`) on Intel with the XeSS XMX driver | Launcher and a known GPU |
+| `perf.low_latency` (per game) | `Launcher.save_settings(key, {low_latency})`: `LOW_LATENCY_LAYER=1` (Anti-Lag 2 / Reflex through low_latency_layer, bundled in Proton-CachyOS 11) on AMD, XeLL (`IGDEXT_XELL_CAP`) on Intel with the XeSS XMX driver. Automatic: on by default for every game and forced on while frame generation is on (`perf.frame_gen`, `perf.lsfg` or the launch setting): detect gives "On automatically with frame generation", `forced_value` shows On, a write of Off is refused, and `LaunchEnv.compose` turns it on at launch even when an old per-game setting says off (`Launcher.frame_gen_hooks` tells it about lsfg-vk / OptiScaler). Off is only an override, behind "More settings" in Settings > Performance > Compatibility and troubleshooting and under the game page's launch settings (Advanced / troubleshooting); not in the quick menu | Launcher and a known GPU |
 | `perf.proton` (per game) | `Library.set_compat_tool` (Steam's own API or config.vdf; umu's PROTONPATH for other stores); options from `Library.compat_tools(game)` | Library and a game |
 | `perf.launch_wrapper` (Steam games) | adds / removes `gamecove-run` in the launch options, in a fall-through form: `/bin/sh -c '[ -x <w> ] && exec <w> "$@"; exec "$@"' gamecove-run %command%`, so the game still starts when GameCove is removed or the previous deployment boots (review S2-1). Older bare-path entries are moved to this form at start while Steam is stopped | the wrapper installed |
 | `perf.wrapper_remove_all` (action) | takes GameCove out of every Steam game's launch options, every account (Steam closes and starts again). The installer's Uninstall does the same | Steam |
@@ -609,6 +609,10 @@ on whole fake handhelds, driven with the pad only, checked at the system layer.
   `SETUPS` + `setup_extras`; a new service behaviour in `fake_system.gd` (`_live_get` / `_live_set`).
 - **Contract addition**: `Control.affects` (ids a write moves on the system; Controls reads them again
   after a write or apply that worked).
+- **Contract addition**: `Control.forced_value` (backward compatible, null by default): the value the
+  system holds while the control is unavailable because another setting decides it. `read()` reports it,
+  so the UI shows the value greyed with the reason; it's never written and never saved in a profile.
+  Used by `perf.low_latency` (On while frame generation is on).
 
 ## State that survives (review fixes, state and persistence)
 

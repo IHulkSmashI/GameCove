@@ -35,6 +35,9 @@ const T := preload("res://scripts/ui/texts_streaming.gd")
 
 ## Box art size: Vector2.ZERO sizes them like every other shelf (seven across).
 const TILE := Vector2.ZERO
+## Stream's apps are box art on a screen with room below them: seven across
+## like every shelf, but at true 2:3 box-art height (taller than library tiles).
+const TILE_ASPECT := 1.5
 
 var services := {}
 var service: Object
@@ -576,8 +579,14 @@ func _add_apps(h: Dictionary) -> void:
 	for a in apps:
 		games.append(service.game_for(selected_id, a))
 	shelf = Shelf.new()
-	shelf.setup("stream_apps", T.APPS_ON % service.display_name(h), games, TILE)
+	var ts := TILE if TILE != Vector2.ZERO else Tile.size_for(Tile.row_width(), Shelf.GAP)
+	ts.y = roundf(ts.x * TILE_ASPECT)
+	shelf.setup("stream_apps", T.APPS_ON % service.display_name(h), games, ts)
 	shelf.count_label.text = "%d %s" % [games.size(), "app" if games.size() == 1 else "apps"]
+	# What this PC will stream, as a quiet glass pill beside the row's title
+	# (it used to float under the row over empty space).
+	shelf.get_node("Head").add_child(_spec_pill())
+	shelf.get_node("Head").move_child(shelf.get_node("Head/SpecPill"), shelf.get_node("Head/Title").get_index() + 1)
 	var asleep := str(h["status"]) in ["asleep", "offline", "waking"]
 	for t in shelf.tiles:
 		t.sub_label.text = service.display_name(h) + (" · HDR" if bool(t.game["stream"].get("hdr", false)) and service.hdr_available(selected_id) else "")
@@ -594,16 +603,31 @@ func _add_apps(h: Dictionary) -> void:
 	align.add_theme_constant_override("margin_right", -int(Shelf.PAD.x))
 	align.add_child(shelf)
 	_detail.add_child(align)
-	var foot := Kit.hbox(ThemeLib.SPACE_3)
-	foot.name = "Foot"
-	foot.add_child(SIcons.rect("signal", 18, ThemeLib.color("accent")))
-	var sum := Kit.label(T.WILL_STREAM % Settings.summary(service.resolved(selected_id)), "MonoLabel")
-	sum.name = "Summary"
-	foot.add_child(sum)
-	# No floating "(X) Stream settings" here: X is in the hint bar already.
-	_detail.add_child(foot)
 	for t in shelf.tiles:
 		detail_focus.append(t)
+
+
+## "1920x1200 · 120 fps · AV1 · 32 Mb/s" in a glass pill (signal icon, mono):
+## the row header's own fact, next to ON GAMING-PC. X opens the settings.
+func _spec_pill() -> Control:
+	var pill := PanelContainer.new()
+	pill.name = "SpecPill"
+	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var sb := ThemeLib.box(ThemeLib.soft(0.05), 999, 12, 4)
+	sb.border_color = ThemeLib.soft(0.10)
+	sb.set_border_width_all(1)
+	pill.add_theme_stylebox_override("panel", sb)
+	var row := Kit.hbox(ThemeLib.SPACE_2)
+	row.name = "Foot"
+	row.add_child(SIcons.rect("signal", 14, ThemeLib.color("accent")))
+	var sum := Kit.label(Settings.summary(service.resolved(selected_id)), "MonoLabel")
+	sum.name = "Summary"
+	sum.add_theme_font_size_override("font_size", 13)
+	sum.add_theme_color_override("font_color", ThemeLib.color("text_2"))
+	sum.tooltip_text = T.WILL_STREAM % sum.text
+	row.add_child(sum)
+	pill.add_child(row)
+	return pill
 
 
 func _empty_state() -> Control:

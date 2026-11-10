@@ -115,7 +115,7 @@ func _run() -> void:
 	var t: Dictionary = F.target("bazzite")
 	await make(t)
 	await shot("installer_welcome")
-	for s in ["startup", "steam", "stores", "device", "look", "extras", "summary"]:
+	for s in ["startup", "steam", "stores", "device", "look", "art", "extras", "summary"]:
 		if want("installer_" + s):
 			at(s)
 			await shot("installer_" + s)

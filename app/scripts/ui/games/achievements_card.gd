@@ -1,10 +1,13 @@
 extends VBoxContainer
-## The body of the game page's Achievements card: "23 of 48" with a bar, a
-## line about the focused achievement, and a grid of icons. Unlocked first
-## (newest first), then locked by how many players have them (easiest next),
-## hidden ones last with their name kept secret. Locked icons are dimmed; rare
-## ones (under 10% of players) get a gold ring. Data from the Achievements
-## service (request -> loaded, changed when rarity arrives).
+## The body of the game page's Achievements card, the same data Home's
+## progress card shows (one Achievements service and its cache): "6 of 14
+## unlocked" with a bar, the rarest one you've unlocked in a gold-edged box
+## (the focused one instead while you browse), then a list of rows: unlocked
+## first (newest first), then locked by how many players have them (easiest
+## next), hidden ones last with their name kept secret. Locked rows are
+## dimmed; rare ones (under 10% of players) get a gold edge. The first
+## LIST_ROWS rows show, then "Show all n"; A on it lists the rest. Data from
+## the Achievements service (request -> loaded, changed when rarity arrives).
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
@@ -18,12 +21,23 @@ signal cells_changed
 ## A cell took focus: the page scrolls the whole card into view.
 signal cell_focused
 
-const COLS := 12
-## Columns in use (set_columns); COLS by default.
+const ProgressCard := preload("res://scripts/ui/progress_card.gd")
+
+## A list now: one column (kept for callers).
+const COLS := 1
 var cols := COLS
-const CELL := Vector2(74, 74)
+const CELL := Vector2(0, 46)
 const MAX_CELLS := 48
+## Rows shown before "Show all" (which makes the fourth): the card fits the
+## bento on one screen, no "More below".
+const LIST_ROWS := 3
 const RARE := 10.0
+
+## The list shows every row (after "Show all").
+var expanded := false
+## The rarest unlocked achievement ({} when none has a rarity yet).
+var rarest: Dictionary = {}
+var detail_eyebrow: Label
 
 var appid := ""
 var service: Object
@@ -33,7 +47,11 @@ var items: Array = []
 var summary: Label
 var percent_label: Label
 var bar: Control
+## Gone (the icon grid became `list`); null, kept for callers.
 var grid: GridContainer
+var list: VBoxContainer
+## "Show all n" while the list is cut at LIST_ROWS.
+var show_all: Button
 var more_label: Label
 var detail_icon: TextureRect
 var detail_name: Label
@@ -70,7 +88,7 @@ func setup(id: String, svc: Object) -> void:
 	var drow := Kit.hbox(16)
 	_detail.add_child(drow)
 	detail_icon = TextureRect.new()
-	detail_icon.custom_minimum_size = Vector2(56, 56)
+	detail_icon.custom_minimum_size = Vector2(48, 48)
 	detail_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	detail_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	detail_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -78,6 +96,9 @@ func setup(id: String, svc: Object) -> void:
 	var dcol := Kit.vbox(2)
 	dcol.alignment = BoxContainer.ALIGNMENT_CENTER
 	dcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_eyebrow = Kit.micro(TG.ACH_RAREST)
+	detail_eyebrow.name = "Eyebrow"
+	dcol.add_child(detail_eyebrow)
 	detail_name = Kit.label("", "")
 	detail_name.name = "Name"
 	detail_name.add_theme_font_override("font", ThemeLib.font("semibold"))
@@ -88,12 +109,10 @@ func setup(id: String, svc: Object) -> void:
 	drow.add_child(dcol)
 	_detail.visible = false
 	add_child(_detail)
-	grid = GridContainer.new()
-	grid.name = "Grid"
-	grid.columns = cols
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
-	add_child(grid)
+	list = Kit.vbox(6)
+	list.name = "List"
+	add_child(list)
+	grid = null
 	more_label = Kit.label("", "QuietLabel")
 	more_label.visible = false
 	add_child(more_label)
@@ -129,8 +148,9 @@ static func ordered(list: Array) -> Array:
 func show_data(result: Dictionary) -> void:
 	data = result
 	for c in cells:
-		Kit.drop(grid, c)
+		Kit.drop(list, c)
 	cells.clear()
+	show_all = null
 	var total := int(result.get("total", 0))
 	var unlocked := int(result.get("unlocked", 0))
 	if total <= 0:
@@ -153,47 +173,123 @@ func show_data(result: Dictionary) -> void:
 	bar.set_value(float(unlocked) / total, false)
 	bar.set_color(ThemeLib.tone("gold") if unlocked == total else Color(0, 0, 0, 0))
 	items = ordered(result.get("items", []))
-	for i in mini(items.size(), MAX_CELLS):
+	rarest = ProgressCard.rarest(result)
+	var n := mini(items.size(), MAX_CELLS)
+	var shown := n if expanded or n <= LIST_ROWS + 1 else LIST_ROWS
+	for i in shown:
 		var b := _cell(items[i], i)
-		grid.add_child(b)
+		list.add_child(b)
 		cells.append(b)
-	more_label.visible = items.size() > MAX_CELLS
+	if shown < n:
+		show_all = Kit.button(TG.ACH_SHOW_ALL % items.size(), "RowButton")
+		show_all.name = "ShowAll"
+		show_all.custom_minimum_size = Vector2(0, 44)
+		show_all.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		show_all.icon = GameIcons.tex("chevron_down", 18, ThemeLib.color("text_2"))
+		show_all.pressed.connect(_expand)
+		show_all.focus_entered.connect(func(): show_rarest(); cell_focused.emit())
+		list.add_child(show_all)
+		cells.append(show_all)
+	more_label.visible = items.size() > MAX_CELLS and expanded
 	more_label.text = "+%d more" % (items.size() - MAX_CELLS)
 	_detail.visible = not items.is_empty()
-	if not items.is_empty():
-		show_item(items[0])
+	show_rarest()
 	_link()
 	cells_changed.emit()
 
 
+## "Show all": add the rest of the rows in its place (it's pressed right now,
+## so it's let go of, not freed in its own signal) and focus the first new one.
+func _expand() -> void:
+	if expanded or show_all == null:
+		return
+	expanded = true
+	var at := cells.find(show_all)
+	cells.erase(show_all)
+	list.remove_child(show_all)
+	show_all.queue_free()
+	show_all = null
+	for i in range(at, mini(items.size(), MAX_CELLS)):
+		var b := _cell(items[i], i)
+		list.add_child(b)
+		cells.append(b)
+	more_label.visible = items.size() > MAX_CELLS
+	_link()
+	cells_changed.emit()
+	if at < cells.size() and is_inside_tree():
+		cells[at].grab_focus()
+
+
+## The box over the list: the rarest unlocked one, gold-edged, when nothing
+## is being browsed (else the first one).
+func show_rarest() -> void:
+	if not rarest.is_empty():
+		show_item(rarest, true)
+	elif not items.is_empty():
+		show_item(items[0])
+
+
+## One row: icon, name, "Unlocked Nov 7" or "Locked", rarity on the right.
 func _cell(a: Dictionary, i: int) -> Button:
 	var b := Button.new()
 	b.name = "Ach_%d" % i
 	b.focus_mode = Control.FOCUS_ALL
 	b.custom_minimum_size = CELL
-	b.theme_type_variation = "TileButton"
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.theme_type_variation = "RowButton"
 	var got: bool = a.get("unlocked", false)
 	var rare: bool = float(a.get("rarity", -1)) >= 0.0 and float(a.get("rarity", -1)) < RARE
-	var bg := ThemeLib.box(ThemeLib.color("surface_2"), ThemeLib.radius("m"), 0, 0)
 	if got and rare:
-		bg.border_color = ThemeLib.tone("gold")
-		bg.set_border_width_all(2)
-	for st in ["normal", "hover", "pressed", "hover_pressed"]:
-		b.add_theme_stylebox_override(st, bg)
-	b.add_theme_stylebox_override("focus", ThemeLib.focus_ring(ThemeLib.radius("m")))
+		# The row's own fill (as the theme's RowButton draws it), with a gold edge.
+		var g2: Color = ThemeLib.color("glass_2")
+		var sb := ThemeLib.box(Color(g2, g2.a * 0.8) if ThemeLib.is_dark() else ThemeLib.color("surface"), ThemeLib.radius("m"), 18, 10)
+		sb.border_color = Color(ThemeLib.tone("gold"), 0.7)
+		sb.set_border_width_all(1)
+		for st in ["normal", "hover"]:
+			b.add_theme_stylebox_override(st, sb)
+	var row := Kit.hbox(12)
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 10
+	row.offset_right = -14
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(row)
 	var icon := TextureRect.new()
 	icon.name = "Icon"
-	Kit.fill(icon)
-	icon.offset_left = 6
-	icon.offset_top = 6
-	icon.offset_right = -6
-	icon.offset_bottom = -6
+	icon.custom_minimum_size = Vector2(34, 34)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	b.add_child(icon)
-	_set_icon(icon, a, 40)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon)
+	_set_icon(icon, a, 24)
+	var col := Kit.vbox(0)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var nm := Kit.label(_name(a), "")
+	nm.name = "Name"
+	nm.add_theme_font_override("font", ThemeLib.font("semibold"))
+	nm.add_theme_font_size_override("font_size", ThemeLib.SIZE_SMALL)
+	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	nm.clip_text = true
+	col.add_child(nm)
+	var t := int(a.get("unlock_time", 0))
+	var st_line := (("Unlocked " + date_text(t)) if t > 0 else "Unlocked") if got else TG.ACH_LOCKED
+	var sub := Kit.label(st_line, "CaptionLabel")
+	sub.name = "State"
+	sub.add_theme_color_override("font_color", ThemeLib.color("good") if got else ThemeLib.color("text_3"))
+	col.add_child(sub)
+	row.add_child(col)
+	var r := float(a.get("rarity", -1))
+	if r >= 0.0:
+		var pct := Kit.label(ProgressCard._pct(r) + "%", "MonoLabel")
+		pct.name = "Rarity"
+		pct.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pct.add_theme_color_override("font_color", ThemeLib.tone("gold") if rare else ThemeLib.color("text_2"))
+		row.add_child(pct)
 	if not got:
 		icon.modulate = Color(1, 1, 1, 0.38)
+		nm.add_theme_color_override("font_color", ThemeLib.color("text_2"))
 	b.focus_entered.connect(func():
 		show_item(a)
 		cell_focused.emit())
@@ -255,49 +351,44 @@ static func date_text(unix: int) -> String:
 	return "%s %d, %d" % [months[int(d["month"]) - 1], int(d["day"]), int(d["year"])]
 
 
-func show_item(a: Dictionary) -> void:
+## The box over the list for `a`; `as_rarest` gives it the gold edge and the
+## RAREST eyebrow (Home's card says the same thing).
+func show_item(a: Dictionary, as_rarest := false) -> void:
 	detail_name.text = _name(a)
-	detail_line.text = describe(a)
+	# The rarest box stays two lines (when, how rare); browsing shows the description too.
+	detail_line.text = describe(a).get_slice("\n", 1) if as_rarest and "\n" in describe(a) else describe(a)
 	_set_icon(detail_icon, a, 36)
 	detail_icon.modulate = Color.WHITE if a.get("unlocked", false) else Color(1, 1, 1, 0.5)
+	detail_eyebrow.visible = as_rarest
+	var sb := ThemeLib.box(ThemeLib.soft(0.05) if ThemeLib.is_dark() else ThemeLib.color("surface"), ThemeLib.radius("m"), 16, 12)
+	sb.border_color = Color(ThemeLib.tone("gold"), 0.85) if as_rarest else ThemeLib.color("line")
+	sb.set_border_width_all(2 if as_rarest else 1)
+	_detail.add_theme_stylebox_override("panel", sb)
+	detail_eyebrow.add_theme_color_override("font_color", ThemeLib.tone("gold"))
 
 
-## Left / right along a row, up / down by column; the page links the edges.
+## Up / down along the list; left / right stay put. The page links the edges.
 func _link() -> void:
 	for i in cells.size():
 		var c: Control = cells[i]
-		var col := i % cols
-		c.focus_neighbor_left = c.get_path_to(cells[i - 1] if col > 0 else c)
-		c.focus_neighbor_right = c.get_path_to(cells[i + 1] if col < cols - 1 and i + 1 < cells.size() else c)
-		if i >= cols:
-			c.focus_neighbor_top = c.get_path_to(cells[i - cols])
-		if i + cols < cells.size():
-			c.focus_neighbor_bottom = c.get_path_to(cells[i + cols])
+		c.focus_neighbor_left = c.get_path_to(c)
+		c.focus_neighbor_right = c.get_path_to(c)
+		if i > 0:
+			c.focus_neighbor_top = c.get_path_to(cells[i - 1])
+		if i + 1 < cells.size():
+			c.focus_neighbor_bottom = c.get_path_to(cells[i + 1])
 
 
 ## Edges: the first row's up goes to `above`, the last row's down to `below`.
 func link_edges(above: Control, below: Control) -> void:
 	_link()
-	for i in cells.size():
-		var c: Control = cells[i]
-		if i < cols and above != null:
-			c.focus_neighbor_top = c.get_path_to(above)
-		if i + cols >= cells.size():
-			# Cells in a short last row's columns fall to the next control too.
-			c.focus_neighbor_bottom = c.get_path_to(below if below != null else c)
-	# A cell above an empty spot in the short last row drops to the last cell.
-	var last_row_start := (cells.size() - 1) / cols * cols
-	for i in range(maxi(0, last_row_start - cols), last_row_start):
-		if i + cols >= cells.size() and i < cells.size():
-			cells[i].focus_neighbor_bottom = cells[i].get_path_to(cells[cells.size() - 1])
-
-
-## Fits the grid to `width` px (the card's inner width); relinks focus.
-func fit_width(width: float) -> void:
-	var n := clampi(int((width + 12.0) / (CELL.x + 12.0)), 3, COLS)
-	if n == cols:
+	if cells.is_empty():
 		return
-	cols = n
-	grid.columns = n
-	if not cells.is_empty():
-		cells_changed.emit()
+	if above != null:
+		cells[0].focus_neighbor_top = cells[0].get_path_to(above)
+	cells[-1].focus_neighbor_bottom = cells[-1].get_path_to(below if below != null else cells[-1])
+
+
+## Kept for callers: a list fits any width.
+func fit_width(_width: float) -> void:
+	pass

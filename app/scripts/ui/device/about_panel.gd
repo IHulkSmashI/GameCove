@@ -1,7 +1,8 @@
 extends "res://scripts/ui/device/device_panel.gd"
 ## About this device: the handheld's picture large on the left, everything
 ## Device.info() knows in tinted cards on the right (device, chip and drivers,
-## memory, storage, screen, battery, software, what works, recommended fixes),
+## memory, screen, battery, software, what works, recommended fixes; storage
+## lives in its own tab and the free-space tile),
 ## packed into two columns (shortest column takes the next card, so there are
 ## no gaps) when there's room, one column on narrow screens.
 ## Asks for the slow details (Steam build, Proton, free space, Vulkan) once and
@@ -279,7 +280,8 @@ func _fill_cards() -> void:
 	cards.append(_device_card())
 	cards.append(_chip_card())
 	cards.append(_memory_card())
-	cards.append(_storage_card())
+	# No Storage card here: the Storage tab has it and the side column shows
+	# the free space (it was a second "(A)" card sliced off at the foot).
 	cards.append(_screen_card())
 	cards.append(_battery_card())
 	cards.append(_software_card())
@@ -376,7 +378,6 @@ func _section(key: String, tint := "accent") -> Array:
 func _card_action(c: Control) -> void:
 	match String(c.name).trim_prefix("Card_"):
 		"device": c.set_action(Texts.ACT_COPY, copy_info)
-		"storage": c.set_action(Texts.ACT_STORAGE, func(): part_requested.emit("storage"))
 		"software": c.set_action(Texts.ACT_UPDATES, func(): part_requested.emit("updates"))
 		"fixes": c.set_action(Texts.ACT_FIXES, func(): part_requested.emit("fixes"))
 		"battery": c.set_action(Texts.ACT_POWER, func(): category_requested.emit("power"))
@@ -455,39 +456,6 @@ func _memory_card() -> Control:
 		["Graphics memory", Texts.mb(int(m.get("vram_mb", -1))), Texts.VRAM_NOTE],
 		["Shared (GTT)", Texts.mb(int(m.get("gtt_mb", -1))), Texts.GTT_NOTE],
 	]))
-	return c[0]
-
-
-func _storage_card() -> Control:
-	var st := _g("storage")
-	var c := _section("storage", "info")
-	var any := false
-	for k in ["internal", "sd_card"]:
-		var s: Variant = st.get(k, {})
-		if not s is Dictionary or s.is_empty():
-			continue
-		any = true
-		var size := float(s.get("size_gb", -1))
-		var title := "Internal" if k == "internal" else "SD card"
-		var row := Kit.vbox(6)
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var top := Kit.hbox(8)
-		top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var name_l := Kit.label("%s  ·  %s" % [title, str(s.get("model", s.get("name", "")))], "", true)
-		name_l.add_theme_font_override("font", ThemeLib.font("medium"))
-		top.add_child(name_l)
-		var right := Kit.label(Texts.gb(size), "ValueLabel")
-		right.add_theme_font_override("font", ThemeLib.font("semibold", true))
-		top.add_child(right)
-		row.add_child(top)
-		if s.has("free_gb") and size > 0.0:
-			var free := float(s["free_gb"])
-			row.add_child(DKit.UsageBar.new(1.0 - free / size))
-			row.add_child(Kit.label(Texts.FREE_OF % [Texts.gb(free), Texts.gb(size)], "CaptionLabel"))
-		c[1].add_child(row)
-	if not any:
-		c[0].free()
-		return null   # nothing known: no "Unknown" card
 	return c[0]
 
 
@@ -598,8 +566,12 @@ func _fixes_card() -> Control:
 	return c[0]
 
 
+## One fixed key column for every card (values line up down the page).
+const KEY_W := 136
+
+
 func _kv(pairs: Array) -> GridContainer:
-	return DKit.kv(pairs, 120, true)
+	return DKit.kv(pairs, KEY_W, true, true)
 
 
 ## Services without info() (older fakes, partial backends): name and support only.

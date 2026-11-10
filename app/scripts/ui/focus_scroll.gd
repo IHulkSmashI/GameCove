@@ -105,6 +105,9 @@ func _apply() -> void:
 		return
 	var target := target_for(_watched)
 	var from := float(scroll.scroll_vertical)
+	# A glide toward an older target (the row before it settled) ends here,
+	# or it would carry on past the place this pass wants.
+	_stop()
 	if absf(target - from) < 1.0:
 		return
 	Motion.method(scroll, "vscroll", func(v: float): scroll.scroll_vertical = int(round(v)), from, target, Motion.FAST)

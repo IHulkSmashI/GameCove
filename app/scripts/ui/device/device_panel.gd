@@ -16,6 +16,7 @@ extends HBoxContainer
 ## the tree. Nothing polls.
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const DKit := preload("res://scripts/ui/device/device_kit.gd")
 const Texts := preload("res://scripts/ui/texts_device.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
@@ -154,11 +155,15 @@ func main_column(ratio := 1.18) -> VBoxContainer:
 	add_child(holder)
 	s.set_anchors_preset(Control.PRESET_FULL_RECT)
 	holder.add_child(s)
-	DKit.foot_fade(holder, s)
 	var col := Kit.vbox(16)
 	col.name = "Cards"
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	s.add_child(DKit.pad(col, 6))
+	# A card the column's foot would slice isn't drawn at all (the mask ends
+	# under the last whole card); "More below" says there's more.
+	var mask: TextureRect = FadeMask.wrap(s, 24.0)
+	mask.cut_fn = func(): return DKit.cards_in(col)
+	DKit.more_cue(holder, s)
 	return col
 
 

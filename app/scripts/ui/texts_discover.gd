@@ -28,6 +28,16 @@ const SEE_ALL_DEALS := "All deals"
 const SEE_PRICE := "See price"
 ## Tiles without a real local price name the store instead of guessing one.
 const PRICE_ON := "Price on %s"
+## A deal's tile line when GG.deals (the user's own key) gives the game's
+## real local price: its best price across official stores.
+const GG_BEST := "Best price · GG.deals"
+## Store names as a tile's one-line store line says them.
+const STORE_SHORT := {"Epic Games Store": "Epic Games", "GreenManGaming": "Green Man Gaming", "GamersGate": "GamersGate",
+	"Humble Store": "Humble Store", "Fanatical": "Fanatical", "GOG": "GOG", "Steam": "Steam"}
+
+
+static func store_short(name: String) -> String:
+	return str(STORE_SHORT.get(name, name))
 const SEE_PRICE_WHY := "Shown on the store's own page in your currency."
 const HIST_LOW := "Lowest ever"
 const HIST_LOW_LONG := "Lowest price ever"

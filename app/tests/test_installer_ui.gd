@@ -232,3 +232,24 @@ func test_first_run_flow_skips_installer_steps() -> void:
 	f.skip_finished = false
 	eq(f.following("welcome"), "theme", "reopened from Settings: every step")
 	f.free()
+
+
+## Custom's 11 steps fit a 1280 px top bar: only the current step is named,
+## the rest are status dots. Easy keeps every name.
+func test_rail_compact_with_many_steps() -> void:
+	var s := _screen(F.target("bazzite"))
+	s.plan.set_mode("custom")
+	s.plan.step = "art"
+	s.show_step()
+	var named := []
+	for p in s.rail.get_children():
+		var l: Label = p.find_child("Text", true, false)
+		if l.visible:
+			named.append(String(p.name))
+	eq(named, ["Step_art"], "Custom: only the current step keeps its name")
+	ok(s.rail.get_combined_minimum_size().x < 700.0, "the rail fits beside the lockup at 1280 px")
+	s.plan.set_mode("easy")
+	s.plan.step = "art"
+	s.show_step()
+	ok(s.rail.get_children().all(func(p): return p.find_child("Text", true, false).visible), "Easy names every step")
+	_free(s)

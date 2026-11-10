@@ -58,7 +58,7 @@ const NUMBERS := {
 const ORDER := ["cove", "midnight", "sunset", "light"]
 const NAMES := {"cove": "Cove", "midnight": "Midnight", "sunset": "Sunset", "light": "Light"}
 const DESCRIBE := {
-	"cove": "Electric cyan and violet on near-black. The GameCove look.",
+	"cove": "Electric cyan and violet on deep slate. The GameCove look.",
 	"midnight": "Pure black with ice-cyan and violet. Saves power on OLED screens.",
 	"sunset": "Warm orange into magenta on deep plum.",
 	"light": "Dark text on light glass, highest contrast in bright rooms.",
@@ -66,18 +66,19 @@ const DESCRIBE := {
 
 const DATA := {
 	"cove": {
-		"bg": Color("#040508"), "surface": Color("#0B0F18"), "surface_2": Color("#111724"),
-		"surface_3": Color("#1A2132"), "glass": Color(0.055, 0.075, 0.118, 0.80), "glass_2": Color(0.078, 0.106, 0.165, 0.85),
+		# A lifted deep slate ground; cards and panels a clear step above it.
+		"bg": Color("#141B2A"), "surface": Color("#1B2336"), "surface_2": Color("#222B40"),
+		"surface_3": Color("#2C364D"), "glass": Color(0.106, 0.137, 0.208, 0.84), "glass_2": Color(0.137, 0.169, 0.247, 0.86),
 		"line": Color(1, 1, 1, 0.10), "line_2": Color(1, 1, 1, 0.15),
-		"text": Color("#F8FAFC"), "text_2": Color("#94A3B8"), "text_3": Color("#5E6B7F"),
+		"text": Color("#F8FAFC"), "text_2": Color("#A3B1C6"), "text_3": Color("#6F7D93"),
 		"accent": Color("#00F0FF"), "accent_2": Color("#7000FF"), "accent_end": Color("#8F86FF"), "on_accent": Color("#00151A"),
 		"ring": Color("#00F0FF"), "glow": Color(0.0, 0.94, 1.0, 0.42),
 		"focus_fill": Color("#E6FDFF"), "on_focus": Color("#040508"),
 		"good": Color("#4ADE80"), "warn": Color("#FBBF24"), "bad": Color("#F87171"), "info": Color("#5CC8FF"),
 		"face_a": Color("#22C55E"), "face_b": Color("#EF4444"), "face_x": Color("#3B82F6"), "face_y": Color("#EAB308"),
 		"on_face": Color("#040508"),
-		"scrim": Color("#040508"), "chip": Color(0.02, 0.025, 0.04, 0.82),
-		"scrim_strength": 0.86, "radius_s": 8, "radius_m": 12, "radius_l": 16, "radius_xl": 24, "glow_size": 18, "dark": 1,
+		"scrim": Color("#121826"), "chip": Color(0.02, 0.025, 0.04, 0.82),
+		"scrim_strength": 0.62, "radius_s": 8, "radius_m": 12, "radius_l": 16, "radius_xl": 24, "glow_size": 18, "dark": 1,
 	},
 	"midnight": {
 		# Pure black for OLED: unlit pixels everywhere but cards and text,
@@ -93,12 +94,12 @@ const DATA := {
 		"face_a": Color("#22C55E"), "face_b": Color("#EF4444"), "face_x": Color("#3B82F6"), "face_y": Color("#EAB308"),
 		"on_face": Color("#000000"),
 		"scrim": Color("#000000"), "chip": Color(0, 0, 0, 0.84),
-		"scrim_strength": 0.93, "radius_s": 8, "radius_m": 12, "radius_l": 16, "radius_xl": 24, "glow_size": 18, "dark": 1,
+		"scrim_strength": 0.80, "radius_s": 8, "radius_m": 12, "radius_l": 16, "radius_xl": 24, "glow_size": 18, "dark": 1,
 	},
 	"sunset": {
-		# Warm neon: orange into magenta over a deep plum-black.
-		"bg": Color("#0C0508"), "surface": Color("#160A10"), "surface_2": Color("#211019"),
-		"surface_3": Color("#2F1724"), "glass": Color(0.09, 0.04, 0.065, 0.86), "glass_2": Color(0.17, 0.08, 0.12, 0.72),
+		# Warm neon: orange into magenta over a lifted deep plum.
+		"bg": Color("#24151F"), "surface": Color("#2B1926"), "surface_2": Color("#341E2D"),
+		"surface_3": Color("#412639"), "glass": Color(0.16, 0.095, 0.14, 0.86), "glass_2": Color(0.20, 0.11, 0.16, 0.80),
 		"line": Color(1, 0.88, 0.85, 0.10), "line_2": Color(1, 0.80, 0.78, 0.18),
 		"text": Color("#FFF4EE"), "text_2": Color("#D4B3AA"), "text_3": Color("#93716B"),
 		"accent": Color("#FF8A3D"), "accent_2": Color("#FF2E88"), "accent_end": Color("#FF4F9A"), "on_accent": Color("#220800"),
@@ -107,8 +108,8 @@ const DATA := {
 		"good": Color("#6EE7A8"), "warn": Color("#FFD166"), "bad": Color("#FF7B7B"), "info": Color("#FFA8CB"),
 		"face_a": Color("#4FD992"), "face_b": Color("#FF6B6B"), "face_x": Color("#55A6FF"), "face_y": Color("#FFCC4D"),
 		"on_face": Color("#12070D"),
-		"scrim": Color("#0B0407"), "chip": Color(0.07, 0.025, 0.045, 0.86),
-		"scrim_strength": 0.86, "radius_s": 8, "radius_m": 12, "radius_l": 16, "radius_xl": 24, "glow_size": 18, "dark": 1,
+		"scrim": Color("#201219"), "chip": Color(0.07, 0.025, 0.045, 0.86),
+		"scrim_strength": 0.62, "radius_s": 8, "radius_m": 12, "radius_l": 16, "radius_xl": 24, "glow_size": 18, "dark": 1,
 	},
 	"light": {
 		# The Neon language on light glass: deep cyan into violet, dark ink.

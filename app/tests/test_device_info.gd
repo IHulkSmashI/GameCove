@@ -45,7 +45,7 @@ func test_info_groups_and_values() -> void:
 	eq(i["software"]["os"], "Bazzite 43 (FROM Fedora Kinoite)", "os")
 	eq(i["software"]["os_version"], "43", "os version")
 	eq(i["software"]["gamecove_version"], "dev", "version")
-	eq(i["support"]["level"], "partial", "partial support")
+	eq(i["support"]["level"], "full", "tested on hardware (RC71L)")
 	eq(i["support"]["buttons"], "rog-ally", "button profile")
 	ok(i["support"]["features"]["tdp"], "features")
 	d.free()

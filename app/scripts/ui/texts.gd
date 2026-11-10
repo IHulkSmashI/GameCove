@@ -52,7 +52,7 @@ const EXPLAIN := {
 	"fps_limit": "Stops the game drawing more frames than this. Lower saves battery and heat; too low feels choppy.",
 	"upscaler": "Renders at a lower resolution and sharpens it back up. More fps and battery; the picture gets a little softer.",
 	"frame_gen": "Adds generated frames between real ones so motion looks smoother. Adds a little input lag; needs about 40 fps to feel right.",
-	"low_latency": "Keeps fewer frames waiting in line so controls feel snappier. Can cost a few fps.",
+	"low_latency": "Leave on. Turn off only if a game stutters or won't start with it.",
 	"profile": "The system's preset power levels. Higher profiles run faster and drain the battery faster.",
 	"tdp": "How many watts the chip may use. More watts: more fps, more heat and fan noise, shorter battery.",
 	"charge_limit": "Stops charging at this level to slow battery wear. Costs some time away from the charger.",
@@ -83,7 +83,7 @@ const EXPLAIN_VALUE := {
 }
 
 const THEME_LINES := {
-	"cove": "Electric cyan and violet on near-black. The GameCove look.",
+	"cove": "Electric cyan and violet on deep slate. The GameCove look.",
 	"midnight": "Pure black with ice-cyan and violet. Saves power on OLED screens.",
 	"sunset": "Warm orange into magenta on deep plum.",
 	"light": "Dark text on light glass, highest contrast in bright rooms.",
@@ -378,3 +378,37 @@ static func playtime_text(minutes: int) -> String:
 	if minutes < 60:
 		return "%d min played" % minutes
 	return "%s played" % format_hours(minutes / 60.0)
+
+
+## Words kept in capitals when a shouted sentence is calmed down.
+const ACRONYMS := ["RPG", "JRPG", "ARPG", "CRPG", "MMO", "MMORPG", "FPS", "TPS", "RTS", "MOBA", "NPC", "NPCS", "PVP", "PVE",
+	"VR", "AI", "UI", "HD", "DLC", "CCG", "TCG", "USA", "UK", "EU", "II", "III", "IV", "VI", "VII", "VIII", "IX", "XI", "XII",
+	"2D", "3D", "4K", "8K", "GOTY", "4X", "OST"]
+
+
+## A store synopsis in sentence case: a sentence written in ALL CAPS (Steam's
+## short descriptions often open with one, "THE CRITICALLY ACCLAIMED FANTASY
+## ACTION RPG.") is lowered, its first letter and known acronyms kept. Mixed-
+## case sentences stay exactly as written.
+static func calm_caps(text: String) -> String:
+	var re := RegEx.create_from_string("[^.!?]+[.!?]*\\s*")
+	var out := ""
+	for m in re.search_all(text):
+		var part: String = m.get_string()
+		var letters := RegEx.create_from_string("[A-Za-z]").search_all(part).size()
+		if letters >= 6 and part == part.to_upper() and part != part.to_lower():
+			var words := part.to_lower().split(" ")
+			var first := true
+			for i in words.size():
+				var w: String = words[i]
+				var core := w.strip_edges().rstrip(".,!?:;)").lstrip("(")
+				if core.to_upper() in ACRONYMS:
+					words[i] = w.replace(core, core.to_upper())
+				elif first and core != "":
+					var at := w.find(core.left(1))
+					words[i] = w.left(at) + w.substr(at, 1).to_upper() + w.substr(at + 1)
+				if core != "":
+					first = false
+			part = " ".join(words)
+		out += part
+	return out if out != "" else text
