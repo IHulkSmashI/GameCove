@@ -399,3 +399,34 @@ func test_discover_files_are_private() -> void:
 	ok(FileAccess.file_exists(p), "saved")
 	eq(FileAccess.get_unix_permissions(p) & 511, 384, "settings.json is 0600")
 	d.free()
+
+
+# ---- final review (Low, Security and privacy): switches asked before each request, every request capped ----
+
+
+
+func test_every_discover_request_is_capped() -> void:
+	var dir := H.temp_dir("disc_caps")
+	var http = H.online_http()
+	var d := H.make(http, dir)
+	d.add_to_wishlist({"title": "Borderlands 2", "appid": "49520"})
+	ok(d.refresh(true), "refresh")
+	d.search("civilization")
+	d.request_prices({"title": "Borderlands 2", "appid": "49520"})
+	d.import_steam_wishlist("robinwalker")
+	ok(http.requests.size() >= 8, "a refresh, a search, a price lookup and an import went out (%d requests)" % http.requests.size())
+	for i in http.requests.size():
+		var cap := int(http.options[i].get("max_bytes", 0))
+		ok(cap > 0 and cap <= d.MAX_CALENDAR_BYTES, "capped: %s (%d)" % [http.requests[i].substr(0, 70), cap])
+	var cal: int = http.requests.find(H.UPCOMING)
+	ok(cal >= 0, "the calendar file was asked for")
+	eq(http.options[cal].get("hosts"), d.RELEASE_HOSTS, "and may only come from GitHub's hosts, every hop")
+	# an answer over the cap is refused, and the refresh carries on
+	var big := PackedByteArray()
+	big.resize(d.MAX_JSON_BYTES + 1)
+	http.route(H.CS + "deals", {"bytes": big})
+	ok(d.refresh(true), "refresh again")
+	ok(str(d.status.get("cheapshark", "")).begins_with("error"), "a too-big answer is an error, not parsed (%s)" % d.status.get("cheapshark"))
+	ok(not d._busy, "and the refresh finishes")
+	H.wipe(dir)
+	d.free()

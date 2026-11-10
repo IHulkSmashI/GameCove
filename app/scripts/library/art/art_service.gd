@@ -23,6 +23,9 @@ const Privacy := preload("res://scripts/system/privacy.gd")
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ArtScript := preload("res://scripts/discover/art.gd")
 const MAX_FILE := 12 * 1024 * 1024
+## SteamGridDB's pictures come from its own hosts (cdn2.steamgriddb.com...): the
+## address and every redirect hop must be https on one of them (http.gd "hosts").
+const IMAGE_HOSTS := ["steamgriddb.com"]
 const AUTO_GAP := 1.5
 const AUTO_KINDS := ["cover", "hero", "logo"]
 const RETRY_AUTO_S := 7 * 86400
@@ -160,7 +163,7 @@ func thumb(asset: Dictionary, done: Callable) -> void:
 			done.call(base + "." + e)
 			return
 	var part := base + ".part"
-	http.request(str(asset.get("thumb", "")), {"download_file": part, "timeout": 20.0, "max_bytes": 4 * 1024 * 1024}, func(res: Dictionary):
+	http.request(str(asset.get("thumb", "")), {"download_file": part, "timeout": 20.0, "max_bytes": 4 * 1024 * 1024, "hosts": IMAGE_HOSTS}, func(res: Dictionary):
 		done.call(_keep(part, base) if res["ok"] else _drop(part)))
 
 
@@ -199,7 +202,7 @@ func apply(game: Dictionary, kind: String, asset: Dictionary, to_steam: bool, do
 	DirAccess.make_dir_recursive_absolute(dir)
 	var base := dir.path_join(Overrides.file_base(key, kind) + "-%d" % int(asset.get("id", 0)))
 	var part := base + ".part"
-	http.request(str(asset["url"]), {"download_file": part, "timeout": 60.0, "max_bytes": MAX_FILE}, func(res: Dictionary):
+	http.request(str(asset["url"]), {"download_file": part, "timeout": 60.0, "max_bytes": MAX_FILE, "hosts": IMAGE_HOSTS}, func(res: Dictionary):
 		var path := _keep(part, base) if res["ok"] else _drop(part)
 		if path == "":
 			if done.is_valid():

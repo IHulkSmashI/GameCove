@@ -392,6 +392,8 @@ func _save_wishlist() -> void:
 
 
 func _set_status(source: String, value: String) -> void:
+	if value == "off":
+		return   # not a result: the source keeps the status of its last real answer
 	if status.get(source, "") != value:
 		status[source] = value
 		status_changed.emit(source, value)
@@ -401,6 +403,8 @@ static func _status_from(res: Dictionary) -> String:
 	if res.get("ok", false):
 		return "ok"
 	var e: String = res.get("error", "")
+	if e == "off":
+		return "off"   # a switch was turned off meanwhile: nothing was asked, nothing failed
 	if e in ["offline", "backoff", "timeout"]:
 		return "offline"
 	if int(res.get("code", 0)) == 429:
@@ -411,6 +415,49 @@ static func _status_from(res: Dictionary) -> String:
 
 
 # ---- refresh pipeline -------------------------------------------------------
+
+## An answer kept in memory (a deals list, 50 store items, a wishlist) and the
+## calendar file never need more than this; a bigger one fails with "too big".
+const MAX_JSON_BYTES := 4 * 1024 * 1024
+const MAX_CALENDAR_BYTES := 16 * 1024 * 1024
+## The calendar file is a GitHub release download: GitHub and its file hosts, every hop.
+const RELEASE_HOSTS := ["github.com", "githubusercontent.com"]
+## True while the refresh that's running was forced (the user asked for it).
+var _forced := false
+
+
+## Whether a request of `kind` may go out now:
+##   "prices"    a price lookup the user asked for (a game page, a search):
+##               "Look up deals and prices" on;
+##   "refresh"   a deals or price lookup of the refresh: that switch, and
+##               "Background lookups" unless the refresh itself was asked for;
+##   "calendar"  the release calendar file: "Background lookups", unless the
+##               refresh was asked for;
+##   "asked"     something the user just asked for by name (a wishlist import).
+func may_fetch(kind: String) -> bool:
+	match kind:
+		"asked":
+			return true
+		"prices":
+			return prices_allowed()
+		"refresh":
+			return prices_allowed() and (_forced or Privacy.background_allowed(privacy_path))
+		"calendar":
+			return _forced or Privacy.background_allowed(privacy_path)
+	return false
+
+
+## Every request Discover makes goes through here. The switches are asked again
+## right before each one: a refresh is up to seven steps and dozens of requests
+## over many seconds, and used to check them once at its start, so turning a
+## switch off mid-refresh still sent the rest. A request that may not go out
+## answers like a failed one (error "off") and its step moves on with what it
+## has. Every request is capped (MAX_JSON_BYTES unless it names its own).
+func _fetch(kind: String, url: String, opts: Dictionary, done: Callable) -> void:
+	if not opts.has("max_bytes"):
+		opts = opts.merged({"max_bytes": MAX_JSON_BYTES})
+	http.request(url, opts, done)
+
 
 ## Refreshes what's due: deals and wishlist prices every 6 h, the calendar
 ## file daily. force := true ignores those ages (and a pause). Returns false
@@ -433,6 +480,7 @@ func refresh(force := false) -> bool:
 	if not due and not cal_due:
 		return false
 	_busy = true
+	_forced = force
 	var steps: Array[Callable] = []
 	if cal_due:
 		steps.append(_step_calendar)
@@ -454,9 +502,9 @@ func _step_calendar(next: Callable) -> void:
 	var path := ProjectSettings.globalize_path(_path("upcoming.json.gz"))
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	var part := path + ".part"
-	http.request(Cal.URL, {"download_file": part, "timeout": 60.0}, func(res: Dictionary):
+	_fetch("calendar", Cal.URL, {"download_file": part, "timeout": 60.0, "max_bytes": MAX_CALENDAR_BYTES, "hosts": RELEASE_HOSTS}, func(res: Dictionary):
 		var st := _status_from(res)
-		if st != "offline":
+		if st != "offline" and st != "off":
 			_state["last_calendar"] = _now()   # 404 too: the file doesn't exist yet, ask tomorrow
 		if not res["ok"]:
 			if FileAccess.file_exists(part):
@@ -486,7 +534,7 @@ func _step_stores(next: Callable) -> void:
 	if not _cache["stores"].is_empty() and _now() - int(_state["last_stores"]) < STORES_EVERY:
 		next.call()
 		return
-	http.request(CheapShark.stores_url(), {}, func(res: Dictionary):
+	_fetch("refresh", CheapShark.stores_url(), {}, func(res: Dictionary):
 		if res["ok"]:
 			var s := CheapShark.parse_stores(res["body"])
 			if not s.is_empty():
@@ -496,7 +544,7 @@ func _step_stores(next: Callable) -> void:
 
 
 func _step_deals(next: Callable) -> void:
-	http.request(CheapShark.deals_url(TOP_DEALS), {}, func(res: Dictionary):
+	_fetch("refresh", CheapShark.deals_url(TOP_DEALS), {}, func(res: Dictionary):
 		var parsed = CheapShark.parse_deals(res["body"]) if res["ok"] else null
 		if parsed != null:
 			_cache["top"] = parsed
@@ -510,7 +558,7 @@ func _step_deals(next: Callable) -> void:
 ## Free-to-keep games (one more request per deals refresh, same switch). A
 ## failed answer keeps the last list.
 func _step_free(next: Callable) -> void:
-	http.request(CheapShark.free_url(), {}, func(res: Dictionary):
+	_fetch("refresh", CheapShark.free_url(), {}, func(res: Dictionary):
 		var parsed = CheapShark.parse_deals(res["body"]) if res["ok"] else null
 		if parsed != null:
 			_cache["free"] = (parsed as Array).filter(func(o): return float(o.get("price", 1.0)) <= 0.0 and float(o.get("regular_price", 0.0)) > 0.0)
@@ -543,7 +591,7 @@ func _resolve_some(keys: Array, next: Callable) -> void:
 	var steam: String = it["ids"].get("steam", "")
 	var url := CheapShark.by_steam_url(steam) if steam != "" else CheapShark.search_url(it["title"], 5)
 	var memo := "steam:" + steam if steam != "" else "title:" + Wish.normalise(it["title"])
-	http.request(url, {}, func(res: Dictionary):
+	_fetch("refresh", url, {}, func(res: Dictionary):
 		var found = CheapShark.parse_search(res["body"]) if res["ok"] else null
 		if found == null:
 			next.call()   # offline or failing: stop resolving for this refresh
@@ -587,7 +635,7 @@ func _lookup_batches(batches: Array, next: Callable) -> void:
 		next.call()
 		return
 	var b: Array = batches.pop_front()
-	http.request(CheapShark.lookup_url(b), {}, func(res: Dictionary):
+	_fetch("refresh", CheapShark.lookup_url(b), {}, func(res: Dictionary):
 		if not res["ok"]:
 			next.call()
 			return
@@ -609,17 +657,17 @@ func _step_steam(next: Callable) -> void:
 	for o in _cache["top"]:
 		if o.get("appid", "") != "" and not o["appid"] in appids:
 			appids.append(o["appid"])
-	_steam_batches(appids, MAX_STEAM_BATCHES, func(_ok): next.call())
+	_steam_batches(appids, MAX_STEAM_BATCHES, func(_ok): next.call(), "refresh")
 
 
 ## Asks Steam for up to `max_batches` x 50 apps; done.call(ok).
-func _steam_batches(appids: Array, max_batches: int, done: Callable) -> void:
+func _steam_batches(appids: Array, max_batches: int, done: Callable, kind := "prices") -> void:
 	if appids.is_empty() or max_batches <= 0:
 		done.call(true)
 		return
 	var batch := appids.slice(0, SteamApi.BATCH)
 	var rest := appids.slice(SteamApi.BATCH)
-	http.request(SteamApi.items_url(batch, country()), {}, func(res: Dictionary):
+	_fetch(kind, SteamApi.items_url(batch, country()), {}, func(res: Dictionary):
 		_set_status("steam", _status_from(res))
 		if not res["ok"]:
 			done.call(false)
@@ -631,7 +679,7 @@ func _steam_batches(appids: Array, max_batches: int, done: Callable) -> void:
 			_cache["steam"][appid] = info[appid]
 			if art_node != null and art_node.has_method("remember"):
 				art_node.remember("steam:" + appid, info[appid]["art"])
-		_steam_batches(rest, max_batches - 1, done))
+		_steam_batches(rest, max_batches - 1, done, kind))
 
 
 ## GG.deals prices (only with the user's key and a supported region): wishlist
@@ -646,10 +694,10 @@ func _step_ggdeals(next: Callable) -> void:
 	for o in _cache["top"]:
 		if o.get("appid", "") != "" and not o["appid"] in appids:
 			appids.append(o["appid"])
-	_gg_fetch(appids, func(): next.call())
+	_gg_fetch(appids, func(): next.call(), "refresh")
 
 
-func _gg_fetch(appids: Array, done: Callable) -> void:
+func _gg_fetch(appids: Array, done: Callable, kind := "prices") -> void:
 	var region := _gg_region()
 	if _gg_key() == "" or region == "":
 		done.call()
@@ -662,7 +710,7 @@ func _gg_fetch(appids: Array, done: Callable) -> void:
 		done.call()
 		return
 	todo = todo.slice(0, GG.MAX_IDS)
-	http.request(GG.prices_url(todo, region, _gg_key()), {}, func(res: Dictionary):
+	_fetch(kind, GG.prices_url(todo, region, _gg_key()), {}, func(res: Dictionary):
 		var parsed = GG.parse(res["body"]) if res["ok"] else null
 		if parsed == null:
 			var st := _status_from(res)
@@ -773,7 +821,7 @@ func request_prices(game: Variant) -> void:
 		if gid == "":
 			prices_ready.emit(g["key"], prices_for(game))
 			return
-		http.request(CheapShark.lookup_url([gid]), {}, func(res: Dictionary):
+		_fetch("prices", CheapShark.lookup_url([gid]), {}, func(res: Dictionary):
 			if res["ok"]:
 				var parsed := CheapShark.parse_lookup(res["body"], gid)
 				for k in parsed:
@@ -786,7 +834,7 @@ func request_prices(game: Variant) -> void:
 			after_steam.call(true)
 	if _cs_id_for(g["ids"], g["title"]) == "" and (steam != "" or g["title"] != ""):
 		var url := CheapShark.by_steam_url(steam) if steam != "" else CheapShark.search_url(g["title"], 5)
-		http.request(url, {}, func(res: Dictionary):
+		_fetch("prices", url, {}, func(res: Dictionary):
 			var found = CheapShark.parse_search(res["body"]) if res["ok"] else null
 			if found != null:
 				for f in found:
@@ -851,7 +899,7 @@ func search(query: String) -> void:
 	if q == "" or http == null or not prices_allowed():
 		search_done.emit(query, [])
 		return
-	http.request(CheapShark.search_url(q, 20), {}, func(res: Dictionary):
+	_fetch("prices", CheapShark.search_url(q, 20), {}, func(res: Dictionary):
 		var found = CheapShark.parse_search(res["body"]) if res["ok"] else null
 		if found == null:
 			_set_status("cheapshark", _status_from(res) if not res["ok"] else "error: unreadable answer")
@@ -1032,7 +1080,7 @@ func import_steam_wishlist(profile: String = "") -> void:
 	if parsed.has("steam_id"):
 		_import_for(parsed["steam_id"], who)
 		return
-	http.request(SteamApi.profile_xml_url(parsed["vanity"]), {}, func(res: Dictionary):
+	_fetch("asked", SteamApi.profile_xml_url(parsed["vanity"]), {}, func(res: Dictionary):
 		var id := SteamApi.parse_profile_xml(res["body"].get_string_from_utf8()) if res["ok"] else ""
 		if id == "":
 			_set_status("wishlist_import", _status_from(res) if not res["ok"] else "error: profile not found")
@@ -1042,7 +1090,7 @@ func import_steam_wishlist(profile: String = "") -> void:
 
 
 func _import_for(steam_id: String, typed: String) -> void:
-	http.request(SteamApi.wishlist_url(steam_id), {}, func(res: Dictionary):
+	_fetch("asked", SteamApi.wishlist_url(steam_id), {}, func(res: Dictionary):
 		var rows = SteamApi.parse_wishlist(res["body"]) if res["ok"] else null
 		if rows == null:
 			_set_status("wishlist_import", _status_from(res) if not res["ok"] else "error: unreadable answer")

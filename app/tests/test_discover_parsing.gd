@@ -162,6 +162,93 @@ func test_http_classify_and_user_agent() -> void:
 	eq(Http.host_of("https://www.cheapshark.com/api/1.0/deals"), "www.cheapshark.com", "host")
 
 
+# ---- final review (Low): hosts are checked on every redirect hop, nothing is uncapped -----------------
+
+## http.gd with its next request recorded instead of started.
+class RecHttp extends "res://scripts/discover/http.gd":
+	var started: Array = []
+	func _start(url: String, opts: Dictionary, done: Callable) -> void:
+		started.append([url, opts])
+		_opts_of[done] = opts
+		_active += 1
+
+
+func test_http_checks_the_host_on_every_redirect_hop() -> void:
+	var HttpScript := load("res://scripts/discover/http.gd")
+	var hosts := ["steamstatic.com", "images.igdb.com"]
+	for good in ["https://steamstatic.com/a.jpg", "https://shared.akamai.steamstatic.com/x/a.jpg", "https://images.igdb.com/igdb/a.jpg",
+			"https://cdn.steamstatic.com:443/a.jpg"]:
+		ok(HttpScript.host_allowed(good, hosts), "allowed: " + good)
+	for bad in ["http://steamstatic.com/a.jpg", "https://steamstatic.com.evil.example/a.jpg", "https://evilsteamstatic.com/a.jpg",
+			"https://evil.example/steamstatic.com/a.jpg", "https://steamstatic.com@evil.example/a.jpg", "https://evil.example?x=.steamstatic.com",
+			"https://evil.example#.steamstatic.com", "https://steamstatic.com:8443/a.jpg", "https://igdb.com/a.jpg", "ftp://steamstatic.com/a", ""]:
+		ok(not HttpScript.host_allowed(bad, hosts), "refused: " + bad)
+	# the first address
+	var h = RecHttp.new()
+	var got := []
+	var done := func(res: Dictionary) -> void: got.append(res)
+	h.request("https://evil.example/a.jpg", {"hosts": hosts}, done)
+	eq([got.size(), got[0]["error"], h.started.size()], [1, "redirect", 0], "an address off the list is never asked")
+	# a redirect to an allowed host is followed (by hand), one to any other host stops
+	got.clear()
+	h.request("https://cdn.steamstatic.com/a.jpg", {"hosts": hosts, "download_file": "/nonexistent/x.part"}, done)
+	eq(h.started.size(), 1, "started")
+	var req := HTTPRequest.new()
+	req.max_redirects = 0
+	h._on_done(HTTPRequest.RESULT_SUCCESS, 302, PackedStringArray(["Location: https://images.igdb.com/b.jpg"]), PackedByteArray(), req, "https://cdn.steamstatic.com/a.jpg", done)
+	eq([h.started.size(), got.size()], [2, 0], "a hop to an allowed host is followed")
+	eq(h.started[1][0], "https://images.igdb.com/b.jpg", "to where it points")
+	eq(h.started[1][1].get("hosts"), hosts, "under the same rule")
+	var req2 := HTTPRequest.new()
+	req2.max_redirects = 0
+	h._on_done(HTTPRequest.RESULT_SUCCESS, 301, PackedStringArray(["Location: https://evil.example/c.jpg"]), PackedByteArray(), req2, "https://images.igdb.com/b.jpg", done)
+	eq(h.started.size(), 2, "a hop off the list is not followed")
+	eq([got.size(), got[0]["ok"], got[0]["error"]], [1, false, "redirect"], "the request fails with \"redirect\"")
+	var req3 := HTTPRequest.new()
+	req3.max_redirects = 0
+	got.clear()
+	h.request("https://cdn.steamstatic.com/a.jpg", {"hosts": hosts}, done)
+	h._on_done(HTTPRequest.RESULT_SUCCESS, 302, PackedStringArray(["Location: http://cdn.steamstatic.com/a.jpg"]), PackedByteArray(), req3, "https://cdn.steamstatic.com/a.jpg", done)
+	eq(got[0]["error"], "redirect", "a downgrade to http is refused too")
+	h.free()
+	var src := FileAccess.get_file_as_string("res://scripts/discover/http.gd")
+	ok("opts.get(\"hosts\", []) as Array).is_empty():\n\t\treq.max_redirects = 0" in src, "a request with hosts never lets HTTPRequest follow redirects itself")
+	# caps: nothing goes out uncapped
+	eq(HttpScript.cap_for({}), HttpScript.DEFAULT_MAX_BYTES, "an answer kept in memory: default cap")
+	eq(HttpScript.cap_for({"download_file": "/x"}), HttpScript.DEFAULT_MAX_DOWNLOAD, "a download: its own default")
+	eq(HttpScript.cap_for({"max_bytes": 1000, "download_file": "/x"}), 1000, "the caller's cap wins")
+	eq(HttpScript.cap_for({"max_bytes": 0}), HttpScript.DEFAULT_MAX_BYTES, "0 no longer means no cap")
+	ok("req.body_size_limit = cap_for(opts)" in src, "and every HTTPRequest gets one")
+
+
+## Pictures: the callers that trust only certain hosts say so to http.gd.
+func test_picture_downloads_name_their_hosts() -> void:
+	var FakeHttp := load("res://scripts/discover/fake_http.gd")
+	var ArtScript := load("res://scripts/discover/art.gd")
+	var http = FakeHttp.new()
+	var png := Image.create_empty(4, 4, false, Image.FORMAT_RGBA8).save_png_to_buffer()
+	http.route("https://shared.akamai.steamstatic.com/", {"bytes": png})
+	var a: Node = ArtScript.new()
+	a.http = http
+	a.cache_dir = "user://tests/art_hosts_%d" % randi()
+	var out := []
+	a._download("steam:10", "cover", "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/10/library_600x900.jpg", func(p): out.append(p))
+	eq(http.options.size(), 1, "asked")
+	eq(http.options[0].get("hosts"), ArtScript.IMAGE_HOSTS, "Discover art: IMAGE_HOSTS on every hop")
+	eq(http.options[0].get("max_bytes"), ArtScript.MAX_FILE_BYTES, "and capped while it downloads, not only checked after")
+	ok(out.size() == 1 and out[0] != "", "the picture was kept")
+	for f in DirAccess.get_files_at(ProjectSettings.globalize_path(a.cache_dir)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(a.cache_dir).path_join(f))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(a.cache_dir))
+	a.free()
+	for f in ["res://scripts/library/meta/resolver.gd", "res://scripts/library/art/art_service.gd", "res://scripts/device/photo.gd"]:
+		var text := FileAccess.get_file_as_string(f)
+		for line in text.split("\n"):
+			if "http.request(" in line and "download_file" in line:
+				ok("\"hosts\":" in line and "\"max_bytes\":" in line, "%s: a download names its hosts and its cap (%s)" % [f.get_file(), line.strip_edges().substr(0, 60)])
+	ok("_http.body_size_limit = MAX_PACKED" in FileAccess.get_file_as_string("res://scripts/library/gamedb.gd"), "the game database download is capped")
+
+
 # ---- review L32: credentials stay with their host ------------------------------------------------
 
 func test_http_drops_auth_on_cross_host_redirects() -> void:
