@@ -70,6 +70,9 @@ func _proton_card() -> void:
 	proton_card.setup(runner, str(services.get("proton_home", "")), host if host is Node else null)
 	proton_card.rebuilt.connect(func(): rebuilt.emit())
 	proton_card.notice.connect(func(t: String, tone: String): notify(t, tone))
+	var gr: Variant = services.get("game_running")
+	if gr is Callable:
+		proton_card.game_running = gr
 	var c := svc("controls")
 	if c != null and c.has_method("detect_all"):
 		proton_card.on_changed = c.detect_all

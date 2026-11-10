@@ -18,7 +18,10 @@ extends RefCounted
 ## start or install (cleanup()). A GE-Proton folder without its
 ## compatibilitytool.vdf (left by an older GameCove or by hand) is listed by
 ## broken() so the card can offer to remove it. curl gives up on a stalled
-## download (under 1 KB/s for 30 s) and only speaks HTTPS.
+## download (under 1 KB/s for 30 s) and only speaks HTTPS. Download, checksum
+## and unpack run at the lowest CPU and disk priority (nice 19, ionice idle, like
+## the automatic Flatpak update), so a game started meanwhile isn't held up; the
+## card refuses to start an install while a game runs.
 
 const Proton := preload("res://scripts/launch/proton.gd")
 const VDF := preload("res://scripts/launch/vdf.gd")
@@ -32,6 +35,9 @@ const TAG_RE := "^GE-Proton[0-9]+-[0-9]+$"
 ## unpack is on the same drive).
 const DOWNLOAD_DIR := ".gamecove-download"
 ## curl: HTTPS only (redirects too), and give up when the transfer stalls.
+## Lowest CPU and disk priority for the heavy steps (priority_prefix()).
+const NICE: Array[String] = ["nice", "-n", "19"]
+const IONICE: Array[String] = ["ionice", "-c", "3"]
 const CURL_SAFE: Array[String] = ["--proto", "=https", "--proto-redir", "=https",
 	"--speed-limit", "1024", "--speed-time", "30"]
 
@@ -154,9 +160,25 @@ static func cleanup(dir: String, group := "") -> bool:
 	return remove_tree(dir.path_join(DOWNLOAD_DIR), group) if dir != "" else true
 
 
+## nice 19, plus ionice idle when ionice is on `path_env` (util-linux; every
+## supported OS has it), as an argv prefix.
+static func priority_prefix(path_env: String, fs_root := "") -> Array:
+	for d in path_env.split(":", false):
+		if FileAccess.file_exists(fs_root + d.path_join("ionice")):
+			return NICE + IONICE
+	return NICE.duplicate()
+
+
+static func _low(runner: RefCounted, prefix: Array, program: String, args: Array) -> Dictionary:
+	if prefix.is_empty():
+		return runner.run(program, PackedStringArray(args))
+	return runner.run(str(prefix[0]), PackedStringArray(prefix.slice(1) + [program] + args))
+
+
 ## Downloads, checks and unpacks `rel` into `dir`. {"ok": bool, "error": ""|reason}
 ## reasons: "exists", "download", "checksum", "unpack", "no_steam".
-static func install(runner: RefCounted, rel: Dictionary, dir: String, group := "") -> Dictionary:
+## `prefix`: priority_prefix() (nice / ionice), [] = as is.
+static func install(runner: RefCounted, rel: Dictionary, dir: String, group := "", prefix: Array = NICE + IONICE) -> Dictionary:
 	if dir == "" or rel.is_empty():
 		return {"ok": false, "error": "no_steam"}
 	var tag := str(rel.get("tag", ""))
@@ -174,7 +196,7 @@ static func install(runner: RefCounted, rel: Dictionary, dir: String, group := "
 	DirAccess.make_dir_recursive_absolute(part.path_join("unpack"))
 	var tarball := part.path_join(tag + ".tar.gz")
 	var shafile := part.path_join(tag + ".sha512sum")
-	var res := _fetch_check_unpack(runner, rel, part.path_join("unpack"), tarball, shafile)
+	var res := _fetch_check_unpack(runner, rel, part.path_join("unpack"), tarball, shafile, prefix)
 	if res["ok"]:
 		var unpacked := part.path_join("unpack").path_join(tag)
 		if not complete(unpacked):
@@ -185,21 +207,21 @@ static func install(runner: RefCounted, rel: Dictionary, dir: String, group := "
 	return res
 
 
-static func _fetch_check_unpack(runner: RefCounted, rel: Dictionary, into: String, tarball: String, shafile: String) -> Dictionary:
+static func _fetch_check_unpack(runner: RefCounted, rel: Dictionary, into: String, tarball: String, shafile: String, prefix: Array) -> Dictionary:
 	for job in [[str(rel["sha512"]), shafile], [str(rel["tarball"]), tarball]]:
 		var url: String = job[0]
 		if not url.begins_with(DOWNLOAD_PREFIX):
 			return {"ok": false, "error": "download"}
-		var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--retry", "2", "--connect-timeout", "20"] + CURL_SAFE + [
-			"-H", "User-Agent: GameCove", "-o", job[1], url]))
+		var r: Dictionary = _low(runner, prefix, "curl", ["-fsSL", "--retry", "2", "--connect-timeout", "20"] + CURL_SAFE + [
+			"-H", "User-Agent: GameCove", "-o", job[1], url])
 		if int(r.get("code", -1)) != 0:
 			return {"ok": false, "error": "download"}
 	var want := parse_sha(_read(shafile))
-	var s: Dictionary = runner.run("sha512sum", PackedStringArray([tarball]))
+	var s: Dictionary = _low(runner, prefix, "sha512sum", [tarball])
 	var got := parse_sha(str(s.get("out", ""))) if int(s.get("code", -1)) == 0 else ""
 	if want == "" or got != want:
 		return {"ok": false, "error": "checksum"}
-	var t: Dictionary = runner.run("tar", PackedStringArray(["-xzf", tarball, "-C", into, "--no-same-owner"]))
+	var t: Dictionary = _low(runner, prefix, "tar", ["-xzf", tarball, "-C", into, "--no-same-owner"])
 	if int(t.get("code", -1)) != 0:
 		return {"ok": false, "error": "unpack"}
 	return {"ok": true, "error": ""}

@@ -54,7 +54,8 @@ func _home(name: String) -> Dictionary:
 ## `digest`, tar unpacks a GE-Proton folder (or fails).
 func _fake(digest := HASH, tar_ok := true, api := "") -> RefCounted:
 	var f: RefCounted = Fake.new()
-	f.handler = func(cmd: String) -> Variant:
+	f.handler = func(full: String) -> Variant:
+		var cmd := plain(full)
 		var a := cmd.split(" ")
 		if cmd.begins_with("curl ") and cmd.ends_with(ProtonGE.API):
 			return {"code": 0 if api != "" else 6, "out": api}
@@ -72,6 +73,11 @@ func _fake(digest := HASH, tar_ok := true, api := "") -> RefCounted:
 			return {"code": 0, "out": ""}
 		return null
 	return f
+
+
+## The command without the low-priority prefix (nice 19, ionice idle).
+static func plain(cmd: String) -> String:
+	return cmd.trim_prefix("nice -n 19 ionice -c 3 ").trim_prefix("nice -n 19 ")
 
 
 func test_parse_release() -> void:
@@ -113,7 +119,7 @@ func test_install_checks_the_checksum_first() -> void:
 	eq(ProtonGE.install(f, rel, h.cd), {"ok": true, "error": ""}, "installed")
 	ok(FileAccess.file_exists(h.cd.path_join("GE-Proton10-26/compatibilitytool.vdf")), "unpacked into compatibilitytools.d")
 	ok(not DirAccess.dir_exists_absolute(h.cd.path_join(ProtonGE.DOWNLOAD_DIR)), "download folder cleaned up")
-	var order: Array = f.calls.map(func(c): return str(c).get_slice(" ", 0))
+	var order: Array = f.calls.map(func(c): return plain(str(c)).get_slice(" ", 0))
 	ok(order.find("sha512sum") < order.find("tar"), "checked before unpacking")
 	eq(ProtonGE.install(f, rel, h.cd)["error"], "exists", "twice: already there")
 	var rel2 := ProtonGE.parse_release(release_json("GE-Proton10-27"))
@@ -203,7 +209,7 @@ func test_curl_gives_up_on_a_stall_and_speaks_only_https() -> void:
 	var f := _fake(HASH, true, release_json())
 	ProtonGE.latest(f)
 	ProtonGE.install(f, ProtonGE.parse_release(release_json()), h.cd)
-	var curls: Array = f.calls.filter(func(c): return str(c).begins_with("curl "))
+	var curls: Array = f.calls.filter(func(c): return plain(str(c)).begins_with("curl "))
 	eq(curls.size(), 3, "lookup, checksum, tarball")
 	for c in curls:
 		ok(" --speed-limit 1024 --speed-time 30 " in c, "stall limit: " + c)
@@ -218,8 +224,8 @@ func test_unpack_goes_into_place_only_when_whole() -> void:
 	var seen := []
 	var inner: Callable = f.handler
 	f.handler = func(cmd: String) -> Variant:
-		if cmd.begins_with("tar -xzf "):
-			var into: String = cmd.split(" ")[4]
+		if plain(cmd).begins_with("tar -xzf "):
+			var into: String = plain(cmd).split(" ")[4]
 			seen.append(into)
 			# while tar runs, Steam's folder has nothing of it yet
 			ok(not DirAccess.dir_exists_absolute(h.cd.path_join("GE-Proton10-26")), "nothing half-unpacked where Steam looks")
@@ -231,11 +237,11 @@ func test_unpack_goes_into_place_only_when_whole() -> void:
 	# a tarball without compatibilitytool.vdf: never moved into place
 	var bad := _fake()
 	bad.handler = func(cmd: String) -> Variant:
-		if cmd.begins_with("tar -xzf "):
-			var a := cmd.split(" ")
+		if plain(cmd).begins_with("tar -xzf "):
+			var a := plain(cmd).split(" ")
 			_touch(a[4].path_join("GE-Proton10-27/files/lib.so"))
 			return {"code": 0, "out": ""}
-		return f.handler.call(cmd) if not cmd.begins_with("tar ") else null
+		return f.handler.call(cmd) if not plain(cmd).begins_with("tar ") else null
 	eq(ProtonGE.install(bad, ProtonGE.parse_release(release_json("GE-Proton10-27")), h.cd)["error"], "unpack", "no vdf: refused")
 	ok(not DirAccess.dir_exists_absolute(h.cd.path_join("GE-Proton10-27")), "nothing put where Steam looks")
 	ok(not ProtonGE.has_leftovers(h.cd), "and nothing left")
@@ -284,4 +290,39 @@ func test_removal_moves_out_of_sight_first_and_stops_at_exit() -> void:
 	ExecSafe.clear_stopped(g)
 	ok(ProtonGE.cleanup(h.cd), "next start finishes it")
 	ok(not ProtonGE.has_leftovers(h.cd), "all gone")
+	_rm(h.root)
+
+
+# ---- review 3, low 5: behind a game ---------------------------------------------------------
+
+func test_install_waits_for_the_game_and_runs_at_low_priority() -> void:
+	var h := _home("lowprio")
+	var f := _fake(HASH, true, release_json())
+	var c: VBoxContainer = Card.new()
+	c.setup(f, h.home)
+	var playing := [true]
+	c.game_running = func() -> bool: return playing[0]
+	var notes := []
+	c.notice.connect(func(t, tone): notes.append([t, tone]))
+	c.check()
+	f.calls.clear()
+	c.press_main()
+	eq(notes[-1], [TX.GE_ERRORS["game_running"], "bad"], "refused while a game runs, saying why")
+	eq(f.calls.size(), 0, "nothing downloaded")
+	playing[0] = false
+	c.path_env = ""   # no ionice found: nice alone
+	c.press_main()
+	eq(notes[-1][1], "good", "installs once the game is closed")
+	var heavy: Array = f.calls.filter(func(x): return plain(str(x)).get_slice(" ", 0) in ["curl", "sha512sum", "tar"])
+	eq(heavy.size(), 4, "both downloads, the checksum and the unpack")
+	for x in heavy:
+		ok(str(x).begins_with("nice -n 19 "), "lowest CPU priority: " + x)
+	c.free()
+	eq(ProtonGE.priority_prefix("/nonexistent"), ["nice", "-n", "19"], "nice only without ionice")
+	var bin: String = h.root.path_join("bin")
+	_touch(bin.path_join("ionice"))
+	eq(ProtonGE.priority_prefix(bin), ["nice", "-n", "19", "ionice", "-c", "3"], "idle disk priority with ionice")
+	var f2 := _fake()
+	ProtonGE.install(f2, ProtonGE.parse_release(release_json("GE-Proton10-30")), h.cd)
+	ok(f2.calls.any(func(x): return str(x).begins_with("nice -n 19 ionice -c 3 tar -xzf ")), "the default is both")
 	_rm(h.root)

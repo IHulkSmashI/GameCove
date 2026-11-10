@@ -96,6 +96,7 @@ const GE_ERRORS := {
 	"in_use": "A game is set to this version. Pick another Proton for it first.",
 	"not_found": "That version isn't installed any more.",
 	"failed": "Couldn't remove it. Try again.",
+	"game_running": "A game is running. Install GE-Proton once you've closed it, so the download doesn't slow the game down.",
 }
 
 # ---- automatic app updates -------------------------------------------------------------

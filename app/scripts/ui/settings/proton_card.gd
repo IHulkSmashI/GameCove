@@ -51,6 +51,11 @@ var sheet: Control
 ## Called after an install or removal (Controls.detect_all, so the per-game
 ## Proton list picks it up).
 var on_changed: Callable
+## func() -> bool: a game runs now (installs wait for it to end). Settings passes
+## main.gd's; unset = never.
+var game_running: Callable
+## Where `ionice` is looked for (nice 19 + ionice idle for the install).
+var path_env := OS.get_environment("PATH")
 
 
 ## command_runner: a fake in tests (then the jobs get an owner of their own unless
@@ -215,11 +220,15 @@ func _on_checked(res: Dictionary) -> void:
 
 
 func install() -> void:
+	if game_running.is_valid() and bool(game_running.call()):
+		notice.emit(TX.GE_ERRORS["game_running"], "bad")
+		return
 	var r := runner
+	var prefix := ProtonGE.priority_prefix(path_env)
 	var rel := release.duplicate()
 	var dir := compat_dir()
 	var g: String = jobs.group
-	if _job("install", func(): return ProtonGE.install(r, rel, dir, g), "_on_installed"):
+	if _job("install", func(): return ProtonGE.install(r, rel, dir, g, prefix), "_on_installed"):
 		_build()
 
 

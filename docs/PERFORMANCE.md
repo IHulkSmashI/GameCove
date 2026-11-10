@@ -66,7 +66,8 @@ costs far more:
   after start (one one-shot timer) or when a game ends, at most daily. If you start a game
   while one runs, Flatpak carries on at nice 19 and idle I/O priority, so it only gets what
   the game leaves over. Per-app volume, Now playing, Bluetooth devices, Clean up and GE-Proton
-  read only when their page opens or you press something: no timers.
+  read only when their page opens or you press something: no timers. GE-Proton won't start an
+  install while a game runs, and one already running carries on at nice 19 and idle I/O.
 - **Cloud saves** run before a launch and after a game ends, never during one. **Battery
   history** writes one small file at game start and end, sleep, wake and the charger (a few
   sysfs reads each); **Sleep at low battery** reacts to Power's 15 s check. None adds a timer;

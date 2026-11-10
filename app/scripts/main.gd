@@ -1907,7 +1907,8 @@ func _build_settings() -> void:
 		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
 			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
-			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log, "recording": recording})
+			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log,
+			"game_running": func() -> bool: return session != null and session.is_active(), "recording": recording})
 
 
 static func _version() -> String:
