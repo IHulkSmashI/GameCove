@@ -33,7 +33,7 @@ func test_about_shows_every_group() -> void:
 	for key in ["device", "chip", "memory", "screen", "battery", "software", "support", "fixes"]:
 		ok(p.find_child("Card_" + key, true, false) != null, "card " + key)
 	ok(p.find_child("Card_storage", true, false) == null, "no Storage card: the Storage tab and the free-space tile have it")
-	for want in ["MSI Claw 8 EX AI+", "Arc B390 (Xe3)", "93% health", "41", "1920 × 1200", "48–120 Hz", "Full support",
+	for want in ["MSI Claw 8 EX AI+", "Arc B390 (Xe3)", "93% health", "41", "1920 × 1200", "48–120 Hz", "Tested on hardware",
 			"Bazzite 44.20261101", "MSI buttons", "Shared (GTT)"]:
 		ok(t.contains(want), "shows " + want)
 	for gone in ["Maker", "Family", "PCI id", "Serial number", "Name"]:

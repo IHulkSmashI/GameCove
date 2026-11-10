@@ -20,6 +20,7 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
+const TD := preload("res://scripts/ui/texts_device.gd")
 const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
 const ActionRow := preload("res://scripts/ui/settings/action_row.gd")
 const BgCommand := preload("res://scripts/ui/bg_command.gd")
@@ -59,10 +60,10 @@ const TOP_INSET := 14.0
 ## How dark the full-screen scrim is (it covers the top bar and hint bar too).
 const SCRIM_ALPHA := 0.55
 const SUPPORT_TEXT := {
-	"full": "Full support: tested on this device by the GameCove team.",
+	"full": "Tested on hardware: the GameCove team runs it on this device.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
 	"partial": TS.QM_SUPPORT_PARTIAL,
-	"generic": "Generic: device-specific settings stay hidden until someone tests this device.",
+	"generic": "Basic support: device-specific settings stay hidden until someone tests this device.",
 }
 const SESSION_SELECT := "/usr/bin/gamecove-session-select"
 ## Review M8: a session switch that hasn't taken GameCove away after this long gave up or hung;
@@ -962,7 +963,7 @@ func _build_device() -> void:
 	facts.name = "Facts"
 	names.add_child(facts)
 	head.add_child(names)
-	head.add_child(Kit.chip(level.capitalize(), "check" if level == "full" else "info", "good" if level == "full" else ("warn" if level == "partial" else ""), true))
+	head.add_child(Kit.chip(TD.SUPPORT_LABELS.get(level, level.capitalize()), "check" if level == "full" else "info", "good" if level == "full" else ("warn" if level == "partial" else ""), true))
 	body.add_child(head)
 	var support := _line(SUPPORT_TEXT.get(level, SUPPORT_TEXT["generic"]), "QuietLabel", "Support")
 	support.add_theme_color_override("font_color", ThemeLib.color("text_3"))

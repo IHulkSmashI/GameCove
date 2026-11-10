@@ -120,7 +120,7 @@ func test_device_lines() -> void:
 	eq(m.maker_name({}, "MSI Claw 8 EX"), "MSI", "maker from the name when the row has none")
 	eq(m.maker_name({"maker": "Lenovo"}, "Legion Go S"), "Lenovo", "row's maker first")
 	ok(t.any(func(x): return str(x).contains("Intel Panther Lake")), "chip")
-	ok("Full" in t or "FULL" in t, "support chip")
+	ok("Tested on hardware" in t or "TESTED ON HARDWARE" in t, "support chip")
 	m.free()
 
 
