@@ -289,3 +289,14 @@ func test_audio_output_switch_rereads_volume_and_mute() -> void:
 		by[c.id] = c
 	ok("audio.volume" in by["audio.output"].affects and "audio.mute" in by["audio.output"].affects, "output affects volume and mute")
 	ok("audio.mic_mute" in by["audio.input"].affects, "input affects the mic mute")
+
+
+## e2e test_random_pad_bursts (20-iteration soak): airplane mode turned the Wi-Fi radio off while
+## network.wifi kept showing on.
+func test_airplane_and_radios_reread_each_other() -> void:
+	var S := load("res://scripts/controls/providers/system.gd")
+	var by := {}
+	for c in S.new().controls():
+		by[c.id] = c
+	ok("network.wifi" in by["network.airplane"].affects and "network.bluetooth" in by["network.airplane"].affects, "airplane affects both radios")
+	ok("network.airplane" in by["network.wifi"].affects and "network.airplane" in by["network.bluetooth"].affects, "each radio affects airplane mode")
