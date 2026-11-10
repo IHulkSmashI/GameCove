@@ -2124,8 +2124,8 @@ func _build_settings() -> void:
 
 
 static func _version() -> String:
-	var v := str(ProjectSettings.get_setting("application/config/version", ""))
-	return v if v != "" else "Development build"
+	var v := AppVersion.text()   # the release's version, or "<spec Version>-dev" from a checkout
+	return v if v != "dev" else "Development build"
 
 
 func _on_setting_changed(key: String, value: Variant) -> void:

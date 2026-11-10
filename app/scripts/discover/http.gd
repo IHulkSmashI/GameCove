@@ -37,8 +37,7 @@ var _opts_of := {}    # done callable -> the opts it was started with
 
 
 static func user_agent() -> String:
-	var v := str(ProjectSettings.get_setting("application/config/version", ""))
-	return "GameCove/%s (+%s)" % [v if v != "" else "dev", REPO]
+	return "GameCove/%s (+%s)" % [AppVersion.text(), REPO]
 
 
 static func host_of(url: String) -> String:

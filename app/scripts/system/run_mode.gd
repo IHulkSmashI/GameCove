@@ -9,6 +9,8 @@ extends RefCounted
 ## start watchers (review 2, problem 5).
 
 const RESTORE_BASELINE := "--restore-baseline"
+## `--version`: boot.gd prints "GameCove <version>" and quits; nothing else starts.
+const VERSION := "--version"
 
 ## Tests only: used instead of the command line when not null.
 static var test_args: Variant = null
@@ -20,4 +22,5 @@ static func args() -> PackedStringArray:
 
 ## True in a headless helper run that must start no services.
 static func helper() -> bool:
-	return RESTORE_BASELINE in args()
+	var a := args()
+	return RESTORE_BASELINE in a or VERSION in a
