@@ -2,8 +2,8 @@ extends "res://scripts/system/service.gd"
 ## First run and the setup checklist. Stores which steps are done or skipped
 ## in user://setup.cfg; reports per-step status for the screens to show.
 ##
-## Steps, in order: welcome, theme, stores, device_fixes, steamgriddb, done.
-## Optional (skippable): theme, stores, device_fixes, steamgriddb.
+## Steps, in order: welcome, theme, stores, steamgriddb (Game art), keys
+## (gg.deals), device_fixes, done. Optional (skippable): all but welcome and done.
 ## The UI marks a step with complete(id) or skip(id); is_first_run() is true
 ## until "done" is completed.
 ##
@@ -25,8 +25,8 @@ const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Login := preload("res://scripts/system/store_login.gd")
 const BgCommand := preload("res://scripts/ui/bg_command.gd")
 
-const STEPS: Array[String] = ["welcome", "theme", "stores", "device_fixes", "steamgriddb", "done"]
-const OPTIONAL: Array[String] = ["theme", "stores", "device_fixes", "steamgriddb"]
+const STEPS: Array[String] = ["welcome", "theme", "stores", "steamgriddb", "keys", "device_fixes", "done"]
+const OPTIONAL: Array[String] = ["theme", "stores", "steamgriddb", "keys", "device_fixes"]
 const CONFIG_PATH := "user://setup.cfg"
 const FIX_HELPER := "/usr/libexec/gamecove/gamecove-fix"
 

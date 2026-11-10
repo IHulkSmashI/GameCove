@@ -23,8 +23,13 @@ func test_easy_defaults_and_path() -> void:
 	eq(p.choices["auto_tdp"], true)
 	eq(p.choices["power_profile"], "balanced")
 	eq(p.choices["charge_limit"], 100, "no charge limit by default")
-	eq(p.steps(), ["welcome", "summary", "progress", "done"])
-	eq(p.next(), "summary")
+	eq(p.steps(), ["welcome", "art", "summary", "progress", "done"], "Game art shows in Easy mode too (no key ships)")
+	eq(p.choices["steamgriddb_key"], "", "no key until the user adds theirs")
+	eq(p.next(), "art")
+	ok(p.can_skip(), "Game art can be skipped (Steam art only)")
+	ok(p.skip(), "skipped")
+	eq(p.step, "summary")
+	eq(p.summary()[5], {"step": "art", "key": "steamgriddb_key", "value": "skipped"}, "summary says so")
 	eq(p.action(), "install")
 	eq(p.next(), "progress")
 	p.ran = true
@@ -43,8 +48,9 @@ func test_custom_path_back_and_skip() -> void:
 	var seen: Array = []
 	while p.step != "summary":
 		seen.append(p.next())
-	eq(seen, ["startup", "steam", "stores", "device", "look", "extras", "summary"])
+	eq(seen, ["startup", "steam", "stores", "device", "look", "art", "extras", "summary"])
 	eq(p.back(), "extras")
+	eq(p.back(), "art")
 	eq(p.back(), "look")
 	p.step = "startup"
 	ok(not p.can_skip(), "startup can't be skipped")
@@ -62,6 +68,7 @@ func test_custom_path_back_and_skip() -> void:
 func test_summary_edit_returns() -> void:
 	var p := _plan()
 	p.next()
+	p.next()
 	eq(p.step, "summary")
 	ok(p.edit("steam"), "edit a step from the summary")
 	eq(p.step, "steam")
@@ -70,7 +77,9 @@ func test_summary_edit_returns() -> void:
 	ok(p.edit("look"))
 	eq(p.back(), "summary", "so does Back")
 	ok(not p.edit("progress"), "only option steps")
-	eq(p.summary().map(func(x): return x["step"]), ["startup", "steam", "stores", "device", "look", "extras"])
+	eq(p.summary().map(func(x): return x["step"]), ["startup", "steam", "stores", "device", "look", "art", "extras"])
+	ok(p.edit("art") and p.set_choice("steamgriddb_key", "0123456789abcdef0123456789abcdef"), "a key from the Game art step")
+	eq(p.summary()[5]["value"], "set", "summary shows it")
 
 
 func test_choice_validation() -> void:

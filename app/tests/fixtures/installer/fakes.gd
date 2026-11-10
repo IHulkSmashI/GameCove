@@ -105,5 +105,8 @@ static func target(family := "bazzite", extra := {}) -> Dictionary:
 
 
 static func services(dev: Object, setup: Object, rec: Object, power_cfg: String) -> Dictionary:
+	# Game art step: no LAN page (nothing listens in tests) and a fake SteamGridDB that knows one key.
+	var http: RefCounted = load("res://scripts/discover/fake_http.gd").new()
+	http.route(load("res://scripts/library/art/sgdb.gd").check_url(), {"text": '{"success":true,"data":{"id":1}}'})
 	return {"setup": setup, "library": rec, "discover": rec, "launcher": rec, "device": dev,
-		"power_cfg": power_cfg, "ui_prefs": false}
+		"power_cfg": power_cfg, "ui_prefs": false, "http": http, "lan": func() -> Array: return []}

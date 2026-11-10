@@ -1,6 +1,7 @@
 extends Control
-## First-run setup: Welcome, Look (theme), Stores (QR sign-in), Keys
-## (gg.deals, SteamGridDB), Device fixes, Done. Shows on the first launch
+## First-run setup: Welcome, Look (theme), Stores (QR sign-in), Game art
+## (the user's own SteamGridDB key, art_key_step.gd), Keys (gg.deals), Device
+## fixes, Done. Shows on the first launch
 ## (Setup.is_first_run()), every step but Welcome and Done can be skipped, and
 ## Settings > About GameCove reopens any step from its checklist.
 ##
@@ -28,6 +29,7 @@ const SignIn := preload("res://scripts/ui/settings/sign_in.gd")
 const Appearance := preload("res://scripts/ui/settings/appearance_page.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const PhotoView := preload("res://scripts/ui/device/device_photo_view.gd")
+const ArtKeyStep := preload("res://scripts/ui/setup/art_key_step.gd")
 
 signal setting_changed(key: String, value: Variant)
 signal closed
@@ -45,6 +47,7 @@ var back_button: Button
 var skip_button: Button
 var keyboard: PanelContainer
 var sign_in: HBoxContainer
+var art_step: HBoxContainer
 var _focusables: Array = []
 var _ask_done: Callable
 var _ask_return: Control
@@ -228,6 +231,7 @@ func go(to: String) -> void:
 		return
 	if sign_in != null and is_instance_valid(sign_in):
 		sign_in.stop()
+	_stop_art()
 	step = to
 	_show_step()
 	focus_first()
@@ -235,6 +239,7 @@ func go(to: String) -> void:
 
 func _show_step() -> void:
 	sign_in = null
+	_stop_art()
 	for c in body.get_children():
 		Kit.drop(body, c)
 	_focusables.clear()
@@ -242,14 +247,16 @@ func _show_step() -> void:
 		"welcome": _build_welcome()
 		"theme": _build_theme()
 		"stores": _build_stores()
+		"art": _build_art()
 		"keys": _build_keys()
 		"fixes": _build_fixes()
 		"done": _build_done()
 	_build_rail()
-	var optional: bool = step in ["theme", "stores", "keys", "fixes"]
+	var optional: bool = step in ["theme", "stores", "art", "keys", "fixes"]
 	back_button.visible = step != "welcome"
 	skip_button.visible = optional or step == "welcome"
-	skip_button.text = TS.SKIP_SETUP if step == "welcome" else TS.SKIP
+	skip_button.text = TS.SKIP_SETUP if step == "welcome" else (ArtKeyStep.SKIP_TEXT if step == "art" else TS.SKIP)
+	skip_button.custom_minimum_size = Vector2(260 if step == "art" else 130, 52)
 	next_button.text = {"welcome": TS.START, "done": TS.FINISH}.get(step, TS.NEXT)
 	_link()
 	body.modulate.a = 0.0
@@ -330,7 +337,7 @@ func _build_welcome() -> void:
 	plan.columns = 2
 	plan.add_theme_constant_override("h_separation", 28)
 	plan.add_theme_constant_override("v_separation", 14)
-	for k in ["theme", "stores", "keys", "fixes"]:
+	for k in ["theme", "stores", "art", "keys", "fixes"]:
 		var row := Kit.hbox(12)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var ic := Icons.rect(TS.WELCOME_PLAN_ICONS[k], 22, ThemeLib.color("accent"))
@@ -510,7 +517,45 @@ func _build_keys() -> void:
 		sg = st.steamgriddb_key()
 	if d != null and d.has_method("set_settings"):
 		_key_row("ggdeals_key", "gg.deals key", gg, TS.KEY_GGDEALS_WHY)
-	_key_row("steamgriddb_key", "SteamGridDB key", sg, TS.KEY_SGDB_WHY)
+	# SteamGridDB has its own guided step now: a row that opens it.
+	var r: VBoxContainer = ActionRow.new()
+	r.setup("steamgriddb_key", "SteamGridDB key", TS.masked(sg), TS.KEY_SGDB_WHY, "shield")
+	r.collapse_hint = false
+	r.set_hint(TS.KEY_SGDB_WHY)
+	r.set_value(TS.masked(sg), "muted" if sg == "" else "good")
+	r.pressed.connect(func(): go("art"))
+	body.add_child(r)
+	_focusables.append(r.button)
+
+
+# ---- Game art: the user's own SteamGridDB key (art_key_step.gd) ----------------
+
+func _build_art() -> void:
+	_heading(ArtKeyStep.TITLE, ArtKeyStep.LINE)
+	art_step = ArtKeyStep.new()
+	art_step.configure({"setup": services.get("setup"), "discover": services.get("discover"), "library": services.get("library"),
+		"http": services.get("http"), "ask_text": ask_text, "lan": services.get("lan", Callable()),
+		"prefs_path": services.get("prefs_path", "user://settings.cfg")})
+	art_step.saved.connect(_on_art_saved)
+	body.add_child(art_step)
+	art_step.start()
+	for b in art_step.buttons:
+		_focusables.append(b)
+
+
+func _on_art_saved(_key: String) -> void:
+	var st: Object = services.get("setup")
+	if st != null:
+		st.complete("steamgriddb")
+	_build_rail()
+	if is_inside_tree():
+		next_button.grab_focus()
+
+
+func _stop_art() -> void:
+	if art_step != null and is_instance_valid(art_step):
+		art_step.stop()
+	art_step = null
 
 
 func _key_row(key: String, title: String, value: String, why: String) -> void:
@@ -681,6 +726,7 @@ func go_back() -> void:
 func finish() -> void:
 	if sign_in != null and is_instance_valid(sign_in):
 		sign_in.stop()
+	_stop_art()
 	if instance == self:
 		instance = null
 	closed.emit()
