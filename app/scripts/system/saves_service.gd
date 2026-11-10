@@ -608,6 +608,7 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 	var conflict := false
 	var cloud_newest := 0
 	var downloaded: Array = []
+	var waiting := ""
 	for l in locs:
 		var cur := str(ts.get(l["name"], "0"))
 		var r := {}
@@ -644,6 +645,10 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 					downloaded.append(str(l["name"]))
 				if r["ts"] != "":
 					ts[l["name"]] = r["ts"]
+			"refused":
+				# the other side is newer and this run could only go one way: nothing happened,
+				# the sync time stays, and the status says which way is waiting
+				waiting = "pending_down" if r["refused"] == "upload" else "pending_up"
 			"none":
 				if r["ts"] != "":
 					ts[l["name"]] = r["ts"]
@@ -654,6 +659,8 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 	var times := {"local": local_newest, "remote": cloud_newest, "gog_ts": ts, "gog_paths": _gog_paths(locs)}
 	if conflict:
 		return _set_status(key, "conflict", "", times)
+	if waiting != "":
+		return _set_status(key, waiting, "", times)
 	var state := str({"upload": "uploaded", "download": "downloaded", "both": "synced", "": "synced"}[acted])
 	return _set_status(key, state, "", times.merged({"synced": true}, true))
 

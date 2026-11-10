@@ -749,3 +749,33 @@ func test_a_download_cut_by_a_crash_is_put_right_at_the_next_sync() -> void:
 	ok(got[0].has("conflict") or FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")) == "hour 9", "and the next sync asks or downloads: it never uploads over the cloud")
 	eq(cloud.cloud["saves/slot2.sav"]["data"], "second slot, later", "the cloud is untouched")
 	_done(w)
+
+
+# ---- GOG: "refused" isn't "synced" ---------------------------------------------------------------
+
+## After a game the cloud turns out newer (another device) and nothing changed here: gogdl
+## refuses to upload. That was shown as "Saves synced" and moved the last sync time.
+func test_gog_refused_is_shown_as_waiting() -> void:
+	var w := _world("gog_refused")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	var synced_at := int(_cfg(w, "gog:1207", "last_sync", 0))
+	w["now"][0] += 5000
+	cloud.cloud["saves/slot1.sav"] = {"data": "hour 9", "t": int(w["now"][0]), "lt": int(w["now"][0]), "hash": "h9"}
+	w["now"][0] += 100
+	w["s"].after_exit(w["gog"])
+	var st: Dictionary = w["s"].status(w["gog"])
+	eq(st["state"], "pending_down", "the cloud's newer save waits for the next launch")
+	eq(st["last_sync"], synced_at, "and that wasn't a sync")
+	# the other way: before a launch, this handheld is newer
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(w["s"].status(w["gog"])["state"], "downloaded", "the next launch brings it down")
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 10", int(w["now"][0]))
+	got.clear()
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "starts")
+	eq(w["s"].status(w["gog"])["state"], "pending_up", "a newer save here waits for the game to end")
+	_done(w)
