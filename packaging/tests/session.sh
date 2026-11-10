@@ -537,7 +537,10 @@ printf '#!/bin/sh\necho "1 ui" >"$GAMECOVE_HEARTBEAT"\nexec sleep 30\n' >"$CB/st
 printf '#!/bin/sh\necho "1 game" >"$GAMECOVE_HEARTBEAT"\nsleep 4\nexit 0\n' >"$CB/ingame"
 printf '#!/bin/sh\ni=0\nwhile [ $i -lt 8 ]; do i=$((i+1)); echo "$i ui" >"$GAMECOVE_HEARTBEAT"; sleep 0.5; done\nexit 0\n' >"$CB/alive"
 printf '#!/bin/sh\n: >"$XDG_RUNTIME_DIR/gamecove-steam-ready"\nsleep 4\nexit 0\n' >"$CB/oldapp"
-chmod +x "$CB/hang" "$CB/stale" "$CB/ingame" "$CB/alive" "$CB/oldapp"
+# final review, session: "front" = GameCove's UI in front of a running game; its beats stopping is a hang
+printf '#!/bin/sh\necho "1 front" >"$GAMECOVE_HEARTBEAT"\nexec sleep 30\n' >"$CB/frontstale"
+printf '#!/bin/sh\ni=0\nwhile [ $i -lt 8 ]; do i=$((i+1)); echo "$i front" >"$GAMECOVE_HEARTBEAT"; sleep 0.5; done\nexit 0\n' >"$CB/frontalive"
+chmod +x "$CB/hang" "$CB/stale" "$CB/ingame" "$CB/alive" "$CB/oldapp" "$CB/frontstale" "$CB/frontalive"
 watch() { # <app> [env...]: prints the client's exit code; never waits more than 20 s
 	a="$1"
 	shift
@@ -563,6 +566,14 @@ eqv "$(sed -n 2p "$DATA/crash-fallback")" hung "fallback says it was hung"
 rm -rf "$DATA"
 eqv "$(watch ingame)" 0 "an unchanging heartbeat during a game is never a hang (long loads)"
 eqv "$(watch alive)" 0 "a beating app runs on"
+eqv "$(watch frontalive GAMECOVE_HEARTBEAT_FRONT_STALE_S=2)" 0 "GameCove in front of a game and beating runs on"
+[ ! -e "$DATA/crash-count" ] && ok || bad "a healthy front run counts nothing"
+started="$(date +%s)"
+code="$(watch frontstale GAMECOVE_HEARTBEAT_FRONT_STALE_S=3)"
+[ "$code" -ne 0 ] && [ "$code" -ne 124 ] && ok || bad "GameCove hung in front of a game is stopped (exit $code)"
+[ $(($(date +%s) - started)) -ge 3 ] && ok || bad "front uses its own, longer limit (GAMECOVE_HEARTBEAT_FRONT_STALE_S), not the ui one"
+eqv "$(cat "$DATA/crash-count" 2>/dev/null)" 1 "and counted as an unclean exit"
+rm -rf "$DATA"
 [ ! -e "$DATA/crash-count" ] && ok || bad "healthy runs count nothing"
 # review 2, problem 4: the ready file comes early (Library autoload); a hang before the first
 # beat (building the main scene) is a hang, and its healthy time clears nothing

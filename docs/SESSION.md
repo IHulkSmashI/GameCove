@@ -295,9 +295,14 @@ job waited for at most `GAMECOVE_ROOT_WAIT_S` (10 s), here and in
   when no heartbeat is expected), or the heartbeat stops changing for 30 s
   (`GAMECOVE_HEARTBEAT_STALE_S`), it kills the app and counts an unclean exit.
   The app (`scripts/system/session_health.gd`) rewrites the heartbeat every 5 s
-  from a main-loop Timer as `<sequence> ui|game`. While a game runs it says `game`
+  from a main-loop Timer as `<sequence> ui|game|front`. While a game runs it says `game`
   and is never killed, so a long load (or gamescope holding back frames from a
-  hidden window) can't end the session and the game with it.
+  hidden window) can't end the session and the game with it. `front` is a game that
+  runs with GameCove's own UI in front of it (the quick menu is open, or Home was
+  brought back): there the screen and the controller are GameCove's again, so the
+  heartbeat beats every 5 s as in `ui`, and if it stops for 45 s
+  (`GAMECOVE_HEARTBEAT_FRONT_STALE_S`) the app is stopped too. A game that is still
+  starting stays `game` until its window has had the screen once.
 - **Telling you why:** after a fallback, the next GameCove start shows a notice
   ("GameCove closed unexpectedly 3 times in a row, so Steam started instead") from
   `crash-fallback`, then deletes it.

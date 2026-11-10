@@ -93,3 +93,71 @@ func test_the_client_never_needs_beats_in_game() -> void:
 	# session/gamecove-session-client: stale only counts while the file says "ui"
 	var client := FileAccess.get_file_as_string(ProjectSettings.globalize_path("res://").path_join("../session/gamecove-session-client"))
 	ok(client.contains("[ \"${now#* }\" = game ]"), "a \"game\" heartbeat resets the stale count")
+
+
+## Final review, session: the hang watchdog was off whenever a game existed, also while
+## GameCove's quick menu or Home held the screen and the controller. "front" turns it back on
+## there, at once, and never while a game is still starting.
+class FakeBackground extends Node:
+	signal front_changed(in_front: bool)
+	var behind := false
+	func in_background() -> bool:
+		return behind
+	func go(now_behind: bool) -> void:
+		behind = now_behind
+		front_changed.emit(not behind)
+
+
+func test_ui_in_front_of_a_game_beats_again() -> void:
+	var d := _dir()
+	var p := d.path_join("gamecove-heartbeat")
+	var h: Node = SessionHealth.new(p)
+	var s := FakeSession.new()
+	var bg := FakeBackground.new()
+	h.game_running = func() -> bool: return s.active
+	h.watch_session(s)
+	h.watch_background(bg)
+	s.active = true
+	s.started.emit({})
+	eq(FileAccess.get_file_as_string(p), "1 game\n", "launching: our window still has the focus, but it says game (a slow launch is no hang)")
+	ok(not h.tick(), "and writes nothing while the game starts")
+	bg.go(true)
+	eq(h.mode(), "game", "the game took the screen")
+	ok(not h.tick(), "behind the game: still no writes")
+	eq(FileAccess.get_file_as_string(p), "1 game\n", "unchanged")
+	bg.go(false)
+	eq(FileAccess.get_file_as_string(p), "2 front\n", "quick menu or Home in front of the game: said at once")
+	ok(h.tick() and h.tick(), "and it beats on every tick while in front")
+	eq(FileAccess.get_file_as_string(p), "4 front\n", "beating")
+	bg.go(true)
+	eq(FileAccess.get_file_as_string(p), "5 game\n", "back behind the game: said at once")
+	ok(not h.tick(), "and quiet again")
+	bg.go(false)
+	s.active = false
+	s.ended.emit({})
+	eq(FileAccess.get_file_as_string(p).split(" ")[1], "ui\n", "game over: ui")
+	s.active = true
+	s.started.emit({})
+	eq(h.mode(), "game", "the next game starts from game again, not front")
+	h.free()
+	bg.free()
+
+
+func test_background_mode_says_when_the_front_changes() -> void:
+	var bg: Node = preload("res://scripts/system/background_mode.gd").new()
+	var seen: Array = []
+	bg.front_changed.connect(func(f: bool): seen.append(f))
+	bg.set_front(false)
+	bg.set_menu(true)
+	bg.set_menu(true)
+	bg.set_menu(false)
+	bg.set_front(true)
+	eq(seen, [false, true, false, true], "once per change, the quick menu counts as in front")
+	bg.free()
+
+
+func test_main_wires_the_watchdog_to_the_background_mode() -> void:
+	var main := FileAccess.get_file_as_string("res://scripts/main.gd")
+	ok(main.contains("health.watch_background(background)"), "main.gd must hand BackgroundMode to SessionHealth")
+	var client := FileAccess.get_file_as_string(ProjectSettings.globalize_path("res://").path_join("../session/gamecove-session-client"))
+	ok(client.contains("HEARTBEAT_FRONT_STALE_S") and client.contains("!= front ]"), "the client must count stale beats while the file says front")
