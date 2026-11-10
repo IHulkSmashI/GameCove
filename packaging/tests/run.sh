@@ -762,7 +762,9 @@ expect_code 0 "the final release over its own pre-release" gg "$R_BAZ"
 contains "$GI/release.env" "^TAG=v0.2.0$" "updated"
 sed -n '/^version_lt() {$/,/^}$/p' "$GG" >"$T/version_lt.sh"
 for pair in "v0.2.0 v0.10.0 0" "v0.10.0 v0.2.0 1" "v1.2.0 v1.2.0 1" "v1.2.0-rc.1 v1.2.0 0" "v1.2.0 v1.2.0-rc.1 1" \
-	"v1.2.0-rc.1 v1.2.0-rc.2 0" "v1.2 v1.2.1 0" "vX v1.0.0 1"; do
+	"v1.2.0-rc.1 v1.2.0-rc.2 0" "v1.2 v1.2.1 0" "vX v1.0.0 1" \
+	"v1.2.0-rc.9 v1.2.0-rc.10 0" "v1.2.0-rc.10 v1.2.0-rc.9 1" "v1.2.0-rc.2 v1.2.0-rc.2 1" "v1.2.0-alpha v1.2.0-beta 0" \
+	"v1.2.0-1 v1.2.0-alpha 0" "v1.2.0-alpha v1.2.0-1 1" "v1.2.0-rc v1.2.0-rc.1 0"; do
 	set -- $pair
 	got="$(sh -c '. "$1"; version_lt "$2" "$3"; echo $?' sh "$T/version_lt.sh" "$1" "$2" 2>/dev/null)"
 	[ "$got" = "$3" ] && ok || bad "version_lt $1 $2: $got, want $3"
