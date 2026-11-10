@@ -122,20 +122,31 @@ func _show(list: Array) -> void:
 func set_volume(stream_id: int, pct: float) -> void:
 	if not supported():
 		return
+	var known := false
+	var stream := ""
 	for a in apps:
 		if int(a["id"]) == stream_id:
 			a["volume"] = pct
+			stream = str(a.get("stream", a.get("name", "")))
+			known = true
 	var p: Object = provider
 	var ctx: Dictionary = registry.ctx
 	var me := get_instance_id()
 	var courier: RefCounted = CardJobs.shared()
+	# only the app this row was built for: the list is as old as its last read,
+	# and PipeWire gives a finished stream's id to whatever starts next
+	var checked: bool = known and p.has_method("set_app_volume")
 	registry.run_on_worker(func():
-		if not p.set_stream_volume(ctx, stream_id, pct):
+		var ok: bool = p.set_app_volume(ctx, stream_id, stream, pct) if checked else (known and p.set_stream_volume(ctx, stream_id, pct))
+		if not ok:
 			courier.hand_back(me, "_on_failed", []))
 
 
+## The app stopped playing (or its id now belongs to something else): say so,
+## and read the list again so the rows match what plays now.
 func _on_failed() -> void:
 	failed.emit(TX.MIXER_FAILED)
+	refresh()
 
 
 func focusables() -> Array:
