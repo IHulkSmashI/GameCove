@@ -157,6 +157,8 @@ static func _sweep(p: String) -> void:
 	_swept[p] = true
 	var dir := p.get_base_dir()
 	var name := p.get_file()
+	if not DirAccess.dir_exists_absolute(dir):
+		return   # the save itself reports the missing folder
 	for f in DirAccess.get_files_at(dir):
 		if not f.begins_with(name + ".") or not f.ends_with(".tmp"):
 			continue
