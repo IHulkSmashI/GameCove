@@ -113,6 +113,19 @@ doc = yaml.safe_load(open(sys.argv[1]))
 bad = [s.get("name", "?") for j in doc["jobs"].values() for s in j.get("steps", []) if "${{" in s.get("run", "")]
 assert not bad, bad
 PY
+# review problem 8: only main is tagged and released
+python3 -I - "$W" >"$T/out" 2>&1 <<'PY' && ok || bad "release.yml main-only release: $(cat "$T/out")"
+import sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+assert "github.ref == 'refs/heads/main'" in jobs["tag"]["if"], "the tag job must require refs/heads/main: " + jobs["tag"]["if"]
+assert "ref_type == 'branch'" not in jobs["tag"]["if"], "any branch may not tag"
+runs = [s.get("run", "") for s in jobs["release"]["steps"]]
+main = [i for i, r in enumerate(runs) if "compare/main...$GITHUB_SHA" in r]
+sign = [i for i, r in enumerate(runs) if "cosign sign-blob" in r]
+assert main and sign and main[0] < sign[0], "the release job must check the tag's commit is on main before signing"
+ver = [s for s in jobs["app"]["steps"] if s.get("id") == "version"][0]
+assert "PUBLISH" in ver.get("env", {}) and 'if [ "$PUBLISH" = true ]' in ver["run"], "publish=true off main must fail"
+PY
 # L28: CI signs and verifies with the cosign devices use
 grep -q 'cosign-release: ${{ steps.cosign.outputs.version }}' "$W" && ok || bad "cosign-installer must install get-gamecove.sh's COSIGN_VERSION"
 grep -q "COSIGN_SHA256=" "$W" && ok || bad "release.yml must check cosign against get-gamecove.sh's COSIGN_SHA256"
