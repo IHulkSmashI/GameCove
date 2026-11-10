@@ -46,6 +46,7 @@ const PAGES := {
 	"stores": preload("res://scripts/ui/settings/stores_page.gd"),
 	"saves": preload("res://scripts/ui/settings/saves_page.gd"),
 	"discover": preload("res://scripts/ui/settings/discover_page.gd"),
+	"media": preload("res://scripts/ui/settings/media_page.gd"),
 	"device": preload("res://scripts/ui/settings/device_page.gd"),
 	"about": preload("res://scripts/ui/settings/about_page.gd"),
 }
@@ -58,6 +59,8 @@ signal notice(text: String, tone: String)
 signal setup_requested(step: String)
 ## A page wants the quick menu open for `game` (Profiles > a game > Edit).
 signal game_settings_requested(game: Dictionary)
+## A page wants an app started like a game (Media > a clip > Watch: its player).
+signal app_launch_requested(app: Dictionary)
 
 ## UI pref rows (theme, match_art, reduce_motion, menu_side, ui_sounds).
 var rows := {}
@@ -481,6 +484,11 @@ func notify(text: String, tone := "") -> void:
 		add_child(_status_timer)
 	if _status_timer.is_inside_tree():
 		_status_timer.start(5.0)
+
+
+## Starts `app` like a game (main.gd listens and launches it).
+func request_app_launch(app: Dictionary) -> void:
+	app_launch_requested.emit(app)
 
 
 ## Opens the keyboard for a key or code; `done(text)` gets what was typed.

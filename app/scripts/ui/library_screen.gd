@@ -18,6 +18,8 @@ const ButtonFx := preload("res://scripts/ui/button_fx.gd")
 signal open_requested(game: Dictionary)
 signal game_focused(game: Dictionary)
 signal downloads_requested
+## The header's Apps button: open the Apps view (desktop apps, apps_view.gd).
+signal apps_requested
 
 const INSTALL_FILTERS := [["installed", "Installed"], ["not_installed", "Not installed"]]
 
@@ -47,6 +49,9 @@ var top_target: Control
 
 var search_button: Button
 var sort_button: Button
+## In the header, not the toolbar: Apps (desktop apps). Up from the toolbar's
+## last chip reaches it.
+var apps_button: Button
 var store_buttons: Array = []
 var count_label: Label
 var details: PanelContainer
@@ -97,6 +102,15 @@ func _init() -> void:
 	count_label.name = "Count"
 	count_label.add_theme_color_override("font_color", ThemeLib.color("accent"))
 	head.add_child(count_label)
+	head.add_child(Kit.spacer())
+	apps_button = Kit.button("Apps", "ChipButton")
+	apps_button.name = "AppsButton"
+	apps_button.icon = Icons.tex("apps", 18, Color.WHITE)
+	apps_button.add_theme_constant_override("h_separation", 8)
+	apps_button.custom_minimum_size = Vector2(0, 40)
+	apps_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	apps_button.pressed.connect(func(): apps_requested.emit())
+	head.add_child(apps_button)
 	var head_pad := Kit.margin(0, int(PAD.x), 0)
 	head_pad.add_child(head)
 	root.add_child(head_pad)
@@ -447,6 +461,13 @@ func _link_toolbar() -> void:
 		b.focus_neighbor_top = b.get_path_to(top_target if top_target != null else b)
 		var down: Control = default_focus() if not _tiles.is_empty() else b
 		b.focus_neighbor_bottom = b.get_path_to(down)
+	if not bar.is_empty():
+		var last: Control = bar[bar.size() - 1]
+		last.focus_neighbor_top = last.get_path_to(apps_button)
+		apps_button.focus_neighbor_bottom = apps_button.get_path_to(last)
+		apps_button.focus_neighbor_left = apps_button.get_path_to(apps_button)
+		apps_button.focus_neighbor_right = apps_button.get_path_to(apps_button)
+		apps_button.focus_neighbor_top = apps_button.get_path_to(top_target if top_target != null else apps_button)
 
 
 func _link_grid() -> void:

@@ -53,6 +53,12 @@ const LowBattery := preload("res://scripts/system/low_battery.gd")
 const LowBatteryDialog := preload("res://scripts/ui/low_battery_dialog.gd")
 const TSaves := preload("res://scripts/ui/texts_saves.gd")
 const SavesCardScript := preload("res://scripts/ui/games/saves_card.gd")
+const Recording := preload("res://scripts/system/recording.gd")
+const UPower := preload("res://scripts/system/upower.gd")
+const Proc := preload("res://scripts/system/proc.gd")
+const AppsView := preload("res://scripts/ui/apps_view.gd")
+const Apps := preload("res://scripts/library/apps.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
@@ -131,6 +137,13 @@ var closer: Node
 var setup_flow: Node
 ## Main-loop pacing: near idle while a game (or any other window) is in front.
 var background: Node
+## Record / Stop recording (quick menu) and the REC chip.
+var recording: Node
+## Desktop apps (Home's Apps shelf "All apps", the Library header's Apps).
+var apps_view: Control
+## Controller batteries: the last UPower read (ticks msec) and whether one is out.
+var _pads_at := -1000000
+var _pads_task := -1
 
 
 ## Play the boot splash at start (screenshots and tests turn it off).
@@ -167,6 +180,7 @@ func _ready() -> void:
 	home.refresh_requested.connect(func(): Library.refresh())
 	home.game_focused.connect(_follow.bind("home"))
 	home.downloads_requested.connect(open_downloads)
+	home.apps_requested.connect(open_apps)
 	home.tile_hook = _hook_tile
 	_screen_layer.add_child(home)
 
@@ -174,6 +188,7 @@ func _ready() -> void:
 	library_screen.open_requested.connect(_open_page)
 	library_screen.game_focused.connect(_follow.bind("library"))
 	library_screen.downloads_requested.connect(open_downloads)
+	library_screen.apps_requested.connect(open_apps)
 	library_screen.tile_hook = _hook_tile
 	library_screen.visible = false
 	_screen_layer.add_child(library_screen)
@@ -201,6 +216,7 @@ func _ready() -> void:
 		settings.setup_requested.connect(_on_setup_requested)
 	if settings.has_signal("game_settings_requested"):
 		settings.game_settings_requested.connect(_open_game_settings)
+	settings.app_launch_requested.connect(_play_app)
 	_screen_layer.add_child(settings)
 	screens = {"home": home, "library": library_screen, "discover": discover, "stream": stream_screen, "settings": settings}
 
@@ -273,8 +289,17 @@ func _ready() -> void:
 	launch_overlay.cancel_requested.connect(_on_launch_cancelled)
 	add_child(launch_overlay)
 
+	recording = Recording.new()
+	add_child(recording)
+	recording.changed.connect(func(): top_bar.set_recording(recording.is_recording()))
+	recording.saved.connect(func(path: String, info: Dictionary):
+		toast(TX.REC_SAVED % (str(info.get("game", "")) if str(info.get("game", "")) != "" else path.get_file()), "check", "good",
+			Recording.clock(int(info.get("seconds", 0))) + " · " + path.get_base_dir().replace(OS.get_environment("HOME"), "~")))
+	recording.failed.connect(func(kind: String, detail: String):
+		toast(str(TX.REC_ERRORS.get(kind, TX.REC_ERRORS["failed"])), "alert", "bad", detail))
+
 	quick_menu = QuickMenu.new()
-	var qm_services := {"device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
+	var qm_services := {"recording": recording, "device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
 	if _svc("Controls") != null:
 		qm_services["controls"] = _svc("Controls")
 		qm_services["profiles"] = _svc("Profiles")
@@ -336,6 +361,9 @@ func _ready() -> void:
 	_refresh_live()
 	_update_timer()
 	_link_top()
+	home.set_apps(_pinned_apps())
+	Input.joy_connection_changed.connect(func(_d, _c): read_pads(true))
+	read_pads(true)
 	_last_input_ms = Time.get_ticks_msec()
 	home.focus_later(home.default_focus())
 	open_setup(false)
@@ -725,6 +753,98 @@ func _downloads_open() -> bool:
 	return downloads_view != null and downloads_view.visible
 
 
+# ------------------------------------------------------------ apps
+
+## Pinned apps for Home's Apps shelf (saved with their icons: no scan at start).
+func _pinned_apps() -> Array:
+	return Apps.pinned()
+
+
+## The Apps view over the current screen (desktop apps; A starts one, X pins it).
+func open_apps() -> void:
+	if quick_menu.visible:
+		quick_menu.close()
+	if page != null:
+		_close_page()
+	close_downloads()
+	if apps_view == null:
+		apps_view = AppsView.new()
+		apps_view.launch_requested.connect(func(app: Dictionary):
+			close_apps()
+			_play_app(app))
+		apps_view.pins_changed.connect(func(): home.set_apps(_pinned_apps()))
+		apps_view.notice.connect(func(text: String, tone: String): toast(text, "check" if tone == "good" else "info", tone))
+		add_child(apps_view)
+		move_child(apps_view, top_bar.get_index())
+	apps_view.top_target = top_bar.tabs[current]
+	screens[current].visible = false
+	apps_view.open()
+	_link_top()
+	_sound("select")
+	_update_hints.call_deferred()
+
+
+func close_apps() -> void:
+	if not _apps_open():
+		return
+	apps_view.close()
+	var s: Control = screens[current]
+	s.visible = true
+	s.modulate.a = 0.0
+	Motion.to(s, "modulate:a", 1.0, Motion.FAST)
+	_link_top()
+	var f := _screen_default_focus()
+	if f != null:
+		f.grab_focus()
+	_update_hints.call_deferred()
+
+
+func _apps_open() -> bool:
+	return apps_view != null and apps_view.visible
+
+
+## Starts a desktop app or a clip's player like a game.
+func _play_app(app: Dictionary) -> void:
+	if session.runs(str(app.get("key", ""))):
+		session.return_to_game()
+		return
+	var launched: Dictionary = Library.launch(app)
+	if not bool(launched.get("ok", false)):
+		toast(TX.APPS_FAILED % str(app.get("title", "")), "alert", "bad")
+		return
+	playing = app
+	launch_overlay.show_for(app, backdrop.current_accent())
+	_pause_motion()
+	session.begin(app, launched)
+
+
+# ------------------------------------------------------------ controller batteries
+
+## Reads the controllers' batteries from UPower on a worker. `now`: an event
+## (focus back, quick menu, a pad connected); else only when the last read is
+## older than UPower.READ_EVERY_S (the live refresh, which only runs while
+## GameCove is in front). Never behind a game.
+func read_pads(now: bool) -> void:
+	if _pads_task != -1 or DisplayServer.get_name() == "headless":
+		return
+	if not now and Time.get_ticks_msec() - _pads_at < UPower.READ_EVERY_S * 1000:
+		return
+	_pads_at = Time.get_ticks_msec()
+	var me: WeakRef = weakref(self)
+	_pads_task = WorkerThreadPool.add_task(func():
+		var list := UPower.pads(Proc.new())
+		var o: Object = me.get_ref()
+		if o != null:
+			o.call_deferred("_on_pads", list), false, "GameCove controller batteries")
+
+
+func _on_pads(list: Array) -> void:
+	if _pads_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_pads_task)
+		_pads_task = -1
+	top_bar.set_pads(list)
+
+
 func _on_accent(c: Color) -> void:
 	home.set_accent(c)
 	if page != null:
@@ -775,6 +895,7 @@ func _notification(what: int) -> void:
 		_check_resume()
 		_refresh_live()
 		_update_timer()
+		read_pads(true)
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST and session != null:
 		session.stop()
 
@@ -810,6 +931,9 @@ static func base_size_for(win: Vector2i) -> Vector2i:
 
 ## Static caches hold textures and fonts; let them go so nothing leaks at exit.
 func _exit_tree() -> void:
+	if _pads_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_pads_task)
+		_pads_task = -1
 	release_caches()
 
 
@@ -828,6 +952,7 @@ static func release_caches() -> void:
 func _on_live_tick() -> void:
 	_check_resume()
 	_refresh_live()
+	read_pads(false)
 	if Time.get_ticks_msec() - _last_input_ms > IDLE_S * 1000.0:
 		_pause_motion()
 
@@ -1052,6 +1177,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			downloads_view.toggle_focused()
 			get_viewport().set_input_as_handled()
 		return
+	if _apps_open():
+		if event.is_action_pressed("ui_cancel"):
+			_sound("back")
+			close_apps()
+			get_viewport().set_input_as_handled()
+		elif _overlay_shoulder(event):
+			get_viewport().set_input_as_handled()
+		elif _pressed(event, JOY_BUTTON_X, KEY_X):
+			apps_view.toggle_focused()
+			_update_hints()
+			get_viewport().set_input_as_handled()
+		return
 	if status_panel.visible:
 		if event.is_action_pressed("ui_cancel"):
 			status_panel.close()
@@ -1148,6 +1285,8 @@ static func _pressed(event: InputEvent, button: JoyButton, key: Key) -> bool:
 func _screen() -> Control:
 	if _downloads_open():
 		return downloads_view
+	if _apps_open():
+		return apps_view
 	return page if page != null else screens[current]
 
 
@@ -1175,6 +1314,7 @@ func show_screen(id: String, dir := 0) -> void:
 	if page != null:
 		_close_page()
 	close_downloads()
+	close_apps()
 	var old: Control = screens[current]
 	var d := float(signi(dir)) if dir != 0 else signf(SCREENS.find(id) - SCREENS.find(current))
 	current = id
@@ -1237,7 +1377,7 @@ func _link_top() -> void:
 			s.set_top_target(tab)
 	# The game page and Downloads keep the top bar: down from it goes into them.
 	var f: Control = _screen().default_focus()
-	for extra in [page, downloads_view]:
+	for extra in [page, downloads_view, apps_view]:
 		if extra != null and is_instance_valid(extra) and extra.has_method("set_top_target"):
 			extra.set_top_target(tab)
 	for t in top_bar.tab_buttons():
@@ -1255,6 +1395,9 @@ func _link_top() -> void:
 ## Home's and the page's main button. Owned games that aren't installed get
 ## installed; ones waiting for an update get updated; the rest start.
 func _play(game: Dictionary) -> void:
+	if str(game.get("store", "")) == Apps.STORE:
+		_play_app(game)
+		return
 	if not game.get("installed", false):
 		game_actions.install(game)
 		return
@@ -1413,6 +1556,9 @@ func _on_game_ended(game: Dictionary) -> void:
 	wiring.game_ended(game)
 	if saves != null:
 		saves.after_exit(game)   # what the game just saved goes up
+	# a clip belongs to its game: the game ending stops (and saves) it
+	if recording != null and recording.is_recording():
+		recording.stop()
 	if streaming != null:
 		streaming.set_game_running(false)
 	if fixes != null:
@@ -1534,6 +1680,7 @@ func _open_menu() -> void:
 	if g.is_empty():
 		g = home.spotlight_game if not home.spotlight_game.is_empty() else home.hero_game
 	quick_menu.open(g)
+	read_pads(true)
 	if wiring != null:
 		wiring.menu_over_game(true)
 	_sound("select")
@@ -1637,6 +1784,8 @@ func _special_hints(f: Control) -> Array:
 		return [["A", TG.BACK_TO_COVE]]
 	if _downloads_open():
 		return downloads_view.hints_for_focus(f)
+	if _apps_open():
+		return apps_view.hints_for_focus(f)
 	if page != null and page.has_method("hints_for_focus"):
 		return page.hints_for_focus(f)
 	if page == null and screens[current].has_method("hints"):
@@ -1745,7 +1894,7 @@ func _build_settings() -> void:
 		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
 			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
-			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log})
+			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log, "recording": recording})
 
 
 static func _version() -> String:

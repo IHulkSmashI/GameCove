@@ -71,6 +71,12 @@ costs far more:
   history** writes one small file at game start and end, sleep, wake and the charger (a few
   sysfs reads each); **Sleep at low battery** reacts to Power's 15 s check. None adds a timer;
   the warning's 30 s countdown runs only while it shows.
+- **Recording**, only while you record (you start it; there is no always-on replay buffer):
+  GPU Screen Recorder captures through KMS and encodes H.264 on the GPU's video engine, so
+  the game's own frame time barely moves; GameCove's part is one thread blocked on the
+  recorder's output pipe (no timer, no polling). The Clips list, the Apps scan and the
+  controller batteries (UPower) are read on events while GameCove is in front, never behind
+  a game. The Send to phone page runs per frame only while its code shows on screen.
 
 `tests/e2e/suite_perf.gd` fails if the main loop runs more than 50 iterations or 70
 main-thread wake-ups a second behind a game, a Timer outside that list runs there, the
