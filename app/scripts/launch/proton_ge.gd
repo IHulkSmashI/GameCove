@@ -19,7 +19,7 @@ const DOWNLOAD_PREFIX := "https://github.com/GloriousEggroll/proton-ge-custom/re
 const TAG_RE := "^GE-Proton[0-9]+-[0-9]+$"
 ## Where a download waits for its checksum (inside compatibilitytools.d, so the
 ## unpack is on the same drive).
-const PARTIAL := ".gamecove-download"
+const DOWNLOAD_DIR := ".gamecove-download"
 
 
 ## The release from GitHub's "latest release" JSON:
@@ -113,7 +113,7 @@ static func install(runner: RefCounted, rel: Dictionary, dir: String) -> Diction
 		return {"ok": false, "error": "download"}
 	if DirAccess.dir_exists_absolute(dir.path_join(tag)):
 		return {"ok": false, "error": "exists"}
-	var part := dir.path_join(PARTIAL)
+	var part := dir.path_join(DOWNLOAD_DIR)
 	remove_tree(part)
 	DirAccess.make_dir_recursive_absolute(part)
 	var tarball := part.path_join(tag + ".tar.gz")

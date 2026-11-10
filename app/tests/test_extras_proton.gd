@@ -111,7 +111,7 @@ func test_install_checks_the_checksum_first() -> void:
 	var f := _fake()
 	eq(ProtonGE.install(f, rel, h.cd), {"ok": true, "error": ""}, "installed")
 	ok(FileAccess.file_exists(h.cd.path_join("GE-Proton10-26/compatibilitytool.vdf")), "unpacked into compatibilitytools.d")
-	ok(not DirAccess.dir_exists_absolute(h.cd.path_join(ProtonGE.PARTIAL)), "download folder cleaned up")
+	ok(not DirAccess.dir_exists_absolute(h.cd.path_join(ProtonGE.DOWNLOAD_DIR)), "download folder cleaned up")
 	var order: Array = f.calls.map(func(c): return str(c).get_slice(" ", 0))
 	ok(order.find("sha512sum") < order.find("tar"), "checked before unpacking")
 	eq(ProtonGE.install(f, rel, h.cd)["error"], "exists", "twice: already there")
