@@ -454,8 +454,20 @@ touch "$T/gamecove-0.1.0-1.x86_64.rpm" "$T/image-info.json"
 inst() {
 	PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" sh "$REPO/packaging/install.sh" "$@"
 }
-expect_code 0 "install.sh install" inst "$T/gamecove-0.1.0-1.x86_64.rpm"
+# final review, session: the root autologin guard goes into /etc on Bazzite too (from the deployment
+# rpm-ostree staged, since nothing is live before the reboot); a root step that fails stops the install
+printf '#!/bin/sh\necho "pkexec $1 $2 <script> $4 $5" >>"%s/install.log"\nexec "$@"\n' "$T" >"$IB/pkexec"
+chmod +x "$IB/pkexec"
+IR="$T/instroot"
+mkdir -p "$IR/ostree/deploy/default/deploy/abc.0/usr/lib/gamecove/session" "$IR/etc"
+cp "$REPO/session/gamecove-autologin-guard" "$IR/ostree/deploy/default/deploy/abc.0/usr/lib/gamecove/session/"
+cp "$REPO/session/systemd/gamecove-autologin-guard.service" "$IR/ostree/deploy/default/deploy/abc.0/usr/lib/gamecove/session/"
+expect_code 0 "install.sh install" env GAMECOVE_ROOT="$IR" PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" sh "$REPO/packaging/install.sh" "$T/gamecove-0.1.0-1.x86_64.rpm"
 contains "$T/install.log" "rpm-ostree install $T/gamecove-0.1.0-1.x86_64.rpm" "rpm-ostree install"
+if cmp -s "$REPO/session/gamecove-autologin-guard" "$IR/etc/gamecove/autologin-guard" && [ -x "$IR/etc/gamecove/autologin-guard" ] &&
+	[ -f "$IR/etc/systemd/system/gamecove-autologin-guard.service" ] && [ -L "$IR/etc/systemd/system/multi-user.target.wants/gamecove-autologin-guard.service" ]; then ok; else bad "install.sh must put the autologin guard and its enabled unit into /etc"; fi
+expect_code 1 "install.sh stops when the guard can't be installed" env GAMECOVE_ROOT="$T/no-such-root" PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" sh "$REPO/packaging/install.sh" "$T/gamecove-0.1.0-1.x86_64.rpm"
+contains "$T/out" "Couldn't install the guard" "says so"
 # review H4: --uninstall puts the boot default back and undoes every fix first, and stops if either fails
 cat >"$IB/select" <<EOF
 #!/bin/sh
@@ -479,6 +491,22 @@ contains "$T/install.log" "rpm-ostree uninstall gamecove" "rpm-ostree uninstall"
 contains "$T/install.log" "^select restore$" "uninstall restores the boot default"
 contains "$T/install.log" "^pkexec $IB/fixhelper --remove-all$" "uninstall undoes every fix"
 if [ "$(head -n 1 "$T/install.log")" = "select restore" ] && [ "$(tail -n 1 "$T/install.log")" = "rpm-ostree uninstall gamecove" ]; then ok; else bad "restore and fixes before the package goes: $(cat "$T/install.log")"; fi
+# the guard in /etc goes with a proper uninstall (the boot default is back by then)
+printf '#!/bin/sh\necho "pkexec $1" >>"%s/install.log"\nexec "$@"\n' "$T" >"$IB/pkexec.real"
+cp "$IB/pkexec" "$IB/pkexec.fake" && cp "$IB/pkexec.real" "$IB/pkexec" && chmod +x "$IB/pkexec"
+: >"$T/install.log"
+GAMECOVE_ROOT="$IR" PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" SESSION_SELECT="$IB/select" GUARD_COPY="$T/no-guard" \
+	FIX_HELPER="$IB/fixhelper" PKEXEC="$IB/pkexec" sh "$REPO/packaging/install.sh" --uninstall >"$T/out" 2>&1
+if [ ! -e "$IR/etc/gamecove" ] && [ ! -e "$IR/etc/systemd/system/gamecove-autologin-guard.service" ] && [ ! -L "$IR/etc/systemd/system/multi-user.target.wants/gamecove-autologin-guard.service" ]; then ok; else bad "install.sh --uninstall must remove the autologin guard from /etc"; fi
+[ "$(tail -n 1 "$T/install.log")" = "rpm-ostree uninstall gamecove" ] && ok || bad "the layer still goes last: $(cat "$T/install.log")"
+# and so does the display file every gamescope session reads (rotation / refresh unlock would stay in Steam Gaming Mode)
+mkdir -p "$T/icfg/environment.d"
+echo "ORIENTATION=left" >"$T/icfg/environment.d/80-gamecove-display.conf"
+echo "X=1" >"$T/icfg/environment.d/90-mine.conf"
+XDG_CONFIG_HOME="$T/icfg" GAMECOVE_ROOT="$IR" PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" SESSION_SELECT="$IB/select" GUARD_COPY="$T/no-guard" \
+	FIX_HELPER="$IB/fixhelper" PKEXEC="$IB/pkexec" sh "$REPO/packaging/install.sh" --uninstall >"$T/out" 2>&1
+[ ! -e "$T/icfg/environment.d/80-gamecove-display.conf" ] && [ -f "$T/icfg/environment.d/90-mine.conf" ] && ok || bad "install.sh --uninstall must remove 80-gamecove-display.conf and nothing else there"
+cp "$IB/pkexec.fake" "$IB/pkexec"
 echo 1 >"$T/select-code"
 expect_code 1 "install.sh uninstall stops when restore fails" uninst
 lacks "$T/install.log" "rpm-ostree uninstall" "package kept when the boot default couldn't go back"

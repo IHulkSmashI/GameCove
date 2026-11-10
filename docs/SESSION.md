@@ -254,13 +254,25 @@ keyboard. The login guard above can't help, it runs after a login. So:
   before the package goes (a failure stops the uninstall); `install.sh --uninstall`
   runs `gamecove-session-select restore` and `gamecove-fix --remove-all` first and
   stops if either fails.
-- **SteamOS:** the installer copies `gamecove-autologin-guard` and its unit out of
-  the sysext into `/etc/gamecove/` and `/etc/systemd/system/` (listed in
-  `/etc/atomic-update.conf.d/gamecove.conf`). It runs as root after
+- **SteamOS and Bazzite:** the installer copies `gamecove-autologin-guard` and its unit out of
+  GameCove's files into `/etc/gamecove/` and `/etc/systemd/system/` (on SteamOS listed in
+  `/etc/atomic-update.conf.d/gamecove.conf`; on Bazzite in the same root command as
+  `rpm-ostree install`, from `/usr` when the layer is live, else from the deployment
+  rpm-ostree just staged). On Bazzite it covers a layer taken off by hand
+  (`rpm-ostree uninstall gamecove`) while GameCove is the boot default: without it the
+  login screen stops at a password prompt, because the user-level guard only runs after a
+  login. A copy that fails stops the install. It runs as root after
   `systemd-sysext.service` and before the display manager, and if an autologin entry
   names `gamecove.desktop` while no session folder holds it, points it at
-  `gamescope-wayland.desktop` (Steam Gaming Mode), else the desktop. Uninstall
-  removes it.
+  `gamescope-wayland.desktop` (Steam Gaming Mode; on Bazzite
+  `gamescope-session-ogui-steam.desktop`, else any other gamescope session), else the
+  desktop. Uninstall removes it (a layer removed by hand leaves it in `/etc`, where it
+  does nothing once no autologin entry names GameCove).
+- **Display settings for the session:** uninstall also takes away
+  `~/.config/environment.d/80-gamecove-display.conf` (rotation, the refresh-rate unlock,
+  HDR), which every gamescope session reads, Steam Gaming Mode included. With "Keep my
+  settings" a copy waits in `~/.local/share/gamecove/display-session.conf` and the next
+  install puts it back.
 
 ### Leaving GameCove's session (review H2)
 

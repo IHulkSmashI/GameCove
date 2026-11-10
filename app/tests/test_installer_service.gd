@@ -76,7 +76,9 @@ func test_staged_install_defers_fixes_and_session() -> void:
 	s.finished.connect(func(a, ok_, m): results.append([a, ok_, m]))
 	ok(s.start("install", _choices(t)))
 	eq(results, [["install", true, ""]])
-	eq(_cmds(r), ["pkexec rpm-ostree install --idempotent --apply-live " + t["package"]], "only the package ran: nothing is live")
+	eq(_cmds(r).size(), 1, "only the package ran: nothing is live")
+	ok(_cmds(r)[0].begins_with("pkexec sh -c set -e; rpm-ostree install --idempotent --apply-live \"$1\"; ") and _cmds(r)[0].ends_with(" sh " + t["package"]), "the layer, live: " + _cmds(r)[0])
+	ok(_cmds(r)[0].contains("/etc/gamecove/autologin-guard"), "with the autologin guard in the same root command")
 	eq(s.results.count("pending"), 5, "four fixes and the startup choice wait for the reboot")
 	eq(s.deferred_fixes, ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "claw-kbd-wakeup"])
 	var p: RefCounted = s.paths
@@ -98,7 +100,7 @@ func test_staged_install_defers_fixes_and_session() -> void:
 	eq(st["choices"]["startup"], "gamecove")
 	ok(not st["choices"].has("ggdeals_key"), "keys stay out of the state file")
 	var log := FileAccess.get_file_as_string(p.log_file())
-	ok("$ pkexec rpm-ostree install" in log, "commands logged")
+	ok("$ pkexec sh -c set -e; rpm-ostree install" in log, "commands logged")
 	ok("install finished" in log)
 	_cleanup()
 
@@ -149,7 +151,7 @@ func test_refuses_during_a_game() -> void:
 
 func test_password_refused_then_retry_then_undo() -> void:
 	var d := _dir("retry")
-	var answers := {"pkexec rpm-ostree": {"code": 126, "out": "Not authorized"}}
+	var answers := {"pkexec sh -c set -e; rpm-ostree install": {"code": 126, "out": "Not authorized"}}
 	var r := _runner(answers)
 	var t := F.target("bazzite")
 	var s := _svc(d, r, t)
@@ -157,7 +159,7 @@ func test_password_refused_then_retry_then_undo() -> void:
 	s.finished.connect(func(a, ok_, m): results.append([a, ok_, m]))
 	s.start("install", _choices(t))
 	eq(results[-1], ["install", false, "no_password"])
-	eq(r.calls.filter(func(c): return c.begins_with("pkexec rpm-ostree")).size(), 2, "live install, then the staged fallback")
+	eq(r.calls.filter(func(c): return c.begins_with("pkexec sh -c set -e; rpm-ostree install")).size(), 2, "live install, then the staged fallback")
 	answers.clear()
 	ok(s.retry(), "retry from the failed step")
 	eq(results[-1], ["install", true, ""])
@@ -166,7 +168,7 @@ func test_password_refused_then_retry_then_undo() -> void:
 	s.undone.connect(func(o): undone.append(o))
 	ok(s.undo())
 	eq(undone, [true])
-	ok(r.called("pkexec rpm-ostree uninstall gamecove"), "package taken off again")
+	ok(r.calls.any(func(c): return c.begins_with("pkexec sh -c rm -f /etc/systemd/system/multi-user.target.wants/gamecove-autologin-guard.service") and c.ends_with("exec rpm-ostree uninstall gamecove")), "package taken off again, the guard with it")
 	ok(not FileAccess.file_exists(s.paths.env_conf()), "user files removed")
 	ok(not FileAccess.file_exists(s.paths.pending_file()), "pending file removed")
 	_cleanup()
@@ -194,7 +196,7 @@ func test_uninstall_restores_steam_and_cleans_up() -> void:
 	ok(cmds[0].begins_with("sh -c ") and "restore" in cmds[0], "session defaults restored first (desktop session too)")
 	ok(cmds[0].ends_with(s2.paths.session_select()), "through the switcher when it's there")
 	eq(cmds[1], "pkexec " + s2.paths.fix_helper() + " --remove-all")
-	ok(cmds[2].begins_with("pkexec sh -c rm -rf /var/lib/gamecove && exec rpm-ostree uninstall gamecove"), "the helper's state goes with the layer: " + cmds[2])
+	ok(cmds[2].begins_with("pkexec sh -c rm -rf /var/lib/gamecove && ") and cmds[2].ends_with("exec rpm-ostree uninstall gamecove"), "the helper's state goes with the layer: " + cmds[2])
 	for f in [s2.paths.env_conf(), s2.paths.unit_file(), s2.paths.switch_entry(), s2.paths.window_entry(),
 			s2.paths.pending_file(), s2.paths.state_file(), data + "/crash-count", data + "/crash-fallback",
 			data + "/left-for-steam", data + "/default-suspended"]:
@@ -220,6 +222,34 @@ func test_uninstall_without_settings_removes_the_installer_entry() -> void:
 	ok(not FileAccess.file_exists(s.paths.installer_entry()), "installer entry removed")
 	ok(not DirAccess.dir_exists_absolute(s.paths.data_dir() + "/launch"), "launch files removed")
 	_cleanup()
+
+
+## Final review, session: uninstall left ~/.config/environment.d/80-gamecove-display.conf, which every
+## gamescope session reads: a rotation or refresh-rate unlock stayed in Steam Gaming Mode with nothing
+## left to turn it off. It goes; "Keep my settings" keeps a copy that the next install puts back.
+func test_uninstall_takes_the_display_session_file_away() -> void:
+	for keep in [true, false]:
+		var d := _dir("uninstall_display_%s" % keep)
+		_make_live(d)
+		var t := F.target("bazzite", {"installed": true, "state": {"version": "0.2.0", "fixes": []}})
+		var s := _svc(d, _runner(), t)
+		var conf: String = s.paths.display_env_conf()
+		eq(conf, d + "/home/.config/environment.d/80-gamecove-display.conf", "the file the Display settings write")
+		DirAccess.make_dir_recursive_absolute(conf.get_base_dir())
+		FileAccess.open(conf, FileAccess.WRITE).store_string("# Written by GameCove (Display settings).\nORIENTATION=left\nCUSTOM_REFRESH_RATES=40,60,90\n")
+		FileAccess.open(conf.get_base_dir() + "/90-mine.conf", FileAccess.WRITE).store_string("X=1\n")
+		var c := _choices(t)
+		c["keep_settings"] = keep
+		s.start("uninstall", c)
+		ok(not FileAccess.file_exists(conf), "gone from every session's way (keep settings %s)" % keep)
+		ok(FileAccess.file_exists(conf.get_base_dir() + "/90-mine.conf"), "the user's own files in that folder stay")
+		eq(FileAccess.file_exists(s.paths.display_env_kept()), keep, "a copy only with \"Keep my settings\"")
+		if keep:
+			var s2 := _svc(d, _runner(), F.target("bazzite"))
+			s2.start("install", _choices(F.target("bazzite")))
+			ok(FileAccess.get_file_as_string(conf).contains("ORIENTATION=left"), "the next install puts the display settings back")
+			ok(not FileAccess.file_exists(s2.paths.display_env_kept()), "and the copy is used up")
+		_cleanup()
 
 
 ## Final review, high 9: with "Keep my settings" off, user:// went whole: every save backup and the

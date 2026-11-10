@@ -306,6 +306,20 @@ rm "$AR/usr/share/wayland-sessions/gamescope-wayland.desktop"
 printf '[Autologin]\nSession=gamecove\n' >"$AR/etc/sddm.conf.d/zz-holo-autologin.conf"
 GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
 has "$AR/etc/sddm.conf.d/zz-holo-autologin.conf" "^Session=plasma.desktop$" "no Steam session: the desktop"
+# final review, session: Bazzite after `rpm-ostree uninstall gamecove` by hand with GameCove as the boot
+# default: its game mode is gamescope-session-ogui-steam.desktop (and other images name theirs differently)
+touch "$AR/usr/share/wayland-sessions/gamescope-session-ogui-steam.desktop"
+printf '[Autologin]\nSession=gamecove.desktop\n' >"$AR/etc/sddm.conf.d/zz-steamos-autologin.conf"
+GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
+has "$AR/etc/sddm.conf.d/zz-steamos-autologin.conf" "^Session=gamescope-session-ogui-steam.desktop$" "Bazzite: autologin goes to its Steam Gaming Mode, not a password prompt"
+rm "$AR/usr/share/wayland-sessions/gamescope-session-ogui-steam.desktop"
+touch "$AR/usr/share/wayland-sessions/gamescope-some-image.desktop"
+printf '[Autologin]\nSession=gamecove.desktop\n' >"$AR/etc/sddm.conf.d/zz-steamos-autologin.conf"
+GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
+has "$AR/etc/sddm.conf.d/zz-steamos-autologin.conf" "^Session=gamescope-some-image.desktop$" "any gamescope session beats the desktop"
+SPEC="$REPO/packaging/rpm/gamecove.spec"
+grep -q 'lib/gamecove/session/gamecove-autologin-guard$' "$SPEC" && grep -q 'lib/gamecove/session/gamecove-autologin-guard.service$' "$SPEC" &&
+	grep -qx '%{_prefix}/lib/gamecove/session' "$SPEC" && ok || bad "the RPM must ship the autologin guard and its unit (the installer copies them into /etc)"
 
 # no steamosctl: guard/session-start are no-ops, switches explain
 env PATH="$BIN:$PATH" HOME="$T/home" STEAMOSCTL=/nonexistent sh "$SEL" guard
