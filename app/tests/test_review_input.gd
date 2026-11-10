@@ -259,3 +259,23 @@ func test_l14_yaml_multiline_strings() -> void:
 	var h: Variant = Yaml.parse(inseq)
 	eq(h["mapping"][0].get("name"), "two\nlines", "block scalar inside a sequence item")
 	eq(h["mapping"][0].get("source_event"), {"gamepad": {"button": "North"}}, "and the item's other keys")
+
+
+# ---- L21: per-game layout file names never collide ------------------------------------------------
+
+func test_l21_game_file_names_are_unique_and_path_safe() -> void:
+	var P := load("res://scripts/input/ip_profile.gd")
+	ok(P.file_name_for("steam:12") != P.file_name_for("steam_12"), "steam:12 and steam_12 differ")
+	var n: String = P.file_name_for("epic:../../x")
+	ok(not "/" in n and not ".." in n.get_basename(), "no path parts (%s)" % n)
+	ok(n.is_valid_filename(), "a valid file name")
+	# an older layout file (steam_12.yaml) is still found for steam:12 and moved to the new name
+	var home := _root("l21") + "/home"
+	var c: Node = ControllerScript.new()
+	c.setup(FakeRunner.new(), home)
+	c.set_device("msi-claw-8-ex")
+	DirAccess.make_dir_recursive_absolute(c.profiles_dir)
+	Fakes.write(c.profiles_dir + "/steam_12.yaml", "{}")
+	ok(c.has_game_profile("steam:12"), "legacy file found")
+	ok(FileAccess.file_exists(c.game_profile_path("steam:12")), "and moved to the unique name")
+	c.free()

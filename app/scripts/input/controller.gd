@@ -231,10 +231,17 @@ func default_profile_path() -> String:
 
 
 func game_profile_path(key: String) -> String:
+	var hhd_on: bool = _state.get("backend", "") == "hhd" or _backend == "hhd"
 	var f := Profile.file_name_for(key)
-	if _state.get("backend", "") == "hhd" or _backend == "hhd":
+	var old := Profile.legacy_file_name_for(key)
+	if hhd_on:
 		f = f.get_basename() + ".hhd.json"
-	return profiles_dir + "/" + f
+		old = old.get_basename() + ".hhd.json"
+	var p := profiles_dir + "/" + f
+	# a layout saved under the older (colliding) name: move it to the unique one once
+	if not FileAccess.file_exists(p) and old != f and FileAccess.file_exists(profiles_dir + "/" + old):
+		DirAccess.rename_absolute(profiles_dir + "/" + old, p)
+	return p
 
 
 func has_game_profile(key: String) -> bool:

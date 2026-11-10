@@ -345,6 +345,9 @@ func save_target() -> String:
 	if game == "":
 		return profile_path()
 	var own := profile_path().get_base_dir().path_join(Profile.file_name_for(game))
+	var old := profile_path().get_base_dir().path_join(Profile.legacy_file_name_for(game))
+	if not FileAccess.file_exists(own) and FileAccess.file_exists(old):
+		return old   # the Controller moves it to the unique name when it loads it
 	return own if FileAccess.file_exists(own) else ""
 
 
