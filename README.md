@@ -25,7 +25,7 @@
 
 <p align="center">
   <img src="docs/images/home.webp" alt="Home: what you're playing, your achievements, what's installed" width="32%">
-  <img src="docs/images/quick-menu.webp" alt="Quick menu in a game: overlay, frame limit, TDP, upscaling" width="32%">
+  <img src="docs/images/quick-menu.webp" alt="Quick menu in a game: frame limit, TDP, upscaling, Record" width="32%">
   <img src="docs/images/library.webp" alt="One library for Steam, Epic, GOG and Amazon" width="32%">
 </p>
 
@@ -144,7 +144,12 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 <tr>
 <td width="33%"><img src="docs/images/game.webp" alt="Game page"><br><sub>Game page: Metacritic, game facts, time to beat</sub></td>
 <td width="33%"><img src="docs/images/achievements.webp" alt="Achievements on the game page"><br><sub>Achievements with global unlock rates</sub></td>
-<td width="33%"><img src="docs/images/home-light.webp" alt="Home in the Light theme"><br><sub>The Light theme</sub></td>
+<td width="33%"><img src="docs/images/game-saves.webp" alt="Cloud saves and battery drain on a GOG game's page"><br><sub>Cloud saves for a GOG game, and what it drains on battery</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/library-filter.webp" alt="The Library's Filter sheet"><br><sub>Filter: favourites, your collections, emulation, hidden games</sub></td>
+<td><img src="docs/images/apps.webp" alt="The Apps view"><br><sub>Your desktop apps, full screen, pinned to Home with X</sub></td>
+<td><img src="docs/images/home-light.webp" alt="Home in the Light theme"><br><sub>The Light theme</sub></td>
 </tr>
 </table>
 
@@ -162,7 +167,12 @@ same interface as everything else.
 - **Nothing installed yet?** The page shows a QR code to emudeck.com and three short steps.
 - GameCove never downloads or ships games or BIOS files. Play backups of games you own.
 
-<p align="center"><img src="docs/images/emulation.webp" alt="The Emulation page" width="70%"></p>
+<table>
+<tr>
+<td width="50%"><img src="docs/images/emulation.webp" alt="The Emulation page"><br><sub>The Emulation page: ES-DE, EmuDeck, Steam ROM Manager, your systems</sub></td>
+<td width="50%"><img src="docs/images/home-emulation.webp" alt="Home's Emulation and Apps shelves"><br><sub>Your ROMs on Home with their box art, and the Apps shelf</sub></td>
+</tr>
+</table>
 
 ## Quick menu and settings
 
@@ -185,8 +195,12 @@ Switch to Desktop Mode live here too.
 <td width="50%"><img src="docs/images/quick-display.webp" alt="Quick menu, Display tab"><br><sub>Display: brightness, refresh rate, VRR, vibrance</sub></td>
 </tr>
 <tr>
+<td><img src="docs/images/quick-audio.webp" alt="Quick menu, Audio tab"><br><sub>Audio: the music playing, each app's own volume</sub></td>
 <td><img src="docs/images/quick-controller.webp" alt="Quick menu, Controller tab"><br><sub>Controller: type, gyro, rumble</sub></td>
+</tr>
+<tr>
 <td><img src="docs/images/quick-leds.webp" alt="Quick menu, stick lights"><br><sub>Stick lights: effect, colour, brightness</sub></td>
+<td><img src="docs/images/quick-device.webp" alt="Quick menu, Device tab"><br><sub>Device: your model, its fixes, Wi-Fi and Bluetooth</sub></td>
 </tr>
 </table>
 
@@ -223,7 +237,20 @@ it does.
   downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage (with one-press
   **clean-up** of the shader caches uninstalled games leave behind), updates, and the network and privacy switches.
 
-<p align="center"><img src="docs/images/settings-power.webp" alt="Settings, Power" width="70%"></p>
+<table>
+<tr>
+<td width="50%"><img src="docs/images/settings-power.webp" alt="Settings, Power"><br><sub>Power: battery saver, Sleep at low battery, charge limit</sub></td>
+<td width="50%"><img src="docs/images/settings-performance.webp" alt="Settings, Performance, GE-Proton"><br><sub>Performance: GE-Proton in one press</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/settings-system.webp" alt="Settings, System, Bluetooth devices"><br><sub>System: Bluetooth devices with their battery</sub></td>
+<td><img src="docs/images/settings-media.webp" alt="Settings, Media, Clips"><br><sub>Media: recording and your clips</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/settings-saves.webp" alt="Settings, Saves"><br><sub>Saves: cloud saves for Epic and GOG games</sub></td>
+<td><img src="docs/images/settings-storage.webp" alt="Settings, Device, Storage"><br><sub>Storage: drives, game folders and Clean up</sub></td>
+</tr>
+</table>
 
 </details>
 
@@ -268,8 +295,9 @@ install GameCove; optional ones are a press away. Every fix shows its status, sa
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/fixes.webp" alt="Device fixes"><br><sub>Fixes for your exact model, each with Undo</sub></td>
-<td width="50%"><img src="docs/images/device.webp" alt="About this device"><br><sub>About this device: your model, chip, drivers, memory</sub></td>
+<td width="33%"><img src="docs/images/fixes.webp" alt="Device fixes"><br><sub>Fixes for your exact model, each with Undo</sub></td>
+<td width="33%"><img src="docs/images/device.webp" alt="About this device"><br><sub>About this device: your model, chip, drivers, memory</sub></td>
+<td width="33%"><img src="docs/images/battery-history.webp" alt="Battery history in About this device"><br><sub>Battery history: 7 days and each game's drain</sub></td>
 </tr>
 </table>
 
@@ -331,11 +359,13 @@ over Tailscale. More in [docs/STREAMING.md](docs/STREAMING.md).
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/discover.webp" alt="Discover"><br><sub>Discover: top deals and what's coming</sub></td>
-<td width="50%"><img src="docs/images/deals.webp" alt="Discover, Deals"><br><sub>Deals with the lowest price ever</sub></td>
+<td width="33%"><img src="docs/images/discover.webp" alt="Discover"><br><sub>Discover: top deals and what's coming</sub></td>
+<td width="33%"><img src="docs/images/discover-free.webp" alt="Discover, Free to keep"><br><sub>Free to keep: what a store gives away now</sub></td>
+<td width="33%"><img src="docs/images/deals.webp" alt="Discover, Deals"><br><sub>Deals with the lowest price ever</sub></td>
 </tr>
 <tr>
 <td><img src="docs/images/calendar.webp" alt="Discover, Coming soon"><br><sub>Release calendar</sub></td>
+<td><img src="docs/images/calendar-month.webp" alt="Discover, Coming soon by month"><br><sub>The same calendar by month</sub></td>
 <td><img src="docs/images/wishlist.webp" alt="Discover, Wishlist"><br><sub>Wishlist and price alerts</sub></td>
 </tr>
 </table>
@@ -478,9 +508,12 @@ art for non-Steam games. Skip it and you get Steam's art; add a key later in Set
 
 <table>
 <tr>
-<td width="33%"><img src="docs/images/installer.webp" alt="GameCove Installer, welcome"><br><sub>The installer: Easy or Custom</sub></td>
-<td width="33%"><img src="docs/images/game-art-setup.webp" alt="Game art setup"><br><sub>Game art: scan, sign in with Steam on your phone, done</sub></td>
-<td width="33%"><img src="docs/images/quick-power-light.webp" alt="Quick menu in the Light theme"><br><sub>Pick your look during setup: here, Light</sub></td>
+<td width="50%"><img src="docs/images/installer.webp" alt="GameCove Installer, welcome"><br><sub>The installer: Easy or Custom</sub></td>
+<td width="50%"><img src="docs/images/game-art-setup.webp" alt="Game art setup"><br><sub>Game art: scan, sign in with Steam on your phone, done</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/quick-power-light.webp" alt="Quick menu in the Light theme"><br><sub>Pick your look during setup: here, Light</sub></td>
+<td><img src="docs/images/game-light.webp" alt="A game page in the Light theme"><br><sub>A game page in Light, art at full colour</sub></td>
 </tr>
 </table>
 

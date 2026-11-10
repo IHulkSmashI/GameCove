@@ -53,18 +53,26 @@ func _notification(what: int) -> void:
 			l.pivot_offset = Vector2(size.x * 0.75, size.y * 0.4)
 
 
-## Light themes keep the art further from the text and the top bar, so
-## dark text stays readable on the light side.
+## The art keeps its full colour in every theme. In its Home / Discover frame
+## only the text side gets a shade (dark themes: toward the scrim, fading out
+## by 58 % of the width; Light: a light band behind the title that's gone by
+## LIGHT_SHADE_TO, never a veil over the picture). Unframed (the downloads
+## list), the art dissolves into the backdrop at its edges instead.
+const LIGHT_SHADE_FROM := 0.22
+const LIGHT_SHADE_TO := 0.40
+const LIGHT_SHADE_ALPHA := 0.88
+
+
 func _apply_fade() -> void:
 	for l in layers:
 		_fade_layer(l)
-	var dark: bool = load("res://theme/gamecove_theme.gd").is_dark()
 	self_modulate = Color.WHITE
-	modulate.a = 1.0 if dark else 0.8
+	modulate.a = 1.0
 
 
 func _fade_layer(l: TextureRect) -> void:
-	var dark: bool = load("res://theme/gamecove_theme.gd").is_dark()
+	var ThemeLib = load("res://theme/gamecove_theme.gd")
+	var dark: bool = ThemeLib.is_dark()
 	var m := l.material as ShaderMaterial
 	m.set_shader_parameter("fade_left_from", 0.10 if dark else 0.40)
 	m.set_shader_parameter("fade_left_to", 0.55 if dark else 0.85)
@@ -72,20 +80,18 @@ func _fade_layer(l: TextureRect) -> void:
 	m.set_shader_parameter("fade_bottom_from", (0.50 if dark else 0.40) if frame_radius <= 0.0 else 0.70)
 	m.set_shader_parameter("frame_radius", frame_radius)
 	m.set_shader_parameter("shade_color", Color(0, 0, 0, 0))
+	m.set_shader_parameter("shade_from", 0.0)
 	if frame_radius > 0.0:
-		m.set_shader_parameter("fade_left_from", 0.22 if dark else 0.40)
-		m.set_shader_parameter("fade_left_to", 0.68 if dark else 0.85)
+		# Key art at full colour in its frame: no fade into the backdrop, only a
+		# shade behind the text on the left and a short fade at the foot.
+		var sc: Color = ThemeLib.color("scrim")
+		m.set_shader_parameter("fade_left_from", -1.0)
+		m.set_shader_parameter("fade_left_to", 0.0)
 		m.set_shader_parameter("fade_top", 0.0)
-		if dark:
-			# Key art at full brightness in its frame: no fade into the dark
-			# backdrop, only a shade behind the text on the left and a short
-			# fade at the foot.
-			var sc: Color = load("res://theme/gamecove_theme.gd").color("scrim")
-			m.set_shader_parameter("fade_left_from", -1.0)
-			m.set_shader_parameter("fade_left_to", 0.0)
-			m.set_shader_parameter("fade_bottom_from", 0.84)
-			m.set_shader_parameter("shade_color", Color(sc, 0.80))
-			m.set_shader_parameter("shade_to", 0.58)
+		m.set_shader_parameter("fade_bottom_from", 0.84)
+		m.set_shader_parameter("shade_color", Color(sc, 0.80 if dark else LIGHT_SHADE_ALPHA))
+		m.set_shader_parameter("shade_from", 0.0 if dark else LIGHT_SHADE_FROM)
+		m.set_shader_parameter("shade_to", 0.58 if dark else LIGHT_SHADE_TO)
 	if l.get_meta("poster", false):
 		m.set_shader_parameter("fade_left_from", 0.0)
 		m.set_shader_parameter("fade_left_to", 0.55)

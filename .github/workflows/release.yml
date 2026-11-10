@@ -115,8 +115,14 @@ jobs:
           rm templates.tpz
           [ "$(cat "$dest/version.txt")" = "${GODOT}.stable" ]
       - name: Export (fails on script errors)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -o pipefail
+          # The spec's Version is what About GameCove and the hint bar show (main.gd _version();
+          # without it a release says "Development build").
+          sed -i "/^config\/name=/a config/version=\"${VERSION}\"" app/project.godot
+          grep -qx "config/version=\"${VERSION}\"" app/project.godot
           ./godot --headless --path app --import 2>&1 | tee import.log
           mkdir -p app/build
           ./godot --headless --path app --export-release "Linux" build/gamecove.x86_64 2>&1 | tee export.log

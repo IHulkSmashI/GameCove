@@ -82,6 +82,15 @@ if [ -L "$REPO/app/CREDITS.md" ] && cmp -s "$REPO/app/CREDITS.md" "$REPO/CREDITS
 
 # ------------------------------------------------------------- release workflow supply chain (M5, M6, L26-L28)
 W="$REPO/.github/workflows/release.yml"
+# The export stamps the spec's Version into project.godot (else About says "Development build"):
+# run the workflow's own line on a copy and check Godot's setting lands under [application].
+stamp=$(grep -o "sed -i \"/^config.*app/project.godot" "$W" | head -n 1)
+cp "$REPO/app/project.godot" "$T/project.godot"
+if [ -n "$stamp" ] && VERSION=0.1.0 sh -c "$(printf '%s' "$stamp" | sed "s#app/project.godot#$T/project.godot#")" &&
+	awk '/^\[/{s=$0} /^config\/version=/{print s; print}' "$T/project.godot" | tr '\n' ' ' | grep -qx '\[application\] config/version="0.1.0" '; then ok; else bad "release.yml must stamp the spec's Version into app/project.godot before exporting"; fi
+ex=$(grep -n -- "--export-release" "$W" | head -n 1 | cut -d: -f1)
+st=$(grep -n "config/version" "$W" | head -n 1 | cut -d: -f1)
+[ -n "$st" ] && [ -n "$ex" ] && [ "$st" -lt "$ex" ] && ok || bad "the version stamp must come before the export"
 GG="$REPO/packaging/get-gamecove.sh"
 # M5: the identity ends with this tag, identical in the installer and the workflow's self-check
 for f in "$GG" "$W"; do

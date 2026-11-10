@@ -32,6 +32,7 @@ const TS := preload("res://scripts/ui/texts_settings.gd")
 const TI := preload("res://scripts/ui/installer/texts_installer.gd")
 const SignIn := preload("res://scripts/ui/installer/store_signin.gd")
 const ArtKeyStep := preload("res://scripts/ui/setup/art_key_step.gd")
+const PhotoView := preload("res://scripts/ui/device/device_photo_view.gd")
 const OptionCard := preload("res://scripts/ui/installer/option_card.gd")
 const Plan := preload("res://scripts/installer/plan.gd")
 const Target := preload("res://scripts/installer/target.gd")
@@ -637,8 +638,23 @@ func _support() -> String:
 	return str(d.support_level()) if d != null and d.has_method("support_level") else "generic"
 
 
-## The device's picture through Device.picture_for (generic art for unknown ids).
+## The device's picture: its real photo when the DevicePhoto service has one
+## cached (the free photo or the maker's image, with its credit line, as in
+## About this device and first-run setup), else Device.picture_for's drawing
+## (generic art for unknown ids). A photo prefetch_photo() brings in while the
+## page is up rebuilds it once.
 func _device_picture(height: float) -> Control:
+	var ph: Object = services.get("photo")
+	var id0 := str(_device_row().get("id", ""))
+	if ph != null and ph.has_method("photo_for") and id0 != "" and id0 != "unknown":
+		if ph.has_signal("photo_ready") and not ph.photo_ready.is_connected(_on_photo_ready):
+			ph.photo_ready.connect(_on_photo_ready)
+		# the credit line goes under the picture: the pair takes the drawing's height
+		var view: Control = PhotoView.make(ph.photo_for(id0), maxf(height - PHOTO_CREDIT_H, 60.0), func(_url: String): pass)
+		if view != null:
+			view.credit.focus_mode = Control.FOCUS_NONE
+			view.custom_minimum_size.x = height * 2.0
+			return view
 	var path := ""
 	var d := _device()
 	var id := str(_device_row().get("id", ""))
@@ -663,6 +679,15 @@ func _device_picture(height: float) -> Control:
 	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return r
+
+
+## Room the photo's credit line takes under it (see _device_picture).
+const PHOTO_CREDIT_H := 34.0
+
+
+func _on_photo_ready(_device_id: String, _path: String) -> void:
+	if is_inside_tree() and body != null and body.find_child("DevicePhoto", true, false) == null:
+		_build.call_deferred()
 
 
 func _row(key: String, title: String, value: String, hint: String, icon := "", chevron := true) -> VBoxContainer:

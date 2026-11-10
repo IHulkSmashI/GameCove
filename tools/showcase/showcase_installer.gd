@@ -34,6 +34,15 @@ func _run() -> void:
 		"release": {"tag": "v" + _ver, "version": _ver, "os": "bazzite", "package": "/dl/gamecove-%s-1.fc45.x86_64.rpm" % _ver},
 		"package": "/dl/gamecove-%s-1.fc45.x86_64.rpm" % _ver})
 	await make(t, theme_id)
+	# The Detected handheld card with the Claw's real picture (showcase.gd's
+	# seeded DevicePhoto cache), as on the handheld once the photo is fetched.
+	var dp: Node = load(get_script().resource_path.get_base_dir().path_join("showcase.gd")).seed_device_photo(root,
+		home.path_join("device_photos"), ProjectSettings.globalize_path(get_script().resource_path.get_base_dir().path_join("cache/device/msi-claw-8-ex.png")))
+	if dp != null:
+		screen.services["photo"] = dp
+		screen.show_step()
+		screen.focus_first()
+		await frames(2)
 	await shot("installer")
 	if want("installer_device"):
 		at("device")

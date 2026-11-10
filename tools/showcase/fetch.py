@@ -3,7 +3,7 @@
 
     python3 -I tools/showcase/fetch.py            # data (library.json, pinned/) + art cache
     python3 -I tools/showcase/fetch.py --art-only # only (re)download missing art from library.json
-    python3 -I tools/showcase/fetch.py --pinned-only  # only the two Discover feeds
+    python3 -I tools/showcase/fetch.py --pinned-only  # only the Discover feeds
 
 Writes, next to this file:
   library.json      the showcase library: real games, their real Steam data
@@ -15,10 +15,12 @@ Writes, next to this file:
                     names. Playtime, last played and which achievements are
                     unlocked are this profile's own (the "user"), picked so the
                     unlocks follow the global percentages (common ones first).
-  pinned/           the two Discover feeds GameCove reads, as fetched now, cut
-                    to well-known games (prices untouched): CheapShark's top
-                    deals and GameCove's upcoming.json.gz release calendar.
-  cache/            (git-ignored) art from Steam's CDN, achievement icons, each
+  pinned/           the Discover feeds GameCove reads, as fetched now, cut to
+                    well-known games (prices untouched): CheapShark's top deals,
+                    its free-to-keep giveaways and GameCove's upcoming.json.gz
+                    release calendar.
+  cache/            (git-ignored) art from Steam's CDN, achievement icons, the
+                    emulated games' box art (libretro-thumbnails), each
                     game's Steam store details (appdetails, the answer GameCove's
                     own game-details lookup reads: genres, developers, release
                     date, Metacritic score, screenshots) and its screenshot
@@ -304,6 +306,11 @@ def fetch_pinned():
     with open(os.path.join(PINNED, "cs_deals.json"), "w") as f:
         json.dump(keep, f, indent=0)
     print("deals kept: %d (%d Steam)" % (len(keep), len(steam)))
+    # Free to keep: CheapShark's giveaways right now, as GameCove asks for them.
+    free = get_json(CS + "deals?onSale=1&upperPrice=0&sortBy=Recent&pageSize=30") or []
+    with open(os.path.join(PINNED, "cs_free.json"), "w") as f:
+        json.dump(free, f, indent=0)
+    print("free to keep: %d" % len(free))
     up = json.loads(gzip.decompress(get(UPCOMING, binary=True)))
     names = {n.lower() for n in CALENDAR_KEEP}
     up["releases"] = [r for r in up["releases"] if r["title"].lower() in names]
@@ -362,8 +369,29 @@ def details_jobs(lib):
     return jobs
 
 
+# The showcase's EmuDeck games: box art and an in-game picture from
+# libretro-thumbnails (the set RetroArch and ES-DE scrapers use), standing in
+# for the SteamGridDB art Steam ROM Manager saves on a real device.
+LIBRETRO = "https://thumbnails.libretro.com/"
+EMU_ART = [
+    ("super-metroid", "Nintendo - Super Nintendo Entertainment System", "Super Metroid (Japan, USA) (En,Ja)"),
+    ("pokemon-emerald", "Nintendo - Game Boy Advance", "Pokemon - Emerald Version (USA, Europe)"),
+    ("castlevania-sotn", "Sony - PlayStation", "Castlevania - Symphony of the Night (USA)"),
+    ("sonic-2", "Sega - Mega Drive - Genesis", "Sonic The Hedgehog 2 (World)"),
+]
+
+
+def emu_art_jobs():
+    jobs = []
+    for name, system, rom in EMU_ART:
+        for kind, folder in (("cover", "Named_Boxarts"), ("snap", "Named_Snaps")):
+            url = LIBRETRO + urllib.parse.quote("%s/%s/%s.png" % (system, folder, rom))
+            jobs.append((os.path.join(CACHE, "emu", "%s-%s.png" % (name, kind)), [url]))
+    return jobs
+
+
 def fetch_art(lib):
-    jobs = art_jobs(lib) + [maker_photo_job()] + details_jobs(lib)
+    jobs = art_jobs(lib) + [maker_photo_job()] + details_jobs(lib) + emu_art_jobs()
     # One job per file: two threads writing the same .part (an icon two
     # achievements share) raced on the rename.
     seen = set()

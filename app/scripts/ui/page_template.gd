@@ -308,14 +308,19 @@ func _show_hero(tex: Texture2D) -> void:
 	hero_fallback.visible = false
 
 
+## Light theme's title shade: [start, end of the strong part, gone] as fractions of the width.
+const LIGHT_SIDE := [0.0, 0.22, 0.40]
+
+
 func _restyle() -> void:
 	var bg: Color = ThemeLib.color("scrim")
 	var g := Gradient.new()
-	# Key art at full brightness: a short fade at the foot only, and a shade
-	# behind the title on the left (Light keeps its stronger wash).
+	# Key art at full colour in every theme: a short fade at the foot only, and
+	# a shade behind the title on the left (Light: a light band that's gone by
+	# LIGHT_SIDE[2] of the width, never a veil over the picture).
 	var dark := ThemeLib.is_dark()
 	g.offsets = PackedFloat32Array([0.0, 0.72, 1.0])
-	g.colors = PackedColorArray([Color(bg, 0.0), Color(bg, 0.0), Color(bg, 0.55 if dark else 0.70)])
+	g.colors = PackedColorArray([Color(bg, 0.0), Color(bg, 0.0), Color(bg, 0.55 if dark else 0.45)])
 	var t := GradientTexture2D.new()
 	t.gradient = g
 	t.width = 4
@@ -323,8 +328,8 @@ func _restyle() -> void:
 	t.fill_to = Vector2(0, 1)
 	_fade.texture = t
 	var g2 := Gradient.new()
-	g2.offsets = PackedFloat32Array([0.0, 0.30, 0.58] if dark else [0.0, 0.40, 0.75])
-	g2.colors = PackedColorArray([Color(bg, 0.86 if dark else 0.92), Color(bg, 0.55 if dark else 0.70), Color(bg, 0.0)])
+	g2.offsets = PackedFloat32Array([0.0, 0.30, 0.58] if dark else LIGHT_SIDE)
+	g2.colors = PackedColorArray([Color(bg, 0.86 if dark else 0.90), Color(bg, 0.55 if dark else 0.82), Color(bg, 0.0)])
 	var t2 := GradientTexture2D.new()
 	t2.gradient = g2
 	t2.width = 256
