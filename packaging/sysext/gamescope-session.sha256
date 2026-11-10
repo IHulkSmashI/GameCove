@@ -1,0 +1,9 @@
+# sha256 of every file build-sysext.sh takes from OpenGamingCollective/gamescope-session at commit
+# 08e65a62ed3d7acc6ae17db637091d402a55ae2a (SESSION_COMMIT), fetched with git (review M6). build-sysext.sh refuses the
+# tree when any of them differs or is missing. A new commit needs new lines: run sha256sum on these paths in a
+# checkout of that commit.
+1e7c2316846e7309a3f905f5264664024923c58ccd840ea0bb0a463cebb3e920  usr/bin/gamescope-session-plus
+eb8559174966696f345011d1c2cfc12948c4756184af427712da073197329900  usr/share/gamescope-session-plus/gamescope-session-plus
+a6e17147b8e165b3c338649d49359a4aa57447ed336779a2f37905ff72266289  usr/share/gamescope-session-plus/device-quirks
+78ed8b074111026b5e3df99b15f26cec9f3b6cf8c5a1c32aed28580a432fc1bf  usr/lib/systemd/user/gamescope-session-plus@.service
+d62fc383576f96d7771cebc2ef27b6ec9f372a96534f908f9c9cc5aed5e2a0a4  LICENSE
