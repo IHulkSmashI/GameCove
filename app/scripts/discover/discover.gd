@@ -305,6 +305,10 @@ func load_all() -> void:
 		for k in DEFAULT_SETTINGS:
 			if s.has(k):
 				_settings[k] = s[k]
+	if not (s is Dictionary and s.has("price_lookups")) and FileAccess.file_exists(_path("settings.json") + ".bad"):
+		# a settings file that couldn't be read (kept as .bad): no price lookups until the user turns them on
+		# again, never the default (review problem 4: no failing open)
+		_settings["price_lookups"] = false
 	var w = _load("wishlist.json")
 	_items = {}
 	if w is Dictionary and w.get("items") is Array:

@@ -16,6 +16,10 @@ the app itself shows under Settings > About > Network and privacy.
 | Show maker photos | Same card, and Settings > Device (`[device] maker_photo`) | On | Your handheld's picture is never requested from its maker's site; the free photo or our drawing is used. |
 | Affiliate links | Settings > Discover | On | Store links GameCove builds carry no affiliate id. None are configured today. It only changes a link's address; prices are the same and nothing is sent. |
 
+All switches are on by default. A settings file that can't be read never turns them on: the damaged copy is kept
+as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) and Look up deals and prices
+(Discover's `settings.json`) stay off until you set them again.
+
 ## Every outbound call
 
 | # | Host | What is sent | Trigger | Gated by | Code |

@@ -45,7 +45,18 @@ const NETWORK_CALLS := [
 
 
 static func background_allowed(path := PREFS_PATH) -> bool:
-	return bool(SettingsFile.load_cfg(path).get_value("privacy", "background", true))
+	return _switch(path, "background")
+
+
+## A switch's value; on by default, but off when the settings file couldn't be read (this run it's quarantined,
+## later starts find <path>.bad) until the user sets that switch again (review problem 4: no failing open).
+static func _switch(path: String, key: String) -> bool:
+	var cfg := SettingsFile.load_cfg(path)
+	if SettingsFile.blocked(path):
+		return false
+	if cfg.has_section_key("privacy", key):
+		return bool(cfg.get_value("privacy", key))
+	return not FileAccess.file_exists(SettingsFile.abs_path(path) + ".bad")
 
 
 static func set_background_allowed(on: bool, path := PREFS_PATH) -> bool:
@@ -55,10 +66,7 @@ static func set_background_allowed(on: bool, path := PREFS_PATH) -> bool:
 ## "Look up game details" ([privacy] metadata, default on): off = no Steam store details, OpenCritic or
 ## SteamGridDB requests at all, background or not.
 static func metadata_allowed(path := PREFS_PATH) -> bool:
-	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
-		return true
-	return bool(cfg.get_value("privacy", "metadata", true))
+	return _switch(path, "metadata")
 
 
 static func set_metadata_allowed(on: bool, path := PREFS_PATH) -> bool:
