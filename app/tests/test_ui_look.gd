@@ -272,3 +272,25 @@ func test_boot_splash_skipped_under_reduce_motion() -> void:
 	eq(s.mouse_filter, Control.MOUSE_FILTER_IGNORE, "never takes input")
 	s.free()
 	host.free()
+
+
+func test_tile_pills_readable_in_every_theme() -> void:
+	# Tile pills sit on their own dark chip (over art, or in Light's list rows
+	# like Discover's wishlist "In 106 days" / "Target"): readable in all themes.
+	var Badge = load("res://scripts/ui/badge.gd")
+	var chip := Color(0.02, 0.03, 0.05)
+	for id in Themes.ORDER:
+		ThemeLib.use(id)
+		for tone in ["", "good", "warn", "bad", "info", "accent", "new", "sale", "wish", "gold"]:
+			var b: PanelContainer = Badge.make({"kind": "x", "text": "In 106 days", "tone": tone}, "tile")
+			var fg: Color = b.label.get_theme_color("font_color")
+			ok(Themes.contrast(fg, chip) >= 4.5, "%s: %s tile pill readable (%.2f)" % [id, tone, Themes.contrast(fg, chip)])
+			b.free()
+	ThemeLib.use("cove")
+
+
+func test_synopsis_in_sentence_case() -> void:
+	var Texts = load("res://scripts/ui/texts.gd")
+	eq(Texts.calm_caps("THE CRITICALLY ACCLAIMED FANTASY ACTION RPG. Rise, Tarnished, and be guided by grace."),
+		"The critically acclaimed fantasy action RPG. Rise, Tarnished, and be guided by grace.", "a shouted sentence calmed, acronyms kept")
+	eq(Texts.calm_caps("A lighthouse keeper rows out. NASA helps."), "A lighthouse keeper rows out. NASA helps.", "mixed case and short words untouched")

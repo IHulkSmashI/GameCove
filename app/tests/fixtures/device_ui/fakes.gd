@@ -112,7 +112,7 @@ class FakeUpdates extends Node:
 static func claw_info() -> Dictionary:
 	return {
 		"device": {"id": "msi-claw-8-ex", "name": "MSI Claw 8 EX AI+", "maker": "MSI", "model": "Claw 8 EX AI+ A2VM",
-			"board": "MS-1T81", "vendor": "Micro-Star International Co., Ltd.", "family": "Claw", "bios_version": "E1T81IMS.10C",
+			"board": "MS-1T91", "vendor": "Micro-Star International Co., Ltd.", "family": "Claw", "bios_version": "E1T91IMS.10E",
 			"bios_date": "09/12/2026", "serial": "hidden", "picture": DeviceScript.picture_for("msi-claw-8-ex")},
 		"chip": {"cpu": "Intel Core Ultra X7 358H", "cores": 16, "threads": 16, "gpu": "Arc B390", "gpu_arch": "Xe3",
 			"gpu_driver": "xe", "gpu_pci_id": "8086:B080", "mesa": "Mesa 26.0.2", "kernel": "6.19.4-ba01.fc44.x86_64", "vulkan_driver": "anv"},

@@ -101,8 +101,8 @@ func _paint() -> void:
 
 
 ## Where the mask ends in cut mode (px from the top), or -1: the foot of the
-## lowest card that's whole in view, plus room for its focus ring, when some
-## card is cut by the bottom edge.
+## lowest card that's whole in view, plus room for its focus ring, when only
+## a sliver of the next card shows at the bottom edge (else the plain fade).
 func cut_at() -> float:
 	if not cut_fn.is_valid() or not is_inside_tree():
 		return -1.0
@@ -115,10 +115,14 @@ func cut_at() -> float:
 		var r: Rect2 = c.get_global_rect()
 		var top := r.position.y - global_position.y
 		var bot := r.end.y - global_position.y
-		if bot <= h + 0.5:
+		if bot <= h + 0.5 and top >= -0.5:
 			if bot > best:
 				best = bot
-		elif top < h:
+		elif top < h and bot > h:
+			# Only a sliver is hidden; a card you're reading (a big part of
+			# the view, or one with focus) is left to the fade instead.
+			if h - top > minf(160.0, h * 0.35) or c.has_focus():
+				return -1.0
 			cut_one = true
 	if not cut_one or best <= 0.0:
 		return -1.0

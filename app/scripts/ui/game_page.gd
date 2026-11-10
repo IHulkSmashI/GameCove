@@ -131,7 +131,8 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 func _fill_about(about: VBoxContainer, g: Dictionary, info: Dictionary) -> void:
 	var summary := str(info.get("summary", g.get("summary", ""))).strip_edges()
 	if summary != "" and summary != "<null>":
-		var syn := Kit.label(summary, "QuietLabel", true)
+		# Sentence case, body text: some store synopses open in ALL CAPS.
+		var syn := Kit.label(Texts.calm_caps(summary), "QuietLabel", true)
 		syn.name = "Synopsis"
 		syn.max_lines_visible = 3
 		syn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS

@@ -376,3 +376,37 @@ static func playtime_text(minutes: int) -> String:
 	if minutes < 60:
 		return "%d min played" % minutes
 	return "%s played" % format_hours(minutes / 60.0)
+
+
+## Words kept in capitals when a shouted sentence is calmed down.
+const ACRONYMS := ["RPG", "JRPG", "ARPG", "CRPG", "MMO", "MMORPG", "FPS", "TPS", "RTS", "MOBA", "NPC", "NPCS", "PVP", "PVE",
+	"VR", "AI", "UI", "HD", "DLC", "CCG", "TCG", "USA", "UK", "EU", "II", "III", "IV", "VI", "VII", "VIII", "IX", "XI", "XII",
+	"2D", "3D", "4K", "8K", "GOTY", "4X", "OST"]
+
+
+## A store synopsis in sentence case: a sentence written in ALL CAPS (Steam's
+## short descriptions often open with one, "THE CRITICALLY ACCLAIMED FANTASY
+## ACTION RPG.") is lowered, its first letter and known acronyms kept. Mixed-
+## case sentences stay exactly as written.
+static func calm_caps(text: String) -> String:
+	var re := RegEx.create_from_string("[^.!?]+[.!?]*\\s*")
+	var out := ""
+	for m in re.search_all(text):
+		var part: String = m.get_string()
+		var letters := RegEx.create_from_string("[A-Za-z]").search_all(part).size()
+		if letters >= 6 and part == part.to_upper() and part != part.to_lower():
+			var words := part.to_lower().split(" ")
+			var first := true
+			for i in words.size():
+				var w: String = words[i]
+				var core := w.strip_edges().rstrip(".,!?:;)").lstrip("(")
+				if core.to_upper() in ACRONYMS:
+					words[i] = w.replace(core, core.to_upper())
+				elif first and core != "":
+					var at := w.find(core.left(1))
+					words[i] = w.left(at) + w.substr(at, 1).to_upper() + w.substr(at + 1)
+				if core != "":
+					first = false
+			part = " ".join(words)
+		out += part
+	return out if out != "" else text
