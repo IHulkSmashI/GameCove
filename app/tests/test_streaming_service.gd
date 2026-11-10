@@ -177,7 +177,7 @@ func test_apps_fallback_to_moonlight_list_and_denied() -> void:
 	answers = {"192.168.1.20:47989/serverinfo": "serverinfo_vibepollo_http.xml",
 		"192.168.1.20:47984/serverinfo": "serverinfo_vibepollo_https.xml"}
 	var s := _make(true, true)
-	runner.responses["/usr/bin/flatpak run --branch=stable com.moonlight_stream.Moonlight list 192.168.1.20 --csv"] = {"code": 0, "file": _f("moonlight_list_csv.txt")}
+	runner.responses["/usr/bin/flatpak run --branch=stable com.moonlight_stream.Moonlight list --csv -- 192.168.1.20"] = {"code": 0, "file": _f("moonlight_list_csv.txt")}
 	s.refresh()
 	var h: Dictionary = s.host(UUID)
 	eq(h["apps_state"], "ready", "moonlight list used when curl applist fails")
@@ -187,7 +187,7 @@ func test_apps_fallback_to_moonlight_list_and_denied() -> void:
 	eq(s.host(UUID)["apps_state"], "denied", "Vibepollo permission placeholder")
 	answers["192.168.1.20:47984/applist"] = _fx(0, FileAccess.get_file_as_string(_f("applist_unauthorized.xml")), 401)
 	runner.responses.clear()
-	runner.responses["/usr/bin/flatpak run --branch=stable com.moonlight_stream.Moonlight list 192.168.1.20 --csv"] = {"code": 255, "out": "Computer GAMING-PC has not been paired. Please open Moonlight to pair before retrieving games list."}
+	runner.responses["/usr/bin/flatpak run --branch=stable com.moonlight_stream.Moonlight list --csv -- 192.168.1.20"] = {"code": 255, "out": "Computer GAMING-PC has not been paired. Please open Moonlight to pair before retrieving games list."}
 	s.load_apps(UUID)
 	eq(s.host(UUID)["paired"], false, "PC forgot us: unpaired")
 	after_each(s)
