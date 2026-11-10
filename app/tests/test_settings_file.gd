@@ -193,3 +193,108 @@ func test_steam_dev_cfg_and_session_question_written_atomically() -> void:
 	eq(FileAccess.get_file_as_string(t2), "{}", "the question file replaced, not written in place")
 	eq(Guard.pending().get("id"), "display.x", "and readable")
 	Guard.path = old_path
+
+
+## Review 2, problem 2: on a full disk a small save returned OK and left a 0-byte
+## file (seen on a 64 KiB tmpfs). A short write must keep the old file.
+func test_short_write_keeps_the_old_file() -> void:
+	var d := _dir("short")
+	var p := d + "/power.cfg"
+	_write(p, "[device]\ncharge_limit=80\n")
+	SettingsFile.test_write_limit = 0
+	var cfg := ConfigFile.new()
+	cfg.set_value("device", "charge_limit", 60)
+	ok(SettingsFile.save_cfg(cfg, p) != OK, "a short write is an error, not OK")
+	SettingsFile.test_write_limit = 5
+	ok(SettingsFile.save_cfg(cfg, p) != OK, "a partial write is an error too")
+	SettingsFile.test_write_limit = -1
+	eq(FileAccess.get_file_as_string(p), "[device]\ncharge_limit=80\n", "the old file is untouched")
+	ok(not FileAccess.file_exists(p + ".tmp"), "no temp file left")
+	eq(SettingsFile.save_cfg(cfg, p), OK, "saves again once there is room")
+
+
+## The hand-rolled writers review 2 listed go through the same checked path.
+func test_hand_rolled_writers_keep_the_old_file_on_a_short_write() -> void:
+	var d := _dir("writers")
+	var Health := preload("res://scripts/system/session_health.gd")
+	var Overrides := preload("res://scripts/library/art/art_overrides.gd")
+	var LaunchFiles := preload("res://scripts/controls/perf/launch_files.gd")
+	var SessionEnv := preload("res://scripts/controls/display/session_env.gd")
+	var StoreCommands := preload("res://scripts/library/manage/store_commands.gd")
+	var VdfWriter := preload("res://scripts/steam/vdf_writer.gd")
+	var hb := d + "/heartbeat"
+	var h: Node = Health.new(hb)
+	var ctx := {"home": d}
+	var vdf := d + "/localconfig.vdf"
+	var steps := {
+		"heartbeat": [hb, func(): return h.beat()],
+		"art overrides": [Overrides.index_path(d + "/art"), func(): return Overrides.write(d + "/art", {"x": {"cover": "y"}})],
+		"perf env": [LaunchFiles.perf_env_path(d, "1"), func(): return LaunchFiles.write_env(d, "1", {"DXVK_HUD": "fps"})],
+		"session env": [SessionEnv.path(ctx), func(): return SessionEnv.set_values(ctx, {"ORIENTATION": "left"})],
+		"gog record": [d + StoreCommands.GOG_RECORD, func(): return StoreCommands.write_gog_record(d, [{"appName": "1"}]) == OK],
+		"vdf": [vdf, func(): return VdfWriter.save(vdf, {"a": {"b": "c"}}) == OK],
+	}
+	for name in steps:
+		var p: String = steps[name][0]
+		var fn: Callable = steps[name][1]
+		ok(fn.call(), "%s: writes normally" % name)
+		var before := FileAccess.get_file_as_bytes(p)
+		ok(before.size() > 0, "%s: wrote something" % name)
+		SettingsFile.test_write_limit = 0
+		ok(not fn.call(), "%s: a short write reports failure" % name)
+		SettingsFile.test_write_limit = -1
+		eq(FileAccess.get_file_as_bytes(p), before, "%s: the old file is kept" % name)
+	h.free()
+
+
+## Review 2, low 23: a second damaged file overwrote the first .bad copy.
+func test_second_damaged_file_keeps_the_first_copy() -> void:
+	var d := _dir("bad2")
+	var p := d + "/x.json"
+	_write(p, "{first")
+	SettingsFile.load_json(p)
+	SettingsFile.reset_for_tests()
+	_write(p, "{second")
+	SettingsFile.load_json(p)
+	eq(FileAccess.get_file_as_string(p + ".bad"), "{first", "the first copy kept")
+	eq(FileAccess.get_file_as_string(p + ".bad.1"), "{second", "the second beside it")
+
+
+## Review 2, low 23: the Steam grid manifest and the OpenCritic quota were written in place.
+func test_grid_manifest_and_quota_are_written_atomically() -> void:
+	var d := _dir("grid_quota")
+	var Grid := preload("res://scripts/library/art/steam_grid.gd")
+	var Resolver := preload("res://scripts/library/meta/resolver.gd")
+	ok(Grid._save_manifest(d, {"400p": {"had": ["400p.png"]}}), "manifest saved")
+	var q := d.path_join("opencritic_quota.json")
+	ok(Resolver._write(q, {"day": "2026-11-10", "searches": 1}), "quota saved")
+	var before_m := FileAccess.get_file_as_string(d.path_join("manifest.json"))
+	var before_q := FileAccess.get_file_as_string(q)
+	SettingsFile.test_write_limit = 0
+	ok(not Grid._save_manifest(d, {}), "a short manifest write fails")
+	ok(not Resolver._write(q, {"day": "2026-11-11"}), "a short quota write fails")
+	SettingsFile.test_write_limit = -1
+	eq(FileAccess.get_file_as_string(d.path_join("manifest.json")), before_m, "manifest kept")
+	eq(FileAccess.get_file_as_string(q), before_q, "quota kept")
+
+
+## Review 2, low 18: achievement rarity and maker photos still read as on after a damaged file.
+func test_damaged_settings_turn_rarity_and_photos_off() -> void:
+	var d := _dir("privacy2")
+	var p := d.path_join("settings.cfg")
+	var Photo := preload("res://scripts/device/photo.gd")
+	var Perf := preload("res://scripts/ui/settings/performance_page.gd")
+	ok(Photo.load_maker_enabled(p) and Photo.load_enabled(p), "no file: on")
+	_write(p, "[device\nmaker_photo=tru")
+	expect_error("ConfigFile parse error")
+	ok(not Photo.load_maker_enabled(p), "damaged: maker photos off")
+	ok(not Photo.load_enabled(p), "damaged: real photo off")
+	SettingsFile.reset_for_tests()
+	var holder := RarityHolder.new()
+	Perf.restore_rarity(holder, p)
+	ok(not holder.fetch_rarity, "next start: rarity off")
+	ok(not Photo.load_maker_enabled(p), "maker photos still off")
+
+
+class RarityHolder extends RefCounted:
+	var fetch_rarity := true

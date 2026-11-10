@@ -26,7 +26,7 @@ const DEFAULT_MAX_BYTES := 256 * 1024 * 1024
 const MAX_FILE_BYTES := 8 * 1024 * 1024
 ## The only hosts art is downloaded from (review M22, problem 4): Steam's CDN, IGDB's image CDN (the calendar)
 ## and SteamGridDB's CDN. A URL from upcoming.json.gz or a store answer naming anything else is skipped.
-const IMAGE_HOSTS := ["steamstatic.com", "akamaihd.net", "images.igdb.com", "steamgriddb.com"]
+const IMAGE_HOSTS := ["steamstatic.com", "steamcdn-a.akamaihd.net", "images.igdb.com", "steamgriddb.com"]
 
 ## http.gd node or fake_http.gd object (made in _ready unless tests set one).
 var http: Variant = null
@@ -35,6 +35,10 @@ var max_bytes := DEFAULT_MAX_BYTES
 ## The user's SteamGridDB key; "" = read it from Discover's settings.
 var api_key := ""
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
+## Where the privacy switches live; tests point it at a temp file.
+var privacy_path: String = preload("res://scripts/system/privacy.gd").PREFS_PATH
+## Returns Discover's settings ({"steamgriddb_key": ...}); unset = the /root/Discover node.
+var settings_source := Callable()
 
 var _known := {}      # key -> {kind: url}
 var _index := {}      # file name -> {"size": int, "used": int}
@@ -44,6 +48,8 @@ var _index_loaded := false
 
 
 func _ready() -> void:
+	if preload("res://scripts/system/run_mode.gd").helper():
+		return   # --restore-baseline: no services (review 2, problem 5)
 	var main_script = get_tree().get_script()
 	if main_script != null and str(main_script.resource_path).begins_with("res://tests/"):
 		return
@@ -142,15 +148,20 @@ func candidates(key: String, kind: String, hints: Dictionary) -> Array:
 	return out
 
 
+## The SteamGridDB key to send, or "" when there is none or "Look up game details"
+## is off (review 2, problem 3: the user's raw key was sent with the switch off).
 func _key() -> String:
+	if not preload("res://scripts/system/privacy.gd").metadata_allowed(privacy_path):
+		return ""
 	if api_key != "":
 		return api_key
 	var user := ""
-	var d := get_node_or_null("/root/Discover") if is_inside_tree() else null
-	if d != null and d.has_method("get_settings"):
-		user = str(d.get_settings().get("steamgriddb_key", ""))
-	if not is_inside_tree() or not preload("res://scripts/system/privacy.gd").metadata_allowed():
-		return user
+	if settings_source.is_valid():
+		user = str(settings_source.call().get("steamgriddb_key", ""))
+	elif is_inside_tree():
+		var d := get_node_or_null("/root/Discover")
+		if d != null and d.has_method("get_settings"):
+			user = str(d.get_settings().get("steamgriddb_key", ""))
 	return preload("res://scripts/library/art/sgdb.gd").key(user)
 
 

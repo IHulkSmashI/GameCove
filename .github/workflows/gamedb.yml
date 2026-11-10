@@ -1,22 +1,35 @@
 name: Nightly game database
 
+# Two jobs (review problem 2 pattern, as firmware.yml; review 2, problem 10): "build" runs the tests and the
+# scrapers (third-party sites, pip packages) with a read-only token and hands dist/ over as an artifact; only
+# "publish", which runs nothing but gh and a standard-library check of the files, can write the release.
+
 on:
   schedule:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
+
+concurrency:
+  group: gamedb
+  cancel-in-progress: false
 
 jobs:
   build:
+    # the rolling release is built from main only
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 100
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: gamedb
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
@@ -24,7 +37,8 @@ jobs:
       - run: python -m pytest -q
       - name: Build
         # Each source falls back to last night's published data if it fails, so this
-        # only fails when there is nothing at all to publish (the old file then stays).
+        # only fails when there is nothing at all to publish (the old file then stays),
+        # or when the file would unpack past the app's cap (gamedb.gd MAX_UNPACKED).
         # +15 min for game details: about 10 min of Steam store appdetails (a slice of
         # the popular games each night, at Steam's ~200 requests / 5 min) and IGDB
         # details. OpenCritic is deliberately not fetched here (its data may not be
@@ -46,14 +60,55 @@ jobs:
           TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
         run: python -m gamedb.upcoming --out dist/upcoming.json.gz --max-minutes 12
+      - name: Hand over the files (with the notice that goes on the release)
+        run: cp NOTICE.md dist/NOTICE.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gamedb-dist
+          path: gamedb/dist/
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write   # the rolling "gamedb" release
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: gamedb-dist
+          path: dist
+      - name: Check the files (Python's standard library only)
+        run: |
+          python3 -I - dist <<'PY'
+          import gzip, json, os, sys
+          d = sys.argv[1]
+          allowed = {"gamedb.json.gz", "upcoming.json.gz", "NOTICE.md"}
+          names = set(os.listdir(d))
+          assert names <= allowed and {"gamedb.json.gz", "NOTICE.md"} <= names, sorted(names)
+          for n in names:
+              p = os.path.join(d, n)
+              assert os.path.isfile(p) and not os.path.islink(p), n
+          for n in names - {"NOTICE.md"}:
+              with gzip.open(os.path.join(d, n)) as f:
+                  raw = f.read(256 * 1024 * 1024 + 1)
+              assert len(raw) <= 256 * 1024 * 1024, n + ": too large"
+              doc = json.loads(raw)
+              assert isinstance(doc, dict), n
+          g = json.loads(gzip.open(os.path.join(d, "gamedb.json.gz")).read())
+          assert isinstance(g.get("games"), list) and g["games"], "gamedb.json.gz has no games"
+          PY
       - name: Publish to the rolling "gamedb" release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           # the notes and NOTICE.md carry IGDB's, ProtonDB's, Steam's and Metacritic's attribution (review M24); refreshed every run
-          gh release view gamedb >/dev/null 2>&1 || gh release create gamedb --title "Game database" --notes-file NOTICE.md --latest=false
-          gh release edit gamedb --notes-file NOTICE.md
-          gh release upload gamedb NOTICE.md --clobber
+          gh release view gamedb >/dev/null 2>&1 || gh release create gamedb --title "Game database" --notes-file dist/NOTICE.md --latest=false
+          gh release edit gamedb --notes-file dist/NOTICE.md
+          gh release upload gamedb dist/NOTICE.md --clobber
           gh release upload gamedb dist/gamedb.json.gz --clobber
           if [ -s dist/upcoming.json.gz ]; then
             gh release upload gamedb dist/upcoming.json.gz --clobber

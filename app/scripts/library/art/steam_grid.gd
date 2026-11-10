@@ -52,12 +52,8 @@ static func read_manifest(backup_dir: String) -> Dictionary:
 
 static func _save_manifest(backup_dir: String, m: Dictionary) -> bool:
 	DirAccess.make_dir_recursive_absolute(backup_dir)
-	var f := FileAccess.open(_manifest_path(backup_dir), FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(JSON.stringify(m, "\t"))
-	f.close()
-	return true
+	# atomic: a torn manifest would forget which originals to put back (review 2, low 23)
+	return preload("res://scripts/system/settings_file.gd").save_json(_manifest_path(backup_dir), m, "\t") == OK
 
 
 ## Files in `grid` that are this base name with any image extension.
@@ -171,6 +167,40 @@ static func reset(grid: String, backup_dir: String, entry: String) -> bool:
 	return ok
 
 
-## Where the backups for one grid folder live: <backup_root>/<account id>.
+## Where the backups for one grid folder live: <backup_root>/<account id>-<hash of the
+## grid folder's resolved path>. Native and Flatpak Steam can share an account id, so
+## the id alone made the two folders share (and overwrite) one backup (review 2,
+## problem 9). A backup from before, keyed by the id alone, is taken over by the
+## first folder that asks for it.
 static func backup_dir_for(backup_root: String, grid: String) -> String:
-	return backup_root.path_join(grid.get_base_dir().get_base_dir().get_file())
+	var id := grid.get_base_dir().get_base_dir().get_file()
+	var dir := backup_root.path_join("%s-%s" % [id, resolve(grid).sha256_text().substr(0, 12)])
+	var legacy := backup_root.path_join(id)
+	if not DirAccess.dir_exists_absolute(dir) and FileAccess.file_exists(_manifest_path(legacy)):
+		DirAccess.rename_absolute(legacy, dir)
+	return dir
+
+
+## `path` with every symlink in it followed (~/.steam/steam -> ~/.local/share/Steam),
+## so one folder reached two ways gets one backup.
+static func resolve(path: String) -> String:
+	var parts := path.simplify_path().split("/", false)
+	var out := ""
+	var hops := 0
+	var i := 0
+	while i < parts.size():
+		var parent := out if out != "" else "/"
+		var name := parts[i]
+		var da := DirAccess.open(parent)
+		if da != null and da.is_link(name) and hops < 40:
+			hops += 1
+			var target := da.read_link(name)
+			var rest := parts.slice(i + 1)
+			var base := target if target.begins_with("/") else parent.path_join(target)
+			parts = PackedStringArray(base.simplify_path().split("/", false)) + rest
+			out = ""
+			i = 0
+			continue
+		out += "/" + name
+		i += 1
+	return out if out != "" else "/"

@@ -237,6 +237,8 @@ var _thread: Thread
 ## Called on the main thread with each parsed line (Dictionary), and with
 ## {"kind": "exited"} when the monitor stops.
 var on_line: Callable
+## Tests: how the monitor is stopped.
+var kill_fn: Callable = func(pid: int) -> void: OS.kill(pid)
 
 
 ## True while the monitor process is alive (review M11: not just "was started": a gdbus that
@@ -263,8 +265,12 @@ func start_monitor(program := MONITOR_PROGRAM, args: Array = MONITOR_ARGS) -> bo
 
 
 func stop_monitor() -> void:
-	if _pid > 0:
-		OS.kill(_pid)
+	# only a monitor that is still ours and alive: once it exited and was reaped
+	# (is_process_running reaps it), its pid may already belong to another process
+	# (review 2, low 23). Until we reap it, an exited child stays a zombie, so the pid
+	# can't be reused between this check and the kill.
+	if _pid > 0 and OS.is_process_running(_pid):
+		kill_fn.call(_pid)
 	if _thread != null:
 		_thread.wait_to_finish()
 		_thread = null

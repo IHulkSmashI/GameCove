@@ -157,6 +157,40 @@ func test_resolver_fetches_caches_and_merges() -> void:
 	wipe(dir)
 
 
+## Review 2, low 23: the background queue kept draining after "Background lookups" went off.
+func test_background_queue_stops_with_the_switch() -> void:
+	var dir := tmp("bgoff")
+	var prefs := dir.path_join("settings.cfg")
+	var http := FakeHttp.new()
+	http.route(STEAM, {"file": fx("appdetails_1145360.json")})
+	var r := _resolver(http, dir, prefs)
+	r.sync_mode = false   # not in the tree: nothing runs until _next()
+	eq(r.queue_games([_game("gog", "1", "1145360"), _game("gog", "2", "1145361")]), 2, "queued")
+	Privacy.set_background_allowed(false, prefs)
+	r._next()
+	eq(http.requests, [], "nothing asked after the switch went off")
+	eq(r.pending(), 0, "the background queue is dropped")
+	eq(r.request(_game("gog", "3", "1145360")), 1, "a page the user opens still asks")
+	r.free()
+	wipe(dir)
+
+
+## Review 2, low 11: a captive portal's HTTP 200 page was cached as "no such app" for a week.
+func test_junk_200_is_not_cached_as_missing() -> void:
+	var dir := tmp("junk")
+	var prefs := dir.path_join("settings.cfg")
+	var http := FakeHttp.new()
+	http.route(STEAM, {"text": "<html>Sign in to the hotel Wi-Fi</html>"})
+	var r := _resolver(http, dir, prefs)
+	r.queue_games([_game("gog", "1", "1145360")])
+	ok(not FileAccess.file_exists(Resolver.steam_cache_path(dir, "1145360")), "nothing cached")
+	eq(r.jobs_for(_game("gog", "1", "1145360")).size(), 1, "asked again next time")
+	ok(Metadata.steam_says_missing("9", '{"9":{"success":false}}'.to_utf8_buffer()), "Steam's own no-such-app answer")
+	ok(not Metadata.steam_says_missing("9", "<html>".to_utf8_buffer()), "not a portal page")
+	r.free()
+	wipe(dir)
+
+
 func test_resolver_privacy_gates() -> void:
 	var dir := tmp("gate")
 	var prefs := dir.path_join("settings.cfg")
@@ -200,5 +234,22 @@ func test_resolver_opencritic_with_own_key_and_quota() -> void:
 	var before := http.requests.size()
 	r.request(_game("epic", "y", "", "Third Game"))
 	eq(http.requests.size(), before, "no more requests today")
+	r.free()
+	wipe(dir)
+
+
+func test_resolver_waits_behind_a_game_except_for_what_you_ask() -> void:
+	var dir := tmp("paused")
+	var prefs := dir.path_join("settings.cfg")
+	var http := FakeHttp.new()
+	http.route(STEAM, {"file": fx("appdetails_1145360.json")})
+	var r := _resolver(http, dir, prefs)
+	r.set_paused(true)
+	eq(r.queue_games([_game("gog", "1207664663", "1145360")]), 1, "queued behind a game")
+	eq(http.requests.size(), 0, "nothing fetched while a game runs")
+	eq(r.request(_game("steam", "620", "", "Portal 2")), 1, "a page you open")
+	eq(http.requests, [Resolver.STEAM_URL + "620"], "what you asked for still runs; the background fill waits")
+	r.set_paused(false)
+	eq(http.requests.size(), 2, "the game ended: the background fill goes on")
 	r.free()
 	wipe(dir)

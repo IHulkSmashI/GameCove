@@ -182,7 +182,8 @@ launch_app() {
 }
 
 # version_lt <a> <b>: tag a (vX.Y.Z[-pre]) is older than b; numeric parts first, then a pre-release is older than
-# the same version without one, pre-release labels compared as text. Anything unparsable is never "older".
+# the same version without one, pre-release labels compared the SemVer way: dot-separated, numbers as numbers
+# (rc.9 < rc.10; review 2, low 20), a number before a word, fewer parts first. Anything unparsable is never "older".
 version_lt() {
 	awk -v a="${1#v}" -v b="${2#v}" 'BEGIN {
 		pa = index(a, "-"); pb = index(b, "-")
@@ -198,7 +199,21 @@ version_lt() {
 		}
 		if (ra != "" && rb == "") exit 0
 		if (ra == "" || rb == "") exit 1
-		exit !(ra < rb)
+		ma = split(ra, p, "."); mb = split(rb, q, ".")
+		m = ma < mb ? ma : mb
+		for (i = 1; i <= m; i++) {
+			da = p[i] ~ /^[0-9]+$/; db = q[i] ~ /^[0-9]+$/
+			if (da && db) {
+				if ((p[i] + 0) < (q[i] + 0)) exit 0
+				if ((p[i] + 0) > (q[i] + 0)) exit 1
+			} else if (da != db) {
+				exit !da
+			} else {
+				if (p[i] < q[i]) exit 0
+				if (p[i] > q[i]) exit 1
+			}
+		}
+		exit !(ma < mb)
 	}'
 }
 

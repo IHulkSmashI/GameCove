@@ -19,8 +19,9 @@
 #    stays up GAMECOVE_HEALTHY_S (10 min), clears the count. If the count can't
 #    be saved (full or read-only home), it switches away at once. The reason is
 #    left in crash-fallback; GameCove shows it at its next start.
-# 4. Hang check (review H1): a GameCove that never gets going (no ready file nor
-#    heartbeat after GAMECOVE_READY_TIMEOUT_S, 60 s), or whose heartbeat file
+# 4. Hang check (review H1): a GameCove that never gets going (no first heartbeat,
+#    or no ready file when no heartbeat is expected, after GAMECOVE_READY_TIMEOUT_S,
+#    60 s), or whose heartbeat file
 #    ($XDG_RUNTIME_DIR/gamecove-heartbeat, rewritten every 5 s from the app's main
 #    loop) stops changing for GAMECOVE_HEARTBEAT_STALE_S (30 s) while it says "ui",
 #    is killed and counted as an unclean exit. While a game runs the app says
@@ -149,35 +150,55 @@ reset_input_intercept() {
 READY="${XDG_RUNTIME_DIR:-/nonexistent}/gamecove-steam-ready"
 rm -f "$READY" 2>/dev/null
 HEARTBEAT=""
+OWN_RUNDIR=""
 if [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ]; then
 	HEARTBEAT="$XDG_RUNTIME_DIR/gamecove-heartbeat"
+else
+	# no $XDG_RUNTIME_DIR: the heartbeat goes to a private temp folder instead, so a healthy
+	# app isn't killed as "not ready" after a minute (review 2, low 21)
+	OWN_RUNDIR="$(mktemp -d "${TMPDIR:-/tmp}/gamecove-run.XXXXXX" 2>/dev/null)" || OWN_RUNDIR=""
+	[ -z "$OWN_RUNDIR" ] || HEARTBEAT="$OWN_RUNDIR/gamecove-heartbeat"
+fi
+if [ -n "$HEARTBEAT" ]; then
 	rm -f "$HEARTBEAT" 2>/dev/null
 	export GAMECOVE_HEARTBEAT="$HEARTBEAT"
 fi
-started_at="$(date +%s)"
+# seconds since boot: a wall-clock step (NTP at boot, a time-zone fix) mustn't make a short
+# run look healthy (review 2, low 19)
+uptime_s() {
+	u=0
+	{ read -r u _ </proc/uptime; } 2>/dev/null || u=0
+	echo "${u%%.*}"
+}
+started_at="$(uptime_s)"
 "$GAMECOVE_BIN" --display-driver x11 --rendering-driver opengl3 --fullscreen "$@" &
 app=$!
+# set before the Steam wait: a session switch or logout during it must stop the app too, not
+# leave it running without us (review 2, low 21)
+stopping=0
+trap 'stopping=1; kill -TERM "$app" 2>/dev/null' TERM INT HUP
 waited=0
 if steam_running || [ ! -d "${XDG_RUNTIME_DIR:-/nonexistent}" ]; then
 	start_steam
 else
 	waited=0
 	limit=$(( ${GAMECOVE_STEAM_WAIT_S:-10} * 5 ))
-	while [ ! -e "$READY" ] && [ "$waited" -lt "$limit" ] && kill -0 "$app" 2>/dev/null; do
+	while [ ! -e "$READY" ] && [ "$waited" -lt "$limit" ] && [ "$stopping" -eq 0 ] && kill -0 "$app" 2>/dev/null; do
 		sleep 0.2
 		waited=$((waited + 1))
 	done
-	start_steam
+	[ "$stopping" -eq 1 ] || start_steam
 fi
-stopping=0
-trap 'stopping=1; kill -TERM "$app" 2>/dev/null' TERM INT HUP
 # Watch the app once a second (counted from its start, the Steam wait included):
-#  - not ready (no ready file, no heartbeat) after READY_TIMEOUT_S: hung at start;
+#  - not ready after READY_TIMEOUT_S: hung at start (ready = the first heartbeat, or
+#    the ready file only when no heartbeat is expected);
 #  - heartbeat unchanged for HEARTBEAT_STALE_S while it says "ui": hung (an app
 #    without a heartbeat is only checked for readiness);
-#  - up HEALTHY_S with a live heartbeat (or none expected): clears the count.
+#  - ready and up HEALTHY_S with a live heartbeat (or none expected): clears the count.
 up=$((waited / 5))
 ready=0
+# neither a heartbeat nor a ready file can appear: readiness can't be checked
+[ -n "$HEARTBEAT" ] || [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] || ready=1
 beat=""
 stale=0
 hung=""
@@ -198,7 +219,9 @@ while kill -0 "$app" 2>/dev/null; do
 		if [ "$stale" -ge "$HEARTBEAT_STALE_S" ]; then
 			hung="no heartbeat for ${stale}s"
 		fi
-	elif [ -e "$READY" ]; then
+	elif [ -z "$HEARTBEAT" ] && [ -e "$READY" ]; then
+		# the ready file is written early (Library autoload): with a heartbeat expected,
+		# only the first beat (end of main.gd's _ready) says the UI really came up (review 2, problem 4)
 		ready=1
 	fi
 	if [ "$ready" -eq 0 ] && [ "$up" -ge "$READY_TIMEOUT_S" ]; then
@@ -209,7 +232,7 @@ while kill -0 "$app" 2>/dev/null; do
 		kill -KILL "$app" 2>/dev/null
 		break
 	fi
-	if [ "$healthy" -eq 0 ] && [ "$up" -ge "$HEALTHY_S" ] && [ "$stale" -lt 10 ]; then
+	if [ "$healthy" -eq 0 ] && [ "$ready" -eq 1 ] && [ "$up" -ge "$HEALTHY_S" ] && [ "$stale" -lt 10 ]; then
 		healthy=1
 		clear_crashes
 	fi
@@ -218,11 +241,12 @@ code=0
 wait "$app" || code=$?
 # The loop can miss the healthy mark (a slow Steam start, a loaded machine), so
 # judge the whole run by the clock too: a crash after a healthy run counts as 1.
-ran=$(( $(date +%s) - started_at ))
-if [ -z "$hung" ] && [ "$ran" -ge "$HEALTHY_S" ] && [ "$stale" -lt 10 ]; then
+ran=$(( $(uptime_s) - started_at ))
+if [ -z "$hung" ] && [ "$ready" -eq 1 ] && [ "$ran" -ge "$HEALTHY_S" ] && [ "$stale" -lt 10 ]; then
 	clear_crashes
 fi
-rm -f "$HEARTBEAT" 2>/dev/null
+[ -z "$HEARTBEAT" ] || rm -f "$HEARTBEAT" "$HEARTBEAT.tmp" 2>/dev/null
+[ -z "$OWN_RUNDIR" ] || rm -rf "$OWN_RUNDIR" 2>/dev/null
 reset_input_intercept
 if [ -n "$hung" ]; then
 	record_crash hung

@@ -182,7 +182,9 @@ func test_broken_steam_files_are_never_written() -> void:
 	f.store_string(ctext + "\n\"extra\" { \"x\" \"1\" ")
 	f.close()
 	eq(SteamConfig.set_compat_tool(home, root, "620", "proton_9", no_proc), ERR_PARSE_ERROR, "trailing garbage refused")
-	eq(VdfWriter.save(path, {"a": {"b": "1"}}), OK, "a sane tree saves")
+	eq(VdfWriter.save(path, {"a": {"b": "1"}}), ERR_FILE_UNRECOGNIZED, "a file we can't put back byte for byte is never replaced")
+	eq(FileAccess.get_file_as_string(path), cut, "still left exactly as it was")
+	eq(VdfWriter.save(home.path_join("new.vdf"), {"a": {"b": "1"}}), OK, "a sane tree saves to a new file")
 	TempTree.remove_tree(home)
 
 
@@ -200,4 +202,50 @@ func test_backend_async_reads() -> void:
 	b.compat_tools_async(func(v): got.append(["tools", v.size() >= 1 and v[0]["id"] == ""]))
 	eq(got, [["lo", "PROTON_LOG=1 \"%command%\" -novid"], ["ct", "GE-Proton10-25"], ["tools", true]], "values reach the callback")
 	b.free()
+	TempTree.remove_tree(home)
+
+
+## Review 2, problem 7: escape() halved Steam's doubled backslashes, so changing one
+## game's launch options rewrote every other game's Windows path ("C:\\prog\\x" came
+## back as "C:\prog\x"). Untouched keys and values are written back byte for byte.
+func test_untouched_values_are_written_back_verbatim() -> void:
+	var home := TempTree.temp_dir("steam_verbatim")
+	var user := home.path_join("userdata/1")
+	DirAccess.make_dir_recursive_absolute(user.path_join("config"))
+	var path := SteamConfig.localconfig_path(user)
+	var lines := [
+		"\"UserLocalConfigStore\"", "{", "\t\"Software\"", "\t{", "\t\t\"Valve\"", "\t\t{", "\t\t\t\"Steam\"", "\t\t\t{",
+		"\t\t\t\t\"apps\"", "\t\t\t\t{",
+		"\t\t\t\t\t\"620\"", "\t\t\t\t\t{",
+		"\t\t\t\t\t\t\"LaunchOptions\"\t\t\"\\\"C:\\\\Program Files\\\\x.exe\\\" %command%\"",
+		"\t\t\t\t\t\t\"Note\"\t\t\"tab\\there\\nnew \\\"q\\\" odd\\p\"",
+		"\t\t\t\t\t}",
+		"\t\t\t\t\t\"440\"", "\t\t\t\t\t{", "\t\t\t\t\t\t\"LaunchOptions\"\t\t\"WINEPATH=C:\\\\prog\\\\x %command%\"", "\t\t\t\t\t}",
+		"\t\t\t\t}", "\t\t\t}", "\t\t}", "\t}", "}", ""]
+	var original := "\n".join(PackedStringArray(lines))
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(original)
+	f.close()
+	var r: Variant = VDF.parse_strict_raw(original)
+	ok(r is Dictionary, "parses")
+	eq(VdfWriter.dump(r["tree"], 0, r["raw"]), original, "dump(parse(original)) is the original, byte for byte")
+	var no_proc := home.path_join("noproc")
+	eq(SteamConfig.launch_options(user, "440"), "WINEPATH=C:\\prog\\x %command%", "Steam's escapes decoded on read")
+	eq(SteamConfig.set_launch_options(home, user, "730", "-novid", no_proc), OK, "another game's options saved")
+	var after := FileAccess.get_file_as_string(path)
+	for l in [lines[12], lines[13], lines[17]]:
+		ok(after.contains(l + "\n"), "untouched line kept byte for byte: " + l)
+	eq(SteamConfig.set_launch_options(home, user, "730", "D:\\games\\y \"%command%\"", no_proc), OK, "a new value with a Windows path")
+	ok(FileAccess.get_file_as_string(path).contains("\"D:\\\\games\\\\y \\\"%command%\\\"\""), "written with Steam's escapes")
+	eq(SteamConfig.launch_options(user, "730"), "D:\\games\\y \"%command%\"", "and reads back")
+	eq(SteamConfig.set_launch_options(home, user, "730", "", no_proc), OK, "removed again")
+	eq(FileAccess.get_file_as_string(path), original.replace("\t\t\t\t}\n\t\t\t}", "\t\t\t\t\t\"730\"\n\t\t\t\t\t{\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}"),
+		"the original again, plus the empty 730 entry")
+	# a layout our writer doesn't produce (spaces, not tabs) is never rewritten
+	var spaced := original.replace("\t\t\"WINEPATH", "  \"WINEPATH")
+	f = FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(spaced)
+	f.close()
+	eq(SteamConfig.set_launch_options(home, user, "730", "-novid", no_proc), ERR_FILE_UNRECOGNIZED, "refused: it wouldn't round-trip")
+	eq(FileAccess.get_file_as_string(path), spaced, "file untouched")
 	TempTree.remove_tree(home)

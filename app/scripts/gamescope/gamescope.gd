@@ -188,6 +188,32 @@ func claim_main_window_async() -> void:
 	focus_home_async()
 
 
+## Watches the focusable app list with `xprop -spy` (one idle child process, no polling):
+## changed(apps) on the main thread with the list now and at every change, exited() when
+## the watch ends by itself. stop() the returned watch when done. null outside gamescope or
+## when the runner can't keep a program running (callers poll focusable_apps_async then).
+func watch_focusable(changed: Callable, exited := Callable()) -> RefCounted:
+	if not is_running() or runner == null or not runner.has_method("spawn_watch"):
+		return null
+	var args := PackedStringArray(["-spy"])
+	args.append_array(get_args(ATOM_FOCUSABLE_APPS))
+	return runner.spawn_watch(XPROP, args, func(line: String) -> void:
+		var v: Variant = spy_values(line, ATOM_FOCUSABLE_APPS)
+		if v != null:
+			changed.call(v), exited)
+
+
+## One `xprop -spy -notype` line: the atom's values ([] when it was removed), or null for a
+## line about something else.
+static func spy_values(line: String, atom: String) -> Variant:
+	var l := line.strip_edges()
+	if l.begins_with(atom + " = "):
+		return parse_values(l, atom)
+	if l.begins_with(atom + ":"):
+		return []   # "ATOM:  not found."
+	return null
+
+
 ## Values of a CARDINAL atom on the root window; [] if it isn't set.
 func read_root(atom: String) -> Array:
 	var r: Dictionary = runner.run(XPROP, get_args(atom))

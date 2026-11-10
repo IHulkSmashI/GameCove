@@ -12,7 +12,8 @@
 #            identity for the tag: what packaging/get-gamecove.sh verifies), then publishes the
 #            GitHub release with packaging/release-notes/<tag>.md: created as a draft, every file
 #            uploaded, then published, so nobody sees a release without its files
-# Every build run uploads the files as workflow artifacts.
+# Every build run uploads the files as workflow artifacts. The release job runs in the "release" environment (the
+# owner approves each signing run); the "Release tags" ruleset and that environment are in docs/RELEASING.md.
 # Supply chain (review M6): actions are pinned by commit (tag in the comment), the Fedora container by
 # digest, the Godot editor, its export template and Source2 (udev-hid-bpf) by sha256 below, and the bundled
 # gamescope-session files per file (packaging/sysext/gamescope-session.sha256, fetched by git at a commit).
@@ -71,7 +72,8 @@ jobs:
             exit 1
           fi
           [ -n "$have" ] || gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
-          gh workflow run release.yml --ref "$tag" -f prerelease="$PRE"
+          # the full ref: a branch named like the tag must never be picked instead (review 2, low 22)
+          gh workflow run release.yml --ref "refs/tags/$tag" -f prerelease="$PRE"
           echo "started the release run for $tag on $GITHUB_SHA"
 
   app:
@@ -221,6 +223,9 @@ jobs:
   release:
     if: github.ref_type == 'tag'
     needs: [app, package]
+    # signing waits for the owner's approval: the "release" environment has him as required reviewer and allows only
+    # main and v* tags (docs/RELEASING.md; review 2, problem 10)
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -287,7 +292,12 @@ jobs:
           # draft first, files next, publish last (review L26): the installer never sees a release without
           # its SHA256SUMS and signature
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --notes-file "$notes" --draft=true $pre
+            # a re-run never touches a release that is already out (it was set back to draft, review 2, low 22)
+            if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != true ]; then
+              echo "$TAG is already published; a re-run changes nothing" >&2
+              exit 1
+            fi
+            gh release edit "$TAG" --notes-file "$notes" $pre
           else
             gh release create "$TAG" --draft --verify-tag --title "GameCove $TAG" --notes-file "$notes" $pre
           fi

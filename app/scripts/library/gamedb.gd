@@ -20,6 +20,12 @@ const MAX_AGE_S := 24 * 60 * 60
 ## refused at start ("Decompression failed"). 128 MB leaves room to grow.
 const MAX_UNPACKED := 128 * 1024 * 1024
 const STORES := ["steam", "gog", "epic"]
+## Beside the copy: the unix time of the last failed download. A download that
+## failed (refused, HTTP error, cut off) is retried at most once a day, so a bad
+## published file isn't fetched and thrown away at every start (review 2, problem 1).
+const FAILED_SUFFIX := ".failed"
+
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 
 ## Where the copy lives; tests point it at a temp file.
 var cache_path := CACHE_PATH
@@ -42,8 +48,7 @@ static func is_stale(cache_modified_unix: int, now_unix: int) -> bool:
 ## after a good download; a failed one keeps the old copy and stays quiet.
 func update_if_stale() -> void:
 	var path := ProjectSettings.globalize_path(cache_path)
-	var modified := int(FileAccess.get_modified_time(path)) if FileAccess.file_exists(path) else 0
-	if not is_stale(modified, int(Time.get_unix_time_from_system())) or _http != null or _task != -1:
+	if not should_download(path, int(Time.get_unix_time_from_system())) or _http != null or _task != -1:
 		return
 	_http = HTTPRequest.new()
 	_http.use_threads = true
@@ -64,6 +69,10 @@ func _on_downloaded(result: int, code: int, _headers: PackedStringArray, _body: 
 		# offline, 404 (no release yet) and so on: keep the old copy
 		if FileAccess.file_exists(part):
 			DirAccess.remove_absolute(part)
+		# no network at all costs nothing: try again next start. Anything that
+		# reached the server (an HTTP error, a cut-off transfer) waits a day.
+		if not result in [HTTPRequest.RESULT_CANT_CONNECT, HTTPRequest.RESULT_CANT_RESOLVE]:
+			record_failure(path)
 		print_verbose("gamedb: download skipped (result %d, HTTP %d); using cached copy" % [result, code])
 		return
 	if not is_inside_tree():
@@ -83,14 +92,33 @@ static func accept_download(part: String, path: String) -> bool:
 		if FileAccess.file_exists(part):
 			DirAccess.remove_absolute(part)
 		print_verbose("gamedb: downloaded file isn't a valid database; using cached copy")
+		record_failure(path)
 		return false
 	if DirAccess.rename_absolute(part, path) != OK:
 		DirAccess.remove_absolute(part)
 		return false
+	if FileAccess.file_exists(path + FAILED_SUFFIX):
+		DirAccess.remove_absolute(path + FAILED_SUFFIX)
 	_handoff_mutex.lock()
 	_handoff = {"path": path, "modified": int(FileAccess.get_modified_time(path)), "doc": doc}
 	_handoff_mutex.unlock()
 	return true
+
+
+## True when the copy at `path` is stale and no download failed in the last day.
+static func should_download(path: String, now_unix: int) -> bool:
+	var modified := int(FileAccess.get_modified_time(path)) if FileAccess.file_exists(path) else 0
+	return is_stale(modified, now_unix) and is_stale(last_failure(path), now_unix)
+
+
+## Unix time of the last failed download of `path` (0 when none).
+static func last_failure(path: String) -> int:
+	var f := path + FAILED_SUFFIX
+	return int(FileAccess.get_file_as_string(f).strip_edges()) if FileAccess.file_exists(f) else 0
+
+
+static func record_failure(path: String) -> void:
+	SettingsFile.save_text(path + FAILED_SUFFIX, "%d\n" % int(Time.get_unix_time_from_system()))
 
 
 ## Main thread, after accept_download().

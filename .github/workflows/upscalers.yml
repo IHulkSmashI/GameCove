@@ -16,7 +16,12 @@ name: Nightly upscalers index
 # Two jobs (review problem 2 pattern, as firmware.yml and release.yml): "build" runs the tests and the builder
 # (third-party downloads, archives, 7-Zip) with a read-only token and no OIDC, and hands dist/ over as an
 # artifact; only "publish", which runs nothing but pinned cosign, gh and a standard-library check of the plan,
-# can mint the signing identity and write the releases.
+# can mint the signing identity and write the releases. "publish" runs in the "nightly" environment, which only main
+# can deploy to (docs/RELEASING.md). It re-checks the artifact first
+# (tools/upscalers/check_plan.py: standard library and mirror.py only).
+#
+# Promotion (review 2, problem 8): only official upstream repos (mirror.UPSTREAM), only full releases at least
+# 72 hours old (rolling files and git files: unchanged for 72 hours); XMX's scripts must match versions.json.
 
 on:
   schedule:
@@ -98,6 +103,8 @@ jobs:
 
   publish:
     needs: build
+    # runs in the "nightly" environment: only main may deploy to it, no daily approval (docs/RELEASING.md)
+    environment: nightly
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -109,27 +116,20 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             packaging/get-gamecove.sh
+            packaging/helpers/gamecove_upscale/__init__.py
+            packaging/helpers/gamecove_upscale/mirror.py
+            packaging/helpers/gamecove_upscale/tls.py
+            packaging/helpers/gamecove_upscale/data/versions.json
+            tools/upscalers/check_plan.py
           sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: upscalers-dist
           path: dist
-      - name: Check the artifact (Python's standard library only)
-        run: |
-          python3 -I - dist <<'PY'
-          import json, os, re, sys
-          d = sys.argv[1]
-          idx = json.load(open(os.path.join(d, "upscalers.json"), encoding="utf-8"))
-          assert idx.get("schema") == 1 and isinstance(idx.get("components"), dict), "not a schema-1 index"
-          for line in open(os.path.join(d, "upload-plan.tsv"), encoding="utf-8"):
-              if not line.strip():
-                  continue
-              tag, name, path = line.rstrip("\n").split("\t")
-              assert re.fullmatch(r"upscalers(-[0-9]+)?", tag), "release tag: " + tag
-              assert re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", name), "asset name: " + name
-              assert path == "upload/%s/%s" % (tag, name), "path: " + path
-              assert os.path.isfile(os.path.join(d, path)) and not os.path.islink(os.path.join(d, path)), "missing: " + path
-          PY
+      - name: Check the artifact before signing (standard library and GameCove's own mirror.py only; review 2, problem 15)
+        # the index parses as devices require (every upstream URL is its component's official repository), and
+        # every planned file is re-hashed against the hash in its name and the one the index or versions.json names
+        run: python3 -I tools/upscalers/check_plan.py dist packaging/helpers/gamecove_upscale/data/versions.json
       - name: cosign version (the one get-gamecove.sh pins)
         id: cosign
         run: echo "version=$(sed -n 's/^COSIGN_VERSION=//p' packaging/get-gamecove.sh)" >>"$GITHUB_OUTPUT"

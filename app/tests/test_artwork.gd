@@ -101,6 +101,32 @@ func test_steam_grid_backup_and_restore() -> void:
 	wipe(dir)
 
 
+## Review 2, problem 9: native and Flatpak Steam with the same account id shared one
+## backup folder; after apply then reset one root lost its original.
+func test_two_steam_roots_with_one_account_keep_their_own_backups() -> void:
+	var dir := tmp("tworoots")
+	var native := dir.path_join("native/userdata/123/config/grid")
+	var flatpak := dir.path_join("flatpak/userdata/123/config/grid")
+	var a := FileAccess.get_file_as_bytes(fixture("discover/cover_jpg.bin"))
+	var b := FileAccess.get_file_as_bytes(fixture("discover/hero_png.bin"))
+	put(native.path_join("400p.jpg"), a)
+	put(flatpak.path_join("400p.png"), b)
+	put(dir.path_join("new.png"), b)
+	var root := dir.path_join("backup")
+	var bn := SteamGrid.backup_dir_for(root, native)
+	var bf := SteamGrid.backup_dir_for(root, flatpak)
+	ok(bn != bf, "one backup folder per grid folder")
+	SteamGrid.apply(native, bn, "400", "cover", dir.path_join("new.png"))
+	SteamGrid.apply(flatpak, bf, "400", "cover", dir.path_join("new.png"))
+	ok(SteamGrid.reset(native, bn, "400p") and SteamGrid.reset(flatpak, bf, "400p"), "both reset")
+	eq(FileAccess.get_file_as_bytes(native.path_join("400p.jpg")), a, "native original back")
+	eq(FileAccess.get_file_as_bytes(flatpak.path_join("400p.png")), b, "flatpak original back")
+	# the same folder through a symlink is the same backup
+	DirAccess.open(dir).create_link(dir.path_join("native"), dir.path_join("link"))
+	eq(SteamGrid.backup_dir_for(root, dir.path_join("link/userdata/123/config/grid")), bn, "symlinked path, same backup")
+	wipe(dir)
+
+
 func _service(http: Variant, dir: String) -> Node:
 	var s: Node = ArtService.new()
 	s.http = http
@@ -108,6 +134,7 @@ func _service(http: Variant, dir: String) -> Node:
 	s.thumbs_dir = dir.path_join("thumbs")
 	s.backup_root = dir.path_join("backup")
 	s.prefs_path = dir.path_join("settings.cfg")
+	s.auto_tried_path = dir.path_join("auto_tried.json")
 	s.steam_roots = [dir.path_join("steam")]
 	s.user_key_fn = func() -> String: return KEY
 	s.sync_mode = true
@@ -190,5 +217,52 @@ func test_non_steam_game_by_title_and_auto_fill() -> void:
 	ok(Overrides.apply({"cover": art["cover"]}, {"cover": {"path": "/elsewhere.jpg", "source": "auto"}})["cover"] == art["cover"], "auto never replaces existing art")
 	s.user_key_fn = func() -> String: return ""
 	ok(s.unavailable_reason().contains("SteamGridDB key"), "no key: says how to add one")
+	s.free()
+	wipe(dir)
+
+
+## Review 2, low 23: the automatic fill forgot what it had tried at every start, and its
+## queue kept draining after a switch went off.
+func test_auto_fill_remembers_tries_and_stops_with_the_switch() -> void:
+	var dir := tmp("auto2")
+	var http := FakeHttp.new()
+	_routes(http)
+	var s := _service(http, dir)
+	var steam_game := {"key": "steam:400", "store": "steam", "id": "400", "title": "Portal", "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	eq(s.auto_fill([steam_game]), 3, "tried")
+	s.free()
+	var s2 := _service(http, dir)
+	eq(s2.auto_fill([steam_game]), 0, "a new run remembers the tries")
+	s2.clock = func() -> int: return int(Time.get_unix_time_from_system()) + 8 * 86400
+	s2.free()
+	var s3 := _service(http, dir)
+	s3.clock = func() -> int: return int(Time.get_unix_time_from_system()) + 8 * 86400
+	eq(s3.auto_fill([steam_game]), 3, "a week later it tries again")
+	s3.free()
+	# queued, then Background lookups goes off: the rest isn't asked
+	var s4 := _service(http, dir)
+	s4.sync_mode = false
+	var other := {"key": "steam:401", "store": "steam", "id": "401", "title": "Portal 2", "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	eq(s4.auto_fill([other]), 3, "queued")
+	var before := http.requests.size()
+	Privacy.set_background_allowed(false, s4.prefs_path)
+	s4._auto_next()
+	eq(http.requests.size(), before, "nothing asked after the switch went off")
+	eq(s4._auto.size(), 0, "queue dropped")
+	s4.free()
+	wipe(dir)
+
+
+func test_auto_fill_waits_behind_a_game() -> void:
+	var dir := tmp("autopause")
+	var http := FakeHttp.new()
+	_routes(http)
+	var s := _service(http, dir)
+	var steam_game := {"key": "steam:400", "store": "steam", "id": "400", "title": "Portal", "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	s.set_paused(true)
+	eq(s.auto_fill([steam_game]), 3, "queued behind a game")
+	eq(http.requests.size(), 0, "nothing fetched while a game runs")
+	s.set_paused(false)
+	ok(http.requests.size() >= 3, "the game ended: filled")
 	s.free()
 	wipe(dir)

@@ -59,6 +59,8 @@ func _ready() -> void:
 	_timer.one_shot = true
 	_timer.timeout.connect(_next)
 	add_child(_timer)
+	# game details nobody refreshed in a year (games long gone from the library)
+	preload("res://scripts/system/cache_prune.gd").prune_later(abs_dir(), 365 * 86400)
 
 
 func _now() -> int:
@@ -88,12 +90,10 @@ static func _read(path: String) -> Dictionary:
 	return j.data
 
 
-static func _write(path: String, data: Dictionary) -> void:
+## Atomic (the OpenCritic quota and the caches; review 2, low 23).
+static func _write(path: String, data: Dictionary) -> bool:
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify(data))
-		f.close()
+	return preload("res://scripts/system/settings_file.gd").save_json(path, data) == OK
 
 
 ## The cached live Steam layer for `appid` ({} if none), whatever its age.
@@ -180,6 +180,18 @@ static func _job_id(j: Dictionary) -> String:
 	return "%s|%s" % [j["kind"], j.get("appid", j.get("title", ""))]
 
 
+## True while a game runs (Library.set_background_paused): the background fill waits; a
+## game page's own request() still runs (the user asked).
+var paused := false
+var _asked := {}   # job ids from request(): run even while paused
+
+
+func set_paused(on: bool) -> void:
+	paused = on
+	if not on:
+		_kick()
+
+
 ## Background fill for a list of games (after a Library scan). Needs both
 ## "Look up game details" and "Background lookups".
 func queue_games(games: Array) -> int:
@@ -192,6 +204,7 @@ func queue_games(games: Array) -> int:
 				break
 			if not _queued.has(_job_id(j)):
 				_queued[_job_id(j)] = true
+				j["bg"] = true   # a background job: dropped when "Background lookups" goes off
 				_queue.append(j)
 				n += 1
 	_kick()
@@ -210,26 +223,39 @@ func request(game: Dictionary) -> int:
 					_queue.remove_at(i)
 					break
 		_queued[id] = true
+		_asked[id] = true
 		_queue.push_front(j)
 	_kick()
 	return js.size()
+
+
+func _drop_background() -> void:
+	for i in range(_queue.size() - 1, -1, -1):
+		if bool(_queue[i].get("bg", false)):
+			_queued.erase(_job_id(_queue[i]))
+			_queue.remove_at(i)
 
 
 func pending() -> int:
 	return _queue.size()
 
 
+## The next job may run now: not paused, or the user asked for it.
+func _may_run() -> bool:
+	return not _queue.is_empty() and (not paused or _asked.has(_job_id(_queue[0])))
+
+
 func _kick() -> void:
 	if sync_mode:
-		while not _queue.is_empty():
+		while _may_run():
 			_run(_queue.pop_front())
 		return
-	if not _busy and not _queue.is_empty() and _timer != null and _timer.is_stopped():
+	if not _busy and _may_run() and _timer != null and _timer.is_stopped():
 		_next()
 
 
 func _next() -> void:
-	if _queue.is_empty():
+	if not _may_run():
 		return
 	_busy = true
 	_run(_queue.pop_front())
@@ -239,12 +265,19 @@ func _done(gap: float) -> void:
 	_busy = false
 	if sync_mode or _timer == null or not is_inside_tree():
 		return
-	if not _queue.is_empty():
+	if _may_run():
 		_timer.start(gap)
 
 
 func _run(j: Dictionary) -> void:
 	_queued.erase(_job_id(j))
+	_asked.erase(_job_id(j))
+	if bool(j.get("bg", false)) and not Privacy.background_allowed(prefs_path):
+		# "Background lookups" went off after these were queued: the rest of the background queue goes too
+		# (review 2, low 23); a page the user opens still asks for its own game
+		_drop_background()
+		_done(0.1)
+		return
 	if http == null or not Privacy.metadata_allowed(prefs_path):
 		_done(0.1)
 		return
@@ -262,9 +295,11 @@ func _steam(j: Dictionary) -> void:
 	http.request(STEAM_URL + appid.uri_encode(), {"timeout": 20.0, "max_bytes": MAX_BODY}, func(res: Dictionary):
 		if res["ok"]:
 			var l := Metadata.steam_layer(appid, res["body"])
-			# "No such app" is cached too, so it isn't asked again for a week.
-			_write(steam_cache_path(abs_dir(), appid), {"at": _now(), "appid": appid, "layer": l})
-			resolved.emit(j["key"])
+			# Steam's "no such app" is cached too, so it isn't asked again for a week; a
+			# page that isn't Steam's answer at all (a captive portal) is not (review 2, low 11).
+			if not l.is_empty() or Metadata.steam_says_missing(appid, res["body"]):
+				_write(steam_cache_path(abs_dir(), appid), {"at": _now(), "appid": appid, "layer": l})
+				resolved.emit(j["key"])
 		_done(STEAM_GAP if res.get("error", "") != "backoff" else 30.0))
 
 

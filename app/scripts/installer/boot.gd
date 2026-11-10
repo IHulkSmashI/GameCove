@@ -55,7 +55,7 @@ func _ready() -> void:
 		add_child(cli)
 		return
 	if wants_restore_baseline(args):
-		return   # the autoloads restore and Profiles quits (profiles.gd RESTORE_ARG)
+		return   # Profiles restores and quits (profiles.gd RESTORE_ARG); the other services stay off (run_mode.gd)
 	if wants_photo_prefetch(args):
 		prefetch_photo_and_quit(get_node_or_null("/root/DevicePhoto"), get_tree())
 		return

@@ -9,10 +9,14 @@ extends Node
 ##   - listens only while start() .. stop(), on one LAN address (never on all
 ##     interfaces), on a random port the system picks;
 ##   - every address carries a one-time token (128 random bits); anything else
-##     gets 404, and after MAX_BAD wrong requests the page closes;
+##     gets 404, and past MAX_BAD wrong requests a minute, new connections are
+##     closed unanswered until the minute is over (the page stays open: someone
+##     else on the network can't shut it for you, review 2, low 16);
 ##   - closes by itself after the first well-formed key, or after `lifetime`
 ##     seconds (10 minutes);
-##   - a request has 10 s and 8 KiB to arrive; at most MAX_CLIENTS at once;
+##   - a request has 10 s and 8 KiB to arrive, and a connection that sends nothing
+##     for IDLE_TIMEOUT s is closed; at most MAX_CLIENTS at once, and when full the
+##     longest-idle one makes room, so idle sockets can't lock the phone out;
 ##   - a POST from another site (an Origin that isn't this page) is refused;
 ##   - the page has no scripts, no outside resources, no caching, no referrer.
 ## Plain HTTP on the local network: the key crosses your Wi-Fi once, like the
@@ -24,14 +28,16 @@ extends Node
 ##   if drop.start(): show_qr(drop.url)
 
 signal key_received(key: String)
-## why: "timeout" (lifetime passed) | "too_many" (MAX_BAD wrong requests)
+## why: "timeout" (lifetime passed)
 signal expired(why: String)
 
 const LIFETIME := 600.0
 const CLIENT_TIMEOUT := 10.0
+const IDLE_TIMEOUT := 3.0
 const MAX_REQUEST := 8192
-const MAX_CLIENTS := 4
-const MAX_BAD := 30
+const MAX_CLIENTS := 8
+const MAX_BAD := 30        # wrong requests per BAD_WINDOW before new connections wait
+const BAD_WINDOW := 60.0
 const SGDB_API_PAGE := "https://www.steamgriddb.com/profile/preferences/api"
 
 var lifetime := LIFETIME
@@ -44,6 +50,7 @@ var url := ""
 var port := 0
 var address := ""
 var bad_requests := 0
+var _bad_times: Array[float] = []   # _age of each recent wrong request
 
 var _server: TCPServer
 var _clients: Array = []   # [{"peer": StreamPeerTCP, "buf": PackedByteArray, "age": float}]
@@ -74,6 +81,7 @@ func start() -> bool:
 	url = "http://%s:%d/k/%s" % [address, port, token]
 	_age = 0.0
 	bad_requests = 0
+	_bad_times.clear()
 	set_process(true)
 	return true
 
@@ -107,22 +115,41 @@ func poll(delta: float) -> void:
 		stop()
 		expired.emit("timeout")
 		return
+	while not _bad_times.is_empty() and _age - _bad_times[0] >= BAD_WINDOW:
+		_bad_times.pop_front()
 	while _server != null and _server.is_connection_available():
 		var peer := _server.take_connection()
-		if _clients.size() >= MAX_CLIENTS:
+		if throttled():
 			peer.disconnect_from_host()
 			continue
-		_clients.append({"peer": peer, "buf": PackedByteArray(), "age": 0.0})
+		if _clients.size() >= MAX_CLIENTS:
+			_evict_idlest()
+		_clients.append({"peer": peer, "buf": PackedByteArray(), "age": 0.0, "idle": 0.0})
 	for c in _clients.duplicate():
 		if not is_running():
 			return
 		_serve(c, delta)
 
 
+## True while wrong requests in the last BAD_WINDOW reached MAX_BAD.
+func throttled() -> bool:
+	return _bad_times.size() >= MAX_BAD
+
+
+func _evict_idlest() -> void:
+	var worst: Dictionary = _clients[0]
+	for c in _clients:
+		if float(c["idle"]) > float(worst["idle"]):
+			worst = c
+	(worst["peer"] as StreamPeerTCP).disconnect_from_host()
+	_clients.erase(worst)
+
+
 func _serve(c: Dictionary, delta: float) -> void:
 	var peer: StreamPeerTCP = c["peer"]
 	peer.poll()
 	c["age"] = float(c["age"]) + delta
+	c["idle"] = float(c["idle"]) + delta
 	if peer.get_status() != StreamPeerTCP.STATUS_CONNECTED:
 		_clients.erase(c)
 		return
@@ -133,9 +160,14 @@ func _serve(c: Dictionary, delta: float) -> void:
 			var grown: PackedByteArray = c["buf"]   # packed arrays are values: write it back
 			grown.append_array(got[1])
 			c["buf"] = grown
+			c["idle"] = 0.0
 	var buf: PackedByteArray = c["buf"]
 	var req := parse_request(buf)
-	if req.is_empty() and buf.size() <= MAX_REQUEST and float(c["age"]) < CLIENT_TIMEOUT:
+	if req.is_empty() and buf.is_empty() and float(c["idle"]) >= IDLE_TIMEOUT:
+		peer.disconnect_from_host()   # connected and never said anything: just close
+		_clients.erase(c)
+		return
+	if req.is_empty() and buf.size() <= MAX_REQUEST and float(c["age"]) < CLIENT_TIMEOUT and float(c["idle"]) < IDLE_TIMEOUT:
 		return   # not all here yet
 	var ans: Dictionary
 	if req.is_empty():
@@ -144,6 +176,7 @@ func _serve(c: Dictionary, delta: float) -> void:
 		ans = respond(req, token, origin())
 	if int(ans["status"]) == 404:
 		bad_requests += 1
+		_bad_times.append(_age)
 	peer.put_data(http_response(int(ans["status"]), str(ans["body"])))
 	peer.disconnect_from_host()
 	_clients.erase(c)
@@ -151,9 +184,6 @@ func _serve(c: Dictionary, delta: float) -> void:
 	if key != "":
 		stop()
 		key_received.emit(key)
-	elif bad_requests >= MAX_BAD:
-		stop()
-		expired.emit("too_many")
 
 
 ## "http://<address>:<port>": the only Origin a form POST may come from.
@@ -168,9 +198,16 @@ static func new_token() -> String:
 	return Crypto.new().generate_random_bytes(16).hex_encode()
 
 
+## Interfaces that are never the phone's network: loopback, containers and VMs
+## (Waydroid's bridge included), and VPNs/tunnels (WireGuard, Tailscale, ZeroTier,
+## OpenVPN, PPP) whose private addresses aren't on the Wi-Fi (review 2, low 17).
+const SKIP_IFACES := ["docker", "br-", "virbr", "veth", "tun", "tap", "podman", "waydroid", "wg", "vpn",
+	"tailscale", "zt", "ppp", "nordlynx", "proton", "lxc", "lxd", "incus", "vmnet", "vnet", "cni", "flannel", "utun"]
+
+
 ## The LAN address to listen on: a private IPv4 (10/8, 172.16/12, 192.168/16)
 ## of a real interface, Wi-Fi first, then Ethernet, then anything else that
-## isn't a container or VM bridge. "" when there's none (offline).
+## isn't a container, VM bridge or VPN. "" when there's none (offline).
 static func pick_lan_ip(interfaces: Array) -> String:
 	var best := ""
 	var best_rank := 99
@@ -178,8 +215,7 @@ static func pick_lan_ip(interfaces: Array) -> String:
 		if not i is Dictionary:
 			continue
 		var nm := str(i.get("name", "")).to_lower()
-		if nm == "lo" or nm.begins_with("docker") or nm.begins_with("br-") or nm.begins_with("virbr") \
-				or nm.begins_with("veth") or nm.begins_with("tun") or nm.begins_with("tap") or nm.begins_with("podman"):
+		if nm == "lo" or SKIP_IFACES.any(func(p: String) -> bool: return nm.begins_with(p)):
 			continue
 		var rank := 0 if nm.begins_with("wl") else (1 if nm.begins_with("en") or nm.begins_with("eth") else 2)
 		for a in i.get("addresses", []):

@@ -110,6 +110,15 @@ func test_only_known_image_hosts() -> void:
 	# IGDB's and SteamGridDB's image CDNs are asked
 	var dir := H.temp_dir("art_hosts")
 	var http := FakeHttp.new()
+	var Meta := preload("res://scripts/library/meta/metadata.gd")
+	# review 2, low 12: a fragment, a backslash, a port or another Akamai customer
+	for bad in ["https://evil.example#.steamstatic.com/x.jpg", "https://evil.example\\.steamstatic.com/x.jpg",
+			"https://cdn.steamstatic.com:8443/x.jpg", "https://other-customer.akamaihd.net/x.jpg",
+			"https://cdn.steamstatic.com/x.jpg#frag", "http://cdn.steamstatic.com/x.jpg"]:
+		eq(Meta.https_on(bad, ArtScript.IMAGE_HOSTS), "", "refused: " + bad)
+	for good in ["https://shared.akamai.steamstatic.com/a/b.jpg?t=1", "https://steamcdn-a.akamaihd.net/steam/apps/1/header.jpg",
+			"https://images.igdb.com/igdb/image/upload/t_cover_big/x.jpg", "https://cdn2.steamgriddb.com/grid/abc.png"]:
+		eq(Meta.https_on(good, ArtScript.IMAGE_HOSTS), good, "allowed: " + good)
 	for u in ["https://tracker.example/x.jpg", "https://images.igdb.com.evil.example/x.jpg", "https://user@images.igdb.com/x.jpg"]:
 		http.route(u, {"file": H.fx("cover_jpg.bin")})
 	var a := _make(http, dir)
@@ -148,4 +157,27 @@ func test_lru_cleanup() -> void:
 	var b := _make(FakeHttp.new(), dir)
 	ok(b.path_for("steam:3", "cover") != "", "index reloaded")
 	b.free()
+	H.wipe(dir)
+
+
+## Review 2, problem 3: with "Look up game details" off, a GOG tile still sent
+## SteamGridDB's title search with the user's own key (from Discover's settings).
+func test_steamgriddb_off_with_the_metadata_switch() -> void:
+	var dir := H.temp_dir("art_sgdb_off")
+	var prefs := dir.path_join("settings.cfg")
+	var http := FakeHttp.new()
+	http.route("https://www.steamgriddb.com/api/v2/search/autocomplete/", {"file": H.fx("sgdb_search.json")})
+	http.route("https://www.steamgriddb.com/api/v2/grids/game/5551", {"file": H.fx("sgdb_grids.json")})
+	http.route("https://cdn2.steamgriddb.com/grid/abc.png", {"file": H.fx("hero_png.bin")})
+	var a := _make(http, dir)
+	a.privacy_path = prefs
+	a.settings_source = func() -> Dictionary: return {"steamgriddb_key": "0123456789abcdef0123456789abcdef"}
+	var Privacy := preload("res://scripts/system/privacy.gd")
+	ok(Privacy.set_metadata_allowed(false, prefs), "switch off")
+	a.request("gog:1", "cover", {"title": "Some Game"})
+	eq(http.requests.filter(func(u): return "steamgriddb.com" in u), [], "no SteamGridDB request with the switch off")
+	ok(Privacy.set_metadata_allowed(true, prefs), "switch on")
+	a.request("gog:2", "cover", {"title": "Some Game"})
+	ok(http.requests.any(func(u): return u.begins_with("https://www.steamgriddb.com/api/v2/search/autocomplete/Some%20Game")), "the user's key is used with it on")
+	a.free()
 	H.wipe(dir)

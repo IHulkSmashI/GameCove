@@ -614,3 +614,37 @@ func test_unknown_device_never_exceeds_the_service_max() -> void:
 	var q := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), _sys("specific_keep"))
 	eq(q.state()["tdp_max"], 35.0, "specific row keeps devices.json's range")
 	q.free()
+
+
+## Review 2, low 23: the boost was written after a raised TDP, so TDP + the old, larger boost
+## passed the new total for a moment. A smaller boost now goes in first.
+func test_smaller_boost_goes_in_before_a_raised_tdp() -> void:
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), _sys("boost_order"))
+	p.runner.props[PS_BOOST_KEY]["data"] = 8.0
+	ok(p.set_boost_w(2.0), "the user picks 2 W")
+	p.runner.props[PS_BOOST_KEY]["data"] = 8.0   # the firmware put its own larger boost back
+	p.runner.calls.clear()
+	ok(p.set_tdp(25.0), "TDP up")
+	var tdp_i := -1
+	var boost_i := -1
+	for i in p.runner.calls.size():
+		var c: String = p.runner.calls[i]
+		if c.contains("TDP TDP d") and tdp_i < 0:
+			tdp_i = i
+		if c.contains("TDP Boost d") and boost_i < 0:
+			boost_i = i
+	ok(boost_i >= 0 and tdp_i >= 0 and boost_i < tdp_i, "boost lowered before the TDP went up (%d, %d)" % [boost_i, tdp_i])
+	ok(p.set_boost_w(6.0), "a larger boost")
+	p.runner.props[PS_BOOST_KEY]["data"] = 1.0
+	p.runner.calls.clear()
+	ok(p.set_tdp(15.0), "TDP")
+	tdp_i = -1
+	boost_i = -1
+	for i in p.runner.calls.size():
+		var c: String = p.runner.calls[i]
+		if c.contains("TDP TDP d") and tdp_i < 0:
+			tdp_i = i
+		if c.contains("TDP Boost d") and boost_i < 0:
+			boost_i = i
+	ok(tdp_i >= 0 and (boost_i < 0 or boost_i > tdp_i), "a larger boost goes in after the TDP")
+	p.free()

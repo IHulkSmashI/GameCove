@@ -22,6 +22,7 @@ import datetime as dt
 import gzip
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -31,6 +32,32 @@ from . import coverage, net
 from . import ttb as ttb_rules
 from .ids import steam_id
 from .sources import awacy, igdb, protondb, steamstore, steamtop, wikidata, wikidata_meta
+
+# The app refuses a database that unpacks past its cap (app/scripts/library/gamedb.gd
+# MAX_UNPACKED): a build over it would be thrown away by every device, so it fails here.
+APP_GAMEDB_GD = os.path.join(os.path.dirname(__file__), "..", "..", "app", "scripts", "library", "gamedb.gd")
+MAX_UNPACKED = 128 * 1024 * 1024  # used when the app's source isn't next to us; a test keeps both equal
+
+
+def app_max_unpacked(path: str = APP_GAMEDB_GD) -> int | None:
+    """The app's MAX_UNPACKED in bytes, or None when its source isn't readable."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    m = re.search(r"^const MAX_UNPACKED := (\d+)((?: \* \d+)*)\s*$", text, re.M)
+    if not m:
+        return None
+    n = int(m.group(1))
+    for factor in re.findall(r"\d+", m.group(2)):
+        n *= int(factor)
+    return n
+
+
+class TooLarge(ValueError):
+    pass
+
 
 SCHEMA = 2  # game details and critic scores were added as optional fields: old readers ignore them
 PREVIOUS_URL = "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/gamedb.json.gz"
@@ -376,9 +403,13 @@ def build(budget: net.Budget, client_factory: Callable[..., net.Client] = net.Cl
     return document(games, run.status)
 
 
-def write(doc: dict, path: str) -> int:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+def write(doc: dict, path: str, cap: int | None = None) -> int:
     body = json.dumps(compact(doc), ensure_ascii=False, separators=(",", ":")).encode()
+    if cap is None:
+        cap = min(MAX_UNPACKED, app_max_unpacked() or MAX_UNPACKED)
+    if len(body) > cap:
+        raise TooLarge(f"gamedb unpacks to {len(body)} bytes, past the app's cap of {cap}: every device would refuse it")
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "wb") as f:
         f.write(gzip.compress(body, compresslevel=9, mtime=0))
     return os.path.getsize(path)
@@ -395,7 +426,11 @@ def main(argv: list[str] | None = None) -> int:
     if doc is None:
         print("no games from any source or the previous file; nothing written", file=sys.stderr)
         return 1
-    size = write(doc, args.out)
+    try:
+        size = write(doc, args.out)
+    except TooLarge as e:
+        print(e, file=sys.stderr)
+        return 1
     summary = ", ".join(f"{k}={v['status']}" for k, v in doc["sources"].items())
     print(f"{doc['count']} games -> {args.out} ({size / 1024:.0f} KiB gzipped) [{summary}]")
     return 0

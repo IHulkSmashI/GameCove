@@ -7,6 +7,8 @@ extends RefCounted
 ##                   "author_url", "steam": [grid files we wrote]}}}
 ## Static and file-based so the Library scan can read it on a worker thread.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
+
 const DIR := "user://art/picked"
 const KINDS := ["cover", "hero", "logo", "icon"]
 
@@ -27,13 +29,7 @@ static func read(dir: String) -> Dictionary:
 
 static func write(dir: String, index: Dictionary) -> bool:
 	DirAccess.make_dir_recursive_absolute(dir)
-	var tmp := index_path(dir) + ".part"
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(JSON.stringify(index))
-	f.close()
-	return DirAccess.rename_absolute(tmp, index_path(dir)) == OK
+	return SettingsFile.save_json(index_path(dir), index) == OK
 
 
 ## The art to show: `store_art` with this game's overrides applied.

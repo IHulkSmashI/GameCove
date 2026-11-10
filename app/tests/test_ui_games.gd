@@ -99,6 +99,7 @@ class Recorder extends RefCounted:
 	func resume(): calls.append(["resume"])
 	func invalidate(a): calls.append(["invalidate", a])
 	func set_target_fps(f): calls.append(["set_target_fps", f])
+	func set_background_paused(on): calls.append(["set_background_paused", on])
 	func settings_for(_k): return {"fps_limit": 40, "frame_gen": true}
 
 
@@ -564,8 +565,9 @@ func test_session_wiring() -> void:
 	var upd := Recorder.new()
 	var ctl := Recorder.new()
 	var disc := Recorder.new()
+	var lib := Recorder.new()
 	var w := SessionWiring.new()
-	w.setup({"perf": perf, "achievements": ach, "updates": upd, "controller": ctl, "discover": disc, "launcher": Recorder.new()})
+	w.setup({"perf": perf, "achievements": ach, "updates": upd, "controller": ctl, "discover": disc, "launcher": Recorder.new(), "library": lib})
 	w.home_in_front(true)
 	eq(perf.calls, [], "nothing before a game")
 	w.game_started(_steam_game(), 42)
@@ -573,6 +575,7 @@ func test_session_wiring() -> void:
 	eq(upd.calls, [["set_game_running", true]], "updates hold off")
 	eq(ctl.calls, [["start_game", "steam:42"]], "controller profile")
 	eq(disc.calls, [["pause"]], "discover pauses")
+	eq(lib.calls, [["set_background_paused", true]], "no metadata / art fill behind the game")
 	w.home_in_front(true)
 	eq(perf.calls[-1], ["set_focused", false], "home in front pauses sampling")
 	w.home_in_front(false)
@@ -583,6 +586,7 @@ func test_session_wiring() -> void:
 	eq(upd.calls[-1], ["set_game_running", false], "updates free again")
 	eq(ctl.calls[-1], ["end_game"], "controller back")
 	eq(disc.calls[-1], ["resume"], "discover resumes")
+	eq(lib.calls[-1], ["set_background_paused", false], "the background fill goes on")
 	w.game_ended(_epic_game())
 	eq(ach.calls.size(), 1, "no Steam stats for other stores")
 	var empty := SessionWiring.new()

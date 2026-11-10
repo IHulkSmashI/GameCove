@@ -19,6 +19,8 @@ extends RefCounted
 ## step: {"cmd": [program, args...], "env": {}, "parser": legendary|gogdl|nile|size|none,
 ##        "kind": "probe"|"main", "tool": legendary|gogdl|nile}
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
+
 const Common := preload("res://scripts/library/stores/common.gd")
 
 const ACTIONS := ["install", "uninstall", "update", "verify", "move"]
@@ -212,12 +214,7 @@ static func read_gog_record(home: String) -> Array:
 static func write_gog_record(home: String, list: Array) -> Error:
 	var path := home + GOG_RECORD
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	var f := FileAccess.open(path + ".tmp", FileAccess.WRITE)
-	if f == null:
-		return FileAccess.get_open_error()
-	f.store_string(JSON.stringify({"installed": list}, "\t"))
-	f.close()
-	return DirAccess.rename_absolute(path + ".tmp", path)
+	return SettingsFile.save_text(path, JSON.stringify({"installed": list}, "\t"))
 
 
 ## The record with `item` added (replacing the same appName) or removed.

@@ -69,6 +69,28 @@ ARCHIVE_COMPONENTS = ("optiscaler", "optiscaler_v10", "optipatcher", "fakenvapi"
 FILES_COMPONENTS = ("fsr4_xmx", "fsr4_amd")
 # GPL-3.0 binaries: the index must name their corresponding source (tools/upscalers/build.py mirrors it)
 GPL_COMPONENTS = ("optiscaler", "optiscaler_v10")
+# The only place each component may come from: its official upstream repository, pinned here and reviewed with
+# every change (review 2, problems 8 and 15). The builder refuses anything else, the publish job re-checks it, and
+# this helper refuses a signed index that names another upstream.
+UPSTREAM = {
+    "optiscaler": "https://github.com/optiscaler/OptiScaler/releases/download/",
+    "optiscaler_v10": "https://github.com/optiscaler/OptiScaler-nightly/releases/download/",
+    "optipatcher": "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/",
+    "fakenvapi": "https://github.com/FakeMichau/fakenvapi/releases/download/",
+    "xess_xmx_linux": "https://github.com/HHHHanasak1/xess-xmx-linux/releases/download/",
+    "reframework": "https://github.com/onehoon/REFramework/releases/download/",
+    "fsr4_amd": "https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/",
+    "fsr4_xmx": "https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/",
+}
+SOURCE_UPSTREAM = "https://github.com/optiscaler/OptiScaler/archive/"
+TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,199}$")
+SCRIPT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,119}(/[A-Za-z0-9][A-Za-z0-9._+-]{0,119}){0,3}$")
+
+
+def from_upstream(component: str, url: str, prefix: str | None = None) -> bool:
+    """True when `url` is under the component's official upstream (no '..', no query or fragment)."""
+    p = prefix if prefix is not None else UPSTREAM.get(component, "")
+    return bool(p) and isinstance(url, str) and url.startswith(p) and ".." not in url and not re.search(r"[?#\\\s]", url)
 
 
 # ---- names ------------------------------------------------------------------------------------------------------
@@ -164,13 +186,13 @@ def _check_item(name: str, e: dict) -> None:
         raise ValueError(f"{name}: bad version {e.get('version')!r}")
 
 
-def _check_file(where: str, f: dict) -> None:
+def _check_file(where: str, f: dict, upstream: str) -> None:
     if not isinstance(f, dict) or not HEX64.match(str(f.get("sha256", ""))):
         raise ValueError(f"{where}: no sha256")
     if not is_mirror_url(f.get("mirror_url", "")):
         raise ValueError(f"{where}: mirror URL isn't GameCove's release: {f.get('mirror_url')!r}")
-    if not str(f.get("upstream_url", "")).startswith("https://"):
-        raise ValueError(f"{where}: upstream URL isn't https")
+    if not from_upstream("", str(f.get("upstream_url", "")), upstream):
+        raise ValueError(f"{where}: upstream URL isn't the official repository ({upstream}): {f.get('upstream_url')!r}")
 
 
 def parse(raw: bytes) -> dict:
@@ -190,14 +212,20 @@ def parse(raw: bytes) -> dict:
     for name, e in d["components"].items():
         if name in ARCHIVE_COMPONENTS:
             _check_item(name, e)
-            _check_file(name, e)
+            _check_file(name, e, UPSTREAM[name])
             if not FILE_RE.match(str(e.get("asset", ""))):
                 raise ValueError(f"{name}: bad asset name")
+            if "tag" in e and not TAG_RE.match(str(e.get("tag"))):
+                raise ValueError(f"{name}: bad tag {e.get('tag')!r}")
+            scripts = e.get("scripts") or {}
+            if not isinstance(scripts, dict) or not all(SCRIPT_RE.match(str(k)) and ".." not in str(k) and HEX64.match(str(v))
+                                                        for k, v in scripts.items()):
+                raise ValueError(f"{name}: bad script hashes")
             if name in GPL_COMPONENTS or "source" in e:   # GPL: its source at the exact commit, next to it
                 src = e.get("source")
                 if not isinstance(src, dict) or not re.match(r"^[0-9a-f]{40}$", str(src.get("commit", ""))):
                     raise ValueError(f"{name}: no source at an exact commit")
-                _check_file(f"{name}/source", {**src, "upstream_url": src.get("url", "")})
+                _check_file(f"{name}/source", {**src, "upstream_url": src.get("url", "")}, SOURCE_UPSTREAM)
             inner = e.get("inner") or {}
             if not isinstance(inner, dict) or not all(FILE_RE.match(k) and HEX64.match(str(v)) for k, v in inner.items()):
                 raise ValueError(f"{name}: bad inner hashes")
@@ -210,7 +238,7 @@ def parse(raw: bytes) -> dict:
             for fn, f in files.items():
                 if not FILE_RE.match(fn) or "/" in fn:
                     raise ValueError(f"{name}: bad file name {fn!r}")
-                _check_file(f"{name}/{fn}", f)
+                _check_file(f"{name}/{fn}", f, UPSTREAM[name])
             comps[name] = e
     return {**d, "components": comps}
 
@@ -230,6 +258,11 @@ def _stamp(home: str) -> dict:
         return {}
 
 
+def _num(v) -> float:
+    """A stamp's number; 0 for null, text or anything else (a damaged stamp never raises, review 2 low 22)."""
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else 0.0
+
+
 def load(home: str, now: float | None = None) -> dict | None:
     """The cached index when it was verified (its sha256 is the one recorded right after cosign accepted it) and
     that was less than MAX_AGE_S ago; else None."""
@@ -240,7 +273,7 @@ def load(home: str, now: float | None = None) -> dict | None:
             raw = f.read(MAX_INDEX + 1)
     except OSError:
         return None
-    if st.get("sha256") != sha256_bytes(raw) or now - float(st.get("verified_at", 0)) > MAX_AGE_S:
+    if st.get("sha256") != sha256_bytes(raw) or now - _num(st.get("verified_at")) > MAX_AGE_S:
         return None
     try:
         return parse(raw)
@@ -254,7 +287,7 @@ def refresh(home: str, force: bool = False, timeout: float = 10.0, now: float | 
     now = time.time() if now is None else now
     p, st = _paths(home), _stamp(home)
     have = load(home, now)
-    if have and not force and now - float(st.get("verified_at", 0)) < FRESH_S:
+    if have and not force and now - _num(st.get("verified_at")) < FRESH_S:
         return {"state": "cached", "generated": have.get("generated"), "error": None}
     try:
         raw = _fetch(INDEX_URL, MAX_INDEX, timeout)
@@ -329,6 +362,10 @@ def effective(pins: dict, idx: dict | None) -> dict:
         if not e or key not in v:
             continue
         if key == "reframework" and "dinput8.dll" not in (e.get("inner") or {}):
+            continue
+        if key == "xess_xmx_linux" and (not v[key].get("scripts") or e.get("scripts") != v[key]["scripts"]):
+            # its install.sh (and the scripts it runs) execute on the device: a newer build is used only when every
+            # script is byte for byte the one reviewed in versions.json (review 2, problem 8); else the tested pin
             continue
         v[key].update(_archive_fields(e))
         v[key].update({"tag": e.get("tag") or e["version"], "asset": e["asset"]})

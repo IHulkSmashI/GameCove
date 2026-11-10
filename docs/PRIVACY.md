@@ -43,7 +43,7 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 | 11 | steamcommunity.com, `IWishlistService` | Your Steam profile name or SteamID64 | You import your wishlist | You start it | `discover.gd` |
 | 12a | github.com (`upscalers/upscalers.json`, `.sigstore.json`; the upscaler files on `upscalers*` releases, then their upstream release) | Nothing personal | The list: at most daily, 90 s after start (background check), and before any upscaler install or update; files: only when you install or update | Background lookups (the daily check); installs and updates: you start them | `app/scripts/controls/providers/perf.gd`, `packaging/helpers/gamecove_upscale/mirror.py` |
 | 12 | github.com (`firmware/firmware.json.gz`, `.sha256`, `.sigstore.json`) | Nothing | Checking for updates | You start it | `app/scripts/system/updates.gd` |
-| 13 | The maker's own download site (allow-listed per maker, https only; at most 5 redirects, each ending on the maker's site; offered only when cosign on this device checked the list's signature) | Nothing | You prepare a USB drive | You start it | `updates.gd`, `firmware_index.gd` |
+| 13 | The maker's own download site (allow-listed per maker, https only, redirects included; at most 5 redirects, and the address the download ends on must be on the maker's site (the hops in between are https but not host-checked); the file must match the sha256 in the signed list; offered only when cosign on this device checked the list's signature) | Nothing | You prepare a USB drive | You start it | `updates.gd`, `firmware_index.gd` |
 | 14 | LVFS, rpm-ostree / steamos-update, Flatpak, Flathub | Those tools' own | You update or install Moonlight | You start it | `updates.gd`, `app/scripts/streaming/` |
 | 15 | PCs on your LAN (GameStream 47989 http, 47984 https pinned to the PC's certificate) | Fixed client id, Moonlight's client certificate | Stream tab | You start it | `app/scripts/streaming/host_api.gd` |
 | 15a | Every address of your local IPv4 networks (each network from /22 to /30, so at most 1,022 addresses; larger networks are skipped), TCP port 47989 | A TCP connection attempt (no data), then a GameStream `serverinfo` request to each address that answers | Opening the Stream tab when no PC is saved and mDNS (avahi) finds none | You start it (opening the tab) | `app/scripts/streaming/streaming.gd` (`_probe_job`), `gamestream.gd` (`subnet_hosts`) |
@@ -75,9 +75,11 @@ on your own network (`app/scripts/system/key_drop.gd`):
   interface, never on a public address), on a random port. No LAN address, no page: the step offers typing or
   pasting the key instead.
 - The address in the QR code carries a one-time token of 128 random bits. Any other address gets "Not found"; after
-  30 wrong requests the page closes. A key sent from another web site (a foreign `Origin`) is refused.
+  30 wrong requests in a minute, new connections are closed unanswered until the minute is over (the page stays
+  open, so someone else on the network can't close it on you). A key sent from another web site (a foreign `Origin`) is refused.
 - It closes as soon as one well-formed key arrives, when you leave the step, or after 10 minutes, whichever comes
-  first. A request must arrive within 10 s and be under 8 KiB; at most four phones at once.
+  first. A request must arrive within 10 s and be under 8 KiB; a connection that sends nothing for 3 s is closed, and
+  when all eight slots are taken the longest-idle connection makes room.
 - The page has no scripts, loads nothing from anywhere else, and is sent with `Cache-Control: no-store`,
   `Referrer-Policy: no-referrer` and a `Content-Security-Policy` of `default-src 'none'`.
 - It is plain HTTP on your local network: the key crosses your Wi-Fi once, like a store sign-in code you'd type.

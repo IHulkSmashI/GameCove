@@ -352,12 +352,9 @@ func write_lsfg_config() -> bool:
 	if profiles.is_empty() and existing == "":
 		return true
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(Lsfg.merge_config(existing, profiles, _lsfg_dll()))
-	f.close()
-	return true
+	# replaced in one rename, never rewritten in place: lsfg-vk reads it at every game start and
+	# it holds the user's own profiles (review 2, low 23)
+	return preload("res://scripts/system/settings_file.gd").save_text(path, Lsfg.merge_config(existing, profiles, _lsfg_dll())) == OK
 
 
 # ---- upscaling per game (gamecove-upscale) -------------------------------------------

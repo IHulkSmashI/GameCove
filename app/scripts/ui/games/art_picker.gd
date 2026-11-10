@@ -352,7 +352,7 @@ func _add(list: Array) -> void:
 		asset_buttons.append(b)
 		service.thumb(asset, func(path: String):
 			if path != "" and is_instance_valid(tr):
-				tr.texture = Kit.load_art(path, Vector2i(int(size.x) * 2, int(size.y) * 2)))
+				Kit.load_art_async(path, Vector2i(int(size.x) * 2, int(size.y) * 2), tr))
 	_link()
 	if is_inside_tree() and _open and _page == 0 and not asset_buttons.is_empty():
 		var f := get_viewport().gui_get_focus_owner()

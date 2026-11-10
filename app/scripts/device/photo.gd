@@ -112,6 +112,8 @@ var _names := {}             # device id -> name (devices.json), for family capt
 func _ready() -> void:
 	enabled = load_enabled(prefs_path)
 	maker_enabled = load_maker_enabled(prefs_path)
+	if preload("res://scripts/system/run_mode.gd").helper():
+		return   # --restore-baseline: no services (review 2, problem 5)
 	var main_script = get_tree().get_script()
 	if main_script != null and str(main_script.resource_path).begins_with("res://tests/"):
 		return
@@ -132,11 +134,11 @@ func _ready() -> void:
 # ---- the setting ----------------------------------------------------------------
 
 static func load_enabled(path := PREFS_PATH) -> bool:
-	return bool(SettingsFile.load_cfg(path).get_value("device", "real_photo", true))
+	return preload("res://scripts/system/privacy.gd").switch_value(path, "device", "real_photo")
 
 
 static func load_maker_enabled(path := PREFS_PATH) -> bool:
-	return bool(SettingsFile.load_cfg(path).get_value("device", "maker_photo", true))
+	return preload("res://scripts/system/privacy.gd").switch_value(path, "device", "maker_photo")
 
 
 func set_maker_enabled(on: bool) -> void:

@@ -40,6 +40,59 @@ func run_async(program: String, args: PackedStringArray, done := Callable()) -> 
 	_sem.post()
 
 
+## A program that keeps running and prints a line per event (`xprop -spy`): each line
+## reaches on_line(line) on the main thread, on_exit() when it ends. Its own reader
+## thread blocks on the pipe, so nothing polls. Returns the Watch (stop() it when done),
+## or null when it can't start.
+func spawn_watch(program: String, args: PackedStringArray, on_line: Callable, on_exit := Callable()) -> RefCounted:
+	var w := Watch.new()
+	return w if w.start(program, args, on_line, on_exit) else null
+
+
+class Watch extends RefCounted:
+	var pid := 0
+	var _pipe: FileAccess
+	var _err: FileAccess
+	var _thread: Thread
+
+	func start(program: String, args: PackedStringArray, on_line: Callable, on_exit: Callable) -> bool:
+		var r: Dictionary = OS.execute_with_pipe(program, args, true)
+		if r.is_empty() or int(r.get("pid", 0)) <= 0:
+			return false
+		pid = int(r["pid"])
+		_pipe = r.get("stdio")
+		_err = r.get("stderr")
+		_thread = Thread.new()
+		_thread.start(_read.bind(_pipe, on_line, on_exit))
+		return true
+
+	func alive() -> bool:
+		if pid > 0 and not OS.is_process_running(pid):
+			pid = 0   # it ended and that check reaped it: never ask about this pid again
+		return pid > 0
+
+	## Ends the program and its reader (and reaps it). Safe to call twice.
+	func stop() -> void:
+		if pid > 0 and OS.is_process_running(pid):
+			OS.kill(pid)   # SIGKILL, then Godot waits for it: no zombie
+		if _thread != null:
+			_thread.wait_to_finish()
+			_thread = null
+		pid = 0
+		_pipe = null
+		_err = null
+
+	static func _read(pipe: FileAccess, on_line: Callable, on_exit: Callable) -> void:
+		while pipe != null and pipe.is_open():
+			var line := pipe.get_line()
+			if line == "" and (pipe.eof_reached() or pipe.get_error() != OK):
+				break
+			if on_line.is_valid():
+				on_line.call_deferred(line)
+		if on_exit.is_valid():
+			on_exit.call_deferred()
+
+
 ## Jobs queued and not finished yet.
 func pending() -> int:
 	_mutex.lock()

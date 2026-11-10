@@ -37,6 +37,7 @@ const SessionWiring := preload("res://scripts/ui/games/session_wiring.gd")
 const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 const GameCloser := preload("res://scripts/ui/games/game_closer.gd")
 const SessionHealth := preload("res://scripts/system/session_health.gd")
+const BackgroundMode := preload("res://scripts/system/background_mode.gd")
 ## First-run setup (s-settings); loaded at runtime only when it exists.
 const SETUP_FLOW := "res://scripts/ui/setup/setup_flow.gd"
 const Glyph := preload("res://scripts/ui/glyph.gd")
@@ -111,6 +112,8 @@ var achievements_api: Object
 var _modal_layer: Control
 var closer: Node
 var setup_flow: Node
+## Main-loop pacing: near idle while a game (or any other window) is in front.
+var background: Node
 
 
 ## Play the boot splash at start (screenshots and tests turn it off).
@@ -118,6 +121,8 @@ static var boot_splash := true
 
 
 func _ready() -> void:
+	background = BackgroundMode.new()
+	add_child(background)
 	get_window().size_changed.connect(_fit_density)
 	_fit_density()
 	UiPrefs.load_prefs()
@@ -259,6 +264,8 @@ func _ready() -> void:
 		quick_menu.settings_requested.connect(_open_settings_category)
 	quick_menu.set_side(menu_side)
 	quick_menu.closed.connect(_on_menu_closed)
+	# full speed from the moment it shows (open() sets visible before building its first frame)
+	quick_menu.visibility_changed.connect(func(): background.set_menu(quick_menu.visible))
 	if quick_menu.has_signal("notice"):
 		quick_menu.notice.connect(func(text, tone): toast(text, "check" if tone == "good" else "info", tone))
 	add_child(quick_menu)
@@ -276,7 +283,7 @@ func _ready() -> void:
 	add_child(session)
 	wiring = SessionWiring.new()
 	wiring.setup({"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "updates": _svc("Updates"),
-		"controller": _svc("Controller"), "discover": _svc("Discover"), "launcher": Launcher,
+		"controller": _svc("Controller"), "discover": _svc("Discover"), "launcher": Launcher, "library": _svc("Library"),
 		"controls": _svc("Controls"), "profiles": _svc("Profiles")})
 	_wire_games()
 	_wire_services()
@@ -289,6 +296,7 @@ func _ready() -> void:
 	health.name = "SessionHealth"
 	health.game_running = func() -> bool: return session != null and session.is_active()
 	add_child(health)
+	health.watch_session(session)
 	if quick_menu.has_method("attach_session"):
 		quick_menu.attach_session(session)
 	if quick_menu.has_signal("exit_game_requested"):
@@ -661,6 +669,8 @@ func _notification(what: int) -> void:
 		return
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_window_focused = false
+		if background != null:
+			background.set_front(false)
 		if wiring != null:
 			wiring.home_in_front(false)
 		if launch_overlay != null:
@@ -670,6 +680,8 @@ func _notification(what: int) -> void:
 		_update_timer()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_window_focused = true
+		if background != null:
+			background.set_front(true)   # first: everything below runs at full speed
 		if wiring != null:
 			wiring.home_in_front(true)
 		_check_resume()

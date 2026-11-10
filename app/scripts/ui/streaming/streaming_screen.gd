@@ -527,7 +527,7 @@ func _running_card(h: Dictionary, app: Dictionary) -> Control:
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	var path := str(app.get("art", ""))
 	if path != "" and FileAccess.file_exists(path):
-		art.texture = Kit.load_art(path, Vector2i(136, 192))
+		Kit.load_art_async(path, Vector2i(136, 192), art)
 	row.add_child(art)
 	var texts := Kit.vbox(4)
 	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL

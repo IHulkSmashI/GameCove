@@ -58,6 +58,46 @@ static func parse_strict(text: String) -> Variant:
 	return d
 
 
+## parse_strict() plus every key and value exactly as written between its quotes, so
+## a writer can put back what it didn't change byte for byte (review 2, problem 7):
+## {"tree": Dictionary, "raw": {key: [raw key, raw value String or raw Dictionary]}}, or null.
+static func parse_strict_raw(text: String) -> Variant:
+	var errors: Array = []
+	var raws := PackedStringArray()
+	var tokens := tokenize(text, errors, raws)
+	if not errors.is_empty():
+		return null
+	var pos: Array[int] = [0]
+	var keys: Array[int] = [0]
+	var raw := {}
+	var d: Variant = _object_strict(tokens, pos, 0, keys, raws, raw)
+	if d == null or pos[0] != tokens.size() or keys[0] != count_keys(d):
+		return null
+	return {"tree": d, "raw": raw}
+
+
+## What the reader makes of the text between a string's quotes (see tokenize()).
+static func decode(raw: String) -> String:
+	if not "\\" in raw:
+		return raw
+	var s := ""
+	var i := 0
+	var n := raw.length()
+	while i < n:
+		if raw[i] == "\\" and i + 1 < n:
+			var e := raw[i + 1]
+			match e:
+				"n": s += "\n"
+				"t": s += "\t"
+				"\\", "\"": s += e
+				_: s += "\\" + e
+			i += 2
+		else:
+			s += raw[i]
+			i += 1
+	return s
+
+
 static func parse_file_strict(path: String) -> Variant:
 	var text: Variant = read_utf8_exact(path)
 	return parse_strict(text) if text is String else null
@@ -83,9 +123,13 @@ static func count_keys(d: Dictionary) -> int:
 	return n
 
 
-static func _object_strict(tokens: PackedStringArray, pos: Array[int], depth: int, keys: Array[int]) -> Variant:
+## raws/raw_out: the tokens as written (tokenize's raw_out) and where to put them.
+static func _object_strict(tokens: PackedStringArray, pos: Array[int], depth: int, keys: Array[int],
+		raws := PackedStringArray(), raw_out := {}) -> Variant:
 	var d := {}
+	var with_raw := raws.size() == tokens.size() and raws.size() > 0
 	while pos[0] < tokens.size():
+		var ki := pos[0]
 		var t := tokens[pos[0]]
 		pos[0] += 1
 		if t == "}":
@@ -95,21 +139,30 @@ static func _object_strict(tokens: PackedStringArray, pos: Array[int], depth: in
 		keys[0] += 1
 		if pos[0] >= tokens.size():
 			return null   # a key without a value
+		var vi := pos[0]
 		var nxt := tokens[pos[0]]
 		pos[0] += 1
 		if nxt == "{":
-			var sub: Variant = _object_strict(tokens, pos, depth + 1, keys)
+			var sub_raw := {}
+			var sub: Variant = _object_strict(tokens, pos, depth + 1, keys, raws, sub_raw)
 			if sub == null:
 				return null
 			d[t.substr(1)] = sub
+			if with_raw:
+				raw_out[t.substr(1)] = [raws[ki], sub_raw]
 		elif nxt == "}":
 			return null
 		else:
 			d[t.substr(1)] = nxt.substr(1)
+			if with_raw:
+				raw_out[t.substr(1)] = [raws[ki], raws[vi]]
 	return d if depth == 0 else null   # end of input inside a block
 
 
-static func tokenize(text: String, errors: Array = []) -> PackedStringArray:
+## raw_out (when given) gets each token as written: a quoted string's text between its
+## quotes, undecoded; an unquoted one with a NUL in front (it can never be put back as
+## written, since writers always quote); a brace as itself.
+static func tokenize(text: String, errors: Array = [], raw_out = null) -> PackedStringArray:
 	var out := PackedStringArray()
 	var i := 0
 	var n := text.length()
@@ -122,9 +175,12 @@ static func tokenize(text: String, errors: Array = []) -> PackedStringArray:
 				i += 1
 		elif c == "{" or c == "}":
 			out.append(c)
+			if raw_out != null:
+				raw_out.append(c)
 			i += 1
 		elif c == "\"":
 			i += 1
+			var start := i
 			var s := ""
 			while i < n and text[i] != "\"":
 				if text[i] == "\\" and i + 1 < n:
@@ -141,6 +197,8 @@ static func tokenize(text: String, errors: Array = []) -> PackedStringArray:
 					i += 1
 			if i >= n:
 				errors.append("unclosed string")
+			if raw_out != null:
+				raw_out.append(text.substr(start, i - start))
 			i += 1
 			# Quoted strings are marked so a literal "{" value is never read as a brace.
 			out.append("\"" + s)
@@ -150,6 +208,8 @@ static func tokenize(text: String, errors: Array = []) -> PackedStringArray:
 				s += text[i]
 				i += 1
 			out.append("\"" + s)
+			if raw_out != null:
+				raw_out.append(char(0) + s)
 	return out
 
 

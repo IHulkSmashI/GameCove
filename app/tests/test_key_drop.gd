@@ -20,6 +20,16 @@ func test_picks_a_private_lan_address() -> void:
 	eq(KeyDrop.pick_lan_ip(ifs.slice(0, 3)), "192.168.1.20", "Ethernet next")
 	eq(KeyDrop.pick_lan_ip([{"name": "wlan0", "addresses": ["8.8.8.8", "fe80::2"]}]), "", "public or IPv6-only: none")
 	eq(KeyDrop.pick_lan_ip([]), "", "offline: none")
+	# review 2, low 17: Waydroid, WireGuard and VPN addresses are private too, but not the Wi-Fi
+	var vpn := [
+		{"name": "waydroid0", "addresses": ["192.168.240.1"]},
+		{"name": "wg0", "addresses": ["10.8.0.2"]},
+		{"name": "tailscale0", "addresses": ["100.64.0.1"]},
+		{"name": "proton0", "addresses": ["10.2.0.2"]},
+		{"name": "vpn0", "addresses": ["10.9.0.2"]},
+	]
+	eq(KeyDrop.pick_lan_ip(vpn), "", "no tunnel or Waydroid address")
+	eq(KeyDrop.pick_lan_ip(vpn + [{"name": "wlp1s0", "addresses": ["192.168.1.44"]}]), "192.168.1.44", "the Wi-Fi among them")
 	ok(KeyDrop.is_private_ipv4("172.31.255.1") and not KeyDrop.is_private_ipv4("172.32.0.1"), "172.16/12 only")
 	ok(not KeyDrop.is_private_ipv4("192.168.1") and not KeyDrop.is_private_ipv4("192.168.1.300"), "malformed")
 
@@ -153,15 +163,44 @@ func test_live_times_out_after_ten_minutes() -> void:
 	d.free()
 
 
-func test_live_closes_after_too_many_wrong_requests() -> void:
+## Review 2, low 16: 30 anonymous 404s closed the page for the person using it. Now
+## guessing only slows new connections for a minute; the page stays open.
+func test_wrong_requests_are_rate_limited_not_fatal() -> void:
 	var d := _drop()
 	ok(d.start(), "listening")
 	var why: Array = []
 	d.expired.connect(func(w): why.append(w))
-	d.bad_requests = KeyDrop.MAX_BAD - 1
-	_ask(d, "GET /k/guess HTTP/1.1\r\n\r\n")
-	eq(why, ["too_many"], "closed against guessing")
-	ok(not d.is_running(), "not listening")
+	for i in KeyDrop.MAX_BAD:
+		_ask(d, "GET /k/guess HTTP/1.1\r\n\r\n")
+	eq(why, [], "not closed")
+	ok(d.is_running() and d.throttled(), "still open, new connections wait")
+	eq(_ask(d, "GET /k/%s HTTP/1.1\r\n\r\n" % d.token), "", "a request during the pause gets no answer")
+	d.poll(KeyDrop.BAD_WINDOW)
+	ok(not d.throttled(), "the pause ends")
+	ok(_ask(d, "GET /k/%s HTTP/1.1\r\n\r\n" % d.token).begins_with("HTTP/1.1 200"), "and the page answers again")
+	d.free()
+
+
+## Review 2, low 16: four idle sockets filled every slot and the phone was refused.
+func test_idle_sockets_cant_lock_the_phone_out() -> void:
+	var d := _drop()
+	ok(d.start(), "listening")
+	var idle: Array = []
+	for i in KeyDrop.MAX_CLIENTS + 2:
+		var c := StreamPeerTCP.new()
+		c.connect_to_host("127.0.0.1", d.port)
+		idle.append(c)
+	for i in 50:
+		for c in idle:
+			c.poll()
+		d.poll(0.01)
+		OS.delay_msec(2)
+	ok(_ask(d, "GET /k/%s HTTP/1.1\r\n\r\n" % d.token).begins_with("HTTP/1.1 200"), "the phone still gets the page")
+	d.poll(KeyDrop.IDLE_TIMEOUT)
+	d.poll(0.01)
+	eq(d._clients.size(), 0, "silent connections are closed after the idle timeout")
+	for c in idle:
+		c.disconnect_from_host()
 	d.free()
 
 

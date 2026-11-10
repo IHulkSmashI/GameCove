@@ -20,6 +20,7 @@ const Sgdb := preload("res://scripts/library/art/sgdb.gd")
 const SteamGrid := preload("res://scripts/library/art/steam_grid.gd")
 const Overrides := preload("res://scripts/library/art/art_overrides.gd")
 const Privacy := preload("res://scripts/system/privacy.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ArtScript := preload("res://scripts/discover/art.gd")
 const MAX_FILE := 12 * 1024 * 1024
 const AUTO_GAP := 1.5
@@ -40,7 +41,12 @@ var sync_mode := false
 
 var _game_ids := {}     # normalised title -> SteamGridDB game id
 var _auto: Array = []   # [game, kind]
-var _auto_tried := {}   # "key|kind" -> unix
+var _auto_tried := {}   # "key|kind" -> unix (kept in auto_tried_path between runs)
+var _auto_loaded := false
+var _tasks: Array[int] = []   # WorkerThreadPool tasks writing picks into Steam
+## The automatic fill's "already tried" list, so a restart doesn't ask SteamGridDB again
+## for every game that has no art there (review 2, low 23).
+var auto_tried_path := "user://art/auto_tried.json"
 var _timer: Timer
 
 
@@ -63,6 +69,8 @@ func _ready() -> void:
 	_timer.one_shot = true
 	_timer.timeout.connect(_auto_next)
 	add_child(_timer)
+	# picker thumbnails are only for browsing: a month is plenty
+	preload("res://scripts/system/cache_prune.gd").prune_later(_abs(thumbs_dir), 30 * 86400)
 
 
 func _abs(p: String) -> String:
@@ -199,16 +207,33 @@ func apply(game: Dictionary, kind: String, asset: Dictionary, to_steam: bool, do
 			return
 		var rec := {"path": path, "source": source, "id": int(asset.get("id", 0)), "author": str(asset.get("author", "")),
 			"author_url": str(asset.get("author_url", "")), "steam": []}
-		var msg := "Artwork changed."
-		if to_steam and str(game.get("store", "")) == "steam":
-			var written := write_to_steam(str(game.get("id", "")), kind, path)
-			rec["steam"] = written
-			if not written.is_empty():
-				msg = "Artwork changed here and in Steam (Steam shows it after it restarts)."
-		Overrides.set_override(dir, key, kind, rec)
-		art_changed.emit(key)
-		if done.is_valid():
-			done.call(true, msg))
+		if not (to_steam and str(game.get("store", "")) == "steam"):
+			_apply_finish(dir, key, kind, rec, [], done)
+		elif sync_mode or not is_inside_tree():
+			_apply_finish(dir, key, kind, rec, write_to_steam(str(game.get("id", "")), kind, path), done)
+		else:
+			# a WebP pick is decoded and saved as PNG for Steam: off the main thread (review 2, low 23)
+			var appid := str(game.get("id", ""))
+			_tasks.append(WorkerThreadPool.add_task(func():
+				call_deferred("_apply_finish", dir, key, kind, rec, write_to_steam(appid, kind, path), done),
+				false, "Art to Steam")))
+
+
+func _apply_finish(dir: String, key: String, kind: String, rec: Dictionary, written: Array, done: Callable) -> void:
+	rec["steam"] = written
+	var msg := "Artwork changed."
+	if not written.is_empty():
+		msg = "Artwork changed here and in Steam (Steam shows it after it restarts)."
+	Overrides.set_override(dir, key, kind, rec)
+	art_changed.emit(key)
+	if done.is_valid():
+		done.call(true, msg)
+
+
+func _exit_tree() -> void:
+	for t in _tasks:
+		WorkerThreadPool.wait_for_task_completion(t)
+	_tasks.clear()
 
 
 ## Writes an image into every Steam account's grid folder; returns the files written.
@@ -286,6 +311,7 @@ func auto_fill(games: Array) -> int:
 	if not Privacy.background_allowed(prefs_path) or unavailable_reason() != "":
 		return 0
 	var now := int(clock.call())
+	_load_auto_tried(now)
 	var n := 0
 	for g in games:
 		for k in missing_kinds(g):
@@ -295,16 +321,51 @@ func auto_fill(games: Array) -> int:
 			_auto_tried[id] = now
 			_auto.append([g, k])
 			n += 1
+	if n > 0:
+		SettingsFile.save_json(_abs(auto_tried_path), _auto_tried)
 	if sync_mode:
-		while not _auto.is_empty():
+		while not _auto.is_empty() and not paused:
 			_auto_next()
-	elif _timer != null and _timer.is_stopped() and n > 0:
+	elif _timer != null and _timer.is_stopped() and n > 0 and not paused:
 		_timer.start(0.5)
 	return n
 
 
+## Reads the tried list once; entries past RETRY_AUTO_S are dropped (pruned).
+func _load_auto_tried(now: int) -> void:
+	if _auto_loaded:
+		return
+	_auto_loaded = true
+	var d: Variant = SettingsFile.load_json(_abs(auto_tried_path))["data"]
+	if d is Dictionary:
+		for id in d:
+			var t := int(d[id]) if (d[id] is int or d[id] is float) else 0
+			if now - t < RETRY_AUTO_S and not _auto_tried.has(id):
+				_auto_tried[id] = t
+
+
+## True while a game runs (Library.set_background_paused): the automatic fill waits;
+## searches and picks the user makes still run.
+var paused := false
+
+
+func set_paused(on: bool) -> void:
+	paused = on
+	if on and _timer != null and _timer.is_inside_tree():
+		_timer.stop()
+	elif not on and not _auto.is_empty():
+		if sync_mode:
+			while not _auto.is_empty() and not paused:
+				_auto_next()
+		elif _timer != null and _timer.is_inside_tree() and _timer.is_stopped():
+			_timer.start(0.5)
+
+
 func _auto_next() -> void:
-	if _auto.is_empty():
+	if _auto.is_empty() or paused:
+		return
+	if not Privacy.background_allowed(prefs_path) or unavailable_reason() != "":
+		_auto.clear()   # a switch went off (or the key went away) after these were queued (review 2, low 23)
 		return
 	var job: Array = _auto.pop_front()
 	var g: Dictionary = job[0]

@@ -287,3 +287,25 @@ func test_monitor_that_died_is_not_running() -> void:
 	ic.stop_monitor()
 	ok(not ic.running(), "stopped")
 
+
+
+## Review 2, low 23: stop_monitor() signalled the old pid even after the monitor had
+## exited by itself (the pid could belong to another process by then).
+func test_stop_never_signals_an_exited_monitor() -> void:
+	var Intercept := preload("res://scripts/input/intercept.gd")
+	var it = Intercept.new()
+	var killed: Array = []
+	it.kill_fn = func(pid: int) -> void: killed.append(pid)
+	ok(it.start_monitor("sh", ["-c", "exit 0"]), "started")
+	for i in 200:
+		if not it.running():
+			break
+		OS.delay_msec(10)
+	ok(not it.running(), "it exited by itself")
+	it.stop_monitor()
+	eq(killed, [], "no signal to a pid that isn't ours any more")
+	ok(it.start_monitor("sh", ["-c", "sleep 5"]), "a live one")
+	var pid: int = it._pid
+	it.kill_fn = func(p: int) -> void: killed.append(p); OS.kill(p)
+	it.stop_monitor()
+	eq(killed, [pid], "a live monitor is stopped")

@@ -52,6 +52,13 @@ var _inflight := {}    # "appid:part" -> true
 var _price_wait := {}  # Wish key -> appid, while Discover fetches its prices
 
 
+func _ready() -> void:
+	# per-game insights not opened in 90 days (review 2, low 23: caches were never pruned)
+	var main_script = get_tree().get_script()
+	if main_script == null or not str(main_script.resource_path).begins_with("res://tests/"):
+		preload("res://scripts/system/cache_prune.gd").prune_later(ProjectSettings.globalize_path(data_dir), 90 * 86400)
+
+
 func _now() -> int:
 	return int(clock.call())
 

@@ -58,6 +58,8 @@ var _batch: Timer
 
 
 func _ready() -> void:
+	if preload("res://scripts/system/run_mode.gd").helper():
+		return   # --restore-baseline: no services (review 2, problem 5)
 	# The test runner loads autoloads too; tests must never read the real home.
 	var main_script = get_tree().get_script()
 	if main_script != null and str(main_script.resource_path).begins_with("res://tests/"):
@@ -105,6 +107,15 @@ func attach_metadata(resolver: Node, art: Node) -> void:
 	_batch.one_shot = true
 	_batch.timeout.connect(func(): changed.emit())
 	add_child(_batch)
+
+
+## A game started (true) or ended: the background metadata and art fill wait while it runs,
+## so nothing of ours fetches or writes behind a game. What the user asks for still runs.
+func set_background_paused(on: bool) -> void:
+	if metadata != null and metadata.has_method("set_paused"):
+		metadata.set_paused(on)
+	if artwork != null and artwork.has_method("set_paused"):
+		artwork.set_paused(on)
 
 
 ## The game, by key, as Library.games has it ({} if unknown).

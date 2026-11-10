@@ -54,6 +54,8 @@ jobs:
 
   publish:
     needs: build
+    # runs in the "nightly" environment: only main may deploy to it, no daily approval (docs/RELEASING.md)
+    environment: nightly
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

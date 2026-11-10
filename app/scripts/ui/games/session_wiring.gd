@@ -6,10 +6,11 @@ extends RefCounted
 ##            Profiles owns it, and followed while the game runs, so Auto TDP's
 ##            target and "can't reach" never work from an older value,
 ##            Updates.set_game_running(true), Controller.start_game(key),
-##            Discover.pause() (no background refresh while you play)
+##            Discover.pause() (no background refresh while you play),
+##            Library.set_background_paused(true) (no metadata / art fill either)
 ##   ended:   PerfMonitor.stop(), Achievements.invalidate(appid) (Steam just
 ##            wrote new stats), Updates.set_game_running(false),
-##            Controller.end_game(), Discover.resume()
+##            Controller.end_game(), Discover.resume(), Library.set_background_paused(false)
 ##   home in front of a running game: PerfMonitor.set_focused(false)
 ##   who has the controller: Controller.set_game_focused(game in front and no
 ##            quick menu over it), sent again on every change (InputPlumber
@@ -25,6 +26,7 @@ var updates: Object
 var controller: Object
 var discover: Object
 var launcher: Object
+var library: Object
 var controls: Object
 var profiles: Object
 var game: Dictionary = {}
@@ -41,6 +43,7 @@ func setup(svc: Dictionary) -> void:
 	controller = svc.get("controller")
 	discover = svc.get("discover")
 	launcher = svc.get("launcher")
+	library = svc.get("library")
 	controls = svc.get("controls")
 	profiles = svc.get("profiles")
 	if controls != null and controls.has_signal("control_changed"):
@@ -94,6 +97,7 @@ func game_started(g: Dictionary, app_id: int) -> void:
 	_call(updates, "set_game_running", [true])
 	_call(controller, "start_game", [key])
 	_call(discover, "pause")
+	_call(library, "set_background_paused", [true])
 
 
 func game_ended(g: Dictionary) -> void:
@@ -105,6 +109,7 @@ func game_ended(g: Dictionary) -> void:
 	_call(updates, "set_game_running", [false])
 	_call(controller, "end_game")
 	_call(discover, "resume")
+	_call(library, "set_background_paused", [false])
 	_other_sent = false   # end_game put our UI in charge; the next focus change says otherwise
 
 

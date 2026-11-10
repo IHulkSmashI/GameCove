@@ -50,13 +50,7 @@ static func write_env(home: String, appid: String, env: Dictionary) -> bool:
 			return DirAccess.remove_absolute(path) == OK
 		return true
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	var tmp := path + ".tmp"
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(render_env(env))
-	f.close()
-	return DirAccess.rename_absolute(tmp, path) == OK
+	return SettingsFile.save_text(path, render_env(env)) == OK
 
 
 ## "# ..." header then sorted KEY=VALUE lines; bad names and values with a

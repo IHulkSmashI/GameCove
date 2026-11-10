@@ -9,6 +9,12 @@ extends Node
 ## id gone from the focusable list and our process gone, twice in a row. On the
 ## end: home in front, frame limit cleared, Auto TDP stopped.
 ##
+## While the game's window is listed, nothing polls: Gamescope.watch_focusable()
+## (`xprop -spy`, one idle child blocked on the X socket) reports every change of
+## the list, and the exit timer only runs once the game looks gone (its second look
+## confirms the end, as before) or when there is no watch. Polling every
+## EXIT_CHECK_S meant a process (sh + xprop) every 3 s behind every game.
+##
 ## Nothing waits: each tick asks Gamescope for one xprop read on its worker
 ## thread (focusable_apps_async) and handles the answer when it comes back; a
 ## tick is skipped while the previous read is still out. Focus and frame-limit
@@ -65,6 +71,9 @@ var _exit_timer: Timer
 var _reading := false   # a focusable-apps read is out
 var _gen := 0           # bumps per session so a late answer can't touch the next one
 var _steam_task := -1   # WorkerThreadPool task of a reaper check that's out
+var _watch: RefCounted  # Gamescope.watch_focusable() while running, null when polling
+## True while the exit check polls (no watch, or the game looks gone): tests read it.
+var exit_polling := false
 ## The reaper check runs on a pool thread (set in _ready; tests outside the tree run it inline).
 var threaded_checks := false
 
@@ -223,6 +232,8 @@ func _on_exit_read(apps: Array) -> void:
 	if listed:
 		_seen = true
 	var alive: bool = listed or (pid > 0 and bool(pid_running.call(pid)))
+	# the watch tells us when the window goes; poll only without it or once it went
+	_set_exit_polling(not (listed and _watch != null and _watch.alive()))
 	if alive:
 		_gone = 0
 		return
@@ -274,10 +285,42 @@ func _enter_running() -> void:
 	phase = "running"
 	_gone = 0
 	_stop(_focus_timer)
-	_start(_exit_timer)
+	_set_exit_polling(true)
+	_start_watch()
+
+
+func _set_exit_polling(on: bool) -> void:
+	exit_polling = on
+	if on:
+		_start(_exit_timer)
+	else:
+		_stop(_exit_timer)
+
+
+## The focusable list's watch for this session (its first report comes at once).
+func _start_watch() -> void:
+	if _watch != null or app_id <= 0 or gamescope == null or not gamescope.has_method("watch_focusable"):
+		return
+	var gen := _gen
+	_watch = gamescope.watch_focusable(func(apps: Array) -> void:
+		if gen == _gen:
+			_on_exit_read(apps),
+		func() -> void:
+			if gen == _gen:
+				_stop_watch()   # joins its reader thread
+				if phase == "running":
+					_set_exit_polling(true))
+
+
+func _stop_watch() -> void:
+	if _watch != null:
+		var w := _watch
+		_watch = null
+		w.stop()
 
 
 func _exit_tree() -> void:
+	_stop_watch()
 	if _steam_task >= 0:
 		WorkerThreadPool.wait_for_task_completion(_steam_task)
 		_steam_task = -1
@@ -287,6 +330,8 @@ func _finish(go_home: bool) -> void:
 	var g := game
 	_stop(_focus_timer)
 	_stop(_exit_timer)
+	exit_polling = false
+	_stop_watch()
 	phase = "idle"
 	_gen += 1
 	_reading = false

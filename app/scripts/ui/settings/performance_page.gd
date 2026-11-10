@@ -72,6 +72,5 @@ static func set_rarity(a: Object, on: bool, path := PREFS_PATH) -> void:
 static func restore_rarity(a: Object, path := PREFS_PATH) -> void:
 	if a == null or not "fetch_rarity" in a:
 		return
-	var cfg := SettingsFile.load_cfg(path)
-	if cfg.has_section_key("achievements", "fetch_rarity"):
-		a.fetch_rarity = bool(cfg.get_value("achievements", "fetch_rarity"))
+	# off after a damaged settings file until the user sets it again (review 2, low 18)
+	a.fetch_rarity = preload("res://scripts/system/privacy.gd").switch_value(path, "achievements", "fetch_rarity")

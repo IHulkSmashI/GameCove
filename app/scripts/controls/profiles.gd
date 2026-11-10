@@ -260,6 +260,9 @@ func _on_detected() -> void:
 	var fresh := now.keys().filter(func(id): return not _seen_available.has(id))
 	_seen_available = now
 	if not fresh.is_empty():
+		# a leftover baseline kept for a control that wasn't there at start (review 2, low 14)
+		if game_key == "" and FileAccess.file_exists(SettingsFile.abs_path(baseline_path)):
+			restore_baseline(fresh)
 		apply_now("controls appeared", fresh)
 
 
@@ -367,7 +370,8 @@ func _desc(c: RefCounted) -> Dictionary:
 ## Puts back a game baseline left on disk by a run that never reached the game's end
 ## (crash, SIGTERM, power-off), together with the everyday values, and drops it once
 ## that ran. Only with no game running and only this device's. True when there was one.
-func restore_baseline() -> bool:
+## `only`: limit what is sent to these ids (controls that just appeared).
+func restore_baseline(only: Array = []) -> bool:
 	if game_key != "" or controls == null:
 		return false
 	var d: Variant = SettingsFile.load_json(baseline_path)["data"]
@@ -375,19 +379,65 @@ func restore_baseline() -> bool:
 		if FileAccess.file_exists(baseline_path):
 			DirAccess.remove_absolute(SettingsFile.abs_path(baseline_path))
 		return false
-	_baseline = _clean(d["values"])
-	apply_now("restore baseline")
+	var vals := _clean(d["values"])
+	var game_vals: Dictionary = d["game_values"] if d.get("game_values") is Dictionary else {}
+	var now := applicable(vals)
+	var keep := {}
+	for id in vals.keys():
+		if not now.has(id):
+			# registered but not available yet (detected later): kept for when it appears,
+			# not dropped with the rest (review 2, low 14)
+			if controls.has(id):
+				keep[id] = vals[id]
+			vals.erase(id)
+		elif game_vals.has(id) and _changed_since_game(id, game_vals[id]):
+			# the value isn't the game's any more: someone chose a newer one; leave it
+			vals.erase(id)
+	if not only.is_empty():
+		for id in vals.keys():
+			if not id in only:
+				keep[id] = vals[id]   # still to do, and not ours to send now
+				vals.erase(id)
+	_baseline = vals
+	apply_now("restore baseline", only)
 	_baseline.clear()
 	var gg := _game_gen
+	var kept_game := {}
+	for id in keep:
+		if game_vals.has(id):
+			kept_game[id] = game_vals[id]
 	_after_worker(func():
-		if _game_gen == gg:
-			_drop_baseline_file())
+		if _game_gen != gg:
+			return
+		if keep.is_empty():
+			_drop_baseline_file()
+		else:
+			SettingsFile.save_json(baseline_path, {"device": device_id, "game": str(d.get("game", "")), "values": keep, "game_values": kept_game}, "  "))
 	return true
+
+
+## True when control `id` now holds something other than the value the game set.
+func _changed_since_game(id: String, game_value: Variant) -> bool:
+	var cur: Variant = controls.value(id)
+	if cur == null:
+		return false
+	var want: Variant = controls.coerce(id, game_value) if controls.has_method("coerce") else game_value
+	if want == null:
+		return false
+	if (cur is int or cur is float) and (want is int or want is float):
+		return not is_equal_approx(float(cur), float(want))
+	return cur != want
 
 
 func _save_baseline_file() -> void:
 	DirAccess.make_dir_recursive_absolute(SettingsFile.abs_path(baseline_path).get_base_dir())
-	SettingsFile.save_json(baseline_path, {"device": device_id, "game": game_key, "values": _baseline}, "  ")
+	# with what the game sets, so a restore can tell a newer choice from the game's value
+	var eff := effective(game_key, source)
+	var game_vals := {}
+	for id in _baseline:
+		if eff.has(id):
+			game_vals[id] = eff[id]
+	SettingsFile.save_json(baseline_path, {"device": device_id, "game": game_key, "values": _baseline, "game_values": game_vals}, "  ")
 
 
 func _drop_baseline_file() -> void:

@@ -282,6 +282,6 @@ func _build_shots() -> void:
 			var url := str(want[i].get("thumb", ""))
 			resolver.image(url, func(path: String):
 				if path != "" and is_instance_valid(tr):
-					tr.texture = Kit.load_art(path, Vector2i(int(SHOT.x) * 2, int(SHOT.y) * 2)))
+					Kit.load_art_async(path, Vector2i(int(SHOT.x) * 2, int(SHOT.y) * 2), tr))
 	Kit.link_horizontal(shot_buttons)
 	_shots_scroll.visible = not shot_buttons.is_empty()

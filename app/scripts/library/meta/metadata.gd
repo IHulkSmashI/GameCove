@@ -32,7 +32,10 @@ const SCREENS_MAX := 8
 ## Who to credit for each source (the UI shows these next to the data).
 const SOURCE_NAMES := {"store": "", "steam": "Steam", "igdb": "IGDB", "wikidata": "Wikidata", "opencritic": "OpenCritic"}
 ## Image hosts screenshot URLs may point at.
-const IMAGE_HOSTS := ["steamstatic.com", "akamaihd.net", "images.igdb.com"]
+## Steam's CDN on Akamai by its exact host: the bare akamaihd.net suffix admitted every
+## Akamai customer (review 2, low 12).
+const IMAGE_HOSTS := ["steamstatic.com", "steamcdn-a.akamaihd.net", "images.igdb.com"]
+static var _URL_RE := RegEx.create_from_string("^https://([A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+)(?:[/?][^\\s#\\\\@]*)?$")
 ## Metacritic's own colour bands (score 75+ green, 50-74 yellow, under 50 red).
 const MC_GOOD := 75
 const MC_MIXED := 50
@@ -89,13 +92,17 @@ static func clean_date(v: Variant) -> String:
 	return s.substr(0, 10) if RegEx.create_from_string("^\\d{4}-\\d{2}-\\d{2}").search(s) != null else ""
 
 
-## `url` if it's https on one of `hosts` (or a subdomain), else "".
+## `url` if it's https on one of `hosts` (or a subdomain), else "". The whole URL must
+## match a strict shape (host of letters, digits, dots and dashes; no user, port,
+## fragment, backslash or space), so "https://evil.example#.steamstatic.com/x" is
+## refused: Godot would connect to evil.example (review 2, low 12).
 static func https_on(url: Variant, hosts: Array) -> String:
-	if not url is String or not (url as String).begins_with("https://") or (url as String).length() > 600:
+	if not url is String or (url as String).length() > 600:
 		return ""
-	var host := (url as String).substr(8).split("/", true, 1)[0].split("?", true, 1)[0].to_lower()
-	if host.contains("@") or host.contains(":"):
+	var m := _URL_RE.search(url)
+	if m == null:
 		return ""
+	var host := m.get_string(1).to_lower()
 	for h in hosts:
 		if host == h or host.ends_with("." + str(h)):
 			return url
@@ -278,6 +285,16 @@ static func local_layer(store: String, raw: Variant) -> Dictionary:
 				m["release_date"] = str(d.get("releaseDate", "")) if d.get("releaseDate") is String else ""
 				m["screens"] = _strings(d.get("screenshots", []))
 	return layer("store", m)
+
+
+## True only for Steam's own "no such app" answer ({"<appid>": {"success": false}}). A
+## captive portal's or a proxy's HTTP 200 page is not that (review 2, low 11).
+static func steam_says_missing(appid: String, body: PackedByteArray) -> bool:
+	var j := JSON.new()
+	if j.parse(body.get_string_from_utf8()) != OK or not j.data is Dictionary:
+		return false
+	var entry = j.data.get(appid)
+	return entry is Dictionary and entry.get("success") == false
 
 
 ## A Steam store appdetails answer for `appid` as a layer, or {} if Steam has

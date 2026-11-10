@@ -402,13 +402,14 @@ echo 2 >"$DATA/crash-count"
 touch -d '1 day ago' "$DATA/crash-count" 2>/dev/null || true
 client
 has "$T/client.log" "^select steam$" "slow crashes (a day apart) still trip the guard"
-printf '#!/bin/sh\nsleep 2.5\nexit 139\n' >"$CB/slowcrash"
+printf '#!/bin/sh\n[ -z "${GAMECOVE_HEARTBEAT:-}" ] || echo "1 ui" >"$GAMECOVE_HEARTBEAT"\nsleep 2.5\nexit 139\n' >"$CB/slowcrash"
 chmod +x "$CB/slowcrash"
 slow() { # an app that crashes after 2.5 s
 	: >"$T/client.log"
 	env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" GAMECOVE_BIN="$CB/slowcrash" \
-		GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=off "$@" sh "$CLIENT" >/dev/null 2>&1
+		XDG_RUNTIME_DIR="$T/srun" GAMECOVE_STEAM_WAIT_S=0 GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=off "$@" sh "$CLIENT" >/dev/null 2>&1
 }
+mkdir -p "$T/srun"
 echo 2 >"$DATA/crash-count"
 slow
 has "$T/client.log" "^select steam$" "a crash after some uptime counts too (no time window)"
@@ -416,6 +417,20 @@ echo 2 >"$DATA/crash-count"
 slow GAMECOVE_HEALTHY_S=1
 hasnt "$T/client.log" "select steam" "a run that stayed up the healthy time starts the count over"
 eqv "$(cat "$DATA/crash-count")" 1 "only the crash after the healthy run counts"
+# review 2, low 19: a wall-clock jump during a short run (NTP stepping the clock at boot) made
+# it look healthy and cleared the count; the run is timed from /proc/uptime instead
+cat >"$CB/date" <<EOF
+#!/bin/sh
+n=\$(cat "$T/date-n" 2>/dev/null || echo 1000)
+echo "\$n"
+echo \$((n + 86400)) >"$T/date-n"
+EOF
+chmod +x "$CB/date"
+rm -f "$T/date-n"
+echo 2 >"$DATA/crash-count"
+slow GAMECOVE_HEALTHY_S=600
+has "$T/client.log" "^select steam$" "a clock jump doesn't make a short run healthy"
+rm -f "$CB/date" "$T/date-n"
 # the count can't be saved: fall back at once instead of never reaching the limit
 rm -rf "$DATA"
 mkdir -p "$DATA/crash-count.tmp" # a directory: the temp file can't be written, even as root
@@ -476,6 +491,25 @@ env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_RUNTIME_DIR="$RUNDIR" GAMECOVE_BIN=
 sleep 0.3
 has "$T/order.log" "^steam -silent$" "an app that never says ready doesn't keep Steam away (timeout)"
 
+# review 2, low 21: a session switch (TERM) during the Steam wait stops the app too, and Steam
+# isn't started for a session that is ending
+printf '#!/bin/sh\necho $$ >"%s/app.pid"\nexec sleep 30\n' "$T" >"$CB/waiter"
+chmod +x "$CB/waiter"
+: >"$T/order.log"
+rm -f "$RUNDIR/gamecove-steam-ready" "$T/app.pid"
+env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_RUNTIME_DIR="$RUNDIR" GAMECOVE_BIN="$CB/waiter" GAMECOVE_STEAM_WAIT_S=10 \
+	GAMECOVE_SESSION_SELECT="$CB/select" GAMECOVE_STEAM_MODE=silent sh "$CLIENT" >/dev/null 2>&1 &
+cpid=$!
+sleep 1
+kill -TERM "$cpid"
+i=0
+while kill -0 "$cpid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
+sleep 0.2
+apid="$(cat "$T/app.pid" 2>/dev/null)"
+[ -n "$apid" ] && ! kill -0 "$apid" 2>/dev/null && ok || { bad "TERM during the Steam wait stops the app"; [ -z "$apid" ] || kill -KILL "$apid" 2>/dev/null; }
+hasnt "$T/order.log" "^steam" "no Steam start for a session that is ending"
+kill -KILL "$cpid" 2>/dev/null
+
 # --- review H1: a hung GameCove (alive, but never ready or its heartbeat stopped) is killed and counted
 HR="$T/hrun"
 mkdir -p "$HR"
@@ -510,9 +544,35 @@ eqv "$(sed -n 2p "$DATA/crash-fallback")" hung "fallback says it was hung"
 rm -rf "$DATA"
 eqv "$(watch ingame)" 0 "an unchanging heartbeat during a game is never a hang (long loads)"
 eqv "$(watch alive)" 0 "a beating app runs on"
-eqv "$(watch oldapp)" 0 "an app with the ready file but no heartbeat is only checked for readiness"
 [ ! -e "$DATA/crash-count" ] && ok || bad "healthy runs count nothing"
+# review 2, problem 4: the ready file comes early (Library autoload); a hang before the first
+# beat (building the main scene) is a hang, and its healthy time clears nothing
+mkdir -p "$DATA"
+echo 2 >"$DATA/crash-count"
+code="$(watch oldapp GAMECOVE_HEALTHY_S=1)"
+[ "$code" -ne 0 ] && [ "$code" -ne 124 ] && ok || bad "ready file but no heartbeat: stopped as not ready (exit $code)"
+has "$T/client.log" "^select steam$" "and counted (third in a row): the count wasn't cleared"
+rm -rf "$DATA"
 [ ! -e "$HR/gamecove-heartbeat" ] && ok || bad "heartbeat file removed when the app is gone"
+# review 2, low 21: without $XDG_RUNTIME_DIR a healthy app was killed as "not ready" every minute;
+# the heartbeat goes to a private temp folder (removed afterwards), and a hang is still caught
+mkdir -p "$T/tmpd"
+eqv "$(watch alive XDG_RUNTIME_DIR= TMPDIR="$T/tmpd")" 0 "no XDG_RUNTIME_DIR: a beating app runs on"
+code="$(watch hang XDG_RUNTIME_DIR= TMPDIR="$T/tmpd")"
+[ "$code" -ne 0 ] && [ "$code" -ne 124 ] && ok || bad "no XDG_RUNTIME_DIR: a hang is still stopped (exit $code)"
+eqv "$(ls -A "$T/tmpd")" "" "the private heartbeat folder is removed"
+rm -rf "$DATA"
+
+# --- review 2, problem 6: on a full or read-only home the crash-loop fallback still switches away
+# (session-select's boot marker write aborted it under set -e). The real client and select.
+echo 139 >"$T/app-code"
+: >"$T/rofile" # a file where the data folder's parent should be: nothing under it can be written
+rm -f "$ST/switched"
+env PATH="$CB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/rofile" XDG_CONFIG_HOME="$T/home/.config" \
+	GAMECOVE_SESSIONS_DIRS="$T/sessions" GAMECOVE_BOOT_ID_FILE="$T/boot_id" GAMECOVE_OSTREE_BOOTED="$T/not-ostree" \
+	GAMECOVE_BIN="$CB/gamecove.x86_64" GAMECOVE_SESSION_SELECT="$SEL" GAMECOVE_STEAM_MODE=off \
+	sh "$CLIENT" >"$T/ro.out" 2>&1
+eqv "$(cat "$ST/switched" 2>/dev/null)" game "unwritable home: the fallback still switches to Steam Gaming Mode"
 
 # --- traits: ZOTAC Zone board G1A1W, which Linux's orientation quirk misses (G0A1W only)
 SD="$REPO/session/gamescope-session-plus/sessions.d/gamecove"
