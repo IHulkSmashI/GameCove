@@ -128,6 +128,8 @@ func _measure(state: String) -> void:
 	d["heartbeat"] = FileAccess.get_file_as_string(OS.get_environment("GAMECOVE_HEARTBEAT")).strip_edges() if hb1 >= 0 else ""
 	d["processing"] = _processing_nodes()
 	d["window_focused"] = world.main._window_focused
+	var bg: Node = world.main.get("background")
+	d["throttled"] = bg.throttled() if bg != null else false
 	d["menu_open"] = world.main.quick_menu.visible
 	result["states"][state] = d
 	print("PERF STATE %s %s" % [state, JSON.stringify(d)])
