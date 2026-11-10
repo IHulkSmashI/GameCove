@@ -210,6 +210,8 @@ func capabilities(game: Dictionary) -> Dictionary:
 	var installed: bool = e.get("installed", false)
 	if str(e.get("store", "")) == "steam":
 		return steam.capabilities(installed)
+	if str(e.get("store", "")) == "emu":
+		return emu_capabilities()
 	var c := {"how": {}, "why": {}, "needs_window": []}
 	for action in StoreCommands.ACTIONS:
 		var p := StoreCommands.plan(action, e, tools, _facts(e, {"path": "/x"} if action == "move" else {}))
@@ -239,6 +241,19 @@ func capabilities(game: Dictionary) -> Dictionary:
 			c[cap] = false
 			c["why"][cap] = "Nothing running for this game"
 	return c
+
+
+## Emulated games and ES-DE / RetroDECK: EmuDeck, RetroDECK and Steam ROM
+## Manager manage them (the Emulation page opens those); nothing to do here.
+static func emu_capabilities() -> Dictionary:
+	var c := {"how": {}, "why": {}, "needs_window": []}
+	for cap in ["install", "uninstall", "update", "verify", "move", "launch_options", "compat_tool", "progress", "pause", "resume", "cancel"]:
+		c[cap] = false
+		c["why"][cap] = EMU_WHY
+	return c
+
+
+const EMU_WHY := "EmuDeck or RetroDECK looks after this one: open it from the Emulation page"
 
 
 # --- Actions ---

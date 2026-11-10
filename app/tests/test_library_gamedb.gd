@@ -81,7 +81,7 @@ func test_collect_merges_all_stores() -> void:
 	sorted.sort_custom(func(a, b): return a.naturalnocasecmp_to(b) < 0)
 	eq(titles, sorted, "sorted by title")
 	for g in games:
-		eq(g.keys(), ["key", "store", "id", "title", "installed", "art", "info", "last_played", "playtime_min"], g["key"] + " has exactly the contract keys")
+		eq(g.keys(), ["key", "store", "id", "title", "installed", "art", "info", "last_played", "playtime_min", "emulated", "shortcut"], g["key"] + " has exactly the contract keys")
 		eq(g["art"].keys(), ["cover", "hero", "logo", "icon"], g["key"] + " art keys")
 	var e: Dictionary = r["entries"]
 	eq(e["steam:976730"]["info"]["protondb"], "platinum", "steam matched by id")

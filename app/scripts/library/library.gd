@@ -27,6 +27,9 @@ const Steam := preload("res://scripts/library/stores/steam.gd")
 const Epic := preload("res://scripts/library/stores/epic.gd")
 const Gog := preload("res://scripts/library/stores/gog.gd")
 const Amazon := preload("res://scripts/library/stores/amazon.gd")
+const Emu := preload("res://scripts/library/stores/emu.gd")
+const Collections := preload("res://scripts/library/collections.gd")
+const Playtime := preload("res://scripts/library/playtime.gd")
 const Common := preload("res://scripts/library/stores/common.gd")
 const GameDB := preload("res://scripts/library/gamedb.gd")
 const StoreManager := preload("res://scripts/library/manage/store_manager.gd")
@@ -38,6 +41,11 @@ const ArtOverrides := preload("res://scripts/library/art/art_overrides.gd")
 const BATCH_S := 2.0
 
 var games: Array[Dictionary] = []
+## Favourites, hidden games and collections (scripts/library/collections.gd).
+var collections: RefCounted = Collections.new()
+## The emulation setup found by the last scan (Emu.detect: EmuDeck, RetroDECK,
+## ES-DE; kind "" when none); the Emulation page shows it.
+var emulation: Dictionary = Emu.empty_setup()
 ## Home folder the stores are read from.
 var home := OS.get_environment("HOME")
 
@@ -176,7 +184,7 @@ func refresh() -> void:
 	_task = WorkerThreadPool.add_task(func(): _apply.call_deferred(collect(h, db_path)), false, "Library scan")
 
 
-## Re-reads one store (steam | epic | gog | amazon) in the background after an
+## Re-reads one store (steam | epic | gog | amazon | emu) in the background after an
 ## install, uninstall or move; emits `changed` when done.
 func refresh_store(store_name: String) -> void:
 	if _task != -1:
@@ -198,6 +206,10 @@ func _apply(result: Dictionary) -> void:
 		var merged := merge_store(games, _entries, result, _task_store)
 		games = merged["games"]
 		_entries = merged["entries"]
+	if result.has("emulation"):
+		emulation = result["emulation"]
+	if result.has("imported"):
+		collections.set_imported(result["imported"])
 	changed.emit()
 	if store != null:
 		store.on_library_scanned(_entries)
@@ -253,15 +265,23 @@ static func collect(home_dir: String, db_path: String, only: Array = []) -> Dict
 		all.append_array(Gog.scan(home_dir))
 	if only.is_empty() or "amazon" in only:
 		all.append_array(Amazon.scan(home_dir))
+	var setup := {}
+	if only.is_empty() or "emu" in only:
+		setup = Emu.detect(home_dir, Emu.path_env, Emu.flatpak_dirs)
+		all.append_array(Emu.scan(home_dir, setup))
 	var index := GameDB.build_index(GameDB.load_file(db_path))
 	var meta_dir := ProjectSettings.globalize_path(MetaResolver.CACHE_DIR)
 	var overrides := ArtOverrides.read(ProjectSettings.globalize_path(ArtOverrides.DIR))
 	var entries := {}
+	var played := Playtime.read()
 	for e in all:
 		var key := "%s:%s" % [e["store"], e["id"]]
 		if entries.has(key) and (entries[key].get("installed", false) or not e.get("installed", false)):
 			continue
-		var rec := GameDB.find(index, e.get("ids", {}), e.get("title", ""))
+		# Emulated games and the frontend aren't PC games: no database match by title.
+		var rec := GameDB.find(index, e.get("ids", {}), e.get("title", "")) if e["store"] != "emu" else {}
+		if e["store"] == "emu":
+			Playtime.apply(e, played)
 		e["info"] = GameDB.info_for(rec)
 		var steam_id = rec.get("ids", {}).get("steam", null) if rec.get("ids") is Dictionary else null
 		if steam_id != null and e["store"] != "steam":
@@ -279,7 +299,24 @@ static func collect(home_dir: String, db_path: String, only: Array = []) -> Dict
 	for key in entries:
 		out.append(make_game(entries[key]))
 	_sort(out)
-	return {"games": out, "entries": entries}
+	var result := {"games": out, "entries": entries}
+	if not setup.is_empty():
+		result["emulation"] = setup
+	if only.is_empty() or "steam" in only or "emu" in only:
+		result["imported"] = imported_lists(home_dir, entries)
+	return result
+
+
+## Steam's own favourites, hidden games and collections (read-only, from its
+## cloud-storage file), plus shortcuts hidden in Steam, as Library keys.
+static func imported_lists(home_dir: String, entries: Dictionary) -> Dictionary:
+	var file := Collections.steam_cloud_file(home_dir, Steam.STEAM_ROOTS)
+	var parsed := Collections.parse_steam_cloud(FileAccess.get_file_as_string(file)) if file != "" else {}
+	var imp := Collections.steam_to_keys(parsed)
+	for k in entries:
+		if entries[k].get("hidden_in_steam", false) and not k in imp["hidden"]:
+			imp["hidden"].append(k)
+	return imp
 
 
 ## Fills every field of the contract's game shape so the UI never checks for missing keys.
@@ -295,6 +332,8 @@ static func make_game(entry: Dictionary) -> Dictionary:
 			"summary": "", "meta": Metadata.empty()}),
 		"last_played": entry.get("last_played", 0),
 		"playtime_min": entry.get("playtime_min", 0),
+		"emulated": entry.get("emulated", {}),
+		"shortcut": entry.get("shortcut", false),
 	}
 
 
@@ -311,6 +350,8 @@ static func launch_command(entry: Dictionary, tools: Dictionary, extra_env := {}
 			return Gog.launch_command(entry, tools, task, extra_env)
 		"amazon":
 			return Amazon.launch_command(entry, tools, extra_env)
+		"emu":
+			return Emu.launch_command(entry)
 	return [] as Array[String]
 
 
@@ -381,6 +422,13 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 	var entry: Dictionary = _entries.get(game.get("key", ""), game)
 	var path_env := OS.get_environment("PATH")
 	var once := str(options.get("args", ""))
+	if entry.get("shortcut", false):
+		# An emulated game Steam ROM Manager added: Steam starts it, the way it does from its own library.
+		var gid := str(entry.get("game_id", ""))
+		if Emu.valid_game_id(gid):
+			result["ok"] = Steam.open_uri("steam://rungameid/" + gid, Common.which("steam", path_env))
+			result["app_id"] = str(entry["id"]).to_int()
+		return result
 	if entry.get("store", "") == "steam":
 		if once != "" and store != null:
 			result["ok"] = store.steam.launch(str(entry["id"]), once)["ok"]
@@ -419,6 +467,15 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 	if not result["ok"]:
 		result["app_id"] = 0
 	return result
+
+
+## A game we started (the frontend or an emulated game) ended: count its time
+## (user://playtime.json) and re-read the emulation entries so it shows.
+func record_playtime(game: Dictionary, started: int, ended: int) -> void:
+	if str(game.get("store", "")) != "emu" or not _entries.has(str(game.get("key", ""))):
+		return
+	if Playtime.record(str(game.get("key", "")), started, ended):
+		refresh_store("emu")
 
 
 # --- Store management (docs/STORES.md). Each returns at once; results arrive as signals. ---
