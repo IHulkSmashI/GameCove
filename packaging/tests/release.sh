@@ -23,6 +23,9 @@ for f in $(git -C "$REPO" ls-files | grep -v /); do
 	*) bad "unexpected file in the repo root: $f" ;;
 	esac
 done
+# A path part starting with "-" is a test or command writing to its own arguments (app/-C/-xzf/ was one)
+git -C "$REPO" ls-files | grep -E '(^|/)-' >"$T/dash"
+if [ -s "$T/dash" ]; then bad "tracked paths with a part starting with '-': $(tr '\n' ' ' <"$T/dash")"; else ok; fi
 # A document whose content isn't what its name says (guide.pdf was a saved captcha page)
 git -C "$REPO" ls-files '*.pdf' '*.zip' '*.7z' '*.exe' '*.dll' '*.so' | grep -v '^app/tests/fixtures/' >"$T/bin"
 if [ -s "$T/bin" ]; then bad "binary or document files tracked: $(tr '\n' ' ' <"$T/bin")"; else ok; fi
