@@ -182,6 +182,25 @@ func _style_fades() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED:
 		_style_fades()
+	elif what == NOTIFICATION_ENTER_TREE:
+		_check_nested_mask()
+
+
+## Godot can't nest clip-children masks (the inner one draws as a white
+## block): inside one (Discover's page sits in a FadeMask) the row drops its
+## own mask and its edge covers fade by their alpha alone (_update_fade).
+func _check_nested_mask() -> void:
+	if _mask == null:
+		return
+	var nested := false
+	var n := get_parent()
+	while n != null:
+		if n is CanvasItem and (n as CanvasItem).clip_children != CanvasItem.CLIP_CHILDREN_DISABLED:
+			nested = true
+			break
+		n = n.get_parent()
+	_mask.clip_children = CanvasItem.CLIP_CHILDREN_DISABLED if nested else CanvasItem.CLIP_CHILDREN_ONLY
+	_mask.self_modulate.a = 0.0 if nested else 1.0
 
 
 func remembered() -> Control:
