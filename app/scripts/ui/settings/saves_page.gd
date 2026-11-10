@@ -104,7 +104,7 @@ func open_game(g: Dictionary) -> void:
 	rows.append({"id": "toggle", "text": TSaves.SYNC_TOGGLE, "value": "On" if bool(st["enabled"]) else "Off", "icon": "cloud",
 		"disabled": not allowed, "detail": "" if allowed else TSaves.DISABLED_LINE})
 	var n: int = s.backup_list(str(g["key"])).size()
-	rows.append({"id": "backups", "text": TSaves.BACKUPS, "detail": TSaves.backup_count(n).capitalize() if n > 0 else TSaves.NO_BACKUPS,
+	rows.append({"id": "backups", "text": TSaves.BACKUPS, "detail": TSaves.backup_count(n) if n > 0 else TSaves.NO_BACKUPS,
 		"icon": "restart", "disabled": n == 0})
 	_sheet().open(str(g.get("title", "")), TSaves.status_line(st, now), rows, func(id: String): _on_game_pick(g, st, id))
 
