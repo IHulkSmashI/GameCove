@@ -85,10 +85,14 @@ func _init() -> void:
 	_restyle()
 
 
+## Light themes' text halo strength (see _halo()).
+const HALO_ALPHA := 0.85
+
+
 func _restyle() -> void:
 	# The line above the title is plain mono accent text (no box).
 	tag.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.40) if ThemeLib.is_dark() else Color(1, 1, 1, 0.0))
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.40) if ThemeLib.is_dark() else Color(ThemeLib.color("scrim"), HALO_ALPHA))
 
 
 ## Colour of the tag (the art accent on Home).
@@ -186,8 +190,20 @@ func _segment(icon: String, text: String) -> HBoxContainer:
 	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_halo(l)
 	row.add_child(l)
 	return row
+
+
+## Light themes: a soft light halo around text that sits on the art past the
+## title shade (the art keeps its colour, so dark text needs its own ground).
+static func _halo(l: Label) -> void:
+	if ThemeLib.is_dark():
+		return
+	l.add_theme_color_override("font_shadow_color", Color(ThemeLib.color("scrim"), HALO_ALPHA))
+	l.add_theme_constant_override("shadow_offset_x", 0)
+	l.add_theme_constant_override("shadow_offset_y", 0)
+	l.add_theme_constant_override("shadow_outline_size", 10)
 
 
 static func _meta_color() -> Color:
