@@ -31,6 +31,8 @@ var home := OS.get_environment("HOME")
 var sheet_host: Node
 ## [{"name", "internal", "dir", "major", "minor", "games"}], newest first.
 var builds: Array = []
+## GE-Proton folders Steam can't use (unpacking didn't finish): names, newest first.
+var broken: Array = []
 ## The last check: ProtonGE.latest() ({} = not checked yet). Kept by `jobs`, so
 ## a rebuilt card still knows what it found.
 var release: Dictionary:
@@ -71,14 +73,24 @@ func compat_dir() -> String:
 	return ProtonGE.compat_dir(home)
 
 
-## Lists the installed builds (file reads only, cheap) and redraws.
+## Lists the installed builds (file reads only, cheap) and redraws. What an
+## interrupted install or removal left behind goes on the worker.
 func read_installed() -> void:
 	var dir := compat_dir()
 	var root := Proton.steam_root(home)
 	builds = ProtonGE.installed(dir)
 	for b in builds:
 		b["games"] = ProtonGE.games_using(root, str(b["internal"])).size()
+	broken = ProtonGE.broken(dir)
 	_build()
+	if busy == "" and ProtonGE.has_leftovers(dir):
+		var g: String = jobs.group
+		_job("cleanup", func(): return ProtonGE.cleanup(dir, g), "_on_cleaned")
+
+
+func _on_cleaned(_ok: Variant) -> void:
+	if not ProtonGE.has_leftovers(compat_dir()):
+		read_installed()
 
 
 ## Hands `fn` to the job owner; `done` gets its result on whichever card is
@@ -108,6 +120,8 @@ func main_row_text() -> Array:
 		return [TX.GE_CHECK, TX.GE_CHECKING, TX.GE_CHECK_HINT]
 	if busy == "install":
 		return [TX.GE_INSTALL % str(release.get("tag", "")), TX.GE_INSTALLING, ""]
+	if busy == "cleanup":
+		return [TX.GE_CHECK, "", TX.GE_CHECK_HINT]
 	if release.has("tag"):
 		var tag := str(release["tag"])
 		if builds.any(func(b): return b["name"] == tag):
@@ -140,7 +154,7 @@ func _build() -> void:
 		main_row.set_value(t[1], "good")
 	main_row.pressed.connect(press_main)
 	add_child(main_row)
-	if builds.is_empty():
+	if builds.is_empty() and broken.is_empty():
 		var n := Kit.label(TX.GE_NONE, "QuietLabel", true)
 		n.name = "GeNone"
 		add_child(n)
@@ -156,6 +170,14 @@ func _build() -> void:
 		# A build that wasn't there at the last read (just installed) pops.
 		if _listed_once and not _listed.has(b["name"]):
 			Motion.pop(r, 0.9, 0.36, 0.05)
+	for n in broken:
+		var r: VBoxContainer = ActionRow.new()
+		r.setup("ge_" + str(n), str(n), TX.GE_BROKEN, TX.GE_BROKEN_HINT, "layers")
+		r.set_value(TX.GE_BROKEN, "bad")
+		var bn := str(n)
+		r.pressed.connect(func(): open_broken(bn))
+		add_child(r)
+		rows[n] = r
 	_listed = {}
 	for b in builds:
 		_listed[b["name"]] = true
@@ -193,7 +215,8 @@ func install() -> void:
 	var r := runner
 	var rel := release.duplicate()
 	var dir := compat_dir()
-	if _job("install", func(): return ProtonGE.install(r, rel, dir), "_on_installed"):
+	var g: String = jobs.group
+	if _job("install", func(): return ProtonGE.install(r, rel, dir, g), "_on_installed"):
 		_build()
 
 
@@ -223,13 +246,20 @@ func open_build(b: Dictionary) -> void:
 		func(choice: String): if choice == "remove": remove(str(b["name"])))
 
 
+## A build that didn't finish unpacking: the only thing to do is remove it.
+func open_broken(build_name: String) -> void:
+	var item := {"id": "remove", "text": TX.GE_REMOVE % build_name, "icon": "x", "tone": "bad", "detail": TX.GE_BROKEN_DETAIL}
+	_sheet().open(build_name, TX.GE_BROKEN, [item], func(choice: String): if choice == "remove": remove(build_name))
+
+
 ## Removes one build on the worker (about 1.5 GB of files).
 func remove(build_name: String) -> void:
 	if busy != "":
 		return
 	var dir := compat_dir()
 	var root := Proton.steam_root(home)
-	_job("remove", func(): return {"name": build_name, "error": ProtonGE.remove(dir, build_name, root)}, "_on_removed")
+	var g: String = jobs.group
+	_job("remove", func(): return {"name": build_name, "error": ProtonGE.remove(dir, build_name, root, g)}, "_on_removed")
 
 
 func _on_removed(res: Dictionary) -> void:

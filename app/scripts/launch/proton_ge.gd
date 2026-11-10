@@ -9,9 +9,20 @@ extends RefCounted
 ##
 ## Only when the user presses Check or Install: no background lookup. Every
 ## step blocks (curl, sha512sum, tar): call from a worker thread only.
+##
+## Nothing half-done ever sits where Steam looks: the tarball is unpacked inside
+## .gamecove-download/ and renamed into compatibilitytools.d/<tag> (same drive,
+## one atomic step) only once its compatibilitytool.vdf is there. A removal is
+## renamed out of the way first, then deleted. Whatever an interruption leaves
+## (power loss, app killed) stays inside .gamecove-download/ and goes at the next
+## start or install (cleanup()). A GE-Proton folder without its
+## compatibilitytool.vdf (left by an older GameCove or by hand) is listed by
+## broken() so the card can offer to remove it. curl gives up on a stalled
+## download (under 1 KB/s for 30 s) and only speaks HTTPS.
 
 const Proton := preload("res://scripts/launch/proton.gd")
 const VDF := preload("res://scripts/launch/vdf.gd")
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 
 const API := "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest"
 ## Downloads are only taken from this release page.
@@ -20,6 +31,9 @@ const TAG_RE := "^GE-Proton[0-9]+-[0-9]+$"
 ## Where a download waits for its checksum (inside compatibilitytools.d, so the
 ## unpack is on the same drive).
 const DOWNLOAD_DIR := ".gamecove-download"
+## curl: HTTPS only (redirects too), and give up when the transfer stalls.
+const CURL_SAFE: Array[String] = ["--proto", "=https", "--proto-redir", "=https",
+	"--speed-limit", "1024", "--speed-time", "30"]
 
 
 ## The release from GitHub's "latest release" JSON:
@@ -51,7 +65,7 @@ static func parse_release(json: String) -> Dictionary:
 
 ## The newest release, or {"error": "..."} when GitHub didn't answer.
 static func latest(runner: RefCounted) -> Dictionary:
-	var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "20",
+	var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "20"] + CURL_SAFE + [
 		"-H", "Accept: application/vnd.github+json", "-H", "User-Agent: GameCove", API]))
 	if int(r.get("code", -1)) != 0:
 		return {"error": "offline"}
@@ -76,8 +90,8 @@ static func installed(dir: String) -> Array:
 		var c := Proton.classify(path.get_file())
 		if c["flavour"] != "ge":
 			c = Proton.classify(str(internal))
-		if c["flavour"] != "ge" or path.get_file().begins_with("."):
-			continue
+		if c["flavour"] != "ge" or path.get_file().begins_with(".") or not complete(path):
+			continue   # a folder without its compatibilitytool.vdf is broken(), not installed
 		out.append({"name": path.get_file(), "internal": str(internal), "dir": path, "major": c["major"], "minor": c["minor"]})
 	out.sort_custom(func(a, b): return a["major"] > b["major"] or (a["major"] == b["major"] and a["minor"] > b["minor"]))
 	return out
@@ -103,35 +117,80 @@ static func parse_sha(text: String) -> String:
 	return h if RegEx.create_from_string("^[0-9a-f]{128}$").search(h) != null else ""
 
 
+## A folder in `dir` that looks like a GE-Proton build ("GE-Proton10-26") but has
+## no readable compatibilitytool.vdf: Steam can't use it. Names, newest first.
+static func broken(dir: String) -> Array:
+	var out: Array = []
+	if dir == "":
+		return out
+	var d := DirAccess.open(dir)
+	if d == null:
+		return out
+	var tag_re := RegEx.create_from_string(TAG_RE)
+	for sub in d.get_directories():
+		if tag_re.search(sub) != null and not d.is_link(sub) and not complete(dir.path_join(sub)):
+			out.append(sub)
+	out.sort_custom(func(a, b):
+		var ca := Proton.classify(a)
+		var cb := Proton.classify(b)
+		return ca["major"] > cb["major"] or (ca["major"] == cb["major"] and ca["minor"] > cb["minor"]))
+	return out
+
+
+## The build in `path` is whole enough for Steam (its compatibilitytool.vdf reads).
+static func complete(path: String) -> bool:
+	var f := path.path_join("compatibilitytool.vdf")
+	return FileAccess.file_exists(f) and _read(f).contains("compat_tools")
+
+
+## What an interrupted install or removal left in `dir` (the download folder).
+static func has_leftovers(dir: String) -> bool:
+	return dir != "" and DirAccess.dir_exists_absolute(dir.path_join(DOWNLOAD_DIR))
+
+
+## Deletes those leftovers. `group`: stop when that exec_safe stop group stops
+## (app exit); what's left goes next time.
+static func cleanup(dir: String, group := "") -> bool:
+	return remove_tree(dir.path_join(DOWNLOAD_DIR), group) if dir != "" else true
+
+
 ## Downloads, checks and unpacks `rel` into `dir`. {"ok": bool, "error": ""|reason}
 ## reasons: "exists", "download", "checksum", "unpack", "no_steam".
-static func install(runner: RefCounted, rel: Dictionary, dir: String) -> Dictionary:
+static func install(runner: RefCounted, rel: Dictionary, dir: String, group := "") -> Dictionary:
 	if dir == "" or rel.is_empty():
 		return {"ok": false, "error": "no_steam"}
 	var tag := str(rel.get("tag", ""))
 	if RegEx.create_from_string(TAG_RE).search(tag) == null:
 		return {"ok": false, "error": "download"}
-	if DirAccess.dir_exists_absolute(dir.path_join(tag)):
-		return {"ok": false, "error": "exists"}
+	var target := dir.path_join(tag)
+	if DirAccess.dir_exists_absolute(target):
+		if complete(target):
+			return {"ok": false, "error": "exists"}
+		# an unfinished copy of this very version (an older GameCove unpacked in place)
+		if not _discard(dir, tag, group):
+			return {"ok": false, "error": "unpack"}
 	var part := dir.path_join(DOWNLOAD_DIR)
-	remove_tree(part)
-	DirAccess.make_dir_recursive_absolute(part)
+	remove_tree(part, group)
+	DirAccess.make_dir_recursive_absolute(part.path_join("unpack"))
 	var tarball := part.path_join(tag + ".tar.gz")
 	var shafile := part.path_join(tag + ".sha512sum")
-	var res := _fetch_check_unpack(runner, rel, dir, tarball, shafile)
-	remove_tree(part)
-	if res["ok"] and not FileAccess.file_exists(dir.path_join(tag).path_join("compatibilitytool.vdf")):
-		remove_tree(dir.path_join(tag))
-		return {"ok": false, "error": "unpack"}
+	var res := _fetch_check_unpack(runner, rel, part.path_join("unpack"), tarball, shafile)
+	if res["ok"]:
+		var unpacked := part.path_join("unpack").path_join(tag)
+		if not complete(unpacked):
+			res = {"ok": false, "error": "unpack"}
+		elif DirAccess.rename_absolute(unpacked, target) != OK:
+			res = {"ok": false, "error": "unpack"}
+	remove_tree(part, group)
 	return res
 
 
-static func _fetch_check_unpack(runner: RefCounted, rel: Dictionary, dir: String, tarball: String, shafile: String) -> Dictionary:
+static func _fetch_check_unpack(runner: RefCounted, rel: Dictionary, into: String, tarball: String, shafile: String) -> Dictionary:
 	for job in [[str(rel["sha512"]), shafile], [str(rel["tarball"]), tarball]]:
 		var url: String = job[0]
 		if not url.begins_with(DOWNLOAD_PREFIX):
 			return {"ok": false, "error": "download"}
-		var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--retry", "2", "--connect-timeout", "20",
+		var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--retry", "2", "--connect-timeout", "20"] + CURL_SAFE + [
 			"-H", "User-Agent: GameCove", "-o", job[1], url]))
 		if int(r.get("code", -1)) != 0:
 			return {"ok": false, "error": "download"}
@@ -140,9 +199,8 @@ static func _fetch_check_unpack(runner: RefCounted, rel: Dictionary, dir: String
 	var got := parse_sha(str(s.get("out", ""))) if int(s.get("code", -1)) == 0 else ""
 	if want == "" or got != want:
 		return {"ok": false, "error": "checksum"}
-	var t: Dictionary = runner.run("tar", PackedStringArray(["-xzf", tarball, "-C", dir, "--no-same-owner"]))
+	var t: Dictionary = runner.run("tar", PackedStringArray(["-xzf", tarball, "-C", into, "--no-same-owner"]))
 	if int(t.get("code", -1)) != 0:
-		remove_tree(dir.path_join(str(rel["tag"])))
 		return {"ok": false, "error": "unpack"}
 	return {"ok": true, "error": ""}
 
@@ -152,9 +210,10 @@ static func _read(path: String) -> String:
 	return f.get_as_text() if f != null else ""
 
 
-## Removes one GE-Proton folder from `dir`. Refused ("in_use") while a Steam game
-## is set to it, and for anything that isn't a GE-Proton folder right inside `dir`.
-static func remove(dir: String, name: String, steam_root: String) -> String:
+## Removes one GE-Proton folder from `dir` (a broken one too). Refused ("in_use")
+## while a Steam game is set to it, and for anything that isn't a GE-Proton folder
+## right inside `dir`. It's renamed out of Steam's sight first, then deleted.
+static func remove(dir: String, name: String, steam_root: String, group := "") -> String:
 	var target := dir.path_join(name)
 	if dir == "" or name.contains("/") or name.begins_with(".") or Proton.classify(name)["flavour"] != "ge" \
 			or not DirAccess.dir_exists_absolute(target):
@@ -162,20 +221,36 @@ static func remove(dir: String, name: String, steam_root: String) -> String:
 	for t in installed(dir):
 		if t["name"] == name and not games_using(steam_root, str(t["internal"])).is_empty():
 			return "in_use"
-	return "" if remove_tree(target) else "failed"
+	return "" if _discard(dir, name, group) else "failed"
+
+
+## Moves dir/<name> into the download folder (one atomic rename), then deletes it.
+## An interrupted delete leaves nothing where Steam looks; cleanup() finishes it.
+static func _discard(dir: String, name: String, group := "") -> bool:
+	var trash := dir.path_join(DOWNLOAD_DIR).path_join("removing")
+	DirAccess.make_dir_recursive_absolute(trash)
+	var moved := trash.path_join(name)
+	remove_tree(moved, group)
+	if DirAccess.rename_absolute(dir.path_join(name), moved) != OK:
+		return false
+	remove_tree(moved, group)
+	return true
 
 
 ## Deletes a folder tree; a symlink inside is removed as a link, never followed.
-static func remove_tree(path: String) -> bool:
+## `group`: give up (false) once that exec_safe stop group is stopped (app exit).
+static func remove_tree(path: String, group := "") -> bool:
 	var d := DirAccess.open(path)
 	if d == null:
 		return not DirAccess.dir_exists_absolute(path)
 	d.include_hidden = true
 	for f in d.get_files():
+		if group != "" and ExecSafe.stopped(group):
+			return false
 		DirAccess.remove_absolute(path.path_join(f))
 	for sub in d.get_directories():
 		if d.is_link(sub):
 			DirAccess.remove_absolute(path.path_join(sub))
-		else:
-			remove_tree(path.path_join(sub))
+		elif not remove_tree(path.path_join(sub), group) and group != "" and ExecSafe.stopped(group):
+			return false
 	return DirAccess.remove_absolute(path) == OK

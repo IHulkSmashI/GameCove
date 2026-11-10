@@ -53,6 +53,8 @@ const LowBattery := preload("res://scripts/system/low_battery.gd")
 const LowBatteryDialog := preload("res://scripts/ui/low_battery_dialog.gd")
 const TSaves := preload("res://scripts/ui/texts_saves.gd")
 const SavesCardScript := preload("res://scripts/ui/games/saves_card.gd")
+const ProtonGE := preload("res://scripts/launch/proton_ge.gd")
+const CardJobs := preload("res://scripts/system/card_jobs.gd")
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
@@ -308,6 +310,7 @@ func _ready() -> void:
 	_wire_services()
 	_wire_controls()
 	_wire_saves_and_battery()
+	_clean_ge_leftovers()
 	closer = GameCloser.new()
 	closer.name = "GameCloser"
 	add_child(closer)
@@ -806,6 +809,18 @@ static func base_size_for(win: Vector2i) -> Vector2i:
 		return Vector2i(1280, 800)
 	var eff := 1.0 + (s - 1.0) * 0.5
 	return Vector2i(roundi(win.x / eff), roundi(win.y / eff))
+
+
+## An interrupted GE-Proton install or removal (power off, app killed) left files in
+## compatibilitytools.d/.gamecove-download (never where Steam looks): they go now, on
+## the card jobs' worker. One folder check on the main thread; nothing when clean.
+func _clean_ge_leftovers() -> void:
+	var dir := ProtonGE.compat_dir(OS.get_environment("HOME"))
+	if not ProtonGE.has_leftovers(dir):
+		return
+	var jobs: RefCounted = CardJobs.shared()
+	var g: String = jobs.group
+	jobs.start("ge_proton", "cleanup", func(): return ProtonGE.cleanup(dir, g), "_on_cleaned")
 
 
 ## Static caches hold textures and fonts; let them go so nothing leaks at exit.

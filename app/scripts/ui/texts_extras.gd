@@ -80,6 +80,9 @@ const GE_REMOVE := "Remove %s"
 const GE_REMOVE_DETAIL := "Frees the space it takes (about 1.5 GB). Versions a game is set to stay until you pick another for it."
 const GE_REMOVED := "Removed %s"
 const GE_NONE := "No GE-Proton installed yet."
+const GE_BROKEN := "Didn't finish unpacking"
+const GE_BROKEN_HINT := "Steam can't use it. Press A to remove it."
+const GE_BROKEN_DETAIL := "The install stopped half way (the handheld switched off or GameCove closed). Removing it frees the space; install it again any time."
 const GE_NO_STEAM := "Steam isn't set up on this handheld yet, so there's nowhere to install Proton."
 const GE_ERRORS := {
 	"offline": "Couldn't reach GitHub. Check the internet connection and try again.",

@@ -9,6 +9,7 @@ const PerfPage := preload("res://scripts/ui/controls/perf_page.gd")
 const Fake := preload("res://tests/fixtures/system/fake_runner.gd")
 const UIC := preload("res://tests/test_ui_controls.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 
 const BASE := "user://test_extras_proton"
 const DL := "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/"
@@ -192,4 +193,95 @@ func test_performance_page_has_the_card() -> void:
 	ok(page2.proton_card == null, "under tests without fakes: nothing real read")
 	page2.free()
 	c.free()
+	_rm(h.root)
+
+
+# ---- review 3, medium 2: stalls, atomic install, leftovers ----------------------------------
+
+func test_curl_gives_up_on_a_stall_and_speaks_only_https() -> void:
+	var h := _home("stall")
+	var f := _fake(HASH, true, release_json())
+	ProtonGE.latest(f)
+	ProtonGE.install(f, ProtonGE.parse_release(release_json()), h.cd)
+	var curls: Array = f.calls.filter(func(c): return str(c).begins_with("curl "))
+	eq(curls.size(), 3, "lookup, checksum, tarball")
+	for c in curls:
+		ok(" --speed-limit 1024 --speed-time 30 " in c, "stall limit: " + c)
+		ok(" --proto =https --proto-redir =https " in c, "HTTPS only: " + c)
+	_rm(h.root)
+
+
+func test_unpack_goes_into_place_only_when_whole() -> void:
+	var h := _home("atomic")
+	var rel := ProtonGE.parse_release(release_json())
+	var f := _fake()
+	var seen := []
+	var inner: Callable = f.handler
+	f.handler = func(cmd: String) -> Variant:
+		if cmd.begins_with("tar -xzf "):
+			var into: String = cmd.split(" ")[4]
+			seen.append(into)
+			# while tar runs, Steam's folder has nothing of it yet
+			ok(not DirAccess.dir_exists_absolute(h.cd.path_join("GE-Proton10-26")), "nothing half-unpacked where Steam looks")
+		return inner.call(cmd)
+	eq(ProtonGE.install(f, rel, h.cd), {"ok": true, "error": ""}, "installed")
+	ok(seen[0].begins_with(h.cd.path_join(ProtonGE.DOWNLOAD_DIR)), "unpacked inside the download folder")
+	ok(ProtonGE.complete(h.cd.path_join("GE-Proton10-26")), "then moved into place whole")
+	ok(not ProtonGE.has_leftovers(h.cd), "download folder gone")
+	# a tarball without compatibilitytool.vdf: never moved into place
+	var bad := _fake()
+	bad.handler = func(cmd: String) -> Variant:
+		if cmd.begins_with("tar -xzf "):
+			var a := cmd.split(" ")
+			_touch(a[4].path_join("GE-Proton10-27/files/lib.so"))
+			return {"code": 0, "out": ""}
+		return f.handler.call(cmd) if not cmd.begins_with("tar ") else null
+	eq(ProtonGE.install(bad, ProtonGE.parse_release(release_json("GE-Proton10-27")), h.cd)["error"], "unpack", "no vdf: refused")
+	ok(not DirAccess.dir_exists_absolute(h.cd.path_join("GE-Proton10-27")), "nothing put where Steam looks")
+	ok(not ProtonGE.has_leftovers(h.cd), "and nothing left")
+	_rm(h.root)
+
+
+func test_interrupted_leftovers_and_broken_builds() -> void:
+	var h := _home("leftovers")
+	# what a power cut leaves: a half unpack, a half removal, an old in-place half unpack
+	_touch(h.cd.path_join(ProtonGE.DOWNLOAD_DIR).path_join("unpack/GE-Proton10-27/files/lib.so"))
+	_touch(h.cd.path_join(ProtonGE.DOWNLOAD_DIR).path_join("removing/GE-Proton9-1/files/lib.so"))
+	_touch(h.cd.path_join("GE-Proton10-20/files/lib.so"))
+	eq(ProtonGE.installed(h.cd).map(func(b): return b["name"]), ["GE-Proton10-25", "GE-Proton9-20"], "never listed as installed")
+	eq(ProtonGE.broken(h.cd), ["GE-Proton10-20"], "the broken one is found")
+	ok(ProtonGE.has_leftovers(h.cd), "leftovers found")
+	var c: VBoxContainer = Card.new()
+	c.setup(_fake(HASH, true, release_json()), h.home)
+	ok(not ProtonGE.has_leftovers(h.cd), "the next start cleans the download folder up")
+	ok(c.rows.has("GE-Proton10-20"), "the broken build has a row")
+	eq(c.rows["GE-Proton10-20"].value_label.text, TX.GE_BROKEN, "saying it didn't finish")
+	eq(c.rows["GE-Proton10-20"].hint_text(), TX.GE_BROKEN_HINT, "and how to remove it")
+	ok(c.rows["GE-Proton10-20"].button in c.focusables(), "reachable with the controller")
+	var notes := []
+	c.notice.connect(func(t, _tone): notes.append(t))
+	c.remove("GE-Proton10-20")
+	eq(notes[-1], TX.GE_REMOVED % "GE-Proton10-20", "removed from the UI")
+	ok(not DirAccess.dir_exists_absolute(h.cd.path_join("GE-Proton10-20")), "gone")
+	ok(not c.rows.has("GE-Proton10-20"), "row gone")
+	c.free()
+	# an unfinished copy of the very version being installed is replaced
+	_touch(h.cd.path_join("GE-Proton10-26/files/lib.so"))
+	eq(ProtonGE.install(_fake(), ProtonGE.parse_release(release_json()), h.cd), {"ok": true, "error": ""}, "replaced")
+	ok(ProtonGE.complete(h.cd.path_join("GE-Proton10-26")), "whole now")
+	_rm(h.root)
+
+
+func test_removal_moves_out_of_sight_first_and_stops_at_exit() -> void:
+	var h := _home("remove_stop")
+	var g := "test_ge_remove_%d" % Time.get_ticks_usec()
+	for i in 20:
+		_touch(h.cd.path_join("GE-Proton9-20/files/f%d" % i))
+	ExecSafe.stop_group(g, 0)
+	eq(ProtonGE.remove(h.cd, "GE-Proton9-20", h.steam, g), "", "removed from Steam's sight")
+	ok(not DirAccess.dir_exists_absolute(h.cd.path_join("GE-Proton9-20")), "nothing left where Steam looks")
+	ok(ProtonGE.has_leftovers(h.cd), "the delete stopped at exit; the rest waits")
+	ExecSafe.clear_stopped(g)
+	ok(ProtonGE.cleanup(h.cd), "next start finishes it")
+	ok(not ProtonGE.has_leftovers(h.cd), "all gone")
 	_rm(h.root)
