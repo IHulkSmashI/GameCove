@@ -12,6 +12,11 @@ name: Nightly upscalers index
 # The first run fills the mirror (no release exists yet: it is created). Run it by hand with
 #   gh workflow run upscalers.yml
 # Builder: tools/upscalers/build.py (tests: packaging/helpers/tests/test_upscalers_build.py).
+#
+# Two jobs (review problem 2 pattern, as firmware.yml and release.yml): "build" runs the tests and the builder
+# (third-party downloads, archives, 7-Zip) with a read-only token and no OIDC, and hands dist/ over as an
+# artifact; only "publish", which runs nothing but pinned cosign, gh and a standard-library check of the plan,
+# can mint the signing identity and write the releases.
 
 on:
   schedule:
@@ -26,13 +31,12 @@ concurrency:
 
 jobs:
   build:
-    # the signing identity is this workflow on main: never publish from another branch
+    # the signing identity is this workflow on main: never build an index to publish from another branch
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
-      contents: write   # the rolling "upscalers" release(s)
-      id-token: write   # cosign keyless (GitHub OIDC)
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -85,10 +89,60 @@ jobs:
         run: |
           python tools/upscalers/build.py --versions packaging/helpers/gamecove_upscale/data/versions.json \
             --out dist --have prev/assets.tsv --previous prev/upscalers.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: upscalers-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write   # the rolling "upscalers" release(s)
+      id-token: write   # cosign keyless (GitHub OIDC)
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            packaging/get-gamecove.sh
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: upscalers-dist
+          path: dist
+      - name: Check the artifact (Python's standard library only)
+        run: |
+          python3 -I - dist <<'PY'
+          import json, os, re, sys
+          d = sys.argv[1]
+          idx = json.load(open(os.path.join(d, "upscalers.json"), encoding="utf-8"))
+          assert idx.get("schema") == 1 and isinstance(idx.get("components"), dict), "not a schema-1 index"
+          for line in open(os.path.join(d, "upload-plan.tsv"), encoding="utf-8"):
+              if not line.strip():
+                  continue
+              tag, name, path = line.rstrip("\n").split("\t")
+              assert re.fullmatch(r"upscalers(-[0-9]+)?", tag), "release tag: " + tag
+              assert re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", name), "asset name: " + name
+              assert path == "upload/%s/%s" % (tag, name), "path: " + path
+              assert os.path.isfile(os.path.join(d, path)) and not os.path.islink(os.path.join(d, path)), "missing: " + path
+          PY
+      - name: cosign version (the one get-gamecove.sh pins)
+        id: cosign
+        run: echo "version=$(sed -n 's/^COSIGN_VERSION=//p' packaging/get-gamecove.sh)" >>"$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          cosign-release: ${{ steps.cosign.outputs.version }}
       - name: Sign the index (keyless; the identity GameCove checks)
         env:
           REPO: ${{ github.repository }}
         run: |
+          # the very binary devices download: get-gamecove.sh's pinned sha256
+          want="$(sed -n 's/^COSIGN_SHA256=//p' packaging/get-gamecove.sh)"
+          echo "$want  $(command -v cosign)" | sha256sum -c -
           cosign sign-blob --yes --bundle dist/upscalers.json.sigstore.json dist/upscalers.json
           ident="(?i)^https://github\.com/$(printf '%s' "$REPO" | sed 's/[.]/\\./g')/\.github/workflows/upscalers\.yml@refs/heads/main$"
           cosign verify-blob --bundle dist/upscalers.json.sigstore.json \

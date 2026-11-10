@@ -190,11 +190,19 @@ on = doc.get("on", doc.get(True))
 assert "schedule" in on and "workflow_dispatch" in on, "nightly and by hand (gh workflow run upscalers.yml)"
 assert doc.get("permissions") == {}, "least privilege: nothing at the top level"
 jobs = doc["jobs"]
-assert list(jobs) == ["build"], "one job"
-job = jobs["build"]
-assert job.get("permissions") == {"contents": "write", "id-token": "write"}, job.get("permissions")
-assert job.get("if") == "github.ref == 'refs/heads/main'", "publish only from main (the signing identity)"
-steps = job["steps"]
+# review problem 2 pattern: build (tests, builder, third-party downloads) read-only; publish signs and uploads
+assert list(jobs) == ["build", "publish"], list(jobs)
+b, p = jobs["build"], jobs["publish"]
+assert b.get("permissions") == {"contents": "read"}, b.get("permissions")
+assert b.get("if") == "github.ref == 'refs/heads/main'", "build for publishing only on main (the signing identity)"
+assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write", "id-token": "write"}, p.get("permissions")
+brun = "\n".join(x.get("run", "") for x in b["steps"])
+prun = "\n".join(x.get("run", "") for x in p["steps"])
+assert "sign-blob" not in brun and "gh release upload" not in brun and "gh release create" not in brun, "build must not sign or publish"
+assert "pip install" not in prun and "tools/upscalers" not in prun and "pytest" not in prun, "publish must not run the builder or third-party packages"
+assert any(x.get("uses", "").startswith("actions/upload-artifact@") for x in b["steps"])
+assert any(x.get("uses", "").startswith("actions/download-artifact@") for x in p["steps"])
+steps = b["steps"] + p["steps"]
 bad = [s.get("name", s.get("uses", "?")) for s in steps if "${{" in s.get("run", "")]
 assert not bad, "${{ }} inside run: " + str(bad)
 for s in steps:
