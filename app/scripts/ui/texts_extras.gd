@@ -196,3 +196,6 @@ const APPS_PINNED := "%s pinned to Home"
 const APPS_UNPINNED := "%s unpinned"
 const APPS_PROMPT_OPEN := "Open"
 const APPS_FAILED := "%s didn't start"
+
+# ---- controller battery -----------------------------------------------------------------
+const PADS_TIP := "Controller battery: %s"

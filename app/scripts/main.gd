@@ -48,6 +48,8 @@ const PerfProvider := preload("res://scripts/controls/providers/perf.gd")
 const StreamingScreen := preload("res://scripts/ui/streaming/streaming_screen.gd")
 const StreamingService := preload("res://scripts/streaming/streaming.gd")
 const Recording := preload("res://scripts/system/recording.gd")
+const UPower := preload("res://scripts/system/upower.gd")
+const Proc := preload("res://scripts/system/proc.gd")
 const AppsView := preload("res://scripts/ui/apps_view.gd")
 const Apps := preload("res://scripts/library/apps.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
@@ -122,6 +124,9 @@ var background: Node
 var recording: Node
 ## Desktop apps (Home's Apps shelf "All apps", the Library header's Apps).
 var apps_view: Control
+## Controller batteries: the last UPower read (ticks msec) and whether one is out.
+var _pads_at := -1000000
+var _pads_task := -1
 
 
 ## Play the boot splash at start (screenshots and tests turn it off).
@@ -337,6 +342,8 @@ func _ready() -> void:
 	_update_timer()
 	_link_top()
 	home.set_apps(_pinned_apps())
+	Input.joy_connection_changed.connect(func(_d, _c): read_pads(true))
+	read_pads(true)
 	_last_input_ms = Time.get_ticks_msec()
 	home.focus_later(home.default_focus())
 	open_setup(false)
@@ -725,6 +732,33 @@ func _play_app(app: Dictionary) -> void:
 	session.begin(app, launched)
 
 
+# ------------------------------------------------------------ controller batteries
+
+## Reads the controllers' batteries from UPower on a worker. `now`: an event
+## (focus back, quick menu, a pad connected); else only when the last read is
+## older than UPower.READ_EVERY_S (the live refresh, which only runs while
+## GameCove is in front). Never behind a game.
+func read_pads(now: bool) -> void:
+	if _pads_task != -1 or DisplayServer.get_name() == "headless":
+		return
+	if not now and Time.get_ticks_msec() - _pads_at < UPower.READ_EVERY_S * 1000:
+		return
+	_pads_at = Time.get_ticks_msec()
+	var me: WeakRef = weakref(self)
+	_pads_task = WorkerThreadPool.add_task(func():
+		var list := UPower.pads(Proc.new())
+		var o: Object = me.get_ref()
+		if o != null:
+			o.call_deferred("_on_pads", list), false, "GameCove controller batteries")
+
+
+func _on_pads(list: Array) -> void:
+	if _pads_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_pads_task)
+		_pads_task = -1
+	top_bar.set_pads(list)
+
+
 func _on_accent(c: Color) -> void:
 	home.set_accent(c)
 	if page != null:
@@ -773,6 +807,7 @@ func _notification(what: int) -> void:
 		_check_resume()
 		_refresh_live()
 		_update_timer()
+		read_pads(true)
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST and session != null:
 		session.stop()
 
@@ -808,6 +843,9 @@ static func base_size_for(win: Vector2i) -> Vector2i:
 
 ## Static caches hold textures and fonts; let them go so nothing leaks at exit.
 func _exit_tree() -> void:
+	if _pads_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_pads_task)
+		_pads_task = -1
 	release_caches()
 
 
@@ -826,6 +864,7 @@ static func release_caches() -> void:
 func _on_live_tick() -> void:
 	_check_resume()
 	_refresh_live()
+	read_pads(false)
 	if Time.get_ticks_msec() - _last_input_ms > IDLE_S * 1000.0:
 		_pause_motion()
 
@@ -1380,6 +1419,7 @@ func _open_menu() -> void:
 	if g.is_empty():
 		g = home.spotlight_game if not home.spotlight_game.is_empty() else home.hero_game
 	quick_menu.open(g)
+	read_pads(true)
 	if wiring != null:
 		wiring.menu_over_game(true)
 	_sound("select")

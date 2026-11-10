@@ -119,6 +119,8 @@ tested data. GameCove recognises your exact model and only shows what it can do:
   app on the handheld (minus settings tools and terminal programs) in an **Apps** view, reached from the Library's
   header or Home. Pin your favourites to Home's Apps shelf with X; they open full screen like a game, with the quick
   menu over them, and closing one brings you back.
+- **Controller battery in the top bar** for wired, 2.4 GHz and Bluetooth pads that report one (from UPower, read when
+  something changes, never on a timer).
 - **Four themes:** Cove, Midnight, Sunset and Light.
 
 <table>

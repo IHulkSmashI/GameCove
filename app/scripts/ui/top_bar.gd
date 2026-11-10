@@ -1,10 +1,11 @@
 extends HBoxContainer
 ## Top bar: logo mark, the tab group (LB / RB chips either side, a count on
-## Library, "new" dots), search, the telemetry pill (TDP watts and profile,
-## temperature) and the status pill (Wi-Fi, battery, clock) that opens a small
-## status panel, then Settings. Anything unknown is hidden, never invented.
-## Knows nothing about services; main.gd feeds it with set_status(),
-## set_telemetry() and set_count().
+## Library, "new" dots), search, a red REC chip while recording, the telemetry
+## pill (TDP watts and profile, temperature) and the status pill (controller
+## battery, Wi-Fi, battery, clock) that opens a small status panel, then
+## Settings. Anything unknown is hidden, never invented. Knows nothing about
+## services; main.gd feeds it with set_status(), set_telemetry(), set_count(),
+## set_recording() and set_pads().
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
@@ -42,6 +43,10 @@ var _telemetry_data := {}
 var _status_seps: Array = []
 ## The red REC chip (shown while recording).
 var rec_chip: PanelContainer
+## Controller battery in the status pill: icon and the lowest pad's percentage.
+var pad_icon: TextureRect
+var pad_label: Label
+var pads: Array = []
 
 
 func _init() -> void:
@@ -195,6 +200,19 @@ func _init() -> void:
 	pill.offset_right = -ThemeLib.SPACE_4
 	pill.alignment = BoxContainer.ALIGNMENT_CENTER
 	status_button.add_child(pill)
+	pad_icon = Icons.rect("gamepad", 18, ThemeLib.color("text"))
+	pad_icon.name = "PadIcon"
+	pad_icon.visible = false
+	pill.add_child(pad_icon)
+	pad_label = Kit.label("", "MonoLabel")
+	pad_label.name = "PadBattery"
+	pad_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pad_label.visible = false
+	pill.add_child(pad_label)
+	var s0 := _sep()
+	s0.name = "PadSep"
+	s0.visible = false
+	pill.add_child(s0)
 	wifi_icon = Icons.rect("wifi", 18, ThemeLib.color("text"))
 	wifi_icon.name = "Wifi"
 	wifi_icon.visible = false
@@ -361,6 +379,25 @@ func set_recording(on: bool) -> void:
 	fit_width.call_deferred()
 
 
+## Controller batteries (upower.gd pads()): the lowest one in the status pill,
+## all of them in its tooltip. [] (or none reporting a level) hides it.
+func set_pads(list: Array) -> void:
+	pads = list
+	var UPower = load("res://scripts/system/upower.gd")
+	var text: String = UPower.chip_text(list)
+	pad_label.text = text
+	pad_label.visible = text != ""
+	pad_icon.visible = text != ""
+	var low: Dictionary = UPower.lowest(list)
+	var warn: bool = not low.is_empty() and int(low["percent"]) <= LOW_BATTERY and not low.get("charging", false)
+	var col: Color = ThemeLib.color("bad") if warn else ThemeLib.color("text")
+	pad_icon.texture = Icons.tex("gamepad", 18, col)
+	pad_label.add_theme_color_override("font_color", col)
+	status_button.get_node("Pill/PadSep").visible = pad_label.visible
+	status_button.tooltip_text = TX.PADS_TIP % UPower.detail_text(list) if text != "" else ""
+	_fit_pill()
+
+
 static func is_low(bat: Dictionary) -> bool:
 	var pct := int(bat.get("percent", -1))
 	return pct >= 0 and pct <= LOW_BATTERY and bat.get("status", "") not in ["Charging", "Full"]
@@ -409,7 +446,7 @@ func _restyle() -> void:
 	status_button.add_theme_stylebox_override("normal", status_box)
 	status_button.add_theme_stylebox_override("hover", status_hover)
 	status_button.add_theme_stylebox_override("pressed", status_hover)
-	for sep in find_children("Sep", "Panel", true, false):
+	for sep in find_children("*Sep", "Panel", true, false):
 		sep.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("line_2"), 0, 0, 0))
 	var rec_box := ThemeLib.pill(Color(ThemeLib.color("bad"), 0.16), Color(ThemeLib.color("bad"), 0.55), 12, 4)
 	rec_chip.add_theme_stylebox_override("panel", rec_box)

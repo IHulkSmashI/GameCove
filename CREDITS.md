@@ -38,6 +38,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | Flathub | Moonlight's Flatpak, installed for the user from the Stream tab or the installer; GPU Screen Recorder and mpv, installed from Settings > Media when you ask | — |
 | GPU Screen Recorder (dec05eba) | Record in the quick menu: screen capture under gamescope (KMS) and GPU video encoding. GameCove runs its CLI and, for the one-time screen-capture OK, its kms-server-proxy (`setup-gsr-ui`, `is-setup`), the way its own UI does | GPL-3.0 |
 | mpv | Playing clips full screen with the controller (`--input-gamepad`), when installed; VLC or Celluloid otherwise | GPL-2.0-or-later / LGPL-2.1-or-later |
+| UPower (freedesktop.org) | Controller batteries in the top bar | GPL-2.0-or-later |
 | freedesktop.org Desktop Entry and Icon Theme specs | Reading installed apps (.desktop files, Exec field codes, hicolor icons) for the Apps view | — |
 | InputPlumber device configs and capability maps (ShadowBlip) | DMI matches, special-button and paddle capabilities, IMU and LED presence for every handheld in `devices.json` / `buttons.gd`; D-Bus intercept mode documented in DEVICES.md | GPL-3.0 |
 | PowerStation APU and DMI-override databases (ShadowBlip) | TDP ranges and boost in `devices.json` and its `cpus` fallback table | GPL-3.0 |
