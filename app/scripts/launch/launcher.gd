@@ -3,6 +3,7 @@ extends Node
 ## generation, low latency) for this device's GPU and the game's Proton.
 ## Settings live in user:// as JSON. Nothing here writes outside user://.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const LaunchEnv := preload("res://scripts/launch/launch_env.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
 const Proton := preload("res://scripts/launch/proton.gd")
@@ -340,12 +341,11 @@ func _load() -> void:
 	_default_goal = ""
 	if not FileAccess.file_exists(settings_path):
 		return
-	var json := JSON.new()
-	var parsed: Variant = null
-	if json.parse(FileAccess.get_file_as_string(settings_path)) == OK:
-		parsed = json.data
+	# a damaged file is kept as .bad and never saved over this run (SettingsFile)
+	var parsed: Variant = SettingsFile.load_json(settings_path)["data"]
 	if not (parsed is Dictionary):
-		push_warning("Launcher: %s is not valid JSON; starting fresh" % settings_path)
+		if parsed != null:
+			SettingsFile.reject(settings_path, "not a settings object")
 		return
 	var games: Variant = parsed.get("games", {})
 	if games is Dictionary:
@@ -373,16 +373,7 @@ func _write() -> bool:
 	var all := {"version": 1, "games": _games, "measured": _measured, "compat": _compat}
 	if _default_goal != "":
 		all["default_goal"] = _default_goal
-	var data := JSON.stringify(all, "\t", true)
-	var tmp := settings_path + ".tmp"
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		push_warning("Launcher: cannot write %s" % tmp)
-		return false
-	f.store_string(data)
-	f.close()
-	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(settings_path))
-	return err == OK
+	return SettingsFile.save_json(settings_path, all, "\t") == OK
 
 
 ## Forget what's in memory; the next call reads the file again.

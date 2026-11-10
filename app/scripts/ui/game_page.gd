@@ -29,6 +29,9 @@ const TC := preload("res://scripts/ui/texts_controls.gd")
 const InsightsCard := preload("res://scripts/ui/games/insights_card.gd")
 const SteamInsights := preload("res://scripts/steam/steam_insights.gd")
 const TI := preload("res://scripts/ui/texts_insights.gd")
+const MetadataCard := preload("res://scripts/ui/games/metadata_card.gd")
+const LinkHandoff := preload("res://scripts/ui/games/link_handoff.gd")
+const ArtPicker := preload("res://scripts/ui/games/art_picker.gd")
 ## Room for the top bar above the hero card (it starts where Home's does).
 const TOP_INSET := 56
 
@@ -68,6 +71,10 @@ var launch_button: Button
 var launch_open := false
 ## "Steam insights" (Steam games): players, reviews, Deck, last update, prices, SteamDB link.
 var insights_card: VBoxContainer
+## Critic scores, facts, screenshots, Change artwork (games/metadata_card.gd).
+var meta_card: VBoxContainer
+var handoff: Control
+var art_picker: Control
 var _accent := Color(0, 0, 0, 0)
 
 
@@ -90,6 +97,7 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 	# side, so nothing sits below the fold while a column stands empty.
 	var about := add_card(TG.ABOUT, "info", "", true, 0)
 	_fill_about(about, g, info)
+	_add_details(about, g)
 
 	if achievements != null and _is_steam():
 		var body := add_card(TG.ACH_TITLE, "star", "", true, 1)
@@ -192,6 +200,24 @@ func _fill_about(about: VBoxContainer, g: Dictionary, info: Dictionary) -> void:
 	credit.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 	info_lines.append(credit)
 	about.add_child(credit)
+
+
+## Game details under the synopsis, with their own overlays (phone hand-off, artwork picker).
+func _add_details(about: VBoxContainer, g: Dictionary) -> void:
+	meta_card = MetadataCard.new()
+	about.add_child(meta_card)
+	# right under the synopsis (or the card's heading when there's none)
+	var syn := about.get_node_or_null("Synopsis")
+	about.move_child(meta_card, (syn.get_index() + 1) if syn != null else 1)
+	handoff = LinkHandoff.new()
+	art_picker = ArtPicker.new()
+	add_child(art_picker)
+	add_child(handoff)
+	meta_card.link_requested.connect(func(t, l, u): handoff.open(t, l, u))
+	art_picker.link_requested.connect(func(t, l, u): handoff.open(t, l, u))
+	meta_card.artwork_requested.connect(func(): art_picker.open(game, library.get("artwork") if library != null else null))
+	meta_card.relink.connect(func(): if is_instance_valid(self) and is_inside_tree(): _relink())
+	meta_card.setup(g, library)
 
 
 ## Main / Extras / 100% as three chips with a mono label over the hours,
@@ -533,6 +559,8 @@ func _relink() -> void:
 	var list: Array = []
 	if pending_card != null and pending_card.visible:
 		list.append(restart_button)
+	if meta_card != null:
+		list.append_array(meta_card.focusables())
 	var first_cell: Control = null
 	if ach_card != null and not ach_card.cells.is_empty():
 		first_cell = ach_card.cells[0]
@@ -576,6 +604,12 @@ func default_focus() -> Control:
 
 ## Hints for the focused control when the page knows better than main.
 func hints_for_focus(f: Control) -> Array:
+	if handoff != null and handoff.is_open():
+		return LinkHandoff.hints()
+	if art_picker != null and art_picker.is_open():
+		return ArtPicker.hints()
+	if f != null and meta_card != null and f in meta_card.critic_buttons:
+		return [["A", "Open on phone"], ["B", "Back"]]
 	if f != null and ach_card != null and f in ach_card.cells:
 		return [["DPAD", "Browse"], ["B", "Back"]]
 	if f == manage_button:

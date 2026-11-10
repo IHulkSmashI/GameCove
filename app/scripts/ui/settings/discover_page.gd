@@ -59,6 +59,7 @@ func build() -> void:
 		sg = setup.steamgriddb_key()
 	_key_row(keys, "steamgriddb_key", sg, "SteamGridDB key", func(t): return t == "" or (t.length() == 32 and t.is_valid_hex_number()))
 	_key_row(keys, "steam_id", str(s.get("steam_id", "")), "Steam profile", func(_t): return true, false)
+	_opencritic_row(keys)
 
 	var alerts := add_card("Alerts", "alert")
 	var al := info("alerts")
@@ -75,6 +76,24 @@ func _key_row(box: Control, key: String, value: String, what: String, valid: Cal
 	r.pressed.connect(func():
 		host.ask_text(i["label"], value, func(text: String):
 			save_key(key, text.strip_edges(), what, valid)))
+
+
+## OpenCritic: the user's own RapidAPI key (OpenCritic's data may not be republished, so none ships).
+func _opencritic_row(box: Control) -> void:
+	var Resolver := preload("res://scripts/library/meta/resolver.gd")
+	var value := Resolver.opencritic_key()
+	var shown := TS.masked(value)
+	var label := "OpenCritic key (optional)"
+	var r: VBoxContainer = action_row(box, "opencritic_key", label, shown,
+		"Critic scores, tier and % recommended on game pages. Free on rapidapi.com (OpenCritic API); stays on this device.", "")
+	r.set_value(shown, "muted" if value == "" else "")
+	r.pressed.connect(func():
+		host.ask_text(label, value, func(text: String):
+			if Resolver.set_opencritic_key(text.strip_edges()):
+				notify((TS.KEY_REMOVED if text.strip_edges() == "" else TS.KEY_SAVED) % "OpenCritic key", "good")
+				rebuild()
+			else:
+				notify(TS.KEY_BAD % "OpenCritic key", "bad")))
 
 
 ## Saves a key typed on the keyboard ("" removes it). SteamGridDB goes to the

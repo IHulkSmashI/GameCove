@@ -13,6 +13,7 @@ extends RefCounted
 ##   charge limit (steamos-manager)   -> user://power.cfg [device] charge_limit
 ##   first-run steps the installer covered -> Setup.complete / skip
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const UiPrefs := preload("res://scripts/ui/ui_prefs.gd")
 const POWER_CFG := "user://power.cfg"
 
@@ -47,13 +48,11 @@ static func apply(choices: Dictionary, svc: Dictionary) -> Array:
 		log.append("auto tdp %s" % ("on" if choices["auto_tdp"] else "off"))
 	var cfg_path := str(svc.get("power_cfg", POWER_CFG))
 	if cfg_path != "":
-		var cfg := ConfigFile.new()
-		cfg.load(cfg_path)
-		cfg.set_value("profile", "battery", choices["power_profile"])
-		cfg.set_value("profile", "plugged", choices["power_profile"])
-		if int(choices["charge_limit"]) < 100:
-			cfg.set_value("device", "charge_limit", int(choices["charge_limit"]))
-		cfg.save(cfg_path)
+		SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile):
+			cfg.set_value("profile", "battery", choices["power_profile"])
+			cfg.set_value("profile", "plugged", choices["power_profile"])
+			if int(choices["charge_limit"]) < 100:
+				cfg.set_value("device", "charge_limit", int(choices["charge_limit"])))
 		log.append("power: profile %s, charge limit %d" % [choices["power_profile"], int(choices["charge_limit"])])
 	return log
 

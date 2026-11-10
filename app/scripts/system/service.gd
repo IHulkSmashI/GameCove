@@ -59,12 +59,12 @@ func _worker() -> void:
 	while true:
 		_sem.wait()
 		_mutex.lock()
-		if _quit:
-			_mutex.unlock()
-			return
 		if _order.is_empty():
 			_mutex.unlock()
+			if _quit:
+				return
 			continue
+		# quitting: queued jobs still run first (review H2)
 		var job_name: String = _order.pop_front()
 		var job: Callable = _jobs[job_name]
 		_jobs.erase(job_name)

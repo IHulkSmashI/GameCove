@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 85
+    timeout-minutes: 100
     defaults:
       run:
         working-directory: gamedb
@@ -25,11 +25,15 @@ jobs:
       - name: Build
         # Each source falls back to last night's published data if it fails, so this
         # only fails when there is nothing at all to publish (the old file then stays).
+        # +15 min for game details: about 10 min of Steam store appdetails (a slice of
+        # the popular games each night, at Steam's ~200 requests / 5 min) and IGDB
+        # details. OpenCritic is deliberately not fetched here (its data may not be
+        # redistributed; see CREDITS.md), so there's no OpenCritic secret.
         env:
           TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: python -m gamedb.build --out dist/gamedb.json.gz --max-minutes 55
+        run: python -m gamedb.build --out dist/gamedb.json.gz --max-minutes 70
       - name: Coverage check (the most popular games must all be in it)
         # Fails the job (so nothing is published and last night's file stays) if any
         # game on gamedb/coverage.py's MUST_HAVE list has no entry.
@@ -46,7 +50,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # the notes and NOTICE.md carry IGDB's and ProtonDB's attribution (review M24); refreshed every run
+          # the notes and NOTICE.md carry IGDB's, ProtonDB's, Steam's and Metacritic's attribution (review M24); refreshed every run
           gh release view gamedb >/dev/null 2>&1 || gh release create gamedb --title "Game database" --notes-file NOTICE.md --latest=false
           gh release edit gamedb --notes-file NOTICE.md
           gh release upload gamedb NOTICE.md --clobber

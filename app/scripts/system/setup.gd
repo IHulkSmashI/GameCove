@@ -21,6 +21,7 @@ signal login_finished(store: String, ok: bool, message: String)
 ## [{"name", "applies", "installed", "state", "status": {key: value}}]
 signal fixes_checked(fixes: Array)
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Login := preload("res://scripts/system/store_login.gd")
 const BgCommand := preload("res://scripts/ui/bg_command.gd")
 
@@ -65,13 +66,12 @@ func setup(command_runner: RefCounted, home_dir: String, cfg_path: String, devic
 func _load() -> void:
 	if _loaded:
 		return
-	_cfg = ConfigFile.new()
-	_cfg.load(config_path)
+	_cfg = SettingsFile.load_cfg(config_path)
 	_loaded = true
 
 
 func _save() -> void:
-	_cfg.save(config_path)
+	SettingsFile.save_cfg(_cfg, config_path)
 
 
 func is_done(step: String) -> bool:

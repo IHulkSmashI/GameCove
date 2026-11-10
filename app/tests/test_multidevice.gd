@@ -153,7 +153,7 @@ func test_controller_hhd_per_game() -> void:
 	c.set_gyro_mode("off")
 	c.set_game_profile("steam:1", true)
 	ok(c.has_game_profile("steam:1"), "saved")
-	ok(c.game_profile_path("steam:1").ends_with("/asus-rog-ally/steam_1.hhd.json"), "per device, hhd file: " + c.game_profile_path("steam:1"))
+	ok(c.game_profile_path("steam:1").ends_with("/asus-rog-ally/steam_3A1.hhd.json"), "per device, hhd file: " + c.game_profile_path("steam:1"))
 	var saved: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(c.game_profile_path("steam:1")))
 	ok(not saved.has("tdp") and not saved.has("hhd"), "only controller and LEDs are kept")
 	c.set_gyro_mode("on")

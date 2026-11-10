@@ -6,6 +6,7 @@ extends RefCounted
 ## Games run through `nile launch <id> --no-wine --wrapper umu-run`.
 
 const Common := preload("res://scripts/library/stores/common.gd")
+const Metadata := preload("res://scripts/library/meta/metadata.gd")
 
 
 static func config_dirs(home: String) -> Array[Dictionary]:
@@ -87,6 +88,7 @@ static func scan(home: String) -> Array[Dictionary]:
 				"art": art_from_heroic(game, cfg["heroic_root"]),
 				"last_played": 0, "playtime_min": 0,
 				"ids": ids_for(game),
+				"local_meta": Metadata.local_layer("amazon", game),
 				"source": cfg["source"], "heroic_root": cfg["heroic_root"], "heroic_flatpak": cfg["heroic_flatpak"],
 				"config_dir": dir,
 				"install_path": inst.get("path", "") if inst is Dictionary else "",

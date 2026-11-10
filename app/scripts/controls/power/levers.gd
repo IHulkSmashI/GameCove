@@ -12,6 +12,7 @@ var be: RefCounted
 var tdp_writer: Callable
 var _orig := {}
 var _gpu := {}      # gpu_clocks() at the first floor change
+var _gpu_raw := {}  # backend.gpu_raw_state() then: PowerStation's ManualClock goes back too (review L9)
 var _cached := {}
 
 
@@ -54,6 +55,7 @@ func gpu_floor(mhz: int) -> bool:
 		return false
 	if _gpu.is_empty():
 		_gpu = c.duplicate()
+		_gpu_raw = be.gpu_raw_state() if be.has_method("gpu_raw_state") else {}
 	var want: int = int(_gpu["min"]) if mhz < 0 else mhz
 	return be.set_gpu_clocks(want, -1)
 
@@ -122,19 +124,30 @@ func _remember(key: String, value: Variant) -> void:
 
 
 ## Everything Auto TDP moved back to what it found (the TDP is the caller's). True when all went back.
+## A lever whose write-back failed keeps its original, so the next restore() (the next game's
+## end, or Power's) tries again instead of forgetting it (review L9).
 func restore() -> bool:
 	var ok := true
 	if not _gpu.is_empty():
-		ok = be.set_gpu_clocks(int(_gpu["min"]), int(_gpu["max"])) and ok
-	if _orig.has("gpu_profile"):
-		ok = be.set_gpu_profile(str(_orig["gpu_profile"])) and ok
-	if _orig.has("boost"):
-		ok = be.set_boost(bool(_orig["boost"])) and ok
-	if _orig.has("cpu_max"):
-		ok = be.set_cpu_max(int(_orig["cpu_max"])) and ok
-	if _orig.has("epp"):
-		ok = be.set_epp(str(_orig["epp"])) and ok
-	_orig.clear()
-	_gpu.clear()
+		var g: bool = be.set_gpu_clocks(int(_gpu["min"]), int(_gpu["max"]))
+		# set_gpu_clocks leaves PowerStation in manual clock mode: hand it back as it was
+		if g and not _gpu_raw.get("ps", []).is_empty():
+			g = be.gpu_raw_restore(_gpu_raw, false)
+		if g:
+			_gpu.clear()
+			_gpu_raw.clear()
+		ok = g and ok
+	var put := {
+		"gpu_profile": func(v): return be.set_gpu_profile(str(v)),
+		"boost": func(v): return be.set_boost(bool(v)),
+		"cpu_max": func(v): return be.set_cpu_max(int(v)),
+		"epp": func(v): return be.set_epp(str(v)),
+	}
+	for k in ["gpu_profile", "boost", "cpu_max", "epp"]:
+		if _orig.has(k):
+			if bool(put[k].call(_orig[k])):
+				_orig.erase(k)
+			else:
+				ok = false
 	_cached.clear()
 	return ok

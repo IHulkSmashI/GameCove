@@ -1,4 +1,11 @@
-"""Time to beat from IGDB's game_time_to_beats endpoint.
+"""Time to beat and game details from IGDB.
+
+Time to beat comes from game_time_to_beats; game details (summary, genres,
+themes, game modes, developers, publishers, first release date, screenshots
+for popular games) and the critic average (aggregated_rating and its count)
+from games. Games are matched by Steam app id, and games only on GOG or Epic by
+IGDB's external_games for those stores. Every field is credited "Game data from
+IGDB" wherever it is shown.
 
 Needs TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET (a GitHub Actions secret in the
 nightly job; never shipped to players). Skipped cleanly when they're missing.
@@ -16,11 +23,18 @@ import urllib.parse
 
 from ..ids import steam_id
 from ..net import Client, GiveUp
+from .. import meta as meta_rules
 from .. import ttb as ttb_rules
 
 TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 API = "https://api.igdb.com/v4/"
 STEAM_SOURCE = 1  # IGDB external game source id for Steam
+STORE_SOURCES = {"gog": 5, "epic": 26}  # IGDB external game sources for GOG and the Epic Games Store
+GAME_FIELDS = ("fields id,slug,summary,first_release_date,aggregated_rating,aggregated_rating_count,"
+               "total_rating_count,genres.name,themes.name,game_modes.name,involved_companies.developer,"
+               "involved_companies.publisher,involved_companies.company.name,screenshots.image_id;")
+SCREEN_URL = "https://images.igdb.com/igdb/image/upload/t_screenshot_med/{}.jpg"
+_IMAGE_ID = re.compile(r"[a-z0-9]{1,40}")
 BATCH = 500
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,199}")  # slugs go into the query
 MAX_TITLE_SEARCHES = 400  # one request each; only popular games still without a value
@@ -181,7 +195,7 @@ def time_to_beats(client: Client, games: set[int], cid: str, tok: str) -> dict[i
 
 def fetch_for_steam(client: Client, steam_ids: list[str], slugs: dict[str, str] | None = None,
                     titles: dict[str, tuple[str, int | None]] | None = None,
-                    big: set[str] | None = None) -> dict[str, dict]:
+                    big: set[str] | None = None, cands_out: dict | None = None) -> dict[str, dict]:
     """Steam app id -> time to beat. Call only when `credentials()` is set.
 
     Each Steam id is mapped to IGDB games by every route that applies: the
@@ -218,4 +232,128 @@ def fetch_for_steam(client: Client, steam_ids: list[str], slugs: dict[str, str] 
             cands.setdefault(s, set()).update(games)
             if t := best(s):
                 out[s] = t
+    if cands_out is not None:
+        cands_out.update(cands)
     return out
+
+
+# ---- game details ----------------------------------------------------------
+
+def _names(rows) -> list:
+    return [r.get("name") for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+
+def to_meta(row: dict, screens: bool = False) -> dict:
+    """An IGDB games row -> {"meta": {...}, "critic": {"score", "count"}?, "igdb": slug}."""
+    comps = [c for c in row.get("involved_companies") or [] if isinstance(c, dict)]
+
+    def companies(flag: str) -> list:
+        return [(c.get("company") or {}).get("name") for c in comps if c.get(flag) and isinstance(c.get("company"), dict)]
+
+    shots = []
+    if screens:
+        for s in row.get("screenshots") or []:
+            iid = s.get("image_id") if isinstance(s, dict) else None
+            if isinstance(iid, str) and _IMAGE_ID.fullmatch(iid):
+                shots.append(SCREEN_URL.format(iid))
+            if len(shots) >= meta_rules.SCREENS_MAX:
+                break
+    m = meta_rules.compact({
+        "summary": meta_rules.summary(row.get("summary")),
+        "genres": meta_rules.clean_list(_names(row.get("genres"))),
+        "themes": meta_rules.clean_list(_names(row.get("themes"))),
+        "modes": meta_rules.clean_list(_names(row.get("game_modes"))),
+        "developers": meta_rules.clean_list(companies("developer")),
+        "publishers": meta_rules.clean_list(companies("publisher")),
+        "release_date": meta_rules.iso_date(row.get("first_release_date")),
+        "screens": shots,
+    })
+    out: dict = {"meta": m}
+    c = meta_rules.score(row.get("aggregated_rating"), row.get("aggregated_rating_count"))
+    if c:
+        out["critic"] = c
+    if isinstance(row.get("slug"), str) and SLUG.fullmatch(row["slug"]):
+        out["igdb"] = row["slug"]
+    return out
+
+
+def _richness(row: dict) -> tuple:
+    return (bool(row.get("summary")), row.get("aggregated_rating_count") or 0, row.get("total_rating_count") or 0)
+
+
+def game_details(client: Client, games: set[int], cid: str, tok: str) -> dict[int, dict]:
+    out: dict[int, dict] = {}
+    ids = sorted(games)
+    for i in range(0, len(ids), BATCH):
+        rows = query_all(client, "games",
+                         f"{GAME_FIELDS} where id = ({','.join(str(g) for g in ids[i:i + BATCH])});", cid, tok)
+        for r in rows:
+            if isinstance(r, dict) and isinstance(r.get("id"), int):
+                out[r["id"]] = r
+    return out
+
+
+def best_details(cands: dict[str, set[int]], rows: dict[int, dict], prefix: str,
+                 screens_for: set[str] | None = None) -> dict[str, dict]:
+    """For each store id, the richest of its IGDB games (a summary first, then
+    the most critic reviews) -> "<prefix>:<id>" -> to_meta(row)."""
+    out = {}
+    screens_for = screens_for or set()
+    for sid, games in cands.items():
+        found = [rows[g] for g in sorted(games) if g in rows]
+        if not found:
+            continue
+        row = max(found, key=_richness)
+        d = to_meta(row, screens=sid in screens_for)
+        if d["meta"] or d.get("critic"):
+            out[f"{prefix}:{sid}"] = d
+    return out
+
+
+def map_by_store(client: Client, store: str, uids: list[str], cid: str, tok: str) -> dict[str, set[int]]:
+    """IGDB external_games rows for GOG or Epic with these store ids."""
+    src = STORE_SOURCES[store]
+    safe = [u for u in uids if isinstance(u, str) and re.fullmatch(r"[A-Za-z0-9._:-]{1,120}", u)]
+    out: dict[str, set[int]] = {}
+    for i in range(0, len(safe), BATCH):
+        rows = query_all(client, "external_games",
+                         f"fields game,uid; where external_game_source = {src} & uid = ({_quoted(safe[i:i + BATCH])});",
+                         cid, tok)
+        for r in rows:
+            if isinstance(r, dict) and isinstance(r.get("game"), int) and isinstance(r.get("uid"), str):
+                out.setdefault(r["uid"], set()).add(r["game"])
+    return out
+
+
+def fetch_all(client: Client, steam_ids: list[str], slugs: dict[str, str] | None = None,
+              titles: dict[str, tuple[str, int | None]] | None = None, big: set[str] | None = None,
+              stores: dict[str, list[str]] | None = None) -> tuple[dict[str, dict], dict[str, dict]]:
+    """(time to beat by Steam id, details by "steam:<id>" / "gog:<id>" / "epic:<id>").
+    Details for GOG/Epic ids only cover games no Steam id already gave. Call
+    only when `credentials()` is set."""
+    cands: dict[str, set[int]] = {}
+    ttb = fetch_for_steam(client, steam_ids, slugs, titles, big, cands_out=cands)
+    cid, secret = credentials()  # type: ignore[misc]
+    tok = token(client, cid, secret)
+    try:
+        rows = game_details(client, set().union(*cands.values()) if cands else set(), cid, tok)
+        details = best_details(cands, rows, "steam", big)
+        for store, uids in (stores or {}).items():
+            if store not in STORE_SOURCES or not uids:
+                continue
+            sc = map_by_store(client, store, sorted(set(uids)), cid, tok)
+            new = set().union(*sc.values()) - set(rows) if sc else set()
+            rows.update(game_details(client, new, cid, tok))
+            details.update(best_details(sc, rows, store))
+    except GiveUp:
+        # out of time: time to beat is still good; details fall back to last night's
+        raise PartialDetails(ttb)
+    return ttb, details
+
+
+class PartialDetails(GiveUp):
+    """Time to beat finished but the details didn't; `ttb` holds it."""
+
+    def __init__(self, ttb: dict):
+        super().__init__("IGDB details ran out of time")
+        self.ttb = ttb

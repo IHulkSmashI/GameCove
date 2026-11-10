@@ -56,8 +56,10 @@ static func find_by_key(games: Array, key: String) -> Dictionary:
 
 ## Short games: main story at most this many hours.
 const SHORT_MAX_H := 10.0
-const SORTS := ["recent", "az", "playtime", "ttb"]
-const SORT_NAMES := {"recent": "Recent", "az": "A to Z", "playtime": "Most played", "ttb": "Shortest first"}
+const SORTS := ["recent", "az", "playtime", "ttb", "critic"]
+const SORT_NAMES := {"recent": "Recent", "az": "A to Z", "playtime": "Most played", "ttb": "Shortest first", "critic": "Top rated"}
+## The critic filter keeps games scored at least this (Metacritic's green band).
+const CRITIC_MIN := 75
 
 
 static func title_order(a: Dictionary, b: Dictionary) -> bool:
@@ -157,6 +159,11 @@ static func sort_games(games: Array, mode: String) -> Array:
 				var pa := int(a.get("playtime_min", 0))
 				var pb := int(b.get("playtime_min", 0))
 				return pa > pb if pa != pb else title_order(a, b))
+		"critic":
+			out.sort_custom(func(a, b):
+				var ca := critic_score(a)
+				var cb := critic_score(b)
+				return ca > cb if ca != cb else title_order(a, b))
 		"ttb":
 			out.sort_custom(func(a, b):
 				var ha := main_hours(a)
@@ -170,6 +177,34 @@ static func sort_games(games: Array, mode: String) -> Array:
 				var lb := int(b.get("last_played", 0))
 				return la > lb if la != lb else title_order(a, b))
 	return out
+
+
+## One critic score for a game (Metacritic, else OpenCritic, else IGDB's critics), -1 if none.
+static func critic_score(g: Dictionary) -> int:
+	var info: Variant = g.get("info", {})
+	return preload("res://scripts/library/meta/metadata.gd").critic_score(info.get("meta") if info is Dictionary else null)
+
+
+static func genres(g: Dictionary) -> Array:
+	var info: Variant = g.get("info", {})
+	return preload("res://scripts/library/meta/metadata.gd").genres_of(info.get("meta") if info is Dictionary else null)
+
+
+## Genres present in `games`, most common first (ties A to Z), at most `limit`.
+static func top_genres(games: Array, limit := 10) -> Array:
+	var n := {}
+	for g in games:
+		for x in genres(g):
+			n[x] = int(n.get(x, 0)) + 1
+	var out := n.keys()
+	out.sort_custom(func(a, b): return n[a] > n[b] if n[a] != n[b] else String(a).naturalnocasecmp_to(b) < 0)
+	return out.slice(0, limit)
+
+
+## Games of a genre ("" keeps all) and, with `critic_min` > 0, scored at least that.
+static func filter_meta(games: Array, genre: String, critic_min := 0) -> Array:
+	return games.filter(func(g):
+		return (genre == "" or genre in genres(g)) and (critic_min <= 0 or critic_score(g) >= critic_min))
 
 
 ## Case- and accent-insensitive title search. Every word of the query must

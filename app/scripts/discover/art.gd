@@ -11,9 +11,9 @@ extends Node
 ##    data / the calendar (remember()); newer Steam apps keep art under hashed
 ##    paths that only the store data knows;
 ## 2. Steam's public CDN by appid (store_item_assets/steam/apps/<id>/...);
-## 3. SteamGridDB, only when the user has entered their own API key in
-##    settings (SteamGridDB's terms allow personal, non-commercial use; no key
-##    ships with GameCove).
+## 3. SteamGridDB, with the user's own API key, else GameCove's project key
+##    when the build has one (scripts/library/art/sgdb.gd), and only while
+##    "Look up game details" is on (scripts/system/privacy.gd).
 ## A game with nothing found isn't asked about again for a day.
 
 signal art_ready(key: String, kind: String, path: String)
@@ -134,10 +134,13 @@ func candidates(key: String, kind: String, hints: Dictionary) -> Array:
 func _key() -> String:
 	if api_key != "":
 		return api_key
+	var user := ""
 	var d := get_node_or_null("/root/Discover") if is_inside_tree() else null
 	if d != null and d.has_method("get_settings"):
-		return str(d.get_settings().get("steamgriddb_key", ""))
-	return ""
+		user = str(d.get_settings().get("steamgriddb_key", ""))
+	if not is_inside_tree() or not preload("res://scripts/system/privacy.gd").metadata_allowed():
+		return user
+	return preload("res://scripts/library/art/sgdb.gd").key(user)
 
 
 func _try(key: String, kind: String, list: Array) -> void:

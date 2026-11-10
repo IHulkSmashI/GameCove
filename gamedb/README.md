@@ -8,6 +8,9 @@ Builds GameCove's open game database every night and publishes it as a GitHub re
 | `popular` rank; title and year for popular games Wikidata doesn't cover | Steam Web API (keyless store lists) | [Steam Web API Terms of Use](https://steamcommunity.com/dev/apiterms) |
 | Anti-cheat status (works / blocked / denied) | AreWeAntiCheatYet | MIT |
 | Time to beat (main, main + extras, 100%, submission count) | IGDB `game_time_to_beats` | IGDB terms, credit IGDB.com |
+| `meta.igdb` (summary, genres, themes, modes, developers, publishers, release date, screenshots for popular games), `critics.igdb_critic` (critic average, review count) | IGDB `games` (matched by Steam id, else by IGDB's GOG / Epic ids) | IGDB terms, credit IGDB.com |
+| `meta.steam` (short description, genres, developers, publishers, release date, controller support, `at`), `critics.metacritic` (`score`, `url`) | Steam store `appdetails` (keyless), a slice of the popular games each night | [Steam Web API Terms of Use](https://steamcommunity.com/dev/apiterms); Metacritic's score as Valve publishes it, credit Metacritic and link `url` |
+| `meta.wikidata` (genres, developers, publishers) | Wikidata P136 / P178 / P123 | CC0 |
 | `protondb` compatibility tier | Our summary of ProtonDB user reports from [bdefore/protondb-data](https://github.com/bdefore/protondb-data) | ODbL 1.0 |
 
 ```
@@ -42,6 +45,35 @@ The games players open first must never be missing, so (`gamedb/sources/steamtop
   is dropped. Last night's values go through the same checks.
 - **Coverage check:** `python -m gamedb.coverage dist/gamedb.json.gz` exits 1 naming any `MUST_HAVE` game without an
   entry. The nightly runs it before publishing, so a regression fails loudly and last night's file stays.
+
+## Game details and critic scores
+
+The app fills in missing details for every library game from these blocks (docs/CONTRACTS.md, "Game details"):
+
+```json
+"meta": {"igdb": {"summary": "...", "genres": ["Role-playing (RPG)"], "themes": ["Fantasy"], "modes": ["Single player"],
+                  "developers": ["Supergiant Games"], "publishers": ["Supergiant Games"], "release_date": "2020-09-17",
+                  "screens": ["https://images.igdb.com/igdb/image/upload/t_screenshot_med/sc8ivc.jpg"]},
+         "steam": {"summary": "...", "genres": ["Action", "Indie", "RPG"], "controller": "full", "at": "2026-11-09"},
+         "wikidata": {"genres": ["Action role-playing"]}},
+"critics": {"metacritic": {"score": 93, "url": "https://www.metacritic.com/game/pc/hades"},
+            "igdb_critic": {"score": 93, "count": 37}}
+```
+
+- **IGDB:** every Steam id IGDB maps (same three routes as time to beat), plus games that are only on GOG or Epic
+  through IGDB's `external_games` for those stores. Of several IGDB games for one store id, the one with a summary
+  and the most critic reviews wins. Screenshot links only for popular games (they're the costly field).
+- **Steam store:** `appdetails` answers one app per request and allows about 200 requests per 5 minutes, so each night
+  refreshes `steamstore.PER_NIGHT` (350) popular games, never-fetched first, then the oldest `at`, one request every
+  1.6 s; the rest keep last night's values. The app fetches other games on demand.
+- **Metacritic:** only Steam's own `metacritic` field (official, with the link). Metacritic's site is never fetched.
+  The app shows a GOG/Epic game the score of its Steam twin (same record, matched by store ids).
+- **OpenCritic:** not here. Its API (RapidAPI, free plan about 25 searches and 200 requests a day) doesn't permit
+  republishing its scores in a public file, so the app fetches them with the user's own key (CREDITS.md).
+- **Wikidata:** genres, developers and publishers as the last fallback; genre names lose "video game".
+- Text is cleaned (tags, entities, whitespace), summaries cut at a sentence near 600 characters, lists capped at 6.
+- Like every source, each falls back to last night's values when it fails (`igdb_details`, `steamstore`,
+  `wikidata_meta` in `sources`).
 
 ## ProtonDB tiers
 

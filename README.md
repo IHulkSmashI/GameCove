@@ -28,6 +28,7 @@ Run **GameCove Installer** again any time to change options, repair, update or r
 
 - **One library:** Steam, Epic, GOG and Amazon in one place, with installs, updates and a download queue. EA, Ubisoft, Battle.net, emulators and cloud come later.
 - **Game info on every tile:** cover art, time to beat, compatibility and anti-cheat status before you hit play.
+- **Complete game details for every store:** missing descriptions, genres, developers, publishers, release dates, screenshots and art are filled in for Steam, Epic, GOG and Amazon games alike, with Metacritic and OpenCritic scores on the game page, Top rated sorting and genre filters, and a SteamGridDB artwork picker (it can update Steam's own library art too).
 - **A quick menu that makes sense:** one button, five sections (This game, Power, Screen, Controller, Device), and a short line under every setting saying what it does. Performance overlay, Auto TDP status and Exit game are right there.
 - **Your handheld, set up properly:** power profiles, auto TDP, fan, charge limit, VRR, device fixes, and the right upscaling and frame generation for your chip, picked per game.
 - **Discover:** deals, real local prices, your wishlist with price alerts, and a release calendar.
@@ -61,9 +62,9 @@ GameCove writes its own front end and device layer and reuses proven open-source
 
 ## Game data
 
-Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAntiCheatYet, ProtonDB, IGDB) and published as a download. See [`gamedb/`](gamedb/).
+Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAntiCheatYet, ProtonDB, IGDB, the Steam store) and published as a download. See [`gamedb/`](gamedb/).
 
-Game data from [IGDB](https://www.igdb.com): time to beat and upcoming release dates. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0.
+Game data from [IGDB](https://www.igdb.com): time to beat, game details, critic averages and upcoming release dates. [Metacritic](https://www.metacritic.com) scores as Valve publishes them on the Steam store, each linked to its Metacritic page. Critic scores from [OpenCritic](https://opencritic.com), fetched by the app only with your own key. Artwork from [SteamGridDB](https://www.steamgriddb.com) and its artists. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0.
 
 ## Network and privacy
 
@@ -78,11 +79,14 @@ GameCove has no analytics, no crash reporting and no account of its own, and nev
 | Upscaler list and downloads (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and before an install; files only when you install or update | Background lookups (daily check); installs: you start them |
 | Firmware list and downloads | GitHub (`firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
 | Steam insights on a game's page (players now, reviews, Steam Deck rating, last update, DLC) | Steam's public API and store | The game's app id (DLC prices: also your store country) | When you open a Steam game's page; players at most every 10 min, the rest every 12 h | Background lookups (prices: Look up deals and prices) |
-| Achievements and game art | Steam's API and CDN; SteamGridDB only with your own key | The game's app id (and your SteamGridDB key) | When you open a game page or a tile needs art | Settings > Performance; remove the key |
+| Achievements and game art | Steam's API and CDN | The game's app id | When you open a game page or a tile needs art | Settings > Performance |
+| Game details | The Steam store (`appdetails`) | The Steam app id of a game (or of a GOG / Epic / Amazon game's Steam edition) whose details or Metacritic score are missing | In the background after start, one request every 2 s, cached a week; at once for the page you open | Look up game details (+ Background lookups for the background fill) |
+| Critic scores (optional) | [OpenCritic](https://opencritic.com) through RapidAPI | A game's title, then its OpenCritic id, with your own key | Same as game details, only if you added a key; at most 20 searches and 180 requests a day | Look up game details, or remove the key |
+| Artwork | [SteamGridDB](https://www.steamgriddb.com) | A game's Steam app id or title, with your key or GameCove's | When you open Change artwork; in the background for games with no cover, hero or logo | Look up game details (+ Background lookups for the automatic fill) |
 | Game streaming | PCs on your own network (GameStream: Sunshine, Apollo, Vibepollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets | When you open the Stream tab or wake a PC | You start it |
 | Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in | You start it |
 
-Settings > About > **Network and privacy** has the switches: **Background lookups** (off: nothing is requested unless you ask for it right then), **Look up deals and prices** and **Show maker photos**, all on by default. Store links can carry a GameCove affiliate id (Settings > Discover > Affiliate links, on by default; none are set up yet); it changes only the link, never the price, and sends nothing about you. Details: [docs/PRIVACY.md](docs/PRIVACY.md).
+Settings > About > **Network and privacy** has the switches: **Background lookups** (off: nothing is requested unless you ask for it right then), **Look up deals and prices**, **Look up game details** and **Show maker photos**, all on by default. Store links can carry a GameCove affiliate id (Settings > Discover > Affiliate links, on by default; none are set up yet); it changes only the link, never the price, and sends nothing about you. Details: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## What we'll never do
 

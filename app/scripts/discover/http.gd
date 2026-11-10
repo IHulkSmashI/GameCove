@@ -18,7 +18,7 @@ extends Node
 ##       "retry_after": int}
 ##   is_offline() -> bool: the last request failed for lack of network.
 ##
-## Credentials (review L32): a request carrying an Authorization header (the SteamGridDB key) follows its redirects
+## Credentials (review L32): a request carrying a key header (SECRET_HEADERS: SteamGridDB's, OpenCritic's) follows its redirects
 ## here, not inside HTTPRequest, so the header goes only to the host it was meant for: a redirect to another host is
 ## followed without it (and only over https).
 
@@ -75,9 +75,21 @@ func _pump() -> void:
 
 
 ## Whether a header list carries credentials.
+## Header names that carry a key: SteamGridDB's bearer token, a user's OpenCritic (RapidAPI) key.
+const SECRET_HEADERS := ["authorization:", "x-rapidapi-key:"]
+
+
+static func is_secret(header: Variant) -> bool:
+	var h := str(header).to_lower()
+	for p in SECRET_HEADERS:
+		if h.begins_with(p):
+			return true
+	return false
+
+
 static func has_auth(headers: Array) -> bool:
 	for h in headers:
-		if str(h).to_lower().begins_with("authorization:"):
+		if is_secret(h):
 			return true
 	return false
 
@@ -87,7 +99,7 @@ static func has_auth(headers: Array) -> bool:
 static func redirect_headers(headers: Array, from_url: String, to_url: String) -> Array:
 	if host_of(from_url) == host_of(to_url) and to_url.begins_with("https://"):
 		return headers.duplicate()
-	return headers.filter(func(h): return not str(h).to_lower().begins_with("authorization:"))
+	return headers.filter(func(h): return not is_secret(h))
 
 
 ## The absolute URL a 3xx answer points to ("" when there's no Location).

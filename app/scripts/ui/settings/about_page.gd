@@ -69,6 +69,9 @@ func _privacy_card() -> void:
 	var bg := toggle(box, "background_lookups", TS.PRIVACY_BACKGROUND, Privacy.background_allowed(privacy_path),
 		by_value(TS.PRIVACY_BACKGROUND_HELP), "download")
 	bg.changed.connect(func(v): Privacy.set_background_allowed(bool(v), privacy_path))
+	var md := toggle(box, "privacy_metadata", "Look up game details", Privacy.metadata_allowed(privacy_path),
+		fixed("Descriptions, genres, screenshots and critic scores from the Steam store, OpenCritic (with your own key) and artwork from SteamGridDB for games that have none. Off: only what's on this device and in GameCove's game database."), "info")
+	md.changed.connect(func(v): Privacy.set_metadata_allowed(bool(v), privacy_path))
 	var d := svc("discover")
 	if d != null and d.has_method("get_settings"):
 		var info: Dictionary = (d.get("SETTINGS_INFO") as Dictionary).get("price_lookups", {}) if d.get("SETTINGS_INFO") is Dictionary else {}

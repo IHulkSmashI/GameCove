@@ -7,6 +7,11 @@ extends Node
 ##                                    fetch this handheld's real photo into the cache
 ##                                    and quit (get-gamecove.sh --no-launch), so it shows
 ##                                    on the first, possibly offline, start
+##   gamecove.x86_64 --headless -- --restore-baseline
+##                                    put the everyday values back (and the values from
+##                                    before a game a crash or a session switch left
+##                                    behind), then quit: no screen. The session runs it
+##                                    before it switches away (Profiles does the work)
 ##   anything else                    the home screen (scenes/main.tscn)
 ## User arguments come after `--` (OS.get_cmdline_user_args(), the same in an
 ## exported binary). Kept apart from main.gd so the shell stays untouched.
@@ -29,6 +34,10 @@ static func wants_controls_cli(args: PackedStringArray) -> bool:
 	return "--controls" in args
 
 
+static func wants_restore_baseline(args: PackedStringArray) -> bool:
+	return "--restore-baseline" in args
+
+
 static func wants_photo_prefetch(args: PackedStringArray) -> bool:
 	return "--prefetch-photo" in args
 
@@ -45,6 +54,8 @@ func _ready() -> void:
 		cli.args = args
 		add_child(cli)
 		return
+	if wants_restore_baseline(args):
+		return   # the autoloads restore and Profiles quits (profiles.gd RESTORE_ARG)
 	if wants_photo_prefetch(args):
 		prefetch_photo_and_quit(get_node_or_null("/root/DevicePhoto"), get_tree())
 		return

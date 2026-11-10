@@ -53,6 +53,7 @@ const DeviceScript := preload("res://scripts/device/device.gd")
 const Hhd := preload("res://scripts/input/hhd.gd")
 const HhdHttp := preload("res://scripts/input/hhd_http.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Backend := preload("res://scripts/controls/power/backend.gd")
 const Levers := preload("res://scripts/controls/power/levers.gd")
 const ThermalGuard := preload("res://scripts/controls/power/thermal_guard.gd")
@@ -127,12 +128,19 @@ var _thermald_held := false
 var _thermald_try_ms := 0
 const THERMALD_RETRY_MS := 30000
 var _guard_timer: Timer
+var _guard_base_w := -1.0   # the TDP before the guard's first step (no user pick this run)
 var _busy := -1
 var _busy_at := -1000.0
 var _battery_pct := -1
 ## Boost watts above the TDP the user picked on PowerStation (PL2 - PL1 / SPPT above SPL);
 ## -1 = the device's default (devices.json pl2_offset_w, else what PowerStation keeps).
 var boost_w := -1.0
+## True while a game's profile layer is in effect (Profiles sets it): what it writes is
+## applied but not remembered as the everyday value (review H2).
+var game_layer := false
+## PowerStation's boost as last seen awake (detect, TDP writes): put back after a sleep when the
+## user never picked one (-1 unknown).
+var _live_boost := -1.0
 ## Handheld Daemon client; setup() swaps its transport in tests.
 var hhd: RefCounted = Hhd.new()
 var _hhd_tdp := {}      # Hhd.tdp_info() while backend == "hhd"
@@ -194,8 +202,8 @@ func _start() -> bool:
 	detect()
 	load_autotune_opts()
 	restore()
-	if backend != "none":
-		_start_timer.call_deferred()
+	# always: besides the charger it notices a sleep while a game is in front (review M19)
+	_start_timer.call_deferred()
 	_emit_changed()
 	return true
 
@@ -203,7 +211,7 @@ func _start() -> bool:
 func _start_timer() -> void:
 	_timer = Timer.new()
 	_timer.wait_time = SOURCE_CHECK_S
-	_timer.timeout.connect(func(): _queue("source", func(): check_power_source(); return true))
+	_timer.timeout.connect(func(): _queue("source", func(): source_tick(); return true))
 	add_child(_timer)
 	_timer.start()
 
@@ -286,6 +294,43 @@ func autotune_limit_info() -> Dictionary:
 	return info
 
 
+## Clocks for noticing a sleep: [unix seconds, ticks msec] (tests swap it).
+var clock: Callable = func(): return [Time.get_unix_time_from_system(), Time.get_ticks_msec()]
+## Wall clock ahead of the monotonic one by more than this between two looks = the device slept.
+const RESUME_GAP_S := 20.0
+var _clock_mark := [0.0, 0]
+var _clock_mutex := Mutex.new()
+
+
+## The 15 s timer's job (worker): a sleep since the last look, else the charger. main.gd
+## only looks while its window or the quick menu is shown, so a sleep with a game in front
+## went unnoticed: a firmware-reset TDP, fan table or charge limit stayed reset (review M19).
+func source_tick() -> void:
+	if slept_since_last_look():
+		refresh(true)
+	else:
+		check_power_source()
+
+
+## True when the clocks say the device slept since the last look (and moves the mark).
+func slept_since_last_look() -> bool:
+	var now: Array = clock.call()
+	_clock_mutex.lock()
+	var before: Array = _clock_mark
+	_clock_mark = now
+	_clock_mutex.unlock()
+	if int(before[1]) == 0:
+		return false
+	return (float(now[0]) - float(before[0])) - (int(now[1]) - int(before[1])) / 1000.0 > RESUME_GAP_S
+
+
+func _mark_clock() -> void:
+	var now: Array = clock.call()
+	_clock_mutex.lock()
+	_clock_mark = now
+	_clock_mutex.unlock()
+
+
 ## refresh() on the worker (it runs busctl).
 func request_refresh() -> void:
 	_queue("refresh", func(): refresh(); return true)
@@ -315,12 +360,12 @@ func _worker() -> void:
 	while true:
 		_job_sem.wait()
 		_job_mutex.lock()
-		if _quit:
-			_job_mutex.unlock()
-			return
 		if _job_order.is_empty():  # coalesced: this post's job already ran
 			_job_mutex.unlock()
+			if _quit:
+				return
 			continue
+		# quitting: what's queued (a restore, a TDP write) still runs first (review H2)
 		var job_name: String = _job_order.pop_front()
 		var entry: Array = _jobs[job_name]
 		_jobs.erase(job_name)
@@ -497,6 +542,8 @@ func _detect_powerstation() -> bool:
 			continue
 		_ps_card = str(path)
 		_tdp_w = float(v)
+		var b: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
+		_live_boost = float(b) if b != null else -1.0
 		# PowerStation reports MinTdp = MaxTdp = 0 for chips missing from its
 		# database (Panther Lake today); then devices.json's range stands.
 		var lo: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "MinTdp")
@@ -681,7 +728,9 @@ func fan_modes() -> Array:
 ## `resumed` only when after_resume: controls call refresh() after their own
 ## writes, and a `resumed` from there would re-apply everything again, forever.
 func refresh(after_resume := false) -> void:
+	var boost_before := _live_boost   # before sleep: what the firmware may have reset
 	if after_resume:
+		_mark_clock()   # main.gd noticed it first: the 15 s check mustn't do it again
 		# the charger may have come or gone while asleep: limits first (review S1-2)
 		check_power_source()
 	var v := read_tdp()
@@ -697,6 +746,8 @@ func refresh(after_resume := false) -> void:
 		_tdp_w = v
 	if v >= 0.0 and backend != "none" and _tdp_w > tdp_max() + 0.01:
 		_clamp_to_source()
+	if after_resume:
+		_reassert_boost(boost_before)
 	if _charge_via == "steamos-manager":
 		var c: Variant = user_bus.get_prop(SM_SERVICE, SM_PATH, SM_CHARGE_IFACE, "MaxChargeLevel")
 		_charge = sm_charge(int(c)) if c != null else -1
@@ -794,7 +845,8 @@ func restore() -> void:
 		if _charge_via != "fix" or fix_installed("charge-limit"):
 			set_charge_limit(c)
 	var f := str(_recall("device", "fan_mode", ""))
-	if f != "" and _fan_via != "" and f != _fan_mode:
+	# "custom": a fan curve (power.fan_curve) is the setting; the power controls put it back
+	if f != "" and f != "custom" and _fan_via != "" and f != _fan_mode:
 		if _fan_via != "fix" or fix_installed("fan"):
 			set_fan_mode(f)
 
@@ -803,6 +855,10 @@ func check_power_source() -> void:
 	var now := DeviceScript.ac_online(sys_root)
 	_report_battery(now)
 	if now == plugged:
+		# a clamp to this source's limit that failed (unplugged at 30 W, the write didn't
+		# land) is tried again on every check until it holds (review L11)
+		if backend != "none" and _tdp_w > tdp_max() + 0.01:
+			_clamp_to_source()
 		hold_charge()
 		return
 	plugged = now
@@ -894,18 +950,35 @@ func device_key() -> String:
 ## 30 W or a quiet fan curve picked on one must never be applied to the other.
 ## Values saved before (plain [profile]/[custom_w]/[device]) move to this device.
 func _load_cfg() -> ConfigFile:
-	var cfg := ConfigFile.new()
-	if cfg.load(config_path) != OK:
-		return cfg
+	var cfg := SettingsFile.load_cfg(config_path)
 	if PerDevice.migrate_cfg(cfg, DEVICE_SECTIONS, device_key()):
-		cfg.save(config_path)
+		SettingsFile.save_cfg(cfg, config_path)
 	return cfg
 
 
+## Values a game's profile can set (power.tdp, power.profile, power.boost, power.fan_mode, the
+## Auto TDP options): not the user's own while a game layer is in effect (review H2). What
+## Auto TDP learned per game, the charge limit and a fan curve the user draws are.
+func _game_value(section: String, key: String, value: Variant) -> bool:
+	if section in ["profile", "custom_w"]:
+		return true
+	if section == "device":
+		return key in ["boost_w", "autotune_opts"] or (key == "fan_mode" and str(value) != "custom")
+	return false
+
+
+## One load-modify-save under SettingsFile's lock (Power's worker, the Controls worker and
+## the installer all write power.cfg).
 func _remember(section: String, key: String, value: Variant) -> void:
-	var cfg := _load_cfg()
-	cfg.set_value(PerDevice.section(section, device_key()), key, value)
-	cfg.save(config_path)
+	if game_layer and _game_value(section, key, value):
+		return
+	SettingsFile.update_cfg(config_path, func(cfg: ConfigFile):
+		PerDevice.migrate_cfg(cfg, DEVICE_SECTIONS, device_key())
+		if value == null:
+			if cfg.has_section_key(PerDevice.section(section, device_key()), key):
+				cfg.erase_section_key(PerDevice.section(section, device_key()), key)
+		else:
+			cfg.set_value(PerDevice.section(section, device_key()), key, value))
 
 
 func _recall(section: String, key: String, fallback: Variant) -> Variant:
@@ -942,10 +1015,14 @@ func write_tdp(watts: float) -> bool:
 			ok = absf(read_tdp() - w) < 0.5
 	elif backend == "powerstation":
 		if system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "TDP", "d", "%.1f" % watts):
-			if boost_w >= 0.0:
-				var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
-				if live == null or absf(float(live) - boost_w) >= 0.05:
-					system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % boost_w)
+			var boost := boost_for(watts)
+			var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
+			if boost >= 0.0:
+				if live == null or absf(float(live) - boost) >= 0.05:
+					system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % boost)
+				_live_boost = boost
+			elif live != null:
+				_live_boost = float(live)
 			ok = absf(read_tdp() - watts) < 0.5
 	elif backend == "hhd" and not _hhd_tdp.is_empty():
 		var w := int(roundf(watts))
@@ -958,6 +1035,35 @@ func write_tdp(watts: float) -> bool:
 		_tdp_w = watts
 		_hold_thermald()
 	return ok
+
+
+## After a resume: the firmware may have reset PL2 while the TDP itself survived, so the user's
+## boost goes back even when refresh() didn't rewrite the TDP (the power controls no longer
+## replay power.boost, review M16).
+func _reassert_boost(before: float) -> void:
+	if backend != "powerstation" or _ps_card == "":
+		return
+	var want := boost_for(_tdp_w)
+	if want < 0.0 and before >= 0.0:
+		# no boost of the user's: the one PowerStation had before the sleep
+		var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
+		want = minf(before, maxf(0.0, cap - _tdp_w)) if cap > 0.0 else before
+	if want < 0.0:
+		return
+	var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
+	if live == null or absf(float(live) - want) >= 0.05:
+		system_bus.set_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost", "d", "%.1f" % want)
+	_live_boost = want
+
+
+## The boost to write with a TDP of `watts` (review H6): the user's boost_w, never past the
+## device's boost_max for that TDP (TDP + boost <= boost_max), for whatever power source and
+## TDP we're at now. -1 = leave PowerStation's own.
+func boost_for(watts: float) -> float:
+	if boost_w < 0.0:
+		return -1.0
+	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
+	return minf(boost_w, maxf(0.0, cap - watts)) if cap > 0.0 else boost_w
 
 
 # ---- charge limit -------------------------------------------------------------
@@ -1127,6 +1233,7 @@ func set_boost_w(watts: float) -> bool:
 	if not be.set_ps_boost(w):
 		return false
 	boost_w = w
+	_live_boost = w
 	_remember("device", "boost_w", w)
 	return true
 
@@ -1155,6 +1262,10 @@ func set_hhd_boost(on: bool) -> bool:
 
 func load_autotune_opts() -> void:
 	boost_w = float(_recall("device", "boost_w", -1.0))
+	# a stale or hand-edited value: never more than the largest boost any TDP here allows
+	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
+	if boost_w >= 0.0 and cap > 0.0:
+		boost_w = minf(boost_w, maxf(0.0, cap - maxf(_range["min"], 0.0)))
 	autotune_opts = AUTOTUNE_DEFAULTS.duplicate()
 	var saved: Variant = _recall("device", "autotune_opts", {})
 	if saved is Dictionary:
@@ -1307,7 +1418,15 @@ func _hold_thermald() -> void:
 		return
 	_thermald_checked = true
 	_thermald_try_ms = now
-	if not be.helper_present() or not be.thermald_active():
+	if not be.helper_present():
+		return
+	if not be.thermald_active():
+		# stopped by an earlier hold (a run that crashed or was switched away): thermald's
+		# temperature control is off all the same, so the guard has to run (review L10)
+		if be.thermald_held_mark():
+			_thermald_held = true
+			guard.reset()
+			_start_guard.call_deferred()
 		return
 	if be.root_set("thermald", "hold"):
 		_thermald_held = true
@@ -1338,7 +1457,12 @@ func guard_check() -> int:
 		w = guard.check(t, sess.learned.tdp, sess.floor_tdp, func(x): return autotune.thermal_step(x),
 			sess.ceiling_tdp, func(x): return autotune.thermal_release(x))
 	else:
-		var limit := int(roundf(_user_tdp)) if _user_tdp > 0.0 else int(roundf(_tdp_w))
+		# with no pick this run the limit is the TDP from before the first step, not the
+		# stepped one (which never let the guard step back up, review L10)
+		if guard.stepped_w < 0:
+			_guard_base_w = _tdp_w
+		var base := _user_tdp if _user_tdp > 0.0 else _guard_base_w
+		var limit := int(roundf(base)) if base > 0.0 else int(roundf(_tdp_w))
 		w = guard.check(t, int(roundf(_tdp_w)), _floor_w(), func(x): return write_tdp(float(x)), limit)
 	if w > 0:
 		_emit_changed()

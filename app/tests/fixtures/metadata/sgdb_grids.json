@@ -1,0 +1,14 @@
+{"success": true, "page": 0, "total": 3, "limit": 50, "data": [
+ {"id": 101, "score": 3, "style": "alternate", "width": 600, "height": 900, "nsfw": false, "humor": false, "epilepsy": false, "notes": null, "mime": "image/png", "language": "en",
+  "url": "https://cdn2.steamgriddb.com/grid/aaa.png", "thumb": "https://cdn2.steamgriddb.com/thumb/aaa.jpg", "lock": false, "upvotes": 3, "downvotes": 0,
+  "author": {"name": "ArtistOne", "steam64": "76561198000000001", "avatar": "https://avatars.steamstatic.com/x.jpg"}},
+ {"id": 102, "score": 9, "style": "white_logo", "width": 600, "height": 900, "nsfw": false, "humor": false, "epilepsy": false, "mime": "image/png",
+  "url": "https://cdn2.steamgriddb.com/grid/bbb.png", "thumb": "https://cdn2.steamgriddb.com/thumb/bbb.jpg", "upvotes": 9, "downvotes": 0,
+  "author": {"name": "ArtistTwo", "steam64": "76561198000000002"}},
+ {"id": 103, "score": 20, "style": "alternate", "width": 600, "height": 900, "nsfw": true, "humor": false, "epilepsy": false, "mime": "image/png",
+  "url": "https://cdn2.steamgriddb.com/grid/ccc.png", "thumb": "https://cdn2.steamgriddb.com/thumb/ccc.jpg",
+  "author": {"name": "ArtistThree", "steam64": "76561198047920049"}},
+ {"id": 104, "score": 50, "style": "alternate", "width": 600, "height": 900, "mime": "video/webm",
+  "url": "https://cdn2.steamgriddb.com/grid/ddd.webm", "thumb": "https://cdn2.steamgriddb.com/thumb/ddd.png", "author": {"name": "Anim"}},
+ {"id": 105, "url": "http://insecure.example/x.png", "thumb": "http://insecure.example/x.png"}
+]}
