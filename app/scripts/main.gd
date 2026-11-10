@@ -1198,6 +1198,13 @@ func _sound(kind: String) -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton or event is InputEventKey or event is InputEventJoypadMotion:
+		# The launch splash is up: nothing under it takes the pad or the keys. The
+		# focused button under it would still get A (focus input comes before any
+		# _unhandled_input), so a blind D-pad then A started a second game and left
+		# the first one unfollowed. Only B (the splash's Cancel) and Guide pass.
+		if launch_overlay != null and launch_overlay.is_open() and not _passes_splash(event):
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_pressed():
 			if Time.get_ticks_msec() - _last_input_ms > IDLE_S * 1000.0:
 				_resume_motion()
@@ -1205,6 +1212,17 @@ func _input(event: InputEvent) -> void:
 			# the first press after a wake notices it at once (two clock reads, at most every 2 s)
 			if _last_input_ms - int(_clock_mark[1]) > 2000:
 				_check_resume()
+
+
+## What still gets through while the launch splash is up: B / Esc (Cancel) and Guide / F1.
+static func _passes_splash(event: InputEvent) -> bool:
+	if event.is_action("ui_cancel"):
+		return true
+	if event is InputEventJoypadButton:
+		return event.button_index == JOY_BUTTON_GUIDE
+	if event is InputEventKey:
+		return event.keycode == KEY_F1
+	return false
 
 
 func _unhandled_input(event: InputEvent) -> void:

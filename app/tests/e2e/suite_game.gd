@@ -183,6 +183,32 @@ func test_home_is_visible_after_guide_in_a_game_launched_from_home() -> void:
 	await end_game()
 
 
+## Medium: the pad doesn't reach the screen under the splash.
+func test_the_pad_does_not_reach_the_screen_under_the_splash() -> void:
+	var m: Control = w.main
+	m.home.play_button.grab_focus()
+	await w.frames(2)
+	var presses := [0]
+	var on_press := func() -> void: presses[0] += 1
+	m.home.play_button.pressed.connect(on_press)
+	await _press_play(GAME_A)
+	var before := focus()
+	await down()
+	await right()
+	await a()
+	await lb()
+	await w.frames(2)
+	ok(focus() == before, "D-pad under the splash moves nothing")
+	eq(presses[0], 0, "A under the splash presses nothing")
+	eq(m.current, "home", "LB / RB don't change the screen under it")
+	eq(m.session.game.get("key", ""), GAME_A["key"], "still the one game")
+	ok(m.launch_overlay.is_open(), "the splash is still up")
+	await b()
+	ok(not m.launch_overlay.is_open(), "B still cancels")
+	m.home.play_button.pressed.disconnect(on_press)
+	ok(await until(func(): return not m.session.is_active(), 20000), "and the game is closed")
+	await w.idle()
+
 
 ## High 7: an emulated game Steam ROM Manager added runs under Steam (store
 ## "emu", shortcut true). Exit game stops Steam's launch of it, by the shortcut's id.
