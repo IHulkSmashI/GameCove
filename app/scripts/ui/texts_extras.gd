@@ -49,3 +49,15 @@ const BT_DONE := {"connect": "%s connected", "disconnect": "%s disconnected", "p
 const BT_FAILED := {"connect": "%s didn't connect. Is it on and nearby?", "disconnect": "%s didn't disconnect",
 	"pair": "%s didn't pair. Put it in pairing mode and try again; a keyboard that asks for a code pairs from Desktop Mode.",
 	"forget": "Couldn't forget %s"}
+
+# ---- clean up (Storage) ----------------------------------------------------------------
+const CLEAN_TITLE := "Clean up"
+const CLEAN_LINE := "Shader caches Steam kept for games you've uninstalled. Safe to remove: they only come back if you reinstall and play."
+const CLEAN_MEASURING := "Looking for leftovers…"
+const CLEAN_NONE := "Nothing to clean up. No leftovers from uninstalled games."
+const CLEAN_FOUND := "%s from %d uninstalled %s"
+const CLEAN_BUTTON := "Clean up %s"
+const CLEAN_RUNNING := "Cleaning up…"
+const CLEAN_DONE := "Freed %s"
+const CLEAN_FAILED := "Some folders couldn't be removed. Close Steam's download page and try again."
+const CLEAN_SAVES := "Your saves and Proton prefixes are never touched."

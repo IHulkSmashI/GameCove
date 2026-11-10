@@ -1,0 +1,112 @@
+extends "res://tests/test_case.gd"
+## Clean up: Storage's leftover shader caches (games no longer installed) on a
+## throwaway Steam tree, and the Storage page's Clean up card. du is faked;
+## the folders are real (under user://), so removal is checked for real.
+
+const StorageScript := preload("res://scripts/system/storage.gd")
+const StoragePanel := preload("res://scripts/ui/device/storage_panel.gd")
+const Fake := preload("res://tests/fixtures/system/fake_runner.gd")
+const TX := preload("res://scripts/ui/texts_extras.gd")
+
+const BASE := "user://test_extras_cleanup"
+
+
+func _rm(path: String) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		return
+	d.include_hidden = true
+	for f in d.get_files():
+		DirAccess.remove_absolute(path.path_join(f))
+	for sub in d.get_directories():
+		_rm(path.path_join(sub))
+	DirAccess.remove_absolute(path)
+
+
+func _touch(path: String, text := "x") -> void:
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(text)
+	f.close()
+
+
+## home/.local/share/Steam (game 10 installed, cache of removed game 20 and a
+## non-Steam shortcut's) plus an SD library (game 30 installed there, its
+## cache left in the internal library, and a removed game 40's cache).
+func _tree(name: String) -> Dictionary:
+	var root := ProjectSettings.globalize_path(BASE).path_join(name)
+	_rm(root)
+	var home := root.path_join("home")
+	var steam := home.path_join(".local/share/Steam")
+	var sd := root.path_join("sd/SteamLibrary")
+	_touch(steam.path_join("steamapps/libraryfolders.vdf"),
+		"\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"%s\"\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"%s\"\n\t}\n}\n" % [steam, sd])
+	_touch(steam.path_join("steamapps/appmanifest_10.acf"))
+	_touch(sd.path_join("steamapps/appmanifest_30.acf"))
+	for id in ["10", "20", "30", "3000000001"]:
+		_touch(steam.path_join("steamapps/shadercache/%s/fozpipelinesv6/steamapp_pipeline_cache.foz" % id))
+	_touch(sd.path_join("steamapps/shadercache/40/DXVK_state_cache/x.dxvk-cache"))
+	var f: RefCounted = Fake.new()
+	f.handler = func(cmd: String) -> Variant:
+		if cmd.begins_with("du -sbc "):
+			var n := cmd.split(" ").size() - 2
+			return {"code": 0, "out": "1000\tdir\n".repeat(n) + "%d\ttotal\n" % (n * 1000)}
+		return null
+	var s: Node = StorageScript.new()
+	s.setup(f, home)
+	return {"root": root, "home": home, "steam": steam, "sd": sd, "s": s, "fake": f}
+
+
+func test_leftovers_are_uninstalled_steam_games_only() -> void:
+	var t := _tree("find")
+	var dirs: Array = StorageScript.leftover_dirs(t.s.steam_library_paths())
+	var ids: Array = dirs.map(func(d): return str(d).get_file())
+	ids.sort()
+	eq(ids, ["20", "40"], "removed games only: installed ones (even in another library) and shortcuts stay")
+	t.s.free()
+	_rm(t.root)
+
+
+func test_measure_then_clean() -> void:
+	var t := _tree("clean")
+	var got := []
+	t.s.changed.connect(func(st): got.append(st["cleanup"].duplicate(true)))
+	t.s.leftovers()
+	var cl: Dictionary = t.s.state()["cleanup"]
+	ok(cl["ready"], "measured")
+	eq(cl["dirs"].size(), 2, "two leftovers")
+	eq(cl["bytes"], 2000, "their size from du -sbc's total")
+	ok(t.s.clean_leftovers(), "clean started")
+	ok(not DirAccess.dir_exists_absolute(t.steam.path_join("steamapps/shadercache/20")), "removed game's cache gone")
+	ok(not DirAccess.dir_exists_absolute(t.sd.path_join("steamapps/shadercache/40")), "on the SD card too")
+	ok(DirAccess.dir_exists_absolute(t.steam.path_join("steamapps/shadercache/10")), "installed game's cache kept")
+	ok(DirAccess.dir_exists_absolute(t.steam.path_join("steamapps/shadercache/30")), "game installed in another library kept")
+	ok(DirAccess.dir_exists_absolute(t.steam.path_join("steamapps/shadercache/3000000001")), "non-Steam shortcut kept")
+	var after: Dictionary = t.s.state()["cleanup"]
+	eq(after["dirs"], [], "nothing left")
+	eq(after["freed"], 2000, "freed reported")
+	eq(after["failed"], 0, "no failures")
+	ok(not t.s.clean_leftovers(), "nothing more to clean")
+	t.s.free()
+	_rm(t.root)
+
+
+func test_panel_card() -> void:
+	var t := _tree("panel")
+	var p: Control = StoragePanel.build({"storage": t.s})
+	ok(p.find_child("CleanUp", true, false) != null, "Clean up card")
+	p.opened()
+	ok(p.clean_button != null, "a button once leftovers are found")
+	ok(p.clean_button.text.begins_with("Clean up "), "button says what it does")
+	ok(p.clean_button in p.focusables(), "in the focus chain")
+	ok(p.find_child("CleanWhy", true, false) != null, "one plain line on what goes")
+	var toasts := []
+	p.toast_requested.connect(func(text, _i, tone): toasts.append([text, tone]))
+	p.start_clean()   # what the (deferred) press runs
+	eq(toasts.size(), 1, "one toast")
+	ok(toasts.size() == 1 and toasts[0][1] == "good", "freed")
+	ok(p.clean_button == null, "nothing left: no button")
+	p.closed()
+	p.free()
+	t.s.free()
+	_rm(t.root)

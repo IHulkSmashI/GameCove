@@ -176,8 +176,8 @@ it does.
 - **System:** Wi-Fi, Bluetooth, airplane mode, Wi-Fi power saving, keep awake, sleep, screenshots, and **Bluetooth
   devices**: connect your controller or headphones, see their battery, pair new ones and forget old ones.
 - **Profiles, Appearance, Stores, Discover, Device and About GameCove:** your saved profiles, themes, store sign-ins and
-  downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage and updates, and the
-  network and privacy switches.
+  downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage (with one-press
+  **clean-up** of the shader caches uninstalled games leave behind), updates, and the network and privacy switches.
 
 <p align="center"><img src="docs/images/settings-power.webp" alt="Settings, Power" width="70%"></p>
 
