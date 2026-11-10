@@ -369,7 +369,8 @@ func cancel() -> void:
 ## Control's rect as drawn now (with its focus lift), else src["rect"].
 func source_rect() -> Rect2:
 	var n: Variant = source.get("node")
-	if n is Control and is_instance_valid(n) and ((n as Control).is_visible_in_tree() or not (n as Control).is_inside_tree()):
+	# is_instance_valid first: `is` on a freed tile (the grid rebuilt mid-launch) is a script error.
+	if is_instance_valid(n) and n is Control and ((n as Control).is_visible_in_tree() or not (n as Control).is_inside_tree()):
 		var r := drawn_rect(n)
 		return get_global_transform().affine_inverse() * r
 	var r2: Variant = source.get("rect")

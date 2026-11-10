@@ -242,7 +242,10 @@ func set_imported(imp: Dictionary) -> void:
 		fav[str(k)] = true
 	for k in imp.get("hidden", []):
 		hid[str(k)] = true
-	_imported = {"favourites": fav, "hidden": hid, "collections": imp.get("collections", []), "dynamic": int(imp.get("dynamic", 0))}
+	var fresh := {"favourites": fav, "hidden": hid, "collections": imp.get("collections", []), "dynamic": int(imp.get("dynamic", 0))}
+	if fresh == _imported:
+		return   # a rescan found the same: no second rebuild of every screen
+	_imported = fresh
 	changed.emit()
 
 

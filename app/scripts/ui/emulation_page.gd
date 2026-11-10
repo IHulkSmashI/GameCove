@@ -53,7 +53,8 @@ func setup(setup_info: Dictionary, games: Array) -> void:
 		if str(g.get("id", "")) == "frontend":
 			frontend_game = g
 	top_inset = TOP_INSET
-	var g := frontend_game if not frontend_game.is_empty() else {"key": "emu:page", "store": "emu", "id": "page", "title": TL.EMU_TITLE,
+	# No frontend: a stand-in with no key, so the quick menu's This game stays empty.
+	var g := frontend_game if not frontend_game.is_empty() else {"key": "", "store": "emu", "id": "page", "title": TL.EMU_TITLE,
 		"installed": true, "art": {"cover": "", "hero": "", "logo": "", "icon": ""}, "info": {}}
 	setup_page(g, "")
 	handoff = LinkHandoff.new()

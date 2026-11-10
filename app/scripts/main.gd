@@ -1462,8 +1462,8 @@ func _open_menu() -> void:
 	_screen().focus_behavior_recursive = Control.FOCUS_BEHAVIOR_DISABLED
 	top_bar.focus_behavior_recursive = Control.FOCUS_BEHAVIOR_DISABLED
 	var g := playing
-	if g.is_empty() and page != null:
-		g = page.game
+	if g.is_empty() and page != null and str(page.game.get("key", "")) != "":
+		g = page.game   # not the Emulation page's stand-in when nothing is installed
 	if g.is_empty():
 		g = home.spotlight_game if not home.spotlight_game.is_empty() else home.hero_game
 	quick_menu.open(g)

@@ -31,6 +31,7 @@ func _pick(id: String) -> void:
 
 func test_favourite_hide_and_show_again() -> void:
 	var lib: Node = w.autoload("Library")
+	var before: Array = lib.games.duplicate()
 	lib.collections.path = w.home.path_join(".local/share/gamecove-e2e-collections.json")
 	lib.collections.reload()
 	lib.games.assign(_games())
@@ -69,6 +70,9 @@ func test_favourite_hide_and_show_again() -> void:
 	await w.frames(3)
 	eq(main().library_screen.tiles().size(), 2, "back in the grid")
 	lib.collections.set_favourite(key, false)
+	# Leave the library as the other suites expect it (no games: "no game running" checks).
+	lib.games.assign(before)
+	lib.changed.emit()
 	main().show_screen("home")
 	await w.frames(3)
 
