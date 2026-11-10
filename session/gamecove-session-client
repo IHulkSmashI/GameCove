@@ -154,6 +154,7 @@ if [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ]; then
 	rm -f "$HEARTBEAT" 2>/dev/null
 	export GAMECOVE_HEARTBEAT="$HEARTBEAT"
 fi
+started_at="$(date +%s)"
 "$GAMECOVE_BIN" --display-driver x11 --rendering-driver opengl3 --fullscreen "$@" &
 app=$!
 waited=0
@@ -180,6 +181,7 @@ ready=0
 beat=""
 stale=0
 hung=""
+healthy=0
 while kill -0 "$app" 2>/dev/null; do
 	sleep 1
 	up=$((up + 1))
@@ -207,12 +209,19 @@ while kill -0 "$app" 2>/dev/null; do
 		kill -KILL "$app" 2>/dev/null
 		break
 	fi
-	if [ "$up" -eq "$HEALTHY_S" ] && [ "$stale" -lt 10 ]; then
+	if [ "$healthy" -eq 0 ] && [ "$up" -ge "$HEALTHY_S" ] && [ "$stale" -lt 10 ]; then
+		healthy=1
 		clear_crashes
 	fi
 done
 code=0
 wait "$app" || code=$?
+# The loop can miss the healthy mark (a slow Steam start, a loaded machine), so
+# judge the whole run by the clock too: a crash after a healthy run counts as 1.
+ran=$(( $(date +%s) - started_at ))
+if [ -z "$hung" ] && [ "$ran" -ge "$HEALTHY_S" ] && [ "$stale" -lt 10 ]; then
+	clear_crashes
+fi
 rm -f "$HEARTBEAT" 2>/dev/null
 reset_input_intercept
 if [ -n "$hung" ]; then
