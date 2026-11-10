@@ -13,6 +13,7 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Media := preload("res://scripts/system/media.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 
 var registry: Object
 ## Media.now_playing() from the last read ({} = nothing playing).
@@ -76,11 +77,7 @@ func _on_state(gen: int, st: Dictionary) -> void:
 
 func _show(st: Dictionary) -> void:
 	state = st
-	var had := buttons.duplicate()
-	var focus_on := ""
-	for k in had:
-		if is_instance_valid(had[k]) and had[k].has_focus():
-			focus_on = k
+	var mark := KeepFocus.mark(self, _buttons_in_order())
 	for c in _col.get_children():
 		_col.remove_child(c)
 		c.queue_free()
@@ -88,6 +85,8 @@ func _show(st: Dictionary) -> void:
 	visible = not st.is_empty()
 	if st.is_empty():
 		rebuilt.emit()
+		# the player went away under a focused button: what came before the card takes it
+		KeepFocus.restore(self, mark, [])
 		return
 	var head := Kit.micro("%s · %s" % [TX.MEDIA_TITLE.to_upper(), str(st.get("app", "")).to_upper()])
 	head.name = "MediaHead"
@@ -131,8 +130,11 @@ func _show(st: Dictionary) -> void:
 	help.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 	_col.add_child(help)
 	rebuilt.emit()
-	if focus_on != "" and buttons.has(focus_on) and is_inside_tree():
-		buttons[focus_on].grab_focus()
+	KeepFocus.restore(self, mark, _buttons_in_order(), buttons["PlayPause"])
+
+
+func _buttons_in_order() -> Array:
+	return ["Previous", "PlayPause", "Next"].filter(func(k): return buttons.has(k)).map(func(k): return buttons[k])
 
 
 ## Sends one action to the player on show, then reads its state again.

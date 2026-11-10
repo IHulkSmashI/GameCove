@@ -157,6 +157,7 @@ func _on_refreshed() -> void:
 ## Rebuilds and keeps focus on the same setting.
 func rebuild() -> void:
 	var keep := _focused_key()
+	var mark := KeepFocus.mark(self, focusables())
 	for c in get_children():
 		Kit.drop(self, c)
 	_focusables.clear()
@@ -171,6 +172,9 @@ func rebuild() -> void:
 					Kit.focus_later(f)
 					return
 				n = n.get_parent()
+	# that setting went (its control isn't offered any more): the nearest one left
+	var after := focusables()
+	KeepFocus.restore(self, mark, after, after[0] if not after.is_empty() else null)
 
 
 func _focused_key() -> String:

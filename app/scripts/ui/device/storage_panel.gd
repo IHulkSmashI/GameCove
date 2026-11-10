@@ -5,6 +5,7 @@ extends "res://scripts/ui/device/device_panel.gd"
 ## watch(false) when it leaves.
 
 const Icons := preload("res://scripts/ui/icons.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
 
 var state: Dictionary = {}
@@ -71,6 +72,7 @@ func _on_changed(s: Dictionary) -> void:
 			keep = "measure:" + str(path)
 	if clean_button != null and clean_button == f:
 		keep = "CleanButton"
+	var mark := KeepFocus.mark(self, focusables())
 	var cl: Dictionary = s.get("cleanup", {}) if s.get("cleanup") is Dictionary else {}
 	if cl.has("freed") and int(cl["freed"]) != _last_freed:
 		_last_freed = int(cl["freed"])
@@ -88,6 +90,9 @@ func _on_changed(s: Dictionary) -> void:
 		var n := _cards.find_child(keep, true, false)
 		if n is Control and n.focus_mode != Control.FOCUS_NONE:
 			n.grab_focus()
+	if KeepFocus.focused_in(self) == null or not is_instance_valid(KeepFocus.focused_in(self)):
+		# Clean up finished (its button went) or a measure button became a size
+		KeepFocus.restore(self, mark, focusables(), default_focus())
 
 
 func _drives() -> Array:

@@ -6,6 +6,7 @@ extends "res://scripts/ui/device/device_panel.gd"
 ## Controller.refresh() runs when the page opens.
 
 const Picture := preload("res://scripts/ui/device/device_picture.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
 const Buttons := preload("res://scripts/device/buttons.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
@@ -94,10 +95,11 @@ func _on_changed(st: Dictionary) -> void:
 	_loaded = true
 	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
 	var keep := _focus_key(f)
+	var mark := KeepFocus.mark(self, focusables())
 	clear_box(_cards)
 	rows.clear()
 	_fill_cards()
-	_restore_focus(keep)
+	_restore_focus(keep, mark)
 
 
 func _focus_key(f: Control) -> String:
@@ -113,8 +115,9 @@ func _focus_key(f: Control) -> String:
 	return "card:" + String(f.name) if f.get_parent() == _cards else ""
 
 
-func _restore_focus(key: String) -> void:
+func _restore_focus(key: String, mark := {}) -> void:
 	if key == "" or not is_inside_tree():
+		KeepFocus.restore(self, mark, focusables(), default_focus())
 		return
 	var target: Control = null
 	if key.begins_with("row:") and rows.has(key.substr(4)):
@@ -127,6 +130,9 @@ func _restore_focus(key: String) -> void:
 		target = _cards.get_node(key.substr(5))
 	if target != null and is_instance_valid(target):
 		target.grab_focus()
+	else:
+		# that row went: the nearest one left
+		KeepFocus.restore(self, mark, focusables(), default_focus())
 
 
 # ---- left: the picture ----------------------------------------------------------

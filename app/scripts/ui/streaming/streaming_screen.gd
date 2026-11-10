@@ -16,6 +16,7 @@ extends Control
 ## address, Menu has the rest (sleep the PC, quit what runs on it, forget it).
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
@@ -287,6 +288,7 @@ func rebuild() -> void:
 		return
 	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
 	var keep := _focus_key(f)
+	var mark := KeepFocus.mark(self, _host_focus())
 	_style_moon_chip()
 	_build_moonlight_card()
 	var list: Array = service.host_list()
@@ -299,6 +301,9 @@ func rebuild() -> void:
 		var target := _find_focus(keep)
 		if target != null and target != f:
 			target.grab_focus()
+		elif target == null:
+			# that PC was removed: the next one in the list, or Add PC
+			KeepFocus.restore(self, mark, _host_focus(), add_button)
 	_hints_changed()
 	# the top bar's "down" pointed at a button this rebuild just freed (Install,
 	# a host card): the host links it again to the new one
@@ -322,6 +327,10 @@ func _focus_key(f: Control) -> String:
 	if f.get("game") is Dictionary and not (f.get("game") as Dictionary).is_empty():
 		return "tile:" + str(f.game.get("key", ""))
 	return "node:" + str(f.name)
+
+
+func _host_focus() -> Array:
+	return host_cards.filter(func(c): return is_instance_valid(c))
 
 
 func _find_focus(key: String) -> Control:

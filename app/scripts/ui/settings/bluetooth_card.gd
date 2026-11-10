@@ -23,6 +23,7 @@ const SKit := preload("res://scripts/ui/settings/kit.gd")
 const Proc := preload("res://scripts/system/proc.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
 const CardJobs := preload("res://scripts/system/card_jobs.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 ## card_jobs.gd channel.
 const CH := "bluetooth"
 
@@ -112,13 +113,7 @@ static func status_text(d: Dictionary) -> String:
 
 
 func _build() -> void:
-	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	var keep := ""
-	for p in rows:
-		if rows[p].button == f:
-			keep = p
-	if find_row != null and find_row.button == f:
-		keep = "find"
+	var mark := KeepFocus.mark(self, focusables())
 	for c in get_children():
 		remove_child(c)
 		c.queue_free()
@@ -126,15 +121,15 @@ func _build() -> void:
 	find_row = null
 	if state.is_empty():
 		add_child(SKit.note(TX.BT_LOADING, "info", "BtLoading"))
-		rebuilt.emit()
+		_rebuilt(mark)
 		return
 	if (state.get("adapters", []) as Array).is_empty():
 		add_child(SKit.note(TX.BT_NONE, "info", "BtNone"))
-		rebuilt.emit()
+		_rebuilt(mark)
 		return
 	if not state.get("powered", false):
 		add_child(SKit.note(TX.BT_OFF, "warn", "BtOff"))
-		rebuilt.emit()
+		_rebuilt(mark)
 		return
 	var devs: Array = state.get("devices", [])
 	var now_on := {}
@@ -162,11 +157,14 @@ func _build() -> void:
 	find_row.setup("bt_find", TX.BT_FIND, TX.BT_FINDING if busy == "scan" else "", TX.BT_FIND_HINT, "search")
 	find_row.pressed.connect(find_new)
 	add_child(find_row)
+	_rebuilt(mark)
+
+
+## After a rebuild: focus stays on the same row, or moves to the nearest one left
+## (Forget, a failed Pair whose device BlueZ dropped), or Find new devices.
+func _rebuilt(mark: Dictionary) -> void:
 	rebuilt.emit()
-	if keep != "" and is_inside_tree():
-		var target: VBoxContainer = find_row if keep == "find" else rows.get(keep)
-		if target != null:
-			Kit.focus_later(target.button)
+	KeepFocus.restore(self, mark, focusables(), find_row.button if find_row != null else null)
 
 
 ## Scans for new devices for about 10 s.

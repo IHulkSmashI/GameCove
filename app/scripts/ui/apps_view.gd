@@ -15,6 +15,7 @@ const Illustrations := preload("res://scripts/ui/illustrations.gd")
 const Apps := preload("res://scripts/library/apps.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
 const CardJobs := preload("res://scripts/system/card_jobs.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 
 ## A was pressed on an app.
 signal launch_requested(app: Dictionary)
@@ -171,12 +172,16 @@ func _on_scanned(list: Array, gen: int) -> void:
 	if before != after:
 		pins_changed.emit()
 	var keep := _focused_key()
+	var mark := KeepFocus.mark(self, tiles)
 	set_apps(list)
 	if keep != "" and visible:
 		for t in tiles:
 			if t.game.get("key", "") == keep:
 				Kit.focus_later(t)
 				return
+		# that app was uninstalled: the tile now at its place
+		if KeepFocus.restore(self, mark, tiles) != null:
+			return
 	if visible and (get_viewport() == null or get_viewport().gui_get_focus_owner() == null or not is_ancestor_of(get_viewport().gui_get_focus_owner())):
 		focus_first()
 

@@ -381,3 +381,31 @@ func test_media_page_lists_clips_and_acts_on_them() -> void:
 	host.free()
 	rec.free()
 	_wipe(home)
+
+
+## Review 3, medium 3: deleting the focused clip moves focus to the next clip.
+func test_deleting_a_focused_clip_keeps_focus() -> void:
+	var home := _tmp("mclipsfocus")
+	var root := home + "/root"
+	_bytes(root + "/usr/bin/flatpak", PackedByteArray([1]))
+	DirAccess.make_dir_recursive_absolute(root + Recorder.SYSTEM_APP_DIR)
+	var a := home + "/Videos/GameCove/Hades/Hades 2026-11-10 15-04-09.mp4"
+	var b := home + "/Videos/GameCove/Hades/Hades 2026-11-09 15-04-09.mp4"
+	_bytes(a, _mp4(65.0))
+	_bytes(b, _mp4(30.0))
+	var f: RefCounted = Fake.new()
+	f.responses[Recorder.KMS_PROXY + " is-setup " + home] = {"code": 0, "out": ""}
+	var host := FakeHost.new()
+	var rec := FakeRec.new()
+	var p := _page(home, f, root, rec, host)
+	p.on_shown()
+	eq(p.clip_rows.size(), 2, "two clips")
+	p.set_meta(preload("res://scripts/ui/keep_focus.gd").TEST_META, p.clip_rows[0].button)
+	p.act(p.clip_rows[0].clip, "delete_yes")
+	eq(p.clip_rows.size(), 1, "one left")
+	var now: Control = p.get_meta(preload("res://scripts/ui/keep_focus.gd").TEST_META)
+	ok(is_instance_valid(now) and now == p.clip_rows[0].button, "focus on the clip left")
+	p.free()
+	host.free()
+	rec.free()
+	_wipe(home)

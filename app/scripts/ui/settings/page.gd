@@ -14,6 +14,7 @@ const ThemeLib := preload("res://theme/gamecove_theme.gd")
 ## The focus chain changed (rebuilt); the screen relinks it.
 signal rebuilt
 
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 var id := ""
 var services := {}
 ## The settings screen: ask_text(), notify(), open_sign_in(), etc.
@@ -43,16 +44,18 @@ func build() -> void:
 	pass
 
 
+## Focus stays on the same row, or moves to the nearest one left when that row
+## went (a deleted clip or backup), else the page's first control.
 func rebuild() -> void:
-	var keep := _focused_row()
+	var mark := KeepFocus.mark(self, focusables())
 	for c in get_children():
 		Kit.drop(self, c)
 	_focusables.clear()
 	rows.clear()
 	build()
 	rebuilt.emit()
-	if keep != "" and rows.has(keep) and is_inside_tree():
-		Kit.focus_later(rows[keep].button)
+	var f := focusables()
+	KeepFocus.restore(self, mark, f, f[0] if not f.is_empty() else null)
 
 
 func focusables() -> Array:
@@ -111,15 +114,6 @@ static func fixed(text: String) -> Callable:
 ## Explanation from a {value: text} map.
 static func by_value(map: Dictionary) -> Callable:
 	return func(v): return str(map.get(v, ""))
-
-
-func _focused_row() -> String:
-	if not is_inside_tree():
-		return ""
-	var f := get_viewport().gui_get_focus_owner()
-	if f == null or not is_ancestor_of(f):
-		return ""
-	return String(f.get_parent().name)
 
 
 func notify(text: String, tone := "") -> void:

@@ -20,6 +20,7 @@ const SliderRow := preload("res://scripts/ui/slider_row.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 
 var registry: Object
 var provider: Object
@@ -95,6 +96,7 @@ func _on_apps(gen: int, list: Array) -> void:
 func _show(list: Array) -> void:
 	apps = list
 	loaded = true
+	var mark := KeepFocus.mark(self, focusables())
 	for c in get_children():
 		remove_child(c)
 		c.queue_free()
@@ -102,6 +104,7 @@ func _show(list: Array) -> void:
 	if not supported():
 		visible = false
 		rebuilt.emit()
+		KeepFocus.restore(self, mark, [])
 		return
 	visible = true
 	if show_title:
@@ -122,6 +125,9 @@ func _show(list: Array) -> void:
 		add_child(r)
 		rows.append(r)
 	rebuilt.emit()
+	# a refresh freed the focused slider: the same app's, or the nearest one, or
+	# what came before the mixer (an app that stopped playing was the last)
+	KeepFocus.restore(self, mark, focusables())
 
 
 ## Sets one app's volume on the Controls worker (tests: sync registry).

@@ -8,6 +8,7 @@ extends Control
 ## rebuilt per tick.
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const ArtCache := preload("res://scripts/ui/art_cache.gd")
@@ -154,6 +155,7 @@ func _game(d: Dictionary) -> Dictionary:
 
 func refresh() -> void:
 	var keep := _focused_id()
+	var mark := KeepFocus.mark(self, focus_list)
 	for c in list.get_children():
 		Kit.drop(list, c)
 	_live.clear()
@@ -198,7 +200,7 @@ func refresh() -> void:
 	focus_list.append_array(_done_rows)
 	_link()
 	if is_visible_in_tree():
-		_restore_focus(keep)
+		_restore_focus(keep, mark)
 
 
 ## A column under the hero: caps header with a count, rows below.
@@ -620,12 +622,15 @@ func _focused_id() -> String:
 	return String(f.name) if f != null and is_ancestor_of(f) else ""
 
 
-func _restore_focus(id: String) -> void:
+func _restore_focus(id: String, mark := {}) -> void:
 	if id != "":
 		for c in focus_list:
 			if String(c.name) == id:
 				c.grab_focus()
 				return
+	# a finished or removed download's row went: the one now at its place
+	if KeepFocus.restore(self, mark, focus_list) != null:
+		return
 	var f := default_focus()
 	if f != null:
 		f.grab_focus()

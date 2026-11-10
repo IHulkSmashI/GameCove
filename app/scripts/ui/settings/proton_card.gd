@@ -21,6 +21,7 @@ const Proc := preload("res://scripts/system/proc.gd")
 const Texts := preload("res://scripts/ui/texts_device.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
 const CardJobs := preload("res://scripts/system/card_jobs.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 ## card_jobs.gd channel.
 const CH := "ge_proton"
 
@@ -132,10 +133,7 @@ func main_row_text() -> Array:
 
 
 func _build() -> void:
-	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	var keep := ""
-	if main_row != null and main_row.button == f:
-		keep = "main"
+	var mark := KeepFocus.mark(self, focusables())
 	for c in get_children():
 		remove_child(c)
 		c.queue_free()
@@ -143,7 +141,7 @@ func _build() -> void:
 	main_row = null
 	if compat_dir() == "":
 		add_child(SKit.note(TX.GE_NO_STEAM, "info", "GeNoSteam"))
-		rebuilt.emit()
+		_rebuilt(mark)
 		return
 	var t := main_row_text()
 	main_row = ActionRow.new()
@@ -182,9 +180,14 @@ func _build() -> void:
 	for b in builds:
 		_listed[b["name"]] = true
 	_listed_once = true
+	_rebuilt(mark)
+
+
+## After a rebuild: focus stays where it was, or moves to the nearest row left
+## (a removed build), or the main row.
+func _rebuilt(mark: Dictionary) -> void:
 	rebuilt.emit()
-	if keep == "main" and is_inside_tree():
-		Kit.focus_later(main_row.button)
+	KeepFocus.restore(self, mark, focusables(), main_row.button if main_row != null else null)
 
 
 ## The main row: check, or install what the check found.

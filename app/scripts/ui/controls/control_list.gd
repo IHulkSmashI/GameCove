@@ -9,6 +9,7 @@ extends VBoxContainer
 ## `rebuilt` whenever its focus chain changes; focusables() is that chain.
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
 const ControlView := preload("res://scripts/ui/controls/control_view.gd")
 const ActionRow := preload("res://scripts/ui/settings/action_row.gd")
@@ -87,6 +88,7 @@ func _layout() -> void:
 	var p := placement()
 	_sig = var_to_str(p)
 	var keep := _focused_id()
+	var mark := KeepFocus.mark(self, focusables())
 	for c in get_children():
 		remove_child(c)
 	# views are kept and put back; the More row is made again every time
@@ -112,6 +114,9 @@ func _layout() -> void:
 		var target: Control = views[keep].button if views.has(keep) else (more_row.button if more_row != null and keep == "<more>" else null)
 		if target != null:
 			Kit.focus_later(target)
+			return
+	# that control went: the nearest one left
+	KeepFocus.restore(self, mark, focusables())
 
 
 func _view(id: String) -> Control:
