@@ -98,7 +98,11 @@ static func _write(path: String, data: Dictionary) -> void:
 ## The cached live Steam layer for `appid` ({} if none), whatever its age.
 static func steam_cached(dir: String, appid: String) -> Dictionary:
 	var c := _read(steam_cache_path(dir, appid)) if appid != "" else {}
-	return c.get("layer", {}) if c.get("layer") is Dictionary else {}
+	var l = c.get("layer", {})
+	if not l is Dictionary or l.is_empty():
+		return {}
+	# cleaned again on the way in: JSON brings numbers back as floats
+	return Metadata.layer("steam", l.get("meta", {}), l.get("critics", {}))
 
 
 static func oc_cached(dir: String, title: String) -> Dictionary:

@@ -262,7 +262,10 @@ func reset(game: Dictionary, kind: String) -> bool:
 ## The pick GameCove has for this game and kind ({} if none): for credits.
 func override_for(game: Dictionary, kind: String) -> Dictionary:
 	var o = Overrides.read(_abs(picked_dir)).get(str(game.get("key", "")), {}).get(kind, {})
-	return o if o is Dictionary else {}
+	if not o is Dictionary or o.is_empty():
+		return {}
+	o["id"] = int(o.get("id", 0))
+	return o
 
 
 # ------------------------------------------------------------ automatic fill

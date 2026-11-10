@@ -152,7 +152,11 @@ static func reset(grid: String, backup_dir: String, entry: String) -> bool:
 	var m := read_manifest(backup_dir)
 	if not m.has(entry):
 		return true
-	var ours: Array[String] = [entry] if entry.ends_with(".json") else existing(grid, entry)
+	var ours: Array[String] = []
+	if entry.ends_with(".json"):
+		ours.append(entry)
+	else:
+		ours = existing(grid, entry)
 	for f in ours:
 		DirAccess.remove_absolute(grid.path_join(f))
 	var ok := true
