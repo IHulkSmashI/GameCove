@@ -258,6 +258,11 @@ def _stamp(home: str) -> dict:
         return {}
 
 
+def _num(v) -> float:
+    """A stamp's number; 0 for null, text or anything else (a damaged stamp never raises, review 2 low 22)."""
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else 0.0
+
+
 def load(home: str, now: float | None = None) -> dict | None:
     """The cached index when it was verified (its sha256 is the one recorded right after cosign accepted it) and
     that was less than MAX_AGE_S ago; else None."""
@@ -268,7 +273,7 @@ def load(home: str, now: float | None = None) -> dict | None:
             raw = f.read(MAX_INDEX + 1)
     except OSError:
         return None
-    if st.get("sha256") != sha256_bytes(raw) or now - float(st.get("verified_at", 0)) > MAX_AGE_S:
+    if st.get("sha256") != sha256_bytes(raw) or now - _num(st.get("verified_at")) > MAX_AGE_S:
         return None
     try:
         return parse(raw)
@@ -282,7 +287,7 @@ def refresh(home: str, force: bool = False, timeout: float = 10.0, now: float | 
     now = time.time() if now is None else now
     p, st = _paths(home), _stamp(home)
     have = load(home, now)
-    if have and not force and now - float(st.get("verified_at", 0)) < FRESH_S:
+    if have and not force and now - _num(st.get("verified_at")) < FRESH_S:
         return {"state": "cached", "generated": have.get("generated"), "error": None}
     try:
         raw = _fetch(INDEX_URL, MAX_INDEX, timeout)

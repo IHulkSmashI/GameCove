@@ -460,3 +460,18 @@ def test_install_sh_runs_only_when_every_script_is_reviewed(tmp_path):
     _w(pkg / "tools" / "extra.sh", "echo new")
     assert "tools/extra.sh" in xess.scripts_check(str(pkg), reviewed), "a script that wasn't reviewed"
     assert xess.reviewed_scripts() == games.pins()["xess_xmx_linux"]["scripts"]
+
+
+@pytest.mark.parametrize("stamp", [None, "yesterday", True, [], {}])
+def test_a_damaged_stamp_never_raises(tmp_path, monkeypatch, cosign, stamp):
+    """Review 2, low 22: a null verified_at raised TypeError in load() and refresh()."""
+    raw = newest()
+    serve(monkeypatch, {mirror.INDEX_URL: raw, mirror.BUNDLE_URL: bundle_for(raw)})
+    home = str(tmp_path / "home")
+    assert mirror.refresh(home)["state"] == "verified"
+    p = mirror._paths(home)["stamp"]
+    st = json.load(open(p))
+    st["verified_at"] = stamp
+    json.dump(st, open(p, "w"))
+    assert mirror.load(home) is None, "an unreadable time is treated as too old"
+    assert mirror.refresh(home)["state"] == "verified"
