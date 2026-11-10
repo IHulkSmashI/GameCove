@@ -676,3 +676,22 @@ func test_env_file_text() -> void:
 	eq(Files.steam_appid("steam:976730"), "976730", "app id")
 	eq(Files.steam_appid("steam:abc"), "", "not numeric")
 	eq(Files.steam_appid("epic:1"), "", "other store")
+
+
+## Review 2, low 23: lsfg-vk's conf.toml (with the user's own profiles) was rewritten in place.
+func test_lsfg_config_is_replaced_atomically() -> void:
+	var SettingsFile := preload("res://scripts/system/settings_file.gd")
+	var w := _world("lsfg_atomic", DECK)
+	var cfg: String = w["home"].path_join(Lsfg.CONFIG)
+	var mine := "version = 2\n\n[[profile]]\nname = \"mine\"\nactive_in = [ \"mpv\" ]\n"
+	_w(cfg, mine)
+	_with_game(w, GAME)
+	SettingsFile.test_write_limit = 0
+	w["reg"].set_value("perf.lsfg", true)
+	SettingsFile.test_write_limit = -1
+	eq(_read(cfg), mine, "a failed write keeps the user's file whole")
+	ok(not FileAccess.file_exists(cfg + ".tmp"), "no temp file left")
+	var src := FileAccess.get_file_as_string("res://scripts/controls/providers/perf.gd")
+	var body := src.substr(src.find("func write_lsfg_config"), 1600)
+	ok(not "FileAccess.WRITE" in body.substr(0, body.find("\nfunc ", 10)), "written through settings_file.gd, not in place")
+	_done(w)
