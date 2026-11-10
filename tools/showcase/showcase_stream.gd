@@ -1,10 +1,10 @@
 extends "../screenshots/shoot_streaming.gd"
 ## The showcase's Stream tab: a gaming PC ("GAMING-PC", Sunshine/Apollo-style
-## host) whose app list is real games with their Steam covers, a second host
+## host) whose app list is the games its owner added, with their Steam covers, a second host
 ## and the user's remote office PC. Shots: stream, stream_host.
 ## SHOWCASE_THEME=light renders the light theme.
 
-const LIB := ["Steam Big Picture", "Desktop", "Cyberpunk 2077", "Red Dead Redemption 2", "Forza Horizon 5",
+const LIB := ["Cyberpunk 2077", "Red Dead Redemption 2", "Forza Horizon 5",
 	"Black Myth: Wukong", "Monster Hunter Wilds", "Baldur's Gate 3", "ELDEN RING", "HELLDIVERS 2"]
 
 
@@ -54,8 +54,8 @@ func _run() -> void:
 	screen.selected_id = UUID
 	screen.rebuild()
 	await frames(3)
-	if screen.shelf.tiles.size() > 2:
-		screen.shelf.tiles[2].grab_focus()
+	if not screen.shelf.tiles.is_empty():
+		screen.shelf.tiles[0].grab_focus()
 	await shot("stream")
 	if want_shot("stream_host"):
 		screen.host_cards[0].grab_focus()
@@ -74,9 +74,9 @@ func _hosts() -> void:
 		"status": "online", "paired": true, "latency_ms": 3, "flavor": "vibepollo", "permission": 0x07000100, "sleep_allowed": true,
 		"info": {"hevc": true, "av1": true, "hdr": true}, "apps_state": "ready"}, true)
 	var apps: Array = []
-	var ids := [1093255277, 881448767, 1091500, 1174180, 1551360, 2358720, 2246340, 1086940, 1245620, 553850]
+	var ids := [1091500, 1174180, 1551360, 2358720, 2246340, 1086940, 1245620, 553850]
 	for i in LIB.size():
-		apps.append({"id": ids[i], "title": LIB[i], "hdr": i >= 2, "uuid": "",
+		apps.append({"id": ids[i], "title": LIB[i], "hdr": true, "uuid": "",
 			"art": str(cover_by_title.get(str(LIB[i]).to_lower(), ""))})
 	h["apps"] = apps
 	var u: Dictionary = S.blank_host("5C2B7E9A-1111-2222-3333-444455556666")
