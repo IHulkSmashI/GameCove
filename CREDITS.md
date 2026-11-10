@@ -50,7 +50,7 @@ GameCove stands on a lot of other people's work. Thank you.
 | Inter typeface | Banner lettering (`assets/banner.png` only; not bundled) | OFL-1.1 |
 | CRT-Lottes ReShade effect (Timothy Lottes; ReShade port in Matsilagi/RSRetroArch `Shaders/CRTLottes.fx`) | Bundled CRT screen effect (`app/scripts/controls/display/reshade_shaders.gd`, unchanged) | Public domain |
 | ReShade.fxh (crosire/reshade-shaders, slim branch) | Header the bundled ReShade effects include | CC0-1.0 |
-| EmuDeck (dragoonDorise), RetroDECK, ES-DE, Steam ROM Manager (SteamGridDB) | The Emulation page starts them (ES-DE / RetroDECK full screen, EmuDeck's app or RetroDECK's configurator, Steam ROM Manager); we read EmuDeck's `settings.sh`, RetroDECK's `retrodeck.cfg`, ES-DE's `es_settings.xml` and `gamelist.xml`, and the Steam shortcuts Steam ROM Manager makes. Nothing of theirs is bundled; ROMs and BIOS are never bundled or downloaded | GPL-3.0 (EmuDeck, RetroDECK, Steam ROM Manager), MIT (ES-DE) |
+| EmuDeck (dragoonDorise), RetroDECK, ES-DE, Steam ROM Manager (SteamGridDB) | The Emulation page starts them (ES-DE / RetroDECK full screen, EmuDeck's app or RetroDECK's configurator, Steam ROM Manager); we read EmuDeck's `settings.sh`, RetroDECK's `retrodeck.cfg`, ES-DE's `es_settings.xml` and `gamelist.xml`, and the Steam shortcuts Steam ROM Manager makes. None of them ships with GameCove, and GameCove never ships or downloads ROMs or BIOS files | GPL-3.0 (EmuDeck, RetroDECK, Steam ROM Manager), MIT (ES-DE) |
 | QR Code encoder, kenyoni-software godot-addons (Iceflower S) | QR codes for store sign-in, vendored in `app/addons/kenyoni/qr_code/` (Kanji mode removed; see its README.GameCove.md) | MIT |
 
 ## Ideas and findings we borrowed

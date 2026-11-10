@@ -178,7 +178,7 @@ static func _kv(map: Dictionary) -> PackedByteArray:
 func _shortcuts_home(name: String) -> String:
 	var home := _dir(name)
 	var steam := home.path_join(STEAM)
-	_touch(steam.path_join("config/loginusers.vdf"), "\"users\"\n{\n\t\"76561197960265729\"\n\t{\n\t\t\"MostRecent\"\t\"1\"\n\t}\n}\n")
+	_touch(steam.path_join("config/loginusers.vdf"), "\"users\"\n{\n\t\"76561197972611406\"\n\t{\n\t\t\"MostRecent\"\t\"1\"\n\t}\n}\n")
 	var shortcuts := {"shortcuts": {
 		"0": {"appid": -1294967295, "AppName": "Super Game", "Exe": "\"/home/deck/Emulation/tools/launchers/retroarch.sh\"",
 			"StartDir": "\"/home/deck/Emulation/tools/launchers/\"", "LaunchOptions": "-L core.so \"'/home/deck/Emulation/roms/snes/Super Game (USA).sfc'\"",
@@ -186,14 +186,14 @@ func _shortcuts_home(name: String) -> String:
 		"1": {"appid": -1294967294, "AppName": "Hades", "Exe": "\"/home/deck/Games/Hades.exe\"", "LaunchOptions": "", "IsHidden": 0},
 		"2": {"appid": -1294967293, "appname": "Disc Game", "exe": "\"flatpak\"", "LaunchOptions": "run net.retrodeck.retrodeck \"/home/deck/retrodeck/roms/psx/Disc Game.m3u\"", "IsHidden": 1},
 	}}
-	var path := steam.path_join("userdata/1/config/shortcuts.vdf")
+	var path := steam.path_join("userdata/12345678/config/shortcuts.vdf")
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	f.store_buffer(_kv(shortcuts))
 	f.close()
 	var u := -1294967295 & 0xFFFFFFFF
-	_touch(steam.path_join("userdata/1/config/grid/%dp.png" % u))
-	_touch(steam.path_join("userdata/1/config/grid/%d_hero.png" % u))
+	_touch(steam.path_join("userdata/12345678/config/grid/%dp.png" % u))
+	_touch(steam.path_join("userdata/12345678/config/grid/%d_hero.png" % u))
 	return home
 
 

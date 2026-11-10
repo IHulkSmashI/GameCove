@@ -59,14 +59,14 @@ func _store(name: String) -> RefCounted:
 	return Collections.new(_dir(name).path_join("collections.json"))
 
 
-## A home with Steam signed in as account 1 (loginusers.vdf MostRecent) and its cloud file.
+## A home with Steam signed in as account 12345678 (loginusers.vdf MostRecent) and its cloud file.
 func _steam_home(name: String) -> String:
 	var home := _dir(name)
 	var steam := home.path_join(".local/share/Steam")
-	_write(steam.path_join("config/loginusers.vdf"), "\"users\"\n{\n\t\"76561197960265729\"\n\t{\n\t\t\"AccountName\"\t\"a\"\n\t\t\"MostRecent\"\t\"1\"\n\t}\n}\n")
-	_write(steam.path_join("userdata/1/config/cloudstorage/cloud-storage-namespace-1.json"), CLOUD)
+	_write(steam.path_join("config/loginusers.vdf"), "\"users\"\n{\n\t\"76561197972611406\"\n\t{\n\t\t\"AccountName\"\t\"a\"\n\t\t\"MostRecent\"\t\"1\"\n\t}\n}\n")
+	_write(steam.path_join("userdata/12345678/config/cloudstorage/cloud-storage-namespace-1.json"), CLOUD)
 	# another account's file must not be read
-	_write(steam.path_join("userdata/2/config/cloudstorage/cloud-storage-namespace-1.json"), "[]")
+	_write(steam.path_join("userdata/87654321/config/cloudstorage/cloud-storage-namespace-1.json"), "[]")
 	return home
 
 
@@ -140,7 +140,7 @@ func test_parse_steam_cloud() -> void:
 func test_steam_import_is_read_only() -> void:
 	var home := _steam_home("steamhome")
 	var file := Collections.steam_cloud_file(home, ["~/.local/share/Steam", "~/.steam/steam"])
-	ok(file.ends_with("userdata/1/config/cloudstorage/cloud-storage-namespace-1.json"), "the signed-in account's file")
+	ok(file.ends_with("userdata/12345678/config/cloudstorage/cloud-storage-namespace-1.json"), "the signed-in account's file")
 	var before := FileAccess.get_file_as_string(file)
 	var r := LibraryScript.collect(home, "/nonexistent/gamedb.json.gz")
 	var c := _store("steamimport")
