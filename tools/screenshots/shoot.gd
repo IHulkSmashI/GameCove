@@ -590,7 +590,7 @@ func _settings_shots() -> void:
 ## Cloud saves (game page card, the conflict choice, Settings > Saves), battery drain and
 ## history (game page line, About this device) and the Sleep at low battery warning.
 func _saves_shots() -> void:
-	var names := ["game_saves", "game_saves_conflict", "settings_saves", "about_battery", "battery_card", "low_battery"]
+	var names := ["game_saves", "game_saves_conflict", "game_saves_restored", "settings_saves", "about_battery", "battery_card", "low_battery"]
 	if not want(names):
 		return
 	var tmp := "/tmp/gamecove-shots/saves"
@@ -662,6 +662,14 @@ func _saves_shots() -> void:
 			card.open_conflict()
 			await shot("game_saves_conflict")
 			main.game_actions.sheet.close()
+			if want(["game_saves_restored"]):
+				# after a restore: the restored save is offered first, whatever its age
+				cfg.set_value("game:" + key, "prefer", "local")
+				cfg.save(sv.cfg_path)
+				card.open_conflict()
+				await shot("game_saves_restored")
+				main.game_actions.sheet.close()
+				cfg.set_value("game:" + key, "prefer", "")
 			cfg.set_value("game:" + key, "state", "synced")
 			cfg.save(sv.cfg_path)
 		main._close_page()
