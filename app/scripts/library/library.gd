@@ -107,6 +107,15 @@ func attach_metadata(resolver: Node, art: Node) -> void:
 	add_child(_batch)
 
 
+## A game started (true) or ended: the background metadata and art fill wait while it runs,
+## so nothing of ours fetches or writes behind a game. What the user asks for still runs.
+func set_background_paused(on: bool) -> void:
+	if metadata != null and metadata.has_method("set_paused"):
+		metadata.set_paused(on)
+	if artwork != null and artwork.has_method("set_paused"):
+		artwork.set_paused(on)
+
+
 ## The game, by key, as Library.games has it ({} if unknown).
 func game_by_key(key: String) -> Dictionary:
 	for g in games:

@@ -192,3 +192,18 @@ func test_non_steam_game_by_title_and_auto_fill() -> void:
 	ok(s.unavailable_reason().contains("SteamGridDB key"), "no key: says how to add one")
 	s.free()
 	wipe(dir)
+
+
+func test_auto_fill_waits_behind_a_game() -> void:
+	var dir := tmp("autopause")
+	var http := FakeHttp.new()
+	_routes(http)
+	var s := _service(http, dir)
+	var steam_game := {"key": "steam:400", "store": "steam", "id": "400", "title": "Portal", "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	s.set_paused(true)
+	eq(s.auto_fill([steam_game]), 3, "queued behind a game")
+	eq(http.requests.size(), 0, "nothing fetched while a game runs")
+	s.set_paused(false)
+	ok(http.requests.size() >= 3, "the game ended: filled")
+	s.free()
+	wipe(dir)

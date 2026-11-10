@@ -202,3 +202,20 @@ func test_resolver_opencritic_with_own_key_and_quota() -> void:
 	eq(http.requests.size(), before, "no more requests today")
 	r.free()
 	wipe(dir)
+
+
+func test_resolver_waits_behind_a_game_except_for_what_you_ask() -> void:
+	var dir := tmp("paused")
+	var prefs := dir.path_join("settings.cfg")
+	var http := FakeHttp.new()
+	http.route(STEAM, {"file": fx("appdetails_1145360.json")})
+	var r := _resolver(http, dir, prefs)
+	r.set_paused(true)
+	eq(r.queue_games([_game("gog", "1207664663", "1145360")]), 1, "queued behind a game")
+	eq(http.requests.size(), 0, "nothing fetched while a game runs")
+	eq(r.request(_game("steam", "620", "", "Portal 2")), 1, "a page you open")
+	eq(http.requests, [Resolver.STEAM_URL + "620"], "what you asked for still runs; the background fill waits")
+	r.set_paused(false)
+	eq(http.requests.size(), 2, "the game ended: the background fill goes on")
+	r.free()
+	wipe(dir)

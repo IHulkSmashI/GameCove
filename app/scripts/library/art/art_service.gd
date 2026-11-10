@@ -296,15 +296,32 @@ func auto_fill(games: Array) -> int:
 			_auto.append([g, k])
 			n += 1
 	if sync_mode:
-		while not _auto.is_empty():
+		while not _auto.is_empty() and not paused:
 			_auto_next()
-	elif _timer != null and _timer.is_stopped() and n > 0:
+	elif _timer != null and _timer.is_stopped() and n > 0 and not paused:
 		_timer.start(0.5)
 	return n
 
 
+## True while a game runs (Library.set_background_paused): the automatic fill waits;
+## searches and picks the user makes still run.
+var paused := false
+
+
+func set_paused(on: bool) -> void:
+	paused = on
+	if on and _timer != null and _timer.is_inside_tree():
+		_timer.stop()
+	elif not on and not _auto.is_empty():
+		if sync_mode:
+			while not _auto.is_empty() and not paused:
+				_auto_next()
+		elif _timer != null and _timer.is_inside_tree() and _timer.is_stopped():
+			_timer.start(0.5)
+
+
 func _auto_next() -> void:
-	if _auto.is_empty():
+	if _auto.is_empty() or paused:
 		return
 	var job: Array = _auto.pop_front()
 	var g: Dictionary = job[0]

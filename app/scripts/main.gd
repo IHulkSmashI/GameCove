@@ -283,7 +283,7 @@ func _ready() -> void:
 	add_child(session)
 	wiring = SessionWiring.new()
 	wiring.setup({"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "updates": _svc("Updates"),
-		"controller": _svc("Controller"), "discover": _svc("Discover"), "launcher": Launcher})
+		"controller": _svc("Controller"), "discover": _svc("Discover"), "launcher": Launcher, "library": _svc("Library")})
 	_wire_games()
 	_wire_services()
 	_wire_controls()
