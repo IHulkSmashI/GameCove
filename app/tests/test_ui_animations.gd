@@ -313,7 +313,7 @@ func test_boot_intro_ends_by_flying_the_mark_into_the_top_bar() -> void:
 			ok(absf(r.size.x - 1280.0 * Splash.CLIP_MARK_FRAC) < 0.5, "at the clip's size (%s)" % r.size)
 		s._morph()
 		ok(s._done, "%s: presses go to the home screen once it flies" % m)
-		ok(s.flyer != null and s.flyer.texture != null, "%s: the mark flies" % m)
+		ok(s.flyer != null, "%s: the mark flies" % m)
 		eq(logo.modulate.a, 0.0, "%s: the top bar's logo waits for it" % m)
 		s._landed(b)   # (the focused control; no live viewport in unit tests)
 		eq(logo.modulate.a, 1.0, "%s: then shows (the mark landed on it)" % m)

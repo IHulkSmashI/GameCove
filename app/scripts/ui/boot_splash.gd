@@ -54,9 +54,13 @@ var _halo: Panel
 var _sweep: TextureRect
 ## The code animation's mark inside its halo.
 var _logo: TextureRect
-## The mark that flies into the top bar, and the top bar's logo (hidden meanwhile).
-var flyer: TextureRect
+## What flies into the top bar (the clip's mark redrawn, or the code
+## animation's whole mark + wordmark row), and the top bar's logo (hidden meanwhile).
+var flyer: Control
+var _center: Control
 var _header_logo: CanvasItem
+## The top bar's wordmark, hidden while the code animation's own flies in.
+var _header_word: CanvasItem
 var _host: Control
 var _tw: Tween
 var _done := false
@@ -121,6 +125,7 @@ func _build_code() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
+	_center = center
 	var row := HBoxContainer.new()
 	row.name = "Mark"
 	row.add_theme_constant_override("separation", 0)
@@ -257,30 +262,44 @@ func _morph() -> void:
 		return
 	var from := mark_rect()
 	var to := _local_rect(target)
-	flyer = TextureRect.new()
-	flyer.name = "Flyer"
-	flyer.texture = load("res://assets/logo-mark.svg")
-	flyer.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	flyer.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	flyer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	flyer.position = from.position
-	flyer.size = from.size
-	add_child(flyer)
-	if player != null:
-		player.stop()
-		player.visible = false
-	if _logo != null:
-		_logo.visible = false
 	_header_logo = target
 	target.modulate.a = 0.0
 	_tw = create_tween().set_parallel(true)
-	_tw.tween_property(flyer, "position", to.position, MORPH_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-	_tw.tween_property(flyer, "size", to.size, MORPH_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	if mode == "video":
+		# The clip's last frame is the mark alone: redraw it at the same place
+		# and size, and fly that.
+		var t := TextureRect.new()
+		t.name = "Flyer"
+		t.texture = load("res://assets/logo-mark.svg")
+		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		t.position = from.position
+		t.size = from.size
+		add_child(t)
+		flyer = t
+		player.stop()
+		player.visible = false
+		_tw.tween_property(flyer, "position", to.position, MORPH_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+		_tw.tween_property(flyer, "size", to.size, MORPH_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	else:
+		# Mark and wordmark fly together (the top bar has both, side by side):
+		# scale the whole row about our origin so the mark lands on the logo.
+		flyer = _center
+		var tb: Node = target.get_parent()
+		var word: Node = tb.get_node_or_null("Wordmark") if tb != null else null
+		if word is CanvasItem:
+			_header_word = word
+			_header_word.modulate.a = 0.0
+		var k := to.size.x / maxf(1.0, from.size.x)
+		_center.pivot_offset = Vector2.ZERO
+		var base := _center.position
+		_tw.tween_property(_center, "scale", Vector2(k, k), MORPH_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+		_tw.tween_property(_center, "position", to.position - (from.position - base) * k, MORPH_S).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+		_tw.tween_method(_set_halo, 0.35, 0.0, MORPH_S * 0.5)
+		if _sweep != null:
+			_sweep.modulate.a = 0.0
 	_tw.tween_property(_shade, "modulate:a", 0.0, MORPH_S * 0.8).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	if _mark != null:   # the wordmark and halo give way to the top bar's own
-		_tw.tween_property(_mark, "modulate:a", 0.0, MORPH_S * 0.5)
-	if _sweep != null:
-		_tw.tween_property(_sweep, "modulate:a", 0.0, MORPH_S * 0.5)
 	_tw.chain().tween_callback(_landed)
 
 
@@ -289,7 +308,7 @@ func _morph() -> void:
 func _landed(focused: Control = null) -> void:
 	_restore_header()
 	if flyer != null:
-		flyer.visible = false
+		flyer.visible = false   # the top bar's own logo (and wordmark) take over
 	if focused == null and is_inside_tree():
 		focused = get_viewport().gui_get_focus_owner()
 	var ring := _pulse_ring(focused)
@@ -332,9 +351,11 @@ func _pulse_ring(f: Control) -> Panel:
 
 
 func _restore_header() -> void:
-	if _header_logo != null and is_instance_valid(_header_logo):
-		_header_logo.modulate.a = 1.0
+	for c in [_header_logo, _header_word]:
+		if c != null and is_instance_valid(c):
+			(c as CanvasItem).modulate.a = 1.0
 	_header_logo = null
+	_header_word = null
 
 
 ## Any button skips it. `now`: gone this frame (our window lost focus).
