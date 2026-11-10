@@ -910,7 +910,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_open_menu()
 		get_viewport().set_input_as_handled()
 		return
-	if quick_menu.visible or launch_overlay.visible:
+	if quick_menu.visible or launch_overlay.is_open():
 		return
 	if event.is_action_pressed("ui_accept"):
 		_sound("select")
@@ -1108,9 +1108,28 @@ func _play(game: Dictionary) -> void:
 		session.return_to_game()   # already running: back to it, no second launch
 		return
 	playing = game
-	launch_overlay.show_for(game, backdrop.current_accent())
+	launch_overlay.show_for(game, backdrop.current_accent(), _launch_source(game))
 	_pause_motion()
-	session.begin(game, Library.launch(game))
+	var launched: Dictionary = Library.launch(game)
+	session.begin(game, launched)
+	if not bool(launched.get("ok", false)):
+		launch_overlay.back()   # Library says why (action_failed)
+		_resume_motion()
+
+
+## Where the launch zoom starts: the art Play was pressed on (Home's hero, the
+## game page's hero, the focused cover). {} = it grows from the middle.
+func _launch_source(game: Dictionary) -> Dictionary:
+	var s := _screen()
+	if s != null and s.has_method("launch_source"):
+		var d: Dictionary = s.launch_source(game)
+		if not d.is_empty():
+			return d
+	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if f != null and f.has_method("launch_source") and f.get("game") is Dictionary \
+			and str(f.game.get("key", "")) == str(game.get("key", "")):
+		return f.launch_source()
+	return {}
 
 
 ## A stream from the Stream tab: Moonlight starts, then the GameSession follows
@@ -1124,7 +1143,7 @@ func _play_stream(game: Dictionary, host_id: String, app: Dictionary) -> void:
 		toast(str(launched.get("why", "")), "alert", "bad")
 		return
 	playing = game
-	launch_overlay.show_for(game, backdrop.current_accent())
+	launch_overlay.show_for(game, backdrop.current_accent(), _launch_source(game))
 	_pause_motion()
 	session.begin(game, launched)
 
@@ -1155,12 +1174,14 @@ func stream_display() -> Dictionary:
 
 func _on_launch_cancelled(_game: Dictionary) -> void:
 	_sound("back")
+	_resume_motion()
 	if session.is_active():
 		session.stop()
 
 
+## GameSession follows the game now. The launch splash stays until the game's
+## window takes the screen (focus out) and hides then.
 func _on_game_started(game: Dictionary) -> void:
-	launch_overlay.finish()
 	if streaming != null:
 		streaming.set_game_running(true)
 	wiring.game_started(game, int(session.app_id))
@@ -1179,9 +1200,14 @@ func _on_game_ended(game: Dictionary) -> void:
 	_controls_follow_game.call_deferred({})
 	if not playing.is_empty() and playing.get("key", "") == game.get("key", ""):
 		playing = {}
-	launch_overlay.finish()
 	_check_resume()
-	_return_home()
+	if launch_overlay.is_open():
+		launch_overlay.back()   # it never got the screen: back into the art it came from
+		_resume_motion()
+	elif launch_overlay.phase == "closing":
+		_resume_motion()        # cancelled: already on its way back
+	else:
+		_return_home()
 
 
 ## Coming back from a game: the screens settle in from slightly smaller.

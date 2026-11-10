@@ -359,6 +359,13 @@ static func action_for(g: Dictionary) -> Dictionary:
 	return {"id": "install", "text": "Install", "icon": "download"}
 
 
+## Where Play's launch zoom starts: the hero card and its art, when it shows `g`.
+func launch_source(g: Dictionary) -> Dictionary:
+	if g.get("key", "") != spotlight_game.get("key", "-") or not frame.is_visible_in_tree():
+		return {}
+	return {"node": frame, "tex": hero_stage.front_texture(), "radius": float(ThemeLib.radius("xl"))}
+
+
 func _on_play() -> void:
 	if spotlight_action.get("id", "play") == "downloads":
 		downloads_requested.emit()
