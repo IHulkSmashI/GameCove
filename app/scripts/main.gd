@@ -328,20 +328,20 @@ func exit_game(_game: Dictionary = {}) -> void:
 
 
 ## Settings > Run setup again (it names a step; setup opens at the first unfinished one).
-func _on_setup_requested(_step: String = "") -> void:
-	open_setup(true)
+func _on_setup_requested(step: String = "") -> void:
+	open_setup(true, step)
 
 
 ## First-run setup from the settings work, when that file is in this build.
-## force: Settings asked to run it again.
-func open_setup(force: bool) -> void:
+## force: Settings asked to run it again (at `step`, e.g. "art" from Settings > Discover).
+func open_setup(force: bool, step := "") -> void:
 	if not ResourceLoader.exists(SETUP_FLOW):
 		return
 	var flow_script: Script = load(SETUP_FLOW)
-	var svc := {"setup": _svc("Setup"), "device": Device, "discover": _svc("Discover"), "photo": _svc("DevicePhoto")}
+	var svc := {"setup": _svc("Setup"), "device": Device, "discover": _svc("Discover"), "photo": _svc("DevicePhoto"), "library": _svc("Library")}
 	var flow: Variant = null
 	if force and _script_has(flow_script, "open"):
-		flow = flow_script.call("open", self, svc)
+		flow = flow_script.call("open", self, svc, step)
 	elif not force and _script_has(flow_script, "open_if_first_run"):
 		flow = flow_script.call("open_if_first_run", self, svc)
 	if flow is Node:

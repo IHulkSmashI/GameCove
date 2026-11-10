@@ -14,6 +14,11 @@ const QuickMenu := preload("res://scripts/ui/quick_menu.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const Screens := preload("res://tests/test_ui_screens.gd")
 const Osk := preload("res://scripts/ui/osk.gd")
+const FakeHttp := preload("res://scripts/discover/fake_http.gd")
+const Sgdb := preload("res://scripts/library/art/sgdb.gd")
+const ArtKeyStep := preload("res://scripts/ui/setup/art_key_step.gd")
+const KeyDropTests := preload("res://tests/test_key_drop.gd")
+const KEY_OK := "0123456789abcdef0123456789abcdef"
 
 
 class FakeSetup extends RefCounted:
@@ -34,8 +39,8 @@ class FakeSetup extends RefCounted:
 	var calls: Array = []
 	func steps() -> Array:
 		var out: Array = []
-		for s in ["welcome", "theme", "stores", "device_fixes", "steamgriddb", "done"]:
-			out.append({"id": s, "optional": s in ["theme", "stores", "device_fixes", "steamgriddb"], "done": done.has(s), "skipped": skipped.has(s), "status": {}})
+		for s in ["welcome", "theme", "stores", "steamgriddb", "keys", "device_fixes", "done"]:
+			out.append({"id": s, "optional": s in ["theme", "stores", "steamgriddb", "keys", "device_fixes"], "done": done.has(s), "skipped": skipped.has(s), "status": {}})
 		return out
 	func is_first_run() -> bool: return not done.has("done")
 	func next_step() -> String:
@@ -79,8 +84,17 @@ class FakeSetup extends RefCounted:
 		return true
 
 
+class FakeArtwork extends RefCounted:
+	var filled: Array = []
+	func auto_fill(games: Array) -> int:
+		filled.append(games.size())
+		return games.size() * 2
+
+
 class FakeLibrary extends RefCounted:
 	signal store_settings_changed
+	var artwork := FakeArtwork.new()
+	var games: Array = [{"key": "gog:1", "title": "Hades"}, {"key": "epic:2", "title": "Control"}]
 	var s := {"install_root": "/home/deck/Games", "steam_cef": false, "auto_resume": true, "max_parallel": 1,
 		"focus_steam_dialogs": true, "steam_cef_status": "off", "steam_pending_count": 0}
 	var sets: Array = []
@@ -170,8 +184,17 @@ class FakeAutoPower extends "res://tests/test_ui_screens.gd".FakePower:
 
 
 func _svc() -> Dictionary:
+	# Game art step: no LAN page by default, and a fake SteamGridDB that accepts KEY_OK and refuses the rest.
+	var http := FakeHttp.new()
+	http.route(Sgdb.check_url(), {"code": 401, "text": '{"success":false,"errors":["Invalid API key"]}'})
 	return {"setup": FakeSetup.new(), "library": FakeLibrary.new(), "discover": FakeDiscover.new(),
-		"perf": FakePerf.new(), "achievements": FakeAchievements.new(), "device": Screens.FakeDevice.new()}
+		"perf": FakePerf.new(), "achievements": FakeAchievements.new(), "device": Screens.FakeDevice.new(),
+		"http": http, "lan": func() -> Array: return []}
+
+
+## SteamGridDB (fake) accepts a key from now on.
+static func _accept_keys(svc: Dictionary) -> void:
+	svc["http"].route(Sgdb.check_url(), {"text": '{"success":true,"data":{"id":5247}}'})
 
 
 func _screen(svc := _svc()) -> Control:
@@ -325,6 +348,10 @@ func test_discover_page_keys() -> void:
 	eq(svc["discover"].s["steamgriddb_key"], k, "Discover too, for art")
 	p.rebuild()
 	eq(p.rows["steamgriddb_key"].value_label.text, "••••cdef", "key shown masked")
+	var asked: Array = []
+	s.setup_requested.connect(func(step): asked.append(step))
+	p.rows["steamgriddb_key"].button.pressed.emit()
+	eq(asked, ["art"], "the SteamGridDB row opens the guided Game art step")
 	ok(_has_text(p, TS.AFFILIATE_NOTE), "affiliate note")
 	p.rows["affiliate_links"].step(1)
 	eq(svc["discover"].s["affiliate_links"], false, "affiliate links off")
@@ -506,12 +533,33 @@ func test_setup_flow_steps() -> void:
 	ok(svc["setup"].done.has("stores"), "signing in completes the step")
 	f.go("stores")
 	f.skip_step()
+	eq(f.step, "art", "Game art next")
+	ok(_has_text(f, ArtKeyStep.TITLE) and _has_text(f, "free"), "says why: free art for every game")
+	eq(f.skip_button.text, "Skip, use Steam art only", "skip says what it means")
+	var art: Control = f.art_step
+	ok(art != null and art.buttons.all(func(b): return b in f.focusables()), "every button reachable with the controller")
+	eq(art.mode, "direct", "no LAN here: the QR opens SteamGridDB's API page")
+	art.submit("nope")
+	eq(art.state, "direct", "not a key: nothing sent")
+	eq(svc["http"].requests.size(), 0, "no request for a malformed key")
+	art.submit("fedcba9876543210fedcba9876543210")
+	eq(art.state, "wrong", "SteamGridDB refused it")
+	eq(svc["setup"].key, "", "a wrong key isn't saved")
+	ok(not svc["setup"].done.has("steamgriddb"), "step not done")
+	_accept_keys(svc)
+	art.submit(" " + KEY_OK + " ")
+	eq(art.state, "ok", "works")
+	eq([svc["setup"].key, svc["discover"].s["steamgriddb_key"]], [KEY_OK, KEY_OK], "saved in Setup and Discover")
+	ok(svc["setup"].done.has("steamgriddb"), "step done")
+	eq(svc["library"].artwork.filled, [2], "the missing-art fill ran for the library")
+	ok("Finding art for 4 games" in art.status.text, "and says so")
+	f.next_step()
 	eq(f.step, "keys", "keys next")
 	ok(not f.save_key("steamgriddb_key", "nope"), "bad key refused")
 	ok(f.save_key("ggdeals_key", "AbCdEf123456"), "gg.deals key saved")
 	eq(svc["discover"].s["ggdeals_key"], "AbCdEf123456", "into Discover")
 	f.skip_step()
-	ok(svc["setup"].skipped.has("steamgriddb"), "keys skipped")
+	ok(svc["setup"].skipped.has("keys"), "keys skipped")
 	eq(f.step, "fixes", "fixes next")
 	ok(f.find_child("Fix_claw8ex-vrr", true, false) != null, "suggested fixes listed")
 	ok(_has_text(f, "Desktop Mode"), "installs need Desktop Mode")
@@ -533,13 +581,106 @@ func test_setup_skip_all() -> void:
 	var f: Control = SetupFlow.open(host, svc, "")
 	f.skip_step()
 	ok(not svc["setup"].is_first_run(), "Skip setup ends the first run")
-	ok(svc["setup"].skipped.has("stores") and svc["setup"].skipped.has("steamgriddb"), "optional steps marked skipped")
+	ok(svc["setup"].skipped.has("stores") and svc["setup"].skipped.has("steamgriddb") and svc["setup"].skipped.has("keys"), "optional steps marked skipped")
 	ok(SetupFlow.instance == null, "closed")
 	var f2: Control = SetupFlow.open(host, svc, "keys")
 	eq(f2.step, "keys", "reopens at a given step")
 	f2.finish()
 	host.free()
 	ok(SetupFlow.open_if_first_run(Control.new(), svc) == null, "no flow once setup is done")
+
+
+func test_art_step_skip_path() -> void:
+	var svc := _svc()
+	var host := Control.new()
+	var f: Control = SetupFlow.open(host, svc, "art")
+	eq(f.step, "art", "opens at Game art (Settings > Discover > SteamGridDB key)")
+	f.skip_step()
+	ok(svc["setup"].skipped.has("steamgriddb"), "skipped: Steam art only")
+	eq(f.step, "keys", "moves on")
+	eq(svc["http"].requests.size(), 0, "nothing sent")
+	f.finish()
+	host.free()
+
+
+func test_art_step_phone_page_end_to_end() -> void:
+	var svc := _svc()
+	_accept_keys(svc)
+	var a: Control = ArtKeyStep.new()
+	a.configure({"setup": svc["setup"], "discover": svc["discover"], "library": svc["library"], "http": svc["http"], "ask_text": func(_p, _s, _d): pass})
+	a._ensure_drop()
+	a.drop.bind_address = "127.0.0.1"
+	a.start()
+	eq(a.mode, "phone", "phone page open")
+	ok(a.drop.is_running() and a.drop.url.begins_with("http://127.0.0.1:"), "listening on the chosen address only")
+	ok(a.qr_rect.texture != null and "(one-time page)" in a.url_label.text, "QR of the one-time page")
+	var t := KeyDropTests.new()
+	var body := "key=" + KEY_OK
+	var ans: String = t._ask(a.drop, "POST /k/%s HTTP/1.1\r\nContent-Length: %d\r\n\r\n%s" % [a.drop.token, body.length(), body])
+	ok("Key sent" in ans, "phone told")
+	eq(a.state, "ok", "checked and saved")
+	eq(svc["setup"].key, KEY_OK, "saved")
+	ok(not a.drop.is_running(), "page closed after the key")
+	a.free()
+
+
+func test_art_step_wrong_key_reopens_page_and_times_out() -> void:
+	var svc := _svc()
+	var a: Control = ArtKeyStep.new()
+	a.configure({"setup": svc["setup"], "discover": svc["discover"], "http": svc["http"]})
+	a._ensure_drop()
+	a.drop.bind_address = "127.0.0.1"
+	a.start()
+	var first: String = a.drop.token
+	a.drop.stop()      # what the page does once a key arrives, before handing it over
+	a.submit(KEY_OK)   # SteamGridDB (fake) refuses every key here
+	eq(a.state, "wrong", "refused")
+	ok(a.drop.is_running() and a.drop.token != first, "a new one-time code to send it again")
+	a.drop.poll(601.0)
+	eq([a.mode, a.state], ["direct", "direct"], "after 10 minutes the page closes")
+	ok("closed after 10 minutes" in a.status.text, "and says so")
+	a.toggle_mode()
+	ok(a.drop.is_running() and a.mode == "phone", "Send from my phone opens a new page")
+	a.stop()
+	ok(not a.drop.is_running(), "leaving the step closes it")
+	a.free()
+
+
+func test_art_step_respects_look_up_game_details() -> void:
+	var svc := _svc()
+	_accept_keys(svc)
+	var d := ProjectSettings.globalize_path("user://tests/art_privacy_%d" % randi())
+	DirAccess.make_dir_recursive_absolute(d)
+	var prefs := d.path_join("settings.cfg")
+	Privacy.set_metadata_allowed(false, prefs)
+	var a: Control = ArtKeyStep.new()
+	a.configure({"setup": svc["setup"], "discover": svc["discover"], "http": svc["http"], "prefs_path": prefs, "lan": func() -> Array: return []})
+	a.start()
+	a.submit(KEY_OK)
+	eq(a.state, "privacy", "switch off: not checked")
+	eq(svc["http"].requests.size(), 0, "nothing sent to SteamGridDB")
+	eq(svc["setup"].key, "", "not saved")
+	ok("Look up game details" in a.status.text, "says which switch")
+	a.free()
+	DirAccess.remove_absolute(prefs)
+	DirAccess.remove_absolute(d)
+
+
+func test_art_step_offline_and_remove() -> void:
+	var svc := _svc()
+	svc["http"].route(Sgdb.check_url(), {"error": "offline"})
+	svc["setup"].key = KEY_OK
+	var a: Control = ArtKeyStep.new()
+	a.configure({"setup": svc["setup"], "discover": svc["discover"], "http": svc["http"], "lan": func() -> Array: return []})
+	a.start()
+	ok(a.remove_button != null, "Remove key offered when one is set")
+	a.submit("fedcba9876543210fedcba9876543210")
+	eq(a.state, "offline", "no network")
+	ok("No internet" in a.status.text, "says so")
+	eq(svc["setup"].key, KEY_OK, "old key kept")
+	a.remove_key()
+	eq([svc["setup"].key, svc["discover"].s["steamgriddb_key"]], ["", ""], "removed everywhere")
+	a.free()
 
 
 func test_texts_helpers() -> void:

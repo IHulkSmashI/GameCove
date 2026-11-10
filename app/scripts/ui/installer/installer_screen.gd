@@ -31,6 +31,7 @@ const Texts := preload("res://scripts/ui/texts.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const TI := preload("res://scripts/ui/installer/texts_installer.gd")
 const SignIn := preload("res://scripts/ui/installer/store_signin.gd")
+const ArtKeyStep := preload("res://scripts/ui/setup/art_key_step.gd")
 const OptionCard := preload("res://scripts/ui/installer/option_card.gd")
 const Plan := preload("res://scripts/installer/plan.gd")
 const Target := preload("res://scripts/installer/target.gd")
@@ -50,6 +51,8 @@ var installer: Node
 var quit_on_close := true
 ## func(cmd: Array) for "Open Steam" (OS.create_process by default; tests record).
 var launch: Callable = func(cmd: Array): OS.create_process(cmd[0], PackedStringArray(cmd.slice(1)))
+## func(url) for "Open the page here" in the Game art step (the desktop browser; tests record).
+var open_page: Callable = func(u: String): OS.shell_open(u)
 
 var rail: HBoxContainer
 var status_pill: PanelContainer
@@ -69,6 +72,7 @@ var next_button: Button
 var keyboard: PanelContainer
 var toasts: VBoxContainer
 var sign_in: Control
+var art_step: Control
 var task_rows: Array = []
 var progress_bar: ProgressBar
 var progress_title: Label
@@ -455,6 +459,9 @@ func show_step() -> void:
 	if sign_in != null and is_instance_valid(sign_in):
 		sign_in.stop()
 	sign_in = null
+	if art_step != null and is_instance_valid(art_step):
+		art_step.stop()
+	art_step = null
 	task_rows.clear()
 	for c in body.get_children():
 		_drop(body, c)
@@ -468,6 +475,7 @@ func show_step() -> void:
 		"stores": _build_stores()
 		"device": _build_device()
 		"look": _build_look()
+		"art": _build_art()
 		"extras": _build_extras()
 		"summary": _build_summary()
 		"progress": _build_progress()
@@ -511,6 +519,7 @@ func _update_nav() -> void:
 	var s: String = plan.step
 	back_button.visible = not s in ["welcome", "maintenance", "finish", "progress", "done"] or plan.return_to != ""
 	skip_button.visible = plan.can_skip() and plan.return_to == ""
+	skip_button.text = ArtKeyStep.SKIP_TEXT if s == "art" else TI.SKIP
 	next_button.visible = not s in ["maintenance", "progress"]
 	next_button.disabled = false
 	next_button.text = TI.NEXT
@@ -1061,9 +1070,9 @@ func pick_theme(id: String) -> void:
 
 func _build_extras() -> void:
 	_heading(TI.EXTRAS_TITLE, TI.EXTRAS_LINE)
-	for k in ["ggdeals_key", "steamgriddb_key", "steam_id"]:
-		var title: String = {"ggdeals_key": TI.GGDEALS, "steamgriddb_key": TI.SGDB, "steam_id": TI.STEAM_PROFILE}[k]
-		var line: String = {"ggdeals_key": TI.GGDEALS_LINE, "steamgriddb_key": TI.SGDB_LINE, "steam_id": TI.STEAM_PROFILE_LINE}[k]
+	for k in ["ggdeals_key", "steam_id"]:
+		var title: String = {"ggdeals_key": TI.GGDEALS, "steam_id": TI.STEAM_PROFILE}[k]
+		var line: String = {"ggdeals_key": TI.GGDEALS_LINE, "steam_id": TI.STEAM_PROFILE_LINE}[k]
 		var v := str(plan.choices[k])
 		var shown := (TS.masked(v) if k != "steam_id" else v) if v != "" else TI.NOT_SET
 		var r := _row(k, title, shown, line, "shield" if k != "steam_id" else "gamepad")
@@ -1077,6 +1086,28 @@ func _build_extras() -> void:
 	c.changed.connect(func(v): plan.set_choice("country", v))
 	var ml := _bool("moonlight", TI.MOONLIGHT, bool(plan.choices.get("moonlight", false)), TI.MOONLIGHT_LINES, "screen")
 	ml.changed.connect(func(v): plan.set_choice("moonlight", v))
+
+
+## Game art: the user's own SteamGridDB key, the same guided step as first-run
+## setup (art_key_step.gd). Checked live, kept in the plan, written at install
+## by settings_writer.gd; the art fill runs when GameCove starts.
+func _build_art() -> void:
+	_heading(ArtKeyStep.TITLE, ArtKeyStep.LINE)
+	art_step = ArtKeyStep.new()
+	art_step.configure({"setup": services.get("setup"), "discover": services.get("discover"), "http": services.get("http"),
+		"ask_text": ask_text, "open_url": open_page, "read_clipboard": services.get("read_clipboard", Callable()),
+		"lan": services.get("lan", Callable()), "prefs_path": services.get("prefs_path", "user://settings.cfg"),
+		"current": str(plan.choices.get("steamgriddb_key", "")),
+		"save_fn": func(k: String): plan.set_choice("steamgriddb_key", k)})
+	art_step.saved.connect(func(_k):
+		plan.skipped.erase("art")
+		toasts.show_toast(TI.ART_SET, "check", "good")
+		if is_inside_tree():
+			next_button.grab_focus())
+	body.add_child(art_step)
+	art_step.start()
+	for b in art_step.buttons:
+		_focusables.append(b)
 
 
 ## A typed key or profile; false (and a note) when it doesn't look right.
@@ -1145,10 +1176,11 @@ func _summary_value(item: Dictionary) -> Array:
 			return ["%d fix%s" % [f.size(), "" if f.size() == 1 else "es"], ", ".join(PackedStringArray(f.map(func(x): return Texts.fix_title(x)))) + ". " + power]
 		"look":
 			return [Themes.NAMES.get(c["theme"], c["theme"]), Texts.THEME_LINES.get(c["theme"], "")]
+		"art":
+			return [TI.ART_SET if str(c["steamgriddb_key"]) != "" else TI.ART_NONE, TI.SGDB_LINE]
 		"extras":
 			var set_: Array = []
 			if c["ggdeals_key"] != "": set_.append(TI.GGDEALS)
-			if c["steamgriddb_key"] != "": set_.append(TI.SGDB)
 			if c["steam_id"] != "": set_.append(TI.STEAM_PROFILE)
 			if c["country"] != "": set_.append(c["country"])
 			return [", ".join(PackedStringArray(set_)) if not set_.is_empty() else TI.SUMMARY_EXTRAS_NONE, TI.EXTRAS_LINE]
@@ -1567,6 +1599,8 @@ func close() -> void:
 		return
 	if sign_in != null and is_instance_valid(sign_in):
 		sign_in.stop()
+	if art_step != null and is_instance_valid(art_step):
+		art_step.stop()
 	closed.emit()
 	if quit_on_close and is_inside_tree():
 		get_tree().quit()
@@ -1680,6 +1714,8 @@ func _notification(what: int) -> void:
 		# Back from the browser or Steam: pick up a copied code, a new Steam sign-in.
 		if sign_in != null and is_instance_valid(sign_in):
 			sign_in.check_clipboard()
+		elif art_step != null and is_instance_valid(art_step):
+			art_step.check_clipboard()
 		elif plan != null and plan.step == "steam":
 			refresh_steam()
 		elif plan != null and plan.step == "stores":

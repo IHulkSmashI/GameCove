@@ -111,18 +111,6 @@ jobs:
           unzip -q -j templates.tpz templates/linux_release.x86_64 templates/version.txt -d "$dest"
           rm templates.tpz
           [ "$(cat "$dest/version.txt")" = "${GODOT}.stable" ]
-      - name: Project API keys (SteamGridDB), only when the secret is set
-        # GameCove's own SteamGridDB key for Change artwork and the automatic art fill. Users' own keys
-        # override it. Never committed (app/data/project_keys.json is in .gitignore); without the secret
-        # the build simply has no project key and asks users for theirs.
-        env:
-          STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
-        run: |
-          if printf '%s' "$STEAMGRIDDB_API_KEY" | grep -Eq '^[0-9a-fA-F]{32}$'; then
-            printf '{"steamgriddb": "%s"}\n' "$STEAMGRIDDB_API_KEY" > app/data/project_keys.json
-          else
-            echo "No STEAMGRIDDB_API_KEY secret: building without a project key"
-          fi
       - name: Export (fails on script errors)
         run: |
           set -o pipefail

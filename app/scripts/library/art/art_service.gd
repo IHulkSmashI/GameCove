@@ -11,8 +11,8 @@ extends Node
 ##   Library.artwork.art_changed.connect(func(key): ...)
 ##
 ## Privacy: every request needs "Look up game details"; the automatic fill also
-## needs "Background lookups". Nothing happens without a SteamGridDB key (the
-## user's own or GameCove's project key, see sgdb.gd).
+## needs "Background lookups". Nothing happens without the user's own
+## SteamGridDB key (the Game art step of setup, see sgdb.gd).
 
 signal art_changed(key: String)
 
@@ -31,7 +31,6 @@ var picked_dir := Overrides.DIR
 var thumbs_dir := "user://art/thumbs"
 var backup_root := "user://art/steam_backup"
 var prefs_path := Privacy.PREFS_PATH
-var project_keys := Sgdb.PROJECT_KEYS
 ## Steam's folders (tests point these at fixtures).
 var steam_roots: Array = []
 ## Returns the user's own SteamGridDB key ("" when none); default reads Discover / Setup.
@@ -85,7 +84,7 @@ func user_key() -> String:
 
 
 func api_key() -> String:
-	return Sgdb.key(user_key(), project_keys)
+	return Sgdb.key(user_key())
 
 
 ## Why Change artwork can't browse right now ("" when it can).

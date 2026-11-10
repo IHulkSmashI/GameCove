@@ -58,6 +58,12 @@ func build() -> void:
 	if sg == "" and setup != null and setup.has_method("steamgriddb_key"):
 		sg = setup.steamgriddb_key()
 	_key_row(keys, "steamgriddb_key", sg, "SteamGridDB key", func(t): return t == "" or (t.length() == 32 and t.is_valid_hex_number()))
+	if host != null and host.has_method("open_setup"):
+		# The guided Game art step (phone page, live check, art fill) instead of the bare keyboard.
+		var r: VBoxContainer = rows["steamgriddb_key"]
+		for c in r.pressed.get_connections():
+			r.pressed.disconnect(c["callable"])
+		r.pressed.connect(func(): host.open_setup("art"))
 	_key_row(keys, "steam_id", str(s.get("steam_id", "")), "Steam profile", func(_t): return true, false)
 	_opencritic_row(keys)
 

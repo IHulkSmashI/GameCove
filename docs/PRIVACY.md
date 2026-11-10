@@ -32,7 +32,7 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 | 6 | github.com (`device-photos` release) | The asset name, i.e. your device model | Start until cached, weekly manifest; About or the welcome page showing the picture | Background lookups (every request; a cached picture still shows) | `app/scripts/device/photo.gd` |
 | 7 | Your maker's site (MSI, Lenovo, ASUS, OneXPlayer, AOKZOE, AYANEO, Acer, GPD, ...) | The image URL implies your model; your IP address | Same, when there's no free photo | Show maker photos, Background lookups | `photo.gd` |
 | 8 | Steam's CDN (`*.steamstatic.com`, `*.akamaihd.net`), images.igdb.com (calendar pictures named in `upcoming.json.gz`), SteamGridDB's CDN; no other host (`IMAGE_HOSTS`) | The picture's address, which names the game | A Discover, calendar or wishlist tile shows a picture that isn't cached | None (pictures of what you're looking at); SteamGridDB lookups: Look up game details | `app/scripts/discover/art.gd` |
-| 9 | www.steamgriddb.com, cdn*.steamgriddb.com | A Steam app id or title; your key, else GameCove's project key (bearer header, dropped on cross-host redirects) | Change artwork (when you open it); automatic fill for library games with no cover, hero or logo, one request every 1.5 s, each game and kind at most weekly; Discover art Steam has none of | Look up game details (+ Background lookups for the automatic fill) | `app/scripts/library/art/art_service.gd`, `sgdb.gd`, `art.gd` |
+| 9 | www.steamgriddb.com, cdn*.steamgriddb.com | A Steam app id or title; your own key (bearer header, dropped on cross-host redirects) | Change artwork (when you open it); automatic fill for library games with no cover, hero or logo, one request every 1.5 s, each game and kind at most weekly; Discover art Steam has none of | Look up game details (+ Background lookups for the automatic fill) | `app/scripts/library/art/art_service.gd`, `sgdb.gd`, `art.gd` |
 | 9a | store.steampowered.com `api/appdetails` | The Steam app id of a library game, or of a GOG / Epic / Amazon game's Steam edition (from the game database) | After a library scan, for games whose details or Metacritic score are missing, one request every 1.6 s, cached a week (`user://metadata/steam/`); at once for the game page you open | Look up game details (+ Background lookups for the background queue) | `app/scripts/library/meta/resolver.gd` |
 | 9b | opencritic-api.p.rapidapi.com | A game's title (search, once per game), then its OpenCritic id; your own RapidAPI key in the `X-RapidAPI-Key` header (dropped on cross-host redirects) | Same as 9a, only if you added a key; at most 20 searches and 180 requests a day, stops for the day on HTTP 429; cached a week | Look up game details; remove the key (Settings > Discover > Keys) | `resolver.gd`, `opencritic.gd` |
 | 9c | Steam CDN (`*.steamstatic.com`), images.igdb.com | A screenshot's address | When a game page shows its screenshots (cached in `user://metadata/shots/`) | Look up game details | `resolver.gd` (`image`) |
@@ -50,6 +50,8 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 | 16 | LAN broadcast (Wake-on-LAN) | Your PC's MAC address | You wake a PC | You start it | `wol.gd` |
 | 17 | 127.0.0.1 (Steam's CEF debugger; Handheld Daemon) | Local only | Opt-in Steam control; controller settings | — | `app/scripts/steam/`, `hhd_client.gd` |
 | 18 | legendary.gl, auth.gog.com, Amazon | The sign-in code you type back | You sign in to a store | You start it | `app/scripts/library/stores/` |
+| 19 | www.steamgriddb.com (`games/steam/400`) | Your SteamGridDB key (bearer header), once | You send or type your key in the Game art step: one request checks it before it is saved | You start it (needs Look up game details) | `app/scripts/ui/setup/art_key_step.gd`, `sgdb.gd` (`check_url`) |
+| 20 | Inbound, on your LAN only: your phone opens GameCove's one-time page | Your phone sends the key you paste; GameCove sends the page (no scripts, nothing from outside) | Only while the Game art step is open, 10 minutes at most | You start it | `app/scripts/system/key_drop.gd` |
 
 Helpers and scripts outside the app: the upscaling helper downloads OptiScaler, OptiPatcher, fakenvapi,
 REFramework, xess-xmx-linux and the FSR 4 files only when you install or update them: the newest versions from
@@ -61,6 +63,29 @@ release, always sha256 checked; the gyro fix downloads MSI's sensor firmware
 from download.msi.com (size and sha256 pinned); the installer (`get-gamecove.sh`) downloads GameCove's own
 release, checks its Sigstore signature and every file's sha256, and fetches a pinned cosign if the system has
 none.
+
+## Game art: the phone page (the only thing GameCove listens for)
+
+GameCove doesn't ship a SteamGridDB key. The Game art step of setup (and of the installer, and Settings > Discover >
+SteamGridDB key) walks you through getting your own, free, by signing in to SteamGridDB with Steam on your phone.
+To get the 32-character key onto the handheld without typing it with a controller, the step serves a tiny web page
+on your own network (`app/scripts/system/key_drop.gd`):
+
+- It listens only while the step is on screen, on this device's private LAN address (Wi-Fi first; never on every
+  interface, never on a public address), on a random port. No LAN address, no page: the step offers typing or
+  pasting the key instead.
+- The address in the QR code carries a one-time token of 128 random bits. Any other address gets "Not found"; after
+  30 wrong requests the page closes. A key sent from another web site (a foreign `Origin`) is refused.
+- It closes as soon as one well-formed key arrives, when you leave the step, or after 10 minutes, whichever comes
+  first. A request must arrive within 10 s and be under 8 KiB; at most four phones at once.
+- The page has no scripts, loads nothing from anywhere else, and is sent with `Cache-Control: no-store`,
+  `Referrer-Policy: no-referrer` and a `Content-Security-Policy` of `default-src 'none'`.
+- It is plain HTTP on your local network: the key crosses your Wi-Fi once, like a store sign-in code you'd type.
+  It never leaves your network through GameCove except to SteamGridDB itself (row 19).
+
+GameCove then checks the key with one SteamGridDB request and saves it only if SteamGridDB accepts it, in
+`user://setup.cfg` and Discover's settings file, both readable by your user only (0600). After that it fills in the
+art your games are missing (row 9).
 
 ## Files GameCove writes for game details and art
 

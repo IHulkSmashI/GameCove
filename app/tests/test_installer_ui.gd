@@ -39,7 +39,7 @@ func _free(s: Control) -> void:
 
 func test_every_page_builds() -> void:
 	var s := _screen(F.target("bazzite"))
-	for step in ["welcome", "startup", "steam", "stores", "device", "look", "extras", "summary", "maintenance", "uninstall", "finish"]:
+	for step in ["welcome", "startup", "steam", "stores", "device", "look", "art", "extras", "summary", "maintenance", "uninstall", "finish"]:
 		s.plan.step = step
 		s.show_step()
 		ok(s.page_title.text != "", step + " has a title")
@@ -56,10 +56,14 @@ func test_welcome_shows_device_and_modes() -> void:
 	ok(easy.selected, "Easy is the default")
 	eq(s.focusables()[0], easy)
 	easy.pressed.emit()
-	eq(s.plan.step, "summary", "Easy goes straight to the summary")
+	eq(s.plan.step, "art", "Easy asks for game art (no key ships with GameCove)")
+	eq(s.skip_button.text, "Skip, use Steam art only")
+	ok(s.skip_button.visible, "skippable")
+	s.skip_step()
+	eq(s.plan.step, "summary", "then the summary")
 	eq(s.next_button.text, "Install")
 	var rows: Array = s.focusables()
-	eq(rows.size(), 6, "one row per option step")
+	eq(rows.size(), 7, "one row per option step")
 	_free(s)
 
 
@@ -91,9 +95,14 @@ func test_custom_walk_and_choices() -> void:
 	eq(s.plan.step, "look")
 	eq(s.plan.choices["fixes"], [], "skip = no fixes")
 	s.next_step()
+	eq(s.plan.step, "art")
+	ok(s.art_step != null and s.body.find_child("SteamGridDB", true, false) == null, "the guided Game art step")
+	s.art_step.submit("0123456789abcdef0123456789abcdef")
+	eq(s.plan.choices["steamgriddb_key"], "0123456789abcdef0123456789abcdef", "checked key kept in the plan")
+	s.next_step()
 	eq(s.plan.step, "extras")
-	ok(not s.save_extra("steamgriddb_key", "nope"), "bad key refused")
-	ok(s.save_extra("steamgriddb_key", "0123456789abcdef0123456789abcdef"))
+	ok(s.body.find_child("steamgriddb_key", true, false) == null, "no bare key row in Extras any more")
+	ok(s.save_extra("ggdeals_key", "AbCdEf123456"))
 	s.next_step()
 	eq(s.plan.step, "summary")
 	s.edit("startup")
@@ -107,6 +116,7 @@ func test_install_runs_to_done() -> void:
 	var setup := F.FakeSetup.new()
 	var s := _screen(F.target("bazzite"), setup)
 	s.pick_mode("easy")
+	s.skip_step()
 	s.next_step()
 	eq(s.plan.step, "done", "the run finished synchronously with the fake runner")
 	eq(s.next_button.text, "Restart now")
@@ -165,8 +175,38 @@ func test_maintenance_and_uninstall_pages() -> void:
 	_free(s)
 
 
+func test_art_step_on_the_desktop() -> void:
+	var s := _screen(F.target("bazzite"))
+	s.pick_mode("easy")
+	eq(s.plan.step, "art")
+	var a: Control = s.art_step
+	ok(a.find_child("OpenHere", true, false) != null, "Open the page here on the desktop")
+	var opened: Array = []
+	a.open_url = func(u): opened.append(u)
+	a.open_button.pressed.emit()
+	eq(opened, ["https://www.steamgriddb.com/profile/preferences/api"], "SteamGridDB's API page")
+	eq(a.mode, "direct", "no LAN in tests: the QR opens SteamGridDB directly")
+	ok(a.buttons.all(func(b): return b in s.focusables()), "every button reachable with the controller")
+	var clip := ["hello"]
+	a.read_clipboard = func() -> String: return clip[0]
+	ok(not a.check_clipboard(), "random clipboard text isn't sent")
+	clip[0] = "fedcba9876543210fedcba9876543210"
+	s.services["http"].route(load("res://scripts/library/art/sgdb.gd").check_url(), {"code": 401, "text": '{"success":false}'})
+	ok(a.check_clipboard(), "a copied key is picked up when the window gets focus back")
+	eq(a.state, "wrong", "SteamGridDB said no")
+	eq(s.plan.choices["steamgriddb_key"], "", "a wrong key isn't kept")
+	s.services["http"].route(load("res://scripts/library/art/sgdb.gd").check_url(), {"text": '{"success":true}'})
+	a.submit(clip[0])
+	eq(s.plan.choices["steamgriddb_key"], clip[0], "kept once it works")
+	ok("fills in missing art when it starts" in a.status.text, "art fill happens at first start")
+	s.next_step()
+	eq(s.plan.step, "summary")
+	ok(s.body.find_child("sum_art", true, false).value_label.text == "Your SteamGridDB key", "summary row")
+	_free(s)
+
+
 class FirstRunSetup extends RefCounted:
-	var done := {"welcome": true, "theme": true, "stores": true, "steamgriddb": true}
+	var done := {"welcome": true, "theme": true, "stores": true, "steamgriddb": true, "keys": true}
 	var skipped := {}
 
 	func is_done(s: String) -> bool:
@@ -188,7 +228,7 @@ func test_first_run_flow_skips_installer_steps() -> void:
 	var f: Control = SetupFlow.new()
 	f.services = {"setup": FirstRunSetup.new()}
 	f.skip_finished = true
-	eq(f.following("welcome"), "fixes", "Look, Stores and Keys were done by the installer")
+	eq(f.following("welcome"), "fixes", "Look, Stores, Game art and Keys were done by the installer")
 	f.skip_finished = false
 	eq(f.following("welcome"), "theme", "reopened from Settings: every step")
 	f.free()

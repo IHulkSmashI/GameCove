@@ -56,7 +56,7 @@ func test_first_run_steps_and_persistence() -> void:
 	ok(not s.complete("nope"), "unknown step")
 	eq(s.next_step(), "stores")
 	var steps: Array = s.steps()
-	eq(steps.map(func(x): return x["id"]), ["welcome", "theme", "stores", "device_fixes", "steamgriddb", "done"])
+	eq(steps.map(func(x): return x["id"]), ["welcome", "theme", "stores", "steamgriddb", "keys", "device_fixes", "done"])
 	ok(steps[1]["skipped"] and steps[1]["optional"], "theme skipped")
 	ok(s.complete("done"), "done")
 	ok(not s.is_first_run(), "finished")
@@ -75,7 +75,9 @@ func test_steamgriddb_key() -> void:
 	ok(not s.set_steamgriddb_key("short"), "rejected")
 	ok(s.set_steamgriddb_key("0123456789abcdef0123456789ABCDEF"), "32 hex")
 	eq(s.steamgriddb_key(), "0123456789abcdef0123456789ABCDEF")
-	ok(s.steps()[4]["status"]["has_key"], "status")
+	ok(s.steps()[3]["status"]["has_key"], "status")
+	var perms := FileAccess.get_unix_permissions(ProjectSettings.globalize_path(s.config_path))
+	eq(perms & 0x3F, 0, "setup.cfg (it holds the key) is readable by this user only")
 	ok(s.set_steamgriddb_key(""), "removed")
 	eq(s.steamgriddb_key(), "")
 	s.free()
@@ -197,7 +199,7 @@ func test_check_fixes_lists_suggested_and_present() -> void:
 	eq(list[0]["state"], "restart")
 	ok(list[0]["installed"] and not list[1]["installed"], "installed flags")
 	ok(not f.called("pkexec"), "status needs no root")
-	ok(s.steps()[3]["status"]["checked"], "step status updated")
+	ok(s.steps()[5]["status"]["checked"], "step status updated")
 	s.free()
 
 
