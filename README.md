@@ -28,24 +28,24 @@ curl -fsSL https://raw.githubusercontent.com/IHulkSmashI/GameCove/main/packaging
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/home.png" alt="Home screen"><br><sub>Home: what you're playing, what's new, what's on sale</sub></td>
-<td width="50%"><img src="docs/images/library.png" alt="Library"><br><sub>One library for Steam, Epic, GOG and Amazon</sub></td>
+<td width="50%"><img src="docs/images/home.webp" alt="Home screen"><br><sub>Home: what you're playing, your achievements, what's installed</sub></td>
+<td width="50%"><img src="docs/images/library.webp" alt="Library"><br><sub>One library for Steam, Epic, GOG and Amazon</sub></td>
 </tr>
 <tr>
-<td><img src="docs/images/quick-menu.png" alt="Quick menu, This game tab"><br><sub>Quick menu in a game: overlay, frame limit, TDP, upscaling</sub></td>
-<td><img src="docs/images/quick-power.png" alt="Quick menu, Power tab"><br><sub>Power tab: TDP, boost, fan, battery care</sub></td>
+<td><img src="docs/images/quick-menu.webp" alt="Quick menu, This game tab"><br><sub>Quick menu in a game: overlay, frame limit, TDP, upscaling</sub></td>
+<td><img src="docs/images/quick-power.webp" alt="Quick menu, Power tab"><br><sub>Power tab: TDP, fan, battery saver, charge limit</sub></td>
 </tr>
 <tr>
-<td><img src="docs/images/game.png" alt="Game page"><br><sub>Game page: time to beat, achievements, compatibility</sub></td>
-<td><img src="docs/images/discover.png" alt="Discover"><br><sub>Discover: deals, local prices, release calendar</sub></td>
+<td><img src="docs/images/game.webp" alt="Game page"><br><sub>Game page: Metacritic score, game facts, time to beat, achievements</sub></td>
+<td><img src="docs/images/discover.webp" alt="Discover"><br><sub>Discover: deals in your currency, wishlist alerts, release calendar</sub></td>
 </tr>
 <tr>
-<td><img src="docs/images/fixes.png" alt="Device fixes"><br><sub>Fixes for your exact model, each with Undo</sub></td>
-<td><img src="docs/images/device.png" alt="About this device"><br><sub>About this device: your model, chip, screen, battery</sub></td>
+<td><img src="docs/images/fixes.webp" alt="Device fixes"><br><sub>Fixes for your exact model, each with Undo</sub></td>
+<td><img src="docs/images/device.webp" alt="About this device"><br><sub>About this device: your model, chip, drivers, memory</sub></td>
 </tr>
 <tr>
-<td><img src="docs/images/stream.png" alt="Stream from your PC"><br><sub>Stream games from your PC</sub></td>
-<td></td>
+<td><img src="docs/images/stream.webp" alt="Stream from your PC"><br><sub>Stream games from your PC</sub></td>
+<td><img src="docs/images/game-art-setup.webp" alt="Game art setup"><br><sub>Free game art: scan, sign in with Steam on your phone, done</sub></td>
 </tr>
 </table>
 
@@ -55,21 +55,31 @@ GameCove is the screen your handheld boots into. Your games sit up front, and ev
 
 | | |
 | --- | --- |
-| **Library** | Steam, Epic, GOG and Amazon games in one place, with art, time to beat, achievements and compatibility |
+| **Library** | Steam, Epic, GOG and Amazon games in one place, with art, game details, critic scores, time to beat, achievements and compatibility |
 | **Quick menu** | Every setting your handheld has, one button away, in any game |
 | **Profiles** | Settings per game, and different ones on battery and plugged in |
 | **Device fixes** | The known problems on your model, fixed for you, each one with Undo |
-| **Updates** | OS, BIOS and firmware, drivers and apps in one place |
+| **Updates** | OS, BIOS and firmware, drivers, upscalers and apps in one place |
 | **Discover** | Deals, real local prices, your wishlist and a release calendar |
 | **Streaming** | Play games running on your PC |
 
 ### Home and library
 
-- **Every store in one library.** Steam, Epic, GOG and Amazon side by side. Filter by store, search with the on-screen keyboard, and see what's installed at a glance.
+- **Every store in one library.** Steam, Epic, GOG and Amazon side by side. Filter by store, genre, critic score (75+) or what's installed, sort by Top rated, and search with the on-screen keyboard.
 - **Install, update and manage from the handheld.** A download queue with pause and resume, check and repair files, move games to an SD card or USB drive, uninstall, launch options and the Proton version per game. Steam games launch through Steam, so cloud saves and Steam Input keep working. Already use Heroic? GameCove reuses its sign-ins and games.
-- **Game pages that tell you what you need.** Cover art and backgrounds, how long it takes to beat (main story, extras, 100%), Steam achievements with your progress, ProtonDB compatibility, and anti-cheat status before you hit play.
+- **Game pages that tell you what you need.** Cover art and backgrounds, the Metacritic score (and OpenCritic's with your own key), genres, developer, publisher, release date, screenshots, how long it takes to beat (main story, extras, 100%), Steam achievements with your progress, ProtonDB compatibility, and anti-cheat status before you hit play.
+- **Complete details for every store.** Missing descriptions, genres, release dates, screenshots and art get filled in for Epic, GOG and Amazon games too, from the game's Steam edition and GameCove's nightly game database.
+- **Steam insights.** On a Steam game's page: players right now, review score, the Steam Deck rating, the last update with its patch notes, DLC with prices, and a SteamDB link you open on your phone.
+- **Change artwork.** Pick any cover, banner, logo or icon from SteamGridDB's community for any game, Steam or not (it can update Steam's own library art too). Free with your own SteamGridDB key, which setup gets you in about a minute.
 - **Store sign-in with your phone.** Scan a QR code and sign in there. No typing passwords on the handheld.
 - **Four themes:** Cove, Midnight, Sunset and Light.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/achievements.webp" alt="Achievements on the game page"><br><sub>Achievements with global unlock rates</sub></td>
+<td width="50%"><img src="docs/images/home-light.webp" alt="Home in the Light theme"><br><sub>The Light theme</sub></td>
+</tr>
+</table>
 
 ### Quick menu
 
@@ -84,19 +94,30 @@ Press the Quick Access button (or Guide) and the quick menu slides in, in a game
 | **Controller** | Controller type, gyro, Nintendo button layout, rumble, stick lights (effect, colour, brightness), mouse mode |
 | **Device** | Wi-Fi, Bluetooth, airplane mode, keep awake, screenshot, plus your device's fixes |
 
+<table>
+<tr>
+<td width="33%"><img src="docs/images/quick-display.webp" alt="Quick menu, Display tab"><br><sub>Display</sub></td>
+<td width="33%"><img src="docs/images/quick-controller.webp" alt="Quick menu, Controller tab"><br><sub>Controller</sub></td>
+<td width="33%"><img src="docs/images/quick-leds.webp" alt="Quick menu, stick lights"><br><sub>Stick lights</sub></td>
+</tr>
+</table>
+
 Everything else is one press away in **Settings**, grouped the same way.
 
 <details>
 <summary><b>Everything in Settings</b></summary>
 
-- **Power:** TDP and boost limits, power and platform modes, a thermal limit, **Auto TDP** (below), fan presets and **custom fan curves**, **charge limit** and battery care, battery saver that turns on by itself at a level you pick, sleep mode.
-- **CPU and graphics:** CPU boost, SMT, active cores, energy preference, governor, CPU ceiling, GPU performance level, GPU clocks, GPU power profile.
+- **Power:** TDP and boost limits, power and platform modes, a thermal limit, **Auto TDP** (below), fan presets and **custom fan curves**, **charge limit** and battery care, battery saver that turns on by itself at a level you pick, sleep mode, plus CPU (boost, SMT, active cores, energy preference, governor, CPU ceiling) and graphics (GPU performance level, clocks, power profile).
 - **Display:** refresh rate (and extra refresh rates where the panel allows), VRR, allow tearing, colour temperature, night light with a schedule, vibrance, **HDR** with inverse tone mapping and SDR brightness, screen effects, rotation, dim and screen-off timers.
-- **Performance:** the overlay (FPS only, compact, a bar, full, or pick your own items, with position, size and opacity), upscaling, frame generation, low latency, Proton version, shader threads and clearing a game's shader cache.
+- **Sound:** volume, output device, microphone and input.
 - **Controller:** controller type (Xbox, DualSense, Steam Deck and more), **back buttons** remapped to any button, a key or a mouse click, gyro on/off and which sensor, stick and trigger deadzones, trackpad mode, **rumble on/off and strength**, a rumble test, **lights** (effect, colours, brightness, speed), mouse mode with pointer speed, a button tester, and one press to start over.
-- **Network and system:** Wi-Fi, Bluetooth, airplane mode, Wi-Fi power saving, keep awake, sleep, screenshots.
+- **Performance:** the overlay (FPS only, compact, a bar, full, or pick your own items, with position, size and opacity), upscaling and frame generation with installed versions and updates, Lossless Scaling frame generation, Proton version, low latency, shader threads and clearing a game's shader cache.
+- **System:** Wi-Fi, Bluetooth, airplane mode, Wi-Fi power saving, keep awake, sleep, screenshots.
+- **Profiles, Appearance, Stores, Discover, Device and About GameCove:** your saved profiles, themes, store sign-ins and downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage and updates, and the network and privacy switches.
 
 </details>
+
+<p align="center"><img src="docs/images/settings-power.webp" alt="Settings, Power" width="80%"></p>
 
 **Auto TDP** watches your frame rate and finds the lowest power that keeps it, so the battery lasts longer without you noticing a drop. Give it a target FPS or let it pick one. It learns each game on battery and plugged in, gives power back within seconds in heavy scenes, skips loading screens, and puts everything back when you quit. It's ported from ClawDeck, which was built and tuned on real hardware, and now works on every handheld with a TDP control.
 
@@ -106,6 +127,7 @@ Everything else is one press away in **Settings**, grouped the same way.
 - **AMD:** FSR 4 on newer chips (using AMD's own files), FSR 3.1 everywhere, FSR frame generation.
 - **Any GPU:** Lossless Scaling frame generation through lsfg-vk (2x to 4x, with your own copy of Lossless Scaling).
 - **Low latency** (Anti-Lag on AMD, XeLL on Intel Arc) is on by default, and always on while frame generation runs.
+- **Always the newest tested files.** GameCove checks once a day, shows what's installed and when an update is out, and downloads from its own signed mirror on GitHub (then the project's own release), so a moved download never breaks your setup.
 - Everything GameCove adds to a game folder is recorded and removed exactly on Undo. Folders set up by other tools are left alone.
 
 ### Profiles: per game and per power source
@@ -113,6 +135,8 @@ Everything else is one press away in **Settings**, grouped the same way.
 Change something in the quick menu while a game runs and it's saved for that game. Set different values for battery and plugged in, and GameCove switches when you plug in or unplug. When you quit, everything goes back to your everyday settings.
 
 Order of priority: this game on this power source, then this game, then battery or plugged in, then everyday. Profiles stay with the handheld they were made on, and you can copy, reset, export and import them.
+
+<p align="center"><img src="docs/images/profiles.webp" alt="Settings, Profiles" width="80%"></p>
 
 ### Device fixes
 
@@ -140,26 +164,38 @@ One page for everything that can be updated:
 
 GameCove never flashes a BIOS by itself, and firmware installs wait until you're on the charger with at least 50% battery and no game running.
 
+<p align="center"><img src="docs/images/updates.webp" alt="Settings, Device, Updates" width="80%"></p>
+
 ### Streaming from your PC
 
 The **Stream** tab plays games running on your PC. Install [Vibepollo](https://github.com/Nonary/Vibepollo) on the PC (Sunshine and Apollo work too) and GameCove finds it on your network, pairs with a PIN, shows your PC's games with box art, wakes the PC, and streams at your handheld's exact resolution and refresh rate through Moonlight (installed for you). Resolution, frame rate, quality, video format and HDR can be set per PC or per game, and it works away from home over Tailscale.
 
 ### Discover
 
-- **Deals** from the big stores, sorted and filtered by store, with the lowest price ever next to today's.
-- **Real local prices** for your Steam region, never converted guesses.
+- **Deals** from the big stores, sorted and filtered by store, with the Steam review score and the lowest price ever next to today's.
+- **Real local prices** for your Steam region, never converted guesses. Other stores show "See price" and their own page has it in your currency.
 - **Your wishlist**, imported from Steam, with price alerts.
 - **Release calendar** by month or as a list, with a reminder on release day.
+
+<table>
+<tr>
+<td width="33%"><img src="docs/images/deals.webp" alt="Discover, Deals"><br><sub>Deals</sub></td>
+<td width="33%"><img src="docs/images/calendar.webp" alt="Discover, Coming soon"><br><sub>Release calendar</sub></td>
+<td width="33%"><img src="docs/images/wishlist.webp" alt="Discover, Wishlist"><br><sub>Wishlist and price alerts</sub></td>
+</tr>
+</table>
 
 ### Safety and reliability
 
 - **Desktop Mode is always one press away**, from the quick menu, and Steam Gaming Mode too.
-- **Crash fallback:** if GameCove crashes three times in two minutes, your handheld goes back to Steam Gaming Mode by itself.
+- **Crash fallback:** if GameCove crashes, hangs or fails to start three times in a row, your handheld goes back to Steam Gaming Mode for the rest of that boot, and GameCove tells you why the next time it opens.
 - **Nothing above your device's limits.** Power, boost, clocks, fan curves and charge limits are clamped to what your model is rated for, and checked again by the system helper.
 - **Risky screen changes revert by themselves.** After HDR or a new refresh rate you get "Keep this?" with a 15-second countdown.
 - **Undo everything:** fixes, upscaling files, launch options, profiles. Uninstalling puts Steam Gaming Mode back as the default.
 - **Signed releases.** The installer checks every download against a signed checksum list before anything runs.
 - **Day-to-day settings never ask for a password.** Only the install and system fixes do, in Desktop Mode.
+
+<!-- Performance section: being written on perf/background. It goes here, between "Safety and reliability" and "Network and privacy". -->
 
 ## Network and privacy
 
@@ -168,15 +204,24 @@ No analytics, no crash reports, no telemetry, no GameCove account. GameCove neve
 | What | Who | What is sent | When | Switch |
 | --- | --- | --- | --- | --- |
 | Game database and release calendar | GitHub (GameCove's own `gamedb` release) | Nothing about you | At start, at most daily | Background lookups |
-| Deals and prices | [CheapShark](https://www.cheapshark.com) (cheapshark.com) and the Steam store API | Steam app ids and titles from your wishlist and Discover, what you search for, your store country | 45 s after start, then every 6 hours; when you search or open a game | Look up deals and prices |
+| Deals and prices (Discover, wishlist) | [CheapShark](https://www.cheapshark.com) (cheapshark.com) and the Steam store API | Steam app ids and titles from your wishlist and Discover, what you search for, your store country | 45 s after start, then every 6 hours; when you search or open a game | Look up deals and prices |
 | Local prices (optional) | [GG.deals](https://gg.deals) (gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
-| Your device's photo | GitHub (free photos) or your handheld's maker | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
-| BIOS and firmware list | GitHub (`firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
-| Achievements and game art | Steam's API and CDN; SteamGridDB only with your own key | The game's app id (and your SteamGridDB key) | When you open a game page or a tile needs art | Settings > Performance; remove the key |
-| Game streaming | PCs on your own network (GameStream: Vibepollo, Sunshine, Apollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets | When you open the Stream tab or wake a PC | You start it |
+| Your device's photo | GitHub (free photos) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
+| Upscaler list and downloads (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and before an install; files only when you install or update | Background lookups (daily check); installs: you start them |
+| BIOS and firmware list and downloads | GitHub (`firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
+| Steam insights on a game's page (players now, reviews, Steam Deck rating, last update, DLC) | Steam's public API and store | The game's app id (DLC prices: also your store country) | When you open a Steam game's page; players at most every 10 min, the rest every 12 h | Background lookups (prices: Look up deals and prices) |
+| Achievements | Steam's API and CDN | The game's app id | When you open a game page | Settings > Performance |
+| Game pictures in Discover and the calendar | Steam's CDN, IGDB's image server (`images.igdb.com`) and SteamGridDB's CDN, no other host | The picture's address (it names the game) | When a tile shows a picture that isn't saved yet | None (SteamGridDB lookups: Look up game details) |
+| Game details | The Steam store (`appdetails`) | The Steam app id of a game (or of a GOG / Epic / Amazon game's Steam edition) whose details or Metacritic score are missing | In the background after start, one request every 2 s, cached a week; at once for the page you open | Look up game details (+ Background lookups for the background fill) |
+| Critic scores (optional) | [OpenCritic](https://opencritic.com) through RapidAPI | A game's title, then its OpenCritic id, with your own key | Same as game details, only if you added a key; at most 20 searches and 180 requests a day | Look up game details, or remove the key |
+| Artwork | [SteamGridDB](https://www.steamgriddb.com) | A game's Steam app id or title, with your own key | When you open Change artwork; in the background for games with no cover, hero or logo | Look up game details (+ Background lookups for the automatic fill) |
+| Game art setup | Your phone, on your own network, then SteamGridDB | Your SteamGridDB key: pasted on a one-time page GameCove serves on your LAN, then checked once with SteamGridDB | Only while the Game art step is open, 10 minutes at most | You start it |
+| Game streaming | PCs on your own network (GameStream: Vibepollo, Sunshine, Apollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets. With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network | When you open the Stream tab or wake a PC | You start it |
 | Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in | You start it |
 
-**Settings > About > Network and privacy** has the switches: **Background lookups** (off: nothing is requested unless you ask for it right then), **Look up deals and prices** and **Show maker photos**, all on by default. Some store links can carry a GameCove affiliate id (Settings > Discover > **Affiliate links**; none are set up yet). It only changes the link, never the price, and sends nothing about you. Every call is listed in [docs/PRIVACY.md](docs/PRIVACY.md).
+**Settings > About > Network and privacy** has the switches: **Background lookups** (off: nothing is requested unless you ask for it right then), **Look up deals and prices**, **Look up game details** and **Show maker photos**, all on by default. Some store links can carry a GameCove affiliate id (Settings > Discover > **Affiliate links**; none are set up yet). It only changes the link, never the price, and sends nothing about you. Every call is listed in [docs/PRIVACY.md](docs/PRIVACY.md).
+
+<p align="center"><img src="docs/images/privacy.webp" alt="Settings, Network and privacy" width="80%"></p>
 
 ## Supported handhelds
 
@@ -210,16 +255,26 @@ Got one of the Supported or Basic models? Run it and tell us how it went; that's
 
 1. Switch to Desktop Mode and open a terminal (Konsole).
 2. Run the command at the top of this page. It downloads the latest release, checks its signature, adds **GameCove Installer** to your app menu and opens it.
-3. The installer walks you through it: **Easy** (recommended settings, one summary page) or **Custom** (every option). Choose whether your handheld boots into GameCove or keeps Steam Gaming Mode as the default with GameCove one tap away, sign in to your stores, pick your fixes and extras (like Moonlight for streaming), and you're done.
+3. The installer walks you through it: **Easy** (recommended settings, one summary page) or **Custom** (every option). Choose whether your handheld boots into GameCove or keeps Steam Gaming Mode as the default with GameCove one tap away, sign in to your stores, get free game art, pick your fixes and extras (like Moonlight for streaming), and you're done.
 
 It asks for your admin password once, for the system package and device fixes.
 
+**Game art:** the installer's Game art step (or GameCove's own first-run setup) gets you a free [SteamGridDB](https://www.steamgriddb.com) key in about a minute. Scan the QR code with your phone, sign in with Steam, tap Generate API key, then paste the key on the page your phone opened and it lands on the handheld by itself (no typing with a controller; typing or pasting it works too). GameCove checks the key, then fills in covers, banners and logos for every game, Steam or not. GameCove ships no key of its own, so this step is what turns on the art picker and art for non-Steam games. Skip it and you get Steam's art; add a key later in Settings > Discover > SteamGridDB key.
+
 - **Bazzite and Fedora Atomic:** installs as a system package. Your previous system stays in the boot menu.
 - **SteamOS:** installs as a system extension that survives SteamOS updates. Read-only mode stays on. After a SteamOS update, restart once so GameCove comes back.
+- **Anything else:** you can try GameCove in a window.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/installer.webp" alt="GameCove Installer, welcome"><br><sub>The installer: Easy or Custom</sub></td>
+<td width="50%"><img src="docs/images/quick-power-light.webp" alt="Quick menu in the Light theme"><br><sub>Pick your look during setup: here, Light</sub></td>
+</tr>
+</table>
 
 ### Update, change or remove
 
-Open **GameCove Installer** from the app menu any time to **update**, **change options**, **repair** or **remove** GameCove. Removing it makes Steam Gaming Mode the default again, can undo every fix, and can keep or delete your settings. Store sign-ins stay with the store tools. Everything the installer does is logged to `~/.local/share/gamecove/installer.log`.
+Open **GameCove Installer** from the app menu any time to **update**, **change options**, **repair** or **remove** GameCove. Removing it makes Steam Gaming Mode the default again, can undo every fix, and can keep or delete your settings. Store sign-ins stay with the store tools. Everything the installer does is logged to `~/.local/share/gamecove/installer.log`. Manual install: [docs/SESSION.md](docs/SESSION.md).
 
 ## FAQ
 
@@ -230,13 +285,13 @@ No. Steam keeps running in the background, Steam games launch through Steam, and
 No. Power, Auto TDP, fans, lights, the overlay, upscaling and frame generation are all built in. If you already use Decky plugins, GameCove leaves their files alone.
 
 **Can it break your system?**
-Everything GameCove changes can be undone, on Bazzite your previous system stays in the boot menu, and if GameCove ever fails to start you land in Steam Gaming Mode.
+Everything GameCove changes can be undone, on Bazzite your previous system stays in the boot menu, and if GameCove keeps crashing or won't start you land in Steam Gaming Mode.
 
 **Does anti-cheat work?**
 Games run on the same Proton as they do in Steam. GameCove shows each game's anti-cheat status, and it never bypasses or tampers with anti-cheat.
 
 **Does it cost anything?**
-No. GameCove is free and open source, and device fixes, battery features and safety settings will never sit behind a paywall.
+No. GameCove is free and open source, and device fixes, battery features and safety settings will never sit behind a paywall. Game art and critic scores use free keys that are yours, not ours.
 
 **What about CachyOS or other distros?**
 Bazzite and SteamOS come first. On other systems GameCove runs in a window, and a CachyOS package is planned.
@@ -254,7 +309,9 @@ More in [docs/COMMUNITY.md](docs/COMMUNITY.md).
 
 ## Credits
 
-GameCove has its own front end and device layer, built on proven open-source work: gamescope, Proton and umu-launcher, InputPlumber, PowerStation, steamos-manager and Handheld Daemon, legendary, gogdl and nile for the stores, MangoHud, OptiScaler, lsfg-vk and Moonlight. Auto TDP, the upscaling setup and the MSI Claw findings are ported from **ClawDeck** (same author). Gyro on the MSI Claw 8 EX was figured out by **Kisenir** (r/MSIClaw). Our game database is rebuilt nightly from free, open sources: Wikidata, AreWeAntiCheatYet, ProtonDB and IGDB. Game data from [IGDB](https://www.igdb.com): time to beat and upcoming release dates. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0. The full list is in [CREDITS.md](CREDITS.md).
+GameCove has its own front end and device layer, built on proven open-source work: gamescope, Proton and umu-launcher, InputPlumber, PowerStation, steamos-manager and Handheld Daemon, legendary, gogdl and nile for the stores, MangoHud, OptiScaler, lsfg-vk and Moonlight. Auto TDP, the upscaling setup and the MSI Claw findings are ported from **ClawDeck** (same author). Gyro on the MSI Claw 8 EX was figured out by **Kisenir** (r/MSIClaw).
+
+Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAntiCheatYet, ProtonDB, IGDB, the Steam store) and published as a download; see [`gamedb/`](gamedb/). Game data from [IGDB](https://www.igdb.com): time to beat, game details, critic averages and upcoming release dates. [Metacritic](https://www.metacritic.com) scores as Valve publishes them on the Steam store, each linked to its Metacritic page. Critic scores from [OpenCritic](https://opencritic.com), fetched by the app only with your own key. Artwork from [SteamGridDB](https://www.steamgriddb.com) and its artists, fetched with your own free key. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0. The full list is in [CREDITS.md](CREDITS.md).
 
 ## Licence
 
