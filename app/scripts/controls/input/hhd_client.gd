@@ -114,9 +114,19 @@ func request(method: String, path: String, body := "") -> Dictionary:
 	return r
 
 
-## Where the one-call header file goes (user data folder, only this user can read it).
+static var _hdr_seq := 0
+static var _hdr_lock := Mutex.new()
+
+
+## Where one call's header file goes (user data folder, only this user can read it). A new name for every call
+## (process id, a counter, a random part): the main thread and the Controls worker may both call at once, and
+## one fixed file let one call overwrite or delete the other's token (review problem 9).
 static func auth_header_path() -> String:
-	return ProjectSettings.globalize_path("user://hhd-auth.header")
+	_hdr_lock.lock()
+	_hdr_seq += 1
+	var n := _hdr_seq
+	_hdr_lock.unlock()
+	return ProjectSettings.globalize_path("user://hhd-auth-%d-%d-%08x.header" % [OS.get_process_id(), n, randi()])
 
 
 static func _write_auth_header(t: String) -> String:
