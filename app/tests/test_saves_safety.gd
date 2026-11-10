@@ -302,3 +302,60 @@ func test_gog_no_upload_without_the_cloud_copy() -> void:
 	eq(cloud.cloud["saves/slot1.sav"]["data"], "progress", "and nothing uploaded")
 	ok(w["s"].status(w["gog"])["state"] in ["offline", "backup_failed"], "the status says it didn't sync")
 	_done(w)
+
+
+# ---- blocker 1, Epic: a blank save never becomes the newest cloud save ------------------------
+
+## Synced, prefix deleted, the launch can't reach Epic, the game writes a blank save. The
+## post-game sync used to upload it (legendary: local newer), burying the real save.
+func test_epic_blank_save_after_a_deleted_prefix_is_a_conflict() -> void:
+	var w := _world("epic_prefix_deleted")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "40 hours", T0)
+	w["s"].sync_now(w["epic"])
+	eq(cloud.saves.size(), 1, "the save is in the cloud")
+	ok(int(_cfg(w, "epic:Min", "last_sync", 0)) > 0, "synced")
+	_rm(w["prefix"])
+	cloud.offline = true
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	eq(got, [{"go": true}], "offline: the game still starts")
+	cloud.offline = false
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["esaves"].path_join("world.sav"), "new game", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	eq(cloud.saves.size(), 1, "nothing was uploaded")
+	eq(cloud.saves[-1]["files"]["world.sav"], "40 hours", "the cloud's newest save is still the real one")
+	eq(w["s"].status(w["epic"])["state"], "conflict", "the user is asked")
+	_done(w)
+
+
+## With Epic reachable at that launch, the cloud save simply comes down into the new prefix.
+func test_epic_empty_folder_gets_the_cloud_save() -> void:
+	var w := _world("epic_empty")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "40 hours", T0)
+	w["s"].sync_now(w["epic"])
+	_rm(w["prefix"])
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	eq(got, [{"go": true}], "starts")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "40 hours", "the cloud save is back")
+	eq(w["s"].status(w["epic"])["state"], "downloaded", "downloaded")
+	_done(w)
+
+
+## A game that never had a prefix: not_set_up at launch, and whatever it writes is new.
+func test_epic_not_set_up_drops_the_last_sync() -> void:
+	var w := _world("epic_not_set_up")
+	_json(w["epic"]["config_dir"].path_join("installed.json"), {"Min": {}})
+	var c := ConfigFile.new()
+	c.set_value("game:epic:Min", "last_sync", T0)
+	c.save(w["s"].cfg_path)
+	_rm(w["prefix"])
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	eq(w["s"].status(w["epic"])["state"], "not_set_up", "no prefix yet")
+	eq(int(_cfg(w, "epic:Min", "last_sync", -1)), 0, "an old sync time doesn't outlive the prefix")
+	_done(w)

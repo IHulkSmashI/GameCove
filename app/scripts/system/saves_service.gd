@@ -315,7 +315,9 @@ func _set_status(key: String, state: String, detail := "", extra := {}) -> Dicti
 			c.set_value(sec, "gog_ts", extra["gog_ts"])
 			c.set_value(sec, "own", true)
 		if extra.has("gog_paths"):
-			c.set_value(sec, "gog_paths", extra["gog_paths"]))
+			c.set_value(sec, "gog_paths", extra["gog_paths"])
+		if bool(extra.get("synced", false)) and str(extra.get("epic_path", "")) != "":
+			c.set_value(sec, "epic_path", str(extra["epic_path"])))
 	return {"state": state, "conflict": state == "conflict"}
 
 
@@ -327,7 +329,7 @@ func _drop_sync(key: String, create: bool) -> bool:
 		var sec := _sec(key)
 		if not c.has_section(sec) and not create:
 			return false
-		for name in ["gog_ts", "gog_paths"]:
+		for name in ["gog_ts", "gog_paths", "epic_path"]:
 			if c.has_section_key(sec, name):
 				c.erase_section_key(sec, name)
 		c.set_value(sec, "last_sync", 0)
@@ -347,17 +349,23 @@ func _sync(key: String, entry: Dictionary, tools: Dictionary, mode: String) -> D
 func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String) -> Dictionary:
 	var plan := CloudSaves.epic_plan(entry, tools)
 	if not plan["ok"]:
+		if plan["why"] == "not_set_up":
+			# no prefix, so no save folder yet: whatever the game makes there is new to us
+			_drop_sync(key, true)
 		return _set_status(key, str(plan["why"]))
 	var app := str(entry.get("id", ""))
+	_epic_folder_check(key, str(plan["save_path"]))
 	var look := _legendary(plan, app, "check")
 	if look["state"] in ["offline", "failed", "unsupported", "no_path"]:
 		return _set_status(key, _plain_state(look["state"]), str(look.get("error", "")))
+	# legendary may only now have worked the folder out
+	var folder := CloudSaves.epic_save_path(str(entry.get("config_dir", "")), app)
 	if look["state"] == "none":
-		return _set_status(key, "no_saves", "", {"synced": true})
+		return _set_status(key, "no_saves", "", {"synced": true, "epic_path": folder})
 	if look["state"] == "same":
-		return _set_status(key, "synced", "", {"synced": true, "local": look["local"], "remote": look["remote"]})
+		return _set_status(key, "synced", "", {"synced": true, "local": look["local"], "remote": look["remote"], "epic_path": folder})
 	var last := int(_cfg_value(key, "last_sync", 0))
-	var times := {"local": look["local"], "remote": look["remote"]}
+	var times := {"local": look["local"], "remote": look["remote"], "epic_path": folder}
 	match CloudSaves.epic_decide(look, last, mode):
 		"conflict":
 			return _set_status(key, "conflict", "", times)
@@ -372,6 +380,20 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 			# the other direction waits for its turn (next exit uploads, next launch downloads)
 			return _set_status(key, "pending_up" if look["state"] == "local_newer" else "pending_down", "", times)
 	return _set_status(key, "synced", "", times.merged({"synced": true}, true))
+
+
+## An Epic sync time only stands for the folder it was made with. With that folder empty
+## or gone (a deleted or new prefix) or another one, the time is dropped, written at once:
+## a blank save the game then makes is "both sides changed" and we ask, where legendary
+## alone would see "local newer" and make the blank one the newest cloud save.
+func _epic_folder_check(key: String, folder: String) -> void:
+	var cfg := SettingsFile.load_cfg(cfg_path)
+	var sec := _sec(key)
+	if int(cfg.get_value(sec, "last_sync", 0)) <= 0:
+		return
+	var kept := str(cfg.get_value(sec, "epic_path", ""))
+	if folder == "" or (kept != "" and kept != folder) or int(CloudSaves.dir_stats(folder)["files"]) == 0:
+		SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(sec, "last_sync", 0))
 
 
 ## Backs the save folder up, downloads (step download or force_download), and puts the
@@ -559,13 +581,14 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 			if not plan["ok"]:
 				return _set_status(key, str(plan["why"]))
 			var app := str(entry.get("id", ""))
+			var folder := CloudSaves.epic_save_path(str(entry.get("config_dir", "")), app)
 			if choice == "cloud":
-				return _epic_download(key, entry, plan, app, {}, "force_download", {})
+				return _epic_download(key, entry, plan, app, {}, "force_download", {"epic_path": folder})
 			# Epic keeps the earlier cloud saves next to the new one, so uploading loses nothing there
 			var up := _legendary(plan, app, "force_upload")
 			if up["state"] in ["offline", "failed"]:
 				return _set_status(key, up["state"], str(up.get("error", "")))
-			return _set_status(key, "uploaded", "", {"synced": true})
+			return _set_status(key, "uploaded", "", {"synced": true, "epic_path": folder})
 		"gog":
 			var plan := _gog_plan(entry, tools)
 			if not plan["ok"]:
