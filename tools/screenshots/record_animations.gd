@@ -8,7 +8,8 @@ extends SceneTree
 ##
 ## Clips: launch (Home Play -> zoom -> waiting -> failed: back), launch_page
 ## (Play on the game page), screens (RB through every tab, LB back, a page open
-## and close), moments (toasts, shelves easing in, wake fade), boot (the intro).
+## and close), moments (toasts, wake fade, shelves easing in), boot (the intro clip),
+## boot_code (the code animation used when there's no clip).
 ## Each prints "CLIP <name> <first frame> <last frame>".
 
 var only: Array = []
@@ -132,13 +133,21 @@ func _run() -> void:
 		await secs(1.0)
 		mark("moments", f)
 
-	if want("boot"):
+	for clip in ["boot", "boot_code"]:
+		if not want(clip):
+			continue
+		# boot: the clip in res://assets/boot/intro.ogv; boot_code: the code animation
+		var Splash = load("res://scripts/ui/boot_splash.gd")
+		var keep: String = Splash.video_path
+		if clip == "boot_code":
+			Splash.video_path = ""
 		var f := Engine.get_frames_drawn()
-		var sp: Variant = load("res://scripts/ui/boot_splash.gd").play(main)
-		await secs(2.4)
+		var sp: Variant = Splash.play(main)
+		await secs(3.6)
 		if sp != null and is_instance_valid(sp):
 			sp.queue_free()
-		mark("boot", f)
+		Splash.video_path = keep
+		mark(clip, f)
 
 	main.get_parent().remove_child(main)
 	main.free()

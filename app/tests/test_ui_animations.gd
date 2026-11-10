@@ -213,3 +213,37 @@ func test_toast_and_shelf_entrances_end_in_place() -> void:
 	eq(s.tiles[1].card.position.y, 0.0, "covers in place")
 	s.free()
 	Motion.reduce = was
+
+
+func test_boot_intro_plays_the_clip_when_there_else_the_code_animation() -> void:
+	var Splash = load("res://scripts/ui/boot_splash.gd")
+	var keep: String = Splash.video_path
+	eq(Splash.pick_mode(), "video", "the owner's clip ships in res://assets/boot/intro.ogv")
+	ok(load(keep) is VideoStream, "and loads as a video stream (Theora)")
+	var v: Control = Splash.new()
+	v.build("video")
+	ok(v.player != null and v.player.stream is VideoStream, "a VideoStreamPlayer on the clip")
+	eq(v.mouse_filter, Control.MOUSE_FILTER_IGNORE, "never takes the mouse")
+	eq(v._shade.color, Color("#0F1723"), "on the clip's own background, so the hand-off is seamless")
+	v.free()
+	Splash.video_path = "res://assets/boot/missing.ogv"
+	eq(Splash.pick_mode(), "code", "no clip: the code animation")
+	Splash.video_path = keep
+	var c: Control = Splash.new()
+	c.build("code")
+	ok(c.find_child("Mark", true, false) != null and c.find_child("Sweep", true, false) != null, "the mark and its glow sweep")
+	var logo: TextureRect = c.find_child("Logo", true, false)
+	ok(logo != null and logo.texture != null, "the GameCove mark (assets/logo-mark.svg = assets/logo.svg)")
+	ok(Splash.IN_S + 0.0 <= Splash.HOLD_UNTIL and Splash.HOLD_UNTIL + Splash.OUT_S <= 2.0, "the code animation is 2 s or less")
+	c.skip()
+	ok(c._done, "a button skips it")
+	c.free()
+
+
+func test_boot_intro_never_delays_readiness() -> void:
+	var src := FileAccess.get_file_as_string("res://scripts/main.gd")
+	var heartbeat := src.find("health.watch_session(session)")
+	var intro := src.find("boot_splash.gd\").play(self)")
+	ok(heartbeat > 0 and intro > heartbeat, "the intro starts after the heartbeat is set up")
+	ok(not src.contains("await _boot_intro") and not src.contains("_boot_intro.finished"), "nothing waits for it")
+	ok(src.contains("_boot_intro.skip(true)"), "it goes at once when our window loses focus")

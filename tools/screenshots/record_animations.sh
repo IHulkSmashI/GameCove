@@ -2,7 +2,7 @@
 # Record GameCove's animations to MP4 and GIF clips (fake library, painted art,
 # no network). Needs xvfb-run, ffmpeg and Godot 4.7.
 #   tools/screenshots/record_animations.sh [OUT_DIR] [clip,clip] [WIDTHxHEIGHT]
-# Clips: launch, launch_page, screens, moments, boot (see record_animations.gd).
+# Clips: launch, launch_page, screens, moments, boot, boot_code (see record_animations.gd).
 # Godot's Movie Maker renders every frame at a fixed 30 fps step, so the clips
 # show the real timings however slow the machine is. GODOT=/path/to/godot.
 set -euo pipefail

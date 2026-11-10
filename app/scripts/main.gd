@@ -118,6 +118,8 @@ var background: Node
 
 ## Play the boot splash at start (screenshots and tests turn it off).
 static var boot_splash := true
+## The boot intro while it plays (it frees itself).
+var _boot_intro: Control
 
 
 func _ready() -> void:
@@ -322,8 +324,9 @@ func _ready() -> void:
 	var fallback_notice := SessionHealth.take_fallback_notice(SessionHealth.data_dir())
 	if fallback_notice != "":
 		toast(fallback_notice, "info", "warn")
+	# Last, after the heartbeat is set up: the intro waits for nothing and nothing waits for it.
 	if boot_splash and DisplayServer.get_name() != "headless":
-		load("res://scripts/ui/boot_splash.gd").play(self)
+		_boot_intro = load("res://scripts/ui/boot_splash.gd").play(self)
 
 
 ## Closes the running game (quick menu "Exit game", whose signal passes the game). Never blocks.
@@ -675,6 +678,8 @@ func _notification(what: int) -> void:
 			wiring.home_in_front(false)
 		if launch_overlay != null:
 			launch_overlay.finish()
+		if _boot_intro != null and is_instance_valid(_boot_intro):
+			_boot_intro.skip(true)   # a game (or anything) in front: gone, nothing left playing
 		if backdrop != null:
 			_pause_motion()
 		_update_timer()
