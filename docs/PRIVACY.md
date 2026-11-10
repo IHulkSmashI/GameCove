@@ -22,6 +22,9 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 (Discover's `settings.json`) stay off until you set them again.
 
 A switch counts from the moment you turn it off. Discover's refresh is several steps and many requests; each
+request asks the switches again right before it goes out (`discover.gd` `may_fetch`), so the ones still waiting
+are never sent.
+
 Every request has a size limit (4 MB for an answer kept in memory unless it names a smaller one, 16 MB for the
 calendar file, 64 MB for the game database, a few MB for a picture): a bigger answer is dropped, not read.
 

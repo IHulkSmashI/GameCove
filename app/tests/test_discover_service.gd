@@ -403,6 +403,67 @@ func test_discover_files_are_private() -> void:
 
 # ---- final review (Low, Security and privacy): switches asked before each request, every request capped ----
 
+## A fake http that runs `hook` once, right after it answered the first request to `after`.
+class HookHttp extends "res://scripts/discover/fake_http.gd":
+	var after := ""
+	var hook: Callable = Callable()
+	func request(url: String, opts: Dictionary, done: Callable) -> void:
+		var fire := after != "" and url.begins_with(after) and hook.is_valid()
+		if fire:
+			var h := hook
+			hook = Callable()
+			super.request(url, opts, func(res: Dictionary) -> void:
+				h.call()   # the switch goes off while the refresh is under way
+				done.call(res))
+			return
+		super.request(url, opts, done)
+
+
+func _hook_http() -> RefCounted:
+	var http := HookHttp.new()
+	var online: RefCounted = H.online_http()
+	http.routes = online.routes
+	return http
+
+
+func test_price_switch_turned_off_mid_refresh_stops_the_rest() -> void:
+	var dir := H.temp_dir("disc_mid_prices")
+	var http = _hook_http()
+	var d := H.make(http, dir)
+	d.add_to_wishlist({"title": "Borderlands 2", "appid": "49520"})
+	http.after = H.CS + "deals?onSale=1&sortBy"
+	http.hook = func() -> void: d.set_settings({"price_lookups": false})
+	ok(d.refresh(true), "refresh started")
+	var asked: Array = http.requests.duplicate()
+	ok(asked.any(func(u): return u.begins_with(H.CS + "deals")), "the deals list was asked for before the switch went off")
+	var after_deals := asked.slice(asked.find(asked.filter(func(u): return u.begins_with(H.CS + "deals"))[0]) + 1)
+	eq(after_deals, [] as Array[String], "nothing more is sent once \"Look up deals and prices\" is off (%s)" % [after_deals])
+	eq(http.count(H.STEAM_ITEMS), 0, "no Steam store request")
+	ok(not d._busy, "and the refresh still finishes")
+	ok(not str(d.status.get("steam", "")).begins_with("error"), "a request that wasn't sent isn't shown as an error")
+	H.wipe(dir)
+	d.free()
+
+
+func test_background_switch_turned_off_mid_refresh_stops_the_rest() -> void:
+	var dir := H.temp_dir("disc_mid_bg")
+	var http = _hook_http()
+	var d := H.make(http, dir)
+	d.add_to_wishlist({"title": "Borderlands 2", "appid": "49520"})
+	http.after = H.CS + "stores"
+	http.hook = func() -> void: Privacy.set_background_allowed(false, d.privacy_path)
+	ok(d.refresh(), "a refresh nobody asked for starts while Background lookups is on")
+	var asked: Array = http.requests.duplicate()
+	var i := asked.find(H.CS + "stores")
+	ok(i >= 0, "stores asked first")
+	eq(asked.slice(i + 1), [] as Array[String], "nothing more is sent once Background lookups is off")
+	ok(not d._busy, "the refresh finishes")
+	# a refresh the user asks for isn't a background lookup: it goes out
+	http.requests.clear()
+	ok(d.refresh(true), "Refresh pressed")
+	ok(http.count(H.STEAM_ITEMS) >= 1, "a forced refresh still asks")
+	H.wipe(dir)
+	d.free()
 
 
 func test_every_discover_request_is_capped() -> void:

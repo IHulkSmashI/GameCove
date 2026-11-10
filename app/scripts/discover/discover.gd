@@ -454,6 +454,9 @@ func may_fetch(kind: String) -> bool:
 ## answers like a failed one (error "off") and its step moves on with what it
 ## has. Every request is capped (MAX_JSON_BYTES unless it names its own).
 func _fetch(kind: String, url: String, opts: Dictionary, done: Callable) -> void:
+	if not may_fetch(kind):
+		done.call({"ok": false, "code": 0, "body": PackedByteArray(), "error": "off", "retry_after": 0})
+		return
 	if not opts.has("max_bytes"):
 		opts = opts.merged({"max_bytes": MAX_JSON_BYTES})
 	http.request(url, opts, done)
