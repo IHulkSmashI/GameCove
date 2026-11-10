@@ -13,7 +13,8 @@ extends Node
 ## the backup taken just before it back.
 ##
 ## Status per game in user://saves.cfg [game:<key>]: enabled, last_sync, state, at, detail,
-## local, remote, gog_ts ({location: gogdl timestamp}), gog_paths ({location: the folder that
+## local, remote, restored_at (a backup was put back and not synced since), prefer (the side
+## a conflict sheet offers first: "local" after a restore), gog_ts ({location: gogdl timestamp}), gog_paths ({location: the folder that
 ## timestamp is about}), own (we keep our own sync times: Heroic's are no longer a fallback);
 ## [gog_remote] caches GOG's answer per client id.
 ##
@@ -158,7 +159,7 @@ func busy(key: String) -> bool:
 
 
 ## {"state", "at", "detail", "local", "remote", "last_sync", "enabled", "busy": "" | phase,
-##  "store"}. state "off" when the game's switch is off, "disabled" when the global one is.
+##  "store", "prefer": "" | "local" (a conflict after a restore: the restored side first)}. state "off" when the game's switch is off, "disabled" when the global one is.
 func status(game: Dictionary) -> Dictionary:
 	var key := str(game.get("key", ""))
 	var cfg := SettingsFile.load_cfg(cfg_path)
@@ -167,7 +168,7 @@ func status(game: Dictionary) -> Dictionary:
 		"detail": str(cfg.get_value(sec, "detail", "")), "local": int(cfg.get_value(sec, "local", 0)),
 		"remote": int(cfg.get_value(sec, "remote", 0)), "last_sync": int(cfg.get_value(sec, "last_sync", 0)),
 		"enabled": bool(cfg.get_value(sec, "enabled", true)), "busy": str(_busy.get(key, "")),
-		"store": str(game.get("store", ""))}
+		"store": str(game.get("store", "")), "prefer": str(cfg.get_value(sec, "prefer", ""))}
 	if not st["enabled"]:
 		st["state"] = "off"
 	elif not allowed():
@@ -317,8 +318,11 @@ func _set_status(key: String, state: String, detail := "", extra := {}) -> Dicti
 		c.set_value(sec, "detail", detail)
 		c.set_value(sec, "local", int(extra.get("local", 0)))
 		c.set_value(sec, "remote", int(extra.get("remote", 0)))
+		c.set_value(sec, "prefer", str(extra.get("prefer", "")))
 		if bool(extra.get("synced", false)):
 			c.set_value(sec, "last_sync", now)
+			if c.has_section_key(sec, "restored_at"):
+				c.erase_section_key(sec, "restored_at")   # both sides agree again
 		if extra.has("gog_ts"):
 			c.set_value(sec, "gog_ts", extra["gog_ts"])
 			c.set_value(sec, "own", true)
@@ -376,9 +380,12 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 		return _set_status(key, "synced", "", {"synced": true, "local": look["local"], "remote": look["remote"], "epic_path": folder})
 	var last := int(_cfg_value(key, "last_sync", 0))
 	var times := {"local": look["local"], "remote": look["remote"], "epic_path": folder}
-	match CloudSaves.epic_decide(look, last, mode):
+	# a restored backup has its old file times: legendary sees "cloud newer" and would download
+	# straight over the restore (final review, high 6)
+	var restored := int(_cfg_value(key, "restored_at", 0)) > 0
+	match CloudSaves.epic_decide(look, last, mode, restored):
 		"conflict":
-			return _set_status(key, "conflict", "", times)
+			return _set_status(key, "conflict", "", times.merged({"prefer": "local"} if restored and look["state"] == "remote_newer" else {}))
 		"download":
 			return _epic_download(key, entry, plan, app, look, "download", times)
 		"upload":
@@ -699,5 +706,7 @@ func _restore(key: String, title: String, id: String) -> Dictionary:
 		return {"ok": false, "why": str(before["why"])}
 	var r: Dictionary = backups.restore(key, id)
 	if r["ok"]:
+		var now: int = clock.call()
+		SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(_sec(key), "restored_at", now))
 		_set_status(key, "restored", str(b.get("time", 0)))
 	return r

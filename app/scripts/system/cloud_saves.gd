@@ -304,12 +304,14 @@ static func _offline(out: String) -> bool:
 ## of this game (0 = never). -> none | download | upload | conflict | later.
 ## A side counts as changed since the last sync when its newest save is past last_sync; when
 ## both changed (or we never synced and both have saves), the user picks.
-static func epic_decide(look: Dictionary, last_sync: int, mode: String) -> String:
+## local_restored: a backup was put back since the last sync. Its files carry their old
+## times, so by the clock the local side looks unchanged; it did change.
+static func epic_decide(look: Dictionary, last_sync: int, mode: String, local_restored := false) -> String:
 	var local := int(look.get("local", 0))
 	var remote := int(look.get("remote", 0))
 	match str(look.get("state", "")):
 		"remote_newer":
-			var local_changed := local > 0 and (last_sync <= 0 or local > last_sync + SLACK_S)
+			var local_changed := local > 0 and (last_sync <= 0 or local > last_sync + SLACK_S or local_restored)
 			if local_changed:
 				return "conflict"
 			return "later" if mode == "post" else "download"

@@ -124,6 +124,8 @@ func _maybe_relink() -> void:
 # ---- sheets ------------------------------------------------------------------------------------
 
 ## The two sides of a conflict, newest first and highlighted. A picks; both are kept as a backup.
+## After a restore (st "prefer": "local") the restored save comes first whatever its age:
+## it is the one the user just asked for.
 static func conflict_rows(st: Dictionary, now: int, with_later := false) -> Array:
 	var local := int(st.get("local", 0))
 	var remote := int(st.get("remote", 0))
@@ -131,11 +133,14 @@ static func conflict_rows(st: Dictionary, now: int, with_later := false) -> Arra
 		{"id": "local", "text": TS.KEEP_LOCAL, "detail": TS.saved_at(local, now), "icon": "drive", "t": local},
 		{"id": "cloud", "text": TS.KEEP_CLOUD, "detail": TS.saved_at(remote, now), "icon": "download", "t": remote},
 	]
-	if remote > local:
-		rows.reverse()
-	if local != remote and maxi(local, remote) > 0:
-		rows[0]["tone"] = "good"
-		rows[0]["value"] = TS.NEWER
+	if str(st.get("prefer", "")) == "local":
+		rows[0].merge({"tone": "good", "value": TS.RESTORED_BADGE, "detail": TS.RESTORED_DETAIL}, true)
+	else:
+		if remote > local:
+			rows.reverse()
+		if local != remote and maxi(local, remote) > 0:
+			rows[0]["tone"] = "good"
+			rows[0]["value"] = TS.NEWER
 	if with_later:
 		rows.append({"id": "later", "text": TS.DECIDE_LATER, "detail": TS.DECIDE_LATER_DETAIL, "icon": "clock"})
 	return rows

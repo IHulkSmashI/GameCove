@@ -223,3 +223,15 @@ func test_conflict_choice_while_a_game_runs_says_close_the_game() -> void:
 	c.free()
 	s.free()
 	a.free()
+
+
+## High 6: after a restore the conflict sheet offers the restored save first, even though
+## the cloud's is newer by the clock.
+func test_conflict_rows_after_a_restore_offer_the_restored_side_first() -> void:
+	var rows := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "prefer": "local", "store": "epic"}, 2030, true)
+	eq(rows.map(func(r): return r["id"]), ["local", "cloud", "later"], "the restored save first")
+	eq([rows[0].get("tone", ""), rows[0].get("value", "")], ["good", TS.RESTORED_BADGE], "marked as the restored one")
+	eq(rows[0]["detail"], TS.RESTORED_DETAIL, "and said so")
+	ok(not rows[1].has("value"), "the cloud's isn't called newer next to it")
+	var plain := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "prefer": "", "store": "epic"}, 2030)
+	eq(plain.map(func(r): return r["id"]), ["cloud", "local"], "without a restore: newest first, as before")

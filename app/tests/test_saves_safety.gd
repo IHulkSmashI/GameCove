@@ -520,3 +520,76 @@ func test_epic_keep_local_becomes_the_newest_cloud_save() -> void:
 	eq(got, [{"go": true}], "the next launch starts")
 	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "this handheld's older save", "and nothing came down over it")
 	_done(w)
+
+
+# ---- high 6: an Epic restore holds ---------------------------------------------------------------
+
+## A restored backup has old file times, so legendary sees "cloud newer" and the next launch
+## used to download straight over the restore.
+func test_epic_restore_is_not_undone_at_the_next_launch() -> void:
+	var w := _world("epic_restore")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "before the bad day", T0)
+	var bk: Dictionary = w["s"].backups.backup("epic:Min", "M", "before_download", [{"name": "saves", "path": w["esaves"]}])
+	Fakes.put(w["esaves"].path_join("world.sav"), "after the bad day", T0 + 5000)
+	w["s"].sync_now(w["epic"])
+	eq(cloud.saves[-1]["files"]["world.sav"], "after the bad day", "the bad save is the cloud's newest")
+	var res := []
+	w["s"].restore(w["epic"], str(bk["id"]), func(r): res.append(r))
+	ok(res[0]["ok"], "restored")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "before the bad day", "the old save is back")
+	var before: int = w["s"].backup_list("epic:Min").size()
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	ok(got[0].has("conflict"), "the launch asks instead of downloading over the restore")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "before the bad day", "the restore is still in place")
+	eq(w["s"].backup_list("epic:Min").size(), before, "and no backup slot was used up")
+	eq(got[0]["conflict"].get("prefer", ""), "local", "the restored side is the one offered first")
+	# keeping it makes it the cloud's newest
+	w["s"].resolve(w["epic"], "local")
+	eq(cloud.saves[-1]["files"]["world.sav"], "before the bad day", "the restored save is now the newest cloud save")
+	eq(w["s"].status(w["epic"]).get("prefer", ""), "", "settled")
+	got.clear()
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the next launch just starts")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "before the bad day", "with the restored save")
+	_done(w)
+
+
+## Playing on from the restore without choosing: the new save goes up after the game.
+func test_epic_restore_then_play_uploads() -> void:
+	var w := _world("epic_restore_play")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "good", T0)
+	var bk: Dictionary = w["s"].backups.backup("epic:Min", "M", "before_download", [{"name": "saves", "path": w["esaves"]}])
+	Fakes.put(w["esaves"].path_join("world.sav"), "bad", T0 + 5000)
+	w["s"].sync_now(w["epic"])
+	w["s"].restore(w["epic"], str(bk["id"]))
+	w["now"][0] += 900
+	Fakes.put(w["esaves"].path_join("world.sav"), "good, continued", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	eq(cloud.saves[-1]["files"]["world.sav"], "good, continued", "what was played from the restore is the newest cloud save")
+	eq(w["s"].status(w["epic"])["state"], "uploaded", "uploaded")
+	_done(w)
+
+
+## GOG: gogdl compares file times with the sync time, so a restored (older) save is left
+## alone at the next launch and what is played from it goes up.
+func test_gog_restore_holds_too() -> void:
+	var w := _world("gog_restore")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "good", T0)
+	var bk: Dictionary = w["s"].backups.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": w["gsaves"]}])
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "bad", T0 + 5000)
+	w["s"].sync_now(w["gog"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "bad", "the bad save is in the cloud")
+	w["s"].restore(w["gog"], str(bk["id"]))
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the launch starts")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "good", "with the restored save")
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "good, continued", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "good, continued", "and what was played from it goes up")
+	_done(w)
