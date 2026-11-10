@@ -298,6 +298,21 @@ func test_hints_follow_focus() -> void:
 	ok(p.any(func(x): return x == ["B", "Back"]) and not p.any(func(x): return x[1] == "Sections"), "page: B back, no tabs")
 	eq(MainScript.hints_for({"screen": "settings", "kind": "row"})[0], ["LR", "Change"], "rows: left/right change")
 	eq(MainScript.hints_for({"kind": ""})[-1], ["GUIDE", "Quick menu"], "quick menu always listed")
+	# final review (Low): an app's tile has no game options behind Menu
+	ok(h.any(func(x): return x == ["MENU", "Options"]), "a game's tile: Menu opens its options")
+	var app := MainScript.hints_for({"screen": "home", "page": false, "kind": "app"})
+	eq(app[0], ["A", "Open"], "an app's tile: A opens")
+	ok(not app.any(func(x): return x[0] is String and x[0] == "MENU"), "and no Options")
+	var Tile = load("res://scripts/ui/game_tile.gd")
+	var game_tile: Button = Tile.new()
+	game_tile.setup({"key": "steam:1", "store": "steam", "title": "Hades", "installed": true, "art": {}}, false)
+	var app_tile: Button = Tile.new()
+	app_tile.setup({"key": "app:vlc", "store": "app", "title": "VLC", "installed": true, "art": {}}, false)
+	ok(MainScript.is_game_tile(game_tile), "a game's tile")
+	ok(not MainScript.is_game_tile(app_tile), "an app's tile isn't a game's")
+	ok(not MainScript.is_game_tile(null), "nothing focused")
+	game_tile.free()
+	app_tile.free()
 
 
 func test_tile_and_shelf() -> void:

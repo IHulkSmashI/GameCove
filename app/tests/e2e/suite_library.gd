@@ -20,6 +20,12 @@ func _games() -> Array:
 	return out
 
 
+## The hint bar's words now.
+func _hints() -> String:
+	var bar: Control = main().hint_bar
+	return preload("res://scripts/ui/ui_kit.gd").prompts_text(bar.get_child(bar.get_child_count() - 1)) if bar.get_child_count() > 0 else ""
+
+
 func _sheet() -> Control:
 	return main().game_actions.sheet
 
@@ -89,3 +95,36 @@ func test_emulation_page_empty_state() -> void:
 	await b()
 	await b()
 	ok(main().page == null, "B closes the page")
+
+
+## Final review (Low): Menu on a pinned app's tile (or "All apps") offered a
+## game's options: favourite, hide, collections. Apps have none.
+func test_menu_on_an_app_tile_offers_no_game_options() -> void:
+	var m: Control = main()
+	var lib: Node = w.autoload("Library")
+	var before: Array = lib.games.duplicate()
+	lib.games.assign(_games())
+	lib.changed.emit()
+	var pinned := [{"key": "app:vlc", "id": "vlc", "store": "app", "title": "VLC", "exec": ["vlc"], "installed": true, "art": {}}]
+	m.home.set_apps(pinned)
+	await w.frames(4)
+	var row: Node = m.home.find_child("Row_apps", true, false)
+	ok(row != null and row.tiles.size() == 2, "the Apps shelf: the pinned app and All apps")
+	for t in row.tiles:
+		t.grab_focus()
+		await w.frames(2)
+		ok(not _hints().contains("Options"), "%s: no Options hint" % t.game["title"])
+		await press(JOY_BUTTON_START)
+		ok(not _sheet().is_open(), "%s: Menu opens no game options" % t.game["title"])
+	# a game's tile still has them
+	var games_row: Node = m.home.find_child("Row_all", true, false)
+	games_row.tiles[0].grab_focus()
+	await w.frames(2)
+	ok(_hints().contains("Options"), "a game's tile says Options")
+	await press(JOY_BUTTON_START)
+	ok(_sheet().is_open(), "and Menu opens them")
+	await b()
+	m.home.set_apps([])
+	lib.games.assign(before)
+	lib.changed.emit()
+	await w.frames(3)

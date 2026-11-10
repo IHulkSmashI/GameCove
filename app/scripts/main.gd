@@ -1294,7 +1294,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			settings.cycle_tabs(d)
 		get_viewport().set_input_as_handled()
 	elif current in ["home", "library"] and _pressed(event, JOY_BUTTON_START, KEY_M) and _focused_tile() != null:
-		collection_actions.options(_focused_tile().game)
+		# game options are for games: not for a pinned app, "All apps" or a shelf's "See all"
+		if is_game_tile(_focused_tile()):
+			collection_actions.options(_focused_tile().game)
 		get_viewport().set_input_as_handled()
 	elif current == "library" and _pressed(event, JOY_BUTTON_BACK, KEY_F):
 		open_library_filter()
@@ -1327,6 +1329,13 @@ func _focused_tile() -> Control:
 	if f is Button and f.theme_type_variation == "TileButton" and f.get("game") is Dictionary and not f.game.is_empty():
 		return f
 	return null
+
+
+## True for a tile that shows a game. A desktop app's tile (store "app": pinned
+## apps, "All apps", a shelf's "See all") isn't one: favourites, hiding and
+## collections don't apply to it.
+static func is_game_tile(f: Control) -> bool:
+	return f != null and f.get("game") is Dictionary and not f.game.is_empty() and str(f.game.get("store", "")) != Apps.STORE
 
 
 ## LB / RB on the game page or Downloads: the top bar is showing, so they
@@ -2095,7 +2104,7 @@ func focus_kind(f: Control) -> String:
 	if f == null:
 		return ""
 	if f is Button and f.theme_type_variation == "TileButton":
-		return "tile"
+		return "tile" if is_game_tile(f) else "app"
 	if f is HSlider:
 		return "slider"
 	if f is Button and f.theme_type_variation == "RowButton":
@@ -2117,6 +2126,7 @@ static func hints_for(ctx: Dictionary) -> Array:
 			out.append(["A", "Open"])
 			if not ctx.get("page", false):
 				out.append(["MENU", "Options"])
+		"app": out.append(["A", "Open"])   # an app's tile: no game options behind Menu
 		"play": out.append(["A", ctx.get("label", "Play")])
 		"row": out.append(["LR", "Change"])
 		"slider": out.append(["LR", "Adjust"])
