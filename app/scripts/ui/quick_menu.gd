@@ -12,7 +12,8 @@ extends Control
 ##
 ## This game: "Use settings for this game" (a per-game profile in Profiles),
 ## overlay, frame limit, TDP, Auto TDP, upscaler and frame generation, Reset
-## this game, how long you've played and Exit game (press twice).
+## this game, Record / Stop recording (the Recording service, when one is
+## passed), how long you've played and Exit game (press twice).
 
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const FadeMask := preload("res://scripts/ui/fade_mask.gd")
@@ -86,6 +87,8 @@ var controls: Object
 var profiles: Object
 var fixes: Object
 var model: Object
+## The Recording service (scripts/system/recording.gd), or null: no Record row.
+var recording: Object
 
 var section := 0
 var game: Dictionary = {}
@@ -141,6 +144,9 @@ func setup(services: Dictionary) -> void:
 	perf = services.get("perf")
 	controller = services.get("controller")
 	fixes = services.get("fixes")
+	recording = services.get("recording")
+	if recording != null and recording.has_signal("changed"):
+		recording.changed.connect(_update_record_row)
 	if services.has("session"):
 		attach_session(services["session"])
 	if services.has("controls"):
@@ -483,6 +489,7 @@ func show_section(i: int, keep_focus := "") -> void:
 	_desktop_button = null
 	_reset_armed = false
 	_reset_row = null
+	_record = null
 	_style_tabs()
 	for c in body.get_children():
 		body.remove_child(c)
@@ -662,9 +669,11 @@ func _build_game() -> void:
 		empty.add_child(Kit.label(TC.NO_GAME, "HeaderLabel"))
 		empty.add_child(Kit.label(TC.NO_GAME_LINE, "QuietLabel", true))
 		body.add_child(empty)
+		_record_row()
 		_build_session()
 		return
 	if model == null:
+		_record_row()
 		_build_session()
 		return
 	var per: bool = model.per_game()
@@ -689,6 +698,7 @@ func _build_game() -> void:
 		_reset_row.pressed.connect(_on_reset_pressed)
 		_reset_row.button.focus_exited.connect(_disarm_reset)
 		_add(_reset_row)
+	_record_row()
 	_all_link("game")
 	_build_session()
 
@@ -780,6 +790,58 @@ func _update_autotune_line() -> void:
 		text = TS.autotune_line(cant, info)
 	l.text = text
 	l.visible = text != ""
+
+
+# ------------------------------------------------------------ recording
+
+var _record: VBoxContainer
+
+
+## Record / Stop recording / Set up recording, by what the Recording service says.
+func _record_row() -> void:
+	_record = null
+	if recording == null or not recording.has_method("row_state"):
+		return
+	_record = ActionRow.new()
+	_record.setup("Record", TX.REC_START, "", "", "record", false)
+	_record.pressed.connect(_on_record_pressed)
+	_add(_record)
+	_update_record_row()
+
+
+func _update_record_row() -> void:
+	if _record == null or not is_instance_valid(_record) or recording == null:
+		return
+	var st: String = recording.row_state()
+	match st:
+		"record":
+			_record.title_label.text = TX.REC_START
+			_record.set_value("")
+			_record.set_hint(TX.REC_START_HINT)
+		"stop":
+			_record.title_label.text = TX.REC_STOP
+			_record.set_value("● " + recording.clock(recording.elapsed_s()), "bad")
+			_record.set_hint(TX.REC_STOP_HINT)
+		"busy":
+			_record.title_label.text = TX.REC_STOP if recording.state == "stopping" else TX.REC_START
+			_record.set_value(TX.REC_SAVING if recording.state == "stopping" else TX.REC_STARTING, "muted")
+			_record.set_hint("")
+		"set_up":
+			_record.title_label.text = TX.REC_SET_UP
+			_record.set_value("")
+			_record.set_hint(TX.REC_SET_UP_HINT)
+
+
+func _on_record_pressed() -> void:
+	match recording.row_state():
+		"record":
+			if recording.start(game if session_seconds() >= 0 else {}):
+				notice.emit(TX.REC_STARTED, "good")
+				close()
+		"stop":
+			recording.stop()
+		"set_up":
+			request_settings("media", "")
 
 
 # ------------------------------------------------------------ running game
@@ -914,6 +976,7 @@ func refresh_live() -> void:
 	var strip := body.get_node_or_null("PowerLive")
 	if strip != null:
 		_fill_strip(strip)
+	_update_record_row()
 
 
 static func _battery_text(b: Dictionary, long := false) -> String:

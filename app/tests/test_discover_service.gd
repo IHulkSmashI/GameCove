@@ -151,7 +151,8 @@ func test_cache_ages_and_pause() -> void:
 	ok(not d.refresh(), "game running: no refresh")
 	eq(http.count(H.CS + "deals"), deals_calls, "nothing fetched while playing")
 	d.game_running = false
-	eq(http.count(H.CS + "deals"), deals_calls + 1, "pending refresh runs when the game ends")
+	# top deals and the free-to-keep list both ask /deals
+	eq(http.count(H.CS + "deals"), deals_calls + 2, "pending refresh runs when the game ends")
 	eq(http.count(H.CS + "stores"), stores_calls, "store list cached for a week")
 	eq(http.count(H.UPCOMING), 1, "calendar only daily")
 	d.pause()
