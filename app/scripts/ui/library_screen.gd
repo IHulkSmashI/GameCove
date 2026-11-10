@@ -31,8 +31,9 @@ var sort := "recent"
 var query := ""
 ## "" (all) | "installed" | "not_installed"
 var install_filter := ""
-## The critic filter chip: "★ Critics 75+".
-const CRITIC_LABEL := "Critics %d+"
+## The critic filter chip: a star and "75+" (a critic score: the star says so;
+## "Critics 75+" didn't fit the 1280 px toolbar).
+const CRITIC_LABEL := "%d+"
 ## Genre filter ("" = all) and "critic score 75+" filter.
 var genre := ""
 var critic_filter := false

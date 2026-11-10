@@ -605,7 +605,7 @@ func test_art_step_skip_path() -> void:
 	var accents: Array = f.find_children("*", "Button", true, false).filter(func(b): return b.is_visible_in_tree() and b.theme_type_variation == "AccentButton")
 	ok(accents.size() <= 1, "never two primary buttons at once")
 	ok(f.art_step.type_button.theme_type_variation != "AccentButton", "Type the key is a secondary pill")
-	ok(f.art_step.find_child("Actions", true, false) is HBoxContainer and f.art_step.buttons.all(func(b): return b.get_parent().name == "Actions"), "the fallbacks in one row")
+	ok(f.art_step.find_child("Actions", true, false) is HFlowContainer and f.art_step.buttons.all(func(b): return b.get_parent().name == "Actions"), "the fallbacks in one row (wrapping only when narrow)")
 	eq(f.art_step.type_button.focus_neighbor_right, f.art_step.type_button.get_path_to(f.art_step.buttons[1]), "linked left / right")
 	ok(not Kit.prompts_text(f.find_child("Prompts", true, false)).contains("Back"), "Back once: the B prompt is the button")
 	eq((f.find_child("Shade", true, false) as ColorRect).color.a, 1.0, "the shell's bars don't show behind setup")

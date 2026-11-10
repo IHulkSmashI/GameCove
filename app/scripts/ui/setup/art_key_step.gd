@@ -109,8 +109,8 @@ var paste_button: Button
 var open_button: Button
 var switch_button: Button
 var remove_button: Button
-## The step's focusable buttons, left to right in one row (hosts link them
-## with Kit.link_horizontal; up/down leave the row).
+## The step's focusable buttons, left to right in one row that wraps where
+## the screen is narrow (hosts link them left / right; up / down leave it).
 var buttons: Array = []
 var _pending := ""
 var _last_clip := ""
@@ -179,40 +179,22 @@ func _build() -> void:
 	status = Kit.label("", "AccentLabel", true)
 	status.name = "Status"
 	col.add_child(status)
-	# The fallbacks: secondary pills side by side, level with the foot of the
-	# code (the QR is the main way; none of these is styled as the primary).
-	var push := Control.new()
-	push.name = "Push"
-	push.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	push.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(push)
-	var rows := Kit.vbox(10)
-	rows.name = "ActionRows"
-	col.add_child(rows)
-	var bcol := Kit.hbox(12)
+	# The fallbacks: secondary pills side by side under the steps (the QR is
+	# the main way; none of these is styled as the primary). They wrap onto a
+	# second line only where the screen is too narrow for one.
+	var bcol := HFlowContainer.new()
 	bcol.name = "Actions"
-	rows.add_child(bcol)
-	# The desktop-only and remove buttons go on a second row (the first keeps
-	# the three every host has).
-	var more := Kit.hbox(12)
-	more.name = "Actions2"
-	rows.add_child(more)
-	# Room the address line takes under the code, so the row's foot lines up
-	# with the code's.
-	var foot := Control.new()
-	foot.name = "Foot"
-	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	foot.custom_minimum_size = Vector2(0, ThemeLib.SIZE_CAPTION + 14)
-	col.add_child(foot)
+	bcol.add_theme_constant_override("h_separation", 12)
+	bcol.add_theme_constant_override("v_separation", 10)
+	col.add_child(bcol)
 	type_button = _action(bcol, TYPE, "gamepad", "TypeKey", _on_type)
 	if read_clipboard.is_valid() or DisplayServer.has_feature(DisplayServer.FEATURE_CLIPBOARD):
 		paste_button = _action(bcol, PASTE, "check", "PasteKey", paste)
 	switch_button = _action(bcol, TO_DIRECT, "wifi", "SwitchMode", toggle_mode)
 	if open_url.is_valid():
-		open_button = _action(more, OPEN_HERE, "rocket", "OpenHere", func(): open_url.call(Sgdb.API_KEY_PAGE))
+		open_button = _action(bcol, OPEN_HERE, "rocket", "OpenHere", func(): open_url.call(Sgdb.API_KEY_PAGE))
 	if current_key != "":
-		remove_button = _action(more, REMOVE, "x", "RemoveKey", remove_key)
-	more.visible = more.get_child_count() > 0
+		remove_button = _action(bcol, REMOVE, "x", "RemoveKey", remove_key)
 
 
 func _action(box: Control, text: String, icon: String, node_name: String, fn: Callable) -> Button:

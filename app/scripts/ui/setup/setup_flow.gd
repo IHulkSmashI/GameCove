@@ -782,15 +782,9 @@ func _link() -> void:
 	if step == "theme":
 		_link_grid(chain)
 	elif step == "art":
-		# The fallbacks sit in a row (Remove key on a second one).
-		var row1: Array = chain.filter(func(c): return c.get_parent().name == "Actions")
-		var row2: Array = chain.filter(func(c): return c.get_parent().name != "Actions")
-		Kit.link_horizontal(row1)
-		Kit.link_horizontal(row2)
-		for c in row1:
+		Kit.link_horizontal(chain)  # the fallbacks sit in one row
+		for c in chain:
 			c.focus_neighbor_top = c.get_path_to(c)
-		for c in row2:
-			c.focus_neighbor_top = c.get_path_to(row1[0] if not row1.is_empty() else c)
 	else:
 		Kit.link_vertical(chain)
 	var last: Control = chain[-1] if not chain.is_empty() else null
@@ -804,10 +798,8 @@ func _link() -> void:
 			for i in range(maxi(0, chain.size() - 2), chain.size()):
 				chain[i].focus_neighbor_bottom = chain[i].get_path_to(down)
 		elif step == "art":
-			var second: Array = chain.filter(func(c): return c.get_parent().name != "Actions")
 			for c in chain:
-				var below: Control = second[0] if not second.is_empty() and c.get_parent().name == "Actions" else down
-				c.focus_neighbor_bottom = c.get_path_to(below)
+				c.focus_neighbor_bottom = c.get_path_to(down)
 		else:
 			last.focus_neighbor_bottom = last.get_path_to(down)
 
