@@ -263,7 +263,7 @@ something, so nothing costs anything behind a game. All run as the user; none ne
 | Per-app volume | Quick menu > Audio, Settings > Sound | PipeWire: `wpctl status` for the app streams, `wpctl get-volume` / `set-volume -l 1.0 <id>` per app, on the Controls worker | `controls/providers/audio.gd` (`app_mixer`), `ui/controls/app_mixer.gd` |
 | Now playing | Quick menu > Audio | MPRIS on the session bus through `busctl --user`: `ListNames` for `org.mpris.MediaPlayer2.*`, `PlaybackStatus` / `Metadata` / `Identity`, then `PlayPause`, `Next`, `Previous` | `system/media.gd`, `ui/controls/media_card.gd` |
 | Bluetooth devices | Settings > System (Quick menu > Device links there) | BlueZ on the system bus through `busctl --system`: `GetManagedObjects` (devices, `Battery1.Percentage`), `Device1.Connect` / `Disconnect` / `Pair` (+ `Trusted`), `Adapter1.RemoveDevice`. Finding new devices runs `bluetoothctl --timeout 10 scan on`, because BlueZ ends a scan as soon as the client that started it leaves the bus. Pairing asks for no code (controllers, headphones, speakers); a keyboard that wants one pairs from Desktop Mode | `system/bluetooth.gd`, `ui/settings/bluetooth_card.gd` |
-| Clean up | Settings > Device > Storage | Finds `steamapps/shadercache/<appid>` folders in every Steam library whose game has no `appmanifest_<appid>.acf` in any library (non-Steam shortcuts, ids from 2^31, are skipped), sizes them with `du -sbc` and removes them through `launch_files.gd`'s guarded remover (the same one that clears a single game's cache). Measured when the Storage page opens. While any library listed in `libraryfolders.vdf` has no readable `steamapps` (an SD card that isn't in), nothing counts as left over and the card says which drive is missing; the button's job looks again on the worker and removes only folders that are still left over and were in the list shown. Proton prefixes (`compatdata`) are never touched: they can hold saves that aren't in the cloud | `system/storage.gd` (`leftovers`, `clean_leftovers`), `ui/device/storage_panel.gd` |
+| Clean up | Settings > Device > Storage | Finds `steamapps/shadercache/<appid>` folders in every Steam library whose game has no `appmanifest_<appid>.acf` in any library (non-Steam shortcuts, ids from 2^31, are skipped), sizes them with `du -sbc` and removes them through `launch_files.gd`'s guarded remover (the same one that clears a single game's cache). Measured when the Storage page opens. While any library listed in `libraryfolders.vdf` has no readable `steamapps` (an SD card that isn't in), nothing counts as left over and the card says which drive is missing. Whether Steam keeps listing an ejected card isn't relied on: every library GameCove has seen and the games it held are remembered in `user://steam_libraries.json` (`system/steam_library_memory.gd`, fed by the Library's Steam scan and by Storage); while a remembered library can't be read its games count as installed, and it is let go after 60 days unseen. The card says whose caches it kept; the button's job looks again on the worker and removes only folders that are still left over and were in the list shown. Proton prefixes (`compatdata`) are never touched: they can hold saves that aren't in the cloud | `system/storage.gd` (`leftovers`, `clean_leftovers`), `ui/device/storage_panel.gd` |
 | GE-Proton | Settings > Performance | GitHub's latest-release API for `GloriousEggroll/proton-ge-custom` (only when you press Check), then the release's `.tar.gz` and `.sha512sum` with `curl` (only from that release page), `curl` with `--proto =https` and a stall limit (`--speed-limit 1024 --speed-time 30`: under 1 KB/s for 30 s gives up), `sha512sum` compared before anything is unpacked, `tar -xzf` into `compatibilitytools.d/.gamecove-download/`, and only once `compatibilitytool.vdf` is there one rename moves it into Steam's `compatibilitytools.d` (the folder Steam reads custom Protons from; Steam's own files aren't touched). Download, checksum and unpack run at `nice -n 19` and `ionice -c 3` (like the automatic Flatpak update), and Install is refused while a game runs. A removal is renamed out first, then deleted. Whatever an interruption leaves stays in `.gamecove-download/` and goes at the next start; a GE-Proton folder without its `compatibilitytool.vdf` shows as "Didn't finish unpacking" and can be removed. A version a Steam game is set to (`config.vdf` `CompatToolMapping`) can't be removed. Steam lists a new version after it restarts | `launch/proton_ge.gd`, `ui/settings/proton_card.gd` |
 | Favourites, hidden games, collections | Menu on any tile, the game page's star and Manage, Library > Filter (View), Home's Favourites shelf, Quick menu > This game, Settings > Stores > Collections | Ours in `user://collections.json` through `settings_file.gd`; Steam's collections, favourites and hidden games read (never written) from `userdata/<account>/config/cloudstorage/cloud-storage-namespace-1.json` of the account that signed in last (static collections; dynamic ones stay in Steam). Turning off a Steam favourite or hidden game records an override in our file | `library/collections.gd`, `ui/games/collection_actions.gd` |
 | Emulation | Library > Filter > Emulation page, ES-DE's / RetroDECK's tile | Reads EmuDeck's `settings.sh`, RetroDECK's `retrodeck.cfg` / `.json`, ES-DE's `es_settings.xml`, `es_systems.xml` (names) and `gamelist.xml` (recently played); counts ROM folder files. Starts ES-DE / RetroDECK, EmuDeck's app (or RetroDECK's configurator) and Steam ROM Manager through `Library.launch` like any game (scope, launch overlay, quick menu, play time in `user://playtime.json`). Steam ROM Manager's shortcuts (`shortcuts.vdf`, launch lines through EmuDeck's launchers, RetroDECK, RetroArch or a known emulator, ROMs under `roms/<system>/`) become store `emu` games with Steam's grid art and start through `steam://rungameid/<64-bit id>`. Never writes their files; never bundles or downloads ROMs or BIOS | `library/stores/emu.gd`, `library/playtime.gd`, `ui/emulation_page.gd` |
@@ -282,8 +282,8 @@ Heroic makes. Steam games keep Steam Cloud. Amazon games aren't covered: nile ha
 | Epic | legendary (native, Heroic's bundled one, or `flatpak run --command=legendary com.heroicgameslauncher.hgl`) | `legendary -y sync-saves <app> --accept-path --skip-upload --skip-download` to look; `--skip-upload` downloads, `--skip-download` uploads, `--force-download` / `--force-upload` settle a conflict. `LEGENDARY_CONFIG_PATH` is the game's legendary folder, `WINEPREFIX` its prefix (`<prefix>/pfx` for Proton layouts) so legendary finds the save folder; it keeps it in `installed.json` `save_path` |
 | GOG | heroic-gogdl (native or Heroic's Flatpak) | `gogdl --auth-config-path <heroic>/gog_store/auth.json save-sync <folder> <id> --os windows --ts <last> --name <location>` with `--skip-upload` before a launch, `--skip-download` after, `--force-*` for a conflict. Folders from Heroic's `GamesConfig/<id>.json` `gogSaves`, else `store_cache/gog_library.json` `gog_save_location` with GOG's `<?VARIABLES?>` resolved in the prefix, else GOG's remote config for the game's client id; the timestamps start from Heroic's `gog_store/saveTimestamps.json` |
 
-Rules: never while a game runs (one worker thread, before `Library.launch()` and after `GameSession.ended`; a restore
-is refused while one runs). Epic: a side counts as changed when its newest save is past our last sync (60 s slack, as
+Rules: never while a game runs (one worker thread, before `Library.launch()` and after `GameSession.ended`; Sync now,
+a restore and a conflict choice are refused while one runs). Epic: a side counts as changed when its newest save is past our last sync (60 s slack, as
 legendary's own same-age check); both changed, or never synced with saves on both sides, is a conflict the user
 settles (the launch waits; B starts nothing; "Decide later" plays without syncing). GOG: gogdl's own classification;
 the fresh timestamp it prints on a conflict is never kept. Before anything may overwrite saves on the handheld
@@ -295,6 +295,38 @@ upload deletes cloud files the handheld doesn't have); Epic keeps earlier cloud 
 failed step: the game starts, nothing is deleted, the status says so and the next launch or exit tries again. Every
 step runs under `timeout 90`. Status per game in `user://saves.cfg`; the game page's Cloud saves card and Settings >
 Saves show it.
+
+What keeps a save from being lost (final review; each has a test against ports of gogdl's and legendary's own sync in
+`app/tests/fixtures/saves/fake_clouds.gd`):
+
+- **A sync time only stands for the folder it was made with.** gogdl's upload deletes every cloud file the folder
+  lacks, and picks an upload when only local files are newer than `--ts`; legendary uploads when the local save is
+  newer. So a deleted or changed prefix, where the game writes a fresh default save, must not look like "only local
+  changed". GOG: a location's time is dropped to `0` when its folder is empty, missing, or not the one the time was kept
+  for (`gog_paths`), and the whole game's when there is no folder to sync yet; Heroic's time is only a fallback for a
+  folder Heroic itself synced. Epic: `last_sync` is dropped the same way (`epic_path`). Uninstalling forgets both. With
+  no sync time both sides count as changed and the user chooses.
+- **A copy of the cloud before an upload may delete from it.** Before a run that may upload, gogdl is run once with a
+  `--ts` in the far future: nothing counts as changed, so it only lists the cloud (its debug log). If the cloud holds
+  files the folder lacks, or the list can't be read, the cloud is fetched and kept as a backup first; without that
+  copy nothing is uploaded.
+- **A changed prefix (Epic).** legendary keeps the folder it worked out once. When the game's prefix is another one
+  now, the same folder inside it is handed over with `--save-path`.
+- **A download cut short.** Before a tool may write into the save folders a note goes into `saves.cfg` (`pending`: the
+  backup to put back, the folders that were empty). A failed download puts the backup back and empties the folders that
+  were empty. A note still there at the next sync (the app or the power went mid-download) is put right first: what is
+  found is kept as a backup, the folders go back as they were, the sync times are dropped.
+- **Two GOG locations.** When one fails and the backup goes back, a location that had downloaded gets its old sync time
+  back with it.
+- **A restore holds.** Restoring makes the folder exactly what the backup holds (unpacked next to it and swapped in).
+  For Epic the restored files carry old times, so until the next good sync the local side counts as changed
+  (`restored_at`): "cloud newer" is a conflict with the restored save offered first.
+- **"Keep this handheld's save" (Epic).** legendary names an upload by the newest local file's time and every device
+  takes the newest name, so the newest file is stamped now before the forced upload.
+- **What the status says.** gogdl's "Refused" (the other side is newer and this run could only go one way) is shown as
+  waiting, not as synced. GOG's cloud time is an upload time, so the GOG conflict sheet calls neither side "Newer".
+- **Backups.** The newest 10 everyday backups per game, and apart from those the newest 10 made by a conflict choice,
+  a cloud copy, a restore or an interrupted download.
 
 ## Battery history and Sleep at low battery
 
