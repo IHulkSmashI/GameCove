@@ -505,5 +505,23 @@ if grep -q "ROG Ally (SteamOS)\|Ally RC71L on SteamOS" "$REPO/README.md" "$REPO/
 grep -q "Not run on a SteamOS handheld yet" "$REPO/packaging/sysext/build-sysext.sh" && grep -q "hasn't been run on a handheld yet" "$REPO/README.md" && ok || bad "the SteamOS install must be described the same way in build-sysext.sh and the README"
 if grep -q '^<!--' "$REPO/README.md"; then bad "README has a hidden comment: $(grep -n '^<!--' "$REPO/README.md" | head -n 2 | tr '\n' ' ')"; else ok; fi
 
+# docs/PRIVACY.md says what the code does (final review, low)
+PV="$REPO/docs/PRIVACY.md"
+grep -q "every address saved for that PC" "$PV" && ok || bad "PRIVACY.md: Wake-on-LAN also goes to the PC's saved addresses (a remote one included)"
+grep -q "Send from my phone" "$PV" && ok || bad "PRIVACY.md: the key page opens when Send from my phone is chosen"
+if grep -q "Only while the Game art step is open" "$PV" "$REPO/README.md"; then bad "the key page no longer opens with the Game art step; the docs still say so"; else ok; fi
+if grep -q "no other host (\`IMAGE_HOSTS\`)" "$PV"; then bad "PRIVACY.md says pictures come from no other host, but redirects are followed"; else ok; fi
+grep -q "redirect" "$PV" && ok || bad "PRIVACY.md must say image redirects are followed"
+grep -q "gamecove-selftest" "$PV" && grep -q "releases/latest" "$PV" && ok || bad "PRIVACY.md must list the selftest's GitHub HEAD request"
+grep -q 'RELEASES=https://github.com/IHulkSmashI/gamecove/releases/latest' "$REPO/packaging/bin/gamecove-selftest" && grep -q -- '-I --max-time 10 "\$RELEASES"' "$REPO/packaging/bin/gamecove-selftest" && ok || bad "the selftest's network request changed: update docs/PRIVACY.md"
+# the phone page for the key really doesn't open with the step: start() itself never calls _open_phone()
+if sed -n '/^func start() -> void:$/,/^$/p' "$REPO/app/scripts/ui/setup/art_key_step.gd" | grep -q "_open_phone()"; then bad "art_key_step.gd start() must not open the phone page"; else ok; fi
+sed -n '/^func start() -> void:$/,/^$/p' "$REPO/app/scripts/ui/setup/art_key_step.gd" | grep -q 'mode = "direct"' && ok || bad "art_key_step.gd start() must begin with SteamGridDB's own page (nothing listening)"
+# CONTRIBUTING names the test commands, and its device report is the real tool, not "coming soon"
+for c in "res://tests/run_tests.gd" "packaging/tests/run.sh" "app/tests/e2e/run.py" "fixes/\*/test.sh" "python3 -m pytest" "shellcheck -S warning"; do
+	grep -q -- "$c" "$REPO/CONTRIBUTING.md" && ok || bad "CONTRIBUTING.md doesn't give the test command: $c"
+done
+if grep -n -i "coming soon" "$REPO/CONTRIBUTING.md" >"$T/out"; then bad "a placeholder is left: $(head -n 2 "$T/out" | tr '\n' ' ')"; else ok; fi
+
 echo "$PASS passed, $FAILS failed"
 [ "$FAILS" -eq 0 ]
