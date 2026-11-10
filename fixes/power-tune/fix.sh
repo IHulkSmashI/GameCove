@@ -540,9 +540,16 @@ start_watch() {
 set_thermald() {
 	case "$1" in
 		hold)
-			[ "$(systemctl is-active thermald.service 2>/dev/null || true)" = active ] || return 0
-			systemctl stop thermald.service || die 1 "could not stop thermald"
+			if [ "$(systemctl is-active thermald.service 2>/dev/null || true)" != active ]; then
+				return 0
+			fi
+			# recorded before the stop, so a run killed right after it (gamecove-fix-set's time limit) still
+			# leaves a hold that restore and the watcher release (review problem 7)
 			mkdir -p "$STATE"; : > "$STATE/thermald-held"
+			if ! systemctl stop thermald.service; then
+				rm -f "$STATE/thermald-held"
+				die 1 "could not stop thermald"
+			fi
 			start_watch
 			;;
 		release)
