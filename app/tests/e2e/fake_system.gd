@@ -410,8 +410,14 @@ func _live_set(svc: String, obj: String, iface: String, prop: String, raw: Strin
 	if svc == PS:
 		match iface + "." + prop:
 			"org.shadowblip.GPU.Card.TDP.TDP", "org.shadowblip.GPU.Card.TDP.Boost":
-				var tdp := raw.to_float() if prop == "TDP" else float(_prop(svc, obj, iface, "TDP"))
-				var boost := raw.to_float() if prop == "Boost" else float(_prop(svc, obj, iface, "Boost"))
+				# the other half from what PowerStation reads now (RAPL on Intel), as its setters do
+				# (src/performance/gpu/intel/tdp.rs: set_boost reads the live TDP). The stored prop
+				# is only the fixture's start value: a Boost write used it and put PL1 back to it,
+				# behind the app's back (CI flake "power.tdp is 35 but RAPL PL1 is 22")
+				var live_tdp: Variant = _live_get(svc, obj, iface, "TDP")
+				var live_boost: Variant = _live_get(svc, obj, iface, "Boost")
+				var tdp := raw.to_float() if prop == "TDP" else float(live_tdp if live_tdp != null else _prop(svc, obj, iface, "TDP"))
+				var boost := raw.to_float() if prop == "Boost" else float(live_boost if live_boost != null else _prop(svc, obj, iface, "Boost"))
 				if tdp <= 0.0 or boost < 0.0:
 					return "Invalid value"
 				var rapl := "/sys/class/powercap/intel-rapl-mmio:0"
