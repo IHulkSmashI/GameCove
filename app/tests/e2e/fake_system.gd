@@ -538,6 +538,10 @@ class GamescopeRunner extends "res://scripts/gamescope/command_runner.gd":
 		var r: Dictionary = fake.run(program, args)
 		return {"exit": int(r.get("code", -1)), "output": str(r.get("out", ""))}
 
+	## No real `xprop -spy` here (it would reach the machine's display): GameSession polls.
+	func spawn_watch(_program: String, _args: PackedStringArray, _on_line: Callable, _on_exit := Callable()) -> RefCounted:
+		return null
+
 
 ## bg_command.gd's runner interface (quick menu session switches).
 class BgRunner extends RefCounted:
