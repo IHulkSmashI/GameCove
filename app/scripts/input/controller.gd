@@ -137,7 +137,8 @@ func _ready() -> void:
 	if dev != null and dev.has_method("id"):
 		set_device(dev.id())
 	var gs := get_node_or_null("/root/Gamescope")
-	if intercept_wanted(OS.get_environment("GAMECOVE_STEAM_MODE"), OS.get_environment("GAMECOVE_INTERCEPT"),
+	if not preload("res://scripts/system/run_mode.gd").helper() and intercept_wanted(
+			OS.get_environment("GAMECOVE_STEAM_MODE"), OS.get_environment("GAMECOVE_INTERCEPT"),
 			gs != null and gs.has_method("is_running") and gs.is_running()):
 		start_intercept()
 	# Only when there is a saved everyday layout: put it back on (InputPlumber

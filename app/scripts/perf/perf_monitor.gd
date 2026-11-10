@@ -181,6 +181,8 @@ class Sampler extends RefCounted:
 
 
 func _ready() -> void:
+	if preload("res://scripts/system/run_mode.gd").helper():
+		return   # --restore-baseline: no services (review 2, problem 5)
 	_setup()
 	_timer = Timer.new()
 	_timer.wait_time = INTERVAL_S
