@@ -26,6 +26,9 @@ const AchievementsCard := preload("res://scripts/ui/games/achievements_card.gd")
 const GameSettingsCard := preload("res://scripts/ui/controls/game_settings_card.gd")
 const Shared := preload("res://scripts/ui/controls/shared.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
+const InsightsCard := preload("res://scripts/ui/games/insights_card.gd")
+const SteamInsights := preload("res://scripts/steam/steam_insights.gd")
+const TI := preload("res://scripts/ui/texts_insights.gd")
 ## Room for the top bar above the hero card (it starts where Home's does).
 const TOP_INSET := 56
 
@@ -60,6 +63,8 @@ var ach_card: VBoxContainer
 var game_settings: VBoxContainer
 var launch_rule: HSeparator
 var launch_title: Label
+## "Steam insights" (Steam games): players, reviews, Deck, last update, prices, SteamDB link.
+var insights_card: VBoxContainer
 var _accent := Color(0, 0, 0, 0)
 
 
@@ -93,6 +98,9 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 		columns_laid_out.connect(func(_n, inner): ach_card.fit_width(inner))
 		ach_card.setup(str(g.get("id", "")), achievements)
 
+	if InsightsCard.visible_for(g):
+		_build_insights(g, services.get("insights"))
+
 	# Game settings: a switch for the game's own settings; off shows the
 	# everyday profile it runs with, on its saved values, Edit and its launch
 	# settings (low latency last, under Advanced / troubleshooting).
@@ -123,6 +131,21 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 		game_actions.pending_changed.connect(func(_n): _refresh_pending())
 	_refresh_status()
 	_relink()
+
+
+## The Steam insights card under About; `svc` is a SteamInsights (one is made
+## for the page when none is passed).
+func _build_insights(g: Dictionary, svc: Object) -> void:
+	if svc == null:
+		svc = SteamInsights.new()
+		svc.name = "SteamInsightsService"
+		add_child(svc)
+	var ibody := add_card(TI.TITLE, "gauge", "", true, 0)
+	insights_card = InsightsCard.new()
+	insights_card.relinked.connect(func(): if is_instance_valid(self): _relink())
+	insights_card.row_focused.connect(func(): _reveal(ibody.get_parent()))
+	ibody.add_child(insights_card)
+	insights_card.setup(g, svc, self)
 
 
 ## About this game: a short synopsis when the metadata has one, time to
@@ -472,6 +495,8 @@ func _relink() -> void:
 	if ach_card != null and not ach_card.cells.is_empty():
 		first_cell = ach_card.cells[0]
 		list.append(first_cell)
+	if insights_card != null:
+		list.append_array(insights_card.focusables())
 	if game_settings != null:
 		list.append_array(game_settings.focusables())
 	if form != null and form.visible:
