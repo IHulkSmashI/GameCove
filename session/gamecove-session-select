@@ -28,7 +28,14 @@
 #   - `steam` and `desktop` leave a marker for this boot; while it's there, a
 #     GameCove session that starts without having been asked for is a "switch to
 #     desktop" from Steam: session-start forwards it to the real desktop (every
-#     time this boot, until `gamecove` is asked for);
+#     time this boot, until `gamecove` is asked for). "Asked for" is this script's
+#     `gamecove` (the GameCove entry in the app menu and on the desktop runs it), or
+#     picking GameCove at the login screen: that session comes in through SDDM's
+#     normal login, not its autologin, which is how a switch arrives (final review,
+#     low: the marker used to send that pick to the desktop too). What can't be told
+#     apart from Steam's switch is logging out of the desktop while GameCove is the
+#     boot default: both are an autologin into the default session, so that still
+#     goes to the desktop; the GameCove entry there brings GameCove back.
 #   - --default also copies this script to the user's data folder with a user
 #     unit that runs `guard` at every login, so a removed or rolled-back GameCove
 #     never leaves the default desktop pointing at a missing gamecove.desktop.
@@ -54,6 +61,7 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_NAME="gamecove-session-guard.service"
 BOOT_ID_FILE="${GAMECOVE_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}"
 OSTREE_BOOTED="${GAMECOVE_OSTREE_BOOTED:-/run/ostree-booted}"
+LOGINCTL="${LOGINCTL:-loginctl}"
 OSTREE="${OSTREE:-ostree}"
 RPM_OSTREE="${RPM_OSTREE:-rpm-ostree}"
 
@@ -406,6 +414,16 @@ session-start)
 	if [ "$mark" != "$(boot_id)" ]; then
 		rm -f "$STEAM_MARK"
 		exit 0
+	fi
+	# Picked at the login screen: this session's PAM service is "sddm" (a person chose it and
+	# logged in), not "sddm-autologin" (how every switch, Steam's included, arrives). That is as
+	# explicit as `gamecove`: stay, and stop forwarding. Anything else, or no answer: as before.
+	if [ -n "${XDG_SESSION_ID:-}" ] && command -v "$LOGINCTL" >/dev/null 2>&1; then
+		svc="$("$LOGINCTL" show-session "$XDG_SESSION_ID" -p Service --value 2>/dev/null)" || svc=""
+		if [ "$svc" = sddm ]; then
+			rm -f "$STEAM_MARK"
+			exit 0
+		fi
 	fi
 	desk="$(real_desktop)"
 	"$STEAMOSCTL" switch-to-desktop-mode "$desk" || exit 0

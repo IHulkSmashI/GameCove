@@ -223,6 +223,13 @@ helper of our own:
     forwards to the real desktop before the app starts (`session-start`, exit 3).
     The marker lasts the whole boot (review L22: Desktop, back to Gaming Mode, then
     "Switch to Desktop" again still reaches the desktop) until `gamecove` is asked for.
+    "Asked for" also covers picking GameCove at the login screen: that session's PAM
+    service is `sddm` (`loginctl show-session $XDG_SESSION_ID -p Service`), while every
+    switch arrives through `sddm-autologin`, so it stays in GameCove and the marker is
+    cleared. One case can't be told apart from Steam's switch and still goes to the
+    desktop: logging out of the desktop while GameCove is the boot default (both are an
+    autologin into the default session). The **GameCove** entry in the app menu and on
+    the desktop runs `gamecove-session-select gamecove`, which always works.
   - `steam --default` and `restore` put the saved desktop session and boot mode
     back. The installer's Uninstall runs `restore`.
   - `--default` also keeps a copy of the script in the data folder and enables a

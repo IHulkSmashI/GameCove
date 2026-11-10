@@ -168,6 +168,28 @@ eqv "$?" 3 "after GameCove -> desktop, an unnamed desktop switch goes to the des
 sel gamecove
 sel session-start
 eqv "$?" 0 "only an explicit gamecove clears it"
+# final review, low: picking GameCove at the login screen is explicit too. That session comes in through
+# SDDM's normal login (PAM service "sddm"); a switch, Steam's included, through its autologin.
+printf '#!/bin/sh\n[ "$1" = show-session ] && [ "$2" = 7 ] && cat "%s/pam-service"\n' "$T" >"$BIN/loginctl"
+chmod +x "$BIN/loginctl"
+sel desktop
+echo sddm-autologin >"$T/pam-service"
+XDG_SESSION_ID=7 sel session-start
+eqv "$?" 3 "an autologin into GameCove after leaving it is still a switch: forwarded"
+eqv "$(cat "$DATA/left-for-steam" 2>/dev/null)" boot-1 "and the marker stays (review L22)"
+echo sddm >"$T/pam-service"
+XDG_SESSION_ID=7 sel session-start
+eqv "$?" 0 "GameCove picked at the login screen isn't sent to the desktop"
+[ ! -e "$ST/switched" ] && ok || bad "no switch happened for a pick at the login screen"
+[ ! -e "$DATA/left-for-steam" ] && ok || bad "and the marker is cleared, like after an explicit gamecove"
+sel desktop
+echo "" >"$T/pam-service"
+XDG_SESSION_ID=7 sel session-start
+eqv "$?" 3 "no answer from logind: forwarded as before"
+sel session-start
+eqv "$?" 3 "no session id: forwarded as before"
+rm -f "$BIN/loginctl"
+sel gamecove
 
 # --- restore (uninstall, TTY): previous desktop session and boot mode back
 sel restore
