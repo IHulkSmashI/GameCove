@@ -634,3 +634,28 @@ func test_l35_json_nulls_do_not_abort_store_scans() -> void:
 	f.close()
 	eq(Gog.scan(home), [], "GOG: installed and games null: an empty scan, not an abort")
 	eq(Gog.primary_task("/nonexistent-l35", "1"), {}, "GOG task info missing")
+
+
+# ---- L19: the Steam reaper check doesn't block the main thread ------------------------------------
+
+func test_l19_reaper_check_off_the_main_thread() -> void:
+	var GS := load("res://scripts/launch/game_session.gd")
+	var s: Node = GS.new()
+	var calls := [0]
+	s.steam_alive = func(_id): calls[0] += 1; OS.delay_msec(300); return true
+	s.threaded_checks = true   # what _ready sets in the app
+	s.phase = "waiting"
+	s.app_id = 42
+	s.pid = 0
+	s._waited = 1000.0
+	s._reaper_wait = 1000.0
+	var t0 := Time.get_ticks_msec()
+	s._on_focus_read([])
+	ok(Time.get_ticks_msec() - t0 < 150, "returned at once (%d ms)" % (Time.get_ticks_msec() - t0))
+	s._reaper_wait = 1000.0
+	s._on_focus_read([])   # a check is still out: no second one
+	ok(s._steam_task >= 0, "the check runs on a pool thread")
+	s._steam_checked(s._gen, 42, true)   # what its deferred answer calls (waits for the task)
+	eq(calls[0], 1, "one pgrep at a time")
+	eq(s.phase, "waiting", "Steam's launch alive: still waiting for the window")
+	s.free()

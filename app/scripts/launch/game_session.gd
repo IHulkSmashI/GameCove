@@ -64,6 +64,9 @@ var _focus_timer: Timer
 var _exit_timer: Timer
 var _reading := false   # a focusable-apps read is out
 var _gen := 0           # bumps per session so a late answer can't touch the next one
+var _steam_task := -1   # WorkerThreadPool task of a reaper check that's out
+## The reaper check runs on a pool thread (set in _ready; tests outside the tree run it inline).
+var threaded_checks := false
 
 
 func setup(gamescope_svc: Object, power_svc: Object, launcher_svc: Object) -> void:
@@ -73,6 +76,7 @@ func setup(gamescope_svc: Object, power_svc: Object, launcher_svc: Object) -> vo
 
 
 func _ready() -> void:
+	threaded_checks = true
 	_focus_timer = _make_timer(FOCUS_POLL_S, poll_focus)
 	_exit_timer = _make_timer(EXIT_CHECK_S, poll_exit)
 	if controls == null:
@@ -154,12 +158,36 @@ func _on_focus_read(apps: Array) -> void:
 		if _reaper_wait < REAPER_CHECK_S and _waited > FOCUS_WAIT_S:
 			return
 		_reaper_wait = 0.0
-		if bool(steam_alive.call(app_id)):
-			_reaper_gone = 0
+		if threaded_checks:
+			# pgrep off the main thread (review L19): the answer comes back to _steam_checked
+			if _steam_task < 0:
+				var id := app_id
+				var gen := _gen
+				var fn := steam_alive
+				_steam_task = WorkerThreadPool.add_task(func(): _steam_checked.call_deferred(gen, id, bool(fn.call(id))),
+					false, "GameSession reaper check")
 			return
-		_reaper_gone += 1
-		if _reaper_gone < GONE_TICKS:
-			return
+		_reaper_result(bool(steam_alive.call(app_id)))
+		return
+	_finish(true)
+
+
+func _steam_checked(gen: int, id: int, alive: bool) -> void:
+	if _steam_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_steam_task)
+		_steam_task = -1
+	if gen != _gen or id != app_id or phase != "waiting":
+		return   # a later session, or the window came meanwhile
+	_reaper_result(alive)
+
+
+func _reaper_result(alive: bool) -> void:
+	if alive:
+		_reaper_gone = 0
+		return
+	_reaper_gone += 1
+	if _reaper_gone < GONE_TICKS:
+		return
 	_finish(true)
 
 
@@ -247,6 +275,12 @@ func _enter_running() -> void:
 	_gone = 0
 	_stop(_focus_timer)
 	_start(_exit_timer)
+
+
+func _exit_tree() -> void:
+	if _steam_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_steam_task)
+		_steam_task = -1
 
 
 func _finish(go_home: bool) -> void:
