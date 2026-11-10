@@ -1,7 +1,7 @@
 # GameCove RPM for Bazzite / Fedora Atomic (rpm-ostree) and Fedora.
 #
-# UNTESTED: written against Fedora packaging guidelines and checked with
-# `rpmspec -P`, but never built in mock or installed on a handheld.
+# Built by .github/workflows/release.yml (rpmbuild in a pinned Fedora container; not in mock).
+# Tested on hardware: MSI Claw 8 EX AI+ and ASUS ROG Ally, both on Bazzite.
 #
 # Sources:
 #   Source0  the repository at a tag (git archive), for session files, helpers, fixes

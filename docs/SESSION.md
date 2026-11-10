@@ -357,15 +357,16 @@ a CI-exported app tarball (`gamecove.x86_64` + `gamecove.pck`). It depends on fi
 provider works. On Bazzite, `packaging/install.sh` explains and runs
 `rpm-ostree install ./gamecove-*.rpm`, then reboot, then
 `gamecove-session-select gamecove`. Removal: `install.sh --uninstall`.
-Untested: never built in mock or installed; `rpmspec -P` parses it and a local
-`rpmbuild --nodeps` with fake sources builds it. rpm-ostree may warn about
+The Release workflow builds it with `rpmbuild` in a pinned Fedora container (not in mock). Tested on hardware:
+MSI Claw 8 EX AI+ and ASUS ROG Ally, both on Bazzite. rpm-ostree may warn about
 `/var/lib/gamecove` in the package (the dispatcher creates it anyway).
 
 **SteamOS (systemd-sysext).** `packaging/sysext/build-sysext.sh` makes
 `gamecove.raw` (squashfs) holding our files plus gamescope-session-plus pinned at
 `08e65a6` (SteamOS doesn't have it), with `extension-release` `ID=_any`,
 `ARCHITECTURE=x86-64` so OS updates don't disable it (no SteamOS libraries
-inside). Same idea as OpenGamepadUI's `make dist-ext`. Documented, not run on SteamOS yet.
+inside). Same idea as OpenGamepadUI's `make dist-ext`. Built and checked by the Release workflow; not run on a SteamOS
+handheld yet (hardware testing so far was on Bazzite).
 
 Where the image lives on SteamOS, and why (checked against SteamOS 3.8 / steamos-manager v26.4):
 

@@ -4,7 +4,8 @@
 #   sh install.sh ./gamecove-0.1.0-1.fc43.x86_64.rpm     install
 #   sh install.sh --uninstall                             remove
 #
-# UNTESTED on hardware. Every step is printed before it runs and asks first.
+# Tested on hardware: MSI Claw 8 EX AI+ and ASUS ROG Ally, both on Bazzite (GameCove's
+# installer runs the same rpm-ostree steps). Every step is printed before it runs and asks first.
 # Nothing here edits files by hand: rpm-ostree layers the package onto the
 # system image and can take it off again, and steamos-manager switches sessions.
 set -eu
