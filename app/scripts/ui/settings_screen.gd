@@ -17,6 +17,7 @@ extends Control
 ## viewer and the on-screen keyboard for keys and codes.
 
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
+const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
@@ -171,7 +172,8 @@ func _build() -> void:
 	margin.add_theme_constant_override("margin_left", 48)
 	margin.add_theme_constant_override("margin_right", 48)
 	margin.add_theme_constant_override("margin_top", 88)
-	margin.add_theme_constant_override("margin_bottom", 58)
+	# 16 px clear of the hint band: no card runs flush into it.
+	margin.add_theme_constant_override("margin_bottom", ThemeLib.HINT_BAR_H + 16)
 	add_child(margin)
 	_layout = margin
 	var root := Kit.vbox(16)
@@ -223,6 +225,8 @@ func _build() -> void:
 	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cols.add_child(_scroll)
+	# A card cut by the foot fades out instead of ending in a hard edge.
+	FadeMask.wrap(_scroll, 28.0)
 	var pad := Kit.margin(6, 6, 6)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(pad)
@@ -379,6 +383,14 @@ func in_page() -> bool:
 	return f != null and _content.is_ancestor_of(f)
 
 
+## True when left / right change the focused control's value: a slider, or a
+## choice row's stepper (its parent lists the values).
+static func changes_with_lr(f: Control) -> bool:
+	if f is Slider:
+		return f.editable
+	return f is Button and f.theme_type_variation == "RowButton" and f.get_parent() != null and "values" in f.get_parent()
+
+
 ## Hint bar for whatever has focus here, for main.gd's hint bar
 ## (see docs: main uses it when the screen has `hints`). [] = main's default.
 func hints(f: Control) -> Array:
@@ -396,7 +408,7 @@ func hints(f: Control) -> Array:
 	else:
 		var pg_a: Control = pages.get(category)
 		var named: String = pg_a.a_hint(f) if pg_a != null and pg_a.has_method("a_hint") else ""
-		if f is Button and f.theme_type_variation == "RowButton" and f.get_parent() != null and "values" in f.get_parent():
+		if changes_with_lr(f):
 			out.append(["LR", "Change"])
 		elif named != "":
 			out.append(["A", named])

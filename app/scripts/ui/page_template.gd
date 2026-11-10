@@ -199,10 +199,14 @@ func _build_scroll_cue() -> void:
 	_cue_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ps := ThemeLib.pill(ThemeLib.color("surface_2"), ThemeLib.color("line_2"), 14, 4)
 	_cue_pill.add_theme_stylebox_override("panel", ps)
+	# In the middle of the hint band (raised over it), not over the content:
+	# a pill floating on the cards covered whatever sat at their foot
+	# (the game page's screenshots).
 	_cue_pill.anchor_top = 1.0
 	_cue_pill.anchor_bottom = 1.0
-	_cue_pill.offset_top = -92
-	_cue_pill.offset_bottom = -60
+	_cue_pill.offset_top = -ThemeLib.HINT_BAR_H * 0.5 - 16
+	_cue_pill.offset_bottom = -ThemeLib.HINT_BAR_H * 0.5 + 16
+	_cue_pill.z_index = 5
 	add_child(_cue_pill)
 	cue = Kit.icon_label("chevron_down", "More below", "CaptionLabel", ThemeLib.color("text_2"), 18, false)
 	cue.name = "ScrollCue"
@@ -232,23 +236,9 @@ func _update_cue() -> void:
 		frame.modulate.a = clampf(1.0 - bar.value / 260.0, 0.0, 1.0)
 
 
-## Under the bento, the cue sits under the column whose own content runs on
-## below (not under a card that's only stretched to line up with it).
+## Centred in the hint band, between its status text and its prompts.
 func _place_cue() -> void:
 	var cx := size.x * 0.5
-	if columns != null and columns.get_child_count() > 1:
-		var best := -1.0
-		for st in columns.get_children():
-			var c := st as Control
-			if c == null:
-				continue
-			var h := 0.0
-			for card in c.get_children():
-				if card is Control and card.visible:
-					h += card.get_combined_minimum_size().y + 18.0
-			if h > best + 1.0:
-				best = h
-				cx = c.global_position.x - global_position.x + c.size.x * 0.5
 	var w := _cue_pill.get_combined_minimum_size().x
 	_cue_pill.anchor_left = 0.0
 	_cue_pill.anchor_right = 0.0

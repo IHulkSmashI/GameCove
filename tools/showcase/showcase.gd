@@ -437,6 +437,10 @@ func _quick() -> void:
 	await shot("quick_leds")
 	qm.close()
 	main.playing = {}
+	# The game ends here: its own values go back to the everyday ones, so the
+	# Settings shots show those (17 W, as the top bar says), not Elden Ring's 20 W.
+	profiles.game_ended(g)
+	await frames(3)
 
 
 # ------------------------------------------------------------------ settings

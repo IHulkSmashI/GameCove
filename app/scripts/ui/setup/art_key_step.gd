@@ -109,7 +109,8 @@ var paste_button: Button
 var open_button: Button
 var switch_button: Button
 var remove_button: Button
-## The step's focusable buttons, top to bottom (hosts link them vertically).
+## The step's focusable buttons, left to right in one row (hosts link them
+## with Kit.link_horizontal; up/down leave the row).
 var buttons: Array = []
 var _pending := ""
 var _last_clip := ""
@@ -151,6 +152,7 @@ func _build() -> void:
 	var frame := PanelContainer.new()
 	frame.name = "QRFrame"
 	frame.add_theme_stylebox_override("panel", ThemeLib.box(Color.WHITE, ThemeLib.radius("l"), 10, 10))
+	frame.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	qr_rect = TextureRect.new()
 	qr_rect.name = "QR"
 	qr_rect.custom_minimum_size = Vector2(232, 232)
@@ -159,15 +161,17 @@ func _build() -> void:
 	qr_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	frame.add_child(qr_rect)
 	qcol.add_child(frame)
-	url_label = Kit.label("", "CaptionLabel", true)
+	# One line under the code: "192.168.1.42:34453 · one-time page" (mono, no wrap).
+	url_label = Kit.label("", "MonoLabel", false)
 	url_label.name = "Url"
-	url_label.custom_minimum_size = Vector2(252, 0)
-	url_label.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+	url_label.add_theme_color_override("font_color", ThemeLib.color("text_2"))
+	url_label.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION - 1)
 	qcol.add_child(url_label)
 	add_child(qcol)
 
 	var col := Kit.vbox(12)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_FILL
 	add_child(col)
 	steps_box = Kit.vbox(8)
 	steps_box.name = "Steps"
@@ -175,23 +179,45 @@ func _build() -> void:
 	status = Kit.label("", "AccentLabel", true)
 	status.name = "Status"
 	col.add_child(status)
-	var bcol := Kit.vbox(8)
+	# The fallbacks: secondary pills side by side, level with the foot of the
+	# code (the QR is the main way; none of these is styled as the primary).
+	var push := Control.new()
+	push.name = "Push"
+	push.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	push.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(push)
+	var rows := Kit.vbox(10)
+	rows.name = "ActionRows"
+	col.add_child(rows)
+	var bcol := Kit.hbox(12)
 	bcol.name = "Actions"
-	col.add_child(bcol)
+	rows.add_child(bcol)
+	# The desktop-only and remove buttons go on a second row (the first keeps
+	# the three every host has).
+	var more := Kit.hbox(12)
+	more.name = "Actions2"
+	rows.add_child(more)
+	# Room the address line takes under the code, so the row's foot lines up
+	# with the code's.
+	var foot := Control.new()
+	foot.name = "Foot"
+	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	foot.custom_minimum_size = Vector2(0, ThemeLib.SIZE_CAPTION + 14)
+	col.add_child(foot)
 	type_button = _action(bcol, TYPE, "gamepad", "TypeKey", _on_type)
 	if read_clipboard.is_valid() or DisplayServer.has_feature(DisplayServer.FEATURE_CLIPBOARD):
 		paste_button = _action(bcol, PASTE, "check", "PasteKey", paste)
-	if open_url.is_valid():
-		open_button = _action(bcol, OPEN_HERE, "rocket", "OpenHere", func(): open_url.call(Sgdb.API_KEY_PAGE))
 	switch_button = _action(bcol, TO_DIRECT, "wifi", "SwitchMode", toggle_mode)
+	if open_url.is_valid():
+		open_button = _action(more, OPEN_HERE, "rocket", "OpenHere", func(): open_url.call(Sgdb.API_KEY_PAGE))
 	if current_key != "":
-		remove_button = _action(bcol, REMOVE, "x", "RemoveKey", remove_key)
-	type_button.theme_type_variation = "AccentButton"
+		remove_button = _action(more, REMOVE, "x", "RemoveKey", remove_key)
+	more.visible = more.get_child_count() > 0
 
 
 func _action(box: Control, text: String, icon: String, node_name: String, fn: Callable) -> Button:
 	var b := SKit.action(text, icon, node_name)
-	b.custom_minimum_size = Vector2(300, 48)
+	b.custom_minimum_size = Vector2(0, 48)
 	b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	b.pressed.connect(fn)
 	box.add_child(b)
@@ -239,7 +265,7 @@ func _show_mode() -> void:
 	qr_rect.texture = QR.texture(url, 6)
 	url_label.text = url.replace("https://www.", "").replace("http://", "")
 	if mode == "phone" and drop != null and drop.is_running():
-		url_label.text = url_label.text.get_slice("/k/", 0) + " (one-time page)"
+		url_label.text = url_label.text.get_slice("/k/", 0) + " · one-time page"
 	for c in steps_box.get_children():
 		Kit.drop(steps_box, c)
 	var lines: Array = (STEPS_PHONE if mode == "phone" else STEPS_DIRECT).duplicate()
@@ -408,6 +434,12 @@ func remove_key() -> void:
 
 func first_focus() -> Control:
 	return type_button
+
+
+## True once a key that works is saved (or one was already): the host's Next
+## only shows then; Skip moves on without one.
+func has_key() -> bool:
+	return current_key != "" and state != "checking"
 
 
 func _set_state(s: String, line: String, tone := "") -> void:

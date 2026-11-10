@@ -76,6 +76,12 @@ func test_steamgriddb_with_user_key() -> void:
 	ok(http.requests.has("https://www.steamgriddb.com/api/v2/grids/game/5551?dimensions=600x900&types=static"), "cover by SteamGridDB id")
 	ok(got[1] != "", "found by title")
 	eq(ArtScript.parse_sgdb('{"success":false}'.to_utf8_buffer()), "", "error answer")
+	var logos := '{"success":true,"data":[{"url":"https://cdn2.steamgriddb.com/logo/crest.png","width":512,"height":512},{"url":"https://cdn2.steamgriddb.com/logo/word.png","width":1200,"height":400}]}'.to_utf8_buffer()
+	eq(ArtScript.parse_sgdb(logos, "url", true), "https://cdn2.steamgriddb.com/logo/word.png", "logos: the horizontal wordmark")
+	eq(ArtScript.parse_sgdb(logos), "https://cdn2.steamgriddb.com/logo/crest.png", "other kinds: the first")
+	var c: Array = a.candidates("steam:30", "logo", {})
+	ok(c[0] is Dictionary and c[0].get("sgdb", false), "logos ask SteamGridDB first (with a key)")
+	ok(c[1] is String and str(c[1]).contains("/30/"), "then Steam's own")
 	a.free()
 	H.wipe(dir)
 

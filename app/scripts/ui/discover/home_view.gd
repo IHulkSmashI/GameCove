@@ -108,7 +108,9 @@ func build() -> void:
 	if not visibility_changed.is_connected(_sync_current_stage):
 		visibility_changed.connect(_sync_current_stage)
 	header = GameHeader.new()
-	header.max_logo = Vector2(440, 100)
+	# Wordmarks land at about 260-340 px wide (SteamGridDB's horizontal ones
+	# come first, art.gd); the height keeps the shelves below in view.
+	header.max_logo = Vector2(340, 110)
 	header.max_badges = 0
 	header.meta.visible = false
 	_spot.add_child(header)

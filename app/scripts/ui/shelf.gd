@@ -22,12 +22,13 @@ const PAD := Vector2(24, 16)
 const LABEL_ROOM := 16
 ## Width of the soft edge where the row continues past the screen: wide and
 ## gone at the very edge, so a peeking cover's bright title is gone before
-## the cut (hidden for the last quarter, 15 % at 60 %, whole at the inside).
+## the cut (fully hidden for the outer 62 %, so a subtitle never peeks
+## through; 30 % at 86 %, whole at the inside).
 ## It's an alpha mask, not a colour laid over the row, so it fades into
 ## whatever is behind (art, glow, a light theme) without a dark band.
 const FADE := 96.0
 ## [visible fraction] from the screen edge inwards, in parts of FADE.
-const FADE_STOPS := [[0.0, 0.0], [0.25, 0.0], [0.60, 0.15], [1.0, 1.0]]
+const FADE_STOPS := [[0.0, 0.0], [0.62, 0.0], [0.86, 0.3], [1.0, 1.0]]
 
 var id := ""
 var title := ""

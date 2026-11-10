@@ -19,6 +19,7 @@ const Sgdb := preload("res://scripts/library/art/sgdb.gd")
 const ArtKeyStep := preload("res://scripts/ui/setup/art_key_step.gd")
 const KeyDropTests := preload("res://tests/test_key_drop.gd")
 const KEY_OK := "0123456789abcdef0123456789abcdef"
+const Kit := preload("res://scripts/ui/ui_kit.gd")
 
 
 class FakeSetup extends RefCounted:
@@ -503,6 +504,11 @@ func test_hints() -> void:
 	h = s.hints(row)
 	eq(h[0], ["LR", "Change"], "choice row: change")
 	eq(h[1], ["B", "Categories"], "in a page B goes back to the list")
+	var sl := HSlider.new()
+	eq(s.hints(sl)[0], ["LR", "Change"], "slider: left / right change it (the TDP slider)")
+	sl.editable = false
+	eq(s.hints(sl)[0], ["A", "Select"], "a locked slider doesn't")
+	sl.free()
 	s.free()
 
 
@@ -595,10 +601,33 @@ func test_art_step_skip_path() -> void:
 	var host := Control.new()
 	var f: Control = SetupFlow.open(host, svc, "art")
 	eq(f.step, "art", "opens at Game art (Settings > Discover > SteamGridDB key)")
+	ok(not f.next_button.visible, "no Next until a key is in (Skip moves on)")
+	var accents: Array = f.find_children("*", "Button", true, false).filter(func(b): return b.is_visible_in_tree() and b.theme_type_variation == "AccentButton")
+	ok(accents.size() <= 1, "never two primary buttons at once")
+	ok(f.art_step.type_button.theme_type_variation != "AccentButton", "Type the key is a secondary pill")
+	ok(f.art_step.find_child("Actions", true, false) is HBoxContainer and f.art_step.buttons.all(func(b): return b.get_parent().name == "Actions"), "the fallbacks in one row")
+	eq(f.art_step.type_button.focus_neighbor_right, f.art_step.type_button.get_path_to(f.art_step.buttons[1]), "linked left / right")
+	ok(not Kit.prompts_text(f.find_child("Prompts", true, false)).contains("Back"), "Back once: the B prompt is the button")
+	eq((f.find_child("Shade", true, false) as ColorRect).color.a, 1.0, "the shell's bars don't show behind setup")
 	f.skip_step()
 	ok(svc["setup"].skipped.has("steamgriddb"), "skipped: Steam art only")
 	eq(f.step, "keys", "moves on")
 	eq(svc["http"].requests.size(), 0, "nothing sent")
+	f.finish()
+	host.free()
+
+
+func test_art_step_next_after_a_key() -> void:
+	var svc := _svc()
+	var host := Control.new()
+	var f: Control = SetupFlow.open(host, svc, "art")
+	ok(not f.next_button.visible, "no key yet: no Next")
+	eq(f.skip_button.focus_neighbor_right, f.skip_button.get_path_to(f.back_button), "Skip, then Back")
+	_accept_keys(svc)
+	f.art_step.submit(KEY_OK)
+	ok(f.next_button.visible, "a key in: Next shows")
+	f.go("art")
+	ok(f.next_button.visible, "and stays for a saved key")
 	f.finish()
 	host.free()
 
@@ -613,7 +642,7 @@ func test_art_step_phone_page_end_to_end() -> void:
 	a.start()
 	eq(a.mode, "phone", "phone page open")
 	ok(a.drop.is_running() and a.drop.url.begins_with("http://127.0.0.1:"), "listening on the chosen address only")
-	ok(a.qr_rect.texture != null and "(one-time page)" in a.url_label.text, "QR of the one-time page")
+	ok(a.qr_rect.texture != null and a.url_label.text.ends_with(" · one-time page") and a.url_label.autowrap_mode == TextServer.AUTOWRAP_OFF, "QR of the one-time page, on one line")
 	var t := KeyDropTests.new()
 	var body := "key=" + KEY_OK
 	var ans: String = t._ask(a.drop, "POST /k/%s HTTP/1.1\r\nContent-Length: %d\r\n\r\n%s" % [a.drop.token, body.length(), body])

@@ -179,6 +179,8 @@ func test_library_critic_sort_and_filters() -> void:
 	s.genre_button.pressed.emit()
 	eq(s.genre, "Action", "A cycles genres")
 	eq(s.shown.size(), 2, "filtered")
+	eq(s.critic_button.text, "Critics 75+", "the chip says what 75+ is")
+	ok(s.critic_button.icon != null, "with a star")
 	s.critic_button.pressed.emit()
 	eq(s.shown.map(func(g): return g["title"]), ["Bravo"], "and 75+")
 	ok(s.genre_button in s._toolbar() and s.critic_button in s._toolbar(), "both reachable with the d-pad")

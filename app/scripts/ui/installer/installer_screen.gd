@@ -1669,7 +1669,7 @@ func _link() -> void:
 	# Rows that sit side by side (cards, fail actions) move left / right; down
 	# goes to whatever follows the row in the chain (else Continue), up to
 	# what comes before it.
-	for row_name in ["FailActions", "Modes", "Startup", "StoreCards", "Themes"]:
+	for row_name in ["FailActions", "Modes", "Startup", "StoreCards", "Themes", "Actions", "Actions2"]:
 		var r := body.find_child(row_name, true, false)
 		if r == null:
 			continue

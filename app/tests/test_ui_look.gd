@@ -179,7 +179,8 @@ func test_tile_card_layout() -> void:
 	var u := Logic.g("steam", "9", "Neon", false, 0, {"anticheat": {"status": "denied", "anticheats": ["EAC"]}})
 	var t2: Button = Tile.new()
 	t2.setup(u)
-	ok(t2.corner_badge != null and t2.corner_badge.get_parent() == t2.pill_row, "status pill sits in the bottom plate")
+	ok(t2.corner_badge != null and t2.corner_badge.get_parent() == t2.sub_row, "status pill sits at the end of the store line, clear of the cover's logo")
+	ok(t2.sub_row.get_child(t2.sub_row.get_child_count() - 1) == t2.corner_badge, "on its right")
 	eq(t2.corner_badge.label.text, "Linux denied", "the anti-cheat problem, not 'Not installed'")
 	t2.free()
 	eq(Tile.size_for(1216.0), Vector2(Tile.SIZE.x + 2, roundf((Tile.SIZE.x + 2) * Tile.SIZE.y / Tile.SIZE.x)), "1280x800: about the base size")
@@ -337,3 +338,22 @@ func test_covers_are_never_dimmed() -> void:
 		eq(t.art.self_modulate, Color.WHITE, "art not dimmed (installed %s)" % installed)
 		ok(Tile.INFO_H <= 0.25, "the plate shades only the bottom quarter")
 		t.free()
+
+
+## A store hero with black bars baked into its sides (Frostpunk's) is shown
+## without them, so the art never ends in a hard vertical edge.
+func test_hero_stage_trims_baked_side_bars() -> void:
+	var HS = load("res://scripts/ui/hero_stage.gd")
+	var img := Image.create(400, 100, false, Image.FORMAT_RGB8)
+	img.fill(Color(0.5, 0.4, 0.3))
+	img.fill_rect(Rect2i(0, 0, 40, 100), Color.BLACK)
+	img.fill_rect(Rect2i(370, 0, 30, 100), Color.BLACK)
+	eq(HS.content_columns(img), Vector2i(40, 370), "both bars found")
+	var plain := Image.create(400, 100, false, Image.FORMAT_RGB8)
+	plain.fill(Color(0.5, 0.4, 0.3))
+	plain.fill_rect(Rect2i(0, 0, 4, 100), Color.BLACK)
+	eq(HS.content_columns(plain), Vector2i(0, 400), "a thin dark edge isn't a bar")
+	var night := Image.create(400, 100, false, Image.FORMAT_RGB8)
+	night.fill(Color.BLACK)
+	night.fill_rect(Rect2i(150, 40, 100, 20), Color.WHITE)
+	eq(HS.content_columns(night), Vector2i(0, 400), "a dark picture isn't cropped to a sliver")

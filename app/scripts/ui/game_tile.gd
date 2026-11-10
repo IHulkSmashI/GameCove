@@ -299,11 +299,12 @@ func set_status_pill(spec: Dictionary) -> void:
 		if not spec.is_empty() and corner_badge.get("spec") is Dictionary \
 				and corner_badge.spec.get("short", "") == spec.get("short", "") and corner_badge.spec.get("tone", "") == spec.get("tone", ""):
 			return
-		Kit.drop(pill_row, corner_badge)
+		Kit.drop(corner_badge.get_parent(), corner_badge)
 		corner_badge = null
 	if not spec.is_empty():
 		var solid: bool = spec.get("kind", "") in ["sale", "new", "update", "download"] or spec.get("tone", "") in ["info", "bad"]
 		corner_badge = Badge.make(spec, "solid" if solid else "tile")
+		corner_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		pill_row.add_child(corner_badge)
 		pill_row.move_child(corner_badge, 0)
 	_update_pills()
@@ -334,7 +335,7 @@ func set_price(text: String, quiet := false, icon: Texture2D = null, store_line 
 	price_label.text = text
 	price_label.add_theme_font_override("font", ThemeLib.font("bold", true))
 	price_label.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
-	price_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.78) if quiet else Color.WHITE)
+	price_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.92) if quiet else Color.WHITE)
 	price_label.visible = text != ""
 	if store_line != "":
 		sub_label.text = store_line
@@ -371,8 +372,23 @@ func set_extra(spec: Dictionary) -> void:
 	sub_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if fits and sub_extra.visible else Control.SIZE_EXPAND_FILL
 
 
+## With a price (Discover) the pill leads the price line; without one
+## (Library: Update, Installing...) it sits at the right end of the store
+## line, so it never covers the logo most covers carry in their lower third.
 func _update_pills() -> void:
-	pill_row.visible = (corner_badge != null and is_instance_valid(corner_badge)) or price_label.visible
+	var has_pill := corner_badge != null and is_instance_valid(corner_badge)
+	if has_pill:
+		var want: Control = pill_row if price_label.visible else sub_row
+		if corner_badge.get_parent() != want:
+			corner_badge.get_parent().remove_child(corner_badge)
+			want.add_child(corner_badge)
+		if want == pill_row:
+			pill_row.move_child(corner_badge, 0)
+		else:
+			sub_row.move_child(corner_badge, sub_row.get_child_count() - 1)
+			sub_row.add_theme_constant_override("separation", 6)
+	pill_row.visible = (has_pill and corner_badge.get_parent() == pill_row) or price_label.visible
+	_style_scrim()
 
 
 ## The mono line under the title: store and playtime, or "Not installed".
@@ -398,16 +414,40 @@ func _style_card() -> void:
 	edge.set_corner_radius_all(r)
 	edge.anti_aliasing = true
 	_edge.add_theme_stylebox_override("panel", edge)
+	_scrim_tall = -1
+	_style_scrim()
+
+
+var _scrim_tall := -1
+
+
+## The dark foot behind the plate's text: strong enough that white text and
+## the store line read on a white or bright cover (Shadow Tactics, Stardew
+## Valley), over only the plate's lines so the rest of the cover stays
+## undimmed. A price plate (Discover: pill + price, store, reviews) gets a
+## taller one.
+func _style_scrim() -> void:
+	if _shade == null:
+		return
+	var tall := 1 if price_label != null and price_label.visible else 0
+	if tall == _scrim_tall:
+		return
+	_scrim_tall = tall
 	var g := Gradient.new()
-	var ink := Color("#040508")
-	g.offsets = PackedFloat32Array([0.0, 1.0 - INFO_H, 0.90, 1.0])
-	g.colors = PackedColorArray([Color(ink, 0.0), Color(ink, 0.0), Color(ink, 0.62), Color(ink, 0.82)])
+	var ink := Color("#06080E")
+	g.offsets = scrim_offsets(tall == 1)
+	g.colors = PackedColorArray([Color(ink, 0.0), Color(ink, 0.0), Color(ink, 0.86), Color(ink, 0.95)])
 	var gt := GradientTexture2D.new()
 	gt.gradient = g
 	gt.width = 4
-	gt.height = 128
+	gt.height = 256
 	gt.fill_to = Vector2(0, 1)
 	_shade.texture = gt
+
+
+## Gradient stops (top to bottom, 0..1 of the tile) of the plate's scrim.
+static func scrim_offsets(tall: bool) -> PackedFloat32Array:
+	return PackedFloat32Array([0.0, 0.52, 0.74, 1.0]) if tall else PackedFloat32Array([0.0, 1.0 - INFO_H - 0.06, 0.86, 1.0])
 
 
 func cover_path() -> String:

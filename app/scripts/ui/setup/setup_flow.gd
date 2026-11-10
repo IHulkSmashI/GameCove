@@ -119,7 +119,9 @@ func _build() -> void:
 		Kit.drop(self, c)
 	var shade := ColorRect.new()
 	shade.name = "Shade"
-	shade.color = Color(ThemeLib.color("bg"), 0.94)
+	# Opaque: the shell's top and bottom bars don't show behind setup (their
+	# prompts and status would only compete with the setup's own).
+	shade.color = ThemeLib.color("bg")
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shade)
@@ -190,20 +192,21 @@ func _build() -> void:
 
 	nav = Kit.hbox(12)
 	nav.name = "Nav"
-	back_button = Kit.button(TS.BACK)
-	back_button.name = "Back"
-	back_button.custom_minimum_size = Vector2(130, 52)
-	back_button.pressed.connect(go_back)
-	nav.add_child(back_button)
 	skip_button = Kit.button(TS.SKIP)
 	skip_button.name = "Skip"
 	skip_button.custom_minimum_size = Vector2(130, 52)
 	skip_button.pressed.connect(skip_step)
 	nav.add_child(skip_button)
 	nav.add_child(Kit.spacer())
-	var prompts := Kit.prompts([["A", "Select"], ["B", TS.BACK]])
+	var prompts := Kit.prompts([["A", "Select"]])
 	prompts.name = "Prompts"
 	nav.add_child(prompts)
+	# Back is the B prompt itself: one control (B on the controller, tap or
+	# focus + A), not a pill and a prompt saying the same thing.
+	back_button = prompt_button("B", TS.BACK)
+	back_button.name = "Back"
+	back_button.pressed.connect(go_back)
+	nav.add_child(back_button)
 	next_button = Kit.button(TS.NEXT, "AccentButton")
 	next_button.name = "Next"
 	next_button.custom_minimum_size = Vector2(190, 52)
@@ -224,6 +227,27 @@ func _build() -> void:
 	keyboard.closed.connect(_on_keyboard_closed)
 	add_child(keyboard)
 	_show_step()
+
+
+## A flat button drawn like a prompt ("(B) Back"): no pill until it's focused.
+static func prompt_button(glyph: String, text: String) -> Button:
+	var b := Button.new()
+	b.theme_type_variation = "TabButton"
+	b.focus_mode = Control.FOCUS_ALL
+	b.custom_minimum_size = Vector2(0, 52)
+	var row := Kit.hbox(7)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_child(Kit.glyph(glyph))
+	var l := Kit.label(text, "CaptionLabel")
+	l.add_theme_font_override("font", ThemeLib.font("semibold"))
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(l)
+	b.add_child(row)
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	b.custom_minimum_size.x = row.get_combined_minimum_size().x + 28
+	b.tooltip_text = text
+	return b
 
 
 func go(to: String) -> void:
@@ -258,6 +282,9 @@ func _show_step() -> void:
 	skip_button.text = TS.SKIP_SETUP if step == "welcome" else (ArtKeyStep.SKIP_TEXT if step == "art" else TS.SKIP)
 	skip_button.custom_minimum_size = Vector2(260 if step == "art" else 130, 52)
 	next_button.text = {"welcome": TS.START, "done": TS.FINISH}.get(step, TS.NEXT)
+	# Game art: Next only once a key is in (Skip moves on without one), so
+	# one primary button shows at a time.
+	next_button.visible = step != "art" or (art_step != null and art_step.has_key())
 	_link()
 	body.modulate.a = 0.0
 	Motion.to(body, "modulate:a", 1.0, Motion.BASE)
@@ -548,6 +575,8 @@ func _on_art_saved(_key: String) -> void:
 	if st != null:
 		st.complete("steamgriddb")
 	_build_rail()
+	next_button.visible = true
+	_link()
 	if is_inside_tree():
 		next_button.grab_focus()
 
@@ -747,22 +776,38 @@ func focusables() -> Array:
 
 
 func _link() -> void:
-	var navs: Array = [back_button, skip_button, next_button].filter(func(b): return b.visible)
+	var navs: Array = [skip_button, back_button, next_button].filter(func(b): return b.visible)
 	Kit.link_horizontal(navs)
 	var chain := _focusables.duplicate()
 	if step == "theme":
 		_link_grid(chain)
+	elif step == "art":
+		# The fallbacks sit in a row (Remove key on a second one).
+		var row1: Array = chain.filter(func(c): return c.get_parent().name == "Actions")
+		var row2: Array = chain.filter(func(c): return c.get_parent().name != "Actions")
+		Kit.link_horizontal(row1)
+		Kit.link_horizontal(row2)
+		for c in row1:
+			c.focus_neighbor_top = c.get_path_to(c)
+		for c in row2:
+			c.focus_neighbor_top = c.get_path_to(row1[0] if not row1.is_empty() else c)
 	else:
 		Kit.link_vertical(chain)
 	var last: Control = chain[-1] if not chain.is_empty() else null
+	var up: Control = chain[0] if step == "art" and not chain.is_empty() else last
 	for b in navs:
-		b.focus_neighbor_top = b.get_path_to(last if last != null else b)
+		b.focus_neighbor_top = b.get_path_to(up if up != null else b)
 		b.focus_neighbor_bottom = b.get_path_to(b)
 	if last != null:
-		var down: Control = next_button
+		var down: Control = next_button if next_button.visible else skip_button
 		if step == "theme":
 			for i in range(maxi(0, chain.size() - 2), chain.size()):
 				chain[i].focus_neighbor_bottom = chain[i].get_path_to(down)
+		elif step == "art":
+			var second: Array = chain.filter(func(c): return c.get_parent().name != "Actions")
+			for c in chain:
+				var below: Control = second[0] if not second.is_empty() and c.get_parent().name == "Actions" else down
+				c.focus_neighbor_bottom = c.get_path_to(below)
 		else:
 			last.focus_neighbor_bottom = last.get_path_to(down)
 

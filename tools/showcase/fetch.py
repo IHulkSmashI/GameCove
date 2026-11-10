@@ -364,7 +364,14 @@ def details_jobs(lib):
 
 def fetch_art(lib):
     jobs = art_jobs(lib) + [maker_photo_job()] + details_jobs(lib)
-    missing = [j for j in jobs if not os.path.exists(j[0])]
+    # One job per file: two threads writing the same .part (an icon two
+    # achievements share) raced on the rename.
+    seen = set()
+    missing = []
+    for j in jobs:
+        if not os.path.exists(j[0]) and j[0] not in seen:
+            seen.add(j[0])
+            missing.append(j)
     print("art: %d files, %d to download" % (len(jobs), len(missing)), flush=True)
     with cf.ThreadPoolExecutor(12) as ex:
         res = list(ex.map(lambda j: (j[0], download(*j)), missing))

@@ -116,6 +116,10 @@ static func stores_present(games: Array) -> Array:
 ## it out made holes in the row and counts that didn't add up.
 
 
+## Tiles a Home shelf shows at once (7 and the faded eighth).
+const SHELF_VISIBLE := 8
+
+
 static func shelves(games: Array) -> Array:
 	var out: Array = []
 	var add := func(id: String, title: String, list: Array):
@@ -129,6 +133,12 @@ static func shelves(games: Array) -> Array:
 		var aa := int(a.get("added", 0))
 		var ab := int(b.get("added", 0))
 		return aa > ab if aa != ab else title_order(a, b))
+	# The first slots of Installed don't repeat the posters Recently played
+	# shows right above: those games move to the end of the shelf (still there).
+	var on_screen := {}
+	for g in recent.slice(0, SHELF_VISIBLE):
+		on_screen[str(g.get("key", ""))] = true
+	inst = inst.filter(func(g): return not on_screen.has(str(g.get("key", "")))) + inst.filter(func(g): return on_screen.has(str(g.get("key", ""))))
 	add.call("installed", "Installed", inst)
 	add.call("short", "Short games, under %d h" % int(SHORT_MAX_H), short_games(games))
 	var ac := anticheat_friendly(games)

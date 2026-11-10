@@ -31,6 +31,8 @@ var sort := "recent"
 var query := ""
 ## "" (all) | "installed" | "not_installed"
 var install_filter := ""
+## The critic filter chip: "★ Critics 75+".
+const CRITIC_LABEL := "Critics %d+"
 ## Genre filter ("" = all) and "critic score 75+" filter.
 var genre := ""
 var critic_filter := false
@@ -139,8 +141,15 @@ func _init() -> void:
 	genre_button.custom_minimum_size = Vector2(0, 44)
 	genre_button.pressed.connect(func(): cycle_genre(1))
 	bar.add_child(genre_button)
-	critic_button = Kit.button("%d+" % View.CRITIC_MIN, "ChipButton")
+	# Says what the number is: a critic score (Metacritic, else OpenCritic / IGDB).
+	critic_button = Kit.button(CRITIC_LABEL % View.CRITIC_MIN, "ChipButton")
 	critic_button.name = "Critic"
+	critic_button.icon = Icons.tex("star", 18, Color.WHITE)
+	critic_button.add_theme_constant_override("h_separation", 6)
+	for st in ["icon_normal_color", "icon_hover_color", "icon_focus_color"]:
+		critic_button.add_theme_color_override(st, ThemeLib.tone("gold"))
+	for st in ["icon_pressed_color", "icon_hover_pressed_color"]:
+		critic_button.add_theme_color_override(st, ThemeLib.color("on_accent"))
 	critic_button.toggle_mode = true
 	critic_button.custom_minimum_size = Vector2(0, 44)
 	critic_button.tooltip_text = "Critic score %d or more" % View.CRITIC_MIN

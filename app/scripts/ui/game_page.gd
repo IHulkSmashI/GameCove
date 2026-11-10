@@ -47,7 +47,6 @@ var manage_button: Button
 var settings_button: Button
 var back_button: Button
 ## Jumps into the achievements grid (Steam games with achievements).
-var ach_button: Button
 var form: VBoxContainer
 var info_lines: Array[Label] = []
 var library: Object
@@ -103,7 +102,6 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 		var body := add_card(TG.ACH_TITLE, "star", "", true, 1)
 		ach_card = AchievementsCard.new()
 		ach_card.cells_changed.connect(_relink)
-		ach_card.cells_changed.connect(_refresh_ach_button)
 		ach_card.cell_focused.connect(func(): _reveal(body.get_parent()))
 		body.add_child(ach_card)
 		columns_laid_out.connect(func(_n, inner): ach_card.fit_width(inner))
@@ -307,16 +305,10 @@ func _build_actions() -> void:
 	manage_button.visible = game_actions != null
 	if not manage_button.visible:
 		actions.erase(manage_button)
-	# No Back here (B does it) and no jump to the settings card (it's on
-	# screen): Achievements jumps into the grid when the game has some.
+	# Play and Manage only: no Back (B does it), no jump to the settings or
+	# achievements cards (both are on screen right below; down reaches them).
 	settings_button = null
 	back_button = null
-	if achievements != null and _is_steam():
-		ach_button = add_action(TG.ACH_TITLE, "star", false, "AchievementsJump")
-		ach_button.pressed.connect(_jump_to_achievements)
-		ach_button.visible = ach_card != null and not ach_card.cells.is_empty()
-		if not ach_button.visible:
-			actions.erase(ach_button)
 	if _accent.a > 0.0:
 		set_accent(_accent)
 
@@ -349,26 +341,6 @@ func _jump_to_settings() -> void:
 	var f: Array = form.focusables() if form != null and form.visible else []
 	if not f.is_empty():
 		f[0].grab_focus()
-
-
-## The Achievements jump shows only while there's a grid to jump into.
-func _refresh_ach_button() -> void:
-	if ach_button == null or not is_instance_valid(ach_button):
-		return
-	var want: bool = ach_card != null and not ach_card.cells.is_empty()
-	if want == ach_button.visible:
-		return
-	ach_button.visible = want
-	if want and not ach_button in actions:
-		actions.append(ach_button)
-	elif not want:
-		actions.erase(ach_button)
-	_relink()
-
-
-func _jump_to_achievements() -> void:
-	if ach_card != null and not ach_card.cells.is_empty():
-		ach_card.cells[0].grab_focus()
 
 
 func set_accent(c: Color) -> void:

@@ -191,7 +191,8 @@ func _restyle() -> void:
 	_styling = true
 	add_theme_stylebox_override("panel", ThemeLib.card(20, 16))
 	_track.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.soft(0.12), 999, 0, 0))
-	_fill.add_theme_stylebox_override("panel", ThemeLib.gradient_pill(ThemeLib.color("accent"), ThemeLib.color("accent_2").lightened(0.15), 6, 0, 0, false))
+	# Solid accent, the same fill as the game page's achievement bar (ProgressLine).
+	_fill.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("accent"), 999, 0, 0))
 	count_label.add_theme_color_override("font_color", ThemeLib.color("accent") if ThemeLib.is_dark() else ThemeLib.color("text"))
 	var warn := ThemeLib.color("warn")
 	var rb := ThemeLib.box(ThemeLib.soft(0.04), ThemeLib.radius("m"), 12, 10)

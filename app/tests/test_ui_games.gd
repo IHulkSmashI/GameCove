@@ -271,6 +271,7 @@ func test_game_page_v2() -> void:
 	var t := _texts(p)
 	eq(p.play_button.text, "Play", "primary")
 	ok(p.manage_button.visible and TG.MANAGE in t, "Manage button")
+	ok(p.find_child("AchievementsJump", true, false) == null, "no Achievements button: the card is right below")
 	ok(p.pending_card.visible, "Steam changes waiting card")
 	ok(TG.RESTART_STEAM in t, "restart button")
 	eq(p.focusables[0], p.restart_button, "restart is the first stop below the actions")

@@ -200,6 +200,14 @@ func test_shelves() -> void:
 	ok(inst.all(func(g): return str(g["key"]) != hero), "the spotlight game isn't repeated")
 	var recent_keys: Array = s[0]["games"].map(func(g): return g["key"])
 	ok(inst.any(func(g): return g["key"] in recent_keys) or recent_keys.is_empty(), "recently played installed games stay in Installed")
+	var big: Array = []
+	for i in 20:
+		big.append(Logic.g("steam", str(100 + i), "G%02d" % i, true, 1000 + i if i < 10 else 0))
+	var bs := View.shelves(big)
+	var first_recent: Array = bs[0]["games"].slice(0, View.SHELF_VISIBLE).map(func(g): return g["key"])
+	var first_inst: Array = bs[1]["games"].slice(0, View.SHELF_VISIBLE).map(func(g): return g["key"])
+	ok(first_inst.all(func(k): return not k in first_recent), "Installed's first slots don't repeat Recently played's")
+	eq(bs[1]["games"].size(), 19, "nothing dropped from Installed (all but the spotlight)")
 	eq(s[3]["games"].map(func(g): return g["title"]), ["bravo"], "anti-cheat friendly")
 	eq(s[-1]["games"].map(func(g): return g["title"]), ["Alpha", "bravo", "Charlie: Ünïcode", "Delta Force"], "all games A to Z")
 	var one_store := View.shelves([Logic.g("steam", "1", "A"), Logic.g("steam", "2", "B")])

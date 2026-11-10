@@ -125,12 +125,20 @@ func candidates(key: String, kind: String, hints: Dictionary) -> Array:
 	var appid := str(hints.get("appid", ""))
 	if appid == "" and key.begins_with("steam:"):
 		appid = key.substr(6)
+	var sgdb := {}
+	if _key() != "" and (appid != "" or str(hints.get("title", "")) != ""):
+		sgdb = {"sgdb": true, "appid": appid, "title": str(hints.get("title", ""))}
+	# Logos: SteamGridDB's horizontal wordmark first (Steam's own logo is
+	# often a square crest, small in a wide spotlight), Steam's after.
+	if kind == "logo" and not sgdb.is_empty():
+		out.append(sgdb)
+		sgdb = {}
 	if appid != "" and appid.is_valid_int():
 		var fb: String = SteamApi.fallback_art(appid).get(kind, "")
 		if fb != "" and not fb in out:
 			out.append(fb)
-	if _key() != "" and (appid != "" or str(hints.get("title", "")) != ""):
-		out.append({"sgdb": true, "appid": appid, "title": str(hints.get("title", ""))})
+	if not sgdb.is_empty():
+		out.append(sgdb)
 	return out
 
 
@@ -182,21 +190,34 @@ static func sgdb_url(kind: String, game: String, by_steam: bool) -> String:
 
 
 ## First image URL (or game id for autocomplete) in a SteamGridDB answer, or "".
-static func parse_sgdb(body: PackedByteArray, field := "url") -> String:
+## `wide`: logos: the first horizontal wordmark (at least 2:1) instead, so a
+## spotlight shows the game's name rather than a small square crest.
+static func parse_sgdb(body: PackedByteArray, field := "url", wide := false) -> String:
 	var j := JSON.new()
 	if j.parse(body.get_string_from_utf8()) != OK or not j.data is Dictionary or not j.data.get("success", false):
 		return ""
 	var data = j.data.get("data", [])
-	if data is Array and not data.is_empty() and data[0] is Dictionary and data[0].has(field):
+	if not data is Array or data.is_empty():
+		return ""
+	if wide and field == "url":
+		for it in data:
+			if it is Dictionary and it.has("url") and float(it.get("height", 0)) > 0.0 \
+					and float(it.get("width", 0)) / float(it["height"]) >= WORDMARK_RATIO:
+				return str(it["url"])
+	if data[0] is Dictionary and data[0].has(field):
 		return str(int(data[0][field])) if field == "id" else str(data[0][field])
 	return ""
+
+
+## Width / height from which a logo counts as a horizontal wordmark.
+const WORDMARK_RATIO := 2.0
 
 
 func _sgdb(key: String, kind: String, c: Dictionary, done: Callable) -> void:
 	var headers := ["Authorization: Bearer " + _key()]
 	var fetch := func(game: String, by_steam: bool):
 		http.request(sgdb_url(kind, game, by_steam), {"headers": headers}, func(res: Dictionary):
-			done.call(parse_sgdb(res["body"]) if res["ok"] else ""))
+			done.call(parse_sgdb(res["body"], "url", kind == "logo") if res["ok"] else ""))
 	if c["appid"] != "":
 		fetch.call(c["appid"], true)
 		return

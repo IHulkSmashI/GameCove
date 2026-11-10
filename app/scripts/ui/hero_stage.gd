@@ -153,7 +153,7 @@ func _crossfade(tex: Texture2D, poster := false) -> void:
 	var new := layers[_front]
 	if new.get_index() < old.get_index():
 		move_child(new, old.get_index())   # new fades in on top
-	new.texture = tex
+	new.texture = trim_bars(tex) if tex != null and not poster else tex
 	# A poster (cover, no hero) fills the right part of the frame only.
 	new.anchor_left = POSTER_LEFT if poster else 0.0
 	(new.material as ShaderMaterial).set_shader_parameter("rect_size", new.size)
@@ -165,6 +165,48 @@ func _crossfade(tex: Texture2D, poster := false) -> void:
 	Motion.to(old, "modulate:a", 0.0, CROSSFADE)
 	if tex != null and not Motion.reduce and not _paused and frame_radius <= 0.0:
 		Motion.to(new, "scale", Vector2(DRIFT_SCALE, DRIFT_SCALE), DRIFT_S, Tween.TRANS_SINE, Tween.EASE_IN_OUT)
+
+
+## Some store heroes come with black bars baked into their sides (Frostpunk's):
+## shown covered in a wide frame, the bar ended the art in a hard vertical
+## edge. Returns the art without them (an AtlasTexture), or `tex` as it is.
+static func trim_bars(tex: Texture2D) -> Texture2D:
+	if not tex is ImageTexture:
+		return tex
+	var img := tex.get_image()
+	if img == null or img.is_empty() or img.is_compressed():
+		return tex
+	var r := content_columns(img)
+	if r.x <= 0 and r.y >= img.get_width():
+		return tex
+	var a := AtlasTexture.new()
+	a.atlas = tex
+	a.region = Rect2(r.x, 0, r.y - r.x, img.get_height())
+	return a
+
+
+## [first, end) columns of `img` that aren't a flat near-black bar at either
+## side. Bars narrower than 2 % or wider than 30 % of the width are left alone.
+static func content_columns(img: Image) -> Vector2i:
+	var w := img.get_width()
+	var h := img.get_height()
+	var dark := func(x: int) -> bool:
+		for i in 24:
+			var c := img.get_pixel(x, int((i + 0.5) * h / 24.0))
+			if c.r + c.g + c.b > 0.08:
+				return false
+		return true
+	var lo := 0
+	while lo < w * 0.3 and dark.call(lo):
+		lo += 1
+	var hi := w
+	while hi > w * 0.7 and dark.call(hi - 1):
+		hi -= 1
+	if lo < w * 0.02 or lo >= w * 0.3:
+		lo = 0
+	if w - hi < w * 0.02 or hi <= w * 0.7:
+		hi = w
+	return Vector2i(lo, hi)
 
 
 func pause_motion() -> void:
