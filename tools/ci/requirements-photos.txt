@@ -1,0 +1,7 @@
+# tools/device_photos' checks: pytest plus Pillow, pinned by version and sha256 (review M6). The two hashes are
+# Pillow 11.3.0's CPython 3.13 x86_64 glibc wheels (manylinux 2.17 and 2.28; pip picks one by the runner's glibc).
+#   pip install --require-hashes --no-deps -r tools/ci/requirements-photos.txt
+-r requirements-pytest.txt
+pillow==11.3.0 \
+    --hash=sha256:f0f5d8f4a08090c6d6d578351a2b91acf519a54986c055af27e7a93feae6d3f1 \
+    --hash=sha256:13f87d581e71d9189ab21fe0efb5a23e9f28552d5be6979e84001d3b8505abe8
