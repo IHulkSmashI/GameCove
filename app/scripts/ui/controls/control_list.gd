@@ -26,6 +26,12 @@ var expanded := false
 var views := {}              # id -> view
 var more_row: VBoxContainer
 var _sig := ""
+var _stale := false
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and _stale and is_visible_in_tree():
+		_on_refreshed()
 
 
 ## opts: hide_unavailable (bool), titles ({id: title}), icons ({id: icon}),
@@ -78,6 +84,19 @@ func placement() -> Array:
 
 
 func _on_refreshed() -> void:
+	# hidden (the quick menu closed, another tab showing): sort it out when shown
+	if is_inside_tree() and not is_visible_in_tree():
+		_stale = true
+		return
+	catch_up(true)
+
+
+## A change came while hidden: lay out again now, hidden or not (see
+## control_view.gd catch_up).
+func catch_up(force := false) -> void:
+	if not (_stale or force):
+		return
+	_stale = false
 	var p := placement()
 	var sig := var_to_str(p)
 	if sig != _sig:

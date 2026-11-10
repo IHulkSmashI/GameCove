@@ -47,6 +47,7 @@ var _shape := ""
 var _badges: HBoxContainer
 var _confirm_from: Variant = null
 var _confirming := false
+var _stale := false       # a change came while hidden: read again when shown
 
 
 ## A view for control `cid`, or null when the model doesn't know it.
@@ -94,6 +95,11 @@ func _enter_tree() -> void:
 		refresh()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and _stale and is_visible_in_tree():
+		refresh()
+
+
 func focusables() -> Array:
 	if row != null and row.has_method("focusables"):
 		return row.focusables()
@@ -101,7 +107,25 @@ func focusables() -> Array:
 
 
 ## Re-reads the description; rebuilds the row only when its shape changed.
+## While the row is in the tree but hidden (the quick menu closed behind a
+## game, a tab not showing) it only notes that it's out of date and reads
+## again the moment it's shown: no work for what nobody can see.
 func refresh() -> void:
+	if is_inside_tree() and not is_visible_in_tree() and row != null:
+		_stale = true
+		return
+	_read()
+
+
+## A change came while hidden: read it now, hidden or not (the quick menu
+## catching up once when a game takes the screen, so its first open is quick).
+func catch_up() -> void:
+	if _stale:
+		_read()
+
+
+func _read() -> void:
+	_stale = false
 	desc = model.describe(id)
 	if desc.is_empty():
 		return

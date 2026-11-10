@@ -16,6 +16,7 @@ const KeepDialog := preload("res://scripts/ui/controls/keep_dialog.gd")
 const SessionGuard := preload("res://scripts/ui/controls/session_guard.gd")
 const Catalog := preload("res://scripts/ui/controls/catalog.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
+const ControlScript := preload("res://scripts/controls/control.gd")
 const PROFILE_FILE := "user://test_ui_controls_profiles.json"
 
 
@@ -173,6 +174,31 @@ func test_model_set_game_redetects_once() -> void:
 	m.set_game({"key": "steam:1"})
 	eq(c.detect_calls, 1, "per-game controls re-detected only when the game changes")
 	eq(c.ctx.get("game_key", ""), "steam:1", "perf provider context follows the game")
+	_done([c])
+
+
+## The quick menu sets the game on every open: the same game again must not make every row
+## read itself again (that cost its first frame ~10 ms), only a UI-local control that moved
+## says so.
+func test_model_same_game_again_is_quiet() -> void:
+	var c := fake()
+	var m = _model(c)
+	var goal := {"auto": false}
+	m.add_local(ControlScript.make({"id": "power.autotune", "group": "power", "kind": "toggle", "title": "Auto TDP",
+		"per_game": false}, func(_c): return "", func(_c): return goal["auto"], func(_c, _v): return true))
+	var seen := {"refreshed": 0, "changed": []}
+	m.refreshed.connect(func(): seen["refreshed"] += 1)
+	m.changed.connect(func(id, _v): seen["changed"].append(id))
+	m.set_game({"key": "steam:1"})
+	var after_new: int = seen["refreshed"]
+	ok(after_new >= 1, "a new game: every row reads again")
+	m.set_game({"key": "steam:1"})
+	eq(seen["refreshed"], after_new, "the same game again: no refresh of every row")
+	eq(seen["changed"], [], "nothing moved: nothing said")
+	goal["auto"] = true
+	m.set_game({"key": "steam:1"})
+	eq(seen["changed"], ["power.autotune"], "a UI-local control that moved says so")
+	eq(m.value("power.autotune"), true, "and reads its new value")
 	_done([c])
 
 

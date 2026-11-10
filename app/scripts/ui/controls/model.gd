@@ -88,8 +88,20 @@ func set_game(g: Dictionary, redetect := true) -> void:
 			pp.set_game(controls.ctx, g)
 	if redetect and not same and controls != null and controls.has_method("detect_all"):
 		controls.detect_all()
-	_redetect_locals()
-	refreshed.emit()
+	if not same:
+		_redetect_locals()
+		refreshed.emit()
+		return
+	# The same game again (the quick menu opening over it): nothing in Controls
+	# moved, so only the UI-local controls are read again, and only the ones
+	# that changed say so; a refresh of every row here would cost the menu's
+	# first frame its speed.
+	for id in _local_order:
+		var before := var_to_str(_local[id].describe())
+		_local[id].detect()
+		_local[id].read()
+		if var_to_str(_local[id].describe()) != before:
+			changed.emit(id, _local[id].value)
 
 
 func game_key() -> String:
