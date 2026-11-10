@@ -46,6 +46,9 @@ func _profiles(c: Node) -> Node:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(PROFILE_FILE))
 	var p: Node = ProfilesScript.new()
 	p.setup(c, "msi-claw-8-ex", PROFILE_FILE)
+	# setup() reads the charger from the real /sys when the fake has no sys_root: on a
+	# plugged-in handheld that made the "battery" layer checks fail (seen on the Claw)
+	p.source = "battery"
 	return p
 
 
