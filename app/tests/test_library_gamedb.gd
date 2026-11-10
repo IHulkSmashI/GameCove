@@ -163,3 +163,35 @@ func test_bad_or_missing_download_keeps_old_copy() -> void:
 
 func test_unpack_cap_is_sane() -> void:
 	ok(GameDB.MAX_UNPACKED <= 128 * 1024 * 1024, "a bad download can't take more than 128 MB")
+
+
+## Review 2, problem 1: a refused download wasn't remembered, so every start
+## downloaded 18.5 MB and threw it away. Retries are daily; offline isn't a failure.
+func test_failed_download_is_retried_at_most_daily() -> void:
+	var path := _tmp_cache()
+	var db: Node = GameDB.new()
+	db.cache_path = path
+	db._on_downloaded(HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())
+	eq(GameDB.last_failure(path), 0, "offline isn't recorded")
+	var f := FileAccess.open(path + ".part", FileAccess.WRITE)
+	f.store_string("<html>maintenance</html>")
+	f.close()
+	db._on_downloaded(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), PackedByteArray())
+	var now := int(Time.get_unix_time_from_system())
+	ok(absi(GameDB.last_failure(path) - now) < 5, "a refused file is recorded")
+	ok(not GameDB.should_download(path, now), "no new download the same day")
+	ok(GameDB.should_download(path, now + GameDB.MAX_AGE_S), "a day later it tries again")
+	GameDB.SettingsFile.save_text(path + GameDB.FAILED_SUFFIX, "%d\n" % (now - GameDB.MAX_AGE_S - 1))
+	db._on_downloaded(HTTPRequest.RESULT_SUCCESS, 404, PackedStringArray(), PackedByteArray())
+	ok(absi(GameDB.last_failure(path) - now) < 5, "an HTTP error is recorded too")
+	# a good download clears it
+	var good := FileAccess.get_file_as_bytes(fixture("library/gamedb.json.gz"))
+	f = FileAccess.open(path + ".part", FileAccess.WRITE)
+	f.store_buffer(good)
+	f.close()
+	db._on_downloaded(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), PackedByteArray())
+	ok(not FileAccess.file_exists(path + GameDB.FAILED_SUFFIX), "a good download clears the record")
+	GameDB.take_handoff(path)
+	db.free()
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(path.get_base_dir())
