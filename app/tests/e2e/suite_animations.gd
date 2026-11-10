@@ -81,6 +81,7 @@ func test_screen_changes_follow_the_press_and_never_block_input() -> void:
 	var lib: Control = m.screens["library"]
 	eq(m.current, "library", "RB: Library")
 	ok(lib.position.x > 0.0 and lib.modulate.a < 1.0, "slides in from the right (x %.1f, a %.2f)" % [lib.position.x, lib.modulate.a])
+	ok(lib.position.x <= m.SCREEN_SLIDE_PX, "from at most 36 px")
 	ok(m.screens["home"].visible, "Home still fading out under it")
 	await w.frames(2)
 	var f: Control = focus()
@@ -138,7 +139,12 @@ func test_screen_changes_under_reduce_motion_are_instant() -> void:
 	mot.reduce = false
 
 
-## The game page rises in over the screen; closing it lands focus back on the tile.
+func _leaving_page() -> Node:
+	return w.main.get_node_or_null("GamePageLeaving")
+
+
+## The game page's cards slide up as it opens; B shows the screen under it at
+## once while the page drops its cards and fades; focus lands back on the tile.
 func test_game_page_opens_and_closes_smoothly() -> void:
 	var m: Control = w.main
 	await w.idle()
@@ -146,19 +152,89 @@ func test_game_page_opens_and_closes_smoothly() -> void:
 	if tiles.is_empty():
 		ok(true, "no shelves on this setup")
 		return
-	tiles[0].grab_focus()
+	var t: Control = tiles[0]
+	for x in tiles:
+		if str(x.game.get("key", "")) != str(m.home.spotlight_game.get("key", "-")):
+			t = x
+			break
+	t.grab_focus()
 	await w.frames(2)
 	await a()
 	ok(m.page != null, "A on a tile: the game page")
-	ok(m.page.position.y > 0.0 and m.page.modulate.a < 1.0, "rising in")
+	var gap0: float = m.page.CARDS_GAP
+	ok(m.page.cards_gap.custom_minimum_size.y > gap0, "its cards slide up (gap %.1f)" % m.page.cards_gap.custom_minimum_size.y)
+	if str(t.game.get("key", "")) != str(m.home.spotlight_game.get("key", "-")):
+		ok(m.page.modulate.a < 1.0, "another game than the hero's: the page fades in")
 	await w.wait_s(0.4)
-	eq(m.page.position.y, 0.0, "in place")
+	eq(m.page.cards_gap.custom_minimum_size.y, gap0, "cards in place")
+	eq(m.page.modulate.a, 1.0, "page shown")
 	await b()
 	ok(m.page == null, "B closes it at once")
-	eq(focus(), tiles[0], "focus back on the tile")
+	eq(focus(), t, "focus back on the tile")
+	ok(m.home.visible and m.home.modulate.a == 1.0 and m.home.scale == Vector2.ONE, "Home there at once, no fade")
+	var gone: Node = _leaving_page()
+	ok(gone != null, "the page drops its cards and fades over it")
+	await w.wait_s(0.3)
+	ok(_leaving_page() == null, "then it's freed")
+	ok(not is_instance_valid(gone), "really gone")
+
+
+## Opened from Home's hero on the same game: the hero stays (the page shows at
+## once, no fade out and back in) and only the cards slide up.
+func test_game_page_from_the_hero_keeps_the_hero() -> void:
+	var m: Control = w.main
+	await w.idle()
+	if m.home.spotlight_game.is_empty():
+		ok(true, "no hero on this setup")
+		return
+	m.home.play_button.grab_focus()
+	await w.frames(1)
+	m._open_page(m.home.spotlight_game)
+	ok(m.page.modulate.a == 1.0 and m.page.position == Vector2.ZERO, "the page is there at once: the hero doesn't strobe")
+	ok(m.page.cards_gap.custom_minimum_size.y > m.page.CARDS_GAP, "only the cards move")
+	var dy: float = m.page.play_button.get_global_rect().position.y - m.home.play_button.get_global_rect().position.y
+	ok(absf(dy) < 2.0, "the title and Play start where Home's are (%.1f px off)" % dy)
+	var hf: Rect2 = m.home.frame.get_global_rect()
+	await w.frames(1)
+	var pf: Rect2 = m.page.frame.get_global_rect()
+	ok(absf(pf.position.y - hf.position.y) < 1.0 and absf(pf.size.x - hf.size.x) < 1.0, "the page's hero card is where Home's was (%s vs %s)" % [pf, hf])
 	await w.wait_s(0.4)
-	eq(m.home.scale, Vector2.ONE, "Home settled back")
-	eq(m.home.modulate.a, 1.0, "fully shown")
+	eq(m.page.cards_gap.custom_minimum_size.y, m.page.CARDS_GAP, "cards in place")
+	await b()
+	eq(focus(), m.home.play_button, "Back lands on what opened it (Home doesn't scroll away to a tile)")
+	await w.wait_s(0.3)
+
+
+## Under the launch zoom the screen steps back (32 px, fades); a launch that
+## goes back puts it in place at once so the zoom lands on its art.
+func test_launch_recedes_the_screen_and_brings_it_back() -> void:
+	var m: Control = w.main
+	await w.idle()
+	var o := _overlay()
+	o.show_for(GAME_B, Color.CYAN, {"node": m.home.frame})
+	m._launch_recede()
+	await w.wait_s(0.25)
+	ok(m.home.modulate.a < 0.01, "Home faded under the splash")
+	eq(m.home.position.y, m.LAUNCH_RECEDE_PX, "and dropped 32 px")
+	eq(o.prompts.modulate.a, 0.0, "no Cancel hint in the first 2 s")
+	o.cancel()
+	eq(m.home.position.y, 0.0, "cancel: back in place at once")
+	await until(func(): return not o.visible, 1000)
+	eq(m.home.modulate.a, 1.0, "and shown again")
+	await w.idle()
+
+
+## A slow launch: after 2 s the small "B Cancel" hint fades in.
+func test_slow_launch_shows_the_cancel_hint() -> void:
+	var o := _overlay()
+	o.show_for(GAME_B, Color.CYAN, {})
+	await w.wait_s(1.5)
+	ok(o.prompts.modulate.a < 0.01, "still hidden at 1.5 s")
+	await w.wait_s(1.0)
+	ok(o.prompts.modulate.a > 0.99, "shown by 2.5 s")
+	o.cancel()
+	await until(func(): return not o.visible, 1000)
+	await w.idle()
 
 
 ## Toasts slide in from the right and settle; their timers and tweens end.

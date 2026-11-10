@@ -55,6 +55,7 @@ func test_launch_starts_on_the_pressed_art() -> void:
 	eq(o.center.modulate.a, 0.0, "logo comes in later")
 	eq(o.running_tweens(), 2, "zoom and shimmer")
 	eq(o.title.text, "Hades", "the title stands in for a missing logo")
+	eq(o.prompts.modulate.a, 0.0, "no Cancel hint yet: it only shows if the game is slow to start")
 	host.free()
 	Motion.reduce = was
 
@@ -234,7 +235,7 @@ func test_boot_intro_plays_the_clip_when_there_else_the_code_animation() -> void
 	ok(c.find_child("Mark", true, false) != null and c.find_child("Sweep", true, false) != null, "the mark and its glow sweep")
 	var logo: TextureRect = c.find_child("Logo", true, false)
 	ok(logo != null and logo.texture != null, "the GameCove mark (assets/logo-mark.svg = assets/logo.svg)")
-	ok(Splash.IN_S + 0.0 <= Splash.HOLD_UNTIL and Splash.HOLD_UNTIL + Splash.OUT_S <= 2.0, "the code animation is 2 s or less")
+	ok(Splash.IN_S + 0.0 <= Splash.HOLD_UNTIL and Splash.HOLD_UNTIL + Splash.MORPH_S <= 2.0, "the code animation is 2 s or less")
 	c.skip()
 	ok(c._done, "a button skips it")
 	c.free()
@@ -247,3 +248,102 @@ func test_boot_intro_never_delays_readiness() -> void:
 	ok(heartbeat > 0 and intro > heartbeat, "the intro starts after the heartbeat is set up")
 	ok(not src.contains("await _boot_intro") and not src.contains("_boot_intro.finished"), "nothing waits for it")
 	ok(src.contains("_boot_intro.skip(true)"), "it goes at once when our window loses focus")
+
+
+## The timings the motion pass settled on (snappy, never in the way).
+func test_motion_timings() -> void:
+	ok(LaunchOverlay.ZOOM_S >= 0.18 and LaunchOverlay.ZOOM_S <= 0.22, "launch zoom ~0.2 s")
+	ok(LaunchOverlay.open_s() <= 0.3, "the whole way in under 0.3 s (%.2f)" % LaunchOverlay.open_s())
+	eq(LaunchOverlay.PUSH_SCALE, 1.04, "the hero art pushes in to 1.04 with the title")
+	ok(LaunchOverlay.HINT_AT >= 2.0, "the Cancel hint waits 2 s")
+	eq(LaunchOverlay.BACK_S, 0.2, "failed or cancelled: back in 0.2 s")
+	var M = load("res://scripts/main.gd")
+	eq(M.SCREEN_SLIDE_PX, 36.0, "tabs slide 36 px")
+	eq(M.SCREEN_IN_S, 0.16, "in 0.16 s")
+	ok(M.SCREEN_OUT_S < M.SCREEN_FADE_IN_S, "the old tab is gone before the new one is opaque")
+	eq(M.LAUNCH_RECEDE_PX, 32.0, "under the launch the screen drops 32 px")
+	eq(M.LAUNCH_RECEDE_S, 0.12, "in 0.12 s")
+	eq(M.PAGE_CARDS_PX, 48.0, "game page cards slide 48 px")
+	ok(M.PAGE_IN_S == 0.22 and M.PAGE_OUT_S == 0.14, "in 0.22 s, out 0.14 s")
+	eq(M.WAKE_FADE_S, 0.2, "wake fade 0.2 s")
+	var Toasts = load("res://scripts/ui/toast.gd")
+	ok(Toasts.SLIDE_PX == 40.0 and Toasts.IN_S == 0.18 and Toasts.OUT_S == 0.14 and Toasts.STAY_S == 3.5, "toasts: 40 px in 0.18 s, 3.5 s, out 0.14 s")
+	var Shelf = load("res://scripts/ui/shelf.gd")
+	eq(Shelf.REVEAL_SHELF_STAGGER_S, 0.04, "shelves enter 40 ms apart")
+	var Splash = load("res://scripts/ui/boot_splash.gd")
+	ok(Splash.VIDEO_END_S + Splash.MORPH_S <= 2.35, "the clip ends with the fly-in by ~2.3 s")
+	eq(Splash.MORPH_S, 0.28, "the fly-in is 0.28 s")
+	eq(Splash.PULSE_S, 0.2, "one 0.2 s focus pulse")
+
+
+class SplashHost extends Control:
+	var top_bar: Control
+
+
+func test_boot_intro_ends_by_flying_the_mark_into_the_top_bar() -> void:
+	var was: bool = Motion.reduce
+	Motion.reduce = false
+	var Splash = load("res://scripts/ui/boot_splash.gd")
+	for m in ["video", "code"]:
+		var host := SplashHost.new()
+		host.size = Vector2(1280, 800)
+		_root().add_child(host)
+		var tb := Control.new()
+		tb.name = "TopBar"
+		host.add_child(tb)
+		host.top_bar = tb
+		var logo := TextureRect.new()
+		logo.name = "Logo"
+		logo.position = Vector2(24, 14)
+		logo.size = Vector2(34, 34)
+		tb.add_child(logo)
+		var b := Button.new()
+		b.position = Vector2(100, 300)
+		b.size = Vector2(160, 48)
+		host.add_child(b)
+		var s: Control = Splash.new()
+		s.build(m)
+		s._host = host
+		host.add_child(s)
+		s.size = host.size
+		if m == "video":
+			s.player.size = host.size
+			var r: Rect2 = s.mark_rect()
+			ok(r.get_center().distance_to(Vector2(640, 400)) < 0.5, "video: the clip's mark is in the middle")
+			ok(absf(r.size.x - 1280.0 * Splash.CLIP_MARK_FRAC) < 0.5, "at the clip's size (%s)" % r.size)
+		s._morph()
+		ok(s._done, "%s: presses go to the home screen once it flies" % m)
+		ok(s.flyer != null and s.flyer.texture != null, "%s: the mark flies" % m)
+		eq(logo.modulate.a, 0.0, "%s: the top bar's logo waits for it" % m)
+		s._landed(b)   # (the focused control; no live viewport in unit tests)
+		eq(logo.modulate.a, 1.0, "%s: then shows (the mark landed on it)" % m)
+		var ring: Control = s.find_child("FocusPulse", true, false)
+		ok(ring != null, "%s: a ring pulses on the focused control" % m)
+		if ring != null:
+			ok(Rect2(ring.position, ring.size).encloses(Rect2(b.position, b.size)), "%s: around it" % m)
+		s.free()
+		eq(logo.modulate.a, 1.0, "%s: the top bar's logo is never left hidden" % m)
+		host.free()
+	Motion.reduce = was
+
+
+func test_boot_intro_skipped_mid_flight_leaves_the_logo_shown() -> void:
+	var Splash = load("res://scripts/ui/boot_splash.gd")
+	var host := SplashHost.new()
+	_root().add_child(host)
+	var tb := Control.new()
+	host.add_child(tb)
+	host.top_bar = tb
+	var logo := TextureRect.new()
+	logo.name = "Logo"
+	logo.size = Vector2(34, 34)
+	tb.add_child(logo)
+	var s: Control = Splash.new()
+	s.build("code")
+	s._host = host
+	host.add_child(s)
+	s._morph()
+	eq(logo.modulate.a, 0.0, "flying")
+	s.skip(true)   # our window lost focus
+	eq(logo.modulate.a, 1.0, "the top bar's logo is back at once")
+	host.free()

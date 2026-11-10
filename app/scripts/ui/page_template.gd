@@ -38,6 +38,11 @@ var header: VBoxContainer
 var actions_row: HBoxContainer
 var actions: Array = []
 var cards_box: VBoxContainer
+## The space between the action row and the cards (CARDS_GAP tall). The cards
+## slide by growing it for a moment (see slide_cards): they sit in a container,
+## which would put a moved position back on its next layout pass.
+var cards_gap: Control
+const CARDS_GAP := 30.0
 var scroll: ScrollContainer
 ## Focusable controls inside cards, top to bottom (add_focusable / finish).
 var focusables: Array = []
@@ -160,9 +165,10 @@ func setup_page(g: Dictionary, line := "") -> void:
 	actions_row = Kit.hbox(14)
 	actions_row.name = "Actions"
 	col.add_child(actions_row)
-	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 30)
-	col.add_child(gap)
+	cards_gap = Control.new()
+	cards_gap.name = "CardsGap"
+	cards_gap.custom_minimum_size = Vector2(0, CARDS_GAP)
+	col.add_child(cards_gap)
 	cards_box = Kit.vbox(18)
 	cards_box.name = "Cards"
 	col.add_child(cards_box)
@@ -468,3 +474,17 @@ func _link_top_target() -> void:
 		return
 	for a in actions:
 		a.focus_neighbor_top = a.get_path_to(top_target)
+
+
+## The cards (everything under the action row) slide: from `from_px` lower
+## to their place, fading in, or (`leaving`) down by `from_px` as they fade
+## out. Returns the tween (null: set at once, e.g. under reduce motion).
+func slide_cards(from_px: float, dur: float, leaving := false) -> Tween:
+	if cards_box == null or cards_gap == null:
+		return null
+	var a := Vector2(0, CARDS_GAP + (0.0 if leaving else Motion.slide(from_px)))
+	var b := Vector2(0, CARDS_GAP + (Motion.slide(from_px) if leaving else 0.0))
+	var ease := Tween.EASE_IN if leaving else Tween.EASE_OUT
+	var trans := Tween.TRANS_CUBIC if leaving else Tween.TRANS_EXPO
+	Motion.enter(cards_box, "modulate:a", 1.0 if leaving else 0.0, 0.0 if leaving else 1.0, dur * (1.0 if leaving else 0.7))
+	return Motion.enter(cards_gap, "custom_minimum_size", a, b, dur, 0.0, trans, ease)

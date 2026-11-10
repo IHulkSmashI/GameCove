@@ -206,15 +206,17 @@ func _check_nested_mask() -> void:
 
 ## Covers that rise in on reveal (the ones on screen, and one more).
 const REVEAL_TILES := 7
-const REVEAL_RISE_PX := 18.0
-const REVEAL_S := 0.34
-const REVEAL_STAGGER_S := 0.035
+const REVEAL_RISE_PX := 24.0
+const REVEAL_S := 0.22
+const REVEAL_STAGGER_S := 0.03
+## Each shelf after the first starts this much later (home.gd).
+const REVEAL_SHELF_STAGGER_S := 0.04
 
 
 ## First show: the row fades in and its covers rise into place one after
 ## another. Instant under reduce motion; a focus lift takes over cleanly.
 func reveal(delay := 0.0) -> void:
-	Motion.enter(self, "modulate:a", 0.0, 1.0, REVEAL_S, delay)
+	Motion.enter(self, "modulate:a", 0.0, 1.0, REVEAL_S * 0.6, delay)
 	for i in mini(tiles.size(), REVEAL_TILES):
 		var card: Variant = tiles[i].get("card")
 		if card is Control:

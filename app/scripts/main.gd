@@ -254,6 +254,7 @@ func _ready() -> void:
 
 	launch_overlay = LaunchOverlay.new()
 	launch_overlay.cancel_requested.connect(_on_launch_cancelled)
+	launch_overlay.revealing.connect(_launch_reveal)
 	add_child(launch_overlay)
 
 	quick_menu = QuickMenu.new()
@@ -782,7 +783,7 @@ func _on_power_resumed() -> void:
 ## settle from a touch smaller), only when it's ours that shows. Never before a
 ## suspend, never in the way of the resume work (it's called after it), never
 ## blocks input, once per wake.
-const WAKE_FADE_S := 0.6
+const WAKE_FADE_S := 0.2
 var _wake_shade: ColorRect
 var _last_wake_ms := -1_000_000
 
@@ -806,7 +807,7 @@ func _wake_fade() -> void:
 	if t != null:
 		t.finished.connect(_wake_shade.hide)
 	_screen_layer.pivot_offset = size / 2.0
-	Motion.enter(_screen_layer, "scale", Vector2.ONE * 0.985, Vector2.ONE, WAKE_FADE_S + 0.1, 0.0, Tween.TRANS_QUART, Tween.EASE_OUT)
+	Motion.enter(_screen_layer, "scale", Vector2.ONE * 0.985, Vector2.ONE, WAKE_FADE_S + 0.04, 0.0, Tween.TRANS_QUART, Tween.EASE_OUT)
 
 
 ## After a sleep: Power re-reads on its worker, puts the TDP back and emits
@@ -1111,13 +1112,15 @@ func show_screen(id: String, dir := 0) -> void:
 		backdrop.show_game(home.spotlight_game)
 
 
-## Screen change timings: the old screen is mostly gone within ~120 ms while
-## the new one fades in slowly at first (no double exposure) and slides for
-## ~240 ms, easing out.
-const SCREEN_IN_S := 0.24
-const SCREEN_FADE_IN_S := 0.2
-const SCREEN_OUT_S := 0.12
-const SCREEN_SLIDE_PX := 48.0
+## Screen change timings: the new screen slides SCREEN_SLIDE_PX in from the
+## side the press went over SCREEN_IN_S with a strong ease-out (most of the
+## move lands in the first frames, so the direction reads even at a glance)
+## and is opaque within SCREEN_FADE_IN_S; the old one slides the same distance
+## the other way and is gone within SCREEN_OUT_S, so they barely overlap.
+const SCREEN_IN_S := 0.16
+const SCREEN_FADE_IN_S := 0.12
+const SCREEN_OUT_S := 0.09
+const SCREEN_SLIDE_PX := 36.0
 
 
 func _screen_in(s: Control, d: float) -> void:
@@ -1126,13 +1129,13 @@ func _screen_in(s: Control, d: float) -> void:
 	s.visible = true   # a screen still fading out (pressed back quickly) turns around from where it is
 	s.scale = Vector2.ONE
 	s.position.x = Motion.slide(SCREEN_SLIDE_PX) * d
-	Motion.to(s, "modulate:a", 1.0, SCREEN_FADE_IN_S, Tween.TRANS_SINE, Tween.EASE_IN)
-	Motion.to(s, "position:x", 0.0, SCREEN_IN_S, Tween.TRANS_QUART, Tween.EASE_OUT)
+	Motion.to(s, "modulate:a", 1.0, SCREEN_FADE_IN_S, Tween.TRANS_LINEAR, Tween.EASE_OUT)
+	Motion.to(s, "position:x", 0.0, SCREEN_IN_S, Tween.TRANS_EXPO, Tween.EASE_OUT)
 
 
 func _screen_out(s: Control, d: float) -> void:
 	var t := Motion.to(s, "modulate:a", 0.0, SCREEN_OUT_S)
-	Motion.to(s, "position:x", -Motion.slide(SCREEN_SLIDE_PX * 0.5) * d, SCREEN_OUT_S, Tween.TRANS_CUBIC, Tween.EASE_OUT)
+	Motion.to(s, "position:x", -Motion.slide(SCREEN_SLIDE_PX) * d, SCREEN_OUT_S, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	if t == null:
 		_screen_hidden(s)
 	else:
@@ -1186,12 +1189,40 @@ func _play(game: Dictionary) -> void:
 		return
 	playing = game
 	launch_overlay.show_for(game, backdrop.current_accent(), _launch_source(game))
+	_launch_recede()
 	_pause_motion()
 	var launched: Dictionary = Library.launch(game)
 	session.begin(game, launched)
 	if not bool(launched.get("ok", false)):
 		launch_overlay.back()   # Library says why (action_failed)
 		_resume_motion()
+
+
+## Under the launch zoom the screen it started on steps back: a short drop
+## and a quick fade (it's covered within ~0.2 s anyway).
+const LAUNCH_RECEDE_PX := 32.0
+const LAUNCH_RECEDE_S := 0.12
+var _receded: Control
+
+
+func _launch_recede() -> void:
+	_receded = _screen()
+	if _receded == null or not launch_overlay.is_open():
+		return
+	Motion.to(_receded, "modulate:a", 0.0, LAUNCH_RECEDE_S)
+	Motion.to(_receded, "position:y", Motion.slide(LAUNCH_RECEDE_PX), LAUNCH_RECEDE_S, Tween.TRANS_CUBIC, Tween.EASE_OUT)
+
+
+## The splash is on its way back (failed or cancelled launch, timeout) or the
+## game came back: the screen is in place at once (the zoom goes back into its
+## art) and fades back up.
+func _launch_reveal() -> void:
+	var n := _receded
+	_receded = null
+	if n == null or not is_instance_valid(n):
+		return
+	Motion.to(n, "position:y", 0.0, 0.0)
+	Motion.to(n, "modulate:a", 1.0, launch_overlay.BACK_S)
 
 
 ## Where the launch zoom starts: the art Play was pressed on (Home's hero, the
@@ -1221,6 +1252,7 @@ func _play_stream(game: Dictionary, host_id: String, app: Dictionary) -> void:
 		return
 	playing = game
 	launch_overlay.show_for(game, backdrop.current_accent(), _launch_source(game))
+	_launch_recede()
 	_pause_motion()
 	session.begin(game, launched)
 
@@ -1290,6 +1322,10 @@ func _on_game_ended(game: Dictionary) -> void:
 ## Coming back from a game: the screens settle in from slightly smaller.
 func _return_home() -> void:
 	_resume_motion()
+	if _receded != null and is_instance_valid(_receded):
+		Motion.to(_receded, "position:y", 0.0, 0.0)
+		Motion.to(_receded, "modulate:a", 1.0, 0.0)
+	_receded = null
 	_screen_layer.pivot_offset = size / 2.0
 	_screen_layer.scale = Vector2.ONE * (1.0 if Motion.reduce else 0.97)
 	_screen_layer.modulate.a = 0.0
@@ -1320,6 +1356,8 @@ func _open_page(game: Dictionary) -> void:
 	if page != null:
 		_close_page()
 	close_downloads()
+	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	_page_return = f if f != null and screens[current].is_ancestor_of(f) else null
 	page = GamePage.new()
 	var g := View.find_by_key(_decorated(), str(game.get("key", "")))
 	page.setup(g if not g.is_empty() else game, Launcher, {"library": store_api, "state": install_state, "actions": game_actions, "achievements": achievements_api})
@@ -1330,11 +1368,19 @@ func _open_page(game: Dictionary) -> void:
 		page.game_settings.edit_requested.connect(_open_game_settings)
 	add_child(page)
 	move_child(page, top_bar.get_index())
-	# The page rises into place as it fades in.
-	page.modulate.a = 0.0
-	page.position.y = Motion.slide(PAGE_RISE_PX)
-	Motion.to(page, "modulate:a", 1.0, SCREEN_IN_S)
-	Motion.to(page, "position:y", 0.0, SCREEN_IN_S, Tween.TRANS_QUART, Tween.EASE_OUT)
+	# Opened from Home's hero on the same game: the hero stays put (the page's
+	# hero card is drawn where Home's was, so nothing fades out and back in)
+	# and only the cards slide up. From anywhere else the page fades in
+	# quickly with the same card slide.
+	if _page_shares_hero(game):
+		page.modulate.a = 1.0
+		Motion.enter(page.frame, "offset_bottom", home.frame.offset_bottom, page.frame.offset_bottom, PAGE_IN_S,
+			0.0, Tween.TRANS_EXPO, Tween.EASE_OUT)
+		_pin_page_header()
+	else:
+		page.modulate.a = 0.0
+		Motion.to(page, "modulate:a", 1.0, PAGE_FADE_S)
+	page.slide_cards(PAGE_CARDS_PX, PAGE_IN_S)
 	screens[current].visible = false
 	_link_top()
 	backdrop.show_game(game)
@@ -1343,30 +1389,87 @@ func _open_page(game: Dictionary) -> void:
 	_sound("select")
 
 
-## The game page rises this far as it opens; the screen under it settles back
-## from a touch smaller when it closes.
-const PAGE_RISE_PX := 22.0
-const PAGE_BACK_SCALE := 0.985
+## The game page: its cards slide up PAGE_CARDS_PX over PAGE_IN_S as it opens
+## (the page fades in over PAGE_FADE_S unless it shares Home's hero); on Back
+## the screen under it is there at once and the page's cards drop
+## PAGE_CARDS_PX as it fades over PAGE_OUT_S.
+const PAGE_CARDS_PX := 48.0
+const PAGE_IN_S := 0.22
+const PAGE_FADE_S := 0.14
+const PAGE_OUT_S := 0.14
+## What had focus when the page opened (Home's Game page button, a tile), so
+## Back lands exactly there and the screen under it doesn't scroll away.
+var _page_return: Variant = null
+
+
+## The page's title, meta and Play start where Home's are and settle into
+## the page's own place with the cards (the art doesn't move). The page is
+## laid out now (its containers sorted at once) so nothing shows misplaced.
+func _pin_page_header() -> void:
+	if Motion.reduce or page.play_button == null:
+		return
+	_sort_now(page)
+	var dy: float = page.play_button.get_global_rect().position.y - home.play_button.get_global_rect().position.y
+	if absf(dy) < 1.0 or absf(dy) > 200.0:
+		return
+	var y: float = page.scroll.position.y
+	Motion.enter(page.scroll, "position:y", y - dy, y, PAGE_IN_S, 0.0, Tween.TRANS_EXPO, Tween.EASE_OUT)
+
+
+## Lay a freshly built tree out now instead of over the next deferred passes.
+static func _sort_now(n: Node) -> void:
+	if n is Container:
+		n.notification(Container.NOTIFICATION_SORT_CHILDREN)
+	for c in n.get_children():
+		_sort_now(c)
+
+
+## Home's hero shows this game right now, where the page's hero card goes.
+func _page_shares_hero(game: Dictionary) -> bool:
+	return current == "home" and home.visible and home.frame.is_visible_in_tree() \
+		and str(home.spotlight_game.get("key", "-")) == str(game.get("key", ""))
 
 
 func _close_page() -> void:
 	if page == null:
 		return
 	var key: String = page.game.get("key", "")
-	page.queue_free()
+	var leaving: Control = page
 	page = null
 	_link_top()
 	var s: Control = screens[current]
 	s.visible = true
-	s.modulate.a = 0.0
-	s.position.x = 0.0
-	s.pivot_offset = s.size / 2.0
-	s.scale = Vector2.ONE * (1.0 if Motion.reduce else PAGE_BACK_SCALE)
-	Motion.to(s, "modulate:a", 1.0, SCREEN_IN_S)
-	Motion.to(s, "scale", Vector2.ONE, SCREEN_IN_S, Tween.TRANS_QUART, Tween.EASE_OUT)
-	# Land back on the tile that opened the page, else the default.
+	s.modulate.a = 1.0
+	s.position = Vector2.ZERO
+	s.scale = Vector2.ONE
+	# The page drops its cards and fades over the screen, which is already
+	# there and taking input; nothing on it can take focus on the way out.
+	leaving.name = "GamePageLeaving"
+	leaving.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Only its cards leave: its backdrop, hero, title and actions go at once,
+	# so the screen under it (Home's own hero) shows straight away.
+	for c in leaving.get_children():
+		if c is CanvasItem and c != leaving.scroll:
+			(c as CanvasItem).visible = false
+	for c in [leaving.header, leaving.actions_row]:
+		if c != null:
+			c.modulate.a = 0.0
+	leaving.set_process_input(false)
+	leaving.set_process_unhandled_input(false)
+	var out := Motion.to(leaving, "modulate:a", 0.0, PAGE_OUT_S, Tween.TRANS_CUBIC, Tween.EASE_IN)
+	if out == null:
+		leaving.queue_free()
+	else:
+		leaving.slide_cards(PAGE_CARDS_PX, PAGE_OUT_S, true)
+		out.finished.connect(leaving.queue_free)
+	# Land back on what opened the page, else its game's tile, else the default.
 	var target: Control = null
-	if current == "home":
+	var back_to: Variant = _page_return
+	_page_return = null
+	if is_instance_valid(back_to) and back_to is Control and (back_to as Control).is_visible_in_tree() \
+			and s.is_ancestor_of(back_to) and (back_to as Control).focus_mode != Control.FOCUS_NONE:
+		target = back_to
+	elif current == "home":
 		target = home.tile_for(key)
 	elif current == "library":
 		for t in library_screen.tiles():
