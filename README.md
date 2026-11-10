@@ -86,13 +86,14 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 7. [Streaming from your PC](#streaming-from-your-pc)
 8. [Discover](#discover)
 9. [Safety and reliability](#safety-and-reliability)
-10. [Network and privacy](#network-and-privacy)
-11. [Supported handhelds](#supported-handhelds)
-12. [Install](#install)
-13. [FAQ](#faq)
-14. [Community](#community)
-15. [Credits](#credits)
-16. [Licence](#licence)
+10. [Performance](#performance)
+11. [Network and privacy](#network-and-privacy)
+12. [Supported handhelds](#supported-handhelds)
+13. [Install](#install)
+14. [FAQ](#faq)
+15. [Community](#community)
+16. [Credits](#credits)
+17. [Licence](#licence)
 
 ---
 
@@ -303,6 +304,18 @@ over Tailscale. More in [docs/STREAMING.md](docs/STREAMING.md).
   default.
 - **Signed releases.** The installer checks every download against a signed checksum list before anything runs.
 - **Day-to-day settings never ask for a password.** Only the install and system fixes do, in Desktop Mode.
+
+## Performance
+
+GameCove stays running behind your games (for the quick menu, power and TDP, and game tracking) and is built to cost
+next to nothing there. With a game in front its main loop wakes about 31 times a second instead of 145, nothing polls
+for the game's window (one idle `xprop -spy` watches it), the session heartbeat writes nothing, and Discover, the
+metadata and art fill and update checks wait until you stop playing. Only safety work keeps running: the 15 s charger
+and sleep check that puts your TDP and charge limit back after a resume, the thermal guard, and Auto TDP's once-a-second
+sample while it's on. The quick menu still opens over a game in under 100 ms. On our test box that cut GameCove's
+wake-ups behind a game from about 2240 to 1190 a second and its CPU time in half; most of what's left is Godot's own X11
+event thread. Numbers, what runs and why, and how to measure it on your handheld:
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Network and privacy
 

@@ -324,9 +324,9 @@ func auto_fill(games: Array) -> int:
 	if n > 0:
 		SettingsFile.save_json(_abs(auto_tried_path), _auto_tried)
 	if sync_mode:
-		while not _auto.is_empty():
+		while not _auto.is_empty() and not paused:
 			_auto_next()
-	elif _timer != null and _timer.is_stopped() and n > 0:
+	elif _timer != null and _timer.is_stopped() and n > 0 and not paused:
 		_timer.start(0.5)
 	return n
 
@@ -344,8 +344,25 @@ func _load_auto_tried(now: int) -> void:
 				_auto_tried[id] = t
 
 
+## True while a game runs (Library.set_background_paused): the automatic fill waits;
+## searches and picks the user makes still run.
+var paused := false
+
+
+func set_paused(on: bool) -> void:
+	paused = on
+	if on and _timer != null and _timer.is_inside_tree():
+		_timer.stop()
+	elif not on and not _auto.is_empty():
+		if sync_mode:
+			while not _auto.is_empty() and not paused:
+				_auto_next()
+		elif _timer != null and _timer.is_inside_tree() and _timer.is_stopped():
+			_timer.start(0.5)
+
+
 func _auto_next() -> void:
-	if _auto.is_empty():
+	if _auto.is_empty() or paused:
 		return
 	if not Privacy.background_allowed(prefs_path) or unavailable_reason() != "":
 		_auto.clear()   # a switch went off (or the key went away) after these were queued (review 2, low 23)

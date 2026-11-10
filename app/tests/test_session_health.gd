@@ -67,3 +67,29 @@ func test_game_start_and_end_beat_at_once() -> void:
 	s.ended.emit({})
 	eq(FileAccess.get_file_as_string(p), "2 ui\n", "and back to ui on end")
 	h.free()
+
+
+func test_nothing_is_written_while_a_game_runs() -> void:
+	var d := _dir()
+	var p := d.path_join("gamecove-heartbeat")
+	var h: Node = SessionHealth.new(p)
+	var playing := [false]
+	h.game_running = func() -> bool: return playing[0]
+	ok(h.tick(), "ui: every tick beats")
+	ok(h.tick(), "ui: and the next")
+	eq(FileAccess.get_file_as_string(p), "2 ui\n", "two beats")
+	playing[0] = true
+	ok(h.tick(), "the game start is written on the next tick")
+	eq(FileAccess.get_file_as_string(p), "3 game\n", "says game")
+	ok(not h.tick() and not h.tick(), "no writes while the file says game: the client never counts it stale")
+	eq(FileAccess.get_file_as_string(p), "3 game\n", "unchanged")
+	playing[0] = false
+	ok(h.tick(), "the game end is written on the next tick")
+	eq(FileAccess.get_file_as_string(p), "4 ui\n", "back to ui, beating again")
+	h.free()
+
+
+func test_the_client_never_needs_beats_in_game() -> void:
+	# session/gamecove-session-client: stale only counts while the file says "ui"
+	var client := FileAccess.get_file_as_string(ProjectSettings.globalize_path("res://").path_join("../session/gamecove-session-client"))
+	ok(client.contains("[ \"${now#* }\" = game ]"), "a \"game\" heartbeat resets the stale count")
