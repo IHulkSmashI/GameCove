@@ -75,9 +75,11 @@ on your own network (`app/scripts/system/key_drop.gd`):
   interface, never on a public address), on a random port. No LAN address, no page: the step offers typing or
   pasting the key instead.
 - The address in the QR code carries a one-time token of 128 random bits. Any other address gets "Not found"; after
-  30 wrong requests the page closes. A key sent from another web site (a foreign `Origin`) is refused.
+  30 wrong requests in a minute, new connections are closed unanswered until the minute is over (the page stays
+  open, so someone else on the network can't close it on you). A key sent from another web site (a foreign `Origin`) is refused.
 - It closes as soon as one well-formed key arrives, when you leave the step, or after 10 minutes, whichever comes
-  first. A request must arrive within 10 s and be under 8 KiB; at most four phones at once.
+  first. A request must arrive within 10 s and be under 8 KiB; a connection that sends nothing for 3 s is closed, and
+  when all eight slots are taken the longest-idle connection makes room.
 - The page has no scripts, loads nothing from anywhere else, and is sent with `Cache-Control: no-store`,
   `Referrer-Policy: no-referrer` and a `Content-Security-Policy` of `default-src 'none'`.
 - It is plain HTTP on your local network: the key crosses your Wi-Fi once, like a store sign-in code you'd type.
