@@ -24,7 +24,9 @@ void vertex() {
 }
 
 void fragment() {
-	vec4 c = texture(TEXTURE, UV) * COLOR;
+	// COLOR already holds texture(TEXTURE, UV) times the modulate: sampling
+	// again and multiplying would square every pixel (darker, crushed art).
+	vec4 c = COLOR;
 	c.rgb = mix(c.rgb, shade_color.rgb, shade_color.a * (1.0 - smoothstep(0.0, shade_to, local.x)));
 	float a = smoothstep(fade_left_from, fade_left_to, local.x);
 	a *= 1.0 - smoothstep(fade_bottom_from, 1.0, local.y);

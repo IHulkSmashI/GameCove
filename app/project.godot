@@ -72,4 +72,4 @@ ui_cancel={
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-environment/defaults/default_clear_color=Color(0.039, 0.067, 0.125, 1)
+environment/defaults/default_clear_color=Color(0.078, 0.106, 0.165, 1)

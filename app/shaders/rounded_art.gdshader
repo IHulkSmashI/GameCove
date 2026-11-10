@@ -12,9 +12,18 @@ uniform float zoom = 1.0;
 uniform vec2 crop = vec2(1.0);
 uniform vec2 crop_at = vec2(0.5);
 
+// The vertex colour (modulate) alone. In fragment() COLOR is already the
+// texture at UV times it, so multiplying a fresh sample by COLOR would square
+// every pixel: darker, crushed art.
+varying vec4 tint;
+
+void vertex() {
+	tint = COLOR;
+}
+
 void fragment() {
 	vec2 uv = (UV - 0.5) * crop / zoom + crop_at + pan;
-	vec4 c = texture(TEXTURE, clamp(uv, vec2(0.0), vec2(1.0))) * COLOR;
+	vec4 c = texture(TEXTURE, clamp(uv, vec2(0.0), vec2(1.0))) * tint;
 	vec2 p = (UV - 0.5) * size;
 	vec2 q = abs(p) - size * 0.5 + radius;
 	float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;

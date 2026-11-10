@@ -57,7 +57,7 @@ const WIDTH := 580
 ## the sheet's own battery pill and prompts are the only ones that read.
 const TOP_INSET := 14.0
 ## How dark the full-screen scrim is (it covers the top bar and hint bar too).
-const SCRIM_ALPHA := 0.58
+const SCRIM_ALPHA := 0.55
 const SUPPORT_TEXT := {
 	"full": "Full support: tested on this device by the GameCove team.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
@@ -267,6 +267,8 @@ func _build_frame() -> void:
 	# A 20 px alpha fade at the foot: the next card's top edge never pokes
 	# out above the prompts.
 	scroll_mask = FadeMask.wrap(scroll, 20.0)
+	# A card only a sliver of which shows is cut off whole instead of faded.
+	scroll_mask.cut_fn = _cut_cards
 	var pad := MarginContainer.new()
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for side_name in ["left", "right"]:
@@ -518,6 +520,20 @@ func focus_target(keep := "") -> Control:
 
 func focusables() -> Array:
 	return _focusables
+
+
+## The cards in the drawer, a control list's rows one by one (for the foot
+## mask's cut).
+func _cut_cards() -> Array:
+	var out: Array = []
+	if not is_instance_valid(body):
+		return out
+	for c in body.get_children():
+		if c is ControlList:
+			out.append_array(c.get_children())
+		else:
+			out.append(c)
+	return out
 
 
 func _add(c: Control) -> Control:

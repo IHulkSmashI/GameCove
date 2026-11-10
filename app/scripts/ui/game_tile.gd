@@ -30,11 +30,11 @@ const Themes := preload("res://theme/themes.gd")
 const SIZE := Vector2(150, 204)
 const LIFT := 1.05
 ## Height of the gradient at the bottom where the plate sits: only the
-## bottom 30 %, so the art above is at full brightness and saturation.
-const INFO_H := 0.30
-## Unfocused covers: barely dimmed (focus is the ring and the lift, not
-## darkened neighbours).
-const REST := Color(0.96, 0.96, 0.96)
+## bottom 25 %, starting transparent, so the art above is untouched.
+const INFO_H := 0.25
+## Covers are never dimmed, focused or not, installed or not: focus is the
+## ring and the lift, and "Not installed" is said in the plate.
+const REST := Color.WHITE
 ## Portrait shelves and grids show at most this many covers across (a little
 ## of the next one peeks in, faded, so the row reads as scrollable).
 const PER_ROW := 7.3
@@ -248,10 +248,7 @@ func setup(g: Dictionary, with_badges := true, tile := SIZE, label_under := true
 		if not pill.is_empty():
 			set_status_pill(pill)
 	_style_card()
-	card.modulate = REST if ThemeLib.is_dark() else Color(0.98, 0.98, 0.98)
-	if not g.get("installed", false):
-		art.self_modulate = Color(0.80, 0.80, 0.80)
-		fallback.modulate = Color(0.82, 0.82, 0.82)
+	card.modulate = REST
 
 	# Load the cover only while near the screen (with a tile of slack either side).
 	var vis := VisibleOnScreenNotifier2D.new()
@@ -403,8 +400,8 @@ func _style_card() -> void:
 	_edge.add_theme_stylebox_override("panel", edge)
 	var g := Gradient.new()
 	var ink := Color("#040508")
-	g.offsets = PackedFloat32Array([0.0, 1.0 - INFO_H, 0.86, 1.0])
-	g.colors = PackedColorArray([Color(ink, 0.0), Color(ink, 0.0), Color(ink, 0.74), Color(ink, 0.92)])
+	g.offsets = PackedFloat32Array([0.0, 1.0 - INFO_H, 0.90, 1.0])
+	g.colors = PackedColorArray([Color(ink, 0.0), Color(ink, 0.0), Color(ink, 0.62), Color(ink, 0.82)])
 	var gt := GradientTexture2D.new()
 	gt.gradient = g
 	gt.width = 4
@@ -509,7 +506,7 @@ func _on_focus() -> void:
 
 func _on_blur() -> void:
 	Motion.to(card, "scale", Vector2.ONE, Motion.FAST)
-	Motion.to(card, "modulate", REST if ThemeLib.is_dark() else Color(0.98, 0.98, 0.98), Motion.FAST)
+	Motion.to(card, "modulate", REST, Motion.FAST)
 	Motion.to(glow, "modulate:a", 0.0, Motion.FAST)
 	_update_title()
 	Motion.method(self, "pan", func(t: float): _set_pan(Vector2.ZERO, 1.0 + 0.045 * t), 1.0, 0.0, Motion.FAST)

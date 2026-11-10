@@ -21,9 +21,13 @@ const PAD := Vector2(24, 16)
 ## Below the tiles: room for the focused tile's lift and glow.
 const LABEL_ROOM := 16
 ## Width of the soft edge where the row continues past the screen: wide and
-## solid at the very edge, so a peeking cover's bright title is gone before
-## the cut (solid for the last quarter, 85 % at 60 %, clear at the inside).
+## gone at the very edge, so a peeking cover's bright title is gone before
+## the cut (hidden for the last quarter, 15 % at 60 %, whole at the inside).
+## It's an alpha mask, not a colour laid over the row, so it fades into
+## whatever is behind (art, glow, a light theme) without a dark band.
 const FADE := 96.0
+## [visible fraction] from the screen edge inwards, in parts of FADE.
+const FADE_STOPS := [[0.0, 0.0], [0.25, 0.0], [0.60, 0.15], [1.0, 1.0]]
 
 var id := ""
 var title := ""
@@ -33,7 +37,10 @@ var strip: HBoxContainer
 var count_label: Label
 var memory := 0          # last focused index (TV-style row memory)
 var tile_size := Vector2.ZERO
-var _fades: Array = []
+## The row's holder: an alpha mask (clip children) that fades the ends.
+var _mask: TextureRect
+var _mask_grad: Gradient
+var _fades: Array = [false, false]
 
 
 ## `size`: tile size; Vector2.ZERO sizes them for the screen (Tile.size_for).
@@ -73,34 +80,27 @@ func setup(shelf_id: String, shelf_title: String, games: Array, size := Vector2.
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.custom_minimum_size = Vector2(0, tile_size.y + PAD.y + LABEL_ROOM)
 	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
-	# The row and its edge fades share a plain holder (a VBox would stack them).
-	var holder := Control.new()
-	holder.name = "Row"
-	holder.mouse_filter = Control.MOUSE_FILTER_PASS
-	holder.custom_minimum_size = scroll.custom_minimum_size
+	# The row sits in an alpha mask: each end fades out (shown only while the
+	# row runs past that end), so covers dissolve into the backdrop.
+	_mask = TextureRect.new()
+	_mask.name = "Row"
+	_mask.mouse_filter = Control.MOUSE_FILTER_PASS
+	_mask.custom_minimum_size = scroll.custom_minimum_size
+	_mask.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_mask.stretch_mode = TextureRect.STRETCH_SCALE
+	_mask.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
+	_mask_grad = Gradient.new()
+	var mt := GradientTexture2D.new()
+	mt.gradient = _mask_grad
+	mt.width = 1024
+	mt.height = 1
+	mt.fill_to = Vector2(1, 0)
+	_mask.texture = mt
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	holder.add_child(scroll)
-	add_child(holder)
-	# Soft edges: a gradient of the screen's scrim colour over each end of the
-	# row, shown only while the row runs past that end. The backdrop is darkest
-	# at the screen edges, so covers fade into it instead of being cut.
-	for side in ["left", "right"]:
-		var f := TextureRect.new()
-		f.name = "Fade_" + side
-		f.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		f.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		f.stretch_mode = TextureRect.STRETCH_SCALE
-		f.anchor_bottom = 1.0
-		if side == "left":
-			f.offset_right = FADE
-		else:
-			f.anchor_left = 1.0
-			f.anchor_right = 1.0
-			f.offset_left = -FADE
-		f.visible = false
-		holder.add_child(f)
-		_fades.append(f)
+	_mask.add_child(scroll)
+	add_child(_mask)
 	_style_fades()
+	_mask.resized.connect(_style_fades)
 	scroll.resized.connect(_update_fade)
 	scroll.get_h_scroll_bar().value_changed.connect(func(_v): _update_fade())
 	scroll.get_h_scroll_bar().changed.connect(_update_fade)
@@ -130,8 +130,10 @@ func _update_fade() -> void:
 	if _fades.is_empty() or scroll == null:
 		return
 	var bar := scroll.get_h_scroll_bar()
-	_fades[0].visible = bar.value > 1.0
-	_fades[1].visible = bar.max_value - bar.page - bar.value > 1.0
+	var was := _fades.duplicate()
+	_fades = [bar.value > 1.0, bar.max_value - bar.page - bar.value > 1.0]
+	if _fades != was:
+		_style_fades()
 	# A cover the edge cuts into fades with it, so the cut never reads as a
 	# hard edge (a tile's own dimming, e.g. an asleep PC, is kept in meta).
 	var x0 := float(bar.value)
@@ -148,35 +150,37 @@ func _update_fade() -> void:
 
 ## [left faded, right faded].
 func faded_edges() -> Array:
-	return [_fades[0].visible, _fades[1].visible]
+	return _fades.duplicate()
 
 
+## The mask's gradient for the faded ends: opaque in the middle, each faded
+## end over FADE px from the edge.
 func _style_fades() -> void:
-	var sc: Color = ThemeLib.color("scrim")
-	for i in _fades.size():
-		var g := Gradient.new()
-		# offsets run from the screen edge inwards; the right fade is mirrored
-		var stops := [[0.0, 1.0], [0.25, 1.0], [0.60, 0.85], [1.0, 0.0]]
-		var offs := PackedFloat32Array()
-		var cols := PackedColorArray()
-		for st in stops:
-			offs.append(st[0] if i == 0 else 1.0 - st[0])
-			cols.append(Color(sc, st[1]))
-		if i == 1:
-			offs.reverse()
-			cols.reverse()
-		g.offsets = offs
-		g.colors = cols
-		var t := GradientTexture2D.new()
-		t.gradient = g
-		t.width = 96
-		t.height = 4
-		t.fill_to = Vector2(1, 0)
-		_fades[i].texture = t
+	if _mask_grad == null:
+		return
+	var w := maxf(_mask.size.x, FADE * 2.0 + 2.0)
+	var offs := PackedFloat32Array()
+	var cols := PackedColorArray()
+	if _fades[0]:
+		for st in FADE_STOPS:
+			offs.append(st[0] * FADE / w)
+			cols.append(Color(1, 1, 1, st[1]))
+	else:
+		offs.append(0.0)
+		cols.append(Color.WHITE)
+	if _fades[1]:
+		for k in range(FADE_STOPS.size() - 1, -1, -1):
+			offs.append(1.0 - FADE_STOPS[k][0] * FADE / w)
+			cols.append(Color(1, 1, 1, FADE_STOPS[k][1]))
+	else:
+		offs.append(1.0)
+		cols.append(Color.WHITE)
+	_mask_grad.offsets = offs
+	_mask_grad.colors = cols
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_THEME_CHANGED and not _fades.is_empty():
+	if what == NOTIFICATION_THEME_CHANGED:
 		_style_fades()
 
 

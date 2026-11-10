@@ -109,6 +109,7 @@ func cut_at() -> float:
 	var h := size.y
 	var best := -1.0
 	var cut_one := false
+	var cut_top := h
 	for c in cut_fn.call():
 		if not (c is Control) or not is_instance_valid(c) or not c.is_visible_in_tree():
 			continue
@@ -124,6 +125,9 @@ func cut_at() -> float:
 			if h - top > minf(160.0, h * 0.35) or c.has_focus():
 				return -1.0
 			cut_one = true
+			cut_top = minf(cut_top, top)
 	if not cut_one or best <= 0.0:
 		return -1.0
-	return minf(h, best + 10.0)
+	# Room for the ring under the last whole card, but never a pixel of the
+	# next card's top edge.
+	return minf(h, minf(best + 10.0, cut_top - 1.0))
