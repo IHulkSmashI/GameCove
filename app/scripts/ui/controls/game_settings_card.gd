@@ -150,9 +150,12 @@ func rebuild() -> void:
 	tl.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var btn: Button = toggle.button
-	tl.resized.connect(func():
+	var fit := func():
 		if is_instance_valid(tl) and is_instance_valid(btn):
-			btn.custom_minimum_size.y = maxf(52.0, tl.get_minimum_size().y + 20.0))
+			var lines := maxi(1, tl.get_line_count())
+			btn.custom_minimum_size.y = maxf(52.0, lines * tl.get_line_height() + 20.0)
+	tl.resized.connect(fit)
+	btn.resized.connect(func(): fit.call_deferred())
 	toggle.collapse_hint = true
 	toggle.set_explainer(func(v): return _toggle_line(bool(v)))
 	toggle.changed.connect(_on_toggle)
