@@ -95,6 +95,16 @@ ok '[ "$(restarts)" = "$((n0 + 10))" ]' "no restart for the refused change"
 ok '! override | grep -q "name: accel_3d"' "the refused change wrote nothing"
 ok 'fix claw8ex-gyro set accel-off >/dev/null' "the current value is still accepted (a no-op)"
 rm -f "$R/run/gamecove/rate-claw8ex-gyro-accel"
+# review problem 6: a change whose override couldn't be written leaves the flag as it was, so the retry
+# really applies it instead of answering "already on"
+mkdir "$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml.gamecove-tmp"
+ok '! fix claw8ex-gyro set accel-on >/dev/null 2>&1' "accel-on fails when the override can't be written"
+ok 'fix claw8ex-gyro status | grep -qx accelerometer=no' "status: still off after the failed change"
+rmdir "$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml.gamecove-tmp"
+ok 'fix claw8ex-gyro set accel-on 2>/dev/null | grep -q "recalibrate"' "the retry applies it"
+ok 'override | grep -q "name: accel_3d"' "accelerometer on after the retry"
+fix claw8ex-gyro set accel-off >/dev/null
+rm -f "$R/run/gamecove/rate-claw8ex-gyro-accel"
 ok '! fix claw8ex-gyro set accel on 2>/dev/null' "old two-token form refused"
 ok '! fix claw8ex-gyro set accel-maybe 2>/dev/null' "unknown value refused"
 fix claw8ex-gyro set accel-on >/dev/null
