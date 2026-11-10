@@ -155,7 +155,14 @@ if [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ]; then
 	rm -f "$HEARTBEAT" 2>/dev/null
 	export GAMECOVE_HEARTBEAT="$HEARTBEAT"
 fi
-started_at="$(date +%s)"
+# seconds since boot: a wall-clock step (NTP at boot, a time-zone fix) mustn't make a short
+# run look healthy (review 2, low 19)
+uptime_s() {
+	u=0
+	{ read -r u _ </proc/uptime; } 2>/dev/null || u=0
+	echo "${u%%.*}"
+}
+started_at="$(uptime_s)"
 "$GAMECOVE_BIN" --display-driver x11 --rendering-driver opengl3 --fullscreen "$@" &
 app=$!
 waited=0
@@ -222,7 +229,7 @@ code=0
 wait "$app" || code=$?
 # The loop can miss the healthy mark (a slow Steam start, a loaded machine), so
 # judge the whole run by the clock too: a crash after a healthy run counts as 1.
-ran=$(( $(date +%s) - started_at ))
+ran=$(( $(uptime_s) - started_at ))
 if [ -z "$hung" ] && [ "$ready" -eq 1 ] && [ "$ran" -ge "$HEALTHY_S" ] && [ "$stale" -lt 10 ]; then
 	clear_crashes
 fi

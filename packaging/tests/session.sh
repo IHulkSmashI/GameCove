@@ -417,6 +417,20 @@ echo 2 >"$DATA/crash-count"
 slow GAMECOVE_HEALTHY_S=1
 hasnt "$T/client.log" "select steam" "a run that stayed up the healthy time starts the count over"
 eqv "$(cat "$DATA/crash-count")" 1 "only the crash after the healthy run counts"
+# review 2, low 19: a wall-clock jump during a short run (NTP stepping the clock at boot) made
+# it look healthy and cleared the count; the run is timed from /proc/uptime instead
+cat >"$CB/date" <<EOF
+#!/bin/sh
+n=\$(cat "$T/date-n" 2>/dev/null || echo 1000)
+echo "\$n"
+echo \$((n + 86400)) >"$T/date-n"
+EOF
+chmod +x "$CB/date"
+rm -f "$T/date-n"
+echo 2 >"$DATA/crash-count"
+slow GAMECOVE_HEALTHY_S=600
+has "$T/client.log" "^select steam$" "a clock jump doesn't make a short run healthy"
+rm -f "$CB/date" "$T/date-n"
 # the count can't be saved: fall back at once instead of never reaching the limit
 rm -rf "$DATA"
 mkdir -p "$DATA/crash-count.tmp" # a directory: the temp file can't be written, even as root
