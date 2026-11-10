@@ -18,18 +18,21 @@ lockdir_stale() {
 	esac
 }
 
-# lockdir_break <dir>: moves the stale lock aside in one atomic rename, so two waiters can't both
-# remove it; if what was moved isn't the stale lock any more (someone took it in between), it goes back.
+# lockdir_break <dir> <judged pid>: 1 when another breaker is busy; removes the lock only while it still names the holder that was
+# judged dead (review L3 follow-up). Every breaker first takes <dir>.break (mkdir, held for a moment), then
+# re-reads the PID: a waiter that judged the old holder dead but was overtaken by another waiter that broke
+# the lock and took it never removes the new holder's lock. A <dir>.break left by a breaker killed in that
+# moment is cleared after a minute.
 lockdir_break() {
-	_lp="$(cat "$1/pid" 2>/dev/null || true)"
-	_aside="$1.stale.$$"
-	mv "$1" "$_aside" 2>/dev/null || return 0
-	if [ "$(cat "$_aside/pid" 2>/dev/null || true)" = "$_lp" ]; then
-		rm -f "$_aside/pid"
-		rmdir "$_aside" 2>/dev/null || true
-	else
-		mv "$_aside" "$1" 2>/dev/null || true
+	if ! mkdir "$1.break" 2>/dev/null; then
+		[ -z "$(find "$1.break" -maxdepth 0 -mmin +1 2>/dev/null)" ] || rmdir "$1.break" 2>/dev/null || true
+		return 1
 	fi
+	if [ "$(cat "$1/pid" 2>/dev/null || true)" = "$2" ] && lockdir_stale "$1"; then
+		rm -f "$1/pid"
+		rmdir "$1" 2>/dev/null || true
+	fi
+	rmdir "$1.break" 2>/dev/null || true
 	return 0
 }
 
@@ -38,7 +41,7 @@ lockdir_take() {
 	while ! mkdir "$1" 2>/dev/null; do
 		if lockdir_stale "$1"; then
 			printf 'gamecove: breaking a stale lock %s (its holder is gone)\n' "$1" >&2
-			lockdir_break "$1"
+			lockdir_break "$1" "$_lp" || sleep 1
 		else
 			sleep 1
 		fi
