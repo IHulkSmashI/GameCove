@@ -33,10 +33,10 @@ const CHOSEN := "Chosen"
 const WELCOME_TITLE := "Choose how to set up GameCove"
 const WELCOME_LINE := "GameCove becomes the home screen of your %s. Works with mouse, touch or your controller."
 const SUPPORT := {
-	"full": "Fully supported",
+	"full": "Tested on hardware",
 	"partial": "Supported",
 	"beta": "Beta support",
-	"generic": "Not tested on this device",
+	"generic": "Basic support",
 }
 const SUPPORT_LINE := {
 	"full": "We test GameCove on this exact device.",

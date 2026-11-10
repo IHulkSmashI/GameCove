@@ -14,13 +14,13 @@ Sources and licenses: [CREDITS.md](../CREDITS.md).
 
 ## Support levels
 
-| Level | Meaning |
-| --- | --- |
-| `full` | Tested on the device by us (today: MSI Claw 8 EX). |
-| `partial` | Every field comes from upstream data that was tested on the device (InputPlumber, steamos-manager, PowerStation, hhd), but we haven't run GameCove on it. |
-| `generic` | Matched, but key values are guesses (no upstream config), or a family row / CPU fallback. |
+| Level | Shown as | Meaning |
+| --- | --- | --- |
+| `full` | Tested on hardware | We ran GameCove on the device: every setting changed, read back from the hardware and restored (MSI Claw 8 EX AI+ on Bazzite, original ROG Ally RC71L on SteamOS 3.10, both 2026-11-09). |
+| `partial` | Supported | Every field comes from upstream data that was tested on the device (InputPlumber, steamos-manager, PowerStation, hhd); we haven't run GameCove on it ourselves yet. |
+| `generic` | Basic support | Matched, but key values are guesses (no upstream config), or a family row / CPU fallback. |
 
-`beta` (confirmed by testers) is still accepted for rows promoted later.
+`beta` (confirmed by testers, shown as "Beta support") is still accepted for rows promoted later. The keys stay as they are; only the words the app shows changed.
 
 ## Support matrix
 
@@ -30,7 +30,7 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Steam Deck (LCD) | `steam-deck-lcd` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
 | Steam Deck (OLED) | `steam-deck-oled` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
-| ASUS ROG Ally | `asus-rog-ally` | partial | 5 / 25 / 30 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
+| ASUS ROG Ally | `asus-rog-ally` | full | 5 / 25 / 30 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
 | ASUS ROG Ally X | `asus-rog-ally-x` | partial | 5 / 25 / 30 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
 | ASUS ROG Xbox Ally | `asus-rog-xbox-ally` | partial | 4 / 20 / 20 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
 | ASUS ROG Xbox Ally X | `asus-rog-xbox-ally-x` | partial | 5 / 35 / 35 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
