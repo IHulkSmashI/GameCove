@@ -49,6 +49,7 @@ var _side: TextureRect
 var _cue_fade: TextureRect
 ## "More below" cue, visible while the page can scroll further.
 var cue: HBoxContainer
+var _cue_pill: PanelContainer
 
 
 func setup_page(g: Dictionary, line := "") -> void:
@@ -191,18 +192,22 @@ func _build_scroll_cue() -> void:
 	t.fill_to = Vector2(0, 1)
 	_cue_fade.texture = t
 	add_child(_cue_fade)
+	# The cue on its own glass pill, so a card peeking up from below never
+	# prints its header through the words.
+	_cue_pill = PanelContainer.new()
+	_cue_pill.name = "ScrollCuePill"
+	_cue_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ps := ThemeLib.pill(ThemeLib.color("surface_2"), ThemeLib.color("line_2"), 14, 4)
+	_cue_pill.add_theme_stylebox_override("panel", ps)
+	_cue_pill.anchor_top = 1.0
+	_cue_pill.anchor_bottom = 1.0
+	_cue_pill.offset_top = -92
+	_cue_pill.offset_bottom = -60
+	add_child(_cue_pill)
 	cue = Kit.icon_label("chevron_down", "More below", "CaptionLabel", ThemeLib.color("text_2"), 18, false)
 	cue.name = "ScrollCue"
-	cue.anchor_left = 0.5
-	cue.anchor_right = 0.5
-	cue.anchor_top = 1.0
-	cue.anchor_bottom = 1.0
-	cue.offset_left = -70
-	cue.offset_right = 70
-	cue.offset_top = -86
-	cue.offset_bottom = -62
 	cue.alignment = BoxContainer.ALIGNMENT_CENTER
-	add_child(cue)
+	_cue_pill.add_child(cue)
 	var bar := scroll.get_v_scroll_bar()
 	bar.value_changed.connect(func(_v): _update_cue())
 	bar.changed.connect(_update_cue)
@@ -217,11 +222,38 @@ func _update_cue() -> void:
 	# isn't any): never a cue pointing at nothing.
 	var more := bar.max_value - bar.page - bar.value > 48.0
 	cue.visible = more
+	_cue_pill.visible = more
 	_cue_fade.visible = more
+	if more:
+		_place_cue()
 	# The hero art stays put while the cards scroll up over it: fade it out
 	# so text never sits on a busy picture (only on scroll, never per frame).
 	if frame != null:
 		frame.modulate.a = clampf(1.0 - bar.value / 260.0, 0.0, 1.0)
+
+
+## Under the bento, the cue sits under the column whose own content runs on
+## below (not under a card that's only stretched to line up with it).
+func _place_cue() -> void:
+	var cx := size.x * 0.5
+	if columns != null and columns.get_child_count() > 1:
+		var best := -1.0
+		for st in columns.get_children():
+			var c := st as Control
+			if c == null:
+				continue
+			var h := 0.0
+			for card in c.get_children():
+				if card is Control and card.visible:
+					h += card.get_combined_minimum_size().y + 18.0
+			if h > best + 1.0:
+				best = h
+				cx = c.global_position.x - global_position.x + c.size.x * 0.5
+	var w := _cue_pill.get_combined_minimum_size().x
+	_cue_pill.anchor_left = 0.0
+	_cue_pill.anchor_right = 0.0
+	_cue_pill.offset_left = cx - w * 0.5
+	_cue_pill.offset_right = cx + w * 0.5
 
 
 func can_scroll_down() -> bool:

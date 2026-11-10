@@ -12,6 +12,8 @@ const GroupPage := preload("res://scripts/ui/controls/group_page.gd")
 const PerfPage := preload("res://scripts/ui/controls/perf_page.gd")
 const ProfilesPage := preload("res://scripts/ui/controls/profiles_page.gd")
 const GameCard := preload("res://scripts/ui/controls/game_settings_card.gd")
+const GamePage := preload("res://scripts/ui/game_page.gd")
+const TG := preload("res://scripts/ui/texts_games.gd")
 const SettingsScreen := preload("res://scripts/ui/settings_screen.gd")
 const ControllerPanel := preload("res://scripts/ui/device/controller_panel.gd")
 const BrandMark := preload("res://scripts/ui/brand_mark.gd")
@@ -200,6 +202,31 @@ func test_game_settings_card() -> void:
 	epic.setup({"key": "epic:x", "title": "Fortnite", "store": "epic", "id": "x"}, e[0], e[1])
 	ok(epic.steam_button == null, "no Steam button for other stores")
 	epic.free()
+	_done(e)
+
+
+## The game page's Game settings card fits: with custom settings on, the
+## launch settings sit closed behind one row (with their summary) until A
+## opens them; off, neither shows.
+func test_game_page_launch_settings_fold() -> void:
+	var e := _env()
+	var launcher := Screens.FakeLauncher.new()
+	var g := {"key": "epic:1", "title": "Hades", "store": "epic", "id": "1", "installed": true}
+	var p: Control = GamePage.new()
+	p.setup(g, launcher, {"controls": e[0], "profiles": e[1]})
+	ok(not p.launch_button.visible and not p.form.visible, "everyday settings: no launch settings")
+	p.game_settings.toggle.step(1)
+	ok(p.launch_button.visible, "custom on: the launch settings row")
+	ok(not p.form.visible, "closed, so nothing is cut off at the card's foot")
+	ok(p.launch_button.text.begins_with(TG.SETTINGS_TITLE) and p.launch_button.text.contains("Balanced"),
+		"the row says what they are: " + p.launch_button.text)
+	ok(p.focusables.has(p.launch_button), "and takes focus")
+	ok(not p.focusables.has(p.form.rows["goal"].button), "closed rows aren't in the focus chain")
+	p.launch_button.pressed.emit()
+	ok(p.form.visible and p.launch_open, "A opens them")
+	eq(p.launch_button.text, TG.SETTINGS_HIDE, "and the row closes them again")
+	ok(p.focusables.has(p.form.rows["goal"].button), "open rows join the focus chain")
+	p.free()
 	_done(e)
 
 

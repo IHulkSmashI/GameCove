@@ -62,7 +62,10 @@ var ach_card: VBoxContainer
 ## "Game settings": this game's own profile, Edit and Reset.
 var game_settings: VBoxContainer
 var launch_rule: HSeparator
-var launch_title: Label
+## "Launch settings · Balanced · No limit": opens and closes the launch
+## settings under it, so the card fits the screen until they're wanted.
+var launch_button: Button
+var launch_open := false
 ## "Steam insights" (Steam games): players, reviews, Deck, last update, prices, SteamDB link.
 var insights_card: VBoxContainer
 var _accent := Color(0, 0, 0, 0)
@@ -115,12 +118,18 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 	launch_rule.name = "LaunchRule"
 	launch_rule.add_theme_constant_override("separation", 10)
 	gbody.add_child(launch_rule)
-	launch_title = Kit.label(TG.SETTINGS_TITLE, "")
-	launch_title.name = "LaunchTitle"
-	launch_title.add_theme_font_override("font", ThemeLib.font("semibold"))
-	gbody.add_child(launch_title)
+	launch_button = Kit.button("", "RowButton")
+	launch_button.name = "LaunchToggle"
+	launch_button.custom_minimum_size = Vector2(0, 48)
+	launch_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	launch_button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	launch_button.clip_text = true
+	launch_button.pressed.connect(func(): set_launch_open(not launch_open))
+	launch_button.focus_entered.connect(func(): _reveal(gbody.get_parent()))
+	gbody.add_child(launch_button)
 	form = SettingsForm.new()
 	form.setup(g.get("key", ""), launcher, true, g.get("store", "") != "steam")
+	form.saved.connect(func(_s): _label_launch_button())
 	gbody.add_child(form)
 	_show_launch_settings()
 
@@ -306,7 +315,9 @@ func _on_primary() -> void:
 
 
 func _jump_to_settings() -> void:
-	var f: Array = form.focusables() if form != null else []
+	if launch_button != null and launch_button.visible and not launch_open:
+		set_launch_open(true)
+	var f: Array = form.focusables() if form != null and form.visible else []
 	if not f.is_empty():
 		f[0].grab_focus()
 
@@ -470,11 +481,42 @@ func _refresh_pending() -> void:
 
 ## Launch settings show while the game has its own settings (or there's no
 ## Game settings card to switch them, tests and previews).
+## With the card, they sit closed behind "Launch settings · <summary>" (A
+## opens them), so nothing is cut off at the foot of the card.
 func _show_launch_settings() -> void:
 	var on: bool = game_settings == null or game_settings.custom()
 	launch_rule.visible = on and game_settings != null
-	launch_title.visible = on
-	form.visible = on
+	launch_button.visible = on and game_settings != null
+	form.visible = on and (game_settings == null or launch_open)
+	_label_launch_button()
+
+
+## Opens or closes the launch settings; opening moves focus to the first one.
+func set_launch_open(open: bool) -> void:
+	launch_open = open
+	_show_launch_settings()
+	_relink()
+	if open and is_inside_tree():
+		var f: Array = form.focusables()
+		if not f.is_empty():
+			f[0].grab_focus.call_deferred()
+
+
+func _label_launch_button() -> void:
+	if launch_button == null:
+		return
+	if launch_open:
+		launch_button.text = TG.SETTINGS_HIDE
+	else:
+		var st: Dictionary = form.settings if form != null else {}
+		var goal := str(st.get("goal", ""))
+		var bits := [TG.SETTINGS_TITLE]
+		if Texts.GOAL_LABELS.has(goal):
+			bits.append(Texts.GOAL_LABELS[goal])
+		if st.has("fps_limit"):
+			bits.append(Texts.fps_label(int(st["fps_limit"])))
+		launch_button.text = "  ·  ".join(bits)
+	launch_button.icon = GameIcons.tex("chevron_down" if launch_open else "chevron_right", 18, ThemeLib.color("text_2"))
 
 
 func _on_game_settings_changed() -> void:
@@ -499,6 +541,8 @@ func _relink() -> void:
 		list.append_array(insights_card.focusables())
 	if game_settings != null:
 		list.append_array(game_settings.focusables())
+	if launch_button != null and launch_button.visible:
+		list.append(launch_button)
 	if form != null and form.visible:
 		list.append_array(form.focusables())
 	focusables = list

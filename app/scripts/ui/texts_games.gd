@@ -87,6 +87,7 @@ const TTB_EXTRAS := "Extras"
 const TTB_ALL := "100%"
 const TTB_FROM := "Times from %d %s"
 const SETTINGS_TITLE := "Launch settings"
+const SETTINGS_HIDE := "Hide launch settings"
 const SETTINGS_SUB := "Saved for this game and used every time it starts."
 
 # ------------------------------------------------------------ install picker

@@ -1,6 +1,6 @@
 extends VBoxContainer
-## The game page's "Game settings" card body. One switch row on top, "Use
-## custom settings for this game", then:
+## The game page's "Game settings" card body. One switch row on top,
+## "Custom settings for this game", then:
 ##   off  a read-only summary of the everyday profile it runs with
 ##        ("Everyday profile  Balanced · 17 W · 60 fps"), nothing to clip
 ##   on   the main values saved for it and Edit (the quick menu's This game
@@ -35,7 +35,7 @@ const SUMMARY := ["power.profile", "power.tdp", "display.fps_limit"]
 
 var model: Object
 var game: Dictionary = {}
-## "Use custom settings for this game".
+## "Custom settings for this game".
 var toggle: VBoxContainer
 var edit_button: Button
 ## Gone: turning the switch off is the reset (it asks first). Kept for callers.
@@ -143,9 +143,16 @@ func rebuild() -> void:
 	var on := custom()
 	toggle = ChoiceRow.bool_row("custom", TC.GAME_CARD_TOGGLE, on)
 	toggle.name = "Custom"
-	# A narrow column trims the title rather than pushing the switch out of the card.
-	toggle.title_label.clip_text = true
-	toggle.title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# A narrow column wraps the title onto a second line (the row grows with
+	# it) rather than cutting it or pushing the switch out of the card.
+	var tl: Label = toggle.title_label
+	tl.clip_text = false
+	tl.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var btn: Button = toggle.button
+	tl.resized.connect(func():
+		if is_instance_valid(tl) and is_instance_valid(btn):
+			btn.custom_minimum_size.y = maxf(52.0, tl.get_minimum_size().y + 20.0))
 	toggle.collapse_hint = true
 	toggle.set_explainer(func(v): return _toggle_line(bool(v)))
 	toggle.changed.connect(_on_toggle)
