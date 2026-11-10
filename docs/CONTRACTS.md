@@ -164,6 +164,7 @@ Free sources only, no API keys shipped (terms in CREDITS.md): CheapShark (which 
   "link": {"kind": "steam" | "url", "uri": ..., "affiliate": false, "note": ""},   # see Affiliate links
   "attribution": {"text": "Prices by GG.deals", "url": "https://gg.deals/"} or null,  # render it, linked
   "keyshop": false, "keyshop_note"?: "...",  # true only on GG.deals key-shop rows
+  "reviews": {"label", "percent", "count", "score"} or {},  # Steam's review summary (from the same GetItems call), Discover's review pill
   "ggdeals": {"price": price block, "historical_low", "url", "attribution", "keyshop": price block or null} or null,
   "on_wishlist": bool, "wishlist_key": "steam:49520"
 }

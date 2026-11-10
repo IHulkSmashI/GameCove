@@ -43,6 +43,8 @@ static func _finish(deal: Dictionary, ctx: Dictionary) -> Dictionary:
 			deal[k] = null
 	if not deal.has("keyshop"):
 		deal["keyshop"] = false
+	if not deal.has("reviews"):
+		deal["reviews"] = {}
 	deal["link"].merge({"affiliate": false, "note": ""}, false)
 	deal["see_price"] = deal["price"] == null
 	deal["on_sale"] = deal["savings_pct"] > 0
@@ -103,6 +105,8 @@ static func from_cheapshark(o: Dictionary, stores: Dictionary, ctx: Dictionary, 
 		"historical_low": hl, "sale_ends_at": ends, "rating": o.get("rating", null), "art": art,
 		"link": {"kind": "url", "uri": CheapShark.redirect_url(str(o.get("deal_id", "")))},
 	}
+	if steam is Dictionary and steam.get("reviews") is Dictionary:
+		deal["reviews"] = steam["reviews"]
 	return _finish(deal, ctx)
 
 
@@ -132,6 +136,7 @@ static func from_steam(info: Dictionary, ctx: Dictionary, low: Variant = null) -
 		"is_historical_low": price["currency"] == "USD" and int(info.get("savings_pct", 0)) > 0 and _is_low(price["amount"], hl),
 		"historical_low": hl, "sale_ends_at": info.get("sale_ends_at", null), "rating": null, "art": art,
 		"link": {"kind": "steam", "uri": SteamApi.store_uri(appid)},
+		"reviews": info.get("reviews", {}) if info.get("reviews") is Dictionary else {},
 	}
 	return _finish(deal, ctx)
 
