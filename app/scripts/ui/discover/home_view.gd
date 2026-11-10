@@ -1,7 +1,7 @@
 extends "res://scripts/ui/discover/section.gd"
 ## "For you": a spotlight over the focused game's art (the biggest deal or a
 ## big release to start with), then shelves: Top deals, From your wishlist on
-## sale, Coming soon, Free right now. Moving through the shelves changes the
+## sale, Coming soon, Free to keep (games a store gives away right now). Moving through the shelves changes the
 ## spotlight, like Home. Under the shelves: the optional gg.deals card, the
 ## offline / loading card when there's nothing to show, and the credits.
 
@@ -155,7 +155,7 @@ func build() -> void:
 	var cur: String = ctx.currency()
 	var ws := Model.on_sale_wishlist(wish)
 	var soon := Model.coming_soon(cal)
-	var free := Model.free_now(deals)
+	var free := Model.free_to_keep(deals, Model.visible_deals(d.free_deals if "free_deals" in d else [], ctx.keyshops()))
 	var top := deals.filter(func(x): return not Model.is_free(x))
 	# No game twice: the spotlight's game leaves the shelves, and Top deals
 	# leaves out what the wishlist shelf shows.

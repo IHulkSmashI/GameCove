@@ -89,6 +89,10 @@ static func from_cheapshark(o: Dictionary, stores: Dictionary, ctx: Dictionary, 
 	elif country == CHEAPSHARK_COUNTRY:
 		price = price_block(float(o.get("price", 0.0)), float(o.get("regular_price", 0.0)), CheapShark.CURRENCY,
 			CHEAPSHARK_COUNTRY, "cheapshark")
+	elif float(o.get("price", 1.0)) <= 0.0 and float(o.get("regular_price", 0.0)) > 0.0:
+		# a giveaway is free in every currency; only the regular price is unknown here
+		price = price_block(0.0, 0.0, str(ctx.get("currency", CheapShark.CURRENCY)), country, "cheapshark")
+		price["giveaway"] = true
 	if steam is Dictionary and steam.get("art") is Dictionary:
 		for k in steam["art"]:
 			if art.has(k) and str(steam["art"][k]) != "":

@@ -292,6 +292,8 @@ over Tailscale. More in [docs/STREAMING.md](docs/STREAMING.md).
 - **Real local prices** for your Steam region, never converted guesses. Other stores show "See price" and their own page
   has it in your currency.
 - **Your wishlist**, imported from Steam, with price alerts.
+- **Free to keep:** games a store is giving away right now (Epic, GOG, Steam and the others CheapShark follows), with
+  the store's own page one press away.
 - **Release calendar** by month or as a list, with a reminder on release day.
 
 <table>
@@ -348,7 +350,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | What | Who | What is sent | When | Switch |
 | --- | --- | --- | --- | --- |
 | Game database and release calendar | GitHub (GameCove's own `gamedb` release) | Nothing about you | At start, at most daily | Background lookups |
-| Deals and prices (Discover, wishlist) | [CheapShark](https://www.cheapshark.com) (cheapshark.com) and the Steam store API | Steam app ids and titles from your wishlist and Discover, what you search for, your store country | 45 s after start, then every 6 hours; when you search or open a game | Look up deals and prices |
+| Deals, prices and free-to-keep games (Discover, wishlist) | [CheapShark](https://www.cheapshark.com) (cheapshark.com) and the Steam store API | Steam app ids and titles from your wishlist and Discover, what you search for, your store country | 45 s after start, then every 6 hours (top deals and the free-to-keep list: two requests); when you search or open a game | Look up deals and prices |
 | Local prices (optional) | [GG.deals](https://gg.deals) (gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
 | Your device's photo | GitHub (free photos) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
 | Upscaler list and downloads (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and before an install; files only when you install or update | Background lookups (daily check); installs: you start them |
