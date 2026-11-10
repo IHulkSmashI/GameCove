@@ -224,8 +224,11 @@ func test_library_screen_views() -> void:
 	eq(l.view, "", "a deleted collection's view falls back to all")
 	var fired := [0]
 	l.filter_requested.connect(func(): fired[0] += 1)
+	l.filter_button.pressed.emit()
+	eq(fired[0], 1, "the header's Filter button opens the Filter sheet")
+	var before: String = l.sort
 	l.sort_button.pressed.emit()
-	eq(fired[0], 1, "the order chip opens the Filter sheet")
+	ok(l.sort != before and fired[0] == 1, "the order chip still changes the order")
 	l.set_games(_store("emptyfav").decorate([Logic.g("steam", "1", "Alpha")]))
 	l.set_view("favourites")
 	eq(l.find_child("EmptyFilter", true, false).text, TL.EMPTY_FAVOURITES, "empty favourites says how to add one")
@@ -332,3 +335,12 @@ func test_manage_menu_lists_collections() -> void:
 	eq(GameActions.manage_rows(Logic.g("emu", "5", "Super Game"), {}, ""), [], "emulated games: no store rows (EmuDeck manages them)")
 	ca.free()
 	fa.free()
+
+
+func test_home_shelf_order_with_apps() -> void:
+	var g := _games()
+	var pinned := [{"key": "app:vlc", "store": "app", "title": "VLC", "exec": ["vlc"], "installed": true, "art": {}}]
+	var ids: Array = load("res://scripts/ui/home.gd").shelf_specs(g, pinned).map(func(s): return s["id"])
+	var want := ["recent", "favourites", "installed", "emulation", "apps"]
+	eq(ids.filter(func(i): return i in want), want, "Recently played, Favourites, Installed, Emulation, Apps")
+	eq(ids.slice(0, 5), want, "and those first")

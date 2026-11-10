@@ -275,7 +275,7 @@ func _run() -> void:
 ## Favourites, hidden games, collections and the Emulation page.
 func _library2_shots(lib: Node) -> void:
 	if not want(["library_options", "library_filter", "library_favourites", "home_favourites", "game_favourite",
-			"emulation_empty", "emulation", "library_emulation", "settings_collections"]):
+			"emulation_empty", "emulation", "library_emulation", "home_emulation", "settings_collections"]):
 		return
 	var cols: RefCounted = lib.collections
 	cols.path = "/tmp/gamecove-shots/collections.json"
@@ -290,6 +290,11 @@ func _library2_shots(lib: Node) -> void:
 	for t in ["Kingdom of Ash", "Crimson Vale"]:
 		cols.add(backlog, _find(t)["key"])
 	cols.set_hidden(_find("Sky Harbor")["key"], true)
+	# Two pinned desktop apps, so Home shows its Apps shelf where it goes.
+	main.home.set_apps([{"key": "app:org.videolan.VLC", "store": "app", "id": "org.videolan.VLC", "title": "VLC", "installed": true,
+		"exec": ["vlc"], "art": {"cover": "", "hero": "", "logo": "", "icon": ""}, "info": {}, "last_played": 0, "playtime_min": 0},
+		{"key": "app:org.mozilla.firefox", "store": "app", "id": "org.mozilla.firefox", "title": "Firefox", "installed": true,
+		"exec": ["firefox"], "art": {"cover": "", "hero": "", "logo": "", "icon": ""}, "info": {}, "last_played": 0, "playtime_min": 0}])
 	await frames(4)
 	main.show_screen("library")
 	await frames(4)
@@ -346,7 +351,7 @@ func _library2_shots(lib: Node) -> void:
 		main.open_emulation()
 		await shot("emulation_empty")
 		main._close_page()
-	if want(["emulation", "library_emulation"]):
+	if want(["emulation", "library_emulation", "home_emulation"]):
 		await _emulation_shots(lib)
 	main.show_screen("home")
 	await frames(2)
@@ -412,6 +417,14 @@ func _emulation_shots(lib: Node) -> void:
 				x.grab_focus()
 		await shot("library_emulation")
 		main.library_screen.set_view("")
+	if want(["home_emulation"]):
+		main.show_screen("home")
+		await frames(4)
+		var em: Array = main.home.tiles("emulation")
+		if not em.is_empty():
+			em[0].grab_focus()
+		await frames(10)
+		await shot("home_emulation")
 	lib.games.assign(games)
 	lib.emulation = load("res://scripts/library/stores/emu.gd").empty_setup()
 	lib.changed.emit()

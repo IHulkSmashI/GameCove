@@ -37,6 +37,7 @@ const Metadata := preload("res://scripts/library/meta/metadata.gd")
 const MetaResolver := preload("res://scripts/library/meta/resolver.gd")
 const ArtService := preload("res://scripts/library/art/art_service.gd")
 const ArtOverrides := preload("res://scripts/library/art/art_overrides.gd")
+const Apps := preload("res://scripts/library/apps.gd")
 ## How long to gather detail / art updates before one `changed`.
 const BATCH_S := 2.0
 
@@ -449,6 +450,8 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 			result["ok"] = Steam.open_uri("steam://rungameid/" + gid, Common.which("steam", path_env))
 			result["app_id"] = str(entry["id"]).to_int()
 		return result
+	if str(game.get("store", "")) == Apps.STORE:
+		return launch_app(game, path_env)
 	if entry.get("store", "") == "steam":
 		if once != "" and store != null:
 			result["ok"] = store.steam.launch(str(entry["id"]), once)["ok"]
@@ -496,6 +499,31 @@ func record_playtime(game: Dictionary, started: int, ended: int) -> void:
 		return
 	if Playtime.record(str(game.get("key", "")), started, ended):
 		refresh_store("emu")
+
+
+## A desktop app (apps.gd), or a clip's video player: started in its own
+## scope behind the reaper, so gamescope focuses it and GameSession follows it
+## like a game. Same result shape as launch().
+func launch_app(app: Dictionary, path_env := OS.get_environment("PATH")) -> Dictionary:
+	var result := {"ok": false, "app_id": 0, "pid": 0, "scoped": false}
+	var systemd_run := Common.which("systemd-run", path_env)
+	var scoped := can_scope(systemd_run, OS.get_environment("XDG_RUNTIME_DIR"))
+	_launch_n += 1
+	var n := (int(Time.get_unix_time_from_system()) % 100000000) * 10 + _launch_n % 10
+	var reaper := Apps.REAPER if FileAccess.file_exists(Apps.REAPER) else ""
+	var plan := Apps.launch_command(app, n, systemd_run, scoped, reaper)
+	var cmd: Array = plan["cmd"]
+	if cmd.is_empty():
+		return result
+	var args := PackedStringArray()
+	for c in cmd.slice(1):
+		args.append(str(c))
+	var pid := OS.create_process(str(cmd[0]), args)
+	result["ok"] = pid > 0
+	result["pid"] = maxi(pid, 0)
+	result["scoped"] = scoped and pid > 0
+	result["app_id"] = int(plan["app_id"]) if pid > 0 else 0
+	return result
 
 
 # --- Store management (docs/STORES.md). Each returns at once; results arrive as signals. ---

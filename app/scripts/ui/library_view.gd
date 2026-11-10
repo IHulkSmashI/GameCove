@@ -5,7 +5,8 @@ extends RefCounted
 ## [store id, button label]. "" means every store.
 const STORES := [["", "All"], ["steam", "Steam"], ["epic", "Epic"], ["gog", "GOG"], ["amazon", "Amazon"]]
 ## "stream": apps streamed from a PC (Stream tab), not a store of the Library.
-const STORE_NAMES := {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "amazon": "Amazon", "stream": "PC", "emu": "Emulation"}
+## "app": desktop apps (scripts/library/apps.gd), not a store of the Library either.
+const STORE_NAMES := {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "amazon": "Amazon", "stream": "PC", "app": "App", "emu": "Emulation"}
 const RECENT_MAX := 12
 
 
@@ -189,6 +190,7 @@ static func shelves(all_games: Array) -> Array:
 		on_screen[str(g.get("key", ""))] = true
 	inst = inst.filter(func(g): return not on_screen.has(str(g.get("key", "")))) + inst.filter(func(g): return on_screen.has(str(g.get("key", ""))))
 	add.call("installed", "Installed", inst)
+	add.call("emulation", "Emulation", emulation_shelf(games))
 	add.call("short", "Short games, under %d h" % int(SHORT_MAX_H), short_games(games))
 	var ac := anticheat_friendly(games)
 	ac.sort_custom(title_order)
@@ -199,7 +201,6 @@ static func shelves(all_games: Array) -> Array:
 			var list := filter_by_store(games, s)
 			list.sort_custom(title_order)
 			add.call("store_" + s, store_name(s), list)
-	add.call("emulation", "Emulation", emulation_shelf(games))
 	var all := games.duplicate()
 	all.sort_custom(title_order)
 	add.call("all", "All games", all)

@@ -4,7 +4,7 @@ extends Control
 ## on-screen keyboard (Y) or a physical one. X cycles the sort. Installed /
 ## Not installed chips narrow it down; a Downloads chip shows while anything
 ## is in the queue. Tiles show install state (main passes a tile_hook).
-## The order chip (A) and View open the Filter sheet (main, through
+## The header's Filter button and View open the Filter sheet (main, through
 ## CollectionActions): all games, favourites, a collection, emulation or hidden
 ## games, and the order. The toolbar fills 1280 px, so views live in that sheet.
 
@@ -22,8 +22,10 @@ const TL := preload("res://scripts/ui/texts_library.gd")
 signal open_requested(game: Dictionary)
 signal game_focused(game: Dictionary)
 signal downloads_requested
-## The order chip was pressed: main opens the Filter sheet.
+## The header's Filter button was pressed: main opens the Filter sheet.
 signal filter_requested
+## The header's Apps button: open the Apps view (desktop apps, apps_view.gd).
+signal apps_requested
 
 const INSTALL_FILTERS := [["installed", "Installed"], ["not_installed", "Not installed"]]
 
@@ -56,6 +58,11 @@ var top_target: Control
 
 var search_button: Button
 var sort_button: Button
+## In the header, not the toolbar: Apps (desktop apps). Up from the toolbar's
+## last chip reaches it.
+var apps_button: Button
+## The header's Filter button (also View): the Filter sheet.
+var filter_button: Button
 var store_buttons: Array = []
 var count_label: Label
 var details: PanelContainer
@@ -111,6 +118,25 @@ func _init() -> void:
 	view_label.visible = false
 	head.add_child(view_label)
 	head.add_child(count_label)
+	head.add_child(Kit.spacer())
+	# Filter (views and order) next to Apps: the toolbar under it is full at 1280 px.
+	filter_button = Kit.button(TL.FILTER_TITLE, "ChipButton")
+	filter_button.name = "FilterButton"
+	filter_button.icon = load("res://scripts/ui/games/game_icons.gd").tex("filter", 18, Color.WHITE)
+	filter_button.add_theme_constant_override("h_separation", 8)
+	filter_button.custom_minimum_size = Vector2(0, 40)
+	filter_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	filter_button.pressed.connect(func(): filter_requested.emit())
+	ButtonFx.attach(filter_button, {"glyph": "VIEW"})
+	head.add_child(filter_button)
+	apps_button = Kit.button("Apps", "ChipButton")
+	apps_button.name = "AppsButton"
+	apps_button.icon = Icons.tex("apps", 18, Color.WHITE)
+	apps_button.add_theme_constant_override("h_separation", 8)
+	apps_button.custom_minimum_size = Vector2(0, 40)
+	apps_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	apps_button.pressed.connect(func(): apps_requested.emit())
+	head.add_child(apps_button)
 	var head_pad := Kit.margin(0, int(PAD.x), 0)
 	head_pad.add_child(head)
 	root.add_child(head_pad)
@@ -184,8 +210,7 @@ func _init() -> void:
 	sort_button.name = "Sort"
 	sort_button.custom_minimum_size = Vector2(0, 44)
 	sort_button.add_theme_constant_override("h_separation", 8)
-	sort_button.tooltip_text = TL.FILTER_TITLE
-	sort_button.pressed.connect(func(): filter_requested.emit())
+	sort_button.pressed.connect(func(): cycle_sort(1))
 	ButtonFx.attach(sort_button, {"glyph": "X"})
 	bar.add_child(sort_button)
 	var bar_pad := Kit.margin(0, int(PAD.x), 0)
@@ -495,6 +520,17 @@ func _link_toolbar() -> void:
 		b.focus_neighbor_top = b.get_path_to(top_target if top_target != null else b)
 		var down: Control = default_focus() if not _tiles.is_empty() else b
 		b.focus_neighbor_bottom = b.get_path_to(down)
+	if not bar.is_empty():
+		var last: Control = bar[bar.size() - 1]
+		last.focus_neighbor_top = last.get_path_to(apps_button)
+		apps_button.focus_neighbor_bottom = apps_button.get_path_to(last)
+		apps_button.focus_neighbor_left = apps_button.get_path_to(filter_button)
+		apps_button.focus_neighbor_right = apps_button.get_path_to(apps_button)
+		apps_button.focus_neighbor_top = apps_button.get_path_to(top_target if top_target != null else apps_button)
+		filter_button.focus_neighbor_bottom = filter_button.get_path_to(last)
+		filter_button.focus_neighbor_left = filter_button.get_path_to(filter_button)
+		filter_button.focus_neighbor_right = filter_button.get_path_to(apps_button)
+		filter_button.focus_neighbor_top = filter_button.get_path_to(top_target if top_target != null else filter_button)
 
 
 func _link_grid() -> void:
