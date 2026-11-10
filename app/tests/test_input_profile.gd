@@ -81,5 +81,6 @@ func test_caps_and_file_names() -> void:
 	eq(Profile.paddles_from_caps(caps), ["LeftPaddle1", "RightPaddle1"])
 	ok(Profile.has_gyro(caps), "gyro")
 	ok(not Profile.has_gyro(["Gamepad:Button:South"]), "no gyro")
-	eq(Profile.file_name_for("steam:976730"), "steam_976730.yaml")
-	eq(Profile.file_name_for("epic:../../x"), "epic_______x.yaml")
+	eq(Profile.file_name_for("steam:976730"), "steam_3A976730.yaml")
+	eq(Profile.file_name_for("epic:../../x"), "epic_3A_2E_2E_2F_2E_2E_2Fx.yaml")
+	eq(Profile.legacy_file_name_for("steam:976730"), "steam_976730.yaml")

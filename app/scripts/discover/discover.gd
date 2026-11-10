@@ -31,6 +31,7 @@ signal price_alert(item: Dictionary, deal: Dictionary)
 signal release_alert(item: Dictionary)
 signal status_changed(source: String, status: String)
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Http := preload("res://scripts/discover/http.gd")
 const CheapShark := preload("res://scripts/discover/cheapshark.gd")
 const SteamApi := preload("res://scripts/discover/steam_api.gd")
@@ -285,30 +286,16 @@ func _path(name: String) -> String:
 	return data_dir.path_join(name)
 
 
+## Atomic; refused for a file that was damaged when it loaded (kept as <name>.bad),
+## so the refresh 45 s after start never writes an empty wishlist over a damaged one.
 func _save(name: String, data: Variant) -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(data_dir))
-	var tmp := _path(name + ".tmp")
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		return
-	f.close()
 	# only this user can read Discover's files: settings.json holds the user's API keys (review L32)
-	FileAccess.set_unix_permissions(ProjectSettings.globalize_path(tmp), FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER)
-	f = FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		return
-	f.store_string(JSON.stringify(data))
-	f.close()
-	FileAccess.set_unix_permissions(ProjectSettings.globalize_path(tmp), FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER)
-	DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(_path(name)))
+	SettingsFile.save_json(_path(name), data, "", true)
 
 
 func _load(name: String) -> Variant:
-	var p := _path(name)
-	if not FileAccess.file_exists(p):
-		return null
-	var j := JSON.new()
-	return j.data if j.parse(FileAccess.get_file_as_string(p)) == OK else null
+	return SettingsFile.load_json(_path(name))["data"]
 
 
 ## Reads settings, wishlist, alert state, caches and the cached calendar.

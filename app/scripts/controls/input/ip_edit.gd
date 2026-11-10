@@ -184,7 +184,11 @@ static func desktop_speed(profile: Dictionary) -> int:
 	return 0
 
 
-static func set_desktop(profile: Dictionary, on: bool, speed := DESKTOP_SPEED_DEFAULT, gamepad_target := "") -> Dictionary:
+## Mouse mode needs the mouse and keyboard virtual devices next to the gamepad. The list
+## starts from the profile's own, else what InputPlumber runs now (`live`: a Steam Deck pad
+## another tool set stays one, review M12), else `gamepad_target`. Off leaves the targets
+## alone: the caller puts back exactly what was there (MouseModeState).
+static func set_desktop(profile: Dictionary, on: bool, speed := DESKTOP_SPEED_DEFAULT, gamepad_target := "", live: Array = []) -> Dictionary:
 	var p := Profile.normalize(profile)
 	var kept: Array = (p["mapping"] as Array).filter(func(m): return not _named(m, "GameCove Desktop"))
 	if on:
@@ -194,7 +198,9 @@ static func set_desktop(profile: Dictionary, on: bool, speed := DESKTOP_SPEED_DE
 			"target_events": [{"mouse": {"button": "Left"}}]})
 		kept.append({"name": "GameCove Desktop Right Click", "source_event": {"gamepad": {"trigger": {"name": "LeftTrigger", "deadzone": 0.4}}},
 			"target_events": [{"mouse": {"button": "Right"}}]})
-		var targets: Array = p.get("target_devices", []) if p.get("target_devices") is Array else []
+		var targets: Array = (p["target_devices"] as Array).duplicate() if p.get("target_devices") is Array else []
+		if targets.is_empty() and not live.is_empty():
+			targets = live.duplicate()
 		if targets.is_empty() and gamepad_target != "":
 			targets = [gamepad_target]
 		for t in ["mouse", "keyboard"]:

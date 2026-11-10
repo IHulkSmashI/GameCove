@@ -8,6 +8,7 @@ extends RefCounted
 ## (DevicePhoto, [device] maker_photo) and "Look up game details" ([privacy] metadata: Steam store details,
 ## OpenCritic with the user's key, SteamGridDB art for games missing it).
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const PREFS_PATH := "user://settings.cfg"
 
 ## Every outbound call, plain words: {"who", "what", "when", "switch"}. Order: background first.
@@ -42,17 +43,11 @@ const NETWORK_CALLS := [
 
 
 static func background_allowed(path := PREFS_PATH) -> bool:
-	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
-		return true
-	return bool(cfg.get_value("privacy", "background", true))
+	return bool(SettingsFile.load_cfg(path).get_value("privacy", "background", true))
 
 
 static func set_background_allowed(on: bool, path := PREFS_PATH) -> bool:
-	var cfg := ConfigFile.new()
-	cfg.load(path)
-	cfg.set_value("privacy", "background", on)
-	return cfg.save(path) == OK
+	return SettingsFile.update_cfg(path, func(cfg: ConfigFile): cfg.set_value("privacy", "background", on)) == OK
 
 
 ## "Look up game details" ([privacy] metadata, default on): off = no Steam store details, OpenCritic or
@@ -65,7 +60,4 @@ static func metadata_allowed(path := PREFS_PATH) -> bool:
 
 
 static func set_metadata_allowed(on: bool, path := PREFS_PATH) -> bool:
-	var cfg := ConfigFile.new()
-	cfg.load(path)
-	cfg.set_value("privacy", "metadata", on)
-	return cfg.save(path) == OK
+	return SettingsFile.update_cfg(path, func(cfg: ConfigFile): cfg.set_value("privacy", "metadata", on)) == OK

@@ -3,6 +3,7 @@ extends "res://scripts/ui/settings/page.gd"
 ## can't measure, and the achievement rarity fetch (Achievements).
 
 ## Where the screen keeps prefs no service stores itself.
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const PREFS_PATH := "user://settings.cfg"
 
 
@@ -63,10 +64,7 @@ static func _measures(srcs: Dictionary) -> Label:
 
 static func set_rarity(a: Object, on: bool, path := PREFS_PATH) -> void:
 	a.fetch_rarity = on
-	var cfg := ConfigFile.new()
-	cfg.load(path)
-	cfg.set_value("achievements", "fetch_rarity", on)
-	cfg.save(path)
+	SettingsFile.update_cfg(path, func(cfg: ConfigFile): cfg.set_value("achievements", "fetch_rarity", on))
 
 
 ## Puts the saved choice back on the service (the settings screen calls this
@@ -74,6 +72,6 @@ static func set_rarity(a: Object, on: bool, path := PREFS_PATH) -> void:
 static func restore_rarity(a: Object, path := PREFS_PATH) -> void:
 	if a == null or not "fetch_rarity" in a:
 		return
-	var cfg := ConfigFile.new()
-	if cfg.load(path) == OK and cfg.has_section_key("achievements", "fetch_rarity"):
+	var cfg := SettingsFile.load_cfg(path)
+	if cfg.has_section_key("achievements", "fetch_rarity"):
 		a.fetch_rarity = bool(cfg.get_value("achievements", "fetch_rarity"))

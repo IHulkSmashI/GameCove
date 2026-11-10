@@ -29,6 +29,7 @@ signal running_changed(active: bool)
 ## The performance overlay level changed (0 off, 1 fps, 2 compact, 3 full).
 signal overlay_changed(level: int)
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Sources := preload("res://scripts/perf/sources.gd")
 const Math := preload("res://scripts/perf/perf_math.gd")
 const MangoHud := preload("res://scripts/perf/mangohud.gd")
@@ -432,14 +433,8 @@ func _exit_tree() -> void:
 
 
 func _remember(section: String, key: String, value: Variant) -> void:
-	var cfg := ConfigFile.new()
-	cfg.load(config_path)
-	cfg.set_value(section, key, value)
-	cfg.save(config_path)
+	SettingsFile.update_cfg(config_path, func(cfg: ConfigFile): cfg.set_value(section, key, value))
 
 
 func _recall(section: String, key: String, fallback: Variant) -> Variant:
-	var cfg := ConfigFile.new()
-	if cfg.load(config_path) != OK:
-		return fallback
-	return cfg.get_value(section, key, fallback)
+	return SettingsFile.load_cfg(config_path).get_value(section, key, fallback)

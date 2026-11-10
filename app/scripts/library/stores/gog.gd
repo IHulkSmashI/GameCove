@@ -55,13 +55,13 @@ static func scan(home: String) -> Array[Dictionary]:
 		var inst_doc = Common.read_json(root + "/gog_store/installed.json", {})
 		var installed := {}
 		if inst_doc is Dictionary:
-			for i in inst_doc.get("installed", []):
+			for i in Common.arr(inst_doc.get("installed")):
 				if i is Dictionary and str(i.get("appName", "")) != "" and not i.get("is_dlc", false):
 					installed[str(i["appName"])] = i
 		var lib_doc = Common.read_json(root + "/store_cache/gog_library.json", {})
 		var library := {}
 		if lib_doc is Dictionary:
-			for g in lib_doc.get("games", []):
+			for g in Common.arr(lib_doc.get("games")):
 				if g is Dictionary and is_game(g):
 					library[str(g["app_name"])] = g
 		for id in installed:
@@ -131,7 +131,7 @@ static func primary_task(install_path: String, id: String) -> Dictionary:
 	if not info is Dictionary:
 		return {}
 	var task = null
-	for t in info.get("playTasks", []):
+	for t in Common.arr(info.get("playTasks")):
 		if t is Dictionary and t.get("isPrimary", false):
 			task = t
 			break

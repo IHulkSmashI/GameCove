@@ -17,6 +17,7 @@ extends RefCounted
 ##   sysfs LEDs     RGB when hhd isn't driving it (leds.gd), written by the
 ##                  no-password root action.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Busctl := preload("res://scripts/device/busctl.gd")
 const Yaml := preload("res://scripts/input/yaml_lite.gd")
 const Profile := preload("res://scripts/input/ip_profile.gd")
@@ -24,6 +25,7 @@ const PerDevice := preload("res://scripts/device/per_device.gd")
 const Hhd := preload("res://scripts/controls/input/hhd_client.gd")
 const Leds := preload("res://scripts/controls/input/leds.gd")
 const IpEdit := preload("res://scripts/controls/input/ip_edit.gd")
+const ProfileLock := preload("res://scripts/input/profile_lock.gd")
 
 const SERVICE := "org.shadowblip.InputPlumber"
 const ROOT_PATH := "/org/shadowblip/InputPlumber"
@@ -58,6 +60,8 @@ func setup(context: Dictionary) -> void:
 	hhd = Hhd.new(context.get("runner"), str(context.get("sys_root", "")), str(context.get("home", "")))
 	hhd.transport = context.get("hhd_transport")
 	invalidate()
+	if str(context.get("home", "")) != "":
+		PerDevice.adopt_file(_led_cfg(), device_id())
 
 
 ## The devices.json row from ctx.device: a Device node (its `profile`), a
@@ -153,6 +157,8 @@ func _read_ip() -> Dictionary:
 	var y: Variant = bus.call_method(SERVICE, dev["path"], DEVICE_IFACE, "GetProfileYaml")
 	var parsed: Variant = Yaml.parse(str(y[0])) if y is Array and y.size() > 0 else null
 	out["profile"] = parsed if parsed is Dictionary else {}
+	# false: the call failed or its answer didn't parse; never the same as "no mappings"
+	out["profile_ok"] = parsed is Dictionary
 	if dev["rumble"]:
 		var en: Variant = bus.get_prop(SERVICE, dev["path"], FF_IFACE, "Enabled")
 		out["rumble"] = bool(en) if en != null else null
@@ -292,9 +298,21 @@ func ip_config_targets() -> Array:
 ## `verify` (profile -> bool) on what InputPlumber hands back, saves it as the
 ## everyday layout. If InputPlumber took it but it doesn't read back right, the
 ## previous profile goes back on.
+##
+## Under ProfileLock, on the profile read right now (not the cached snapshot: the Controller
+## service may have loaded another one since), and only when that read worked: an edit on an
+## empty stand-in for a failed read dropped every other mapping (review M13).
 func ip_apply(edit: Callable, verify: Callable) -> bool:
+	ProfileLock.mutex.lock()
+	var ok := _ip_apply_locked(edit, verify)
+	ProfileLock.mutex.unlock()
+	return ok
+
+
+func _ip_apply_locked(edit: Callable, verify: Callable) -> bool:
+	invalidate()
 	var dev: Dictionary = ip().get("device", {})
-	if dev.is_empty():
+	if dev.is_empty() or not ip().get("profile_ok", false):
 		return false
 	var before: Dictionary = ip_profile()
 	var base: Dictionary = before if not before.is_empty() else Profile.empty()
@@ -304,9 +322,8 @@ func ip_apply(edit: Callable, verify: Callable) -> bool:
 		return false
 	invalidate()
 	var after: Dictionary = ip_profile()
-	if after.is_empty() or not verify.call(after):
-		if not before.is_empty():
-			_load(dev["path"], Profile.to_json(before))
+	if not ip().get("profile_ok", false) or not verify.call(after):
+		_load(dev["path"], Profile.to_json(before))
 		invalidate()
 		return false
 	_save(next)
@@ -318,13 +335,28 @@ func _load(path: String, json: String) -> bool:
 	return call_void(path, DEVICE_IFACE, "LoadProfileFromYaml", ["s", json])
 
 
+## Where an edit is kept (review H3). No game running: the everyday layout. A game running
+## (ctx.game_key, set on this worker by main.gd at its start and end): its legacy own-layout
+## file when it has one (the Controller service loads that for it), else nowhere: the game's
+## values live in its profile (Profiles) and go back to the everyday ones at its end, at the
+## next start or on --restore-baseline, so default.yaml must never take them.
+func save_target() -> String:
+	var game := str(ctx.get("game_key", ""))
+	if game == "":
+		return profile_path()
+	var own := profile_path().get_base_dir().path_join(Profile.file_name_for(game))
+	var old := profile_path().get_base_dir().path_join(Profile.legacy_file_name_for(game))
+	if not FileAccess.file_exists(own) and FileAccess.file_exists(old):
+		return old   # the Controller moves it to the unique name when it loads it
+	return own if FileAccess.file_exists(own) else ""
+
+
 func _save(profile: Dictionary) -> void:
-	var p := profile_path()
-	DirAccess.make_dir_recursive_absolute(p.get_base_dir())
-	var f := FileAccess.open(p, FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify(Profile.clean(Profile.normalize(profile)), "  ") + "\n")
-		f.close()
+	var target := save_target()
+	if target == "":
+		return
+	DirAccess.make_dir_recursive_absolute(target.get_base_dir())
+	SettingsFile.save_text(target, JSON.stringify(Profile.clean(Profile.normalize(profile)), "  ") + "\n")
 
 
 ## busctl call with no reply value.
@@ -439,20 +471,17 @@ static func same(got: Variant, want: Variant) -> bool:
 ## enabled is root-only and the helper isn't there), so the next "on" brings it back
 ## (the Claw's 21 became 0 after a probe of led_effect). Per handheld, kept in the home.
 func led_saved_pct(node: Dictionary) -> float:
-	var cfg := ConfigFile.new()
-	cfg.load(_led_cfg())
+	var cfg := SettingsFile.load_cfg(_led_cfg())
 	return float(cfg.get_value(PerDevice.section("leds", device_id()), str(node.get("name", "")), -1.0))
 
 
 func _led_remember(nodes: Array) -> void:
-	var cfg := ConfigFile.new()
-	cfg.load(_led_cfg())
 	var sec := PerDevice.section("leds", device_id())
-	for n in nodes:
-		if Leds.brightness_pct(n) > 0.0:
-			cfg.set_value(sec, str(n.get("name", "")), Leds.brightness_pct(n))
 	DirAccess.make_dir_recursive_absolute(_led_cfg().get_base_dir())
-	cfg.save(_led_cfg())
+	SettingsFile.update_cfg(_led_cfg(), func(cfg: ConfigFile):
+		for n in nodes:
+			if Leds.brightness_pct(n) > 0.0:
+				cfg.set_value(sec, str(n.get("name", "")), Leds.brightness_pct(n)))
 
 
 func _led_cfg() -> String:

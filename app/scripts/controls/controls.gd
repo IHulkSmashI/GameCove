@@ -124,6 +124,29 @@ func describe_cached(id: String) -> Dictionary:
 	return d
 
 
+## `v` made valid for the control as of the last finished worker job (Control.coerce on the
+## committed description): safe on the main thread while a detection replaces the live
+## control's options (that read crashed, review M14). null when unknown or invalid.
+func coerce(id: String, v: Variant) -> Variant:
+	var c = _controls.get(id)
+	var d := describe_cached(id)
+	if c == null or d.is_empty():
+		return null
+	var out: Variant = ControlScript.coerce_spec(d, v)
+	if out != null and c.normalize.is_valid():
+		out = c.normalize.call(out)
+	return out
+
+
+## Available as of the last finished worker job.
+func available(id: String) -> bool:
+	_cache_mutex.lock()
+	var e: Variant = _cache.get(id)
+	var a: bool = e != null and bool(e["available"])
+	_cache_mutex.unlock()
+	return a
+
+
 ## The control's value as of the last finished worker job (safe on any thread).
 func value(id: String) -> Variant:
 	_cache_mutex.lock()
@@ -284,7 +307,9 @@ func _worker() -> void:
 	while true:
 		_sem.wait()
 		_mutex.lock()
-		if _quit:
+		# quitting: finish what's queued first (a game's restore queued just before the
+		# quit must still be written, review H2), then stop
+		if _quit and _jobs.is_empty():
 			_mutex.unlock()
 			return
 		var job: Callable = _jobs.pop_front() if not _jobs.is_empty() else Callable()

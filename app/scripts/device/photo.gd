@@ -60,6 +60,7 @@ extends Node
 
 signal photo_ready(device_id: String, path: String)
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const RELEASE := "https://github.com/IHulkSmashI/GameCove/releases/download/device-photos/"
 const PREFS_PATH := "user://settings.cfg"
 const MANIFEST_MAX_AGE := 7 * 24 * 3600
@@ -131,33 +132,21 @@ func _ready() -> void:
 # ---- the setting ----------------------------------------------------------------
 
 static func load_enabled(path := PREFS_PATH) -> bool:
-	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
-		return true
-	return bool(cfg.get_value("device", "real_photo", true))
+	return bool(SettingsFile.load_cfg(path).get_value("device", "real_photo", true))
 
 
 static func load_maker_enabled(path := PREFS_PATH) -> bool:
-	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
-		return true
-	return bool(cfg.get_value("device", "maker_photo", true))
+	return bool(SettingsFile.load_cfg(path).get_value("device", "maker_photo", true))
 
 
 func set_maker_enabled(on: bool) -> void:
 	maker_enabled = on
-	var cfg := ConfigFile.new()
-	cfg.load(prefs_path)
-	cfg.set_value("device", "maker_photo", on)
-	cfg.save(prefs_path)
+	SettingsFile.update_cfg(prefs_path, func(cfg: ConfigFile): cfg.set_value("device", "maker_photo", on))
 
 
 func set_enabled(on: bool) -> void:
 	enabled = on
-	var cfg := ConfigFile.new()
-	cfg.load(prefs_path)
-	cfg.set_value("device", "real_photo", on)
-	cfg.save(prefs_path)
+	SettingsFile.update_cfg(prefs_path, func(cfg: ConfigFile): cfg.set_value("device", "real_photo", on))
 
 
 # ---- licenses -------------------------------------------------------------------

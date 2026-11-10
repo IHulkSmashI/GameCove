@@ -19,6 +19,20 @@ const EMPTY_ART := {"cover": "", "hero": "", "logo": "", "icon": ""}
 
 ## Parsed JSON file, or `fallback` when the file is missing or broken. Never
 ## prints errors: a missing store is normal.
+## `v` when it is an Array (or Dictionary), else an empty one: JSON from other tools has nulls
+## where a list is expected, and iterating null aborted the whole store scan (review L35).
+static func arr(v: Variant) -> Array:
+	return v if v is Array else []
+
+
+static func dict(v: Variant) -> Dictionary:
+	return v if v is Dictionary else {}
+
+
+static func num(v: Variant, fallback := 0.0) -> float:
+	return float(v) if v is int or v is float else fallback
+
+
 static func read_json(path: String, fallback: Variant = null) -> Variant:
 	if not FileAccess.file_exists(path):
 		return fallback
@@ -74,7 +88,7 @@ static func apply_heroic_playtime(entry: Dictionary, playtime: Dictionary) -> vo
 	if not t is Dictionary:
 		return
 	entry["last_played"] = iso_to_unix(str(t.get("lastPlayed", "")))
-	entry["playtime_min"] = int(t.get("totalPlayed", 0))
+	entry["playtime_min"] = int(num(t.get("totalPlayed", 0)))
 
 
 ## Wine prefix and Proton for a game installed by Heroic, from

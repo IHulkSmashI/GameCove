@@ -7,6 +7,7 @@ extends "res://scripts/system/service.gd"
 ## Not an autoload: the installer screen makes one. Tests: setup(fake_runner,
 ## Paths.for_home(tmp), target) and call outside the tree (runs synchronously).
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Commands := preload("res://scripts/installer/commands.gd")
 const UserFiles := preload("res://scripts/installer/user_files.gd")
 const Paths := preload("res://scripts/installer/paths.gd")
@@ -280,10 +281,7 @@ func _write_state() -> void:
 	st["choices"] = keep
 	st["updated"] = _clock.call()
 	DirAccess.make_dir_recursive_absolute(paths.data_dir())
-	var f := FileAccess.open(paths.state_file(), FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify(st, "\t", true))
-		f.close()
+	SettingsFile.save_json(paths.state_file(), st, "\t")
 
 
 ## Undoes every finished task, newest first (a failed install's way back).

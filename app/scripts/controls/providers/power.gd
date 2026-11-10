@@ -21,6 +21,7 @@ const Ctl := preload("res://scripts/controls/control.gd")
 const Backend := preload("res://scripts/controls/power/backend.gd")
 const Tx := preload("res://scripts/controls/power/texts.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const PowerScript := preload("res://scripts/device/power.gd")
 
 const CFG := "user://power_controls.cfg"
@@ -45,8 +46,11 @@ var cfg_path := CFG
 var _last := {}           # id -> last value written (re-applied after resume)
 var _saver_prev := {}
 var _saver_auto := false
+var _saver_src := ""      # "ac" | "battery": where the saver went on (its _saver_prev's source)
 var _thermal_top := -1.0
 var _by_id := {}
+var _replaying := {}       # ids the resume replay is writing (main thread sets, worker clears)
+var _replay_mutex := Mutex.new()
 
 
 func setup(c: Dictionary) -> void:
@@ -58,6 +62,7 @@ func setup(c: Dictionary) -> void:
 		be.fix_set = str(c["fix_set"])
 	power = c.get("power")
 	registry = c.get("registry")
+	PerDevice.adopt_file(cfg_path, device_key())
 	# the autoloads only on the real system: a fixture context (tests, device
 	# matrix) must never drive the machine running the tests
 	var real := str(c.get("sys_root", "")) == ""
@@ -140,26 +145,49 @@ func _ctl(id: String) -> RefCounted:
 
 
 func _wrote(id: String, v: Variant) -> void:
+	if _limit_alias(id):
+		# Battery care done through the charge limit is the charge limit (Power remembers
+		# it): saving the toggle too re-applied 80 or 100 over the slider (review M18)
+		_forget(id)
+		return
 	_last[id] = v
-	if id in DEVICE_IDS:
-		var cfg := ConfigFile.new()
-		cfg.load(cfg_path)
-		cfg.set_value(PerDevice.section("set", device_key()), id, v)
-		cfg.save(cfg_path)
-	if id in LEVER_IDS and power != null and power.has_method("autotune_active") and power.autotune_active():
+	var c := _ctl(id)
+	var from_game: bool = power != null and power.get("game_layer") == true and c != null and c.per_game
+	if id in DEVICE_IDS and not from_game:
+		SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile): cfg.set_value(PerDevice.section("set", device_key()), id, v))
+	_replay_mutex.lock()
+	var replay := _replaying.has(id)
+	_replaying.erase(id)
+	_replay_mutex.unlock()
+	if not replay and id in LEVER_IDS and power != null and power.has_method("autotune_active") and power.autotune_active():
 		power.request_autotune_pause("manual " + id)
 
 
+## Drops a device-level value from memory and from the file (it no longer applies).
+func _forget(id: String) -> void:
+	_last.erase(id)
+	SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile):
+		var sec := PerDevice.section("set", device_key())
+		if not cfg.has_section_key(sec, id):
+			return false
+		cfg.erase_section_key(sec, id))
+
+
 func saved_device_values() -> Dictionary:
-	var cfg := ConfigFile.new()
-	if cfg.load(cfg_path) != OK:
-		return {}
+	var cfg := SettingsFile.load_cfg(cfg_path)
 	var sec := PerDevice.section("set", device_key())
 	var out := {}
 	if cfg.has_section(sec):
 		for k in cfg.get_section_keys(sec):
 			out[k] = cfg.get_value(sec, k)
+	if out.has("power.battery_long_life") and _limit_alias("power.battery_long_life"):
+		out.erase("power.battery_long_life")   # saved by an older build (review M18)
 	return out
+
+
+## power.battery_long_life where it is only a preset charge limit (no firmware mode).
+func _limit_alias(id: String) -> bool:
+	return id == "power.battery_long_life" and _long_life_via() == "limit"
 
 
 # ---- events --------------------------------------------------------------------------------------
@@ -186,12 +214,33 @@ func _reassert_saver() -> void:
 
 ## After sleep the firmware may have reset what we set while every control still
 ## holds our value, so this writes them all again (forced, not "skip if equal").
+##
+## Not the TDP, the profile or the boost (review M16): Power's own refresh(true) already put
+## back the TDP that is in effect now (the battery saver's, or the battery profile after
+## waking on battery), and `_last` only knows the last value written through the control,
+## which Power or the saver may have changed since. Nor does this replay pause Auto TDP:
+## it is ours, not a manual change.
+const NO_RESUME_REPLAY := ["power.tdp", "power.profile", "power.boost"]
+
+
 func _on_resumed() -> void:
 	if registry == null:
 		return
 	var v := saved_device_values()
 	v.merge(_last, true)
+	for id in NO_RESUME_REPLAY:
+		v.erase(id)
+	_replay_mutex.lock()
+	for id in v:
+		_replaying[id] = true
+	_replay_mutex.unlock()
 	registry.apply(v, true)
+	if registry.has_method("run_on_worker"):
+		# a replay write that failed (or was skipped) must not hide a later manual change
+		registry.run_on_worker(func():
+			_replay_mutex.lock()
+			_replaying.clear()
+			_replay_mutex.unlock())
 
 
 ## The TDP's range follows the power source: detect again.
@@ -533,13 +582,12 @@ func _thermal_limit() -> RefCounted:
 			if now <= 0.0:
 				return Tx.NO_THERMAL
 			if _thermal_top < 0.0:
-				var cfg := ConfigFile.new()
-				cfg.load(cfg_path)
 				var sec := PerDevice.section("firmware", device_key())
-				_thermal_top = float(cfg.get_value(sec, "thermal_limit", now))
-				if not cfg.has_section_key(sec, "thermal_limit"):
-					cfg.set_value(sec, "thermal_limit", now)
-					cfg.save(cfg_path)
+				SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile):
+					_thermal_top = float(cfg.get_value(sec, "thermal_limit", now))
+					if cfg.has_section_key(sec, "thermal_limit"):
+						return false
+					cfg.set_value(sec, "thermal_limit", now))
 			c.max_value = minf(_thermal_top, 100.0)
 			return "" if c.max_value > c.min_value else Tx.NO_THERMAL,
 		func(_c): return be.thermal_limit(),
@@ -614,7 +662,11 @@ func _fan_mode() -> RefCounted:
 			c.options = _choice_opts(st.get("fan_modes", []))
 			return "",
 		func(_c): return str(_pstate().get("fan_mode", "")),
-		func(_c, v): return bool(_p(func(): return power.set_fan_mode(str(v)))))
+		func(_c, v):
+			if not bool(_p(func(): return power.set_fan_mode(str(v)))):
+				return false
+			_forget("power.fan_curve")   # a preset replaces the curve, also at the next start (review H5)
+			return true)
 
 
 ## {"driver", "points", "quiet": [...], "hwmon"} for table fan drivers driven by the fan fix, {}.
@@ -683,6 +735,9 @@ func _fan_curve() -> RefCounted:
 			return bool(_p(func():
 				if not power._run_fix("fan", "curve:" + ",".join(curve.map(func(x): return str(x)))):
 					return false
+				# the curve is the fan setting now: Power must not put a remembered preset back
+				# over it on the next charger change or start (review H5)
+				power._remember("device", "fan_mode", "custom")
 				power.refresh()
 				return true)))
 
@@ -722,6 +777,7 @@ func _battery_saver() -> RefCounted:
 			if bool(saved.get("on", false)):
 				_saver_prev = saved.get("prev", {}) if saved.get("prev") is Dictionary else {}
 				_saver_auto = bool(saved.get("auto", false))
+				_saver_src = str(saved.get("source", ""))
 				return true
 			return false,
 		func(c, v):
@@ -747,38 +803,59 @@ func _battery_saver() -> RefCounted:
 						var now: Variant = other.read()
 						if now != null:
 							_saver_prev[id] = now
+				_saver_src = _source_now()
 				registry.apply(want)
 				_save_saver(true)
 			else:
 				_saver_auto = false
+				var prev := _saver_prev.duplicate()
+				if _saver_src != "" and _saver_src != _source_now():
+					# the TDP and its limits were recorded on the other power source: this
+					# source's own choice comes back instead (review L13)
+					for id in SOURCE_IDS:
+						prev.erase(id)
+					if power != null and power.has_method("restore"):
+						_p(func(): power.restore(); return true)
 				# forced: the controls' cached values may still show what was there before the
 				# saver (the TDP control never re-read after the profile wrote 12 W), and a
 				# plain apply would skip them as "unchanged"
-				registry.apply(_saver_prev, true)
+				registry.apply(prev, true)
 				_saver_prev = {}
+				_saver_src = ""
 				_save_saver(false)
 			return true)
 
 
+## Values that belong to the power source they were picked on (Power remembers them per source).
+const SOURCE_IDS := ["power.tdp", "power.profile", "power.boost", "power.sppt", "power.fppt"]
+
+
+func _source_now() -> String:
+	if power == null or not "plugged" in power:
+		return ""
+	return "ac" if bool(power.plugged) else "battery"
+
+
 ## Battery saver on / off and what it replaced, per handheld (survives a restart).
 func _save_saver(on: bool) -> void:
-	var cfg := ConfigFile.new()
-	cfg.load(cfg_path)
 	var sec := PerDevice.section("saver", device_key())
-	cfg.set_value(sec, "on", on)
-	cfg.set_value(sec, "prev", _saver_prev.duplicate(true) if on else {})
-	cfg.set_value(sec, "auto", _saver_auto and on)
-	cfg.save(cfg_path)
+	var prev := _saver_prev.duplicate(true) if on else {}
+	var auto := _saver_auto and on
+	var src := _saver_src if on else ""
+	SettingsFile.update_cfg(cfg_path, func(cfg: ConfigFile):
+		cfg.set_value(sec, "on", on)
+		cfg.set_value(sec, "prev", prev)
+		cfg.set_value(sec, "auto", auto)
+		cfg.set_value(sec, "source", src))
 
 
 func _saved_saver() -> Dictionary:
-	var cfg := ConfigFile.new()
-	if cfg.load(cfg_path) != OK:
-		return {}
+	var cfg := SettingsFile.load_cfg(cfg_path)
 	var sec := PerDevice.section("saver", device_key())
 	if not cfg.has_section(sec):
 		return {}
-	return {"on": cfg.get_value(sec, "on", false), "prev": cfg.get_value(sec, "prev", {}), "auto": cfg.get_value(sec, "auto", false)}
+	return {"on": cfg.get_value(sec, "on", false), "prev": cfg.get_value(sec, "prev", {}), "auto": cfg.get_value(sec, "auto", false),
+		"source": cfg.get_value(sec, "source", "")}
 
 
 func _battery_saver_at() -> RefCounted:

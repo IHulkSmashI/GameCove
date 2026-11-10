@@ -11,6 +11,7 @@ extends RefCounted
 ## and only while Settings > About > "Background lookups" is on; pressing the row
 ## checks right away whatever that switch says (the user asked for it).
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const INTERVAL_S := 24 * 3600
 ## After start-up, so the first frame and the library come first.
 const FIRST_DELAY_S := 90.0
@@ -23,17 +24,11 @@ static func due(last_unix: int, now_unix: int, background_allowed: bool) -> bool
 
 
 static func last_check(path: String) -> int:
-	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
-		return 0
-	return int(cfg.get_value(STAMP_SECTION, "checked", 0))
+	return int(SettingsFile.load_cfg(path).get_value(STAMP_SECTION, "checked", 0))
 
 
 static func save_check(path: String, now_unix: int) -> void:
-	var cfg := ConfigFile.new()
-	cfg.load(path)
-	cfg.set_value(STAMP_SECTION, "checked", now_unix)
-	cfg.save(path)
+	SettingsFile.update_cfg(path, func(cfg: ConfigFile): cfg.set_value(STAMP_SECTION, "checked", now_unix))
 
 
 ## The rows of a check answer with a downloaded version (the helper lists only those).

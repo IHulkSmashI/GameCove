@@ -29,6 +29,7 @@ const STEAM_GAP := 1.6
 const OC_GAP := 3.0
 const MAX_QUEUE := 2000
 const MAX_BODY := 2 * 1024 * 1024
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 
 ## http.gd node or fake_http.gd object (made in _ready unless set).
 var http: Variant = null
@@ -145,14 +146,12 @@ static func set_opencritic_key(key: String, path := Privacy.PREFS_PATH) -> bool:
 	var k := key.strip_edges()
 	if not OpenCritic.valid_key(k):
 		return false
-	var cfg := ConfigFile.new()
-	cfg.load(path)
-	if k == "":
-		if cfg.has_section_key("metadata", "opencritic_key"):
-			cfg.erase_section_key("metadata", "opencritic_key")
-	else:
-		cfg.set_value("metadata", "opencritic_key", k)
-	return cfg.save(path) == OK
+	return SettingsFile.update_cfg(path, func(cfg: ConfigFile):
+		if k == "":
+			if cfg.has_section_key("metadata", "opencritic_key"):
+				cfg.erase_section_key("metadata", "opencritic_key")
+		else:
+			cfg.set_value("metadata", "opencritic_key", k)) == OK
 
 
 # ------------------------------------------------------------ queue

@@ -169,8 +169,21 @@ static func has_gyro(caps: Array) -> bool:
 	return false
 
 
-## A per-game key ("steam:976730") as a safe file name.
+## A per-game key ("steam:976730") as a safe, unique file name: letters, digits and "-" stay,
+## every other byte (":" "/" "." "_" ...) becomes "_" and two hex digits, so "steam:12" and
+## "steam_12" never share a file and nothing can climb out of the folder (review L21).
 static func file_name_for(key: String) -> String:
+	var safe := ""
+	for b in key.to_utf8_buffer():
+		var ch := char(b)
+		var plain := (b >= 0x30 and b <= 0x39) or (b >= 0x41 and b <= 0x5a) or (b >= 0x61 and b <= 0x7a) or ch == "-"
+		safe += ch if plain else "_%02X" % b
+	return safe + ".yaml"
+
+
+## The name file_name_for() gave before (every other character "_"; could collide). Only
+## to find layouts saved by older builds.
+static func legacy_file_name_for(key: String) -> String:
 	var safe := ""
 	for ch in key:
 		safe += ch if (ch.is_valid_identifier() or ch.is_valid_int() or ch == "-") else "_"

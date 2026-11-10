@@ -25,13 +25,14 @@ func controls() -> Array:
 		_mk("audio.mute", {"kind": "toggle", "default_value": false, "per_game": false},
 			func(c): return _detect_node(c, "sinks"), func(c): return _read_muted(c, Wp.SINK),
 			func(c, v): return _wp(c, ["set-mute", Wp.SINK, "1" if v else "0"])),
-		_mk("audio.output", {"kind": "choice", "per_game": false},
+		# another output has its own volume and mute: read them again after a switch
+		_mk("audio.output", {"kind": "choice", "per_game": false, "affects": ["audio.volume", "audio.mute"]},
 			func(c): return _detect_list(c, "sinks"), func(c): return _default_name(c, "sinks"),
 			func(c, v): return _set_default(c, "sinks", v)),
 		_mk("audio.mic_mute", {"kind": "toggle", "default_value": false, "per_game": false},
 			func(c): return _detect_node(c, "sources"), func(c): return _read_muted(c, Wp.SOURCE),
 			func(c, v): return _wp(c, ["set-mute", Wp.SOURCE, "1" if v else "0"])),
-		_mk("audio.input", {"kind": "choice", "per_game": false},
+		_mk("audio.input", {"kind": "choice", "per_game": false, "affects": ["audio.mic_mute"]},
 			func(c): return _detect_list(c, "sources"), func(c): return _default_name(c, "sources"),
 			func(c, v): return _set_default(c, "sources", v)),
 	]

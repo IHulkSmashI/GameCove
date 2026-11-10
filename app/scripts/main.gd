@@ -7,6 +7,7 @@ extends Control
 ## services themselves except through what's passed in here, so they can be
 ## tested with fakes.
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Home := preload("res://scripts/ui/home.gd")
 const LibraryScreen := preload("res://scripts/ui/library_screen.gd")
@@ -410,6 +411,8 @@ func _wire_services() -> void:
 	var power: Node = _svc("Power")
 	if power != null and power.has_signal("autotune_limit"):
 		power.autotune_limit.connect(_on_autotune_limit)
+	if power != null and power.has_signal("resumed"):
+		power.resumed.connect(_on_power_resumed)
 	# The s-hw Controller service may emit ui_action("home" | "quick_menu" | "osk")
 	# for Guide / QuickAccess / Keyboard buttons it intercepts in InputPlumber.
 	var ctl: Node = _svc("Controller")
@@ -740,6 +743,13 @@ static func resumed_between(before: Array, after: Array, gap_s: float) -> bool:
 	var wall: float = after[0] - before[0]
 	var mono: float = (after[1] - before[1]) / 1000.0
 	return wall - mono > gap_s
+
+
+## Power noticed a sleep itself (its 15 s check, review M19) or finished ours: the
+## controller lights follow, and our own clock mark moves so we don't report it twice.
+func _on_power_resumed() -> void:
+	_clock_mark = [Time.get_unix_time_from_system(), Time.get_ticks_msec()]
+	_schedule_resume_reapply()
 
 
 ## After a sleep: Power re-reads on its worker, puts the TDP back and emits
@@ -1420,19 +1430,17 @@ func _style_hint_shade() -> void:
 # ------------------------------------------------------------ settings
 
 func _load_extra_prefs() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load(UiPrefs.path) == OK:
+	var cfg := SettingsFile.load_cfg(UiPrefs.path)
+	if true:
 		menu_side = str(cfg.get_value("ui", "menu_side", "right"))
 		ui_sounds = str(cfg.get_value("ui", "ui_sounds", "low"))
 
 
 func _save_prefs() -> void:
 	UiPrefs.save_prefs()
-	var cfg := ConfigFile.new()
-	cfg.load(UiPrefs.path)
-	cfg.set_value("ui", "menu_side", menu_side)
-	cfg.set_value("ui", "ui_sounds", ui_sounds)
-	cfg.save(UiPrefs.path)
+	SettingsFile.update_cfg(UiPrefs.path, func(cfg: ConfigFile):
+		cfg.set_value("ui", "menu_side", menu_side)
+		cfg.set_value("ui", "ui_sounds", ui_sounds))
 
 
 func _settings_values() -> Dictionary:

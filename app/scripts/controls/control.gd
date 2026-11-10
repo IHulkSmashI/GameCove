@@ -107,6 +107,19 @@ func coerce(v: Variant) -> Variant:
 
 
 func _coerce_kind(v: Variant) -> Variant:
+	return coerce_spec({"kind": kind, "min": min_value, "max": max_value, "step": step, "options": options, "points": points}, v)
+
+
+## The value made valid for a control described by `spec` (describe()'s kind, min, max, step,
+## options, points), without touching a live Control: the main thread coerces against the
+## registry's committed copy (Controls.coerce), never against fields the worker rewrites (review M14).
+static func coerce_spec(spec: Dictionary, v: Variant) -> Variant:
+	var kind: String = str(spec.get("kind", "toggle"))
+	var min_value := float(spec.get("min", 0.0))
+	var max_value := float(spec.get("max", 1.0))
+	var step := float(spec.get("step", 1.0))
+	var options: Array = spec.get("options", []) if spec.get("options") is Array else []
+	var points := int(spec.get("points", 0))
 	match kind:
 		"slider":
 			if not (v is int or v is float):

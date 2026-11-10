@@ -44,9 +44,11 @@ func setup(_ctx: Dictionary) -> void:
 
 func controls() -> Array:
 	return [
-		_mk("network.wifi", "network", {"kind": "toggle", "default_value": true}, _detect_wifi, _read_wifi, _write_wifi),
-		_mk("network.bluetooth", "network", {"kind": "toggle", "default_value": true}, _detect_bt, _read_bt, _write_bt),
-		_mk("network.airplane", "network", {"kind": "toggle", "default_value": false}, _detect_airplane,
+		# airplane mode switches both radios, and a radio coming on ends airplane mode: each
+		# write reads the others again, or they keep showing the old state
+		_mk("network.wifi", "network", {"kind": "toggle", "default_value": true, "affects": ["network.airplane"]}, _detect_wifi, _read_wifi, _write_wifi),
+		_mk("network.bluetooth", "network", {"kind": "toggle", "default_value": true, "affects": ["network.airplane"]}, _detect_bt, _read_bt, _write_bt),
+		_mk("network.airplane", "network", {"kind": "toggle", "default_value": false, "affects": ["network.wifi", "network.bluetooth"]}, _detect_airplane,
 			_read_airplane, _write_airplane),
 		_mk("network.wifi_power_save", "network", {"kind": "toggle", "default_value": true}, _detect_wifi_pm,
 			func(c): return _wifi_pm(c) == 1,

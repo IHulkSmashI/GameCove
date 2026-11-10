@@ -27,6 +27,7 @@ const LAYOUT := {"cover": [Vector2(132, 198), 6], "hero": [Vector2(372, 120), 3]
 const PAGE_SIZE := 50
 const PIN_NAMES := {"BottomLeft": "Bottom left", "UpperLeft": "Top left", "CenterCenter": "Centre", "UpperCenter": "Top centre", "BottomCenter": "Bottom centre"}
 const STEAM_PREF := "user://settings.cfg"
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 
 var game: Dictionary = {}
 var service: Object
@@ -231,10 +232,8 @@ func _toggle_mature() -> void:
 
 func _toggle_steam() -> void:
 	to_steam = not to_steam
-	var cfg := ConfigFile.new()
-	cfg.load(prefs_path)
-	cfg.set_value("art", "steam_grid", to_steam)
-	cfg.save(prefs_path)
+	var on := to_steam
+	SettingsFile.update_cfg(prefs_path, func(cfg: ConfigFile): cfg.set_value("art", "steam_grid", on))
 	_refresh_options()
 
 

@@ -6,6 +6,7 @@ extends RefCounted
 ## is a game key ("steam:976730", "epic:abc"). Thread-safe (hooks run on the
 ## Controls worker, the launch hook on the main thread).
 
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
 const GLOBAL := "global"
 const PREFIX := "perf/"
@@ -29,8 +30,9 @@ func _section(scope: String) -> String:
 func _load() -> void:
 	if _cfg != null:
 		return
-	_cfg = ConfigFile.new()
-	_cfg.load(path)
+	_cfg = SettingsFile.load_cfg(path)
+	if PerDevice.adopt_unknown_cfg(_cfg, device_id):
+		SettingsFile.save_cfg(_cfg, path)
 
 
 func get_value(scope: String, key: String, fallback: Variant = null) -> Variant:
@@ -59,7 +61,7 @@ func set_value(scope: String, key: String, v: Variant) -> bool:
 			_cfg.erase_section_key(s, key)
 	else:
 		_cfg.set_value(s, key, v)
-	var ok := _cfg.save(path) == OK
+	var ok := SettingsFile.save_cfg(_cfg, path) == OK
 	_mutex.unlock()
 	return ok
 

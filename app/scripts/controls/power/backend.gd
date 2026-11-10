@@ -575,6 +575,11 @@ func pkg_temp_file() -> String:
 	return ""
 
 
+## The power-tune fix's "thermald is held" mark (it stopped thermald and hasn't started it again).
+func thermald_held_mark() -> bool:
+	return FileAccess.file_exists(path("/var/lib/gamecove/fixes/power-tune/thermald-held"))
+
+
 func thermald_active() -> bool:
 	var r: Dictionary = runner.run("systemctl", PackedStringArray(["is-active", "thermald.service"]))
 	return str(r.get("out", "")).strip_edges() == "active"
