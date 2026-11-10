@@ -323,6 +323,16 @@ static func margin(all := 0, h := -1, v := -1) -> MarginContainer:
 
 ## Remove and delete a child. Outside the scene tree (tests) there's no frame
 ## to run queue_free, so it's freed at once.
+## `c` and every Control under it let taps and clicks through (an overlay that
+## must never block input: the wake fade, toasts). Containers and TextureRects
+## stop or pass mouse events by default, which still swallows them.
+static func ignore_mouse(c: Node) -> void:
+	if c is Control:
+		(c as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for k in c.get_children():
+		ignore_mouse(k)
+
+
 static func drop(parent: Node, c: Node) -> void:
 	if c.get_parent() == parent:
 		parent.remove_child(c)

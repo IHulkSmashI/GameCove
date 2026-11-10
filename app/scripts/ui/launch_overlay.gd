@@ -225,6 +225,11 @@ func _init() -> void:
 	row.add_child(prompts)
 	col.add_child(row)
 
+	# only the overlay itself takes taps (while it's up); its pieces never do, so
+	# on its way out (mouse_filter IGNORE) the first tap reaches what's below
+	for k in get_children():
+		Kit.ignore_mouse(k)
+
 	_timer = Timer.new()
 	_timer.one_shot = true
 	_timer.wait_time = LAUNCH_TIMEOUT_S

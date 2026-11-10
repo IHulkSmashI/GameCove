@@ -1020,6 +1020,7 @@ func _wake_fade() -> void:
 		_wake_shade.name = "WakeShade"
 		_wake_shade.color = Color("#05070B")
 		Kit.fill(_wake_shade)
+		_wake_shade.mouse_filter = Control.MOUSE_FILTER_IGNORE   # the first tap after a wake goes through
 		add_child(_wake_shade)
 	move_child(_wake_shade, -1)
 	_wake_shade.visible = true

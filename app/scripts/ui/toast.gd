@@ -60,6 +60,7 @@ func show_toast(text: String, icon := "info", tone := "", detail := "") -> Contr
 		texts.add_child(Kit.label(detail, "QuietLabel", true))
 	row.add_child(texts)
 	p.add_child(row)
+	Kit.ignore_mouse(p)   # labels, icons and boxes too: a toast never eats a tap
 	add_child(p)
 	while get_child_count() > MAX:
 		Kit.drop(self, get_child(0))
