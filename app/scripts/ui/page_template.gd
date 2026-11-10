@@ -25,6 +25,9 @@ const HERO_FRACTION := 0.66
 const FRAME_TOP := 20
 const FRAME_H := 336
 const FadeShader := preload("res://shaders/hero_fade.gdshader")
+const HeroInk := preload("res://scripts/ui/hero_ink.gd")
+## Light: the scroll offset where the hero art starts to fade (see _update_cue).
+const LIGHT_FADE_FROM := 170.0
 
 var game: Dictionary = {}
 ## Extra space above the hero card, set before setup_page(): the game page
@@ -160,8 +163,10 @@ func setup_page(g: Dictionary, line := "") -> void:
 	col.add_child(top)
 	header = GameHeader.new()
 	header.max_badges = 6
+	header.on_art = true
 	header.show_game(g, line)
 	col.add_child(header)
+	header.extent_changed.connect(_sync_scrim)
 	actions_row = Kit.hbox(14)
 	actions_row.name = "Actions"
 	col.add_child(actions_row)
@@ -259,8 +264,11 @@ func _update_cue() -> void:
 		_place_cue()
 	# The hero art stays put while the cards scroll up over it: fade it out
 	# so text never sits on a busy picture (only on scroll, never per frame).
+	# Light's title is light text on that art: there the art stays until the
+	# header has scrolled out from under the top bar, then goes.
 	if frame != null:
-		frame.modulate.a = clampf(1.0 - bar.value / 260.0, 0.0, 1.0)
+		var from := 0.0 if ThemeLib.is_dark() else LIGHT_FADE_FROM
+		frame.modulate.a = clampf(1.0 - (bar.value - from) / (260.0 - from), 0.0, 1.0)
 
 
 ## Centred in the hint band, between its status text and its prompts.
@@ -277,6 +285,9 @@ func can_scroll_down() -> bool:
 	return cue != null and cue.visible
 
 
+var _hero_path := ""
+
+
 func _load_hero() -> void:
 	var a: Variant = game.get("art", {})
 	var p := ""
@@ -287,6 +298,7 @@ func _load_hero() -> void:
 				break
 	if p == "":
 		return
+	_hero_path = p
 	var tex := ArtCache.request("hero", p, func(t): _show_hero(t), self)
 	if tex != null:
 		_show_hero(tex)
@@ -306,21 +318,49 @@ func _show_hero(tex: Texture2D) -> void:
 	hero.texture = tex
 	hero.visible = true
 	hero_fallback.visible = false
+	if _side != null and HeroInk.active():
+		_restyle()
 
 
-## Light theme's title shade: [start, end of the strong part, gone] as fractions of the width.
-const LIGHT_SIDE := [0.0, 0.22, 0.40]
+## Light: how strong the scrim behind the title is for this art, and where
+## its full-strength part ends (hero_ink.gd).
+var _scrim := HeroInk.MAX
+var _hold := HeroInk.HOLD_MAX
+
+
+## The title changed or moved: the scrim's full-strength part ends with it.
+func _sync_scrim() -> void:
+	if header == null or frame == null or not HeroInk.active():
+		return
+	# the scroll never moves sideways, so the layout's own offsets are enough
+	var h := HeroInk.hold_for(HeroInk.x_within(header, self) + header.title_right() - frame.position.x, frame.size.x)
+	if not is_equal_approx(h, _hold):
+		_hold = h
+		_restyle()
+
+
+## The art is the picture when there is one, else the generated card.
+func _scrim_for_art() -> float:
+	if hero != null and hero.visible and _hero_path != "":
+		return HeroInk.strength_for(ArtCache.text_side("hero", _hero_path))
+	var tone := Color(0, 0, 0, 0)
+	for c in hero_fallback.colors:
+		if tone.a <= 0.0 or (c as Color).get_luminance() > tone.get_luminance():
+			tone = Color(c.r, c.g, c.b, 1.0)
+	return HeroInk.strength_for(tone)
 
 
 func _restyle() -> void:
 	var bg: Color = ThemeLib.color("scrim")
 	var g := Gradient.new()
-	# Key art at full colour in every theme: a short fade at the foot only, and
-	# a shade behind the title on the left (Light: a light band that's gone by
-	# LIGHT_SIDE[2] of the width, never a veil over the picture).
+	# Key art at full colour in every theme, and a shade behind the title on
+	# the left. Dark themes: toward the backdrop colour, with a short fade at
+	# the foot. Light: the console look (hero_ink.gd), a soft dark scrim that's
+	# gone by 45 % of the width with light text over it, and no fade at the
+	# foot: nothing washes the picture toward white.
 	var dark := ThemeLib.is_dark()
 	g.offsets = PackedFloat32Array([0.0, 0.72, 1.0])
-	g.colors = PackedColorArray([Color(bg, 0.0), Color(bg, 0.0), Color(bg, 0.55 if dark else 0.45)])
+	g.colors = PackedColorArray([Color(bg, 0.0), Color(bg, 0.0), Color(bg, 0.55 if dark else 0.0)])
 	var t := GradientTexture2D.new()
 	t.gradient = g
 	t.width = 4
@@ -328,11 +368,24 @@ func _restyle() -> void:
 	t.fill_to = Vector2(0, 1)
 	_fade.texture = t
 	var g2 := Gradient.new()
-	g2.offsets = PackedFloat32Array([0.0, 0.30, 0.58] if dark else LIGHT_SIDE)
-	g2.colors = PackedColorArray([Color(bg, 0.86 if dark else 0.90), Color(bg, 0.55 if dark else 0.82), Color(bg, 0.0)])
+	if dark:
+		g2.offsets = PackedFloat32Array([0.0, 0.30, 0.58])
+		g2.colors = PackedColorArray([Color(bg, 0.86), Color(bg, 0.55), Color(bg, 0.0)])
+	else:
+		_scrim = _scrim_for_art()
+		var offs := PackedFloat32Array()
+		var cols := PackedColorArray()
+		for i in 25:
+			var x := i / 24.0 * (HeroInk.END + 0.03)
+			offs.append(x)
+			cols.append(Color(0, 0, 0, HeroInk.alpha_at(x, _scrim, _hold)))
+		g2.offsets = offs
+		g2.colors = cols
+	if header != null:
+		header.on_art = true
 	var t2 := GradientTexture2D.new()
 	t2.gradient = g2
-	t2.width = 256
+	t2.width = 512
 	t2.height = 4
 	t2.fill_to = Vector2(1, 0)
 	_side.texture = t2

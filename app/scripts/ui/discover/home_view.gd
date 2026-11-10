@@ -8,6 +8,7 @@ extends "res://scripts/ui/discover/section.gd"
 const Shelf := preload("res://scripts/ui/shelf.gd")
 const GameHeader := preload("res://scripts/ui/game_header.gd")
 const HeroStage := preload("res://scripts/ui/hero_stage.gd")
+const HeroInk := preload("res://scripts/ui/hero_ink.gd")
 const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 
 ## The spotlight card: about 26 px shorter than Home's, so the shelves get the room.
@@ -50,6 +51,7 @@ func attach_stage(layer: Control) -> void:
 	stage.pause_motion()      # no slow drift here: nothing moves when nothing happens
 	stage.visible = visible
 	visibility_changed.connect(func(): stage.visible = is_visible_in_tree())
+	stage.art_changed.connect(_sync_ink)
 
 
 ## Keep the hero art (on root's stage layer) inside the spotlight's frame.
@@ -70,6 +72,37 @@ func _sync_stage(frame: Control) -> void:
 	stage.size = frame.size
 	stage._apply_fade()
 	stage.visible = is_visible_in_tree() and frame.visible
+	_sync_ink()
+
+
+## The spotlight's text follows what's behind it (light on art in every
+## theme, see hero_ink.gd), and the stage's scrim follows the title's width.
+func _sync_ink() -> void:
+	if stage == null or not is_instance_valid(header):
+		return
+	header.on_art = stage.text_on_art()
+	# Light: the frame's glass would lie over the art as a white veil (the
+	# stage is on the layer behind): clear while there's art, the border stays.
+	if is_instance_valid(_spot_frame):
+		var fsb := _spot_frame.get_theme_stylebox("panel") as StyleBoxFlat
+		if fsb != null:
+			fsb.bg_color.a = 0.0 if header.light_ink() else 0.45
+	if is_inside_tree() and stage.is_inside_tree() and header.is_inside_tree():
+		stage.set_text_extent(header.global_position.x + header.title_right() - stage.global_position.x)
+	_ink_price()
+
+
+## The price beside the chips is built in the hero's light ink while it sits
+## on art: build it again when that changes (the art arrived, or left).
+var _price_ink := false
+
+
+func _ink_price() -> void:
+	if not is_instance_valid(price_box) or spot_view.is_empty() or header.light_ink() == _price_ink:
+		return
+	for c in price_box.get_children():
+		W.detach(price_box, c)
+	_fill_price(spot_view)
 
 
 func build() -> void:
@@ -113,6 +146,7 @@ func build() -> void:
 	header.max_logo = Vector2(340, 110)
 	header.max_badges = 0
 	header.meta.visible = false
+	header.extent_changed.connect(_sync_ink)
 	_spot.add_child(header)
 	price_box = Kit.hbox(18)
 	price_box.name = "SpotPrice"
@@ -318,6 +352,8 @@ func _set_spot(v: Dictionary, line: String, animate: bool) -> void:
 
 
 func _fill_price(v: Dictionary) -> void:
+	var ink: bool = header.light_ink()
+	_price_ink = ink
 	var d: Dictionary = v["data"]
 	var now: int = ctx.now()
 	var cur: String = ctx.currency()
@@ -338,6 +374,13 @@ func _fill_price(v: Dictionary) -> void:
 	if deal.is_empty():
 		return
 	var col := W.price_column(deal, true, false)
+	if ink:
+		var amount := col.find_child("Amount", true, false) as Label
+		amount.add_theme_color_override("font_color", HeroInk.accent(Color(0, 0, 0, 0)) if amount.get_meta("accent", false) else HeroInk.meta())
+		GameHeader._shade(amount, true)
+		var reg := col.find_child("Regular", true, false) as RichTextLabel
+		if reg != null:
+			reg.add_theme_color_override("default_color", HeroInk.meta())
 	price_box.add_child(col)
 	var side := Kit.vbox(6)
 	side.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -346,7 +389,10 @@ func _fill_price(v: Dictionary) -> void:
 	# the deal is on a different one.
 	var store := str(deal.get("store_name", ""))
 	if store != "" and store != str(v.get("store", "")):
-		var where := Kit.icon_label("store", "on " + store, "QuietLabel", Color(0, 0, 0, 0), 18, false)
+		var where := Kit.icon_label("store", "on " + store, "QuietLabel", HeroInk.meta() if ink else Color(0, 0, 0, 0), 18, false)
+		if ink:
+			(where.get_child(1) as Label).add_theme_color_override("font_color", HeroInk.meta())
+			GameHeader._shade(where.get_child(1) as Label, true)
 		side.add_child(where)
 	var chips := Kit.hbox(8)
 	chips.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -340,31 +340,187 @@ func test_covers_are_never_dimmed() -> void:
 		t.free()
 
 
-## Hero art keeps its full colour in every theme: Light only gets a narrow
-## light band behind the title (gone by 40 % of the width), never a veil over
-## the picture, and its chips are opaque so their text stays readable on art.
-func test_light_hero_art_is_never_washed_out() -> void:
-	var HeroStage = load("res://scripts/ui/hero_stage.gd")
-	var Page = load("res://scripts/ui/page_template.gd")
-	var Badge = load("res://scripts/ui/badge.gd")
-	for id in ["light", "cove"]:
-		ThemeLib.use(id)
-		var st: Control = HeroStage.new()
-		st.frame_radius = 24.0
-		st._apply_fade()
-		eq(st.modulate.a, 1.0, "%s: the stage isn't faded" % id)
-		var m := (st.layers[0] as TextureRect).material as ShaderMaterial
-		ok(float(m.get_shader_parameter("fade_left_from")) < 0.0, "%s: the framed art is opaque across its width" % id)
-		ok(float(m.get_shader_parameter("shade_to")) <= (0.40 if id == "light" else 0.58), "%s: the title shade stays on the text side" % id)
-		ok((m.get_shader_parameter("shade_color") as Color).a <= 0.9, "%s: the shade never fully hides the art" % id)
-		st.free()
-		var chip: Control = Badge.make({"kind": "time", "text": "46 h to beat", "tone": "info", "icon": "clock"}, "chip")
-		var sb := chip.get_theme_stylebox("panel") as StyleBoxFlat
-		if id == "light":
-			eq(sb.bg_color.a, 1.0, "light: hero chips are opaque")
-		chip.free()
-	ok(float(Page.LIGHT_SIDE[2]) <= 0.40, "game page: Light's title shade is gone by 40 % of the width")
+# ---- Light's hero: the art at full colour, a dark scrim under light text ----
+
+const HeroInk := preload("res://scripts/ui/hero_ink.gd")
+const HeroStage := preload("res://scripts/ui/hero_stage.gd")
+const ArtCache := preload("res://scripts/ui/art_cache.gd")
+const HERO_DIR := "user://test_light_hero"
+
+
+## A 1920x620 hero written to disk: `base` everywhere with lighter bands and a
+## diagonal sweep, so every sample point has its own colour.
+func _hero_art(name: String, base: Color, lift: Color) -> String:
+	var dir := ProjectSettings.globalize_path(HERO_DIR)
+	DirAccess.make_dir_recursive_absolute(dir)
+	var img := Image.create(480, 155, false, Image.FORMAT_RGB8)
+	for y in img.get_height():
+		for x in img.get_width():
+			var t := 0.5 + 0.5 * sin((x + y * 2.0) / 23.0)
+			img.set_pixel(x, y, base.lerp(lift, t))
+	img.resize(1920, 620, Image.INTERPOLATE_BILINEAR)
+	var path := dir.path_join(name + ".png")
+	img.save_png(path)
+	return path
+
+
+func _hero_game(name: String, path: String) -> Dictionary:
+	var g: Dictionary = Logic.g("steam", name, "Elden Ring", true, 100)
+	g["art"]["hero"] = path
+	return g
+
+
+## What the stage's front layer shows at `at` (px in the stage): the art's own
+## pixel there (covered, like the TextureRect), then hero_fade.gdshader's sums
+## with the parameters the layer's material really has. [colour, scrim alpha,
+## art pixel].
+func _hero_pixel(st: Control, at: Vector2) -> Array:
+	var layer: TextureRect = st.layers[st._front]
+	var img: Image = layer.texture.get_image()
+	var s := maxf(st.size.x / img.get_width(), st.size.y / img.get_height())
+	var off := (Vector2(img.get_width(), img.get_height()) * s - st.size) * 0.5
+	var px := ((at + off) / s).floor()
+	var art := img.get_pixel(clampi(int(px.x), 0, img.get_width() - 1), clampi(int(px.y), 0, img.get_height() - 1))
+	var m := layer.material as ShaderMaterial
+	var shade: Color = m.get_shader_parameter("shade_color")
+	var x := at.x / st.size.x
+	var a := shade.a * (1.0 - smoothstep(float(m.get_shader_parameter("shade_from")), float(m.get_shader_parameter("shade_to")), x))
+	var c := Color(lerpf(art.r, shade.r, a), lerpf(art.g, shade.g, a), lerpf(art.b, shade.b, a), 1.0)
+	# its alpha: opaque unless a fade into the backdrop is on
+	var alpha := smoothstep(float(m.get_shader_parameter("fade_left_from")), float(m.get_shader_parameter("fade_left_to")), x)
+	alpha *= 1.0 - smoothstep(float(m.get_shader_parameter("fade_bottom_from")), 1.0, at.y / st.size.y)
+	return [c, a, Color(art.r, art.g, art.b, 1.0), alpha]
+
+
+## The Home hero in Light, measured: under the title the art comes through a
+## dark scrim (never a white band, never more than 55 % black, gone by 45 % of
+## the width), the picture is untouched past it, and the white title reads at
+## 4.5:1 or better on bright art and on dark art, at both screen sizes.
+func test_light_hero_shows_the_art_under_a_dark_scrim() -> void:
+	ThemeLib.use("light")
+	ArtCache.clear()
+	var arts := {
+		"bright": _hero_art("bright", Color(0.62, 0.80, 0.96), Color(1.0, 1.0, 1.0)),
+		"dark": _hero_art("dark", Color(0.03, 0.05, 0.09), Color(0.16, 0.22, 0.30)),
+		"other": _hero_art("other", Color(0.98, 0.78, 0.10), Color(1.0, 0.95, 0.60)),
+	}
+	var worst := {}
+	for width in [1856.0, 1216.0]:      # the hero frame at 1920x1200 and at 1280x800
+		var shown := {}
+		for id in arts:
+			var st: Control = HeroStage.new()
+			st.frame_radius = 24.0
+			st.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			st.size = Vector2(width, 330)
+			var g := _hero_game(id, arts[id])
+			st.show_game(g)
+			ok(st.text_on_art(), "%s: the words are on the art" % id)
+			var head: VBoxContainer = load("res://scripts/ui/game_header.gd").new()
+			head.on_art = st.text_on_art()
+			head.show_game(g, "Jump back in")
+			var left: float = 32.0                       # Home's FRAME_PAD
+			var right: float = left + float(head.title_right())
+			st.set_text_extent(right)
+			var m := (st.layers[st._front] as TextureRect).material as ShaderMaterial
+			var shade: Color = m.get_shader_parameter("shade_color")
+			ok(shade.r + shade.g + shade.b < 0.01, "%s: the scrim is dark, not a light band" % id)
+			ok(shade.a <= HeroInk.MAX + 0.001 and HeroInk.MAX <= 0.55, "%s: at most 55 %% black (%.2f)" % [id, shade.a])
+			ok(float(m.get_shader_parameter("shade_to")) <= 0.45, "%s: gone by 45 %% of the width" % id)
+			ok(float(m.get_shader_parameter("shade_from")) * width >= right - 1.0 or float(m.get_shader_parameter("shade_from")) >= HeroInk.HOLD_MAX,
+				"%s: full strength to the end of the title" % id)
+			var ink: Color = head.title.get_theme_color("font_color")
+			eq(ink, Color.WHITE, "%s: white title, as in the dark themes" % id)
+			eq(head.title.get_theme_color("font_shadow_color").get_luminance(), 0.0, "%s: no light halo" % id)
+			var pts: Array = []
+			for fy in [0.34, 0.42, 0.50]:        # the title's rows in the 330 px hero
+				for fx in [0.0, 0.25, 0.5, 0.75, 1.0]:
+					pts.append(Vector2(lerpf(left, right, fx), 330.0 * fy))
+			var seen: Array = []
+			var low := 99.0
+			for p in pts:
+				var r := _hero_pixel(st, p)
+				var bg: Color = r[0]
+				seen.append(bg)
+				eq(r[3], 1.0, "%s: the art is opaque there" % id)
+				ok(float(r[1]) <= 0.551, "%s: the scrim never hides the art" % id)
+				ok(Themes.luminance(bg) < 0.20, "%s: not washed toward white (luminance %.3f)" % [id, Themes.luminance(bg)])
+				low = minf(low, Themes.contrast(ink, bg))
+			ok(low >= 4.5, "%s at %d px: title contrast %.2f" % [id, int(width), low])
+			worst["%s@%d" % [id, int(width)]] = low
+			shown[id] = seen
+			# Past the scrim the picture is exactly the picture, to the right edge and the foot.
+			for p in [Vector2(width * 0.46, 40), Vector2(width * 0.7, 165), Vector2(width - 30, 320), Vector2(width * 0.5, 326)]:
+				var r := _hero_pixel(st, p)
+				eq(r[0], r[2], "%s: untouched art at %s" % [id, p])
+				eq(r[3], 1.0, "%s: and opaque" % id)
+			head.free()
+			st.free()
+		# The art is what you see under the title: another picture, other pixels.
+		for i in shown["bright"].size():
+			var a: Color = shown["bright"][i]
+			var b: Color = shown["other"][i]
+			ok(absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b) > 0.12, "under the title the art shows through (point %d)" % i)
+			ok(shown["dark"][i] != shown["bright"][i], "and follows the picture")
+	print("    light hero title contrast: ", worst)
+	# The scrim is as strong as the picture needs: dark art gets the least.
+	ok(HeroInk.strength_for(ArtCache.text_side("hero", arts["dark"])) <= HeroInk.MIN + 0.001, "dark art: the lightest scrim")
+	ok(HeroInk.strength_for(ArtCache.text_side("hero", arts["bright"])) > 0.5, "bright art: a stronger one")
+	ArtCache.clear()
 	ThemeLib.use("cove")
+
+
+## Light text only where there's art behind it: with no picture (or a poster
+## on the right, or the welcome glow) the header keeps the theme's dark text.
+func test_light_hero_text_follows_the_art() -> void:
+	ThemeLib.use("light")
+	ArtCache.clear()
+	var Home = load("res://scripts/ui/home.gd")
+	var h: Control = Home.new()
+	h.set_games([_hero_game("dark", _hero_art("dark", Color(0.03, 0.05, 0.09), Color(0.16, 0.22, 0.30)))])
+	ok(h.hero_stage.text_on_art() and h.header.light_ink(), "art behind the title: light ink")
+	eq(h.header.title.get_theme_color("font_color"), Color.WHITE, "white title")
+	ok(Themes.contrast(h.header._meta_color(), Color(0.1, 0.1, 0.1)) >= 4.5, "light info line")
+	h.set_games([Logic.g("steam", "9", "No Art", true, 100)])
+	ok(not h.hero_stage.text_on_art() and not h.header.light_ink(), "no art: the theme's text")
+	ok(not h.header.title.has_theme_color_override("font_color"), "the theme's dark title on the light frame")
+	eq(h.header.title.get_theme_color("font_shadow_color").a, 0.0, "and no halo")
+	h.set_games([])
+	ok(not h.hero_stage.text_on_art(), "the welcome glow is no picture")
+	var wm := (h.hero_stage.layers[h.hero_stage._front] as TextureRect).material as ShaderMaterial
+	eq((wm.get_shader_parameter("shade_color") as Color).a, 0.0, "so it gets no scrim")
+	h.free()
+	# The game page (and the store and emulation pages built on it).
+	var Page = load("res://scripts/ui/page_template.gd")
+	var p: Control = Page.new()
+	p.setup_page(_hero_game("bright", _hero_art("bright", Color(0.62, 0.80, 0.96), Color(1.0, 1.0, 1.0))))
+	ok(p.header.light_ink(), "game page: light ink on its art")
+	var side := (p._side.texture as GradientTexture2D).gradient
+	var top := 0.0
+	for i in side.get_point_count():
+		var c := side.get_color(i)
+		ok(c.r + c.g + c.b < 0.01, "game page: a dark scrim")
+		top = maxf(top, c.a)
+		if side.get_offset(i) >= 0.45:
+			eq(c.a, 0.0, "game page: gone by 45 % of the width")
+	ok(top <= 0.551 and top > 0.5, "game page: at most 55 %% black on bright art (%.2f)" % top)
+	var foot := (p._fade.texture as GradientTexture2D).gradient
+	for i in foot.get_point_count():
+		eq(foot.get_color(i).a, 0.0, "game page: nothing washes the foot of the art")
+	p.free()
+	# Chips on the hero stay light and opaque.
+	var chip: Control = load("res://scripts/ui/badge.gd").make({"kind": "time", "text": "46 h to beat", "tone": "info", "icon": "clock"}, "chip")
+	eq((chip.get_theme_stylebox("panel") as StyleBoxFlat).bg_color.a, 1.0, "light: hero chips are opaque")
+	chip.free()
+	# The dark themes keep their own shade toward the backdrop.
+	ThemeLib.use("cove")
+	var st: Control = HeroStage.new()
+	st.frame_radius = 24.0
+	st._apply_fade()
+	var dm := (st.layers[0] as TextureRect).material as ShaderMaterial
+	ok(is_equal_approx((dm.get_shader_parameter("shade_color") as Color).a, 0.80), "cove: its shade is unchanged")
+	eq(float(dm.get_shader_parameter("shade_to")), 0.58, "cove: to 58 % of the width")
+	st.free()
+	ArtCache.clear()
 
 
 ## A store hero with black bars baked into its sides (Frostpunk's) is shown
