@@ -857,7 +857,7 @@ func _gog_plan(entry: Dictionary, tools: Dictionary) -> Dictionary:
 	var cfg := SettingsFile.load_cfg(cfg_path)
 	var cached: Variant = cfg.get_value("gog_remote", client) if cfg.has_section_key("gog_remote", client) else null
 	if cached == null:
-		var r: Dictionary = run.call("curl", PackedStringArray(["-sS", "--fail", "-m", "15", CloudSaves.GOG_REMOTE_CONFIG % client]))
+		var r: Dictionary = run.call("curl", CloudSaves.gog_remote_args(client))
 		if int(r.get("code", -1)) != 0:
 			return {"ok": false, "why": "offline"}
 		var locs: Variant = CloudSaves.parse_gog_remote(str(r.get("out", "")))

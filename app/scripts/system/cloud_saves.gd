@@ -374,10 +374,20 @@ static func heroic_gog_timestamps(heroic_root: String, id: String) -> Dictionary
 	return out
 
 
-## The game's GOG client id from goggame-<id>.info, "" when missing.
+## The game's GOG client id from goggame-<id>.info, "" when missing or not a client id (GOG's
+## are digits): it goes into a URL and a folder path, so a tampered game file can't put
+## anything else there (review at ff76ca4, section 9 L3).
 static func gog_client_id(install_path: String, id: String) -> String:
 	var info: Variant = Common.read_json(install_path.path_join("goggame-%s.info" % id), {})
-	return str(Common.dict(info).get("clientId", ""))
+	var c := str(Common.dict(info).get("clientId", ""))
+	return c if RegEx.create_from_string("^[0-9]{1,32}$").search(c) != null else ""
+
+
+## curl's arguments for GOG's remote config of `client` (https only, no URL globbing, the
+## answer capped at 1 MiB, 15 s).
+static func gog_remote_args(client: String) -> PackedStringArray:
+	return PackedStringArray(["-sS", "--fail", "--proto", "=https", "--proto-redir", "=https", "-g",
+		"--max-filesize", "1048576", "-m", "15", "--", GOG_REMOTE_CONFIG % client])
 
 
 ## GOG remote config JSON -> locations [{name, location}] (Windows), [] when cloud storage is
@@ -431,7 +441,17 @@ static func resolve_gog_location(location: String, install_path: String, pfx: St
 			p = p.replace(m.get_string(0), map[key])
 	if not p.begins_with("/"):
 		return ""
-	return case_insensitive(p.simplify_path())
+	p = p.simplify_path()
+	# a location may only name a folder in the game's install folder or its prefix ("../"
+	# in a location from a tampered file or answer stays out)
+	var inside := false
+	for root in [install_path, pfx]:
+		var r := str(root).simplify_path()
+		if r != "" and r != "/" and (p == r or p.begins_with(r + "/")):
+			inside = true
+	if not inside:
+		return ""
+	return case_insensitive(p)
 
 
 ## Matches each existing folder of `path` case-insensitively (Windows games' paths, on a

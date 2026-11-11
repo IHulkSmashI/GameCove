@@ -269,3 +269,29 @@ func test_a_page_that_isnt_gogs_answer_is_not_no_cloud_saves() -> void:
 	eq(CS.parse_gog_remote("<html>Sign in to the hotel Wi-Fi</html>"), "invalid", "not JSON")
 	eq(CS.parse_gog_remote("{\"welcome\": true}"), "invalid", "JSON, but not GOG's")
 	eq(CS.parse_gog_remote(JSON.stringify({"content": {"Windows": {}}})), null, "GOG's answer without cloud saves: none")
+
+
+## Review at ff76ca4, section 9 L3: the client id from a game's own files went into a curl URL
+## and a folder path unchecked.
+func test_gog_client_id_and_locations_stay_in_bounds() -> void:
+	var root := ProjectSettings.globalize_path("user://test_cloud_saves_l3")
+	DirAccess.make_dir_recursive_absolute(root)
+	var write := func(id: String) -> void:
+		var f := FileAccess.open(root.path_join("goggame-1.info"), FileAccess.WRITE)
+		f.store_string(JSON.stringify({"clientId": id}))
+		f.close()
+	write.call("53035488294233580")
+	eq(CS.gog_client_id(root, "1"), "53035488294233580", "a real client id")
+	for bad in ["../../../etc", "1?x=@evil.example", "123 456", "1" .repeat(33), "{1..9}"]:
+		write.call(bad)
+		eq(CS.gog_client_id(root, "1"), "", "refused: %s" % bad)
+	DirAccess.remove_absolute(root.path_join("goggame-1.info"))
+	DirAccess.remove_absolute(root)
+	var args := Array(CS.gog_remote_args("5150"))
+	ok(args.has("--proto") and args[args.find("--proto") + 1] == "=https", "https only")
+	ok(args.has("-g"), "no URL globbing")
+	ok(args.has("--max-filesize"), "size cap")
+	eq(args[-2], "--", "the URL after --")
+	ok(str(args[-1]).begins_with("https://remote-config.gog.com/"), "GOG's host")
+	eq(CS.resolve_gog_location("<?INSTALL?>/../../home/user/.ssh", "/games/w", ""), "", "a location can't climb out of the install folder")
+	eq(CS.resolve_gog_location("/etc/x", "/games/w", ""), "", "nor name a folder elsewhere")
