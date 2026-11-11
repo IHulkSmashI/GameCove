@@ -120,6 +120,36 @@ static func list_games(root: String, exts: Array, max_games := SYSTEM_MAX) -> Di
 	return out
 
 
+## The files a .cue ("FILE \"name.bin\" BINARY") or .gdi (one track per line, the file name 5th) names, as
+## lower case names without a folder. [] when it can't be read or names none.
+static func _sheet_tracks(path: String, ext: String) -> Array:
+	var fa := FileAccess.open(path, FileAccess.READ)
+	if fa == null or fa.get_length() > 65536:
+		return []
+	var out: Array = []
+	for line in fa.get_as_text().split("\n"):
+		var l := line.strip_edges()
+		var name := ""
+		if ext == "cue":
+			if not l.to_upper().begins_with("FILE "):
+				continue
+			l = l.substr(5).strip_edges()
+			if l.begins_with("\""):
+				name = l.substr(1).get_slice("\"", 0)
+			else:
+				name = l.get_slice(" ", 0)
+		else:
+			var parts := l.split(" ", false)
+			if parts.size() < 5 or not parts[0].is_valid_int():
+				continue
+			name = l.get_slice("\"", 1) if l.contains("\"") else parts[4]
+		name = name.replace("\\", "/").get_file().to_lower()
+		if name != "" and not name in out:
+			out.append(name)
+	fa.close()
+	return out
+
+
 static func _list(root: String, rel_dir: String, depth: int, allowed: Dictionary, listed: Dictionary, out: Dictionary, max_games: int) -> void:
 	var dir := root.path_join(rel_dir) if rel_dir != "" else root
 	var d := DirAccess.open(dir)
@@ -129,12 +159,19 @@ static func _list(root: String, rel_dir: String, depth: int, allowed: Dictionary
 	var files := d.get_files()
 	if files.has("noload.txt"):
 		return
-	var has_sheet := false
 	var has_rpx := false
+	# The track files a disc sheet names (lower case file names): only those are not games of their own. A
+	# .bin the sheets don't name (another game in the folder) stays listed; one .cue used to hide every .bin.
+	var tracks := {}
+	var bare_sheets: Array = []   # sheets that name nothing we can read: their same-name files are theirs
 	for f in files:
 		var ext := f.get_extension().to_lower()
 		if ext in ["cue", "gdi"]:
-			has_sheet = true
+			var named := _sheet_tracks(dir.path_join(f), ext)
+			for t in named:
+				tracks[t] = true
+			if named.is_empty():
+				bare_sheets.append(f.get_basename().to_lower())
 		elif ext == "rpx":
 			has_rpx = true
 		elif ext == "m3u":
@@ -160,7 +197,7 @@ static func _list(root: String, rel_dir: String, depth: int, allowed: Dictionary
 				continue
 		elif not allowed.has(ext):
 			continue
-		if has_sheet and ext in TRACK_EXT:
+		if ext in TRACK_EXT and (tracks.has(f.to_lower()) or f.get_basename().to_lower() in bare_sheets):
 			continue
 		if wiiu_code and ext != "rpx":
 			continue

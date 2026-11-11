@@ -186,6 +186,28 @@ func test_clean_titles() -> void:
 
 # ------------------------------------------------------------ what counts as a game
 
+## Review Medium (other): one .cue hid every .bin in its folder, so a Mega Drive / PS1 .bin game
+## sitting beside a disc image vanished from the Library. Only the files a sheet names are its tracks.
+func test_a_cue_hides_only_the_tracks_it_names() -> void:
+	var dir := OS.get_user_data_dir().path_join("test_cue_%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(dir)
+	_touch(dir.path_join("Disc A.cue"), "FILE \"Disc A (Track 1).bin\" BINARY\r\n  TRACK 01 MODE2/2352\r\n    INDEX 01 00:00:00\r\nFILE \"Disc A (Track 2).bin\" BINARY\r\n  TRACK 02 AUDIO\r\n")
+	_touch(dir.path_join("Disc A (Track 1).bin"))
+	_touch(dir.path_join("Disc A (Track 2).bin"))
+	_touch(dir.path_join("Homebrew Game.bin"))                      # another game: the .cue doesn't name it
+	_touch(dir.path_join("Unquoted.cue"), "FILE unquoted.img BINARY\n")
+	_touch(dir.path_join("unquoted.img"))
+	_touch(dir.path_join("Dreamcast.gdi"), "2\n1 0 4 2352 track01.bin 0\n2 600 0 2352 \"track 02.raw\" 0\n")
+	_touch(dir.path_join("track01.bin"))
+	_touch(dir.path_join("track 02.raw"))
+	_touch(dir.path_join("Blank.cue"))                              # names nothing readable: its same-name file is its track
+	_touch(dir.path_join("Blank.bin"))
+	var found := Roms.list_games(dir, ["cue", "bin", "gdi", "img", "raw"])
+	eq(_ids(found["games"]), ["Blank.cue", "Disc A.cue", "Dreamcast.gdi", "Homebrew Game.bin", "Unquoted.cue"],
+		"the discs, and the .bin no sheet names")
+	DirAccess.remove_absolute(dir)
+
+
 func test_listing_rules() -> void:
 	var home := _emudeck("list")
 	var roms := home.path_join("Emulation/roms")
