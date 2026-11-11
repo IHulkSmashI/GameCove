@@ -107,6 +107,9 @@ func _run() -> void:
 		cp.light("RightBumper", true)
 		await shot("device_controller_test")
 		cp.stop_test()
+	# what upscaling keeps here (gamecove-upscale storage), as on a Claw with three games set up
+	s["storage"].st["upscaling"] = {"bytes": 438304768, "games": 3, "bundle_bytes": 347078656,
+		"folder": "/home/deck/.local/share/gamecove", "parts": []}
 	await _page("storage_panel.gd", "Storage", s, "device_storage", 1)
 	await _page("updates_panel.gd", "Updates", s, "device_updates", 1)
 

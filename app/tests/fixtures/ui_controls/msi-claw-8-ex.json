@@ -121,7 +121,7 @@
   },
   {
    "apply_order": 0,
-   "available": true,
+   "available": false,
    "default": true,
    "group": "controller",
    "help": "Motion aiming for games and Steam Input. Off stops the gyro reaching games.",
@@ -133,12 +133,12 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "",
+   "reason": "Needs the gyro fix first (Device, Fixes)",
    "requires": [],
    "step": 1.0,
    "title": "Gyro",
    "unit": "",
-   "value": true
+   "value": null
   },
   {
    "apply_order": 0,
@@ -171,7 +171,7 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "This handheld has one gyro",
+   "reason": "Needs the gyro fix first (Device, Fixes)",
    "requires": [
     "controller.gyro"
    ],
@@ -232,7 +232,7 @@
   {
    "apply_order": 20,
    "available": true,
-   "default": "dualsense",
+   "default": "default",
    "group": "controller",
    "help": "What games see. Steam Deck and DualSense carry gyro and trackpads; Xbox works everywhere.",
    "id": "controller.emulation",
@@ -242,8 +242,32 @@
    "needs_root": false,
    "options": [
     {
+     "label": "Handheld default",
+     "value": "default"
+    },
+    {
+     "label": "Steam Deck",
+     "value": "deck"
+    },
+    {
+     "label": "DualSense Edge",
+     "value": "ds5-edge"
+    },
+    {
+     "label": "Xbox Elite",
+     "value": "xbox-elite"
+    },
+    {
+     "label": "Xbox Series",
+     "value": "xbox-series"
+    },
+    {
      "label": "DualSense",
-     "value": "dualsense"
+     "value": "ds5"
+    },
+    {
+     "label": "Xbox 360",
+     "value": "xb360"
     }
    ],
    "per_game": true,
@@ -253,11 +277,11 @@
    "step": 1.0,
    "title": "Controller type",
    "unit": "",
-   "value": "dualsense"
+   "value": "default"
   },
   {
    "apply_order": 0,
-   "available": true,
+   "available": false,
    "default": "steam_input",
    "group": "controller",
    "help": "What the back buttons do as a group (Handheld Daemon).",
@@ -274,16 +298,16 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "",
+   "reason": "With InputPlumber each back button is set on its own",
    "requires": [],
    "step": 1.0,
    "title": "Back buttons",
    "unit": "",
-   "value": "steam_input"
+   "value": null
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": "",
    "group": "controller",
    "help": "What this button sends.",
@@ -476,16 +500,16 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Handheld Daemon sets the back buttons together (Back buttons)",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Back button M2",
    "unit": "",
-   "value": null
+   "value": ""
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": "",
    "group": "controller",
    "help": "What this button sends.",
@@ -678,16 +702,16 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Handheld Daemon sets the back buttons together (Back buttons)",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Back button M1",
    "unit": "",
-   "value": null
+   "value": ""
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": false,
    "group": "controller",
    "help": "Nintendo layout: confirm on the right button.",
@@ -699,16 +723,16 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Handheld Daemon has no layout swap for this handheld",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Swap A/B and X/Y",
    "unit": "",
-   "value": null
+   "value": false
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": false,
    "group": "controller",
    "help": "Right stick moves the pointer, right trigger clicks, left trigger right-clicks.",
@@ -720,16 +744,16 @@
    "options": [],
    "per_game": false,
    "points": 0,
-   "reason": "Handheld Daemon has no mouse mode; use the touchpad or Steam's desktop layout",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Mouse mode",
    "unit": "",
-   "value": null
+   "value": false
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": 1000.0,
    "group": "controller",
    "help": "How fast the pointer moves.",
@@ -741,14 +765,14 @@
    "options": [],
    "per_game": false,
    "points": 0,
-   "reason": "Needs InputPlumber",
+   "reason": "",
    "requires": [
     "controller.desktop_mode"
    ],
    "step": 100.0,
    "title": "Mouse mode speed",
    "unit": "px/s",
-   "value": null
+   "value": 1000.0
   },
   {
    "apply_order": 0,
@@ -781,7 +805,7 @@
    "value": null
   },
   {
-   "apply_order": 0,
+   "apply_order": 1,
    "available": true,
    "default": true,
    "group": "controller",
@@ -802,11 +826,11 @@
    "value": true
   },
   {
-   "apply_order": 0,
+   "apply_order": 2,
    "available": true,
    "default": 100,
    "group": "controller",
-   "help": "How strong the vibration is.",
+   "help": "How strong every game's vibration is. Kept in the controller itself where it can be.",
    "id": "controller.rumble_strength",
    "kind": "choice",
    "max": 1.0,
@@ -814,20 +838,40 @@
    "needs_root": false,
    "options": [
     {
+     "label": "10%",
+     "value": 10
+    },
+    {
      "label": "20%",
      "value": 20
+    },
+    {
+     "label": "30%",
+     "value": 30
     },
     {
      "label": "40%",
      "value": 40
     },
     {
+     "label": "50%",
+     "value": 50
+    },
+    {
      "label": "60%",
      "value": 60
     },
     {
+     "label": "70%",
+     "value": 70
+    },
+    {
      "label": "80%",
      "value": 80
+    },
+    {
+     "label": "90%",
+     "value": 90
     },
     {
      "label": "100%",
@@ -845,10 +889,10 @@
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": null,
    "group": "controller",
-   "help": "A short buzz.",
+   "help": "A short buzz at the rumble strength set here.",
    "id": "controller.rumble_test",
    "kind": "action",
    "max": 1.0,
@@ -857,8 +901,10 @@
    "options": [],
    "per_game": false,
    "points": 0,
-   "reason": "Handheld Daemon can't buzz on request",
-   "requires": [],
+   "reason": "",
+   "requires": [
+    "controller.rumble"
+   ],
    "step": 1.0,
    "title": "Test rumble",
    "unit": "",
@@ -878,7 +924,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Handheld Daemon has no deadzone setting for this handheld",
+   "reason": "InputPlumber has no deadzone setting; Steam's controller settings have one per game",
    "requires": [],
    "step": 2.0,
    "title": "Left stick deadzone",
@@ -899,7 +945,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Handheld Daemon has no deadzone setting for this handheld",
+   "reason": "InputPlumber has no deadzone setting; Steam's controller settings have one per game",
    "requires": [],
    "step": 2.0,
    "title": "Right stick deadzone",
@@ -920,7 +966,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Handheld Daemon has no deadzone setting for this handheld",
+   "reason": "InputPlumber has no deadzone setting; Steam's controller settings have one per game",
    "requires": [],
    "step": 2.0,
    "title": "Left trigger deadzone",
@@ -941,7 +987,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Handheld Daemon has no deadzone setting for this handheld",
+   "reason": "InputPlumber has no deadzone setting; Steam's controller settings have one per game",
    "requires": [],
    "step": 2.0,
    "title": "Right trigger deadzone",
@@ -961,8 +1007,28 @@
    "needs_root": false,
    "options": [
     {
+     "label": "Off",
+     "value": "off"
+    },
+    {
      "label": "Solid",
      "value": "solid"
+    },
+    {
+     "label": "Pulse",
+     "value": "pulse"
+    },
+    {
+     "label": "Rainbow",
+     "value": "rainbow"
+    },
+    {
+     "label": "Spiral",
+     "value": "spiral"
+    },
+    {
+     "label": "Frostfire",
+     "value": "frostfire"
     }
    ],
    "per_game": true,
@@ -972,7 +1038,7 @@
    "step": 1.0,
    "title": "Lights",
    "unit": "",
-   "value": "solid"
+   "value": "off"
   },
   {
    "apply_order": 4,
@@ -995,7 +1061,7 @@
    "step": 1.0,
    "title": "Light colour",
    "unit": "",
-   "value": "#ff8000"
+   "value": "#03e6ff"
   },
   {
    "apply_order": 4,
@@ -1011,7 +1077,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Not on this handheld",
+   "reason": "This handheld's lights have one zone",
    "requires": [
     "controller.led_effect"
    ],
@@ -1038,10 +1104,10 @@
    "requires": [
     "controller.led_effect"
    ],
-   "step": 5.0,
+   "step": 1.0,
    "title": "Light brightness",
    "unit": "%",
-   "value": 50.0
+   "value": 21.0
   },
   {
    "apply_order": 2,
@@ -1057,7 +1123,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "This handheld's effects have a fixed speed",
+   "reason": "Pick a moving effect first (pulse, rainbow...)",
    "requires": [
     "controller.led_effect"
    ],
@@ -1068,7 +1134,7 @@
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": null,
    "group": "controller",
    "help": "Removes GameCove's button, gyro, trackpad and controller-type changes.",
@@ -1080,7 +1146,7 @@
    "options": [],
    "per_game": false,
    "points": 0,
-   "reason": "Needs InputPlumber",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Reset controller layout",
@@ -1279,7 +1345,7 @@
    "available": true,
    "default": 0,
    "group": "display",
-   "help": "How a game running below the screen's resolution is scaled up. FSR and NIS sharpen; Nearest and Pixel keep pixel art crisp.",
+   "help": "How the screen scales up a game running below its resolution (not the game's own upscaler). FSR and NIS sharpen; Nearest and Pixel keep pixel art crisp.",
    "id": "display.upscale_filter",
    "kind": "choice",
    "max": 1.0,
@@ -2108,7 +2174,7 @@
    "available": false,
    "default": false,
    "group": "perf",
-   "help": "Adds generated frames with lsfg-vk and your own Lossless Scaling. Best above 40 real fps.",
+   "help": "For games the upscaler above can't reach: older games, emulators, anything. Uses your own Lossless Scaling. Best above 40 real fps.",
    "id": "perf.lsfg",
    "kind": "toggle",
    "max": 1.0,
@@ -2117,7 +2183,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs lsfg-vk",
+   "reason": "Needs Lossless Scaling, a paid app on Steam",
    "requires": [],
    "step": 1.0,
    "title": "Lossless Scaling frame generation",
@@ -2137,26 +2203,29 @@
    "needs_root": false,
    "options": [
     {
+     "help": "One made frame per real frame.",
      "label": "2x",
      "value": 2
     },
     {
+     "help": "Two made frames per real frame: more lag and more artefacts.",
      "label": "3x",
      "value": 3
     },
     {
+     "help": "Three made frames per real frame: the most lag and artefacts.",
      "label": "4x",
      "value": 4
     }
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Needs lsfg-vk",
+   "reason": "Needs Lossless Scaling, a paid app on Steam",
    "requires": [
     "perf.lsfg"
    ],
    "step": 1.0,
-   "title": "Frame generation multiplier",
+   "title": "Lossless multiplier",
    "unit": "",
    "value": null
   },
@@ -2165,7 +2234,7 @@
    "available": false,
    "default": 0.8,
    "group": "perf",
-   "help": "Lower is faster with a softer result; 80 % suits handheld screens.",
+   "help": "Lower is faster with a softer result; 80 % suits handheld screens, 60 % the slower chips.",
    "id": "perf.lsfg_flow_scale",
    "kind": "slider",
    "max": 1.0,
@@ -2174,7 +2243,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs lsfg-vk",
+   "reason": "Needs Lossless Scaling, a paid app on Steam",
    "requires": [
     "perf.lsfg"
    ],
@@ -2197,7 +2266,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs lsfg-vk",
+   "reason": "Needs Lossless Scaling, a paid app on Steam",
    "requires": [
     "perf.lsfg"
    ],
@@ -2207,11 +2276,89 @@
    "value": null
   },
   {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "perf",
+   "help": "Lossless Scaling is a paid app on Steam. This uses your own copy.",
+   "id": "perf.lsfg_setup",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Set up Lossless frame generation",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 4,
+   "available": false,
+   "default": "best",
+   "group": "perf",
+   "help": "Best sets up the sharpest upscaler this handheld runs, before you start the game. Native takes everything out again.",
+   "id": "perf.upscale_mode",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Best for this handheld",
+     "value": "best"
+    },
+    {
+     "help": "You picked the upscaler and frame generation below. We keep them exactly as you set them.",
+     "label": "My choice",
+     "value": "custom"
+    },
+    {
+     "help": "The game as it shipped: everything we added is taken out, and nothing comes back by itself.",
+     "label": "Native (nothing added)",
+     "value": "native"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Upscaling for this game",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "What the last start of this game really used. Press to check again.",
+   "id": "perf.upscale_active",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Running now",
+   "unit": "",
+   "value": null
+  },
+  {
    "apply_order": 3,
    "available": false,
    "default": "own",
    "group": "perf",
-   "help": "Puts a better upscaler into the game with OptiScaler (XeSS on Intel Arc, FSR on AMD). Pick the game's DLSS or FSR in its menu.",
+   "help": "Pick one yourself. The game keeps its own menu: choose DLSS or FSR there and it becomes this.",
    "id": "perf.upscaler",
    "kind": "choice",
    "max": 1.0,
@@ -2219,18 +2366,22 @@
    "needs_root": false,
    "options": [
     {
+     "help": "The game's own upscaler, untouched. Nothing of ours goes into the game.",
      "label": "Game's own",
      "value": "own"
     },
     {
-     "label": "XeSS (OptiScaler)",
+     "help": "Intel's XeSS 2: sharp and light. On Arc with the XMX driver it runs on the XMX cores.",
+     "label": "XeSS 2",
      "value": "xess"
     },
     {
+     "help": "AMD's newest FSR on Arc's XMX cores: the sharpest picture here. DirectX 12 games.",
      "label": "FSR 4.1.2 on XMX",
      "value": "fsr4_xmx"
     },
     {
+     "help": "The lighter FSR 4 model on the XMX cores: a few more frames, a slightly softer picture.",
      "label": "FSR 4.1.2 Lite on XMX",
      "value": "fsr4_xmx_lite"
     }
@@ -2249,7 +2400,7 @@
    "available": false,
    "default": 0,
    "group": "perf",
-   "help": "XeSS frame generation on Intel Arc (2x-4x), FSR frame generation on AMD (2x). Needs about 40 real fps.",
+   "help": "XeSS frame generation on the XMX cores: 2x, 3x or 4x, with XeLL low latency. Needs about 40 real fps.",
    "id": "perf.frame_gen",
    "kind": "choice",
    "max": 1.0,
@@ -2257,18 +2408,22 @@
    "needs_root": false,
    "options": [
     {
+     "help": "No frames are added.",
      "label": "Off",
      "value": 0
     },
     {
+     "help": "One made frame between every two real ones, with low latency on. Best from about 40 real fps.",
      "label": "2x",
      "value": 2
     },
     {
+     "help": "Two made frames for every real one. Best from about 40 real fps on a 120 Hz screen.",
      "label": "3x",
      "value": 3
     },
     {
+     "help": "Three made frames for every real one: the smoothest motion and the most artefacts.",
      "label": "4x",
      "value": 4
     }
@@ -2283,12 +2438,39 @@
    "value": null
   },
   {
+   "apply_order": 2,
+   "available": false,
+   "default": "xefg",
+   "group": "perf",
+   "help": "FSR is lighter and pairs with Anti-Lag 2. XeSS handles menus and HUDs better, costs more, and brings XeLL. Not every game likes XeSS here yet.",
+   "id": "perf.fg_generator",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "help": "Intel's: cleaner menus and HUDs, costs more, and brings XeLL low latency.",
+     "label": "XeSS frame generation",
+     "value": "xefg"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "One frame generator on this graphics chip",
+   "requires": [],
+   "step": 1.0,
+   "title": "Frame generation by",
+   "unit": "",
+   "value": null
+  },
+  {
    "apply_order": 0,
    "available": false,
    "default": null,
    "group": "perf",
-   "help": "Sets up the best upscaler for this game from what it ships and OptiScaler's game list.",
-   "id": "perf.upscale_recommended",
+   "help": "Opens the in-game menu with every setting (the Insert key). Works while the game is in front.",
+   "id": "perf.upscale_menu",
    "kind": "action",
    "max": 1.0,
    "min": 0.0,
@@ -2299,7 +2481,7 @@
    "reason": "Needs GameCove's upscaling helper",
    "requires": [],
    "step": 1.0,
-   "title": "Use the recommended setup",
+   "title": "Open the upscaler's menu",
    "unit": "",
    "value": null
   },
@@ -2308,7 +2490,7 @@
    "available": false,
    "default": null,
    "group": "perf",
-   "help": "Takes OptiScaler (and REFramework) out of the game folder, exactly as it was.",
+   "help": "Takes every file we added out of the game folder, exactly as it was. Same as Native.",
    "id": "perf.upscale_undo",
    "kind": "action",
    "max": 1.0,
@@ -2320,7 +2502,49 @@
    "reason": "Needs GameCove's upscaling helper",
    "requires": [],
    "step": 1.0,
-   "title": "Remove GameCove's upscaler",
+   "title": "Remove our upscaler from this game",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "OptiScaler, OptiPatcher, the XeSS driver and FSR 4 files GameCove downloaded, kept at the newest.",
+   "id": "perf.upscaler_update",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Upscaler downloads",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "Puts the newest OptiScaler into this game, with its settings kept.",
+   "id": "perf.upscale_game_update",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Update this game's upscaler",
    "unit": "",
    "value": null
   },
@@ -2329,7 +2553,7 @@
    "available": false,
    "default": true,
    "group": "perf",
-   "help": "Cuts input lag: Anti-Lag through low_latency_layer on AMD, XeLL on Intel Arc. From the next launch.",
+   "help": "Leave on. Turn off only if a game stutters or won't start with it.",
    "id": "perf.low_latency",
    "kind": "toggle",
    "max": 1.0,
@@ -2384,6 +2608,27 @@
    "requires": [],
    "step": 1.0,
    "title": "Start through GameCove",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "perf",
+   "help": "Takes GameCove's launcher out of every Steam game's launch options. Steam closes for a moment and starts again. Per-game upscaling and frame limits stop until you turn them on again.",
+   "id": "perf.wrapper_remove_all",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Remove GameCove from all Steam games",
    "unit": "",
    "value": null
   },
@@ -2591,7 +2836,7 @@
   },
   {
    "apply_order": 89,
-   "available": false,
+   "available": true,
    "default": null,
    "group": "power",
    "help": "The maker's own power and fan mode for this handheld.",
@@ -2600,15 +2845,28 @@
    "max": 1.0,
    "min": 0.0,
    "needs_root": false,
-   "options": [],
+   "options": [
+    {
+     "label": "Low Power",
+     "value": "low-power"
+    },
+    {
+     "label": "Balanced",
+     "value": "balanced"
+    },
+    {
+     "label": "Performance",
+     "value": "performance"
+    }
+   ],
    "per_game": true,
    "points": 0,
-   "reason": "Not available on this handheld",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Firmware mode",
    "unit": "",
-   "value": null
+   "value": "balanced"
   },
   {
    "apply_order": 80,
@@ -2660,7 +2918,7 @@
    "help": "How many CPU threads stay on. Fewer saves power in light games.",
    "id": "power.cpu_cores",
    "kind": "slider",
-   "max": 16.0,
+   "max": 14.0,
    "min": 2.0,
    "needs_root": false,
    "options": [],
@@ -2671,7 +2929,7 @@
    "step": 1.0,
    "title": "CPU cores",
    "unit": "",
-   "value": 16.0
+   "value": 14.0
   },
   {
    "apply_order": 70,
@@ -2764,7 +3022,7 @@
   },
   {
    "apply_order": 66,
-   "available": false,
+   "available": true,
    "default": null,
    "group": "power",
    "help": "Auto lets the GPU pick its clock; low and high pin it; manual uses the clock below.",
@@ -2773,22 +3031,31 @@
    "max": 1.0,
    "min": 0.0,
    "needs_root": false,
-   "options": [],
+   "options": [
+    {
+     "label": "Auto",
+     "value": "auto"
+    },
+    {
+     "label": "Manual",
+     "value": "manual"
+    }
+   ],
    "per_game": true,
    "points": 0,
-   "reason": "An AMD GPU setting",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "GPU performance level",
    "unit": "",
-   "value": null
+   "value": "auto"
   },
   {
    "apply_order": 65,
    "available": false,
    "default": null,
    "group": "power",
-   "help": "Fixed GPU clock in manual mode.",
+   "help": "Fixed GPU clock. Setting it switches the GPU to manual mode.",
    "id": "power.gpu_clock",
    "kind": "slider",
    "max": 1.0,
@@ -2930,7 +3197,7 @@
    "kind": "toggle",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": true,
+   "needs_root": false,
    "options": [],
    "per_game": false,
    "points": 0,
@@ -3024,6 +3291,48 @@
    "title": "Battery saver at",
    "unit": "%",
    "value": 0.0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "power",
+   "help": "Puts the handheld to sleep on battery at the level below, after a 30 s warning any button cancels. Off by default.",
+   "id": "power.low_battery_sleep",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Sleep at low battery",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 5.0,
+   "group": "power",
+   "help": "The battery level for Sleep at low battery, 3 to 10 %.",
+   "id": "power.low_battery_sleep_at",
+   "kind": "slider",
+   "max": 10.0,
+   "min": 3.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Sleep at",
+   "unit": "%",
+   "value": 5.0
   },
   {
    "apply_order": 0,
