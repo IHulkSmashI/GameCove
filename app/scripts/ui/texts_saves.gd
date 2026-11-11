@@ -45,12 +45,13 @@ const STATE := {
 	"linux": "The store's cloud saves only cover the Windows version of this game.",
 	"upload_finished": "The last upload was cut off; we finished it %s.",
 	"upload_cut": "The last upload was cut off, so the cloud may hold only part of it. We finish it before anything else syncs.",
+	"state_unsaved": "We couldn't save how your saves stand (the file was damaged), so nothing syncs until GameCove restarts. Your saves are safe on this handheld.",
 	"off": OFF_LINE,
 	"disabled": DISABLED_LINE,
 }
 ## state -> tone for the status line.
 const TONE := {"synced": "good", "uploaded": "good", "downloaded": "good", "restored": "good", "conflict": "warn",
-	"upload_finished": "good", "upload_cut": "warn",
+	"upload_finished": "good", "upload_cut": "warn", "state_unsaved": "warn",
 	"offline": "warn", "failed": "bad", "backup_failed": "bad", "too_big": "warn", "pending_up": "", "pending_down": ""}
 
 const CONFLICT_TITLE := "Which save do we keep?"

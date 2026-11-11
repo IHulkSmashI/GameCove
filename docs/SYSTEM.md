@@ -410,6 +410,10 @@ What keeps a save from being lost (final review; each has a test against ports o
   instead of "Newer" (a fresh default save has the newest file time).
 - **What the status says.** gogdl's "Refused" (the other side is newer and this run could only go one way) is shown as
   waiting, not as synced. GOG's cloud time is an upload time, so the GOG conflict sheet calls neither side "Newer".
+- **`saves.cfg` itself.** A game's switch is also kept in `saves_off.json`, so a damaged `saves.cfg` (set aside and
+  read as empty) never switches sync back on for a game switched off. While it's set aside nothing syncs that run
+  ("we couldn't save how your saves stand"), and a note (`pending`, `uploading`) that can't be written stops the tool
+  from running at all.
 - **Backups.** The newest 10 everyday backups per game, and apart from those the newest 10 made by a conflict choice,
   a cloud copy, a restore or an interrupted download. "Newest" is the order they were made in (`seq` in each backup's
   JSON), not the time in their name: with the clock behind, the backup just made is never the one rotated out.

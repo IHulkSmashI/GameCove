@@ -160,6 +160,8 @@ art your games are missing (row 9).
   folders they were made with (and the identity of their prefix: `stat` device, inode and birth time), a note while a
   download is replacing a save folder or an upload is going up, what both sides of a conflict hold; GOG's
   remote-config answers per client id.
+- `user://saves_off.json`: the games whose cloud-save switch is off, kept apart from `saves.cfg` so a damaged
+  `saves.cfg` never switches them back on.
 - `user://saves/backups/<game>/`: the local backups (`<time>-<n>.tar.gz` per save folder and `<time>.json` listing
   them), at most 10 everyday ones per game plus 10 made by a choice, a restore or a copy of the cloud. Taken before a
   cloud save replaces one on the handheld, before a restore, and of the cloud's save when a conflict is found, before

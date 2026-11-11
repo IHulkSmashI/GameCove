@@ -59,6 +59,7 @@ func _world(name: String) -> Dictionary:
 	var w := {"root": root, "saves": saves, "gsaves": gsaves, "epic": epic, "gog": gog, "calls": [], "now": [2000000000]}
 	var s: Node = Service.new()
 	s.cfg_path = root.path_join("saves.cfg")
+	s.off_path = root.path_join("saves_off.json")
 	s.privacy_path = root.path_join("settings.cfg")
 	s.backup_dir = root.path_join("backups")
 	s.backups.base_dir = s.backup_dir

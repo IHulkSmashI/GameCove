@@ -7,6 +7,7 @@ const Service := preload("res://scripts/system/saves_service.gd")
 const CloudSaves := preload("res://scripts/system/cloud_saves.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 const Fakes := preload("res://tests/fixtures/saves/fake_clouds.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const BASE := "user://test_saves_safety"
 ## A day in the past the saves were made on, and the clock after it.
 const T0 := 1762000000
@@ -62,6 +63,7 @@ func _world(name: String) -> Dictionary:
 		"gog_cloud": gc, "epic_cloud": ec, "calls": [], "now": [T0 + 100000], "running": [false], "entries": {"gog:1207": gog, "epic:Min": epic}}
 	var s: Node = Service.new()
 	s.cfg_path = root.path_join("saves.cfg")
+	s.off_path = root.path_join("saves_off.json")
 	s.privacy_path = root.path_join("settings.cfg")
 	s.backup_dir = root.path_join("backups")
 	s.backups.base_dir = s.backup_dir
@@ -839,6 +841,46 @@ func test_a_launch_with_sync_off_waits_for_a_restore_at_work() -> void:
 	w["s"].before_launch(w["gog"], func(r): got.append([r, phases.duplicate()]))
 	eq(got.size(), 1, "the launch goes ahead once")
 	eq(got[0][1], ["wait"], "after its turn on the worker, behind the restore")
+	_done(w)
+
+
+## L7: saves.cfg found damaged is set aside and read as empty, which switched sync back on for
+## every game the user had switched off, and later writes failed unseen.
+func test_a_damaged_saves_cfg_keeps_games_off_and_syncs_nothing() -> void:
+	var w := _world("cfg_damaged")
+	var cloud: Object = w["gog_cloud"]
+	cloud.seed("saves", "slot1.sav", "cloud", T0)
+	w["s"].set_enabled("gog:1207", false)
+	var f := FileAccess.open(w["s"].cfg_path, FileAccess.WRITE)
+	f.store_string("[game:gog:1207\nthis isn't a config file =")
+	f.close()
+	expect_error("ConfigFile parse error", 1)
+	ok(not w["s"].enabled("gog:1207"), "a game switched off stays off")
+	eq(w["s"].status(w["gog"])["state"], "off", "and says so")
+	w["s"].set_enabled("gog:1207", true)
+	var calls: int = w["calls"].size()
+	w["s"].sync_now(w["gog"])
+	eq(w["calls"].size(), calls, "with nowhere to keep what a sync does, nothing runs")
+	eq(w["s"].status(w["gog"])["state"], "state_unsaved", "and the status says why")
+	SettingsFile.reset_for_tests()
+	_done(w)
+
+
+## L7: a note that can't be written (a full disk) means no tool runs: a crash after it couldn't
+## be put right.
+func test_no_download_without_its_note() -> void:
+	var w := _world("note_unwritable")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "local", T0)
+	w["s"].sync_now(w["gog"])
+	cloud.seed("saves", "slot1.sav", "cloud, newer", int(w["now"][0]) + 500)
+	w["now"][0] += 1000
+	SettingsFile.test_write_limit = 0   # every write from here comes out short
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	SettingsFile.reset_for_tests()
+	eq(got, [{"go": true}], "the game still starts")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "local", "nothing downloaded without its note")
 	_done(w)
 
 
