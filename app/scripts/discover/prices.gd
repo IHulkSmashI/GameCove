@@ -81,7 +81,19 @@ static func from_cheapshark(o: Dictionary, stores: Dictionary, ctx: Dictionary, 
 	var price = null
 	var savings := int(o.get("savings_pct", 0))
 	var ends = null
-	if sid == STEAM_STORE_ID and steam is Dictionary and steam.get("price") != null:
+	# The offer itself says it's free to keep right now (CheapShark: sale price 0, a regular price above it).
+	var giveaway := float(o.get("price", 1.0)) <= 0.0 and float(o.get("regular_price", 0.0)) > 0.0
+	if sid == STEAM_STORE_ID and steam is Dictionary and steam.get("price") != null and giveaway and float(steam["price"]) > 0.0:
+		# A Steam giveaway whose Steam answer still carries a price (the paid package is
+		# Steam's "best purchase option" while the free one is a separate licence, or the
+		# answer is a few hours old): the row is the giveaway, so it reads free, not that
+		# price. Steam's regular price is in the user's own currency, so it's kept.
+		price = price_block(0.0, float(steam.get("regular_price", steam["price"])), str(ctx.get("currency", "")), country, "steam",
+			"", str(steam.get("regular_text", "")))
+		price["giveaway"] = true
+		savings = 100
+		ends = steam.get("sale_ends_at", null)
+	elif sid == STEAM_STORE_ID and steam is Dictionary and steam.get("price") != null:
 		price = price_block(steam["price"], steam["regular_price"], ctx.get("currency", ""), country, "steam",
 			steam.get("price_text", ""), steam.get("regular_text", ""))
 		savings = int(steam.get("savings_pct", 0))
@@ -89,7 +101,7 @@ static func from_cheapshark(o: Dictionary, stores: Dictionary, ctx: Dictionary, 
 	elif country == CHEAPSHARK_COUNTRY:
 		price = price_block(float(o.get("price", 0.0)), float(o.get("regular_price", 0.0)), CheapShark.CURRENCY,
 			CHEAPSHARK_COUNTRY, "cheapshark")
-	elif float(o.get("price", 1.0)) <= 0.0 and float(o.get("regular_price", 0.0)) > 0.0:
+	elif giveaway:
 		# a giveaway is free in every currency; only the regular price is unknown here
 		price = price_block(0.0, 0.0, str(ctx.get("currency", CheapShark.CURRENCY)), country, "cheapshark")
 		price["giveaway"] = true

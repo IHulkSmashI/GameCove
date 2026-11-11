@@ -8,6 +8,7 @@ const QuickMenu := preload("res://scripts/ui/quick_menu.gd")
 const SettingsForm := preload("res://scripts/ui/settings_form.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const TG := preload("res://scripts/ui/texts_games.gd")
+const TL := preload("res://scripts/ui/texts_library.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
 const Logic := preload("res://tests/test_ui_logic.gd")
 const LibraryScreen := preload("res://scripts/ui/library_screen.gd")
@@ -116,6 +117,86 @@ func test_home_empty() -> void:
 	ok("No games found yet" in _texts(h), "empty message shown")
 	eq(String(h.default_focus().name), "Refresh", "focus lands on Look again")
 	h.free()
+
+
+## Final review (Medium): each of Steam ROM Manager's ROMs sat in three Home
+## shelves with no cap (500 ROMs: 1,659 tiles, about half a second per rebuild).
+func _big_library(roms: int) -> Array:
+	var games: Array = []
+	for i in 30:
+		games.append(Logic.g("steam", str(i + 1), "Game %02d" % i, i < 10, 100 + i))
+	for i in roms:
+		var g: Dictionary = Logic.g("emu", str(3000000000 + i), "Rom %04d" % i, true, 0)
+		g["shortcut"] = true
+		g["emulated"] = {"system": "snes", "system_short": "SNES"}
+		games.append(g)
+	return games
+
+
+func test_home_shelves_are_capped() -> void:
+	var games := _big_library(500)
+	var h: Control = Home.new()
+	h.set_games(games)
+	var tiles := 0
+	for s in h.shelves():
+		ok(s.tiles.size() <= Home.SHELF_MAX + 1, "%s: at most %d games and See all (%d)" % [s.id, Home.SHELF_MAX, s.tiles.size()])
+		tiles += s.tiles.size()
+	ok(tiles <= h.shelves().size() * (Home.SHELF_MAX + 1), "Home builds %d tiles for 530 games, not one per game per shelf" % tiles)
+	var emu: Node = h.find_child("Row_emulation", true, false)
+	ok(emu != null, "the Emulation shelf")
+	eq(emu.tiles.size(), Home.SHELF_MAX + 1, "the first %d ROMs and See all" % Home.SHELF_MAX)
+	eq(emu.count_label.text, "500 games", "its count still says how many there are")
+	var last: Dictionary = emu.tiles[-1].game
+	eq(last["key"], Home.MORE_PREFIX + "emulation", "See all comes last")
+	eq(last["title"], TL.SEE_ALL, "named See all")
+	eq(last["sub"], TL.SEE_ALL_LINE % 500, "and says where the rest are")
+	eq(last["store"], "app", "not a game: no options, no badges, the spotlight keeps its game")
+	emu._on_focus(2)
+	eq(emu.count_label.text, "03 / 500", "on a game: its place in the whole list")
+	emu._on_focus(Home.SHELF_MAX)
+	eq(emu.count_label.text, "500 games", "on See all: how many there are")
+	eq(emu.tiles[0].game["title"], "Rom 0000", "the shelf's own order is kept")
+	# A opens the Library on that list; a game's tile still opens its page
+	var asked := []
+	var opened := []
+	h.see_all_requested.connect(func(id): asked.append(id))
+	h.open_requested.connect(func(g): opened.append(g["key"]))
+	emu.tile_pressed.emit(last)
+	emu.tile_pressed.emit(emu.tiles[0].game)
+	eq(asked, ["emulation"], "See all asks for the shelf's list")
+	eq(opened, [emu.tiles[0].game["key"]], "a game opens its page")
+	h.free()
+	# a short shelf is left alone
+	var few := Home.shelf_specs(_big_library(Home.SHELF_MAX - 6), [])
+	for spec in few:
+		if spec["id"] == "emulation":
+			ok(not spec.has("total"), "a shelf within the cap has no See all")
+			eq(spec["games"].size(), Home.SHELF_MAX - 6, "and every game")
+
+
+func test_see_all_opens_the_library_on_the_shelfs_list() -> void:
+	var l: Control = LibraryScreen.new()
+	l.set_games(_big_library(40))
+	l.set_query("zzz")
+	l.set_store("steam")
+	l.show_shelf("emulation")
+	eq([l.view, l.store, l.query, l.install_filter], ["emulation", "", "", ""], "Emulation: that view, other filters and the search cleared")
+	eq(l.shown.size(), 40, "every ROM")
+	l.show_shelf("installed")
+	eq([l.view, l.install_filter], ["", "installed"], "Installed: the Installed filter")
+	eq(l.shown.size(), 50, "every installed game")
+	l.show_shelf("store_steam")
+	eq([l.view, l.store, l.install_filter], ["", "steam", ""], "a store's shelf: that store")
+	l.show_shelf("favourites")
+	eq(l.view, "favourites", "Favourites: that view")
+	l.show_shelf("short")
+	eq([l.view, l.store, l.sort], ["", "", "ttb"], "Short games: everything, shortest first")
+	l.show_shelf("all")
+	eq([l.view, l.store, l.install_filter, l.query], ["", "", "", ""], "All games: everything")
+	eq(l.shown.size(), 70, "the whole library")
+	l.show_shelf("store_nope")
+	eq(l.store, "", "an unknown store filters nothing")
+	l.free()
 
 
 func test_home_three_games() -> void:

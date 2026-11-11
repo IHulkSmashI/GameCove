@@ -20,6 +20,8 @@ const MAX_AGE_S := 24 * 60 * 60
 ## 73 MB (November 2026), past the old 64 MB cap: the whole database was
 ## refused at start ("Decompression failed"). 128 MB leaves room to grow.
 const MAX_UNPACKED := 128 * 1024 * 1024
+## The packed file as downloaded.
+const MAX_PACKED := 64 * 1024 * 1024
 const STORES := ["steam", "gog", "epic"]
 ## Beside the copy: the unix time of the last failed download. A download that
 ## failed (refused, HTTP error, cut off) is retried at most once a day, so a bad
@@ -55,6 +57,7 @@ func update_if_stale() -> void:
 	_http.use_threads = true
 	_http.accept_gzip = false
 	_http.timeout = 120.0
+	_http.body_size_limit = MAX_PACKED   # a bigger download stops there (the unpacked size has its own cap)
 	_http.download_file = path + ".part"
 	add_child(_http)
 	_http.request_completed.connect(_on_downloaded)

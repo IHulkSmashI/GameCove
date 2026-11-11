@@ -37,8 +37,22 @@ readers() {
 
 hw_present() { [ -n "$(readers)" ]; }
 
+# The system does it (Bazzite's 50-gpd-win-4-fingerprint.rules and 50-gpd-wm2-fingerprint.rules): with a reader on
+# the bus, a rule for that reader's own id (one for the other model doesn't help); with none left on the bus, a rule
+# for either id took it off.
 os_fixed() {
-	gc_rule_elsewhere '2808' '9338' 'remove' || gc_rule_elsewhere '2541' '9711' 'remove'
+	_ids=""
+	for _r in $(readers); do
+		_ids="$_ids $(cat "$ROOT$_r/idVendor" 2>/dev/null):$(cat "$ROOT$_r/idProduct" 2>/dev/null)"
+	done
+	if [ -z "$_ids" ]; then
+		gc_rule_elsewhere '2808' '9338' 'remove' || gc_rule_elsewhere '2541' '9711' 'remove'
+		return
+	fi
+	for _i in $_ids; do
+		gc_rule_elsewhere "${_i%%:*}" "${_i#*:}" 'remove' || return 1
+	done
+	return 0
 }
 
 apply_now() {

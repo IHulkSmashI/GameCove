@@ -144,17 +144,24 @@ func test_moonlight_conf() -> void:
 func test_moonlight_commands() -> void:
 	var fp := {"kind": "flatpak", "program": "/usr/bin/flatpak", "prefix": ["run", "--branch=stable", Moonlight.FLATPAK_ID]}
 	eq(Moonlight.command(fp, Moonlight.list_args("192.168.1.20")),
-		["/usr/bin/flatpak", "run", "--branch=stable", Moonlight.FLATPAK_ID, "list", "192.168.1.20", "--csv"], "flatpak list")
+		["/usr/bin/flatpak", "run", "--branch=stable", Moonlight.FLATPAK_ID, "list", "--csv", "--", "192.168.1.20"], "flatpak list")
 	eq(Moonlight.command(fp, Moonlight.pair_args("pc", "0427"), {"QT_QPA_PLATFORM": "offscreen"}),
-		["/usr/bin/flatpak", "run", "--env=QT_QPA_PLATFORM=offscreen", "--branch=stable", Moonlight.FLATPAK_ID, "pair", "pc", "--pin", "0427"], "flatpak pair, env")
+		["/usr/bin/flatpak", "run", "--env=QT_QPA_PLATFORM=offscreen", "--branch=stable", Moonlight.FLATPAK_ID, "pair", "--pin", "0427", "--", "pc"], "flatpak pair, env")
 	var nat := {"kind": "native", "program": "/usr/bin/moonlight", "prefix": []}
 	eq(Moonlight.command(nat, Moonlight.quit_args("pc"), {"QT_QPA_PLATFORM": "offscreen"}),
-		["env", "QT_QPA_PLATFORM=offscreen", "/usr/bin/moonlight", "quit", "pc"], "native with env")
+		["env", "QT_QPA_PLATFORM=offscreen", "/usr/bin/moonlight", "quit", "--", "pc"], "native with env")
 	eq(Moonlight.command({"kind": ""}, ["list"]), [] as Array[String], "not installed")
 	var r := Settings.resolve({}, {"width": 1920, "height": 1200, "hz": 120, "hdr": false}, Settings.decode_for_family("intel-xe2"),
 		{"hevc": true, "av1": true, "hdr": true})
 	var a := Moonlight.stream_args("192.168.1.20", "Steam Big Picture", r)
-	eq(a.slice(0, 3), ["stream", "192.168.1.20", "Steam Big Picture"], "positional")
+	eq(a[0], "stream", "the action first")
+	eq(a.slice(a.size() - 3), ["--", "192.168.1.20", "Steam Big Picture"], "host and app last, after --")
+	# final review (Low): a title or host that begins with "-" can't be read as an option
+	var odd := Moonlight.stream_args("-h", "--version", {"width": 1280, "height": 800, "fps": 60, "bitrate_kbps": 10000, "codec": "auto"})
+	eq(odd.slice(odd.size() - 3), ["--", "-h", "--version"], "everything after -- is a name, whatever it looks like")
+	ok(odd.find("--") == odd.size() - 3, "and no option comes after it")
+	for args in [Moonlight.list_args("-x"), Moonlight.pair_args("-x", "1234"), Moonlight.quit_args("-x")]:
+		eq(args.slice(args.size() - 2), ["--", "-x"], "%s: the host comes last, after --" % args[0])
 	ok("--resolution" in a and a[a.find("--resolution") + 1] == "1920x1200", "native resolution")
 	ok(a[a.find("--fps") + 1] == "120", "panel refresh")
 	ok(a[a.find("--video-codec") + 1] == "AV1", "AV1 on Xe2 with an AV1 host")

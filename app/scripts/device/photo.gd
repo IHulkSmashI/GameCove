@@ -67,6 +67,8 @@ const PREFS_PATH := "user://settings.cfg"
 const MANIFEST_MAX_AGE := 7 * 24 * 3600
 const MAX_PHOTO_BYTES := 4 * 1024 * 1024
 const MAX_MANIFEST_BYTES := 512 * 1024
+## A GitHub release download: GitHub and its file hosts, the address and every redirect hop.
+const RELEASE_HOSTS := ["github.com", "githubusercontent.com"]
 const SOURCES_PATH := "res://data/device_photos.json"
 const MAKER_MAX_BYTES := 3 * 1024 * 1024
 const MAKER_MAX_AGE := 7 * 24 * 3600
@@ -332,7 +334,7 @@ func _fetch_manifest() -> void:
 		return
 	_manifest_fetching = true
 	_manifest_tried = true
-	http.request(RELEASE + "manifest.json", {"timeout": 20.0}, _on_manifest)
+	http.request(RELEASE + "manifest.json", {"timeout": 20.0, "max_bytes": MAX_MANIFEST_BYTES, "hosts": RELEASE_HOSTS}, _on_manifest)
 
 
 func _on_manifest(res: Dictionary) -> void:
@@ -365,7 +367,7 @@ func _download(device_id: String) -> void:
 	_inflight[device_id] = true
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(cache_dir))
 	var part := _abs(e["asset"] + ".part")
-	http.request(RELEASE + e["asset"], {"download_file": part, "timeout": 30.0}, func(res: Dictionary):
+	http.request(RELEASE + e["asset"], {"download_file": part, "timeout": 30.0, "max_bytes": MAX_PHOTO_BYTES, "hosts": RELEASE_HOSTS}, func(res: Dictionary):
 		_inflight.erase(device_id)
 		var path := store_part(part, e) if res.get("ok", false) else _drop(part)
 		if path != "":

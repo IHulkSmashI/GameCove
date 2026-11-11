@@ -35,6 +35,58 @@ func _bytes(path: String, data: PackedByteArray) -> void:
 	f.close()
 
 
+## A gamescope that answers the screenshot request by writing `img` to <root>/tmp/gamescope.png
+## (or not at all when `img` is null).
+class ShotRunner extends RefCounted:
+	var root := ""
+	var img: Image
+	var asked := 0
+	func run(_program: String, args: PackedStringArray) -> Dictionary:
+		if "-notype" in args:
+			return {"code": 0, "out": "GAMESCOPE_FOCUSABLE_APPS = 769\n"}
+		if "GAMESCOPECTRL_REQUEST_SCREENSHOT" in args:
+			asked += 1
+			if img != null:
+				img.save_png(root + "/tmp/gamescope.png")
+		return {"code": 0, "out": ""}
+
+
+## Final review (Low): the clip's picture removed /tmp/gamescope.png first. That
+## file isn't ours: it may be the user's last screenshot, or the one the quick
+## menu's Screenshot is copying right now.
+func test_clip_picture_never_removes_the_screenshot_file() -> void:
+	var root := _tmp("shot")
+	DirAccess.make_dir_recursive_absolute(root + "/tmp")
+	var old := Image.create_empty(64, 36, false, Image.FORMAT_RGB8)
+	old.fill(Color.RED)
+	old.save_png(root + "/tmp/gamescope.png")
+	var old_md5 := FileAccess.get_md5(root + "/tmp/gamescope.png")
+	var clip := root.path_join("Videos/a.mp4")
+	# gamescope doesn't answer: the file that was there stays, and isn't taken for the clip's picture
+	var r := ShotRunner.new()
+	r.root = root
+	Clips.remove_thumb(clip)
+	Clips.grab_gamescope_thumb(clip, r, root)
+	eq(r.asked, 1, "gamescope was asked")
+	eq(FileAccess.get_md5(root + "/tmp/gamescope.png"), old_md5, "the screenshot that was there is untouched")
+	ok(not FileAccess.file_exists(Clips.thumb_path(clip)), "and an old screenshot isn't used as this clip's picture")
+	# gamescope answers: the new picture is used, nothing removed
+	r.img = Image.create_empty(960, 540, false, Image.FORMAT_RGB8)
+	r.img.fill(Color.BLUE)
+	Clips.grab_gamescope_thumb(clip, r, root)
+	ok(FileAccess.file_exists(root + "/tmp/gamescope.png"), "the file is still there for whoever else wants it")
+	var t := Image.load_from_file(Clips.thumb_path(clip))
+	ok(t != null and t.get_width() == Clips.THUMB_W, "the clip's picture was saved")
+	ok(t != null and t.get_pixel(5, 5).b > 0.9 and t.get_pixel(5, 5).r < 0.1, "from the new screenshot")
+	# and with no file there before
+	DirAccess.remove_absolute(root + "/tmp/gamescope.png")
+	Clips.remove_thumb(clip)
+	Clips.grab_gamescope_thumb(clip, r, root)
+	ok(FileAccess.file_exists(Clips.thumb_path(clip)), "works the first time too")
+	Clips.remove_thumb(clip)
+	_wipe(root)
+
+
 static func _u32(n: int) -> PackedByteArray:
 	var b := PackedByteArray([0, 0, 0, 0])
 	b.encode_u32(0, n)

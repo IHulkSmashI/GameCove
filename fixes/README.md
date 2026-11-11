@@ -9,7 +9,7 @@ research behind it: `app/data/fixes.json` and [docs/DEVICE-FIXES.md](../docs/DEV
 | Fix | Devices | What it fixes | Kind |
 | --- | --- | --- | --- |
 | `claw8ex-buttons` | Claw 8 EX | MSI face buttons | InputPlumber override (admin) |
-| `claw8ex-vrr` | Claw 8 EX, 8 AI+ (same panel); A1M, 7 AI+ (optional) | VRR down to 30 Hz | EDID override (admin, restart) |
+| `claw8ex-vrr` | Claw 8 EX, 8 AI+ (same panel); A1M, 7 AI+ (optional) | VRR down to 30 Hz | EDID override (admin, restart; Bazzite and SteamOS) |
 | `claw8ex-gyro` | Claw 8 EX | Gyro | HID-BPF + ISH firmware (admin, cold boot) |
 | `claw-kbd-wakeup` | every MSI Claw | volume buttons wake it from sleep | udev rule |
 | `claw-wifi-d3cold` | every Intel Claw (optional) | Wi-Fi gone after sleep | udev rule |
@@ -20,6 +20,8 @@ research behind it: `app/data/fixes.json` and [docs/DEVICE-FIXES.md](../docs/DEV
 | `ally-fingerprint-drain` | Ally, Ally X; Xbox Allys (optional) | battery drain while off | udev rule (Bazzite: os-fixed) |
 | `ally-mcu-powersave` | every ROG Ally (optional) | drain while asleep | udev rule + sysfs |
 | `onexfly-touch` | OneXFly F1; OneXPlayer 2 / 2 Pro / X1 A / X1 mini, AOKZOE A1 / A1 Pro (optional) | touch turned 90° in Gaming Mode | gamescope-session file |
+| `journal-flood` | any handheld with steamos-manager but no steamos-log-submitter (optional; Bazzite) | split-lock lines flood the journal and wipe older boots | systemd drop-in (SteamOS: not needed) |
+| `overlay-power` | every Intel handheld (optional) | 0.0 W for the CPU in the performance overlay (RAPL counter root-only) | tmpfiles.d rule + sysfs mode |
 | `fan`, `charge-limit` | see devices.json | fan presets, charge limit (Power page) | sysfs |
 | `controller-led`, `controller-rumble` | handhelds with the kernel LED / rumble-strength attributes | lights and rumble strength (Controller settings) | sysfs, no password |
 

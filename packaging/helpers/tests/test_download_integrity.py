@@ -71,8 +71,9 @@ def test_downloads_use_immutable_urls():
 
 def test_xess_entry_pins_the_tested_zip():
     e = json.load(open(VERSIONS, encoding="utf-8"))["xess_xmx_linux"]
-    assert e["tag"] == "20261104"
-    assert e["sha256"] == "4d97b77e44f22235a567d0b5317421e65566089dc08a6a0caf9fa16549433173"
+    assert e["tag"] == "20261111"
+    assert e["sha256"] == "ca8334b6c2d4a86d2348eaff8cde9e0f46747e100d0733ad5a184db20e20224b"
+    assert "xmx-stock.sh" in e["scripts"] and len(e["scripts"]) == 16
 
 
 def test_fetch_refuses_pinned_entry_without_sha256(tmp_path, monkeypatch):

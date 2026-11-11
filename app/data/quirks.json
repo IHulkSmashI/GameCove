@@ -11,6 +11,15 @@
    "sources": ["ClawDeck docs/HARDWARE-FINDINGS.md section 12 (measured 2026-10-21)"]
   },
   {
+   "id": "smt-off-breaks-sleep",
+   "applies": "maker:asus",
+   "what": "Suspend may break while SMT is switched off, so the SMT switch stays on (greyed out) and can only be turned back on.",
+   "reason": "Stays on here: sleep can break on this handheld with SMT off",
+   "why": "Documented for ASUS's ROG Ally handhelds by Bazzite; no root cause known, so every ASUS row gets it.",
+   "used_by": "app/scripts/controls/providers/power.gd (power.smt)",
+   "sources": ["https://docs.bazzite.gg/Handheld_and_HTPC_edition/Handheld_Wiki/ASUS_ROG_Ally/ (\"Suspend may be broken if SMT is disabled\", read 2026-11-10)"]
+  },
+  {
    "id": "thermald-restores-tdp",
    "applies": "cpu_vendor:intel",
    "what": "thermald puts the firmware's power limits back every few seconds, so Power holds it while GameCove sets a lower TDP (with a temperature guard).",

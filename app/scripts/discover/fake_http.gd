@@ -11,7 +11,9 @@ extends RefCounted
 ## A route is {"file": path} | {"text": String} | {"bytes": PackedByteArray}
 ## plus optional "code" (default 200) and "retry_after"; or {"error": "..."}.
 ## Unrouted URLs fail with error "offline". The longest matching prefix wins.
-## opts["max_bytes"] is honoured like http.gd: a bigger body fails with "too big".
+## opts["max_bytes"] is honoured like http.gd: a bigger body fails with "too big"
+## (without one, http.gd's default caps apply here too). opts["hosts"] is checked
+## for the address asked for (a fake has no redirects).
 ## opts are recorded in `options` (same order as `requests`).
 
 var routes := {}
@@ -37,6 +39,10 @@ func count(prefix: String) -> int:
 
 
 func request(url: String, opts: Dictionary, done: Callable) -> void:
+	var Http = load("res://scripts/discover/http.gd")
+	if opts.get("hosts") is Array and not opts["hosts"].is_empty() and not Http.host_allowed(url, opts["hosts"]):
+		done.call({"ok": false, "code": 0, "body": PackedByteArray(), "error": "redirect", "retry_after": 0})
+		return
 	requests.append(url)
 	options.append(opts)
 	var best := ""
@@ -59,7 +65,7 @@ func request(url: String, opts: Dictionary, done: Callable) -> void:
 			elif a.has("bytes"):
 				body = a["bytes"]
 			var code := int(a.get("code", 200))
-			if int(opts.get("max_bytes", 0)) > 0 and body.size() > int(opts["max_bytes"]):
+			if body.size() > int(Http.cap_for(opts)):
 				done.call({"ok": false, "code": code, "body": PackedByteArray(), "error": "too big", "retry_after": 0})
 				return
 			res = {"ok": code >= 200 and code < 300, "code": code, "body": body,

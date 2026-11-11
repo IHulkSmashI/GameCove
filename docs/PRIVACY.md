@@ -21,6 +21,13 @@ All switches are on by default. A settings file that can't be read never turns t
 as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) and Look up deals and prices
 (Discover's `settings.json`) stay off until you set them again.
 
+A switch counts from the moment you turn it off. Discover's refresh is several steps and many requests; each
+request asks the switches again right before it goes out (`discover.gd` `may_fetch`), so the ones still waiting
+are never sent.
+
+Every request has a size limit (4 MB for an answer kept in memory unless it names a smaller one, 16 MB for the
+calendar file, 64 MB for the game database, a few MB for a picture): a bigger answer is dropped, not read.
+
 ## Every outbound call
 
 GameCove's own data files (rows 1, 2, 6, 12a and 12) are on the releases of
@@ -37,7 +44,7 @@ release. The app's own releases (what `get-gamecove.sh` installs) stay on IHulkS
 | 5 | api.gg.deals | App ids, region, your API key (in the query, as GG.deals requires) | Same, only with a key | Same | `ggdeals.gd` |
 | 6 | github.com/IHulkSmashI/GameCove-data (`device-photos` release) | The asset name, i.e. your device model | Start until cached, weekly manifest; About or the welcome page showing the picture | Background lookups (every request; a cached picture still shows) | `app/scripts/device/photo.gd` |
 | 7 | Your maker's site (MSI, Lenovo, ASUS, OneXPlayer, AOKZOE, AYANEO, Acer, GPD, ...) | The image URL implies your model; your IP address | Same, when there's no free photo | Show maker photos, Background lookups | `photo.gd` |
-| 8 | Steam's CDN (`*.steamstatic.com`, `*.akamaihd.net`), images.igdb.com (calendar pictures named in `upcoming.json.gz`), SteamGridDB's CDN: a download only ever starts on one of these (`IMAGE_HOSTS`). If one of them answers with a redirect, it is followed (at most 5, https or http as given) and the host it leads to isn't checked again | The picture's address, which names the game | A Discover, calendar or wishlist tile shows a picture that isn't cached | None (pictures of what you're looking at); SteamGridDB lookups: Look up game details | `app/scripts/discover/art.gd` |
+| 8 | Steam's CDN (`*.steamstatic.com`, `*.akamaihd.net`), images.igdb.com (calendar pictures named in `upcoming.json.gz`), SteamGridDB's CDN; no other host (`IMAGE_HOSTS`), and that holds for every redirect on the way: each hop is checked before it's followed, https only (`http.gd` `hosts`) | The picture's address, which names the game | A Discover, calendar or wishlist tile shows a picture that isn't cached | None (pictures of what you're looking at); SteamGridDB lookups: Look up game details | `app/scripts/discover/art.gd` |
 | 9 | www.steamgriddb.com, cdn*.steamgriddb.com | A Steam app id or title; your own key (bearer header, dropped on cross-host redirects) | Change artwork (when you open it); automatic fill for library games with no cover, hero or logo, one request every 1.5 s, each game and kind at most weekly; Discover art Steam has none of | Look up game details (+ Background lookups for the automatic fill) | `app/scripts/library/art/art_service.gd`, `sgdb.gd`, `art.gd` |
 | 9a | store.steampowered.com `api/appdetails` | The Steam app id of a library game, or of a GOG / Epic / Amazon game's Steam edition (from the game database) | After a library scan, for games whose details or Metacritic score are missing, one request every 1.6 s, cached a week (`user://metadata/steam/`); at once for the game page you open | Look up game details (+ Background lookups for the background queue) | `app/scripts/library/meta/resolver.gd` |
 | 9b | opencritic-api.p.rapidapi.com | A game's title (search, once per game), then its OpenCritic id; your own RapidAPI key in the `X-RapidAPI-Key` header (dropped on cross-host redirects) | Same as 9a, only if you added a key; at most 20 searches and 180 requests a day, stops for the day on HTTP 429; cached a week | Look up game details; remove the key (Settings > Discover > Keys) | `resolver.gd`, `opencritic.gd` |

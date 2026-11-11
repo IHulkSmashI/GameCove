@@ -24,6 +24,8 @@ const SGDB := "https://www.steamgriddb.com/api/v2/"
 const RETRY_FAILED_S := 86400
 const DEFAULT_MAX_BYTES := 256 * 1024 * 1024
 const MAX_FILE_BYTES := 8 * 1024 * 1024
+## SteamGridDB's answers (a list of images, a search) are small.
+const MAX_JSON_BYTES := 2 * 1024 * 1024
 ## The only hosts art is downloaded from (review M22, problem 4): Steam's CDN, IGDB's image CDN (the calendar)
 ## and SteamGridDB's CDN. A URL from upcoming.json.gz or a store answer naming anything else is skipped.
 const IMAGE_HOSTS := ["steamstatic.com", "steamcdn-a.akamaihd.net", "images.igdb.com", "steamgriddb.com"]
@@ -227,12 +229,12 @@ const WORDMARK_RATIO := 2.0
 func _sgdb(key: String, kind: String, c: Dictionary, done: Callable) -> void:
 	var headers := ["Authorization: Bearer " + _key()]
 	var fetch := func(game: String, by_steam: bool):
-		http.request(sgdb_url(kind, game, by_steam), {"headers": headers}, func(res: Dictionary):
+		http.request(sgdb_url(kind, game, by_steam), {"headers": headers, "max_bytes": MAX_JSON_BYTES}, func(res: Dictionary):
 			done.call(parse_sgdb(res["body"], "url", kind == "logo") if res["ok"] else ""))
 	if c["appid"] != "":
 		fetch.call(c["appid"], true)
 		return
-	http.request(SGDB + "search/autocomplete/" + str(c["title"]).uri_encode(), {"headers": headers}, func(res: Dictionary):
+	http.request(SGDB + "search/autocomplete/" + str(c["title"]).uri_encode(), {"headers": headers, "max_bytes": MAX_JSON_BYTES}, func(res: Dictionary):
 		var gid := parse_sgdb(res["body"], "id") if res["ok"] else ""
 		if gid == "":
 			done.call("")
@@ -261,7 +263,8 @@ func _download(key: String, kind: String, url: String, done: Callable) -> void:
 		return
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(cache_dir))
 	var part := _abs(file_base(key, kind) + ".part")
-	http.request(url, {"download_file": part, "timeout": 30.0}, func(res: Dictionary):
+	# "hosts": every redirect hop is checked like the address itself (http.gd)
+	http.request(url, {"download_file": part, "timeout": 30.0, "max_bytes": MAX_FILE_BYTES, "hosts": IMAGE_HOSTS}, func(res: Dictionary):
 		done.call(store_part(part, key, kind) if res["ok"] else _drop(part)))
 
 

@@ -288,6 +288,28 @@
    "source": "InputPlumber"
   },
   {
+   "expect": "onexplayer-x1-air",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK",
+    "product_name": "ONEXPLAYER X1Air",
+    "board_name": "ONEXPLAYER X1Air",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "Linux oxpec.c (board name), Handheld Daemon (product name)"
+  },
+  {
+   "expect": "onexplayer-x1-air",
+   "dmi": {
+    "sys_vendor": "ONE-NETBOOK TECHNOLOGY CO., LTD.",
+    "product_name": "",
+    "board_name": "ONEXPLAYER X1Air",
+    "board_vendor": "ONE-NETBOOK",
+    "product_family": ""
+   },
+   "source": "Linux oxpec.c: board vendor and board name only"
+  },
+  {
    "expect": "onexplayer-x1-mini",
    "dmi": {
     "sys_vendor": "ONE-NETBOOK",

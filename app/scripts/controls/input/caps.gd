@@ -42,5 +42,9 @@ static func of(row: Dictionary) -> Dictionary:
 
 
 ## Reason the gyro can't be used whatever the backend, "" when it might.
+## A row's own gyro_reason (devices.json, e.g. broken on one OS release) wins over the plain words.
 static func gyro_block(row: Dictionary) -> String:
-	return GYRO_REASONS.get(str(row.get("gyro", "unknown")), "")
+	var r: String = GYRO_REASONS.get(str(row.get("gyro", "unknown")), "")
+	if r != "" and str(row.get("gyro_reason", "")) != "":
+		return str(row["gyro_reason"])
+	return r

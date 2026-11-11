@@ -220,6 +220,12 @@ func test_resolver_opencritic_with_own_key_and_quota() -> void:
 	eq(r.jobs_for(g), [], "no key: OpenCritic is never asked")
 	ok(not Resolver.set_opencritic_key("bad key", prefs), "bad key refused")
 	ok(Resolver.set_opencritic_key("k".repeat(50), prefs), "key saved")
+	# final review (Low): the file holding the key was written 0644
+	var prefs_abs := ProjectSettings.globalize_path(prefs)
+	eq(FileAccess.get_unix_permissions(prefs_abs) & 511, 384, "the file with the key is 0600")
+	ok(Privacy.set_background_allowed(false, prefs), "another setting saved to the same file")
+	eq(FileAccess.get_unix_permissions(prefs_abs) & 511, 384, "still 0600 after it was rewritten")
+	ok(Privacy.set_background_allowed(true, prefs), "and back")
 	r.request(g)
 	eq(http.requests, [OpenCritic.search_url("Hades"), OpenCritic.game_url(9136)], "search once, then the game")
 	ok(str(http.options[0]["headers"]).contains("X-RapidAPI-Key"), "the user's key goes in RapidAPI's header")

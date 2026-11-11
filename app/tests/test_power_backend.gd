@@ -97,20 +97,37 @@ func test_claw_uses_powerstation_and_fixes() -> void:
 	p.free()
 
 
-## The Claw 8 EX: PowerStation Boost 7, a stored boost_w of 2 that the user never chose
-## must not win; start (restore) and TDP writes leave the live boost.
-func test_live_boost_is_not_overwritten() -> void:
+## Intel: PL2 = PL1 + 2 W (pl2_offset_w), as Handheld Daemon, PowerControl, PowerStation's Intel
+## database and ClawDeck's power.py run it, never past the model's PL2 (boost_max); a boost the user
+## picked wins, and is never stored by a TDP write.
+func test_intel_pl2_is_pl1_plus_2() -> void:
 	var root := _sys("live_boost")
 	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
 	p.runner.props[PS_BOOST_KEY]["data"] = 7.0
 	p.load_autotune_opts()
 	p.restore()
 	ok(p.set_tdp(17.0), "TDP")
-	eq(p.runner.props[PS_BOOST_KEY]["data"], 7.0, "live 7 W boost kept")
+	eq(p.runner.props[PS_BOOST_KEY]["data"], 2.0, "PL2 = 17 + 2 W")
+	eq(p.boost_w, -1.0, "not remembered as the user's")
 	ok(p.set_boost_w(4.0), "the user picks 4 W")
 	ok(p.set_tdp(20.0), "TDP again")
 	eq(p.runner.props[PS_BOOST_KEY]["data"], 4.0, "the user's boost stays")
 	p.free()
+	# the model's PL2 caps it: the Atlas 8 allows 40 W sustained and 40 W PL2
+	var atlas := _row("acer-predator-atlas-8").duplicate(true)
+	atlas["tdp_backends"] = ["powerstation"]
+	var q := _power("bus_claw_powerstation.json", atlas, _sys("atlas_pl2"))
+	q.plugged = true
+	eq(q.boost_for(30.0), 2.0, "30 W: PL2 32 W")
+	eq(q.boost_for(39.0), 1.0, "39 W: PL2 at the model's 40 W")
+	eq(q.boost_for(40.0), 0.0, "40 W: no boost past the model's PL2")
+	q.free()
+	# rows without the Intel rule leave PowerStation's own boost
+	var amd := _row("msi-claw-a8").duplicate(true)
+	amd["tdp_backends"] = ["powerstation"]
+	var a := _power("bus_claw_powerstation.json", amd, _sys("amd_pl2"))
+	eq(a.boost_for(20.0), -1.0, "no PL2 rule on AMD rows")
+	a.free()
 
 
 func test_default_order_prefers_steamos_manager() -> void:
@@ -154,8 +171,7 @@ func test_set_tdp_reads_back_and_sets_boost() -> void:
 	eq(p.state()["tdp_w"], 17.0, "tdp_w")
 	eq(p.state()["profile"], "balanced", "17 W is balanced")
 	ok(p.runner.calls.has("busctl --system set-property org.shadowblip.PowerStation " + PS_CARD + " org.shadowblip.GPU.Card.TDP TDP d 17.0"), "TDP command")
-	eq(p.runner.props[PS_BOOST_KEY]["data"], 12.0, "PowerStation's own boost left alone (the user picked none)")
-	ok(not p.runner.calls.any(func(x): return x.contains("TDP Boost d")), "no boost write")
+	eq(p.runner.props[PS_BOOST_KEY]["data"], 2.0, "PL2 = PL1 + 2 W on Intel (the user picked none)")
 	ok(p.set_tdp(99.0), "too high is clamped")
 	eq(p.state()["tdp_w"], 35.0, "clamped to battery max")
 	p.free()
@@ -648,6 +664,75 @@ func test_smaller_boost_goes_in_before_a_raised_tdp() -> void:
 			boost_i = i
 	ok(tdp_i >= 0 and (boost_i < 0 or boost_i > tdp_i), "a larger boost goes in after the TDP")
 	p.free()
+
+
+# ---- the maker's limits on every path, stricter firmware limits win (item 9) ---------------------------
+
+func _fw_spl(root: String, lo: int, hi: int) -> void:
+	var a := root + "/sys/class/firmware-attributes/msi-wmi-platform/attributes/ppt_pl1_spl"
+	DirAccess.make_dir_recursive_absolute(a)
+	_write(a + "/min_value", str(lo))
+	_write(a + "/max_value", str(hi))
+	_write(a + "/current_value", str(lo))
+
+
+func test_firmware_limits_stricter_than_the_maker_win() -> void:
+	var root := _sys("fw_strict")
+	_fw_spl(root, 10, 30)
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
+	eq(p.state()["tdp_min"], 10.0, "firmware minimum 10 W over the row's 8 W")
+	eq(p.state()["tdp_max"], 30.0, "firmware maximum 30 W under the row's 35 W")
+	ok(p.set_tdp(35.0), "slider past it")
+	eq(p.state()["tdp_w"], 30.0, "slider clamped to the firmware's 30 W")
+	ok(p.set_tdp(4.0), "slider under it")
+	eq(p.state()["tdp_w"], 10.0, "and to its 10 W")
+	p.free()
+
+
+func test_maker_limits_win_over_a_wider_firmware_range() -> void:
+	var root := _sys("fw_wide")
+	_fw_spl(root, 5, 60)
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
+	eq(p.state()["tdp_min"], 8.0, "MSI's 8 W, not the firmware's 5")
+	eq(p.state()["tdp_max"], 35.0, "MSI's 35 W, not the firmware's 60")
+	p.free()
+
+
+func test_every_path_is_clamped_to_the_limits() -> void:
+	var root := _sys("clamp_paths")
+	_fw_spl(root, 8, 30)
+	var row := _row("msi-claw-8-ex").duplicate(true)
+	row["profiles"] = {"battery": 12, "balanced": 17, "performance": 33}   # a preset past the firmware's 30 W
+	var p := _power("bus_claw_powerstation.json", row, root)
+	ok(p.set_profile("performance"), "preset")
+	eq(p.state()["tdp_w"], 30.0, "preset clamped (33 -> 30 W)")
+	ok(p.write_tdp(50.0), "Auto TDP / the temperature guard write directly")
+	eq(p.state()["tdp_w"], 30.0, "a direct write clamped too")
+	ok(p.write_tdp(2.0), "and under the minimum")
+	eq(p.state()["tdp_w"], 8.0, "to the minimum")
+	ok(p.set_tdp(99.0), "a per-game or imported profile's value goes through set_tdp")
+	eq(p.state()["tdp_w"], 30.0, "clamped")
+	p._user_tdp = 45.0   # a ceiling remembered from before a firmware update
+	ok(p.autotune_start("game"), "Auto TDP starts")
+	ok(p.autotune.session.ceiling_tdp <= 30, "its ceiling is inside the limits (%s)" % p.autotune.session.ceiling_tdp)
+	p.autotune_stop()
+	ok(p.set_boost_w(20.0), "boost")
+	ok(float(p.runner.props[PS_BOOST_KEY]["data"]) + p.state()["tdp_w"] <= 45.0, "TDP + boost never past the model's PL2 (45 W)")
+	p.free()
+
+
+func test_unknown_and_family_rows_get_conservative_limits() -> void:
+	var doc := {"devices": DeviceScript.load_table(), "cpus": JSON.parse_string(FileAccess.get_file_as_string("res://data/devices.json"))["cpus"]}
+	# an unlisted handheld with a Ryzen AI Max (the chip table says 45 W / 80 W)
+	var unknown := DeviceScript.resolve(doc, {"sys_vendor": "Nobody", "product_name": "Mystery", "board_name": "X"}, "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S", {})
+	eq(unknown["id"], "unknown", "no row")
+	ok(float(unknown["tdp"]["plugged_max"]) <= 25.0 and float(unknown["tdp"]["battery_max"]) <= 20.0, "conservative: %s" % unknown["tdp"])
+	ok(str(unknown["tdp"].get("source", "")).contains("conservative"), "its source says so")
+	# an unlisted GPD with the same chip: the family row is filled from the CPU, conservatively
+	var fam := DeviceScript.resolve(doc, {"sys_vendor": "GPD", "product_name": "G9999-01", "board_name": "G9999-01"}, "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S", {})
+	eq(fam["id"], "gpd-family", "family row")
+	ok(float(fam["tdp"]["plugged_max"]) <= 25.0, "family row not above the conservative limits: %s" % fam["tdp"])
+	ok(DeviceScript.row_problems(fam).is_empty(), "still a valid row: %s" % [DeviceScript.row_problems(fam)])
 
 
 ## Final review, session: leaving GameCove re-applied GameCove's own profile; the TDP, boost and

@@ -14,7 +14,8 @@ MCU_DIR=$(mktemp -d)
 trap 'rm -rf "$MCU_DIR"' EXIT
 printf 'model=ally\nversion=319\nmin=319\n' >"$MCU_DIR/ok"
 printf 'model=ally\nversion=318\nmin=319\n' >"$MCU_DIR/old"
-printf 'model=ally-x\nversion=313\nmin=314\n' >"$MCU_DIR/old-x"
+printf 'model=ally-x\nversion=312\nmin=313\n' >"$MCU_DIR/old-x"
+printf 'model=ally-x\nversion=313\nmin=313\n' >"$MCU_DIR/ok-x"
 printf 'error=couldn'"'"'t ask the MCU (Permission denied)\n' >"$MCU_DIR/err"
 export GAMECOVE_TEST_MCU_INFO="$MCU_DIR/ok"
 ally() {
@@ -61,7 +62,9 @@ for f in old old-x err; do
 	t_check '[ "$(cat "$N")" = 0 ]' "$f firmware: switch untouched"
 done
 export GAMECOVE_TEST_MCU_INFO="$MCU_DIR/old-x"
-t_check 'sh "$FIX" status | grep -q "older than 314"' "Ally X minimum 314"
+t_check 'sh "$FIX" status | grep -q "older than 313"' "Ally X minimum 313 (kernel ROG_ALLY_X_MIN_MCU)"
+export GAMECOVE_TEST_MCU_INFO="$MCU_DIR/ok-x"
+t_check '! sh "$FIX" status | grep -q "^reason="' "Ally X firmware 313: not refused"
 t_new
 ally
 export GAMECOVE_TEST_MCU_INFO="$MCU_DIR/ok"
