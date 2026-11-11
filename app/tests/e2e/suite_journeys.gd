@@ -595,13 +595,14 @@ func test_game_page_own_settings_then_play_with_them() -> void:
 		var chooses: Array = w.fake.upscale_runs.filter(func(r): return r[0] == "choose" and r[1] == "1145360")
 		ok(not chooses.is_empty(), "the upscaling helper put the upscaler into Hades (%s)" % [w.fake.upscale_runs])
 		eq(str(w.fake.upscale_games.get("1145360", {}).get("upscaler", "")), str(changed["perf.upscaler"]), "the helper has the game's upscaler")
-	# mid-game: back to the game's own upscaler (Native: nothing of ours in its folder)
+	# mid-game: back to the game's own upscaler. Its files are loaded now, so the change waits until the game has
+	# quit (review M7) and is made at the next look
 	if changed.has("perf.upscaler"):
+		controls().ctx["upscale_launch_grace_ms"] = 0
 		ok(await open_menu_tab("game"), "Quick Access over the game: This game")
 		ok(await step_to("perf.frame_gen", 0, key), "frame generation off")
 		ok(await step_to("perf.upscaler", "own", key), "upscaler back to the game's own")
-		eq(str(w.fake.upscale_games.get("1145360", {}).get("upscaler", "")), "own", "the helper took ours out")
-		eq(int(w.fake.upscale_games.get("1145360", {}).get("fg", -1)), 0, "and frame generation")
+		eq(str(w.fake.upscale_games.get("1145360", {}).get("upscaler", "")), str(changed["perf.upscaler"]), "nothing in the game's folder changes while it runs")
 		await b()
 		await w.idle()
 		ok(not qm().visible and not main()._window_focused, "B: back to the game")
@@ -614,6 +615,11 @@ func test_game_page_own_settings_then_play_with_them() -> void:
 	# turn the game's own settings off: the first A only asks
 	if page() == null:
 		ok(await open_from_library(key), "Hades' page again")
+	if changed.has("perf.upscaler"):
+		ok(await until(func(): return str(w.fake.upscale_games.get("1145360", {}).get("upscaler", "")) == "own", 8000),
+			"after the game quit, the helper took ours out (%s)" % [w.fake.upscale_games.get("1145360", {})])
+		eq(int(w.fake.upscale_games.get("1145360", {}).get("fg", -1)), 0, "and frame generation")
+		controls().ctx.erase("upscale_launch_grace_ms")
 	card = page().game_settings
 	ok(await nav_to(func(): return page().game_settings.toggle.button, 40), "the switch")
 	await a()

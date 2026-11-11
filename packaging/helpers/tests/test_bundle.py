@@ -173,7 +173,7 @@ def _set_up(home):
     _w(os.path.join(home, optiscaler.FSR4_AMD_DIR, optiscaler.FSR4_AMD_FILE), "amd-sdk-4.1.2")
     d = _steam_game(home, "400", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
     before = _tree(d)
-    assert best.prepare(home, "400", Z1E)["did"] == "set up" and _tree(d) != before
+    assert best.opt_in(home, "400", Z1E)["did"] == "set up" and _tree(d) != before
     return d, before
 
 
@@ -193,6 +193,25 @@ def test_storage_says_what_upscaling_takes_and_in_how_many_games(tmp_path, monke
     monkeypatch.setenv("GAMECOVE_BUNDLE", str(dest))
     r2 = cli.run(["storage", "--home", home])
     assert r2["bundle_files"] == 7 and r2["bundle_bytes"] > 0 and r2["bytes"] == r["bytes"]
+
+
+def test_native_and_a_purge_without_gpu_clear_frame_generation(tmp_path):
+    """Review low: uninstall runs purge without --gpu; a game set to 3x frame generation on Intel made undo raise,
+    and Native left XESS_FG=3 and GAMECOVE_XMX=1 in the launch file."""
+    home = str(tmp_path / "home")
+    _pkg(home)
+    d = _steam_game(home, "480", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    xmx = {"vendor": "intel", "family": "intel-xe2", "arch": "Xe2", "xmx": True}
+    assert games.choose(home, "480", "xess", 3, xmx)["ok"]
+    env = os.path.join(home, ".local/share/gamecove/launch/480.env")
+    assert "XESS_FG=3" in open(env).read()
+    r = cli.run(["purge", "--home", home])                  # what the installer runs: no --gpu
+    assert r["ok"] and "480" in r["games"] and _tree(d) == before and not os.path.exists(env)
+    _pkg(home)                                              # purge took the package out with the managed folders
+    assert games.choose(home, "480", "xess", 3, xmx)["ok"]
+    assert best.native(home, "480", xmx)["ok"] and not os.path.exists(env)
+    assert games.get_launch(home, "480").get("fg") is None
 
 
 def test_purge_puts_every_game_back_and_deletes_the_managed_folders(tmp_path):

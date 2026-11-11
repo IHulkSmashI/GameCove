@@ -81,6 +81,18 @@ static func perf_opts(settings: Dictionary) -> Dictionary:
 	return {"target_fps": int(settings.get("fps_limit", 0)), "frame_gen_multiplier": 2.0 if settings.get("frame_gen", false) else 1.0}
 
 
+## Tells the perf controls which game runs: changes to its upscaler files wait
+## until it has quit (review M7).
+func _upscale_running(key: String) -> void:
+	if controls == null or not ("ctx" in controls):
+		return
+	var f: Variant = (controls.get("ctx") as Dictionary).get("upscale_running") if controls.get("ctx") is Dictionary else null
+	if f is Callable and (f as Callable).is_valid():
+		(f as Callable).call(key)
+		if key == "" and controls.has_method("detect_all"):
+			controls.detect_all()     # a change that waited for the game to quit is made now (on the worker)
+
+
 static func _call(o: Object, method: String, args: Array = []) -> void:
 	if o != null and o.has_method(method):
 		o.callv(method, args)
@@ -97,6 +109,7 @@ func game_started(g: Dictionary, app_id: int) -> void:
 	_call(perf, "start", [app_id, opts])
 	_call(updates, "set_game_running", [true])
 	_call(controller, "start_game", [key])
+	_upscale_running(key)
 	_call(discover, "pause")
 	_call(library, "set_background_paused", [true])
 
@@ -110,6 +123,7 @@ func game_ended(g: Dictionary) -> void:
 	_call(updates, "set_game_running", [false])
 	_call(controller, "end_game")
 	_call(discover, "resume")
+	_upscale_running("")
 	_call(library, "set_background_paused", [false])
 	_other_sent = false   # end_game put our UI in charge; the next focus change says otherwise
 

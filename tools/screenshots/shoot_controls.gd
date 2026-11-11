@@ -21,7 +21,8 @@ const SHOTS := ["controls_quick_game", "controls_quick_game_everyday", "controls
 	"controls_settings_fan_curve", "controls_settings_display", "controls_settings_controller", "controls_settings_lights",
 	"controls_settings_performance", "controls_settings_system", "controls_settings_profiles", "controls_settings_fixes",
 	"controls_settings_more", "controls_keep", "controls_game_page", "controls_quick_midnight", "controls_settings_light",
-	"controls_quick_sunset", "controls_quick_legion", "controls_quick_upscaling", "controls_settings_upscaling", "controls_quick_upscaling_amd", "controls_settings_about", "controls_settings_about_works", "controls_settings_about_photo", "controls_settings_stores"]
+	"controls_quick_sunset", "controls_quick_legion", "controls_quick_upscaling", "controls_settings_upscaling", "controls_quick_upscaling_amd", "controls_settings_about", "controls_settings_about_works", "controls_settings_about_photo", "controls_settings_stores",
+	"controls_settings_upscaling_online"]
 
 
 ## The Device service the Settings pages see: Device.info() of a set-up Claw
@@ -188,7 +189,32 @@ func _run() -> void:
 	if want(["controls_quick_legion", "controls_quick_display", "controls_settings_display", "controls_settings_more", "controls_quick_upscaling_amd"]):
 		await _use_device("lenovo-legion-go-s-z2go", legion_patch())
 		await _legion_shots()
+	if want(["controls_settings_upscaling_online"]):
+		await _use_device("lenovo-legion-go-s-z2go", online_patch())
+		await _online_shots()
 	quit()
+
+
+## An online game on the Legion Go S: Best adds nothing by itself, says why in
+## plain words, and offers our pick on one press.
+static func online_patch() -> Dictionary:
+	var p := legion_patch()
+	var warn := "This is an online game. An upscaler in its files can break its rules and get the account banned, so we don't add one by ourselves. Press Add to put FSR 3.1 in if you accept that risk."
+	p["perf.upscale_mode"] = {"value": "best", "help": warn}
+	p["perf.upscale_offer"] = {"value": null, "title": "Add FSR 3.1 to this game", "help": warn}
+	p["perf.upscale_active"] = {"value": null, "help": "Using the game's own upscaler. Nothing of ours is in this game."}
+	p["perf.upscaler"] = {"value": "own"}
+	p["perf.frame_gen"] = {"value": 0}
+	p["perf.upscale_menu"] = {"reason": "Our upscaler isn't in this game"}
+	return p
+
+
+func _online_shots() -> void:
+	var g := _game(1)
+	_status_legion()
+	if want(["controls_settings_upscaling_online"]):
+		await _settings_page("performance", "perf.upscale_offer")
+		await shot("controls_settings_upscaling_online")
 
 
 ## The fake Controls registry (the showcase adds a worker for the Audio cards).

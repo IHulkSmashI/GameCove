@@ -421,17 +421,23 @@ fetch() {
 
 fetch "$sums_url"
 
-# cosign: $COSIGN, the system's, else the pinned release (downloaded once, sha256 checked).
+# cosign: $COSIGN, the pinned release already here (the version the bundles are made for; the same order as the
+# app's updates.gd and the upscaling helper's mirror.py), the system's, else the pinned release downloaded once,
+# sha256 checked.
 cosign_bin() {
 	if [ -n "${COSIGN:-}" ]; then
 		echo "$COSIGN"
+		return 0
+	fi
+	c="$DATA/tools/cosign-$COSIGN_VERSION"
+	if [ -x "$c" ] && [ "$("$SHA256SUM" "$c" | cut -d ' ' -f 1)" = "$COSIGN_SHA256" ]; then
+		echo "$c"
 		return 0
 	fi
 	if command -v cosign >/dev/null 2>&1; then
 		command -v cosign
 		return 0
 	fi
-	c="$DATA/tools/cosign-$COSIGN_VERSION"
 	if [ ! -x "$c" ] || [ "$("$SHA256SUM" "$c" | cut -d ' ' -f 1)" != "$COSIGN_SHA256" ]; then
 		mkdir -p "$DATA/tools"
 		say "Downloading cosign $COSIGN_VERSION (checks the release's signature; once)" >&2

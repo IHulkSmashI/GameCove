@@ -162,6 +162,9 @@ SPEC0="$REPO/packaging/rpm/gamecove.spec"
 grep -q 'app-export/bin/cabinet.dll %{buildroot}%{_prefix}/lib/gamecove/bin/cabinet.dll' "$SPEC0" && ok || bad "spec must install bin/cabinet.dll"
 grep -qx '%{_prefix}/lib/gamecove/bin' "$SPEC0" && ok || bad "spec %files must take /usr/lib/gamecove/bin"
 grep -q 'LGPL-2.1-or-later' "$SPEC0" && ok || bad "spec License must name LGPL-2.1-or-later (cabinet.dll)"
+# review 6 low: the bundled AMD FidelityFX DLLs and Intel's XeSS libraries carry their own licences
+grep -q '^License:.*LicenseRef-AMD-FidelityFX-SDK' "$SPEC0" && ok || bad "spec License must name AMD's FidelityFX SDK licence"
+grep -q '^License:.*LicenseRef-Intel-ISSL' "$SPEC0" && ok || bad "spec License must name Intel's Simplified Software License"
 REL="$REPO/.github/workflows/release.yml"
 grep -q 'bash tools/cabinet-lzms/build.sh --check' "$REL" && ok || bad "release.yml must build cabinet.dll and compare it with cabinet.sha256"
 grep -q 'bash tools/cabinet-lzms/test/run.sh' "$REL" && ok || bad "release.yml must test cabinet.dll under Wine"
@@ -244,6 +247,13 @@ ci_pin=$(sed -n 's/^  GODOT_EDITOR_SHA256: \([0-9a-f]\{64\}\)$/\1/p' "$CI")
 rel_pin=$(sed -n 's/^  GODOT_EDITOR_SHA256: \([0-9a-f]\{64\}\)$/\1/p' "$W")
 [ -n "$ci_pin" ] && [ "$ci_pin" = "$rel_pin" ] && ok || bad "ci.yml must pin the same Godot editor sha256 as release.yml ($ci_pin vs $rel_pin)"
 [ "$(grep -c 'godot.zip "https://' "$CI")" = "$(grep -c '${GODOT_EDITOR_SHA256}  godot.zip" | sha256sum -c -' "$CI")" ] && ok || bad "ci.yml must check every Godot download"
+# one cosign order everywhere (review 6 low): the pinned copy first, then the system's
+pin_at=$(awk '/^cosign_bin\(\)/ { f = 1 } f && /cosign-\$COSIGN_VERSION/ { print NR; exit }' "$GG")
+sys_at=$(awk '/^cosign_bin\(\)/ { f = 1 } f && /command -v cosign/ { print NR; exit }' "$GG")
+[ -n "$pin_at" ] && [ -n "$sys_at" ] && [ "$pin_at" -lt "$sys_at" ] && ok || bad "get-gamecove.sh must try the pinned cosign before the system's"
+# a "run:" without "shell: bash" has no pipefail on GitHub: "pytest | tee" would pass with failing tests (review M)
+nopf=$(awk '/^ *- (name|run|uses):/ { pf = 0 } /set -o pipefail/ { pf = 1 } /\| tee / && !pf { n++ } END { print n + 0 }' "$CI")
+[ "$nopf" = 0 ] && ok || bad "ci.yml: every step that pipes into tee must set -o pipefail first ($nopf without)"
 # L26: draft, upload, publish
 awk '/gh release create/{c=NR} /gh release upload/{u=NR} /gh release edit "\$TAG" --draft=false/{p=NR} END{exit !(c && u && p && c<u && u<p)}' "$W" && ok || bad "release.yml must create a draft, upload, then publish"
 grep -q 'gh release create "$TAG" --draft' "$W" && ok || bad "the release must start as a draft"

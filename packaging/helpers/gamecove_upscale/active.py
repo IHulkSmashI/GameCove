@@ -31,6 +31,17 @@ _UPSCALER = re.compile(r"(creating new .{0,40}upscaler|feature created|upscaler 
                        r"(xess|fsr ?[234][0-9.x/ ]*|ffx|dlss)[a-z0-9_ ]{0,24}(init|creat)[a-z]* (ok|success|result: 0\b))", re.I)
 _FG = re.compile(r"(xefg|xess[- ]?fg|fsr ?fg|fsrfg|framegen|frame generation).{0,60}(creat|init|activ|enabled)", re.I)
 _XEFG = re.compile(r"xefg|xess[_ -]?fg|libxess_fg", re.I)
+# an error line that says the picked upscaler itself failed (FSR 4's DLL, FidelityFX, XeSS), not any other error
+_UPSCALER_FAIL = re.compile(r"(fsr ?4|fsr4|fidelityfx|ffx|amd_fidelityfx|xess|upscaler)[^\n]{0,120}"
+                            r"(fail|error|can'?t|cannot|not found|unsupported|missing)|"
+                            r"(fail|error|can'?t|cannot|unsupported|missing)[^\n]{0,120}(fsr ?4|fidelityfx|ffx|xess|upscaler)", re.I)
+
+
+def upscaler_failed(errors: list) -> bool:
+    """One of the log's error lines says the upscaler itself didn't come up."""
+    return any(_UPSCALER_FAIL.search(str(e)) for e in errors or [])
+
+
 _FAIL = re.compile(r"\[(error|critical)\]|\b(failed|can't|cannot|not found|unsupported)\b", re.I)
 
 

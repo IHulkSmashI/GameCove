@@ -356,6 +356,32 @@ def test_only_full_releases_at_least_72_hours_old_are_promoted(tmp_path):
     assert u1 not in net.got and u2 not in net.got, "never even downloaded"
 
 
+def test_an_asset_replaced_in_an_old_release_waits_72_hours(tmp_path):
+    """Review M: the quarantine looked at the release's date only, so an asset deleted and uploaded again into an
+    old release (other bytes, same name) was promoted at once."""
+    v, net = world()
+    xr = "/repos/HHHHanasak1/xess-xmx-linux/releases?per_page=15"
+    r, u, _ = rel("20261120", "xess-xmx-linux-20261120.zip", XESS_NEW, date="2026-11-01T00:00:00Z", repo="HHHHanasak1/xess-xmx-linux")
+    r["assets"][0].update({"created_at": "2026-11-01T00:00:00Z", "updated_at": "2026-11-01T00:00:00Z"})
+    net.api[xr] = [r]
+    _rep, first, plan, out = _run(tmp_path, v, net)
+    assert first["components"]["xess_xmx_linux"]["sha256"] == sha(XESS_NEW)
+    have = tmp_path / "have.tsv"                                  # what last night uploaded is on the mirror now
+    have.write_text("".join(f"{t}\t{n}\t1\n" for t, n, _p in plan))
+    swapped = XESS_NEW + b" swapped"
+    r2 = json.loads(json.dumps(r))
+    r2["assets"][0].update({"digest": "sha256:" + sha(swapped), "created_at": "2026-11-09T01:00:00Z", "updated_at": "2026-11-09T01:00:00Z"})
+    net.api[xr] = [r2]
+    net.files[u] = swapped
+    net.got.clear()
+    rep, idx, _plan, _o = _run(tmp_path, v, net, name="dist2", have=str(have), previous=str(out / "upscalers.json"))
+    assert idx["components"]["xess_xmx_linux"]["sha256"] == sha(XESS_NEW), "the copy before stays"
+    assert u not in net.got, "the new upload isn't even downloaded"
+    # with no copy before, the release is skipped (the next older one, or the pin)
+    rep, idx, _plan, _o = _run(tmp_path, v, net, name="dist3")
+    assert idx["components"]["xess_xmx_linux"].get("sha256") != sha(swapped)
+
+
 def test_a_rolling_build_newer_than_72_hours_waits(tmp_path):
     v, net = world()
     net.api["/repos/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/tags/bins-for-optipatcher-rolling"]["assets"][0]["updated_at"] = "2026-11-08T22:00:00Z"

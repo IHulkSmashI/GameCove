@@ -34,10 +34,22 @@ def is_pinned(entry: dict) -> bool:
     return entry.get("tag") not in UNPINNED
 
 
+# size caps: no answer may fill the disk or the memory before its sha256 is checked
+MAX_API = 8 << 20
+MAX_DOWNLOAD = 1 << 30                  # the largest upscaler file is ~100 MB (FSR 4.1.2 on XMX); the build's MAX_FILE
+
+
+def read_capped(r, limit: int) -> bytes:
+    data = r.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f"the answer is larger than {limit} bytes: not used")
+    return data
+
+
 def _get(url: str, timeout: float = 20.0) -> bytes:
     req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "GameCove"})
     with tls.urlopen(req, timeout) as r:
-        return r.read()
+        return read_capped(r, MAX_API)
 
 
 def release(repo: str, tag: str | None) -> dict:
@@ -68,15 +80,43 @@ def pick_asset(rel: dict, pattern: str) -> dict | None:
     return None
 
 
+# Set by the command line (--no-download) when GameCove runs the helper by itself while "Background lookups" is off
+# (app/scripts/system/privacy.gd): files that came inside the install are still used, nothing is fetched.
+NO_NETWORK = False
+BLOCKED_TEXT = ("Background lookups are off, so we don't download the upscaler by ourselves. Pick it here and it "
+                "downloads now.")
+
+
+class Blocked(OSError):
+    """A download asked for while downloads by ourselves are off (NO_NETWORK)."""
+
+
 def download(url: str, dest: str, timeout: float = 60.0) -> str:
+    if NO_NETWORK:
+        raise Blocked(BLOCKED_TEXT)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     tmp = dest + ".part"
     if os.path.lexists(tmp):
         os.unlink(tmp)
     req = urllib.request.Request(url, headers={"User-Agent": "GameCove", "Accept": "application/octet-stream"})
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
-    with tls.urlopen(req, timeout) as r, os.fdopen(fd, "wb") as f:
-        shutil.copyfileobj(r, f, 1 << 20)
+    try:
+        with tls.urlopen(req, timeout) as r, os.fdopen(fd, "wb") as f:
+            total = 0
+            while True:
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_DOWNLOAD:
+                    raise ValueError(f"{url}: larger than {MAX_DOWNLOAD} bytes, stopped")
+                f.write(chunk)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
     os.replace(tmp, dest)
     return dest
 
@@ -156,6 +196,8 @@ def get_verified(urls: list[str], sha256: str, dest: str, timeout: float = 60.0)
             errors.append(f"{have}: {e}")
     if not urls:
         raise ValueError(f"{os.path.basename(dest)}: nowhere to download it from")
+    if NO_NETWORK:
+        raise Blocked(BLOCKED_TEXT)
     for url in urls:
         try:
             download(url, tmp, timeout)

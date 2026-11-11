@@ -53,7 +53,7 @@ const CARDS := {
 			["perf.overlay_opacity", "perf.overlay_scale", "perf.overlay_item.*"]],
 		# One card for everything that makes more frames from fewer: the mode first (Best / My choice / Native),
 		# what really ran, then each real alternative for people who want control.
-		["Upscaling and frame generation", "upscale", ["perf.upscale_mode", "perf.upscale_active", "perf.upscaler", "perf.frame_gen",
+		["Upscaling and frame generation", "upscale", ["perf.upscale_mode", "perf.upscale_offer", "perf.upscale_active", "perf.upscaler", "perf.frame_gen",
 			"perf.fg_generator", "perf.lsfg", "perf.lsfg_multiplier", "perf.upscale_menu"],
 			["perf.lsfg_flow_scale", "perf.lsfg_performance", "perf.lsfg_setup", "perf.upscale_game_update", "perf.upscaler_update", "perf.upscale_undo"]],
 		# Low latency is automatic (on by default, forced on with frame generation):
@@ -72,7 +72,7 @@ const CARDS := {
 ## Quick menu tabs: the most used first. Unavailable ones are left out there.
 const QUICK := {
 	"game": ["perf.overlay", "display.fps_limit", "power.tdp", "power.autotune", "power.autotune_target",
-		"perf.upscale_mode", "perf.upscale_active", "perf.upscaler", "perf.frame_gen", "perf.lsfg", "perf.lsfg_multiplier",
+		"perf.upscale_mode", "perf.upscale_offer", "perf.upscale_active", "perf.upscaler", "perf.frame_gen", "perf.lsfg", "perf.lsfg_multiplier",
 		"perf.upscale_menu", "display.upscale_filter"],
 	"power": ["power.profile", "power.tdp", "power.fan_mode", "power.battery_saver", "power.charge_limit",
 		"power.cpu_boost", "power.boost", "power.epp"],
@@ -97,7 +97,7 @@ const SHORT_TITLES := {
 ## Icons per control in the quick menu (left of the title).
 const ICONS := {
 	"perf.overlay": "overlay", "display.fps_limit": "latency", "power.tdp": "bolt", "power.autotune": "sparkle",
-	"perf.upscaler": "upscale", "perf.upscale_mode": "sparkle", "perf.upscale_active": "gauge", "perf.upscale_menu": "upscale", "perf.frame_gen": "frames", "perf.lsfg": "frames", "display.brightness": "sun",
+	"perf.upscaler": "upscale", "perf.upscale_mode": "sparkle", "perf.upscale_offer": "sparkle", "perf.upscale_active": "gauge", "perf.upscale_menu": "upscale", "perf.frame_gen": "frames", "perf.lsfg": "frames", "display.brightness": "sun",
 	"audio.volume": "volume", "audio.mic_mute": "mic", "network.wifi": "wifi", "network.bluetooth": "bluetooth",
 	"network.airplane": "airplane", "controller.gyro": "motion", "controller.led_effect": "light",
 	"power.fan_mode": "fan", "power.battery_saver": "battery_leaf", "display.night_light": "moon",

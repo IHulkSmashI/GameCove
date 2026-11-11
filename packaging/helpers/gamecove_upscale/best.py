@@ -9,15 +9,18 @@ Per game there is one saved mode (upscale.json "mode"):
 prepare() is what runs when a game is installed, updated, opened or about to start: in "best" mode it puts the plan in
 when that is safe and it isn't there yet, repairs files a game update removed, and falls back (FSR 4 -> FSR 3.1,
 FSR 4.1.2 on XMX -> XeSS 2) when the last start shows the pick didn't come up. Safe means: no anti-cheat, no other
-injector, not marked broken, and for a game no list knows, only when what it ships makes the route certain (DirectX
-12 with DLSS or FSR 3.1 DLLs) and then without frame generation. Anything else is offered, not done.
+injector, not marked broken, a game the lists know, and not an online game. Anything else is offered, not done
+(review H5): the plan says why in one line and names our pick ("offer"), and nothing goes into the game until the
+player takes it (opt_in, the menu's "Add ... to this game"). A game no list knows then gets the upscaler only, no
+frame generation. Setting the game's own FSR 3.1 to FSR 4 through Proton puts nothing into the folder and stays
+automatic, except for online games.
 """
 from __future__ import annotations
 
 import os
 import time
 
-from . import active, chips, games, guard, launchenv, mirror, optiscaler, xess
+from . import active, chips, downloads, games, guard, launchenv, mirror, optiscaler, xess
 
 MODES = ("best", "custom", "native")
 FALLBACK = {"fsr4_amd": "fsr31", "fsr4_xmx": "xess", "fsr4_xmx_lite": "xess"}
@@ -39,9 +42,21 @@ def set_mode(home: str, key: str, mode: str) -> None:
         s["mode"].pop(str(key), None)
     else:
         s["mode"][str(key)] = mode
-    for k in ("strikes", "fell_back"):
+    for k in ("strikes", "fell_back") + (("optin",) if mode == "native" else ()):
         (s.get(k) or {}).pop(str(key), None)
     games.save_state(home, s)
+
+
+def opted_in(home: str, key: str) -> bool:
+    """The player took our pick for a game we don't set up by ourselves (an online game, one no list knows)."""
+    return bool((games.load_state(home).get("optin") or {}).get(str(key)))
+
+
+ONLINE_LINE = ("This is an online game. An upscaler in its files can break its rules and get the account banned, so "
+               "we don't add one by ourselves. Press Add to put {up} in if you accept that risk.")
+UNKNOWN_LINE = "We don't know this game yet, so nothing is added by itself. Our pick here is {up}: press Add to put it in."
+UNSURE_LINE = ("We don't know this game yet and can't tell how it renders, so nothing is added by itself. You can still "
+               "press Add to try {up}.")
 
 
 def _stamp(home: str, key: str) -> float:
@@ -82,22 +97,29 @@ def plan(home: str, key: str, gpu: dict, game_dir: str | None = None, name: str 
         out.update(refused="listed", why_not=rec["reasons"][0])
     elif not rec["launch"]:
         out.update(why_not="")                      # nothing to add: the game's own is the best here
-    elif not rec.get("optiscaler"):
-        out["auto"] = True                          # environment only (Proton's FSR 4 upgrade): nothing in the folder
-    elif entry.get("known") or rec.get("re_engine"):
-        out["auto"] = True
-    elif rec.get("dx12") and (set(rec["ships"]["upscaler"]) & {"DLSS", "FSR"}) and folder:
-        out["auto"] = True
-        out["unknown_safe"] = True
     else:
-        out.update(why_not="We don't know this game yet and can't tell how it renders, so nothing is added by itself. "
-                           "You can still pick an upscaler below.")
+        opted = opted_in(home, key)
+        up = active.LABELS.get(out["upscaler"], out["upscaler"])
+        out["online"] = bool(entry.get("online"))
+        out["opted_in"] = opted
+        if out["online"] and not opted:
+            out.update(offer=out["upscaler"], why_not=ONLINE_LINE.format(up=up))
+        elif not rec.get("optiscaler"):
+            out["auto"] = True                      # environment only (Proton's FSR 4 upgrade): nothing in the folder
+        elif entry.get("known") or rec.get("re_engine"):
+            out["auto"] = True
+        elif opted:
+            out["auto"] = True
+            out["unknown_safe"] = True              # a game no list knows: the upscaler only
+        else:
+            sure = rec.get("dx12") and (set(rec["ships"]["upscaler"]) & {"DLSS", "FSR"}) and folder
+            out.update(offer=out["upscaler"], why_not=(UNKNOWN_LINE if sure else UNSURE_LINE).format(up=up))
     out["line"] = headline(out, rec)
     return out
 
 
 def headline(p: dict, rec: dict) -> str:
-    if p["refused"]:
+    if p["refused"] or p.get("offer"):
         return p["why_not"]
     if not rec["launch"]:
         return rec["reasons"][0]
@@ -117,6 +139,11 @@ def prepare(home: str, key: str, gpu: dict, game_dir: str | None = None, name: s
         # the game gained anti-cheat (an update, or our data learnt it): everything of ours comes out
         r = games.undo(home, key, gpu, game_dir)
         return {"ok": bool(r.get("ok", True)), "did": "removed: this game has anti-cheat", "mode": mode, "plan": p}
+    if p.get("online") and not p.get("opted_in") and mode == "best" and \
+            (games.load_state(home)["opti_games"].get(str(key)) or games.get_launch(home, key)):
+        # set up by itself before the lists said it is an online game: out again until the player picks it
+        r = games.undo(home, key, gpu, game_dir)
+        return {"ok": bool(r.get("ok", True)), "did": "taken out: this is an online game", "mode": mode, "plan": p}
     gone = _withdrawn_step(home, key, gpu, game_dir)
     if gone:
         return {"ok": True, "did": gone, "mode": mode, "plan": p}
@@ -143,7 +170,29 @@ def prepare(home: str, key: str, gpu: dict, game_dir: str | None = None, name: s
             set_mode(home, key, "best")
     else:
         r = games.apply_recommended(home, key, gpu, game_dir, allow_unpinned, anticheat=anticheat)
+    if not r.get("ok") and downloads.NO_NETWORK and downloads.BLOCKED_TEXT in str(r.get("error") or ""):
+        # Background lookups are off and the files aren't here yet: nothing is fetched by itself, and we say so
+        return {"ok": True, "did": "", "waiting": downloads.BLOCKED_TEXT, "mode": mode, "plan": p}
     return {"ok": bool(r.get("ok")), "did": "set up" if r.get("ok") else "", "error": r.get("error"), "mode": mode, "plan": p}
+
+
+def opt_in(home: str, key: str, gpu: dict, game_dir: str | None = None, name: str | None = None,
+           anticheat: bool = False, allow_unpinned: bool = False) -> dict:
+    """The player took our pick for a game we don't set up by ourselves (the menu's "Add ... to this game"): Best
+    from now on, with the pick put in now. Anti-cheat, another injector or a broken entry still refuse."""
+    p = plan(home, key, gpu, game_dir, name, anticheat)
+    if p["refused"]:
+        return {"ok": False, "refused": p["refused"], "error": p["why_not"], "plan": p}
+    s = games.load_state(home)
+    s.setdefault("optin", {})[str(key)] = int(time.time())
+    games.save_state(home, s)
+    set_mode(home, key, "best")
+    r = prepare(home, key, gpu, game_dir, name, anticheat, allow_unpinned)
+    if not r.get("ok"):
+        s = games.load_state(home)
+        (s.get("optin") or {}).pop(str(key), None)
+        games.save_state(home, s)
+    return r
 
 
 def _withdrawn_step(home: str, key: str, gpu: dict, game_dir: str | None) -> str:
@@ -165,7 +214,7 @@ def _repair(home: str, key: str, gpu: dict, game_dir: str | None) -> str:
     """A game update (or "Verify files") took our files out while the launch settings still ask for them: put the
     same choice back."""
     launch = games.get_launch(home, key)
-    folder = games.load_state(home)["opti_games"].get(str(key))
+    folder = games.tracked_folder(home, key, game_dir)
     if not folder or launch.get("opti") in (None, "off"):
         return ""
     if optiscaler.owner(folder)["owner"] == "gamecove" and _proxy_there(folder):
@@ -194,7 +243,11 @@ def _fallback(home: str, key: str, gpu: dict, game_dir: str | None, p: dict) -> 
     if not started or seen.get(str(key)) == started:
         return _repair(home, key, gpu, game_dir)
     seen[str(key)] = started
-    bad = st["active"]["state"] == "not_loaded" or (st["active"]["state"] == "loaded" and st["active"].get("errors"))
+    # a strike: OptiScaler never started, or it started and its log says the upscaler itself failed. "Loaded" with
+    # other errors is a game whose DLSS / FSR wasn't switched on in its menu (review low: that counted, and two starts
+    # without DLSS on said "FSR 4.1.2 didn't start twice")
+    a = st["active"]
+    bad = a["state"] == "not_loaded" or (a["state"] == "loaded" and active.upscaler_failed(a.get("errors")))
     strikes[str(key)] = strikes.get(str(key), 0) + 1 if bad else 0
     games.save_state(home, s)
     if strikes[str(key)] < STRIKES:

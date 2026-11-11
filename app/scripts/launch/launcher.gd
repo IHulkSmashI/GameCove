@@ -7,6 +7,7 @@ const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const LaunchEnv := preload("res://scripts/launch/launch_env.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
 const Proton := preload("res://scripts/launch/proton.gd")
+const GpuCaps := preload("res://scripts/device/gpu_caps.gd")
 
 const SETTINGS_PATH := "user://launch_settings.json"
 const GOALS := ["battery", "balanced", "smooth"]
@@ -23,6 +24,10 @@ var settings_path := SETTINGS_PATH
 var home := OS.get_environment("HOME")
 var root_prefix := ""
 var device_profile: Dictionary = {}
+## The vendor of the card games render on (Device.gpu["render"]): "nvidia" on a
+## machine with an NVIDIA card next to the CPU's graphics, whose own DLSS and
+## Reflex are then left alone. Overridable for tests.
+var render_vendor := ""
 ## Show the active upscaler on screen (Proton's FSR 4 watermark). For testing a game.
 var show_indicator := false
 ## More environment for a game at launch, from other areas (perf controls: the
@@ -33,6 +38,9 @@ var env_hooks: Array[Callable] = []
 ## `hook(key) -> bool`: is frame generation on for this game outside the launch
 ## settings (lsfg-vk, OptiScaler)? Any true forces low latency on at launch.
 var frame_gen_hooks: Array[Callable] = []
+## `hook(key) -> bool`: did the player pick Native for this game's upscaling
+## (perf controls)? Then nothing at launch swaps the game's upscaler.
+var native_hooks: Array[Callable] = []
 
 var _games := {}
 ## Frame rates measured per device: {device id: {game key: fps}} (a game runs
@@ -48,10 +56,11 @@ var _loaded := false
 func _ready() -> void:
 	# kept here: the per-game controls read settings_for() on the Controls worker,
 	# which may not look up nodes in the tree
-	if device_profile.is_empty():
-		var d := get_node_or_null("/root/Device")
-		if d != null and d.get("profile") is Dictionary:
-			device_profile = d.get("profile")
+	var d := get_node_or_null("/root/Device")
+	if device_profile.is_empty() and d != null and d.get("profile") is Dictionary:
+		device_profile = d.get("profile")
+	if render_vendor == "" and d != null and d.get("gpu") is Dictionary:
+		render_vendor = GpuCaps.render_vendor(d.get("gpu"))
 
 
 func profile() -> Dictionary:
@@ -69,7 +78,7 @@ func profile() -> Dictionary:
 static func defaults_for(device: Dictionary) -> Dictionary:
 	var d := {"goal": "balanced", "fps_limit": 0, "upscaler": "auto", "frame_gen": false, "low_latency": true}
 	# Older, weaker chips: battery first.
-	if device.get("gpu_family", "") in ["amd-rdna2", "intel-xe-lpg"]:
+	if device.get("gpu_family", "") in ["amd-rdna2", "intel-xe-lp", "intel-xe-lpg"]:
 		d["goal"] = "battery"
 	var custom: Variant = device.get("launch_defaults", {})
 	if custom is Dictionary:
@@ -258,12 +267,15 @@ func launch_plan(game: Dictionary) -> Dictionary:
 			game["extra_env"] = extra
 	var p := profile()
 	var device := {"gpu_family": str(p.get("gpu_family", "")), "xmx": bool(p.get("xmx", false))}
+	if render_vendor == "nvidia":
+		device = {"gpu_family": "nvidia", "xmx": false}     # the game renders on the NVIDIA card
 	var proton := proton_for(game)
 	var facts := {
 		"anticheat": has_anticheat(game),
 		"base_fps": int(game.get("base_fps", base_fps(key))),
 		"extra_env": game.get("extra_env", {}),
 		"frame_gen_on": frame_gen_elsewhere(key),
+		"upscale_native": upscale_native(key),
 	}
 	var plan := LaunchEnv.compose(settings_for(key), device, proton, host_facts(), facts, {"indicator": show_indicator})
 	for hook in env_hooks:
@@ -273,6 +285,14 @@ func launch_plan(game: Dictionary) -> Dictionary:
 				plan["env"] = LaunchEnv.merge(plan["env"], more)
 	plan["proton"] = proton
 	return plan
+
+
+## True when a native_hooks hook says the player picked Native for `key`.
+func upscale_native(key: String) -> bool:
+	for hook in native_hooks:
+		if hook.is_valid() and bool(hook.call(key)):
+			return true
+	return false
 
 
 ## True when a frame_gen_hooks hook says frame generation is on for `key`.

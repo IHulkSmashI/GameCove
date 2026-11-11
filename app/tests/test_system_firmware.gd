@@ -532,6 +532,34 @@ func test_index_signature_checked_when_cosign_is_there() -> void:
 	u3.free()
 
 
+func test_an_older_firmware_index_never_replaces_the_one_held() -> void:
+	# review 6 M2 (same class): load_index had no "older" check, so a replayed, genuinely signed older list was taken
+	var newer := _index()
+	newer["built"] = "2026-11-10T05:41:00Z"
+	var f := _fake_with_index(newer)
+	var u := _upd(_tree(_dmi("RC71L.341")), f, _row("asus-rog-ally"))
+	eq(u.load_index()["built"], "2026-11-10T05:41:00Z", "the first list")
+	var held: String = str(u.cache_dir).path_join("firmware.json.gz")
+	var f2 := _fake_with_index(_index())          # 2026-11-09: older
+	u.runner = f2
+	u.now_unix = int(Time.get_unix_time_from_system()) + 8 * 24 * 3600   # over a week later: due again
+	eq(u.load_index()["built"], "2026-11-10T05:41:00Z", "the older one is refused")
+	ok(f2.calls.any(func(c): return c.ends_with(Index.URL)), "it was fetched")
+	ok(FileAccess.file_exists(held) and not FileAccess.file_exists(held + ".part"), "nothing left over")
+	u.free()
+
+
+func test_the_pinned_cosign_comes_first() -> void:
+	# the same order as the installer and the upscaling helper: the pinned copy the bundles are made for
+	var home := _tree({".local/share/gamecove/tools/cosign-v2.5.3": ""})
+	var u := _upd(_tree(_dmi("RC71L.341", {"usr/bin/cosign": ""})), Fake.new(), _row("asus-rog-ally"))
+	u.home = home
+	eq(u._cosign(), home.path_join(".local/share/gamecove/tools/cosign-v2.5.3"), "pinned before the system's")
+	u.home = _tree({})
+	ok(u._cosign().ends_with("/usr/bin/cosign"), "the system's without it")
+	u.free()
+
+
 # ---- review problem 1: downloads only from a checked index, and curl's final host is checked too -------------
 
 func _usb_zip() -> String:

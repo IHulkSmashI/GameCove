@@ -40,10 +40,16 @@ GAMES_FILE = "games.json"
 SUPPORTED_LIST_FILE = "supported-games.md"
 
 
+MAX_LIST = 8 << 20                       # a list or a game's entry: far below this (the compatibility list is ~300 KB)
+
+
 def _get(url: str, timeout: float = 20.0) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "GameCove"})
     with tls.urlopen(req, timeout) as r:
-        return r.read()
+        data = r.read(MAX_LIST + 1)
+    if len(data) > MAX_LIST:
+        raise OSError(f"{url}: larger than {MAX_LIST} bytes, not used")
+    return data
 
 
 def _fresh(path: str) -> bool:
@@ -147,16 +153,22 @@ def parse_supported_list(text: str) -> dict[str, dict]:
             support[_norm(cells[1])] = (cells[2], cells[3], cells[4])
     m = re.search(r"<!--\s*opticlick-supported-games-meta\s*(\{.*?\})\s*-->", text, re.S)
     try:
-        meta = json.loads(m.group(1)).get("games", []) if m else []
+        doc = json.loads(m.group(1)) if m else {}
     except ValueError:
-        meta = []
+        doc = {}
+    # the page is someone else's: any part of the wrong type is skipped, never raised on (review low)
+    meta = doc.get("games") if isinstance(doc, dict) else None
     out: dict[str, dict] = {}
-    for g in meta:
+    for g in meta if isinstance(meta, list) else []:
+        if not isinstance(g, dict):
+            continue
         name = str(g.get("game_name_en") or "")
         cols = support.get(_norm(name))
         if not cols:
             continue
         ids = g.get("cover_steam_app_ids") or ([g["cover_steam_app_id"]] if g.get("cover_steam_app_id") else [])
+        if not isinstance(ids, list):
+            ids = [ids] if isinstance(ids, (str, int)) and not isinstance(ids, bool) else []
         for appid in ids:
             out[str(appid)] = {"name": name, "intel": cols[0], "amd": cols[1], "nvidia": cols[2],
                                "game_id": g.get("game_id")}
@@ -166,7 +178,7 @@ def parse_supported_list(text: str) -> dict[str, dict]:
 def supported_list(cache_dir: str) -> dict[str, dict]:
     try:
         with open(os.path.join(cache_dir, SUPPORTED_LIST_FILE), "r", encoding="utf-8") as f:
-            return parse_supported_list(f.read())
+            return parse_supported_list(f.read(MAX_LIST))
     except OSError:
         return {}
 
@@ -217,7 +229,7 @@ def parse_compat(text: str) -> dict[str, dict]:
 def compat(cache_dir: str) -> dict[str, dict]:
     try:
         with open(os.path.join(cache_dir, OPTISCALER_FILE), "r", encoding="utf-8") as f:
-            return parse_compat(f.read())
+            return parse_compat(f.read(MAX_LIST))
     except OSError:
         return {}
 
@@ -269,6 +281,6 @@ def game_page(cache_dir: str, slug: str | None, get=_get) -> dict | None:
             log.info("OptiScaler entry %s: %s", slug, e)
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return parse_page(f.read())
+            return parse_page(f.read(MAX_LIST))
     except OSError:
         return None

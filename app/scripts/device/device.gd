@@ -366,8 +366,9 @@ static func match_device(devices: Array, board: String, product: String) -> Dict
 
 
 const SUPPORT_LEVELS := ["full", "partial", "beta", "generic"]
-const GPU_FAMILIES := ["", "amd-vega", "amd-rdna2", "amd-rdna3", "intel-xe-lpg", "intel-xe2", "intel-xe3"]
-const GPU_ARCHS := ["unknown", "Vega", "RDNA2", "RDNA3", "RDNA3.5", "Xe-LPG", "Xe2", "Xe3"]
+## intel-xe-lp: Alder Lake's UHD / Iris Xe (the Intel AYANEO AIR Plus); no XMX, launch settings left to the game
+const GPU_FAMILIES := ["", "amd-vega", "amd-rdna2", "amd-rdna3", "intel-xe-lp", "intel-xe-lpg", "intel-xe2", "intel-xe3"]
+const GPU_ARCHS := ["unknown", "Vega", "RDNA2", "RDNA3", "RDNA3.5", "Xe-LP", "Xe-LPG", "Xe2", "Xe3"]
 const GYRO_STATES := ["yes", "fix", "no", "none", "unknown"]
 ## devices.json rgb.via: who drives the lights (texts_device.gd LED_BY names each).
 const RGB_VIA := ["inputplumber", "hhd", "ayaneo-ec", "oxp-ec", "kernel", "steam"]
@@ -578,13 +579,18 @@ static func cpu_counts(prefix := "") -> Dictionary:
 	return {"cores": cores, "threads": threads}
 
 
-## The integrated GPU: first DRM card with a PCI driver, preferring AMD/Intel.
+## The integrated GPU: first DRM card with a PCI driver, preferring AMD/Intel
+## (what picks the device row). "render" is the card games render on: an NVIDIA
+## card when there is one (always a discrete card; DXVK and vkd3d-proton put
+## discrete GPUs first, so Proton games run there), else the same card.
 static func gpu_info(prefix := "") -> Dictionary:
 	var base := prefix + "/sys/class/drm/"
 	var dir := DirAccess.open(base)
 	var out := {"vendor": "", "driver": "", "pci_id": "", "card": ""}
 	if dir == null:
+		out["render"] = {}
 		return out
+	var nvidia := {}
 	var names := Array(dir.get_directories()) + Array(dir.get_files())
 	names.sort()
 	for n in names:
@@ -601,10 +607,14 @@ static func gpu_info(prefix := "") -> Dictionary:
 			continue
 		var vendor: String = {"1002": "amd", "8086": "intel", "10DE": "nvidia"}.get(pci.get_slice(":", 0), "")
 		var cand := {"vendor": vendor, "driver": driver, "pci_id": pci, "card": n}
-		if vendor in ["amd", "intel"]:
-			return cand
-		if out["card"] == "":
+		if vendor == "nvidia" and nvidia.is_empty():
+			nvidia = cand.duplicate()
+		if vendor in ["amd", "intel"] and str(out.get("vendor", "")) not in ["amd", "intel"]:
 			out = cand
+		elif out["card"] == "":
+			out = cand
+	out["render"] = nvidia if not nvidia.is_empty() else {"vendor": out["vendor"], "driver": out["driver"],
+		"pci_id": out["pci_id"], "card": out["card"]}
 	return out
 
 

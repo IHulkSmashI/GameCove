@@ -411,6 +411,13 @@ def stock_env() -> dict[str, str]:
 
 
 def prefix_dir(home: str, appid: str) -> str:
+    """The game's Proton prefix (drive_c): Steam keeps it in the library the game is installed in, so an SD-card
+    game's is on the card (review low: only the default library was looked at, and the XMX proof stayed empty).
+    The default library's path when no prefix exists yet."""
+    for lib in _steam_libraries(home):
+        d = os.path.join(lib, "steamapps", "compatdata", str(appid), "pfx", "drive_c")
+        if os.path.isdir(d):
+            return d
     return os.path.join(home, COMPATDATA, str(appid), "pfx", "drive_c")
 
 

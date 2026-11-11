@@ -51,6 +51,12 @@ var _status_cache := {}           # game key -> {"t": ms, "r": Dictionary}
 var _plan_cache := {}             # game key -> {"t": ms, "r": Dictionary}
 var _prepared := {}               # game keys set up ahead of their start this session
 var _last_did := {}               # game key -> what prepare changed, for the mode row's help
+var _running_key := ""            # the game running now (session_wiring through ctx["upscale_running"])
+var _running_since := 0           # Time.get_ticks_msec() when it started
+var _pending := {}                # game key -> {"verb", "extra"}: a change asked for while that game ran
+## Helper commands that change the game's files: never while that game runs
+## (its DLLs are loaded; review M7). They wait and run once it has quit.
+const CHANGES_FILES := ["choose", "mode", "opt-in"]
 var _check := {}                  # the helper's last "check" answer
 var _check_t := -1
 var _mutex := Mutex.new()
@@ -71,10 +77,13 @@ func setup(c: Dictionary) -> void:
 	library = c.get("library", _autoload("Library") if real else null)
 	store = Store.new(str(c.get("perf_store_path", "")), str(_profile().get("id", "unknown")))
 	c["prepare_installed"] = prepare_installed
+	c["upscale_running"] = set_running_game
 	if launcher != null and "env_hooks" in launcher:
 		launcher.env_hooks.append(launch_env_hook)
 	if launcher != null and "frame_gen_hooks" in launcher:
 		launcher.frame_gen_hooks.append(frame_gen_on)
+	if launcher != null and "native_hooks" in launcher:
+		launcher.native_hooks.append(upscale_native)
 	refresh_device_files()
 	if real:
 		_schedule_background_check(UpscaleUpdates.FIRST_DELAY_S)
@@ -356,9 +365,18 @@ func _lsfg_reason() -> String:
 			return "Update lsfg-vk to version 2 below"
 	if game_key() == "":
 		return NO_GAME
-	if _anticheat():
+	if _anticheat() or _helper_says_anticheat():
 		return "Off for this game: it uses anti-cheat"
 	return ""
+
+
+## The upscaling helper's look at the game (its folder's anti-cheat files, the
+## lists' notes) says anti-cheat, also when the app's own data has no record
+## (review H2: Lossless checked only the app's data). Cached with the plan.
+func _helper_says_anticheat() -> bool:
+	if _upscale_reason() != "":
+		return false
+	return str(upscale_plan().get("refused", "")) == "anticheat"
 
 
 ## Lossless on/off: never next to another frame generator. The game's own (or
@@ -490,24 +508,107 @@ func _upscale_reason() -> String:
 
 
 func _upscale_run(verb: String, extra: Array = []) -> Dictionary:
-	return Upscale.run(ctx.get("runner"), upscale_cmd(), verb, _home(), game_key(), _gpu(),
+	var k := game_key()
+	if verb in CHANGES_FILES and is_running(k):
+		# the game has these files loaded: the change waits until it has quit (flush_pending)
+		_mutex.lock()
+		_pending[k] = {"verb": verb, "extra": extra.duplicate()}
+		var c: Dictionary = _status_cache.get(k, {})
+		_mutex.unlock()
+		var env: Variant = (c.get("r", {}) as Dictionary).get("env", {}) if not c.is_empty() else store.get_value(k, "upscale_env", {})
+		return {"ok": true, "queued": true, "env": env if env is Dictionary else {}}
+	return Upscale.run(ctx.get("runner"), upscale_cmd(), verb, _home(), k, _gpu(),
 		str(game().get("install_path", "")), extra)
+
+
+## Session wiring: `key` started ("" when the game ended). A change asked for
+## while it ran is made at the next look at the game or its next start.
+func set_running_game(key: String) -> void:
+	_mutex.lock()
+	_running_key = key
+	_running_since = Time.get_ticks_msec()
+	_mutex.unlock()
+
+
+## While a game's process is only starting (Proton sets up its prefix for several
+## seconds before the game loads its DLLs), the game's own settings from its
+## profile are still put in as it starts; after that window, changes wait.
+const LAUNCH_GRACE_MS := 6000
+
+
+func is_running(key: String) -> bool:
+	var grace := int(ctx.get("upscale_launch_grace_ms", LAUNCH_GRACE_MS))
+	_mutex.lock()
+	var r := key != "" and _running_key == key and Time.get_ticks_msec() - _running_since >= grace
+	_mutex.unlock()
+	return r
+
+
+## The change that waited for the game to quit, made now. True when one ran.
+func flush_pending(key: String) -> bool:
+	_mutex.lock()
+	var p: Dictionary = _pending.get(key, {})
+	var waiting := not p.is_empty() and _running_key != key
+	if waiting:
+		_pending.erase(key)
+	_mutex.unlock()
+	if not waiting or key != game_key():
+		if waiting:
+			_mutex.lock()
+			_pending[key] = p          # not the open game: kept until it is looked at
+			_mutex.unlock()
+		return false
+	var r := _upscale_run(str(p["verb"]), p["extra"])
+	_forget_status()
+	if bool(r.get("ok", false)):
+		var env: Variant = upscale_status().get("env", {})
+		_sv("upscale_env", env if env is Dictionary and not env.is_empty() else null)
+	return true
 
 
 ## The helper's status for the game, cached for a few seconds (one detect_all
 ## reads several controls).
 func upscale_status() -> Dictionary:
 	var k := game_key()
+	flush_pending(k)
 	_mutex.lock()
 	var c: Dictionary = _status_cache.get(k, {})
+	var waiting: Dictionary = _pending.get(k, {})
 	_mutex.unlock()
 	if not c.is_empty() and Time.get_ticks_msec() - int(c["t"]) < STATUS_TTL_MS:
-		return c["r"]
+		return _with_pending(c["r"], waiting)
 	var r := _upscale_run("status")
 	_mutex.lock()
 	_status_cache[k] = {"t": Time.get_ticks_msec(), "r": r}
+	var p: Dictionary = _pending.get(k, {})
 	_mutex.unlock()
-	return r
+	return _with_pending(r, p)
+
+
+## The status as it will be once the waiting change is made, so the rows show
+## the pick (and say it waits for the game to quit).
+static func _with_pending(r: Dictionary, p: Dictionary) -> Dictionary:
+	if p.is_empty() or not bool(r.get("ok", false)):
+		return r
+	var out := r.duplicate()
+	var x: Array = p.get("extra", [])
+	var arg := func(name: String) -> String:
+		var i := x.find(name)
+		return str(x[i + 1]) if i >= 0 and i + 1 < x.size() else ""
+	match str(p.get("verb", "")):
+		"choose":
+			out["upscaler"] = arg.call("--upscaler")
+			out["fg"] = int(arg.call("--fg"))
+			out["mode"] = "custom"
+		"mode":
+			out["mode"] = arg.call("--mode")
+		"opt-in":
+			out["mode"] = "best"
+	var a: Dictionary = (out.get("active", {}) as Dictionary).duplicate() if out.get("active") is Dictionary else {}
+	a["line"] = "Your change is made when you quit the game: its files are in use now."
+	out["active"] = a
+	out["pending"] = true
+	return out
 
 
 func _forget_status() -> void:
@@ -538,7 +639,15 @@ func _set_mode(mode: String) -> bool:
 	_prepared[game_key()] = true
 	if mode == "native":
 		_sv("frame_gen", 0)
+	if bool(r.get("ok", false)):
+		_sv("upscale_native", true if mode == "native" else null)
 	return _after_upscale(r, true)
+
+
+## Launcher.native_hooks: Native was picked for this game, so its launch swaps
+## nothing (no Proton FSR 4 upgrade either). Any pick afterwards clears it.
+func upscale_native(key: String) -> bool:
+	return store != null and bool(store.get_value(key, "upscale_native", false))
 
 
 ## Sets the open game up ahead of its first start ("Best for this handheld"),
@@ -547,10 +656,13 @@ func _set_mode(mode: String) -> bool:
 ## the pick didn't come up. Worker thread (detect) or the launch itself.
 func prepare_game(key := "") -> Dictionary:
 	var k := key if key != "" else game_key()
-	if k == "" or _prepared.has(k) or _upscale_reason() != "":
+	flush_pending(k)
+	if k == "" or _prepared.has(k) or _upscale_reason() != "" or is_running(k):
 		return {}
 	_prepared[k] = true
-	var r := _upscale_run("prepare", _ac_args())
+	var r := _upscale_run("prepare", _ac_args() + _auto_net_args())
+	if str(r.get("waiting", "")) != "":
+		_last_did[k] = str(r["waiting"]).trim_suffix(".")
 	if str(r.get("did", "")) != "":
 		_forget_status()
 		var st := upscale_status()
@@ -558,6 +670,13 @@ func prepare_game(key := "") -> Dictionary:
 		_sv("upscale_env", env if env is Dictionary and not env.is_empty() else null)
 		_last_did[k] = str(r.get("did", ""))
 	return r
+
+
+## What GameCove runs by itself (prepare) may download only with "Background
+## lookups" on (Settings > About; privacy.gd). Files that came with the install
+## are still used; the player's own picks download as before.
+func _auto_net_args() -> Array:
+	return [] if Privacy.background_allowed(str(ctx.get("privacy_path", Privacy.PREFS_PATH))) else ["--no-download"]
 
 
 ## A game was just installed, updated or had its files checked (main's
@@ -579,7 +698,7 @@ func prepare_installed(g: Dictionary, now := true) -> Dictionary:
 		return {}
 	_prepared[k] = true
 	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(g)) else []
-	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac)
+	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac + _auto_net_args())
 	if str(r.get("did", "")) != "":
 		var st := Upscale.run(ctx.get("runner"), upscale_cmd(), "status", _home(), k, _gpu(), dir)
 		var env: Variant = st.get("env", {})
@@ -640,13 +759,27 @@ func _upscale_controls() -> Array:
 			func(_v):
 				_forget_status()
 				return true),
+		_mkc({"id": "perf.upscale_offer", "title": "Add our pick to this game",
+			"help": "For games we don't set up by ourselves: online games and games we don't know yet. Nothing goes in until you press this.",
+			"kind": "action", "per_game": false, "apply_order": 4,
+			"affects": ["perf.upscale_mode", "perf.upscaler", "perf.frame_gen", "perf.upscale_active", "perf.upscale_menu"]},
+			_offer_detect, func(): return null,
+			func(_v):
+				if not _after_upscale(_upscale_run("opt-in", _ac_args()), true):
+					return false
+				_sv("upscale_native", null)
+				return true),
 		_mk({"id": "perf.upscaler", "title": "Upscaler",
 			"help": "Pick one yourself. The game keeps its own menu: choose DLSS or FSR there and it becomes this.",
 			"kind": "choice", "options": _opts(Upscale.upscalers(g), Upscale.LABELS, Upscale.upscaler_help(g)), "default_value": "own",
 			"apply_order": 3},
 			_upscale_reason,
 			func(): return str(upscale_status().get("upscaler", "own")) if upscale_status().get("ok", false) else null,
-			func(v): return _after_upscale(_upscale_run("choose", ["--upscaler", v, "--fg", str(int(upscale_status().get("fg", 0)))] + _gen_args() + _ac_args()))),
+			func(v):
+				if not _after_upscale(_upscale_run("choose", ["--upscaler", v, "--fg", str(int(upscale_status().get("fg", 0)))] + _gen_args() + _ac_args())):
+					return false
+				_sv("upscale_native", null)
+				return true),
 		_mk({"id": "perf.frame_gen", "title": "Frame generation",
 			"help": _fg_help(g),
 			"kind": "choice", "options": _opts(Upscale.frame_gens(g), Upscale.FG_LABELS, Upscale.FG_HELP),
@@ -719,6 +852,22 @@ func _mode_detect(c: RefCounted) -> String:
 		c.help = line + (" (" + did.substr(0, 1).to_upper() + did.substr(1) + ".)" if did != "" and did != "set up" else "")
 	if str(p.get("refused", "")) == "anticheat":
 		return "Off for this game: it uses anti-cheat"
+	return ""
+
+
+## "Add our pick": only for a game Best offers but won't set up by itself (an
+## online game, or one no list knows). Its title names the pick, its help line
+## says why it isn't added by itself (for an online game, the ban risk).
+func _offer_detect(c: RefCounted) -> String:
+	var why := _upscale_reason()
+	if why != "":
+		return why
+	var p := upscale_plan()
+	var offer := str(p.get("offer", ""))
+	if offer == "" or str(upscale_status().get("mode", "best")) != "best":
+		return "Nothing to add here: Best already looks after this game" if str(p.get("refused", "")) == "" else "Off for this game"
+	c.title = "Add %s to this game" % str(Upscale.LABELS.get(offer, offer))
+	c.help = str(p.get("line", c.help))
 	return ""
 
 
@@ -839,6 +988,9 @@ func background_check(now_unix: int) -> bool:
 		return false
 	UpscaleUpdates.save_check(stamp, now_unix)      # at most daily, also when the network is down
 	upscale_check(true)
+	# the per-game lists: the signed nightly games.json and OptiScaler's compatibility notes (anti-cheat and
+	# online flags, fixes). Nothing else called this, so devices kept the list they were installed with (review low)
+	Upscale.run(ctx.get("runner"), upscale_cmd(), "refresh", _home(), "", _gpu())
 	return true
 
 

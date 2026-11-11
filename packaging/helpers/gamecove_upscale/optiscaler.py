@@ -32,6 +32,7 @@ touched: owner() says whose it is and the panel shows a warning instead.
 """
 from __future__ import annotations
 
+import fnmatch
 import glob
 import json
 import logging
@@ -57,6 +58,10 @@ STATE = ".gamecove-optiscaler"
 # logs and caches OptiScaler, fakenvapi and OptiPatcher create in the game folder at run time (not in the manifest)
 RUNTIME_FILES = ("OptiScaler.log", "OptiScaler.log.*", "OptiScaler*.log", "fakenvapi.log", "OptiPatcher.log",
                  "dlssg_to_fsr3.log", "nvngx.log")
+# files GameCove writes that OptiScaler (its in-game menu's Save) and fakenvapi rewrite while the game runs: always
+# GameCove's to take out on undo, whatever their bytes are now. Kept, OptiScaler.ini made the folder read as "another
+# tool's OptiScaler" and locked the game out of ours after Native (review M).
+OWN_CONFIGS = ("OptiScaler.ini", "fakenvapi.ini", "OptiScaler/fakenvapi.ini")
 PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "winhttp.dll", "wininet.dll")
 FSR4_XMX_DIR = "fsr4-xmx"
 FSR4_XMX_FILES = ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll")   # what the user puts in ~/fsr4-xmx
@@ -88,7 +93,14 @@ SKIP_SUFFIX = (".bat",)                  # v10: OptiScaler/Streamlined_fetcher_w
 # always: OptiPatcher (plugins/) loads, and the HQ font stays off (its auto mode asserts on a missing font under
 # Proton; Decky Framegen sets the same two)
 BASE_INI = {"Plugins_LoadAsiPlugins": "true", "Menu_UseHQFont": "false"}
-MAIN_EXE_SKIP = re.compile(r"(unins|crash|setup|redist|launcher|vc_?redist|dxsetup|easyanticheat|eac|ue4prereq|cefprocess|helper|report)", re.I)
+# how deep below the game's folder main_exe_dir() looks for the exe: the folder OptiScaler goes into is at most this
+# many levels down. guard.py scans at least as deep (review H4: it stopped one level short).
+EXE_DEPTH = 5
+# exes that are never the game: matched as whole words or name endings, not anywhere in the name (review low: "eac"
+# skipped Peaceful.exe, "report" a game named Reporter, "crash" Crashlands)
+MAIN_EXE_SKIP = re.compile(r"^(unins\w*|.*crash(report|handler|pad|sender|_?reporter)\w*|.*(easyanticheat|ue4prereq|cefprocess|"
+                           r"dxsetup|vc_?redist|redist)[\w.]*|(.*[^a-z0-9])?(setup|eac|installer|report)([^a-z0-9].*)?|"
+                           r".*(launcher|helper|setup))\.exe$", re.I)
 
 
 # ---- the package ------------------------------------------------------------------------------------------------
@@ -290,7 +302,7 @@ def main_exe_dir(game_dir: str, known_exes: list[str] | None = None) -> str | No
     shipping: list[tuple[bool, int, str]] = []
     for r, d, f in os.walk(game_dir):
         d.sort()                                         # the same folder every time, whatever the file system's order
-        if r.count(os.sep) - base >= 5:
+        if r.count(os.sep) - base >= EXE_DEPTH:
             d[:] = []
         for x in sorted(f):
             lo = x.lower()
@@ -382,6 +394,25 @@ def set_ini(text: str, values: dict[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def ci_path(folder: str, rel: str) -> str:
+    """folder/rel with each part spelled as it already is on disk, matched without case: Windows games (and Wine)
+    don't tell DXGI.dll from dxgi.dll or Plugins/ from plugins/, so ours must replace, back up and undo the game's
+    own file, never sit next to it under another case."""
+    cur = folder
+    for part in rel.replace(os.sep, "/").split("/"):
+        nxt = os.path.join(cur, part)
+        if not os.path.lexists(nxt) and os.path.isdir(cur):
+            lo = part.lower()
+            try:
+                hit = next((x for x in sorted(os.listdir(cur)) if x.lower() == lo), None)
+            except OSError:
+                hit = None
+            if hit:
+                nxt = os.path.join(cur, hit)
+        cur = nxt
+    return cur
+
+
 def _mkdirs(folder: str, rel_dir: str, dirs: list | None) -> None:
     """makedirs for folder/rel_dir, recording each folder that didn't exist yet (so unpatch takes it away again)."""
     if not rel_dir or rel_dir == ".":
@@ -396,27 +427,102 @@ def _mkdirs(folder: str, rel_dir: str, dirs: list | None) -> None:
                 dirs.append(rel)
 
 
-def _put(src: str, dest: str, folder: str, added: list, backed: list, dirs: list | None = None,
-         hashes: dict | None = None) -> None:
+def _fsync_dir(path: str) -> None:
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _save_manifest(folder: str, m: dict) -> None:
+    """The manifest on disk now (written to a temporary name, synced, then renamed): what is in the game folder and
+    which game files are in the backup, also when the helper is stopped or the disk fills up a moment later."""
+    d = os.path.join(folder, STATE)
+    os.makedirs(d, exist_ok=True)
+    tmp = os.path.join(d, "manifest.json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(m, f, indent=1)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, os.path.join(d, "manifest.json"))
+    _fsync_dir(d)
+
+
+def _staged(src: str, folder: str, rel: str) -> str:
+    """src copied (and synced) into the state folder, on the game's file system, so it can be renamed into place in
+    one step: a game file is never left half written."""
+    tmp = os.path.join(folder, STATE, "tmp", rel.replace("/", "__"))
+    os.makedirs(os.path.dirname(tmp), exist_ok=True)
+    shutil.copyfile(src, tmp)
+    with open(tmp, "rb+") as f:
+        os.fsync(f.fileno())
+    return tmp
+
+
+def _put(src: str, dest: str, folder: str, m: dict) -> None:
+    """One file of ours into the game (review H6: the manifest is written before each step, so a stopped helper or
+    a full disk never loses a game file). In order: a game file in the way is recorded as backed up (with its
+    sha256), then moved into the backup; ours is copied into the state folder, recorded with its sha256, then
+    renamed into place."""
+    added, backed, hashes = m["added"], m["backed"], m["sha256"]
+    bshas = m.setdefault("backup_sha256", {})
+    dest = ci_path(folder, os.path.relpath(dest, folder))
     rel = os.path.relpath(dest, folder).replace(os.sep, "/")
-    _mkdirs(folder, os.path.dirname(rel), dirs)
+    _mkdirs(folder, os.path.dirname(rel), m.setdefault("dirs", []))
     bak = os.path.join(folder, STATE, "backup", rel)
+    want = downloads.sha256_of(src)
     ours = rel in added
-    if ours and hashes is not None and rel in hashes and os.path.isfile(dest) and \
-            downloads.sha256_of(dest) != hashes[rel]:
+    if ours and rel in hashes and os.path.isfile(dest) and downloads.sha256_of(dest) not in (hashes[rel], want):
         ours = False      # ours once, replaced since (a game update): the game's file now, backed up afresh
     if os.path.lexists(dest) and not ours:
         os.makedirs(os.path.dirname(bak), exist_ok=True)
-        if not os.path.exists(bak) or rel in added:
-            os.replace(dest, bak)
+        have = downloads.sha256_of(dest) if os.path.isfile(dest) else ""
+        if os.path.exists(bak) and rel not in backed:
+            # a backup no manifest lists (a run stopped before this version kept its manifest up to date)
+            old = downloads.sha256_of(bak)
+            if have == want:            # the file in place is ours from that run: the backup is the game's
+                backed.append(rel)
+                bshas[rel] = old
+                _save_manifest(folder, m)
+                ours = True
+            elif old != have:           # the game has another file now: the old copy is kept aside, never deleted
+                stale = os.path.join(folder, STATE, "stale", rel)
+                os.makedirs(os.path.dirname(stale), exist_ok=True)
+                os.replace(bak, stale)
+        if not ours and (not os.path.exists(bak) or rel in added or rel not in backed):
             if rel not in backed:
                 backed.append(rel)
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    shutil.copyfile(src, dest)
+            bshas[rel] = have
+            _save_manifest(folder, m)
+            os.replace(dest, bak)
+            _fsync_dir(os.path.dirname(bak))
+    tmp = _staged(src, folder, rel)
     if rel not in added:
         added.append(rel)
-    if hashes is not None:
-        hashes[rel] = downloads.sha256_of(dest)
+    hashes[rel] = want
+    _save_manifest(folder, m)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    os.replace(tmp, dest)
+
+
+def _put_text(text: str, dest: str, folder: str, m: dict) -> None:
+    """A file GameCove writes itself (OptiScaler.ini, fakenvapi.ini) the same way as _put."""
+    work = os.path.join(folder, STATE, "tmp")
+    os.makedirs(work, exist_ok=True)
+    src = os.path.join(work, "text-" + os.path.basename(dest))
+    with open(src, "w", encoding="utf-8") as f:
+        f.write(text)
+    try:
+        _put(src, dest, folder, m)
+    finally:
+        if os.path.exists(src):
+            os.remove(src)
 
 
 def fsr4_xmx_missing(home: str) -> list[str]:
@@ -747,23 +853,28 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
         if not r.get("ok"):
             return {"ok": False, "error": f"taking out OptiScaler {m.get('version')} first: {r.get('error')}"}
         m = None
+    fresh = m is None
     m = m or {"version": version, "layout": layout, "dll": None, "added": [], "backed": [], "dirs": [], "sha256": {}}
-    added, backed = m["added"], m["backed"]
+    added = m["added"]
+    m.setdefault("backed", [])
     dirs = m.setdefault("dirs", [])
     hashes = m.setdefault("sha256", {})
+    m.setdefault("backup_sha256", {})
     sub = "OptiScaler/" if layout == "subfolder" else ""        # where OptiScaler's libraries (and FSR 4's) go
     try:
         dll = m.get("dll")
         if not dll:
+            taken = {x.lower() for x in os.listdir(folder)}
             for name in dict.fromkeys([*(x.lower() for x in proxies or [] if x.lower() in PROXIES), *PROXIES]):
-                p = os.path.join(folder, name)
-                if not os.path.exists(p):
+                if name not in taken:
                     dll = name
                     break
             if not dll:
                 return {"ok": False, "error": f"every proxy name ({', '.join(PROXIES)}) is taken in {folder}"}
-        os.makedirs(os.path.join(folder, STATE), exist_ok=True)
-        _put(os.path.join(pkg, "OptiScaler.dll"), os.path.join(folder, dll), folder, added, backed, dirs, hashes)
+        # the manifest first, before anything in the folder changes (review H6)
+        m.update({"version": version, "layout": layout, "dll": dll, "preset": preset, "ini": ini, "state": "patching"})
+        _save_manifest(folder, m)
+        _put(os.path.join(pkg, "OptiScaler.dll"), os.path.join(folder, dll), folder, m)
         for r, d, f in os.walk(pkg):
             for x in f:
                 rel = os.path.relpath(os.path.join(r, x), pkg).replace(os.sep, "/")
@@ -771,7 +882,7 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
                     continue
                 if (fsr4_xmx or fsr4_amd) and rel == sub + "amd_fidelityfx_upscaler_dx12.dll":
                     continue
-                _put(os.path.join(r, x), os.path.join(folder, rel), folder, added, backed, dirs, hashes)
+                _put(os.path.join(r, x), os.path.join(folder, rel), folder, m)
         # FSR 4 on XMX: nitec's upscaler instead of AMD's, with what it needs; or AMD's back when switched away.
         # The upscaler and fsr-original.dll sit where OptiScaler loads its libraries from (OptiScaler/ in the
         # subfolder layout); GameCove's cabinet.dll and Wine's own as cabinet_wine.dll next to the exe, where Wine
@@ -779,16 +890,15 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
         xdir = os.path.join(home, FSR4_XMX_DIR)
         extra = (sub + "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll")
         if fsr4_amd:                          # GameCove, AMD: AMD's own FSR SDK 2.4 upscaler instead of the package's
-            _put(os.path.join(home, FSR4_AMD_DIR, FSR4_AMD_FILE), os.path.join(folder, sub + FSR4_AMD_FILE), folder,
-                 added, backed, dirs, hashes)
+            _put(os.path.join(home, FSR4_AMD_DIR, FSR4_AMD_FILE), os.path.join(folder, sub + FSR4_AMD_FILE), folder, m)
         if fsr4_xmx:
             for f in FSR4_XMX_FILES:
-                _put(os.path.join(xdir, f), os.path.join(folder, sub + f), folder, added, backed, dirs, hashes)
-            _put(own_cabinet(home), os.path.join(folder, "cabinet.dll"), folder, added, backed, dirs, hashes)
+                _put(os.path.join(xdir, f), os.path.join(folder, sub + f), folder, m)
+            _put(own_cabinet(home), os.path.join(folder, "cabinet.dll"), folder, m)
             wcab = os.path.join(xdir, "cabinet_wine.dll")
             wcab = wcab if os.path.isfile(wcab) else _proton_cabinet(home)
             if wcab:
-                _put(wcab, os.path.join(folder, "cabinet_wine.dll"), folder, added, backed, dirs, hashes)
+                _put(wcab, os.path.join(folder, "cabinet_wine.dll"), folder, m)
         else:
             for f in extra:
                 if f in added and os.path.exists(os.path.join(folder, f)):
@@ -796,13 +906,9 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
                         os.remove(os.path.join(folder, f))
                     added.remove(f)
                     hashes.pop(f, None)
+                    _save_manifest(folder, m)
         ini_text = open(os.path.join(pkg, "OptiScaler.ini"), "r", encoding="utf-8", errors="replace").read()
-        ini_path = os.path.join(folder, "OptiScaler.ini")
-        with open(ini_path, "w", encoding="utf-8") as f:
-            f.write(set_ini(ini_text, {**BASE_INI, **ini}))
-        if "OptiScaler.ini" not in added:
-            added.append("OptiScaler.ini")
-        hashes["OptiScaler.ini"] = downloads.sha256_of(ini_path)
+        _put_text(set_ini(ini_text, {**BASE_INI, **ini}), os.path.join(folder, "OptiScaler.ini"), folder, m)
         # low latency always on: the game's Reflex becomes XeLL through fakenvapi, forced on even where the game's
         # menu leaves Reflex off (xess-xmx-linux's shim then runs XeLL on the frames)
         fk = os.path.join(folder, "fakenvapi.ini")
@@ -810,19 +916,20 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
             t = open(fk, "r", encoding="utf-8", errors="replace").read()
             want = force_reflex                        # Intel: "2", XeLL in every game (maintainer, 2026-11-04)
             t = re.sub(r"(?m)^force_reflex=.*$", f"force_reflex={want}", t) if re.search(r"(?m)^force_reflex=", t) else t + f"\nforce_reflex={want}\n"
-            with open(fk, "w", encoding="utf-8") as f:
-                f.write(t)
-            hashes["fakenvapi.ini"] = downloads.sha256_of(fk)
-        m.update({"version": version, "layout": layout, "dll": dll, "preset": preset, "ini": ini, "added": added,
-                  "backed": backed, "dirs": dirs, "sha256": hashes})
-        with open(os.path.join(folder, STATE, "manifest.json"), "w", encoding="utf-8") as f:
-            json.dump(m, f, indent=1)
+            _put_text(t, fk, folder, m)
+        m["state"] = "done"
+        _save_manifest(folder, m)
+        shutil.rmtree(os.path.join(folder, STATE, "tmp"), ignore_errors=True)
         for rel in added + [STATE] + [x for x in dirs if "/" not in x]:
             p = os.path.join(folder, rel)
             if os.path.exists(p):
                 userexec.chown_tree(p, home)
     except OSError as e:
-        return {"ok": False, "error": f"putting OptiScaler into {folder}: {e}"}
+        # a full disk, a read-only file: the game goes back to how it was before this call when it had nothing of
+        # ours yet; a game that had our files keeps a manifest that lists exactly what is there, for the next try
+        undone = unpatch(folder, home) if fresh else {"ok": False}
+        back = " The game's files are as they were." if undone.get("ok") else ""
+        return {"ok": False, "error": f"putting OptiScaler into {folder}: {e}.{back}"}
     log.info("OptiScaler %s (%s) into %s as %s (%s)", version, layout, folder, dll, preset)
     return {"ok": True, "dll": dll, "dll_override": dll[:-4], "folder": folder, "version": version, "layout": layout}
 
@@ -834,8 +941,10 @@ def unpatch(folder: str | None, home: str | None = None) -> dict:
     Returns {"ok", "removed", "kept": [files left because they changed], "error"}."""
     m = _manifest(folder) if folder else None
     if not m:
-        return {"ok": True, "removed": False, "kept": []}
-    errors, kept = [], []
+        if not folder or not os.path.isdir(os.path.join(folder, STATE)):
+            return {"ok": True, "removed": False, "kept": []}
+        m = {}                            # stopped before the first manifest was in place: only backups to look at
+    errors, kept, saved = [], [], []
     hashes = m.get("sha256") or {}
     pkg = package_dir(home, m.get("version", "")) if home and m.get("version") else None
 
@@ -851,35 +960,62 @@ def unpatch(folder: str | None, home: str | None = None) -> dict:
             if not os.path.isfile(p):
                 continue
             want = hashes.get(rel) or source_sha(rel)
-            if not want or downloads.sha256_of(p) != want:
+            mine = rel in OWN_CONFIGS and rel not in m.get("backed", [])
+            changed = not want or downloads.sha256_of(p) != want
+            if changed and not mine:
                 kept.append(rel)          # changed since GameCove put it there (or can't tell): not ours to delete
                 continue
+            if changed and home:
+                saved.append(_keep_edited(home, folder, rel))     # the player's own tuning: a copy, out of the game
             os.remove(p)
         except OSError as e:
             errors.append(f"{rel}: {e}")
-    for rel in m.get("backed", []):
-        bak = os.path.join(folder, STATE, "backup", rel)
+    bdir = os.path.join(folder, STATE, "backup")
+    bshas = m.get("backup_sha256") or {}
+    listed = [str(x) for x in m.get("backed", [])]
+    # backups no manifest lists (a run stopped before this version kept its manifest current) are game files too
+    orphans = []
+    for r, _d, f in os.walk(bdir):
+        for x in f:
+            rel = os.path.relpath(os.path.join(r, x), bdir).replace(os.sep, "/")
+            if rel not in listed:
+                orphans.append(rel)
+    for rel in listed + orphans:
+        bak = os.path.join(bdir, rel)
         target = os.path.join(folder, rel)
+        if not os.path.lexists(bak):
+            continue                      # recorded, then stopped before the move: the game's file never left
         if os.path.lexists(target):
-            if rel not in kept:
+            if os.path.isfile(target) and downloads.sha256_of(target) == downloads.sha256_of(bak):
+                os.remove(bak)            # the same bytes are in place: nothing to put back
+            elif rel not in kept:
                 kept.append(rel)          # a newer file is there (a game update): the old backup never goes over it
             continue
         try:
             os.replace(bak, target)
+            if bshas.get(rel) and downloads.sha256_of(target) != bshas[rel]:
+                log.warning("OptiScaler undo in %s: %s came back with other bytes than were backed up", folder, rel)
         except OSError as e:
             errors.append(f"restoring {rel}: {e}")
     if kept:
         log.info("OptiScaler undo in %s kept changed files: %s", folder, ", ".join(kept))
     # what OptiScaler and its helpers write while the game runs: gone too, so the folder is as the game shipped it
     # (maintainer, 2026-11-04: "uninstall removes everything we installed and reverts everything back")
-    for pat in RUNTIME_FILES:
-        for p in glob.glob(os.path.join(glob.escape(folder), pat)):
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        names = []
+    backed_lo = {str(x).lower() for x in m.get("backed", [])}
+    for x in names:                      # matched without case, as Wine writes them
+        if any(fnmatch.fnmatch(x.lower(), pat.lower()) for pat in RUNTIME_FILES) and x.lower() not in backed_lo:
             try:
-                if os.path.isfile(p) and os.path.relpath(p, folder) not in m.get("backed", []):
-                    os.remove(p)
+                if os.path.isfile(os.path.join(folder, x)):
+                    os.remove(os.path.join(folder, x))
             except OSError:
                 pass
-    shutil.rmtree(os.path.join(folder, "D3D12_Optiscaler"), ignore_errors=True)
+    for x in names:
+        if x.lower() == "d3d12_optiscaler":
+            shutil.rmtree(os.path.join(folder, x), ignore_errors=True)
     # the folders GameCove created (manifest "dirs", deepest first): OptiScaler/ of the subfolder layout goes with
     # whatever OptiScaler wrote into it (its caches, logs); any other only when empty
     for rel in sorted(m.get("dirs") or [], key=lambda x: x.count("/"), reverse=True):
@@ -897,5 +1033,42 @@ def unpatch(folder: str | None, home: str | None = None) -> dict:
         except OSError:
             pass
     if not errors:
-        shutil.rmtree(os.path.join(folder, STATE), ignore_errors=True)
-    return {"ok": not errors, "removed": True, "kept": kept, "error": "; ".join(errors) or None}
+        _drop_state(folder)
+    return {"ok": not errors, "removed": True, "kept": kept, "saved": saved, "error": "; ".join(errors) or None}
+
+
+KEPT_CONFIGS = ".local/share/gamecove/optiscaler-settings"
+
+
+def _keep_edited(home: str, folder: str, rel: str) -> str:
+    """A copy of a config the player changed in OptiScaler's own menu, in GameCove's data folder (named after the
+    game folder), before undo takes it out of the game."""
+    tag = re.sub(r"[^A-Za-z0-9._-]+", "_", folder.strip(os.sep))[-120:]
+    dest = os.path.join(home, KEPT_CONFIGS, tag, rel)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    shutil.copyfile(os.path.join(folder, rel), dest)
+    userexec.chown_tree(os.path.join(home, KEPT_CONFIGS), home)
+    return dest
+
+
+def _drop_state(folder: str) -> None:
+    """The state folder goes, but a backup that couldn't be put back (a newer game file is in its place) or a stale
+    copy is never deleted unchecked: those stay in .gamecove-optiscaler/ with the manifest gone (so the folder
+    reads as having nothing of ours)."""
+    st = os.path.join(folder, STATE)
+    for name in ("manifest.json", "manifest.json.tmp"):
+        try:
+            os.remove(os.path.join(st, name))
+        except OSError:
+            pass
+    shutil.rmtree(os.path.join(st, "tmp"), ignore_errors=True)
+    for sub in ("backup", "stale"):
+        for r, _d, _f in sorted(os.walk(os.path.join(st, sub)), key=lambda t: t[0].count(os.sep), reverse=True):
+            try:
+                os.rmdir(r)
+            except OSError:
+                pass
+    try:
+        os.rmdir(st)
+    except OSError:
+        pass

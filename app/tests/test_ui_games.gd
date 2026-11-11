@@ -560,6 +560,12 @@ func test_home_action() -> void:
 
 # ------------------------------------------------------------ session wiring
 
+class FakeCtx extends RefCounted:
+	var ctx: Dictionary
+	func _init(c: Dictionary) -> void:
+		ctx = c
+
+
 func test_session_wiring() -> void:
 	var perf := Recorder.new()
 	var ach := Recorder.new()
@@ -590,6 +596,15 @@ func test_session_wiring() -> void:
 	eq(lib.calls[-1], ["set_background_paused", false], "the background fill goes on")
 	w.game_ended(_epic_game())
 	eq(ach.calls.size(), 1, "no Steam stats for other stores")
+	# the perf controls learn which game runs: its upscaler files wait until it has quit (review M7)
+	var seen := []
+	var holder := {"ctx": {"upscale_running": func(k): seen.append(k)}}
+	var w2 := SessionWiring.new()
+	w2.setup({"launcher": Recorder.new()})
+	w2.controls = FakeCtx.new(holder["ctx"])
+	w2.game_started(_steam_game(), 42)
+	w2.game_ended(_steam_game())
+	eq(seen, ["steam:42", ""], "told at start and at the end")
 	var empty := SessionWiring.new()
 	empty.setup({})
 	empty.game_started(_steam_game(), 1)

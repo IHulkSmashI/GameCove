@@ -313,7 +313,19 @@ def build_doc(defs, rows):
         e.pop("schema", None)
         e["devices"] = resolved_devices(e, rows)
         fixes.append(e)
-    return {"_about": ABOUT, "schema": DATA_SCHEMA, "version": 1, "fixes": fixes}
+    return {"_about": ABOUT, "schema": DATA_SCHEMA, "version": 1, "serial": bundled_serial(fixes), "fixes": fixes}
+
+
+def bundled_serial(fixes):
+    """The built-in definitions' serial: midnight UTC of the newest "audited" date among them. A nightly release
+    (tools/fixes/audit.py: serial = the time of its run) made before that is older than what this GameCove carries,
+    and the app refuses it (fix_data.gd accept, review 6 M2)."""
+    import calendar
+    dates = sorted(str(e.get("audited") or "") for e in fixes if re.match(r"^\d{4}-\d\d-\d\d$", str(e.get("audited") or "")))
+    if not dates:
+        return 1
+    y, m, d = (int(x) for x in dates[-1].split("-"))
+    return calendar.timegm((y, m, d, 0, 0, 0))
 
 
 def render_json(doc):

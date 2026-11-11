@@ -27,7 +27,10 @@ Summary:        Controller-first home screen for Linux handhelds
 # (notice in fixes/claw8ex-vrr/LICENSE.ClawLab-MIT). The LZMS cabinet.dll (tools/cabinet-lzms,
 # with wimlib's LZMS decoder) is LGPL-2.1-or-later, its helpers MIT. bin/fsr4-xmx holds nitec's
 # FSR 4.1.2 build for Intel XMX (OptiScaler community; made from AMD's FidelityFX SDK upscaler,
-# shared with his OK, shipped unmodified): LicenseRef-FSR4-XMX. Bundled in the app: Godot Engine
+# shipped unmodified): LicenseRef-FSR4-XMX. bin/upscalers holds AMD's FidelityFX SDK DLLs under AMD's
+# binary licence (LICENSES/AMD-FidelityFX-SDK-license.md): LicenseRef-AMD-FidelityFX-SDK, and, inside
+# OptiScaler's archives, Intel's XeSS, XeSS-FG and XeLL libraries under the Intel Simplified
+# Software License: LicenseRef-Intel-ISSL. Bundled in the app: Godot Engine
 # 4.7.2's export template (MIT, plus the components in LICENSES/Godot-COPYRIGHT.txt:
 # Apache-2.0, BSD-2/3-Clause, Zlib, MPL-2.0, BSL-1.0, FTL, IJG, Unlicense, CC-BY-4.0
 # and a few project licences grouped as LicenseRef-Godot-thirdparty), the OFL-1.1
@@ -37,7 +40,7 @@ Summary:        Controller-first home screen for Linux handhelds
 # trademarks, not GPL-licensed (app/assets/brand/LICENSE.md): LicenseRef-Trademarked-logos.
 # The one bundled device picture (app/assets/device_photos/acer-nitro-blaze-8.webp, bundled because no
 # linkable head-on image exists) is the maker's, not GPL-licensed (CREDITS.md): LicenseRef-Maker-image.
-License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND OFL-1.1 AND CC0-1.0 AND LGPL-2.1-or-later AND LicenseRef-Fedora-Public-Domain AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND Zlib AND MPL-2.0 AND BSL-1.0 AND FTL AND IJG AND Unlicense AND CC-BY-4.0 AND LicenseRef-Godot-thirdparty AND LicenseRef-Trademarked-logos AND LicenseRef-Maker-image AND LicenseRef-FSR4-XMX
+License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND OFL-1.1 AND CC0-1.0 AND LGPL-2.1-or-later AND LicenseRef-Fedora-Public-Domain AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND Zlib AND MPL-2.0 AND BSL-1.0 AND FTL AND IJG AND Unlicense AND CC-BY-4.0 AND LicenseRef-Godot-thirdparty AND LicenseRef-Trademarked-logos AND LicenseRef-Maker-image AND LicenseRef-FSR4-XMX AND LicenseRef-AMD-FidelityFX-SDK AND LicenseRef-Intel-ISSL
 URL:            https://github.com/IHulkSmashI/gamecove
 Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 Source1:        %{url}/releases/download/v%{version}/%{name}-%{version}-x86_64.tar.gz

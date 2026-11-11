@@ -2913,8 +2913,18 @@
       "pl2_offset_w": 2
     },
     {
-      "match": ["*Ultra*2??H*", "*Ultra*2??U*"],
-      "chip": "Intel Arrow Lake",
+      "match": ["*Ultra*2??H*"],
+      "chip": "Intel Arrow Lake-H",
+      "cpu_vendor": "intel",
+      "gpu_family": "intel-xe-lpg",
+      "gpu_arch": "Xe-LPG",
+      "xmx": true,
+      "tdp": {"min": 8, "battery_max": 28, "plugged_max": 35},
+      "pl2_offset_w": 2
+    },
+    {
+      "match": ["*Ultra*2??U*"],
+      "chip": "Intel Arrow Lake-U",
       "cpu_vendor": "intel",
       "gpu_family": "intel-xe-lpg",
       "gpu_arch": "Xe-LPG",
@@ -2930,6 +2940,16 @@
       "gpu_arch": "Xe-LPG",
       "xmx": false,
       "tdp": {"min": 8, "battery_max": 28, "plugged_max": 35},
+      "pl2_offset_w": 2
+    },
+    {
+      "match": ["*i?-12??U*", "*i?-12??P*", "*i?-12??H*"],
+      "chip": "Intel Alder Lake",
+      "cpu_vendor": "intel",
+      "gpu_family": "intel-xe-lp",
+      "gpu_arch": "Xe-LP",
+      "xmx": false,
+      "tdp": {"min": 8, "battery_max": 25, "plugged_max": 28},
       "pl2_offset_w": 2
     }
   ]

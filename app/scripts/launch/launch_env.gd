@@ -85,7 +85,11 @@ static func resolve_upscaler(choice: String, gpu_family: String, xmx_ready: bool
 ## proton:   Proton.classify()/resolve() result
 ## host:     {"xess_xmx": bool, "low_latency_layer": bool}
 ## game:     {"anticheat": bool, "base_fps": int (-1 unknown), "extra_env": Dictionary,
-##            "frame_gen_on": bool (lsfg-vk / OptiScaler frame generation is on)}
+##            "frame_gen_on": bool (lsfg-vk / OptiScaler frame generation is on),
+##            "upscale_native": bool (the player picked Native for this game)}
+## A game with anti-cheat, or set to Native, gets no variable that swaps its
+## upscaler (Proton's FSR 4 upgrade, Proton's OptiScaler, FSR on XeSS) and,
+## with anti-cheat, no frame generation either: nothing replaces a game file.
 ## options:  {"indicator": bool}
 ## Returns {"env", "upscaler", "frame_gen", "low_latency", "low_latency_forced",
 ## "conflicts": [{id, message}], "notes": [String]}.
@@ -99,6 +103,7 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 	var native := flavour == "native"
 	var xmx_ready: bool = family in INTEL and bool(device.get("xmx", false)) and bool(host.get("xess_xmx", false))
 	var anticheat: bool = game.get("anticheat", false)
+	var hands_off: bool = anticheat or bool(game.get("upscale_native", false))
 	var picked := choice_for_gpu(str(settings.get("upscaler", "auto")), family)
 	var choice: String = picked[0]
 	if picked[1] != "":
@@ -125,7 +130,9 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 	if native:
 		notes.append("Native Linux game: Proton settings don't apply.")
 	elif family in AMD:
-		if upscaler == "fsr":
+		if upscaler == "fsr" and hands_off:
+			notes.append("Off for this game: it uses anti-cheat." if anticheat else "Native: the game's own FSR runs as it shipped.")
+		elif upscaler == "fsr":
 			var v := fsr4_var(family, proton)
 			if v != "":
 				env[v] = "1"
@@ -143,9 +150,9 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 		if bool(device.get("xmx", false)) and not bool(host.get("xess_xmx", false)) and (upscaler == "xess" or frame_gen):
 			notes.append("Install the XeSS XMX driver (xess-xmx-linux) to run XeSS on the XMX cores.")
 		if xmx_ready:
-			if upscaler == "fsr":
+			if upscaler == "fsr" and not hands_off:
 				env["FSR"] = "xess"
-			if frame_gen:
+			if frame_gen and not anticheat:
 				env["XESS_FG"] = "2"
 				if upscaler != "fsr":
 					env["FSR_FG"] = "xess"
@@ -157,12 +164,16 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 		if choice == "xess" and bundles_optiscaler(proton):
 			if anticheat:
 				notes.append("OptiScaler left out: this game has anti-cheat.")
+			elif hands_off:
+				notes.append("OptiScaler left out: this game is set to Native.")
 			else:
 				env["PROTON_USE_OPTISCALER"] = "1"
+	elif family == "nvidia":
+		notes.append("NVIDIA: the game's own DLSS, frame generation and Reflex are left alone.")
 	else:
 		notes.append("Unknown GPU: only the game's own settings apply.")
 
-	if low_latency and not native and family != "":
+	if low_latency and not native and family != "" and family != "nvidia":
 		if bundles_low_latency_layer(proton) or bool(host.get("low_latency_layer", false)):
 			env["LOW_LATENCY_LAYER"] = "1"
 

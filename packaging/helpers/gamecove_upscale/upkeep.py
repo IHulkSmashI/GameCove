@@ -133,7 +133,8 @@ def update(home: str, gpu: dict, only: str | None = None) -> dict:
     games.prune(home)
     errors = [f"{mirror.NAMES.get(k, k)}: {r.get('error')}" for k, r in res.items() if not r.get("ok")]
     outdated_games = []
-    for key, folder in games.load_state(home)["opti_games"].items():
+    for key in list(games.load_state(home)["opti_games"]):
+        folder = games.tracked_folder(home, key)
         entry = games._opti_entry(games.get_launch(home, key), home)
         if games.game_outdated(folder, entry):
             outdated_games.append(key)
@@ -173,7 +174,7 @@ def storage(home: str) -> dict:
     if xmx:
         parts.append({"name": "XeSS XMX driver", "path": xmx[0], "bytes": sum(_du(p) for p in xmx)})
     s = games.load_state(home)
-    in_games = [k for k, folder in s["opti_games"].items() if optiscaler.owner(folder)["owner"] == "gamecove"]
+    in_games = [k for k in s["opti_games"] if optiscaler.owner(games.tracked_folder(home, k))["owner"] == "gamecove"]
     bundle = downloads.bundle_info()
     return {"ok": True, "bytes": sum(p["bytes"] for p in parts), "parts": parts, "folder": root, "games": len(in_games),
             "bundle_bytes": int(bundle.get("bytes") or 0), "bundle_files": int(bundle.get("files") or 0)}

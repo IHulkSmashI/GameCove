@@ -26,7 +26,7 @@ done <"$CHECK_OUT/list.txt"
 deny='system.sleep system.screenshot system.keep_awake network.airplane network.wifi network.bluetooth
 display.refresh_rate display.refresh_unlock display.rotation display.hdr display.hdr_itm
 power.smt power.cpu_cores power.sleep_mode power.mcu_powersave power.fan_curve
-controller.reset_layout controller.rumble_test perf.clear_shader_cache perf.upscale_active perf.upscale_menu perf.upscale_undo
+controller.reset_layout controller.rumble_test perf.clear_shader_cache perf.upscale_active perf.upscale_menu perf.upscale_undo perf.upscale_offer
 perf.wrapper_remove_all perf.launch_wrapper perf.proton controller.desktop_mode'
 ids="${GC_PROBE:-}"
 if [ -z "$ids" ]; then

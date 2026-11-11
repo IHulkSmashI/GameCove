@@ -129,13 +129,12 @@ def slug(name: str) -> str:
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "packaging", "helpers"))
-ANTICHEAT_RE = re.compile(r"\b(anti-?cheat|EAC|easy anti-?cheat|battleye|vanguard)\b", re.I)
 SCHEMA = 2
 
 
 def compat_rows(wiki: str) -> dict:
     """OptiScaler's Compatibility List with each game's page folded in."""
-    from gamecove_upscale import livedb
+    from gamecove_upscale import gamedb, livedb
     with open(os.path.join(wiki, "Compatibility-List.md"), encoding="utf-8") as f:
         text = f.read()
     rows = livedb.parse_compat(text)
@@ -152,8 +151,9 @@ def compat_rows(wiki: str) -> dict:
             row["optipatcher"] = True
         if r.get("reframework"):
             row["reframework"] = True
-        # "Make sure EAC is disabled" is a game that runs with it off; only a not-working row counts as anti-cheat
-        if r["status"] == "broken" and ANTICHEAT_RE.search(r["notes"]):
+        # a note naming an anti-cheat ("EAC active", "disable BattlEye", "anti-cheat will block it") counts as
+        # anti-cheat whatever the status (review H2): a game that only runs with it off is still an anti-cheat game
+        if gamedb.anticheat_note(r["notes"]):
             row["anticheat"] = True
         if r.get("slug"):
             row["slug"] = r["slug"]
@@ -165,6 +165,12 @@ def compat_rows(wiki: str) -> dict:
                     row["proxies"] = pg["proxies"]
                 if pg.get("issues"):
                     row["issues"] = [i[:200] for i in pg["issues"][:3]]
+        # "Online game, use at your own risk!", or an anti-cheat that has to be switched off: never set up by
+        # itself, the player opts in per game (gamedb.online_risk, review H5)
+        if not row.get("anticheat") and gamedb.anticheat_note(row["notes"], row.get("issues")):
+            row["anticheat"] = True
+        if not row.get("anticheat") and gamedb.online_risk(row["notes"], row.get("issues")):
+            row["online"] = True
         out[key] = row
     return out
 

@@ -18,6 +18,7 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PINS = os.path.join(ROOT, "packaging", "helpers", "gamecove_upscale", "data", "versions.json")
 MANIFEST = "set.json"
+MAX_FILE = 256 << 20                    # nitec's upscaler is ~100 MB
 
 
 def entry() -> dict:
@@ -68,9 +69,17 @@ def fetch(dest: str, opener=urllib.request.urlopen) -> int:
     for name, sha in e["files"].items():
         url = e["base"].rstrip("/") + "/" + name
         path = os.path.join(dest, name)
+        total = 0
         with opener(url, timeout=300) as r, open(path, "wb") as f:
             while chunk := r.read(1 << 20):
+                total += len(chunk)
+                if total > MAX_FILE:            # never more than a pinned file can be (review 6 low)
+                    break
                 f.write(chunk)
+        if total > MAX_FILE:
+            os.remove(path)
+            print(f"{name}: larger than {MAX_FILE} bytes, stopped", file=sys.stderr)
+            return 1
         got = sha256_of(path)
         if got != sha:
             os.remove(path)

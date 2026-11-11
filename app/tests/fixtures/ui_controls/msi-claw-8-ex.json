@@ -2333,6 +2333,27 @@
    "value": null
   },
   {
+   "apply_order": 4,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "For games we don't set up by ourselves: online games and games we don't know yet. Nothing goes in until you press this.",
+   "id": "perf.upscale_offer",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Add our pick to this game",
+   "unit": "",
+   "value": null
+  },
+  {
    "apply_order": 0,
    "available": false,
    "default": null,

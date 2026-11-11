@@ -64,6 +64,9 @@ a|
 """
 
 
+_REAL_DOWNLOAD = downloads.download
+
+
 def _w(path, value):
     os.makedirs(os.path.dirname(str(path)), exist_ok=True)
     with open(path, "w") as f:
@@ -350,6 +353,10 @@ def test_reframework_never_overwrites_a_foreign_dinput8(tmp_path, monkeypatch):
     r = reframework.install(str(tmp_path), str(folder), {"repo": "praydog/REFramework-nightly", "tag": "t1"})
     assert not r["ok"] and "isn't GameCove's" in r["error"]
     os.remove(folder / "dinput8.dll")
+    _w(folder / "DINPUT8.DLL", "reshade")                   # the same file to Wine, whatever its case
+    r = reframework.install(str(tmp_path), str(folder), {"repo": "praydog/REFramework-nightly", "tag": "t1"})
+    assert not r["ok"] and "isn't GameCove's" in r["error"] and sorted(os.listdir(folder)) == ["DINPUT8.DLL"]
+    os.remove(folder / "DINPUT8.DLL")
     src = tmp_path / "unpacked"
     _w(src / "dinput8.dll", "refw")
     monkeypatch.setattr(downloads, "fetch", lambda e, w, a=False: {"tag": "t1", "repo": e["repo"], "archive": "REFramework.zip", "dir": str(src)})
@@ -486,6 +493,180 @@ def test_optiscaler_patch_and_unpatch_leave_the_game_as_it_was(tmp_path, monkeyp
     assert optiscaler.unpatch(str(g))["removed"]
     assert sorted(p.name for p in g.iterdir()) == ["Game.exe", "dxgi.dll", "libxess.dll"]
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess"
+
+
+def _game_with_own_files(tmp_path):
+    g = tmp_path / "game" / "bin"
+    _w(g / "Game.exe", "x" * 100)
+    _w(g / "libxess.dll", "game-own-xess")                       # replaced by OptiScaler's: backed up first
+    _w(g / "amd_fidelityfx_upscaler_dx12.dll", "game-own-fsr")
+    return g
+
+
+def _snapshot(d):
+    out = {}
+    for r, _dirs, files in os.walk(d):
+        for x in files:
+            out[os.path.relpath(os.path.join(r, x), d)] = open(os.path.join(r, x), "rb").read()
+    return out
+
+
+class _Killed(BaseException):
+    """The helper process stopped mid-way (SIGKILL, power loss): no except clause of the helper runs."""
+
+
+@pytest.mark.parametrize("stop_at", range(1, 9))
+def test_a_patch_stopped_mid_way_never_loses_a_game_file(tmp_path, monkeypatch, stop_at):
+    """Review H6: the manifest was written only at the end, so a stopped patch, then a patch and Native, deleted
+    the backup of the game's own file. The helper is stopped at every step of the patch in turn."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    before = _snapshot(g)
+    real, calls = os.replace, {"n": 0}
+
+    def replace(a, b):
+        calls["n"] += 1
+        if calls["n"] == stop_at:
+            raise _Killed()
+        return real(a, b)
+    monkeypatch.setattr(optiscaler.os, "replace", replace)
+    with pytest.raises(_Killed):
+        optiscaler.patch(home, str(g), "0.9.4", {"Upscalers_Dx12Upscaler": "xess"})
+    monkeypatch.setattr(optiscaler.os, "replace", real)
+    # the next start sets it up again, then the player picks Native
+    assert optiscaler.patch(home, str(g), "0.9.4", {"Upscalers_Dx12Upscaler": "xess"})["ok"]
+    r = optiscaler.unpatch(str(g), home)
+    assert r["ok"] and r["kept"] == [], r
+    assert _snapshot(g) == before
+    # Native straight after the stop is just as safe
+    monkeypatch.setattr(optiscaler.os, "replace", replace)
+    calls["n"] = 0
+    with pytest.raises(_Killed):
+        optiscaler.patch(home, str(g), "0.9.4", {})
+    monkeypatch.setattr(optiscaler.os, "replace", real)
+    assert optiscaler.unpatch(str(g), home)["ok"] and _snapshot(g) == before
+
+
+def test_a_full_disk_mid_patch_puts_the_game_back(tmp_path, monkeypatch):
+    import errno
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    before = _snapshot(g)
+    real, calls = optiscaler.shutil.copyfile, {"n": 0}
+
+    def copyfile(a, b, *k, **kw):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real(a, b, *k, **kw)
+    monkeypatch.setattr(optiscaler.shutil, "copyfile", copyfile)
+    r = optiscaler.patch(home, str(g), "0.9.4", {})
+    assert r["ok"] is False and "No space left" in r["error"] and "as they were" in r["error"]
+    assert _snapshot(g) == before and optiscaler.owner(str(g))["owner"] is None
+
+
+def test_the_manifest_lists_the_backup_before_the_game_file_moves(tmp_path, monkeypatch):
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    seen = []
+    real = os.replace
+
+    def replace(a, b):
+        if b.endswith(os.path.join("backup", "libxess.dll")):
+            seen.append(json.loads((g / ".gamecove-optiscaler" / "manifest.json").read_text()))
+        return real(a, b)
+    monkeypatch.setattr(optiscaler.os, "replace", replace)
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]
+    assert seen and "libxess.dll" in seen[0]["backed"] and seen[0]["state"] == "patching"
+    assert seen[0]["backup_sha256"]["libxess.dll"] == downloads.sha256_of(str(tmp_path / "game" / "bin" / ".gamecove-optiscaler" / "backup" / "libxess.dll"))
+
+
+def test_undo_never_deletes_a_backup_it_could_not_put_back(tmp_path, monkeypatch):
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]
+    _w(g / "libxess.dll", "game-update-xess")                    # a game update put its own newer file there
+    r = optiscaler.unpatch(str(g), home)
+    assert r["ok"] and "libxess.dll" in r["kept"] and (g / "libxess.dll").read_text().strip() == "game-update-xess"
+    assert (g / ".gamecove-optiscaler" / "backup" / "libxess.dll").read_text().strip() == "game-own-xess"   # kept, not deleted
+    assert optiscaler.owner(str(g))["owner"] is None                                              # nothing of ours left
+
+
+def test_native_after_saving_optiscalers_own_menu_leaves_nothing_behind(tmp_path, monkeypatch):
+    """Review M: saving in OptiScaler's own menu rewrites OptiScaler.ini; undo kept it as "changed", and the folder
+    then read as another tool's OptiScaler, so the game was locked out of ours after Native."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    before = _snapshot(g)
+    assert optiscaler.patch(home, str(g), "0.9.4", {"Upscalers_Dx12Upscaler": "xess"})["ok"]
+    with open(g / "OptiScaler.ini", "a") as f:                  # the menu's Save, in the game
+        f.write("\n[Menu]\nScale=1.5\n")
+    r = optiscaler.unpatch(str(g), home)
+    assert r["ok"] and r["kept"] == [] and _snapshot(g) == before
+    assert optiscaler.owner(str(g))["owner"] is None
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]    # and ours goes in again
+
+
+def test_game_files_are_matched_without_case(tmp_path, monkeypatch):
+    """Review low: names were compared with case, so a game's DXGI.DLL or LIBXESS.DLL wasn't seen: ours went in
+    next to it as dxgi.dll / libxess.dll (two files Wine can't tell apart) and the game's was never backed up."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x" * 100)
+    _w(g / "DXGI.DLL", "game-dxgi")
+    _w(g / "LIBXESS.DLL", "game-own-xess")
+    _w(g / "Plugins" / "game.asi", "game-plugin")
+    before = _snapshot(g)
+    r = optiscaler.patch(home, str(g), "0.9.4", {})
+    assert r["ok"] and r["dll"] == "winmm.dll", r                  # DXGI.DLL is taken, whatever its case
+    names = sorted(os.listdir(g))
+    assert "libxess.dll" not in names and "plugins" not in names and "dxgi.dll" not in names, names
+    assert (g / "LIBXESS.DLL").read_text().strip() == "xess-opti"   # ours, under the game's own spelling
+    assert (g / "Plugins" / "OptiPatcher.asi").exists()
+    _w(g / "optiscaler.LOG", "runtime")
+    assert optiscaler.unpatch(str(g), home)["ok"] and _snapshot(g) == before
+
+
+def test_downloads_and_lists_have_size_caps(tmp_path, monkeypatch):
+    import io
+    from gamecove_upscale import tls
+
+    class Answer(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    monkeypatch.setattr(tls, "urlopen", lambda req, timeout: Answer(b"x" * 5000))
+    monkeypatch.setattr(downloads, "MAX_DOWNLOAD", 4096)
+    dest = str(tmp_path / "big.bin")
+    with pytest.raises(ValueError):
+        _REAL_DOWNLOAD("https://example.com/big.bin", dest)        # the real one (conftest fakes it per test)
+    assert not os.path.exists(dest) and not os.path.exists(dest + ".part")
+    monkeypatch.setattr(downloads, "MAX_API", 4096)
+    with pytest.raises(ValueError):
+        downloads._get("https://api.github.com/x")
+    monkeypatch.setattr(livedb, "MAX_LIST", 4096)
+    with pytest.raises(OSError):
+        livedb._get("https://raw.githubusercontent.com/wiki/x")
 
 
 def test_optiscaler_never_touches_another_tools_install(tmp_path, monkeypatch):
@@ -1160,7 +1341,8 @@ def test_uninstall_restores_igdext_in_prefixes_and_protons(tmp_path):
 
 def test_optiscaler_undo_keeps_files_changed_since(tmp_path, monkeypatch):
     """review S2-3: undo removes only what still matches what GameCove put there, and never puts a stale backup
-    over a file a game update wrote; the user's own OptiScaler.ini edits stay."""
+    over a file a game update wrote; the user's own OptiScaler.ini edits are kept as a copy outside the game (a
+    changed OptiScaler.ini left in the game locked it out of ours after Native)."""
     from gamecove_upscale import optiscaler
     monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
     home = str(tmp_path)
@@ -1177,8 +1359,9 @@ def test_optiscaler_undo_keeps_files_changed_since(tmp_path, monkeypatch):
     r = optiscaler.unpatch(str(g), home)
     assert r["ok"] and r["removed"]
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess-2.0", "the update's file is never deleted or overwritten"
-    assert "; mine" in (g / "OptiScaler.ini").read_text(), "the user's edits stay"
-    assert sorted(r["kept"]) == ["OptiScaler.ini", "libxess.dll"], "and both are reported"
+    assert not (g / "OptiScaler.ini").exists() and "; mine" in open(r["saved"][0]).read(), "the user's edits are kept, outside the game"
+    assert r["saved"][0].startswith(os.path.join(home, optiscaler.KEPT_CONFIGS))
+    assert sorted(r["kept"]) == ["libxess.dll"], "the game's newer file is reported"
     assert not (g / "dxgi.dll").exists() and not (g / "D3D12_Optiscaler").exists(), "unchanged files of ours go"
 
 
@@ -1216,4 +1399,45 @@ def test_optiscaler_undo_of_an_older_manifest_checks_the_package(tmp_path, monke
     r = optiscaler.unpatch(str(g), home)
     assert not (g / "dxgi.dll").exists(), "matches the package's OptiScaler.dll: removed"
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess-2.0" and "libxess.dll" in r["kept"]
-    assert (g / "OptiScaler.ini").exists() and "OptiScaler.ini" in r["kept"], "can't tell: kept"
+    assert not (g / "OptiScaler.ini").exists() and "OptiScaler.ini" not in r["kept"], "our own config: always ours to take out"
+
+
+def test_exe_skip_words_and_generic_unreal_names(tmp_path):
+    """Review low: MAIN_EXE_SKIP matched anywhere in the name ("eac" in Peaceful.exe, "crash" in Crashlands), and a
+    generic Unreal project name ("Game") made any Game-Win64-Shipping.exe a known game."""
+    from gamecove_upscale import optiscaler
+    for name in ("Peaceful.exe", "Crashlands2.exe", "Reporter.exe", "Helpless.exe", "Teacup.exe"):
+        assert not optiscaler.MAIN_EXE_SKIP.search(name.lower()), name
+    for name in ("unins000.exe", "UnityCrashHandler64.exe", "CrashReportClient.exe", "EasyAntiCheat_EOS_Setup.exe",
+                 "vc_redist.x64.exe", "GameLauncher.exe", "Launcher.exe", "setup.exe", "eac_launcher.exe",
+                 "UE4PrereqSetup_x64.exe", "Game_Setup.exe", "bug_report.exe"):
+        assert optiscaler.MAIN_EXE_SKIP.search(name.lower()), name
+    g = tmp_path / "pc"
+    _w(g / "Peaceful.exe", "x" * 5000)
+    _w(g / "unins000.exe", "x" * 9000)
+    assert optiscaler.main_exe_dir(str(g)) == str(g)
+    doc = gamedb.load(os.path.join(ROOT, "data", "games.json"))
+    assert gamedb.match(doc, ["game-win64-shipping.exe"]) is None
+
+
+@pytest.mark.parametrize("bad", ['[]', '"x"', '{"games": {}}', '{"games": [1, "a", null]}', '{"games": [], "compat": []}'])
+def test_lists_of_the_wrong_shape_never_raise(tmp_path, bad):
+    p = tmp_path / "games.json"
+    p.write_text(bad)
+    doc = gamedb.load(str(p))
+    assert gamedb.match(doc, ["x.exe"]) is None and gamedb.knowledge(doc, None, "1", "x")["known"] is False
+    page = '| a | English Title | I | A | N |\n| x | Foo | ✅ | ✅ | ✅ |\n<!-- opticlick-supported-games-meta %s -->'
+    for meta in ('{"games": 5}', '{"games": [5, {"game_name_en": "Foo", "cover_steam_app_ids": 7}]}', '[1]'):
+        assert isinstance(livedb.parse_supported_list(page % meta), dict)
+
+
+def test_the_xmx_proof_and_shim_find_an_sd_card_games_prefix(tmp_path):
+    """Review low: xess.prefix_dir looked only in the default library, so a game on the SD card (whose prefix Steam
+    keeps on the card) never showed the XMX proof."""
+    home = str(tmp_path / "home")
+    sd = tmp_path / "sd"
+    _w(os.path.join(home, ".local/share/Steam/steamapps/libraryfolders.vdf"), f'"libraryfolders"\n{{\n "1"\n {{\n  "path" "{sd}"\n }}\n}}\n')
+    pfx = sd / "steamapps" / "compatdata" / "777" / "pfx" / "drive_c"
+    _w(pfx / "igdext_kernels" / "anv_canary", "ok")
+    assert xess.prefix_dir(home, "777") == str(pfx)
+    assert xess.prefix_dir(home, "778").startswith(os.path.join(home, ".local/share/Steam"))   # none yet: the default

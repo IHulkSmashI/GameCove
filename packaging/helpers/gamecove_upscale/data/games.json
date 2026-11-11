@@ -1987,7 +1987,8 @@
    "issues": [
     "Requires disabling Easy Anti-Cheat for OptiScaler to work.",
     "FSR3 inputs aren't supported."
-   ]
+   ],
+   "anticheat": true
   },
   "achilleslegendsuntold": {
    "name": "Achilles: Legends Untold",
@@ -2219,7 +2220,8 @@
    "issues": [
     "Setting UseNtdllHooks=false might be required for upscaler inputs to be hooked.",
     "On Linux, the ACE anti-cheat triggers using Proton-CachyOS and Proton-GE. Use dwproton instead."
-   ]
+   ],
+   "anticheat": true
   },
   "arksurvivalascended": {
    "name": "Ark: Survival Ascended",
@@ -3067,7 +3069,8 @@
     "XeSS"
    ],
    "notes": "Requires **disabling BattlEye** under Game - More in Funcom Launcher, or launching the game directly through `ConanSandbox-Win64-Shipping.exe`",
-   "optipatcher": true
+   "optipatcher": true,
+   "anticheat": true
   },
   "controlresonant": {
    "name": "CONTROL Resonant",
@@ -3708,7 +3711,8 @@
     "Game has anticheat, so testing on your own responsibility!",
     "Game detects unsupported software and shuts down. Use signed builds of OptiScaler (most of them are).",
     "To fix pixelation of damage numbers, untick the \"Skip Point Filters\" checkbox in the Anisotropic Filtering category of OptiScaler."
-   ]
+   ],
+   "anticheat": true
   },
   "dinoblade": {
    "name": "Dinoblade",
@@ -4135,7 +4139,8 @@
     "DLSS"
    ],
    "notes": "Works only for Singleplayer Tarkov (SPT) mod without EAC.",
-   "slug": "Escape-from-Tarkov-(SPT"
+   "slug": "Escape-from-Tarkov-(SPT",
+   "anticheat": true
   },
   "escapesimulator2demo": {
    "name": "Escape Simulator 2 Demo",
@@ -4730,7 +4735,8 @@
     "FSR3.1",
     "XeSS"
    ],
-   "notes": "**Online game!** Use OptiScaler at your own discretion."
+   "notes": "**Online game!** Use OptiScaler at your own discretion.",
+   "online": true
   },
   "godofwar2018": {
    "name": "God of War (2018)",
@@ -4846,7 +4852,8 @@
     "For OptiScaler to work, requires disabling Battleye anticheat - check the screenshot below",
     "Upscaler presets are hardcoded - overriding won't work",
     "INI settings may not save correctly after recent updates - to fix this, use DirectStorageFix."
-   ]
+   ],
+   "anticheat": true
   },
   "grandtheftautovicecitydefinitiveedition": {
    "name": "Grand Theft Auto: Vice City – Definitive Edition",
@@ -5331,7 +5338,8 @@
     "DLSS",
     "XeSS"
    ],
-   "notes": "Install as `version.dll`. Make sure to use signed build, else anti-cheat will block it."
+   "notes": "Install as `version.dll`. Make sure to use signed build, else anti-cheat will block it.",
+   "anticheat": true
   },
   "influxredux": {
    "name": "Influx Redux",
@@ -5928,7 +5936,8 @@
     "Anti-cheat/anti-tamper seems to block OptiScaler with default naming - use d3d12.dll or dbghelp.dll",
     "FSR2 inputs are not supported",
     "Might require re-toggling FG on every boot as the game tends to disable it"
-   ]
+   ],
+   "anticheat": true
   },
   "marvelsspiderman2": {
    "name": "Marvel's Spider‐Man 2",
@@ -8322,7 +8331,8 @@
    "slug": "Suicide-Squad-Kill-The-Justice-League",
    "proxies": [
     "dxgi.dll"
-   ]
+   ],
+   "anticheat": true
   },
   "sumeriansix": {
    "name": "Sumerian Six",
@@ -9474,7 +9484,8 @@
     "DLSS",
     "FSR3.1"
    ],
-   "notes": "Disable EAC to load OptiScaler."
+   "notes": "Disable EAC to load OptiScaler.",
+   "anticheat": true
   },
   "watchdogs2": {
    "name": "Watch Dogs 2",
@@ -9562,7 +9573,8 @@
    "inputs": [
     "DLSS"
    ],
-   "notes": "**Online game, use at your own risk!**, Opti works as `dxgi.dll`. Devs have broken spoofing, so no access to DLSS and DLSS-FG. Best you can do is XeSS inputs and OptiFG"
+   "notes": "**Online game, use at your own risk!**, Opti works as `dxgi.dll`. Devs have broken spoofing, so no access to DLSS and DLSS-FG. Best you can do is XeSS inputs and OptiFG",
+   "online": true
   },
   "whiskerwood": {
    "name": "Whiskerwood",
@@ -9740,7 +9752,8 @@
     "After patch 3.4, setting UseNtdllHooks=false in OptiScaler.ini is required to avoid startup errors and to hook upscalers properly.",
     "Also requires PreserveSwapchain=false in order to fix XeFG framerate",
     "FSR inputs disable SSR. DLSS or XeSS inputs (read notes) are recommended."
-   ]
+   ],
+   "online": true
   },
   "xuanyuanswordvii": {
    "name": "Xuan-Yuan Sword VII",
@@ -9782,7 +9795,8 @@
     "After July update, devs have added native FSR4 and seem to have broken the FSR4 Update method in the process. Changing any AMD FSR SDK file results in not being able to see FSR4 in OptiScaler.",
     "Launching in DX12 is required to use OptiScaler. The launcher only exposes the option on Nvidia cards. To fix this on AMD/Intel:",
     "FSR 3.1 FG inputs have no HUD and break on opening menus. Use DLSSG via Streamline FG inputs instead."
-   ]
+   ],
+   "online": true
   },
   "zombievilleusa3d": {
    "name": "Zombieville USA 3D",

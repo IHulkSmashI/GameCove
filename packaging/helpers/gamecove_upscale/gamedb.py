@@ -14,18 +14,27 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 DEPTH = 6
 KEY_RE = r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$"
 
 
 def load(path: str) -> dict:
+    """The list, or an empty one when the file is missing, isn't JSON or has the wrong shape (a list, a string, a
+    "games" that isn't a list): never raises (review low)."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             doc = json.load(f)
     except (OSError, ValueError):
         return {"games": [], "re_engine_exes": []}
-    return doc if isinstance(doc.get("games"), list) else {"games": [], "re_engine_exes": []}
+    if not isinstance(doc, dict) or not isinstance(doc.get("games"), list):
+        return {"games": [], "re_engine_exes": []}
+    for k, want in (("re_engine_exes", list), ("compat", dict), ("capcom", dict)):
+        if k in doc and not isinstance(doc[k], want):
+            doc[k] = want()
+    doc["games"] = [g for g in doc["games"] if isinstance(g, dict)]
+    return doc
 
 
 def exes_in(game_dir: str | None) -> list[str]:
@@ -41,12 +50,24 @@ def exes_in(game_dir: str | None) -> list[str]:
     return sorted(set(out))
 
 
+# Unreal project names every other game uses ("Game-Win64-Shipping.exe"): never enough to say which game it is
+# (review low: OptiScaler's list has "game" among one entry's projects, which made any such game that entry)
+GENERIC_UE = {"game", "project", "myproject", "unrealgame", "shooter"}
+
+
 def match(doc: dict, exes: list[str]) -> dict | None:
-    have = set(exes)
-    for g in doc.get("games", []):
-        if have & {e.lower() for e in g.get("exes", [])}:
+    have = set(x for x in exes if isinstance(x, str)) if isinstance(exes, (list, tuple, set)) else set()
+    games = doc.get("games") if isinstance(doc, dict) else None
+    for g in games if isinstance(games, list) else []:
+        if not isinstance(g, dict):
+            continue
+        names = [e for e in g.get("exes") or [] if isinstance(e, str)] if isinstance(g.get("exes"), list) else []
+        if have & {e.lower() for e in names}:
             return g
-        for ue in g.get("ue_exes", []):
+        ues = g.get("ue_exes") if isinstance(g.get("ue_exes"), list) else []
+        for ue in ues:
+            if not isinstance(ue, str) or ue.lower() in GENERIC_UE:
+                continue
             if {f"{ue.lower()}-win64-shipping.exe", f"{ue.lower()}-wingdk-shipping.exe"} & have:
                 return g
     return None
@@ -324,16 +345,45 @@ def compat_row(doc: dict, name: str | None, appid: str | None = None) -> dict | 
     return rows.get(_norm(name)) if name else None
 
 
+# OptiScaler's Compatibility List marks online games ("**Online game, use at your own risk!**", "at your own
+# discretion") and games whose anti-cheat has to be switched off, bypassed or is "active" (review H2/H5). A note that
+# names an anti-cheat counts as anti-cheat whatever the row's status: nothing is ever put in, as for anti-cheat found
+# in the folder. An online game whose note names none is never set up by itself: the menu says why in one line and
+# the player can still add it per game. "no anti-cheat" / "does not use anticheat" are games that say they are safe.
+_ONLINE_RE = re.compile(r"online game|at your own (risk|discretion)|own responsibility", re.I)
+_AC_RE = re.compile(r"anti-?cheat|\bEAC\b|battleye|vanguard|\bACE\b|xigncode|gameguard|nprotect|javelin", re.I)
+_AC_NONE_RE = re.compile(r"\b(no|without|doesn'?t use|does not use|not use)\s+(an?\s+)?anti-?cheat", re.I)
+
+
+def _texts(notes, issues) -> list[str]:
+    return [notes if isinstance(notes, str) else ""] + [x for x in (issues if isinstance(issues, list) else []) if isinstance(x, str)]
+
+
+def anticheat_note(notes: str | None, issues: list | None = None) -> bool:
+    """True when the list's notes or known issues name an anti-cheat (to switch off, bypass, or "active")."""
+    return any(_AC_RE.search(_AC_NONE_RE.sub("", t)) for t in _texts(notes, issues))
+
+
+def online_risk(notes: str | None, issues: list | None = None) -> bool:
+    """True when the list's notes or known issues say the game is online at the player's own risk, or name an
+    anti-cheat (online_risk covers both; anticheat_note says which)."""
+    return any(_ONLINE_RE.search(t) for t in _texts(notes, issues)) or anticheat_note(notes, issues)
+
+
 def knowledge(doc: dict, game_dir: str | None, appid: str | None = None, name: str | None = None) -> dict:
     """Everything the list knows about a game, merged: its own entry (by app id, then exe), the compatibility row
     (by app id, then title). Keys a caller can rely on: known, status ("works" | "broken" | "mixed" | ""), inputs,
-    proxies, args, anticheat, notes, steamdeck0, optipatcher, appids, id, name."""
+    proxies, args, anticheat, online, notes, steamdeck0, optipatcher, appids, id, name."""
     g = by_appid(doc, appid) or match(doc, exes_in(game_dir)) or {}
     row = compat_row(doc, name or g.get("name"), appid) or {}
     return {"known": bool(g or row), "id": g.get("id") or row.get("slug"), "name": g.get("name") or row.get("name"),
             "status": g.get("status") or row.get("status") or "", "inputs": g.get("inputs") or row.get("inputs") or [],
             "proxies": g.get("proxies") or row.get("proxies") or [], "args": g.get("args") or row.get("args") or "",
-            "anticheat": bool(g.get("anticheat") or row.get("anticheat")), "notes": g.get("notes") or row.get("notes") or "",
+            "anticheat": bool(g.get("anticheat") or row.get("anticheat") or anticheat_note(g.get("notes"))
+                              or anticheat_note(row.get("notes"), row.get("issues"))),
+            "notes": g.get("notes") or row.get("notes") or "",
+            "online": bool(g.get("online") or row.get("online") or online_risk(g.get("notes"))
+                           or online_risk(row.get("notes"), row.get("issues"))),
             "steamdeck0": bool(g.get("steamdeck0")), "optipatcher": bool(row.get("optipatcher")),
             "appids": sorted({str(x) for x in (g.get("appids") or []) + (row.get("appids") or [])}),
             "wine_check": bool(g.get("wine_check")), "ini": dict(g.get("ini") or {}), "in_list": bool(g), "in_compat": bool(row)}

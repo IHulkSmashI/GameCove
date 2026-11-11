@@ -40,6 +40,13 @@ const NVIDIA_PCI := "10DE"
 ## The facts the helper gets (--gpu): vendor, family, arch, xmx, chip, gpu, tier.
 ## profile: the devices.json row; gpu_dev: Device.gpu_info() ({"vendor", "driver", "pci_id"}).
 static func gpu(profile: Dictionary, gpu_dev: Dictionary = {}) -> Dictionary:
+	if render_vendor(gpu_dev) == "nvidia":
+		# an NVIDIA card next to the CPU's own graphics: games render on the NVIDIA card, whose own DLSS,
+		# frame generation and Reflex are left alone (the device row describes the integrated chip)
+		var nv := {"vendor": "nvidia", "family": "nvidia", "arch": "", "xmx": false,
+			"chip": str(profile.get("chip", "")), "gpu": "NVIDIA"}
+		nv["tier"] = "nvidia"
+		return nv
 	var fam := str(profile.get("gpu_family", ""))
 	var vendor := "intel" if fam.begins_with("intel") else ("amd" if fam.begins_with("amd") else "")
 	var dev_vendor := str(gpu_dev.get("vendor", ""))
@@ -52,6 +59,12 @@ static func gpu(profile: Dictionary, gpu_dev: Dictionary = {}) -> Dictionary:
 		"chip": str(profile.get("chip", "")), "gpu": str(profile.get("gpu", ""))}
 	g["tier"] = tier(g)
 	return g
+
+
+## The vendor of the card games render on (Device.gpu_info()["render"]), "" when unknown.
+static func render_vendor(gpu_dev: Dictionary) -> String:
+	var r: Variant = gpu_dev.get("render")
+	return str((r as Dictionary).get("vendor", "")) if r is Dictionary else ""
 
 
 static func _desktop_series(text: String) -> String:

@@ -182,13 +182,41 @@ def test_offline_falls_back_to_the_pins_and_a_verified_copy_wins_over_them(tmp_p
     _w(p, raw.replace(b"0.9.5", b"0.9.6"))
     mirror._memo.clear()
     assert games.versions(home) == games.pins()
-    # and an old verification expires
+    # an old verification is stale, and still the last good set (review M: after 30 days offline the index was
+    # dropped, its withdrawals with it, and any older signed list was accepted next)
     _w(p, raw)
+    mirror._memo.clear()
     st = os.path.join(home, mirror.CACHE, "verified.json")
     s = json.load(open(st))
     s["verified_at"] -= mirror.MAX_AGE_S + 1
     _w(st, json.dumps(s))
-    assert mirror.load(home) is None
+    assert mirror.load(home) is not None and mirror.stale(home)
+    assert games.versions(home)["optiscaler"]["version"] == "0.9.5"
+    status = mirror.status(home)
+    assert status["verified"] and status["stale"] and status["files_from"] == "2026-11-09"
+
+
+def test_a_stale_list_keeps_working_and_is_never_replaced_by_an_older_one(tmp_path, monkeypatch, cosign):
+    """Review M: 30 days offline dropped the verified list (and the kill switch in it); the next refresh then
+    accepted any genuinely signed but older list (a replay)."""
+    home = str(tmp_path / "home")
+    new = index("2026-11-09T05:00:00Z")
+    new = json.dumps({**json.loads(new), "withdrawn": {"fsr4_amd": "pulled for now"}}).encode()
+    serve(monkeypatch, {mirror.INDEX_URL: new, mirror.BUNDLE_URL: bundle_for(new)})
+    t0 = 1_800_000_000
+    assert mirror.refresh(home, now=t0)["state"] == "verified"
+    later = t0 + mirror.MAX_AGE_S + 3600
+    serve(monkeypatch, {})
+    assert mirror.refresh(home, now=later)["state"] == "offline"
+    assert mirror.withdrawn(home) == {"fsr4_amd": "pulled for now"}, "the withdrawal still holds offline"
+    assert mirror.status(home, now=later)["stale"] is True
+    old = index("2026-10-01T00:00:00Z")
+    serve(monkeypatch, {mirror.INDEX_URL: old, mirror.BUNDLE_URL: bundle_for(old)})
+    r = mirror.refresh(home, now=later + 60)
+    assert r["state"] == "older" and mirror.load(home)["generated"] == "2026-11-09T05:00:00Z"
+    newer = index("2026-12-12T05:00:00Z")
+    serve(monkeypatch, {mirror.INDEX_URL: newer, mirror.BUNDLE_URL: bundle_for(newer)})
+    assert mirror.refresh(home, now=later + 120)["state"] == "verified" and not mirror.stale(home, now=later + 120)
 
 
 def test_an_older_signed_index_never_replaces_a_newer_one(tmp_path, monkeypatch, cosign):
@@ -475,5 +503,20 @@ def test_a_damaged_stamp_never_raises(tmp_path, monkeypatch, cosign, stamp):
     st = json.load(open(p))
     st["verified_at"] = stamp
     json.dump(st, open(p, "w"))
-    assert mirror.load(home) is None, "an unreadable time is treated as too old"
+    assert mirror.load(home) is not None and mirror.stale(home), "an unreadable time is treated as too old"
     assert mirror.refresh(home)["state"] == "verified"
+
+
+def test_the_index_is_read_only_after_cosign_accepted_it(tmp_path, monkeypatch, cosign):
+    """Review 6 low: upscalers.json was parsed before cosign ran. A file cosign refuses is never read."""
+    home = str(tmp_path / "home")
+    raw = newest()
+    serve(monkeypatch, {mirror.INDEX_URL: raw, mirror.BUNDLE_URL: b"not a bundle"})
+    parsed = []
+    real = mirror.parse
+    monkeypatch.setattr(mirror, "parse", lambda b: parsed.append(b) or real(b))
+    assert mirror.refresh(home)["state"] == "bad-signature"
+    assert parsed == [], "read before the signature was checked"
+    serve(monkeypatch, {mirror.INDEX_URL: b"{not json", mirror.BUNDLE_URL: bundle_for(b"{not json")})
+    assert mirror.refresh(home, force=True)["state"] == "invalid"
+    assert not os.path.exists(os.path.join(home, mirror.CACHE, mirror.INDEX_NAME + ".new"))

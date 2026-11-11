@@ -172,3 +172,21 @@ func test_other_conflicts() -> void:
 func test_dxvk_config_entries_are_joined() -> void:
 	var plan := _env("intel-xe3", "valve11", {"upscaler": "xess"}, {}, {"extra_env": {"DXVK_CONFIG": "dxgi.maxFrameRate = 60"}})
 	eq(plan["env"]["DXVK_CONFIG"], LaunchEnv.SHOW_INTEL + "; dxgi.maxFrameRate = 60", "joined")
+
+
+func test_native_and_anticheat_games_get_no_upscaler_swap() -> void:
+	# review M: PROTON_FSR4_UPGRADE was set for a game set to Native and for games with anti-cheat
+	var base := _env("amd-rdna3", "cachy11")
+	eq(base["env"].get("PROTON_FSR4_UPGRADE"), "1", "Auto on RDNA 3 with CachyOS: the FSR 4 upgrade")
+	for g in [{"anticheat": true}, {"upscale_native": true}]:
+		var plan := _env("amd-rdna3", "cachy11", {"upscaler": "fsr"}, {}, g)
+		for v in LaunchEnv.FSR4_VARS + ["PROTON_FSR4_INDICATOR"]:
+			ok(not plan["env"].has(v), "%s: no %s" % [str(g), v])
+		ok(plan["notes"].size() > 0, "says why: " + str(plan["notes"]))
+		var ge := _env("amd-rdna3", "ge10", {}, {}, g)
+		ok(not ge["env"].has("PROTON_FSR4_UPGRADE"), "GE-Proton too")
+		var intel := _env("intel-xe3", "cachy11", {"upscaler": "fsr"}, {}, g)
+		ok(not intel["env"].has("FSR"), "no FSR on XeSS either")
+		ok(not intel["env"].has("PROTON_USE_OPTISCALER"), "no Proton OptiScaler")
+	ok(not _env("intel-xe3", "valve11", {"frame_gen": true}, {}, {"anticheat": true})["env"].has("XESS_FG"), "no frame generation swapped into an anti-cheat game")
+	eq(_env("intel-xe3", "valve11", {"frame_gen": true}, {}, {"upscale_native": true})["env"].get("XESS_FG"), "2", "Native leaves frame generation to its own setting")

@@ -262,7 +262,7 @@ def test_withdrawn_files_leave_games_and_arent_offered(tmp_path, monkeypatch):
     _pkg(home)
     _w(os.path.join(home, optiscaler.FSR4_AMD_DIR, optiscaler.FSR4_AMD_FILE), "amd-sdk-4.1.2")
     d = _steam_game(home, "710", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
-    assert best.prepare(home, "710", Z1E)["did"] == "set up"
+    assert best.opt_in(home, "710", Z1E)["did"] == "set up"
     assert open(os.path.join(d, "amd_fidelityfx_upscaler_dx12.dll")).read() == "amd-sdk-4.1.2"
     assert mirror.withdrawn(home) == {}                              # no verified index: nothing is withdrawn
     monkeypatch.setattr(mirror, "load", lambda h, now=None: {"withdrawn": {"fsr4_amd": "pulled for now", "bogus": "x"}})
@@ -322,7 +322,9 @@ def test_gen_games_from_optiscaler_sources_and_wiki(tmp_path):
     _w(wiki / "Compatibility-List.md", "| Game | Compatibility | Upscaler <br>Inputs | OptiPatcher | Notes | Images |\n| ---- | :--: | :--: | :--: | ----- | :--: |\n"
        "| [Enshrouded](Enshrouded) | ✅ | DLSS, FSR3 | ✨ | Vulkan game | |\n"
        "| Online Shooter | ❌ | DLSS |  | Anti-cheat blocks it | |\n"
-       "| Solo Game | ✅ | XeSS |  | Make sure **EAC** is disabled. | |\n")
+       "| Solo Game | ✅ | XeSS |  | Make sure **EAC** is disabled. | |\n"
+       "| Risky Online | ✅ | DLSS |  | **Online game, use at your own risk!** | |\n"
+       "| Coop Thing | ✅ | DLSS |  | Online co-op game, does not use anticheat | |\n")
     _w(wiki / "Enshrouded.asciidoc", "|===\n|**Filename**\n|`winmm.dll`, `dbghelp.dll`\n\n|**OS**\n|W11\n\n|**Known Issues**\na|\n* Needs Vulkan spoofing\n\n|===\n")
     ini = tmp_path / "OptiScaler.ini"
     ini.write_text("[Spoofing]\nDxgi=auto\n[Hotfix]\nRestoreComputeSignature=auto\n")
@@ -341,7 +343,9 @@ def test_gen_games_from_optiscaler_sources_and_wiki(tmp_path):
     assert c["enshrouded"]["proxies"] == ["winmm.dll", "dbghelp.dll"] and c["enshrouded"]["optipatcher"] is True
     assert c["enshrouded"]["inputs"] == ["DLSS", "FSR3"] and c["enshrouded"]["issues"] == ["Needs Vulkan spoofing"]
     assert c["onlineshooter"]["status"] == "broken" and c["onlineshooter"]["anticheat"] is True
-    assert "anticheat" not in c["sologame"]                          # "EAC off" is a game that works
+    assert c["sologame"]["anticheat"] is True                         # review H2: a note naming EAC, whatever the status
+    assert c["riskyonline"].get("online") is True and "anticheat" not in c["riskyonline"]
+    assert "anticheat" not in c["coopthing"] and "online" not in c["coopthing"]
     assert smoke.check_games(str(out)) == []
 
 

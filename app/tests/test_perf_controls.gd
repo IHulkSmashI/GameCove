@@ -122,7 +122,7 @@ func test_every_control_is_perf_and_explains_itself() -> void:
 	for want in ["perf.overlay", "perf.overlay_position", "perf.overlay_opacity", "perf.overlay_scale",
 			"perf.overlay_item.fps", "perf.lsfg",
 			"perf.lsfg_multiplier", "perf.lsfg_flow_scale", "perf.lsfg_performance", "perf.upscaler",
-			"perf.frame_gen", "perf.upscale_mode", "perf.upscale_active", "perf.fg_generator", "perf.upscale_menu", "perf.upscale_undo", "perf.upscaler_update",
+			"perf.frame_gen", "perf.upscale_mode", "perf.upscale_offer", "perf.upscale_active", "perf.fg_generator", "perf.upscale_menu", "perf.upscale_undo", "perf.upscaler_update",
 			"perf.upscale_game_update", "perf.low_latency", "perf.proton",
 			"perf.launch_wrapper", "perf.shader_threads", "perf.clear_shader_cache"]:
 		ok(want in ids, want + " registered")
@@ -391,6 +391,9 @@ func test_upscaler_updates_summary() -> void:
 	var u := UpscaleUpdates.summary(CHECK_CURRENT)
 	ok(not u["update"] and u["reason"] == "", "up to date stays usable (press: check now)")
 	eq(u["help"], "Up to date: OptiScaler 0.9.5 · OptiPatcher rolling-20261020. Press to check now.", "installed versions shown")
+	var stale := CHECK_CURRENT.duplicate(true)
+	stale["index"] = {"verified": true, "stale": true, "files_from": "2026-10-02", "generated": "2026-10-02T05:00:00Z"}
+	ok(UpscaleUpdates.summary(stale)["help"].begins_with("Up to date (offline, files from 2026-10-02):"), "a month without a check says how old the files are: " + UpscaleUpdates.summary(stale)["help"])
 	var pins := CHECK_CURRENT.duplicate(true)
 	pins["index"]["verified"] = false
 	ok("tested versions" in UpscaleUpdates.summary(pins)["help"], "says when the newest list isn't verified")
@@ -423,7 +426,7 @@ func test_upscaler_update_row_shows_and_runs_the_update() -> void:
 	ok("Update available: OptiScaler 0.9.4 → 0.9.5" in v.explanation(), "the row says so: " + v.explanation())
 	var card: Array = Catalog.cards_for(["perf"], reg.list().map(func(x): return x.id)).filter(func(cd): return cd[0] == "Upscaling and frame generation")[0]
 	ok("perf.upscaler_update" in card[3] and "perf.upscale_game_update" in card[3], "on the Upscaling card, under More")
-	eq(card[2].slice(0, 2), ["perf.upscale_mode", "perf.upscale_active"], "the mode and what is running come first")
+	eq(card[2].slice(0, 3), ["perf.upscale_mode", "perf.upscale_offer", "perf.upscale_active"], "the mode, what it offers and what is running come first")
 	# pressing it updates, then reads again
 	runner.answers["update"] = {"ok": true, "results": {}, "games": ["epic:abc"]}
 	var n_check := _calls_with(runner, "check").size()
@@ -489,10 +492,12 @@ func test_background_check_is_daily_and_follows_the_privacy_switch() -> void:
 	ok(PrivacyScript.set_background_allowed(false, prefs), "switch off")
 	ok(not p.background_check(now), "off: no background check")
 	eq(_calls_with(runner, "check").filter(func(x): return "--online" in x), [], "nothing went online")
+	eq(_calls_with(runner, "refresh"), [], "and no list refresh")
 	eq(UpscaleUpdates.last_check(stamp), 0, "and nothing recorded")
 	PrivacyScript.set_background_allowed(true, prefs)
 	ok(p.background_check(now), "on: checks")
 	eq(_calls_with(runner, "check").filter(func(x): return "--online" in x).size(), 1, "one online check")
+	eq(_calls_with(runner, "refresh").size(), 1, "the per-game lists (signed games.json, OptiScaler's notes) refresh with it")
 	eq(UpscaleUpdates.last_check(stamp), now, "recorded")
 	ok(not p.background_check(now + 3600), "not again within a day")
 	ok(p.background_check(now + UpscaleUpdates.INTERVAL_S), "again a day later")
@@ -892,6 +897,7 @@ func test_native_takes_everything_out_in_one_press() -> void:
 	var last: Array = _calls_with(runner, "mode")
 	ok(last.size() == 1 and "--mode native" in last[0] and "--key epic:abc" in last[0], "one helper call: " + str(last))
 	eq(w["p"].launch_env_hook("epic:abc", EPIC).has("WINEDLLOVERRIDES"), false, "nothing of ours reaches the next start")
+	ok(w["p"].upscale_native("epic:abc"), "the launcher is told Native: no Proton FSR 4 upgrade either")
 	reg.detect_all()
 	eq(reg.control("perf.upscale_mode").value, "native", "stays Native")
 	eq(reg.control("perf.upscaler").value, "own", "the game's own")
@@ -915,6 +921,105 @@ func test_anticheat_games_get_nothing_and_say_why() -> void:
 	eq(c.reason, "Off for this game: it uses anti-cheat", "says why")
 	ok("--anticheat" in _calls_with(runner, "prepare")[0] and "--anticheat" in _calls_with(runner, "plan")[0], "the app's own anti-cheat data reaches the helper")
 	eq(w["reg"].control("perf.lsfg").reason, "Off for this game: it uses anti-cheat", "Lossless too")
+	_done(w)
+
+
+func test_best_downloads_nothing_by_itself_with_background_lookups_off() -> void:
+	var w := _world("mode_privacy", ALLY_X)
+	var base := ProjectSettings.globalize_path("user://test_perf_controls/mode_privacy")
+	var prefs := base.path_join("settings.cfg")
+	w["ctx"]["privacy_path"] = prefs
+	ok(PrivacyScript.set_background_allowed(false, prefs), "Background lookups off")
+	var runner = w["runner"]
+	var wait := "Background lookups are off, so we don't download the upscaler by ourselves. Pick it here and it downloads now."
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {}}
+	runner.answers["prepare"] = {"ok": true, "did": "", "waiting": wait}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null}
+	_with_game(w, EPIC)
+	var calls := _calls_with(runner, "prepare")
+	ok(calls.size() == 1 and "--no-download" in calls[0], "what Best does by itself fetches nothing: " + str(calls))
+	ok("Background lookups are off" in w["reg"].control("perf.upscale_mode").help, "and says so: " + w["reg"].control("perf.upscale_mode").help)
+	runner.answers["choose"] = {"ok": true, "env": {}}
+	w["reg"].set_value("perf.upscaler", "fsr31")
+	ok(not "--no-download" in _calls_with(runner, "choose")[0], "the player's own pick still downloads")
+	PrivacyScript.set_background_allowed(true, prefs)
+	w["p"].prepare_installed(EPIC)
+	ok(not "--no-download" in _calls_with(runner, "prepare")[-1], "with the switch on, Best may fetch")
+	_done(w)
+
+
+func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> void:
+	var w := _world("mode_offer", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	var warn := "This is an online game. An upscaler in its files can break its rules and get the account banned, so we don't add one by ourselves. Press Add to put FSR 4.1.2 in if you accept that risk."
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {}}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": warn, "auto": false, "refused": null, "online": true, "offer": "fsr4_amd"}
+	_with_game(w, EPIC)
+	eq(_calls_with(runner, "opt-in").size(), 0, "nothing is put in by itself")
+	eq(reg.control("perf.upscale_mode").help, warn, "the mode row says why, in plain words")
+	var c: RefCounted = reg.control("perf.upscale_offer")
+	ok(c.available, "offered: " + c.reason)
+	eq(c.title, "Add FSR 4.1.2 to this game", "our pick is the one offered")
+	eq(c.help, warn, "with the plain warning")
+	runner.answers["opt-in"] = {"ok": true, "did": "set up", "mode": "best"}
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove", "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
+	reg.set_value("perf.upscale_offer", true)
+	var calls := _calls_with(runner, "opt-in")
+	ok(calls.size() == 1 and "--key epic:abc" in calls[0], "one press, the player's pick: " + str(calls))
+	eq(w["p"].launch_env_hook("epic:abc", EPIC).get("WINEDLLOVERRIDES"), "dxgi=n,b;", "and the next start has it")
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null, "opted_in": true}
+	w["p"]._forget_status()
+	reg.detect_all()
+	ok(not reg.control("perf.upscale_offer").available, "nothing left to offer once added")
+	_done(w)
+
+
+func test_upscaler_changes_wait_until_the_game_has_quit() -> void:
+	# review M7: changing the upscaler while the game ran rewrote DLLs the game had loaded
+	var w := _world("upscale_running", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove",
+		"env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}, "active": {"state": "active", "line": "Active: FSR 4.1.2"}}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null}
+	runner.answers["choose"] = {"ok": true, "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
+	_with_game(w, EPIC)
+	w["ctx"]["upscale_launch_grace_ms"] = 0
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	runner.calls.clear()
+	reg.set_value("perf.upscaler", "fsr31")
+	eq(_calls_with(runner, "choose").size(), 0, "nothing in the game's folder changes while it runs")
+	reg.detect_all()
+	eq(reg.control("perf.upscaler").value, "fsr31", "the pick shows")
+	ok("when you quit the game" in reg.control("perf.upscale_active").help, reg.control("perf.upscale_active").help)
+	eq(w["p"].launch_env_hook("epic:abc", EPIC).get("WINEDLLOVERRIDES"), "dxgi=n,b;", "the running setup keeps its launch settings")
+	(w["ctx"]["upscale_running"] as Callable).call("")
+	w["p"]._forget_status()
+	reg.detect_all()
+	var calls := _calls_with(runner, "choose")
+	ok(calls.size() == 1 and "--upscaler fsr31" in calls[0], "made once the game has quit: " + str(calls))
+	reg.detect_all()
+	eq(_calls_with(runner, "choose").size(), 1, "and only once")
+	# the game's own profile settings still go in as it starts (Proton hasn't loaded it yet)
+	w["ctx"]["upscale_launch_grace_ms"] = 60000
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	reg.set_value("perf.upscaler", "fsr4_amd")
+	eq(_calls_with(runner, "choose").size(), 2, "at the start: made at once")
+	_done(w)
+
+
+func test_lossless_is_off_when_the_helper_finds_anticheat() -> void:
+	# the app's own data has no anti-cheat record; the game's folder (or the list's notes) does
+	var w := _world("lsfg_ac_folder", ALLY_X)
+	var runner = w["runner"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none"}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "refused": "anticheat", "line": "This game uses NetEase Anti-Cheat."}
+	_with_game(w, EPIC)
+	eq(w["reg"].control("perf.lsfg").reason, "Off for this game: it uses anti-cheat", "Lossless stays off")
 	_done(w)
 
 
