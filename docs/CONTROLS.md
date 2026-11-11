@@ -497,7 +497,7 @@ Owner: ctl-power. 33 controls, group `power`. Each detects its backend on this e
 | `power.power_mode` | choice | power-profiles-daemon / tuned-ppd `ActiveProfile` | Bazzite, CachyOS |
 | `power.platform_profile` | choice | steamos-manager `PerformanceProfile1`, else helper (`/sys/firmware/acpi/platform_profile`) | Steam Deck, ASUS, Lenovo; greyed out when PPD owns it |
 | `power.cpu_boost` | toggle | steamos-manager `CpuBoost1`, PowerStation `BoostEnabled` (AMD cpb), helper (intel_pstate `no_turbo`, amd-pstate `policyN/boost`, `cpufreq/boost`) | all |
-| `power.smt` | toggle | PowerStation `SmtEnabled`, helper | CPUs with SMT (not the Claw 8 EX) |
+| `power.smt` | toggle | PowerStation `SmtEnabled`, helper | CPUs with SMT (not the Claw 8 EX); on ASUS handhelds it stays on (greyed out, can only go back on) because Bazzite documents that suspend may break with SMT off (quirks.json `smt-off-breaks-sleep`) |
 | `power.cpu_cores` | slider | PowerStation `CoresEnabled`, helper; 2..all | all with CPU hotplug |
 | `power.epp` | choice | helper (every CPU, from the offered words) | intel_pstate / amd-pstate-epp |
 | `power.governor` | choice | steamos-manager `CpuScaling1`, helper | all |
