@@ -21,6 +21,39 @@ const Games := preload("res://tests/test_ui_games.gd")
 const Screens := preload("res://tests/test_ui_screens.gd")
 
 
+# ---- one thing glows ---------------------------------------------------------
+
+## A primary button that waits (Continue while a card has focus) is a calm
+## filled pill with no glow; only focus brings the gradient, ring and glow.
+func test_waiting_primary_is_calm() -> void:
+	for id in Themes.ORDER:
+		ThemeLib.use(id)
+		var b := Kit.primary("Continue")
+		var other := Kit.button("Easy")
+		var fx: Control = b.get_node("Fx")
+		ok(fx.is_calm(), "%s: without focus it waits" % id)
+		var calm := b.get_theme_stylebox("normal")
+		ok(calm is StyleBoxFlat, "%s: a plain filled pill, not the gradient" % id)
+		eq(b.get_node("Glow").modulate.a, 0.0, "%s: no glow without focus" % id)
+		if calm is StyleBoxFlat:
+			var fill: Color = (calm as StyleBoxFlat).bg_color
+			eq(fill.a, 1.0, "%s: the fill is opaque" % id)
+			ok(Themes.contrast(fx._color(), fill) >= 4.5, "%s: its label reads (%.2f)" % [id, Themes.contrast(fx._color(), fill)])
+			ok(Themes.contrast(fill, ThemeLib.color("accent")) >= 1.5, "%s: clearly not the bright accent fill" % id)
+		b.focus_entered.emit()
+		ok(not fx.is_calm(), "%s: focus wakes it" % id)
+		ok(b.get_theme_stylebox("normal") is StyleBoxTexture, "%s: the gradient with focus" % id)
+		eq(fx._color(), ThemeLib.color("on_accent"), "%s: and its own ink" % id)
+		b.focus_exited.emit()
+		ok(fx.is_calm() and b.get_theme_stylebox("normal") is StyleBoxFlat, "%s: calm again when focus moves on" % id)
+		# An art-coloured primary (Play) follows the same rule.
+		Kit.accent_button(b, Color("#D9A441"))
+		ok(b.get_theme_stylebox("normal") is StyleBoxFlat, "%s: an art-coloured one waits calmly too" % id)
+		b.free()
+		other.free()
+	ThemeLib.use("cove")
+
+
 # ---- one drawer ---------------------------------------------------------------
 
 func _radii(sb: StyleBoxFlat) -> Array:
