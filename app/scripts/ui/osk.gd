@@ -88,7 +88,6 @@ var done_button: Button
 var showing := false
 ## Every keyboard is in this group while it's in the tree (main.gd puts them away when their screen is left).
 const GROUP := "osk"
-var _was_seen := false
 ## Paste, beside the field: only where a code or key is asked for (use_for_codes).
 var paste_button: Button
 ## func() -> String: the clipboard; tests return canned text.
@@ -365,12 +364,9 @@ func _notification(what: int) -> void:
 func _on_seen_changed(seen: bool) -> void:
 	if not seen:
 		_stop_repeat()
-	# Hidden without close() (its screen went away, Guide, the quick menu): it is closed. Left
-	# "showing" it kept taking every key and button, unseen (review Medium, input).
-	if _was_seen and not seen and showing:
-		showing = false
-		visible = false
-	_was_seen = seen
+	# Hidden without close() (its screen went away, Guide, the quick menu): it stays open but takes no key or
+	# button while it or a screen above it is hidden (_hidden() in _input), and is there again, with its
+	# focus, when the screen comes back. Closing it silently here lost the focus for good (monkey seed 99001).
 
 
 # ---- pages, focus --------------------------------------------------------------

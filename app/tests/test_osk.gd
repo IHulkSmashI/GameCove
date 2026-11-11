@@ -505,25 +505,22 @@ func test_text_keyboard_is_the_same_keyboard() -> void:
 	k.free()
 
 
-## Review Medium (input): an on-screen keyboard hidden without close() (its screen went away) stayed
-## "showing" and went on taking every key and button, unseen.
+## Review Medium (input): an on-screen keyboard hidden without close() (its screen went away) went on taking
+## every key and button, unseen. It stays open (so its focus is there when the screen is back; closing it
+## silently lost the focus, monkey seed 99001) but takes nothing while it is hidden.
 func test_a_keyboard_that_is_hidden_stops_taking_input() -> void:
 	var k := _kb()
-	k._on_seen_changed(true)   # what the engine reports when it shows
 	k._input(_key_event(KEY_A, 65))
 	eq(k.text, "a", "open: it types")
-	k._on_seen_changed(false)   # its screen went away, no close()
-	ok(not k.showing and not k.is_open(), "no longer open")
-	ok(not k.visible, "and hidden")
+	k.visible = false   # its screen went away, no close()
+	ok(k.is_open(), "still open")
 	k._input(_key_event(KEY_B, 66))
 	_pad(k, JOY_BUTTON_Y)
-	eq(k.text, "a", "and takes nothing")
-	# a keyboard that was never seen (opened under a hidden screen) isn't closed by a hide
-	var k2 := _kb()
-	k2._on_seen_changed(false)
-	ok(k2.showing, "never seen: left as it was")
+	eq(k.text, "a", "but takes nothing while hidden")
+	k.visible = true
+	k._input(_key_event(KEY_C, 67))
+	eq(k.text, "ac", "and types again when it is back")
 	k.free()
-	k2.free()
 
 
 func test_cancel_puts_the_old_text_back_and_done_keeps_the_new() -> void:
