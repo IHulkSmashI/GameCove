@@ -1454,6 +1454,8 @@ func show_screen(id: String, dir := 0) -> void:
 		_close_page()
 	close_downloads()
 	close_apps()
+	if id == "library" and Library.has_method("rescan_emulation"):
+		Library.rescan_emulation()   # ROMs copied in since show up (background, cached, never behind a game)
 	var old: Control = screens[current]
 	var d := float(signi(dir)) if dir != 0 else signf(SCREENS.find(id) - SCREENS.find(current))
 	current = id
@@ -1861,6 +1863,8 @@ func open_emulation() -> void:
 	if page != null:
 		_close_page()
 	close_downloads()
+	if Library.has_method("rescan_emulation"):
+		Library.rescan_emulation()
 	page = EmulationPage.new()
 	page.setup(Library.emulation, _decorated())
 	page.play_requested.connect(_play)
@@ -1868,6 +1872,13 @@ func open_emulation() -> void:
 		_close_page()
 		show_screen("library")
 		library_screen.set_view("emulation"))
+	page.system_requested.connect(func(system: String):
+		_close_page()
+		show_screen("library")
+		library_screen.set_view("emulation:" + system))
+	page.game_requested.connect(func(g: Dictionary):
+		_close_page()
+		_open_page(g))
 	add_child(page)
 	move_child(page, top_bar.get_index())
 	# Rises in like the game page.

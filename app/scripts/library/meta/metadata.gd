@@ -30,7 +30,7 @@ const SUMMARY_MAX := 600
 const LIST_MAX := 6
 const SCREENS_MAX := 8
 ## Who to credit for each source (the UI shows these next to the data).
-const SOURCE_NAMES := {"store": "", "steam": "Steam", "igdb": "IGDB", "wikidata": "Wikidata", "opencritic": "OpenCritic"}
+const SOURCE_NAMES := {"store": "", "steam": "Steam", "igdb": "IGDB", "wikidata": "Wikidata", "opencritic": "OpenCritic", "esde": "ES-DE"}
 ## Image hosts screenshot URLs may point at.
 ## Steam's CDN on Akamai by its exact host: the bare akamaihd.net suffix admitted every
 ## Akamai customer (review 2, low 12).
@@ -457,4 +457,6 @@ static func credits(meta: Dictionary) -> Array:
 		out.append({"text": "Steam", "url": ""})
 	if used.has("wikidata"):
 		out.append({"text": "Wikidata (CC0)", "url": "https://www.wikidata.org"})
+	if used.has("esde"):
+		out.append({"text": "Your ES-DE game list", "url": ""})
 	return out

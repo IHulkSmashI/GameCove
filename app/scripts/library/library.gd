@@ -121,6 +121,7 @@ func attach_metadata(resolver: Node, art: Node) -> void:
 ## A game started (true) or ended: the background metadata and art fill wait while it runs,
 ## so nothing of ours fetches or writes behind a game. What the user asks for still runs.
 func set_background_paused(on: bool) -> void:
+	_bg_paused = on
 	if metadata != null and metadata.has_method("set_paused"):
 		metadata.set_paused(on)
 	if artwork != null and artwork.has_method("set_paused"):
@@ -181,8 +182,9 @@ func refresh() -> void:
 		return
 	var h := home
 	var db_path := ProjectSettings.globalize_path(GameDB.CACHE_PATH)
+	var stamp := _emu_stamp
 	_task_store = ""
-	_task = WorkerThreadPool.add_task(func(): _apply.call_deferred(collect(h, db_path)), false, "Library scan")
+	_task = WorkerThreadPool.add_task(func(): _apply.call_deferred(collect(h, db_path, [], stamp)), false, "Library scan")
 
 
 ## Re-reads one store (steam | epic | gog | amazon | emu) in the background after an
@@ -193,8 +195,9 @@ func refresh_store(store_name: String) -> void:
 		return
 	var h := home
 	var db_path := ProjectSettings.globalize_path(GameDB.CACHE_PATH)
+	var stamp := _emu_stamp
 	_task_store = store_name
-	_task = WorkerThreadPool.add_task(func(): _apply.call_deferred(collect(h, db_path, [store_name])), false, "Library scan")
+	_task = WorkerThreadPool.add_task(func(): _apply.call_deferred(collect(h, db_path, [store_name], stamp)), false, "Library scan")
 
 
 func _apply(result: Dictionary) -> void:
@@ -207,30 +210,84 @@ func _apply(result: Dictionary) -> void:
 
 
 ## A scan's result becomes the library: all of it (`store_name` ""), or one
-## store's part of it.
+## store's part of it. A rescan that found exactly what we have (the usual case
+## when the Library opens, or the app comes back from a game) keeps what we have
+## and drops the fresh copy, so nothing is redrawn and thousands of ROM games
+## aren't held twice while the old copy waits to be freed. With "emu_same" the
+## scan didn't even make the "emu" games again (nothing they come from changed).
 func take(result: Dictionary, store_name: String) -> void:
-	if store_name == "":
-		games = result["games"]
-		_entries = result["entries"]
-	else:
+	var emu_same: bool = result.get("emu_same", false)
+	if result.has("emu_stamp"):
+		_emu_stamp = str(result["emu_stamp"])
+	var fresh_sigs: Dictionary = result.get("sigs", {})
+	var same := (emu_same or not fresh_sigs.is_empty()) and (not result.has("emulation") or str(result.get("emulation_sig", "")) == _emulation_sig)
+	for st in fresh_sigs:
+		same = same and _sigs.has(st) and str(_sigs[st]) == str(fresh_sigs[st])
+	if not same and store_name == "":
+		var fresh_games: Array[Dictionary] = result["games"]
+		var fresh_entries: Dictionary = result["entries"]
+		if emu_same:
+			for g in games:
+				if g["store"] == "emu":
+					fresh_games.append(g)
+			for k in _entries:
+				if _entries[k].get("store", "") == "emu":
+					fresh_entries[k] = _entries[k]
+			_sort(fresh_games)
+		games = fresh_games
+		_entries = fresh_entries
+	elif not same:
 		var merged := merge_store(games, _entries, result, store_name)
 		games = merged["games"]
 		_entries = merged["entries"]
 	if result.has("emulation"):
-		emulation = result["emulation"]
+		if not same:
+			emulation = result["emulation"]
+		_emulation_sig = str(result.get("emulation_sig", ""))
+	if result.has("emulation") or emu_same:
+		_last_emu_scan = int(Time.get_unix_time_from_system())
+	_sigs.merge(fresh_sigs, true)
 	if result.has("imported"):
-		# A one-store rescan only saw that store's entries: a Steam-only one (after an
-		# install or uninstall) knew no shortcut, so the shortcuts hidden in Steam
-		# dropped off the hidden list and came back on every screen. The list is
-		# completed from every entry we hold now.
-		collections.set_imported(with_hidden_entries(result["imported"], _entries))
+		# A one-store rescan (or one that kept the "emu" games) only saw part of the
+		# entries: a Steam-only one knew no shortcut, so the shortcuts hidden in Steam
+		# dropped off the hidden list and came back on every screen. The lists are
+		# completed from every entry we hold now (hidden in Steam, ES-DE's flags,
+		# shortcuts folded into a ROM).
+		var imp: Dictionary = result["imported"]
+		add_entry_lists(imp, _entries)
+		collections.set_imported(imp)   # emits only when something changed
+	if same:
+		return
+	var aliases := aliases_of(_entries)
+	if not aliases.is_empty():
+		collections.adopt_keys(aliases)   # favourites and collections of a shortcut now on its ROM
 	changed.emit()
 	if store != null:
 		store.on_library_scanned(_entries)
 	if metadata != null:
 		metadata.queue_games(games)
 	if artwork != null:
-		artwork.auto_fill(games)
+		# ROMs: no SteamGridDB search can tell a console game from a PC one by its title alone.
+		artwork.auto_fill(games.filter(func(g): return not g.get("emulated", {}).get("rom", false)))
+
+
+## A store's games as one hash: what they look like on screen and, with
+## `entries`, everything we know about them (how each starts, where it lives).
+## Same hash: nothing to redraw and nothing new to keep.
+static func store_signature(list: Array, store_name: String, entries := {}) -> String:
+	var ctx := HashingContext.new()
+	ctx.start(HashingContext.HASH_MD5)
+	for g in list:
+		if g["store"] == store_name:
+			ctx.update(("%s|%s|%s|%s|%s|%s|%s\n" % [g["key"], g["title"], g["art"], g["last_played"], g["playtime_min"], g["emulated"],
+				g["info"].get("summary", "")]).to_utf8_buffer())
+			if entries.has(g["key"]):
+				ctx.update(var_to_bytes(entries[g["key"]]))
+	return ctx.finish().hex_encode()
+
+
+static func _setup_signature(setup: Dictionary) -> String:
+	return var_to_bytes(setup).hex_encode().md5_text()
 
 
 ## `games`/`entries` with every game of `store_name` replaced by a one-store
@@ -266,8 +323,14 @@ func _exit_tree() -> void:
 ## Reads all stores under `home_dir`, fills game info from the database at
 ## `db_path`, and returns {"games": sorted contract games, "entries": key -> entry}.
 ## Safe to call off the main thread. The same game in two stores keeps two keys.
-static func collect(home_dir: String, db_path: String, only: Array = []) -> Dictionary:
+## `emu_stamp`: the stamp of the "emu" games the caller has (Emu.scan); when
+## nothing they're made from changed, they aren't made again: the result has
+## "emu_same" and no "emu" games, sigs or "emulation" (the caller keeps its own).
+static func collect(home_dir: String, db_path: String, only: Array = [], emu_stamp := "") -> Dictionary:
 	var all: Array[Dictionary] = []
+	var overrides := ArtOverrides.read(ProjectSettings.globalize_path(ArtOverrides.DIR))
+	var played := Playtime.read()
+	var reuse := {}
 	if only.is_empty() or "steam" in only:
 		all.append_array(Steam.scan(home_dir))
 	if only.is_empty() or "epic" in only:
@@ -278,13 +341,22 @@ static func collect(home_dir: String, db_path: String, only: Array = []) -> Dict
 		all.append_array(Amazon.scan(home_dir))
 	var setup := {}
 	if only.is_empty() or "emu" in only:
-		setup = Emu.detect(home_dir, Emu.path_env, Emu.flatpak_dirs)
-		all.append_array(Emu.scan(home_dir, setup))
-	var index := GameDB.build_index(GameDB.load_file(db_path))
+		var roms := Emu.roms_enabled()
+		setup = Emu.detect(home_dir, Emu.path_env, Emu.flatpak_dirs, not roms)
+		reuse = {"salt": var_to_bytes([played, overrides])}
+		if emu_stamp != "":
+			reuse["stamp"] = emu_stamp
+		all.append_array(Emu.scan(home_dir, setup, roms, reuse))
+	var emu_same: bool = reuse.get("same", false)
+	# The game database is only read when a game here can use it: unpacked it's well
+	# over a gigabyte of dictionaries for a moment, and ROMs and the frontend never
+	# match it (the rescan each time the Library or Emulation page opens reads only "emu").
+	var index := {}
+	if all.any(func(x): return x["store"] != "emu"):
+		index = GameDB.build_index(GameDB.load_file(db_path))
 	var meta_dir := ProjectSettings.globalize_path(MetaResolver.CACHE_DIR)
-	var overrides := ArtOverrides.read(ProjectSettings.globalize_path(ArtOverrides.DIR))
 	var entries := {}
-	var played := Playtime.read()
+	var rom_info := {}   # ROMs: hash of the local layer -> [layer, info], shared by every ROM with the same details
 	for e in all:
 		var key := "%s:%s" % [e["store"], e["id"]]
 		if entries.has(key) and (entries[key].get("installed", false) or not e.get("installed", false)):
@@ -293,29 +365,65 @@ static func collect(home_dir: String, db_path: String, only: Array = []) -> Dict
 		var rec := GameDB.find(index, e.get("ids", {}), e.get("title", "")) if e["store"] != "emu" else {}
 		if e["store"] == "emu":
 			Playtime.apply(e, played)
+			for alias in e.get("aliases", []):
+				Playtime.apply_key(e, played, str(alias))   # time counted while it was a Steam shortcut
+		# Art: picked or auto-filled art over (or in place of) the store's (the same
+		# dictionary when nothing is picked; a pick makes a new one, never edits it).
+		e["store_art"] = e.get("art", Common.empty_art())
+		e["art"] = ArtOverrides.apply(e["store_art"], overrides[key]) if overrides.has(key) else e["store_art"]
+		if e.get("emulated", {}).get("rom", false):
+			_rom_details(e, rom_info, meta_dir)
+			entries[key] = e
+			continue
 		e["info"] = GameDB.info_for(rec)
 		var steam_id = rec.get("ids", {}).get("steam", null) if rec.get("ids") is Dictionary else null
 		if steam_id != null and e["store"] != "steam":
 			e["umu_id"] = "umu-%s" % steam_id
 		# Details: the store's own, then the database's, then cached live fetches (Metadata).
 		var twin := str(e["id"]) if e["store"] == "steam" else (str(steam_id) if steam_id != null else "")
-		e["meta_layers"] = {"local": e.get("local_meta", {}), "db": Metadata.gamedb_layers(rec)}
-		e["info"]["meta"] = MetaResolver.assemble(e["meta_layers"], twin, str(e.get("title", "")), meta_dir)
+		e["meta_layers"] = {"local": e.get("local_meta", {}), "db": Metadata.gamedb_layers(rec) if not rec.is_empty() else []}
+		# A ROM never has an OpenCritic lookup (resolver.gd): no cache file to look for.
+		var oc_title := "" if e.get("emulated", {}).get("rom", false) else str(e.get("title", ""))
+		e["info"]["meta"] = MetaResolver.assemble(e["meta_layers"], twin, oc_title, meta_dir)
 		e["info"]["summary"] = e["info"]["meta"]["summary"]
-		# Art: picked or auto-filled art over (or in place of) the store's.
-		e["store_art"] = e.get("art", Common.empty_art())
-		e["art"] = ArtOverrides.apply(e["store_art"], overrides.get(key, {}))
 		entries[key] = e
 	var out: Array[Dictionary] = []
 	for key in entries:
-		out.append(make_game(entries[key]))
+		out.append(make_game(entries[key], key))
 	_sort(out)
-	var result := {"games": out, "entries": entries}
-	if not setup.is_empty():
+	var result := {"games": out, "entries": entries, "sigs": {}}
+	for st in (only if not only.is_empty() else ["steam", "epic", "gog", "amazon", "emu"]):
+		if not (st == "emu" and emu_same):
+			result["sigs"][st] = store_signature(out, st, entries)
+	if reuse.has("salt"):
+		result["emu_stamp"] = str(reuse.get("stamp_now", ""))
+		result["emu_same"] = emu_same
+	if not setup.is_empty() and not emu_same:
 		result["emulation"] = setup
+		result["emulation_sig"] = _setup_signature(setup)
 	if only.is_empty() or "steam" in only or "emu" in only:
 		result["imported"] = imported_lists(home_dir, entries)
 	return result
+
+
+## A ROM's details: only ES-DE's gamelist (or our line about its console) and
+## never a lookup (resolver.gd), so nothing replaces them later and ROMs with the
+## same details share one read-only `info` (thousands of unscraped ROMs of a
+## console are one dictionary, not thousands). No layers are kept.
+static func _rom_details(e: Dictionary, shared: Dictionary, meta_dir: String) -> void:
+	var layer: Dictionary = e.get("local_meta", {})
+	e.erase("local_meta")
+	var h := layer.hash()
+	var hit: Variant = shared.get(h)
+	if hit is Array and hit[0] == layer:
+		e["info"] = hit[1]
+		return
+	var info := GameDB.info_for({})
+	info["meta"] = MetaResolver.assemble({"local": layer, "db": []}, "", "", meta_dir)
+	info["summary"] = info["meta"]["summary"]
+	e["info"] = Common.freeze(info)
+	if not hit is Array:
+		shared[h] = [layer, info]
 
 
 ## Steam's own favourites, hidden games and collections (read-only, from its
@@ -323,7 +431,9 @@ static func collect(home_dir: String, db_path: String, only: Array = []) -> Dict
 static func imported_lists(home_dir: String, entries: Dictionary) -> Dictionary:
 	var file := Collections.steam_cloud_file(home_dir, Steam.STEAM_ROOTS)
 	var parsed := Collections.parse_steam_cloud(FileAccess.get_file_as_string(file)) if file != "" else {}
-	return with_hidden_entries(Collections.steam_to_keys(parsed), entries)
+	var imp := Collections.steam_to_keys(parsed)
+	add_entry_lists(imp, entries)
+	return imp
 
 
 ## `imp` (imported_lists' shape) with every entry Steam hides (a shortcut's
@@ -337,10 +447,42 @@ static func with_hidden_entries(imp: Dictionary, entries: Dictionary) -> Diction
 	return imp
 
 
+## What the games themselves say into imported lists `imp` (changed in place):
+## hidden in Steam, ES-DE's favourite / hidden flags, and Steam's lists of a
+## shortcut folded into a ROM.
+static func add_entry_lists(imp: Dictionary, entries: Dictionary) -> void:
+	for k in entries:
+		var e: Dictionary = entries[k]
+		if e.get("hidden_in_steam", false) and not k in imp["hidden"]:
+			imp["hidden"].append(k)
+		# ES-DE's own favourite / hidden flags, read as where we start (ours stay in collections.json).
+		if e.get("es_favorite", false) and not k in imp["favourites"]:
+			imp["favourites"].append(k)
+		if e.get("es_hidden", false) and not k in imp["hidden"]:
+			imp["hidden"].append(k)
+		# A Steam ROM Manager shortcut folded into a ROM: what Steam says about it follows the ROM.
+		for alias in e.get("aliases", []):
+			for list in ["favourites", "hidden"]:
+				if alias in imp[list] and not k in imp[list]:
+					imp[list].append(k)
+			for c in imp["collections"]:
+				if alias in c["games"] and not k in c["games"]:
+					c["games"].append(k)
+
+
+## Keys of Steam ROM Manager shortcuts folded into a ROM entry: {shortcut key: ROM key}.
+static func aliases_of(entries: Dictionary) -> Dictionary:
+	var out := {}
+	for k in entries:
+		for alias in entries[k].get("aliases", []):
+			out[str(alias)] = k
+	return out
+
+
 ## Fills every field of the contract's game shape so the UI never checks for missing keys.
-static func make_game(entry: Dictionary) -> Dictionary:
+static func make_game(entry: Dictionary, key := "") -> Dictionary:
 	return {
-		"key": "%s:%s" % [entry["store"], entry["id"]],
+		"key": key if key != "" else "%s:%s" % [entry["store"], entry["id"]],
 		"store": entry["store"],
 		"id": entry["id"],
 		"title": entry.get("title", ""),
@@ -369,7 +511,7 @@ static func launch_command(entry: Dictionary, tools: Dictionary, extra_env := {}
 		"amazon":
 			return Amazon.launch_command(entry, tools, extra_env)
 		"emu":
-			return Emu.launch_command(entry)
+			return Emu.launch_command(entry, extra_env)
 	return [] as Array[String]
 
 
@@ -489,6 +631,11 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 		args = (str(compat["args"]) + " " + once).strip_edges()
 	var cmd: Array = append_args(launch_command(entry, _tools, extra), args)
 	if cmd.is_empty():
+		if str(entry.get("rom", "")) != "":
+			var why := str(Emu.launch_plan(entry, extra, home, path_env)["why"])
+			push_warning("Can't start %s: %s" % [entry.get("title", "?"), why])
+			action_failed.emit("%s:%s" % [entry["store"], entry["id"]], "launch", why)
+			return result
 		push_warning("Can't launch %s: install umu-launcher and the store's tool, or Heroic" % entry.get("title", "?"))
 		return result
 	var systemd_run := Common.which("systemd-run", path_env)
@@ -507,6 +654,43 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 	if not result["ok"]:
 		result["app_id"] = 0
 	return result
+
+
+## The Library or the Emulation page opened: read the ROM folders again in the
+## background, so ROMs copied in since show up without a restart. Cheap (the
+## ROM cache only compares folder times); never while a game runs, and at most
+## every RESCAN_GAP_S.
+const RESCAN_GAP_S := 20
+var _bg_paused := false
+## store -> store_signature() of what's shown, and the emulation setup's (made on the scan thread).
+var _sigs := {}
+var _emulation_sig := ""
+## Emu.scan's stamp of the "emu" games we have ("" = make them again next scan).
+var _emu_stamp := ""
+var _last_emu_scan := 0
+
+
+func rescan_emulation() -> bool:
+	var now := int(Time.get_unix_time_from_system())
+	if _bg_paused or now - _last_emu_scan < RESCAN_GAP_S or str(emulation.get("kind", "")) == "":
+		return false
+	_last_emu_scan = now
+	refresh_store("emu")
+	return true
+
+
+## "Show emulated games in the Library" (Settings > Stores): every ROM as a game.
+func show_roms() -> bool:
+	return Emu.roms_enabled()
+
+
+## Saves it and re-reads the emulation entries. False when it couldn't be saved.
+func set_show_roms(on: bool) -> bool:
+	var ok := Emu.set_roms_enabled(on)
+	if ok:
+		refresh_store("emu")
+		store_settings_changed.emit()
+	return ok
 
 
 ## A game we started (the frontend or an emulated game) ended: count its time

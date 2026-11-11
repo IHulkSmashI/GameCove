@@ -18,6 +18,7 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Metadata := preload("res://scripts/library/meta/metadata.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
+const TL := preload("res://scripts/ui/texts_library.gd")
 
 signal link_requested(title: String, line: String, url: String)
 signal artwork_requested
@@ -235,10 +236,31 @@ static func fact_rows(m: Dictionary) -> Array:
 	return rows
 
 
+## A ROM's own facts (ES-DE's gamelist and how it starts): system, emulator,
+## players, rating, times played in ES-DE. [] for any other game.
+static func emu_rows(g: Dictionary) -> Array:
+	var e: Variant = g.get("emulated")
+	if not (e is Dictionary and e.get("rom", false)):
+		return []
+	var rows := [[TL.FACT_SYSTEM, str(e.get("system_name", ""))]]
+	if str(e.get("emulator", "")) != "":
+		rows.append([TL.FACT_RUNS_IN, str(e["emulator"])])
+	if str(e.get("players", "")) != "":
+		rows.append([TL.FACT_PLAYERS, str(e["players"])])
+	var r := float(e.get("rating", -1.0))
+	if r > 0.0:
+		var stars := snappedf(r * 5.0, 0.5)
+		rows.append([TL.FACT_RATING, TL.RATING_OF % (str(int(stars)) if is_equal_approx(stars, floorf(stars)) else String.num(stars, 1))])
+	var n := int(e.get("playcount", 0))
+	if n > 0:
+		rows.append([TL.FACT_PLAYED_ESDE, TL.TIMES % [n, TL.plural(n)]])
+	return rows
+
+
 func _build_facts() -> void:
 	for c in _facts.get_children():
 		Kit.drop(_facts, c)
-	for r in fact_rows(meta):
+	for r in emu_rows(game) + fact_rows(meta):
 		var k := Kit.micro(str(r[0]).to_upper())
 		k.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_facts.add_child(k)

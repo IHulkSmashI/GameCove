@@ -81,7 +81,7 @@ static func for_game(g: Dictionary, now := -1) -> Array:
 	if not g.get("installed", false):
 		out["not_installed"] = _b("not_installed", "Not installed", "Not installed", "", "download")
 	if g.has("store"):
-		out["store"] = _b("store", View.store_name(String(g["store"])), View.store_name(String(g["store"])), "", "store")
+		out["store"] = _b("store", View.store_label(g), View.store_label(g), "", "store")
 
 	var list: Array = []
 	for k in ORDER:

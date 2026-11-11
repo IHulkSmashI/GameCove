@@ -154,7 +154,7 @@ func show_game(g: Dictionary, line := "", animate := false) -> void:
 
 ## [[icon, text], ...] for the meta line: store, last played, playtime.
 static func meta_segments(g: Dictionary, now: int) -> Array:
-	var out: Array = [["store", View.store_name(String(g.get("store", "")))]]
+	var out: Array = [["store", View.store_label(g)]]
 	var info: Variant = g.get("info", {})
 	if g.has("last_played"):
 		out.append(["clock", Texts.last_played_text(int(g.get("last_played", 0)), now)])
