@@ -179,7 +179,10 @@ func build() -> void:
 	root.add_child(_scroll)
 	# A 48 px alpha fade at the foot: the next row peeking in looks masked,
 	# not sliced off under the hint bar.
-	FadeMask.wrap(_scroll, 48.0)
+	var foot: TextureRect = FadeMask.wrap(_scroll, 48.0)
+	# A card under the shelves (the gg.deals note, the credits) that the foot
+	# would slice isn't drawn until it fits: its text never sits half in the fade.
+	foot.cut_fn = func(): return foot_items()
 	var pad := Kit.margin(0)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_theme_constant_override("margin_left", -int(Shelf.PAD.x))
@@ -500,6 +503,19 @@ func _scroll_rows(y: float) -> void:
 
 
 # ---- cards under the shelves -------------------------------------------------------
+
+## What the foot never slices: the shelves and the cards under them.
+func foot_items() -> Array:
+	var out: Array = []
+	for s in shelves:
+		if is_instance_valid(s):
+			out.append(s)
+	if is_instance_valid(_cards_pad) and _cards_pad.get_child_count() > 0:
+		for c in _cards_pad.get_child(0).get_children():
+			if c is Control and (c as Control).visible:
+				out.append(c)
+	return out
+
 
 func _build_cards(deals: Array, nothing: bool) -> void:
 	var box := Kit.vbox(16)

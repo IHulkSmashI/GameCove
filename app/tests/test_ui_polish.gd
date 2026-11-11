@@ -214,6 +214,28 @@ func test_featured_cards_fill_a_short_row() -> void:
 	s.free()
 
 
+## The note under the shelves ("Want real prices from every store?") is a
+## card on the backdrop: its heading and body read at AA in every theme, over
+## the lightest and the darkest art the backdrop can show through.
+func test_discover_note_reads_on_any_backdrop() -> void:
+	for id in Themes.ORDER:
+		ThemeLib.use(id)
+		var t: Dictionary = Themes.get_theme(id)
+		var card: StyleBoxFlat = ThemeLib.card()
+		for art in [Color.WHITE, Color.BLACK]:
+			var back: Color = (art as Color).lerp(t["scrim"], float(t["scrim_strength"]))
+			back.a = 1.0
+			var ground: Color = Themes.over(card.bg_color, back)
+			ok(Themes.contrast(t["text"], ground) >= 4.5, "%s: heading %.2f" % [id, Themes.contrast(t["text"], ground)])
+			ok(Themes.contrast(t["text_2"], ground) >= 4.5, "%s: body %.2f" % [id, Themes.contrast(t["text_2"], ground)])
+	ThemeLib.use("cove")
+	# And the foot never leaves it half in the fade: it's cut whole (FadeMask).
+	var HomeView = load("res://scripts/ui/discover/home_view.gd")
+	var hv: Control = HomeView.new()
+	eq(hv.foot_items(), [], "Discover's foot knows its shelves and cards (none before it's built)")
+	hv.free()
+
+
 # ---- Light: dark ink on light chips and cards ------------------------------------------
 
 ## Every text / ground pair the Light theme puts on a hero or a card reads at
