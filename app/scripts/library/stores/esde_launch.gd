@@ -349,18 +349,15 @@ static func expand(command: String, rom: String, ctx: Dictionary, out: Dictionar
 			startdir = tok.substr(11)   # may name %EMUDIR%, found further on
 			continue
 		if tok.begins_with("%INJECT%="):
-			var f := _vars(tok.substr(9), rom, basename, gamedir, emu_dir, ctx)
-			f = _home_path(f, home)
-			if not f.begins_with("/"):
-				f = gamedir.path_join(f)
-			if DirAccess.dir_exists_absolute(rom) and f == rom:
-				f = rom.path_join(rom.get_file())
-			var fa := FileAccess.open(f, FileAccess.READ)
-			if fa != null and fa.get_length() > 0 and fa.get_length() <= INJECT_MAX:
-				for w in Common.shell_split(fa.get_as_text().strip_edges()):
-					words.append(w)
-			if fa != null:
-				fa.close()
+			for w in Common.shell_split(_inject_text(tok.substr(9), rom, basename, gamedir, emu_dir, ctx, home)):
+				words.append(w)
+			continue
+		# inside a word (3dSen's "-id=%INJECT%=<name>.3dsen"): the file's text takes the place of the
+		# %INJECT%=<name> part, in that one word
+		var inject_at := tok.find("%INJECT%=")
+		if inject_at > 0:
+			var inside := _inject_text(tok.substr(inject_at + 9), rom, basename, gamedir, emu_dir, ctx, home)
+			words.append(_vars(tok.substr(0, inject_at), rom, basename, gamedir, emu_dir, ctx) + inside)
 			continue
 		var cm := core_re.search(tok)
 		if cm != null:
@@ -370,7 +367,12 @@ static func expand(command: String, rom: String, ctx: Dictionary, out: Dictionar
 				out["why"] = "The RetroArch core %s isn't installed (%s)" % [rest.get_file(), out["label"]]
 				return out
 			tok = tok.replace(cm.get_string(0), core_dir)
-		words.append(_vars(tok, rom, basename, gamedir, emu_dir, ctx))
+		var word := _vars(tok, rom, basename, gamedir, emu_dir, ctx)
+		# a file name is ROM-controlled: "-foo.zip" as a word on its own would be read by the emulator as an
+		# option (ES-DE does the same); "./" in front keeps it a name (review at ff76ca4, F9)
+		if (tok == "%BASENAME%" or tok == "%FILENAME%") and word.begins_with("-"):
+			word = "./" + word
+		words.append(word)
 	if startdir != "":
 		out["cwd"] = _home_path(_vars(startdir, rom, basename, gamedir, emu_dir, ctx), home)
 	if program_at < 0:
@@ -405,6 +407,25 @@ static func expand(command: String, rom: String, ctx: Dictionary, out: Dictionar
 	out["env"] = env
 	out["ok"] = true
 	return out
+
+
+## The text of the file a %INJECT%= names (relative to the ROM's folder, ~ for home), "" when it is missing,
+## empty or too big.
+static func _inject_text(spec: String, rom: String, basename: String, gamedir: String, emu_dir: String, ctx: Dictionary, home: String) -> String:
+	var f := _vars(spec, rom, basename, gamedir, emu_dir, ctx)
+	f = _home_path(f, home)
+	if not f.begins_with("/"):
+		f = gamedir.path_join(f)
+	if DirAccess.dir_exists_absolute(rom) and f == rom:
+		f = rom.path_join(rom.get_file())
+	var fa := FileAccess.open(f, FileAccess.READ)
+	if fa == null:
+		return ""
+	var text := ""
+	if fa.get_length() > 0 and fa.get_length() <= INJECT_MAX:
+		text = fa.get_as_text().strip_edges()
+	fa.close()
+	return text
 
 
 static func _vars(s: String, rom: String, basename: String, gamedir: String, emu_dir: String, ctx: Dictionary) -> String:

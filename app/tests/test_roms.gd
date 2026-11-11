@@ -555,6 +555,30 @@ func test_inject_and_shortcuts() -> void:
 	eq(p["cmd"], ["/usr/bin/port-game", "--full"], "a .desktop shortcut runs its Exec line")
 
 
+## Review at ff76ca4, F9: %INJECT%= inside a word (3dSen's -id=%INJECT%=...) and a file name that looks like an option.
+func test_inject_inside_a_word_and_a_dashed_file_name() -> void:
+	var home := _dir("inject_word")
+	_touch(home.path_join("Applications/ES-DE.AppImage"))
+	_echo_script(home.path_join("bin/eden"))
+	_touch(home.path_join("ROMs/nes/Mario.nes"))
+	_touch(home.path_join("ROMs/nes/Mario.3dsen"), "mario-profile\n")
+	_touch(home.path_join("ROMs/nes/-evil.nes"))
+	_touch(home.path_join("ES-DE/custom_systems/es_systems.xml"), "<systemList><system><name>nes</name><path>%ROMPATH%/nes</path><extension>.nes</extension>" +
+		"<command label=\"Sen\">%EMULATOR_EDEN% -id=%INJECT%=%BASENAME%.3dsen</command>" +
+		"<command label=\"Name\">%EMULATOR_EDEN% %BASENAME% %FILENAME% %ROM%</command></system></systemList>")
+	var ctx := _ctx(home, "esde")
+	ctx["path_env"] = home.path_join("bin")
+	var rom := home.path_join("ROMs/nes/Mario.nes")
+	var r := EsdeLaunch.build({"system": "nes", "path": rom}, ctx)
+	eq(r["cmd"], [home.path_join("bin/eden"), "-id=mario-profile"], "the file's text takes the place of %INJECT%=name inside the word")
+	var none := EsdeLaunch.build({"system": "nes", "path": home.path_join("ROMs/nes/-evil.nes")}, ctx)
+	eq(none["cmd"], [home.path_join("bin/eden"), "-id="], "no file: the word keeps its start and loses the rest, like ES-DE")
+	var cmd := EsdeLaunch.expand("%EMULATOR_EDEN% %BASENAME% %FILENAME% %ROM%", home.path_join("ROMs/nes/-evil.nes"), ctx, {"via": "", "label": ""})
+	eq(cmd["cmd"].slice(1), ["./-evil", "./-evil.nes", home.path_join("ROMs/nes/-evil.nes")], "a name that starts with a dash stays a name, never an option")
+	var plain := EsdeLaunch.expand("%EMULATOR_EDEN% %BASENAME% %FILENAME%", rom, ctx, {"via": "", "label": ""})
+	eq(plain["cmd"].slice(1), ["Mario", "Mario.nes"], "an ordinary name is untouched")
+
+
 func test_retrodeck_uses_its_cli() -> void:
 	var home := _dir("retrodeck")
 	var rom := home.path_join("retrodeck/roms/psx/Game.chd")
