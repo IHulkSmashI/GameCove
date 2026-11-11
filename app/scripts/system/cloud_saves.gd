@@ -372,10 +372,12 @@ static func heroic_gog_timestamps(heroic_root: String, id: String) -> Dictionary
 	return out
 
 
-## The game's GOG client id from goggame-<id>.info, "" when missing.
+## The game's GOG client id from goggame-<id>.info, "" when missing or not all digits (it goes into a
+## save path and a remote-config address, so a file with "../" or a slash in it is not trusted).
 static func gog_client_id(install_path: String, id: String) -> String:
 	var info: Variant = Common.read_json(install_path.path_join("goggame-%s.info" % id), {})
-	return str(Common.dict(info).get("clientId", ""))
+	var client := str(Common.dict(info).get("clientId", ""))
+	return client if client.is_valid_int() and not client.begins_with("-") and not client.begins_with("+") else ""
 
 
 ## GOG remote config JSON -> locations [{name, location}] (Windows), [] when cloud storage is

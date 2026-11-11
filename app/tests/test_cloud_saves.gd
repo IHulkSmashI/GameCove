@@ -189,6 +189,10 @@ func test_gog_plan_reads_heroic_then_asks_gog() -> void:
 	_write(heroic.path_join("gog_store/auth.json"), "{}")
 	eq(CS.gog_plan(entry, tools)["why"], "unsupported", "no Heroic data and no client id: nothing to sync")
 	_write(r.path_join("game/goggame-1207.info"), JSON.stringify({"clientId": "5150"}))
+	for bad in ["../../x", "51/50", "-5", "", "5150 --os"]:
+		_write(r.path_join("game/goggame-1207.info"), JSON.stringify({"clientId": bad}))
+		eq(CS.gog_client_id(r.path_join("game"), "1207"), "", "client id %s is not trusted" % bad)
+	_write(r.path_join("game/goggame-1207.info"), JSON.stringify({"clientId": "5150"}))
 	var ask := CS.gog_plan(entry, tools)
 	eq([ask["why"], ask["client_id"]], ["ask", "5150"], "Heroic doesn't know it: ask GOG for its client id")
 	var with_remote := CS.gog_plan(entry, tools, [])
