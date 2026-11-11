@@ -267,6 +267,7 @@ func test_availability_rules() -> void:
 # ---- saved strip ----------------------------------------------------------------------------
 
 func _prefs_file() -> String:
+	DirAccess.make_dir_recursive_absolute(OS.get_cache_dir())   # a fresh HOME has no ~/.cache yet
 	var p := OS.get_cache_dir().path_join("gamecove_strip_%d.cfg" % Time.get_ticks_usec())
 	UiPrefs.path = p
 	Prefs.load_prefs()
