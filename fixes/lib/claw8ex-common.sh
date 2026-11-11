@@ -163,6 +163,7 @@ m_undo() {
 			;;
 		karg | marker) karg_release "$arg" "$FIX" || { done_ok=0; boot_kept=1; } ;;
 		initramfs) rpm-ostree initramfs-etc --untrack="$arg" >/dev/null || { done_ok=0; boot_kept=1; } ;;
+		grubline) grub_line_remove "$arg" || { done_ok=0; boot_kept=1; } ;;
 		ipflag) ip_flag_off "$arg" || done_ok=0 ;;
 		*) warn "unknown manifest line: $kind $arg" ;;
 		esac
@@ -252,6 +253,73 @@ karg_release() {
 	fi
 	rm -rf "$kd"
 	state_tidy
+}
+
+# ---- boot configuration on SteamOS (no rpm-ostree) ---------------------------------------------------------------
+# Ported from ClawDeck's edid.py (boot_backend "steamos-grub", conf_enable, conf_disable, steamos_after_update, built
+# from SteamOS's own steamos-customizations: grub/bin/update-grub and atomic-update): Holo's update-grub runs
+# grub-mkconfig on /etc/default/grub and writes /efi/EFI/SteamOS/grub.cfg, the documented way to add kernel arguments
+# there. GameCove appends ONE line ending in its marker and undo deletes exactly the lines with the marker; nothing
+# else in the file is touched. A SteamOS update keeps only the /etc files on its keep list (plus drop-ins in
+# /etc/atomic-update.conf.d), so the fix keep-lists its own files only, never /etc/default/grub (that would hide
+# Valve's future changes to it); after an update `set refresh` puts the one line back on top of Valve's new file.
+GRUB_DEFAULT=/etc/default/grub
+STEAMOS_GRUB_CFG=/efi/EFI/SteamOS/grub.cfg
+# shellcheck disable=SC2034 # used by the VRR fix
+KEEP_DIR=/etc/atomic-update.conf.d
+
+os_id() { sed -n 's/^ID=//p' "$ROOT/etc/os-release" 2>/dev/null | tr -d "\"'" | head -n 1; }
+is_steamos() { [ "$(os_id)" = steamos ]; }
+
+# grub_mark <fix>: the marker that ends each of the fix's lines in /etc/default/grub.
+grub_mark() { printf '# GameCove %s' "$1"; }
+
+grub_has_line() { grep -qF "$(grub_mark "$FIX")" "$ROOT$GRUB_DEFAULT" 2>/dev/null; }
+
+# grub_write <file> <content file>: atomically, into the real file (a symlinked config stays one), mode kept.
+grub_write() {
+	_real=$(readlink -f "$ROOT$1" 2>/dev/null) || _real=$ROOT$1
+	cp -p "$_real" "$_real.gamecove-tmp" 2>/dev/null || : >"$_real.gamecove-tmp" || return 1
+	cat "$2" >"$_real.gamecove-tmp" && sync "$_real.gamecove-tmp" 2>/dev/null
+	mv -f "$_real.gamecove-tmp" "$_real" || { rm -f "$_real.gamecove-tmp"; return 1; }
+}
+
+# update-grub as its own systemd unit when it can (a Steam or GameCove restart can't kill it halfway), else directly.
+grub_regen() {
+	if [ -z "$ROOT" ] && command -v systemd-run >/dev/null 2>&1; then
+		systemd-run --wait --collect --pipe --quiet --unit "gamecove-update-grub-$$" update-grub >/dev/null 2>&1
+	else
+		update-grub >/dev/null 2>&1
+	fi
+}
+
+# grub_line_add <args>: GameCove's line (marker on the same line: the file is a shell script grub-mkconfig sources),
+# the boot menu rebuilt, and checked: SteamOS's grub.cfg must carry the arguments, or it is all taken back.
+grub_line_add() {
+	_tmp=$(mktemp) || return 1
+	grep -vF "$(grub_mark "$FIX")" "$ROOT$GRUB_DEFAULT" >"$_tmp" 2>/dev/null || true
+	printf 'GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} %s"  %s\n' "$1" "$(grub_mark "$FIX")" >>"$_tmp"
+	grub_write "$GRUB_DEFAULT" "$_tmp" || { rm -f "$_tmp"; return 1; }
+	rm -f "$_tmp"
+	if ! grub_regen; then
+		warn "update-grub failed"
+		return 1
+	fi
+	if [ -f "$ROOT$STEAMOS_GRUB_CFG" ] && ! grep -qF -- "$1" "$ROOT$STEAMOS_GRUB_CFG"; then
+		warn "SteamOS's boot menu didn't take the setting (update-grub left it out)"
+		return 1
+	fi
+}
+
+# grub_line_remove <file>: only GameCove's lines out again, and the boot menu rebuilt.
+grub_line_remove() {
+	if grep -qF "$(grub_mark "$FIX")" "$ROOT$1" 2>/dev/null; then
+		_tmp=$(mktemp) || return 1
+		grep -vF "$(grub_mark "$FIX")" "$ROOT$1" >"$_tmp" || true
+		grub_write "$1" "$_tmp" || { rm -f "$_tmp"; return 1; }
+		rm -f "$_tmp"
+	fi
+	grub_regen || { warn "update-grub failed"; return 1; }
 }
 
 # firmware_class.path must be ours (/etc/firmware) or unset.

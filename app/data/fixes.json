@@ -46,9 +46,10 @@
     "msi-claw-a8": "AMD GPU: the boot hook runs before xe/i915 only, and the A8's panel EDID isn't in the validated list."
    },
    "bazzite": "Not fixed.",
-   "steamos": "Not supported on SteamOS.",
+   "steamos": "Not fixed. The fix works there too: the switch goes on one marked line in /etc/default/grub (update-grub), its files are keep-listed for SteamOS updates, and GameCove puts the line back after an update. Only offered where the GPU driver starts after /etc is there.",
    "sources": [
     "ClawDeck docs/HARDWARE-FINDINGS.md section 11",
+    "ClawDeck py_modules/clawdeck/edid.py at 4cf5cf9 (boot_backend steamos-grub, conf_enable, steamos_after_update; checked by a tester on SteamOS 3.9.5)",
     "fixes/claw8ex-vrr/README.md"
    ],
    "page": "fixes"

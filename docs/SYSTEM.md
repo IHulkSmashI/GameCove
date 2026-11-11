@@ -392,6 +392,7 @@ handheld, never a background or remote session):
 | controller-rumble | rumble strength, per game | 0-100 or off/low/medium/high, checked against what the driver offers; an unchanged value is never rewritten (hid-msi stores it in the controller's flash); the original is restored on removal |
 | claw8ex-gyro accel on/off | a gyro tuning switch | only rewrites GameCove's own InputPlumber override |
 | claw8ex-gyro / -buttons refresh | after an OS update the controller may otherwise stop matching; must work without a keyboard | only rebuilds GameCove's override from the current stock file, or removes it |
+| claw8ex-vrr refresh | a SteamOS update brings back Valve's `/etc/default/grub` without the VRR fix's line; the fix was installed with the password, and Gaming Mode has no keyboard to type it | only puts back GameCove's one marked line (`gamecove.vrr=1`) when the fix is installed and every file the keep list kept is there; where the update made the fix impossible it takes the fix out instead; update-grub runs as its own systemd unit, so the time bound can't cut it halfway |
 
 Administrator password (`gamecove-fix`, `auth_admin_keep`):
 

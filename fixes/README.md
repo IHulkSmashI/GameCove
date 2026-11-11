@@ -9,7 +9,7 @@ research behind it: `app/data/fixes.json` and [docs/DEVICE-FIXES.md](../docs/DEV
 | Fix | Devices | What it fixes | Kind |
 | --- | --- | --- | --- |
 | `claw8ex-buttons` | Claw 8 EX | MSI face buttons | InputPlumber override (admin) |
-| `claw8ex-vrr` | Claw 8 EX, 8 AI+ (same panel); A1M, 7 AI+ (optional) | VRR down to 30 Hz | EDID override (admin, restart) |
+| `claw8ex-vrr` | Claw 8 EX, 8 AI+ (same panel); A1M, 7 AI+ (optional) | VRR down to 30 Hz | EDID override (admin, restart; Bazzite and SteamOS) |
 | `claw8ex-gyro` | Claw 8 EX | Gyro | HID-BPF + ISH firmware (admin, cold boot) |
 | `claw-kbd-wakeup` | every MSI Claw | volume buttons wake it from sleep | udev rule |
 | `claw-wifi-d3cold` | every Intel Claw (optional) | Wi-Fi gone after sleep | udev rule |
