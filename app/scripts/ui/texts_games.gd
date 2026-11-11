@@ -82,6 +82,7 @@ const ACH_SHOW_ALL := "Show all %d"
 
 const ABOUT := "About this game"
 ## Time to beat as three chips on the game page.
+const TTB_TITLE := "Time to beat"
 const TTB_MAIN := "Main"
 const TTB_EXTRAS := "Extras"
 const TTB_ALL := "100%"

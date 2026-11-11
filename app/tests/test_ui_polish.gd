@@ -131,3 +131,53 @@ func test_settings_foot_rule() -> void:
 	page.free()
 	# The cut ends softly in the gap (a long card's own panel goes on below it).
 	ok(FadeMask.CUT_FADE >= 6.0 and FadeMask.CUT_FADE <= 12.0, "the cut fades over the gap between rows")
+
+
+# ---- the game page ---------------------------------------------------------------
+
+## Time to beat is its own card that goes under the shortest column, so
+## About (the tallest) doesn't run below the fold beside half-empty columns.
+func test_time_to_beat_floats_to_the_shortest_column() -> void:
+	for want in [[[900.0, 300.0, 220.0], "Column2"], [[900.0, 300.0, 700.0], "Column1"], [[200.0, 300.0, 700.0], "Column0"]]:
+		var p: Control = Page.new()
+		p.size = Vector2(1536, 960)
+		p.setup_page(Logic.g("gog", "1", "Cyber", true, 100))
+		var heights: Array = want[0]
+		for i in 3:
+			var body: VBoxContainer = p.add_card("Card %d" % i, "info", "", true, i)
+			var block := Control.new()
+			block.custom_minimum_size = Vector2(0, heights[i])
+			body.add_child(block)
+		# (last here: outside the scene tree a card's height is measured once)
+		var fbody: VBoxContainer = p.add_card("Time to beat", "clock", "", true, -1, true)
+		var fcard: Control = fbody.get_parent()
+		eq(p.columns.get_child_count(), 3, "three columns: the floating card takes none")
+		eq(String(fcard.get_parent().name), want[1], "under the shortest column of %s" % str(heights))
+		eq(fcard.get_index(), 1, "below that column's own card")
+		p._place_floats()
+		eq(String(fcard.get_parent().name), want[1], "and stays put once placed")
+		p.free()
+
+
+func test_game_page_about_keeps_its_last_lines_in_reach() -> void:
+	var games := Games.new()
+	var r: Dictionary = games._rig()
+	var g: Dictionary = games._steam_game()
+	g["info"]["time_to_beat"] = {"main_h": 33.0, "extra_h": 72.0, "complete_h": 129.0, "count": 21}
+	var p: Control = GamePage.new()
+	p.setup(g, Screens.FakeLauncher.new(), {"library": r["lib"], "state": r["state"], "actions": r["actions"]})
+	ok(p.ttb_card != null, "time to beat has its own card")
+	ok(p.ttb_card.get_parent().get_meta("float", false), "a floating one")
+	var about: Control = p.find_child("Card_" + games.TG.ABOUT.validate_node_name(), true, false)
+	ok(about != null and about.find_child("TimeToBeat", true, false) == null, "and no longer lengthens About")
+	ok(p.ttb_card.find_child("TimeToBeat", true, false) != null, "the three times are in the card")
+	# The read-only lines after About's last button come into view with it.
+	var with: Variant = p.meta_card.artwork_button.get_meta("reveal_with", null)
+	ok(with is Control and about.is_ancestor_of(with), "Change artwork brings About's last lines with it")
+	p.free()
+	# Without numbers there's no card, just the line.
+	var q: Control = GamePage.new()
+	q.setup(games._steam_game(), Screens.FakeLauncher.new(), {"library": r["lib"], "state": r["state"], "actions": r["actions"]})
+	ok(q.ttb_card == null, "no times, no card")
+	q.free()
+	games._free(r)

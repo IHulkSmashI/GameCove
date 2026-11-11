@@ -88,6 +88,9 @@ var saves_card: VBoxContainer
 var battery: Object
 ## "Drains about 9 W, ~5 h on a full charge" once the game has enough time on battery.
 var drain_label: Label
+## The Time to beat card's body (null when the game has no times).
+var ttb_card: VBoxContainer
+var _ttb_pending: Dictionary = {}
 var _accent := Color(0, 0, 0, 0)
 
 
@@ -113,6 +116,11 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 	var about := add_card(TG.ABOUT, "info", "", true, 0)
 	_fill_about(about, g, info)
 	_add_details(about, g)
+	# The lines after the last button (anti-cheat, community reports, what it
+	# drains, the credits) take no focus: they come into view with that
+	# button, so on a small screen they're never left under the fold.
+	if meta_card != null and meta_card.artwork_button != null and about.get_child_count() > 0:
+		meta_card.artwork_button.set_meta("reveal_with", about.get_child(about.get_child_count() - 1))
 
 	if achievements != null and _is_steam():
 		var body := add_card(TG.ACH_TITLE, "star", "", true, 1)
@@ -122,6 +130,10 @@ func setup(g: Dictionary, launcher: Object, services := {}) -> void:
 		body.add_child(ach_card)
 		columns_laid_out.connect(func(_n, inner): ach_card.fit_width(inner))
 		ach_card.setup(str(g.get("id", "")), achievements)
+
+	if not _ttb_pending.is_empty():
+		ttb_card = add_card(TG.TTB_TITLE, "clock", "", true, -1, true)
+		ttb_card.add_child(_ttb_chips(_ttb_pending))
 
 	if InsightsCard.visible_for(g):
 		_build_insights(g, services.get("insights"))
@@ -204,7 +216,13 @@ func _fill_about(about: VBoxContainer, g: Dictionary, info: Dictionary) -> void:
 		syn.max_lines_visible = 3
 		syn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		about.add_child(syn)
-	about.add_child(_ttb_chips(info))
+	# Time to beat: with numbers, its own small card that sits under the
+	# shortest column (About is the tallest: it ran below the fold beside two
+	# half-empty columns, and its last lines were cut); without, one line here.
+	if typeof(info.get("time_to_beat")) == TYPE_DICTIONARY:
+		_ttb_pending = info
+	else:
+		about.add_child(_ttb_chips(info))
 	var ac := Texts.anticheat_badge(info)
 	for s in [["shield", Texts.anticheat_line(info), "anticheat"], ["gauge", Texts.protondb_line(info), ""]]:
 		var tone: String = ac.get("tone", "") if s[2] == "anticheat" else ""
