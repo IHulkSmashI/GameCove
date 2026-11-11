@@ -1,5 +1,5 @@
 #!/bin/sh
-# shellcheck disable=SC2016 # t_check evals its single-quoted check later, on purpose
+# shellcheck disable=SC2016,SC2034 # t_check evals its single-quoted checks later, on purpose (RULE is used there)
 # overlay-power against fake roots (never the real system).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
