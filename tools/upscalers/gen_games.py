@@ -135,7 +135,7 @@ SCHEMA = 2
 
 def compat_rows(wiki: str) -> dict:
     """OptiScaler's Compatibility List with each game's page folded in."""
-    from gamecove_upscale import livedb
+    from gamecove_upscale import gamedb, livedb
     with open(os.path.join(wiki, "Compatibility-List.md"), encoding="utf-8") as f:
         text = f.read()
     rows = livedb.parse_compat(text)
@@ -165,6 +165,10 @@ def compat_rows(wiki: str) -> dict:
                     row["proxies"] = pg["proxies"]
                 if pg.get("issues"):
                     row["issues"] = [i[:200] for i in pg["issues"][:3]]
+        # "Online game, use at your own risk!", or an anti-cheat that has to be switched off: never set up by
+        # itself, the player opts in per game (gamedb.online_risk, review H5)
+        if not row.get("anticheat") and gamedb.online_risk(row["notes"], row.get("issues")):
+            row["online"] = True
         out[key] = row
     return out
 

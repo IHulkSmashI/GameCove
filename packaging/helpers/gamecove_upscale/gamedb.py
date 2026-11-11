@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 DEPTH = 6
 KEY_RE = r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$"
@@ -324,16 +325,38 @@ def compat_row(doc: dict, name: str | None, appid: str | None = None) -> dict | 
     return rows.get(_norm(name)) if name else None
 
 
+# OptiScaler's Compatibility List marks online games ("**Online game, use at your own risk!**", "at your own
+# discretion") and games whose anti-cheat has to be switched off or bypassed. These are never set up by themselves:
+# the menu says why in one line and the player can still pick it per game (review H5). "no anti-cheat" /
+# "does not use anticheat" are games that say they are safe, not a risk.
+_ONLINE_RE = re.compile(r"online game|at your own (risk|discretion)|own responsibility", re.I)
+_AC_RE = re.compile(r"anti-?cheat|\bEAC\b|battleye|vanguard|\bACE\b", re.I)
+_AC_NONE_RE = re.compile(r"\b(no|without|doesn'?t use|does not use|not use)\s+(an?\s+)?anti-?cheat", re.I)
+
+
+def online_risk(notes: str | None, issues: list | None = None) -> bool:
+    """True when the list's notes or known issues say the game is online-only at the player's risk, or names an
+    anti-cheat that has to be off for OptiScaler to work."""
+    for text in [str(notes or "")] + [str(x) for x in issues or []]:
+        if _ONLINE_RE.search(text):
+            return True
+        if _AC_RE.search(_AC_NONE_RE.sub("", text)):
+            return True
+    return False
+
+
 def knowledge(doc: dict, game_dir: str | None, appid: str | None = None, name: str | None = None) -> dict:
     """Everything the list knows about a game, merged: its own entry (by app id, then exe), the compatibility row
     (by app id, then title). Keys a caller can rely on: known, status ("works" | "broken" | "mixed" | ""), inputs,
-    proxies, args, anticheat, notes, steamdeck0, optipatcher, appids, id, name."""
+    proxies, args, anticheat, online, notes, steamdeck0, optipatcher, appids, id, name."""
     g = by_appid(doc, appid) or match(doc, exes_in(game_dir)) or {}
     row = compat_row(doc, name or g.get("name"), appid) or {}
     return {"known": bool(g or row), "id": g.get("id") or row.get("slug"), "name": g.get("name") or row.get("name"),
             "status": g.get("status") or row.get("status") or "", "inputs": g.get("inputs") or row.get("inputs") or [],
             "proxies": g.get("proxies") or row.get("proxies") or [], "args": g.get("args") or row.get("args") or "",
             "anticheat": bool(g.get("anticheat") or row.get("anticheat")), "notes": g.get("notes") or row.get("notes") or "",
+            "online": bool(g.get("online") or row.get("online") or online_risk(g.get("notes"))
+                           or online_risk(row.get("notes"), row.get("issues"))),
             "steamdeck0": bool(g.get("steamdeck0")), "optipatcher": bool(row.get("optipatcher")),
             "appids": sorted({str(x) for x in (g.get("appids") or []) + (row.get("appids") or [])}),
             "wine_check": bool(g.get("wine_check")), "ini": dict(g.get("ini") or {}), "in_list": bool(g), "in_compat": bool(row)}

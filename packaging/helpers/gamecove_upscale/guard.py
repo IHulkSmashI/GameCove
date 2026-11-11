@@ -21,20 +21,32 @@ DEPTH = EXE_DEPTH + 1
 LIBRARY_DIRS = {"common", "steamapps", "games", "heroic", "gog games", "epic games", "lutris", "legendary", "itch",
                 "roms", "faugus", "bottles", "drive_c", "program files", "program files (x86)"}
 MAX_UP = 3
-# folder and file names (lower case, fnmatch) the anti-cheat systems install next to a game
+# folder and file names (lower case, fnmatch) the anti-cheat systems install next to a game. Sources, checked
+# 2026-11-11: EA's own help pages and EA forum threads for Javelin (EAAntiCheat.GameServiceLauncher.exe/.dll,
+# EAAntiCheat.Installer.exe in the game's folder); Steam discussions for NetEase's NEAC (NeacClient.exe in the
+# NARAKA: BLADEPOINT folder, the NeacSafe/NeacSafe64 kernel driver); the vendors' and PCGamingWiki's file lists
+# for the rest. Most kernel parts (Vanguard's vgk.sys, FACEIT, Javelin's service) live outside the game's folder:
+# for those the app's own anti-cheat data (Are We Anti-Cheat Yet) is what refuses the game.
 ANTICHEAT = {
     "Easy Anti-Cheat": ("easyanticheat", "easyanticheat_eos", "easyanticheat_x64.dll", "easyanticheat_eos_setup.exe",
                         "start_protected_game.exe", "eac_launcher.exe", "*.eac"),
     "BattlEye": ("battleye", "beservice.exe", "beservice_x64.exe", "beclient_x64.dll", "*_be.exe"),
-    "nProtect GameGuard": ("gameguard", "gameguard.des", "npggnt.des"),
-    "XIGNCODE3": ("xigncode", "x3.xem", "xcorona_x64.xem"),
+    "EA Javelin": ("eaanticheat", "eaanticheat.*", "eaanticheat.gameservicelauncher.exe",
+                   "eaanticheat.gameservicelauncher.dll", "eaanticheat.installer.exe"),
+    "NetEase Anti-Cheat": ("neacclient.exe", "neac*.exe", "neacsafe*.sys", "neacsafe*.dll", "neac_*.dll"),
+    "nProtect GameGuard": ("gameguard", "gameguard.des", "npggnt.des", "gamemon.des", "gamemon64.des"),
+    "XIGNCODE3": ("xigncode", "x3.xem", "xcorona_x64.xem", "xhunter1.sys", "xhunter64.sys"),
     "Vanguard": ("vgc.exe", "vgk.sys", "riot vanguard"),
-    "Anti-Cheat Expert": ("anticheatexpert", "ace-base.sys", "ace-base64.dll", "sguard64.exe"),
+    "Anti-Cheat Expert": ("anticheatexpert", "ace-base.sys", "ace-base64.dll", "ace-*.sys", "sguard64.exe",
+                          "sguardsvc64.exe"),
+    "Tencent TP": ("tenprotect", "tp3helper.dat", "tessafe.sys"),
+    "Nexon Game Security": ("blackcipher", "blackcipher64.aes", "blackcall.aes", "blackcall64.aes"),
+    "AhnLab HackShield": ("hshield", "ehsvc.dll"),
     "PunkBuster": ("pb", "pbsvc.exe", "punkbuster"),
-    "EQU8": ("equ8", "equ8_conf.json"),
+    "EQU8": ("equ8", "equ8_conf.json", "equ8*.sys"),
     "miHoYo Protect": ("mhyprot2.sys", "mhyprot3.sys", "hoyokprotect.sys", "mhypbase.dll"),
-    "FACEIT": ("faceit", "faceitclient.exe"),
-    "Denuvo Anti-Cheat": ("denuvo-anti-cheat-update-service.exe", "denuvo anti-cheat"),
+    "FACEIT": ("faceit", "faceitclient.exe", "faceit.sys"),
+    "Denuvo Anti-Cheat": ("denuvo-anti-cheat-update-service.exe", "denuvo anti-cheat", "denuvo-anti-cheat.sys"),
     "Ricochet": ("randgrid.sys",),
 }
 # "pb" as a folder name is too common: only counted together with a PunkBuster file

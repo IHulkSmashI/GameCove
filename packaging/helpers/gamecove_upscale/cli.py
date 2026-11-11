@@ -34,19 +34,20 @@ from . import best, chips, framegen, games, launchenv, livedb, lsfg, mirror, opt
 
 COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency", "xess-install", "xess-remove",
             "check", "update", "game-update", "plan", "prepare", "mode", "native", "caps", "lsfg-install", "lsfg-remove", "lsfg-state", "storage", "purge",
-            "fsr4-rollback")
+            "fsr4-rollback", "opt-in")
 # commands that may download: the signed index is fetched (at most every mirror.FRESH_S) before they run
-INSTALLS = ("choose", "apply", "xess-install", "game-update")
+INSTALLS = ("choose", "apply", "xess-install", "game-update", "opt-in")
 # GameCove: "best for your handheld" (best.py)
 #   plan      what GameCove would pick for the game and whether it may set it up by itself (read-only)
 #   prepare   set the game up ahead of its start when that is safe (run when a game is installed, updated or opened)
+#   opt-in    the player takes our pick for a game we don't set up by ourselves (an online game, one no list knows)
 #   mode      --mode best|custom|native: how the game is handled;  native: everything out, nothing added
 #   caps      what this GPU can run (chips.capabilities), no game needed
 #   status    also answers "active": the read-out of the last start, and "mode"
 # commands that first do what ClawDeck does at every plugin start (games.xmx_upkeep): Protons added since the XeSS
 # XMX driver was installed get the per-game scope, and the FSR 4.1.2 XMX files that came with the package go to
 # ~/fsr4-xmx when they aren't there. Not "status" / "latency": those only read.
-XMX_UPKEEP = ("state", "recommend", "check", "choose", "apply", "update", "game-update", "plan", "prepare", "mode")
+XMX_UPKEEP = ("state", "recommend", "check", "choose", "apply", "update", "game-update", "plan", "prepare", "mode", "opt-in")
 
 
 def _state(home: str, gpu: dict) -> dict:
@@ -103,7 +104,7 @@ def run(argv: list[str]) -> dict:
     a = p.parse_args(argv)
     gpu = parse_gpu(a.gpu)
     home = a.home
-    if a.command in ("recommend", "status", "choose", "apply", "undo", "latency", "game-update", "plan", "prepare", "mode", "native") and not a.key:
+    if a.command in ("recommend", "status", "choose", "apply", "undo", "latency", "game-update", "plan", "prepare", "mode", "native", "opt-in") and not a.key:
         raise ValueError(f"{a.command} needs --key")
     if a.command in INSTALLS and not (a.command == "choose" and a.upscaler == "own"):
         mirror.refresh(home)
@@ -127,6 +128,8 @@ def run(argv: list[str]) -> dict:
         return best.prepare(home, a.key, gpu, a.dir, a.name, a.anticheat, a.allow_unpinned)
     if a.command == "native":
         return best.native(home, a.key, gpu, a.dir)
+    if a.command == "opt-in":
+        return best.opt_in(home, a.key, gpu, a.dir, a.name, a.anticheat, a.allow_unpinned)
     if a.command == "mode":
         if a.mode == "native":
             return best.native(home, a.key, gpu, a.dir)

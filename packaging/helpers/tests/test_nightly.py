@@ -262,7 +262,7 @@ def test_withdrawn_files_leave_games_and_arent_offered(tmp_path, monkeypatch):
     _pkg(home)
     _w(os.path.join(home, optiscaler.FSR4_AMD_DIR, optiscaler.FSR4_AMD_FILE), "amd-sdk-4.1.2")
     d = _steam_game(home, "710", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
-    assert best.prepare(home, "710", Z1E)["did"] == "set up"
+    assert best.opt_in(home, "710", Z1E)["did"] == "set up"
     assert open(os.path.join(d, "amd_fidelityfx_upscaler_dx12.dll")).read() == "amd-sdk-4.1.2"
     assert mirror.withdrawn(home) == {}                              # no verified index: nothing is withdrawn
     monkeypatch.setattr(mirror, "load", lambda h, now=None: {"withdrawn": {"fsr4_amd": "pulled for now", "bogus": "x"}})

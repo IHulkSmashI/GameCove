@@ -640,6 +640,12 @@ func _upscale_controls() -> Array:
 			func(_v):
 				_forget_status()
 				return true),
+		_mkc({"id": "perf.upscale_offer", "title": "Add our pick to this game",
+			"help": "For games we don't set up by ourselves: online games and games we don't know yet. Nothing goes in until you press this.",
+			"kind": "action", "per_game": false, "apply_order": 4,
+			"affects": ["perf.upscale_mode", "perf.upscaler", "perf.frame_gen", "perf.upscale_active", "perf.upscale_menu"]},
+			_offer_detect, func(): return null,
+			func(_v): return _after_upscale(_upscale_run("opt-in", _ac_args()), true)),
 		_mk({"id": "perf.upscaler", "title": "Upscaler",
 			"help": "Pick one yourself. The game keeps its own menu: choose DLSS or FSR there and it becomes this.",
 			"kind": "choice", "options": _opts(Upscale.upscalers(g), Upscale.LABELS, Upscale.upscaler_help(g)), "default_value": "own",
@@ -719,6 +725,22 @@ func _mode_detect(c: RefCounted) -> String:
 		c.help = line + (" (" + did.substr(0, 1).to_upper() + did.substr(1) + ".)" if did != "" and did != "set up" else "")
 	if str(p.get("refused", "")) == "anticheat":
 		return "Off for this game: it uses anti-cheat"
+	return ""
+
+
+## "Add our pick": only for a game Best offers but won't set up by itself (an
+## online game, or one no list knows). Its title names the pick, its help line
+## says why it isn't added by itself (for an online game, the ban risk).
+func _offer_detect(c: RefCounted) -> String:
+	var why := _upscale_reason()
+	if why != "":
+		return why
+	var p := upscale_plan()
+	var offer := str(p.get("offer", ""))
+	if offer == "" or str(upscale_status().get("mode", "best")) != "best":
+		return "Nothing to add here: Best already looks after this game" if str(p.get("refused", "")) == "" else "Off for this game"
+	c.title = "Add %s to this game" % str(Upscale.LABELS.get(offer, offer))
+	c.help = str(p.get("line", c.help))
 	return ""
 
 

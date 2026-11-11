@@ -122,7 +122,7 @@ func test_every_control_is_perf_and_explains_itself() -> void:
 	for want in ["perf.overlay", "perf.overlay_position", "perf.overlay_opacity", "perf.overlay_scale",
 			"perf.overlay_item.fps", "perf.lsfg",
 			"perf.lsfg_multiplier", "perf.lsfg_flow_scale", "perf.lsfg_performance", "perf.upscaler",
-			"perf.frame_gen", "perf.upscale_mode", "perf.upscale_active", "perf.fg_generator", "perf.upscale_menu", "perf.upscale_undo", "perf.upscaler_update",
+			"perf.frame_gen", "perf.upscale_mode", "perf.upscale_offer", "perf.upscale_active", "perf.fg_generator", "perf.upscale_menu", "perf.upscale_undo", "perf.upscaler_update",
 			"perf.upscale_game_update", "perf.low_latency", "perf.proton",
 			"perf.launch_wrapper", "perf.shader_threads", "perf.clear_shader_cache"]:
 		ok(want in ids, want + " registered")
@@ -423,7 +423,7 @@ func test_upscaler_update_row_shows_and_runs_the_update() -> void:
 	ok("Update available: OptiScaler 0.9.4 → 0.9.5" in v.explanation(), "the row says so: " + v.explanation())
 	var card: Array = Catalog.cards_for(["perf"], reg.list().map(func(x): return x.id)).filter(func(cd): return cd[0] == "Upscaling and frame generation")[0]
 	ok("perf.upscaler_update" in card[3] and "perf.upscale_game_update" in card[3], "on the Upscaling card, under More")
-	eq(card[2].slice(0, 2), ["perf.upscale_mode", "perf.upscale_active"], "the mode and what is running come first")
+	eq(card[2].slice(0, 3), ["perf.upscale_mode", "perf.upscale_offer", "perf.upscale_active"], "the mode, what it offers and what is running come first")
 	# pressing it updates, then reads again
 	runner.answers["update"] = {"ok": true, "results": {}, "games": ["epic:abc"]}
 	var n_check := _calls_with(runner, "check").size()
@@ -915,6 +915,34 @@ func test_anticheat_games_get_nothing_and_say_why() -> void:
 	eq(c.reason, "Off for this game: it uses anti-cheat", "says why")
 	ok("--anticheat" in _calls_with(runner, "prepare")[0] and "--anticheat" in _calls_with(runner, "plan")[0], "the app's own anti-cheat data reaches the helper")
 	eq(w["reg"].control("perf.lsfg").reason, "Off for this game: it uses anti-cheat", "Lossless too")
+	_done(w)
+
+
+func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> void:
+	var w := _world("mode_offer", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	var warn := "This is an online game. An upscaler in its files can break its rules and get the account banned, so we don't add one by ourselves. You can still add FSR 4.1.2 below if you accept that risk."
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {}}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": warn, "auto": false, "refused": null, "online": true, "offer": "fsr4_amd"}
+	_with_game(w, EPIC)
+	eq(_calls_with(runner, "opt-in").size(), 0, "nothing is put in by itself")
+	eq(reg.control("perf.upscale_mode").help, warn, "the mode row says why, in plain words")
+	var c: RefCounted = reg.control("perf.upscale_offer")
+	ok(c.available, "offered: " + c.reason)
+	eq(c.title, "Add FSR 4.1.2 to this game", "our pick is the one offered")
+	eq(c.help, warn, "with the plain warning")
+	runner.answers["opt-in"] = {"ok": true, "did": "set up", "mode": "best"}
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove", "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
+	reg.set_value("perf.upscale_offer", true)
+	var calls := _calls_with(runner, "opt-in")
+	ok(calls.size() == 1 and "--key epic:abc" in calls[0], "one press, the player's pick: " + str(calls))
+	eq(w["p"].launch_env_hook("epic:abc", EPIC).get("WINEDLLOVERRIDES"), "dxgi=n,b;", "and the next start has it")
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null, "opted_in": true}
+	w["p"]._forget_status()
+	reg.detect_all()
+	ok(not reg.control("perf.upscale_offer").available, "nothing left to offer once added")
 	_done(w)
 
 

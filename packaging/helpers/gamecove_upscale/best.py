@@ -9,8 +9,11 @@ Per game there is one saved mode (upscale.json "mode"):
 prepare() is what runs when a game is installed, updated, opened or about to start: in "best" mode it puts the plan in
 when that is safe and it isn't there yet, repairs files a game update removed, and falls back (FSR 4 -> FSR 3.1,
 FSR 4.1.2 on XMX -> XeSS 2) when the last start shows the pick didn't come up. Safe means: no anti-cheat, no other
-injector, not marked broken, and for a game no list knows, only when what it ships makes the route certain (DirectX
-12 with DLSS or FSR 3.1 DLLs) and then without frame generation. Anything else is offered, not done.
+injector, not marked broken, a game the lists know, and not an online game. Anything else is offered, not done
+(review H5): the plan says why in one line and names our pick ("offer"), and nothing goes into the game until the
+player takes it (opt_in, the menu's "Add ... to this game"). A game no list knows then gets the upscaler only, no
+frame generation. Setting the game's own FSR 3.1 to FSR 4 through Proton puts nothing into the folder and stays
+automatic, except for online games.
 """
 from __future__ import annotations
 
@@ -39,9 +42,21 @@ def set_mode(home: str, key: str, mode: str) -> None:
         s["mode"].pop(str(key), None)
     else:
         s["mode"][str(key)] = mode
-    for k in ("strikes", "fell_back"):
+    for k in ("strikes", "fell_back") + (("optin",) if mode == "native" else ()):
         (s.get(k) or {}).pop(str(key), None)
     games.save_state(home, s)
+
+
+def opted_in(home: str, key: str) -> bool:
+    """The player took our pick for a game we don't set up by ourselves (an online game, one no list knows)."""
+    return bool((games.load_state(home).get("optin") or {}).get(str(key)))
+
+
+ONLINE_LINE = ("This is an online game. An upscaler in its files can break its rules and get the account banned, so "
+               "we don't add one by ourselves. You can still add {up} below if you accept that risk.")
+UNKNOWN_LINE = "We don't know this game yet, so nothing is added by itself. Our pick here is {up}: add it below if you want it."
+UNSURE_LINE = ("We don't know this game yet and can't tell how it renders, so nothing is added by itself. You can still "
+               "add {up} below and see if it works.")
 
 
 def _stamp(home: str, key: str) -> float:
@@ -82,22 +97,29 @@ def plan(home: str, key: str, gpu: dict, game_dir: str | None = None, name: str 
         out.update(refused="listed", why_not=rec["reasons"][0])
     elif not rec["launch"]:
         out.update(why_not="")                      # nothing to add: the game's own is the best here
-    elif not rec.get("optiscaler"):
-        out["auto"] = True                          # environment only (Proton's FSR 4 upgrade): nothing in the folder
-    elif entry.get("known") or rec.get("re_engine"):
-        out["auto"] = True
-    elif rec.get("dx12") and (set(rec["ships"]["upscaler"]) & {"DLSS", "FSR"}) and folder:
-        out["auto"] = True
-        out["unknown_safe"] = True
     else:
-        out.update(why_not="We don't know this game yet and can't tell how it renders, so nothing is added by itself. "
-                           "You can still pick an upscaler below.")
+        opted = opted_in(home, key)
+        up = active.LABELS.get(out["upscaler"], out["upscaler"])
+        out["online"] = bool(entry.get("online"))
+        out["opted_in"] = opted
+        if out["online"] and not opted:
+            out.update(offer=out["upscaler"], why_not=ONLINE_LINE.format(up=up))
+        elif not rec.get("optiscaler"):
+            out["auto"] = True                      # environment only (Proton's FSR 4 upgrade): nothing in the folder
+        elif entry.get("known") or rec.get("re_engine"):
+            out["auto"] = True
+        elif opted:
+            out["auto"] = True
+            out["unknown_safe"] = True              # a game no list knows: the upscaler only
+        else:
+            sure = rec.get("dx12") and (set(rec["ships"]["upscaler"]) & {"DLSS", "FSR"}) and folder
+            out.update(offer=out["upscaler"], why_not=(UNKNOWN_LINE if sure else UNSURE_LINE).format(up=up))
     out["line"] = headline(out, rec)
     return out
 
 
 def headline(p: dict, rec: dict) -> str:
-    if p["refused"]:
+    if p["refused"] or p.get("offer"):
         return p["why_not"]
     if not rec["launch"]:
         return rec["reasons"][0]
@@ -117,6 +139,11 @@ def prepare(home: str, key: str, gpu: dict, game_dir: str | None = None, name: s
         # the game gained anti-cheat (an update, or our data learnt it): everything of ours comes out
         r = games.undo(home, key, gpu, game_dir)
         return {"ok": bool(r.get("ok", True)), "did": "removed: this game has anti-cheat", "mode": mode, "plan": p}
+    if p.get("online") and not p.get("opted_in") and mode == "best" and \
+            (games.load_state(home)["opti_games"].get(str(key)) or games.get_launch(home, key)):
+        # set up by itself before the lists said it is an online game: out again until the player picks it
+        r = games.undo(home, key, gpu, game_dir)
+        return {"ok": bool(r.get("ok", True)), "did": "taken out: this is an online game", "mode": mode, "plan": p}
     gone = _withdrawn_step(home, key, gpu, game_dir)
     if gone:
         return {"ok": True, "did": gone, "mode": mode, "plan": p}
@@ -144,6 +171,25 @@ def prepare(home: str, key: str, gpu: dict, game_dir: str | None = None, name: s
     else:
         r = games.apply_recommended(home, key, gpu, game_dir, allow_unpinned, anticheat=anticheat)
     return {"ok": bool(r.get("ok")), "did": "set up" if r.get("ok") else "", "error": r.get("error"), "mode": mode, "plan": p}
+
+
+def opt_in(home: str, key: str, gpu: dict, game_dir: str | None = None, name: str | None = None,
+           anticheat: bool = False, allow_unpinned: bool = False) -> dict:
+    """The player took our pick for a game we don't set up by ourselves (the menu's "Add ... to this game"): Best
+    from now on, with the pick put in now. Anti-cheat, another injector or a broken entry still refuse."""
+    p = plan(home, key, gpu, game_dir, name, anticheat)
+    if p["refused"]:
+        return {"ok": False, "refused": p["refused"], "error": p["why_not"], "plan": p}
+    s = games.load_state(home)
+    s.setdefault("optin", {})[str(key)] = int(time.time())
+    games.save_state(home, s)
+    set_mode(home, key, "best")
+    r = prepare(home, key, gpu, game_dir, name, anticheat, allow_unpinned)
+    if not r.get("ok"):
+        s = games.load_state(home)
+        (s.get("optin") or {}).pop(str(key), None)
+        games.save_state(home, s)
+    return r
 
 
 def _withdrawn_step(home: str, key: str, gpu: dict, game_dir: str | None) -> str:

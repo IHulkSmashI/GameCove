@@ -95,7 +95,11 @@ def test_amd_launch_env_for_fsr4_and_xess_frame_generation():
 @pytest.mark.parametrize("files,system", [
     (["EasyAntiCheat/EasyAntiCheat_x64.dll"], "Easy Anti-Cheat"), (["start_protected_game.exe"], "Easy Anti-Cheat"),
     (["BattlEye/BEService_x64.exe"], "BattlEye"), (["Game_BE.exe"], "BattlEye"), (["bin/GameGuard.des"], "nProtect GameGuard"),
-    (["mhyprot3.sys"], "miHoYo Protect"), (["AntiCheatExpert/ACE-BASE.sys"], "Anti-Cheat Expert")])
+    (["mhyprot3.sys"], "miHoYo Protect"), (["AntiCheatExpert/ACE-BASE.sys"], "Anti-Cheat Expert"),
+    (["EAAntiCheat.GameServiceLauncher.exe", "EAAntiCheat.GameServiceLauncher.dll"], "EA Javelin"),
+    (["NeacClient.exe"], "NetEase Anti-Cheat"), (["bin/NeacSafe64.sys"], "NetEase Anti-Cheat"),
+    (["bin/xhunter1.sys"], "XIGNCODE3"), (["BlackCipher/BlackCipher64.aes"], "Nexon Game Security"),
+    (["TenProtect/TP3Helper.dat"], "Tencent TP"), (["EQU8/equ8_conf.json"], "EQU8")])
 def test_anticheat_in_the_folder_is_found(tmp_path, files, system):
     for f in files:
         _w(tmp_path / "g" / f)
@@ -158,7 +162,7 @@ def test_a_game_that_gains_anticheat_gets_everything_taken_out(tmp_path):
     _pkg(home)
     d = _steam_game(home, "302", "Later", ["Later.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
     before = _tree(d)
-    assert best.prepare(home, "302", DECK)["did"] == "set up"
+    assert best.opt_in(home, "302", DECK)["did"] == "set up"
     _w(os.path.join(d, "EasyAntiCheat", "EasyAntiCheat_x64.dll"), "eac")
     r = best.prepare(home, "302", DECK)
     assert "anti-cheat" in r["did"]
@@ -178,6 +182,59 @@ def test_other_injectors_are_left_alone(tmp_path):
     assert p["refused"] == "mod" and best.prepare(home, "303", Z1E)["did"] == "" and _tree(d) == before
 
 
+ONLINE_TITLES = ["Wuthering Waves", "Zenless Zone Zero", "Arknights: Endfield", "Where Winds Meet", "GOALS"]
+
+
+def test_online_games_in_the_list_are_flagged():
+    """Review H5: the list's "Online game, use at your own risk" titles are status "works"; each carries the online
+    flag, in the bundled data and when read from the notes of an older list."""
+    doc = gamedb.load(games.BUNDLED_GAMES)
+    for name in ONLINE_TITLES:
+        k = gamedb.knowledge(doc, None, None, name)
+        assert k["known"] and k["status"] == "works" and k["online"] is True, name
+        assert gamedb.compat_row(doc, name).get("online") is True, name
+    assert gamedb.online_risk("**Online game, use at your own risk!**") and gamedb.online_risk("Disable EAC to load OptiScaler.")
+    for safe in ("Free online co-op game, no anticheat", "Online co-op game, does not use anticheat", "Use DX12", ""):
+        assert not gamedb.online_risk(safe), safe
+
+
+@pytest.mark.parametrize("name", ONLINE_TITLES)
+def test_online_games_are_never_set_up_by_themselves(tmp_path, name):
+    home = str(tmp_path)
+    _pkg(home)
+    _amd_fsr4(home)
+    d = _steam_game(home, "450", name, ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    p = best.plan(home, "450", Z1E)
+    assert p["online"] and p["auto"] is False and p["offer"] and p["refused"] is None
+    assert "online game" in p["line"] and "banned" in p["line"]
+    assert best.prepare(home, "450", Z1E)["did"] == "" and _tree(d) == before
+    assert not os.path.exists(os.path.join(home, ".local/share/gamecove/launch/450.env"))
+    r = cli.run(["opt-in", "--home", home, "--key", "450", "--gpu", json.dumps(Z1E)])     # the player's own pick
+    assert r["ok"] and r["did"] == "set up" and _tree(d) != before
+    assert best.plan(home, "450", Z1E)["opted_in"] and best.prepare(home, "450", Z1E)["did"] == ""
+    assert best.native(home, "450", Z1E)["ok"] and _tree(d) == before and not best.opted_in(home, "450")
+
+
+def test_an_online_game_set_up_before_it_was_flagged_comes_out(tmp_path):
+    home = str(tmp_path)
+    _pkg(home)
+    d = _steam_game(home, "451", "Wuthering Waves", ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    assert games.apply_recommended(home, "451", DECK)["ok"] and _tree(d) != before    # an older GameCove's doing
+    r = best.prepare(home, "451", DECK)
+    assert "online game" in r["did"] and _tree(d) == before
+
+
+def test_opt_in_still_refuses_anticheat(tmp_path):
+    home = str(tmp_path)
+    _pkg(home)
+    d = _steam_game(home, "452", "Zenless Zone Zero", ["ZZZ.exe", "nvngx_dlss.dll", "D3D12Core.dll", "mhypbase.dll"])
+    before = _tree(d)
+    r = best.opt_in(home, "452", Z1E)
+    assert r["ok"] is False and r["refused"] == "anticheat" and _tree(d) == before and not best.opted_in(home, "452")
+
+
 # ---- plan and prepare ---------------------------------------------------------------------------------------------
 def test_z1_extreme_gets_fsr4_by_default_with_amds_own_file(tmp_path):
     home = str(tmp_path)
@@ -185,8 +242,10 @@ def test_z1_extreme_gets_fsr4_by_default_with_amds_own_file(tmp_path):
     _amd_fsr4(home)
     d = _steam_game(home, "400", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
     p = best.plan(home, "400", Z1E)
-    assert p["upscaler"] == "fsr4_amd" and p["auto"] and p["launch"]["fsr4_int8"] is True and "FSR 4.1.2" in p["line"]
-    r = best.prepare(home, "400", Z1E)
+    assert p["upscaler"] == "fsr4_amd" and p["launch"]["fsr4_int8"] is True and "FSR 4.1.2" in p["line"]
+    assert p["auto"] is False and p["offer"] == "fsr4_amd"         # a game no list knows: offered, not done
+    assert best.prepare(home, "400", Z1E)["did"] == ""
+    r = best.opt_in(home, "400", Z1E)
     assert r["ok"] and r["did"] == "set up", r
     assert open(os.path.join(d, "amd_fidelityfx_upscaler_dx12.dll")).read() == "amd-sdk-4.1.2"
     ini = open(os.path.join(d, "OptiScaler.ini")).read()
@@ -228,7 +287,11 @@ def test_an_unknown_dx12_game_gets_the_upscaler_only(tmp_path):
     home = str(tmp_path)
     _pkg(home)
     d = _steam_game(home, "403", "Plain", ["Plain.exe", "nvngx_dlss.dll", "nvngx_dlssg.dll", "D3D12Core.dll"])
-    assert best.prepare(home, "403", DECK)["did"] == "set up"
+    before = _tree(d)
+    p = best.plan(home, "403", DECK)
+    assert p["auto"] is False and p["offer"] == "fsr31" and "FSR 3.1" in p["line"]       # review H5: opt-in only
+    assert best.prepare(home, "403", DECK)["did"] == "" and _tree(d) == before
+    assert best.opt_in(home, "403", DECK)["did"] == "set up"
     ini = open(os.path.join(d, "OptiScaler.ini")).read()
     assert "Dx12Upscaler=fsr31" in ini and "FGInput=nofg" in ini    # no frame generation by itself
     assert best.get_mode(home, "403") == "best" and best.prepare(home, "403", DECK)["did"] == ""
@@ -240,14 +303,16 @@ def test_native_takes_everything_out_and_stays_out(tmp_path):
     _amd_fsr4(home)
     d = _steam_game(home, "404", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll", "amd_fidelityfx_upscaler_dx12.dll.keep"])
     before = _tree(d)
-    assert best.prepare(home, "404", Z1E)["did"] == "set up" and _tree(d) != before
+    assert best.opt_in(home, "404", Z1E)["did"] == "set up" and _tree(d) != before
     r = cli.run(["mode", "--home", home, "--key", "404", "--gpu", json.dumps(Z1E), "--mode", "native"])
     assert r["ok"] and r["mode"] == "native"
     assert _tree(d) == before                                       # byte for byte as the game shipped
     assert not os.path.exists(os.path.join(home, ".local/share/gamecove/launch/404.env"))
     assert best.prepare(home, "404", Z1E)["did"] == "" and _tree(d) == before       # and nothing comes back by itself
     r = cli.run(["mode", "--home", home, "--key", "404", "--gpu", json.dumps(Z1E), "--mode", "best"])
-    assert r["mode"] == "best" and r["did"] == "set up"
+    assert r["mode"] == "best" and r["did"] == "" and _tree(d) == before      # Native forgot the opt-in: offered again
+    r = cli.run(["opt-in", "--home", home, "--key", "404", "--gpu", json.dumps(Z1E)])
+    assert r["did"] == "set up" and best.get_mode(home, "404") == "best"
 
 
 def test_custom_choices_are_kept_and_repaired_after_a_game_update(tmp_path):
@@ -311,7 +376,7 @@ def test_fsr4_that_never_starts_falls_back_to_fsr31_once(tmp_path):
     _pkg(home)
     _amd_fsr4(home)
     d = _steam_game(home, "501", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
-    assert best.prepare(home, "501", Z1E)["did"] == "set up"
+    assert best.opt_in(home, "501", Z1E)["did"] == "set up"
     t = time.time() + 30
     _start(home, "501", t)
     assert best.prepare(home, "501", Z1E)["did"] == ""              # one bad start isn't enough
@@ -333,7 +398,7 @@ def test_a_good_start_clears_the_strikes(tmp_path):
     _pkg(home)
     _amd_fsr4(home)
     d = _steam_game(home, "502", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
-    best.prepare(home, "502", Z1E)
+    best.opt_in(home, "502", Z1E)
     t = time.time() + 30
     for i, good in enumerate((False, True, False)):
         _start(home, "502", t + i * 60)

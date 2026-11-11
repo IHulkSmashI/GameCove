@@ -173,7 +173,7 @@ def _set_up(home):
     _w(os.path.join(home, optiscaler.FSR4_AMD_DIR, optiscaler.FSR4_AMD_FILE), "amd-sdk-4.1.2")
     d = _steam_game(home, "400", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
     before = _tree(d)
-    assert best.prepare(home, "400", Z1E)["did"] == "set up" and _tree(d) != before
+    assert best.opt_in(home, "400", Z1E)["did"] == "set up" and _tree(d) != before
     return d, before
 
 
