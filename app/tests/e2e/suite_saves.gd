@@ -101,7 +101,7 @@ func test_low_battery_warns_and_any_button_stays_awake() -> void:
 	low.charging_now = func() -> bool: return false
 	low.plugged_now = func() -> bool: return false
 	# start from a known healthy reading, whatever ran before: 80 % then 5 % is a sudden drop
-	low.ask_again = func() -> void: pass
+	low.confirm_s = 0.2
 	low._pct = 80
 	low._unconfirmed = false
 	low.warning = false
@@ -109,6 +109,12 @@ func test_low_battery_warns_and_any_button_stays_awake() -> void:
 	await w.idle()
 	# a sudden low reading (the fixture's battery is far above 5 %) waits for a second one
 	ok(main().low_dialog == null, "one sudden low reading doesn't start the countdown")
+	# the second look reads the battery itself (far above 5 % in the fixture): a glitch, still nothing
+	await w.wait_s(0.6)
+	await w.idle()
+	ok(main().low_dialog == null, "and the battery read again says it was a glitch: no warning")
+	eq(slept[0], 0, "no sleep")
+	low._pct = 80
 	power().battery_level.emit(5, false)
 	await w.idle()
 	ok(main().low_dialog != null and is_instance_valid(main().low_dialog), "the 30 s warning shows")
