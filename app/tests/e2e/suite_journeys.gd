@@ -888,6 +888,8 @@ func test_over_a_game_record_a_clip_sleep_wake_and_switch_sessions() -> void:
 func test_fixes_page_apply_then_undo() -> void:
 	var fx: Node = main().fixes
 	ok(fx != null, "the Fixes service")
+	var quiet0: bool = fx.quiet_enabled()
+	fx.set_quiet_enabled(false)   # GameCove's own fix starts off (it's kept in user://, not in the reset home)
 	ok(await open_settings("device"), "Settings > Device")
 	var s: Control = main().settings
 	var dp: Control = s.pages.get("device")
@@ -952,6 +954,7 @@ func test_fixes_page_apply_then_undo() -> void:
 		var r2: Array = done.filter(func(d): return d[0] == aid)
 		ok(not r2.is_empty() and not r2[-1][2] and str(r2[-1][3]) != "", "it says why it couldn't here (%s)" % [r2])
 		ok(page.find_child("Admin", true, false) != null, "the card says it needs Desktop Mode")
+	fx.set_quiet_enabled(quiet0)
 	check("fixes")
 	await go_tab("home")
 
@@ -1004,6 +1007,7 @@ func test_every_screen_by_pad_discover_stream_apps_emulation_art() -> void:
 		await a()
 		await w.frames(4)
 		eq(where(), "apps", "the Apps list opens")
+		ok(focus() != null and focus().is_visible_in_tree(), "focus somewhere visible at once, even while the apps load (%s)" % [focus().get_path() if focus() else "none"])
 		await roam("apps", 4)
 		await x()
 		await w.frames(2)
@@ -1237,3 +1241,76 @@ func test_installer_remove_keeping_or_not_the_settings() -> void:
 		eq(s.installer.noted.has("remove_settings"), not keep, "and only then run")
 		await close_installer(s)
 	check("installer remove")
+
+
+## A game has the screen: the player's presses are the game's. Our screens take
+## none (the pad is a plain input device GameCove sees too), Guide still comes.
+func test_presses_for_the_game_never_reach_our_screens() -> void:
+	await with_stores()
+	ok(await play_hades(), "Hades runs")
+	await w.idle()
+	ok(not main()._window_focused, "the game has the screen")
+	var f0 := focus()
+	var uris: int = stores.steam_uris.size()
+	for p in ["down", "a", "right", "a", "b", "rb", "x"]:
+		await call(p)
+		await w.frames(2)
+	eq(focus(), f0, "focus didn't move under the game")
+	eq(stores.steam_uris.size(), uris, "nothing was started or opened")
+	ok(page() != null and str(page().game.get("key", "")) == "steam:1145360", "the page under the game is as it was")
+	await guide()
+	await w.idle()
+	eq(main().current, "home", "Guide still brings Home over the game")
+	await down()
+	await w.frames(2)
+	ok(focus() != null and focus_on_screen() == "", "and Home takes the pad then")
+	stores.game_quit("1145360")
+	ok(await until(func(): return not main().session.is_active(), 12000), "the game ends")
+	await without_stores()
+
+
+# ---- pending merge: journeys for features still on their own branches --------------------------
+# Each is listed by the runner as "E2E SKIP ... (pending merge)" and filled in
+# when its branch lands (docs/TESTING.md, the "pending merge" rows).
+
+## ROM library (feat/rom-library): ROMs found by system, a ROM's page, launch
+## through its emulator, play time, hide / favourite like any game.
+func test_pending_rom_library_browse_launch_and_play_time() -> void:
+	pass
+
+
+## Quick-menu shortcuts and button shortcuts (quick-actions): add, reorder and
+## remove a shortcut, each shortcut does its thing over a game, a held button
+## combo runs its action.
+func test_pending_quick_menu_shortcuts_and_button_shortcuts() -> void:
+	pass
+
+
+## Upscaling selection (upscaling / upscale-latest): the new per-game picker
+## (OptiScaler, XeSS, FSR, Native), versions and the update flow.
+func test_pending_upscaling_selection_picker() -> void:
+	pass
+
+
+## Fixes lifecycle (fixes): a fix applied at install, re-checked after a system
+## update, offered again when the system dropped it, undone on removal.
+func test_pending_fixes_lifecycle_after_a_system_update() -> void:
+	pass
+
+
+## Resolutions and Steam Machine (resolutions): output resolution, interface
+## size, TV / docked layouts, changed and reverted.
+func test_pending_resolutions_interface_size_and_docked() -> void:
+	pass
+
+
+## Keyboard (the new keyboard work): the system on-screen keyboard over a game
+## and in GameCove's own fields.
+func test_pending_keyboard_over_a_game() -> void:
+	pass
+
+
+## Launch fixes (launch): per-game launch fixes chosen, applied on launch and
+## taken out again.
+func test_pending_launch_fixes_per_game() -> void:
+	pass

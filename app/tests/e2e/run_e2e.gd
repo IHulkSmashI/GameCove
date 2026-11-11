@@ -83,6 +83,11 @@ func _run() -> void:
 				continue
 			if t.has_method("applies") and not t.applies(name):
 				continue
+			# a journey written ahead of a feature still on its own branch: listed, not run
+			if name.begins_with("test_pending_"):
+				results["skipped"] = int(results.get("skipped", 0)) + 1
+				print("E2E SKIP %s (pending merge)" % label)
+				continue
 			if OS.get_environment("E2E_PHASE") != "2":
 				await world.reset()   # phase 2 of a restart starts from what phase 1 left
 				if OS.get_environment("E2E_DEBUG") != "":

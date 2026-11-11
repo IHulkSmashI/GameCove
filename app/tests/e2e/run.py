@@ -211,7 +211,8 @@ def main(argv=None) -> int:
             total_fail += int(r.get("failed", 0))
             total_pass += int(r.get("passed", 0))
             state = "ok" if not r.get("failed") else "FAILED"
-            print(f"{setup}/{label}: {r.get('passed', 0)} passed, {r.get('failed', 0)} failed in {r['seconds']} s ({state})")
+            skipped = f", {r['skipped']} pending merge" if r.get("skipped") else ""
+            print(f"{setup}/{label}: {r.get('passed', 0)} passed, {r.get('failed', 0)} failed{skipped} in {r['seconds']} s ({state})")
             for msg in r.get("failures", [])[:80]:
                 print("    " + str(msg))
     if not a.keep:
