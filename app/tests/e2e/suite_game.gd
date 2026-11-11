@@ -282,7 +282,16 @@ func test_starting_another_game_asks_to_close_the_first() -> void:
 	await w.wait_s(0.5)
 	eq(m.session.game.get("key", ""), GAME_A["key"], "A keeps running")
 	eq(_closes("TERM", str(GAME_A["id"])), 0, "and isn't closed")
-	# again, and this time yes
+	# again, and this time yes (B goes through Library.launch: a stand-in `steam` takes it, so
+	# nothing real is opened)
+	var bin := ProjectSettings.globalize_path("user://e2e_fake_steam")
+	DirAccess.make_dir_recursive_absolute(bin)
+	var fs := FileAccess.open(bin.path_join("steam"), FileAccess.WRITE)
+	fs.store_string("#!/bin/sh\nexit 0\n")
+	fs.close()
+	OS.execute("chmod", ["+x", bin.path_join("steam")])
+	var path := OS.get_environment("PATH")
+	OS.set_environment("PATH", bin + ":" + path)
 	w.fake_apps[int(GAME_B["id"])] = true
 	_set_focusable(int(GAME_B["id"]), true)
 	m._play(GAME_B)
@@ -297,7 +306,17 @@ func test_starting_another_game_asks_to_close_the_first() -> void:
 	var scope: RefCounted = load("res://scripts/controls/game_scope.gd").of(controls().ctx)
 	eq(scope.key() if scope != null else "", GAME_B["key"], "Controls follow B, not \"no game\"")
 	m.session.ended.disconnect(on_end)
+	OS.set_environment("PATH", path)
 	await end_game()
+	# the stand-in steam exited at once; reap it (a child left as a zombie would count as one
+	# of ours behind the next game in suite_perf)
+	for d in DirAccess.get_directories_at("/proc"):
+		if d.is_valid_int():
+			var st := FileAccess.open("/proc/%s/stat" % d, FileAccess.READ)
+			var line := st.get_line() if st != null else ""
+			var rest := line.substr(line.rfind(")") + 2).split(" ")
+			if line.contains("(steam)") and rest.size() > 1 and rest[1].to_int() == OS.get_process_id():
+				OS.is_process_running(d.to_int())   # waitpid: reaped
 
 
 ## Review at ff76ca4, the splash-timeout residual: once the splash gave up waiting (its own
@@ -316,5 +335,6 @@ func test_play_after_the_splash_timed_out_still_asks_first() -> void:
 	await b()
 	await until(func(): return not m.game_actions.sheet.is_open(), 3000)
 	w.end_app(int(GAME_A["id"]))
-	ok(await until(func(): return not m.session.is_active(), 20000), "A ends when it's gone")
+	m.session.stop()   # its reaper is only looked for again past FOCUS_WAIT_S; the test doesn't wait that long
 	await w.idle()
+	ok(not m.session.is_active(), "done")

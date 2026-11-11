@@ -66,7 +66,8 @@ func test_a_conflict_asks_and_b_starts_nothing() -> void:
 	eq(rows[0]["id"], "cloud", "the newest side first")
 	eq(rows[0].get("value", ""), TSaves.NEWER, "and marked newer")
 	eq(rows[-1]["id"], "later", "or play without syncing")
-	eq(calls.size(), 1, "nothing downloaded while it asks")
+	# the look, then a copy of the cloud's save fetched with a private copy of legendary's folder
+	eq(calls.filter(func(c): return not str(c).contains("--skip-download") and not str(c).contains(".legendary-")).size(), 0, "nothing downloaded into the game's folder while it asks")
 	await b()
 	await w.idle()
 	eq(main()._launch_wait, "", "B: nothing waits")

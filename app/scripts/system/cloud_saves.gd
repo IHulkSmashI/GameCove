@@ -314,7 +314,8 @@ static func _offline(out: String) -> bool:
 static func epic_decide(look: Dictionary, last_sync: int, mode: String, local_restored := false, synced_remote := -1) -> String:
 	var local := int(look.get("local", 0))
 	var remote := int(look.get("remote", 0))
-	var cloud_moved := synced_remote >= 0 and remote > 0 and absi(remote - synced_remote) > SLACK_S
+	# 0 or -1: not known (legendary prints no dates for a save that's up to date)
+	var cloud_moved := synced_remote > 0 and remote > 0 and absi(remote - synced_remote) > SLACK_S
 	match str(look.get("state", "")):
 		"remote_newer":
 			var local_changed := local > 0 and (last_sync <= 0 or local > last_sync + SLACK_S or local_restored)

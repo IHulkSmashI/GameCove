@@ -261,6 +261,7 @@ func test_epic_decide_sees_a_cloud_save_that_is_older_than_our_sync() -> void:
 	eq(CS.epic_decide(look, last, "post"), "upload", "by the clock alone it looked unchanged")
 	eq(CS.epic_decide(look, last, "post", false, last - 90000), "conflict", "but it isn't the one we last saw")
 	eq(CS.epic_decide(look, last, "post", false, last - 5000), "upload", "the one we last saw: upload")
+	eq(CS.epic_decide(look, last, "post", false, 0), "upload", "0 (a sync that learnt no cloud time): not known, by the clock")
 
 
 ## Review at ff76ca4, L8: a captive portal's page (a 200 that isn't GOG's answer) was cached
