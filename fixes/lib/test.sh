@@ -152,6 +152,7 @@ demo remove >/dev/null || fail "remove with another handheld's record"
 echo factory >"$T/root/sys/demo/value"
 mkdir -p "$T/root/etc/udev/rules.d"
 printf '# ATTR{x}=="y"\nACTION=="add"\n' >"$T/root/etc/udev/rules.d/90-other.rules"
+# shellcheck disable=SC2034 # gcfix.sh reads these when it is sourced
 elsewhere() { (NAME=probe DEVICES="*" FILES=/etc/x; GAMECOVE_ROOT="$T/root"; . "$HERE/gcfix.sh"; gc_rule_elsewhere "$@"); }
 if elsewhere 'ATTR{x}=="y"'; then fail "a comment that mentions the rule is not the rule"; fi
 printf 'ACTION=="add", ATTR{x}=="y"\n' >"$T/root/etc/udev/rules.d/90-other.rules"
