@@ -19,6 +19,9 @@ const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 
 signal chosen(id: String)
 signal closed
+## A pick closed the sheet and the control it was opened from is gone (the
+## pick rebuilt it, e.g. Install turning into Pause): the host puts focus back.
+signal focus_lost
 
 const WIDTH := 560.0
 const MAX_ROWS := 9
@@ -211,13 +214,26 @@ func _row(it: Dictionary) -> Button:
 	return b
 
 
-## Choose a row by id (what A on that row does).
+## Choose a row by id (what A on that row does). Focus goes back to where the
+## sheet was opened from, unless the pick opened another sheet or moved focus
+## itself; when that control is gone, `focus_lost` asks the host.
 func pick(id: String) -> void:
 	var cb := _callback
 	close(false)
 	chosen.emit(id)
 	if cb.is_valid():
 		cb.call(id)
+	if _open or not is_inside_tree():
+		return
+	var f := get_viewport().gui_get_focus_owner()
+	if f != null and not is_ancestor_of(f):
+		return
+	if _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
+		_focus_before.grab_focus()
+	else:
+		if f != null:
+			f.release_focus()
+		focus_lost.emit()
 
 
 func close(restore_focus := true) -> void:

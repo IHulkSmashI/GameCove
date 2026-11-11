@@ -449,6 +449,10 @@ func _wire_games() -> void:
 		close_downloads()
 		_open_page(g))
 	game_actions.modal_changed.connect(func(_o): _update_hints.call_deferred())
+	game_actions.sheet.focus_lost.connect(func():
+		var f := _screen_default_focus()
+		if f != null and f.is_visible_in_tree():
+			f.grab_focus())
 	collection_actions = CollectionActions.new()
 	add_child(collection_actions)
 	collection_actions.setup(Library.collections, game_actions)
