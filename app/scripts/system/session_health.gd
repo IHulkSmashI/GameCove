@@ -36,6 +36,12 @@ var game_running: Callable = func() -> bool: return false
 var ui_front: Callable = func() -> bool: return false
 ## The running game has had the screen at least once (see "front" above).
 var _game_had_screen := false
+## A game that is "running" but has never shown a window while our UI stays in front (a launch that never
+## produced one: the Heroic hand-off, a crashed start) is watched like the UI after this long, instead of
+## leaving a hung GameCove unwatched behind a game that is not there (residual C of the review).
+const NO_SCREEN_WAIT_S := 90.0
+var now_s: Callable = func() -> float: return Time.get_ticks_msec() / 1000.0
+var _running_since := -1.0
 var path := ""
 var seq := 0
 ## The mode the file says now ("" before the first beat).
@@ -69,6 +75,7 @@ func watch_session(session: Object) -> void:
 
 
 func _on_game_change(_game: Dictionary) -> void:
+	_running_since = -1.0
 	_game_had_screen = false   # a new game hasn't shown yet; after a game there is none
 	beat()
 
@@ -94,8 +101,12 @@ func _on_front_changed(in_front: bool) -> void:
 
 func mode() -> String:
 	if not (game_running.is_valid() and bool(game_running.call())):
+		_running_since = -1.0
 		return "ui"
-	if _game_had_screen and ui_front.is_valid() and bool(ui_front.call()):
+	if _running_since < 0.0:
+		_running_since = float(now_s.call())
+	var front: bool = ui_front.is_valid() and bool(ui_front.call())
+	if front and (_game_had_screen or float(now_s.call()) - _running_since >= NO_SCREEN_WAIT_S):
 		return "front"
 	return "game"
 
