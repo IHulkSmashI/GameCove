@@ -27,13 +27,16 @@ const STORES := ["steam", "gog", "epic"]
 ## failed (refused, HTTP error, cut off) is retried at most once a day, so a bad
 ## published file isn't fetched and thrown away at every start (review 2, problem 1).
 const FAILED_SUFFIX := ".failed"
+## The hosts a download may be on, redirects included (the release is on github.com, its files on GitHub's own hosts).
+const HOSTS := ["github.com", "githubusercontent.com"]
 
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 
 ## Where the copy lives; tests point it at a temp file.
 var cache_path := CACHE_PATH
 
-var _http: HTTPRequest
+var _http: Variant = null   # discover/http.gd, made on the first download
+var _busy := false          # a download is under way
 var _task := -1
 
 ## The last download's parsed document, waiting for load_file() of that path:
@@ -51,18 +54,29 @@ static func is_stale(cache_modified_unix: int, now_unix: int) -> bool:
 ## after a good download; a failed one keeps the old copy and stays quiet.
 func update_if_stale() -> void:
 	var path := ProjectSettings.globalize_path(cache_path)
-	if not should_download(path, int(Time.get_unix_time_from_system())) or _http != null or _task != -1:
+	if not should_download(path, int(Time.get_unix_time_from_system())) or _busy or _task != -1:
 		return
-	_http = HTTPRequest.new()
-	_http.use_threads = true
-	_http.accept_gzip = false
-	_http.timeout = 120.0
-	_http.body_size_limit = MAX_PACKED   # a bigger download stops there (the unpacked size has its own cap)
-	_http.download_file = path + ".part"
-	add_child(_http)
-	_http.request_completed.connect(_on_downloaded)
-	if _http.request(URL) != OK:
-		_finish_http()
+	if _http == null:
+		# the one network gateway (http.gd): github.com's redirects are followed one hop at a time and each must
+		# stay on GitHub's own hosts, the file is capped while it downloads, and a host that failed is left alone
+		_http = preload("res://scripts/discover/http.gd").new()
+		add_child(_http)
+	_busy = true
+	_http.request(URL, {"timeout": 120.0, "max_bytes": MAX_PACKED, "download_file": path + ".part",
+		"hosts": HOSTS}, _on_gateway)
+
+
+## http.gd's answer, in the terms _on_downloaded always had.
+func _on_gateway(res: Dictionary) -> void:
+	var err := str(res.get("error", ""))
+	if res.get("ok", false):
+		_on_downloaded(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), PackedByteArray())
+	elif err == "offline" or err == "backoff":
+		_on_downloaded(HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())
+	else:
+		# a refused redirect, a too big file, an HTTP error: it reached a server, so it waits a day
+		var code := int(res.get("code", 0))
+		_on_downloaded(HTTPRequest.RESULT_SUCCESS, code if code != 200 else 0, PackedStringArray(), PackedByteArray())
 
 
 func _on_downloaded(result: int, code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
@@ -142,9 +156,7 @@ func _exit_tree() -> void:
 
 
 func _finish_http() -> void:
-	if _http:
-		_http.queue_free()
-		_http = null
+	_busy = false
 
 
 ## The database document from gzip bytes, or {} if they aren't a valid one.

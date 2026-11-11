@@ -25,8 +25,9 @@ A switch counts from the moment you turn it off. Discover's refresh is several s
 request asks the switches again right before it goes out (`discover.gd` `may_fetch`), so the ones still waiting
 are never sent.
 
-Every request has a size limit (4 MB for an answer kept in memory unless it names a smaller one, 16 MB for the
-calendar file, 64 MB for the game database, a few MB for a picture): a bigger answer is dropped, not read.
+Every request has a size limit (8 MB for an answer kept in memory unless it names its own: 4 MB for Discover's, 2 MB for
+achievement rarity; 16 MB for the calendar file, 64 MB for the game database and any other file written to disk, a few
+MB for a picture): a bigger answer is dropped, not read.
 
 ## Every outbound call
 
@@ -37,7 +38,7 @@ release. The app's own releases (what `get-gamecove.sh` installs) stay on IHulkS
 
 | # | Host | What is sent | Trigger | Gated by | Code |
 | --- | --- | --- | --- | --- | --- |
-| 1 | github.com/IHulkSmashI/GameCove-data (`gamedb/gamedb.json.gz`) | Nothing personal | Start, at most daily | Background lookups | `app/scripts/library/gamedb.gd` |
+| 1 | github.com/IHulkSmashI/GameCove-data (`gamedb/gamedb.json.gz`), through `http.gd`: GitHub's own hosts only, every redirect hop checked, 64 MB cap | Nothing personal | Start, at most daily | Background lookups | `app/scripts/library/gamedb.gd` |
 | 2 | github.com/IHulkSmashI/GameCove-data (`gamedb/upcoming.json.gz`) | Nothing personal | Deals refresh, at most daily | Background lookups | `app/scripts/discover/discover.gd` |
 | 3 | www.cheapshark.com | Wishlist Steam app ids and titles; search text; nothing for the free-to-keep list (`deals?onSale=1&upperPrice=0`, one more request per refresh) | 45 s after start, every 6 h; search; game page | Look up deals and prices (+ Background lookups for the timer) | `discover.gd`, `cheapshark.gd` |
 | 4 | api.steampowered.com `IStoreBrowseService/GetItems` | Wishlist and top-deal app ids, store country | Same | Same | `steam_api.gd` |

@@ -246,7 +246,8 @@ func test_picture_downloads_name_their_hosts() -> void:
 		for line in text.split("\n"):
 			if "http.request(" in line and "download_file" in line:
 				ok("\"hosts\":" in line and "\"max_bytes\":" in line, "%s: a download names its hosts and its cap (%s)" % [f.get_file(), line.strip_edges().substr(0, 60)])
-	ok("_http.body_size_limit = MAX_PACKED" in FileAccess.get_file_as_string("res://scripts/library/gamedb.gd"), "the game database download is capped")
+	var gamedb := FileAccess.get_file_as_string("res://scripts/library/gamedb.gd")
+	ok("\"max_bytes\": MAX_PACKED" in gamedb and "\"hosts\": HOSTS" in gamedb and not "HTTPRequest.new()" in gamedb, "the game database download goes through http.gd, capped and on GitHub's hosts")
 
 
 # ---- review L32: credentials stay with their host ------------------------------------------------

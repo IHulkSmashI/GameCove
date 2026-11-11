@@ -195,3 +195,17 @@ func test_failed_download_is_retried_at_most_daily() -> void:
 	db.free()
 	DirAccess.remove_absolute(path)
 	DirAccess.remove_absolute(path.get_base_dir())
+
+
+func test_gateway_answers_map_to_the_old_outcomes() -> void:
+	var path := _tmp_cache()
+	var db: Node = GameDB.new()
+	db.cache_path = path
+	db._on_gateway({"ok": false, "error": "offline", "code": 0})
+	ok(not FileAccess.file_exists(path + GameDB.FAILED_SUFFIX), "offline costs nothing: tried again next start")
+	db._on_gateway({"ok": false, "error": "redirect", "code": 0})
+	ok(FileAccess.file_exists(path + GameDB.FAILED_SUFFIX), "a redirect off GitHub waits a day")
+	DirAccess.remove_absolute(path + GameDB.FAILED_SUFFIX)
+	db._on_gateway({"ok": false, "error": "too big", "code": 200})
+	ok(FileAccess.file_exists(path + GameDB.FAILED_SUFFIX), "a file past the cap waits a day too")
+	db.free()
