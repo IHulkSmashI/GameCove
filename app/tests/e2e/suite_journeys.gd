@@ -1038,3 +1038,90 @@ func test_every_screen_by_pad_discover_stream_apps_emulation_art() -> void:
 	await without_stores()
 
 
+
+
+# ---- first boot: setup walked by pad, a store signed in with a typed code -------------------
+
+const SetupFlowScript := preload("res://scripts/ui/setup/setup_flow.gd")
+const ProcScript := preload("res://scripts/system/proc.gd")
+const UiPrefsScript := preload("res://scripts/ui/ui_prefs.gd")
+
+
+func flow() -> Control:
+	var f: Variant = SetupFlowScript.instance
+	return f if f != null and is_instance_valid(f) else null
+
+
+func test_first_boot_setup_by_pad_with_a_store_sign_in() -> void:
+	await with_stores()
+	var st: Node = w.autoload("Setup")
+	var old := {"cfg": st.config_path, "home": st.home, "path": st.path_env, "runner": st.runner, "device": st.device}
+	var cfg := "user://e2e_first_boot_setup.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(cfg))
+	# a fresh handheld: setup never done, Epic not signed in yet; legendary is the stand-in on PATH
+	st.setup(ProcScript.new(), w.home, cfg, w.row, stores.bin_dir + ":/usr/bin:/bin")
+	DirAccess.remove_absolute(w.home.path_join(".config/legendary/user.json"))
+	var theme0 := str(UiPrefsScript.values().get("theme", "cove"))
+	await w.shutdown_main()
+	await w.boot_main()
+	await w.frames(4)
+	ok(flow() != null, "first boot: setup opens by itself")
+	if flow() == null:
+		await _undo_setup(st, old, theme0)
+		return
+	eq(flow().step, "welcome", "on Welcome")
+	ok(focused_in(flow().next_button), "focus on Next")
+	await a()
+	await w.frames(3)
+	eq(flow().step, "theme", "A: the Look step")
+	# a theme with the D-pad: right, A
+	await right()
+	await a()
+	await w.frames(4)
+	var picked := str(UiPrefsScript.values().get("theme", ""))
+	ok(picked != "" and picked != theme0, "a new theme picked and applied (%s)" % picked)
+	ok(await press_on(func(): return flow().next_button, 20), "Next")
+	eq(flow().step, "stores", "the Stores step")
+	var epic_row := func(): return flow().body.find_child("store_epic", true, false)
+	ok(epic_row.call() != null, "Epic listed")
+	ok(await press_on(func(): return epic_row.call().button if epic_row.call() else null, 20, "v"), "A on Epic")
+	await w.frames(3)
+	ok(flow().sign_in != null, "the sign-in opens")
+	ok(await until(func(): return flow().sign_in.state == "ready", 4000), "ready for the code (%s)" % flow().sign_in.state)
+	ok(await press_on(func(): return flow().sign_in.type_button, 10), "A on Type the code")
+	await w.frames(2)
+	ok(flow().keyboard.is_open(), "the keyboard opens")
+	await type_keys("e2ecode42")
+	await key(KEY_ENTER)
+	ok(await until(func(): return FileAccess.file_exists(w.home.path_join(".config/legendary/user.json")), 8000), "legendary signed in with the code")
+	ok(stores.tool_calls().any(func(c): return c[0] == "legendary" and c[1] == "auth" and "e2ecode42" in c), "legendary auth --code e2ecode42")
+	ok(await until(func(): return flow().sign_in.state == "done" or st.is_done("stores"), 4000), "the step says signed in (%s)" % flow().sign_in.state)
+	# the rest: Skip the optional ones, Next through, Done
+	for i in 6:
+		if flow() == null:
+			break
+		var s: String = flow().step
+		if s == "done":
+			ok(await press_on(func(): return flow().next_button if flow() else null, 20), "Done")
+			break
+		var target: Button = flow().skip_button if flow().skip_button.visible and s in ["art", "keys"] else flow().next_button
+		ok(await press_on(target, 30), "%s: %s" % [s, target.name])
+		await w.frames(3)
+	await w.frames(4)
+	ok(flow() == null, "setup closes at the end")
+	ok(not st.is_first_run(), "and is done")
+	ok(focus() != null and focus_on_screen() == "", "focus on Home")
+	check("first boot")
+	await _undo_setup(st, old, theme0)
+	await without_stores()
+
+
+func _undo_setup(st: Node, old: Dictionary, theme0: String) -> void:
+	var v: Dictionary = UiPrefsScript.values()
+	v["theme"] = theme0
+	UiPrefsScript.set_values(v)
+	main().apply_theme()
+	st.setup(old["runner"], old["home"], old["cfg"], old["device"], old["path"])
+	if flow() != null:
+		flow().finish()
+	await w.frames(3)

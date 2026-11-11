@@ -86,6 +86,7 @@ func attach() -> void:
 	if not _old_path.begins_with(bin_dir):
 		OS.set_environment("PATH", bin_dir + ":" + _old_path)
 	OS.set_environment("GAMECOVE_FAKE_STORE", state_dir)
+	OS.set_environment("GAMECOVE_FAKE_HOME", w.home)
 	_wire_library()
 	_wire_storage()
 	w.autoload("Controls").detect_all()
@@ -111,6 +112,7 @@ func detach() -> void:
 	_kill_fakes()
 	OS.set_environment("PATH", _old_path if _old_path != "" else OS.get_environment("PATH").trim_prefix(bin_dir + ":"))
 	OS.unset_environment("GAMECOVE_FAKE_STORE")
+	OS.unset_environment("GAMECOVE_FAKE_HOME")
 	lib.home = _old_home if _old_home != "" else lib.home
 	lib.games.clear()
 	lib._entries.clear()

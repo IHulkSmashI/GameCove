@@ -31,6 +31,10 @@ import sys
 import time
 
 STATE = os.environ.get("GAMECOVE_FAKE_STORE", "")
+# the fake handheld's home (the journeys' process keeps its own HOME): the real
+# tools find their config under $HOME, so these do under the fake one
+if os.environ.get("GAMECOVE_FAKE_HOME"):
+    os.environ["HOME"] = os.environ["GAMECOVE_FAKE_HOME"]
 TOTAL_MIB = 1000.0
 
 
