@@ -459,11 +459,12 @@ func set_top_target(c: Control) -> void:
 func _rebuild(keep_focus: bool) -> void:
 	var focused_key := ""
 	var focused_at := -1
-	if keep_focus and is_inside_tree():
+	if is_inside_tree():
 		var f := get_viewport().gui_get_focus_owner()
 		if f != null and f in _tiles:
 			focused_key = f.game.get("key", "")
-			focused_at = _tiles.find(f)
+			# a new order or view (X, the Filter sheet) starts at the top of the grid
+			focused_at = _tiles.find(f) if keep_focus else 0
 	var in_view := View.filter_view(games, view)
 	var picked := View.filter_meta(filter_install(View.filter_by_store(in_view, store), install_filter), genre, View.CRITIC_MIN if critic_filter else 0)
 	shown = View.sort_games(View.search(picked, query), sort)
