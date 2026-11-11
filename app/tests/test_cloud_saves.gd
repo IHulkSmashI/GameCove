@@ -261,3 +261,11 @@ func test_epic_decide_sees_a_cloud_save_that_is_older_than_our_sync() -> void:
 	eq(CS.epic_decide(look, last, "post"), "upload", "by the clock alone it looked unchanged")
 	eq(CS.epic_decide(look, last, "post", false, last - 90000), "conflict", "but it isn't the one we last saw")
 	eq(CS.epic_decide(look, last, "post", false, last - 5000), "upload", "the one we last saw: upload")
+
+
+## Review at ff76ca4, L8: a captive portal's page (a 200 that isn't GOG's answer) was cached
+## as "this game has no cloud saves" for good.
+func test_a_page_that_isnt_gogs_answer_is_not_no_cloud_saves() -> void:
+	eq(CS.parse_gog_remote("<html>Sign in to the hotel Wi-Fi</html>"), "invalid", "not JSON")
+	eq(CS.parse_gog_remote("{\"welcome\": true}"), "invalid", "JSON, but not GOG's")
+	eq(CS.parse_gog_remote(JSON.stringify({"content": {"Windows": {}}})), null, "GOG's answer without cloud saves: none")

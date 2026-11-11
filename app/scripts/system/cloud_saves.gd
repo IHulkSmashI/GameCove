@@ -381,11 +381,13 @@ static func gog_client_id(install_path: String, id: String) -> String:
 
 
 ## GOG remote config JSON -> locations [{name, location}] (Windows), [] when cloud storage is
-## on with no locations listed, null when the game has no cloud saves.
+## on with no locations listed, null when the game has no cloud saves, "invalid" when the
+## answer isn't GOG's at all (a captive portal's page with a 200): that one is never kept as
+## "no cloud saves" (review at ff76ca4, L8).
 static func parse_gog_remote(text: String) -> Variant:
 	var j := JSON.new()
-	if j.parse(text) != OK or not j.data is Dictionary:
-		return null
+	if j.parse(text) != OK or not j.data is Dictionary or not j.data.get("content") is Dictionary:
+		return "invalid"
 	var win: Dictionary = Common.dict(Common.dict(j.data.get("content")).get("Windows"))
 	var cs: Dictionary = Common.dict(win.get("cloudStorage"))
 	if not bool(cs.get("enabled", false)):

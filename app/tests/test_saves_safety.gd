@@ -884,6 +884,29 @@ func test_no_download_without_its_note() -> void:
 	_done(w)
 
 
+## L8: the remote-config answer from behind a captive portal isn't kept; the next sync asks GOG again.
+func test_a_captive_portal_answer_isnt_cached() -> void:
+	var w := _world("captive")
+	var install: String = w["gog"]["install_path"]
+	_json(install.path_join("goggame-1207.info"), {"clientId": "53035488294233580"})
+	_json(w["gog"]["heroic_root"].path_join("store_cache/gog_library.json"), {"games": []})
+	var answers := ["<html>hotel wifi</html>"]
+	var real: Callable = w["s"].run
+	w["s"].run = func(program: String, args: PackedStringArray) -> Dictionary:
+		if program == "curl":
+			return {"code": 0, "out": answers[0]}
+		return real.call(program, args)
+	w["s"].sync_now(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "offline", "said as offline, not 'no cloud saves'")
+	var c := ConfigFile.new()
+	c.load(w["s"].cfg_path)
+	ok(not c.has_section_key("gog_remote", "53035488294233580"), "and nothing kept")
+	answers[0] = JSON.stringify({"content": {"Windows": {"cloudStorage": {"enabled": true, "locations": []}}}})
+	w["s"].sync_now(w["gog"])
+	ok(w["s"].status(w["gog"])["state"] != "unsupported", "GOG's real answer next time (%s)" % w["s"].status(w["gog"])["state"])
+	_done(w)
+
+
 ## The service marks the backups a choice or a restore made.
 func test_choice_backups_are_kept_apart() -> void:
 	var w := _world("pinned")

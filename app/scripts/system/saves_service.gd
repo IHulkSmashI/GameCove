@@ -734,7 +734,8 @@ func _local_parts(entry: Dictionary, tools: Dictionary) -> Array:
 		var plan := CloudSaves.epic_plan(entry, tools)
 		return _epic_parts(entry, plan, str(entry.get("id", ""))) if plan["ok"] else []
 	var client := CloudSaves.gog_client_id(str(entry.get("install_path", "")), str(entry.get("id", "")))
-	var cached: Variant = SettingsFile.load_cfg(cfg_path).get_value("gog_remote", client, null) if client != "" else null
+	var rc := SettingsFile.load_cfg(cfg_path)
+	var cached: Variant = rc.get_value("gog_remote", client) if client != "" and rc.has_section_key("gog_remote", client) else null
 	var gp := CloudSaves.gog_plan(entry, tools, cached)
 	return gp["locations"] if gp["ok"] else []
 
@@ -849,12 +850,14 @@ func _gog_plan(entry: Dictionary, tools: Dictionary) -> Dictionary:
 		return plan
 	var client := str(plan["client_id"])
 	var cfg := SettingsFile.load_cfg(cfg_path)
-	var cached: Variant = cfg.get_value("gog_remote", client, null)
+	var cached: Variant = cfg.get_value("gog_remote", client) if cfg.has_section_key("gog_remote", client) else null
 	if cached == null:
 		var r: Dictionary = run.call("curl", PackedStringArray(["-sS", "--fail", "-m", "15", CloudSaves.GOG_REMOTE_CONFIG % client]))
 		if int(r.get("code", -1)) != 0:
 			return {"ok": false, "why": "offline"}
 		var locs: Variant = CloudSaves.parse_gog_remote(str(r.get("out", "")))
+		if locs is String and locs == "invalid":
+			return {"ok": false, "why": "offline"}   # not GOG's answer: asked again next time
 		cached = locs if locs != null else "none"
 		SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value("gog_remote", client, cached))
 	return CloudSaves.gog_plan(entry, tools, cached)
