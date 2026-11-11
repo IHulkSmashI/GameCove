@@ -958,3 +958,83 @@ func test_fixes_page_apply_then_undo() -> void:
 
 func btn_of(page: Control, verb: String, id: String) -> Control:
 	return page.buttons.get("%s:%s" % [verb, id])
+
+
+# ---- every other screen: Discover, Stream, Apps, Emulation, the art picker ----------------------
+
+## Presses `dirs` round and round `n` times, checking focus stays visible on screen.
+func roam(where_: String, n: int) -> void:
+	var dirs := ["down", "right", "down", "left", "up", "right"]
+	for i in n:
+		await call(dirs[i % dirs.size()])
+		await w.frames(2)
+		await until(func(): return focus_on_screen() == "", 800)
+		var e := focus_on_screen()
+		if e != "":
+			ok(false, "%s, press %d: %s" % [where_, i, e])
+			return
+
+
+func test_every_screen_by_pad_discover_stream_apps_emulation_art() -> void:
+	await with_stores()
+	# Home: the hero and shelves
+	ok(await go_tab("home"), "Home")
+	await roam("home", 10)
+	await b()
+	# Discover: its sections by pad, then back
+	ok(await go_tab("discover"), "RB to Discover")
+	await w.frames(4)
+	await roam("discover", 14)
+	check("discover")
+	# Stream: hosts (none found on the fake network) and its own buttons
+	ok(await go_tab("stream"), "RB to Stream")
+	await w.frames(4)
+	ok(screen_text(main().stream_screen) != "", "the Stream tab says something (no hosts here)")
+	await roam("stream", 6)
+	check("stream")
+	# Library > Apps: the desktop apps list, X pins, B closes
+	ok(await go_tab("library"), "Library")
+	var apps_btn: Control = main().library_screen.apps_button
+	if apps_btn != null and apps_btn.is_visible_in_tree():
+		# Apps sits above the toolbar's last button (Order): D-pad to it, up, A
+		ok(await nav_to(main().library_screen.sort_button, 40, "h") or await nav_to(main().library_screen.sort_button, 40), "along the toolbar to Order")
+		await up()
+		await w.frames(2)
+		ok(focused_in(apps_btn), "up: Apps")
+		await a()
+		await w.frames(4)
+		eq(where(), "apps", "the Apps list opens")
+		await roam("apps", 4)
+		await x()
+		await w.frames(2)
+		await b()
+		await w.frames(3)
+		ok(where() != "apps", "B closes it")
+	# the Emulation page from the Filter sheet
+	await view_btn()
+	ok(await choose("+emulation_page"), "Filter > Emulation page")
+	await w.frames(6)
+	ok(page() != null and page().name == "EmulationPage", "the Emulation page opens")
+	await roam("emulation", 4)
+	await b()
+	if page() != null:
+		await b()
+	await w.frames(3)
+	ok(page() == null, "B closes it")
+	# a game page: Change artwork opens the art picker, B closes it
+	ok(await open_from_library("steam:367520"), "Hollow Knight's page")
+	var art := func(): return page().find_child("ChangeArtwork", true, false)
+	if art.call() != null:
+		ok(await press_on(art, 40), "A on Change artwork")
+		await w.frames(4)
+		ok(page().art_picker.is_open(), "the art picker opens")
+		await roam("art picker", 6)
+		await b()
+		await w.frames(4)
+		ok(not page().art_picker.is_open(), "B closes it")
+		ok(focus() != null and page().is_ancestor_of(focus()), "focus back on the page")
+	await b()
+	check("screens")
+	await without_stores()
+
+
