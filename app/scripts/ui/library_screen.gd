@@ -433,10 +433,12 @@ func set_top_target(c: Control) -> void:
 
 func _rebuild(keep_focus: bool) -> void:
 	var focused_key := ""
+	var focused_at := -1
 	if keep_focus and is_inside_tree():
 		var f := get_viewport().gui_get_focus_owner()
 		if f != null and f in _tiles:
 			focused_key = f.game.get("key", "")
+			focused_at = _tiles.find(f)
 	var in_view := View.filter_view(games, view)
 	var picked := View.filter_meta(filter_install(View.filter_by_store(in_view, store), install_filter), genre, View.CRITIC_MIN if critic_filter else 0)
 	shown = View.sort_games(View.search(picked, query), sort)
@@ -478,6 +480,9 @@ func _rebuild(keep_focus: bool) -> void:
 			if t.game.get("key", "") == focused_key:
 				_focus_later(t)
 				return
+		# the focused game left the grid (hidden, uninstalled with the Installed
+		# filter on): focus takes its place, or the toolbar when the grid is empty
+		_focus_later(_tiles[mini(focused_at, _tiles.size() - 1)] if not _tiles.is_empty() else _current_store_button())
 
 
 func _refresh_toolbar() -> void:
