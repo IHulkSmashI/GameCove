@@ -252,16 +252,16 @@ func _build_actions() -> void:
 	last.alignment = BoxContainer.ALIGNMENT_CENTER
 	shift_button = _action("Shift", "LT", "arrow_up", "Shift", 76)
 	shift_button.pressed.connect(press_shift)
-	symbols_button = _action("SymbolsKey", "RT", "", "?123", 92)
+	symbols_button = _action("SymbolsKey", "RT", "", "?123", 84)
 	symbols_button.pressed.connect(toggle_symbols)
 	space_button = _action("Space", "Y", "", "Space", 104)
 	space_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	space_button.pressed.connect(type.bind(" "))
-	left_button = _action("CaretLeft", "LB", "chevron_left", "Left", 62)
+	left_button = _action("CaretLeft", "LB", "chevron_left", "Left", 60)
 	left_button.pressed.connect(move_caret.bind(-1))
-	right_button = _action("CaretRight", "RB", "chevron_right", "Right", 62)
+	right_button = _action("CaretRight", "RB", "chevron_right", "Right", 60)
 	right_button.pressed.connect(move_caret.bind(1))
-	back_button = _action("Backspace", "X", "backspace", "Backspace", 70)
+	back_button = _action("Backspace", "X", "backspace", "Backspace", 64)
 	# Held (a finger, the mouse, A): the first one goes at once, then it repeats.
 	back_button.button_down.connect(func():
 		_back_held = true
@@ -272,9 +272,9 @@ func _build_actions() -> void:
 		if not _back_held:
 			backspace()
 		_back_held = false)
-	accents_button = _action("Accents", "", "", "áé", 52)
+	accents_button = _action("Accents", "", "", "áé", 60)
 	accents_button.pressed.connect(toggle_accents)
-	clear_button = _action("Clear", "", "", "Clear", 56)
+	clear_button = _action("Clear", "", "", "Clear", 60)
 	clear_button.pressed.connect(func(): set_text(""))
 	done_button = Kit.button("Done", "AccentButton")
 	done_button.name = "Done"
