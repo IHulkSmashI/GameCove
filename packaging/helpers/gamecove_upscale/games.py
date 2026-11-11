@@ -578,7 +578,22 @@ def undo(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
     removed = reframework.remove(folder, _ref_shas(home)) if folder else {"ok": True}
     opti = optiscaler.unpatch(folder, home) if folder else {"ok": True}
     _forget(home, key)
-    r = set_launch(home, key, {k: None for k in REC_KEYS}, gpu)
+    # everything GameCove set for the game, frame generation's multiplier too (Native: nothing added; review low:
+    # XESS_FG=3 and GAMECOVE_XMX=1 stayed in the launch file)
+    clear = {k: None for k in (*REC_KEYS, "fg")}
+    try:
+        r = set_launch(home, key, clear, gpu)
+    except ValueError:
+        # what is left can't be composed for this GPU (uninstall runs without --gpu): the game's launch settings go
+        s = load_state(home)
+        s["launch"].pop(str(key), None)
+        save_state(home, s)
+        if str(key).isdigit():
+            try:
+                os.remove(launchenv.path_for(os.path.join(home, DATA), str(key)))
+            except OSError:
+                pass
+        r = {"ok": True, "launch": {}, "env": {}, "path": None}
     return {**r, "reframework": removed, "optiscaler": opti, "ok": r.get("ok", True) and opti.get("ok", True)}
 
 
