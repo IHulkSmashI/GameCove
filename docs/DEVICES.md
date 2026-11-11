@@ -16,7 +16,7 @@ Sources and licenses: [CREDITS.md](../CREDITS.md).
 
 | Level | Shown as | Meaning |
 | --- | --- | --- |
-| `full` | Tested on hardware | We ran GameCove on the device: every setting changed, read back from the hardware and restored (MSI Claw 8 EX AI+ and the original ROG Ally RC71L, both on Bazzite). |
+| `full` | Tested on hardware | We ran GameCove on the device: every setting changed, read back from the hardware and restored (MSI Claw 8 EX AI+ on Bazzite and the original ROG Ally RC71L on SteamOS). |
 | `partial` | Supported | Every field comes from upstream data that was tested on the device (InputPlumber, steamos-manager, PowerStation, hhd); we haven't run GameCove on it ourselves yet. |
 | `generic` | Basic support | Matched, but key values are guesses (no upstream config), or a family row / CPU fallback. |
 

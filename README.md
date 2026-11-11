@@ -53,12 +53,12 @@ a script or a Windows app for is built in.
 - 🛡️ **Safe by design:** everything can be undone, repeated crashes drop you back in Steam Gaming Mode, and there's no
   telemetry and no account.
 
-**Tested on** the MSI Claw 8 EX AI+ and the ASUS ROG Ally, both on Bazzite, and 46 more models set up from
+**Tested on** the MSI Claw 8 EX AI+ (Bazzite) and the ASUS ROG Ally (SteamOS), and 46 more models set up from
 tested data. GameCove recognises your exact model and only shows what it can do:
 
 | Support | Handhelds |
 | --- | --- |
-| **Tested on hardware** | MSI Claw 8 EX AI+ and ASUS ROG Ally, both on Bazzite |
+| **Tested on hardware** | MSI Claw 8 EX AI+ (Bazzite), ASUS ROG Ally (SteamOS) |
 | **Supported** | Steam Deck LCD and OLED, the other MSI Claws, ROG Ally X and Xbox Allys, Legion Go, Go 2 and Go S, most OneXPlayers, AOKZOE, AYANEO, GPD, ZOTAC, Acer Predator Atlas 8, Orange Pi Neo ([every model](#supported-handhelds)) |
 | **Basic** | Any other handheld: safe settings for the chip, and model settings once someone helps us test it |
 
@@ -444,7 +444,7 @@ GameCove recognises your exact model and sets itself up for it. About this devic
 | Maker | Tested on hardware | Supported | Basic |
 | --- | --- | --- | --- |
 | **MSI** | Claw 8 EX AI+ (Bazzite) | Claw 8 AI+, Claw 7 AI+, Claw A1M, Claw A8 | |
-| **ASUS** | ROG Ally (Bazzite) | ROG Ally X, ROG Xbox Ally, ROG Xbox Ally X, ROG Xbox Ally X20 | |
+| **ASUS** | ROG Ally (SteamOS) | ROG Ally X, ROG Xbox Ally, ROG Xbox Ally X, ROG Xbox Ally X20 | |
 | **Valve** | | Steam Deck LCD, Steam Deck OLED | |
 | **Lenovo** | | Legion Go, Legion Go 2 (and Z2), Legion Go S (Z2 Go and Z1 Extreme) | |
 | **OneXPlayer** | | OneXFly F1, F1 Pro and Apex; X1 (AMD, Intel, Mini, Pro); 2 and 2 Pro; G1 (AMD, Intel); 3 | X2 Mini, X2 Mini Pro, Super X |

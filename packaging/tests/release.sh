@@ -495,13 +495,13 @@ rm -f "$T/ce/fail"
 grep -q "check-environment.sh" "$REPO/docs/RELEASING.md" && ok || bad "docs/RELEASING.md must describe the environment check"
 if grep -q "owner: create it" "$REPO/docs/RELEASING.md"; then bad "docs/RELEASING.md still says the environments are to be created"; else ok; fi
 
-# "Tested on hardware" says the same thing everywhere: MSI Claw 8 EX AI+ and ROG Ally, both on Bazzite
-grep -q "MSI Claw 8 EX AI+ and the ASUS ROG Ally, both on Bazzite" "$REPO/README.md" && ok || bad "README must say what was tested on hardware: Claw 8 EX AI+ and ROG Ally, both on Bazzite"
+# "Tested on hardware" says the same thing everywhere: MSI Claw 8 EX AI+ (Bazzite) and ROG Ally (SteamOS)
+grep -q "MSI Claw 8 EX AI+ (Bazzite) and the ASUS ROG Ally (SteamOS)" "$REPO/README.md" && ok || bad "README must say what was tested on hardware: Claw 8 EX AI+ (Bazzite) and ROG Ally (SteamOS)"
 for f in packaging/rpm/gamecove.spec packaging/install.sh; do
-	grep -q "Tested on hardware: MSI Claw 8 EX AI+ and ASUS ROG Ally, both on Bazzite" "$REPO/$f" && ok || bad "$f must say what the README says about hardware testing"
+	grep -q "Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS)" "$REPO/$f" && ok || bad "$f must say what the README says about hardware testing"
 	if grep -qi "untested" "$REPO/$f"; then bad "$f still says untested while the README says tested on hardware"; else ok; fi
 done
-if grep -q "ROG Ally (SteamOS)\|Ally RC71L on SteamOS" "$REPO/README.md" "$REPO/docs/DEVICES.md"; then bad "README / DEVICES.md claim the ROG Ally was tested on SteamOS"; else ok; fi
+if grep -q "both on Bazzite" "$REPO/README.md" "$REPO/docs/DEVICES.md" "$REPO/docs/SESSION.md"; then bad "the ROG Ally was tested on SteamOS, not Bazzite"; else ok; fi
 grep -q "Not run on a SteamOS handheld yet" "$REPO/packaging/sysext/build-sysext.sh" && grep -q "hasn't been run on a handheld yet" "$REPO/README.md" && ok || bad "the SteamOS install must be described the same way in build-sysext.sh and the README"
 if grep -q '^<!--' "$REPO/README.md"; then bad "README has a hidden comment: $(grep -n '^<!--' "$REPO/README.md" | head -n 2 | tr '\n' ' ')"; else ok; fi
 

@@ -400,7 +400,7 @@ provider works. On Bazzite, `packaging/install.sh` explains and runs
 `rpm-ostree install ./gamecove-*.rpm`, then reboot, then
 `gamecove-session-select gamecove`. Removal: `install.sh --uninstall`.
 The Release workflow builds it with `rpmbuild` in a pinned Fedora container (not in mock). Tested on hardware:
-MSI Claw 8 EX AI+ and ASUS ROG Ally, both on Bazzite. rpm-ostree may warn about
+MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS). rpm-ostree may warn about
 `/var/lib/gamecove` in the package (the dispatcher creates it anyway).
 
 **SteamOS (systemd-sysext).** `packaging/sysext/build-sysext.sh` makes
