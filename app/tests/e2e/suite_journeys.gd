@@ -222,8 +222,12 @@ func test_steam_manage_verify_update_move_uninstall() -> void:
 	ok(await choose("verify"), "Check files")
 	ok(await until(func(): return "steam://validate/367520" in stores.steam_uris, 6000), "Steam validates it")
 	await until(func(): return not stores.steam_jobs.has("367520"), 8000)
+	# the app notices Steam's manifest a moment after Steam finished: wait for its own state (the page
+	# is rebuilt when it changes) before steering to a button, and look the button up as we go
+	await until(func(): return not main().install_state.is_busy(key), 8000)
 	await w.idle()
-	ok(await press_on(page().manage_button, 10), "Manage again")
+	var manage := func() -> Variant: return page().manage_button if page() != null else null
+	ok(await press_on(manage, 10), "Manage again (focus %s, install state %s, sheet open %s)" % [focus().get_path() if focus() else "none", install_state(key), sheet_open()])
 	ok(await choose("steam_store"), "Steam store page")
 	ok(await until(func(): return "steam://store/367520" in stores.steam_uris, 6000), "Steam opens the store page")
 	if main().steam_overlay.is_open():
