@@ -20,13 +20,6 @@
    "kind": "blurry",
    "node": "*/LaunchOverlay/Center/Logo",
    "why": "The launch splash's game logo is the logo art from SteamGridDB / Steam, at most 900 px wide; on a 4K TV (2.7x) it is drawn 60 % sharp for the second the splash shows. Nothing bigger is published."
-  },
-  {
-   "kind": "focus",
-   "set": "installer",
-   "shot": "installer_welcome_other",
-   "node": "*/Modes/Card_mode_easy",
-   "why": "At 1280x800 the focus glow of the Easy card is clipped by at most 5 px at the bottom edge of the installer page's scroll area (card 370 px tall, area 440 px); the card and its ring are fully readable and the page scrolls. Found by the harness, not yet reduced."
   }
  ]
 }
