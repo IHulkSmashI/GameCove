@@ -297,6 +297,12 @@ func override_for(game: Dictionary, kind: String) -> Dictionary:
 
 # ------------------------------------------------------------ automatic fill
 
+## A game made from a ROM file (the Emulation page's, EmuDeck / RetroDECK / ES-DE folders).
+static func is_rom(game: Dictionary) -> bool:
+	var e: Variant = game.get("emulated", {})
+	return e is Dictionary and bool(e.get("rom", false))
+
+
 static func missing_kinds(game: Dictionary) -> Array:
 	var art = game.get("art", {})
 	var out := []
@@ -317,6 +323,11 @@ func auto_fill(games: Array) -> int:
 	_load_auto_tried(now)
 	var n := 0
 	for g in games:
+		# a ROM's title never leaves the device (docs/PRIVACY.md, the Emulation page): a search
+		# can't tell a console game from a PC one by its title anyway. Every caller goes through
+		# here, so the setup step's fill after a key is saved is covered too.
+		if is_rom(g):
+			continue
 		for k in missing_kinds(g):
 			var id := "%s|%s" % [g.get("key", ""), k]
 			if _auto_tried.has(id) and now - int(_auto_tried[id]) < RETRY_AUTO_S:

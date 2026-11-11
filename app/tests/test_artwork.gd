@@ -221,6 +221,25 @@ func test_non_steam_game_by_title_and_auto_fill() -> void:
 	wipe(dir)
 
 
+## Review Medium (privacy): saving a SteamGridDB key in setup filled the art of every game, ROMs
+## included, so ROM titles went to SteamGridDB against docs/PRIVACY.md ("no art is looked up
+## online for a ROM"). The filter lives in auto_fill, so every caller is covered.
+func test_auto_fill_never_asks_about_a_rom() -> void:
+	var dir := tmp("autorom")
+	var http := FakeHttp.new()
+	_routes(http)
+	var s := _service(http, dir)
+	var rom := {"key": "emu:3000000001", "store": "emu", "id": "3000000001", "title": "Moonlit Harbor",
+		"emulated": {"system": "snes", "system_short": "SNES", "rom": true}, "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	var steam_game := {"key": "steam:400", "store": "steam", "id": "400", "title": "Portal", "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	eq(s.auto_fill([rom]), 0, "a ROM alone: nothing queued")
+	eq(http.requests.size(), 0, "and nothing sent anywhere")
+	eq(s.auto_fill([rom, steam_game]), 3, "next to a PC game only that one's three pictures")
+	ok(not http.requests.any(func(r): return r.contains("Moonlit")), "the ROM's title was never sent")
+	s.free()
+	wipe(dir)
+
+
 ## Review 2, low 23: the automatic fill forgot what it had tried at every start, and its
 ## queue kept draining after a switch went off.
 func test_auto_fill_remembers_tries_and_stops_with_the_switch() -> void:
