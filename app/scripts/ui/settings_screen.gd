@@ -576,10 +576,11 @@ func request_app_launch(app: Dictionary) -> void:
 
 
 ## Opens the keyboard for a key or code; `done(text)` gets what was typed.
-func ask_text(placeholder: String, start: String, done: Callable) -> void:
+## `secret`: an API key or password, drawn as dots (Show reveals it).
+func ask_text(placeholder: String, start: String, done: Callable, secret := false) -> void:
 	_ask_done = done
 	_ask_return = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	keyboard.use_for_codes(placeholder)
+	keyboard.use_for_codes(placeholder, 600, secret)
 	_set_layout_focus(false)
 	keyboard.open(start)
 

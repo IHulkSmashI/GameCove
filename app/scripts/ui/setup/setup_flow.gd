@@ -593,7 +593,7 @@ func _key_row(key: String, title: String, value: String, why: String) -> void:
 	r.collapse_hint = false
 	r.set_hint(why)
 	r.set_value(TS.masked(value), "muted" if value == "" else "good")
-	r.pressed.connect(func(): ask_text(title, value, func(t: String): save_key(key, t.strip_edges())))
+	r.pressed.connect(func(): ask_text(title, value, func(t: String): save_key(key, t.strip_edges()), true))
 	body.add_child(r)
 	_focusables.append(r.button)
 
@@ -815,10 +815,11 @@ static func _link_grid(chain: Array) -> void:
 		c.focus_neighbor_bottom = c.get_path_to(chain[i + 2] if i + 2 < chain.size() else c)
 
 
-func ask_text(placeholder: String, start: String, done: Callable) -> void:
+## `secret`: an API key or password, drawn as dots (Show reveals it).
+func ask_text(placeholder: String, start: String, done: Callable, secret := false) -> void:
 	_ask_done = done
 	_ask_return = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	keyboard.use_for_codes(placeholder)
+	keyboard.use_for_codes(placeholder, 600, secret)
 	keyboard.open(start)
 
 

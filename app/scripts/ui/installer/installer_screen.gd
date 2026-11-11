@@ -1177,7 +1177,7 @@ func _build_extras() -> void:
 		r.collapse_hint = false
 		r.set_hint(line)
 		r.set_value(shown, "muted" if v == "" else "good")
-		r.pressed.connect(func(): ask_text(title, v, func(t: String): save_extra(k, t)))
+		r.pressed.connect(func(): ask_text(title, v, func(t: String): save_extra(k, t), k != "steam_id"))
 	var vals: Array = [""] + TS.COUNTRIES
 	var labels: Array = [TI.REGION_AUTO] + TS.COUNTRIES
 	var c := _choice("country", TI.REGION, vals, labels, plan.choices["country"], func(_v): return TI.REGION_LINE, "discover")
@@ -1807,10 +1807,11 @@ func _link() -> void:
 				b.focus_neighbor_top = b.get_path_to(items[0])
 
 
-func ask_text(placeholder: String, start: String, done: Callable) -> void:
+## `secret`: an API key or password, drawn as dots (Show reveals it).
+func ask_text(placeholder: String, start: String, done: Callable, secret := false) -> void:
 	_ask_done = done
 	_ask_return = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	keyboard.use_for_codes(placeholder)
+	keyboard.use_for_codes(placeholder, 600, secret)
 	keyboard.open(start)
 
 
