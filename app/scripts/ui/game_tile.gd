@@ -279,6 +279,10 @@ func _add_app_icon(g: Dictionary, tile: Vector2) -> void:
 	if icon == "" or not ArtCache.usable(icon):
 		return
 	fallback.monogram = false
+	# The icon is the picture: no generated scenery, and the card takes the
+	# icon's own colour (neutral slate until it loads, or for grey icons).
+	fallback.plain = true
+	fallback.colors = ArtColor.app_card_colors(Color(0, 0, 0, 0))
 	app_icon = TextureRect.new()
 	app_icon.name = "AppIcon"
 	app_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -298,9 +302,20 @@ func _add_app_icon(g: Dictionary, tile: Vector2) -> void:
 	var tex := ArtCache.request("logo", icon, func(t: Texture2D):
 		var o: Object = me.get_ref()
 		if o != null and is_instance_valid(o.app_icon):
-			o.app_icon.texture = t, self)
+			o.app_icon.texture = t
+			o._tint_app_card(t), self)
 	if tex != null:
 		app_icon.texture = tex
+		_tint_app_card(tex)
+
+
+## An app card's background from its icon's vibrant colour.
+func _tint_app_card(tex: Texture2D) -> void:
+	if tex == null or fallback == null:
+		return
+	var img := tex.get_image()
+	fallback.colors = ArtColor.app_card_colors(ArtColor.vibrant(img) if img != null else Color(0, 0, 0, 0))
+	fallback.queue_redraw()
 
 
 ## Tile size for a row `avail_w` px wide: PER_ROW covers across, never

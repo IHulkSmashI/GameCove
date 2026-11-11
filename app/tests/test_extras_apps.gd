@@ -7,6 +7,7 @@ const Apps := preload("res://scripts/library/apps.gd")
 const AppsView := preload("res://scripts/ui/apps_view.gd")
 const Home := preload("res://scripts/ui/home.gd")
 const Tile := preload("res://scripts/ui/game_tile.gd")
+const ArtColor := preload("res://theme/art_color.gd")
 const GameSession := preload("res://scripts/launch/game_session.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
 
@@ -202,5 +203,18 @@ func test_app_tiles_show_their_icon() -> void:
 	ok(not t.fallback.monogram, "instead of the monogram")
 	ok(t.title_label.visible, "the title on the plate")
 	eq(t.sub_label.text, "App", "says it's an app")
+	ok(t.fallback.plain, "no generated scenery behind the icon")
+	var bg: Color = t.fallback.colors[1]
+	ok(bg.h < 0.05 or bg.h > 0.95, "the card takes the icon's own hue (red): %s" % bg)
+	ok(bg.v < 0.5, "and stays dark, so the icon is the bright thing: %s" % bg)
 	t.free()
 	_wipe(dir)
+
+
+func test_app_card_colours_from_the_icon() -> void:
+	var grey := ArtColor.app_card_colors(Color(0, 0, 0, 0))
+	ok(absf(grey[1].s) < 0.2, "a grey or unknown icon gets a neutral slate")
+	var blue := ArtColor.app_card_colors(Color.from_hsv(0.6, 0.9, 0.9))
+	ok(absf(blue[0].h - 0.6) < 0.01 and absf(blue[1].h - 0.6) < 0.01, "same hue as the icon")
+	ok(blue[0].v < blue[1].v and blue[1].v <= 0.4, "dark, darker at the base")
+	ok(blue[1].s <= 0.6, "muted, never louder than the icon")
