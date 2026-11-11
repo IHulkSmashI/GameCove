@@ -168,6 +168,16 @@ ok 'cmp -s "$HERE/../edid-hook.sh" "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh"' "
 ok '[ -f "$R$EDID_FILE" ] && fix claw8ex-vrr status | grep -qx installed=yes && fix claw8ex-vrr status | grep -qx state=on' "still installed and on (not removed)"
 ok '[ -f "$R/etc/modprobe.d/gamecove-claw8ex-vrr.conf" ] && grep -qx "gamecove.vrr=1" "$FAKE/kargs"' "modprobe rule and boot switch in place"
 fix claw8ex-vrr remove >/dev/null 2>&1
+# review 4-L3: an install cut short (the record is there, the boot hook is not) is not "already installed"
+case_start install_cut_short
+vrr_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+rm -f "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh" "$R/etc/gamecove/claw8ex-vrr/edid.conf"
+ok 'fix claw8ex-vrr install >"$T/out" 2>&1' "install after a cut-short one succeeds ($(tail -n 1 "$T/out" 2>/dev/null))"
+ok '! grep -q "already installed" "$T/out"' "and does not claim it was already installed"
+ok '[ -f "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh" ] && [ -f "$R$EDID_FILE" ]' "the hook and the EDID are in place"
+fix claw8ex-vrr remove >/dev/null 2>&1
+
 # an older EDID is active and can't be rebuilt: nothing is changed
 case_start update_refuses_when_it_cannot_rebuild
 vrr_ready

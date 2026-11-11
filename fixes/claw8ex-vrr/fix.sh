@@ -343,6 +343,11 @@ migrate() {
 install() {
 	require_root
 	lock
+	if m_installed && { [ ! -f "$ROOT$HOOK" ] || [ ! -f "$ROOT$HOOK_CONF" ]; } && [ -z "$(old_kargs)" ]; then
+		# a record without its boot hook is an install that was cut short (the manifest is written step by
+		# step): "already installed" would leave it half done for good. Undo what it did and install again.
+		vrr_undo || die "an earlier install was cut short and could not be undone; see the messages above, then run remove"
+	fi
 	if m_installed; then
 		migrate || die "could not move the old kernel arguments to the boot hook; see the messages above"
 		if m_installed; then
