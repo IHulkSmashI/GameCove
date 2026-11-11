@@ -290,8 +290,6 @@ noticing a drop. Give it a target FPS or let it pick one. It learns each game on
 back within seconds in heavy scenes, skips loading screens, and puts everything back when you quit. It's ported from
 ClawDeck, which was built and tuned on real hardware, and works on every handheld with a TDP control.
 
-<!-- Performance section: being written on perf/background. It goes here, after "Upscaling, frame generation and Auto TDP" (numbers come from that branch; add a Contents entry with it). -->
-
 ## Profiles
 
 Change something in the quick menu while a game runs and it's saved for that game. Set different values for battery
