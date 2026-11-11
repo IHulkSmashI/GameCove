@@ -372,6 +372,14 @@ What keeps a save from being lost (final review; each has a test against ports o
   backup to put back, the folders that were empty). A failed download puts the backup back and empties the folders that
   were empty. A note still there at the next sync (the app or the power went mid-download) is put right first: what is
   found is kept as a backup, the folders go back as they were, the sync times are dropped.
+- **An upload cut short.** Before a tool may upload, a note goes into `saves.cfg` (`uploading`: when, the folders and
+  their fingerprint). One cut off (the 90 s cap, the app or the power going) leaves the cloud a mix of new and old
+  files; the note stays and the status says so ("upload cut off"). The next sync of that game, before anything else,
+  and once at start (when the Library loads; never under a game), finishes it: with the folders as they were then, a
+  copy of the cloud as it is is kept and a forced upload sends every file ("we finished it"; offline: nothing else
+  syncs for that game, the game still starts, the next sync tries again). With the folders changed since (played from
+  Heroic, a restore), finishing would mix again, so the copy is kept, the sync times are dropped and the sync asks.
+  Picking a side in a conflict settles the note.
 - **Two GOG locations.** When one fails and the backup goes back, a location that had downloaded gets its old sync time
   back with it.
 - **A restore holds.** Restoring makes the folder exactly what the backup holds (unpacked next to it and swapped in).

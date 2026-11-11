@@ -704,12 +704,17 @@ func _wire_saves_and_battery() -> void:
 
 ## A cloud save job ended: after a game, only trouble is worth a toast (the page shows the rest).
 func _on_saves_finished(key: String, phase: String, state: String) -> void:
+	if state == "upload_finished" or (state == "upload_cut" and phase in ["post", "repair"]):
+		var t := str(View.find_by_key(_decorated(), key).get("title", key))
+		toast((TSaves.UPLOAD_FINISHED_TOAST if state == "upload_finished" else TSaves.UPLOAD_CUT_TOAST) % t, "cloud", "good" if state == "upload_finished" else "warn")
 	if phase != "post":
 		return
 	if bool(_queued_start.get("sync", false)) and str(_queued_start.get("after", "")) == key:
 		call_deferred("_run_queued_start")   # the closed game's saves are up: the next one starts
 	var g := View.find_by_key(_decorated(), key)
 	var title := str(g.get("title", key))
+	if state == "upload_cut":
+		return
 	if state == "conflict":
 		toast(TSaves.CONFLICT_TOAST % title, "alert", "warn")
 	elif state in ["failed", "offline", "backup_failed"]:

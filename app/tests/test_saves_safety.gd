@@ -993,9 +993,127 @@ func test_gog_a_failed_location_after_play_keeps_what_was_uploaded() -> void:
 	cloud.fail_names = []
 	w["now"][0] += 100
 	w["s"].after_exit(w["gog"])
-	eq(w["s"].status(w["gog"])["state"], "uploaded", "the retry finishes location 2 without calling location 1 a conflict")
+	eq(w["s"].status(w["gog"])["state"], "upload_finished", "the retry finishes the cut upload (location 2) without calling location 1 a conflict")
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 2", "location 1 stays as uploaded")
 	eq(cloud.cloud["cfg/keys.ini"]["data"], "esdf", "location 2 went up")
 	_done(w)
+
+
+# ---- an upload cut short (review at ff76ca4, medium) --------------------------------------------
+
+## Two slots changed, the upload is killed after one (the 90 s cap): the cloud is a mix of a
+## new slot 1 and an old slot 2. The note stays, the status says so, and the next sync, before
+## anything else, finishes it (a copy of the cloud first): never a download of the mix.
+func test_gog_cut_upload_is_finished_before_anything_else() -> void:
+	var w := _world("gog_cut_upload")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload_after = 1
+	w["s"].after_exit(w["gog"])
+	eq([cloud.cloud["saves/slot1.sav"]["data"], cloud.cloud["saves/slot2.sav"]["data"]], ["hour 2", "hour 1"], "cut: the cloud is a mix")
+	eq(w["s"].status(w["gog"])["state"], "upload_cut", "the status says the upload was cut off")
+	ok(not Dictionary(_cfg(w, "gog:1207", "uploading", {})).is_empty(), "and the note stays")
+	# another device downloading the mix is beyond us; here, the next launch finishes it first
+	cloud.cut_upload_after = -1
+	cloud.did.clear()
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the game starts")
+	eq([cloud.cloud["saves/slot1.sav"]["data"], cloud.cloud["saves/slot2.sav"]["data"]], ["hour 2", "hour 2"], "the upload is finished")
+	ok(cloud.did.filter(func(x): return str(x).begins_with("download")).size() > 0 and Fakes.walk(w["gsaves"]) == ["slot1.sav", "slot2.sav"], "after a copy of the cloud (fetched into a scratch folder)")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot2.sav")), "hour 2", "nothing of the mix came down here")
+	eq(w["s"].status(w["gog"])["state"], "upload_finished", "and the status says so in plain words")
+	eq(_cfg(w, "gog:1207", "uploading", {}), {}, "the note is gone")
+	eq(w["s"].backup_list("gog:1207").filter(func(b): return b["reason"] == "cloud_copy").size(), 1, "the mix is kept as a cloud copy")
+	_done(w)
+
+
+## While it can't be finished (offline), nothing else syncs for that game: no download of the mix.
+func test_gog_cut_upload_blocks_other_syncs_until_finished() -> void:
+	var w := _world("gog_cut_upload_offline")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload_after = 1
+	w["s"].after_exit(w["gog"])
+	cloud.cut_upload_after = -1
+	# someone else's newer slot 2 lands in the cloud meanwhile; we're offline at the launch
+	cloud.offline = true
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "offline: the game starts")
+	eq(w["s"].status(w["gog"])["state"], "upload_cut", "still waiting to finish")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot2.sav")), "hour 2", "this handheld's save untouched")
+	ok(not Dictionary(_cfg(w, "gog:1207", "uploading", {})).is_empty(), "the note stays for the next try")
+	cloud.offline = false
+	_done(w)
+
+
+## Played on elsewhere since the cut (from Heroic): finishing would mix again. A copy of the
+## cloud is kept and we ask.
+func test_gog_cut_upload_changed_since_asks() -> void:
+	var w := _world("gog_cut_upload_changed")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload_after = 1
+	w["s"].after_exit(w["gog"])
+	cloud.cut_upload_after = -1
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 3, from Heroic", int(w["now"][0]))
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "we ask")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot2.sav")), "hour 3, from Heroic", "nothing came down over it")
+	ok(w["s"].backup_list("gog:1207").any(func(b): return b["reason"] == "cloud_copy"), "the cloud's mix is kept as a copy")
+	eq(_cfg(w, "gog:1207", "uploading", {}), {}, "the note is settled")
+	_done(w)
+
+
+## Epic: an upload killed before legendary wrote its manifest. The next start (the Library
+## loading) finishes it on its own, and says so.
+func test_epic_cut_upload_is_finished_at_the_next_start() -> void:
+	var w := _world("epic_cut_upload")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "hour 1", T0)
+	w["s"].sync_now(w["epic"])
+	w["now"][0] += 900
+	Fakes.put(w["esaves"].path_join("world.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload = true
+	w["s"].after_exit(w["epic"])
+	eq(cloud.saves[-1]["files"]["world.sav"], "hour 1", "cut before the manifest")
+	eq(w["s"].status(w["epic"])["state"], "upload_cut", "said so")
+	cloud.cut_upload = false
+	# the next start: a fresh service, the Library comes up
+	var lib := RepairLibrary.new()
+	var phases := []
+	w["s"].finished.connect(func(k, ph, st): phases.append([k, ph, st]))
+	w["s"].setup_library(lib)
+	w["s"].entry_lookup = func(k: String) -> Dictionary: return w["entries"].get(k, {}).duplicate()
+	lib.changed.emit()
+	eq(phases, [["epic:Min", "repair", "upload_finished"]], "finished at the start, before any launch")
+	eq(cloud.saves[-1]["files"]["world.sav"], "hour 2", "the save is up")
+	lib.changed.emit()
+	eq(phases.size(), 1, "once")
+	lib.free()
+	_done(w)
+
+
+class RepairLibrary extends Node:
+	signal changed
 
 
 # ---- high 10: a download cut short ------------------------------------------------------------------

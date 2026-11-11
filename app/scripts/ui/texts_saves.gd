@@ -43,11 +43,14 @@ const STATE := {
 	"signed_out": "Sign in to the store (Settings > Stores) to sync saves.",
 	"no_tool": "Needs legendary or Heroic to sync saves.",
 	"linux": "The store's cloud saves only cover the Windows version of this game.",
+	"upload_finished": "The last upload was cut off; we finished it %s.",
+	"upload_cut": "The last upload was cut off, so the cloud may hold only part of it. We finish it before anything else syncs.",
 	"off": OFF_LINE,
 	"disabled": DISABLED_LINE,
 }
 ## state -> tone for the status line.
 const TONE := {"synced": "good", "uploaded": "good", "downloaded": "good", "restored": "good", "conflict": "warn",
+	"upload_finished": "good", "upload_cut": "warn",
 	"offline": "warn", "failed": "bad", "backup_failed": "bad", "too_big": "warn", "pending_up": "", "pending_down": ""}
 
 const CONFLICT_TITLE := "Which save do we keep?"
@@ -87,6 +90,8 @@ const RESOLVE_RUNNING := "Close the game first, then choose. We never swap saves
 const SYNC_FAILED_TOAST := "%s: saves didn't sync. They're safe on this handheld."
 const CONFLICT_TOAST := "%s: saves changed here and in the cloud. Open the game to choose."
 const UPLOADED_TOAST := "%s: saves uploaded."
+const UPLOAD_FINISHED_TOAST := "%s: last time its saves' upload was cut off. We finished it."
+const UPLOAD_CUT_TOAST := "%s: its saves' upload was cut off. We'll finish it before anything else syncs."
 
 # ---- Settings > Saves --------------------------------------------------------------------------
 
