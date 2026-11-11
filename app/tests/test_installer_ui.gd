@@ -48,6 +48,15 @@ func test_every_page_builds() -> void:
 	_free(s)
 
 
+func test_the_page_scrolls_with_room_for_the_focus_glow() -> void:
+	# Godot's follow_focus leaves the focused card flush with the area's edge, which cut
+	# the Easy card's glow at 1280x800 (layout harness); FocusScroll keeps room around it.
+	var s := _screen(F.target("other"))
+	ok(not s.scroll.follow_focus, "Godot's follow_focus is off")
+	ok(s.scroll.get_children(true).any(func(c): return c.name == "FocusScroll"), "FocusScroll follows the focus")
+	_free(s)
+
+
 func test_welcome_shows_device_and_modes() -> void:
 	var s := _screen(F.target("bazzite"))
 	eq(s.page_title.text, "CHOOSE HOW TO SET UP GAMECOVE")

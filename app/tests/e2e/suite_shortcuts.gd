@@ -397,3 +397,24 @@ func test_settings_page_picks_and_orders_the_strip() -> void:
 	eq(Prefs.shown(), Registry.STRIP_DEFAULT, "the reset row puts the usual strip back")
 	main().show_screen("home")
 	await w.idle()
+
+
+## Eight buttons share the panel's width: a word like "Screenshot" or "Keyboard" used to touch
+## both edges of its button (the Shortcuts pictures showed it). Every label keeps air each side.
+func test_labels_sit_inside_their_buttons_with_air() -> void:
+	Prefs.reset()
+	await start_game(GAME_A)
+	await until(func(): return not w.main._window_focused, 4000)
+	await qam()
+	await w.frames(3)
+	ok(strip() != null and strip().focusables().size() >= 6, "the strip is there with its default shortcuts")
+	for btn in strip().focusables():
+		var l := btn.get_node("Col/Name") as Label
+		var font := l.get_theme_font("font")
+		var px := l.get_theme_font_size("font_size")
+		var width := font.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+		ok(width <= btn.size.x - 8.0, "%s: \"%s\" is %d px wide in a %d px button, with air each side" % [btn.name, l.text, int(width), int(btn.size.x)])
+		ok(px >= 9, "%s: the label is still readable (%d px)" % [btn.name, px])
+	await b()
+	await end_game()
+	Prefs.reset()

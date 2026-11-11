@@ -22,6 +22,7 @@ const Themes := preload("res://theme/themes.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 const Illus := preload("res://scripts/ui/illustrations.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
+const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const Osk := preload("res://scripts/ui/osk.gd")
 const Toasts := preload("res://scripts/ui/toast.gd")
 const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
@@ -336,11 +337,13 @@ func _build() -> void:
 	page_col.add_child(title_box)
 	scroll = ScrollContainer.new()
 	scroll.name = "Scroll"
-	scroll.follow_focus = true
+	# FocusScroll, not Godot's follow_focus: that one stops with the focused card flush
+	# against the area's edge and its focus glow cut off; FocusScroll keeps room around it.
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	page_col.add_child(scroll)
+	FocusScroll.attach(scroll)
 	var pad := Kit.margin(6, 6, 10)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(pad)

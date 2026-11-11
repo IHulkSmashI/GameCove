@@ -562,4 +562,4 @@ func _legion_shots() -> void:
 func _status_legion() -> void:
 	main.top_bar.set_status("Lenovo Legion Go S", {"percent": 58, "status": "Discharging", "watts": 11.2}, "8:40 PM", {"connected": true, "strength": 0.6})
 	main.top_bar.set_telemetry({"tdp_w": 15.0, "profile": "balanced", "temp_c": 61.0})
-	main.hint_status.text = "● GameCove 0.4   Lenovo Legion Go S"
+	main.hint_status.text = "● GameCove %s   Lenovo Legion Go S" % ShotVersion.short()
