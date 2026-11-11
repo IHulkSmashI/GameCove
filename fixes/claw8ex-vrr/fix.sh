@@ -33,6 +33,11 @@
 # keeps the fix's own files across SteamOS updates. An update brings back Valve's grub file without our line:
 # `set refresh` (no password; GameCove runs it at start when the line is gone) puts it back on top of the new file,
 # and one restart brings the range back; where the update made the fix impossible, it takes the fix out instead.
+# The record of the changes (the manifest) is the one thing that must survive too: SteamOS gives every OS slot its own
+# /var and an update keeps only the /etc files on the keep list, so on SteamOS the record lives in
+# /etc/gamecove/claw8ex-vrr/record (on the keep list) instead of /var/lib/gamecove (Bazzite keeps /var). A record an
+# older GameCove left in /var is moved over on the next run as root. Without it, `set refresh` after an update would
+# find "nothing to do" and the range would stay gone. Untested on a SteamOS handheld (see docs/FIXES.md).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=fixes/lib/claw8ex-common.sh
@@ -53,6 +58,40 @@ DRM_PARAM=/sys/module/drm/parameters/edid_firmware
 VRR_KARG=gamecove.vrr=1
 KEEP_CONF=$KEEP_DIR/gamecove-claw8ex-vrr.conf
 m_init "$NAME"
+RECORD_ETC=/etc/gamecove/claw8ex-vrr/record
+
+# On SteamOS the record sits in /etc, which the keep list carries across updates (see the header).
+record_home() {
+	is_steamos || return 0
+	_old=$M_DIR
+	M_DIR=$ROOT$RECORD_ETC
+	MANIFEST=$M_DIR/manifest
+	[ ! -s "$MANIFEST" ] && [ -s "$_old/manifest" ] || return 0
+	if [ -n "$ROOT" ] || [ "$(id -u)" -eq 0 ]; then
+		# an install from before the record moved: bring it over, and the keep list with it
+		mkdir -p "$M_DIR" && cp -pR "$_old/." "$M_DIR/" && rm -rf "$_old" || { M_DIR=$_old; MANIFEST=$M_DIR/manifest; return 0; }
+		if [ -f "$ROOT$KEEP_CONF" ]; then
+			GC_TMP=$(mktemp -d)
+			keep_text >"$GC_TMP/keep.conf"
+			m_put "$GC_TMP/keep.conf" "$KEEP_CONF" 644 || warn "could not add the record to $KEEP_CONF"
+			rm -rf "$GC_TMP"
+			GC_TMP=
+		fi
+	else
+		M_DIR=$_old
+		MANIFEST=$M_DIR/manifest
+	fi
+}
+
+vrr_undo() {
+	m_undo || return 1
+	record_tidy
+}
+
+# After an undo: the record's own folders, when nothing else is in them.
+record_tidy() {
+	rmdir "$ROOT/etc/gamecove/claw8ex-vrr" "$ROOT/etc/gamecove" 2>/dev/null || true
+}
 
 # How this system takes the boot switch: rpm-ostree (Bazzite / Fedora Atomic), steamos (its GRUB config), or none.
 boot_backend() {
@@ -112,6 +151,9 @@ $EDID_DIR/gamecove-*.bin
 $HOOK_CONF
 $HOOK
 $MODPROBE_CONF
+$KEEP_CONF
+$RECORD_ETC/manifest
+$RECORD_ETC/backup
 EOF
 }
 
@@ -161,7 +203,7 @@ refresh() {
 		ls "$ROOT$EDID_DIR"/gamecove-*.bin >/dev/null 2>&1 || why="the update didn't keep the corrected EDID"
 	fi
 	if [ -n "$why" ]; then
-		m_undo || warn "some changes could not be undone; run remove"
+		vrr_undo || warn "some changes could not be undone; run remove"
 		say "removed: $why"
 		return 0
 	fi
@@ -290,7 +332,7 @@ migrate() {
 		fi
 	done
 	if [ "$hook" = no ]; then
-		m_undo || { warn "some changes could not be undone; run remove"; return 1; }
+		vrr_undo || { warn "some changes could not be undone; run remove"; return 1; }
 		say "removed the old global kernel arguments (this isn't the Claw it was installed on); install again on the Claw"
 		return 0
 	fi
@@ -357,21 +399,21 @@ install() {
 	fi
 	name=$(file_name "$key")
 	dest=$EDID_DIR/$name
-	m_put "$GC_TMP/patched.bin" "$dest" 644 || { m_undo || true; die "could not write $dest"; }
+	m_put "$GC_TMP/patched.bin" "$dest" 644 || { vrr_undo || true; die "could not write $dest"; }
 	if [ "$backend" = rpm-ostree ]; then
 		if ! rpm-ostree initramfs-etc --track="$dest" >/dev/null; then
-			m_undo || true
+			vrr_undo || true
 			die "rpm-ostree initramfs-etc failed"
 		fi
 		m_add initramfs "$dest"
 	fi
-	put_hook "$(board_name)" "$name" || { m_undo || true; die "could not set up the boot hook"; }
-	ensure_marker || { m_undo || true; die "could not add the gamecove.vrr=1 boot switch"; }
+	put_hook "$(board_name)" "$name" || { vrr_undo || true; die "could not set up the boot hook"; }
+	ensure_marker || { vrr_undo || true; die "could not add the gamecove.vrr=1 boot switch"; }
 	m_add rev "$REVISION"
 	if [ "$backend" = steamos ]; then
 		# last in, so undo takes it out first: an interrupted remove never comes back after an update
 		keep_text >"$GC_TMP/keep.conf"
-		m_put "$GC_TMP/keep.conf" "$KEEP_CONF" 644 || { m_undo || true; die "could not write $KEEP_CONF"; }
+		m_put "$GC_TMP/keep.conf" "$KEEP_CONF" 644 || { vrr_undo || true; die "could not write $KEEP_CONF"; }
 	fi
 	say "installed for panel $key on board $(board_name): restart the Claw to get 30-120 Hz VRR"
 	say "other handhelds booting this drive are not affected"
@@ -385,7 +427,7 @@ remove() {
 		say "not installed"
 		return 0
 	fi
-	m_undo || die "some changes could not be undone; see the messages above and run remove again"
+	vrr_undo || die "some changes could not be undone; see the messages above and run remove again"
 	say "removed: restart the Claw to go back to the panel's own 48-120 Hz range"
 }
 
@@ -451,6 +493,7 @@ status() {
 	fi
 }
 
+record_home
 case ${1:-} in
 install) install ;;
 update) require_root; gc_root_update ;;

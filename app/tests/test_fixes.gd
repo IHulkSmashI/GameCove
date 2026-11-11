@@ -486,7 +486,7 @@ func test_vrr_line_is_put_back_after_a_steamos_update() -> void:
 	var h := _tmp("vrr_update")
 	var s := _svc("msi-claw-8-ex", {}, h)
 	var root := h + "/root"
-	DirAccess.make_dir_recursive_absolute(root + "/var/lib/gamecove/fixes/claw8ex-vrr")
+	DirAccess.make_dir_recursive_absolute(root + FixesSvc.VRR_MANIFEST.get_base_dir())
 	DirAccess.make_dir_recursive_absolute(root + "/etc/default")
 	var m := FileAccess.open(root + FixesSvc.VRR_MANIFEST, FileAccess.WRITE)
 	m.store_string("file /etc/firmware/edid/gamecove-csw0801-30-120.bin\ngrubline /etc/default/grub\nfile /etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf\n")
@@ -510,6 +510,13 @@ func test_vrr_line_is_put_back_after_a_steamos_update() -> void:
 	m.store_string("file /etc/firmware/edid/gamecove-csw0801-30-120.bin\nmarker gamecove.vrr=1\n")
 	m.close()
 	ok(not FixesSvc.vrr_line_lost(root), "Bazzite install: nothing to put back")
+	# a record an older GameCove left in /var is read too, until the fix moves it
+	DirAccess.remove_absolute(root + FixesSvc.VRR_MANIFEST)
+	DirAccess.make_dir_recursive_absolute(root + FixesSvc.VRR_MANIFEST_OLD.get_base_dir())
+	m = FileAccess.open(root + FixesSvc.VRR_MANIFEST_OLD, FileAccess.WRITE)
+	m.store_string("grubline /etc/default/grub\n")
+	m.close()
+	ok(FixesSvc.vrr_line_lost(root), "an old record in /var counts too")
 	s.free()
 
 

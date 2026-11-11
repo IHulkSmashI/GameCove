@@ -268,8 +268,15 @@ steamos_boot() {
 	sed -n 's/^ *linux \/boot\/vmlinuz-linux-neptune-612 /BOOT_IMAGE=\/boot\/vmlinuz-linux-neptune-612 /p' "$R/efi/EFI/SteamOS/grub.cfg" >"$R/proc/cmdline"
 	GAMECOVE_ROOT=$R sh "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh"
 }
-# A SteamOS update: Valve's new grub file (no line of ours), its boot menu rebuilt; only keep-listed /etc files stay.
+# A SteamOS update: Valve's new grub file (no line of ours), its boot menu rebuilt; only keep-listed /etc files stay,
+# and /var is the new slot's own (review High 9: the record in /var/lib/gamecove was gone, refresh found nothing to do).
 steamos_update() {
+	rm -rf "$R/var/lib/gamecove"
+	if [ -f "$R$KEEP" ]; then
+		for f in $(cd "$R" && find etc/gamecove -type f 2>/dev/null); do
+			grep -qxF "/$f" "$R$KEEP" || rm -f "$R/$f"
+		done
+	fi
 	printf 'GRUB_DEFAULT=0\nGRUB_TIMEOUT=0\nGRUB_CMDLINE_LINUX_DEFAULT="quiet splash amd_iommu=off"\n' >"$R$GRUB"
 	update-grub
 	[ "${1:-}" = drop-hook ] && rm -f "$R/etc/modprobe.d/gamecove-claw8ex-vrr.conf"
@@ -313,7 +320,11 @@ ok '[ "$(snapshot)" = "$before" ]' "remove: back to exactly how it was"
 case_start steamos_after_update
 steamos_ready
 fix claw8ex-vrr install >/dev/null 2>&1
+ok '[ ! -e "$R/var/lib/gamecove/fixes/claw8ex-vrr" ] && [ -s "$R/etc/gamecove/claw8ex-vrr/record/manifest" ]' "SteamOS: the record is in /etc, not in the per-slot /var (High 9)"
+ok 'grep -qx /etc/gamecove/claw8ex-vrr/record/manifest "$R$KEEP" && grep -qx "$KEEP" "$R$KEEP"' "and on the keep list, with the keep list itself"
 steamos_update
+ok '[ -s "$R/etc/gamecove/claw8ex-vrr/record/manifest" ]' "the record survived the update"
+ok 'fix claw8ex-vrr status | grep -qx installed=yes' "still installed after the update"
 ok 'fix claw8ex-vrr status | grep -qx after_update=yes' "after an update: status says the line is gone"
 ok 'fix claw8ex-vrr status | grep -qx state=restart && fix claw8ex-vrr status | grep -qx pending=no' "not pending until it is back"
 ok 'fix claw8ex-vrr set refresh | grep -q "put back after the SteamOS update"' "refresh puts it back"
@@ -323,12 +334,29 @@ ok 'fix claw8ex-vrr status | grep -qx after_update=no && fix claw8ex-vrr status 
 steamos_boot
 ok '[ "$(drm_param)" = "eDP-1:edid/gamecove-csw0801-30-120.bin" ]' "the restart after brings the range back"
 
+case_start steamos_old_record_in_var_moves
+steamos_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+# an install from before the record moved: record in /var, keep list without it
+mkdir -p "$R/var/lib/gamecove/fixes"
+mv "$R/etc/gamecove/claw8ex-vrr/record" "$R/var/lib/gamecove/fixes/claw8ex-vrr"
+grep -v -e /record/ "$R$KEEP" >"$R$KEEP.tmp"
+mv "$R$KEEP.tmp" "$R$KEEP"
+ok 'fix claw8ex-vrr status | grep -qx installed=yes' "the old record is still found"
+fix claw8ex-vrr set refresh >/dev/null 2>&1
+ok '[ -s "$R/etc/gamecove/claw8ex-vrr/record/manifest" ] && [ ! -e "$R/var/lib/gamecove/fixes/claw8ex-vrr" ]' "moved into /etc on the next run"
+ok 'grep -qx /etc/gamecove/claw8ex-vrr/record/manifest "$R$KEEP"' "and onto the keep list"
+steamos_update
+ok 'fix claw8ex-vrr status | grep -qx after_update=yes' "so an update no longer loses it"
+fix claw8ex-vrr remove >/dev/null 2>&1
+ok '[ ! -e "$R/etc/gamecove" ] && [ ! -e "$R$KEEP" ] && [ ! -e "$R$EDID_FILE" ]' "remove: record, keep list and files gone"
+
 case_start steamos_update_lost_files
 steamos_ready
 fix claw8ex-vrr install >/dev/null 2>&1
 steamos_update drop-hook
 ok 'fix claw8ex-vrr set refresh | grep -q "removed: the update didn.t keep /etc/modprobe.d/gamecove-claw8ex-vrr.conf"' "files the update didn't keep: the fix is taken out"
-ok '[ ! -e "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest" ] && [ ! -e "$R$KEEP" ] && [ ! -e "$R$EDID_FILE" ]' "nothing of it left"
+ok '[ ! -e "$R/etc/gamecove/claw8ex-vrr" ] && [ ! -e "$R$KEEP" ] && [ ! -e "$R$EDID_FILE" ]' "nothing of it left"
 ok '! grep -q GameCove "$R$GRUB"' "no line added"
 
 case_start steamos_driver_in_initramfs
@@ -379,7 +407,7 @@ export FAKE_FAIL=update-grub
 ok '! fix claw8ex-vrr install 2>/dev/null' "update-grub fails: install fails"
 unset FAKE_FAIL
 ok '! grep -q GameCove "$R$GRUB"' "no line left in the grub file"
-ok 'grep -qx "grubline /etc/default/grub" "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest"' "the boot menu step that failed is kept to retry"
+ok 'grep -qx "grubline /etc/default/grub" "$R/etc/gamecove/claw8ex-vrr/record/manifest"' "the boot menu step that failed is kept to retry"
 fix claw8ex-vrr remove >/dev/null 2>&1
 ok '[ "$(snapshot)" = "$before" ]' "remove then finishes the job"
 

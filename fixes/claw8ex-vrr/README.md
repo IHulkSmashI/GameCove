@@ -36,7 +36,7 @@ It takes effect at the next restart. `remove` undoes all of it, also at the next
 
 - Pick the previous boot entry in the boot menu. Its command line has no `gamecove.vrr=1`, so it starts with the panel's own EDID even though the hook and its modprobe rule are in `/etc` (rpm-ostree carries live `/etc` edits into it).
 - Or kill switch: at the boot menu press `e`, add `gamecove.novrr` to the `linux` line (or delete `gamecove.vrr=1`), then Ctrl+X. VRR fix off for that boot.
-- Then `gamecove-fix claw8ex-vrr remove` (Desktop Mode, or `sudo` from a TTY / SSH) undoes it for good at the next restart. Changes are recorded in `/var/lib/gamecove/fixes/claw8ex-vrr/manifest`. `install` refuses when another modprobe rule already has an `install` line for `xe`/`i915`.
+- Then `gamecove-fix claw8ex-vrr remove` (Desktop Mode, or `sudo` from a TTY / SSH) undoes it for good at the next restart. Changes are recorded in `/var/lib/gamecove/fixes/claw8ex-vrr/manifest` (on SteamOS in `/etc/gamecove/claw8ex-vrr/record/manifest`, see below). `install` refuses when another modprobe rule already has an `install` line for `xe`/`i915`.
 
 ### SteamOS
 
@@ -47,7 +47,8 @@ SteamOS 3.9.5). The EDID, the hook and the modprobe rule are the same files as o
 | What | Where |
 | --- | --- |
 | The boot switch | one line at the end of `/etc/default/grub`: `GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} gamecove.vrr=1"  # GameCove claw8ex-vrr`; nothing else in the file is touched, and `update-grub` runs (as its own systemd unit, so nothing can cut it halfway). Install checks that SteamOS's `grub.cfg` took it, or takes everything back |
-| Keep list | `/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf`: the EDID, the hook, its `edid.conf` and the modprobe rule survive SteamOS updates. Never `/etc/default/grub` itself, which would hide Valve's own changes to it |
+| Keep list | `/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf`: the EDID, the hook, its `edid.conf`, the modprobe rule, the keep list itself and the record below survive SteamOS updates. Never `/etc/default/grub` itself, which would hide Valve's own changes to it |
+| The record | `/etc/gamecove/claw8ex-vrr/record/manifest` (and `backup/`), not `/var/lib/gamecove`: SteamOS gives every OS slot its own `/var`, and an update keeps only the `/etc` files on the keep list (Igalia, "Keeping your system-wide configuration files intact after updating SteamOS"; the repo's docs/SESSION.md). A record in `/var` would be gone after the first update and `set refresh` would find nothing to do. A record an older GameCove left in `/var` is moved over (and the keep list rewritten) on the next run as root |
 | Initramfs | nothing: the fix is only offered where the GPU driver starts after the real `/etc` is there (not built into the kernel, not in the running kernel's initramfs, read with `lsinitcpio`) |
 
 A SteamOS update brings back Valve's `/etc/default/grub` without our line. At its next start GameCove sees that
@@ -56,6 +57,8 @@ refresh`, which needs no password: it puts the one line back on top of the new f
 range back. If the update made the fix impossible (the driver now in the initramfs) or didn't keep its files, the
 fix takes itself out instead. `status` shows `after_update=yes` while the line is missing and `boot=steamos`.
 `remove` takes out the keep list first, then the line (update-grub again), then the files.
+The SteamOS path, the keep list and the refresh after an update are tested against a fake root only (the fake update
+wipes `/var` and everything off the keep list); they are not tested on a SteamOS handheld yet.
 
 ### Older installs
 
