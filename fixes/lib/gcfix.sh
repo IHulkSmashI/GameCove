@@ -10,6 +10,9 @@
 #                "*" = any handheld in devices.txt
 #   FILES        real paths it writes (space separated, no spaces inside), e.g. /etc/udev/rules.d/...
 #   RELOAD       "udev" to reload udev rules after a change, else empty
+#   REVISION     optional: the fix's revision (a whole number, the same as "revision" in its fix.json;
+#                1 when unset). Bump both when the files the fix writes change: installed copies are
+#                then brought up to date by `update` (docs/FIXES.md, "When a fix changes").
 # and defines:
 #   file_text <path>   prints the content for one of FILES (the first line must hold GC_MARK)
 #   hw_present         0 when the part the fix is for is in this handheld (else: not needed)
@@ -17,13 +20,18 @@
 #   apply_now          optional: make it take effect now (save originals with save_value first)
 #                      (file_text builds udev lines with gc_rule_lines, which adds the DMI match)
 #   revert_now         optional: undo apply_now (restore_values does the usual thing)
+#   verify             optional: 0 when the fix just written really works (update rolls back when not)
 #   blocked            optional: prints why it can't be applied on this machine now ("" = it can);
 #                      install refuses (exit 3) and status says state=unsupported, reason=<text>
 #
-# Commands: install | remove | status | set on | set off (on = install, off = remove; all through
+# Commands: install | remove | update | status | set on | set off (on = install, off = remove; all through
 # gamecove-fix with the administrator password since review S3-2: a udev rule that acts on every
 # boot isn't a day-to-day setting). status prints applies=, installed=, os_fixed=,
-# hw=, then state= (on | off | os-fixed | not-needed | partial | n/a).
+# hw=, revision= (and installed_revision= when installed), then state= (on | off | os-fixed |
+# not-needed | partial | n/a).
+# update: only when installed. Rewrites the fix's files from this revision of the script; when that
+# fails (a file can't be written, verify says no) every file, the saved values and the record are put
+# back exactly as they were (exit 1). Never leaves half of each.
 #
 # Only the handhelds in DEVICES: the id comes from fixes/lib/devices.txt (generated from
 # devices.json). Rules themselves also match the DMI ids of every handheld in DEVICES
@@ -47,6 +55,7 @@ fi
 GC_MARK="# GameCove fix $NAME"
 STATE="$ROOT/var/lib/gamecove/fixes/$NAME"
 RELOAD="${RELOAD:-}"
+REVISION="${REVISION:-1}"
 
 gc_say() { printf '%s\n' "$*"; }
 gc_die() { printf '%s: %s\n' "$NAME" "$2" >&2; exit "$1"; }
@@ -112,6 +121,13 @@ gc_ours() { [ -f "$ROOT$1" ] && head -n 1 "$ROOT$1" | grep -qxF "$GC_MARK"; }
 
 gc_installed() { [ -f "$STATE/installed" ]; }
 
+# The revision that was installed (1 for installs from before revisions were recorded).
+gc_installed_revision() {
+	_r="$(cat "$STATE/installed" 2>/dev/null || true)"
+	case "$_r" in '' | *[!0-9]*) _r=1 ;; esac
+	printf '%s' "$_r"
+}
+
 # 0 when every file is in place and ours.
 gc_files_ok() {
 	for _f in $FILES; do
@@ -175,6 +191,15 @@ gc_need_root() {
 	[ -n "$ROOT" ] || [ "$(id -u)" -eq 0 ] || gc_die 1 "needs root (run it through gamecove-fix)"
 }
 
+# gc_write_file <real path>: the file's text from file_text, written in one step (temp file + rename).
+gc_write_file() {
+	mkdir -p "$(dirname "$ROOT$1")" 2>/dev/null || return 1
+	if ! { file_text "$1" >"$ROOT$1.gamecove-tmp" && chmod 644 "$ROOT$1.gamecove-tmp" && mv -f "$ROOT$1.gamecove-tmp" "$ROOT$1"; }; then
+		rm -f "$ROOT$1.gamecove-tmp"
+		return 1
+	fi
+}
+
 gc_install() {
 	gc_need_root
 	gc_applies || gc_die 2 "not for this handheld"
@@ -201,11 +226,9 @@ gc_install() {
 		fi
 	done
 	mkdir -p "$STATE"
-	: >"$STATE/installed"
+	printf '%s\n' "$REVISION" >"$STATE/installed"
 	for _f in $FILES; do
-		mkdir -p "$(dirname "$ROOT$_f")"
-		if ! { file_text "$_f" >"$ROOT$_f.gamecove-tmp" && chmod 644 "$ROOT$_f.gamecove-tmp" && mv -f "$ROOT$_f.gamecove-tmp" "$ROOT$_f"; }; then
-			rm -f "$ROOT$_f.gamecove-tmp"
+		if ! gc_write_file "$_f"; then
 			gc_remove_files
 			rm -f "$STATE/installed"
 			gc_die 1 "could not write $_f"
@@ -245,6 +268,77 @@ gc_remove() {
 	gc_say "removed"
 }
 
+# Puts back what gc_update saved: every file as it was (or gone, when it wasn't there), the saved
+# sysfs values and the installed record.
+gc_rollback() {
+	_i=0
+	for _f in $FILES; do
+		_i=$((_i + 1))
+		if [ -f "$1/file$_i" ]; then
+			cp -p "$1/file$_i" "$ROOT$_f.gamecove-tmp" && mv -f "$ROOT$_f.gamecove-tmp" "$ROOT$_f"
+		elif gc_ours "$_f"; then
+			rm -f "$ROOT$_f"
+		fi
+	done
+	cp -p "$1/installed" "$STATE/installed"
+	if [ -f "$1/saved" ]; then cp -p "$1/saved" "$STATE/saved"; else rm -f "$STATE/saved"; fi
+	rm -rf "$1"
+	gc_reload
+}
+
+# update: bring an installed fix to this revision of the script, or leave it exactly as it was.
+gc_update() {
+	gc_need_root
+	if ! gc_installed; then
+		gc_say "not installed"
+		return 0
+	fi
+	gc_applies || gc_die 2 "not for this handheld"
+	fix_lock "$NAME"
+	_from="$(gc_installed_revision)"
+	_bak="$STATE/rollback"
+	rm -rf "$_bak"
+	mkdir -p "$_bak" || gc_die 1 "could not save the current files"
+	_i=0
+	for _f in $FILES; do
+		_i=$((_i + 1))
+		if gc_ours "$_f"; then
+			cp -p "$ROOT$_f" "$_bak/file$_i" || { rm -rf "$_bak"; gc_die 1 "could not save $_f"; }
+		fi
+	done
+	cp -p "$STATE/installed" "$_bak/installed" || { rm -rf "$_bak"; gc_die 1 "could not save the current files"; }
+	[ ! -f "$STATE/saved" ] || cp -p "$STATE/saved" "$_bak/saved" || { rm -rf "$_bak"; gc_die 1 "could not save the current files"; }
+	_why=""
+	for _f in $FILES; do
+		if [ -e "$ROOT$_f" ] && ! gc_ours "$_f"; then
+			_why="$_f exists and isn't GameCove's; leaving it"
+			break
+		fi
+		gc_write_file "$_f" || { _why="could not write $_f"; break; }
+	done
+	if [ -z "$_why" ]; then
+		gc_reload
+		if command -v apply_now >/dev/null 2>&1; then
+			apply_now || printf 'warning: it takes effect after a restart\n' >&2
+		fi
+		printf '%s\n' "$REVISION" >"$STATE/installed" || _why="could not record the new revision"
+	fi
+	if [ -z "$_why" ] && ! gc_files_ok; then
+		_why="the new files didn't land"
+	fi
+	if [ -z "$_why" ] && command -v verify >/dev/null 2>&1 && ! verify; then
+		_why="the new version didn't work here"
+	fi
+	if [ -n "$_why" ]; then
+		gc_rollback "$_bak"
+		gc_log "update failed ($_why); back at revision $_from"
+		gc_die 1 "$_why; put back as it was"
+	fi
+	rm -rf "$_bak"
+	gc_log "update revision=$_from->$REVISION"
+	gc_say "updated"
+}
+
 gc_status() {
 	if ! gc_applies; then
 		gc_say "applies=no"
@@ -261,6 +355,8 @@ gc_status() {
 	hw=no
 	hw_present && hw=yes
 	gc_say "hw=$hw"
+	gc_say "revision=$REVISION"
+	[ "$inst" = no ] || gc_say "installed_revision=$(gc_installed_revision)"
 	_why=""
 	if [ "$inst" = no ] && [ "$osf" = no ] && [ "$hw" = yes ] && command -v blocked >/dev/null 2>&1; then
 		_why="$(blocked)"
@@ -287,6 +383,7 @@ gc_main() {
 	case "${1:-}" in
 	install) gc_install ;;
 	remove) gc_remove ;;
+	update) gc_update ;;
 	status) gc_status ;;
 	set)
 		case "${2:-}" in
@@ -295,6 +392,6 @@ gc_main() {
 		*) gc_die 2 "set needs on or off" ;;
 		esac
 		;;
-	*) gc_die 2 "usage: fix.sh install|remove|status|set on|off" ;;
+	*) gc_die 2 "usage: fix.sh install|remove|update|status|set on|off" ;;
 	esac
 }

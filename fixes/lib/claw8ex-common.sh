@@ -30,6 +30,44 @@ IP_OVERRIDE=/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml
 IP_MARK="# GameCove override of $IP_STOCK"
 IP_MAP_ID=gamecove_claw8ex
 
+# ip_stock_handles_buttons: 0 when InputPlumber's own capability map for board MS-1T91 already takes what this
+# firmware sends (Guide from KeyG without KeyF15, i.e. G alone or Win+G = KeyLeftMeta+KeyG; QuickAccess from KeyF15
+# alone), so claw8ex-buttons can stand down. Read from the map itself, not from a version or a map name: an update
+# can fix claw2 in place or ship a new map that still misses a button. A map id other than claw2 whose file we can't
+# find counts as handled (InputPlumber moved on to a map we don't know; ours would replace it blind).
+IP_MAPS_DIR=/usr/share/inputplumber/capability_maps
+ip_stock_map_id() { sed -n 's/^capability_map_id:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$ROOT$IP_STOCK" 2>/dev/null | head -n 1; }
+ip_map_file() { # ip_map_file <id>: the stock capability map file with that id ("" = none)
+	for _m in "$ROOT$IP_MAPS_DIR"/*.yaml; do
+		[ -f "$_m" ] || continue
+		grep -qx "id:[[:space:]]*$1[[:space:]]*" "$_m" && { printf '%s\n' "$_m"; return 0; }
+	done
+	return 0
+}
+ip_map_targets() { # ip_map_targets <file>: one line per mapping, "<target button> <sorted source keys joined by +>"
+	awk '
+		function flush() { if (btn != "") { n = split(keys, a, " "); for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++) if (a[j] < a[i]) { t = a[i]; a[i] = a[j]; a[j] = t }
+			o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? "+" : "") a[i]; print btn, o } btn = ""; keys = "" }
+		/^[[:space:]]*-[[:space:]]+name:/ { flush() }
+		/^[[:space:]]*-?[[:space:]]*keyboard:[[:space:]]*/ { k = $0; sub(/.*keyboard:[[:space:]]*/, "", k); sub(/[[:space:]#].*/, "", k); keys = keys " " k }
+		/^[[:space:]]*button:[[:space:]]*/ { b = $0; sub(/.*button:[[:space:]]*/, "", b); sub(/[[:space:]#].*/, "", b); btn = b }
+		/^[^[:space:]-]/ && !/^mapping:/ { flush() }
+		END { flush() }
+	' "$1" 2>/dev/null
+}
+ip_stock_handles_buttons() {
+	_id=$(ip_stock_map_id)
+	[ -n "$_id" ] || return 1
+	_f=$(ip_map_file "$_id")
+	if [ -z "$_f" ]; then
+		[ "$_id" != claw2 ]
+		return
+	fi
+	_t=$(ip_map_targets "$_f")
+	printf '%s\n' "$_t" | grep -qx 'QuickAccess KeyF15' || return 1
+	printf '%s\n' "$_t" | grep -qxE 'Guide (KeyG|KeyG\+KeyLeftMeta)'
+}
+
 say() { printf '%s\n' "$*" 2>/dev/null || :; } # a reader that stopped early (grep -q) is fine
 warn() { printf 'warning: %s\n' "$*" >&2; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -68,6 +106,33 @@ m_add() {
 }
 
 m_has() { [ -f "$MANIFEST" ] && grep -qxF "$1 $2" "$MANIFEST"; }
+
+# The revision that was installed ("rev <n>" in the manifest; 1 for installs from before it was recorded).
+m_rev() {
+	_r=$(sed -n 's/^rev \([0-9][0-9]*\)$/\1/p' "$MANIFEST" 2>/dev/null | tail -n 1)
+	printf '%s' "${_r:-1}"
+}
+
+# status lines every fix prints: this script's revision and, when installed, the one that was installed.
+say_revision() {
+	say "revision=${REVISION:-1}"
+	! m_installed || say "installed_revision=$(m_rev)"
+}
+
+# update: bring an installed fix to this revision. These fixes change boot configuration, so there is
+# no in-place swap: the old version is taken out by its own record, then this one goes in. When that
+# fails, install's own undo leaves the system stock (never half of each), and exit 1 says so.
+gc_root_update() {
+	if ! m_installed; then
+		say "not installed"
+		return 0
+	fi
+	sh "$0" remove || die "the installed version could not be taken out; nothing else was changed"
+	if ! sh "$0" install; then
+		die "the new version could not be installed; the old one is out and the system is as shipped. Apply the fix again from GameCove's Fixes page"
+	fi
+	say "updated"
+}
 
 # mkdir -p that records every folder it creates, so undo takes them away again.
 m_mkdir() {
@@ -126,6 +191,7 @@ m_undo() {
 		karg | marker) karg_release "$arg" "$FIX" || { done_ok=0; boot_kept=1; } ;;
 		initramfs) rpm-ostree initramfs-etc --untrack="$arg" >/dev/null || { done_ok=0; boot_kept=1; } ;;
 		ipflag) ip_flag_off "$arg" || done_ok=0 ;;
+		rev) ;; # the installed revision (m_rev): nothing to undo
 		*) warn "unknown manifest line: $kind $arg" ;;
 		esac
 		[ "$done_ok" = 1 ] || printf '%s %s\n' "$kind" "$arg" >>"$M_DIR/left"
@@ -327,7 +393,12 @@ EOF
 ip_render() {
 	swap=0
 	imu=0
-	ip_flag buttons && swap=1
+	# Our face-button map only replaces a stock one that misses what this firmware sends. Once
+	# InputPlumber's own map takes both buttons (ip_stock_handles_buttons) the override keeps it, so an
+	# InputPlumber update that fixes the buttons is used at once: the no-password `set refresh` GameCove
+	# runs after such an update rebuilds the override this way, and our two files never shadow the
+	# system's fix while the real remove waits for the admin password.
+	ip_flag buttons && ! ip_stock_handles_buttons && swap=1
 	ip_flag imu && ! grep -q 'name: gyro_3d' "$ROOT$IP_STOCK" && imu=1
 	snip="$IP_FLAGS/.snippet"
 	: >"$snip"

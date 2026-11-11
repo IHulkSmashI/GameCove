@@ -280,4 +280,22 @@ ok 'fix claw8ex-vrr install >/dev/null 2>&1' "zero-padded 128-byte EDID accepted
 ok '[ "$(wc -c <"$R/etc/firmware/edid/gamecove-tma2027-30-120.bin" | tr -d " ")" = 128 ]' "written at its own length"
 ok '[ "$(od -An -v -tu1 "$R/etc/firmware/edid/gamecove-tma2027-30-120.bin" | awk -f "$FIXES/claw8ex-vrr/edid.awk" -v mode=range)" = "30 120" ]' "range 30-120"
 
+
+case_start lifecycle
+# docs/FIXES.md: the probe (os_fixed), the installed revision, and update (old version out, this one in)
+vrr_ready
+ok 'fix claw8ex-vrr status | grep -qx os_fixed=no' "not installed, problem there: os_fixed=no"
+ok 'fix claw8ex-vrr status | grep -qx revision=1' "status names the script's revision"
+ok 'fix claw8ex-vrr update | grep -q "not installed"' "update never installs"
+ok 'fix claw8ex-vrr status | grep -qx state=off' "still off"
+fix claw8ex-vrr install >/dev/null 2>&1
+ok 'fix claw8ex-vrr status | grep -qx installed_revision=1' "the installed revision is recorded"
+ok '! fix claw8ex-vrr status | grep -q "^os_fixed="' "with ours in place the probe can't tell, so it doesn't answer"
+before=$(snapshot)
+ok 'fix claw8ex-vrr update 2>/dev/null | tail -n 1 | grep -qx updated' "update"
+ok '[ "$(snapshot)" = "$before" ]' "update of the same revision leaves the same files and boot configuration"
+ok 'fix claw8ex-vrr status | grep -qx installed=yes' "update: still installed"
+fix claw8ex-vrr remove >/dev/null 2>&1
+ok 'fix claw8ex-vrr status | grep -qx installed=no' "remove after an update"
+
 finish

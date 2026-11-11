@@ -1,6 +1,6 @@
 #!/bin/sh
 # GameCove fix: the two MSI face buttons on the Claw 8 EX AI+ (board MS-1T91).
-# usage: fix.sh install|remove|status
+# usage: fix.sh install|remove|update|status
 #
 # Its firmware sends Win+G for the left face button and F15 alone for the right one; InputPlumber's stock
 # map for the board (claw2) waits for the chord F15+G and for F16, so both buttons do nothing. This adds a
@@ -12,6 +12,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/../lib/claw8ex-common.sh"
 
 NAME=claw8ex-buttons
+REVISION=1 # = "revision" in fix.json
 MAP=/etc/inputplumber/capability_maps.d/gamecove_claw8ex.yaml
 m_init "$NAME"
 
@@ -66,8 +67,8 @@ install() {
 	ip_require_free
 	stock=$(stock_map)
 	[ -n "$stock" ] || die "$IP_STOCK has no capability_map_id"
-	if [ "$stock" != claw2 ]; then
-		say "not needed: this InputPlumber already ships its own map ($stock) for the Claw 8 EX"
+	if ip_stock_handles_buttons; then
+		say "not needed: this InputPlumber's own map ($stock) already takes both face buttons"
 		return 0
 	fi
 	GC_TMP=$(mktemp -d)
@@ -81,6 +82,7 @@ install() {
 		die "could not write the InputPlumber override"
 	fi
 	m_add ipflag buttons
+	m_add rev "$REVISION"
 	say "installed: left face button = Steam menu, right face button = Quick Access"
 }
 
@@ -102,11 +104,25 @@ status() {
 		return 0
 	fi
 	stock=$(stock_map)
+	native=no
+	ip_stock_handles_buttons && native=yes
+	points=no
+	grep -q "^capability_map_id: $IP_MAP_ID" "$ROOT$IP_OVERRIDE" 2>/dev/null && points=yes
 	installed=no
-	m_installed && ip_flag buttons && [ -f "$ROOT$MAP" ] && grep -q "^capability_map_id: $IP_MAP_ID" "$ROOT$IP_OVERRIDE" 2>/dev/null && installed=yes
+	# ours is in place: our record, flag and map, and the override pointing at the map (or, once
+	# InputPlumber ships its own map, standing aside for it after `set refresh`)
+	m_installed && ip_flag buttons && [ -f "$ROOT$MAP" ] && { [ "$points" = yes ] || [ "$native" = yes ]; } && installed=yes
 	active=$(systemctl is-active inputplumber 2>/dev/null || true)
 	say "applies=yes"
 	say "installed=$installed"
+	say_revision
+	# InputPlumber's stock map takes the firmware's keys now: the system does it (also with ours still in place)
+	say "os_fixed=$native"
+	# both at once: our override still names our map although InputPlumber has its own (until the
+	# next `set refresh` rebuilds it, or the fix is removed)
+	if [ "$installed" = yes ]; then
+		if [ "$native" = yes ] && [ "$points" = yes ]; then say "conflict=yes"; else say "conflict=no"; fi
+	fi
 	say "stock_map=${stock:-none}"
 	say "inputplumber=${active:-unknown}"
 	say "inputplumber_override=$(ip_override_state)"
@@ -114,7 +130,7 @@ status() {
 		say "state=on"
 	elif [ "$installed" = yes ]; then
 		say "state=partial"
-	elif [ -n "$stock" ] && [ "$stock" != claw2 ]; then
+	elif [ "$native" = yes ]; then
 		say "state=not-needed"
 	else
 		say "state=off"
@@ -123,6 +139,7 @@ status() {
 
 case ${1:-} in
 install) install ;;
+update) require_root; gc_root_update ;;
 remove) remove ;;
 status) status ;;
 set)
@@ -132,5 +149,5 @@ set)
 	lock
 	ip_refresh
 	;;
-*) die "usage: $0 install|remove|status|set refresh" ;;
+*) die "usage: $0 install|remove|update|status|set refresh" ;;
 esac

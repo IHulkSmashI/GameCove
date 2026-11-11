@@ -1,6 +1,6 @@
 #!/bin/sh
 # GameCove fix: 30-120 Hz VRR on the Claw's own screen instead of the 48-120 Hz its EDID announces.
-# usage: fix.sh install|remove|status
+# usage: fix.sh install|remove|update|status
 #
 # The panel refreshes down to 30 Hz but its EDID says 48, so below 48 fps every frame is held for a whole
 # 48 Hz refresh, which judders. This writes a copy of the factory EDID with only the range bytes changed
@@ -31,6 +31,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/../lib/claw8ex-common.sh"
 
 NAME=claw8ex-vrr
+REVISION=1 # = "revision" in fix.json
 PANELS=${GAMECOVE_VRR_PANELS:-$HERE/panels.txt}
 EDID_DIR=$FW_DIR/edid
 CONNECTOR=eDP-1
@@ -236,6 +237,7 @@ install() {
 	m_add initramfs "$dest"
 	put_hook "$(board_name)" "$name" || { m_undo || true; die "could not set up the boot hook"; }
 	ensure_marker || { m_undo || true; die "could not add the gamecove.vrr=1 kernel argument"; }
+	m_add rev "$REVISION"
 	say "installed for panel $key on board $(board_name): restart the Claw to get 30-120 Hz VRR"
 	say "other handhelds booting this drive are not affected"
 	say "if the screen is wrong after the restart: pick the previous boot entry, or add gamecove.novrr at the boot menu (e), then remove this fix"
@@ -283,6 +285,12 @@ status() {
 	say "validated=$([ -n "$row" ] && echo yes || echo no)"
 	say "range=$(printf '%s' "${range:-unknown}" | tr ' ' '-')"
 	say "installed=$installed"
+	say_revision
+	# the panel's own EDID already goes down to our range (a BIOS that corrected it): the system does it.
+	# Only readable while ours isn't installed; with ours in place the BIOS rule in fix.json decides.
+	if [ "$installed" = no ] && ! theirs "$booted"; then
+		if [ -n "$range" ] && [ "${range%% *}" -le "$LO" ] 2>/dev/null; then say "os_fixed=yes"; else say "os_fixed=no"; fi
+	fi
 	say "pending=$pending"
 	say "old_kernel_args=$old"
 	say "boot_switch=$(m_has marker "$VRR_KARG" && echo yes || echo no)"
@@ -302,7 +310,8 @@ status() {
 
 case ${1:-} in
 install) install ;;
+update) require_root; gc_root_update ;;
 remove) remove ;;
 status) status ;;
-*) die "usage: $0 install|remove|status" ;;
+*) die "usage: $0 install|remove|update|status" ;;
 esac
