@@ -89,6 +89,8 @@ func _upscale_running(key: String) -> void:
 	var f: Variant = (controls.get("ctx") as Dictionary).get("upscale_running") if controls.get("ctx") is Dictionary else null
 	if f is Callable and (f as Callable).is_valid():
 		(f as Callable).call(key)
+		if key == "" and controls.has_method("detect_all"):
+			controls.detect_all()     # a change that waited for the game to quit is made now (on the worker)
 
 
 static func _call(o: Object, method: String, args: Array = []) -> void:
