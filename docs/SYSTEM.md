@@ -370,8 +370,11 @@ What keeps a save from being lost (final review; each has a test against ports o
 - **Two GOG locations.** When one fails and the backup goes back, a location that had downloaded gets its old sync time
   back with it.
 - **A restore holds.** Restoring makes the folder exactly what the backup holds (unpacked next to it and swapped in).
-  For Epic the restored files carry old times, so until the next good sync the local side counts as changed
-  (`restored_at`): "cloud newer" is a conflict with the restored save offered first.
+  The restored files carry old times, so until the next good sync the local side counts as changed (`restored_at`).
+  Epic: "cloud newer" is a conflict with the restored save offered first. GOG: gogdl decides by file times alone, so
+  the cloud is listed first (the far-future `--ts` look): changed since the last sync (or never synced), a conflict
+  with the restored save offered first; unchanged, the whole restore goes up with a forced upload (after a cloud copy)
+  when the run may upload, else it waits for the game's end ("pending up"), never a download over it.
 - **"Keep this handheld's save" (Epic).** legendary names an upload by the newest local file's time and every device
   takes the newest name, so the newest file is stamped now before the forced upload.
 - **A copy of Epic's cloud save.** legendary only downloads into the save folder it keeps for a game, so the copy runs

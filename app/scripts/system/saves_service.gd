@@ -735,6 +735,8 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 			return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]))
 	var ts := _gog_ts(key, entry, locs)
 	var before := ts.duplicate()
+	if int(_cfg_value(key, "restored_at", 0)) > 0:
+		return _gog_after_restore(key, title, plan, entry, locs, ts, mode)
 	# gogdl downloads into an empty folder whatever it was asked (after a game too)
 	var empty := _mark_download(key, b, locs)
 	var step := str({"pre": "pre", "post": "post", "now": ""}[mode])
@@ -799,6 +801,51 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 		return _set_status(key, waiting, "", times)
 	var state := str({"upload": "uploaded", "download": "downloaded", "both": "synced", "": "synced"}[acted])
 	return _set_status(key, state, "", times.merged({"synced": true}, true))
+
+
+## A backup was put back and not synced since (review at ff76ca4: high 6 was only fixed for
+## Epic). gogdl decides by file times, and a restored backup's files carry their old ones:
+## with the cloud changed since the last sync it would download straight over the restore,
+## and with the cloud unchanged it would see nothing to do and never send the restore up.
+## So: the cloud is listed (gogdl's look). Changed since the last sync (or never synced):
+## a conflict with the restored save offered first. Unchanged: the restore goes up, the
+## whole of it (a forced upload, after a copy of the cloud: it deletes what the restore
+## lacks), right away when this run may upload, else after the game.
+func _gog_after_restore(key: String, title: String, plan: Dictionary, entry: Dictionary, locs: Array, ts: Dictionary, mode: String) -> Dictionary:
+	var changed := false
+	var cloud_newest := 0
+	for l in locs:
+		var cur := str(ts.get(l["name"], "0"))
+		var look := _gogdl(plan, entry, l, cur, "look")
+		if look["action"] == "failed":
+			return _set_status(key, "offline" if look["offline"] else "failed", str(look["error"]), {"gog_ts": ts})
+		cloud_newest = maxi(cloud_newest, int(look["cloud_newest"]))
+		if look["action"] in ["upload", "download"]:
+			# one side had no files: gogdl already did the whole sync of this location
+			if look["ts"] != "":
+				ts[l["name"]] = look["ts"]
+			continue
+		if float(cur) <= 0.0 or int(look["cloud_newest"]) > int(float(cur)) + CloudSaves.SLACK_S:
+			changed = true
+	var local_newest := 0
+	for l in locs:
+		local_newest = maxi(local_newest, int(CloudSaves.dir_stats(str(l["path"]))["newest"]))
+	var times := {"local": local_newest, "remote": cloud_newest, "gog_ts": ts, "gog_paths": _gog_paths(locs)}
+	if changed:
+		var sides := _conflict_sides(key, entry, plan, locs)
+		return _set_status(key, "conflict", "", times.merged(sides).merged({"prefer": "local"}))
+	if mode == "pre":
+		return _set_status(key, "pending_up", "", times)
+	var why := _gog_cloud_copy(key, title, plan, entry, locs, false)
+	if why != "":
+		return _set_status(key, "backup_failed", why, times)
+	for l in locs:
+		var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_upload")
+		if r["action"] == "failed":
+			return _set_status(key, "offline" if r["offline"] else "failed", str(r["error"]), {"gog_ts": ts})
+		if r["ts"] != "":
+			ts[l["name"]] = r["ts"]
+	return _set_status(key, "uploaded", "", times.merged({"synced": true, "gog_ts": ts}, true))
 
 
 ## Before a run that may upload location `loc`: lists the cloud (gogdl "look") and, when the

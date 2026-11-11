@@ -796,6 +796,71 @@ func test_choices_wait_for_the_games_processes_not_the_session() -> void:
 	_done(w)
 
 
+# ---- high 6, GOG: a restore holds too (review at ff76ca4) ----------------------------------------
+
+## Synced, then a bad session went up; the user restores the backup from before it. Another
+## device uploads meanwhile. The next launch used to download straight over the restore
+## (gogdl: only the cloud is newer than --ts, the restored files carry their old times).
+func test_gog_restore_is_not_undone_at_the_next_launch() -> void:
+	var w := _world("gog_restore")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "before the bad day", T0)
+	var bk: Dictionary = w["s"].backups.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": w["gsaves"]}])
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "after the bad day", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "after the bad day", "the bad save went up")
+	var res := []
+	w["s"].restore(w["gog"], str(bk["id"]), func(r): res.append(r))
+	ok(res[0]["ok"], "restored")
+	w["now"][0] += 900
+	cloud.now = int(w["now"][0])
+	cloud.seed("saves", "slot1.sav", "another device, also bad", int(w["now"][0]))
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "the launch asks instead of downloading over the restore")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "before the bad day", "the restore is still in place")
+	eq(got[0]["conflict"].get("prefer", ""), "local", "the restored side is offered first")
+	w["s"].resolve(w["gog"], "local")
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "before the bad day", "kept: the restore is the cloud's save now")
+	got.clear()
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the next launch just starts")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "before the bad day", "with the restored save")
+	_done(w)
+
+
+## The cloud didn't change since: the whole restore goes up after the game (gogdl alone saw
+## nothing to do and the cloud kept the bad save; a played slot alone would have gone up,
+## leaving the cloud a mix).
+func test_gog_restore_goes_up_whole_when_the_cloud_didnt_change() -> void:
+	var w := _world("gog_restore_up")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "good 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "good 2", T0)
+	var bk: Dictionary = w["s"].backups.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": w["gsaves"]}])
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "bad 1", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "bad 2", int(w["now"][0]))
+	w["s"].sync_now(w["gog"])
+	eq(cloud.cloud["saves/slot2.sav"]["data"], "bad 2", "the bad saves went up")
+	w["s"].restore(w["gog"], str(bk["id"]))
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the game starts")
+	eq(w["s"].status(w["gog"])["state"], "pending_up", "the restore waits to go up after the game")
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "good 1, played on", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "good 1, played on", "the played slot went up")
+	eq(cloud.cloud["saves/slot2.sav"]["data"], "good 2", "and the restored slot that wasn't played")
+	eq(w["s"].status(w["gog"])["state"], "uploaded", "uploaded")
+	eq(int(_cfg(w, "gog:1207", "restored_at", 0)), 0, "settled")
+	_done(w)
+
+
 # ---- high 6: an Epic restore holds ---------------------------------------------------------------
 
 ## A restored backup has old file times, so legendary sees "cloud newer" and the next launch
