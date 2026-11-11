@@ -54,6 +54,11 @@ the data repo's `gamecove-source.env` pins. So:
 - The data repo's own settings (the `nightly` environment, Actions permissions, the IGDB secrets) are in its
   README, "Owner settings". Its `tests/check_workflows.py` holds the rules this repo's `release.sh` used to apply to
   those workflows.
+- **Check the published files with the app's own code:** `sh tools/data_check/run.sh --godot <godot>` downloads
+  every data file the app uses from the data repo (game database, calendar, device photos, firmware list, the
+  signed upscaler list and every upscaler file, newest and pinned) through the app's and the helper's own download
+  and verify code, signatures included, and fails on anything that doesn't check out or that came from upstream
+  instead of the mirror. It uses the network, so it isn't one of the gates; run it after the data workflows publish.
 - The weekly check of the makers' image links stays here (`maker-links.yml`): it reads this repo's data and files
   its issue here.
 
