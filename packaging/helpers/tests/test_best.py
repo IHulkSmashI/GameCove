@@ -352,3 +352,31 @@ def test_knowledge_matches_by_appid_exe_and_title():
     for g in doc["games"]:                                          # every setting is a valid OptiScaler.ini line
         for key, val in g["ini"].items():
             assert launchenv.INI_KEY_RE.match(key) and launchenv.INI_VAL_RE.match(str(val)), (g["id"], key, val)
+
+
+# ---- the XMX build's other models stay off -----------------------------------------------------------------------
+def test_only_the_fsr4_models_of_the_xmx_build_are_ever_selected():
+    """The XMX build can also run other vendors' networks; GameCove never switches those on and never names them."""
+    root = os.path.join(HERE, "..", "..", "..")
+    # every way a launch is composed picks model 6 (FSR 4.1.2) or 9 (Lite), nothing else
+    seen = set()
+    for opti in launchenv.FSR4_XMX:
+        for fg in (0, 2, 3, 4):
+            env = launchenv.compose({"opti": opti, "fg": fg, "opti_fg": "dlssg" if fg else "off", "opti_dll": "dxgi"}, True, "intel")
+            seen.add(env["FSR_UpscalerIndex"])
+            assert not [k for k in env if k.startswith("FSR4_XMX_") and k not in ("FSR4_XMX_NO_DIALOG", "FSR4_XMX_LITE")], env
+    assert seen == {"6", "9"}
+    # and no source, text or doc of ours mentions the switches for the other models
+    names = ("FSR4_XMX_DLSS", "FSR4_XMX_PROVIDER_INDEX", "DLSS on XMX", "DLSS on Intel XMX")
+    for base, exts in (("packaging", (".py", ".sh", "")), ("app/scripts", (".gd",)), ("docs", (".md",))):
+        for r, _d, files in os.walk(os.path.join(root, base)):
+            if "tests" in r.split(os.sep) or "__pycache__" in r:
+                continue
+            for f in files:
+                if os.path.splitext(f)[1] in exts and not f.endswith(".json"):
+                    text = open(os.path.join(r, f), encoding="utf-8", errors="replace").read()
+                    for n in names:
+                        assert n not in text, (os.path.join(r, f), n)
+    for f in ("README.md", "CREDITS.md"):
+        text = open(os.path.join(root, f), encoding="utf-8").read()
+        assert "DLSS on XMX" not in text and "FSR4_XMX_DLSS" not in text

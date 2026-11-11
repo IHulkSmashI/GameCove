@@ -187,11 +187,12 @@ func test_uninstall_restores_steam_and_cleans_up() -> void:
 		FileAccess.open(data + f, FileAccess.WRITE).store_string("x")
 	s2.start("uninstall", c)
 	var cmds := _cmds(r)
-	eq(cmds.size(), 3)
+	eq(cmds.size(), 4)
 	ok(cmds[0].begins_with("sh -c ") and "restore" in cmds[0], "session defaults restored first (desktop session too)")
 	ok(cmds[0].ends_with(s2.paths.session_select()), "through the switcher when it's there")
 	eq(cmds[1], "pkexec " + s2.paths.fix_helper() + " --remove-all")
-	ok(cmds[2].begins_with("pkexec sh -c rm -rf /var/lib/gamecove && exec rpm-ostree uninstall gamecove"), "the helper's state goes with the layer: " + cmds[2])
+	eq(cmds[2], "%s purge --home %s" % [s2.paths.upscale_helper(), s2.paths.home], "our upscaler files leave the games, as the user, while the helper is still there")
+	ok(cmds[3].begins_with("pkexec sh -c rm -rf /var/lib/gamecove && exec rpm-ostree uninstall gamecove"), "the helper's state goes with the layer: " + cmds[3])
 	for f in [s2.paths.env_conf(), s2.paths.unit_file(), s2.paths.switch_entry(), s2.paths.window_entry(),
 			s2.paths.pending_file(), s2.paths.state_file(), data + "/crash-count", data + "/crash-fallback",
 			data + "/left-for-steam", data + "/default-suspended"]:
