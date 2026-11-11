@@ -779,3 +779,105 @@ func test_settings_thermal_limit_reaches_the_system() -> void:
 	check("thermal limit")
 	await go_tab("home")
 
+
+
+# ---- over a game: recording a clip, sleep and wake, a session switch and back ----------------
+
+const FAKE_RECORDER := """#!/bin/sh
+# e2e stand-in for gpu-screen-recorder: prints like it, writes the clip when stopped (SIGINT)
+out=""
+while [ $# -gt 0 ]; do [ "$1" = "-o" ] && out="$2"; shift; done
+echo "gsr info: recording to $out"
+trap 'printf "e2e clip" > "$out"; echo "gsr info: saved"; exit 0' INT TERM
+while :; do sleep 0.05; done
+"""
+
+
+## Plays Hades from its page (Play), until it runs.
+func play_hades() -> bool:
+	if not await open_from_library("steam:1145360"):
+		return false
+	await a()
+	return await until(func(): return main().session.phase == "running", 8000)
+
+
+func test_over_a_game_record_a_clip_sleep_wake_and_switch_sessions() -> void:
+	await with_stores()
+	# GPU Screen Recorder on the fake handheld: a stand-in first on PATH
+	var rec_bin := stores.bin_dir.path_join("gpu-screen-recorder")
+	stores._write(rec_bin, FAKE_RECORDER)
+	FileAccess.set_unix_permissions(rec_bin, 493)
+	var rec: Node = main().recording
+	rec.env = {"home": w.home, "path_env": stores.bin_dir, "sys_root": "", "proc_root": "/proc"}
+	rec.thumb_fn = func(_clip: String) -> void: pass
+	rec.setup_needed = false
+	ok(await play_hades(), "Hades runs")
+	await w.idle()
+	# Record: This game > Record
+	ok(await open_menu_tab("game"), "Quick Access: This game")
+	var row := func(): return qm().body.find_child("Record", true, false)
+	ok(row.call() != null, "a Record row")
+	ok(await press_on(func(): return row.call().button if row.call() else null, 40, "v"), "A on Record")
+	ok(await until(func(): return rec.state == "recording", 6000), "recording (%s)" % rec.state)
+	var clip: String = rec.path
+	var saved := []
+	rec.saved.connect(func(p, info): saved.append([p, info]), CONNECT_ONE_SHOT)
+	ok(not qm().visible, "the menu gets out of the way")
+	ok(main().top_bar.has_method("set_recording"), "the REC chip is there to show it")
+	await w.wait_s(0.5)
+	ok(await open_menu_tab("game"), "Quick Access again")
+	ok(await press_on(func(): return row.call().button if row.call() else null, 40, "v"), "A on Stop recording")
+	ok(await until(func(): return rec.state == "idle", 15000), "stopped")
+	ok(await until(func(): return not saved.is_empty(), 5000), "saved (%s)" % [saved])
+	ok(clip != "" and FileAccess.file_exists(clip) and clip.begins_with(w.home.path_join("Videos/GameCove")), "the clip is saved under Videos/GameCove (%s)" % clip)
+	if qm().visible:
+		await b()
+	# sleep from the quick menu, wake later: the game still runs, settings come back
+	var tdp_before: Variant = ctl("power.tdp").value
+	ok(await open_menu_tab("device"), "Device tab")
+	var sleep_v := view("system.sleep")
+	if sleep_v != null and available("system.sleep"):
+		ok(await down_to(sleep_v, 40), "Sleep reachable")
+		await a()
+		await w.idle()
+		if not "suspend" in w.fake.events:
+			await a()   # asks first
+			await w.idle()
+		ok("suspend" in w.fake.events, "the handheld was put to sleep (%s)" % [w.fake.events])
+	else:
+		await b()
+	# the firmware forgot the TDP over sleep; the clocks say two minutes passed
+	main()._clock_mark = [Time.get_unix_time_from_system() - 120.0, Time.get_ticks_msec() - 1000]
+	await down()   # the first press after waking notices it
+	await w.wait_s(5.6)
+	await w.idle()
+	ok(main().session.is_active(), "the game still runs after waking")
+	eq(str(ctl("power.tdp").value), str(tdp_before), "the TDP is what it was")
+	if qm().visible:
+		await b()
+	var t0 := Time.get_ticks_msec()
+	await qam()
+	ok(qm().visible and Time.get_ticks_msec() - t0 < 1500, "the quick menu opens at once after waking (%d ms)" % (Time.get_ticks_msec() - t0))
+	# Switch to Steam (Gaming Mode's own session) and back
+	ok(await open_menu_tab("device"), "Device tab")
+	var steam_btn := qm().body.get_node_or_null("SteamMode/Button") as Button
+	if steam_btn != null and not steam_btn.disabled:
+		ok(await focus_on(steam_btn), "Switch to Steam reachable")
+		await a()
+		eq(w.fake.events.count("steam") + w.fake.events.count("gamescope"), 0, "the first A only asks")
+		await a()
+		await w.idle()
+		ok(w.fake.events.size() > 0, "the session switch was asked for (%s)" % [w.fake.events])
+		for m in w.fake.prop_value("InterceptMode"):
+			eq(int(m), 0, "the controller is let go before the switch")
+		# the switch didn't take GameCove away (or GameCove is back): the controller comes back
+		qm().switch_timed_out(qm()._switch_gen)
+		await w.idle()
+		eq(qm().status_label.text, preload("res://scripts/ui/texts.gd").SWITCH_STUCK, "back: GameCove says the switch didn't happen and keeps going")
+		ok(main().session.is_active(), "and the game still runs")
+	if qm().visible:
+		await b()
+	check("over the game")
+	stores.game_quit("1145360")
+	ok(await until(func(): return not main().session.is_active(), 12000), "the game ends")
+	await without_stores()
