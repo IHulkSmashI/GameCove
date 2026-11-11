@@ -137,6 +137,17 @@ gc_rule_elsewhere() {
 	return 1
 }
 
+# Used by os_fixed: gc_all_values "<device dirs, one per line>" <attribute> <value> is 0 when there is at least one
+# device and every one already has that value (the system does it some other way than a rule we can read).
+gc_all_values() {
+	_n=0
+	for _d in $1; do
+		[ "$(cat "$ROOT$_d/$2" 2>/dev/null)" = "$3" ] || return 1
+		_n=$((_n + 1))
+	done
+	[ "$_n" -gt 0 ]
+}
+
 # save_value <real path>: remember a sysfs value once, so remove can put it back.
 save_value() {
 	[ -f "$ROOT$1" ] || return 0

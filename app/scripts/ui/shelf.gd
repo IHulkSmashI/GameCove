@@ -38,6 +38,9 @@ var scroll: ScrollContainer
 var strip: HBoxContainer
 var count_label: Label
 var memory := 0          # last focused index (TV-style row memory)
+## Games in the shelf's whole list when it shows only the first of them and ends
+## with a "See all" tile (Home's cap); 0 = it shows them all.
+var total := 0
 var tile_size := Vector2.ZERO
 ## "hero" for a row of wide featured cards (set before setup()); see featured_size().
 var art_kind := "cover"
@@ -237,7 +240,11 @@ func remembered() -> Control:
 
 func _on_focus(i: int) -> void:
 	memory = i
-	count_label.text = "%02d / %02d" % [i + 1, tiles.size()]
+	if total > 0:
+		# a capped shelf: the place in the whole list; on its last tile ("See all") how many there are
+		count_label.text = ("%d games" % total) if i == tiles.size() - 1 else "%02d / %02d" % [i + 1, total]
+	else:
+		count_label.text = "%02d / %02d" % [i + 1, tiles.size()]
 	scroll_to(i)
 	tile_focused.emit(tiles[i].game, i)
 

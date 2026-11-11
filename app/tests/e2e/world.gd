@@ -254,6 +254,12 @@ func sync_window_focus() -> void:
 	var ids := Array(base.split(",", false)).map(func(x): return str(x).strip_edges().to_int())
 	ids.erase(413091)
 	var ours: bool = ids.is_empty() or int(ids[0]) == 769
+	# a window forced in front (GAMESCOPECTRL_BASELAYER_WINDOW: Steam's own screen) has the focus, not us
+	fake._mutex.lock()
+	var forced := str(fake.xroot.get("GAMESCOPECTRL_BASELAYER_WINDOW", "")).strip_edges()
+	fake._mutex.unlock()
+	if forced != "" and forced.to_int() != WINDOW_ID:
+		ours = false
 	if ours != main._window_focused:
 		main.notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN if ours else Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
 
@@ -287,6 +293,9 @@ func reset() -> void:
 		main.show_screen("home")
 	fake_pids.clear()
 	fake_apps.clear()
+	if main != null and main.steam_trip != null and main.steam_trip.service.active():
+		main.steam_trip.service.back("guide")
+		main.steam_trip.service.arrived()
 	await idle()
 	if main != null and not ui_clean():
 		# a test opened something that stays (first-run setup from "Run setup

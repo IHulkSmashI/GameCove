@@ -1,8 +1,10 @@
 #!/bin/sh
 # GameCove autologin guard (review H4). Runs as root before the login screen starts, from
-# /etc/systemd/system/gamecove-autologin-guard.service, which the SteamOS installer copies,
-# with this script (to /etc/gamecove/autologin-guard), out of the GameCove sysext into /etc,
-# so both stay when the sysext doesn't merge (removed by hand, an OS update that dropped it).
+# /etc/systemd/system/gamecove-autologin-guard.service, which the installer copies, with
+# this script (to /etc/gamecove/autologin-guard), out of GameCove's files into /etc, so both
+# stay when GameCove's files aren't there: on SteamOS a sysext that doesn't merge (removed by
+# hand, an OS update that dropped it), on Bazzite a layer taken off by hand with
+# `rpm-ostree uninstall gamecove` while GameCove was the boot default (final review).
 #
 # Why: SDDM looks the autologin Session= up in its session folders and, when the file isn't
 # there, logs "Unable to find autologin session entry" and shows the login screen instead
@@ -11,8 +13,9 @@
 #
 # What: every autologin entry (steamos-manager's zz-*-autologin.conf and the temporary
 # zzt-*-temp-login.conf, or sddm.conf) that names gamecove.desktop while no session folder
-# holds it is pointed at Steam Gaming Mode (gamescope-wayland.desktop, what steamos-manager
-# writes for "game"), else the desktop. Nothing else is ever touched. Once logged in,
+# holds it is pointed at Steam Gaming Mode (what steamos-manager writes for "game":
+# gamescope-wayland.desktop on SteamOS, gamescope-session-ogui-steam.desktop on Bazzite; else
+# any other gamescope session), else the desktop. Nothing else is ever touched. Once logged in,
 # gamecove-session-guard puts steamos-manager's own defaults back the same way.
 #
 #   GAMECOVE_ROOT  prefix for every path (tests)
@@ -31,7 +34,22 @@ present() { # <name.desktop>
 }
 
 fallback() {
-	for s in gamescope-wayland.desktop gamescope-session-steam.desktop plasma.desktop plasmawayland.desktop gnome.desktop; do
+	for s in gamescope-wayland.desktop gamescope-session-ogui-steam.desktop gamescope-session-steam.desktop gamescope-session.desktop; do
+		if present "$s"; then
+			echo "$s"
+			return 0
+		fi
+	done
+	# any other gamescope session the system has (the names differ between images)
+	for d in $SESSION_DIRS; do
+		for f in "$ROOT$d"/gamescope*.desktop; do
+			if [ -f "$f" ]; then
+				echo "${f##*/}"
+				return 0
+			fi
+		done
+	done
+	for s in plasma.desktop plasmawayland.desktop plasmax11.desktop gnome.desktop gnome-wayland.desktop; do
 		if present "$s"; then
 			echo "$s"
 			return 0

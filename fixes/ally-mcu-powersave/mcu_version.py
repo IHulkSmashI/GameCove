@@ -8,7 +8,9 @@ answer ("FGA80100.RC71LS.318_T01") and takes the three digits after the second "
 userspace, so this does the same request over hidraw. Needs root (hidraw nodes are root-only).
 
 Minimums: hid-asus ROG_ALLY_MIN_MCU 319 (Ally, 0b05:1abe) and ROG_ALLY_X_MIN_MCU 313 (Ally X,
-0b05:1b4c); SimpleDeckyTDP asks for Ally X 314, so the stricter 314 is used here.
+0b05:1b4c), read in drivers/hid/hid-asus.c (torvalds/linux master, 2026-11-10): validate_mcu_fw_version()
+warns when version < min and otherwise calls set_ally_mcu_powersave(true) itself, so 313 is where the kernel
+already trusts the Ally X firmware with powersave. (SimpleDeckyTDP's "mc_version >= 314" is commented-out code.)
 
     python3 -I mcu_version.py [--sys /sys] [--dev /dev]
 prints "model=ally|ally-x", "version=<n>", "min=<n>" (exit 0), or "error=<reason>" (exit 1).
@@ -20,7 +22,7 @@ import re
 import sys
 
 ASUS = 0x0B05
-MODELS = {0x1ABE: ("ally", 319), 0x1B4C: ("ally-x", 314)}
+MODELS = {0x1ABE: ("ally", 319), 0x1B4C: ("ally-x", 313)}
 REPORT_ID = 0x5A
 REQUEST = bytes([0x5A, 0x05, 0x03, 0x31, 0x00, 0x20])
 REPORT_SIZE = 64

@@ -15,6 +15,10 @@ bad() {
 	printf 'FAIL: %s\n' "$*" >&2
 }
 
+contains() {
+	if grep -q -- "$2" "$1" 2>/dev/null; then ok; else bad "$3: '$2' not in $1"; fi
+}
+
 # ------------------------------------------------------------- repo hygiene (M28)
 # Only these files may sit in the repo root; anything else is a stray download or a leftover.
 for f in $(git -C "$REPO" ls-files | grep -v /); do
@@ -64,10 +68,85 @@ echo MIT >"$T/ss/LICENSE"
 	usr/share/gamescope-session-plus/device-quirks usr/lib/systemd/user/gamescope-session-plus@.service LICENSE) >"$T/ss.sums"
 if SESSION_SUMS="$T/ss.sums" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$T/app" --session-src "$T/ss" --out "$T/sx" --tree-only >"$T/out" 2>&1; then ok; else bad "sysext tree: $(cat "$T/out")"; fi
 while read -r d; do [ -s "$T/sx/gamecove/usr/share/licenses/gamecove/$d" ] && ok || bad "sysext lacks /usr/share/licenses/gamecove/$d"; done <"$T/dests"
+# ------------------------------------------------------------- the LZMS cabinet.dll (FSR 4 on XMX) in every artefact
+CAB="$REPO/tools/cabinet-lzms"
+grep -Eqx '[0-9a-f]{64}  cabinet\.dll' "$CAB/cabinet.sha256" && ok || bad "tools/cabinet-lzms/cabinet.sha256 must hold the reviewed build's sha256"
+for f in cabinet.c cabinet.def build.sh LICENSE wimlib/lzms_decompress.c wimlib/COPYING wimlib/COPYING.LGPL test/run.sh; do
+	[ -s "$CAB/$f" ] && ok || bad "tools/cabinet-lzms/$f missing"
+done
+for need in LICENSE.cabinet-lzms-LGPL wimlib-COPYING wimlib-COPYING.LGPL; do
+	grep -qx "$need" "$T/dests" && ok || bad "licenses.list lacks $need"
+done
+# a release tarball must have the reviewed DLL: none, or other bytes, fails
+if REQUIRE_CABINET=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/nocab.tar.gz" >"$T/out" 2>&1; then bad "REQUIRE_CABINET=1 must fail without bin/cabinet.dll"; else ok; fi
+mkdir -p "$T/app/bin"
+echo "not the reviewed dll" >"$T/app/bin/cabinet.dll"
+if REQUIRE_CABINET=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/badcab.tar.gz" >"$T/out" 2>&1; then bad "REQUIRE_CABINET=1 must refuse a cabinet.dll that isn't the reviewed build"; else ok; fi
+# the real build when it is here (tools/cabinet-lzms/build.sh ran): accepted
+if [ -s "$CAB/out/cabinet.dll" ] && (cd "$CAB/out" && sha256sum -c ../cabinet.sha256 >/dev/null 2>&1); then
+	cp "$CAB/out/cabinet.dll" "$T/app/bin/cabinet.dll"
+	if REQUIRE_CABINET=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/cab.tar.gz" >"$T/out" 2>&1; then ok; else bad "the reviewed cabinet.dll is refused: $(cat "$T/out")"; fi
+else
+	sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/cab.tar.gz" >"$T/out" 2>&1 || bad "make-app-tarball with bin/: $(cat "$T/out")"
+fi
+tar -tzf "$T/cab.tar.gz" >"$T/cabtar" 2>/dev/null
+for f in bin/cabinet.dll bin/cabinet-lzms-source.tar.gz; do grep -qx "$f" "$T/cabtar" && ok || bad "tarball lacks $f"; done
+mkdir -p "$T/cabx" && tar -xzf "$T/cab.tar.gz" -C "$T/cabx" 2>/dev/null
+tar -tzf "$T/cabx/bin/cabinet-lzms-source.tar.gz" >"$T/cabsrc" 2>/dev/null
+for f in cabinet-lzms/cabinet.c cabinet-lzms/wimlib/lzms_decompress.c cabinet-lzms/LICENSE cabinet-lzms/wimlib/COPYING.LGPL; do
+	grep -qx "$f" "$T/cabsrc" && ok || bad "the cabinet source archive lacks $f"
+done
+grep -q '^cabinet-lzms/out/' "$T/cabsrc" && bad "the cabinet source archive carries build output" || ok
+# nitec's FSR 4.1.2 XMX files: a release tarball must carry the pinned set, and nothing else is accepted
+if REQUIRE_FSR4=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/nofsr.tar.gz" >"$T/out" 2>&1; then bad "REQUIRE_FSR4=1 must fail without bin/fsr4-xmx"; else ok; fi
+mkdir -p "$T/app/bin/fsr4-xmx"
+echo "not nitec's" >"$T/app/bin/fsr4-xmx/amd_fidelityfx_upscaler_dx12.dll"
+echo "not nitec's" >"$T/app/bin/fsr4-xmx/fsr-original.dll"
+echo '{}' >"$T/app/bin/fsr4-xmx/set.json"
+if sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/badfsr.tar.gz" >"$T/out" 2>&1; then bad "a bin/fsr4-xmx that isn't the pinned set must be refused"; else ok; fi
+rm -rf "$T/app/bin/fsr4-xmx"
+python3 -I "$REPO/tools/upscalers/fetch_fsr4.py" --check "$T/nowhere" >/dev/null 2>&1 && bad "fetch_fsr4 --check passes on a missing folder" || ok
+# the unpacked tarball as the sysext and the RPM see it (stand-in bytes: the real check is the one above)
+mkdir -p "$T/cabx/bin/fsr4-xmx"
+for f in amd_fidelityfx_upscaler_dx12.dll fsr-original.dll set.json; do echo "$f" >"$T/cabx/bin/fsr4-xmx/$f"; done
+# sysext: from the unpacked tarball to /usr/lib/gamecove/bin (the path optiscaler.SYSTEM_CABINET checks)
+if SESSION_SUMS="$T/ss.sums" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$T/cabx" --session-src "$T/ss" --out "$T/sxc" --tree-only >"$T/out" 2>&1; then ok; else bad "sysext tree with cabinet: $(cat "$T/out")"; fi
+cmp -s "$T/cabx/bin/cabinet.dll" "$T/sxc/gamecove/usr/lib/gamecove/bin/cabinet.dll" && ok || bad "sysext lacks /usr/lib/gamecove/bin/cabinet.dll"
+[ -s "$T/sxc/gamecove/usr/lib/gamecove/bin/cabinet-lzms-source.tar.gz" ] && ok || bad "sysext lacks the cabinet source archive"
+for f in amd_fidelityfx_upscaler_dx12.dll fsr-original.dll set.json; do
+	cmp -s "$T/cabx/bin/fsr4-xmx/$f" "$T/sxc/gamecove/usr/lib/gamecove/bin/fsr4-xmx/$f" && ok || bad "sysext lacks /usr/lib/gamecove/bin/fsr4-xmx/$f"
+done
+grep -q "no bin/fsr4-xmx" "$T/out" && bad "sysext warned about FSR 4 files that are there" || ok
+grep -q '^SYSTEM_DIR = "/usr/lib/gamecove"$' "$REPO/packaging/helpers/gamecove_upscale/optiscaler.py" && ok || bad "optiscaler.SYSTEM_DIR moved: packages install the FSR 4 set to /usr/lib/gamecove/bin/fsr4-xmx"
+grep -q 'app-export/bin/fsr4-xmx/\* %{buildroot}%{_prefix}/lib/gamecove/bin/fsr4-xmx/' "$REPO/packaging/rpm/gamecove.spec" && ok || bad "spec must install bin/fsr4-xmx"
+RELY="$REPO/.github/workflows/release.yml"
+grep -q 'python3 -I tools/upscalers/fetch_fsr4.py app/build/bin/fsr4-xmx' "$RELY" && ok || bad "release.yml must fetch the pinned FSR 4.1.2 XMX files into the app"
+grep -q 'REQUIRE_FSR4=1' "$RELY" && ok || bad "release.yml must require the FSR 4.1.2 XMX files in the tarball"
+grep -q 'fetch_fsr4.py --check app-export/bin/fsr4-xmx' "$RELY" && ok || bad "release.yml must check the shipped FSR 4.1.2 XMX files against the pins"
+grep -q '"/usr/lib/gamecove/bin/fsr4-xmx/$f" rpm-files.txt' "$RELY" && ok || bad "release.yml must check the RPM has the FSR 4.1.2 XMX files"
+grep -Eq '"base": "https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/[0-9a-f]{40}"' "$REPO/packaging/helpers/gamecove_upscale/data/versions.json" && ok || bad "versions.json fsr4_xmx must pin ClawDeck's fsr4-xmx-files branch by commit"
+grep -q 'nitec and the OptiScaler community' "$REPO/CREDITS.md" && ok || bad "CREDITS.md must credit nitec and the OptiScaler community for FSR 4 on XMX"
+grep -q "no bin/cabinet.dll" "$T/out" && bad "sysext warned about a cabinet.dll that is there" || ok
+grep -q '^SYSTEM_CABINET = "/usr/lib/gamecove/bin/cabinet.dll"$' "$REPO/packaging/helpers/gamecove_upscale/optiscaler.py" && ok || bad "optiscaler.SYSTEM_CABINET moved: packages install to /usr/lib/gamecove/bin/cabinet.dll"
+# RPM and workflows
+SPEC0="$REPO/packaging/rpm/gamecove.spec"
+grep -q 'app-export/bin/cabinet.dll %{buildroot}%{_prefix}/lib/gamecove/bin/cabinet.dll' "$SPEC0" && ok || bad "spec must install bin/cabinet.dll"
+grep -qx '%{_prefix}/lib/gamecove/bin' "$SPEC0" && ok || bad "spec %files must take /usr/lib/gamecove/bin"
+grep -q 'LGPL-2.1-or-later' "$SPEC0" && ok || bad "spec License must name LGPL-2.1-or-later (cabinet.dll)"
+REL="$REPO/.github/workflows/release.yml"
+grep -q 'bash tools/cabinet-lzms/build.sh --check' "$REL" && ok || bad "release.yml must build cabinet.dll and compare it with cabinet.sha256"
+grep -q 'bash tools/cabinet-lzms/test/run.sh' "$REL" && ok || bad "release.yml must test cabinet.dll under Wine"
+grep -q '"gcc-mingw-w64-x86-64=${MINGW_GCC}"' "$REL" && grep -Eq '^  MINGW_GCC: [0-9]' "$REL" && ok || bad "release.yml must pin the mingw-w64 toolchain by version"
+grep -q 'REQUIRE_CABINET=1 REQUIRE_FSR4=1 sh packaging/make-app-tarball.sh' "$REL" && ok || bad "release.yml must require the reviewed cabinet.dll in the tarball"
+grep -q 'grep -qx /usr/lib/gamecove/bin/cabinet.dll rpm-files.txt' "$REL" && ok || bad "release.yml must check the RPM has cabinet.dll"
+grep -q 'cp app-export/bin/cabinet.dll dist/cabinet.dll' "$REL" && grep -q 'dist/cabinet.dll$' "$REL" && ok || bad "release.yml must publish cabinet.dll so SHA256SUMS and its signature cover it"
+grep -q 'bash tools/cabinet-lzms/test/run.sh' "$REPO/.github/workflows/ci.yml" && ok || bad "ci.yml must build and test cabinet.dll on every push"
+rm -rf "$T/app/bin"
+
 # RPM: run the spec's %prep licence loop against the repo and check %files takes the result
 SPEC="$REPO/packaging/rpm/gamecove.spec"
 awk '/^# licence and notice texts/{f=1;next} f&&/^done < packaging\/licenses.list/{print;exit} f' "$SPEC" >"$T/prep.sh"
-if (cd "$REPO" && mkdir -p "$T/rpm" && cd "$T/rpm" && ln -s "$REPO/packaging" packaging && for s in LICENSE CREDITS.md LICENSES fixes app; do ln -s "$REPO/$s" "$s"; done && sh "$T/prep.sh") >"$T/out" 2>&1; then ok; else bad "spec %prep licence loop: $(cat "$T/out")"; fi
+if (cd "$REPO" && mkdir -p "$T/rpm" && cd "$T/rpm" && ln -s "$REPO/packaging" packaging && for s in LICENSE CREDITS.md LICENSES fixes app tools; do ln -s "$REPO/$s" "$s"; done && sh "$T/prep.sh") >"$T/out" 2>&1; then ok; else bad "spec %prep licence loop: $(cat "$T/out")"; fi
 while read -r d; do [ -s "$T/rpm/licenses/$d" ] && ok || bad "RPM %prep doesn't stage licenses/$d"; done <"$T/dests"
 grep -qx '%license licenses/\*' "$SPEC" && ok || bad "spec %files must take %license licenses/*"
 grep -q "missing from the RPM" "$REPO/.github/workflows/release.yml" && ok || bad "release.yml must check the built RPM's licence files"
@@ -232,7 +311,7 @@ assert "cosign sign-blob --yes --bundle dist/upscalers.json.sigstore.json dist/u
 assert runs.count("--clobber") == 1 and "dist/upscalers.json.sigstore.json dist/upscalers.json.sha256 --clobber" in runs, \
     "only the index is replaced; mirror files never"
 assert runs.index('gh release upload "$tag" "dist/$path"') < runs.index("--clobber"), "files first, the index last"
-assert "--latest=false" in runs, "the mirror release must never become 'latest' (get-gamecove.sh reads releases/latest)"
+assert "--latest=false" in runs, "the mirror release must never become 'latest' (GitHub would hide the app release behind it; get-gamecove.sh reads the release list and only takes vX... tags)"
 assert "cosign-release: ${{ steps.cosign.outputs.version }}" in open(wf).read()
 # the workflow's own check, for this repository, is the identity the helper requires
 ident = [l.strip()[len('ident="'):-1] for l in runs.splitlines() if l.strip().startswith('ident="')]
@@ -374,6 +453,149 @@ sed 's/.*:\(7656119[0-9]*\)$/\1/' "$T/ids" | sort -u | while read -r id; do
 done >"$T/unknown_ids"
 if [ -s "$T/unknown_ids" ]; then bad "SteamID64s in tests that aren't the synthetic ones (app/tests/fixtures/STEAM_IDS.md): $(tr '\n' ' ' <"$T/unknown_ids")"; else ok; fi
 if git -C "$REPO" grep -nI '/home/clau''de/' -- app tools packaging gamedb fixes session >"$T/paths" 2>/dev/null; then bad "machine-specific paths: $(head -5 "$T/paths" | tr '\n' ' ')"; else ok; fi
+
+# ------------------------------------------------------------- final release review: version, checksums, environments
+# The workflow's own step scripts, run here against fake files (step <job> <part of the step's name>).
+step() {
+	python3 -I - "$W" "$1" "$2" <<'PY'
+import sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+hits = [s["run"] for s in jobs[sys.argv[2]]["steps"] if sys.argv[3] in s.get("name", "")]
+assert len(hits) == 1, (sys.argv[2], sys.argv[3], len(hits))
+print(hits[0])
+PY
+}
+# high 8: the exported app must say the spec's Version, and the tag's
+step app "exported app says the spec's Version" >"$T/vstep.sh"
+vrun() { # <what the app prints> <VERSION> <ref type> <ref name>
+	mkdir -p "$T/v/app/build"
+	printf '#!/bin/sh\necho "Godot Engine v4.7.2"\necho "%s"\n' "$1" >"$T/v/app/build/gamecove.x86_64"
+	chmod +x "$T/v/app/build/gamecove.x86_64"
+	(cd "$T/v" && VERSION="$2" GITHUB_REF_TYPE="$3" GITHUB_REF_NAME="$4" bash -e "$T/vstep.sh") >"$T/out" 2>&1
+}
+vrun "GameCove 0.1.0" 0.1.0 tag v0.1.0 && ok || bad "version step: a matching app, spec and tag must pass ($(cat "$T/out"))"
+vrun "GameCove 0.1.0" 0.1.0 branch main && ok || bad "version step: a branch build with a matching app must pass"
+vrun "GameCove 0.1.0-dev" 0.1.0 tag v0.1.0 && bad "version step: an unstamped app (0.1.0-dev) must fail" || ok
+vrun "GameCove 0.0.9" 0.1.0 tag v0.1.0 && bad "version step: an app that says another version must fail" || ok
+vrun "" 0.1.0 tag v0.1.0 && bad "version step: an app that says nothing must fail" || ok
+vrun "GameCove 0.1.0" 0.1.0 tag v0.2.0 && bad "version step: a tag that differs from the app must fail" || ok
+grep -q 'wants_version' "$REPO/app/scripts/installer/boot.gd" && ok || bad "boot.gd must answer --version (the release workflow asks the exported app)"
+if grep -q '^config/version=' "$REPO/app/project.godot"; then bad "app/project.godot must not carry config/version: the export stamps the spec's Version"; else ok; fi
+# low: SHA256SUMS never lists itself, even when one is left in dist/
+step package "Checksums" >"$T/sums.sh"
+mkdir -p "$T/s1/dist"
+for f in gamecove-0.1.0-x86_64.tar.gz gamecove-0.1.0-1.fc43.x86_64.rpm gamecove-0.1.0-1.fc43.src.rpm gamecove-0.1.0-x86_64.raw MSI__Claw-ISH-IMU.bpf.o; do echo "$f" >"$T/s1/dist/$f"; done
+cp "$GG" "$T/s1/dist/get-gamecove.sh"
+echo "stale" >"$T/s1/dist/SHA256SUMS"
+echo "stale" >"$T/s1/dist/SHA256SUMS.sigstore.json"
+if (cd "$T/s1" && bash -e "$T/sums.sh") >"$T/out" 2>&1; then ok; else bad "checksums step: $(cat "$T/out")"; fi
+if grep -q "SHA256SUMS" "$T/s1/dist/SHA256SUMS"; then bad "SHA256SUMS lists itself"; else ok; fi
+[ "$(wc -l <"$T/s1/dist/SHA256SUMS")" -eq 6 ] && (cd "$T/s1/dist" && sha256sum --strict -c SHA256SUMS >/dev/null 2>&1) && ok || bad "SHA256SUMS must list the six files and match them"
+[ ! -e "$T/s1/dist/SHA256SUMS.sigstore.json" ] && ok || bad "a stale signature must not survive new checksums"
+# low: the release job re-checks what it downloaded before it signs
+step release "checked again before signing" >"$T/recheck.sh"
+recheck() { # <dir> [tag]
+	(cd "$1" && TAG="${2:-v0.1.0}" bash -e "$T/recheck.sh") >"$T/out" 2>&1
+}
+mkdir -p "$T/s1/packaging" && cp "$GG" "$T/s1/packaging/get-gamecove.sh"
+recheck "$T/s1" && ok || bad "re-check: untouched files must pass ($(cat "$T/out"))"
+cp -r "$T/s1" "$T/s2" && echo changed >>"$T/s2/dist/gamecove-0.1.0-x86_64.raw"
+recheck "$T/s2" && bad "re-check: a changed file must fail" || ok
+cp -r "$T/s1" "$T/s3" && echo extra >"$T/s3/dist/extra.bin"
+recheck "$T/s3" && bad "re-check: a file SHA256SUMS doesn't list must fail" || ok
+cp -r "$T/s1" "$T/s4" && rm "$T/s4/dist/MSI__Claw-ISH-IMU.bpf.o"
+recheck "$T/s4" && bad "re-check: a listed file that is missing must fail" || ok
+cp -r "$T/s1" "$T/s5" && echo "# other" >>"$T/s5/packaging/get-gamecove.sh"
+recheck "$T/s5" && bad "re-check: an installer script that isn't the tagged commit's must fail" || ok
+recheck "$T/s1" v0.2.0 && bad "re-check: files of another version must fail" || ok
+cp -r "$T/s1" "$T/s6" && (cd "$T/s6/dist" && sha256sum -- * >SHA256SUMS)
+recheck "$T/s6" && bad "re-check: a SHA256SUMS that lists itself must fail" || ok
+python3 -I - "$W" >"$T/out" 2>&1 <<'PY' && ok || bad "release.yml order: $(cat "$T/out")"
+import sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+names = [s.get("name", s.get("uses", "")) for s in jobs["release"]["steps"]]
+chk = [i for i, n in enumerate(names) if "checked again before signing" in n][0]
+dl = [i for i, n in enumerate(names) if n.startswith("actions/download-artifact@")][0]
+sign = [i for i, n in enumerate(names) if n.startswith("Sign SHA256SUMS")][0]
+assert dl < chk < sign, "download, re-check, then sign"
+# the environment is asked about before the job that would create it: release needs protected; the tag job asks
+# before it creates the tag
+assert "protected" in jobs["release"]["needs"], "release must need the protected job"
+p = jobs["protected"]
+assert "environment" not in p and p["permissions"] == {"contents": "read", "actions": "read"}, p.get("permissions")
+assert any("check-environment.sh release reviewers" in s.get("run", "") for s in p["steps"])
+t = [s.get("run", "") for s in jobs["tag"]["steps"]]
+ask = [i for i, r in enumerate(t) if "check-environment.sh release reviewers" in r]
+mk = [i for i, r in enumerate(t) if "git/refs" in r]
+assert ask and mk and ask[0] < mk[0], "the tag job checks the environment before creating the tag"
+for n in ("firmware.yml", "upscalers.yml"):
+    b = yaml.safe_load(open(sys.argv[1].replace("release.yml", n)))["jobs"]["build"]
+    assert any("check-environment.sh\" nightly branches" in s.get("run", "") for s in b["steps"]), n + ": build must check the nightly environment"
+PY
+# tools/ci/check-environment.sh against canned answers of GitHub's "get an environment"
+CE="$REPO/tools/ci/check-environment.sh"
+mkdir -p "$T/ce"
+cat >"$T/ce/curl" <<EOF
+#!/bin/sh
+out=""
+while [ \$# -gt 0 ]; do case "\$1" in -o) out="\$2"; shift ;; esac; shift; done
+[ -f "$T/ce/fail" ] && exit 7
+cp "$T/ce/body" "\$out"
+printf '%s' "\$(cat "$T/ce/code")"
+EOF
+chmod +x "$T/ce/curl"
+ce() { # <code> <body> <name> <need>
+	echo "$1" >"$T/ce/code"
+	printf '%s\n' "$2" >"$T/ce/body"
+	CURL="$T/ce/curl" GITHUB_REPOSITORY=IHulkSmashI/GameCove GITHUB_REPOSITORY_OWNER=IHulkSmashI GH_TOKEN=t sh "$CE" "$3" "$4" >"$T/out" 2>&1
+}
+REVIEW='{"type": "required_reviewers", "reviewers": [{"type": "User", "reviewer": {"login": "ihulksmashi"}}]}'
+OTHER='{"type": "required_reviewers", "reviewers": [{"type": "User", "reviewer": {"login": "someone-else"}}]}'
+POLICY='"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}'
+ce 200 "{\"name\": \"release\", \"protection_rules\": [$REVIEW, {\"type\": \"branch_policy\"}], $POLICY}" release reviewers && ok || bad "a protected release environment must pass ($(cat "$T/out"))"
+ce 200 "{\"name\": \"release\", \"protection_rules\": [], \"deployment_branch_policy\": null}" release reviewers && bad "an unprotected release environment (what GitHub auto-creates) must fail" || ok
+ce 200 "{\"name\": \"release\", \"protection_rules\": [{\"type\": \"branch_policy\"}], $POLICY}" release reviewers && bad "a release environment without a required reviewer must fail" || ok
+contains "$T/out" "no required reviewer" "says what is missing"
+ce 200 "{\"name\": \"release\", \"protection_rules\": [$OTHER], $POLICY}" release reviewers && bad "a release environment the owner doesn't review must fail" || ok
+ce 200 "{\"name\": \"release\", \"protection_rules\": [$REVIEW], \"deployment_branch_policy\": null}" release reviewers && bad "a release environment every branch can deploy to must fail" || ok
+ce 404 '{"message": "Not Found"}' release reviewers && bad "a missing environment must fail" || ok
+contains "$T/out" "doesn't exist" "says it is missing"
+ce 200 "{\"name\": \"nightly\", \"protection_rules\": [{\"type\": \"branch_policy\"}], $POLICY}" nightly branches && ok || bad "nightly with a branch rule must pass ($(cat "$T/out"))"
+ce 200 '{"name": "nightly", "protection_rules": [], "deployment_branch_policy": null}' nightly branches && bad "nightly open to every branch must fail" || ok
+ce 403 '{"message": "rate limit"}' release reviewers && ok || bad "an answer GitHub won't give is a warning, not a failure"
+contains "$T/out" "::warning::" "warns when it couldn't check"
+touch "$T/ce/fail"
+ce 200 '{}' release reviewers && ok || bad "unreachable API: a warning, not a failure"
+rm -f "$T/ce/fail"
+grep -q "check-environment.sh" "$REPO/docs/RELEASING.md" && ok || bad "docs/RELEASING.md must describe the environment check"
+if grep -q "owner: create it" "$REPO/docs/RELEASING.md"; then bad "docs/RELEASING.md still says the environments are to be created"; else ok; fi
+
+# "Tested on hardware" says the same thing everywhere: MSI Claw 8 EX AI+ (Bazzite) and ROG Ally (SteamOS)
+grep -q "MSI Claw 8 EX AI+ (Bazzite) and the ASUS ROG Ally (SteamOS)" "$REPO/README.md" && ok || bad "README must say what was tested on hardware: Claw 8 EX AI+ (Bazzite) and ROG Ally (SteamOS)"
+for f in packaging/rpm/gamecove.spec packaging/install.sh; do
+	grep -q "Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS)" "$REPO/$f" && ok || bad "$f must say what the README says about hardware testing"
+	if grep -qi "untested" "$REPO/$f"; then bad "$f still says untested while the README says tested on hardware"; else ok; fi
+done
+if grep -q "both on Bazzite" "$REPO/README.md" "$REPO/docs/DEVICES.md" "$REPO/docs/SESSION.md"; then bad "the ROG Ally was tested on SteamOS, not Bazzite"; else ok; fi
+grep -q "Not run on a SteamOS handheld yet" "$REPO/packaging/sysext/build-sysext.sh" && grep -q "hasn't been run on a handheld yet" "$REPO/README.md" && ok || bad "the SteamOS install must be described the same way in build-sysext.sh and the README"
+if grep -q '^<!--' "$REPO/README.md"; then bad "README has a hidden comment: $(grep -n '^<!--' "$REPO/README.md" | head -n 2 | tr '\n' ' ')"; else ok; fi
+
+# docs/PRIVACY.md says what the code does (final review, low)
+PV="$REPO/docs/PRIVACY.md"
+grep -q "every address saved for that PC" "$PV" && ok || bad "PRIVACY.md: Wake-on-LAN also goes to the PC's saved addresses (a remote one included)"
+grep -q "Send from my phone" "$PV" && ok || bad "PRIVACY.md: the key page opens when Send from my phone is chosen"
+if grep -q "Only while the Game art step is open" "$PV" "$REPO/README.md"; then bad "the key page no longer opens with the Game art step; the docs still say so"; else ok; fi
+grep -q "each hop is checked before it's followed" "$PV" && ok || bad "PRIVACY.md must say every image redirect hop is checked against IMAGE_HOSTS"
+grep -q "gamecove-selftest" "$PV" && grep -q "releases/latest" "$PV" && ok || bad "PRIVACY.md must list the selftest's GitHub HEAD request"
+grep -q 'RELEASES=https://github.com/IHulkSmashI/gamecove/releases/latest' "$REPO/packaging/bin/gamecove-selftest" && grep -q -- '-I --max-time 10 "\$RELEASES"' "$REPO/packaging/bin/gamecove-selftest" && ok || bad "the selftest's network request changed: update docs/PRIVACY.md"
+# the phone page for the key really doesn't open with the step: start() itself never calls _open_phone()
+if sed -n '/^func start() -> void:$/,/^$/p' "$REPO/app/scripts/ui/setup/art_key_step.gd" | grep -q "_open_phone()"; then bad "art_key_step.gd start() must not open the phone page"; else ok; fi
+sed -n '/^func start() -> void:$/,/^$/p' "$REPO/app/scripts/ui/setup/art_key_step.gd" | grep -q 'mode = "direct"' && ok || bad "art_key_step.gd start() must begin with SteamGridDB's own page (nothing listening)"
+# CONTRIBUTING names the test commands, and its device report is the real tool, not "coming soon"
+for c in "res://tests/run_tests.gd" "packaging/tests/run.sh" "app/tests/e2e/run.py" "fixes/\*/test.sh" "python3 -m pytest" "shellcheck -S warning"; do
+	grep -q -- "$c" "$REPO/CONTRIBUTING.md" && ok || bad "CONTRIBUTING.md doesn't give the test command: $c"
+done
+if grep -n -i "coming soon" "$REPO/CONTRIBUTING.md" >"$T/out"; then bad "a placeholder is left: $(head -n 2 "$T/out" | tr '\n' ' ')"; else ok; fi
 
 echo "$PASS passed, $FAILS failed"
 [ "$FAILS" -eq 0 ]

@@ -85,5 +85,9 @@ func test_steam_window_pick() -> void:
 	eq(SteamFocus.pick_window(triples, 100, comms), 0x600003, "newest Steam window, not ours, not the game")
 	eq(SteamFocus.pick_window([0x400001, 769, 100], 100, comms), 0, "none")
 	eq(SteamFocus.comms([1, 0, 4242, 2, 0, 5000], fixture("stores/data/proc")), {4242: "steam", 5000: "steamwebhelper"}, "comm from /proc")
+	# the real /proc: its files report a size of 0, and a read that trusts the size gave ""
+	# for every process, so Steam's dialog was never found and never brought forward
+	var me := OS.get_process_id()
+	ok(str(SteamFocus.comms([1, 0, me], "/proc").get(me, "")) != "", "a process name is read from the real /proc")
 	eq(SteamFocus.focus_args(0x600003), PackedStringArray(["-root", "-f", "GAMESCOPECTRL_BASELAYER_WINDOW", "32c", "-set", "GAMESCOPECTRL_BASELAYER_WINDOW", str(0x600003)]), "focus")
 	eq(SteamFocus.release_args(), PackedStringArray(["-root", "-remove", "GAMESCOPECTRL_BASELAYER_WINDOW"]), "release")

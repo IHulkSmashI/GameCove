@@ -66,8 +66,8 @@ install() {
 	ip_require_free
 	stock=$(stock_map)
 	[ -n "$stock" ] || die "$IP_STOCK has no capability_map_id"
-	if [ "$stock" != claw2 ]; then
-		say "not needed: this InputPlumber already ships its own map ($stock) for the Claw 8 EX"
+	if ip_stock_handles_buttons; then
+		say "not needed: this InputPlumber's own map ($stock) already takes both face buttons"
 		return 0
 	fi
 	GC_TMP=$(mktemp -d)
@@ -107,6 +107,8 @@ status() {
 	active=$(systemctl is-active inputplumber 2>/dev/null || true)
 	say "applies=yes"
 	say "installed=$installed"
+	# InputPlumber's stock map takes the firmware's keys now: the system does it (also with ours still in place)
+	if ip_stock_handles_buttons; then say "os_fixed=yes"; else say "os_fixed=no"; fi
 	say "stock_map=${stock:-none}"
 	say "inputplumber=${active:-unknown}"
 	say "inputplumber_override=$(ip_override_state)"
@@ -114,7 +116,7 @@ status() {
 		say "state=on"
 	elif [ "$installed" = yes ]; then
 		say "state=partial"
-	elif [ -n "$stock" ] && [ "$stock" != claw2 ]; then
+	elif ip_stock_handles_buttons; then
 		say "state=not-needed"
 	else
 		say "state=off"

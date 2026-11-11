@@ -66,7 +66,8 @@ static func row_state(key: String, f: Dictionary, unverified: Array) -> Dictiona
 	if key == "gyro":
 		var g := str(f.get("gyro", "unknown"))
 		if g != "yes":
-			return {"key": key, "state": "maybe", "note": GYRO_NOTES.get(g, GYRO_NOTES["unknown"])}
+			var why := str(f.get("gyro_reason", ""))
+			return {"key": key, "state": "maybe", "note": why if why != "" else GYRO_NOTES.get(g, GYRO_NOTES["unknown"])}
 	if key == "fan_control" and not bool(f.get("fan_control", false)):
 		return {"key": key, "state": "maybe", "note": "The fan runs on its own; presets aren't set up for this model yet"}
 	for u in UNVERIFIED_KEYS.get(key, []):

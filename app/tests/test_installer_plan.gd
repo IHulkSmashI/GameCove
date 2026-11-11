@@ -23,9 +23,13 @@ func test_easy_defaults_and_path() -> void:
 	eq(p.choices["auto_tdp"], true)
 	eq(p.choices["power_profile"], "balanced")
 	eq(p.choices["charge_limit"], 100, "no charge limit by default")
-	eq(p.steps(), ["welcome", "art", "summary", "progress", "done"], "Game art shows in Easy mode too (no key ships)")
+	eq(p.steps(), ["welcome", "stores", "art", "summary", "progress", "done"], "store sign-in and Game art show in Easy mode too")
 	eq(p.choices["steamgriddb_key"], "", "no key until the user adds theirs")
-	eq(p.next(), "art")
+	eq(p.next(), "stores", "Easy offers store sign-in right after the welcome page")
+	ok(p.can_skip(), "the store step can be skipped")
+	ok(p.skip(), "skipped with one press")
+	eq(p.step, "art")
+	eq(p.summary()[2], {"step": "stores", "key": "stores", "value": "skipped"}, "the summary says stores were skipped")
 	ok(p.can_skip(), "Game art can be skipped (Steam art only)")
 	ok(p.skip(), "skipped")
 	eq(p.step, "summary")
@@ -67,6 +71,7 @@ func test_custom_path_back_and_skip() -> void:
 
 func test_summary_edit_returns() -> void:
 	var p := _plan()
+	p.next()
 	p.next()
 	p.next()
 	eq(p.step, "summary")

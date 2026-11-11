@@ -153,12 +153,12 @@
   },
   "asus-rog-ally": {
    "tdp": {
-    "min": 5,
+    "min": 7,
     "max": 30,
     "max_dc": 25,
     "sppt_max": 35,
     "fppt_max": 35,
-    "source": "hhd:src/adjustor/core/const.py#L268-L281 ALLY_DATA, ASUS_DATA['ROG Ally RC71L']; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
+    "source": "ASUS: Linux asus-armoury.h power_data ppt_pl1_spl_min 7 (min); hhd:src/adjustor/core/const.py#L268-L281 ALLY_DATA, ASUS_DATA['ROG Ally RC71L']; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
    },
    "rgb": {
     "present": true,
@@ -171,12 +171,12 @@
   },
   "asus-rog-ally-x": {
    "tdp": {
-    "min": 5,
+    "min": 7,
     "max": 30,
     "max_dc": 25,
     "sppt_max": 35,
     "fppt_max": 35,
-    "source": "hhd:src/adjustor/core/const.py#L283-L296 ALLYX_DATA, ASUS_DATA['ROG Ally X RC72L']; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
+    "source": "ASUS: Linux asus-armoury.h power_data ppt_pl1_spl_min 7 (min); hhd:src/adjustor/core/const.py#L283-L296 ALLYX_DATA, ASUS_DATA['ROG Ally X RC72L']; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
    },
    "rgb": {
     "present": true,
@@ -206,11 +206,11 @@
   },
   "asus-rog-xbox-ally-x": {
    "tdp": {
-    "min": 4,
+    "min": 7,
     "max": 35,
     "sppt_max": 35,
     "fppt_max": 35,
-    "source": "hhd:src/adjustor/core/const.py#L314-L327 XBOX_ALLYX_DATA; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
+    "source": "ASUS: Linux asus-armoury.h power_data ppt_pl1_spl_min 7 (min); hhd:src/adjustor/core/const.py#L314-L327 XBOX_ALLYX_DATA; boost: hhd:src/adjustor/drivers/asus/__init__.py#L51-L53,L370-L380 (FPPT/SPPT = min(max(steady, 35), steady*1.4/1.2))"
    },
    "rgb": {
     "present": true,
@@ -1439,10 +1439,10 @@
     "min": 2,
     "max": 15
    },
-   "_source": "ASUS ROG Ally (RC71L, Z1 Extreme, 7\" IPS 120 Hz VRR). Fixture stack: steamos-manager + PowerStation + InputPlumber. TDP 5-25 W on battery, 30 W plugged (hhd ALLY_DATA max_tdp_dc 25, max_tdp 30). Boost: hhd asus/__init__.py L51-53, L370-380 SPPT <= min(35, SPL*1.2), FPPT <= min(35, SPL*1.4). Fan: asus_custom_fan_curve, 8 points, never under hhd's minimum curve. RGB: HueSync asus_ally.py (ally:rgb:joystick_rings).",
+   "_source": "ASUS ROG Ally (RC71L, Z1 Extreme, 7\" IPS 120 Hz VRR). Fixture stack: steamos-manager + PowerStation + InputPlumber. TDP 7-25 W on battery, 30 W plugged (ASUS's own table in the kernel's asus-armoury: RC71 SPL 7-25 W DC, 7-30 W AC; hhd ALLY_DATA max_tdp_dc 25, max_tdp 30). Boost: hhd asus/__init__.py L51-53, L370-380 SPPT <= min(35, SPL*1.2), FPPT <= min(35, SPL*1.4). Fan: asus_custom_fan_curve, 8 points, never under hhd's minimum curve. RGB: HueSync asus_ally.py (ally:rgb:joystick_rings).",
    "power.tdp": {
     "available": true,
-    "min": 5,
+    "min": 7,
     "max": 25,
     "unit": "W",
     "ac": {
@@ -1460,7 +1460,9 @@
     "note": "fixture SPL 25 W: up to 35"
    },
    "power.smt": {
-    "available": true
+    "available": false,
+    "reason_contains": "sleep can break",
+    "note": "ASUS: SMT stays on (quirks.json smt-off-breaks-sleep, Bazzite ASUS page)"
    },
    "power.cpu_cores": {
     "available": true

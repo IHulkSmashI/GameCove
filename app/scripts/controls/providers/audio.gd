@@ -165,8 +165,9 @@ func streams(ctx: Dictionary) -> Array:
 
 
 ## Apps playing or recording now, with their volume, for the per-app mixer
-## (ui/controls/app_mixer.gd): [{"id", "name", "volume" (0-100), "muted"}].
-## Two apps with the same name get " 2", " 3"... so each row can be told apart.
+## (ui/controls/app_mixer.gd): [{"id", "name", "stream", "volume" (0-100), "muted"}].
+## Two apps with the same name get " 2", " 3"... so each row can be told apart;
+## "stream" is the name PipeWire gave it (what set_app_volume checks).
 ## Worker only (runs wpctl once per app).
 func app_mixer(ctx: Dictionary) -> Array:
 	var out := []
@@ -178,15 +179,29 @@ func app_mixer(ctx: Dictionary) -> Array:
 		var v := Wp.parse_volume(str(r.get("out", ""))) if int(r.get("code", -1)) == 0 else {}
 		if v.is_empty():
 			continue   # gone between status and get-volume
-		var name := str(s["name"]).strip_edges()
+		var stream := str(s["name"]).strip_edges()
+		var name := stream
 		if name == "":
 			name = T.APP_UNNAMED
 		seen[name] = int(seen.get(name, 0)) + 1
 		if int(seen[name]) > 1:
 			name = "%s %d" % [name, seen[name]]
-		out.append({"id": int(s["id"]), "name": name,
+		out.append({"id": int(s["id"]), "name": name, "stream": stream,
 			"volume": roundf(clampf(float(v["volume"]), 0.0, 1.0) * 100.0), "muted": bool(v.get("muted", false))})
 	return out
+
+
+## Sets the volume of app stream `stream_id` only while it's still the app the
+## mixer listed (`stream`: its PipeWire name). The mixer reads once per open and
+## PipeWire hands a finished stream's id to the next node that appears, so a
+## slider moved later could turn another app (or a device) up or down. One
+## `wpctl status` first; false when the id is gone or belongs to something else.
+## Worker only.
+func set_app_volume(ctx: Dictionary, stream_id: int, stream: String, pct: float) -> bool:
+	for s in streams(ctx):
+		if int(s["id"]) == stream_id:
+			return str(s["name"]).strip_edges() == stream and set_stream_volume(ctx, stream_id, pct)
+	return false
 
 
 ## Sets one app stream's volume (0-100 %). Worker only.

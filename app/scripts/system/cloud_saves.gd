@@ -19,7 +19,10 @@ extends RefCounted
 ## gogdl prints the new sync timestamp on stdout; on a conflict it only logs one (and still
 ## prints a fresh timestamp, which must not be kept). Its download deletes local files the
 ## cloud doesn't have and its upload deletes cloud files the folder doesn't have, so we back
-## up both sides before any forced choice. The save folders are Heroic's (GamesConfig
+## up both sides before any forced choice. gogdl has no dry run, but with a --ts in the far
+## future nothing counts as changed on either side, so it only lists the cloud ("look"); an
+## upload that would delete cloud files the folder lacks is held until a copy of the cloud is
+## kept (saves_service.gd). The save folders are Heroic's (GamesConfig
 ## gogSaves, already resolved), else gog_library.json's gog_save_location with GOG's
 ## <?VARIABLES?> resolved in the prefix (Heroic's getDefaultGogSavePaths), else GOG's remote
 ## config for the game's clientId (remote-config.gog.com, as Heroic's getSaveSyncLocation).
@@ -27,6 +30,7 @@ extends RefCounted
 ## Amazon: nile has no save sync (github.com/imLinguin/nile), so Amazon games aren't covered.
 
 const Common := preload("res://scripts/library/stores/common.gd")
+const SteamGrid := preload("res://scripts/library/art/steam_grid.gd")
 
 const HEROIC_FLATPAK_ID := "com.heroicgameslauncher.hgl"
 ## A clock difference smaller than this is the same moment (legendary SAME_AGE uses 60 s).
@@ -118,8 +122,11 @@ static func with_timeout(base: Array, args: Array, secs := TIMEOUT_S) -> Array[S
 
 
 ## legendary's arguments for one sync step. step: check | download | upload | force_download | force_upload.
-static func legendary_args(app: String, step: String) -> Array:
+## save_path: the folder legendary should keep for the app from now on ("" = the one it has).
+static func legendary_args(app: String, step: String, save_path := "") -> Array:
 	var a: Array = ["-y", "sync-saves", app, "--accept-path"]
+	if save_path != "":
+		a.append_array(["--save-path", save_path])
 	match step:
 		"check": a.append_array(["--skip-upload", "--skip-download"])
 		"download": a.append("--skip-upload")
@@ -129,11 +136,17 @@ static func legendary_args(app: String, step: String) -> Array:
 	return a
 
 
+## A sync time later than any file's: with it gogdl finds nothing changed on either side and
+## only lists the cloud's files (saves.py SyncClassifier.classify compares against --ts).
+const GOG_LOOK_TS := "9999999999"
+
+
 ## gogdl's arguments for one location. step: pre (download only) | post (upload only) |
-## force_download | force_upload | fetch (into an empty folder: everything in the cloud).
+## force_download | force_upload | fetch (into an empty folder: everything in the cloud) |
+## look (changes nothing when both sides have files: lists the cloud).
 static func gogdl_args(auth: String, path: String, id: String, name: String, ts: String, step: String) -> Array:
 	var a: Array = ["--auth-config-path", auth, "save-sync", path, id, "--os", "windows",
-		"--ts", ts if ts != "" else "0", "--name", name]
+		"--ts", GOG_LOOK_TS if step == "look" else (ts if ts != "" else "0"), "--name", name]
 	match step:
 		"pre": a.append("--skip-upload")
 		"post": a.append("--skip-download")
@@ -169,7 +182,31 @@ static func epic_save_path(config_dir: String, app: String) -> String:
 	return str(v) if v is String else ""
 
 
-## What's needed to sync an Epic game: {"ok", "why", "cmd", "save_path", "needs_prefix"}.
+## The save folder legendary keeps (`saved`), as the same folder inside the prefix the game
+## runs in now (`pfx`, from wine_prefix()). legendary works the folder out once and keeps it,
+## so after a prefix change it would go on syncing the old prefix's folder. "" when `saved`
+## isn't inside a prefix, or is in `pfx` already.
+static func epic_moved_save_path(saved: String, pfx: String) -> String:
+	if saved == "" or pfx == "":
+		return ""
+	var s := saved.simplify_path()
+	var at := s.find("/drive_c/")
+	if at <= 0:
+		return ""
+	var root := pfx.simplify_path()
+	if s.substr(0, at) == root or SteamGrid.resolve(s.substr(0, at)) == SteamGrid.resolve(root):
+		return ""
+	var parts := s.substr(at + 1).split("/")   # drive_c / users / <user> / ...
+	if parts.size() >= 3 and parts[1].to_lower() == "users" and parts[2].to_lower() != "public":
+		var user := prefix_user_dir(root)
+		if user != "":
+			parts[2] = user.get_file()
+	return case_insensitive(root.path_join("/".join(parts)))
+
+
+## What's needed to sync an Epic game: {"ok", "why", "cmd", "save_path", "moved"}.
+## save_path is the folder that will be synced; moved is true when that isn't the one
+## legendary keeps yet (a changed prefix: pass it to legendary_args).
 ## why: no_tool | signed_out | unsupported | not_set_up.
 static func epic_plan(entry: Dictionary, tools: Dictionary) -> Dictionary:
 	var cfg := str(entry.get("config_dir", ""))
@@ -193,7 +230,8 @@ static func epic_plan(entry: Dictionary, tools: Dictionary) -> Dictionary:
 	var base := tool_base("legendary", entry, tools, env)
 	if not base["ok"]:
 		return {"ok": false, "why": "no_tool"}
-	return {"ok": true, "why": "", "cmd": base["cmd"], "save_path": saved}
+	var moved := epic_moved_save_path(saved, pfx) if windows else ""
+	return {"ok": true, "why": "", "cmd": base["cmd"], "save_path": moved if moved != "" else saved, "moved": moved != ""}
 
 
 ## "2026-11-10 12:30:00" (UTC, as legendary prints it) -> unix seconds; 0 for N/A.
@@ -266,12 +304,14 @@ static func _offline(out: String) -> bool:
 ## of this game (0 = never). -> none | download | upload | conflict | later.
 ## A side counts as changed since the last sync when its newest save is past last_sync; when
 ## both changed (or we never synced and both have saves), the user picks.
-static func epic_decide(look: Dictionary, last_sync: int, mode: String) -> String:
+## local_restored: a backup was put back since the last sync. Its files carry their old
+## times, so by the clock the local side looks unchanged; it did change.
+static func epic_decide(look: Dictionary, last_sync: int, mode: String, local_restored := false) -> String:
 	var local := int(look.get("local", 0))
 	var remote := int(look.get("remote", 0))
 	match str(look.get("state", "")):
 		"remote_newer":
-			var local_changed := local > 0 and (last_sync <= 0 or local > last_sync + SLACK_S)
+			var local_changed := local > 0 and (last_sync <= 0 or local > last_sync + SLACK_S or local_restored)
 			if local_changed:
 				return "conflict"
 			return "later" if mode == "post" else "download"
@@ -404,8 +444,8 @@ static func case_insensitive(path: String) -> String:
 
 
 ## What's needed to sync a GOG game. `remote` is GOG's answer for its client id when already
-## asked (null = not asked). {"ok", "why", "cmd", "auth", "locations": [{name, path}],
-## "client_id", "ask_remote"}; why: no_tool | signed_out | unsupported | linux | not_set_up | ask.
+## asked (null = not asked). {"ok", "why", "cmd", "auth", "locations": [{name, path, heroic:
+## true when the folder is the one Heroic syncs}], "client_id", "ask_remote"}; why: no_tool | signed_out | unsupported | linux | not_set_up | ask.
 static func gog_plan(entry: Dictionary, tools: Dictionary, remote: Variant = null) -> Dictionary:
 	var auth := gog_auth(entry)
 	if auth == "" or not FileAccess.file_exists(auth):
@@ -423,7 +463,7 @@ static func gog_plan(entry: Dictionary, tools: Dictionary, remote: Variant = nul
 	var locations: Array = []
 	if not resolved.is_empty():
 		for s in resolved:
-			locations.append({"name": s["name"], "path": s["location"]})
+			locations.append({"name": s["name"], "path": s["location"], "heroic": true})
 	else:
 		var raw: Variant = heroic_gog_locations(root, id) if root != "" else null
 		var client := gog_client_id(install, id)
@@ -448,16 +488,26 @@ static func gog_plan(entry: Dictionary, tools: Dictionary, remote: Variant = nul
 	return {"ok": true, "why": "", "cmd": base["cmd"], "auth": auth, "locations": locations}
 
 
-## gogdl save-sync output -> {"action", "ts", "cloud_newest", "error", "offline"}.
-## action: upload | download | conflict | none | refused | failed.
+## gogdl save-sync output -> {"action", "ts", "cloud_newest", "error", "offline", "refused",
+## "cloud_count", "cloud_files"}.
+## action: upload | download | conflict | none | refused | failed. refused: "upload" (the
+## cloud is newer and this run could only upload) | "download" | "". cloud_count: files GOG
+## holds for the game (-1 when the log didn't say); cloud_files: [{name, hash}] of them, null
+## when the list wasn't in the log.
 static func parse_gogdl(out: String, code: int) -> Dictionary:
-	var r := {"action": "none", "ts": "", "cloud_newest": 0, "error": "", "offline": false}
+	var r := {"action": "none", "ts": "", "cloud_newest": 0, "error": "", "offline": false, "refused": "",
+		"cloud_count": -1, "cloud_files": null}
 	for raw in out.split("\n"):
 		var line := raw.strip_edges()
 		if line.contains("Files in conflict"):
 			r["action"] = "conflict"
 		elif line.contains("Refused to upload") or line.contains("Refused to download"):
 			r["action"] = "refused"
+			r["refused"] = "upload" if line.contains("Refused to upload") else "download"
+		elif line.contains("Files in cloud: "):
+			r["cloud_count"] = line.get_slice("Files in cloud: ", 1).to_int()
+		elif line.contains("DEBUG: Files: ["):
+			r["cloud_files"] = parse_gog_listing(line.substr(line.find("Files: [") + 7))
 		elif line.contains("No files in cloud, uploading") or line.contains("Uploading files") or line.contains("Forcing upload"):
 			if r["action"] != "conflict":
 				r["action"] = "upload"
@@ -484,6 +534,60 @@ static func parse_gogdl(out: String, code: int) -> Dictionary:
 		if r["error"] == "":
 			r["error"] = "gogdl stopped (code %d)" % code
 	return r
+
+
+## The cloud's file list as gogdl logs it at debug level (a Python list of dicts:
+## [{'name': 'saves/slot1.sav', 'hash': '...', 'last_modified': '...'}, ...]) ->
+## [{name, hash}], or null when it doesn't read as one (then nothing may be assumed).
+static func parse_gog_listing(text: String) -> Variant:
+	var t := text.strip_edges()
+	if not t.begins_with("[") or not t.ends_with("]"):
+		return null
+	var out: Array = []
+	var inner := t.substr(1, t.length() - 2).strip_edges()
+	if inner == "":
+		return out
+	var item := RegEx.create_from_string("\\{[^{}]*\\}")
+	var name_rx := RegEx.create_from_string("'name':\\s*(?:'([^'\\\\]*)'|\"([^\"\\\\]*)\")")
+	var hash_rx := RegEx.create_from_string("'hash':\\s*'([^']*)'")
+	var covered := 0
+	for m in item.search_all(inner):
+		var n := name_rx.search(m.get_string(0))
+		if n == null:
+			return null   # a name with escapes: not guessed at
+		var h := hash_rx.search(m.get_string(0))
+		out.append({"name": n.get_string(1) if n.get_string(1) != "" else n.get_string(2), "hash": h.get_string(1) if h != null else ""})
+		covered += m.get_string(0).length()
+	# everything between the dicts must be ", ": anything else and the list isn't what we think
+	if inner.length() - covered != maxi(0, out.size() - 1) * 2:
+		return null
+	return out
+
+
+## GOG marks a file deleted in the cloud with this content hash (saves.py skips them).
+const GOG_DELETED_HASH := "aadd86936a80ee8a369579c3926f1b3c"
+
+
+## Files of location `name` the cloud holds and `folder` doesn't: what an upload from
+## `folder` would delete in the cloud (saves.py: not_existing_locally). null when the
+## listing is unknown.
+static func gog_cloud_only(listing: Variant, name: String, folder: String) -> Variant:
+	if not listing is Array:
+		return null
+	var have := {}
+	for rel in rel_files(folder):
+		have[rel] = true
+	var out: Array = []
+	for f in listing:
+		var n := str(f["name"])
+		if not n.begins_with(name) or str(f["hash"]) == GOG_DELETED_HASH:
+			continue
+		# as gogdl: the first "<name>/" taken out
+		var at := n.find(name + "/")
+		var rel := n if at < 0 else n.substr(0, at) + n.substr(at + name.length() + 1)
+		if not have.has(rel):
+			out.append(rel)
+	return out
 
 
 ## ISO 8601 with an offset ("2026-11-10T10:00:00+01:00", "...Z") -> unix seconds; 0 when not.
@@ -513,6 +617,32 @@ static func dir_stats(path: String) -> Dictionary:
 		return r
 	_walk(path, r, 0)
 	return r
+
+
+## Every file under `path`, relative to it with "/" between folders.
+static func rel_files(path: String, base := "", depth := 0) -> Array:
+	var out: Array = []
+	var d := DirAccess.open(path) if path != "" and depth <= 24 else null
+	if d == null:
+		return out
+	d.include_hidden = true
+	for f in d.get_files():
+		out.append(base + f)
+	for sub in d.get_directories():
+		out.append_array(rel_files(path.path_join(sub), base + sub + "/", depth + 1))
+	return out
+
+
+## The newest file under `path` ("" when there is none).
+static func newest_file(path: String) -> String:
+	var best := ""
+	var t := -1
+	for rel in rel_files(path):
+		var m := int(FileAccess.get_modified_time(path.path_join(rel)))
+		if m > t:
+			t = m
+			best = path.path_join(rel)
+	return best
 
 
 static func _walk(path: String, r: Dictionary, depth: int) -> void:

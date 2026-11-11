@@ -349,6 +349,105 @@ func test_quick_menu_without_recording_has_no_row() -> void:
 	qm.free()
 
 
+## Final review (Low): GameCove dies (crash, SIGKILL) while recording. The recorder
+## used to be left recording until the disk filled. A real fake recorder under
+## the real wrapper: when our end of its stdin pipe closes (what a dead GameCove
+## leaves behind), it gets SIGINT and finishes the file.
+func test_the_recorder_stops_when_gamecove_is_gone() -> void:
+	var dir := _tmp("orphan")
+	var fake := dir.path_join("gpu-screen-recorder")
+	var done := dir.path_join("finished")
+	var f := FileAccess.open(fake, FileAccess.WRITE)
+	f.store_string("#!/bin/sh\ntrap 'echo saved > \"%s\"; exit 0' INT\necho recording\nwhile :; do sleep 0.05; done\n" % done)
+	f.close()
+	OS.execute("chmod", ["+x", fake])
+	var Spawner = load("res://scripts/system/recording.gd").PipeSpawner
+	var p: Dictionary = Spawner.spawn(PackedStringArray([fake]))
+	ok(p.has("pid"), "the recorder started under the wrapper")
+	var wrapper: int = p["pid"]
+	var pipe: FileAccess = p["stdio"]
+	eq(pipe.get_line(), "recording", "its output comes through")
+	OS.delay_msec(300)
+	ok(OS.is_process_running(wrapper) and not FileAccess.file_exists(done), "still recording while GameCove is there")
+	# GameCove is gone: its ends of the pipes close
+	pipe.close()
+	if p.get("stderr") != null:
+		p["stderr"].close()
+	p.clear()
+	pipe = null
+	var waited := 0
+	while not FileAccess.file_exists(done) and waited < 4000:
+		OS.delay_msec(20)
+		waited += 20
+	ok(FileAccess.file_exists(done), "the recorder was told to finish the file (SIGINT)")
+	waited = 0
+	while OS.is_process_running(wrapper) and waited < 3000:
+		OS.delay_msec(20)
+		waited += 20
+	ok(not OS.is_process_running(wrapper), "and nothing of it is left running")
+	_wipe(dir)
+
+
+## The same when something GameCove started while recording (a game) still holds
+## the other end of the pipe: Godot's pipes aren't close-on-exec. Here a stand-in
+## "GameCove" (a shell) starts the wrapper with its stdin on a pipe a `sleep`
+## keeps open, and is killed outright.
+func test_the_recorder_stops_when_gamecove_is_killed_and_a_child_holds_the_pipe() -> void:
+	var dir := _tmp("orphan_leak")
+	var fake := dir.path_join("gpu-screen-recorder")
+	var done := dir.path_join("finished")
+	var up := dir.path_join("up")
+	var f := FileAccess.open(fake, FileAccess.WRITE)
+	f.store_string("#!/bin/sh\ntrap 'echo saved > \"%s\"; exit 0' INT\necho up > \"%s\"\nwhile :; do sleep 0.05; done\n" % [done, up])
+	f.close()
+	OS.execute("chmod", ["+x", fake])
+	var Spawner = load("res://scripts/system/recording.gd").PipeSpawner
+	# $1 the wrapper, $2 the recorder: `sleep 6` holds the pipe's write end well past the kill
+	var parent := OS.create_process("sh", PackedStringArray(["-c", "sleep 6 | sh -c \"$1\" \"$2\" >/dev/null 2>&1", "gamecove", Spawner.WRAP, fake]))
+	var waited := 0
+	while not FileAccess.file_exists(up) and waited < 3000:
+		OS.delay_msec(20)
+		waited += 20
+	ok(FileAccess.file_exists(up), "recording")
+	OS.delay_msec(300)
+	ok(not FileAccess.file_exists(done), "and it keeps recording while GameCove lives")
+	OS.kill(parent)   # SIGKILL: no clean-up of any kind
+	waited = 0
+	while not FileAccess.file_exists(done) and waited < 4000:
+		OS.delay_msec(20)
+		waited += 20
+	ok(FileAccess.file_exists(done), "the recorder was told to finish the file, though the pipe is still held open (%d ms)" % waited)
+	OS.delay_msec(200)
+	_wipe(dir)
+
+
+## SIGINT to the wrapper (Stop before the recorder's own pid is known) reaches the recorder.
+func test_the_wrapper_passes_stop_on_and_returns_the_exit_code() -> void:
+	var dir := _tmp("wrap")
+	var fake := dir.path_join("gpu-screen-recorder")
+	var f := FileAccess.open(fake, FileAccess.WRITE)
+	f.store_string("#!/bin/sh\ntrap 'echo bye; exit 7' INT\necho recording\nwhile :; do sleep 0.05; done\n")
+	f.close()
+	OS.execute("chmod", ["+x", fake])
+	var Spawner = load("res://scripts/system/recording.gd").PipeSpawner
+	var lines := []
+	var pids := []
+	var s = Spawner.new()
+	var t := Thread.new()
+	var code := [-99]
+	t.start(func(): code[0] = s.run_blocking(PackedStringArray([fake]), func(pid): pids.append(pid), func(l): lines.append(l)))
+	var waited := 0
+	while lines.is_empty() and waited < 3000:
+		OS.delay_msec(10)
+		waited += 10
+	eq(lines, ["recording"], "running")
+	OS.execute("kill", ["-INT", str(pids[0])])
+	t.wait_to_finish()
+	eq(code[0], 7, "the recorder's own exit code comes back")
+	ok("bye" in lines, "after it handled SIGINT")
+	_wipe(dir)
+
+
 ## A real child that ignores SIGINT (a recorder that hangs on its way out).
 class HangSpawner extends "res://scripts/system/recording.gd".PipeSpawner:
 	func run_blocking(_a: PackedStringArray, on_pid: Callable, on_line: Callable) -> int:

@@ -131,6 +131,36 @@ func test_the_charger_and_sleep_cut_the_stretch() -> void:
 	_done(w)
 
 
+## Final review (Medium): GameCove crashed or the handheld lost power mid-game. The
+## stretch left open in the file must not be charged to that game days later.
+func test_an_open_stretch_does_not_survive_a_crash() -> void:
+	var w := _world("crash")
+	var l: Node = w["log"]
+	_bat(w, 90, 45.0)
+	l.game_started({"key": "steam:1", "title": "S"})
+	ok(not l.data["open"].is_empty(), "a stretch is open and saved")
+	# no "end": the app is gone. Two days later it starts again and the charger goes in.
+	var again: Node = Log.new()
+	again.path = l.path
+	again.sys_root = w["root"]
+	again.clock = l.clock
+	again.load_data()
+	eq(again.data["open"], {}, "the stretch a crash left open is dropped at the start")
+	_at(w, 2 * 86400)
+	_bat(w, 20, 10.0, true)
+	again.record("plug")
+	ok(not again.data["games"].has("steam:1"), "two days of standby aren't charged to the game")
+	# and the next game starts clean
+	_bat(w, 80, 40.0)
+	again.game_started({"key": "steam:2", "title": "T"})
+	_at(w, 1800)
+	_bat(w, 70, 35.0)
+	again.game_ended({"key": "steam:2"})
+	eq(again.data["games"]["steam:2"]["s"], 1800, "the next game counts as usual")
+	again.free()
+	_done(w)
+
+
 func test_no_battery_no_history_and_old_samples_go() -> void:
 	var w := _world("prune")
 	var l: Node = w["log"]

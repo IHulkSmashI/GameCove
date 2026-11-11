@@ -22,6 +22,8 @@ onexplayer-onexfly-f1	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER F1|ONEXPLAY
 onexplayer-onexfly-f1-pro	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER F1Pro|ONEXPLAYER F1 EVA-02
 onexplayer-x1-amd	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER X1 A
 onexplayer-x1-intel	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER X1 i
+onexplayer-x1-air	board_name=ONEXPLAYER X1Air	board_vendor=ONE-NETBOOK
+onexplayer-x1-air	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER X1Air
 onexplayer-x1-mini	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER X1 mini
 onexplayer-x1-pro	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER X1Pro|ONEXPLAYER X1 Pro
 onexplayer-2	sys_vendor=ONE-NETBOOK	product_name=ONEXPLAYER 2 ARP23

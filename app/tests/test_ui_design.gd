@@ -12,6 +12,7 @@ const Motion := preload("res://scripts/ui/motion.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ArtCache := preload("res://scripts/ui/art_cache.gd")
+const ImageGuard := preload("res://scripts/ui/image_guard.gd")
 const Tile := preload("res://scripts/ui/game_tile.gd")
 const Shelf := preload("res://scripts/ui/shelf.gd")
 const Osk := preload("res://scripts/ui/osk.gd")
@@ -298,6 +299,21 @@ func test_hints_follow_focus() -> void:
 	ok(p.any(func(x): return x == ["B", "Back"]) and not p.any(func(x): return x[1] == "Sections"), "page: B back, no tabs")
 	eq(MainScript.hints_for({"screen": "settings", "kind": "row"})[0], ["LR", "Change"], "rows: left/right change")
 	eq(MainScript.hints_for({"kind": ""})[-1], ["GUIDE", "Quick menu"], "quick menu always listed")
+	# final review (Low): an app's tile has no game options behind Menu
+	ok(h.any(func(x): return x == ["MENU", "Options"]), "a game's tile: Menu opens its options")
+	var app := MainScript.hints_for({"screen": "home", "page": false, "kind": "app"})
+	eq(app[0], ["A", "Open"], "an app's tile: A opens")
+	ok(not app.any(func(x): return x[0] is String and x[0] == "MENU"), "and no Options")
+	var Tile = load("res://scripts/ui/game_tile.gd")
+	var game_tile: Button = Tile.new()
+	game_tile.setup({"key": "steam:1", "store": "steam", "title": "Hades", "installed": true, "art": {}}, false)
+	var app_tile: Button = Tile.new()
+	app_tile.setup({"key": "app:vlc", "store": "app", "title": "VLC", "installed": true, "art": {}}, false)
+	ok(MainScript.is_game_tile(game_tile), "a game's tile")
+	ok(not MainScript.is_game_tile(app_tile), "an app's tile isn't a game's")
+	ok(not MainScript.is_game_tile(null), "nothing focused")
+	game_tile.free()
+	app_tile.free()
 
 
 func test_tile_and_shelf() -> void:
@@ -445,3 +461,39 @@ func test_shelf_fades_its_edges() -> void:
 	eq(s.tile_size, Tile.size_for(Tile.row_width(), Shelf.GAP), "tiles sized for the screen")
 	eq(s.faded_edges(), [false, false], "nothing faded before layout")
 	s.free()
+
+
+## Final review, medium (security): art from SteamGridDB was decoded whatever size its
+## header named. This 6 KB PNG is a valid 7000 x 7000 picture: decoded it is 49 megapixels
+## (close to 200 MB as RGBA), on every show.
+func test_art_with_a_huge_declared_size_is_never_decoded() -> void:
+	var dir := ProjectSettings.globalize_path("user://tests/image_guard")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var huge := dir.path_join("huge.png")
+	DirAccess.copy_absolute(fixture("art/huge_7000x7000_png.bin"), huge)
+	ok(FileAccess.get_file_as_bytes(huge).size() < 16 * 1024, "the file itself is tiny")
+	eq(ImageGuard.size_of(huge), Vector2i(7000, 7000), "its header names the size")
+	eq(ImageGuard.load(huge), null, "not decoded")
+	eq(ArtCache._load("cover", huge)[0], null, "the art cache shows nothing for it")
+	eq(ArtCache._load("hero", huge)[0], null, "as a hero too")
+	eq(Kit.decode_art(huge, Vector2i(1920, 1080)), null, "nor does the page art loader")
+	eq(Kit.load_art(huge, Vector2i(1920, 1080)), null, "on either path")
+	# ordinary art still loads, by what the file is rather than what it's called
+	var img := Image.create(64, 96, false, Image.FORMAT_RGB8)
+	img.fill(Color(0.2, 0.5, 0.8))
+	img.save_png(dir.path_join("cover.png"))
+	img.save_jpg(dir.path_join("cover.jpg"))
+	img.save_webp(dir.path_join("cover.webp"))
+	for name in ["cover.png", "cover.jpg", "cover.webp"]:
+		var got: Image = ImageGuard.load(dir.path_join(name))
+		ok(got != null and got.get_size() == Vector2i(64, 96), name + " loads")
+	ok(ArtCache._load("cover", dir.path_join("cover.jpg"))[0] != null, "the art cache still shows a normal cover")
+	ok(Kit.decode_art(dir.path_join("cover.png"), Vector2i(600, 900)) != null, "and so does the page art loader")
+	# a file that says .png but isn't a picture is refused without a decode attempt
+	var f := FileAccess.open(dir.path_join("fake.png"), FileAccess.WRITE)
+	f.store_string("<html>not an image</html>")
+	f.close()
+	eq(ImageGuard.load(dir.path_join("fake.png")), null, "not a picture: nothing")
+	eq(ImageGuard.load(dir.path_join("missing.png")), null, "missing: nothing")
+	for name in ["cover.png", "cover.jpg", "cover.webp", "fake.png", "huge.png"]:
+		DirAccess.remove_absolute(dir.path_join(name))

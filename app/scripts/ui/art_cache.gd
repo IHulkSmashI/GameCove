@@ -12,6 +12,7 @@ extends RefCounted
 
 const ArtColor := preload("res://theme/art_color.gd")
 const HeroInk := preload("res://scripts/ui/hero_ink.gd")
+const ImageGuard := preload("res://scripts/ui/image_guard.gd")
 
 const LIMIT := {"cover": 160, "hero": 4, "logo": 24, "blur": 48}
 const COVER := Vector2i(360, 540)
@@ -91,7 +92,8 @@ static func text_side(kind: String, path: String) -> Color:
 ## Worker side: decode and shrink. Returns [Image or null, accent Color,
 ## text-side Color (heroes and covers)].
 static func _load(kind: String, path: String) -> Array:
-	var img := Image.load_from_file(path)
+	# never decoded past a sane size, whatever the file claims (image_guard.gd)
+	var img := ImageGuard.load(path)
 	if img == null or img.is_empty():
 		return [null, Color(0, 0, 0, 0), Color(0, 0, 0, 0)]
 	if img.is_compressed():

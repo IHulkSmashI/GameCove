@@ -645,6 +645,12 @@ func test_art_step_phone_page_end_to_end() -> void:
 	a._ensure_drop()
 	a.drop.bind_address = "127.0.0.1"
 	a.start()
+	# final review, low: showing the step must not open a page on the network; a press does
+	ok(not a.drop.is_running(), "the step is on screen: nothing listens yet")
+	eq([a.mode, a.switch_button.text], ["direct", ArtKeyStep.TO_PHONE], "the QR is SteamGridDB's own page; Send from my phone is offered")
+	ok(a.status.text.contains("Choose Send from my phone"), "and the line says how to start it: " + a.status.text)
+	eq(a.first_focus(), a.switch_button, "which is where the focus goes")
+	a.switch_button.pressed.emit()
 	eq(a.mode, "phone", "phone page open")
 	ok(a.drop.is_running() and a.drop.url.begins_with("http://127.0.0.1:"), "listening on the chosen address only")
 	ok(a.qr_rect.texture != null and a.url_label.text.ends_with(" · one-time page") and a.url_label.autowrap_mode == TextServer.AUTOWRAP_OFF, "QR of the one-time page, on one line")
@@ -665,6 +671,7 @@ func test_art_step_wrong_key_reopens_page_and_times_out() -> void:
 	a._ensure_drop()
 	a.drop.bind_address = "127.0.0.1"
 	a.start()
+	a.toggle_mode()   # Send from my phone
 	var first: String = a.drop.token
 	a.drop.stop()      # what the page does once a key arrives, before handing it over
 	a.submit(KEY_OK)   # SteamGridDB (fake) refuses every key here

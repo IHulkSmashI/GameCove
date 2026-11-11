@@ -1,4 +1,7 @@
 # Builds what packaging needs and the packages themselves:
+#   cabinet  tools/cabinet-lzms: the LZMS cabinet.dll FSR 4 on XMX needs, cross-compiled with mingw-w64 at pinned
+#            package versions on Ubuntu 24.04, tested under Wine, and compared with tools/cabinet-lzms/cabinet.sha256
+#            (the build is reproducible; other bytes fail the run). The app tarball carries it as bin/cabinet.dll.
 #   app      Godot export -> gamecove-<version>-x86_64.tar.gz (gamecove.x86_64 + gamecove.pck at the top
 #            level: Source1 of packaging/rpm/gamecove.spec, --app of packaging/sysext/build-sysext.sh)
 #   package  in a Fedora container: the gyro fix's HID-BPF object (fixes/claw8ex-gyro/bpf/build-bpf.sh),
@@ -44,6 +47,11 @@ env:
   GODOT_TEMPLATES_SHA256: f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011
   # Source2: udev-hid-bpf-bbaad63.tar.gz from gitlab.freedesktop.org (same bytes on two downloads, 2026-11-09)
   UHB_SHA256: aab408afea76fab67b925225d6b4f0d28b226a9558ab6e750db79b12732e9ff8
+  # The cabinet job's cross toolchain (Ubuntu 24.04 packages; these versions give the bytes in
+  # tools/cabinet-lzms/cabinet.sha256, the same as ClawDeck's own build, checked 2026-11-10)
+  MINGW_GCC: 13.2.0-6ubuntu1+26.1
+  MINGW_BINUTILS: 2.41.90.20240122-1ubuntu1+11.4
+  MINGW_DEV: 11.0.1-3build1
 
 jobs:
   tag:
@@ -56,6 +64,10 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: The release environment is protected (checked before any tag exists)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh tools/ci/check-environment.sh release reviewers
       - name: Tag this commit and start the release run on the tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -76,8 +88,33 @@ jobs:
           gh workflow run release.yml --ref "refs/tags/$tag" -f prerelease="$PRE"
           echo "started the release run for $tag on $GITHUB_SHA"
 
+  cabinet:
+    if: github.event_name != 'workflow_dispatch' || !inputs.publish || github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain (mingw-w64 at the pinned versions; Wine and wimlib for the test)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            "gcc-mingw-w64-x86-64=${MINGW_GCC}" "gcc-mingw-w64-x86-64-win32=${MINGW_GCC}" \
+            "gcc-mingw-w64-x86-64-posix=${MINGW_GCC}" "gcc-mingw-w64-base=${MINGW_GCC}" \
+            "binutils-mingw-w64-x86-64=${MINGW_BINUTILS}" "mingw-w64-x86-64-dev=${MINGW_DEV}" \
+            wine wine64 libwine libwim-dev
+      - name: Build (must be the reviewed bytes)
+        run: bash tools/cabinet-lzms/build.sh --check
+      - name: Test under Wine
+        run: bash tools/cabinet-lzms/test/run.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cabinet
+          path: tools/cabinet-lzms/out/cabinet.dll
+          if-no-files-found: error
+
   app:
     if: github.event_name != 'workflow_dispatch' || !inputs.publish || github.ref != 'refs/heads/main'
+    needs: cabinet
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -137,13 +174,38 @@ jobs:
             res://fonts/OFL-JetBrainsMono.txt res://addons/kenyoni/qr_code/LICENSE.md; do
             grep -qx "$f" pck-files.txt || { echo "missing from gamecove.pck: $f" >&2; exit 1; }
           done
-      - name: App tarball (with licenses/)
+      - name: The exported app says the spec's Version (final review, high 8)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Tag = spec Version is checked in the Version step; this is the third part: the app
+          # itself (About GameCove, bug reports, the User-Agent) must say the same number.
+          got="$(timeout 120 app/build/gamecove.x86_64 --headless -- --version 2>/dev/null | sed -n 's/^GameCove //p' | head -n 1)"
+          if [ "$got" != "$VERSION" ]; then
+            echo "the exported app says version '$got', the spec says '$VERSION'" >&2
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "v$got" != "${GITHUB_REF_NAME}" ]; then
+            echo "the exported app says version '$got', the tag is ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cabinet
+          path: app/build/bin
+      - name: FSR 4.1.2 on XMX files (nitec's build, from the pinned commit of ClawDeck's fsr4-xmx-files branch, sha256 checked)
+        run: python3 -I tools/upscalers/fetch_fsr4.py app/build/bin/fsr4-xmx
+      - name: App tarball (with licenses/, bin/cabinet.dll and bin/fsr4-xmx)
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p dist
-          sh packaging/make-app-tarball.sh app/build "dist/gamecove-${VERSION}-x86_64.tar.gz"
+          REQUIRE_CABINET=1 REQUIRE_FSR4=1 sh packaging/make-app-tarball.sh app/build "dist/gamecove-${VERSION}-x86_64.tar.gz"
           tar -tzf "dist/gamecove-${VERSION}-x86_64.tar.gz" | tee tarball-files.txt
+          for f in bin/cabinet.dll bin/cabinet-lzms-source.tar.gz bin/fsr4-xmx/set.json \
+            bin/fsr4-xmx/amd_fidelityfx_upscaler_dx12.dll bin/fsr4-xmx/fsr-original.dll; do
+            grep -qx "$f" tarball-files.txt || { echo "missing from the tarball: $f" >&2; exit 1; }
+          done
           sed -n 's/^[^#][^ ]* \(.*\)$/licenses\/\1/p' packaging/licenses.list | while read -r f; do
             grep -qx "$f" tarball-files.txt || { echo "missing from the tarball: $f" >&2; exit 1; }
           done
@@ -196,6 +258,11 @@ jobs:
           rpm -qlp "$top"/RPMS/x86_64/gamecove-*.rpm | tee rpm-files.txt
           grep -qx /usr/lib/gamecove/fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o rpm-files.txt
           grep -qx /usr/libexec/gamecove/gamecove-fix-set rpm-files.txt
+          grep -qx /usr/lib/gamecove/bin/cabinet.dll rpm-files.txt
+          grep -qx /usr/lib/gamecove/bin/cabinet-lzms-source.tar.gz rpm-files.txt
+          for f in set.json amd_fidelityfx_upscaler_dx12.dll fsr-original.dll; do
+            grep -qx "/usr/lib/gamecove/bin/fsr4-xmx/$f" rpm-files.txt
+          done
           sed -n 's/^[^#][^ ]* \(.*\)$/\/usr\/share\/licenses\/gamecove\/\1/p' packaging/licenses.list | while read -r f; do
             grep -qx "$f" rpm-files.txt || { echo "missing from the RPM: $f" >&2; exit 1; }
           done
@@ -206,7 +273,16 @@ jobs:
           tar -xzf "dist/gamecove-${VERSION}-x86_64.tar.gz" -C app-export
           sh packaging/sysext/build-sysext.sh --app app-export --out sysext 2>&1 | tee sysext.log
           ! grep -q "no gyro HID-BPF object" sysext.log
+          ! grep -q "no bin/cabinet.dll" sysext.log
+          ! grep -q "no bin/fsr4-xmx" sysext.log
           unsquashfs -l sysext/gamecove.raw >sysext-files.txt
+          grep -q "/usr/lib/gamecove/bin/cabinet.dll\$" sysext-files.txt
+          grep -q "/usr/lib/gamecove/bin/fsr4-xmx/amd_fidelityfx_upscaler_dx12.dll\$" sysext-files.txt
+          # the shipped FSR 4.1.2 XMX files are the pinned bytes (what ClawDeck ships)
+          python3 -I tools/upscalers/fetch_fsr4.py --check app-export/bin/fsr4-xmx
+          # the same file as a release asset of its own (SHA256SUMS and its signature name it): the reviewed bytes
+          cp app-export/bin/cabinet.dll dist/cabinet.dll
+          (cd dist && sha256sum -c "$GITHUB_WORKSPACE/tools/cabinet-lzms/cabinet.sha256")
           sed -n 's/^[^#][^ ]* \(.*\)$/usr\/share\/licenses\/gamecove\/\1/p' packaging/licenses.list | while read -r f; do
             grep -q "/$f\$" sysext-files.txt || { echo "missing from the sysext: $f" >&2; exit 1; }
           done
@@ -214,7 +290,17 @@ jobs:
       - name: Installer bootstrap (get-gamecove.sh fetches itself from the release, checked against SHA256SUMS)
         run: cp packaging/get-gamecove.sh dist/
       - name: Checksums
-        run: cd dist && sha256sum -- * | tee SHA256SUMS
+        run: |
+          # every file but the list itself and its signature: a SHA256SUMS left in dist/ (a re-run, a cache) would
+          # otherwise be listed in itself with a hash that can never match (final review, low)
+          cd dist
+          rm -f SHA256SUMS SHA256SUMS.sigstore.json
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS*' -printf '%f\n' | LC_ALL=C sort >../sums.list
+          test -s ../sums.list
+          xargs -d '\n' sha256sum -- <../sums.list >../SHA256SUMS.new
+          mv ../SHA256SUMS.new SHA256SUMS
+          cat SHA256SUMS
+          ! grep -q 'SHA256SUMS' SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: packages
@@ -222,13 +308,34 @@ jobs:
             dist/*.rpm
             dist/*.raw
             dist/*.bpf.o
+            dist/cabinet.dll
             dist/get-gamecove.sh
             dist/SHA256SUMS
           if-no-files-found: error
 
+  protected:
+    # A job that names a missing environment gets one created without protection, so the release job (below) must
+    # never be the first to find out: this one asks GitHub first, and release needs it (tools/ci/check-environment.sh).
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          sparse-checkout: tools/ci
+          sparse-checkout-cone-mode: false
+      - name: The release environment exists, the owner is its required reviewer, only chosen refs deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh tools/ci/check-environment.sh release reviewers
+
   release:
     if: github.ref_type == 'tag'
-    needs: [app, package]
+    needs: [app, package, protected]
     # signing waits for the owner's approval: the "release" environment has him as required reviewer and allows only
     # main and v* tags (docs/RELEASING.md; review 2, problem 10)
     environment: release
@@ -259,6 +366,30 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: The files are the ones the build made (checked again before signing)
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          # What gets signed is SHA256SUMS, so it must describe exactly what gets published (final review, low):
+          # every listed file is there and matches, nothing unlisted is there, the release's files are all in it,
+          # and the installer script is the tagged commit's own.
+          cd dist
+          test -s SHA256SUMS
+          ! grep -q 'SHA256SUMS' SHA256SUMS
+          sha256sum --strict -c SHA256SUMS
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | LC_ALL=C sort >../have.list
+          sed 's/^[0-9a-f]\{64\} [ *]//' SHA256SUMS | LC_ALL=C sort >../listed.list
+          if ! cmp -s ../have.list ../listed.list; then
+            echo "dist/ and SHA256SUMS disagree:" >&2
+            diff ../listed.list ../have.list >&2 || true
+            exit 1
+          fi
+          ver="${TAG#v}"
+          for f in "gamecove-$ver-x86_64.tar.gz" "gamecove-$ver-x86_64.raw" get-gamecove.sh; do
+            grep -qx "$f" ../listed.list || { echo "SHA256SUMS lacks $f" >&2; exit 1; }
+          done
+          grep -q "^gamecove-$ver-.*\.x86_64\.rpm\$" ../listed.list || { echo "SHA256SUMS lacks the RPM for $ver" >&2; exit 1; }
+          cmp get-gamecove.sh ../packaging/get-gamecove.sh || { echo "dist/get-gamecove.sh isn't the tagged commit's" >&2; exit 1; }
       - name: cosign version (the one get-gamecove.sh pins; review L28)
         id: cosign
         run: echo "version=$(sed -n 's/^COSIGN_VERSION=//p' packaging/get-gamecove.sh)" >>"$GITHUB_OUTPUT"

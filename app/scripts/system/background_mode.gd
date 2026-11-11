@@ -39,6 +39,11 @@ var front_sleep_us := 6900
 ## Our window has focus / the quick menu is open.
 var front := true
 var menu := false
+## Our UI came in front (true: the window has focus or the quick menu is open) or went behind
+## (false). Only on a change. SessionHealth listens: the hang watchdog is on while we are in
+## front of a game.
+signal front_changed(in_front: bool)
+var _was_front := true
 ## Clocks (tests swap it): [unix seconds, ticks msec].
 var clock: Callable = func() -> Array: return [Time.get_unix_time_from_system(), Time.get_ticks_msec()]
 
@@ -95,6 +100,10 @@ func resumes_seen() -> int:
 
 
 func _apply() -> void:
+	var now_front := not in_background()
+	if now_front != _was_front:
+		_was_front = now_front
+		front_changed.emit(now_front)
 	if in_background():
 		_mark = clock.call()
 		_start_watching()

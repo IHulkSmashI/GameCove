@@ -51,3 +51,23 @@ func test_a_giveaway_reads_free_in_any_currency() -> void:
 	var paid := o.duplicate()
 	paid["price"] = 4.99
 	ok(Prices.from_cheapshark(paid, {}, {"country": "CA", "currency": "CAD"})["price"] == null, "a paid deal outside the US still says See price")
+	# final review (Low): a Steam giveaway whose Steam answer still carries the paid price showed that price
+	var steam_free := {"deal_id": "S1", "store_id": "1", "game_id": "9", "appid": "440900", "title": "Free On Steam", "price": 0.0,
+		"regular_price": 19.99, "savings_pct": 100, "thumb": ""}
+	var steam_info := {"appid": "440900", "price": 25.99, "regular_price": 25.99, "savings_pct": 0, "price_text": "CDN$ 25.99",
+		"regular_text": "CDN$ 25.99", "sale_ends_at": 1800000000, "art": {}}
+	var g: Dictionary = Prices.from_cheapshark(steam_free, {"1": {"name": "Steam"}}, {"country": "CA", "currency": "CAD"}, null, steam_info)
+	eq(g["price"]["amount"], 0.0, "a Steam giveaway reads free, whatever price Steam's answer still has")
+	eq(g["price"]["regular"], 25.99, "Steam's regular price, in the user's currency, is kept")
+	eq(g["price"]["regular_text"], "CDN$ 25.99", "as Steam writes it")
+	eq(g["price"].get("giveaway", false), true, "marked as a giveaway")
+	eq(g["savings_pct"], 100, "100 % off")
+	eq(g["sale_ends_at"], 1800000000, "with Steam's end date")
+	ok(Model.is_free(g), "the Free shelf takes it")
+	# a normal Steam sale is untouched
+	var on_sale := {"deal_id": "S2", "store_id": "1", "game_id": "9", "appid": "440900", "title": "On Sale", "price": 9.99,
+		"regular_price": 19.99, "savings_pct": 50, "thumb": ""}
+	var sale_info := steam_info.duplicate()
+	sale_info.merge({"price": 12.99, "savings_pct": 50, "price_text": "CDN$ 12.99"}, true)
+	var n: Dictionary = Prices.from_cheapshark(on_sale, {"1": {"name": "Steam"}}, {"country": "CA", "currency": "CAD"}, null, sale_info)
+	eq([n["price"]["amount"], n["savings_pct"], n["price"].get("giveaway", false)], [12.99, 50, false], "a sale keeps Steam's own price")

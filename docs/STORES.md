@@ -124,9 +124,13 @@ A job is a list of steps from `StoreCommands.plan()`:
 
 | Store | Install | Update | Verify / repair | Uninstall | Move |
 | --- | --- | --- | --- | --- | --- |
-| Epic (legendary) | `info <app> --json` (size), `install <app> --base-path <dir> --platform Windows -y --skip-sdl` | `update <app> -y --skip-sdl` | `repair <app> -y --skip-sdl` | `uninstall <app> -y --skip-uninstaller` | `mv -T -- <old> <dir>/<folder>`, then `move <app> <dir> --skip-move` (legendary's own move only renames within a drive) |
-| GOG (gogdl) | `--auth-config-path <heroic>/gog_store/auth.json info <id> --platform p` (size), `... download <id> --platform p --path <dir> --skip-dlcs`; then we record it | `... update <id> --platform p --path <install>` | `... repair ...` | `rm -rf -- <install>` (only an absolute path ≥ 3 levels deep, not home, holding `goggame-<id>.info`, `gameinfo` or `start.sh`) | `mv -T`, record updated |
-| Amazon (nile) | `install <id> --info --json` (size), `install <id> --base-path <dir>` | `update <id>` | `verify <id>` | `uninstall <id>` | not supported by nile: "why" says reinstall |
+| Epic (legendary) | `info --json -- <app>` (size), `install --base-path <dir> --platform Windows -y --skip-sdl -- <app>` | `update -y --skip-sdl -- <app>` | `repair -y --skip-sdl -- <app>` | `uninstall -y --skip-uninstaller -- <app>` | On one drive `mv -T -- <old> <dir>/<folder>` (a rename); across drives `cp -a -T -- <old> <dir>/<folder>.gamecove-moving`, `mv -T` to `<dir>/<folder>`, then `move --skip-move -- <app> <dir>` (legendary's own move only renames within a drive) and `rm -rf -- <old>`. Only the copy can be paused or cancelled (it runs again over what is there; a cancelled one is removed); from the rename on the job runs to the end |
+| GOG (gogdl) | `--auth-config-path <heroic>/gog_store/auth.json info --platform p -- <id>` (size), `... download --platform p --path <dir> --skip-dlcs -- <id>`; then we record it | `... update --platform p --path <install> -- <id>` | `... repair ...` | `rm -rf -- <install>` (only an absolute path ≥ 3 levels deep, not home, holding `goggame-<id>.info`, `gameinfo` or `start.sh`) | The same steps as Epic's move, then our record is updated |
+| Amazon (nile) | `install --info --json -- <id>` (size), `install --base-path <dir> -- <id>` | `update -- <id>` | `verify -- <id>` | `uninstall -- <id>` | not supported by nile: "why" says reinstall |
+
+The store's id always comes last, after `--` (the end of options in all three tools, which parse with
+Python's argparse): ids are read from the stores' own files, and one that began with `-` can't be taken
+for an option.
 
 - legendary and nile get their config folder (`LEGENDARY_CONFIG_PATH`,
   `NILE_CONFIG_PATH`) so Heroic users' installs land in Heroic's records, exactly

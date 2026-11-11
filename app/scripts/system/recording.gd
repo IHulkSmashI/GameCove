@@ -7,7 +7,7 @@ extends Node
 ## so there's no timer and no polling; the encoding itself runs on the GPU's
 ## video engine. Stop sends SIGINT, the recorder finishes the file and ends,
 ## and saved(path) follows. A game ending stops the recording too (main.gd),
-## and so does GameCove closing.
+## and so does GameCove closing, or dying (PipeSpawner's wrapper).
 ##
 ## The clip's picture for the Clips list is a gamescope screenshot of the game
 ## (base plane only, so no quick menu in it), taken right after recording
@@ -323,15 +323,69 @@ func _wait_thread(ms: int) -> bool:
 
 
 ## Runs a program, hands its pid over as soon as it has one, then its output
-## line by line until it ends (stderr folded in by a tiny sh wrapper, so one
-## pipe carries everything and nothing blocks on a full stderr pipe).
+## line by line until it ends, through a small sh wrapper that execs it:
+##   - stderr is folded into stdout, so one pipe carries everything and nothing
+##     blocks on a full stderr pipe;
+##   - the recorder never outlives GameCove. Before the exec the wrapper leaves a
+##     watcher behind that sleeps until GameCove is gone, however it went (a
+##     crash, SIGKILL, the session ending). Then the recorder gets SIGINT, which
+##     makes it finish the file, and SIGTERM if it's still there 10 s later. Before this a dead
+##     GameCove left it recording until the disk was full.
+##     The watcher never polls and has no timer. It waits in one select() on
+##     three things (python3, which Bazzite and SteamOS ship): GameCove's
+##     process (a pidfd), the recorder's (so it goes when the recording ends),
+##     and the stdin pipe, whose other end only GameCove writes to and closes.
+##     The pidfd matters because Godot's pipes aren't close-on-exec: anything
+##     GameCove starts while recording (a game) inherits the pipe's other end
+##     and would keep it open after GameCove died. Without python3 the watcher
+##     reads the pipe alone, which then ends when the last such child has gone.
+##     Either way it only signals a recorder that is still the process it was
+##     started for (its start time in /proc).
+## The program is exec'd, so the pid handed over is still the program's own
+## (or the Flatpak wrapper's, as before).
 class PipeSpawner extends RefCounted:
+	## sh -c script: $0 the program, "$@" its arguments. fd 3 keeps the stdin
+	## pipe for the watcher (a background job's own stdin is /dev/null).
+	const WRAP := """exec 3<&0
+me=$$
+born() { sed 's/.*) //' "/proc/$me/stat" 2>/dev/null | cut -d' ' -f20; }
+was="$(born)"
+tree() { echo "$1"; for c in $(pgrep -P "$1" 2>/dev/null); do tree "$c"; done; }
+stop() {
+	found=0
+	for p in $(tree "$me"); do
+		case "$(cat "/proc/$p/comm" 2>/dev/null)" in
+			gpu-screen-reco*) kill -"$1" "$p" 2>/dev/null; found=1 ;;
+		esac
+	done
+	[ "$found" = 1 ] || kill -"$1" "$me" 2>/dev/null
+}
+(
+	python3 -c 'import os, select, sys
+fds = [os.pidfd_open(int(a)) for a in sys.argv[1:]] + [3]
+select.select(fds, [], [])' "$PPID" "$me" 2>/dev/null || while read -r _ <&3; do :; done
+	[ -n "$was" ] && [ "$(born)" = "$was" ] || exit 0
+	stop INT
+	python3 -c 'import os, select, sys
+try:
+    select.select([os.pidfd_open(int(sys.argv[1]))], [], [], 10)
+except ProcessLookupError:
+    pass' "$me" 2>/dev/null || sleep 10
+	[ "$(born)" = "$was" ] && stop TERM
+) >/dev/null 2>&1 &
+exec "$0" "$@" 2>&1 </dev/null 3<&-
+"""
+
+	## Starts `argv` under the wrapper: OS.execute_with_pipe's result ({} when it didn't start).
+	static func spawn(argv: PackedStringArray) -> Dictionary:
+		var sh := PackedStringArray(["-c", WRAP])
+		sh.append_array(argv)
+		return OS.execute_with_pipe("/bin/sh", sh, true)
+
 	func run_blocking(argv: PackedStringArray, on_pid: Callable, on_line: Callable) -> int:
 		if argv.is_empty():
 			return -1
-		var sh := PackedStringArray(["-c", "exec \"$0\" \"$@\" 2>&1"])
-		sh.append_array(argv)
-		var p: Dictionary = OS.execute_with_pipe("/bin/sh", sh, true)
+		var p: Dictionary = spawn(argv)
 		if p.is_empty() or not p.has("pid"):
 			return -1
 		var child: int = p["pid"]

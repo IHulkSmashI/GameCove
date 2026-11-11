@@ -26,6 +26,11 @@ extends Node
 const DeviceScript := preload("res://scripts/device/device.gd")
 signal started(game: Dictionary)
 signal ended(game: Dictionary)
+## A cancelled launch (dismiss()) has something to close: our own process, at
+## once; a Steam launch, once Steam's reaper for it is seen (now, or whenever
+## Steam gets to it); and again if its window shows up anyway. Whoever closes
+## games (main.gd's GameCloser) closes it on each of these.
+signal unwanted(game: Dictionary)
 
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 const FOCUS_POLL_S := 0.5
@@ -60,10 +65,14 @@ var pid := 0
 var phase := "idle"
 var focused := false
 var autotune_on := false
+## The launch was cancelled (B on the splash) and the game is being closed: its
+## window never gets the screen, and the session ends once the game is really gone.
+var dismissed := false
 
 var _waited := 0.0
 var _reaper_wait := 0.0
 var _reaper_gone := 0
+var _reaper_seen := false
 var _seen := false
 var _gone := 0
 var _focus_timer: Timer
@@ -117,6 +126,8 @@ func begin(g: Dictionary, launched: Dictionary) -> void:
 	_waited = 0.0
 	_reaper_wait = 0.0
 	_reaper_gone = 0
+	_reaper_seen = false
+	dismissed = false
 	_seen = false
 	_gone = 0
 	var key := str(g.get("key", ""))
@@ -150,10 +161,17 @@ func _on_focus_read(apps: Array) -> void:
 		return
 	if app_id in apps:
 		_seen = true
+		if dismissed:
+			# cancelled, and here it is anyway: it never gets the screen, and it's closed again
+			_enter_running()
+			unwanted.emit(game)
+			return
 		_focus_game()
 		_enter_running()
 		return
 	_waited += FOCUS_POLL_S
+	if dismissed and _poll_dismissed():
+		return
 	if _waited < FOCUS_WAIT_S:
 		return
 	# Never got a window with our app id. With a process to watch, keep the
@@ -168,18 +186,49 @@ func _on_focus_read(apps: Array) -> void:
 		if _reaper_wait < REAPER_CHECK_S and _waited > FOCUS_WAIT_S:
 			return
 		_reaper_wait = 0.0
-		if threaded_checks:
-			# pgrep off the main thread (review L19): the answer comes back to _steam_checked
-			if _steam_task < 0:
-				var id := app_id
-				var gen := _gen
-				var fn := steam_alive
-				_steam_task = WorkerThreadPool.add_task(func(): _steam_checked.call_deferred(gen, id, bool(fn.call(id))),
-					false, "GameSession reaper check")
-			return
-		_reaper_result(bool(steam_alive.call(app_id)))
+		_check_reaper()
 		return
 	_finish(true)
+
+
+## A cancelled launch that's still waiting for its window: is the game gone yet?
+## Looked at from the first tick (a launch that isn't cancelled only asks after
+## FOCUS_WAIT_S). True when this tick is dealt with.
+##   Our own process: gone GONE_TICKS times in a row ends the session.
+##   A Steam launch: its reaper, every REAPER_CHECK_S. Steam may not have started
+##   it yet when B was pressed, so "not there" only counts once it has been seen,
+##   or after the usual FOCUS_WAIT_S (the caller's own rule then).
+func _poll_dismissed() -> bool:
+	if pid > 0:
+		if bool(pid_running.call(pid)):
+			_gone = 0
+			return true
+		_gone += 1
+		if _gone >= GONE_TICKS:
+			_finish(true)
+		return true
+	if app_id <= 0 or _waited >= FOCUS_WAIT_S:
+		return false
+	_reaper_wait += FOCUS_POLL_S
+	if _reaper_wait < REAPER_CHECK_S:
+		return true
+	_reaper_wait = 0.0
+	_check_reaper()
+	return true
+
+
+## One look for Steam's launch of this app; the answer goes to _reaper_result.
+func _check_reaper() -> void:
+	if threaded_checks:
+		# pgrep off the main thread (review L19): the answer comes back to _steam_checked
+		if _steam_task < 0:
+			var id := app_id
+			var gen := _gen
+			var fn := steam_alive
+			_steam_task = WorkerThreadPool.add_task(func(): _steam_checked.call_deferred(gen, id, bool(fn.call(id))),
+				false, "GameSession reaper check")
+		return
+	_reaper_result(bool(steam_alive.call(app_id)))
 
 
 func _steam_checked(gen: int, id: int, alive: bool) -> void:
@@ -194,7 +243,13 @@ func _steam_checked(gen: int, id: int, alive: bool) -> void:
 func _reaper_result(alive: bool) -> void:
 	if alive:
 		_reaper_gone = 0
+		var first := not _reaper_seen
+		_reaper_seen = true
+		if dismissed and first:
+			unwanted.emit(game)   # Steam started it after B was pressed: closed again
 		return
+	if dismissed and not _reaper_seen and _waited < FOCUS_WAIT_S:
+		return   # Steam hasn't started it yet (or never will): keep looking
 	_reaper_gone += 1
 	if _reaper_gone < GONE_TICKS:
 		return
@@ -249,6 +304,29 @@ func stop() -> void:
 		_finish(true)
 
 
+## The launch was cancelled (B on the splash): from here on the game never gets
+## the screen, and `unwanted` says when there is something to close. The session
+## is not ended here: it ends through the same checks as any game, once the game
+## is really gone, so nothing treats a still-starting game as finished.
+## A Steam launch is looked for first and closed when found: closing blind would
+## race Steam (no reaper yet: nothing closed; reaper closed before we ever saw
+## it: no way to tell "gone" from "not started").
+func dismiss() -> void:
+	if not is_active() or dismissed:
+		return
+	dismissed = true
+	_gone = 0
+	_reaper_wait = 0.0
+	_reaper_gone = 0
+	if focused and gamescope != null and gamescope.is_running():
+		_focus_home()
+	focused = false
+	if pid > 0 or phase == "running" or _reaper_seen:
+		unwanted.emit(game)
+	elif app_id > 0:
+		_check_reaper()
+
+
 ## Puts GameCove in front of the running game (Guide pressed in a game).
 ## The game keeps running; return_to_game() brings it back.
 func bring_home() -> bool:
@@ -263,7 +341,7 @@ func bring_home() -> bool:
 ## gamescope yet (still launching) or nothing runs. The switch itself happens
 ## on Gamescope's worker; `focused` turns false if xprop fails.
 func return_to_game() -> bool:
-	if phase != "running" or app_id <= 0 or gamescope == null or not gamescope.is_running():
+	if phase != "running" or dismissed or app_id <= 0 or gamescope == null or not gamescope.is_running():
 		return false
 	focused = true
 	_focus_game()
@@ -348,6 +426,7 @@ func _finish(go_home: bool) -> void:
 	app_id = 0
 	pid = 0
 	focused = false
+	dismissed = false
 	ended.emit(g)
 
 

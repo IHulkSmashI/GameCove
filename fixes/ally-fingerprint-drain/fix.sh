@@ -34,7 +34,12 @@ readers() {
 
 hw_present() { [ -n "$(readers)" ]; }
 
-os_fixed() { gc_rule_elsewhere '1c7a' '0588' 'power/control'; }
+# The system does it: its own rule (Bazzite's 50-ally-fingerprint.rules), or, whatever the mechanism (SteamOS 3.8+
+# is reported to fix it; how isn't published), every reader already powers down without GameCove's rule.
+os_fixed() {
+	gc_rule_elsewhere '1c7a' '0588' 'power/control' && return 0
+	! gc_installed && gc_all_values "$(readers)" power/control auto
+}
 
 apply_now() {
 	for r in $(readers); do

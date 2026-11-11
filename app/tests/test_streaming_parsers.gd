@@ -104,6 +104,27 @@ func test_addresses() -> void:
 	eq(GameStream.url_host("fd00::1"), "[fd00::1]", "brackets")
 
 
+## The fixture is no one's Moonlight identity (final review, low: "contains a PEM private key; make
+## sure it's a throwaway"). Its client certificate and "PRIVATE KEY" blocks are stubs, cut off
+## after the first base64 line: 48 and 39 bytes of what would be 727 and 1217, i.e. the ASN.1
+## headers and nothing of a key. The one complete certificate is a server certificate made with
+## openssl for the pinning test below (self-signed "NVIDIA GameStream Server", created
+## 2026-11-09), and a certificate is public anyway. This test keeps it that way.
+func test_moonlight_fixture_holds_no_private_key() -> void:
+	var text := _f("Moonlight.conf")
+	var re := RegEx.create_from_string("-----BEGIN ([A-Z ]+)-----(.*?)-----END")
+	var kinds: Array = []
+	for m in re.search_all(text):
+		var raw := Marshalls.base64_to_raw(m.get_string(2).replace("\\n", "").strip_edges())
+		kinds.append(m.get_string(1))
+		if m.get_string(1).contains("PRIVATE KEY"):
+			# DER says how long the whole key would be (bytes 2-3, plus the 4-byte header)
+			var declared := (raw[2] << 8 | raw[3]) + 4
+			ok(raw.size() < 64 and declared > 1000, "the key block is a %d-byte stub of a %d-byte structure: no key material" % [raw.size(), declared])
+	eq(kinds.count("PRIVATE KEY"), 1, "one key block, the stub")
+	ok(not text.contains("ENCRYPTED") and not text.contains("RSA PRIVATE KEY") and not text.contains("EC PRIVATE KEY"), "no other kind of key")
+
+
 func test_moonlight_conf() -> void:
 	var c := Moonlight.parse_conf(_f("Moonlight.conf"))
 	ok(str(c["cert"]).begins_with("-----BEGIN CERTIFICATE-----\nMIIC"), "client cert with real newlines")
@@ -123,17 +144,24 @@ func test_moonlight_conf() -> void:
 func test_moonlight_commands() -> void:
 	var fp := {"kind": "flatpak", "program": "/usr/bin/flatpak", "prefix": ["run", "--branch=stable", Moonlight.FLATPAK_ID]}
 	eq(Moonlight.command(fp, Moonlight.list_args("192.168.1.20")),
-		["/usr/bin/flatpak", "run", "--branch=stable", Moonlight.FLATPAK_ID, "list", "192.168.1.20", "--csv"], "flatpak list")
+		["/usr/bin/flatpak", "run", "--branch=stable", Moonlight.FLATPAK_ID, "list", "--csv", "--", "192.168.1.20"], "flatpak list")
 	eq(Moonlight.command(fp, Moonlight.pair_args("pc", "0427"), {"QT_QPA_PLATFORM": "offscreen"}),
-		["/usr/bin/flatpak", "run", "--env=QT_QPA_PLATFORM=offscreen", "--branch=stable", Moonlight.FLATPAK_ID, "pair", "pc", "--pin", "0427"], "flatpak pair, env")
+		["/usr/bin/flatpak", "run", "--env=QT_QPA_PLATFORM=offscreen", "--branch=stable", Moonlight.FLATPAK_ID, "pair", "--pin", "0427", "--", "pc"], "flatpak pair, env")
 	var nat := {"kind": "native", "program": "/usr/bin/moonlight", "prefix": []}
 	eq(Moonlight.command(nat, Moonlight.quit_args("pc"), {"QT_QPA_PLATFORM": "offscreen"}),
-		["env", "QT_QPA_PLATFORM=offscreen", "/usr/bin/moonlight", "quit", "pc"], "native with env")
+		["env", "QT_QPA_PLATFORM=offscreen", "/usr/bin/moonlight", "quit", "--", "pc"], "native with env")
 	eq(Moonlight.command({"kind": ""}, ["list"]), [] as Array[String], "not installed")
 	var r := Settings.resolve({}, {"width": 1920, "height": 1200, "hz": 120, "hdr": false}, Settings.decode_for_family("intel-xe2"),
 		{"hevc": true, "av1": true, "hdr": true})
 	var a := Moonlight.stream_args("192.168.1.20", "Steam Big Picture", r)
-	eq(a.slice(0, 3), ["stream", "192.168.1.20", "Steam Big Picture"], "positional")
+	eq(a[0], "stream", "the action first")
+	eq(a.slice(a.size() - 3), ["--", "192.168.1.20", "Steam Big Picture"], "host and app last, after --")
+	# final review (Low): a title or host that begins with "-" can't be read as an option
+	var odd := Moonlight.stream_args("-h", "--version", {"width": 1280, "height": 800, "fps": 60, "bitrate_kbps": 10000, "codec": "auto"})
+	eq(odd.slice(odd.size() - 3), ["--", "-h", "--version"], "everything after -- is a name, whatever it looks like")
+	ok(odd.find("--") == odd.size() - 3, "and no option comes after it")
+	for args in [Moonlight.list_args("-x"), Moonlight.pair_args("-x", "1234"), Moonlight.quit_args("-x")]:
+		eq(args.slice(args.size() - 2), ["--", "-x"], "%s: the host comes last, after --" % args[0])
 	ok("--resolution" in a and a[a.find("--resolution") + 1] == "1920x1200", "native resolution")
 	ok(a[a.find("--fps") + 1] == "120", "panel refresh")
 	ok(a[a.find("--video-codec") + 1] == "AV1", "AV1 on Xe2 with an AV1 host")

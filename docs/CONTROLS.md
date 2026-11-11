@@ -343,7 +343,7 @@ with Background lookups on (stamp `user://upscalers.cfg`). Tests: `test_upscaler
 
 | GPU | Choices | Default route |
 | --- | --- | --- |
-| Intel Arc with XMX (Xe2, Xe3, Arrow Lake H) | game's own, XeSS, FSR 4.1.2 on XMX, FSR 4.1.2 Lite; XeSS-FG 2x-4x | exactly ClawDeck's: own XeSS if shipped, else OptiScaler XeSS (FSR 4.1.2 on XMX for DX12 games when nitec's files are there), Capcom setup for RE Engine |
+| Intel Arc with XMX (Xe2, Xe3, Arrow Lake H) | game's own, XeSS, FSR 4.1.2 on XMX, FSR 4.1.2 Lite; XeSS-FG 2x-4x | exactly ClawDeck's: own XeSS if shipped, else OptiScaler XeSS (FSR 4.1.2 on XMX for DX12 games; nitec's files come with GameCove), Capcom setup for RE Engine |
 | Intel without XMX (Meteor Lake) | game's own, XeSS (DP4a) | as above without XeSS-FG |
 | AMD RDNA3 / RDNA3.5 | game's own, FSR 3.1, FSR 4 (AMD's FSR SDK 2.4 upscaler 4.1.2, downloaded from AMD's GitHub at a pinned commit, sha256 checked); FSR-FG 2x | games with FSR keep it (Proton-CachyOS / GE upgrade it to FSR 4 on RDNA3); DLSS / XeSS / FSR 2 games get OptiScaler FSR 3.1; FSR 4 opt-in |
 | AMD RDNA2 (Steam Deck, Z2 A, Z2 Go, 6800U) | game's own, FSR 3.1; FSR-FG 2x | as above, no FSR 4 (AMD's lightweight model takes 5.6 ms at 1080p on a Z2 A) |
@@ -370,8 +370,41 @@ fails with the reason ("remove it there first").
 - Every GPU, not just the Claw (table above); AMD presets in launchenv (`fsr31`, `fsr4_amd`, FSR-FG output, Capcom
   setup on FSR) and AMD's own FSR SDK 2.4 upscaler instead of leaked builds (`test_games.py`).
 - ClawDeck's own OptiScaler installs are recognised and left alone (`test_foreign_optiscaler_is_never_touched`).
-- The LZMS cabinet.dll is looked up (GAMECOVE_CABINET, ~/.local/share/gamecove, an installed ClawDeck) instead of
-  assumed inside the package.
+- The LZMS cabinet.dll ships in every GameCove package (`/usr/lib/gamecove/bin/cabinet.dll`, built from
+  `tools/cabinet-lzms` by the release workflow, the same bytes as ClawDeck's); `GAMECOVE_CABINET`, a source
+  checkout's build, `~/.local/share/gamecove` and an installed ClawDeck are looked at too.
+- nitec's FSR 4.1.2 XMX files ship in every package as a set with a manifest (`bin/fsr4-xmx/set.json`); a newer set
+  from the signed list replaces them as a unit, the set before is kept (`~/.local/share/gamecove/fsr4-xmx-previous`)
+  and `gamecove-upscale fsr4-rollback` swaps back (`test_fsr4_set.py`).
+
+### The Intel XMX path against ClawDeck, step by step
+Reference: ClawDeck at 4cf5cf9 (v0.2.0-beta.15). `packaging/helpers/tests/test_clawdeck_parity.py` runs the same
+fixture game through both projects (`CLAWDECK_SRC=<clone>`; CI checks ClawDeck out at that commit) and fails on any
+difference that isn't in this table.
+
+| Step | ClawDeck | GameCove | Same? |
+| --- | --- | --- | --- |
+| Driver | xess-xmx-linux, pinned release (20261111: stock mode on Xe3, its five extra session variables carried per game like the others), its own `install.sh` as the user | the same release and script; also a sha256 pin for the zip, a reviewed-script check, a mirror | same run; safety added before it |
+| Driver scope | session file moved aside, `xmx.env`, a scope script in every Proton with the installer's hook (looks 9 folders down for Unreal plugins); redone at every plugin start | the same files and text (`xmxscope.py`); redone before the helper's commands (`games.xmx_upkeep`) | same |
+| Launch file | `launchenv.compose` / `write`, per game unless the session-wide file is active | the same code, the same flag (`games.per_game`) | same (line order follows the variable names) |
+| Shim, at set-up | `xmxscope.prefix_shim` after OptiScaler goes in | the same call in `games.choose` | same |
+| Shim, at launch | prefix copy when it is the shim, else the package folder through `Z:`; the Proton the game runs on gets the shim as its bundled `igdext64.dll`, original kept as `.stock`, stamped | the same lines in `gamecove-run` | same |
+| A Proton added later (GE-Proton) | covered at launch by the step above | the same | same |
+| OptiScaler.ini | `launchenv.opti_ini` into the package's ini | the same | same |
+| Files in the game | proxy DLL, package files, nitec's two files, `cabinet.dll` + `cabinet_wine.dll`, `fakenvapi.ini` with `force_reflex=2` | the same files and bytes | same; the manifest also records each file's sha256 |
+| DLL overrides | `WINEDLLOVERRIDES=<proxy>=n,b;dinput8=n,b;cabinet=n,b;`, the user's own kept behind | the same | same |
+| Variables | `VK_DRIVER_FILES`, `VKD3D_DISABLE_EXTENSIONS`, `ANV_CM_KERNEL_DIR`, `INTC_ALT_DRIVER_EXTENSIONS_PATH`, `XESS_FG`, `FSR`, `DXVK_CONFIG` (for any OptiScaler XeSS, and 3x+ frame generation through OptiScaler), `IGDEXT_XELL_LOG=1` | the same | same; `IGDEXT_XELL_LOG` only once the driver is installed (nothing reads it before) |
+| FSR 4.1.2 files | inside the zip (`bin/fsr4-xmx`), copied to `~/fsr4-xmx` at start; the user's own files never replaced; import from Downloads; download as a fallback | inside every package (`/usr/lib/gamecove/bin/fsr4-xmx`), the same rule and order (`optiscaler.fsr4_xmx_ready`); the mirror is tried before the branch | same; also `set.json`, the set before kept, `fsr4-rollback` |
+| `cabinet.dll` | built by CI, `bin/cabinet.dll` | the same bytes, `/usr/lib/gamecove/bin/cabinet.dll` | same |
+| Decky Framegen games | second stage after `fgmod` puts FSR 4 XMX over fgmod's files and takes it out again | the same stage in `gamecove-run` | same; the removal list takes file names only |
+| Undo | manifest: files out, backups back; driver: its `uninstall.sh` | the same, but a file that changed since is kept; every `.stock` in a Proton is put back by GameCove too | safety added; nothing changes while in use |
+| Game folder | OptiScaler next to the largest `-Shipping` exe under `Binaries` (not a launcher stub of that name), the DirectX 12 folder when a known exe is in two | the same `main_exe_dir` | same |
+| Not taken | MangoHud log for Auto TDP, E-cores switch | Auto TDP reads mangoapp; cores are a power control | on purpose |
+| Not taken here | non-Steam games in the list (#161), the debug-logs launch (#150) | the per-game upscaling UI (feat/upscaling) | later |
+
+`gamecove-run` used to keep the shim in the game's prefix only and never touch a Proton. That lost against Protons
+that copy their own `igdext64.dll` over the prefix at every launch (ClawDeck: black screen with FSR 4.1.2 on
+GE-Proton), so it now does what ClawDeck does. A prefix an older build changed is put back at the next launch.
 
 ### Needs real hardware / real games to confirm
 - MangoHud limiter inside gamescope with mangoapp running (frame pacing, no second overlay).
@@ -466,7 +499,7 @@ Owner: ctl-power. 33 controls, group `power`. Each detects its backend on this e
 | `power.power_mode` | choice | power-profiles-daemon / tuned-ppd `ActiveProfile` | Bazzite, CachyOS |
 | `power.platform_profile` | choice | steamos-manager `PerformanceProfile1`, else helper (`/sys/firmware/acpi/platform_profile`) | Steam Deck, ASUS, Lenovo; greyed out when PPD owns it |
 | `power.cpu_boost` | toggle | steamos-manager `CpuBoost1`, PowerStation `BoostEnabled` (AMD cpb), helper (intel_pstate `no_turbo`, amd-pstate `policyN/boost`, `cpufreq/boost`) | all |
-| `power.smt` | toggle | PowerStation `SmtEnabled`, helper | CPUs with SMT (not the Claw 8 EX) |
+| `power.smt` | toggle | PowerStation `SmtEnabled`, helper | CPUs with SMT (not the Claw 8 EX); on ASUS handhelds it stays on (greyed out, can only go back on) because Bazzite documents that suspend may break with SMT off (quirks.json `smt-off-breaks-sleep`) |
 | `power.cpu_cores` | slider | PowerStation `CoresEnabled`, helper; 2..all | all with CPU hotplug |
 | `power.epp` | choice | helper (every CPU, from the offered words) | intel_pstate / amd-pstate-epp |
 | `power.governor` | choice | steamos-manager `CpuScaling1`, helper | all |
@@ -518,7 +551,7 @@ on a temporary file.
 | Layout | `catalog.gd` | Cards per group and the quick menu tabs, ids only; `*` prefixes; anything not listed shows in "Other" |
 | Pages | `group_page.gd`, `perf_page.gd`, `group_cards.gd`, `profiles_page.gd` | Settings > Power, Display, Sound, Controller, Performance, System (built on first show; rebuilt when what's usable changes), Profiles (everyday / battery / plugged in / per game: save current, copy everyday, edit in the quick menu, export, reset with a second press; export / import `~/Documents/GameCove/gamecove-profiles-<device>.json`) |
 | Safety | `keep_dialog.gd`, `session_guard.gd` | "Keep this? Reverting in 15 s" after HDR and after a refresh rate change once we unlocked rates. The unlock and rotation take effect next session, so the change is remembered (`user://controls_confirm.json`) and the countdown runs at the next start; nobody pressing Keep puts the old value back |
-| Gyro | `steam_input.gd` | Gyro aiming is Steam Input's: the UI says so and opens `steam://controllerconfig/<appid>` for Steam games (quick menu Controller tab, game page's Game settings card). Controller settings use `controller.gyro` / `controller.emulation` (the device Controller page too); the legacy Controller gyro modes are gone from the UI (current InputPlumber ignores them), without Controls the page only explains |
+| Gyro | `steam_input.gd` | Gyro aiming is Steam Input's: the UI says so and opens `steam://controllerconfig/<appid>` for every game Steam starts (quick menu Controller tab, game page's Game settings card, the Controller page); see "Steam's controller settings and back" below. Controller settings use `controller.gyro` / `controller.emulation` (the device Controller page too); the legacy Controller gyro modes are gone from the UI (current InputPlumber ignores them), without Controls the page only explains |
 | Shared | `shared.gd` | One Fixes service for the quick menu's Device tab and Settings > Device > Fixes; `autoload(name)` |
 | Device page | `settings/device_page.gd` | Settings > Device as section tabs (About, Fixes, Controller, Storage, Updates): one full-height panel at a time, left / right on the tabs switch, A goes in; `focus_part("fixes")` opens a section; only the open panel gets `opened()`. The Device photo card (real photo, Show maker photos) sits under About |
 | Logos | `brand_mark.gd` | Maker / store logos through `device/brand.gd` (mono ones tinted with the theme text colour), text when there's none: quick menu Device header, About this device, store rows, game page meta line, installer store cards, the Steam gyro note and the game card's "Controller in Steam" |
@@ -532,6 +565,63 @@ close the menu, `show_screen("settings")`, `settings.open_category(category, par
 menu does this itself through its parent); `settings.game_settings_requested(game)` and
 `game_page.game_settings.edit_requested(game)` → `quick_menu.open(game)` (fallback: they find the
 QuickMenu node); the Controller provider's `REAPPLY_AFTER_RESUME` ~5 s after wake (unchanged).
+
+## Steam's controller settings and back
+
+`ui/controls/steam_input.gd`, `steam/steam_handoff.gd`, `ui/steam_trip.gd`.
+
+**Which games.** Every game Steam itself starts: a Steam game by its app id, and a non-Steam shortcut (an
+emulated game Steam ROM Manager added, any entry with `shortcut` true) by the shortcut's own 32-bit app id,
+the `appid` Steam keeps in `shortcuts.vdf` and shows in `SteamLaunch AppId=<id>` (not the 64-bit game id
+`steam://rungameid` takes). A game GameCove starts itself (Epic, GOG, Amazon, a ROM started directly) never
+passes through Steam Input, so there is no button for it, and one line says why. Valve's Steam browser
+protocol page documents `steam://controllerconfig/<id>` with a Steam application id and doesn't spell out the
+shortcut case. The shortcut's 32-bit app id is what shipped tools use for it: Vesktop runs in Game Mode as a
+non-Steam shortcut, reads its own id from `STEAM_COMPAT_MEDIA_PATH` (`steamapps/shadercache/<id>`, the
+32-bit shortcut id, because Steam sets `SteamAppId` to 0 for shortcuts) and opens
+`steam://controllerconfig/<id>/<layout id>` to offer its layout (`src/main/utils/steamOS.ts`); Decktricks, also
+started as a shortcut, does the same from `STEAM_COMPAT_TRANSCODED_MEDIA_PATH`
+(`src/controller_layout.rs`, based on Vesktop's). Steam's own client scripts build the address as
+`steam://controllerconfig/${appid}/…` (SteamTracking `API/JavascriptUrls.txt`), and in Steam's client a
+shortcut's appid is that same 32-bit id. The 64-bit game id is never used there. We haven't opened it on a
+handheld ourselves yet, so it stays first on the hardware list below.
+
+**Out.** The button shows a cover ("Opening Steam's controller settings…", a 0.14 s fade, so nothing behind
+flashes), and from that moment GameCove takes nothing from the pad. The address goes to Steam; every 0.4 s
+GameCove looks at gamescope's `GAMESCOPE_FOCUSABLE_WINDOWS` for a window owned by `steam` / `steamwebhelper`
+that wasn't there before (after 1.6 s any Steam window will do: its handheld mode shows the screen in the
+window it already has) and puts it in front with `GAMESCOPECTRL_BASELAYER_WINDOW`. GameCove's window loses
+focus and SessionWiring is told as well, so InputPlumber's intercept goes to Pass and the controller is
+Steam's. Over a running game the quick menu stays up until Steam's screen shows, so the game never gets the
+pad in between, then steps aside.
+
+**Back.** When Steam's window is gone (B out of its screen), or on Guide, the property is removed and the
+screen goes back to whoever had it. GameCove returns to the same page and the same focused control (the
+quick menu on the same tab and button when the trip started there), the cover fades over 0.3 s, and the pad
+is ignored for 350 ms more and until every button is up, so the B that closed Steam's screen isn't also Back.
+
+**When it can't.** Steam not running: a toast says so and nothing starts. No Steam window within 8 s: a toast
+("It may still be starting. Try again in a moment."), focus back where it was. B while it's still opening
+stops the wait. Our focus never arriving after the return: carried on after 1.5 s. One Timer, only during a
+trip. Outside gamescope the address is simply handed to Steam.
+
+**To confirm on a handheld in Game Mode** (none of this can be seen in the test harness, which fakes
+gamescope's window list and Steam):
+
+1. `steam://controllerconfig/<shortcut app id>` opens the configurator for a Steam ROM Manager game (and
+   for a plain Steam game) with Steam started as GameCove starts it (`steam -silent`, and the `gamepadui`
+   mode). Vesktop and Decktricks open it this way in Game Mode; check it from GameCove too. If it ever
+   opens the wrong screen, only `uri_for` in `steam_input.gd` changes.
+2. Steam's configurator window appears in `GAMESCOPE_FOCUSABLE_WINDOWS` under a `steam` or `steamwebhelper`
+   pid, and `GAMESCOPECTRL_BASELAYER_WINDOW` brings it in front without a black or desktop frame.
+3. With it in front the pad drives Steam's screen at once (InputPlumber intercept on Pass; Handheld Daemon
+   devices too) and nothing moves in GameCove behind it.
+4. B at the top of Steam's screen closes its window (`-silent`), and GameCove is back on the same control
+   with no extra Back. In `gamepadui` mode, where Steam keeps one window, Guide is the way back: check it.
+5. Guide while Steam's screen is in front reaches GameCove (InputPlumber switches to Always on Guide).
+6. Over a running game: Steam's screen shows above the game, and afterwards the game is in front with the
+   quick menu open on the Controller tab.
+7. How long Steam takes to show the screen on a cold start, against the 8 s wait.
 
 ## Integration rules (hardening pass)
 
