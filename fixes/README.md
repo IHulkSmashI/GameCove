@@ -21,6 +21,7 @@ research behind it: `app/data/fixes.json` and [docs/DEVICE-FIXES.md](../docs/DEV
 | `ally-mcu-powersave` | every ROG Ally (optional) | drain while asleep | udev rule + sysfs |
 | `onexfly-touch` | OneXFly F1; OneXPlayer 2 / 2 Pro / X1 A / X1 mini, AOKZOE A1 / A1 Pro (optional) | touch turned 90° in Gaming Mode | gamescope-session file |
 | `journal-flood` | any handheld with steamos-manager but no steamos-log-submitter (optional; Bazzite) | split-lock lines flood the journal and wipe older boots | systemd drop-in (SteamOS: not needed) |
+| `overlay-power` | every Intel handheld (optional) | 0.0 W for the CPU in the performance overlay (RAPL counter root-only) | tmpfiles.d rule + sysfs mode |
 | `fan`, `charge-limit` | see devices.json | fan presets, charge limit (Power page) | sysfs |
 | `controller-led`, `controller-rumble` | handhelds with the kernel LED / rumble-strength attributes | lights and rumble strength (Controller settings) | sysfs, no password |
 

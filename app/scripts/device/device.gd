@@ -14,6 +14,7 @@ const Buttons := preload("res://scripts/device/buttons.gd")
 const Traits := preload("res://scripts/device/traits.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 const OsInfo := preload("res://scripts/system/os_info.gd")
+const Sources := preload("res://scripts/perf/sources.gd")
 
 const DEVICE_TABLE := "res://data/devices.json"
 const DMI := "/sys/class/dmi/id/"
@@ -679,12 +680,13 @@ func battery() -> Dictionary:
 	out["status"] = read_text(bat + "status")
 	var power_uw := read_text(bat + "power_now")
 	if power_uw.is_valid_int():
-		out["watts"] = power_uw.to_int() / 1_000_000.0
+		out["watts"] = Sources.scale_fix(power_uw.to_int() / 1_000_000.0)
 	else:
 		var cur := read_text(bat + "current_now")
 		var volt := read_text(bat + "voltage_now")
 		if cur.is_valid_int() and volt.is_valid_int():
-			out["watts"] = cur.to_int() * volt.to_int() / 1e12
+			# the Claw 8 EX EC reports current_now 100x too large (perf/sources.gd scale_fix)
+			out["watts"] = Sources.scale_fix(cur.to_int() * volt.to_int() / 1e12)
 	return out
 
 

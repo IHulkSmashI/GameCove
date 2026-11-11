@@ -13,3 +13,4 @@ ally-fingerprint-drain	asus-rog-ally asus-rog-ally-x asus-rog-xbox-ally asus-rog
 ally-mcu-powersave	asus-rog-ally asus-rog-ally-x asus-rog-xbox-ally asus-rog-xbox-ally-x asus-rog-xbox-ally-x20
 onexfly-touch	onexplayer-onexfly-f1 onexplayer-x1-amd onexplayer-x1-mini onexplayer-2 onexplayer-2-pro aokzoe-a1 aokzoe-a1-pro
 journal-flood	*
+overlay-power	msi-claw-8-ex msi-claw-8-ai-plus msi-claw-7-ai-plus msi-claw-a1m onexplayer-x1-intel onexplayer-x1-air onexplayer-g1-intel onexplayer-3 onexplayer-x2-mini acer-predator-atlas-8
