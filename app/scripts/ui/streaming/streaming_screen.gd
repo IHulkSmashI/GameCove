@@ -304,6 +304,12 @@ func rebuild() -> void:
 		elif target == null:
 			# that PC was removed: the next one in the list, or Add PC
 			KeepFocus.restore(self, mark, _host_focus(), add_button)
+	elif is_visible_in_tree() and (f == null or not is_instance_valid(f) or not f.is_visible_in_tree()):
+		# the tab was just shown and its focus was on its way to a control this
+		# rebuild freed (Install, as discovery starts): the tab's own control
+		var d := default_focus()
+		if d != null and d.is_visible_in_tree():
+			d.grab_focus.call_deferred()
 	_hints_changed()
 	# the top bar's "down" pointed at a button this rebuild just freed (Install,
 	# a host card): the host links it again to the new one
