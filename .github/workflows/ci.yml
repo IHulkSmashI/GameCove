@@ -48,6 +48,7 @@ jobs:
         env:
           CLAWDECK_SRC: ${{ github.workspace }}/clawdeck-ref
         run: |
+          set -o pipefail   # a failing pytest fails the step, not just tee
           python -m pytest -q -rs | tee out.txt
           ! grep -q "CLAWDECK_SRC is not a ClawDeck checkout" out.txt
 

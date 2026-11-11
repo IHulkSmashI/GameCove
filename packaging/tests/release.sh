@@ -244,6 +244,9 @@ ci_pin=$(sed -n 's/^  GODOT_EDITOR_SHA256: \([0-9a-f]\{64\}\)$/\1/p' "$CI")
 rel_pin=$(sed -n 's/^  GODOT_EDITOR_SHA256: \([0-9a-f]\{64\}\)$/\1/p' "$W")
 [ -n "$ci_pin" ] && [ "$ci_pin" = "$rel_pin" ] && ok || bad "ci.yml must pin the same Godot editor sha256 as release.yml ($ci_pin vs $rel_pin)"
 [ "$(grep -c 'godot.zip "https://' "$CI")" = "$(grep -c '${GODOT_EDITOR_SHA256}  godot.zip" | sha256sum -c -' "$CI")" ] && ok || bad "ci.yml must check every Godot download"
+# a "run:" without "shell: bash" has no pipefail on GitHub: "pytest | tee" would pass with failing tests (review M)
+nopf=$(awk '/^ *- (name|run|uses):/ { pf = 0 } /set -o pipefail/ { pf = 1 } /\| tee / && !pf { n++ } END { print n + 0 }' "$CI")
+[ "$nopf" = 0 ] && ok || bad "ci.yml: every step that pipes into tee must set -o pipefail first ($nopf without)"
 # L26: draft, upload, publish
 awk '/gh release create/{c=NR} /gh release upload/{u=NR} /gh release edit "\$TAG" --draft=false/{p=NR} END{exit !(c && u && p && c<u && u<p)}' "$W" && ok || bad "release.yml must create a draft, upload, then publish"
 grep -q 'gh release create "$TAG" --draft' "$W" && ok || bad "the release must start as a draft"
