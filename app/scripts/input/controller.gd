@@ -795,7 +795,7 @@ func _refresh() -> void:
 	# what the buttons ask of GameCove (button_map.gd), for the intercept
 	var table: Dictionary = ButtonMap.table(profile, device_id) if backend == "inputplumber" else {}
 	var prefs: Variant = SettingsFile.load_json(shortcuts_file())["data"] if FileAccess.file_exists(shortcuts_file()) else null
-	var hold := clampf(float(prefs.get("hold_s", 0.5)), 0.3, 1.5) if prefs is Dictionary else 0.5
+	var hold := ButtonMap.hold_seconds(prefs)
 	st["shortcuts"] = table
 	st["hold_s"] = hold
 	_main(func():

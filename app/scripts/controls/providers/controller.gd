@@ -630,7 +630,7 @@ func _hold_time() -> RefCounted:
 			if ButtonMap.hold_caps(row).is_empty():
 				return "This handheld has no button for it"
 			return "" if be.controller_backend() == "inputplumber" else (R_IP_ONLY if be.controller_backend() == "hhd" else R_NONE),
-		func(_c): return clampf(float(_shortcuts_prefs().get("hold_s", 0.5)), 0.3, 1.5),
+		func(_c): return ButtonMap.hold_seconds(_shortcuts_prefs()),
 		func(_c, v):
 			var d := _shortcuts_prefs()
 			d["hold_s"] = snappedf(float(v), 0.1)

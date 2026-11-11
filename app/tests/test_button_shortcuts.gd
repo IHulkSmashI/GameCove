@@ -287,6 +287,30 @@ func test_back_button_action_runs_on_the_press() -> void:
 	eq(log["actions"], [], "nor as home / quick menu")
 
 
+func test_a_hand_edited_hold_time_never_raises() -> void:
+	for bad in [null, [], {}, "slow", true]:
+		eq(ButtonMap.hold_seconds({"hold_s": bad}), 0.5, "hold_s %s -> the usual 0.5" % str(bad))
+	eq(ButtonMap.hold_seconds(null), 0.5, "no file")
+	eq(ButtonMap.hold_seconds({"hold_s": 9}), 1.5, "clamped")
+	eq(ButtonMap.hold_seconds({"hold_s": 0.8}), 0.8, "a number is taken")
+
+
+func test_a_lost_release_does_not_swallow_the_next_press() -> void:
+	var p := ButtonMap.set_press(_empty(), "LeftPaddle1", "action:screenshot")
+	var t := _rec("generic", p)
+	var i: RefCounted = t[0]
+	var log: Dictionary = t[1]
+	var clock := [1000]
+	i.now_ms = func() -> int: return clock[0]
+	i.handle("ui_volume_up", 1.0)
+	eq(log["shortcuts"].size(), 1, "pressed")
+	clock[0] += Intercept.STALE_DOWN_MS + 1000   # the release never arrived
+	i.handle("ui_volume_up", 1.0)
+	eq(log["shortcuts"].size(), 2, "the next press runs again")
+	i.handle("ui_volume_up", 1.0)
+	eq(log["shortcuts"].size(), 2, "and a plain repeat still does not")
+
+
 func test_back_button_exit_needs_a_hold() -> void:
 	var p := ButtonMap.set_press(_empty(), "LeftPaddle1", "action:exit_game")
 	var t := _rec("generic", p)
