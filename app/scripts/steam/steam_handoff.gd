@@ -42,6 +42,10 @@ const WAIT_S := 8.0
 const NEW_WINDOW_S := 1.6
 ## Longest wait for our window to get focus back.
 const RETURN_S := 1.5
+## A read of the windows that has not answered after this many polls is given up on (the next poll asks again),
+## and a trip still "opening" this long after WAIT_S ends whatever the reads did: the pad is never held for ever.
+const STUCK_POLLS := 8
+const HARD_WAIT_S := WAIT_S + 3.0
 
 ## The Gamescope service (autoload), or a fake.
 var gamescope: Object
@@ -62,6 +66,7 @@ var _before: Array = []
 var _waited := 0.0
 var _gen := 0
 var _reading := false
+var _reading_polls := 0
 var _timer: Timer
 
 
@@ -92,6 +97,8 @@ func start(for_game: Dictionary) -> String:
 	_reading = false
 	var gen := _gen
 	started.emit()
+	# the timer runs from the start: it is what ends a trip whose first read never answers
+	_run_timer(true)
 	# what Steam shows already, so its new window can be told apart; then the URI
 	_read(func(triples: Array) -> void:
 		if gen != _gen or state != "opening":
@@ -99,8 +106,7 @@ func start(for_game: Dictionary) -> String:
 		_before = _steam_windows(triples)
 		if not bool(open_uri.call(uri)):
 			_end("failed")
-			return
-		_run_timer(true))
+			return)
 	return ""
 
 
@@ -151,8 +157,15 @@ func poll() -> void:
 		if _waited >= RETURN_S:
 			_end(_why)   # focus never came back by itself: carry on anyway, never hang
 		return
-	if _reading:
+	if state == "opening" and _waited >= HARD_WAIT_S:
+		_end("timeout")   # no read answered in time: Steam's screen never showed, as far as we can tell
 		return
+	if _reading:
+		_reading_polls += 1
+		if _reading_polls < STUCK_POLLS:
+			return
+		_reading = false   # that read is lost; ask again
+	_reading_polls = 0
 	_reading = true
 	var gen := _gen
 	_read(func(triples: Array) -> void:
@@ -194,6 +207,7 @@ func _end(why: String) -> void:
 	state = "idle"
 	_gen += 1
 	_reading = false
+	_reading_polls = 0
 	_run_timer(false)
 	if was == "away":
 		_xprop(SteamFocus.release_args())

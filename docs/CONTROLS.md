@@ -669,7 +669,7 @@ pad in between, then steps aside.
 **Back.** When Steam's window is gone (B out of its screen), or on Guide, the property is removed and the
 screen goes back to whoever had it. GameCove returns to the same page and the same focused control (the
 quick menu on the same tab and button when the trip started there), the cover fades over 0.3 s, and the pad
-is ignored for 350 ms more and until every button is up, so the B that closed Steam's screen isn't also Back.
+is ignored for 350 ms more and until every button is up (at most 2.5 s more: a release let go while Steam had the controller never reaches us, and the pad must not stay dead), so the B that closed Steam's screen isn't also Back. The trip itself ends whatever Steam does: a read of the windows that never answers is asked for again, and a trip still opening 11 s in ends with the "slow" toast. An on-screen keyboard that is hidden without Done (its screen goes away) is closed, so it stops taking keys and buttons.
 
 **When it can't.** Steam not running: a toast says so and nothing starts. No Steam window within 8 s: a toast
 ("It may still be starting. Try again in a moment."), focus back where it was. B while it's still opening
