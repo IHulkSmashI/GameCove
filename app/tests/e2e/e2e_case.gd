@@ -166,6 +166,9 @@ func open_menu_tab(tab: String) -> bool:
 	if not qm().visible:
 		await qam()
 	if not qm().visible:
+		ok(false, "open_menu_tab %s: the menu did not open (screen %s, page %s, playing %s, session %s, modal %s, low dialog %s, fix dialog %s)" % [tab,
+			main().current, main().page != null, main().playing.get("key", ""), main().session.phase, main().game_actions.is_modal(),
+			main().low_dialog != null, main().fix_dialog != null])
 		return false
 	var want := TC.TAB_IDS.find(tab)
 	var guard := 0
@@ -173,6 +176,9 @@ func open_menu_tab(tab: String) -> bool:
 		await rb()
 		guard += 1
 	await w.frames(2)
+	if qm().section != want:
+		ok(false, "open_menu_tab %s: menu section %d (want %d), screen %s, page %s, playing %s, session %s, modal %s" % [tab, qm().section, want,
+			main().current, main().page != null, main().playing.get("key", ""), main().session.phase, main().game_actions.is_modal()])
 	return qm().section == want
 
 
