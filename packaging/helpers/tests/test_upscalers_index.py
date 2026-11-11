@@ -505,3 +505,18 @@ def test_a_damaged_stamp_never_raises(tmp_path, monkeypatch, cosign, stamp):
     json.dump(st, open(p, "w"))
     assert mirror.load(home) is not None and mirror.stale(home), "an unreadable time is treated as too old"
     assert mirror.refresh(home)["state"] == "verified"
+
+
+def test_the_index_is_read_only_after_cosign_accepted_it(tmp_path, monkeypatch, cosign):
+    """Review 6 low: upscalers.json was parsed before cosign ran. A file cosign refuses is never read."""
+    home = str(tmp_path / "home")
+    raw = newest()
+    serve(monkeypatch, {mirror.INDEX_URL: raw, mirror.BUNDLE_URL: b"not a bundle"})
+    parsed = []
+    real = mirror.parse
+    monkeypatch.setattr(mirror, "parse", lambda b: parsed.append(b) or real(b))
+    assert mirror.refresh(home)["state"] == "bad-signature"
+    assert parsed == [], "read before the signature was checked"
+    serve(monkeypatch, {mirror.INDEX_URL: b"{not json", mirror.BUNDLE_URL: bundle_for(b"{not json")})
+    assert mirror.refresh(home, force=True)["state"] == "invalid"
+    assert not os.path.exists(os.path.join(home, mirror.CACHE, mirror.INDEX_NAME + ".new"))

@@ -347,10 +347,6 @@ def refresh(home: str, force: bool = False, timeout: float = 10.0, now: float | 
         bundle = _fetch(BUNDLE_URL, MAX_INDEX, timeout)
     except Exception as e:        # network of any kind: the pins (or the verified copy) are used
         return {"state": "offline", "generated": have.get("generated") if have else None, "error": f"{type(e).__name__}: {e}"}
-    try:
-        idx = parse(raw)
-    except ValueError as e:
-        return {"state": "invalid", "generated": have.get("generated") if have else None, "error": str(e)}
     cos = cosign_path(home)
     if not cos:
         return {"state": "unverified", "generated": have.get("generated") if have else None,
@@ -367,6 +363,13 @@ def refresh(home: str, force: bool = False, timeout: float = 10.0, now: float | 
             os.unlink(t)
         log.warning("upscalers.json signature refused: %s", msg)
         return {"state": "bad-signature", "generated": have.get("generated") if have else None, "error": msg or "cosign refused it"}
+    # read only after cosign accepted it (review 6 low: it was parsed first)
+    try:
+        idx = parse(raw)
+    except ValueError as e:
+        for t in (tmp_i, tmp_b):
+            os.unlink(t)
+        return {"state": "invalid", "generated": have.get("generated") if have else None, "error": str(e)}
     if have and str(idx["generated"]) < str(have.get("generated", "")):
         # a genuinely signed but older list (replayed): keep the newer one
         for t in (tmp_i, tmp_b):
