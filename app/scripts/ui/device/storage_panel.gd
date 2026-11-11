@@ -38,8 +38,17 @@ func _build() -> void:
 	_fill()
 
 
+## On its own (a test, a screenshot) the panel watches while it's on screen. In
+## the Device page every part is built at once, hidden: there only the part on
+## show watches (the page calls opened() / closed()), so a Storage tab nobody
+## looked at never polls the mounts behind a game.
 func _enter_tree() -> void:
-	opened()
+	call_deferred("_open_if_shown")
+
+
+func _open_if_shown() -> void:
+	if is_inside_tree() and is_visible_in_tree():
+		opened()
 
 
 func closed() -> void:

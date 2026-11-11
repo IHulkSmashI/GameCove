@@ -100,6 +100,25 @@ func _ready() -> void:
 	_late_start.call_deferred()
 
 
+## Leaving Settings for another screen hides it without changing the category:
+## the page on show stops what it watches (the Device page's Storage tab polls
+## the mounts while open) and starts again when Settings comes back.
+var _page_hidden := false
+
+
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_VISIBILITY_CHANGED or not pages.has(category):
+		return
+	if not is_visible_in_tree() and not _page_hidden:
+		_page_hidden = true
+		if pages[category].has_method("on_hidden"):
+			pages[category].on_hidden()
+	elif is_visible_in_tree() and _page_hidden:
+		_page_hidden = false
+		if pages[category].has_method("on_shown"):
+			pages[category].on_shown()
+
+
 ## No host passed services: use the autoloads (never under the test runner),
 ## and on a first run open setup if nobody else did.
 func _late_start() -> void:
