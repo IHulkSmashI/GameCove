@@ -459,3 +459,25 @@ in Gaming Mode such a change waits for Desktop Mode (`packaging/tests/run.sh` ch
 
 In Gaming Mode the Power page shows these as "Needs your admin password: change it in Desktop Mode", and the
 Fixes page shows the admin note on the file fixes.
+
+### Everything else that runs as root, and where it writes
+
+The two helper actions above are not the whole list. The installer (Desktop Mode, the administrator password) runs
+a few `pkexec sh -c` steps of its own (`app/scripts/installer/commands.gd`; the package path and its sha256 are
+arguments, never pasted into the script; the root step copies the package into a root-only folder and checks the
+hash again before installing the copy), and the fixes write the files they name. Between them, root writes only
+these places:
+
+| Path | Written by | Why |
+| --- | --- | --- |
+| `/etc/gamecove/autologin-guard`, `/etc/systemd/system/gamecove-autologin-guard.service` and its `multi-user.target.wants` link | both installs (`GUARD_INSTALL`); the uninstall removes them | copied out of the package so they outlive it: points autologin back at Steam before the login screen when the GameCove session is gone |
+| `/var/lib/gamecove` | the root helper and every fix (records, saved values, logs) | per OS slot on SteamOS; removed on uninstall with the fixes |
+| `/etc/extensions/gamecove.raw` (a link), `/home/.steamos/offload/gamecove/gamecove.raw` | the SteamOS sysext install | the image lives on the big `/home` partition, linked from a systemd-sysext search path; elsewhere it goes to `/var/lib/extensions/gamecove.raw` |
+| `/etc/atomic-update.conf.d/gamecove.conf`, `gamecove-fix-<name>.conf`, `gamecove-claw8ex-vrr.conf` | the sysext install and the fixes on SteamOS | SteamOS 3.6+ keeps across an OS update only the `/etc` files such an entry lists |
+| `/etc/gamecove/sysext-enabled` | the sysext install, only when it turned `systemd-sysext.service` on | tells the uninstall to turn it off again, and only when no other extension is left |
+| `/etc/gamecove/claw8ex-vrr/` (record, hook, EDID) and `/etc/gamecove/` fix files | the Claw VRR fix on SteamOS | kept across updates through the entry above |
+| `/etc/udev/rules.d`, `/etc/modprobe.d`, `/etc/inputplumber`, `/etc/default/grub` (one marked line), the initramfs and kernel arguments (rpm-ostree) | the fixes that name them (docs/FIXES.md) | the fix's own marked files only; each is removed by its own `remove` |
+| `/run` | the helpers' locks and rate limits | volatile |
+
+Nothing else is written as root, and nothing writes outside `/etc`, `/var/lib/gamecove`, `/run`, `/home/.steamos/offload/gamecove`
+and temporary folders.

@@ -38,6 +38,10 @@ const DOWNLOAD_DIR := ".gamecove-download"
 ## Lowest CPU and disk priority for the heavy steps (priority_prefix()).
 const NICE: Array[String] = ["nice", "-n", "19"]
 const IONICE: Array[String] = ["ionice", "-c", "3"]
+## Size caps (review 9 L8): curl stops past them. A GE-Proton tarball is about 500 MB; the release answer and the
+## checksum file are a few KB.
+const MAX_API_BYTES := 4 * 1024 * 1024
+const MAX_TARBALL_BYTES := 2 * 1024 * 1024 * 1024
 const CURL_SAFE: Array[String] = ["--proto", "=https", "--proto-redir", "=https",
 	"--speed-limit", "1024", "--speed-time", "30"]
 
@@ -71,7 +75,7 @@ static func parse_release(json: String) -> Dictionary:
 
 ## The newest release, or {"error": "..."} when GitHub didn't answer.
 static func latest(runner: RefCounted) -> Dictionary:
-	var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "20"] + CURL_SAFE + [
+	var r: Dictionary = runner.run("curl", PackedStringArray(["-fsSL", "--max-time", "20", "--max-filesize", str(MAX_API_BYTES)] + CURL_SAFE + [
 		"-H", "Accept: application/vnd.github+json", "-H", "User-Agent: GameCove", API]))
 	if int(r.get("code", -1)) != 0:
 		return {"error": "offline"}
@@ -212,7 +216,8 @@ static func _fetch_check_unpack(runner: RefCounted, rel: Dictionary, into: Strin
 		var url: String = job[0]
 		if not url.begins_with(DOWNLOAD_PREFIX):
 			return {"ok": false, "error": "download"}
-		var r: Dictionary = _low(runner, prefix, "curl", ["-fsSL", "--retry", "2", "--connect-timeout", "20"] + CURL_SAFE + [
+		var r: Dictionary = _low(runner, prefix, "curl", ["-fsSL", "--retry", "2", "--connect-timeout", "20",
+			"--max-filesize", str(MAX_TARBALL_BYTES if job[1] == tarball else MAX_API_BYTES)] + CURL_SAFE + [
 			"-H", "User-Agent: GameCove", "-o", job[1], url])
 		if int(r.get("code", -1)) != 0:
 			return {"ok": false, "error": "download"}
