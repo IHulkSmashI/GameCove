@@ -122,6 +122,26 @@ func test_intel_pl2_is_pl1_plus_2() -> void:
 	eq(q.boost_for(39.0), 1.0, "39 W: PL2 at the model's 40 W")
 	eq(q.boost_for(40.0), 0.0, "40 W: no boost past the model's PL2")
 	q.free()
+	# review 4-L2: write_tdp also honours PowerStation's own MaxBoost, as set_boost_w does
+	var capped := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
+	capped.runner.props[PS_BOOST_KEY.replace(" Boost", " MaxBoost")] = {"type": "d", "data": 1.0}
+	capped.load_autotune_opts()
+	ok(capped.set_tdp(17.0), "TDP")
+	ok(float(capped.runner.props[PS_BOOST_KEY]["data"]) <= 1.0, "the boost written stays under the service's own ceiling (1 W)")
+	capped.free()
+	# review 4-L2: a row with no boost_max is capped at its highest TDP, not left unbounded
+	var generic := _row("msi-claw-8-ex").duplicate(true)
+	generic["tdp_backends"] = ["powerstation"]
+	generic["tdp"] = {"min": 8, "battery_max": 25, "plugged_max": 28}
+	generic["pl2_offset_w"] = 2.0
+	var g := _power("bus_claw_powerstation.json", generic, _sys("generic_pl2"))
+	g.plugged = true
+	eq(g.boost_for(20.0), 2.0, "20 W: PL2 22 W")
+	eq(g.boost_for(27.0), 1.0, "27 W: PL2 at the row's 28 W")
+	eq(g.boost_for(28.0), 0.0, "28 W: PL2 was 30 W")
+	g.boost_w = 9.0
+	eq(g.boost_for(20.0), 8.0, "a hand-edited boost_w is bounded the same way")
+	g.free()
 	# rows without the Intel rule leave PowerStation's own boost
 	var amd := _row("msi-claw-a8").duplicate(true)
 	amd["tdp_backends"] = ["powerstation"]
