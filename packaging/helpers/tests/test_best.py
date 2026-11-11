@@ -272,6 +272,21 @@ def test_a_game_with_fsr31_gets_protons_upgrade_and_no_files(tmp_path):
     assert best.native(home, "401", Z1E)["ok"] and not os.path.exists(os.path.join(home, ".local/share/gamecove/launch/401.env"))
 
 
+def test_amd_older_fsr_gets_fsr4_and_fsr31_stays_the_games(tmp_path):
+    """Review M: on AMD any shipped FSR DLL meant "use the game's own", so a game with FSR 2 never got the FSR 4
+    the docs promise. FSR 3.1+ DLLs are what Proton upgrades; older FSR goes through OptiScaler like DLSS."""
+    home = str(tmp_path)
+    _pkg(home)
+    _steam_game(home, "406", "Fsr2Game", ["Fsr2Game.exe", "ffx_fsr2_api_dx12_x64.dll", "ffx_fsr2_api_x64.dll"])
+    p = best.plan(home, "406", Z1E)
+    assert p["route"] == "optiscaler" and p["upscaler"] == "fsr4_amd" and p["files"] is True, p
+    assert "FSR 4.1.2" in p["line"]
+    assert best.plan(home, "406", DECK)["route"] == "own_fsr"       # RDNA 2: FSR 4 only offered, the game's own stays
+    _steam_game(home, "407", "Fsr31Game", ["Fsr31Game.exe", "amd_fidelityfx_dx12.dll", "ffx_fsr2_api_x64.dll"])
+    p = best.plan(home, "407", Z1E)
+    assert p["route"] == "own_fsr" and p["launch"] == {"proton_fsr4": True} and p["files"] is False
+
+
 def test_an_unknown_game_without_clear_signs_is_never_touched(tmp_path):
     home = str(tmp_path)
     _pkg(home)

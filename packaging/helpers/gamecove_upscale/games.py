@@ -265,10 +265,15 @@ def _for_gpu(rec: dict, d: str | None, gpu: dict, home: str | None = None) -> No
         rec.update(route="own", optiscaler=False, launch={}, upscaler=None, frame_gen=None, ini={}, later=[],
                    reasons=["This GPU is too old for a newer upscaler: use the game's own FSR in its graphics menu."])
         return
-    if "FSR" in ships.get("upscaler", []) and not rec.get("re_engine"):
+    fsr31 = gamedb.has_fsr31(d)
+    fsr4_default = chips.FSR4.get(t) == "default"
+    # docs/UPSCALING.md: a game's own FSR 3.1 or newer stays (Proton can turn it into FSR 4); an older FSR (2.x,
+    # 3.0: not upgradable) gets OptiScaler's FSR 4.1.2 like a DLSS game, where FSR 4 is this chip's default.
+    # Chips where FSR 4 is only offered keep any FSR of the game's own (review M: any FSR DLL blocked FSR 4).
+    if "FSR" in ships.get("upscaler", []) and not rec.get("re_engine") and (fsr31 or not fsr4_default):
         # the game has FSR of its own: nothing goes into its folder. Where Proton can upgrade FSR 3.1 to FSR 4 by
         # itself (GE-Proton, Proton-CachyOS) and FSR 4 is this chip's default, the launch gets PROTON_FSR4_UPGRADE.
-        up = dx12 and t in chips.PROTON_FSR4 and chips.FSR4.get(t) == "default" and gamedb.has_fsr31(d)
+        up = dx12 and t in chips.PROTON_FSR4 and fsr4_default and fsr31
         rec.update(route="own_fsr", optiscaler=False, launch={"proton_fsr4": True} if up else {}, upscaler="fsr" if up else None,
                    frame_gen=None, ini={}, later=[])
         rec["reasons"] = [("This game ships FSR 3.1: pick FSR in its graphics menu and Proton turns it into FSR 4 "
