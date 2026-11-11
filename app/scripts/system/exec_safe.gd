@@ -26,8 +26,11 @@ const _MERGE := "exec 2>&1; exec \"$0\" \"$@\""
 const _QUIET := "exec 2>/dev/null; exec \"$0\" \"$@\""
 const _CHUNK := 65536
 ## Programs never signalled by stop_group: a firmware flash must finish, pkexec
-## runs as root (we can't), systemctl is quick and a reboot or suspend must go.
-const NEVER_STOP: Array[String] = ["fwupdmgr", "fwupdtool", "pkexec", "systemctl"]
+## runs as root (we can't), systemctl is quick and a reboot or suspend must go,
+## busctl calls are short (they carry their own --timeout) and the exit-time hand-back of the
+## buttons and the controller (Controller._exit_tree), a key let go mid-press and a
+## session switch all run after the group is stopped and must still get through.
+const NEVER_STOP: Array[String] = ["fwupdmgr", "fwupdtool", "pkexec", "systemctl", "busctl"]
 ## "*": every group.
 const ALL := "*"
 
