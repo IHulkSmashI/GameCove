@@ -12,8 +12,10 @@ extends RefCounted
 ## with `shortcut` true) by the shortcut's own 32-bit app id, the `appid` Steam
 ## keeps for it in shortcuts.vdf and names in `SteamLaunch AppId=<id>`. Not the
 ## 64-bit game id steam://rungameid takes. Valve's page doesn't spell out the
-## shortcut case, so this is the id Steam's own interface uses for a shortcut
-## and is on the list to confirm on a handheld (docs/CONTROLS.md).
+## shortcut case; shipped tools do: Vesktop (src/main/utils/steamOS.ts), run as
+## a shortcut in Game Mode, opens steam://controllerconfig/<its 32-bit shortcut
+## id>/<layout> (the id read from its shadercache folder), and Decktricks does
+## the same. Still on the list to confirm on a handheld (docs/CONTROLS.md).
 ## A game GameCove starts itself (Epic, GOG, Amazon, a ROM started directly)
 ## never passes through Steam Input, so it has no such screen: why_not() says so.
 ##

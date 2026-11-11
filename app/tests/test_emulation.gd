@@ -12,6 +12,7 @@ const EmulationPage := preload("res://scripts/ui/emulation_page.gd")
 const TL := preload("res://scripts/ui/texts_library.gd")
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Logic := preload("res://tests/test_ui_logic.gd")
+const SteamInput := preload("res://scripts/ui/controls/steam_input.gd")
 
 const BASE := "user://test_emulation"
 const STEAM := ".local/share/Steam"
@@ -219,6 +220,8 @@ func test_shortcuts_become_emulated_games() -> void:
 	eq(game["info"]["meta"]["steam_twin"], "", "never matched to a PC game by title")
 	eq(game["emulated"]["system"], "snes", "the game carries its system")
 	ok(game["shortcut"], "marked as a Steam shortcut")
+	eq([SteamInput.uri_for(game), SteamInput.uri_for(r["entries"]["emu:%d" % u])], ["steam://controllerconfig/%d" % u, "steam://controllerconfig/%d" % u],
+		"Steam's controller settings: the unsigned 32-bit id from shortcuts.vdf (the id Vesktop opens as a shortcut), not the 64-bit game id")
 	eq(LibraryScript.launch_command(r["entries"]["emu:%d" % u], {}), [] as Array[String], "not started by us: Steam starts it (Library.launch)")
 
 

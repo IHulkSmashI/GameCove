@@ -543,7 +543,15 @@ the `appid` Steam keeps in `shortcuts.vdf` and shows in `SteamLaunch AppId=<id>`
 `steam://rungameid` takes). A game GameCove starts itself (Epic, GOG, Amazon, a ROM started directly) never
 passes through Steam Input, so there is no button for it, and one line says why. Valve's Steam browser
 protocol page documents `steam://controllerconfig/<id>` with a Steam application id and doesn't spell out the
-shortcut case, so the shortcut id is on the hardware list below.
+shortcut case. The shortcut's 32-bit app id is what shipped tools use for it: Vesktop runs in Game Mode as a
+non-Steam shortcut, reads its own id from `STEAM_COMPAT_MEDIA_PATH` (`steamapps/shadercache/<id>`, the
+32-bit shortcut id, because Steam sets `SteamAppId` to 0 for shortcuts) and opens
+`steam://controllerconfig/<id>/<layout id>` to offer its layout (`src/main/utils/steamOS.ts`); Decktricks, also
+started as a shortcut, does the same from `STEAM_COMPAT_TRANSCODED_MEDIA_PATH`
+(`src/controller_layout.rs`, based on Vesktop's). Steam's own client scripts build the address as
+`steam://controllerconfig/${appid}/…` (SteamTracking `API/JavascriptUrls.txt`), and in Steam's client a
+shortcut's appid is that same 32-bit id. The 64-bit game id is never used there. We haven't opened it on a
+handheld ourselves yet, so it stays first on the hardware list below.
 
 **Out.** The button shows a cover ("Opening Steam's controller settings…", a 0.14 s fade, so nothing behind
 flashes), and from that moment GameCove takes nothing from the pad. The address goes to Steam; every 0.4 s
@@ -569,7 +577,8 @@ gamescope's window list and Steam):
 
 1. `steam://controllerconfig/<shortcut app id>` opens the configurator for a Steam ROM Manager game (and
    for a plain Steam game) with Steam started as GameCove starts it (`steam -silent`, and the `gamepadui`
-   mode).
+   mode). Vesktop and Decktricks open it this way in Game Mode; check it from GameCove too. If it ever
+   opens the wrong screen, only `uri_for` in `steam_input.gd` changes.
 2. Steam's configurator window appears in `GAMESCOPE_FOCUSABLE_WINDOWS` under a `steam` or `steamwebhelper`
    pid, and `GAMESCOPECTRL_BASELAYER_WINDOW` brings it in front without a black or desktop frame.
 3. With it in front the pad drives Steam's screen at once (InputPlumber intercept on Pass; Handheld Daemon
