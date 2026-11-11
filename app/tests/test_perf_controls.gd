@@ -706,6 +706,38 @@ func test_lsfg_config_is_replaced_atomically() -> void:
 
 # ---- Best / My choice / Native, what is running, one frame generator ------------------
 
+## Set up when a game is installed or updated, not at its first start.
+func test_a_game_is_set_up_when_it_is_installed_or_updated() -> void:
+	var w := _world("prepare_installed", ALLY_X)
+	var runner = w["runner"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove",
+		"env": {"WINEDLLOVERRIDES": "dxgi=n,b;", "PROTON_FSR4_UPGRADE": "1"}, "active": {"state": "waiting", "line": "Ready"}}
+	runner.answers["prepare"] = {"ok": true, "did": "set up", "mode": "best"}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null}
+	var prepare: Variant = w["ctx"].get("prepare_installed")
+	ok(prepare is Callable and (prepare as Callable).is_valid(), "main reaches it through the controls' context")
+	# no game page is open: the installed game is set up all the same
+	var r: Dictionary = (prepare as Callable).call(EPIC, true)
+	eq(str(r.get("did", "")), "set up", "set up right after the install")
+	var calls := _calls_with(runner, "prepare")
+	eq(calls.size(), 1, "one helper run")
+	ok("epic:abc" in calls[0] or "abc" in calls[0], "for that game: " + calls[0])
+	eq(w["p"].launch_env_hook("epic:abc", EPIC).get("PROTON_FSR4_UPGRADE"), "1", "its first start already has the upscaler's settings")
+	_with_game(w, EPIC)
+	eq(_calls_with(runner, "prepare").size(), 1, "opening its page afterwards doesn't do it twice")
+	# an update: checked again (the update may have removed our files)
+	runner.answers["prepare"] = {"ok": true, "did": "put back after a game update", "mode": "best"}
+	(prepare as Callable).call(EPIC, true)
+	eq(_calls_with(runner, "prepare").size(), 2, "an update is looked at again")
+	# while another game runs nothing is started; the next look does it
+	(prepare as Callable).call(EPIC, false)
+	eq(_calls_with(runner, "prepare").size(), 2, "nothing runs behind a running game")
+	w["reg"].detect_all()
+	eq(_calls_with(runner, "prepare").size(), 3, "done at the next look instead")
+	eq((prepare as Callable).call({}, true), {}, "no game: nothing")
+	_done(w)
+
+
 func test_mode_row_sets_the_game_up_once_and_says_what_best_picks() -> void:
 	var w := _world("mode_best", ALLY_X)
 	var runner = w["runner"]

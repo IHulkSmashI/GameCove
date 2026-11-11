@@ -727,10 +727,27 @@ func _on_install_finished(key: String, action: String, ok: bool) -> void:
 		return
 	var g := View.find_by_key(Library.games, key)
 	var title := str(g.get("title", ""))
+	if action in ["install", "update", "verify"] and not g.is_empty():
+		_prepare_upscaling(g)
 	if action == "install" and title != "":
 		toast("%s is ready to play" % title, "check", "good", "")
 	elif action in ["update", "move", "uninstall", "verify"] and title != "":
 		toast("%s: %s" % [title, TG.ACTION_DONE[action].to_lower()], "check", "good", "")
+
+
+## Upscaling is set up when a game lands (installed, updated, files checked),
+## not at its first start: one short helper run on the Controls worker. While a
+## game is running nothing is started; that game is set up at its next look.
+func _prepare_upscaling(g: Dictionary) -> void:
+	var controls := _svc("Controls")
+	if controls == null or not controls.has_method("run_on_worker") or not ("ctx" in controls):
+		return
+	var prepare: Variant = controls.ctx.get("prepare_installed")
+	if not (prepare is Callable and (prepare as Callable).is_valid()):
+		return
+	var game := g.duplicate()
+	var now: bool = not (session != null and session.is_active())
+	controls.run_on_worker(func(): (prepare as Callable).call(game, now))
 
 
 func open_downloads() -> void:

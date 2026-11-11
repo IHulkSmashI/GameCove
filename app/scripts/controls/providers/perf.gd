@@ -71,6 +71,7 @@ func setup(c: Dictionary) -> void:
 	launcher = c.get("launcher", _autoload("Launcher") if real else null)
 	library = c.get("library", _autoload("Library") if real else null)
 	store = Store.new(str(c.get("perf_store_path", "")), str(_profile().get("id", "unknown")))
+	c["prepare_installed"] = prepare_installed
 	if launcher != null and "env_hooks" in launcher:
 		launcher.env_hooks.append(launch_env_hook)
 	if launcher != null and "frame_gen_hooks" in launcher:
@@ -547,6 +548,35 @@ func prepare_game(key := "") -> Dictionary:
 		var st := upscale_status()
 		var env: Variant = st.get("env", {})
 		_sv("upscale_env", env if env is Dictionary and not env.is_empty() else null)
+		_last_did[k] = str(r.get("did", ""))
+	return r
+
+
+## A game was just installed, updated or had its files checked (main's
+## install_finished, on the Controls worker): set it up now, or put back what
+## the update removed, so its first start already runs with the pick. Works for
+## any game, not only the open one; `now` false (another game is running) only
+## marks it, and the next look or start does the work.
+func prepare_installed(g: Dictionary, now := true) -> Dictionary:
+	var k := str(g.get("key", "%s:%s" % [g.get("store", ""), g.get("id", "")]))
+	if k == "" or k == ":":
+		return {}
+	_prepared.erase(k)
+	_mutex.lock()
+	_status_cache.erase(k)
+	_plan_cache.erase(k)
+	_mutex.unlock()
+	var dir := str(g.get("install_path", ""))
+	if not now or upscale_cmd() == "" or _gpu()["vendor"] == "other" or (Files.steam_appid(k) == "" and dir == ""):
+		return {}
+	_prepared[k] = true
+	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(g)) else []
+	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac)
+	if str(r.get("did", "")) != "":
+		var st := Upscale.run(ctx.get("runner"), upscale_cmd(), "status", _home(), k, _gpu(), dir)
+		var env: Variant = st.get("env", {})
+		store.set_value(k, "upscale_env", env if env is Dictionary and not env.is_empty() else null)
+		game_changed(k, g)
 		_last_did[k] = str(r.get("did", ""))
 	return r
 
