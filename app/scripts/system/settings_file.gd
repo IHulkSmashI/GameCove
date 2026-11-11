@@ -1,8 +1,11 @@
 extends RefCounted
 ## The one way GameCove writes its settings files (review H9).
 ##
-## Writes go to "<path>.tmp", are flushed, then renamed over the file: a crash or
-## a dead battery leaves either the old file or the new one, never half of one.
+## Writes go to "<path>.<pid>.tmp", are flushed, then renamed over the file: a crash or
+## a dead battery leaves either the old file or the new one, never half of one. The
+## temp name carries the process id, so two processes saving the same file (a helper run
+## next to the home screen) never write into each other's half-written copy; what a
+## crashed process left is cleared on the first save of that file in a run.
 ## (Godot has no fsync; FileAccess.flush() hands the data to the kernel, and the
 ## rename-over-an-existing-file pattern is what ext4/btrfs order for us.)
 ##
@@ -16,10 +19,13 @@ extends RefCounted
 ## Use update_cfg() for a read-modify-write; load_cfg()/save_cfg() for stores
 ## that keep the ConfigFile in memory.
 ##
+## claim_instance() is the one-home-screen lock (run_mode.gd decides who asks).
+##
 ## Tests: reset_for_tests() forgets blocked paths.
 
 static var _lock := Mutex.new()
 static var _blocked := {}   # absolute path -> true: damaged on load, never saved this run
+static var _swept := {}     # absolute path -> true: leftover temp files looked for this run
 ## Tests only: when >= 0, at most this many bytes reach the .tmp file (a full disk).
 static var test_write_limit := -1
 
@@ -39,6 +45,7 @@ static func blocked(path: String) -> bool:
 static func reset_for_tests() -> void:
 	_lock.lock()
 	_blocked.clear()
+	_swept.clear()
 	test_write_limit = -1
 	_lock.unlock()
 
@@ -140,7 +147,68 @@ static func save_text(path: String, text: String, private := false) -> Error:
 	return save_bytes(path, text.to_utf8_buffer(), private)
 
 
-## Atomic write: <path>.tmp, flush, rename over <path>.
+## This process's temp file for `path`.
+static func tmp_path(path: String) -> String:
+	return "%s.%d.tmp" % [abs_path(path), OS.get_process_id()]
+
+
+## Once per file and run: removes temp files of `p` that no live process owns (a crash in
+## the middle of a save, or the fixed "<file>.tmp" of builds before the pid was in the name).
+## Call with the lock held.
+static func _sweep(p: String) -> void:
+	if _swept.has(p):
+		return
+	_swept[p] = true
+	var dir := p.get_base_dir()
+	var name := p.get_file()
+	if not DirAccess.dir_exists_absolute(dir):
+		return   # the save itself reports the missing folder
+	for f in DirAccess.get_files_at(dir):
+		if not f.begins_with(name + ".") or not f.ends_with(".tmp"):
+			continue
+		var mid := f.substr(name.length() + 1, f.length() - name.length() - 5)
+		if f == name + ".tmp":
+			DirAccess.remove_absolute(dir.path_join(f))
+		elif mid.is_valid_int() and mid.to_int() != OS.get_process_id() and not DirAccess.dir_exists_absolute("/proc/" + mid):
+			DirAccess.remove_absolute(dir.path_join(f))
+
+
+## The one-home-screen lock: `lock` holds the pid of the GameCove that runs the home
+## screen. Returns 0 when that is (now) `my_pid`, else the pid of the other, live one.
+## A holder that is gone, or whose pid now belongs to another program, is replaced.
+static func claim_instance(lock: String, my_pid: int = OS.get_process_id(), proc_root := "/proc") -> int:
+	var p := abs_path(lock)
+	var mine := _read_all(proc_root.path_join(str(my_pid)).path_join("comm")).strip_edges()
+	for attempt in 2:
+		var held := FileAccess.get_file_as_string(p).strip_edges() if FileAccess.file_exists(p) else ""
+		if held.is_valid_int() and held.to_int() > 0 and held.to_int() != my_pid:
+			var theirs := _read_all(proc_root.path_join(held).path_join("comm")).strip_edges()
+			if theirs != "" and theirs == mine:
+				return held.to_int()
+		if held == str(my_pid):
+			return 0
+		DirAccess.make_dir_recursive_absolute(p.get_base_dir())
+		if save_text(p, "%d\n" % my_pid) != OK:
+			return 0   # a settings folder that can't be written: nothing to protect by stepping aside
+		# two starting in the same instant: the one whose pid is in the file after both wrote keeps it
+	return 0
+
+
+## A file read to its real end (/proc files report a size of 0).
+static func _read_all(path: String) -> String:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return ""
+	var buf := PackedByteArray()
+	while buf.size() < 65536:
+		var chunk := f.get_buffer(4096)
+		buf.append_array(chunk)
+		if chunk.size() < 4096:
+			break
+	return buf.get_string_from_utf8()
+
+
+## Atomic write: <path>.<pid>.tmp, flush, rename over <path>.
 ## A short write (a full disk: the kernel can accept the bytes into the page cache
 ## and still drop them, and Godot's close() reports nothing) never replaces the
 ## file: the .tmp must hold exactly `data` before the rename (review 2, problem 2).
@@ -152,7 +220,8 @@ static func save_bytes(path: String, data: PackedByteArray, private := false) ->
 		return ERR_LOCKED
 	# never makes folders: an explicit path whose folder is missing fails; the owners of
 	# the app's own folders (user://, ~/.config/...) create them
-	var tmp := p + ".tmp"
+	_sweep(p)
+	var tmp := tmp_path(p)
 	if private:
 		var e0 := FileAccess.open(tmp, FileAccess.WRITE)
 		if e0 != null:

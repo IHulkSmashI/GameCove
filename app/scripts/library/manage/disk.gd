@@ -78,3 +78,41 @@ static func locations(install_root: String, media_root: String, user: String) ->
 
 static func is_removable(path: String, media_root := "/run/media") -> bool:
 	return path.simplify_path().begins_with(media_root.simplify_path() + "/")
+
+
+## The mount point holding `path`, from the text of /proc/self/mounts ("" when unknown).
+static func mount_of(path: String, mounts_text: String) -> String:
+	var p := path.simplify_path()
+	var best := ""
+	for line in mounts_text.split("\n", false):
+		var cols := line.split(" ", false)
+		if cols.size() < 2:
+			continue
+		# the kernel writes a space in a mount point as \040 (tab \011, newline \012, backslash \134)
+		var target := cols[1].replace("\\040", " ").replace("\\011", "\t").replace("\\012", "\n").replace("\\134", "\\")
+		if (p == target or target == "/" or p.begins_with(target + "/")) and target.length() > best.length():
+			best = target
+	return best
+
+
+## True when both paths sit under the same mount point, so a move between them is one
+## rename. False when that can't be told (then the move copies, which is always right).
+## `mounts_text`: /proc/self/mounts (read here when not given).
+static func same_drive(a: String, b: String, mounts_text: Variant = null) -> bool:
+	var text: String = mounts_text if mounts_text is String else _read_all("/proc/self/mounts")
+	var ma := mount_of(a, text)
+	return ma != "" and ma == mount_of(b, text)
+
+
+## A file read to its real end (/proc files report a size of 0).
+static func _read_all(path: String) -> String:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return ""
+	var buf := PackedByteArray()
+	while buf.size() < 4 * 1024 * 1024:
+		var chunk := f.get_buffer(65536)
+		buf.append_array(chunk)
+		if chunk.size() < 65536:
+			break
+	return buf.get_string_from_utf8()

@@ -66,6 +66,58 @@ static func _step(cmd: Array, env: Dictionary, parser: String, tool: String, kin
 	return {"cmd": c, "env": env, "parser": parser, "kind": kind, "tool": tool}
 
 
+## The folder a game is copied into while it moves to another drive (renamed when whole).
+const MOVING_SUFFIX := ".gamecove-moving"
+
+
+## The file steps of a move from `src` to `dest`/<src's name> (download_queue.gd runs them).
+## facts["same_drive"]: one rename, which can't be half done. Otherwise a `mv` would copy
+## and then delete, and that can't be picked up again once stopped, so it is done in steps
+## that can each be run again:
+##   1. cp -a into <new>.gamecove-moving   may be paused or cancelled; running it again
+##                                         copies over what is there; a cancel or a failure
+##                                         removes the half copy ("cleanup")
+##   2. mv <new>.gamecove-moving <new>     one rename on that drive
+##   (`between`: the store's own record, e.g. legendary move --skip-move)
+##   3. rm -rf the old folder
+## From step 2 on the job can't be stopped ("no_stop"); a step with "done_if" is skipped
+## when its "gone" path isn't there and its "there" path is (a restart after it ran).
+## {"ok", "why", "steps", "new_path"}.
+static func move_steps(src: String, dest: String, facts: Dictionary, between: Array = []) -> Dictionary:
+	if dest == "" or src == "":
+		return {"ok": false, "why": "Pick a folder to move to"}
+	var from := src.simplify_path()
+	var home := str(facts.get("home", "")).simplify_path()
+	if not from.is_absolute_path() or from.count("/") < 2 or from == home or ".." in src.split("/"):
+		return {"ok": false, "why": "Won't move this folder: it doesn't look like a game's install"}
+	var to := dest.path_join(src.get_file())
+	var steps: Array = []
+	if bool(facts.get("same_drive", false)):
+		var one := _step(["mv", "-T", "--", src, to], {}, "none", "mv")
+		one["no_stop"] = true
+		one["done_if"] = {"gone": src, "there": to}
+		steps.append(one)
+		for s in between:
+			s["no_stop"] = true
+			steps.append(s)
+	else:
+		var part := to + MOVING_SUFFIX
+		var copy := _step(["cp", "-a", "-T", "--", src, part], {}, "none", "cp")
+		copy["cleanup"] = ["rm", "-rf", "--", part]
+		var rename := _step(["mv", "-T", "--", part, to], {}, "none", "mv")
+		rename["no_stop"] = true
+		rename["done_if"] = {"gone": part, "there": to}
+		steps.append(copy)
+		steps.append(rename)
+		for s in between:
+			s["no_stop"] = true
+			steps.append(s)
+		var delete := _step(["rm", "-rf", "--", src], {}, "none", "rm")
+		delete["no_stop"] = true
+		steps.append(delete)
+	return {"ok": true, "why": "", "steps": steps, "new_path": to}
+
+
 ## Install folder for a new game: options.path, else <install_root>/<store>.
 static func install_base(store: String, facts: Dictionary, options: Dictionary = {}) -> String:
 	if str(options.get("path", "")) != "":
@@ -119,13 +171,11 @@ static func _epic(action: String, entry: Dictionary, tools: Dictionary, facts: D
 			return _yes("legendary", [_step([legendary, "uninstall", "-y", "--skip-uninstaller", "--", id], env, "none", "legendary")])
 		"move":
 			var dest := str(facts.get("options", {}).get("path", ""))
-			var src := str(entry.get("install_path", ""))
-			if dest == "" or src == "":
-				return _no("Pick a folder to move to")
-			return _yes("legendary", [
-				_step(["mv", "-T", "--", src, dest.path_join(src.get_file())], {}, "none", "mv"),
-				_step([legendary, "move", "--skip-move", "--", id, dest], env, "none", "legendary"),
-			], {"new_path": dest.path_join(src.get_file())})
+			var mv := move_steps(str(entry.get("install_path", "")), dest, facts,
+				[_step([legendary, "move", "--skip-move", "--", id, dest], env, "none", "legendary")])
+			if not mv["ok"]:
+				return _no(mv["why"])
+			return _yes("legendary", mv["steps"], {"new_path": mv["new_path"]})
 	return _no("Unknown action")
 
 
@@ -163,12 +213,10 @@ static func _gog(action: String, entry: Dictionary, tools: Dictionary, facts: Di
 				return _no("Won't delete this folder: it doesn't look like the game's install")
 			return _yes("gamecove", [_step(["rm", "-rf", "--", path], {}, "none", "rm")], {"gog_record": "remove"})
 		"move":
-			var dest := str(facts.get("options", {}).get("path", ""))
-			var src := str(entry.get("install_path", ""))
-			if dest == "" or src == "":
-				return _no("Pick a folder to move to")
-			return _yes("gamecove", [_step(["mv", "-T", "--", src, dest.path_join(src.get_file())], {}, "none", "mv")],
-				{"gog_record": "move", "new_path": dest.path_join(src.get_file())})
+			var mv := move_steps(str(entry.get("install_path", "")), str(facts.get("options", {}).get("path", "")), facts)
+			if not mv["ok"]:
+				return _no(mv["why"])
+			return _yes("gamecove", mv["steps"], {"gog_record": "move", "new_path": mv["new_path"]})
 	return _no("Unknown action")
 
 
@@ -197,6 +245,13 @@ static func _amazon(action: String, entry: Dictionary, tools: Dictionary, facts:
 		"move":
 			return _no("nile can't move games; reinstall to the new folder")
 	return _no("Unknown action")
+
+
+## True when `path` is `folder` or somewhere inside it.
+static func is_inside(path: String, folder: String) -> bool:
+	var p := path.simplify_path()
+	var f := folder.simplify_path()
+	return f != "" and p != "" and (p == f or p.begins_with(f + "/"))
 
 
 ## Only delete a folder that is clearly a game install: absolute, at least three

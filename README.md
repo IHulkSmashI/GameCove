@@ -383,7 +383,8 @@ over Tailscale. More in [docs/STREAMING.md](docs/STREAMING.md).
   countdown.
 - **Saves are never overwritten without a copy.** Before a cloud save replaces one on the handheld (or a backup is
   restored), the current one is backed up locally; a download that fails half way puts it straight back. The last 10
-  backups per game are kept, and the game page restores any of them.
+  backups per game are kept, plus the last 10 made by a choice between two saves or by a restore, and the game page
+  restores any of them.
 - **Undo everything:** fixes, upscaling files, launch options, profiles. Uninstalling puts Steam Gaming Mode back as the
   default.
 - **Signed releases.** The installer checks every download against a signed checksum list before anything runs.

@@ -550,6 +550,10 @@ func _wire_saves_and_battery() -> void:
 	saves.name = "CloudSaves"
 	saves.setup_library(_svc("Library"))
 	saves.game_running = func() -> bool: return session != null and session.is_active()
+	# no uninstall, move, update or verify of an Epic, GOG or Amazon game while it runs
+	var lib_store: Variant = _svc("Library").get("store") if _svc("Library") != null else null
+	if lib_store is Object and "game_running" in lib_store:
+		lib_store.game_running = func(key: String) -> bool: return session != null and session.runs(key)
 	saves.finished.connect(_on_saves_finished)
 	add_child(saves)
 	battery_log = BatteryLog.new()

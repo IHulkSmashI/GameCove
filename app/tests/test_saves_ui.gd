@@ -7,6 +7,7 @@ const SavesCard := preload("res://scripts/ui/games/saves_card.gd")
 const GamePage := preload("res://scripts/ui/game_page.gd")
 const SavesPage := preload("res://scripts/ui/settings/saves_page.gd")
 const TS := preload("res://scripts/ui/texts_saves.gd")
+const TG := preload("res://scripts/ui/texts_games.gd")
 const Screens := preload("res://tests/test_ui_screens.gd")
 
 
@@ -53,8 +54,14 @@ class FakeSaves:
 	func sync_now(_g: Dictionary, _d := Callable()) -> void:
 		calls.append("sync")
 
-	func resolve(_g: Dictionary, c: String, _d := Callable()) -> void:
+	## A game runs: resolve refuses, as saves_service.gd does.
+	var running := false
+
+	func resolve(_g: Dictionary, c: String, _d := Callable()) -> bool:
+		if running:
+			return false
 		calls.append("resolve " + c)
+		return true
 
 	func restore(_g: Dictionary, id: String, _d := Callable()) -> void:
 		calls.append("restore " + id)
@@ -198,3 +205,53 @@ func test_settings_page_lists_games_and_the_switch() -> void:
 	page.free()
 	lib.free()
 	s.free()
+
+
+## High 5: the conflict choice from the game page while a game runs is refused, and the
+## card says why instead of looking as if it worked.
+func test_conflict_choice_while_a_game_runs_says_close_the_game() -> void:
+	var s := FakeSaves.new()
+	var a := FakeActions.new()
+	var toasts := []
+	a.toast = func(t, _i = "info", tone = "", _d = ""): toasts.append([t, tone])
+	var c: VBoxContainer = SavesCard.new()
+	s.st["state"] = "conflict"
+	c.setup(EPIC, s, a)
+	s.running = true
+	c.choose_button.pressed.emit()
+	a.cb.call("cloud")
+	eq(s.calls, [], "nothing was started")
+	eq(toasts, [[TS.RESOLVE_RUNNING, "warn"]], "the card says to close the game first")
+	s.running = false
+	a.cb.call("cloud")
+	eq(s.calls, ["resolve cloud"], "after the game it goes through")
+	eq(toasts.size(), 1, "with no warning")
+	c.free()
+	s.free()
+	a.free()
+
+
+## High 6: after a restore the conflict sheet offers the restored save first, even though
+## the cloud's is newer by the clock.
+func test_conflict_rows_after_a_restore_offer_the_restored_side_first() -> void:
+	var rows := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "prefer": "local", "store": "epic"}, 2030, true)
+	eq(rows.map(func(r): return r["id"]), ["local", "cloud", "later"], "the restored save first")
+	eq([rows[0].get("tone", ""), rows[0].get("value", "")], ["good", TS.RESTORED_BADGE], "marked as the restored one")
+	eq(rows[0]["detail"], TS.RESTORED_DETAIL, "and said so")
+	ok(not rows[1].has("value"), "the cloud's isn't called newer next to it")
+	var plain := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "prefer": "", "store": "epic"}, 2030)
+	eq(plain.map(func(r): return r["id"]), ["cloud", "local"], "without a restore: newest first, as before")
+
+
+## GOG's time for the cloud side is when the files were uploaded, not when they were played,
+## so it can't be compared with the local save's time: no side is called "Newer".
+func test_gog_conflict_rows_dont_claim_a_newer_side() -> void:
+	var rows := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "store": "gog"}, 2030, true)
+	eq(rows.map(func(r): return r["id"]), ["local", "cloud", "later"], "a fixed order: this handheld, the cloud")
+	ok(not rows[0].has("value") and not rows[1].has("value"), "no Newer badge on either")
+	ok(not rows[0].has("tone") and not rows[1].has("tone"), "and no highlight")
+	eq(rows[1]["detail"], TS.UPLOADED_AT % TG.ago(2000, 2030), "the cloud side says when it was uploaded")
+	eq(rows[0]["detail"], TS.saved_at(1000, 2030), "the local side when it was saved")
+	eq(SavesCard.conflict_rows({"local": 1000, "remote": 0, "store": "gog"}, 2030)[1]["detail"], TS.UNKNOWN_TIME, "no time: unknown")
+	var epic := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "store": "epic"}, 2030)
+	eq(epic[0].get("value", ""), TS.NEWER, "Epic's times are both save times: Newer stays")

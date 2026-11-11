@@ -6,6 +6,7 @@ extends SceneTree
 ## device_storage, device_updates, device_about_light, device_controller_midnight,
 ## device_about_generic, device_storage_loading, device_controller_missing,
 ## device_storage_cleanup_missing (an SD library listed but not mounted),
+## device_storage_cleanup_away (a card that's out and no longer listed by Steam),
 ## device_about_photo (needs a photo at /tmp/gamecove-shots/device_photo.webp, e.g. one
 ## built by tools/device_photos/build.py; skipped otherwise).
 
@@ -141,6 +142,15 @@ func _run() -> void:
 		var sm: Dictionary = s.duplicate()
 		sm["storage"] = ms
 		await _page("storage_panel.gd", "Storage", sm, "device_storage_cleanup_missing")
+	if only.is_empty() or "device_storage_cleanup_away" in only:
+		# a card that's out and that Steam no longer lists: its games' caches are kept, the rest offered
+		var aw: Node = ShotStorage.new()
+		aw.st = s["storage"].st.duplicate(true)
+		aw.st["cleanup"] = {"ready": true, "dirs": ["/home/deck/.local/share/Steam/steamapps/shadercache/20"], "bytes": 734003200,
+			"cleaning": false, "missing": [], "away": ["/run/media/deck/SD/SteamLibrary"]}
+		var sa: Dictionary = s.duplicate()
+		sa["storage"] = aw
+		await _page("storage_panel.gd", "Storage", sa, "device_storage_cleanup_away")
 	g["controller"].st = {"available": false, "supported": {}}
 	var mp: Control = await _page("controller_panel.gd", "Controller", g, "", 0)
 	g["controller"].changed.emit({"available": false, "supported": {}})

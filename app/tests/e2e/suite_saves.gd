@@ -19,6 +19,12 @@ func _fake(look: String) -> Array:
 		var fa := FileAccess.open(dir + "/" + f[0], FileAccess.WRITE)
 		fa.store_string(f[1])
 		fa.close()
+	# the save the fake legendary talks about is really there: a sync time is dropped for an
+	# empty save folder (a deleted prefix), and the end of a game would then ask, not upload
+	DirAccess.make_dir_recursive_absolute(str(w.home) + "/MinSaves")
+	var sv := FileAccess.open(str(w.home) + "/MinSaves/world.sav", FileAccess.WRITE)
+	sv.store_string("progress")
+	sv.close()
 	var s: Node = main().saves
 	s.entry_lookup = func(_k: String) -> Dictionary: return EPIC.merged({"config_dir": dir, "platform": "Windows", "prefix": ""})
 	s.tools_lookup = func() -> Dictionary: return {"legendary": "/usr/bin/legendary", "heroic_flatpak": []}

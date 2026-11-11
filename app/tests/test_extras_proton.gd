@@ -326,3 +326,25 @@ func test_install_waits_for_the_game_and_runs_at_low_priority() -> void:
 	ProtonGE.install(f2, ProtonGE.parse_release(release_json("GE-Proton10-30")), h.cd)
 	ok(f2.calls.any(func(x): return str(x).begins_with("nice -n 19 ionice -c 3 tar -xzf ")), "the default is both")
 	_rm(h.root)
+
+
+## Final review, low: a GE-Proton entry that is a symlink (a build kept on another drive
+## and linked in) was followed, and Remove deleted the files of the folder it points at.
+## Only the link goes.
+func test_remove_never_follows_a_top_level_symlink() -> void:
+	var h := _home("symlink")
+	var elsewhere: String = h.root.path_join("elsewhere/GE-Proton9-27")
+	_touch(elsewhere.path_join("proton"), "the real build")
+	_touch(elsewhere.path_join("compatibilitytool.vdf"), _tool_vdf("GE-Proton9-27"))
+	_touch(elsewhere.path_join("files/bin/wine"), "wine")
+	OS.execute("ln", ["-s", elsewhere, h.cd.path_join("GE-Proton9-27")])
+	ok(DirAccess.dir_exists_absolute(h.cd.path_join("GE-Proton9-27")), "linked in")
+	eq(ProtonGE.remove(h.cd, "GE-Proton9-27", h.steam), "", "removed")
+	ok(not DirAccess.dir_exists_absolute(h.cd.path_join("GE-Proton9-27")), "the link is gone from Steam's folder")
+	eq(FileAccess.get_file_as_string(elsewhere.path_join("proton")), "the real build", "what it pointed at is untouched")
+	ok(FileAccess.file_exists(elsewhere.path_join("files/bin/wine")), "all of it")
+	# remove_tree itself, handed a link
+	OS.execute("ln", ["-s", elsewhere, h.root.path_join("alink")])
+	ok(ProtonGE.remove_tree(h.root.path_join("alink")), "a link given to remove_tree")
+	ok(FileAccess.file_exists(elsewhere.path_join("proton")), "is removed as a link")
+	_rm(h.root)
