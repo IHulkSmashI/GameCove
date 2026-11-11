@@ -33,6 +33,8 @@ signal relinked
 const BUTTON_MIN := Vector2(56, 62)
 const ICON_PX := 26
 const GAP := 4
+const LABEL_AIR := 12.0     # px of room left and right of a label inside its button
+const MIN_LABEL_PX := 9
 
 var runner: Object
 ## Where sheets go (the quick menu itself, so they cover its panel).
@@ -127,7 +129,23 @@ func _button(a: Dictionary) -> Button:
 	var id: String = a["id"]
 	b.pressed.connect(press.bind(id))
 	b.focus_entered.connect(func(): _last = id)
+	b.resized.connect(fit_label.bind(b))
 	return b
+
+
+## The label's size so its whole word sits inside the button with a little air:
+## eight buttons share the panel's width, and "Screenshot" or "Keyboard" at the
+## usual size touched both edges. Steps down a point at a time, never below
+## MIN_LABEL_PX.
+func fit_label(b: Button) -> void:
+	var l := b.get_node_or_null("Col/Name") as Label
+	if l == null or b.size.x <= 0.0:
+		return
+	var font := l.get_theme_font("font")
+	var px := ThemeLib.SIZE_MICRO
+	while px > MIN_LABEL_PX and font.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > b.size.x - LABEL_AIR:
+		px -= 1
+	l.add_theme_font_size_override("font_size", px)
 
 
 ## Shows the shortcuts that work right now and their state. Memory reads only.
@@ -165,6 +183,7 @@ func _paint(id: String, st: Dictionary) -> void:
 	var label := b.get_node("Col/Name") as Label
 	var word := str(st.get("label", ""))
 	label.text = word if word != "" else str(a["short"])
+	fit_label(b)
 	for state in ["normal", "hover"]:
 		b.remove_theme_stylebox_override(state)
 	if on:
