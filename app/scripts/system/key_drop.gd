@@ -9,11 +9,15 @@ extends Node
 ##   - listens only while start() .. stop(), on one LAN address (never on all
 ##     interfaces), on a random port the system picks;
 ##   - every address carries a one-time token (128 random bits); anything else
-##     gets 404, and past MAX_BAD wrong requests a minute, new connections are
-##     closed unanswered until the minute is over (the page stays open: someone
-##     else on the network can't shut it for you, review 2, low 16);
+##     gets 404, and past MAX_BAD wrong requests a minute FROM ONE DEVICE, that
+##     device's new connections are closed unanswered until the minute is over.
+##     The count is per device (final review, low: it was one count for everybody,
+##     so anyone on the Wi-Fi could keep the page closed to your phone), and the
+##     page stays open (review 2, low 16);
 ##   - closes by itself after the first well-formed key, or after `lifetime`
-##     seconds (10 minutes);
+##     seconds (10 minutes) by the clock: time the handheld spent asleep, or with
+##     its main loop slowed down, counts (final review, low: it counted frame
+##     time, so a page could outlive a night's sleep);
 ##   - a request has 10 s and 8 KiB to arrive, and a connection that sends nothing
 ##     for IDLE_TIMEOUT s is closed; at most MAX_CLIENTS at once, and when full the
 ##     longest-idle one makes room, so idle sockets can't lock the phone out;
@@ -36,8 +40,9 @@ const CLIENT_TIMEOUT := 10.0
 const IDLE_TIMEOUT := 3.0
 const MAX_REQUEST := 8192
 const MAX_CLIENTS := 8
-const MAX_BAD := 30        # wrong requests per BAD_WINDOW before new connections wait
+const MAX_BAD := 30        # wrong requests per BAD_WINDOW from one device before its connections wait
 const BAD_WINDOW := 60.0
+const MAX_TRACKED := 64    # devices whose wrong requests are remembered at once
 const SGDB_API_PAGE := "https://www.steamgriddb.com/profile/preferences/api"
 
 var lifetime := LIFETIME
@@ -50,7 +55,13 @@ var url := ""
 var port := 0
 var address := ""
 var bad_requests := 0
-var _bad_times: Array[float] = []   # _age of each recent wrong request
+## Wrong requests per device: address -> the _age of each one in the last BAD_WINDOW.
+var _bad_by: Dictionary = {}
+## The address a connection comes from (tests give each fake client its own).
+var peer_address: Callable = func(peer: StreamPeerTCP) -> String: return peer.get_connected_host()
+## Wall clock in seconds (tests swap it): the lifetime runs by it.
+var clock: Callable = func() -> float: return Time.get_unix_time_from_system()
+var _opened_at := 0.0
 
 var _server: TCPServer
 var _clients: Array = []   # [{"peer": StreamPeerTCP, "buf": PackedByteArray, "age": float}]
@@ -80,8 +91,9 @@ func start() -> bool:
 	token = new_token()
 	url = "http://%s:%d/k/%s" % [address, port, token]
 	_age = 0.0
+	_opened_at = float(clock.call())
 	bad_requests = 0
-	_bad_times.clear()
+	_bad_by.clear()
 	set_process(true)
 	return true
 
@@ -99,7 +111,17 @@ func stop() -> void:
 
 
 func seconds_left() -> int:
-	return maxi(0, int(ceil(lifetime - _age))) if is_running() else 0
+	return maxi(0, int(ceil(lifetime - open_for()))) if is_running() else 0
+
+
+## Seconds the page has been open: the wall clock's count, or the frames' when that is more
+## (a clock set back must not keep the page open longer).
+func open_for() -> float:
+	return elapsed(_age, _opened_at, float(clock.call()))
+
+
+static func elapsed(frames_s: float, opened_at: float, now: float) -> float:
+	return maxf(frames_s, now - opened_at)
 
 
 func _process(delta: float) -> void:
@@ -111,29 +133,62 @@ func poll(delta: float) -> void:
 	if not is_running():
 		return
 	_age += delta
-	if _age >= lifetime:
+	if open_for() >= lifetime:
 		stop()
 		expired.emit("timeout")
 		return
-	while not _bad_times.is_empty() and _age - _bad_times[0] >= BAD_WINDOW:
-		_bad_times.pop_front()
+	bad_prune(_bad_by, _age, BAD_WINDOW)
 	while _server != null and _server.is_connection_available():
 		var peer := _server.take_connection()
-		if throttled():
+		var from := str(peer_address.call(peer))
+		if throttled(from):
 			peer.disconnect_from_host()
 			continue
 		if _clients.size() >= MAX_CLIENTS:
 			_evict_idlest()
-		_clients.append({"peer": peer, "buf": PackedByteArray(), "age": 0.0, "idle": 0.0})
+		_clients.append({"peer": peer, "buf": PackedByteArray(), "age": 0.0, "idle": 0.0, "from": from})
 	for c in _clients.duplicate():
 		if not is_running():
 			return
 		_serve(c, delta)
 
 
-## True while wrong requests in the last BAD_WINDOW reached MAX_BAD.
-func throttled() -> bool:
-	return _bad_times.size() >= MAX_BAD
+## True while this device's wrong requests in the last BAD_WINDOW reached MAX_BAD. Without an
+## address: true when any device is being held off.
+func throttled(from := "") -> bool:
+	if from == "":
+		return _bad_by.values().any(func(t: Array) -> bool: return t.size() >= MAX_BAD)
+	return bad_throttled(_bad_by, from, MAX_BAD)
+
+
+# The per-device count of wrong requests, shared with clip_drop.gd.
+
+## Notes one wrong request from `from` at time `now`. At most MAX_TRACKED devices are kept:
+## past that, the one whose last wrong request is oldest is forgotten.
+static func bad_note(table: Dictionary, from: String, now: float) -> void:
+	if not table.has(from):
+		if table.size() >= MAX_TRACKED:
+			var oldest := ""
+			for k in table:
+				if oldest == "" or float((table[k] as Array).back()) < float((table[oldest] as Array).back()):
+					oldest = k
+			table.erase(oldest)
+		table[from] = []
+	(table[from] as Array).append(now)
+
+
+## Forgets wrong requests older than `window`.
+static func bad_prune(table: Dictionary, now: float, window: float) -> void:
+	for k in table.keys():
+		var t: Array = table[k]
+		while not t.is_empty() and now - float(t[0]) >= window:
+			t.pop_front()
+		if t.is_empty():
+			table.erase(k)
+
+
+static func bad_throttled(table: Dictionary, from: String, limit: int) -> bool:
+	return table.has(from) and (table[from] as Array).size() >= limit
 
 
 func _evict_idlest() -> void:
@@ -176,7 +231,7 @@ func _serve(c: Dictionary, delta: float) -> void:
 		ans = respond(req, token, origin())
 	if int(ans["status"]) == 404:
 		bad_requests += 1
-		_bad_times.append(_age)
+		bad_note(_bad_by, str(c.get("from", "")), _age)
 	peer.put_data(http_response(int(ans["status"]), str(ans["body"])))
 	peer.disconnect_from_host()
 	_clients.erase(c)

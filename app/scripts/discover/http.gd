@@ -12,21 +12,31 @@ extends Node
 ## Interface shared with fake_http.gd (tests and UI previews use that one):
 ##   request(url: String, opts: Dictionary, done: Callable) -> void
 ##     opts: {"headers": Array[String], "timeout": float, "download_file": String,
-##       "max_bytes": int (0 = no cap; a bigger body fails with error "too big")}
+##       "max_bytes": int (a bigger body fails with error "too big"; without one the
+##         cap is DEFAULT_MAX_BYTES, or DEFAULT_MAX_DOWNLOAD into a file: nothing is uncapped),
+##       "hosts": Array[String] (when given, the address and every redirect hop must be
+##         https on one of these hosts or a subdomain of one, else error "redirect")}
 ##     done.call(res) with res = {"ok": bool, "code": int, "body": PackedByteArray,
-##       "error": "" | "offline" | "timeout" | "backoff" | "http <code>" | "busy" | "too big",
+##       "error": "" | "offline" | "timeout" | "backoff" | "http <code>" | "busy" | "too big" | "redirect",
 ##       "retry_after": int}
 ##   is_offline() -> bool: the last request failed for lack of network.
 ##
 ## Credentials (review L32): a request carrying a key header (SECRET_HEADERS: SteamGridDB's, OpenCritic's) follows its redirects
 ## here, not inside HTTPRequest, so the header goes only to the host it was meant for: a redirect to another host is
 ## followed without it (and only over https).
+##
+## Hosts (final review): a caller that only trusts certain hosts (pictures: Steam's CDN, IGDB, SteamGridDB) used to
+## check the first address and let HTTPRequest follow redirects anywhere. With opts["hosts"] the redirects are followed
+## here too, and each hop is checked the same way before anything is asked of it.
 
 const REPO := "https://github.com/IHulkSmashI/GameCove"
 const MAX_PARALLEL := 3
 const MAX_QUEUE := 64
 const BACKOFF_MIN := 60
 const BACKOFF_MAX := 3600
+## Caps for a request that names none: an answer kept in memory, and one written to a file.
+const DEFAULT_MAX_BYTES := 8 * 1024 * 1024
+const DEFAULT_MAX_DOWNLOAD := 64 * 1024 * 1024
 
 var _active := 0
 var _queue: Array = []
@@ -37,8 +47,7 @@ var _opts_of := {}    # done callable -> the opts it was started with
 
 
 static func user_agent() -> String:
-	var v := str(ProjectSettings.get_setting("application/config/version", ""))
-	return "GameCove/%s (+%s)" % [v if v != "" else "dev", REPO]
+	return "GameCove/%s (+%s)" % [AppVersion.text(), REPO]
 
 
 static func host_of(url: String) -> String:
@@ -55,7 +64,36 @@ func _now() -> int:
 	return int(Time.get_unix_time_from_system())
 
 
+## The cap a request runs under: its own "max_bytes", else the default for its kind.
+static func cap_for(opts: Dictionary) -> int:
+	var own := int(opts.get("max_bytes", 0))
+	if own > 0:
+		return own
+	return DEFAULT_MAX_DOWNLOAD if str(opts.get("download_file", "")) != "" else DEFAULT_MAX_BYTES
+
+
+## True when `url` is https on one of `hosts` or a subdomain of one. Anything odd
+## in the host part (a user name, a port other than 443, other characters) fails.
+static func host_allowed(url: String, hosts: Array) -> bool:
+	if not url.begins_with("https://"):
+		return false
+	var host := host_of(url).trim_suffix(":443")
+	if host == "" or _HOST_RE.search(host) == null:
+		return false
+	for h in hosts:
+		if host == str(h) or host.ends_with("." + str(h)):
+			return true
+	return false
+
+
+static var _HOST_RE := RegEx.create_from_string("^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$")
+
+
 func request(url: String, opts: Dictionary, done: Callable) -> void:
+	var allowed: Array = opts.get("hosts", []) if opts.get("hosts") is Array else []
+	if not allowed.is_empty() and not host_allowed(url, allowed):
+		done.call({"ok": false, "code": 0, "body": PackedByteArray(), "error": "redirect", "retry_after": 0})
+		return
 	var host := host_of(url)
 	var b: Dictionary = _blocked.get(host, {})
 	if not b.is_empty() and b["until"] > _now():
@@ -122,13 +160,12 @@ func _start(url: String, opts: Dictionary, done: Callable) -> void:
 	req.use_threads = true
 	req.timeout = float(opts.get("timeout", 20.0))
 	req.max_redirects = 5
-	if int(opts.get("max_bytes", 0)) > 0:
-		req.body_size_limit = int(opts["max_bytes"])
+	req.body_size_limit = cap_for(opts)
 	if str(opts.get("download_file", "")) != "":
 		req.download_file = opts["download_file"]
 		req.accept_gzip = false
-	if has_auth(opts.get("headers", [])):
-		req.max_redirects = 0     # followed in _on_done, see redirect_headers()
+	if has_auth(opts.get("headers", [])) or not (opts.get("hosts", []) as Array).is_empty():
+		req.max_redirects = 0     # followed in _on_done: redirect_headers(), host_allowed()
 	add_child(req)
 	_active += 1
 	var headers := PackedStringArray(["User-Agent: " + user_agent(), "Accept: */*"])
@@ -157,6 +194,14 @@ func _on_done(result: int, code: int, headers: PackedStringArray, body: PackedBy
 	req.queue_free()
 	if req.max_redirects == 0 and code in [301, 302, 303, 307, 308] and int(_redirects.get(done, 0)) < 5:
 		var to := location_of(headers, url)
+		var allowed: Array = _opts_of.get(done, {}).get("hosts", [])
+		if to != "" and not allowed.is_empty() and not host_allowed(to, allowed):
+			# a hop off the hosts this request trusts: stop here, nothing is asked of that host
+			_redirects.erase(done)
+			_opts_of.erase(done)
+			done.call({"ok": false, "code": code, "body": PackedByteArray(), "error": "redirect", "retry_after": 0})
+			_pump()
+			return
 		if to != "":
 			var opts: Dictionary = _opts_of.get(done, {}).duplicate()
 			opts["headers"] = redirect_headers(opts.get("headers", []), url, to)

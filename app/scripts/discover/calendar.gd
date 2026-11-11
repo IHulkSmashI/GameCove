@@ -161,8 +161,8 @@ static func load_file(path: String) -> Dictionary:
 ## `keep_days` (the nightly already does; this covers an old cached file).
 static func releases_from(doc: Dictionary, now: int, wishlist_keys := {}, keep_days := 14) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	for rec in doc.get("releases", []):
-		if not rec is Dictionary or str(rec.get("title", "")) == "":
+	for rec in (doc["releases"] if doc.get("releases") is Array else []):
+		if not rec is Dictionary or not rec.get("title") is String or str(rec["title"]) == "":
 			continue
 		var r := make_release(rec, now, wishlist_keys)
 		var p := period(r["date"], r["precision"])

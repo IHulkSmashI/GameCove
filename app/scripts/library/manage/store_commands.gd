@@ -6,11 +6,15 @@ extends RefCounted
 ##
 ## Command lines follow each tool's own CLI and what Heroic runs
 ## (src/backend/storeManagers/{legendary,gog,nile}/games.ts):
-##   legendary install <app> --base-path <dir> --platform Windows -y --skip-sdl
-##   legendary update <app> -y --skip-sdl | repair <app> -y --skip-sdl
-##   legendary uninstall <app> -y --skip-uninstaller | move <app> <dir> --skip-move
-##   gogdl --auth-config-path <auth.json> download|update|repair <id> --platform <p> --path <dir>
-##   nile install|update|verify <id> [--base-path <dir>] | nile uninstall <id>
+##   legendary install --base-path <dir> --platform Windows -y --skip-sdl -- <app>
+##   legendary update -y --skip-sdl -- <app> | repair -y --skip-sdl -- <app>
+##   legendary uninstall -y --skip-uninstaller -- <app> | move --skip-move -- <app> <dir>
+##   gogdl --auth-config-path <auth.json> download|update|repair --platform <p> --path <dir> -- <id>
+##   nile install|update|verify [--base-path <dir>] -- <id> | nile uninstall -- <id>
+## The store's id (and a folder) always come last, after `--`: ids are read from
+## the stores' own files, and one that began with "-" would otherwise be taken
+## for an option of the tool. All three tools parse with Python's argparse,
+## where `--` ends the options.
 ## legendary's own `move` only renames inside one drive, so we `mv` first (which
 ## copies across drives, e.g. to an SD card) and then tell legendary with --skip-move.
 ##
@@ -156,19 +160,19 @@ static func _epic(action: String, entry: Dictionary, tools: Dictionary, facts: D
 		"install":
 			var base := install_base("epic", facts, facts.get("options", {}))
 			return _yes("legendary", [
-				_step([legendary, "info", id, "--json"], env, "size", "legendary", "probe"),
-				_step([legendary, "install", id, "--base-path", base, "--platform", "Windows", "-y", "--skip-sdl"], env, "legendary", "legendary"),
+				_step([legendary, "info", "--json", "--", id], env, "size", "legendary", "probe"),
+				_step([legendary, "install", "--base-path", base, "--platform", "Windows", "-y", "--skip-sdl", "--", id], env, "legendary", "legendary"),
 			], {"base": base})
 		"update":
-			return _yes("legendary", [_step([legendary, "update", id, "-y", "--skip-sdl"], env, "legendary", "legendary")])
+			return _yes("legendary", [_step([legendary, "update", "-y", "--skip-sdl", "--", id], env, "legendary", "legendary")])
 		"verify":
-			return _yes("legendary", [_step([legendary, "repair", id, "-y", "--skip-sdl"], env, "legendary", "legendary")])
+			return _yes("legendary", [_step([legendary, "repair", "-y", "--skip-sdl", "--", id], env, "legendary", "legendary")])
 		"uninstall":
-			return _yes("legendary", [_step([legendary, "uninstall", id, "-y", "--skip-uninstaller"], env, "none", "legendary")])
+			return _yes("legendary", [_step([legendary, "uninstall", "-y", "--skip-uninstaller", "--", id], env, "none", "legendary")])
 		"move":
 			var dest := str(facts.get("options", {}).get("path", ""))
 			var mv := move_steps(str(entry.get("install_path", "")), dest, facts,
-				[_step([legendary, "move", id, dest, "--skip-move"], env, "none", "legendary")])
+				[_step([legendary, "move", "--skip-move", "--", id, dest], env, "none", "legendary")])
 			if not mv["ok"]:
 				return _no(mv["why"])
 			return _yes("legendary", mv["steps"], {"new_path": mv["new_path"]})
@@ -197,12 +201,12 @@ static func _gog(action: String, entry: Dictionary, tools: Dictionary, facts: Di
 			var base := install_base("gog", facts, facts.get("options", {}))
 			platform = str(facts.get("options", {}).get("platform", "windows"))
 			return _yes("gogdl", [
-				_step(head + ["info", id, "--platform", platform], {}, "size", "gogdl", "probe"),
-				_step(head + ["download", id, "--platform", platform, "--path", base, "--skip-dlcs"], {}, "gogdl", "gogdl"),
+				_step(head + ["info", "--platform", platform, "--", id], {}, "size", "gogdl", "probe"),
+				_step(head + ["download", "--platform", platform, "--path", base, "--skip-dlcs", "--", id], {}, "gogdl", "gogdl"),
 			], {"gog_record": "add", "base": base, "platform": platform})
 		"update", "verify":
 			var sub := "update" if action == "update" else "repair"
-			return _yes("gogdl", [_step(head + [sub, id, "--platform", platform, "--path", str(entry.get("install_path", ""))], {}, "gogdl", "gogdl")])
+			return _yes("gogdl", [_step(head + [sub, "--platform", platform, "--path", str(entry.get("install_path", "")), "--", id], {}, "gogdl", "gogdl")])
 		"uninstall":
 			var path := str(entry.get("install_path", ""))
 			if not safe_to_delete(path, str(facts.get("home", "")), facts.get("gog_marker_exists", false)):
@@ -229,15 +233,15 @@ static func _amazon(action: String, entry: Dictionary, tools: Dictionary, facts:
 		"install":
 			var base := install_base("amazon", facts, facts.get("options", {}))
 			return _yes("nile", [
-				_step([nile, "install", id, "--info", "--json"], env, "size", "nile", "probe"),
-				_step([nile, "install", id, "--base-path", base], env, "nile", "nile"),
+				_step([nile, "install", "--info", "--json", "--", id], env, "size", "nile", "probe"),
+				_step([nile, "install", "--base-path", base, "--", id], env, "nile", "nile"),
 			], {"base": base})
 		"update":
-			return _yes("nile", [_step([nile, "update", id], env, "nile", "nile")])
+			return _yes("nile", [_step([nile, "update", "--", id], env, "nile", "nile")])
 		"verify":
-			return _yes("nile", [_step([nile, "verify", id], env, "nile", "nile")])
+			return _yes("nile", [_step([nile, "verify", "--", id], env, "nile", "nile")])
 		"uninstall":
-			return _yes("nile", [_step([nile, "uninstall", id], env, "none", "nile")])
+			return _yes("nile", [_step([nile, "uninstall", "--", id], env, "none", "nile")])
 		"move":
 			return _no("nile can't move games; reinstall to the new folder")
 	return _no("Unknown action")

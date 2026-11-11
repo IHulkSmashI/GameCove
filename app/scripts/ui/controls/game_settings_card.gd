@@ -241,6 +241,12 @@ func rebuild() -> void:
 		add_child(row)
 	else:
 		row.free()
+	if SteamInput.uri_for(game) == "" and SteamInput.why_not(game) != "" and str(game.get("key", "")) != "":
+		# a game Steam doesn't start has no Steam controller settings: one line instead of the button
+		var why := Kit.label(SteamInput.why_not(game), "QuietLabel", true)
+		why.name = "NoSteamInput"
+		why.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+		add_child(why)
 	relinked.emit()
 	if had != null and is_inside_tree():
 		Kit.focus_later(toggle.button if focus_toggle or edit_button == null else edit_button)
@@ -285,4 +291,9 @@ func _on_edit() -> void:
 func _on_steam_input() -> void:
 	if steam_button == null:
 		return
-	steam_button.text = TC.GYRO_STEAM_OPENING if SteamInput.open(game, open_uri) else TC.GYRO_STEAM_FAILED
+	# on the way there the app's own cover says so (main.gd's hand-off); the
+	# button only changes to say it couldn't
+	var went := SteamInput.open(game, open_uri)
+	if went and SteamInput.handoff.is_valid() and not open_uri.is_valid():
+		return   # the app's hand-off shows its own "Opening…" cover and comes back to this button as it was
+	steam_button.text = TC.GYRO_STEAM_OPENING if went else TC.GYRO_STEAM_FAILED

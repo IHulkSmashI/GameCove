@@ -64,6 +64,10 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: The release environment is protected (checked before any tag exists)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh tools/ci/check-environment.sh release reviewers
       - name: Tag this commit and start the release run on the tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -170,6 +174,21 @@ jobs:
             res://fonts/OFL-JetBrainsMono.txt res://addons/kenyoni/qr_code/LICENSE.md; do
             grep -qx "$f" pck-files.txt || { echo "missing from gamecove.pck: $f" >&2; exit 1; }
           done
+      - name: The exported app says the spec's Version (final review, high 8)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Tag = spec Version is checked in the Version step; this is the third part: the app
+          # itself (About GameCove, bug reports, the User-Agent) must say the same number.
+          got="$(timeout 120 app/build/gamecove.x86_64 --headless -- --version 2>/dev/null | sed -n 's/^GameCove //p' | head -n 1)"
+          if [ "$got" != "$VERSION" ]; then
+            echo "the exported app says version '$got', the spec says '$VERSION'" >&2
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "v$got" != "${GITHUB_REF_NAME}" ]; then
+            echo "the exported app says version '$got', the tag is ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: cabinet
@@ -276,7 +295,17 @@ jobs:
       - name: Installer bootstrap (get-gamecove.sh fetches itself from the release, checked against SHA256SUMS)
         run: cp packaging/get-gamecove.sh dist/
       - name: Checksums
-        run: cd dist && sha256sum -- * | tee SHA256SUMS
+        run: |
+          # every file but the list itself and its signature: a SHA256SUMS left in dist/ (a re-run, a cache) would
+          # otherwise be listed in itself with a hash that can never match (final review, low)
+          cd dist
+          rm -f SHA256SUMS SHA256SUMS.sigstore.json
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS*' -printf '%f\n' | LC_ALL=C sort >../sums.list
+          test -s ../sums.list
+          xargs -d '\n' sha256sum -- <../sums.list >../SHA256SUMS.new
+          mv ../SHA256SUMS.new SHA256SUMS
+          cat SHA256SUMS
+          ! grep -q 'SHA256SUMS' SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: packages
@@ -289,9 +318,29 @@ jobs:
             dist/SHA256SUMS
           if-no-files-found: error
 
+  protected:
+    # A job that names a missing environment gets one created without protection, so the release job (below) must
+    # never be the first to find out: this one asks GitHub first, and release needs it (tools/ci/check-environment.sh).
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          sparse-checkout: tools/ci
+          sparse-checkout-cone-mode: false
+      - name: The release environment exists, the owner is its required reviewer, only chosen refs deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh tools/ci/check-environment.sh release reviewers
+
   release:
     if: github.ref_type == 'tag'
-    needs: [app, package]
+    needs: [app, package, protected]
     # signing waits for the owner's approval: the "release" environment has him as required reviewer and allows only
     # main and v* tags (docs/RELEASING.md; review 2, problem 10)
     environment: release
@@ -322,6 +371,30 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: The files are the ones the build made (checked again before signing)
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          # What gets signed is SHA256SUMS, so it must describe exactly what gets published (final review, low):
+          # every listed file is there and matches, nothing unlisted is there, the release's files are all in it,
+          # and the installer script is the tagged commit's own.
+          cd dist
+          test -s SHA256SUMS
+          ! grep -q 'SHA256SUMS' SHA256SUMS
+          sha256sum --strict -c SHA256SUMS
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | LC_ALL=C sort >../have.list
+          sed 's/^[0-9a-f]\{64\} [ *]//' SHA256SUMS | LC_ALL=C sort >../listed.list
+          if ! cmp -s ../have.list ../listed.list; then
+            echo "dist/ and SHA256SUMS disagree:" >&2
+            diff ../listed.list ../have.list >&2 || true
+            exit 1
+          fi
+          ver="${TAG#v}"
+          for f in "gamecove-$ver-x86_64.tar.gz" "gamecove-$ver-x86_64.raw" get-gamecove.sh; do
+            grep -qx "$f" ../listed.list || { echo "SHA256SUMS lacks $f" >&2; exit 1; }
+          done
+          grep -q "^gamecove-$ver-.*\.x86_64\.rpm\$" ../listed.list || { echo "SHA256SUMS lacks the RPM for $ver" >&2; exit 1; }
+          cmp get-gamecove.sh ../packaging/get-gamecove.sh || { echo "dist/get-gamecove.sh isn't the tagged commit's" >&2; exit 1; }
       - name: cosign version (the one get-gamecove.sh pins; review L28)
         id: cosign
         run: echo "version=$(sed -n 's/^COSIGN_VERSION=//p' packaging/get-gamecove.sh)" >>"$GITHUB_OUTPUT"

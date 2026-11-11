@@ -125,17 +125,35 @@ static func grab_gamescope_thumb(clip_path: String, runner: RefCounted = null, s
 	if not xa.running():
 		return
 	var tmp := sys_root + SHOT_TMP
-	if FileAccess.file_exists(tmp):
-		DirAccess.remove_absolute(tmp)
+	# gamescope always writes the same file, and it isn't ours: the quick menu's
+	# Screenshot may be waiting for it or copying it this very moment, and what
+	# lies there may be the user's last screenshot. So nothing is removed: the
+	# new picture is told from the old one by what the file says about itself.
+	var before := shot_stamp(tmp)
 	if not xa.send_cardinal("GAMESCOPECTRL_REQUEST_SCREENSHOT", 1):
 		return
 	var waited := 0
-	while not (FileAccess.file_exists(tmp) and FileAccess.get_size(tmp) > 0) and waited < SHOT_WAIT_MS:
+	var seen := before
+	var fresh := false
+	while waited < SHOT_WAIT_MS:
 		OS.delay_msec(100)
 		waited += 100
-	OS.delay_msec(150)   # gamescope may still be writing the last bytes
-	if FileAccess.file_exists(tmp):
+		var now := shot_stamp(tmp)
+		# new, and no longer growing (two looks alike): gamescope is done writing
+		if not now.is_empty() and now != before and now == seen:
+			fresh = true
+			break
+		seen = now
+	if fresh:
 		save_thumb(clip_path, Image.load_from_file(tmp))
+
+
+## What tells one gamescope screenshot from the next without touching the file:
+## [modified time, size, md5]; [] when there's none (or it's empty).
+static func shot_stamp(path: String) -> Array:
+	if not FileAccess.file_exists(path) or FileAccess.get_size(path) <= 0:
+		return []
+	return [FileAccess.get_modified_time(path), FileAccess.get_size(path), FileAccess.get_md5(path)]
 
 
 ## A picture for a clip that has none, from ffmpeg (one frame a second in).

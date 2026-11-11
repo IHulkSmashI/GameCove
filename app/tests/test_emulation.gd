@@ -12,6 +12,7 @@ const EmulationPage := preload("res://scripts/ui/emulation_page.gd")
 const TL := preload("res://scripts/ui/texts_library.gd")
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Logic := preload("res://tests/test_ui_logic.gd")
+const SteamInput := preload("res://scripts/ui/controls/steam_input.gd")
 
 const BASE := "user://test_emulation"
 const STEAM := ".local/share/Steam"
@@ -219,7 +220,29 @@ func test_shortcuts_become_emulated_games() -> void:
 	eq(game["info"]["meta"]["steam_twin"], "", "never matched to a PC game by title")
 	eq(game["emulated"]["system"], "snes", "the game carries its system")
 	ok(game["shortcut"], "marked as a Steam shortcut")
+	eq([SteamInput.uri_for(game), SteamInput.uri_for(r["entries"]["emu:%d" % u])], ["steam://controllerconfig/%d" % u, "steam://controllerconfig/%d" % u],
+		"Steam's controller settings: the unsigned 32-bit id from shortcuts.vdf (the id Vesktop opens as a shortcut), not the 64-bit game id")
 	eq(LibraryScript.launch_command(r["entries"]["emu:%d" % u], {}), [] as Array[String], "not started by us: Steam starts it (Library.launch)")
+
+
+## Final review (Low): a Steam-only rescan (after an install or uninstall) knew
+## no shortcut, so shortcuts hidden in Steam came back on every screen.
+func test_hidden_shortcuts_stay_hidden_after_a_one_store_rescan() -> void:
+	var home := _shortcuts_home("srm_rescan")
+	var hidden_key := "emu:%d" % (-1294967293 & 0xFFFFFFFF)
+	var lib: Node = LibraryScript.new()
+	lib.collections.path = home.path_join("collections.json")
+	lib.collections.reload()
+	lib.take(LibraryScript.collect(home, "/nonexistent/gamedb.json.gz"), "")
+	ok(lib.collections.is_hidden(hidden_key), "hidden after the full scan")
+	var steam_only := LibraryScript.collect(home, "/nonexistent/gamedb.json.gz", ["steam"])
+	ok(not hidden_key in steam_only["imported"]["hidden"], "a Steam-only scan doesn't see the shortcut itself")
+	lib.take(steam_only, "steam")
+	ok(lib.collections.is_hidden(hidden_key), "and it stays hidden after it")
+	ok(lib.games.any(func(g): return g["key"] == hidden_key), "the game is still in the library")
+	lib.take(LibraryScript.collect(home, "/nonexistent/gamedb.json.gz", ["emu"]), "emu")
+	ok(lib.collections.is_hidden(hidden_key), "an Emulation-only scan keeps it too")
+	lib.free()
 
 
 func test_frontend_entry_and_launch() -> void:

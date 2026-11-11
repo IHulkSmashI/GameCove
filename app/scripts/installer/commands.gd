@@ -32,8 +32,10 @@ const SYSEXT_ETC_LINK := "/etc/extensions/gamecove.raw"
 const SYSEXT_KEEP := "/etc/atomic-update.conf.d/gamecove.conf"
 const SYSEXT_UNIT_LINK := "/etc/systemd/system/sysinit.target.wants/systemd-sysext.service"
 ## Review H4: SDDM shows its login screen when the autologin session file is missing (a
-## sysext that didn't merge). This root guard, copied out of the image into /etc so it
-## outlives it, points autologin back at Steam before the login screen starts.
+## sysext that didn't merge, or on Bazzite a GameCove layer removed by hand with
+## `rpm-ostree uninstall gamecove` while it was the boot default: final review, session). This
+## root guard, copied out of the image into /etc so it outlives it, points autologin back at
+## Steam before the login screen starts. Both installs put it there.
 const GUARD_SRC := "/usr/lib/gamecove/session"
 const GUARD_SCRIPT := "/etc/gamecove/autologin-guard"
 const GUARD_UNIT := "/etc/systemd/system/gamecove-autologin-guard.service"
@@ -43,6 +45,18 @@ const GUARD_LINK := "/etc/systemd/system/multi-user.target.wants/gamecove-autolo
 const SYSEXT_ENABLED_MARK := "/etc/gamecove/sysext-enabled"
 ## The root helper's state (fix originals, logs). Removed on uninstall only with the fixes.
 const STATE_DIR := "/var/lib/gamecove"
+## The guard into /etc, as root, under `set -e`: a copy that fails stops the install (it used
+## to end in `|| true`, which hid it; final review, low). On rpm-ostree the package may only be
+## staged for the next boot (no --apply-live): then the files are taken from the new
+## deployment's own /usr under /ostree/deploy. Only systemd's reload may fail.
+const GUARD_INSTALL := "src=" + GUARD_SRC + "; " \
+	+ "if [ ! -f \"$src/gamecove-autologin-guard\" ]; then for d in /ostree/deploy/*/deploy/*" + GUARD_SRC + "; do " \
+	+ "if [ -f \"$d/gamecove-autologin-guard\" ]; then src=\"$d\"; fi; done; fi; " \
+	+ "install -D -m 0755 \"$src/gamecove-autologin-guard\" " + GUARD_SCRIPT + "; " \
+	+ "install -D -m 0644 \"$src/gamecove-autologin-guard.service\" " + GUARD_UNIT + "; " \
+	+ "mkdir -p /etc/systemd/system/multi-user.target.wants; ln -sfn " + GUARD_UNIT + " " + GUARD_LINK + "; " \
+	+ "systemctl daemon-reload >/dev/null 2>&1 || true"
+const GUARD_REMOVE := "rm -f " + GUARD_LINK + " " + GUARD_UNIT + " " + GUARD_SCRIPT + "; rmdir /etc/gamecove 2>/dev/null || true"
 const SYSEXT_INSTALL := "set -e; " \
 	+ "if [ -d /etc/atomic-update.conf.d ] && [ -d /home/.steamos ]; then " \
 	+ "mkdir -p -m 0755 " + SYSEXT_STORE + " /etc/extensions; " \
@@ -52,10 +66,7 @@ const SYSEXT_INSTALL := "set -e; " \
 	+ "else mkdir -p /var/lib/extensions; install -m 0644 \"$1\" " + SYSEXT_PATH + "; fi; " \
 	+ "if ! systemctl is-enabled -q systemd-sysext.service 2>/dev/null; then mkdir -p /etc/gamecove && : > " + SYSEXT_ENABLED_MARK + "; fi; " \
 	+ "systemctl enable systemd-sysext.service >/dev/null 2>&1 || true; systemd-sysext refresh; " \
-	+ "install -D -m 0755 " + GUARD_SRC + "/gamecove-autologin-guard " + GUARD_SCRIPT + " && " \
-	+ "install -D -m 0644 " + GUARD_SRC + "/gamecove-autologin-guard.service " + GUARD_UNIT + " && " \
-	+ "mkdir -p /etc/systemd/system/multi-user.target.wants && ln -sfn " + GUARD_UNIT + " " + GUARD_LINK + " && " \
-	+ "systemctl daemon-reload >/dev/null 2>&1 || true; " \
+	+ GUARD_INSTALL + "; " \
 	+ "systemctl reload polkit.service >/dev/null 2>&1 || true"
 const SYSEXT_REMOVE := "set -e; rm -f " + SYSEXT_ETC_LINK + " " + SYSEXT_PATH + " " + SYSEXT_KEEP + " " + SYSEXT_STORE + "/gamecove.raw " \
 	+ GUARD_LINK + " " + GUARD_UNIT + " " + GUARD_SCRIPT + "; " \
@@ -78,23 +89,25 @@ static func pkexec(cmd: Array) -> Array:
 ## Bazzite / Fedora Atomic: layer the package. --apply-live makes it usable
 ## right away (fixes, session) and keeps it for the next boot; when that
 ## isn't possible the fallback just stages it for the next boot.
+## Then, in the same root command (one password), the autologin guard goes into /etc
+## (GUARD_INSTALL): without it a layer removed by hand while GameCove is the boot default
+## leaves the login screen at a password prompt.
 static func rpm_install(rpm: String, live := true) -> Array:
-	var c := [RPM_OSTREE, "install", "--idempotent"]
-	if live:
-		c.append("--apply-live")
-	c.append(rpm)
-	return pkexec(c)
+	var text := "set -e; " + RPM_OSTREE + " install --idempotent " + ("--apply-live " if live else "") + "\"$1\"; " + GUARD_INSTALL
+	return pkexec(["sh", "-c", text, "sh", rpm])
 
 
+## The layer off again, and the guard with it: the installer puts the boot default back
+## first (session_restore), so nothing names GameCove's session any more.
 static func rpm_uninstall() -> Array:
-	return pkexec([RPM_OSTREE, "uninstall", "gamecove"])
+	return pkexec(["sh", "-c", GUARD_REMOVE + "; exec " + RPM_OSTREE + " uninstall gamecove"])
 
 
 ## Uninstall with the fixes undone: the root helper's state goes too (review L25), one password.
 static func rpm_remove(purge: bool) -> Array:
 	if not purge:
 		return rpm_uninstall()
-	return pkexec(["sh", "-c", "rm -rf " + STATE_DIR + " && exec " + RPM_OSTREE + " uninstall gamecove"])
+	return pkexec(["sh", "-c", "rm -rf " + STATE_DIR + " && " + GUARD_REMOVE + "; exec " + RPM_OSTREE + " uninstall gamecove"])
 
 
 ## A newer local RPM in place of the layered one, in one transaction (next boot).

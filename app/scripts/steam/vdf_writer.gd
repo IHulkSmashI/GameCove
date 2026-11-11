@@ -44,7 +44,7 @@ static func dump(d: Dictionary, indent := 0, raw := {}) -> String:
 
 
 static func _as_written(raw_text: String, value: String) -> bool:
-	return not raw_text.begins_with(char(0)) and VDF.decode(raw_text) == value
+	return not raw_text.begins_with(VDF.UNQUOTED) and VDF.decode(raw_text) == value
 
 
 ## Saves `data` to `path`. Keeps the very first version as <path>.gamecove-orig

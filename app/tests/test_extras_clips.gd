@@ -5,6 +5,7 @@ extends "res://tests/test_case.gd"
 
 const Clips := preload("res://scripts/system/clips.gd")
 const ClipDrop := preload("res://scripts/system/clip_drop.gd")
+const KeyDrop := preload("res://scripts/system/key_drop.gd")
 const Recorder := preload("res://scripts/system/recorder.gd")
 const MediaPage := preload("res://scripts/ui/settings/media_page.gd")
 const ClipRow := preload("res://scripts/ui/settings/clip_row.gd")
@@ -34,6 +35,58 @@ func _bytes(path: String, data: PackedByteArray) -> void:
 	f.close()
 
 
+## A gamescope that answers the screenshot request by writing `img` to <root>/tmp/gamescope.png
+## (or not at all when `img` is null).
+class ShotRunner extends RefCounted:
+	var root := ""
+	var img: Image
+	var asked := 0
+	func run(_program: String, args: PackedStringArray) -> Dictionary:
+		if "-notype" in args:
+			return {"code": 0, "out": "GAMESCOPE_FOCUSABLE_APPS = 769\n"}
+		if "GAMESCOPECTRL_REQUEST_SCREENSHOT" in args:
+			asked += 1
+			if img != null:
+				img.save_png(root + "/tmp/gamescope.png")
+		return {"code": 0, "out": ""}
+
+
+## Final review (Low): the clip's picture removed /tmp/gamescope.png first. That
+## file isn't ours: it may be the user's last screenshot, or the one the quick
+## menu's Screenshot is copying right now.
+func test_clip_picture_never_removes_the_screenshot_file() -> void:
+	var root := _tmp("shot")
+	DirAccess.make_dir_recursive_absolute(root + "/tmp")
+	var old := Image.create_empty(64, 36, false, Image.FORMAT_RGB8)
+	old.fill(Color.RED)
+	old.save_png(root + "/tmp/gamescope.png")
+	var old_md5 := FileAccess.get_md5(root + "/tmp/gamescope.png")
+	var clip := root.path_join("Videos/a.mp4")
+	# gamescope doesn't answer: the file that was there stays, and isn't taken for the clip's picture
+	var r := ShotRunner.new()
+	r.root = root
+	Clips.remove_thumb(clip)
+	Clips.grab_gamescope_thumb(clip, r, root)
+	eq(r.asked, 1, "gamescope was asked")
+	eq(FileAccess.get_md5(root + "/tmp/gamescope.png"), old_md5, "the screenshot that was there is untouched")
+	ok(not FileAccess.file_exists(Clips.thumb_path(clip)), "and an old screenshot isn't used as this clip's picture")
+	# gamescope answers: the new picture is used, nothing removed
+	r.img = Image.create_empty(960, 540, false, Image.FORMAT_RGB8)
+	r.img.fill(Color.BLUE)
+	Clips.grab_gamescope_thumb(clip, r, root)
+	ok(FileAccess.file_exists(root + "/tmp/gamescope.png"), "the file is still there for whoever else wants it")
+	var t := Image.load_from_file(Clips.thumb_path(clip))
+	ok(t != null and t.get_width() == Clips.THUMB_W, "the clip's picture was saved")
+	ok(t != null and t.get_pixel(5, 5).b > 0.9 and t.get_pixel(5, 5).r < 0.1, "from the new screenshot")
+	# and with no file there before
+	DirAccess.remove_absolute(root + "/tmp/gamescope.png")
+	Clips.remove_thumb(clip)
+	Clips.grab_gamescope_thumb(clip, r, root)
+	ok(FileAccess.file_exists(Clips.thumb_path(clip)), "works the first time too")
+	Clips.remove_thumb(clip)
+	_wipe(root)
+
+
 static func _u32(n: int) -> PackedByteArray:
 	var b := PackedByteArray([0, 0, 0, 0])
 	b.encode_u32(0, n)
@@ -61,7 +114,7 @@ static func _mp4(seconds: float, mdat_size := 5000) -> PackedByteArray:
 	mvhd.append_array(pad)
 	var data := PackedByteArray()
 	data.resize(mdat_size)
-	var out := _box("ftyp", "isom\u0000\u0000\u0002\u0000".to_ascii_buffer())
+	var out := _box("ftyp", "isom".to_ascii_buffer() + PackedByteArray([0, 0, 2, 0]))
 	out.append_array(_box("mdat", data))
 	out.append_array(_box("moov", _box("mvhd", mvhd)))
 	return out
@@ -228,6 +281,87 @@ func test_sends_the_clip_over_the_network_and_closes() -> void:
 	eq(whole.slice(end + 4), data, "unchanged")
 	eq(done, [true], "sent")
 	ok(not d.is_running(), "the page closed after the download")
+	d.free()
+	_wipe(root)
+
+
+## Final review, low: the clip page had no idle-socket eviction (eight silent connections kept the
+## phone out for good), one wrong-request count for everybody, and a lifetime in frame time.
+func test_clip_page_cant_be_shut_by_someone_else_on_the_wifi() -> void:
+	var root := _tmp("dos")
+	_bytes(root + "/clip.mp4", _mp4(1.0))
+	var d: Node = ClipDrop.new()
+	d.bind_address = "127.0.0.1"
+	var who := ["10.0.0.66"]
+	d.peer_address = func(_peer: StreamPeerTCP) -> String: return who[0]
+	var now := [5000.0]
+	d.clock = func() -> float: return now[0]
+	ok(d.start(root + "/clip.mp4", "Hades"), "listening")
+	# silent sockets in every slot
+	var idle: Array = []
+	for i in ClipDrop.MAX_CLIENTS + 2:
+		var c := StreamPeerTCP.new()
+		c.connect_to_host("127.0.0.1", d.port)
+		idle.append(c)
+	for i in 50:
+		for c in idle:
+			c.poll()
+		d.poll(0.01)
+		OS.delay_msec(2)
+	who[0] = "10.0.0.7"
+	ok(_fetch(d, "/c/" + d.token).get_string_from_utf8().begins_with("HTTP/1.1 200"), "the phone still gets the page with every slot taken")
+	d.poll(ClipDrop.IDLE_TIMEOUT)
+	d.poll(0.01)
+	eq(d._clients.size(), 0, "silent connections are closed after the idle timeout")
+	for c in idle:
+		c.disconnect_from_host()
+	# wrong requests from one device hold off that device only
+	who[0] = "10.0.0.66"
+	for i in KeyDrop.MAX_BAD:
+		_fetch(d, "/c/guess")
+	ok(d.throttled("10.0.0.66") and not d.throttled("10.0.0.7"), "the guessing device is held off, the phone isn't")
+	eq(_fetch(d, "/c/" + d.token).size(), 0, "the guessing device gets no answer")
+	who[0] = "10.0.0.7"
+	ok(_fetch(d, "/c/" + d.token).get_string_from_utf8().begins_with("HTTP/1.1 200"), "the phone still gets the page")
+	# the lifetime runs by the clock
+	var why := []
+	d.expired.connect(func(w): why.append(w))
+	now[0] += 700.0
+	d.poll(0.016)
+	eq(why, ["timeout"], "closed by the clock (a sleep counts)")
+	d.free()
+	_wipe(root)
+
+
+## A download that stops taking bytes gives its slot and the file back (and no longer keeps the
+## page from closing).
+func test_a_stalled_download_is_closed() -> void:
+	var root := _tmp("stall")
+	var data := PackedByteArray()
+	data.resize(8_000_000)
+	_bytes(root + "/clip.mp4", data)
+	var d: Node = ClipDrop.new()
+	d.bind_address = "127.0.0.1"
+	ok(d.start(root + "/clip.mp4"), "listening")
+	var peer := StreamPeerTCP.new()
+	peer.connect_to_host("127.0.0.1", d.port)
+	var asked := false
+	for i in 300:
+		d.poll(0.016)
+		peer.poll()
+		if peer.get_status() == StreamPeerTCP.STATUS_CONNECTED and not asked:
+			peer.put_data(("GET /c/%s/clip.mp4?dl=1 HTTP/1.1\r\nHost: x\r\n\r\n" % d.token).to_utf8_buffer())
+			asked = true
+		if asked and d._clients.size() == 1 and d._clients[0]["file"] != null and i > 150:
+			break
+		OS.delay_msec(2)
+	eq(d._clients.size(), 1, "a download is under way and the phone has stopped reading")
+	ok(d._clients[0]["file"] != null, "the file is open for it")
+	d.poll(ClipDrop.STALL_TIMEOUT)
+	d.poll(0.016)
+	eq(d._clients.size(), 0, "no bytes taken for the stall timeout: closed")
+	ok(d.is_running(), "the page itself stays for the phone to try again")
+	peer.disconnect_from_host()
 	d.free()
 	_wipe(root)
 

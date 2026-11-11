@@ -561,7 +561,7 @@ on a temporary file.
 | Layout | `catalog.gd` | Cards per group and the quick menu tabs, ids only; `*` prefixes; anything not listed shows in "Other" |
 | Pages | `group_page.gd`, `perf_page.gd`, `group_cards.gd`, `profiles_page.gd` | Settings > Power, Display, Sound, Controller, Performance, System (built on first show; rebuilt when what's usable changes), Profiles (everyday / battery / plugged in / per game: save current, copy everyday, edit in the quick menu, export, reset with a second press; export / import `~/Documents/GameCove/gamecove-profiles-<device>.json`) |
 | Safety | `keep_dialog.gd`, `session_guard.gd` | "Keep this? Reverting in 15 s" after HDR and after a refresh rate change once we unlocked rates. The unlock and rotation take effect next session, so the change is remembered (`user://controls_confirm.json`) and the countdown runs at the next start; nobody pressing Keep puts the old value back |
-| Gyro | `steam_input.gd` | Gyro aiming is Steam Input's: the UI says so and opens `steam://controllerconfig/<appid>` for Steam games (quick menu Controller tab, game page's Game settings card). Controller settings use `controller.gyro` / `controller.emulation` (the device Controller page too); the legacy Controller gyro modes are gone from the UI (current InputPlumber ignores them), without Controls the page only explains |
+| Gyro | `steam_input.gd` | Gyro aiming is Steam Input's: the UI says so and opens `steam://controllerconfig/<appid>` for every game Steam starts (quick menu Controller tab, game page's Game settings card, the Controller page); see "Steam's controller settings and back" below. Controller settings use `controller.gyro` / `controller.emulation` (the device Controller page too); the legacy Controller gyro modes are gone from the UI (current InputPlumber ignores them), without Controls the page only explains |
 | Shared | `shared.gd` | One Fixes service for the quick menu's Device tab and Settings > Device > Fixes; `autoload(name)` |
 | Device page | `settings/device_page.gd` | Settings > Device as section tabs (About, Fixes, Controller, Storage, Updates): one full-height panel at a time, left / right on the tabs switch, A goes in; `focus_part("fixes")` opens a section; only the open panel gets `opened()`. The Device photo card (real photo, Show maker photos) sits under About |
 | Logos | `brand_mark.gd` | Maker / store logos through `device/brand.gd` (mono ones tinted with the theme text colour), text when there's none: quick menu Device header, About this device, store rows, game page meta line, installer store cards, the Steam gyro note and the game card's "Controller in Steam" |
@@ -575,6 +575,63 @@ close the menu, `show_screen("settings")`, `settings.open_category(category, par
 menu does this itself through its parent); `settings.game_settings_requested(game)` and
 `game_page.game_settings.edit_requested(game)` → `quick_menu.open(game)` (fallback: they find the
 QuickMenu node); the Controller provider's `REAPPLY_AFTER_RESUME` ~5 s after wake (unchanged).
+
+## Steam's controller settings and back
+
+`ui/controls/steam_input.gd`, `steam/steam_handoff.gd`, `ui/steam_trip.gd`.
+
+**Which games.** Every game Steam itself starts: a Steam game by its app id, and a non-Steam shortcut (an
+emulated game Steam ROM Manager added, any entry with `shortcut` true) by the shortcut's own 32-bit app id,
+the `appid` Steam keeps in `shortcuts.vdf` and shows in `SteamLaunch AppId=<id>` (not the 64-bit game id
+`steam://rungameid` takes). A game GameCove starts itself (Epic, GOG, Amazon, a ROM started directly) never
+passes through Steam Input, so there is no button for it, and one line says why. Valve's Steam browser
+protocol page documents `steam://controllerconfig/<id>` with a Steam application id and doesn't spell out the
+shortcut case. The shortcut's 32-bit app id is what shipped tools use for it: Vesktop runs in Game Mode as a
+non-Steam shortcut, reads its own id from `STEAM_COMPAT_MEDIA_PATH` (`steamapps/shadercache/<id>`, the
+32-bit shortcut id, because Steam sets `SteamAppId` to 0 for shortcuts) and opens
+`steam://controllerconfig/<id>/<layout id>` to offer its layout (`src/main/utils/steamOS.ts`); Decktricks, also
+started as a shortcut, does the same from `STEAM_COMPAT_TRANSCODED_MEDIA_PATH`
+(`src/controller_layout.rs`, based on Vesktop's). Steam's own client scripts build the address as
+`steam://controllerconfig/${appid}/…` (SteamTracking `API/JavascriptUrls.txt`), and in Steam's client a
+shortcut's appid is that same 32-bit id. The 64-bit game id is never used there. We haven't opened it on a
+handheld ourselves yet, so it stays first on the hardware list below.
+
+**Out.** The button shows a cover ("Opening Steam's controller settings…", a 0.14 s fade, so nothing behind
+flashes), and from that moment GameCove takes nothing from the pad. The address goes to Steam; every 0.4 s
+GameCove looks at gamescope's `GAMESCOPE_FOCUSABLE_WINDOWS` for a window owned by `steam` / `steamwebhelper`
+that wasn't there before (after 1.6 s any Steam window will do: its handheld mode shows the screen in the
+window it already has) and puts it in front with `GAMESCOPECTRL_BASELAYER_WINDOW`. GameCove's window loses
+focus and SessionWiring is told as well, so InputPlumber's intercept goes to Pass and the controller is
+Steam's. Over a running game the quick menu stays up until Steam's screen shows, so the game never gets the
+pad in between, then steps aside.
+
+**Back.** When Steam's window is gone (B out of its screen), or on Guide, the property is removed and the
+screen goes back to whoever had it. GameCove returns to the same page and the same focused control (the
+quick menu on the same tab and button when the trip started there), the cover fades over 0.3 s, and the pad
+is ignored for 350 ms more and until every button is up, so the B that closed Steam's screen isn't also Back.
+
+**When it can't.** Steam not running: a toast says so and nothing starts. No Steam window within 8 s: a toast
+("It may still be starting. Try again in a moment."), focus back where it was. B while it's still opening
+stops the wait. Our focus never arriving after the return: carried on after 1.5 s. One Timer, only during a
+trip. Outside gamescope the address is simply handed to Steam.
+
+**To confirm on a handheld in Game Mode** (none of this can be seen in the test harness, which fakes
+gamescope's window list and Steam):
+
+1. `steam://controllerconfig/<shortcut app id>` opens the configurator for a Steam ROM Manager game (and
+   for a plain Steam game) with Steam started as GameCove starts it (`steam -silent`, and the `gamepadui`
+   mode). Vesktop and Decktricks open it this way in Game Mode; check it from GameCove too. If it ever
+   opens the wrong screen, only `uri_for` in `steam_input.gd` changes.
+2. Steam's configurator window appears in `GAMESCOPE_FOCUSABLE_WINDOWS` under a `steam` or `steamwebhelper`
+   pid, and `GAMESCOPECTRL_BASELAYER_WINDOW` brings it in front without a black or desktop frame.
+3. With it in front the pad drives Steam's screen at once (InputPlumber intercept on Pass; Handheld Daemon
+   devices too) and nothing moves in GameCove behind it.
+4. B at the top of Steam's screen closes its window (`-silent`), and GameCove is back on the same control
+   with no extra Back. In `gamepadui` mode, where Steam keeps one window, Guide is the way back: check it.
+5. Guide while Steam's screen is in front reaches GameCove (InputPlumber switches to Always on Guide).
+6. Over a running game: Steam's screen shows above the game, and afterwards the game is in front with the
+   quick menu open on the Controller tab.
+7. How long Steam takes to show the screen on a cold start, against the 8 s wait.
 
 ## Integration rules (hardening pass)
 
