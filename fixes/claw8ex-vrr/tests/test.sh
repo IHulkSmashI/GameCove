@@ -152,6 +152,35 @@ fix claw8ex-vrr status >/dev/null 2>&1
 ok '[ "$(karg_count gamecove.vrr=1)" = 1 ]' "only once"
 fix claw8ex-vrr remove >/dev/null
 
+# review Medium (Fixes): `update` on an active fix removed it and then failed (install can't validate the factory EDID
+# while the patched one is what the screen reports), leaving the screen without VRR until a restart
+case_start update_while_active
+vrr_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+cp "$R/sys/class/drm/card1-eDP-1/edid" "$T/factory.edid"
+cp "$R$EDID_FILE" "$R/sys/class/drm/card1-eDP-1/edid"      # after the restart: the screen reports our EDID
+boot_hook   # the boot hook hands the driver the EDID
+echo "# an older hook" >"$R/etc/gamecove/claw8ex-vrr/edid-hook.sh"
+ok 'fix claw8ex-vrr status | grep -qx state=on' "the fix is active"
+ok 'fix claw8ex-vrr update >"$T/out" 2>&1' "update succeeds while active ($(tail -n 1 "$T/out" 2>/dev/null))"
+ok '[ "$(tail -n 1 "$T/out")" = updated ]' "says updated"
+ok 'cmp -s "$HERE/../edid-hook.sh" "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh"' "the hook is this revision's"
+ok '[ -f "$R$EDID_FILE" ] && fix claw8ex-vrr status | grep -qx installed=yes && fix claw8ex-vrr status | grep -qx state=on' "still installed and on (not removed)"
+ok '[ -f "$R/etc/modprobe.d/gamecove-claw8ex-vrr.conf" ] && grep -qx "gamecove.vrr=1" "$FAKE/kargs"' "modprobe rule and boot switch in place"
+fix claw8ex-vrr remove >/dev/null 2>&1
+# an older EDID is active and can't be rebuilt: nothing is changed
+case_start update_refuses_when_it_cannot_rebuild
+vrr_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+cp "$R$EDID_FILE" "$T/patched.edid"
+cp "$R/sys/class/drm/card1-eDP-1/edid" "$R$EDID_FILE"      # the installed file is not this range (an older revision's)
+cp "$T/patched.edid" "$R/sys/class/drm/card1-eDP-1/edid"   # and the screen runs a 30-120 EDID
+before=$(snapshot)
+ok '! fix claw8ex-vrr update >"$T/out" 2>&1' "refused"
+ok 'grep -q "nothing was changed" "$T/out"' "says nothing was changed"
+ok '[ "$(snapshot)" = "$before" ]' "and nothing was"
+fix claw8ex-vrr remove >/dev/null 2>&1
+
 case_start refuses_other_modprobe_rule
 vrr_ready
 mkdir -p "$R/etc/modprobe.d"

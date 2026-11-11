@@ -420,6 +420,57 @@ install() {
 	say "if the screen is wrong after the restart: pick the previous boot entry, or add gamecove.novrr at the boot menu (e), then remove this fix"
 }
 
+# update: bring an installed fix to this revision. gc_root_update (remove, then install) can't do it here: with the
+# fix active the screen's EDID is already the patched one, so install could not validate the factory EDID and failed
+# after remove had run (the fix gone until a restart). So what a revision changes is rewritten in place: the hook, its
+# board file, the modprobe rule, the SteamOS keep list and the boot switch (each replaced in one step; all put
+# back as they were when one fails). The EDID file stays when it already holds this range. When it doesn't and the
+# panel still shows the factory EDID (the fix isn't active yet), the old way works; when it doesn't and the patched
+# one is active, nothing is changed and it says what to do.
+update() {
+	require_root
+	if ! m_installed; then
+		say "not installed"
+		return 0
+	fi
+	claw_board || die "this fix is only for the MSI Claw (boards MS-1T*); this board is '$(board_name)'"
+	edid=$(sed -n 's|^file \(/etc/firmware/edid/gamecove-.*\.bin\)$|\1|p' "$MANIFEST" | head -n 1)
+	[ -n "$edid" ] && [ -f "$ROOT$edid" ] || die "the fix's EDID file is missing; remove the fix and apply it again"
+	if [ "$(edid_q "$ROOT$edid" -v mode=range 2>/dev/null)" != "$LO $HI" ] || ! edid_q "$ROOT$edid" -v mode=check 2>/dev/null; then
+		raw=$(panel_edid) || die "no internal screen EDID found"
+		if [ "$(edid_q "$raw" -v mode=range 2>/dev/null)" = "$LO $HI" ]; then
+			die "the screen is running GameCove's older EDID, so it can't be rebuilt now: restart with gamecove.novrr at the boot menu (or remove the fix, restart), then apply it again; nothing was changed"
+		fi
+		sh "$0" remove || die "the installed version could not be taken out; nothing else was changed"
+		sh "$0" install || die "the new version could not be installed; the old one is out and the system is as shipped. Apply the fix again from GameCove's Fixes page"
+		say "updated"
+		return 0
+	fi
+	lock
+	GC_TMP=$(mktemp -d)
+	bak=$GC_TMP/bak
+	mkdir -p "$bak"
+	for f in "$HOOK_CONF" "$HOOK" "$MODPROBE_CONF" "$KEEP_CONF"; do
+		[ -f "$ROOT$f" ] && cp -p "$ROOT$f" "$bak/$(printf '%s' "$f" | tr / _)"
+	done
+	why=""
+	put_hook "$(board_name)" "$(basename "$edid")" || why="could not rewrite the boot hook"
+	if [ -z "$why" ]; then ensure_marker || why="could not check the boot switch"; fi
+	if [ -z "$why" ] && [ "$(boot_backend)" = steamos ]; then
+		keep_text >"$GC_TMP/keep.conf"
+		m_put "$GC_TMP/keep.conf" "$KEEP_CONF" 644 || why="could not rewrite $KEEP_CONF"
+	fi
+	if [ -n "$why" ]; then
+		for f in "$HOOK_CONF" "$HOOK" "$MODPROBE_CONF" "$KEEP_CONF"; do
+			b=$bak/$(printf '%s' "$f" | tr / _)
+			[ -f "$b" ] && cp -p "$b" "$ROOT$f"
+		done
+		die "$why; put back as it was"
+	fi
+	[ "$(m_rev)" = "$REVISION" ] || m_add rev "$REVISION"
+	say "updated"
+}
+
 remove() {
 	require_root
 	lock
@@ -496,7 +547,7 @@ status() {
 record_home
 case ${1:-} in
 install) install ;;
-update) require_root; gc_root_update ;;
+update) update ;;
 remove) remove ;;
 status) status ;;
 set)

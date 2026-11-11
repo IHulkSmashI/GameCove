@@ -60,6 +60,14 @@ fix takes itself out instead. `status` shows `after_update=yes` while the line i
 The line counts as there only once SteamOS's boot menu took it: when `update-grub` fails or leaves it out, the
 file goes back to how it was, so the next `set refresh` (GameCove runs it at every start) tries again.
 
+`update` (a new revision of the fix) rewrites the hook, its board file, the modprobe rule, the keep list and the
+boot switch in place, each replaced in one step and all put back when one fails. It no longer removes the fix and
+installs it again: with the fix active the screen reports the patched EDID, so the install could not validate the
+factory one and failed after the remove had run. If the installed EDID itself is out of date and the patched one
+is active, `update` changes nothing and says to restart without the fix first.
+The SteamOS path, the keep list and the refresh after an update are tested against a fake root only (the fake update
+wipes `/var` and everything off the keep list); they are not tested on a SteamOS handheld yet.
+
 ### Older installs
 
 Before this, the fix set the kernel arguments `drm.edid_firmware=eDP-1:edid/<file>` and `firmware_class.path=/etc/firmware`, which every handheld booting the drive got. `install`, or `status` run as root (`pkexec /usr/libexec/gamecove/gamecove-fix claw8ex-vrr status`), moves an old install to the hook and drops both arguments (the gyro fix keeps `firmware_class.path` if it holds it). Run on a different board, it removes the old install entirely, so the Claw's EDID can never reach another screen; install it again on the Claw. `status` shows `old_kernel_args=yes` until this has happened.
