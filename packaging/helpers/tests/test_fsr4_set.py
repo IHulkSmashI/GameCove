@@ -221,3 +221,14 @@ def test_pins_are_the_files_clawdeck_ships():
     pins = _tool().entry()["files"]
     assert pins == {"amd_fidelityfx_upscaler_dx12.dll": "a609f609a3ef29ddff59adfbd27dc417bf68fcd865383b2529987a7eff1081ac",
                     "fsr-original.dll": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace"}
+
+
+def test_fetch_tool_stops_at_its_size_cap(tmp_path, monkeypatch):
+    tool = _tool()
+    data = {f: b"x" * 300 for f in FILES}
+    fake = {"version": "t", "base": "https://example.invalid/commit", "files": {f: hashlib.sha256(b).hexdigest() for f, b in data.items()}}
+    monkeypatch.setattr(tool, "entry", lambda: fake)
+    monkeypatch.setattr(tool, "MAX_FILE", 100)
+    dest = str(tmp_path / "out")
+    assert tool.fetch(dest, lambda url, timeout=0: io.BytesIO(data[url.rsplit("/", 1)[1]])) == 1
+    assert not any(os.path.exists(os.path.join(dest, f)) for f in FILES)
