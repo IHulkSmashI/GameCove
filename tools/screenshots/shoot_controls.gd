@@ -74,7 +74,7 @@ static func claw_patch() -> Dictionary:
 		"perf.overlay_scale": {"value": 100, "min": 50.0, "max": 200.0, "step": 10.0, "unit": "%"},
 		"perf.upscaler": {"value": "xess"},
 		"perf.frame_gen": {"value": 0},
-		"perf.upscale_recommended": {"value": null},
+		"perf.upscale_active": {"value": null},
 		"perf.upscale_undo": {"value": null},
 		"perf.low_latency": {"value": true},
 		"perf.proton": {"value": "proton_cachyos", "options": [{"value": "", "label": "Steam's default"},

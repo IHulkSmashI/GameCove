@@ -27,6 +27,9 @@ class FakeLauncher extends RefCounted:
 	var env := {"LOW_LATENCY_LAYER": "1"}
 	var env_hooks: Array[Callable] = []
 	var frame_gen_hooks: Array[Callable] = []
+	var anticheat_keys: Array = []
+	func has_anticheat(game: Dictionary) -> bool:
+		return str(game.get("key", "")) in anticheat_keys
 	func settings_for(key: String) -> Dictionary:
 		return settings.get(key, {"low_latency": true}).duplicate()
 	func save_settings(key: String, s: Dictionary) -> void:
@@ -40,6 +43,9 @@ class FakeLibrary extends RefCounted:
 	var tools: Array = [{"id": "", "name": "Default"}, {"id": "proton_cachyos_11", "name": "Proton-CachyOS 11"}]
 	var compat := {}
 	var calls: Array = []
+	var games := {}
+	func game_by_key(key: String) -> Dictionary:
+		return games.get(key, {})
 	func launch_options(g: Dictionary) -> String:
 		return str(options.get(g.get("key", ""), ""))
 	func set_launch_options(g: Dictionary, o: String) -> Dictionary:

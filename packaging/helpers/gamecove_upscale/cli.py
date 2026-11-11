@@ -28,10 +28,10 @@ import json
 import os
 import sys
 
-from . import best, chips, framegen, games, launchenv, livedb, mirror, optiscaler, upkeep, xess
+from . import best, chips, framegen, games, launchenv, livedb, lsfg, mirror, optiscaler, upkeep, xess
 
 COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency", "xess-install", "xess-remove",
-            "check", "update", "game-update", "plan", "prepare", "mode", "native", "caps")
+            "check", "update", "game-update", "plan", "prepare", "mode", "native", "caps", "lsfg-install", "lsfg-remove", "lsfg-state")
 # commands that may download: the signed index is fetched (at most every mirror.FRESH_S) before they run
 INSTALLS = ("choose", "apply", "xess-install", "game-update")
 # GameCove: "best for your handheld" (best.py)
@@ -99,6 +99,12 @@ def run(argv: list[str]) -> dict:
         raise ValueError(f"{a.command} needs --key")
     if a.command in INSTALLS and not (a.command == "choose" and a.upscaler == "own"):
         mirror.refresh(home)
+    if a.command == "lsfg-install":        # the user pressed "Set up Lossless frame generation" (lsfg.py)
+        return lsfg.install(home, games.versions(home).get("lsfg_vk") or games.pins().get("lsfg_vk"))
+    if a.command == "lsfg-remove":
+        return lsfg.remove(home)
+    if a.command == "lsfg-state":
+        return {"ok": True, **lsfg.state(home)}
     if a.command == "caps":
         return {"ok": True, **chips.capabilities(gpu)}
     if a.command == "plan":
@@ -147,7 +153,9 @@ def run(argv: list[str]) -> dict:
     if a.command == "xess-remove":
         return xess.remove_for_uninstall(home)
     if a.command == "refresh":
-        return {"ok": True, "lists": livedb.refresh(os.path.join(home, games.LISTS), games.BUNDLED_GAMES)}
+        mirror.refresh(home)
+        return {"ok": True, "lists": livedb.refresh(os.path.join(home, games.LISTS), games.BUNDLED_GAMES,
+                                                    signed=lambda: mirror.fetch_data(home, "games"))}
     on = games.get_launch(home, a.key).get("low_latency", True) is not False
     return {"ok": True, **xess.game_latency(home, a.key, on)}
 

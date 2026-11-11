@@ -96,6 +96,16 @@ def upscalers_for(gpu: dict) -> list[str]:
     return chips.upscalers(gpu)
 
 
+# which upscaler choices need which withdrawable component (mirror.withdrawn: the signed index's kill switch)
+NEEDS = {"fsr4_xmx": "fsr4_xmx", "fsr4_xmx_lite": "fsr4_xmx", "fsr4_amd": "fsr4_amd"}
+
+
+def offered(home: str | None, gpu: dict) -> list[str]:
+    """upscalers_for() without the choices whose files were withdrawn."""
+    gone = mirror.withdrawn(home)
+    return [u for u in upscalers_for(gpu) if NEEDS.get(u) not in gone]
+
+
 def fg_for(gpu: dict) -> list[int]:
     """Frame generation multipliers: XeSS-FG 2x-4x on XMX, 2x on everything else that has a generator, none elsewhere."""
     return chips.frame_gens(gpu)
@@ -254,11 +264,18 @@ def recommend(home: str, key: str, gpu: dict, game_dir: str | None = None, name:
     _optiscaler_entry(home, rec, name, online)
     _prefer_fsr4(home, rec, d, gpu, xmx_off)
     _for_gpu(rec, d, gpu, home)
+    gone = mirror.withdrawn(home)
+    if gone and NEEDS.get((rec.get("launch") or {}).get("opti")) in gone:       # withdrawn: the next best this chip has
+        step = {"fsr4_xmx": "xess", "fsr4_xmx_lite": "xess", "fsr4_amd": "fsr31"}[rec["launch"]["opti"]]
+        rec["launch"]["opti"] = step
+        rec["launch"].pop("fsr4_int8", None)
+        rec["upscaler"] = step
+        rec["reasons"].append("The sharper upscaler was taken out of GameCove for now, so this is the next best.")
     launch = get_launch(home, key)
     applied = bool(rec["launch"]) and all(launch.get(k) == v for k, v in rec["launch"].items())
     dx12 = gamedb.is_dx12(d, rec["main_exes"]) if d else False
     return {**rec, "dir": d, "folder": folder, "applied": applied, "opti_owner": optiscaler.owner(folder)["owner"],
-            "dx12": dx12, "upscalers": upscalers_for(gpu), "frame_gens": fg_for(gpu), "vendor": vendor(gpu),
+            "dx12": dx12, "upscalers": offered(home, gpu), "frame_gens": fg_for(gpu), "vendor": vendor(gpu),
             "chip": chips.capabilities(gpu), "api": gamedb.api(d, rec["main_exes"]), "engine": gamedb.engine(d),
             "fsr4_xmx_missing": optiscaler.fsr4_xmx_missing(home) if vendor(gpu) == "intel" and gpu.get("xmx") else [],
             "fsr4_amd_missing": optiscaler.fsr4_amd_missing(home) if vendor(gpu) == "amd" else [],
@@ -269,7 +286,10 @@ def recommend(home: str, key: str, gpu: dict, game_dir: str | None = None, name:
 # ---- putting it in ----------------------------------------------------------------------------------------------
 def _opti_entry(launch: dict, home: str | None = None) -> dict:
     v = versions(home)
-    return v["optiscaler_v10"] if launchenv.v10(launch) and v.get("optiscaler_v10") else v["optiscaler"]
+    key = "optiscaler_v10" if launchenv.v10(launch) and v.get("optiscaler_v10") else "optiscaler"
+    if home and v[key].get("version") in (load_state(home).get("bad_versions") or []):
+        return pins()[key]                        # the newest failed its check on this device: the tested pin
+    return v[key]
 
 
 def _ref_shas(home: str | None = None) -> tuple[str, ...]:
@@ -357,6 +377,9 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
            generator: str | None = None, anticheat: bool = False) -> dict:
     """ClawDeck's game_choose, for this GPU: the upscaler (the game's own, or one through GameCove's OptiScaler)
     and frame generation (0 off, else the multiplier). Everything they need is put in or taken out here."""
+    if upscaler in upscalers_for(gpu) and upscaler not in offered(home, gpu):
+        return {"ok": False, "withdrawn": NEEDS[upscaler], "error": "This upscaler was taken out of GameCove for now: "
+                + mirror.withdrawn(home)[NEEDS[upscaler]]}
     if upscaler not in upscalers_for(gpu):
         return {"ok": False, "error": f"{upscaler!r} isn't offered on this GPU ({', '.join(upscalers_for(gpu))})"}
     fg = int(fg or 0)

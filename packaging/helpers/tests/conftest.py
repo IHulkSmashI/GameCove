@@ -27,3 +27,17 @@ def _no_downloads(monkeypatch):
     def offline(url, dest, timeout=60.0):
         raise OSError(f"no network in tests: {url}")
     monkeypatch.setattr(downloads, "download", offline)
+
+
+@pytest.fixture(autouse=True)
+def _packages_pass_the_selfcheck(request, monkeypatch):
+    """The fake OptiScaler packages of these tests are a few text files, not Windows libraries: the self-check after
+    an update (selfcheck.package) is off for them. Tests marked "selfcheck" run the real one (test_nightly.py)."""
+    if "selfcheck" in request.keywords:
+        return
+    from gamecove_upscale import selfcheck
+    monkeypatch.setattr(selfcheck, "package", lambda pkg, layout="flat": [])
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "selfcheck: run the real package self-check (selfcheck.package)")

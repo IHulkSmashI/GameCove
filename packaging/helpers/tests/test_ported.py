@@ -895,8 +895,10 @@ def test_live_lists_refresh_and_newer_games_json_wins(tmp_path):
     bundled = tmp_path / "games.json"
     bundled.write_text(json.dumps({"schema": 1, "generated": "2026-11-05T00:00:00Z", "games": []}))
     newer = json.dumps({"schema": 1, "generated": "2026-11-06T00:00:00Z", "games": [{"id": "x"}]}).encode()
-    pages = {livedb.GAMES_URL: newer, livedb.SUPPORTED_LIST_URL: SUPPORTED_LIST_PAGE.encode(), livedb.OPTISCALER_COMPAT_URL: COMPAT_PAGE.encode()}
-    out = livedb.refresh(str(tmp_path / "lists"), str(bundled), get=lambda u: pages[u])
+    # GameCove: games.json only through the signed index (signed=), never from an unsigned URL
+    pages = {livedb.SUPPORTED_LIST_URL: SUPPORTED_LIST_PAGE.encode(), livedb.OPTISCALER_COMPAT_URL: COMPAT_PAGE.encode()}
+    assert not hasattr(livedb, "GAMES_URL")
+    out = livedb.refresh(str(tmp_path / "lists"), str(bundled), get=lambda u: pages[u], signed=lambda: newer)
     assert out == {"games": "updated", "supported_list": "updated", "optiscaler": "updated"}
     assert livedb.games_path(str(tmp_path / "lists"), str(bundled)).startswith(str(tmp_path / "lists"))
     assert "1154030" in livedb.supported_list(str(tmp_path / "lists"))
@@ -904,11 +906,14 @@ def test_live_lists_refresh_and_newer_games_json_wins(tmp_path):
     assert livedb.refresh(str(tmp_path / "lists"), str(bundled), get=lambda u: 1 / 0) == {}
     # another schema or an older list is never used; a failed download keeps the copy
     other = json.dumps({"schema": 2, "generated": "2027", "games": []}).encode()
-    out = livedb.refresh(str(tmp_path / "lists"), str(bundled), force=True, get=lambda u: other if u == livedb.GAMES_URL else b"nothing")
+    out = livedb.refresh(str(tmp_path / "lists"), str(bundled), force=True, get=lambda u: b"nothing", signed=lambda: other)
     assert out["games"] == "other schema, kept" and "kept" in out["supported_list"] and "kept" in out["optiscaler"]
     assert "1154030" in livedb.supported_list(str(tmp_path / "lists"))
     bundled.write_text(json.dumps({"schema": 1, "generated": "2026-12-01T00:00:00Z", "games": []}))
     assert livedb.games_path(str(tmp_path / "lists"), str(bundled)) == str(bundled)
+    # no signed list (no index yet, or it names none): the bundled one, nothing fetched
+    assert livedb.refresh(str(tmp_path / "l2"), str(bundled), get=lambda u: pages[u])["games"] == "bundled"
+    assert livedb.refresh(str(tmp_path / "l3"), str(bundled), get=lambda u: pages[u], signed=lambda: None)["games"] == "bundled"
 
 
 def test_shipped_lists_upscaler_fg_and_latency(tmp_path):

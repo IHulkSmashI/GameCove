@@ -1287,12 +1287,13 @@
    "perf.upscaler": {
     "options_include": [
      "own",
-     "fsr31"
-    ],
-    "options_exclude": [
+     "fsr31",
      "fsr4_amd"
     ],
-    "note": "Z2 Go is RDNA2: no FSR 4 (games.py)"
+    "options_exclude": [
+     "fsr4_xmx"
+    ],
+    "note": "Z2 Go is RDNA2: FSR 4.1.2 is offered (AMD's own file, INT8), never picked by itself (chips.py)"
    }
   },
   "asus-rog-ally": {
@@ -1545,7 +1546,7 @@
      "fsr31",
      "fsr4_amd"
     ],
-    "note": "Z1 Extreme is RDNA3: FSR 4 opt-in"
+    "note": "Z1 Extreme is RDNA3: FSR 4.1.2 is the default (chips.py)"
    }
   },
   "soc:lunar-lake|panther-lake": {

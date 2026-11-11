@@ -124,5 +124,13 @@
    "amd_fidelityfx_upscaler_dx12.dll": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fsr4_amd-sdk2.4.0-7539ae8b-aad4fccc-amd_fidelityfx_upscaler_dx12.dll"
   },
   "notice": "Kits/FidelityFX/docs/license.md"
+ },
+ "lsfg_vk": {
+  "version": "2.0.0",
+  "asset": "lsfg-vk-2.0.0.tar.xz",
+  "url": "https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz",
+  "sha256": "08bdbdf373a111022df87dac7aa87e3b564bb841f961552e3ca85fea12b5aa74",
+  "license": "CC BY-NC-ND 4.0 (lsfg-vk.dev, 2026-08-27): not part of GameCove's package and not on its mirror; fetched unmodified from its author's own site when the user asks for it",
+  "note": "lsfg-vk 2.0.0 (2026-09-05; 561348 bytes, downloaded 2026-11-10): lib/liblsfg-vk-layer.so, share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json, bin/lsfg-vk-cli. Needs the user's own Lossless Scaling (Steam app 993090, beta branch lsfg-vk)."
  }
 }

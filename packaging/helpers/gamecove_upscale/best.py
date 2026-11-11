@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import time
 
-from . import active, chips, games, guard, launchenv, optiscaler, xess
+from . import active, chips, games, guard, launchenv, mirror, optiscaler, xess
 
 MODES = ("best", "custom", "native")
 FALLBACK = {"fsr4_amd": "fsr31", "fsr4_xmx": "xess", "fsr4_xmx_lite": "xess"}
@@ -117,6 +117,9 @@ def prepare(home: str, key: str, gpu: dict, game_dir: str | None = None, name: s
         # the game gained anti-cheat (an update, or our data learnt it): everything of ours comes out
         r = games.undo(home, key, gpu, game_dir)
         return {"ok": bool(r.get("ok", True)), "did": "removed: this game has anti-cheat", "mode": mode, "plan": p}
+    gone = _withdrawn_step(home, key, gpu, game_dir)
+    if gone:
+        return {"ok": True, "did": gone, "mode": mode, "plan": p}
     if mode == "custom":
         return {"ok": True, "did": _repair(home, key, gpu, game_dir) or "", "mode": mode, "plan": p}
     fb = _fallback(home, key, gpu, game_dir, p)
@@ -141,6 +144,21 @@ def prepare(home: str, key: str, gpu: dict, game_dir: str | None = None, name: s
     else:
         r = games.apply_recommended(home, key, gpu, game_dir, allow_unpinned, anticheat=anticheat)
     return {"ok": bool(r.get("ok")), "did": "set up" if r.get("ok") else "", "error": r.get("error"), "mode": mode, "plan": p}
+
+
+def _withdrawn_step(home: str, key: str, gpu: dict, game_dir: str | None) -> str:
+    """The signed index withdrew the files this game's upscaler needs: they come out of the game, the next best
+    goes in (whatever the mode: a withdrawn file must not stay on a device)."""
+    launch = games.get_launch(home, key)
+    cur = launch.get("opti")
+    need = games.NEEDS.get(cur)
+    if not need or need not in mirror.withdrawn(home):
+        return ""
+    r = games.choose(home, key, FALLBACK[cur], int(launch.get("fg") or 0), gpu, game_dir, launch.get("opti_overlay"),
+                     generator=launch.get("fg_out"))
+    if not r.get("ok"):
+        r = games.undo(home, key, gpu, game_dir)
+    return f"{active.LABELS[cur]} was taken out of GameCove for now: switched to {active.LABELS[FALLBACK[cur]]}"
 
 
 def _repair(home: str, key: str, gpu: dict, game_dir: str | None) -> str:

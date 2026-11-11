@@ -10,9 +10,11 @@ update()  every component with an update: OptiScaler packages (and their OptiPat
 """
 from __future__ import annotations
 
+import shutil
+
 import os
 
-from . import downloads, games, mirror, optiscaler, xess
+from . import downloads, games, mirror, optiscaler, xess, selfcheck
 
 
 def _labels(home: str) -> dict[str, str]:
@@ -87,6 +89,24 @@ def check(home: str, gpu: dict, refresh: bool = False) -> dict:
             "index": {**st, **({"refresh": idx_state} if idx_state else {})}}
 
 
+def _checked(home: str, e: dict, result: dict) -> dict:
+    """The self-check after an update (selfcheck.package). A package that fails it is deleted again and its version
+    remembered as bad: the device stays on the package it had (rollback), games keep theirs, and the tested pin is
+    what new games get until a later version passes."""
+    pkg = optiscaler.package_dir(home, e["version"])
+    problems = selfcheck.package(pkg, e.get("layout") or "flat")
+    if not problems:
+        return result
+    shutil.rmtree(pkg, ignore_errors=True)
+    s = games.load_state(home)
+    bad = s.setdefault("bad_versions", [])
+    if e["version"] not in bad:
+        bad.append(e["version"])
+    games.save_state(home, s)
+    return {"ok": False, "rolled_back": True, "version": e["version"],
+            "error": f"version {e['version']} failed its check ({problems[0]}); kept the one before"}
+
+
 def update(home: str, gpu: dict, only: str | None = None) -> dict:
     """Every component check() calls outdated (or just `only`). Returns {"ok", "results": {id: result}}."""
     mirror.refresh(home)
@@ -102,6 +122,8 @@ def update(home: str, gpu: dict, only: str | None = None) -> dict:
             continue
         if key in rows or (extras_due and optiscaler.installed(home, e["version"]) and not optiscaler.extras_current(home, e)):
             res[key] = optiscaler.install(home, e)
+            if res[key].get("ok"):
+                res[key] = _checked(home, e, res[key])
     if "xess_xmx_linux" in rows:
         res["xess_xmx_linux"] = xess.install(home, eff["xess_xmx_linux"])
     if "fsr4_xmx" in rows:

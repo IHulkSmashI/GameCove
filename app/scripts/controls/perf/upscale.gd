@@ -5,12 +5,16 @@ extends RefCounted
 ## through ctx.runner and answers one JSON object; nothing here touches a game
 ## folder itself.
 
+const GpuCaps := preload("res://scripts/device/gpu_caps.gd")
 const PATHS := ["/usr/libexec/gamecove/gamecove-upscale"]
 const LABELS := {
-	"own": "Game's own", "xess": "XeSS (OptiScaler)", "fsr4_xmx": "FSR 4.1.2 on XMX",
-	"fsr4_xmx_lite": "FSR 4.1.2 Lite on XMX", "fsr31": "FSR 3.1 (OptiScaler)", "fsr4_amd": "FSR 4 (OptiScaler)",
+	"own": "Game's own", "xess": "XeSS 2", "fsr4_xmx": "FSR 4.1.2 on XMX",
+	"fsr4_xmx_lite": "FSR 4.1.2 Lite on XMX", "fsr31": "FSR 3.1", "fsr4_amd": "FSR 4.1.2",
 }
-const INTEL_XMX := ["intel-xe2", "intel-xe3"]
+const MODES := ["best", "custom", "native"]
+const MODE_LABELS := {"best": "Best for this handheld", "custom": "My choice", "native": "Native (nothing added)"}
+const GENERATOR_LABELS := {"fsrfg": "FSR frame generation", "xefg": "XeSS frame generation"}
+const FG_LABELS := {0: "Off", 2: "2x", 3: "3x", 4: "4x"}
 
 
 ## Where the helper is, "" when missing. extra: dev/test paths tried first.
@@ -21,31 +25,24 @@ static func command(sys_root: String, extra: Array = []) -> String:
 	return ""
 
 
-## The GPU facts the helper needs, from the device profile (devices.json row).
-static func gpu(profile: Dictionary) -> Dictionary:
-	var fam := str(profile.get("gpu_family", ""))
-	var vendor := "intel" if fam.begins_with("intel") else ("amd" if fam.begins_with("amd") else "other")
-	return {"vendor": vendor, "family": fam, "arch": str(profile.get("gpu_arch", "")),
-		"xmx": bool(profile.get("xmx", fam in INTEL_XMX)), "chip": str(profile.get("chip", ""))}
+## The GPU facts the helper needs, from the device profile (devices.json row)
+## and, when known, the card the system reports (Device.gpu_info(): an NVIDIA
+## desktop has no row that says so). device/gpu_caps.gd owns the table.
+static func gpu(profile: Dictionary, gpu_dev: Dictionary = {}) -> Dictionary:
+	return GpuCaps.gpu(profile, gpu_dev)
 
 
-## Same choices games.upscalers_for() gives (kept in step by test_perf_upscale).
+## Same choices the helper's chips.py gives (kept in step by gpu_tiers.json).
 static func upscalers(g: Dictionary) -> Array:
-	match str(g.get("vendor", "")):
-		"intel":
-			return ["own", "xess", "fsr4_xmx", "fsr4_xmx_lite"] if g.get("xmx", false) else ["own", "xess"]
-		"amd":
-			return ["own", "fsr31", "fsr4_amd"] if str(g.get("arch", "")) in ["RDNA3", "RDNA3.5"] else ["own", "fsr31"]
-	return ["own"]
+	return GpuCaps.upscalers(g)
 
 
 static func frame_gens(g: Dictionary) -> Array:
-	match str(g.get("vendor", "")):
-		"intel":
-			return [0, 2, 3, 4] if g.get("xmx", false) else [0]
-		"amd":
-			return [0, 2]
-	return [0]
+	return GpuCaps.frame_gens(g)
+
+
+static func generators(g: Dictionary) -> Array:
+	return GpuCaps.generators(g)
 
 
 ## --gpu for the helper: the GPU facts as one JSON object (keys sorted). The
@@ -53,7 +50,8 @@ static func frame_gens(g: Dictionary) -> Array:
 ## reads the older vendor=..,xmx=.. pairs.
 static func gpu_arg(g: Dictionary) -> String:
 	return JSON.stringify({"vendor": str(g.get("vendor", "")), "family": str(g.get("family", "")),
-		"arch": str(g.get("arch", "")), "xmx": bool(g.get("xmx", false)), "chip": str(g.get("chip", ""))}, "", true)
+		"arch": str(g.get("arch", "")), "xmx": bool(g.get("xmx", false)), "chip": str(g.get("chip", "")),
+		"gpu": str(g.get("gpu", "")), "tier": GpuCaps.tier(g)}, "", true)
 
 
 ## Runs one command; {} with "ok": false and "error" when it can't.

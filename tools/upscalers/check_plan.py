@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "packaging", "helpers"))
 
 from gamecove_upscale import mirror  # noqa: E402
 
-COMPONENTS = tuple(mirror.UPSTREAM)
+COMPONENTS = tuple(mirror.UPSTREAM) + mirror.DATA_NAMES
 
 
 def _sha(path: str) -> str:
@@ -55,6 +55,8 @@ def _named(idx: dict, pins: dict) -> dict:
             walk_index(f)
 
     for e in idx.get("components", {}).values():
+        walk_index(e)
+    for e in (idx.get("data") or {}).values():      # the per-game knowledge base (games.json)
         walk_index(e)
     for e in (idx.get("pin_sources") or {}).values():
         walk_index(e)
