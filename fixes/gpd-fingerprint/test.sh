@@ -39,4 +39,13 @@ t_check '[ "$(t_state)" = os-fixed ]' "Bazzite's rule: os-fixed"
 t_new
 t_dmi "GPD" "G1618-04" "Default string"
 t_check '[ "$(t_state)" = not-needed ]' "no reader: not-needed"
+# A rule for the other model's reader doesn't fix this one (Win Max 2 reader, only the Win 4 rule present)
+t_new
+t_dmi "GPD" "G1619-04" "Default string"
+t_usb 1-4 2541 9711 remove=0
+mkdir -p "$R/usr/lib/udev/rules.d"
+printf '%s\n' 'SUBSYSTEM=="usb", ATTR{idVendor}=="2808", ATTR{idProduct}=="9338", ATTR{remove}="1"' >"$R/usr/lib/udev/rules.d/50-gpd-win-4-fingerprint.rules"
+t_check '[ "$(t_state)" = off ]' "Win 4 rule only, Win Max 2 reader on the bus: still needed"
+printf '%s\n' 'SUBSYSTEM=="usb", ATTR{idVendor}=="2541", ATTR{idProduct}=="9711", ATTR{remove}="1"' >"$R/usr/lib/udev/rules.d/50-gpd-wm2-fingerprint.rules"
+t_check '[ "$(t_state)" = os-fixed ]' "its own rule there too: os-fixed"
 t_end

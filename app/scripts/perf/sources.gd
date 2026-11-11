@@ -172,18 +172,26 @@ static func _find_cpu_temp(root: String, s: Dictionary) -> void:
 			return
 
 
-## Battery draw in watts while discharging, else -1.
+## Battery draw in watts while discharging, else -1. current_now may be negative while
+## discharging (the Claw 8 EX's EC) and comes 100x too large on the Claw 8 EX (-64.6 A at about
+## 10 W): scale_fix() as ClawDeck's telemetry.battery_watts does.
 static func battery_watts(bat: String) -> float:
 	if bat == "" or read_line(bat + "status") != "Discharging":
 		return -1.0
-	var p := read_int(bat + "power_now")
-	if p >= 0:
-		return absf(p / 1_000_000.0)
-	var c := read_int(bat + "current_now")
-	var v := read_int(bat + "voltage_now")
-	if c >= 0 and v >= 0:
-		return absf(c * v / 1e12)
+	var ps := read_line(bat + "power_now")
+	if ps.is_valid_int():
+		return scale_fix(absf(ps.to_int() / 1_000_000.0))
+	var cs := read_line(bat + "current_now")
+	var vs := read_line(bat + "voltage_now")
+	if cs.is_valid_int() and vs.is_valid_int():
+		return scale_fix(absf(cs.to_int() * vs.to_int() / 1e12))
 	return -1.0
+
+
+## No handheld battery delivers 200 W: a reading above that is the Claw 8 EX EC's current_now in
+## units 100x too large (ClawDeck py_modules/clawdeck/telemetry.py battery_watts, HARDWARE-FINDINGS §6).
+static func scale_fix(w: float) -> float:
+	return w / 100.0 if absf(w) > 200.0 else w
 
 
 ## Which source each metric uses, for the UI's "where does this number come

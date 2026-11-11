@@ -213,8 +213,8 @@ def install(home: str, entry: dict, allow_unpinned: bool = False) -> dict:
     return out
 
 
-PREFIX_STOCK = ".gamecove-stock"      # gamecove-run: the prefix's own igdext64.dll, kept while the shim is in
-PREFIX_ADDED = ".gamecove-added"      # gamecove-run: the prefix had none; ours goes away
+PREFIX_STOCK = ".gamecove-stock"      # older gamecove-run: the prefix's own igdext64.dll, kept while the shim was in
+PREFIX_ADDED = ".gamecove-added"      # older gamecove-run: the prefix had none; ours goes away
 PROTON_IGDEXT = os.path.join("files", "lib", "wine", "igdext", "x86_64-windows", "igdext64.dll")
 
 
@@ -226,10 +226,12 @@ def _steam_libraries(home: str) -> list[str]:
 
 
 def restore_igdext(home: str) -> dict:
-    """Undo every igdext64.dll change GameCove's launch wrapper made (review S2-2): each game prefix's own copy back
-    from igdext64.dll.gamecove-stock (or ours removed where the prefix had none), and the .stock copies older builds
-    left inside Proton installs put back, but only where the Proton's file is still a shim (a Proton update since
-    wins). Nothing else in a Proton or Steam install is touched."""
+    """Undo every igdext64.dll change GameCove's launch wrapper made. gamecove-run puts the shim into the Proton a
+    game runs on, as ClawDeck's wrapper does (the original kept next to it as igdext64.dll.stock): every .stock is
+    put back, but only where the Proton's file is still a shim (a Proton update since wins). Prefix copies older
+    GameCove builds made (igdext64.dll.gamecove-stock / .gamecove-added) are put back too. Nothing else in a Proton
+    or Steam install is touched. ClawDeck leaves this to xess-xmx-linux's uninstall.sh; GameCove also does it itself,
+    so a Proton added after the driver install is covered (a safety addition: nothing changes while XMX is in use)."""
     prefixes = protons = 0
     for lib in _steam_libraries(home):
         for marker in glob.glob(os.path.join(lib, "steamapps", "compatdata", "*", "pfx", "drive_c", "windows",

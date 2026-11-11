@@ -35,6 +35,10 @@ const FIX_SET_HELPER := "/usr/libexec/gamecove/gamecove-fix-set"
 ## GameCove's InputPlumber override for the Claw 8 EX shadows this stock file (fixes/lib/claw8ex-common.sh).
 const IP_STOCK := "/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
 const IP_OVERRIDE := "/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"
+## The VRR fix on SteamOS: its record and the marked line in Valve's grub file (fixes/claw8ex-vrr/fix.sh).
+const VRR_MANIFEST := "/var/lib/gamecove/fixes/claw8ex-vrr/manifest"
+const GRUB_DEFAULT := "/etc/default/grub"
+const VRR_GRUB_MARK := "# GameCove claw8ex-vrr"
 ## Helper state= -> page status (see status_of for the rest).
 const STATE_STATUS := {"on": "applied", "restart": "restart", "partial": "partial", "os-fixed": "os-fixed",
 	"not-needed": "not-needed", "n/a": "not-needed", "unsupported": "blocked", "other-override": "blocked"}
@@ -458,6 +462,24 @@ func refresh_stale_override() -> bool:
 		PackedStringArray([FIX_SET_HELPER, "claw8ex-buttons", "set", "refresh"]))
 
 
+## A SteamOS update brought back Valve's /etc/default/grub without the VRR fix's line (the fix is installed on
+## SteamOS: its record has the grub line). The range is gone from the next restart until the line is back.
+static func vrr_line_lost(root: String) -> bool:
+	var mf := FileAccess.open(root + VRR_MANIFEST, FileAccess.READ)
+	if mf == null or not ("grubline " + GRUB_DEFAULT) in DeviceScript.read_all(mf).split("\n", false):
+		return false
+	var gf := FileAccess.open(root + GRUB_DEFAULT, FileAccess.READ)
+	return gf != null and not DeviceScript.read_all(gf).contains(VRR_GRUB_MARK)
+
+
+## Puts the line back at once, without a password (the fix was installed with it); the fix takes itself out
+## where the update made it impossible.
+func refresh_vrr_after_update() -> bool:
+	if not vrr_line_lost(sys_root):
+		return false
+	return commands.run("refresh:vrr", "pkexec", PackedStringArray([FIX_SET_HELPER, "claw8ex-vrr", "set", "refresh"]))
+
+
 func _read(path: String) -> String:
 	var f := FileAccess.open(path, FileAccess.READ)
 	return DeviceScript.read_all(f).strip_edges() if f != null else ""
@@ -495,6 +517,7 @@ func check_changes() -> Dictionary:
 	last_changes = {"first_run": not old is Dictionary, "changed": changes}
 	# every start, not only after a change: cheap, and the update may have come before this check existed
 	refresh_stale_override()
+	refresh_vrr_after_update()
 	if not changes.is_empty():
 		refresh()
 	return last_changes

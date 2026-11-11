@@ -834,7 +834,7 @@ func state() -> Dictionary:
 	return {
 		"backend": backend,
 		"tdp_w": _tdp_w if tdp_ok else -1.0,
-		"tdp_min": _range["min"],
+		"tdp_min": tdp_min(),
 		"tdp_max": tdp_max(),
 		"profile": _profile,
 		"profiles": PROFILES.duplicate() if tdp_ok else [],
@@ -852,8 +852,48 @@ func state() -> Dictionary:
 	}
 
 
+## The most watts allowed here now: the maker's limit for this power source (devices.json, which records
+## its source per row), made stricter by what the firmware reports and steamos-manager's own range when it
+## is the backend; the stricter one always wins. Every TDP write goes through write_tdp, which clamps to it.
 func tdp_max() -> float:
-	return _range["plugged_max"] if plugged else _range["battery_max"]
+	var hi: float = _range["plugged_max"] if plugged else _range["battery_max"]
+	var fw := fw_tdp_range()
+	if not fw.is_empty() and float(fw["max"]) > 0.0:
+		hi = minf(hi, float(fw["max"])) if hi > 0.0 else float(fw["max"])
+	if backend == "steamos-manager" and not _svc_range.is_empty() and float(_svc_range["max"]) > 0.0:
+		hi = minf(hi, float(_svc_range["max"])) if hi > 0.0 else float(_svc_range["max"])
+	return maxf(hi, tdp_min())
+
+
+## The fewest watts allowed here: the maker's minimum, raised by the firmware's own and steamos-manager's.
+func tdp_min() -> float:
+	var lo: float = _range["min"]
+	var fw := fw_tdp_range()
+	if not fw.is_empty() and float(fw["min"]) > 0.0:
+		lo = maxf(lo, float(fw["min"]))
+	if backend == "steamos-manager" and not _svc_range.is_empty() and float(_svc_range["min"]) > 0.0:
+		lo = maxf(lo, float(_svc_range["min"]))
+	return lo
+
+
+## The sustained limit's range as the firmware reports it (ppt_pl1_spl min_value / max_value of a
+## firmware-attributes driver: asus-armoury, which switches between ASUS's AC and DC table with the
+## charger, lenovo-wmi-other, msi-wmi-platform, zotac_zone_platform), {} when there is none. Read when
+## a limit is needed, never polled.
+func fw_tdp_range() -> Dictionary:
+	var base := sys_root + "/sys/class/firmware-attributes"
+	var d := DirAccess.open(base)
+	if d == null:
+		return {}
+	var classes := Array(d.get_directories()) + Array(d.get_files())
+	classes.sort()
+	for c in classes:
+		var a := "%s/%s/attributes/ppt_pl1_spl" % [base, c]
+		var lo := DeviceScript.read_text(a + "/min_value")
+		var hi := DeviceScript.read_text(a + "/max_value")
+		if lo.is_valid_int() and hi.is_valid_int() and hi.to_int() > 0 and hi.to_int() >= lo.to_int():
+			return {"min": float(lo.to_int()), "max": float(hi.to_int()), "driver": str(c)}
+	return {}
 
 
 func fan_modes() -> Array:
@@ -949,7 +989,7 @@ func set_profile(profile_name: String) -> bool:
 func set_tdp(watts: float) -> bool:
 	if backend == "none":
 		return false
-	var w := clampf(watts, _range["min"], tdp_max())
+	var w := clampf(watts, tdp_min(), tdp_max())
 	if not _apply_user_tdp(w):
 		return false
 	_profile = _profile_for(w)
@@ -966,6 +1006,7 @@ func custom_watts() -> float:
 
 
 func _apply_user_tdp(w: float) -> bool:
+	w = clampf(w, tdp_min(), tdp_max())   # presets, per-game and imported profiles come through here too
 	_user_tdp = w
 	guard.reset()  # the user's choice replaces a thermal step (ClawDeck: guard.reset on a pick)
 	if _autotune_on:
@@ -1170,6 +1211,10 @@ func read_tdp() -> float:
 ## writing devices.json's pl2_offset_w with every TDP write put 2 W over the Claw 8
 ## EX's live 7 W at start (and a probe then stored 2 as the user's).
 func write_tdp(watts: float) -> bool:
+	# the last word on every path (slider, presets, Auto TDP, the temperature guard, per-game and imported
+	# profiles, resume): never outside the maker's range or the firmware's, whichever is stricter
+	if backend != "none" and tdp_min() > 0.0:
+		watts = clampf(watts, tdp_min(), tdp_max())
 	var ok := false
 	if backend == "steamos-manager":
 		var w := int(roundf(watts))
@@ -1225,14 +1270,17 @@ func _reassert_boost(before: float) -> void:
 	_live_boost = want
 
 
-## The boost to write with a TDP of `watts` (review H6): the user's boost_w, never past the
-## device's boost_max for that TDP (TDP + boost <= boost_max), for whatever power source and
-## TDP we're at now. -1 = leave PowerStation's own.
+## The boost to write with a TDP of `watts` (review H6): the user's boost_w, else the row's
+## pl2_offset_w (Intel: PL2 = PL1 + 2 W, as Handheld Daemon's rapl.py, PowerControl, PowerStation's
+## Intel database and ClawDeck's power.py do; scaling PL2 higher made frame times noisy), never past
+## the device's boost_max for that TDP (TDP + boost <= boost_max), for whatever power source and TDP
+## we're at now. -1 = leave PowerStation's own (rows without a PL2 rule).
 func boost_for(watts: float) -> float:
-	if boost_w < 0.0:
+	var b := boost_w if boost_w >= 0.0 else float(device.get("pl2_offset_w", -1.0))
+	if b < 0.0:
 		return -1.0
 	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
-	return minf(boost_w, maxf(0.0, cap - watts)) if cap > 0.0 else boost_w
+	return minf(b, maxf(0.0, cap - watts)) if cap > 0.0 else b
 
 
 # ---- charge limit -------------------------------------------------------------
@@ -1406,6 +1454,9 @@ func set_boost_w(watts: float) -> bool:
 	var w := maxf(0.0, watts)
 	if cap > 0.0:
 		w = minf(w, maxf(0.0, cap - _tdp_w))
+	var mx := float(be.ps_boost().get("max", -1.0))   # the service's own ceiling: the stricter one wins
+	if mx > 0.0:
+		w = minf(w, mx)
 	if not be.set_ps_boost(w):
 		return false
 	boost_w = w
@@ -1441,7 +1492,7 @@ func load_autotune_opts() -> void:
 	# a stale or hand-edited value: never more than the largest boost any TDP here allows
 	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
 	if boost_w >= 0.0 and cap > 0.0:
-		boost_w = minf(boost_w, maxf(0.0, cap - maxf(_range["min"], 0.0)))
+		boost_w = minf(boost_w, maxf(0.0, cap - maxf(tdp_min(), 0.0)))
 	autotune_opts = AUTOTUNE_DEFAULTS.duplicate()
 	var saved: Variant = _recall("device", "autotune_opts", {})
 	if saved is Dictionary:
@@ -1461,12 +1512,12 @@ func set_autotune_option(key: String, value: Variant) -> bool:
 			"target": autotune.set_target(int(value), bool(autotune_opts["auto_fps"]))
 			"auto_fps": autotune.set_target(int(autotune_opts["target"]), bool(value))
 			"keep_pct": autotune.set_keep(float(value))
-			"floor_w": autotune.set_floor(_floor_w(), int(_range["min"]))
+			"floor_w": autotune.set_floor(_floor_w(), int(tdp_min()))
 	return true
 
 
 func _floor_w() -> int:
-	var lo := int(_range["min"])
+	var lo := int(ceilf(tdp_min()))
 	var f := int(autotune_opts.get("floor_w", 0))
 	return lo if f <= 0 else clampi(f, lo, int(tdp_max()))
 
@@ -1487,7 +1538,7 @@ func autotune_start(game_key := "") -> bool:
 	_game_key = game_key
 	if _user_tdp <= 0.0:
 		_user_tdp = _tdp_w if _tdp_w > 0.0 else tdp_max()
-	var ceiling := int(roundf(clampf(_user_tdp, _range["min"], tdp_max())))
+	var ceiling := int(clampf(roundf(_user_tdp), ceilf(tdp_min()), floorf(tdp_max())))
 	var learned: Variant = _recall("autotune", _learned_key(), {})
 	_autotune_on = true
 	_limit_shown = false

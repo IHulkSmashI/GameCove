@@ -86,7 +86,8 @@ def test_launch_env_compose_and_write(tmp_path):
     assert launchenv.compose({"fsr": "fg"}) == {"GAMECOVE_XMX": "1", "FSR_FG": "xess"}
     assert launchenv.compose({"fsr": "inject"}) == {"GAMECOVE_XMX": "1", "FSR": "xess", "FSR_FG": "inject"}
     # Decky Framegen's fgmod writes these into the game's OptiScaler.ini
-    assert launchenv.compose({"opti": "xess", "opti_xefg": True}) == {"GAMECOVE_XMX": "1", "Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
+    assert launchenv.compose({"opti": "xess", "opti_xefg": True}) == {"GAMECOVE_XMX": "1", "Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg",
+                                                                      "DXVK_CONFIG": "dxgi.customVendorId = 8086"}
     assert launchenv.compose({"opti": "fsr4"}) == launchenv.compose({"opti": "fsr4_xmx"})   # INT8 retired: on XMX
     for bad in ({"fg": 1}, {"fg": 9}, {"fg": True}, {"fg": "4"}, {"fsr": "amd"}, {"opti": "dlss"}):
         with pytest.raises(ValueError):
@@ -300,8 +301,12 @@ def test_ships_xess_matches_the_scope_script_depth(tmp_path):
     g = tmp_path / "game"
     _w(g / "a" / "b" / "c" / "libxess.dll", "x")
     assert xmxscope.ships_xess(str(g))
+    # Unreal plugins sit 7-8 folders down (ClawDeck 4cf5cf9, DEPTH 9)
+    ue = tmp_path / "ue"
+    _w(ue / "Engine" / "Plugins" / "Runtime" / "Intel" / "XeSS" / "Binaries" / "ThirdParty" / "Win64" / "libxess.dll", "x")
+    assert xmxscope.ships_xess(str(ue))
     deep = tmp_path / "deep"
-    _w(deep / "1" / "2" / "3" / "4" / "5" / "6" / "libxess.dll", "x")   # deeper than the launch-time check looks
+    _w(deep.joinpath(*[str(i) for i in range(1, 11)]) / "libxess.dll", "x")   # deeper than the launch-time check looks
     assert not xmxscope.ships_xess(str(deep))
     assert not xmxscope.ships_xess(None)
 
@@ -369,8 +374,44 @@ def _own_cabinet(tmp_path, monkeypatch, present=True):
         _w(p, "gamecove-lzms")
     monkeypatch.setenv("GAMECOVE_CABINET", str(p))   # GameCove: own_cabinet() looks here first
     monkeypatch.setattr(optiscaler, "CABINET_PLACES", ())
-    monkeypatch.setattr(optiscaler, "SYSTEM_CABINET", str(p))
+    for k in ("SYSTEM_CABINET", "PACKAGE_CABINET", "CHECKOUT_CABINET"):
+        monkeypatch.setattr(optiscaler, k, str(p))
     return p
+
+
+def test_cabinet_comes_from_the_package_on_a_clean_install(tmp_path, monkeypatch):
+    """FSR 4.1.2 on XMX with nothing but GameCove installed: no GAMECOVE_CABINET, no ClawDeck, nothing in the data
+    folder. The DLL is the one the package ships (bin/ two folders above the helper, /usr/lib/gamecove/bin)."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    monkeypatch.delenv("GAMECOVE_CABINET", raising=False)
+    home = str(tmp_path / "home")
+    # the rule itself: <prefix>/lib/gamecove/helpers/gamecove_upscale/optiscaler.py -> <prefix>/lib/gamecove/bin
+    here = os.path.dirname(os.path.realpath(optiscaler.__file__))
+    assert optiscaler.PACKAGE_CABINET == os.path.join(os.path.dirname(os.path.dirname(here)), "bin", "cabinet.dll")
+    assert optiscaler.SYSTEM_CABINET == "/usr/lib/gamecove/bin/cabinet.dll"
+    pkg = tmp_path / "usr" / "lib" / "gamecove" / "bin" / "cabinet.dll"
+    for k in ("SYSTEM_CABINET", "CHECKOUT_CABINET"):
+        monkeypatch.setattr(optiscaler, k, str(tmp_path / "absent" / k))
+    monkeypatch.setattr(optiscaler, "PACKAGE_CABINET", str(pkg))
+    x = tmp_path / "home" / "fsr4-xmx"
+    _w(x / "amd_fidelityfx_upscaler_dx12.dll", "nitec")
+    _w(x / "fsr-original.dll", "o")
+    assert any("cabinet.dll" in m for m in optiscaler.fsr4_xmx_missing(home))      # not shipped: refused
+    _w(pkg, "packaged-lzms")
+    assert optiscaler.own_cabinet(home) == str(pkg) and optiscaler.fsr4_xmx_missing(home) == []
+    # a stale copy in the data folder or ClawDeck's never wins over the packaged one
+    _w(tmp_path / "home" / ".local/share/gamecove/cabinet.dll", "stale")
+    _w(tmp_path / "home" / "homebrew/plugins/ClawDeck/bin/cabinet.dll", "clawdeck")
+    assert optiscaler.own_cabinet(home) == str(pkg)
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x")
+    assert optiscaler.patch(home, str(g), "0.9.4", {}, "fsr4_xmx", fsr4_xmx=True)["ok"]
+    assert (g / "cabinet.dll").read_text().strip() == "packaged-lzms"
+    # without the package's copy an installed ClawDeck's still works (the same bytes)
+    os.remove(pkg)
+    assert optiscaler.own_cabinet(home).endswith(".local/share/gamecove/cabinet.dll")
 
 
 def test_fsr4_xmx_never_asks_the_user_for_cabinet_dll(tmp_path, monkeypatch):
@@ -469,6 +510,29 @@ def test_main_exe_dir_finds_the_real_exe(tmp_path):
     _w(t2 / "unins000.exe", "x" * 900)
     _w(t2 / "bin" / "big.exe", "x" * 300)
     assert optiscaler.main_exe_dir(str(t2)).endswith("bin")
+
+
+def test_main_exe_dir_skips_unreal_launcher_stubs_and_picks_dx12(tmp_path):
+    """ClawDeck 4cf5cf9: Gothic 1 Remake ships a small launcher stub with the -Shipping name in its top folder (#162);
+    The Witcher 3 has witcher3.exe in bin/x64 and bin/x64_dx12, and only the DX12 one has DLSS, FSR and XeSS (#141)."""
+    from gamecove_upscale import optiscaler
+    g = tmp_path / "gothic"
+    _w(g / "Gothic-Win64-Shipping.exe", "x" * 10)
+    _w(g / "Gothic" / "Binaries" / "Win64" / "Gothic-Win64-Shipping.exe", "x" * 900)
+    assert optiscaler.main_exe_dir(str(g)) == str(g / "Gothic" / "Binaries" / "Win64")
+    w = tmp_path / "witcher"
+    _w(w / "bin" / "x64" / "witcher3.exe", "x")
+    _w(w / "bin" / "x64_dx12" / "witcher3.exe", "x")
+    assert optiscaler.main_exe_dir(str(w), ["witcher3.exe"]) == str(w / "bin" / "x64_dx12")
+
+
+def test_optiscaler_xess_shows_the_intel_gpu_to_dxvk():
+    """ClawDeck #150: OptiScaler's XeSS loads before the game's DXGI factory, so DXVK hides the Intel GPU and XeSS
+    takes DP4a. Any OptiScaler XeSS gets dxgi.customVendorId = 8086, at any multiplier and without frame generation."""
+    from gamecove_upscale import launchenv
+    assert launchenv.compose({"opti": "xess"})["DXVK_CONFIG"] == launchenv.SHOW_INTEL
+    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "fsr4_xmx"})
+    assert launchenv.compose({"opti": "fsr4_xmx", "fg": 3, "opti_fg": "dlssg"})["DXVK_CONFIG"] == launchenv.SHOW_INTEL
 
 
 def test_installed_games_from_steam_manifests(tmp_path):
@@ -632,7 +696,8 @@ def _ini(text):
 def test_versions_pin_the_capcom_setup():
     v = downloads.load_versions(os.path.join(ROOT, "data", "versions.json"))
     ref = v["reframework"]
-    assert ref["repo"] == "onehoon/REFramework" and ref["tag"] == "fork-release-15-854e42d58b97be792c8ce441e4bdc691684e5866"
+    assert ref["repo"] == "onehoon/REFramework" and ref["tag"] == "fork-release-18-135e7ac98b0703ef157080cbd1ee4f39e54ba8e0"
+    assert ref["dll_sha256"] == "58e65e32e2a12951a81bb342a62b65079efddf56e67301ce7288d4c85daedb9b"
     assert ref["asset_glob"] == "REFramework.zip" and len(ref["sha256"]) == 64 and downloads.is_pinned(ref)
     o10 = v["optiscaler_v10"]
     assert o10["layout"] == "subfolder" and o10["tag"] == "nightly-20261030"
@@ -998,9 +1063,11 @@ def test_3x_4x_through_optiscaler_show_the_intel_gpu_to_xess_fg():
     assert launchenv.compose({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": 3})["DXVK_CONFIG"] == show
     assert launchenv.compose({"opti": "xess", "opti_xefg": True, "fg": 4})["DXVK_CONFIG"] == show
     # 2x needs no override; a game's own XeSS (no OptiScaler) keeps DXVK's hiding (its older XeSS-FG crashes)
-    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "xess", "opti_fg": "dlssg", "fg": 2})
+    # GameCove (ClawDeck #150): OptiScaler's own XeSS always shows the Intel GPU, or XeSS takes DP4a under Proton 11
+    assert launchenv.compose({"opti": "xess", "opti_fg": "dlssg", "fg": 2})["DXVK_CONFIG"] == show
+    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": 2})
     assert "DXVK_CONFIG" not in launchenv.compose({"fg": 4, "xess_latest": True})
-    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "xess", "opti_fg": "off", "fg": 3})
+    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "fsr4_xmx", "opti_fg": "off", "fg": 3})
 
 
 

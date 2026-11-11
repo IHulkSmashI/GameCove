@@ -343,7 +343,7 @@ with Background lookups on (stamp `user://upscalers.cfg`). Tests: `test_upscaler
 
 | GPU | Choices | Default route |
 | --- | --- | --- |
-| Intel Arc with XMX (Xe2, Xe3, Arrow Lake H) | game's own, XeSS, FSR 4.1.2 on XMX, FSR 4.1.2 Lite; XeSS-FG 2x-4x | exactly ClawDeck's: own XeSS if shipped, else OptiScaler XeSS (FSR 4.1.2 on XMX for DX12 games when nitec's files are there), Capcom setup for RE Engine |
+| Intel Arc with XMX (Xe2, Xe3, Arrow Lake H) | game's own, XeSS, FSR 4.1.2 on XMX, FSR 4.1.2 Lite; XeSS-FG 2x-4x | exactly ClawDeck's: own XeSS if shipped, else OptiScaler XeSS (FSR 4.1.2 on XMX for DX12 games; nitec's files come with GameCove), Capcom setup for RE Engine |
 | Intel without XMX (Meteor Lake) | game's own, XeSS (DP4a) | as above without XeSS-FG |
 | AMD RDNA3 / RDNA3.5 | game's own, FSR 3.1, FSR 4 (AMD's FSR SDK 2.4 upscaler 4.1.2, downloaded from AMD's GitHub at a pinned commit, sha256 checked); FSR-FG 2x | games with FSR keep it (Proton-CachyOS / GE upgrade it to FSR 4 on RDNA3); DLSS / XeSS / FSR 2 games get OptiScaler FSR 3.1; FSR 4 opt-in |
 | AMD RDNA2 (Steam Deck, Z2 A, Z2 Go, 6800U) | game's own, FSR 3.1; FSR-FG 2x | as above, no FSR 4 (AMD's lightweight model takes 5.6 ms at 1080p on a Z2 A) |
@@ -370,8 +370,41 @@ fails with the reason ("remove it there first").
 - Every GPU, not just the Claw (table above); AMD presets in launchenv (`fsr31`, `fsr4_amd`, FSR-FG output, Capcom
   setup on FSR) and AMD's own FSR SDK 2.4 upscaler instead of leaked builds (`test_games.py`).
 - ClawDeck's own OptiScaler installs are recognised and left alone (`test_foreign_optiscaler_is_never_touched`).
-- The LZMS cabinet.dll is looked up (GAMECOVE_CABINET, ~/.local/share/gamecove, an installed ClawDeck) instead of
-  assumed inside the package.
+- The LZMS cabinet.dll ships in every GameCove package (`/usr/lib/gamecove/bin/cabinet.dll`, built from
+  `tools/cabinet-lzms` by the release workflow, the same bytes as ClawDeck's); `GAMECOVE_CABINET`, a source
+  checkout's build, `~/.local/share/gamecove` and an installed ClawDeck are looked at too.
+- nitec's FSR 4.1.2 XMX files ship in every package as a set with a manifest (`bin/fsr4-xmx/set.json`); a newer set
+  from the signed list replaces them as a unit, the set before is kept (`~/.local/share/gamecove/fsr4-xmx-previous`)
+  and `gamecove-upscale fsr4-rollback` swaps back (`test_fsr4_set.py`).
+
+### The Intel XMX path against ClawDeck, step by step
+Reference: ClawDeck at 4cf5cf9 (v0.2.0-beta.15). `packaging/helpers/tests/test_clawdeck_parity.py` runs the same
+fixture game through both projects (`CLAWDECK_SRC=<clone>`; CI checks ClawDeck out at that commit) and fails on any
+difference that isn't in this table.
+
+| Step | ClawDeck | GameCove | Same? |
+| --- | --- | --- | --- |
+| Driver | xess-xmx-linux, pinned release (20261111: stock mode on Xe3, its five extra session variables carried per game like the others), its own `install.sh` as the user | the same release and script; also a sha256 pin for the zip, a reviewed-script check, a mirror | same run; safety added before it |
+| Driver scope | session file moved aside, `xmx.env`, a scope script in every Proton with the installer's hook (looks 9 folders down for Unreal plugins); redone at every plugin start | the same files and text (`xmxscope.py`); redone before the helper's commands (`games.xmx_upkeep`) | same |
+| Launch file | `launchenv.compose` / `write`, per game unless the session-wide file is active | the same code, the same flag (`games.per_game`) | same (line order follows the variable names) |
+| Shim, at set-up | `xmxscope.prefix_shim` after OptiScaler goes in | the same call in `games.choose` | same |
+| Shim, at launch | prefix copy when it is the shim, else the package folder through `Z:`; the Proton the game runs on gets the shim as its bundled `igdext64.dll`, original kept as `.stock`, stamped | the same lines in `gamecove-run` | same |
+| A Proton added later (GE-Proton) | covered at launch by the step above | the same | same |
+| OptiScaler.ini | `launchenv.opti_ini` into the package's ini | the same | same |
+| Files in the game | proxy DLL, package files, nitec's two files, `cabinet.dll` + `cabinet_wine.dll`, `fakenvapi.ini` with `force_reflex=2` | the same files and bytes | same; the manifest also records each file's sha256 |
+| DLL overrides | `WINEDLLOVERRIDES=<proxy>=n,b;dinput8=n,b;cabinet=n,b;`, the user's own kept behind | the same | same |
+| Variables | `VK_DRIVER_FILES`, `VKD3D_DISABLE_EXTENSIONS`, `ANV_CM_KERNEL_DIR`, `INTC_ALT_DRIVER_EXTENSIONS_PATH`, `XESS_FG`, `FSR`, `DXVK_CONFIG` (for any OptiScaler XeSS, and 3x+ frame generation through OptiScaler), `IGDEXT_XELL_LOG=1` | the same | same; `IGDEXT_XELL_LOG` only once the driver is installed (nothing reads it before) |
+| FSR 4.1.2 files | inside the zip (`bin/fsr4-xmx`), copied to `~/fsr4-xmx` at start; the user's own files never replaced; import from Downloads; download as a fallback | inside every package (`/usr/lib/gamecove/bin/fsr4-xmx`), the same rule and order (`optiscaler.fsr4_xmx_ready`); the mirror is tried before the branch | same; also `set.json`, the set before kept, `fsr4-rollback` |
+| `cabinet.dll` | built by CI, `bin/cabinet.dll` | the same bytes, `/usr/lib/gamecove/bin/cabinet.dll` | same |
+| Decky Framegen games | second stage after `fgmod` puts FSR 4 XMX over fgmod's files and takes it out again | the same stage in `gamecove-run` | same; the removal list takes file names only |
+| Undo | manifest: files out, backups back; driver: its `uninstall.sh` | the same, but a file that changed since is kept; every `.stock` in a Proton is put back by GameCove too | safety added; nothing changes while in use |
+| Game folder | OptiScaler next to the largest `-Shipping` exe under `Binaries` (not a launcher stub of that name), the DirectX 12 folder when a known exe is in two | the same `main_exe_dir` | same |
+| Not taken | MangoHud log for Auto TDP, E-cores switch | Auto TDP reads mangoapp; cores are a power control | on purpose |
+| Not taken here | non-Steam games in the list (#161), the debug-logs launch (#150) | the per-game upscaling UI (feat/upscaling) | later |
+
+`gamecove-run` used to keep the shim in the game's prefix only and never touch a Proton. That lost against Protons
+that copy their own `igdext64.dll` over the prefix at every launch (ClawDeck: black screen with FSR 4.1.2 on
+GE-Proton), so it now does what ClawDeck does. A prefix an older build changed is put back at the next launch.
 
 ### Needs real hardware / real games to confirm
 - MangoHud limiter inside gamescope with mangoapp running (frame pacing, no second overlay).
@@ -466,7 +499,7 @@ Owner: ctl-power. 33 controls, group `power`. Each detects its backend on this e
 | `power.power_mode` | choice | power-profiles-daemon / tuned-ppd `ActiveProfile` | Bazzite, CachyOS |
 | `power.platform_profile` | choice | steamos-manager `PerformanceProfile1`, else helper (`/sys/firmware/acpi/platform_profile`) | Steam Deck, ASUS, Lenovo; greyed out when PPD owns it |
 | `power.cpu_boost` | toggle | steamos-manager `CpuBoost1`, PowerStation `BoostEnabled` (AMD cpb), helper (intel_pstate `no_turbo`, amd-pstate `policyN/boost`, `cpufreq/boost`) | all |
-| `power.smt` | toggle | PowerStation `SmtEnabled`, helper | CPUs with SMT (not the Claw 8 EX) |
+| `power.smt` | toggle | PowerStation `SmtEnabled`, helper | CPUs with SMT (not the Claw 8 EX); on ASUS handhelds it stays on (greyed out, can only go back on) because Bazzite documents that suspend may break with SMT off (quirks.json `smt-off-breaks-sleep`) |
 | `power.cpu_cores` | slider | PowerStation `CoresEnabled`, helper; 2..all | all with CPU hotplug |
 | `power.epp` | choice | helper (every CPU, from the offered words) | intel_pstate / amd-pstate-epp |
 | `power.governor` | choice | steamos-manager `CpuScaling1`, helper | all |

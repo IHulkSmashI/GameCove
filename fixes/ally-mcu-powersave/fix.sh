@@ -5,12 +5,12 @@
 # The Ally's controller MCU can power down during sleep ("MCU powersave", asus-wmi mcu_powersave or
 # asus-armoury attributes/mcu_powersave). SimpleDeckyTDP turns it on by default on the Ally series
 # ("Asus extreme powersave": reduces power consumption during suspend; needs updated MCU firmware,
-# Ally 319+ / Ally X 314+). Optional because an old MCU firmware can leave the controller dead after
+# Ally 319+ / Ally X 313+). Optional because an old MCU firmware can leave the controller dead after
 # waking; update the firmware in Windows / Armoury Crate first. See fixes/README.md.
 #
 # Never automatic (no "auto" in app/data/fixes.json) and refused unless the MCU firmware is new
 # enough: install reads the version over hidraw first (mcu_version.py; kernel hid-asus minimums,
-# Ally 319, Ally X 314) and status says "unsupported" with the reason otherwise (review S1-3).
+# ROG_ALLY_MIN_MCU 319, ROG_ALLY_X_MIN_MCU 313; at or above them the kernel turns powersave on itself) and status says "unsupported" with the reason otherwise (review S1-3).
 set -eu
 NAME=ally-mcu-powersave
 DEVICES="@"  # fixes/lib/fix-devices.txt, from the trait selectors in app/data/fixes.json
