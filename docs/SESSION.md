@@ -289,7 +289,11 @@ A switch logs the session out, which stops gamescope-session-plus with a signal,
 file exports `GAMECOVE_SESSION=1`), first runs `gamecove.x86_64 --headless --
 --restore-baseline` (the everyday values back in place of a running game's, bounded to
 35 s), then the charge-limit release and power-tune restore through the no-password
-helper, then `steam -shutdown`, then switches. The root restores run in one background
+helper, then `steam -shutdown`, then switches. `steam -shutdown` talks to whichever Steam
+runs for the user, so it only runs when a `steam` process is in this script's own control group
+(`/proc/<pid>/cgroup` equal to `/proc/self/cgroup`: GameCove's session unit, which `leave`
+also runs in as its `ExecStopPost`); by the time `leave` runs, the Steam there may be the next
+session's, and that one is never closed. The root restores run in one background
 job waited for at most `GAMECOVE_ROOT_WAIT_S` (10 s), here and in
 `post_client_shutdown`: `timeout pkexec` only killed pkexec, never its root child.
 A restore that fails never holds the next one up: each runs by itself, and a failure ends

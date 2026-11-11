@@ -70,6 +70,7 @@ UNIT_NAME="gamecove-session-guard.service"
 BOOT_ID_FILE="${GAMECOVE_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}"
 OSTREE_BOOTED="${GAMECOVE_OSTREE_BOOTED:-/run/ostree-booted}"
 LOGINCTL="${LOGINCTL:-loginctl}"
+PROC="${GAMECOVE_PROC:-/proc}"
 OSTREE="${OSTREE:-ostree}"
 RPM_OSTREE="${RPM_OSTREE:-rpm-ostree}"
 
@@ -289,9 +290,24 @@ leave_session() {
 	if [ -x "$FIX_SET" ] && command -v "$PKEXEC" >/dev/null 2>&1; then
 		bounded "$ROOT_WAIT_S" root_restores
 	fi
-	if command -v steam >/dev/null 2>&1 && pgrep -u "$(id -u)" -x steam >/dev/null 2>&1; then
+	if command -v steam >/dev/null 2>&1 && own_steam_runs; then
 		bounded 10 steam -shutdown
 	fi
+}
+
+# True when a Steam of this session runs: a `steam` process of ours in the same control group
+# as this script (GameCove's session unit; `leave` runs as its ExecStopPost, in the same unit).
+# `steam -shutdown` talks to whichever Steam runs for the user, and by the time `leave` runs the
+# next session (Steam Gaming Mode, the desktop) may have started its own: that one is never
+# closed (review at ff76ca4, medium). No control group to compare with: nothing is closed.
+own_steam_runs() {
+	me="$(cat "$PROC/self/cgroup" 2>/dev/null)" || me=""
+	[ -n "$me" ] || return 1
+	for p in $(pgrep -u "$(id -u)" -x steam 2>/dev/null); do
+		case "$p" in '' | *[!0-9]*) continue ;; esac
+		[ "$(cat "$PROC/$p/cgroup" 2>/dev/null)" = "$me" ] && return 0
+	done
+	return 1
 }
 
 # Left GameCove this boot: from here a switch that names no session means the real desktop.

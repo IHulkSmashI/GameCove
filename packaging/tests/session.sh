@@ -359,7 +359,11 @@ printf '#!/bin/sh\necho "app $*" >>"%s/leave.log"\n' "$T" >"$LB/gamecove.x86_64"
 printf '#!/bin/sh\necho "pkexec $*" >>"%s/leave.log"\n[ -f "%s/pkexec-hangs" ] && sleep 20\nexit 0\n' "$T" "$T" >"$LB/pkexec"
 printf '#!/bin/sh\nexit 0\n' >"$LB/fix-set"
 printf '#!/bin/sh\necho "steam $*" >>"%s/leave.log"\n' "$T" >"$LB/steam"
-printf '#!/bin/sh\nexit 0\n' >"$LB/pgrep" # Steam runs
+printf '#!/bin/sh\necho 4242\n' >"$LB/pgrep" # Steam runs, pid 4242
+# ... in this session's control group (the session unit's): GAMECOVE_PROC stands in for /proc
+mkdir -p "$T/proc/self" "$T/proc/4242"
+echo "0::/user.slice/user-1000.slice/user@1000.service/app.slice/gamescope-session-plus@gamecove.service" >"$T/proc/self/cgroup"
+cp "$T/proc/self/cgroup" "$T/proc/4242/cgroup"
 cat >"$LB/steamosctl" <<EOF
 #!/bin/sh
 case "\$1" in switch-*) echo "steamosctl \$*" >>"$T/leave.log" ;; *) exec "$BIN/steamosctl" "\$@" ;; esac
@@ -370,7 +374,7 @@ leave() { # [env...] -- <target>
 	env PATH="$LB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" XDG_CONFIG_HOME="$T/home/.config" \
 		GAMECOVE_SESSIONS_DIRS="$T/sessions" GAMECOVE_BOOT_ID_FILE="$T/boot_id" GAMECOVE_OSTREE_BOOTED="$T/not-ostree" \
 		XDG_RUNTIME_DIR="$T/lrun" STEAMOSCTL="$LB/steamosctl" GAMECOVE_BIN="$LB/gamecove.x86_64" GAMECOVE_FIX_SET="$LB/fix-set" PKEXEC="$LB/pkexec" \
-		GAMECOVE_STATE_DIR="$T/lstate" GAMECOVE_ROOT_WAIT_S=1 "$@" >"$T/out" 2>&1
+		GAMECOVE_STATE_DIR="$T/lstate" GAMECOVE_ROOT_WAIT_S=1 GAMECOVE_PROC="$T/proc" "$@" >"$T/out" 2>&1
 }
 fresh
 leave GAMECOVE_SESSION=1 sh "$SEL" steam
@@ -393,6 +397,21 @@ eqv "$(cat "$T/leave.log")" "$(printf '%s\n' "app --headless -- --restore-baseli
 echo 1 >"$T/lrun/gamecove-left"
 leave sh "$SEL" leave
 has "$T/leave.log" "^app --headless -- --restore-baseline$" "an old switch mark doesn't stop it"
+# review at ff76ca4: by the time `leave` runs, the Steam that runs may be the next session's (Steam
+# Gaming Mode's own): only a Steam in this session's control group is shut down
+echo "0::/user.slice/user-1000.slice/user@1000.service/app.slice/gamescope-session-plus@steam.service" >"$T/proc/4242/cgroup"
+leave sh "$SEL" leave
+has "$T/leave.log" "^app --headless -- --restore-baseline$" "leave still tidies up"
+hasnt "$T/leave.log" "^steam -shutdown$" "but never shuts down the next session's Steam"
+rm -f "$T/proc/4242/cgroup"
+leave sh "$SEL" leave
+hasnt "$T/leave.log" "^steam -shutdown$" "a Steam whose control group can't be read isn't shut down either"
+echo "0::/same" >"$T/proc/4242/cgroup"
+rm -f "$T/proc/self/cgroup"
+leave sh "$SEL" leave
+hasnt "$T/leave.log" "^steam -shutdown$" "nor anything when our own control group can't be read"
+echo "0::/user.slice/user-1000.slice/user@1000.service/app.slice/gamescope-session-plus@gamecove.service" >"$T/proc/self/cgroup"
+cp "$T/proc/self/cgroup" "$T/proc/4242/cgroup"
 leave env STEAMOSCTL=/nonexistent sh "$SEL" leave
 eqv "$?" 0 "leave needs no steamosctl"
 has "$T/leave.log" "^app --headless -- --restore-baseline$" "and still tidies up without it"
