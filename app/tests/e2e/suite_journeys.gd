@@ -610,3 +610,55 @@ func test_game_page_own_settings_then_play_with_them() -> void:
 	await b()
 	await without_stores()
 
+
+
+# ---- moving to the SD card, uninstalling with the saves kept (Epic) --------------------------
+
+func test_epic_move_to_sd_card_then_uninstall_keeps_saves() -> void:
+	await with_stores()
+	stores.set_speed(0.05)
+	var key := "epic:Quail"
+	var save: String = w.home.path_join("Games/Heroic/Prefixes/default/Celeste/pfx/drive_c/users/steamuser/AppData/Local/Celeste/Saves/0.celeste")
+	stores._write(save, "<SaveData>e2e</SaveData>\n")
+	ok(await open_from_library(key), "Celeste's page")
+	eq(primary_text(), "Play", "installed: Play")
+	ok(await press_on(page().manage_button, 10), "Manage")
+	ok(await choose("move"), "Move to another drive")
+	ok(sheet_open(), "asks where to")
+	var sd: String = ""
+	for id in sheet_ids():
+		if "SDCARD" in id:
+			sd = id
+	ok(sd != "", "the SD card is offered (%s)" % [sheet_ids()])
+	var fails := []
+	w.autoload("Library").store.action_failed.connect(func(k, a, m): fails.append([k, a, m]))
+	ok(await choose(sd), "A on the SD card")
+	var where := func() -> String: return str(w.autoload("Library")._entries.get(key, {}).get("install_path", ""))
+	ok(await until(func(): return where.call().begins_with(sd), 20000),
+		"moved: the library has it on the SD card (%s; %s; %s)" % [where.call(), install_state(key), fails])
+	ok(FileAccess.file_exists(where.call().path_join("game.exe")), "its files are there")
+	ok(not FileAccess.file_exists(w.home.path_join("Games/epic/Celeste/game.exe")), "and gone from internal storage")
+	var mv: Array = stores.tool_calls().filter(func(c): return c[0] == "legendary" and c[1] == "move")
+	ok(not mv.is_empty() and "--skip-move" in mv[-1], "legendary was told the new place (%s)" % [mv])
+	eq(str(stores.epic_installed().get("Quail", {}).get("install_path", "")).begins_with(sd), true, "legendary's installed.json points there")
+	check("after the move")
+	await w.frames(4)
+	ok(await press_on(page().manage_button, 10), "Manage again")
+	ok(await choose("uninstall"), "Uninstall")
+	eq(sheet_ids(), ["no", "yes"], "asks first")
+	ok(focused_in(sheet_row("no")), "focus on No")
+	ok(await choose("no"), "No")
+	await w.frames(3)
+	ok(game(key).get("installed", false), "No keeps it")
+	ok(await press_on(page().manage_button, 10), "Manage once more")
+	ok(await choose("uninstall"), "Uninstall")
+	ok(await choose("yes"), "Yes")
+	ok(await until(func(): return not game(key).get("installed", true), 15000), "uninstalled")
+	ok(not stores.epic_installed().has("Quail"), "legendary forgot it")
+	ok(stores.tool_calls().any(func(c): return c[0] == "legendary" and c[1] == "uninstall" and "--skip-uninstaller" in c), "legendary uninstall ran")
+	ok(FileAccess.file_exists(save), "the save in its prefix is kept")
+	await w.frames(4)
+	if page() != null:
+		eq(primary_text(), "Install", "Install offered again")
+	check("after uninstall")
+	await without_stores()
