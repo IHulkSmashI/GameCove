@@ -141,7 +141,8 @@ jobs:
 
   e2e:
     # The real app headless on three fake handhelds (Claw 8 EX / Bazzite, ROG Ally / SteamOS,
-    # Legion Go S / Bazzite): quick menu, Settings, profiles and what reaches the system.
+    # Legion Go S / Bazzite) and a fake Steam Machine (no battery, no panel): quick menu, Settings,
+    # profiles and what reaches the system.
     # Long soak: E2E_SOAK=1 (200 iterations of the randomized parts).
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -159,6 +160,36 @@ jobs:
         run: ./godot --headless --path app --import > /dev/null 2>&1
       - name: End-to-end suite (seed = run number, printed for replay)
         run: GODOT="$PWD/godot" python3 -I app/tests/e2e/run.py --iters 5 --seed "${{ github.run_number }}"
+
+  layout:
+    # Every screen of the app on the screen sizes in app/tests/layout/matrix.gd (the rows marked "ci":
+    # handheld 1280x800, 1080p and 1200p panels, a 4K TV, a 1440p monitor, an ultrawide TV), headless,
+    # geometry only: text outside the screen or cut off, overlaps, focus rings, tiny text. The full matrix
+    # (every distinct layout, more sets) is `python3 -I tools/layout/run.py --full`, too slow for CI.
+    # Accepted findings: tools/layout/known.json. See docs/RESOLUTIONS.md.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GODOT: "4.7.2"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Get Godot
+        run: |
+          curl -fsSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_linux.x86_64.zip"
+          echo "${GODOT_EDITOR_SHA256}  godot.zip" | sha256sum -c -
+          unzip -q godot.zip
+          mv "Godot_v${GODOT}-stable_linux.x86_64" godot
+      - name: Import the project
+        run: ./godot --headless --path app --import > /dev/null 2>&1
+      - name: Layout checks on the CI screen sizes
+        run: GODOT="$PWD/godot" python3 -I tools/layout/run.py --ci --out "$RUNNER_TEMP/layout" -v
+      - name: Layout reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: layout-report
+          path: ${{ runner.temp }}/layout
+          if-no-files-found: ignore
 
   cabinet:
     # tools/cabinet-lzms: the LZMS cabinet.dll for FSR 4 on XMX, cross-compiled and tested under Wine with data

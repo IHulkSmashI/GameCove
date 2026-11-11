@@ -10,7 +10,7 @@ extends SceneTree
 ##
 ## Env: E2E_SUITES=a,b (file name parts), E2E_TEST=<part of a test name>,
 ## E2E_SEED (randomized parts), E2E_ITERS (iterations of randomized parts),
-## E2E_PHASE (restart suite: 1 = before the restart, 2 = after).
+## E2E_PHASE (restart suite: 1 = before the restart, 2 = after), E2E_SCREEN (a matrix row id: run as on that screen).
 ## Prints "E2E PASS|FAIL <suite>::<test> (<ms> ms)" and a last line
 ## "E2E RESULT {json}"; exits 1 on any failure.
 
@@ -39,6 +39,17 @@ func _run() -> void:
 	errors = ErrorCounter.new()
 	OS.add_logger(errors)
 	var t_start := Time.get_ticks_msec()
+	# E2E_SCREEN=<row id of tests/layout/matrix.gd> runs the app as on that screen (tv-4k-55in: a 4K TV),
+	# for the perf numbers at 4K (docs/PERFORMANCE.md). Headless has no real window: these are the hooks.
+	var screen_row := OS.get_environment("E2E_SCREEN")
+	if screen_row != "":
+		var row: Dictionary = load("res://tests/layout/matrix.gd").row(screen_row)
+		if row.is_empty():
+			printerr("E2E FAIL setup: E2E_SCREEN %s is not a row of tests/layout/matrix.gd" % screen_row)
+			_finish(1, {"error": "bad E2E_SCREEN"})
+			return
+		load("res://scripts/ui/ui_scale.gd").override_screen = row["screen"]
+		load("res://scripts/ui/ui_scale.gd").override_window = row["size"]
 	world = World.new(self)
 	var err: String = await world.configure()
 	if err != "":
