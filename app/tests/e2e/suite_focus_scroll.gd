@@ -5,6 +5,7 @@ extends "res://tests/e2e/e2e_case.gd"
 ## the inner scroller glides), or it ends scrolled past the pane's top and cuts the card off.
 
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
+const PAST_MIN := 9.0   # a focus ring and glow reach about this far past a row's box
 
 
 func _nested(host: Control, rows: int) -> Array:
@@ -113,3 +114,37 @@ func test_settings_categories_never_stop_with_a_row_cut_at_the_top() -> void:
 	ok(scroll.scroll_vertical > 0, "the list did scroll (size %s, content %s, scroll %s)" % [scroll.size, scroll.get_child(0).size, scroll.scroll_vertical])
 	holder.custom_minimum_size = Vector2(280, 0)
 	holder.size_flags_vertical = Control.SIZE_FILL
+
+
+## A row that can't stay whole under the top edge is scrolled past with room for its ring and
+## glow: a sliver of the Fixes tab's underline used to show above the pane.
+func test_a_row_scrolled_past_leaves_no_sliver_of_its_ring() -> void:
+	var host := Control.new()
+	host.name = "NestedScrollHost3"
+	w.tree.root.add_child(host)
+	var outer := ScrollContainer.new()
+	outer.size = Vector2(300, 300)
+	outer.custom_minimum_size = Vector2(300, 300)
+	outer.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	host.add_child(outer)
+	var page := VBoxContainer.new()
+	page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outer.add_child(page)
+	var tabs := Button.new()
+	tabs.name = "Tabs"
+	tabs.text = "Tabs"
+	tabs.custom_minimum_size = Vector2(0, 50)
+	page.add_child(tabs)
+	var tall := Button.new()
+	tall.name = "Tall"
+	tall.text = "Tall"
+	tall.custom_minimum_size = Vector2(0, 600)   # taller than the view: its top first
+	page.add_child(tall)
+	FocusScroll.attach(outer)
+	await w.frames(3)
+	tall.grab_focus()
+	await w.wait_s(0.8)
+	var tab_end := tabs.get_global_rect().end.y - outer.get_global_rect().position.y
+	var tab_top := tabs.get_global_rect().position.y - outer.get_global_rect().position.y
+	ok(tab_top >= -1.0 or tab_end <= -PAST_MIN, "the tab is whole at the top or fully clear of it, not a sliver (tab %s to %s)" % [tab_top, tab_end])
+	host.free()

@@ -167,6 +167,8 @@ func target_for(c: Control) -> float:
 				var up := maxf(0.0, rr.position.y - 6.0)
 				if bottom + below <= up + view:
 					v = up
+				elif bottom - top + MARGIN + below > view and top - up <= view * 0.5:
+					v = up   # the focus is taller than the view anyway: keep the row whole above it
 				else:
 					v = minf(rr.end.y + 2.0, top - 4.0)
 				moved = true
