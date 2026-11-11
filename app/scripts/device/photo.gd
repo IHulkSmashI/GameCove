@@ -572,7 +572,9 @@ func _fetch_maker(device_id: String) -> void:
 		return
 	_maker_tried[url] = true
 	_maker_inflight[url] = [device_id]
+	# the maker's own host only: a redirect to anywhere else fails (http.gd checks every hop)
 	http.request(url, {"timeout": MAKER_TIMEOUT, "max_bytes": MAKER_MAX_BYTES,
+		"hosts": [preload("res://scripts/discover/http.gd").host_of(url)],
 		"headers": ["Accept: image/png, image/jpeg, image/webp"]}, _on_maker.bind(url))
 
 

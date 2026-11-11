@@ -284,6 +284,15 @@ func test_maker_sources_follow_the_rules() -> void:
 	ok(not shipped.has("msi-claw-family"), "family rows have no link of their own (they borrow a model's)")
 
 
+func test_a_maker_image_request_names_the_makers_host() -> void:
+	var m := FakeHttp.new()
+	m.route(MAKER_URL, {"bytes": _png_bytes()})
+	var sm := _maker_svc(m)
+	sm.photo_for("msi-claw-8-ex")
+	eq(m.options.size(), 1, "one request")
+	eq(m.options[0].get("hosts", []), ["asset-us-store.msi.com"], "only the maker's host, redirects included")
+
+
 func test_sniff_image() -> void:
 	eq(PhotoSvc.sniff_image(_png_bytes()), "png", "png")
 	eq(PhotoSvc.sniff_image(_photo_bytes()), "webp", "webp")
