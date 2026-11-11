@@ -77,6 +77,15 @@ def test_amds_dll_isnt_stored_twice_next_to_the_xmx_set(tmp_path, monkeypatch):
     amd = m[sha(blobs["amd.dll"])]
     assert amd["path"] == os.path.join("..", "fsr4-xmx", "fsr-original.dll") and not (dest / sha(blobs["amd.dll"])).exists()
     assert len(calls) == 6 and fetch_bundle.main(["--check", str(dest)]) == 0
+    # the release build passes a relative path (app/build/bin/upscalers): the shared file is still inside bin/
+    monkeypatch.chdir(tmp_path)
+    assert fetch_bundle.main(["--check", os.path.join("bin", "upscalers")]) == 0
+    # but a path that leaves bin/ is refused
+    m[sha(blobs["amd.dll"])]["path"] = os.path.join("..", "..", "elsewhere.dll")
+    json.dump({"files": m}, open(dest / "bundle.json", "w"))
+    assert fetch_bundle.main(["--check", os.path.join("bin", "upscalers")]) == 1
+    m[sha(blobs["amd.dll"])]["path"] = os.path.join("..", "fsr4-xmx", "fsr-original.dll")
+    json.dump({"files": m}, open(dest / "bundle.json", "w"))
     monkeypatch.setenv("GAMECOVE_BUNDLE", str(dest))
     assert downloads.bundled(sha(blobs["amd.dll"])) == str(fsr4 / "fsr-original.dll")
 
