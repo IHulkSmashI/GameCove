@@ -1293,14 +1293,68 @@ func test_presses_for_the_game_never_reach_our_screens() -> void:
 	await without_stores()
 
 
+# ---- emulated games: an EmuDeck setup, a console's ROMs by pad, one started ----------------------
+
+func _touch(path: String, text := "x") -> void:
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(text)
+	f.close()
+
+
+func test_rom_library_by_pad_filter_a_console_open_and_play() -> void:
+	await with_stores()
+	var home: String = w.home
+	var emu: String = home.path_join("Emulation")
+	var marker: String = stores.state_dir.path_join("retroarch.args")
+	_touch(home.path_join(".config/EmuDeck/settings.sh"), "emulationPath=\"%s\"\n" % emu)
+	_touch(home.path_join("Applications/ES-DE.AppImage"))
+	# EmuDeck's RetroArch launcher: notes what it was asked to start, then the "game" quits
+	_touch(emu.path_join("tools/launchers/retroarch.sh"), "#!/bin/sh\nprintf '%%s\\n' \"$@\" > '%s'\nexit 0\n" % marker)
+	FileAccess.set_unix_permissions(emu.path_join("tools/launchers/retroarch.sh"), 493)
+	_touch(home.path_join(".var/app/org.libretro.RetroArch/config/retroarch/cores/snes9x_libretro.so"))
+	for f in ["Moonlit Harbor (USA).sfc", "Copper Canyon Racing (Europe) (Rev 1).sfc"]:
+		_touch(emu.path_join("roms/snes").path_join(f))
+	_touch(emu.path_join("roms/nes/Thwaite.nes"))
+	await stores.rescan()
+	await until(func(): return w.autoload("Library")._task == -1, 30000)
+	var roms: Array = w.autoload("Library").games.filter(func(g): return g.get("emulated", {}).get("rom", false))
+	ok(roms.size() >= 3, "every ROM is a Library game (%s)" % [roms.map(func(g): return g["title"])])
+	ok(await go_tab("library"), "the Library")
+	await view_btn()
+	ok(await choose("+emulation"), "Filter > Emulation")
+	ok(sheet_open() and "emulation:snes" in sheet_ids(), "the consoles (%s)" % [sheet_ids()])
+	ok(await choose("emulation:snes"), "SNES")
+	var shown := shown_titles()
+	shown.sort()
+	eq(shown, ["Copper Canyon Racing", "Moonlit Harbor"], "the SNES games")
+	var key := ""
+	for t in main().library_screen.tiles():
+		if str(t.game["title"]) == "Moonlit Harbor":
+			key = str(t.game["key"])
+	ok(await open_from_library(key), "A on Moonlit Harbor: its page")
+	ok(page() != null and page().find_child("Fact_System", true, false) != null, "with its console in the facts")
+	eq(primary_text(), "Play", "Play")
+	await a()
+	ok(await until(func(): return FileAccess.file_exists(marker), 10000), "EmuDeck's RetroArch launcher started it")
+	ok("Moonlit Harbor" in FileAccess.get_file_as_string(marker), "with the ROM (%s)" % FileAccess.get_file_as_string(marker).strip_edges())
+	await until(func(): return not main().session.is_active(), 15000)
+	await w.idle()
+	ok(focus() != null and focus_on_screen() == "", "back from the game, focus on screen")
+	# favourite it like any game
+	if page() != null:
+		await b()
+	ok(await tile_options(key), "Start on its tile")
+	ok(await choose("favourite"), "Add to favourites")
+	ok(w.autoload("Library").collections.is_favourite(key), "a favourite")
+	check("rom library")
+	await without_stores()
+
+
 # ---- pending merge: journeys for features still on their own branches --------------------------
 # Each is listed by the runner as "E2E SKIP ... (pending merge)" and filled in
 # when its branch lands (docs/TESTING.md, the "pending merge" rows).
 
-## ROM library (feat/rom-library): ROMs found by system, a ROM's page, launch
-## through its emulator, play time, hide / favourite like any game.
-func test_pending_rom_library_browse_launch_and_play_time() -> void:
-	pass
 
 
 ## Quick-menu shortcuts and button shortcuts (quick-actions): add, reorder and
@@ -1310,16 +1364,6 @@ func test_pending_quick_menu_shortcuts_and_button_shortcuts() -> void:
 	pass
 
 
-## Upscaling selection (upscaling / upscale-latest): the new per-game picker
-## (OptiScaler, XeSS, FSR, Native), versions and the update flow.
-func test_pending_upscaling_selection_picker() -> void:
-	pass
-
-
-## Fixes lifecycle (fixes): a fix applied at install, re-checked after a system
-## update, offered again when the system dropped it, undone on removal.
-func test_pending_fixes_lifecycle_after_a_system_update() -> void:
-	pass
 
 
 ## Resolutions and Steam Machine (resolutions): output resolution, interface
