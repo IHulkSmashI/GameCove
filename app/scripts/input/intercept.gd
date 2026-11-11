@@ -179,12 +179,24 @@ var on_seen: Callable
 var start_timer: Callable
 var _holds := {}         # event -> {"gen", "fired", "pressed"} while a shortcut button is down
 var _hold_gen := 0
+## A shortcut button that has been "down" this long without a release lost its release (a reconnect, a
+## restarted monitor): its next press counts as a press again instead of being swallowed as a repeat.
+const STALE_DOWN_MS := 20000
+var now_ms: Callable = func() -> int: return Time.get_ticks_msec()
+var _down_ms := {}       # shortcut event -> when it went down
 
 
 ## One InputEvent signal (event name, value).
 func handle(event: String, value: float) -> void:
 	var was: bool = _held.get(event, false)
 	var down := value >= PRESS_AT if not was else value > RELEASE_AT
+	if was and down and shortcuts.has(event) and not NAV_AXES.has(event) \
+			and int(now_ms.call()) - int(_down_ms.get(event, now_ms.call())) > STALE_DOWN_MS:
+		# the release never came: let the old press end, then this one is a new press
+		_set_held(event, false, true)
+		_shortcut_event(event, false)
+		_down_ms.erase(event)
+		was = false
 	if NAV_AXES.has(event):
 		var m := InputEventJoypadMotion.new()
 		m.device = joy_device
@@ -197,6 +209,10 @@ func handle(event: String, value: float) -> void:
 		return
 	_set_held(event, down, was)
 	if shortcuts.has(event):
+		if down:
+			_down_ms[event] = int(now_ms.call())
+		else:
+			_down_ms.erase(event)
 		_shortcut_event(event, down)
 		return
 	var cap: String = Buttons.DBUS_EVENTS.get(event, "")

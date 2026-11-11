@@ -36,8 +36,9 @@ a script or a Windows app for is built in.
 
 - 🔥 **The best upscaler your chip runs, set up for you.** FSR 4.1.2 on Intel's XMX cores with XeSS frame generation
   up to 4x, FSR 4.1.2 on AMD (the Z1 Extreme too), Lossless Scaling frame generation for everything else, and low
-  latency with every frame generator that has one. Nothing to download or copy: it's ready before a game's first
-  start, and one tap takes it out again.
+  latency with every frame generator that has one. The upscaler files come with GameCove, so there is nothing to
+  copy: it's ready before a game's first start, and one tap takes it out again. (Two optional pieces download when
+  you ask: lsfg-vk for Lossless frame generation, and the XeSS driver's vendor files.)
 - 🎮 **Every store, one library.** Steam, Epic, GOG and Amazon side by side, with art, critic scores, time to beat,
   achievements and ProtonDB ratings. Install, update, repair and move games right from the handheld.
 - ⚡ **A quick menu with every setting your handheld has**, one button away in any game: TDP, fan, frame limit,
@@ -57,7 +58,7 @@ a script or a Windows app for is built in.
 - 🛡️ **Safe by design:** everything can be undone, repeated crashes drop you back in Steam Gaming Mode, and there's no
   telemetry and no account.
 
-**Tested on** the MSI Claw 8 EX AI+ (Bazzite) and the ASUS ROG Ally (SteamOS), and 46 more models set up from
+**Tested on** the MSI Claw 8 EX AI+ (Bazzite) and the ASUS ROG Ally (SteamOS), and 48 more models set up from
 tested data. GameCove recognises your exact model and only shows what it can do:
 
 | Support | Handhelds |
@@ -110,7 +111,7 @@ one of two badges:
 | Fix | Restores | For | Tested on hardware | Your system today |
 | --- | --- | --- | --- | --- |
 | **MSI buttons**<br>Makes the two MSI buttons next to the screen work: left opens the menu, right opens Quick Access. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed (InputPlumber still maps the board to claw2). SteamOS: Not supported on SteamOS. |
-| **Smooth screen down to 30 fps**<br>Lets VRR keep games smooth down to 30 fps instead of 48. | Screen | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+<br>**Optional**: MSI Claw 7 AI+, MSI Claw A1M | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); not yet tested on a SteamOS Claw. |
+| **Smooth screen down to 30 fps**<br>Lets VRR keep games smooth down to 30 fps instead of 48. | Screen | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+<br>**Optional**: MSI Claw 7 AI+, MSI Claw A1M | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); untested on a SteamOS Claw (fake-root tests only). |
 | **Gyro aiming**<br>Turns on the motion sensor so you can aim by tilting the Claw. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not supported on SteamOS. |
 | **Volume buttons don't wake it**<br>Stops a bump of the volume buttons from waking the Claw in your bag. | Sleep and battery while asleep | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M, MSI Claw A8 | Not yet | Bazzite: Not fixed: Handheld Daemon switched it off at start, InputPlumber (Bazzite 44+) doesn't. SteamOS: Not fixed (no Claw support in SteamOS). |
 | **Wi-Fi back after sleep**<br>Keeps the Wi-Fi card awake enough to come back after sleep. Uses a little more battery asleep. | Wi-Fi and Bluetooth | **Optional**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M | Not yet | Bazzite: Not fixed (reported 2024-12, no answer). SteamOS: Not fixed (SteamOS issues 2742, 2703; user-verified workaround). |
@@ -172,9 +173,10 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
   or what's installed, sort by Top rated, and search with the on-screen keyboard.
 - **A keyboard made for a controller.** Wherever GameCove asks for text (search, a collection's name, a sign-in code
   or key, a streaming PC's address, launch options) its own on-screen keyboard slides up: letters with a number row,
-  a symbols page with everything a code or a URL needs, Shift (press twice for Caps), a caret you can move, and Paste
-  where a code is asked for. X deletes, Y is space, LT shifts, RT shows the symbols, LB and RB move the caret, Menu is
-  Done; hold the D-pad or X and it repeats. Touch, a mouse and a real keyboard work too. In a game, typing stays
+  a symbols page with everything a code or a URL needs, an accents page (áé), Shift (press twice for Caps), a caret
+  you can move, and Paste where a code is asked for; an API key shows as dots until you press Show. X deletes, Y is
+  space, LT shifts, RT shows the symbols, LB and RB move the caret, Menu is Done and B cancels (what you typed since it
+  opened is dropped); hold the D-pad or X and it repeats. Touch, a mouse and a real keyboard work too. In a game, typing stays
   Steam's keyboard.
 - **Home stays quick with a big library.** Each Home shelf shows its first 24 games and ends with **See all**, which
   opens the Library on the same list. Thousands of ROMs don't slow Home down.
@@ -387,8 +389,8 @@ it does.
 ## Upscaling, frame generation and Auto TDP
 
 **GameCove sets up the best upscaler your handheld runs, per game, before you press Play.** It reads your chip and
-what the game ships, puts the right files in, and shows afterwards what really ran. No downloads, no folders, no
-launch options. The full guide and the table for every chip are in [docs/UPSCALING.md](docs/UPSCALING.md).
+what the game ships, puts the right files in, and shows afterwards what really ran. No folders, no launch options,
+and the upscaler files come with GameCove (lsfg-vk and the XeSS driver's vendor files download only when you ask). The full guide and the table for every chip are in [docs/UPSCALING.md](docs/UPSCALING.md).
 
 | Your chip | What "Best for this handheld" picks | Frame generation |
 | --- | --- | --- |
@@ -402,7 +404,8 @@ launch options. The full guide and the table for every chip are in [docs/UPSCALI
   Every option has one line saying what it is.
 - **You see what's really running.** After a start the card reads the logs and says, for example,
   "Active: FSR 4.1.2 on XMX, XeSS frame generation 2x, XeLL low latency", or why it isn't active.
-- **One install.** Every file comes with GameCove, each pinned and checked. The size of it all is in
+- **One install.** The upscaler files come with GameCove, each pinned and checked (the optional lsfg-vk and the XeSS
+  driver's vendor files, about 260 MB, download only when you ask). The size of it all is in
   Settings > Device > Storage, and uninstalling puts every game back exactly as it shipped.
 - **Safe.** Never on games with anti-cheat. Never on top of another tool's upscaler or ReShade. Never two frame
   generators at once. Nothing in a game folder is changed for good.
@@ -534,16 +537,18 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Local prices (optional) | [GG.deals](https://gg.deals) (gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
 | Your device's photo | GitHub (free photos on GameCove-data's `device-photos` release) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
 | Upscaler list and newer upscaler files (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove-data's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and when you change an upscaler; files only when the list has a newer tested version than the one that came with GameCove | Background lookups (daily check). With it off, the files that came with GameCove are used |
+| Steam wishlist import (Discover) | steamcommunity.com (`IWishlistService`) | Your Steam profile name or SteamID64 | When you import your wishlist | You start it |
+| XeSS driver installer, and the gyro firmware on the MSI Claw | Intel's and AMD's download sites (compiler, libraries, FidelityFX files); download.msi.com (sensor firmware, pinned by size and sha256) | Nothing about you | When you install the XeSS driver, or the Claw gyro fix | You start it |
 | lsfg-vk for Lossless Scaling frame generation | Its author's site (builds.lsfg-vk.dev) | Nothing about you | When you press Set up Lossless frame generation, and only if you have Lossless Scaling installed | You start it |
 | The list of device fixes | GitHub (the `fixes` release of GameCove's data repo, [GameCove-data](https://github.com/IHulkSmashI/GameCove-data), signed) | Nothing about you: the same file for every handheld | At most once a day, at start, never while you play | Background lookups |
 | GE-Proton (Settings > Performance) | GitHub (GloriousEggroll's `proton-ge-custom` releases) | Nothing about you | When you press Check or Install | You start it |
 | BIOS and firmware list and downloads | GitHub (GameCove-data's `firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
 | Steam insights on a game's page (players now, reviews, Steam Deck rating, last update, DLC) | Steam's public API and store | The game's app id (DLC prices: also your store country) | When you open a Steam game's page; players at most every 10 min, the rest every 12 h | Background lookups (prices: Look up deals and prices) |
 | Achievements | Steam's API and CDN | The game's app id | When you open a game page | Settings > Performance |
-| Game pictures in Discover and the calendar | Steam's CDN, IGDB's image server (`images.igdb.com`) and SteamGridDB's CDN (a download only starts on one of these; a redirect they answer with is followed) | The picture's address (it names the game) | When a tile shows a picture that isn't saved yet | None (SteamGridDB lookups: Look up game details) |
-| Game details | The Steam store (`appdetails`) | The Steam app id of a game (or of a GOG / Epic / Amazon game's Steam edition) whose details or Metacritic score are missing | In the background after start, one request every 2 s, cached a week; at once for the page you open | Look up game details (+ Background lookups for the background fill) |
+| Game pictures in Discover and the calendar | Steam's CDN, IGDB's image server (`images.igdb.com`) and SteamGridDB's CDN (a download only starts on one of these, and every redirect hop is checked against the same list) | The picture's address (it names the game) | When a tile shows a picture that isn't saved yet | None (SteamGridDB lookups: Look up game details) |
+| Game details | The Steam store (`appdetails`) | The Steam app id of a game (or of a GOG / Epic / Amazon game's Steam edition) whose details or Metacritic score are missing | In the background after start, one request every 1.6 s, cached a week; at once for the page you open | Look up game details (+ Background lookups for the background fill) |
 | Critic scores (optional) | [OpenCritic](https://opencritic.com) through RapidAPI | A game's title, then its OpenCritic id, with your own key | Same as game details, only if you added a key; at most 20 searches and 180 requests a day | Look up game details, or remove the key |
-| Artwork | [SteamGridDB](https://www.steamgriddb.com) | A game's Steam app id or title, with your own key | When you open Change artwork; in the background for games with no cover, hero or logo | Look up game details (+ Background lookups for the automatic fill) |
+| Artwork | [SteamGridDB](https://www.steamgriddb.com) | A game's Steam app id or title, with your own key | When you open Change artwork; in the background for games with no cover, hero or logo (never a ROM game) | Look up game details (+ Background lookups for the automatic fill) |
 | Game art setup | Your phone, on your own network, then SteamGridDB | Your SteamGridDB key: pasted on a one-time page GameCove serves on your LAN, then checked once with SteamGridDB | Only after you choose Send from my phone in the Game art step, 10 minutes at most | You start it |
 | Emulation tools | Whatever EmuDeck, RetroDECK, ES-DE and Steam ROM Manager contact themselves | Those tools' own requests (GameCove only reads their files, on the device) | Only while you have them open from the Emulation page | You start it |
 | Sending a clip to your phone | Your phone, on your own network | The clip itself, from a one-time page GameCove serves on your LAN; nothing leaves your network | Only while the Send to phone code shows, until it's downloaded or 10 minutes pass | You start it |

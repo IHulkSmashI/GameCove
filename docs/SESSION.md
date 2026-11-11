@@ -351,7 +351,8 @@ GameCove's quick menu) unless a switch of ours did it in the last two minutes
   brought back): there the screen and the controller are GameCove's again, so the
   heartbeat beats every 5 s as in `ui`, and if it stops for 45 s
   (`GAMECOVE_HEARTBEAT_FRONT_STALE_S`) the app is stopped too. A game that is still
-  starting stays `game` until its window has had the screen once.
+  starting stays `game` until its window has had the screen once, or 90 s have passed with GameCove's own
+  window still in front (a launch that never produced a window): then it is `front` and watched.
 - **Telling you why:** after a fallback, the next GameCove start shows a notice
   ("GameCove closed unexpectedly 3 times in a row, so Steam started instead") from
   `crash-fallback`, then deletes it.

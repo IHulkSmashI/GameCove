@@ -119,8 +119,8 @@ static func launch_command(entry: Dictionary, tools: Dictionary, extra_env := {}
 		var env := Common.umu_env(entry, "amazon")
 		env["NILE_CONFIG_PATH"] = str(entry.get("config_dir", "")).get_base_dir()
 		env.merge(extra_env, true)
-		return Common.with_env(env, [tools["nile"], "launch", entry["id"],
-			"--no-wine", "--wrapper", Common.shell_quote(tools["umu"])])
+		return Common.with_env(env, [tools["nile"], "launch",
+			"--no-wine", "--wrapper", Common.shell_quote(tools["umu"]), "--", entry["id"]])
 	if entry.get("source", "") == "heroic":
 		return Common.heroic_command(entry, tools, "nile")
 	return [] as Array[String]

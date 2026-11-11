@@ -13,6 +13,8 @@ const Icons := preload("res://scripts/ui/icons.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ArtCache := preload("res://scripts/ui/art_cache.gd")
 const ImageGuard := preload("res://scripts/ui/image_guard.gd")
+const EmulationPageScript := preload("res://scripts/ui/emulation_page.gd")
+const SteamGridScript := preload("res://scripts/library/art/steam_grid.gd")
 const Tile := preload("res://scripts/ui/game_tile.gd")
 const Shelf := preload("res://scripts/ui/shelf.gd")
 const Osk := preload("res://scripts/ui/osk.gd")
@@ -236,6 +238,11 @@ func test_search() -> void:
 	eq(titles.call("lta"), ["Delta Force"], "substring")
 	eq(titles.call("xyz"), [], "no match")
 	eq(View.fold("  The Witcher 3: Wild-Hunt "), "the witcher 3 wild hunt", "fold")
+	eq(View.fold("ドラゴンクエスト III"), "ドラゴンクエスト iii", "Japanese letters stay in the folded title")
+	eq(View.fold("Тетрис: Ёлка"), "тетрис ёлка", "so do Cyrillic ones")
+	eq(View.fold("Straße・Æon"), "strasse aeon", "ß and Æ fold, a middle dot separates")
+	eq(View.search([{"title": "ドラゴンクエスト III"}, {"title": "Tetris"}], "クエスト").size(), 1, "a Japanese title can be searched")
+	eq(View.folded("Café"), View.fold("Café"), "the kept fold is the same")
 
 
 # ------------------------------------------------------------ motion
@@ -538,6 +545,40 @@ func test_shelf_fades_its_edges() -> void:
 	eq(s.tile_size, Tile.size_for(Tile.row_width(), Shelf.GAP), "tiles sized for the screen")
 	eq(s.faded_edges(), [false, false], "nothing faded before layout")
 	s.free()
+
+
+## Partly-fixed review finding (5ba2035): the Emulation page's collage and the Steam grid's
+## WebP conversion still decoded art whatever size its header named.
+func test_the_collage_and_the_steam_grid_never_decode_a_huge_picture() -> void:
+	var dir := ProjectSettings.globalize_path("user://tests/image_guard2")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var huge := dir.path_join("huge.png")
+	DirAccess.copy_absolute(fixture("art/huge_7000x7000_png.bin"), huge)
+	eq(EmulationPageScript._load_image(huge), null, "the collage skips it")
+	var img := Image.create(64, 96, false, Image.FORMAT_RGB8)
+	img.fill(Color(0.2, 0.5, 0.8))
+	img.save_png(dir.path_join("ok.png"))
+	img.save_jpg(dir.path_join("ok.jpg"))
+	img.save_webp(dir.path_join("ok.webp"))
+	for name in ["ok.png", "ok.jpg", "ok.webp"]:
+		var got: Image = EmulationPageScript._load_image(dir.path_join(name))
+		ok(got != null and got.get_size() == Vector2i(64, 96), "the collage still loads " + name)
+	var f := FileAccess.open(dir.path_join("junk.png"), FileAccess.WRITE)
+	f.store_string("<html>not an image</html>")
+	f.close()
+	eq(EmulationPageScript._load_image(dir.path_join("junk.png")), null, "and refuses what isn't a picture")
+	# Steam's grid: a ".webp" that is really a huge picture is not converted (nor decoded)
+	var grid := dir.path_join("grid")
+	var backup := dir.path_join("backup")
+	DirAccess.make_dir_recursive_absolute(grid)
+	var fake_webp := dir.path_join("big.webp")
+	DirAccess.copy_absolute(fixture("art/huge_7000x7000_png.bin"), fake_webp)
+	eq(SteamGridScript.apply(grid, backup, "400", "cover", fake_webp), "", "nothing written for it")
+	ok(SteamGridScript.existing(grid, "400p").is_empty(), "and nothing in Steam's grid folder")
+	var good := SteamGridScript.apply(grid, backup, "400", "cover", dir.path_join("ok.webp"))
+	ok(good != "", "a normal WebP is still converted for Steam")
+	for name in ["huge.png", "ok.png", "ok.jpg", "ok.webp", "junk.png", "big.webp"]:
+		DirAccess.remove_absolute(dir.path_join(name))
 
 
 ## Final review, medium (security): art from SteamGridDB was decoded whatever size its

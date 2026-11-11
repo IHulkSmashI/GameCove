@@ -130,7 +130,7 @@ A job is a list of steps from `StoreCommands.plan()`:
 
 The store's id always comes last, after `--` (the end of options in all three tools, which parse with
 Python's argparse): ids are read from the stores' own files, and one that began with `-` can't be taken
-for an option.
+for an option. That covers the launch commands and the cloud-save sync calls too.
 
 - legendary and nile get their config folder (`LEGENDARY_CONFIG_PATH`,
   `NILE_CONFIG_PATH`) so Heroic users' installs land in Heroic's records, exactly

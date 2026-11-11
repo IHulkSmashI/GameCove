@@ -157,8 +157,8 @@ static func launch_command(entry: Dictionary, tools: Dictionary, extra_env := {}
 		var env := Common.umu_env(entry, "egs")
 		env["LEGENDARY_CONFIG_PATH"] = entry.get("config_dir", "")
 		env.merge(extra_env, true)
-		return Common.with_env(env, [tools["legendary"], "launch", entry["id"],
-			"--no-wine", "--wrapper", Common.shell_quote(tools["umu"])])
+		return Common.with_env(env, [tools["legendary"], "launch",
+			"--no-wine", "--wrapper", Common.shell_quote(tools["umu"]), "--", entry["id"]])
 	if entry.get("source", "") == "heroic":
 		return Common.heroic_command(entry, tools, "legendary")
 	return [] as Array[String]

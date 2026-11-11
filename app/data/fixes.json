@@ -171,7 +171,7 @@
     {
      "type": "file",
      "target": "/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf",
-     "detail": "SteamOS only: keeps the fix's own files across SteamOS updates (never Valve's grub file); after an update GameCove puts the grub line back without a password."
+     "detail": "SteamOS only: keeps the fix's own files and its record (/etc/gamecove/claw8ex-vrr/record, since SteamOS gives every OS slot its own /var) across SteamOS updates (never Valve's grub file); after an update GameCove puts the grub line back without a password."
     }
    ],
    "undo": "Takes out the boot switch (kernel argument, or the grub line and update-grub on SteamOS), the initramfs entries, the SteamOS keep list and every file, in reverse order. The panel's own EDID is back after a restart.",
@@ -184,7 +184,7 @@
     }
    ],
    "bazzite": "Not fixed.",
-   "steamos": "Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); not yet tested on a SteamOS Claw.",
+   "steamos": "Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); untested on a SteamOS Claw (fake-root tests only).",
    "sources": [
     "ClawDeck docs/HARDWARE-FINDINGS.md section 11",
     "fixes/claw8ex-vrr/README.md"

@@ -1085,18 +1085,13 @@ func _clamp_to_source() -> void:
 
 func _report_battery(on_ac: bool) -> void:
 	var pct := -1
-	var dir := DirAccess.open(sys_root + "/sys/class/power_supply")
-	if dir != null:
-		var names := Array(dir.get_directories()) + Array(dir.get_files())
-		names.sort()
-		for n in names:
-			var d: String = sys_root + "/sys/class/power_supply/" + n + "/"
-			if DeviceScript.read_text(d + "type") == "Battery":
-				var c := DeviceScript.read_text(d + "capacity")
-				if c.is_valid_int():
-					pct = c.to_int()
-				_battery_status = DeviceScript.read_text(d + "status")
-				break
+	# the system battery (BAT*, else a Battery that isn't a gadget's): a gamepad at 5 % is not this box's charge
+	var d := DeviceScript.battery_path_at(sys_root)
+	if d != "":
+		var c := DeviceScript.read_text(d + "capacity")
+		if c.is_valid_int():
+			pct = c.to_int()
+		_battery_status = DeviceScript.read_text(d + "status")
 	if pct >= 0 and pct != _battery_pct:
 		_battery_pct = pct
 		_emit_main(battery_level, [pct, on_ac])
@@ -1217,6 +1212,9 @@ func write_tdp(watts: float) -> bool:
 		# passes the new total on the way (a raised TDP with the old, larger boost overshot boost_max;
 		# review 2, low 23)
 		var boost := boost_for(watts)
+		var service_max := float(be.ps_boost().get("max", -1.0)) if boost >= 0.0 else -1.0
+		if service_max > 0.0:
+			boost = minf(boost, service_max)   # PowerStation's own ceiling, as set_boost_w applies it
 		var live: Variant = system_bus.get_prop(PS_SERVICE, _ps_card, PS_TDP_IFACE, "Boost")
 		var change := boost >= 0.0 and (live == null or absf(float(live) - boost) >= 0.05)
 		var first := change and live != null and boost < float(live)
@@ -1271,7 +1269,12 @@ func boost_for(watts: float) -> float:
 	var b := boost_w if boost_w >= 0.0 else float(device.get("pl2_offset_w", -1.0))
 	if b < 0.0:
 		return -1.0
-	var cap := float(device.get("tdp", {}).get("boost_max", -1.0))
+	var tdp: Dictionary = device.get("tdp", {})
+	var cap := float(tdp.get("boost_max", -1.0))
+	if cap <= 0.0:
+		# a row with no boost_max (a generic Intel row, an unlisted model): PL2 still never passes the highest
+		# TDP the row allows (PL1 28 W had given PL2 30 W), and a hand-edited boost_w is bounded the same way
+		cap = float(tdp.get("plugged_max", -1.0))
 	return minf(b, maxf(0.0, cap - watts)) if cap > 0.0 else b
 
 

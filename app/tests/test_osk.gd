@@ -308,9 +308,10 @@ func test_controller_buttons() -> void:
 	k.showing = true   # open (what open() sets), without its fade
 	_pad(k, JOY_BUTTON_B)
 	eq(closed.size(), 2, "B closes too")
+	eq(closed[1], "", "but B cancels: what was typed since it opened is not kept")
 	k.visible = false
 	_pad(k, JOY_BUTTON_Y)
-	eq(k.text, "ax", "closed, it takes nothing")
+	eq(k.text, "", "closed, it takes nothing")
 	k.free()
 
 
@@ -501,4 +502,91 @@ func test_text_keyboard_is_the_same_keyboard() -> void:
 	for ch in "abcdefgh":
 		k.type(ch)
 	eq(k.text, "abcde", "its limit is max_len")
+	k.free()
+
+
+## Review Medium (input): an on-screen keyboard hidden without close() (its screen went away) stayed
+## "showing" and went on taking every key and button, unseen.
+func test_a_keyboard_that_is_hidden_stops_taking_input() -> void:
+	var k := _kb()
+	k._on_seen_changed(true)   # what the engine reports when it shows
+	k._input(_key_event(KEY_A, 65))
+	eq(k.text, "a", "open: it types")
+	k._on_seen_changed(false)   # its screen went away, no close()
+	ok(not k.showing and not k.is_open(), "no longer open")
+	ok(not k.visible, "and hidden")
+	k._input(_key_event(KEY_B, 66))
+	_pad(k, JOY_BUTTON_Y)
+	eq(k.text, "a", "and takes nothing")
+	# a keyboard that was never seen (opened under a hidden screen) isn't closed by a hide
+	var k2 := _kb()
+	k2._on_seen_changed(false)
+	ok(k2.showing, "never seen: left as it was")
+	k.free()
+	k2.free()
+
+
+func test_cancel_puts_the_old_text_back_and_done_keeps_the_new() -> void:
+	var k := _kb()
+	var got := {"changed": [], "closed": []}
+	k.text_changed.connect(func(t): got["changed"].append(t))
+	k.closed.connect(func(t): got["closed"].append(t))
+	k.open("old")
+	k.set_text("new")
+	k.cancel()
+	eq(k.text, "old", "B / Esc: back to what it was")
+	eq(got["changed"].back(), "old", "the owner hears the old text first (a live search shows its old list)")
+	eq(got["closed"], ["old"], "and closed carries it")
+	k.open("old")
+	k.set_text("")   # Clear, then B
+	k.cancel()
+	eq(got["closed"].back(), "old", "Clear then B does not save an empty value")
+	k.open("old")
+	k.type("x")
+	k.close()
+	eq(got["closed"].back(), "oldx", "Done keeps it")
+	k.free()
+
+
+func test_cancel_is_told_to_the_owner() -> void:
+	var k := _kb()
+	k.open("old")
+	k.set_text("new")
+	k.cancel()
+	ok(k.cancelled, "cancelled")
+	k.open("old")
+	ok(not k.cancelled, "a new session starts clean")
+	k.close()
+	ok(not k.cancelled, "Done is not a cancel")
+	k.free()
+
+
+func test_a_secret_is_drawn_as_dots_until_shown() -> void:
+	var k := _kb()
+	k.use_for_codes("API key", 600, true)
+	ok(k.show_button.visible, "a Show key beside Paste")
+	k.open("abc123")
+	eq(k._display(k.text), "••••••", "dots, one per character")
+	eq(k.text, "abc123", "the text itself is untouched")
+	k.toggle_reveal()
+	eq(k._display(k.text), "abc123", "Show reveals it")
+	k.close()
+	k.open("abc123")
+	ok(not k.revealed, "and it is hidden again the next time")
+	k.free()
+
+
+func test_accented_letters_are_on_a_page_of_their_own() -> void:
+	var k := _kb()
+	k.open("")
+	k.toggle_accents()
+	ok(k.accents and k.symbols, "the Accents key opens the page (RT then goes back to the letters)")
+	eq(_texts([k.keys[0]]), "àáâãäåæç", "the first row")
+	k.type("é")
+	eq(k.text, "é", "typed")
+	k.toggle_shift()
+	k.type("é")
+	eq(k.text, "éÉ", "and a capital with Shift")
+	k.toggle_symbols()
+	ok(not k.symbols and not k.accents, "RT: back to the letters")
 	k.free()

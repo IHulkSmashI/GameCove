@@ -59,7 +59,10 @@ const FIX_SET_HELPER := "/usr/libexec/gamecove/gamecove-fix-set"
 const IP_STOCK := "/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
 const IP_OVERRIDE := "/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"
 ## The VRR fix on SteamOS: its record and the marked line in Valve's grub file (fixes/claw8ex-vrr/fix.sh).
-const VRR_MANIFEST := "/var/lib/gamecove/fixes/claw8ex-vrr/manifest"
+## SteamOS gives every OS slot its own /var and keeps only the keep-listed /etc files across an update,
+## so the record lives in /etc there (an older install's is still in /var).
+const VRR_MANIFEST := "/etc/gamecove/claw8ex-vrr/record/manifest"
+const VRR_MANIFEST_OLD := "/var/lib/gamecove/fixes/claw8ex-vrr/manifest"
 const GRUB_DEFAULT := "/etc/default/grub"
 const VRR_GRUB_MARK := "# GameCove claw8ex-vrr"
 ## Helper state= -> page status (see status_of for the rest).
@@ -668,6 +671,8 @@ func refresh_stale_override() -> bool:
 ## SteamOS: its record has the grub line). The range is gone from the next restart until the line is back.
 static func vrr_line_lost(root: String) -> bool:
 	var mf := FileAccess.open(root + VRR_MANIFEST, FileAccess.READ)
+	if mf == null:
+		mf = FileAccess.open(root + VRR_MANIFEST_OLD, FileAccess.READ)
 	if mf == null or not ("grubline " + GRUB_DEFAULT) in DeviceScript.read_all(mf).split("\n", false):
 		return false
 	var gf := FileAccess.open(root + GRUB_DEFAULT, FileAccess.READ)

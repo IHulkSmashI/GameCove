@@ -322,21 +322,35 @@ grub_regen() {
 }
 
 # grub_line_add <args>: GameCove's line (marker on the same line: the file is a shell script grub-mkconfig sources),
-# the boot menu rebuilt, and checked: SteamOS's grub.cfg must carry the arguments, or it is all taken back.
+# the boot menu rebuilt, and checked: SteamOS's grub.cfg must carry the arguments, or it is all taken back. The
+# line counts as there (marked) only once the menu took it: when update-grub fails or leaves it out, the file goes
+# back to how it was, so the next refresh sees the line missing and tries again (it used to find "already in place"
+# and never retried).
 grub_line_add() {
 	_tmp=$(mktemp) || return 1
+	_orig=$(mktemp) || { rm -f "$_tmp"; return 1; }
+	cat "$ROOT$GRUB_DEFAULT" >"$_orig" 2>/dev/null || : >"$_orig"
 	grep -vF "$(grub_mark "$FIX")" "$ROOT$GRUB_DEFAULT" >"$_tmp" 2>/dev/null || true
 	printf 'GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} %s"  %s\n' "$1" "$(grub_mark "$FIX")" >>"$_tmp"
-	grub_write "$GRUB_DEFAULT" "$_tmp" || { rm -f "$_tmp"; return 1; }
+	if ! grub_write "$GRUB_DEFAULT" "$_tmp"; then
+		rm -f "$_tmp" "$_orig"
+		return 1
+	fi
 	rm -f "$_tmp"
-	if ! grub_regen; then
-		warn "update-grub failed"
+	_why=""
+	grub_regen || _why="update-grub failed"
+	if [ -z "$_why" ] && [ -f "$ROOT$STEAMOS_GRUB_CFG" ] && ! grep -qF -- "$1" "$ROOT$STEAMOS_GRUB_CFG"; then
+		_why="SteamOS's boot menu didn't take the setting (update-grub left it out)"
+	fi
+	if [ -n "$_why" ]; then
+		warn "$_why"
+		# not marked after all: the file as it was, and the boot menu rebuilt from it (best effort)
+		grub_write "$GRUB_DEFAULT" "$_orig" || warn "could not put $GRUB_DEFAULT back"
+		grub_regen || true
+		rm -f "$_orig"
 		return 1
 	fi
-	if [ -f "$ROOT$STEAMOS_GRUB_CFG" ] && ! grep -qF -- "$1" "$ROOT$STEAMOS_GRUB_CFG"; then
-		warn "SteamOS's boot menu didn't take the setting (update-grub left it out)"
-		return 1
-	fi
+	rm -f "$_orig"
 }
 
 # grub_line_remove <file>: only GameCove's lines out again, and the boot menu rebuilt.

@@ -584,10 +584,11 @@ func request_app_launch(app: Dictionary) -> void:
 
 
 ## Opens the keyboard for a key or code; `done(text)` gets what was typed.
-func ask_text(placeholder: String, start: String, done: Callable) -> void:
+## `secret`: an API key or password, drawn as dots (Show reveals it).
+func ask_text(placeholder: String, start: String, done: Callable, secret := false) -> void:
 	_ask_done = done
 	_ask_return = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	keyboard.use_for_codes(placeholder)
+	keyboard.use_for_codes(placeholder, 600, secret)
 	_set_layout_focus(false)
 	keyboard.open(start)
 
@@ -599,7 +600,7 @@ func _on_keyboard_closed(text: String) -> void:
 		_set_layout_focus(true)
 	if _ask_return != null and is_instance_valid(_ask_return) and _ask_return.is_visible_in_tree():
 		_ask_return.grab_focus()
-	if cb.is_valid():
+	if cb.is_valid() and not keyboard.cancelled:   # B / Esc: nothing typed is kept, so nothing is saved or checked
 		cb.call(text)
 
 

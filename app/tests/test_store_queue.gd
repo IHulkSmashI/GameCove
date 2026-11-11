@@ -174,6 +174,7 @@ func test_save_and_restore() -> void:
 # ---- final review, low: move jobs ------------------------------------------------------------------
 
 const StoreCommands := preload("res://scripts/library/manage/store_commands.gd")
+const TempTree := preload("res://tests/fixtures/stores/temp_tree.gd")
 const Disk := preload("res://scripts/library/manage/disk.gd")
 
 
@@ -316,3 +317,13 @@ func test_same_drive_and_restart_after_the_rename() -> void:
 	eq(r.last()["cmd"].slice(0, 2), ["rm", "-rf"], "the rename is skipped as done, on to deleting the old folder")
 	eq(j["step"], 2, "at the last step")
 	OS.execute("rm", ["-rf", root])
+
+
+func test_same_drive_follows_a_symlinked_library() -> void:
+	var root := TempTree.temp_dir("same_drive_link")
+	DirAccess.make_dir_recursive_absolute(root.path_join("sd/Games"))
+	DirAccess.make_dir_recursive_absolute(root.path_join("home"))
+	OS.execute("ln", ["-s", root.path_join("sd/Games"), root.path_join("home/Games")])
+	var mounts := "/dev/a / ext4 rw 0 0\n/dev/b %s ext4 rw 0 0\n" % root.path_join("sd")
+	ok(not Disk.same_drive(root.path_join("home/Games/x"), root.path_join("home/y"), mounts), "a library symlinked to another drive is not the home drive")
+	ok(Disk.same_drive(root.path_join("home/Games/x"), root.path_join("sd/z"), mounts), "it is the drive it points to")

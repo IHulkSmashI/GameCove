@@ -500,11 +500,13 @@ mv "$work/app" "$DEST/app"
 rm -rf "$DEST/app.old"
 
 package=""
+package_sha=""
 if [ -n "$pkg_url" ]; then
 	mkdir -p "$DEST/packages"
 	rm -f "$DEST/packages/"*
 	package="$DEST/packages/${pkg_url##*/}"
 	mv "$work/${pkg_url##*/}" "$package"
+	package_sha="$("$SHA256SUM" "$package" | cut -d ' ' -f 1)"
 fi
 if [ -n "$script_url" ]; then
 	mv "$work/get-gamecove.sh" "$DEST/get-gamecove.sh"
@@ -516,6 +518,9 @@ fi
 	echo "VERSION=${tag#v}"
 	echo "OS=$os"
 	echo "PACKAGE=$package"
+	# what the root install step checks the file against again, on its own private copy: the package sits in a
+	# folder the user can write between this check and the install (review 9 L9)
+	echo "PACKAGE_SHA256=$package_sha"
 	echo "APP=$DEST/app/gamecove.x86_64"
 	echo "REPO=$REPO"
 	echo "SIGNATURE=$signature"

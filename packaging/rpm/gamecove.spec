@@ -154,13 +154,6 @@ install -Dpm0755 session/gamecove-autologin-guard \
 install -Dpm0644 session/systemd/gamecove-autologin-guard.service \
     %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard.service
 
-# Root autologin guard: the installer copies both into /etc so they outlive the package
-# (session/gamecove-autologin-guard says why)
-install -Dpm0755 session/gamecove-autologin-guard \
-    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard
-install -Dpm0644 session/systemd/gamecove-autologin-guard.service \
-    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard.service
-
 # polkit
 install -Dpm0644 packaging/polkit/io.github.ihulksmashi.gamecove.policy \
     %{buildroot}%{_datadir}/polkit-1/actions/io.github.ihulksmashi.gamecove.policy

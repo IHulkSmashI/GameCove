@@ -31,6 +31,8 @@ signal closed(text: String)
 const ROWS := ["1234567890", "qwertyuiop", "asdfghjkl'", "zxcvbnm-:."]
 ## The symbols page: with the letters page, every printable ASCII character.
 const SYMBOL_ROWS := ["!@#$%^&*", "()[]{}<>", "-_=+/\\|~", ";:'\",.?`"]
+## Accented letters (the Accents key): the ones the stores and the ROM sets use, each typed lower case and a capital with Shift.
+const ACCENT_ROWS := ["àáâãäåæç", "èéêëìíîïñ", "òóôõöøœš", "ùúûüýÿžð"]
 const MAX_LEN := 40
 ## A letter key, layout px: big enough for a thumb at 1280x800 on a 7" screen.
 const KEY := Vector2(66, 52)
@@ -58,6 +60,17 @@ var shift := false
 var caps := false
 ## The symbols page is showing.
 var symbols := false
+## The accents page is up (symbols is true then too, so RT goes back to the letters).
+var accents := false
+## Shown as dots (an API key or a password); Show reveals it.
+var masked := false
+var revealed := false
+var accents_button: Button
+var show_button: Button
+var _original := ""
+## The last close was a Cancel (B, Esc): the text handed back is the old one, and an owner that would save or
+## check what it is given (an API key) can skip that.
+var cancelled := false
 ## The rows of keys on screen now (the page showing, then the action row),
 ## for focus and for callers that look a key up by its text.
 var keys: Array = []
@@ -75,6 +88,7 @@ var done_button: Button
 var showing := false
 ## Every keyboard is in this group while it's in the tree (main.gd puts them away when their screen is left).
 const GROUP := "osk"
+var _was_seen := false
 ## Paste, beside the field: only where a code or key is asked for (use_for_codes).
 var paste_button: Button
 ## func() -> String: the clipboard; tests return canned text.
@@ -110,9 +124,9 @@ func _init() -> void:
 	_col = Kit.vbox(10)
 	add_child(_col)
 	_build_head()
-	for rows in [ROWS, SYMBOL_ROWS]:
+	for rows in [ROWS, SYMBOL_ROWS, ACCENT_ROWS]:
 		var page := Kit.vbox(GAP)
-		page.name = "Letters" if _pages.is_empty() else "Symbols"
+		page.name = ["Letters", "Symbols", "Accents"][_pages.size()]
 		var list: Array = []
 		var total := ROWS[0].length() * KEY.x + (ROWS[0].length() - 1) * GAP
 		for r in rows:
@@ -133,6 +147,7 @@ func _init() -> void:
 		_pages.append(page)
 		_page_rows.append(list)
 	_pages[1].visible = false
+	_pages[2].visible = false
 	_build_actions()
 	_repeat = Timer.new()
 	_repeat.name = "Repeat"
@@ -178,7 +193,13 @@ func _build_head() -> void:
 	paste_button.visible = false
 	paste_button.pressed.connect(paste)
 	head.add_child(paste_button)
-	var tips := Kit.prompts([["B", "Close"]])
+	show_button = _key("Show", Vector2(84, 40))
+	show_button.name = "Show"
+	show_button.add_theme_font_size_override("font_size", ThemeLib.SIZE_SMALL)
+	show_button.visible = false
+	show_button.pressed.connect(toggle_reveal)
+	head.add_child(show_button)
+	var tips := Kit.prompts([["B", "Cancel"], ["MENU", "Done"]])
 	tips.name = "Tips"
 	head.add_child(tips)
 	_col.add_child(head)
@@ -233,7 +254,7 @@ func _build_actions() -> void:
 	shift_button.pressed.connect(press_shift)
 	symbols_button = _action("SymbolsKey", "RT", "", "?123", 92)
 	symbols_button.pressed.connect(toggle_symbols)
-	space_button = _action("Space", "Y", "", "Space", 124)
+	space_button = _action("Space", "Y", "", "Space", 60)
 	space_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	space_button.pressed.connect(type.bind(" "))
 	left_button = _action("CaretLeft", "LB", "chevron_left", "Left", 62)
@@ -251,6 +272,8 @@ func _build_actions() -> void:
 		if not _back_held:
 			backspace()
 		_back_held = false)
+	accents_button = _action("Accents", "", "", "áé", 60)
+	accents_button.pressed.connect(toggle_accents)
 	clear_button = _action("Clear", "", "", "Clear", 64)
 	clear_button.pressed.connect(func(): set_text(""))
 	done_button = Kit.button("Done", "AccentButton")
@@ -259,7 +282,7 @@ func _build_actions() -> void:
 	done_button.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
 	load("res://scripts/ui/button_fx.gd").attach(done_button, {"glyph": "MENU"})
 	done_button.pressed.connect(close)
-	_action_row = [shift_button, symbols_button, space_button, left_button, right_button, back_button, clear_button, done_button]
+	_action_row = [shift_button, symbols_button, accents_button, space_button, left_button, right_button, back_button, clear_button, done_button]
 	for b in _action_row:
 		last.add_child(b)
 	_col.add_child(last)
@@ -334,20 +357,35 @@ func _notification(what: int) -> void:
 		add_to_group(GROUP)
 	elif what == NOTIFICATION_THEME_CHANGED and field != null:
 		_style()
-	elif what == NOTIFICATION_VISIBILITY_CHANGED and not is_visible_in_tree():
+	elif what == NOTIFICATION_VISIBILITY_CHANGED:
+		_on_seen_changed(is_visible_in_tree())
+
+
+## It can be seen now (true) or not (false: it, or a screen above it, was hidden).
+func _on_seen_changed(seen: bool) -> void:
+	if not seen:
 		_stop_repeat()
+	# Hidden without close() (its screen went away, Guide, the quick menu): it is closed. Left
+	# "showing" it kept taking every key and button, unseen (review Medium, input).
+	if _was_seen and not seen and showing:
+		showing = false
+		visible = false
+	_was_seen = seen
 
 
 # ---- pages, focus --------------------------------------------------------------
 
 func _show_page() -> void:
 	_pages[0].visible = not symbols
-	_pages[1].visible = symbols
+	_pages[1].visible = symbols and not accents
+	_pages[2].visible = accents
 	keys = []
-	if paste_button != null and paste_button.visible:
-		keys.append([paste_button])
-	keys.append_array(_page_rows[1 if symbols else 0])
+	var head_keys: Array = [paste_button, show_button].filter(func(b): return b != null and b.visible)
+	if not head_keys.is_empty():
+		keys.append(head_keys)
+	keys.append_array(_page_rows[_page_i()])
 	keys.append(_action_row)
+	_mark(accents_button, accents, false)
 	var word := symbols_button.get_node("Face/Word") as Label
 	word.text = "ABC" if symbols else "?123"
 	_mark(symbols_button, symbols, false)
@@ -373,20 +411,38 @@ static func _column(i: int, from_n: int, to_n: int) -> int:
 	return int(round(float(i) / maxf(1.0, from_n - 1) * (to_n - 1)))
 
 
+func _page_i() -> int:
+	return 2 if accents else (1 if symbols else 0)
+
+
+## Letters <-> the accents page (the Accents key); RT goes back to the letters from it.
+func toggle_accents() -> void:
+	accents = not accents
+	symbols = accents
+	_show_page()
+	if is_inside_tree():
+		first_key_on_page().grab_focus()
+
+
+func first_key_on_page() -> Button:
+	return _page_rows[_page_i()][0][0]
+
+
 ## Letters <-> symbols (RT). Focus stays in the same place on the grid.
 func toggle_symbols() -> void:
 	var f: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
 	var at := Vector2i(-1, -1)
-	var rows: Array = _page_rows[1 if symbols else 0]
+	var rows: Array = _page_rows[_page_i()]
 	for r in rows.size():
 		var i: int = rows[r].find(f)
 		if i >= 0:
 			at = Vector2i(r, i)
 	var from_n: int = rows[at.x].size() if at.x >= 0 else 1
 	symbols = not symbols
+	accents = false
 	_show_page()
 	if at.x >= 0 and is_inside_tree():
-		var row: Array = _page_rows[1 if symbols else 0][at.x]
+		var row: Array = _page_rows[_page_i()][at.x]
 		row[mini(_column(at.y, from_n, row.size()), row.size() - 1)].grab_focus()
 
 
@@ -438,8 +494,12 @@ func open(start := "") -> void:
 	set_text(start, false)
 	shift = false
 	caps = false
-	if symbols:
+	_original = start
+	cancelled = false
+	revealed = false
+	if symbols or accents:
 		symbols = false
+		accents = false
 		_show_page()
 	_refresh_case()
 	var was := visible
@@ -481,6 +541,15 @@ func dismiss() -> void:
 	showing = false
 	_stop_repeat()
 	Motion.fade(self, false)
+## Closes without keeping what was typed: the text goes back to what it was when the keyboard opened, and the
+## owner hears that first (a search shows its old list again), then closed with the old text.
+func cancel() -> void:
+	if not showing:
+		return
+	if text != _original:
+		set_text(_original)
+	cancelled = true
+	close()
 
 
 ## Types `ch` at the caret (a letter as a capital while Shift is on).
@@ -504,15 +573,32 @@ func _insert(s: String) -> void:
 
 ## For codes and keys: longer text, a placeholder, case kept from a physical
 ## keyboard, and Paste beside the field.
-func use_for_codes(hint: String, longest := 600) -> void:
+func use_for_codes(hint: String, longest := 600, secret := false) -> void:
 	placeholder = hint
 	max_len = longest
 	keep_case = true
+	masked = secret
+	revealed = false
+	show_button.text = "Show"
+	show_button.visible = secret
+	_show_page()
 	if not paste_button.visible:
 		paste_button.visible = true
 		_show_page()
 	_set_shift(false)
 	set_text(text, false)
+
+
+## Show / Hide for a masked field.
+func toggle_reveal() -> void:
+	revealed = not revealed
+	show_button.text = "Hide" if revealed else "Show"
+	_refresh_field()
+
+
+## What the field draws for `t`: the text, or a dot for each character while masked.
+func _display(t: String) -> String:
+	return "•".repeat(t.length()) if masked and not revealed else t
 
 
 ## Puts the clipboard's text at the caret (one line, as much as fits).
@@ -597,39 +683,41 @@ func _refresh_field() -> void:
 		_win_end = 0
 		return
 	field.add_theme_color_override("font_color", ThemeLib.color("text"))
-	caret = clampi(caret, 0, text.length())
-	var a := clampi(_win_start, 0, text.length())
+	var shown := _display(text)   # dots while masked; the caret and window count the same characters
+	caret = clampi(caret, 0, shown.length())
+	var a := clampi(_win_start, 0, shown.length())
 	if caret < a:
 		a = maxi(0, caret - 3)
 	# Scroll right until the caret is in view.
-	while a < caret and not _fits(("…" if a > 0 else "") + text.substr(a, caret - a)):
+	while a < caret and not _fits(("…" if a > 0 else "") + shown.substr(a, caret - a)):
 		a += 1
 	# Then show as much after the caret as fits.
 	var b := caret
-	while b < text.length():
-		var more := b + 1 < text.length()
-		if not _fits(("…" if a > 0 else "") + text.substr(a, b + 1 - a) + ("…" if more else "")):
+	while b < shown.length():
+		var more := b + 1 < shown.length()
+		if not _fits(("…" if a > 0 else "") + shown.substr(a, b + 1 - a) + ("…" if more else "")):
 			break
 		b += 1
 	# With everything to the right in view, pull the start back as far as it goes.
-	while b == text.length() and a > 0 and _fits(("…" if a - 1 > 0 else "") + text.substr(a - 1)):
+	while b == shown.length() and a > 0 and _fits(("…" if a - 1 > 0 else "") + shown.substr(a - 1)):
 		a -= 1
 	_win_start = a
 	_win_end = b
 	var lead := "…" if a > 0 else ""
-	field.text = lead + text.substr(a, b - a) + ("…" if b < text.length() else "")
-	_caret.position = Vector2(_width(lead + text.substr(a, caret - a)), mid)
+	field.text = lead + shown.substr(a, b - a) + ("…" if b < shown.length() else "")
+	_caret.position = Vector2(_width(lead + shown.substr(a, caret - a)), mid)
 
 
 ## The caret position (0..text.length()) nearest to `x`, a pixel offset in the field.
 func caret_index_at(x: float) -> int:
+	var shown := _display(text)
 	if text == "":
 		return 0
 	var lead := "…" if _win_start > 0 else ""
 	var best := _win_start
 	var best_d := INF
 	for i in range(_win_start, _win_end + 1):
-		var d := absf(_width(lead + text.substr(_win_start, i - _win_start)) - x)
+		var d := absf(_width(lead + shown.substr(_win_start, i - _win_start)) - x)
 		if d < best_d:
 			best_d = d
 			best = i
@@ -741,7 +829,9 @@ func _input(event: InputEvent) -> void:
 			move_caret(-text.length())
 		elif event.keycode == KEY_END:
 			move_caret(text.length())
-		elif event.keycode == KEY_ESCAPE or event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
+		elif event.keycode == KEY_ESCAPE:
+			cancel()
+		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 			close()
 		elif event.ctrl_pressed and event.keycode == KEY_V:
 			paste()
@@ -797,7 +887,9 @@ func _pad_button(button: int, pressed: bool) -> bool:
 		JOY_BUTTON_X:
 			backspace()
 			_start_repeat("back")
-		JOY_BUTTON_B, JOY_BUTTON_START:
+		JOY_BUTTON_B:
+			cancel()
+		JOY_BUTTON_START:
 			close()
 		JOY_BUTTON_LEFT_STICK:
 			press_shift()

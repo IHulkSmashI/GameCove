@@ -161,3 +161,23 @@ func test_main_wires_the_watchdog_to_the_background_mode() -> void:
 	ok(main.contains("health.watch_background(background)"), "main.gd must hand BackgroundMode to SessionHealth")
 	var client := FileAccess.get_file_as_string(ProjectSettings.globalize_path("res://").path_join("../session/gamecove-session-client"))
 	ok(client.contains("HEARTBEAT_FRONT_STALE_S") and client.contains("!= front ]"), "the client must count stale beats while the file says front")
+
+
+## Residual C: a game that never shows a window must not leave the UI in front of it unwatched for ever.
+func test_a_game_that_never_shows_a_window_is_watched_after_a_while() -> void:
+	var d := _dir()
+	var p := d.path_join("gamecove-heartbeat")
+	var h: Node = SessionHealth.new(p)
+	var clock := [100.0]
+	h.now_s = func() -> float: return clock[0]
+	h.game_running = func() -> bool: return true
+	h.ui_front = func() -> bool: return true   # our window is what the user sees
+	eq(h.mode(), "game", "just launched: the splash is up, a stall is normal")
+	clock[0] += SessionHealth.NO_SCREEN_WAIT_S - 1.0
+	eq(h.mode(), "game", "still waiting for the game's window")
+	clock[0] += 2.0
+	eq(h.mode(), "front", "no window for 90 s and our UI is in front: watched like the UI")
+	ok(h.tick(), "and the next tick writes it")
+	h.ui_front = func() -> bool: return false
+	eq(h.mode(), "game", "the game has the screen: left alone")
+	h.free()

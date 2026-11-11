@@ -542,6 +542,17 @@ func release_intercept(done := Callable()) -> void:
 				done.call()))
 
 
+## `--restore-baseline` (Profiles), after the everyday values went back on: the same hand-back
+## release_intercept() does, once more, because applying those values loads the buttons' GameCove
+## mappings again. Worker; `done` is called on the main thread afterwards.
+func hand_back(done := Callable()) -> void:
+	_queue("hand_back", func():
+		_hand_buttons_back()
+		_main(func():
+			if done.is_valid():
+				done.call()))
+
+
 ## Worker: before another session takes over, the buttons only GameCove answers
 ## (a back button set to a GameCove action, a held Quick Access) go back to what
 ## the handheld sends, in the loaded profile only: the layout file keeps them for
@@ -614,6 +625,7 @@ func _on_monitor_line(d: Dictionary) -> void:
 		"started":
 			_monitor_alive = true
 			_restarts = 0
+			_gave_up = false
 			_apply_intercept()
 			_queue("shortcuts", _ensure_shortcuts)
 		"owner":
@@ -655,8 +667,18 @@ func _reload_layout() -> void:
 				controls.detect_all()))
 
 
+var _gave_up := false   # the monitor could not be restarted and the buttons were handed back
+
+
 func _restart_monitor_later() -> void:
-	if _restarts >= 3 or not is_inside_tree():
+	if _restarts >= 3:
+		# nobody is listening any more: the buttons we mapped to GameCove must not stay mapped to a dead D-Bus
+		# listener (Quick Access would do nothing anywhere), so they go back to what Steam and the desktop expect
+		if not _gave_up:
+			_gave_up = true
+			hand_back()
+		return
+	if not is_inside_tree():
 		return
 	_restarts += 1
 	get_tree().create_timer(5.0 * _restarts).timeout.connect(_restart_monitor_now)   # a method, not a lambda: freed with this node at exit
@@ -784,7 +806,7 @@ func _refresh() -> void:
 	# what the buttons ask of GameCove (button_map.gd), for the intercept
 	var table: Dictionary = ButtonMap.table(profile, device_id) if backend == "inputplumber" else {}
 	var prefs: Variant = SettingsFile.load_json(shortcuts_file())["data"] if FileAccess.file_exists(shortcuts_file()) else null
-	var hold := clampf(float(prefs.get("hold_s", 0.5)), 0.3, 1.5) if prefs is Dictionary else 0.5
+	var hold := ButtonMap.hold_seconds(prefs)
 	st["shortcuts"] = table
 	st["hold_s"] = hold
 	_main(func():

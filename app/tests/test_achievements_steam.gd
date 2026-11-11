@@ -143,6 +143,22 @@ func test_service_caches_and_fetches_rarity_once_a_day() -> void:
 	svc.free()
 
 
+func test_the_rarity_request_goes_through_the_gateway_capped_and_on_steams_host() -> void:
+	var svc: Node = AchievementsScript.new()
+	var fake := preload("res://scripts/discover/fake_http.gd").new()
+	fake.route(AchievementsScript.RARITY_URL.get_slice("?", 0), {"text": FileAccess.get_file_as_string(fixture("achievements/rarity_4242.json"))})
+	svc._http = fake
+	var got := []
+	svc.rarity_dir = _scratch("rarity_gw")
+	svc.changed.connect(func(id): got.append(id))
+	svc._http_fetch(AchievementsScript.RARITY_URL % "4242", "4242")
+	eq(fake.options.size(), 1, "one request, through http.gd's interface")
+	eq(fake.options[0].get("hosts", []), ["api.steampowered.com"], "names Steam's API host (redirects checked)")
+	var cap: int = int(fake.options[0].get("max_bytes", 0))
+	ok(cap > 0 and cap <= 4 * 1024 * 1024, "has a size cap")
+	eq(got, ["4242"], "the body came back to rarity_arrived")
+
+
 func test_failed_fetch_waits_a_day_too() -> void:
 	var svc: Node = AchievementsScript.new()
 	svc.steam_root = _root()

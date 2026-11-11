@@ -129,7 +129,13 @@ grep -q '^installed=yes$' "$T/st" || fail "status installed"
 grep -q '^orig_epp-0=balance_performance$' "$T/st" || fail "status shows the recorded EPP"
 grep -q '^thermald=held$' "$T/st" || fail "status shows thermald held"
 tail -n 1 "$T/st" | grep -q '^state=on$' || fail "status ends state=on"
-expect 0 "restore" set restore
+set +e; sh -x "$FIX" set restore >"$T/out" 2>"$T/trace"; got=$?; set -e
+[ "$got" = 0 ] || fail "restore: exit $got ($(cat "$T/out"))"
+# review 4-L1: every governor goes back before any energy preference (under "performance" the kernel refuses
+# an EPP write, and the glob order puts epp- first)
+g="$(grep -n 'scaling_governor' "$T/trace" | grep '^[0-9]*:+ wr ' | head -n 1 | cut -d: -f1)"
+e="$(grep -n 'energy_performance_preference' "$T/trace" | grep '^[0-9]*:+ wr ' | head -n 1 | cut -d: -f1)"
+[ -n "$g" ] && [ -n "$e" ] && [ "$g" -lt "$e" ] || fail "restore: the governor goes back before the EPP (gov line ${g:-none}, epp line ${e:-none})"
 [ "$(r "$C/cpu2/cpufreq/energy_performance_preference")" = balance_performance ] || fail "EPP back"
 [ "$(r "$C/intel_pstate/max_perf_pct") $(r "$C/intel_pstate/no_turbo")" = "100 0" ] || fail "CPU ceiling and boost back"
 [ "$(r "$G/min_freq") $(r "$G/max_freq")" = "100 2300" ] || fail "GPU window back"

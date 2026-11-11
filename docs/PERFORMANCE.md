@@ -58,9 +58,9 @@ ROM that Steam ROM Manager added sat in three of them (Installed, Emulation, All
 A Home shelf now shows at most 24 games (`Home.SHELF_MAX`) and ends with a "See all" tile
 that opens the Library on the same list; its count still says how many it holds. What's
 left at 1,500 ROMs is mostly sorting the lists (`View.shelves`, about 55 ms). A handheld's
-CPU is slower than the one measured, so read the table as a ratio. The Library grid itself
-still builds one tile per game shown: that's the list you asked for, and it's built when
-the library changes, not while a game runs.
+CPU is slower than the one measured, so read the table as a ratio. The Library grid is
+virtual (see "Library grid" below): it makes the rows on screen and three each side, never one
+tile per game.
 
 ## On a 4K screen
 
@@ -120,7 +120,7 @@ tiny sysfs reads) runs on start, on window resize and on focus-in only: no Timer
   what's shown redraws nothing and keeps nothing new. ROMs with the same details share one
   read-only copy of them. The game database is read only when a scanned game can match it
   (never for the emulation rescan). Home's shelves show 24 games at most, then See all, and the Library grid
-  makes its tiles 56 at a time as you scroll. Measured with a 160-system, 5,440-ROM folder
+  makes only the rows around the view (see "Library grid"). Measured with a 160-system, 5,440-ROM folder
   (e2e `suite_emulation`, headless, 2-core box): see "ROM folders" below.
 - **Cloud saves** run before a launch and after a game ends, never during one. **Battery
   history** writes one small file at game start and end, sleep, wake and the charger (a few
@@ -219,9 +219,28 @@ whole-Library rescan with Steam, Epic, GOG or Amazon games reads the game databa
 1.3 GB for a moment) when the app starts and after the database updates.
 
 The first numbers had every tile made at once (Home's All games shelf and the Library grid):
-the app ran out of memory. Now Home's shelves show 24 games and See all, and the Library grid makes 56 at a
-time as focus nears the end (LT / RT letter jumps make what they land on). None of this runs
-behind a game: the rescan waits until the game ends.
+the app ran out of memory. Now Home's shelves show 24 games and See all, and the Library grid is virtual. None of this
+runs behind a game: the rescan waits until the game ends.
+
+### Library grid
+
+The grid made tiles a page at a time, but every tile up to the game it was asked for: the
+remembered game 15,000 ROMs down, or an LT / RT letter jump, made all of them (seconds per
+thousand), and the tiles never went away again. Now only the rows on screen and three each side
+(`ROW_MARGIN`) exist, at most 24 rows (`MAX_ROWS`). One row of spacers above and one below stand
+in for the others, as high as the rows they replace, so the scroll bar, the "more below" cue
+and the scroll position are those of the whole list. Moving focus or scrolling moves the
+window: the tiles that leave it are dropped, those that enter are made (a row at a time on a
+d-pad press, one window on a jump, which lands at once instead of scrolling through every row
+in between). A drag on the touch screen far from the focus moves the window to the screen and
+focus to a tile on it. `tests/test_ui_library_virtual.gd` opens 20,000 ROMs and jumps to the
+19,000th under time budgets; `suite_library` walks 40 rows by the d-pad and six letters.
+What stays: sorting 20,000 games takes about 0.45 s on the 2-core box (natural title order),
+done once when the list changes, never while a game runs.
+
+Searching re-reads every title on every key, so each title is folded (lower case, accents and punctuation out, other
+scripts kept) once and kept (`View.folded`, at most 100,000 titles), and keys that arrive in one frame (a held key, a
+paste) rebuild the list once, after the last.
 
 ## Nothing waits on a slow job
 
@@ -239,8 +258,9 @@ Only real app exit joins, and only after the programs are stopped: long runs (GE
 group (`exec_safe.gd`), and `ExecSafe.stop_group()` sends them SIGTERM, then SIGKILL after
 1.5 s, so the threads waiting on them return at once. A recording still running at exit
 gets SIGINT to finish its file, SIGTERM after 3 s and SIGKILL a second later before its
-thread is joined. Firmware flashes (`fwupdmgr`), `pkexec`
-and `systemctl` are never signalled. Cache pruning at exit stops at the next file.
+thread is joined. Firmware flashes (`fwupdmgr`), `pkexec`,
+`systemctl` and `busctl` are never signalled and still run once the group is stopped (the
+exit-time hand-back of the buttons and a key let go mid-press are `busctl` calls). Cache pruning at exit stops at the next file.
 `tests/test_card_jobs.gd` fails if an `_exit_tree` outside the app-lifetime owners, or a page
 rebuild path, joins a worker.
 

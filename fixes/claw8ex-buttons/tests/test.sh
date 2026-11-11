@@ -22,6 +22,14 @@ ok '[ "$(snapshot)" = "$before" ]' "remove restores the fake root exactly"
 ok 'fix claw8ex-buttons status | grep -qx state=off' "status off"
 ok 'fix claw8ex-buttons remove | grep -q "not installed"' "second remove is a no-op"
 
+case_start orphaned_record
+fix claw8ex-buttons install >/dev/null 2>&1
+rm -f "$R/etc/inputplumber/capability_maps.d/gamecove_claw8ex.yaml"
+ok 'fix claw8ex-buttons status | grep -qx installed=no' "a record without its map is not 'installed'"
+ok 'fix claw8ex-buttons install | grep -q "^installed:"' "install mends it instead of saying 'already installed'"
+ok 'fix claw8ex-buttons status | grep -qx state=on' "and it is on"
+fix claw8ex-buttons remove >/dev/null
+
 case_start override_is_device_matched
 fix claw8ex-buttons install >/dev/null 2>&1
 # InputPlumber only uses a device config whose matches fit the hardware; the override keeps the stock match.

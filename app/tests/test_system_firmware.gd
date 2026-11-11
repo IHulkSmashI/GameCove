@@ -279,6 +279,28 @@ func test_metered_battery_skips_downloads() -> void:
 	u.free()
 
 
+## Review Medium (other): a box with no battery (Steam Machine, desktop) was refused every firmware
+## update with "needs_ac": it has no charger entry that says online, and nothing to run flat.
+func test_a_box_with_no_battery_may_update_firmware() -> void:
+	var files := _dmi("E1T91IMS.10D")
+	for k in files.keys():
+		if str(k).begins_with("sys/class/power_supply"):
+			files.erase(k)   # no battery, no charger entry: a box
+	var f: RefCounted = Fake.new()
+	var u := _upd(_tree(files), f, _row("msi-claw-8-ex"))
+	eq(u.power_block(), "", "no battery: on the mains, firmware may be written")
+	var st: Dictionary = u.power_state()
+	ok(bool(st["ok"]) and st["battery"] == -1 and bool(st["ac"]), "the state says so (%s)" % [st])
+	u.free()
+	# the same files with a battery on a charger that isn't in: still refused
+	files["sys/class/power_supply/ADP1/online"] = "0"
+	files["sys/class/power_supply/ADP1/type"] = "Mains"
+	files["sys/class/power_supply/BAT1/capacity"] = "80"
+	var u2 := _upd(_tree(files), f, _row("msi-claw-8-ex"))
+	eq(u2.power_block(), "needs_ac", "a handheld on its battery still needs the charger")
+	u2.free()
+
+
 func test_firmware_install_needs_ac_and_half_battery() -> void:
 	var files := _dmi("E1T91IMS.10D")
 	files["sys/class/power_supply/ADP1/online"] = "0"

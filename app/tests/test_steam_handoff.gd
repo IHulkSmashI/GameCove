@@ -123,6 +123,34 @@ func test_guide_brings_it_back_and_focus_never_hangs() -> void:
 	h.free()
 
 
+## A scope whose reads never answer (xprop wedged).
+class DeafScope extends FakeScope:
+	var asked := 0
+	func read_root_async(_atom: String, _done: Callable) -> void:
+		asked += 1
+
+
+## Review Medium (input): the trip's wait ended only when a read of the windows answered, so a read
+## that never did left the trip "opening" and the pad dead for GameCove.
+func test_a_read_that_never_answers_still_ends_the_trip() -> void:
+	var scope := DeafScope.new()
+	var w := _trip(scope)
+	var h: Node = w["h"]
+	eq(h.start(STEAM), "", "under way")
+	for i in int(Handoff.HARD_WAIT_S / Handoff.POLL_S) + 2:
+		h.poll()
+	eq([h.state, w["events"]], ["idle", ["timeout"]], "ended with a timeout, the pad is free")
+	# and in Steam's screen (away) a lost read is asked again
+	var scope2 := DeafScope.new()
+	var w2 := _trip(scope2)
+	var h2: Node = w2["h"]
+	h2.state = "away"
+	h2.window = 5001
+	for i in Handoff.STUCK_POLLS * 2 + 1:
+		h2.poll()
+	ok(scope2.asked >= 2, "a read that never came back is asked for again (%d times)" % scope2.asked)
+
+
 func test_slow_or_missing_steam() -> void:
 	var scope := FakeScope.new()
 	scope.windows = [11, 769, 100]
@@ -180,3 +208,21 @@ class FakeController extends RefCounted:
 	var calls: Array
 	func set_game_focused(on: bool) -> void:
 		calls.append(on)
+
+
+const SteamTrip := preload("res://scripts/ui/steam_trip.gd")
+
+
+## Review Medium (input): the pad stayed dead after Steam's screen when a button's release was let go
+## while Steam had the controller (blocks() waited for every button to be up).
+func test_the_pad_comes_back_even_when_a_release_never_arrives() -> void:
+	var t: Control = SteamTrip.new()
+	t._held["j1"] = true   # B was down when the trip started
+	t._on_finished("closed")
+	ok(t.blocks(), "right after the return: guarded")
+	t._guard_until = 0
+	ok(t.blocks(), "the guard is over but the button is still down: a little longer")
+	t._held_until = Time.get_ticks_msec() - 1
+	ok(not t.blocks(), "its release never came: the pad is ours again")
+	ok(t._held.is_empty(), "and nothing is remembered as held")
+	t.free()

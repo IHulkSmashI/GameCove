@@ -521,3 +521,32 @@ func test_leftover_baseline_leaves_a_newer_choice() -> void:
 	eq(_store["power.tdp"], 12.0, "the game's value is undone")
 	p.free()
 	_cleanup()
+
+
+class FakeHandBack extends RefCounted:
+	var log: Array
+	func hand_back(done: Callable) -> void:
+		log.append("hand_back")
+		done.call()
+
+
+class FakePowerLeave extends RefCounted:
+	var log: Array
+	func request_restore_before(_quit: Callable) -> void:
+		log.append("power")
+
+
+## Review High 7: the restore helper hands the buttons back before Power's restore and the quit.
+func test_restore_helper_hands_the_buttons_back_before_power() -> void:
+	var p = _setup()
+	var log := []
+	var c := FakeHandBack.new()
+	c.log = log
+	var pw := FakePowerLeave.new()
+	pw.log = log
+	p.controller = c
+	p.power = pw
+	p._leave_and_quit()
+	eq(log, ["hand_back", "power"], "buttons first, then the power values")
+	p.free()
+	_cleanup()

@@ -99,11 +99,13 @@ var _ended_baseline: Dictionary = {}   # the last ended game's baseline ...
 var _restore_gen := 0                  # ... its restore, queued (main thread) ...
 var _restore_done := 0                 # ... and run (Controls worker)
 var _restore_and_quit := false         # --restore-baseline: quit once the start values are applied
+var controller: Object                 # Controller autoload (hand_back), or null; set when --restore-baseline runs
 
 
 func _ready() -> void:
 	if RESTORE_ARG in OS.get_cmdline_user_args():
 		_restore_and_quit = true
+		controller = get_node_or_null("/root/Controller")
 		get_tree().create_timer(RESTORE_TIMEOUT_S).timeout.connect(func(): get_tree().quit(1))
 	if controls != null:
 		return   # set up by a test
@@ -464,14 +466,23 @@ func _set_game_layer(on: bool) -> void:
 
 
 ## Runs `fn` once everything queued on the Controls worker so far has run (inline in tests).
-## --restore-baseline, last step (main thread): the everyday values are back; now Power puts
-## back the TDP, boost and fan mode the handheld had before GameCove's session, then we quit.
+## --restore-baseline, last steps (main thread): the everyday values are back, and applying
+## them put the buttons' GameCove mappings into the profile again (a hold or a back button
+## set to a GameCove action: the value's apply loads the whole profile). Nobody answers them
+## once Steam or the desktop has the controller, so the Controller hands them back first
+## (review High 7: they were dead buttons in Steam); then Power puts back the TDP, boost
+## and fan mode the handheld had before GameCove's session, then we quit.
 func _leave_and_quit() -> void:
 	var quit := func(): get_tree().quit(0)
-	if power != null and power.has_method("request_restore_before"):
-		power.request_restore_before(quit)
+	var then_power := func():
+		if power != null and power.has_method("request_restore_before"):
+			power.request_restore_before(quit)
+		else:
+			quit.call()
+	if controller != null and controller.has_method("hand_back"):
+		controller.hand_back(then_power)
 	else:
-		quit.call()
+		then_power.call()
 
 
 func _after_worker(fn: Callable) -> void:

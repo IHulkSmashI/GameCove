@@ -287,6 +287,30 @@ func test_back_button_action_runs_on_the_press() -> void:
 	eq(log["actions"], [], "nor as home / quick menu")
 
 
+func test_a_hand_edited_hold_time_never_raises() -> void:
+	for bad in [null, [], {}, "slow", true]:
+		eq(ButtonMap.hold_seconds({"hold_s": bad}), 0.5, "hold_s %s -> the usual 0.5" % str(bad))
+	eq(ButtonMap.hold_seconds(null), 0.5, "no file")
+	eq(ButtonMap.hold_seconds({"hold_s": 9}), 1.5, "clamped")
+	eq(ButtonMap.hold_seconds({"hold_s": 0.8}), 0.8, "a number is taken")
+
+
+func test_a_lost_release_does_not_swallow_the_next_press() -> void:
+	var p := ButtonMap.set_press(_empty(), "LeftPaddle1", "action:screenshot")
+	var t := _rec("generic", p)
+	var i: RefCounted = t[0]
+	var log: Dictionary = t[1]
+	var clock := [1000]
+	i.now_ms = func() -> int: return clock[0]
+	i.handle("ui_volume_up", 1.0)
+	eq(log["shortcuts"].size(), 1, "pressed")
+	clock[0] += Intercept.STALE_DOWN_MS + 1000   # the release never arrived
+	i.handle("ui_volume_up", 1.0)
+	eq(log["shortcuts"].size(), 2, "the next press runs again")
+	i.handle("ui_volume_up", 1.0)
+	eq(log["shortcuts"].size(), 2, "and a plain repeat still does not")
+
+
 func test_back_button_exit_needs_a_hold() -> void:
 	var p := ButtonMap.set_press(_empty(), "LeftPaddle1", "action:exit_game")
 	var t := _rec("generic", p)
@@ -735,6 +759,23 @@ func test_service_without_the_intercept_never_loads_what_only_gamecove_answers()
 		x.free()
 
 
+## Review High 7: the --restore-baseline helper applies the everyday values, which loads the
+## GameCove mappings (a hold, a back button) again; hand_back() strips them once more.
+func test_hand_back_strips_what_the_restore_helper_put_in_again() -> void:
+	var t := _service("handback")
+	var c: Node = t[0]
+	var f: RefCounted = t[1]
+	var ip = t[2]
+	ip.loaded = Profile.to_json(ButtonMap.set_press(ButtonMap.set_hold(_empty(), "QuickAccess", "action:screenshot", CLAW), "LeftPaddle1", "action:mute"))
+	var done := [false]
+	c.hand_back(func(): done[0] = true)
+	var loads := _loads(f)
+	eq(loads.size(), 1, "one load")
+	ok(not JSON.stringify(loads[0]).contains("\"dbus\""), "no button left that only GameCove answers")
+	ok(done[0], "the callback runs after the load")
+	c.free()
+
+
 func test_service_exit_hands_back_a_shortcut_set_outside_our_session() -> void:
 	var t := _service("exit")
 	var c: Node = t[0]
@@ -745,6 +786,22 @@ func test_service_exit_hands_back_a_shortcut_set_outside_our_session() -> void:
 	f.calls.clear()
 	c._exit_tree()
 	ok(_loads(f).size() == 1 and not JSON.stringify(_loads(f)[0]).contains("\"dbus\""), "quitting hands it back")
+	c.free()
+
+
+func test_service_hands_the_buttons_back_when_the_monitor_cannot_be_restarted() -> void:
+	var t := _service("monitor_gone")
+	var c: Node = t[0]
+	var f: RefCounted = t[1]
+	var ip = t[2]
+	ip.loaded = Profile.to_json(ButtonMap.set_press(_empty(), "LeftPaddle1", "action:mute"))
+	c.refresh()
+	c.setup_intercept_for_tests()
+	c.monitor_line({"kind": "started"})
+	f.calls.clear()
+	c._restarts = 3   # three restarts already failed
+	c.monitor_line({"kind": "exited"})
+	ok(_loads(f).size() >= 1 and not JSON.stringify(_loads(f)[-1]).contains("\"dbus\""), "no mapping to a listener that is gone")
 	c.free()
 
 

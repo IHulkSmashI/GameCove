@@ -25,6 +25,9 @@ const Steam := preload("res://scripts/achievements/steam_achievements.gd")
 const RARITY_URL := "https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=%s&format=json"
 const RARITY_DIR := "user://achievements/rarity"
 const DAY_S := 86400
+## The rarity answer is a few hundred KB at most for the biggest games.
+const RARITY_MAX_BYTES := 2 * 1024 * 1024
+const RARITY_HOSTS := ["api.steampowered.com"]
 
 ## Steam root; "" = the first of steam.gd's roots with an appcache/stats folder.
 var steam_root := ""
@@ -41,6 +44,7 @@ var fetcher: Callable
 var _cache := {}   # appid -> {"key": [mtimes], "result": Dictionary}
 var _mutex := Mutex.new()
 var _in_flight := {}
+var _http: Variant = null   # discover/http.gd (a fake in tests), made on the first fetch
 var _tasks: Array[int] = []   # thread-pool ids; every task must be waited on before exit
 
 
@@ -178,17 +182,14 @@ func _save_rarity(appid: String, data: Dictionary) -> void:
 
 
 func _http_fetch(url: String, appid: String) -> void:
-	if not is_inside_tree():
-		rarity_arrived(appid, "")
-		return
-	var req := HTTPRequest.new()
-	req.use_threads = true
-	req.timeout = 15.0
-	add_child(req)
-	req.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, body: PackedByteArray):
-		req.queue_free()
-		var ok := result == HTTPRequest.RESULT_SUCCESS and code == 200
-		rarity_arrived(appid, body.get_string_from_utf8() if ok else ""))
-	if req.request(url) != OK:
-		req.queue_free()
-		rarity_arrived(appid, "")
+	if _http == null:
+		if not is_inside_tree():
+			rarity_arrived(appid, "")
+			return
+		_http = preload("res://scripts/discover/http.gd").new()
+		add_child(_http)
+	# through the one network gateway: a size cap, backoff, and Steam's own host only (also for redirects)
+	_http.request(url, {"timeout": 15.0, "max_bytes": RARITY_MAX_BYTES, "hosts": RARITY_HOSTS},
+		func(res: Dictionary):
+			var body: PackedByteArray = res.get("body", PackedByteArray())
+			rarity_arrived(appid, body.get_string_from_utf8() if res.get("ok", false) else ""))

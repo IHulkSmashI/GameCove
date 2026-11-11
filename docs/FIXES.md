@@ -119,7 +119,9 @@ only asks the fixes GameCove installed for their status, so a handheld with none
 fix's own record and marker):
 
 1. **Withdrawn** in the definitions, or **the system does it now** (`obsolete_when` is yes): the
-   fix's own `remove` runs. It deletes only GameCove's files and writes the saved values back.
+   fix's own `remove` runs. It deletes only GameCove's files and writes the saved values back, but only to a node that still holds the value the fix set (`set` in the fix's state folder): when the system or the user has written another since (an OS update that fixes it itself), that value stays and is logged as kept.
+
+   **SteamOS.** Its `/etc` and `/var` belong to one OS slot, and an update brings over only the `/etc` files an `/etc/atomic-update.conf.d` entry names (docs/SESSION.md). So on SteamOS `install` and `update` write `gamecove-fix-<name>.conf` there, naming the fix's files and itself (`remove` deletes it), and a fix whose files are all there and ours but whose record in `/var/lib/gamecove` an update took is still installed: `status` says so (`installed_revision=0`), and the next `install`, `update` or `remove` writes the record again; `update` then brings it current. Untested on a SteamOS handheld (fake-root tests only).
    GameCove then asks the fix for its status again; only `installed=no` counts as removed.
 2. **A newer revision** of the fix came with a GameCove update: `update` runs. For `file` fixes
    the helper first saves every file, the saved values and the record, writes the new version,
@@ -296,11 +298,11 @@ Lets VRR keep games smooth down to 30 fps instead of 48. The Claw's panel EDID s
 - Changes (file): `/etc/modprobe.d/gamecove-claw8ex-vrr.conf`. Runs the hook before xe / i915.
 - Changes (initramfs): `rpm-ostree initramfs-etc --track`. Bazzite: the four files above, so it also works when the driver loads early. (SteamOS: only offered where the driver starts after /etc is there, so no initramfs step.)
 - Changes (kernel-arg): `gamecove.vrr=1`. The switch the hook looks for (plus firmware_class.path=/etc/firmware, shared with the gyro fix). Bazzite: a kernel argument. SteamOS: one marked line in /etc/default/grub, then update-grub.
-- Changes (file): `/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf`. SteamOS only: keeps the fix's own files across SteamOS updates (never Valve's grub file); after an update GameCove puts the grub line back without a password.
+- Changes (file): `/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf`. SteamOS only: keeps the fix's own files and its record (/etc/gamecove/claw8ex-vrr/record, since SteamOS gives every OS slot its own /var) across SteamOS updates (never Valve's grub file); after an update GameCove puts the grub line back without a password.
 - Undo: Takes out the boot switch (kernel argument, or the grub line and update-grub on SteamOS), the initramfs entries, the SteamOS keep list and every file, in reverse order. The panel's own EDID is back after a restart.
 - Risk: Changes what the Intel GPU driver is told about the panel at boot. Only exact, validated factory EDIDs are patched, and a boot-menu kill switch (gamecove.novrr) skips it.
 - Tested on hardware: MSI Claw 8 EX AI+ (Bazzite, 2026-11-09)
-- Bazzite: Not fixed. SteamOS: Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); not yet tested on a SteamOS Claw.
+- Bazzite: Not fixed. SteamOS: Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); untested on a SteamOS Claw (fake-root tests only).
 - Needed when: `{"all": [{"any": [{"file": "/usr/bin/rpm-ostree"}, {"all": [{"os": "steamos"}, {"file": "/etc/default/grub"}]}]}, {"any": [{"module": "xe"}, {"module": "i915"}]}]}`
 - Not needed any more when: `{"probe": "os_fixed"}`
 - Probe: Reads the panel's own EDID. If it already says 30 Hz or lower (a BIOS that corrected it), nothing is needed. With GameCove's copy in place the factory EDID can't be read, so a BIOS change is checked by a maintainer.

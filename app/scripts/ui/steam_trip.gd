@@ -28,6 +28,9 @@ const Handoff := preload("res://scripts/steam/steam_handoff.gd")
 const GUARD_MS := 350
 const OUT_S := 0.14
 const BACK_S := 0.3
+## After the return, a button the trip saw go down is waited for this long at most: Steam had the
+## controller while it was let go, so its release may never reach us, and the pad stayed dead.
+const HELD_MAX_MS := 2500
 
 var service: Node
 ## main.gd (quick_menu, wiring, toast(), _open_menu(), _screen_default_focus()).
@@ -35,6 +38,7 @@ var main: Control
 var label: Label
 var _dim: ColorRect
 var _guard_until := 0
+var _held_until := 0
 var _held := {}
 ## Where the trip started: {"focus": WeakRef, "menu": bool, "game": Dictionary, "section": int, "name": String}.
 var _from := {}
@@ -89,7 +93,17 @@ func _exit_tree() -> void:
 ## Nothing of GameCove's may take the pad or the keys: a trip is under way, or it
 ## just ended and a button may still be down.
 func blocks() -> bool:
-	return service.active() or Time.get_ticks_msec() < _guard_until or not _held.is_empty()
+	if service.active():
+		return true
+	var now := Time.get_ticks_msec()
+	if now < _guard_until:
+		return true
+	if _held.is_empty():
+		return false
+	if now < _held_until:
+		return true
+	_held.clear()   # a release that never came (it went to Steam): the pad is ours again
+	return false
 
 
 ## main._input hands every pad and key event here while blocks(): true = swallow it.
@@ -127,6 +141,7 @@ func open(game: Dictionary) -> bool:
 		"":
 			_from = from
 			_held.clear()
+			_held_until = 0
 			label.text = TC.GYRO_STEAM_OPENING
 			# over a running game the quick menu is all of ours that shows, and it says
 			# "Opening…" itself: no cover over the game
@@ -153,6 +168,7 @@ func _on_left() -> void:
 
 func _on_finished(why: String) -> void:
 	_guard_until = Time.get_ticks_msec() + GUARD_MS
+	_held_until = _guard_until + HELD_MAX_MS
 	if main != null and main.wiring != null and main.wiring.has_method("set_away"):
 		main.wiring.set_away(false)
 	_restore()

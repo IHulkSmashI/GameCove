@@ -22,6 +22,7 @@ extends RefCounted
 ## The manifest's read-modify-write runs under one lock: the automatic fill
 ## and a pick work on different threads.
 
+const ImageGuard := preload("res://scripts/ui/image_guard.gd")
 const NAMES := {"cover": "%sp", "hero": "%s_hero", "logo": "%s_logo", "icon": "%s_icon"}
 const EXTS := ["png", "jpg", "jpeg", "webp"]
 const PINS := ["BottomLeft", "UpperLeft", "CenterCenter", "UpperCenter", "BottomCenter"]
@@ -129,8 +130,8 @@ static func _apply(grid: String, backup_dir: String, base: String, src: String) 
 	var ext := src.get_extension().to_lower()
 	var tmp := grid.path_join(base + ".gamecove-part")
 	if ext == "webp":
-		var img := Image.new()
-		if img.load_webp_from_buffer(FileAccess.get_file_as_bytes(src)) != OK or img.save_png(tmp) != OK:
+		var img := ImageGuard.load_known(src)   # a picture the header of which names a huge canvas isn't decoded
+		if img == null or img.save_png(tmp) != OK:
 			return ""
 		ext = "png"
 	elif ext in ["png", "jpg", "jpeg"]:

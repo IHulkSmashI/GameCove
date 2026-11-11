@@ -132,5 +132,56 @@ V_REV=2 demo status | grep -qx "installed_revision=2" || fail "status after the 
 V_REV=2 demo remove >/dev/null || fail "remove after an update"
 [ "$(cat "$T/root/sys/demo/value")" = factory ] || fail "remove: the original value from before revision 1"
 [ ! -e "$RULE" ] && [ ! -e "$CONF" ] || fail "remove: files gone"
+[ ! -e "$ST/set" ] || fail "remove: the record of what we set is gone too"
+# review Medium (Fixes): removing a fix the system now covers itself must not write our stale original over
+# the system's own value (the node no longer holds what we set)
+demo install >/dev/null || fail "install again"
+[ "$(cat "$T/root/sys/demo/value")" = new1 ] || fail "applied again"
+echo "by-the-os" >"$T/root/sys/demo/value"
+demo remove >/dev/null || fail "remove after the system changed the value"
+[ "$(cat "$T/root/sys/demo/value")" = by-the-os ] || fail "remove: the system's own value is left alone, not overwritten by our saved one"
+grep -q "kept /sys/demo/value" "$ST/changes.log" 2>/dev/null || [ ! -d "$ST" ] || fail "the kept value is logged"
+
+# review 4-L6: saved values belong to the handheld that read them; a rule that only a comment mentions is not
+# "the system already does it"
+demo install >/dev/null || fail "install for the device test"
+echo "some-other-handheld" >"$ST/device"
+echo "changed" >"$T/root/sys/demo/value"
+demo remove >/dev/null || fail "remove with another handheld's record"
+[ "$(cat "$T/root/sys/demo/value")" = changed ] || fail "another handheld's saved value is not written here"
+echo factory >"$T/root/sys/demo/value"
+mkdir -p "$T/root/etc/udev/rules.d"
+printf '# ATTR{x}=="y"\nACTION=="add"\n' >"$T/root/etc/udev/rules.d/90-other.rules"
+# shellcheck disable=SC2034 # gcfix.sh reads these when it is sourced
+elsewhere() { (NAME=probe DEVICES="*" FILES=/etc/x; GAMECOVE_ROOT="$T/root"; . "$HERE/gcfix.sh"; gc_rule_elsewhere "$@"); }
+if elsewhere 'ATTR{x}=="y"'; then fail "a comment that mentions the rule is not the rule"; fi
+printf 'ACTION=="add", ATTR{x}=="y"\n' >"$T/root/etc/udev/rules.d/90-other.rules"
+elsewhere 'ATTR{x}=="y"' || fail "a real line with it is found"
+rm -f "$T/root/etc/udev/rules.d/90-other.rules"
+
+# ---- SteamOS: /etc and /var are per OS slot and only keep-listed /etc files survive an update (docs/SESSION.md)
+KEEP="$T/root/etc/atomic-update.conf.d/gamecove-fix-demo.conf"
+demo install >/dev/null || fail "install (not SteamOS)"
+[ ! -e "$KEEP" ] || fail "no keep entry off SteamOS"
+demo remove >/dev/null || fail "remove"
+mkdir -p "$T/root/etc"
+echo 'ID=steamos' >"$T/root/etc/os-release"
+demo install >/dev/null || fail "install on SteamOS"
+grep -qxF "/etc/udev/rules.d/60-gamecove-demo.rules" "$KEEP" || fail "the rule is keep-listed"
+grep -qxF "/etc/gamecove-demo.conf" "$KEEP" || fail "so is the second file"
+grep -qxF "/etc/atomic-update.conf.d/gamecove-fix-demo.conf" "$KEEP" || fail "and the keep file itself"
+# the update: the keep-listed files come over, /var does not
+rm -rf "$T/root/var/lib/gamecove"
+st="$(demo status)"
+echo "$st" | grep -qx "installed=yes" || fail "files without a record: still installed ($st)"
+echo "$st" | grep -qx "state=on" || fail "and on"
+echo "$st" | grep -qx "installed_revision=0" || fail "at revision 0, so an update is offered"
+[ ! -e "$ST/installed" ] || fail "status writes nothing"
+[ "$(V_REV=2 demo update)" = updated ] || fail "update re-adopts and brings it current"
+[ "$(cat "$ST/installed")" = 2 ] || fail "the record is back, at revision 2"
+rm -rf "$T/root/var/lib/gamecove"
+demo remove >/dev/null || fail "remove after the update took the record"
+[ ! -e "$RULE" ] && [ ! -e "$CONF" ] && [ ! -e "$KEEP" ] || fail "remove: files and keep entry gone"
+demo status | grep -qx "state=off" || fail "off again"
 
 echo "lib tests passed"

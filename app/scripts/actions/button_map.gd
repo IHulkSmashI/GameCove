@@ -117,6 +117,13 @@ static func built_in(device: Variant, cap: String) -> String:
 	return a if a in BUILT_IN else ""
 
 
+## The hold time from shortcuts.json's "hold_s" (0.3..1.5 s). Anything that is not a number (null, [], {} or text in
+## a hand-edited file) is the usual 0.5 s: float() on those raises and took the whole Controls refresh with it.
+static func hold_seconds(prefs: Variant) -> float:
+	var v: Variant = prefs.get("hold_s", 0.5) if prefs is Dictionary else 0.5
+	return clampf(float(v), 0.3, 1.5) if (v is float or v is int) else 0.5
+
+
 ## Buttons that can have a hold on this device: every special button that is
 ## GameCove's, in the profile's order, each once.
 static func hold_caps(device: Variant) -> Array:

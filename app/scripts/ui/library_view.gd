@@ -318,7 +318,7 @@ static func search(games: Array, query: String) -> Array:
 		return games.duplicate()
 	var words := q.split(" ", false)
 	return games.filter(func(g):
-		var t := fold(String(g.get("title", "")))
+		var t := folded(String(g.get("title", "")))
 		if t.contains(q):
 			return true
 		var tw := Array(t.split(" ", false))
@@ -328,7 +328,35 @@ static func search(games: Array, query: String) -> Array:
 		return true)
 
 
-## Lower case, accents dropped, punctuation turned into spaces.
+const FOLD_CACHE_MAX := 100000
+static var _fold_cache := {}
+
+
+## fold() of a title, kept: the search re-reads every title on every key, and folding 20k titles each time was
+## the cost (a title folds once; the list is a few MB at most).
+static func folded(title: String) -> String:
+	var f: Variant = _fold_cache.get(title)
+	if f == null:
+		if _fold_cache.size() >= FOLD_CACHE_MAX:
+			_fold_cache.clear()
+		f = fold(title)
+		_fold_cache[title] = f
+	return f
+
+
+## True for a character that is punctuation, a symbol or a space in any script (so it separates words); every
+## other character above ASCII is a letter of some script and is kept, so Japanese, Korean, Cyrillic and Greek
+## titles can be searched too.
+static func _is_separator(cp: int) -> bool:
+	return (cp >= 0x80 and cp <= 0xBF) or cp == 0xD7 or cp == 0xF7 \
+		or (cp >= 0x2000 and cp <= 0x2BFF) or (cp >= 0x3000 and cp <= 0x3004) \
+		or (cp >= 0x3008 and cp <= 0x3020) or cp == 0x30FB \
+		or (cp >= 0xFF01 and cp <= 0xFF0F) or (cp >= 0xFF1A and cp <= 0xFF20) \
+		or (cp >= 0xFF3B and cp <= 0xFF40) or (cp >= 0xFF5B and cp <= 0xFF65) \
+		or (cp >= 0xFE30 and cp <= 0xFE6F)
+
+
+## Lower case, accents dropped, punctuation turned into spaces. Letters of other scripts stay as they are.
 static func fold(s: String) -> String:
 	var src := "àáâãäåèéêëìíîïòóôõöùúûüýÿñç"
 	var dst := "aaaaaaeeeeiiiiooooouuuuyync"
@@ -337,7 +365,17 @@ static func fold(s: String) -> String:
 		var i := src.find(ch)
 		if i >= 0:
 			out += dst[i]
+		elif ch == "ß":
+			out += "ss"
+		elif ch == "æ":
+			out += "ae"
+		elif ch == "ø":
+			out += "o"
+		elif ch == "œ":
+			out += "oe"
 		elif (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9"):
+			out += ch
+		elif ch.unicode_at(0) >= 0x80 and not _is_separator(ch.unicode_at(0)):
 			out += ch
 		else:
 			out += " "

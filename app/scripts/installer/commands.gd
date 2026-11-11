@@ -92,9 +92,20 @@ static func pkexec(cmd: Array) -> Array:
 ## Then, in the same root command (one password), the autologin guard goes into /etc
 ## (GUARD_INSTALL): without it a layer removed by hand while GameCove is the boot default
 ## leaves the login screen at a password prompt.
-static func rpm_install(rpm: String, live := true) -> Array:
+static func rpm_install(rpm: String, live := true, sha := "") -> Array:
 	var text := "set -e; " + RPM_OSTREE + " install --idempotent " + ("--apply-live " if live else "") + "\"$1\"; " + GUARD_INSTALL
+	if sha != "":
+		return pkexec(["sh", "-c", _checked(text, "gamecove.rpm"), "sh", rpm, sha])
 	return pkexec(["sh", "-c", text, "sh", rpm])
+
+
+## The root step re-checks the package (review 9 L9): the file was verified by get-gamecove.sh as the user, in a
+## folder the user can write, and is installed later as root. The script copies "$1" into a root-only folder,
+## compares it with the sha256 in "$2" and goes on with the copy, so what was checked is what is installed.
+static func _checked(text: String, name: String) -> String:
+	return "set -e; d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; cp -- \"$1\" \"$d/" + name + "\"; " \
+		+ "echo \"$2  $d/" + name + "\" | sha256sum -c - >/dev/null; set -- \"$d/" + name + "\"; " \
+		+ text.trim_prefix("set -e; ")
 
 
 ## The layer off again, and the guard with it: the installer puts the boot default back
@@ -111,11 +122,15 @@ static func rpm_remove(purge: bool) -> Array:
 
 
 ## A newer local RPM in place of the layered one, in one transaction (next boot).
-static func rpm_update(rpm: String) -> Array:
+static func rpm_update(rpm: String, sha := "") -> Array:
+	if sha != "":
+		return pkexec(["sh", "-c", _checked("set -e; " + RPM_OSTREE + " uninstall gamecove --install \"$1\"", "gamecove.rpm"), "sh", rpm, sha])
 	return pkexec([RPM_OSTREE, "uninstall", "gamecove", "--install", rpm])
 
 
-static func sysext_install(raw: String) -> Array:
+static func sysext_install(raw: String, sha := "") -> Array:
+	if sha != "":
+		return pkexec(["sh", "-c", _checked(SYSEXT_INSTALL, "gamecove.raw"), "sh", raw, sha])
 	return pkexec(["sh", "-c", SYSEXT_INSTALL, "sh", raw])
 
 
@@ -216,12 +231,12 @@ static func _internal(id: String, extra := {}) -> Dictionary:
 	return t
 
 
-static func package_task(method: String, pkg: String, verb := "install") -> Dictionary:
+static func package_task(method: String, pkg: String, verb := "install", sha := "") -> Dictionary:
 	if method == "rpm-ostree":
 		if verb == "update":
-			return _cmd("package_update", rpm_update(pkg))
-		return _cmd("package", rpm_install(pkg, true), {"undo": rpm_uninstall(), "fallback": rpm_install(pkg, false)})
-	return _cmd("package_update" if verb == "update" else "package", sysext_install(pkg), {"undo": sysext_remove()})
+			return _cmd("package_update", rpm_update(pkg, sha))
+		return _cmd("package", rpm_install(pkg, true, sha), {"undo": rpm_uninstall(), "fallback": rpm_install(pkg, false, sha)})
+	return _cmd("package_update" if verb == "update" else "package", sysext_install(pkg, sha), {"undo": sysext_remove()})
 
 
 static func fix_task(paths: RefCounted, fix_name: String, verb := "install") -> Dictionary:
@@ -236,6 +251,7 @@ static func fix_task(paths: RefCounted, fix_name: String, verb := "install") -> 
 static func tasks_for(action: String, choices: Dictionary, target: Dictionary, paths: RefCounted) -> Array:
 	var method := str(target.get("method", "none"))
 	var pkg := str(target.get("package", ""))
+	var pkg_sha := str(target.get("package_sha256", ""))
 	var state: Dictionary = target.get("state", {})
 	var had_fixes: Array = state.get("fixes", []) if state.get("fixes", []) is Array else []
 	var want_fixes: Array = choices.get("fixes", [])
@@ -248,7 +264,7 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 	match action:
 		"install", "change", "repair":
 			if method != "none" and pkg != "" and (action != "change" or not present):
-				out.append(package_task(method, pkg))
+				out.append(package_task(method, pkg, "install", pkg_sha))
 			for f in want_fixes:
 				if action == "repair" or not f in had_fixes:
 					out.append(fix_task(paths, f, "install"))
@@ -272,7 +288,7 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 			out.append(_internal("state"))
 		"update":
 			if method != "none" and pkg != "":
-				out.append(package_task(method, pkg, "update"))
+				out.append(package_task(method, pkg, "update", pkg_sha))
 			out.append(_internal("user_files"))
 			out.append(_internal("state"))
 		"uninstall":

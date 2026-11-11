@@ -186,6 +186,28 @@ func test_clean_titles() -> void:
 
 # ------------------------------------------------------------ what counts as a game
 
+## Review Medium (other): one .cue hid every .bin in its folder, so a Mega Drive / PS1 .bin game
+## sitting beside a disc image vanished from the Library. Only the files a sheet names are its tracks.
+func test_a_cue_hides_only_the_tracks_it_names() -> void:
+	var dir := OS.get_user_data_dir().path_join("test_cue_%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(dir)
+	_touch(dir.path_join("Disc A.cue"), "FILE \"Disc A (Track 1).bin\" BINARY\r\n  TRACK 01 MODE2/2352\r\n    INDEX 01 00:00:00\r\nFILE \"Disc A (Track 2).bin\" BINARY\r\n  TRACK 02 AUDIO\r\n")
+	_touch(dir.path_join("Disc A (Track 1).bin"))
+	_touch(dir.path_join("Disc A (Track 2).bin"))
+	_touch(dir.path_join("Homebrew Game.bin"))                      # another game: the .cue doesn't name it
+	_touch(dir.path_join("Unquoted.cue"), "FILE unquoted.img BINARY\n")
+	_touch(dir.path_join("unquoted.img"))
+	_touch(dir.path_join("Dreamcast.gdi"), "2\n1 0 4 2352 track01.bin 0\n2 600 0 2352 \"track 02.raw\" 0\n")
+	_touch(dir.path_join("track01.bin"))
+	_touch(dir.path_join("track 02.raw"))
+	_touch(dir.path_join("Blank.cue"))                              # names nothing readable: its same-name file is its track
+	_touch(dir.path_join("Blank.bin"))
+	var found := Roms.list_games(dir, ["cue", "bin", "gdi", "img", "raw"])
+	eq(_ids(found["games"]), ["Blank.cue", "Disc A.cue", "Dreamcast.gdi", "Homebrew Game.bin", "Unquoted.cue"],
+		"the discs, and the .bin no sheet names")
+	DirAccess.remove_absolute(dir)
+
+
 func test_listing_rules() -> void:
 	var home := _emudeck("list")
 	var roms := home.path_join("Emulation/roms")
@@ -922,3 +944,32 @@ func test_every_rom_root() -> void:
 	ExecSafe.run("mv", PackedStringArray([home.path_join("SD-out"), home.path_join("run/media/deck/SD")]))
 	ok(LibraryScript.collect(home, "/nonexistent/gamedb.json.gz")["entries"].has(nes_key), "card back: its games are back")
 	Emu.removable = Emu.REMOVABLE
+
+
+func test_tilde_is_only_the_home_folder_at_the_start() -> void:
+	eq(Emu.tilde("~/ROMs", "/h/u"), "/h/u/ROMs", "leading ~/")
+	eq(Emu.tilde("~", "/h/u"), "/h/u", "just ~")
+	eq(Emu.tilde("/mnt/a~b/roms", "/h/u"), "/mnt/a~b/roms", "a ~ inside a name is left alone")
+
+
+func test_variables_in_a_launch_command_are_not_expanded_twice() -> void:
+	var v := EsdeLaunch._vars("%ROM%|%BASENAME%", "/r/%BASENAME%.zip", "x", "/r", "", {})
+	eq(v, "/r/%BASENAME%.zip|x", "a ROM called %BASENAME%.zip stays as it is")
+
+
+func test_the_scan_cache_key_includes_the_extension_list() -> void:
+	var a := {"id": "snes", "root": "/r/snes", "exts": [".sfc", ".smc"]}
+	var b := {"id": "snes", "root": "/r/snes", "exts": [".sfc", ".smc", ".fig"]}
+	ok(Roms._key(a, "/m") != Roms._key(b, "/m"), "a new format in ES-DE's list rescans")
+	eq(Roms._key(a, "/m"), Roms._key({"id": "snes", "root": "/r/snes", "exts": [".smc", ".sfc"]}, "/m"), "its order does not matter")
+
+
+func test_a_shortcut_through_a_symlink_merges_with_its_rom() -> void:
+	var root := ProjectSettings.globalize_path("user://test_merge_link")
+	DirAccess.make_dir_recursive_absolute(root + "/real/snes")
+	OS.execute("ln", ["-sfn", root + "/real", root + "/link"])
+	var rom := {"rom": root + "/real/snes/a.sfc", "rom_rel": "a.sfc", "art": {}, "last_played": 0, "key": "emu:rom:a"}
+	var sc := {"id": "7", "rom_path": root + "/link/snes/a.sfc", "art": {}, "last_played": 5}
+	var out := Emu.merge_shortcuts([rom], [sc])
+	eq(out.size(), 0, "one game, not two")
+	eq(rom["last_played"], 5, "its play time followed")

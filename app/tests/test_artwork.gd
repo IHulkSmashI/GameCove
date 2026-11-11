@@ -221,6 +221,25 @@ func test_non_steam_game_by_title_and_auto_fill() -> void:
 	wipe(dir)
 
 
+## Review Medium (privacy): saving a SteamGridDB key in setup filled the art of every game, ROMs
+## included, so ROM titles went to SteamGridDB against docs/PRIVACY.md ("no art is looked up
+## online for a ROM"). The filter lives in auto_fill, so every caller is covered.
+func test_auto_fill_never_asks_about_a_rom() -> void:
+	var dir := tmp("autorom")
+	var http := FakeHttp.new()
+	_routes(http)
+	var s := _service(http, dir)
+	var rom := {"key": "emu:3000000001", "store": "emu", "id": "3000000001", "title": "Moonlit Harbor",
+		"emulated": {"system": "snes", "system_short": "SNES", "rom": true}, "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	var steam_game := {"key": "steam:400", "store": "steam", "id": "400", "title": "Portal", "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	eq(s.auto_fill([rom]), 0, "a ROM alone: nothing queued")
+	eq(http.requests.size(), 0, "and nothing sent anywhere")
+	eq(s.auto_fill([rom, steam_game]), 3, "next to a PC game only that one's three pictures")
+	ok(not http.requests.any(func(r): return r.contains("Moonlit")), "the ROM's title was never sent")
+	s.free()
+	wipe(dir)
+
+
 ## Review 2, low 23: the automatic fill forgot what it had tried at every start, and its
 ## queue kept draining after a switch went off.
 func test_auto_fill_remembers_tries_and_stops_with_the_switch() -> void:
@@ -370,4 +389,25 @@ func test_a_damaged_art_index_doesnt_drop_the_other_picks() -> void:
 	eq(Overrides.read(dir), {}, "nothing can be read")
 	ok(not Overrides.set_override(dir, "steam:4", "cover", {"path": c, "source": "user"}), "and a pick isn't saved over what can't be read")
 	eq(FileAccess.get_file_as_string(Overrides.index_path(dir) + ".bak"), "not json", "the copy is left for repair")
+	wipe(dir)
+
+
+## Review nit: a pick whose index could not be written was reported as done.
+func test_a_pick_that_cannot_be_saved_is_not_reported_as_done() -> void:
+	var dir := tmp("apply_fail")
+	var f := FileAccess.open(Overrides.index_path(dir), FileAccess.WRITE)
+	f.store_string("not json")
+	f.close()
+	f = FileAccess.open(Overrides.index_path(dir) + ".bak", FileAccess.WRITE)
+	f.store_string("not json")
+	f.close()
+	var s: Node = ArtService.new()
+	var got := []
+	var changed := []
+	s.art_changed.connect(func(k): changed.append(k))
+	s._apply_finish(dir, "steam:1", "cover", {"path": dir.path_join("a.png")}, [], func(good: bool, msg: String): got.append([good, msg]))
+	eq(got.size(), 1, "told once")
+	eq(got[0][0], false, "not ok")
+	eq(changed, [], "and nobody is told the art changed")
+	s.free()
 	wipe(dir)

@@ -2263,10 +2263,7 @@ func _close_page() -> void:
 	elif current == "home":
 		target = home.tile_for(key)
 	elif current == "library":
-		for t in library_screen.tiles():
-			if t.game.get("key", "") == key:
-				target = t
-				break
+		target = library_screen.tile_for(key)   # made now when the window had moved off it
 	if target == null:
 		target = _screen_default_focus()
 	if target != null:

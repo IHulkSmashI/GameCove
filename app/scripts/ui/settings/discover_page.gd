@@ -81,7 +81,7 @@ func _key_row(box: Control, key: String, value: String, what: String, valid: Cal
 	r.set_value(shown, "muted" if value == "" else "")
 	r.pressed.connect(func():
 		host.ask_text(i["label"], value, func(text: String):
-			save_key(key, text.strip_edges(), what, valid)))
+			save_key(key, text.strip_edges(), what, valid), mask))
 
 
 ## OpenCritic: the user's own RapidAPI key (OpenCritic's data may not be republished, so none ships).
@@ -99,7 +99,7 @@ func _opencritic_row(box: Control) -> void:
 				notify((TS.KEY_REMOVED if text.strip_edges() == "" else TS.KEY_SAVED) % "OpenCritic key", "good")
 				rebuild()
 			else:
-				notify(TS.KEY_BAD % "OpenCritic key", "bad")))
+				notify(TS.KEY_BAD % "OpenCritic key", "bad"), true))
 
 
 ## Saves a key typed on the keyboard ("" removes it). SteamGridDB goes to the

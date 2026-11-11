@@ -261,9 +261,10 @@ func _ensure_identity() -> Dictionary:
 		var f := FileAccess.open(paths[k], FileAccess.WRITE)
 		if f == null:
 			return {}
+		# private before the first byte of the key goes in (it was written, then chmod'ed: readable for a moment)
+		FileAccess.set_unix_permissions(paths[k], FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER)
 		f.store_string(str(conf[k]))
 		f.close()
-		FileAccess.set_unix_permissions(paths[k], FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER)
 	_identity = paths
 	return _identity
 

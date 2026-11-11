@@ -61,8 +61,13 @@ install() {
 	require_board
 	lock
 	if m_installed; then
-		say "already installed"
-		return 0
+		if ip_flag buttons && [ -f "$ROOT$MAP" ]; then
+			say "already installed"
+			return 0
+		fi
+		# a record whose map or flag is gone (an InputPlumber reset, a cut-short install): it said "already
+		# installed" and nothing could mend it, and uninstall skipped it (status installed=no). Start clean.
+		m_undo || true
 	fi
 	ip_require_free
 	stock=$(stock_map)

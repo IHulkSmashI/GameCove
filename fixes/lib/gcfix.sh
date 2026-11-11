@@ -121,6 +121,36 @@ gc_ours() { [ -f "$ROOT$1" ] && head -n 1 "$ROOT$1" | grep -qxF "$GC_MARK"; }
 
 gc_installed() { [ -f "$STATE/installed" ]; }
 
+# ---- SteamOS keeps /etc and /var per OS slot: an update brings over only the /etc files an
+# /etc/atomic-update.conf.d entry names (docs/SESSION.md). A rule written to /etc/udev/rules.d is gone after
+# the update unless it is named there, and /var/lib/gamecove (our record) is gone either way, so:
+#   - install and update on SteamOS name their files (and that file itself) in a keep entry;
+#   - when the files are there and ours but the record is not, the fix is still installed: status says so and
+#     the next install / update / remove writes the record again (revision 0: "update" then brings it current).
+gc_os_steamos() { [ "$(sed -n 's/^ID=//p' "$ROOT/etc/os-release" 2>/dev/null | tr -d "\"'" | head -n 1)" = steamos ]; }
+GC_KEEP=/etc/atomic-update.conf.d/gamecove-fix-$NAME.conf
+
+gc_keep_write() {
+	gc_os_steamos || return 0
+	mkdir -p "$ROOT/etc/atomic-update.conf.d" 2>/dev/null || return 0
+	{
+		printf '## GameCove %s: keeps its files across SteamOS updates. gamecove-fix %s remove deletes this file.\n' "$NAME" "$NAME"
+		for _f in $FILES; do printf '%s\n' "$_f"; done
+		printf '%s\n' "$GC_KEEP"
+	} >"$ROOT$GC_KEEP.gamecove-tmp" && mv -f "$ROOT$GC_KEEP.gamecove-tmp" "$ROOT$GC_KEEP" || rm -f "$ROOT$GC_KEEP.gamecove-tmp"
+}
+
+gc_keep_drop() { rm -f "$ROOT$GC_KEEP"; }
+
+# 0 when the record is missing but every file is in place and ours (an OS update took the record).
+gc_adoptable() { gc_os_steamos && [ ! -f "$STATE/installed" ] && gc_files_ok; }
+
+gc_adopt() {
+	gc_adoptable || return 0
+	mkdir -p "$STATE" && printf '0\n' >"$STATE/installed" || return 0
+	gc_log "adopted the files an OS update left behind without their record"
+}
+
 # The revision that was installed (1 for installs from before revisions were recorded).
 gc_installed_revision() {
 	_r="$(cat "$STATE/installed" 2>/dev/null || true)"
@@ -145,7 +175,8 @@ gc_rule_elsewhere() {
 			head -n 1 "$_r" | grep -qF "# GameCove fix " && continue
 			_all=0
 			for _s in "$@"; do
-				grep -qF -- "$_s" "$_r" || { _all=1; break; }
+				# a line of the rule, not a comment that mentions it
+				grep -v '^[[:space:]]*#' "$_r" | grep -qF -- "$_s" || { _all=1; break; }
 			done
 			[ "$_all" -eq 0 ] && return 0
 		done
@@ -168,26 +199,50 @@ gc_all_values() {
 save_value() {
 	[ -f "$ROOT$1" ] || return 0
 	mkdir -p "$STATE"
+	# which handheld read it: a drive that boots several shares this record, and another one's values are not
+	# this one's to put back (restore_values checks)
+	[ -f "$STATE/device" ] || gc_device >"$STATE/device" 2>/dev/null || true
 	grep -q "^$1=" "$STATE/saved" 2>/dev/null && return 0
 	printf '%s=%s\n' "$1" "$(cat "$ROOT$1" 2>/dev/null)" >>"$STATE/saved"
 }
 
-# write_value <real path> <value>: a sysfs write; failures are reported, never fatal.
+# write_value <real path> <value>: a sysfs write; failures are reported, never fatal. A value we saved
+# (save_value) is also noted in "set" as the node reads right after the write, so restore_values can tell
+# later whether the node still holds what we set.
 write_value() {
 	if ! printf '%s\n' "$2" 2>/dev/null >"$ROOT$1"; then
 		printf 'warning: could not write %s to %s\n' "$2" "$1" >&2
 		return 1
 	fi
+	if grep -q "^$1=" "$STATE/saved" 2>/dev/null; then
+		{ grep -v "^$1=" "$STATE/set" 2>/dev/null || true; printf '%s=%s\n' "$1" "$(cat "$ROOT$1" 2>/dev/null)"; } >"$STATE/set.tmp" &&
+			mv -f "$STATE/set.tmp" "$STATE/set" || true
+	fi
 }
 
-# Puts back every saved value (sysfs nodes that are gone are skipped).
+# Puts back every saved value (sysfs nodes that are gone are skipped). Only a node that still holds the
+# value we set: when the system (an OS update that fixes it itself) or the user wrote another one since,
+# that one stays and our stale original is not written over it. A record from before "set" existed has
+# nothing to compare with and is restored as it always was.
 restore_values() {
 	[ -f "$STATE/saved" ] || return 0
+	_dev="$(cat "$STATE/device" 2>/dev/null || true)"
+	if [ -n "$_dev" ] && [ "$_dev" != "$(gc_device)" ]; then
+		gc_log "kept the values: they were read on $_dev, this is $(gc_device)"
+		return 0
+	fi
 	while IFS= read -r _line; do
 		_p="${_line%%=*}"
 		_v="${_line#*=}"
 		case "$_p" in /sys/*) ;; *) continue ;; esac
 		[ -f "$ROOT$_p" ] || continue
+		if [ -f "$STATE/set" ] && grep -q "^$_p=" "$STATE/set"; then
+			_ours="$(grep "^$_p=" "$STATE/set" | head -n 1)"
+			if [ "$(cat "$ROOT$_p" 2>/dev/null)" != "${_ours#*=}" ]; then
+				gc_log "kept $_p: it isn't the value we set any more"
+				continue
+			fi
+		fi
 		write_value "$_p" "$_v" || true
 	done <"$STATE/saved"
 }
@@ -215,7 +270,9 @@ gc_install() {
 	gc_need_root
 	gc_applies || gc_die 2 "not for this handheld"
 	fix_lock "$NAME"
+	gc_adopt
 	if gc_installed && gc_files_ok; then
+		gc_keep_write
 		gc_say "already installed"
 		return 0
 	fi
@@ -245,6 +302,7 @@ gc_install() {
 			gc_die 1 "could not write $_f"
 		fi
 	done
+	gc_keep_write
 	gc_reload
 	if command -v apply_now >/dev/null 2>&1; then
 		apply_now || printf 'warning: it takes effect after a restart\n' >&2
@@ -261,19 +319,21 @@ gc_remove_files() {
 
 gc_remove() {
 	gc_need_root
+	gc_adopt
 	if ! gc_installed; then
 		gc_say "not installed"
 		return 0
 	fi
 	fix_lock "$NAME"
 	gc_remove_files
+	gc_keep_drop
 	gc_reload
 	if command -v revert_now >/dev/null 2>&1; then
 		revert_now || true
 	else
 		restore_values
 	fi
-	rm -f "$STATE/installed" "$STATE/saved"
+	rm -f "$STATE/installed" "$STATE/saved" "$STATE/set" "$STATE/device"
 	gc_log "remove"
 	rmdir "$STATE" 2>/dev/null || true
 	gc_say "removed"
@@ -293,6 +353,7 @@ gc_rollback() {
 	done
 	cp -p "$1/installed" "$STATE/installed"
 	if [ -f "$1/saved" ]; then cp -p "$1/saved" "$STATE/saved"; else rm -f "$STATE/saved"; fi
+	if [ -f "$1/set" ]; then cp -p "$1/set" "$STATE/set"; else rm -f "$STATE/set"; fi
 	rm -rf "$1"
 	gc_reload
 }
@@ -300,6 +361,7 @@ gc_rollback() {
 # update: bring an installed fix to this revision of the script, or leave it exactly as it was.
 gc_update() {
 	gc_need_root
+	gc_adopt
 	if ! gc_installed; then
 		gc_say "not installed"
 		return 0
@@ -319,6 +381,7 @@ gc_update() {
 	done
 	cp -p "$STATE/installed" "$_bak/installed" || { rm -rf "$_bak"; gc_die 1 "could not save the current files"; }
 	[ ! -f "$STATE/saved" ] || cp -p "$STATE/saved" "$_bak/saved" || { rm -rf "$_bak"; gc_die 1 "could not save the current files"; }
+	[ ! -f "$STATE/set" ] || cp -p "$STATE/set" "$_bak/set" || { rm -rf "$_bak"; gc_die 1 "could not save the current files"; }
 	_why=""
 	for _f in $FILES; do
 		if [ -e "$ROOT$_f" ] && ! gc_ours "$_f"; then
@@ -328,6 +391,7 @@ gc_update() {
 		gc_write_file "$_f" || { _why="could not write $_f"; break; }
 	done
 	if [ -z "$_why" ]; then
+		gc_keep_write
 		gc_reload
 		if command -v apply_now >/dev/null 2>&1; then
 			apply_now || printf 'warning: it takes effect after a restart\n' >&2
@@ -359,6 +423,8 @@ gc_status() {
 	gc_say "applies=yes"
 	inst=no
 	gc_installed && inst=yes
+	adopt=no
+	if gc_adoptable; then inst=yes; adopt=yes; fi
 	gc_say "installed=$inst"
 	osf=no
 	os_fixed && osf=yes
@@ -367,7 +433,8 @@ gc_status() {
 	hw_present && hw=yes
 	gc_say "hw=$hw"
 	gc_say "revision=$REVISION"
-	[ "$inst" = no ] || gc_say "installed_revision=$(gc_installed_revision)"
+	if [ "$adopt" = yes ]; then gc_say "installed_revision=0"
+	elif [ "$inst" = yes ]; then gc_say "installed_revision=$(gc_installed_revision)"; fi
 	_why=""
 	if [ "$inst" = no ] && [ "$osf" = no ] && [ "$hw" = yes ] && command -v blocked >/dev/null 2>&1; then
 		_why="$(blocked)"

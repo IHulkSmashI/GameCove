@@ -593,8 +593,24 @@ func power_block() -> String:
 	return ""
 
 
+## True when a charger is connected, and always on a box with no battery (a Steam Machine, a desktop): it
+## has nothing to run out and often no supply entry that says "online", so it used to be refused every
+## firmware update with "needs_ac".
 func _ac() -> bool:
+	if not has_battery():
+		return true
 	return preload("res://scripts/device/device.gd").ac_online(root)
+
+
+## A battery (a BAT* supply, or one whose type says Battery) exists, readable or not.
+func has_battery() -> bool:
+	var dir := DirAccess.open(root + POWER_SUPPLY)
+	if dir == null:
+		return false
+	for n in Array(dir.get_directories()) + Array(dir.get_files()):
+		if str(n).begins_with("BAT") or read_text(root + POWER_SUPPLY + n + "/type") == "Battery":
+			return true
+	return false
 
 
 func battery_percent() -> int:
@@ -665,8 +681,8 @@ func load_index() -> Dictionary:
 	if Index.is_stale(mod, _now()) and _stamp_due("index_fetch", REFRESH_EVERY_S) and network_ok():
 		_touch_stamp("index_fetch")
 		var part := path + ".part"
-		var r: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "60", "-o", part, "--", Index.URL]))
-		var s: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "20", "--", Index.URL + ".sha256"]))
+		var r: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "60", "--max-filesize", str(MAX_INDEX_BYTES), "-o", part, "--", Index.URL]))
+		var s: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "20", "--max-filesize", "4096", "--", Index.URL + ".sha256"]))
 		var want := Index.sha_from_text(str(s.get("out", "")))
 		var good := int(r.get("code", -1)) == 0 and int(s.get("code", -1)) == 0 and want != "" \
 			and FileAccess.file_exists(part) and FileAccess.get_sha256(part) == want \
@@ -691,6 +707,8 @@ const VERIFIED_SUFFIX := ".verified"
 ## A maker's firmware download: redirects and size are capped (review problem 1).
 const MAX_FW_REDIRS := 5
 const MAX_FW_BYTES := 512 * 1024 * 1024
+## The firmware index (gzip) and its small companions: curl stops past these (review 9 L8).
+const MAX_INDEX_BYTES := 16 * 1024 * 1024
 
 
 func _cosign() -> String:
@@ -719,7 +737,7 @@ func _index_signature(part: String) -> String:
 	if cos == "":
 		return "unverified"
 	var bundle := part + ".sigstore.json"
-	var b: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "20", "-o", bundle, "--", Index.URL + ".sigstore.json"]))
+	var b: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "20", "--max-filesize", "1048576", "-o", bundle, "--", Index.URL + ".sigstore.json"]))
 	var ok := int(b.get("code", -1)) == 0 and FileAccess.file_exists(bundle) and int(runner.run(cos, PackedStringArray([
 		"verify-blob", "--bundle", bundle, "--certificate-oidc-issuer", Index.OIDC_ISSUER,
 		"--certificate-identity-regexp", Index.SIGNER_IDENTITY, part])).get("code", -1)) == 0
