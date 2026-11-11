@@ -29,6 +29,12 @@ func set_pattern(shorts: Array) -> void:
 	pattern_systems = shorts.slice(0, 24)
 	colors = ArtColor.fallback_colors("emu:pattern")
 	queue_redraw()
+## Gradient only, no motif or sun: desktop app cards, where the app's icon is
+## the picture and the generated scenery behind it only adds noise.
+var plain := false:
+	set(v):
+		plain = v
+		queue_redraw()
 ## Draw the monogram (tiles set this; no title labels).
 var monogram := false:
 	set(v):
@@ -109,6 +115,8 @@ func _draw() -> void:
 		var t := clampf((p.x / w) * 0.55 + (1.0 - p.y / h) * 0.45, 0.0, 1.0)
 		cols.append(a.lerp(b, t))
 	draw_polygon(shape, cols)
+	if plain:
+		return
 	var decor: Array = []
 	match motif:
 		"waves":
