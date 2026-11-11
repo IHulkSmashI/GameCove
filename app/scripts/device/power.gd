@@ -1086,18 +1086,13 @@ func _clamp_to_source() -> void:
 
 func _report_battery(on_ac: bool) -> void:
 	var pct := -1
-	var dir := DirAccess.open(sys_root + "/sys/class/power_supply")
-	if dir != null:
-		var names := Array(dir.get_directories()) + Array(dir.get_files())
-		names.sort()
-		for n in names:
-			var d: String = sys_root + "/sys/class/power_supply/" + n + "/"
-			if DeviceScript.read_text(d + "type") == "Battery":
-				var c := DeviceScript.read_text(d + "capacity")
-				if c.is_valid_int():
-					pct = c.to_int()
-				_battery_status = DeviceScript.read_text(d + "status")
-				break
+	# the system battery (BAT*, else a Battery that isn't a gadget's): a gamepad at 5 % is not this box's charge
+	var d := DeviceScript.battery_path_at(sys_root)
+	if d != "":
+		var c := DeviceScript.read_text(d + "capacity")
+		if c.is_valid_int():
+			pct = c.to_int()
+		_battery_status = DeviceScript.read_text(d + "status")
 	if pct >= 0 and (pct != _battery_pct or _battery_resend):
 		_battery_resend = false
 		_battery_pct = pct

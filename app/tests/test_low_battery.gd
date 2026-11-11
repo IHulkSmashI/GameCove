@@ -216,6 +216,14 @@ func test_a_charging_battery_is_never_put_to_sleep() -> void:
 	FileAccess.open(root + "/sys/class/power_supply/BAT0/status", FileAccess.WRITE).store_string("Discharging\n")
 	power._report_battery(false)
 	ok(not power.battery_charging(), "status Discharging: on battery")
+	# a gamepad's battery (scope Device) that sorts before the box's own is not the box's charge
+	DirAccess.make_dir_recursive_absolute(root + "/sys/class/power_supply/AApad")
+	for f in [["type", "Battery"], ["capacity", "5"], ["scope", "Device"], ["status", "Discharging"]]:
+		FileAccess.open(root + "/sys/class/power_supply/AApad/" + f[0], FileAccess.WRITE).store_string(f[1] + "\n")
+	seen.clear()
+	power.request_battery_report()
+	power._report_battery(false)
+	eq(seen, [[4, false]], "the gamepad at 5 % is not reported as the system battery")
 	var l2: Node = Low.new()
 	l2.setup(power, null)
 	FileAccess.open(root + "/sys/class/power_supply/BAT0/status", FileAccess.WRITE).store_string("Charging\n")
