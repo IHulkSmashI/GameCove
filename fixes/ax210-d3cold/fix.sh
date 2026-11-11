@@ -35,7 +35,12 @@ cards() {
 
 hw_present() { [ -n "$(cards)" ]; }
 
-os_fixed() { gc_rule_elsewhere '0x2725' 'd3cold_allowed'; }
+# The system does it: its own rule (Bazzite's 50-intel-ax200-ax210-disable-d3cold-state.rules), or every AX210
+# already stays out of D3cold without GameCove's rule.
+os_fixed() {
+	gc_rule_elsewhere '0x2725' 'd3cold_allowed' && return 0
+	! gc_installed && gc_all_values "$(cards)" d3cold_allowed 0
+}
 
 apply_now() {
 	for c in $(cards); do

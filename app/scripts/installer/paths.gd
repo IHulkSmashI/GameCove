@@ -47,6 +47,18 @@ func env_conf() -> String:
 	return home + "/.config/environment.d/gamecove.conf"
 
 
+## Display settings gamescope reads at session start (rotation, the refresh-rate unlock, HDR):
+## written by the app (controls/display/session_env.gd), read by EVERY gamescope-session-plus
+## session, Steam Gaming Mode included. Uninstall takes it away (final review, session).
+func display_env_conf() -> String:
+	return home.path_join(preload("res://scripts/controls/display/session_env.gd").REL_PATH)
+
+
+## Where uninstall keeps a copy of it for "Keep my settings" (put back by the next install).
+func display_env_kept() -> String:
+	return data_dir() + "/display-session.conf"
+
+
 func unit_dir() -> String:
 	return home + "/.config/systemd/user"
 

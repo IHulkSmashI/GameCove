@@ -33,6 +33,7 @@ var game: Dictionary = {}
 var running := false
 var _front := true       # GameCove's window has focus (it has at start)
 var _menu := false       # the quick menu is open over the game
+var _away := false       # Steam's own screen is in front (ui/steam_trip.gd): the pad is Steam's
 var _other_sent := false # no game: we last told the Controller another window is in front
 
 
@@ -142,10 +143,17 @@ func sync_focus() -> void:
 		_call(controller, "set_game_focused", [other])
 
 
+## Steam's controller settings screen came in front (true) or went (false). While
+## it's there the controller is Steam's, whatever our window's focus says.
+func set_away(away: bool) -> void:
+	_away = away
+	sync_focus()
+
+
 func game_focused() -> bool:
-	return running and not (_front or _menu)
+	return running and (_away or not (_front or _menu))
 
 
 ## No game, and a window that isn't GameCove's has focus (the quick menu means ours does).
 func other_window_focused() -> bool:
-	return not running and not (_front or _menu)
+	return not running and (_away or not (_front or _menu))

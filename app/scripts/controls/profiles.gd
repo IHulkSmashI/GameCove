@@ -255,7 +255,7 @@ func _on_detected() -> void:
 		if game_key != "" or not restore_baseline():
 			apply_now("start")
 		if _restore_and_quit:
-			_after_worker(func(): get_tree().quit.call_deferred(0))
+			_after_worker(func(): _leave_and_quit.call_deferred())
 		return
 	var fresh := now.keys().filter(func(id): return not _seen_available.has(id))
 	_seen_available = now
@@ -464,6 +464,16 @@ func _set_game_layer(on: bool) -> void:
 
 
 ## Runs `fn` once everything queued on the Controls worker so far has run (inline in tests).
+## --restore-baseline, last step (main thread): the everyday values are back; now Power puts
+## back the TDP, boost and fan mode the handheld had before GameCove's session, then we quit.
+func _leave_and_quit() -> void:
+	var quit := func(): get_tree().quit(0)
+	if power != null and power.has_method("request_restore_before"):
+		power.request_restore_before(quit)
+	else:
+		quit.call()
+
+
 func _after_worker(fn: Callable) -> void:
 	if controls != null and controls.has_method("run_on_worker") and controls.get("sync_mode") != true:
 		controls.run_on_worker(fn)

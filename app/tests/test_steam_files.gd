@@ -251,6 +251,35 @@ func test_untouched_values_are_written_back_verbatim() -> void:
 	TempTree.remove_tree(home)
 
 
+## Start check: Godot logged "Unicode parsing error ... Unexpected NUL character" four times
+## on every start, because the reader marked unquoted tokens with char(0), which the compiler
+## folds into the script's constants. The marker is a bare quote now; unquoted tokens are
+## still never written back as they were (writers always quote).
+func test_unquoted_tokens_are_marked_without_a_nul() -> void:
+	var raws := PackedStringArray()
+	VDF.tokenize("\"a\"\n{\n\tplain\t\tword\n\t\"q\"\t\t\"\\\"x\"\n}\n", [], raws)
+	eq(Array(raws), ["a", "{", VDF.UNQUOTED + "plain", VDF.UNQUOTED + "word", "q", "\\\"x", "}"], "tokens as written")
+	for r in raws:
+		ok(r.to_utf8_buffer().find(0) < 0, "no NUL in " + r)
+	var parsed: Dictionary = VDF.parse_strict_raw("\"a\"\n{\n\tplain\t\tword\n\t\"q\"\t\t\"\\\"x\"\n}\n")
+	eq(parsed["tree"], {"a": {"plain": "word", "q": "\"x"}}, "values")
+	eq(VdfWriter.dump(parsed["tree"], 0, parsed["raw"]), "\"a\"\n{\n\t\"plain\"\t\t\"word\"\n\t\"q\"\t\t\"\\\"x\"\n}\n",
+		"unquoted ones come back quoted, the quoted one exactly as written")
+	# no script may build a NUL character: it is what Godot complains about when it compiles
+	var bad: Array[String] = []
+	var stack := ["res://scripts"]
+	while not stack.is_empty():
+		var dir: String = stack.pop_back()
+		for d in DirAccess.get_directories_at(dir):
+			stack.append(dir.path_join(d))
+		for f in DirAccess.get_files_at(dir):
+			if f.ends_with(".gd"):
+				var text := FileAccess.get_file_as_string(dir.path_join(f))
+				if text.contains("char(" + "0)") or text.contains("\\u00" + "00") or text.contains("String.chr(" + "0)"):
+					bad.append(dir.path_join(f))
+	eq(bad, [] as Array[String], "scripts that build a NUL character")
+
+
 ## Final review, low (saves and storage), and what it uncovered. Two ways a running Steam
 ## was missed, so a setting was written while Steam runs and silently overwritten at exit:
 ## - /proc files report a size of 0 and get_file_as_string() trusts the size, so on a real

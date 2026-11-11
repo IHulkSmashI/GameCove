@@ -4,7 +4,7 @@ extends SceneTree
 ## Shots: installer_welcome, installer_startup, installer_steam, installer_stores,
 ## installer_signin, installer_device, installer_look, installer_extras,
 ## installer_summary, installer_progress, installer_failed, installer_done,
-## installer_maintenance, installer_uninstall, installer_finish, installer_welcome_steamos,
+## installer_maintenance, installer_uninstall, installer_uninstall_backups, installer_finish, installer_welcome_steamos,
 ## installer_welcome_other, installer_welcome_light.
 
 var out := "/tmp/gamecove-shots/"
@@ -149,6 +149,20 @@ func _run() -> void:
 		await shot("installer_maintenance")
 		at("uninstall", "uninstall")
 		await shot("installer_uninstall")
+		# "Keep my settings" off with save backups on disk: their own switch, with count and size
+		var user := home + "/userdata/GameCove"
+		for g in ["epic_hades", "gog_witcher3", "epic_alanwake2"]:
+			DirAccess.make_dir_recursive_absolute(user + "/saves/backups/" + g)
+			for stamp in ["20261108-201500", "20261109-221000"]:
+				FileAccess.open(user + "/saves/backups/%s/%s.json" % [g, stamp], FileAccess.WRITE).store_string("{}")
+				var f := FileAccess.open(user + "/saves/backups/%s/%s-0.tar.gz" % [g, stamp], FileAccess.WRITE)
+				f.store_buffer(PackedByteArray().duplicate())
+				f.resize(7 * 1024 * 1024)
+		screen.installer.user_dir = user
+		screen.plan.set_choice("keep_settings", false)
+		screen.show_step()
+		screen.focus_first()
+		await shot("installer_uninstall_backups")
 	if want("installer_finish"):
 		await make(F.target("bazzite", {"installed": true, "maintenance": true, "pending": {"FIXES": "claw8ex-vrr,claw8ex-gyro"},
 			"state": {"version": "0.2.0", "method": "rpm-ostree", "stage": "live", "fixes": []}}))

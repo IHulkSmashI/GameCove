@@ -313,3 +313,29 @@ func test_samples_only_while_someone_uses_them() -> void:
 	m.stop()
 	p.free()
 	m.free()
+
+
+func _bat(dir: String, kv: Dictionary) -> String:
+	DirAccess.make_dir_recursive_absolute(dir)
+	for k in kv:
+		var f := FileAccess.open(dir + "/" + k, FileAccess.WRITE)
+		f.store_string(str(kv[k]) + "\n")
+		f.close()
+	return dir + "/"
+
+
+func test_claw_8_ex_battery_current_100x_too_high() -> void:
+	# ClawDeck HARDWARE-FINDINGS §6: the Claw 8 EX EC reports current_now about 100x too large and
+	# negative while discharging (-64.6 A at ~10 W, 15.4 V): telemetry.battery_watts divides >200 W by 100
+	var root := OS.get_user_data_dir().path_join("bat_fixture_%d" % Time.get_ticks_usec())
+	var b := _bat(root + "/BAT1", {"status": "Discharging", "current_now": -64600000, "voltage_now": 15400000})
+	var w := Sources.battery_watts(b)
+	ok(absf(w - 9.948) < 0.01, "about 9.9 W, not 995 W (%s)" % w)
+	b = _bat(root + "/BAT2", {"status": "Discharging", "current_now": 650000, "voltage_now": 15400000})
+	ok(absf(Sources.battery_watts(b) - 10.01) < 0.01, "a sane current_now is kept")
+	b = _bat(root + "/BAT3", {"status": "Discharging", "power_now": 12500000})
+	eq(Sources.battery_watts(b), 12.5, "power_now wins")
+	eq(Sources.battery_watts(_bat(root + "/BAT4", {"status": "Charging", "current_now": 1000000, "voltage_now": 15000000})), -1.0, "only while discharging")
+	eq(Sources.scale_fix(250.0), 2.5, "above 200 W: /100")
+	eq(Sources.scale_fix(-995.0), -9.95, "sign kept")
+	eq(Sources.scale_fix(45.0), 45.0, "real readings untouched")

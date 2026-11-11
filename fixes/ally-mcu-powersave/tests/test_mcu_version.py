@@ -35,7 +35,7 @@ class McuVersion(unittest.TestCase):
             hidraw(t, "hidraw1", "0003:00000B05:00001ABE", b"\x05\x01\x09\x06\x85\x01")  # keyboard, no 0x5a
             hidraw(t, "hidraw2", "0003:0000045E:0000028E", b"\x85\x5a")  # not ASUS
             hidraw(t, "hidraw3", "0003:00000B05:00001B4C", b"\x85\x5a")
-            self.assertEqual(mv.candidates(t), [("hidraw0", "ally", 319), ("hidraw3", "ally-x", 314)])
+            self.assertEqual(mv.candidates(t), [("hidraw0", "ally", 319), ("hidraw3", "ally-x", 313)])
 
     def test_no_mcu(self):
         with tempfile.TemporaryDirectory() as t:

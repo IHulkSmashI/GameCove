@@ -110,3 +110,6 @@ func _gyro_note(box: VBoxContainer) -> void:
 		b.pressed.connect(func(): SteamInput.open(g))
 		box.add_child(b)
 		parts.append(b)
+	elif not g.is_empty():
+		# a game Steam doesn't start: say why there's no button (one line)
+		box.add_child(SKit.note(SteamInput.why_not(g), "info", "NoSteamInput"))

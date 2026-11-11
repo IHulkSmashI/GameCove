@@ -14,6 +14,10 @@ extends Node
 ##                and every descendant: pressure-vessel, wine, the game). Only
 ##                our own user's processes, only that exact app id.
 ##                After GRACE_S, the same with KILL.
+##                The same for a non-Steam shortcut Steam started (an emulated
+##                game Steam ROM Manager added: `shortcut` true, its id is the
+##                shortcut's app id): Steam wraps it in the same reaper, and no
+##                scope of ours exists for it.
 ##   Our scoped games (umu / store launchers started in an
 ##                app-steam-app<id>-<n>.scope): `systemctl --user stop
 ##                app-steam-app<id>-*.scope`, which signals the whole scope.
@@ -49,7 +53,6 @@ exit 0"""
 var run: Callable = func(cmd: Array) -> int: return OS.create_process(str(cmd[0]), PackedStringArray(cmd.slice(1)))
 ## func(pid: int) -> bool. Swapped in tests.
 var alive: Callable = func(pid: int) -> bool: return pid > 0 and OS.is_process_running(pid)
-var _pending: Array = []
 
 
 static func _kill(sig: String, mode: String, arg: String) -> Array:
@@ -61,7 +64,11 @@ static func _kill(sig: String, mode: String, arg: String) -> Array:
 static func plan(game: Dictionary, app_id: int, pid: int) -> Array:
 	var now: Array = []
 	var later: Array = []
-	if str(game.get("store", "")) == "steam":
+	# Steam's own games, and non-Steam shortcuts Steam starts (Steam ROM Manager's
+	# emulated games: store "emu", shortcut true, id = the shortcut's app id). Steam
+	# wraps both in the same reaper, so both stop the same way. Keyed on `shortcut`,
+	# not on the store: an "emu" game we start ourselves has our scope or pid.
+	if str(game.get("store", "")) == "steam" or game.get("shortcut", false) == true:
 		var appid := str(game.get("id", app_id))
 		if not preload("res://scripts/steam/app_id.gd").valid(appid):
 			return [now, later]
@@ -83,19 +90,20 @@ func close(session: Object) -> bool:
 	var p := plan(session.game, int(session.app_id), int(session.pid))
 	for cmd in p[0]:
 		run.call(cmd)
-	_pending = p[1]
+	var later: Array = p[1]
 	var pid := int(session.pid)
-	if _pending.is_empty():
+	if later.is_empty():
 		return true
 	if not is_inside_tree():
 		return true
-	get_tree().create_timer(GRACE_S).timeout.connect(_hard.bind(session, pid))
+	# each close carries its own forced step (a second close, e.g. of a cancelled
+	# launch whose game showed up late, must not lose or cut short the first one's)
+	get_tree().create_timer(GRACE_S).timeout.connect(_hard.bind(session, pid, later))
 	return true
 
 
 ## After the grace period: force it, unless it's already gone.
-func _hard(session: Object, pid: int) -> void:
+func _hard(session: Object, pid: int, cmds: Array) -> void:
 	if (is_instance_valid(session) and session.is_active()) or alive.call(pid):
-		for cmd in _pending:
+		for cmd in cmds:
 			run.call(cmd)
-	_pending = []

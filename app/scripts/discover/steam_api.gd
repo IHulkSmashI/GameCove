@@ -13,6 +13,7 @@ extends RefCounted
 ##   64-bit SteamID (ISteamUser/ResolveVanityURL would need a key).
 
 const Cal := preload("res://scripts/discover/calendar.gd")
+const JsonField := preload("res://scripts/discover/json_field.gd")
 
 const API := "https://api.steampowered.com/"
 const CDN := "https://shared.akamai.steamstatic.com/store_item_assets/"
@@ -86,10 +87,10 @@ static func parse_wishlist(body: Variant) -> Variant:
 	if not d is Dictionary or not d.get("response") is Dictionary:
 		return null
 	var out: Array[Dictionary] = []
-	for it in d["response"].get("items", []):
-		if it is Dictionary and it.has("appid"):
-			out.append({"appid": str(int(it["appid"])), "priority": int(it.get("priority", 0)),
-				"added": int(it.get("date_added", 0))})
+	for it in JsonField.list(d["response"].get("items")):
+		if it is Dictionary and JsonField.i(it.get("appid")) > 0:
+			out.append({"appid": str(JsonField.i(it["appid"])), "priority": JsonField.i(it.get("priority")),
+				"added": JsonField.i(it.get("date_added"))})
 	return out
 
 
@@ -98,12 +99,12 @@ static func parse_wishlist(body: Variant) -> Variant:
 ## the only reliable URLs for them.
 static func art_from_assets(assets: Variant) -> Dictionary:
 	var out := {}
-	if not assets is Dictionary or not assets.has("asset_url_format"):
+	if not assets is Dictionary or JsonField.s(assets.get("asset_url_format")) == "":
 		return out
-	var fmt: String = assets["asset_url_format"]
+	var fmt: String = JsonField.s(assets["asset_url_format"])
 	for pair in [["cover", "library_capsule"], ["hero", "library_hero"], ["header", "header"], ["capsule", "main_capsule"]]:
-		if str(assets.get(pair[1], "")) != "":
-			out[pair[0]] = CDN + fmt.replace("${FILENAME}", assets[pair[1]])
+		if JsonField.s(assets.get(pair[1])) != "":
+			out[pair[0]] = CDN + fmt.replace("${FILENAME}", JsonField.s(assets[pair[1]]))
 	return out
 
 
@@ -119,9 +120,9 @@ static func fallback_art(appid: String) -> Dictionary:
 ## {"released": bool, "date": "YYYY-MM-DD"|"YYYY-MM"|"YYYY-Qn"|"YYYY"|"", "precision": ...}.
 static func release_from(rel: Variant, is_coming_soon: bool) -> Dictionary:
 	var r: Dictionary = rel if rel is Dictionary else {}
-	var soon := is_coming_soon or bool(r.get("is_coming_soon", false))
-	var stamp := int(r.get("steam_release_date", 0))
-	var precision: String = PRECISION.get(str(r.get("coming_soon_display", "")), "day" if stamp > 0 else "tba")
+	var soon: bool = is_coming_soon or r.get("is_coming_soon") == true
+	var stamp := JsonField.i(r.get("steam_release_date"))
+	var precision: String = PRECISION.get(JsonField.s(r.get("coming_soon_display")), "day" if stamp > 0 else "tba")
 	if stamp <= 0:
 		precision = "tba"
 	return {"released": not soon, "date": Cal.date_label(stamp, precision) if stamp > 0 else "",
@@ -139,32 +140,32 @@ static func parse_items(body: Variant) -> Dictionary:
 	var out := {}
 	if not d is Dictionary or not d.get("response") is Dictionary:
 		return out
-	for it in d["response"].get("store_items", []):
-		if not it is Dictionary or int(it.get("success", 0)) != 1:
+	for it in JsonField.list(d["response"].get("store_items")):
+		if not it is Dictionary or JsonField.i(it.get("success")) != 1:
 			continue
-		var appid := str(int(it.get("appid", it.get("id", 0))))
+		var appid := str(JsonField.i(it.get("appid", it.get("id"))))
 		var info := {
-			"appid": appid, "title": str(it.get("name", "")).strip_edges(),
+			"appid": appid, "title": JsonField.s(it.get("name")).strip_edges(),
 			"price": null, "regular_price": null, "savings_pct": 0, "price_text": "", "regular_text": "",
-			"sale_ends_at": null, "free": bool(it.get("is_free", false)),
+			"sale_ends_at": null, "free": it.get("is_free") == true,
 			"art": art_from_assets(it.get("assets")),
-			"release": release_from(it.get("release"), bool(it.get("is_coming_soon", false))),
+			"release": release_from(it.get("release"), it.get("is_coming_soon") == true),
 			"reviews": preload("res://scripts/steam/insights_api.gd").reviews_from(it),
 		}
 		var bpo = it.get("best_purchase_option")
-		if bpo is Dictionary and bpo.has("final_price_in_cents"):
-			var final := int(str(bpo["final_price_in_cents"])) / 100.0
-			var orig := int(str(bpo.get("original_price_in_cents", bpo["final_price_in_cents"]))) / 100.0
+		if bpo is Dictionary and JsonField.s(bpo.get("final_price_in_cents")).is_valid_float():
+			var final := JsonField.i(bpo["final_price_in_cents"]) / 100.0
+			var orig := (JsonField.i(bpo["original_price_in_cents"]) if JsonField.s(bpo.get("original_price_in_cents")).is_valid_float() else JsonField.i(bpo["final_price_in_cents"])) / 100.0
 			info["price"] = final
 			info["regular_price"] = maxf(orig, final)
-			info["price_text"] = str(bpo.get("formatted_final_price", ""))
-			info["regular_text"] = str(bpo.get("formatted_original_price", info["price_text"]))
-			info["savings_pct"] = int(bpo.get("discount_pct", 0))
+			info["price_text"] = JsonField.s(bpo.get("formatted_final_price"))
+			info["regular_text"] = JsonField.s(bpo.get("formatted_original_price")) if JsonField.s(bpo.get("formatted_original_price")) != "" else str(info["price_text"])
+			info["savings_pct"] = JsonField.i(bpo.get("discount_pct"))
 			if info["savings_pct"] == 0 and orig > final and orig > 0:
 				info["savings_pct"] = int(round((1.0 - final / orig) * 100.0))
-			for disc in bpo.get("active_discounts", []):
-				if disc is Dictionary and int(disc.get("discount_end_date", 0)) > 0:
-					var end := int(disc["discount_end_date"])
+			for disc in JsonField.list(bpo.get("active_discounts")):
+				if disc is Dictionary and JsonField.i(disc.get("discount_end_date")) > 0:
+					var end := JsonField.i(disc["discount_end_date"])
 					info["sale_ends_at"] = end if info["sale_ends_at"] == null else mini(info["sale_ends_at"], end)
 		out[appid] = info
 	return out

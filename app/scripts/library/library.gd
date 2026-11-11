@@ -205,17 +205,30 @@ func refresh_store(store_name: String) -> void:
 func _apply(result: Dictionary) -> void:
 	WorkerThreadPool.wait_for_task_completion(_task)
 	_task = -1
-	if _task_store == "":
+	take(result, _task_store)
+	if _again:
+		_again = false
+		refresh()
+
+
+## A scan's result becomes the library: all of it (`store_name` ""), or one
+## store's part of it.
+func take(result: Dictionary, store_name: String) -> void:
+	if store_name == "":
 		games = result["games"]
 		_entries = result["entries"]
 	else:
-		var merged := merge_store(games, _entries, result, _task_store)
+		var merged := merge_store(games, _entries, result, store_name)
 		games = merged["games"]
 		_entries = merged["entries"]
 	if result.has("emulation"):
 		emulation = result["emulation"]
 	if result.has("imported"):
-		collections.set_imported(result["imported"])
+		# A one-store rescan only saw that store's entries: a Steam-only one (after an
+		# install or uninstall) knew no shortcut, so the shortcuts hidden in Steam
+		# dropped off the hidden list and came back on every screen. The list is
+		# completed from every entry we hold now.
+		collections.set_imported(with_hidden_entries(result["imported"], _entries))
 	changed.emit()
 	if store != null:
 		store.on_library_scanned(_entries)
@@ -223,9 +236,6 @@ func _apply(result: Dictionary) -> void:
 		metadata.queue_games(games)
 	if artwork != null:
 		artwork.auto_fill(games)
-	if _again:
-		_again = false
-		refresh()
 
 
 ## `games`/`entries` with every game of `store_name` replaced by a one-store
@@ -318,10 +328,17 @@ static func collect(home_dir: String, db_path: String, only: Array = []) -> Dict
 static func imported_lists(home_dir: String, entries: Dictionary) -> Dictionary:
 	var file := Collections.steam_cloud_file(home_dir, Steam.STEAM_ROOTS)
 	var parsed := Collections.parse_steam_cloud(FileAccess.get_file_as_string(file)) if file != "" else {}
-	var imp := Collections.steam_to_keys(parsed)
+	return with_hidden_entries(Collections.steam_to_keys(parsed), entries)
+
+
+## `imp` (imported_lists' shape) with every entry Steam hides (a shortcut's
+## IsHidden) on its hidden list. `entries`: the Library's entries by key.
+static func with_hidden_entries(imp: Dictionary, entries: Dictionary) -> Dictionary:
+	var hidden: Array = imp.get("hidden", [])
 	for k in entries:
-		if entries[k].get("hidden_in_steam", false) and not k in imp["hidden"]:
-			imp["hidden"].append(k)
+		if entries[k].get("hidden_in_steam", false) and not k in hidden:
+			hidden.append(k)
+	imp["hidden"] = hidden
 	return imp
 
 

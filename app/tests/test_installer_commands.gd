@@ -16,9 +16,12 @@ func _choices(target: Dictionary) -> Dictionary:
 
 
 func test_rpm_ostree_commands() -> void:
-	eq(C.rpm_install("/dl/g.rpm"), ["pkexec", "rpm-ostree", "install", "--idempotent", "--apply-live", "/dl/g.rpm"])
-	eq(C.rpm_install("/dl/g.rpm", false), ["pkexec", "rpm-ostree", "install", "--idempotent", "/dl/g.rpm"])
-	eq(C.rpm_uninstall(), ["pkexec", "rpm-ostree", "uninstall", "gamecove"])
+	var ri := C.rpm_install("/dl/g.rpm")
+	eq([ri[0], ri[1], ri[2], ri[4], ri[5]], ["pkexec", "sh", "-c", "sh", "/dl/g.rpm"], "one root command, the package path as an argument")
+	ok(ri[3].begins_with("set -e; rpm-ostree install --idempotent --apply-live \"$1\"; "), "the layer first: " + ri[3])
+	ok(C.rpm_install("/dl/g.rpm", false)[3].begins_with("set -e; rpm-ostree install --idempotent \"$1\"; "), "staged when live apply isn't possible")
+	ok(ri[3].ends_with(C.GUARD_INSTALL), "then the autologin guard into /etc (Bazzite too)")
+	ok(C.rpm_uninstall()[3].ends_with("exec rpm-ostree uninstall gamecove") and C.rpm_uninstall()[3].contains("rm -f /etc/systemd/system/multi-user.target.wants/gamecove-autologin-guard.service"), "uninstall takes the guard along")
 	eq(C.rpm_update("/dl/n.rpm"), ["pkexec", "rpm-ostree", "uninstall", "gamecove", "--install", "/dl/n.rpm"])
 
 
@@ -48,7 +51,7 @@ func test_sysext_commands() -> void:
 	eq(C.sysext_remove(true).back(), "purge")
 	var rr := C.rpm_remove(true)
 	eq(rr[0], "pkexec")
-	ok(rr[3].begins_with("rm -rf /var/lib/gamecove && exec rpm-ostree uninstall gamecove"), "rpm-ostree: state, then the layer, one password")
+	ok(rr[3].begins_with("rm -rf /var/lib/gamecove && ") and rr[3].ends_with("exec rpm-ostree uninstall gamecove"), "rpm-ostree: state, then the layer, one password")
 	eq(C.rpm_remove(false), C.rpm_uninstall(), "fixes kept: their state stays too")
 
 
@@ -175,9 +178,52 @@ func test_xess_driver_option() -> void:
 ## Review H4: the root autologin guard is copied out of the sysext into /etc (kept across OS
 ## updates) and removed with it.
 func test_sysext_installs_the_autologin_guard_into_etc() -> void:
-	ok(C.SYSEXT_INSTALL.contains("install -D -m 0755 /usr/lib/gamecove/session/gamecove-autologin-guard /etc/gamecove/autologin-guard"), "script copied into /etc")
+	ok(C.SYSEXT_INSTALL.contains("install -D -m 0755 \"$src/gamecove-autologin-guard\" /etc/gamecove/autologin-guard"), "script copied into /etc")
 	ok(C.SYSEXT_INSTALL.contains("ln -sfn " + C.GUARD_UNIT + " " + C.GUARD_LINK), "unit enabled")
 	ok(C.SYSEXT_INSTALL.contains(C.GUARD_SCRIPT + " " + C.GUARD_UNIT + " " + C.GUARD_LINK + " " + C.SYSEXT_ENABLED_MARK + " > " + C.SYSEXT_KEEP), "kept across SteamOS updates")
 	for f in [C.GUARD_LINK, C.GUARD_UNIT, C.GUARD_SCRIPT]:
 		ok(C.SYSEXT_REMOVE.contains(f), "removed with GameCove: " + f)
 
+
+
+## Final review: (session) Bazzite got no root autologin guard, so `rpm-ostree uninstall gamecove` by
+## hand with GameCove as the boot default left the login screen at a password prompt; (low) the
+## SteamOS install ended the guard's copy in `|| true`, hiding a failure. The copy runs for real
+## here, against a temp folder standing in for / (systemctl isn't there to call).
+func _guard_run(root: String) -> int:
+	var text: String = C.GUARD_INSTALL.replace("/ostree/deploy/*/deploy/*/usr/lib/gamecove/session", "@STAGED@") \
+		.replace("/usr/lib/gamecove/session", root + "/usr/lib/gamecove/session").replace("/etc/", root + "/etc/") \
+		.replace("@STAGED@", root + "/ostree/deploy/*/deploy/*/usr/lib/gamecove/session")
+	var script := root + "/guard-install.sh"
+	FileAccess.open(script, FileAccess.WRITE).store_string("set -e\nsystemctl() { return 1; }\n" + text + "\n")
+	return int(preload("res://scripts/system/exec_safe.gd").run("sh", PackedStringArray([script])).get("code", -1))
+
+
+func _guard_root(n: String, src: String) -> String:
+	var root := ProjectSettings.globalize_path("user://test_installer_guard/" + n)
+	preload("res://scripts/installer/user_files.gd").remove_tree(root, ProjectSettings.globalize_path("user://test_installer_guard"))
+	DirAccess.make_dir_recursive_absolute(root + "/etc")
+	if src != "":
+		DirAccess.make_dir_recursive_absolute(root + src)
+		FileAccess.open(root + src + "/gamecove-autologin-guard", FileAccess.WRITE).store_string("#!/bin/sh\n# from " + src + "\n")
+		FileAccess.open(root + src + "/gamecove-autologin-guard.service", FileAccess.WRITE).store_string("[Unit]\n")
+	return root
+
+
+func test_autologin_guard_install_runs_for_real() -> void:
+	var live := _guard_root("live", "/usr/lib/gamecove/session")
+	eq(_guard_run(live), 0, "live package: copied from /usr")
+	ok(FileAccess.get_file_as_string(live + "/etc/gamecove/autologin-guard").contains("from /usr/lib/gamecove/session"), "the script is in /etc")
+	ok(FileAccess.file_exists(live + "/etc/systemd/system/gamecove-autologin-guard.service"), "the unit too")
+	var link := DirAccess.open(live + "/etc/systemd/system/multi-user.target.wants")
+	ok(link != null and link.is_link("gamecove-autologin-guard.service"), "and it is enabled")
+	var staged := _guard_root("staged", "/ostree/deploy/default/deploy/abc123.0/usr/lib/gamecove/session")
+	eq(_guard_run(staged), 0, "package only staged for the next boot: copied from the new deployment")
+	ok(FileAccess.get_file_as_string(staged + "/etc/gamecove/autologin-guard").contains("from /ostree/deploy/default/deploy/abc123.0"), "taken from the staged deployment")
+	var none := _guard_root("none", "")
+	ok(_guard_run(none) != 0, "no guard to copy: the install step fails instead of hiding it")
+	ok(not FileAccess.file_exists(none + "/etc/gamecove/autologin-guard"), "and nothing half-made is left")
+	# both installs use it, with nothing after it that could hide a failure
+	ok(C.SYSEXT_INSTALL.contains(C.GUARD_INSTALL + "; systemctl reload polkit.service"), "SteamOS install: the same copy, under set -e")
+	ok(not C.SYSEXT_INSTALL.contains(C.GUARD_UNIT + " && "), "no && chain ending in || true")
+	ok(C.SYSEXT_INSTALL.begins_with("set -e; ") and C.rpm_install("/x.rpm")[3].begins_with("set -e; "), "both stop on a failed step")

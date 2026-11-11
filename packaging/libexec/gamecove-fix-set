@@ -28,6 +28,10 @@
 #   claw8ex-gyro | claw8ex-buttons  set refresh  rebuild GameCove's InputPlumber override from the
 #                                                current stock file after an OS update (or drop it
 #                                                if the new layout can't be edited); nothing else
+#   claw8ex-vrr   set refresh                    after a SteamOS update: put the VRR fix's one marked
+#                                                line back into /etc/default/grub (the fix was already
+#                                                installed with the password; only when its kept files
+#                                                are all there, else the fix is taken out); nothing else
 #   controller-led set off | <zone>,<rrggbb>,<percent>[,<effect>[,<speed>]]
 #                                                handheld RGB lights (kernel LED class);
 #                                                fix.sh checks every field strictly
@@ -73,7 +77,7 @@ run_bounded() {
 }
 
 usage() {
-	echo "usage: gamecove-fix-set charge-limit|fan|claw8ex-gyro|claw8ex-buttons|controller-led|controller-rumble|power-tune set <value>" >&2
+	echo "usage: gamecove-fix-set charge-limit|fan|claw8ex-gyro|claw8ex-buttons|claw8ex-vrr|controller-led|controller-rumble|power-tune set <value>" >&2
 	echo "       gamecove-fix-set <name> status" >&2
 	echo "install and remove need an administrator: pkexec /usr/libexec/gamecove/gamecove-fix" >&2
 	exit 64
@@ -89,7 +93,7 @@ name="$1"
 action="$2"
 
 case "$name" in
-charge-limit | fan | claw8ex-gyro | claw8ex-buttons | controller-led | controller-rumble | power-tune) ;;
+charge-limit | fan | claw8ex-gyro | claw8ex-buttons | claw8ex-vrr | controller-led | controller-rumble | power-tune) ;;
 *) die "fix '$name' can't be changed without a password; use gamecove-fix" 65 ;;
 esac
 
@@ -127,7 +131,7 @@ power-tune:boost:* | power-tune:epp:* | power-tune:governor:* | \
 	[ "${#value}" -le 48 ] || die "value not allowed for $name" 66
 	;;
 claw8ex-gyro:accel-on | claw8ex-gyro:accel-off) ;;
-claw8ex-gyro:refresh | claw8ex-buttons:refresh) ;;
+claw8ex-gyro:refresh | claw8ex-buttons:refresh | claw8ex-vrr:refresh) ;;
 controller-led:off) ;;
 controller-led:*[!a-z0-9,]*) die "value not allowed for $name" 66 ;;
 controller-rumble:off | controller-rumble:low | controller-rumble:medium | controller-rumble:high) ;;

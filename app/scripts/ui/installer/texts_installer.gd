@@ -16,6 +16,7 @@ const TITLE := "GameCove Installer"
 const NEXT := "Continue"
 const BACK := "Back"
 const SKIP := "Skip"
+const SKIP_STORES := "Skip for now"
 const INSTALL := "Install"
 const APPLY := "Apply changes"
 const REMOVE := "Remove GameCove"
@@ -67,7 +68,7 @@ const DETECTED := "DETECTED HANDHELD"
 const WHAT_WILL_HAPPEN := "WHAT WILL HAPPEN"
 const LOCKUP_LINE := "LINUX HANDHELD INSTALLER"
 const SWITCH_STEP := "Switch step"
-const MODE_EASY_LINE := "Tested defaults for your %s on %s: boots into GameCove with Steam quietly in the background, adds the device fixes, keeps your store sign-ins, and helps you get free game art. You see a summary before anything changes."
+const MODE_EASY_LINE := "Tested defaults for your %s on %s: boots into GameCove with Steam quietly in the background, adds the device fixes, lets you sign in to Epic, GOG and Amazon (or skip that), and helps you get free game art. You see a summary before anything changes."
 const MODE_CUSTOM := "Custom"
 const MODE_CUSTOM_LINE := "Go through every option yourself: startup, how Steam runs, each device fix, power defaults, theme, game art and the optional extras."
 const NO_PACKAGE := "The download for this system is missing. Run the install command again to fetch it."
@@ -112,7 +113,7 @@ const BROWSER_SIGNIN := "Browser sign-in"
 const SIGN_IN_BROWSER := "Sign in (opens your browser)"
 const STORE_READY := "Ready: games show up in your library"
 const STORE_NOT_HERE := "Can't sign in from here"
-const STORES_LATER := "You can skip this and connect stores later in Settings."
+const STORES_LATER := "You can skip this and connect stores later, with your controller: Settings > Stores > Accounts in GameCove."
 const STORE_ROW_LINE := {
 	"signed": "Signed in%s.",
 	"code": "Opens the sign-in page in your browser.",
@@ -309,7 +310,16 @@ const UNINSTALL_LINE := "Steam Gaming Mode becomes the default again, GameCove c
 const REMOVE_FIXES := "Undo device fixes too"
 const REMOVE_FIXES_LINES := {true: "Every fix GameCove installed is removed, as if it was never there.", false: "Fixes stay in place; they work without GameCove."}
 const KEEP_SETTINGS := "Keep my settings"
-const KEEP_SETTINGS_LINES := {true: "Settings and sign-ins stay, so installing again picks up where you left off.", false: "GameCove's settings and downloads are deleted too. Store sign-ins belong to the store tools and stay."}
+const KEEP_SETTINGS_LINES := {true: "Settings and sign-ins stay, so installing again picks up where you left off.", false: "GameCove's settings, downloaded art and lists are deleted. Art we changed in Steam goes back to what you had. Store sign-ins belong to the store tools and stay."}
+## Added to the Off line when there are save backups: they aren't settings, so they have their own switch.
+const KEEP_SETTINGS_SAVES := " Your save backups stay unless you turn on the switch below."
+const REMOVE_SAVE_BACKUPS := "Delete save backups too"
+## %s: backups_text(), e.g. "12 save backups of 4 games (1.3 GB)"; second %s in the Off line: the folder.
+const REMOVE_SAVE_BACKUPS_LINES := {false: "We keep your %s in %s. Install GameCove again and they're back on each game's page.", true: "Your %s are deleted for good. The games' own saves and your cloud saves aren't touched."}
+
+
+static func backups_text(backups: int, games: int, size: String) -> String:
+	return "%d save backup%s of %d game%s (%s)" % [backups, "" if backups == 1 else "s", games, "" if games == 1 else "s", size]
 
 # ---- finish
 const FINISH_TITLE := "Finish setting up"

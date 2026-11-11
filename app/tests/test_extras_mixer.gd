@@ -30,7 +30,7 @@ func test_app_mixer_lists_apps_with_volume() -> void:
 	var s := _env("mixer_list")
 	var apps: Array = AudioProvider.new().app_mixer(s.ctx)
 	eq(apps.size(), 3, "three apps")
-	eq(apps[0], {"id": 70, "name": "Hades II", "volume": 100.0, "muted": false}, "the game")
+	eq(apps[0], {"id": 70, "name": "Hades II", "stream": "Hades II", "volume": 100.0, "muted": false}, "the game")
 	eq(apps[1]["name"], "Spotify", "first Spotify")
 	eq(apps[1]["muted"], true, "muted")
 	eq(apps[2]["name"], "Spotify 2", "a second app with the same name is told apart")
@@ -76,6 +76,34 @@ func test_widget_empty_and_failed() -> void:
 	m.failed.connect(func(t): got.append(t))
 	m.set_volume(99, 50.0)
 	eq(got, [TX.MIXER_FAILED], "a vanished app says so")
+	m.free()
+	s.reg.free()
+
+
+## Final review (Low): the mixer reads once; PipeWire reuses a finished stream's
+## id, so a slider moved later could set another app's volume.
+func test_a_stale_stream_id_never_sets_another_apps_volume() -> void:
+	var s := _env("mixer_stale")
+	var m: VBoxContainer = AppMixer.new()
+	m.setup(s.reg)
+	eq(m.rows[1].title_label.text, "Spotify", "the row was built for Spotify (id 71)")
+	# Spotify stops; a call starts and PipeWire gives it id 71
+	s.fake.streams = [{"id": 70, "name": "Hades II", "volume": 1.0}, {"id": 71, "name": "Discord", "volume": 0.8}]
+	var got := []
+	m.failed.connect(func(t): got.append(t))
+	m.rows[1].changed.emit(10.0)
+	eq(s.fake.streams[1]["volume"], 0.8, "the other app's volume is left alone")
+	eq(got, [TX.MIXER_FAILED], "the row says its app stopped playing")
+	eq(m.rows.map(func(r): return r.title_label.text), ["Hades II", "Discord"], "and the list is read again")
+	m.rows[1].changed.emit(10.0)
+	eq(s.fake.streams[1]["volume"], 0.1, "the new row sets its own app")
+	# an id that now belongs to a device, not an app
+	s.fake.streams = [{"id": 70, "name": "Hades II", "volume": 1.0}]
+	var p := AudioProvider.new()
+	ok(not p.set_app_volume(s.ctx, 48, "Speaker", 5.0), "a sink's id is never an app's")
+	eq(s.fake.sinks[0]["volume"], 0.4, "main volume untouched")
+	ok(p.set_app_volume(s.ctx, 70, "Hades II", 50.0), "the same app still works")
+	eq(s.fake.streams[0]["volume"], 0.5, "set")
 	m.free()
 	s.reg.free()
 

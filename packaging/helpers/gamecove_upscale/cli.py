@@ -17,6 +17,8 @@ Prints one JSON object on stdout and exits 0 (also for {"ok": false, "error": ..
               upscalers index first (GameCove's background check, at most daily, and the Check button)
   update      every downloaded component that has a newer version ([--component ID] for one); games keep theirs
   game-update --key KEY: GameCove's OptiScaler in this game (and its REFramework) up to the newest, settings kept
+  fsr4-rollback  the FSR 4.1.2 XMX files in ~/fsr4-xmx back to the set before the last update (the one replaced is
+                 kept in its place, so running it again returns to the newer set)
 
 Which versions: the newest from GameCove's signed upscalers index (mirror.py), fetched before anything is
 installed; without a verified index, the tested pins in data/versions.json. Every file is sha256 checked.
@@ -31,9 +33,13 @@ import sys
 from . import framegen, games, launchenv, livedb, mirror, optiscaler, upkeep, xess
 
 COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency", "xess-install", "xess-remove",
-            "check", "update", "game-update")
+            "check", "update", "game-update", "fsr4-rollback")
 # commands that may download: the signed index is fetched (at most every mirror.FRESH_S) before they run
 INSTALLS = ("choose", "apply", "xess-install", "game-update")
+# commands that first do what ClawDeck does at every plugin start (games.xmx_upkeep): Protons added since the XeSS
+# XMX driver was installed get the per-game scope, and the FSR 4.1.2 XMX files that came with the package go to
+# ~/fsr4-xmx when they aren't there. Not "status" / "latency": those only read.
+XMX_UPKEEP = ("state", "recommend", "check", "choose", "apply", "update", "game-update")
 
 
 def _state(home: str, gpu: dict) -> dict:
@@ -46,6 +52,7 @@ def _state(home: str, gpu: dict) -> dict:
             "decky_framegen": framegen.state(home),
             "xess": xess.state(home) if games.vendor(gpu) == "intel" else None,
             "fsr4_xmx_missing": optiscaler.fsr4_xmx_missing(home),
+            "fsr4_xmx_set": {**optiscaler.fsr4_xmx_set(home), "packaged": (optiscaler.fsr4_packaged() or {}).get("version")},
             "fsr4_amd_missing": optiscaler.fsr4_amd_missing(home),
             "upscalers": games.upscalers_for(gpu), "frame_gens": games.fg_for(gpu), "vendor": games.vendor(gpu),
             "index": mirror.status(home)}
@@ -90,12 +97,16 @@ def run(argv: list[str]) -> dict:
         raise ValueError(f"{a.command} needs --key")
     if a.command in INSTALLS and not (a.command == "choose" and a.upscaler == "own"):
         mirror.refresh(home)
+    if a.command in XMX_UPKEEP:
+        games.xmx_upkeep(home, gpu)
     if a.command == "check":
         return upkeep.check(home, gpu, refresh=a.online)
     if a.command == "update":
         return upkeep.update(home, gpu, a.component)
     if a.command == "game-update":
         return games.game_update(home, a.key, gpu, a.dir)
+    if a.command == "fsr4-rollback":
+        return optiscaler.fsr4_xmx_rollback(home)
     if a.command == "recommend":
         return {"ok": True, **games.recommend(home, a.key, gpu, a.dir, a.name, a.online)}
     if a.command == "status":

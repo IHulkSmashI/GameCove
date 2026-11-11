@@ -105,7 +105,7 @@ echo "curl \$*" >>"$T/curl-calls"
 out=""
 while [ \$# -gt 0 ]; do case "\$1" in -o) out="\$2"; shift ;; esac; url="\$1"; shift; done
 case "\$url" in
-*/releases\?per_page=1) printf '[{"tag_name": "v0.1.0", "prerelease": true}]\n' ;;
+*/releases\?per_page=100) printf '[{"tag_name": "upscalers", "prerelease": false},{"tag_name": "v0.1.0", "prerelease": true}, {"tag_name": "v0.0.9", "prerelease": true}]\n' ;;
 */packaging/get-gamecove.sh) cp "$T/get.sh" "\$out" ;;
 *) exit 22 ;;
 esac
@@ -121,7 +121,7 @@ EOF
 chmod +x "$T/bin/curl" "$T/get.sh"
 export GAMECOVE_TESTBED_CURL="$T/bin/curl" GAMECOVE_API=https://api.example GAMECOVE_TESTBED_RAW=https://raw.example
 out="$(DISPLAY=:9 sh "$S" install 2>&1)" && ok || bad "install runs ($out)"
-grep -q "releases?per_page=1" "$T/curl-calls" && ok || bad "no tag: asks the release list (pre-releases included)"
+grep -q "releases?per_page=100" "$T/curl-calls" && ok || bad "no tag: asks the release list (pre-releases included)"
 grep -q "raw.example/IHulkSmashI/GameCove/v0.1.0/packaging/get-gamecove.sh" "$T/curl-calls" && ok || bad "downloads the tag's own get-gamecove.sh"
 ilog="$(ls "$T"/home/gamecove-tests/install-*.log 2>/dev/null | head -n 1)"
 [ -n "$ilog" ] && ok || bad "install writes a log"

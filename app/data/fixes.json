@@ -46,9 +46,10 @@
     "msi-claw-a8": "AMD GPU: the boot hook runs before xe/i915 only, and the A8's panel EDID isn't in the validated list."
    },
    "bazzite": "Not fixed.",
-   "steamos": "Not supported on SteamOS.",
+   "steamos": "Not fixed. The fix works there too: the switch goes on one marked line in /etc/default/grub (update-grub), its files are keep-listed for SteamOS updates, and GameCove puts the line back after an update. Only offered where the GPU driver starts after /etc is there.",
    "sources": [
     "ClawDeck docs/HARDWARE-FINDINGS.md section 11",
+    "ClawDeck py_modules/clawdeck/edid.py at 4cf5cf9 (boot_backend steamos-grub, conf_enable, steamos_after_update; checked by a tester on SteamOS 3.9.5)",
     "fixes/claw8ex-vrr/README.md"
    ],
    "page": "fixes"
@@ -217,7 +218,7 @@
   {
    "id": "ally-mcu-powersave",
    "title": "Less drain while asleep",
-   "line": "Lets the controller chip power down in sleep. Needs controller firmware 319+ (Ally X 314+); checked first.",
+   "line": "Lets the controller chip power down in sleep. Needs controller firmware 319+ (Ally X 313+); checked first.",
    "symptom": "The Ally loses more battery asleep than it needs to while MCU powersave is off.",
    "kind": "file",
    "password": "admin",
@@ -254,6 +255,45 @@
    "sources": [
     "https://github.com/ublue-os/bazzite/issues/5581",
     "https://github.com/ChimeraOS/gamescope-session/pull/128"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "journal-flood",
+   "title": "Quiet system log",
+   "line": "Stops steamos-manager filling the system log with split-lock lines, so older logs aren't wiped.",
+   "symptom": "steamos-manager hands every split-lock hit to a crash reporter Bazzite doesn't have; each hit and each failure is logged (about 70,000 lines in five minutes on a Claw 8 EX, 14 % of a CPU core), so the capped journal loses every earlier boot within minutes.",
+   "kind": "file",
+   "password": "admin",
+   "restart": "",
+   "auto": [],
+   "optional": "*",
+   "why": "Any handheld with steamos-manager but without Valve's steamos-log-submitter (Bazzite); the fix checks for both, so it is offered everywhere.",
+   "bazzite": "Not fixed: Bazzite ships steamos-manager without steamos-log-submitter.",
+   "steamos": "Not needed: SteamOS has steamos-log-submitter, which takes the hits.",
+   "sources": [
+    "ClawDeck py_modules/clawdeck/quietlog.py and docs/HARDWARE-FINDINGS.md (measured on a Claw 8 EX, 2026-11-04)",
+    "https://gitlab.steamos.cloud/holo/steamos-manager/-/blob/a3b2013/steamos-manager/src/sls/ftrace.rs (split_lock_warn trace, forwarded to the log submitter)"
+   ],
+   "page": "fixes"
+  },
+  {
+   "id": "overlay-power",
+   "title": "Watts in the overlay",
+   "line": "Shows real CPU watts in the performance overlay. Any program can then read the power counter.",
+   "symptom": "The performance overlay shows 0.0 W for the CPU on Intel handhelds: the RAPL energy counter it reads is root-only since 2020.",
+   "kind": "file",
+   "password": "admin",
+   "restart": "",
+   "auto": [],
+   "optional": "cpu_vendor:intel",
+   "why": "Every Intel chip's RAPL package counter (intel-rapl:0, intel-rapl-mmio:0) is mode 0400 since Linux closed the PLATYPUS power side channel (CVE-2020-8694).",
+   "bazzite": "Not changed (the kernel's 0400 default).",
+   "steamos": "Not changed (the kernel's 0400 default).",
+   "sources": [
+    "ClawDeck py_modules/clawdeck/telemetry.py and docs/HARDWARE-FINDINGS.md (measured on a Claw 8 EX)",
+    "https://nvd.nist.gov/vuln/detail/CVE-2020-8694",
+    "https://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html"
    ],
    "page": "fixes"
   },

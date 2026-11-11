@@ -631,6 +631,14 @@ func test_game_closer_plan() -> void:
 	eq(scoped[1], [["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "KILL", "pid", "4242"]], "pid forced later")
 	eq(GC.plan(_epic_game(true), 0, 0), [[], []], "nothing to close")
 	eq(GC.plan({"store": "steam", "id": "42 -x"}, 0, 0), [[], []], "a bad Steam id closes nothing")
+	# final review High 7: Steam ROM Manager's games are Steam shortcuts (store "emu"): Steam's reaper, by the shortcut's id
+	var rom := {"key": "emu:2789567361", "store": "emu", "id": "2789567361", "shortcut": true}
+	var srm: Array = GC.plan(rom, 2789567361, 0)
+	eq(srm[0], [["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "TERM", "steam", "2789567361"]], "a shortcut Steam started: its reaper, like a Steam game")
+	eq(srm[1], [["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "KILL", "steam", "2789567361"]], "then force")
+	var direct: Array = GC.plan({"key": "emu:rom1", "store": "emu", "id": "rom1", "shortcut": false}, 3000000123, 4242)
+	eq(direct[0][0], ["systemctl", "--user", "stop", "app-steam-app3000000123-*.scope"], "an emulated game we start ourselves (not a shortcut): our scope, never Steam's path")
+	eq(GC.plan({"key": "emu:frontend", "store": "emu", "id": "frontend"}, 0, 4242)[0], [["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "TERM", "pid", "4242"]], "the frontend: its process")
 	var c: Node = GC.new()
 	var ran: Array = []
 	c.run = func(cmd: Array) -> int:
