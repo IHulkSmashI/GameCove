@@ -380,3 +380,34 @@ def test_only_the_fsr4_models_of_the_xmx_build_are_ever_selected():
     for f in ("README.md", "CREDITS.md"):
         text = open(os.path.join(root, f), encoding="utf-8").read()
         assert "DLSS on XMX" not in text and "FSR4_XMX_DLSS" not in text
+
+
+# ---- FSR 4 on AMD and the Proton the game really ran on ------------------------------------------------------------
+@pytest.mark.parametrize("name,want", [
+    ("GE-Proton10-25", True), ("GE-Proton11-12", True), ("GE-Proton9-27", False), ("proton-cachyos-11.0-20261107-slr", True),
+    ("Proton 11.0", False), ("Proton 9.0 (Beta)", False), ("Proton - Experimental", None), ("Proton Hotfix", None), ("", None),
+    ("SteamTinkerLaunch", None),
+])
+def test_which_protons_run_fsr4_on_amd(name, want):
+    assert active.fsr4_proton(name) is want
+
+
+def test_the_readout_says_when_the_proton_cant_do_fsr4(tmp_path):
+    home = str(tmp_path)
+    _pkg(home)
+    _steam_game(home, "401", "FsrGame", ["FsrGame.exe", "amd_fidelityfx_dx12.dll"])
+    assert best.prepare(home, "401", Z1E)["did"] == "set up"
+    log = os.path.join(home, ".local/share/gamecove/launch/401.log")
+    assert best.status(home, "401", Z1E)["active"]["state"] == "waiting"          # not started yet: no verdict
+    _start(home, "401")
+    open(log, "w").write("gamecove: launch 2026-11-10 20:00:00, appid 401\ngamecove: proton /home/deck/.steam/steam/steamapps/common/Proton 11.0\n")
+    a = best.status(home, "401", Z1E)["active"]
+    assert a["state"] == "env_off" and a["line"].startswith("Not active: the last start ran on Proton 11.0") and "GE-Proton or Proton-CachyOS" in a["line"]
+    open(log, "w").write("gamecove: proton /home/deck/.steam/root/compatibilitytools.d/GE-Proton11-12\n")
+    a = best.status(home, "401", Z1E)["active"]
+    assert a["state"] == "env" and a["line"].startswith("Set for the last start: FSR 4")
+    open(log, "w").write("gamecove: proton /x/common/Proton - Experimental\n")
+    assert best.status(home, "401", Z1E)["active"]["state"] == "env"               # can't tell: nothing is claimed either way
+    os.remove(log)
+    assert best.status(home, "401", Z1E)["active"]["state"] == "env"
+    assert active.proton_of(log) == "" and active.proton_of(None) == ""

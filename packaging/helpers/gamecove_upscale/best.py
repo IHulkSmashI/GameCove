@@ -225,8 +225,9 @@ def status(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
             xmx = xess.xmx_proof(home, key, os.path.join(home, games.DATA))
         except OSError:
             xmx = None
+    proton = active.proton_of(os.path.join(home, games.DATA, "launch", f"{key}.log")) if games.vendor(gpu) == "amd" else ""
     a = active.state(st.get("folder"), st["owner"], up, fg, gen, chips.latency(gpu, gen if fg else ""),
-                     _stamp(home, key), _installed_at(st.get("folder")), env_only, xmx)
+                     _stamp(home, key), _installed_at(st.get("folder")), env_only, xmx, proton)
     fb = (games.load_state(home).get("fell_back") or {}).get(str(key))
     if fb and a["state"] != "own":
         a["line"] += f" ({active.LABELS.get(fb['from'], fb['from'])} didn't start here, so we switched.)"

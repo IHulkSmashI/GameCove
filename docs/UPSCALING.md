@@ -85,6 +85,10 @@ FSR 4.1.2 is the default on all of these, including the Z1 Extreme, which AMD do
 INT8 model there. It costs a few frames against FSR 3.1 and looks clearly better; FSR 3.1 is one tap away under
 **Upscaler**.
 
+FSR 4 on AMD needs a Proton that can run it: **GE-Proton 10 or newer, or Proton-CachyOS**. Pick one for the game
+under Compatibility on the same page. If the last start ran on a Proton that can't, **Running now** says so by name
+instead of claiming FSR 4, and Best steps down to FSR 3.1 after two starts where FSR 4 didn't come up.
+
 ### AMD: Steam Deck, Ryzen Z2 Go, Z2 A, 6800U (RDNA 2)
 
 | The game has | Best picks | Frame generation |
@@ -185,7 +189,7 @@ grep -iE "upscaler|xefg|fsr|xess" "<game folder>/OptiScaler.log" | tail -40
 | XeSS frame generation 2x / 3x / 4x | Read-out: `XeSS frame generation 3x`. Launch log `settings` line: `XESS_FG=3` and `DXVK_CONFIG=dxgi.customVendorId = 8086`. `OptiScaler.log` has a line with `XeFG` being created. The overlay's frame rate is about the multiplier times the rendered rate. |
 | XeLL low latency | `gamecove-upscale latency --home "$HOME" --key <appid> --gpu '<gpu json>'` answers `"mode": "pacing"` with a latency in ms, read from `drive_c/igdext_xell.log` in the game's prefix. |
 | FSR 4.1.2 on a Z1 Extreme | Read-out: `Active: FSR 4.1.2`. `OptiScaler.ini` next to the exe has `Fsr4Update=true` and `Fsr4ForceEnableInt8=true`; the launch settings have `PROTON_FSR4_UPGRADE=1`. With `PROTON_FSR4_INDICATOR=1` in the game's launch options the FSR 4 mark shows in a corner. |
-| Proton's FSR 4 upgrade (FSR 3.1 games on AMD) | Read-out: `Set for the last start: FSR 4 (Proton's upgrade). Nothing was added to the game's files.` |
+| Proton's FSR 4 upgrade (FSR 3.1 games on AMD) | Read-out: `Set for the last start: FSR 4 (Proton's upgrade). Nothing was added to the game's files.` On Valve's numbered Proton it reads `Not active: the last start ran on Proton 11.0, which can't turn the game's FSR 3.1 into FSR 4.` |
 | Native | The game's folder has none of our files; `status` says `Using the game's own upscaler.` |
 
 The first start after any change compiles kernels on Intel. Always start twice and judge the second start.
