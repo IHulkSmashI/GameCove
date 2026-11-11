@@ -42,8 +42,12 @@ static func attach(s: ScrollContainer, bottom_room := MARGIN) -> Node:
 	return fs
 
 
-func _ready() -> void:
-	get_viewport().gui_focus_changed.connect(_on_focus)
+## Every time it enters the tree, not only the first: a screen taken out of the
+## tree while another one shows (and put back) must follow focus again.
+func _enter_tree() -> void:
+	var vp := get_viewport()
+	if vp != null and not vp.gui_focus_changed.is_connected(_on_focus):
+		vp.gui_focus_changed.connect(_on_focus)
 
 
 func _exit_tree() -> void:
