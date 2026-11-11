@@ -1,6 +1,6 @@
 # gamedb
 
-Builds GameCove's open game database every night and publishes it as a GitHub release asset (`gamedb.json.gz` on the rolling `gamedb` release). The app downloads it from there, so there's no server and no API keys on players' devices.
+Builds GameCove's open game database every night and publishes it as a GitHub release asset (`gamedb.json.gz` on the rolling `gamedb` release of [GameCove-data](https://github.com/IHulkSmashI/GameCove-data), whose `gamedb.yml` runs this package at a pinned GameCove commit). The app downloads it from there, so there's no server and no API keys on players' devices.
 
 | Field | Source | License |
 | --- | --- | --- |
@@ -144,5 +144,5 @@ The Wikidata query avoids `EXISTS` / `NOT EXISTS`: with them the public endpoint
 
 `python -m gamedb.firmware.build --out dist/firmware.json.gz` builds the handheld firmware index
 (maker BIOS/EC/controller versions and driver-stack upstream versions) published nightly on the
-`firmware` release by `.github/workflows/firmware.yml`. Sources and schema: `gamedb/firmware/`;
+`firmware` release of IHulkSmashI/GameCove-data by that repo's `.github/workflows/firmware.yml`. Sources and schema: `gamedb/firmware/`;
 app side: docs/SYSTEM.md "Firmware, BIOS and drivers".

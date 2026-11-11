@@ -3,10 +3,15 @@
 How a release is made, what protects the signing identity, and the repository settings that must stay as they
 are. Every signed file (the release's `SHA256SUMS`, `firmware/firmware.json.gz`, `upscalers/upscalers.json`) is
 signed with cosign keyless: the signature names the workflow file and the ref it ran on, and GameCove accepts it
-only from exactly that workflow (`packaging/get-gamecove.sh`, `app/scripts/system/firmware_index.gd`,
-`packaging/helpers/gamecove_upscale/mirror.py`). So whoever can run those workflows on those refs can sign. Three
-things guard that: a tag ruleset, a deployment environment with the owner as required reviewer, and the workflows'
-own checks.
+only from exactly that workflow (`packaging/get-gamecove.sh` for releases; `app/scripts/system/data_repo.gd` and
+`packaging/helpers/gamecove_upscale/mirror.py` for the data lists). So whoever can run those workflows on those refs
+can sign. Three things guard that: a tag ruleset, a deployment environment with the owner as required reviewer, and
+the workflows' own checks.
+
+This repo's Releases page only has the app's own `v*` releases. The data GameCove downloads (game database,
+firmware list, upscaler files and list, device photos) is built and published by the workflows of
+**[IHulkSmashI/GameCove-data](https://github.com/IHulkSmashI/GameCove-data)** on that repo's own releases (see
+"Data releases" below).
 
 ## Making a release
 
@@ -22,10 +27,35 @@ own checks.
 A re-run of a release that is already published fails without changing it; a release left as a draft by a failed
 run is finished by re-running.
 
-The nightly firmware and upscaler lists work the same way: their `build` job runs the scrapers and the builder with
-a read-only token and no OIDC, and their `publish` job (which signs) runs in the `nightly` environment, which only `main` can deploy to. They run
-every night, so they don't wait for an approval. The game database and device photos aren't signed; their `build` jobs are read-only too and only their
-`publish` jobs (which run nothing but `gh` and a standard-library check of the files) can write the release.
+## Data releases (IHulkSmashI/GameCove-data)
+
+The `gamedb`, `firmware`, `upscalers` and `device-photos` releases live in the data repo, published by its
+`gamedb.yml`, `firmware.yml`, `upscalers.yml` and `device-photos.yml` (a workflow's `GITHUB_TOKEN` can only write
+to the repository the workflow is in, and no long-lived token is used). Those workflows run **this** repo's builders
+(`gamedb/`, `tools/upscalers/`, `tools/device_photos/`, `packaging/helpers/`), checked out read-only at the commit
+the data repo's `gamecove-source.env` pins. So:
+
+- **After merging a change to a builder or its data** (`gamedb/`, `tools/upscalers/`, `tools/device_photos/`,
+  `app/data/devices.json`, `app/data/device_photos.json`, `packaging/helpers/`, including a new tested pin in
+  `versions.json`, or the cosign pins in `get-gamecove.sh`), bump `GAMECOVE_COMMIT` in the data repo's
+  `gamecove-source.env` to that `main` commit, then run the workflow by hand
+  (`gh workflow run upscalers.yml -R IHulkSmashI/GameCove-data`). A new pin in `versions.json` must be on the
+  mirror before an app release ships it.
+- **Identities the app pins:** `https://github.com/IHulkSmashI/GameCove-data/.github/workflows/firmware.yml@refs/heads/main`
+  and `.../upscalers.yml@refs/heads/main`, issuer `https://token.actions.githubusercontent.com`
+  (`app/scripts/system/data_repo.gd`, `mirror.py`; `packaging/tests/release.sh` keeps them equal).
+- The firmware and upscaler lists are signed the way releases are: their `build` job runs the scrapers and the
+  builder with a read-only token and no OIDC, and their `publish` job (which signs) runs in the data repo's `nightly`
+  environment, which only its `main` can deploy to; the build job refuses to start when that environment is missing
+  or lets another branch deploy. They run every night, so they don't wait for an approval. The game database and
+  device photos aren't signed (the app checks each photo's sha256 against the manifest); their `build` jobs are
+  read-only too and only their `publish` jobs (which run nothing but `gh` and a standard-library check of the files)
+  can write the release.
+- The data repo's own settings (the `nightly` environment, Actions permissions, the IGDB secrets) are in its
+  README, "Owner settings". Its `tests/check_workflows.py` holds the rules this repo's `release.sh` used to apply to
+  those workflows.
+- The weekly check of the makers' image links stays here (`maker-links.yml`): it reads this repo's data and files
+  its issue here.
 
 ## Repository settings (owner)
 
@@ -53,28 +83,23 @@ Settings > Environments > New environment, name **`release`** (exactly; the work
 
 Job that uses it: `release` in `release.yml`.
 
-### Environment "nightly" (owner: create it)
-
-Settings > Environments > New environment, name **`nightly`**:
-
-- **No required reviewers** (it runs every night).
-- **Deployment branches and tags:** "Selected branches and tags", one rule: branch `main`.
-
-Jobs that use it: `publish` in `firmware.yml` and `publish` in `upscalers.yml`.
-
-Until an environment exists, GitHub creates it on the first run **without** protection rules, so create both before
-the next run. `packaging/tests/release.sh` checks that every job with `id-token: write` names one of them.
+Until an environment exists, GitHub creates it on the first run **without** protection rules, so create it before
+the next run. `packaging/tests/release.sh` checks that every job with `id-token: write` names it. (This repo's own
+`nightly` environment, which the data workflows used before they moved, isn't used any more; it can be deleted in
+Settings > Environments.)
 
 ### Branch protection for `main`
 
-`main` should stay protected (pull requests, no force pushes): the signing identity of the nightly lists is
-"this workflow on `main`", and the release job's "on `main`" check is only as strong as `main` itself.
+`main` should stay protected (pull requests, no force pushes): the data repo builds from a commit of `main`, and
+the release job's "on `main`" check is only as strong as `main` itself. The data repo's `main` signs the nightly
+lists, so protect it the same way.
 
 ## What the workflows check by themselves
 
 - `release.yml`: the tag job runs only on `main`; the release job refuses a tagged commit that isn't on `main` and
   checks its own signature against the identity the installer requires before publishing.
-- `firmware.yml`, `upscalers.yml`: the build job is read-only with no OIDC; the publish job runs only pinned cosign,
-  `gh` and standard-library checks. `upscalers.yml`'s publish job re-hashes every planned file and re-checks the
-  index (official upstream repositories only) with `tools/upscalers/check_plan.py` before signing.
-- `gamedb.yml`, `device-photos.yml`: the same build/publish split, without signing.
+- In the data repo, `firmware.yml`, `upscalers.yml`: the build job is read-only with no OIDC and checks it got
+  exactly the pinned commit; the publish job runs only pinned cosign, `gh` and standard-library checks.
+  `upscalers.yml`'s publish job re-hashes every planned file and re-checks the index (official upstream
+  repositories only, builds at least 72 hours old) with `tools/upscalers/check_plan.py` before signing.
+- In the data repo, `gamedb.yml`, `device-photos.yml`: the same build/publish split, without signing.
