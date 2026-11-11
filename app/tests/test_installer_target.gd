@@ -69,6 +69,22 @@ func test_pending_kv_never_runs_anything() -> void:
 	eq(Target.read_kv(f), {"STARTUP": "gamecove", "X": "$(rm -rf ~)"}, "plain text, no shell")
 
 
+func test_remove_tree_never_follows_a_linked_folder() -> void:
+	var root := ProjectSettings.globalize_path("user://test_remove_tree_link")
+	DirAccess.make_dir_recursive_absolute(root + "/data/elsewhere")
+	DirAccess.make_dir_recursive_absolute(root + "/data/tools")
+	var keep := FileAccess.open(root + "/data/elsewhere/keep.txt", FileAccess.WRITE)
+	keep.store_string("mine")
+	keep.close()
+	OS.execute("ln", ["-sfn", root + "/data/elsewhere", root + "/data/tools/linked"])
+	OS.execute("ln", ["-sfn", root + "/data/elsewhere", root + "/data/tools2"])
+	ok(UserFiles.remove_tree(root + "/data/tools2", root + "/data"), "a linked folder is removed")
+	ok(FileAccess.file_exists(root + "/data/elsewhere/keep.txt"), "but what it pointed at is kept")
+	ok(UserFiles.remove_tree(root + "/data/tools", root + "/data"), "a tree with a link inside")
+	ok(FileAccess.file_exists(root + "/data/elsewhere/keep.txt"), "keeps that too")
+	UserFiles.remove_tree(root + "/data", root)
+
+
 func test_desktop_dir_and_remove_tree_guard() -> void:
 	var h := _home("dirs")
 	var p: RefCounted = Paths.for_home(h)

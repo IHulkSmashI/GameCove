@@ -189,6 +189,11 @@ static func remove_settings_files(paths: RefCounted) -> Array:
 static func remove_tree(path: String, under: String) -> bool:
 	if under.length() < 2 or not path.begins_with(under + "/") or ".." in path:
 		return false
+	# a path that is itself a link (a folder kept on another drive and linked in) is removed as a link: its
+	# files are not ours to delete (the same rule as proton_ge.gd, 21febb7)
+	var parent := DirAccess.open(path.get_base_dir())
+	if parent != null and parent.is_link(path.get_file()):
+		return DirAccess.remove_absolute(path) == OK
 	var d := DirAccess.open(path)
 	if d == null:
 		return false
