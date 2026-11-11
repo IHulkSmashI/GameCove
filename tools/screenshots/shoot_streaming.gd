@@ -17,6 +17,7 @@ var covers: Array = []
 ## Painted cover per game title, so each app tile shows its own game.
 var cover_by_title: Dictionary = {}
 
+const ShotVersion := preload("shot_version.gd")
 const Layout := preload("../layout/recorder.gd")
 const UUID := "A1B2C3D4-0000-4E5F-8899-AABBCCDDEEFF"
 const APPS := [["Steam Big Picture", 1093255277], ["Desktop", 881448767], ["Iron Meridian", 101], ["Kingdom of Ash", 102],
@@ -84,7 +85,7 @@ func _run() -> void:
 		flow_script.instance.finish()
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
 	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
-	main.hint_status.text = "● GameCove 0.4   MSI Claw 8 EX AI+"
+	main.hint_status.text = "● GameCove %s   MSI Claw 8 EX AI+" % ShotVersion.short()
 	if OS.get_environment("SHOOT_THEME") != "":
 		var TL = load("res://theme/gamecove_theme.gd")
 		TL.use(OS.get_environment("SHOOT_THEME"))
