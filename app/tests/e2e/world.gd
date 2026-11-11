@@ -232,8 +232,15 @@ func boot_main() -> void:
 	await idle()
 
 
+## What the rest of the fake system does when a game ends (stores_world.gd: Steam
+## writes its play time). func(app: int).
+var on_app_end := Callable()
+
+
 ## A game's window and Steam launch go away (it quit, or was closed).
 func end_app(app: int) -> void:
+	if on_app_end.is_valid():
+		on_app_end.call(app)
 	fake_apps.erase(app)
 	fake._mutex.lock()
 	var ids: Array = Array(str(fake.xroot.get("GAMESCOPE_FOCUSABLE_APPS", "769")).split(",", false)).map(func(x): return x.strip_edges())

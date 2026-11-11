@@ -37,6 +37,9 @@ SETUPS = ["claw8ex-bazzite", "ally-steamos", "legion-go-s-bazzite"]
 ROWS = {"claw8ex-bazzite": "msi-claw-8-ex", "ally-steamos": "asus-rog-ally",
         "legion-go-s-bazzite": "lenovo-legion-go-s-z2go"}
 RESTART_SUITE = "restart"
+## Suites that run in a process of their own (they bring the player's games and
+## store tools along, and a long random run shouldn't share a process with the rest).
+OWN_PROCESS = ["journeys", "monkey"]
 
 
 def godot_path(arg: str) -> str:
@@ -193,9 +196,13 @@ def main(argv=None) -> int:
         common = {"E2E_SEED": str(seed), "E2E_ITERS": str(iters), "E2E_TEST": a.test}
         suites = [s for s in a.suites.split(",") if s]
         runs = []
-        if not suites or any(s != RESTART_SUITE for s in suites):
-            only = ",".join(s for s in suites if s != RESTART_SUITE) if suites else ""
-            runs.append(("main", dict(common, E2E_SUITES=only or "suite_", E2E_SKIP="restart")))
+        shared = [s for s in suites if s != RESTART_SUITE and s not in OWN_PROCESS]
+        if not suites or shared:
+            runs.append(("main", dict(common, E2E_SUITES=",".join(shared) or "suite_",
+                                      E2E_SKIP=",".join([RESTART_SUITE] + OWN_PROCESS))))
+        for own in OWN_PROCESS:
+            if not suites or own in suites:
+                runs.append((own, dict(common, E2E_SUITES=own, E2E_SKIP=RESTART_SUITE)))
         if not suites or RESTART_SUITE in suites:
             runs.append(("restart-1", dict(common, E2E_SUITES=RESTART_SUITE, E2E_PHASE="1")))
             runs.append(("restart-2", dict(common, E2E_SUITES=RESTART_SUITE, E2E_PHASE="2")))
