@@ -907,6 +907,19 @@ func test_a_captive_portal_answer_isnt_cached() -> void:
 	_done(w)
 
 
+## L9: a cloud copy's backup named the scratch folder and was pointed at the game's folder
+## only after it was written; an app killed in between left it restoring into the scratch
+## folder. The folder it goes back into is written with the backup itself.
+func test_a_cloud_copy_names_the_game_folder_from_the_start() -> void:
+	var w := _world("copy_path")
+	var bk: RefCounted = w["s"].backups
+	var scratch: String = w["root"].path_join("scratch")
+	Fakes.put(scratch.path_join("slot1.sav"), "the cloud's", T0)
+	var b: Dictionary = bk.backup("gog:1207", "W", "cloud_copy", [{"name": "saves", "path": scratch, "restore_path": w["gsaves"]}], true, true)
+	eq(str(bk.find("gog:1207", str(b["id"]))["parts"][0]["path"]), w["gsaves"], "the game's folder, as written")
+	_done(w)
+
+
 ## The service marks the backups a choice or a restore made.
 func test_choice_backups_are_kept_apart() -> void:
 	var w := _world("pinned")

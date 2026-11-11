@@ -45,7 +45,7 @@ static func fingerprint(parts: Array) -> String:
 	return ",".join(bits)
 
 
-## Backs up `parts` ([{name, path}]). -> {"ok", "id", "skipped": "" | "empty" | "same" , "why"}.
+## Backs up `parts` ([{name, path, restore_path?}]). -> {"ok", "id", "skipped": "" | "empty" | "same" , "why"}.
 ## ok is false only when a copy was needed and couldn't be made (then nothing may overwrite
 ## the folders). `force` takes a copy even when the last one has the same fingerprint.
 ## `pinned`: counted apart from the everyday backups when the oldest are dropped.
@@ -87,7 +87,10 @@ func backup(key: String, title: String, reason: String, parts: Array, force := f
 		if fa != null:
 			size = fa.get_length()
 			fa.close()
-		out_parts.append({"name": str(p["name"]), "path": str(p["path"]), "file": file, "bytes": size})
+		# a copy made elsewhere (the cloud's, fetched into a scratch folder) names the folder it
+		# goes back into: written with the backup itself, never fixed up after it (an app killed
+		# in between left it pointing at the scratch folder; review at ff76ca4, L9)
+		out_parts.append({"name": str(p["name"]), "path": str(p.get("restore_path", p["path"])), "file": file, "bytes": size})
 	var meta := {"time": int(clock.call()), "reason": reason, "title": title,
 		"parts": out_parts, "fingerprint": fp, "pinned": pinned, "seq": seq}
 	if SettingsFile.save_json(dir.path_join(stamp + ".json"), meta, "\t") != OK:

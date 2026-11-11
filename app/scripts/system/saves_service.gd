@@ -1239,10 +1239,8 @@ func _epic_cloud_copy(key: String, title: String, entry: Dictionary, plan: Dicti
 	if got["state"] in ["offline", "failed"]:
 		return _copy_failed(scratch, tmp, str(got["error"]) if str(got["error"]) != "" else "couldn't reach Epic")
 	var st := CloudSaves.dir_stats(scratch)
-	var parts := [{"name": "saves", "path": scratch, "restore_path": folder}]
+	var parts := [{"name": "saves", "path": scratch, "restore_path": folder if folder != "" else scratch}]
 	var b: Dictionary = backups.backup(key, title, "cloud_copy", parts, true, true)
-	if b["ok"] and str(b["id"]) != "" and folder != "":
-		_point_parts(key, str(b["id"]), parts)
 	_remove_tree(scratch)
 	_remove_tree(tmp)
 	return {"why": "" if b["ok"] else str(b["why"]), "files": int(st["files"]), "bytes": int(st["bytes"])}
@@ -1282,23 +1280,8 @@ func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictio
 					return ""   # an upload that failed after its copy: the copy is already kept
 				break
 	var b: Dictionary = backups.backup(key, title, "cloud_copy", parts, true, true)
-	if b["ok"] and str(b["id"]) != "":
-		_point_parts(key, str(b["id"]), parts)
 	_remove_tree(scratch)
 	return "" if b["ok"] else str(b["why"])
-
-
-## A cloud copy is restored into the game's own folders, not the scratch one it came from.
-func _point_parts(key: String, id: String, parts: Array) -> void:
-	var path: String = backups.dir_for(key).path_join(id + ".json")
-	var j: Variant = SettingsFile.load_json(path).get("data")
-	if not j is Dictionary:
-		return
-	for p in j["parts"]:
-		for q in parts:
-			if str(q["name"]) == str(p["name"]):
-				p["path"] = str(q["restore_path"])
-	SettingsFile.save_json(path, j, "\t")
 
 
 static func _remove_tree(path: String) -> void:
