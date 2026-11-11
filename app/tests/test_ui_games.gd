@@ -439,8 +439,9 @@ func test_launch_options_and_compat() -> void:
 
 func test_text_keyboard_layout() -> void:
 	var kb: PanelContainer = TextKeyboard.new()
-	eq(kb.keys.size(), 6, "four letter rows, symbols, bottom row (built once)")
-	eq(kb.get_child(0).get_child_count(), 7, "head + six rows")
+	eq(kb.keys.size(), 5, "four letter rows and the action row (built once)")
+	eq(kb.get_child(0).get_child_count(), 4, "field, letters, symbols, actions")
+	ok(kb.keep_case and kb.max_len == TextKeyboard.LONG_MAX, "keeps case, takes long text")
 	kb.free()
 
 

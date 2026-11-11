@@ -670,8 +670,8 @@ func _build_overlays() -> void:
 	keyboard.anchor_bottom = 1.0
 	keyboard.offset_left = -400
 	keyboard.offset_right = 400
-	keyboard.offset_top = -380
-	keyboard.offset_bottom = -20
+	keyboard.offset_top = -424
+	keyboard.offset_bottom = -64
 	keyboard.closed.connect(_on_keyboard_closed)
 	add_child(keyboard)
 

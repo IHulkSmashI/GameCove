@@ -16,7 +16,8 @@ const SHOTS_ALL := ["home", "home_shelves", "library", "library_filter", "librar
 	"discover_calendar_month", "discover_wishlist", "quick_game", "quick_power", "quick_display", "quick_audio",
 	"quick_controller", "quick_leds", "quick_device", "settings_power", "settings_performance", "settings_system",
 	"settings_profiles", "settings_saves", "settings_media", "media_clip_sheet", "media_share", "settings_about",
-	"settings_battery", "settings_storage", "settings_fixes", "settings_updates", "settings_privacy", "setup_art"]
+	"settings_battery", "settings_storage", "settings_fixes", "settings_updates", "settings_privacy", "setup_art",
+	"keyboard", "keyboard_code"]
 
 const Recorder := preload("res://scripts/system/recorder.gd")
 const Clips := preload("res://scripts/system/clips.gd")
@@ -737,7 +738,7 @@ func _fake_apps() -> void:
 # ------------------------------------------------------------------ library and game
 
 func _library_shots() -> void:
-	if not want(["library", "library_filter", "library_apps"]):
+	if not want(["library", "library_filter", "library_apps", "keyboard", "keyboard_code"]):
 		return
 	main.show_screen("library")
 	await frames(4)
@@ -754,6 +755,40 @@ func _library_shots() -> void:
 		main.library_screen.apps_button.grab_focus()
 		await frames(6)
 		await shot("library_apps")
+	if want(["keyboard"]):
+		# Search with the on-screen keyboard: "hade" typed, the grid already filtered.
+		var lib = main.library_screen
+		lib.open_search()
+		await frames(4)
+		for ch in "hade":
+			lib.keyboard.type(ch)
+		lib.keyboard.keys[2][1].grab_focus()      # S, the next letter
+		await frames(24)
+		await shot("keyboard")
+		lib.keyboard.close()
+		lib.set_query("")
+		await frames(8)
+	if want(["keyboard_code"]):
+		# A key being typed in Settings: Paste beside the field, Caps on, the symbols page.
+		main.show_screen("settings")
+		await frames(6)
+		var st = main.settings
+		st.ask_text("Paste or type your SteamGridDB key", "", func(_t): pass)
+		await frames(4)
+		var kb = st.keyboard
+		kb.read_clipboard = func() -> String: return ""
+		kb.press_shift()
+		kb.press_shift()
+		for ch in "sgdb":
+			kb.type(ch)
+		kb.toggle_symbols()
+		for ch in "_4f2a-":
+			kb.type(ch)
+		kb.keys[kb.keys.size() - 3][1].grab_focus()      # the underscore
+		await frames(24)
+		await shot("keyboard_code")
+		kb.close()
+		await frames(8)
 	main.show_screen("home")
 	await frames(3)
 
