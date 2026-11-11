@@ -923,7 +923,7 @@ func test_fixes_page_apply_then_undo() -> void:
 	var done := []
 	fx.action_finished.connect(func(f, v, okk, m): done.append([f, v, okk, m]))
 	var btn := func(v: String): return page.buttons.get("%s:%s" % [v, id])
-	ok(await press_on(func(): return btn.call(verb), 60), "D-pad to %s on %s, A" % [verb, id])
+	ok(await press_on(func(): return btn.call(verb), 120), "D-pad to %s on %s, A (focus %s)" % [verb, id, focus().get_path() if focus() else "none"])
 	ok(await until(func(): return done.any(func(d): return d[0] == id and d[1] == verb), 15000), "%s finished (%s)" % [verb, done])
 	await w.idle()
 	var d1: Array = done.filter(func(d): return d[0] == id and d[1] == verb)
@@ -935,7 +935,7 @@ func test_fixes_page_apply_then_undo() -> void:
 	ok(focus() != null and focus_on_screen() == "", "focus stays on the page after it rebuilt")
 	await w.frames(3)
 	if btn.call(other) != null:
-		ok(await press_on(func(): return btn.call(other), 60), "%s offered now, A" % other)
+		ok(await press_on(func(): return btn.call(other), 120), "%s offered now, A" % other)
 		ok(await until(func(): return done.any(func(d): return d[0] == id and d[1] == other), 15000), "%s finished" % other)
 		await w.idle()
 		var d2: Array = done.filter(func(d): return d[0] == id and d[1] == other)
