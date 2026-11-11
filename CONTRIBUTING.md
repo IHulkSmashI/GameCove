@@ -53,8 +53,12 @@ XDG_DATA_HOME=$(mktemp -d) HOME=$(mktemp -d) $G --headless --path app --quit-aft
 # 3. Shell helpers, session, installer, release and workflow checks (slow: several minutes)
 sh packaging/tests/run.sh
 
-# 4. End to end: the real app driven through its screens with fake services (run it alone)
+# 4. End to end: the real app driven through its screens with fake services (run it alone);
+#    includes the user journeys and the random journeys (docs/TESTING.md: what covers what)
 python3 -I app/tests/e2e/run.py --godot $G
+
+# 4b. The device journeys runner (a dry run against a temp home)
+sh tools/devicetest/test.sh
 
 # 5. Each root fix against a fake /sys
 for t in fixes/*/test.sh fixes/*/tests/test.sh fixes/lib/test.sh; do sh $t || echo "FAILED $t"; done

@@ -15,6 +15,11 @@ The release under test is **v0.1.0, a GitHub pre-release**. The installer finds 
 (it reads the release list and takes the highest `vX.Y.Z` tag, pre-releases included while there is no stable
 release); test installs still name the tag (`install v0.1.0`, or `GAMECOVE_TAG=v0.1.0`) so a run is repeatable.
 
+The checks below read and change the system piece by piece. The user journeys on top of them (a free
+game installed, played with the quick menu over it and uninstalled, OptiScaler in and out, sleep, recording,
+EmuDeck, GameCove's CPU behind a game), driven with a virtual gamepad, are
+`tools/devicetest/devicetest.sh` ([TESTING.md](TESTING.md#running-on-the-handhelds)).
+
 ## How a session works
 
 1. The owner runs the testbed once per device; `console --keep` starts ttyd on `127.0.0.1:7681`
