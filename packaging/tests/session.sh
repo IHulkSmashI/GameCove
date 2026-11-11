@@ -369,7 +369,7 @@ leave() { # [env...] -- <target>
 	: >"$T/leave.log"
 	env PATH="$LB:$BIN:$PATH" HOME="$T/home" XDG_DATA_HOME="$T/home/.local/share" XDG_CONFIG_HOME="$T/home/.config" \
 		GAMECOVE_SESSIONS_DIRS="$T/sessions" GAMECOVE_BOOT_ID_FILE="$T/boot_id" GAMECOVE_OSTREE_BOOTED="$T/not-ostree" \
-		STEAMOSCTL="$LB/steamosctl" GAMECOVE_BIN="$LB/gamecove.x86_64" GAMECOVE_FIX_SET="$LB/fix-set" PKEXEC="$LB/pkexec" \
+		XDG_RUNTIME_DIR="$T/lrun" STEAMOSCTL="$LB/steamosctl" GAMECOVE_BIN="$LB/gamecove.x86_64" GAMECOVE_FIX_SET="$LB/fix-set" PKEXEC="$LB/pkexec" \
 		GAMECOVE_STATE_DIR="$T/lstate" GAMECOVE_ROOT_WAIT_S=1 "$@" >"$T/out" 2>&1
 }
 fresh
@@ -380,6 +380,24 @@ eqv "$(cat "$T/leave.log")" "$(printf '%s\n' "app --headless -- --restore-baseli
 leave GAMECOVE_SESSION=1 sh "$SEL" desktop
 has "$T/leave.log" "^app --headless -- --restore-baseline$" "leaving for the desktop restores the baseline too"
 eqv "$(tail -n 1 "$T/leave.log")" "steamosctl switch-to-desktop-mode plasma.desktop" "and switches last"
+# the session unit's ExecStopPost (`leave`): right after a switch of ours there is nothing left to do
+leave sh "$SEL" leave
+eqv "$(cat "$T/leave.log")" "" "leave right after a switch of ours does nothing"
+hasnt "$T/lrun/gamecove-left" "." "and forgets that switch"
+# a session that ended some other way (Steam's own Switch to Desktop, a logout): tidied up the same
+# way (the buttons only GameCove answers handed back by the baseline run), never a switch
+leave sh "$SEL" leave
+eqv "$(cat "$T/leave.log")" "$(printf '%s\n' "app --headless -- --restore-baseline" \
+	"pkexec $LB/fix-set charge-limit set release" "pkexec $LB/fix-set power-tune set restore" \
+	"steam -shutdown")" "leave on its own: baseline, root restores, Steam closed, no switch"
+echo 1 >"$T/lrun/gamecove-left"
+leave sh "$SEL" leave
+has "$T/leave.log" "^app --headless -- --restore-baseline$" "an old switch mark doesn't stop it"
+leave env STEAMOSCTL=/nonexistent sh "$SEL" leave
+eqv "$?" 0 "leave needs no steamosctl"
+has "$T/leave.log" "^app --headless -- --restore-baseline$" "and still tidies up without it"
+has "$REPO/session/systemd/gamescope-session-plus@gamecove.service.d/10-gamecove.conf" \
+	"^ExecStopPost=-/usr/bin/gamecove-session-select leave$" "the session unit runs leave when it stops"
 leave sh "$SEL" steam
 eqv "$(cat "$T/leave.log")" "steamosctl switch-to-game-mode" "outside GameCove's session (desktop, Steam): only the switch"
 # final review, session: a root restore that FAILS (password dialog dismissed, helper error) must not
