@@ -217,6 +217,12 @@ func before_launch(game: Dictionary, done: Callable) -> void:
 	if applies(game):
 		folder_guard(key)   # also with sync off or signed out: what's seen now is kept
 	if not applies(game) or not enabled(key) or not allowed():
+		if applies(game) and busy(key):
+			# sync is off for it, but a restore (or a sync started before it was switched off) is
+			# still at work on its folder: the game waits for that, never starts under it
+			# (review at ff76ca4, L6)
+			_queue(game, "wait", func(_e, _t): return {"state": ""}, func(_r): done.call({"go": true}))
+			return
 		done.call({"go": true})
 		return
 	_queue(game, "pre", func(e, t): return _sync(key, e, t, "pre"), func(r: Dictionary) -> void:

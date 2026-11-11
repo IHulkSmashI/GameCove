@@ -827,6 +827,21 @@ func test_a_choice_on_a_save_that_changed_since_asks_again() -> void:
 	_done(w)
 
 
+## L6: with sync off for a game, its launch didn't wait for a restore still at work on the
+## worker: the game could start while its folder was being swapped.
+func test_a_launch_with_sync_off_waits_for_a_restore_at_work() -> void:
+	var w := _world("launch_waits_restore")
+	w["s"].set_enabled("gog:1207", false)
+	var phases := []
+	w["s"].finished.connect(func(_k, ph, _st): phases.append(ph))
+	w["s"]._busy["gog:1207"] = "restore"   # a restore queued on the worker, not done yet
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append([r, phases.duplicate()]))
+	eq(got.size(), 1, "the launch goes ahead once")
+	eq(got[0][1], ["wait"], "after its turn on the worker, behind the restore")
+	_done(w)
+
+
 ## The service marks the backups a choice or a restore made.
 func test_choice_backups_are_kept_apart() -> void:
 	var w := _world("pinned")
