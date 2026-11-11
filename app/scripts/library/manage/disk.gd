@@ -5,6 +5,8 @@ extends RefCounted
 ## /run/media/<label> such as /run/media/mmcblk0p1). Reads only; quick enough for
 ## the main thread (statvfs and a directory listing).
 
+const Emu := preload("res://scripts/library/stores/emu.gd")
+
 
 ## Free bytes on the drive holding `path` (or its nearest existing parent). -1 if unknown.
 static func free_bytes(path: String) -> int:
@@ -100,8 +102,11 @@ static func mount_of(path: String, mounts_text: String) -> String:
 ## `mounts_text`: /proc/self/mounts (read here when not given).
 static func same_drive(a: String, b: String, mounts_text: Variant = null) -> bool:
 	var text: String = mounts_text if mounts_text is String else _read_all("/proc/self/mounts")
-	var ma := mount_of(a, text)
-	return ma != "" and ma == mount_of(b, text)
+	# symlinks are followed first: a library that is a link to another drive is on that drive
+	var ra := Emu.real_path(a)
+	var rb := Emu.real_path(b)
+	var ma := mount_of(ra, text)
+	return ma != "" and ma == mount_of(rb, text)
 
 
 ## A file read to its real end (/proc files report a size of 0).

@@ -556,8 +556,22 @@ func _on_job_finished(j: Dictionary) -> void:
 		action_failed.emit(j["key"], j["action"], j["error"])
 	if j["state"] == DownloadQueue.DONE:
 		_finalize(j)
+	elif j["state"] == DownloadQueue.FAILED and _gog_move_got_there(j):
+		# the folder was renamed into place and only the old copy's removal failed: the game IS at the new
+		# path, so our record follows it (left alone it names a folder that is gone and the next move is refused)
+		_finalize(j)
 	if j["state"] != DownloadQueue.CANCELLED or j["action"] == "install":
 		store_changed.emit(store)
+
+
+## A GOG move that failed after its rename: the new folder is there and the half copy is not.
+func _gog_move_got_there(j: Dictionary) -> bool:
+	var f: Dictionary = j.get("finalize", {})
+	if str(f.get("gog_record", "")) != "move":
+		return false
+	var to := str(f.get("new_path", ""))
+	return to != "" and DirAccess.dir_exists_absolute(to) \
+		and not DirAccess.dir_exists_absolute(to + StoreCommands.MOVING_SUFFIX)
 
 
 ## After a GOG job we ran ourselves, keep our install record in step.

@@ -8,6 +8,7 @@ const FakeRunner := preload("res://tests/fixtures/stores/fake_job_runner.gd")
 const LibraryScript := preload("res://scripts/library/library.gd")
 const LauncherScript := preload("res://scripts/launch/launcher.gd")
 const TempTree := preload("res://tests/fixtures/stores/temp_tree.gd")
+const DownloadQueue := preload("res://scripts/library/manage/download_queue.gd")
 const StoreCommands := preload("res://scripts/library/manage/store_commands.gd")
 
 const TOOLS := {"legendary": "/usr/bin/legendary", "nile": "", "gogdl": "/opt/gogdl", "umu": "/usr/bin/umu-run",
@@ -383,3 +384,20 @@ func test_move_makes_the_destination_folder() -> void:
 	ok(res.get("ok", false), "move accepted (%s)" % res)
 	ok(DirAccess.dir_exists_absolute(dest), "the folder it goes into is made first")
 	_done(m)
+
+
+## Residual B: the rename went through and only the removal of the old folder failed: the record follows the game.
+func test_a_gog_move_that_fails_after_the_rename_still_updates_the_record() -> void:
+	var m := _manager("sm_gog_move_rm")
+	var old := m.home.path_join("Games/gog/Game")
+	var new_path := m.home.path_join("SD/Games/Game")
+	DirAccess.make_dir_recursive_absolute(new_path)
+	StoreCommands.write_gog_record(m.home, [{"appName": "1", "install_path": old, "platform": "windows", "title": "G"}])
+	var job := {"key": "gog:1", "action": "move", "state": DownloadQueue.FAILED, "error": "rm failed", "title": "G",
+		"finalize": {"gog_record": "move", "new_path": new_path}}
+	m._on_job_finished(job)
+	eq(StoreCommands.read_gog_record(m.home)[0]["install_path"], new_path, "the record names the new folder")
+	DirAccess.make_dir_recursive_absolute(new_path + StoreCommands.MOVING_SUFFIX)
+	StoreCommands.write_gog_record(m.home, [{"appName": "1", "install_path": old, "platform": "windows", "title": "G"}])
+	m._on_job_finished(job)
+	eq(StoreCommands.read_gog_record(m.home)[0]["install_path"], old, "a copy that never finished leaves it alone")

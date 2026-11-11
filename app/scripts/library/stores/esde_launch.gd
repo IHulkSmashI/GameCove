@@ -408,10 +408,28 @@ static func expand(command: String, rom: String, ctx: Dictionary, out: Dictionar
 
 
 static func _vars(s: String, rom: String, basename: String, gamedir: String, emu_dir: String, ctx: Dictionary) -> String:
-	return s.replace("%ROMRAW%", rom).replace("%ROM%", rom).replace("%BASENAME%", basename).replace("%FILENAME%", rom.get_file()) \
-		.replace("%GAMEDIRRAW%", gamedir).replace("%GAMEENTRYDIR%", rom if DirAccess.dir_exists_absolute(rom) else gamedir) \
-		.replace("%GAMEDIR%", gamedir).replace("%ROMPATH%", str(ctx.get("roms_dir", ""))).replace("%EMUDIR%", emu_dir) \
-		.replace("%ESPATH%", str(ctx.get("es_path", "")))
+	var table := {
+		"%ROMRAW%": rom, "%ROM%": rom, "%BASENAME%": basename, "%FILENAME%": rom.get_file(),
+		"%GAMEDIRRAW%": gamedir, "%GAMEENTRYDIR%": rom if DirAccess.dir_exists_absolute(rom) else gamedir,
+		"%GAMEDIR%": gamedir, "%ROMPATH%": str(ctx.get("roms_dir", "")), "%EMUDIR%": emu_dir,
+		"%ESPATH%": str(ctx.get("es_path", ""))}
+	# one pass, left to right: what a variable stands for is never read again, so a ROM called
+	# "%BASENAME%.zip" or a folder named "%EMUDIR%" stays as it is
+	var out := ""
+	var i := 0
+	while i < s.length():
+		var hit := ""
+		if s[i] == "%":
+			for k in table:
+				if s.substr(i, k.length()) == k and k.length() > hit.length():
+					hit = k
+		if hit != "":
+			out += table[hit]
+			i += hit.length()
+		else:
+			out += s[i]
+			i += 1
+	return out
 
 
 ## EmuDeck's launcher script for an ES-DE emulator name, when this is EmuDeck
