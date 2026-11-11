@@ -252,3 +252,12 @@ func test_gog_listing_and_what_an_upload_would_delete() -> void:
 	ok(not CS.gogdl_args("/a", "/p", "1", "saves", "123.4", "look").has("123.4"), "and not the real one")
 	eq(CS.parse_gogdl("[SAVES] WARNING: Refused to upload files, newer files in the cloud\n123.4", 0)["refused"], "upload", "refused to upload")
 	eq(CS.parse_gogdl("[SAVES] WARNING: Refused to download files, newer files locally\n123.4", 0)["refused"], "download", "refused to download")
+
+
+## Review at ff76ca4, L1: the cloud's time as of our last sync makes any other time a change.
+func test_epic_decide_sees_a_cloud_save_that_is_older_than_our_sync() -> void:
+	var last := 2000000000
+	var look := {"state": "local_newer", "local": last + 9000, "remote": last - 5000}
+	eq(CS.epic_decide(look, last, "post"), "upload", "by the clock alone it looked unchanged")
+	eq(CS.epic_decide(look, last, "post", false, last - 90000), "conflict", "but it isn't the one we last saw")
+	eq(CS.epic_decide(look, last, "post", false, last - 5000), "upload", "the one we last saw: upload")

@@ -601,6 +601,30 @@ func test_gog_blank_save_conflict_is_in_doubt() -> void:
 	_done(w)
 
 
+# ---- the review's Low items (review at ff76ca4, section 3) ----------------------------------------
+
+## L1: a cloud save is named by when it was saved, not uploaded. Saved on another device before
+## our last sync and uploaded after it, it looked older than our sync, so "unchanged", and our
+## post-game upload buried it. The cloud save's own time at our last sync is kept and compared.
+func test_epic_a_cloud_save_older_than_our_sync_but_new_to_us_is_a_change() -> void:
+	var w := _world("epic_l1")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "ours", T0)
+	w["s"].sync_now(w["epic"])
+	eq(cloud.saves.size(), 1, "synced")
+	# the other device saved an hour after T0 (long before our sync), and only now uploaded
+	cloud.saves.append({"t": T0 + 3600, "files": {"world.sav": "the other device's"}})
+	cloud.offline = true
+	w["s"].before_launch(w["epic"], func(_r): pass)
+	cloud.offline = false
+	w["now"][0] += 900
+	Fakes.put(w["esaves"].path_join("world.sav"), "ours, played on", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	eq(cloud.saves[-1]["files"]["world.sav"], "the other device's", "nothing uploaded over it")
+	eq(w["s"].status(w["epic"])["state"], "conflict", "we ask")
+	_done(w)
+
+
 # ---- Epic: a changed prefix ---------------------------------------------------------------------
 
 ## legendary keeps the save folder it computed once. After a prefix change we hand it the

@@ -365,7 +365,9 @@ func _set_status(key: String, state: String, detail := "", extra := {}) -> Dicti
 		if bool(extra.get("synced", false)) and str(extra.get("epic_path", "")) != "":
 			c.set_value(sec, "epic_path", str(extra["epic_path"]))
 		if bool(extra.get("synced", false)):
-			c.set_value(sec, "anchors", anchors))
+			c.set_value(sec, "anchors", anchors)
+			# the cloud save's own time as of this sync (Epic), -1 when this step didn't learn it
+			c.set_value(sec, "synced_remote", int(extra.get("synced_remote", -1))))
 	return {"state": state, "conflict": state == "conflict"}
 
 
@@ -518,13 +520,13 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 	if look["state"] == "none":
 		return _set_status(key, "no_saves", "", {"synced": true, "epic_path": folder})
 	if look["state"] == "same":
-		return _set_status(key, "synced", "", {"synced": true, "local": look["local"], "remote": look["remote"], "epic_path": folder})
+		return _set_status(key, "synced", "", {"synced": true, "local": look["local"], "remote": look["remote"], "epic_path": folder, "synced_remote": look["remote"]})
 	var last := int(_cfg_value(key, "last_sync", 0))
 	var times := {"local": look["local"], "remote": look["remote"], "epic_path": folder}
 	# a restored backup has its old file times: legendary sees "cloud newer" and would download
 	# straight over the restore (final review, high 6)
 	var restored := int(_cfg_value(key, "restored_at", 0)) > 0
-	match CloudSaves.epic_decide(look, last, mode, restored):
+	match CloudSaves.epic_decide(look, last, mode, restored, int(_cfg_value(key, "synced_remote", -1))):
 		"conflict":
 			var sides := _conflict_sides(key, entry, plan, [{"name": "saves", "path": str(plan["save_path"]) if str(plan["save_path"]) != "" else folder}])
 			sides["fresh"] = last <= 0 and not restored
@@ -537,7 +539,8 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 			if up["state"] in ["offline", "failed"]:
 				return _set_status(key, "upload_cut", str(up.get("error", "")), times)
 			_clear_upload(key)
-			return _set_status(key, "uploaded", "", times.merged({"synced": true}, true))
+			# legendary names the new cloud save by the newest local file's time
+			return _set_status(key, "uploaded", "", times.merged({"synced": true, "synced_remote": look["local"]}, true))
 		"later":
 			# the other direction waits for its turn (next exit uploads, next launch downloads)
 			return _set_status(key, "pending_up" if look["state"] == "local_newer" else "pending_down", "", times)
@@ -581,7 +584,7 @@ func _epic_download(key: String, entry: Dictionary, plan: Dictionary, app: Strin
 		var back := _put_back(key, b, empty)
 		return _set_status(key, down["state"], str(down.get("error", "")) + back, times)
 	_clear_mark(key)
-	return _set_status(key, "downloaded", "", times.merged({"synced": true}, true))
+	return _set_status(key, "downloaded", "", times.merged({"synced": true, "synced_remote": int(look.get("remote", -1)) if not look.is_empty() else -1}, true))
 
 
 ## Before a tool may write into the save folders: notes it in the status file (the backup to

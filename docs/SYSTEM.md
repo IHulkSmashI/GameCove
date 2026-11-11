@@ -380,6 +380,9 @@ What keeps a save from being lost (final review; each has a test against ports o
   syncs for that game, the game still starts, the next sync tries again). With the folders changed since (played from
   Heroic, a restore), finishing would mix again, so the copy is kept, the sync times are dropped and the sync asks.
   Picking a side in a conflict settles the note.
+- **A cloud save new to us (Epic).** A cloud save is named by when it was saved, not uploaded, so one saved elsewhere
+  before our last sync and uploaded after it looks older than the sync. The cloud save's own time at each sync is kept
+  (`synced_remote`): any other one counts as a change, so it's a conflict, never an upload over it.
 - **Two GOG locations.** When one fails and the backup goes back, a location that had downloaded gets its old sync time
   back with it.
 - **A restore holds.** Restoring makes the folder exactly what the backup holds (unpacked next to it and swapped in).

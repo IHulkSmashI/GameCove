@@ -306,9 +306,15 @@ static func _offline(out: String) -> bool:
 ## both changed (or we never synced and both have saves), the user picks.
 ## local_restored: a backup was put back since the last sync. Its files carry their old
 ## times, so by the clock the local side looks unchanged; it did change.
-static func epic_decide(look: Dictionary, last_sync: int, mode: String, local_restored := false) -> String:
+## synced_remote: the cloud save's own time (its manifest name) at our last sync, -1 when not
+## known. A cloud save is named by when it was *saved*, not when it went up: one saved on
+## another device before our last sync but uploaded after it has an older time than our sync
+## and would look unchanged (review at ff76ca4, L1). With the time we last saw, any other
+## time is a change.
+static func epic_decide(look: Dictionary, last_sync: int, mode: String, local_restored := false, synced_remote := -1) -> String:
 	var local := int(look.get("local", 0))
 	var remote := int(look.get("remote", 0))
+	var cloud_moved := synced_remote >= 0 and remote > 0 and absi(remote - synced_remote) > SLACK_S
 	match str(look.get("state", "")):
 		"remote_newer":
 			var local_changed := local > 0 and (last_sync <= 0 or local > last_sync + SLACK_S or local_restored)
@@ -316,7 +322,7 @@ static func epic_decide(look: Dictionary, last_sync: int, mode: String, local_re
 				return "conflict"
 			return "later" if mode == "post" else "download"
 		"local_newer":
-			var remote_changed := remote > 0 and (last_sync <= 0 or remote > last_sync + SLACK_S)
+			var remote_changed := remote > 0 and (last_sync <= 0 or remote > last_sync + SLACK_S or cloud_moved)
 			if remote_changed:
 				return "conflict"
 			return "later" if mode == "pre" else "upload"
