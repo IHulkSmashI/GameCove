@@ -93,6 +93,9 @@ func setup(context: Dictionary) -> void:
 	ctx = context
 	if ctx.get("runner") == null:
 		ctx["runner"] = NoRunner.new()
+	# the game per-game controls act on: made here, before any worker reads the
+	# context, so changing the game later never adds or erases a context key
+	load("res://scripts/controls/game_scope.gd").ensure(ctx)
 	for id in _order:
 		_controls[id].ctx = ctx
 

@@ -6,8 +6,8 @@ extends RefCounted
 ## Proton, the Steam launch wrapper and Steam's shader pre-caching.
 ## Details, sources and what each writes: docs/CONTROLS.md "Performance".
 ##
-## Game scope: per-game controls act on the game in ctx["game"] (a Library
-## game dictionary) or ctx["game_key"] ("steam:976730"); set it with
+## Game scope: per-game controls act on one game at a time (a Library
+## game dictionary; kept in the context's GameScope, see set_game); set it with
 ## set_game(ctx, game) and call Controls.detect_all() after, so availability
 ## and values follow the game. Without a game they say "Open a game first".
 ##
@@ -35,6 +35,7 @@ const LOW_LATENCY_HELP := "Leave on. Turn off only if a game stutters or won't s
 const MANGOHUD_LAYER_DIRS := ["/usr/share/vulkan/implicit_layer.d", "/etc/vulkan/implicit_layer.d",
 	"/usr/local/share/vulkan/implicit_layer.d"]
 const GpuCaps := preload("res://scripts/device/gpu_caps.gd")
+const GameScope := preload("res://scripts/controls/game_scope.gd")
 const STATUS_TTL_MS := 3000
 const PLAN_TTL_MS := 15000
 ## The helper's check hashes the downloaded files (FSR 4 DLLs are ~100 MB): read again at most this often.
@@ -55,13 +56,11 @@ var _check_t := -1
 var _mutex := Mutex.new()
 
 
+## Any thread. The game lives in the context's GameScope (game_scope.gd), not
+## in keys of the context itself: the main thread changes it while the worker
+## reads, and a Dictionary can't take a new key under a reader.
 static func set_game(context: Dictionary, game: Dictionary) -> void:
-	if game.is_empty():
-		context.erase("game")
-		context.erase("game_key")
-	else:
-		context["game"] = game
-		context["game_key"] = str(game.get("key", "%s:%s" % [game.get("store", ""), game.get("id", "")]))
+	GameScope.ensure(context).swap(game)
 
 
 func setup(c: Dictionary) -> void:
@@ -122,6 +121,12 @@ func _ac_args() -> Array:
 # ---- the game ------------------------------------------------------------------
 
 func game() -> Dictionary:
+	var scope := GameScope.of(ctx)
+	if scope != null:
+		var sg: Dictionary = scope.game()
+		if not sg.is_empty():
+			return sg
+	# a context filled by hand before any worker runs (tests, tools)
 	var g: Variant = ctx.get("game")
 	if g is Dictionary and not g.is_empty():
 		return g

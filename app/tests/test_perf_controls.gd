@@ -706,6 +706,53 @@ func test_lsfg_config_is_replaced_atomically() -> void:
 
 # ---- Best / My choice / Native, what is running, one frame generator ------------------
 
+## The game is changed on the main thread (quick menu, game page) while the
+## Controls worker reads it. It used to be two keys added to and erased from
+## the shared context, which crashed a reader on the worker (SIGABRT in game()).
+func test_the_game_can_change_while_the_worker_reads_it() -> void:
+	var w := _world("game_race", ALLY_X)
+	var ctx: Dictionary = w["ctx"]
+	var p = w["p"]
+	var keys_before := ctx.keys()
+	keys_before.sort()
+	PerfProvider.set_game(ctx, EPIC)
+	eq(p.game_key(), "epic:abc", "the provider sees the game")
+	var keys_after := ctx.keys()
+	keys_after.sort()
+	eq(keys_after, keys_before, "changing the game never adds a key to the shared context")
+	ok(not ctx.has("game") and not ctx.has("game_key"), "the game isn't kept in the context's own keys")
+	# the stored game is a copy: the caller changing its dictionary later doesn't reach a reader
+	var mine := {"key": "gog:9", "store": "gog", "id": "9", "title": "Before"}
+	PerfProvider.set_game(ctx, mine)
+	mine["title"] = "After"
+	eq(str(p.game().get("title", "")), "Before", "a reader keeps the game as it was set")
+	# stress: the worker reads without pause while the main thread swaps the game and clears it
+	var other := {"key": "steam:42", "store": "steam", "id": "42", "title": "Steam Game", "install_path": "/games/42"}
+	var stop := [false]
+	var seen := {"reads": 0, "bad": []}
+	var reader := Thread.new()
+	reader.start(func():
+		while not stop[0]:
+			var k: String = p.game_key()
+			var g: Dictionary = p.game()
+			var gk := str(g.get("key", ""))
+			if not k in ["", "epic:abc", "steam:42"] or not gk in ["", "epic:abc", "steam:42"]:
+				seen["bad"].append([k, gk])
+			if gk == "steam:42" and str(g.get("install_path", "")) != "/games/42":
+				seen["bad"].append(["torn", g])
+			seen["reads"] += 1)
+	for i in 20000:
+		PerfProvider.set_game(ctx, [EPIC, other, {}][i % 3])
+	stop[0] = true
+	reader.wait_to_finish()
+	ok(int(seen["reads"]) > 0, "the worker read while the game changed (%d reads)" % int(seen["reads"]))
+	eq(seen["bad"], [], "every read saw a whole game or none")
+	PerfProvider.set_game(ctx, {})
+	eq(p.game_key(), "", "cleared")
+	eq(ctx.keys().size(), keys_before.size(), "and the context is as it was")
+	_done(w)
+
+
 ## Every alternative says in one plain line what it is.
 func test_every_choice_has_its_own_plain_line() -> void:
 	for chip in [CLAW, ALLY_X]:
