@@ -73,6 +73,8 @@ var done_button: Button
 ## Open from open() until close(): it takes keys only then, not while it fades
 ## out (a press right after Done goes to the screen, not into the text).
 var showing := false
+## Every keyboard is in this group while it's in the tree (main.gd puts them away when their screen is left).
+const GROUP := "osk"
 ## Paste, beside the field: only where a code or key is asked for (use_for_codes).
 var paste_button: Button
 ## func() -> String: the clipboard; tests return canned text.
@@ -328,7 +330,9 @@ func _ink_action(b: Button) -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_THEME_CHANGED and field != null:
+	if what == NOTIFICATION_ENTER_TREE:
+		add_to_group(GROUP)
+	elif what == NOTIFICATION_THEME_CHANGED and field != null:
 		_style()
 	elif what == NOTIFICATION_VISIBILITY_CHANGED and not is_visible_in_tree():
 		_stop_repeat()
@@ -467,6 +471,16 @@ func close() -> void:
 	_stop_repeat()
 	Motion.fade(self, false)
 	closed.emit(text)
+
+
+## Put away without `closed` (the screen it sits on was left: nothing there wants the focus back,
+## and a keyboard still open under a fading screen would take the next B from what's in front).
+func dismiss() -> void:
+	if not showing:
+		return
+	showing = false
+	_stop_repeat()
+	Motion.fade(self, false)
 
 
 ## Types `ch` at the caret (a letter as a capital while Shift is on).
@@ -700,8 +714,22 @@ func is_open() -> bool:
 	return showing
 
 
+## This keyboard or a screen above it is hidden (walks the parents, so it also holds outside a live tree).
+func _hidden() -> bool:
+	var n: Node = self
+	while n != null:
+		if n is CanvasItem and not (n as CanvasItem).visible:
+			return true
+		n = n.get_parent()
+	return false
+
+
 func _input(event: InputEvent) -> void:
 	if not showing:
+		return
+	# Open on a screen that has since been left (Library search, then Guide to Home): hidden, the
+	# keyboard must not take B, Start, X, Y or the bumpers from whatever is in front now
+	if _hidden():
 		return
 	var handled := true
 	if event is InputEventKey and event.pressed:
