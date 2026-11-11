@@ -220,14 +220,21 @@ func _row(it: Dictionary) -> Button:
 func pick(id: String) -> void:
 	var cb := _callback
 	close(false)
+	# Focus goes back first, so whatever the pick opens (a confirmation, Steam's
+	# card, the keyboard) remembers the control the sheet came from, not a row
+	# of a sheet that's gone, and gives focus back there when it closes.
+	var back := _focus_before
+	if back != null and is_instance_valid(back) and back.is_visible_in_tree():
+		back.grab_focus()
 	chosen.emit(id)
 	if cb.is_valid():
 		cb.call(id)
 	if _open or not is_inside_tree():
 		return
 	var f := get_viewport().gui_get_focus_owner()
-	if f != null and not is_ancestor_of(f):
+	if f != null and not is_ancestor_of(f) and f.is_visible_in_tree() and not f.is_queued_for_deletion():
 		return
+	_focus_before = back
 	if _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
 		_focus_before.grab_focus()
 	else:
