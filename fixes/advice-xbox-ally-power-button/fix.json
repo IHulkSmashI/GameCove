@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "id": "advice-xbox-ally-power-button",
+  "revision": 1,
+  "title": "Power button doesn't sleep",
+  "line": "If the power button doesn't put it to sleep, update your system: it needs steamos-powerbuttond 3.4 or newer.",
+  "symptom": "On the Xbox Ally models the power button does nothing in Gaming Mode with steamos-powerbuttond older than 3.4.",
+  "why": "The Xbox Ally models report the power button in a way older steamos-powerbuttond versions don't read.",
+  "kind": "advice",
+  "page": "fixes",
+  "password": "none",
+  "restart": "",
+  "level": "optional",
+  "must_fix": true,
+  "breaks": "sleep",
+  "default": "advice-only",
+  "risk": "low",
+  "risk_note": "Text only: GameCove changes nothing.",
+  "auto": [],
+  "optional": "platform:rog-xbox-ally*",
+  "exclude": {},
+  "changes": [],
+  "undo": "Nothing to undo: this is advice, GameCove changes nothing.",
+  "tested": [],
+  "bazzite": "Reports 6036 and 6180 were still open on 2026-11-08; fixed by steamos-powerbuttond 3.4 and newer.",
+  "steamos": "Fixed with steamos-powerbuttond 3.4 and newer.",
+  "sources": [
+    "https://discuss.cachyos.org/t/rog-xbox-ally-x-power-button-not-working/17528",
+    "https://github.com/ublue-os/bazzite/issues/6036",
+    "https://github.com/ublue-os/bazzite/issues/6180"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+      "tool": "steamos-powerbuttond",
+      "version": ">=3.4"
+    },
+    "probe": {
+      "command": "none",
+      "native": "",
+      "what": "Compares the installed steamos-powerbuttond version with 3.4."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "bazzite-6036",
+      "kind": "github-issue",
+      "repo": "ublue-os/bazzite",
+      "number": 6036,
+      "note": "Bazzite report."
+    },
+    {
+      "id": "bazzite-6180",
+      "kind": "github-issue",
+      "repo": "ublue-os/bazzite",
+      "number": 6180,
+      "note": "Bazzite report (powerbuttond at 100 % CPU)."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

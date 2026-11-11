@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "id": "power-tune",
+  "revision": 1,
+  "title": "CPU and GPU power",
+  "line": "The TDP, boost, governor and GPU limits the Power page and Auto TDP set.",
+  "symptom": "",
+  "why": "",
+  "kind": "power",
+  "page": "power",
+  "password": "none",
+  "restart": "",
+  "level": "optional",
+  "must_fix": false,
+  "breaks": "",
+  "default": "suggested-off",
+  "risk": "low",
+  "risk_note": "A day-to-day setting with checked values; the original is always saved and put back.",
+  "auto": [],
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "sysfs",
+      "target": "cpufreq, intel_pstate / amd_pstate, GPU frequency and firmware-attributes power limits (fixes/power-tune/README.md)",
+      "detail": "Each value is checked against what the kernel offers; the original is recorded first."
+    },
+    {
+      "type": "service",
+      "target": "thermald.service",
+      "detail": "Held while a game runs on Intel handhelds where it would overwrite the TDP; it starts again by itself."
+    }
+  ],
+  "undo": "`set restore` writes every recorded original back; remove also forgets them.",
+  "tested": [],
+  "bazzite": "",
+  "steamos": "",
+  "sources": [
+    "fixes/power-tune/README.md"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": null,
+    "probe": {
+      "command": "status",
+      "native": "",
+      "what": "A setting, not a workaround: status says whether this handheld has the control at all (applies=yes)."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

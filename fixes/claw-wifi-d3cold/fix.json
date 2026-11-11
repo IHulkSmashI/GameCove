@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "id": "claw-wifi-d3cold",
+  "revision": 1,
+  "title": "Wi-Fi back after sleep",
+  "line": "Keeps the Wi-Fi card awake enough to come back after sleep. Uses a little more battery asleep.",
+  "symptom": "Wi-Fi is gone after sleep until a restart: the Intel card drops into D3cold and doesn't come back.",
+  "why": "Intel Claws (MSI firmware with an Intel Wi-Fi card): the card drops into D3cold during sleep and doesn't come back.",
+  "kind": "file",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "",
+  "level": "optional",
+  "must_fix": true,
+  "breaks": "wireless",
+  "default": "suggested-off",
+  "risk": "low",
+  "risk_note": "One udev rule. The Wi-Fi card uses a little more power while the Claw sleeps.",
+  "auto": [],
+  "optional": {
+    "all-of": [
+      "controller:msi-claw",
+      "cpu_vendor:intel"
+    ]
+  },
+  "exclude": {},
+  "changes": [
+    {
+      "type": "udev-rule",
+      "target": "/etc/udev/rules.d/60-gamecove-claw-wifi-d3cold.rules",
+      "detail": "Stops Intel network cards on MS-1T* boards from entering D3cold."
+    },
+    {
+      "type": "sysfs",
+      "target": "/sys/bus/pci/devices/<wifi>/d3cold_allowed",
+      "detail": "Set to 0 at once; the old value is saved."
+    }
+  ],
+  "undo": "Deletes the rule and writes the saved value back.",
+  "tested": [],
+  "bazzite": "Not fixed (reported 2024-12, no answer).",
+  "steamos": "Not fixed (SteamOS issues 2742, 2703; user-verified workaround).",
+  "sources": [
+    "https://github.com/ValveSoftware/SteamOS/issues/2742",
+    "https://github.com/ValveSoftware/SteamOS/issues/2703",
+    "https://universal-blue.discourse.group/t/wifi-refuses-to-reconnect-after-resuming-from-sleep/5519"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Looks for the same rule from the system itself (any udev rule that isn't GameCove's and does the same), or the value already being right without GameCove."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "steamos-2742",
+      "kind": "github-issue",
+      "repo": "ValveSoftware/SteamOS",
+      "number": 2742,
+      "note": "The SteamOS report this workaround comes from: closing it usually names the fixed build."
+    },
+    {
+      "id": "steamos-2703",
+      "kind": "github-issue",
+      "repo": "ValveSoftware/SteamOS",
+      "number": 2703,
+      "note": "Second SteamOS report."
+    },
+    {
+      "id": "iwlwifi",
+      "kind": "github-commits",
+      "repo": "torvalds/linux",
+      "path": "drivers/net/wireless/intel/iwlwifi/pcie/drv.c",
+      "note": "iwlwifi PCIe resume handling: a kernel fix would make the rule unnecessary."
+    },
+    {
+      "id": "bazzite-udev",
+      "kind": "github-commits",
+      "repo": "ublue-os/bazzite",
+      "path": "system_files/deck/shared/usr/lib/udev/rules.d",
+      "note": "Bazzite's handheld udev rules."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

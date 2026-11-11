@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "id": "ally-controller-wakeup",
+  "revision": 1,
+  "title": "Sticks don't wake it",
+  "line": "Stops a nudge of the sticks from waking the handheld while it goes to sleep.",
+  "symptom": "The built-in controller (0b05:1b4c) is a wakeup source, so stick movement wakes the device before or during sleep.",
+  "why": "The ASUS controller 0b05:1b4c shared by the Ally X, Xbox Ally, Xbox Ally X and Xbox Ally X20 (InputPlumber configs); the first Ally's 0b05:1abe isn't a wakeup source.",
+  "kind": "file",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "",
+  "level": "recommended",
+  "must_fix": true,
+  "breaks": "sleep",
+  "default": "on",
+  "risk": "low",
+  "risk_note": "One udev rule, the same one Bazzite ships. The power button still wakes it.",
+  "auto": "controller:asus-ally-x",
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "udev-rule",
+      "target": "/etc/udev/rules.d/60-gamecove-ally-controller-wakeup.rules",
+      "detail": "Switches off wake-up for the built-in controller (USB 0b05:1b4c)."
+    },
+    {
+      "type": "sysfs",
+      "target": "/sys/bus/usb/devices/<controller>/power/wakeup",
+      "detail": "Set to disabled at once; the old value is saved."
+    }
+  ],
+  "undo": "Deletes the rule and writes the saved value back.",
+  "tested": [],
+  "bazzite": "Fixed (50-ally-x-controller.rules).",
+  "steamos": "Unknown; the fix checks the system's own rules.",
+  "sources": [
+    "https://github.com/ublue-os/bazzite/blob/main/system_files/deck/shared/usr/lib/udev/rules.d/50-ally-x-controller.rules"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+      "any": [
+        {
+          "probe": "os_fixed"
+        },
+        {
+          "file": "/usr/lib/udev/rules.d/50-ally-x-controller.rules"
+        }
+      ]
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Looks for the same rule from the system itself (any udev rule that isn't GameCove's and does the same), or the value already being right without GameCove."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "bazzite-rule",
+      "kind": "github-file",
+      "repo": "ublue-os/bazzite",
+      "path": "system_files/deck/shared/usr/lib/udev/rules.d/50-ally-x-controller.rules",
+      "note": "Bazzite's own rule.",
+      "records": {
+        "os": "bazzite",
+        "present": "fixed",
+        "absent": "not-fixed"
+      }
+    },
+    {
+      "id": "hid-asus",
+      "kind": "github-commits",
+      "repo": "torvalds/linux",
+      "path": "drivers/hid/hid-asus.c",
+      "note": "The Ally's kernel HID driver: it could switch the wake-up off itself."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

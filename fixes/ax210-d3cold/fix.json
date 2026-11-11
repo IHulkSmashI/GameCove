@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "id": "ax210-d3cold",
+  "revision": 1,
+  "title": "Intel AX210 Wi-Fi after sleep",
+  "line": "Stops the Intel AX210 Wi-Fi card from crashing after sleep.",
+  "symptom": "The AX210 enters D3cold during sleep, iwlwifi can't wake it, Wi-Fi is dead (sometimes even after a restart).",
+  "why": "The Intel AX210 card (PCI 8086:2725), whichever handheld it is in; the fix checks for the card, so it is offered everywhere.",
+  "kind": "file",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "",
+  "level": "recommended",
+  "must_fix": true,
+  "breaks": "wireless",
+  "default": "on",
+  "risk": "low",
+  "risk_note": "One udev rule, the same one Bazzite ships.",
+  "auto": "wifi:ax210",
+  "optional": "*",
+  "exclude": {},
+  "changes": [
+    {
+      "type": "udev-rule",
+      "target": "/etc/udev/rules.d/60-gamecove-ax210-d3cold.rules",
+      "detail": "Stops the Intel AX210 (8086:2725) from entering D3cold."
+    },
+    {
+      "type": "sysfs",
+      "target": "/sys/bus/pci/devices/<ax210>/d3cold_allowed",
+      "detail": "Set to 0 at once; the old value is saved."
+    }
+  ],
+  "undo": "Deletes the rule and writes the saved value back.",
+  "tested": [],
+  "bazzite": "Fixed up to stable 45.20261105 (50-intel-ax200-ax210-disable-d3cold-state.rules, after issue 5867). Bazzite reverted that rule on 2026-11-08 (in testing and unstable 45.20261110), so later builds need ours again; the fix checks the system's own rules.",
+  "steamos": "Not shipped as far as we can tell; the fix checks the system's own rules.",
+  "sources": [
+    "https://github.com/ublue-os/bazzite/issues/5867",
+    "https://github.com/ublue-os/bazzite/blob/main/system_files/deck/shared/usr/lib/udev/rules.d/50-intel-ax200-ax210-disable-d3cold-state.rules"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+      "any": [
+        {
+          "probe": "os_fixed"
+        },
+        {
+          "file": "/usr/lib/udev/rules.d/50-intel-ax200-ax210-disable-d3cold-state.rules"
+        }
+      ]
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Looks for the same rule from the system itself (any udev rule that isn't GameCove's and does the same), or the value already being right without GameCove."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "bazzite-rule",
+      "kind": "github-file",
+      "repo": "ublue-os/bazzite",
+      "path": "system_files/deck/shared/usr/lib/udev/rules.d/50-intel-ax200-ax210-disable-d3cold-state.rules",
+      "note": "Bazzite's own rule (added after issue 5867, reverted on 2026-11-08 in commit a4807c3).",
+      "records": {
+        "os": "bazzite",
+        "present": "fixed",
+        "absent": "not-fixed"
+      }
+    },
+    {
+      "id": "bazzite-5867",
+      "kind": "github-issue",
+      "repo": "ublue-os/bazzite",
+      "number": 5867,
+      "note": "The report behind Bazzite's rule."
+    },
+    {
+      "id": "iwlwifi",
+      "kind": "github-commits",
+      "repo": "torvalds/linux",
+      "path": "drivers/net/wireless/intel/iwlwifi/pcie/drv.c",
+      "note": "iwlwifi PCIe resume handling: a kernel fix would retire the rule everywhere."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

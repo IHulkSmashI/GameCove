@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/IHulkSmashI/GameCove/blob/main/tools/fixes/fix.schema.json",
+  "title": "GameCove fix definition (fixes/<id>/fix.json), schema 1",
+  "description": "One file per fix. docs/FIXES.md explains every field. tools/fixes/build.py checks each file against this schema (and a few rules a schema can't say) and builds app/data/fixes.json from them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "revision", "title", "line", "symptom", "why", "kind", "page", "password", "restart", "level", "must_fix", "breaks", "default", "risk", "risk_note", "auto", "optional", "changes", "undo", "tested", "bazzite", "steamos", "sources", "lifecycle", "watch", "withdrawn", "audited"],
+  "properties": {
+    "schema": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"},
+    "revision": {"type": "integer", "minimum": 1},
+    "title": {"type": "string", "minLength": 3, "maxLength": 60},
+    "line": {"type": "string", "minLength": 11, "maxLength": 160},
+    "symptom": {"type": "string"},
+    "why": {"type": "string"},
+    "kind": {"enum": ["root", "file", "power", "app", "advice"]},
+    "page": {"enum": ["fixes", "power", "controller"]},
+    "password": {"enum": ["admin", "none"]},
+    "restart": {"enum": ["", "restart", "cold-boot", "session"]},
+    "level": {"enum": ["recommended", "optional"]},
+    "must_fix": {"type": "boolean"},
+    "breaks": {"enum": ["", "sleep", "controls", "sound", "screen", "wireless", "touch", "power", "charging", "session"]},
+    "default": {"enum": ["on", "suggested-off", "advice-only"]},
+    "risk": {"enum": ["low", "medium", "high"]},
+    "risk_note": {"type": "string", "minLength": 10},
+    "auto": {"$ref": "#/$defs/selector"},
+    "optional": {"$ref": "#/$defs/selector"},
+    "exclude": {"type": "object", "additionalProperties": {"type": "string", "minLength": 5}},
+    "changes": {"type": "array", "items": {"$ref": "#/$defs/change"}},
+    "undo": {"type": "string", "minLength": 10},
+    "tested": {"type": "array", "items": {"$ref": "#/$defs/tested"}},
+    "bazzite": {"type": "string"},
+    "steamos": {"type": "string"},
+    "sources": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 5}},
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["needed_when", "obsolete_when", "probe", "both_active"],
+      "properties": {
+        "needed_when": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/condition"}]},
+        "obsolete_when": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/condition"}]},
+        "probe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command", "native", "what"],
+          "properties": {
+            "command": {"enum": ["status", "none"]},
+            "native": {"enum": ["", "os_fixed=yes"]},
+            "what": {"type": "string", "minLength": 10}
+          }
+        },
+        "both_active": {"enum": ["harmless", "conflict"]}
+      }
+    },
+    "watch": {"type": "array", "items": {"$ref": "#/$defs/watch"}},
+    "withdrawn": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["date", "reason"],
+          "properties": {"date": {"$ref": "#/$defs/date"}, "reason": {"type": "string", "minLength": 10, "maxLength": 200}}
+        }
+      ]
+    },
+    "audited": {"$ref": "#/$defs/date"}
+  },
+  "$defs": {
+    "date": {"type": "string", "pattern": "^20[0-9]{2}-[01][0-9]-[0-3][0-9]$"},
+    "path": {"type": "string", "pattern": "^/(sys|proc|usr|etc|lib|boot|run|var/lib)/[A-Za-z0-9._:+@/-]+$"},
+    "compare": {"type": "string", "pattern": "^(>=|<=|==|>|<)[0-9A-Za-z][0-9A-Za-z._-]*$"},
+    "selector": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "array", "items": {"$ref": "#/$defs/selector"}},
+        {"type": "object", "additionalProperties": false, "required": ["any-of"], "properties": {"any-of": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/selector"}}}},
+        {"type": "object", "additionalProperties": false, "required": ["all-of"], "properties": {"all-of": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/selector"}}}},
+        {"type": "object", "additionalProperties": false, "required": ["not"], "properties": {"not": {"$ref": "#/$defs/selector"}}}
+      ]
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "target", "detail"],
+      "properties": {
+        "type": {"enum": ["file", "udev-rule", "sysfs", "kernel-arg", "initramfs", "firmware", "service", "process"]},
+        "target": {"type": "string", "minLength": 3},
+        "detail": {"type": "string", "minLength": 10}
+      }
+    },
+    "tested": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device", "date", "os"],
+      "properties": {
+        "device": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]+$"},
+        "date": {"$ref": "#/$defs/date"},
+        "os": {"type": "string", "minLength": 3},
+        "note": {"type": "string"}
+      }
+    },
+    "condition": {
+      "anyOf": [
+        {"type": "object", "additionalProperties": false, "required": ["all"], "properties": {"all": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/condition"}}}},
+        {"type": "object", "additionalProperties": false, "required": ["any"], "properties": {"any": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/condition"}}}},
+        {"type": "object", "additionalProperties": false, "required": ["not"], "properties": {"not": {"$ref": "#/$defs/condition"}}},
+        {"type": "object", "additionalProperties": false, "required": ["kernel"], "properties": {"kernel": {"$ref": "#/$defs/compare"}}},
+        {"type": "object", "additionalProperties": false, "required": ["os"], "properties": {"os": {"enum": ["bazzite", "steamos", "chimeraos", "nobara", "cachyos", "fedora", "arch"]}, "version": {"$ref": "#/$defs/compare"}}},
+        {"type": "object", "additionalProperties": false, "required": ["bios"], "properties": {"bios": {"$ref": "#/$defs/compare"}, "scheme": {"enum": ["natural", "asus", "msi", "lenovo", "valve", "hex-ts"]}}},
+        {"type": "object", "additionalProperties": false, "required": ["ec"], "properties": {"ec": {"$ref": "#/$defs/compare"}}},
+        {"type": "object", "additionalProperties": false, "required": ["tool", "version"], "properties": {"tool": {"enum": ["inputplumber", "hhd", "steamos-powerbuttond", "steamos-manager", "gamescope", "gamescope-session-plus", "powerstation", "linux-firmware", "mesa"]}, "version": {"$ref": "#/$defs/compare"}}},
+        {"type": "object", "additionalProperties": false, "required": ["file"], "properties": {"file": {"$ref": "#/$defs/path"}}},
+        {"type": "object", "additionalProperties": false, "required": ["file_contains"], "properties": {"file_contains": {"type": "object", "additionalProperties": false, "required": ["path", "text"], "properties": {"path": {"$ref": "#/$defs/path"}, "text": {"type": "string", "minLength": 2, "maxLength": 200}}}}},
+        {"type": "object", "additionalProperties": false, "required": ["sysfs"], "properties": {"sysfs": {"$ref": "#/$defs/path"}}},
+        {"type": "object", "additionalProperties": false, "required": ["sysfs_value"], "properties": {"sysfs_value": {"type": "object", "additionalProperties": false, "required": ["path", "equals"], "properties": {"path": {"$ref": "#/$defs/path"}, "equals": {"type": "string", "maxLength": 100}}}}},
+        {"type": "object", "additionalProperties": false, "required": ["module"], "properties": {"module": {"type": "string", "pattern": "^[a-z0-9_]+$"}}},
+        {"type": "object", "additionalProperties": false, "required": ["module_param"], "properties": {"module_param": {"type": "object", "additionalProperties": false, "required": ["module", "param"], "properties": {"module": {"type": "string", "pattern": "^[a-z0-9_]+$"}, "param": {"type": "string", "pattern": "^[A-Za-z0-9_]+$"}, "equals": {"type": "string", "maxLength": 100}}}}},
+        {"type": "object", "additionalProperties": false, "required": ["probe"], "properties": {"probe": {"enum": ["os_fixed", "hw_absent"]}}}
+      ]
+    },
+    "watch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "note"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,40}$"},
+        "kind": {"enum": ["github-file", "github-commits", "github-release", "github-issue", "gitlab-tags", "kernel-releases", "firmware-index", "lore", "url"]},
+        "note": {"type": "string", "minLength": 10},
+        "repo": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+        "project": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+        "path": {"type": "string", "pattern": "^[A-Za-z0-9._+@ /-]*$"},
+        "number": {"type": "integer", "minimum": 1},
+        "device": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]+$"},
+        "item": {"enum": ["bios", "ec", "controller"]},
+        "query": {"type": "string", "minLength": 3, "maxLength": 120},
+        "url": {"type": "string", "pattern": "^https://[A-Za-z0-9.-]+/[^ ]*$"},
+        "records": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["os"],
+          "properties": {
+            "os": {"enum": ["bazzite", "steamos"]},
+            "present": {"enum": ["fixed", "not-fixed"]},
+            "absent": {"enum": ["fixed", "not-fixed"]}
+          }
+        }
+      }
+    }
+  }
+}

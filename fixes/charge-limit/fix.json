@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "id": "charge-limit",
+  "revision": 1,
+  "title": "Charge limit",
+  "line": "Stops charging at a limit you choose.",
+  "symptom": "",
+  "why": "",
+  "kind": "power",
+  "page": "power",
+  "password": "none",
+  "restart": "",
+  "level": "optional",
+  "must_fix": false,
+  "breaks": "",
+  "default": "suggested-off",
+  "risk": "low",
+  "risk_note": "A day-to-day setting with checked values; the original is always saved and put back.",
+  "auto": [],
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "sysfs",
+      "target": "/sys/class/power_supply/<battery>/charge_control_end_threshold (or the maker's own attribute)",
+      "detail": "The charge limit; the original is saved first."
+    },
+    {
+      "type": "udev-rule",
+      "target": "/etc/udev/rules.d/60-gamecove-charge-limit.rules",
+      "detail": "Only on handhelds whose firmware forgets the limit: puts it back at start."
+    }
+  ],
+  "undo": "Writes the original limit back (100 = no limit) and deletes the rule.",
+  "tested": [],
+  "bazzite": "",
+  "steamos": "",
+  "sources": [
+    "fixes/charge-limit/README.md"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": null,
+    "probe": {
+      "command": "status",
+      "native": "",
+      "what": "A setting, not a workaround: status says whether this handheld has the control at all (applies=yes)."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}
