@@ -1,11 +1,11 @@
 #!/bin/sh
 # Live check of every download GameCove makes from its data repo (IHulkSmashI/GameCove-data), against the real
 # releases, with signature checks: the app's own code (app/tests/live/data_check.gd: game database, release
-# calendar, device photos, firmware list) and the upscaling helper's (tools/data_check/upscalers_live.py: the signed
+# calendar, device photos, firmware list, the signed fix list) and the upscaling helper's (tools/data_check/upscalers_live.py: the signed
 # upscaler list, OptiScaler with its extras, the XeSS XMX driver, REFramework, the FSR 4 files, newest and pinned).
 # It uses the network, so it's never part of the gates; run it after the data repo's workflows publish, e.g. after
 # bumping its gamecove-source.env. Everything goes into a temp folder (a temp HOME too); nothing is installed.
-# usage: sh tools/data_check/run.sh [--godot PATH] [gamedb] [calendar] [photos] [firmware] [upscalers]
+# usage: sh tools/data_check/run.sh [--godot PATH] [gamedb] [calendar] [photos] [firmware] [fixes] [upscalers]
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -18,11 +18,11 @@ work=$(mktemp -d)
 trap '[ -n "${KEEP_WORK:-}" ] || rm -rf "$work"' EXIT
 gd=""
 up=no
-[ "$#" -gt 0 ] || set -- gamedb calendar photos firmware upscalers
+[ "$#" -gt 0 ] || set -- gamedb calendar photos firmware fixes upscalers
 for c in "$@"; do
 	case "$c" in
 	upscalers) up=yes ;;
-	gamedb | calendar | photos | firmware) gd="$gd $c" ;;
+	gamedb | calendar | photos | firmware | fixes) gd="$gd $c" ;;
 	*)
 		echo "unknown check: $c" >&2
 		exit 2
