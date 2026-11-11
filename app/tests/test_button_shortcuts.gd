@@ -789,6 +789,22 @@ func test_service_exit_hands_back_a_shortcut_set_outside_our_session() -> void:
 	c.free()
 
 
+func test_service_hands_the_buttons_back_when_the_monitor_cannot_be_restarted() -> void:
+	var t := _service("monitor_gone")
+	var c: Node = t[0]
+	var f: RefCounted = t[1]
+	var ip = t[2]
+	ip.loaded = Profile.to_json(ButtonMap.set_press(_empty(), "LeftPaddle1", "action:mute"))
+	c.refresh()
+	c.setup_intercept_for_tests()
+	c.monitor_line({"kind": "started"})
+	f.calls.clear()
+	c._restarts = 3   # three restarts already failed
+	c.monitor_line({"kind": "exited"})
+	ok(_loads(f).size() >= 1 and not JSON.stringify(_loads(f)[-1]).contains("\"dbus\""), "no mapping to a listener that is gone")
+	c.free()
+
+
 func test_service_opens_steams_menu_through_the_virtual_pad() -> void:
 	var t := _service("steam_menu")
 	var c: Node = t[0]

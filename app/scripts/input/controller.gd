@@ -625,6 +625,7 @@ func _on_monitor_line(d: Dictionary) -> void:
 		"started":
 			_monitor_alive = true
 			_restarts = 0
+			_gave_up = false
 			_apply_intercept()
 			_queue("shortcuts", _ensure_shortcuts)
 		"owner":
@@ -666,8 +667,18 @@ func _reload_layout() -> void:
 				controls.detect_all()))
 
 
+var _gave_up := false   # the monitor could not be restarted and the buttons were handed back
+
+
 func _restart_monitor_later() -> void:
-	if _restarts >= 3 or not is_inside_tree():
+	if _restarts >= 3:
+		# nobody is listening any more: the buttons we mapped to GameCove must not stay mapped to a dead D-Bus
+		# listener (Quick Access would do nothing anywhere), so they go back to what Steam and the desktop expect
+		if not _gave_up:
+			_gave_up = true
+			hand_back()
+		return
+	if not is_inside_tree():
 		return
 	_restarts += 1
 	get_tree().create_timer(5.0 * _restarts).timeout.connect(_restart_monitor_now)   # a method, not a lambda: freed with this node at exit
