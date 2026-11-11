@@ -22,7 +22,7 @@ const KNOWN := {
 	"scripts/steam/steam_backend.gd": [2, "polls only while an install / setting it started is watched"],
 	# one-shot, started by something the user did (or a rare event)
 	"scripts/library/library.gd": [1, "one-shot batch of library change signals"],
-	"scripts/input/controller.gd": [1, "one-shot restart backoff when the intercept monitor died"],
+	"scripts/input/controller.gd": [2, "one-shot restart backoff when the intercept monitor died; one-shot hold time only while a shortcut button is held down"],
 	"scripts/controls/providers/perf.gd": [1, "one-shot daily upscaler update check (privacy-gated)"],
 	"scripts/ui/toast.gd": [1, "one-shot: a toast's stay time"],
 	"scripts/system/updates.gd": [1, "one-shot 3 min after start: the opt-in automatic app update (refused while a game runs)"],

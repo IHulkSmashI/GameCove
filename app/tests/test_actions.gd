@@ -99,6 +99,10 @@ class FakeSession extends RefCounted:
 
 class FakeController extends RefCounted:
 	var backend := "inputplumber"
+	var steam_menus := 0
+
+	func open_steam_menu() -> void:
+		steam_menus += 1
 
 	func state() -> Dictionary:
 		return {"backend": backend}
@@ -178,7 +182,7 @@ func test_registry_is_whole() -> void:
 			ok(full["control"] != "", "%s is backed by a Control" % id)
 	for id in Registry.STRIP_DEFAULT:
 		ok(bool(Registry.action(id).get("strip", false)), "default shortcut %s is a strip action" % id)
-	eq(Registry.STRIP_DEFAULT, ["keyboard", "screenshot", "record", "mouse_mode", "mute", "send_key", "sleep"], "the usual strip")
+	eq(Registry.STRIP_DEFAULT, ["keyboard", "steam_menu", "screenshot", "record", "mouse_mode", "mute", "send_key", "sleep"], "the usual strip")
 	for id in Registry.SEND_KEYS:
 		eq(Registry.action(id)["kind"], "key", "%s in the Send key sheet presses keys" % id)
 	eq(Registry.SEND_KEYS.map(func(i): return Registry.action(i)["title"]), ["Esc", "Enter", "Tab", "Alt + Enter", "Alt + F4"], "the Send key set")
@@ -279,17 +283,17 @@ func _prefs_done(p: String) -> void:
 
 func test_strip_prefs() -> void:
 	var p := _prefs_file()
-	eq(Prefs.shown(), Registry.STRIP_DEFAULT, "defaults: Keyboard, Screenshot, Record, Mouse mode, Mute, Send key, Sleep")
+	eq(Prefs.shown(), Registry.STRIP_DEFAULT, "defaults: Keyboard, Steam menu, Screenshot, Record, Mouse mode, Mute, Send key, Sleep")
 	eq(Prefs.all().size(), Registry.strip_ids().size(), "every strip action is in the list")
 	ok(not Prefs.is_shown("wifi") and Prefs.is_shown("mute"), "the rest start hidden")
 	Prefs.set_shown("wifi", true)
 	Prefs.set_shown("sleep", false)
 	ok(Prefs.is_shown("wifi") and not Prefs.is_shown("sleep"), "on / off")
-	ok(Prefs.move("screenshot", -1), "move up")
-	eq(Prefs.shown().slice(0, 2), ["screenshot", "keyboard"], "Screenshot is first now")
-	ok(not Prefs.move("screenshot", -1), "the first can't go higher")
+	ok(Prefs.move("steam_menu", -1), "move up")
+	eq(Prefs.shown().slice(0, 2), ["steam_menu", "keyboard"], "Steam menu is first now")
+	ok(not Prefs.move("steam_menu", -1), "the first can't go higher")
 	ok(not Prefs.move(Prefs.all()[-1], 1), "the last can't go lower")
-	ok(Prefs.move("screenshot", 1), "move down")
+	ok(Prefs.move("steam_menu", 1), "move down")
 	eq(Prefs.shown()[0], "keyboard", "back in place")
 	# what was saved is what loads
 	var before_order := Prefs.all()
@@ -499,6 +503,24 @@ func test_runner_steam_keyboard() -> void:
 	DirAccess.remove_absolute(dir)
 
 
+func test_runner_steam_menu() -> void:
+	var rig := _rig()
+	var r: Node = rig["r"]
+	ok(r.run("steam_menu"), "Steam menu runs over a game")
+	eq(rig["ctl"].steam_menus, 1, "the Controller service hands Steam its menu button")
+	eq(rig["calls"]["closed"], 1, "our menu closes first, so Steam's opens over the game")
+	eq(rig["run"].calls, [], "no program of ours runs for it")
+	rig["front"][0] = false
+	ok(not r.run("steam_menu"), "not with GameCove in front")
+	rig["front"][0] = true
+	rig["ctl"].backend = "hhd"
+	ok(not r.can_run("steam_menu"), "Handheld Daemon: no way to hand Steam the button")
+	eq(r.why_not("steam_menu"), "Needs InputPlumber, which hands the button to Steam.", "with the reason")
+	eq(rig["ctl"].steam_menus, 1, "nothing more was sent")
+	ok(Registry.action("steam_menu")["button"], "a back button can open Steam's menu too")
+	_done(rig)
+
+
 func test_runner_sends_keys_only_to_a_game() -> void:
 	var rig := _rig()
 	var r: Node = rig["r"]
@@ -596,7 +618,7 @@ func test_strip_shows_what_works_here() -> void:
 	qm.open(rig["session"].game)
 	var strip: Control = qm.strip
 	ok(strip != null and strip.visible, "the strip is in the menu")
-	eq(strip.visible_ids(), Registry.STRIP_DEFAULT, "over a game: the usual seven, in order")
+	eq(strip.visible_ids(), Registry.STRIP_DEFAULT, "over a game: the usual eight, in order")
 	for id in strip.visible_ids():
 		var b: Button = strip.buttons[id]
 		eq(str(b.name), "Shortcut_" + id, "%s button is named after it" % id)
@@ -609,12 +631,12 @@ func test_strip_shows_what_works_here() -> void:
 	ok(not qm.find_child("Scroll", true, false).is_ancestor_of(strip) or strip.find_parent("Shortcuts") == null, "never scrolls away with them")
 	rig["front"][0] = false
 	strip.refresh()
-	eq(strip.visible_ids(), ["screenshot", "record", "mouse_mode", "mute", "sleep"], "GameCove in front: no Keyboard, no Send key")
+	eq(strip.visible_ids(), ["screenshot", "record", "mouse_mode", "mute", "sleep"], "GameCove in front: no Keyboard, no Steam menu, no Send key")
 	rig["front"][0] = true
 	rig["ctl"].backend = "hhd"
 	rig["controls"].missing = ["controller.desktop_mode"]
 	strip.refresh()
-	eq(strip.visible_ids(), ["keyboard", "screenshot", "record", "mute", "sleep"], "Handheld Daemon: no Send key, no mouse mode")
+	eq(strip.visible_ids(), ["keyboard", "screenshot", "record", "mute", "sleep"], "Handheld Daemon: no Steam menu, no Send key, no mouse mode")
 	rig["controls"].missing = ["controller.desktop_mode", "system.screenshot", "audio.mute", "system.sleep"]
 	rig["front"][0] = false
 	rig["r"].recording = null
@@ -635,7 +657,7 @@ func test_strip_follows_the_saved_list() -> void:
 	var rig := _rig()
 	var qm := _menu(rig)
 	qm.open(rig["session"].game)
-	eq(qm.strip.visible_ids(), ["screenshot", "record", "mute", "mouse_mode", "send_key", "sleep", "wifi", "force_close", "power_menu"],
+	eq(qm.strip.visible_ids(), ["steam_menu", "screenshot", "record", "mute", "mouse_mode", "send_key", "sleep", "wifi", "force_close", "power_menu"],
 		"the user's shortcuts in the user's order")
 	qm.close()
 	Prefs.reset()
@@ -778,7 +800,7 @@ func test_settings_page_lists_and_moves_shortcuts() -> void:
 	var page: VBoxContainer = Page.new()
 	page.setup("quick_menu", {"actions": rig["r"]}, null)
 	eq(page.focusables().size(), Registry.strip_ids().size() + 1, "a row per shortcut and the reset row")
-	eq(page.rows.keys().slice(0, 7), Registry.STRIP_DEFAULT, "in the strip's order")
+	eq(page.rows.keys().slice(0, 8), Registry.STRIP_DEFAULT, "in the strip's order")
 	ok(page.rows["keyboard"].value() == true and page.rows["wifi"].value() == false, "on / off as saved")
 	for id in Registry.strip_ids():
 		ok(page.rows[id].hint_text().contains(Registry.action(id)["help"]), "%s: its one help line" % id)
@@ -786,7 +808,7 @@ func test_settings_page_lists_and_moves_shortcuts() -> void:
 	page.rows["wifi"].step(1)
 	ok(Prefs.is_shown("wifi"), "a row's switch saves at once")
 	ok(page.move("mute", -1), "move up")
-	eq(page.rows.keys().slice(0, 5), ["keyboard", "screenshot", "record", "mute", "mouse_mode"], "the list shows the new order")
+	eq(page.rows.keys().slice(0, 6), ["keyboard", "steam_menu", "screenshot", "record", "mute", "mouse_mode"], "the list shows the new order")
 	ok(not page.move("keyboard", -1), "the first stays first")
 	ok(not page.move("", 1), "no row in focus: nothing moves")
 	rig["ctl"].backend = "hhd"
@@ -827,3 +849,22 @@ func test_screenshots_list() -> void:
 	DirAccess.remove_absolute(dir)
 	DirAccess.remove_absolute(home.path_join("Pictures"))
 	DirAccess.remove_absolute(home)
+
+
+## feat/upscaling's "Open the upscaler's menu" reaches the registry through the
+## Controls context: the key is there from setup on (never added while the worker
+## runs) and the action itself runs on the main thread, through main's runner.
+func test_controls_context_runs_a_shared_action() -> void:
+	var src := FileAccess.get_file_as_string("res://scripts/controls/controls.gd")
+	ok(src.contains("\"open_uri\": open_uri, \"run_action\": run_action})"), "run_action is in the context Controls sets up with")
+	var c: Node = load("res://scripts/controls/controls.gd").new()
+	var got: Array = []
+	ok(c.run_action("key_optiscaler"), "handed over")
+	c._run_action("key_optiscaler")
+	eq(got, [], "no runner yet: nothing happens")
+	c.action_handler = func(id: String) -> void: got.append(id)
+	c._run_action("key_optiscaler")
+	eq(got, ["key_optiscaler"], "the runner gets it on the main thread")
+	var main_src := FileAccess.get_file_as_string("res://scripts/main.gd")
+	ok(main_src.contains("ctls.action_handler = func(id: String) -> void: actions.run(id, \"button\", true)"), "main points it at its action runner")
+	c.free()

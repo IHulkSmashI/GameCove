@@ -103,12 +103,19 @@ const ICONS := {
 }
 
 
+## Controls with a page of their own, never repeated in a group's cards:
+## Settings > Controller > Button shortcuts (ui/device/shortcuts_card.gd).
+const OWN_PAGE := ["controller.paddle.*", "controller.button.*", "controller.hold.*", "controller.to_steam.*",
+	"controller.hold_time", "controller.hhd_shortcut.*", "controller.reset_shortcuts"]
+
+
 ## The cards for a list of Controls groups, with "*" ids expanded against
 ## `all` (the ids that exist) and every leftover id in an "Other" card.
 ## Returns [[title, icon, main ids, more ids], ...] with only existing ids.
 static func cards_for(groups: Array, all: Array) -> Array:
 	var out := []
 	var used := {}
+	expand(OWN_PAGE, all, used)
 	for g in groups:
 		for card in CARDS.get(g, []):
 			var main := expand(card[2], all, used)

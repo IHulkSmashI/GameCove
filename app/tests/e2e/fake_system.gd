@@ -724,6 +724,10 @@ func _ip_call(path: String, iface: String, method: String, a: Array) -> Dictiona
 			if props.has(key):
 				props[key]["data"] = str(p.get("name", ""))
 			return {"code": 0, "out": ""}
+		"SendButtonChord":
+			# straight to the virtual pad (Steam menu shortcut): "as N cap..."
+			_event("chord " + " ".join(PackedStringArray(a.slice(2).map(func(x): return str(x)))))
+			return {"code": 0 if mode != "failing" else 1, "out": ""}
 		"SetInterceptActivation", "Rumble", "Stop":
 			return {"code": 0 if mode != "failing" else 1, "out": ""}
 	return {}

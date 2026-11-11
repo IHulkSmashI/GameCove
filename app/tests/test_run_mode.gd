@@ -36,4 +36,4 @@ func test_service_autoloads_check_helper_mode_first() -> void:
 	var photo := FileAccess.get_file_as_string("res://scripts/device/photo.gd")
 	ok(photo.find("run_mode.gd\").helper()") < photo.find("prefetch_detected.call_deferred()"), "photo: no prefetch in helper mode")
 	var ctl := FileAccess.get_file_as_string("res://scripts/input/controller.gd")
-	ok("not preload(\"res://scripts/system/run_mode.gd\").helper() and intercept_wanted(" in ctl, "controller: no intercept in helper mode")
+	ok("var helper := preload(\"res://scripts/system/run_mode.gd\").helper()\n\tif not helper and intercept_wanted(" in ctl, "controller: no intercept in helper mode")

@@ -237,5 +237,5 @@ static func fixes_line(counts: Dictionary) -> String:
 
 ## Controller category: the link to the device's button map and test.
 const BUTTONS_CARD := "Buttons"
-const BUTTONS_ROW := "Back buttons and button test"
-const BUTTONS_ROW_HINT := "Map the back buttons, see this game's layout and test every button."
+const BUTTONS_ROW := "Button shortcuts"
+const BUTTONS_ROW_HINT := "What each button does when pressed and when held, Quick Access in games, a button test and this game's own layout."

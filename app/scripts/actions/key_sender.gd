@@ -1,7 +1,6 @@
 extends RefCounted
-## Presses keyboard keys at the game through InputPlumber's virtual keyboard,
-## the way OpenGamepadUI's on-screen keyboard types (its KeyboardDevice.send_key
-## on org.shadowblip.Input.Keyboard, GPL-3.0). GameCove writes no uinput device
+## Presses keyboard keys at the game through InputPlumber's virtual keyboard
+## (org.shadowblip.Input.Keyboard.SendKey). GameCove writes no uinput device
 ## of its own.
 ##
 ##   /org/shadowblip/InputPlumber/devices/target/keyboardN

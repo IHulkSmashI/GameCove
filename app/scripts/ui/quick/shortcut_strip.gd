@@ -30,9 +30,9 @@ signal close_requested
 ## The set of visible buttons changed (the menu links focus again).
 signal relinked
 
-const BUTTON_MIN := Vector2(68, 62)
+const BUTTON_MIN := Vector2(56, 62)
 const ICON_PX := 26
-const GAP := 6
+const GAP := 4
 
 var runner: Object
 ## Where sheets go (the quick menu itself, so they cover its panel).

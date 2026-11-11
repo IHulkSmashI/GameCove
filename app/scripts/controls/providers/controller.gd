@@ -23,7 +23,10 @@ const Hhd := preload("res://scripts/controls/input/hhd_client.gd")
 const Profile := preload("res://scripts/input/ip_profile.gd")
 const Traits := preload("res://scripts/device/traits.gd")
 const Rumble := preload("res://scripts/controls/input/rumble.gd")
+const Buttons := preload("res://scripts/device/buttons.gd")
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
+const ButtonMap := preload("res://scripts/actions/button_map.gd")
+const Registry := preload("res://scripts/actions/registry.gd")
 
 const R_NONE := "Needs InputPlumber or Handheld Daemon running"
 const R_HHD_ONLY := "Needs Handheld Daemon (InputPlumber has no such setting)"
@@ -107,6 +110,14 @@ func controls() -> Array:
 		out.append(_button("paddle", cap, "Back button " + str(hw["paddles"][cap])))
 	for cap in hw["extra_buttons"]:
 		out.append(_button("button", cap, str(hw["extra_buttons"][cap])))
+	for cap in ButtonMap.hold_caps(row):
+		if ButtonMap.ours_in_game(row, cap):
+			out.append(_to_steam(cap))
+		out.append(_hold(cap))
+	out.append(_hold_time())
+	out.append(_reset_shortcuts(hw))
+	for sc in HHD_SHORTCUTS:
+		out.append(_hhd_shortcut(sc[0], sc[1], sc[2]))
 	out.append_array([
 		_nintendo(), _desktop(), _desktop_speed_ctl(), _trackpad(),
 		_rumble(), _rumble_strength(), _rumble_test(),
@@ -462,40 +473,239 @@ func _hhd_paddles_path() -> Array:
 	return [k, mode, "paddles_as"] if be.hhd_ctl([k, mode, "paddles_as"]) is String else []
 
 
-func _button_options(cap: String) -> Array:
+## What a button can press, in the order the picker lists it: itself, off, the
+## GameCove actions (scripts/actions/registry.gd), key combinations (the Send
+## key set, OptiScaler's keys, the user's own), single keys, gamepad buttons,
+## mouse clicks. `also`: a value the profile holds that isn't in the list.
+func _button_options(cap: String, also := "") -> Array:
 	var vals: Array = ["", "disabled"]
+	for id in Registry.button_ids():
+		var a := Registry.action(id)
+		var v: String = ButtonMap.ACTION + id if a["kind"] != "key" else Registry.combo_text(a["keys"])
+		if not v in vals:
+			vals.append(v)
+	for combo in custom_keys():
+		if not combo in vals:
+			vals.append(combo)
+	for k in KEYS:
+		if not k in vals:
+			vals.append(k)
 	for b in Profile.BUTTONS:
 		if b != cap and not b.contains("Paddle"):
 			vals.append(b)
 	vals.append_array(["mouse:Left", "mouse:Right"])
-	vals.append_array(KEYS)
-	var labels := BUTTON_LABELS.duplicate()
-	labels.merge({"": "As itself", "disabled": "Off", "mouse:Left": "Mouse left click", "mouse:Right": "Mouse right click"})
-	for k in KEYS:
-		labels[k] = "Key " + str(k).trim_prefix("Key")
-	return _opts(vals, labels)
+	if also != "" and not also in vals and ButtonMap.valid_press(also):
+		vals.append(also)
+	return vals.map(func(v): return {"value": v, "label": ButtonMap.label(str(v), BUTTON_LABELS)})
+
+
+## Where the hold time and the user's own key combinations are kept, next to the layouts.
+func _shortcuts_path() -> String:
+	return be.profile_path().get_base_dir().path_join("shortcuts.json")
+
+
+func _shortcuts_prefs() -> Dictionary:
+	if not FileAccess.file_exists(_shortcuts_path()):
+		return {}
+	var d: Variant = SettingsFile.load_json(_shortcuts_path())["data"]
+	return d if d is Dictionary else {}
+
+
+func _save_shortcuts_prefs(d: Dictionary) -> bool:
+	DirAccess.make_dir_recursive_absolute(_shortcuts_path().get_base_dir())
+	return SettingsFile.save_json(_shortcuts_path(), d, "  ") == OK
+
+
+## Key combinations the user added ("KeyLeftCtrl+KeyF5"), valid ones only.
+func custom_keys() -> Array:
+	var out: Array = []
+	var list: Variant = _shortcuts_prefs().get("custom_keys", [])
+	for c in list if list is Array else []:
+		if c is String and Registry.valid_combo(Registry.combo_keys(c)) and not c in out:
+			out.append(c)
+	return out
+
+
+## Adds a key or key combination to what buttons can press. Worker (the Controls
+## worker: Controls.run_on_worker), followed by a detect so the lists show it.
+func add_custom_key(combo: String) -> bool:
+	if not Registry.valid_combo(Registry.combo_keys(combo)):
+		return false
+	var d := _shortcuts_prefs()
+	var list: Array = custom_keys()
+	if not combo in list:
+		list.append(combo)
+	d["custom_keys"] = list
+	return _save_shortcuts_prefs(d)
 
 
 ## One remappable button (a back paddle or an extra special button). InputPlumber only.
+## A key or a gamepad button is pressed by InputPlumber itself; a GameCove action
+## reaches GameCove as a D-Bus event (scripts/actions/button_map.gd).
 func _button(kind: String, cap: String, title: String) -> RefCounted:
 	return _make({"id": "controller.%s.%s" % [kind, cap], "title": title, "kind": "choice", "default_value": "",
-		"options": _button_options(cap), "help": "What this button sends."},
+		"options": _button_options(cap), "help": "What a press of this button does."},
+		func(c):
+			match be.controller_backend():
+				"inputplumber":
+					if not ("Gamepad:Button:" + cap) in be.ip_caps():
+						return "InputPlumber doesn't report this button"
+					c.options = _button_options(cap, ButtonMap.press_of(be.ip_profile(), cap))
+					return ""
+				"hhd":
+					return "Handheld Daemon sets the back buttons together (Back buttons)" if kind == "paddle" else R_IP_ONLY
+			return R_NONE,
+		func(_c):
+			var t := ButtonMap.press_of(be.ip_profile(), cap)
+			return t if ButtonMap.valid_press(t) else null,
+		func(c, v):
+			var why := ButtonMap.press_problem(be.ip_profile(), cap, str(v))
+			c.set_meta("why", ButtonMap.why_text(why) if why != "" else "")
+			if why != "":
+				return false
+			var stock := be.ip_stock_profile()
+			return be.ip_apply(func(p): return ButtonMap.set_press(p, cap, str(v), stock),
+				func(p): return ButtonMap.press_of(p, cap) == str(v)))
+
+
+## What holding one of GameCove's own buttons (Guide, Quick Access...) does. The
+## short press stays what it is. InputPlumber only: the button is mapped to its
+## D-Bus name so the press and the release reach GameCove while a game has focus.
+func _hold(cap: String) -> RefCounted:
+	var label := Buttons.label_for(row, cap)
+	var vals: Array = [""]
+	for id in Registry.button_ids():
+		if ButtonMap.hold_problem(row, cap, ButtonMap.ACTION + id) == "":
+			vals.append(ButtonMap.ACTION + id)
+	var opts: Array = vals.map(func(v): return {"value": v, "label": "Nothing" if v == "" else ButtonMap.label(str(v))})
+	return _make({"id": "controller.hold." + cap, "title": "Hold " + label, "kind": "choice",
+		"default_value": ButtonMap.default_hold(row, cap), "options": opts, "affects": ["controller.to_steam." + cap],
+		"help": "What holding this button does. A short press stays the same."},
+		func(_c):
+			match be.controller_backend():
+				"inputplumber":
+					if not ("Gamepad:Button:" + cap) in be.ip_caps():
+						return "InputPlumber doesn't report this button"
+					if ButtonMap.to_steam(be.ip_profile(), cap):
+						return ButtonMap.why_text("steam")
+					return ""
+				"hhd":
+					return "Handheld Daemon has its own button shortcuts (below)"
+			return R_NONE,
+		func(_c): return ButtonMap.hold_of(be.ip_profile(), cap, row),
+		func(_c, v):
+			if ButtonMap.hold_problem(row, cap, str(v)) != "":
+				return false
+			return be.ip_apply(func(p): return ButtonMap.set_hold(p, cap, str(v), row),
+				func(p): return ButtonMap.hold_of(p, cap, row) == str(v)))
+
+
+## Quick Access in games: GameCove's quick menu (off, the default) or Steam's
+## quick access menu as the handheld sends it (on). In GameCove's own screens
+## the button opens our menu either way. InputPlumber only.
+func _to_steam(cap: String) -> RefCounted:
+	var label := Buttons.label_for(row, cap)
+	return _make({"id": "controller.to_steam." + cap, "title": "Goes to Steam in games", "kind": "toggle",
+		"default_value": false, "affects": ["controller.hold." + cap],
+		"help": "On: in a game, %s opens Steam's quick access menu instead of ours, and has no hold." % label},
 		func(_c):
 			match be.controller_backend():
 				"inputplumber":
 					return "" if ("Gamepad:Button:" + cap) in be.ip_caps() else "InputPlumber doesn't report this button"
 				"hhd":
-					return "Handheld Daemon sets the back buttons together (Back buttons)" if kind == "paddle" else R_IP_ONLY
+					return R_IP_ONLY
 			return R_NONE,
-		func(_c):
-			var t := IpEdit.button_target(be.ip_profile(), cap)
-			return t if t == "" or IpEdit.valid_button_target(t) else null,
+		func(_c): return ButtonMap.to_steam(be.ip_profile(), cap),
 		func(_c, v):
-			if not IpEdit.valid_button_target(str(v)):
+			var on: bool = v == true
+			return be.ip_apply(func(p): return ButtonMap.set_to_steam(p, cap, on, row),
+				func(p): return ButtonMap.to_steam(p, cap) == on))
+
+
+func _hold_time() -> RefCounted:
+	return _make({"id": "controller.hold_time", "title": "Hold time", "kind": "slider", "min_value": 0.3, "max_value": 1.5,
+		"step": 0.1, "unit": "s", "default_value": 0.5, "per_game": false,
+		"help": "How long a button is held before its hold action runs."},
+		func(_c):
+			if ButtonMap.hold_caps(row).is_empty():
+				return "This handheld has no button for it"
+			return "" if be.controller_backend() == "inputplumber" else (R_IP_ONLY if be.controller_backend() == "hhd" else R_NONE),
+		func(_c): return clampf(float(_shortcuts_prefs().get("hold_s", 0.5)), 0.3, 1.5),
+		func(_c, v):
+			var d := _shortcuts_prefs()
+			d["hold_s"] = snappedf(float(v), 0.1)
+			if not _save_shortcuts_prefs(d):
 				return false
+			be._changed()   # the Controller service reads it for the intercept
+			return true)
+
+
+## Every button shortcut back to this handheld's usual ones (Quick Access: our
+## quick menu, held: Keyboard; back buttons as themselves; half a second).
+## The rest of the layout stays. InputPlumber only.
+func _reset_shortcuts(hw: Dictionary) -> RefCounted:
+	var caps: Array = (hw["paddles"] as Dictionary).keys() + (hw["extra_buttons"] as Dictionary).keys()
+	var affects: Array = ["controller.hold_time"]
+	for cap in (hw["paddles"] as Dictionary).keys():
+		affects.append("controller.paddle." + str(cap))
+	for cap in (hw["extra_buttons"] as Dictionary).keys():
+		affects.append("controller.button." + str(cap))
+	for cap in ButtonMap.hold_caps(row):
+		affects.append_array(["controller.hold." + cap, "controller.to_steam." + cap])
+	return _make({"id": "controller.reset_shortcuts", "title": "Reset button shortcuts", "kind": "action", "per_game": false, "affects": affects,
+		"help": "Puts every button's press and hold back the way they came."},
+		func(_c): return "" if be.controller_backend() == "inputplumber" else (R_IP_ONLY if be.controller_backend() == "hhd" else R_NONE),
+		func(_c): return null,
+		func(_c, _v):
 			var stock := be.ip_stock_profile()
-			return be.ip_apply(func(p): return IpEdit.set_button(p, cap, str(v), stock),
-				func(p): return IpEdit.button_target(p, cap) == str(v)))
+			var want := func(p: Dictionary) -> Dictionary: return ButtonMap.reset(p, row, caps, stock)
+			if not be.ip_apply(want, func(p): return p.get("mapping", []) == ButtonMap.reset(p, row, caps, stock).get("mapping", [])):
+				return false
+			var d := _shortcuts_prefs()
+			d.erase("hold_s")
+			_save_shortcuts_prefs(d)
+			be._changed()
+			return true)
+
+
+## Handheld Daemon's own button shortcuts (its `shortcuts` settings): GameCove
+## shows each one hhd offers on this handheld with hhd's own choices and writes
+## hhd's setting. [section, key, title].
+const HHD_SHORTCUTS := [
+	["custom", "armoury", "Armoury Crate button"], ["custom", "fan", "Fan button"],
+	["controller", "xbox_a", "Xbox + A"], ["controller", "xbox_b", "Xbox + B"],
+	["controller", "xbox_x", "Xbox + X"], ["controller", "xbox_y", "Xbox + Y"],
+	["touchscreen", "bottom", "Swipe up from the bottom"], ["touchscreen", "top", "Swipe down from the top"],
+	["touchscreen", "left_top", "Swipe in from the left, top half"], ["touchscreen", "left_bottom", "Swipe in from the left, bottom half"],
+	["touchscreen", "right_top", "Swipe in from the right, top half"], ["touchscreen", "right_bottom", "Swipe in from the right, bottom half"],
+]
+const HHD_SHORTCUT_LABELS := {"disabled": "Nothing", "keyboard": "Steam keyboard", "steam_qam": "Steam side menu",
+	"steam_expanded": "Steam overlay", "hhd_qam": "Handheld Daemon side menu", "hhd_expanded": "Handheld Daemon overlay",
+	"tdp_cycle": "Next TDP step", "framegen_toggle": "Frame generation on / off", "disconnect": "Disconnect the controller",
+	"screenshot": "Screenshot"}
+
+
+func _hhd_shortcut(section: String, key: String, title: String) -> RefCounted:
+	var path: Array = ["shortcuts", section, key]
+	return _make({"id": "controller.hhd_shortcut.%s.%s" % [section, key], "title": title, "kind": "choice",
+		"default_value": "disabled", "options": _opts(["disabled"], HHD_SHORTCUT_LABELS), "per_game": false,
+		"help": "A Handheld Daemon shortcut: it works in games by itself."},
+		func(c):
+			if be.controller_backend() != "hhd":
+				return R_HHD_ONLY if be.controller_backend() == "inputplumber" else R_NONE
+			var cur: Variant = Hhd.dig(be.hhd_state(), path)
+			if not cur is String:
+				return "Handheld Daemon has no such shortcut on this handheld"
+			var node: Variant = Hhd.schema_node(be.hhd_settings(), path)
+			var vals := Hhd.options_of(node)
+			if vals.is_empty():
+				vals = [cur]
+			var labels: Dictionary = HHD_SHORTCUT_LABELS.duplicate()
+			labels.merge(Hhd.labels_of(node))   # hhd's own words win where it gives them
+			c.options = _opts(vals, labels)
+			return "",
+		func(_c): return str(Hhd.dig(be.hhd_state(), path)),
+		func(_c, v): return be.hhd_set(Hhd.nest(path, v), [[path, v]]))
 
 
 func _nintendo() -> RefCounted:

@@ -27,6 +27,8 @@ extends RefCounted
 const ACTIONS := [
 	{"id": "keyboard", "title": "Keyboard", "short": "Keyboard", "icon": "keyboard", "kind": "run", "game": "front",
 		"help": "Opens Steam's on-screen keyboard over the game, so you can type in it.", "strip": true, "button": true},
+	{"id": "steam_menu", "title": "Steam menu", "short": "Steam", "icon": "steam", "kind": "run", "game": "front",
+		"help": "Opens Steam's own quick access menu over the game: friends, notifications, Steam's settings.", "strip": true, "button": true},
 	{"id": "screenshot", "title": "Screenshot", "short": "Screenshot", "icon": "camera", "kind": "run", "control": "system.screenshot",
 		"help": "Saves a picture of the game to Pictures/Screenshots.", "strip": true, "button": true},
 	{"id": "record", "title": "Record", "short": "Record", "icon": "record", "kind": "toggle",
@@ -78,7 +80,7 @@ const ACTIONS := [
 ]
 
 ## The strip when nobody changed it.
-const STRIP_DEFAULT := ["keyboard", "screenshot", "record", "mouse_mode", "mute", "send_key", "sleep"]
+const STRIP_DEFAULT := ["keyboard", "steam_menu", "screenshot", "record", "mouse_mode", "mute", "send_key", "sleep"]
 ## The Send key sheet, top to bottom.
 const SEND_KEYS := ["key_esc", "key_enter", "key_tab", "key_alt_enter", "key_alt_f4"]
 ## Power sheet rows: id -> [title, detail, icon, tone].
@@ -95,6 +97,7 @@ const WHY := {
 	"no_game": "Shows while a game runs.",
 	"no_steam": "Needs Steam running.",
 	"no_keys": "Needs InputPlumber, which presses the keys.",
+	"no_steam_menu": "Needs InputPlumber, which hands the button to Steam.",
 	"no_recorder": "Recording isn't available here.",
 	"no_closer": "Not available here.",
 	"no_optiscaler": "Shows for games that use OptiScaler.",
@@ -185,6 +188,8 @@ static func why_not(id: String, ctx: Dictionary) -> String:
 			return "" if bool(ctx.get("recording", false)) else "no_recorder"
 		"send_key":
 			return "" if bool(ctx.get("keys", false)) else "no_keys"
+		"steam_menu":
+			return "" if bool(ctx.get("keys", false)) else "no_steam_menu"
 		"force_close", "exit_game":
 			return "" if bool(ctx.get("closer", false)) else "no_closer"
 	if a["kind"] == "key":

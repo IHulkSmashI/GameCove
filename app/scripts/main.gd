@@ -60,6 +60,7 @@ const ProtonGE := preload("res://scripts/launch/proton_ge.gd")
 const CardJobs := preload("res://scripts/system/card_jobs.gd")
 const Recording := preload("res://scripts/system/recording.gd")
 const ActionRunner := preload("res://scripts/actions/runner.gd")
+const ActionRegistry := preload("res://scripts/actions/registry.gd")
 const TShortcuts := preload("res://scripts/ui/quick/texts_shortcuts.gd")
 const UPower := preload("res://scripts/system/upower.gd")
 const Proc := preload("res://scripts/system/proc.gd")
@@ -375,6 +376,10 @@ func _ready() -> void:
 		"open_settings": _open_settings_category,
 		"current_game": func() -> Dictionary: return session.game if session.is_active() else {}})
 	actions.notice.connect(_on_action_notice)
+	# the Controls' ctx["run_action"] (perf.upscale_menu: Insert at the game) lands here
+	var ctls: Node = _svc("Controls")
+	if ctls != null and "action_handler" in ctls:
+		ctls.action_handler = func(id: String) -> void: actions.run(id, "button", true)
 	# heartbeat for the session client's hang check, and why it left GameCove last time
 	var health := SessionHealth.new()
 	health.name = "SessionHealth"
@@ -543,6 +548,10 @@ func _wire_services() -> void:
 	var ctl: Node = _svc("Controller")
 	if ctl != null and ctl.has_signal("ui_action"):
 		ctl.ui_action.connect(on_ui_action)
+	# Button shortcuts: a back button set to an action, or an extra button held.
+	if ctl != null and ctl.has_signal("shortcut"):
+		ctl.shortcut.connect(_on_shortcut)
+		ctl.shortcut_hint.connect(_on_shortcut_hint)
 
 
 ## Controls, Profiles and the device fixes around the game session. Each signal
@@ -673,6 +682,21 @@ func _on_autotune_limit(cant_reach: bool, info: Dictionary) -> void:
 	var m := TG.autotune_message(cant_reach, info)
 	if not m.is_empty():
 		toast(m[0], "bolt", "warn", m[1])
+
+
+## A button shortcut (Controller.shortcut): the same actions as the Shortcuts
+## strip. An action that asks first was held long enough to count as a yes.
+func _on_shortcut(action: String, _how: String) -> void:
+	if actions != null:
+		actions.run(action, "button", true)
+	if wiring != null:
+		wiring.sync_focus()
+
+
+func _on_shortcut_hint(action: String) -> void:
+	var a := ActionRegistry.action(action)
+	if not a.is_empty():
+		toast(TShortcuts.HOLD_TO % str(a["title"]).to_lower(), str(a["icon"]), "")
 
 
 ## A one-press action finished with something to say (a toast, never focus).

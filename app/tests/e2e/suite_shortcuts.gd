@@ -113,11 +113,21 @@ func test_one_up_from_the_rows_reaches_the_strip() -> void:
 	var strip_rect: Rect2 = strip().get_global_rect()
 	ok(panel_rect.encloses(strip_rect), "the strip is inside the menu's panel")
 	ok(strip_rect.end.y <= qm()._scroll.get_global_rect().position.y + 1.0, "above the rows, so it never scrolls away")
+	# the shortcut used last this session, else the first
+	var ids: Array = strip().visible_ids()
+	var at: int = ids.find(strip()._last) if strip()._last in ids else 0
 	await up()
-	ok(focus() == strip().buttons[strip().visible_ids()[0]], "one D-pad Up from the rows: the first shortcut")
-	await right()
-	ok(focus() == strip().buttons[strip().visible_ids()[1]], "Right moves along the strip")
-	await left()
+	ok(focus() == strip().buttons[ids[at]], "one D-pad Up from the rows: the shortcut used last, else the first (%s)" % ids[at])
+	var nxt: int = at + 1 if at + 1 < ids.size() else at - 1
+	if nxt > at:
+		await right()
+	else:
+		await left()
+	ok(focus() == strip().buttons[ids[nxt]], "Left / Right move along the strip")
+	if nxt > at:
+		await left()
+	else:
+		await right()
 	await down()
 	ok(focus() == rows_top, "Down goes back to the rows")
 	await up()
@@ -235,7 +245,8 @@ func test_send_key_reaches_the_game_and_never_gamecove() -> void:
 	await b()
 	# GameCove in front (the game still runs behind it): keys are refused
 	await guide()
-	await until(func(): return w.main._window_focused, 4000)
+	await w.idle()   # the fake gamescope's focus change reaches the window on idle()
+	ok(await until(func(): return w.main._window_focused, 4000), "Guide brings GameCove to the front")
 	w.fake.reset_log()
 	ok(not w.main.actions.run("key_alt_f4", "button"), "GameCove in front: Alt+F4 is refused")
 	await w.idle()
@@ -361,7 +372,7 @@ func test_settings_page_picks_and_orders_the_strip() -> void:
 	ok(Prefs.is_shown("keyboard"), "Right turns it on")
 	eq(s.hints(focus()).filter(func(h): return h[0] in ["X", "Y"]).size(), 2, "the hint bar offers X / Y to move it")
 	await press(JOY_BUTTON_Y)
-	eq(Prefs.all().slice(0, 2), ["screenshot", "keyboard"], "Y moves it down")
+	eq(Prefs.all().slice(0, 2), ["steam_menu", "keyboard"], "Y moves it down")
 	ok(focus() == page.rows["keyboard"].button, "focus follows the row")
 	await press(JOY_BUTTON_X)
 	eq(Prefs.all()[0], "keyboard", "X moves it up")

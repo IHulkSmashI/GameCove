@@ -9,8 +9,13 @@ extends "res://scripts/system/service.gd"
 ##
 ## How each action works:
 ##   keyboard     `steam -ifrunning steam://open/keyboard`: Steam's own keyboard for
-##                the game in focus (the call Handheld Daemon's keyboard shortcut
-##                makes). The menu closes first so the game has the keyboard.
+##                the game in focus; -ifrunning never starts a second Steam.
+##                The menu closes first so the game has the keyboard.
+##   steam_menu   Steam's own quick access menu: the Controller service hands a
+##                Quick Access press straight to the virtual pad (InputPlumber
+##                SendButtonChord),
+##                which Steam reads as its menu button (Guide + A on the Xbox pad).
+##                The menu closes first so the game is in front.
 ##   key_*        InputPlumber's virtual keyboard (key_sender.gd), after the menu
 ##                closed and only with a game on screen: never typed at GameCove.
 ##   screenshot, sleep, mouse_mode, mute, mic_mute, wifi, bluetooth, airplane,
@@ -209,6 +214,12 @@ func run(id: String, source := "strip", confirmed := false) -> bool:
 	match id:
 		"keyboard":
 			return _steam_keyboard()
+		"steam_menu":
+			if controller == null or not controller.has_method("open_steam_menu"):
+				return false
+			_close_menu()
+			controller.open_steam_menu()
+			return true
 		"screenshot":
 			return _set_control(a, true, true)
 		"sleep":

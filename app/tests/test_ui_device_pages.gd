@@ -125,10 +125,7 @@ func test_controller_rows_drive_the_service() -> void:
 	var p: Control = ControllerPage.build(s)
 	var ctl = s["controller"]
 	ok(ctl.calls.has("refresh"), "refresh on open")
-	ok(p.rows.has("paddle_LeftPaddle1") and p.rows.has("paddle_RightPaddle1"), "a row per back button")
-	eq(p.rows["paddle_LeftPaddle1"].value_text(), "A", "current mapping shown")
-	p.rows["paddle_LeftPaddle1"].step(1)
-	ok(ctl.calls.has("paddle LeftPaddle1 East"), "remap through Controller.set_paddle")
+	ok(not p.rows.has("paddle_LeftPaddle1"), "back buttons live on the Button shortcuts card now (test_button_shortcuts.gd)")
 	ok(not p.rows.has("gyro"), "no legacy gyro modes (current InputPlumber ignores them)")
 	ok(_texts(p).contains("Gyro aiming lives in Steam"), "says aiming is Steam Input's")
 	p.rows["rumble"].step(1)
