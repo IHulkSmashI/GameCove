@@ -76,5 +76,12 @@ the next run. `packaging/tests/release.sh` checks that every job with `id-token:
   checks its own signature against the identity the installer requires before publishing.
 - `firmware.yml`, `upscalers.yml`: the build job is read-only with no OIDC; the publish job runs only pinned cosign,
   `gh` and standard-library checks. `upscalers.yml`'s publish job re-hashes every planned file and re-checks the
-  index (official upstream repositories only) with `tools/upscalers/check_plan.py` before signing.
+  index (official upstream repositories only) with `tools/upscalers/check_plan.py` before signing. Its build job
+  also makes the per-game list from OptiScaler's sources as they were 72 hours ago, runs `tools/upscalers/smoke.py`
+  over what is new (the publish job only runs when it passed, so devices keep last night's signed index otherwise)
+  and `tools/upscalers/watch.py` over the upstreams a person has to look at; a third job, `report`, has
+  `issues: write`, runs no code of ours, and opens or updates one issue when something moved or a check failed.
+  `tools/upscalers/withdrawn.json` is the kill switch: a component named there rides in the signed index and every
+  device stops using its files. The workflow names no repository (everything comes from `github.repository`), so it
+  moves to the data repo unchanged.
 - `gamedb.yml`, `device-photos.yml`: the same build/publish split, without signing.

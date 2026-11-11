@@ -366,6 +366,18 @@ fails with the reason ("remove it there first").
 - **decky-storage-cleaner** (mcarlucci): `steamapps/shadercache/<appid>` is what to delete for one game.
 - **Bazzite** (bazzite-steam): `unShaderBackgroundProcessingThreads` in steam_dev.cfg.
 
+### Best for this handheld, one install, read-out
+The user-facing guide with the table per chip is [UPSCALING.md](UPSCALING.md). In code: `chips.py` (what each GPU
+runs), `best.py` (plan, prepare, fallback after two starts that didn't come up, Native), `guard.py` (anti-cheat and
+other injectors), `active.py` (the read-out from OptiScaler's log, the launch stamp and the XMX proof),
+`downloads.bundled` (the files that came inside the package, used before any download), `upkeep.storage` /
+`upkeep.purge` (size and clean uninstall), `lsfg.py` (lsfg-vk for owners of Lossless Scaling). In the app:
+`device/gpu_caps.gd` (the same table, kept in step by `tests/fixtures/gpu_tiers.json`), `providers/perf.gd`
+(`perf.upscale_mode`, `perf.upscale_active`, `prepare_game`, `prepare_installed` from main's `install_finished`),
+`perf/upscale.gd` (labels and the one line per option that `control_view.gd` shows for the option in view).
+`perf.upscale_menu` presses Insert through `ctx["run_action"]` once the shared action registry is in main; until
+then the row says to press Insert on a keyboard.
+
 ### Improvements over ClawDeck (each tested)
 - Every GPU, not just the Claw (table above); AMD presets in launchenv (`fsr31`, `fsr4_amd`, FSR-FG output, Capcom
   setup on FSR) and AMD's own FSR SDK 2.4 upscaler instead of leaked builds (`test_games.py`).
