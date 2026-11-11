@@ -80,7 +80,16 @@ var _area: Control
 var rows_visible := 2
 var _empty: Control
 var _empty_text: Label
+## The tiles made now: shown[_first] to shown[_first + _tiles.size() - 1], whole rows (the
+## grid is virtual, see "The window" below).
 var _tiles: Array = []
+var _first := 0
+## Spacers standing in for the rows above and below the tiles made (one per column, so
+## the grid's own row height carries the whole list's height).
+var _top_sp: Array = []
+var _bot_sp: Array = []
+## A scroll position to take once the scroll bar knows the new height (-1 = none).
+var _pending_scroll := -1
 var _memory_key := ""
 ## Cover size for the current width: at most Tile.PER_ROW-ish (7) across.
 var tile_size := Tile.SIZE
@@ -254,8 +263,12 @@ func _init() -> void:
 	cue.offset_bottom = -4
 	cue.alignment = BoxContainer.ALIGNMENT_CENTER
 	area.add_child(cue)
-	_scroll.get_v_scroll_bar().value_changed.connect(func(_v): _update_cue())
-	_scroll.get_v_scroll_bar().changed.connect(_update_cue)
+	_scroll.get_v_scroll_bar().value_changed.connect(func(_v):
+		_update_cue()
+		_on_scrolled())
+	_scroll.get_v_scroll_bar().changed.connect(func():
+		_update_cue()
+		_take_pending_scroll())
 	var pad := Kit.margin(0, int(PAD.x), int(PAD.y))
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(pad)
@@ -265,6 +278,14 @@ func _init() -> void:
 	grid.add_theme_constant_override("h_separation", int(GAP.x))
 	grid.add_theme_constant_override("v_separation", int(GAP.y))
 	pad.add_child(grid)
+	for sp_list in [_top_sp, _bot_sp]:
+		for _c in MAX_COLS:
+			var sp := Control.new()
+			sp.name = "Spacer"
+			sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			sp.visible = false
+			grid.add_child(sp)
+			sp_list.append(sp)
 
 	details = _build_details()
 	var dpad := Kit.margin(0, int(PAD.x), 0)
@@ -450,7 +471,7 @@ func default_focus() -> Control:
 		for t in _tiles:
 			if t.game.get("key", "") == _memory_key:
 				return t
-		return _tiles[0]
+		return _tile_at(0) if _tile_at(0) != null else _tiles[0]
 	return _current_store_button()
 
 
@@ -469,23 +490,29 @@ func _rebuild(keep_focus: bool) -> void:
 		if f != null and f in _tiles:
 			focused_key = f.game.get("key", "")
 			# a new order or view (X, the Filter sheet) starts at the top of the grid
-			focused_at = _tiles.find(f) if keep_focus else 0
+			focused_at = (_first + _tiles.find(f)) if keep_focus else 0
 	var in_view := View.filter_view(games, view)
 	var picked := View.filter_meta(filter_install(View.filter_by_store(in_view, store), install_filter), genre, View.CRITIC_MIN if critic_filter else 0)
 	shown = View.sort_games(View.search(picked, query), sort)
 	for t in _tiles:
 		Kit.drop(grid, t)
 	_tiles.clear()
-	# Tiles are made a page at a time (thousands of ROMs would take seconds and
-	# gigabytes at once): enough to reach the remembered game, more as focus nears the end.
-	var want := PAGE
+	_first = 0
+	# Only the rows around the remembered game (or the top) are made, never the whole list.
 	var mk := focused_key if focused_key != "" else _memory_key
+	var at := -1
 	if mk != "":
 		for i in shown.size():
 			if shown[i].get("key", "") == mk:
-				want = maxi(want, i + 1 + PAGE / 2)
+				at = i
 				break
-	_grow(want)
+	var row := maxi(0, at) / grid.columns
+	var first := clampi(row, 0, maxi(0, _total_rows() - rows_visible))
+	_pending_scroll = int(first * (tile_size.y + GAP.y))
+	_scroll.scroll_vertical = _pending_scroll
+	if _scroll.scroll_vertical == _pending_scroll:
+		_pending_scroll = -1
+	_ensure_window(first, row if at >= 0 else -1)
 	_refresh_toolbar()
 	_empty.visible = shown.is_empty()
 	_scroll.get_parent().visible = not shown.is_empty()
@@ -513,34 +540,157 @@ func _rebuild(keep_focus: bool) -> void:
 				return
 		# the focused game left the grid (hidden, uninstalled with the Installed
 		# filter on): focus takes its place, or the toolbar when the grid is empty
-		_focus_later(_tiles[mini(focused_at, _tiles.size() - 1)] if not _tiles.is_empty() else _current_store_button())
+		if shown.is_empty():
+			_focus_later(_current_store_button())
+		else:
+			var at_i := mini(focused_at, shown.size() - 1)
+			var near := tile_for(str(shown[at_i].get("key", "")))
+			_focus_later(near if near != null else _current_store_button())
 
 
-## Tiles made at once, and how many more each time focus nears the last row made:
-## eight rows of seven, a good two screens at 1280x800. Every tile is a node tree
-## made on the main thread, so opening the Library on thousands of ROMs costs what
-## this page costs (140 took 330 ms and the most memory of anything on screen).
-const PAGE := 56
+# ------------------------------------------------------------ the window
+
+## The grid is virtual: thousands of ROMs would take seconds and gigabytes if every game
+## made its tile (140 took 330 ms and the most memory of anything on screen), so only the
+## rows on screen and ROW_MARGIN rows each side are made. The rows above and below are
+## one row of spacers each (the same height as the rows they stand for), so the scroll bar,
+## the cue and the scroll position are those of the whole list. Moving focus or scrolling
+## moves the window: tiles that leave it are dropped, the ones that enter it are made (a
+## row at a time while scrolling, a window at once on a jump). The focused row and the
+## visible rows share one window as long as it stays under MAX_ROWS; beyond that (a touch
+## drag far from the focus) the visible rows win and focus goes to a tile on screen.
+const ROW_MARGIN := 3
+const MAX_ROWS := 24
 
 
-## Makes tiles up to `count` of `shown` (never fewer than there are now).
-func _grow(count: int) -> void:
-	var from := _tiles.size()
-	var to := mini(count, shown.size())
-	if to <= from:
+func _total_rows() -> int:
+	return ceili(shown.size() / float(grid.columns))
+
+
+## The tile of shown[i], or null when it isn't made now.
+func _tile_at(i: int) -> Control:
+	var k := i - _first
+	return _tiles[k] if k >= 0 and k < _tiles.size() else null
+
+
+## The tile of the game with this key, made first when it is out of the window (null: it
+## isn't shown).
+func tile_for(key: String) -> Control:
+	for t in _tiles:
+		if t.game.get("key", "") == key:
+			return t
+	for i in shown.size():
+		if shown[i].get("key", "") == key:
+			var row := i / grid.columns
+			_ensure_window(clampi(row, 0, maxi(0, _total_rows() - rows_visible)), row)
+			return _tile_at(i)
+	return null
+
+
+## Makes the rows for a view whose first row on screen is `first` and, when focus is on a
+## tile, `focus_row` (-1: none).
+func _ensure_window(first: int, focus_row: int) -> void:
+	var r0 := first - ROW_MARGIN
+	var r1 := first + rows_visible + ROW_MARGIN
+	if focus_row >= 0:
+		var f0 := focus_row - ROW_MARGIN
+		var f1 := focus_row + 1 + ROW_MARGIN
+		if maxi(r1, f1) - mini(r0, f0) <= MAX_ROWS:
+			r0 = mini(r0, f0)
+			r1 = maxi(r1, f1)
+	_set_window(maxi(0, r0), mini(_total_rows(), r1))
+
+
+## Makes the tiles of rows r0 up to r1 (exclusive) and drops the others; tiles already made
+## for those rows stay as they are.
+func _set_window(r0: int, r1: int) -> void:
+	var cols := grid.columns
+	var from := r0 * cols
+	var to := mini(r1 * cols, shown.size())
+	if to < from:
+		to = from
+	var rows_total := _total_rows()
+	var had_focus := false
+	if is_inside_tree():
+		var f := get_viewport().gui_get_focus_owner()
+		had_focus = f != null and f in _tiles
+	if not _tiles.is_empty() and from == _first and to == _first + _tiles.size():
+		_size_spacers(r0, r1, rows_total)
 		return
+	var keep := {}
+	for k in _tiles.size():
+		var i := _first + k
+		if i >= from and i < to:
+			keep[i] = _tiles[k]
+		else:
+			Kit.drop(grid, _tiles[k])
+	var fresh: Array = []
+	var top_n := _top_sp.size()
 	for i in range(from, to):
-		var g: Dictionary = shown[i]
-		var t: Button = Tile.new()
-		t.setup(g, true, tile_size, false)
-		var game: Dictionary = g
-		t.pressed.connect(func(): open_requested.emit(game))
-		t.focus_entered.connect(_on_tile_focus.bind(t))
-		grid.add_child(t)
-		_tiles.append(t)
-		if tile_hook.is_valid():
-			tile_hook.call(t)
+		var t: Button = keep.get(i)
+		if t == null:
+			var g: Dictionary = shown[i]
+			t = Tile.new()
+			t.setup(g, true, tile_size, false)
+			t.pressed.connect(func(): open_requested.emit(g))
+			t.focus_entered.connect(_on_tile_focus.bind(t))
+			grid.add_child(t)
+			grid.move_child(t, top_n + (i - from))
+			if tile_hook.is_valid():
+				tile_hook.call(t)
+		fresh.append(t)
+	_tiles = fresh
+	_first = from
+	_size_spacers(r0, r1, rows_total)
 	_link_grid()
+	if had_focus and is_inside_tree() and get_viewport().gui_get_focus_owner() == null and not _tiles.is_empty():
+		# the window moved away from the focused tile (a long drag on the touch screen); a
+		# caller that grabs focus itself right after (a jump) keeps what it grabbed
+		call_deferred("_refocus_if_lost", weakref(_tiles[mini(_tiles.size() - 1, (rows_visible / 2) * cols)]))
+
+
+## The spacer rows: as high as the rows they stand for (the grid's row gap is added once
+## between a spacer and a tile row, so the pitch carries over exactly).
+func _size_spacers(r0: int, r1: int, rows_total: int) -> void:
+	var pitch := tile_size.y + GAP.y
+	var above := r0 if not _tiles.is_empty() else 0
+	var below := maxi(0, rows_total - r1) if not _tiles.is_empty() else 0
+	var cols := grid.columns
+	for k in _top_sp.size():
+		var a: Control = _top_sp[k]
+		a.visible = above > 0 and k < cols
+		a.custom_minimum_size = Vector2(tile_size.x, maxf(0.0, above * pitch - GAP.y))
+		var b: Control = _bot_sp[k]
+		b.visible = below > 0 and k < cols
+		b.custom_minimum_size = Vector2(tile_size.x, maxf(0.0, below * pitch - GAP.y))
+	# the bottom spacers come after the tiles, the top ones before them
+	for k in _bot_sp.size():
+		grid.move_child(_bot_sp[k], grid.get_child_count() - 1)
+
+
+## The scroll bar moved (a drag, the wheel, the focus tween): make the rows now on screen.
+func _on_scrolled() -> void:
+	if _pending_scroll >= 0 or shown.is_empty():
+		return
+	var pitch := tile_size.y + GAP.y
+	var first := int(floorf(_scroll.scroll_vertical / pitch))
+	var focus_row := -1
+	if is_inside_tree():
+		var f := get_viewport().gui_get_focus_owner()
+		if f != null and f in _tiles:
+			focus_row = (_first + _tiles.find(f)) / grid.columns
+	_ensure_window(first, focus_row)
+
+
+## A rebuild asked for a scroll position the old scroll bar couldn't hold yet.
+func _take_pending_scroll() -> void:
+	if _pending_scroll < 0:
+		return
+	var bar := _scroll.get_v_scroll_bar()
+	if bar.max_value - bar.page + 1.0 >= _pending_scroll:
+		var v := _pending_scroll
+		_pending_scroll = -1
+		_scroll.scroll_vertical = v
 
 
 func _refresh_toolbar() -> void:
@@ -598,14 +748,20 @@ func _link_toolbar() -> void:
 
 func _link_grid() -> void:
 	var cols := grid.columns
-	for i in _tiles.size():
-		var t: Control = _tiles[i]
-		var up: Control = _tiles[i - cols] if i >= cols else _current_store_button()
-		var down: Control = _tiles[i + cols] if i + cols < _tiles.size() else (_tiles[_tiles.size() - 1] if i / cols < (_tiles.size() - 1) / cols else t)
-		t.focus_neighbor_top = t.get_path_to(up)
-		t.focus_neighbor_bottom = t.get_path_to(down)
-		t.focus_neighbor_left = t.get_path_to(_tiles[i - 1] if i % cols > 0 else t)
-		t.focus_neighbor_right = t.get_path_to(_tiles[i + 1] if i % cols < cols - 1 and i + 1 < _tiles.size() else t)
+	var n := shown.size()
+	for k in _tiles.size():
+		var i := _first + k
+		var t: Control = _tiles[k]
+		var up: Control = _tile_at(i - cols) if i >= cols else _current_store_button()
+		var down: Control = _tile_at(i + cols) if i + cols < n else (_tile_at(n - 1) if i / cols < (n - 1) / cols else t)
+		var left: Control = _tile_at(i - 1) if i % cols > 0 else t
+		var right: Control = _tile_at(i + 1) if i % cols < cols - 1 and i + 1 < n else t
+		# a neighbour out of the window isn't made yet: the window moves with focus before
+		# it can be reached, so this stays on the tile
+		t.focus_neighbor_top = t.get_path_to(up if up != null else t)
+		t.focus_neighbor_bottom = t.get_path_to(down if down != null else t)
+		t.focus_neighbor_left = t.get_path_to(left if left != null else t)
+		t.focus_neighbor_right = t.get_path_to(right if right != null else t)
 
 
 func _current_store_button() -> Button:
@@ -615,23 +771,30 @@ func _current_store_button() -> Button:
 
 func _on_tile_focus(t: Control) -> void:
 	_memory_key = t.game.get("key", "")
-	if _tiles.find(t) >= _tiles.size() - grid.columns * 3 and _tiles.size() < shown.size():
-		_grow(_tiles.size() + PAGE)
+	_pending_scroll = -1
+	var cols := grid.columns
+	var i := _first + _tiles.find(t)
 	show_details(t.game)
 	for b in _toolbar():
 		b.focus_neighbor_bottom = b.get_path_to(t)
-	var row := _tiles.find(t) / grid.columns
+	var row := i / cols
 	var pitch := tile_size.y + GAP.y
 	# Whole rows only: move the window of rows_visible rows just enough to
 	# hold the focused row.
-	var first := roundi(_scroll.scroll_vertical / pitch)
+	var now := roundi(_scroll.scroll_vertical / pitch)
+	var first := now
 	if row >= first + rows_visible:
 		first = row - rows_visible + 1
 	elif row < first:
 		first = row
+	# the rows around the focus (and the ones the scroll passes) are made before it moves on
+	_ensure_window(first, row)
 	var target := first * pitch
+	# a jump of more than the window holds (letter jump, a game far down) lands at once:
+	# a tween would make every row it passes
+	var dur: float = 0.0 if absi(first - now) > ROW_MARGIN * 2 else Motion.BASE
 	Motion.method(_scroll, "vscroll", func(v: float): _scroll.scroll_vertical = int(v),
-		float(_scroll.scroll_vertical), target, Motion.BASE)
+		float(_scroll.scroll_vertical), target, dur)
 	game_focused.emit(t.game)
 
 
@@ -729,6 +892,8 @@ func _fit_rows() -> void:
 	_scroll.offset_bottom = -(h - fit)
 	_fade.offset_top = -(h - fit) - 40.0
 	_update_cue()
+	if not shown.is_empty() and _pending_scroll < 0:
+		_on_scrolled()   # more (or fewer) rows on screen: the window follows
 
 
 ## LT / RT: jump to the previous / next first letter in the current order.
@@ -737,7 +902,7 @@ func jump_letter(d: int) -> void:
 		return
 	d = signi(d)
 	var f := get_viewport().gui_get_focus_owner()
-	var i := maxi(0, _tiles.find(f))
+	var i := maxi(0, _first + _tiles.find(f)) if f in _tiles else 0
 	var cur := _initial(shown[i])
 	var j := i
 	while true:
@@ -750,8 +915,11 @@ func jump_letter(d: int) -> void:
 				# Land on the first tile of that letter.
 				while j > 0 and _initial(shown[j - 1]) == ini:
 					j -= 1
-			_grow(j + 1 + PAGE / 2)   # past the tiles made so far: make them now
-			_tiles[j].grab_focus()
+			var row := j / grid.columns
+			_ensure_window(clampi(row, 0, maxi(0, _total_rows() - rows_visible)), row)   # past the tiles made so far: make them now
+			var target := _tile_at(j)
+			if target != null:
+				target.grab_focus()
 			return
 
 
@@ -763,10 +931,17 @@ static func _initial(g: Dictionary) -> String:
 
 
 func _after_search() -> void:
-	if not _tiles.is_empty():
-		_focus_later(_tiles[0])
+	if not shown.is_empty():
+		_ensure_window(0, 0)
+		_focus_later(_tile_at(0))
 	else:
 		_focus_later(search_button)
+
+
+func _refocus_if_lost(ref: WeakRef) -> void:
+	var n: Control = ref.get_ref()
+	if n != null and is_inside_tree() and get_viewport().gui_get_focus_owner() == null and n.is_inside_tree() and n.is_visible_in_tree():
+		n.grab_focus()
 
 
 static func _focus_later(c: Control) -> void:
@@ -813,4 +988,4 @@ func _notification(what: int) -> void:
 			_rebuild.call_deferred(true)
 			_fit_rows.call_deferred()
 		elif relink:
-			_link_grid()
+			_rebuild.call_deferred(true)   # the rows of the window are as wide as the grid

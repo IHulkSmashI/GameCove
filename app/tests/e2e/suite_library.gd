@@ -130,6 +130,74 @@ func test_menu_on_an_app_tile_offers_no_game_options() -> void:
 	await w.frames(3)
 
 
+## Review High 13: a long Library is a window of tiles that follows focus. The d-pad walks
+## down it row by row, the focused tile never leaves the grid, and a letter jump far down
+## makes the tiles it needs without making the ones before them.
+func test_a_long_library_walks_and_jumps_through_a_window() -> void:
+	var m: Control = main()
+	var lib: Node = w.autoload("Library")
+	var before: Array = lib.games.duplicate()
+	var games := _games()
+	var letters := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	for i in 780:
+		games.append({"key": "emu:%d" % (3100000000 + i), "store": "emu", "id": str(3100000000 + i),
+			"title": "%s Rom %03d" % [letters[i / 30], i % 30], "installed": true, "shortcut": true,
+			"art": {"cover": "", "hero": "", "logo": "", "icon": ""},
+			"info": {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null, "summary": ""},
+			"last_played": 0, "playtime_min": 0, "emulated": {"system": "snes", "system_short": "SNES"}})
+	lib.games.assign(games)
+	lib.changed.emit()
+	await w.frames(4)
+	m.show_screen("library")
+	await w.frames(6)
+	var l: Control = m.library_screen
+	l.set_sort("az")
+	await w.frames(4)
+	var cols: int = l.grid.columns
+	var bound: int = (l.MAX_ROWS + 1) * cols
+	ok(l.tiles().size() > 0 and l.tiles().size() <= bound, "%d tiles for %d games" % [l.tiles().size(), l.shown.size()])
+	# the first game of the list (the grid may have kept the window on the game it had before)
+	l.tile_for(str(l.shown[0]["key"])).grab_focus()
+	await w.frames(3)
+	var at := 0
+	var broke := ""
+	for step in 40:
+		await down()
+		await w.frames(2)
+		at += cols
+		var f: Variant = focus()
+		if f == null or not f in l.tiles():
+			broke = "step %d: focus left the grid" % step
+			break
+		if l.shown.find(f.game) != at:
+			broke = "step %d: focus on game %d, wanted %d" % [step, l.shown.find(f.game), at]
+			break
+		if l.tiles().size() > bound:
+			broke = "step %d: %d tiles" % [step, l.tiles().size()]
+			break
+	eq(broke, "", "40 rows down by the d-pad, one row each, in a window of tiles")
+	for step in 40:
+		await up()
+		await w.frames(2)
+	var back: Variant = focus()
+	ok(back != null and back in l.tiles() and l.shown.find(back.game) == 0, "and 40 rows back up to the first game")
+	var t0 := Time.get_ticks_msec()
+	for i in 6:
+		l.jump_letter(1)
+		await w.frames(3)
+	var jumped := Time.get_ticks_msec() - t0
+	var landed: Variant = focus()
+	ok(landed != null and landed in l.tiles(), "six letters on (RT): focus is on a tile")
+	if landed != null and "game" in landed:
+		ok(str(landed.game["title"]).begins_with("G"), "on the first G game (%s)" % landed.game["title"])
+	ok(l.tiles().size() <= bound, "still %d tiles" % l.tiles().size())
+	ok(jumped < 8000, "six jumps in %d ms" % jumped)
+	lib.games.assign(before)
+	lib.changed.emit()
+	m.show_screen("home")
+	await w.frames(3)
+
+
 ## Final review (Medium): Home's shelves are capped; "See all" at the end of a
 ## long one opens the Library on that shelf's list.
 func test_see_all_on_a_long_shelf_opens_the_library() -> void:
@@ -163,7 +231,8 @@ func test_see_all_on_a_long_shelf_opens_the_library() -> void:
 	eq(m.current, "library", "A on See all: the Library")
 	eq(m.library_screen.view, "emulation", "on the Emulation view")
 	eq(m.library_screen.shown.size(), 60, "with every one of them")
-	eq(m.library_screen.tiles().size(), mini(60, m.library_screen.PAGE), "their tiles made a page at a time")
+	var made: int = m.library_screen.tiles().size()
+	ok(made > 0 and made < 60, "their tiles made around the view, not all %d at once (%d)" % [60, made])
 	ok(m.page == null, "and no game page opened for the tile")
 	m.library_screen.show_shelf("all")
 	lib.games.assign(before)
