@@ -223,6 +223,13 @@ helper of our own:
     forwards to the real desktop before the app starts (`session-start`, exit 3).
     The marker lasts the whole boot (review L22: Desktop, back to Gaming Mode, then
     "Switch to Desktop" again still reaches the desktop) until `gamecove` is asked for.
+    "Asked for" also covers picking GameCove at the login screen: that session's PAM
+    service is `sddm` (`loginctl show-session $XDG_SESSION_ID -p Service`), while every
+    switch arrives through `sddm-autologin`, so it stays in GameCove and the marker is
+    cleared. One case can't be told apart from Steam's switch and still goes to the
+    desktop: logging out of the desktop while GameCove is the boot default (both are an
+    autologin into the default session). The **GameCove** entry in the app menu and on
+    the desktop runs `gamecove-session-select gamecove`, which always works.
   - `steam --default` and `restore` put the saved desktop session and boot mode
     back. The installer's Uninstall runs `restore`.
   - `--default` also keeps a copy of the script in the data folder and enables a
@@ -254,13 +261,25 @@ keyboard. The login guard above can't help, it runs after a login. So:
   before the package goes (a failure stops the uninstall); `install.sh --uninstall`
   runs `gamecove-session-select restore` and `gamecove-fix --remove-all` first and
   stops if either fails.
-- **SteamOS:** the installer copies `gamecove-autologin-guard` and its unit out of
-  the sysext into `/etc/gamecove/` and `/etc/systemd/system/` (listed in
-  `/etc/atomic-update.conf.d/gamecove.conf`). It runs as root after
+- **SteamOS and Bazzite:** the installer copies `gamecove-autologin-guard` and its unit out of
+  GameCove's files into `/etc/gamecove/` and `/etc/systemd/system/` (on SteamOS listed in
+  `/etc/atomic-update.conf.d/gamecove.conf`; on Bazzite in the same root command as
+  `rpm-ostree install`, from `/usr` when the layer is live, else from the deployment
+  rpm-ostree just staged). On Bazzite it covers a layer taken off by hand
+  (`rpm-ostree uninstall gamecove`) while GameCove is the boot default: without it the
+  login screen stops at a password prompt, because the user-level guard only runs after a
+  login. A copy that fails stops the install. It runs as root after
   `systemd-sysext.service` and before the display manager, and if an autologin entry
   names `gamecove.desktop` while no session folder holds it, points it at
-  `gamescope-wayland.desktop` (Steam Gaming Mode), else the desktop. Uninstall
-  removes it.
+  `gamescope-wayland.desktop` (Steam Gaming Mode; on Bazzite
+  `gamescope-session-ogui-steam.desktop`, else any other gamescope session), else the
+  desktop. Uninstall removes it (a layer removed by hand leaves it in `/etc`, where it
+  does nothing once no autologin entry names GameCove).
+- **Display settings for the session:** uninstall also takes away
+  `~/.config/environment.d/80-gamecove-display.conf` (rotation, the refresh-rate unlock,
+  HDR), which every gamescope session reads, Steam Gaming Mode included. With "Keep my
+  settings" a copy waits in `~/.local/share/gamecove/display-session.conf` and the next
+  install puts it back.
 
 ### Leaving GameCove's session (review H2)
 
@@ -273,6 +292,24 @@ file exports `GAMECOVE_SESSION=1`), first runs `gamecove.x86_64 --headless --
 helper, then `steam -shutdown`, then switches. The root restores run in one background
 job waited for at most `GAMECOVE_ROOT_WAIT_S` (10 s), here and in
 `post_client_shutdown`: `timeout pkexec` only killed pkexec, never its root child.
+A restore that fails never holds the next one up: each runs by itself, and a failure ends
+the wait at once.
+
+What goes back, in order:
+
+1. In the app, before the switch starts (quick menu): Power stops everything that keeps
+   writing (`Power.request_leave`: Auto TDP with its levers put back, the charge hold, the
+   thermald hold, the 15 s check, the thermal guard), so nothing of ours lands after the
+   restores. If the switch fails or never comes, `request_cancel_leave` turns it back on. The
+   quick menu waits up to 75 s for `gamecove-session-select` and 20 s more for the logout.
+2. `--restore-baseline`: the everyday values in place of a running game's (Profiles), then
+   **the TDP, boost and fan mode the handheld had before GameCove** (`Power.restore_before`).
+   Power notes them at every start, before it applies GameCove's own
+   (`power_before.json` next to `power.cfg`, once per boot, so a GameCove that restarts
+   keeps the first record). The TDP is never put past the current power source's limit, a
+   fan curve from another tool ("custom") can't be put back, and nothing is remembered as
+   your choice: GameCove's own profile is what it applies the next time it starts.
+3. The root helper: the charge limit released, power-tune values restored, thermald started.
 
 ### If GameCove won't let you out
 
@@ -295,9 +332,14 @@ job waited for at most `GAMECOVE_ROOT_WAIT_S` (10 s), here and in
   when no heartbeat is expected), or the heartbeat stops changing for 30 s
   (`GAMECOVE_HEARTBEAT_STALE_S`), it kills the app and counts an unclean exit.
   The app (`scripts/system/session_health.gd`) rewrites the heartbeat every 5 s
-  from a main-loop Timer as `<sequence> ui|game`. While a game runs it says `game`
+  from a main-loop Timer as `<sequence> ui|game|front`. While a game runs it says `game`
   and is never killed, so a long load (or gamescope holding back frames from a
-  hidden window) can't end the session and the game with it.
+  hidden window) can't end the session and the game with it. `front` is a game that
+  runs with GameCove's own UI in front of it (the quick menu is open, or Home was
+  brought back): there the screen and the controller are GameCove's again, so the
+  heartbeat beats every 5 s as in `ui`, and if it stops for 45 s
+  (`GAMECOVE_HEARTBEAT_FRONT_STALE_S`) the app is stopped too. A game that is still
+  starting stays `game` until its window has had the screen once.
 - **Telling you why:** after a fallback, the next GameCove start shows a notice
   ("GameCove closed unexpectedly 3 times in a row, so Steam started instead") from
   `crash-fallback`, then deletes it.
@@ -357,15 +399,16 @@ a CI-exported app tarball (`gamecove.x86_64` + `gamecove.pck`). It depends on fi
 provider works. On Bazzite, `packaging/install.sh` explains and runs
 `rpm-ostree install ./gamecove-*.rpm`, then reboot, then
 `gamecove-session-select gamecove`. Removal: `install.sh --uninstall`.
-Untested: never built in mock or installed; `rpmspec -P` parses it and a local
-`rpmbuild --nodeps` with fake sources builds it. rpm-ostree may warn about
+The Release workflow builds it with `rpmbuild` in a pinned Fedora container (not in mock). Tested on hardware:
+MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS). rpm-ostree may warn about
 `/var/lib/gamecove` in the package (the dispatcher creates it anyway).
 
 **SteamOS (systemd-sysext).** `packaging/sysext/build-sysext.sh` makes
 `gamecove.raw` (squashfs) holding our files plus gamescope-session-plus pinned at
 `08e65a6` (SteamOS doesn't have it), with `extension-release` `ID=_any`,
 `ARCHITECTURE=x86-64` so OS updates don't disable it (no SteamOS libraries
-inside). Same idea as OpenGamepadUI's `make dist-ext`. Documented, not run on SteamOS yet.
+inside). Same idea as OpenGamepadUI's `make dist-ext`. Built and checked by the Release workflow; not run on a SteamOS
+handheld yet (hardware testing so far was on Bazzite).
 
 Where the image lives on SteamOS, and why (checked against SteamOS 3.8 / steamos-manager v26.4):
 
@@ -407,9 +450,14 @@ Where the image lives on SteamOS, and why (checked against SteamOS 3.8 / steamos
 The guided install (README "Install"). Three parts:
 
 1. **`packaging/get-gamecove.sh`** (POSIX sh, no root): detects the OS from `os-release` (+ `/run/ostree-booted`
-   for Fedora Atomic), asks the GitHub API for the latest release (`--tag` / `GAMECOVE_TAG` for a given one;
-   `releases/latest` skips pre-releases, so while only pre-releases exist it takes the newest of the release
-   list, and a given tag is never replaced), downloads the app tarball, the package for this
+   for Fedora Atomic), asks the GitHub API for the release list and takes the highest `vX.Y.Z` tag that isn't a draft
+   (`--tag` / `GAMECOVE_TAG` for a given one, which is never replaced). `releases/latest` is never asked: it
+   answers with whichever release GitHub marks "latest", and that is one of the data releases (`upscalers`,
+   `firmware`, `gamedb`, `device-photos`), not the app. A stable release wins over a pre-release; while only
+   pre-releases exist (v0.1.0 is one) the highest of those is used. If the lookup fails (offline, a rate limit, no
+   app release listed, or the newest listed is older than the installed one) and a copy was downloaded before, that
+   copy opens instead, so the "GameCove Installer" entry always works; an error away from a terminal is also shown
+   as a desktop notification. Then it downloads the app tarball, the package for this
    system (RPM, or the `.raw` sysext on SteamOS), its own copy and `SHA256SUMS` into
    `~/.local/share/gamecove/installer/`, checks `SHA256SUMS`'s Sigstore signature (`SHA256SUMS.sigstore.json`, made
    by the Release workflow with its GitHub OIDC identity, no key or secret; verified with cosign from the system or a

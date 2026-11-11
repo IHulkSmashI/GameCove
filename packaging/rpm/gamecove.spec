@@ -1,7 +1,7 @@
 # GameCove RPM for Bazzite / Fedora Atomic (rpm-ostree) and Fedora.
 #
-# UNTESTED: written against Fedora packaging guidelines and checked with
-# `rpmspec -P`, but never built in mock or installed on a handheld.
+# Built by .github/workflows/release.yml (rpmbuild in a pinned Fedora container; not in mock).
+# Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS).
 #
 # Sources:
 #   Source0  the repository at a tag (git archive), for session files, helpers, fixes
@@ -141,6 +141,20 @@ install -Dpm0644 session/wayland-sessions/gamecove.desktop \
 install -Dpm0644 session/systemd/gamescope-session-plus@gamecove.service.d/10-gamecove.conf \
     %{buildroot}%{_userunitdir}/gamescope-session-plus@gamecove.service.d/10-gamecove.conf
 
+# Root autologin guard: the installer copies both into /etc so they outlive the package
+# (session/gamecove-autologin-guard says why)
+install -Dpm0755 session/gamecove-autologin-guard \
+    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard
+install -Dpm0644 session/systemd/gamecove-autologin-guard.service \
+    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard.service
+
+# Root autologin guard: the installer copies both into /etc so they outlive the package
+# (session/gamecove-autologin-guard says why)
+install -Dpm0755 session/gamecove-autologin-guard \
+    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard
+install -Dpm0644 session/systemd/gamecove-autologin-guard.service \
+    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard.service
+
 # polkit
 install -Dpm0644 packaging/polkit/io.github.ihulksmashi.gamecove.policy \
     %{buildroot}%{_datadir}/polkit-1/actions/io.github.ihulksmashi.gamecove.policy
@@ -156,6 +170,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 %{_prefix}/lib/gamecove/gamecove.pck
 %{_prefix}/lib/gamecove/fixes
 %{_prefix}/lib/gamecove/bin
+%{_prefix}/lib/gamecove/session
 %dir %{_libexecdir}/gamecove
 %{_libexecdir}/gamecove/gamecove-fix
 %{_libexecdir}/gamecove/gamecove-fix-set

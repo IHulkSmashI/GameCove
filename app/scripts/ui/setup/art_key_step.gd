@@ -4,12 +4,14 @@ extends HBoxContainer
 ## installer (installer_screen.gd) and Settings > Discover > SteamGridDB key
 ## (which opens setup at this step). GameCove ships no key of its own.
 ##
-## On screen: a QR code and four short steps. By default the QR opens a
-## one-time page GameCove serves on your own network (scripts/system/key_drop.gd):
-## the phone signs in to SteamGridDB with Steam, generates a key, pastes it on
-## that page and taps Send; the key arrives here by itself. Fallbacks: "Phone
-## not on this Wi-Fi?" turns the QR into SteamGridDB's own API page and the key
-## is typed (on-screen or Steam keyboard) or pasted. The installer, on the
+## On screen: a QR code and four short steps. Choosing "Send from my phone" turns
+## the QR into a one-time page GameCove serves on your own network
+## (scripts/system/key_drop.gd): the phone signs in to SteamGridDB with Steam,
+## generates a key, pastes it on that page and taps Send; the key arrives here by
+## itself. That page only ever opens on that press (final review, low: it used
+## to open, and listen on the network, as soon as this step was shown). Until
+## then, and after "Phone not on this Wi-Fi?", the QR is SteamGridDB's own API
+## page and the key is typed (on-screen or Steam keyboard) or pasted. The installer, on the
 ## desktop, also opens the page in the browser and picks a copied key up from
 ## the clipboard when its window gets focus back.
 ##
@@ -60,6 +62,7 @@ const TO_DIRECT := "Phone not on this Wi-Fi?"
 const TO_PHONE := "Send from my phone"
 const REMOVE := "Remove key"
 const SAY := {
+	"start": "Choose Send from my phone and this code becomes a one-time page on your own network: paste the key there and it lands here by itself. Or type or paste it.",
 	"phone": "Waiting for your phone. The page works for 10 minutes, on your own network only.",
 	"direct": "Type or paste the key when you have it.",
 	"no_lan": "This handheld isn't on a network your phone can reach, so type or paste the key instead.",
@@ -187,10 +190,11 @@ func _build() -> void:
 	bcol.add_theme_constant_override("h_separation", 12)
 	bcol.add_theme_constant_override("v_separation", 10)
 	col.add_child(bcol)
+	# first in the row: it is what starts the easy way, and where the focus goes
+	switch_button = _action(bcol, TO_PHONE, "wifi", "SwitchMode", toggle_mode)
 	type_button = _action(bcol, TYPE, "gamepad", "TypeKey", _on_type)
 	if read_clipboard.is_valid() or DisplayServer.has_feature(DisplayServer.FEATURE_CLIPBOARD):
 		paste_button = _action(bcol, PASTE, "check", "PasteKey", paste)
-	switch_button = _action(bcol, TO_DIRECT, "wifi", "SwitchMode", toggle_mode)
 	if open_url.is_valid():
 		open_button = _action(bcol, OPEN_HERE, "rocket", "OpenHere", func(): open_url.call(Sgdb.API_KEY_PAGE))
 	if current_key != "":
@@ -207,10 +211,13 @@ func _action(box: Control, text: String, icon: String, node_name: String, fn: Ca
 	return b
 
 
-## Opens the phone page (or SteamGridDB's page directly when there's no LAN).
+## Shows the step. Nothing listens yet: the QR is SteamGridDB's own page, and the phone page
+## opens when "Send from my phone" is pressed (toggle_mode).
 func start() -> void:
 	_last_clip = _clip()
-	_open_phone()
+	mode = "direct"
+	_show_mode()
+	_set_state("direct", SAY["has_key"] % TS.masked(current_key) if current_key != "" else SAY["start"])
 
 
 func _open_phone() -> void:
@@ -415,7 +422,7 @@ func remove_key() -> void:
 
 
 func first_focus() -> Control:
-	return type_button
+	return switch_button
 
 
 ## True once a key that works is saved (or one was already): the host's Next

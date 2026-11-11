@@ -71,8 +71,13 @@ const SUPPORT_TEXT := {
 	"generic": "Basic support: device-specific settings stay hidden until someone tests this device.",
 }
 const SESSION_SELECT := "/usr/bin/gamecove-session-select"
-## Review M8: a session switch that hasn't taken GameCove away after this long gave up or hung;
-## the controller is handed back to GameCove's UI so Guide works again.
+## Review M8: a session switch that hasn't taken GameCove away gave up or hung; the controller is
+## handed back to GameCove's UI so Guide works again. Two waits (final review, session: one 20 s
+## wait from the start was shorter than a slow switch, which first restores the everyday values,
+## up to 40 s, then the root values and closes Steam, 10 s each):
+##   SWITCH_LIMIT_S   from the start, for a gamecove-session-select that never comes back;
+##   SWITCH_REARM_S   from the moment it finished without an error, for a logout that never came.
+const SWITCH_LIMIT_S := 75.0
 const SWITCH_REARM_S := 20.0
 
 var device: Object
@@ -118,6 +123,7 @@ var _desktop_armed := false
 var _desktop_button: Button
 var _switch_rearm := false    # intercept was on before the switch released it
 var _switch_gen := 0          # one per switch, so a late timer can't touch the next one
+var _power_left := false      # Power was told a switch is under way (request_leave)
 var _exit_armed := false
 var _exit_button: Button
 var _reset_armed := false
@@ -1327,9 +1333,21 @@ func _begin_switch(target: String) -> void:
 	_switch_rearm = controller != null and controller.has_method("intercept_state") \
 		and bool(controller.intercept_state().get("active", false))
 	if controller != null and controller.has_method("release_intercept"):
-		controller.release_intercept(_run_switch.bind(target, _switch_gen))
+		controller.release_intercept(_quiet_power_then_switch.bind(target, _switch_gen))
 	else:
-		_run_switch(target, _switch_gen)
+		_quiet_power_then_switch(target, _switch_gen)
+
+
+## Final review, session: Auto TDP, the charge hold, the thermald hold and the 15 s check kept
+## writing while the session's restores ran, so a game's limit or a held thermald could land
+## after them and stay for Steam or the desktop. Power stops all of it first (on its worker),
+## then the switch runs; a switch that fails or times out turns it back on (_rearm_after_switch).
+func _quiet_power_then_switch(target: String, gen: int) -> void:
+	if power != null and power.has_method("request_leave"):
+		_power_left = true
+		power.request_leave(_run_switch.bind(target, gen))
+	else:
+		_run_switch(target, gen)
 
 
 func _run_switch(target: String, gen: int) -> void:
@@ -1343,10 +1361,11 @@ func _run_switch(target: String, gen: int) -> void:
 	if not commands.run("session_switch", SESSION_SELECT, PackedStringArray([target])):
 		return
 	if is_inside_tree() and gen == _switch_gen:
-		get_tree().create_timer(SWITCH_REARM_S).timeout.connect(switch_timed_out.bind(gen))
+		get_tree().create_timer(SWITCH_LIMIT_S).timeout.connect(switch_timed_out.bind(gen))
 
 
-## SWITCH_REARM_S after a switch started and GameCove is still here: give the controller back.
+## The switch is taking too long and GameCove is still here (see SWITCH_LIMIT_S and
+## SWITCH_REARM_S): give the controller back.
 func switch_timed_out(gen: int) -> void:
 	if gen != _switch_gen:
 		return
@@ -1356,8 +1375,13 @@ func switch_timed_out(gen: int) -> void:
 
 
 func _on_switch_finished(id: String, code: int, output: String) -> void:
-	if id != "session_switch" or code == 0:
-		return   # 0: the logout is on its way (the timer covers a switch that never came)
+	if id != "session_switch":
+		return
+	if code == 0:
+		# the logout is on its way; if GameCove is still here SWITCH_REARM_S from now, it never came
+		if is_inside_tree():
+			get_tree().create_timer(SWITCH_REARM_S).timeout.connect(switch_timed_out.bind(_switch_gen))
+		return
 	var reason := BgCommand.error_line(output)
 	if reason == "":
 		var lines := output.strip_edges().split("\n", false)
@@ -1373,6 +1397,10 @@ func _rearm_after_switch() -> void:
 	if _switch_rearm and controller != null and controller.has_method("start_intercept"):
 		controller.start_intercept()
 	_switch_rearm = false
+	# GameCove stays: Power writes again and puts our own values back
+	if _power_left and power != null and power.has_method("request_cancel_leave"):
+		power.request_cancel_leave()
+	_power_left = false
 
 
 func _on_desktop_pressed() -> void:

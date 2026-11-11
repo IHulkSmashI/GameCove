@@ -139,7 +139,8 @@ func test_claw8ex_writes_through_the_root_verbs_and_reads_back() -> void:
 	eq(int(r["code"]), 0, "restore ran")
 	eq([_read(root, "/sys/devices/system/cpu/cpu3/cpufreq/energy_performance_preference"), _read(root, "/sys/devices/system/cpu/intel_pstate/no_turbo"),
 		_read(root, "/sys/class/drm/card1/device/tile0/gt0/freq0/max_freq"), _read(root, "/sys/power/mem_sleep"), _read(root, "/sys/devices/system/cpu/cpu3/online")],
-		["balance_performance", "0", "2300", "s2idle", "1"], "everything back")
+		["balance_performance", "0", "2300", "deep", "0"], "the day-to-day values are back; the two set with the admin password (sleep mode, cores) stay (final review, low)")
+	# (`remove` puts those two back as well: fixes/power-tune/test.sh)
 	_no_root_writes_outside(e)
 	_free()
 

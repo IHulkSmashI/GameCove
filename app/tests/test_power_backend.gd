@@ -733,3 +733,109 @@ func test_unknown_and_family_rows_get_conservative_limits() -> void:
 	eq(fam["id"], "gpd-family", "family row")
 	ok(float(fam["tdp"]["plugged_max"]) <= 25.0, "family row not above the conservative limits: %s" % fam["tdp"])
 	ok(DeviceScript.row_problems(fam).is_empty(), "still a valid row: %s" % [DeviceScript.row_problems(fam)])
+
+
+## Final review, session: leaving GameCove re-applied GameCove's own profile; the TDP, boost and
+## fan mode the handheld had before GameCove were never noted or put back.
+func _boot(root: String, id: String) -> void:
+	DirAccess.make_dir_recursive_absolute(root + "/proc/sys/kernel/random")
+	_write(root + "/proc/sys/kernel/random/boot_id", id)
+
+
+func test_values_from_before_gamecove_are_noted_and_put_back() -> void:
+	var root := _sys("before")
+	_boot(root, "boot-a")
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
+	ok(p.record_before(), "noted at start")
+	var rec: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(root + "/power_before.json"))
+	eq([rec["boot"], rec["backend"], rec["tdp_w"], rec["boost_w"]], ["boot-a", "powerstation", 25.0, 12.0], "the live TDP and boost, for this boot")
+	# GameCove's own values on top: 17 W and a 5 W boost the user picked
+	ok(p.set_tdp(17.0) and p.set_boost_w(5.0), "GameCove's values")
+	ok(not p.record_before(), "a restart in the same boot keeps the first record (what is live now is ours)")
+	eq(JSON.parse_string(FileAccess.get_file_as_string(root + "/power_before.json"))["tdp_w"], 25.0, "unchanged")
+	p.runner.calls.clear()
+	ok(p.restore_before(), "put back on leaving")
+	eq(p.runner.props[PS_TDP_KEY]["data"], 25.0, "TDP as before GameCove")
+	eq(p.runner.props[PS_BOOST_KEY]["data"], 12.0, "boost as before GameCove")
+	ok(not FileAccess.file_exists(root + "/power_before.json"), "and forgotten")
+	eq(p.boost_w, 5.0, "GameCove's own boost is still the user's choice")
+	var text := FileAccess.get_file_as_string(root + "/power.cfg")
+	ok(text.contains("battery=\"balanced\"") and text.contains("boost_w=5.0"), "power.cfg keeps GameCove's own profile (17 W, balanced) and boost; the restore isn't remembered as a pick: " + text)
+	ok(not p.restore_before(), "nothing left to put back")
+	p.free()
+
+
+func test_before_record_from_another_boot_is_never_applied() -> void:
+	var root := _sys("before_boot")
+	_boot(root, "boot-a")
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
+	ok(p.record_before(), "noted")
+	ok(p.set_tdp(17.0), "ours")
+	_boot(root, "boot-b")
+	p.runner.calls.clear()
+	ok(not p.restore_before(), "another boot: stale values aren't written")
+	eq(p.runner.props[PS_TDP_KEY]["data"], 17.0, "TDP untouched")
+	ok(not FileAccess.file_exists(root + "/power_before.json"), "the stale record is dropped")
+	ok(p.record_before(), "and a new boot notes its own")
+	eq(JSON.parse_string(FileAccess.get_file_as_string(root + "/power_before.json"))["boot"], "boot-b", "for this boot")
+	p.free()
+
+
+func test_fan_mode_from_before_gamecove_goes_back_without_being_remembered() -> void:
+	var root := _sys("before_fan")
+	_boot(root, "boot-a")
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
+	var h := root + "/sys/class/hwmon/hwmon5/"
+	p.runner.exec_handler = func(argv: PackedStringArray) -> Variant:
+		if argv.size() == 3 and argv[2] == "status":
+			return {"code": 0, "out": "installed=yes\n"}
+		if argv.size() < 5 or argv[2] != "fan":
+			return 0
+		for n in [1, 2]:
+			if argv[4] == "auto":
+				_write(h + "pwm%d_enable" % n, "2")
+				continue
+			var table: Array = PowerScript.FAN_TABLES[argv[4]]
+			for i in range(6):
+				_write(h + "pwm%d_auto_point%d_pwm" % [n, i + 1], str(int((int(table[i]) * 255 + 50) / 100)))
+			_write(h + "pwm%d_enable" % n, "1")
+		return 0
+	var was: String = p.state()["fan_mode"]
+	ok(was != "" and was != "quiet", "the fan mode before GameCove: " + was)
+	ok(p.record_before(), "noted")
+	ok(p.set_fan_mode("quiet"), "GameCove's fan mode")
+	ok(p.restore_before(), "put back")
+	eq(p.read_fan_sysfs(), was, "the hardware is in the mode from before")
+	ok(FileAccess.get_file_as_string(root + "/power.cfg").contains("fan_mode=\"quiet\""), "GameCove still remembers quiet as the user's choice")
+	p.free()
+
+
+func test_leaving_stops_every_writer_until_cancelled() -> void:
+	var root := _sys("leaving")
+	_boot(root, "boot-a")
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
+	ok(p.set_tdp(17.0), "a TDP of ours")
+	ok(p.autotune_start("steam:1"), "Auto TDP running")
+	ok(p.prepare_leave(), "a session switch begins")
+	ok(not p._autotune_on, "Auto TDP stopped first")
+	p.runner.calls.clear()
+	p.request_feed(30.0, 12.0)
+	p.source_tick()
+	p._thermald_held = true
+	eq(p.guard_check(), -1, "the thermal guard doesn't step")
+	ok(not p.hold_charge(), "no charge hold")
+	p._thermald_checked = false
+	p._hold_thermald()
+	eq(p.runner.calls.filter(func(c): return c.contains("set-property") or c.begins_with("pkexec")), [], "nothing writes while leaving")
+	ok(p.cancel_leave(), "the switch didn't happen")
+	ok(not p.leaving, "writing again")
+	eq(p.runner.props[PS_TDP_KEY]["data"], 17.0, "with our own value in place")
+	ok(not p.cancel_leave(), "only once")
+	p.free()
+
+
+func test_restore_baseline_run_ends_with_the_values_from_before() -> void:
+	var profiles := FileAccess.get_file_as_string("res://scripts/controls/profiles.gd")
+	ok(profiles.contains("power.request_restore_before(quit)"), "--restore-baseline must end with Power.restore_before()")
+	var power := FileAccess.get_file_as_string("res://scripts/device/power.gd")
+	ok(power.find("record_before()   # before restore()") < power.find("\trestore()\n\t# always:"), "the record is taken before restore() writes GameCove's values")

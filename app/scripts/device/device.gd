@@ -846,8 +846,7 @@ func info() -> Dictionary:
 
 
 static func gamecove_version() -> String:
-	var v := str(ProjectSettings.get_setting("application/config/version", ""))
-	return v if v != "" else "dev"
+	return AppVersion.text()
 
 
 func _mesa_from_renderer() -> String:

@@ -11,6 +11,12 @@ extends RefCounted
 ##   ~/.local/share/applications/…GameCoveInstaller "GameCove Installer" (if get-gamecove.sh didn't)
 ##   ~/.config/autostart/…GameCoveFinish            opens the installer once in Desktop Mode
 ##                                                  while fixes still wait for a password
+## and one the app writes, which uninstall must also take away because every gamescope session
+## reads it, Steam Gaming Mode included (a rotation or a refresh-rate unlock would stay with no
+## GameCove left to turn it off):
+##   ~/.config/environment.d/80-gamecove-display.conf   Display settings read at session start.
+##       Uninstall moves it to ~/.local/share/gamecove/display-session.conf; the next install
+##       puts it back, "Keep my settings" off deletes it.
 
 const HEADER := "# Written by the GameCove installer. Remove GameCove from \"GameCove Installer\" to undo.\n"
 const UNIT := """[Unit]
@@ -102,6 +108,14 @@ static func write_all(paths: RefCounted, choices: Dictionary, exe: String) -> Ar
 		wrote.append(paths.installer_entry())
 	# Installed now: the "Install GameCove" desktop shortcut has done its job.
 	_remove(paths.desktop_shortcut())
+	# Display settings an earlier uninstall kept ("Keep my settings"): back in place, unless
+	# there are newer ones already
+	if FileAccess.file_exists(paths.display_env_kept()):
+		if not FileAccess.file_exists(paths.display_env_conf()):
+			DirAccess.make_dir_recursive_absolute(paths.display_env_conf().get_base_dir())
+			if DirAccess.copy_absolute(paths.display_env_kept(), paths.display_env_conf()) == OK:
+				wrote.append(paths.display_env_conf())
+		_remove(paths.display_env_kept())
 	return wrote
 
 
@@ -141,6 +155,14 @@ static func remove_all(paths: RefCounted) -> Array:
 		if FileAccess.file_exists(p) or _is_link(p):
 			_remove(p)
 			gone.append(p)
+	# the app's display settings for the session: out of every gamescope session's way, a copy
+	# kept for a later install (remove_settings_files deletes the copy)
+	if FileAccess.file_exists(paths.display_env_conf()) or _is_link(paths.display_env_conf()):
+		DirAccess.make_dir_recursive_absolute(data)
+		if not _is_link(paths.display_env_conf()):
+			DirAccess.copy_absolute(paths.display_env_conf(), paths.display_env_kept())
+		_remove(paths.display_env_conf())
+		gone.append(paths.display_env_conf())
 	# the bootstrap's cosign download (a cache: it comes back if the installer runs again)
 	if DirAccess.dir_exists_absolute(data + "/tools") and remove_tree(data + "/tools", data):
 		gone.append(data + "/tools")
@@ -157,6 +179,9 @@ static func remove_settings_files(paths: RefCounted) -> Array:
 		gone.append(paths.installer_entry())
 	if DirAccess.dir_exists_absolute(data + "/launch") and remove_tree(data + "/launch", data):
 		gone.append(data + "/launch")
+	if FileAccess.file_exists(paths.display_env_kept()):
+		_remove(paths.display_env_kept())
+		gone.append(paths.display_env_kept())
 	return gone
 
 

@@ -11,14 +11,16 @@ extends RefCounted
 ## A second home screen on the same settings (started from the desktop while one runs) is
 ## treated the same way and boot.gd ends it at once: two would write the same settings
 ## files in turns and both restart the saved download queue. The installer, the Controls
-## command line, the photo prefetch and --restore-baseline run next to the home screen by
+## command line, the photo prefetch, --restore-baseline and --version run next to the home screen by
 ## design and never ask for the lock; neither does `godot -s <script>` (tests, tools).
 
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 
 const RESTORE_BASELINE := "--restore-baseline"
+## `--version`: boot.gd prints "GameCove <version>" and quits; nothing else starts.
+const VERSION := "--version"
 ## Starts that aren't the home screen.
-const NOT_HOME := ["--installer", "--controls", "--prefetch-photo", RESTORE_BASELINE]
+const NOT_HOME := ["--installer", "--controls", "--prefetch-photo", RESTORE_BASELINE, VERSION]
 const LOCK := "user://gamecove.pid"
 
 ## Tests only: used instead of the command line when not null.
@@ -37,7 +39,8 @@ static func args() -> PackedStringArray:
 
 ## True in a headless helper run that must start no services, and in a second home screen.
 static func helper() -> bool:
-	return RESTORE_BASELINE in args() or second_instance()
+	var a := args()
+	return RESTORE_BASELINE in a or VERSION in a or second_instance()
 
 
 ## True when this start is a home screen and another one already runs on these settings.

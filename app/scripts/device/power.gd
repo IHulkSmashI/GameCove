@@ -57,6 +57,7 @@ const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const Backend := preload("res://scripts/controls/power/backend.gd")
 const Levers := preload("res://scripts/controls/power/levers.gd")
 const ThermalGuard := preload("res://scripts/controls/power/thermal_guard.gd")
+const RunMode := preload("res://scripts/system/run_mode.gd")
 ## power.cfg sections kept per device ("<name>@<device id>", see per_device.gd).
 const DEVICE_SECTIONS: Array[String] = ["profile", "custom_w", "device"]
 ## Auto TDP options (power.autotune_* controls), defaults as ClawDeck's.
@@ -132,6 +133,8 @@ var _guard_base_w := -1.0   # the TDP before the guard's first step (no user pic
 var _busy := -1
 var _busy_at := -1000.0
 var _battery_pct := -1
+var _battery_status := ""     # the battery's own "status" (Charging, Discharging, ...)
+var _battery_resend := false
 ## Boost watts above the TDP the user picked on PowerStation (PL2 - PL1 / SPPT above SPL);
 ## -1 = the device's default (devices.json pl2_offset_w, else what PowerStation keeps).
 var boost_w := -1.0
@@ -177,6 +180,22 @@ var _job_mutex := Mutex.new()
 var _job_sem := Semaphore.new()
 var _quit := false
 
+# ---- what the handheld had before GameCove, and leaving it that way (final review, session) ----
+## The TDP, boost and fan mode read at start, before restore() puts GameCove's own back, are
+## kept in this file (next to power.cfg) for as long as GameCove's session lasts. When the
+## session is left for Steam or the desktop, `--restore-baseline` (run by the session, see
+## profiles.gd) writes them back with restore_before(), so the next session finds the handheld
+## as it was instead of at GameCove's profile, boost and fan mode. Keyed by the boot: a
+## GameCove that restarts in the same boot (a crash, an update) keeps the first record, since
+## what it would read then is its own values.
+const BEFORE_FILE := "power_before.json"
+const BOOT_ID := "/proc/sys/kernel/random/boot_id"
+var before_path := ""
+## True from prepare_leave() on: a session switch is under way, so nothing here writes any
+## more (Auto TDP, the charge hold, the thermald hold, the 15 s check, the thermal guard).
+## cancel_leave() turns it off again when the switch didn't happen.
+var leaving := false
+
 
 func _ready() -> void:
 	var dev := get_node_or_null("/root/Device")
@@ -201,6 +220,8 @@ func _exit_tree() -> void:
 func _start() -> bool:
 	detect()
 	load_autotune_opts()
+	if not RunMode.helper():
+		record_before()   # before restore(): what is live now is what the handheld had without us
 	restore()
 	# always: besides the charger it notices a sleep while a game is in front (review M19)
 	_start_timer.call_deferred()
@@ -214,6 +235,117 @@ func _start_timer() -> void:
 	_timer.timeout.connect(func(): _queue("source", func(): source_tick(); return true))
 	add_child(_timer)
 	_timer.start()
+
+
+func _before_file() -> String:
+	return before_path if before_path != "" else config_path.get_base_dir().path_join(BEFORE_FILE)
+
+
+func _boot() -> String:
+	return DeviceScript.read_text(sys_root + BOOT_ID)
+
+
+## Notes the live TDP, boost and fan mode, once per boot (see BEFORE_FILE). Call after detect().
+func record_before() -> bool:
+	var boot := _boot()
+	var have: Variant = SettingsFile.load_json(_before_file()).get("data")
+	if have is Dictionary and boot != "" and str(have.get("boot", "")) == boot:
+		return false   # already noted this boot: what is live now is ours
+	var rec := {"boot": boot, "backend": backend, "tdp_w": _tdp_w if backend != "none" else -1.0,
+		"boost_w": _live_boost if backend == "powerstation" else -1.0, "fan_mode": _fan_mode, "fan_via": _fan_via}
+	return SettingsFile.save_json(_before_file(), rec, "\t") == OK
+
+
+## Writes back what record_before() noted and forgets it. Nothing is remembered as the user's
+## choice (GameCove's own profile, boost and fan mode stay as they are in power.cfg), and the
+## TDP is never set past the limit of the power source we're on now. True when something was
+## written.
+func restore_before() -> bool:
+	var saved: Variant = SettingsFile.load_json(_before_file()).get("data")
+	if FileAccess.file_exists(SettingsFile.abs_path(_before_file())):
+		DirAccess.remove_absolute(SettingsFile.abs_path(_before_file()))
+	if not saved is Dictionary or str(saved.get("boot", "")) != _boot() or _boot() == "":
+		return false   # from another boot (or unreadable): the values there mean nothing now
+	var any := false
+	var w := float(saved.get("tdp_w", -1.0))
+	if backend != "none" and str(saved.get("backend", "")) == backend and w > 0.0:
+		if tdp_max() > 0.0:
+			w = minf(w, tdp_max())
+		var b := float(saved.get("boost_w", -1.0))
+		var ours := boost_w
+		boost_w = b   # write_tdp writes TDP and boost in the safe order; -1 leaves the boost alone
+		var boost_differs := b >= 0.0 and absf(b - _live_boost) >= 0.05
+		if absf(w - _tdp_w) >= 0.05 or boost_differs:
+			any = write_tdp(w)
+		boost_w = ours
+	var f := str(saved.get("fan_mode", ""))
+	# "custom" was someone's curve, which we never read: nothing to put back
+	if f != "" and f != "custom" and f != _fan_mode and _fan_via != "" and str(saved.get("fan_via", "")) == _fan_via and f in fan_modes():
+		if _fan_via != "fix" or fix_installed("fan"):
+			any = _write_fan_mode(f) == f or any
+	return any
+
+
+## A session switch is about to start (quick menu): stop everything that keeps writing, on the
+## worker, so the restores that follow (the session's --restore-baseline and the root helper)
+## are the last word. Auto TDP stops first and puts its levers and the user's TDP back.
+func prepare_leave() -> bool:
+	_autotune_stop(true)
+	leaving = true
+	_stop_timers.call_deferred()
+	return true
+
+
+## The switch didn't happen (it failed or timed out): back to normal, with our values in place.
+func cancel_leave() -> bool:
+	if not leaving:
+		return false
+	leaving = false
+	_thermald_checked = false
+	_resume_timers.call_deferred()
+	restore()
+	return true
+
+
+## prepare_leave() on the worker; `done` (optional) is called on the main thread afterwards.
+func request_leave(done := Callable()) -> void:
+	_queue("leave", func():
+		prepare_leave()
+		if done.is_valid():
+			_emit_main_call(done)
+		return true)
+
+
+## restore_before() on the worker (after whatever it is still doing: the start's detect and
+## restore), then `done` on the main thread. The --restore-baseline run ends with this.
+func request_restore_before(done := Callable()) -> void:
+	_queue("before", func():
+		restore_before()
+		if done.is_valid():
+			_emit_main_call(done)
+		return true)
+
+
+func request_cancel_leave() -> void:
+	_queue("leave", func(): cancel_leave(); return true)
+
+
+func _emit_main_call(fn: Callable) -> void:
+	fn.call_deferred()
+
+
+func _stop_timers() -> void:
+	for t in [_timer, _guard_timer]:
+		if t != null and is_instance_valid(t):
+			t.stop()
+
+
+func _resume_timers() -> void:
+	if leaving:
+		return
+	for t in [_timer, _guard_timer]:
+		if t != null and is_instance_valid(t) and t.is_inside_tree():
+			t.start()
 
 
 # ---- worker -------------------------------------------------------------------
@@ -247,7 +379,7 @@ func request_autotune(on: bool, game_key := "") -> void:
 ## worker is busy replaces the one waiting.
 ## `sample`: PerfMonitor's whole reading (cpu_load, gpu_load, gpu_mhz, fps...) when it has one.
 func request_feed(fps: float, watts := -1.0, sample := {}) -> void:
-	if not _autotune_on or _autotune_stopping:
+	if not _autotune_on or _autotune_stopping or leaving:
 		return
 	_queue("feed", func(): autotune_feed(fps, watts, sample); return true)
 
@@ -309,6 +441,8 @@ var slept_at := 0
 ## only looks while its window or the quick menu is shown, so a sleep with a game in front
 ## went unnoticed: a firmware-reset TDP, fan table or charge limit stayed reset (review M19).
 func source_tick() -> void:
+	if leaving:
+		return
 	if slept_since_last_look():
 		refresh(true)
 	else:
@@ -962,10 +1096,25 @@ func _report_battery(on_ac: bool) -> void:
 				var c := DeviceScript.read_text(d + "capacity")
 				if c.is_valid_int():
 					pct = c.to_int()
+				_battery_status = DeviceScript.read_text(d + "status")
 				break
-	if pct >= 0 and pct != _battery_pct:
+	if pct >= 0 and (pct != _battery_pct or _battery_resend):
+		_battery_resend = false
 		_battery_pct = pct
 		_emit_main(battery_level, [pct, on_ac])
+
+
+## True while the battery itself says it is charging. Some chargers aren't listed as "Mains"
+## or "USB" (ac_online()), so on those handhelds `plugged` stays false with the cable in; the
+## low-battery sleep must not count that as running on battery.
+func battery_charging() -> bool:
+	return _battery_status == "Charging"
+
+
+## The next 15 s check reports the level again even if it didn't change (the low-battery
+## watcher asks for a second reading before it believes a sudden low one).
+func request_battery_report() -> void:
+	_battery_resend = true
 
 
 func battery_percent() -> int:
@@ -977,7 +1126,7 @@ func battery_percent() -> int:
 ## the charger or the level crossed that line (from the 15 s check; one sysfs
 ## read when nothing changed). True when it ran the fix.
 func hold_charge() -> bool:
-	if _charge_via != "fix" or _charge_mode != "behaviour" or _charge <= 0 or _charge >= 100:
+	if leaving or _charge_via != "fix" or _charge_mode != "behaviour" or _charge <= 0 or _charge >= 100:
 		return false
 	if not FileAccess.file_exists(sys_root + CHARGE_STATE_DIR + "/original"):
 		return false  # the fix isn't in use (removed): leave the battery alone
@@ -1194,6 +1343,16 @@ func read_charge_sysfs() -> int:
 func set_fan_mode(mode: String) -> bool:
 	if _fan_via == "" or not mode in fan_modes():
 		return false
+	if _write_fan_mode(mode) != mode:
+		return false
+	_remember("device", "fan_mode", mode)
+	_emit_changed()
+	return true
+
+
+## Writes a fan mode and reads it back (the mode the hardware is in afterwards, "" when
+## unreadable). Remembers nothing: set_fan_mode() is the user's choice, restore_before() isn't.
+func _write_fan_mode(mode: String) -> String:
 	var got := ""
 	if _fan_via == "steamos-manager":
 		var want := "1" if mode == "auto" else "0"
@@ -1204,12 +1363,9 @@ func set_fan_mode(mode: String) -> bool:
 	else:
 		if _run_fix("fan", mode):
 			got = read_fan_sysfs()
-	if got != mode:
-		return false
-	_fan_mode = got
-	_remember("device", "fan_mode", mode)
-	_emit_changed()
-	return true
+	if got == mode:
+		_fan_mode = got
+	return got
 
 
 ## The fan preset the hardware is in now: "auto" (the firmware's own control),
@@ -1479,6 +1635,8 @@ func _check_limit() -> void:
 ## The helper bounds a hold to a running game (review S3-2): thermald starts again by itself when no
 ## game runs. So a hold is asked for again (at most every THERMALD_RETRY_MS) once thermald runs again.
 func _hold_thermald() -> void:
+	if leaving or RunMode.helper():
+		return   # leaving the session: the root helper starts thermald again, nothing may stop it now
 	if backend != "powerstation" or str(device.get("cpu_vendor", "")) != "intel":
 		return
 	if _thermald_held and not be.thermald_active():
@@ -1517,7 +1675,7 @@ func _start_guard() -> void:
 
 ## One guard check (worker): the package temperature against ThermalGuard's rules.
 func guard_check() -> int:
-	if not _thermald_held:
+	if not _thermald_held or leaving:
 		return -1
 	var f: String = be.pkg_temp_file()
 	var raw := Backend.read_int(f) if f != "" else -1

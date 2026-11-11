@@ -404,5 +404,10 @@ Administrator password (`gamecove-fix`, `auth_admin_keep`):
 | power-tune sleep (s2idle / deep) | a wrong mode can stop the handheld waking; set once |
 | power-tune mcu (Ally controller power saving) | old MCU firmware leaves the controller dead after sleep; also gated on the firmware version |
 
+These last three are also **kept when GameCove's session ends**: `power-tune set restore`, which the session
+runs without a password on the way out, puts back only the day-to-day values above it. A setting made with the
+administrator password stays until you change it again or the fix is removed (`gamecove-fix power-tune remove`,
+which the uninstaller runs): the session couldn't ask for the password to set it again.
+
 In Gaming Mode the Power page shows these as "Needs your admin password: change it in Desktop Mode", and the
 Fixes page shows the admin note on the file fixes.

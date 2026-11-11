@@ -4,10 +4,12 @@ extends RefCounted
 ## the screen drives it and the service carries it out.
 ##
 ## Modes and their steps:
-##   easy       welcome, art, summary, progress, done         (recommended defaults)
+##   easy       welcome, stores, art, summary, progress, done (recommended defaults)
 ##   custom     welcome, startup, steam, stores, device, look, art, extras, summary, progress, done
 ##   maintenance  maintenance                                 (already installed: pick below)
 ##   change     maintenance, startup … art, extras, summary, progress, done
+## "stores" (Epic, GOG, Amazon sign-in) is in Easy too: the welcome page promises it, and
+## it is one press to skip ("Skip for now"; stores already signed in show as done).
 ## "art" is the Game art step (the user's own SteamGridDB key): shown in Easy
 ## mode too, since GameCove ships no key; skippable ("Steam art only").
 ##   repair / update  maintenance, progress, done
@@ -20,7 +22,7 @@ const Traits := preload("res://scripts/device/traits.gd")
 
 const OPTION_STEPS: Array[String] = ["startup", "steam", "stores", "device", "look", "art", "extras"]
 const STEPS := {
-	"easy": ["welcome", "art", "summary", "progress", "done"],
+	"easy": ["welcome", "stores", "art", "summary", "progress", "done"],
 	"custom": ["welcome", "startup", "steam", "stores", "device", "look", "art", "extras", "summary", "progress", "done"],
 	"maintenance": ["maintenance"],
 	"change": ["maintenance", "startup", "steam", "stores", "device", "look", "art", "extras", "summary", "progress", "done"],
@@ -127,6 +129,8 @@ static func defaults(target: Dictionary, device_row: Dictionary, prefs: Dictiona
 		"country": "",
 		"remove_fixes": true,
 		"keep_settings": true,
+		# only read when keep_settings is off: save backups go only when asked for by name (final review, high 9)
+		"remove_save_backups": false,
 		"xess_driver": false,
 		"moonlight": false,
 	}
@@ -230,7 +234,7 @@ func set_choice(key: String, value: Variant) -> bool:
 		"theme":
 			if not Themes.has_theme(str(value)):
 				return false
-		"steam_control", "auto_tdp", "match_art", "reduce_motion", "remove_fixes", "keep_settings", "moonlight":
+		"steam_control", "auto_tdp", "match_art", "reduce_motion", "remove_fixes", "keep_settings", "remove_save_backups", "moonlight":
 			if not value is bool:
 				return false
 		"xess_driver":

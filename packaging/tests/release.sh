@@ -15,6 +15,10 @@ bad() {
 	printf 'FAIL: %s\n' "$*" >&2
 }
 
+contains() {
+	if grep -q -- "$2" "$1" 2>/dev/null; then ok; else bad "$3: '$2' not in $1"; fi
+}
+
 # ------------------------------------------------------------- repo hygiene (M28)
 # Only these files may sit in the repo root; anything else is a stray download or a leftover.
 for f in $(git -C "$REPO" ls-files | grep -v /); do
@@ -307,7 +311,7 @@ assert "cosign sign-blob --yes --bundle dist/upscalers.json.sigstore.json dist/u
 assert runs.count("--clobber") == 1 and "dist/upscalers.json.sigstore.json dist/upscalers.json.sha256 --clobber" in runs, \
     "only the index is replaced; mirror files never"
 assert runs.index('gh release upload "$tag" "dist/$path"') < runs.index("--clobber"), "files first, the index last"
-assert "--latest=false" in runs, "the mirror release must never become 'latest' (get-gamecove.sh reads releases/latest)"
+assert "--latest=false" in runs, "the mirror release must never become 'latest' (GitHub would hide the app release behind it; get-gamecove.sh reads the release list and only takes vX... tags)"
 assert "cosign-release: ${{ steps.cosign.outputs.version }}" in open(wf).read()
 # the workflow's own check, for this repository, is the identity the helper requires
 ident = [l.strip()[len('ident="'):-1] for l in runs.splitlines() if l.strip().startswith('ident="')]
@@ -449,6 +453,150 @@ sed 's/.*:\(7656119[0-9]*\)$/\1/' "$T/ids" | sort -u | while read -r id; do
 done >"$T/unknown_ids"
 if [ -s "$T/unknown_ids" ]; then bad "SteamID64s in tests that aren't the synthetic ones (app/tests/fixtures/STEAM_IDS.md): $(tr '\n' ' ' <"$T/unknown_ids")"; else ok; fi
 if git -C "$REPO" grep -nI '/home/clau''de/' -- app tools packaging gamedb fixes session >"$T/paths" 2>/dev/null; then bad "machine-specific paths: $(head -5 "$T/paths" | tr '\n' ' ')"; else ok; fi
+
+# ------------------------------------------------------------- final release review: version, checksums, environments
+# The workflow's own step scripts, run here against fake files (step <job> <part of the step's name>).
+step() {
+	python3 -I - "$W" "$1" "$2" <<'PY'
+import sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+hits = [s["run"] for s in jobs[sys.argv[2]]["steps"] if sys.argv[3] in s.get("name", "")]
+assert len(hits) == 1, (sys.argv[2], sys.argv[3], len(hits))
+print(hits[0])
+PY
+}
+# high 8: the exported app must say the spec's Version, and the tag's
+step app "exported app says the spec's Version" >"$T/vstep.sh"
+vrun() { # <what the app prints> <VERSION> <ref type> <ref name>
+	mkdir -p "$T/v/app/build"
+	printf '#!/bin/sh\necho "Godot Engine v4.7.2"\necho "%s"\n' "$1" >"$T/v/app/build/gamecove.x86_64"
+	chmod +x "$T/v/app/build/gamecove.x86_64"
+	(cd "$T/v" && VERSION="$2" GITHUB_REF_TYPE="$3" GITHUB_REF_NAME="$4" bash -e "$T/vstep.sh") >"$T/out" 2>&1
+}
+vrun "GameCove 0.1.0" 0.1.0 tag v0.1.0 && ok || bad "version step: a matching app, spec and tag must pass ($(cat "$T/out"))"
+vrun "GameCove 0.1.0" 0.1.0 branch main && ok || bad "version step: a branch build with a matching app must pass"
+vrun "GameCove 0.1.0-dev" 0.1.0 tag v0.1.0 && bad "version step: an unstamped app (0.1.0-dev) must fail" || ok
+vrun "GameCove 0.0.9" 0.1.0 tag v0.1.0 && bad "version step: an app that says another version must fail" || ok
+vrun "" 0.1.0 tag v0.1.0 && bad "version step: an app that says nothing must fail" || ok
+vrun "GameCove 0.1.0" 0.1.0 tag v0.2.0 && bad "version step: a tag that differs from the app must fail" || ok
+grep -q 'wants_version' "$REPO/app/scripts/installer/boot.gd" && ok || bad "boot.gd must answer --version (the release workflow asks the exported app)"
+if grep -q '^config/version=' "$REPO/app/project.godot"; then bad "app/project.godot must not carry config/version: the export stamps the spec's Version"; else ok; fi
+# low: SHA256SUMS never lists itself, even when one is left in dist/
+step package "Checksums" >"$T/sums.sh"
+mkdir -p "$T/s1/dist"
+for f in gamecove-0.1.0-x86_64.tar.gz gamecove-0.1.0-1.fc43.x86_64.rpm gamecove-0.1.0-1.fc43.src.rpm gamecove-0.1.0-x86_64.raw MSI__Claw-ISH-IMU.bpf.o; do echo "$f" >"$T/s1/dist/$f"; done
+cp "$GG" "$T/s1/dist/get-gamecove.sh"
+echo "stale" >"$T/s1/dist/SHA256SUMS"
+echo "stale" >"$T/s1/dist/SHA256SUMS.sigstore.json"
+if (cd "$T/s1" && bash -e "$T/sums.sh") >"$T/out" 2>&1; then ok; else bad "checksums step: $(cat "$T/out")"; fi
+if grep -q "SHA256SUMS" "$T/s1/dist/SHA256SUMS"; then bad "SHA256SUMS lists itself"; else ok; fi
+[ "$(wc -l <"$T/s1/dist/SHA256SUMS")" -eq 6 ] && (cd "$T/s1/dist" && sha256sum --strict -c SHA256SUMS >/dev/null 2>&1) && ok || bad "SHA256SUMS must list the six files and match them"
+[ ! -e "$T/s1/dist/SHA256SUMS.sigstore.json" ] && ok || bad "a stale signature must not survive new checksums"
+# low: the release job re-checks what it downloaded before it signs
+step release "checked again before signing" >"$T/recheck.sh"
+recheck() { # <dir> [tag]
+	(cd "$1" && TAG="${2:-v0.1.0}" bash -e "$T/recheck.sh") >"$T/out" 2>&1
+}
+mkdir -p "$T/s1/packaging" && cp "$GG" "$T/s1/packaging/get-gamecove.sh"
+recheck "$T/s1" && ok || bad "re-check: untouched files must pass ($(cat "$T/out"))"
+cp -r "$T/s1" "$T/s2" && echo changed >>"$T/s2/dist/gamecove-0.1.0-x86_64.raw"
+recheck "$T/s2" && bad "re-check: a changed file must fail" || ok
+cp -r "$T/s1" "$T/s3" && echo extra >"$T/s3/dist/extra.bin"
+recheck "$T/s3" && bad "re-check: a file SHA256SUMS doesn't list must fail" || ok
+cp -r "$T/s1" "$T/s4" && rm "$T/s4/dist/MSI__Claw-ISH-IMU.bpf.o"
+recheck "$T/s4" && bad "re-check: a listed file that is missing must fail" || ok
+cp -r "$T/s1" "$T/s5" && echo "# other" >>"$T/s5/packaging/get-gamecove.sh"
+recheck "$T/s5" && bad "re-check: an installer script that isn't the tagged commit's must fail" || ok
+recheck "$T/s1" v0.2.0 && bad "re-check: files of another version must fail" || ok
+cp -r "$T/s1" "$T/s6" && (cd "$T/s6/dist" && sha256sum -- * >SHA256SUMS)
+recheck "$T/s6" && bad "re-check: a SHA256SUMS that lists itself must fail" || ok
+python3 -I - "$W" >"$T/out" 2>&1 <<'PY' && ok || bad "release.yml order: $(cat "$T/out")"
+import sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+names = [s.get("name", s.get("uses", "")) for s in jobs["release"]["steps"]]
+chk = [i for i, n in enumerate(names) if "checked again before signing" in n][0]
+dl = [i for i, n in enumerate(names) if n.startswith("actions/download-artifact@")][0]
+sign = [i for i, n in enumerate(names) if n.startswith("Sign SHA256SUMS")][0]
+assert dl < chk < sign, "download, re-check, then sign"
+# the environment is asked about before the job that would create it: release needs protected; the tag job asks
+# before it creates the tag
+assert "protected" in jobs["release"]["needs"], "release must need the protected job"
+p = jobs["protected"]
+assert "environment" not in p and p["permissions"] == {"contents": "read", "actions": "read"}, p.get("permissions")
+assert any("check-environment.sh release reviewers" in s.get("run", "") for s in p["steps"])
+t = [s.get("run", "") for s in jobs["tag"]["steps"]]
+ask = [i for i, r in enumerate(t) if "check-environment.sh release reviewers" in r]
+mk = [i for i, r in enumerate(t) if "git/refs" in r]
+assert ask and mk and ask[0] < mk[0], "the tag job checks the environment before creating the tag"
+for n in ("firmware.yml", "upscalers.yml"):
+    b = yaml.safe_load(open(sys.argv[1].replace("release.yml", n)))["jobs"]["build"]
+    assert any("check-environment.sh\" nightly branches" in s.get("run", "") for s in b["steps"]), n + ": build must check the nightly environment"
+PY
+# tools/ci/check-environment.sh against canned answers of GitHub's "get an environment"
+CE="$REPO/tools/ci/check-environment.sh"
+mkdir -p "$T/ce"
+cat >"$T/ce/curl" <<EOF
+#!/bin/sh
+out=""
+while [ \$# -gt 0 ]; do case "\$1" in -o) out="\$2"; shift ;; esac; shift; done
+[ -f "$T/ce/fail" ] && exit 7
+cp "$T/ce/body" "\$out"
+printf '%s' "\$(cat "$T/ce/code")"
+EOF
+chmod +x "$T/ce/curl"
+ce() { # <code> <body> <name> <need>
+	echo "$1" >"$T/ce/code"
+	printf '%s\n' "$2" >"$T/ce/body"
+	CURL="$T/ce/curl" GITHUB_REPOSITORY=IHulkSmashI/GameCove GITHUB_REPOSITORY_OWNER=IHulkSmashI GH_TOKEN=t sh "$CE" "$3" "$4" >"$T/out" 2>&1
+}
+REVIEW='{"type": "required_reviewers", "reviewers": [{"type": "User", "reviewer": {"login": "ihulksmashi"}}]}'
+OTHER='{"type": "required_reviewers", "reviewers": [{"type": "User", "reviewer": {"login": "someone-else"}}]}'
+POLICY='"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}'
+ce 200 "{\"name\": \"release\", \"protection_rules\": [$REVIEW, {\"type\": \"branch_policy\"}], $POLICY}" release reviewers && ok || bad "a protected release environment must pass ($(cat "$T/out"))"
+ce 200 "{\"name\": \"release\", \"protection_rules\": [], \"deployment_branch_policy\": null}" release reviewers && bad "an unprotected release environment (what GitHub auto-creates) must fail" || ok
+ce 200 "{\"name\": \"release\", \"protection_rules\": [{\"type\": \"branch_policy\"}], $POLICY}" release reviewers && bad "a release environment without a required reviewer must fail" || ok
+contains "$T/out" "no required reviewer" "says what is missing"
+ce 200 "{\"name\": \"release\", \"protection_rules\": [$OTHER], $POLICY}" release reviewers && bad "a release environment the owner doesn't review must fail" || ok
+ce 200 "{\"name\": \"release\", \"protection_rules\": [$REVIEW], \"deployment_branch_policy\": null}" release reviewers && bad "a release environment every branch can deploy to must fail" || ok
+ce 404 '{"message": "Not Found"}' release reviewers && bad "a missing environment must fail" || ok
+contains "$T/out" "doesn't exist" "says it is missing"
+ce 200 "{\"name\": \"nightly\", \"protection_rules\": [{\"type\": \"branch_policy\"}], $POLICY}" nightly branches && ok || bad "nightly with a branch rule must pass ($(cat "$T/out"))"
+ce 200 '{"name": "nightly", "protection_rules": [], "deployment_branch_policy": null}' nightly branches && bad "nightly open to every branch must fail" || ok
+ce 403 '{"message": "rate limit"}' release reviewers && ok || bad "an answer GitHub won't give is a warning, not a failure"
+contains "$T/out" "::warning::" "warns when it couldn't check"
+touch "$T/ce/fail"
+ce 200 '{}' release reviewers && ok || bad "unreachable API: a warning, not a failure"
+rm -f "$T/ce/fail"
+grep -q "check-environment.sh" "$REPO/docs/RELEASING.md" && ok || bad "docs/RELEASING.md must describe the environment check"
+if grep -q "owner: create it" "$REPO/docs/RELEASING.md"; then bad "docs/RELEASING.md still says the environments are to be created"; else ok; fi
+
+# "Tested on hardware" says the same thing everywhere: MSI Claw 8 EX AI+ (Bazzite) and ROG Ally (SteamOS)
+grep -q "MSI Claw 8 EX AI+ (Bazzite) and the ASUS ROG Ally (SteamOS)" "$REPO/README.md" && ok || bad "README must say what was tested on hardware: Claw 8 EX AI+ (Bazzite) and ROG Ally (SteamOS)"
+for f in packaging/rpm/gamecove.spec packaging/install.sh; do
+	grep -q "Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS)" "$REPO/$f" && ok || bad "$f must say what the README says about hardware testing"
+	if grep -qi "untested" "$REPO/$f"; then bad "$f still says untested while the README says tested on hardware"; else ok; fi
+done
+if grep -q "both on Bazzite" "$REPO/README.md" "$REPO/docs/DEVICES.md" "$REPO/docs/SESSION.md"; then bad "the ROG Ally was tested on SteamOS, not Bazzite"; else ok; fi
+grep -q "Not run on a SteamOS handheld yet" "$REPO/packaging/sysext/build-sysext.sh" && grep -q "hasn't been run on a handheld yet" "$REPO/README.md" && ok || bad "the SteamOS install must be described the same way in build-sysext.sh and the README"
+if grep -q '^<!--' "$REPO/README.md"; then bad "README has a hidden comment: $(grep -n '^<!--' "$REPO/README.md" | head -n 2 | tr '\n' ' ')"; else ok; fi
+
+# docs/PRIVACY.md says what the code does (final review, low)
+PV="$REPO/docs/PRIVACY.md"
+grep -q "every address saved for that PC" "$PV" && ok || bad "PRIVACY.md: Wake-on-LAN also goes to the PC's saved addresses (a remote one included)"
+grep -q "Send from my phone" "$PV" && ok || bad "PRIVACY.md: the key page opens when Send from my phone is chosen"
+if grep -q "Only while the Game art step is open" "$PV" "$REPO/README.md"; then bad "the key page no longer opens with the Game art step; the docs still say so"; else ok; fi
+if grep -q "no other host (\`IMAGE_HOSTS\`)" "$PV"; then bad "PRIVACY.md says pictures come from no other host, but redirects are followed"; else ok; fi
+grep -q "redirect" "$PV" && ok || bad "PRIVACY.md must say image redirects are followed"
+grep -q "gamecove-selftest" "$PV" && grep -q "releases/latest" "$PV" && ok || bad "PRIVACY.md must list the selftest's GitHub HEAD request"
+grep -q 'RELEASES=https://github.com/IHulkSmashI/gamecove/releases/latest' "$REPO/packaging/bin/gamecove-selftest" && grep -q -- '-I --max-time 10 "\$RELEASES"' "$REPO/packaging/bin/gamecove-selftest" && ok || bad "the selftest's network request changed: update docs/PRIVACY.md"
+# the phone page for the key really doesn't open with the step: start() itself never calls _open_phone()
+if sed -n '/^func start() -> void:$/,/^$/p' "$REPO/app/scripts/ui/setup/art_key_step.gd" | grep -q "_open_phone()"; then bad "art_key_step.gd start() must not open the phone page"; else ok; fi
+sed -n '/^func start() -> void:$/,/^$/p' "$REPO/app/scripts/ui/setup/art_key_step.gd" | grep -q 'mode = "direct"' && ok || bad "art_key_step.gd start() must begin with SteamGridDB's own page (nothing listening)"
+# CONTRIBUTING names the test commands, and its device report is the real tool, not "coming soon"
+for c in "res://tests/run_tests.gd" "packaging/tests/run.sh" "app/tests/e2e/run.py" "fixes/\*/test.sh" "python3 -m pytest" "shellcheck -S warning"; do
+	grep -q -- "$c" "$REPO/CONTRIBUTING.md" && ok || bad "CONTRIBUTING.md doesn't give the test command: $c"
+done
+if grep -n -i "coming soon" "$REPO/CONTRIBUTING.md" >"$T/out"; then bad "a placeholder is left: $(head -n 2 "$T/out" | tr '\n' ' ')"; else ok; fi
 
 echo "$PASS passed, $FAILS failed"
 [ "$FAILS" -eq 0 ]

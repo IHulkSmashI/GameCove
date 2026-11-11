@@ -442,6 +442,23 @@ contains "$T/post.log" "^pkexec $T/fix-set charge-limit set release$" "the resto
 cp "$T/pkexec.keep" "$PB/pkexec"
 printf '#!/bin/sh\nshift\nexec "$@"\n' >"$PB/timeout"
 chmod +x "$PB/pkexec" "$PB/timeout"
+# final review, session: a root restore that FAILS (in a session script running under set -e) must not skip
+# the next one, nor leave the session waiting for the whole limit
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/post.log"\nexit 126\n' "$T" >"$PB/pkexec"
+mkdir -p "$T/gcstate/fixes/power-tune/orig"
+: >"$T/busctl.log"
+: >"$T/post.log"
+started="$(date +%s)"
+# shellcheck disable=SC2016  # expanded by the inner bash
+PATH="$PB:/usr/bin:/bin" GAMECOVE_STATE_DIR="$T/gcstate" GAMECOVE_FIX_SET="$T/fix-set" GAMECOVE_ROOT_WAIT_S=20 \
+	bash -c 'set -a; . "$1"; set -e; root_restores' _ "$REPO/session/gamescope-session-plus/sessions.d/gamecove"
+if [ $(($(date +%s) - started)) -lt 10 ]; then ok; else bad "session end waited the whole limit on a failed root restore"; fi
+contains "$T/post.log" "^pkexec $T/fix-set charge-limit set release$" "the release was tried"
+contains "$T/post.log" "^pkexec $T/fix-set power-tune set restore$" "a failed charge-limit release doesn't skip the power restore (session end)"
+rmdir "$T/gcstate/fixes/power-tune/orig"
+cp "$T/pkexec.keep" "$PB/pkexec"
+chmod +x "$PB/pkexec"
+if grep -q "3 app crashes in 2 minutes" "$REPO/session/gamescope-session-plus/sessions.d/gamecove"; then bad "sessions.d/gamecove still describes the old crash guard"; else ok; fi
 # busctl --list tree can hang on a stuck bus: every call has a timeout
 for f in "$REPO/session/gamecove-session-client" "$REPO/session/gamecove-session-select" "$REPO/session/gamescope-session-plus/sessions.d/gamecove"; do
 	if grep -n 'busctl --' "$f" | grep -v -- '--timeout=' | grep -q .; then bad "busctl without --timeout in $f"; else ok; fi
@@ -459,8 +476,20 @@ touch "$T/gamecove-0.1.0-1.x86_64.rpm" "$T/image-info.json"
 inst() {
 	PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" sh "$REPO/packaging/install.sh" "$@"
 }
-expect_code 0 "install.sh install" inst "$T/gamecove-0.1.0-1.x86_64.rpm"
+# final review, session: the root autologin guard goes into /etc on Bazzite too (from the deployment
+# rpm-ostree staged, since nothing is live before the reboot); a root step that fails stops the install
+printf '#!/bin/sh\necho "pkexec $1 $2 <script> $4 $5" >>"%s/install.log"\nexec "$@"\n' "$T" >"$IB/pkexec"
+chmod +x "$IB/pkexec"
+IR="$T/instroot"
+mkdir -p "$IR/ostree/deploy/default/deploy/abc.0/usr/lib/gamecove/session" "$IR/etc"
+cp "$REPO/session/gamecove-autologin-guard" "$IR/ostree/deploy/default/deploy/abc.0/usr/lib/gamecove/session/"
+cp "$REPO/session/systemd/gamecove-autologin-guard.service" "$IR/ostree/deploy/default/deploy/abc.0/usr/lib/gamecove/session/"
+expect_code 0 "install.sh install" env GAMECOVE_ROOT="$IR" PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" sh "$REPO/packaging/install.sh" "$T/gamecove-0.1.0-1.x86_64.rpm"
 contains "$T/install.log" "rpm-ostree install $T/gamecove-0.1.0-1.x86_64.rpm" "rpm-ostree install"
+if cmp -s "$REPO/session/gamecove-autologin-guard" "$IR/etc/gamecove/autologin-guard" && [ -x "$IR/etc/gamecove/autologin-guard" ] &&
+	[ -f "$IR/etc/systemd/system/gamecove-autologin-guard.service" ] && [ -L "$IR/etc/systemd/system/multi-user.target.wants/gamecove-autologin-guard.service" ]; then ok; else bad "install.sh must put the autologin guard and its enabled unit into /etc"; fi
+expect_code 1 "install.sh stops when the guard can't be installed" env GAMECOVE_ROOT="$T/no-such-root" PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" sh "$REPO/packaging/install.sh" "$T/gamecove-0.1.0-1.x86_64.rpm"
+contains "$T/out" "Couldn't install the guard" "says so"
 # review H4: --uninstall puts the boot default back and undoes every fix first, and stops if either fails
 cat >"$IB/select" <<EOF
 #!/bin/sh
@@ -484,6 +513,22 @@ contains "$T/install.log" "rpm-ostree uninstall gamecove" "rpm-ostree uninstall"
 contains "$T/install.log" "^select restore$" "uninstall restores the boot default"
 contains "$T/install.log" "^pkexec $IB/fixhelper --remove-all$" "uninstall undoes every fix"
 if [ "$(head -n 1 "$T/install.log")" = "select restore" ] && [ "$(tail -n 1 "$T/install.log")" = "rpm-ostree uninstall gamecove" ]; then ok; else bad "restore and fixes before the package goes: $(cat "$T/install.log")"; fi
+# the guard in /etc goes with a proper uninstall (the boot default is back by then)
+printf '#!/bin/sh\necho "pkexec $1" >>"%s/install.log"\nexec "$@"\n' "$T" >"$IB/pkexec.real"
+cp "$IB/pkexec" "$IB/pkexec.fake" && cp "$IB/pkexec.real" "$IB/pkexec" && chmod +x "$IB/pkexec"
+: >"$T/install.log"
+GAMECOVE_ROOT="$IR" PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" SESSION_SELECT="$IB/select" GUARD_COPY="$T/no-guard" \
+	FIX_HELPER="$IB/fixhelper" PKEXEC="$IB/pkexec" sh "$REPO/packaging/install.sh" --uninstall >"$T/out" 2>&1
+if [ ! -e "$IR/etc/gamecove" ] && [ ! -e "$IR/etc/systemd/system/gamecove-autologin-guard.service" ] && [ ! -L "$IR/etc/systemd/system/multi-user.target.wants/gamecove-autologin-guard.service" ]; then ok; else bad "install.sh --uninstall must remove the autologin guard from /etc"; fi
+[ "$(tail -n 1 "$T/install.log")" = "rpm-ostree uninstall gamecove" ] && ok || bad "the layer still goes last: $(cat "$T/install.log")"
+# and so does the display file every gamescope session reads (rotation / refresh unlock would stay in Steam Gaming Mode)
+mkdir -p "$T/icfg/environment.d"
+echo "ORIENTATION=left" >"$T/icfg/environment.d/80-gamecove-display.conf"
+echo "X=1" >"$T/icfg/environment.d/90-mine.conf"
+XDG_CONFIG_HOME="$T/icfg" GAMECOVE_ROOT="$IR" PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" SESSION_SELECT="$IB/select" GUARD_COPY="$T/no-guard" \
+	FIX_HELPER="$IB/fixhelper" PKEXEC="$IB/pkexec" sh "$REPO/packaging/install.sh" --uninstall >"$T/out" 2>&1
+[ ! -e "$T/icfg/environment.d/80-gamecove-display.conf" ] && [ -f "$T/icfg/environment.d/90-mine.conf" ] && ok || bad "install.sh --uninstall must remove 80-gamecove-display.conf and nothing else there"
+cp "$IB/pkexec.fake" "$IB/pkexec"
 echo 1 >"$T/select-code"
 expect_code 1 "install.sh uninstall stops when restore fails" uninst
 lacks "$T/install.log" "rpm-ostree uninstall" "package kept when the boot default couldn't go back"
@@ -557,7 +602,10 @@ if [ "$(tail -n 1 "$GG")" = 'main "$@"' ] && grep -q '^main() {$' "$GG"; then ok
 GB="$T/ggbin"
 SRV="$T/ggsrv"
 mkdir -p "$GB" "$SRV"
-# Fake curl: serves $SRV/<last path part> ($SRV/latest.json for the API), logs every URL.
+# Fake curl: serves $SRV/<last path part>, logs every URL. The API is modelled on the real
+# repository (final review, blocker 2): releases/latest answers with a DATA release ("upscalers",
+# not a pre-release, so GitHub marks it latest), the app release is only in the release list
+# ($SRV/releases?per_page=100) and under releases/tags/<tag> ($SRV/tag.json).
 cat >"$GB/curl" <<EOF
 #!/bin/sh
 out=""
@@ -605,7 +653,8 @@ cat >"$GB/cosign" <<EOF
 echo "\$*" >>"$T/cosign.log"
 [ ! -f "$T/cosign-fail" ]
 EOF
-chmod +x "$GB/curl" "$GB/badsum" "$GB/cosign"
+printf '#!/bin/sh\necho "$*" >>"%s/notify.log"\n' "$T" >"$GB/notify"
+chmod +x "$GB/curl" "$GB/badsum" "$GB/cosign" "$GB/notify"
 mkdir -p "$T/ggapp"
 printf '#!/bin/sh\necho "app $*" >>"%s/launch.log"\n' "$T" >"$T/ggapp/gamecove.x86_64"
 echo pck >"$T/ggapp/gamecove.pck"
@@ -627,8 +676,34 @@ echo '{"bundle": "fake"}' >"$SRV/SHA256SUMS.sigstore.json"
 	done
 	echo '  ]'
 	echo '}'
-} >"$SRV/latest.json"
-cp "$SRV/latest.json" "$SRV/tag.json"
+} >"$SRV/tag.json"
+# what GitHub's releases/latest really answers here: a data release, never the app
+cat >"$SRV/latest.json" <<'EOF'
+{
+  "tag_name": "upscalers",
+  "draft": false,
+  "prerelease": false,
+  "body": "notes that try to look like a release: \"tag_name\": \"v9.9.9\", \"prerelease\": false } ] and a backslash \\",
+  "assets": [
+    { "name": "index.json", "uploader": { "login": "bot", "browser_download_url": "https://example.test/dl/not-an-asset" }, "browser_download_url": "https://example.test/dl/index.json" },
+    { "name": "gamecove-9.9.9-x86_64.tar.gz", "browser_download_url": "https://example.test/dl/gamecove-9.9.9-x86_64.tar.gz" }
+  ]
+}
+EOF
+LIST="$SRV/releases?per_page=100"
+# mklist <draft> <prerelease> [more releases, each ending with a comma]: the release list, newest first as GitHub
+# sends it: the data release, then the app release from tag.json with these flags
+mklist() {
+	{
+		echo '['
+		cat "$SRV/latest.json"
+		echo ','
+		printf '%s' "${3:-}"
+		sed "s/^  \"tag_name\": \"v0.2.0\",\$/  \"tag_name\": \"v0.2.0\", \"draft\": $1, \"prerelease\": $2,/" "$SRV/tag.json"
+		echo ']'
+	} >"$LIST"
+}
+mklist false false
 osroot() {
 	d="$T/os-$1"
 	mkdir -p "$d/etc" "$d/run"
@@ -651,7 +726,7 @@ gg() {
 	: >"$T/curl.log"
 	: >"$T/cosign.log"
 	env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$root" GAMECOVE_ARCH=x86_64 \
-		GAMECOVE_API=https://api.example.test COSIGN="$GB/cosign" "$@" sh "$GG" --no-launch
+		GAMECOVE_API=https://api.example.test COSIGN="$GB/cosign" GAMECOVE_NOTIFY="$GB/notify" "$@" sh "$GG" --no-launch
 }
 for pair in "$R_BAZ:bazzite" "$R_FED:fedora-atomic" "$R_FEDWS:other" "$R_DECK:steamos" "$R_ARCH:other" "$T/os-none:other"; do
 	got="$(GAMECOVE_ROOT="${pair%%:*}" sh "$GG" --detect-os)"
@@ -667,7 +742,9 @@ lacks "$T/curl.log" "x86_64.raw" "no sysext on Bazzite"
 contains "$GI/release.env" "^TAG=v0.2.0$" "release tag"
 contains "$GI/release.env" "^OS=bazzite$" "release os"
 contains "$GI/release.env" "^PACKAGE=$GI/packages/gamecove-0.2.0-1.fc43.x86_64.rpm$" "release package"
-contains "$T/curl.log" "^https://api.example.test/repos/IHulkSmashI/GameCove/releases/latest$" "latest release API"
+contains "$T/curl.log" "^https://api.example.test/repos/IHulkSmashI/GameCove/releases?per_page=100$" "asks the release list"
+lacks "$T/curl.log" "/releases/latest" "never asks releases/latest (it answers with a data release)"
+lacks "$T/curl.log" "9.9.9\|not-an-asset\|index.json" "nothing of the data release is downloaded"
 if [ -x "$GI/get-gamecove.sh" ]; then ok; else bad "bootstrap keeps a checked copy of itself"; fi
 GE="$T/gghome/.local/share/applications/io.github.ihulksmashi.GameCoveInstaller.desktop"
 contains "$GE" "^Name=GameCove Installer$" "installer app entry"
@@ -683,29 +760,69 @@ expect_code 0 "bootstrap elsewhere (app only)" gg "$R_ARCH"
 contains "$GI/release.env" "^PACKAGE=$" "no package on other systems"
 expect_code 0 "bootstrap with a tag" gg "$R_BAZ" GAMECOVE_TAG=v0.2.0
 contains "$T/curl.log" "/releases/tags/v0.2.0$" "tag API"
-# only pre-releases published (v0.1.0): releases/latest 404s, the newest release of any kind is used
-mv "$SRV/latest.json" "$SRV/latest.off"
-{ echo '['; cat "$SRV/tag.json"; echo ']'; } >"$SRV/releases?per_page=1"
-expect_code 0 "bootstrap with only a pre-release" gg "$R_DECK"
-contains "$T/curl.log" "/releases?per_page=1$" "falls back to the release list"
-contains "$T/out" "using the newest pre-release" "says a pre-release is used"
+# final review, blocker 2: v0.1.0 is a pre-release while a data release is GitHub's "latest": the app release is
+# still found (and said to be a pre-release); the old lookup took "upscalers" and stopped with "no app download"
+mklist false true
+expect_code 0 "bootstrap with only a pre-release, a data release being latest" gg "$R_DECK"
+contains "$T/out" "using the newest pre-release v0.2.0" "says a pre-release is used"
+lacks "$T/out" "upscalers" "the data release is never picked"
 contains "$GI/release.env" "^TAG=v0.2.0$" "pre-release picked"
+lacks "$T/curl.log" "/releases/latest" "pre-release: releases/latest still isn't asked"
+# the same list the way GitHub sends it to clients that aren't curl: all on one line
+tr -d '\n' <"$LIST" >"$T/list.min" && cp "$T/list.min" "$LIST"
+expect_code 0 "bootstrap from a one-line release list" gg "$R_DECK"
+contains "$GI/release.env" "^TAG=v0.2.0$" "one-line list: release picked"
+# the highest version wins whatever the list order; a stable release beats a newer pre-release; drafts and tags
+# that aren't vX... never count (v0.1.9 has no downloads, so picking it would fail)
+old='{ "tag_name": "v0.1.9", "draft": false, "prerelease": true, "assets": [] },'
+mklist false true "$old"
+expect_code 0 "the highest pre-release, not the first listed" gg "$R_DECK"
+contains "$GI/release.env" "^TAG=v0.2.0$" "v0.2.0 over v0.1.9"
+mklist false false '{ "tag_name": "v0.3.0-rc.1", "draft": false, "prerelease": true, "assets": [] },'
+expect_code 0 "a stable release beats a newer pre-release" gg "$R_DECK"
+contains "$GI/release.env" "^TAG=v0.2.0$" "stable picked"
+lacks "$T/out" "pre-release" "and not called a pre-release"
+mklist false false '{ "tag_name": "v0.9.0", "draft": true, "prerelease": false, "assets": [] }, { "tag_name": "version-7", "draft": false, "prerelease": false, "assets": [] },'
+expect_code 0 "drafts and other tags are skipped" gg "$R_DECK"
+contains "$GI/release.env" "^TAG=v0.2.0$" "v0.2.0, not the draft"
+# no app release in the list at all: the installed copy opens (the app menu entry keeps working) ...
+printf '[\n%s\n]\n' "$(cat "$SRV/latest.json")" >"$LIST"
+: >"$T/launch.log"
+expect_code 0 "no app release listed: the installed copy is used" gg "$R_DECK"
+contains "$T/out" "GitHub lists no GameCove release; using the copy downloaded before" "says so"
+contains "$T/launch.log" "prefetch-photo" "the installed app is what runs"
+# ... and so does a rate limit or a 5xx; nothing is downloaded
+for st in 403 500; do
+	echo "$st" >"$T/api-status"
+	expect_code 0 "HTTP $st with an installed copy" gg "$R_DECK"
+	contains "$T/out" "GitHub answered HTTP $st; using the copy downloaded before" "HTTP $st: says what GitHub answered"
+	lacks "$T/curl.log" "example.test/dl/" "HTTP $st: nothing downloaded"
+done
+rm -f "$T/api-status"
+mklist false true
 mv "$SRV/tag.json" "$SRV/tag.off"
-gg "$R_DECK" GAMECOVE_TAG=v9.9.9 >/dev/null 2>&1 || true
+: >"$T/notify.log"
+expect_code 1 "a given tag that doesn't exist" gg "$R_DECK" GAMECOVE_TAG=v9.9.9
 lacks "$T/curl.log" "per_page" "a given tag is never replaced by another release"
+contains "$T/out" "no GameCove release v9.9.9" "says the tag doesn't exist"
+contains "$T/notify.log" "no GameCove release v9.9.9" "an error away from a terminal is also a desktop notification"
 mv "$SRV/tag.off" "$SRV/tag.json"
-# review M7: only a 404 means "no stable release"; a rate limit or a 5xx must never install a pre-release
+# without an installed copy the same failures stop with the reason (review M7: an error never installs anything)
 rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
 for st in 403 500; do
 	echo "$st" >"$T/api-status"
 	expect_code 1 "bootstrap stops on HTTP $st" gg "$R_DECK"
-	lacks "$T/curl.log" "per_page" "HTTP $st: no fallback to a pre-release"
+	lacks "$T/curl.log" "example.test/dl/" "HTTP $st: nothing downloaded"
 	contains "$T/out" "HTTP $st" "says what GitHub answered"
 done
 rm -f "$T/api-status"
-mv "$SRV/latest.off" "$SRV/latest.json"
-rm -f "$SRV/releases?per_page=1"
+printf '[\n%s\n]\n' "$(cat "$SRV/latest.json")" >"$LIST"
+expect_code 1 "no app release listed and nothing installed" gg "$R_DECK"
+contains "$T/out" "no GameCove release found" "says why"
+mklist false false
+# --help also when piped into a shell (there is no file to read then)
+if sh -s -- --help <"$GG" 2>/dev/null | grep -q -- "--no-launch"; then ok; else bad "get-gamecove.sh --help prints nothing when piped"; fi
 rm -rf "$T/gghome"
 mkdir -p "$T/gghome"
 expect_code 1 "bootstrap refuses a bad checksum" gg "$R_BAZ" SHA256SUM="$GB/badsum"
@@ -734,14 +851,16 @@ contains "$T/out" "signature doesn't check out" "said why"
 if [ ! -e "$GI/app" ] && [ ! -e "$GI/release.env" ]; then ok; else bad "nothing installed after a bad signature"; fi
 rm -f "$T/cosign-fail"
 mv "$SRV/SHA256SUMS.sigstore.json" "$SRV/bundle.off"
-cp "$SRV/latest.json" "$SRV/latest.keep"
-grep -v "sigstore.json" "$SRV/latest.keep" >"$SRV/latest.json"
+cp "$SRV/tag.json" "$SRV/tag.keep"
+grep -v "sigstore.json" "$SRV/tag.keep" >"$SRV/tag.json"
+mklist false false
 expect_code 1 "an unsigned release is refused" gg "$R_BAZ"
 contains "$T/out" "has no signature" "said why"
 expect_code 0 "unsigned accepted only when asked" gg "$R_BAZ" GAMECOVE_ALLOW_UNSIGNED=1
 contains "$GI/release.env" "^SIGNATURE=unsigned$" "and recorded as unsigned"
 mv "$SRV/bundle.off" "$SRV/SHA256SUMS.sigstore.json"
-mv "$SRV/latest.keep" "$SRV/latest.json"
+mv "$SRV/tag.keep" "$SRV/tag.json"
+mklist false false
 # no cosign anywhere: the pinned release is downloaded and its sha256 checked (a fake one here: refused)
 printf 'not cosign\n' >"$SRV/cosign-linux-amd64"
 mkdir -p "$T/ggbin2"
@@ -758,8 +877,11 @@ expect_code 0 "bootstrap again" gg "$R_BAZ"
 # review problem 9: "latest" never installs an older release over a newer one; --tag (GAMECOVE_TAG) may
 cp "$GI/release.env" "$T/release.env.keep"
 sed 's/^TAG=.*/TAG=v0.10.0/' "$T/release.env.keep" >"$GI/release.env"
-expect_code 1 "an older latest isn't installed over a newer one" gg "$R_BAZ"
+: >"$T/launch.log"
+expect_code 0 "an older newest release isn't installed over a newer one; the installed copy opens" gg "$R_BAZ"
 contains "$T/out" "older than the installed v0.10.0" "said why"
+lacks "$T/curl.log" "example.test/dl/" "nothing of the older release is downloaded"
+contains "$T/launch.log" "prefetch-photo" "the installed copy runs instead"
 contains "$GI/release.env" "^TAG=v0.10.0$" "the newer install is left alone"
 expect_code 0 "an older release on purpose (--tag)" gg "$R_BAZ" GAMECOVE_TAG=v0.2.0
 sed 's/^TAG=.*/TAG=v0.2.0-rc.1/' "$T/release.env.keep" >"$GI/release.env"

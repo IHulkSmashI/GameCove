@@ -168,6 +168,28 @@ eqv "$?" 3 "after GameCove -> desktop, an unnamed desktop switch goes to the des
 sel gamecove
 sel session-start
 eqv "$?" 0 "only an explicit gamecove clears it"
+# final review, low: picking GameCove at the login screen is explicit too. That session comes in through
+# SDDM's normal login (PAM service "sddm"); a switch, Steam's included, through its autologin.
+printf '#!/bin/sh\n[ "$1" = show-session ] && [ "$2" = 7 ] && cat "%s/pam-service"\n' "$T" >"$BIN/loginctl"
+chmod +x "$BIN/loginctl"
+sel desktop
+echo sddm-autologin >"$T/pam-service"
+XDG_SESSION_ID=7 sel session-start
+eqv "$?" 3 "an autologin into GameCove after leaving it is still a switch: forwarded"
+eqv "$(cat "$DATA/left-for-steam" 2>/dev/null)" boot-1 "and the marker stays (review L22)"
+echo sddm >"$T/pam-service"
+XDG_SESSION_ID=7 sel session-start
+eqv "$?" 0 "GameCove picked at the login screen isn't sent to the desktop"
+[ ! -e "$ST/switched" ] && ok || bad "no switch happened for a pick at the login screen"
+[ ! -e "$DATA/left-for-steam" ] && ok || bad "and the marker is cleared, like after an explicit gamecove"
+sel desktop
+echo "" >"$T/pam-service"
+XDG_SESSION_ID=7 sel session-start
+eqv "$?" 3 "no answer from logind: forwarded as before"
+sel session-start
+eqv "$?" 3 "no session id: forwarded as before"
+rm -f "$BIN/loginctl"
+sel gamecove
 
 # --- restore (uninstall, TTY): previous desktop session and boot mode back
 sel restore
@@ -306,6 +328,20 @@ rm "$AR/usr/share/wayland-sessions/gamescope-wayland.desktop"
 printf '[Autologin]\nSession=gamecove\n' >"$AR/etc/sddm.conf.d/zz-holo-autologin.conf"
 GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
 has "$AR/etc/sddm.conf.d/zz-holo-autologin.conf" "^Session=plasma.desktop$" "no Steam session: the desktop"
+# final review, session: Bazzite after `rpm-ostree uninstall gamecove` by hand with GameCove as the boot
+# default: its game mode is gamescope-session-ogui-steam.desktop (and other images name theirs differently)
+touch "$AR/usr/share/wayland-sessions/gamescope-session-ogui-steam.desktop"
+printf '[Autologin]\nSession=gamecove.desktop\n' >"$AR/etc/sddm.conf.d/zz-steamos-autologin.conf"
+GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
+has "$AR/etc/sddm.conf.d/zz-steamos-autologin.conf" "^Session=gamescope-session-ogui-steam.desktop$" "Bazzite: autologin goes to its Steam Gaming Mode, not a password prompt"
+rm "$AR/usr/share/wayland-sessions/gamescope-session-ogui-steam.desktop"
+touch "$AR/usr/share/wayland-sessions/gamescope-some-image.desktop"
+printf '[Autologin]\nSession=gamecove.desktop\n' >"$AR/etc/sddm.conf.d/zz-steamos-autologin.conf"
+GAMECOVE_ROOT="$AR" sh "$AG" 2>/dev/null
+has "$AR/etc/sddm.conf.d/zz-steamos-autologin.conf" "^Session=gamescope-some-image.desktop$" "any gamescope session beats the desktop"
+SPEC="$REPO/packaging/rpm/gamecove.spec"
+grep -q 'lib/gamecove/session/gamecove-autologin-guard$' "$SPEC" && grep -q 'lib/gamecove/session/gamecove-autologin-guard.service$' "$SPEC" &&
+	grep -qx '%{_prefix}/lib/gamecove/session' "$SPEC" && ok || bad "the RPM must ship the autologin guard and its unit (the installer copies them into /etc)"
 
 # no steamosctl: guard/session-start are no-ops, switches explain
 env PATH="$BIN:$PATH" HOME="$T/home" STEAMOSCTL=/nonexistent sh "$SEL" guard
@@ -346,12 +382,31 @@ has "$T/leave.log" "^app --headless -- --restore-baseline$" "leaving for the des
 eqv "$(tail -n 1 "$T/leave.log")" "steamosctl switch-to-desktop-mode plasma.desktop" "and switches last"
 leave sh "$SEL" steam
 eqv "$(cat "$T/leave.log")" "steamosctl switch-to-game-mode" "outside GameCove's session (desktop, Steam): only the switch"
+# final review, session: a root restore that FAILS (password dialog dismissed, helper error) must not
+# skip the next one, and must not be waited on for the whole limit. (Before the hang test below: its
+# helper is still running in the background afterwards and would write to the same log.)
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/leave.log"\nexit 126\n' "$T" >"$LB/pkexec"
+started="$(date +%s)"
+leave GAMECOVE_SESSION=1 GAMECOVE_ROOT_WAIT_S=20 sh "$SEL" steam
+took=$(($(date +%s) - started))
+has "$T/leave.log" "^pkexec $LB/fix-set charge-limit set release$" "the charge limit release is tried"
+has "$T/leave.log" "^pkexec $LB/fix-set power-tune set restore$" "a failed charge-limit release doesn't skip the power restore"
+[ "$took" -lt 10 ] && ok || bad "a failing root restore was waited on for the whole limit (${took}s of 20)"
+has "$T/leave.log" "^steamosctl switch-to-game-mode$" "the switch still happens after failed restores"
+# a failing command in bounded() ends the wait at once (the flag is written under set +e)
+sed -n '/^bounded() {/,/^}$/p' "$SEL" >"$T/bounded.sh"
+started="$(date +%s)"
+sh -c 'set -eu; . "$1"; bounded 15 false' sh "$T/bounded.sh"
+[ $(($(date +%s) - started)) -lt 5 ] && ok || bad "bounded waits the full limit when its command fails"
+printf '#!/bin/sh\necho "pkexec $*" >>"%s/leave.log"\n[ -f "%s/pkexec-hangs" ] && sleep 20\nexit 0\n' "$T" "$T" >"$LB/pkexec"
 touch "$T/pkexec-hangs"
 started="$(date +%s)"
 leave GAMECOVE_SESSION=1 sh "$SEL" steam
 [ $(($(date +%s) - started)) -lt 8 ] && ok || bad "a hung root restore holds the switch up only briefly"
 has "$T/leave.log" "^steamosctl switch-to-game-mode$" "the switch still happens"
 rm -f "$T/pkexec-hangs"
+# a baseline run that ignores TERM is killed (timeout -k), so the switch isn't held for good
+grep -q 'timeout -k [0-9]* 35 "\$GAMECOVE_BIN"' "$SEL" && ok || bad "the baseline run's timeout needs -k (a process that ignores TERM would hang the switch)"
 rm "$LB/gamecove.x86_64"
 leave GAMECOVE_SESSION=1 sh "$SEL" steam
 has "$T/leave.log" "^steamosctl switch-to-game-mode$" "no GameCove binary: the rest still runs"
@@ -518,7 +573,10 @@ printf '#!/bin/sh\necho "1 ui" >"$GAMECOVE_HEARTBEAT"\nexec sleep 30\n' >"$CB/st
 printf '#!/bin/sh\necho "1 game" >"$GAMECOVE_HEARTBEAT"\nsleep 4\nexit 0\n' >"$CB/ingame"
 printf '#!/bin/sh\ni=0\nwhile [ $i -lt 8 ]; do i=$((i+1)); echo "$i ui" >"$GAMECOVE_HEARTBEAT"; sleep 0.5; done\nexit 0\n' >"$CB/alive"
 printf '#!/bin/sh\n: >"$XDG_RUNTIME_DIR/gamecove-steam-ready"\nsleep 4\nexit 0\n' >"$CB/oldapp"
-chmod +x "$CB/hang" "$CB/stale" "$CB/ingame" "$CB/alive" "$CB/oldapp"
+# final review, session: "front" = GameCove's UI in front of a running game; its beats stopping is a hang
+printf '#!/bin/sh\necho "1 front" >"$GAMECOVE_HEARTBEAT"\nexec sleep 30\n' >"$CB/frontstale"
+printf '#!/bin/sh\ni=0\nwhile [ $i -lt 8 ]; do i=$((i+1)); echo "$i front" >"$GAMECOVE_HEARTBEAT"; sleep 0.5; done\nexit 0\n' >"$CB/frontalive"
+chmod +x "$CB/hang" "$CB/stale" "$CB/ingame" "$CB/alive" "$CB/oldapp" "$CB/frontstale" "$CB/frontalive"
 watch() { # <app> [env...]: prints the client's exit code; never waits more than 20 s
 	a="$1"
 	shift
@@ -544,6 +602,14 @@ eqv "$(sed -n 2p "$DATA/crash-fallback")" hung "fallback says it was hung"
 rm -rf "$DATA"
 eqv "$(watch ingame)" 0 "an unchanging heartbeat during a game is never a hang (long loads)"
 eqv "$(watch alive)" 0 "a beating app runs on"
+eqv "$(watch frontalive GAMECOVE_HEARTBEAT_FRONT_STALE_S=2)" 0 "GameCove in front of a game and beating runs on"
+[ ! -e "$DATA/crash-count" ] && ok || bad "a healthy front run counts nothing"
+started="$(date +%s)"
+code="$(watch frontstale GAMECOVE_HEARTBEAT_FRONT_STALE_S=3)"
+[ "$code" -ne 0 ] && [ "$code" -ne 124 ] && ok || bad "GameCove hung in front of a game is stopped (exit $code)"
+[ $(($(date +%s) - started)) -ge 3 ] && ok || bad "front uses its own, longer limit (GAMECOVE_HEARTBEAT_FRONT_STALE_S), not the ui one"
+eqv "$(cat "$DATA/crash-count" 2>/dev/null)" 1 "and counted as an unclean exit"
+rm -rf "$DATA"
 [ ! -e "$DATA/crash-count" ] && ok || bad "healthy runs count nothing"
 # review 2, problem 4: the ready file comes early (Library autoload); a hang before the first
 # beat (building the main scene) is a hang, and its healthy time clears nothing

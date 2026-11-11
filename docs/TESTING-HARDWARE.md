@@ -11,8 +11,9 @@ versus by the owner's hands and eyes. Tools: [tools/testbed/](../tools/testbed/)
 | 2 | ROG Ally Z1 Extreme (RC71L) | SteamOS, internal drive | Custom ("Keep Steam, add GameCove", charge limit 80 %) | MCU firmware, Armoury/Command Centre buttons, LEDs, SteamOS updater |
 | 3 | Legion Go S Z2 Go (83L3 / 83Q2) | Bazzite, the same SSD | Easy, then Change (Custom) | TDP limits, trackpad, LEDs |
 
-The release under test is **v0.1.0, a GitHub pre-release**. GitHub's `releases/latest` skips
-pre-releases, so every install names the tag (`install v0.1.0`, or `GAMECOVE_TAG=v0.1.0`).
+The release under test is **v0.1.0, a GitHub pre-release**. The installer finds it by itself
+(it reads the release list and takes the highest `vX.Y.Z` tag, pre-releases included while there is no stable
+release); test installs still name the tag (`install v0.1.0`, or `GAMECOVE_TAG=v0.1.0`) so a run is repeatable.
 
 ## How a session works
 

@@ -11,6 +11,8 @@ const UserFiles := preload("res://scripts/installer/user_files.gd")
 const SettingsWriter := preload("res://scripts/installer/settings_writer.gd")
 const Fake := preload("res://tests/fixtures/system/fake_runner.gd")
 const F := preload("res://tests/fixtures/installer/fakes.gd")
+const UserData := preload("res://scripts/installer/user_data.gd")
+const SteamGrid := preload("res://scripts/library/art/steam_grid.gd")
 
 
 func _dir(n: String) -> String:
@@ -41,6 +43,7 @@ func _make_live(d: String) -> void:
 func _svc(d: String, runner: RefCounted, target: Dictionary) -> Node:
 	var s: Node = Service.new()
 	s.setup(runner, Paths.for_home(d + "/home", d + "/root"), target, "/opt/gc/gamecove.x86_64")
+	s.user_dir = d + "/userdata/GameCove"   # never the real user:// (remove_settings deletes it)
 	s._clock = func() -> String: return "2026-11-08T12:00:00Z"
 	_nodes.append(s)
 	return s
@@ -73,7 +76,9 @@ func test_staged_install_defers_fixes_and_session() -> void:
 	s.finished.connect(func(a, ok_, m): results.append([a, ok_, m]))
 	ok(s.start("install", _choices(t)))
 	eq(results, [["install", true, ""]])
-	eq(_cmds(r), ["pkexec rpm-ostree install --idempotent --apply-live " + t["package"]], "only the package ran: nothing is live")
+	eq(_cmds(r).size(), 1, "only the package ran: nothing is live")
+	ok(_cmds(r)[0].begins_with("pkexec sh -c set -e; rpm-ostree install --idempotent --apply-live \"$1\"; ") and _cmds(r)[0].ends_with(" sh " + t["package"]), "the layer, live: " + _cmds(r)[0])
+	ok(_cmds(r)[0].contains("/etc/gamecove/autologin-guard"), "with the autologin guard in the same root command")
 	eq(s.results.count("pending"), 5, "four fixes and the startup choice wait for the reboot")
 	eq(s.deferred_fixes, ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "claw-kbd-wakeup"])
 	var p: RefCounted = s.paths
@@ -95,7 +100,7 @@ func test_staged_install_defers_fixes_and_session() -> void:
 	eq(st["choices"]["startup"], "gamecove")
 	ok(not st["choices"].has("ggdeals_key"), "keys stay out of the state file")
 	var log := FileAccess.get_file_as_string(p.log_file())
-	ok("$ pkexec rpm-ostree install" in log, "commands logged")
+	ok("$ pkexec sh -c set -e; rpm-ostree install" in log, "commands logged")
 	ok("install finished" in log)
 	_cleanup()
 
@@ -146,7 +151,7 @@ func test_refuses_during_a_game() -> void:
 
 func test_password_refused_then_retry_then_undo() -> void:
 	var d := _dir("retry")
-	var answers := {"pkexec rpm-ostree": {"code": 126, "out": "Not authorized"}}
+	var answers := {"pkexec sh -c set -e; rpm-ostree install": {"code": 126, "out": "Not authorized"}}
 	var r := _runner(answers)
 	var t := F.target("bazzite")
 	var s := _svc(d, r, t)
@@ -154,7 +159,7 @@ func test_password_refused_then_retry_then_undo() -> void:
 	s.finished.connect(func(a, ok_, m): results.append([a, ok_, m]))
 	s.start("install", _choices(t))
 	eq(results[-1], ["install", false, "no_password"])
-	eq(r.calls.filter(func(c): return c.begins_with("pkexec rpm-ostree")).size(), 2, "live install, then the staged fallback")
+	eq(r.calls.filter(func(c): return c.begins_with("pkexec sh -c set -e; rpm-ostree install")).size(), 2, "live install, then the staged fallback")
 	answers.clear()
 	ok(s.retry(), "retry from the failed step")
 	eq(results[-1], ["install", true, ""])
@@ -163,7 +168,7 @@ func test_password_refused_then_retry_then_undo() -> void:
 	s.undone.connect(func(o): undone.append(o))
 	ok(s.undo())
 	eq(undone, [true])
-	ok(r.called("pkexec rpm-ostree uninstall gamecove"), "package taken off again")
+	ok(r.calls.any(func(c): return c.begins_with("pkexec sh -c rm -f /etc/systemd/system/multi-user.target.wants/gamecove-autologin-guard.service") and c.ends_with("exec rpm-ostree uninstall gamecove")), "package taken off again, the guard with it")
 	ok(not FileAccess.file_exists(s.paths.env_conf()), "user files removed")
 	ok(not FileAccess.file_exists(s.paths.pending_file()), "pending file removed")
 	_cleanup()
@@ -191,7 +196,7 @@ func test_uninstall_restores_steam_and_cleans_up() -> void:
 	ok(cmds[0].begins_with("sh -c ") and "restore" in cmds[0], "session defaults restored first (desktop session too)")
 	ok(cmds[0].ends_with(s2.paths.session_select()), "through the switcher when it's there")
 	eq(cmds[1], "pkexec " + s2.paths.fix_helper() + " --remove-all")
-	ok(cmds[2].begins_with("pkexec sh -c rm -rf /var/lib/gamecove && exec rpm-ostree uninstall gamecove"), "the helper's state goes with the layer: " + cmds[2])
+	ok(cmds[2].begins_with("pkexec sh -c rm -rf /var/lib/gamecove && ") and cmds[2].ends_with("exec rpm-ostree uninstall gamecove"), "the helper's state goes with the layer: " + cmds[2])
 	for f in [s2.paths.env_conf(), s2.paths.unit_file(), s2.paths.switch_entry(), s2.paths.window_entry(),
 			s2.paths.pending_file(), s2.paths.state_file(), data + "/crash-count", data + "/crash-fallback",
 			data + "/left-for-steam", data + "/default-suspended"]:
@@ -217,6 +222,134 @@ func test_uninstall_without_settings_removes_the_installer_entry() -> void:
 	ok(not FileAccess.file_exists(s.paths.installer_entry()), "installer entry removed")
 	ok(not DirAccess.dir_exists_absolute(s.paths.data_dir() + "/launch"), "launch files removed")
 	_cleanup()
+
+
+## Final review, session: uninstall left ~/.config/environment.d/80-gamecove-display.conf, which every
+## gamescope session reads: a rotation or refresh-rate unlock stayed in Steam Gaming Mode with nothing
+## left to turn it off. It goes; "Keep my settings" keeps a copy that the next install puts back.
+func test_uninstall_takes_the_display_session_file_away() -> void:
+	for keep in [true, false]:
+		var d := _dir("uninstall_display_%s" % keep)
+		_make_live(d)
+		var t := F.target("bazzite", {"installed": true, "state": {"version": "0.2.0", "fixes": []}})
+		var s := _svc(d, _runner(), t)
+		var conf: String = s.paths.display_env_conf()
+		eq(conf, d + "/home/.config/environment.d/80-gamecove-display.conf", "the file the Display settings write")
+		DirAccess.make_dir_recursive_absolute(conf.get_base_dir())
+		FileAccess.open(conf, FileAccess.WRITE).store_string("# Written by GameCove (Display settings).\nORIENTATION=left\nCUSTOM_REFRESH_RATES=40,60,90\n")
+		FileAccess.open(conf.get_base_dir() + "/90-mine.conf", FileAccess.WRITE).store_string("X=1\n")
+		var c := _choices(t)
+		c["keep_settings"] = keep
+		s.start("uninstall", c)
+		ok(not FileAccess.file_exists(conf), "gone from every session's way (keep settings %s)" % keep)
+		ok(FileAccess.file_exists(conf.get_base_dir() + "/90-mine.conf"), "the user's own files in that folder stay")
+		eq(FileAccess.file_exists(s.paths.display_env_kept()), keep, "a copy only with \"Keep my settings\"")
+		if keep:
+			var s2 := _svc(d, _runner(), F.target("bazzite"))
+			s2.start("install", _choices(F.target("bazzite")))
+			ok(FileAccess.get_file_as_string(conf).contains("ORIENTATION=left"), "the next install puts the display settings back")
+			ok(not FileAccess.file_exists(s2.paths.display_env_kept()), "and the copy is used up")
+		_cleanup()
+
+
+## Final review, high 9: with "Keep my settings" off, user:// went whole: every save backup and the
+## originals of the art GameCove replaced in Steam, whose replacements stayed in Steam's grid folder
+## for good. Now Steam's own art is put back first, and save backups stay unless asked for by name.
+func _user_data(d: String) -> Dictionary:
+	var user := d + "/userdata/GameCove"
+	var grid := d + "/home/.local/share/Steam/userdata/123/config/grid"
+	DirAccess.make_dir_recursive_absolute(grid)
+	DirAccess.make_dir_recursive_absolute(user + "/saves/backups/epic_abc")
+	DirAccess.make_dir_recursive_absolute(user + "/art/picked")
+	FileAccess.open(grid + "/620p.png", FileAccess.WRITE).store_string("the user's own cover")
+	FileAccess.open(user + "/art/picked/new.png", FileAccess.WRITE).store_string("GameCove's pick")
+	FileAccess.open(user + "/ui.cfg", FileAccess.WRITE).store_string("[ui]\n")
+	FileAccess.open(user + "/saves/backups/epic_abc/20261110-120000.json", FileAccess.WRITE).store_string("{\"parts\": []}")
+	FileAccess.open(user + "/saves/backups/epic_abc/20261110-120000-0.tar.gz", FileAccess.WRITE).store_string("a save")
+	FileAccess.open(user + "/saves/status.json", FileAccess.WRITE).store_string("{}")
+	var bdir: String = SteamGrid.backup_dir_for(user + "/art/steam_backup", grid)
+	eq(SteamGrid.apply(grid, bdir, "620", "cover", user + "/art/picked/new.png"), grid + "/620p.png", "GameCove's cover applied to Steam")
+	eq(FileAccess.get_file_as_string(grid + "/620p.png"), "GameCove's pick", "replaced")
+	return {"user": user, "grid": grid, "bdir": bdir}
+
+
+func test_uninstall_without_settings_keeps_save_backups_and_restores_steam_art() -> void:
+	var d := _dir("uninstall_data")
+	_make_live(d)
+	var t := F.target("bazzite", {"installed": true, "state": {"version": "0.2.0", "fixes": []}})
+	var s := _svc(d, _runner(), t)
+	var u := _user_data(d)
+	var c := _choices(t)
+	eq(c["remove_save_backups"], false, "save backups are never deleted by default")
+	c["keep_settings"] = false
+	s.start("uninstall", c)
+	eq(FileAccess.get_file_as_string(u["grid"] + "/620p.png"), "the user's own cover", "Steam has the user's own art back")
+	ok(FileAccess.file_exists(u["user"] + "/saves/backups/epic_abc/20261110-120000.json"), "save backup index kept")
+	eq(FileAccess.get_file_as_string(u["user"] + "/saves/backups/epic_abc/20261110-120000-0.tar.gz"), "a save", "save backup kept")
+	ok(not FileAccess.file_exists(u["user"] + "/ui.cfg"), "settings deleted")
+	ok(not FileAccess.file_exists(u["user"] + "/saves/status.json"), "sync state deleted (only the backups stay)")
+	ok(not DirAccess.dir_exists_absolute(u["user"] + "/art"), "downloaded art and the used-up art backup deleted")
+	ok("kept in" in FileAccess.get_file_as_string(s.paths.log_file()), "the log says what was kept")
+	_cleanup()
+
+
+func test_uninstall_deletes_save_backups_only_when_asked() -> void:
+	var d := _dir("uninstall_data_all")
+	_make_live(d)
+	var t := F.target("bazzite", {"installed": true, "state": {"version": "0.2.0", "fixes": []}})
+	var s := _svc(d, _runner(), t)
+	var u := _user_data(d)
+	var c := _choices(t)
+	c["keep_settings"] = false
+	c["remove_save_backups"] = true
+	s.start("uninstall", c)
+	eq(FileAccess.get_file_as_string(u["grid"] + "/620p.png"), "the user's own cover", "Steam art still goes back")
+	ok(not DirAccess.dir_exists_absolute(u["user"]), "everything deleted, backups too")
+	_cleanup()
+
+
+## An original whose Steam folder isn't there (another drive, Steam moved) keeps its backup.
+func test_uninstall_keeps_art_originals_it_could_not_put_back() -> void:
+	var d := _dir("uninstall_data_art")
+	_make_live(d)
+	var t := F.target("bazzite", {"installed": true, "state": {"version": "0.2.0", "fixes": []}})
+	var s := _svc(d, _runner(), t)
+	var u := _user_data(d)
+	UserFiles.remove_tree(d + "/home/.local/share/Steam", d + "/home")
+	var c := _choices(t)
+	c["keep_settings"] = false
+	s.start("uninstall", c)
+	ok(FileAccess.file_exists(str(u["bdir"]) + "/620p.png"), "the original stays in the backup")
+	ok(FileAccess.file_exists(str(u["bdir"]) + "/manifest.json"), "with its manifest")
+	ok(not FileAccess.file_exists(u["user"] + "/ui.cfg"), "settings still deleted")
+	_cleanup()
+
+
+func test_keep_settings_on_touches_nothing_in_the_data_folder() -> void:
+	var d := _dir("uninstall_data_keep")
+	_make_live(d)
+	var t := F.target("bazzite", {"installed": true, "state": {"version": "0.2.0", "fixes": []}})
+	var s := _svc(d, _runner(), t)
+	var u := _user_data(d)
+	var c := _choices(t)
+	c["keep_settings"] = true
+	c["remove_save_backups"] = true   # ignored: it belongs to "Keep my settings" off
+	s.start("uninstall", c)
+	ok(FileAccess.file_exists(u["user"] + "/ui.cfg"), "settings kept")
+	ok(FileAccess.file_exists(u["user"] + "/saves/backups/epic_abc/20261110-120000-0.tar.gz"), "backups kept")
+	eq(FileAccess.get_file_as_string(u["grid"] + "/620p.png"), "GameCove's pick", "art in Steam left as it is (its backup is kept too)")
+	_cleanup()
+
+
+func test_user_data_helpers() -> void:
+	var d := _dir("user_data")
+	var u := _user_data(d)
+	eq(UserData.save_backup_stats(u["user"]), {"backups": 1, "games": 1, "bytes": 19}, "one backup of one game, both files counted")
+	eq(UserData.save_backup_stats(d + "/nowhere"), {"backups": 0, "games": 0, "bytes": 0}, "none")
+	eq([UserData.size_text(20), UserData.size_text(5 * 1024 * 1024), UserData.size_text(1400000000)], ["1 KB", "5 MB", "1.3 GB"], "sizes")
+	eq(UserData.remove_except(u["user"], "/", ["saves/backups"]), [], "refuses a folder that isn't under the given parent")
+	eq(UserData.remove_except(u["user"], d + "/userdata", ["saves/backups", "nothing/here"]), ["saves/backups"], "kept")
+	ok(DirAccess.dir_exists_absolute(u["user"] + "/saves/backups/epic_abc") and not FileAccess.file_exists(u["user"] + "/saves/status.json"), "only the kept folder is left")
 
 
 ## Review H4: a failed session restore stops the uninstall before the package goes, so the boot
