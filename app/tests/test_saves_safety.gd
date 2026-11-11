@@ -788,6 +788,23 @@ func test_a_two_folder_restore_is_all_or_nothing() -> void:
 	_done(w)
 
 
+## L4: a save folder with a linked subfolder (the tools follow links, so its files are part of
+## the save) was backed up as the bare link: the files themselves weren't in the backup.
+func test_a_linked_subfolder_is_backed_up_by_its_files() -> void:
+	var w := _world("backup_link")
+	var bk: RefCounted = w["s"].backups
+	var outside: String = w["root"].path_join("elsewhere")
+	Fakes.put(outside.path_join("slot2.sav"), "the linked slot", T0)
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "slot 1", T0)
+	OS.execute("ln", ["-s", outside, w["gsaves"].path_join("more")])
+	var b: Dictionary = bk.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": w["gsaves"]}])
+	ok(b["ok"], "backed up")
+	_rm(outside)
+	ok(bk.restore("gog:1207", str(b["id"]))["ok"], "restored")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("more/slot2.sav")), "the linked slot", "the linked folder's file came back")
+	_done(w)
+
+
 ## The service marks the backups a choice or a restore made.
 func test_choice_backups_are_kept_apart() -> void:
 	var w := _world("pinned")

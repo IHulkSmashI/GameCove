@@ -73,7 +73,10 @@ func backup(key: String, title: String, reason: String, parts: Array, force := f
 	for i in with_files.size():
 		var p: Dictionary = with_files[i]
 		var file := "%s-%d.tar.gz" % [stamp, i]
-		var r: Dictionary = run.call("tar", PackedStringArray(["-czf", dir.path_join(file), "-C", str(p["path"]), "."]))
+		# -h: a linked subfolder is copied, not stored as a link (gogdl and legendary follow links,
+		# so its files are part of the save; a link alone would restore to whatever it points at
+		# then, or to nothing; review at ff76ca4, L4)
+		var r: Dictionary = run.call("tar", PackedStringArray(["-czhf", dir.path_join(file), "-C", str(p["path"]), "."]))
 		if int(r.get("code", -1)) != 0:
 			for q in out_parts:
 				DirAccess.remove_absolute(dir.path_join(str(q["file"])))
