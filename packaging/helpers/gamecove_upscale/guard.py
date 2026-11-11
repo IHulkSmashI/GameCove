@@ -42,6 +42,8 @@ ANTICHEAT = {
     "Tencent TP": ("tenprotect", "tp3helper.dat", "tessafe.sys"),
     "Nexon Game Security": ("blackcipher", "blackcipher64.aes", "blackcall.aes", "blackcall64.aes"),
     "AhnLab HackShield": ("hshield", "ehsvc.dll"),
+    # Byfron's Hyperion lives inside Roblox's own client files (no separate file of its own)
+    "Hyperion": ("robloxplayerbeta.exe", "robloxplayerbeta.dll", "robloxplayerlauncher.exe"),
     "PunkBuster": ("pb", "pbsvc.exe", "punkbuster"),
     "EQU8": ("equ8", "equ8_conf.json", "equ8*.sys"),
     "miHoYo Protect": ("mhyprot2.sys", "mhyprot3.sys", "hoyokprotect.sys", "mhypbase.dll"),

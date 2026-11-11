@@ -326,23 +326,28 @@ def compat_row(doc: dict, name: str | None, appid: str | None = None) -> dict | 
 
 
 # OptiScaler's Compatibility List marks online games ("**Online game, use at your own risk!**", "at your own
-# discretion") and games whose anti-cheat has to be switched off or bypassed. These are never set up by themselves:
-# the menu says why in one line and the player can still pick it per game (review H5). "no anti-cheat" /
-# "does not use anticheat" are games that say they are safe, not a risk.
+# discretion") and games whose anti-cheat has to be switched off, bypassed or is "active" (review H2/H5). A note that
+# names an anti-cheat counts as anti-cheat whatever the row's status: nothing is ever put in, as for anti-cheat found
+# in the folder. An online game whose note names none is never set up by itself: the menu says why in one line and
+# the player can still add it per game. "no anti-cheat" / "does not use anticheat" are games that say they are safe.
 _ONLINE_RE = re.compile(r"online game|at your own (risk|discretion)|own responsibility", re.I)
-_AC_RE = re.compile(r"anti-?cheat|\bEAC\b|battleye|vanguard|\bACE\b", re.I)
+_AC_RE = re.compile(r"anti-?cheat|\bEAC\b|battleye|vanguard|\bACE\b|xigncode|gameguard|nprotect|javelin", re.I)
 _AC_NONE_RE = re.compile(r"\b(no|without|doesn'?t use|does not use|not use)\s+(an?\s+)?anti-?cheat", re.I)
 
 
+def _texts(notes, issues) -> list[str]:
+    return [notes if isinstance(notes, str) else ""] + [x for x in (issues if isinstance(issues, list) else []) if isinstance(x, str)]
+
+
+def anticheat_note(notes: str | None, issues: list | None = None) -> bool:
+    """True when the list's notes or known issues name an anti-cheat (to switch off, bypass, or "active")."""
+    return any(_AC_RE.search(_AC_NONE_RE.sub("", t)) for t in _texts(notes, issues))
+
+
 def online_risk(notes: str | None, issues: list | None = None) -> bool:
-    """True when the list's notes or known issues say the game is online-only at the player's risk, or names an
-    anti-cheat that has to be off for OptiScaler to work."""
-    for text in [str(notes or "")] + [str(x) for x in issues or []]:
-        if _ONLINE_RE.search(text):
-            return True
-        if _AC_RE.search(_AC_NONE_RE.sub("", text)):
-            return True
-    return False
+    """True when the list's notes or known issues say the game is online at the player's own risk, or name an
+    anti-cheat (online_risk covers both; anticheat_note says which)."""
+    return any(_ONLINE_RE.search(t) for t in _texts(notes, issues)) or anticheat_note(notes, issues)
 
 
 def knowledge(doc: dict, game_dir: str | None, appid: str | None = None, name: str | None = None) -> dict:
@@ -354,7 +359,9 @@ def knowledge(doc: dict, game_dir: str | None, appid: str | None = None, name: s
     return {"known": bool(g or row), "id": g.get("id") or row.get("slug"), "name": g.get("name") or row.get("name"),
             "status": g.get("status") or row.get("status") or "", "inputs": g.get("inputs") or row.get("inputs") or [],
             "proxies": g.get("proxies") or row.get("proxies") or [], "args": g.get("args") or row.get("args") or "",
-            "anticheat": bool(g.get("anticheat") or row.get("anticheat")), "notes": g.get("notes") or row.get("notes") or "",
+            "anticheat": bool(g.get("anticheat") or row.get("anticheat") or anticheat_note(g.get("notes"))
+                              or anticheat_note(row.get("notes"), row.get("issues"))),
+            "notes": g.get("notes") or row.get("notes") or "",
             "online": bool(g.get("online") or row.get("online") or online_risk(g.get("notes"))
                            or online_risk(row.get("notes"), row.get("issues"))),
             "steamdeck0": bool(g.get("steamdeck0")), "optipatcher": bool(row.get("optipatcher")),

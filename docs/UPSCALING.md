@@ -141,10 +141,11 @@ native Linux games, emulators.
   there is no switch to override it. If a game gains anti-cheat in an update, everything of ours is taken out. The
   folder check looks as deep as our upscaler can go and up to the game's own folder in its library, and knows Easy
   Anti-Cheat, BattlEye, EA Javelin, NetEase's anti-cheat, Anti-Cheat Expert (Tencent), Tencent TP, Vanguard,
-  nProtect GameGuard, XIGNCODE3, Nexon Game Security, AhnLab HackShield, PunkBuster, EQU8, miHoYo's protection,
+  nProtect GameGuard, XIGNCODE3, Nexon Game Security, AhnLab HackShield, Hyperion, PunkBuster, EQU8, miHoYo's protection,
   FACEIT, Denuvo Anti-Cheat and Ricochet. Proton's FSR 4 upgrade is off for these games too.
 - **No online games by themselves.** An online game is only set up when you add it yourself, after a plain line
-  about the ban risk.
+  about the ban risk. A game whose entry in OptiScaler's list names an anti-cheat ("EAC active", "disable
+  BattlEye", "anti-cheat will block it") counts as an anti-cheat game, whatever the entry says about working.
 - **No stacking.** If another tool's upscaler, ReShade or Special K is in the game, we leave it alone and say which
   one we found.
 - **Nothing permanent.** Every file we add is listed in a manifest with its hash; files we replace are kept and put

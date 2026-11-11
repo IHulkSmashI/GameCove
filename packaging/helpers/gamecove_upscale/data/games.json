@@ -1988,7 +1988,7 @@
     "Requires disabling Easy Anti-Cheat for OptiScaler to work.",
     "FSR3 inputs aren't supported."
    ],
-   "online": true
+   "anticheat": true
   },
   "achilleslegendsuntold": {
    "name": "Achilles: Legends Untold",
@@ -2221,7 +2221,7 @@
     "Setting UseNtdllHooks=false might be required for upscaler inputs to be hooked.",
     "On Linux, the ACE anti-cheat triggers using Proton-CachyOS and Proton-GE. Use dwproton instead."
    ],
-   "online": true
+   "anticheat": true
   },
   "arksurvivalascended": {
    "name": "Ark: Survival Ascended",
@@ -3070,7 +3070,7 @@
    ],
    "notes": "Requires **disabling BattlEye** under Game - More in Funcom Launcher, or launching the game directly through `ConanSandbox-Win64-Shipping.exe`",
    "optipatcher": true,
-   "online": true
+   "anticheat": true
   },
   "controlresonant": {
    "name": "CONTROL Resonant",
@@ -3712,7 +3712,7 @@
     "Game detects unsupported software and shuts down. Use signed builds of OptiScaler (most of them are).",
     "To fix pixelation of damage numbers, untick the \"Skip Point Filters\" checkbox in the Anisotropic Filtering category of OptiScaler."
    ],
-   "online": true
+   "anticheat": true
   },
   "dinoblade": {
    "name": "Dinoblade",
@@ -4140,7 +4140,7 @@
    ],
    "notes": "Works only for Singleplayer Tarkov (SPT) mod without EAC.",
    "slug": "Escape-from-Tarkov-(SPT",
-   "online": true
+   "anticheat": true
   },
   "escapesimulator2demo": {
    "name": "Escape Simulator 2 Demo",
@@ -4853,7 +4853,7 @@
     "Upscaler presets are hardcoded - overriding won't work",
     "INI settings may not save correctly after recent updates - to fix this, use DirectStorageFix."
    ],
-   "online": true
+   "anticheat": true
   },
   "grandtheftautovicecitydefinitiveedition": {
    "name": "Grand Theft Auto: Vice City – Definitive Edition",
@@ -5339,7 +5339,7 @@
     "XeSS"
    ],
    "notes": "Install as `version.dll`. Make sure to use signed build, else anti-cheat will block it.",
-   "online": true
+   "anticheat": true
   },
   "influxredux": {
    "name": "Influx Redux",
@@ -5937,7 +5937,7 @@
     "FSR2 inputs are not supported",
     "Might require re-toggling FG on every boot as the game tends to disable it"
    ],
-   "online": true
+   "anticheat": true
   },
   "marvelsspiderman2": {
    "name": "Marvel's Spider‐Man 2",
@@ -8332,7 +8332,7 @@
    "proxies": [
     "dxgi.dll"
    ],
-   "online": true
+   "anticheat": true
   },
   "sumeriansix": {
    "name": "Sumerian Six",
@@ -9485,7 +9485,7 @@
     "FSR3.1"
    ],
    "notes": "Disable EAC to load OptiScaler.",
-   "online": true
+   "anticheat": true
   },
   "watchdogs2": {
    "name": "Watch Dogs 2",

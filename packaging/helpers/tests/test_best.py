@@ -99,7 +99,8 @@ def test_amd_launch_env_for_fsr4_and_xess_frame_generation():
     (["EAAntiCheat.GameServiceLauncher.exe", "EAAntiCheat.GameServiceLauncher.dll"], "EA Javelin"),
     (["NeacClient.exe"], "NetEase Anti-Cheat"), (["bin/NeacSafe64.sys"], "NetEase Anti-Cheat"),
     (["bin/xhunter1.sys"], "XIGNCODE3"), (["BlackCipher/BlackCipher64.aes"], "Nexon Game Security"),
-    (["TenProtect/TP3Helper.dat"], "Tencent TP"), (["EQU8/equ8_conf.json"], "EQU8")])
+    (["TenProtect/TP3Helper.dat"], "Tencent TP"), (["EQU8/equ8_conf.json"], "EQU8"),
+    (["RobloxPlayerBeta.exe", "RobloxPlayerBeta.dll"], "Hyperion")])
 def test_anticheat_in_the_folder_is_found(tmp_path, files, system):
     for f in files:
         _w(tmp_path / "g" / f)
@@ -182,7 +183,10 @@ def test_other_injectors_are_left_alone(tmp_path):
     assert p["refused"] == "mod" and best.prepare(home, "303", Z1E)["did"] == "" and _tree(d) == before
 
 
-ONLINE_TITLES = ["Wuthering Waves", "Zenless Zone Zero", "Arknights: Endfield", "Where Winds Meet", "GOALS"]
+ONLINE_TITLES = ["Wuthering Waves", "Zenless Zone Zero", "Where Winds Meet", "GOALS"]
+# notes naming an anti-cheat: refused like anti-cheat in the folder, whatever the row's status (review H2)
+AC_NOTE_TITLES = ["Arknights: Endfield", "Infinity Nikki", "Suicide Squad: Kill the Justice League", "7 Days to Die",
+                  "Warhammer 40,000: Space Marine 2"]
 
 
 def test_online_games_in_the_list_are_flagged():
@@ -193,6 +197,11 @@ def test_online_games_in_the_list_are_flagged():
         k = gamedb.knowledge(doc, None, None, name)
         assert k["known"] and k["status"] == "works" and k["online"] is True, name
         assert gamedb.compat_row(doc, name).get("online") is True, name
+    for name in AC_NOTE_TITLES:
+        k = gamedb.knowledge(doc, None, None, name)
+        assert k["known"] and k["anticheat"] is True, name
+    assert gamedb.anticheat_note("**EAC** active in both single player OFFLINE and multiplayer")
+    assert not gamedb.anticheat_note("**Online game, use at your own risk!**")
     assert gamedb.online_risk("**Online game, use at your own risk!**") and gamedb.online_risk("Disable EAC to load OptiScaler.")
     for safe in ("Free online co-op game, no anticheat", "Online co-op game, does not use anticheat", "Use DX12", ""):
         assert not gamedb.online_risk(safe), safe
@@ -214,6 +223,18 @@ def test_online_games_are_never_set_up_by_themselves(tmp_path, name):
     assert r["ok"] and r["did"] == "set up" and _tree(d) != before
     assert best.plan(home, "450", Z1E)["opted_in"] and best.prepare(home, "450", Z1E)["did"] == ""
     assert best.native(home, "450", Z1E)["ok"] and _tree(d) == before and not best.opted_in(home, "450")
+
+
+@pytest.mark.parametrize("name", AC_NOTE_TITLES)
+def test_anticheat_named_in_the_notes_is_refused_and_cant_be_added(tmp_path, name):
+    home = str(tmp_path)
+    _pkg(home)
+    d = _steam_game(home, "455", name, ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    p = best.plan(home, "455", DECK)
+    assert p["refused"] == "anticheat" and not p.get("offer") and p["auto"] is False
+    assert best.opt_in(home, "455", DECK)["refused"] == "anticheat"
+    assert games.choose(home, "455", "fsr31", 0, DECK)["refused"] == "anticheat" and _tree(d) == before
 
 
 def test_an_online_game_set_up_before_it_was_flagged_comes_out(tmp_path):
