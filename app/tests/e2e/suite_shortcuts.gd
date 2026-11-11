@@ -141,7 +141,7 @@ func test_one_up_from_the_rows_reaches_the_strip() -> void:
 	for b in strip().focusables():
 		var r: Rect2 = b.get_global_rect()
 		ok(r.size.x >= 56.0 and r.size.y >= 56.0, "%s is a large target (%s)" % [b.name, r.size])
-		ok(panel_rect.grow(1.0).encloses(r), "%s is fully inside the panel" % b.name)
+		ok(panel_rect.grow(1.0).encloses(r), "%s is fully inside the panel (button %s, panel %s, strip scrolled %s)" % [b.name, r, panel_rect, strip()._scroll.scroll_horizontal])
 	await b()
 	await end_game()
 
