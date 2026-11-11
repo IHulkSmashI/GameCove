@@ -979,6 +979,9 @@ func background_check(now_unix: int) -> bool:
 		return false
 	UpscaleUpdates.save_check(stamp, now_unix)      # at most daily, also when the network is down
 	upscale_check(true)
+	# the per-game lists: the signed nightly games.json and OptiScaler's compatibility notes (anti-cheat and
+	# online flags, fixes). Nothing else called this, so devices kept the list they were installed with (review low)
+	Upscale.run(ctx.get("runner"), upscale_cmd(), "refresh", _home(), "", _gpu())
 	return true
 
 
