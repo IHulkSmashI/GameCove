@@ -60,22 +60,27 @@ RUNTIME_FILES = ("OptiScaler.log", "OptiScaler.log.*", "OptiScaler*.log", "faken
 PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "winhttp.dll", "wininet.dll")
 FSR4_XMX_DIR = "fsr4-xmx"
 FSR4_XMX_FILES = ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll")   # what the user puts in ~/fsr4-xmx
-# ClawDeck's own cabinet.dll (ClawDeck tools/cabinet-lzms, same author, built by its CI into the plugin's bin/): the
-# Compression API LZMS decompressor nitec's build imports (Cabinet.dll ordinals 40, 43, 45), which Wine's cabinet.dll
-# lacks; its FDI/FCI exports forward to cabinet_wine.dll. GameCove doesn't build it: it uses the first copy found
-# (GAMECOVE_CABINET, GameCove's data folder, an installed ClawDeck, the package's lib folder).
-CABINET_PLACES = (".local/share/gamecove/cabinet.dll", "homebrew/plugins/ClawDeck/bin/cabinet.dll")
+# GameCove's own cabinet.dll (tools/cabinet-lzms, ported from ClawDeck, same author; built by the release workflow
+# and shipped as <package>/bin/cabinet.dll): the Compression API LZMS decompressor nitec's build imports (Cabinet.dll
+# ordinals 40, 43, 45), which Wine's cabinet.dll lacks; its FDI/FCI exports forward to cabinet_wine.dll. The first
+# copy found is used: GAMECOVE_CABINET, the package this helper is part of (ClawDeck's OWN_CABINET rule: bin/ two
+# folders above the module, /usr/lib/gamecove/bin in every GameCove package), a source checkout's build output,
+# GameCove's data folder, then an installed ClawDeck (the same bytes).
+_HERE = os.path.dirname(os.path.realpath(__file__))
 SYSTEM_CABINET = "/usr/lib/gamecove/bin/cabinet.dll"
+PACKAGE_CABINET = os.path.join(os.path.dirname(os.path.dirname(_HERE)), "bin", "cabinet.dll")
+CHECKOUT_CABINET = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(_HERE))), "tools", "cabinet-lzms", "out", "cabinet.dll")
+CABINET_PLACES = (".local/share/gamecove/cabinet.dll", "homebrew/plugins/ClawDeck/bin/cabinet.dll")
 
 
 def own_cabinet(home: str) -> str:
     """Where the LZMS cabinet.dll is, or the first place it would go ("" never: callers check isfile)."""
     env = os.environ.get("GAMECOVE_CABINET", "")
-    places = ([env] if env else []) + [os.path.join(home, p) for p in CABINET_PLACES] + [SYSTEM_CABINET]
+    places = ([env] if env else []) + [PACKAGE_CABINET, SYSTEM_CABINET, CHECKOUT_CABINET] + \
+        [os.path.join(home, p) for p in CABINET_PLACES]
     return next((p for p in places if os.path.isfile(p)), places[0])
 
 
-# OptiScaler's package, minus what only Windows installs need
 PACKAGE_RECORD = ".gamecove-package.json"
 SKIP = {"setup_linux.sh", "setup_windows.bat", "OptiScaler.dll", "OptiScaler.ini", PACKAGE_RECORD}
 SKIP_PREFIX = ("!!", "Licenses/")
@@ -396,12 +401,12 @@ def _put(src: str, dest: str, folder: str, added: list, backed: list, dirs: list
 
 
 def fsr4_xmx_missing(home: str) -> list[str]:
-    """What FSR 4 on XMX still needs: nitec's two files in ~/fsr4-xmx, and GameCove's cabinet.dll in the plugin
+    """What FSR 4 on XMX still needs: nitec's two files in ~/fsr4-xmx, and GameCove's cabinet.dll from the package
     (missing only in a source checkout where tools/cabinet-lzms/build.sh hasn't run)."""
     xdir = os.path.join(home, FSR4_XMX_DIR)
     need = [f for f in FSR4_XMX_FILES if not os.path.isfile(os.path.join(xdir, f))]
     if not os.path.isfile(own_cabinet(home)):
-        need.append("the LZMS cabinet.dll (ClawDeck's tools/cabinet-lzms build) in ~/.local/share/gamecove")
+        need.append("GameCove's LZMS cabinet.dll (/usr/lib/gamecove/bin/cabinet.dll; in a source checkout run tools/cabinet-lzms/build.sh)")
     return need
 
 
@@ -410,8 +415,8 @@ IMPORT_FROM = ("Downloads", "Desktop", "Documents")
 
 def fsr4_xmx_import(home: str, depth: int = 3) -> dict:
     """nitec's two files from where a download lands, into ~/fsr4-xmx, so FSR 4.1.2 needs no folder made by hand
-    (maintainer, 2026-11-05: "make it seamless"). GameCove doesn't download or ship them (no license to: they are
-    shared in the OptiScaler Discord). Taken only as a pair, from one folder or one .zip, since a game's own
+    (maintainer, 2026-11-05: "make it seamless"), for a build without the packaged set or a newer pair the user
+    got from the OptiScaler Discord. Taken only as a pair, from one folder or one .zip, since a game's own
     amd_fidelityfx_upscaler_dx12.dll has the same name: both files next to each other are nitec's build."""
     xdir = os.path.join(home, FSR4_XMX_DIR)
     if all(os.path.isfile(os.path.join(xdir, f)) for f in FSR4_XMX_FILES):
@@ -457,6 +462,7 @@ def fsr4_xmx_download(home: str, entry: dict) -> dict:
     xdir = os.path.join(home, FSR4_XMX_DIR)
     os.makedirs(xdir, exist_ok=True)
     got = []
+    _fsr4_keep_previous(home, entry.get("files") or {})      # a different set there now: kept for rollback
     for name, sha in (entry.get("files") or {}).items():
         dest = os.path.join(xdir, name)
         if os.path.isfile(dest) and downloads.sha256_of(dest) == sha:
@@ -470,6 +476,7 @@ def fsr4_xmx_download(home: str, entry: dict) -> dict:
             return {"ok": False, "error": err}
         got.append(name)
     if got:
+        _fsr4_record(home, entry.get("version"))
         userexec.chown_tree(xdir, home)
         log.info("FSR 4.1.2 XMX files downloaded: %s", ", ".join(got))
     return {"ok": True, "downloaded": got, "dir": xdir}
@@ -492,7 +499,7 @@ FSR4_BUNDLED = os.path.join("bin", "fsr4-xmx")      # inside the plugin: the bui
 
 
 def fsr4_xmx_from_plugin(home: str, plugin_dir: str, entry: dict) -> dict:
-    """The FSR 4.1.2 XMX files that came inside GameCove.zip (the build adds them, sha256 checked: nothing to download,
+    """The FSR 4.1.2 XMX files that came inside the package (plugin_dir/bin/fsr4-xmx; the build adds them, sha256 checked: nothing to download,
     maintainer 2026-11-06) copied to ~/fsr4-xmx, where the launch wrapper takes them from. Each one is checked again
     against versions.json; a file already in place with the right sha256 is left as it is."""
     src = os.path.join(plugin_dir, FSR4_BUNDLED)
@@ -513,6 +520,153 @@ def fsr4_xmx_from_plugin(home: str, plugin_dir: str, entry: dict) -> dict:
         userexec.chown_tree(xdir, home)
         log.info("FSR 4.1.2 XMX files from the plugin: %s", ", ".join(got))
     return {"ok": not missing, "copied": got, "missing": missing, "dir": xdir}
+
+
+# ---- the FSR 4.1.2 XMX files as one set: shipped in the package, swapped as a unit, the one before kept -------------
+PACKAGE_DIR = os.path.dirname(os.path.dirname(_HERE))          # /usr/lib/gamecove (ClawDeck's PLUGIN_DIR)
+SYSTEM_DIR = "/usr/lib/gamecove"
+FSR4_SET = ".gamecove-set.json"                                # in ~/fsr4-xmx: which set GameCove put there
+FSR4_PREVIOUS = ".local/share/gamecove/fsr4-xmx-previous"      # the set before the last swap, for rollback
+
+
+def fsr4_packaged() -> dict | None:
+    """The set this GameCove package carries (bin/fsr4-xmx/set.json, written by tools/upscalers/fetch_fsr4.py):
+    {"version", "files": {name: sha256}, "dir"}, or None in a build without it (a source checkout)."""
+    for root in dict.fromkeys((PACKAGE_DIR, SYSTEM_DIR)):
+        d = os.path.join(root, FSR4_BUNDLED)
+        try:
+            with open(os.path.join(d, "set.json"), "r", encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if isinstance(m, dict) and isinstance(m.get("files"), dict) and set(m["files"]) == set(FSR4_XMX_FILES):
+            return {"version": str(m.get("version", "")), "files": {k: str(v).lower() for k, v in m["files"].items()}, "dir": d}
+    return None
+
+
+def fsr4_xmx_set(home: str) -> dict:
+    """What is in ~/fsr4-xmx now: {"present", "files": {name: sha256}, "version" (GameCove's record, None for files
+    the user put there), "previous": the kept set's version or None}."""
+    xdir = os.path.join(home, FSR4_XMX_DIR)
+    present = all(os.path.isfile(os.path.join(xdir, f)) for f in FSR4_XMX_FILES)
+    files = {f: downloads.sha256_of(os.path.join(xdir, f)) for f in FSR4_XMX_FILES} if present else {}
+    rec = _read_json(os.path.join(xdir, FSR4_SET))
+    version = rec.get("version") if present and rec.get("files") == files else None
+    prev = _read_json(os.path.join(home, FSR4_PREVIOUS, FSR4_SET))
+    return {"present": present, "files": files, "version": version, "previous": prev.get("version") if prev else None}
+
+
+def _read_json(path: str) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _fsr4_record(home: str, version: str | None) -> None:
+    xdir = os.path.join(home, FSR4_XMX_DIR)
+    files = {f: downloads.sha256_of(os.path.join(xdir, f)) for f in FSR4_XMX_FILES}
+    with open(os.path.join(xdir, FSR4_SET + ".new"), "w", encoding="utf-8") as f:
+        json.dump({"component": "fsr4_xmx", "version": version, "files": files, "installed": time.time()}, f)
+    os.replace(os.path.join(xdir, FSR4_SET + ".new"), os.path.join(xdir, FSR4_SET))
+
+
+def _fsr4_keep_previous(home: str, incoming: dict) -> bool:
+    """Before a different set goes into ~/fsr4-xmx: the complete set there now is copied to the rollback folder
+    (one set kept: the one before the last swap). False when there was nothing to keep or it is the same set."""
+    cur = fsr4_xmx_set(home)
+    want = {k: str(v).lower() for k, v in (incoming or {}).items()}
+    if not cur["present"] or cur["files"] == want:
+        return False
+    xdir, keep = os.path.join(home, FSR4_XMX_DIR), os.path.join(home, FSR4_PREVIOUS)
+    tmp = keep + ".new"
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp)
+    for f in FSR4_XMX_FILES:
+        shutil.copyfile(os.path.join(xdir, f), os.path.join(tmp, f))
+    with open(os.path.join(tmp, FSR4_SET), "w", encoding="utf-8") as f:
+        json.dump({"component": "fsr4_xmx", "version": cur["version"] or "your own files", "files": cur["files"],
+                   "kept": time.time()}, f)
+    shutil.rmtree(keep, ignore_errors=True)
+    os.replace(tmp, keep)
+    userexec.chown_tree(keep, home)
+    return True
+
+
+def fsr4_xmx_rollback(home: str) -> dict:
+    """The set before the last swap back into ~/fsr4-xmx, and the one that was there kept in its place (so rolling
+    back twice returns to where you were). Every file is checked against the kept set's own record first. Games
+    keep the copy they have until GameCove's OptiScaler is put into them again."""
+    keep, xdir = os.path.join(home, FSR4_PREVIOUS), os.path.join(home, FSR4_XMX_DIR)
+    rec = _read_json(os.path.join(keep, FSR4_SET))
+    files = rec.get("files") if isinstance(rec.get("files"), dict) else None
+    if not files or set(files) != set(FSR4_XMX_FILES):
+        return {"ok": False, "error": "no earlier FSR 4.1.2 XMX set is kept"}
+    for f, sha in files.items():
+        p = os.path.join(keep, f)
+        if not os.path.isfile(p) or downloads.sha256_of(p) != sha:
+            return {"ok": False, "error": f"the kept set is damaged ({f}); nothing changed"}
+    cur = fsr4_xmx_set(home)
+    stage = keep + ".swap"
+    shutil.rmtree(stage, ignore_errors=True)
+    os.makedirs(stage)
+    for f in FSR4_XMX_FILES:
+        shutil.copyfile(os.path.join(keep, f), os.path.join(stage, f))
+    _fsr4_keep_previous(home, files)                    # what is there now becomes the kept set
+    os.makedirs(xdir, exist_ok=True)
+    for f in FSR4_XMX_FILES:
+        os.replace(os.path.join(stage, f), os.path.join(xdir, f))
+    shutil.rmtree(stage, ignore_errors=True)
+    version = rec.get("version")
+    _fsr4_record(home, None if version == "your own files" else version)
+    userexec.chown_tree(xdir, home)
+    log.info("FSR 4.1.2 XMX: back to %s (was %s)", version, cur.get("version") or "your own files")
+    return {"ok": True, "version": version, "was": cur.get("version") or ("your own files" if cur["present"] else None), "dir": xdir}
+
+
+def fsr4_xmx_from_package(home: str, entry: dict) -> dict:
+    """ClawDeck's fsr4_xmx_from_plugin for GameCove's package: the files that came with the install
+    (<package>/bin/fsr4-xmx) copied to ~/fsr4-xmx, each checked against `entry`'s sha256."""
+    last: dict = {"ok": False, "copied": [], "missing": list(FSR4_XMX_FILES), "dir": os.path.join(home, FSR4_XMX_DIR)}
+    for root in dict.fromkeys((PACKAGE_DIR, SYSTEM_DIR)):
+        if not os.path.isdir(os.path.join(root, FSR4_BUNDLED)):
+            continue
+        _fsr4_keep_previous(home, entry.get("files") or {})
+        last = fsr4_xmx_from_plugin(home, root, entry)
+        if last.get("ok"):
+            _fsr4_record(home, entry.get("version"))
+            return last
+    return last
+
+
+def fsr4_xmx_ready(home: str, entries: list[dict], download: bool = False) -> dict:
+    """ClawDeck's _fsr4_fetch (it runs at every plugin start): nothing to do while both files are in ~/fsr4-xmx (also
+    the user's own, newer ones: never replaced here). Else the set that came with the package (checked against the
+    newest entry, then the tested pins), else a pair found in Downloads / Desktop, else, with download=True, the
+    download as before. Returns {"ok": files are there, "how"}."""
+    def missing() -> bool:
+        return any(m in FSR4_XMX_FILES for m in fsr4_xmx_missing(home))
+    if not missing():
+        return {"ok": True, "how": "there"}
+    for e in entries:
+        if e and fsr4_xmx_from_package(home, e).get("ok"):
+            return {"ok": True, "how": "package", "version": e.get("version")}
+    try:
+        if fsr4_xmx_import(home).get("imported"):
+            return {"ok": True, "how": "imported"}
+    except OSError as e:
+        log.info("FSR 4.1.2 XMX import: %s", e)
+    if download:
+        for e in entries:
+            if not e:
+                continue
+            r = fsr4_xmx_download(home, e)
+            if r.get("ok"):
+                return {"ok": True, "how": "downloaded", "version": e.get("version")}
+            log.info("FSR 4.1.2 XMX download: %s", r.get("error"))
+    return {"ok": not missing(), "how": "missing"}
 
 
 def _proton_cabinet(home: str) -> str | None:

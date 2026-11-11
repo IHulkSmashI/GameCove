@@ -34,7 +34,12 @@ pads() {
 
 hw_present() { [ -n "$(pads)" ]; }
 
-os_fixed() { gc_rule_elsewhere '1b4c' 'power/wakeup'; }
+# The system does it: its own rule (Bazzite's 50-ally-x-controller.rules), or the controller already can't wake it
+# without GameCove's rule.
+os_fixed() {
+	gc_rule_elsewhere '1b4c' 'power/wakeup' && return 0
+	! gc_installed && gc_all_values "$(pads)" power/wakeup disabled
+}
 
 apply_now() {
 	for p in $(pads); do

@@ -116,6 +116,20 @@ cp "$session_src/LICENSE" "$tree/usr/share/licenses/gamescope-session/"
 # GameCove
 install -Dm0755 "$app/gamecove.x86_64" "$tree/usr/lib/gamecove/gamecove.x86_64"
 install -Dm0644 "$app/gamecove.pck" "$tree/usr/lib/gamecove/gamecove.pck"
+# the LZMS cabinet.dll for FSR 4 on XMX and its source, when the app tarball carries them (release builds do)
+if [ -s "$app/bin/cabinet.dll" ]; then
+	install -Dm0644 "$app/bin/cabinet.dll" "$tree/usr/lib/gamecove/bin/cabinet.dll"
+	[ -s "$app/bin/cabinet-lzms-source.tar.gz" ] && install -Dm0644 "$app/bin/cabinet-lzms-source.tar.gz" "$tree/usr/lib/gamecove/bin/cabinet-lzms-source.tar.gz"
+else
+	echo "build-sysext: warning: no bin/cabinet.dll in the app folder; FSR 4 on XMX won't be offered (tools/cabinet-lzms/build.sh)" >&2
+fi
+# nitec's FSR 4.1.2 XMX files with their set.json, unmodified (release builds carry them in the app tarball)
+if [ -d "$app/bin/fsr4-xmx" ]; then
+	mkdir -p "$tree/usr/lib/gamecove/bin/fsr4-xmx"
+	install -m0644 "$app/bin/fsr4-xmx"/* "$tree/usr/lib/gamecove/bin/fsr4-xmx/"
+else
+	echo "build-sysext: warning: no bin/fsr4-xmx in the app folder; FSR 4 on XMX files will be downloaded on first use" >&2
+fi
 mkdir -p "$tree/usr/lib/gamecove/fixes"
 if [ -d "$REPO/fixes" ]; then
 	cp -a "$REPO/fixes/." "$tree/usr/lib/gamecove/fixes/"

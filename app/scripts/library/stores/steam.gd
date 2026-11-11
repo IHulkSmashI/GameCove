@@ -7,6 +7,7 @@ extends RefCounted
 
 const AppId := preload("res://scripts/steam/app_id.gd")
 const Acf := preload("res://scripts/steam/acf.gd")
+const LibraryMemory := preload("res://scripts/system/steam_library_memory.gd")
 
 const STEAM_ROOTS := [
 	"~/.local/share/Steam",
@@ -169,6 +170,7 @@ static func art_for(steam_root: String, appid: String, users: Array[String] = []
 static func scan(home: String) -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	var seen := {}
+	var libraries := {}   # library folder -> its app ids, for Storage's Clean up (steam_library_memory.gd)
 	for root in STEAM_ROOTS:
 		var steam_root := expand(root, home)
 		if not DirAccess.dir_exists_absolute(steam_root):
@@ -180,9 +182,12 @@ static func scan(home: String) -> Array[Dictionary]:
 			var dir := DirAccess.open(apps)
 			if dir == null:
 				continue
+			var ids: Array = libraries.get(folder, [])
+			libraries[folder] = ids
 			for file in dir.get_files():
 				if not (file.begins_with("appmanifest_") and file.ends_with(".acf")):
 					continue
+				ids.append(file.trim_prefix("appmanifest_").trim_suffix(".acf"))
 				var m := Acf.parse(FileAccess.get_file_as_string(apps + "/" + file))
 				var appid: String = m.get("appid", "")
 				var name: String = m.get("name", "")
@@ -198,6 +203,8 @@ static func scan(home: String) -> Array[Dictionary]:
 					"last_played": p["last_played"], "playtime_min": p["playtime_min"],
 					"state_flags": flags, "busy": Acf.is_busy(flags), "library_folder": folder,
 					"install_path": folder.path_join("steamapps/common").path_join(m["installdir"]) if m["installdir"] != "" else ""})
+	if not libraries.is_empty():
+		LibraryMemory.remember(libraries, int(Time.get_unix_time_from_system()))
 	return found
 
 

@@ -22,10 +22,13 @@ Generalized for every handheld (GameCove), by the GPU the app passes in (gpu: {"
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 
-from . import active, chips, framegen, gamedb, guard, launchenv, livedb, mirror, optiscaler, reframework, xess
+from . import active, chips, framegen, gamedb, guard, launchenv, livedb, mirror, optiscaler, reframework, xess, xmxscope
+
+log = logging.getLogger("gamecove.games")
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 BUNDLED_GAMES = os.path.join(HERE, "data", "games.json")
@@ -177,7 +180,7 @@ def _prefer_fsr4(home: str, rec: dict, d: str | None, gpu: dict, xmx_off: bool) 
         rec["upscaler"] = "fsr4_xmx"
         rec["reasons"][0] = rec["reasons"][0].replace("into XeSS on the XMX cores", "into FSR 4.1.2 on the XMX cores (the newest; XeSS 2 is one tap away)")
     else:
-        rec["reasons"].append("FSR 4.1.2 (newer than XeSS) would be picked here: put nitec's two files in ~/fsr4-xmx")
+        rec["reasons"].append("FSR 4.1.2 (newer than XeSS) would be picked here once its files are in ~/fsr4-xmx (they come with GameCove; pick it once and they are fetched)")
 
 
 def _for_gpu(rec: dict, d: str | None, gpu: dict, home: str | None = None) -> None:
@@ -335,6 +338,42 @@ def _refused(d: str | None, folder: str | None, anticheat: bool, rec: dict) -> d
     return {"ok": False, "refused": no["code"], "error": no["error"]} if no and no["code"] != "broken" else None
 
 
+def per_game(home: str, gpu: dict) -> bool:
+    """ClawDeck's `not xmxscope.session_active(HOME)`: the XeSS XMX driver is scoped per game unless the package's
+    session-wide driver file is still in place (an install.sh run by hand outside GameCove's folder). Then the launch
+    file must not switch the driver per game. Other GPUs have no such driver: always per game."""
+    return vendor(gpu) != "intel" or not xmxscope.session_active(home)
+
+
+def xmx_upkeep(home: str, gpu: dict) -> dict | None:
+    """What ClawDeck does at every plugin start, here before the helper's commands on an Intel XMX handheld: a
+    session-wide driver file from an install into GameCove's folder moves aside, and Protons added since the driver
+    was installed get the per-game scope script. None when there is nothing to do (no driver)."""
+    if vendor(gpu) != "intel" or not gpu.get("xmx"):
+        return None
+    out: dict = {}
+    try:
+        if xmxscope.session_active(home) and (xess.package_dir(home) or "").startswith(os.path.join(home, xess.INSTALL_ROOT)):
+            out["isolated"] = xmxscope.isolate_session(home)
+        if xmxscope.xmx_env(home):
+            out["scope"] = xmxscope.install_scope(home)
+    except OSError as e:
+        out["error"] = str(e)
+    try:
+        # ClawDeck's _fsr4_fetch: nitec's FSR 4.1.2 files from the package into ~/fsr4-xmx when they aren't there
+        # (nothing to set up, nothing downloaded); files already there, also the user's own, are never replaced
+        r = fsr4_ready(home)
+        if r.get("how") not in ("there", "missing"):
+            out["fsr4_xmx"] = r
+    except OSError as e:
+        out["error"] = str(e)
+    return out or None
+
+
+def fsr4_ready(home: str, download: bool = False) -> dict:
+    return optiscaler.fsr4_xmx_ready(home, [versions(home).get("fsr4_xmx"), pins().get("fsr4_xmx")], download)
+
+
 def set_launch(home: str, key: str, values: dict, gpu: dict) -> dict:
     """ClawDeck's set_launch: merge (None removes a key), check by composing, save, write the launch file."""
     s = load_state(home)
@@ -344,7 +383,7 @@ def set_launch(home: str, key: str, values: dict, gpu: dict) -> dict:
             cur.pop(k, None)
         else:
             cur[k] = v
-    env = launchenv.compose(cur, True, vendor(gpu))       # raises on a bad combination: nothing saved then
+    env = launchenv.compose(cur, per_game(home, gpu), vendor(gpu))       # raises on a bad combination: nothing saved then
     if cur:
         s["launch"][str(key)] = cur
     else:
@@ -352,7 +391,7 @@ def set_launch(home: str, key: str, values: dict, gpu: dict) -> dict:
     save_state(home, s)
     path = None
     if str(key).isdigit():
-        path = launchenv.write(os.path.join(home, DATA), str(key), cur, True, vendor(gpu))["path"]
+        path = launchenv.write(os.path.join(home, DATA), str(key), cur, per_game(home, gpu), vendor(gpu))["path"]
     return {"ok": True, "launch": cur, "env": env, "path": path}
 
 
@@ -399,8 +438,8 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
                 return {"ok": False, "error": "FSR 4.1.2 needs the XMX cores, and this game's last launch ran without them "
                         "(a black screen with FSR 4.1.2): start it once with XeSS 2, then FSR 4.1.2 is offered again"}
         if optiscaler.fsr4_xmx_missing(home):
-            try:
-                optiscaler.fsr4_xmx_import(home)
+            try:                               # from the package, a pair in Downloads, or the download as before
+                fsr4_ready(home, download=True)
             except OSError:
                 pass
         missing = optiscaler.fsr4_xmx_missing(home)
@@ -431,6 +470,11 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
     if not r.get("ok"):
         return r
     launch["opti_dll"] = r["dll_override"]
+    if vendor(gpu) == "intel" and str(key).isdigit():
+        # ClawDeck's game_choose: XeSS and FSR 4.1.2 reach the XMX cores only through the shim in the prefix's driver
+        # store, which Valve's Proton 11.0 doesn't make (the scope script does the same at every launch)
+        shim = xmxscope.prefix_shim(home, str(key), xess.package_dir(home))
+        log.info("game %s: XMX shim in the prefix: %s", key, "put there" if shim.get("placed") else shim.get("why") or "already there")
     if rec["re_engine"]:
         rf = reframework.install(home, folder, versions(home)["reframework"], bool(allow_unpinned))
         if not rf.get("ok"):
@@ -494,7 +538,7 @@ def status(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
         fg = 2
     env = {}
     try:
-        env = launchenv.compose(launch, True, vendor(gpu))
+        env = launchenv.compose(launch, per_game(home, gpu), vendor(gpu))
     except ValueError:
         pass
     out = {"dir": d, "folder": folder, "owner": who["owner"], "upscaler": upscaler, "fg": fg, "launch": launch,

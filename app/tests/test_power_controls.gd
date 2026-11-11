@@ -9,6 +9,7 @@ const ControlsScript := preload("res://scripts/controls/controls.gd")
 const ProviderScript := preload("res://scripts/controls/providers/power.gd")
 const PowerScript := preload("res://scripts/device/power.gd")
 const Tx := preload("res://scripts/controls/power/texts.gd")
+const Traits := preload("res://scripts/device/traits.gd")
 
 var _nodes: Array = []
 
@@ -686,7 +687,7 @@ func test_ally_offers_what_this_handheld_has() -> void:
 	var e := _setup(Trees.new().ally())
 	_every_reason_set(e, "ally")
 	var c: Dictionary = e["c"]
-	for id in ["power.tdp", "power.sppt", "power.fppt", "power.power_mode", "power.cpu_boost", "power.smt", "power.cpu_cores",
+	for id in ["power.tdp", "power.sppt", "power.fppt", "power.power_mode", "power.cpu_boost", "power.cpu_cores",
 			"power.epp", "power.gpu_level", "power.gpu_min", "power.gpu_max", "power.thermal_limit", "power.charge_limit",
 			"power.fan_mode", "power.fan_curve", "power.mcu_powersave"]:
 		ok(c[id].available, "ally offers %s (%s)" % [id, c[id].reason])
@@ -699,6 +700,53 @@ func test_ally_offers_what_this_handheld_has() -> void:
 	eq(c["power.thermal_limit"].max_value, 95.0, "never above the firmware's Tctl")
 	eq(c["power.fan_curve"].points, 8, "asus curve points")
 	_free()
+
+
+func test_ally_smt_stays_on_because_sleep_can_break() -> void:
+	# Bazzite's ASUS page: "Suspend may be broken if SMT is disabled" (quirks.json smt-off-breaks-sleep)
+	var e := _setup(Trees.new().ally())
+	var c: Object = e["c"]["power.smt"]
+	ok(e["prov"].smt_guarded(), "ASUS row: guarded")
+	ok(not c.available, "SMT on: the switch is off by default")
+	eq(c.reason, Tx.SMT_KEEP_ON, "says why")
+	eq(c.help, Tx.SMT_HELP_SLEEP, "help line warns")
+	eq(c.read(), true, "shows On, greyed")
+	var before: int = e["runner"].calls.size()
+	e["reg"].apply({"power.smt": false})
+	e["reg"].set_value("power.smt", false)
+	ok(not e["runner"].calls.slice(before).any(func(x): return str(x).contains("smt")), "a profile or the UI can't turn it off")
+	eq(_read(e["root"], "/sys/devices/system/cpu/smt/control"), "on", "still on")
+	_free()
+
+
+func test_ally_smt_already_off_can_only_go_back_on() -> void:
+	var t := Trees.new().ally()
+	var f := FileAccess.open(t["root"] + "/sys/devices/system/cpu/smt/control", FileAccess.WRITE)
+	f.store_string("off\n")
+	f.close()
+	var e := _setup(t)
+	var c: Object = e["c"]["power.smt"]
+	ok(c.available, "off (set elsewhere): offered, so it can go back on (%s)" % c.reason)
+	eq(c.coerce(false), null, "off is turned down (profiles, imports, the UI)")
+	eq(c.coerce(true), true, "on is fine")
+	ok(not c.write(false), "writing off fails")
+	ok(not e["runner"].calls.any(func(x): return str(x).contains("smt") and str(x).contains("off")), "nothing written for off")
+	_free()
+
+
+func test_smt_guard_only_on_asus() -> void:
+	var e := _setup(Trees.new().legion())
+	ok(not e["prov"].smt_guarded(), "Lenovo: no guard")
+	ok(e["c"]["power.smt"].available, "Lenovo: SMT offered (%s)" % e["c"]["power.smt"].reason)
+	eq(e["c"]["power.smt"].help, Tx.help("power.smt"), "plain help")
+	ok(e["c"]["power.smt"].coerce(false) == false, "off allowed")
+	_free()
+	var rows: Dictionary = {}
+	for r in JSON.parse_string(FileAccess.get_file_as_string("res://data/devices.json"))["devices"]:
+		rows[r["id"]] = r
+	for id in rows:
+		var asus: bool = str(rows[id].get("maker", "")).to_lower() == "asus"
+		eq(Traits.has_quirk("smt-off-breaks-sleep", rows[id]), asus, "%s: guard follows the maker" % id)
 
 
 func test_ally_mcu_powersave_needs_new_enough_firmware() -> void:

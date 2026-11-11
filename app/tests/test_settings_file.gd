@@ -3,6 +3,7 @@ extends "res://tests/test_case.gd"
 ## never replaced in the same run, and no store calls ConfigFile.save() by itself.
 
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
+const RunMode := preload("res://scripts/system/run_mode.gd")
 const PerfStore := preload("res://scripts/controls/perf/store.gd")
 const PowerScript := preload("res://scripts/device/power.gd")
 const ProfilesScript := preload("res://scripts/controls/profiles.gd")
@@ -298,3 +299,93 @@ func test_damaged_settings_turn_rarity_and_photos_off() -> void:
 
 class RarityHolder extends RefCounted:
 	var fetch_rarity := true
+
+
+## Final review, low: every writer used the one name "<file>.tmp". A second GameCove
+## process (or a helper run) saving the same file wrote into the first one's half-written
+## temp file, and one of them renamed the mix into place. Each process now has its own.
+func test_another_process_temp_file_is_never_touched() -> void:
+	var d := _dir("tmp_names")
+	var p := d + "/x.cfg"
+	# another process is in the middle of writing its copy
+	var theirs := "%s.%d.tmp" % [p, 1]     # pid 1 is always alive
+	var f := FileAccess.open(theirs, FileAccess.WRITE)
+	f.store_string("[half")
+	f.close()
+	var cfg := ConfigFile.new()
+	cfg.set_value("a", "b", 3)
+	eq(SettingsFile.save_cfg(cfg, p), OK, "saved")
+	eq(FileAccess.get_file_as_string(theirs), "[half", "the other process's temp file is as it left it")
+	eq(SettingsFile.load_cfg(p).get_value("a", "b", 0), 3, "ours landed whole")
+	ok(SettingsFile.tmp_path(p).contains(".%d.tmp" % OS.get_process_id()), "our temp file carries our pid")
+	ok(not FileAccess.file_exists(SettingsFile.tmp_path(p)), "and is gone after the save")
+	# what a crashed process left behind is swept on the first save of that file in a run
+	var dead := "%s.%d.tmp" % [p, 2000000000]
+	f = FileAccess.open(dead, FileAccess.WRITE)
+	f.store_string("left by a crash")
+	f.close()
+	var old_style := p + ".tmp"
+	f = FileAccess.open(old_style, FileAccess.WRITE)
+	f.store_string("from an older build")
+	f.close()
+	SettingsFile.reset_for_tests()
+	eq(SettingsFile.save_cfg(cfg, p), OK, "saved again")
+	ok(not FileAccess.file_exists(dead), "a dead process's temp file is cleared away")
+	ok(not FileAccess.file_exists(old_style), "so is the old fixed-name one")
+	ok(FileAccess.file_exists(theirs), "a live process's stays")
+	DirAccess.remove_absolute(theirs)
+
+
+## Final review, low: nothing stopped a second home screen on the same settings (started
+## from the desktop while the session runs). Its services would write the same files in
+## turns and restart the saved download queue beside the first.
+func test_a_second_home_screen_steps_aside() -> void:
+	var d := _dir("instance")
+	var lock := d + "/gamecove.pid"
+	var proc := d + "/proc"
+	for p in [["100", "gamecove.x86_64"], ["200", "gamecove.x86_64"], ["300", "bash"]]:
+		DirAccess.make_dir_recursive_absolute(proc + "/" + p[0])
+		var f := FileAccess.open(proc + "/" + p[0] + "/comm", FileAccess.WRITE)
+		f.store_string(p[1] + "\n")
+		f.close()
+	eq(SettingsFile.claim_instance(lock, 100, proc), 0, "the first one holds the lock")
+	eq(FileAccess.get_file_as_string(lock).strip_edges(), "100", "its pid is written down")
+	eq(SettingsFile.claim_instance(lock, 100, proc), 0, "asking again is fine")
+	eq(SettingsFile.claim_instance(lock, 200, proc), 100, "a second one is told who runs already")
+	eq(FileAccess.get_file_as_string(lock).strip_edges(), "100", "and doesn't take the lock")
+	# the first one is gone (crashed: nothing removed the file)
+	DirAccess.remove_absolute(proc + "/100/comm")
+	DirAccess.remove_absolute(proc + "/100")
+	eq(SettingsFile.claim_instance(lock, 200, proc), 0, "a dead holder's lock is taken over")
+	# the pid in the file now belongs to some other program
+	var f2 := FileAccess.open(lock, FileAccess.WRITE)
+	f2.store_string("300\n")
+	f2.close()
+	eq(SettingsFile.claim_instance(lock, 200, proc), 0, "a reused pid that isn't GameCove doesn't block")
+	# only the home screen claims: helpers and the installer run next to it by design
+	var keep: Variant = RunMode.test_args
+	RunMode.reset_for_tests()
+	RunMode.lock_path = lock
+	RunMode.proc_root = proc
+	RunMode.pid = 200
+	f2 = FileAccess.open(lock, FileAccess.WRITE)
+	f2.store_string("300\n")
+	f2.close()
+	DirAccess.make_dir_recursive_absolute(proc + "/100")
+	f2 = FileAccess.open(proc + "/100/comm", FileAccess.WRITE)
+	f2.store_string("gamecove.x86_64\n")
+	f2.close()
+	f2 = FileAccess.open(lock, FileAccess.WRITE)
+	f2.store_string("100\n")
+	f2.close()
+	for args in [["--installer"], ["--controls", "status"], ["--prefetch-photo"], ["--restore-baseline"]]:
+		RunMode.test_args = args
+		RunMode.reset_for_tests(false)
+		ok(not RunMode.second_instance(), "%s runs next to the home screen" % args[0])
+	RunMode.test_args = []
+	RunMode.reset_for_tests(false)
+	ok(RunMode.second_instance(), "a second home screen is one too many")
+	ok(RunMode.helper(), "and starts no services, like a helper run")
+	eq(FileAccess.get_file_as_string(lock).strip_edges(), "100", "the lock stays the first one's")
+	RunMode.test_args = keep
+	RunMode.reset_for_tests()

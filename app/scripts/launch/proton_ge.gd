@@ -259,9 +259,14 @@ static func _discard(dir: String, name: String, group := "") -> bool:
 	return true
 
 
-## Deletes a folder tree; a symlink inside is removed as a link, never followed.
+## Deletes a folder tree; a symlink is removed as a link, never followed: inside the
+## tree, and when `path` itself is one (a build kept elsewhere and linked into
+## compatibilitytools.d keeps its files).
 ## `group`: give up (false) once that exec_safe stop group is stopped (app exit).
 static func remove_tree(path: String, group := "") -> bool:
+	var parent := DirAccess.open(path.get_base_dir())
+	if parent != null and parent.is_link(path.get_file()):
+		return DirAccess.remove_absolute(path) == OK
 	var d := DirAccess.open(path)
 	if d == null:
 		return not DirAccess.dir_exists_absolute(path)

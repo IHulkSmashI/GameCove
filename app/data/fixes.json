@@ -217,7 +217,7 @@
   {
    "id": "ally-mcu-powersave",
    "title": "Less drain while asleep",
-   "line": "Lets the controller chip power down in sleep. Needs controller firmware 319+ (Ally X 314+); checked first.",
+   "line": "Lets the controller chip power down in sleep. Needs controller firmware 319+ (Ally X 313+); checked first.",
    "symptom": "The Ally loses more battery asleep than it needs to while MCU powersave is off.",
    "kind": "file",
    "password": "admin",

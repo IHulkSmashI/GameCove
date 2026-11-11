@@ -18,7 +18,7 @@ const EXPECT := {
 		"controller.gyro": true, "controller.led_effect": true, "display.refresh_rate": true,
 		# SteamOS: no PowerStation or power-profiles-daemon; the helper's admin verbs need Desktop Mode
 		"power.boost": "Not available", "power.power_mode": "No power-profiles-daemon",
-		"power.smt": "Desktop Mode", "power.cpu_cores": "Desktop Mode", "power.mcu_powersave": "Desktop Mode",
+		"power.smt": "sleep can break", "power.cpu_cores": "Desktop Mode", "power.mcu_powersave": "Desktop Mode",
 		"power.sleep_mode": "Desktop Mode", "controller.trackpad": "no trackpad",
 	},
 	"legion-go-s-bazzite": {

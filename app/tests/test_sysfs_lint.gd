@@ -39,6 +39,9 @@ const REGULAR_FILES := {
 	"res://scripts/device/fixes.gd|old = JSON.parse_string(FileAccess.get_file_as_string(path))": "GameCove's system-snapshot.json",
 	"res://scripts/system/os_info.gd|parse_os_release(FileAccess.get_file_as_string(root + p))": "os-release under /etc or /usr/lib",
 	"res://scripts/system/os_info.gd|_json(FileAccess.get_file_as_string(p))": "a JSON file GameCove ships",
+	"res://scripts/system/settings_file.gd|var text := FileAccess.get_file_as_string(path)": "a settings JSON file",
+	"res://scripts/system/settings_file.gd|var held := FileAccess.get_file_as_string(p)": "GameCove's own pid lock under user://",
+	"res://scripts/steam/steam_config.gd|var pid := FileAccess.get_file_as_string(p).strip_edges()": "Steam's pid file in the home folder",
 }
 
 
@@ -56,7 +59,9 @@ static func problems() -> Array[String]:
 	var out: Array[String] = []
 	for path in _scripts("res://scripts"):
 		var text := FileAccess.get_file_as_string(path)
-		var touches := "\"/sys/" in text or "\"/proc/" in text or "sys_root" in text
+		# proc_root: a /proc that tests swap for a folder (steam_config.gd read comm through one
+		# with get_file_as_string, so a running Steam was never seen on a real system)
+		var touches := "\"/sys/" in text or "\"/proc/" in text or "sys_root" in text or "proc_root" in text
 		var n := 0
 		for line in text.split("\n"):
 			n += 1

@@ -43,9 +43,12 @@ func test_epic_with_legendary() -> void:
 func test_epic_move_copies_then_tells_legendary() -> void:
 	var f := FACTS.duplicate()
 	f["options"] = {"path": "/run/media/deck/SD/Games"}
+	f["same_drive"] = true
 	var p := StoreCommands.plan("move", _epic(true), TOOLS, f)
-	eq(_cmd(p, 0), "mv -T -- /home/u/Games/epic/Hades /run/media/deck/SD/Games/Hades", "mv works across drives")
+	eq(_cmd(p, 0), "mv -T -- /home/u/Games/epic/Hades /run/media/deck/SD/Games/Hades", "same drive: one rename")
 	eq(_cmd(p, 1), "/usr/bin/legendary move Quail /run/media/deck/SD/Games --skip-move", "legendary records it")
+	ok(p["steps"][0]["no_stop"] and p["steps"][1]["no_stop"], "neither can be stopped half way")
+	eq(p["steps"][0]["done_if"], {"gone": "/home/u/Games/epic/Hades", "there": "/run/media/deck/SD/Games/Hades"}, "and a restart knows the rename happened")
 	ok(not StoreCommands.plan("move", _epic(true), TOOLS, FACTS)["ok"], "no folder: refused")
 
 
@@ -145,3 +148,39 @@ func test_gog_record_and_scan() -> void:
 	StoreCommands.write_gog_record(home, StoreCommands.gog_record_with(list, {"appName": "2"}, true))
 	eq(Gog.scan(home).size(), 1, "removed")
 	TempTree.remove_tree(home)
+
+
+## Final review, low: a move was one `mv`. Across drives that is a copy and then a delete,
+## which can't be picked up again: paused or cancelled it left half a game in the new
+## place (and the next try refused: "already a folder there"), or half of one in each.
+## Across drives the plan is now steps that can each be run again.
+func test_move_across_drives_is_a_copy_a_rename_and_a_delete() -> void:
+	var f := FACTS.duplicate()
+	f["options"] = {"path": "/run/media/deck/SD/Games"}
+	f["same_drive"] = false
+	var p := StoreCommands.plan("move", _epic(true), TOOLS, f)
+	var part: String = "/run/media/deck/SD/Games/Hades" + StoreCommands.MOVING_SUFFIX
+	eq(_cmd(p, 0), "cp -a -T -- /home/u/Games/epic/Hades " + part, "copied next to where it goes")
+	eq(_cmd(p, 1), "mv -T -- %s /run/media/deck/SD/Games/Hades" % part, "then one rename on that drive")
+	eq(_cmd(p, 2), "/usr/bin/legendary move Quail /run/media/deck/SD/Games --skip-move", "legendary records it")
+	eq(_cmd(p, 3), "rm -rf -- /home/u/Games/epic/Hades", "and only then the old folder goes")
+	ok(not p["steps"][0].get("no_stop", false), "the copy can be paused or cancelled")
+	eq(p["steps"][0]["cleanup"], ["rm", "-rf", "--", part], "a cancelled copy is cleared away")
+	ok(p["steps"][1]["no_stop"] and p["steps"][2]["no_stop"] and p["steps"][3]["no_stop"], "from the rename on it runs to the end")
+	eq(p["steps"][1]["done_if"], {"gone": part, "there": "/run/media/deck/SD/Games/Hades"}, "a restart knows the rename happened")
+	eq(p["finalize"]["new_path"], "/run/media/deck/SD/Games/Hades", "where it ends up")
+	# GOG (ours): the same, with our record updated at the end
+	var g := {"store": "gog", "id": "1207", "title": "W", "installed": true, "source": "gamecove", "platform": "windows",
+		"install_path": "/home/u/Games/gog/Witcher", "heroic_root": "/h"}
+	var gf := f.duplicate()
+	gf["gog_auth_exists"] = true
+	var gp := StoreCommands.plan("move", g, TOOLS, gf)
+	eq(_cmd(gp, 0), "cp -a -T -- /home/u/Games/gog/Witcher /run/media/deck/SD/Games/Witcher" + StoreCommands.MOVING_SUFFIX, "GOG copies too")
+	eq(_cmd(gp, 2), "rm -rf -- /home/u/Games/gog/Witcher", "then deletes")
+	eq(gp["finalize"]["gog_record"], "move", "and our record follows")
+	# a folder that can't be a game's install is never handed to rm
+	var odd := _epic(true)
+	odd["install_path"] = "/home/u"
+	ok(not StoreCommands.plan("move", odd, TOOLS, f)["ok"], "the home folder is never 'moved'")
+	odd["install_path"] = "/Hades"
+	ok(not StoreCommands.plan("move", odd, TOOLS, f)["ok"], "nor a folder at the top of the disk")

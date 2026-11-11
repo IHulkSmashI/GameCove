@@ -37,7 +37,8 @@ static func comms(triples: Array, proc_root := "/proc") -> Dictionary:
 		var pid := int(triples[i])
 		var p := proc_root.path_join(str(pid)).path_join("comm")
 		if not out.has(pid) and FileAccess.file_exists(p):
-			out[pid] = FileAccess.get_file_as_string(p).strip_edges()
+			# read to the real end: /proc files report a size of 0 (steam_config.gd read_proc)
+			out[pid] = preload("res://scripts/steam/steam_config.gd").read_proc(p).strip_edges()
 		i += 3
 	return out
 
