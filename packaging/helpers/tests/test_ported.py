@@ -369,8 +369,44 @@ def _own_cabinet(tmp_path, monkeypatch, present=True):
         _w(p, "gamecove-lzms")
     monkeypatch.setenv("GAMECOVE_CABINET", str(p))   # GameCove: own_cabinet() looks here first
     monkeypatch.setattr(optiscaler, "CABINET_PLACES", ())
-    monkeypatch.setattr(optiscaler, "SYSTEM_CABINET", str(p))
+    for k in ("SYSTEM_CABINET", "PACKAGE_CABINET", "CHECKOUT_CABINET"):
+        monkeypatch.setattr(optiscaler, k, str(p))
     return p
+
+
+def test_cabinet_comes_from_the_package_on_a_clean_install(tmp_path, monkeypatch):
+    """FSR 4.1.2 on XMX with nothing but GameCove installed: no GAMECOVE_CABINET, no ClawDeck, nothing in the data
+    folder. The DLL is the one the package ships (bin/ two folders above the helper, /usr/lib/gamecove/bin)."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    monkeypatch.delenv("GAMECOVE_CABINET", raising=False)
+    home = str(tmp_path / "home")
+    # the rule itself: <prefix>/lib/gamecove/helpers/gamecove_upscale/optiscaler.py -> <prefix>/lib/gamecove/bin
+    here = os.path.dirname(os.path.realpath(optiscaler.__file__))
+    assert optiscaler.PACKAGE_CABINET == os.path.join(os.path.dirname(os.path.dirname(here)), "bin", "cabinet.dll")
+    assert optiscaler.SYSTEM_CABINET == "/usr/lib/gamecove/bin/cabinet.dll"
+    pkg = tmp_path / "usr" / "lib" / "gamecove" / "bin" / "cabinet.dll"
+    for k in ("SYSTEM_CABINET", "CHECKOUT_CABINET"):
+        monkeypatch.setattr(optiscaler, k, str(tmp_path / "absent" / k))
+    monkeypatch.setattr(optiscaler, "PACKAGE_CABINET", str(pkg))
+    x = tmp_path / "home" / "fsr4-xmx"
+    _w(x / "amd_fidelityfx_upscaler_dx12.dll", "nitec")
+    _w(x / "fsr-original.dll", "o")
+    assert any("cabinet.dll" in m for m in optiscaler.fsr4_xmx_missing(home))      # not shipped: refused
+    _w(pkg, "packaged-lzms")
+    assert optiscaler.own_cabinet(home) == str(pkg) and optiscaler.fsr4_xmx_missing(home) == []
+    # a stale copy in the data folder or ClawDeck's never wins over the packaged one
+    _w(tmp_path / "home" / ".local/share/gamecove/cabinet.dll", "stale")
+    _w(tmp_path / "home" / "homebrew/plugins/ClawDeck/bin/cabinet.dll", "clawdeck")
+    assert optiscaler.own_cabinet(home) == str(pkg)
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x")
+    assert optiscaler.patch(home, str(g), "0.9.4", {}, "fsr4_xmx", fsr4_xmx=True)["ok"]
+    assert (g / "cabinet.dll").read_text().strip() == "packaged-lzms"
+    # without the package's copy an installed ClawDeck's still works (the same bytes)
+    os.remove(pkg)
+    assert optiscaler.own_cabinet(home).endswith(".local/share/gamecove/cabinet.dll")
 
 
 def test_fsr4_xmx_never_asks_the_user_for_cabinet_dll(tmp_path, monkeypatch):

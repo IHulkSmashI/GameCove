@@ -26,6 +26,31 @@ jobs:
       - run: pip install --require-hashes --no-deps -r ../tools/ci/requirements-pytest.txt
       - run: python -m pytest -q
 
+  upscale-helper:
+    # The per-game upscaling helper (packaging/helpers) and, with ClawDeck checked out at the commit GameCove's
+    # Intel XMX path is matched against, tests/test_clawdeck_parity.py: the same fixture game through both projects'
+    # generators and launch wrappers must give the same files and the same environment.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: IHulkSmashI/clawdeck
+          ref: cf349a697b738a3456dc7c1c6c6ac147fbd754ba # ClawDeck main, 2026-11-08 (v0.2.0-beta.8)
+          path: clawdeck-ref
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - run: pip install --require-hashes --no-deps -r tools/ci/requirements-pytest.txt
+      - name: Helper tests with the ClawDeck comparison (none of its tests may be skipped)
+        working-directory: packaging/helpers
+        env:
+          CLAWDECK_SRC: ${{ github.workspace }}/clawdeck-ref
+        run: |
+          python -m pytest -q -rs | tee out.txt
+          ! grep -q "CLAWDECK_SRC is not a ClawDeck checkout" out.txt
+
   device-photos:
     # Offline checks of app/data/device_photos.json on every push: every row has a picture
     # source, each maker image link sits on that maker's own site (its _makers rules), family
@@ -103,6 +128,24 @@ jobs:
         run: ./godot --headless --path app --import > /dev/null 2>&1
       - name: End-to-end suite (seed = run number, printed for replay)
         run: GODOT="$PWD/godot" python3 -I app/tests/e2e/run.py --iters 5 --seed "${{ github.run_number }}"
+
+  cabinet:
+    # tools/cabinet-lzms: the LZMS cabinet.dll for FSR 4 on XMX, cross-compiled and tested under Wine with data
+    # packed by wimlib's own LZMS compressor (byte for byte), its export table and forwards checked. The release
+    # workflow builds the same with pinned package versions and requires the bytes in cabinet.sha256.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain (mingw-w64, Wine, wimlib)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends gcc-mingw-w64-x86-64 wine wine64 libwine libwim-dev
+      - run: bash tools/cabinet-lzms/build.sh
+      - name: Test under Wine
+        run: bash tools/cabinet-lzms/test/run.sh
+      - name: Same bytes as the reviewed build
+        run: cd tools/cabinet-lzms/out && sha256sum -c ../cabinet.sha256
 
   shell:
     runs-on: ubuntu-latest
