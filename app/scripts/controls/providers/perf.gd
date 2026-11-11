@@ -75,6 +75,8 @@ func setup(c: Dictionary) -> void:
 		launcher.env_hooks.append(launch_env_hook)
 	if launcher != null and "frame_gen_hooks" in launcher:
 		launcher.frame_gen_hooks.append(frame_gen_on)
+	if launcher != null and "native_hooks" in launcher:
+		launcher.native_hooks.append(upscale_native)
 	refresh_device_files()
 	if real:
 		_schedule_background_check(UpscaleUpdates.FIRST_DELAY_S)
@@ -538,7 +540,15 @@ func _set_mode(mode: String) -> bool:
 	_prepared[game_key()] = true
 	if mode == "native":
 		_sv("frame_gen", 0)
+	if bool(r.get("ok", false)):
+		_sv("upscale_native", true if mode == "native" else null)
 	return _after_upscale(r, true)
+
+
+## Launcher.native_hooks: Native was picked for this game, so its launch swaps
+## nothing (no Proton FSR 4 upgrade either). Any pick afterwards clears it.
+func upscale_native(key: String) -> bool:
+	return store != null and bool(store.get_value(key, "upscale_native", false))
 
 
 ## Sets the open game up ahead of its first start ("Best for this handheld"),
@@ -645,14 +655,22 @@ func _upscale_controls() -> Array:
 			"kind": "action", "per_game": false, "apply_order": 4,
 			"affects": ["perf.upscale_mode", "perf.upscaler", "perf.frame_gen", "perf.upscale_active", "perf.upscale_menu"]},
 			_offer_detect, func(): return null,
-			func(_v): return _after_upscale(_upscale_run("opt-in", _ac_args()), true)),
+			func(_v):
+				if not _after_upscale(_upscale_run("opt-in", _ac_args()), true):
+					return false
+				_sv("upscale_native", null)
+				return true),
 		_mk({"id": "perf.upscaler", "title": "Upscaler",
 			"help": "Pick one yourself. The game keeps its own menu: choose DLSS or FSR there and it becomes this.",
 			"kind": "choice", "options": _opts(Upscale.upscalers(g), Upscale.LABELS, Upscale.upscaler_help(g)), "default_value": "own",
 			"apply_order": 3},
 			_upscale_reason,
 			func(): return str(upscale_status().get("upscaler", "own")) if upscale_status().get("ok", false) else null,
-			func(v): return _after_upscale(_upscale_run("choose", ["--upscaler", v, "--fg", str(int(upscale_status().get("fg", 0)))] + _gen_args() + _ac_args()))),
+			func(v):
+				if not _after_upscale(_upscale_run("choose", ["--upscaler", v, "--fg", str(int(upscale_status().get("fg", 0)))] + _gen_args() + _ac_args())):
+					return false
+				_sv("upscale_native", null)
+				return true),
 		_mk({"id": "perf.frame_gen", "title": "Frame generation",
 			"help": _fg_help(g),
 			"kind": "choice", "options": _opts(Upscale.frame_gens(g), Upscale.FG_LABELS, Upscale.FG_HELP),

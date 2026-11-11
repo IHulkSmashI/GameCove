@@ -892,6 +892,7 @@ func test_native_takes_everything_out_in_one_press() -> void:
 	var last: Array = _calls_with(runner, "mode")
 	ok(last.size() == 1 and "--mode native" in last[0] and "--key epic:abc" in last[0], "one helper call: " + str(last))
 	eq(w["p"].launch_env_hook("epic:abc", EPIC).has("WINEDLLOVERRIDES"), false, "nothing of ours reaches the next start")
+	ok(w["p"].upscale_native("epic:abc"), "the launcher is told Native: no Proton FSR 4 upgrade either")
 	reg.detect_all()
 	eq(reg.control("perf.upscale_mode").value, "native", "stays Native")
 	eq(reg.control("perf.upscaler").value, "own", "the game's own")

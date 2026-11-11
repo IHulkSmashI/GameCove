@@ -38,6 +38,9 @@ var env_hooks: Array[Callable] = []
 ## `hook(key) -> bool`: is frame generation on for this game outside the launch
 ## settings (lsfg-vk, OptiScaler)? Any true forces low latency on at launch.
 var frame_gen_hooks: Array[Callable] = []
+## `hook(key) -> bool`: did the player pick Native for this game's upscaling
+## (perf controls)? Then nothing at launch swaps the game's upscaler.
+var native_hooks: Array[Callable] = []
 
 var _games := {}
 ## Frame rates measured per device: {device id: {game key: fps}} (a game runs
@@ -272,6 +275,7 @@ func launch_plan(game: Dictionary) -> Dictionary:
 		"base_fps": int(game.get("base_fps", base_fps(key))),
 		"extra_env": game.get("extra_env", {}),
 		"frame_gen_on": frame_gen_elsewhere(key),
+		"upscale_native": upscale_native(key),
 	}
 	var plan := LaunchEnv.compose(settings_for(key), device, proton, host_facts(), facts, {"indicator": show_indicator})
 	for hook in env_hooks:
@@ -281,6 +285,14 @@ func launch_plan(game: Dictionary) -> Dictionary:
 				plan["env"] = LaunchEnv.merge(plan["env"], more)
 	plan["proton"] = proton
 	return plan
+
+
+## True when a native_hooks hook says the player picked Native for `key`.
+func upscale_native(key: String) -> bool:
+	for hook in native_hooks:
+		if hook.is_valid() and bool(hook.call(key)):
+			return true
+	return false
 
 
 ## True when a frame_gen_hooks hook says frame generation is on for `key`.
