@@ -307,3 +307,154 @@ func test_play_quick_menu_every_tab_exit_and_play_time() -> void:
 		"play time recorded: Hades is Home's hero now (%s)" % main().home.hero_game.get("key", ""))
 	check("after the game")
 	await without_stores()
+
+
+# ---- messing around with the library: order, search, favourites, collections, hidden ---------
+
+func shown_keys() -> Array:
+	return main().library_screen.tiles().map(func(t): return str(t.game["key"]))
+
+
+func shown_titles() -> Array:
+	return main().library_screen.tiles().map(func(t): return str(t.game["title"]))
+
+
+## Steers to `key`'s tile in the Library and presses Start (the game's options).
+func tile_options(key: String) -> bool:
+	if not await nav_to(func(): return lib_tile(key), 80):
+		return false
+	await start_btn()
+	await w.frames(3)
+	return sheet_open()
+
+
+func test_library_order_search_favourite_collection_hide() -> void:
+	await with_stores()
+	var lib: Node = w.autoload("Library")
+	var ls: Control = main().library_screen
+	ok(await go_tab("library"), "the Library")
+	var n_all := shown_keys().size()
+	ok(n_all >= 8, "every game (%d)" % n_all)
+	# X cycles the order and says so
+	var sort0: String = ls.sort
+	await x()
+	await w.frames(3)
+	ok(ls.sort != sort0, "X changes the order (%s -> %s)" % [sort0, ls.sort])
+	ok(shows("Sorted by", main().toasts), "a toast names it (%s)" % toasts())
+	# View: the Filter sheet, Order, A to Z
+	await view_btn()
+	ok(sheet_open(), "View opens the Filter sheet")
+	ok(await choose("+sort"), "Order")
+	ok(sheet_open() and "az" in sheet_ids(), "the orders (%s)" % [sheet_ids()])
+	ok(await choose("az"), "A to Z")
+	eq(ls.sort, "az", "A to Z picked")
+	var titles := shown_titles()
+	var sorted := titles.duplicate()
+	sorted.sort_custom(func(p, q): return str(p).naturalnocasecmp_to(str(q)) < 0)
+	eq(titles, sorted, "tiles in A to Z order")
+	ok(not sheet_open(), "the sheet closes after a pick")
+	# Y: search, typed on a physical keyboard
+	await y()
+	await w.frames(2)
+	ok(ls.searching(), "Y opens the search keyboard")
+	await type_keys("hol")
+	await w.frames(3)
+	eq(shown_keys(), ["steam:367520"], "typing 'hol' leaves Hollow Knight")
+	await key(KEY_ENTER)
+	await w.frames(3)
+	ok(not ls.searching(), "Enter closes the keyboard")
+	ok(lib_tile("steam:367520") != null and focused_in(lib_tile("steam:367520")), "focus on the one result")
+	# Y again: delete with X, type with the D-pad on the on-screen keys
+	await y()
+	await w.frames(2)
+	for i in 3:
+		await x()
+	eq(ls.query, "", "X deletes what was typed")
+	ok(await osk_type(ls.keyboard, "cel"), "D-pad and A on the on-screen keys")
+	await w.frames(3)
+	eq(shown_keys(), ["epic:Quail"], "'cel' finds Celeste")
+	for i in 3:
+		await x()
+	await b()
+	await w.frames(3)
+	ok(not ls.searching(), "B closes the keyboard (Done)")
+	eq(shown_keys().size(), n_all, "an empty search shows everything again")
+	# Start on a tile: favourite
+	ok(await tile_options("epic:Quail"), "Start on Celeste opens its options")
+	eq(sheet_ids().slice(0, 4), ["page", "favourite", "collections", "hide"], "its options")
+	ok(await choose("favourite"), "Add to favourites")
+	ok(lib.collections.is_favourite("epic:Quail"), "Celeste is a favourite (saved)")
+	ok(shows("Celeste is in your favourites", main().toasts), "a toast says so (%s)" % toasts())
+	ok(lib_tile("epic:Quail") != null and focused_in(lib_tile("epic:Quail")), "focus back on its tile after the pick")
+	ok(main().home.shelf_ids().has("favourites"), "Home has a Favourites shelf")
+	# a new collection, named on the keyboard
+	ok(await tile_options("epic:Quail"), "Start again")
+	ok(await choose("collections"), "Add to a collection")
+	ok(await choose("+new"), "New collection")
+	ok(main().game_actions._kb_open, "the keyboard opens for its name")
+	await type_keys("Couch")
+	await key(KEY_ENTER)
+	await w.frames(4)
+	var cols: Array = lib.collections.collections().filter(func(c): return str(c["name"]).to_lower() == "couch")
+	eq(cols.size(), 1, "the collection is made (%s)" % [lib.collections.collections().map(func(c): return c["name"])])
+	var cid: String = str(cols[0]["id"]) if not cols.is_empty() else ""
+	ok(cid != "" and "epic:Quail" in lib.collections.find(cid)["games"], "with Celeste in it (%s; %s)" % [cols, toasts()])
+	# Hollow Knight joins it too
+	ok(await tile_options("steam:367520"), "Start on Hollow Knight")
+	ok(await choose("collections"), "Add to a collection")
+	ok(await choose(cid), "Couch")
+	ok("steam:367520" in lib.collections.find(cid)["games"], "Hollow Knight added")
+	# View: the collection, then Favourites, then everything
+	await view_btn()
+	ok(await choose("collection:" + cid), "View > Couch")
+	var in_col := shown_keys()
+	in_col.sort()
+	eq(in_col, ["epic:Quail", "steam:367520"], "the collection's games")
+	await view_btn()
+	ok(await choose("favourites"), "View > Favourites")
+	eq(shown_keys(), ["epic:Quail"], "just the favourite")
+	await view_btn()
+	ok(await choose(""), "View > All games")
+	eq(shown_keys().size(), n_all, "everything again")
+	# hide Hades, find it under Hidden, show it again
+	ok(await tile_options("steam:1145360"), "Start on Hades")
+	ok(await choose("hide"), "Hide")
+	ok(lib.collections.is_hidden("steam:1145360"), "hidden (saved)")
+	ok(not "steam:1145360" in shown_keys(), "it leaves the grid")
+	ok(focus() != null and focus_on_screen() == "", "focus stays on screen after the tile went (%s)" % focus_on_screen())
+	await view_btn()
+	ok(await choose("hidden"), "View > Hidden games")
+	eq(shown_keys(), ["steam:1145360"], "Hades under Hidden")
+	ok(await tile_options("steam:1145360"), "Start on it")
+	ok(await choose("unhide"), "Show again")
+	ok(not lib.collections.is_hidden("steam:1145360"), "shown again (saved)")
+	await view_btn()
+	ok(await choose(""), "All games")
+	ok("steam:1145360" in shown_keys(), "Hades back in the grid")
+	# Manage collections: rename, then delete (No first)
+	await view_btn()
+	ok(await choose("+manage"), "Manage collections")
+	ok(await choose(cid), "Couch")
+	ok(await choose("rename"), "Rename")
+	for i in 5:
+		await key(KEY_BACKSPACE)
+	await type_keys("Sofa")
+	await key(KEY_ENTER)
+	await w.frames(3)
+	eq(str(lib.collections.find(cid).get("name", "")).to_lower(), "sofa", "renamed")
+	await view_btn()
+	ok(await choose("+manage"), "Manage again")
+	ok(await choose(cid), "Sofa")
+	ok(await choose("delete"), "Delete")
+	ok(focused_in(sheet_row("no")), "asks, focus on No")
+	ok(await choose("yes"), "Yes, delete")
+	ok(lib.collections.find(cid).is_empty(), "gone")
+	ok("epic:Quail" in shown_keys(), "its games stay in the library")
+	# LT / RT jump by letter in A to Z
+	var before := focus()
+	await rt()
+	await w.frames(2)
+	ok(focus() != null and focus_on_screen() == "", "RT jumps to the next letter, focus on screen")
+	ok(before != focus() or shown_keys().size() < 2, "it moved")
+	check("library journey")
+	await without_stores()

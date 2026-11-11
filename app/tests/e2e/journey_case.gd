@@ -345,6 +345,11 @@ func game(key: String) -> Dictionary:
 func with_stores() -> void:
 	stores = StoresWorld.new(w)
 	stores.attach()
+	# favourites, hidden games and collections in the fake home (reset with it)
+	var lib: Node = w.autoload("Library")
+	DirAccess.make_dir_recursive_absolute(w.home.path_join(".local/share/gamecove-e2e"))
+	lib.collections.path = w.home.path_join(".local/share/gamecove-e2e/collections.json")
+	lib.collections.reload()
 	await stores.rescan()
 	await w.idle()
 
