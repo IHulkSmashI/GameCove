@@ -22,25 +22,6 @@ name: Nightly upscalers index
 #
 # Promotion (review 2, problem 8): only official upstream repos (mirror.UPSTREAM), only full releases at least
 # 72 hours old (rolling files and git files: unchanged for 72 hours); XMX's scripts must match versions.json.
-#
-# What is tracked, and how each reaches a device:
-#   mirrored and promoted by build.py (72 hour rule, sha256 pins, devices adopt by themselves and keep the version
-#   before for rollback):  OptiScaler stable, the OptiScaler v10 nightly, OptiPatcher, fakenvapi, the XeSS XMX driver
-#   (xess-xmx-linux), the REFramework fork, AMD's FSR upscaler (FidelityFX SDK), the FSR 4.1.2 XMX files
-#   (ClawDeck's fsr4-xmx-files branch), and the per-game list generated from OptiScaler's sources and wiki
-#   (gen_games.py, from commits at least 72 hours old).
-#   watched by watch.py (a person looks before GameCove changes; an issue is opened):  Intel's XeSS / XeSS-FG /
-#   XeLL releases, dlssg-to-fsr3, OptiPatcher's tags, Proton-CachyOS, GE-Proton and Valve's Proton, the owner's
-#   xess-xmx-linux fork, lsfg-vk (never mirrored: its licence asks that it come from its author), the Decky plugins.
-# Before anything is signed, smoke.py checks what is new (64-bit DLLs with the FidelityFX entry points, the XMX
-# build still importing Cabinet.dll, OptiScaler's archive layout, every setting we write still in its ini, the game
-# list): when it fails, nothing is published, devices keep last night's signed index, and the "report" job opens an
-# issue. tools/upscalers/withdrawn.json is the kill switch: a component named there rides in the signed index and
-# every device takes its files out of use.
-#
-# Moving to the data repo: nothing here names a repository. Every URL and identity comes from github.repository
-# (and, on devices, from mirror.py's REPO), so the file works unchanged from another repository once the tools are
-# checked out next to it.
 
 on:
   schedule:
@@ -61,8 +42,6 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-    outputs:
-      smoke: ${{ steps.smoke.outputs.ok }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -104,8 +83,6 @@ jobs:
               --jq ".[] | [\"$tag\", .name, (.size | tostring)] | @tsv" >>prev/assets.tsv
           done
           echo "files on the mirror: $(wc -l <prev/assets.tsv)"
-          # what the upstream watch saw last night (not signed: it only decides what the issue says)
-          gh release download upscalers -p watch.json -D prev 2>/dev/null || echo "no watch.json yet: the first run reports nothing"
           if gh release download upscalers -p upscalers.json -p upscalers.json.sigstore.json -D prev 2>/dev/null; then
             ident="(?i)^https://github\.com/$(printf '%s' "$REPO" | sed 's/[.]/\\./g')/\.github/workflows/upscalers\.yml@refs/heads/main$"
             if ! cosign verify-blob --bundle prev/upscalers.json.sigstore.json \
@@ -115,62 +92,21 @@ jobs:
               rm -f prev/upscalers.json
             fi
           fi
-      - name: Per-game list from OptiScaler's own sources and wiki, as they were 72 hours ago
-        run: |
-          mkdir -p src gen report
-          if git clone -q --filter=blob:none https://github.com/optiscaler/OptiScaler src/optiscaler &&
-            git clone -q https://github.com/optiscaler/OptiScaler.wiki.git src/wiki; then
-            for d in src/optiscaler src/wiki; do
-              old="$(git -C "$d" rev-list -1 --before='72 hours ago' HEAD)"
-              git -C "$d" -c advice.detachedHead=false checkout -q "$old"
-            done
-            python tools/upscalers/gen_games.py --optiscaler src/optiscaler --wiki src/wiki \
-              --commit "$(git -C src/optiscaler rev-parse HEAD)" --ini-version 0.9.4 \
-              --ini packaging/helpers/tests/fixtures/OptiScaler-0.9.4.keys.ini --out gen/games.json ||
-              { echo "::warning::the game list couldn't be generated (OptiScaler's sources changed shape); last night's list stays"; rm -f gen/games.json; }
-          else
-            echo "::warning::OptiScaler's sources couldn't be cloned; last night's game list stays"
-          fi
       - name: Build (newest upstream builds and the tested pins; a failing upstream keeps its previous entry)
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           python tools/upscalers/build.py --versions packaging/helpers/gamecove_upscale/data/versions.json \
-            --out dist --have prev/assets.tsv --previous prev/upscalers.json --games gen/games.json --report report/build.json
-      - name: Smoke check (a build that changed shape is never signed; devices keep last night's index)
-        id: smoke
-        run: |
-          if python tools/upscalers/smoke.py dist --games gen/games.json --report report/smoke.json; then
-            echo "ok=true" >>"$GITHUB_OUTPUT"
-          else
-            echo "ok=false" >>"$GITHUB_OUTPUT"
-            echo "::error::smoke check failed: nothing is published tonight"
-          fi
-      - name: Upstream watch (what moved since last night, for the issue)
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          python tools/upscalers/watch.py --previous prev/watch.json --out report/watch.json \
-            --build-report report/build.json --smoke-report report/smoke.json --issue report/issue.md
-          cp report/watch.json dist/watch.json
+            --out dist --have prev/assets.tsv --previous prev/upscalers.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: steps.smoke.outputs.ok == 'true'
         with:
           name: upscalers-dist
           path: dist/
           if-no-files-found: error
           retention-days: 3
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: upscalers-report
-          path: report/
-          if-no-files-found: ignore
-          retention-days: 14
 
   publish:
     needs: build
-    if: needs.build.outputs.smoke == 'true'
     # runs in the "nightly" environment: only main may deploy to it, no daily approval (docs/RELEASING.md)
     environment: nightly
     runs-on: ubuntu-latest
@@ -235,45 +171,4 @@ jobs:
             echo "uploading $tag/$name"
             gh release upload "$tag" "dist/$path"
           done <dist/upload-plan.tsv
-          gh release upload upscalers dist/watch.json dist/upscalers.json dist/upscalers.json.sigstore.json dist/upscalers.json.sha256 --clobber
-
-  report:
-    # an upstream moved, couldn't be read, or tonight's build failed its smoke check: one open issue says what,
-    # so a person looks. No code of ours runs here and nothing is signed: gh only.
-    needs: build
-    if: always() && needs.build.result != 'skipped'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      issues: write
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: upscalers-report
-          path: report
-        continue-on-error: true
-      - name: Open or update the issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          BUILD_RESULT: ${{ needs.build.result }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          body=report/issue.md
-          mkdir -p report
-          [ -f "$body" ] || : >"$body"
-          if [ "$BUILD_RESULT" != success ]; then
-            printf '\n### The nightly build itself failed\n\nDevices keep the last signed index. Run: %s\n' "$RUN_URL" >>"$body"
-          fi
-          if [ ! -s "$body" ]; then
-            echo "nothing moved, nothing failed: no issue"
-            exit 0
-          fi
-          printf '\nRun: %s\n' "$RUN_URL" >>"$body"
-          title="Upscalers nightly: an upstream moved or a check failed"
-          open="$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
-          if [ -n "$open" ]; then
-            gh issue comment "$open" --body-file "$body"
-          else
-            gh issue create --title "$title" --body-file "$body"
-          fi
+          gh release upload upscalers dist/upscalers.json dist/upscalers.json.sigstore.json dist/upscalers.json.sha256 --clobber

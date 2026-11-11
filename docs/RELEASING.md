@@ -100,12 +100,12 @@ environments.
   (publish off) builds everything and runs every check except tagging, signing and publishing.
 - `firmware.yml`, `upscalers.yml`: the build job is read-only with no OIDC; the publish job runs only pinned cosign,
   `gh` and standard-library checks. `upscalers.yml`'s publish job re-hashes every planned file and re-checks the
-  index (official upstream repositories only) with `tools/upscalers/check_plan.py` before signing. Its build job
-  also makes the per-game list from OptiScaler's sources as they were 72 hours ago, runs `tools/upscalers/smoke.py`
-  over what is new (the publish job only runs when it passed, so devices keep last night's signed index otherwise)
-  and `tools/upscalers/watch.py` over the upstreams a person has to look at; a third job, `report`, has
-  `issues: write`, runs no code of ours, and opens or updates one issue when something moved or a check failed.
+  index (official upstream repositories only) with `tools/upscalers/check_plan.py` before signing. The nightly's
+  newer steps live in the data repo's `upscalers.yml` (GameCove-data, branch `upscalers-smoke-watch` until it is
+  merged there): the per-game list from OptiScaler's sources as they were 72 hours ago (`tools/upscalers/gen_games.py`),
+  `tools/upscalers/smoke.py` over what is new (its publish job only runs when it passed, so devices keep last night's
+  signed index otherwise), `tools/upscalers/watch.py` over the upstreams a person has to look at, and a `report` job
+  with `issues: write` and no code that opens or updates one issue when something moved or a check failed.
   `tools/upscalers/withdrawn.json` is the kill switch: a component named there rides in the signed index and every
-  device stops using its files. The workflow names no repository (everything comes from `github.repository`), so it
-  moves to the data repo unchanged.
+  device stops using its files.
 - `gamedb.yml`, `device-photos.yml`: the same build/publish split, without signing.

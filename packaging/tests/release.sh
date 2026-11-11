@@ -315,33 +315,8 @@ assert "schedule" in on and "workflow_dispatch" in on, "nightly and by hand (gh 
 assert doc.get("permissions") == {}, "least privilege: nothing at the top level"
 jobs = doc["jobs"]
 # review problem 2 pattern: build (tests, builder, third-party downloads) read-only; publish signs and uploads
-assert list(jobs) == ["build", "publish", "report"], list(jobs)
+assert list(jobs) == ["build", "publish"], list(jobs)
 b, p = jobs["build"], jobs["publish"]
-# the smoke check gates the signature: publish runs only when it passed, and the build never uploads dist/ otherwise
-assert b.get("outputs") == {"smoke": "${{ steps.smoke.outputs.ok }}"} and p.get("if") == "needs.build.outputs.smoke == 'true'", "publish only after the smoke check"
-names = [x.get("name", "") for x in b["steps"]]
-order = [next(i for i, n in enumerate(names) if n.startswith(w)) for w in ("Per-game list", "Build (", "Smoke check", "Upstream watch")]
-assert order == sorted(order), "game list, build, smoke check, watch: in that order"
-dist_up = [x for x in b["steps"] if x.get("with", {}).get("name") == "upscalers-dist"]
-assert len(dist_up) == 1 and dist_up[0].get("if") == "steps.smoke.outputs.ok == 'true'", "dist/ is handed over only after the smoke check"
-smoke = next(x["run"] for x in b["steps"] if x.get("name", "").startswith("Smoke check"))
-assert "tools/upscalers/smoke.py dist" in smoke and "ok=false" in smoke
-gen = next(x["run"] for x in b["steps"] if x.get("name", "").startswith("Per-game list"))
-assert gen.count("--before='72 hours ago'") == 1 and "for d in src/optiscaler src/wiki" in gen, "the game list is made from sources 72 hours old"
-# the report job: an issue when an upstream moved or a check failed; gh only, no code, no signing, no release
-r = jobs["report"]
-assert r.get("permissions") == {"issues": "write"} and r.get("needs") == "build" and "always()" in r.get("if", ""), r
-rrun = "\n".join(x.get("run", "") for x in r["steps"])
-assert "gh issue create" in rrun and "gh issue comment" in rrun and "python" not in rrun and "cosign" not in rrun and "gh release" not in rrun
-assert not any(x.get("uses", "").startswith("actions/checkout@") for x in r["steps"]), "report needs no code"
-assert "${{" not in rrun, "${{ }} inside run (report)"
-for x in r["steps"]:
-    if "uses" in x:
-        assert re.match(r"^[^@ ]+@[0-9a-f]{40}$", x["uses"]), "unpinned: " + x["uses"]
-# nothing in the workflow names a repository: it moves to the data repo unchanged
-text = open(wf).read()
-body = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
-assert "IHulkSmashI" not in body, "the workflow must take the repository from github.repository"
 assert b.get("permissions") == {"contents": "read"}, b.get("permissions")
 assert b.get("if") == "github.ref == 'refs/heads/main'", "build for publishing only on main (the signing identity)"
 assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write", "id-token": "write"}, p.get("permissions")
