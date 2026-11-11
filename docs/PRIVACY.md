@@ -133,11 +133,16 @@ art your games are missing (row 9).
 
 ## Files GameCove writes for cloud saves and battery history
 
-- `user://saves.cfg`: per game, its sync switch, the last sync time, how it stands, and gogdl's timestamps; GOG's
-  remote-config answers per client id.
+- `user://saves.cfg`: per game, its sync switch, the last sync time, how it stands, gogdl's timestamps and the save
+  folders they were made with, and a note while a download is replacing a save folder; GOG's remote-config answers
+  per client id.
 - `user://saves/backups/<game>/`: the local backups (`<time>-<n>.tar.gz` per save folder and `<time>.json` listing
-  them), at most 10 per game. Taken before a cloud save replaces one on the handheld, before a restore, and of the
-  cloud's copy before a GOG conflict is settled for this handheld's save.
+  them), at most 10 everyday ones per game plus 10 made by a choice, a restore or a copy of the cloud. Taken before a
+  cloud save replaces one on the handheld, before a restore, and of the cloud's copy before a GOG upload would delete
+  files from it.
+- `user://steam_libraries.json`: the Steam library folders seen on this handheld and the app ids each held, so Clean
+  up never offers the shader caches of games on a card that isn't in. Never sent anywhere.
+- `user://gamecove.pid`: the process id of the running home screen, so a second one steps aside.
 - `user://battery_history.json`: battery level, energy and time at game starts and ends, sleep, wake and the
   charger (30 days, at most 3,000 entries), and the battery each game used. Nothing about this leaves the device.
 

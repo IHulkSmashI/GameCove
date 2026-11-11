@@ -57,7 +57,10 @@ const KEEP_CLOUD := "Keep the cloud save"
 const DECIDE_LATER := "Decide later"
 const DECIDE_LATER_DETAIL := "Play without syncing this time"
 const NEWER := "Newer"
+const RESTORED_BADGE := "Restored"
+const RESTORED_DETAIL := "The backup you just restored"
 const SAVED_AT := "Saved %s"
+const UPLOADED_AT := "Uploaded %s"
 const UNKNOWN_TIME := "Time unknown"
 const KEPT_LOCAL := "Kept this handheld's save."
 const KEPT_CLOUD := "Kept the cloud save."
@@ -65,10 +68,12 @@ const KEPT_CLOUD := "Kept the cloud save."
 const BACKUPS_TITLE := "Restore a backup"
 const BACKUPS_LINE := "Your saves right now are backed up first, so you can always come back."
 const REASONS := {"before_download": "Before a cloud download", "before_upload": "Before keeping this handheld's save",
-	"cloud_copy": "The cloud's save, before it was replaced", "before_restore": "Before a restore"}
+	"cloud_copy": "The cloud's save, before it was replaced", "before_restore": "Before a restore",
+	"interrupted": "Found after a download was cut off"}
 const RESTORED := "Backup restored."
 const RESTORE_FAILED := "Couldn't restore that backup: %s"
 const RESTORE_RUNNING := "Close the game first."
+const RESOLVE_RUNNING := "Close the game first, then choose. We never swap saves under a running game."
 
 const SYNC_FAILED_TOAST := "%s: saves didn't sync. They're safe on this handheld."
 const CONFLICT_TOAST := "%s: saves changed here and in the cloud. Open the game to choose."
@@ -83,8 +88,8 @@ const SWITCH_HELP := {true: "On: Epic games sync through legendary, GOG games th
 const HOW_TITLE := "How it works"
 const HOW_LINES := [
 	"Before a game starts we get the newest save from the store's cloud; after it ends we send yours up.",
-	"Before anything replaces a save on this handheld, we back it up here. The last 10 backups per game are kept.",
-	"When both sides changed, you choose. The newest one is highlighted.",
+	"Before anything replaces a save on this handheld, we back it up here. We keep the last 10 per game, plus the last 10 from a choice or a restore.",
+	"When both sides changed, you choose. For Epic the newest one is highlighted; GOG only tells us when a save was uploaded.",
 	"No connection? The game starts anyway and we sync next time.",
 ]
 const AMAZON_NOTE := "Amazon games aren't covered: nile, Amazon's tool, has no save sync."
@@ -117,6 +122,11 @@ static func tone(st: Dictionary) -> String:
 ## "Saved 2 h ago" for a side of a conflict.
 static func saved_at(ts: int, now: int) -> String:
 	return SAVED_AT % TG.ago(ts, now) if ts > 0 else UNKNOWN_TIME
+
+
+## "Uploaded 2 h ago": GOG's cloud only knows when files arrived, not when they were played.
+static func uploaded_at(ts: int, now: int) -> String:
+	return UPLOADED_AT % TG.ago(ts, now) if ts > 0 else UNKNOWN_TIME
 
 
 # ---- battery -----------------------------------------------------------------------------------

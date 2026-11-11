@@ -2,7 +2,8 @@ extends RefCounted
 ## Art GameCove uses instead of (or where there is no) store art, per game and
 ## kind: what the user picked in Change artwork ("user", always wins) and what
 ## the automatic fill found for games with none ("auto", only where the store
-## has nothing). Files live in user://art/picked/, listed in index.json:
+## has nothing). Files live in user://art/picked/, listed in index.json (with a second
+## copy, index.json.bak, so one damaged file never costs every game's pick):
 ##   {"<game key>": {"<kind>": {"path", "source": "user"|"auto", "id", "author",
 ##                   "author_url", "steam": [grid files we wrote]}}}
 ## Static and file-based so the Library scan can read it on a worker thread.
@@ -17,19 +18,48 @@ static func index_path(dir: String) -> String:
 	return dir.path_join("index.json")
 
 
+## The index, {} when there is none. A damaged index.json isn't "no picks": the copy
+## written next to it at every save (index.json.bak) is read instead, and the damaged file
+## is kept as index.json.bad.
 static func read(dir: String) -> Dictionary:
+	return load_index(dir)["index"]
+
+
+## {"ok", "index"}: ok is false only when an index exists and neither it nor its copy can
+## be read. Then nothing may be written (a new index would drop every other game's pick).
+static func load_index(dir: String) -> Dictionary:
 	var p := index_path(dir)
-	if not FileAccess.file_exists(p):
+	var main: Variant = _parse(p)
+	if main != null:
+		return {"ok": true, "index": main}
+	if not FileAccess.file_exists(p + ".bad"):
+		DirAccess.copy_absolute(p, p + ".bad")
+	var copy: Variant = _parse(p + ".bak") if FileAccess.file_exists(p + ".bak") else null
+	if copy != null:
+		return {"ok": true, "index": copy}
+	return {"ok": false, "index": {}}
+
+
+## A JSON object file: {} when missing or empty, null when it's there and doesn't read.
+static func _parse(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return {}
+	var text := FileAccess.get_file_as_string(path)
+	if text.strip_edges() == "":
 		return {}
 	var j := JSON.new()
-	if j.parse(FileAccess.get_file_as_string(p)) != OK or not j.data is Dictionary:
-		return {}
+	if j.parse(text) != OK or not j.data is Dictionary:
+		return null
 	return j.data
 
 
+## Saves the index, then the same again as index.json.bak (both atomic).
 static func write(dir: String, index: Dictionary) -> bool:
 	DirAccess.make_dir_recursive_absolute(dir)
-	return SettingsFile.save_json(index_path(dir), index) == OK
+	if SettingsFile.save_json(index_path(dir), index) != OK:
+		return false
+	SettingsFile.save_json(index_path(dir) + ".bak", index)
+	return true
 
 
 ## The art to show: `store_art` with this game's overrides applied.
@@ -51,7 +81,10 @@ static func file_base(key: String, kind: String) -> String:
 
 ## Records an override (replacing the old file for that game and kind).
 static func set_override(dir: String, key: String, kind: String, rec: Dictionary) -> bool:
-	var index := read(dir)
+	var loaded := load_index(dir)
+	if not loaded["ok"]:
+		return false
+	var index: Dictionary = loaded["index"]
 	var game: Dictionary = index.get(key, {})
 	var old = game.get(kind)
 	if old is Dictionary and str(old.get("path", "")) != str(rec.get("path", "")) and FileAccess.file_exists(str(old.get("path", ""))):
@@ -63,7 +96,10 @@ static func set_override(dir: String, key: String, kind: String, rec: Dictionary
 
 ## Forgets an override and deletes its file; returns the record that was there ({} if none).
 static func remove(dir: String, key: String, kind: String) -> Dictionary:
-	var index := read(dir)
+	var loaded := load_index(dir)
+	if not loaded["ok"]:
+		return {}
+	var index: Dictionary = loaded["index"]
 	var game: Dictionary = index.get(key, {})
 	var old = game.get(kind, {})
 	if not old is Dictionary or old.is_empty():

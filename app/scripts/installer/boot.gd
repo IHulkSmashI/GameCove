@@ -28,6 +28,7 @@ const MAIN := "res://scenes/main.tscn"
 const INSTALLER := "res://scenes/installer.tscn"
 const Paths := preload("res://scripts/installer/paths.gd")
 const ControlsCli := preload("res://scripts/hwtest/controls_cli.gd")
+const RunMode := preload("res://scripts/system/run_mode.gd")
 
 
 static func wants_installer(args: PackedStringArray) -> bool:
@@ -64,6 +65,11 @@ func _ready() -> void:
 	if wants_version(args):
 		print(version_line())
 		get_tree().quit(0)
+		return
+	if RunMode.second_instance():
+		# a home screen already runs on these settings: two would write them in turns
+		printerr("GameCove is already running; this second one steps aside.")
+		get_tree().quit()
 		return
 	if wants_controls_cli(args):
 		var cli: Node = ControlsCli.new()
