@@ -265,7 +265,12 @@ func test_uninstall_asks_about_save_backups_separately() -> void:
 	eq(s.plan.choices["remove_save_backups"], false, "and starts off")
 	ok(row._hint.visible, "the count and size are on screen before Remove is pressed")
 	var hint := str(row.hint_text())
-	ok(hint.contains("3 save backups of 2 games") and hint.contains("KB") and hint.contains(user + "/saves/backups"), "says how many, how big and where: " + hint)
+	# the folder is shown as ~/… when it is under HOME (the unit runs under a fresh HOME that contains user://)
+	var shown := user + "/saves/backups"
+	var home_dir := OS.get_environment("HOME")
+	if home_dir.length() > 1 and shown.begins_with(home_dir + "/"):
+		shown = "~" + shown.substr(home_dir.length())
+	ok(hint.contains("3 save backups of 2 games") and hint.contains("KB") and hint.contains(shown), "says how many, how big and where: " + hint)
 	var off_line := str(s.body.find_child("keep_settings", true, false).hint_text())
 	ok(off_line.contains("Art we changed in Steam goes back") and off_line.contains("save backups stay unless"), "the Off line says what happens: " + off_line)
 	ok(not off_line.contains("downloads are deleted too"), "the old line is gone")
