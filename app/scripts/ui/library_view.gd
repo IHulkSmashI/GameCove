@@ -94,9 +94,8 @@ static func filter_view(games: Array, view: String) -> Array:
 
 
 ## Emulated games and the frontend for the Home shelf: ES-DE / RetroDECK
-## first, then what you played last, then the rest A to Z; at most
-## EMU_SHELF_MAX (a ROM folder can hold thousands: the Library lists them all).
-const EMU_SHELF_MAX := 40
+## first, then what you played last, then the rest A to Z (Home shows the first
+## Home.SHELF_MAX and See all).
 
 
 static func emulation_shelf(games: Array) -> Array:
@@ -109,7 +108,7 @@ static func emulation_shelf(games: Array) -> Array:
 		var la := int(a.get("last_played", 0))
 		var lb := int(b.get("last_played", 0))
 		return la > lb if la != lb else title_order(a, b))
-	return out.slice(0, EMU_SHELF_MAX)
+	return out
 
 
 ## The console an emulated game is for ("" for anything else, ES-DE itself included).
@@ -207,9 +206,6 @@ static func stores_present(games: Array) -> Array:
 
 ## Tiles a Home shelf shows at once (7 and the faded eighth).
 const SHELF_VISIBLE := 8
-## Tiles a Home shelf holds at most: a library with thousands of games (a big
-## ROM folder) keeps Home light; the Library lists everything.
-const SHELF_MAX := 60
 
 
 static func shelves(all_games: Array) -> Array:
@@ -218,7 +214,7 @@ static func shelves(all_games: Array) -> Array:
 	var out: Array = []
 	var add := func(id: String, title: String, list: Array):
 		if not list.is_empty():
-			out.append({"id": id, "title": title, "games": list.slice(0, SHELF_MAX), "total": list.size()})
+			out.append({"id": id, "title": title, "games": list})
 	var hero_key := str(continue_game(games).get("key", ""))
 	var recent := recently_played(games).filter(func(g): return str(g.get("key", "")) != hero_key)
 	add.call("recent", "Recently played", recent)

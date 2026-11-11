@@ -66,7 +66,7 @@ a ROM we list folds into the ROM's entry, its key kept in the entry's `aliases`)
 Screens decorate games with `Library.collections.decorate()` (`scripts/library/collections.gd`): `favourite`,
 `hidden` (bool) and `collections` (ids). `library_view.gd` `filter_view(games, view)` picks `""` (not hidden),
 `favourites`, `hidden`, `emulation`, `emulation:<system>` or `collection:<id>`; Home's shelves leave hidden games
-out and hold `View.SHELF_MAX` tiles at most (the Library grid makes its tiles a page at a time).
+out and show `Home.SHELF_MAX` games at most, then See all (the Library grid makes its tiles a page at a time).
 
 ### Game details (`info.meta`)
 

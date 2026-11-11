@@ -21,6 +21,7 @@ const FallbackArt := preload("res://scripts/ui/fallback_art.gd")
 const TL := preload("res://scripts/ui/texts_library.gd")
 const Tile := preload("res://scripts/ui/game_tile.gd")
 const Shelf := preload("res://scripts/ui/shelf.gd")
+const Home := preload("res://scripts/ui/home.gd")
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 const EmuTests := preload("res://tests/test_emulation.gd")
@@ -815,7 +816,9 @@ func test_home_shelf_is_capped() -> void:
 		games.append({"key": "emu:rom:snes/%d" % i, "store": "emu", "id": "rom:snes/%d" % i, "title": "Game %03d" % i, "last_played": 500 if i == 77 else 0,
 			"emulated": {"system": "snes"}})
 	var shelf := View.emulation_shelf(games)
-	eq(shelf.size(), View.EMU_SHELF_MAX, "a ROM folder with thousands of games doesn't fill Home")
+	var capped: Dictionary = Home.cap_shelves([{"id": "emulation", "games": shelf}])[0]
+	eq(capped["games"].size(), Home.SHELF_MAX + 1, "a ROM folder with thousands of games doesn't fill Home (See all)")
+	eq(capped["total"], 121, "and its count says how many")
 	eq([shelf[0]["id"], shelf[1]["title"]], ["frontend", "Game 077"], "ES-DE, then what you played")
 
 

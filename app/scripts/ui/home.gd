@@ -401,9 +401,6 @@ func _build_rows() -> void:
 	for spec in shelf_specs(games, apps):
 		var s: VBoxContainer = Shelf.new()
 		s.setup(spec["id"], spec["title"], spec["games"])
-		var total := int(spec.get("total", spec["games"].size()))
-		if total > spec["games"].size():
-			s.count_label.text = "%d games" % total   # the shelf holds View.SHELF_MAX; the Library has them all
 		s.memory = mini(memory.get(spec["id"], 0), s.tiles.size() - 1)
 		s.tile_focused.connect(_on_tile_focus.bind(s))
 		if spec["id"] == "apps":
