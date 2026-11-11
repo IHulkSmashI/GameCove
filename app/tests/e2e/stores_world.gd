@@ -116,6 +116,7 @@ func detach() -> void:
 	lib.home = _old_home if _old_home != "" else lib.home
 	lib.games.clear()
 	lib._entries.clear()
+	_forget_scans(lib)
 	lib.changed.emit()
 	steam_jobs.clear()
 	steam_running.clear()
@@ -194,6 +195,9 @@ func _write_tools() -> void:
 	_write(w.root.path_join("usr/share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json"),
 		JSON.stringify({"file_format_version": "1.0.0", "layer": {"name": "VK_LAYER_LSFGVK_frame_generation"}}))
 	_write(steam_root.path_join("steamapps/common/Lossless Scaling/Lossless.dll"), "MZ e2e\n")
+	# the player owns Lossless Scaling and Steam installed it (its lsfg-vk beta)
+	_write(steam_root.path_join("steamapps/appmanifest_993090.acf"),
+		"\"AppState\"\n{\n\t\"appid\"\t\t\"993090\"\n\t\"name\"\t\t\"Lossless Scaling\"\n\t\"StateFlags\"\t\t\"4\"\n\t\"installdir\"\t\t\"Lossless Scaling\"\n\t\"BetaKey\"\t\t\"lsfg-vk\"\n}\n")
 
 
 ## An appmanifest as Steam writes it.
@@ -273,9 +277,21 @@ func _wire_storage() -> void:
 	s.setup(f, w.home, mounts)
 
 
+## What the Library remembers of its last scans (a rescan that finds the same
+## files keeps what it has): forgotten, so the next scan reads these stores.
+static func _forget_scans(lib: Node) -> void:
+	if "_sigs" in lib:
+		lib._sigs.clear()
+	if "_emulation_sig" in lib:
+		lib._emulation_sig = ""
+	if "_emu_stamp" in lib:
+		lib._emu_stamp = ""
+
+
 ## The library as the app reads it from the files now (a rescan, as at start).
 func rescan() -> void:
 	var lib: Node = w.autoload("Library")
+	_forget_scans(lib)
 	var done := [false]
 	var cb := func(): done[0] = true
 	lib.changed.connect(cb, CONNECT_ONE_SHOT)
