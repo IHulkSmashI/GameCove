@@ -37,7 +37,9 @@ const HARMLESS_PATHS: Array[String] = ["/dev/null", "/dev/zero"]
 ## reading them: power/backend.gd path(rel) and dirs(rel) return root + rel).
 ## Key: the file the bare call is allowed in ("*" = any file, through `be.`).
 const SYS_ROOT_HELPERS := {"power/backend.gd": ["path(", "dirs("], "*": ["be.path(", "be.dirs("]}
-const SLOW_HOOK_MS := 1500
+## A detect+read that runs more commands than this is slow on a real handheld (every one is a process);
+## counted, not timed, so a loaded machine can't fail it (it failed once on the ROG Ally's power.fppt).
+const SLOW_HOOK_CALLS := 40
 const REASON_MAX := 100
 const INVALID := "__devicematrix_invalid__"
 const EXPECT_KEYS: Array[String] = ["available", "reason_contains", "kind", "unit", "min", "max", "min_ge", "max_le",
@@ -394,12 +396,12 @@ static func _run_scenario(info: Dictionary, scripts: Array, backends: Dictionary
 			reg.register(c)
 	var desc := {}
 	for c in reg.list():
-		var t0 := Time.get_ticks_msec()
+		var n0: int = runner.calls.size()
 		c.detect()
 		c.read()
-		var ms := Time.get_ticks_msec() - t0
-		if ms > SLOW_HOOK_MS:
-			problems.append("%s: detect+read took %d ms" % [c.id, ms])
+		var cmds: int = runner.calls.size() - n0
+		if cmds > SLOW_HOOK_CALLS:
+			problems.append("%s: detect+read ran %d commands (more than %d)" % [c.id, cmds, SLOW_HOOK_CALLS])
 		problems.append_array(_check_shape(c, row))
 		desc[c.id] = _describe(c)
 	if scenario in ["battery", "ac"]:

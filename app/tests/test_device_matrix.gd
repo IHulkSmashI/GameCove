@@ -86,6 +86,14 @@ func test_all_providers_on_all_devices() -> void:
 		failures.append("%s: ... and %d more" % [_current, problems.size() - 600])
 
 
+## The "slow hook" rule counts commands, it doesn't time them: on a loaded machine a wall-clock
+## limit failed the ROG Ally's power.fppt once, with nothing wrong in the provider.
+func test_the_slow_hook_rule_does_not_depend_on_the_clock() -> void:
+	var src := FileAccess.get_file_as_string("res://tests/devicematrix/matrix.gd")
+	ok(not src.contains("SLOW_HOOK_MS") and not src.contains("get_ticks_msec"), "no wall-clock limit in the matrix")
+	ok(src.contains("SLOW_HOOK_CALLS") and Matrix.SLOW_HOOK_CALLS >= 20, "a command budget instead")
+
+
 ## The harness itself: a careful provider passes everywhere it's tried...
 func test_harness_passes_a_careful_provider() -> void:
 	var m := _manifest()
