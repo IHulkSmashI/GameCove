@@ -1348,6 +1348,100 @@ func test_rom_library_by_pad_filter_a_console_open_and_play() -> void:
 	ok(await choose("favourite"), "Add to favourites")
 	ok(w.autoload("Library").collections.is_favourite(key), "a favourite")
 	check("rom library")
+	# back to every game (the Library keeps its view between screens)
+	await view_btn()
+	ok(await choose(""), "Filter > All games")
+	await without_stores()
+
+
+# ---- over a real game: the quick menu's Shortcuts strip and Quick Access ----------------------
+
+func _fake_events() -> Array:
+	w.fake._log_mutex.lock()
+	var e: Array = w.fake.events.duplicate()
+	w.fake._log_mutex.unlock()
+	return e
+
+
+func test_shortcuts_strip_over_a_store_game() -> void:
+	await with_stores()
+	preload("res://scripts/actions/shortcut_prefs.gd").reset()
+	ok(await play_hades(), "Hades runs (started from its page)")
+	await w.idle()
+	await qam()
+	ok(qm().visible, "Quick Access over the game: GameCove's quick menu")
+	var strip: Control = qm().strip
+	ok(strip != null and strip.is_visible_in_tree(), "with the Shortcuts strip")
+	if strip == null:
+		await without_stores()
+		return
+	await up()
+	await w.frames(2)
+	ok(focus() != null and strip.is_ancestor_of(focus()), "one Up reaches the strip")
+	var ids: Array = strip.visible_ids()
+	print("E2E INFO strip on %s: %s" % [setup_name(), ids])
+	# walk to a shortcut with left / right and press it
+	var walk := func(id: String) -> bool:
+		for i in ids.size() * 2:
+			if focus() == strip.buttons.get(id):
+				return true
+			var here: int = ids.find(str(focus().get_meta("action", ""))) if focus() != null and focus().has_meta("action") else -1
+			if here < 0:
+				return false
+			if here < ids.find(id):
+				await right()
+			else:
+				await left()
+		return focus() == strip.buttons.get(id)
+	if "screenshot" in ids:
+		w.fake.reset_log()
+		ok(await walk.call("screenshot"), "to Screenshot")
+		await a()
+		ok(await until(func(): return "screenshot" in _fake_events(), 5000), "a screenshot of the game was taken (%s)" % [_fake_events()])
+		if not qm().visible:
+			await qam()
+			await up()
+			await w.frames(2)
+	if "keyboard" in ids:
+		w.fake.reset_log()
+		ok(await walk.call("keyboard"), "to Keyboard")
+		await a()
+		ok(await until(func(): return "steam steam://open/keyboard" in _fake_events(), 5000), "Steam's keyboard opens over the game (%s)" % [_fake_events()])
+	if qm().visible:
+		await b()
+	await w.idle()
+	ok(main().session.is_active(), "the game still runs")
+	check("shortcuts over a game")
+	stores.game_quit("1145360")
+	ok(await until(func(): return not main().session.is_active(), 12000), "the game ends")
+	await without_stores()
+
+
+# ---- the keyboard where a player types: a game's launch options ------------------------------
+
+func test_keyboard_launch_options_typed_two_ways() -> void:
+	await with_stores()
+	var key := "epic:Quail"
+	ok(await open_from_library(key), "Celeste's page")
+	ok(await press_on(page().manage_button, 10), "Manage")
+	ok(await choose("launch_options"), "Launch options")
+	await w.frames(3)
+	ok(main().game_actions._kb_open, "the keyboard opens for them")
+	var kb: Control = main().game_actions.keyboard
+	ok(kb.is_open() and focus() != null and kb.is_ancestor_of(focus()), "focus on its keys")
+	await type_keys("-skip")
+	ok(await osk_type(kb, "intro"), "and the rest with the D-pad and A on its keys")
+	eq(str(kb.text).to_lower(), "-skipintro", "the field has it")
+	await key(KEY_ENTER)
+	await w.frames(4)
+	ok(not main().game_actions._kb_open, "Enter closes it")
+	await w.idle()
+	var args := str(Launcher.compat_for(key).get("args", "")) if Launcher.has_method("compat_for") else ""
+	ok(args.to_lower() == "-skipintro" or str(w.autoload("Library").launch_options(game(key))).to_lower() == "-skipintro",
+		"saved as the game's launch options (%s)" % args)
+	ok(focus() != null and focus_on_screen() == "", "focus back on the page")
+	check("launch options")
+	await b()
 	await without_stores()
 
 
@@ -1356,12 +1450,6 @@ func test_rom_library_by_pad_filter_a_console_open_and_play() -> void:
 # when its branch lands (docs/TESTING.md, the "pending merge" rows).
 
 
-
-## Quick-menu shortcuts and button shortcuts (quick-actions): add, reorder and
-## remove a shortcut, each shortcut does its thing over a game, a held button
-## combo runs its action.
-func test_pending_quick_menu_shortcuts_and_button_shortcuts() -> void:
-	pass
 
 
 
@@ -1372,13 +1460,3 @@ func test_pending_resolutions_interface_size_and_docked() -> void:
 	pass
 
 
-## Keyboard (the new keyboard work): the system on-screen keyboard over a game
-## and in GameCove's own fields.
-func test_pending_keyboard_over_a_game() -> void:
-	pass
-
-
-## Launch fixes (launch): per-game launch fixes chosen, applied on launch and
-## taken out again.
-func test_pending_launch_fixes_per_game() -> void:
-	pass

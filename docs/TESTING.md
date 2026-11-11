@@ -33,7 +33,7 @@ How long (a two-core machine also running other jobs; a quiet one is about half)
 
 | Run | Claw 8 EX | ROG Ally | Legion Go S |
 | --- | --- | --- | --- |
-| `--suites journeys` (21 journeys, 7 pending merge) | 3 min | 4 min | 4 min |
+| `--suites journeys` (24 journeys, 1 pending merge) | 2 min | 3 min | 3 min |
 | `--suites monkey` (CI, 5 runs of 70 steps) | 2 min | 2 min | 3.5 min |
 
 ### How a journey works
@@ -205,17 +205,26 @@ journey is a skipped stub (`test_pending_*`, listed as `E2E SKIP ... (pending me
 | Emulation page (EmuDeck / RetroDECK) | J: every_screen_by_pad…; E: library; U: test_emulation | D: emudeck |
 | Every screen with RB and back | E: screens, animations | — |
 
+### Shortcuts, button shortcuts, the keyboard, emulated games
+
+| Action | Headless | Device |
+| --- | --- | --- |
+| The quick menu's Shortcuts strip over a store game (one Up, Screenshot, Keyboard) | J: shortcuts_strip_over_a_store_game; E: shortcuts | D: input |
+| Every shortcut on the system (key to the game, mute, sleep, force close, power); Settings > Quick menu | E: shortcuts | — |
+| Quick Access in a game: short press our menu, hold Steam's keyboard; Button shortcuts page | E: buttons | D: input |
+| The on-screen keyboard: a game's launch options typed on a keyboard and on its keys | J: keyboard_launch_options_typed_two_ways; E: keyboard; U: test_osk | — |
+| The keyboard everywhere it opens (search, a key, wishlist name, a streaming host) | E: keyboard | — |
+| Every ROM as a game: Filter > Emulation > a console, its page, Play through EmuDeck's launcher, favourite | J: rom_library_by_pad_filter_a_console_open_and_play; E: emulation | D: emudeck |
+| Thousands of ROMs: scan and Library budgets | E: emulation (test_five_thousand_roms) | — |
+| Fixes lifecycle: updates with rollback, withdrawn and obsolete fixes | E: fixes; U: test_fixes | — (testbed `device`) |
+| Upscaling selection (Best / My choice / Native) | J: game_page_own_settings…; U: test_perf_controls | D: optiscaler |
+| The launch splash: cancel, a late game closed again, Home after Guide | E: game, animations | D: steam-game |
+
 ### Pending merge
 
 | Feature (branch) | Stub |
 | --- | --- |
-| ROM library (`rom-library`) | test_pending_rom_library_browse_launch_and_play_time |
-| Quick-menu shortcuts and button shortcuts (`quick-actions`) | test_pending_quick_menu_shortcuts_and_button_shortcuts |
-| Upscaling selection (`upscaling`, `upscale-latest`) | test_pending_upscaling_selection_picker |
-| Fixes lifecycle (`fixes`) | test_pending_fixes_lifecycle_after_a_system_update |
 | Resolutions, interface size, Steam Machine (`resolutions`) | test_pending_resolutions_interface_size_and_docked |
-| Keyboard | test_pending_keyboard_over_a_game |
-| Launch fixes (`launch`) | test_pending_launch_fixes_per_game |
 
 ## Bugs the journeys found
 
@@ -240,3 +249,6 @@ Each has its own commit and a regression test (named in the commit):
 - Apps: opening the list left focus on the hidden Apps button.
 - Stream: switching to the tab could leave nothing focused (discovery rebuilt it first).
 - A new launch goal replaced the game's own frame limit at the next launch (Legion Go S: 15 fps became 60).
+- X (a new order) or a Filter pick with a tile focused left nothing focused.
+- Stream: the tab could still miss focus while the screen before it slid out.
+- The rewritten keyboard (merged later) took keys while fading out again.
