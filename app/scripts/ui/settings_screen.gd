@@ -592,7 +592,7 @@ func _on_keyboard_closed(text: String) -> void:
 		_set_layout_focus(true)
 	if _ask_return != null and is_instance_valid(_ask_return) and _ask_return.is_visible_in_tree():
 		_ask_return.grab_focus()
-	if cb.is_valid():
+	if cb.is_valid() and not keyboard.cancelled:   # B / Esc: nothing typed is kept, so nothing is saved or checked
 		cb.call(text)
 
 

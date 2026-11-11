@@ -68,6 +68,9 @@ var revealed := false
 var accents_button: Button
 var show_button: Button
 var _original := ""
+## The last close was a Cancel (B, Esc): the text handed back is the old one, and an owner that would save or
+## check what it is given (an API key) can skip that.
+var cancelled := false
 ## The rows of keys on screen now (the page showing, then the action row),
 ## for focus and for callers that look a key up by its text.
 var keys: Array = []
@@ -488,6 +491,7 @@ func open(start := "") -> void:
 	shift = false
 	caps = false
 	_original = start
+	cancelled = false
 	revealed = false
 	if symbols or accents:
 		symbols = false
@@ -532,6 +536,7 @@ func cancel() -> void:
 		return
 	if text != _original:
 		set_text(_original)
+	cancelled = true
 	close()
 
 

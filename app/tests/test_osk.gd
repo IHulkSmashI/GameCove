@@ -501,6 +501,19 @@ func test_cancel_puts_the_old_text_back_and_done_keeps_the_new() -> void:
 	k.free()
 
 
+func test_cancel_is_told_to_the_owner() -> void:
+	var k := _kb()
+	k.open("old")
+	k.set_text("new")
+	k.cancel()
+	ok(k.cancelled, "cancelled")
+	k.open("old")
+	ok(not k.cancelled, "a new session starts clean")
+	k.close()
+	ok(not k.cancelled, "Done is not a cancel")
+	k.free()
+
+
 func test_a_secret_is_drawn_as_dots_until_shown() -> void:
 	var k := _kb()
 	k.use_for_codes("API key", 600, true)
