@@ -1,0 +1,12 @@
+{
+  "_about": "What the nightly fix audit follows for every fix at once (tools/fixes/audit.py, docs/FIXES.md). Each fix's own sources are in its fix.json \"watch\". Same entry shape as there.",
+  "watch": [
+    {"id": "kernel", "kind": "kernel-releases", "note": "kernel.org's mainline, stable and longterm versions: checked against every kernel rule in an obsolete_when."},
+    {"id": "bazzite", "kind": "github-release", "repo": "ublue-os/bazzite", "note": "The newest Bazzite image and the kernel its notes name."},
+    {"id": "steamos", "kind": "url", "url": "https://store.steampowered.com/feeds/news/app/1675200", "note": "SteamOS release notes (Steam's news feed for SteamOS)."},
+    {"id": "inputplumber", "kind": "github-release", "repo": "ShadowBlip/InputPlumber", "note": "The controller service Bazzite uses."},
+    {"id": "hhd", "kind": "github-release", "repo": "hhd-dev/hhd", "note": "Handheld Daemon."},
+    {"id": "gamescope-session", "kind": "github-commits", "repo": "ChimeraOS/gamescope-session", "path": "usr/share/gamescope-session-plus/device-quirks", "note": "The per-handheld session quirks."},
+    {"id": "linux-firmware", "kind": "gitlab-tags", "project": "kernel-firmware/linux-firmware", "note": "linux-firmware releases."}
+  ]
+}

@@ -1,0 +1,235 @@
+name: Nightly fix audit
+
+# Every device fix (fixes/<id>/fix.json) says what to watch upstream: the kernel file a real fix would
+# land in, Bazzite's own udev rules, an issue or pull request, InputPlumber and Handheld Daemon releases,
+# linux-firmware, the maker's BIOS listing. Every night tools/fixes/audit.py fetches those, compares them
+# with the signed snapshot of the night before and:
+#   - opens or updates ONE issue per fix with a change (label fix-audit), plus a summary issue;
+#   - records by itself only what a rule already declares (a watched Bazzite rule file is there or not; a
+#     kernel named in an obsolete_when is released / in the newest Bazzite). It never edits a rule: every
+#     fetched page is data, and tools/fixes/check_dist.py refuses to sign anything whose rules differ from
+#     this repository's files;
+#   - publishes the fix definitions as fixes.json on the rolling "fixes" release, signed with cosign
+#     keyless (fixes.json.sigstore.json, this workflow's GitHub OIDC identity on main). GameCove reads it at
+#     most once a day (app/scripts/device/fix_data.gd), uses it only when cosign verifies it on the device,
+#     and so retires or withdraws a fix without an app update. docs/FIXES.md has the whole design.
+# Weekly (Mondays) it also checks that every source link still answers and reports dead ones.
+#
+# Four jobs, as in firmware.yml and upscalers.yml: "audit" and "links" fetch third-party pages with a
+# read-only token and no OIDC; only "publish", which runs nothing but a standard-library check, pinned
+# cosign and gh on audit's artifact, can mint the signing identity and write the release; only "issues"
+# can write issues, and it runs nothing but gh on text the audit produced.
+#
+# Dry run without the network (CI does this on every push):
+#   python3 tools/fixes/make_fixtures.py /tmp/n1 && python3 tools/fixes/audit.py --fixtures /tmp/n1 --out /tmp/d1
+
+on:
+  schedule:
+    - cron: "9 3 * * *"    # the audit
+    - cron: "17 6 * * 1"   # the link check
+  workflow_dispatch:
+    inputs:
+      links:
+        description: "Run the source link check instead of the audit"
+        type: boolean
+        default: false
+
+permissions: {}
+
+# Moving the "fixes" release to another repository (docs/RELEASING.md, "Moving the data releases"): copy
+# this file into that repository's .github/workflows/ and set SOURCE_REPO to the repository that holds
+# fixes/<id>/fix.json (IHulkSmashI/GameCove). Nothing else here names a repository: the release, its
+# signing identity (this workflow on that repository's main) and the firmware index the audit reads all
+# follow github.repository. Issues go to SOURCE_REPO; from another repository that needs a token with
+# issues: write there, in the secret FIX_AUDIT_ISSUES_TOKEN. In the app, fix_data.gd RELEASES_REPO moves
+# with it.
+env:
+  SOURCE_REPO: ${{ github.repository }}
+  GAMECOVE_DATA_REPO: ${{ github.repository }}
+
+concurrency:
+  group: fixes
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    # the signing identity is this workflow on main: never build data to publish from another branch
+    if: github.ref == 'refs/heads/main' && github.event.schedule != '17 6 * * 1' && inputs.links != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - run: pip install --require-hashes --no-deps -r tools/ci/requirements-pytest.txt
+      - name: Tests (the definitions, the builder and the audit, from recorded answers)
+        working-directory: packaging/helpers
+        run: python -m pytest -q tests/test_fixes_build.py tests/test_fixes_audit.py
+      - name: cosign version (the one get-gamecove.sh pins)
+        id: cosign
+        run: echo "version=$(sed -n 's/^COSIGN_VERSION=//p' packaging/get-gamecove.sh)" >>"$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          cosign-release: ${{ steps.cosign.outputs.version }}
+      - name: Last night's snapshot, if its signature checks out
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPO: ${{ github.repository }}
+        run: |
+          # the very binary devices download: get-gamecove.sh's pinned sha256
+          want="$(sed -n 's/^COSIGN_SHA256=//p' packaging/get-gamecove.sh)"
+          echo "$want  $(command -v cosign)" | sha256sum -c -
+          mkdir -p prev
+          if gh release download fixes -p audit-state.json -p audit-state.json.sigstore.json -D prev 2>/dev/null; then
+            ident="(?i)^https://github\.com/$(printf '%s' "$REPO" | sed 's/[.]/\\./g')/\.github/workflows/fixes\.yml@refs/heads/main$"
+            if ! cosign verify-blob --bundle prev/audit-state.json.sigstore.json \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity-regexp "$ident" prev/audit-state.json; then
+              echo "::warning::last night's snapshot doesn't verify; tonight is a new baseline (no change is reported)"
+              rm -f prev/audit-state.json
+            fi
+          else
+            echo "no snapshot yet: tonight is the baseline"
+          fi
+      - name: Audit (a source that can't be fetched keeps its last state)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/fixes/audit.py --out dist --previous prev/audit-state.json --max-minutes 15
+          cat dist/summary.md >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fix-audit-data
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  links:
+    if: github.ref == 'refs/heads/main' && (github.event.schedule == '17 6 * * 1' || inputs.links == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - name: Every source and watch link still answers
+        run: |
+          python3 tools/fixes/audit.py --links --out dist
+          cat dist/summary.md >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fix-audit-links
+          path: dist/issues.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: audit
+    # runs in the "nightly" environment: only main may deploy to it, no daily approval (docs/RELEASING.md)
+    environment: nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # the rolling "fixes" release
+      id-token: write   # cosign keyless (GitHub OIDC)
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          persist-credentials: false
+          sparse-checkout: |
+            packaging/get-gamecove.sh
+            fixes
+            tools/fixes
+            tools/traits
+            app/data/devices.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: fix-audit-data
+          path: dist
+      - name: Check the artifact before signing (standard library only)
+        # fixes.json must be exactly what this checkout's fix.json files build, plus the audit's small notes:
+        # nothing fetched can have changed a rule, withdrawn a fix or added one
+        run: |
+          python3 -I tools/fixes/check_dist.py dist
+          python3 -I - dist/audit-state.json <<'PY'
+          import json, sys
+          doc = json.load(open(sys.argv[1], encoding="utf-8"))
+          assert doc.get("schema") == 1 and isinstance(doc.get("observed"), dict), "not a schema-1 snapshot"
+          PY
+          (cd dist && sha256sum fixes.json >fixes.json.sha256)
+      - name: cosign version (the one get-gamecove.sh pins)
+        id: cosign
+        run: echo "version=$(sed -n 's/^COSIGN_VERSION=//p' packaging/get-gamecove.sh)" >>"$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          cosign-release: ${{ steps.cosign.outputs.version }}
+      - name: Sign (keyless; the identity GameCove checks)
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          # the very binary devices download: get-gamecove.sh's pinned sha256
+          want="$(sed -n 's/^COSIGN_SHA256=//p' packaging/get-gamecove.sh)"
+          echo "$want  $(command -v cosign)" | sha256sum -c -
+          ident="(?i)^https://github\.com/$(printf '%s' "$REPO" | sed 's/[.]/\\./g')/\.github/workflows/fixes\.yml@refs/heads/main$"
+          for f in fixes.json audit-state.json; do
+            cosign sign-blob --yes --bundle "dist/$f.sigstore.json" "dist/$f"
+            cosign verify-blob --bundle "dist/$f.sigstore.json" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity-regexp "$ident" "dist/$f"
+          done
+      - name: Publish to the rolling "fixes" release (data, never GameCove's latest release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view fixes >/dev/null 2>&1 || gh release create fixes --latest=false --prerelease \
+            --title "Fix definitions (data, not an app release)" \
+            --notes "Not a GameCove version: the list of device fixes GameCove knows, rebuilt every night by .github/workflows/fixes.yml from fixes/<id>/fix.json and an audit of each fix's upstream sources. Handhelds read fixes.json at most once a day and use it only when its cosign signature (fixes.json.sigstore.json, this workflow on main) checks out, so a fix the system no longer needs is retired, or a bad one withdrawn, without an app update. audit-state.json is the audit's own snapshot. See docs/FIXES.md. To install GameCove, use a release whose tag starts with v."
+          # stays a non-latest prerelease even if someone edited it by hand
+          gh release edit fixes --latest=false --prerelease
+          # the signature bundles first, the data last: a device never sees a new file with an old bundle for long
+          gh release upload fixes dist/audit-state.json dist/audit-state.json.sigstore.json --clobber
+          gh release upload fixes dist/fixes.json.sigstore.json dist/fixes.json.sha256 dist/fixes.json --clobber
+
+  issues:
+    needs: [audit, links]
+    # whichever of the two ran
+    if: always() && (needs.audit.result == 'success' || needs.links.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          persist-credentials: false
+          sparse-checkout: |
+            tools/fixes/file_issues.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: fix-audit-*
+          path: got
+      - name: One issue per fix with a change, and a summary (label fix-audit)
+        env:
+          GH_TOKEN: ${{ secrets.FIX_AUDIT_ISSUES_TOKEN || github.token }}
+          GH_REPO: ${{ env.SOURCE_REPO }}
+        run: |
+          set -- got/*/issues.json
+          python3 -I tools/fixes/file_issues.py "$@"
