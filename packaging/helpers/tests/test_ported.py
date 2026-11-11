@@ -353,6 +353,10 @@ def test_reframework_never_overwrites_a_foreign_dinput8(tmp_path, monkeypatch):
     r = reframework.install(str(tmp_path), str(folder), {"repo": "praydog/REFramework-nightly", "tag": "t1"})
     assert not r["ok"] and "isn't GameCove's" in r["error"]
     os.remove(folder / "dinput8.dll")
+    _w(folder / "DINPUT8.DLL", "reshade")                   # the same file to Wine, whatever its case
+    r = reframework.install(str(tmp_path), str(folder), {"repo": "praydog/REFramework-nightly", "tag": "t1"})
+    assert not r["ok"] and "isn't GameCove's" in r["error"] and sorted(os.listdir(folder)) == ["DINPUT8.DLL"]
+    os.remove(folder / "DINPUT8.DLL")
     src = tmp_path / "unpacked"
     _w(src / "dinput8.dll", "refw")
     monkeypatch.setattr(downloads, "fetch", lambda e, w, a=False: {"tag": "t1", "repo": e["repo"], "archive": "REFramework.zip", "dir": str(src)})

@@ -26,6 +26,7 @@ import shutil
 import urllib.error
 
 from . import downloads, userexec
+from .optiscaler import ci_path
 
 log = logging.getLogger("gamecove.reframework")
 
@@ -60,7 +61,7 @@ def _mark(folder: str) -> dict | None:
 def status(folder: str | None) -> dict:
     if not folder:
         return {"present": False, "ours": False, "folder": None}
-    dll = os.path.join(folder, DLL)
+    dll = ci_path(folder, DLL)                # DINPUT8.DLL is the same file to Wine
     m = _mark(folder)
     ours = bool(m and os.path.isfile(dll) and downloads.sha256_of(dll) == m.get("sha256"))
     return {"present": os.path.isfile(dll), "ours": ours, "folder": folder, "tag": (m or {}).get("tag") if ours else None}
@@ -134,7 +135,7 @@ def install(home: str, folder: str, entry: dict, allow_unpinned: bool = False, m
             return {"ok": False, "error": f"no {DLL} in {os.path.basename(got['archive'])}", **st}
         if entry.get("dll_sha256") and got["tag"] == entry.get("tag") and downloads.sha256_of(src) != entry["dll_sha256"].lower():
             return {"ok": False, "error": f"{DLL} in {os.path.basename(got['archive'])} does not match its pinned sha256; not installed", **st}
-        dest = os.path.join(folder, DLL)
+        dest = ci_path(folder, DLL)
         had = [x for x in (*RUNTIME, RUNTIME_DIR) if os.path.lexists(os.path.join(folder, x))]
         shutil.copyfile(src, dest)
         mark = {"tag": got["tag"], "repo": got["repo"], "sha256": downloads.sha256_of(dest), "had": had}
