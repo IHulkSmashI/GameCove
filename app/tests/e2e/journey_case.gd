@@ -176,7 +176,19 @@ func nav_to(target: Variant, limit := 60, axes := "vh") -> bool:
 				moved = true
 				break
 		if not moved:
-			return focused_in(_resolve(target))
+			break
+	if focused_in(_resolve(target)):
+		return true
+	# a page whose focus is one chain (down / up through every card): walk it
+	for dir in (["down", "up"] if "v" in axes else ["right", "left"]):
+		for i in limit:
+			if focused_in(_resolve(target)):
+				return true
+			var f0 := focus()
+			await call(dir)
+			await w.frames(1)
+			if focus() == f0:
+				break
 	return focused_in(_resolve(target))
 
 

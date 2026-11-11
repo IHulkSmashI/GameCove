@@ -141,6 +141,8 @@ func _dispatch(program: String, args: PackedStringArray) -> Dictionary:
 	if program.ends_with("session-select") and args.size() > 0:
 		_event(str(args[0]))
 		return {"code": 0, "out": ""}
+	if program.ends_with("/gamecove-upscale"):
+		return _upscale(args)
 	match program:
 		"pkexec":
 			return _pkexec(args)
@@ -165,6 +167,55 @@ func _dispatch(program: String, args: PackedStringArray) -> Dictionary:
 				_mutex.unlock()
 				return {"code": 1, "out": "xprop: unable to open display ':0'"}
 	return super.run(program, args)
+
+
+# ---- the upscaling helper (gamecove-upscale) --------------------------------------
+
+## key -> {"upscaler", "fg"}: what the helper put into each game's folder.
+var upscale_games := {}
+## Every helper call: [verb, key, args...].
+var upscale_runs: Array = []
+
+
+## gamecove-upscale as GameCove sees it (packaging/helpers/gamecove_upscale/cli.py):
+## one JSON object per call. The real helper's own behaviour (OptiScaler files,
+## downloads, checksums) is tested by packaging/helpers' pytest; here it keeps
+## what was chosen per game and answers status with it.
+func _upscale(args: PackedStringArray) -> Dictionary:
+	var a := Array(args)
+	var verb := str(a[0]) if not a.is_empty() else ""
+	var opt := func(name: String, def: String) -> String:
+		var i := a.find(name)
+		return str(a[i + 1]) if i >= 0 and i + 1 < a.size() else def
+	var key: String = opt.call("--key", "")
+	var gpu: String = opt.call("--gpu", "{}")
+	_log_mutex.lock()
+	upscale_runs.append([verb, key] + a.slice(1))
+	_log_mutex.unlock()
+	_mutex.lock()
+	var cur: Dictionary = upscale_games.get(key, {"upscaler": "own", "fg": 0})
+	var out := {"ok": true}
+	match verb:
+		"status":
+			out.merge({"upscaler": cur["upscaler"], "fg": cur["fg"], "ours": cur["upscaler"] != "own"})
+		"choose":
+			cur = {"upscaler": opt.call("--upscaler", "own"), "fg": int(opt.call("--fg", "0"))}
+			out["env"] = {} if cur["upscaler"] == "own" else {"OPTISCALER": "1"}
+		"apply":
+			cur = {"upscaler": "xess" if "intel" in gpu else "fsr", "fg": 0}
+			out["env"] = {"OPTISCALER": "1"}
+		"undo":
+			cur = {"upscaler": "own", "fg": 0}
+		"recommend":
+			out.merge({"upscaler": "xess" if "intel" in gpu else "fsr", "fg": 0})
+		"check", "state", "refresh":
+			out.merge({"components": [], "updates": 0})
+		_:
+			out = {"ok": false, "error": "e2e: %s not offered" % verb}
+	if key != "":
+		upscale_games[key] = cur
+	_mutex.unlock()
+	return {"code": 0, "out": JSON.stringify(out)}
 
 
 # ---- root helper -----------------------------------------------------------------

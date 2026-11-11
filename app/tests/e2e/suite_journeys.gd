@@ -228,6 +228,8 @@ func test_steam_manage_verify_update_move_uninstall() -> void:
 	ok(await until(func(): return "steam://store/367520" in stores.steam_uris, 6000), "Steam opens the store page")
 	if main().steam_overlay.is_open():
 		await b()
+		await w.frames(3)
+		ok(focused_in(page().manage_button), "B on Steam's card: focus back on Manage (%s)" % [focus().get_path() if focus() else "none"])
 	await w.frames(3)
 	ok(await press_on(page().manage_button, 10), "Manage once more")
 	ok(await choose("uninstall"), "Uninstall")
@@ -458,3 +460,153 @@ func test_library_order_search_favourite_collection_hide() -> void:
 	ok(before != focus() or shown_keys().size() < 2, "it moved")
 	check("library journey")
 	await without_stores()
+
+
+# ---- a game's own settings from its page: TDP, frame limit, upscaler / frame gen / Native, Lossless ----
+
+const Effects := preload("res://tests/e2e/effects.gd")
+
+
+## Steps the ControlView `id` in the open quick-menu tab once to the right (left
+## when it is at its top), with the D-pad. The new value, or null when not there.
+## `game_key`: the menu is open for that game (not running): the value lands
+## in its own settings, not on the system.
+func step_control(id: String, game_key := "") -> Variant:
+	var v := view(id)
+	if v == null or not await down_to(v, 40):
+		return null
+	var c := ctl(id)
+	var cur: Variant = shown_value(id, game_key)
+	if c != null and c.kind == "slider" and cur != null and float(cur) >= c.max_value - 0.0001:
+		await left()
+	else:
+		await right()
+	await w.wait_s(0.35)
+	await w.idle()
+	return shown_value(id, game_key)
+
+
+## Presses left (or right) on `id` until it shows `want` (at most 8 presses).
+func step_to(id: String, want: Variant, game_key := "", dir := "left") -> bool:
+	var v := view(id)
+	if v == null or not await down_to(v, 40):
+		return false
+	for i in 8:
+		if str(shown_value(id, game_key)) == str(want):
+			return true
+		await call(dir)
+		await w.wait_s(0.35)
+		await w.idle()
+	return str(shown_value(id, game_key)) == str(want)
+
+
+## The value the menu shows for `id`: the game's own when it has one.
+func shown_value(id: String, game_key := "") -> Variant:
+	if game_key != "" and profiles().layer(game_key, "").has(id):
+		return profiles().layer(game_key, "")[id]
+	return ctl(id).value if ctl(id) != null else null
+
+
+func test_game_page_own_settings_then_play_with_them() -> void:
+	await with_stores()
+	var key := "steam:1145360"
+	ok(await open_from_library(key), "Hades' page")
+	var card: Control = page().game_settings
+	ok(card != null, "the Game settings card")
+	ok(not profiles().has_profile(key), "no settings of its own yet")
+	ok(await nav_to(func(): return page().game_settings.toggle.button, 40), "D-pad to 'Use settings for this game' (focus %s)" % [focus().get_path() if focus() else "none"])
+	await a()
+	await w.idle()
+	ok(profiles().has_profile(key), "A: the game has its own settings now")
+	ok(card.edit_button != null, "Edit shows")
+	ok(await press_on(func(): return page().game_settings.edit_button, 10), "A on Edit")
+	await w.frames(3)
+	ok(qm().visible, "the quick menu opens for the game")
+	eq(qm().head_title.text, "Hades", "named after it")
+	eq(TC.TAB_IDS[qm().section], "game", "on This game")
+	var changed := {}
+	for id in ["power.tdp", "display.fps_limit", "perf.upscaler", "perf.frame_gen", "perf.lsfg"]:
+		if not available(id) or qm().model.blocked_reason(ctl(id)) != "":
+			continue
+		var before: Variant = shown_value(id, key)
+		var after: Variant = await step_control(id, key)
+		if after == null:
+			ok(false, "%s reachable in This game" % id)
+			continue
+		ok(after != before, "%s changed (%s -> %s)" % [id, before, after])
+		changed[id] = after
+		check("after " + id)
+	ok(changed.has("power.tdp"), "the TDP was offered (%s)" % [changed.keys()])
+	for id in ["perf.upscaler", "perf.frame_gen", "perf.lsfg"]:
+		ok(changed.has(id), "%s offered and changed (%s)" % [id, ctl(id).reason if ctl(id) else "?"])
+	await w.idle()
+	var layer: Dictionary = profiles().layer(key, "")
+	for id in changed:
+		if ctl(id).per_game:
+			eq(str(layer.get(id, "<none>")), str(changed[id]), "%s saved for Hades" % id)
+		else:
+			ok(not layer.has(id), "%s isn't a per-game setting" % id)
+	eq(str(profiles().layer("", "").get("power.tdp", "<none>")) == str(changed.get("power.tdp")), false, "the everyday TDP isn't the game's")
+	await b()
+	await w.frames(3)
+	ok(not qm().visible, "B closes the menu")
+	ok(page() != null, "back on the page")
+	# the launch settings: open them, change the goal and the upscaler (Native = off)
+	var lt: Button = page().launch_button
+	if lt != null and lt.visible:
+		ok(await press_on(lt, 30), "A on Launch settings")
+		ok(page().launch_open, "they open")
+		var goal: Control = page().form.rows.get("goal")
+		if goal != null:
+			var g0: Variant = page().form.settings.get("goal")
+			ok(await down_to(goal.button, 10), "the goal row")
+			await right()
+			await w.frames(2)
+			ok(Launcher.settings_for(key).get("goal") != g0, "goal saved (%s)" % Launcher.settings_for(key).get("goal"))
+		ok(await press_on(func(): return page().launch_button, 20), "A closes them")
+	# Play: the game's own settings reach the system, everyday comes back after
+	var tdp_game: Variant = changed.get("power.tdp")
+	ok(await nav_to(page().play_button, 40), "up to Play")
+	await a()
+	ok(await until(func(): return main().session.phase == "running", 8000), "the game runs")
+	await w.idle()
+	if tdp_game != null:
+		eq(float(ctl("power.tdp").value), float(tdp_game), "the game's TDP applies")
+		eq(Effects.check(self, "power.tdp", ctl("power.tdp").value), "", "and the hardware has it")
+	if changed.has("display.fps_limit"):
+		eq(atom("GAMESCOPE_FPS_LIMIT").to_int(), int(changed["display.fps_limit"]), "gamescope has the frame limit")
+	if changed.has("perf.upscaler"):
+		var chooses: Array = w.fake.upscale_runs.filter(func(r): return r[0] == "choose" and r[1] == "1145360")
+		ok(not chooses.is_empty(), "the upscaling helper put the upscaler into Hades (%s)" % [w.fake.upscale_runs])
+		eq(str(w.fake.upscale_games.get("1145360", {}).get("upscaler", "")), str(changed["perf.upscaler"]), "the helper has the game's upscaler")
+	# mid-game: back to the game's own upscaler (Native: nothing of ours in its folder)
+	if changed.has("perf.upscaler"):
+		ok(await open_menu_tab("game"), "Quick Access over the game: This game")
+		ok(await step_to("perf.frame_gen", 0, key), "frame generation off")
+		ok(await step_to("perf.upscaler", "own", key), "upscaler back to the game's own")
+		eq(str(w.fake.upscale_games.get("1145360", {}).get("upscaler", "")), "own", "the helper took ours out")
+		eq(int(w.fake.upscale_games.get("1145360", {}).get("fg", -1)), 0, "and frame generation")
+		await b()
+		await w.idle()
+		ok(not qm().visible and not main()._window_focused, "B: back to the game")
+	check("in game")
+	stores.game_quit("1145360")
+	ok(await until(func(): return not main().session.is_active(), 12000), "the game ends")
+	await w.idle()
+	if tdp_game != null:
+		ok(await until(func(): return float(ctl("power.tdp").value) != float(tdp_game), 5000), "the everyday TDP is back (%s)" % ctl("power.tdp").value)
+	# turn the game's own settings off: the first A only asks
+	if page() == null:
+		ok(await open_from_library(key), "Hades' page again")
+	card = page().game_settings
+	ok(await nav_to(func(): return page().game_settings.toggle.button, 40), "the switch")
+	await a()
+	await w.idle()
+	ok(profiles().has_profile(key), "the first A only asks")
+	await a()
+	await w.idle()
+	ok(not profiles().has_profile(key), "the second turns them off")
+	check("own settings off")
+	await b()
+	await without_stores()
+

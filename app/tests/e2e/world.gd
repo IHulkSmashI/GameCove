@@ -175,6 +175,14 @@ func reset_controls() -> void:
 	c._mutex.lock()
 	c._jobs.clear()
 	c._mutex.unlock()
+	# a job already running (the app's own start detection on a busy machine)
+	# still walks the old controls: it finishes before they go
+	if c._thread != null:
+		var done := [false]
+		c.run_on_worker(func(): done[0] = true)
+		var until_ms := Time.get_ticks_msec() + 15000
+		while not done[0] and Time.get_ticks_msec() < until_ms:
+			OS.delay_msec(2)
 	c._controls = {}
 	c._order = []
 	c._cache_mutex.lock()

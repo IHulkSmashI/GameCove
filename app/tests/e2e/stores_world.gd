@@ -81,12 +81,14 @@ func attach() -> void:
 		f.close()
 		FileAccess.set_unix_permissions(bin_dir.path_join(tool), 493)
 	_write_home()
+	_write_tools()
 	_old_path = OS.get_environment("PATH")
 	if not _old_path.begins_with(bin_dir):
 		OS.set_environment("PATH", bin_dir + ":" + _old_path)
 	OS.set_environment("GAMECOVE_FAKE_STORE", state_dir)
 	_wire_library()
 	_wire_storage()
+	w.autoload("Controls").detect_all()
 	_ticker = steam_tick
 	if not w.tree.process_frame.is_connected(_ticker):
 		w.tree.process_frame.connect(_ticker)
@@ -180,6 +182,16 @@ func _write_home() -> void:
 	_write(h.path_join(".config/nile/library.json"), JSON.stringify(lib))
 	_write(h.path_join(".config/nile/installed.json"), "[]")
 	_write(h.path_join(".config/nile/current_user.json"), JSON.stringify({"user_id": "e2e", "name": "CovePlayer"}))
+
+
+## GameCove's upscaling helper (answered by fake_system.gd's _upscale), lsfg-vk's
+## Vulkan layer and the Lossless Scaling DLL from Steam: the per-game upscaling
+## and Lossless frame generation controls have what they need.
+func _write_tools() -> void:
+	_write(w.root.path_join("usr/libexec/gamecove/gamecove-upscale"), "#!/bin/sh\n# e2e: answered by fake_system.gd\n")
+	_write(w.root.path_join("usr/share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json"),
+		JSON.stringify({"file_format_version": "1.0.0", "layer": {"name": "VK_LAYER_LSFGVK_frame_generation"}}))
+	_write(steam_root.path_join("steamapps/common/Lossless Scaling/Lossless.dll"), "MZ e2e\n")
 
 
 ## An appmanifest as Steam writes it.
