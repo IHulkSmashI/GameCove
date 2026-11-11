@@ -62,13 +62,15 @@ static func bundled(path := BUNDLED) -> Dictionary:
 
 ## The release held in `dir`, only when it is the very file cosign accepted (its sha256 is in
 ## fixes.json.verified); {} otherwise.
-static func cached(dir: String) -> Dictionary:
+static func cached(dir: String, built_in_path := BUNDLED) -> Dictionary:
 	var path := dir.path_join(FILE)
 	if not FileAccess.file_exists(path) or not FileAccess.file_exists(path + VERIFIED_SUFFIX):
 		return {}
 	if FileAccess.get_file_as_string(path + VERIFIED_SUFFIX).strip_edges() != FileAccess.get_sha256(path):
 		return {}
-	return parse(FileAccess.get_file_as_string(path))
+	var doc := parse(FileAccess.get_file_as_string(path))
+	# kept from before a GameCove update whose own definitions are newer: those stay in charge
+	return {} if serial(doc) < serial(bundled(built_in_path)) else doc
 
 
 static func serial(doc: Dictionary) -> int:
@@ -145,8 +147,9 @@ static func discard(dir: String) -> void:
 
 
 ## After cosign said yes: keep the download when it is a schema-1 document no older than the
-## one already held. "verified" | "schema" | "older" | "missing".
-static func accept(dir: String) -> String:
+## one already held, nor than the definitions built into this GameCove (their "serial": review 6 M2,
+## a fresh install accepted any older signed release). "verified" | "schema" | "older" | "missing".
+static func accept(dir: String, built_in_path := BUNDLED) -> String:
 	var part := dir.path_join(FILE + ".part")
 	if not FileAccess.file_exists(part):
 		return "missing"
@@ -154,7 +157,7 @@ static func accept(dir: String) -> String:
 	var result := "verified"
 	if doc.is_empty():
 		result = "schema"
-	elif serial(doc) < serial(cached(dir)):
+	elif serial(doc) < maxi(serial(cached(dir)), serial(bundled(built_in_path))):
 		result = "older"   # a replayed old file must not bring a withdrawn fix back
 	if result == "verified":
 		var sha := FileAccess.get_sha256(part)

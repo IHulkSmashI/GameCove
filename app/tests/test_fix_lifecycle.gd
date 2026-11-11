@@ -616,6 +616,19 @@ func test_withdrawn_fix_is_reversed_and_no_longer_offered() -> void:
 	s.free()
 
 
+func test_a_release_older_than_the_built_in_definitions_is_refused() -> void:
+	# review 6 M2: accept() compared only with the cached release, so a fresh install took any older signed one
+	var bundled_serial := FixData.serial(FixData.bundled())
+	ok(bundled_serial > 1, "the built-in definitions carry a serial (%d)" % bundled_serial)
+	var a := _ally("older_than_built_in", {"background": true, "cosign": true})
+	var s: FixesSvc = a[0]
+	var r: FakeHelper = a[1]
+	r.release = _release(func(_by): pass, 1, bundled_serial - 86400)
+	s.check_changes()
+	eq(s.data_result, "older", "nothing held yet, and still refused")
+	s.free()
+
+
 func test_release_is_data_only() -> void:
 	var built: Array = FixData.bundled()["fixes"]
 	var remote := {"schema": 1, "fixes": [
