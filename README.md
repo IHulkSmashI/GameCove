@@ -198,7 +198,8 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 - **Cloud saves for Epic and GOG.** Just before an Epic or GOG game starts, GameCove gets your newest save from the
   store's own cloud (through legendary and Heroic's gogdl, with your sign-in); just after it ends, yours goes up. The
   game page says how it stands ("Saves synced 2 min ago"), with a switch per game, Sync now, and a local backup before
-  anything replaces a save on the handheld. Changed on both sides? You pick, with the newer one highlighted. No
+  anything replaces a save on the handheld. Changed on both sides? You pick, with both kept as a backup first and the
+  newer one highlighted (a save that looks freshly started is flagged, never called newer). No
   connection? The game starts anyway. Steam games keep Steam Cloud; Amazon games aren't covered (nile has no save sync).
 - **Battery drain per game.** "Drains about 9 W, ~5 h on a full charge" on a game's page once you've played it on
   battery for a while, and a 7-day battery chart with every game's drain in About this device. Recorded only when a
@@ -488,9 +489,13 @@ over Tailscale. More in [docs/STREAMING.md](docs/STREAMING.md).
 - **Risky screen changes revert by themselves.** After HDR or a new refresh rate you get "Keep this?" with a 15-second
   countdown.
 - **Saves are never overwritten without a copy.** Before a cloud save replaces one on the handheld (or a backup is
-  restored), the current one is backed up locally; a download that fails half way puts it straight back. The last 10
-  backups per game are kept, plus the last 10 made by a choice between two saves or by a restore, and the game page
-  restores any of them.
+  restored), the current one is backed up locally; a download that fails half way puts it straight back. Before your
+  save replaces the cloud's in a choice, the cloud's is copied here too. A save folder that started over (a lost
+  Wine prefix) never goes up over the cloud's on its own, even if it happened with sync off, and an upload that was
+  cut off is finished before anything else syncs that game. The last 10 backups per game are kept, plus the last 10
+  made by a choice between two saves, a copy of the cloud or a restore, and the game page restores any of them.
+- **One game at a time.** Starting another game while one runs asks to close it first; the next one starts once the
+  first has closed and its saves have synced.
 - **Undo everything:** fixes, upscaling files, launch options, profiles. Uninstalling puts Steam Gaming Mode back as the
   default.
 - **Signed releases.** The installer checks every download against a signed checksum list before anything runs.
