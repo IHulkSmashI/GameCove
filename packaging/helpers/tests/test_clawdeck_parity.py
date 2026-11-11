@@ -30,30 +30,15 @@ CD_RUN = os.path.join(SRC, "tools", "clawdeck-launch.sh")
 
 # What GameCove does differently on purpose. Each is a safety addition that leaves the game's run as ClawDeck's.
 KNOWN = {
-    "manifest sha256": "GameCove's manifest also records each file's sha256, so undo never deletes a file that changed",
+    "manifest sha256": "GameCove's manifest also records each file's sha256 (and each backed-up game file's), and "
+                       "whether the patch finished, so undo never deletes a file that changed and a stopped patch never "
+                       "loses a game file",
     "IGDEXT_XELL_LOG without a driver": "ClawDeck sets it in every wrapped launch; GameCove only once the XeSS XMX "
                                         "driver is installed (nothing reads it before, and AMD handhelds never get it)",
     "env key check": "GameCove's wrapper skips lines of the .env file whose name isn't a plain variable name",
-    "Intel GPU shown to OptiScaler's XeSS": "ClawDeck at cf349a6 sets DXVK_CONFIG=dxgi.customVendorId = 8086 only for "
-                                            "3x/4x; its main moved on (#150: XeSS through OptiScaler ran DP4a on a "
-                                            "Claw 8 AI+ until it was set), and GameCove sets it whenever OptiScaler's "
-                                            "own XeSS is the upscaler (feat/upscaling, from the ClawDeck handoff)",
     "games.json": "GameCove regenerates the list every night from OptiScaler's newest sources and adds its wiki "
                   "(schema 2); every game and every hand-tested Capcom entry of ClawDeck's list is still in it",
 }
-VENDOR_KEY, VENDOR_VALUE = "DXVK_CONFIG", "dxgi.customVendorId = 8086"
-
-
-def _known_vendor(launch: dict, clawdeck, gamecove):
-    """KNOWN["Intel GPU shown to OptiScaler's XeSS"]: where only GameCove sets the vendor id for an OptiScaler XeSS
-    game, take it out of GameCove's answer before comparing; everything else must still be equal."""
-    if launch.get("opti") != "xess":
-        return gamecove
-    if isinstance(gamecove, tuple) and gamecove[0] == "ok" and isinstance(gamecove[1], dict):
-        c = clawdeck[1] if isinstance(clawdeck, tuple) and isinstance(clawdeck[1], dict) else {}
-        if VENDOR_KEY not in c and gamecove[1].get(VENDOR_KEY) == VENDOR_VALUE:
-            return (gamecove[0], {k: v for k, v in gamecove[1].items() if k != VENDOR_KEY})
-    return gamecove
 
 
 def cd(name):
@@ -157,7 +142,7 @@ def test_launch_environment_is_the_same():
     for launch in _launches():
         for per_game in (True, False):
             a, b = _both(lambda: norm_env(le_c.compose(dict(launch), per_game)), lambda: le_g.compose(dict(launch), per_game))
-            assert a == _known_vendor(launch, a, b), (launch, per_game)
+            assert a == b, (launch, per_game)
             n += 1
         a, b = _both(lambda: norm_env(le_c.opti_ini(dict(launch))), lambda: le_g.opti_ini(dict(launch)))
         assert a == b, launch
@@ -184,8 +169,6 @@ def test_launch_file_is_the_same(tmp_path):
         # the same lines; their order follows the names (CLAWDECK_* sorts before Dx12Upscaler, GAMECOVE_* after),
         # and the wrapper exports them one by one, so the order changes nothing
         assert (ta is None) == (tb is None), launch
-        if tb is not None and launch.get("opti") == "xess" and VENDOR_KEY not in (ta or ""):
-            tb = "".join(ln for ln in tb.splitlines(True) if ln.strip() != f"{VENDOR_KEY}={VENDOR_VALUE}")   # KNOWN
         assert ta is None or sorted(ta.splitlines()) == sorted(tb.splitlines()), launch
         assert os.path.basename(a.get("path") or "") == os.path.basename(b.get("path") or "")
 
@@ -235,7 +218,8 @@ def _tree(folder, state_dir):
                 rel = ".state/" + rel[len(state_dir) + 1:]
                 if rel.endswith("manifest.json"):
                     m = json.loads(data)
-                    m.pop("sha256", None)                       # KNOWN["manifest sha256"]
+                    for k in ("sha256", "backup_sha256", "state"):
+                        m.pop(k, None)                          # KNOWN["manifest sha256"]
                     data = json.dumps(m, sort_keys=True).encode()
             out[rel] = norm(data.decode("utf-8", "replace"))
     return out
@@ -564,6 +548,6 @@ def test_wrappers_second_stage_after_fgmod_is_the_same(tmp_path):
     assert open(os.path.join(g.game, "cabinet.dll")).read() == "lzms" and open(os.path.join(g.game, "cabinet_wine.dll")).read() == "wine cab"
     c.env_file({"opti": "xess", "xmx": True}, le_c), g.env_file({"opti": "xess", "xmx": True}, le_g)
     rc, rg = c.run(p, fgmod=True), g.run(p, fgmod=True)
-    _same(c, g, rc, rg, "FSR 4 XMX off again", drop_env=(VENDOR_KEY,))     # KNOWN: the vendor id for OptiScaler's XeSS
+    _same(c, g, rc, rg, "FSR 4 XMX off again")
     assert sorted(os.listdir(g.game)) == ["Game.exe", "amd_fidelityfx_upscaler_dx12.dll"]
     assert open(os.path.join(g.game, "amd_fidelityfx_upscaler_dx12.dll")).read() == "fgmod fsr4"
