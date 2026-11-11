@@ -169,7 +169,9 @@ and a controller-type change carry it. The actions are the Shortcuts strip's
 - **Handed back on every way out:** `ButtonMap.for_other_sessions()` takes every D-Bus mapping out
   of the loaded profile (keys and gamepad buttons stay; the layout file keeps everything for next
   time) on the quick menu's Switch to Steam / Desktop, the strip's Power sheet, GameCove quitting,
-  the headless `--restore-baseline` run `gamecove-session-select` makes before a switch, and the
+  the headless `--restore-baseline` run `gamecove-session-select` makes before a switch (it
+  applies the everyday values first, which loads the mappings again, so it ends with its own
+  hand-back, `Controller.hand_back()`, before Power's restore), and the
   session unit's `ExecStopPost=gamecove-session-select leave` (Steam's own "Switch to Desktop", a
   logout, the app killed). Without the intercept (the desktop) a layout file loads without them.
   So under Steam Gaming Mode every button is Steam's again.

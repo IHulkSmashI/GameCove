@@ -735,6 +735,23 @@ func test_service_without_the_intercept_never_loads_what_only_gamecove_answers()
 		x.free()
 
 
+## Review High 7: the --restore-baseline helper applies the everyday values, which loads the
+## GameCove mappings (a hold, a back button) again; hand_back() strips them once more.
+func test_hand_back_strips_what_the_restore_helper_put_in_again() -> void:
+	var t := _service("handback")
+	var c: Node = t[0]
+	var f: RefCounted = t[1]
+	var ip = t[2]
+	ip.loaded = Profile.to_json(ButtonMap.set_press(ButtonMap.set_hold(_empty(), "QuickAccess", "action:screenshot", CLAW), "LeftPaddle1", "action:mute"))
+	var done := [false]
+	c.hand_back(func(): done[0] = true)
+	var loads := _loads(f)
+	eq(loads.size(), 1, "one load")
+	ok(not JSON.stringify(loads[0]).contains("\"dbus\""), "no button left that only GameCove answers")
+	ok(done[0], "the callback runs after the load")
+	c.free()
+
+
 func test_service_exit_hands_back_a_shortcut_set_outside_our_session() -> void:
 	var t := _service("exit")
 	var c: Node = t[0]

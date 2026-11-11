@@ -542,6 +542,17 @@ func release_intercept(done := Callable()) -> void:
 				done.call()))
 
 
+## `--restore-baseline` (Profiles), after the everyday values went back on: the same hand-back
+## release_intercept() does, once more, because applying those values loads the buttons' GameCove
+## mappings again. Worker; `done` is called on the main thread afterwards.
+func hand_back(done := Callable()) -> void:
+	_queue("hand_back", func():
+		_hand_buttons_back()
+		_main(func():
+			if done.is_valid():
+				done.call()))
+
+
 ## Worker: before another session takes over, the buttons only GameCove answers
 ## (a back button set to a GameCove action, a held Quick Access) go back to what
 ## the handheld sends, in the loaded profile only: the layout file keeps them for
