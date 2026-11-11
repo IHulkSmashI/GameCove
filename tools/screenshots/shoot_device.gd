@@ -18,6 +18,8 @@ var Fakes: GDScript
 var Kit: GDScript
 var frame: Control
 
+const ShotVersion := preload("shot_version.gd")
+const Layout := preload("../layout/recorder.gd")
 const PHOTO := "/tmp/gamecove-shots/device_photo.webp"
 
 
@@ -42,6 +44,7 @@ class FakePhoto extends RefCounted:
 
 
 func _initialize() -> void:
+	Layout.begin()   # tools/layout: measure every shot on one screen of the matrix
 	var args := OS.get_cmdline_user_args()
 	for i in args.size():
 		match args[i]:
@@ -60,10 +63,14 @@ func shot(name: String) -> void:
 	if not only.is_empty() and name not in only:
 		return
 	await frames(40)
+	if Layout.measuring():
+		Layout.check(root, name)
+		return
 	await RenderingServer.frame_post_draw
 	DirAccess.make_dir_recursive_absolute(out)
 	root.get_texture().get_image().save_png(out + name + suffix + ".png")
 	print("saved ", out + name + suffix + ".png")
+	Layout.check(root, name)
 
 
 func _run() -> void:
@@ -85,7 +92,7 @@ func _run() -> void:
 		flow_script.instance.finish()
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
 	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
-	main.hint_status.text = "● GameCove 0.4   MSI Claw 8 EX AI+"
+	main.hint_status.text = "● GameCove %s   MSI Claw 8 EX AI+" % ShotVersion.short()
 	main.show_screen("settings")
 	await frames(4)
 	for c in main.settings.get_children():
@@ -233,3 +240,7 @@ func _hints(h: Array) -> void:
 	for c in main.hint_bar.get_children():
 		c.queue_free()
 	main.hint_bar.add_child(Kit.prompts(h if not h.is_empty() else [["B", "Back"]]))
+
+
+func _finalize() -> void:
+	Layout.save(get_script().resource_path.get_file().get_basename())

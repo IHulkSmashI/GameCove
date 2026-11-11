@@ -48,6 +48,15 @@ func test_every_page_builds() -> void:
 	_free(s)
 
 
+func test_the_page_scrolls_with_room_for_the_focus_glow() -> void:
+	# Godot's follow_focus leaves the focused card flush with the area's edge, which cut
+	# the Easy card's glow at 1280x800 (layout harness); FocusScroll keeps room around it.
+	var s := _screen(F.target("other"))
+	ok(not s.scroll.follow_focus, "Godot's follow_focus is off")
+	ok(s.scroll.get_children(true).any(func(c): return c.name == "FocusScroll"), "FocusScroll follows the focus")
+	_free(s)
+
+
 func test_welcome_shows_device_and_modes() -> void:
 	var s := _screen(F.target("bazzite"))
 	eq(s.page_title.text, "CHOOSE HOW TO SET UP GAMECOVE")
@@ -139,6 +148,12 @@ func test_custom_walk_and_choices() -> void:
 	s.next_step()
 	eq(s.plan.step, "device")
 	var gyro = s.body.find_child("fix_claw8ex-gyro", true, false)
+	# every fix carries its badge: Recommended (only those are preselected), and Tested on hardware on the Claw 8 EX
+	var badges = s.body.find_child("Badges_claw8ex-gyro", true, false)
+	ok(badges != null and badges.find_child("Level", true, false) != null, "the gyro fix says Recommended")
+	ok(badges.find_child("Tested", true, false) != null, "and Tested on hardware (docs/TESTING-HARDWARE.md, device 1)")
+	ok(s.body.find_child("Badges_claw-kbd-wakeup", true, false).find_child("Tested", true, false) == null, "a fix we didn't run on this model has no Tested badge")
+	ok("claw8ex-gyro" in s.plan.choices["fixes"], "Recommended fixes are preselected")
 	gyro.step(1)
 	ok(not "claw8ex-gyro" in s.plan.choices["fixes"], "gyro fix off")
 	ok(s.body.find_child("charge_limit", true, false) != null, "charge limit slider on the Claw")
@@ -342,6 +357,40 @@ func test_rail_compact_with_many_steps() -> void:
 	s.show_step()
 	ok(s.rail.get_children().all(func(p): return p.find_child("Text", true, false).visible), "Easy names every step")
 	_free(s)
+
+
+## Typing a code or a key in the installer and in first-run setup is the same
+## on-screen keyboard as everywhere: pinned by its foot, with Paste, and what
+## was typed goes back to whoever asked.
+func test_installer_and_setup_ask_with_the_keyboard() -> void:
+	var s := _screen(F.target("bazzite"))
+	var got: Array = []
+	s.ask_text("Sign-in code", "", func(t): got.append(t))
+	var k: PanelContainer = s.keyboard
+	ok(k.visible, "installer: the keyboard opens")
+	ok(k.paste_button.visible and k.keep_case, "installer: codes can be pasted, case kept")
+	eq(k.field.text, "Sign-in code", "installer: it says what it wants")
+	eq(k.anchor_bottom, 1.0, "installer: pinned to the foot of the screen")
+	eq(k.grow_vertical, Control.GROW_DIRECTION_BEGIN, "installer: growing upward")
+	ok(k.offset_right - k.offset_left >= 10 * k.KEY.x + 9 * k.GAP + 48, "installer: wide enough for its keys")
+	k.type("a")
+	k.shift_button.pressed.emit()
+	k.type("b")
+	k.close()
+	eq(got, ["aB"], "installer: the text goes back")
+	_free(s)
+	var f: Control = SetupFlow.new()
+	f.setup({"setup": FirstRunSetup.new()})
+	var got2: Array = []
+	f.ask_text("API key", "x", func(t): got2.append(t))
+	ok(f.keyboard.visible and f.keyboard.paste_button.visible, "setup: the keyboard opens for a key")
+	eq(f.keyboard.text, "x", "setup: with what was there")
+	ok(f.keyboard.offset_right - f.keyboard.offset_left >= 10 * f.keyboard.KEY.x + 9 * f.keyboard.GAP + 48, "setup: wide enough for its keys")
+	f.keyboard.symbols_button.pressed.emit()
+	f.keyboard.keys[1][1].pressed.emit()
+	f.keyboard.close()
+	eq(got2, ["x@"], "setup: the text goes back")
+	f.free()
 
 
 ## Owner item: Easy never offered Epic / GOG / Amazon sign-in although the welcome card promises it.

@@ -40,10 +40,11 @@ for res in $sizes; do
 	for theme in $themes; do
 		dir="$out/$res-$theme"
 		mkdir -p "$dir"
-		for script in showcase.gd showcase_stream.gd showcase_installer.gd; do
+		# the Fixes page on three handhelds and the start dialog: tools/screenshots/shoot_fixes.gd
+		for script in showcase.gd showcase_stream.gd showcase_installer.gd ../screenshots/shoot_fixes.gd; do
 			args=(--out "$dir")
 			[[ -n "$only" ]] && args+=(--only "$only")
-			SHOWCASE_THEME="$theme" xvfb-run -a -s "-screen 0 ${w}x${h}x24" \
+			SHOWCASE_THEME="$theme" SHOOT_THEME="$theme" xvfb-run -a -s "-screen 0 ${w}x${h}x24" \
 				"$godot" --path "$repo/app" --rendering-driver opengl3 --resolution "$res" --position 0,0 \
 				-s "$here/$script" -- "${args[@]}" 2>&1 | grep -E "^saved|SCRIPT ERROR" || true
 		done
@@ -57,11 +58,14 @@ README_NAMES=(
 	discover:discover discover_free:discover-free discover_deals:deals discover_calendar:calendar
 	discover_calendar_month:calendar-month discover_wishlist:wishlist
 	quick_game:quick-menu quick_power:quick-power quick_display:quick-display quick_audio:quick-audio
-	quick_controller:quick-controller quick_leds:quick-leds quick_device:quick-device
+	quick_controller:quick-controller quick_leds:quick-leds quick_device:quick-device quick_shortcuts:quick-shortcuts
+	settings_buttons:settings-buttons
 	settings_power:settings-power settings_performance:settings-performance settings_system:settings-system
 	settings_media:settings-media settings_saves:settings-saves settings_storage:settings-storage
-	settings_battery:battery-history settings_about:device settings_fixes:fixes settings_updates:updates
+	settings_battery:battery-history settings_about:device fixes_claw:fixes fixes_claw_details:fixes-details
+	fixes_ally:fixes-retired fixes_claw_dialog:fixes-attention settings_updates:updates
 	settings_privacy:privacy settings_profiles:profiles stream:stream installer:installer setup_art:game-art-setup
+	keyboard:keyboard keyboard_code:keyboard-code
 )
 src="$out/1920x1200-cove"
 if [[ "${DOCS:-1}" == "1" && -d "$src" ]]; then
@@ -74,6 +78,9 @@ if [[ "${DOCS:-1}" == "1" && -d "$src" ]]; then
 	# The light theme, for the README's theme shots.
 	[[ -f "$out/1920x1200-light/home.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/home.png=$repo/docs/images/home-light.png"
 	[[ -f "$out/1920x1200-light/quick_power.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/quick_power.png=$repo/docs/images/quick-power-light.png"
+	[[ -f "$out/1920x1200-light/quick_shortcuts.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/quick_shortcuts.png=$repo/docs/images/quick-shortcuts-light.png"
+	[[ -f "$out/1920x1200-light/settings_buttons.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/settings_buttons.png=$repo/docs/images/settings-buttons-light.png"
 	[[ -f "$out/1920x1200-light/game.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/game.png=$repo/docs/images/game-light.png"
+	[[ -f "$out/1920x1200-light/keyboard.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/keyboard.png=$repo/docs/images/keyboard-light.png"
 fi
 echo "showcase: $out"

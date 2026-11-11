@@ -1,6 +1,6 @@
 #!/bin/sh
 # GameCove fix: gyro on the MSI Claw 8 EX AI+ (board MS-1T91), the IMU behind Intel's sensor hub (ISH).
-# usage: fix.sh install|remove|status|set accel-on|accel-off|refresh
+# usage: fix.sh install|remove|update|status|set accel-on|accel-off|refresh
 #
 # Method found and tested by Kisenir (r/MSIClaw), used with his permission (2026-11-08); ported from
 # ClawDeck. Four pieces, all recorded and all taken out again by remove:
@@ -26,6 +26,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/../lib/claw8ex-common.sh"
 
 NAME=claw8ex-gyro
+REVISION=1 # = "revision" in fix.json
 KIT_URL="https://download.msi.com/nb_drivers/cs/ISH_Kit_5.8.1.7782_1T91%20_0318_5.8.58.0_0x96746247.zip"
 KIT_MEMBER="Drivers/Win10/IshHeci/x64/FWImage/0004/ishS_SI_5.8.1.7782.bin"
 FW_SIZE=432640
@@ -242,6 +243,7 @@ install() {
 	done
 	ip_flag_on imu || fail "could not add the gyro to the InputPlumber override"
 	m_add ipflag imu
+	m_add rev "$REVISION"
 	karg_hold "$FW_KARG" "$NAME" || fail "could not set the kernel argument $FW_KARG"
 	m_add karg "$FW_KARG"
 	say "installed. Next: shut the Claw down fully and turn it on again (a cold boot, not a restart: it clears"
@@ -345,6 +347,10 @@ status() {
 	fi
 	say "applies=yes"
 	say "installed=$installed"
+	say_revision
+	# a gyro without our firmware and HID-BPF program: the system brings its own (only readable while
+	# ours isn't installed; with ours in place the lifecycle rules in fix.json decide)
+	if [ "$installed" = no ] && [ "$gyro" = yes ]; then say "os_fixed=yes"; elif [ "$installed" = no ]; then say "os_fixed=no"; fi
 	say "firmware_file=$fw"
 	say "kernel_arg=$karg"
 	say "firmware_loaded=$loaded"
@@ -368,8 +374,9 @@ status() {
 
 case ${1:-} in
 install) install ;;
+update) require_root; gc_root_update ;;
 remove) remove ;;
 status) status ;;
 set) shift; set_value "$@" ;;
-*) die "usage: $0 install|remove|status|set accel-on|accel-off|refresh" ;;
+*) die "usage: $0 install|remove|update|status|set accel-on|accel-off|refresh" ;;
 esac

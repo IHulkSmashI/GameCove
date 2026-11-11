@@ -14,9 +14,10 @@ extends "../screenshots/shoot_controls.gd"
 const SHOTS_ALL := ["home", "home_shelves", "library", "library_filter", "library_apps", "game", "game_achievements",
 	"game_saves", "emulation", "library_emulation", "game_rom", "apps_view", "discover", "discover_free", "discover_deals", "discover_calendar",
 	"discover_calendar_month", "discover_wishlist", "quick_game", "quick_power", "quick_display", "quick_audio",
-	"quick_controller", "quick_leds", "quick_device", "settings_power", "settings_performance", "settings_system",
+	"quick_controller", "quick_leds", "quick_device", "quick_shortcuts", "settings_buttons", "settings_power", "settings_performance", "settings_system",
 	"settings_profiles", "settings_saves", "settings_media", "media_clip_sheet", "media_share", "settings_about",
-	"settings_battery", "settings_storage", "settings_fixes", "settings_updates", "settings_privacy", "setup_art"]
+	"settings_battery", "settings_storage", "settings_fixes", "settings_updates", "settings_privacy", "setup_art",
+	"keyboard", "keyboard_code"]
 
 const Recorder := preload("res://scripts/system/recorder.gd")
 const Clips := preload("res://scripts/system/clips.gd")
@@ -459,6 +460,34 @@ func _use_device(id: String, patch: Dictionary) -> void:
 	profiles.save_file()
 
 
+## Button shortcuts (the device snapshot predates them): the real controller
+## provider on the Claw's fake InputPlumber, its shortcut controls copied into
+## the fake Controls with a lived-in setup.
+func _button_controls() -> void:
+	var CtlTest = load("res://tests/test_controls_controller.gd")
+	var CFakes = load("res://tests/fixtures/controller/fakes.gd")
+	var FC = load("res://tests/fixtures/ui_controls/fake_controls.gd")
+	var h: RefCounted = CtlTest.new()
+	var dir := fake_home.path_join("button_shortcuts")
+	DirAccess.make_dir_recursive_absolute(dir.path_join("home"))
+	var f: RefCounted = CFakes.new(dir)
+	f.with_ip("MSI Claw 8 EX", CtlTest.CLAW_CAPS)
+	var reg: Node = h._setup(f, h._row("msi-claw-8-ex"))
+	for w in [["controller.paddle.LeftPaddle1", "action:screenshot"], ["controller.paddle.RightPaddle1", "KeyLeftAlt+KeyEnter"]]:
+		var c: RefCounted = reg.control(w[0])
+		if c != null:
+			c.write(w[1])
+	reg.detect_all()
+	for c in reg.list("controller"):
+		var d: Dictionary = c.describe()
+		var id := str(d.get("id", ""))
+		for pre in ["controller.paddle.", "controller.button.", "controller.hold", "controller.to_steam.", "controller.reset_shortcuts"]:
+			if id.begins_with(pre):
+				fake.add(FC.from_describe(d))
+				break
+	reg.free()
+
+
 ## What the device snapshot predates: Sleep at low battery (on, at 5 %), the
 ## music playing (MPRIS) and each app's volume (PipeWire), all fakes.
 func _extra_controls() -> void:
@@ -798,7 +827,7 @@ func _fake_apps() -> void:
 # ------------------------------------------------------------------ library and game
 
 func _library_shots() -> void:
-	if not want(["library", "library_filter", "library_apps"]):
+	if not want(["library", "library_filter", "library_apps", "keyboard", "keyboard_code"]):
 		return
 	main.show_screen("library")
 	await frames(4)
@@ -815,6 +844,40 @@ func _library_shots() -> void:
 		main.library_screen.apps_button.grab_focus()
 		await frames(6)
 		await shot("library_apps")
+	if want(["keyboard"]):
+		# Search with the on-screen keyboard: "hade" typed, the grid already filtered.
+		var lib = main.library_screen
+		lib.open_search()
+		await frames(4)
+		for ch in "hade":
+			lib.keyboard.type(ch)
+		lib.keyboard.keys[2][1].grab_focus()      # S, the next letter
+		await frames(24)
+		await shot("keyboard")
+		lib.keyboard.close()
+		lib.set_query("")
+		await frames(8)
+	if want(["keyboard_code"]):
+		# A key being typed in Settings: Paste beside the field, Caps on, the symbols page.
+		main.show_screen("settings")
+		await frames(6)
+		var st = main.settings
+		st.ask_text("Paste or type your SteamGridDB key", "", func(_t): pass)
+		await frames(4)
+		var kb = st.keyboard
+		kb.read_clipboard = func() -> String: return ""
+		kb.press_shift()
+		kb.press_shift()
+		for ch in "sgdb":
+			kb.type(ch)
+		kb.toggle_symbols()
+		for ch in "_4f2a-":
+			kb.type(ch)
+		kb.keys[kb.keys.size() - 3][1].grab_focus()      # the underscore
+		await frames(24)
+		await shot("keyboard_code")
+		kb.close()
+		await frames(8)
 	main.show_screen("home")
 	await frames(3)
 
@@ -957,8 +1020,25 @@ func _discover(lib: Node) -> void:
 
 # ------------------------------------------------------------------ quick menu
 
+class ShowSession extends RefCounted:
+	var game: Dictionary
+	var app_id := 0
+	var pid := 0
+
+	func _init(g: Dictionary) -> void:
+		game = g
+
+	func is_active() -> bool:
+		return true
+
+
+class ShowController extends RefCounted:
+	func state() -> Dictionary:
+		return {"backend": "inputplumber"}
+
+
 func _quick() -> void:
-	if not want(["quick_game", "quick_power", "quick_display", "quick_audio", "quick_controller", "quick_leds", "quick_device"]):
+	if not want(["quick_game", "quick_power", "quick_display", "quick_audio", "quick_controller", "quick_leds", "quick_device", "quick_shortcuts"]):
 		return
 	var qm = main.quick_menu
 	var g := _find_key("steam:1245620")
@@ -969,6 +1049,11 @@ func _quick() -> void:
 		qm.exit_game_requested.connect(_noop)
 	main.show_screen("home")
 	await frames(3)
+	# The hero behind the menu is the game being played, not wherever the shots before left it.
+	var played = main.home.tile_for(str(g.get("key", "")))
+	if played != null:
+		played.grab_focus()
+		await frames(6)
 	main.home.play_button.grab_focus()
 	await frames(3)
 	main.playing = g
@@ -980,6 +1065,16 @@ func _quick() -> void:
 	rec.state = "recording"
 	rec._started_ms = Time.get_ticks_msec() - 83 * 1000
 	main.top_bar.set_recording(true)
+	# The Shortcuts strip as it is over a running game on InputPlumber.
+	main.actions.session = ShowSession.new(g)
+	main.actions.controls = fake
+	for cid in ["system.screenshot", "system.sleep", "audio.mute", "controller.desktop_mode"]:
+		if not fake.has(cid):
+			fake.add({"id": cid, "kind": "toggle" if cid in ["audio.mute", "controller.desktop_mode"] else "action", "value": cid == "audio.mute"})
+		fake.set_available(cid, true)
+	main.actions.controller = ShowController.new()
+	main.actions.game_front = func() -> bool: return true
+	main.actions.steam_bin = "/usr/bin/steam"
 	main._open_menu()
 	qm.game = g
 	await _open_quick(g, 0)
@@ -1010,7 +1105,16 @@ func _quick() -> void:
 	await shot("quick_leds")
 	await _open_quick(g, 5)
 	await shot("quick_device")
+	# The strip itself: focus on Screenshot, sound muted.
+	await _open_quick(g, 0)
+	if qm.strip != null and qm.strip.buttons.has("screenshot"):
+		qm.strip.buttons["screenshot"].grab_focus()
+	await frames(8)
+	await shot("quick_shortcuts")
 	qm.close()
+	main.actions.session = main.session
+	main.actions.controller = root.get_node_or_null("Controller")
+	main.actions.controls = root.get_node_or_null("Controls")
 	rec.state = "idle"
 	main.top_bar.set_recording(false)
 	main.playing = {}
@@ -1091,6 +1195,20 @@ func _settings() -> void:
 		if bt != null and not bt.focusables().is_empty():
 			await _focus_row(bt.focusables()[0])
 		await shot("settings_system")
+	if want(["settings_buttons"]):
+		# Settings > Controller > Button shortcuts on the Claw: M1 takes a
+		# screenshot, M2 sends Alt + Enter, Quick Settings held opens Steam's keyboard.
+		_button_controls()
+		main.show_screen("settings")
+		await frames(4)
+		st.open_category("device", "controller")
+		await frames(14)
+		var card: Node = st.find_child("ShortcutsCard", true, false)
+		if card != null and card.rows.has("hold:QuickAccess"):
+			await _focus_row(card.rows["hold:QuickAccess"].button)
+			card._on_seen("QuickAccess", "hold")
+		await frames(8)
+		await shot("settings_buttons")
 	if want(["settings_profiles"]):
 		await _settings_page("profiles")
 		var f: Array = st.pages["profiles"].focusables()

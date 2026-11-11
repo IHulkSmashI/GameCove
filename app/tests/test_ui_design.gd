@@ -266,7 +266,7 @@ func test_prefs_round_trip() -> void:
 	UiPrefs.save_prefs()
 	UiPrefs.set_values(UiPrefs.DEFAULTS)
 	UiPrefs.load_prefs(path)
-	eq(UiPrefs.values(), {"theme": "sunset", "match_art": false, "reduce_motion": true}, "saved and loaded")
+	eq(UiPrefs.values(), {"theme": "sunset", "match_art": false, "reduce_motion": true, "interface_size": "default"}, "saved and loaded")
 	UiPrefs.set_values({"theme": "bogus"})
 	eq(UiPrefs.theme, "cove", "unknown theme rejected")
 	UiPrefs.set_values(UiPrefs.DEFAULTS)
@@ -352,6 +352,37 @@ func test_keyboard() -> void:
 	k.free()
 
 
+## Done closes the keyboard at once: while it fades out, a press (X sorts the
+## Library, Y...) goes to the screen, not into the text it just closed.
+func test_osk_takes_no_keys_once_closed() -> void:
+	var k: PanelContainer = Osk.new()
+	k.open("hol")
+	ok(k.is_open(), "open")
+	var y := InputEventJoypadButton.new()
+	y.button_index = JOY_BUTTON_Y
+	y.pressed = true
+	k._input(y)
+	eq(k.text, "hol ", "open: Y types a space")
+	k.close()
+	ok(not k.is_open(), "closed as soon as Done is pressed")
+	var x := InputEventJoypadButton.new()
+	x.button_index = JOY_BUTTON_X
+	x.pressed = true
+	k._input(x)
+	k._input(y)
+	var kb := InputEventKey.new()
+	kb.keycode = KEY_A
+	kb.unicode = 97
+	kb.pressed = true
+	k._input(kb)
+	eq(k.text, "hol ", "presses during the fade change nothing")
+	var closes := [0]
+	k.closed.connect(func(_t): closes[0] += 1)
+	k.close()
+	eq(closes[0], 0, "a second Done doesn't close it twice")
+	k.free()
+
+
 func test_toasts() -> void:
 	var t: VBoxContainer = Toasts.new()
 	for i in 5:
@@ -392,6 +423,35 @@ func test_page_template() -> void:
 	eq(play.get_node(play.focus_neighbor_bottom), row.button, "down into the cards")
 	eq(more.get_node(more.focus_neighbor_bottom), row.button, "down from any action")
 	eq(row.button.get_node(row.button.focus_neighbor_top), play, "up returns to the primary action")
+	p.free()
+
+
+## The column cards are dealt again once the page knows its width (two columns
+## become three): the D-pad links follow the cards to their new column.
+func test_page_columns_dealt_again_keep_the_links() -> void:
+	var p: Control = PageTemplate.new()
+	p.setup_page(Logic.g("steam", "1", "Hades", true, 0, _ttb(20.0)), "")
+	p.add_action("Play", "play", true, "Play")
+	var buttons: Array = []
+	for i in 3:
+		var body: VBoxContainer = p.add_card("Card %d" % i, "info", "", true, i)
+		var b := Button.new()
+		b.name = "B%d" % i
+		body.add_child(b)
+		buttons.append(b)
+	p.add_focusables(buttons)
+	p.columns.size = Vector2(800, 400)
+	p._layout_columns()
+	p.finish()
+	eq(p.columns.get_child_count(), 2, "narrow: two columns")
+	p.columns.size = Vector2(1600, 400)
+	p._layout_columns()
+	eq(p.columns.get_child_count(), 3, "wide: three")
+	for i in 2:
+		var nb: NodePath = buttons[i].focus_neighbor_bottom
+		ok(buttons[i].get_node_or_null(nb) == buttons[i + 1], "card %d: down still reaches card %d (%s)" % [i, i + 1, nb])
+	var up: NodePath = buttons[2].focus_neighbor_top
+	ok(buttons[2].get_node_or_null(up) == buttons[1], "and up comes back (%s)" % up)
 	p.free()
 
 

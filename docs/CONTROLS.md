@@ -33,6 +33,7 @@ Floats are IEEE bit patterns in a CARDINAL. Names from gamescope `src/steamcompm
 | `display.hdr_itm`, `display.sdr_brightness` | `GAMESCOPE_HDR_ITM_ENABLE`; `GAMESCOPE_SDR_ON_HDR_CONTENT_BRIGHTNESS` (nits) | HDR supported; SDR brightness hidden where Brightness already uses it |
 | `display.effect` | `GAMESCOPE_RESHADE_TECHNIQUE_IDX`=0 then `GAMESCOPE_RESHADE_EFFECT` (text, path under Shaders/); Off removes it. Bundled effects are written to `~/.local/share/gamescope/reshade/Shaders/gamecove/` on first use; user and `/usr/share` `.fx` files are listed too | gamescope with ReShade |
 | `display.rotation` | `ORIENTATION` in the session env file (auto = removed, device-quirks' own) | gamescope-session-plus |
+| `display.hdmi_cec` | steamos-manager `HdmiCec1.HdmiCecState` (user bus; 0 off, 1 the TV remote only, 2 remote and TV power; the finer `HdmiCec2` state 3 reads as 2) | steamos-manager offers `HdmiCec1` (Steam Machine, a Steam Deck dock). Nothing else is tried: no `cec-client`, no polling |
 | `display.dim_after`, `display.screen_off_after` | stored per device; the UI's idle timer reads them (and skips while `system.keep_awake`) | always |
 | `audio.volume` / `audio.mute` | `wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@` / `set-mute` | `wpctl status` works and lists a sink |
 | `audio.output`, `audio.input` | `wpctl set-default <id>`; values are device names (ids change per boot) | sinks / sources listed |
@@ -105,8 +106,13 @@ Picked at detect time on the running system, not from the table:
 | `controller.gyro_aim` | choice | always unavailable: points to Steam Input (see below) | same |
 | `controller.emulation` | choice | profile `target_devices` (Steam Deck, DualSense Edge, Xbox Elite, Xbox Series, DualSense, Xbox 360; "Handheld default" = the device config's own list, `/etc/inputplumber/devices.d` first) | `controller_mode` / `xinput` modes from the schema |
 | `controller.paddles_as` | choice | unavailable (each paddle is set on its own) | `paddles_as` of the current emulation mode |
-| `controller.paddle.<Cap>` | choice | one per back paddle in the button profile (label "Back button M1"): itself, off, any button, mouse click, a key | unavailable |
-| `controller.button.<Cap>` | choice | special buttons GameCove leaves to the game (e.g. Xbox Ally's Armoury Crate hold) | unavailable |
+| `controller.paddle.<Cap>` | choice | one per back paddle in the button profile (label "Back button M1"): itself, off, any button, mouse click, a key or key combination, a GameCove action (see Button shortcuts below) | unavailable |
+| `controller.button.<Cap>` | choice | special buttons GameCove leaves to the game (e.g. Xbox Ally's Armoury Crate hold): the same choices | unavailable |
+| `controller.hold.<Cap>` | choice | the buttons next to the screen that belong to GameCove (Quick Access, Guide...): nothing, a GameCove action or a key; Quick Access held = Keyboard unless changed, Guide = nothing | unavailable (hhd's own shortcuts instead) |
+| `controller.to_steam.<Cap>` | toggle | Quick Access only, off by default: on gives the button back to Steam in games (Steam's quick access menu, no hold) | unavailable |
+| `controller.hold_time` | slider 0.3-1.5 s | how long a hold is (`<profiles>/shortcuts.json`, per device, 0.5 s) | unavailable |
+| `controller.reset_shortcuts` | action | every button's press and hold back to the handheld's usual ones, hold time 0.5 s | unavailable |
+| `controller.hhd_shortcut.<section>.<key>` | choice | unavailable | hhd's own `shortcuts.*` settings (Armoury Crate / fan button, Xbox + A/B/X/Y) with hhd's choices |
 | `controller.nintendo_layout` | toggle | A<->B, X<->Y mappings | `nintendo_mode` |
 | `controller.desktop_mode` | toggle | right stick = pointer, RT left click, LT right click, adds the `mouse`/`keyboard` targets | unavailable |
 | `controller.desktop_speed` | slider 200-3000 px/s | pointer `speed_pps` | unavailable |
@@ -121,9 +127,56 @@ Picked at detect time on the running system, not from the table:
 | `controller.led_speed` | slider % | `speed` within `speed_range` | `speed` or `speedd` |
 | `controller.reset_layout` | action | removes every "GameCove ..." mapping and our target override | unavailable |
 
-Per game: everything but `gyro_accel`, `gyro_aim`, `desktop_*`, the actions. Every unavailable
+Per game: everything but `gyro_accel`, `gyro_aim`, `desktop_*`, `hold_time`, the actions. Every unavailable
 control has a plain reason ("This handheld has no trackpad", "Needs the gyro fix first (Device,
 Fixes)", "Only Steam sets this controller's rumble strength").
+
+### Button shortcuts (Settings > Controller > Button shortcuts)
+
+`app/scripts/actions/button_map.gd` turns a choice into one InputPlumber profile mapping per button,
+named `GameCove <Cap>[ press:<id>][ hold:<id>]`; the page is `app/scripts/ui/device/shortcuts_card.gd`
+(the handheld's picture outlines the button you're on, a test area shows what was seen: down, press,
+hold). Everything lives in the profile, so per-game layouts, the everyday layout file, sleep / wake
+and a controller-type change carry it. The actions are the Shortcuts strip's
+(`app/scripts/actions/registry.gd`, the ones marked `button`).
+
+- **Keys** on a button are keyboard target events: InputPlumber presses them in order and releases in
+  reverse, with GameCove closed too. OptiScaler's Insert / End only show for games that use it.
+- **GameCove actions** on a button are `dbus:` target events, which InputPlumber hands to its D-Bus
+  target in every intercept mode, so they reach the `gdbus monitor` GameCove already runs (press and
+  release) while a game has the pad. No gamepad button sends `ui_volume_up`, `ui_volume_down` or
+  `ui_volume_mute`, so those carry the actions: three different actions on buttons at once (a fourth
+  is refused with that reason); keys and gamepad buttons have no limit. Exit game and Force close on
+  a button need a 1 s hold; a tap only says so.
+- **Holds** only on the buttons next to the screen that already belong to GameCove. To see them while
+  a game has the pad they're mapped to their own D-Bus name (`QuickAccess` -> `ui_quick`); the
+  intercept's own button (Guide on most handhelds) already arrives and is left alone. A and B, X and
+  Y, the bumpers and the back buttons never get a hold: games hold them. Guide's default hold is
+  nothing, so Steam's Guide chords and its long-Guide chord list stay Steam's. On the Claw, where
+  Quick Access + Y is a chord, the menu opens on the release.
+- **Quick Access in a game** opens GameCove's quick menu: while GameCove runs its session the button
+  is mapped to `ui_quick` even with no hold. `controller.to_steam.QuickAccess` gives it back to Steam
+  in games (the mapping becomes the button as the handheld sends it, which the Xbox pad turns into
+  Guide + A). Steam's menu is also on the Shortcuts strip (**Steam menu**: `SendButtonChord
+  ["Gamepad:Button:QuickAccess"]` on the composite device, written straight to the virtual pad past
+  the profile, after the game gets the pad in Pass mode).
+- **Under layering:** these mappings sit below Steam Input. Steam sees what InputPlumber's virtual pad
+  sends, so a back button set to a key no longer reaches Steam's own back-button binding.
+- **Loaded, not saved, by the service:** the Controller service puts the usual shortcuts (Quick
+  Access ours, held: Keyboard) into every profile it loads while it intercepts (start, a game's own
+  layout, its end, a reload after InputPlumber made the pad again) on the same load; the layout file
+  only keeps what the user chose.
+- **Handed back on every way out:** `ButtonMap.for_other_sessions()` takes every D-Bus mapping out
+  of the loaded profile (keys and gamepad buttons stay; the layout file keeps everything for next
+  time) on the quick menu's Switch to Steam / Desktop, the strip's Power sheet, GameCove quitting,
+  the headless `--restore-baseline` run `gamecove-session-select` makes before a switch, and the
+  session unit's `ExecStopPost=gamecove-session-select leave` (Steam's own "Switch to Desktop", a
+  logout, the app killed). Without the intercept (the desktop) a layout file loads without them.
+  So under Steam Gaming Mode every button is Steam's again.
+- **Profile lock:** the page (Controls worker) and the service both read-modify-write the profile;
+  both go through `ProfileLock`, so neither loses the other's change.
+- **Handheld Daemon** has no per-button remap or holds; the page shows hhd's own `shortcuts.*`
+  settings instead.
 
 ### Hardware per handheld
 
@@ -377,8 +430,10 @@ other injectors), `active.py` (the read-out from OptiScaler's log, the launch st
 `device/gpu_caps.gd` (the same table, kept in step by `tests/fixtures/gpu_tiers.json`), `providers/perf.gd`
 (`perf.upscale_mode`, `perf.upscale_active`, `prepare_game`, `prepare_installed` from main's `install_finished`),
 `perf/upscale.gd` (labels and the one line per option that `control_view.gd` shows for the option in view).
-`perf.upscale_menu` presses Insert through `ctx["run_action"]` once the shared action registry is in main; until
-then the row says to press Insert on a keyboard.
+`perf.upscale_menu` presses Insert through `ctx["run_action"]`: Controls puts it in the context at setup (never
+added later while the worker runs) and hands the action to the main thread, where main's action runner
+(`scripts/actions/runner.gd`, `key_optiscaler`) types it at the game. Without a runner (tests, the headless helper)
+nothing happens.
 
 ### Improvements over ClawDeck (each tested)
 - Every GPU, not just the Claw (table above); AMD presets in launchenv (`fsr31`, `fsr4_amd`, FSR-FG output, Capcom

@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "id": "onexfly-touch",
+  "revision": 1,
+  "title": "Touch in the right place",
+  "line": "Makes touch line up with the picture in Gaming Mode (it's turned 90 degrees).",
+  "symptom": "gamescope-session-plus marks this sideways panel as external, so gamescope turns the picture but not touch input.",
+  "why": "gamescope-session-plus device-quirks starts these OneXPlayer / AOKZOE panels as PANEL_TYPE=external with ORIENTATION=left, so touch isn't turned with the picture. Confirmed on the OneXFly F1 (Bazzite 5581); offered on the other models in such blocks.",
+  "kind": "file",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "session",
+  "level": "recommended",
+  "must_fix": true,
+  "breaks": "touch",
+  "default": "on",
+  "risk": "low",
+  "risk_note": "One session file that only sets the panel type, checked against the DMI ids.",
+  "auto": "session_quirk:oxp-120-external-left",
+  "optional": "session_quirk:oxp-60-external-left|oxp-x1-external-left|oxp-x1mini-external-left",
+  "exclude": {},
+  "changes": [
+    {
+      "type": "file",
+      "target": "/etc/gamescope-session-plus/sessions.d/<session>",
+      "detail": "Sets PANEL_TYPE=internal for this handheld, so gamescope turns touch with the screen."
+    }
+  ],
+  "undo": "Deletes the file. Takes effect next time Gaming Mode starts.",
+  "tested": [],
+  "bazzite": "Not fixed (issue 5581; waits for ChimeraOS/gamescope-session PR 128).",
+  "steamos": "Not affected the same way (SteamOS uses its own session).",
+  "sources": [
+    "https://github.com/ublue-os/bazzite/issues/5581",
+    "https://github.com/ChimeraOS/gamescope-session/pull/128"
+  ],
+  "lifecycle": {
+    "needed_when": {
+      "file": "/usr/share/gamescope-session-plus/device-quirks"
+    },
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Reads gamescope-session's own device-quirks file: once it treats this handheld's panel as internal, nothing is needed."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "chimera-pr-128",
+      "kind": "github-issue",
+      "repo": "ChimeraOS/gamescope-session",
+      "number": 128,
+      "note": "The upstream fix (open on 2026-11-10). Merged = fixed once Bazzite packages it."
+    },
+    {
+      "id": "bazzite-5581",
+      "kind": "github-issue",
+      "repo": "ublue-os/bazzite",
+      "number": 5581,
+      "note": "The Bazzite report."
+    },
+    {
+      "id": "device-quirks",
+      "kind": "github-commits",
+      "repo": "ChimeraOS/gamescope-session",
+      "path": "usr/share/gamescope-session-plus/device-quirks",
+      "note": "The file the probe reads."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

@@ -600,7 +600,7 @@ func open_import() -> void:
 
 
 func close_import() -> void:
-	if keyboard.visible:
+	if keyboard.is_open():
 		keyboard.close()
 	import_panel.visible = false
 	var back: Control = _return_focus if _return_focus != null and is_instance_valid(_return_focus) and is_ancestor_of(_return_focus) else import_button

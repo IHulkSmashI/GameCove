@@ -14,8 +14,14 @@ extends RefCounted
 ##      game's virtual pad (and Steam Input) except the activation button. When
 ##      it is pressed, InputPlumber switches to Always itself and sends the
 ##      target event, which becomes ui_action("home") (or "quick_menu").
-##   4. Quick Access stays Steam's inside a game (InputPlumber's Xbox target turns
-##      it into Guide + A, Steam's quick access menu); in our UI it opens ours.
+##   4. Quick Access opens GameCove's quick menu inside a game too: while GameCove
+##      runs its session the loaded profile maps it to its own D-Bus name
+##      (scripts/actions/button_map.gd), which InputPlumber hands to us in every
+##      mode, and a hold on it runs a shortcut (Keyboard unless changed). Steam's
+##      quick access menu stays one press away (the Shortcuts strip's Steam menu),
+##      and Settings > Controller > Button shortcuts can give the button back to
+##      Steam for games. Before another session takes over the mapping is taken
+##      out again, so under Steam Gaming Mode the button is Steam's as ever.
 ##
 ## Signals come from one long-running `gdbus monitor --system --dest
 ## org.shadowblip.InputPlumber` child, read line by line on its own thread
@@ -29,11 +35,27 @@ extends RefCounted
 ##   The name org.shadowblip.InputPlumber is owned by :1.42     (InputPlumber (re)started)
 ##   The name org.shadowblip.InputPlumber does not have an owner
 ##
+## Button shortcuts (scripts/actions/button_map.gd): a back button set to a
+## GameCove action, and a hold on one of the handheld's extra buttons, arrive
+## here as D-Bus names too (`shortcuts` says which). They come with a press and
+## a release, in every mode, so a hold is told from a tap by the two signals
+## and one one-shot timer the owner starts while the button is down
+## (`start_timer`): nothing polls, and nothing runs while no button is held.
+##   a back button's action      runs on the press; Exit game and Force close
+##                               only after CONFIRM_S held (hold to confirm)
+##   a hold on an extra button   runs once `hold_s` passed with the button
+##                               still down. Its short press stays what it was:
+##                               the quick menu still opens on the press itself
+##                               (never later than before); home, the keyboard
+##                               and a screenshot wait for the release, so a
+##                               hold doesn't do both.
+##
 ## Safety: mode 2 is only set while the monitor runs (otherwise nobody would
 ## turn D-Bus events back into input and the UI would be stuck). When the
 ## monitor dies, or GameCove quits, every device goes back to mode 0 (None).
 
 const Buttons := preload("res://scripts/device/buttons.gd")
+const Registry := preload("res://scripts/actions/registry.gd")
 
 const MODE_NONE := 0
 const MODE_PASS := 1
@@ -139,6 +161,25 @@ var joy_device := 0
 var _held := {}          # event name -> true while pressed
 var _chord_used := {}    # modifier capability -> a chord fired while it was held
 
+## Hold to confirm: how long Exit game / Force close on a button must be held.
+const CONFIRM_S := 1.0
+## D-Bus name -> {"cap", "press", "hold", "slot"} (ButtonMap.table()).
+var shortcuts := {}
+## Seconds an extra button is held before its hold action runs.
+var hold_s := 0.5
+## Called with (action id, "press" | "hold") for a registry action.
+var on_shortcut: Callable
+## Called with (action id) when a hold-to-confirm action was only tapped.
+var on_hint: Callable
+## Called with (capability, "down" | "press" | "hold") for a shortcut button: it
+## went down, it counted as a press, it counted as a hold (the button test).
+var on_seen: Callable
+## Called with (seconds, event, generation): the owner calls hold_elapsed(event,
+## generation) that much later (one one-shot timer; tests call it themselves).
+var start_timer: Callable
+var _holds := {}         # event -> {"gen", "fired", "pressed"} while a shortcut button is down
+var _hold_gen := 0
+
 
 ## One InputEvent signal (event name, value).
 func handle(event: String, value: float) -> void:
@@ -155,6 +196,9 @@ func handle(event: String, value: float) -> void:
 	if down == was:
 		return
 	_set_held(event, down, was)
+	if shortcuts.has(event):
+		_shortcut_event(event, down)
+		return
 	var cap: String = Buttons.DBUS_EVENTS.get(event, "")
 	var chords := chords_for(device)
 	if down:
@@ -194,6 +238,90 @@ func handle(event: String, value: float) -> void:
 var _swallowed := {}
 
 
+# ---- button shortcuts -------------------------------------------------------------------
+
+func _shortcut_event(event: String, down: bool) -> void:
+	var e: Dictionary = shortcuts[event]
+	if down:
+		_seen(str(e.get("cap", "")), "down")
+	if bool(e.get("slot", false)):
+		var id := str(e["press"])
+		var confirm := bool(Registry.action(id).get("confirm", false))
+		if down:
+			if confirm:
+				_arm(event, CONFIRM_S)
+			else:
+				_seen(str(e.get("cap", "")), "press")
+				_run(id, "press")
+		else:
+			var h: Variant = _holds.get(event)
+			_holds.erase(event)
+			if confirm and h != null and not bool(h["fired"]):
+				_seen(str(e.get("cap", "")), "press")
+				if on_hint.is_valid():
+					on_hint.call(id)
+		return
+	var built_in := Buttons.action_for_dbus(device, event)
+	var cap: String = Buttons.DBUS_EVENTS.get(event, "")
+	# half of a chord here (Quick Access + Y): it acts when let go, as it always did
+	var modifier: bool = chords_for(device).values().any(func(c): return c[0] == cap)
+	if down:
+		var wait := hold_s
+		if bool(Registry.action(str(e["hold"])).get("confirm", false)):
+			wait = maxf(wait, CONFIRM_S)
+		_arm(event, wait)
+		if modifier:
+			_chord_used[cap] = false
+		elif built_in == "quick_menu":
+			# the menu opens on the press, as fast as it always did
+			_holds[event]["pressed"] = true
+			_action(built_in)
+	else:
+		var h2: Variant = _holds.get(event)
+		_holds.erase(event)
+		var used: bool = modifier and bool(_chord_used.get(cap, false))
+		if h2 != null and not bool(h2["fired"]) and not used:
+			_seen(cap, "press")
+		if h2 != null and not bool(h2["fired"]) and not bool(h2["pressed"]) and not used and built_in in UI_ACTIONS:
+			_action(built_in)
+
+
+func _arm(event: String, seconds: float) -> void:
+	_hold_gen += 1
+	_holds[event] = {"gen": _hold_gen, "fired": false, "pressed": false}
+	if start_timer.is_valid():
+		start_timer.call(seconds, event, _hold_gen)
+
+
+## The hold time for `event` passed (the owner's timer). Runs the hold action
+## when that same press is still down.
+func hold_elapsed(event: String, gen: int) -> void:
+	var h: Variant = _holds.get(event)
+	if h == null or int(h["gen"]) != gen or bool(h["fired"]) or not _held.has(event) or not shortcuts.has(event):
+		return
+	if bool(_chord_used.get(str(Buttons.DBUS_EVENTS.get(event, "")), false)):
+		return   # it was a chord
+	h["fired"] = true
+	var e: Dictionary = shortcuts[event]
+	_seen(str(e.get("cap", "")), "hold")
+	_run(str(e["press"]) if bool(e.get("slot", false)) else str(e["hold"]), "hold")
+
+
+func _seen(cap: String, what: String) -> void:
+	if cap != "" and on_seen.is_valid():
+		on_seen.call(cap, what)
+
+
+func _run(id: String, how: String) -> void:
+	if id != "" and on_shortcut.is_valid():
+		on_shortcut.call(id, how)
+
+
+## Buttons down right now that a shortcut listens to (the button test shows them).
+func held_shortcuts() -> Array:
+	return _holds.keys()
+
+
 func _set_held(event: String, down: bool, was: bool) -> void:
 	if down:
 		_held[event] = true
@@ -221,10 +349,22 @@ func _inject(e: InputEvent) -> void:
 		inject.call(e)
 
 
-## Forget held buttons (mode change, monitor restart).
-func reset() -> void:
-	_held.clear()
-	_chord_used.clear()
+## Forget held buttons (mode change, monitor restart). A shortcut button stays:
+## its release arrives in every mode, and the menu opening under a held Quick
+## Access button (which changes the mode) must not lose the hold.
+func reset(everything := false) -> void:
+	var keep := {}
+	if not everything:
+		for e in _holds:
+			if _held.has(e):
+				keep[e] = true
+	_held = keep
+	for e in _holds.keys():
+		if not keep.has(e):
+			_holds.erase(e)
+	for cap in _chord_used.keys():
+		if not keep.keys().any(func(e): return Buttons.DBUS_EVENTS.get(e, "") == cap):
+			_chord_used.erase(cap)
 	_swallowed.clear()
 
 

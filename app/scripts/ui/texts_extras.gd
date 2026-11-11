@@ -194,6 +194,20 @@ const SHARE_SENT := "Clip sent to your phone"
 const SHARE_EXPIRED := "The page closed after 10 minutes"
 const SHARE_OFFLINE := "Connect to Wi-Fi first: the phone downloads the clip over your own network."
 
+# ---- screenshots (Settings > Media) -------------------------------------------------------
+const SHOTS_TITLE := "Screenshots"
+const SHOTS_LINE := "Pictures you took with the Screenshot shortcut or your handheld's screenshot button, newest first. They're in Pictures/Screenshots."
+const SHOTS_EMPTY := "No screenshots yet. Open the quick menu while you play and press Screenshot."
+const SHOTS_LOADING := "Looking for screenshots…"
+const SHOTS_MORE := "%d more in Pictures/Screenshots"
+const SHOTS_VIEW := "Look at it"
+const SHOTS_VIEW_DETAIL := "Shows the picture full screen."
+const SHOTS_VIEW_FAILED := "Couldn't open that picture."
+const SHOTS_DELETE := "Delete screenshot"
+const SHOTS_DELETE_DETAIL := "Removes it from Pictures/Screenshots for good."
+const SHOTS_DELETED := "Screenshot deleted"
+const SHOTS_CLOSE := "Close"
+
 # ---- apps -------------------------------------------------------------------------------
 const APPS_TITLE := "Apps"
 const APPS_SHELF := "Apps"

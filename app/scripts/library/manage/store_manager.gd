@@ -334,6 +334,9 @@ func _do(action: String, game: Dictionary, options: Dictionary) -> Dictionary:
 		return _fail(key, action, "There's already a folder with that name there")
 	if action == "move" and StoreCommands.is_inside(str(options.get("path", "")), str(e.get("install_path", ""))):
 		return _fail(key, action, "That folder is inside the game's own folder")
+	if action == "move":
+		# a fresh SD card has no Games folder yet: cp / mv into it would fail
+		DirAccess.make_dir_recursive_absolute(str(options.get("path", "")))
 	if action == "install":
 		var base := str(p["finalize"].get("base", ""))
 		DirAccess.make_dir_recursive_absolute(base)

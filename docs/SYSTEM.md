@@ -153,6 +153,14 @@ It formats with Steam's options and adds the card as a Steam library. We would c
 the same helper (no root action of ours), only for an `sd` drive, only after a typed
 confirmation, never while a game runs, and show its progress lines.
 
+## Display output (`DisplayOutput`, `scripts/system/display_output.gd`)
+
+Reads `/sys/class/drm/card*-*/{status,enabled,edid}` (through `Device.read_all`) to say what the window is on: the handheld's own panel
+(eDP / DSI), an external monitor or a TV. The EDID's physical size bytes (21 and 22) give the diagonal. An external output that is
+connected and enabled wins; a machine with no panel at all (a Steam Machine) counts as a TV. `UiScale` (docs/RESOLUTIONS.md) uses it for the
+layout, and streaming uses the real output size and refresh when the output is external or there is no panel. It runs on start, on window
+resize and on focus-in: about ten tiny sysfs reads, no Timer and no polling.
+
 ## Controller (`Controller`, `scripts/input/controller.gd`)
 
 Autoload name `Controller`, not `Input`: an autoload called `Input` would hide Godot's
@@ -165,7 +173,8 @@ InputPlumber D-Bus API (system bus, service `org.shadowblip.InputPlumber`), read
 | --- | --- | --- |
 | `/org/shadowblip/InputPlumber` | `org.freedesktop.DBus.ObjectManager` | `GetManagedObjects()` (lists `CompositeDeviceN`) |
 | `/org/shadowblip/InputPlumber/Manager` | `org.shadowblip.InputManager` | `Version` s, `GamepadOrder` ao |
-| `/org/shadowblip/InputPlumber/CompositeDeviceN` | `org.shadowblip.Input.CompositeDevice` | `Name` s, `ProfileName` s, `ProfilePath` s, `Capabilities` as, `OutputCapabilities` as; `GetProfileYaml() → s`, `LoadProfileFromYaml(s)`, `LoadProfilePath(s)` |
+| `/org/shadowblip/InputPlumber/CompositeDeviceN` | `org.shadowblip.Input.CompositeDevice` | `Name` s, `ProfileName` s, `ProfilePath` s, `Capabilities` as, `OutputCapabilities` as; `GetProfileYaml() → s`, `LoadProfileFromYaml(s)`, `LoadProfilePath(s)`, `SendButtonChord(as)` (Steam menu shortcut) |
+| `/org/shadowblip/InputPlumber/devices/target/keyboardN` | `org.shadowblip.Input.Keyboard` | `SendKey(s key, b pressed)` (Send key: `KEY_ESC`...), made with `InputManager.CreateTargetDevice("keyboard")` and stopped with `StopTargetDevice(path)` when the device config has no keyboard target |
 | same | `org.shadowblip.Output.ForceFeedback` (only when the device rumbles) | `Enabled` b (rw), `Rumble(d)`, `Stop()` |
 
 Not used yet: `SetTargetDevices(as)`, `FilteredEvents`, `SetInterceptMode`.
@@ -200,6 +209,33 @@ source_event, target_events[]}]}`. Events: `{gamepad: {button: South}}`,
 - Per game: `start_game(key)` loads the game's profile when it has one; `end_game()`
   puts `default.yaml` (or the layout from before) back. Edits during a game go to its
   profile if it has one, else to the everyday one.
+- Button shortcuts (docs/CONTROLS.md, "Button shortcuts"): while it intercepts, every
+  profile the service loads gets the handheld's usual shortcuts on the same load (Quick
+  Access mapped to `dbus: ui_quick`, so it opens our quick menu in a game; held: Steam's
+  keyboard). Press against hold is timed from the two D-Bus events (1.0 then 0.0) with one
+  one-shot Timer per press (`hold_s`, 0.5 s unless changed). `release_intercept()`,
+  `_exit_tree()`, the `--restore-baseline` helper and `gamecove-session-select leave` (the
+  session unit's `ExecStopPost`) load the profile without the D-Bus mappings, so another
+  session never inherits a button nobody answers.
+- Steam menu: `open_steam_menu()` gives the game the pad (Pass) and sends
+  `SendButtonChord(["Gamepad:Button:QuickAccess"])`, which InputPlumber writes straight to
+  the virtual pad without the profile; the Xbox pad sends it as Guide + A, Steam's quick
+  access menu.
+
+## Quick menu shortcuts (`scripts/actions/`)
+
+The Shortcuts strip, the back buttons and the holds share one action list
+(`registry.gd`) and one runner (`runner.gd`, a Service: blocking calls on its worker).
+
+| Action | How |
+| --- | --- |
+| Keyboard | `steam -ifrunning steam://open/keyboard` (never starts a second Steam), after our menu closed, only with a game in front |
+| Steam menu | Controller `open_steam_menu()` (above) |
+| Send key | InputPlumber's virtual keyboard (`SendKey`, above); refused unless a game is in front, so a key is never typed at GameCove; hidden under Handheld Daemon (no call that presses a key) |
+| Screenshot, Sleep, Mute, Mic, Wi-Fi, Bluetooth, Airplane, Night light, Mouse mode, Performance overlay | the existing Controls (`system.screenshot`: gamescope's screenshot of the game plane, saved to `~/Pictures/Screenshots/GameCove_<date>_<time>.png`) |
+| Record | the Recording service (GPU Screen Recorder) |
+| Force close | `game_closer.gd`'s own targets (Steam's reaper for the app id, our scope, the process tree), KILL at once; confirmed first |
+| Power | `systemctl reboot` / `poweroff` (logind allows the active seat's user), or the quick menu's own session switch; each confirmed |
 
 ## Setup (`Setup`, `scripts/system/setup.gd`)
 
@@ -414,6 +450,12 @@ These last three are also **kept when GameCove's session ends**: `power-tune set
 runs without a password on the way out, puts back only the day-to-day values above it. A setting made with the
 administrator password stays until you change it again or the fix is removed (`gamecove-fix power-tune remove`,
 which the uninstaller runs): the session couldn't ask for the password to set it again.
+
+`gamecove-fix <name> update` (same action, same password) brings an installed fix to the revision of the script this
+GameCove carries, and puts the old version back when that fails. The fix lifecycle ([FIXES.md](FIXES.md)) uses only
+`remove` and `update` through this action when it retires or updates a fix by itself: it adds no prompt-free verb, so
+in Gaming Mode such a change waits for Desktop Mode (`packaging/tests/run.sh` checks `gamecove-fix-set` refuses
+`update` and `retire`).
 
 In Gaming Mode the Power page shows these as "Needs your admin password: change it in Desktop Mode", and the
 Fixes page shows the admin note on the file fixes.

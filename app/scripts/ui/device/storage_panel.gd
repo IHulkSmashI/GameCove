@@ -1,8 +1,8 @@
 extends "res://scripts/ui/device/device_panel.gd"
 ## Storage page: every drive that can hold games (internal, SD card, USB) with
 ## a usage bar, and the game folders on them. Storage.watch(true) while the
-## page is in the tree, so a card or drive that comes or goes shows up at once;
-## watch(false) when it leaves.
+## page shows, so a card or drive that comes or goes shows up at once;
+## watch(false) when it closes or leaves.
 
 const Icons := preload("res://scripts/ui/icons.gd")
 const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
@@ -38,8 +38,23 @@ func _build() -> void:
 	_fill()
 
 
+## On its own (a test, a screenshot) the panel watches while it's on screen. In
+## the Device page every part is built at once, hidden: there only the part on
+## show watches (the page calls opened() / closed()), so a Storage tab nobody
+## looked at never polls the mounts behind a game.
 func _enter_tree() -> void:
-	opened()
+	call_deferred("_open_if_shown")
+
+
+func _open_if_shown() -> void:
+	# its own and every parent control's visibility (the window itself may be hidden headless)
+	var n: Node = self
+	while n is CanvasItem:
+		if not (n as CanvasItem).visible:
+			return
+		n = n.get_parent()
+	if is_instance_valid(self):
+		opened()
 
 
 func closed() -> void:

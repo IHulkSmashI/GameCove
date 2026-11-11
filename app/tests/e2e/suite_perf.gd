@@ -63,13 +63,42 @@ func _running_timers() -> Array:
 	return out
 
 
+## Settings builds every page, the hidden Storage page too. Its mount watch (a Timer reading
+## /proc/mounts) must run only while that page is on screen: not for the hidden page, and not after
+## Settings is left (it used to keep polling behind a game).
+func test_storage_mount_watch_runs_only_while_the_page_is_shown() -> void:
+	var storage: Node = w.autoload("Storage")
+	if storage == null:
+		return
+	w.main.show_screen("settings")
+	await w.frames(3)
+	var st: Control = w.main.settings
+	for id in st.cat_buttons:
+		st.open_category(id)
+		await w.frames(4)
+	if st.cat_buttons.has("device"):
+		st.open_category("device", "storage")
+		await w.frames(4)
+		ok(storage._timer != null and not storage._timer.is_stopped(), "watching while the Storage page is shown")
+		st.open_category("device", "about")
+		await w.frames(4)
+		ok(storage._timer == null or storage._timer.is_stopped(), "not watching once another page is shown")
+	w.main.show_screen("home")
+	await w.frames(3)
+	ok(storage._timer == null or storage._timer.is_stopped(), "not watching after Settings is left")
+
+
 func test_behind_a_game_the_main_loop_is_near_idle() -> void:
 	await _behind_game()
 	ok(not w.main._window_focused, "the game in front")
 	ok(_bg().throttled(), "BackgroundMode throttles behind the game")
 	var a := ProcStats.snapshot()
 	await w.wait_s(MEASURE_S)
-	var d := ProcStats.delta(a, ProcStats.snapshot())
+	var z := ProcStats.snapshot()
+	var d := ProcStats.delta(a, z)
+	print("E2E BEHIND loops/s %s wake-ups/s %s (voluntary %d, preempted %d) CPU ms/s %s" % [d["loops_per_s"], d["main_wake_per_s"],
+		int(z["main_vol"]) - int(a["main_vol"]), int(z["main_invol"]) - int(a["main_invol"]), d["cpu_ms_per_s"]])
+	print("E2E PERF behind a game: %s loops/s, %s main wake-ups/s, %s ms CPU/s (screen %s)" % [d["loops_per_s"], d["main_wake_per_s"], d["cpu_ms_per_s"], OS.get_environment("E2E_SCREEN") if OS.get_environment("E2E_SCREEN") != "" else "default"])
 	ok(float(d["loops_per_s"]) <= MAX_LOOPS_PER_S, "main-loop iterations %s/s <= %s" % [d["loops_per_s"], MAX_LOOPS_PER_S])
 	ok(float(d["main_wake_per_s"]) <= MAX_MAIN_WAKE_PER_S, "main-thread wake-ups %s/s <= %s" % [d["main_wake_per_s"], MAX_MAIN_WAKE_PER_S])
 	ok(float(d["cpu_ms_per_s"]) <= MAX_CPU_MS_PER_S, "CPU %s ms/s <= %s" % [d["cpu_ms_per_s"], MAX_CPU_MS_PER_S])
@@ -146,6 +175,7 @@ func test_the_quick_menu_opens_fast_typically() -> void:
 	times.sort()
 	var median: float = (float(times[4]) + float(times[5])) / 2.0
 	print("E2E MENU_MS ", times)
+	print("E2E PERF quick menu over a game: median %.0f ms, worst %.0f ms (screen %s)" % [median, float(times[-1]), OS.get_environment("E2E_SCREEN") if OS.get_environment("E2E_SCREEN") != "" else "default"])
 	ok(median <= MAX_MENU_MEDIAN_MS, "quick menu over a game in %.0f ms (median of 10) <= %.0f" % [median, MAX_MENU_MEDIAN_MS])
 	ok(float(times[-1]) <= MAX_MENU_MS, "and %.0f ms at worst <= %.0f" % [float(times[-1]), MAX_MENU_MS])
 

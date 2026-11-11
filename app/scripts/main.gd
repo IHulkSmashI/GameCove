@@ -54,16 +54,22 @@ const SavesService := preload("res://scripts/system/saves_service.gd")
 const BatteryLog := preload("res://scripts/system/battery_log.gd")
 const LowBattery := preload("res://scripts/system/low_battery.gd")
 const LowBatteryDialog := preload("res://scripts/ui/low_battery_dialog.gd")
+const FixAttentionDialog := preload("res://scripts/ui/fix_attention_dialog.gd")
 const TSaves := preload("res://scripts/ui/texts_saves.gd")
 const SavesCardScript := preload("res://scripts/ui/games/saves_card.gd")
 const ProtonGE := preload("res://scripts/launch/proton_ge.gd")
 const CardJobs := preload("res://scripts/system/card_jobs.gd")
 const Recording := preload("res://scripts/system/recording.gd")
+const ActionRunner := preload("res://scripts/actions/runner.gd")
+const ActionRegistry := preload("res://scripts/actions/registry.gd")
+const TShortcuts := preload("res://scripts/ui/quick/texts_shortcuts.gd")
 const UPower := preload("res://scripts/system/upower.gd")
 const Proc := preload("res://scripts/system/proc.gd")
 const AppsView := preload("res://scripts/ui/apps_view.gd")
 const Apps := preload("res://scripts/library/apps.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const UiScale := preload("res://scripts/ui/ui_scale.gd")
+const Words := preload("res://scripts/ui/words.gd")
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
@@ -121,6 +127,7 @@ var battery_log: Node
 ## Sleep at low battery (low_battery.gd) and its warning while it shows.
 var low_battery: Node
 var low_dialog: Control
+var fix_dialog: Control
 ## Key of the game waiting for its cloud save before it starts ("" when none).
 var _launch_wait := ""
 ## Key of the game whose save conflict sheet is open before its launch ("" when none).
@@ -150,6 +157,8 @@ var setup_flow: Node
 var background: Node
 ## Record / Stop recording (quick menu) and the REC chip.
 var recording: Node
+## Runs the one-press actions (the quick menu's Shortcuts strip, button shortcuts).
+var actions: Node
 ## Desktop apps (Home's Apps shelf "All apps", the Library header's Apps).
 var apps_view: Control
 ## Controller batteries: the last UPower read (ticks msec) and whether one is out.
@@ -159,6 +168,8 @@ var _pads_busy := false   # a UPower read is out (card_jobs.gd)
 
 ## Play the boot splash at start (screenshots and tests turn it off).
 static var boot_splash := true
+## The hint list last asked for (before it was cut to fit the band).
+var _last_hints: Array = []
 ## The boot intro while it plays (it frees itself).
 var _boot_intro: Control
 
@@ -166,12 +177,14 @@ var _boot_intro: Control
 func _ready() -> void:
 	background = BackgroundMode.new()
 	add_child(background)
+	UiPrefs.load_prefs()
+	# a Steam Machine or a PC by the TV: "device" for "handheld" in every text (words.gd)
+	Words.setup(Device)
+	Words.install()
 	get_window().size_changed.connect(_fit_density)
 	_fit_density()
-	UiPrefs.load_prefs()
 	_load_extra_prefs()
-	if Device.has_method("glyph_set"):
-		Glyph.use_set(str(Device.glyph_set()))
+	_pick_glyphs()
 	ThemeLib.use(UiPrefs.theme, device_accent())
 	theme = ThemeLib.build()
 
@@ -316,8 +329,12 @@ func _ready() -> void:
 	recording.failed.connect(func(kind: String, detail: String):
 		toast(str(TX.REC_ERRORS.get(kind, TX.REC_ERRORS["failed"])), "alert", "bad", detail))
 
+	# the strip is built with the menu; the runner gets its services further down
+	actions = ActionRunner.new()
+	actions.name = "Actions"
+	add_child(actions)
 	quick_menu = QuickMenu.new()
-	var qm_services := {"recording": recording, "device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
+	var qm_services := {"actions": actions, "recording": recording, "device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
 	if _svc("Controls") != null:
 		qm_services["controls"] = _svc("Controls")
 		qm_services["profiles"] = _svc("Profiles")
@@ -327,6 +344,7 @@ func _ready() -> void:
 		quick_menu.settings_requested.connect(_open_settings_category)
 	quick_menu.set_side(menu_side)
 	quick_menu.closed.connect(_on_menu_closed)
+	quick_menu.visibility_changed.connect(_sync_pad_input)
 	# full speed from the moment it shows (open() sets visible before building its first frame)
 	quick_menu.visibility_changed.connect(func(): background.set_menu(quick_menu.visible))
 	if quick_menu.has_signal("notice"):
@@ -357,6 +375,20 @@ func _ready() -> void:
 	closer = GameCloser.new()
 	closer.name = "GameCloser"
 	add_child(closer)
+	actions.setup({"controls": _svc("Controls"), "model": quick_menu.model, "recording": recording, "closer": closer,
+		"session": session, "controller": _svc("Controller"),
+		"game_front": func() -> bool: return session.is_active() and not _window_focused,
+		"close_menu": func() -> void: if quick_menu.visible: quick_menu.close(),
+		"toggle_menu": func() -> void: on_ui_action("quick_menu"),
+		"exit_game": func() -> void: exit_game(),
+		"switch_session": func(target: String) -> void: quick_menu.switch_session(target),
+		"open_settings": _open_settings_category,
+		"current_game": func() -> Dictionary: return session.game if session.is_active() else {}})
+	actions.notice.connect(_on_action_notice)
+	# the Controls' ctx["run_action"] (perf.upscale_menu: Insert at the game) lands here
+	var ctls: Node = _svc("Controls")
+	if ctls != null and "action_handler" in ctls:
+		ctls.action_handler = func(id: String) -> void: actions.run(id, "button", true)
 	# heartbeat for the session client's hang check, and why it left GameCove last time
 	var health := SessionHealth.new()
 	health.name = "SessionHealth"
@@ -385,6 +417,7 @@ func _ready() -> void:
 	_link_top()
 	home.set_apps(_pinned_apps())
 	Input.joy_connection_changed.connect(func(_d, _c): read_pads(true))
+	Input.joy_connection_changed.connect(_on_pad_plugged)
 	read_pads(true)
 	_last_input_ms = Time.get_ticks_msec()
 	home.focus_later(home.default_focus())
@@ -443,6 +476,16 @@ func open_setup(force: bool, step := "") -> void:
 		setup_flow = flow
 		if flow.has_signal("setting_changed"):
 			flow.setting_changed.connect(_on_setting_changed)
+		# setup ends (Done, Skip setup): focus comes back to the screen under it
+		if flow.has_signal("closed") and not flow.closed.is_connected(_on_setup_closed):
+			flow.closed.connect(_on_setup_closed)
+
+
+func _on_setup_closed() -> void:
+	setup_flow = null
+	var f := _screen_default_focus()
+	if f != null:
+		Home.focus_later(f)
 
 
 static func _script_has(sc: Script, method: String) -> bool:
@@ -474,6 +517,10 @@ func _wire_games() -> void:
 		close_downloads()
 		_open_page(g))
 	game_actions.modal_changed.connect(func(_o): _update_hints.call_deferred())
+	game_actions.sheet.focus_lost.connect(func():
+		var f := _screen_default_focus()
+		if f != null and f.is_visible_in_tree():
+			f.grab_focus())
 	collection_actions = CollectionActions.new()
 	add_child(collection_actions)
 	collection_actions.setup(Library.collections, game_actions)
@@ -483,6 +530,10 @@ func _wire_games() -> void:
 	Library.collections.changed.connect(_on_collections_changed)
 	steam_overlay = SteamOverlay.new()
 	steam_overlay.back_requested.connect(func(): store_api.return_from_steam())
+	steam_overlay.focus_lost.connect(func():
+		var f := _screen_default_focus()
+		if f != null and f.is_visible_in_tree():
+			f.grab_focus())
 	_modal_layer.add_child(steam_overlay)
 	if Library.has_signal("action_failed"):
 		Library.action_failed.connect(_on_action_failed)
@@ -525,6 +576,10 @@ func _wire_services() -> void:
 	var ctl: Node = _svc("Controller")
 	if ctl != null and ctl.has_signal("ui_action"):
 		ctl.ui_action.connect(on_ui_action)
+	# Button shortcuts: a back button set to an action, or an extra button held.
+	if ctl != null and ctl.has_signal("shortcut"):
+		ctl.shortcut.connect(_on_shortcut)
+		ctl.shortcut_hint.connect(_on_shortcut_hint)
 
 
 ## Controls, Profiles and the device fixes around the game session. Each signal
@@ -539,6 +594,10 @@ func _wire_controls() -> void:
 	fixes.name = "Fixes"
 	add_child(fixes)
 	fixes.setup({"sys_root": "", "runner": CommandRunner.new(), "home": OS.get_environment("HOME"), "device": Device})
+	# a fix GameCove removed or updated by itself (the system caught up, docs/FIXES.md): said once
+	fixes.lifecycle_notice.connect(func(text, tone): toast(text, "check" if tone == "good" else "info", tone))
+	# one that does harm while it waits for the admin password: over the home screen, every start
+	fixes.attention_needed.connect(_on_fix_attention)
 	fixes.check_changes()
 	if quick_menu != null and "fixes" in quick_menu:
 		quick_menu.fixes = fixes
@@ -605,6 +664,25 @@ func _on_low_battery(percent: int) -> void:
 	_update_hints.call_deferred()
 
 
+## A fix GameCove installed must come out (withdrawn, or it clashes with the system's own fix)
+## and waits for the admin password: said prominently at start (fix_attention_dialog.gd).
+func _on_fix_attention(items: Array) -> void:
+	if items.is_empty() or (fix_dialog != null and is_instance_valid(fix_dialog)):
+		return
+	if session != null and session.is_active():
+		return   # fixes.gd never says it during a game; belt and braces
+	fix_dialog = FixAttentionDialog.open(_modal_layer, items, fixes.can_prompt())
+	fix_dialog.decided.connect(func(choice: String):
+		fix_dialog = null
+		if choice == "remove":
+			for it in items:
+				fixes.run_pending(str(it.get("id", "")))
+		elif choice == "open":
+			_open_settings_category("device", "fixes")
+		_update_hints.call_deferred())
+	_update_hints.call_deferred()
+
+
 func _low_dialog_closed() -> void:
 	low_dialog = null
 	background.set_menu(quick_menu.visible)
@@ -657,7 +735,28 @@ func _on_autotune_limit(cant_reach: bool, info: Dictionary) -> void:
 		toast(m[0], "bolt", "warn", m[1])
 
 
-## Guide -> Home, QuickAccess -> quick menu, Keyboard -> search keyboard.
+## A button shortcut (Controller.shortcut): the same actions as the Shortcuts
+## strip. An action that asks first was held long enough to count as a yes.
+func _on_shortcut(action: String, _how: String) -> void:
+	if actions != null:
+		actions.run(action, "button", true)
+	if wiring != null:
+		wiring.sync_focus()
+
+
+func _on_shortcut_hint(action: String) -> void:
+	var a := ActionRegistry.action(action)
+	if not a.is_empty():
+		toast(TShortcuts.HOLD_TO % str(a["title"]).to_lower(), str(a["icon"]), "")
+
+
+## A one-press action finished with something to say (a toast, never focus).
+func _on_action_notice(text: String, tone: String, icon: String) -> void:
+	toast(text, icon if icon != "" else "info", tone, TShortcuts.SHOT_SAVED_DETAIL if text == TShortcuts.SHOT_SAVED else "")
+
+
+## Guide -> Home, QuickAccess -> quick menu, Keyboard -> Steam's keyboard over a
+## game and the search keyboard in GameCove, Screenshot -> a screenshot.
 func on_ui_action(action: String) -> void:
 	# Steam's controller settings are in front: the handheld's own button brings GameCove back, and does nothing else
 	if steam_trip != null and steam_trip.service.active():
@@ -686,8 +785,14 @@ func on_ui_action(action: String) -> void:
 				quick_menu.close()
 			else:
 				_open_menu()
+		"screenshot":
+			if actions != null:
+				actions.run("screenshot", "button")
 		"osk":
-			if not (game_actions.is_modal() or quick_menu.visible):
+			# over a game the keyboard is Steam's, for the game; in GameCove it's the search
+			if actions != null and session != null and session.is_active() and not _window_focused:
+				actions.run("keyboard", "button")
+			elif not (game_actions.is_modal() or quick_menu.visible):
 				close_downloads()
 				_close_page()
 				if current != "library":
@@ -849,6 +954,11 @@ func open_apps() -> void:
 	screens[current].visible = false
 	apps_view.open()
 	_link_top()
+	# no tiles yet (still looking for apps) or none at all: focus goes up to the
+	# top bar's tab, not left on the Apps button the screen just hid (the list
+	# takes it when it arrives)
+	if apps_view.default_focus() == null:
+		top_bar.tabs[current].grab_focus()
 	_sound("select")
 	_update_hints.call_deferred()
 
@@ -944,6 +1054,7 @@ func _notification(what: int) -> void:
 		return
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_window_focused = false
+		_sync_pad_input()
 		if background != null:
 			background.set_front(false)
 		if wiring != null:
@@ -967,6 +1078,8 @@ func _notification(what: int) -> void:
 		_update_timer()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_window_focused = true
+		_sync_pad_input()
+		_fit_density()   # docked or undocked while a game was in front
 		if steam_trip != null:
 			steam_trip.service.arrived()   # back from Steam's controller settings
 		if background != null:
@@ -981,6 +1094,20 @@ func _notification(what: int) -> void:
 		session.stop()
 
 
+## Something else has the screen (a game, Steam, a store's window) and the quick
+## menu is closed: the player's presses are for it. The pad is a plain input
+## device that we see too, so our screens take none of them then (focus doesn't
+## move, A presses nothing); Guide still comes to us, and so does everything
+## once the quick menu opens over it or our window is back in front.
+func _pads_for_us() -> bool:
+	return _window_focused or (quick_menu != null and quick_menu.visible)
+
+
+func _sync_pad_input() -> void:
+	if is_inside_tree():
+		get_viewport().gui_disable_input = not _pads_for_us()
+
+
 ## Slow drifts (hero, backdrop) stop when idle, in a game or under Reduce motion.
 func _pause_motion() -> void:
 	backdrop.pause_motion()
@@ -992,22 +1119,44 @@ func _resume_motion() -> void:
 	home.hero_stage.resume_motion()
 
 
-## Big screens get more room instead of just bigger pixels: past 1280x800
-## the scale grows at half the rate (1920x1200 lays out at 1536x960, 1.25x),
-## which keeps text about the size it is on a 7" 800p handheld.
+## Button pictures: a handheld shows its own (Device.glyph_set()); a box by the
+## TV (Steam Machine, mini PC) has no buttons of its own, so they follow the
+## first pad that is plugged in: shapes for a DualSense, Valve's labels for a
+## Steam Controller, Xbox letters for everything else.
+func _pick_glyphs() -> bool:
+	var want := str(Device.glyph_set()) if Device.has_method("glyph_set") else "xbox"
+	if Device.has_method("is_handheld") and not Device.is_handheld():
+		want = "xbox"
+		for id in Input.get_connected_joypads():
+			var info: Dictionary = Input.get_joy_info(id)
+			want = Glyph.set_for_pad(Input.get_joy_name(id), int(info.get("vendor_id", 0)))
+			break
+	if want == Glyph.glyph_set:
+		return false
+	Glyph.use_set(want)
+	return true
+
+
+func _on_pad_plugged(_device: int, _connected: bool) -> void:
+	if _pick_glyphs() and is_inside_tree():
+		propagate_notification(NOTIFICATION_THEME_CHANGED)   # every glyph on screen re-reads its label
+		_update_hints()
+
+
+## The layout follows the real output: the window's size (gamescope's nested
+## resolution, whatever the panel's own is), what it is shown on (the built-in
+## panel, a desk monitor or a TV: display_output.gd) and the player's
+## Interface size. ui_scale.gd has the rule. Runs at start, when the window's
+## size changes and when GameCove comes back to the front (docked meanwhile?).
 func _fit_density() -> void:
-	var w := get_window()
-	if w == null or w.content_scale_mode == Window.CONTENT_SCALE_MODE_DISABLED:
-		return
-	w.content_scale_size = base_size_for(w.size)
+	if UiScale.apply(get_window(), Device, UiPrefs.interface_size) and hint_bar != null and not _last_hints.is_empty():
+		call_deferred("_update_hints")
 
 
-static func base_size_for(win: Vector2i) -> Vector2i:
-	var s := minf(win.x / 1280.0, win.y / 800.0)
-	if s <= 1.0:
-		return Vector2i(1280, 800)
-	var eff := 1.0 + (s - 1.0) * 0.5
-	return Vector2i(roundi(win.x / eff), roundi(win.y / eff))
+## The layout size for a window on a screen nothing is known about (tests,
+## tools): past 1280x800 the scale grows at half the rate.
+static func base_size_for(win: Vector2i, screen := {}, size_id := "default") -> Vector2i:
+	return UiScale.layout_for(win, screen, size_id)
 
 
 ## An interrupted GE-Proton install or removal (power off, app killed) left files in
@@ -1035,6 +1184,7 @@ static func release_caches() -> void:
 	load("res://scripts/ui/icons.gd")._cache.clear()
 	load("res://scripts/ui/games/game_icons.gd").clear()
 	load("res://scripts/ui/art_cache.gd").shutdown()
+	load("res://scripts/ui/words.gd").uninstall()
 	ThemeLib._fonts.clear()
 	ThemeLib._knobs.clear()
 	ThemeLib._gradients.clear()
@@ -1277,6 +1427,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if quick_menu.visible or launch_overlay.is_open():
 		return
+	if not _pads_for_us():
+		return   # a game has the screen: its presses aren't ours (Guide was handled above)
 	if event.is_action_pressed("ui_accept"):
 		_sound("select")
 	# Sheets, the text keyboard and the Steam overlay handle their own input.
@@ -1704,19 +1856,31 @@ func _streaming_ctx() -> Dictionary:
 		"display_fn": stream_display, "gpu_family": str(prof.get("gpu_family", ""))}
 
 
-## The panel's size, top refresh rate and whether HDR is on now (display.hdr).
+## The screen games are shown on: size, top refresh rate and whether HDR is on
+## now (display.hdr). The handheld's own panel from the device table; on a TV
+## or monitor (docked, or a box with no panel) what the output really is.
 func stream_display() -> Dictionary:
 	var prof: Dictionary = Device.profile if Device.get("profile") is Dictionary else {}
-	var panel: Variant = prof.get("panel")
-	var res: Array = panel.get("resolution", []) if panel is Dictionary and panel.get("resolution") is Array else []
-	var hz: Array = prof.get("panel_hz", []) if prof.get("panel_hz") is Array else []
-	var win := DisplayServer.screen_get_size() if DisplayServer.get_name() != "headless" else Vector2i(1280, 800)
 	var controls := _svc("Controls")
 	var hdr := false
 	if controls != null and controls.has_method("has") and controls.has("display.hdr"):
 		hdr = controls.value("display.hdr") == true
-	return {"width": int(res[0]) if res.size() == 2 else win.x, "height": int(res[1]) if res.size() == 2 else win.y,
-		"hz": int(hz[hz.size() - 1]) if not hz.is_empty() else 60, "hdr": hdr}
+	var headless := DisplayServer.get_name() == "headless"
+	var out := display_for(prof, UiScale.screen_for(Device), Vector2i(1280, 800) if headless else DisplayServer.screen_get_size(),
+		60.0 if headless else DisplayServer.screen_get_refresh_rate())
+	out["hdr"] = hdr
+	return out
+
+
+## {width, height, hz} for a device row on `screen` (ui_scale.gd screen_for):
+## the row's panel while GameCove is on it, else the output's own size and rate.
+static func display_for(prof: Dictionary, screen: Dictionary, out_size: Vector2i, out_hz: float) -> Dictionary:
+	var panel: Variant = prof.get("panel")
+	var res: Array = panel.get("resolution", []) if panel is Dictionary and panel.get("resolution") is Array else []
+	var hz: Array = prof.get("panel_hz", []) if prof.get("panel_hz") is Array else []
+	if bool(screen.get("external", false)) or res.size() != 2:
+		return {"width": out_size.x, "height": out_size.y, "hz": int(roundf(out_hz)) if out_hz >= 24.0 else 60}
+	return {"width": int(res[0]), "height": int(res[1]), "hz": int(hz[hz.size() - 1]) if not hz.is_empty() else 60}
 
 
 ## B on the launch splash. A game that was already started is really closed
@@ -2011,6 +2175,9 @@ func _close_page() -> void:
 
 
 func _open_menu() -> void:
+	# One drawer at a time: a choice sheet left open would sit over the menu.
+	if game_actions != null and game_actions.sheet != null and game_actions.sheet.is_open():
+		game_actions.sheet.close()
 	_focus_before_menu = get_viewport().gui_get_focus_owner()
 	_screen().focus_behavior_recursive = Control.FOCUS_BEHAVIOR_DISABLED
 	top_bar.focus_behavior_recursive = Control.FOCUS_BEHAVIOR_DISABLED
@@ -2131,7 +2298,25 @@ func _update_hints(f: Control = null) -> void:
 	for c in hint_bar.get_children():
 		hint_bar.remove_child(c)
 		c.queue_free()
+	_last_hints = list
 	hint_bar.add_child(Kit.prompts(list))
+	_fit_hints()
+
+
+## The hint bar never runs off the screen: where the prompts are wider than the
+## band (the Library's nine on a 1280 px layout), the last ones go, the ones
+## everybody knows first (Quick menu, Sections, Home); the action stays.
+func _fit_hints() -> void:
+	if hint_bar == null or hint_bar.get_child_count() == 0 or not is_inside_tree():
+		return
+	var avail := get_viewport_rect().size.x - 2.0 * ThemeLib.EDGE - ThemeLib.SPACE_4 - hint_status.get_combined_minimum_size().x
+	var list := _last_hints
+	while list.size() > 1 and (hint_bar.get_child(0) as Control).get_combined_minimum_size().x > avail:
+		list = list.slice(0, list.size() - 1)
+		var old := hint_bar.get_child(0)
+		hint_bar.remove_child(old)
+		old.free()
+		hint_bar.add_child(Kit.prompts(list))
 
 
 ## Hints from whatever sits on top: a sheet, the Steam overlay, the downloads
@@ -2139,6 +2324,8 @@ func _update_hints(f: Control = null) -> void:
 func _special_hints(f: Control) -> Array:
 	if low_dialog != null and is_instance_valid(low_dialog):
 		return LowBatteryDialog.hints()
+	if fix_dialog != null and is_instance_valid(fix_dialog):
+		return fix_dialog.hints()
 	if game_actions != null and game_actions.is_modal():
 		return game_actions.modal_hints()
 	if steam_overlay != null and steam_overlay.is_open():
@@ -2244,6 +2431,8 @@ func _settings_values() -> Dictionary:
 	var v := UiPrefs.values()
 	v["menu_side"] = menu_side
 	v["ui_sounds"] = ui_sounds
+	var w := get_window()
+	v["interface_sizes"] = UiScale.sizes_for(UiScale.window_size(w), UiScale.screen_for(Device)) if w != null else ["default"]
 	return v
 
 
@@ -2260,8 +2449,9 @@ func _build_settings() -> void:
 		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
 			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
-			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log,
-			"game_running": func() -> bool: return session != null and session.is_active(), "recording": recording})
+			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log, "fixes": fixes,
+			"game_running": func() -> bool: return session != null and session.is_active(), "recording": recording,
+			"actions": actions})
 
 
 static func _version() -> String:
@@ -2276,6 +2466,11 @@ func _on_setting_changed(key: String, value: Variant) -> void:
 			v[key] = value
 			UiPrefs.set_values(v)
 			apply_theme()
+		"interface_size":
+			var v2 := UiPrefs.values()
+			v2[key] = value
+			UiPrefs.set_values(v2)
+			_fit_density()
 		"reduce_motion":
 			Motion.reduce = bool(value)
 			if Motion.reduce:

@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "fan",
+  "revision": 1,
+  "title": "Fan presets",
+  "line": "Quiet, auto and max fan presets for handhelds whose fan driver has no service.",
+  "symptom": "",
+  "why": "",
+  "kind": "power",
+  "page": "power",
+  "password": "none",
+  "restart": "",
+  "level": "optional",
+  "must_fix": false,
+  "breaks": "",
+  "default": "suggested-off",
+  "risk": "low",
+  "risk_note": "A day-to-day setting with checked values; the original is always saved and put back.",
+  "auto": [],
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "sysfs",
+      "target": "the fan driver's hwmon or platform attributes (fixes/fan/README.md lists them per driver)",
+      "detail": "Fan mode and curve points; the originals are saved first."
+    }
+  ],
+  "undo": "Writes the saved fan mode and curve back (also when a preset fails halfway).",
+  "tested": [],
+  "bazzite": "",
+  "steamos": "",
+  "sources": [
+    "fixes/fan/README.md"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": null,
+    "probe": {
+      "command": "status",
+      "native": "",
+      "what": "A setting, not a workaround: status says whether this handheld has the control at all (applies=yes)."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

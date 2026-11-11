@@ -26,6 +26,7 @@ const CARDS := {
 	"display": [
 		["Screen", "sun", ["display.brightness", "display.refresh_rate", "display.fps_limit", "display.vrr"],
 			["display.allow_tearing", "display.refresh_unlock", "display.rotation"]],
+		["TV", "screen", ["display.hdmi_cec"], []],
 		["Colour", "palette", ["display.night_light", "display.night_light_strength", "display.night_light_schedule", "display.vibrance", "display.color_temp"], []],
 		["Scaling", "scaling", ["display.upscale_filter", "display.upscale_scaler", "display.sharpness"], []],
 		["HDR", "sparkle", ["display.hdr", "display.hdr_itm", "display.sdr_brightness"], []],
@@ -103,12 +104,19 @@ const ICONS := {
 }
 
 
+## Controls with a page of their own, never repeated in a group's cards:
+## Settings > Controller > Button shortcuts (ui/device/shortcuts_card.gd).
+const OWN_PAGE := ["controller.paddle.*", "controller.button.*", "controller.hold.*", "controller.to_steam.*",
+	"controller.hold_time", "controller.hhd_shortcut.*", "controller.reset_shortcuts"]
+
+
 ## The cards for a list of Controls groups, with "*" ids expanded against
 ## `all` (the ids that exist) and every leftover id in an "Other" card.
 ## Returns [[title, icon, main ids, more ids], ...] with only existing ids.
 static func cards_for(groups: Array, all: Array) -> Array:
 	var out := []
 	var used := {}
+	expand(OWN_PAGE, all, used)
 	for g in groups:
 		for card in CARDS.get(g, []):
 			var main := expand(card[2], all, used)

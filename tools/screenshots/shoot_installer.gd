@@ -7,6 +7,7 @@ extends SceneTree
 ## installer_maintenance, installer_uninstall, installer_uninstall_backups, installer_finish, installer_welcome_steamos,
 ## installer_welcome_other, installer_welcome_light.
 
+const Layout := preload("../layout/recorder.gd")
 var out := "/tmp/gamecove-shots/"
 var only: Array = []
 var suffix := ""
@@ -22,6 +23,7 @@ var home := "/tmp/gamecove-shots/installer-home"
 
 
 func _initialize() -> void:
+	Layout.begin()   # tools/layout: measure every shot on one screen of the matrix
 	var args := OS.get_cmdline_user_args()
 	for i in args.size():
 		match args[i]:
@@ -44,10 +46,14 @@ func shot(name: String) -> void:
 	if not want(name):
 		return
 	await frames(30)
+	if Layout.measuring():
+		Layout.check(root, name)
+		return
 	await RenderingServer.frame_post_draw
 	DirAccess.make_dir_recursive_absolute(out)
 	root.get_texture().get_image().save_png(out + name + suffix + ".png")
 	print("saved ", out + name + suffix + ".png")
+	Layout.check(root, name)
 
 
 ## A fake runner: every command works, no game is running.
@@ -177,3 +183,7 @@ func _run() -> void:
 		await make(t, "light")
 		await shot("installer_welcome_light")
 	quit()
+
+
+func _finalize() -> void:
+	Layout.save(get_script().resource_path.get_file().get_basename())

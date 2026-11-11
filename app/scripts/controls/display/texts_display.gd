@@ -23,6 +23,7 @@ const TEXT := {
 	"display.sdr_brightness": ["SDR brightness in HDR", "How bright normal content looks while HDR is on."],
 	"display.effect": ["Screen effect", "A ReShade effect over the game, like a CRT look. Shows in games only."],
 	"display.rotation": ["Screen rotation", "Turn the picture. Takes effect after the session restarts."],
+	"display.hdmi_cec": ["TV control (HDMI-CEC)", "Lets the TV's remote move around GameCove, and turns the TV on and off with this device."],
 	"display.dim_after": ["Dim screen after", "Dims the screen when you haven't touched anything for a while."],
 	"display.screen_off_after": ["Turn screen off after", "Turns the screen off when you haven't touched anything for a while."],
 	# audio
@@ -51,6 +52,7 @@ const UNKNOWN_DEVICE := "Needs a known handheld"
 const NO_SESSION := "Needs gamescope-session-plus"
 const NO_VRR := "This screen doesn't support VRR"
 const NO_HDR := "This screen doesn't support HDR"
+const NO_CEC := "This device has no HDMI-CEC the system can drive"
 const HDR_OFF := "Turn on HDR first"
 const USE_BRIGHTNESS := "Use Brightness on this screen"
 const NO_RESHADE := "This gamescope has no ReShade support"

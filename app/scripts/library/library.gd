@@ -64,6 +64,11 @@ var metadata: Node
 ## Change artwork and the automatic art fill (scripts/library/art/art_service.gd).
 var artwork: Node
 var _batch: Timer
+## Games of these stores GameCove starts itself (umu-run, an emulator, a shortcut):
+## no store counts their play time, so we do (playtime.gd).
+const OWN_PLAYTIME := ["emu", "epic", "gog", "amazon"]
+## key -> true when the last launch went through Heroic, which counts that session itself.
+var _heroic_launched := {}
 
 
 func _ready() -> void:
@@ -363,7 +368,7 @@ static func collect(home_dir: String, db_path: String, only: Array = [], emu_sta
 			continue
 		# Emulated games and the frontend aren't PC games: no database match by title.
 		var rec := GameDB.find(index, e.get("ids", {}), e.get("title", "")) if e["store"] != "emu" else {}
-		if e["store"] == "emu":
+		if e["store"] in OWN_PLAYTIME:
 			Playtime.apply(e, played)
 			for alias in e.get("aliases", []):
 				Playtime.apply_key(e, played, str(alias))   # time counted while it was a Steam shortcut
@@ -630,6 +635,7 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 		entry = apply_compat(entry, compat, launcher.proton_path_for(compat["proton"]))
 		args = (str(compat["args"]) + " " + once).strip_edges()
 	var cmd: Array = append_args(launch_command(entry, _tools, extra), args)
+	_heroic_launched[str(game.get("key", "%s:%s" % [entry["store"], entry["id"]]))] = cmd.any(func(c): return str(c).begins_with("heroic://"))
 	if cmd.is_empty():
 		if str(entry.get("rom", "")) != "":
 			var why := str(Emu.launch_plan(entry, extra, home, path_env)["why"])
@@ -693,13 +699,22 @@ func set_show_roms(on: bool) -> bool:
 	return ok
 
 
-## A game we started (the frontend or an emulated game) ended: count its time
-## (user://playtime.json) and re-read the emulation entries so it shows.
+## A game ended. One GameCove started itself (umu-run, an emulator, a shortcut):
+## we count its time (user://playtime.json). One its store started (Steam, or
+## Heroic): the store wrote its own play time and last played. Either way the
+## store is read again, so Home's Jump back in and the Recent sort show it.
 func record_playtime(game: Dictionary, started: int, ended: int) -> void:
-	if str(game.get("store", "")) != "emu" or not _entries.has(str(game.get("key", ""))):
+	var key := str(game.get("key", ""))
+	var store_name := str(game.get("store", ""))
+	if not _entries.has(key):
 		return
-	if Playtime.record(str(game.get("key", "")), started, ended):
-		refresh_store("emu")
+	var by_heroic: bool = _heroic_launched.get(key, false)
+	_heroic_launched.erase(key)
+	if store_name in OWN_PLAYTIME and not by_heroic:
+		if Playtime.record(key, started, ended):
+			refresh_store(store_name)
+	elif store_name != "":
+		refresh_store(store_name)
 
 
 ## A desktop app (apps.gd), or a clip's video player: started in its own

@@ -125,10 +125,7 @@ func test_controller_rows_drive_the_service() -> void:
 	var p: Control = ControllerPage.build(s)
 	var ctl = s["controller"]
 	ok(ctl.calls.has("refresh"), "refresh on open")
-	ok(p.rows.has("paddle_LeftPaddle1") and p.rows.has("paddle_RightPaddle1"), "a row per back button")
-	eq(p.rows["paddle_LeftPaddle1"].value_text(), "A", "current mapping shown")
-	p.rows["paddle_LeftPaddle1"].step(1)
-	ok(ctl.calls.has("paddle LeftPaddle1 East"), "remap through Controller.set_paddle")
+	ok(not p.rows.has("paddle_LeftPaddle1"), "back buttons live on the Button shortcuts card now (test_button_shortcuts.gd)")
 	ok(not p.rows.has("gyro"), "no legacy gyro modes (current InputPlumber ignores them)")
 	ok(_texts(p).contains("Gyro aiming lives in Steam"), "says aiming is Steam Input's")
 	p.rows["rumble"].step(1)
@@ -190,6 +187,24 @@ func test_storage_bars_watch_and_measure() -> void:
 	p.closed()
 	ok(st.calls.has("watch false"), "stop watching when closed")
 	_done(p, s)
+
+
+func test_storage_watches_only_while_it_shows() -> void:
+	# inside Settings > Device every panel is in the tree; a hidden Storage tab must not watch (behind a game)
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var s := Fakes.services()
+	var host := Control.new()
+	host.visible = false
+	root.add_child(host)
+	var p: Control = StoragePage.build(s)
+	host.add_child(p)
+	p._open_if_shown()
+	ok(not s["storage"].calls.has("watch true"), "a hidden panel doesn't watch")
+	host.visible = true
+	p._open_if_shown()
+	ok(s["storage"].calls.has("watch true"), "a shown one does")
+	p.closed()
+	host.free()
 
 
 func test_storage_loading_and_empty() -> void:

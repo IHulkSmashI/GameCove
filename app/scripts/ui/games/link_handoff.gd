@@ -93,7 +93,7 @@ func open(title: String, line: String, address: String) -> void:
 	title_label.text = title
 	line_label.text = line
 	url_label.text = address
-	qr_rect.texture = QR.texture(address, 6)
+	QR.show_on(qr_rect, address, 6)
 	_open = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	if is_inside_tree():

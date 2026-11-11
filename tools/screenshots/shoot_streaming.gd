@@ -17,6 +17,8 @@ var covers: Array = []
 ## Painted cover per game title, so each app tile shows its own game.
 var cover_by_title: Dictionary = {}
 
+const ShotVersion := preload("shot_version.gd")
+const Layout := preload("../layout/recorder.gd")
 const UUID := "A1B2C3D4-0000-4E5F-8899-AABBCCDDEEFF"
 const APPS := [["Steam Big Picture", 1093255277], ["Desktop", 881448767], ["Iron Meridian", 101], ["Kingdom of Ash", 102],
 	["Hollow Tide", 103], ["Northbound", 104], ["Neon Ronin", 105], ["Saltwind", 106], ["Tidebreaker", 107]]
@@ -28,6 +30,7 @@ class NoRunner extends RefCounted:
 
 
 func _initialize() -> void:
+	Layout.begin()   # tools/layout: measure every shot on one screen of the matrix
 	var args := OS.get_cmdline_user_args()
 	for i in args.size():
 		match args[i]:
@@ -50,10 +53,14 @@ func shot(name: String) -> void:
 		if load("res://scripts/ui/art_cache.gd").pending_count() == 0 and i > 20:
 			break
 	await frames(30)
+	if Layout.measuring():
+		Layout.check(root, name)
+		return
 	await RenderingServer.frame_post_draw
 	DirAccess.make_dir_recursive_absolute(out)
 	root.get_texture().get_image().save_png(out + name + suffix + ".png")
 	print("saved ", out + name + suffix + ".png")
+	Layout.check(root, name)
 
 
 func _run() -> void:
@@ -78,7 +85,7 @@ func _run() -> void:
 		flow_script.instance.finish()
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
 	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
-	main.hint_status.text = "● GameCove 0.4   MSI Claw 8 EX AI+"
+	main.hint_status.text = "● GameCove %s   MSI Claw 8 EX AI+" % ShotVersion.short()
 	if OS.get_environment("SHOOT_THEME") != "":
 		var TL = load("res://theme/gamecove_theme.gd")
 		TL.use(OS.get_environment("SHOOT_THEME"))
@@ -210,3 +217,7 @@ func finish() -> void:
 			n.set("_task", -1)
 	await frames(4)
 	quit(0)
+
+
+func _finalize() -> void:
+	Layout.save(get_script().resource_path.get_file().get_basename())

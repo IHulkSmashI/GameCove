@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "id": "gpd-wm2-touch-wakeup",
+  "revision": 1,
+  "title": "Stays asleep",
+  "line": "Stops the touch panel from waking the Win Max 2 right after it goes to sleep.",
+  "symptom": "The Win Max 2 (2025 especially) wakes again at once: its I2C touch device (PNP0C50:00) is a wakeup source.",
+  "why": "The WIN Max 2 body's I2C touch device (PNP0C50:00).",
+  "kind": "file",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "",
+  "level": "optional",
+  "must_fix": true,
+  "breaks": "sleep",
+  "default": "suggested-off",
+  "risk": "low",
+  "risk_note": "One udev rule. Its source calls it not yet widely tested, so it isn't preselected.",
+  "auto": [],
+  "optional": "platform:gpd-win-max-2",
+  "exclude": {},
+  "changes": [
+    {
+      "type": "udev-rule",
+      "target": "/etc/udev/rules.d/60-gamecove-gpd-wm2-touch-wakeup.rules",
+      "detail": "Switches off wake-up for the I2C touch device PNP0C50:00."
+    },
+    {
+      "type": "sysfs",
+      "target": "/sys/bus/i2c/devices/<touch>/power/wakeup",
+      "detail": "Set to disabled at once; the old value is saved."
+    }
+  ],
+  "undo": "Deletes the rule and writes the saved value back.",
+  "tested": [],
+  "bazzite": "Not fixed.",
+  "steamos": "Not shipped.",
+  "sources": [
+    "https://github.com/aarron-lee/gpd-win-tricks/blob/main/wm2-suspend-udev.sh",
+    "https://github.com/torvalds/linux/commit/805c74eac8cb306dc69b87b6b066ab4da77ceaf1"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Looks for the same rule from the system itself (any udev rule that isn't GameCove's and does the same), or the value already being right without GameCove."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "gpd-win-tricks",
+      "kind": "github-commits",
+      "repo": "aarron-lee/gpd-win-tricks",
+      "path": "wm2-suspend-udev.sh",
+      "note": "The workaround's source: a change or removal there is the first sign it's no longer needed."
+    },
+    {
+      "id": "i2c-hid-acpi",
+      "kind": "github-commits",
+      "repo": "torvalds/linux",
+      "path": "drivers/hid/i2c-hid/i2c-hid-acpi.c",
+      "note": "Where a kernel quirk for the touch device's wake-up would land."
+    },
+    {
+      "id": "bazzite-udev",
+      "kind": "github-commits",
+      "repo": "ublue-os/bazzite",
+      "path": "system_files/deck/shared/usr/lib/udev/rules.d",
+      "note": "Bazzite's handheld udev rules."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

@@ -1,11 +1,14 @@
 extends Node
-## Knows which handheld we're on and reads live battery and power numbers.
+## Knows which device we're on (a handheld, a Steam Machine, any PC by the TV)
+## and reads live battery and power numbers.
 ## Read-only: nothing here writes to the system.
 ##
 ## Detection: the DMI ids in /sys/class/dmi/id pick the best row of
 ## data/devices.json (a "specific" row beats a "family" row). On hardware no row
 ## matches, a generic row is built from the CPU (/proc/cpuinfo) and GPU
-## (/sys/class/drm) so TDP limits and the upscaler choice stay sane.
+## (/sys/class/drm) so TDP limits and the upscaler choice stay sane; with no
+## battery in /sys/class/power_supply that row is a "desktop" (mini PC, HTPC,
+## tower), which gets no handheld power limits at all.
 ## docs/DEVICES.md describes the table; docs/CONTRACTS.md the info() shape.
 
 signal info_updated(info: Dictionary)
@@ -25,6 +28,10 @@ const ART_ROOT := "res://assets/devices/art/"
 const UNITS_PER_MM := 1.6
 const DMI_KEYS: Array[String] = ["sys_vendor", "product_name", "board_name", "board_vendor", "product_family"]
 const TIER_RANK := {"specific": 2, "family": 1, "generic": 0}
+## A row's "form": a handheld (the default: own screen, battery, built-in
+## controls), a console (a known box for the TV, e.g. the Steam Machine) or a
+## desktop (an unknown PC with no battery).
+const FORMS: Array[String] = ["handheld", "console", "desktop"]
 
 var board_name := ""
 var product_name := ""
@@ -42,6 +49,10 @@ var home := OS.get_environment("HOME")
 
 var _slow: Dictionary = {}
 var _slow_thread: Thread
+var _has_battery := true
+## Tests and the screenshot tools pin this (true / false) so results don't
+## depend on the machine they run on; null = look.
+static var assume_battery: Variant = null
 
 
 func _ready() -> void:
@@ -89,7 +100,8 @@ func detect() -> Dictionary:
 	product_family = dmi["product_family"]
 	cpu_model = cpu_model_name(root)
 	gpu = gpu_info(root)
-	profile = for_os(resolve(load_doc(), dmi, cpu_model, gpu), OsInfo.detect(root))
+	_has_battery = battery_path() != "" if assume_battery == null else bool(assume_battery)
+	profile = for_os(resolve(load_doc(), dmi, cpu_model, gpu, _has_battery), OsInfo.detect(root))
 	return profile
 
 
@@ -139,6 +151,34 @@ func display_name() -> String:
 
 func maker() -> String:
 	return str(profile.get("maker", sys_vendor))
+
+
+## "handheld" | "console" | "desktop" (FORMS).
+func form() -> String:
+	return form_of(profile)
+
+
+static func form_of(row: Dictionary) -> String:
+	var f := str(row.get("form", "handheld"))
+	return f if f in FORMS else "handheld"
+
+
+## False on a Steam Machine, a mini PC or any other box with no screen and
+## battery of its own: the UI then says "device", shows no battery and lays
+## out for a TV.
+func is_handheld() -> bool:
+	return form() == "handheld"
+
+
+## A system battery (BAT*) was there at detection. Controller batteries
+## (power supplies with scope "Device") don't count.
+func has_battery() -> bool:
+	return _has_battery
+
+
+## What to call this device in a sentence: "handheld", or "device" for anything else.
+func noun() -> String:
+	return "handheld" if is_handheld() else "device"
 
 
 func chip() -> String:
@@ -375,6 +415,10 @@ static func row_problems(row: Dictionary) -> Array:
 						has_exact = true
 			if not has_exact:
 				p.append("%s: a specific row needs at least one exact (wildcard-free) DMI value" % id)
+	if row.has("form") and not str(row["form"]) in FORMS:
+		p.append("%s: form %s" % [id, row["form"]])
+	if form_of(row) != "handheld" and (bool(row["charge_limit"]) or row.get("panel") != null or not (row.get("tdp_backends", [""]) as Array).is_empty()):
+		p.append("%s: a %s has no panel, charge limit or handheld TDP backends" % [id, form_of(row)])
 	if not str(row["support"]) in SUPPORT_LEVELS:
 		p.append("%s: support %s" % [id, row["support"]])
 	if row["support"] == "full" and not bool(row["verified"]):
@@ -426,8 +470,8 @@ static func row_problems(row: Dictionary) -> Array:
 		if not b in TDP_BACKENDS:
 			p.append("%s: unknown tdp backend %s" % [id, b])
 	var hz: Variant = row["panel_hz"]
-	if hz is Array and hz.is_empty() and str(row["tier"]) == "generic":
-		hz = [30, 360]  # unknown panel on unknown hardware
+	if hz is Array and hz.is_empty() and (str(row["tier"]) == "generic" or form_of(row) != "handheld"):
+		hz = [30, 360]  # unknown panel on unknown hardware, or no panel at all: the TV decides
 	if not hz is Array or hz.size() != 2 or float(hz[0]) < 30.0 or float(hz[0]) > float(hz[1]) or float(hz[1]) > 360.0:
 		p.append("%s: panel_hz must be [min, max] Hz, 30..360" % id)
 	var vrr: Variant = row.get("vrr_range")
@@ -604,7 +648,10 @@ static func conservative_tdp(chip_tdp: Dictionary, vendor: String) -> Dictionary
 
 
 ## A row for hardware no specific row knows. Ranges are conservative.
-static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cpus: Array) -> Dictionary:
+## `battery` false = no system battery: a desktop (mini PC, HTPC, tower), not a
+## handheld. No power service may set a TDP there (tdp_backends []): the
+## handheld-sized limits below would choke a desktop chip.
+static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cpus: Array, battery := true) -> Dictionary:
 	var c := cpu_entry(cpus, model)
 	var vendor := str(c.get("cpu_vendor", ""))
 	if vendor == "":
@@ -643,16 +690,22 @@ static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cp
 	}
 	if c.has("pl2_offset_w"):
 		row["pl2_offset_w"] = c["pl2_offset_w"]
+	if not battery:
+		row["form"] = "desktop"
+		row["name"] = name if name != "" else "Unknown PC"
+		row["art"] = "generic-box"
+		row["tdp_backends"] = []
+		row["quirks"] = ["Not in GameCove's device table. No battery found, so we treat it as a PC by the TV: no battery settings and no power limits."]
 	return row
 
 
 ## The row for this hardware: best DMI match, its chip details filled in from
 ## the CPU where the row leaves them open, else the generic fallback.
-static func resolve(doc: Dictionary, dmi: Dictionary, model: String, gpu_dev: Dictionary) -> Dictionary:
+static func resolve(doc: Dictionary, dmi: Dictionary, model: String, gpu_dev: Dictionary, battery := true) -> Dictionary:
 	var cpus: Array = doc.get("cpus", [])
 	var row := match_dmi(doc.get("devices", []), dmi)
 	if row.is_empty():
-		return fallback_row(dmi, model, gpu_dev, cpus)
+		return fallback_row(dmi, model, gpu_dev, cpus, battery)
 	var c := cpu_entry(cpus, model)
 	var open_chip := str(row.get("chip", "")) == "Unknown" or bool(row.get("chip_from_cpu", false))
 	if c.is_empty() and open_chip and str(row.get("cpu_vendor", "")) == "":
@@ -683,14 +736,25 @@ static func resolve(doc: Dictionary, dmi: Dictionary, model: String, gpu_dev: Di
 
 ## First battery found, e.g. BAT0 or BAT1. Empty string when there's none.
 func battery_path() -> String:
-	var dir := DirAccess.open(root + POWER_SUPPLY)
+	return battery_path_at(root)
+
+
+## The system battery under `prefix`: BAT* first, else any supply of type
+## "Battery" that isn't a gadget's (controllers and mice show up here with
+## scope "Device": a wired DualSense on a Steam Machine is not its battery).
+static func battery_path_at(prefix: String) -> String:
+	var dir := DirAccess.open(prefix + POWER_SUPPLY)
 	if dir == null:
 		return ""
 	var names := Array(dir.get_directories()) + Array(dir.get_files())
 	names.sort()
 	for name in names:
 		if name.begins_with("BAT"):
-			return root + POWER_SUPPLY + name + "/"
+			return prefix + POWER_SUPPLY + name + "/"
+	for name in names:
+		var base: String = prefix + POWER_SUPPLY + name + "/"
+		if read_text(base + "type") == "Battery" and read_text(base + "scope") != "Device":
+			return base
 	return ""
 
 

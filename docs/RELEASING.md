@@ -9,7 +9,7 @@ can sign. Three things guard that: a tag ruleset, a deployment environment with 
 the workflows' own checks.
 
 This repo's Releases page only has the app's own `v*` releases. The data GameCove downloads (game database,
-firmware list, upscaler files and list, device photos) is built and published by the workflows of
+firmware list, upscaler files and list, device photos, device fix list) is built and published by the workflows of
 **[IHulkSmashI/GameCove-data](https://github.com/IHulkSmashI/GameCove-data)** on that repo's own releases (see
 "Data releases" below).
 
@@ -29,22 +29,23 @@ run is finished by re-running.
 
 ## Data releases (IHulkSmashI/GameCove-data)
 
-The `gamedb`, `firmware`, `upscalers` and `device-photos` releases live in the data repo, published by its
-`gamedb.yml`, `firmware.yml`, `upscalers.yml` and `device-photos.yml` (a workflow's `GITHUB_TOKEN` can only write
+The `gamedb`, `firmware`, `upscalers`, `device-photos` and `fixes` releases live in the data repo, published by its
+`gamedb.yml`, `firmware.yml`, `upscalers.yml`, `device-photos.yml` and `fixes.yml` (a workflow's `GITHUB_TOKEN` can only write
 to the repository the workflow is in, and no long-lived token is used). Those workflows run **this** repo's builders
-(`gamedb/`, `tools/upscalers/`, `tools/device_photos/`, `packaging/helpers/`), checked out read-only at the commit
+(`gamedb/`, `tools/upscalers/`, `tools/device_photos/`, `tools/fixes/`, `packaging/helpers/`), checked out read-only at the commit
 the data repo's `gamecove-source.env` pins. So:
 
 - **After merging a change to a builder or its data** (`gamedb/`, `tools/upscalers/`, `tools/device_photos/`,
+  `fixes/`, `tools/fixes/`,
   `app/data/devices.json`, `app/data/device_photos.json`, `packaging/helpers/`, including a new tested pin in
   `versions.json`, or the cosign pins in `get-gamecove.sh`), bump `GAMECOVE_COMMIT` in the data repo's
   `gamecove-source.env` to that `main` commit, then run the workflow by hand
   (`gh workflow run upscalers.yml -R IHulkSmashI/GameCove-data`). A new pin in `versions.json` must be on the
   mirror before an app release ships it.
 - **Identities the app pins:** `https://github.com/IHulkSmashI/GameCove-data/.github/workflows/firmware.yml@refs/heads/main`
-  and `.../upscalers.yml@refs/heads/main`, issuer `https://token.actions.githubusercontent.com`
+  and `.../upscalers.yml@refs/heads/main` (and `.../fixes.yml@refs/heads/main` for the fix list), issuer `https://token.actions.githubusercontent.com`
   (`app/scripts/system/data_repo.gd`, `mirror.py`; `packaging/tests/release.sh` keeps them equal).
-- The firmware and upscaler lists are signed the way releases are: their `build` job runs the scrapers and the
+- The firmware, upscaler and fix lists are signed the way releases are: their `build` job runs the scrapers and the
   builder with a read-only token and no OIDC, and their `publish` job (which signs) runs in the data repo's `nightly`
   environment, which only its `main` can deploy to; the build job refuses to start when that environment is missing
   or lets another branch deploy. They run every night, so they don't wait for an approval. The game database and
@@ -60,7 +61,9 @@ the data repo's `gamecove-source.env` pins. So:
   and verify code, signatures included, and fails on anything that doesn't check out or that came from upstream
   instead of the mirror. It uses the network, so it isn't one of the gates; run it after the data workflows publish.
 - The weekly check of the makers' image links stays here (`maker-links.yml`): it reads this repo's data and files
-  its issue here.
+  its issue here. So does filing the nightly fix audit's issues (`fix-audit.yml`): it checks the signature of the
+  data repo's `issues.json` and files one issue per fix here, plus the weekly check of every fix's source links
+  ([FIXES.md](FIXES.md)).
 
 ## Repository settings (owner)
 
@@ -125,13 +128,12 @@ lists, so protect it the same way.
   RPM, sysext and installer script all listed, and `get-gamecove.sh` identical to the tagged commit's).
 - Before the first release from a changed `release.yml`, do a dry run: `gh workflow run release.yml --ref main`
   (publish off) builds everything and runs every check except tagging, signing and publishing.
-- In the data repo, `firmware.yml`, `upscalers.yml`: the build job checks its `nightly` environment exists and only
+- In the data repo, `firmware.yml`, `upscalers.yml`, `fixes.yml`: the build job checks its `nightly` environment exists and only
   `main` can deploy to it, is read-only with no OIDC and checks it got exactly the pinned commit; the publish job
   runs only pinned cosign, `gh` and standard-library checks. `upscalers.yml`'s publish job re-hashes every planned
   file and re-checks the index (official upstream repositories only, builds at least 72 hours old) with
   `tools/upscalers/check_plan.py` before signing. The nightly's
-  newer steps live in the data repo's `upscalers.yml` (GameCove-data, branch `upscalers-smoke-watch` until it is
-  merged there): the per-game list from OptiScaler's sources as they were 72 hours ago (`tools/upscalers/gen_games.py`),
+  newer steps live in the data repo's `upscalers.yml`: the per-game list from OptiScaler's sources as they were 72 hours ago (`tools/upscalers/gen_games.py`),
   `tools/upscalers/smoke.py` over what is new (its publish job only runs when it passed, so devices keep last night's
   signed index otherwise), `tools/upscalers/watch.py` over the upstreams a person has to look at, and a `report` job
   with `issues: write` and no code that opens or updates one issue when something moved or a check failed.

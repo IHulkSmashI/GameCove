@@ -11,6 +11,7 @@ extends RefCounted
 ## Outside the scene tree (tests, tools) loads happen at once.
 
 const ArtColor := preload("res://theme/art_color.gd")
+const HeroInk := preload("res://scripts/ui/hero_ink.gd")
 const ImageGuard := preload("res://scripts/ui/image_guard.gd")
 
 const LIMIT := {"cover": 160, "hero": 4, "logo": 24, "blur": 48}
@@ -20,6 +21,7 @@ static var _tex := {}        # "kind|path" -> Texture2D (null = failed)
 static var _order := {}      # kind -> Array of keys, oldest first
 static var _pending := {}    # key -> Array[Callable]
 static var _accent := {}     # path -> Color (a = 0 when grey)
+static var _side := {}       # "kind|path" -> Color: how bright the art's text side is (HeroInk)
 static var _tasks: Array[int] = []   # WorkerThreadPool ids still running
 static var _closed := false          # set by shutdown(): late results are dropped
 
@@ -54,7 +56,7 @@ static func request(kind: String, path: String, done: Callable = Callable(), own
 		return _tex[key]
 	if owner == null or not owner.is_inside_tree():
 		var r := _load(kind, path)
-		_finish(kind, path, r[0], r[1])
+		_finish(kind, path, r[0], r[1], r[2])
 		return _tex.get(key)
 	if _pending.has(key):
 		if done.is_valid():
@@ -66,7 +68,7 @@ static func request(kind: String, path: String, done: Callable = Callable(), own
 		_tasks.erase(t)
 	_tasks.append(WorkerThreadPool.add_task(func():
 		var r := _load(kind, path)
-		_finish.call_deferred(kind, path, r[0], r[1]),
+		_finish.call_deferred(kind, path, r[0], r[1], r[2]),
 		false, "GameCove art"))
 	return null
 
@@ -81,12 +83,19 @@ static func has_accent(path: String) -> bool:
 	return _accent.has(path)
 
 
-## Worker side: decode and shrink. Returns [Image or null, accent Color].
+## How bright the text side (the left) of a loaded hero or cover is, for the
+## scrim behind text on it (HeroInk.strength_for). Color(0,0,0,0) if unknown.
+static func text_side(kind: String, path: String) -> Color:
+	return _side.get(kind + "|" + path, Color(0, 0, 0, 0))
+
+
+## Worker side: decode and shrink. Returns [Image or null, accent Color,
+## text-side Color (heroes and covers)].
 static func _load(kind: String, path: String) -> Array:
 	# never decoded past a sane size, whatever the file claims (image_guard.gd)
 	var img := ImageGuard.load(path)
 	if img == null or img.is_empty():
-		return [null, Color(0, 0, 0, 0)]
+		return [null, Color(0, 0, 0, 0), Color(0, 0, 0, 0)]
 	if img.is_compressed():
 		img.decompress()
 	if img.get_format() != Image.FORMAT_RGBA8 and img.get_format() != Image.FORMAT_RGB8:
@@ -104,9 +113,12 @@ static func _load(kind: String, path: String) -> Array:
 			var r := blurred(img)
 			img = r[0]
 			acc = r[1]
+	var side := Color(0, 0, 0, 0)
+	if kind == "hero" or kind == "cover":
+		side = HeroInk.text_side(img)
 	if kind == "cover":
 		img.generate_mipmaps()
-	return [img, acc]
+	return [img, acc, side]
 
 
 ## [smooth 320 px Image, vibrant Color] from any image.
@@ -146,10 +158,12 @@ static func _fit(img: Image, max_size: Vector2i) -> void:
 		img.resize(maxi(1, int(img.get_width() * s)), maxi(1, int(img.get_height() * s)), Image.INTERPOLATE_LANCZOS)
 
 
-static func _finish(kind: String, path: String, img: Image, acc: Color) -> void:
+static func _finish(kind: String, path: String, img: Image, acc: Color, side := Color(0, 0, 0, 0)) -> void:
 	if _closed:
 		return
 	var key := kind + "|" + path
+	if side.a > 0.0:
+		_side[key] = side
 	var tex: Texture2D = ImageTexture.create_from_image(img) if img != null else null
 	_tex[key] = tex
 	if kind == "blur":
@@ -170,7 +184,9 @@ static func _touch(kind: String, key: String) -> void:
 	list.append(key)
 	_order[kind] = list
 	while list.size() > int(LIMIT.get(kind, 64)):
-		_tex.erase(list.pop_front())
+		var old: String = list.pop_front()
+		_tex.erase(old)
+		_side.erase(old)
 
 
 ## Call when the app quits (main.gd does): waits for loads still running and
@@ -189,3 +205,4 @@ static func clear() -> void:
 	_tex.clear()
 	_order.clear()
 	_accent.clear()
+	_side.clear()

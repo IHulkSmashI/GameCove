@@ -175,6 +175,14 @@ func reset_controls() -> void:
 	c._mutex.lock()
 	c._jobs.clear()
 	c._mutex.unlock()
+	# a job already running (the app's own start detection on a busy machine)
+	# still walks the old controls: it finishes before they go
+	if c._thread != null:
+		var done := [false]
+		c.run_on_worker(func(): done[0] = true)
+		var until_ms := Time.get_ticks_msec() + 15000
+		while not done[0] and Time.get_ticks_msec() < until_ms:
+			OS.delay_msec(2)
 	c._controls = {}
 	c._order = []
 	c._cache_mutex.lock()
@@ -214,6 +222,7 @@ func boot_main() -> void:
 	if main.fixes != null:
 		main.fixes.setup({"sys_root": root, "runner": fake, "home": home, "device": autoload("Device")})
 	main.quick_menu.commands.runner = Fake.BgRunner.new(fake)
+	_wire_actions()
 	# the Stream tab's discovery: the fake answers (no mDNS, no network), nothing is probed
 	if main.streaming != null:
 		main.streaming.ctx["runner"] = fake
@@ -232,8 +241,26 @@ func boot_main() -> void:
 	await idle()
 
 
+## What the rest of the fake system does when a game ends (stores_world.gd: Steam
+## writes its play time). func(app: int).
+var on_app_end := Callable()
+
+
+## The action runner (Shortcuts strip, button shortcuts): its programs go to the
+## fake, Steam is "installed", and key presses don't really wait.
+func _wire_actions() -> void:
+	if main.actions == null:
+		return
+	main.actions.runner = fake
+	main.actions.keys = load("res://scripts/actions/key_sender.gd").new(fake)
+	main.actions.keys.wait = func(_ms: int) -> void: pass
+	main.actions.steam_bin = "/usr/bin/steam"
+
+
 ## A game's window and Steam launch go away (it quit, or was closed).
 func end_app(app: int) -> void:
+	if on_app_end.is_valid():
+		on_app_end.call(app)
 	fake_apps.erase(app)
 	fake._mutex.lock()
 	var ids: Array = Array(str(fake.xroot.get("GAMESCOPE_FOCUSABLE_APPS", "769")).split(",", false)).map(func(x): return x.strip_edges())
@@ -314,6 +341,7 @@ func reset() -> void:
 	if main != null:
 		main.fixes.setup({"sys_root": root, "runner": fake, "home": home, "device": autoload("Device")})
 		main.quick_menu.commands.runner = Fake.BgRunner.new(fake)
+		_wire_actions()
 	await idle()
 	fake.reset_log()
 

@@ -20,3 +20,6 @@ const UPCOMING_URL := RELEASES + "gamedb/upcoming.json.gz"
 const FIRMWARE_URL := RELEASES + "firmware/firmware.json.gz"
 const UPSCALERS_URL := RELEASES + "upscalers/upscalers.json"
 const PHOTOS := RELEASES + "device-photos/"
+## The nightly fix definitions (docs/FIXES.md), signed by that repo's fixes.yml on main.
+const FIXES_SIGNER := "(?i)^https://github\\.com/IHulkSmashI/GameCove-data/\\.github/workflows/fixes\\.yml@refs/heads/main$"
+const FIXES_URL := RELEASES + "fixes/fixes.json"

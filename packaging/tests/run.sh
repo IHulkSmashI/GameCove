@@ -54,7 +54,7 @@ echo "args:$*" >>"$GAMECOVE_ROOT/calls"
 echo "root:$GAMECOVE_ROOT" >>"$GAMECOVE_ROOT/calls"
 case "$1" in
 status) echo "installed=yes" ;;
-install|remove) echo "detail: $1 dummy" >>"$GAMECOVE_CHANGES_LOG" ;;
+install|remove|update) echo "detail: $1 dummy" >>"$GAMECOVE_CHANGES_LOG" ;;
 set) [ "$2" = "boom" ] && exit 3 ;;
 esac
 exit 0
@@ -129,6 +129,14 @@ if [ "$(wc -l <"$LOG")" -eq "$lines_before" ]; then ok; else bad "status must no
 
 expect_code 0 "remove" gf dummy remove
 contains "$LOG" "action=remove value=- result=ok" "remove logged"
+
+# update (docs/FIXES.md): bring an installed fix to the script's revision; the fix rolls back when it fails
+expect_code 0 "update" gf dummy update
+contains "$ROOT/calls" "args:update" "update reaches the fix"
+contains "$LOG" "fix=dummy action=update value=- result=ok" "update logged"
+expect_code 7 "a failed update's code comes back" gf broken update
+contains "$LOG" "fix=broken action=update value=- result=fail(7)" "failed update logged"
+expect_code 64 "update takes no value" gf dummy update now
 
 expect_code 0 "list" gf --list
 contains "$T/out" "^dummy$" "list shows dummy"
@@ -275,6 +283,11 @@ expect_code 66 "set entry: power-tune path" gfs power-tune set epp:../x
 expect_code 66 "set entry: power-tune upper case" gfs power-tune set epp:POWER
 expect_code 64 "set entry refuses power-tune install" gfs power-tune install
 expect_code 64 "set entry refuses power-tune remove" gfs power-tune remove
+# the fix lifecycle adds no prompt-free door: retiring or updating a fix is install / remove work (admin password)
+expect_code 64 "set entry refuses update" gfs claw8ex-buttons update
+expect_code 66 "set entry refuses set update" gfs claw8ex-buttons set update
+expect_code 66 "set entry refuses set retire" gfs claw8ex-buttons set retire
+expect_code 65 "set entry refuses a file fix update" gfs claw-kbd-wakeup update
 lacks "$ROOT/calls" "install" "no install reached a fix through the set entry"
 lacks "$ROOT/calls" "remove" "no remove reached a fix through the set entry"
 # review S3-2: the small file fixes (udev rules, session files) need the administrator password now
@@ -1115,6 +1128,30 @@ then ok; else bad "showcase app icons: $(cat "$T/out")"; fi
 
 # ------------------------- fixes/lib/handhelds.txt is generated from devices.json
 if python3 -I "$REPO/tools/fixes/gen_handhelds.py" --check >"$T/out" 2>&1; then ok; else bad "$(cat "$T/out")"; fi
+# every fixes/<id>/ has a valid fix.json (metadata, undo, probe, tests, lifecycle rule, watch), and
+# app/data/fixes.json, the README table and docs/FIXES.md's catalogue are what they build (docs/FIXES.md)
+if python3 -I "$REPO/tools/fixes/build.py" --check >"$T/out" 2>&1; then ok; else bad "fix definitions: $(cat "$T/out")"; fi
+for d in "$REPO"/fixes/*/; do
+	n="$(basename "$d")"
+	[ -f "$d/fix.sh" ] || continue
+	if [ -f "$d/fix.json" ]; then ok; else bad "fixes/$n has no fix.json"; fi
+done
+# the nightly audit, dry: two nights from recorded answers, the signing job's check, and the issues it would file
+if python3 -I "$REPO/tools/fixes/make_fixtures.py" "$T/audit-n1" >"$T/out" 2>&1 \
+	&& python3 -I "$REPO/tools/fixes/audit.py" --fixtures "$T/audit-n1" --out "$T/audit-d1" --date 2026-11-09 --serial 1 >>"$T/out" 2>&1 \
+	&& python3 -I "$REPO/tools/fixes/make_fixtures.py" "$T/audit-n2" --night 2 >>"$T/out" 2>&1 \
+	&& python3 -I "$REPO/tools/fixes/audit.py" --fixtures "$T/audit-n2" --out "$T/audit-d2" --previous "$T/audit-d1/audit-state.json" --date 2026-11-10 --serial 2 >>"$T/out" 2>&1 \
+	&& python3 -I "$REPO/tools/fixes/check_dist.py" "$T/audit-d2" >>"$T/out" 2>&1; then ok; else bad "fix audit dry run: $(cat "$T/out")"; fi
+python3 -I "$REPO/tools/fixes/file_issues.py" "$T/audit-d2/issues.json" --dry-run >"$T/out" 2>&1 || true
+contains "$T/out" "issue create --title Fix audit: onexfly-touch --label fix-audit" "the audit files one issue per fix with a change"
+contains "$T/out" "issue create --title Fix audit summary --label fix-audit" "and a summary"
+python3 -I "$REPO/tools/fixes/file_issues.py" "$T/audit-d1/issues.json" --dry-run >"$T/out" 2>&1 || true
+contains "$T/out" "nothing to report" "a night without changes files nothing"
+# the fixes release is built and signed in IHulkSmashI/GameCove-data (its tests/check_workflows.py); here only the issues
+[ ! -e "$REPO/.github/workflows/fixes.yml" ] && ok || bad "fixes.yml publishes data: it belongs in IHulkSmashI/GameCove-data"
+contains "$REPO/.github/workflows/fix-audit.yml" "cosign verify-blob --bundle dist/issues.json.sigstore.json" "fix-audit.yml files issues only from a verified issues.json"
+contains "$REPO/app/scripts/device/fix_data.gd" "const URL := DataRepo.FIXES_URL" "fix_data.gd downloads from the data repo"
+contains "$REPO/app/scripts/device/fix_data.gd" "const SIGNER_IDENTITY := DataRepo.FIXES_SIGNER" "and pins its fixes.yml"
 # ------------------- traits, fix / quirk / matrix selectors (tools/traits/traits.py)
 if python3 -I "$REPO/tools/traits/traits.py" check >"$T/out" 2>&1; then ok; else bad "traits: $(cat "$T/out")"; fi
 python3 -I "$REPO/tools/traits/traits.py" trait controller:asus-ally-x >"$T/out" 2>&1

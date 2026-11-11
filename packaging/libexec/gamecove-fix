@@ -1,7 +1,7 @@
 #!/bin/sh
 # gamecove-fix: the one root helper GameCove has. Run with pkexec:
 #
-#   pkexec /usr/libexec/gamecove/gamecove-fix <name> install|remove|status
+#   pkexec /usr/libexec/gamecove/gamecove-fix <name> install|remove|update|status
 #   pkexec /usr/libexec/gamecove/gamecove-fix <name> set <value>
 #   /usr/libexec/gamecove/gamecove-fix --list
 #
@@ -11,7 +11,8 @@
 # allows without a password and which only accepts those `set`s and hands them here.
 #
 # <name> must be a folder under the fixes directory holding a fix.sh that
-# implements `install|remove|status|set <value>`. Every change (anything but
+# implements `install|remove|update|status|set <value>` (update: bring an installed fix to the
+# script's current revision, or leave it as it was; docs/FIXES.md). Every change (anything but
 # status) is logged to /var/lib/gamecove/changes.log with who asked, what and the
 # result; fix.sh may append its own detail lines to $GAMECOVE_CHANGES_LOG.
 #
@@ -42,7 +43,7 @@ LOG_DIR="$ROOT/var/lib/gamecove"
 LOG_FILE="$LOG_DIR/changes.log"
 
 usage() {
-	echo "usage: gamecove-fix <name> install|remove|status|set <value>" >&2
+	echo "usage: gamecove-fix <name> install|remove|update|status|set <value>" >&2
 	echo "       gamecove-fix --list" >&2
 	echo "       gamecove-fix --remove-all" >&2
 	exit 64
@@ -150,7 +151,7 @@ script="$FIXES_DIR/$name/fix.sh"
 [ -f "$script" ] && [ ! -L "$FIXES_DIR/$name" ] || die "unknown fix: $name" 65
 
 case "$action" in
-install | remove | status)
+install | remove | update | status)
 	[ $# -eq 2 ] || usage
 	;;
 set)

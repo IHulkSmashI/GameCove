@@ -44,7 +44,7 @@ func _ready() -> void:
 	if ctx.is_empty():
 		setup({"sys_root": "", "runner": load("res://scripts/device/command_runner.gd").new(),
 			"home": OS.get_environment("HOME"), "device": get_node_or_null("/root/Device"),
-			"open_uri": open_uri})
+			"open_uri": open_uri, "run_action": run_action})
 		load_providers()
 		detect_all()
 
@@ -61,6 +61,25 @@ func open_uri(uri: String) -> bool:
 
 func _shell_open(uri: String) -> void:
 	OS.shell_open(uri)
+
+
+## Main thread only: runs one of the shared one-press actions
+## (scripts/actions/registry.gd); main sets it once its action runner exists.
+var action_handler: Callable
+
+
+## ctx["run_action"]: a provider asks for one of the shared actions ("key_optiscaler":
+## Insert at the game, for "Open the upscaler's menu"). It's in the context from
+## setup on, so the worker never sees a key come or go; the action runs on the
+## main thread, through action_handler. True when it was handed over.
+func run_action(id: String) -> bool:
+	call_deferred("_run_action", id)
+	return true
+
+
+func _run_action(id: String) -> void:
+	if action_handler.is_valid():
+		action_handler.call(id)
 
 
 ## Every script in providers/ is a provider (new() then controls()), so each
@@ -185,12 +204,17 @@ var detected_seq := 0
 func detect_all() -> void:
 	requested_seq += 1
 	var n := requested_seq
+	# The controls as they are now: the worker never reads the registry while
+	# the main thread may change it (a reset registering the providers again
+	# swapped it under a running detection, which then stopped half way).
+	var ids: Array = _order.duplicate()
+	var ctls: Dictionary = _controls.duplicate()
 	_queue(func():
-		for id in _order:
-			var c = _controls[id]
+		for id in ids:
+			var c = ctls[id]
 			c.detect()
 			c.read()
-		_commit(_order)
+		_commit(ids, ctls)
 		_emit_detected(n))
 
 
@@ -263,11 +287,12 @@ func snapshot(per_game_only := true) -> Dictionary:
 
 
 ## Copies what the worker changed into the cache (end of each worker job).
-func _commit(ids: Array) -> void:
+## `from`: the controls a job worked on (only those still registered are cached).
+func _commit(ids: Array, from := {}) -> void:
 	_cache_mutex.lock()
 	for id in ids:
 		var c = _controls.get(id)
-		if c != null:
+		if c != null and (from.is_empty() or from.get(id) == c):
 			_cache[id] = {"available": bool(c.available), "value": _copy(c.value), "per_game": bool(c.per_game),
 				"desc": c.describe().duplicate(true)}
 	_cache_mutex.unlock()

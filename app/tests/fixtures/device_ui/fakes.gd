@@ -35,6 +35,7 @@ class FakeController extends Node:
 	signal changed(state: Dictionary)
 	signal applied(setting: String, ok: bool)
 	signal button_event(capability: String, pressed: bool)
+	signal shortcut_seen(capability: String, what: String)
 	var st: Dictionary = {}
 	var calls: Array[String] = []
 

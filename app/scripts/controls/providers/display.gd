@@ -9,6 +9,7 @@ extends RefCounted
 ## refresh-rate list, HDR at start) and a per-device store (values only
 ## GameCove keeps). Hooks run on the Controls worker, never on the UI thread.
 
+const Busctl := preload("res://scripts/device/busctl.gd")
 const Ctl := preload("res://scripts/controls/control.gd")
 const XAtoms := preload("res://scripts/controls/display/xatoms.gd")
 const PanelInfo := preload("res://scripts/controls/display/panel.gd")
@@ -63,6 +64,15 @@ const DIM_CHOICES := [
 const OFF_CHOICES := [
 	{"value": 0, "label": "Never"}, {"value": 60, "label": "1 minute"}, {"value": 120, "label": "2 minutes"},
 	{"value": 300, "label": "5 minutes"}, {"value": 600, "label": "10 minutes"},
+]
+
+## steamos-manager HdmiCec1.HdmiCecState (u): 0 off, 1 control only, 2 control and wake
+## (3 = the finer switches of HdmiCec2, shown as 2).
+const SM_SERVICE := "com.steampowered.SteamOSManager1"
+const SM_PATH := "/com/steampowered/SteamOSManager1"
+const SM_CEC := "com.steampowered.SteamOSManager1.HdmiCec1"
+const CEC_CHOICES := [
+	{"value": 0, "label": "Off"}, {"value": 1, "label": "TV remote only"}, {"value": 2, "label": "Remote and power"},
 ]
 
 const HDR_NITS_MIN := 20.0     # software brightness range (ClawDeck screen.py)
@@ -136,6 +146,11 @@ func controls() -> Array:
 			_detect_effect, func(c): return _x(c).text(Reshade.ATOM_EFFECT), _write_effect),
 		_mk("display.rotation", {"kind": "choice", "options": ROTATIONS, "default_value": "auto", "per_game": false},
 			_detect_session, _read_rotation, _write_rotation),
+		# HDMI-CEC (TV remote, TV on / off with the device): steamos-manager's HdmiCec1, where
+		# the device has it (Steam Machine, a Steam Deck dock). Nothing else is tried.
+		_mk("display.hdmi_cec", {"kind": "choice", "options": CEC_CHOICES, "default_value": 2, "per_game": false},
+			_detect_cec, func(c): return clampi(int(_cec_bus(c).get_prop(SM_SERVICE, SM_PATH, SM_CEC, "HdmiCecState")), 0, 2),
+			func(c, v): return _cec_bus(c).set_prop(SM_SERVICE, SM_PATH, SM_CEC, "HdmiCecState", "u", str(clampi(int(v), 0, 2)))),
 		_mk("display.dim_after", {"kind": "choice", "options": DIM_CHOICES, "default_value": 60, "per_game": false},
 			func(_c): return "", func(c): return int(_st(c).get_value("dim_after", 60)),
 			func(c, v): return _st(c).set_value("dim_after", int(v))),
@@ -152,6 +167,16 @@ func _mk(id: String, spec: Dictionary, d: Callable, r: Callable, w: Callable) ->
 	var c = Ctl.make(s, d, r, w)
 	c.set_meta("provider", self)   # keeps this provider alive as long as its controls
 	return c
+
+
+func _cec_bus(c) -> RefCounted:
+	return Busctl.new(c.ctx.get("runner"), "--user")
+
+
+func _detect_cec(c) -> String:
+	if c.ctx.get("runner") == null:
+		return T.NO_CEC
+	return "" if _cec_bus(c).get_prop(SM_SERVICE, SM_PATH, SM_CEC, "HdmiCecState") != null else T.NO_CEC
 
 
 func _x(c) -> RefCounted:
@@ -200,6 +225,8 @@ func _gs_has(c, needle: String) -> bool:
 ## The backlight to drive: raw (GPU) first, then platform, then firmware (ACPI).
 static func find_backlight(sys_root: String) -> String:
 	var base := sys_root + "/sys/class/backlight"
+	if not DirAccess.dir_exists_absolute(base):
+		return ""   # a box with no panel (Steam Machine, mini PC): the TV has its own brightness
 	var best := ""
 	var best_rank := 99
 	for n in Sysfs.entries(base):

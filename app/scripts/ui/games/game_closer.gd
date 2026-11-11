@@ -25,6 +25,9 @@ extends Node
 ##                descendant, then KILL after GRACE_S if alive.
 ## A group is only signalled when its leader is the process itself, so Steam's
 ## or GameCove's own group is never hit.
+##
+## force() is the Shortcuts strip's "Force close game": the same targets, KILL
+## at once (force_plan), for a game that hangs.
 
 const GRACE_S := 5.0
 
@@ -100,6 +103,33 @@ func close(session: Object) -> bool:
 	# launch whose game showed up late, must not lose or cut short the first one's)
 	get_tree().create_timer(GRACE_S).timeout.connect(_hard.bind(session, pid, later))
 	return true
+
+
+## [commands] that end `game` at once (the quick menu's Force close, for a game
+## that hangs and ignores TERM): the same targets as plan(), with KILL and no
+## grace. A scoped game's whole scope is killed too.
+static func force_plan(game: Dictionary, app_id: int, pid: int) -> Array:
+	var out: Array = []
+	if str(game.get("store", "")) == "steam" or game.get("shortcut", false) == true:
+		var appid := str(game.get("id", app_id))
+		if preload("res://scripts/steam/app_id.gd").valid(appid):
+			out.append(_kill("KILL", "steam", appid))
+		return out
+	if app_id > 0:
+		out.append(["systemctl", "--user", "kill", "--signal=KILL", "app-steam-app%d-*.scope" % app_id])
+	if pid > 0:
+		out.append(_kill("KILL", "pid", str(pid)))
+	return out
+
+
+## Ends what `session` runs right now, without asking it first. False when nothing runs.
+func force(session: Object) -> bool:
+	if session == null or not session.is_active():
+		return false
+	var cmds := force_plan(session.game, int(session.app_id), int(session.pid))
+	for cmd in cmds:
+		run.call(cmd)
+	return not cmds.is_empty()
 
 
 ## After the grace period: force it, unless it's already gone.

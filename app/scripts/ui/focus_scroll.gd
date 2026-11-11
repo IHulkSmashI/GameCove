@@ -42,8 +42,14 @@ static func attach(s: ScrollContainer, bottom_room := MARGIN) -> Node:
 	return fs
 
 
-func _ready() -> void:
-	get_viewport().gui_focus_changed.connect(_on_focus)
+# Every time it enters the tree, not once in _ready: a scroll that is wrapped
+# after it was added (FadeMask.wrap takes it out and puts it back) left the
+# tree in between, and with it this listener; Settings rebuilt for a new theme
+# then stopped following focus.
+func _enter_tree() -> void:
+	var vp := get_viewport()
+	if vp != null and not vp.gui_focus_changed.is_connected(_on_focus):
+		vp.gui_focus_changed.connect(_on_focus)
 
 
 func _exit_tree() -> void:
@@ -120,11 +126,18 @@ func target_for(c: Control) -> float:
 	if content == null or view <= 0.0:
 		return float(scroll.scroll_vertical)
 	var max_v := maxf(0.0, content.size.y - view)
+	# Focus inside a scroller of its own (a column of cards inside the page):
+	# that scroller keeps the control in view; this one only keeps the whole
+	# pane in view. Following the control itself would chase it while the inner
+	# scroller glides and leave the page scrolled past the pane's top.
+	var inner := _nested_scroller(c)
+	if inner != null:
+		c = inner
 	var r := _rect_in_content(_row_of(c, content))
 	# A control can ask for a neighbour to show with it (meta "reveal_with"):
 	# read-only cards that don't take focus come into view next to the
 	# nearest one that does.
-	var extra: Variant = c.get_meta("reveal_with") if c.has_meta("reveal_with") else null
+	var extra: Variant = c.get_meta("reveal_with") if c.has_meta("reveal_with") and inner == null else null
 	if extra is Control and is_instance_valid(extra) and content.is_ancestor_of(extra):
 		var u := r.merge(_rect_in_content(extra))
 		if u.size.y + MARGIN + margin_bottom <= view:
@@ -141,10 +154,10 @@ func target_for(c: Control) -> float:
 		v = bottom + below - view
 	v = clampf(v, 0.0, max_v)
 	# Something cut by the top edge (a row, a line of text): show it whole if
-	# the focus still fits, else scroll past it. A few passes, as moving up
-	# can cut the next thing.
+	# the focus still fits, else scroll past it. Several passes, as moving up
+	# can cut the next thing (in a tight list, one row at a time).
 	var blocks := _blocks(content)
-	for _pass in 3:
+	for _pass in 24:
 		var moved := false
 		for b in blocks:
 			if b == c or b.is_ancestor_of(c) or c.is_ancestor_of(b):
@@ -154,6 +167,8 @@ func target_for(c: Control) -> float:
 				var up := maxf(0.0, rr.position.y - 6.0)
 				if bottom + below <= up + view:
 					v = up
+				elif bottom - top + MARGIN + below > view and top - up <= view * 0.5:
+					v = up   # the focus is taller than the view anyway: keep the row whole above it
 				else:
 					v = minf(rr.end.y + 2.0, top - 4.0)
 				moved = true
@@ -161,6 +176,17 @@ func target_for(c: Control) -> float:
 		if not moved:
 			break
 	return clampf(v, 0.0, max_v)
+
+
+## The outermost scroller between `c` and this one, or null.
+func _nested_scroller(c: Control) -> ScrollContainer:
+	var found: ScrollContainer = null
+	var p := c.get_parent()
+	while p != null and p != scroll:
+		if p is ScrollContainer:
+			found = p
+		p = p.get_parent()
+	return found
 
 
 ## The whole row a focused button belongs to (its title, value, explanation,
@@ -209,5 +235,5 @@ static func _labels(n: Node, out: Array) -> void:
 		if ch is Control and (ch as Control).visible:
 			if ch is Label or ch is RichTextLabel:
 				out.append(ch)
-			else:
-				_labels(ch, out)
+			elif (ch as Control).focus_mode == Control.FOCUS_NONE:
+				_labels(ch, out)   # a focusable row is one block, already counted: its own text isn't another

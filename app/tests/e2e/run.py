@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """GameCove end-to-end suite driver (GPL-3.0).
 
-Builds the fake handhelds once (tools/devicematrix/gen.py --setups), then runs
+Builds the fake devices (three handhelds and a Steam Machine) once (tools/devicematrix/gen.py --setups), then runs
 the real app headless on each one, in its own process with a private HOME and
 XDG folders, so nothing of the machine running the tests is used or changed:
 
@@ -33,10 +33,18 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 APP = os.path.dirname(os.path.dirname(HERE))
 REPO = os.path.dirname(APP)
 GEN = os.path.join(REPO, "tools", "devicematrix", "gen.py")
-SETUPS = ["claw8ex-bazzite", "ally-steamos", "legion-go-s-bazzite"]
+SETUPS = ["claw8ex-bazzite", "ally-steamos", "legion-go-s-bazzite", "steam-machine-steamos"]
 ROWS = {"claw8ex-bazzite": "msi-claw-8-ex", "ally-steamos": "asus-rog-ally",
-        "legion-go-s-bazzite": "lenovo-legion-go-s-z2go"}
+        "legion-go-s-bazzite": "lenovo-legion-go-s-z2go", "steam-machine-steamos": "valve-steam-machine"}
 RESTART_SUITE = "restart"
+## Suites that run in a process of their own (they bring the player's games and
+## store tools along, and a long random run shouldn't share a process with the rest).
+OWN_PROCESS = ["journeys", "monkey"]
+# The Steam Machine has no TDP slider, battery or backlight, which is what the profile, restart,
+# robustness, settings and game suites drive: it runs the suites that fit a box (suite_box.gd
+# covers what must be absent there).
+BOX_SUITES = "smoke,screens,box,box_tv,capabilities,library,quick_menu,saves,perf,animations"
+BOXED = ["steam-machine-steamos"]
 
 
 def godot_path(arg: str) -> str:
@@ -192,10 +200,19 @@ def main(argv=None) -> int:
         work, info_path = prepare(fixtures, manifest, setup, base)
         common = {"E2E_SEED": str(seed), "E2E_ITERS": str(iters), "E2E_TEST": a.test}
         suites = [s for s in a.suites.split(",") if s]
+        if setup in BOXED:
+            fit = BOX_SUITES.split(",")
+            suites = [s for s in suites if s in fit] if suites else fit
+            if not suites:
+                continue
         runs = []
-        if not suites or any(s != RESTART_SUITE for s in suites):
-            only = ",".join(s for s in suites if s != RESTART_SUITE) if suites else ""
-            runs.append(("main", dict(common, E2E_SUITES=only or "suite_", E2E_SKIP="restart")))
+        shared = [s for s in suites if s != RESTART_SUITE and s not in OWN_PROCESS]
+        if not suites or shared:
+            runs.append(("main", dict(common, E2E_SUITES=",".join(shared) or "suite_",
+                                      E2E_SKIP=",".join([RESTART_SUITE] + OWN_PROCESS))))
+        for own in OWN_PROCESS:
+            if not suites or own in suites:
+                runs.append((own, dict(common, E2E_SUITES=own, E2E_SKIP=RESTART_SUITE)))
         if not suites or RESTART_SUITE in suites:
             runs.append(("restart-1", dict(common, E2E_SUITES=RESTART_SUITE, E2E_PHASE="1")))
             runs.append(("restart-2", dict(common, E2E_SUITES=RESTART_SUITE, E2E_PHASE="2")))
@@ -204,7 +221,8 @@ def main(argv=None) -> int:
             total_fail += int(r.get("failed", 0))
             total_pass += int(r.get("passed", 0))
             state = "ok" if not r.get("failed") else "FAILED"
-            print(f"{setup}/{label}: {r.get('passed', 0)} passed, {r.get('failed', 0)} failed in {r['seconds']} s ({state})")
+            skipped = f", {r['skipped']} pending merge" if r.get("skipped") else ""
+            print(f"{setup}/{label}: {r.get('passed', 0)} passed, {r.get('failed', 0)} failed{skipped} in {r['seconds']} s ({state})")
             for msg in r.get("failures", [])[:80]:
                 print("    " + str(msg))
     if not a.keep:

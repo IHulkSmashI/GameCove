@@ -241,6 +241,7 @@ func test_library_screen_filters() -> void:
 	l.set_query("wit")
 	eq(l.tiles().map(func(t): return t.game["title"]), ["Witcher 3"], "search")
 	eq(l.count_label.text, "1 of 3", "count shows the filter")
+	eq(l._d_title.text, "Witcher 3", "the strip under the grid names the game that is left, not the one it showed before")
 	l.set_query("zzz")
 	ok(l.find_child("EmptyFilter", true, false).text.contains("zzz"), "no-results line names the query")
 	l.free()
@@ -323,3 +324,24 @@ func test_game_page() -> void:
 	p2.free()
 
 
+
+
+## With the Game settings card owning the frame limit, the launch settings show
+## no frame-limit row; changing the goal there must leave the stored frame limit
+## alone, or the next launch puts the goal's over the one the player picked
+## (Profiles.sync_launcher_fps takes a changed launcher value over).
+func test_goal_change_keeps_the_cards_frame_limit() -> void:
+	var launcher := FakeLauncher.new()
+	launcher.saved["steam:1"] = {"goal": "battery", "fps_limit": 0, "upscaler": "auto", "frame_gen": false, "low_latency": true}
+	var f: VBoxContainer = SettingsForm.new()
+	f.setup("steam:1", launcher, false, true, false)
+	ok(not f.rows.has("fps_limit"), "no frame-limit row (the card has it)")
+	f._on_changed("balanced", "goal")
+	eq(launcher.saved["steam:1"]["goal"], "balanced", "goal saved")
+	eq(int(launcher.saved["steam:1"]["fps_limit"]), 0, "frame limit untouched")
+	f.free()
+	var g: VBoxContainer = SettingsForm.new()
+	g.setup("steam:1", launcher, false, true, true)
+	g._on_changed("battery", "goal")
+	eq(int(launcher.saved["steam:1"]["fps_limit"]), int(Texts.GOAL_PRESETS["battery"].get("fps_limit", 0)), "with its own row the goal still sets it")
+	g.free()

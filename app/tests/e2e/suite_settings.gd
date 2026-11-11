@@ -10,6 +10,7 @@ extends "res://tests/e2e/e2e_case.gd"
 const Effects := preload("res://tests/e2e/effects.gd")
 const Checks := preload("res://tests/e2e/checks.gd")
 const ControlsScript := preload("res://scripts/controls/controls.gd")
+const Catalog := preload("res://scripts/ui/controls/catalog.gd")
 const CATEGORIES := ["power", "display", "audio", "controller", "performance", "system"]
 ## Moved by their own tests (they leave the session, need a game, or go to Steam).
 const NOT_HERE := ["system.sleep", "system.screenshot", "perf.wrapper_remove_all", "perf.clear_shader_cache",
@@ -100,11 +101,19 @@ func _view_of(f: Node) -> Node:
 	return null
 
 
+## The ids a category page lists: not the ones with a page of their own
+## (Settings > Controller > Button shortcuts, checked by suite_buttons.gd).
 func _ids_of(cat: String) -> Array:
 	var out := []
+	var all: Array = []
 	for g in TC.CATEGORY_GROUPS_OF[cat]:
 		for c in controls().list(g):
-			out.append(str(c.id))
+			all.append(str(c.id))
+	var own := {}
+	Catalog.expand(Catalog.OWN_PAGE, all, own)
+	for id in all:
+		if not own.has(id):
+			out.append(id)
 	return out
 
 

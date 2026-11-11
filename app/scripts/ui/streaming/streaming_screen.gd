@@ -304,12 +304,41 @@ func rebuild() -> void:
 		elif target == null:
 			# that PC was removed: the next one in the list, or Add PC
 			KeepFocus.restore(self, mark, _host_focus(), add_button)
+	elif _shown_without_focus(f):
+		# the tab was just shown and its focus was on its way to a control this
+		# rebuild freed (Install, as discovery starts): the tab's own control
+		var d := default_focus()
+		if d != null and d.is_visible_in_tree():
+			d.grab_focus.call_deferred()
 	_hints_changed()
 	# the top bar's "down" pointed at a button this rebuild just freed (Install,
 	# a host card): the host links it again to the new one
 	var h := host()
 	if h != null and h.has_method("_link_top"):
 		h.call("_link_top")
+
+
+## This tab is the screen in front (the host says so; the screen before it may
+## still be sliding out with focus on it) and nothing of ours, or of a sheet or
+## the quick menu over it, has focus.
+func _shown_without_focus(f: Control) -> bool:
+	if not is_visible_in_tree():
+		return false
+	var h := host()
+	if h != null and h.has_method("_screen") and h.call("_screen") != self:
+		return false
+	if f != null and is_instance_valid(f) and f.is_visible_in_tree():
+		if is_ancestor_of(f):
+			return false
+		var qm: Variant = h.get("quick_menu") if h != null else null
+		if qm is Control and (qm as Control).is_ancestor_of(f):
+			return false
+		var ga: Variant = h.get("game_actions") if h != null else null
+		if ga is Object and ga.has_method("is_modal") and ga.is_modal():
+			return false
+		if h != null and h.get("top_bar") is Control and (h.get("top_bar") as Control).is_ancestor_of(f):
+			return false
+	return true
 
 
 func _default_host(list: Array) -> String:
@@ -670,7 +699,7 @@ func _empty_state() -> Control:
 	qcol.add_child(Kit.label(T.QR_CAPTION, "EyebrowLabel"))
 	var qr := TextureRect.new()
 	qr.name = "QR"
-	qr.texture = QR.texture(T.VIBEPOLLO_URL, 5)
+	QR.show_on(qr, T.VIBEPOLLO_URL, 5)
 	qr.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	qr.custom_minimum_size = Vector2(210, 210)
 	qcol.add_child(qr)

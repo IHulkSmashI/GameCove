@@ -17,6 +17,8 @@ extends TextureRect
 
 ## Height of the fade, in layout px.
 var px := 20.0
+## In cut mode the mask ends over this many px (the gap under the last whole item).
+const CUT_FADE := 9.0
 ## Optional `fn() -> Array[Control]` (cards in the scrolling content): while
 ## more waits below, the mask ends at the foot of the last one that's fully in
 ## view, so a card cut by the edge doesn't show at all (no sliver, no second
@@ -157,8 +159,12 @@ func _paint() -> void:
 	if nested or not _alpha_hidden.is_empty():
 		_hide_below(cut if nested else -1.0)
 	if cut > 0.0:
+		# The mask ends in the gap under the last whole item, over a few px:
+		# when the items are rows of one long card, the card's own panel goes
+		# on below the cut and would otherwise end in a hard line.
 		var e := clampf(cut / h, 0.0, 1.0)
-		_grad.offsets = PackedFloat32Array([0.0, e, minf(1.0, e + 1.0 / h), 1.0])
+		var from := clampf((cut - CUT_FADE) / h, 0.0, e)
+		_grad.offsets = PackedFloat32Array([0.0, from, e, 1.0])
 		_grad.colors = PackedColorArray([Color.WHITE, Color.WHITE, Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.0)])
 		return
 	var start := clampf(1.0 - px / h, 0.0, 1.0)

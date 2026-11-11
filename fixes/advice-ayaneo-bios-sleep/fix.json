@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "id": "advice-ayaneo-bios-sleep",
+  "revision": 1,
+  "title": "Sleep needs the newest BIOS",
+  "line": "If sleep doesn't work or the controller is gone after waking, update the BIOS from AYANEO's site first.",
+  "symptom": "Sleep is unreliable on AYANEO handhelds with an old BIOS, and the controller can be lost after waking.",
+  "why": "Fixed by AYANEO in BIOS updates, not by the system.",
+  "kind": "advice",
+  "page": "fixes",
+  "password": "none",
+  "restart": "",
+  "level": "optional",
+  "must_fix": true,
+  "breaks": "sleep",
+  "default": "advice-only",
+  "risk": "low",
+  "risk_note": "Text only: GameCove changes nothing.",
+  "auto": [],
+  "optional": "maker:AYANEO",
+  "exclude": {},
+  "changes": [],
+  "undo": "Nothing to undo: this is advice, GameCove changes nothing.",
+  "tested": [],
+  "bazzite": "Not a system matter: Bazzite's AYANEO page asks for the newest BIOS.",
+  "steamos": "Not a system matter.",
+  "sources": [
+    "https://docs.bazzite.gg/Handheld_and_HTPC_edition/Handheld_Wiki/Ayaneo_Handhelds/"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": null,
+    "probe": {
+      "command": "none",
+      "native": "",
+      "what": "Bazzite's page names no BIOS versions, so nothing on the device can tell."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "bazzite-ayaneo-page",
+      "kind": "url",
+      "url": "https://docs.bazzite.gg/Handheld_and_HTPC_edition/Handheld_Wiki/Ayaneo_Handhelds/",
+      "note": "Bazzite's AYANEO page."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

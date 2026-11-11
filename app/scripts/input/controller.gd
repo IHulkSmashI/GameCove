@@ -8,7 +8,8 @@ extends "res://scripts/system/service.gd"
 ##   /org/shadowblip/InputPlumber/CompositeDeviceN
 ##       org.shadowblip.Input.CompositeDevice: Name s, ProfileName s, ProfilePath s,
 ##           Capabilities as, OutputCapabilities as, TargetDevices as;
-##           GetProfileYaml() -> s, LoadProfilePath(s), LoadProfileFromYaml(s)
+##           GetProfileYaml() -> s, LoadProfilePath(s), LoadProfileFromYaml(s),
+##           SendButtonChord(as)  (Steam menu shortcut: open_steam_menu)
 ##       org.shadowblip.Output.ForceFeedback (only when the device can rumble):
 ##           Enabled b (read/write), Rumble(d), Stop()
 ##
@@ -62,6 +63,14 @@ signal applied(setting: String, ok: bool)
 ## A special button asked for a GameCove action: "home", "quick_menu", "osk" or
 ## "screenshot" (InputPlumber intercept, or a fallback chord). Main thread.
 signal ui_action(action: String)
+## A button shortcut asked for an action of scripts/actions/registry.gd: a back
+## button set to one ("press"), or an extra button held ("hold"). Main thread.
+signal shortcut(action: String, how: String)
+## A hold-to-confirm action (Exit game, Force close) on a button was only tapped.
+signal shortcut_hint(action: String)
+## A shortcut button went "down", counted as a "press" or as a "hold"
+## (InputPlumber capability name). For the Button shortcuts page's test area.
+signal shortcut_seen(capability: String, what: String)
 ## Any button seen through the intercept went down or up (InputPlumber
 ## capability name: "South", "Guide", "LeftBumper"...). For the button test.
 signal button_event(capability: String, pressed: bool)
@@ -74,8 +83,11 @@ const Hhd := preload("res://scripts/input/hhd.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ProfileLock := preload("res://scripts/input/profile_lock.gd")
+const ButtonMap := preload("res://scripts/actions/button_map.gd")
 
 const SERVICE := "org.shadowblip.InputPlumber"
+## What open_steam_menu() presses on the virtual pad.
+const STEAM_MENU_BUTTON := "Gamepad:Button:QuickAccess"
 const ROOT_PATH := "/org/shadowblip/InputPlumber"
 const MANAGER_PATH := "/org/shadowblip/InputPlumber/Manager"
 const MANAGER_IFACE := "org.shadowblip.InputManager"
@@ -137,19 +149,32 @@ func _ready() -> void:
 	if dev != null and dev.has_method("id"):
 		set_device(dev.id())
 	var gs := get_node_or_null("/root/Gamescope")
-	if not preload("res://scripts/system/run_mode.gd").helper() and intercept_wanted(
+	var helper := preload("res://scripts/system/run_mode.gd").helper()
+	if not helper and intercept_wanted(
 			OS.get_environment("GAMECOVE_STEAM_MODE"), OS.get_environment("GAMECOVE_INTERCEPT"),
 			gs != null and gs.has_method("is_running") and gs.is_running()):
 		start_intercept()
-	# Only when there is a saved everyday layout: put it back on (InputPlumber
-	# forgot it at reboot). Otherwise nothing runs until the UI calls refresh().
+	put_layout_back(helper)
+
+
+## At start. Only when there is a saved everyday layout: put it back on
+## (InputPlumber forgot it at reboot). Otherwise nothing runs until the UI calls
+## refresh(). Without the intercept (the desktop, or the headless run
+## session-select makes before a session switch: `helper`) nobody answers a
+## button mapped to GameCove, so the layout goes on without those mappings
+## (_load_file), and the switch helper hands back whatever the live GameCove
+## had loaded, layout file or not.
+func put_layout_back(helper := false) -> void:
 	if not FileAccess.file_exists(default_profile_path()):
+		if helper:
+			_queue("start", _hand_buttons_back)
 		return
 	_queue("start", func():
 		_refresh()
 		if _active != "":
 			_load_file(default_profile_path())
-			_refresh())
+			_refresh()
+			_ensure_shortcuts())
 
 
 func _exit_tree() -> void:
@@ -162,7 +187,10 @@ func _exit_tree() -> void:
 	if was:
 		# ... then never leave a device in Always/Pass with nobody listening
 		_set_devices_mode(MODE_NONE_SAFE, Intercept.activation_for(device_id))
+		_hand_buttons_back()
 		intercept.stop_monitor()
+	elif _backend == "inputplumber" and not is_same(ButtonMap.for_other_sessions(_profile), _profile):
+		_hand_buttons_back()   # a shortcut set from Settings outside our session
 
 
 ## Tests: fake runner and a fixture home.
@@ -222,7 +250,9 @@ func _blank() -> Dictionary:
 ##   "paddles": {paddle: target}, "gyro": off|mouse|stick|custom},
 ##  "rumble": bool or null, "led": bool (device has LEDs; not settable),
 ##  "game": key or "", "game_profile": bool (that game has its own profile),
-##  "supported": {"profiles", "paddles", "gyro", "rumble", "led", "per_game"}}
+##  "supported": {"profiles", "paddles", "gyro", "rumble", "led", "per_game"},
+##  "shortcuts": D-Bus name -> {"cap", "press", "hold", "slot"} (button_map.gd table()),
+##  "hold_s": seconds a button is held for its hold action}
 func state() -> Dictionary:
 	return _state.duplicate(true)
 
@@ -251,7 +281,13 @@ func has_game_profile(key: String) -> bool:
 
 ## Reads everything again (worker).
 func refresh() -> void:
-	_queue("refresh", func(): _refresh())
+	# after a layout change (Reset controller layout loads the stock one) the usual
+	# button shortcuts go back in; _ensure_shortcuts() reads the profile either way
+	_queue("refresh", func():
+		if _intercepting:
+			_ensure_shortcuts()
+		else:
+			_refresh())
 
 
 ## Map a back paddle ("LeftPaddle1") to a gamepad button ("South") or a key
@@ -405,8 +441,47 @@ func _setup_intercept() -> void:
 	intercept.device = device_id
 	intercept.inject = _inject
 	intercept.on_action = func(a: String): ui_action.emit(a)
+	intercept.on_shortcut = func(a: String, how: String): shortcut.emit(a, how)
+	intercept.on_hint = func(a: String): shortcut_hint.emit(a)
+	intercept.on_seen = func(c: String, w: String): shortcut_seen.emit(c, w)
+	intercept.start_timer = _start_hold_timer
+	if intercept.shortcuts.is_empty():
+		intercept.shortcuts = ButtonMap.table({}, device_id)   # the usual holds, until the profile is read
 	intercept.on_button = func(c: String, p: bool): button_event.emit(c, p)
 	intercept.on_line = _on_monitor_line
+
+
+## One one-shot timer while a shortcut button is down (intercept.gd): its hold
+## time. Nothing runs while no such button is held.
+func _start_hold_timer(seconds: float, event: String, gen: int) -> void:
+	if is_inside_tree():
+		get_tree().create_timer(seconds).timeout.connect(intercept.hold_elapsed.bind(event, gen))
+
+
+## Where the hold time and the user's own key combinations are kept (per device).
+func shortcuts_file() -> String:
+	return profiles_dir + "/shortcuts.json"
+
+
+## Worker: this handheld's usual button shortcuts (Quick Access to GameCove in
+## games, held: Keyboard) go into the loaded profile when they aren't there and
+## nothing else maps the button, so the button reaches GameCove while a game has
+## focus. Only while GameCove owns the session (the intercept is on) and
+## InputPlumber drives the controller. Under ProfileLock, on the profile read
+## right now. Loaded only, never written to a layout file: a file keeps what the
+## user chose, and every load (start, a game's own layout, its end, a reload)
+## comes through here again.
+func _ensure_shortcuts() -> void:
+	if not _intercepting:
+		return
+	ProfileLock.mutex.lock()
+	_refresh()
+	if _backend == "inputplumber" and _active != "" and _profiles_ok and _profile_read_ok:
+		var base: Dictionary = _profile if not _profile.is_empty() else Profile.empty()
+		var next := ButtonMap.ensure_defaults(base, device_id)
+		if not is_same(next, base) and _load_json(Profile.to_json(next)):
+			_refresh()
+	ProfileLock.mutex.unlock()
 
 
 ## Tests: pretend the intercept runs (no monitor process); lines go through
@@ -430,6 +505,22 @@ func set_game_focused(on: bool) -> void:
 	_apply_intercept()
 
 
+## Steam's own quick access menu over the game: one Quick Access press written
+## straight to the virtual pad with SendButtonChord, which skips the profile
+## (so the mapping that brings Quick Access to GameCove doesn't catch it); the
+## Xbox pad turns it into Guide + A, the Deck pad sends its own menu button.
+## The game gets the controller first (Pass), so the press reaches the pad Steam
+## reads. InputPlumber only; one worker job, nothing stays behind.
+func open_steam_menu() -> void:
+	if _intercepting and not _game_focused:
+		set_game_focused(true)
+	_queue("steam_menu", func():
+		if _active == "":
+			_refresh()
+		if _backend == "inputplumber" and _active != "":
+			_call_void(_active, DEVICE_IFACE, "SendButtonChord", ["as", "1", STEAM_MENU_BUTTON]))
+
+
 ## Before leaving the session (quick menu "Switch to Steam"): stop
 ## intercepting and put InterceptMode 0 on every composite device, so Steam or
 ## the desktop never start with a device that sends its input nowhere. Runs on
@@ -438,16 +529,31 @@ func release_intercept(done := Callable()) -> void:
 	_intercepting = false
 	_monitor_alive = false
 	intercept.on_line = Callable()
-	intercept.reset()
+	intercept.reset(true)
 	intercept.stop_monitor()
 	_intercept_mode = MODE_NONE_SAFE
 	_queue("intercept", func():
 		var objs: Variant = bus.call_method(SERVICE, ROOT_PATH, OM_IFACE, "GetManagedObjects")
 		for d in parse_devices(objs[0] if objs is Array and objs.size() > 0 else {}):
 			bus.set_prop(SERVICE, d["path"], DEVICE_IFACE, "InterceptMode", "u", str(MODE_NONE_SAFE))
+		_hand_buttons_back()
 		_main(func():
 			if done.is_valid():
 				done.call()))
+
+
+## Worker: before another session takes over, the buttons only GameCove answers
+## (a back button set to a GameCove action, a held Quick Access) go back to what
+## the handheld sends, in the loaded profile only: the layout file keeps them for
+## the next time GameCove runs. Keys and gamepad buttons on back buttons stay.
+func _hand_buttons_back() -> void:
+	ProfileLock.mutex.lock()
+	_refresh()
+	if _backend == "inputplumber" and _active != "" and _profile_read_ok and not _profile.is_empty():
+		var plain := ButtonMap.for_other_sessions(_profile)
+		if not is_same(plain, _profile):
+			_load_json(Profile.to_json(plain))
+	ProfileLock.mutex.unlock()
 
 
 ## Button test: lets the virtual pad reach Godot directly (mode 0) so even back
@@ -509,6 +615,7 @@ func _on_monitor_line(d: Dictionary) -> void:
 			_monitor_alive = true
 			_restarts = 0
 			_apply_intercept()
+			_queue("shortcuts", _ensure_shortcuts)
 		"owner":
 			if str(d.get("owner", "")) != "":
 				_apply_intercept()   # InputPlumber (re)started: its devices are new
@@ -521,7 +628,7 @@ func _on_monitor_line(d: Dictionary) -> void:
 			intercept.handle(str(d["event"]), float(d["value"]))
 		"exited":
 			_monitor_alive = false
-			intercept.reset()
+			intercept.reset(true)
 			if _intercepting:
 				_send_mode(Intercept.MODE_NONE)
 				_restart_monitor_later()
@@ -541,6 +648,7 @@ func _reload_layout() -> void:
 			elif FileAccess.file_exists(default_profile_path()):
 				_load_file(default_profile_path())
 			_refresh()
+			_ensure_shortcuts()
 		_main(func():
 			var controls := get_node_or_null("/root/Controls") if is_inside_tree() else null
 			if controls != null and controls.has_method("detect_all"):
@@ -551,10 +659,13 @@ func _restart_monitor_later() -> void:
 	if _restarts >= 3 or not is_inside_tree():
 		return
 	_restarts += 1
-	get_tree().create_timer(5.0 * _restarts).timeout.connect(func():
-		if _intercepting and not intercept.running():
-			intercept.stop_monitor()
-			intercept.start_monitor())
+	get_tree().create_timer(5.0 * _restarts).timeout.connect(_restart_monitor_now)   # a method, not a lambda: freed with this node at exit
+
+
+func _restart_monitor_now() -> void:
+	if _intercepting and not intercept.running():
+		intercept.stop_monitor()
+		intercept.start_monitor()
 
 
 func _inject(e: InputEvent) -> void:
@@ -582,6 +693,7 @@ func start_game(key: String) -> void:
 		elif has and _active != "":
 			loaded = _load_file(game_profile_path(key))
 			_refresh()
+			_ensure_shortcuts()
 		_main(func():
 			_baseline = base
 			_game_profile_loaded = loaded
@@ -610,6 +722,7 @@ func end_game() -> void:
 				_load_file(default_profile_path())
 			elif not base.is_empty():
 				_load_json(Profile.to_json(base))
+			_ensure_shortcuts()
 		_refresh()
 		_main(func(): changed.emit(state())))
 
@@ -668,7 +781,15 @@ func _refresh() -> void:
 	_rumble_ok = st["supported"]["rumble"]
 	_profile = profile
 	_profile_read_ok = read_ok
+	# what the buttons ask of GameCove (button_map.gd), for the intercept
+	var table: Dictionary = ButtonMap.table(profile, device_id) if backend == "inputplumber" else {}
+	var prefs: Variant = SettingsFile.load_json(shortcuts_file())["data"] if FileAccess.file_exists(shortcuts_file()) else null
+	var hold := clampf(float(prefs.get("hold_s", 0.5)), 0.3, 1.5) if prefs is Dictionary else 0.5
+	st["shortcuts"] = table
+	st["hold_s"] = hold
 	_main(func():
+		intercept.shortcuts = table
+		intercept.hold_s = hold
 		st["game"] = _game
 		_state = st
 		st["game_profile"] = has_game_profile(_game) if _game != "" else false
@@ -844,10 +965,21 @@ func _change(setting: String, edit: Callable) -> void:
 	_main(func(): applied.emit(setting, ok))
 
 
+## Loads a layout file. Without the intercept (the desktop, the headless run
+## session-select makes before a switch) nobody answers a button mapped to
+## GameCove, so such mappings stay out (ButtonMap.for_other_sessions()). With
+## it, this handheld's usual button shortcuts go in on the same load
+## (ButtonMap.ensure_defaults()), so a wake or a new pad costs one load.
 func _load_file(path: String) -> bool:
 	if not FileAccess.file_exists(path):
 		return false
-	return _load_json(FileAccess.get_file_as_string(path))
+	var text := FileAccess.get_file_as_string(path)
+	var d: Variant = JSON.parse_string(text)
+	if d is Dictionary:
+		var next: Dictionary = ButtonMap.ensure_defaults(d, device_id) if _intercepting else ButtonMap.for_other_sessions(d)
+		if not is_same(next, d):
+			text = Profile.to_json(next)
+	return _load_json(text)
 
 
 func _load_json(text: String) -> bool:

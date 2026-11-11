@@ -44,7 +44,8 @@ a script or a Windows app for is built in.
   refresh rate, VRR, gyro, stick lights, charge limit and more. It only shows what your model can actually do.
 - 🔋 **Auto TDP** finds the lowest power that holds your frame rate, learns each game on battery and plugged in, and
   gives power back within seconds when a scene gets heavy.
-- 🛠️ **Fixes for your exact model,** applied at install, each with one line on what it does and an **Undo**.
+- 🛠️ **[Fixes for your exact model](#fixes-for-your-handheld),** applied at install, checked every night, and removed
+  again when your system catches up. Each says what it changes and has an **Undo**.
 - 🕹️ **Emulation with EmuDeck:** every ROM in your ROM folders is a real game in the Library, like your Steam games:
   ES-DE's art and details, its own page, Play, play time, filters by console. ES-DE, EmuDeck and Steam ROM Manager
   open from one Emulation page. Favourites, hidden games and collections work for every store.
@@ -62,7 +63,7 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 | Support | Handhelds |
 | --- | --- |
 | **Tested on hardware** | MSI Claw 8 EX AI+ (Bazzite), ASUS ROG Ally (SteamOS) |
-| **Supported** | Steam Deck LCD and OLED, the other MSI Claws, ROG Ally X and Xbox Allys, Legion Go, Go 2 and Go S, most OneXPlayers, AOKZOE, AYANEO, GPD, ZOTAC, Acer Predator Atlas 8, Orange Pi Neo ([every model](#supported-handhelds)) |
+| **Supported** | Steam Deck LCD and OLED, the other MSI Claws, ROG Ally X and Xbox Allys, Legion Go, Go 2 and Go S, most OneXPlayers, AOKZOE, AYANEO, GPD, ZOTAC, Acer Predator Atlas 8, Orange Pi Neo, and the Valve Steam Machine for the TV ([every model](#supported-handhelds)) |
 | **Basic** | Any other handheld: safe settings for the chip, and model settings once someone helps us test it |
 
 | System | How GameCove installs |
@@ -78,16 +79,78 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 >
 > The installer takes it from there. Full steps: [Install](#install).
 
+## Fixes for your handheld
+
+Some handhelds need a nudge before the basics work on Linux: sleep that stays asleep, the built-in buttons, gyro,
+Wi-Fi after waking, touch that lines up with the picture. GameCove knows which of these your exact model needs,
+applies them when you install it, and takes them out again the day your system doesn't need them any more.
+
+<table>
+<tr>
+<td width="33%"><img src="docs/images/fixes.webp" alt="Fixes page on an MSI Claw 8 EX"><br><sub>Fixes for your exact model: Recommended or Optional, each with Undo</sub></td>
+<td width="33%"><img src="docs/images/fixes-details.webp" alt="A fix's details"><br><sub>Details: what it changes, how it's undone, the risk, where it was tested</sub></td>
+<td width="33%"><img src="docs/images/fixes-retired.webp" alt="A fix the system now does itself, in History"><br><sub>Your system caught up: removed, in History, Keep it anyway</sub></td>
+</tr>
+<tr>
+<td width="33%"><img src="docs/images/fixes-attention.webp" alt="Start dialog for a fix in the system's way"><br><sub>A fix in your system's way is shown at start until it's out</sub></td>
+<td width="33%"><img src="docs/images/device.webp" alt="About this device"><br><sub>About this device: your model, chip, drivers, memory</sub></td>
+<td width="33%"><img src="docs/images/battery-history.webp" alt="Battery history in About this device"><br><sub>Battery history: 7 days and each game's drain</sub></td>
+</tr>
+</table>
+
+Every fix in Settings > Device > **Fixes** says what it changes, how it's undone and where it comes from, and carries
+one of two badges:
+
+| Badge | What it means |
+| --- | --- |
+| **Recommended** | It fixes something that breaks everyday use on your model, the workaround is proven and safe, and one press undoes it. Preselected when you install. |
+| **Optional** | Everything else we offer: it helps only some units, or isn't proven widely enough to switch on for you. Yours to turn on. |
+| *Tested on hardware* | A second, smaller badge: we ran that fix on that exact model ourselves. Without it, the fix comes from projects that tested it (Bazzite, InputPlumber and others), linked as its sources. |
+
+| Fix | Restores | For | Tested on hardware | Your system today |
+| --- | --- | --- | --- | --- |
+| **MSI buttons**<br>Makes the two MSI buttons next to the screen work: left opens the menu, right opens Quick Access. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed (InputPlumber still maps the board to claw2). SteamOS: Not supported on SteamOS. |
+| **Smooth screen down to 30 fps**<br>Lets VRR keep games smooth down to 30 fps instead of 48. | Screen | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+<br>**Optional**: MSI Claw 7 AI+, MSI Claw A1M | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); not yet tested on a SteamOS Claw. |
+| **Gyro aiming**<br>Turns on the motion sensor so you can aim by tilting the Claw. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not supported on SteamOS. |
+| **Volume buttons don't wake it**<br>Stops a bump of the volume buttons from waking the Claw in your bag. | Sleep and battery while asleep | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M, MSI Claw A8 | Not yet | Bazzite: Not fixed: Handheld Daemon switched it off at start, InputPlumber (Bazzite 44+) doesn't. SteamOS: Not fixed (no Claw support in SteamOS). |
+| **Wi-Fi back after sleep**<br>Keeps the Wi-Fi card awake enough to come back after sleep. Uses a little more battery asleep. | Wi-Fi and Bluetooth | **Optional**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M | Not yet | Bazzite: Not fixed (reported 2024-12, no answer). SteamOS: Not fixed (SteamOS issues 2742, 2703; user-verified workaround). |
+| **Intel AX210 Wi-Fi after sleep**<br>Stops the Intel AX210 Wi-Fi card from crashing after sleep. | Wi-Fi and Bluetooth | **Recommended**: AYANEO 2S, AYANEO 2, GPD WIN 5<br>**Optional**: Any handheld with the part | Not yet | Bazzite: Fixed up to stable 45.20261105 (50-intel-ax200-ax210-disable-d3cold-state.rules, after issue 5867). Bazzite reverted that rule on 2026-11-08 (in testing and unstable 45.20261110), so later builds need ours again; the fix checks the system's own rules. SteamOS: Not shipped as far as we can tell; the fix checks the system's own rules. |
+| **Sleep that works**<br>Switches off the fingerprint reader, which has no Linux driver and breaks sleep. | Sleep and battery while asleep | **Recommended**: GPD WIN 4, GPD WIN Max 2 | Not yet | Bazzite: Fixed (50-gpd-win-4-fingerprint.rules, 50-gpd-wm2-fingerprint.rules). SteamOS: Not shipped (GPD isn't a SteamOS device). |
+| **Stays asleep**<br>Stops the touch panel from waking the Win Max 2 right after it goes to sleep. | Sleep and battery while asleep | **Optional**: GPD WIN Max 2 | Not yet | Bazzite: Not fixed. SteamOS: Not shipped. |
+| **Sticks don't wake it**<br>Stops a nudge of the sticks from waking the handheld while it goes to sleep. | Sleep and battery while asleep | **Recommended**: ASUS ROG Ally X, ASUS ROG Xbox Ally, ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | Not yet | Bazzite: Fixed (50-ally-x-controller.rules). SteamOS: Unknown; the fix checks the system's own rules. |
+| **No drain while off**<br>Lets the fingerprint reader power down, so the battery doesn't drain while the Ally is off. | Sleep and battery while asleep | **Recommended**: ASUS ROG Ally, ASUS ROG Ally X<br>**Optional**: ASUS ROG Xbox Ally, ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | Not yet | Bazzite: Fixed (50-ally-fingerprint.rules). SteamOS: Reported fixed in SteamOS 3.8 and later (second-hand, from a write-up of the 3.8.0 notes; not yet confirmed on our Ally). The fix checks the system's own rules. |
+| **Less drain while asleep**<br>Lets the controller chip power down in sleep. Needs controller firmware 319+ (Ally X 313+); checked first. | Sleep and battery while asleep | **Optional**: ASUS ROG Ally, ASUS ROG Ally X, ASUS ROG Xbox Ally, ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | Not yet | Bazzite: Handled by Bazzite's own MCU workaround (shows as fixed by the system when on). SteamOS: Not on by default. |
+| **Touch in the right place**<br>Makes touch line up with the picture in Gaming Mode (it's turned 90 degrees). | Touch | **Recommended**: OneXFly F1<br>**Optional**: OneXPlayer X1 (AMD), OneXPlayer X1 Mini, OneXPlayer 2, OneXPlayer 2 Pro, AOKZOE A1, AOKZOE A1 Pro | Not yet | Bazzite: Not fixed (issue 5581; waits for ChimeraOS/gamescope-session PR 128). SteamOS: Not affected the same way (SteamOS uses its own session). |
+
+Steam Deck and Legion Go need nothing extra today: the system already covers them. Where a problem has no software
+fix (say, it needs a BIOS update), the Fixes page says so in one line instead of pretending.
+
+**Kept current every night.** A workaround should disappear when the real fix lands, so GameCove checks:
+
+- **On your handheld**, at start and after every system update (never while you play): each fix looks whether the
+  problem is still there. If your system now handles it, GameCove removes its own workaround with that fix's own
+  undo, tells you once, and lists it under History, with **Keep it anyway** if you disagree. It never touches
+  anything it didn't install. In Gaming Mode nothing can ask for your admin password, so the removal waits for
+  Desktop Mode: said once when both copies are harmless together, shown over Home at every start when ours would get
+  in the way of the system's own fix (or was withdrawn), until it's out or you keep it.
+- **Every night, for everyone:** a job follows the kernel, Bazzite, SteamOS, InputPlumber, Handheld Daemon,
+  linux-firmware, maker BIOS listings and each fix's own sources. When something changes, it opens an issue for a
+  maintainer; rules it can check by machine are recorded by themselves. The result is a signed list your handheld
+  picks up within a day, so a fix can be retired, or withdrawn, without waiting for a GameCove update.
+
+How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs/FIXES.md). The research per model:
+[docs/DEVICE-FIXES.md](docs/DEVICE-FIXES.md).
+
 ---
 
 ## Contents
 
-1. [Home and library](#home-and-library)
-2. [Emulation](#emulation)
-3. [Quick menu and settings](#quick-menu-and-settings)
-4. [Upscaling, frame generation and Auto TDP](#upscaling-frame-generation-and-auto-tdp)
-5. [Profiles](#profiles)
-6. [Device fixes](#device-fixes)
+1. [Fixes for your handheld](#fixes-for-your-handheld)
+2. [Home and library](#home-and-library)
+3. [Emulation](#emulation)
+4. [Quick menu and settings](#quick-menu-and-settings)
+5. [Upscaling, frame generation and Auto TDP](#upscaling-frame-generation-and-auto-tdp)
+6. [Profiles](#profiles)
 7. [Updates](#updates)
 8. [Streaming from your PC](#streaming-from-your-pc)
 9. [Discover](#discover)
@@ -107,6 +170,12 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 
 - **Every store in one library.** Steam, Epic, GOG and Amazon side by side. Filter by store, genre, critic score (75+)
   or what's installed, sort by Top rated, and search with the on-screen keyboard.
+- **A keyboard made for a controller.** Wherever GameCove asks for text (search, a collection's name, a sign-in code
+  or key, a streaming PC's address, launch options) its own on-screen keyboard slides up: letters with a number row,
+  a symbols page with everything a code or a URL needs, Shift (press twice for Caps), a caret you can move, and Paste
+  where a code is asked for. X deletes, Y is space, LT shifts, RT shows the symbols, LB and RB move the caret, Menu is
+  Done; hold the D-pad or X and it repeats. Touch, a mouse and a real keyboard work too. In a game, typing stays
+  Steam's keyboard.
 - **Home stays quick with a big library.** Each Home shelf shows its first 24 games and ends with **See all**, which
   opens the Library on the same list. Thousands of ROMs don't slow Home down.
 - **Favourites, hidden games and collections.** Press Menu on any game (or the star on its page) to make it a
@@ -134,7 +203,8 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 - **Battery drain per game.** "Drains about 9 W, ~5 h on a full charge" on a game's page once you've played it on
   battery for a while, and a 7-day battery chart with every game's drain in About this device. Recorded only when a
   game starts or ends, the handheld sleeps or wakes, or the charger goes in or out.
-- **Store sign-in with your phone.** Scan a QR code and sign in there. No typing passwords on the handheld.
+- **Store sign-in with your phone.** Scan a QR code and sign in there. No typing passwords on the handheld. A code
+  or key you'd rather enter here goes in with the on-screen keyboard, or its Paste key.
 - **Your desktop apps too.** Browsers, Discord, Spotify, a video player, emulator front-ends: every Flatpak and desktop
   app on the handheld (minus settings tools and terminal programs) in an **Apps** view, reached from the Library's
   header or Home. Pin your favourites to Home's Apps shelf with X; they open full screen like a game, with the quick
@@ -153,6 +223,11 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 <td><img src="docs/images/library-filter.webp" alt="The Library's Filter sheet"><br><sub>Filter: favourites, your collections, emulation, hidden games</sub></td>
 <td><img src="docs/images/apps.webp" alt="The Apps view"><br><sub>Your desktop apps, full screen, pinned to Home with X</sub></td>
 <td><img src="docs/images/home-light.webp" alt="Home in the Light theme"><br><sub>The Light theme</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/keyboard.webp" alt="Searching the Library with the on-screen keyboard"><br><sub>Search: the on-screen keyboard, with the controller's buttons on its keys</sub></td>
+<td><img src="docs/images/keyboard-code.webp" alt="Typing a key with the symbols page, Caps on, Paste beside the field"><br><sub>A sign-in code or key: symbols, Caps, Paste</sub></td>
+<td><img src="docs/images/keyboard-light.webp" alt="The on-screen keyboard in the Light theme"><br><sub>The same keyboard in Light</sub></td>
 </tr>
 </table>
 
@@ -191,6 +266,43 @@ same interface as everything else.
 Press the Quick Access button (or Guide) and the quick menu slides in, in a game or on the home screen. It only shows
 what your handheld can actually do, and anything it can't gets a plain reason instead of a broken switch. Exit game and
 Switch to Desktop Mode live here too.
+
+**Quick Access is GameCove's in a game too.** A short press opens our quick menu over the game, and holding it opens
+Steam's keyboard. Steam's own quick access menu (friends, notifications) is one press away on the Shortcuts strip, and
+if you'd rather Quick Access went to Steam in games, one switch in Settings > Controller > Button shortcuts gives it
+back. Guide works just like before. Leave for Steam Gaming Mode or the desktop and every button is Steam's again.
+
+**Shortcuts strip.** A row of big buttons along the top of the quick menu for the things you want in one press. Pick
+which ones show and in what order in Settings > Quick menu.
+
+| Shortcut | What it does |
+| --- | --- |
+| **Keyboard** | Steam's on-screen keyboard over the game |
+| **Steam menu** | Steam's own quick access menu over the game |
+| **Screenshot** | Saves a picture of the game (without our menu) to Pictures/Screenshots |
+| **Record** | Starts and stops recording; the button shows the time |
+| **Mouse mode** | Right stick moves the pointer, right trigger clicks |
+| **Mute** | Sound off and back on |
+| **Send key** | Esc, Enter, Tab, Alt+Enter or Alt+F4, typed into the game (for stuck launchers and dialogs) |
+| **Sleep** | Puts the handheld to sleep |
+| Also there to add | Performance overlay, microphone, Wi-Fi, Bluetooth, airplane mode, night light, **Force close** (ends a hung game at once) and **Power** (restart, shut down, Desktop Mode, Steam Gaming Mode) |
+
+**Button shortcuts.** Settings > Controller > Button shortcuts shows your handheld with each button it has: set what
+a back button presses (a gamepad button, a mouse click, a key or a key combination like Alt+Enter, or a GameCove
+action like Screenshot or Keyboard) and what a hold on the buttons next to the screen does. Holds are only for those
+buttons, never for A, B, X, Y or the back buttons that games hold themselves, and Guide stays free for Steam's chords.
+A test area shows each press and hold as it happens, and one press puts everything back.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/quick-shortcuts.webp" alt="Quick menu with the Shortcuts strip"><br><sub>The Shortcuts strip over a game</sub></td>
+<td width="50%"><img src="docs/images/settings-buttons.webp" alt="Settings, Controller, Button shortcuts"><br><sub>Button shortcuts: press and hold for each button</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/quick-shortcuts-light.webp" alt="Shortcuts strip in the Light theme"><br><sub>The strip in the Light theme</sub></td>
+<td><img src="docs/images/settings-buttons-light.webp" alt="Button shortcuts in the Light theme"><br><sub>Button shortcuts in the Light theme</sub></td>
+</tr>
+</table>
 
 | Tab | What you control |
 | --- | --- |
@@ -232,8 +344,9 @@ it does.
   dim and screen-off timers.
 - **Sound:** volume, output device, microphone and input, plus a volume for each app playing sound (turn the game
   down under your music or a voice chat).
-- **Controller:** controller type (Xbox, DualSense, Steam Deck and more), **back buttons** remapped to any button, a key
-  or a mouse click, gyro on/off and which sensor, stick and trigger deadzones, trackpad mode, **rumble on/off and
+- **Controller:** controller type (Xbox, DualSense, Steam Deck and more), **Button shortcuts** (back buttons set to any
+  button, a key or key combination, a mouse click or a GameCove action; holds on the buttons next to the screen; Quick
+  Access in games), gyro on/off and which sensor, stick and trigger deadzones, trackpad mode, **rumble on/off and
   strength**, a rumble test, **lights** (effect, colours, brightness, speed), mouse mode with pointer speed, a button
   tester, and one press to start over. **Steam's controller settings** (gyro aiming, layouts) open straight from the
   game for every game Steam starts, emulated games Steam ROM Manager added included, and closing them lands you back
@@ -248,6 +361,7 @@ it does.
   off, 30 or 60 fps) and **Clips**: everything you recorded, with a picture, its length and size. Watch one full
   screen (in mpv, VLC or Celluloid; no player yet? one press installs mpv), **send it to your phone** with a QR code
   (a one-time page on your own Wi-Fi to watch and download it), or delete it.
+- **Quick menu:** which shortcuts the strip shows, and their order.
 - **Profiles, Appearance, Stores, Discover, Device and About GameCove:** your saved profiles, themes, store sign-ins and
   downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage (with one-press
   **clean-up** of the shader caches uninstalled games leave behind), updates, and the network and privacy switches.
@@ -311,37 +425,6 @@ Order of priority: this game on this power source, then this game, then battery 
 stay with the handheld they were made on, and you can copy, reset, export and import them.
 
 <p align="center"><img src="docs/images/profiles.webp" alt="Settings, Profiles" width="70%"></p>
-
-## Device fixes
-
-Settings > Device > **Fixes** lists the fixes for your exact model. The ones your handheld needs are applied when you
-install GameCove; optional ones are a press away. Every fix shows its status, says in one line what it does, and has
-**Undo**. GameCove also notices when an OS update starts fixing something itself, so you can drop its copy.
-
-<table>
-<tr>
-<td width="33%"><img src="docs/images/fixes.webp" alt="Device fixes"><br><sub>Fixes for your exact model, each with Undo</sub></td>
-<td width="33%"><img src="docs/images/device.webp" alt="About this device"><br><sub>About this device: your model, chip, drivers, memory</sub></td>
-<td width="33%"><img src="docs/images/battery-history.webp" alt="Battery history in About this device"><br><sub>Battery history: 7 days and each game's drain</sub></td>
-</tr>
-</table>
-
-<details>
-<summary><b>Every fix, by maker</b></summary>
-
-| Handhelds | Fixes |
-| --- | --- |
-| **MSI Claw** | MSI buttons next to the screen work (8 EX) · gyro aiming (8 EX) · smooth VRR down to 30 fps instead of 48 (8 EX, 8 AI+; optional on 7 AI+ and A1M) · volume buttons don't wake it in your bag (every Claw) · Wi-Fi comes back after sleep (optional, Intel Claws) |
-| **ASUS ROG Ally** | sticks don't wake it (Ally X, Xbox Ally, Xbox Ally X, X20) · no battery drain while off (Ally, Ally X; optional on the Xbox Allys) · less drain while asleep (optional, every Ally) |
-| **GPD** | sleep that works (WIN 4, WIN Max 2) · stays asleep (optional, WIN Max 2) · Intel AX210 Wi-Fi after sleep (WIN 5) |
-| **AYANEO** | Intel AX210 Wi-Fi after sleep (2, 2S) |
-| **OneXPlayer and AOKZOE** | touch lines up with the picture (OneXFly F1; optional on X1, X1 Mini, 2, 2 Pro, A1, A1 Pro) |
-| **Every handheld** | keeps GameCove off the game's CPU cores while you play · fan presets and charge limit where the system has no service for them · AX210 Wi-Fi fix offered wherever that card is fitted |
-
-Steam Deck and Legion Go need nothing extra today: the OS already covers them, and GameCove's settings do the rest.
-How each fix works: [docs/DEVICE-FIXES.md](docs/DEVICE-FIXES.md).
-
-</details>
 
 ## Updates
 
@@ -447,6 +530,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Your device's photo | GitHub (free photos on GameCove-data's `device-photos` release) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
 | Upscaler list and newer upscaler files (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove-data's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and when you change an upscaler; files only when the list has a newer tested version than the one that came with GameCove | Background lookups (daily check). With it off, the files that came with GameCove are used |
 | lsfg-vk for Lossless Scaling frame generation | Its author's site (builds.lsfg-vk.dev) | Nothing about you | When you press Set up Lossless frame generation, and only if you have Lossless Scaling installed | You start it |
+| The list of device fixes | GitHub (the `fixes` release of GameCove's data repo, [GameCove-data](https://github.com/IHulkSmashI/GameCove-data), signed) | Nothing about you: the same file for every handheld | At most once a day, at start, never while you play | Background lookups |
 | GE-Proton (Settings > Performance) | GitHub (GloriousEggroll's `proton-ge-custom` releases) | Nothing about you | When you press Check or Install | You start it |
 | BIOS and firmware list and downloads | GitHub (GameCove-data's `firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
 | Steam insights on a game's page (players now, reviews, Steam Deck rating, last update, DLC) | Steam's public API and store | The game's app id (DLC prices: also your store country) | When you open a Steam game's page; players at most every 10 min, the rest every 12 h | Background lookups (prices: Look up deals and prices) |
@@ -475,7 +559,7 @@ GameCove recognises your exact model and sets itself up for it. About this devic
 | --- | --- | --- | --- |
 | **MSI** | Claw 8 EX AI+ (Bazzite) | Claw 8 AI+, Claw 7 AI+, Claw A1M, Claw A8 | |
 | **ASUS** | ROG Ally (SteamOS) | ROG Ally X, ROG Xbox Ally, ROG Xbox Ally X, ROG Xbox Ally X20 | |
-| **Valve** | | Steam Deck LCD, Steam Deck OLED | |
+| **Valve** | | Steam Deck LCD, Steam Deck OLED, Steam Machine (a box for the TV: not yet tested on hardware) | |
 | **Lenovo** | | Legion Go, Legion Go 2 (and Z2), Legion Go S (Z2 Go and Z1 Extreme) | |
 | **OneXPlayer** | | OneXFly F1, F1 Pro and Apex; X1 (AMD, Intel, Mini, Pro); 2 and 2 Pro; G1 (AMD, Intel); 3 | X2 Mini, X2 Mini Pro, Super X |
 | **AOKZOE** | | A1, A1 Pro, A1X | |
@@ -491,6 +575,20 @@ GameCove recognises your exact model and sets itself up for it. About this devic
 - **Basic:** GameCove runs with safe settings for the chip, and model-specific settings stay hidden until someone with
   the device helps us test it. Any other handheld gets this too.
 
+### Screens and the Steam Machine
+
+GameCove lays itself out for the screen it is on, from the handheld's panel size to a TV across the room: the size of
+the text follows how big and how far away the screen is, not just its pixel count, so a 4K TV reads like a 1080p one.
+Settings > Appearance has an **Interface size** (Small, Default, Large, Largest) for the sizes that make sense on your
+screen. Ultrawide and portrait screens get a centred 16:10 area with bars at the sides. We check every screen of the
+app on 34 resolutions and sizes with a layout harness (`tools/layout/run.py`, see [docs/RESOLUTIONS.md](docs/RESOLUTIONS.md)).
+
+The **Steam Machine** and other living-room boxes (no screen or battery of their own) are supported but **not yet
+tested on hardware**: we match Valve's own DMI ids (Valve / Fremont, the same pair steamos-manager uses), and everything
+else is checked only against fake devices. A box gets the TV layout, no battery or handheld power settings, "device"
+wording, button pictures from the controller you actually hold, and HDMI-CEC control through steamos-manager. Any other
+PC with no battery gets the same generic box setup. If you have a Steam Machine, [tell us how it went](https://github.com/IHulkSmashI/GameCove/issues/new?template=tester_signup.yml).
+
 Got one of the Supported or Basic models? Run it and [tell us how it went](https://github.com/IHulkSmashI/GameCove/issues/new?template=tester_signup.yml);
 that's how a model moves up. Details per device: [docs/DEVICES.md](docs/DEVICES.md).
 
@@ -498,7 +596,7 @@ that's how a model moves up. Details per device: [docs/DEVICES.md](docs/DEVICES.
 <summary><b>See every model</b></summary>
 <br>
 
-<p align="center"><img src="docs/images/devices.png" alt="Every handheld GameCove supports" width="100%"></p>
+<p align="center"><img src="docs/images/devices.png" alt="Every device GameCove supports" width="100%"></p>
 
 <sub>Photos: the makers' official product images (their property, removed on request), except Steam Deck (LCD) by Liam Dawe/GamingOnLinux, <a href="https://commons.wikimedia.org/wiki/File:Steam_Deck_(front).png">CC BY-SA 4.0</a>.</sub>
 

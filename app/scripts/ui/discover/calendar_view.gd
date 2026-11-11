@@ -383,7 +383,7 @@ func _day_cell(day: int, rels: Array, h: int, is_today: bool) -> Control:
 	if is_today:
 		var tag := Kit.micro(T.TODAY_TAG, "EyebrowLabel")
 		tag.name = "Today"
-		tag.add_theme_font_size_override("font_size", 10)
+		tag.add_theme_font_size_override("font_size", 11)
 		tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		top.add_child(tag)
 	if not rels.is_empty():
@@ -471,7 +471,8 @@ func _cell_covers(col: VBoxContainer, rels: Array, h: float, w: float) -> void:
 		t.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO)
 		t.add_theme_color_override("font_color", ThemeLib.color("text"))
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		t.size_flags_vertical = Control.SIZE_SHRINK_END
+		t.size_flags_vertical = Control.SIZE_FILL   # the whole cover height, so every line fits;
+		t.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM   # the text still sits at the bottom
 		t.max_lines_visible = 3
 		t.autowrap_mode = TextServer.AUTOWRAP_WORD
 		t.clip_text = true

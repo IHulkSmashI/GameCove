@@ -319,7 +319,7 @@ def all_problems(all_rows=None, cat=None, qs=None, src_keys=None):
                 k = part.split(":", 1)[0] if ":" in part else ""
                 # "<row id>@<variant>": an extra matrix fixture of a row as seen on a real
                 # setup (tools/devicematrix/overrides.json)
-                if part in ("*", "generic") or part in ids or k in MATRIX_RUNTIME or ("@" in part and part.split("@", 1)[0] in ids):
+                if part in ("*", "generic", "generic-box-amd") or part in ids or k in MATRIX_RUNTIME or ("@" in part and part.split("@", 1)[0] in ids):
                     continue
                 if not k or k not in SELECTOR_KEYS:
                     out.append("expectations.json devices: unknown device or selector %s" % sel)

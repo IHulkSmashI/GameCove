@@ -62,6 +62,21 @@ CPU is slower than the one measured, so read the table as a ratio. The Library g
 still builds one tile per game shown: that's the list you asked for, and it's built when
 the library changes, not while a game runs.
 
+## On a 4K screen
+
+The layout does not grow with the pixel count: a TV is laid out 800 tall at any resolution (docs/RESOLUTIONS.md), so a 4K TV runs the same
+1422x800 UI, with the same nodes and timers, as a 1080p one; only the renderer fills more pixels (the GPU's job, not measured headless).
+`E2E_SCREEN=<matrix row>` runs the e2e suites as on that screen, and `suite_perf` prints its numbers (`-v`). Claw 8 EX fixture, headless,
+2-core box shared with other jobs, 2026-11-11:
+
+| Screen | Behind a game: loops/s | main wake-ups/s | CPU ms/s | Quick menu over a game (median / worst) |
+| --- | --- | --- | --- | --- |
+| default (1280x800 handheld) | 31.2 | 31.5 | 4.1 | 18 ms / 34 ms |
+| `tv-4k-55in` (3840x2160) | 31.3 | 31.3 | 4.6 | 30 ms / 39 ms |
+
+Budgets are 50 loops/s, 70 wake-ups/s, 30 ms CPU/s and 100 ms median / 250 ms worst; both rows pass. Display detection (`DisplayOutput`, about ten
+tiny sysfs reads) runs on start, on window resize and on focus-in only: no Timer, no polling.
+
 ## What runs behind a game, and why
 
 - **The main loop, slowed down.** `scripts/system/background_mode.gd` makes the main loop
@@ -124,6 +139,16 @@ the library changes, not while a game runs.
   work: a change behind the game (Auto TDP moving the TDP, say) only marks the row out of
   date, and it reads the value when the menu shows it.
 
+- **The quick menu's Shortcuts strip** is built once (and again only when its list or the
+  theme changes) and kept while the menu is closed. Opening the menu only reads memory to
+  show, hide and tint its buttons (the Controls cache, Recording's state): no program and no
+  D-Bus call (`suite_shortcuts.gd` checks the fake system saw nothing). The sheets (Send a
+  key, Power, Force close) are made the first time one is needed.
+- **Button shortcuts** cost nothing while no button is held: their presses arrive on the
+  InputPlumber monitor GameCove already runs, and a hold is one one-shot Timer started on
+  the press and dropped on the release. The usual shortcuts go into a profile on the same
+  load as the layout, so a wake or a new pad costs no extra D-Bus call.
+
 `tests/e2e/suite_perf.gd` fails if the main loop runs more than 50 iterations or 70
 main-thread wake-ups a second behind a game, a Timer outside that list runs there, the
 quick menu takes over 250 ms at worst or over 100 ms for the median of 10 presses, the
@@ -145,6 +170,11 @@ button event to the menu's first frame), with `open()` instrumented step by step
 | building This game | 12 ms | 0.4 ms (shown as kept) |
 | first focus (rebuilt the hint bar under the scrim) | 4 ms | 0.5 ms |
 | waiting out the main loop's sleep behind the game | 0-33 ms | 0-33 ms |
+
+With the Shortcuts strip in the menu (2026-11-11, on a 2-core box shared with other jobs):
+press to first frame median 34 / 30 / 40 ms, worst 93 / 61 / 100 ms (Claw / Ally / Legion Go S
+setups; budgets 100 and 250); behind a game 29-30 main-loop iterations, 30-31 wake-ups and
+4-5 ms of CPU a second (budgets 50, 70 and 30).
 
 No process or D-Bus call runs when it opens: the controller batteries (UPower) are read on
 a worker after it shows, Now playing and per-app volume are on the Audio tab and read on

@@ -22,6 +22,7 @@ var _home_ach: Node
 
 
 func _initialize() -> void:
+	Layout.begin()   # tools/layout: measure every shot on one screen of the matrix
 	var args := OS.get_cmdline_user_args()
 	for i in args.size():
 		match args[i]:
@@ -50,10 +51,14 @@ func shot(name: String) -> void:
 	if not only.is_empty() and name not in only:
 		return
 	await settle()
+	if Layout.measuring():
+		Layout.check(root, name)
+		return
 	await RenderingServer.frame_post_draw
 	DirAccess.make_dir_recursive_absolute(out)
 	root.get_texture().get_image().save_png(out + name + suffix + ".png")
 	print("saved ", out + name + suffix + ".png")
+	Layout.check(root, name)
 
 
 func want(names: Array) -> bool:
@@ -299,10 +304,11 @@ func _library2_shots(lib: Node) -> void:
 	main.show_screen("library")
 	await frames(4)
 	var tiles: Array = main.library_screen.tiles()
-	if tiles.size() > 2:
-		tiles[2].grab_focus()
-	if want(["library_options"]):
-		main.collection_actions.options(main.get_viewport().gui_get_focus_owner().game)
+	var third: int = mini(2, tiles.size() - 1)   # a narrow layout may show fewer than three tiles
+	if third >= 0:
+		tiles[third].grab_focus()
+	if third >= 0 and want(["library_options"]):
+		main.collection_actions.options(tiles[third].game)
 		await shot("library_options")
 		main.game_actions.sheet.close()
 	if want(["library_filter"]):
@@ -767,7 +773,7 @@ func _status() -> void:
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
 	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
 	main.home.set_battery_left("~2 h 45 min")
-	main.hint_status.text = "● GameCove 0.4   MSI Claw 8 EX AI+"
+	main.hint_status.text = "● GameCove %s   MSI Claw 8 EX AI+" % ShotVersion.short()
 	if _home_ach == null:
 		_home_ach = load("res://tests/test_ui_games.gd").FakeAchievements.new()
 		_home_ach.data = _ach_data()
@@ -779,6 +785,8 @@ func _status() -> void:
 
 # ------------------------------------------------------------ games (s-games)
 
+const ShotVersion := preload("shot_version.gd")
+const Layout := preload("../layout/recorder.gd")
 const GAME_SHOTS := ["games_library", "games_home", "games_page", "games_page_achievements", "games_page_downloading",
 	"games_manage", "games_install", "games_launch_options", "games_compat", "games_downloads", "games_downloads_empty",
 	"games_steam", "games_toasts", "games_page_light", "games_downloads_midnight"]
@@ -1089,3 +1097,7 @@ func _discover_shots(lib: Node) -> void:
 		r.show_section("wishlist")
 		await shot("discover_wishlist_empty")
 	main.show_screen("home")
+
+
+func _finalize() -> void:
+	Layout.save(get_script().resource_path.get_file().get_basename())

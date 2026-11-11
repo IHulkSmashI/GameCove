@@ -72,7 +72,7 @@ func default_focus() -> Control:
 
 
 func focus_chain() -> Array:
-	return _chain.duplicate()
+	return _chain.filter(func(c): return is_instance_valid(c) and is_ancestor_of(c))
 
 
 ## Same as focus_chain() (name the Settings screen looks for).
@@ -108,7 +108,9 @@ func set_hints(list: Array) -> void:
 
 ## Set the focus chain (top to bottom) and wire neighbours.
 func chain(controls: Array) -> void:
-	_chain = controls.filter(func(c): return c != null and is_instance_valid(c))
+	# only what's still on the page: a row being replaced (a Control row drawing a
+	# new button, a dropped card waiting to be freed) has no path to the rest
+	_chain = controls.filter(func(c): return c != null and is_instance_valid(c) and is_ancestor_of(c))
 	_link()
 	for c in _chain:
 		if not c.focus_entered.is_connected(_on_focus.bind(c)):
@@ -116,6 +118,7 @@ func chain(controls: Array) -> void:
 
 
 func _link() -> void:
+	_chain = _chain.filter(func(c): return is_instance_valid(c) and is_ancestor_of(c))
 	if _chain.is_empty():
 		return
 	Kit.link_vertical(_chain, top_target)

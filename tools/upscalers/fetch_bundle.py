@@ -123,8 +123,9 @@ def check(dest: str) -> int:
             bad = 1
         else:
             rel = str(m[sha].get("path", ""))
-            p = os.path.normpath(os.path.join(dest, rel))
-            if os.path.isabs(rel) or not p.startswith(os.path.dirname(os.path.abspath(dest)) + os.sep) and not p.startswith(os.path.normpath(dest)):
+            # inside bin/ (the bundle's parent: bin/fsr4-xmx shares AMD's DLL), whether dest is relative or not
+            p = os.path.normpath(os.path.join(os.path.abspath(dest), rel))
+            if os.path.isabs(rel) or not p.startswith(os.path.dirname(os.path.abspath(dest)) + os.sep):
                 print(f"{rel}: outside the package", file=sys.stderr)
                 bad = 1
             elif not os.path.isfile(p) or downloads.sha256_of(p) != sha:

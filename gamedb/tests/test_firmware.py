@@ -124,8 +124,10 @@ def test_build_covers_every_model_row_and_shares_deck_controller():
     assert doc["software"]["inputplumber"]["version"] == "0.62.0"
     # unreachable listing without previous data: kept with an error, not dropped
     assert d["asus-rog-ally-x"]["items"] == [] and "403" in d["asus-rog-ally-x"]["error"]
-    # every non-family row of devices.json has an entry
-    want = {r["id"] for r in ROWS if not r["id"].endswith("-family")}
+    # every non-family handheld row of devices.json has an entry (a box for the TV, "form": "console",
+    # has no maker BIOS listing to read: SteamOS updates the Steam Machine itself)
+    want = {r["id"] for r in ROWS if not r["id"].endswith("-family") and r.get("form", "handheld") == "handheld"}
+    assert "valve-steam-machine" not in d
     assert want <= set(d), want - set(d)
 
 

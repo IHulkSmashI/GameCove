@@ -1,0 +1,118 @@
+{
+  "schema": 1,
+  "id": "claw8ex-gyro",
+  "revision": 1,
+  "title": "Gyro aiming",
+  "line": "Turns on the motion sensor so you can aim by tilting the Claw.",
+  "symptom": "The Claw 8 EX's IMU sits behind the Intel sensor hub with MSI firmware Linux doesn't load, so there is no gyro.",
+  "why": "MSI's Panther Lake ISH firmware (installed under this model's own ish_ptl_<vendor>_<product>.bin name) and the 2247-byte sensor descriptor of board MS-1T91; Lunar Lake and Meteor Lake Claws use other sensor hubs.",
+  "kind": "root",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "cold-boot",
+  "level": "recommended",
+  "must_fix": true,
+  "breaks": "controls",
+  "default": "on",
+  "risk": "medium",
+  "risk_note": "Installs MSI's own sensor-hub firmware (downloaded from MSI, checked by sha256) and changes boot configuration. Only loads on this exact board.",
+  "auto": {
+    "all-of": [
+      "firmware:msi-e1t91",
+      "imu:ish-hid-sensor"
+    ]
+  },
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "firmware",
+      "target": "/etc/firmware/intel/ish/ish_ptl_<vendor>_<product>.bin",
+      "detail": "MSI's sensor-hub firmware under this model's own name, downloaded from MSI and checked by size and sha256."
+    },
+    {
+      "type": "kernel-arg",
+      "target": "firmware_class.path=/etc/firmware",
+      "detail": "Adds a firmware search path (shared with the VRR fix)."
+    },
+    {
+      "type": "initramfs",
+      "target": "rpm-ostree initramfs-etc --track",
+      "detail": "The firmware file, for an early-loading sensor hub."
+    },
+    {
+      "type": "file",
+      "target": "/etc/udev-hid-bpf/",
+      "detail": "A HID-BPF program that labels the hub's sensors as accelerometer and gyro."
+    },
+    {
+      "type": "service",
+      "target": "gamecove-claw-gyro-keepalive.service, gamecove-claw-gyro-bias.service",
+      "detail": "Keep the sensor powered and correct its drift."
+    },
+    {
+      "type": "file",
+      "target": "/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml",
+      "detail": "Adds the gyro as a motion source."
+    }
+  ],
+  "undo": "Stops and removes both services, the HID-BPF program, the firmware file, its initramfs entry and the kernel argument (when the VRR fix doesn't need it), and rebuilds the InputPlumber override without the gyro.",
+  "tested": [
+    {
+      "device": "msi-claw-8-ex",
+      "date": "2026-11-09",
+      "os": "Bazzite",
+      "note": "docs/TESTING-HARDWARE.md, device 1"
+    }
+  ],
+  "bazzite": "Not fixed.",
+  "steamos": "Not supported on SteamOS.",
+  "sources": [
+    "fixes/claw8ex-gyro/README.md"
+  ],
+  "lifecycle": {
+    "needed_when": {
+      "file": "/usr/bin/rpm-ostree"
+    },
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Looks for a gyro (gyro_3d) that works without GameCove's firmware and HID-BPF program. With the fix in place that can't be told apart, so new linux-firmware and kernel releases are checked by a maintainer."
+    },
+    "both_active": "conflict"
+  },
+  "watch": [
+    {
+      "id": "ish-loader",
+      "kind": "github-commits",
+      "repo": "torvalds/linux",
+      "path": "drivers/hid/intel-ish-hid",
+      "note": "Kernel sensor-hub driver: native support for the Claw's custom sensors would replace the HID-BPF program."
+    },
+    {
+      "id": "linux-firmware",
+      "kind": "gitlab-tags",
+      "project": "kernel-firmware/linux-firmware",
+      "note": "linux-firmware may start shipping MSI's Panther Lake ISH firmware (intel/ish/)."
+    },
+    {
+      "id": "ip-config",
+      "kind": "github-commits",
+      "repo": "ShadowBlip/InputPlumber",
+      "path": "rootfs/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml",
+      "note": "The stock config: an imu source there means InputPlumber expects a native gyro."
+    },
+    {
+      "id": "bios",
+      "kind": "firmware-index",
+      "device": "msi-claw-8-ex",
+      "item": "bios",
+      "note": "A BIOS update can change the sensor hub's firmware needs."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

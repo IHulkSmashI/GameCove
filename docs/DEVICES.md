@@ -30,6 +30,7 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Steam Deck (LCD) | `steam-deck-lcd` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
 | Steam Deck (OLED) | `steam-deck-oled` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
+| Steam Machine | `valve-steam-machine` | partial | – (no TDP backend) | – | – | – | – | – | – | by connected controller | no: rgb, fan, tdp, cec |
 | ASUS ROG Ally | `asus-rog-ally` | full | 7 / 25 / 30 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
 | ASUS ROG Ally X | `asus-rog-ally-x` | partial | 7 / 25 / 30 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
 | ASUS ROG Xbox Ally | `asus-rog-xbox-ally` | partial | 4 / 20 / 20 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
@@ -98,7 +99,26 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 3. Rows sold with several chips (`chip_from_cpu: true`) and family rows take `chip`, `cpu_vendor`, `gpu_family`, `gpu_arch`, `xmx` from the CPU table (`cpus` in devices.json); family rows also take its TDP range.
 4. No match: a `generic` row is built from the CPU table (or, failing that, conservative AMD 5–20 W / Intel 8–25 W and the GPU driver: `xe` means Xe2 or newer). It has `id: "unknown"`, `support: "generic"`, the generic picture and Xbox glyphs.
 
-The tests check that each real DMI fixture (`app/tests/fixtures/devices/dmi.json`) resolves to exactly one specific row, that common laptops and the Steam Machine resolve to nothing, and that every specific row has a fixture.
+The tests check that each real DMI fixture (`app/tests/fixtures/devices/dmi.json`) resolves to exactly one specific row, that common laptops and mini PCs (a Beelink SER8) resolve to nothing, that the Steam Machine's Valve / Fremont ids resolve to `valve-steam-machine`, and that every specific row has a fixture.
+
+## Boxes for the TV (`form: "console"`)
+
+A row with `"form": "console"` (the Steam Machine) is a box with no panel, battery, TDP backend or built-in controls. An unknown PC with no
+battery gets the generic fallback row with `form: "desktop"`, the `generic-box` drawing and no TDP backends. For a box:
+
+- **Match.** `valve-steam-machine` matches `sys_vendor` Valve and `board_name` Fremont, the same pair Valve's steamos-manager matches in
+  `data/devices/steam-machine.toml` (OpenGamingCollective/steamos-manager @ 051c074, 2026-10-31). That file defines only HDMI-CEC
+  (cros_ec port 0): no TDP limit, fan speed, charge limit or GPU performance, so GameCove offers none of those.
+- **Support.** `partial`, `verified: false`: matched from Valve's own data, **not yet tested on hardware** by us or a tester.
+- **No battery anywhere.** `Device.has_battery()` is false: no battery in the status pill, quick menu (no Battery or Drawing tile), Settings,
+  Home or About; `battery_saver`, `battery_saver_at` and `low_battery_sleep` need a system battery; `power.tdp` reads `MAINS_ONLY`.
+  A controller's battery (scope "Device", e.g. a DualSense on a cable) is not the system's and is ignored.
+- **Wording.** `scripts/ui/words.gd` installs a Translation (only off a handheld) so "handheld" reads "device" / "Steam Machine" and battery
+  phrases read as power wording. "Handheld Daemon" keeps its name.
+- **Layout and pictures.** TV layout (docs/RESOLUTIONS.md). Button pictures follow the first connected pad (`Glyph.set_for_pad`; a Steam
+  Controller gets the Deck set, a DualSense the new `ps` set).
+- **HDMI-CEC.** `display.hdmi_cec` writes steamos-manager's `HdmiCec1.HdmiCecState` (0 off, 1 TV remote, 2 remote and TV power). No polling.
+- **Photo.** Valve's product page image, head-on, by link (`device_photos.json`).
 
 ## Fields
 
@@ -174,7 +194,7 @@ InputPlumber already turns every special button into a capability (above). To ge
 1. On start, and for every new composite device (service `org.shadowblip.InputPlumber`, objects `/org/shadowblip/InputPlumber/CompositeDeviceN`, interface `org.shadowblip.Input.CompositeDevice`; the manager is `/org/shadowblip/InputPlumber/Manager`), call `SetInterceptActivation(["Gamepad:Button:Guide"], "Gamepad:Button:Guide")`.
 2. While GameCove's own UI has focus, set the `InterceptMode` property to `2` (Always): every input goes to InputPlumber's D-Bus target instead of the virtual gamepad, so a game in the background sees nothing. Listen to `org.shadowblip.Input.DBusDevice.InputEvent(event s, value d)` on the composite device's D-Bus target (`/org/shadowblip/InputPlumber/devices/target/dbusN`; the composite device's `TargetDevices` property lists it) and map `event` with `Buttons.action_for_dbus(device_id, event)`: `ui_guide` → home, `ui_quick` → quick menu, `ui_osk` → keyboard, `ui_screenshot` → screenshot, `ui_accept`/`ui_back`/... → navigation. Value 1.0 = pressed, 0.0 = released.
 3. While a game has focus, set `InterceptMode` to `1` (Pass): everything reaches the game's virtual controller except the activation button. When Guide is pressed InputPlumber switches the device to Always and emits `ui_guide`; GameCove opens its home or quick menu and sets the mode back to `1` when it closes.
-4. QuickAccess: InputPlumber's Xbox targets turn QuickAccess into Guide + A, which Steam reads as its Quick Access Menu. To open GameCove's quick menu instead from inside a game, use OpenGamepadUI's overlay approach: `SetInterceptActivation(["Gamepad:Button:Guide", "Gamepad:Button:East"], "Gamepad:Button:QuickAccess2")`, or load a per-device profile (`LoadProfileFromYaml`) that maps QuickAccess to a DBus action. Only do this when GameCove is the session's main app; under Steam's own session leave InputPlumber alone.
+4. QuickAccess: InputPlumber's Xbox targets turn QuickAccess into Guide + A, which Steam reads as its Quick Access Menu. While GameCove runs its session it loads a profile that maps QuickAccess to its own D-Bus name (`dbus: ui_quick`, `app/scripts/actions/button_map.gd`), which InputPlumber hands to the D-Bus target in every intercept mode, so Quick Access opens GameCove's quick menu inside a game too (held: Steam's keyboard, unless changed). Steam's menu stays one press away: the Shortcuts strip's Steam menu sends `SendButtonChord(["Gamepad:Button:QuickAccess"])` straight to the virtual pad, and Settings > Controller > Button shortcuts can give the button back to Steam for games. Before any other session takes over (every switch path, GameCove quitting, the session unit stopping) the D-Bus mappings come out again, so under Steam's own session InputPlumber's profile is the handheld's own.
 5. Steam games: Steam Input talks to InputPlumber's virtual controller (`deck-uhid` on steamos-manager setups, `xbox-elite` otherwise) like any pad. In Pass mode Steam keeps its Guide/QAM chords for everything except the intercepted button, so Steam's overlay still works.
 6. `InterceptMode` 3 (GamepadOnly) is available on newer InputPlumber: gamepad input goes to D-Bus but keyboard and mouse still reach the focused window, useful for the on-screen keyboard.
 

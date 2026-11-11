@@ -283,7 +283,7 @@ func _tdp() -> RefCounted:
 		func(c):
 			var st := _pstate()
 			if st.is_empty() or not st.get("supported", {}).get("tdp", false):
-				return Tx.NO_TDP
+				return Tx.MAINS_ONLY if str(row().get("form", "handheld")) != "handheld" else Tx.NO_TDP
 			c.min_value = float(st["tdp_min"])
 			c.max_value = float(st["tdp_max"])
 			return "",
@@ -788,6 +788,8 @@ func saver_values() -> Dictionary:
 func _battery_saver() -> RefCounted:
 	return _make("power.battery_saver", "toggle", {"per_game": false, "default_value": false},
 		func(_c):
+			if Backend.read_int(_battery_capacity_file()) < 0:
+				return Tx.NO_BATTERY   # nothing to save on a box that runs from the wall
 			var tdp: RefCounted = _ctl("power.tdp")
 			if tdp != null and not tdp.available and be.boost_via() == "" and be.ppd().is_empty():
 				return Tx.NOT_HERE
@@ -909,7 +911,8 @@ func _low_battery_sleep_at() -> RefCounted:
 func _battery_capacity_file() -> String:
 	for n in be.dirs("/sys/class/power_supply"):
 		var d: String = be.path("/sys/class/power_supply/" + n)
-		if Backend.read(d + "/type") == "Battery":
+		# not a controller's or mouse's battery (scope "Device"): this is about the system's own
+		if Backend.read(d + "/type") == "Battery" and Backend.read(d + "/scope") != "Device":
 			return d + "/capacity"
 	return ""
 

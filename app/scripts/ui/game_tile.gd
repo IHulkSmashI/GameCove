@@ -46,6 +46,10 @@ const TITLE_PX := 14
 
 var game: Dictionary = {}
 var tile_size := SIZE
+## The art this tile shows: "cover", or "hero" on a wide featured card (set
+## before setup(); falls back to the cover while there's no wide art).
+var art_kind := "cover"
+var _shown_path := ""
 var card: Control
 var art: TextureRect
 var glow: Panel
@@ -320,6 +324,14 @@ func _tint_app_card(tex: Texture2D) -> void:
 
 ## Tile size for a row `avail_w` px wide: PER_ROW covers across, never
 ## smaller than SIZE (the 1280x800 layout), 2:3-ish like SIZE.
+## How much a focused card of `size` grows: LIFT for covers; a wide featured
+## card grows by the same few px (LIFT on its width would push it out of its row).
+static func lift_for(size: Vector2) -> float:
+	if size.x <= size.y:
+		return LIFT
+	return 1.0 + (LIFT - 1.0) * size.y / size.x
+
+
 static func size_for(avail_w: float, gap := 16.0) -> Vector2:
 	var w := floorf((avail_w + gap) / PER_ROW - gap)
 	w = maxf(SIZE.x, w)
@@ -512,7 +524,20 @@ static func scrim_offsets(tall: bool) -> PackedFloat32Array:
 
 func cover_path() -> String:
 	var a: Variant = game.get("art", {})
-	return a.get("cover", "") if a is Dictionary else ""
+	if not a is Dictionary:
+		return ""
+	# A wide card shows the wide key art when the game has it (the cover else).
+	if art_kind != "cover" and ArtCache.usable(str(a.get(art_kind, ""))):
+		return a[art_kind]
+	return a.get("cover", "")
+
+
+## Which ArtCache kind the picture loads as: the wide art isn't cropped to a cover.
+func _art_kind() -> String:
+	var a: Variant = game.get("art", {})
+	if art_kind != "cover" and a is Dictionary and ArtCache.usable(str(a.get(art_kind, ""))):
+		return "hero"
+	return "cover"
 
 
 func has_cover() -> bool:
@@ -521,12 +546,16 @@ func has_cover() -> bool:
 
 ## Start loading the cover (no-op without one, or when it's showing).
 func ensure_art() -> void:
-	if has_cover():
-		return
 	var p := cover_path()
+	# A wide card may get its cover first and the wide art later: take it then.
+	if has_cover() and (art_kind == "cover" or p == _shown_path):
+		return
 	if not ArtCache.usable(p):
 		return
-	var tex := ArtCache.request("cover", p, func(t): _show_art(t, true), self)
+	if p == _shown_path and has_cover():
+		return
+	_shown_path = p
+	var tex := ArtCache.request(_art_kind(), p, func(t): _show_art(t, true), self)
 	if tex != null:
 		_show_art(tex, false)
 	# The glow colour comes from the art; the blur pass picks it.
@@ -593,7 +622,7 @@ func _on_focus() -> void:
 	ensure_art()
 	_refresh_glow_color()
 	card.pivot_offset = size / 2.0
-	Motion.to(card, "scale", Vector2(LIFT, LIFT), Motion.BASE, Tween.TRANS_BACK)
+	Motion.to(card, "scale", Vector2.ONE * lift_for(tile_size), Motion.BASE, Tween.TRANS_BACK)
 	Motion.to(card, "modulate", Color.WHITE, Motion.FAST)
 	Motion.to(glow, "modulate:a", 1.0, Motion.FAST)
 	_update_title()

@@ -7,8 +7,10 @@ extends SceneTree
 ##             parse (licence allowlist), download, size + sha256 check (store_part), `photo_ready`
 ##   firmware  Updates.load_index() with the real command runner: curl, .sha256, cosign verify-blob with the pinned
 ##             identity (firmware_index.gd), index_verified()
+##   fixes     FixData.fetch_steps() with the real command runner: curl of DataRepo.FIXES_URL and its bundle, cosign
+##             verify-blob as DataRepo.FIXES_SIGNER, FixData.accept() and merge() over the bundled definitions
 ## usage (tools/data_check/run.sh sets it up):
-##   godot --headless --path app -s res://tests/live/data_check.gd -- <work dir> [gamedb] [calendar] [photos] [firmware]
+##   godot --headless --path app -s res://tests/live/data_check.gd -- <work dir> [gamedb] [calendar] [photos] [firmware] [fixes]
 ## It lives under res://tests/ so the app's autoloads stay idle (no device reads, no background requests of their own);
 ## it isn't a test file (only res://tests/test_*.gd run in the unit suite).
 ## Behind an HTTPS proxy (HTTPS_PROXY, and GAMECOVE_CA_BUNDLE for a proxy that re-signs TLS) the app's HTTPRequests
@@ -23,6 +25,7 @@ const UpdatesScript := preload("res://scripts/system/updates.gd")
 const CommandRunner := preload("res://scripts/device/command_runner.gd")
 const Cal := preload("res://scripts/discover/calendar.gd")
 const Index := preload("res://scripts/system/firmware_index.gd")
+const FixData := preload("res://scripts/device/fix_data.gd")
 
 var work := ""
 var failures: Array[String] = []
@@ -34,13 +37,13 @@ var _ca: X509Certificate = null
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.is_empty():
-		printerr("usage: -- <work dir> [gamedb] [calendar] [photos] [firmware]")
+		printerr("usage: -- <work dir> [gamedb] [calendar] [photos] [firmware] [fixes]")
 		quit(2)
 		return
 	work = args[0]
 	var which: Array = Array(args.slice(1))
 	if which.is_empty():
-		which = ["gamedb", "calendar", "photos", "firmware"]
+		which = ["gamedb", "calendar", "photos", "firmware", "fixes"]
 	_proxy_from_env()
 	_run.call_deferred(which)
 
@@ -91,6 +94,7 @@ func _run(which: Array) -> void:
 			"calendar": await _calendar()
 			"photos": await _photos()
 			"firmware": _firmware()
+			"fixes": _fixes()
 			_: _ok(false, "unknown check " + str(w))
 	print("%d failed" % failures.size())
 	# let the freed HTTPRequests go first, and drop the CA before the TLS module shuts down
@@ -181,3 +185,30 @@ func _firmware() -> void:
 	_ok(u.index_verified(), "firmware: cosign verify-blob accepted the signature as %s (issuer %s)" % [
 		Index.SIGNER_IDENTITY, Index.OIDC_ISSUER])
 	u.free()
+
+
+func _fixes() -> void:
+	var u: Node = UpdatesScript.new()   # only for the cosign it finds (the same lookup fixes.gd makes)
+	var fsroot := work.path_join("fsroot")
+	DirAccess.make_dir_recursive_absolute(fsroot)
+	u.setup(CommandRunner.new(), fsroot, OS.get_environment("HOME"), OS.get_environment("PATH"))
+	var cos: String = u._cosign()
+	u.free()
+	_ok(cos != "", "fixes: cosign found (%s)" % cos)
+	var dir := work.path_join("fixes")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var runner = CommandRunner.new()
+	var names := ["fixes.json", "its .sigstore.json", "cosign verify-blob as %s" % FixData.SIGNER_IDENTITY]
+	var steps: Array = FixData.fetch_steps(dir, cos)
+	for i in steps.size():
+		var r: Dictionary = runner.run(steps[i][0], steps[i][1])
+		_ok(int(r.get("code", 1)) == 0, "fixes: %s (%s)" % [names[i], FixData.URL if i < 2 else "exit %d" % int(r.get("code", 1))])
+		if int(r.get("code", 1)) != 0:
+			FixData.discard(dir)
+			return
+	var got := FixData.accept(dir)
+	_ok(got == "verified", "fixes: accepted (%s)" % got)
+	var doc := FixData.cached(dir)
+	var merged: Array = FixData.merge(FixData.bundled()["fixes"], doc)
+	_ok(not merged.is_empty(), "fixes: serial %d, built %s, %d fixes after merging over the built-in list" % [
+		FixData.serial(doc), str(doc.get("built", "?")), merged.size()])

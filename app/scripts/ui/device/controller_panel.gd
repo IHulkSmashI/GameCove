@@ -1,6 +1,7 @@
 extends "res://scripts/ui/device/device_panel.gd"
 ## Controller page: the handheld's picture with pressed buttons lit (and the
-## back button you're editing outlined), back-button remapping, gyro mode,
+## button you're editing outlined), Button shortcuts (shortcuts_card.gd: what
+## each button does on a press and a hold, with a test area), gyro mode,
 ## rumble on/off with a test buzz, the lights (read-only), this game's own
 ## layout, and a button test. Talks to the Controller service (InputPlumber);
 ## Controller.refresh() runs when the page opens.
@@ -14,6 +15,8 @@ const ControlView := preload("res://scripts/ui/controls/control_view.gd")
 const CModel := preload("res://scripts/ui/controls/model.gd")
 const CShared := preload("res://scripts/ui/controls/shared.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
+const ShortcutsCard := preload("res://scripts/ui/device/shortcuts_card.gd")
+const TS := preload("res://scripts/ui/quick/texts_shortcuts.gd")
 
 ## Godot joypad buttons -> InputPlumber capability (part ids in the picture).
 ## SDL paddles: 1 = upper right, 2 = upper left, 3 = lower right, 4 = lower left.
@@ -40,6 +43,10 @@ var _cards: VBoxContainer
 var _caption: Label
 var _trigger_down := {}
 var _hold: Timer
+var shortcuts: VBoxContainer
+var _shortcuts_box: Control
+var _relink_queued := false
+var _cmodel: Object
 
 
 static func build(services_: Dictionary) -> Control:
@@ -96,7 +103,10 @@ func _on_changed(st: Dictionary) -> void:
 	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
 	var keep := _focus_key(f)
 	var mark := KeepFocus.mark(self, focusables())
-	clear_box(_cards)
+	# the Button shortcuts card follows the Controls, not this state: it stays (and keeps focus)
+	for c in _cards.get_children():
+		if c != _shortcuts_box:
+			Kit.drop(_cards, c)
 	rows.clear()
 	_fill_cards()
 	_restore_focus(keep, mark)
@@ -105,6 +115,8 @@ func _on_changed(st: Dictionary) -> void:
 func _focus_key(f: Control) -> String:
 	if f == null:
 		return ""
+	if _shortcuts_box != null and is_instance_valid(_shortcuts_box) and _shortcuts_box.is_ancestor_of(f):
+		return "keep"
 	for k in rows:
 		if rows[k].button == f:
 			return "row:" + k
@@ -116,6 +128,8 @@ func _focus_key(f: Control) -> String:
 
 
 func _restore_focus(key: String, mark := {}) -> void:
+	if key == "keep":
+		return   # it never left the Button shortcuts card
 	if key == "" or not is_inside_tree():
 		KeepFocus.restore(self, mark, focusables(), default_focus())
 		return
@@ -198,17 +212,31 @@ func _fill_cards() -> void:
 		c2[1].add_child(DKit.quiet(Texts.NO_INPUTPLUMBER_LINE))
 		_cards.add_child(c2[0])
 		focus.append(c2[0])
+	focus.append_array(_shortcuts_card())
 	if not _loaded or not bool(state.get("available", false)):
 		# gyro on Controls doesn't need the Controller service's state
 		focus.append_array(_gyro_controls_card())
 	else:
-		focus.append_array(_paddles_card())
 		focus.append_array(_gyro_card())
 		focus.append_array(_rumble_card())
 		focus.append_array(_led_card())
 		focus.append_array(_game_card())
 	focus.append_array(_test_card())
 	chain(focus)
+
+
+## A Button shortcuts row drew a new button: the other cards are drawn again
+## around the card (it stays, with focus) so the whole chain is fresh.
+func _relink() -> void:
+	if not _relink_queued:
+		_relink_queued = true
+		call_deferred("_do_relink")
+
+
+func _do_relink() -> void:
+	_relink_queued = false
+	if is_inside_tree():
+		_on_changed(state)
 
 
 func _supported(k: String) -> bool:
@@ -225,42 +253,37 @@ func _row(box: VBoxContainer, key: String, title: String, vals: Array, labels: A
 	return r
 
 
-func _paddles_card() -> Array:
-	var prof: Dictionary = state.get("profile", {}) if state.get("profile") is Dictionary else {}
-	var current: Dictionary = prof.get("paddles", {}) if prof.get("paddles") is Dictionary else {}
-	var names: Array = current.keys()
-	if names.is_empty():
-		names = Buttons.paddles(device_id).keys()
-	if names.is_empty() or not _supported("paddles"):
+## The Controls model the Button shortcuts card reads (one per page).
+func _model() -> Object:
+	if _cmodel == null:
+		var ctl: Object = services.get("controls", CShared.autoload("Controls"))
+		if ctl == null or not ctl.has_method("has"):
+			return null
+		_cmodel = CModel.new()
+		_cmodel.setup(ctl, services.get("profiles", CShared.autoload("Profiles")))
+	return _cmodel
+
+
+## Button shortcuts: what each button does on a press and a hold, the hold
+## time, a test area and a reset (shortcuts_card.gd).
+func _shortcuts_card() -> Array:
+	if _shortcuts_box != null and is_instance_valid(_shortcuts_box) and _shortcuts_box.get_parent() == _cards:
+		_cards.move_child(_shortcuts_box, _cards.get_child_count() - 1)
+		return shortcuts.focusables()
+	var m := _model()
+	if not ShortcutsCard.wanted(m):
 		return []
-	names.sort()
-	var c := DKit.card(Texts.PADDLES_TITLE, "gamepad", "accent", false)
-	c[0].name = "Card_paddles"
-	c[1].add_child(DKit.quiet(Texts.PADDLES_LINE))
-	var out := []
-	var targets: Array = Texts.PADDLE_TARGETS
-	for p in names:
-		var label := Buttons.label_for(device_id, p)
-		var side := "left" if str(p).begins_with("Left") else "right"
-		var cur := str(current.get(p, ""))
-		if not cur in targets:
-			targets = targets + [cur]
-		var r := _row(c[1], "paddle_" + str(p), "%s  ·  %s back" % [label, side], targets,
-			targets.map(func(t): return Texts.paddle_target(t)), cur, "",
-			func(_k, _v): return Texts.PADDLE_EXPLAIN)
-		var cap := str(p)
-		r.changed.connect(func(v): _set_paddle(cap, str(v)))
-		r.button.focus_entered.connect(func(): picture.set_selected([cap]))
-		r.button.focus_exited.connect(func(): picture.set_selected([]))
-		out.append(r.button)
+	var c := DKit.card(TS.BS_TITLE, "paddle", "accent", false)
+	c[0].name = "Card_shortcuts"
+	shortcuts = ShortcutsCard.new()
+	shortcuts.setup(m, {"controls": services.get("controls", CShared.autoload("Controls")), "controller": svc("controller")}, device_id, null)
+	shortcuts.selected.connect(func(cap: String): picture.set_selected([cap] if cap != "" else []))
+	shortcuts.notice.connect(func(text: String, tone: String): toast_requested.emit(text, "paddle", tone))
+	shortcuts.rebuilt.connect(_relink)
+	c[1].add_child(shortcuts)
 	_cards.add_child(c[0])
-	return out
-
-
-func _set_paddle(cap: String, target: String) -> void:
-	var ctl := svc("controller")
-	if ctl != null:
-		ctl.set_paddle(cap, target)
+	_shortcuts_box = c[0]
+	return shortcuts.focusables()
 
 
 ## Gyro through the Controls (controller.gyro on/off, controller.emulation):
@@ -384,6 +407,13 @@ func _test_card() -> Array:
 func hints_for(c: Control) -> Array:
 	if testing:
 		return [["B", Texts.TEST_HOLD]]
+	if shortcuts != null and is_instance_valid(shortcuts) and shortcuts.is_ancestor_of(c):
+		var cap: String = shortcuts.cap_of(c)
+		if picture != null:
+			picture.set_selected([cap] if cap != "" else [])
+		var h: Array = shortcuts.hints_for(c)
+		if not h.is_empty():
+			return h
 	for k in rows:
 		if rows[k].button == c:
 			return [["LR", "Change"], ["B", "Back"]]

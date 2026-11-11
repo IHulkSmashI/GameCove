@@ -763,6 +763,68 @@
   }
  },
  "devices": {
+  "valve-steam-machine": {
+   "power.tdp": {
+    "available": false,
+    "note": "a box on mains: no TDP slider even when the image's power service answers (devices.json tdp_backends [])"
+   },
+   "power.profile": {
+    "available": false
+   },
+   "power.charge_limit": {
+    "available": false,
+    "note": "no battery"
+   },
+   "power.battery_saver": {
+    "available": false
+   },
+   "power.battery_saver_at": {
+    "available": false,
+    "note": "the DualSense's battery (scope Device) is not the system's"
+   },
+   "power.low_battery_sleep": {
+    "available": false,
+    "note": "a low controller must never put the box to sleep"
+   },
+   "power.low_battery_sleep_at": {
+    "available": false
+   },
+   "display.brightness": {
+    "available": false,
+    "note": "no backlight: the TV has its own"
+   }
+  },
+  "generic-box-amd": {
+   "power.tdp": {
+    "available": false,
+    "note": "a box on mains: no TDP slider even when the image's power service answers (devices.json tdp_backends [])"
+   },
+   "power.profile": {
+    "available": false
+   },
+   "power.charge_limit": {
+    "available": false,
+    "note": "no battery"
+   },
+   "power.battery_saver": {
+    "available": false
+   },
+   "power.battery_saver_at": {
+    "available": false,
+    "note": "the DualSense's battery (scope Device) is not the system's"
+   },
+   "power.low_battery_sleep": {
+    "available": false,
+    "note": "a low controller must never put the box to sleep"
+   },
+   "power.low_battery_sleep_at": {
+    "available": false
+   },
+   "display.brightness": {
+    "available": false,
+    "note": "no backlight: the TV has its own"
+   }
+  },
   "msi-claw-8-ex": {
    "display.brightness": {
     "available": true,

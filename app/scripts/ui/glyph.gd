@@ -18,10 +18,14 @@ const ARROWS := {"DPAD": "◂▸ / ▴▾", "LR": "◂ ▸", "UD": "▴ ▾"}
 const SET_LABELS := {
 	"xbox": {"MENU": "Menu", "VIEW": "View"},
 	"deck": {"LB": "L1", "RB": "R1", "LT": "L2", "RT": "R2", "MENU": "Menu", "VIEW": "View"},
+	# PlayStation pads (DualSense, DualShock 4): the shapes, by position
+	"ps": {"A": "✕", "B": "◯", "X": "□", "Y": "△", "LB": "L1", "RB": "R1", "LT": "L2", "RT": "R2", "MENU": "Options", "VIEW": "Create"},
 }
 const FACE_TOKENS := {"A": "face_a", "B": "face_b", "X": "face_x", "Y": "face_y"}
 
-## The handheld's glyph set: "xbox" or "deck".
+## The glyph set in use: "xbox", "deck" (Steam Deck, Steam Controller) or "ps".
+## A handheld uses its own; a box by the TV follows the pad that is plugged in
+## (set_for_pad, main.gd).
 static var glyph_set := "xbox"
 
 var button := ""
@@ -35,6 +39,19 @@ static func use_set(set_name: String) -> void:
 	glyph_set = set_name if SET_LABELS.has(set_name) else "xbox"
 
 
+## The glyph set for a connected pad, from its name and USB vendor id (as
+## Input.get_joy_name / get_joy_info give them): Sony pads show the shapes, a
+## Steam Controller or Steam Deck pad Valve's labels, everything else Xbox
+## letters (which is also what Steam Input and InputPlumber present by default).
+static func set_for_pad(pad_name: String, vendor_id := 0) -> String:
+	var n := pad_name.to_lower()
+	if vendor_id == 0x054c or "dualsense" in n or "dualshock" in n or "ps5" in n or "ps4" in n or "playstation" in n or n.begins_with("sony"):
+		return "ps"
+	if vendor_id == 0x28de or "steam controller" in n or "steam deck" in n or n.begins_with("valve"):
+		return "deck"
+	return "xbox"
+
+
 ## The text a glyph shows on this set ("LB" -> "L1" on the Deck).
 static func label_for(b: String) -> String:
 	if ARROWS.has(b):
@@ -46,7 +63,7 @@ static func label_for(b: String) -> String:
 ## Fill of a face-button glyph; transparent for everything else and on the
 ## Deck (its face buttons aren't coloured).
 static func face_color(b: String) -> Color:
-	if glyph_set == "deck" or not FACE_TOKENS.has(b):
+	if glyph_set in ["deck", "ps"] or not FACE_TOKENS.has(b):
 		return Color(0, 0, 0, 0)
 	return ThemeLib.color(FACE_TOKENS[b])
 
@@ -74,7 +91,8 @@ func setup(b: String, is_primary := false, is_small := false) -> void:
 		_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		var face := b in FACES
 		_label.add_theme_font_override("font", ThemeLib.font("mono_bold") if face else ThemeLib.mono(true, 1))
-		var fs := (12 if small else 14) if round else (10 if small else 11)
+		# never under 11 px: a 5.5" 1080p panel can't show 10 px text readably (ui_scale.gd)
+		var fs := (12 if small else 14) if round else 11
 		_label.add_theme_font_size_override("font_size", fs)
 		_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(_label)

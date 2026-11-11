@@ -14,6 +14,7 @@ const Badge := preload("res://scripts/ui/badge.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const BrandMark := preload("res://scripts/ui/brand_mark.gd")
+const HeroInk := preload("res://scripts/ui/hero_ink.gd")
 
 var game: Dictionary = {}
 ## The line above the title ("Jump back in"), drawn as a mono tag chip.
@@ -82,22 +83,53 @@ func _init() -> void:
 	badges.name = "Badges"
 	badges.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(badges)
+	title.resized.connect(func(): extent_changed.emit())
 	_restyle()
 
 
-## Light themes' text halo strength (see _halo()).
-const HALO_ALPHA := 0.85
+## True while the header sits on hero art. Light themes then use the hero's
+## own light text over its dark scrim (hero_ink.gd), like the dark themes;
+## off art (no picture yet, a poster on the right) the theme's dark text.
+var on_art := false:
+	set(v):
+		if v == on_art:
+			return
+		on_art = v
+		if title != null and HeroInk.active():
+			_restyle()
+			if not game.is_empty():
+				show_game(game, eyebrow.text)
+var _tag_color := Color(0, 0, 0, 0)
+
+## The title (or what stands in for it) changed size or text: owners that
+## draw a scrim behind it read title_right() again.
+signal extent_changed
+
+
+## True when the text is the hero's light ink (Light theme, on art).
+func light_ink() -> bool:
+	return on_art and HeroInk.active()
 
 
 func _restyle() -> void:
 	# The line above the title is plain mono accent text (no box).
 	tag.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.40) if ThemeLib.is_dark() else Color(ThemeLib.color("scrim"), HALO_ALPHA))
+	var ink := light_ink()
+	# A soft dark shadow under the title on art, in every theme; none (and
+	# never a light halo) where Light's dark title sits on the bare frame.
+	title.add_theme_color_override("font_shadow_color", HeroInk.shadow() if ThemeLib.is_dark() or ink else Color(0, 0, 0, 0))
+	if ink:
+		title.add_theme_color_override("font_color", HeroInk.title())
+	else:
+		title.remove_theme_color_override("font_color")
+	var acc: Color = _tag_color if _tag_color.a > 0.0 else ThemeLib.color("accent")
+	eyebrow.add_theme_color_override("font_color", HeroInk.accent(_tag_color) if ink else acc)
+	_shade(eyebrow, ink)
 
 
 ## Colour of the tag (the art accent on Home).
 func set_tag_color(c: Color) -> void:
-	eyebrow.add_theme_color_override("font_color", c if c.a > 0.0 else ThemeLib.color("accent"))
+	_tag_color = c
 	_restyle()
 
 
@@ -144,6 +176,7 @@ func show_game(g: Dictionary, line := "", animate := false) -> void:
 		badges.add_child(Badge.make(b, "chip"))
 		n += 1
 	badges.visible = n > 0
+	extent_changed.emit()
 	if animate and not same:
 		modulate.a = 0.0
 		position.x = Motion.slide(-12.0)
@@ -190,24 +223,38 @@ func _segment(icon: String, text: String) -> HBoxContainer:
 	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_halo(l)
+	_shade(l, light_ink())
 	row.add_child(l)
 	return row
 
 
-## Light themes: a soft light halo around text that sits on the art past the
-## title shade (the art keeps its colour, so dark text needs its own ground).
-static func _halo(l: Label) -> void:
-	if ThemeLib.is_dark():
-		return
-	l.add_theme_color_override("font_shadow_color", Color(ThemeLib.color("scrim"), HALO_ALPHA))
+## Small light text on art (Light's hero) gets a soft dark shadow, since it
+## can run past the end of the scrim; anywhere else, none.
+static func _shade(l: Label, on: bool) -> void:
+	l.add_theme_color_override("font_shadow_color", HeroInk.shadow(0.45) if on else Color(0, 0, 0, 0))
 	l.add_theme_constant_override("shadow_offset_x", 0)
-	l.add_theme_constant_override("shadow_offset_y", 0)
-	l.add_theme_constant_override("shadow_outline_size", 10)
+	l.add_theme_constant_override("shadow_offset_y", 1)
+	l.add_theme_constant_override("shadow_outline_size", 4 if on else 0)
 
 
-static func _meta_color() -> Color:
+func _meta_color() -> Color:
+	if light_ink():
+		return HeroInk.meta()
 	return ThemeLib.color("text").lerp(ThemeLib.color("text_2"), 0.35)
+
+
+## Where the title (or the logo standing in for it) ends: px from this
+## header's left edge. Owners turn it into the hero scrim's extent.
+func title_right() -> float:
+	if logo.visible:
+		return logo.position.x + logo.custom_minimum_size.x
+	var f := title.get_theme_font("font")
+	var fs := title.get_theme_font_size("font_size")
+	var text := title.text.to_upper() if title.uppercase else title.text
+	var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	if title.size.x > 0.0:
+		w = minf(w, title.size.x)
+	return title.position.x + w
 
 
 func _logo_for(g: Dictionary) -> void:

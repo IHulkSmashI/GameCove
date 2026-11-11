@@ -438,7 +438,7 @@ func open_search() -> void:
 
 
 func searching() -> bool:
-	return keyboard.visible
+	return keyboard.is_open()
 
 
 func tiles() -> Array:
@@ -463,10 +463,13 @@ func set_top_target(c: Control) -> void:
 
 func _rebuild(keep_focus: bool) -> void:
 	var focused_key := ""
-	if keep_focus and is_inside_tree():
+	var focused_at := -1
+	if is_inside_tree():
 		var f := get_viewport().gui_get_focus_owner()
 		if f != null and f in _tiles:
 			focused_key = f.game.get("key", "")
+			# a new order or view (X, the Filter sheet) starts at the top of the grid
+			focused_at = _tiles.find(f) if keep_focus else 0
 	var in_view := View.filter_view(games, view)
 	var picked := View.filter_meta(filter_install(View.filter_by_store(in_view, store), install_filter), genre, View.CRITIC_MIN if critic_filter else 0)
 	shown = View.sort_games(View.search(picked, query), sort)
@@ -503,11 +506,20 @@ func _rebuild(keep_focus: bool) -> void:
 		_empty_text.text = "No %s games found. Pick another store or All." % View.store_name(store)
 	var total := View.not_hidden(games).size() if view != "hidden" else in_view.size()
 	count_label.text = ("%d of %d" % [shown.size(), total]) if shown.size() != total else ("%d games" % total if total != 1 else "1 game")
+	if focused_key == "" and not _tiles.is_empty():
+		# nothing in the grid has focus (typing a search on the keyboard): the strip under the
+		# grid names the game focus would land on, not the one it was last on
+		var landing: Control = default_focus()
+		if landing in _tiles:
+			show_details(landing.game)
 	if focused_key != "":
 		for t in _tiles:
 			if t.game.get("key", "") == focused_key:
 				_focus_later(t)
 				return
+		# the focused game left the grid (hidden, uninstalled with the Installed
+		# filter on): focus takes its place, or the toolbar when the grid is empty
+		_focus_later(_tiles[mini(focused_at, _tiles.size() - 1)] if not _tiles.is_empty() else _current_store_button())
 
 
 ## Tiles made at once, and how many more each time focus nears the last row made:
