@@ -308,7 +308,8 @@ static func collage_covers(games: Array) -> Array:
 
 
 ## The covers in a row from the right edge, each cut to fill a 3:4 cell (no
-## stretching), as far left as COLLAGE_FROM; clear elsewhere. Off the main thread.
+## stretching), as far left as `start` (the last one cut there and faded in);
+## clear elsewhere. Off the main thread.
 static func collage(paths: Array, size: Vector2i, start := COLLAGE_FROM) -> Image:
 	var img := Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))   # the theme's own card shows through where the title sits
@@ -316,8 +317,9 @@ static func collage(paths: Array, size: Vector2i, start := COLLAGE_FROM) -> Imag
 	var cw := int(ch * 0.75)
 	var gap := 10
 	var x := size.x - cw
+	var start_px := int(size.x * start)
 	for p in paths:
-		if x < int(size.x * start):
+		if x + cw <= start_px:
 			break   # the left of the hero stays clear for the title and buttons
 		var src := _load_image(str(p))
 		if src == null or src.is_empty():
@@ -328,8 +330,9 @@ static func collage(paths: Array, size: Vector2i, start := COLLAGE_FROM) -> Imag
 		var from := Vector2i((src.get_width() - cw) / 2, (src.get_height() - ch) / 2)
 		img.blit_rect(src, Rect2i(from, Vector2i(cw, ch)), Vector2i(x, 0))
 		x -= cw + gap
-	# Fade the collage in from its left end.
-	var left := x + cw + gap
+	# Fade the collage in from its left end (a cover reaching past `start` is cut there, faded).
+	var left := maxi(start_px, x + cw + gap)
+	img.fill_rect(Rect2i(0, 0, clampi(left, 0, size.x), size.y), Color(0, 0, 0, 0))
 	var fade := int(size.x * COLLAGE_FADE)
 	for px in range(maxi(0, left), mini(size.x, left + fade)):
 		var k := smoothstep(0.0, 1.0, float(px - left) / fade)
