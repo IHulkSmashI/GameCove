@@ -488,6 +488,115 @@ def test_optiscaler_patch_and_unpatch_leave_the_game_as_it_was(tmp_path, monkeyp
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess"
 
 
+def _game_with_own_files(tmp_path):
+    g = tmp_path / "game" / "bin"
+    _w(g / "Game.exe", "x" * 100)
+    _w(g / "libxess.dll", "game-own-xess")                       # replaced by OptiScaler's: backed up first
+    _w(g / "amd_fidelityfx_upscaler_dx12.dll", "game-own-fsr")
+    return g
+
+
+def _snapshot(d):
+    out = {}
+    for r, _dirs, files in os.walk(d):
+        for x in files:
+            out[os.path.relpath(os.path.join(r, x), d)] = open(os.path.join(r, x), "rb").read()
+    return out
+
+
+class _Killed(BaseException):
+    """The helper process stopped mid-way (SIGKILL, power loss): no except clause of the helper runs."""
+
+
+@pytest.mark.parametrize("stop_at", range(1, 9))
+def test_a_patch_stopped_mid_way_never_loses_a_game_file(tmp_path, monkeypatch, stop_at):
+    """Review H6: the manifest was written only at the end, so a stopped patch, then a patch and Native, deleted
+    the backup of the game's own file. The helper is stopped at every step of the patch in turn."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    before = _snapshot(g)
+    real, calls = os.replace, {"n": 0}
+
+    def replace(a, b):
+        calls["n"] += 1
+        if calls["n"] == stop_at:
+            raise _Killed()
+        return real(a, b)
+    monkeypatch.setattr(optiscaler.os, "replace", replace)
+    with pytest.raises(_Killed):
+        optiscaler.patch(home, str(g), "0.9.4", {"Upscalers_Dx12Upscaler": "xess"})
+    monkeypatch.setattr(optiscaler.os, "replace", real)
+    # the next start sets it up again, then the player picks Native
+    assert optiscaler.patch(home, str(g), "0.9.4", {"Upscalers_Dx12Upscaler": "xess"})["ok"]
+    r = optiscaler.unpatch(str(g), home)
+    assert r["ok"] and r["kept"] == [], r
+    assert _snapshot(g) == before
+    # Native straight after the stop is just as safe
+    monkeypatch.setattr(optiscaler.os, "replace", replace)
+    calls["n"] = 0
+    with pytest.raises(_Killed):
+        optiscaler.patch(home, str(g), "0.9.4", {})
+    monkeypatch.setattr(optiscaler.os, "replace", real)
+    assert optiscaler.unpatch(str(g), home)["ok"] and _snapshot(g) == before
+
+
+def test_a_full_disk_mid_patch_puts_the_game_back(tmp_path, monkeypatch):
+    import errno
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    before = _snapshot(g)
+    real, calls = optiscaler.shutil.copyfile, {"n": 0}
+
+    def copyfile(a, b, *k, **kw):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real(a, b, *k, **kw)
+    monkeypatch.setattr(optiscaler.shutil, "copyfile", copyfile)
+    r = optiscaler.patch(home, str(g), "0.9.4", {})
+    assert r["ok"] is False and "No space left" in r["error"] and "as they were" in r["error"]
+    assert _snapshot(g) == before and optiscaler.owner(str(g))["owner"] is None
+
+
+def test_the_manifest_lists_the_backup_before_the_game_file_moves(tmp_path, monkeypatch):
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    seen = []
+    real = os.replace
+
+    def replace(a, b):
+        if b.endswith(os.path.join("backup", "libxess.dll")):
+            seen.append(json.loads((g / ".gamecove-optiscaler" / "manifest.json").read_text()))
+        return real(a, b)
+    monkeypatch.setattr(optiscaler.os, "replace", replace)
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]
+    assert seen and "libxess.dll" in seen[0]["backed"] and seen[0]["state"] == "patching"
+    assert seen[0]["backup_sha256"]["libxess.dll"] == downloads.sha256_of(str(tmp_path / "game" / "bin" / ".gamecove-optiscaler" / "backup" / "libxess.dll"))
+
+
+def test_undo_never_deletes_a_backup_it_could_not_put_back(tmp_path, monkeypatch):
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]
+    _w(g / "libxess.dll", "game-update-xess")                    # a game update put its own newer file there
+    r = optiscaler.unpatch(str(g), home)
+    assert r["ok"] and "libxess.dll" in r["kept"] and (g / "libxess.dll").read_text().strip() == "game-update-xess"
+    assert (g / ".gamecove-optiscaler" / "backup" / "libxess.dll").read_text().strip() == "game-own-xess"   # kept, not deleted
+    assert optiscaler.owner(str(g))["owner"] is None                                              # nothing of ours left
+
+
 def test_optiscaler_never_touches_another_tools_install(tmp_path, monkeypatch):
     from gamecove_upscale import optiscaler
     home = str(tmp_path)
