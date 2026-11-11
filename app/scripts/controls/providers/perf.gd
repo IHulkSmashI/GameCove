@@ -560,7 +560,9 @@ func prepare_game(key := "") -> Dictionary:
 	if k == "" or _prepared.has(k) or _upscale_reason() != "":
 		return {}
 	_prepared[k] = true
-	var r := _upscale_run("prepare", _ac_args())
+	var r := _upscale_run("prepare", _ac_args() + _auto_net_args())
+	if str(r.get("waiting", "")) != "":
+		_last_did[k] = str(r["waiting"]).trim_suffix(".")
 	if str(r.get("did", "")) != "":
 		_forget_status()
 		var st := upscale_status()
@@ -568,6 +570,13 @@ func prepare_game(key := "") -> Dictionary:
 		_sv("upscale_env", env if env is Dictionary and not env.is_empty() else null)
 		_last_did[k] = str(r.get("did", ""))
 	return r
+
+
+## What GameCove runs by itself (prepare) may download only with "Background
+## lookups" on (Settings > About; privacy.gd). Files that came with the install
+## are still used; the player's own picks download as before.
+func _auto_net_args() -> Array:
+	return [] if Privacy.background_allowed(str(ctx.get("privacy_path", Privacy.PREFS_PATH))) else ["--no-download"]
 
 
 ## A game was just installed, updated or had its files checked (main's
@@ -589,7 +598,7 @@ func prepare_installed(g: Dictionary, now := true) -> Dictionary:
 		return {}
 	_prepared[k] = true
 	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(g)) else []
-	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac)
+	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac + _auto_net_args())
 	if str(r.get("did", "")) != "":
 		var st := Upscale.run(ctx.get("runner"), upscale_cmd(), "status", _home(), k, _gpu(), dir)
 		var env: Variant = st.get("env", {})

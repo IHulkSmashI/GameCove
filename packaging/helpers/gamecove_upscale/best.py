@@ -20,7 +20,7 @@ from __future__ import annotations
 import os
 import time
 
-from . import active, chips, games, guard, launchenv, mirror, optiscaler, xess
+from . import active, chips, downloads, games, guard, launchenv, mirror, optiscaler, xess
 
 MODES = ("best", "custom", "native")
 FALLBACK = {"fsr4_amd": "fsr31", "fsr4_xmx": "xess", "fsr4_xmx_lite": "xess"}
@@ -170,6 +170,9 @@ def prepare(home: str, key: str, gpu: dict, game_dir: str | None = None, name: s
             set_mode(home, key, "best")
     else:
         r = games.apply_recommended(home, key, gpu, game_dir, allow_unpinned, anticheat=anticheat)
+    if not r.get("ok") and downloads.NO_NETWORK and downloads.BLOCKED_TEXT in str(r.get("error") or ""):
+        # Background lookups are off and the files aren't here yet: nothing is fetched by itself, and we say so
+        return {"ok": True, "did": "", "waiting": downloads.BLOCKED_TEXT, "mode": mode, "plan": p}
     return {"ok": bool(r.get("ok")), "did": "set up" if r.get("ok") else "", "error": r.get("error"), "mode": mode, "plan": p}
 
 

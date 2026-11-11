@@ -287,6 +287,26 @@ def test_amd_older_fsr_gets_fsr4_and_fsr31_stays_the_games(tmp_path):
     assert p["route"] == "own_fsr" and p["launch"] == {"proton_fsr4": True} and p["files"] is False
 
 
+def test_best_downloads_nothing_by_itself_with_background_lookups_off(tmp_path, monkeypatch):
+    """Review M: "Best" fetched OptiScaler on its own with Background lookups off. Run by the app itself
+    (prepare --no-download), nothing is fetched; the player's own pick still downloads."""
+    from gamecove_upscale import downloads
+    home = str(tmp_path)
+    d = _steam_game(home, "460", "Alan Wake 2", ["AlanWake2.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    asked = []
+    monkeypatch.setattr(downloads, "download", lambda url, dest, timeout=60.0: asked.append(url) or (_ for _ in ()).throw(OSError("offline")))
+    assert best.plan(home, "460", DECK)["auto"] is True                # a game the list knows: Best sets it up
+    r = cli.run(["prepare", "--home", home, "--key", "460", "--gpu", json.dumps(DECK), "--no-download"])
+    assert r["ok"] and r["did"] == "" and "Background lookups are off" in r["waiting"]
+    assert asked == [] and _tree(d) == before
+    r = cli.run(["prepare", "--home", home, "--key", "460", "--gpu", json.dumps(DECK)])   # allowed: it tries
+    assert asked and r["did"] == ""
+    _pkg(home)                                                          # files already here: no network needed
+    r = cli.run(["prepare", "--home", home, "--key", "460", "--gpu", json.dumps(DECK), "--no-download"])
+    assert r["did"] == "set up" and _tree(d) != before
+
+
 def test_an_unknown_game_without_clear_signs_is_never_touched(tmp_path):
     home = str(tmp_path)
     _pkg(home)

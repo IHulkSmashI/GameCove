@@ -919,6 +919,30 @@ func test_anticheat_games_get_nothing_and_say_why() -> void:
 	_done(w)
 
 
+func test_best_downloads_nothing_by_itself_with_background_lookups_off() -> void:
+	var w := _world("mode_privacy", ALLY_X)
+	var base := ProjectSettings.globalize_path("user://test_perf_controls/mode_privacy")
+	var prefs := base.path_join("settings.cfg")
+	w["ctx"]["privacy_path"] = prefs
+	ok(PrivacyScript.set_background_allowed(false, prefs), "Background lookups off")
+	var runner = w["runner"]
+	var wait := "Background lookups are off, so we don't download the upscaler by ourselves. Pick it here and it downloads now."
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {}}
+	runner.answers["prepare"] = {"ok": true, "did": "", "waiting": wait}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null}
+	_with_game(w, EPIC)
+	var calls := _calls_with(runner, "prepare")
+	ok(calls.size() == 1 and "--no-download" in calls[0], "what Best does by itself fetches nothing: " + str(calls))
+	ok("Background lookups are off" in w["reg"].control("perf.upscale_mode").help, "and says so: " + w["reg"].control("perf.upscale_mode").help)
+	runner.answers["choose"] = {"ok": true, "env": {}}
+	w["reg"].set_value("perf.upscaler", "fsr31")
+	ok(not "--no-download" in _calls_with(runner, "choose")[0], "the player's own pick still downloads")
+	PrivacyScript.set_background_allowed(true, prefs)
+	w["p"].prepare_installed(EPIC)
+	ok(not "--no-download" in _calls_with(runner, "prepare")[-1], "with the switch on, Best may fetch")
+	_done(w)
+
+
 func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> void:
 	var w := _world("mode_offer", ALLY_X)
 	var runner = w["runner"]

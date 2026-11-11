@@ -30,7 +30,7 @@ import json
 import os
 import sys
 
-from . import best, chips, framegen, games, launchenv, livedb, lsfg, mirror, optiscaler, upkeep, xess
+from . import best, chips, downloads, framegen, games, launchenv, livedb, lsfg, mirror, optiscaler, upkeep, xess
 
 COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency", "xess-install", "xess-remove",
             "check", "update", "game-update", "plan", "prepare", "mode", "native", "caps", "lsfg-install", "lsfg-remove", "lsfg-state", "storage", "purge",
@@ -101,12 +101,15 @@ def run(argv: list[str]) -> dict:
     p.add_argument("--generator", default=None, choices=sorted(launchenv.FG_OUTS))
     p.add_argument("--mode", default=None, choices=best.MODES)
     p.add_argument("--anticheat", action="store_true", help="the app's data says this game has anti-cheat")
+    p.add_argument("--no-download", action="store_true",
+                   help="run by GameCove itself with Background lookups off: nothing is fetched from the network")
     a = p.parse_args(argv)
+    downloads.NO_NETWORK = bool(a.no_download)
     gpu = parse_gpu(a.gpu)
     home = a.home
     if a.command in ("recommend", "status", "choose", "apply", "undo", "latency", "game-update", "plan", "prepare", "mode", "native", "opt-in") and not a.key:
         raise ValueError(f"{a.command} needs --key")
-    if a.command in INSTALLS and not (a.command == "choose" and a.upscaler == "own"):
+    if a.command in INSTALLS and not (a.command == "choose" and a.upscaler == "own") and not a.no_download:
         mirror.refresh(home)
     if a.command in XMX_UPKEEP:
         games.xmx_upkeep(home, gpu)

@@ -68,7 +68,20 @@ def pick_asset(rel: dict, pattern: str) -> dict | None:
     return None
 
 
+# Set by the command line (--no-download) when GameCove runs the helper by itself while "Background lookups" is off
+# (app/scripts/system/privacy.gd): files that came inside the install are still used, nothing is fetched.
+NO_NETWORK = False
+BLOCKED_TEXT = ("Background lookups are off, so we don't download the upscaler by ourselves. Pick it here and it "
+                "downloads now.")
+
+
+class Blocked(OSError):
+    """A download asked for while downloads by ourselves are off (NO_NETWORK)."""
+
+
 def download(url: str, dest: str, timeout: float = 60.0) -> str:
+    if NO_NETWORK:
+        raise Blocked(BLOCKED_TEXT)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     tmp = dest + ".part"
     if os.path.lexists(tmp):
@@ -156,6 +169,8 @@ def get_verified(urls: list[str], sha256: str, dest: str, timeout: float = 60.0)
             errors.append(f"{have}: {e}")
     if not urls:
         raise ValueError(f"{os.path.basename(dest)}: nowhere to download it from")
+    if NO_NETWORK:
+        raise Blocked(BLOCKED_TEXT)
     for url in urls:
         try:
             download(url, tmp, timeout)
