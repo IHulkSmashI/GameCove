@@ -289,12 +289,13 @@ func decorate(games: Array) -> Array:
 				member[k] = []
 			member[k].append(c["id"])
 	var out: Array = []
+	var none := []   # one empty list for every game in no collection (thousands of ROMs)
 	for g in games:
 		var d: Dictionary = g.duplicate()
 		var k := str(g.get("key", ""))
 		d["favourite"] = is_favourite(k)
 		d["hidden"] = is_hidden(k)
-		d["collections"] = member.get(k, [])
+		d["collections"] = member.get(k, none)
 		out.append(d)
 	return out
 

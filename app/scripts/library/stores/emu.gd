@@ -726,16 +726,17 @@ static func gamelist_for(system: String, root: String, gamelist_dirs: Array) -> 
 ## "short", "count", "roots": [ROM roots it's in], "known"}]}. A folder ES-DE
 ## doesn't know keeps its games, named after the folder, marked "unknown": they
 ## can't start (launch_plan says why).
-static func rom_entries(home: String, setup: Dictionary, names: Dictionary) -> Dictionary:
-	var custom := EsdeLaunch.read_custom(str(setup.get("esde_dir", "")))
-	var list := rom_systems(setup, custom)
-	for sy in list:
-		sy["gamelist"] = gamelist_for(sy["id"], sy["root"], setup.get("gamelist_dirs", []))
+static func rom_entries(home: String, setup: Dictionary, names: Dictionary, sources := {}) -> Dictionary:
+	if sources.is_empty():
+		sources = rom_sources(setup)
+	var custom: Dictionary = sources["custom"]
+	var list: Array = sources["list"]
 	var found := Roms.scan_all(list, str(setup.get("media_dir", "")))
 	var kind := str(setup.get("kind", ""))
 	var entries: Array[Dictionary] = []
 	var by_sys := {}
 	var ids := {}
+	var no_art: Dictionary = Common.freeze(Common.empty_art())
 	for sy in list:
 		var res: Variant = found.get(sy["key"])
 		if not res is Dictionary or (res["games"] as Array).is_empty():
@@ -749,6 +750,7 @@ static func rom_entries(home: String, setup: Dictionary, names: Dictionary) -> D
 		var sys_ctx := {"kind": kind, "home": home, "emu_path": str(setup.get("emu_path", "")), "roms_dir": str(sy["base"]),
 			"es_path": str(setup.get("es_path", "")), "esde_dir": str(setup.get("esde_dir", "")), "system_alt": alt}
 		var names_by := {}   # (game alt, shell file?) -> [label, emulator name]: worked out once per system
+		var emulated_by := {}   # one "emulated" for every ROM of this system that reads the same (never edited in place)
 		for g in res["games"]:
 			var nk := "%s|%s" % [g["altemulator"], str(g["path"]).get_extension().to_lower() in EsdeLaunch.SHELL_EXT]
 			if not names_by.has(nk):
@@ -770,13 +772,22 @@ static func rom_entries(home: String, setup: Dictionary, names: Dictionary) -> D
 			if ids.has(gid):
 				gid += "@" + str(sy["base"]).sha256_text().substr(0, 8)
 			ids[gid] = true
-			entries.append({"store": "emu", "id": gid, "title": g["title"], "installed": true, "art": (g["art"] as Dictionary).duplicate(),
-				"ids": {}, "rom": g["path"], "rom_rel": g["rel"], "altemulator": g["altemulator"], "launch_ctx": sys_ctx,
-				"emulated": {"system": id, "system_name": sname, "system_short": sshort, "emulator": emu_name, "via": kind,
+			var ek := "%s|%s|%s|%s|%s" % [label, emu_name, g["players"], g["rating"], g["playcount"]]
+			if not emulated_by.has(ek):
+				emulated_by[ek] = Common.freeze({"system": id, "system_name": sname, "system_short": sshort, "emulator": emu_name, "via": kind,
 					"rom": true, "unknown": not known, "label": label, "players": g["players"], "rating": g["rating"], "playcount": g["playcount"],
-					"root": str(sy["base"])},
+					"root": str(sy["base"])})
+			# A ROM without art shares one empty set (merge_shortcuts and a picked cover
+			# replace it, never edit it).
+			var art: Dictionary = g["art"]
+			art = no_art if art == no_art else art.duplicate()
+			# No "ids" (ROMs never match the database) and no "aliases" until a shortcut folds
+			# in (merge_shortcuts): two empty containers per ROM add up over thousands.
+			entries.append({"store": "emu", "id": gid, "title": g["title"], "installed": true, "art": art,
+				"rom": g["path"], "rom_rel": g["rel"], "altemulator": g["altemulator"], "launch_ctx": sys_ctx,
+				"emulated": emulated_by[ek],
 				"es_favorite": g["favorite"], "es_hidden": g["hidden"],
-				"last_played": int(g["last_played"]), "playtime_min": 0, "aliases": [],
+				"last_played": int(g["last_played"]), "playtime_min": 0,
 				"local_meta": {"source": "esde" if not (g["meta"] as Dictionary).is_empty() else "emu", "meta": meta}})
 		if not by_sys.has(id):
 			by_sys[id] = {"id": id, "name": sname, "short": sshort, "count": 0, "roots": [], "known": known}
@@ -786,6 +797,16 @@ static func rom_entries(home: String, setup: Dictionary, names: Dictionary) -> D
 	var counts: Array = by_sys.values()
 	counts.sort_custom(func(a, b): return a["count"] > b["count"] if a["count"] != b["count"] else a["name"].naturalnocasecmp_to(b["name"]) < 0)
 	return {"entries": entries, "systems": counts}
+
+
+## What the ROM games are read from: ES-DE's custom systems and every system
+## folder with its gamelist ({"custom", "list"}).
+static func rom_sources(setup: Dictionary) -> Dictionary:
+	var custom := EsdeLaunch.read_custom(str(setup.get("esde_dir", "")))
+	var list := rom_systems(setup, custom)
+	for sy in list:
+		sy["gamelist"] = gamelist_for(sy["id"], sy["root"], setup.get("gamelist_dirs", []))
+	return {"custom": custom, "list": list}
 
 
 const UNKNOWN_SYSTEM := "ES-DE doesn't know a system called \"%s\", so nothing can start these games. Rename the folder to ES-DE's name for that console (EmuDeck's own folders already are)."
@@ -816,12 +837,13 @@ static func merge_shortcuts(roms: Array, shortcut_entries: Array) -> Array[Dicti
 		if hit == null:
 			out.append(e)
 			continue
-		var art: Dictionary = hit["art"]
+		var art: Dictionary = (hit["art"] as Dictionary).duplicate()   # it may be the shared empty set
+		hit["art"] = art
 		for k in art:
 			if str(art[k]) == "" and str(e.get("art", {}).get(k, "")) != "":
 				art[k] = e["art"][k]
 		hit["last_played"] = maxi(int(hit["last_played"]), int(e.get("last_played", 0)))
-		hit["aliases"].append("emu:%s" % e["id"])
+		hit["aliases"] = hit.get("aliases", []) + ["emu:%s" % e["id"]]
 		if e.get("hidden_in_steam", false):
 			hit["hidden_in_steam"] = true
 	return out
@@ -834,8 +856,19 @@ static func merge_shortcuts(roms: Array, shortcut_entries: Array) -> Array[Dicti
 ## that signed in last (those for a ROM we list fold into its entry).
 ## `setup` is what detect() returned (Library keeps it for the Emulation page);
 ## with `roms` on, its "systems" and "rom_total" come from the games found.
-static func scan(home: String, setup: Dictionary, roms := false) -> Array[Dictionary]:
+##
+## `reuse` ({"stamp", "salt"}) lets the Library skip making thousands of ROM
+## games again when nothing they're made from changed: "stamp" is the stamp of
+## the ones it has, "salt" the bytes of anything else they depend on (play time,
+## picked art). Every stamp is a hash of the setup, the consoles, ES-DE's custom
+## systems, every ROM folder (as the ROM cache saw it, unchanged), the shortcuts
+## and the salt. The new one goes in reuse["stamp_now"] ("" when a folder changed
+## in the second it was read: read again next time). When it matches,
+## reuse["same"] is true and nothing comes back: the Library keeps every "emu"
+## game it has.
+static func scan(home: String, setup: Dictionary, roms := false, reuse := {}) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	var setup_bytes := var_to_bytes(setup)
 	var fe: Variant = setup.get("frontend", {})
 	if fe is Dictionary and not fe.is_empty():
 		out.append({"store": "emu", "id": "frontend", "title": str(fe["name"]), "installed": true, "art": Common.empty_art(),
@@ -858,7 +891,23 @@ static func scan(home: String, setup: Dictionary, roms := false) -> Array[Dictio
 				seen[e["id"]] = true
 				cuts.append(e)
 	if roms and str(setup.get("kind", "")) != "":
-		var found := rom_entries(home, setup, names)
+		var sources := rom_sources(setup)
+		var media := str(setup.get("media_dir", ""))
+		var ctx := HashingContext.new()
+		ctx.start(HashingContext.HASH_MD5)
+		ctx.update(var_to_bytes([setup_bytes, names, sources, cuts, out, reuse.get("salt", PackedByteArray())]))
+		var inputs := ctx.finish().hex_encode()
+		var stamp_of := func() -> String:
+			var folders := Roms.unchanged_stamp(sources["list"], media)
+			return "" if folders == "" else (inputs + folders).md5_text()
+		if reuse.has("stamp"):
+			var now: String = stamp_of.call()
+			if now != "" and now == str(reuse["stamp"]):
+				reuse["stamp_now"] = now
+				reuse["same"] = true
+				return []
+		var found := rom_entries(home, setup, names, sources)
+		reuse["stamp_now"] = stamp_of.call()
 		setup["systems"] = found["systems"]
 		setup["rom_total"] = 0
 		for sy in setup["systems"]:

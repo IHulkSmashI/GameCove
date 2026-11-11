@@ -24,6 +24,7 @@ const Shelf := preload("res://scripts/ui/shelf.gd")
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 const EmuTests := preload("res://tests/test_emulation.gd")
+const GameDB := preload("res://scripts/library/gamedb.gd")
 
 const BASE := "user://test_roms"
 const STEAM := ".local/share/Steam"
@@ -296,7 +297,10 @@ func test_cache_and_invalidation() -> void:
 	# Mark the cached copy: a second start that reuses it returns the mark.
 	var c := Roms.load_cache()
 	var key: String = c["systems"].keys()[0]
-	c["systems"][key]["games"][0]["title"] = "FROM CACHE"
+	ok(c["systems"][key]["games"] is PackedByteArray, "games kept packed (checking the folders unpacks none)")
+	var packed: Array = bytes_to_var(c["systems"][key]["games"])
+	packed[0]["title"] = "FROM CACHE"
+	c["systems"][key]["games"] = var_to_bytes(packed)
 	Roms.save_cache(c)
 	var again := _sa(systems, media)
 	ok(again["snes"]["games"].any(func(g): return g["title"] == "FROM CACHE"), "nothing changed: the cache is used")
@@ -320,6 +324,99 @@ func test_cache_and_invalidation() -> void:
 	ok(_sa(systems, media)["snes"]["games"].any(func(g): return g["rel"] == "sub/Deep.sfc"), "a new sub-folder: read again")
 	_touch(Roms.cache_path, "junk")
 	eq(_sa(systems, media)["snes"]["games"].size(), 5, "a broken cache is just read again")
+
+
+## The stamp of folders the cache saw: "" until they're cached and settled, the
+## same while nothing changes, "" again the moment one does.
+func test_unchanged_stamp() -> void:
+	var home := _emudeck("ustamp")
+	var roms := home.path_join("Emulation/roms")
+	_age(home)
+	var systems := [{"id": "snes", "root": roms.path_join("snes"), "exts": ["sfc", "smc", "zip"], "gamelist": ""},
+		{"id": "psx", "root": roms.path_join("psx"), "exts": ["cue", "chd", "m3u"], "gamelist": ""}]
+	eq(Roms.unchanged_stamp(systems, ""), "", "nothing cached yet")
+	Roms.scan_all(systems, "")
+	var st := Roms.unchanged_stamp(systems, "")
+	ok(st != "", "cached and settled")
+	eq(Roms.unchanged_stamp(systems, ""), st, "the same while nothing changes")
+	_touch(roms.path_join("psx/New (USA).chd"))
+	eq(Roms.unchanged_stamp(systems, ""), "", "a new file: read again")
+
+
+## A rescan of ROM folders that didn't change makes nothing again (the Library or
+## Emulation page opening): Emu.scan's stamp matches, the Library keeps the very
+## games it has and redraws nothing. A new ROM, play time or a picked cover (the
+## salt) makes them again.
+func test_unchanged_rescan_makes_nothing() -> void:
+	var home := _emudeck("rescan")
+	_age(home)
+	SettingsFile.reset_for_tests()
+	var reuse := {"salt": PackedByteArray()}
+	var first := Emu.scan(home, Emu.detect(home, "", [], false), true, reuse)
+	var stamp := str(reuse.get("stamp_now", ""))
+	ok(first.size() > 4 and stamp != "", "a stamp for what was read")
+	var again := {"salt": PackedByteArray(), "stamp": stamp}
+	eq(Emu.scan(home, Emu.detect(home, "", [], false), true, again).size(), 0, "nothing changed: nothing made")
+	ok(again.get("same", false) and again["stamp_now"] == stamp, "and it says so")
+	var salted := {"salt": var_to_bytes([{"emu:x": 1}]), "stamp": stamp}
+	ok(Emu.scan(home, Emu.detect(home, "", [], false), true, salted).size() == first.size() and not salted.get("same", false),
+		"play time or picked art changed: made again")
+	var lib: Node = LibraryScript.new()
+	lib.home = home
+	lib.collections = Collections.new(home.path_join("collections.json"))
+	var redraws := [0]
+	lib.changed.connect(func(): redraws[0] += 1)
+	var apply := func(res: Dictionary) -> void:
+		lib._task = WorkerThreadPool.add_task(func(): pass)
+		lib._apply(res)
+	apply.call(LibraryScript.collect(home, "/nonexistent/gamedb.json.gz", [], lib._emu_stamp))
+	var had: Array = lib.games.filter(func(g): return g["emulated"].get("rom", false))
+	ok(had.size() > 4 and lib._emu_stamp != "" and redraws[0] == 1, "first scan: the ROM games")
+	var res := LibraryScript.collect(home, "/nonexistent/gamedb.json.gz", ["emu"], lib._emu_stamp)
+	ok(res["emu_same"] and res["games"].is_empty() and not res.has("emulation"), "rescan of Emulation: nothing made")
+	apply.call(res)
+	var now: Array = lib.games.filter(func(g): return g["emulated"].get("rom", false))
+	ok(now.size() == had.size() and is_same(now[0], had[0]) and redraws[0] == 1, "the games we had stay, nothing redrawn")
+	apply.call(LibraryScript.collect(home, "/nonexistent/gamedb.json.gz", [], lib._emu_stamp))
+	now = lib.games.filter(func(g): return g["emulated"].get("rom", false))
+	ok(now.size() == had.size() and is_same(now[0], had[0]) and redraws[0] == 1 and not (lib.emulation["systems"] as Array).is_empty(),
+		"a whole Library rescan keeps them too, and the Emulation page's consoles")
+	_touch(home.path_join("Emulation/roms/snes/Brand New (USA).sfc"))
+	apply.call(LibraryScript.collect(home, "/nonexistent/gamedb.json.gz", ["emu"], lib._emu_stamp))
+	ok(lib.games.any(func(g): return g["title"] == "Brand New") and redraws[0] == 2, "a new ROM: made again and shown")
+	lib.free()
+
+
+## Thousands of ROMs: what's the same for many is one copy. Unscraped ROMs of a
+## console share their details, the console line and the empty art, all
+## read-only (a write meant for one game is refused instead of reaching all of
+## them); a scraped one keeps its own. The game database isn't read for ROMs.
+func test_rom_games_share_what_they_can() -> void:
+	var home := _dir("share")
+	var emu := home.path_join("Emulation")
+	_touch(home.path_join(".config/EmuDeck/settings.sh"), "emulationPath=\"%s\"\n" % emu)
+	_touch(home.path_join("Applications/ES-DE.AppImage"))
+	for i in 3:
+		_touch(emu.path_join("roms/nes/Game %d (USA).nes" % i))
+	_touch(emu.path_join("roms/nes/gamelist.xml"), "<gameList><game><path>./Game 2 (USA).nes</path><desc>Our own words.</desc></game></gameList>")
+	SettingsFile.reset_for_tests()
+	var db := home.path_join("gamedb.json.gz")
+	_touch(db, "not read")
+	GameDB._handoff = {"path": db, "modified": int(FileAccess.get_modified_time(db)), "doc": {"games": []}}
+	var res := LibraryScript.collect(home, db, ["emu"])
+	ok(not GameDB._handoff.is_empty(), "the game database isn't read for ROMs")
+	GameDB._handoff = {}
+	var by := {}
+	for g in res["games"]:
+		by[g["title"]] = g
+	var a: Dictionary = by["Game 0"]
+	var b: Dictionary = by["Game 1"]
+	ok(is_same(a["info"], b["info"]) and is_same(a["emulated"], b["emulated"]) and is_same(a["art"], b["art"]), "one copy for both")
+	ok(a["info"].is_read_only() and a["info"]["meta"].is_read_only() and a["emulated"].is_read_only() and a["art"].is_read_only(),
+		"read-only")
+	var c: Dictionary = by["Game 2"]
+	ok(not is_same(c["info"], a["info"]) and c["info"]["summary"] == "Our own words.", "a scraped one has its own")
+	ok(str(a["info"]["summary"]).begins_with("A Nintendo Entertainment System game from your ROM folder."), "the console line")
 
 
 # ------------------------------------------------------------ starting a game

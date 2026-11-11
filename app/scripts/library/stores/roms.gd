@@ -38,7 +38,9 @@ const SYSTEM_MAX := 20000
 const TOTAL_MAX := 60000
 const GAMELIST_MAX_BYTES := 8 * 1024 * 1024
 const CACHE_PATH := "user://emu/roms.cache"
-const CACHE_VERSION := 1
+## 2: each system's games are kept packed (var_to_bytes) so checking that nothing
+## changed reads only folder times, not thousands of games.
+const CACHE_VERSION := 2
 ## ES-DE's media folders (downloaded_media/<system>/<type>/<rom path without extension>.<ext>)
 ## for each kind of art, best first.
 const ART_FROM := {"cover": ["covers", "3dboxes", "miniatures"], "hero": ["fanart", "screenshots", "titlescreens"],
@@ -383,25 +385,33 @@ static func scan_all(systems: Array, media_root: String, now := -1) -> Dictionar
 	var cache := load_cache()
 	var old: Dictionary = cache.get("systems", {})
 	var fresh := {}
+	var keep := {}
 	var changed := false
 	var total := 0
 	for s in systems:
-		var gl := str(s.get("gamelist", ""))
-		var key := "%s|%s|%s|%s" % [s["id"], s["root"], gl, media_root]
+		var key := _key(s, media_root)
 		s["key"] = key
 		var hit: Variant = old.get(key)
 		var res: Dictionary
 		if hit is Dictionary and still_valid(hit):
-			res = hit
+			res = hit.duplicate()
+			res["games"] = bytes_to_var(hit["games"])
+			if not res["games"] is Array:
+				res["games"] = []
+			keep[key] = hit
 		else:
+			var gl := str(s.get("gamelist", ""))
 			res = scan_system(str(s["id"]), str(s["root"]), s.get("exts", []), gl, media_root, mini(SYSTEM_MAX, TOTAL_MAX - total))
 			res["at"] = t
 			changed = true
+			var packed := res.duplicate()
+			packed["games"] = var_to_bytes(res["games"])
+			packed["count"] = (res["games"] as Array).size()
+			keep[key] = packed
 		total += (res["games"] as Array).size()
 		fresh[key] = res
 		if total >= TOTAL_MAX:
 			break
-	var keep := fresh.duplicate()
 	for key in old:
 		if not keep.has(key) and not DirAccess.dir_exists_absolute(str(key).get_slice("|", 1)):
 			keep[key] = old[key]
@@ -410,12 +420,36 @@ static func scan_all(systems: Array, media_root: String, now := -1) -> Dictionar
 	return fresh
 
 
+static func _key(s: Dictionary, media_root: String) -> String:
+	return "%s|%s|%s|%s" % [s["id"], s["root"], str(s.get("gamelist", "")), media_root]
+
+
+## What scan_all would return, as one hash, when every system's folders are as
+## the cache has them ("" when something changed or isn't cached yet, so it must
+## be read). Reads only the cache's folder times: no game is unpacked.
+static func unchanged_stamp(systems: Array, media_root: String) -> String:
+	var old: Dictionary = load_cache().get("systems", {})
+	var ctx := HashingContext.new()
+	ctx.start(HashingContext.HASH_MD5)
+	var total := 0
+	for s in systems:
+		var key := _key(s, media_root)
+		var hit: Variant = old.get(key)
+		if not (hit is Dictionary and still_valid(hit)):
+			return ""
+		ctx.update(("%s@%d\n" % [key, int(hit["at"])]).to_utf8_buffer())
+		total += int(hit.get("count", 0))
+		if total >= TOTAL_MAX:
+			break
+	return ctx.finish().hex_encode()
+
+
 ## True while every folder and file a cached system was read from still has
 ## the time it had. One changed in the second the scan ran (or later) never
 ## counts as unchanged: times are whole seconds, so it may have changed after
 ## it was read.
 static func still_valid(entry: Dictionary) -> bool:
-	if not (entry.get("dirs") is Dictionary and entry.get("files") is Dictionary and entry.get("games") is Array):
+	if not (entry.get("dirs") is Dictionary and entry.get("files") is Dictionary and entry.get("games") is PackedByteArray):
 		return false
 	var at := int(entry.get("at", 0))
 	for group in [entry["dirs"], entry["files"]]:
