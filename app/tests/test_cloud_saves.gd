@@ -199,7 +199,7 @@ func test_gog_plan_reads_heroic_then_asks_gog() -> void:
 	var lib := CS.gog_plan(entry, tools)
 	eq(lib["locations"], [{"name": "saves", "path": r.path_join("game/saves")}], "Heroic's library cache")
 	_write(heroic.path_join("GamesConfig/1207.json"), JSON.stringify({"1207": {"gogSaves": [{"name": "__default", "location": "/already/resolved"}]}}))
-	eq(CS.gog_plan(entry, tools)["locations"], [{"name": "__default", "path": "/already/resolved"}], "Heroic's resolved folders first")
+	eq(CS.gog_plan(entry, tools)["locations"], [{"name": "__default", "path": "/already/resolved", "heroic": true}], "Heroic's resolved folders first (and marked as Heroic's)")
 	entry["platform"] = "linux"
 	eq(CS.gog_plan(entry, tools)["why"], "linux", "Linux versions have no GOG cloud saves")
 	_write(heroic.path_join("gog_store/saveTimestamps.json"), JSON.stringify({"1207": {"__default": "1762790000.5"}}))
@@ -223,3 +223,32 @@ func test_iso_and_folder_stats() -> void:
 	eq(CS.kind_of({"store": "amazon", "installed": true}), "", "Amazon isn't covered (nile has no save sync)")
 	eq(CS.kind_of({"store": "gog", "installed": false}), "", "not installed")
 	_rm(r)
+
+
+## The cloud's file list from gogdl's debug log, and what an upload would delete (final
+## review, blocker 1).
+func test_gog_listing_and_what_an_upload_would_delete() -> void:
+	var out := "[SAVES] INFO: Local files: 1\n[SAVES] INFO: Files in cloud: 4\n" \
+		+ "[SAVES] DEBUG: Files: [{'name': 'saves/slot1.sav', 'hash': 'aa', 'last_modified': '2026-11-01T10:00:00+00:00'}, " \
+		+ "{'name': 'saves/sub/slot2.sav', 'hash': 'bb', 'last_modified': '2026-11-01T10:00:00+00:00'}, " \
+		+ "{'name': 'saves/gone.sav', 'hash': 'aadd86936a80ee8a369579c3926f1b3c', 'last_modified': '2026-11-01T10:00:00+00:00'}, " \
+		+ "{'name': \"saves/it's.sav\", 'hash': 'cc', 'last_modified': '2026-11-01T10:00:00+00:00'}, " \
+		+ "{'name': 'other/x.sav', 'hash': 'dd', 'last_modified': '2026-11-01T10:00:00+00:00'}]\n[SAVES] INFO: Nothing to do\n1762800050.0"
+	var r := CS.parse_gogdl(out, 0)
+	eq(r["action"], "none", "a look does nothing")
+	eq(r["cloud_count"], 4, "files in the cloud")
+	eq((r["cloud_files"] as Array).map(func(f): return f["name"]), ["saves/slot1.sav", "saves/sub/slot2.sav", "saves/gone.sav", "saves/it's.sav", "other/x.sav"], "the list")
+	var dir := ProjectSettings.globalize_path(BASE).path_join("listing")
+	_write(dir.path_join("slot1.sav"), "x")
+	eq(CS.gog_cloud_only(r["cloud_files"], "saves", dir), ["sub/slot2.sav", "it's.sav"], "cloud files the folder lacks (deleted ones and other locations left out)")
+	_write(dir.path_join("sub/slot2.sav"), "x")
+	_write(dir.path_join("it's.sav"), "x")
+	eq(CS.gog_cloud_only(r["cloud_files"], "saves", dir), [], "nothing would be deleted")
+	eq(CS.gog_cloud_only(null, "saves", dir), null, "no list: unknown, never 'nothing'")
+	eq(CS.parse_gogdl("[SAVES] INFO: Files in cloud: 2\n1762800050.0", 0)["cloud_files"], null, "a log without the list")
+	eq(CS.parse_gog_listing("[{'name': 'a\\\\b', 'hash': 'x'}]"), null, "a name with escapes isn't guessed at")
+	eq(CS.parse_gog_listing("[]"), [], "an empty cloud")
+	ok(CS.gogdl_args("/a", "/p", "1", "saves", "123.4", "look").has(CS.GOG_LOOK_TS), "the look passes a time later than any file")
+	ok(not CS.gogdl_args("/a", "/p", "1", "saves", "123.4", "look").has("123.4"), "and not the real one")
+	eq(CS.parse_gogdl("[SAVES] WARNING: Refused to upload files, newer files in the cloud\n123.4", 0)["refused"], "upload", "refused to upload")
+	eq(CS.parse_gogdl("[SAVES] WARNING: Refused to download files, newer files locally\n123.4", 0)["refused"], "download", "refused to download")

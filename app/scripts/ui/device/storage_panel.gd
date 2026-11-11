@@ -215,6 +215,11 @@ func _clean_card() -> void:
 		b.pressed.connect(start_clean, CONNECT_DEFERRED)
 		c[1].add_child(b)
 		clean_button = b
+	var away: Array = cl.get("away", []) if cl.get("away") is Array else []
+	if bool(cl.get("ready", false)) and missing.is_empty() and not away.is_empty():
+		var kept := DKit.quiet(TX.CLEAN_AWAY % ", ".join(PackedStringArray(away)))
+		kept.name = "CleanAway"
+		c[1].add_child(kept)
 	var why := DKit.quiet(TX.CLEAN_LINE)
 	why.name = "CleanWhy"
 	c[1].add_child(why)
