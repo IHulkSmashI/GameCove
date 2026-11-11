@@ -124,7 +124,7 @@ static func with_timeout(base: Array, args: Array, secs := TIMEOUT_S) -> Array[S
 ## legendary's arguments for one sync step. step: check | download | upload | force_download | force_upload.
 ## save_path: the folder legendary should keep for the app from now on ("" = the one it has).
 static func legendary_args(app: String, step: String, save_path := "") -> Array:
-	var a: Array = ["-y", "sync-saves", app, "--accept-path"]
+	var a: Array = ["-y", "sync-saves", "--accept-path"]
 	if save_path != "":
 		a.append_array(["--save-path", save_path])
 	match step:
@@ -133,6 +133,8 @@ static func legendary_args(app: String, step: String, save_path := "") -> Array:
 		"upload": a.append("--skip-download")
 		"force_download": a.append("--force-download")
 		"force_upload": a.append("--force-upload")
+	# the app name goes after `--` so an id that starts with a dash is never read as an option
+	a.append_array(["--", app])
 	return a
 
 
@@ -145,7 +147,7 @@ const GOG_LOOK_TS := "9999999999"
 ## force_download | force_upload | fetch (into an empty folder: everything in the cloud) |
 ## look (changes nothing when both sides have files: lists the cloud).
 static func gogdl_args(auth: String, path: String, id: String, name: String, ts: String, step: String) -> Array:
-	var a: Array = ["--auth-config-path", auth, "save-sync", path, id, "--os", "windows",
+	var a: Array = ["--auth-config-path", auth, "save-sync", "--os", "windows",
 		"--ts", GOG_LOOK_TS if step == "look" else (ts if ts != "" else "0"), "--name", name]
 	match step:
 		"pre": a.append("--skip-upload")
@@ -154,6 +156,8 @@ static func gogdl_args(auth: String, path: String, id: String, name: String, ts:
 		"force_upload": a.append("--force-upload")
 	# the cloud's file list with their times (for the conflict prompt) is only logged at debug level
 	a.append("--debug")
+	# path and id go after `--` so neither can be read as an option
+	a.append_array(["--", path, id])
 	return a
 
 

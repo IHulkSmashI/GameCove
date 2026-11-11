@@ -76,11 +76,12 @@ func test_legendary_output_is_read() -> void:
 
 
 func test_legendary_arguments() -> void:
-	eq(CS.legendary_args("Min", "check"), ["-y", "sync-saves", "Min", "--accept-path", "--skip-upload", "--skip-download"], "look only")
-	eq(CS.legendary_args("Min", "download"), ["-y", "sync-saves", "Min", "--accept-path", "--skip-upload"], "download only")
-	eq(CS.legendary_args("Min", "upload")[-1], "--skip-download", "upload only")
-	eq(CS.legendary_args("Min", "force_download")[-1], "--force-download", "forced download")
-	eq(CS.legendary_args("Min", "force_upload")[-1], "--force-upload", "forced upload")
+	eq(CS.legendary_args("Min", "check"), ["-y", "sync-saves", "--accept-path", "--skip-upload", "--skip-download", "--", "Min"], "look only")
+	eq(CS.legendary_args("Min", "download"), ["-y", "sync-saves", "--accept-path", "--skip-upload", "--", "Min"], "download only")
+	eq(CS.legendary_args("Min", "upload")[-3], "--skip-download", "upload only")
+	eq(CS.legendary_args("Min", "force_download")[-3], "--force-download", "forced download")
+	eq(CS.legendary_args("Min", "force_upload")[-3], "--force-upload", "forced upload")
+	eq(CS.legendary_args("-x", "check").slice(-2), ["--", "-x"], "an id that looks like an option comes after --")
 	eq(CS.with_timeout(["env", "A=b", "/bin/legendary"], ["-y"]), ["timeout", "-k", "5", str(CS.TIMEOUT_S), "env", "A=b", "/bin/legendary", "-y"] as Array[String], "under timeout")
 
 
@@ -152,8 +153,8 @@ func test_gogdl_output_is_read() -> void:
 
 func test_gogdl_arguments() -> void:
 	var a := CS.gogdl_args("/h/auth.json", "/pfx/saves", "1207", "__default", "17.5", "pre")
-	eq(a, ["--auth-config-path", "/h/auth.json", "save-sync", "/pfx/saves", "1207", "--os", "windows", "--ts", "17.5",
-		"--name", "__default", "--skip-upload", "--debug"], "download before play")
+	eq(a, ["--auth-config-path", "/h/auth.json", "save-sync", "--os", "windows", "--ts", "17.5",
+		"--name", "__default", "--skip-upload", "--debug", "--", "/pfx/saves", "1207"], "download before play")
 	ok("--skip-download" in CS.gogdl_args("a", "p", "1", "n", "", "post"), "upload after play")
 	ok("0" in CS.gogdl_args("a", "p", "1", "n", "", "post"), "never synced: --ts 0")
 	ok("--force-upload" in CS.gogdl_args("a", "p", "1", "n", "1", "force_upload"), "forced upload")

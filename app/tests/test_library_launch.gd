@@ -21,7 +21,7 @@ func test_epic_legendary_with_umu() -> void:
 	eq(Epic.launch_command(_epic(), TOOLS, {"PROTON_ENABLE_WAYLAND": "1"}),
 		["env", "GAMEID=umu-504230", "LEGENDARY_CONFIG_PATH=/h/.config/legendary", "PROTON_ENABLE_WAYLAND=1",
 		"STORE=egs", "WINEPREFIX=/pfx/celeste",
-		"/usr/bin/legendary", "launch", "Quail", "--no-wine", "--wrapper", "/usr/bin/umu-run"] as Array[String],
+		"/usr/bin/legendary", "launch", "--no-wine", "--wrapper", "/usr/bin/umu-run", "--", "Quail"] as Array[String],
 		"legendary launch --no-wine --wrapper umu-run")
 
 
@@ -60,7 +60,7 @@ func test_amazon_nile_with_umu() -> void:
 		"heroic_flatpak": false, "config_dir": "/h/.config/heroic/nile_config/nile", "prefix": "/pfx/fo3", "proton": true}
 	eq(Amazon.launch_command(e, TOOLS),
 		["env", "GAMEID=umu-default", "NILE_CONFIG_PATH=/h/.config/heroic/nile_config", "STORE=amazon", "WINEPREFIX=/pfx/fo3",
-		"/usr/bin/nile", "launch", "amzn1.adg.product.aaaa-1111", "--no-wine", "--wrapper", "/usr/bin/umu-run"] as Array[String],
+		"/usr/bin/nile", "launch", "--no-wine", "--wrapper", "/usr/bin/umu-run", "--", "amzn1.adg.product.aaaa-1111"] as Array[String],
 		"nile launch --no-wine --wrapper umu-run")
 	var no_nile := TOOLS.duplicate()
 	no_nile["nile"] = ""
