@@ -61,6 +61,10 @@ var tools_lookup: Callable = func() -> Dictionary: return {}
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 ## func() -> bool: a game runs now (restores wait).
 var game_running: Callable = func() -> bool: return false
+## func(path) -> "<device>:<inode>:<birth>" of a folder, "" when it isn't there (tests swap it). A
+## save folder's anchor (CloudSaves.identity_anchor) with another identity than at the last
+## sync is a new folder, whatever is in it now.
+var folder_id: Callable = func(path: String) -> String: return stat_id(path)
 
 var backups: RefCounted
 var _busy := {}       # key -> "pre" | "post" | "now" | "resolve" | "restore" (main thread)
@@ -199,6 +203,8 @@ func backup_list(key: String) -> Array:
 ## user must pick first. Calls done right away when there's nothing to do.
 func before_launch(game: Dictionary, done: Callable) -> void:
 	var key := str(game.get("key", ""))
+	if applies(game):
+		folder_guard(key)   # also with sync off or signed out: what's seen now is kept
 	if not applies(game) or not enabled(key) or not allowed():
 		done.call({"go": true})
 		return
@@ -209,12 +215,16 @@ func before_launch(game: Dictionary, done: Callable) -> void:
 			done.call({"go": true}))
 
 
-## After the game ended: uploads what it saved.
-func after_exit(game: Dictionary) -> void:
+## After the game ended: uploads what it saved. True when an upload job was queued (its
+## `finished` with phase "post" follows).
+func after_exit(game: Dictionary) -> bool:
 	var key := str(game.get("key", ""))
+	if applies(game):
+		folder_guard(key)
 	if not applies(game) or not enabled(key) or not allowed():
-		return
+		return false
 	_queue(game, "post", func(e, t): return _sync(key, e, t, "post"), Callable())
+	return true
 
 
 ## Both ways now (never while that game runs). done(status).
@@ -313,6 +323,14 @@ func _cfg_value(key: String, name: String, fallback: Variant) -> Variant:
 ## Writes the outcome. last_sync moves only when both sides agree after this step.
 func _set_status(key: String, state: String, detail := "", extra := {}) -> Dictionary:
 	var now: int = clock.call()
+	var anchors := {}
+	if bool(extra.get("synced", false)):
+		var folders: Array = []
+		if str(extra.get("epic_path", "")) != "":
+			folders.append(str(extra["epic_path"]))
+		if extra.get("gog_paths") is Dictionary:
+			folders.append_array(extra["gog_paths"].values())
+		anchors = _anchors_of(folders)
 	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
 		var sec := _sec(key)
 		c.set_value(sec, "state", state)
@@ -331,7 +349,9 @@ func _set_status(key: String, state: String, detail := "", extra := {}) -> Dicti
 		if extra.has("gog_paths"):
 			c.set_value(sec, "gog_paths", extra["gog_paths"])
 		if bool(extra.get("synced", false)) and str(extra.get("epic_path", "")) != "":
-			c.set_value(sec, "epic_path", str(extra["epic_path"])))
+			c.set_value(sec, "epic_path", str(extra["epic_path"]))
+		if bool(extra.get("synced", false)):
+			c.set_value(sec, "anchors", anchors))
 	return {"state": state, "conflict": state == "conflict"}
 
 
@@ -343,7 +363,7 @@ func _drop_sync(key: String, create: bool) -> bool:
 		var sec := _sec(key)
 		if not c.has_section(sec) and not create:
 			return false
-		for name in ["gog_ts", "gog_paths", "epic_path"]:
+		for name in ["gog_ts", "gog_paths", "epic_path", "anchors"]:
 			if c.has_section_key(sec, name):
 				c.erase_section_key(sec, name)
 		c.set_value(sec, "last_sync", 0)
@@ -353,7 +373,106 @@ func _drop_sync(key: String, create: bool) -> bool:
 	return wrote[0]
 
 
+## The local half of blocker 1, on every path that may upload and at every launch, whether
+## sync is on, allowed or signed in or not: a sync time only stands for the folder it was
+## made with. A folder the last sync knew that is now empty or gone, or whose anchor (the
+## prefix's drive_c) isn't the same folder any more (a deleted and re-made prefix, even one
+## the game has written a fresh save into since, played outside GameCove), loses its sync
+## time at once, so the next sync sees both sides changed and asks: a blank save never goes
+## up over the cloud's on the strength of an old time. Nothing touches the network here.
+## True when something was dropped. Main or worker thread.
+func folder_guard(key: String) -> bool:
+	var cfg := SettingsFile.load_cfg(cfg_path)
+	var sec := _sec(key)
+	if not cfg.has_section(sec):
+		return false
+	var anchors: Variant = cfg.get_value(sec, "anchors", {})
+	var known: Dictionary = anchors if anchors is Dictionary else {}
+	var folders := {}   # path -> GOG location name, "" for Epic's one folder
+	var epic := str(cfg.get_value(sec, "epic_path", ""))
+	if epic != "" and int(cfg.get_value(sec, "last_sync", 0)) > 0:
+		folders[epic] = ""
+	var ts: Variant = cfg.get_value(sec, "gog_ts", {})
+	var paths: Variant = cfg.get_value(sec, "gog_paths", {})
+	if ts is Dictionary and paths is Dictionary:
+		for name in paths:
+			if str(ts.get(name, "0")) != "0":
+				folders[str(paths[name])] = str(name)
+	var stale: Array = []
+	for path in folders:
+		if not CloudSaves.has_files(path):
+			stale.append(path)
+		elif known.has(path) and str(known[path]) != "" and str(folder_id.call(CloudSaves.identity_anchor(path))) != str(known[path]):
+			stale.append(path)
+	if stale.is_empty():
+		return false
+	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
+		var gts: Variant = c.get_value(sec, "gog_ts", {})
+		var new_ts: Dictionary = gts.duplicate() if gts is Dictionary else {}
+		var kept: Variant = c.get_value(sec, "anchors", {})
+		var new_anchors: Dictionary = kept.duplicate() if kept is Dictionary else {}
+		for path in stale:
+			if str(folders[path]) != "":
+				new_ts[folders[path]] = "0"
+			new_anchors.erase(path)
+		if c.has_section_key(sec, "gog_ts"):
+			c.set_value(sec, "gog_ts", new_ts)
+		c.set_value(sec, "anchors", new_anchors)
+		c.set_value(sec, "last_sync", 0)
+		c.set_value(sec, "own", true))
+	if OS.get_thread_caller_id() == OS.get_main_thread_id():
+		status_changed.emit(key)
+	else:
+		call_deferred("_emit_status", key)
+	return true
+
+
+func _emit_status(key: String) -> void:
+	status_changed.emit(key)
+
+
+## {folder: identity of its anchor} for the folders that are there.
+func _anchors_of(folders: Array) -> Dictionary:
+	var out := {}
+	for f in folders:
+		var id := str(folder_id.call(CloudSaves.identity_anchor(str(f))))
+		if id != "":
+			out[str(f)] = id
+	return out
+
+
+## A folder we put back ourselves (a backup restored, the save folder swapped in) keeps
+## counting as the folder its sync time is for.
+func _refresh_anchors(key: String, folders: Array) -> void:
+	var cfg := SettingsFile.load_cfg(cfg_path)
+	var kept: Variant = cfg.get_value(_sec(key), "anchors", {})
+	if not kept is Dictionary or kept.is_empty():
+		return
+	var mine: Array = folders.filter(func(f): return kept.has(str(f)))
+	if mine.is_empty():
+		return
+	var fresh := _anchors_of(mine)
+	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
+		var cur: Variant = c.get_value(_sec(key), "anchors", {})
+		var d: Dictionary = cur.duplicate() if cur is Dictionary else {}
+		for f in fresh:
+			d[f] = fresh[f]
+		c.set_value(_sec(key), "anchors", d))
+
+
+## `stat`'s "<device>:<inode>:<birth>" for a folder ("" when it isn't there or stat fails).
+## The birth time (0 where the file system doesn't keep one) is there because a deleted
+## folder's inode number is often handed straight to the next new one.
+static func stat_id(path: String) -> String:
+	if path == "" or not DirAccess.dir_exists_absolute(path):
+		return ""
+	var r := ExecSafe.run("stat", PackedStringArray(["-c", "%d:%i:%W", "--", path]), false)
+	var out := str(r.get("out", "")).strip_edges()
+	return out if int(r.get("code", -1)) == 0 and out.contains(":") else ""
+
+
 func _sync(key: String, entry: Dictionary, tools: Dictionary, mode: String) -> Dictionary:
+	folder_guard(key)
 	match CloudSaves.kind_of(entry):
 		"epic": return _sync_epic(key, entry, tools, mode)
 		"gog": return _sync_gog(key, entry, tools, mode)
@@ -477,6 +596,9 @@ func _put_back(key: String, b: Dictionary, empty: Array) -> String:
 	if str(b.get("id", "")) != "" and str(b.get("skipped", "")) != "empty":
 		var r: Dictionary = backups.restore(key, str(b["id"]))
 		why = "" if r["ok"] else " (" + str(r["why"]) + ")"
+		if r["ok"]:
+			var put: Array = backups.find(key, str(b["id"])).get("parts", [])
+			_refresh_anchors(key, put.map(func(p): return str(p.get("path", ""))))
 	if why == "":
 		_clear_mark(key)
 	return why
@@ -813,6 +935,7 @@ func _restore(key: String, title: String, id: String) -> Dictionary:
 		return {"ok": false, "why": str(before["why"])}
 	var r: Dictionary = backups.restore(key, id)
 	if r["ok"]:
+		_refresh_anchors(key, parts.map(func(p): return str(p["path"])))
 		var now: int = clock.call()
 		SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(_sec(key), "restored_at", now))
 		_set_status(key, "restored", str(b.get("time", 0)))

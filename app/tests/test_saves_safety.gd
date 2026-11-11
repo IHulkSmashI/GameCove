@@ -319,6 +319,130 @@ func test_gog_no_upload_without_the_cloud_copy() -> void:
 	_done(w)
 
 
+# ---- blocker 1 everywhere: the folder check doesn't need a sync to run (review at ff76ca4) ---
+
+## A world whose folder identities are ours to change: w["gen"][path] bumps when the test
+## "re-makes" a folder (a real stat can hand a deleted folder's inode to the next one).
+func _ided(w: Dictionary) -> void:
+	w["gen"] = {}
+	w["s"].folder_id = func(path: String) -> String:
+		return "" if not DirAccess.dir_exists_absolute(path) else path + "#" + str(w["gen"].get(path, 0))
+
+
+## GOG, sync switched off for the first launch after the prefix was lost: the launch sees the
+## empty folder and drops the sync time, so the blank save that game makes is a conflict
+## when sync is back on, never an upload that deletes the cloud's slots.
+func test_gog_lost_prefix_with_sync_off_never_uploads_the_blank_save() -> void:
+	var w := _world("gog_lost_sync_off")
+	var cloud: Object = w["gog_cloud"]
+	for slot in ["slot1.sav", "slot2.sav"]:
+		Fakes.put(w["gsaves"].path_join(slot), "progress " + slot, T0)
+	w["s"].sync_now(w["gog"])
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav"], "synced")
+	_rm(w["prefix"])
+	w["s"].set_enabled("gog:1207", false)
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "sync off: the game starts at once")
+	eq(str(Dictionary(_cfg(w, "gog:1207", "gog_ts", {})).get("saves", "0")), "0", "but the empty folder's sync time is gone")
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["gsaves"].path_join("settings.ini"), "defaults", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	w["s"].set_enabled("gog:1207", true)
+	cloud.did.clear()
+	w["s"].sync_now(w["gog"])
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav"], "both slots are still in the cloud")
+	ok(cloud.did.filter(func(x): return str(x).begins_with("delete cloud") or str(x).begins_with("upload")).is_empty(), "nothing uploaded or deleted (%s)" % str(cloud.did))
+	eq(w["s"].status(w["gog"])["state"], "conflict", "we ask")
+	_done(w)
+
+
+## Same with Epic and the user signed out of Epic at that launch.
+func test_epic_lost_prefix_while_signed_out_never_uploads_the_blank_save() -> void:
+	var w := _world("epic_lost_signed_out")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "40 hours", T0)
+	w["s"].sync_now(w["epic"])
+	eq(cloud.saves.size(), 1, "synced")
+	_rm(w["prefix"])
+	var user_json: String = w["epic"]["config_dir"].path_join("user.json")
+	DirAccess.remove_absolute(user_json)
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	eq(got, [{"go": true}], "signed out: the game starts")
+	eq(int(_cfg(w, "epic:Min", "last_sync", -1)), 0, "the sync time of the folder that's gone is dropped")
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["esaves"].path_join("world.sav"), "new game", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	_json(user_json, {})
+	w["s"].sync_now(w["epic"])
+	eq(cloud.saves.size(), 1, "nothing was uploaded")
+	eq(cloud.saves[-1]["files"]["world.sav"], "40 hours", "the cloud's newest save is the real one")
+	eq(w["s"].status(w["epic"])["state"], "conflict", "we ask")
+	_done(w)
+
+
+## A prefix lost and re-made while GameCove never looked (the game played from Heroic): the
+## folder is full again by the time we see it, but its prefix isn't the one we synced with.
+func test_remade_prefix_seen_only_after_the_fact_is_a_conflict() -> void:
+	var w := _world("remade_unseen")
+	_ided(w)
+	var cloud: Object = w["gog_cloud"]
+	for slot in ["slot1.sav", "slot2.sav"]:
+		Fakes.put(w["gsaves"].path_join(slot), "progress " + slot, T0)
+	w["s"].sync_now(w["gog"])
+	Fakes.put(w["esaves"].path_join("world.sav"), "40 hours", T0)
+	w["s"].sync_now(w["epic"])
+	ok(Dictionary(_cfg(w, "gog:1207", "anchors", {})).has(w["gsaves"]), "the folder's prefix is noted at the sync")
+	_rm(w["prefix"])
+	var drive: String = w["prefix"].path_join("drive_c")
+	w["gen"][drive] = 1
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["gsaves"].path_join("settings.ini"), "defaults", int(w["now"][0]))
+	Fakes.put(w["esaves"].path_join("world.sav"), "new game", int(w["now"][0]))
+	cloud.did.clear()
+	w["s"].sync_now(w["gog"])
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav"], "GOG: the slots stay")
+	ok(cloud.did.filter(func(x): return str(x).begins_with("upload")).is_empty(), "GOG: nothing uploaded")
+	eq(w["s"].status(w["gog"])["state"], "conflict", "GOG: we ask")
+	w["s"].sync_now(w["epic"])
+	eq(w["epic_cloud"].saves.size(), 1, "Epic: nothing uploaded")
+	eq(w["s"].status(w["epic"])["state"], "conflict", "Epic: we ask")
+	_done(w)
+
+
+## Our own put-back of a backup (a download that failed) isn't a new folder.
+func test_our_own_restore_keeps_the_folder_identity() -> void:
+	var w := _world("own_restore_identity")
+	var cloud: Object = w["gog_cloud"]
+	var folder: String = w["root"].path_join("gogsaves")   # outside any prefix: its own anchor
+	_json(w["gog"]["heroic_root"].path_join("GamesConfig/1207.json"), {"1207": {"gogSaves": [{"name": "saves", "location": folder}]}})
+	Fakes.put(folder.path_join("slot1.sav"), "progress", T0)
+	w["s"].sync_now(w["gog"])
+	var before := str(Dictionary(_cfg(w, "gog:1207", "anchors", {})).get(folder, ""))
+	ok(before != "", "noted (a real stat: %s)" % before)
+	Fakes.put(folder.path_join("slot2.sav"), "x", T0)
+	var b: Dictionary = w["s"].backups.backup("gog:1207", "The Witcher", "before_download", [{"name": "saves", "path": folder}], true)
+	w["s"]._put_back("gog:1207", b, [])
+	ok(not w["s"].folder_guard("gog:1207"), "the swapped-in folder still counts as ours")
+	ok(str(Dictionary(_cfg(w, "gog:1207", "gog_ts", {})).get("saves", "0")) != "0", "the sync time stays")
+	_done(w)
+
+
+func test_stat_id_reads_a_folder() -> void:
+	var dir := ProjectSettings.globalize_path(BASE).path_join("stat_id")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var id := Service.stat_id(dir)
+	eq(id.split(":").size(), 3, "device, inode and birth (%s)" % id)
+	eq(Service.stat_id(dir.path_join("missing")), "", "nothing for a folder that isn't there")
+	eq(CloudSaves.identity_anchor("/p/pfx/drive_c/users/steamuser/Documents/W"), "/p/pfx/drive_c", "a prefix folder: its drive_c")
+	eq(CloudSaves.identity_anchor("/games/W/saves"), "/games/W/saves", "elsewhere: the folder")
+	_rm(dir)
+
+
 # ---- blocker 1, Epic: a blank save never becomes the newest cloud save ------------------------
 
 ## Synced, prefix deleted, the launch can't reach Epic, the game writes a blank save. The

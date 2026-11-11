@@ -619,6 +619,32 @@ static func dir_stats(path: String) -> Dictionary:
 	return r
 
 
+## True when there is at least one file under `path` (stops at the first one: cheap enough
+## for the main thread, unlike dir_stats on a big folder).
+static func has_files(path: String, depth := 0) -> bool:
+	var d := DirAccess.open(path) if path != "" and depth <= 24 else null
+	if d == null:
+		return false
+	d.include_hidden = true
+	if not d.get_files().is_empty():
+		return true
+	for sub in d.get_directories():
+		if has_files(path.path_join(sub), depth + 1):
+			return true
+	return false
+
+
+## The folder whose identity stands for a save folder: the Wine prefix's drive_c when the
+## folder is inside one (a deleted and re-made prefix gets a new one, while games are free
+## to re-make their own save folder), else the folder itself.
+static func identity_anchor(path: String) -> String:
+	var p := path.simplify_path()
+	var at := p.find("/drive_c/")
+	if at > 0:
+		return p.substr(0, at + "/drive_c".length())
+	return p
+
+
 ## Every file under `path`, relative to it with "/" between folders.
 static func rel_files(path: String, base := "", depth := 0) -> Array:
 	var out: Array = []

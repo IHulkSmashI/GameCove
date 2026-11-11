@@ -344,6 +344,14 @@ What keeps a save from being lost (final review; each has a test against ports o
   for (`gog_paths`), and the whole game's when there is no folder to sync yet; Heroic's time is only a fallback for a
   folder Heroic itself synced. Epic: `last_sync` is dropped the same way (`epic_path`). Uninstalling forgets both. With
   no sync time both sides count as changed and the user chooses.
+- **That check runs without a sync too** (`folder_guard`). Every launch and every game's end of an Epic or GOG game
+  looks at the folders the last sync knew, whether cloud saves are on, allowed or signed in or not, and so does every
+  sync before it does anything else. A folder that is empty or gone loses its sync time right then, so a blank save the
+  game makes at a launch with sync off or signed out still asks later instead of going up. Each sync also notes the
+  identity (`stat` device, inode and birth time; `anchors` in `saves.cfg`) of the folder's prefix (`drive_c`), or of
+  the folder itself outside a prefix: a prefix deleted and made again while GameCove never looked (the game played from
+  Heroic) has another identity, so its fresh save asks too. A backup we put back ourselves keeps its identity. Purely
+  local: nothing goes over the network.
 - **A copy of the cloud before an upload may delete from it.** Before a run that may upload, gogdl is run once with a
   `--ts` in the far future: nothing counts as changed, so it only lists the cloud (its debug log). If the cloud holds
   files the folder lacks, or the list can't be read, the cloud is fetched and kept as a backup first; without that
