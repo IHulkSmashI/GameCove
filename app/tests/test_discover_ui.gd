@@ -385,6 +385,9 @@ func test_offline_and_empty_states() -> void:
 	ok(home.shelves.is_empty(), "nothing to shelve")
 	ok(_texts(home).contains(T.OFFLINE_TITLE), "offline card")
 	ok(home.default_focus() is Button, "focus lands on Try again")
+	# not the Spotlight's hidden button: switching to Discover left nothing focused
+	ok(home.empty_card != null and home.empty_card.is_ancestor_of(home.default_focus()),
+		"the Try again on the card, not a hidden Spotlight button (%s)" % home.default_focus().name)
 	ok(r.offline_pill.visible, "offline pill in the header")
 	ok(_texts(r.sections["deals"]).contains(T.OFFLINE_TITLE), "deals say offline too")
 	var wish: Control = r.sections["wishlist"]

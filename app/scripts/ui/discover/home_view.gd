@@ -483,9 +483,25 @@ func set_top_target(c: Control) -> void:
 
 
 func default_focus() -> Control:
-	if _spot != null and _spot.visible:
+	# the Spotlight's button only when it shows: while deals load (or offline)
+	# its buttons are hidden and focus goes to the card's Try again
+	if _spot != null and _shown(primary):
 		return primary
-	return cards_focus[0] if not cards_focus.is_empty() else null
+	for c in cards_focus:
+		if _shown(c):
+			return c
+	return null
+
+
+## `c` and everything between it and this view are shown (the screen itself
+## may be off while it slides in).
+func _shown(c: Control) -> bool:
+	var n: Node = c
+	while n != null and is_instance_valid(n) and n != self:
+		if n is CanvasItem and not (n as CanvasItem).visible:
+			return false
+		n = n.get_parent()
+	return n == self
 
 
 func hints(f: Control) -> Array:
