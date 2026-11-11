@@ -29,11 +29,12 @@ const DEFAULTS := {
 }
 
 ## Decode support by GPU family when vainfo isn't there to ask (VA-API on these
-## APUs: Van Gogh / Vega have no AV1 decode; RDNA3+, Intel Xe-LPG and newer do).
+## APUs: Van Gogh / Vega have no AV1 decode; RDNA3+, Intel Xe-LP (Alder Lake) and newer do).
 const DECODE_BY_FAMILY := {
 	"amd-vega": {"h264": true, "hevc": true, "hevc10": true, "av1": false},
 	"amd-rdna2": {"h264": true, "hevc": true, "hevc10": true, "av1": false},
 	"amd-rdna3": {"h264": true, "hevc": true, "hevc10": true, "av1": true},
+	"intel-xe-lp": {"h264": true, "hevc": true, "hevc10": true, "av1": true},
 	"intel-xe-lpg": {"h264": true, "hevc": true, "hevc10": true, "av1": true},
 	"intel-xe2": {"h264": true, "hevc": true, "hevc10": true, "av1": true},
 	"intel-xe3": {"h264": true, "hevc": true, "hevc10": true, "av1": true},

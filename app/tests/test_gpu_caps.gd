@@ -152,3 +152,19 @@ func _rm(dir: String) -> void:
 	for f in DirAccess.get_files_at(dir):
 		DirAccess.remove_absolute(dir.path_join(f))
 	DirAccess.remove_absolute(dir)
+
+
+func test_arrow_lake_h_has_xmx_and_the_intel_air_plus_is_intel() -> void:
+	# review low: the Arrow Lake CPU row said no XMX (Arrow Lake-H's Arc 130T/140T has it, as the OneXPlayer G1 row
+	# and the docs say), and the AYANEO AIR Plus board with an Intel i3-1215U stayed an AMD RDNA 2 handheld
+	var doc := DeviceScript.load_doc()
+	var cpus: Array = doc["cpus"]
+	var h := DeviceScript.cpu_entry(cpus, "Intel(R) Core(TM) Ultra 7 255H")
+	ok(bool(h.get("xmx", false)) and GpuCaps.gpu(h)["tier"] == "intel_xmx", "Arrow Lake-H: XMX")
+	var u := DeviceScript.cpu_entry(cpus, "Intel(R) Core(TM) Ultra 7 255U")
+	ok(not bool(u.get("xmx", true)) and GpuCaps.gpu(u)["tier"] == "intel", "Arrow Lake-U: no XMX")
+	var dmi := {"sys_vendor": "AYANEO", "product_name": "AIR Plus", "board_name": "AB05-Intel", "board_vendor": "AYANEO", "product_family": ""}
+	var row := DeviceScript.resolve(doc, dmi, "12th Gen Intel(R) Core(TM) i3-1215U", {"vendor": "intel", "driver": "i915", "pci_id": "8086:46B3", "card": "card0"}, true)
+	eq(str(row.get("cpu_vendor", "")), "intel", "the Intel AIR Plus is Intel")
+	ok(str(row.get("gpu_family", "")).begins_with("intel"), "with Intel graphics: " + str(row.get("gpu_family", "")))
+	eq(GpuCaps.gpu(row)["vendor"], "intel", "and the helper is told Intel")

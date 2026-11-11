@@ -1083,9 +1083,37 @@
     "vendor": "intel",
     "family": "intel-xe-lpg",
     "arch": "Xe-LPG",
+    "xmx": true,
+    "chip": "Intel Arrow Lake-H",
+    "gpu": "Intel Arrow Lake-H"
+   },
+   "tier": "intel_xmx",
+   "upscalers": [
+    "own",
+    "xess",
+    "fsr4_xmx",
+    "fsr4_xmx_lite"
+   ],
+   "frame_gens": [
+    0,
+    2,
+    3,
+    4
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "cpus:*Ultra*2??U*",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe-lpg",
+    "arch": "Xe-LPG",
     "xmx": false,
-    "chip": "Intel Arrow Lake",
-    "gpu": "Intel Arrow Lake"
+    "chip": "Intel Arrow Lake-U",
+    "gpu": "Intel Arrow Lake-U"
    },
    "tier": "intel",
    "upscalers": [
@@ -1110,6 +1138,30 @@
     "xmx": false,
     "chip": "Intel Meteor Lake",
     "gpu": "Intel Meteor Lake"
+   },
+   "tier": "intel",
+   "upscalers": [
+    "own",
+    "xess"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "cpus:*i?-12??U*",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe-lp",
+    "arch": "Xe-LP",
+    "xmx": false,
+    "chip": "Intel Alder Lake",
+    "gpu": "Intel Alder Lake"
    },
    "tier": "intel",
    "upscalers": [

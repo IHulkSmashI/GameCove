@@ -366,8 +366,9 @@ static func match_device(devices: Array, board: String, product: String) -> Dict
 
 
 const SUPPORT_LEVELS := ["full", "partial", "beta", "generic"]
-const GPU_FAMILIES := ["", "amd-vega", "amd-rdna2", "amd-rdna3", "intel-xe-lpg", "intel-xe2", "intel-xe3"]
-const GPU_ARCHS := ["unknown", "Vega", "RDNA2", "RDNA3", "RDNA3.5", "Xe-LPG", "Xe2", "Xe3"]
+## intel-xe-lp: Alder Lake's UHD / Iris Xe (the Intel AYANEO AIR Plus); no XMX, launch settings left to the game
+const GPU_FAMILIES := ["", "amd-vega", "amd-rdna2", "amd-rdna3", "intel-xe-lp", "intel-xe-lpg", "intel-xe2", "intel-xe3"]
+const GPU_ARCHS := ["unknown", "Vega", "RDNA2", "RDNA3", "RDNA3.5", "Xe-LP", "Xe-LPG", "Xe2", "Xe3"]
 const GYRO_STATES := ["yes", "fix", "no", "none", "unknown"]
 ## devices.json rgb.via: who drives the lights (texts_device.gd LED_BY names each).
 const RGB_VIA := ["inputplumber", "hhd", "ayaneo-ec", "oxp-ec", "kernel", "steam"]

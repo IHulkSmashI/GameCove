@@ -78,7 +78,7 @@ func profile() -> Dictionary:
 static func defaults_for(device: Dictionary) -> Dictionary:
 	var d := {"goal": "balanced", "fps_limit": 0, "upscaler": "auto", "frame_gen": false, "low_latency": true}
 	# Older, weaker chips: battery first.
-	if device.get("gpu_family", "") in ["amd-rdna2", "intel-xe-lpg"]:
+	if device.get("gpu_family", "") in ["amd-rdna2", "intel-xe-lp", "intel-xe-lpg"]:
 		d["goal"] = "battery"
 	var custom: Variant = device.get("launch_defaults", {})
 	if custom is Dictionary:
