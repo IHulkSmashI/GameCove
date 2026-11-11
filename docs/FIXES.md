@@ -120,6 +120,8 @@ fix's own record and marker):
 
 1. **Withdrawn** in the definitions, or **the system does it now** (`obsolete_when` is yes): the
    fix's own `remove` runs. It deletes only GameCove's files and writes the saved values back, but only to a node that still holds the value the fix set (`set` in the fix's state folder): when the system or the user has written another since (an OS update that fixes it itself), that value stays and is logged as kept.
+
+   **SteamOS.** Its `/etc` and `/var` belong to one OS slot, and an update brings over only the `/etc` files an `/etc/atomic-update.conf.d` entry names (docs/SESSION.md). So on SteamOS `install` and `update` write `gamecove-fix-<name>.conf` there, naming the fix's files and itself (`remove` deletes it), and a fix whose files are all there and ours but whose record in `/var/lib/gamecove` an update took is still installed: `status` says so (`installed_revision=0`), and the next `install`, `update` or `remove` writes the record again; `update` then brings it current. Untested on a SteamOS handheld (fake-root tests only).
    GameCove then asks the fix for its status again; only `installed=no` counts as removed.
 2. **A newer revision** of the fix came with a GameCove update: `update` runs. For `file` fixes
    the helper first saves every file, the saved values and the record, writes the new version,

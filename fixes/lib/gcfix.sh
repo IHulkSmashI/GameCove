@@ -121,6 +121,36 @@ gc_ours() { [ -f "$ROOT$1" ] && head -n 1 "$ROOT$1" | grep -qxF "$GC_MARK"; }
 
 gc_installed() { [ -f "$STATE/installed" ]; }
 
+# ---- SteamOS keeps /etc and /var per OS slot: an update brings over only the /etc files an
+# /etc/atomic-update.conf.d entry names (docs/SESSION.md). A rule written to /etc/udev/rules.d is gone after
+# the update unless it is named there, and /var/lib/gamecove (our record) is gone either way, so:
+#   - install and update on SteamOS name their files (and that file itself) in a keep entry;
+#   - when the files are there and ours but the record is not, the fix is still installed: status says so and
+#     the next install / update / remove writes the record again (revision 0: "update" then brings it current).
+gc_os_steamos() { [ "$(sed -n 's/^ID=//p' "$ROOT/etc/os-release" 2>/dev/null | tr -d "\"'" | head -n 1)" = steamos ]; }
+GC_KEEP=/etc/atomic-update.conf.d/gamecove-fix-$NAME.conf
+
+gc_keep_write() {
+	gc_os_steamos || return 0
+	mkdir -p "$ROOT/etc/atomic-update.conf.d" 2>/dev/null || return 0
+	{
+		printf '## GameCove %s: keeps its files across SteamOS updates. gamecove-fix %s remove deletes this file.\n' "$NAME" "$NAME"
+		for _f in $FILES; do printf '%s\n' "$_f"; done
+		printf '%s\n' "$GC_KEEP"
+	} >"$ROOT$GC_KEEP.gamecove-tmp" && mv -f "$ROOT$GC_KEEP.gamecove-tmp" "$ROOT$GC_KEEP" || rm -f "$ROOT$GC_KEEP.gamecove-tmp"
+}
+
+gc_keep_drop() { rm -f "$ROOT$GC_KEEP"; }
+
+# 0 when the record is missing but every file is in place and ours (an OS update took the record).
+gc_adoptable() { gc_os_steamos && [ ! -f "$STATE/installed" ] && gc_files_ok; }
+
+gc_adopt() {
+	gc_adoptable || return 0
+	mkdir -p "$STATE" && printf '0\n' >"$STATE/installed" || return 0
+	gc_log "adopted the files an OS update left behind without their record"
+}
+
 # The revision that was installed (1 for installs from before revisions were recorded).
 gc_installed_revision() {
 	_r="$(cat "$STATE/installed" 2>/dev/null || true)"
@@ -231,7 +261,9 @@ gc_install() {
 	gc_need_root
 	gc_applies || gc_die 2 "not for this handheld"
 	fix_lock "$NAME"
+	gc_adopt
 	if gc_installed && gc_files_ok; then
+		gc_keep_write
 		gc_say "already installed"
 		return 0
 	fi
@@ -261,6 +293,7 @@ gc_install() {
 			gc_die 1 "could not write $_f"
 		fi
 	done
+	gc_keep_write
 	gc_reload
 	if command -v apply_now >/dev/null 2>&1; then
 		apply_now || printf 'warning: it takes effect after a restart\n' >&2
@@ -277,12 +310,14 @@ gc_remove_files() {
 
 gc_remove() {
 	gc_need_root
+	gc_adopt
 	if ! gc_installed; then
 		gc_say "not installed"
 		return 0
 	fi
 	fix_lock "$NAME"
 	gc_remove_files
+	gc_keep_drop
 	gc_reload
 	if command -v revert_now >/dev/null 2>&1; then
 		revert_now || true
@@ -317,6 +352,7 @@ gc_rollback() {
 # update: bring an installed fix to this revision of the script, or leave it exactly as it was.
 gc_update() {
 	gc_need_root
+	gc_adopt
 	if ! gc_installed; then
 		gc_say "not installed"
 		return 0
@@ -346,6 +382,7 @@ gc_update() {
 		gc_write_file "$_f" || { _why="could not write $_f"; break; }
 	done
 	if [ -z "$_why" ]; then
+		gc_keep_write
 		gc_reload
 		if command -v apply_now >/dev/null 2>&1; then
 			apply_now || printf 'warning: it takes effect after a restart\n' >&2
@@ -377,6 +414,8 @@ gc_status() {
 	gc_say "applies=yes"
 	inst=no
 	gc_installed && inst=yes
+	adopt=no
+	if gc_adoptable; then inst=yes; adopt=yes; fi
 	gc_say "installed=$inst"
 	osf=no
 	os_fixed && osf=yes
@@ -385,7 +424,8 @@ gc_status() {
 	hw_present && hw=yes
 	gc_say "hw=$hw"
 	gc_say "revision=$REVISION"
-	[ "$inst" = no ] || gc_say "installed_revision=$(gc_installed_revision)"
+	if [ "$adopt" = yes ]; then gc_say "installed_revision=0"
+	elif [ "$inst" = yes ]; then gc_say "installed_revision=$(gc_installed_revision)"; fi
 	_why=""
 	if [ "$inst" = no ] && [ "$osf" = no ] && [ "$hw" = yes ] && command -v blocked >/dev/null 2>&1; then
 		_why="$(blocked)"
