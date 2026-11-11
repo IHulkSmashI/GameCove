@@ -211,7 +211,7 @@ def _repair(home: str, key: str, gpu: dict, game_dir: str | None) -> str:
     """A game update (or "Verify files") took our files out while the launch settings still ask for them: put the
     same choice back."""
     launch = games.get_launch(home, key)
-    folder = games.load_state(home)["opti_games"].get(str(key))
+    folder = games.tracked_folder(home, key, game_dir)
     if not folder or launch.get("opti") in (None, "off"):
         return ""
     if optiscaler.owner(folder)["owner"] == "gamecove" and _proxy_there(folder):

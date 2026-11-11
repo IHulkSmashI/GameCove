@@ -85,6 +85,61 @@ def get_launch(home: str, key: str) -> dict:
     return dict(load_state(home)["launch"].get(str(key)) or {})
 
 
+# ---- which folder of a game has our files -------------------------------------------------------------------------
+# Games are keyed by a stable id (the Steam app id, else GameCove's own key), never by their path. Next to the folder
+# OptiScaler went into ("opti_games") the state keeps where that is inside the game ("opti_rel"), so a game moved to
+# another library (Steam's "Move install folder", another drive) is found again with our files and manifest in it
+# (review M: a moved game was orphaned).
+def _remember(home: str, key: str, folder: str, game_dir: str | None) -> None:
+    s = load_state(home)
+    s["opti_games"][str(key)] = folder
+    rel = os.path.relpath(folder, game_dir) if game_dir and os.path.realpath(folder).startswith(os.path.realpath(game_dir) + os.sep) \
+        else ("." if game_dir and os.path.realpath(folder) == os.path.realpath(game_dir) else None)
+    if rel is not None and not rel.startswith(".."):
+        s.setdefault("opti_rel", {})[str(key)] = rel
+    save_state(home, s)
+
+
+def _forget(home: str, key: str) -> None:
+    s = load_state(home)
+    s["opti_games"].pop(str(key), None)
+    (s.get("opti_rel") or {}).pop(str(key), None)
+    save_state(home, s)
+
+
+def _find_ours(game_dir: str) -> str | None:
+    """The folder below game_dir with GameCove's manifest in it (as deep as OptiScaler goes), or None."""
+    base = game_dir.rstrip(os.sep).count(os.sep)
+    for r, d, _f in os.walk(game_dir):
+        d.sort()
+        if optiscaler.STATE in d and optiscaler._manifest(r):
+            return r
+        if r.count(os.sep) - base >= optiscaler.EXE_DEPTH:
+            d[:] = []
+    return None
+
+
+def tracked_folder(home: str, key: str, game_dir: str | None = None) -> str | None:
+    """The folder with our files for this game, following a move: the one saved when it still has our manifest,
+    else the same place inside the game's folder now, else wherever below it our manifest is. A folder found
+    elsewhere is saved for next time. The saved one (even if gone) when nothing is found."""
+    s = load_state(home)
+    stored = s["opti_games"].get(str(key))
+    if stored and optiscaler._manifest(stored):
+        return stored
+    d = _game_dir(home, key, game_dir)
+    if d:
+        rel = (s.get("opti_rel") or {}).get(str(key))
+        cand = os.path.normpath(os.path.join(d, rel)) if rel else None
+        found = cand if cand and optiscaler._manifest(cand) else (_find_ours(d) if stored or rel else None)
+        if found:
+            if found != stored:
+                log.info("game %s moved: our files are now in %s", key, found)
+                _remember(home, key, found, d)
+            return found
+    return stored
+
+
 # ---- the GPU ----------------------------------------------------------------------------------------------------
 def vendor(gpu: dict) -> str:
     v = str(gpu.get("vendor") or "")
@@ -301,7 +356,8 @@ def _ref_shas(home: str | None = None) -> tuple[str, ...]:
     return tuple(dict.fromkeys(x for x in shas if x))
 
 
-def _opti_into(home: str, key: str, folder: str, launch: dict, gpu: dict, proxies: list[str] | None = None) -> dict:
+def _opti_into(home: str, key: str, folder: str, launch: dict, gpu: dict, proxies: list[str] | None = None,
+               game_dir: str | None = None) -> dict:
     """ClawDeck's _opti_into: the pinned OptiScaler (downloaded once) into the game with `launch`'s settings."""
     entry = _opti_entry(launch, home)
     if not optiscaler.installed(home, entry["version"]) or not optiscaler.extras_ready(home, entry):
@@ -326,9 +382,7 @@ def _opti_into(home: str, key: str, folder: str, launch: dict, gpu: dict, proxie
                          opti in launchenv.FSR4_XMX, entry.get("layout") or "flat", proxies,
                          fsr4_amd=opti == "fsr4_amd", force_reflex="2" if v == "intel" else None)
     if r.get("ok"):
-        s = load_state(home)
-        s["opti_games"][str(key)] = folder
-        save_state(home, s)
+        _remember(home, key, folder, game_dir or _game_dir(home, key, None))
     return r
 
 
@@ -396,7 +450,8 @@ def set_launch(home: str, key: str, values: dict, gpu: dict) -> dict:
 
 
 def _folder(home: str, key: str, d: str | None, rec: dict) -> str | None:
-    return load_state(home)["opti_games"].get(str(key)) or rec.get("folder") or (optiscaler.main_exe_dir(d) if d else None)
+    t = tracked_folder(home, key, d)
+    return (t if t and os.path.isdir(t) else None) or rec.get("folder") or (optiscaler.main_exe_dir(d) if d else None)
 
 
 def _foreign(who: str | None) -> dict | None:
@@ -448,9 +503,7 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
     if upscaler == "own":
         out = optiscaler.unpatch(folder, home)
         ref = reframework.remove(folder, _ref_shas(home))
-        s = load_state(home)
-        s["opti_games"].pop(str(key), None)
-        save_state(home, s)
+        _forget(home, key)
         r = set_launch(home, key, {**{k: None for k in REC_KEYS}, "fg": fg or None}, gpu)
         return {**r, "optiscaler": out, "reframework_left": bool(ref.get("present") and not ref.get("removed"))}
     bad = _foreign(optiscaler.owner(folder)["owner"]) or _refused(d, folder, anticheat, rec)
@@ -466,7 +519,7 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
               "fsr4_int8": True if upscaler == "fsr4_amd" and chips.tier(gpu) not in chips.FSR4_LISTED else None,
               "opti_overlay": overlay if isinstance(overlay, int) and overlay in launchenv.OVERLAYS else None}
     r = _opti_into(home, key, folder, {**{k: v for k, v in launch.items() if v is not None},
-                                       "xmx": get_launch(home, key).get("xmx")}, gpu, rec.get("proxies"))
+                                       "xmx": get_launch(home, key).get("xmx")}, gpu, rec.get("proxies"), d)
     if not r.get("ok"):
         return r
     launch["opti_dll"] = r["dll_override"]
@@ -498,7 +551,7 @@ def apply_recommended(home: str, key: str, gpu: dict, game_dir: str | None = Non
         bad = _foreign(optiscaler.owner(folder)["owner"]) or _refused(d, folder, anticheat, rec)
         if bad:
             return bad
-        r = _opti_into(home, key, folder, launch, gpu, rec.get("proxies"))
+        r = _opti_into(home, key, folder, launch, gpu, rec.get("proxies"), d)
         if not r.get("ok"):
             return r
         launch["opti_dll"] = r["dll_override"]
@@ -515,12 +568,11 @@ def apply_recommended(home: str, key: str, gpu: dict, game_dir: str | None = Non
 def undo(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
     """ClawDeck's game_undo_recommended: REFramework and OptiScaler out, the launch settings cleared."""
     d = _game_dir(home, key, game_dir)
-    folder = load_state(home)["opti_games"].get(str(key)) or (optiscaler.main_exe_dir(d) if d else None)
+    t = tracked_folder(home, key, d)
+    folder = (t if t and os.path.isdir(t) else None) or (optiscaler.main_exe_dir(d) if d else None)
     removed = reframework.remove(folder, _ref_shas(home)) if folder else {"ok": True}
     opti = optiscaler.unpatch(folder, home) if folder else {"ok": True}
-    s = load_state(home)
-    s["opti_games"].pop(str(key), None)
-    save_state(home, s)
+    _forget(home, key)
     r = set_launch(home, key, {k: None for k in REC_KEYS}, gpu)
     return {**r, "reframework": removed, "optiscaler": opti, "ok": r.get("ok", True) and opti.get("ok", True)}
 
@@ -529,7 +581,8 @@ def status(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
     """What is set and what is in the folder now, read-only (the control reads this)."""
     d = _game_dir(home, key, game_dir)
     launch = get_launch(home, key)
-    folder = load_state(home)["opti_games"].get(str(key)) or (optiscaler.main_exe_dir(d) if d else None)
+    t = tracked_folder(home, key, d)
+    folder = (t if t and os.path.isdir(t) else None) or (optiscaler.main_exe_dir(d) if d else None)
     who = optiscaler.owner(folder)
     opti = launch.get("opti")
     upscaler = "own" if not opti or opti == "off" or who["owner"] != "gamecove" else ("fsr4_xmx" if opti == "fsr4" else opti)
@@ -573,7 +626,8 @@ def game_update(home: str, key: str, gpu: dict, game_dir: str | None = None) -> 
     whose sha256 is still what GameCove put there; backups never over newer game files), or, for the same
     OptiScaler, replaces only GameCove's own files."""
     d = _game_dir(home, key, game_dir)
-    folder = load_state(home)["opti_games"].get(str(key)) or (optiscaler.main_exe_dir(d) if d else None)
+    t = tracked_folder(home, key, d)
+    folder = (t if t and os.path.isdir(t) else None) or (optiscaler.main_exe_dir(d) if d else None)
     who = optiscaler.owner(folder)
     if who["owner"] != "gamecove":
         return {"ok": False, "error": "GameCove's OptiScaler isn't in this game"}
@@ -581,7 +635,7 @@ def game_update(home: str, key: str, gpu: dict, game_dir: str | None = None) -> 
     entry = _opti_entry(launch, home)
     if not game_outdated(folder, entry):
         return {"ok": True, "up_to_date": True, "version": who.get("version"), "folder": folder}
-    r = _opti_into(home, key, folder, launch, gpu, [who["dll"]] if who.get("dll") else None)
+    r = _opti_into(home, key, folder, launch, gpu, [who["dll"]] if who.get("dll") else None, d)
     if not r.get("ok"):
         return r
     out = {"ok": True, "version": r.get("version"), "was": who.get("version"), "folder": folder}
@@ -603,7 +657,8 @@ def prune(home: str) -> list[str]:
         return []
     v = versions(home)
     keep = {(v.get(k) or {}).get("version") for k in ("optiscaler", "optiscaler_v10")}
-    for folder in load_state(home)["opti_games"].values():
+    for key in list(load_state(home)["opti_games"]):
+        folder = tracked_folder(home, key)
         m = optiscaler._manifest(folder) if folder else None
         if m:
             keep.add(m.get("version"))

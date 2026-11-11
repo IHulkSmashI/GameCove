@@ -222,3 +222,36 @@ def test_cli_xess_install_is_for_xmx_only_and_uses_the_pinned_release(tmp_path, 
     assert seen["entry"] == games.versions()["xess_xmx_linux"] and seen["home"] == home
     assert cli.main(["xess-remove", "--home", home]) == 0
     assert json.loads(capsys.readouterr().out)["ok"] is True
+
+
+def _tree(d):
+    out = {}
+    for r, _d, f in os.walk(d):
+        for x in f:
+            out[os.path.relpath(os.path.join(r, x), d)] = open(os.path.join(r, x), "rb").read()
+    return out
+
+
+def test_a_game_moved_to_another_library_keeps_its_upscaler_and_undo(tmp_path):
+    """Review M: the folder was saved by path, so a game moved between libraries (Steam's "Move install folder")
+    was orphaned: Native left our files in it. Games are keyed by their id and the folder is followed."""
+    import shutil
+    home = str(tmp_path / "home")
+    _pkg(home)
+    d = _steam_game(home, "620", "Moving", ["Moving/Binaries/Win64/Moving-Win64-Shipping.exe", "Moving/Binaries/Win64/nvngx_dlss.dll",
+                                            "Moving/Binaries/Win64/D3D12Core.dll"])
+    before = _tree(d)
+    assert games.choose(home, "620", "fsr31", 0, RDNA2)["ok"]
+    # Steam moves it to the SD card library: the manifest goes along, the old path is gone
+    sd = tmp_path / "sd"
+    os.makedirs(sd / "steamapps" / "common")
+    lib = os.path.join(home, ".local/share/Steam/steamapps")
+    shutil.move(os.path.join(lib, "appmanifest_620.acf"), sd / "steamapps" / "appmanifest_620.acf")
+    shutil.move(d, sd / "steamapps" / "common" / "Moving")
+    _w(os.path.join(lib, "libraryfolders.vdf"), f'"libraryfolders"\n{{\n "1"\n {{\n  "path" "{sd}"\n }}\n}}\n')
+    moved = str(sd / "steamapps" / "common" / "Moving")
+    st = games.status(home, "620", RDNA2)
+    assert st["owner"] == "gamecove" and st["upscaler"] == "fsr31" and st["folder"].startswith(moved)
+    assert games.load_state(home)["opti_games"]["620"].startswith(moved)          # saved for next time
+    assert games.undo(home, "620", RDNA2)["ok"]
+    assert _tree(moved) == before                                               # Native reaches the moved copy
