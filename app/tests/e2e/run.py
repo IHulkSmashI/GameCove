@@ -43,7 +43,7 @@ OWN_PROCESS = ["journeys", "monkey"]
 # The Steam Machine has no TDP slider, battery or backlight, which is what the profile, restart,
 # robustness, settings and game suites drive: it runs the suites that fit a box (suite_box.gd
 # covers what must be absent there).
-BOX_SUITES = "smoke,screens,box,capabilities,library,quick_menu,saves,perf,animations"
+BOX_SUITES = "smoke,screens,box,box_tv,capabilities,library,quick_menu,saves,perf,animations"
 BOXED = ["steam-machine-steamos"]
 
 

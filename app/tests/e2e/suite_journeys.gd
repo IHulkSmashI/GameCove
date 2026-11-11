@@ -1443,20 +1443,3 @@ func test_keyboard_launch_options_typed_two_ways() -> void:
 	check("launch options")
 	await b()
 	await without_stores()
-
-
-# ---- pending merge: journeys for features still on their own branches --------------------------
-# Each is listed by the runner as "E2E SKIP ... (pending merge)" and filled in
-# when its branch lands (docs/TESTING.md, the "pending merge" rows).
-
-
-
-
-
-
-## Resolutions and Steam Machine (resolutions): output resolution, interface
-## size, TV / docked layouts, changed and reverted.
-func test_pending_resolutions_interface_size_and_docked() -> void:
-	pass
-
-

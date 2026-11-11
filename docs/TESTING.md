@@ -3,7 +3,8 @@
 Every thing a player can do, and the test that does it. Two layers:
 
 - **Headless journeys** (`app/tests/e2e/`): the real app on three fake handhelds (MSI Claw 8 EX on
-  Bazzite, ROG Ally on SteamOS, Legion Go S on Bazzite), driven only through controller input events
+  Bazzite, ROG Ally on SteamOS, Legion Go S on Bazzite) and a Steam Machine on SteamOS (the suites that fit
+  a box, `run.py` BOX_SUITES), driven only through controller input events
   (plus touch and a physical keyboard where the app takes them), checked on what's on screen, the state
   files, and the commands the fake system and the fake store tools received. Runs anywhere, in CI.
 - **Device journeys** (`tools/devicetest/`): the same journeys on the real handhelds, with a virtual
@@ -33,7 +34,7 @@ How long (a two-core machine also running other jobs; a quiet one is about half)
 
 | Run | Claw 8 EX | ROG Ally | Legion Go S |
 | --- | --- | --- | --- |
-| `--suites journeys` (24 journeys, 1 pending merge) | 2 min | 3 min | 3 min |
+| `--suites journeys` (24 journeys) | 2 min | 3 min | 3 min |
 | `--suites monkey` (CI, 5 runs of 70 steps) | 2 min | 2 min | 3.5 min |
 
 ### How a journey works
@@ -220,11 +221,17 @@ journey is a skipped stub (`test_pending_*`, listed as `E2E SKIP ... (pending me
 | Upscaling selection (Best / My choice / Native) | J: game_page_own_settings…; U: test_perf_controls | D: optiscaler |
 | The launch splash: cancel, a late game closed again, Home after Guide | E: game, animations | D: steam-game |
 
-### Pending merge
+### Docked to a TV, the Steam Machine
 
-| Feature (branch) | Stub |
-| --- | --- |
-| Resolutions, interface size, Steam Machine (`resolutions`) | test_pending_resolutions_interface_size_and_docked |
+| Action | Headless | Device |
+| --- | --- | --- |
+| Docked to a 4K TV: Interface size by pad, saved, the layout follows, undocked back | box_tv: test_docked_to_a_tv_interface_size_by_pad_then_undocked (every setup, the Steam Machine too) | — |
+| Every screen on a TV by pad, focus on screen | box_tv: test_every_screen_on_a_tv_by_pad | — |
+| A box: no battery or handheld power controls, device wording, HDMI-CEC | E: box | — |
+| Screens at every resolution and screen size | U: tests/layout (layout matrix); `E2E_SCREEN=<row>` runs any suite as on that screen | — |
+
+No feature is pending merge now: the runner still skips any `test_pending_*` journey written ahead of a
+branch and lists it as `E2E SKIP ... (pending merge)`.
 
 ## Bugs the journeys found
 
