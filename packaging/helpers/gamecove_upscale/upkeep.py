@@ -14,7 +14,7 @@ import shutil
 
 import os
 
-from . import downloads, games, mirror, optiscaler, xess, selfcheck
+from . import downloads, games, lsfg, mirror, optiscaler, selfcheck, xess
 
 
 def _labels(home: str) -> dict[str, str]:
@@ -138,3 +138,91 @@ def update(home: str, gpu: dict, only: str | None = None) -> dict:
         if games.game_outdated(folder, entry):
             outdated_games.append(key)
     return {"ok": not errors, "results": res, "error": "; ".join(errors) or None, "games": outdated_games}
+
+
+# ---- GameCove: one managed place, its size, and a clean uninstall --------------------------------------------------
+# everything upscaling keeps in the user's home, below ~/.local/share/gamecove unless it says otherwise
+MANAGED = (("OptiScaler packages", os.path.join(games.DATA, "optiscaler")), ("Downloads and the signed list", os.path.join(games.DATA, "upscalers")),
+           ("FSR 4 (AMD)", optiscaler.FSR4_AMD_DIR), ("FSR 4.1.2 on XMX", optiscaler.FSR4_XMX_DIR),
+           ("Game lists", games.LISTS), ("Launch settings", os.path.join(games.DATA, "launch")),
+           ("Verification tool", os.path.join(games.DATA, "tools")))
+
+
+def _du(path: str) -> int:
+    total = 0
+    for r, _d, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.lstat(os.path.join(r, f)).st_size
+            except OSError:
+                pass
+    return total
+
+
+def storage(home: str) -> dict:
+    """What upscaling takes on this handheld: each managed folder's size, the XeSS XMX driver's folders, what came
+    inside the install (read-only, counted apart), and how many games have our files in them."""
+    parts = []
+    for name, rel in MANAGED:
+        p = os.path.join(home, rel)
+        if os.path.isdir(p):
+            parts.append({"name": name, "path": p, "bytes": _du(p)})
+    root = os.path.join(home, games.DATA)
+    xmx = [os.path.join(root, d) for d in (os.listdir(root) if os.path.isdir(root) else []) if d.startswith("xess-xmx-linux")]
+    xmx += [p for p in (os.path.join(home, ".cache", "xess-xmx"),) if os.path.isdir(p)]
+    if xmx:
+        parts.append({"name": "XeSS XMX driver", "path": xmx[0], "bytes": sum(_du(p) for p in xmx)})
+    s = games.load_state(home)
+    in_games = [k for k, folder in s["opti_games"].items() if optiscaler.owner(folder)["owner"] == "gamecove"]
+    bundle = downloads.bundle_info()
+    return {"ok": True, "bytes": sum(p["bytes"] for p in parts), "parts": parts, "folder": root, "games": len(in_games),
+            "bundle_bytes": int(bundle.get("bytes") or 0), "bundle_files": int(bundle.get("files") or 0)}
+
+
+def purge(home: str, gpu: dict) -> dict:
+    """Uninstall: every game goes back to how it shipped (the same exact undo as Native), the XeSS XMX driver and an
+    lsfg-vk GameCove installed come out, and the managed folders are deleted. The user's own files stay: saves,
+    lsfg-vk's config, and FSR 4.1.2 XMX files they put there themselves (only a set that came from GameCove goes)."""
+    s = games.load_state(home)
+    done, failed = [], []
+    for key in sorted(set(s["opti_games"]) | set(s["launch"])):
+        try:
+            r = games.undo(home, key, gpu, None)
+            (done if r.get("ok", True) else failed).append(key)
+        except (OSError, ValueError) as e:
+            failed.append(f"{key}: {e}")
+    out = {"ok": not failed, "games": done, "failed": failed}
+    try:
+        out["xess"] = xess.remove_for_uninstall(home)
+    except (OSError, ValueError) as e:
+        out["xess"] = {"ok": False, "error": str(e)}
+    out["lsfg_vk"] = lsfg.remove(home)
+    removed = []
+    for _name, rel in MANAGED:
+        p = os.path.join(home, rel)
+        if rel == optiscaler.FSR4_XMX_DIR and not _our_fsr4_set(home):
+            continue
+        if os.path.isdir(p):
+            shutil.rmtree(p, ignore_errors=True)
+            removed.append(rel)
+    for f in (games.STATE,):
+        try:
+            os.remove(os.path.join(home, f))
+        except OSError:
+            pass
+    out["removed"] = removed
+    return out
+
+
+def _our_fsr4_set(home: str) -> bool:
+    """~/fsr4-xmx holds exactly a set GameCove knows (packaged or pinned): then it is ours to remove."""
+    d = os.path.join(home, optiscaler.FSR4_XMX_DIR)
+    known = [games.pins().get("fsr4_xmx", {}).get("files") or {}]
+    packaged = getattr(optiscaler, "fsr4_packaged", lambda: None)()
+    if packaged:
+        known.append(packaged["files"])
+    try:
+        have = {n: downloads.sha256_of(os.path.join(d, n)) for n in optiscaler.FSR4_XMX_FILES if os.path.isfile(os.path.join(d, n))}
+    except OSError:
+        return False
+    return bool(have) and any(all(k.get(n) == h for n, h in have.items()) for k in known)

@@ -487,6 +487,27 @@ echo 126 >"$T/pkexec-code"
 expect_code 1 "install.sh uninstall stops when the fixes can't be undone" uninst
 lacks "$T/install.log" "rpm-ostree uninstall" "package kept when the fixes couldn't be undone"
 rm -f "$T/pkexec-code"
+# one install, one clean uninstall: our upscaler files leave the games (as the user, never through pkexec) after the
+# fixes are undone and before the package goes; a game that can't be put back doesn't keep GameCove installed
+cat >"$IB/upscale" <<EOF
+#!/bin/sh
+echo "upscale \$*" >>"$T/install.log"
+exit \$(cat "$T/upscale-code" 2>/dev/null || echo 0)
+EOF
+chmod +x "$IB/upscale"
+uninst_up() {
+	: >"$T/install.log"
+	PATH="$IB:$PATH" ASSUME_YES=1 IMAGE_INFO="$T/image-info.json" SESSION_SELECT="$IB/select" GUARD_COPY="$T/no-guard" \
+		FIX_HELPER="$IB/fixhelper" PKEXEC="$IB/pkexec" UPSCALE_HELPER="$IB/upscale" HOME="$T/uhome" sh "$REPO/packaging/install.sh" --uninstall
+}
+expect_code 0 "install.sh uninstall with the upscaling helper" uninst_up
+contains "$T/install.log" "^upscale purge --home $T/uhome$" "uninstall takes our upscaler files out of the games"
+lacks "$T/install.log" "pkexec.*upscale" "the purge runs as the user, not as root"
+if [ "$(sed -n 3p "$T/install.log")" = "upscale purge --home $T/uhome" ] && [ "$(tail -n 1 "$T/install.log")" = "rpm-ostree uninstall gamecove" ]; then ok; else bad "purge after the fixes, before the package goes: $(cat "$T/install.log")"; fi
+echo 1 >"$T/upscale-code"
+expect_code 0 "install.sh uninstall goes on when a game couldn't be put back" uninst_up
+contains "$T/install.log" "rpm-ostree uninstall gamecove" "the package still goes"
+rm -f "$T/upscale-code"
 expect_code 64 "install.sh missing rpm" inst "$T/none.rpm"
 expect_code 1 "install.sh says no" sh -c "echo n | PATH='$IB:$PATH' IMAGE_INFO='$T/image-info.json' sh '$REPO/packaging/install.sh' '$T/gamecove-0.1.0-1.x86_64.rpm'"
 

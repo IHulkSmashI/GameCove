@@ -117,7 +117,7 @@
   "files": {
    "amd_fidelityfx_upscaler_dx12.dll": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace"
   },
-  "license": "AMD FidelityFX SDK binary licence (Kits/FidelityFX/docs/license.md): binary redistribution allowed with its notice; GameCove downloads it from AMD at the user's request instead of shipping it",
+  "license": "AMD FidelityFX SDK binary licence (Kits/FidelityFX/docs/license.md): binary redistribution allowed with its notice; shipped unmodified inside every GameCove package with that notice (licenses/AMD-FidelityFX-SDK-license.md), and fetched from AMD's repository when a package has none",
   "note": "AMD FSR SDK 2.4.0 (2026-10-28): FSR Upscaling 4.1.2, ML model picked by GPU (FP8 RDNA4, INT8 RDNA3/RDNA2 dGPU and Strix Halo, lightweight INT8 for Z2 Extreme / 890M / Z2 A). The same file ClawDeck keeps as fsr-original.dll next to nitec's XMX build. Under Proton FSR 4 needs a Proton with AMD's driver extension shim (Proton-CachyOS, GE-Proton).",
   "version": "sdk2.4.0-7539ae8b",
   "mirror": {

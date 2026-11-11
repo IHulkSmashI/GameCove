@@ -63,5 +63,22 @@ elif [ "${REQUIRE_FSR4:-0}" = 1 ]; then
 	echo "make-app-tarball: $app/bin/fsr4-xmx missing (python3 tools/upscalers/fetch_fsr4.py $app/bin/fsr4-xmx)" >&2
 	exit 1
 fi
+# One install: every upscaler file we may redistribute (tools/upscalers/fetch_bundle.py), so nothing is downloaded
+# when a game is first set up. They must be exactly the pinned files. REQUIRE_UPSCALERS=1 (release builds) fails
+# without them.
+if [ -d "$app/bin/upscalers" ]; then
+	python3 -I "$REPO/tools/upscalers/fetch_bundle.py" --check "$app/bin/upscalers" || {
+		echo "make-app-tarball: $app/bin/upscalers isn't the pinned set of upscaler files" >&2
+		exit 1
+	}
+	mkdir -p "$stage/bin/upscalers"
+	for f in "$app/bin/upscalers"/*; do
+		[ -f "$f" ] && install -m0644 "$f" "$stage/bin/upscalers/"
+	done
+	case " $parts " in *" bin "*) ;; *) parts="$parts bin" ;; esac
+elif [ "${REQUIRE_UPSCALERS:-0}" = 1 ]; then
+	echo "make-app-tarball: $app/bin/upscalers missing (python3 tools/upscalers/fetch_bundle.py $app/bin/upscalers --fsr4 $app/bin/fsr4-xmx)" >&2
+	exit 1
+fi
 # shellcheck disable=SC2086 # a fixed word list
 tar -czf "$out" -C "$stage" $parts

@@ -230,3 +230,42 @@ func test_the_steam_scan_remembers_libraries() -> void:
 	eq(got.get(t.steam, {}).get("apps", []), ["10"], "the internal one")
 	t.s.free()
 	_rm(t.root)
+
+
+## Settings > Device > Storage: what upscaling keeps here, from one helper call
+## made only while the page is open; nothing shown without the helper.
+func test_upscaling_files_card() -> void:
+	var t := _tree("upscaling")
+	var asked := []
+	var helper: String = t.root.path_join("gamecove-upscale")
+	_touch(helper)
+	var du: Callable = t.fake.handler
+	t.fake.handler = func(cmd: String) -> Variant:
+		if cmd.begins_with(helper + " "):
+			asked.append(cmd)
+			return {"code": 0, "out": "{\"ok\": true, \"bytes\": 314572800, \"games\": 2, \"bundle_bytes\": 209715200, \"folder\": \"/h/.local/share/gamecove\", \"parts\": []}\n"}
+		return du.call(cmd)
+	var none: Control = StoragePanel.build({"storage": t.s})
+	none.opened()
+	ok(none.find_child("UpscalingFiles", true, false) == null, "no helper: no card")
+	eq(asked.size(), 0, "and nothing was run")
+	none.closed()
+	none.free()
+	t.s.upscale_helper = helper
+	var p: Control = StoragePanel.build({"storage": t.s})
+	ok(p.find_child("UpscalingFiles", true, false) == null and asked.is_empty(), "nothing is measured before the page opens")
+	p.opened()
+	eq(asked, ["%s storage --home %s" % [helper, t.home]], "one call, as the user")
+	var size: Label = p.find_child("UpscalingSize", true, false)
+	ok(size != null and size.text == TX.UPSCALE_STORE_SIZE % load("res://scripts/ui/texts_device.gd").bytes(314572800.0), "the folder's size")
+	var games: Label = p.find_child("UpscalingGames", true, false)
+	ok(games != null and games.text.begins_with("Set up in 2 games"), "how many games have our files")
+	ok(p.find_child("UpscalingBundle", true, false) != null, "what came with the install is said apart")
+	ok(p.find_child("UpscalingWhy", true, false) != null, "one plain line on what it is and how it goes")
+	p.closed()
+	p.free()
+	t.fake.handler = func(cmd: String) -> Variant:
+		return {"code": 0, "out": "not json\n"} if cmd.begins_with(helper + " ") else du.call(cmd)
+	eq(t.s.upscaling_report(), {}, "a broken answer shows nothing")
+	t.s.free()
+	_rm(t.root)

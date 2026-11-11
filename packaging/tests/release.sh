@@ -101,10 +101,35 @@ echo "not nitec's" >"$T/app/bin/fsr4-xmx/fsr-original.dll"
 echo '{}' >"$T/app/bin/fsr4-xmx/set.json"
 if sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/badfsr.tar.gz" >"$T/out" 2>&1; then bad "a bin/fsr4-xmx that isn't the pinned set must be refused"; else ok; fi
 rm -rf "$T/app/bin/fsr4-xmx"
+# one install: the redistributable upscaler files ride in every artefact (tools/upscalers/fetch_bundle.py)
+if REQUIRE_UPSCALERS=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/noup.tar.gz" >"$T/out" 2>&1; then bad "REQUIRE_UPSCALERS=1 must fail without bin/upscalers"; else ok; fi
+mkdir -p "$T/app/bin/upscalers"
+echo "not OptiScaler" >"$T/app/bin/upscalers/0000000000000000000000000000000000000000000000000000000000000000"
+echo '{"schema": 1, "files": {}}' >"$T/app/bin/upscalers/bundle.json"
+if sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/badup.tar.gz" >"$T/out" 2>&1; then bad "a bin/upscalers that isn't the pinned set must be refused"; else ok; fi
+rm -rf "$T/app/bin/upscalers"
+python3 -I "$REPO/tools/upscalers/fetch_bundle.py" --check "$T/nowhere" >/dev/null 2>&1 && bad "fetch_bundle --check passes on a missing folder" || ok
+grep -q 'python3 -I tools/upscalers/fetch_bundle.py app/build/bin/upscalers --fsr4 app/build/bin/fsr4-xmx' "$REPO/.github/workflows/release.yml" && ok || bad "release.yml must fetch the pinned upscaler files into the app"
+grep -q 'bin/upscalers/bundle.json' "$REPO/.github/workflows/release.yml" && ok || bad "release.yml must check the tarball has the upscaler bundle"
+grep -q 'app-export/bin/upscalers/\* %{buildroot}%{_prefix}/lib/gamecove/bin/upscalers/' "$REPO/packaging/rpm/gamecove.spec" && ok || bad "spec must install bin/upscalers"
+grep -q '"/usr/lib/gamecove/bin/upscalers")$' "$REPO/packaging/helpers/gamecove_upscale/downloads.py" && ok || bad "downloads.BUNDLE_DIRS moved: packages install the bundle to /usr/lib/gamecove/bin/upscalers"
+grep -q '^LICENSES/AMD-FidelityFX-SDK-license.md ' "$REPO/packaging/licenses.list" && ok || bad "AMD's FSR SDK notice must ship next to its DLL (licenses.list)"
+# never in the bundle or the repo: NVIDIA's files, AMD's driver DLLs, Lossless Scaling's DLL, lsfg-vk (CC BY-NC-ND: from its author only)
+if python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/packaging/helpers"); sys.path.insert(0, sys.argv[1] + "/tools/upscalers")
+import fetch_bundle
+names = " ".join((i["name"] + " " + " ".join(i["urls"])).lower() for i in fetch_bundle.items(fetch_bundle.load_pins()))
+bad = [w for w in ("nvngx", "amdxcffx", "amdxc64", "lossless", "lsfg") if w in names]
+assert not bad, bad
+PY
+then ok; else bad "the upscaler bundle names a file we must never ship: $(cat "$T/out")"; fi
 python3 -I "$REPO/tools/upscalers/fetch_fsr4.py" --check "$T/nowhere" >/dev/null 2>&1 && bad "fetch_fsr4 --check passes on a missing folder" || ok
 # the unpacked tarball as the sysext and the RPM see it (stand-in bytes: the real check is the one above)
 mkdir -p "$T/cabx/bin/fsr4-xmx"
 for f in amd_fidelityfx_upscaler_dx12.dll fsr-original.dll set.json; do echo "$f" >"$T/cabx/bin/fsr4-xmx/$f"; done
+mkdir -p "$T/cabx/bin/upscalers"
+for f in bundle.json 1111111111111111111111111111111111111111111111111111111111111111; do echo "$f" >"$T/cabx/bin/upscalers/$f"; done
 # sysext: from the unpacked tarball to /usr/lib/gamecove/bin (the path optiscaler.SYSTEM_CABINET checks)
 if SESSION_SUMS="$T/ss.sums" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$T/cabx" --session-src "$T/ss" --out "$T/sxc" --tree-only >"$T/out" 2>&1; then ok; else bad "sysext tree with cabinet: $(cat "$T/out")"; fi
 cmp -s "$T/cabx/bin/cabinet.dll" "$T/sxc/gamecove/usr/lib/gamecove/bin/cabinet.dll" && ok || bad "sysext lacks /usr/lib/gamecove/bin/cabinet.dll"
@@ -112,6 +137,10 @@ cmp -s "$T/cabx/bin/cabinet.dll" "$T/sxc/gamecove/usr/lib/gamecove/bin/cabinet.d
 for f in amd_fidelityfx_upscaler_dx12.dll fsr-original.dll set.json; do
 	cmp -s "$T/cabx/bin/fsr4-xmx/$f" "$T/sxc/gamecove/usr/lib/gamecove/bin/fsr4-xmx/$f" && ok || bad "sysext lacks /usr/lib/gamecove/bin/fsr4-xmx/$f"
 done
+for f in bundle.json 1111111111111111111111111111111111111111111111111111111111111111; do
+	cmp -s "$T/cabx/bin/upscalers/$f" "$T/sxc/gamecove/usr/lib/gamecove/bin/upscalers/$f" && ok || bad "sysext lacks /usr/lib/gamecove/bin/upscalers/$f"
+done
+grep -q "no bin/upscalers" "$T/out" && bad "sysext warned about upscaler files that are there" || ok
 grep -q "no bin/fsr4-xmx" "$T/out" && bad "sysext warned about FSR 4 files that are there" || ok
 grep -q '^SYSTEM_DIR = "/usr/lib/gamecove"$' "$REPO/packaging/helpers/gamecove_upscale/optiscaler.py" && ok || bad "optiscaler.SYSTEM_DIR moved: packages install the FSR 4 set to /usr/lib/gamecove/bin/fsr4-xmx"
 grep -q 'app-export/bin/fsr4-xmx/\* %{buildroot}%{_prefix}/lib/gamecove/bin/fsr4-xmx/' "$REPO/packaging/rpm/gamecove.spec" && ok || bad "spec must install bin/fsr4-xmx"
@@ -133,7 +162,7 @@ REL="$REPO/.github/workflows/release.yml"
 grep -q 'bash tools/cabinet-lzms/build.sh --check' "$REL" && ok || bad "release.yml must build cabinet.dll and compare it with cabinet.sha256"
 grep -q 'bash tools/cabinet-lzms/test/run.sh' "$REL" && ok || bad "release.yml must test cabinet.dll under Wine"
 grep -q '"gcc-mingw-w64-x86-64=${MINGW_GCC}"' "$REL" && grep -Eq '^  MINGW_GCC: [0-9]' "$REL" && ok || bad "release.yml must pin the mingw-w64 toolchain by version"
-grep -q 'REQUIRE_CABINET=1 REQUIRE_FSR4=1 sh packaging/make-app-tarball.sh' "$REL" && ok || bad "release.yml must require the reviewed cabinet.dll in the tarball"
+grep -q 'REQUIRE_CABINET=1 REQUIRE_FSR4=1 REQUIRE_UPSCALERS=1 sh packaging/make-app-tarball.sh' "$REL" && ok || bad "release.yml must require the reviewed cabinet.dll in the tarball"
 grep -q 'grep -qx /usr/lib/gamecove/bin/cabinet.dll rpm-files.txt' "$REL" && ok || bad "release.yml must check the RPM has cabinet.dll"
 grep -q 'cp app-export/bin/cabinet.dll dist/cabinet.dll' "$REL" && grep -q 'dist/cabinet.dll$' "$REL" && ok || bad "release.yml must publish cabinet.dll so SHA256SUMS and its signature cover it"
 grep -q 'bash tools/cabinet-lzms/test/run.sh' "$REPO/.github/workflows/ci.yml" && ok || bad "ci.yml must build and test cabinet.dll on every push"

@@ -243,6 +243,7 @@ const TASKS := {
 	"forget": "Forget the install",
 	"xess_install": "Install the XeSS XMX driver",
 	"xess_remove": "Remove the XeSS XMX driver",
+	"upscale_purge": "Take our upscaler files out of your games",
 	"moonlight_remote": "Add Flathub for this user",
 	"moonlight_install": "Install Moonlight for PC streaming",
 }
@@ -254,6 +255,7 @@ const TASK_WHY := {
 	"fix_install": "Asks for your admin password.",
 	"fix_remove": "Asks for your admin password.",
 	"moonlight_install": "No password: it installs for this user only.",
+	"upscale_purge": "Every game gets back exactly the files it shipped with. Your saves stay.",
 }
 const STATE := {"": "", "running": "Working…", "ok": "Done", "failed": "Failed", "skipped": "Skipped",
 	"pending": "After restart", "undone": "Undone"}

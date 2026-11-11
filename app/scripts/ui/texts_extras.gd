@@ -62,6 +62,12 @@ const CLEAN_DONE := "Freed %s"
 const CLEAN_FAILED := "Some folders couldn't be removed. Close Steam's download page and try again."
 const CLEAN_SAVES := "Your saves and Proton prefixes are never touched."
 const CLEAN_AWAY := "A drive with Steam games isn't in right now (%s). We keep its games' caches."
+const UPSCALE_STORE_TITLE := "Upscaling files"
+const UPSCALE_STORE_SIZE := "%s in one folder"
+const UPSCALE_STORE_GAMES := "Set up in %d %s. Pick Native on a game's page to take ours out of it."
+const UPSCALE_STORE_NO_GAMES := "Not in any game right now."
+const UPSCALE_STORE_BUNDLE := "Another %s came with GameCove, so nothing is downloaded when a game is first set up."
+const UPSCALE_STORE_LINE := "Upscalers and frame generation for your games. Uninstalling GameCove removes all of it and puts every game back as it shipped."
 const CLEAN_MISSING := "A drive with Steam games isn't there right now (%s), so we can't tell which caches are left over. Put it back in and open this page again."
 
 # ---- GE-Proton ---------------------------------------------------------------------------

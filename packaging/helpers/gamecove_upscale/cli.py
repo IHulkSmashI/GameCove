@@ -33,7 +33,7 @@ import sys
 from . import best, chips, framegen, games, launchenv, livedb, lsfg, mirror, optiscaler, upkeep, xess
 
 COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency", "xess-install", "xess-remove",
-            "check", "update", "game-update", "plan", "prepare", "mode", "native", "caps", "lsfg-install", "lsfg-remove", "lsfg-state",
+            "check", "update", "game-update", "plan", "prepare", "mode", "native", "caps", "lsfg-install", "lsfg-remove", "lsfg-state", "storage", "purge",
             "fsr4-rollback")
 # commands that may download: the signed index is fetched (at most every mirror.FRESH_S) before they run
 INSTALLS = ("choose", "apply", "xess-install", "game-update")
@@ -109,6 +109,10 @@ def run(argv: list[str]) -> dict:
         mirror.refresh(home)
     if a.command in XMX_UPKEEP:
         games.xmx_upkeep(home, gpu)
+    if a.command == "storage":             # Settings > Device > Storage: what upscaling takes here (upkeep.storage)
+        return upkeep.storage(home)
+    if a.command == "purge":               # uninstall: every game as shipped, drivers out, the managed folders gone
+        return upkeep.purge(home, gpu)
     if a.command == "lsfg-install":        # the user pressed "Set up Lossless frame generation" (lsfg.py)
         return lsfg.install(home, games.versions(home).get("lsfg_vk") or games.pins().get("lsfg_vk"))
     if a.command == "lsfg-remove":

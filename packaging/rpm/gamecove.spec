@@ -101,6 +101,12 @@ if [ -s app-export/bin/cabinet.dll ]; then
     install -Dpm0644 app-export/bin/cabinet-lzms-source.tar.gz %{buildroot}%{_prefix}/lib/gamecove/bin/cabinet-lzms-source.tar.gz
 fi
 # nitec's FSR 4.1.2 XMX files, unmodified, with their set.json (tools/upscalers/fetch_fsr4.py; in Source1)
+if [ -d app-export/bin/upscalers ]; then
+    # one install: OptiScaler, OptiPatcher, fakenvapi, REFramework, the XeSS XMX driver's release and AMD's FSR
+    # upscaler, unmodified at their pinned versions (tools/upscalers/fetch_bundle.py; in Source1)
+    mkdir -p %{buildroot}%{_prefix}/lib/gamecove/bin/upscalers
+    install -pm0644 app-export/bin/upscalers/* %{buildroot}%{_prefix}/lib/gamecove/bin/upscalers/
+fi
 if [ -d app-export/bin/fsr4-xmx ]; then
     mkdir -p %{buildroot}%{_prefix}/lib/gamecove/bin/fsr4-xmx
     install -pm0644 app-export/bin/fsr4-xmx/* %{buildroot}%{_prefix}/lib/gamecove/bin/fsr4-xmx/
