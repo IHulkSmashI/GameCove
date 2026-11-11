@@ -319,6 +319,7 @@ func _ready() -> void:
 		quick_menu.settings_requested.connect(_open_settings_category)
 	quick_menu.set_side(menu_side)
 	quick_menu.closed.connect(_on_menu_closed)
+	quick_menu.visibility_changed.connect(_sync_pad_input)
 	# full speed from the moment it shows (open() sets visible before building its first frame)
 	quick_menu.visibility_changed.connect(func(): background.set_menu(quick_menu.visible))
 	if quick_menu.has_signal("notice"):
@@ -914,6 +915,7 @@ func _notification(what: int) -> void:
 		return
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_window_focused = false
+		_sync_pad_input()
 		if background != null:
 			background.set_front(false)
 		if wiring != null:
@@ -932,6 +934,7 @@ func _notification(what: int) -> void:
 		_update_timer()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_window_focused = true
+		_sync_pad_input()
 		if background != null:
 			background.set_front(true)   # first: everything below runs at full speed
 		if wiring != null:
@@ -942,6 +945,20 @@ func _notification(what: int) -> void:
 		read_pads(true)
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST and session != null:
 		session.stop()
+
+
+## Something else has the screen (a game, Steam, a store's window) and the quick
+## menu is closed: the player's presses are for it. The pad is a plain input
+## device that we see too, so our screens take none of them then (focus doesn't
+## move, A presses nothing); Guide still comes to us, and so does everything
+## once the quick menu opens over it or our window is back in front.
+func _pads_for_us() -> bool:
+	return _window_focused or (quick_menu != null and quick_menu.visible)
+
+
+func _sync_pad_input() -> void:
+	if is_inside_tree():
+		get_viewport().gui_disable_input = not _pads_for_us()
 
 
 ## Slow drifts (hero, backdrop) stop when idle, in a game or under Reduce motion.
@@ -1218,6 +1235,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if quick_menu.visible or launch_overlay.is_open():
 		return
+	if not _pads_for_us():
+		return   # a game has the screen: its presses aren't ours (Guide was handled above)
 	if event.is_action_pressed("ui_accept"):
 		_sound("select")
 	# Sheets, the text keyboard and the Steam overlay handle their own input.
