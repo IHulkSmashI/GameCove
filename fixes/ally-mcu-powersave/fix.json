@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "id": "ally-mcu-powersave",
+  "revision": 1,
+  "title": "Less drain while asleep",
+  "line": "Lets the controller chip power down in sleep. Needs controller firmware 319+ (Ally X 313+); checked first.",
+  "symptom": "The Ally loses more battery asleep than it needs to while MCU powersave is off.",
+  "why": "Every ROG Ally controller MCU behind asus-armoury / asus-wmi mcu_powersave.",
+  "kind": "file",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "",
+  "level": "optional",
+  "must_fix": true,
+  "breaks": "sleep",
+  "default": "suggested-off",
+  "risk": "medium",
+  "risk_note": "With old controller (MCU) firmware the controller can stay dead after waking, so the fix refuses to install until the firmware is new enough (Ally 319, Ally X 313, as the kernel's hid-asus).",
+  "auto": [],
+  "optional": {
+    "all-of": [
+      "ec:asus-armoury",
+      "controller:asus-ally*"
+    ]
+  },
+  "exclude": {},
+  "changes": [
+    {
+      "type": "udev-rule",
+      "target": "/etc/udev/rules.d/60-gamecove-ally-mcu-powersave.rules",
+      "detail": "Turns MCU powersave on at every start."
+    },
+    {
+      "type": "sysfs",
+      "target": "/sys/class/firmware-attributes/asus-armoury/attributes/mcu_powersave/current_value (or /sys/devices/platform/asus-nb-wmi/mcu_powersave)",
+      "detail": "Set to 1 at once; the old value is saved."
+    }
+  ],
+  "undo": "Deletes the rule and writes the saved value back.",
+  "tested": [],
+  "bazzite": "Handled by Bazzite's own MCU workaround (shows as fixed by the system when on).",
+  "steamos": "Not on by default.",
+  "sources": [
+    "https://github.com/aarron-lee/SimpleDeckyTDP/blob/main/py_modules/devices/rog_ally.py",
+    "https://github.com/aarron-lee/SimpleDeckyTDP/blob/main/py_modules/advanced_options.py"
+  ],
+  "lifecycle": {
+    "needed_when": {
+      "any": [
+        {
+          "sysfs": "/sys/class/firmware-attributes/asus-armoury/attributes/mcu_powersave/current_value"
+        },
+        {
+          "sysfs": "/sys/devices/platform/asus-nb-wmi/mcu_powersave"
+        }
+      ]
+    },
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Looks for another rule that sets mcu_powersave, or the value already being 1 without GameCove (Bazzite's own handling)."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "asus-armoury",
+      "kind": "github-commits",
+      "repo": "torvalds/linux",
+      "path": "drivers/platform/x86/asus-armoury.c",
+      "note": "The kernel driver that owns mcu_powersave: a default of on would retire the fix."
+    },
+    {
+      "id": "asus-wmi",
+      "kind": "github-commits",
+      "repo": "torvalds/linux",
+      "path": "drivers/platform/x86/asus-wmi.c",
+      "note": "The older driver with the same switch and the MCU firmware minimums."
+    },
+    {
+      "id": "sdtdp",
+      "kind": "github-commits",
+      "repo": "aarron-lee/SimpleDeckyTDP",
+      "path": "py_modules/devices/rog_ally.py",
+      "note": "Where the workaround comes from."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

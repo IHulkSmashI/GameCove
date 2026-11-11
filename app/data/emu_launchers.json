@@ -1,0 +1,33 @@
+{
+ "_source": "How GameCove starts a ROM with each setup. EmuDeck: ES-DE picks the command (the system's default from es_systems.xml, the system's alternative emulator from the gamelist's <alternativeEmulator>, or the game's own <altemulator>), and when that command's %EMULATOR_x% has an EmuDeck launcher script, the script in <Emulation>/tools/launchers/ runs instead of the bare emulator, with ES-DE's arguments, the way EmuDeck's own Steam ROM Manager parsers start games (configs/steam-rom-manager/userData/userConfigurations.json in https://github.com/dragoonDorise/EmuDeck, GPL-3.0; scripts in tools/launchers/, each passes its arguments on to the emulator). 'args' replaces ES-DE's arguments where the script handles them differently: supermodel.sh joins all its arguments into one, vita3k.sh reads the .psvita file itself. RetroDECK: its own CLI starts a game and applies ES-DE's alternative emulators itself (functions/retrodeck.sh and functions/run_game.sh in https://github.com/RetroDECK/RetroDECK, GPL-3.0): flatpak run net.retrodeck.retrodeck -s <system> <game>. ES-DE on its own: ES-DE's command with its find rules, nothing in between.",
+ "emudeck": {
+  "ARES": {"script": "ares-emu.sh"},
+  "ARMSX2": {"script": "armsx2.sh"},
+  "AZAHAR": {"script": "azahar.sh"},
+  "BIGPEMU": {"script": "bigpemu.sh"},
+  "CEMU": {"script": "cemu.sh"},
+  "CITRON": {"script": "citron.sh"},
+  "DOLPHIN": {"script": "dolphin-emu.sh"},
+  "DUCKSTATION": {"script": "duckstation.sh"},
+  "EDEN": {"script": "eden.sh"},
+  "FLYCAST": {"script": "flycast.sh"},
+  "MAME": {"script": "mame.sh"},
+  "MELONDS": {"script": "melonds.sh"},
+  "MGBA": {"script": "mgba.sh"},
+  "PCSX2": {"script": "pcsx2-qt.sh"},
+  "PPSSPP": {"script": "ppsspp.sh"},
+  "PRIMEHACK": {"script": "primehack.sh"},
+  "RETROARCH": {"script": "retroarch.sh"},
+  "ROSALIES-MUPEN-GUI": {"script": "rosaliesmupengui.sh"},
+  "RPCS3": {"script": "rpcs3.sh"},
+  "RYUJINX": {"script": "ryujinx.sh"},
+  "SCUMMVM": {"script": "scummvm.sh"},
+  "SHADPS4": {"script": "shadps4.sh"},
+  "SUPERMODEL": {"script": "supermodel.sh", "args": ["%ROM%"]},
+  "VITA3K": {"script": "vita3k.sh", "args": ["%ROM%"]},
+  "XEMU": {"script": "xemu-emu.sh"},
+  "XENIA": {"script": "xenia.sh"},
+  "YUZU": {"script": "yuzu.sh"}
+ },
+ "retrodeck": {"command": ["flatpak", "run", "net.retrodeck.retrodeck", "-s", "%SYSTEM%", "%ROM%"]}
+}

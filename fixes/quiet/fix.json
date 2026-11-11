@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "id": "quiet",
+  "revision": 1,
+  "title": "Keep GameCove off the game's cores",
+  "line": "While a game runs, GameCove's own work moves to the efficiency cores at low priority.",
+  "symptom": "GameCove's background work could land on a performance core next to the game's render thread.",
+  "why": "GameCove's own behaviour, every handheld.",
+  "kind": "app",
+  "page": "fixes",
+  "password": "none",
+  "restart": "",
+  "level": "optional",
+  "must_fix": false,
+  "breaks": "",
+  "default": "on",
+  "risk": "low",
+  "risk_note": "Only moves GameCove's own process; no system file changes.",
+  "auto": "*",
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "process",
+      "target": "GameCove's own threads",
+      "detail": "While a game runs: CPU affinity to the efficiency cores and nice 10 (taskset, renice). Nothing is written to disk."
+    }
+  ],
+  "undo": "Affinity and priority go back when the game ends, or at once when you switch it off.",
+  "tested": [
+    {
+      "device": "msi-claw-8-ex",
+      "date": "2026-11-04",
+      "os": "Bazzite",
+      "note": "Measured in ClawDeck (same author)."
+    }
+  ],
+  "bazzite": "Not applicable (GameCove's own behaviour).",
+  "steamos": "Not applicable.",
+  "sources": [
+    "ClawDeck py_modules/clawdeck/quiet.py (same author, measured on the Claw 8 EX 2026-11-04)"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": null,
+    "probe": {
+      "command": "none",
+      "native": "",
+      "what": "GameCove's own behaviour: there is nothing upstream to wait for."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

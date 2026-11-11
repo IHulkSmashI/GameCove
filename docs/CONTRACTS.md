@@ -44,21 +44,29 @@ The UI (`scenes/`, `scripts/ui/`, `scripts/main.gd`, `theme/`) only calls these 
   "last_played": 0,               # unix seconds
   "playtime_min": 0,
   "emulated": {},                 # store "emu" only: {"system": "snes", "system_name", "system_short": "SNES",
-                                  #   "emulator": "RetroArch", "via": "emudeck|retrodeck|emulator"}
+                                  #   "emulator": "RetroArch", "via": "emudeck|retrodeck|esde|emulator"}; a ROM
+                                  #   game adds "rom": true, "unknown" (ES-DE doesn't know its folder: can't start),
+                                  #   "label" (ES-DE's command label), "players", "rating" (0..1, -1), "playcount", "root"
   "shortcut": false               # true: a Steam ROM Manager shortcut, started through Steam
 }
 ```
 
 Store `emu` (`scripts/library/stores/emu.gd`): id `frontend` is ES-DE or RetroDECK (opens the Emulation page;
-started by us in a scope), any other id is a Steam shortcut app id from Steam ROM Manager (started with
-`steam://rungameid/<64-bit id>`). `Library.emulation` is the setup the last scan found (`Emu.detect`):
+started by us in a scope); id `rom:<system>/<path in the system folder>` is a ROM (`roms.gd` lists them,
+`esde_launch.gd` builds the command; started by us in a scope; a second ROM root's same path gets `@<root hash>`);
+any other id is a Steam shortcut app id from Steam ROM Manager (started with `steam://rungameid/<64-bit id>`; one for
+a ROM we list folds into the ROM's entry, its key kept in the entry's `aliases`). `Library.emulation` is the setup the last scan found (`Emu.detect`):
 `{"kind": "emudeck|retrodeck|esde|", "name", "frontend": {"name", "command"}, "app": {...}, "srm": {"command"},
-"roms_dir", "systems": [{"id", "name", "short", "count"}], "rom_total", "recent": [{"title", "system", "last_played"}]}`.
+"roms_dir", "systems": [{"id", "name", "short", "count", "roots", "known"}], "rom_total", "recent": [{"title", "system",
+"last_played"}], "roots": [{"path", "real", "online", "from"}], "roms_shown", "esde_dir", "media_dir", "emu_path"}`.
+`Library.show_roms()` / `set_show_roms(on)`: Settings > Stores > Show emulated games in the Library.
+`Library.rescan_emulation()`: the Library or the Emulation page opened (background, cached, never behind a game).
 `Library.record_playtime(game, started, ended)` adds a session for an `emu` game (`user://playtime.json`).
 
 Screens decorate games with `Library.collections.decorate()` (`scripts/library/collections.gd`): `favourite`,
 `hidden` (bool) and `collections` (ids). `library_view.gd` `filter_view(games, view)` picks `""` (not hidden),
-`favourites`, `hidden`, `emulation` or `collection:<id>`; Home's shelves leave hidden games out.
+`favourites`, `hidden`, `emulation`, `emulation:<system>` or `collection:<id>`; Home's shelves leave hidden games
+out and show `Home.SHELF_MAX` games at most, then See all (the Library grid makes its tiles a page at a time).
 
 ### Game details (`info.meta`)
 
@@ -259,7 +267,7 @@ Alert rules (`alerts.gd`): with a target (in the user's currency), fires when th
 
 Order: by the last day a date can mean (so "December 2026" follows every known December day), finer precision first on ties, TBA last. Entries out for more than 14 days are dropped.
 
-`upcoming.json.gz` (rolling `gamedb` release, built by `gamedb/gamedb/upcoming.py`): `{"schema": 1, "built", "sources", "credits", "fx": {...ECB rates, not used for any displayed price}, "count", "releases": [{"title", "date", "precision", "ids", "art", "sources"}]}` (null fields omitted). The app downloads it at most daily; a 404 (not published yet) gives status `missing` and an empty calendar, a broken file keeps the old copy.
+`upcoming.json.gz` (rolling `gamedb` release of IHulkSmashI/GameCove-data, built by `gamedb/gamedb/upcoming.py`): `{"schema": 1, "built", "sources", "credits", "fx": {...ECB rates, not used for any displayed price}, "count", "releases": [{"title", "date", "precision", "ids", "art", "sources"}]}` (null fields omitted). The app downloads it at most daily; a 404 (not published yet) gives status `missing` and an empty calendar, a broken file keeps the old copy.
 
 ### Affiliate links
 

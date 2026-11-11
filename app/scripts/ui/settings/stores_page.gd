@@ -29,6 +29,8 @@ func build() -> void:
 	var lib := svc("library")
 	if lib != null and lib.get("collections") != null:
 		_build_collections(lib.collections, lib.games if lib.get("games") is Array else [])
+	if SvcLib.has_all(lib, ["show_roms", "set_show_roms"]):
+		_build_emulation(lib)
 	if not SvcLib.has_all(lib, ["store_settings", "set_store_setting"]):
 		return
 	var s: Dictionary = lib.store_settings()
@@ -140,6 +142,29 @@ func _build_collections(cols: RefCounted, games: Array) -> void:
 	var dyn: int = cols.dynamic_count()
 	if cols.steam_enabled() and dyn > 0:
 		box.add_child(SKit.note(TL.STEAM_DYNAMIC % [dyn, TL.plural(dyn)], "info", "SteamDynamic"))
+
+
+## Emulation: whether every ROM is a game in the Library, and what was found.
+func _build_emulation(lib: Object) -> void:
+	var box := add_card(TL.EMULATION_CARD, "gamepad", TL.EMULATION_CARD_LINE)
+	var setup: Variant = lib.get("emulation")
+	var info: Dictionary = setup if setup is Dictionary else {}
+	var t := toggle(box, "show_roms", TL.SHOW_ROMS, bool(lib.show_roms()), by_value(TL.SHOW_ROMS_HELP), "library")
+	t.changed.connect(func(v):
+		if not lib.set_show_roms(bool(v)):
+			notify(TL.COULDNT_SAVE, "bad")
+		_later_rebuild())
+	var roms := str(info.get("roms_dir", ""))
+	var fact: Label
+	if str(info.get("kind", "")) == "" or roms == "":
+		fact = Kit.label(TL.SHOW_ROMS_NONE, "QuietLabel", true)
+	else:
+		var n := int(info.get("rom_total", 0))
+		var sys: int = (info.get("systems", []) as Array).size()
+		var home := OS.get_environment("HOME")
+		fact = Kit.label(TL.SHOW_ROMS_FACT % [n, TL.plural(n), sys, TL.plural(sys), ("~" + roms.substr(home.length())) if home != "" and roms.begins_with(home) else roms], "QuietLabel", true)
+	fact.name = "RomsFact"
+	box.add_child(fact)
 
 
 const TL := preload("res://scripts/ui/texts_library.gd")

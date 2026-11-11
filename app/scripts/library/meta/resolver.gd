@@ -161,6 +161,10 @@ func jobs_for(game: Dictionary) -> Array:
 	var out := []
 	if not Privacy.metadata_allowed(prefs_path):
 		return out
+	# A ROM's details come from ES-DE's gamelist: a lookup by title alone would find PC games.
+	var emu = game.get("emulated", {})
+	if emu is Dictionary and emu.get("rom", false):
+		return out
 	var key := str(game.get("key", ""))
 	var info = game.get("info", {})
 	var meta: Dictionary = info.get("meta", {}) if info is Dictionary and info.get("meta") is Dictionary else Metadata.empty()

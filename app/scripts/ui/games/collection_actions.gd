@@ -170,11 +170,25 @@ func filter_rows(games: Array, view: String, sort: String) -> Array:
 		rows.append({"id": v, "text": c["name"], "detail": TL.FROM_STEAM if c["read_only"] else TL.YOUR_COLLECTION,
 			"icon": "layers", "value": count.call(v), "current": view == v})
 	if games.any(func(g): return g.get("store", "") == "emu"):
-		rows.append({"id": "emulation", "text": TL.VIEW_EMULATION, "detail": TL.VIEW_EMULATION_DETAIL, "icon": "emulation", "value": count.call("emulation"), "current": view == "emulation"})
+		var sys := View.systems_in(games)
+		var detail: String = TL.VIEW_EMULATION_DETAIL if sys.size() > 1 else (str(sys[0]["name"]) if sys.size() == 1 else TL.VIEW_EMULATION_DETAIL)
+		var on := view == "emulation" or view.begins_with("emulation:")
+		rows.append({"id": "+emulation" if sys.size() > 1 else "emulation", "text": TL.VIEW_EMULATION, "detail": detail, "icon": "emulation",
+			"value": count.call("emulation"), "current": on})
 	rows.append({"id": "hidden", "text": TL.VIEW_HIDDEN, "detail": TL.VIEW_HIDDEN_DETAIL, "icon": "eye_off", "value": count.call("hidden"), "current": view == "hidden"})
 	rows.append({"id": "+sort", "text": TL.SORT_ROW, "detail": View.SORT_NAMES.get(sort, ""), "icon": "sort"})
 	rows.append({"id": "+emulation_page", "text": TL.VIEW_EMULATION_PAGE, "detail": TL.VIEW_EMULATION_PAGE_DETAIL, "icon": "emulation"})
 	rows.append({"id": "+manage", "text": TL.MANAGE_COLLECTIONS, "detail": TL.MANAGE_COLLECTIONS_DETAIL, "icon": "pencil"})
+	return rows
+
+
+## The Emulation row's second sheet: every emulated game, then one row per console.
+func system_rows(games: Array, view: String) -> Array:
+	var rows: Array = [{"id": "emulation", "text": TL.EMU_ALL_SYSTEMS, "detail": TL.EMU_ALL_SYSTEMS_DETAIL, "icon": "emulation",
+		"value": str(View.filter_view(games, "emulation").size()), "current": view == "emulation"}]
+	for s in View.systems_in(games):
+		rows.append({"id": "emulation:" + str(s["id"]), "text": str(s["short"]), "detail": str(s["name"]), "icon": "gamepad",
+			"value": str(s["count"]), "current": view == "emulation:" + str(s["id"])})
 	return rows
 
 
@@ -192,6 +206,8 @@ func _on_filter(id: String, screen: Object) -> void:
 			actions.open_menu(TL.SORT_TITLE, TL.SORT_SUB, rows, func(s: String): screen.set_sort(s))
 		"+emulation_page":
 			open_emulation.emit()
+		"+emulation":
+			actions.open_menu(TL.EMU_SYSTEMS_TITLE, TL.EMU_SYSTEMS_SUB, system_rows(screen.games, screen.view), func(v: String): screen.set_view(v))
 		"+manage":
 			manage()
 		_:

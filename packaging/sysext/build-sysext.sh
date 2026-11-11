@@ -125,6 +125,12 @@ else
 	echo "build-sysext: warning: no bin/cabinet.dll in the app folder; FSR 4 on XMX won't be offered (tools/cabinet-lzms/build.sh)" >&2
 fi
 # nitec's FSR 4.1.2 XMX files with their set.json, unmodified (release builds carry them in the app tarball)
+if [ -d "$app/bin/upscalers" ]; then
+	mkdir -p "$tree/usr/lib/gamecove/bin/upscalers"
+	install -m0644 "$app/bin/upscalers"/* "$tree/usr/lib/gamecove/bin/upscalers/"
+else
+	echo "build-sysext: warning: no bin/upscalers in the app folder; upscaler files will be downloaded on first use" >&2
+fi
 if [ -d "$app/bin/fsr4-xmx" ]; then
 	mkdir -p "$tree/usr/lib/gamecove/bin/fsr4-xmx"
 	install -m0644 "$app/bin/fsr4-xmx"/* "$tree/usr/lib/gamecove/bin/fsr4-xmx/"

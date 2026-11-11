@@ -14,6 +14,7 @@ extends Control
 ## Tests: InstallerScreen.create(services, target, plan, installer) outside the
 ## tree; nothing real runs (the installer service gets a fake runner).
 
+const TFix := preload("res://scripts/ui/texts_fixes.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const SKit := preload("res://scripts/ui/settings/kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
@@ -986,6 +987,25 @@ func _refresh_stores_later() -> void:
 			show_step()
 
 
+## The badges every fix carries (docs/FIXES.md): Recommended here (only those are preselected and
+## listed in setup; Optional ones are on the Fixes page), and Tested on hardware when we ran it on this model.
+func _fix_badges(fix: String) -> HBoxContainer:
+	var row := Kit.hbox(8)
+	row.name = "Badges_" + fix.validate_node_name()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lv := Kit.badge(TFix.LEVEL["recommended"], "info")
+	lv.name = "Level"
+	row.add_child(lv)
+	var id := str(_device_row().get("id", ""))
+	for t in Texts.fix_tested(fix):
+		if str(t.get("device", "")) == id:
+			var tb := Kit.badge(TFix.TESTED_BADGE, "good")
+			tb.name = "Tested"
+			row.add_child(tb)
+			break
+	return row
+
+
 func _build_device() -> void:
 	_heading(TI.DEVICE_TITLE % _device_name(), TI.DEVICE_LINE)
 	var fixes: Array = plan.suggested_fixes.filter(func(f): return not f in Texts.HIDDEN_FIXES)
@@ -1001,6 +1021,7 @@ func _build_device() -> void:
 		r.collapse_hint = false
 		r.set_explainer(func(_v): return Texts.fix_explain(f))
 		r.changed.connect(func(v): plan.toggle_fix(f, v))
+		left.add_child(_fix_badges(f))
 	var right := _panel_card(cols, TI.POWER_HEADER, "", 1.0)
 	right.get_parent().get_parent().name = "PowerCard"
 	var row := _device_row()

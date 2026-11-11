@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/IHulkSmashI/GameCove/releases"><img src="https://img.shields.io/github/v/release/IHulkSmashI/GameCove?include_prereleases&filter=v*&label=Latest%20Release&logo=github&color=7c3aed" alt="Latest release"></a>
-  <!-- Downloads badge goes back once v0.1.0 is out, filtered to the GameCove release (the total counts the app's own data downloads): https://img.shields.io/github/downloads/IHulkSmashI/GameCove/v0.1.0/total -->
+  <!-- Downloads badge goes back once v0.1.0 is out: https://img.shields.io/github/downloads/IHulkSmashI/GameCove/total (only app releases are here; the data GameCove downloads lives in IHulkSmashI/GameCove-data) -->
   <a href="https://github.com/IHulkSmashI/GameCove/commits/main"><img src="https://img.shields.io/github/last-commit/IHulkSmashI/GameCove?label=Last%20update" alt="Last update"></a>
   <br>
   <a href="#contents"><img src="https://img.shields.io/badge/Guide%20%26%20FAQ-Read%20the%20docs-2563eb?logo=readthedocs&logoColor=white" alt="Guide and FAQ"></a>
@@ -34,17 +34,21 @@
 GameCove is the screen your handheld boots into. Your games sit up front, and everything you'd normally need a plugin,
 a script or a Windows app for is built in.
 
+- 🔥 **The best upscaler your chip runs, set up for you.** FSR 4.1.2 on Intel's XMX cores with XeSS frame generation
+  up to 4x, FSR 4.1.2 on AMD (the Z1 Extreme too), Lossless Scaling frame generation for everything else, and low
+  latency with every frame generator that has one. Nothing to download or copy: it's ready before a game's first
+  start, and one tap takes it out again.
 - 🎮 **Every store, one library.** Steam, Epic, GOG and Amazon side by side, with art, critic scores, time to beat,
   achievements and ProtonDB ratings. Install, update, repair and move games right from the handheld.
 - ⚡ **A quick menu with every setting your handheld has**, one button away in any game: TDP, fan, frame limit,
   refresh rate, VRR, gyro, stick lights, charge limit and more. It only shows what your model can actually do.
 - 🔋 **Auto TDP** finds the lowest power that holds your frame rate, learns each game on battery and plugged in, and
   gives power back within seconds when a scene gets heavy.
-- 🔥 **Upscaling and frame generation picked for your chip:** XeSS and FSR 4 on Intel's XMX cores, FSR 4 and 3.1 on
-  AMD, Lossless Scaling frame generation on anything, with low latency on by default.
-- 🛠️ **Fixes for your exact model,** applied at install, each with one line on what it does and an **Undo**.
-- 🕹️ **Emulation with EmuDeck:** your ROMs show up as games with their art and console, and ES-DE, EmuDeck and
-  Steam ROM Manager open from one Emulation page. Favourites, hidden games and collections work for every store.
+- 🛠️ **[Fixes for your exact model](#fixes-for-your-handheld),** applied at install, checked every night, and removed
+  again when your system catches up. Each says what it changes and has an **Undo**.
+- 🕹️ **Emulation with EmuDeck:** every ROM in your ROM folders is a real game in the Library, like your Steam games:
+  ES-DE's art and details, its own page, Play, play time, filters by console. ES-DE, EmuDeck and Steam ROM Manager
+  open from one Emulation page. Favourites, hidden games and collections work for every store.
 - 🎯 **Profiles per game and per power source.** Change it in a game and it's saved for that game, with different
   values on battery and plugged in.
 - 🏷️ **Discover:** deals in your real local prices, wishlist price alerts and a release calendar.
@@ -75,16 +79,78 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 >
 > The installer takes it from there. Full steps: [Install](#install).
 
+## Fixes for your handheld
+
+Some handhelds need a nudge before the basics work on Linux: sleep that stays asleep, the built-in buttons, gyro,
+Wi-Fi after waking, touch that lines up with the picture. GameCove knows which of these your exact model needs,
+applies them when you install it, and takes them out again the day your system doesn't need them any more.
+
+<table>
+<tr>
+<td width="33%"><img src="docs/images/fixes.webp" alt="Fixes page on an MSI Claw 8 EX"><br><sub>Fixes for your exact model: Recommended or Optional, each with Undo</sub></td>
+<td width="33%"><img src="docs/images/fixes-details.webp" alt="A fix's details"><br><sub>Details: what it changes, how it's undone, the risk, where it was tested</sub></td>
+<td width="33%"><img src="docs/images/fixes-retired.webp" alt="A fix the system now does itself, in History"><br><sub>Your system caught up: removed, in History, Keep it anyway</sub></td>
+</tr>
+<tr>
+<td width="33%"><img src="docs/images/fixes-attention.webp" alt="Start dialog for a fix in the system's way"><br><sub>A fix in your system's way is shown at start until it's out</sub></td>
+<td width="33%"><img src="docs/images/device.webp" alt="About this device"><br><sub>About this device: your model, chip, drivers, memory</sub></td>
+<td width="33%"><img src="docs/images/battery-history.webp" alt="Battery history in About this device"><br><sub>Battery history: 7 days and each game's drain</sub></td>
+</tr>
+</table>
+
+Every fix in Settings > Device > **Fixes** says what it changes, how it's undone and where it comes from, and carries
+one of two badges:
+
+| Badge | What it means |
+| --- | --- |
+| **Recommended** | It fixes something that breaks everyday use on your model, the workaround is proven and safe, and one press undoes it. Preselected when you install. |
+| **Optional** | Everything else we offer: it helps only some units, or isn't proven widely enough to switch on for you. Yours to turn on. |
+| *Tested on hardware* | A second, smaller badge: we ran that fix on that exact model ourselves. Without it, the fix comes from projects that tested it (Bazzite, InputPlumber and others), linked as its sources. |
+
+| Fix | Restores | For | Tested on hardware | Your system today |
+| --- | --- | --- | --- | --- |
+| **MSI buttons**<br>Makes the two MSI buttons next to the screen work: left opens the menu, right opens Quick Access. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed (InputPlumber still maps the board to claw2). SteamOS: Not supported on SteamOS. |
+| **Smooth screen down to 30 fps**<br>Lets VRR keep games smooth down to 30 fps instead of 48. | Screen | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+<br>**Optional**: MSI Claw 7 AI+, MSI Claw A1M | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); not yet tested on a SteamOS Claw. |
+| **Gyro aiming**<br>Turns on the motion sensor so you can aim by tilting the Claw. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not supported on SteamOS. |
+| **Volume buttons don't wake it**<br>Stops a bump of the volume buttons from waking the Claw in your bag. | Sleep and battery while asleep | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M, MSI Claw A8 | Not yet | Bazzite: Not fixed: Handheld Daemon switched it off at start, InputPlumber (Bazzite 44+) doesn't. SteamOS: Not fixed (no Claw support in SteamOS). |
+| **Wi-Fi back after sleep**<br>Keeps the Wi-Fi card awake enough to come back after sleep. Uses a little more battery asleep. | Wi-Fi and Bluetooth | **Optional**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M | Not yet | Bazzite: Not fixed (reported 2024-12, no answer). SteamOS: Not fixed (SteamOS issues 2742, 2703; user-verified workaround). |
+| **Intel AX210 Wi-Fi after sleep**<br>Stops the Intel AX210 Wi-Fi card from crashing after sleep. | Wi-Fi and Bluetooth | **Recommended**: AYANEO 2S, AYANEO 2, GPD WIN 5<br>**Optional**: Any handheld with the part | Not yet | Bazzite: Fixed up to stable 45.20261105 (50-intel-ax200-ax210-disable-d3cold-state.rules, after issue 5867). Bazzite reverted that rule on 2026-11-08 (in testing and unstable 45.20261110), so later builds need ours again; the fix checks the system's own rules. SteamOS: Not shipped as far as we can tell; the fix checks the system's own rules. |
+| **Sleep that works**<br>Switches off the fingerprint reader, which has no Linux driver and breaks sleep. | Sleep and battery while asleep | **Recommended**: GPD WIN 4, GPD WIN Max 2 | Not yet | Bazzite: Fixed (50-gpd-win-4-fingerprint.rules, 50-gpd-wm2-fingerprint.rules). SteamOS: Not shipped (GPD isn't a SteamOS device). |
+| **Stays asleep**<br>Stops the touch panel from waking the Win Max 2 right after it goes to sleep. | Sleep and battery while asleep | **Optional**: GPD WIN Max 2 | Not yet | Bazzite: Not fixed. SteamOS: Not shipped. |
+| **Sticks don't wake it**<br>Stops a nudge of the sticks from waking the handheld while it goes to sleep. | Sleep and battery while asleep | **Recommended**: ASUS ROG Ally X, ASUS ROG Xbox Ally, ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | Not yet | Bazzite: Fixed (50-ally-x-controller.rules). SteamOS: Unknown; the fix checks the system's own rules. |
+| **No drain while off**<br>Lets the fingerprint reader power down, so the battery doesn't drain while the Ally is off. | Sleep and battery while asleep | **Recommended**: ASUS ROG Ally, ASUS ROG Ally X<br>**Optional**: ASUS ROG Xbox Ally, ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | Not yet | Bazzite: Fixed (50-ally-fingerprint.rules). SteamOS: Reported fixed in SteamOS 3.8 and later (second-hand, from a write-up of the 3.8.0 notes; not yet confirmed on our Ally). The fix checks the system's own rules. |
+| **Less drain while asleep**<br>Lets the controller chip power down in sleep. Needs controller firmware 319+ (Ally X 313+); checked first. | Sleep and battery while asleep | **Optional**: ASUS ROG Ally, ASUS ROG Ally X, ASUS ROG Xbox Ally, ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | Not yet | Bazzite: Handled by Bazzite's own MCU workaround (shows as fixed by the system when on). SteamOS: Not on by default. |
+| **Touch in the right place**<br>Makes touch line up with the picture in Gaming Mode (it's turned 90 degrees). | Touch | **Recommended**: OneXFly F1<br>**Optional**: OneXPlayer X1 (AMD), OneXPlayer X1 Mini, OneXPlayer 2, OneXPlayer 2 Pro, AOKZOE A1, AOKZOE A1 Pro | Not yet | Bazzite: Not fixed (issue 5581; waits for ChimeraOS/gamescope-session PR 128). SteamOS: Not affected the same way (SteamOS uses its own session). |
+
+Steam Deck and Legion Go need nothing extra today: the system already covers them. Where a problem has no software
+fix (say, it needs a BIOS update), the Fixes page says so in one line instead of pretending.
+
+**Kept current every night.** A workaround should disappear when the real fix lands, so GameCove checks:
+
+- **On your handheld**, at start and after every system update (never while you play): each fix looks whether the
+  problem is still there. If your system now handles it, GameCove removes its own workaround with that fix's own
+  undo, tells you once, and lists it under History, with **Keep it anyway** if you disagree. It never touches
+  anything it didn't install. In Gaming Mode nothing can ask for your admin password, so the removal waits for
+  Desktop Mode: said once when both copies are harmless together, shown over Home at every start when ours would get
+  in the way of the system's own fix (or was withdrawn), until it's out or you keep it.
+- **Every night, for everyone:** a job follows the kernel, Bazzite, SteamOS, InputPlumber, Handheld Daemon,
+  linux-firmware, maker BIOS listings and each fix's own sources. When something changes, it opens an issue for a
+  maintainer; rules it can check by machine are recorded by themselves. The result is a signed list your handheld
+  picks up within a day, so a fix can be retired, or withdrawn, without waiting for a GameCove update.
+
+How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs/FIXES.md). The research per model:
+[docs/DEVICE-FIXES.md](docs/DEVICE-FIXES.md).
+
 ---
 
 ## Contents
 
-1. [Home and library](#home-and-library)
-2. [Emulation](#emulation)
-3. [Quick menu and settings](#quick-menu-and-settings)
-4. [Auto TDP, upscaling and frame generation](#auto-tdp-upscaling-and-frame-generation)
-5. [Profiles](#profiles)
-6. [Device fixes](#device-fixes)
+1. [Fixes for your handheld](#fixes-for-your-handheld)
+2. [Home and library](#home-and-library)
+3. [Emulation](#emulation)
+4. [Quick menu and settings](#quick-menu-and-settings)
+5. [Upscaling, frame generation and Auto TDP](#upscaling-frame-generation-and-auto-tdp)
+6. [Profiles](#profiles)
 7. [Updates](#updates)
 8. [Streaming from your PC](#streaming-from-your-pc)
 9. [Discover](#discover)
@@ -158,12 +224,21 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 GameCove works with what EmuDeck (or RetroDECK, or ES-DE on its own) already set up, so your console games live in the
 same interface as everything else.
 
-- **Your ROMs in the library.** Steam ROM Manager's games show up as games, with the art it picked, a badge for the
-  console, and play time. They start through Steam, exactly as Steam starts them.
-- **One Emulation page** (Library > Filter > Emulation page, or ES-DE's tile): open ES-DE or RetroDECK full screen
-  like a game (the quick menu works over it), open EmuDeck for emulator updates and settings, and **Add or update ROMs
-  in the library** with Steam ROM Manager. It shows your systems with how many games each has, and what you played
-  last in ES-DE.
+- **Every ROM is a game.** We read every ROM folder your setup points at (EmuDeck's, also on an SD card, ES-DE's own,
+  RetroDECK's) and list each game the way ES-DE does: one entry per game (a `.m3u` for its discs, a `.cue` for its
+  tracks, a `Game.ps3` folder as one game), a clean title ("Super Game (USA) [!]" reads "Super Game"), ES-DE's
+  description, developer, genres, players and rating from its `gamelist.xml`, and the box art, fan art and marquee
+  ES-DE downloaded. No art yet? A card in the console's colours with its name on it.
+- **Plays the way your setup plays it.** Play starts the emulator ES-DE would pick (your alternative emulator for the
+  system or the game included) through EmuDeck's own launcher scripts, RetroDECK's command line, or ES-DE's command,
+  in its own scope like any game: the quick menu, sleep, recording and play time all work.
+- **Like your Steam games.** Filter > Emulation, then any console; search finds ROM titles; favourites, hidden games
+  and collections work (ES-DE's favourites and hidden games are where we start; your changes stay ours); what you
+  played last is on Home. A game Steam ROM Manager also added to Steam shows once.
+- **One Emulation page** (Library > Filter > Emulation page, or ES-DE's tile): every console with its game count
+  (pick one and the Library opens on it), what you played last, each ROM folder, open ES-DE or RetroDECK full screen
+  like a game, open EmuDeck for emulator updates and settings, and add ROMs to Steam too with Steam ROM Manager.
+  Settings > Stores > **Show emulated games in the Library** turns the ROM games off.
 - **Nothing installed yet?** The page shows a QR code to emudeck.com and three short steps.
 - GameCove never downloads or ships games or BIOS files. Play backups of games you own.
 
@@ -257,25 +332,37 @@ it does.
 
 </details>
 
-## Auto TDP, upscaling and frame generation
+## Upscaling, frame generation and Auto TDP
+
+**GameCove sets up the best upscaler your handheld runs, per game, before you press Play.** It reads your chip and
+what the game ships, puts the right files in, and shows afterwards what really ran. No downloads, no folders, no
+launch options. The full guide and the table for every chip are in [docs/UPSCALING.md](docs/UPSCALING.md).
+
+| Your chip | What "Best for this handheld" picks | Frame generation |
+| --- | --- | --- |
+| **Intel Arc with XMX** (Claw 8 EX, Claw 8 AI+, OneXPlayer 3) | **FSR 4.1.2 on the XMX cores**, then its Lite model, then XeSS 2 | XeSS frame generation **2x, 3x or 4x** with XeLL low latency |
+| **AMD Z1 Extreme, Z2 Extreme, 780M / 890M, Ryzen AI** | **FSR 4.1.2** from AMD's own file; FSR 3.1 by itself if it doesn't come up | FSR or XeSS frame generation 2x with low latency |
+| **Steam Deck, Z2 Go and other RDNA 2** | FSR 3.1; FSR 4.1.2 is one tap away, with its cost said plainly | FSR frame generation 2x |
+| **NVIDIA** | Nothing: the game's own DLSS is already the best | The game's own |
+| **Anything** | | Lossless Scaling frame generation, if you own Lossless Scaling on Steam |
+
+- **Three plain choices per game:** Best for this handheld, My choice, and Native (nothing added, everything undone).
+  Every option has one line saying what it is.
+- **You see what's really running.** After a start the card reads the logs and says, for example,
+  "Active: FSR 4.1.2 on XMX, XeSS frame generation 2x, XeLL low latency", or why it isn't active.
+- **One install.** Every file comes with GameCove, each pinned and checked. The size of it all is in
+  Settings > Device > Storage, and uninstalling puts every game back exactly as it shipped.
+- **Safe.** Never on games with anti-cheat. Never on top of another tool's upscaler or ReShade. Never two frame
+  generators at once. Nothing in a game folder is changed for good.
+- **Always the newest tested files.** A nightly job watches every project this builds on and adopts a new build only
+  after 72 hours and a smoke check, through a signed list your handheld verifies. The version before is kept.
+- **Lossless Scaling frame generation** is for owners of Lossless Scaling only: GameCove uses the copy in your own
+  Steam library and never ships or downloads it.
 
 **Auto TDP** watches your frame rate and finds the lowest power that keeps it, so the battery lasts longer without you
 noticing a drop. Give it a target FPS or let it pick one. It learns each game on battery and plugged in, gives power
 back within seconds in heavy scenes, skips loading screens, and puts everything back when you quit. It's ported from
 ClawDeck, which was built and tuned on real hardware, and works on every handheld with a TDP control.
-
-**Upscaling and frame generation** pick the right thing for your chip, per game:
-
-- **Intel Arc:** XeSS on the XMX cores, FSR 4 on XMX, and XeSS frame generation (2x to 4x), through OptiScaler and the
-  XeSS XMX driver.
-- **AMD:** FSR 4 on newer chips (using AMD's own files), FSR 3.1 everywhere, FSR frame generation.
-- **Any GPU:** Lossless Scaling frame generation through lsfg-vk (2x to 4x, with your own copy of Lossless Scaling).
-- **Low latency** (Anti-Lag on AMD, XeLL on Intel Arc) is on by default, and always on while frame generation runs.
-- **Always the newest tested files.** GameCove checks once a day, shows what's installed and when an update is out, and
-  downloads from its own signed mirror on GitHub (then the project's own release), so a moved download never breaks
-  your setup.
-- **Clean Undo.** Everything GameCove adds to a game folder is recorded and removed exactly on Undo. Folders set up by
-  other tools are left alone.
 
 ## Profiles
 
@@ -287,37 +374,6 @@ Order of priority: this game on this power source, then this game, then battery 
 stay with the handheld they were made on, and you can copy, reset, export and import them.
 
 <p align="center"><img src="docs/images/profiles.webp" alt="Settings, Profiles" width="70%"></p>
-
-## Device fixes
-
-Settings > Device > **Fixes** lists the fixes for your exact model. The ones your handheld needs are applied when you
-install GameCove; optional ones are a press away. Every fix shows its status, says in one line what it does, and has
-**Undo**. GameCove also notices when an OS update starts fixing something itself, so you can drop its copy.
-
-<table>
-<tr>
-<td width="33%"><img src="docs/images/fixes.webp" alt="Device fixes"><br><sub>Fixes for your exact model, each with Undo</sub></td>
-<td width="33%"><img src="docs/images/device.webp" alt="About this device"><br><sub>About this device: your model, chip, drivers, memory</sub></td>
-<td width="33%"><img src="docs/images/battery-history.webp" alt="Battery history in About this device"><br><sub>Battery history: 7 days and each game's drain</sub></td>
-</tr>
-</table>
-
-<details>
-<summary><b>Every fix, by maker</b></summary>
-
-| Handhelds | Fixes |
-| --- | --- |
-| **MSI Claw** | MSI buttons next to the screen work (8 EX) · gyro aiming (8 EX) · smooth VRR down to 30 fps instead of 48 (8 EX, 8 AI+; optional on 7 AI+ and A1M) · volume buttons don't wake it in your bag (every Claw) · Wi-Fi comes back after sleep (optional, Intel Claws) |
-| **ASUS ROG Ally** | sticks don't wake it (Ally X, Xbox Ally, Xbox Ally X, X20) · no battery drain while off (Ally, Ally X; optional on the Xbox Allys) · less drain while asleep (optional, every Ally) |
-| **GPD** | sleep that works (WIN 4, WIN Max 2) · stays asleep (optional, WIN Max 2) · Intel AX210 Wi-Fi after sleep (WIN 5) |
-| **AYANEO** | Intel AX210 Wi-Fi after sleep (2, 2S) |
-| **OneXPlayer and AOKZOE** | touch lines up with the picture (OneXFly F1; optional on X1, X1 Mini, 2, 2 Pro, A1, A1 Pro) |
-| **Every handheld** | keeps GameCove off the game's CPU cores while you play · fan presets and charge limit where the system has no service for them · AX210 Wi-Fi fix offered wherever that card is fitted |
-
-Steam Deck and Legion Go need nothing extra today: the OS already covers them, and GameCove's settings do the rest.
-How each fix works: [docs/DEVICE-FIXES.md](docs/DEVICE-FIXES.md).
-
-</details>
 
 ## Updates
 
@@ -417,13 +473,15 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 
 | What | Who | What is sent | When | Switch |
 | --- | --- | --- | --- | --- |
-| Game database and release calendar | GitHub (GameCove's own `gamedb` release) | Nothing about you | At start, at most daily | Background lookups |
+| Game database and release calendar | GitHub (the `gamedb` release of GameCove's data repo, [GameCove-data](https://github.com/IHulkSmashI/GameCove-data)) | Nothing about you | At start, at most daily | Background lookups |
 | Deals, prices and free-to-keep games (Discover, wishlist) | [CheapShark](https://www.cheapshark.com) (cheapshark.com) and the Steam store API | Steam app ids and titles from your wishlist and Discover, what you search for, your store country | 45 s after start, then every 6 hours (top deals and the free-to-keep list: two requests); when you search or open a game | Look up deals and prices |
 | Local prices (optional) | [GG.deals](https://gg.deals) (gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
-| Your device's photo | GitHub (free photos) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
-| Upscaler list and downloads (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and before an install; files only when you install or update | Background lookups (daily check); installs: you start them |
+| Your device's photo | GitHub (free photos on GameCove-data's `device-photos` release) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
+| Upscaler list and newer upscaler files (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove-data's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and when you change an upscaler; files only when the list has a newer tested version than the one that came with GameCove | Background lookups (daily check). With it off, the files that came with GameCove are used |
+| lsfg-vk for Lossless Scaling frame generation | Its author's site (builds.lsfg-vk.dev) | Nothing about you | When you press Set up Lossless frame generation, and only if you have Lossless Scaling installed | You start it |
+| The list of device fixes | GitHub (the `fixes` release of GameCove's data repo, [GameCove-data](https://github.com/IHulkSmashI/GameCove-data), signed) | Nothing about you: the same file for every handheld | At most once a day, at start, never while you play | Background lookups |
 | GE-Proton (Settings > Performance) | GitHub (GloriousEggroll's `proton-ge-custom` releases) | Nothing about you | When you press Check or Install | You start it |
-| BIOS and firmware list and downloads | GitHub (`firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
+| BIOS and firmware list and downloads | GitHub (GameCove-data's `firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
 | Steam insights on a game's page (players now, reviews, Steam Deck rating, last update, DLC) | Steam's public API and store | The game's app id (DLC prices: also your store country) | When you open a Steam game's page; players at most every 10 min, the rest every 12 h | Background lookups (prices: Look up deals and prices) |
 | Achievements | Steam's API and CDN | The game's app id | When you open a game page | Settings > Performance |
 | Game pictures in Discover and the calendar | Steam's CDN, IGDB's image server (`images.igdb.com`) and SteamGridDB's CDN (a download only starts on one of these; a redirect they answer with is followed) | The picture's address (it names the game) | When a tile shows a picture that isn't saved yet | None (SteamGridDB lookups: Look up game details) |
@@ -607,7 +665,7 @@ OptiScaler, lsfg-vk and Moonlight. Auto TDP, the upscaling setup and the MSI Cla
 **ClawDeck** (same author). Gyro on the MSI Claw 8 EX was figured out by **Kisenir** (r/MSIClaw).
 
 Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAntiCheatYet, ProtonDB, IGDB, the Steam
-store) and published as a download; see [`gamedb/`](gamedb/). Game data from [IGDB](https://www.igdb.com): time to beat, game details, critic averages and upcoming release dates. [Metacritic](https://www.metacritic.com) scores as Valve publishes them on the Steam store, each linked to its Metacritic page. Critic scores from [OpenCritic](https://opencritic.com), fetched by the app only with your own key. Artwork from [SteamGridDB](https://www.steamgriddb.com) and its artists, fetched with your own free key. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0. The full list is in [CREDITS.md](CREDITS.md).
+store) and published as a download on [GameCove-data](https://github.com/IHulkSmashI/GameCove-data); see [`gamedb/`](gamedb/). Game data from [IGDB](https://www.igdb.com): time to beat, game details, critic averages and upcoming release dates. [Metacritic](https://www.metacritic.com) scores as Valve publishes them on the Steam store, each linked to its Metacritic page. Critic scores from [OpenCritic](https://opencritic.com), fetched by the app only with your own key. Artwork from [SteamGridDB](https://www.steamgriddb.com) and its artists, fetched with your own free key. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0. The full list is in [CREDITS.md](CREDITS.md).
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
 

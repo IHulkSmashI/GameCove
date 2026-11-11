@@ -95,16 +95,67 @@ def sources(item: dict) -> list[str]:
     return out
 
 
+# ---- GameCove: what came with the install (one install, no download at first use) ---------------------------------
+_HERE = os.path.dirname(os.path.realpath(__file__))
+BUNDLE_DIRS = (os.path.join(os.path.dirname(os.path.dirname(_HERE)), "bin", "upscalers"), "/usr/lib/gamecove/bin/upscalers")
+BUNDLE_MANIFEST = "bundle.json"
+
+
+def bundle_dirs() -> list[str]:
+    env = os.environ.get("GAMECOVE_BUNDLE")
+    return [d for d in dict.fromkeys(([env] if env else []) + list(BUNDLE_DIRS)) if os.path.isdir(d)]
+
+
+def bundled(sha256: str) -> str | None:
+    """The file with this sha256 inside the package (bin/upscalers, written by tools/upscalers/fetch_bundle.py), or
+    None. bundle.json names where each file is; the bytes are checked again by the caller."""
+    want = (sha256 or "").lower()
+    for d in bundle_dirs():
+        try:
+            with open(os.path.join(d, BUNDLE_MANIFEST), encoding="utf-8") as f:
+                files = json.load(f).get("files") or {}
+        except (OSError, ValueError):
+            continue
+        rel = str((files.get(want) or {}).get("path") or "")
+        p = os.path.normpath(os.path.join(d, rel)) if rel and not os.path.isabs(rel) else ""
+        if p and p.startswith(os.path.dirname(d.rstrip(os.sep)) + os.sep) and os.path.isfile(p):
+            return p
+    return None
+
+
+def bundle_info() -> dict:
+    """{"dir", "files": n, "bytes": n} for the bundle in this install ({} without one)."""
+    for d in bundle_dirs():
+        try:
+            with open(os.path.join(d, BUNDLE_MANIFEST), encoding="utf-8") as f:
+                files = json.load(f).get("files") or {}
+        except (OSError, ValueError):
+            continue
+        return {"dir": d, "files": len(files), "bytes": sum(int(v.get("size") or 0) for v in files.values())}
+    return {}
+
+
 def get_verified(urls: list[str], sha256: str, dest: str, timeout: float = 60.0) -> str:
     """Download the first source whose bytes have `sha256` to dest (atomically: a good file already at dest stays
     until the new one is checked). Raises ValueError when no source has those bytes, PermissionError without a pin."""
     want = (sha256 or "").lower()
     if len(want) != 64 or any(c not in "0123456789abcdef" for c in want):
         raise PermissionError(f"{os.path.basename(dest)} has no sha256 pinned; not installed")
-    if not urls:
-        raise ValueError(f"{os.path.basename(dest)}: nowhere to download it from")
     errors = []
     tmp = dest + ".new"
+    have = bundled(want)                    # in the install already: copied, checked like a download, no network
+    if have:
+        try:
+            shutil.copyfile(have, tmp)
+            if sha256_of(tmp) == want:
+                os.replace(tmp, dest)
+                return dest
+            os.remove(tmp)
+            errors.append(f"{have}: the packaged copy does not match its pinned sha256")
+        except OSError as e:
+            errors.append(f"{have}: {e}")
+    if not urls:
+        raise ValueError(f"{os.path.basename(dest)}: nowhere to download it from")
     for url in urls:
         try:
             download(url, tmp, timeout)

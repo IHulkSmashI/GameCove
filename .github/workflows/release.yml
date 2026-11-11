@@ -195,14 +195,16 @@ jobs:
           path: app/build/bin
       - name: FSR 4.1.2 on XMX files (nitec's build, from the pinned commit of ClawDeck's fsr4-xmx-files branch, sha256 checked)
         run: python3 -I tools/upscalers/fetch_fsr4.py app/build/bin/fsr4-xmx
+      - name: Upscaler files for the one install (OptiScaler, OptiPatcher, fakenvapi, REFramework, the XMX driver's release, AMD's FSR upscaler; pinned, sha256 checked)
+        run: python3 -I tools/upscalers/fetch_bundle.py app/build/bin/upscalers --fsr4 app/build/bin/fsr4-xmx
       - name: App tarball (with licenses/, bin/cabinet.dll and bin/fsr4-xmx)
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p dist
-          REQUIRE_CABINET=1 REQUIRE_FSR4=1 sh packaging/make-app-tarball.sh app/build "dist/gamecove-${VERSION}-x86_64.tar.gz"
+          REQUIRE_CABINET=1 REQUIRE_FSR4=1 REQUIRE_UPSCALERS=1 sh packaging/make-app-tarball.sh app/build "dist/gamecove-${VERSION}-x86_64.tar.gz"
           tar -tzf "dist/gamecove-${VERSION}-x86_64.tar.gz" | tee tarball-files.txt
-          for f in bin/cabinet.dll bin/cabinet-lzms-source.tar.gz bin/fsr4-xmx/set.json \
+          for f in bin/cabinet.dll bin/cabinet-lzms-source.tar.gz bin/fsr4-xmx/set.json bin/upscalers/bundle.json \
             bin/fsr4-xmx/amd_fidelityfx_upscaler_dx12.dll bin/fsr4-xmx/fsr-original.dll; do
             grep -qx "$f" tarball-files.txt || { echo "missing from the tarball: $f" >&2; exit 1; }
           done
@@ -263,6 +265,7 @@ jobs:
           for f in set.json amd_fidelityfx_upscaler_dx12.dll fsr-original.dll; do
             grep -qx "/usr/lib/gamecove/bin/fsr4-xmx/$f" rpm-files.txt
           done
+          grep -qx /usr/lib/gamecove/bin/upscalers/bundle.json rpm-files.txt
           sed -n 's/^[^#][^ ]* \(.*\)$/\/usr\/share\/licenses\/gamecove\/\1/p' packaging/licenses.list | while read -r f; do
             grep -qx "$f" rpm-files.txt || { echo "missing from the RPM: $f" >&2; exit 1; }
           done
@@ -275,11 +278,13 @@ jobs:
           ! grep -q "no gyro HID-BPF object" sysext.log
           ! grep -q "no bin/cabinet.dll" sysext.log
           ! grep -q "no bin/fsr4-xmx" sysext.log
+          ! grep -q "no bin/upscalers" sysext.log
           unsquashfs -l sysext/gamecove.raw >sysext-files.txt
           grep -q "/usr/lib/gamecove/bin/cabinet.dll\$" sysext-files.txt
           grep -q "/usr/lib/gamecove/bin/fsr4-xmx/amd_fidelityfx_upscaler_dx12.dll\$" sysext-files.txt
           # the shipped FSR 4.1.2 XMX files are the pinned bytes (what ClawDeck ships)
           python3 -I tools/upscalers/fetch_fsr4.py --check app-export/bin/fsr4-xmx
+          python3 -I tools/upscalers/fetch_bundle.py --check app-export/bin/upscalers
           # the same file as a release asset of its own (SHA256SUMS and its signature name it): the reviewed bytes
           cp app-export/bin/cabinet.dll dist/cabinet.dll
           (cd dist && sha256sum -c "$GITHUB_WORKSPACE/tools/cabinet-lzms/cabinet.sha256")

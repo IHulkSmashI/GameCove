@@ -17,3 +17,4 @@ app/assets/brand/LICENSE.md LICENSE.brand-logos.md
 tools/cabinet-lzms/LICENSE LICENSE.cabinet-lzms-LGPL
 tools/cabinet-lzms/wimlib/COPYING wimlib-COPYING
 tools/cabinet-lzms/wimlib/COPYING.LGPL wimlib-COPYING.LGPL
+LICENSES/AMD-FidelityFX-SDK-license.md AMD-FidelityFX-SDK-license.md

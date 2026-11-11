@@ -31,7 +31,6 @@ from . import tls
 
 log = logging.getLogger("gamecove.livedb")
 
-GAMES_URL = "https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/main/assets/games.json"   # ClawDeck's list (same author)
 SUPPORTED_LIST_URL = "https://raw.githubusercontent.com/wiki/onehoon/OptiClick/Supported-Game-List.md"
 OPTISCALER_COMPAT_URL = "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/Compatibility-List.md"
 OPTISCALER_PAGE_URL = "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/{slug}.asciidoc"
@@ -66,9 +65,12 @@ def valid_games(doc: object, schema: object) -> bool:
     return isinstance(doc, dict) and isinstance(doc.get("games"), list) and doc.get("schema") == schema
 
 
-def refresh(cache_dir: str, bundled_games: str, force: bool = False, get=_get) -> dict:
-    """Fetch both lists when the cached copies are older than REFRESH_S (blocking: run it off the event loop).
-    A list that fails to download or doesn't parse leaves the cached copy as it was."""
+def refresh(cache_dir: str, bundled_games: str, force: bool = False, get=_get, signed=None) -> dict:
+    """Fetch the lists when the cached copies are older than REFRESH_S (blocking: run it off the event loop).
+    A list that fails to download or doesn't parse leaves the cached copy as it was.
+    GameCove: games.json comes only through the signed nightly index: `signed` is a callable that returns its
+    verified bytes (mirror.fetch_data) or None when the index has no newer list. It is never read from an unsigned
+    URL, since it decides what goes into game folders."""
     out = {}
     try:
         with open(bundled_games, "r", encoding="utf-8") as f:
@@ -78,8 +80,10 @@ def refresh(cache_dir: str, bundled_games: str, force: bool = False, get=_get) -
     gp = os.path.join(cache_dir, GAMES_FILE)
     if force or not _fresh(gp):
         try:
-            data = get(GAMES_URL)
-            if valid_games(json.loads(data), schema):
+            data = signed() if signed else None
+            if data is None:
+                out["games"] = "bundled"
+            elif valid_games(json.loads(data), schema):
                 _write(gp, data)
                 out["games"] = "updated"
             else:

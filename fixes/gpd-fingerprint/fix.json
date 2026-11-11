@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "id": "gpd-fingerprint",
+  "revision": 1,
+  "title": "Sleep that works",
+  "line": "Switches off the fingerprint reader, which has no Linux driver and breaks sleep.",
+  "symptom": "Suspend/resume is unreliable on the GPD Win 4 and Win Max 2 because of their USB fingerprint readers.",
+  "why": "The GPD fingerprint readers 2808:9338 (WIN 4) and 2541:9711 (WIN Max 2), which have no Linux driver.",
+  "kind": "file",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "",
+  "level": "recommended",
+  "must_fix": true,
+  "breaks": "sleep",
+  "default": "on",
+  "risk": "low",
+  "risk_note": "One udev rule, the same one Bazzite ships. The fingerprint reader (which has no Linux driver) is switched off.",
+  "auto": "fingerprint:2808:9338|2541:9711",
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "udev-rule",
+      "target": "/etc/udev/rules.d/60-gamecove-gpd-fingerprint.rules",
+      "detail": "Removes the fingerprint reader (2808:9338 on the WIN 4, 2541:9711 on the WIN Max 2) from the USB bus when it appears."
+    },
+    {
+      "type": "sysfs",
+      "target": "/sys/bus/usb/devices/<reader>/remove",
+      "detail": "Written once at install."
+    }
+  ],
+  "undo": "Deletes the rule. The reader is back after a restart.",
+  "tested": [],
+  "bazzite": "Fixed (50-gpd-win-4-fingerprint.rules, 50-gpd-wm2-fingerprint.rules).",
+  "steamos": "Not shipped (GPD isn't a SteamOS device).",
+  "sources": [
+    "https://github.com/aarron-lee/gpd-win-tricks",
+    "https://github.com/ublue-os/bazzite/tree/main/system_files/deck/shared/usr/lib/udev/rules.d"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Looks for the system's own rule for the reader this unit has (Bazzite ships one per model, 50-gpd-win-4-fingerprint.rules and 50-gpd-wm2-fingerprint.rules; a rule for the other model's reader doesn't count), or the value already being right without GameCove."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "bazzite-rule-win4",
+      "kind": "github-file",
+      "repo": "ublue-os/bazzite",
+      "path": "system_files/deck/shared/usr/lib/udev/rules.d/50-gpd-win-4-fingerprint.rules",
+      "note": "Bazzite's WIN 4 rule.",
+      "records": {
+        "os": "bazzite",
+        "present": "fixed",
+        "absent": "not-fixed"
+      }
+    },
+    {
+      "id": "bazzite-rule-wm2",
+      "kind": "github-file",
+      "repo": "ublue-os/bazzite",
+      "path": "system_files/deck/shared/usr/lib/udev/rules.d/50-gpd-wm2-fingerprint.rules",
+      "note": "Bazzite's WIN Max 2 rule."
+    },
+    {
+      "id": "gpd-win-tricks",
+      "kind": "github-commits",
+      "repo": "aarron-lee/gpd-win-tricks",
+      "path": "",
+      "note": "Where the workaround comes from."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

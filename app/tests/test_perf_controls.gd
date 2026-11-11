@@ -80,6 +80,8 @@ func _world(name: String, device: Dictionary, leave_out: Array = []) -> Dictiona
 	DirAccess.make_dir_recursive_absolute(home.path_join(".local/share/Steam/steamapps"))
 	if not "dll" in leave_out:
 		_w(home.path_join(".local/share/Steam/steamapps/common/Lossless Scaling/lsfg-vk.dll"), "dll")
+	if not "dll" in leave_out and not "manifest" in leave_out:
+		_w(home.path_join(".local/share/Steam/steamapps/appmanifest_993090.acf"), "\"AppState\"\n{\n}\n")
 	var perf = Fakes.FakePerf.new()
 	var launcher = Fakes.FakeLauncher.new()
 	var library = Fakes.FakeLibrary.new()
@@ -120,7 +122,7 @@ func test_every_control_is_perf_and_explains_itself() -> void:
 	for want in ["perf.overlay", "perf.overlay_position", "perf.overlay_opacity", "perf.overlay_scale",
 			"perf.overlay_item.fps", "perf.lsfg",
 			"perf.lsfg_multiplier", "perf.lsfg_flow_scale", "perf.lsfg_performance", "perf.upscaler",
-			"perf.frame_gen", "perf.upscale_recommended", "perf.upscale_undo", "perf.upscaler_update",
+			"perf.frame_gen", "perf.upscale_mode", "perf.upscale_active", "perf.fg_generator", "perf.upscale_menu", "perf.upscale_undo", "perf.upscaler_update",
 			"perf.upscale_game_update", "perf.low_latency", "perf.proton",
 			"perf.launch_wrapper", "perf.shader_threads", "perf.clear_shader_cache"]:
 		ok(want in ids, want + " registered")
@@ -252,14 +254,14 @@ func test_lsfg_profiles_keep_the_users_own() -> void:
 func test_lsfg_reasons_and_old_config() -> void:
 	var w := _world("lsfg_reasons", DECK, ["lsfg"])
 	_with_game(w, GAME)
-	eq(w["reg"].control("perf.lsfg").reason, "Needs lsfg-vk", "no layer")
+	eq(w["reg"].control("perf.lsfg").reason, "Needs lsfg-vk: install it below", "no layer")
 	_w(w["home"].path_join(".local/share/vulkan/implicit_layer.d").path_join(Lsfg.LAYER_V1), "{}")
 	w["reg"].detect_all()
-	eq(w["reg"].control("perf.lsfg").reason, "Update lsfg-vk to version 2", "1.x layer")
+	eq(w["reg"].control("perf.lsfg").reason, "Update lsfg-vk to version 2 below", "1.x layer")
 	_done(w)
 	var w2 := _world("lsfg_nodll", DECK, ["dll"])
 	_with_game(w2, GAME)
-	eq(w2["reg"].control("perf.lsfg").reason, "Needs Lossless Scaling from Steam (beta: lsfg-vk)", "no DLL")
+	eq(w2["reg"].control("perf.lsfg").reason, "Needs Lossless Scaling, a paid app on Steam", "no DLL")
 	_done(w2)
 	var w3 := _world("lsfg_v1cfg", DECK)
 	var cfg: String = w3["home"].path_join(Lsfg.CONFIG)
@@ -288,7 +290,10 @@ func test_upscaler_choices_follow_the_gpu() -> void:
 	eq(Upscale.upscalers(Upscale.gpu(CLAW)), ["own", "xess", "fsr4_xmx", "fsr4_xmx_lite"], "Claw")
 	eq(Upscale.frame_gens(Upscale.gpu(CLAW)), [0, 2, 3, 4], "XeSS-FG 2x-4x")
 	eq(Upscale.upscalers(Upscale.gpu(ALLY_X)), ["own", "fsr31", "fsr4_amd"], "RDNA3.5")
-	eq(Upscale.upscalers(Upscale.gpu(DECK)), ["own", "fsr31"], "Steam Deck: no FSR 4")
+	eq(Upscale.upscalers(Upscale.gpu(DECK)), ["own", "fsr31", "fsr4_amd"], "Steam Deck: FSR 4.1.2 offered, never picked by itself")
+	eq(Upscale.frame_gens(Upscale.gpu({"gpu_family": "intel-xe-lpg"})), [0, 2], "Meteor Lake: XeSS frame generation 2x")
+	eq(Upscale.generators(Upscale.gpu(ALLY_X)), ["fsrfg", "xefg"], "AMD: FSR first, XeSS as a choice")
+	eq(Upscale.upscalers(Upscale.gpu({}, {"vendor": "nvidia"})), ["own"], "NVIDIA: the game's own")
 	eq(Upscale.frame_gens(Upscale.gpu(DECK)), [0, 2], "FSR-FG 2x")
 	eq(Upscale.upscalers(Upscale.gpu({"gpu_family": "intel-xe-lpg"})), ["own", "xess"], "Meteor Lake")
 	eq(Upscale.upscalers(Upscale.gpu({})), ["own"], "unknown")
@@ -310,7 +315,7 @@ func test_upscaler_runs_the_helper_and_keeps_its_environment() -> void:
 	reg.set_value("perf.upscaler", "fsr31")
 	var last: String = runner.calls[runner.calls.size() - 1]
 	ok(last.begins_with("/usr/libexec/gamecove/gamecove-upscale choose --home ") and "--key epic:abc --dir /games/abc --upscaler fsr31 --fg 0" in last, "choose call: " + last)
-	ok("--gpu {\"arch\":\"RDNA3.5\",\"chip\":\"\",\"family\":\"amd-rdna3\",\"vendor\":\"amd\",\"xmx\":false} " in last, "GPU facts passed as JSON: " + last)
+	ok("--gpu {\"arch\":\"RDNA3.5\",\"chip\":\"\",\"family\":\"amd-rdna3\",\"gpu\":\"\",\"tier\":\"amd_rdna35\",\"vendor\":\"amd\",\"xmx\":false} " in last, "GPU facts passed as JSON: " + last)
 	var env: Dictionary = w["p"].launch_env_hook("epic:abc", EPIC)
 	eq(env.get("WINEDLLOVERRIDES"), "dxgi=n,b;", "non-Steam launch gets OptiScaler's override")
 	runner.answers["choose"] = {"ok": false, "error": "Decky Framegen has put OptiScaler in this game"}
@@ -332,7 +337,8 @@ func test_upscaler_reasons() -> void:
 	_done(w2)
 	var w3 := _world("upscale_lpg", {"id": "x", "gpu_family": "intel-xe-lpg", "gpu_arch": "Xe-LPG"})
 	_with_game(w3, GAME)
-	eq(w3["reg"].control("perf.frame_gen").reason, "Not on this GPU", "no XeSS-FG without XMX")
+	eq(w3["reg"].control("perf.frame_gen").options.map(func(o): return int(o["value"])), [0, 2], "Meteor Lake: 2x only, never 3x or 4x")
+	eq(w3["reg"].control("perf.fg_generator").reason, "One frame generator on this graphics chip", "nothing to choose between")
 	_done(w3)
 
 
@@ -415,8 +421,9 @@ func test_upscaler_update_row_shows_and_runs_the_update() -> void:
 	var v: Control = ControlView.make(m, "perf.upscaler_update")
 	eq(str(v.row.get_script().resource_path).get_file(), "action_row.gd", "an action row")
 	ok("Update available: OptiScaler 0.9.4 → 0.9.5" in v.explanation(), "the row says so: " + v.explanation())
-	var card: Array = Catalog.cards_for(["perf"], reg.list().map(func(x): return x.id)).filter(func(cd): return cd[0] == "Upscaling")[0]
-	ok("perf.upscaler_update" in card[2] and "perf.upscale_game_update" in card[2], "on the Upscaling card")
+	var card: Array = Catalog.cards_for(["perf"], reg.list().map(func(x): return x.id)).filter(func(cd): return cd[0] == "Upscaling and frame generation")[0]
+	ok("perf.upscaler_update" in card[3] and "perf.upscale_game_update" in card[3], "on the Upscaling card, under More")
+	eq(card[2].slice(0, 2), ["perf.upscale_mode", "perf.upscale_active"], "the mode and what is running come first")
 	# pressing it updates, then reads again
 	runner.answers["update"] = {"ok": true, "results": {}, "games": ["epic:abc"]}
 	var n_check := _calls_with(runner, "check").size()
@@ -694,4 +701,353 @@ func test_lsfg_config_is_replaced_atomically() -> void:
 	var src := FileAccess.get_file_as_string("res://scripts/controls/providers/perf.gd")
 	var body := src.substr(src.find("func write_lsfg_config"), 1600)
 	ok(not "FileAccess.WRITE" in body.substr(0, body.find("\nfunc ", 10)), "written through settings_file.gd, not in place")
+	_done(w)
+
+
+# ---- Best / My choice / Native, what is running, one frame generator ------------------
+
+## The game is changed on the main thread (quick menu, game page) while the
+## Controls worker reads it. It used to be two keys added to and erased from
+## the shared context, which crashed a reader on the worker (SIGABRT in game()).
+func test_the_game_can_change_while_the_worker_reads_it() -> void:
+	var w := _world("game_race", ALLY_X)
+	var ctx: Dictionary = w["ctx"]
+	var p = w["p"]
+	var keys_before := ctx.keys()
+	keys_before.sort()
+	PerfProvider.set_game(ctx, EPIC)
+	eq(p.game_key(), "epic:abc", "the provider sees the game")
+	var keys_after := ctx.keys()
+	keys_after.sort()
+	eq(keys_after, keys_before, "changing the game never adds a key to the shared context")
+	ok(not ctx.has("game") and not ctx.has("game_key"), "the game isn't kept in the context's own keys")
+	# the stored game is a copy: the caller changing its dictionary later doesn't reach a reader
+	var mine := {"key": "gog:9", "store": "gog", "id": "9", "title": "Before"}
+	PerfProvider.set_game(ctx, mine)
+	mine["title"] = "After"
+	eq(str(p.game().get("title", "")), "Before", "a reader keeps the game as it was set")
+	# stress: the worker reads without pause while the main thread swaps the game and clears it
+	var other := {"key": "steam:42", "store": "steam", "id": "42", "title": "Steam Game", "install_path": "/games/42"}
+	var stop := [false]
+	var seen := {"reads": 0, "bad": []}
+	PerfProvider.set_game(ctx, {})   # the reader starts on "none", one of the values it may see
+	var reader := Thread.new()
+	reader.start(func():
+		while not stop[0]:
+			var k: String = p.game_key()
+			var g: Dictionary = p.game()
+			var gk := str(g.get("key", ""))
+			if not k in ["", "epic:abc", "steam:42"] or not gk in ["", "epic:abc", "steam:42"]:
+				seen["bad"].append([k, gk])
+			if gk == "steam:42" and str(g.get("install_path", "")) != "/games/42":
+				seen["bad"].append(["torn", g])
+			seen["reads"] += 1)
+	# a loaded machine may not run the reader at once: wait for it, then swap until it has read
+	# a fair number of times while the game changes (not only a fixed count of swaps)
+	var t0 := Time.get_ticks_msec()
+	while int(seen["reads"]) == 0 and Time.get_ticks_msec() - t0 < 5000:
+		OS.delay_usec(500)
+	var start_reads := int(seen["reads"])
+	var i := 0
+	while i < 20000 or (int(seen["reads"]) - start_reads < 200 and Time.get_ticks_msec() - t0 < 10000):
+		PerfProvider.set_game(ctx, [EPIC, other, {}][i % 3])
+		i += 1
+	stop[0] = true
+	reader.wait_to_finish()
+	ok(int(seen["reads"]) > 0, "the worker read while the game changed (%d reads)" % int(seen["reads"]))
+	eq(seen["bad"], [], "every read saw a whole game or none")
+	PerfProvider.set_game(ctx, {})
+	eq(p.game_key(), "", "cleared")
+	eq(ctx.keys().size(), keys_before.size(), "and the context is as it was")
+	_done(w)
+
+
+## Every alternative says in one plain line what it is.
+func test_every_choice_has_its_own_plain_line() -> void:
+	for chip in [CLAW, ALLY_X]:
+		var w := _world("option_lines_" + str(chip.get("id", "x")), chip)
+		runner_ok(w)
+		_with_game(w, EPIC)
+		var reg: Node = w["reg"]
+		for id in ["perf.upscaler", "perf.frame_gen", "perf.fg_generator", "perf.lsfg_multiplier"]:
+			var c: RefCounted = reg.control(id)
+			for o in c.options:
+				ok(str(o.get("help", "")).length() > 12 and str(o["help"]).length() < 130, "%s / %s has a short line: %s" % [id, str(o["label"]), str(o.get("help", ""))])
+				ok(not "OptiScaler" in str(o.get("help", "")), "in plain words, no tool names")
+		var mode: RefCounted = reg.control("perf.upscale_mode")
+		var by := {}
+		for o in mode.options:
+			by[o["value"]] = str(o.get("help", ""))
+		ok(by["native"].contains("as it shipped") and by["custom"] != "", "Native and My choice explain themselves")
+		eq(by["best"], "", "Best's line is what the plan picked for this game")
+		_done(w)
+	# the row shows the line of the option in view, and the reason when it can't be used
+	var w2 := _world("option_lines_row", CLAW)
+	runner_ok(w2)
+	_with_game(w2, EPIC)
+	var m = Model.new()
+	m.setup(w2["reg"], null)
+	var v: Control = ControlView.make(m, "perf.frame_gen")
+	eq(v._option_line(3, "the control's own line"), Upscale.FG_HELP[3], "3x says what 3x is")
+	eq(v._option_line(0, "the control's own line"), Upscale.FG_HELP[0], "Off too")
+	eq(v._option_line(8, "the control's own line"), "the control's own line", "an option without a line keeps the control's")
+	var mv: Control = ControlView.make(m, "perf.upscale_mode")
+	eq(mv._option_line("best", "Best here: FSR 4.1.2 on XMX."), "Best here: FSR 4.1.2 on XMX.", "Best shows what was picked for this game")
+	eq(mv._option_line("native", "x"), Upscale.MODE_HELP["native"], "Native says what it does")
+	mv.desc["available"] = false
+	eq(mv._option_line("native", "Off for this game: it uses anti-cheat"), "Off for this game: it uses anti-cheat", "why not wins over any option line")
+	# "Running now" is a read-out: its line shows without focus, and its button says what it does
+	var av: Control = ControlView.make(m, "perf.upscale_active")
+	ok(not av.row.collapse_hint, "the read-out stays in view")
+	eq(av.row.value_label.text, "Check again", "the button says what a press does, not Run")
+	var undo: Control = ControlView.make(m, "perf.upscale_undo")
+	ok(undo.row.collapse_hint and undo.row.value_label.text == "Remove", "other action rows fold their line away until focused")
+	undo.free()
+	av.free()
+	v.free()
+	mv.free()
+	_done(w2)
+	eq(Upscale.upscaler_help({"vendor": "amd", "arch": "RDNA2", "chip": "AMD Van Gogh"})["fsr4_amd"], Upscale.FSR4_HEAVY_HELP, "FSR 4 is called heavy where it is")
+	ok(Upscale.upscaler_help({"vendor": "amd", "arch": "RDNA3", "chip": "AMD Ryzen Z1 Extreme"})["fsr4_amd"].contains("sharpest"), "and the best pick on a Z1 Extreme")
+
+
+func runner_ok(w: Dictionary) -> void:
+	w["runner"].answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {},
+		"active": {"state": "own", "line": "Using the game's own upscaler. Nothing of ours is in this game."}}
+	w["runner"].answers["prepare"] = {"ok": true, "did": ""}
+	w["runner"].answers["plan"] = {"ok": true, "line": "", "auto": false, "refused": null}
+
+
+## Set up when a game is installed or updated, not at its first start.
+func test_a_game_is_set_up_when_it_is_installed_or_updated() -> void:
+	var w := _world("prepare_installed", ALLY_X)
+	var runner = w["runner"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove",
+		"env": {"WINEDLLOVERRIDES": "dxgi=n,b;", "PROTON_FSR4_UPGRADE": "1"}, "active": {"state": "waiting", "line": "Ready"}}
+	runner.answers["prepare"] = {"ok": true, "did": "set up", "mode": "best"}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null}
+	var prepare: Variant = w["ctx"].get("prepare_installed")
+	ok(prepare is Callable and (prepare as Callable).is_valid(), "main reaches it through the controls' context")
+	# no game page is open: the installed game is set up all the same
+	var r: Dictionary = (prepare as Callable).call(EPIC, true)
+	eq(str(r.get("did", "")), "set up", "set up right after the install")
+	var calls := _calls_with(runner, "prepare")
+	eq(calls.size(), 1, "one helper run")
+	ok("epic:abc" in calls[0] or "abc" in calls[0], "for that game: " + calls[0])
+	eq(w["p"].launch_env_hook("epic:abc", EPIC).get("PROTON_FSR4_UPGRADE"), "1", "its first start already has the upscaler's settings")
+	_with_game(w, EPIC)
+	eq(_calls_with(runner, "prepare").size(), 1, "opening its page afterwards doesn't do it twice")
+	# an update: checked again (the update may have removed our files)
+	runner.answers["prepare"] = {"ok": true, "did": "put back after a game update", "mode": "best"}
+	(prepare as Callable).call(EPIC, true)
+	eq(_calls_with(runner, "prepare").size(), 2, "an update is looked at again")
+	# while another game runs nothing is started; the next look does it
+	(prepare as Callable).call(EPIC, false)
+	eq(_calls_with(runner, "prepare").size(), 2, "nothing runs behind a running game")
+	w["reg"].detect_all()
+	eq(_calls_with(runner, "prepare").size(), 3, "done at the next look instead")
+	eq((prepare as Callable).call({}, true), {}, "no game: nothing")
+	_done(w)
+
+
+func test_mode_row_sets_the_game_up_once_and_says_what_best_picks() -> void:
+	var w := _world("mode_best", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove",
+		"env": {"WINEDLLOVERRIDES": "dxgi=n,b;", "PROTON_FSR4_UPGRADE": "1"},
+		"active": {"state": "waiting", "line": "Ready: FSR 4.1.2. Start the game, then pick DLSS or FSR in its graphics menu."}}
+	runner.answers["prepare"] = {"ok": true, "did": "set up", "mode": "best"}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2. OptiScaler turns the game's DLSS into FSR 4.1.2.", "auto": true, "refused": null}
+	_with_game(w, EPIC)
+	var c: RefCounted = reg.control("perf.upscale_mode")
+	ok(c.available, "available: " + c.reason)
+	eq(c.value, "best", "Best is the default")
+	eq(c.options.map(func(o): return o["value"]), ["best", "custom", "native"], "three plain choices")
+	eq(c.options.map(func(o): return o["label"]), ["Best for this handheld", "My choice", "Native (nothing added)"], "in plain words")
+	ok(c.help.begins_with("Best here: FSR 4.1.2."), "says what it picked: " + c.help)
+	eq(_calls_with(runner, "prepare").size(), 1, "set up ahead of the first start")
+	reg.detect_all()
+	reg.detect_all()
+	eq(_calls_with(runner, "prepare").size(), 1, "once per game and session, not at every look")
+	var env: Dictionary = w["p"].launch_env_hook("epic:abc", EPIC)
+	eq(env.get("PROTON_FSR4_UPGRADE"), "1", "a non-Steam start gets what prepare set")
+	var a: RefCounted = reg.control("perf.upscale_active")
+	ok(a.available and a.help.begins_with("Ready: FSR 4.1.2."), "the read-out: " + a.help)
+	_done(w)
+
+
+func test_native_takes_everything_out_in_one_press() -> void:
+	var w := _world("mode_native", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr31", "fg": 2, "owner": "gamecove", "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 3.1."}
+	runner.answers["mode"] = {"ok": true, "mode": "native"}
+	_with_game(w, EPIC)
+	runner.answers["status"] = {"ok": true, "mode": "native", "upscaler": "own", "fg": 0, "owner": "none", "env": {},
+		"active": {"state": "own", "line": "Using the game's own upscaler. Nothing of ours is in this game."}}
+	reg.set_value("perf.upscale_mode", "native")
+	var last: Array = _calls_with(runner, "mode")
+	ok(last.size() == 1 and "--mode native" in last[0] and "--key epic:abc" in last[0], "one helper call: " + str(last))
+	eq(w["p"].launch_env_hook("epic:abc", EPIC).has("WINEDLLOVERRIDES"), false, "nothing of ours reaches the next start")
+	reg.detect_all()
+	eq(reg.control("perf.upscale_mode").value, "native", "stays Native")
+	eq(reg.control("perf.upscaler").value, "own", "the game's own")
+	ok("Nothing of ours" in reg.control("perf.upscale_active").help, reg.control("perf.upscale_active").help)
+	runner.calls.clear()
+	reg.set_value("perf.upscale_undo", true)
+	ok(_calls_with(runner, "mode").size() == 1 and "--mode native" in _calls_with(runner, "mode")[0], "Remove is the same as Native")
+	_done(w)
+
+
+func test_anticheat_games_get_nothing_and_say_why() -> void:
+	var w := _world("mode_anticheat", ALLY_X)
+	var runner = w["runner"]
+	w["launcher"].anticheat_keys = ["epic:abc"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none"}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "refused": "anticheat", "line": "This game uses Easy Anti-Cheat. We never put an upscaler into a game with anti-cheat: it can get an account banned. The game's own settings still work."}
+	_with_game(w, EPIC)
+	var c: RefCounted = w["reg"].control("perf.upscale_mode")
+	eq(c.available, false, "nothing to choose")
+	eq(c.reason, "Off for this game: it uses anti-cheat", "says why")
+	ok("--anticheat" in _calls_with(runner, "prepare")[0] and "--anticheat" in _calls_with(runner, "plan")[0], "the app's own anti-cheat data reaches the helper")
+	eq(w["reg"].control("perf.lsfg").reason, "Off for this game: it uses anti-cheat", "Lossless too")
+	_done(w)
+
+
+func test_never_two_frame_generators() -> void:
+	var w := _world("fg_exclusive", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "custom", "upscaler": "fsr31", "fg": 0, "owner": "gamecove", "launch": {}}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 3.1."}
+	runner.answers["choose"] = {"ok": true, "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
+	_with_game(w, EPIC)
+	reg.set_value("perf.lsfg", true)
+	eq(reg.control("perf.lsfg").value, true, "Lossless on")
+	reg.detect_all()
+	eq(reg.control("perf.frame_gen").reason, "Off while Lossless frame generation is on for this game", "the game's frame generation steps aside, and says so")
+	var failed := []
+	reg.control_failed.connect(func(id, _v): failed.append(id))
+	reg.set_value("perf.frame_gen", 2)
+	eq(failed, ["perf.frame_gen"], "and can't be switched on next to it")
+	reg.set_value("perf.lsfg", false)
+	reg.detect_all()
+	reg.set_value("perf.frame_gen", 2)
+	eq(int(w["p"].store.get_value("epic:abc", "frame_gen", 0)), 2, "game frame generation on")
+	reg.detect_all()
+	eq(reg.control("perf.lsfg").reason, "Off while this game's own frame generation is on: that one is sharper", "Lossless steps aside for the sharper one")
+	failed.clear()
+	reg.set_value("perf.lsfg", true)
+	eq(bool(w["p"].store.get_value("epic:abc", "lsfg", false)), false, "Lossless stays off")
+	_done(w)
+
+
+func test_frame_generator_choice_reaches_the_helper() -> void:
+	var w := _world("fg_generator", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "custom", "upscaler": "fsr31", "fg": 2, "owner": "gamecove", "launch": {"fg_out": "fsrfg"}}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": ""}
+	runner.answers["choose"] = {"ok": true, "env": {}}
+	_with_game(w, EPIC)
+	var c: RefCounted = reg.control("perf.fg_generator")
+	ok(c.available, c.reason)
+	eq(c.value, "fsrfg", "FSR frame generation is the default on AMD")
+	eq(c.options.map(func(o): return o["label"]), ["FSR frame generation", "XeSS frame generation"], "plain names")
+	reg.set_value("perf.fg_generator", "xefg")
+	var last: String = _calls_with(runner, "choose")[-1]
+	ok("--upscaler fsr31 --fg 2 --generator xefg" in last, last)
+	eq(reg.control("perf.frame_gen").options.map(func(o): return int(o["value"])), [0, 2], "2x only off Intel: no 3x or 4x shown")
+	var claw := _world("fg_claw", CLAW)
+	eq(claw["reg"].control("perf.frame_gen").options.map(func(o): return o["label"]), ["Off", "2x", "3x", "4x"], "XMX: 2x 3x 4x")
+	eq(claw["reg"].control("perf.fg_generator").reason, "One frame generator on this graphics chip", "XeSS only on Intel")
+	_done(claw)
+	_done(w)
+
+
+func test_upscaler_menu_uses_the_shared_action() -> void:
+	var w := _world("opti_menu", ALLY_X)
+	var runner = w["runner"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr31", "fg": 0, "owner": "gamecove"}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": ""}
+	_with_game(w, EPIC)
+	eq(w["reg"].control("perf.upscale_menu").reason, "Press Insert on a keyboard, or put it on a back button in Settings", "no registry: says how")
+	eq(w["p"].open_upscaler_menu(), false, "nothing to press with")
+	var pressed := []
+	w["ctx"]["run_action"] = func(id): pressed.append(id); return true
+	w["reg"].detect_all()
+	ok(w["reg"].control("perf.upscale_menu").available, "with the action registry it is one press")
+	w["reg"].set_value("perf.upscale_menu", true)
+	eq(pressed, ["key_optiscaler"], "presses the registry's OptiScaler key")
+	runner.answers["status"] = {"ok": true, "mode": "native", "upscaler": "own", "fg": 0, "owner": "none"}
+	w["p"]._forget_status()
+	w["reg"].detect_all()
+	eq(w["reg"].control("perf.upscale_menu").reason, "Our upscaler isn't in this game", "no menu without our upscaler")
+	_done(w)
+
+
+func test_lossless_only_for_people_who_own_it() -> void:
+	# not owned: a plain line and the store page, nothing else
+	var w := _world("lsfg_not_owned", ALLY_X, ["dll", "lsfg"])
+	var opened := []
+	w["ctx"]["open_uri"] = func(u): opened.append(u); return true
+	_with_game(w, EPIC)
+	eq(w["reg"].control("perf.lsfg").reason, "Needs Lossless Scaling, a paid app on Steam", "plain line")
+	var setup: RefCounted = w["reg"].control("perf.lsfg_setup")
+	ok(setup.available and setup.help == "Lossless Scaling is a paid app on Steam. This uses your own copy.", setup.help)
+	w["reg"].set_value("perf.lsfg_setup", true)
+	eq(opened, ["steam://store/993090"], "the store page, nothing else")
+	eq(_calls_with(w["runner"], "lsfg-install"), [], "lsfg-vk is never installed for someone without the app")
+	_done(w)
+	# a DLL without Steam's own install record doesn't count
+	var w2 := _world("lsfg_loose_dll", ALLY_X, ["manifest"])
+	_with_game(w2, EPIC)
+	eq(w2["reg"].control("perf.lsfg").reason, "Needs Lossless Scaling, a paid app on Steam", "a copied DLL is not ownership")
+	_done(w2)
+	# owned, not installed: one press installs it in Steam
+	var w3 := _world("lsfg_owned", ALLY_X, ["dll"])
+	w3["library"].games["steam:993090"] = {"key": "steam:993090", "store": "steam", "id": "993090"}
+	var opened3 := []
+	w3["ctx"]["open_uri"] = func(u): opened3.append(u); return true
+	_with_game(w3, EPIC)
+	eq(w3["reg"].control("perf.lsfg").reason, "Install Lossless Scaling in Steam first", "owned")
+	w3["reg"].set_value("perf.lsfg_setup", true)
+	eq(opened3, ["steam://install/993090"], "installs it in Steam")
+	_done(w3)
+	# owned and installed, lsfg-vk missing: the helper installs lsfg-vk
+	var w4 := _world("lsfg_layer", ALLY_X, ["lsfg"])
+	w4["runner"].answers["lsfg-install"] = {"ok": true, "how": "installed", "version": "2.0.0"}
+	_with_game(w4, EPIC)
+	eq(w4["reg"].control("perf.lsfg").reason, "Needs lsfg-vk: install it below", "one piece left")
+	w4["reg"].set_value("perf.lsfg_setup", true)
+	eq(_calls_with(w4["runner"], "lsfg-install").size(), 1, "one press installs lsfg-vk")
+	_done(w4)
+	# everything there
+	var w5 := _world("lsfg_ready", ALLY_X)
+	_with_game(w5, EPIC)
+	ok(w5["reg"].control("perf.lsfg").available, "ready: " + w5["reg"].control("perf.lsfg").reason)
+	eq(w5["reg"].control("perf.lsfg_setup").reason, "Ready: nothing left to set up", "nothing to do")
+	_done(w5)
+
+
+func test_lossless_defaults_follow_the_chip() -> void:
+	eq(Lsfg.defaults_for("amd_rdna2")["lsfg_performance"], true, "Steam Deck: the lighter model")
+	eq(Lsfg.defaults_for("amd_rdna2")["lsfg_flow_scale"], 0.6, "and 60 % flow scale")
+	eq(Lsfg.defaults_for("amd_rdna35")["lsfg_performance"], false, "890M: the full model")
+	eq(Lsfg.defaults_for("intel_xmx")["lsfg_multiplier"], 2, "2x everywhere")
+	eq(Lsfg.next_step("v2", "ready")["step"], "", "ready")
+	eq(Lsfg.next_step("", "wrong_branch")["step"], "branch", "the Steam beta comes before lsfg-vk")
+	var w := _world("lsfg_deck", DECK)
+	_with_game(w, EPIC)
+	eq(w["reg"].control("perf.lsfg_performance").value, true, "the Deck starts on the lighter model")
+	w["reg"].set_value("perf.lsfg", true)
+	var conf := FileAccess.get_file_as_string(w["home"].path_join(Lsfg.CONFIG))
+	ok("performance_mode = true" in conf and "flow_scale = 0.6" in conf, conf)
 	_done(w)

@@ -1,0 +1,4 @@
+{
+ "_about": "The kill switch. A component listed under \"withdrawn\" (with one line saying why) is named in the signed nightly index; every device then stops offering it, takes its files out of games at the next look and falls back to the next best upscaler. Used when an author asks for their files to be pulled. Components: fsr4_xmx, fsr4_amd, optipatcher, reframework, fakenvapi, optiscaler_v10, xess_xmx_linux. Removing the line brings it back with the next nightly.",
+ "withdrawn": {}
+}

@@ -5,12 +5,56 @@ extends RefCounted
 ## through ctx.runner and answers one JSON object; nothing here touches a game
 ## folder itself.
 
+const GpuCaps := preload("res://scripts/device/gpu_caps.gd")
 const PATHS := ["/usr/libexec/gamecove/gamecove-upscale"]
 const LABELS := {
-	"own": "Game's own", "xess": "XeSS (OptiScaler)", "fsr4_xmx": "FSR 4.1.2 on XMX",
-	"fsr4_xmx_lite": "FSR 4.1.2 Lite on XMX", "fsr31": "FSR 3.1 (OptiScaler)", "fsr4_amd": "FSR 4 (OptiScaler)",
+	"own": "Game's own", "xess": "XeSS 2", "fsr4_xmx": "FSR 4.1.2 on XMX",
+	"fsr4_xmx_lite": "FSR 4.1.2 Lite on XMX", "fsr31": "FSR 3.1", "fsr4_amd": "FSR 4.1.2",
 }
-const INTEL_XMX := ["intel-xe2", "intel-xe3"]
+const MODES := ["best", "custom", "native"]
+const MODE_LABELS := {"best": "Best for this handheld", "custom": "My choice", "native": "Native (nothing added)"}
+const GENERATOR_LABELS := {"fsrfg": "FSR frame generation", "xefg": "XeSS frame generation"}
+const FG_LABELS := {0: "Off", 2: "2x", 3: "3x", 4: "4x"}
+## One plain line per choice, shown under the row for the option in view.
+## "best" has none here: its line is what the helper's plan picked for the game.
+const MODE_HELP := {
+	"custom": "You picked the upscaler and frame generation below. We keep them exactly as you set them.",
+	"native": "The game as it shipped: everything we added is taken out, and nothing comes back by itself.",
+}
+const UPSCALER_HELP := {
+	"own": "The game's own upscaler, untouched. Nothing of ours goes into the game.",
+	"xess": "Intel's XeSS 2: sharp and light. On Arc with the XMX driver it runs on the XMX cores.",
+	"fsr4_xmx": "AMD's newest FSR on Arc's XMX cores: the sharpest picture here. DirectX 12 games.",
+	"fsr4_xmx_lite": "The lighter FSR 4 model on the XMX cores: a few more frames, a slightly softer picture.",
+	"fsr31": "FSR 3.1: runs on every chip and costs the fewest frames.",
+	"fsr4_amd": "AMD's newest FSR: the sharpest picture, for a few frames. DirectX 12 games. FSR 3.1 is one tap away.",
+}
+## FSR 4 on chips where it is offered but never picked by itself (RDNA 2, Z2 A).
+## Steam Deck tests (steamdeckhq.com, club386.com, September 2025): about 10 fps, a fifth to a quarter, for a clearly better picture.
+const FSR4_HEAVY_HELP := "AMD's newest FSR: a clearly better picture for about a quarter fewer frames on this chip. FSR 3.1 is the faster pick."
+const FG_HELP := {
+	0: "No frames are added.",
+	2: "One made frame between every two real ones, with low latency on. Best from about 40 real fps.",
+	3: "Two made frames for every real one. Best from about 40 real fps on a 120 Hz screen.",
+	4: "Three made frames for every real one: the smoothest motion and the most artefacts.",
+}
+const GENERATOR_HELP := {
+	"fsrfg": "AMD's: the lightest, paired with Anti-Lag 2.",
+	"xefg": "Intel's: cleaner menus and HUDs, costs more, and brings XeLL low latency.",
+}
+const LSFG_HELP := {
+	2: "One made frame per real frame.",
+	3: "Two made frames per real frame: more lag and more artefacts.",
+	4: "Three made frames per real frame: the most lag and artefacts.",
+}
+
+
+## The upscaler lines for this GPU (FSR 4 says so where it is heavy).
+static func upscaler_help(g: Dictionary) -> Dictionary:
+	var out := UPSCALER_HELP.duplicate()
+	if GpuCaps.tier(g) in ["amd_rdna2", "amd_z2a"]:
+		out["fsr4_amd"] = FSR4_HEAVY_HELP
+	return out
 
 
 ## Where the helper is, "" when missing. extra: dev/test paths tried first.
@@ -21,31 +65,24 @@ static func command(sys_root: String, extra: Array = []) -> String:
 	return ""
 
 
-## The GPU facts the helper needs, from the device profile (devices.json row).
-static func gpu(profile: Dictionary) -> Dictionary:
-	var fam := str(profile.get("gpu_family", ""))
-	var vendor := "intel" if fam.begins_with("intel") else ("amd" if fam.begins_with("amd") else "other")
-	return {"vendor": vendor, "family": fam, "arch": str(profile.get("gpu_arch", "")),
-		"xmx": bool(profile.get("xmx", fam in INTEL_XMX)), "chip": str(profile.get("chip", ""))}
+## The GPU facts the helper needs, from the device profile (devices.json row)
+## and, when known, the card the system reports (Device.gpu_info(): an NVIDIA
+## desktop has no row that says so). device/gpu_caps.gd owns the table.
+static func gpu(profile: Dictionary, gpu_dev: Dictionary = {}) -> Dictionary:
+	return GpuCaps.gpu(profile, gpu_dev)
 
 
-## Same choices games.upscalers_for() gives (kept in step by test_perf_upscale).
+## Same choices the helper's chips.py gives (kept in step by gpu_tiers.json).
 static func upscalers(g: Dictionary) -> Array:
-	match str(g.get("vendor", "")):
-		"intel":
-			return ["own", "xess", "fsr4_xmx", "fsr4_xmx_lite"] if g.get("xmx", false) else ["own", "xess"]
-		"amd":
-			return ["own", "fsr31", "fsr4_amd"] if str(g.get("arch", "")) in ["RDNA3", "RDNA3.5"] else ["own", "fsr31"]
-	return ["own"]
+	return GpuCaps.upscalers(g)
 
 
 static func frame_gens(g: Dictionary) -> Array:
-	match str(g.get("vendor", "")):
-		"intel":
-			return [0, 2, 3, 4] if g.get("xmx", false) else [0]
-		"amd":
-			return [0, 2]
-	return [0]
+	return GpuCaps.frame_gens(g)
+
+
+static func generators(g: Dictionary) -> Array:
+	return GpuCaps.generators(g)
 
 
 ## --gpu for the helper: the GPU facts as one JSON object (keys sorted). The
@@ -53,7 +90,8 @@ static func frame_gens(g: Dictionary) -> Array:
 ## reads the older vendor=..,xmx=.. pairs.
 static func gpu_arg(g: Dictionary) -> String:
 	return JSON.stringify({"vendor": str(g.get("vendor", "")), "family": str(g.get("family", "")),
-		"arch": str(g.get("arch", "")), "xmx": bool(g.get("xmx", false)), "chip": str(g.get("chip", ""))}, "", true)
+		"arch": str(g.get("arch", "")), "xmx": bool(g.get("xmx", false)), "chip": str(g.get("chip", "")),
+		"gpu": str(g.get("gpu", "")), "tier": GpuCaps.tier(g)}, "", true)
 
 
 ## Runs one command; {} with "ok": false and "error" when it can't.

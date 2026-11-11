@@ -51,10 +51,10 @@ def _no_chown(monkeypatch):
 def test_choices_follow_the_gpu():
     assert games.upscalers_for(INTEL_XMX) == ["own", "xess", "fsr4_xmx", "fsr4_xmx_lite"]
     assert games.fg_for(INTEL_XMX) == [0, 2, 3, 4]
-    assert games.upscalers_for(INTEL_LPG) == ["own", "xess"] and games.fg_for(INTEL_LPG) == [0]
+    assert games.upscalers_for(INTEL_LPG) == ["own", "xess"] and games.fg_for(INTEL_LPG) == [0, 2]
     assert games.upscalers_for(RDNA35) == ["own", "fsr31", "fsr4_amd"] and games.fg_for(RDNA35) == [0, 2]
-    # Van Gogh (Steam Deck): no FSR 4 (AMD's lightweight model, 5.6 ms at 1080p on a Z2 A)
-    assert games.upscalers_for(RDNA2) == ["own", "fsr31"]
+    # Van Gogh (Steam Deck): FSR 4.1.2 is offered (AMD's own DLL, INT8 switched on), never picked by itself
+    assert games.upscalers_for(RDNA2) == ["own", "fsr31", "fsr4_amd"]
     assert games.upscalers_for({}) == ["own"] and games.fg_for({}) == [0]
     assert games.vendor({"family": "intel-xe3"}) == "intel" and games.vendor({"family": "amd-rdna2"}) == "amd"
 
@@ -143,7 +143,7 @@ def test_fsr4_on_amd_uses_amds_own_upscaler_and_puts_the_packages_back(tmp_path,
     r = games.choose(home, "200", "fsr4_amd", 0, RDNA35)
     assert not r["ok"] and "sha256" in r["error"] and not os.path.exists(os.path.join(d, "OptiScaler.ini"))
     # GameCove's mirror first, then AMD's own repository at the pinned commit; both refused on the hash
-    assert calls[0].startswith("https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fsr4_amd-")
+    assert calls[0].startswith("https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/fsr4_amd-")
     assert calls[1].startswith("https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/7539ae8b")
     _w(os.path.join(home, optiscaler.FSR4_AMD_DIR, optiscaler.FSR4_AMD_FILE), "amd-sdk-4.1.2")
     r = games.choose(home, "200", "fsr4_amd", 0, RDNA35)
@@ -152,7 +152,7 @@ def test_fsr4_on_amd_uses_amds_own_upscaler_and_puts_the_packages_back(tmp_path,
     assert "Fsr4Update=true" in open(os.path.join(d, "OptiScaler.ini")).read()
     assert games.choose(home, "200", "fsr31", 0, RDNA35)["ok"]
     assert open(os.path.join(d, "amd_fidelityfx_upscaler_dx12.dll")).read() == "pkg-fsr"
-    assert games.choose(home, "200", "fsr4_amd", 0, RDNA2)["ok"] is False        # not offered on Van Gogh
+    assert games.choose(home, "200", "fsr4_amd", 0, {"vendor": "amd", "arch": "Vega"})["ok"] is False   # not on Vega
 
 
 def test_foreign_optiscaler_is_never_touched(tmp_path):
@@ -204,7 +204,7 @@ def test_entry_script_runs_the_package(tmp_path):
     script = os.path.join(HERE, "..", "..", "libexec", "gamecove-upscale")
     r = subprocess.run(["sh", script, "state", "--home", str(tmp_path), "--gpu", json.dumps(RDNA2)],
                        capture_output=True, text=True, timeout=60, check=False)
-    assert r.returncode == 0 and json.loads(r.stdout)["upscalers"] == ["own", "fsr31"]
+    assert r.returncode == 0 and json.loads(r.stdout)["upscalers"] == ["own", "fsr31", "fsr4_amd"]
 
 
 def test_cli_xess_install_is_for_xmx_only_and_uses_the_pinned_release(tmp_path, capsys, monkeypatch):

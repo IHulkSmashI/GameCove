@@ -249,6 +249,27 @@ func set_imported(imp: Dictionary) -> void:
 	changed.emit()
 
 
+## Keys that now name another game ({old: new}: a Steam ROM Manager shortcut
+## folded into its ROM's own entry): our favourites, hidden games, overrides and
+## collections move to the new key. Saved only when something moved.
+func adopt_keys(map: Dictionary) -> bool:
+	_load()
+	var moved := false
+	var lists: Array = [_data["favourites"], _data["hidden"], _data["unfavourite"], _data["unhide"]]
+	for c in _data["collections"]:
+		lists.append(c["games"])
+	for l in lists:
+		for i in range(l.size() - 1, -1, -1):
+			var k := str(l[i])
+			if map.has(k):
+				moved = true
+				if str(map[k]) in l:
+					l.remove_at(i)
+				else:
+					l[i] = str(map[k])
+	return _save() if moved else false
+
+
 ## How many Steam collections stay in Steam (dynamic ones).
 func dynamic_count() -> int:
 	return int(_imported.get("dynamic", 0))
@@ -268,12 +289,13 @@ func decorate(games: Array) -> Array:
 				member[k] = []
 			member[k].append(c["id"])
 	var out: Array = []
+	var none := []   # one empty list for every game in no collection (thousands of ROMs)
 	for g in games:
 		var d: Dictionary = g.duplicate()
 		var k := str(g.get("key", ""))
 		d["favourite"] = is_favourite(k)
 		d["hidden"] = is_hidden(k)
-		d["collections"] = member.get(k, [])
+		d["collections"] = member.get(k, none)
 		out.append(d)
 	return out
 

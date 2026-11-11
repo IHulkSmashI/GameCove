@@ -310,4 +310,22 @@ fix claw8ex-gyro remove >/dev/null
 ok '[ "$(karg_count firmware_class.path=/etc/firmware)" = 1 ]' "an argument set by someone else stays"
 ok '[ "$(snapshot)" = "$before" ]' "fake root restored"
 
+
+case_start lifecycle
+# docs/FIXES.md: the probe (os_fixed), the installed revision, and update (old version out, this one in)
+gyro_ready
+ok 'fix claw8ex-gyro status | grep -qx os_fixed=no' "not installed, problem there: os_fixed=no"
+ok 'fix claw8ex-gyro status | grep -qx revision=1' "status names the script's revision"
+ok 'fix claw8ex-gyro update | grep -q "not installed"' "update never installs"
+ok 'fix claw8ex-gyro status | grep -qx state=off' "still off"
+fix claw8ex-gyro install >/dev/null 2>&1
+ok 'fix claw8ex-gyro status | grep -qx installed_revision=1' "the installed revision is recorded"
+ok '! fix claw8ex-gyro status | grep -q "^os_fixed="' "with ours in place the probe can't tell, so it doesn't answer"
+before=$(snapshot)
+ok 'fix claw8ex-gyro update 2>/dev/null | tail -n 1 | grep -qx updated' "update"
+ok '[ "$(snapshot)" = "$before" ]' "update of the same revision leaves the same files and boot configuration"
+ok 'fix claw8ex-gyro status | grep -qx installed=yes' "update: still installed"
+fix claw8ex-gyro remove >/dev/null 2>&1
+ok 'fix claw8ex-gyro status | grep -qx installed=no' "remove after an update"
+
 finish

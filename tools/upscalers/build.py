@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build upscalers.json and the mirror's new files (.github/workflows/upscalers.yml runs this nightly).
+"""Build upscalers.json and the mirror's new files (IHulkSmashI/GameCove-data's .github/workflows/upscalers.yml runs this nightly).
 
 Promotion rules (review 2, problem 8; the owner wants the newest builds, with these guards):
   - only from each component's official upstream repository (gamecove_upscale.mirror.UPSTREAM, reviewed in-repo);
@@ -518,12 +518,52 @@ def pin_entry(comp: str, v: dict, mir: Mirror, sources: dict | None = None) -> d
 
 
 # ---- all of it --------------------------------------------------------------------------------------------------
+WITHDRAWN = os.path.join(HERE, "withdrawn.json")
+
+
+def withdrawn(path: str = WITHDRAWN) -> dict:
+    """tools/upscalers/withdrawn.json: {"component": "why"}. The owner's kill switch: a component listed here is
+    named in the signed index and devices take it out of use and out of games at their next look."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    w = d.get("withdrawn") if isinstance(d, dict) else None
+    return {k: str(v)[:200] for k, v in (w or {}).items() if k in mirror.WITHDRAWABLE}
+
+
+def games_data(path: str | None, bundled: str, mir: Mirror, out: str, prev: dict | None) -> dict | None:
+    """The per-game knowledge base for the signed index ("data" "games"): a games.json generated in this run
+    (tools/upscalers/gen_games.py, from sources at least 72 hours old) when it differs from the one in the package,
+    stored on the mirror under its hash. No file or nothing new: last night's entry is carried, else none."""
+    if not path or not os.path.isfile(path):
+        return prev
+    try:
+        new = json.load(open(path, encoding="utf-8"))
+        old = json.load(open(bundled, encoding="utf-8"))
+    except (OSError, ValueError):
+        return prev
+    strip = lambda d: {k: v for k, v in d.items() if k not in ("generated", "optiscaler_commit")}   # noqa: E731
+    if new.get("schema") != old.get("schema") or not isinstance(new.get("games"), list) or len(new["games"]) < len(old.get("games", [])) // 2:
+        raise ValueError("generated games.json has another shape than the package's")
+    if strip(new) == strip(old):
+        return prev
+    sha = sha256_of(path)
+    if prev and prev.get("sha256") == sha:
+        return prev
+    version = re.sub(r"[^0-9]", "", str(new.get("generated", "")))[:14] or today().replace("-", "")
+    name = mirror.mirror_name("games", version, sha, "games.json")
+    url = mir.url_of(name) or mir.add(name, path, out)
+    return {"version": version, "sha256": sha, "size": os.path.getsize(path), "mirror_url": url}
+
+
 def build(net: Net, versions_path: str, out: str, have: str | None = None, previous: str | None = None,
-          now: str | None = None) -> dict:
+          now: str | None = None, games: str | None = None, withdrawn_path: str = WITHDRAWN) -> dict:
     check_sources()
     cutoff = cutoff_for(now)
     v = json.load(open(versions_path, encoding="utf-8"))
-    prev_comps, pin_sources = {}, {}
+    prev_comps, pin_sources, prev_idx = {}, {}, {}
     if previous and os.path.exists(previous):
         try:
             prev_idx = mirror.parse(open(previous, "rb").read())
@@ -553,7 +593,21 @@ def build(net: Net, versions_path: str, out: str, have: str | None = None, previ
                 comps[comp] = fallback
                 report["components"][comp] = fallback["version"] + " (kept)"
     shutil.rmtree(work, ignore_errors=True)
-    idx = {"schema": 1, "generated": now or dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    data = {}
+    try:
+        g = games_data(games, os.path.join(os.path.dirname(versions_path), "games.json"), mir, out,
+                       mirror.data_entry(prev_idx, "games"))
+        if g:
+            data["games"] = g
+            report["components"]["games (data)"] = g["version"]
+    except (ValueError, OSError) as e:
+        report["warnings"].append(f"games: {e}; kept last night's list")
+        if mirror.data_entry(prev_idx, "games"):
+            data["games"] = mirror.data_entry(prev_idx, "games")
+    gone = withdrawn(withdrawn_path)
+    for comp in gone:
+        report["warnings"].append(f"{comp}: withdrawn ({gone[comp]}); devices take it out of use")
+    idx = {"schema": 1, "data": data, "withdrawn": gone, "generated": now or dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
            "repo": mirror.REPO, "note": "Newest upstream build of each upscaler GameCove installs, mirrored on this "
            "repository's 'upscalers' releases under immutable names. Signed with cosign keyless by "
            ".github/workflows/upscalers.yml on main; GameCove checks that signature and every file's sha256.",
@@ -575,8 +629,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", required=True)
     p.add_argument("--have")
     p.add_argument("--previous")
+    p.add_argument("--games", help="a games.json generated in this run (gen_games.py)")
+    p.add_argument("--report", help="write the run's report here as JSON (the workflow opens an issue from it)")
     a = p.parse_args(argv)
-    rep = build(Net(os.environ.get("GITHUB_TOKEN", "")), a.versions, a.out, a.have, a.previous)
+    rep = build(Net(os.environ.get("GITHUB_TOKEN", "")), a.versions, a.out, a.have, a.previous, games=a.games)
+    if a.report:
+        with open(a.report, "w", encoding="utf-8") as f:
+            json.dump(rep, f, indent=1, sort_keys=True)
     lines = ["## Upscalers index", "", "| Component | Version |", "| --- | --- |"]
     lines += [f"| {k} | {v} |" for k, v in rep["components"].items()]
     lines += ["", f"New files on the mirror: {len(rep['uploads'])}"] + [f"- {u}" for u in rep["uploads"]]

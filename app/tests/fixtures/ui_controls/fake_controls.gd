@@ -88,7 +88,10 @@ static func from_describe(c: Dictionary) -> Dictionary:
 	var opts := []
 	for o in spec["options"]:
 		if o is Dictionary:
-			opts.append({"value": _num(o.get("value")), "label": o.get("label", "")})
+			var opt := {"value": _num(o.get("value")), "label": o.get("label", "")}
+			if str(o.get("help", "")) != "":
+				opt["help"] = str(o["help"])      # the option's own line (control_view shows it)
+			opts.append(opt)
 	spec["options"] = opts
 	return spec
 

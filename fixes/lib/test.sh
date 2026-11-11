@@ -56,4 +56,81 @@ mkdir -p "$ROOT/run/gamecove"
 printf '%s\n%s\n' "$future" "$future" >"$ROOT/run/gamecove/rate-f"
 rate_take f 2 600 || fail "stamps later than now (clock stepped back) don't lock changes out"
 
+# ---- gcfix.sh update: a new revision replaces the installed one, or everything is put back (docs/FIXES.md)
+# A throwaway fix built on gcfix.sh, in a fake root. V picks what the "new script" writes and whether it works.
+FX="$T/fixes"
+mkdir -p "$FX/demo" "$T/root/sys/class/dmi/id" "$T/root/run" "$T/bin"
+ln -s "$HERE" "$FX/lib"
+printf '#!/bin/sh\nexit 0\n' >"$T/bin/udevadm"
+chmod +x "$T/bin/udevadm"
+cat >"$FX/demo/fix.sh" <<'EOF'
+#!/bin/sh
+set -eu
+NAME=demo
+DEVICES="*"
+FILES="/etc/udev/rules.d/60-gamecove-demo.rules /etc/gamecove-demo.conf"
+RELOAD=udev
+REVISION="${V_REV:-1}"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/gcfix.sh"
+file_text() {
+	[ "${V_BREAK:-}" != "$1" ] || return 1
+	printf '%s\n# revision %s of %s\n' "$GC_MARK" "$REVISION" "$1"
+}
+hw_present() { return 0; }
+os_fixed() { return 1; }
+apply_now() { save_value /sys/demo/value; write_value /sys/demo/value "new$REVISION"; }
+verify() { [ "${V_VERIFY:-ok}" = ok ]; }
+gc_main "$@"
+EOF
+demo() { GAMECOVE_ROOT="$T/root" PATH="$T/bin:$PATH" sh "$FX/demo/fix.sh" "$@"; }
+echo "Valve" >"$T/root/sys/class/dmi/id/sys_vendor"
+echo "Jupiter" >"$T/root/sys/class/dmi/id/product_name"
+mkdir -p "$T/root/sys/demo"
+echo factory >"$T/root/sys/demo/value"
+RULE="$T/root/etc/udev/rules.d/60-gamecove-demo.rules"
+CONF="$T/root/etc/gamecove-demo.conf"
+ST="$T/root/var/lib/gamecove/fixes/demo"
+[ "$(demo update)" = "not installed" ] || fail "update of a fix that isn't installed does nothing"
+[ ! -e "$RULE" ] || fail "update never installs"
+demo install >/dev/null || fail "install revision 1"
+grep -q "revision 1 of" "$RULE" || fail "revision 1 written"
+[ "$(cat "$ST/installed")" = 1 ] || fail "the installed revision is recorded"
+demo status | grep -qx "installed_revision=1" || fail "status: installed_revision"
+V_REV=2 demo status | grep -qx "revision=2" || fail "status: the script's revision"
+cp "$RULE" "$T/rule.v1"; cp "$CONF" "$T/conf.v1"; cp "$ST/saved" "$T/saved.v1"
+# the new revision doesn't work here (verify says no): every file, the saved values and the record are back
+if V_REV=2 V_VERIFY=no demo update >"$T/out" 2>&1; then fail "a failed update exits non-zero"; fi
+grep -q "put back as it was" "$T/out" || fail "says it was put back: $(cat "$T/out")"
+cmp -s "$RULE" "$T/rule.v1" || fail "rollback: the rule is byte for byte the old one"
+cmp -s "$CONF" "$T/conf.v1" || fail "rollback: the second file too"
+cmp -s "$ST/saved" "$T/saved.v1" || fail "rollback: the saved original values"
+[ "$(cat "$ST/installed")" = 1 ] || fail "rollback: still recorded at revision 1"
+[ ! -e "$ST/rollback" ] || fail "rollback: no copy left behind"
+[ -z "$(find "$T/root/etc" -name '*.gamecove-tmp')" ] || fail "rollback: no temp file left"
+grep -q "update failed" "$ST/changes.log" || fail "the failed update is logged"
+demo status | grep -qx "state=on" || fail "rollback: the old version is still on"
+# the second file can't be written: the first, already replaced, goes back too (never half of each)
+if V_REV=2 V_BREAK=/etc/gamecove-demo.conf demo update >"$T/out" 2>&1; then fail "a half-written update exits non-zero"; fi
+cmp -s "$RULE" "$T/rule.v1" || fail "half-written: the first file is the old one again"
+cmp -s "$CONF" "$T/conf.v1" || fail "half-written: the second file untouched"
+[ "$(cat "$ST/installed")" = 1 ] || fail "half-written: still revision 1"
+# someone replaced one of our files with their own: it is left alone and nothing else changes
+cp "$CONF" "$T/conf.ours"
+echo "# mine now" >"$CONF"
+if V_REV=2 demo update >"$T/out" 2>&1; then fail "a foreign file stops the update"; fi
+grep -qx "# mine now" "$CONF" || fail "a file that isn't GameCove's is never overwritten"
+cmp -s "$RULE" "$T/rule.v1" || fail "foreign file: the rule is the old one"
+cp "$T/conf.ours" "$CONF"
+# and the update that works
+[ "$(V_REV=2 demo update)" = updated ] || fail "update to revision 2"
+grep -q "revision 2 of" "$RULE" && grep -q "revision 2 of" "$CONF" || fail "both files are revision 2"
+[ "$(cat "$ST/installed")" = 2 ] || fail "recorded at revision 2"
+[ "$(cat "$T/root/sys/demo/value")" = new2 ] || fail "applied at once"
+grep -q "update revision=1->2" "$ST/changes.log" || fail "the update is logged"
+V_REV=2 demo status | grep -qx "installed_revision=2" || fail "status after the update"
+# remove still puts the very first value back (the saved original survived both updates)
+V_REV=2 demo remove >/dev/null || fail "remove after an update"
+[ "$(cat "$T/root/sys/demo/value")" = factory ] || fail "remove: the original value from before revision 1"
+[ ! -e "$RULE" ] && [ ! -e "$CONF" ] || fail "remove: files gone"
+
 echo "lib tests passed"

@@ -105,10 +105,35 @@ echo "not nitec's" >"$T/app/bin/fsr4-xmx/fsr-original.dll"
 echo '{}' >"$T/app/bin/fsr4-xmx/set.json"
 if sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/badfsr.tar.gz" >"$T/out" 2>&1; then bad "a bin/fsr4-xmx that isn't the pinned set must be refused"; else ok; fi
 rm -rf "$T/app/bin/fsr4-xmx"
+# one install: the redistributable upscaler files ride in every artefact (tools/upscalers/fetch_bundle.py)
+if REQUIRE_UPSCALERS=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/noup.tar.gz" >"$T/out" 2>&1; then bad "REQUIRE_UPSCALERS=1 must fail without bin/upscalers"; else ok; fi
+mkdir -p "$T/app/bin/upscalers"
+echo "not OptiScaler" >"$T/app/bin/upscalers/0000000000000000000000000000000000000000000000000000000000000000"
+echo '{"schema": 1, "files": {}}' >"$T/app/bin/upscalers/bundle.json"
+if sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/badup.tar.gz" >"$T/out" 2>&1; then bad "a bin/upscalers that isn't the pinned set must be refused"; else ok; fi
+rm -rf "$T/app/bin/upscalers"
+python3 -I "$REPO/tools/upscalers/fetch_bundle.py" --check "$T/nowhere" >/dev/null 2>&1 && bad "fetch_bundle --check passes on a missing folder" || ok
+grep -q 'python3 -I tools/upscalers/fetch_bundle.py app/build/bin/upscalers --fsr4 app/build/bin/fsr4-xmx' "$REPO/.github/workflows/release.yml" && ok || bad "release.yml must fetch the pinned upscaler files into the app"
+grep -q 'bin/upscalers/bundle.json' "$REPO/.github/workflows/release.yml" && ok || bad "release.yml must check the tarball has the upscaler bundle"
+grep -q 'app-export/bin/upscalers/\* %{buildroot}%{_prefix}/lib/gamecove/bin/upscalers/' "$REPO/packaging/rpm/gamecove.spec" && ok || bad "spec must install bin/upscalers"
+grep -q '"/usr/lib/gamecove/bin/upscalers")$' "$REPO/packaging/helpers/gamecove_upscale/downloads.py" && ok || bad "downloads.BUNDLE_DIRS moved: packages install the bundle to /usr/lib/gamecove/bin/upscalers"
+grep -q '^LICENSES/AMD-FidelityFX-SDK-license.md ' "$REPO/packaging/licenses.list" && ok || bad "AMD's FSR SDK notice must ship next to its DLL (licenses.list)"
+# never in the bundle or the repo: NVIDIA's files, AMD's driver DLLs, Lossless Scaling's DLL, lsfg-vk (CC BY-NC-ND: from its author only)
+if python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/packaging/helpers"); sys.path.insert(0, sys.argv[1] + "/tools/upscalers")
+import fetch_bundle
+names = " ".join((i["name"] + " " + " ".join(i["urls"])).lower() for i in fetch_bundle.items(fetch_bundle.load_pins()))
+bad = [w for w in ("nvngx", "amdxcffx", "amdxc64", "lossless", "lsfg") if w in names]
+assert not bad, bad
+PY
+then ok; else bad "the upscaler bundle names a file we must never ship: $(cat "$T/out")"; fi
 python3 -I "$REPO/tools/upscalers/fetch_fsr4.py" --check "$T/nowhere" >/dev/null 2>&1 && bad "fetch_fsr4 --check passes on a missing folder" || ok
 # the unpacked tarball as the sysext and the RPM see it (stand-in bytes: the real check is the one above)
 mkdir -p "$T/cabx/bin/fsr4-xmx"
 for f in amd_fidelityfx_upscaler_dx12.dll fsr-original.dll set.json; do echo "$f" >"$T/cabx/bin/fsr4-xmx/$f"; done
+mkdir -p "$T/cabx/bin/upscalers"
+for f in bundle.json 1111111111111111111111111111111111111111111111111111111111111111; do echo "$f" >"$T/cabx/bin/upscalers/$f"; done
 # sysext: from the unpacked tarball to /usr/lib/gamecove/bin (the path optiscaler.SYSTEM_CABINET checks)
 if SESSION_SUMS="$T/ss.sums" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$T/cabx" --session-src "$T/ss" --out "$T/sxc" --tree-only >"$T/out" 2>&1; then ok; else bad "sysext tree with cabinet: $(cat "$T/out")"; fi
 cmp -s "$T/cabx/bin/cabinet.dll" "$T/sxc/gamecove/usr/lib/gamecove/bin/cabinet.dll" && ok || bad "sysext lacks /usr/lib/gamecove/bin/cabinet.dll"
@@ -116,6 +141,10 @@ cmp -s "$T/cabx/bin/cabinet.dll" "$T/sxc/gamecove/usr/lib/gamecove/bin/cabinet.d
 for f in amd_fidelityfx_upscaler_dx12.dll fsr-original.dll set.json; do
 	cmp -s "$T/cabx/bin/fsr4-xmx/$f" "$T/sxc/gamecove/usr/lib/gamecove/bin/fsr4-xmx/$f" && ok || bad "sysext lacks /usr/lib/gamecove/bin/fsr4-xmx/$f"
 done
+for f in bundle.json 1111111111111111111111111111111111111111111111111111111111111111; do
+	cmp -s "$T/cabx/bin/upscalers/$f" "$T/sxc/gamecove/usr/lib/gamecove/bin/upscalers/$f" && ok || bad "sysext lacks /usr/lib/gamecove/bin/upscalers/$f"
+done
+grep -q "no bin/upscalers" "$T/out" && bad "sysext warned about upscaler files that are there" || ok
 grep -q "no bin/fsr4-xmx" "$T/out" && bad "sysext warned about FSR 4 files that are there" || ok
 grep -q '^SYSTEM_DIR = "/usr/lib/gamecove"$' "$REPO/packaging/helpers/gamecove_upscale/optiscaler.py" && ok || bad "optiscaler.SYSTEM_DIR moved: packages install the FSR 4 set to /usr/lib/gamecove/bin/fsr4-xmx"
 grep -q 'app-export/bin/fsr4-xmx/\* %{buildroot}%{_prefix}/lib/gamecove/bin/fsr4-xmx/' "$REPO/packaging/rpm/gamecove.spec" && ok || bad "spec must install bin/fsr4-xmx"
@@ -137,7 +166,7 @@ REL="$REPO/.github/workflows/release.yml"
 grep -q 'bash tools/cabinet-lzms/build.sh --check' "$REL" && ok || bad "release.yml must build cabinet.dll and compare it with cabinet.sha256"
 grep -q 'bash tools/cabinet-lzms/test/run.sh' "$REL" && ok || bad "release.yml must test cabinet.dll under Wine"
 grep -q '"gcc-mingw-w64-x86-64=${MINGW_GCC}"' "$REL" && grep -Eq '^  MINGW_GCC: [0-9]' "$REL" && ok || bad "release.yml must pin the mingw-w64 toolchain by version"
-grep -q 'REQUIRE_CABINET=1 REQUIRE_FSR4=1 sh packaging/make-app-tarball.sh' "$REL" && ok || bad "release.yml must require the reviewed cabinet.dll in the tarball"
+grep -q 'REQUIRE_CABINET=1 REQUIRE_FSR4=1 REQUIRE_UPSCALERS=1 sh packaging/make-app-tarball.sh' "$REL" && ok || bad "release.yml must require the reviewed cabinet.dll in the tarball"
 grep -q 'grep -qx /usr/lib/gamecove/bin/cabinet.dll rpm-files.txt' "$REL" && ok || bad "release.yml must check the RPM has cabinet.dll"
 grep -q 'cp app-export/bin/cabinet.dll dist/cabinet.dll' "$REL" && grep -q 'dist/cabinet.dll$' "$REL" && ok || bad "release.yml must publish cabinet.dll so SHA256SUMS and its signature cover it"
 grep -q 'bash tools/cabinet-lzms/test/run.sh' "$REPO/.github/workflows/ci.yml" && ok || bad "ci.yml must build and test cabinet.dll on every push"
@@ -242,99 +271,59 @@ PY
 grep -q 'cosign-release: ${{ steps.cosign.outputs.version }}' "$W" && ok || bad "cosign-installer must install get-gamecove.sh's COSIGN_VERSION"
 grep -q "COSIGN_SHA256=" "$W" && ok || bad "release.yml must check cosign against get-gamecove.sh's COSIGN_SHA256"
 
-# ------------------------------------------------------------- firmware index signature (M21)
-FW="$REPO/.github/workflows/firmware.yml"
-grep -q "cosign sign-blob --yes --bundle dist/firmware.json.gz.sigstore.json dist/firmware.json.gz" "$FW" && ok || bad "firmware.yml must sign the index"
-grep -q "dist/firmware.json.gz.sigstore.json --clobber" "$FW" && ok || bad "firmware.yml must publish the signature"
-grep -q "id-token: write" "$FW" && ok || bad "firmware.yml needs id-token: write"
-# review problem 2: build (scrapers, pip packages) can't sign or publish; publish runs only pinned cosign and gh
-python3 -I - "$FW" >"$T/out" 2>&1 <<'PY' && ok || bad "firmware.yml jobs: $(cat "$T/out")"
-import re, sys, yaml
-doc = yaml.safe_load(open(sys.argv[1]))
-assert doc.get("permissions") == {}, "nothing at the top level"
-jobs = doc["jobs"]
-assert set(jobs) == {"build", "publish"}, list(jobs)
-b, p = jobs["build"], jobs["publish"]
-assert b.get("permissions") == {"contents": "read"}, b.get("permissions")
-assert b.get("if") == "github.ref == 'refs/heads/main'", "build for publishing only on main"
-assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write", "id-token": "write"}, p.get("permissions")
-brun = "\n".join(s.get("run", "") for s in b["steps"])
-prun = "\n".join(s.get("run", "") for s in p["steps"])
-assert "cosign" not in brun and "gh release" not in brun, "build must not sign or publish"
-assert "pip install" not in prun and "gamedb" not in prun, "publish must not run the scrapers or third-party packages"
-assert "cosign sign-blob" in prun and "COSIGN_SHA256=" in prun
-for j in (b, p):
-    for s in j["steps"]:
-        if s.get("uses", "").startswith("actions/checkout@"):
-            assert s.get("with", {}).get("persist-credentials") is False, "checkout keeps no token"
-        assert "${{" not in s.get("run", ""), "${{ }} inside run:"
-PY
-app_cos=$(sed -n 's/^const COSIGN_VERSION := "\(.*\)"$/\1/p' "$REPO/app/scripts/system/updates.gd")
-gg_cos=$(sed -n 's/^COSIGN_VERSION=//p' "$REPO/packaging/get-gamecove.sh")
-[ -n "$app_cos" ] && [ "$app_cos" = "$gg_cos" ] && ok || bad "updates.gd COSIGN_VERSION ($app_cos) must match get-gamecove.sh ($gg_cos)"
-grep -q 'workflows/firmware\\\\.yml@refs/heads/main\$' "$REPO/app/scripts/system/firmware_index.gd" && ok || bad "firmware_index.gd SIGNER_IDENTITY must name firmware.yml on main"
-
-# ------------------------------------------------------------- upscalers index and mirror (owner decision 2026-11-09)
-UW="$REPO/.github/workflows/upscalers.yml"
+# ------------------------------------------------------------- data releases live in GameCove-data (owner decision 2026-11-11)
+# The gamedb, firmware, upscalers and device-photos releases are built, signed and published by the workflows of
+# github.com/IHulkSmashI/GameCove-data (its tests/check_workflows.py checks them); this repo's Releases page only has
+# the v* app releases. The app names that repo in one place (data_repo.gd), the helper in mirror.py; they must agree.
+for n in upscalers.yml firmware.yml gamedb.yml device-photos.yml fixes.yml; do
+	[ ! -e "$REPO/.github/workflows/$n" ] && ok || bad ".github/workflows/$n publishes data: it belongs in IHulkSmashI/GameCove-data"
+done
+DR="$REPO/app/scripts/system/data_repo.gd"
 MP="$REPO/packaging/helpers/gamecove_upscale/mirror.py"
-python3 -I - "$UW" "$MP" "$GG" >"$T/out" 2>&1 <<'PY' && ok || bad "upscalers.yml / mirror.py: $(cat "$T/out")"
-import re, subprocess, sys, yaml
-wf, mp, gg = sys.argv[1:4]
-doc = yaml.safe_load(open(wf))
-on = doc.get("on", doc.get(True))
-assert "schedule" in on and "workflow_dispatch" in on, "nightly and by hand (gh workflow run upscalers.yml)"
-assert doc.get("permissions") == {}, "least privilege: nothing at the top level"
-jobs = doc["jobs"]
-# review problem 2 pattern: build (tests, builder, third-party downloads) read-only; publish signs and uploads
-assert list(jobs) == ["build", "publish"], list(jobs)
-b, p = jobs["build"], jobs["publish"]
-assert b.get("permissions") == {"contents": "read"}, b.get("permissions")
-assert b.get("if") == "github.ref == 'refs/heads/main'", "build for publishing only on main (the signing identity)"
-assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write", "id-token": "write"}, p.get("permissions")
-brun = "\n".join(x.get("run", "") for x in b["steps"])
-prun = "\n".join(x.get("run", "") for x in p["steps"])
-assert "sign-blob" not in brun and "gh release upload" not in brun and "gh release create" not in brun, "build must not sign or publish"
-assert "pip install" not in prun and "tools/upscalers/build.py" not in prun and "pytest" not in prun, "publish must not run the builder or third-party packages"
-assert set(re.findall(r"tools/upscalers/[A-Za-z_./]+", prun)) <= {"tools/upscalers/check_plan.py"}, "publish runs only check_plan.py of ours"
-assert any(x.get("uses", "").startswith("actions/upload-artifact@") for x in b["steps"])
-assert any(x.get("uses", "").startswith("actions/download-artifact@") for x in p["steps"])
-steps = b["steps"] + p["steps"]
-bad = [s.get("name", s.get("uses", "?")) for s in steps if "${{" in s.get("run", "")]
-assert not bad, "${{ }} inside run: " + str(bad)
-for s in steps:
-    if "uses" in s:
-        assert re.match(r"^[^@ ]+@[0-9a-f]{40}$", s["uses"]), "unpinned: " + s["uses"]
-    if s.get("uses", "").startswith("actions/checkout@"):
-        assert s.get("with", {}).get("persist-credentials") is False, "checkout keeps no token"
-runs = "\n".join(s.get("run", "") for s in steps)
-assert "cosign sign-blob --yes --bundle dist/upscalers.json.sigstore.json dist/upscalers.json" in runs
-assert runs.count("--clobber") == 1 and "dist/upscalers.json.sigstore.json dist/upscalers.json.sha256 --clobber" in runs, \
-    "only the index is replaced; mirror files never"
-assert runs.index('gh release upload "$tag" "dist/$path"') < runs.index("--clobber"), "files first, the index last"
-assert "--latest=false" in runs, "the mirror release must never become 'latest' (GitHub would hide the app release behind it; get-gamecove.sh reads the release list and only takes vX... tags)"
-assert "cosign-release: ${{ steps.cosign.outputs.version }}" in open(wf).read()
-# the workflow's own check, for this repository, is the identity the helper requires
-ident = [l.strip()[len('ident="'):-1] for l in runs.splitlines() if l.strip().startswith('ident="')]
-assert len(ident) == 2 and ident[0] == ident[1], ident
-got = subprocess.run(["sh", "-c", 'printf "%s" "' + ident[0] + '"'], env={"REPO": "IHulkSmashI/GameCove", "PATH": "/usr/bin:/bin"},
-                     capture_output=True, text=True, check=True).stdout
-src = open(mp).read()
-helper = re.search(r'^SIGNER_IDENTITY = r"(.*)"$', src, re.M).group(1)
-assert got == helper, (got, helper)
-r = re.compile(helper)
-base = "https://github.com/IHulkSmashI/GameCove/.github/workflows/"
-assert r.search(base + "upscalers.yml@refs/heads/main") and r.search(base.lower() + "upscalers.yml@refs/heads/main")
-for other in ("firmware.yml@refs/heads/main", "upscalers.yml@refs/heads/dev", "upscalers.yml@refs/tags/v1.0.0",
-              "upscalers.yml@refs/heads/main2"):
-    assert not r.search(base + other), other
-assert not r.search("https://github.com/fork/GameCove/.github/workflows/upscalers.yml@refs/heads/main")
+FI="$REPO/app/scripts/system/firmware_index.gd"
+python3 -I - "$DR" "$MP" "$FI" "$GG" >"$T/out" 2>&1 <<'PY' && ok || bad "data repo pins: $(cat "$T/out")"
+import re, sys
+dr, mp, fi, gg = (open(p).read() for p in sys.argv[1:5])
+def gd(name):
+    return re.search(r'^const %s := "(.*)"$' % name, dr, re.M).group(1).replace("\\\\", "\\")
+def py(name):
+    return re.search(r'^%s = r?"(.*)"$' % name, mp, re.M).group(1)
+assert gd("REPO") == py("REPO") == "IHulkSmashI/GameCove-data", (gd("REPO"), py("REPO"))
+assert gd("RELEASES") == "https://github.com/IHulkSmashI/GameCove-data/releases/download/"
+assert 'RELEASE_BASE = f"https://github.com/{REPO}/releases/download/"' in mp
+assert gd("OIDC_ISSUER") == py("OIDC_ISSUER") == "https://token.actions.githubusercontent.com"
+assert gd("UPSCALERS_SIGNER") == py("SIGNER_IDENTITY"), (gd("UPSCALERS_SIGNER"), py("SIGNER_IDENTITY"))
+assert "const SIGNER_IDENTITY := DataRepo.FIRMWARE_SIGNER" in fi and "const OIDC_ISSUER := DataRepo.OIDC_ISSUER" in fi
+assert "const URL := DataRepo.FIRMWARE_URL" in fi
+assert "IHulkSmashI/GameCove-data/releases/download/upscalers(" in mp
+base = "https://github.com/IHulkSmashI/GameCove-data/.github/workflows/"
+for name, wf in (("FIRMWARE_SIGNER", "firmware.yml"), ("UPSCALERS_SIGNER", "upscalers.yml")):
+    r = re.compile(gd(name))
+    assert r.search(base + wf + "@refs/heads/main") and r.search((base + wf + "@refs/heads/main").lower()), name
+    for other in ("https://github.com/IHulkSmashI/GameCove/.github/workflows/" + wf + "@refs/heads/main",
+                  base + wf + "@refs/heads/dev", base + wf + "@refs/tags/v1.0.0", base + wf + "@refs/heads/main2",
+                  "https://github.com/fork/GameCove-data/.github/workflows/" + wf + "@refs/heads/main",
+                  base + ("upscalers.yml" if wf == "firmware.yml" else "firmware.yml") + "@refs/heads/main"):
+        assert not r.search(other), (name, other)
 # the helper checks signatures with the cosign the installer pins
-ggs = open(gg).read()
 for k in ("COSIGN_VERSION", "COSIGN_SHA256"):
-    a = re.search(r"^%s=(\S+)$" % k, ggs, re.M).group(1)
-    b = re.search(r'^%s = "(\S+)"$' % k, src, re.M).group(1)
+    a = re.search(r"^%s=(\S+)$" % k, gg, re.M).group(1)
+    b = re.search(r'^%s = "(\S+)"$' % k, mp, re.M).group(1)
     assert a == b, (k, a, b)
 PY
+app_cos=$(sed -n 's/^const COSIGN_VERSION := "\(.*\)"$/\1/p' "$REPO/app/scripts/system/updates.gd")
+gg_cos=$(sed -n 's/^COSIGN_VERSION=//p' "$GG")
+[ -n "$app_cos" ] && [ "$app_cos" = "$gg_cos" ] && ok || bad "updates.gd COSIGN_VERSION ($app_cos) must match get-gamecove.sh ($gg_cos)"
+# nothing downloads data from this repo's releases any more (only the v* app releases are here); the tests that
+# name the old home on purpose (to check it's refused) are the only exceptions
+git -C "$REPO" grep -nI -i "IHulkSmashI/GameCove/releases/download" -- . \
+	':!packaging/tests/release.sh' ':!app/tests/test_data_repo.gd' ':!packaging/helpers/tests/test_upscalers_index.py' >"$T/old" 2>/dev/null
+if [ -s "$T/old" ]; then bad "still downloads data from the app repo's releases: $(head -5 "$T/old" | tr '\n' ' ')"; else ok; fi
+# only release.yml writes releases here, and only v* tags: get-gamecove.sh and the README badge never see a data release
+for f in "$REPO"/.github/workflows/*.yml; do
+	case "$f" in */release.yml) continue ;; esac
+	if grep -n "gh release \(create\|upload\|edit\)\|releases/assets\|action-gh-release" "$f" >"$T/rel"; then bad "$f writes a release: $(tr '\n' ' ' <"$T/rel")"; else ok; fi
+done
 
 # ------------------------------------------------------------- brand logos (M23)
 python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY' && ok || bad "brand logos: $(cat "$T/out")"
@@ -387,43 +376,23 @@ import os, re, sys, yaml
 d = sys.argv[1]
 def load(n):
     return yaml.safe_load(open(os.path.join(d, n)))
-# every job that can mint the signing identity runs in a protected environment: "release" (owner approves) for
-# GameCove releases, "nightly" (main only, no daily approval) for the firmware and upscaler lists
+# every job that can mint the signing identity runs in the protected "release" environment (owner approves); the
+# nightly data lists sign in GameCove-data's "nightly" environment, not here
 for n in sorted(os.listdir(d)):
     for name, j in load(n)["jobs"].items():
         if (j.get("permissions") or {}).get("id-token") == "write":
-            assert j.get("environment") in ("release", "nightly"), f"{n}:{name} signs without a protected environment"
+            assert j.get("environment") == "release", f"{n}:{name} signs without the protected release environment"
 assert load("release.yml")["jobs"]["release"].get("environment") == "release"
-for n in ("firmware.yml", "upscalers.yml"):
-    assert load(n)["jobs"]["publish"].get("environment") == "nightly", n
-# gamedb and device photos: scrapers in a read-only job, the release written only by a job that runs gh
-for n, scraper in (("gamedb.yml", "gamedb.build"), ("device-photos.yml", "tools/device_photos/build.py")):
-    doc = load(n)
-    assert doc.get("permissions") == {}, n + ": nothing at the top level"
-    b, p = doc["jobs"]["build"], doc["jobs"]["publish"]
-    assert b.get("permissions") == {"contents": "read"}, (n, b.get("permissions"))
-    assert b.get("if") == "github.ref == 'refs/heads/main'", n + ": build for publishing only on main"
-    assert p.get("needs") == "build" and p.get("permissions") == {"contents": "write"}, (n, p.get("permissions"))
-    brun = "\n".join(s.get("run", "") for s in b["steps"])
-    prun = "\n".join(s.get("run", "") for s in p["steps"])
-    assert scraper in brun and "gh release upload" not in brun and "gh release create" not in brun, n + ": build must not publish"
-    assert "pip install" not in prun and scraper not in prun and "pytest" not in prun, n + ": publish must not run the scrapers"
-    assert not any(s.get("uses", "").startswith("actions/checkout@") for s in p["steps"]), n + ": publish needs no code"
-    assert any(s.get("uses", "").startswith("actions/upload-artifact@") for s in b["steps"])
-    assert any(s.get("uses", "").startswith("actions/download-artifact@") for s in p["steps"])
-    for j in doc["jobs"].values():
-        for s in j["steps"]:
-            if s.get("uses", "").startswith("actions/checkout@"):
-                assert s.get("with", {}).get("persist-credentials") is False, n + ": checkout keeps no token"
-            assert "${{" not in s.get("run", ""), n + ": ${{ }} inside run:"
-mk = load("device-photos.yml")["jobs"]["maker-links"]
+# the weekly maker image link check (it reads this repo's data and files its issue here) needs no write to contents
+mk = load("maker-links.yml")
+assert mk.get("permissions") == {} and list(mk["jobs"]) == ["maker-links"], "maker-links.yml: one job, nothing at the top"
+mk = mk["jobs"]["maker-links"]
 assert mk.get("permissions") == {"contents": "read", "issues": "write"}, mk.get("permissions")
-# the upscalers publish job re-checks the artifact with GameCove's own code before signing (review 2, problem 15)
-up = load("upscalers.yml")["jobs"]["publish"]
-runs = [s.get("run", "") for s in up["steps"]]
-chk = [i for i, r in enumerate(runs) if "tools/upscalers/check_plan.py dist" in r]
-sig = [i for i, r in enumerate(runs) if "cosign sign-blob" in r]
-assert chk and sig and chk[0] < sig[0], "check_plan.py must run before signing"
+for s in mk["steps"]:
+    if s.get("uses", "").startswith("actions/checkout@"):
+        assert s.get("with", {}).get("persist-credentials") is False, "maker-links: checkout keeps no token"
+    assert "${{" not in s.get("run", ""), "maker-links: ${{ }} inside run:"
+assert "tools/device_photos/makers.py --check" in "\n".join(s.get("run", "") for s in mk["steps"])
 # the tag job starts the release run on the full tag ref; a re-run never unpublishes a release (review 2, low 22)
 rel = load("release.yml")["jobs"]
 assert 'gh workflow run release.yml --ref "refs/tags/$tag"' in "\n".join(s.get("run", "") for s in rel["tag"]["steps"])
@@ -434,7 +403,6 @@ test -s "$REPO/docs/RELEASING.md" && grep -q "Release tags" "$REPO/docs/RELEASIN
 
 # ------------------------------------------------------------- IGDB / ProtonDB attribution (M24)
 grep -q "Game data from IGDB" "$REPO/gamedb/NOTICE.md" && grep -q "ODbL" "$REPO/gamedb/NOTICE.md" && ok || bad "gamedb/NOTICE.md must credit IGDB and ProtonDB (ODbL)"
-grep -q "gh release upload gamedb dist/NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && grep -q "gh release edit gamedb --notes-file dist/NOTICE.md" "$REPO/.github/workflows/gamedb.yml" && ok || bad "gamedb.yml must publish NOTICE.md as an asset and as the notes"
 grep -q "Game data from \[IGDB\](https://www.igdb.com)" "$REPO/README.md" && ok || bad "README must credit IGDB with a link"
 # ------------------------------------------------------------- no SteamGridDB key in any build
 # Users sign in to SteamGridDB in the Game art step; a key inside a public build could be pulled out.
@@ -528,9 +496,6 @@ t = [s.get("run", "") for s in jobs["tag"]["steps"]]
 ask = [i for i, r in enumerate(t) if "check-environment.sh release reviewers" in r]
 mk = [i for i, r in enumerate(t) if "git/refs" in r]
 assert ask and mk and ask[0] < mk[0], "the tag job checks the environment before creating the tag"
-for n in ("firmware.yml", "upscalers.yml"):
-    b = yaml.safe_load(open(sys.argv[1].replace("release.yml", n)))["jobs"]["build"]
-    assert any("check-environment.sh\" nightly branches" in s.get("run", "") for s in b["steps"]), n + ": build must check the nightly environment"
 PY
 # tools/ci/check-environment.sh against canned answers of GitHub's "get an environment"
 CE="$REPO/tools/ci/check-environment.sh"

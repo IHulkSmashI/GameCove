@@ -1,0 +1,159 @@
+{
+  "schema": 1,
+  "id": "claw8ex-vrr",
+  "revision": 1,
+  "title": "Smooth screen down to 30 fps",
+  "line": "Lets VRR keep games smooth down to 30 fps instead of 48.",
+  "symptom": "The Claw's panel EDID says 48-120 Hz although the panel does 30-120 Hz, so VRR stops working under 48 fps.",
+  "why": "The panel: the CSW PN8007QB1-2 in the Claw 8 AI+ and 8 EX (and the TMX TL070FVXS02-0 in the A1M and 7 AI+) report 48-120 Hz but run 30-120 Hz; the fix only patches those exact factory EDIDs (sha256) and hooks the Intel GPU driver.",
+  "kind": "root",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "restart",
+  "level": "recommended",
+  "must_fix": true,
+  "breaks": "screen",
+  "default": "on",
+  "risk": "medium",
+  "risk_note": "Changes what the Intel GPU driver is told about the panel at boot. Only exact, validated factory EDIDs are patched, and a boot-menu kill switch (gamecove.novrr) skips it.",
+  "auto": {
+    "all-of": [
+      "panel:csw-pn8007qb1-2",
+      "gpu_driver:xe|i915"
+    ]
+  },
+  "optional": {
+    "all-of": [
+      "panel:tmx-tl070fvxs02-0",
+      "gpu_driver:xe|i915"
+    ]
+  },
+  "exclude": {
+    "msi-claw-a8": "AMD GPU: the boot hook runs before xe/i915 only, and the A8's panel EDID isn't in the validated list."
+  },
+  "changes": [
+    {
+      "type": "firmware",
+      "target": "/etc/firmware/edid/gamecove-<panel>-30-120.bin",
+      "detail": "A copy of the panel's own EDID with only the refresh range changed to 30-120 Hz."
+    },
+    {
+      "type": "file",
+      "target": "/etc/gamecove/claw8ex-vrr/edid.conf",
+      "detail": "Which board and connector the EDID is for."
+    },
+    {
+      "type": "file",
+      "target": "/etc/gamecove/claw8ex-vrr/edid-hook.sh",
+      "detail": "A tiny board check that runs right before the GPU driver loads."
+    },
+    {
+      "type": "file",
+      "target": "/etc/modprobe.d/gamecove-claw8ex-vrr.conf",
+      "detail": "Runs the hook before xe / i915."
+    },
+    {
+      "type": "initramfs",
+      "target": "rpm-ostree initramfs-etc --track",
+      "detail": "Bazzite: the four files above, so it also works when the driver loads early. (SteamOS: only offered where the driver starts after /etc is there, so no initramfs step.)"
+    },
+    {
+      "type": "kernel-arg",
+      "target": "gamecove.vrr=1",
+      "detail": "The switch the hook looks for (plus firmware_class.path=/etc/firmware, shared with the gyro fix). Bazzite: a kernel argument. SteamOS: one marked line in /etc/default/grub, then update-grub."
+    },
+    {
+      "type": "file",
+      "target": "/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf",
+      "detail": "SteamOS only: keeps the fix's own files across SteamOS updates (never Valve's grub file); after an update GameCove puts the grub line back without a password."
+    }
+  ],
+  "undo": "Takes out the boot switch (kernel argument, or the grub line and update-grub on SteamOS), the initramfs entries, the SteamOS keep list and every file, in reverse order. The panel's own EDID is back after a restart.",
+  "tested": [
+    {
+      "device": "msi-claw-8-ex",
+      "date": "2026-11-09",
+      "os": "Bazzite",
+      "note": "docs/TESTING-HARDWARE.md, device 1"
+    }
+  ],
+  "bazzite": "Not fixed.",
+  "steamos": "Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); not yet tested on a SteamOS Claw.",
+  "sources": [
+    "ClawDeck docs/HARDWARE-FINDINGS.md section 11",
+    "fixes/claw8ex-vrr/README.md"
+  ],
+  "lifecycle": {
+    "needed_when": {
+      "all": [
+        {
+          "any": [
+            {
+              "file": "/usr/bin/rpm-ostree"
+            },
+            {
+              "all": [
+                {
+                  "os": "steamos"
+                },
+                {
+                  "file": "/etc/default/grub"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "any": [
+            {
+              "module": "xe"
+            },
+            {
+              "module": "i915"
+            }
+          ]
+        }
+      ]
+    },
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Reads the panel's own EDID. If it already says 30 Hz or lower (a BIOS that corrected it), nothing is needed. With GameCove's copy in place the factory EDID can't be read, so a BIOS change is checked by a maintainer."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "bios",
+      "kind": "firmware-index",
+      "device": "msi-claw-8-ex",
+      "item": "bios",
+      "note": "A new BIOS may correct the EDID's range (the factory sha256 in panels.txt then stops matching)."
+    },
+    {
+      "id": "bios-8ai",
+      "kind": "firmware-index",
+      "device": "msi-claw-8-ai-plus",
+      "item": "bios",
+      "note": "Same panel in the Claw 8 AI+."
+    },
+    {
+      "id": "drm-edid",
+      "kind": "github-commits",
+      "repo": "torvalds/linux",
+      "path": "drivers/gpu/drm/drm_panel_backlight_quirks.c",
+      "note": "Panel quirk tables: a kernel quirk for CSW PN8007QB1-2 would replace the EDID override."
+    },
+    {
+      "id": "lore",
+      "kind": "lore",
+      "query": "s:CSW0801 OR s:PN8007QB1",
+      "note": "Kernel patches naming the panel."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

@@ -345,7 +345,7 @@ func set_critic_filter(on: bool) -> void:
 
 ## A view from the filter sheet; an unknown collection falls back to all games.
 func set_view(v: String) -> void:
-	view = v if (v in View.VIEWS or v.begins_with("collection:")) else ""
+	view = v if (v in View.VIEWS or v.begins_with("collection:") or (v.begins_with("emulation:") and v.length() > 10)) else ""
 	_rebuild(false)
 	if is_inside_tree() and is_visible_in_tree():
 		_focus_later(default_focus())
@@ -355,6 +355,11 @@ func set_view(v: String) -> void:
 func view_name() -> String:
 	if view.begins_with("collection:"):
 		return _collection_names.get(view.substr(11), "")
+	if view.begins_with("emulation:"):
+		for s in View.systems_in(games):
+			if s["id"] == view.substr(10):
+				return s["short"]
+		return view.substr(10).to_upper()
 	return TL.VIEW_NAMES.get(view, "")
 
 
@@ -471,25 +476,25 @@ func _rebuild(keep_focus: bool) -> void:
 	for t in _tiles:
 		Kit.drop(grid, t)
 	_tiles.clear()
-	for g in shown:
-		var t: Button = Tile.new()
-		t.setup(g, true, tile_size, false)
-		var game: Dictionary = g
-		t.pressed.connect(func(): open_requested.emit(game))
-		t.focus_entered.connect(_on_tile_focus.bind(t))
-		grid.add_child(t)
-		_tiles.append(t)
-		if tile_hook.is_valid():
-			tile_hook.call(t)
+	# Tiles are made a page at a time (thousands of ROMs would take seconds and
+	# gigabytes at once): enough to reach the remembered game, more as focus nears the end.
+	var want := PAGE
+	var mk := focused_key if focused_key != "" else _memory_key
+	if mk != "":
+		for i in shown.size():
+			if shown[i].get("key", "") == mk:
+				want = maxi(want, i + 1 + PAGE / 2)
+				break
+	_grow(want)
 	_refresh_toolbar()
-	_link_grid()
 	_empty.visible = shown.is_empty()
 	_scroll.get_parent().visible = not shown.is_empty()
 	details.get_parent().visible = not shown.is_empty()
 	if games.is_empty():
 		_empty_text.text = "Your games will show up here once a store has some installed."
 	elif in_view.is_empty() and view != "":
-		_empty_text.text = {"favourites": TL.EMPTY_FAVOURITES, "hidden": TL.EMPTY_HIDDEN, "emulation": TL.EMPTY_EMULATION}.get(view, TL.EMPTY_COLLECTION)
+		_empty_text.text = {"favourites": TL.EMPTY_FAVOURITES, "hidden": TL.EMPTY_HIDDEN, "emulation": TL.EMPTY_EMULATION}.get(
+			"emulation" if view.begins_with("emulation:") else view, TL.EMPTY_COLLECTION)
 	elif query != "":
 		_empty_text.text = "No games match \"%s\". Try fewer letters or another store." % query
 	elif shown.is_empty() and (genre != "" or critic_filter):
@@ -509,6 +514,33 @@ func _rebuild(keep_focus: bool) -> void:
 		# the focused game left the grid (hidden, uninstalled with the Installed
 		# filter on): focus takes its place, or the toolbar when the grid is empty
 		_focus_later(_tiles[mini(focused_at, _tiles.size() - 1)] if not _tiles.is_empty() else _current_store_button())
+
+
+## Tiles made at once, and how many more each time focus nears the last row made:
+## eight rows of seven, a good two screens at 1280x800. Every tile is a node tree
+## made on the main thread, so opening the Library on thousands of ROMs costs what
+## this page costs (140 took 330 ms and the most memory of anything on screen).
+const PAGE := 56
+
+
+## Makes tiles up to `count` of `shown` (never fewer than there are now).
+func _grow(count: int) -> void:
+	var from := _tiles.size()
+	var to := mini(count, shown.size())
+	if to <= from:
+		return
+	for i in range(from, to):
+		var g: Dictionary = shown[i]
+		var t: Button = Tile.new()
+		t.setup(g, true, tile_size, false)
+		var game: Dictionary = g
+		t.pressed.connect(func(): open_requested.emit(game))
+		t.focus_entered.connect(_on_tile_focus.bind(t))
+		grid.add_child(t)
+		_tiles.append(t)
+		if tile_hook.is_valid():
+			tile_hook.call(t)
+	_link_grid()
 
 
 func _refresh_toolbar() -> void:
@@ -583,6 +615,8 @@ func _current_store_button() -> Button:
 
 func _on_tile_focus(t: Control) -> void:
 	_memory_key = t.game.get("key", "")
+	if _tiles.find(t) >= _tiles.size() - grid.columns * 3 and _tiles.size() < shown.size():
+		_grow(_tiles.size() + PAGE)
 	show_details(t.game)
 	for b in _toolbar():
 		b.focus_neighbor_bottom = b.get_path_to(t)
@@ -704,18 +738,19 @@ func jump_letter(d: int) -> void:
 	d = signi(d)
 	var f := get_viewport().gui_get_focus_owner()
 	var i := maxi(0, _tiles.find(f))
-	var cur := _initial(_tiles[i].game)
+	var cur := _initial(shown[i])
 	var j := i
 	while true:
 		j += d
-		if j < 0 or j >= _tiles.size():
+		if j < 0 or j >= shown.size():
 			return
-		var ini := _initial(_tiles[j].game)
+		var ini := _initial(shown[j])
 		if ini != cur:
 			if d < 0:
 				# Land on the first tile of that letter.
-				while j > 0 and _initial(_tiles[j - 1].game) == ini:
+				while j > 0 and _initial(shown[j - 1]) == ini:
 					j -= 1
+			_grow(j + 1 + PAGE / 2)   # past the tiles made so far: make them now
 			_tiles[j].grab_focus()
 			return
 

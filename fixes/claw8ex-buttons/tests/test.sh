@@ -50,6 +50,27 @@ ok 'fix claw8ex-buttons install | grep -q "not needed"' "not needed when InputPl
 ok '[ "$(snapshot)" = "$before" ]' "nothing changed"
 ok 'fix claw8ex-buttons status | grep -qx state=not-needed' "status not-needed"
 
+case_start lifecycle
+# docs/FIXES.md: the probe (os_fixed), the installed revision, and update
+ok 'fix claw8ex-buttons status | grep -qx os_fixed=no' "stock map claw2: the system doesn't do it"
+ok 'fix claw8ex-buttons status | grep -qx revision=1' "status names the script's revision"
+ok '! fix claw8ex-buttons status | grep -q "^installed_revision="' "no installed revision before install"
+ok 'fix claw8ex-buttons update | grep -q "not installed"' "update never installs"
+ok 'fix claw8ex-buttons status | grep -qx state=off' "still off"
+fix claw8ex-buttons install >/dev/null 2>&1
+ok 'fix claw8ex-buttons status | grep -qx installed_revision=1' "the installed revision is recorded"
+before=$(snapshot)
+ok 'fix claw8ex-buttons update 2>/dev/null | grep -qx updated' "update: the old version out, this one in"
+ok '[ "$(snapshot)" = "$before" ]' "update of the same revision changes nothing"
+ok 'fix claw8ex-buttons status | grep -qx state=on' "update: still on"
+# InputPlumber starts shipping its own map while ours is installed: the probe says so, so GameCove retires ours
+sed -i 's/capability_map_id: claw2/capability_map_id: claw8ex_upstream/' "$R/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
+ok 'fix claw8ex-buttons status | grep -qx os_fixed=yes' "upstream map with ours installed: os_fixed=yes"
+ok 'fix claw8ex-buttons status | grep -qx installed=yes' "and still installed (the app removes it)"
+fix claw8ex-buttons remove >/dev/null 2>&1
+ok 'fix claw8ex-buttons status | grep -qx installed=no' "remove after the upstream fix"
+ok '! grep -rqs "rev " "$R/var/lib/gamecove/fixes/claw8ex-buttons"' "nothing left recorded"
+
 # Stand down only when InputPlumber's own map takes what this firmware sends (read from the map, not its name).
 CLAW2_MAP='version: 1
 kind: CapabilityMap
@@ -134,5 +155,28 @@ echo "capability_map_id: claw2" >>"$STOCK"
 fix claw8ex-buttons set refresh >/dev/null 2>&1
 ok 'override | grep -qx "capability_map_id: gamecove_claw8ex"' "rebuilt once the layout is editable again"
 ok '! fix claw8ex-buttons set other 2>/dev/null' "only refresh can be set"
+
+# docs/FIXES.md: an InputPlumber update ships its own map for the board while ours is installed. Both at
+# once would clash, and the real remove needs the admin password, so the no-password refresh GameCove
+# runs after such an update makes our override stand aside: InputPlumber's own map is used at once.
+case_start stands_aside_for_upstream_map
+STOCK="$R/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
+fix claw8ex-buttons install >/dev/null 2>&1
+ok 'fix claw8ex-buttons status | grep -qx conflict=no' "stock claw2: no clash"
+sed -i 's/capability_map_id: claw2/capability_map_id: claw8ex_upstream/' "$STOCK"
+ok 'fix claw8ex-buttons status | grep -qx os_fixed=yes' "InputPlumber's own map: os_fixed"
+ok 'fix claw8ex-buttons status | grep -qx conflict=yes' "ours still names our map: conflict=yes"
+ok 'fix claw8ex-buttons status | grep -qx inputplumber_override=stale' "and the override is stale"
+fix claw8ex-buttons set refresh >/dev/null 2>&1; rc=$?
+ok "[ $rc -eq 0 ]" "refresh succeeds"
+ok 'override | grep -qx "capability_map_id: claw8ex_upstream"' "the override keeps InputPlumber's own map"
+ok '! override | grep -q gamecove_claw8ex' "and no longer names ours"
+ok 'fix claw8ex-buttons status | grep -qx conflict=no' "conflict=no"
+ok 'fix claw8ex-buttons status | grep -qx installed=yes' "still installed: the remove (admin password) takes our files out"
+ok 'fix claw8ex-buttons status | grep -qx state=on' "state on, so GameCove offers Remove now"
+fix claw8ex-buttons remove >/dev/null 2>&1
+ok '[ ! -e "$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml" ]' "remove takes the override out"
+ok '[ ! -e "$R/etc/inputplumber/capability_maps.d/gamecove_claw8ex.yaml" ]' "and our map"
+ok 'fix claw8ex-buttons status | grep -qx state=not-needed' "then not needed"
 
 finish

@@ -17,6 +17,7 @@ ASSUME_YES="${ASSUME_YES:-0}"
 SESSION_SELECT="${SESSION_SELECT:-/usr/bin/gamecove-session-select}"
 GUARD_COPY="${GUARD_COPY:-${XDG_DATA_HOME:-$HOME/.local/share}/gamecove/gamecove-session-guard}"
 FIX_HELPER="${FIX_HELPER:-/usr/libexec/gamecove/gamecove-fix}"
+UPSCALE_HELPER="${UPSCALE_HELPER:-/usr/libexec/gamecove/gamecove-upscale}"
 PKEXEC="${PKEXEC:-pkexec}"
 # Prefix for /etc, /usr and /ostree (tests).
 ROOT="${GAMECOVE_ROOT:-}"
@@ -79,7 +80,7 @@ if [ "${1:-}" = "--uninstall" ]; then
 	echo "    Removing GameCove: the boot default goes back, every device fix is undone,"
 	echo "    then rpm-ostree builds a new system image without GameCove."
 	ask "Remove GameCove?"
-	say "Step 1/4: boot into Steam Gaming Mode again (or the desktop, if that was the default)"
+	say "Step 1/5: boot into Steam Gaming Mode again (or the desktop, if that was the default)"
 	select=""
 	for s in "$GUARD_COPY" "$SESSION_SELECT"; do
 		if [ -f "$s" ]; then
@@ -96,7 +97,7 @@ if [ "${1:-}" = "--uninstall" ]; then
 	else
 		echo "    GameCove never was the boot default here; nothing to do."
 	fi
-	say "Step 2/4: undo every device fix and setting GameCove applied"
+	say "Step 2/5: undo every device fix and setting GameCove applied"
 	if [ -x "$FIX_HELPER" ]; then
 		echo "    This asks for your password."
 		run "$PKEXEC" "$FIX_HELPER" --remove-all || {
@@ -106,7 +107,15 @@ if [ "${1:-}" = "--uninstall" ]; then
 	else
 		echo "    No fix helper installed; nothing to undo."
 	fi
-	say "Step 3/4: remove the GameCove layer"
+	# One install, one clean uninstall: every game gets back exactly the files it shipped with, the XeSS XMX driver
+	# and lsfg-vk we installed come out, and our folder of upscaler files is deleted. Runs as you, not as root.
+	say "Step 3/5: take our upscaler files out of your games"
+	if [ -x "$UPSCALE_HELPER" ]; then
+		run "$UPSCALE_HELPER" purge --home "$HOME" || echo "    Some games couldn't be put back by themselves: use Steam's \"Verify integrity of game files\" for those."
+	else
+		echo "    No upscaling helper installed; nothing to undo."
+	fi
+	say "Step 4/5: remove the GameCove layer"
 	echo "    Your current image stays bootable until you reboot."
 	if [ -e "$ROOT/etc/gamecove/autologin-guard" ] || [ -e "$ROOT/etc/systemd/system/gamecove-autologin-guard.service" ]; then
 		echo "    First the login-screen guard GameCove kept in /etc (the boot default is back, so it has nothing left to do)."
@@ -120,7 +129,7 @@ if [ "${1:-}" = "--uninstall" ]; then
 		run rm -f "$display_conf"
 	fi
 	run "$RPM_OSTREE" uninstall gamecove
-	say "Step 4/4: reboot to finish"
+	say "Step 5/5: reboot to finish"
 	echo "    Run: systemctl reboot"
 	exit 0
 fi

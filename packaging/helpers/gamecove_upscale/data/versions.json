@@ -1,5 +1,5 @@
 {
- "_comment": "The tested versions (ported from ClawDeck's assets/versions.json, same author), the fallback when the signed upscalers.json can't be fetched or verified (mirror.py). Every file is pinned by sha256 and copied to GameCove's rolling 'upscalers' release under an immutable name (\"mirror\"), so a file moved or replaced upstream never breaks an install; the upstream URL (\"url\") is the second source, same sha256. .github/workflows/upscalers.yml puts these files on the mirror on its first run and keeps them.",
+ "_comment": "The tested versions (ported from ClawDeck's assets/versions.json, same author), the fallback when the signed upscalers.json can't be fetched or verified (mirror.py). Every file is pinned by sha256 and copied to the rolling 'upscalers' release of IHulkSmashI/GameCove-data under an immutable name (\"mirror\"), so a file moved or replaced upstream never breaks an install; the upstream URL (\"url\") is the second source, same sha256. .github/workflows/upscalers.yml puts these files on the mirror on its first run and keeps them.",
  "xess_xmx_linux": {
   "repo": "HHHHanasak1/xess-xmx-linux",
   "tag": "20261111",
@@ -10,7 +10,7 @@
   "version": "20261111",
   "asset": "xess-xmx-linux-20261111.zip",
   "url": "https://github.com/HHHHanasak1/xess-xmx-linux/releases/download/20261111/xess-xmx-linux-20261111.zip",
-  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/xess_xmx_linux-20261111-ca8334b6-xess-xmx-linux-20261111.zip",
+  "mirror": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/xess_xmx_linux-20261111-ca8334b6-xess-xmx-linux-20261111.zip",
   "scripts": {
    "install.sh": "334a8cd36603ba8f05211e35bcabb3454fb096e5a39fad3f7467b0cedefc402f",
    "uninstall.sh": "74ecdbfb58f20670de2f76dc8eca6b627299b464fa5d2b603c29cb1a2a955002",
@@ -41,7 +41,7 @@
   "version": "fork-release-18-135e7ac9",
   "asset": "REFramework.zip",
   "url": "https://github.com/onehoon/REFramework/releases/download/fork-release-18-135e7ac98b0703ef157080cbd1ee4f39e54ba8e0/REFramework.zip",
-  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/reframework-fork-release-18-135e7ac9-86a43b88-REFramework.zip"
+  "mirror": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/reframework-fork-release-18-135e7ac9-86a43b88-REFramework.zip"
  },
  "optiscaler": {
   "version": "0.9.4",
@@ -54,11 +54,11 @@
     "sha256": "88b9e1be3559737cd205fdf5f2c8550cf1923fb1def4c603e5bf03c3e84131b1",
     "dest": "plugins/OptiPatcher.asi",
     "version": "rolling-dfg017",
-    "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/optipatcher-rolling-dfg017-88b9e1be-OptiPatcher_rolling.asi"
+    "mirror": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/optipatcher-rolling-dfg017-88b9e1be-OptiPatcher_rolling.asi"
    }
   ],
   "note": "ClawDeck's own OptiScaler (optiscaler.py): the same release and OptiPatcher build Decky Framegen v0.17 pins, with the same sha256.",
-  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/optiscaler-0.9.4-575cb4df-Optiscaler_0.9.4-final.20260718._MM.7z",
+  "mirror": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/optiscaler-0.9.4-575cb4df-Optiscaler_0.9.4-final.20260718._MM.7z",
   "asset": "Optiscaler_0.9.4-final.20260718._MM.7z",
   "tag": "v0.9.4",
   "repo": "optiscaler/OptiScaler"
@@ -78,7 +78,7 @@
     "sha256": "88b9e1be3559737cd205fdf5f2c8550cf1923fb1def4c603e5bf03c3e84131b1",
     "dest": "OptiScaler/plugins/OptiPatcher.asi",
     "version": "rolling-dfg017",
-    "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/optipatcher-rolling-dfg017-88b9e1be-OptiPatcher_rolling.asi"
+    "mirror": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/optipatcher-rolling-dfg017-88b9e1be-OptiPatcher_rolling.asi"
    },
    {
     "name": "fakenvapi",
@@ -92,11 +92,11 @@
     },
     "ini": "OptiScaler/fakenvapi.ini",
     "version": "1.4.1",
-    "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fakenvapi-1.4.1-e1239f74-fakenvapi-v1.4.1.7z"
+    "mirror": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/fakenvapi-1.4.1-e1239f74-fakenvapi-v1.4.1.7z"
    }
   ],
   "note": "Capcom RE Engine games only (optiscaler.py layout 'subfolder'): OptiScaler.dll as the proxy and OptiScaler.ini next to the exe, everything else in OptiScaler\\ (OptiDllPath), OptiPatcher in OptiScaler\\plugins. a working Windows Onimusha install uses 0.9.5-pre4, which isn't published on GitHub; this public v10 nightly ran Onimusha with onehoon's REFramework on a Claw 8 EX on Bazzite (2026-11-04). Every other game stays on 'optiscaler' (0.9.4). fakenvapi v1.4.1 (FakeMichau) goes in OptiScaler\\ with the tested fakenvapi.ini, as in the tested folder: its fakenvapi.dll (415232 bytes) is byte-identical to the one OptiScaler 0.9.4 ships. OptiScaler v10 has fakenvapi built in ([fakenvapi] UseFakenvapi, set to true) and doesn't load the file; it is there to match the setup tested on the Claw.",
-  "mirror": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/optiscaler_v10-10.0.0-pre1-20261030-db4fe2de-OptiScaler_v10.0.0-pre1_20261030.7z"
+  "mirror": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/optiscaler_v10-10.0.0-pre1-20261030-db4fe2de-OptiScaler_v10.0.0-pre1_20261030.7z"
  },
  "fsr4_xmx": {
   "repo": "IHulkSmashI/ClawDeck",
@@ -108,8 +108,8 @@
   "note": "nitec's FSR 4.1.2 build for the XMX cores (OptiScaler community), the same files the tested setup installs on Intel (its Archives/Custom/FSR4_XMX). Hosted on ClawDeck's fsr4-xmx-files branch, pinned by commit (not on the Releases page); downloaded into ~/fsr4-xmx when missing, each sha256 checked (the maintainer's working copy on the Claw 8 EX, 2026-11-04).",
   "version": "4.1.2-34a8210e",
   "mirror": {
-   "amd_fidelityfx_upscaler_dx12.dll": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fsr4_xmx-4.1.2-34a8210e-a609f609-amd_fidelityfx_upscaler_dx12.dll",
-   "fsr-original.dll": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fsr4_xmx-4.1.2-34a8210e-aad4fccc-fsr-original.dll"
+   "amd_fidelityfx_upscaler_dx12.dll": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/fsr4_xmx-4.1.2-34a8210e-a609f609-amd_fidelityfx_upscaler_dx12.dll",
+   "fsr-original.dll": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/fsr4_xmx-4.1.2-34a8210e-aad4fccc-fsr-original.dll"
   }
  },
  "fsr4_amd": {
@@ -118,12 +118,20 @@
   "files": {
    "amd_fidelityfx_upscaler_dx12.dll": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace"
   },
-  "license": "AMD FidelityFX SDK binary licence (Kits/FidelityFX/docs/license.md): binary redistribution allowed with its notice; GameCove downloads it from AMD at the user's request instead of shipping it",
+  "license": "AMD FidelityFX SDK binary licence (Kits/FidelityFX/docs/license.md): binary redistribution allowed with its notice; shipped unmodified inside every GameCove package with that notice (licenses/AMD-FidelityFX-SDK-license.md), and fetched from AMD's repository when a package has none",
   "note": "AMD FSR SDK 2.4.0 (2026-10-28): FSR Upscaling 4.1.2, ML model picked by GPU (FP8 RDNA4, INT8 RDNA3/RDNA2 dGPU and Strix Halo, lightweight INT8 for Z2 Extreme / 890M / Z2 A). The same file ClawDeck keeps as fsr-original.dll next to nitec's XMX build. Under Proton FSR 4 needs a Proton with AMD's driver extension shim (Proton-CachyOS, GE-Proton).",
   "version": "sdk2.4.0-7539ae8b",
   "mirror": {
-   "amd_fidelityfx_upscaler_dx12.dll": "https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/fsr4_amd-sdk2.4.0-7539ae8b-aad4fccc-amd_fidelityfx_upscaler_dx12.dll"
+   "amd_fidelityfx_upscaler_dx12.dll": "https://github.com/IHulkSmashI/GameCove-data/releases/download/upscalers/fsr4_amd-sdk2.4.0-7539ae8b-aad4fccc-amd_fidelityfx_upscaler_dx12.dll"
   },
   "notice": "Kits/FidelityFX/docs/license.md"
+ },
+ "lsfg_vk": {
+  "version": "2.0.0",
+  "asset": "lsfg-vk-2.0.0.tar.xz",
+  "url": "https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz",
+  "sha256": "08bdbdf373a111022df87dac7aa87e3b564bb841f961552e3ca85fea12b5aa74",
+  "license": "CC BY-NC-ND 4.0 (lsfg-vk.dev, 2026-08-27): not part of GameCove's package and not on its mirror; fetched unmodified from its author's own site when the user asks for it",
+  "note": "lsfg-vk 2.0.0 (2026-09-05; 561348 bytes, downloaded 2026-11-10): lib/liblsfg-vk-layer.so, share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json, bin/lsfg-vk-cli. Needs the user's own Lossless Scaling (Steam app 993090, beta branch lsfg-vk)."
  }
 }

@@ -190,6 +190,12 @@ static func fix_explain(fix: String) -> String:
 	return "%s %s" % [d["explain"], d["after"]]
 
 
+## Hardware a fix was tested on: [{"device", "date", "os"}] (fixes/<id>/fix.json "tested").
+static func fix_tested(fix: String) -> Array:
+	var t: Variant = _catalogue_entry(fix).get("tested", [])
+	return t if t is Array else []
+
+
 ## A fix's entry in app/data/fixes.json (the Fixes catalogue), {} when missing.
 static func _catalogue_entry(fix: String) -> Dictionary:
 	for e in load("res://scripts/device/fixes.gd").load_catalogue("res://data/fixes.json"):

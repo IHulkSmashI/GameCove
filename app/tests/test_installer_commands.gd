@@ -112,20 +112,22 @@ func test_change_repair_update_uninstall_finish() -> void:
 	c["remove_fixes"] = true
 	c["keep_settings"] = false
 	var un := C.tasks_for("uninstall", c, t, p)
-	eq(_ids(un), ["check_game", "session_restore", "steam_unwrap", "fix_remove_all", "package_remove",
+	eq(_ids(un), ["check_game", "session_restore", "steam_unwrap", "fix_remove_all", "upscale_purge", "package_remove",
 		"remove_user_files", "remove_settings", "forget"])
 	eq(un[3]["cmd"], ["pkexec", p.fix_helper(), "--remove-all"], "every fix in use, not only the installer's (review S2-5)")
 	eq(un[1]["cmd"], C.session_restore(p))
 	eq(un[1]["cmd"][4], p.data_dir() + "/gamecove-session-guard", "the copy that survives the package goes first")
-	eq(un[4]["cmd"], C.rpm_remove(true), "fixes undone: /var/lib/gamecove goes with the layer (review L25)")
+	eq(un[4]["cmd"], C.upscale_purge(p.upscale_helper(), p.home), "our upscaler files leave the games before the package goes")
+	ok(not un[4]["privileged"] and un[4]["optional"], "as the user; a game that can't be put back doesn't stop the uninstall")
+	eq(un[5]["cmd"], C.rpm_remove(true), "fixes undone: /var/lib/gamecove goes with the layer (review L25)")
 	ok(un[2]["optional"], "taking GameCove out of Steam's launch options never stops an uninstall")
 	ok(not un[1]["optional"], "review H4: the boot default must be restored before the package goes")
 	ok(not un[3]["optional"], "review H4: every fix undone before the helper that undoes them goes")
 	c["remove_fixes"] = false
 	c["keep_settings"] = true
 	var kept := C.tasks_for("uninstall", c, t, p)
-	eq(_ids(kept), ["check_game", "session_restore", "steam_unwrap", "package_remove", "remove_user_files", "forget"])
-	eq(kept[3]["cmd"], C.rpm_uninstall(), "fixes kept: their state stays")
+	eq(_ids(kept), ["check_game", "session_restore", "steam_unwrap", "upscale_purge", "package_remove", "remove_user_files", "forget"])
+	eq(kept[4]["cmd"], C.rpm_uninstall(), "fixes kept: their state stays")
 	c["fixes"] = ["claw8ex-vrr"]
 	eq(_ids(C.tasks_for("finish", c, t, p)), ["check_game", "fix_install:claw8ex-vrr", "pending", "state"])
 
@@ -172,7 +174,11 @@ func test_xess_driver_option() -> void:
 	ok(_ids(C.tasks_for("change", c, had, p)).filter(func(i): return i.begins_with("xess")).is_empty(), "already there: change leaves it")
 	c["xess_driver"] = false
 	ok("xess_remove" in _ids(C.tasks_for("change", c, had, p)), "turned off in change: removed")
-	ok("xess_remove" in _ids(C.tasks_for("uninstall", c, had, p)), "uninstall takes it out")
+	var un: Array = C.tasks_for("uninstall", c, had, p)
+	ok("upscale_purge" in _ids(un) and not "xess_remove" in _ids(un), "uninstall takes it out with everything else of upscaling")
+	eq(C.upscale_purge(p.upscale_helper(), p.home), [p.upscale_helper(), "purge", "--home", p.home], "as the user, no pkexec")
+	ok(_ids(un).find("upscale_purge") < _ids(un).find("package_remove"), "while the helper is still installed")
+	ok(load("res://scripts/ui/installer/texts_installer.gd").task_title({"id": "upscale_purge"}) != "upscale_purge", "the step has a plain title")
 
 
 ## Review H4: the root autologin guard is copied out of the sysext into /etc (kept across OS

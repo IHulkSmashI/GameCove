@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "id": "advice-gpd-sleep",
+  "revision": 1,
+  "title": "Sleep only partly works",
+  "line": "On 7840U and newer GPD handhelds sleep drains the battery and the system hibernates after about 5 %. Turn it off for long breaks.",
+  "symptom": "Suspend only partly works on GPD handhelds with a 7840U or newer; the firmware wakes it as the battery drops and Bazzite hibernates it.",
+  "why": "A firmware and graphics-driver problem on the 7840U and newer GPD boards; no software workaround is known.",
+  "kind": "advice",
+  "page": "fixes",
+  "password": "none",
+  "restart": "",
+  "level": "optional",
+  "must_fix": true,
+  "breaks": "sleep",
+  "default": "advice-only",
+  "risk": "low",
+  "risk_note": "Text only: GameCove changes nothing.",
+  "auto": [],
+  "optional": {
+    "all-of": [
+      "platform:gpd-win-4|gpd-win-mini|gpd-win-max-2",
+      "soc:phoenix|hawk-point|strix-point"
+    ]
+  },
+  "exclude": {},
+  "changes": [],
+  "undo": "Nothing to undo: this is advice, GameCove changes nothing.",
+  "tested": [],
+  "bazzite": "Not fixed; documented on Bazzite's GPD page (upstream drm/amd issue 3154).",
+  "steamos": "Not fixed.",
+  "sources": [
+    "https://docs.bazzite.gg/Handheld_and_HTPC_edition/Handheld_Wiki/GPD_Handhelds/",
+    "https://github.com/ublue-os/bazzite/issues/5702"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": null,
+    "probe": {
+      "command": "none",
+      "native": "",
+      "what": "Nothing on the device can tell; the nightly audit watches the reports."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "bazzite-5702",
+      "kind": "github-issue",
+      "repo": "ublue-os/bazzite",
+      "number": 5702,
+      "note": "WIN 4 wakes about every two hours on battery."
+    },
+    {
+      "id": "bazzite-gpd-page",
+      "kind": "url",
+      "url": "https://docs.bazzite.gg/Handheld_and_HTPC_edition/Handheld_Wiki/GPD_Handhelds/",
+      "note": "Bazzite's GPD page: the sleep note going away means it's fixed."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

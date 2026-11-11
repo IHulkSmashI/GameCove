@@ -54,6 +54,7 @@ const SavesService := preload("res://scripts/system/saves_service.gd")
 const BatteryLog := preload("res://scripts/system/battery_log.gd")
 const LowBattery := preload("res://scripts/system/low_battery.gd")
 const LowBatteryDialog := preload("res://scripts/ui/low_battery_dialog.gd")
+const FixAttentionDialog := preload("res://scripts/ui/fix_attention_dialog.gd")
 const TSaves := preload("res://scripts/ui/texts_saves.gd")
 const SavesCardScript := preload("res://scripts/ui/games/saves_card.gd")
 const ProtonGE := preload("res://scripts/launch/proton_ge.gd")
@@ -121,6 +122,7 @@ var battery_log: Node
 ## Sleep at low battery (low_battery.gd) and its warning while it shows.
 var low_battery: Node
 var low_dialog: Control
+var fix_dialog: Control
 ## Key of the game waiting for its cloud save before it starts ("" when none).
 var _launch_wait := ""
 ## Key of the game whose save conflict sheet is open before its launch ("" when none).
@@ -558,6 +560,10 @@ func _wire_controls() -> void:
 	fixes.name = "Fixes"
 	add_child(fixes)
 	fixes.setup({"sys_root": "", "runner": CommandRunner.new(), "home": OS.get_environment("HOME"), "device": Device})
+	# a fix GameCove removed or updated by itself (the system caught up, docs/FIXES.md): said once
+	fixes.lifecycle_notice.connect(func(text, tone): toast(text, "check" if tone == "good" else "info", tone))
+	# one that does harm while it waits for the admin password: over the home screen, every start
+	fixes.attention_needed.connect(_on_fix_attention)
 	fixes.check_changes()
 	if quick_menu != null and "fixes" in quick_menu:
 		quick_menu.fixes = fixes
@@ -621,6 +627,25 @@ func _on_low_battery(percent: int) -> void:
 	background.set_menu(true)
 	if session.is_active() and not quick_menu.visible:
 		Gamescope.set_overlay(true)
+	_update_hints.call_deferred()
+
+
+## A fix GameCove installed must come out (withdrawn, or it clashes with the system's own fix)
+## and waits for the admin password: said prominently at start (fix_attention_dialog.gd).
+func _on_fix_attention(items: Array) -> void:
+	if items.is_empty() or (fix_dialog != null and is_instance_valid(fix_dialog)):
+		return
+	if session != null and session.is_active():
+		return   # fixes.gd never says it during a game; belt and braces
+	fix_dialog = FixAttentionDialog.open(_modal_layer, items, fixes.can_prompt())
+	fix_dialog.decided.connect(func(choice: String):
+		fix_dialog = null
+		if choice == "remove":
+			for it in items:
+				fixes.run_pending(str(it.get("id", "")))
+		elif choice == "open":
+			_open_settings_category("device", "fixes")
+		_update_hints.call_deferred())
 	_update_hints.call_deferred()
 
 
@@ -775,10 +800,27 @@ func _on_install_finished(key: String, action: String, ok: bool) -> void:
 		return
 	var g := View.find_by_key(Library.games, key)
 	var title := str(g.get("title", ""))
+	if action in ["install", "update", "verify"] and not g.is_empty():
+		_prepare_upscaling(g)
 	if action == "install" and title != "":
 		toast("%s is ready to play" % title, "check", "good", "")
 	elif action in ["update", "move", "uninstall", "verify"] and title != "":
 		toast("%s: %s" % [title, TG.ACTION_DONE[action].to_lower()], "check", "good", "")
+
+
+## Upscaling is set up when a game lands (installed, updated, files checked),
+## not at its first start: one short helper run on the Controls worker. While a
+## game is running nothing is started; that game is set up at its next look.
+func _prepare_upscaling(g: Dictionary) -> void:
+	var controls := _svc("Controls")
+	if controls == null or not controls.has_method("run_on_worker") or not ("ctx" in controls):
+		return
+	var prepare: Variant = controls.ctx.get("prepare_installed")
+	if not (prepare is Callable and (prepare as Callable).is_valid()):
+		return
+	var game := g.duplicate()
+	var now: bool = not (session != null and session.is_active())
+	controls.run_on_worker(func(): (prepare as Callable).call(game, now))
 
 
 func open_downloads() -> void:
@@ -1479,6 +1521,8 @@ func show_screen(id: String, dir := 0) -> void:
 		_close_page()
 	close_downloads()
 	close_apps()
+	if id == "library" and Library.has_method("rescan_emulation"):
+		Library.rescan_emulation()   # ROMs copied in since show up (background, cached, never behind a game)
 	var old: Control = screens[current]
 	var d := float(signi(dir)) if dir != 0 else signf(SCREENS.find(id) - SCREENS.find(current))
 	current = id
@@ -1886,6 +1930,8 @@ func open_emulation() -> void:
 	if page != null:
 		_close_page()
 	close_downloads()
+	if Library.has_method("rescan_emulation"):
+		Library.rescan_emulation()
 	page = EmulationPage.new()
 	page.setup(Library.emulation, _decorated())
 	page.play_requested.connect(_play)
@@ -1893,6 +1939,13 @@ func open_emulation() -> void:
 		_close_page()
 		show_screen("library")
 		library_screen.set_view("emulation"))
+	page.system_requested.connect(func(system: String):
+		_close_page()
+		show_screen("library")
+		library_screen.set_view("emulation:" + system))
+	page.game_requested.connect(func(g: Dictionary):
+		_close_page()
+		_open_page(g))
 	add_child(page)
 	move_child(page, top_bar.get_index())
 	# Rises in like the game page.
@@ -2153,6 +2206,8 @@ func _update_hints(f: Control = null) -> void:
 func _special_hints(f: Control) -> Array:
 	if low_dialog != null and is_instance_valid(low_dialog):
 		return LowBatteryDialog.hints()
+	if fix_dialog != null and is_instance_valid(fix_dialog):
+		return fix_dialog.hints()
 	if game_actions != null and game_actions.is_modal():
 		return game_actions.modal_hints()
 	if steam_overlay != null and steam_overlay.is_open():
@@ -2274,7 +2329,7 @@ func _build_settings() -> void:
 		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
 			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
-			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log,
+			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log, "fixes": fixes,
 			"game_running": func() -> bool: return session != null and session.is_active(), "recording": recording})
 
 

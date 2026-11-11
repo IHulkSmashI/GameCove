@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "id": "claw-kbd-wakeup",
+  "revision": 1,
+  "title": "Volume buttons don't wake it",
+  "line": "Stops a bump of the volume buttons from waking the Claw in your bag.",
+  "symptom": "The volume buttons are keys on the i8042 keyboard, which is a wakeup source, so pressing them wakes the Claw from sleep.",
+  "why": "Every MSI Claw (controller 0db0:1901/1902) puts its volume keys on the i8042 keyboard, which is a wakeup source.",
+  "kind": "file",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "",
+  "level": "recommended",
+  "must_fix": true,
+  "breaks": "sleep",
+  "default": "on",
+  "risk": "low",
+  "risk_note": "One udev rule; the power button still wakes the Claw.",
+  "auto": "controller:msi-claw",
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "udev-rule",
+      "target": "/etc/udev/rules.d/60-gamecove-claw-kbd-wakeup.rules",
+      "detail": "Switches off wake-up for the built-in keyboard port (serio, atkbd) on MSI MS-1T* boards."
+    },
+    {
+      "type": "sysfs",
+      "target": "/sys/bus/serio/devices/serio*/power/wakeup",
+      "detail": "Set to disabled at once; the old value is saved."
+    }
+  ],
+  "undo": "Deletes the rule and writes the saved value back.",
+  "tested": [],
+  "bazzite": "Not fixed: Handheld Daemon switched it off at start, InputPlumber (Bazzite 44+) doesn't.",
+  "steamos": "Not fixed (no Claw support in SteamOS).",
+  "sources": [
+    "https://lkml.iu.edu/hypermail/linux/kernel/2506.2/01805.html",
+    "https://lkml.indiana.edu/hypermail/linux/kernel/2506.2/03339.html",
+    "https://github.com/hhd-dev/hhd/blob/master/src/hhd/device/claw/__init__.py"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Looks for the same rule from the system itself (any udev rule that isn't GameCove's and does the same), or the value already being right without GameCove."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "ip-udev",
+      "kind": "github-commits",
+      "repo": "ShadowBlip/InputPlumber",
+      "path": "rootfs/usr/lib/udev/rules.d",
+      "note": "InputPlumber's udev rules: it may start switching the keyboard wake-up off, as Handheld Daemon did."
+    },
+    {
+      "id": "bazzite-udev",
+      "kind": "github-commits",
+      "repo": "ublue-os/bazzite",
+      "path": "system_files/deck/shared/usr/lib/udev/rules.d",
+      "note": "Bazzite's handheld udev rules: a Claw wake-up rule would make this os-fixed."
+    },
+    {
+      "id": "lore",
+      "kind": "lore",
+      "query": "s:\"MSI Claw\" s:wakeup",
+      "note": "The kernel quirk was refused in 2025-06 in favour of a udev rule; a new attempt would show up here."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

@@ -139,6 +139,12 @@ func test_custom_walk_and_choices() -> void:
 	s.next_step()
 	eq(s.plan.step, "device")
 	var gyro = s.body.find_child("fix_claw8ex-gyro", true, false)
+	# every fix carries its badge: Recommended (only those are preselected), and Tested on hardware on the Claw 8 EX
+	var badges = s.body.find_child("Badges_claw8ex-gyro", true, false)
+	ok(badges != null and badges.find_child("Level", true, false) != null, "the gyro fix says Recommended")
+	ok(badges.find_child("Tested", true, false) != null, "and Tested on hardware (docs/TESTING-HARDWARE.md, device 1)")
+	ok(s.body.find_child("Badges_claw-kbd-wakeup", true, false).find_child("Tested", true, false) == null, "a fix we didn't run on this model has no Tested badge")
+	ok("claw8ex-gyro" in s.plan.choices["fixes"], "Recommended fixes are preselected")
 	gyro.step(1)
 	ok(not "claw8ex-gyro" in s.plan.choices["fixes"], "gyro fix off")
 	ok(s.body.find_child("charge_limit", true, false) != null, "charge limit slider on the Claw")

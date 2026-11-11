@@ -1,0 +1,62 @@
+{
+ "_comment": "What GameCove adds by hand to the generated list (tools/upscalers/gen_games.py), by game id. Only facts from our own hardware tests, ClawDeck's notes (same author) and public store pages: Steam app ids, launch arguments, anti-cheat, notes. ClawDeck's additions to assets/games.json (tools/gen_games.py merges them). re_engine_exes: Capcom RE Engine games, which need REFramework (dinput8.dll) next to OptiScaler or Capcom's anti-tamper stops the game (seen with Onimusha on the Claw 8 EX, 2026-11-04). games: by id, wins over OptiScaler's entry.",
+ "re_engine_exes": [
+  "re2.exe",
+  "re3.exe",
+  "re4.exe",
+  "re7.exe",
+  "re8.exe",
+  "re9.exe",
+  "re9demo.exe",
+  "devilmaycry5.exe",
+  "streetfighter6.exe",
+  "dd2.exe",
+  "dd2ccs.exe",
+  "monsterhunterwilds.exe",
+  "monsterhunterrise.exe",
+  "onimushawots.exe",
+  "onimushawots_demo.exe",
+  "kunitsugami.exe",
+  "kunitsugamidemo.exe",
+  "drdr.exe",
+  "pragmata.exe",
+  "pragmata_sketchbook.exe",
+  "monster_hunter_stories_3_twisted_reflection.exe"
+ ],
+ "capcom": {
+  "_comment": "Every game in re_engine_exes gets the Capcom setup (onehoon's REFramework, OptiScaler v10 in the OptiScaler/ subfolder, DLSS-G to XeSS-FG; launchenv.capcom). tested: seen working on a Claw, with where and when. untested: games known to have DLSS frame generation the setup relies on, not run on a Claw yet; the rest of re_engine_exes is untested too.",
+  "tested": {
+   "onimushawots.exe": "Onimusha: Way of the Sword, Claw 8 EX on Bazzite, 2026-11-04"
+  },
+  "untested": [
+   "dd2.exe",
+   "dd2ccs.exe",
+   "onimushawots_demo.exe"
+  ]
+ },
+ "games": {
+  "the-witcher-3": {
+   "appids": [
+    "292030"
+   ],
+   "wine_check": true,
+   "notes": "Version 5.0 switches DLSS off under Wine by itself (it asks for wine_get_version): pick XeSS or FSR in the game's menu, or use GE-Proton 11-9 or newer (ClawDeck, 2026-11)."
+  },
+  "cyberpunk-2077": {
+   "appids": [
+    "1091500"
+   ]
+  },
+  "black-myth-wukong": {
+   "name": "Black Myth: Wukong",
+   "appids": [
+    "2358720",
+    "3132990"
+   ],
+   "exes": [
+    "b1-win64-shipping.exe"
+   ],
+   "notes": "Ships XeSS: the cleanest XeSS on XMX test (ClawDeck docs/testing/wukong.md)."
+  }
+ }
+}

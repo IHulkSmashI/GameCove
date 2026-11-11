@@ -107,6 +107,33 @@ m_add() {
 
 m_has() { [ -f "$MANIFEST" ] && grep -qxF "$1 $2" "$MANIFEST"; }
 
+# The revision that was installed ("rev <n>" in the manifest; 1 for installs from before it was recorded).
+m_rev() {
+	_r=$(sed -n 's/^rev \([0-9][0-9]*\)$/\1/p' "$MANIFEST" 2>/dev/null | tail -n 1)
+	printf '%s' "${_r:-1}"
+}
+
+# status lines every fix prints: this script's revision and, when installed, the one that was installed.
+say_revision() {
+	say "revision=${REVISION:-1}"
+	! m_installed || say "installed_revision=$(m_rev)"
+}
+
+# update: bring an installed fix to this revision. These fixes change boot configuration, so there is
+# no in-place swap: the old version is taken out by its own record, then this one goes in. When that
+# fails, install's own undo leaves the system stock (never half of each), and exit 1 says so.
+gc_root_update() {
+	if ! m_installed; then
+		say "not installed"
+		return 0
+	fi
+	sh "$0" remove || die "the installed version could not be taken out; nothing else was changed"
+	if ! sh "$0" install; then
+		die "the new version could not be installed; the old one is out and the system is as shipped. Apply the fix again from GameCove's Fixes page"
+	fi
+	say "updated"
+}
+
 # mkdir -p that records every folder it creates, so undo takes them away again.
 m_mkdir() {
 	[ -d "$ROOT$1" ] && return 0
@@ -165,6 +192,7 @@ m_undo() {
 		initramfs) rpm-ostree initramfs-etc --untrack="$arg" >/dev/null || { done_ok=0; boot_kept=1; } ;;
 		grubline) grub_line_remove "$arg" || { done_ok=0; boot_kept=1; } ;;
 		ipflag) ip_flag_off "$arg" || done_ok=0 ;;
+		rev) ;; # the installed revision (m_rev): nothing to undo
 		*) warn "unknown manifest line: $kind $arg" ;;
 		esac
 		[ "$done_ok" = 1 ] || printf '%s %s\n' "$kind" "$arg" >>"$M_DIR/left"
@@ -433,7 +461,12 @@ EOF
 ip_render() {
 	swap=0
 	imu=0
-	ip_flag buttons && swap=1
+	# Our face-button map only replaces a stock one that misses what this firmware sends. Once
+	# InputPlumber's own map takes both buttons (ip_stock_handles_buttons) the override keeps it, so an
+	# InputPlumber update that fixes the buttons is used at once: the no-password `set refresh` GameCove
+	# runs after such an update rebuilds the override this way, and our two files never shadow the
+	# system's fix while the real remove waits for the admin password.
+	ip_flag buttons && ! ip_stock_handles_buttons && swap=1
 	ip_flag imu && ! grep -q 'name: gyro_3d' "$ROOT$IP_STOCK" && imu=1
 	snip="$IP_FLAGS/.snippet"
 	: >"$snip"

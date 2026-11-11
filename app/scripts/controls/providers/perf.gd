@@ -6,8 +6,8 @@ extends RefCounted
 ## Proton, the Steam launch wrapper and Steam's shader pre-caching.
 ## Details, sources and what each writes: docs/CONTROLS.md "Performance".
 ##
-## Game scope: per-game controls act on the game in ctx["game"] (a Library
-## game dictionary) or ctx["game_key"] ("steam:976730"); set it with
+## Game scope: per-game controls act on one game at a time (a Library
+## game dictionary; kept in the context's GameScope, see set_game); set it with
 ## set_game(ctx, game) and call Controls.detect_all() after, so availability
 ## and values follow the game. Without a game they say "Open a game first".
 ##
@@ -34,7 +34,10 @@ const LOW_LATENCY_WITH_FG := "On automatically with frame generation"
 const LOW_LATENCY_HELP := "Leave on. Turn off only if a game stutters or won't start with it."
 const MANGOHUD_LAYER_DIRS := ["/usr/share/vulkan/implicit_layer.d", "/etc/vulkan/implicit_layer.d",
 	"/usr/local/share/vulkan/implicit_layer.d"]
+const GpuCaps := preload("res://scripts/device/gpu_caps.gd")
+const GameScope := preload("res://scripts/controls/game_scope.gd")
 const STATUS_TTL_MS := 3000
+const PLAN_TTL_MS := 15000
 ## The helper's check hashes the downloaded files (FSR 4 DLLs are ~100 MB): read again at most this often.
 const CHECK_TTL_MS := 600000
 const UPSCALE_STAMP := "user://upscalers.cfg"
@@ -45,18 +48,19 @@ var perf: Object
 var launcher: Object
 var library: Object
 var _status_cache := {}           # game key -> {"t": ms, "r": Dictionary}
+var _plan_cache := {}             # game key -> {"t": ms, "r": Dictionary}
+var _prepared := {}               # game keys set up ahead of their start this session
+var _last_did := {}               # game key -> what prepare changed, for the mode row's help
 var _check := {}                  # the helper's last "check" answer
 var _check_t := -1
 var _mutex := Mutex.new()
 
 
+## Any thread. The game lives in the context's GameScope (game_scope.gd), not
+## in keys of the context itself: the main thread changes it while the worker
+## reads, and a Dictionary can't take a new key under a reader.
 static func set_game(context: Dictionary, game: Dictionary) -> void:
-	if game.is_empty():
-		context.erase("game")
-		context.erase("game_key")
-	else:
-		context["game"] = game
-		context["game_key"] = str(game.get("key", "%s:%s" % [game.get("store", ""), game.get("id", "")]))
+	GameScope.ensure(context).swap(game)
 
 
 func setup(c: Dictionary) -> void:
@@ -66,6 +70,7 @@ func setup(c: Dictionary) -> void:
 	launcher = c.get("launcher", _autoload("Launcher") if real else null)
 	library = c.get("library", _autoload("Library") if real else null)
 	store = Store.new(str(c.get("perf_store_path", "")), str(_profile().get("id", "unknown")))
+	c["prepare_installed"] = prepare_installed
 	if launcher != null and "env_hooks" in launcher:
 		launcher.env_hooks.append(launch_env_hook)
 	if launcher != null and "frame_gen_hooks" in launcher:
@@ -98,12 +103,30 @@ func _root() -> String:
 
 
 func _gpu() -> Dictionary:
-	return Upscale.gpu(_profile())
+	var d: Variant = ctx.get("device")
+	var dev: Variant = d.get("gpu") if d is Object and "gpu" in d else ctx.get("gpu_dev", {})
+	return Upscale.gpu(_profile(), dev if dev is Dictionary else {})
+
+
+## The app's own data says this game has anti-cheat (Are We Anti-Cheat Yet):
+## the helper then refuses whatever the game's folder shows.
+func _anticheat() -> bool:
+	return launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(game()))
+
+
+func _ac_args() -> Array:
+	return ["--anticheat"] if _anticheat() else []
 
 
 # ---- the game ------------------------------------------------------------------
 
 func game() -> Dictionary:
+	var scope := GameScope.of(ctx)
+	if scope != null:
+		var sg: Dictionary = scope.game()
+		if not sg.is_empty():
+			return sg
+	# a context filled by hand before any worker runs (tests, tools)
 	var g: Variant = ctx.get("game")
 	if g is Dictionary and not g.is_empty():
 		return g
@@ -162,10 +185,20 @@ func _mk(spec: Dictionary, detect: Callable, read: Callable, write: Callable) ->
 	return Ctl.make(s, func(_c): return detect.call(), func(_c): return read.call(), func(_c, v): return write.call(v))
 
 
-func _opts(values: Array, labels: Dictionary = {}) -> Array:
+## As _mk, for a detect that also rewrites the control's help line (it gets the control).
+func _mkc(spec: Dictionary, detect: Callable, read: Callable, write: Callable) -> RefCounted:
+	var s := {"group": "perf"}
+	s.merge(spec, true)
+	return Ctl.make(s, detect, func(_c): return read.call(), func(_c, v): return write.call(v))
+
+
+func _opts(values: Array, labels: Dictionary = {}, helps: Dictionary = {}) -> Array:
 	var out := []
 	for v in values:
-		out.append({"value": v, "label": str(labels.get(v, str(v).capitalize()))})
+		var o := {"value": v, "label": str(labels.get(v, str(v).capitalize()))}
+		if str(helps.get(v, "")) != "":
+			o["help"] = str(helps[v])     # one plain line for this option (control_view shows it)
+		out.append(o)
 	return out
 
 
@@ -291,40 +324,118 @@ func set_mangohud_limit(key: String, fps: int, method := "late") -> bool:
 
 func _lsfg_dll() -> String:
 	var root := Proton.steam_root(_home()) if _home() != "" else ""
-	return Lsfg.find_dll(Lsfg.steam_libraries(root))
+	var libs := Lsfg.steam_libraries(root)
+	return Lsfg.find_dll(libs) if Lsfg.app_state(libs, false) == "ready" else ""
+
+
+func _lsfg_owned() -> bool:
+	if library == null or not library.has_method("game_by_key"):
+		return false
+	var g: Variant = library.game_by_key("steam:" + Lsfg.APP_ID)
+	return g is Dictionary and not g.is_empty()
+
+
+## {"step", "line"}: what Lossless frame generation still needs here (Lsfg.next_step).
+func lsfg_step() -> Dictionary:
+	var root := Proton.steam_root(_home()) if _home() != "" else ""
+	return Lsfg.next_step(Lsfg.layer(_root(), _home()), Lsfg.app_state(Lsfg.steam_libraries(root), _lsfg_owned()))
 
 
 func _lsfg_reason() -> String:
-	match Lsfg.layer(_root(), _home()):
-		"":
-			return "Needs lsfg-vk"
-		"v1":
-			return "Update lsfg-vk to version 2"
-	if _lsfg_dll() == "":
-		return "Needs Lossless Scaling from Steam (beta: lsfg-vk)"
-	return NO_GAME if game_key() == "" else ""
+	var step := lsfg_step()
+	match str(step["step"]):
+		"buy":
+			return "Needs Lossless Scaling, a paid app on Steam"
+		"install_app":
+			return "Install Lossless Scaling in Steam first"
+		"branch":
+			return "Needs Lossless Scaling's lsfg-vk beta in Steam"
+		"layer":
+			return "Needs lsfg-vk: install it below"
+		"layer_update":
+			return "Update lsfg-vk to version 2 below"
+	if game_key() == "":
+		return NO_GAME
+	if _anticheat():
+		return "Off for this game: it uses anti-cheat"
+	return ""
+
+
+## Lossless on/off: never next to another frame generator. The game's own (or
+## OptiScaler's) knows the game's motion and keeps the HUD clean, so it wins:
+## Lossless can't be switched on while that one is on.
+func _lsfg_toggle_reason() -> String:
+	var why := _lsfg_reason()
+	if why != "":
+		return why
+	if int(_gv("frame_gen", 0)) > 0:
+		return "Off while this game's own frame generation is on: that one is sharper"
+	return ""
+
+
+func _open_uri(uri: String) -> bool:
+	var open: Variant = ctx.get("open_uri")
+	if open is Callable and (open as Callable).is_valid():
+		return bool((open as Callable).call(uri))
+	return false               # no opener given (tests): never the real desktop
+
+
+## The setup row: one press does the next step (open the store page, start
+## the install in Steam, or install lsfg-vk itself).
+func _lsfg_setup_write() -> bool:
+	match str(lsfg_step()["step"]):
+		"buy":
+			return _open_uri(Lsfg.STORE_URI)
+		"install_app":
+			return _open_uri(Lsfg.INSTALL_URI)
+		"branch":
+			return _open_uri("steam://gameproperties/" + Lsfg.APP_ID)
+		"layer", "layer_update":
+			var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "lsfg-install", _home(), "", _gpu())
+			if not bool(r.get("ok", false)):
+				push_warning("lsfg-vk: %s" % str(r.get("error", "failed")))
+				return false
+			return write_lsfg_config()
+	return true
 
 
 func _lsfg_controls() -> Array:
+	var d := Lsfg.defaults_for(GpuCaps.tier(_gpu()))
 	return [
 		_mk({"id": "perf.lsfg", "title": "Lossless Scaling frame generation",
-			"help": "Adds generated frames with lsfg-vk and your own Lossless Scaling. Best above 40 real fps.",
-			"kind": "toggle", "default_value": false, "affects": ["perf.low_latency"]},
-			_lsfg_reason, func(): return bool(_gv("lsfg", false)), func(v): return _lsfg_set("lsfg", v)),
-		_mk({"id": "perf.lsfg_multiplier", "title": "Frame generation multiplier",
+			"help": "For games the upscaler above can't reach: older games, emulators, anything. Uses your own Lossless Scaling. Best above 40 real fps.",
+			"kind": "toggle", "default_value": false, "affects": ["perf.low_latency", "perf.frame_gen"]},
+			_lsfg_toggle_reason, func(): return bool(_gv("lsfg", false)),
+			func(v):
+				if bool(v) and int(_gv("frame_gen", 0)) > 0:
+					return false
+				return _lsfg_set("lsfg", v)),
+		_mk({"id": "perf.lsfg_multiplier", "title": "Lossless multiplier",
 			"help": "2x adds one frame per real frame; 3x and 4x add more (more lag, more artefacts).",
-			"kind": "choice", "options": _opts(Lsfg.MULTIPLIERS, {2: "2x", 3: "3x", 4: "4x"}), "default_value": 2,
+			"kind": "choice", "options": _opts(Lsfg.MULTIPLIERS, {2: "2x", 3: "3x", 4: "4x"}, Upscale.LSFG_HELP), "default_value": 2,
 			"requires": ["perf.lsfg"]},
 			_lsfg_reason, func(): return int(_gv("lsfg_multiplier", 2)), func(v): return _lsfg_set("lsfg_multiplier", v)),
 		_mk({"id": "perf.lsfg_flow_scale", "title": "Flow scale",
-			"help": "Lower is faster with a softer result; 80 % suits handheld screens.",
-			"kind": "slider", "min_value": 0.25, "max_value": 1.0, "step": 0.05, "default_value": 0.8,
+			"help": "Lower is faster with a softer result; 80 % suits handheld screens, 60 % the slower chips.",
+			"kind": "slider", "min_value": 0.25, "max_value": 1.0, "step": 0.05, "default_value": d["lsfg_flow_scale"],
 			"requires": ["perf.lsfg"]},
-			_lsfg_reason, func(): return float(_gv("lsfg_flow_scale", 0.8)), func(v): return _lsfg_set("lsfg_flow_scale", v)),
+			_lsfg_reason, func(): return float(_gv("lsfg_flow_scale", d["lsfg_flow_scale"])), func(v): return _lsfg_set("lsfg_flow_scale", v)),
 		_mk({"id": "perf.lsfg_performance", "title": "Performance mode",
 			"help": "A lighter frame generation model: faster, slightly lower quality.",
-			"kind": "toggle", "default_value": false, "requires": ["perf.lsfg"]},
-			_lsfg_reason, func(): return bool(_gv("lsfg_performance", false)), func(v): return _lsfg_set("lsfg_performance", v)),
+			"kind": "toggle", "default_value": d["lsfg_performance"], "requires": ["perf.lsfg"]},
+			_lsfg_reason, func(): return bool(_gv("lsfg_performance", d["lsfg_performance"])), func(v): return _lsfg_set("lsfg_performance", v)),
+		_mkc({"id": "perf.lsfg_setup", "title": "Set up Lossless frame generation",
+			"help": "Does the next step for you.", "kind": "action", "per_game": false,
+			"affects": ["perf.lsfg", "perf.lsfg_multiplier"]},
+			func(c):
+				var step := lsfg_step()
+				if str(step["step"]) == "":
+					return "Ready: nothing left to set up"
+				if str(step["step"]) in ["layer", "layer_update"] and upscale_cmd() == "":
+					return "Needs GameCove's upscaling helper"
+				c.help = str(step["line"])
+				return "",
+			func(): return null, func(_v): return _lsfg_setup_write()),
 	]
 
 
@@ -342,7 +453,9 @@ func write_lsfg_config() -> bool:
 	for k in store.games():
 		var vals: Dictionary = store.values(k)
 		if bool(vals.get("lsfg", false)):
-			profiles[k] = vals
+			var merged := Lsfg.defaults_for(GpuCaps.tier(_gpu()))
+			merged.merge(vals, true)
+			profiles[k] = merged
 	var path := _home().path_join(Lsfg.CONFIG)
 	var existing := FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
 	if existing.strip_edges() != "" and not RegEx.create_from_string("(?m)^\\s*version\\s*=\\s*2\\b").search(existing):
@@ -400,53 +513,228 @@ func upscale_status() -> Dictionary:
 func _forget_status() -> void:
 	_mutex.lock()
 	_status_cache.erase(game_key())
+	_plan_cache.erase(game_key())
 	_mutex.unlock()
 
 
 ## After the helper changed the game: keep its environment for non-Steam launches
 ## and make sure a Steam game starts through the wrapper.
-func _after_upscale(r: Dictionary) -> bool:
+func _after_upscale(r: Dictionary, reread := false) -> bool:
 	_forget_status()
 	if not bool(r.get("ok", false)):
 		push_warning("Upscaling: %s" % str(r.get("error", "failed")))
 		return false
-	var env: Variant = r.get("env", {})
+	var env: Variant = upscale_status().get("env", {}) if reread else r.get("env", {})
 	_sv("upscale_env", env if env is Dictionary and not env.is_empty() else null)
 	return true
+
+
+## One press back to how the game shipped, or to our pick. "custom" is set by
+## the helper itself when an upscaler or frame generation is picked by hand.
+func _set_mode(mode: String) -> bool:
+	if mode == "custom":
+		return _after_upscale(_upscale_run("mode", ["--mode", "custom"]))
+	var r := _upscale_run("mode", ["--mode", mode] + _ac_args())
+	_prepared[game_key()] = true
+	if mode == "native":
+		_sv("frame_gen", 0)
+	return _after_upscale(r, true)
+
+
+## Sets the open game up ahead of its first start ("Best for this handheld"),
+## once per game and session: the helper puts the plan in when that is safe,
+## repairs what a game update removed and steps down when the last start showed
+## the pick didn't come up. Worker thread (detect) or the launch itself.
+func prepare_game(key := "") -> Dictionary:
+	var k := key if key != "" else game_key()
+	if k == "" or _prepared.has(k) or _upscale_reason() != "":
+		return {}
+	_prepared[k] = true
+	var r := _upscale_run("prepare", _ac_args())
+	if str(r.get("did", "")) != "":
+		_forget_status()
+		var st := upscale_status()
+		var env: Variant = st.get("env", {})
+		_sv("upscale_env", env if env is Dictionary and not env.is_empty() else null)
+		_last_did[k] = str(r.get("did", ""))
+	return r
+
+
+## A game was just installed, updated or had its files checked (main's
+## install_finished, on the Controls worker): set it up now, or put back what
+## the update removed, so its first start already runs with the pick. Works for
+## any game, not only the open one; `now` false (another game is running) only
+## marks it, and the next look or start does the work.
+func prepare_installed(g: Dictionary, now := true) -> Dictionary:
+	var k := str(g.get("key", "%s:%s" % [g.get("store", ""), g.get("id", "")]))
+	if k == "" or k == ":":
+		return {}
+	_prepared.erase(k)
+	_mutex.lock()
+	_status_cache.erase(k)
+	_plan_cache.erase(k)
+	_mutex.unlock()
+	var dir := str(g.get("install_path", ""))
+	if not now or upscale_cmd() == "" or _gpu()["vendor"] == "other" or (Files.steam_appid(k) == "" and dir == ""):
+		return {}
+	_prepared[k] = true
+	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(g)) else []
+	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac)
+	if str(r.get("did", "")) != "":
+		var st := Upscale.run(ctx.get("runner"), upscale_cmd(), "status", _home(), k, _gpu(), dir)
+		var env: Variant = st.get("env", {})
+		store.set_value(k, "upscale_env", env if env is Dictionary and not env.is_empty() else null)
+		game_changed(k, g)
+		_last_did[k] = str(r.get("did", ""))
+	return r
+
+
+## The helper's plan for the open game (what Best would pick, and why not when
+## it won't), cached with the status.
+func upscale_plan() -> Dictionary:
+	var k := game_key()
+	_mutex.lock()
+	var c: Dictionary = _plan_cache.get(k, {})
+	_mutex.unlock()
+	if not c.is_empty() and Time.get_ticks_msec() - int(c["t"]) < PLAN_TTL_MS:
+		return c["r"]
+	var r := _upscale_run("plan", _ac_args())
+	_mutex.lock()
+	_plan_cache[k] = {"t": Time.get_ticks_msec(), "r": r}
+	_mutex.unlock()
+	return r
+
+
+## "Open the upscaler's menu": the shared action registry presses Insert in the
+## game (ctx["run_action"], set by main when the registry is there).
+func open_upscaler_menu() -> bool:
+	var run: Variant = ctx.get("run_action")
+	if run is Callable and (run as Callable).is_valid():
+		return bool((run as Callable).call("key_optiscaler"))
+	return false
+
+
+func _fg_help(g: Dictionary) -> String:
+	match GpuCaps.tier(g):
+		"intel_xmx":
+			return "XeSS frame generation on the XMX cores: 2x, 3x or 4x, with XeLL low latency. Needs about 40 real fps."
+		"intel":
+			return "XeSS frame generation at 2x with XeLL low latency. Needs about 40 real fps."
+	return "Makes every second frame from the two around it (2x), with low latency on. Needs about 40 real fps."
 
 
 func _upscale_controls() -> Array:
 	var g := _gpu()
 	return [
+		_mkc({"id": "perf.upscale_mode", "title": "Upscaling for this game",
+			"help": "Best sets up the sharpest upscaler this handheld runs, before you start the game. Native takes everything out again.",
+			"kind": "choice", "options": _opts(Upscale.MODES, Upscale.MODE_LABELS, Upscale.MODE_HELP), "default_value": "best",
+			"apply_order": 4, "affects": ["perf.upscaler", "perf.frame_gen", "perf.fg_generator", "perf.upscale_active", "perf.low_latency"]},
+			_mode_detect,
+			func(): return str(upscale_status().get("mode", "best")) if upscale_status().get("ok", false) else null,
+			func(v): return _set_mode(str(v))),
+		_mkc({"id": "perf.upscale_active", "title": "Running now",
+			"help": "What the last start of this game really used. Press to check again.",
+			"kind": "action", "per_game": false},
+			_active_detect, func(): return null,
+			func(_v):
+				_forget_status()
+				return true),
 		_mk({"id": "perf.upscaler", "title": "Upscaler",
-			"help": "Puts a better upscaler into the game with OptiScaler (XeSS on Intel Arc, FSR on AMD). Pick the game's DLSS or FSR in its menu.",
-			"kind": "choice", "options": _opts(Upscale.upscalers(g), Upscale.LABELS), "default_value": "own",
+			"help": "Pick one yourself. The game keeps its own menu: choose DLSS or FSR there and it becomes this.",
+			"kind": "choice", "options": _opts(Upscale.upscalers(g), Upscale.LABELS, Upscale.upscaler_help(g)), "default_value": "own",
 			"apply_order": 3},
 			_upscale_reason,
 			func(): return str(upscale_status().get("upscaler", "own")) if upscale_status().get("ok", false) else null,
-			func(v): return _after_upscale(_upscale_run("choose", ["--upscaler", v, "--fg", str(int(upscale_status().get("fg", 0)))]))),
+			func(v): return _after_upscale(_upscale_run("choose", ["--upscaler", v, "--fg", str(int(upscale_status().get("fg", 0)))] + _gen_args() + _ac_args()))),
 		_mk({"id": "perf.frame_gen", "title": "Frame generation",
-			"help": "XeSS frame generation on Intel Arc (2x-4x), FSR frame generation on AMD (2x). Needs about 40 real fps.",
-			"kind": "choice", "options": _opts(Upscale.frame_gens(g), {0: "Off", 2: "2x", 3: "3x", 4: "4x"}),
-			"default_value": 0, "apply_order": 2, "affects": ["perf.low_latency"]},
-			func(): return _upscale_reason() if Upscale.frame_gens(_gpu()).size() > 1 else "Not on this GPU",
+			"help": _fg_help(g),
+			"kind": "choice", "options": _opts(Upscale.frame_gens(g), Upscale.FG_LABELS, Upscale.FG_HELP),
+			"default_value": 0, "apply_order": 2, "affects": ["perf.low_latency", "perf.lsfg"]},
+			func():
+				if Upscale.frame_gens(_gpu()).size() <= 1:
+					return "Not on this graphics chip: games use their own" if _gpu()["vendor"] == "nvidia" else "Not on this graphics chip"
+				if _upscale_reason() == "" and bool(_gv("lsfg", false)):
+					return "Off while Lossless frame generation is on for this game"
+				return _upscale_reason(),
 			func(): return int(upscale_status().get("fg", 0)) if upscale_status().get("ok", false) else null,
 			func(v):
-				if not _after_upscale(_upscale_run("choose", ["--upscaler", str(upscale_status().get("upscaler", "own")), "--fg", str(int(v))])):
+				if int(v) > 0 and bool(_gv("lsfg", false)):
+					return false           # never two frame generators at once
+				if not _after_upscale(_upscale_run("choose", ["--upscaler", str(upscale_status().get("upscaler", "own")), "--fg", str(int(v))] + _gen_args() + _ac_args())):
 					return false
 				_sv("frame_gen", int(v))   # remembered, so a launch knows FG is on (low latency follows)
 				return true),
-		_mk({"id": "perf.upscale_recommended", "title": "Use the recommended setup",
-			"help": "Sets up the best upscaler for this game from what it ships and OptiScaler's game list.",
+		_mk({"id": "perf.fg_generator", "title": "Frame generation by",
+			"help": "FSR is lighter and pairs with Anti-Lag 2. XeSS handles menus and HUDs better, costs more, and brings XeLL. Not every game likes XeSS here yet.",
+			"kind": "choice", "options": _opts(Upscale.generators(g), Upscale.GENERATOR_LABELS, Upscale.GENERATOR_HELP),
+			"default_value": Upscale.generators(g)[0] if not Upscale.generators(g).is_empty() else "", "apply_order": 2},
+			func(): return _upscale_reason() if Upscale.generators(_gpu()).size() > 1 else "One frame generator on this graphics chip",
+			func():
+				var st := upscale_status()
+				var gens := Upscale.generators(_gpu())
+				var cur := str((st.get("launch", {}) as Dictionary).get("fg_out", "")) if st.get("launch") is Dictionary else ""
+				return cur if cur in gens else (gens[0] if not gens.is_empty() else null),
+			func(v):
+				var st := upscale_status()
+				return _after_upscale(_upscale_run("choose", ["--upscaler", str(st.get("upscaler", "own")), "--fg", str(maxi(int(st.get("fg", 0)), 2)),
+					"--generator", str(v)] + _ac_args()))),
+		_mk({"id": "perf.upscale_menu", "title": "Open the upscaler's menu",
+			"help": "Opens the in-game menu with every setting (the Insert key). Works while the game is in front.",
 			"kind": "action", "per_game": false},
-			_upscale_reason, func(): return null, func(_v): return _after_upscale(_upscale_run("apply"))),
-		_mk({"id": "perf.upscale_undo", "title": "Remove GameCove's upscaler",
-			"help": "Takes OptiScaler (and REFramework) out of the game folder, exactly as it was.",
+			func():
+				if _upscale_reason() != "":
+					return _upscale_reason()
+				if str(upscale_status().get("owner", "")) != "gamecove":
+					return "Our upscaler isn't in this game"
+				var run: Variant = ctx.get("run_action")
+				return "" if run is Callable and (run as Callable).is_valid() else "Press Insert on a keyboard, or put it on a back button in Settings",
+			func(): return null, func(_v): return open_upscaler_menu()),
+		_mk({"id": "perf.upscale_undo", "title": "Remove our upscaler from this game",
+			"help": "Takes every file we added out of the game folder, exactly as it was. Same as Native.",
 			"kind": "action", "per_game": false},
-			_upscale_reason, func(): return null, func(_v): return _after_upscale(_upscale_run("undo"))),
+			_upscale_reason, func(): return null, func(_v): return _set_mode("native")),
 		_updates_control(),
 		_game_update_control(),
 	]
+
+
+func _gen_args() -> Array:
+	var st := upscale_status()
+	var cur := str((st.get("launch", {}) as Dictionary).get("fg_out", "")) if st.get("launch") is Dictionary else ""
+	return ["--generator", cur] if cur in Upscale.generators(_gpu()) else []
+
+
+## Mode row: sets the game up (once per session) and says in its help what
+## Best picks here, or why nothing is added.
+func _mode_detect(c: RefCounted) -> String:
+	var why := _upscale_reason()
+	if why != "":
+		return why
+	prepare_game()
+	var p := upscale_plan()
+	var line := str(p.get("line", ""))
+	var did := str(_last_did.get(game_key(), ""))
+	if line != "":
+		c.help = line + (" (" + did.substr(0, 1).to_upper() + did.substr(1) + ".)" if did != "" and did != "set up" else "")
+	if str(p.get("refused", "")) == "anticheat":
+		return "Off for this game: it uses anti-cheat"
+	return ""
+
+
+func _active_detect(c: RefCounted) -> String:
+	var why := _upscale_reason()
+	if why != "":
+		return why
+	var st := upscale_status()
+	var a: Dictionary = st.get("active", {}) if st.get("active") is Dictionary else {}
+	var line := str(a.get("line", ""))
+	if bool(_gv("lsfg", false)) and _lsfg_reason() == "":
+		# lsfg-vk reports nothing back: this is what is set for the next start
+		line = (line + " " if str(a.get("state", "own")) != "own" else "") + "Lossless frame generation %dx is set for this game." % int(_gv("lsfg_multiplier", 2))
+	if line != "":
+		c.help = line
+	return ""
 
 
 # ---- keeping the upscalers current (helper check / update / game-update) -------------
@@ -794,6 +1082,8 @@ func env_for(key: String, g: Dictionary, include_launcher := false) -> Dictionar
 ## Launcher.env_hooks: a non-Steam game GameCove starts gets our variables and
 ## the upscaler's (the helper's launch file is only read by gamecove-run).
 func launch_env_hook(key: String, _game: Dictionary) -> Dictionary:
+	if key == game_key():
+		prepare_game(key)     # a start from Home without opening the game's page: set up first (once per session)
 	var env := env_for(key, {})
 	var up: Variant = store.get_value(key, "upscale_env", {})
 	if up is Dictionary:

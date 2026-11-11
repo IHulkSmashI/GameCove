@@ -30,14 +30,19 @@ calendar file, 64 MB for the game database, a few MB for a picture): a bigger an
 
 ## Every outbound call
 
+GameCove's own data files (rows 1, 2, 6, 12a and 12) are on the releases of
+[IHulkSmashI/GameCove-data](https://github.com/IHulkSmashI/GameCove-data); github.com sends each download on to
+GitHub's file host (`release-assets.githubusercontent.com` or `objects.githubusercontent.com`), as for any GitHub
+release. The app's own releases (what `get-gamecove.sh` installs) stay on IHulkSmashI/GameCove.
+
 | # | Host | What is sent | Trigger | Gated by | Code |
 | --- | --- | --- | --- | --- | --- |
-| 1 | github.com (`gamedb/gamedb.json.gz`) | Nothing personal | Start, at most daily | Background lookups | `app/scripts/library/gamedb.gd` |
-| 2 | github.com (`gamedb/upcoming.json.gz`) | Nothing personal | Deals refresh, at most daily | Background lookups | `app/scripts/discover/discover.gd` |
+| 1 | github.com/IHulkSmashI/GameCove-data (`gamedb/gamedb.json.gz`) | Nothing personal | Start, at most daily | Background lookups | `app/scripts/library/gamedb.gd` |
+| 2 | github.com/IHulkSmashI/GameCove-data (`gamedb/upcoming.json.gz`) | Nothing personal | Deals refresh, at most daily | Background lookups | `app/scripts/discover/discover.gd` |
 | 3 | www.cheapshark.com | Wishlist Steam app ids and titles; search text; nothing for the free-to-keep list (`deals?onSale=1&upperPrice=0`, one more request per refresh) | 45 s after start, every 6 h; search; game page | Look up deals and prices (+ Background lookups for the timer) | `discover.gd`, `cheapshark.gd` |
 | 4 | api.steampowered.com `IStoreBrowseService/GetItems` | Wishlist and top-deal app ids, store country | Same | Same | `steam_api.gd` |
 | 5 | api.gg.deals | App ids, region, your API key (in the query, as GG.deals requires) | Same, only with a key | Same | `ggdeals.gd` |
-| 6 | github.com (`device-photos` release) | The asset name, i.e. your device model | Start until cached, weekly manifest; About or the welcome page showing the picture | Background lookups (every request; a cached picture still shows) | `app/scripts/device/photo.gd` |
+| 6 | github.com/IHulkSmashI/GameCove-data (`device-photos` release) | The asset name, i.e. your device model | Start until cached, weekly manifest; About or the welcome page showing the picture | Background lookups (every request; a cached picture still shows) | `app/scripts/device/photo.gd` |
 | 7 | Your maker's site (MSI, Lenovo, ASUS, OneXPlayer, AOKZOE, AYANEO, Acer, GPD, ...) | The image URL implies your model; your IP address | Same, when there's no free photo | Show maker photos, Background lookups | `photo.gd` |
 | 8 | Steam's CDN (`*.steamstatic.com`, `*.akamaihd.net`), images.igdb.com (calendar pictures named in `upcoming.json.gz`), SteamGridDB's CDN; no other host (`IMAGE_HOSTS`), and that holds for every redirect on the way: each hop is checked before it's followed, https only (`http.gd` `hosts`) | The picture's address, which names the game | A Discover, calendar or wishlist tile shows a picture that isn't cached | None (pictures of what you're looking at); SteamGridDB lookups: Look up game details | `app/scripts/discover/art.gd` |
 | 9 | www.steamgriddb.com, cdn*.steamgriddb.com | A Steam app id or title; your own key (bearer header, dropped on cross-host redirects) | Change artwork (when you open it); automatic fill for library games with no cover, hero or logo, one request every 1.5 s, each game and kind at most weekly; Discover art Steam has none of | Look up game details (+ Background lookups for the automatic fill) | `app/scripts/library/art/art_service.gd`, `sgdb.gd`, `art.gd` |
@@ -49,9 +54,11 @@ calendar file, 64 MB for the game database, a few MB for a picture): a bigger an
 | 10b | api.steampowered.com `IStoreBrowseService/GetItems`; CheapShark, GG.deals (rows 3 to 5) | DLC app ids and your store country, for local DLC prices; the game's current price and lowest ever go through Discover's own calls (rows 3 to 5) | Same page, at most every 6 h (the deals refresh) | Look up deals and prices | `steam_insights.gd` |
 | — | steamdb.info | Nothing: GameCove never contacts SteamDB (it forbids scraping). The page shows a QR code with the game's SteamDB address for your phone. | — | — | `app/scripts/ui/games/insights_card.gd` |
 | 11 | steamcommunity.com, `IWishlistService` | Your Steam profile name or SteamID64 | You import your wishlist | You start it | `discover.gd` |
-| 12a | github.com (`upscalers/upscalers.json`, `.sigstore.json`; the upscaler files on `upscalers*` releases, then their upstream release) | Nothing personal | The list: at most daily, 90 s after start (background check), and before any upscaler install or update; files: only when you install or update | Background lookups (the daily check); installs and updates: you start them | `app/scripts/controls/providers/perf.gd`, `packaging/helpers/gamecove_upscale/mirror.py` |
+| 12a | github.com/IHulkSmashI/GameCove-data (`upscalers/upscalers.json`, `.sigstore.json`; the upscaler files on `upscalers*` releases), then their upstream release | Nothing personal | The list: at most daily, 90 s after start (background check), and before any upscaler install or update; files: only when you install or update | Background lookups (the daily check); installs and updates: you start them | `app/scripts/controls/providers/perf.gd`, `packaging/helpers/gamecove_upscale/mirror.py` |
+| 12c | builds.lsfg-vk.dev (lsfg-vk's release tarball, pinned by sha256) | Nothing personal | You press Set up Lossless frame generation and Lossless Scaling is installed from your Steam library; never in the background | You start it | `packaging/helpers/gamecove_upscale/lsfg.py` |
+| 12d | github.com/IHulkSmashI/GameCove-data (`fixes/fixes.json`, `.sigstore.json`: the nightly list of device fixes, [FIXES.md](FIXES.md)) | Nothing personal: two plain downloads, the same for every handheld (not your model, not which fixes you use) | At most once a day, at start, never while a game runs. Used only when cosign verifies it on the device; otherwise the list built into GameCove stays | Background lookups | `app/scripts/device/fixes.gd`, `app/scripts/device/fix_data.gd`, `app/scripts/system/data_repo.gd` |
 | 12b | api.github.com (`repos/GloriousEggroll/proton-ge-custom/releases/latest`), then github.com (that release's `GE-Proton*.tar.gz` and `.sha512sum`, only from GloriousEggroll's release page) | Nothing personal (curl's request with a `User-Agent: GameCove` header) | You press Check, then Install, in Settings > Performance > GE-Proton; never in the background | You start it | `app/scripts/launch/proton_ge.gd` |
-| 12 | github.com (`firmware/firmware.json.gz`, `.sha256`, `.sigstore.json`) | Nothing | Checking for updates | You start it | `app/scripts/system/updates.gd` |
+| 12 | github.com/IHulkSmashI/GameCove-data (`firmware/firmware.json.gz`, `.sha256`, `.sigstore.json`) | Nothing | Checking for updates | You start it | `app/scripts/system/updates.gd` |
 | 13 | The maker's own download site (allow-listed per maker, https only, redirects included; at most 5 redirects, and the address the download ends on must be on the maker's site (the hops in between are https but not host-checked); the file must match the sha256 in the signed list; offered only when cosign on this device checked the list's signature) | Nothing | You prepare a USB drive | You start it | `updates.gd`, `firmware_index.gd` |
 | 14 | LVFS, rpm-ostree / steamos-update, Flatpak, Flathub | Those tools' own | You update or install Moonlight; Flatpak apps also at most daily (3 min after start or when a game ends, never while one runs, on AC or an unmetered network) if you turned on "Update apps by themselves" | You start it; the automatic app update is off by default and also needs Background lookups | `updates.gd`, `app/scripts/streaming/` |
 | 14a | Whatever EmuDeck, RetroDECK, ES-DE and Steam ROM Manager contact (Steam ROM Manager: SteamGridDB, with its own settings) | Those tools' own requests | Only while you have them open: you open them from the Emulation page | You start it | `app/scripts/ui/emulation_page.gd` |
@@ -73,12 +80,16 @@ device in it, to tell you whether updates and downloads can work. `gamecove-self
 nothing else in the selftest goes online. The installer script (`get-gamecove.sh`) asks `api.github.com` for this
 repository's release list (or the one release you named with `--tag`) before it downloads anything.
 
-Helpers and scripts outside the app: the upscaling helper downloads OptiScaler, OptiPatcher, fakenvapi,
-REFramework, xess-xmx-linux and the FSR 4 files only when you install or update them: the newest versions from
+Helpers and scripts outside the app: OptiScaler, OptiPatcher, fakenvapi, REFramework, xess-xmx-linux's release and
+the FSR 4 files come inside the GameCove package (`bin/upscalers`, `bin/fsr4-xmx`), so setting a game up fetches
+nothing. The upscaling helper downloads one of them only when the signed list names a newer tested version than
+the packaged one (then a game being set up, by you or by "Best for this handheld", fetches that version once), or
+when a build has no packaged copy. The XeSS XMX driver's own installer fetches Intel's compiler and libraries and
+AMD's FidelityFX files from those vendors when you install the driver. The newest versions come from
 GameCove's signed `upscalers.json` (row 12a; its signature is checked with the cosign the installer pins, which it
 downloads once from sigstore's GitHub release if the system has none; cosign itself may refresh Sigstore's public
 trust root from tuf-repo-cdn.sigstore.dev, sending nothing about you), else the tested pins in
-`packaging/helpers/gamecove_upscale/data/versions.json`; each file from GameCove's own mirror first, then its upstream
+`packaging/helpers/gamecove_upscale/data/versions.json`; each file from GameCove's own mirror (the data repo's `upscalers` release) first, then its upstream
 release, always sha256 checked; the gyro fix downloads MSI's sensor firmware
 from download.msi.com (size and sha256 pinned); the installer (`get-gamecove.sh`) downloads GameCove's own
 release, checks its Sigstore signature and every file's sha256, and fetches a pinned cosign if the system has
@@ -133,9 +144,14 @@ art your games are missing (row 9).
   `~/.local/share/Steam/userdata/<account>/config/cloudstorage/cloud-storage-namespace-1.json` (the account that
   signed in last) and Steam ROM Manager's games from `config/shortcuts.vdf` in the same folder. GameCove never writes
   either file.
-- The Emulation page reads EmuDeck's `~/.config/EmuDeck/settings.sh`, RetroDECK's `retrodeck.cfg` /
-  `retrodeck.json`, ES-DE's `es_settings.xml`, `es_systems.xml` and `gamelist.xml` files, and counts the files in the
-  ROM folders (it doesn't open them). It never writes their files and never downloads or bundles games or BIOS files.
+- The Emulation page and the Library read EmuDeck's `~/.config/EmuDeck/settings.sh`, RetroDECK's `retrodeck.cfg` /
+  `retrodeck.json`, ES-DE's `es_settings.xml`, `custom_systems/es_systems.xml`, `custom_systems/es_find_rules.xml` and
+  `gamelist.xml` files, list the files in the ROM folders they point at (names and folder times; a `.m3u` playlist is
+  read for its disc names, a `.desktop` shortcut for its command, an `%INJECT%` file ES-DE's command names), and list
+  ES-DE's `downloaded_media` folder for art. ROMs themselves are never opened. What was found is cached on the device
+  in `user://emu/roms.cache` and the "Show emulated games" switch in `user://emulation.json`. Nothing is sent
+  anywhere, no art is looked up online for a ROM, and GameCove never writes their files and never downloads or bundles
+  games or BIOS files.
   Its EmuDeck QR code is drawn on the handheld; showing it contacts nothing.
 
 ## Files GameCove writes for cloud saves and battery history

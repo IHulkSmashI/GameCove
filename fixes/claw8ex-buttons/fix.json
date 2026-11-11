@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "id": "claw8ex-buttons",
+  "revision": 1,
+  "title": "MSI buttons",
+  "line": "Makes the two MSI buttons next to the screen work: left opens the menu, right opens Quick Access.",
+  "symptom": "Both MSI face buttons do nothing in Gaming Mode: the firmware sends Win+G and F15, InputPlumber's stock map waits for other keys.",
+  "why": "InputPlumber's stock config for board MS-1T91 (firmware E1T91) waits for keys this firmware never sends; other Claw firmwares send what their configs expect.",
+  "kind": "root",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "",
+  "level": "recommended",
+  "must_fix": true,
+  "breaks": "controls",
+  "default": "on",
+  "risk": "low",
+  "risk_note": "Only adds two InputPlumber files in /etc; the stock files are never edited.",
+  "auto": "firmware:msi-e1t91",
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "file",
+      "target": "/etc/inputplumber/capability_maps.d/gamecove_claw8ex.yaml",
+      "detail": "A button map: Guide = G, Quick Access = F15, M1/M2 back buttons."
+    },
+    {
+      "type": "file",
+      "target": "/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml",
+      "detail": "A copy of InputPlumber's own file for this board that points at the map above (rebuilt when the stock file changes)."
+    },
+    {
+      "type": "service",
+      "target": "inputplumber.service",
+      "detail": "Restarted once so it reads the new files."
+    }
+  ],
+  "undo": "Deletes both files and restarts InputPlumber, which then reads its stock files again.",
+  "tested": [
+    {
+      "device": "msi-claw-8-ex",
+      "date": "2026-11-09",
+      "os": "Bazzite",
+      "note": "docs/TESTING-HARDWARE.md, device 1"
+    }
+  ],
+  "bazzite": "Not fixed (InputPlumber still maps the board to claw2).",
+  "steamos": "Not supported on SteamOS.",
+  "sources": [
+    "https://github.com/ShadowBlip/InputPlumber/blob/main/rootfs/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml",
+    "ClawDeck docs/HARDWARE-FINDINGS.md section 12 (measured with evtest on BIOS E1T91IMS.10D)"
+  ],
+  "lifecycle": {
+    "needed_when": {
+      "file": "/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
+    },
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Reads InputPlumber's own capability map for this board and checks it takes what this firmware sends (Guide from G or Win+G, Quick Access from F15 alone), from the map itself, not its name. Until ours is removed, the no-password rebuild keeps InputPlumber's map in the override, and conflict=no says ours stands aside."
+    },
+    "both_active": "conflict"
+  },
+  "watch": [
+    {
+      "id": "ip-config",
+      "kind": "github-commits",
+      "repo": "ShadowBlip/InputPlumber",
+      "path": "rootfs/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml",
+      "note": "The stock config our override shadows: a new capability_map_id means it's fixed upstream."
+    },
+    {
+      "id": "ip-release",
+      "kind": "github-release",
+      "repo": "ShadowBlip/InputPlumber",
+      "note": "A release may carry the fix."
+    },
+    {
+      "id": "bios",
+      "kind": "firmware-index",
+      "device": "msi-claw-8-ex",
+      "item": "bios",
+      "note": "A BIOS that sends other keys for the MSI buttons changes what the map must wait for."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

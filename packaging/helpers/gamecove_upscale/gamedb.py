@@ -224,3 +224,116 @@ def is_dx12(game_dir: str | None, exes: list[str] | None = None) -> bool:
             except OSError:
                 continue
     return False
+
+
+# ---- GameCove: what a game is, read from its folder (never from the network) -------------------------------------
+FSR31_FILES = ("amd_fidelityfx_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_loader_dx12.dll",
+               "amd_fidelityfx_vk.dll", "amd_fidelityfx_upscaler_vk.dll", "amd_fidelityfx_loader_vk.dll")
+# imports that tell the graphics API, looked for in the main exe (and Unreal's -Shipping exe)
+_API_IMPORTS = ((b"d3d12.dll", "dx12"), (b"vulkan-1.dll", "vulkan"), (b"d3d11.dll", "dx11"), (b"opengl32.dll", "opengl"),
+                (b"d3d9.dll", "dx9"))
+ENGINE_MARKS = (("unity", ("unityplayer.dll",)), ("re", ()), ("unreal", ()), ("cryengine", ("crysystem.dll", "cryrenderd3d12.dll")),
+                ("redengine", ("redprelauncher.exe",)), ("source2", ("engine2.dll",)), ("godot", ("*.pck",)))
+
+
+def has_fsr31(game_dir: str | None) -> bool:
+    """FSR 3.1 or newer as AMD's own DLLs: what Proton's FSR 4 upgrade and the XMX driver's FSR route take over."""
+    return _has(game_dir, FSR31_FILES)
+
+
+def _main_exes(game_dir: str, exes: list[str] | None):
+    want = {e.lower() for e in exes or []}
+    base = game_dir.rstrip(os.sep).count(os.sep)
+    found = []
+    for r, d, f in os.walk(game_dir):
+        if r.count(os.sep) - base >= DEPTH:
+            d[:] = []
+        for x in f:
+            lo = x.lower()
+            if lo.endswith(".exe") and (lo in want or lo.endswith("-shipping.exe")):
+                found.append(os.path.join(r, x))
+    if not found:                                       # no known exe: the largest one in the folder
+        best, size = None, 0
+        for r, d, f in os.walk(game_dir):
+            if r.count(os.sep) - base >= DEPTH:
+                d[:] = []
+            for x in f:
+                if x.lower().endswith(".exe"):
+                    try:
+                        s = os.path.getsize(os.path.join(r, x))
+                    except OSError:
+                        continue
+                    if s > size:
+                        best, size = os.path.join(r, x), s
+        found = [best] if best else []
+    return found
+
+
+def api(game_dir: str | None, exes: list[str] | None = None) -> str:
+    """"dx12", "dx11", "vulkan", "opengl", "dx9" or "" (unknown): DX12-only libraries in the folder, else the first
+    graphics library the main exe names (its first 32 MB). A game that can run on two shows the newer one."""
+    if not game_dir or not os.path.isdir(game_dir):
+        return ""
+    if is_dx12(game_dir, exes):
+        return "dx12"
+    seen: set[str] = set()
+    for p in _main_exes(game_dir, exes)[:3]:
+        try:
+            with open(p, "rb") as fh:
+                blob = fh.read(32 << 20).lower()
+        except OSError:
+            continue
+        seen |= {name for mark, name in _API_IMPORTS if mark in blob}
+    return next((name for _m, name in _API_IMPORTS if name in seen), "")
+
+
+def engine(game_dir: str | None, doc: dict | None = None) -> str:
+    """"unreal", "unity", "re", "cryengine", "redengine", "source2", "godot" or ""."""
+    exes = exes_in(game_dir)
+    if doc and is_re_engine(doc, exes):
+        return "re"
+    if any(e.endswith(("-win64-shipping.exe", "-wingdk-shipping.exe")) for e in exes) or _has(game_dir, ("ue4prereqsetup_x64.exe", "ueprereqsetup_x64.exe")):
+        return "unreal"
+    for name, marks in ENGINE_MARKS:
+        if marks and _has(game_dir, marks):
+            return name
+    return ""
+
+
+def by_appid(doc: dict, appid: str | None) -> dict | None:
+    """The list's entry for a Steam app id (Epic, GOG and other copies are found by their exe: match())."""
+    a = str(appid or "")
+    if not a.isdigit():
+        return None
+    return next((g for g in doc.get("games", []) if a in [str(x) for x in g.get("appids") or []]), None)
+
+
+def _norm(name: str | None) -> str:
+    return "".join(ch for ch in str(name or "").lower() if ch.isalnum())
+
+
+def compat_row(doc: dict, name: str | None, appid: str | None = None) -> dict | None:
+    """OptiScaler's Compatibility List as packed into games.json ("compat": normalised name -> row), for a game by
+    app id or title: works offline, and is what the nightly data refreshes."""
+    rows = doc.get("compat") or {}
+    a = str(appid or "")
+    if a.isdigit():
+        hit = next((r for r in rows.values() if a in [str(x) for x in r.get("appids") or []]), None)
+        if hit:
+            return hit
+    return rows.get(_norm(name)) if name else None
+
+
+def knowledge(doc: dict, game_dir: str | None, appid: str | None = None, name: str | None = None) -> dict:
+    """Everything the list knows about a game, merged: its own entry (by app id, then exe), the compatibility row
+    (by app id, then title). Keys a caller can rely on: known, status ("works" | "broken" | "mixed" | ""), inputs,
+    proxies, args, anticheat, notes, steamdeck0, optipatcher, appids, id, name."""
+    g = by_appid(doc, appid) or match(doc, exes_in(game_dir)) or {}
+    row = compat_row(doc, name or g.get("name"), appid) or {}
+    return {"known": bool(g or row), "id": g.get("id") or row.get("slug"), "name": g.get("name") or row.get("name"),
+            "status": g.get("status") or row.get("status") or "", "inputs": g.get("inputs") or row.get("inputs") or [],
+            "proxies": g.get("proxies") or row.get("proxies") or [], "args": g.get("args") or row.get("args") or "",
+            "anticheat": bool(g.get("anticheat") or row.get("anticheat")), "notes": g.get("notes") or row.get("notes") or "",
+            "steamdeck0": bool(g.get("steamdeck0")), "optipatcher": bool(row.get("optipatcher")),
+            "appids": sorted({str(x) for x in (g.get("appids") or []) + (row.get("appids") or [])}),
+            "wine_check": bool(g.get("wine_check")), "ini": dict(g.get("ini") or {}), "in_list": bool(g), "in_compat": bool(row)}

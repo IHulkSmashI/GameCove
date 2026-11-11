@@ -32,7 +32,7 @@ const ACTION_DONE := {
 const ACTION_NAME := {
 	"install": "install", "update": "update", "verify": "check the files of", "move": "move",
 	"uninstall": "uninstall", "launch_options": "change launch options for",
-	"compat_tool": "change the compatibility tool for", "pause": "pause", "resume": "resume", "cancel": "cancel",
+	"compat_tool": "change the compatibility tool for", "pause": "pause", "resume": "resume", "cancel": "cancel", "launch": "start",
 }
 
 ## Play pressed while a cancelled launch is still being closed (%s: its title).

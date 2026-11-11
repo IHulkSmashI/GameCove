@@ -347,7 +347,23 @@ func open_category(id: String, part := "") -> void:
 		var f: Array = pages[id].focusables()
 		target = f[0] if not f.is_empty() else null
 	if target != null and is_inside_tree():
-		Kit.focus_later(target)
+		_focus_later_in(id, part, target)
+
+
+## Focus `target` once the frame settles; if the page rebuilt it in between (the Fixes page does
+## when its status answers come in), the same part's new first control instead.
+func _focus_later_in(id: String, part: String, target: Control) -> void:
+	var ref: WeakRef = weakref(target)
+	(func():
+		var n: Control = ref.get_ref()
+		if (n == null or not n.is_inside_tree()) and category == id and pages.has(id):
+			n = pages[id].focus_part(part) if part != "" and pages[id].has_method("focus_part") else null
+			if n == null:
+				var f: Array = pages[id].focusables()
+				n = f[0] if not f.is_empty() else null
+		if n != null and n.is_inside_tree() and n.is_visible_in_tree():
+			n.grab_focus()
+	).call_deferred()
 
 
 func _link() -> void:

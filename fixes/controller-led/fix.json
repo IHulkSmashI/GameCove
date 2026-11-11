@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "controller-led",
+  "revision": 1,
+  "title": "Controller lights",
+  "line": "Colour, brightness and effect of the lights around the sticks.",
+  "symptom": "",
+  "why": "",
+  "kind": "power",
+  "page": "controller",
+  "password": "none",
+  "restart": "",
+  "level": "optional",
+  "must_fix": false,
+  "breaks": "",
+  "default": "suggested-off",
+  "risk": "low",
+  "risk_note": "A day-to-day setting with checked values; the original is always saved and put back.",
+  "auto": [],
+  "optional": [],
+  "exclude": {},
+  "changes": [
+    {
+      "type": "sysfs",
+      "target": "/sys/class/leds/<handheld RGB>/",
+      "detail": "Colour, brightness and effect; the originals are saved first."
+    }
+  ],
+  "undo": "Writes the original colours back.",
+  "tested": [],
+  "bazzite": "",
+  "steamos": "",
+  "sources": [
+    "fixes/controller-led/README.md"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": null,
+    "probe": {
+      "command": "status",
+      "native": "",
+      "what": "A setting, not a workaround: status says whether this handheld has the control at all (applies=yes)."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}
