@@ -63,7 +63,7 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 | Support | Handhelds |
 | --- | --- |
 | **Tested on hardware** | MSI Claw 8 EX AI+ (Bazzite), ASUS ROG Ally (SteamOS) |
-| **Supported** | Steam Deck LCD and OLED, the other MSI Claws, ROG Ally X and Xbox Allys, Legion Go, Go 2 and Go S, most OneXPlayers, AOKZOE, AYANEO, GPD, ZOTAC, Acer Predator Atlas 8, Orange Pi Neo ([every model](#supported-handhelds)) |
+| **Supported** | Steam Deck LCD and OLED, the other MSI Claws, ROG Ally X and Xbox Allys, Legion Go, Go 2 and Go S, most OneXPlayers, AOKZOE, AYANEO, GPD, ZOTAC, Acer Predator Atlas 8, Orange Pi Neo, and the Valve Steam Machine for the TV ([every model](#supported-handhelds)) |
 | **Basic** | Any other handheld: safe settings for the chip, and model settings once someone helps us test it |
 
 | System | How GameCove installs |
@@ -559,7 +559,7 @@ GameCove recognises your exact model and sets itself up for it. About this devic
 | --- | --- | --- | --- |
 | **MSI** | Claw 8 EX AI+ (Bazzite) | Claw 8 AI+, Claw 7 AI+, Claw A1M, Claw A8 | |
 | **ASUS** | ROG Ally (SteamOS) | ROG Ally X, ROG Xbox Ally, ROG Xbox Ally X, ROG Xbox Ally X20 | |
-| **Valve** | | Steam Deck LCD, Steam Deck OLED | |
+| **Valve** | | Steam Deck LCD, Steam Deck OLED, Steam Machine (a box for the TV: not yet tested on hardware) | |
 | **Lenovo** | | Legion Go, Legion Go 2 (and Z2), Legion Go S (Z2 Go and Z1 Extreme) | |
 | **OneXPlayer** | | OneXFly F1, F1 Pro and Apex; X1 (AMD, Intel, Mini, Pro); 2 and 2 Pro; G1 (AMD, Intel); 3 | X2 Mini, X2 Mini Pro, Super X |
 | **AOKZOE** | | A1, A1 Pro, A1X | |
@@ -575,6 +575,20 @@ GameCove recognises your exact model and sets itself up for it. About this devic
 - **Basic:** GameCove runs with safe settings for the chip, and model-specific settings stay hidden until someone with
   the device helps us test it. Any other handheld gets this too.
 
+### Screens and the Steam Machine
+
+GameCove lays itself out for the screen it is on, from the handheld's panel size to a TV across the room: the size of
+the text follows how big and how far away the screen is, not just its pixel count, so a 4K TV reads like a 1080p one.
+Settings > Appearance has an **Interface size** (Small, Default, Large, Largest) for the sizes that make sense on your
+screen. Ultrawide and portrait screens get a centred 16:10 area with bars at the sides. We check every screen of the
+app on 34 resolutions and sizes with a layout harness (`tools/layout/run.py`, see [docs/RESOLUTIONS.md](docs/RESOLUTIONS.md)).
+
+The **Steam Machine** and other living-room boxes (no screen or battery of their own) are supported but **not yet
+tested on hardware**: we match Valve's own DMI ids (Valve / Fremont, the same pair steamos-manager uses), and everything
+else is checked only against fake devices. A box gets the TV layout, no battery or handheld power settings, "device"
+wording, button pictures from the controller you actually hold, and HDMI-CEC control through steamos-manager. Any other
+PC with no battery gets the same generic box setup. If you have a Steam Machine, [tell us how it went](https://github.com/IHulkSmashI/GameCove/issues/new?template=tester_signup.yml).
+
 Got one of the Supported or Basic models? Run it and [tell us how it went](https://github.com/IHulkSmashI/GameCove/issues/new?template=tester_signup.yml);
 that's how a model moves up. Details per device: [docs/DEVICES.md](docs/DEVICES.md).
 
@@ -582,7 +596,7 @@ that's how a model moves up. Details per device: [docs/DEVICES.md](docs/DEVICES.
 <summary><b>See every model</b></summary>
 <br>
 
-<p align="center"><img src="docs/images/devices.png" alt="Every handheld GameCove supports" width="100%"></p>
+<p align="center"><img src="docs/images/devices.png" alt="Every device GameCove supports" width="100%"></p>
 
 <sub>Photos: the makers' official product images (their property, removed on request), except Steam Deck (LCD) by Liam Dawe/GamingOnLinux, <a href="https://commons.wikimedia.org/wiki/File:Steam_Deck_(front).png">CC BY-SA 4.0</a>.</sub>
 

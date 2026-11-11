@@ -108,12 +108,14 @@
   },
   "Valve": {
    "image_prefixes": [
-    "https://cdn.fastly.steamstatic.com/steamdeck/images/press/"
+    "https://cdn.fastly.steamstatic.com/steamdeck/images/press/",
+    "https://clan.fastly.steamstatic.com/images/45479024/"
    ],
    "page_domains": [
-    "steamdeck.com"
+    "steamdeck.com",
+    "steampowered.com"
    ],
-   "note": "Valve's Steam Deck press kit (steamdeck.com/en/press) on Steam's CDN; only its press/ folder"
+   "note": "Valve's Steam Deck press kit (steamdeck.com/en/press) on Steam's CDN; only its press/ folder. The Steam Machine's product page (store.steampowered.com/hardware/steammachine) serves its pictures from Valve's own store group folder on Steam's CDN (clan images 45479024); only that folder"
   }
  },
  "steam-deck-lcd": {
@@ -131,6 +133,16 @@
    "maker": "Valve",
    "checked": "2026-11-09",
    "note": "Press-kit front render (1.7 MB PNG); replaces a dark room photo.",
+   "view": "front"
+  }
+ },
+ "valve-steam-machine": {
+  "maker_image": {
+   "url": "https://clan.fastly.steamstatic.com/images/45479024/d2ce7e96bb0ab51817ba37cf61e3ca919d6f7209.jpg",
+   "page_url": "https://store.steampowered.com/hardware/steammachine",
+   "maker": "Valve",
+   "checked": "2026-11-10",
+   "note": "The product page's own og:image: a flat front view on a plain background (800 x 450 JPEG). Commons has a free photo (File:Steam machine front.jpg, CC BY-SA 4.0), but it is a three-quarter view on a bedsheet, so it doesn't meet the head-on rule.",
    "view": "front"
   }
  },

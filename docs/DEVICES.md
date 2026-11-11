@@ -30,6 +30,7 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Steam Deck (LCD) | `steam-deck-lcd` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
 | Steam Deck (OLED) | `steam-deck-oled` | partial | 3 / 15 / 15 | steamdeck_hwmon (steamos-manager) | yes (steamos-manager) | yes | – | `steam-deck` | 4 | deck | yes |
+| Steam Machine | `valve-steam-machine` | partial | – (no TDP backend) | – | – | – | – | – | – | by connected controller | no: rgb, fan, tdp, cec |
 | ASUS ROG Ally | `asus-rog-ally` | full | 7 / 25 / 30 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
 | ASUS ROG Ally X | `asus-rog-ally-x` | partial | 7 / 25 / 30 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-ally` | 2 | xbox | yes |
 | ASUS ROG Xbox Ally | `asus-rog-xbox-ally` | partial | 4 / 20 / 20 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
@@ -98,7 +99,26 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 3. Rows sold with several chips (`chip_from_cpu: true`) and family rows take `chip`, `cpu_vendor`, `gpu_family`, `gpu_arch`, `xmx` from the CPU table (`cpus` in devices.json); family rows also take its TDP range.
 4. No match: a `generic` row is built from the CPU table (or, failing that, conservative AMD 5–20 W / Intel 8–25 W and the GPU driver: `xe` means Xe2 or newer). It has `id: "unknown"`, `support: "generic"`, the generic picture and Xbox glyphs.
 
-The tests check that each real DMI fixture (`app/tests/fixtures/devices/dmi.json`) resolves to exactly one specific row, that common laptops and the Steam Machine resolve to nothing, and that every specific row has a fixture.
+The tests check that each real DMI fixture (`app/tests/fixtures/devices/dmi.json`) resolves to exactly one specific row, that common laptops and mini PCs (a Beelink SER8) resolve to nothing, that the Steam Machine's Valve / Fremont ids resolve to `valve-steam-machine`, and that every specific row has a fixture.
+
+## Boxes for the TV (`form: "console"`)
+
+A row with `"form": "console"` (the Steam Machine) is a box with no panel, battery, TDP backend or built-in controls. An unknown PC with no
+battery gets the generic fallback row with `form: "desktop"`, the `generic-box` drawing and no TDP backends. For a box:
+
+- **Match.** `valve-steam-machine` matches `sys_vendor` Valve and `board_name` Fremont, the same pair Valve's steamos-manager matches in
+  `data/devices/steam-machine.toml` (OpenGamingCollective/steamos-manager @ 051c074, 2026-10-31). That file defines only HDMI-CEC
+  (cros_ec port 0): no TDP limit, fan speed, charge limit or GPU performance, so GameCove offers none of those.
+- **Support.** `partial`, `verified: false`: matched from Valve's own data, **not yet tested on hardware** by us or a tester.
+- **No battery anywhere.** `Device.has_battery()` is false: no battery in the status pill, quick menu (no Battery or Drawing tile), Settings,
+  Home or About; `battery_saver`, `battery_saver_at` and `low_battery_sleep` need a system battery; `power.tdp` reads `MAINS_ONLY`.
+  A controller's battery (scope "Device", e.g. a DualSense on a cable) is not the system's and is ignored.
+- **Wording.** `scripts/ui/words.gd` installs a Translation (only off a handheld) so "handheld" reads "device" / "Steam Machine" and battery
+  phrases read as power wording. "Handheld Daemon" keeps its name.
+- **Layout and pictures.** TV layout (docs/RESOLUTIONS.md). Button pictures follow the first connected pad (`Glyph.set_for_pad`; a Steam
+  Controller gets the Deck set, a DualSense the new `ps` set).
+- **HDMI-CEC.** `display.hdmi_cec` writes steamos-manager's `HdmiCec1.HdmiCecState` (0 off, 1 TV remote, 2 remote and TV power). No polling.
+- **Photo.** Valve's product page image, head-on, by link (`device_photos.json`).
 
 ## Fields
 

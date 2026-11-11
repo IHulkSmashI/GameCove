@@ -1081,7 +1081,11 @@ func _disarm_exit() -> void:
 # ------------------------------------------------------------ Power
 
 func _build_power() -> void:
-	body.add_child(_live_strip())
+	var strip := _live_strip()
+	if strip.get_child_count() > 0:
+		body.add_child(strip)
+	else:
+		strip.free()
 	if model == null:
 		return
 	_list(Catalog.QUICK["power"])
@@ -1093,7 +1097,7 @@ func _build_power() -> void:
 func _live_strip() -> HBoxContainer:
 	var row := Kit.hbox(8)
 	row.name = "PowerLive"
-	for k in ["battery", "draw", "tdp"]:
+	for k in _live_keys():
 		var p := PanelContainer.new()
 		p.name = "Stat_" + k
 		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1119,14 +1123,30 @@ func _live_strip() -> HBoxContainer:
 	return row
 
 
+## Which live tiles this device has. No battery (a Steam Machine, a mini PC) means
+## no Battery and no Drawing tile; TDP stays only where the power service offers it.
+func _live_keys() -> Array[String]:
+	var has_bat: bool = device == null or not device.has_method("has_battery") or device.has_battery()
+	if has_bat:
+		return ["battery", "draw", "tdp"]
+	var tdp: Dictionary = model.describe("power.tdp") if model != null else {}
+	return ["tdp"] if bool(tdp.get("available", false)) else []
+
+
 func _fill_strip(row: Node) -> void:
 	var b: Dictionary = device.battery() if device != null and device.has_method("battery") else {}
 	var pct := int(b.get("percent", -1))
 	var st := str(b.get("status", ""))
-	(row.get_node("Stat_battery/Col/Value") as Label).text = ("%d%%" % pct + (" ⚡" if st in ["Charging", "Full"] else "")) if pct >= 0 else "—"
-	(row.get_node("Stat_draw/Col/Value") as Label).text = "%.1f W" % float(b["watts"]) if float(b.get("watts", -1.0)) >= 0.0 else "—"
-	var tdp: Dictionary = model.describe("power.tdp") if model != null else {}
-	(row.get_node("Stat_tdp/Col/Value") as Label).text = Model.value_label(tdp) if bool(tdp.get("available", false)) else "—"
+	var v := row.get_node_or_null("Stat_battery/Col/Value") as Label
+	if v != null:
+		v.text = ("%d%%" % pct + (" ⚡" if st in ["Charging", "Full"] else "")) if pct >= 0 else "—"
+	v = row.get_node_or_null("Stat_draw/Col/Value") as Label
+	if v != null:
+		v.text = "%.1f W" % float(b["watts"]) if float(b.get("watts", -1.0)) >= 0.0 else "—"
+	v = row.get_node_or_null("Stat_tdp/Col/Value") as Label
+	if v != null:
+		var tdp: Dictionary = model.describe("power.tdp") if model != null else {}
+		v.text = Model.value_label(tdp) if bool(tdp.get("available", false)) else "—"
 
 
 ## Called every few seconds by main while the menu is open.

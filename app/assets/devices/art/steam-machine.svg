@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="290" viewBox="0 0 300 290">
+<title>Steam Machine</title>
+<rect id="part-body" x="25.2" y="23.4" width="249.6" height="243.2" rx="5" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<rect id="part-faceplate" x="31" y="29" width="238" height="186" rx="3" fill="#1F2630" stroke="#5A6678" stroke-width="1.5"/>
+<path d="M31 222 H269" stroke="#5A6678" stroke-width="1.5" stroke-linecap="round"/>
+<rect id="port-usb-1" x="44" y="232" width="21" height="10" rx="1.5" fill="#0B0E13" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="port-usb-2" x="80" y="232" width="21" height="10" rx="1.5" fill="#0B0E13" stroke="#9AA4B0" stroke-width="1.3"/>
+<rect id="port-microsd" x="121" y="235.5" width="18" height="3" rx="1.5" fill="#0B0E13" stroke="#9AA4B0" stroke-width="1.1"/>
+<circle id="part-led" cx="222" cy="237" r="1.8" fill="#E8ECF1"/>
+<circle id="btn-Power" cx="246" cy="237" r="8.5" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.5"/>
+<path id="part-led-bar" d="M40 256.5 H260" stroke="#9AA4B0" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+<path d="M44 266.6 H74 M226 266.6 H256" stroke="#5A6678" stroke-width="3" stroke-linecap="round"/>
+</svg>

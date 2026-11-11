@@ -71,6 +71,14 @@ const SET_FILES := {
 		"DPad": "dpad", "DPadUp": "dpad_up", "DPadDown": "dpad_down", "DPadLeft": "dpad_left", "DPadRight": "dpad_right",
 		"Guide": "steam", "QuickAccess": "qam", "LeftPad": "trackpad_l", "RightPad": "trackpad_r",
 	},
+	# PlayStation pads on a box by the TV (DualSense, DualShock 4); the PS button is a plain house
+	"ps": {
+		"South": "cross", "East": "circle", "West": "square", "North": "triangle",
+		"LeftBumper": "l1", "RightBumper": "r1", "LeftTrigger": "l2", "RightTrigger": "r2",
+		"LeftStick": "l3", "RightStick": "r3", "Select": "create", "Start": "options",
+		"DPad": "dpad", "DPadUp": "dpad_up", "DPadDown": "dpad_down", "DPadLeft": "dpad_left", "DPadRight": "dpad_right",
+		"Guide": "home", "LeftPad": "touchpad",
+	},
 }
 
 ## Glyphs for actions a device has no button for (the UI can still show what

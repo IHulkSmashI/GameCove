@@ -26,6 +26,7 @@ const CARDS := {
 	"display": [
 		["Screen", "sun", ["display.brightness", "display.refresh_rate", "display.fps_limit", "display.vrr"],
 			["display.allow_tearing", "display.refresh_unlock", "display.rotation"]],
+		["TV", "screen", ["display.hdmi_cec"], []],
 		["Colour", "palette", ["display.night_light", "display.night_light_strength", "display.night_light_schedule", "display.vibrance", "display.color_temp"], []],
 		["Scaling", "scaling", ["display.upscale_filter", "display.upscale_scaler", "display.sharpness"], []],
 		["HDR", "sparkle", ["display.hdr", "display.hdr_itm", "display.sdr_brightness"], []],

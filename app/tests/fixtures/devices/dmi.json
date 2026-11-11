@@ -24,6 +24,17 @@
    "source": "InputPlumber + steamos-manager device configs"
   },
   {
+   "expect": "valve-steam-machine",
+   "dmi": {
+    "sys_vendor": "Valve",
+    "product_name": "Fremont",
+    "board_name": "Fremont",
+    "board_vendor": "Valve",
+    "product_family": ""
+   },
+   "source": "steamos-manager data/devices/steam-machine.toml: dmi.sys_vendor \"Valve\", dmi.board_name \"Fremont\"; Geekbench 6 result 18366182 lists \"Valve Fremont\" too"
+  },
+  {
    "expect": "asus-rog-ally",
    "dmi": {
     "sys_vendor": "ASUSTeK COMPUTER INC.",
@@ -818,17 +829,6 @@
   {
    "expect": "",
    "dmi": {
-    "sys_vendor": "Valve",
-    "product_name": "Fremont",
-    "board_name": "Fremont",
-    "board_vendor": "Valve",
-    "product_family": ""
-   },
-   "source": "Steam Machine (steamos-manager)"
-  },
-  {
-   "expect": "",
-   "dmi": {
     "sys_vendor": "Framework",
     "product_name": "Laptop 13 (AMD Ryzen 7040Series)",
     "board_name": "FRANMDCP07",
@@ -836,6 +836,17 @@
     "product_family": ""
    },
    "source": "laptop"
+  },
+  {
+   "expect": "",
+   "dmi": {
+    "sys_vendor": "AZW",
+    "product_name": "SER8",
+    "board_name": "SER8",
+    "board_vendor": "AZW",
+    "product_family": "SER"
+   },
+   "source": "a Beelink SER8 mini PC (Ryzen 7 8845HS): an unknown box with no battery, must not match any row"
   }
  ]
 }

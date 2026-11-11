@@ -188,6 +188,8 @@ func _fill_side() -> void:
 		if not _side.resized.is_connected(_fit_side):
 			_side.resized.connect(_fit_side)
 		_fit_side()
+	else:
+		facts.free()  # a box with no screen and no battery may have nothing to show
 
 
 ## The three fact tiles need room for their captions; in a narrow column

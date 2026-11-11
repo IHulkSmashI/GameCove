@@ -65,6 +65,11 @@ func _initialize() -> void:
 	var emu: GDScript = load("res://scripts/library/stores/emu.gd")
 	emu.flatpak_dirs = []
 	emu.path_env = ""
+	# A build box has no battery and would count as a desktop PC: the tests see a handheld
+	# unless they say otherwise (Device.assume_battery), whatever machine runs them.
+	load("res://scripts/device/device.gd").assume_battery = true
+	if root.get_node_or_null("Device") != null:
+		root.get_node("Device").detect()
 	# ES-DE's find rules name /var/lib/flatpak and /usr paths: never this machine's
 	load("res://scripts/library/stores/esde_launch.gd").abs_root = "/nonexistent-gamecove-test-root"
 	load("res://scripts/ui/emulation_page.gd")._sync_jobs = true   # its hero collage is drawn at once in tests
