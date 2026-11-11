@@ -201,6 +201,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -o pipefail
           mkdir -p dist
           REQUIRE_CABINET=1 REQUIRE_FSR4=1 REQUIRE_UPSCALERS=1 sh packaging/make-app-tarball.sh app/build "dist/gamecove-${VERSION}-x86_64.tar.gz"
           tar -tzf "dist/gamecove-${VERSION}-x86_64.tar.gz" | tee tarball-files.txt
@@ -249,6 +250,7 @@ jobs:
           cp fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o dist/
       - name: RPM
         run: |
+          set -o pipefail
           top="$PWD/rpmbuild"
           mkdir -p "$top/SOURCES"
           # Source0: the repository as the spec's URL would serve it (top folder gamecove-<version>)
@@ -272,6 +274,7 @@ jobs:
           cp "$top"/RPMS/x86_64/gamecove-*.rpm "$top"/SRPMS/gamecove-*.src.rpm dist/
       - name: Sysext
         run: |
+          set -o pipefail
           mkdir -p app-export
           tar -xzf "dist/gamecove-${VERSION}-x86_64.tar.gz" -C app-export
           sh packaging/sysext/build-sysext.sh --app app-export --out sysext 2>&1 | tee sysext.log

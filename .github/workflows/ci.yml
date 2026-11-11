@@ -48,6 +48,7 @@ jobs:
         env:
           CLAWDECK_SRC: ${{ github.workspace }}/clawdeck-ref
         run: |
+          set -o pipefail
           python -m pytest -q -rs | tee out.txt
           ! grep -q "CLAWDECK_SRC is not a ClawDeck checkout" out.txt
 
@@ -144,8 +145,14 @@ jobs:
     # Legion Go S / Bazzite) and a fake Steam Machine (no battery, no panel): quick menu, Settings,
     # profiles and what reaches the system.
     # Long soak: E2E_SOAK=1 (200 iterations of the randomized parts).
+    # One job per fake handheld (the four together took 35 minutes in one job and hit its limit): each runs
+    # every suite for its setup, with the same seed, so a failure replays with --setups <id> --seed <n>.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        setup: [claw8ex-bazzite, ally-steamos, legion-go-s-bazzite, steam-machine-steamos]
     env:
       GODOT: "4.7.2"
     steps:
@@ -158,8 +165,8 @@ jobs:
           mv "Godot_v${GODOT}-stable_linux.x86_64" godot
       - name: Import the project
         run: ./godot --headless --path app --import > /dev/null 2>&1
-      - name: End-to-end suite (seed = run number, printed for replay)
-        run: GODOT="$PWD/godot" python3 -I app/tests/e2e/run.py --iters 5 --seed "${{ github.run_number }}"
+      - name: End-to-end suite on ${{ matrix.setup }} (seed = run number, printed for replay)
+        run: GODOT="$PWD/godot" python3 -I app/tests/e2e/run.py --setups "${{ matrix.setup }}" --iters 5 --seed "${{ github.run_number }}"
 
   layout:
     # Every screen of the app on the screen sizes in app/tests/layout/matrix.gd (the rows marked "ci":

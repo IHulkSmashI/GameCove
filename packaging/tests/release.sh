@@ -547,6 +547,38 @@ grep -q "Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (Stea
 if grep -rnE "(hasn't been run|Not run) on a SteamOS handheld|hardware testing so far was on Bazzite|Nothing (here )?has run on a handheld yet" "$REPO/README.md" "$REPO/docs" "$REPO/packaging" --exclude=release.sh; then bad "a doc says nothing ran on a handheld / SteamOS never ran, but the ROG Ally ran on SteamOS"; else ok; fi
 if grep -q '^<!--' "$REPO/README.md"; then bad "README has a hidden comment: $(grep -n '^<!--' "$REPO/README.md" | head -n 2 | tr '\n' ' ')"; else ok; fi
 
+# every workflow step that pipes into tee says set -o pipefail first (the pipe's exit status is tee's otherwise), and
+# the e2e job is one job per fake handheld with room under its time limit (the single job hit its 30 min limit)
+for wf in ci release; do
+	python3 - "$REPO/.github/workflows/$wf.yml" >"$T/pipe" <<'PY'
+import re, sys
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+i = 0
+while i < len(lines):
+    m = re.match(r"^(\s*)run:\s*\|\s*$", lines[i])
+    if m:
+        ind = len(m.group(1))
+        j = i + 1
+        body = []
+        while j < len(lines) and (not lines[j].strip() or len(lines[j]) - len(lines[j].lstrip()) > ind):
+            body.append(lines[j])
+            j += 1
+        text = "\n".join(body)
+        if re.search(r"\|\s*tee\b", text) and "pipefail" not in text:
+            print("line %d" % (i + 1))
+        i = j
+    else:
+        i += 1
+PY
+	if [ -s "$T/pipe" ]; then bad "$wf.yml: a step pipes into tee without set -o pipefail ($(tr '\n' ' ' <"$T/pipe"))"; else ok; fi
+done
+E2E_JOB=$(sed -n '/^  e2e:$/,/^  layout:$/p' "$REPO/.github/workflows/ci.yml")
+printf '%s\n' "$E2E_JOB" | grep -q "matrix:" && printf '%s\n' "$E2E_JOB" | grep -q -- '--setups "${{ matrix.setup }}"' && ok || bad "ci.yml: the e2e job must be a matrix with one setup per job"
+for s in claw8ex-bazzite ally-steamos legion-go-s-bazzite steam-machine-steamos; do
+	printf '%s\n' "$E2E_JOB" | grep -q "$s" && ok || bad "ci.yml: the e2e matrix is missing the $s setup"
+done
+printf '%s\n' "$E2E_JOB" | grep -qE "timeout-minutes: (3[5-9]|[4-9][0-9])$" && ok || bad "ci.yml: the e2e job needs a time limit above 30 minutes"
+
 # the CLA workflow links to github.com, not a mirror (a contributor reads that page before signing)
 if git -C "$REPO" grep -nIE "cloudns|ali360|https://gh\.[a-z0-9-]+\.[a-z]+/" -- . ':!packaging/tests/release.sh' >"$T/mirror"; then bad "a non-github mirror host is linked: $(head -n 2 "$T/mirror" | tr '\n' ' ')"; else ok; fi
 grep -q "path-to-document: https://github.com/IHulkSmashI/GameCove/blob/main/docs/CLA.md" "$REPO/.github/workflows/cla.yml" && ok || bad "cla.yml must link docs/CLA.md on github.com"
