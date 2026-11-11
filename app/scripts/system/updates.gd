@@ -593,8 +593,24 @@ func power_block() -> String:
 	return ""
 
 
+## True when a charger is connected, and always on a box with no battery (a Steam Machine, a desktop): it
+## has nothing to run out and often no supply entry that says "online", so it used to be refused every
+## firmware update with "needs_ac".
 func _ac() -> bool:
+	if not has_battery():
+		return true
 	return preload("res://scripts/device/device.gd").ac_online(root)
+
+
+## A battery (a BAT* supply, or one whose type says Battery) exists, readable or not.
+func has_battery() -> bool:
+	var dir := DirAccess.open(root + POWER_SUPPLY)
+	if dir == null:
+		return false
+	for n in Array(dir.get_directories()) + Array(dir.get_files()):
+		if str(n).begins_with("BAT") or read_text(root + POWER_SUPPLY + n + "/type") == "Battery":
+			return true
+	return false
 
 
 func battery_percent() -> int:

@@ -107,7 +107,7 @@ Claw entries), so fwupd covers controllers via plugins and accessories only.
 - fwupd metadata refresh: at most daily, same network rule. `fwupdmgr get-devices --json` lists
   every updatable part with its running version.
 - Installs (fwupd) and USB preparation are refused while a game runs, without AC
-  (`needs_ac`) or under 50% battery (`low_battery`).
+  (`needs_ac`) or under 50% battery (`low_battery`). A box with no battery at all (Steam Machine, desktop) counts as being on the mains: it is never refused for it.
 - Shared firmware: index `shared[].traits` matched against the row's `traits` (filled from
   maker/family/cpu_vendor/chip/buttons/gpu_family when a row has none), so siblings get it.
 - Drivers: kernel (`/proc/sys/kernel/osrelease`), Mesa, linux-firmware, InputPlumber,
