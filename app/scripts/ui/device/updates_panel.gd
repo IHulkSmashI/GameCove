@@ -390,11 +390,10 @@ func _hub_row(col: VBoxContainer, it: Dictionary) -> Array:
 
 ## A phone-scannable QR of the maker's page, and the address under it.
 func _fill_qr(box: VBoxContainer, page: String) -> void:
-	var tex := QR.texture(page, 4)
-	if tex != null:
+	if QR.texture(page, 4) != null:
 		var qr := TextureRect.new()
 		qr.name = "QR"
-		qr.texture = tex
+		QR.show_on(qr, page, 4)
 		qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		qr.custom_minimum_size = Vector2(200, 200)
 		box.add_child(qr)

@@ -580,7 +580,7 @@ func _build_empty() -> void:
 	row.name = "EmptyRow"
 	var qr := TextureRect.new()
 	qr.name = "Qr"
-	qr.texture = QR.texture(TL.EMUDECK_URL, 5)
+	QR.show_on(qr, TL.EMUDECK_URL, 5)
 	qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	qr.custom_minimum_size = Vector2(180, 180)
 	qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE

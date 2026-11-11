@@ -123,7 +123,7 @@ func _on_started(which: String, info: Dictionary) -> void:
 	if url == "" or not needs in ["code", "redirect_url"]:
 		_set_state("failed", TS.store_line({"how": needs}))
 		return
-	qr_rect.texture = QR.texture(url, 6)
+	QR.show_on(qr_rect, url, 6)
 	url_label.text = url if url.length() <= 90 else url.left(87) + "…"
 	for c in steps_box.get_children():
 		Kit.drop(steps_box, c)

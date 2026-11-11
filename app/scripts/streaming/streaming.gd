@@ -989,11 +989,16 @@ func quit_app(id: String) -> bool:
 	if pid <= 0:
 		return false
 	if is_inside_tree():
-		get_tree().create_timer(4.0).timeout.connect(func():
-			if bool(ctx["spawn"].running(pid)):
-				ctx["spawn"].kill(pid)
-			check_host(id))
+		# a bound method, not a lambda: if this node is freed first (exit) the connection goes with it
+		get_tree().create_timer(4.0).timeout.connect(_after_quit.bind(pid, id))
 	return true
+
+
+## Four seconds after Moonlight's quit command: kill what is still running, then look at the host again.
+func _after_quit(pid: int, id: String) -> void:
+	if bool(ctx["spawn"].running(pid)):
+		ctx["spawn"].kill(pid)
+	check_host(id)
 
 
 # ---------------------------------------------------------------- settings

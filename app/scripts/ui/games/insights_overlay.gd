@@ -144,7 +144,7 @@ func open_text(title: String, subtitle: String, bbcode: String) -> void:
 ## A link for the phone: a QR code plus the address written out.
 func open_qr(title: String, url: String, line: String, note := "") -> void:
 	mode = "qr"
-	qr_rect.texture = QR.texture(url, 6)
+	QR.show_on(qr_rect, url, 6)
 	url_label.text = url
 	qr_line.text = line
 	qr_note.text = note

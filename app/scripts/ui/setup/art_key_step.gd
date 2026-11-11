@@ -251,7 +251,7 @@ func stop() -> void:
 
 func _show_mode() -> void:
 	var url: String = drop.url if mode == "phone" and drop != null and drop.is_running() else Sgdb.API_KEY_PAGE
-	qr_rect.texture = QR.texture(url, 6)
+	QR.show_on(qr_rect, url, 6)
 	url_label.text = url.replace("https://www.", "").replace("http://", "")
 	if mode == "phone" and drop != null and drop.is_running():
 		url_label.text = url_label.text.get_slice("/k/", 0) + " · one-time page"

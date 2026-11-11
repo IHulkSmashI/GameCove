@@ -659,10 +659,13 @@ func _restart_monitor_later() -> void:
 	if _restarts >= 3 or not is_inside_tree():
 		return
 	_restarts += 1
-	get_tree().create_timer(5.0 * _restarts).timeout.connect(func():
-		if _intercepting and not intercept.running():
-			intercept.stop_monitor()
-			intercept.start_monitor())
+	get_tree().create_timer(5.0 * _restarts).timeout.connect(_restart_monitor_now)   # a method, not a lambda: freed with this node at exit
+
+
+func _restart_monitor_now() -> void:
+	if _intercepting and not intercept.running():
+		intercept.stop_monitor()
+		intercept.start_monitor()
 
 
 func _inject(e: InputEvent) -> void:

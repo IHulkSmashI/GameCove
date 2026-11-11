@@ -498,6 +498,10 @@ func test_qr_encoder() -> void:
 	var long := QR.modules(TS.REPO_URL + "/a/very/long/path?with=a&query=string&and=more&stuff=here&x=" + "y".repeat(100))
 	ok(long["size"] > 21 and (long["size"] - 17) % 4 == 0, "longer text grows the version")
 	ok(QR.texture("") == null, "nothing for empty text")
+	var qr_rect := TextureRect.new()
+	QR.show_on(qr_rect, "https://example.org", 5)
+	ok(qr_rect.texture != null and qr_rect.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST, "a QR code is drawn with nearest filtering, so it stays sharp at any scale")
+	qr_rect.free()
 
 
 func test_hints() -> void:

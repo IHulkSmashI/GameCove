@@ -38,3 +38,10 @@ static func texture(text: String, px := 6, dark := Color(0.04, 0.06, 0.1), light
 			if data[y * n + x] == 1:
 				img.fill_rect(Rect2i((x + quiet) * px, (y + quiet) * px, px, px), dark)
 	return ImageTexture.create_from_image(img)
+
+
+## Puts the code on a TextureRect with nearest filtering: the modules stay hard-edged at any scale
+## (a 4K screen draws a 205 px code 2.7 times bigger; linear filtering would blur every edge).
+static func show_on(rect: TextureRect, text: String, px := 6) -> void:
+	rect.texture = texture(text, px)
+	rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
