@@ -987,6 +987,7 @@ func test_upscaler_changes_wait_until_the_game_has_quit() -> void:
 	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null}
 	runner.answers["choose"] = {"ok": true, "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
 	_with_game(w, EPIC)
+	w["ctx"]["upscale_launch_grace_ms"] = 0
 	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
 	runner.calls.clear()
 	reg.set_value("perf.upscaler", "fsr31")
@@ -1002,6 +1003,11 @@ func test_upscaler_changes_wait_until_the_game_has_quit() -> void:
 	ok(calls.size() == 1 and "--upscaler fsr31" in calls[0], "made once the game has quit: " + str(calls))
 	reg.detect_all()
 	eq(_calls_with(runner, "choose").size(), 1, "and only once")
+	# the game's own profile settings still go in as it starts (Proton hasn't loaded it yet)
+	w["ctx"]["upscale_launch_grace_ms"] = 60000
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	reg.set_value("perf.upscaler", "fsr4_amd")
+	eq(_calls_with(runner, "choose").size(), 2, "at the start: made at once")
 	_done(w)
 
 

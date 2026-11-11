@@ -52,6 +52,7 @@ var _plan_cache := {}             # game key -> {"t": ms, "r": Dictionary}
 var _prepared := {}               # game keys set up ahead of their start this session
 var _last_did := {}               # game key -> what prepare changed, for the mode row's help
 var _running_key := ""            # the game running now (session_wiring through ctx["upscale_running"])
+var _running_since := 0           # Time.get_ticks_msec() when it started
 var _pending := {}                # game key -> {"verb", "extra"}: a change asked for while that game ran
 ## Helper commands that change the game's files: never while that game runs
 ## (its DLLs are loaded; review M7). They wait and run once it has quit.
@@ -525,12 +526,20 @@ func _upscale_run(verb: String, extra: Array = []) -> Dictionary:
 func set_running_game(key: String) -> void:
 	_mutex.lock()
 	_running_key = key
+	_running_since = Time.get_ticks_msec()
 	_mutex.unlock()
 
 
+## While a game's process is only starting (Proton sets up its prefix for several
+## seconds before the game loads its DLLs), the game's own settings from its
+## profile are still put in as it starts; after that window, changes wait.
+const LAUNCH_GRACE_MS := 6000
+
+
 func is_running(key: String) -> bool:
+	var grace := int(ctx.get("upscale_launch_grace_ms", LAUNCH_GRACE_MS))
 	_mutex.lock()
-	var r := key != "" and _running_key == key
+	var r := key != "" and _running_key == key and Time.get_ticks_msec() - _running_since >= grace
 	_mutex.unlock()
 	return r
 
