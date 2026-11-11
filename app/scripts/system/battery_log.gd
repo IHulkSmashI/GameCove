@@ -7,6 +7,7 @@ extends Node
 ##   {"v": 1, "samples": [[unix, percent, wh, event, game key], ...],   newest last, 30 days
 ##    "games": {key: {"title", "wh", "s", "n"}},                          battery used while playing
 ##    "open": {"key", "t", "pct", "wh"} | {}}                             a stretch on battery now
+##                                                                        (never kept across a start: load_data)
 ## A stretch is time in a game on battery, awake: it opens at a game start (on battery), an
 ## unplug or a wake during a game, and closes at the game's end, a plug-in or a sleep; then
 ## its watt-hours and seconds add to the game. A sleep GameCove didn't start (power button)
@@ -52,8 +53,11 @@ func load_data() -> void:
 		data["samples"] = []
 	if not data.get("games") is Dictionary:
 		data["games"] = {}
-	if not data.get("open") is Dictionary:
-		data["open"] = {}
+	# A stretch only lives while this run follows a game. One still open in the
+	# file was left by a crash or a power loss (no "end" was ever written): the
+	# next plug-in or game end would add everything since, hours or days of
+	# standby, to that game. It's dropped here; what it had used is unknown.
+	data["open"] = {}
 	data["v"] = 1
 
 

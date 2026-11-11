@@ -82,21 +82,25 @@ static func command(m: Dictionary, action_args: Array, env := {}) -> Array[Strin
 	return out
 
 
+## The host (and an app's title) always come last, after `--`: a host is typed
+## or found on the network and a title comes from the PC's app list, and one
+## that began with "-" would otherwise be read as a Moonlight option. Moonlight
+## parses with Qt's QCommandLineParser, where `--` ends the options.
 static func list_args(host: String) -> Array:
-	return ["list", host, "--csv"]
+	return ["list", "--csv", "--", host]
 
 
 static func pair_args(host: String, pin: String) -> Array:
-	return ["pair", host, "--pin", pin]
+	return ["pair", "--pin", pin, "--", host]
 
 
 static func quit_args(host: String) -> Array:
-	return ["quit", host]
+	return ["quit", "--", host]
 
 
 ## Moonlight's stream arguments from resolved settings (stream_settings.gd resolve()).
 static func stream_args(host: String, app_title: String, s: Dictionary) -> Array:
-	var a: Array = ["stream", host, app_title,
+	var a: Array = ["stream",
 		"--resolution", "%dx%d" % [int(s["width"]), int(s["height"])],
 		"--fps", str(int(s["fps"])),
 		"--bitrate", str(int(s["bitrate_kbps"])),
@@ -111,6 +115,7 @@ static func stream_args(host: String, app_title: String, s: Dictionary) -> Array
 		var key: String = flag.replace("-", "_")
 		if s.has(key):
 			a.append("--" + flag if bool(s[key]) else "--no-" + flag)
+	a.append_array(["--", host, app_title])
 	return a
 
 

@@ -510,8 +510,7 @@ PV="$REPO/docs/PRIVACY.md"
 grep -q "every address saved for that PC" "$PV" && ok || bad "PRIVACY.md: Wake-on-LAN also goes to the PC's saved addresses (a remote one included)"
 grep -q "Send from my phone" "$PV" && ok || bad "PRIVACY.md: the key page opens when Send from my phone is chosen"
 if grep -q "Only while the Game art step is open" "$PV" "$REPO/README.md"; then bad "the key page no longer opens with the Game art step; the docs still say so"; else ok; fi
-if grep -q "no other host (\`IMAGE_HOSTS\`)" "$PV"; then bad "PRIVACY.md says pictures come from no other host, but redirects are followed"; else ok; fi
-grep -q "redirect" "$PV" && ok || bad "PRIVACY.md must say image redirects are followed"
+grep -q "each hop is checked before it's followed" "$PV" && ok || bad "PRIVACY.md must say every image redirect hop is checked against IMAGE_HOSTS"
 grep -q "gamecove-selftest" "$PV" && grep -q "releases/latest" "$PV" && ok || bad "PRIVACY.md must list the selftest's GitHub HEAD request"
 grep -q 'RELEASES=https://github.com/IHulkSmashI/gamecove/releases/latest' "$REPO/packaging/bin/gamecove-selftest" && grep -q -- '-I --max-time 10 "\$RELEASES"' "$REPO/packaging/bin/gamecove-selftest" && ok || bad "the selftest's network request changed: update docs/PRIVACY.md"
 # the phone page for the key really doesn't open with the step: start() itself never calls _open_phone()

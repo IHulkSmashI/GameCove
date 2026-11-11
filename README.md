@@ -167,6 +167,8 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 
 - **Every store in one library.** Steam, Epic, GOG and Amazon side by side. Filter by store, genre, critic score (75+)
   or what's installed, sort by Top rated, and search with the on-screen keyboard.
+- **Home stays quick with a big library.** Each Home shelf shows its first 24 games and ends with **See all**, which
+  opens the Library on the same list. Thousands of ROMs don't slow Home down.
 - **Favourites, hidden games and collections.** Press Menu on any game (or the star on its page) to make it a
   favourite, put it in a collection or hide it. Favourites get their own shelf on Home; the Library's Filter button (or View) opens its Filter
   sheet for favourites, a collection, emulated games or hidden games. Your Steam collections, favourites and hidden
@@ -283,7 +285,9 @@ it does.
 - **Controller:** controller type (Xbox, DualSense, Steam Deck and more), **back buttons** remapped to any button, a key
   or a mouse click, gyro on/off and which sensor, stick and trigger deadzones, trackpad mode, **rumble on/off and
   strength**, a rumble test, **lights** (effect, colours, brightness, speed), mouse mode with pointer speed, a button
-  tester, and one press to start over.
+  tester, and one press to start over. **Steam's controller settings** (gyro aiming, layouts) open straight from the
+  game for every game Steam starts, emulated games Steam ROM Manager added included, and closing them lands you back
+  where you were.
 - **Performance:** the overlay (FPS only, compact, a bar, full, or pick your own items, with position, size and
   opacity), upscaling and frame generation with installed versions and updates, Lossless Scaling frame generation,
   Proton version, low latency, shader threads and clearing a game's shader cache, plus **GE-Proton**: install the

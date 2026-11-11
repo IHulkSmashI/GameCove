@@ -537,3 +537,101 @@ func test_a_real_watch_stops_and_is_reaped() -> void:
 		OS.delay_msec(100)
 		ok(not gone.alive(), "a missing program ends at once (GameSession polls then)")
 		gone.stop()
+
+
+# ------------------------------------------------------------ a cancelled launch (B on the splash)
+
+## Final review High 3: cancelling used to end the session at once while the game
+## kept starting. dismiss() keeps following it until it's really gone.
+func test_dismissed_launch_ends_only_when_our_process_is_gone() -> void:
+	var r := _gamescope()
+	var x: FakeXprop = r[1]
+	var power := FakePower.new()
+	var s := _session(r[0], power, FakeLauncher.new())
+	var alive := [true]
+	s.pid_running = func(_p: int) -> bool: return alive[0]
+	var ended := []
+	s.ended.connect(func(g): ended.append(g["key"]))
+	var id := LibraryScript.app_id_for("epic:Quail")
+	var close := []
+	s.unwanted.connect(func(g): close.append(g["key"]))
+	s.begin(EPIC, {"ok": true, "app_id": id, "pid": 4242, "scoped": true})
+	s.dismiss()
+	eq(close, ["epic:Quail"], "our own process: closed at once")
+	ok(s.is_active() and s.dismissed, "cancelled: still followed, nothing pretends it ended")
+	eq(ended, [], "no `ended` on cancel")
+	eq(power.calls, ["start"], "its settings stay while it's still there")
+	for i in 6:
+		s.poll_focus()
+	ok(s.is_active(), "its process still runs: still a running game")
+	ok(not s.return_to_game(), "and it can't be brought to the front")
+	alive[0] = false
+	s.poll_focus()
+	ok(s.is_active(), "one miss isn't enough")
+	s.poll_focus()
+	eq(s.phase, "idle", "gone twice: ended, long before FOCUS_WAIT_S")
+	eq(ended, ["epic:Quail"], "ended once, when it was really gone")
+	eq(power.calls, ["start", "stop"], "Auto TDP stopped then")
+	ok(not s.dismissed, "the next session starts clean")
+	eq(_base(x), [413091, 769], "home in front")
+	s.free()
+	r[0].free()
+
+
+func test_dismissed_launch_never_gets_the_screen_and_is_closed_again() -> void:
+	var r := _gamescope()
+	var x: FakeXprop = r[1]
+	var s := _session(r[0], FakePower.new(), FakeLauncher.new())
+	var alive := [false]   # Steam hasn't started its reaper when B is pressed
+	s.steam_alive = func(_id: int) -> bool: return alive[0]
+	var again := []
+	s.unwanted.connect(func(g): again.append(g["key"]))
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0, "scoped": false})
+	s.dismiss()
+	var per_check := int(GameSession.REAPER_CHECK_S / GameSession.FOCUS_POLL_S)
+	for i in per_check * 4:
+		s.poll_focus()
+	ok(s.is_active(), "no reaper yet isn't 'gone': Steam may still be starting it")
+	eq(again, [], "nothing to close again yet")
+	alive[0] = true
+	for i in per_check:
+		s.poll_focus()
+	eq(again, ["steam:976730"], "Steam started it after all: asked to close it again, once")
+	for i in per_check * 2:
+		s.poll_focus()
+	eq(again, ["steam:976730"], "not every tick")
+	# its window shows up before the close lands
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769, 976730]
+	s.poll_focus()
+	eq(s.phase, "running", "followed like any running game")
+	ok(not 976730 in _base(x), "but never given the screen")
+	eq(again, ["steam:976730", "steam:976730"], "and closed again")
+	x.root[GamescopeScript.ATOM_FOCUSABLE_APPS] = [769]
+	s.poll_exit()
+	s.poll_exit()
+	eq(s.phase, "idle", "ends through the normal exit check")
+	s.free()
+	r[0].free()
+
+
+func test_dismissed_steam_launch_ends_once_its_reaper_is_gone() -> void:
+	var r := _gamescope()
+	var s := _session(r[0], FakePower.new(), FakeLauncher.new())
+	var alive := [true]
+	s.steam_alive = func(_id: int) -> bool: return alive[0]
+	var close := []
+	s.unwanted.connect(func(g): close.append(g["key"]))
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0, "scoped": false})
+	s.dismiss()
+	eq(close, ["steam:976730"], "Steam's launch is there: looked for and closed at once")
+	ok(s.is_active(), "reaper seen: running until it's gone")
+	var per_check := int(GameSession.REAPER_CHECK_S / GameSession.FOCUS_POLL_S)
+	alive[0] = false
+	for i in per_check:
+		s.poll_focus()
+	ok(s.is_active(), "gone once")
+	for i in per_check:
+		s.poll_focus()
+	eq(s.phase, "idle", "gone twice: ended")
+	s.free()
+	r[0].free()

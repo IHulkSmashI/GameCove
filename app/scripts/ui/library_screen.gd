@@ -369,6 +369,31 @@ func set_collection_names(names: Dictionary) -> void:
 	_refresh_toolbar()
 
 
+## The Library on what a Home shelf lists (its "See all" tile): every filter and
+## the search cleared first, then that shelf's own, in one rebuild.
+##   installed: Installed only        favourites / emulation: that view
+##   store_<id>: that store           short: everything, shortest first
+##   anything else (all, anti-cheat friendly, recent): every game
+func show_shelf(shelf_id: String) -> void:
+	store = ""
+	view = ""
+	install_filter = ""
+	genre = ""
+	critic_filter = false
+	query = ""
+	match shelf_id:
+		"installed":
+			install_filter = "installed"
+		"favourites", "emulation":
+			view = shelf_id
+		"short":
+			sort = "ttb"
+		_:
+			if shelf_id.begins_with("store_") and View.STORES.any(func(s): return s[0] == shelf_id.substr(6)):
+				store = shelf_id.substr(6)
+	_rebuild(false)
+
+
 func set_install_filter(f: String) -> void:
 	install_filter = f if f in ["installed", "not_installed"] else ""
 	_rebuild(false)
