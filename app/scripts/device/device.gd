@@ -13,6 +13,7 @@ signal info_updated(info: Dictionary)
 const Buttons := preload("res://scripts/device/buttons.gd")
 const Traits := preload("res://scripts/device/traits.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
+const OsInfo := preload("res://scripts/system/os_info.gd")
 
 const DEVICE_TABLE := "res://data/devices.json"
 const DMI := "/sys/class/dmi/id/"
@@ -87,8 +88,38 @@ func detect() -> Dictionary:
 	product_family = dmi["product_family"]
 	cpu_model = cpu_model_name(root)
 	gpu = gpu_info(root)
-	profile = resolve(load_doc(), dmi, cpu_model, gpu)
+	profile = for_os(resolve(load_doc(), dmi, cpu_model, gpu), OsInfo.detect(root))
 	return profile
+
+
+## The row as it holds on this OS: each `by_os` entry whose os (OsInfo family) and version range
+## ("from" / "until", the VERSION_ID's major number, both inclusive) match replaces the keys in its
+## "set" (the Legion Go's gyro is broken on Bazzite 44+, a Claw's lights are the kernel's there).
+## The entry's "why" goes to the row's "os_notes". Rows without by_os come back unchanged.
+static func for_os(row: Dictionary, os: Dictionary) -> Dictionary:
+	var entries: Variant = row.get("by_os")
+	if not entries is Array or (entries as Array).is_empty():
+		return row
+	var out := row.duplicate(true)
+	var notes: Array = []
+	var major := str(os.get("version", "")).get_slice(".", 0)
+	for e in entries:
+		if not e is Dictionary or str(e.get("os", "")) != str(os.get("family", "")):
+			continue
+		if not major.is_valid_int():
+			continue
+		var v := major.to_int()
+		if e.has("from") and v < int(e["from"]):
+			continue
+		if e.has("until") and v > int(e["until"]):
+			continue
+		var set_: Dictionary = e.get("set", {}) if e.get("set") is Dictionary else {}
+		for k in set_:
+			out[k] = set_[k]
+		notes.append(str(e.get("why", "")))
+	if not notes.is_empty():
+		out["os_notes"] = notes
+	return out
 
 
 # ---- identity -------------------------------------------------------------------
@@ -135,6 +166,7 @@ static func features_of(row: Dictionary) -> Dictionary:
 		"fan_control": row.get("fan_via") != null,
 		"charge_limit": bool(row.get("charge_limit", false)),
 		"gyro": str(row.get("gyro", "unknown")),
+		"gyro_reason": str(row.get("gyro_reason", "")),
 		"rgb": rgb is Dictionary,
 		"rgb_via": str(rgb.get("via", "")) if rgb is Dictionary else "",
 		"vrr": row.get("vrr_range") is Array,
@@ -296,6 +328,10 @@ const SUPPORT_LEVELS := ["full", "partial", "beta", "generic"]
 const GPU_FAMILIES := ["", "amd-vega", "amd-rdna2", "amd-rdna3", "intel-xe-lpg", "intel-xe2", "intel-xe3"]
 const GPU_ARCHS := ["unknown", "Vega", "RDNA2", "RDNA3", "RDNA3.5", "Xe-LPG", "Xe2", "Xe3"]
 const GYRO_STATES := ["yes", "fix", "no", "none", "unknown"]
+## devices.json rgb.via: who drives the lights (texts_device.gd LED_BY names each).
+const RGB_VIA := ["inputplumber", "hhd", "ayaneo-ec", "oxp-ec", "kernel", "steam"]
+## by_os may only change what an OS changes about a handheld, never its identity or limits.
+const BY_OS_KEYS := ["gyro", "gyro_reason", "rgb"]
 const TDP_BACKENDS := ["steamos-manager", "powerstation"]
 const REQUIRED := ["id", "name", "maker", "tier", "match", "chip", "gpu", "gpu_family", "gpu_arch", "xmx",
 	"panel_hz", "tdp", "fan", "charge_limit", "gyro", "buttons", "glyphs", "art", "fixes", "support", "verified", "unverified"]
@@ -390,11 +426,36 @@ static func row_problems(row: Dictionary) -> Array:
 		if not panel is Dictionary or float(panel.get("size_in", 0)) < 3.0 or float(panel.get("size_in", 0)) > 18.0 \
 				or not panel.get("resolution") is Array or panel["resolution"].size() != 2:
 			p.append("%s: panel needs size_in (3..18) and resolution [w, h]" % id)
-	var rgb: Variant = row.get("rgb")
-	if rgb != null and (not rgb is Dictionary or str(rgb.get("via", "")) == ""):
-		p.append("%s: rgb must be null or {zones, via}" % id)
+	p.append_array(_rgb_problems(id, row.get("rgb")))
+	if row.has("gyro_reason") and str(row["gyro"]) == "yes":
+		p.append("%s: gyro_reason only where the gyro doesn't simply work" % id)
+	var by_os: Variant = row.get("by_os")
+	if by_os != null:
+		if not by_os is Array:
+			p.append("%s: by_os must be a list" % id)
+		else:
+			for e in by_os:
+				if not e is Dictionary or not str(e.get("os", "")) in ["bazzite", "steamos", "fedora-atomic"] \
+						or not e.get("set") is Dictionary or str(e.get("why", "")) == "" or str(e.get("source", "")) == "":
+					p.append("%s: by_os entries need os, set, why and source" % id)
+					continue
+				for k in e["set"]:
+					if not k in BY_OS_KEYS:
+						p.append("%s: by_os can't change %s" % [id, k])
+				if e["set"].has("gyro") and not str(e["set"]["gyro"]) in GYRO_STATES:
+					p.append("%s: by_os gyro %s" % [id, e["set"]["gyro"]])
+				if e["set"].has("rgb"):
+					p.append_array(_rgb_problems(id + " by_os", e["set"]["rgb"]))
 	p.append_array(rumble_problems(id, row.get("rumble")))
 	return p
+
+
+static func _rgb_problems(id: String, rgb: Variant) -> Array:
+	if rgb == null:
+		return []
+	if not rgb is Dictionary or not str(rgb.get("via", "")) in RGB_VIA:
+		return ["%s: rgb must be null or {zones, via} with via one of %s" % [id, ", ".join(RGB_VIA)]]
+	return []
 
 
 const RUMBLE_STRENGTH := ["kernel", "hhd", "steam", "none"]

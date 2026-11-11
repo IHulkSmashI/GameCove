@@ -35,21 +35,22 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 | ASUS ROG Xbox Ally | `asus-rog-xbox-ally` | partial | 4 / 20 / 20 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
 | ASUS ROG Xbox Ally X | `asus-rog-xbox-ally-x` | partial | 5 / 35 / 35 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | yes |
 | ASUS ROG Xbox Ally X20 | `asus-rog-xbox-ally-x20` | partial | 5 / 35 / 35 | asus_custom_fan_curve (fix) | yes (steamos-manager) | yes | inputplumber | `rog-xbox-ally` | 2 | xbox | no: tdp, panel.vrr |
-| Lenovo Legion Go | `lenovo-legion-go` | partial | 5 / 30 / 30 | lenovo_wmi_other | – | yes | hhd | `legion-go` | 4 | xbox | no: charge_limit |
+| Lenovo Legion Go | `lenovo-legion-go` | partial | 5 / 30 / 30 | lenovo_wmi_other | – | yes (no on Bazzite 44+) | hhd (kernel on Bazzite 44+) | `legion-go` | 4 | xbox | no: charge_limit |
 | Lenovo Legion Go 2 | `lenovo-legion-go-2` | partial | 5 / 30 / 35 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-2` | 4 | xbox | no: tdp, charge_limit, panel.vrr |
 | Lenovo Legion Go 2 (Z2) | `lenovo-legion-go-2-z2` | partial | 5 / 30 / 35 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-2` | 4 | xbox | no: tdp, charge_limit, panel.vrr, chip |
 | Lenovo Legion Go S (Z2 Go) | `lenovo-legion-go-s-z2go` | partial | 5 / 30 / 33 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-s` | 2 | xbox | no: charge_limit |
 | Lenovo Legion Go S (Z1 Extreme) | `lenovo-legion-go-s-z1e` | partial | 5 / 30 / 33 | lenovo_wmi_other | – | yes | inputplumber | `legion-go-s` | 2 | xbox | no: charge_limit |
-| MSI Claw 8 EX AI+ | `msi-claw-8-ex` | full | 8 / 35 / 35 | msi_wmi_platform (fix) | yes (fix) | fix | hhd | `msi-claw-8-ex` | 2 | xbox | yes |
-| MSI Claw 8 AI+ | `msi-claw-8-ai-plus` | partial | 8 / 30 / 30 | msi_wmi_platform (fix) | yes (steamos-manager) | no | hhd | `msi-claw` | 2 | xbox | no: panel.vrr |
-| MSI Claw 7 AI+ | `msi-claw-7-ai-plus` | partial | 8 / 30 / 30 | msi_wmi_platform (fix) | yes (steamos-manager) | no | hhd | `msi-claw` | 2 | xbox | no: panel |
-| MSI Claw A1M | `msi-claw-a1m` | partial | 8 / 35 / 43 | msi_wmi_platform (fix) | yes (steamos-manager) | yes | hhd | `msi-claw` | 2 | xbox | yes |
-| MSI Claw A8 | `msi-claw-a8` | partial | 8 / 35 / 35 | msi_wmi_platform (fix) | yes (steamos-manager) | yes | hhd | `msi-claw` | 2 | xbox | no: panel.vrr |
+| MSI Claw 8 EX AI+ | `msi-claw-8-ex` | full | 8 / 35 / 35 | msi_wmi_platform (fix) | yes (fix) | fix | hhd (kernel on Bazzite 44+) | `msi-claw-8-ex` | 2 | xbox | yes |
+| MSI Claw 8 AI+ | `msi-claw-8-ai-plus` | partial | 8 / 30 / 30 | msi_wmi_platform (fix) | yes (steamos-manager) | no | hhd (kernel on Bazzite 44+) | `msi-claw` | 2 | xbox | no: panel.vrr |
+| MSI Claw 7 AI+ | `msi-claw-7-ai-plus` | partial | 8 / 30 / 30 | msi_wmi_platform (fix) | yes (steamos-manager) | no | hhd (kernel on Bazzite 44+) | `msi-claw` | 2 | xbox | no: panel |
+| MSI Claw A1M | `msi-claw-a1m` | partial | 8 / 35 / 43 | msi_wmi_platform (fix) | yes (steamos-manager) | yes | hhd (kernel on Bazzite 44+) | `msi-claw` | 2 | xbox | yes |
+| MSI Claw A8 | `msi-claw-a8` | partial | 8 / 35 / 35 | msi_wmi_platform (fix) | yes (steamos-manager) | yes | hhd (kernel on Bazzite 44+) | `msi-claw` | 2 | xbox | no: panel.vrr |
 | MSI Claw (unknown model) *(family)* | `msi-claw-family` | generic | 8 / 25 / 30 | msi_wmi_platform (fix) | – | unknown | – | `msi-claw` | 2 | xbox | no: tdp, panel, chip, buttons |
 | OneXFly F1 | `onexplayer-onexfly-f1` | partial | 5 / 28 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-f1` | 1 | xbox | no: panel.vrr |
 | OneXFly F1 Pro | `onexplayer-onexfly-f1-pro` | partial | 5 / 30 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-f1` | 1 | xbox | no: panel.vrr |
 | OneXPlayer X1 (AMD) | `onexplayer-x1-amd` | partial | 5 / 28 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
 | OneXPlayer X1 (Intel) | `onexplayer-x1-intel` | partial | 8 / 28 / 35 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
+| OneXPlayer X1 Air | `onexplayer-x1-air` | partial | 8 / 30 / 30 | oxp_ec (fix) | yes (sysfs) | unknown | hhd (none on Bazzite 44+) | `oxp-x1` | 2 | xbox | no: tdp, panel, buttons, gyro |
 | OneXPlayer X1 Mini | `onexplayer-x1-mini` | partial | 5 / 28 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: tdp, panel.vrr |
 | OneXPlayer X1 Pro | `onexplayer-x1-pro` | partial | 4 / 30 / 30 | oxp_ec (fix) | yes (sysfs) | yes | inputplumber | `oxp-x1` | 2 | xbox | no: dmi, buttons, panel |
 | OneXPlayer 2 | `onexplayer-2` | partial | 5 / 28 / 33 | oxp_ec (fix) | – | yes | – | `oxp-2` | 0 | xbox | yes |
@@ -78,11 +79,11 @@ TDP is `min / battery_max / plugged_max` watts. Fan shows the kernel interface a
 | AYANEO (unknown model) *(family)* | `ayaneo-family` | generic | 5 / 25 / 28 | ayaneo_ec (fix) | – | unknown | – | `aya-classic` | 0 | xbox | no: tdp, panel, chip, buttons |
 | GPD WIN 4 | `gpd-win-4` | partial | 5 / 28 / 28 | gpdfan (fix) | – | yes | – | `gpd-win4` | 1 | xbox | no: chip |
 | GPD WIN Mini | `gpd-win-mini` | partial | 5 / 28 / 28 | gpdfan (fix) | – | yes | – | `gpd-win4` | 1 | xbox | no: chip, panel.vrr |
-| GPD WIN Max 2 | `gpd-win-max-2` | partial | 5 / 28 / 28 | gpdfan (fix) | – | yes | – | `gpd-winmax2` | 2 | xbox | no: chip |
+| GPD WIN Max 2 | `gpd-win-max-2` | partial | 5 / 28 / 28 | gpdfan (fix) | – | no | – | `gpd-winmax2` | 2 | xbox | no: chip |
 | GPD WIN 5 | `gpd-win-5` | partial | 4 / 50 / 85 | gpdfan (fix) | – | yes | – | `gpd-win5` | 2 | xbox | no: tdp.battery_max, panel |
 | GPD (unknown model) *(family)* | `gpd-family` | generic | 5 / 25 / 28 | gpdfan (fix) | – | unknown | – | `gpd-win4` | 1 | xbox | no: tdp, panel, chip, buttons |
 | ZOTAC Gaming Zone | `zotac-zone` | partial | 5 / 28 / 30 | zotac_zone_platform (fix) | – | yes | inputplumber | `zotac-zone` | 2 | xbox | no: tdp, charge_limit |
-| Acer Predator Atlas 8 | `acer-predator-atlas-8` | partial | 8 / 30 / 40 | – | – | unknown | – | `acer-atlas` | 2 | xbox | no: tdp, panel.vrr, gyro |
+| Acer Predator Atlas 8 | `acer-predator-atlas-8` | partial | 8 / 30 / 40 | – | – | no | – | `acer-atlas` | 2 | xbox | no: tdp, panel.vrr |
 | Acer Nitro Blaze 7 | `acer-nitro-blaze-7` | generic | 5 / 28 / 30 | – | – | unknown | – | `acer-blaze` | 0 | xbox | no: dmi, buttons, tdp, panel.vrr, gyro |
 | Acer Nitro Blaze 8 | `acer-nitro-blaze-8` | generic | 5 / 28 / 30 | – | – | unknown | – | `acer-blaze` | 0 | xbox | no: dmi, buttons, tdp, panel.vrr, gyro |
 | Acer Nitro Blaze 11 | `acer-nitro-blaze-11` | generic | 5 / 28 / 30 | – | – | unknown | – | `acer-blaze` | 0 | xbox | no: dmi, buttons, tdp, panel.vrr, gyro |
@@ -119,8 +120,9 @@ The tests check that each real DMI fixture (`app/tests/fixtures/devices/dmi.json
 | `power_backend` | What actually writes the limit under those services (informational): `intel-rapl`, `intel-rapl-mmio`, `powerstation`, `steamos-manager`. |
 | `fan`, `fan_via` | Kernel fan interface (hwmon name or driver: `steamdeck_hwmon`, `msi_wmi_platform`, `asus_custom_fan_curve`, `lenovo_wmi_other`, `oxp_ec`, `ayaneo_ec`, `gpdfan`, `zotac_zone_platform`); how GameCove drives it today (`steamos-manager`, `fix`, or `null` = not yet). |
 | `charge_limit`, `charge_limit_via` | Battery charge limit available; through `steamos-manager`, the `charge-limit` fix (`fix`) or a kernel battery control (`sysfs`: `charge_control_end_threshold`, or `charge_behaviour` on AYANEO), which Power also writes through the `charge-limit` fix. Power reads this flag. |
-| `gyro`, `imu` | `yes` (works through InputPlumber), `fix` (needs a GameCove fix), `no` (sensor present, not on Linux yet), `none` (no sensor), `unknown`; `imu` names the sensor. |
-| `rgb` | `null` or `{zones, via}`; `via` is who drives the LEDs (`inputplumber`, `hhd`, `ayaneo-ec`, `oxp-ec`). |
+| `gyro`, `imu`, `gyro_reason` | `yes` (works through InputPlumber), `fix` (needs a GameCove fix), `no` (sensor present, not on Linux yet), `none` (no sensor), `unknown`; `imu` names the sensor; `gyro_reason` (optional, never with `yes`) is the plain line the gyro control and the Device page show instead of the general words. |
+| `rgb` | `null` or `{zones, via}`; `via` is who drives the LEDs (`inputplumber`, `hhd`, `ayaneo-ec`, `oxp-ec`, `kernel` = the kernel's LED node, which GameCove drives through `fixes/controller-led`, `steam` = only Steam's lighting settings). |
+| `by_os` | Optional list: what an OS release changes about this handheld. Each entry `{os, from?, until?, set, why, source}`: `os` is the OS family (`bazzite`, `steamos`, `fedora-atomic`), `from` / `until` the VERSION_ID's major number (inclusive), `set` replaces only `gyro`, `gyro_reason` or `rgb` (never limits or identity). Applied at detection (`Device.for_os`); the matched `why` lines land in the row's `os_notes`. Used for Bazzite 44+, which ships InputPlumber instead of Handheld Daemon (lights) and broke the Legion Go's gyro. |
 | `rumble` | Optional. Where the rumble strength lives: `strength` `kernel` (the controller firmware's setting through `driver` `hid-msi` / `hid-lenovo-go`, `values` `[lo, hi]` or its words), `hhd` (Handheld Daemon's setting `hhd`), `steam` (only Steam sets it) or `none`; `checked` lists what was tried on a real handheld (`on_off`, `test`, `strength`) with `checked_on` naming the system, `unverified` what comes from source only, `source` where. The Controller's rumble controls use it for their reasons and still check the live system (docs/CONTROLS.md, Rumble). Kept out of the row's own `verified` / `unverified`. |
 | `buttons`, `glyphs`, `art` | Button profile in buttons.gd, glyph set (`xbox`, `deck`), picture in `app/assets/devices/art/`. |
 | `fixes` | Root / file fixes the installer applies here (folder names in `fixes/`). Generated: the fix catalogue's `auto` selectors resolved on this row's `traits` (`python3 tools/fixes/gen_handhelds.py`; the tests fail when it's stale). |
