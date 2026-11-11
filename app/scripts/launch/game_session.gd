@@ -57,10 +57,18 @@ var controls: Object
 var pid_running: Callable = func(pid: int) -> bool: return OS.is_process_running(pid)
 ## func(app_id: int) -> bool: Steam's launch of this app is still alive (its reaper). Swapped in tests.
 var steam_alive: Callable = steam_launch_alive
+## func(unit: String) -> bool: our systemd scope for a launch still holds a process. Swapped in tests.
+var unit_alive: Callable = scope_alive
 
 var game: Dictionary = {}
 var app_id := 0
 var pid := 0
+## Our systemd scope of the launch ("app-steam-app<id>-<n>.scope"), "" when unscoped.
+var unit := ""
+## Games whose session ended without their processes being seen gone (the app quitting,
+## a launch that never showed a window): [{key, app_id, pid, unit, steam}]. processes_alive()
+## looks at them again and lets each go once it's gone.
+var _left: Array = []
 ## "idle" | "waiting" (for the game's window) | "running"
 var phase := "idle"
 var focused := false
@@ -108,6 +116,38 @@ func is_active() -> bool:
 	return phase != "idle"
 
 
+## True while a game we started may still be running: a session is on, or the processes of
+## one that ended are still there (its pid, its scope, or Steam's reaper for it). This is
+## what "never under a running game" means for saves (review at ff76ca4, high 5): the session
+## going idle doesn't mean the game is gone. One look per call (pgrep / systemctl for the
+## ones left), so it's for a user's action, never a loop.
+func processes_alive() -> bool:
+	if is_active():
+		return true
+	var still: Array = []
+	for t in _left:
+		if _tracked_alive(t):
+			still.append(t)
+	_left = still
+	return not _left.is_empty()
+
+
+func _tracked_alive(t: Dictionary) -> bool:
+	if int(t["pid"]) > 0 and bool(pid_running.call(int(t["pid"]))):
+		return true
+	if str(t["unit"]) != "" and bool(unit_alive.call(str(t["unit"]))):
+		return true
+	return bool(t["steam"]) and int(t["app_id"]) > 0 and bool(steam_alive.call(int(t["app_id"])))
+
+
+## True while systemd still has our scope for a launch (it's collected once its last process
+## is gone: systemd-run --collect).
+static func scope_alive(scope: String) -> bool:
+	if scope == "" or not scope.begins_with("app-steam-app"):
+		return false
+	return ExecSafe.run("systemctl", PackedStringArray(["--user", "is-active", "--quiet", "--", scope]), false)["code"] == 0
+
+
 ## A game was just started. `launched` is Library.launch()'s result.
 func begin(g: Dictionary, launched: Dictionary) -> void:
 	if is_active():
@@ -117,6 +157,7 @@ func begin(g: Dictionary, launched: Dictionary) -> void:
 	game = g
 	app_id = int(launched.get("app_id", 0))
 	pid = int(launched.get("pid", 0))
+	unit = str(launched.get("unit", ""))
 	if app_id <= 0 and pid <= 0:
 		return   # nothing we can follow (e.g. shell_open with no app id)
 	phase = "waiting"
@@ -407,6 +448,9 @@ func _exit_tree() -> void:
 
 func _finish(go_home: bool) -> void:
 	var g := game
+	if not g.is_empty():
+		_left.append({"key": str(g.get("key", "")), "app_id": app_id, "pid": pid, "unit": unit,
+			"steam": str(g.get("store", "")) == "steam" or g.get("shortcut", false) == true})
 	_stop(_focus_timer)
 	_stop(_exit_timer)
 	exit_polling = false
@@ -425,6 +469,7 @@ func _finish(go_home: bool) -> void:
 	game = {}
 	app_id = 0
 	pid = 0
+	unit = ""
 	focused = false
 	dismissed = false
 	ended.emit(g)

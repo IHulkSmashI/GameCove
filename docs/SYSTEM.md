@@ -321,7 +321,10 @@ Heroic makes. Steam games keep Steam Cloud. Amazon games aren't covered: nile ha
 | GOG | heroic-gogdl (native or Heroic's Flatpak) | `gogdl --auth-config-path <heroic>/gog_store/auth.json save-sync <folder> <id> --os windows --ts <last> --name <location>` with `--skip-upload` before a launch, `--skip-download` after, `--force-*` for a conflict. Folders from Heroic's `GamesConfig/<id>.json` `gogSaves`, else `store_cache/gog_library.json` `gog_save_location` with GOG's `<?VARIABLES?>` resolved in the prefix, else GOG's remote config for the game's client id; the timestamps start from Heroic's `gog_store/saveTimestamps.json` |
 
 Rules: never while a game runs (one worker thread, before `Library.launch()` and after `GameSession.ended`; Sync now,
-a restore and a conflict choice are refused while one runs). Epic: a side counts as changed when its newest save is past our last sync (60 s slack, as
+a restore and a conflict choice are refused while one runs). "Runs" is the game's processes, not the session
+(`GameSession.processes_alive()`): a session that ended while its game was still there (the app quitting, a launch
+given up on) keeps counting until its pid, its `app-steam-app<id>-<n>.scope` (`systemctl --user is-active`) and, for
+Steam, its reaper are gone. Epic: a side counts as changed when its newest save is past our last sync (60 s slack, as
 legendary's own same-age check); both changed, or never synced with saves on both sides, is a conflict the user
 settles (the launch waits; B starts nothing; "Decide later" plays without syncing). GOG: gogdl's own classification;
 the fresh timestamp it prints on a conflict is never kept. Before anything may overwrite saves on the handheld

@@ -762,6 +762,40 @@ func test_epic_keep_local_becomes_the_newest_cloud_save() -> void:
 	_done(w)
 
 
+# ---- high 5: the guard follows the game's processes (review at ff76ca4) ------------------------
+
+## The session can end while the game still runs (app quitting, a launch given up on): a
+## conflict choice, a restore and Sync now are still refused until its process is gone.
+func test_choices_wait_for_the_games_processes_not_the_session() -> void:
+	var w := _world("guard_processes")
+	var GS := preload("res://scripts/launch/game_session.gd")
+	var session: Node = GS.new()
+	var alive := [true]
+	session.pid_running = func(_p: int) -> bool: return alive[0]
+	session.unit_alive = func(_u: String) -> bool: return false
+	w["s"].game_running = func() -> bool: return session.processes_alive()
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "progress", T0)
+	w["gog_cloud"].seed("saves", "slot1.sav", "cloud", T0 + 50)
+	w["s"].sync_now(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "conflict", "a conflict to settle")
+	session.begin(w["gog"], {"ok": true, "app_id": 0, "pid": 4242})
+	session.stop()
+	eq(session.phase, "idle", "the session ended")
+	ok(not w["s"].resolve(w["gog"], "cloud"), "the choice is refused: the game's process still runs")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "progress", "nothing swapped under it")
+	var res := []
+	w["s"].restore(w["gog"], "x", func(r): res.append(r))
+	eq(res, [{"ok": false, "why": "running"}], "a restore too")
+	var calls: int = w["calls"].size()
+	w["s"].sync_now(w["gog"])
+	eq(w["calls"].size(), calls, "and Sync now")
+	alive[0] = false
+	ok(w["s"].resolve(w["gog"], "cloud"), "gone: the choice goes ahead")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "cloud", "the cloud's save")
+	session.free()
+	_done(w)
+
+
 # ---- high 6: an Epic restore holds ---------------------------------------------------------------
 
 ## A restored backup has old file times, so legendary sees "cloud newer" and the next launch

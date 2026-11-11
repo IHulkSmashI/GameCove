@@ -635,3 +635,42 @@ func test_dismissed_steam_launch_ends_once_its_reaper_is_gone() -> void:
 	eq(s.phase, "idle", "gone twice: ended")
 	s.free()
 	r[0].free()
+
+
+## Review at ff76ca4, high 5: the saves guard was "a session is on", which goes false while
+## the game still runs. processes_alive() follows the game's processes instead: its pid, our
+## scope, Steam's reaper, after the session ended too, and lets each go once it's gone.
+func test_processes_alive_outlives_the_session() -> void:
+	var r := _gamescope()
+	var s := _session(r[0], FakePower.new(), FakeLauncher.new())
+	var pids := {99: true}
+	var units := {}
+	var reapers := {}
+	s.pid_running = func(p: int) -> bool: return pids.get(p, false)
+	s.unit_alive = func(u: String) -> bool: return units.get(u, false)
+	s.steam_alive = func(id: int) -> bool: return reapers.get(id, false)
+	ok(not s.processes_alive(), "nothing started: nothing alive")
+	s.begin(EPIC, {"ok": true, "app_id": 0, "pid": 99, "scoped": false})
+	ok(s.processes_alive(), "a session: alive")
+	s.stop()   # the session ends (the app quitting, a launch given up) while the game still runs
+	eq(s.phase, "idle", "the session is over")
+	ok(s.processes_alive(), "but its process runs: still alive")
+	pids[99] = false
+	ok(not s.processes_alive(), "its process gone: not alive")
+	# a scoped launch whose first process (the launcher) exits while the game runs on in the scope
+	s.begin(EPIC, {"ok": true, "app_id": 0, "pid": 5, "scoped": true, "unit": "app-steam-app1-2.scope"})
+	units["app-steam-app1-2.scope"] = true
+	s.stop()
+	ok(s.processes_alive(), "our scope still holds the game")
+	units["app-steam-app1-2.scope"] = false
+	ok(not s.processes_alive(), "the scope collected: gone")
+	# Steam's game: its reaper
+	reapers[976730] = true
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
+	s.stop()
+	ok(s.processes_alive(), "Steam's reaper for it runs")
+	reapers[976730] = false
+	ok(not s.processes_alive(), "reaper gone")
+	eq(GameSession.scope_alive("not-ours.service"), false, "only our own scopes are asked about")
+	s.free()
+	r[0].free()

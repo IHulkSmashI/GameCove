@@ -652,6 +652,7 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 		cmd = scope_command(cmd, id, n, systemd_run)
 		result["app_id"] = id
 		result["scoped"] = true
+		result["unit"] = "app-steam-app%d-%d.scope" % [id, n]
 	else:
 		push_warning("systemd-run --user not available: %s starts without an app id, so gamescope can't focus it" % entry.get("title", "?"))
 	var pid := OS.create_process(cmd[0], cmd.slice(1))
@@ -739,6 +740,8 @@ func launch_app(app: Dictionary, path_env := OS.get_environment("PATH")) -> Dict
 	result["pid"] = maxi(pid, 0)
 	result["scoped"] = scoped and pid > 0
 	result["app_id"] = int(plan["app_id"]) if pid > 0 else 0
+	if result["scoped"]:
+		result["unit"] = "app-steam-app%d-%d.scope" % [int(plan["app_id"]), n]
 	return result
 
 
