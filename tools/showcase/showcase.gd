@@ -739,29 +739,50 @@ func _media_services() -> void:
 	main.recording.env = {"home": fake_home, "path_env": "/usr/bin", "sys_root": fake_home.path_join("root"), "proc_root": fake_home}
 
 
-## Simple original icons (no brand marks) for a handful of everyday apps.
+## Desktop apps with their real icons: the official icon files from each
+## project's own repository, kept in app_icons/ (sources and licences in
+## app_icons/SOURCES.md). Open-source apps only, so no proprietary brand
+## mark ships in the repo. On a device GameCove reads the same icons from
+## the system's icon theme; this is what a handheld with these Flatpaks
+## shows.
 func _fake_apps() -> void:
 	var specs := [
-		["org.mozilla.firefox", "Firefox", "#FF7139", "<circle cx='32' cy='32' r='20' fill='none' stroke='white' stroke-width='5'/><path d='M12 32h40M32 12c-8 8-8 32 0 40M32 12c8 8 8 32 0 40' stroke='white' stroke-width='4' fill='none'/>"],
-		["com.discordapp.Discord", "Discord", "#5865F2", "<path d='M14 20h36v20H30l-10 8v-8h-6z' fill='white'/>"],
-		["io.mpv.Mpv", "mpv", "#6A1B9A", "<path d='M24 18v28l22-14z' fill='white'/>"],
-		["com.spotify.Client", "Spotify", "#1DB954", "<path d='M18 26c10-4 20-3 28 2M20 33c8-3 16-2 22 2M22 40c6-2 12-1 16 2' stroke='white' stroke-width='4' fill='none' stroke-linecap='round'/>"],
-		["org.libretro.RetroArch", "RetroArch", "#4A4A4A", "<rect x='14' y='22' width='36' height='20' rx='10' fill='white'/><circle cx='24' cy='32' r='3' fill='#4A4A4A'/><circle cx='40' cy='32' r='3' fill='#4A4A4A'/>"],
-		["org.videolan.VLC", "VLC media player", "#FF8800", "<path d='M32 12l14 36H18z' fill='white'/>"],
-		["com.obsproject.Studio", "OBS Studio", "#302E31", "<circle cx='32' cy='32' r='18' fill='white'/><circle cx='32' cy='32' r='7' fill='#302E31'/>"],
-		["net.davidotek.pupgui2", "ProtonUp-Qt", "#C2185B", "<path d='M32 14v26M22 30l10 10 10-10M18 48h28' stroke='white' stroke-width='5' fill='none'/>"],
-		["org.kde.dolphin", "Dolphin", "#1D99F3", "<path d='M14 22h14l4 4h18v20H14z' fill='white'/>"],
-		["com.heroicgameslauncher.hgl", "Heroic Games Launcher", "#0E1A2B", "<path d='M32 12l18 8v12c0 10-8 18-18 20-10-2-18-10-18-20V20z' fill='white'/>"],
-		["org.chromium.Chromium", "Chromium", "#4285F4", "<circle cx='32' cy='32' r='20' fill='white'/><circle cx='32' cy='32' r='8' fill='#4285F4'/>"],
-		["md.obsidian.Obsidian", "Obsidian", "#7C3AED", "<path d='M32 12l16 14-6 26H22l-6-26z' fill='white'/>"],
+		["com.heroicgameslauncher.hgl", "Heroic Games Launcher"],
+		["org.libretro.RetroArch", "RetroArch"],
+		["com.moonlight_stream.Moonlight", "Moonlight"],
+		["org.videolan.VLC", "VLC media player"],
+		["com.obsproject.Studio", "OBS Studio"],
+		["io.mpv.Mpv", "mpv"],
+		["net.davidotek.pupgui2", "ProtonUp-Qt"],
+		["org.DolphinEmu.dolphin-emu", "Dolphin Emulator"],
+		["net.lutris.Lutris", "Lutris"],
+		["com.usebottles.bottles", "Bottles"],
+		["org.ppsspp.PPSSPP", "PPSSPP"],
+		["net.pcsx2.PCSX2", "PCSX2"],
 	]
+	var src_dir := here.path_join("app_icons")
 	var list: Array = []
 	var dir := fake_home.path_join("icons")
 	DirAccess.make_dir_recursive_absolute(dir)
 	for s in specs:
-		var svg := "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' rx='14' fill='%s'/>%s</svg>" % [s[2], s[3]]
 		var img := Image.new()
-		img.load_svg_from_buffer(svg.to_utf8_buffer(), 4.0)
+		var svg := src_dir.path_join(str(s[0]) + ".svg")
+		var png := src_dir.path_join(str(s[0]) + ".png")
+		var err := ERR_FILE_NOT_FOUND
+		if FileAccess.file_exists(svg):
+			var raw := FileAccess.get_file_as_string(svg)
+			var probe := Image.new()
+			# Rasterise at the size the app caches icons (Apps.ICON_PX).
+			err = probe.load_svg_from_buffer(raw.to_utf8_buffer(), 1.0)
+			if err == OK and probe.get_width() > 0:
+				err = img.load_svg_from_buffer(raw.to_utf8_buffer(), float(Apps.ICON_PX) / probe.get_width())
+		elif FileAccess.file_exists(png):
+			err = img.load(png)
+			if err == OK and img.get_width() != Apps.ICON_PX:
+				img.resize(Apps.ICON_PX, Apps.ICON_PX, Image.INTERPOLATE_LANCZOS)
+		if err != OK:
+			push_error("showcase: no icon for %s" % s[0])
+			continue
 		var p := dir.path_join(str(s[0]) + ".png")
 		img.save_png(p)
 		list.append({"key": "app:" + str(s[0]), "id": s[0], "store": "app", "title": s[1], "exec": ["/usr/bin/flatpak", "run", s[0]],

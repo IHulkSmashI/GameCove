@@ -129,7 +129,7 @@ The GameCove mark (`assets/logo.svg`, `app/assets/logo-mark.svg`, `assets/app-ic
 
 ## README screenshots
 
-The screenshots in `docs/images/` are the real app (`tools/showcase/`) with a made-up player's library of real games. The game art in them comes from each game's Steam store page (Valve's CDN), the emulated games' box art and in-game pictures from [libretro-thumbnails](https://github.com/libretro-thumbnails/libretro-thumbnails) (the set RetroArch and ES-DE scrapers use), and Discover's deals and giveaways from CheapShark as fetched on the day. That art belongs to the games' publishers and isn't covered by GameCove's GPL; none of it is in the app package.
+The screenshots in `docs/images/` are the real app (`tools/showcase/`) with a made-up player's library of real games. The game art in them comes from each game's Steam store page (Valve's CDN), the emulated games' box art and in-game pictures from [libretro-thumbnails](https://github.com/libretro-thumbnails/libretro-thumbnails) (the set RetroArch and ES-DE scrapers use), and Discover's deals and giveaways from CheapShark as fetched on the day. That art belongs to the games' publishers and isn't covered by GameCove's GPL; none of it is in the app package. The desktop apps in the Apps view and the Apps shelf are shown with their projects' own official icons, all open-source apps, copied unchanged from each project's repository; sources, commits and licences are in [tools/showcase/app_icons/SOURCES.md](tools/showcase/app_icons/SOURCES.md). They're only used for the screenshots and aren't in the app package.
 
 ## Device photos
 

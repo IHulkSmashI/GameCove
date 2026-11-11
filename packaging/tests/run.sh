@@ -1090,6 +1090,29 @@ assert not bad, bad
 PY
 then ok; else bad "devices.json fixes must name folders in fixes/: $(cat "$T/out")"; fi
 
+# --------------- showcase apps: real icons on disk, each credited in SOURCES.md
+if python3 -I - "$REPO" >"$T/out" 2>&1 <<'PY'
+import os, re, sys
+repo = sys.argv[1]
+gd = open(os.path.join(repo, "tools/showcase/showcase.gd")).read()
+body = gd[gd.index("func _fake_apps()"):gd.index("var pins :=", gd.index("func _fake_apps()"))]
+ids = re.findall(r'^\t\t\["([A-Za-z0-9_.-]+)", "', body, re.M)
+src = open(os.path.join(repo, "tools/showcase/app_icons/SOURCES.md")).read()
+icons = os.path.join(repo, "tools/showcase/app_icons")
+bad = []
+assert len(ids) >= 8, "showcase lists %d apps" % len(ids)
+for i in ids:
+    if not any(os.path.isfile(os.path.join(icons, i + e)) for e in (".png", ".svg")):
+        bad.append("no icon file for " + i)
+    if "`%s." % i not in src:
+        bad.append("no SOURCES.md row for " + i)
+# Made-up icons drawn in code are what this replaced; none may come back.
+if "<svg" in body or "load_svg_from_buffer(svg.to_utf8" in body:
+    bad.append("_fake_apps draws its own icons")
+assert not bad, bad
+PY
+then ok; else bad "showcase app icons: $(cat "$T/out")"; fi
+
 # ------------------------- fixes/lib/handhelds.txt is generated from devices.json
 if python3 -I "$REPO/tools/fixes/gen_handhelds.py" --check >"$T/out" 2>&1; then ok; else bad "$(cat "$T/out")"; fi
 # ------------------- traits, fix / quirk / matrix selectors (tools/traits/traits.py)
