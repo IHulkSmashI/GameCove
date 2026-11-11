@@ -326,7 +326,9 @@ func test_power_jobs_go_through_queue_and_coalesce() -> void:
 	r[0].free()
 
 
-func test_new_launch_replaces_running_session() -> void:
+## Review at ff76ca4, high 3: a second start used to end the running session (its exit-time
+## save upload ran under the live game). A session is never ended while its game runs.
+func test_a_new_launch_never_ends_the_running_session() -> void:
 	var r := _gamescope()
 	var power := FakePower.new()
 	var s := _session(r[0], power, FakeLauncher.new())
@@ -334,9 +336,9 @@ func test_new_launch_replaces_running_session() -> void:
 	s.ended.connect(func(g): ended.append(g["key"]))
 	s.begin(EPIC, {"ok": true, "app_id": 0, "pid": 7})
 	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
-	eq(ended, ["epic:Quail"], "old session ended")
-	eq(s.game["key"], "steam:976730", "new game tracked")
-	eq(power.calls, ["start", "stop", "start"], "Auto TDP restarted for the new game")
+	eq(ended, [], "the running game's session goes on")
+	eq(s.game["key"], "epic:Quail", "still following the first game")
+	eq(power.calls, ["start"], "Auto TDP untouched")
 	s.free()
 	r[0].free()
 

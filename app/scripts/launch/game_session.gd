@@ -149,9 +149,12 @@ static func scope_alive(scope: String) -> bool:
 
 
 ## A game was just started. `launched` is Library.launch()'s result.
+## A session is never ended while its game runs (review at ff76ca4, high 3): with one on,
+## this follows nothing (main.gd asks "Close <game> first?" before it starts anything).
 func begin(g: Dictionary, launched: Dictionary) -> void:
 	if is_active():
-		_finish(false)
+		push_warning("GameCove: %s started while %s still runs; it isn't followed" % [g.get("title", "?"), game.get("title", "?")])
+		return
 	if not bool(launched.get("ok", false)):
 		return
 	game = g

@@ -37,6 +37,15 @@ const ACTION_NAME := {
 
 ## Play pressed while a cancelled launch is still being closed (%s: its title).
 const STILL_CLOSING := "Still closing %s. Try again in a moment."
+## Play pressed on another game while one runs: one game at a time, and the running one's
+## saves go up after it has really closed, before the next one starts.
+const CLOSE_FIRST_TITLE := "Close %s first?"
+const CLOSE_FIRST_LINE := "One game at a time. We close %s, wait for its saves to sync, then start %s."
+const CLOSE_AND_START := "Close it and start %s"
+const CLOSE_AND_START_DETAIL := "Unsaved progress in the running game is lost"
+const KEEP_PLAYING := "Keep playing %s"
+const KEEP_PLAYING_DETAIL := "Nothing changes"
+const CLOSING_FIRST := "Closing %s. %s starts once it's closed."
 
 # ------------------------------------------------------------ game page
 

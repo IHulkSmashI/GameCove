@@ -455,6 +455,72 @@ func _closing_guard() -> bool:
 	return true
 
 
+## Another game (or app, or stream) asked for while one runs (review at ff76ca4, high 3):
+## starting it used to end the running game's session under it, which ran its exit-time
+## cloud-save upload while it was still writing, let Sync now and Restore run under it, and
+## left Controls on "no game". Now the player is asked "Close <game> first?"; yes closes it
+## (GameCloser, like Exit game), and `starter` (a method of ours: _play, _play_app,
+## _play_stream, called with `next` and `extra`) runs once the game has really exited and its
+## exit sync is done. True when the start is held (asked, or waiting).
+var _queued_start := {}
+## A held start only goes ahead when the game it waits for closes within this long of the
+## answer: a game that refused to close and was played on doesn't start another one later.
+const CLOSE_FIRST_WAIT_S := 120
+
+
+func _close_first(next: Dictionary, starter: String, extra: Array = []) -> bool:
+	if session == null or not session.is_active():
+		return false
+	var running: Dictionary = session.game
+	var key := str(running.get("key", ""))
+	if not _queued_start.is_empty() and str(_queued_start.get("after", "")) == key:
+		toast(TG.CLOSING_FIRST % [str(running.get("title", "")), str(next.get("title", ""))], "info", "", "")
+		return true   # already closing it for a start
+	var old_title := str(running.get("title", ""))
+	var new_title := str(next.get("title", ""))
+	game_actions.open_menu(TG.CLOSE_FIRST_TITLE % old_title, TG.CLOSE_FIRST_LINE % [old_title, new_title], [
+		# the safe answer first: an A pressed twice never closes a game
+		{"id": "keep", "text": TG.KEEP_PLAYING % old_title, "detail": TG.KEEP_PLAYING_DETAIL, "icon": "play"},
+		{"id": "close", "text": TG.CLOSE_AND_START % new_title, "detail": TG.CLOSE_AND_START_DETAIL, "icon": "x"},
+	], func(id: String) -> void:
+		if id != "close" or not session.is_active() or str(session.game.get("key", "")) != key:
+			return
+		_queued_start = {"after": key, "starter": starter, "next": next, "extra": extra,
+			"at": int(Time.get_unix_time_from_system()), "sync": false}
+		toast(TG.CLOSING_FIRST % [old_title, new_title], "info", "", "")
+		_close_running())
+	return true
+
+
+## The game a held start waited for has ended (from _on_game_ended): start now, or once its
+## exit sync is done when one was queued.
+func _queued_after_end(key: String, syncing: bool) -> void:
+	if _queued_start.is_empty() or str(_queued_start.get("after", "")) != key:
+		return
+	if int(Time.get_unix_time_from_system()) - int(_queued_start.get("at", 0)) > CLOSE_FIRST_WAIT_S:
+		_queued_start = {}
+		return
+	if syncing:
+		_queued_start["sync"] = true   # _on_saves_finished starts it
+		return
+	# deferred: after the ended game's own deferred clean-up (Controls back to "no game")
+	call_deferred("_run_queued_start")
+
+
+func _run_queued_start() -> void:
+	var q := _queued_start
+	_queued_start = {}
+	if q.is_empty() or session.is_active():
+		return
+	match str(q.get("starter", "")):
+		"_play": _play(q["next"])
+		"_play_app": _play_app(q["next"])
+		"_play_stream":
+			var ex: Array = q.get("extra", [])
+			if ex.size() == 2:
+				_play_stream(q["next"], str(ex[0]), ex[1])
+
+
 ## Settings > Run setup again (it names a step; setup opens at the first unfinished one).
 func _on_setup_requested(step: String = "") -> void:
 	open_setup(true, step)
@@ -640,6 +706,8 @@ func _wire_saves_and_battery() -> void:
 func _on_saves_finished(key: String, phase: String, state: String) -> void:
 	if phase != "post":
 		return
+	if bool(_queued_start.get("sync", false)) and str(_queued_start.get("after", "")) == key:
+		call_deferred("_run_queued_start")   # the closed game's saves are up: the next one starts
 	var g := View.find_by_key(_decorated(), key)
 	var title := str(g.get("title", key))
 	if state == "conflict":
@@ -989,6 +1057,8 @@ func _play_app(app: Dictionary) -> void:
 		return
 	if session.runs(str(app.get("key", ""))):
 		session.return_to_game()
+		return
+	if _close_first(app, "_play_app"):
 		return
 	var launched: Dictionary = Library.launch(app)
 	if not bool(launched.get("ok", false)):
@@ -1708,6 +1778,8 @@ func _play(game: Dictionary) -> void:
 	if session.runs(str(game.get("key", ""))):
 		session.return_to_game()   # already running: back to it, no second launch
 		return
+	if _close_first(game, "_play"):
+		return
 	if _launch_wait != "":
 		return   # another game is still getting its cloud save
 	playing = game
@@ -1768,6 +1840,13 @@ func _start_after_sync(game: Dictionary) -> void:
 
 
 func _launch_now(game: Dictionary) -> void:
+	if session.is_active():
+		# something started while this one got its cloud save: one game at a time
+		launch_overlay.back()
+		_resume_motion()
+		playing = session.game
+		_close_first(game, "_play")
+		return
 	var launched: Dictionary = Library.launch(game)
 	session.begin(game, launched)
 	if not bool(launched.get("ok", false)):
@@ -1836,6 +1915,8 @@ func _play_stream(game: Dictionary, host_id: String, app: Dictionary) -> void:
 		return
 	if session.runs(str(game.get("key", ""))):
 		session.return_to_game()
+		return
+	if _close_first(game, "_play_stream", [host_id, app]):
 		return
 	var launched: Dictionary = streaming.launch(host_id, app)
 	if not bool(launched.get("ok", false)):
@@ -1925,8 +2006,9 @@ func _on_game_ended(game: Dictionary) -> void:
 	if _game_started_at > 0 and Library.has_method("record_playtime"):
 		Library.record_playtime(game, _game_started_at, int(Time.get_unix_time_from_system()))
 	_game_started_at = 0
+	var syncing := false
 	if saves != null:
-		saves.after_exit(game)   # what the game just saved goes up
+		syncing = saves.after_exit(game)   # what the game just saved goes up
 	# a clip belongs to its game: the game ending stops (and saves) it
 	if recording != null and recording.is_recording():
 		recording.stop()
@@ -1939,6 +2021,7 @@ func _on_game_ended(game: Dictionary) -> void:
 	if not playing.is_empty() and playing.get("key", "") == game.get("key", ""):
 		playing = {}
 	_check_resume()
+	_queued_after_end(str(game.get("key", "")), syncing)
 	var cancelled := _cancelled_key != "" and _cancelled_key == str(game.get("key", ""))
 	_cancelled_key = ""
 	if launch_overlay.is_open():
