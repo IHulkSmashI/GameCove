@@ -662,3 +662,120 @@ func test_epic_move_to_sd_card_then_uninstall_keeps_saves() -> void:
 		eq(primary_text(), "Install", "Install offered again")
 	check("after uninstall")
 	await without_stores()
+
+
+# ---- every Settings page: walked by pad, things changed and put back ------------------------
+
+const UI_ROWS := ["theme", "match_art", "reduce_motion", "menu_side", "ui_sounds"]
+
+
+## The ChoiceRow around `f` (a UI preference or a page's own choice), or null.
+func choice_row_of(f: Control) -> Control:
+	var n: Node = f
+	for i in 3:
+		if n == null:
+			return null
+		if "values" in n and "key" in n:
+			return n
+		n = n.get_parent()
+	return null
+
+
+func test_settings_every_page_walked_changed_and_put_back() -> void:
+	var s: Control = main().settings
+	var walked := {}
+	for cat in s.categories():
+		ok(await open_settings(cat), "%s: reached with the pad (focus %s)" % [cat, focus().get_path() if focus() else "none"])
+		if not s.in_page():
+			continue
+		var stops := 0
+		var seen := {}
+		for i in 80:
+			var f := focus()
+			if f == null or not s.in_page() or seen.has(f):
+				break
+			seen[f] = true
+			stops += 1
+			# the page glides to the focused row: on screen once it settles
+			await until(func(): return focus_on_screen() == "", 1200)
+			var e := focus_on_screen()
+			ok(e == "", "%s: %s" % [cat, e])
+			var row := choice_row_of(f)
+			# the look and feel rows: one step right and back, saved both times
+			if row != null and str(row.key) in UI_ROWS and cat == "appearance":
+				var before: Variant = row.values[row.index]
+				var rkey := str(row.key)
+				await right()
+				await w.frames(3)
+				row = choice_row_of(focus())   # a new theme rebuilds the page
+				ok(row != null and str(row.key) == rkey, "appearance: focus stays on %s" % rkey)
+				if row == null:
+					break
+				ok(row.values[row.index] != before, "appearance: %s changes (%s)" % [row.key, row.values[row.index]])
+				ok(FileAccess.file_exists(ProjectSettings.globalize_path("user://ui.cfg")), "appearance: saved")
+				if str(row.key) == "theme":
+					eq(str(preload("res://scripts/ui/ui_prefs.gd").values().get("theme", "")), str(row.values[row.index]), "the theme applies")
+				await left()
+				await w.frames(3)
+				row = choice_row_of(focus())
+				ok(row != null and row.values[row.index] == before, "appearance: %s back" % rkey)
+				f = focus()
+				if f == null:
+					break
+			await down()
+			await w.frames(1)
+		walked[cat] = stops
+		ok(stops >= 1, "%s: something to focus" % cat)
+		eq(settings_files_valid(), "", "%s: every settings file still parses" % cat)
+		check("settings " + cat)
+	print("E2E INFO settings stops per page: %s" % [walked])
+	await go_tab("home")
+
+
+## The temperature limit (Power > Power limit > More settings): pushed with the
+## pad, it reaches the firmware and reads back, on every handheld that has one.
+func test_settings_thermal_limit_reaches_the_system() -> void:
+	var c := ctl("power.thermal_limit")
+	print("E2E INFO thermal limit on %s: available=%s reason=%s" % [setup_name(), c.available if c else false, c.reason if c else "missing"])
+	if c == null or not c.available:
+		ok(c != null and c.reason != "", "not on this handheld, with a reason (%s)" % (c.reason if c else "missing"))
+		return
+	ok(await open_settings("power"), "Power page")
+	var target := func(): return view("power.thermal_limit", main().settings)
+	# "More settings" of the Power limit card opens with A
+	for i in 60:
+		if target.call() != null and focused_in(target.call()):
+			break
+		var f := focus()
+		if f != null and f.get_parent() != null and String(f.get_parent().name) == "More" and "expanded" in f.get_parent().get_parent() \
+				and not f.get_parent().get_parent().expanded:
+			await a()
+			await w.frames(2)
+			continue
+		await down()
+		await w.frames(1)
+	ok(target.call() != null and focused_in(target.call()), "the temperature limit reached with the pad")
+	var before := float(c.value)
+	if before >= c.max_value - 0.01:
+		await left()
+	else:
+		await right()
+	await w.wait_s(0.4)
+	await w.idle()
+	ok(float(c.value) != before, "pushed: %s -> %s" % [before, c.value])
+	var sent := last_set("org.shadowblip.PowerStation", "org.shadowblip.GPU.Card.TDP", "ThermalThrottleLimitC")
+	ok(sent != "" and absf(sent.to_float() - float(c.value)) < 0.5, "PowerStation was told %s (%s)" % [c.value, sent])
+	controls().detect_all()
+	await w.idle()
+	eq(float(ctl("power.thermal_limit").value), float(c.value), "reads back the same")
+	# and back
+	if float(c.value) < before:
+		await right()
+	else:
+		await left()
+	await w.wait_s(0.4)
+	await w.idle()
+	eq(float(ctl("power.thermal_limit").value), before, "put back")
+	check("thermal limit")
+	await go_tab("home")
+

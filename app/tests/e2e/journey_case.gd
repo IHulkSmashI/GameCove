@@ -389,3 +389,58 @@ func invariants(step: String) -> Array[String]:
 func check(step: String) -> void:
 	for p in invariants(step):
 		ok(false, p)
+
+
+# ---- Settings ------------------------------------------------------------------------------
+
+## Settings open on `cat`, focus inside its page, reached with the pad (RB to the
+## tab, up / down the category list, right into the page).
+func open_settings(cat: String) -> bool:
+	if not await go_tab("settings"):
+		return false
+	await w.frames(3)
+	var s: Control = main().settings
+	var cats: Array = s.categories()
+	var btns: Dictionary = s.cat_buttons
+	if s.in_page():
+		await b()   # B: from inside a page back to the category list
+		await w.frames(2)
+	if focus() == null or not focus() in btns.values():
+		await nav_to(btns[s.category], 10)
+	var want: Button = btns[cat]
+	for guard in 24:
+		if focus() == want:
+			break
+		var here := -1
+		for k in btns:
+			if btns[k] == focus():
+				here = cats.find(k)
+		if here < cats.find(cat):
+			await down()
+		else:
+			await up()
+	if focus() != want:
+		return false
+	await right()
+	await w.frames(3)
+	return s.in_page()
+
+
+## Every settings file GameCove keeps parses (JSON / ConfigFile): "" when fine.
+func settings_files_valid() -> String:
+	var bad := PackedStringArray()
+	for dir in [ProjectSettings.globalize_path("user://"), w.home.path_join(".config/gamecove")]:
+		if not DirAccess.dir_exists_absolute(dir):
+			continue
+		for f in DirAccess.get_files_at(dir):
+			var p: String = dir.path_join(f)
+			if f.ends_with(".json"):
+				var txt := FileAccess.get_file_as_string(p)
+				if txt.strip_edges() != "" and JSON.parse_string(txt) == null:
+					bad.append(f)
+			elif f.ends_with(".cfg"):
+				if ConfigFile.new().load(p) != OK:
+					bad.append(f)
+			elif ".tmp" in f:
+				bad.append(f + " (left-over temp file)")
+	return ", ".join(bad)
