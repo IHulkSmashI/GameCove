@@ -379,11 +379,19 @@ func test_library_order_search_favourite_collection_hide() -> void:
 	ok(await osk_type(ls.keyboard, "cel"), "D-pad and A on the on-screen keys")
 	await w.frames(3)
 	eq(shown_keys(), ["epic:Quail"], "'cel' finds Celeste")
-	for i in 3:
-		await x()
+	# B cancels: the search is what it was when the keyboard opened ("hol"), not what was typed since
 	await b()
 	await w.frames(3)
-	ok(not ls.searching(), "B closes the keyboard (Done)")
+	ok(not ls.searching(), "B closes the keyboard (Cancel)")
+	eq(shown_keys(), ["steam:367520"], "and the search is back to 'hol'")
+	# Menu keeps what is on the field: emptied, everything shows again
+	await y()
+	await w.frames(2)
+	for i in 3:
+		await x()
+	await start_btn()
+	await w.frames(3)
+	ok(not ls.searching(), "Menu closes the keyboard (Done)")
 	eq(shown_keys().size(), n_all, "an empty search shows everything again")
 	# Start on a tile: favourite
 	ok(await tile_options("epic:Quail"), "Start on Celeste opens its options")
