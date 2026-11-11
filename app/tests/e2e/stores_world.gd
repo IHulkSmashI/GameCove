@@ -147,7 +147,7 @@ func _write_home() -> void:
 	_write(steam_root.path_join("steamapps/libraryfolders.vdf"),
 		"\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"%s\"\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"%s\"\n\t}\n}\n" % [steam_root, sd_card])
 	_write(steam_root.path_join("config/loginusers.vdf"),
-		"\"users\"\n{\n\t\"76561190000000001\"\n\t{\n\t\t\"AccountName\"\t\t\"coveplayer\"\n\t\t\"PersonaName\"\t\t\"CovePlayer\"\n\t\t\"MostRecent\"\t\t\"1\"\n\t}\n}\n")
+		"\"users\"\n{\n\t\"76561197972611406\"\n\t{\n\t\t\"AccountName\"\t\t\"coveplayer\"\n\t\t\"PersonaName\"\t\t\"CovePlayer\"\n\t\t\"MostRecent\"\t\t\"1\"\n\t}\n}\n")
 	for appid in STEAM:
 		var g: Dictionary = STEAM[appid]
 		write_manifest(steam_root, appid, int(g["flags"]), 0 if int(g["flags"]) & Acf.FULLY_INSTALLED else 0)
