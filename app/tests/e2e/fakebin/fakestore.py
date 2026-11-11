@@ -83,6 +83,33 @@ def write_json(path: str, data) -> None:
     os.replace(tmp, path)
 
 
+# Options that take a value, for finding the positional arguments the way argparse does.
+VALUED = {"--base-path", "--platform", "--path", "--code", "--auth-config-path", "--client-id",
+          "--code-verifier", "--serial", "--lang"}
+
+
+def positionals(argv: list[str]) -> list[str]:
+    """The command's positional arguments: everything after `--` (GameCove puts the store's
+    id and a folder there), or the words that aren't options or option values."""
+    if "--" in argv:
+        i = argv.index("--")
+        head = positionals(argv[:i])
+        return head + argv[i + 1:]
+    out = []
+    skip = False
+    for a in argv:
+        if skip:
+            skip = False
+            continue
+        if a in VALUED:
+            skip = True
+            continue
+        if a.startswith("-"):
+            continue
+        out.append(a)
+    return out
+
+
 def opt(argv: list[str], name: str, default: str = "") -> str:
     if name in argv:
         i = argv.index(name)
@@ -151,8 +178,9 @@ def fail(why: str) -> int:
 def legendary(argv: list[str]) -> int:
     cfg = os.environ.get("LEGENDARY_CONFIG_PATH", os.path.expanduser("~/.config/legendary"))
     installed_path = os.path.join(cfg, "installed.json")
-    cmd = argv[0] if argv else ""
-    gid = argv[1] if len(argv) > 1 else ""
+    pos = positionals(argv)
+    cmd = pos[0] if pos else ""
+    gid = pos[1] if len(pos) > 1 else ""
     why = take_fault(cmd)
     if why:
         return fail(why)
@@ -217,7 +245,7 @@ def legendary(argv: list[str]) -> int:
         print(f'[cli] INFO: Game "{title}" has been uninstalled.')
         return 0
     if cmd == "move":
-        dest = argv[2] if len(argv) > 2 else ""
+        dest = pos[2] if len(pos) > 2 else ""
         inst = read_json(installed_path, {})
         if gid not in inst:
             return fail("not installed")
@@ -233,8 +261,9 @@ def legendary(argv: list[str]) -> int:
 def gogdl(argv: list[str]) -> int:
     auth = opt(argv, "--auth-config-path")
     rest = [a for i, a in enumerate(argv) if a != "--auth-config-path" and (i == 0 or argv[i - 1] != "--auth-config-path")]
-    cmd = rest[0] if rest else ""
-    gid = rest[1] if len(rest) > 1 else ""
+    rpos = positionals(rest)
+    cmd = rpos[0] if rpos else ""
+    gid = rpos[1] if len(rpos) > 1 else ""
     why = take_fault(cmd)
     if why:
         return fail(why)
@@ -273,8 +302,9 @@ def gogdl(argv: list[str]) -> int:
 def nile(argv: list[str]) -> int:
     base_cfg = os.environ.get("NILE_CONFIG_PATH", os.path.expanduser("~/.config"))
     cfg = os.path.join(base_cfg, "nile")
-    cmd = argv[0] if argv else ""
-    gid = argv[1] if len(argv) > 1 else ""
+    pos = positionals(argv)
+    cmd = pos[0] if pos else ""
+    gid = pos[1] if len(pos) > 1 else ""
     why = take_fault(cmd)
     if why:
         return fail(why)

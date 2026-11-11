@@ -551,7 +551,8 @@ func test_game_page_own_settings_then_play_with_them() -> void:
 	await w.frames(3)
 	ok(not qm().visible, "B closes the menu")
 	ok(page() != null, "back on the page")
-	# the launch settings: open them, change the goal and the upscaler (Native = off)
+	# the launch settings: a new goal (it must not replace the frame limit the
+	# quick menu just set: the card owns it)
 	var lt: Button = page().launch_button
 	if lt != null and lt.visible:
 		ok(await press_on(lt, 30), "A on Launch settings")
@@ -574,7 +575,7 @@ func test_game_page_own_settings_then_play_with_them() -> void:
 		eq(float(ctl("power.tdp").value), float(tdp_game), "the game's TDP applies")
 		eq(Effects.check(self, "power.tdp", ctl("power.tdp").value), "", "and the hardware has it")
 	if changed.has("display.fps_limit"):
-		eq(atom("GAMESCOPE_FPS_LIMIT").to_int(), int(changed["display.fps_limit"]), "gamescope has the frame limit")
+		eq(atom("GAMESCOPE_FPS_LIMIT").to_int(), int(changed["display.fps_limit"]), "gamescope has the frame limit (control %s, layer %s, sets %s)" % [ctl("display.fps_limit").value, profiles().layer(key, ""), w.fake.log_copy().filter(func(e): return "GAMESCOPE_FPS_LIMIT" in " ".join(PackedStringArray(e["argv"].map(func(x): return str(x))))).map(func(e): return e["argv"].slice(-1))])
 	if changed.has("perf.upscaler"):
 		var chooses: Array = w.fake.upscale_runs.filter(func(r): return r[0] == "choose" and r[1] == "1145360")
 		ok(not chooses.is_empty(), "the upscaling helper put the upscaler into Hades (%s)" % [w.fake.upscale_runs])
