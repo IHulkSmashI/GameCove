@@ -706,6 +706,62 @@ func test_lsfg_config_is_replaced_atomically() -> void:
 
 # ---- Best / My choice / Native, what is running, one frame generator ------------------
 
+## Every alternative says in one plain line what it is.
+func test_every_choice_has_its_own_plain_line() -> void:
+	for chip in [CLAW, ALLY_X]:
+		var w := _world("option_lines_" + str(chip.get("id", "x")), chip)
+		runner_ok(w)
+		_with_game(w, EPIC)
+		var reg: Node = w["reg"]
+		for id in ["perf.upscaler", "perf.frame_gen", "perf.fg_generator", "perf.lsfg_multiplier"]:
+			var c: RefCounted = reg.control(id)
+			for o in c.options:
+				ok(str(o.get("help", "")).length() > 12 and str(o["help"]).length() < 130, "%s / %s has a short line: %s" % [id, str(o["label"]), str(o.get("help", ""))])
+				ok(not "OptiScaler" in str(o.get("help", "")), "in plain words, no tool names")
+		var mode: RefCounted = reg.control("perf.upscale_mode")
+		var by := {}
+		for o in mode.options:
+			by[o["value"]] = str(o.get("help", ""))
+		ok(by["native"].contains("as it shipped") and by["custom"] != "", "Native and My choice explain themselves")
+		eq(by["best"], "", "Best's line is what the plan picked for this game")
+		_done(w)
+	# the row shows the line of the option in view, and the reason when it can't be used
+	var w2 := _world("option_lines_row", CLAW)
+	runner_ok(w2)
+	_with_game(w2, EPIC)
+	var m = Model.new()
+	m.setup(w2["reg"], null)
+	var v: Control = ControlView.make(m, "perf.frame_gen")
+	eq(v._option_line(3, "the control's own line"), Upscale.FG_HELP[3], "3x says what 3x is")
+	eq(v._option_line(0, "the control's own line"), Upscale.FG_HELP[0], "Off too")
+	eq(v._option_line(8, "the control's own line"), "the control's own line", "an option without a line keeps the control's")
+	var mv: Control = ControlView.make(m, "perf.upscale_mode")
+	eq(mv._option_line("best", "Best here: FSR 4.1.2 on XMX."), "Best here: FSR 4.1.2 on XMX.", "Best shows what was picked for this game")
+	eq(mv._option_line("native", "x"), Upscale.MODE_HELP["native"], "Native says what it does")
+	mv.desc["available"] = false
+	eq(mv._option_line("native", "Off for this game: it uses anti-cheat"), "Off for this game: it uses anti-cheat", "why not wins over any option line")
+	# "Running now" is a read-out: its line shows without focus, and its button says what it does
+	var av: Control = ControlView.make(m, "perf.upscale_active")
+	ok(not av.row.collapse_hint, "the read-out stays in view")
+	eq(av.row.value_label.text, "Check again", "the button says what a press does, not Run")
+	var undo: Control = ControlView.make(m, "perf.upscale_undo")
+	ok(undo.row.collapse_hint and undo.row.value_label.text == "Remove", "other action rows fold their line away until focused")
+	undo.free()
+	av.free()
+	v.free()
+	mv.free()
+	_done(w2)
+	eq(Upscale.upscaler_help({"vendor": "amd", "arch": "RDNA2", "chip": "AMD Van Gogh"})["fsr4_amd"], Upscale.FSR4_HEAVY_HELP, "FSR 4 is called heavy where it is")
+	ok(Upscale.upscaler_help({"vendor": "amd", "arch": "RDNA3", "chip": "AMD Ryzen Z1 Extreme"})["fsr4_amd"].contains("sharpest"), "and the best pick on a Z1 Extreme")
+
+
+func runner_ok(w: Dictionary) -> void:
+	w["runner"].answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {},
+		"active": {"state": "own", "line": "Using the game's own upscaler. Nothing of ours is in this game."}}
+	w["runner"].answers["prepare"] = {"ok": true, "did": ""}
+	w["runner"].answers["plan"] = {"ok": true, "line": "", "auto": false, "refused": null}
+
+
 ## Set up when a game is installed or updated, not at its first start.
 func test_a_game_is_set_up_when_it_is_installed_or_updated() -> void:
 	var w := _world("prepare_installed", ALLY_X)

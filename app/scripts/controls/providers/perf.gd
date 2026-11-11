@@ -187,10 +187,13 @@ func _mkc(spec: Dictionary, detect: Callable, read: Callable, write: Callable) -
 	return Ctl.make(s, detect, func(_c): return read.call(), func(_c, v): return write.call(v))
 
 
-func _opts(values: Array, labels: Dictionary = {}) -> Array:
+func _opts(values: Array, labels: Dictionary = {}, helps: Dictionary = {}) -> Array:
 	var out := []
 	for v in values:
-		out.append({"value": v, "label": str(labels.get(v, str(v).capitalize()))})
+		var o := {"value": v, "label": str(labels.get(v, str(v).capitalize()))}
+		if str(helps.get(v, "")) != "":
+			o["help"] = str(helps[v])     # one plain line for this option (control_view shows it)
+		out.append(o)
 	return out
 
 
@@ -404,7 +407,7 @@ func _lsfg_controls() -> Array:
 				return _lsfg_set("lsfg", v)),
 		_mk({"id": "perf.lsfg_multiplier", "title": "Lossless multiplier",
 			"help": "2x adds one frame per real frame; 3x and 4x add more (more lag, more artefacts).",
-			"kind": "choice", "options": _opts(Lsfg.MULTIPLIERS, {2: "2x", 3: "3x", 4: "4x"}), "default_value": 2,
+			"kind": "choice", "options": _opts(Lsfg.MULTIPLIERS, {2: "2x", 3: "3x", 4: "4x"}, Upscale.LSFG_HELP), "default_value": 2,
 			"requires": ["perf.lsfg"]},
 			_lsfg_reason, func(): return int(_gv("lsfg_multiplier", 2)), func(v): return _lsfg_set("lsfg_multiplier", v)),
 		_mk({"id": "perf.lsfg_flow_scale", "title": "Flow scale",
@@ -620,7 +623,7 @@ func _upscale_controls() -> Array:
 	return [
 		_mkc({"id": "perf.upscale_mode", "title": "Upscaling for this game",
 			"help": "Best sets up the sharpest upscaler this handheld runs, before you start the game. Native takes everything out again.",
-			"kind": "choice", "options": _opts(Upscale.MODES, Upscale.MODE_LABELS), "default_value": "best",
+			"kind": "choice", "options": _opts(Upscale.MODES, Upscale.MODE_LABELS, Upscale.MODE_HELP), "default_value": "best",
 			"apply_order": 4, "affects": ["perf.upscaler", "perf.frame_gen", "perf.fg_generator", "perf.upscale_active", "perf.low_latency"]},
 			_mode_detect,
 			func(): return str(upscale_status().get("mode", "best")) if upscale_status().get("ok", false) else null,
@@ -634,14 +637,14 @@ func _upscale_controls() -> Array:
 				return true),
 		_mk({"id": "perf.upscaler", "title": "Upscaler",
 			"help": "Pick one yourself. The game keeps its own menu: choose DLSS or FSR there and it becomes this.",
-			"kind": "choice", "options": _opts(Upscale.upscalers(g), Upscale.LABELS), "default_value": "own",
+			"kind": "choice", "options": _opts(Upscale.upscalers(g), Upscale.LABELS, Upscale.upscaler_help(g)), "default_value": "own",
 			"apply_order": 3},
 			_upscale_reason,
 			func(): return str(upscale_status().get("upscaler", "own")) if upscale_status().get("ok", false) else null,
 			func(v): return _after_upscale(_upscale_run("choose", ["--upscaler", v, "--fg", str(int(upscale_status().get("fg", 0)))] + _gen_args() + _ac_args()))),
 		_mk({"id": "perf.frame_gen", "title": "Frame generation",
 			"help": _fg_help(g),
-			"kind": "choice", "options": _opts(Upscale.frame_gens(g), Upscale.FG_LABELS),
+			"kind": "choice", "options": _opts(Upscale.frame_gens(g), Upscale.FG_LABELS, Upscale.FG_HELP),
 			"default_value": 0, "apply_order": 2, "affects": ["perf.low_latency", "perf.lsfg"]},
 			func():
 				if Upscale.frame_gens(_gpu()).size() <= 1:
@@ -659,7 +662,7 @@ func _upscale_controls() -> Array:
 				return true),
 		_mk({"id": "perf.fg_generator", "title": "Frame generation by",
 			"help": "FSR is lighter and pairs with Anti-Lag 2. XeSS handles menus and HUDs better, costs more, and brings XeLL. Not every game likes XeSS here yet.",
-			"kind": "choice", "options": _opts(Upscale.generators(g), Upscale.GENERATOR_LABELS),
+			"kind": "choice", "options": _opts(Upscale.generators(g), Upscale.GENERATOR_LABELS, Upscale.GENERATOR_HELP),
 			"default_value": Upscale.generators(g)[0] if not Upscale.generators(g).is_empty() else "", "apply_order": 2},
 			func(): return _upscale_reason() if Upscale.generators(_gpu()).size() > 1 else "One frame generator on this graphics chip",
 			func():

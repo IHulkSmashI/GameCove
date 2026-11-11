@@ -64,6 +64,11 @@ const LESS := "Fewer settings"
 const UNAVAILABLE_TITLE := "Not on this handheld"
 const UNAVAILABLE_LINE := "These need hardware or software this handheld doesn't have. Each says why."
 const RUN := "Run"
+## Action rows whose button isn't "Run": what the press does, in a word or two.
+const ACTION_VERBS := {"perf.upscale_active": "Check again", "perf.upscale_menu": "Open", "perf.upscale_undo": "Remove",
+	"perf.lsfg_setup": "Set up"}
+## Rows that are a read-out: their line stays in view without focus.
+const ALWAYS_EXPLAIN := ["perf.upscale_active"]
 const DONE := "Done"
 
 # ---- colour and curve editors -------------------------------------------------

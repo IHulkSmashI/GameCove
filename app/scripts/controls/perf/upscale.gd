@@ -15,6 +15,46 @@ const MODES := ["best", "custom", "native"]
 const MODE_LABELS := {"best": "Best for this handheld", "custom": "My choice", "native": "Native (nothing added)"}
 const GENERATOR_LABELS := {"fsrfg": "FSR frame generation", "xefg": "XeSS frame generation"}
 const FG_LABELS := {0: "Off", 2: "2x", 3: "3x", 4: "4x"}
+## One plain line per choice, shown under the row for the option in view.
+## "best" has none here: its line is what the helper's plan picked for the game.
+const MODE_HELP := {
+	"custom": "You picked the upscaler and frame generation below. We keep them exactly as you set them.",
+	"native": "The game as it shipped: everything we added is taken out, and nothing comes back by itself.",
+}
+const UPSCALER_HELP := {
+	"own": "The game's own upscaler, untouched. Nothing of ours goes into the game.",
+	"xess": "Intel's XeSS 2: sharp and light. On Arc with the XMX driver it runs on the XMX cores.",
+	"fsr4_xmx": "AMD's newest FSR on Arc's XMX cores: the sharpest picture here. DirectX 12 games.",
+	"fsr4_xmx_lite": "The lighter FSR 4 model on the XMX cores: a few more frames, a slightly softer picture.",
+	"fsr31": "FSR 3.1: runs on every chip and costs the fewest frames.",
+	"fsr4_amd": "AMD's newest FSR: the sharpest picture, for a few frames. DirectX 12 games. FSR 3.1 is one tap away.",
+}
+## FSR 4 on chips where it is offered but never picked by itself (RDNA 2, Z2 A).
+## Steam Deck tests (steamdeckhq.com, club386.com, September 2025): about 10 fps, a fifth to a quarter, for a clearly better picture.
+const FSR4_HEAVY_HELP := "AMD's newest FSR: a clearly better picture for about a quarter fewer frames on this chip. FSR 3.1 is the faster pick."
+const FG_HELP := {
+	0: "No frames are added.",
+	2: "One made frame between every two real ones, with low latency on. Best from about 40 real fps.",
+	3: "Two made frames for every real one. Best from about 40 real fps on a 120 Hz screen.",
+	4: "Three made frames for every real one: the smoothest motion and the most artefacts.",
+}
+const GENERATOR_HELP := {
+	"fsrfg": "AMD's: the lightest, paired with Anti-Lag 2.",
+	"xefg": "Intel's: cleaner menus and HUDs, costs more, and brings XeLL low latency.",
+}
+const LSFG_HELP := {
+	2: "One made frame per real frame.",
+	3: "Two made frames per real frame: more lag and more artefacts.",
+	4: "Three made frames per real frame: the most lag and artefacts.",
+}
+
+
+## The upscaler lines for this GPU (FSR 4 says so where it is heavy).
+static func upscaler_help(g: Dictionary) -> Dictionary:
+	var out := UPSCALER_HELP.duplicate()
+	if GpuCaps.tier(g) in ["amd_rdna2", "amd_z2a"]:
+		out["fsr4_amd"] = FSR4_HEAVY_HELP
+	return out
 
 
 ## Where the helper is, "" when missing. extra: dev/test paths tried first.
