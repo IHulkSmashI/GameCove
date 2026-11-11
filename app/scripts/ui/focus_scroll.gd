@@ -126,11 +126,18 @@ func target_for(c: Control) -> float:
 	if content == null or view <= 0.0:
 		return float(scroll.scroll_vertical)
 	var max_v := maxf(0.0, content.size.y - view)
+	# Focus inside a scroller of its own (a column of cards inside the page):
+	# that scroller keeps the control in view; this one only keeps the whole
+	# pane in view. Following the control itself would chase it while the inner
+	# scroller glides and leave the page scrolled past the pane's top.
+	var inner := _nested_scroller(c)
+	if inner != null:
+		c = inner
 	var r := _rect_in_content(_row_of(c, content))
 	# A control can ask for a neighbour to show with it (meta "reveal_with"):
 	# read-only cards that don't take focus come into view next to the
 	# nearest one that does.
-	var extra: Variant = c.get_meta("reveal_with") if c.has_meta("reveal_with") else null
+	var extra: Variant = c.get_meta("reveal_with") if c.has_meta("reveal_with") and inner == null else null
 	if extra is Control and is_instance_valid(extra) and content.is_ancestor_of(extra):
 		var u := r.merge(_rect_in_content(extra))
 		if u.size.y + MARGIN + margin_bottom <= view:
@@ -167,6 +174,17 @@ func target_for(c: Control) -> float:
 		if not moved:
 			break
 	return clampf(v, 0.0, max_v)
+
+
+## The outermost scroller between `c` and this one, or null.
+func _nested_scroller(c: Control) -> ScrollContainer:
+	var found: ScrollContainer = null
+	var p := c.get_parent()
+	while p != null and p != scroll:
+		if p is ScrollContainer:
+			found = p
+		p = p.get_parent()
+	return found
 
 
 ## The whole row a focused button belongs to (its title, value, explanation,

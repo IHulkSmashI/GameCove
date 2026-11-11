@@ -17,12 +17,6 @@
    "why": "The Discover hero is the deal's store image at the size the store offers (Steam header images are 460x215; the screenshot sets use a 360 px one). We show it as it is: nothing bigger is published for most deals, and fetching another image would add a request per deal. Soft only on a 4K TV."
   },
   {
-   "kind": "focus",
-   "shot": "*battery",
-   "node": "*/Card_history",
-   "why": "OPEN, not understood yet: on layouts 1536 wide and up (checked 1552x970) the Battery history card, which is taller than the pane, is scrolled so its top sits about 126 px above the pane's top edge instead of at it (rendered: chart top cut, empty space below the card). FocusScroll's own target for it is 'top first'; something moves the page after the glide. Listed so CI stays green; needs a look with a live window."
-  },
-  {
    "kind": "blurry",
    "node": "*/LaunchOverlay/Center/Logo",
    "why": "The launch splash's game logo is the logo art from SteamGridDB / Steam, at most 900 px wide; on a 4K TV (2.7x) it is drawn 60 % sharp for the second the splash shows. Nothing bigger is published."
