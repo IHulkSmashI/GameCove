@@ -102,7 +102,14 @@ func _add(r: VBoxContainer) -> void:
 
 func _on_changed(v: Variant, k: String) -> void:
 	if k == "goal":
+		var own_fps: Variant = settings.get("fps_limit", 0)
 		settings = Texts.apply_goal(settings, v)
+		# The Game settings card owns the frame limit (this form shows no row for
+		# it): a goal mustn't change it behind the card's back, or the next launch
+		# takes the goal's over the frame limit the player picked (Profiles'
+		# sync_launcher_fps sees a new launcher value).
+		if not rows.has("fps_limit"):
+			settings["fps_limit"] = own_fps
 		for f in ["fps_limit", "upscaler", "frame_gen"]:
 			if rows.has(f):
 				rows[f].set_value_quiet(settings[f])
