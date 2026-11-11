@@ -172,15 +172,24 @@ save_value() {
 	printf '%s=%s\n' "$1" "$(cat "$ROOT$1" 2>/dev/null)" >>"$STATE/saved"
 }
 
-# write_value <real path> <value>: a sysfs write; failures are reported, never fatal.
+# write_value <real path> <value>: a sysfs write; failures are reported, never fatal. A value we saved
+# (save_value) is also noted in "set" as the node reads right after the write, so restore_values can tell
+# later whether the node still holds what we set.
 write_value() {
 	if ! printf '%s\n' "$2" 2>/dev/null >"$ROOT$1"; then
 		printf 'warning: could not write %s to %s\n' "$2" "$1" >&2
 		return 1
 	fi
+	if grep -q "^$1=" "$STATE/saved" 2>/dev/null; then
+		{ grep -v "^$1=" "$STATE/set" 2>/dev/null || true; printf '%s=%s\n' "$1" "$(cat "$ROOT$1" 2>/dev/null)"; } >"$STATE/set.tmp" &&
+			mv -f "$STATE/set.tmp" "$STATE/set" || true
+	fi
 }
 
-# Puts back every saved value (sysfs nodes that are gone are skipped).
+# Puts back every saved value (sysfs nodes that are gone are skipped). Only a node that still holds the
+# value we set: when the system (an OS update that fixes it itself) or the user wrote another one since,
+# that one stays and our stale original is not written over it. A record from before "set" existed has
+# nothing to compare with and is restored as it always was.
 restore_values() {
 	[ -f "$STATE/saved" ] || return 0
 	while IFS= read -r _line; do
@@ -188,6 +197,13 @@ restore_values() {
 		_v="${_line#*=}"
 		case "$_p" in /sys/*) ;; *) continue ;; esac
 		[ -f "$ROOT$_p" ] || continue
+		if [ -f "$STATE/set" ] && grep -q "^$_p=" "$STATE/set"; then
+			_ours="$(grep "^$_p=" "$STATE/set" | head -n 1)"
+			if [ "$(cat "$ROOT$_p" 2>/dev/null)" != "${_ours#*=}" ]; then
+				gc_log "kept $_p: it isn't the value we set any more"
+				continue
+			fi
+		fi
 		write_value "$_p" "$_v" || true
 	done <"$STATE/saved"
 }
@@ -273,7 +289,7 @@ gc_remove() {
 	else
 		restore_values
 	fi
-	rm -f "$STATE/installed" "$STATE/saved"
+	rm -f "$STATE/installed" "$STATE/saved" "$STATE/set"
 	gc_log "remove"
 	rmdir "$STATE" 2>/dev/null || true
 	gc_say "removed"
@@ -293,6 +309,7 @@ gc_rollback() {
 	done
 	cp -p "$1/installed" "$STATE/installed"
 	if [ -f "$1/saved" ]; then cp -p "$1/saved" "$STATE/saved"; else rm -f "$STATE/saved"; fi
+	if [ -f "$1/set" ]; then cp -p "$1/set" "$STATE/set"; else rm -f "$STATE/set"; fi
 	rm -rf "$1"
 	gc_reload
 }
@@ -319,6 +336,7 @@ gc_update() {
 	done
 	cp -p "$STATE/installed" "$_bak/installed" || { rm -rf "$_bak"; gc_die 1 "could not save the current files"; }
 	[ ! -f "$STATE/saved" ] || cp -p "$STATE/saved" "$_bak/saved" || { rm -rf "$_bak"; gc_die 1 "could not save the current files"; }
+	[ ! -f "$STATE/set" ] || cp -p "$STATE/set" "$_bak/set" || { rm -rf "$_bak"; gc_die 1 "could not save the current files"; }
 	_why=""
 	for _f in $FILES; do
 		if [ -e "$ROOT$_f" ] && ! gc_ours "$_f"; then

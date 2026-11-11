@@ -132,5 +132,14 @@ V_REV=2 demo status | grep -qx "installed_revision=2" || fail "status after the 
 V_REV=2 demo remove >/dev/null || fail "remove after an update"
 [ "$(cat "$T/root/sys/demo/value")" = factory ] || fail "remove: the original value from before revision 1"
 [ ! -e "$RULE" ] && [ ! -e "$CONF" ] || fail "remove: files gone"
+[ ! -e "$ST/set" ] || fail "remove: the record of what we set is gone too"
+# review Medium (Fixes): removing a fix the system now covers itself must not write our stale original over
+# the system's own value (the node no longer holds what we set)
+demo install >/dev/null || fail "install again"
+[ "$(cat "$T/root/sys/demo/value")" = new1 ] || fail "applied again"
+echo "by-the-os" >"$T/root/sys/demo/value"
+demo remove >/dev/null || fail "remove after the system changed the value"
+[ "$(cat "$T/root/sys/demo/value")" = by-the-os ] || fail "remove: the system's own value is left alone, not overwritten by our saved one"
+grep -q "kept /sys/demo/value" "$ST/changes.log" 2>/dev/null || [ ! -d "$ST" ] || fail "the kept value is logged"
 
 echo "lib tests passed"
