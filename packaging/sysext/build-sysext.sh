@@ -1,8 +1,8 @@
 #!/bin/sh
 # Build a systemd-sysext image of GameCove for SteamOS.
 #
-# Not run on a SteamOS handheld yet: GameCove's hardware testing so far (MSI Claw 8 EX AI+
-# and ASUS ROG Ally) was on Bazzite. The Release workflow builds the image and checks its
+# Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS); other SteamOS
+# handhelds are set up from what Valve ships. The Release workflow builds the image and checks its
 # contents; the --tree-only path is exercised by packaging/tests/run.sh with fake inputs.
 #
 # SteamOS's /usr is read-only and wiped on updates; a sysext is a squashfs image

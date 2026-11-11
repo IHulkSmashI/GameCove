@@ -542,8 +542,14 @@ for f in packaging/rpm/gamecove.spec packaging/install.sh; do
 	if grep -qi "untested" "$REPO/$f"; then bad "$f still says untested while the README says tested on hardware"; else ok; fi
 done
 if grep -q "both on Bazzite" "$REPO/README.md" "$REPO/docs/DEVICES.md" "$REPO/docs/SESSION.md"; then bad "the ROG Ally was tested on SteamOS, not Bazzite"; else ok; fi
-grep -q "Not run on a SteamOS handheld yet" "$REPO/packaging/sysext/build-sysext.sh" && grep -q "hasn't been run on a handheld yet" "$REPO/README.md" && ok || bad "the SteamOS install must be described the same way in build-sysext.sh and the README"
+grep -q "Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS)" "$REPO/packaging/sysext/build-sysext.sh" && grep -q "run it on a ROG Ally on SteamOS" "$REPO/README.md" && ok || bad "the SteamOS install must be described the same way in build-sysext.sh and the README: tested on a ROG Ally on SteamOS"
+# nothing may say SteamOS never ran on a handheld (the Ally ran on it)
+if grep -rnE "(hasn't been run|Not run) on a SteamOS handheld|hardware testing so far was on Bazzite|Nothing (here )?has run on a handheld yet" "$REPO/README.md" "$REPO/docs" "$REPO/packaging" --exclude=release.sh; then bad "a doc says nothing ran on a handheld / SteamOS never ran, but the ROG Ally ran on SteamOS"; else ok; fi
 if grep -q '^<!--' "$REPO/README.md"; then bad "README has a hidden comment: $(grep -n '^<!--' "$REPO/README.md" | head -n 2 | tr '\n' ' ')"; else ok; fi
+
+# the CLA workflow links to github.com, not a mirror (a contributor reads that page before signing)
+if git -C "$REPO" grep -nIE "cloudns|ali360|https://gh\.[a-z0-9-]+\.[a-z]+/" -- . ':!packaging/tests/release.sh' >"$T/mirror"; then bad "a non-github mirror host is linked: $(head -n 2 "$T/mirror" | tr '\n' ' ')"; else ok; fi
+grep -q "path-to-document: https://github.com/IHulkSmashI/GameCove/blob/main/docs/CLA.md" "$REPO/.github/workflows/cla.yml" && ok || bad "cla.yml must link docs/CLA.md on github.com"
 
 # docs/PRIVACY.md says what the code does (final review, low)
 PV="$REPO/docs/PRIVACY.md"

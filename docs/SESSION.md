@@ -5,8 +5,8 @@ switches sessions, gets root for fixes, and is packaged. Read with
 [CONTRACTS.md](CONTRACTS.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Status: everything here passes its tests against fakes and an Xvfb X server.
-**Nothing has run on a handheld yet.** The checklist at the end lists what must be
-tried on the Claw 8 EX before we call any of it working.
+Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS). The
+checklist at the end lists what is tried on a handheld before we call any of it working.
 
 ## Files
 
@@ -415,8 +415,8 @@ MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS). rpm-ostree may warn abo
 `gamecove.raw` (squashfs) holding our files plus gamescope-session-plus pinned at
 `08e65a6` (SteamOS doesn't have it), with `extension-release` `ID=_any`,
 `ARCHITECTURE=x86-64` so OS updates don't disable it (no SteamOS libraries
-inside). Same idea as OpenGamepadUI's `make dist-ext`. Built and checked by the Release workflow; not run on a SteamOS
-handheld yet (hardware testing so far was on Bazzite).
+inside). Same idea as OpenGamepadUI's `make dist-ext`. Built and checked by the Release workflow; run on a SteamOS
+handheld (ASUS ROG Ally), not yet on other SteamOS devices.
 
 Where the image lives on SteamOS, and why (checked against SteamOS 3.8 / steamos-manager v26.4):
 
