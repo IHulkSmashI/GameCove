@@ -367,3 +367,19 @@ func test_no_uninstall_move_update_or_verify_under_the_running_game() -> void:
 func test_main_wires_the_running_game_to_the_store_manager() -> void:
 	var src := FileAccess.get_file_as_string("res://scripts/main.gd")
 	ok(src.contains("lib_store.game_running = func(key: String) -> bool: return session != null and session.runs(key)"), "main.gd wires store.game_running")
+
+
+## Moving to a fresh SD card: its Games folder doesn't exist yet, and cp / mv
+## into a missing folder fail. The folder is made before the move starts.
+func test_move_makes_the_destination_folder() -> void:
+	var m := _manager("sm_move_dest")
+	var e := _epic(true)
+	var src := m.home.path_join("Games/epic/Hades")
+	DirAccess.make_dir_recursive_absolute(src)
+	e["install_path"] = src
+	var dest := m.home.path_join("media/SD/Games")
+	ok(not DirAccess.dir_exists_absolute(dest), "no Games folder on the card yet")
+	var res := m.move({"key": e["key"]}, dest)
+	ok(res.get("ok", false), "move accepted (%s)" % res)
+	ok(DirAccess.dir_exists_absolute(dest), "the folder it goes into is made first")
+	_done(m)
