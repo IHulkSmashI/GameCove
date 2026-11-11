@@ -50,8 +50,18 @@ func _svc(device: String, states: Dictionary, home := "") -> FixesSvc:
 	r.responses["pkexec*"] = {"code": 0, "out": "installed\n"}
 	var s: FixesSvc = FixesSvc.new()
 	var h := home if home != "" else _tmp("home_" + device)
-	s.setup({"runner": r, "home": h, "device": device, "sys_root": h + "/root"})
+	_system_files(h + "/root")
+	# no network and no password prompt unless a test asks: the lifecycle tests are in test_fix_lifecycle.gd
+	s.setup({"runner": r, "home": h, "device": device, "sys_root": h + "/root", "background": false, "can_prompt": false})
 	return s
+
+
+## What the lifecycle rules of the Claw and Ally fixes look for on a real system (their needed_when).
+func _system_files(root: String) -> void:
+	for f in ["/usr/bin/rpm-ostree", "/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml",
+			"/sys/module/xe/version", "/sys/class/firmware-attributes/asus-armoury/attributes/mcu_powersave/current_value",
+			"/usr/share/gamescope-session-plus/device-quirks"]:
+		_write(root + f, "0\n")
 
 
 func _devices() -> Array:
@@ -71,9 +81,14 @@ func test_catalogue_entries_are_complete_and_real() -> void:
 		seen[id] = true
 		for k in ["title", "line", "kind", "password", "sources"]:
 			ok(e.has(k), "%s: has %s" % [id, k])
-		ok(str(e["line"]).length() > 10 and str(e["line"]).length() <= 120, id + ": one plain line")
+		ok(str(e["line"]).length() > 10 and str(e["line"]).length() <= (160 if e["kind"] == "advice" else 120), id + ": one plain line")
 		ok(not (e["sources"] as Array).is_empty(), id + ": has a source")
-		ok(e["kind"] in ["root", "file", "power", "app"], id + ": kind")
+		ok(e["kind"] in ["root", "file", "power", "app", "advice"], id + ": kind")
+		if e["kind"] == "advice":
+			# text for a must-fix problem with no software fix: nothing to run, nothing to apply
+			ok(not FileAccess.file_exists(_repo().path_join("fixes/%s/fix.sh" % id)), id + ": advice has no script")
+			ok((e["changes"] as Array).is_empty() and e["default"] == "advice-only", id + ": advice changes nothing")
+			continue
 		if e["kind"] != "app":
 			ok(FileAccess.file_exists(_repo().path_join("fixes/%s/fix.sh" % id)), id + ": fix folder exists")
 			ok(FileAccess.file_exists(_repo().path_join("fixes/%s/test.sh" % id)), id + ": has test.sh")
@@ -302,6 +317,25 @@ class FakeDevice extends Object:
 	func support_level() -> String: return level
 
 
+func test_page_says_when_nothing_is_left_to_fix() -> void:
+	var h := _tmp("page_done")
+	_write(h + "/.local/share/gamecove/install-state.json", JSON.stringify({"fixes": ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "claw-kbd-wakeup"]}))
+	var s := _svc("msi-claw-8-ex", {"claw8ex-buttons": "on", "claw8ex-vrr": "on", "claw8ex-gyro": "on",
+		"claw-kbd-wakeup": "on", "ax210-d3cold": "not-needed"}, h)
+	s.refresh()
+	eq(int(s.counts()["recommended"]), 0, "every recommended fix is applied")
+	var p: Control = Page.build({"fixes": s, "device": FakeDevice.new()})
+	ok(p.find_child("NothingLeft", true, false) != null, "the summary says nothing is left to fix")
+	ok(_texts(p).contains("Nothing left to fix on your MSI Claw 8 EX AI+."), "in plain words, with the device")
+	# Details read as plain words: the model's name, each change as "target: what", the fix's own why
+	var vrr: Dictionary = s.rows().filter(func(r): return r["id"] == "claw8ex-vrr")[0]
+	eq(str(vrr["tested_on"][0]["name"]), "MSI Claw 8 EX AI+", "tested on: the model's name, not its id")
+	ok(str(vrr["changes"][0]).begins_with("/etc/firmware/edid/") and str(vrr["changes"][0]).contains(": "), "target, then what it does")
+	eq(str(vrr["why"]), str(s.entry("claw8ex-vrr")["why"]), "why: the fix's own words")
+	p.press("claw8ex-vrr", "details")
+	ok(_texts(p.find_child("Fix_claw8ex-vrr", true, false)).contains("MSI Claw 8 EX AI+, Bazzite (2026-11-09)"), "tested line in Details")
+
+
 func test_page_shows_every_fix_with_status_and_actions() -> void:
 	var h := _tmp("page")
 	_write(h + "/.local/share/gamecove/install-state.json", JSON.stringify({"fixes": ["claw8ex-buttons", "claw-kbd-wakeup"]}))
@@ -311,15 +345,38 @@ func test_page_shows_every_fix_with_status_and_actions() -> void:
 	var dev := FakeDevice.new()
 	var p: Control = Page.build({"fixes": s, "device": dev})
 	var t := _texts(p)
-	for want in ["MSI buttons", "Volume buttons don't wake it", "Applied by GameCove", "Needed", "Not needed",
-			"Restart to finish", "MSI Claw 8 EX AI+", "GameCove applies this one at install",
+	for want in ["MSI buttons", "Volume buttons don't wake it", "Applied by GameCove", "Needed", "1 not needed on this unit",
+			"Restart to finish", "MSI Claw 8 EX AI+", "Easy setup turns this one on; it isn't on here yet",
+			"Applied", "Recommended for your MSI Claw 8 EX AI+", "Optional", "Recommended", "Tested on hardware",
 			"Apply and Undo ask for your admin password: use Desktop Mode."]:
 		ok(t.contains(want), "shows " + want)
 	ok(p.buttons.has("undo:claw8ex-buttons"), "applied: Undo")
 	ok(p.buttons.has("apply:claw8ex-vrr"), "needed: Apply")
 	ok(p.buttons.has("undo:claw8ex-gyro"), "restart pending: Undo")
 	ok(not p.buttons.has("apply:ax210-d3cold") and not p.buttons.has("undo:ax210-d3cold"), "not needed: no button")
-	ok(p.find_child("Fix_ax210-d3cold", true, false).focus_mode == Control.FOCUS_ALL, "a card without buttons takes focus (scroll)")
+	ok(p.find_child("Fix_ax210-d3cold", true, false) == null, "a fix for a part this unit doesn't have isn't listed")
+	ok(p.find_child("Count_not_needed", true, false) != null, "the summary still counts it")
+	ok(p.find_child("NothingLeft", true, false) == null, "one still recommended: no all-done line")
+	# the groups, in order, and each fix under the right one
+	var order: Array = []
+	for c in p.find_child("Fix_claw8ex-buttons", true, false).get_parent().get_children():
+		order.append(String(c.name))
+	ok(order.find("Group_applied") < order.find("Fix_claw8ex-buttons") and order.find("Fix_claw8ex-buttons") < order.find("Group_recommended"), "applied fixes under Applied")
+	ok(order.find("Group_recommended") < order.find("Fix_claw8ex-vrr") and order.find("Fix_claw8ex-vrr") < order.find("Group_optional"), "a needed fix under Recommended")
+	ok(order.find("Group_optional") < order.find("Fix_claw-wifi-d3cold"), "an optional fix under Optional")
+	ok(p.find_child("Fix_claw8ex-buttons", true, false).find_child("Tested", true, false) != null, "tested on this model: the second badge")
+	ok(p.find_child("Fix_claw-kbd-wakeup", true, false).find_child("Tested", true, false) == null, "not tested here: no badge")
+	# Details: what it changes, how it's undone, the audit date and a QR code to the source
+	ok(p.buttons.has("details:claw-kbd-wakeup"), "every fix has Details")
+	p.press("claw-kbd-wakeup", "details")
+	var det: Control = p.find_child("Fix_claw-kbd-wakeup", true, false).find_child("Details", true, false)
+	ok(det != null, "Details opens in the card")
+	var dt := _texts(det)
+	for want in ["What it changes", "/etc/udev/rules.d/60-gamecove-claw-kbd-wakeup.rules", "How it's undone", "Risk", "Last checked against its sources: 20"]:
+		ok(dt.contains(want), "details show " + want)
+	ok(det.find_child("Qr", true, false) != null and (det.find_child("Qr", true, false) as TextureRect).texture != null, "source as a QR code")
+	p.press("claw-kbd-wakeup", "details")
+	ok(p.find_child("Fix_claw-kbd-wakeup", true, false).find_child("Details", true, false) == null, "Details closes again")
 	ok(p.find_child("Count_applied", true, false) != null, "summary counts")
 	ok(p.focus_chain().size() >= 6, "focus chain covers every fix")
 	eq(p.hints_for(p.buttons["apply:claw8ex-vrr"])[0], ["A", "Apply"], "hint names the action")
@@ -364,6 +421,8 @@ func test_page_shows_os_fixed_and_changes() -> void:
 	var t := _texts(p)
 	ok(t.contains("Already fixed by the system"), "os-fixed chip")
 	ok(t.contains("Your system already does this"), "os-fixed note")
+	ok(t.contains("Not needed any more"), "the system's own fix: under Not needed any more")
+	ok(not p.buttons.has("apply:ally-controller-wakeup"), "never offered once the system does it")
 	ok(t.contains("System: Bazzite 44 → Bazzite 45"), "what changed")
 	ok(p.buttons.has("apply:ally-mcu-powersave"), "optional fix: Apply")
 	ok(t.contains("Optional"), "optional fixes say so")
