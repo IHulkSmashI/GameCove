@@ -418,6 +418,16 @@ func open_setup(force: bool, step := "") -> void:
 		setup_flow = flow
 		if flow.has_signal("setting_changed"):
 			flow.setting_changed.connect(_on_setting_changed)
+		# setup ends (Done, Skip setup): focus comes back to the screen under it
+		if flow.has_signal("closed") and not flow.closed.is_connected(_on_setup_closed):
+			flow.closed.connect(_on_setup_closed)
+
+
+func _on_setup_closed() -> void:
+	setup_flow = null
+	var f := _screen_default_focus()
+	if f != null:
+		Home.focus_later(f)
 
 
 static func _script_has(sc: Script, method: String) -> bool:
