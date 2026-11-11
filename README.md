@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/IHulkSmashI/GameCove/releases"><img src="https://img.shields.io/github/v/release/IHulkSmashI/GameCove?include_prereleases&filter=v*&label=Latest%20Release&logo=github&color=7c3aed" alt="Latest release"></a>
-  <!-- Downloads badge goes back once v0.1.0 is out, filtered to the GameCove release (the total counts the app's own data downloads): https://img.shields.io/github/downloads/IHulkSmashI/GameCove/v0.1.0/total -->
+  <!-- Downloads badge goes back once v0.1.0 is out: https://img.shields.io/github/downloads/IHulkSmashI/GameCove/total (only app releases are here; the data GameCove downloads lives in IHulkSmashI/GameCove-data) -->
   <a href="https://github.com/IHulkSmashI/GameCove/commits/main"><img src="https://img.shields.io/github/last-commit/IHulkSmashI/GameCove?label=Last%20update" alt="Last update"></a>
   <br>
   <a href="#contents"><img src="https://img.shields.io/badge/Guide%20%26%20FAQ-Read%20the%20docs-2563eb?logo=readthedocs&logoColor=white" alt="Guide and FAQ"></a>
@@ -431,14 +431,14 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 
 | What | Who | What is sent | When | Switch |
 | --- | --- | --- | --- | --- |
-| Game database and release calendar | GitHub (GameCove's own `gamedb` release) | Nothing about you | At start, at most daily | Background lookups |
+| Game database and release calendar | GitHub (the `gamedb` release of GameCove's data repo, [GameCove-data](https://github.com/IHulkSmashI/GameCove-data)) | Nothing about you | At start, at most daily | Background lookups |
 | Deals, prices and free-to-keep games (Discover, wishlist) | [CheapShark](https://www.cheapshark.com) (cheapshark.com) and the Steam store API | Steam app ids and titles from your wishlist and Discover, what you search for, your store country | 45 s after start, then every 6 hours (top deals and the free-to-keep list: two requests); when you search or open a game | Look up deals and prices |
 | Local prices (optional) | [GG.deals](https://gg.deals) (gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
-| Your device's photo | GitHub (free photos) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
-| Upscaler list and newer upscaler files (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and when you change an upscaler; files only when the list has a newer tested version than the one that came with GameCove | Background lookups (daily check). With it off, the files that came with GameCove are used |
+| Your device's photo | GitHub (free photos on GameCove-data's `device-photos` release) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
+| Upscaler list and newer upscaler files (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove-data's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and when you change an upscaler; files only when the list has a newer tested version than the one that came with GameCove | Background lookups (daily check). With it off, the files that came with GameCove are used |
 | lsfg-vk for Lossless Scaling frame generation | Its author's site (builds.lsfg-vk.dev) | Nothing about you | When you press Set up Lossless frame generation, and only if you have Lossless Scaling installed | You start it |
 | GE-Proton (Settings > Performance) | GitHub (GloriousEggroll's `proton-ge-custom` releases) | Nothing about you | When you press Check or Install | You start it |
-| BIOS and firmware list and downloads | GitHub (`firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
+| BIOS and firmware list and downloads | GitHub (GameCove-data's `firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
 | Steam insights on a game's page (players now, reviews, Steam Deck rating, last update, DLC) | Steam's public API and store | The game's app id (DLC prices: also your store country) | When you open a Steam game's page; players at most every 10 min, the rest every 12 h | Background lookups (prices: Look up deals and prices) |
 | Achievements | Steam's API and CDN | The game's app id | When you open a game page | Settings > Performance |
 | Game pictures in Discover and the calendar | Steam's CDN, IGDB's image server (`images.igdb.com`) and SteamGridDB's CDN (a download only starts on one of these; a redirect they answer with is followed) | The picture's address (it names the game) | When a tile shows a picture that isn't saved yet | None (SteamGridDB lookups: Look up game details) |
@@ -622,7 +622,7 @@ OptiScaler, lsfg-vk and Moonlight. Auto TDP, the upscaling setup and the MSI Cla
 **ClawDeck** (same author). Gyro on the MSI Claw 8 EX was figured out by **Kisenir** (r/MSIClaw).
 
 Our game database is rebuilt nightly from free, open sources (Wikidata, AreWeAntiCheatYet, ProtonDB, IGDB, the Steam
-store) and published as a download; see [`gamedb/`](gamedb/). Game data from [IGDB](https://www.igdb.com): time to beat, game details, critic averages and upcoming release dates. [Metacritic](https://www.metacritic.com) scores as Valve publishes them on the Steam store, each linked to its Metacritic page. Critic scores from [OpenCritic](https://opencritic.com), fetched by the app only with your own key. Artwork from [SteamGridDB](https://www.steamgriddb.com) and its artists, fetched with your own free key. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0. The full list is in [CREDITS.md](CREDITS.md).
+store) and published as a download on [GameCove-data](https://github.com/IHulkSmashI/GameCove-data); see [`gamedb/`](gamedb/). Game data from [IGDB](https://www.igdb.com): time to beat, game details, critic averages and upcoming release dates. [Metacritic](https://www.metacritic.com) scores as Valve publishes them on the Steam store, each linked to its Metacritic page. Critic scores from [OpenCritic](https://opencritic.com), fetched by the app only with your own key. Artwork from [SteamGridDB](https://www.steamgriddb.com) and its artists, fetched with your own free key. Compatibility tiers are our own summary of [ProtonDB](https://www.protondb.com) community reports, shared under the ODbL 1.0. The full list is in [CREDITS.md](CREDITS.md).
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
 

@@ -12,7 +12,8 @@ GameCove is one Godot 4 app that runs as gamescope's main client, plus small hel
  │  InputPlumber                                      │
  └────────────────────────────────────────────────────┘
           ▲ nightly download
-   gamedb release (Wikidata + AreWeAntiCheatYet + ProtonDB + IGDB)
+   GameCove-data releases: gamedb (Wikidata + AreWeAntiCheatYet + ProtonDB + IGDB),
+   firmware, upscalers, device-photos
 ```
 
 ## Decisions
@@ -23,7 +24,7 @@ GameCove is one Godot 4 app that runs as gamescope's main client, plus small hel
 | Godot 4, Compatibility renderer | Lightest Godot renderer, good gamepad focus handling, same toolkit as OpenGamepadUI so we can learn from its gamescope code |
 | Steam launched via `steam://rungameid/` | Steam handles its own games; we read the library from local files |
 | Power through PowerStation / steamos-manager | Already the standard on Bazzite; we add missing devices upstream |
-| Game data built nightly on GitHub | Free, no server, no API keys on players' devices |
+| Game data built nightly on GitHub, in its own repo (IHulkSmashI/GameCove-data) | Free, no server, no API keys on players' devices; the app repo's Releases page lists only app versions |
 | PC streaming drives Moonlight's CLI against a Vibepollo host | Moonlight decodes and pairs; GameCove only discovers, shows apps, wakes and follows the session ([STREAMING.md](STREAMING.md)) |
 | Packaging: RPM on Bazzite first, sysext on SteamOS, native on CachyOS | Flatpak can't start Steam or reach system D-Bus the way we need |
 

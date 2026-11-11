@@ -2,13 +2,15 @@
 
 Two halves, one source of truth:
 
-  (A) a copy of every tested file on GameCove's rolling "upscalers" release, under a name that never changes
+  (A) a copy of every tested file on the rolling "upscalers" release of GameCove's data repo
+      (github.com/IHulkSmashI/GameCove-data), under a name that never changes
       (<component>-<version>-<sha256[:8]>-<upstream name>), so a file moved or replaced upstream never breaks an
       install. Older files are never deleted, so every pinned hash keeps resolving.
   (B) upscalers.json on the same release: per component the newest upstream version, its upstream URL, the mirror
-      URL, sha256, size and date. .github/workflows/upscalers.yml rebuilds it nightly (tools/upscalers/build.py) and
-      signs it with cosign keyless; this module accepts it only when the signature was made by exactly that workflow
-      on main (SIGNER_IDENTITY), checked with the cosign get-gamecove.sh pins (~/.local/share/gamecove/tools).
+      URL, sha256, size and date. The data repo's .github/workflows/upscalers.yml rebuilds it nightly
+      (tools/upscalers/build.py, checked out from this repo at a pinned commit) and signs it with cosign keyless; this
+      module accepts it only when the signature was made by exactly that workflow on the data repo's main
+      (SIGNER_IDENTITY), checked with the cosign get-gamecove.sh pins (~/.local/share/gamecove/tools).
 
 How the helper uses it: before an install or update, refresh() fetches and verifies the index (at most every
 FRESH_S); versions(home) is versions.json with every component the verified index lists replaced by its newest
@@ -33,14 +35,15 @@ from . import tls
 
 log = logging.getLogger("gamecove.mirror")
 
-REPO = "IHulkSmashI/GameCove"
+# the data repo (app/scripts/system/data_repo.gd has the same values; packaging/tests/release.sh keeps them equal)
+REPO = "IHulkSmashI/GameCove-data"
 RELEASE_BASE = f"https://github.com/{REPO}/releases/download/"
 INDEX_TAG = "upscalers"
 INDEX_NAME = "upscalers.json"
 INDEX_URL = RELEASE_BASE + INDEX_TAG + "/" + INDEX_NAME
 BUNDLE_URL = INDEX_URL + ".sigstore.json"
-# the nightly workflow's GitHub OIDC identity, on the default branch only (as firmware_index.gd and get-gamecove.sh)
-SIGNER_IDENTITY = r"(?i)^https://github\.com/IHulkSmashI/GameCove/\.github/workflows/upscalers\.yml@refs/heads/main$"
+# the data repo's nightly workflow's GitHub OIDC identity, on its default branch only (as data_repo.gd)
+SIGNER_IDENTITY = r"(?i)^https://github\.com/IHulkSmashI/GameCove-data/\.github/workflows/upscalers\.yml@refs/heads/main$"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 # the cosign get-gamecove.sh pins (packaging/tests/release.sh keeps them equal)
 COSIGN_VERSION = "v2.5.3"
@@ -53,7 +56,7 @@ MAX_INDEX = 1 << 20
 FRESH_S = 600                     # an install right after another doesn't fetch again
 MAX_AGE_S = 30 * 24 * 3600        # a verified copy is used offline for this long, then the pins
 # files live on "upscalers" and, once it nears GitHub's 1000-asset limit, on "upscalers-2", "upscalers-3", ...
-MIRROR_RE = re.compile(r"^https://github\.com/IHulkSmashI/GameCove/releases/download/upscalers(-[0-9]{1,3})?/"
+MIRROR_RE = re.compile(r"^https://github\.com/IHulkSmashI/GameCove-data/releases/download/upscalers(-[0-9]{1,3})?/"
                        r"[A-Za-z0-9][A-Za-z0-9._+-]{0,199}$")
 VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$")
 FILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ +-]{0,119}$")

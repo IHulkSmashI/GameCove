@@ -60,7 +60,7 @@ class TooLarge(ValueError):
 
 
 SCHEMA = 2  # game details and critic scores were added as optional fields: old readers ignore them
-PREVIOUS_URL = "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/gamedb.json.gz"
+PREVIOUS_URL = "https://github.com/IHulkSmashI/GameCove-data/releases/download/gamedb/gamedb.json.gz"
 CREDITS = (
     "Game data from IGDB (https://www.igdb.com): time to beat, summaries, genres, themes, game modes, companies, "
     "release dates, screenshots and critic averages; Wikidata (CC0); AreWeAntiCheatYet (MIT); "

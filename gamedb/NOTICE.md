@@ -1,6 +1,6 @@
 # GameCove game database: sources and credits
 
-Published nightly on the `gamedb` release of github.com/IHulkSmashI/GameCove: `gamedb.json.gz` (game database)
+Published nightly on the `gamedb` release of github.com/IHulkSmashI/GameCove-data: `gamedb.json.gz` (game database)
 and `upcoming.json.gz` (release calendar). This notice is uploaded next to them and used as the release notes.
 
 - **Game data from IGDB** (https://www.igdb.com): time to beat, game details (`meta.igdb`: summaries, genres,

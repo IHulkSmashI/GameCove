@@ -259,7 +259,7 @@ Alert rules (`alerts.gd`): with a target (in the user's currency), fires when th
 
 Order: by the last day a date can mean (so "December 2026" follows every known December day), finer precision first on ties, TBA last. Entries out for more than 14 days are dropped.
 
-`upcoming.json.gz` (rolling `gamedb` release, built by `gamedb/gamedb/upcoming.py`): `{"schema": 1, "built", "sources", "credits", "fx": {...ECB rates, not used for any displayed price}, "count", "releases": [{"title", "date", "precision", "ids", "art", "sources"}]}` (null fields omitted). The app downloads it at most daily; a 404 (not published yet) gives status `missing` and an empty calendar, a broken file keeps the old copy.
+`upcoming.json.gz` (rolling `gamedb` release of IHulkSmashI/GameCove-data, built by `gamedb/gamedb/upcoming.py`): `{"schema": 1, "built", "sources", "credits", "fx": {...ECB rates, not used for any displayed price}, "count", "releases": [{"title", "date", "precision", "ids", "art", "sources"}]}` (null fields omitted). The app downloads it at most daily; a 404 (not published yet) gives status `missing` and an empty calendar, a broken file keeps the old copy.
 
 ### Affiliate links
 

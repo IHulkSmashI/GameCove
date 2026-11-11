@@ -319,9 +319,11 @@ another handheld, the files are rewritten from that device's values (stamp `laun
 | `perf.clear_shader_cache` (action, Steam games) | deletes `steamapps/shadercache/<appid>` in every library (only that path shape, never following links) | a cache folder exists |
 
 **Keeping upscalers current** (owner decision 2026-11-09: always the newest, never broken by upstream moving a
-file). `.github/workflows/upscalers.yml` (nightly, `gh workflow run upscalers.yml`) runs `tools/upscalers/build.py`:
+file). The data repo's `.github/workflows/upscalers.yml` (IHulkSmashI/GameCove-data, nightly,
+`gh workflow run upscalers.yml -R IHulkSmashI/GameCove-data`) runs this repo's `tools/upscalers/build.py` at the commit its
+`gamecove-source.env` pins:
 the newest upstream build of each component (releases API, the rolling OptiPatcher hashed, the newest commit of the
-FSR 4 files), upstream digest and the helper's archive checks, copied to the rolling `upscalers` release under
+FSR 4 files), upstream digest and the helper's archive checks, copied to the data repo's rolling `upscalers` release under
 `<component>-<version>-<sha8>-<name>` (never deleted or replaced; `upscalers-2`... near GitHub's 1000-asset limit),
 plus every versions.json pin under the name it expects. GPL builds (OptiScaler, also the v10 nightlies) go only with
 GitHub's source archive at the exact commit they came from (the tag, or a commit named in the release resolved in
@@ -331,7 +333,7 @@ pre-releases; the v10 nightly repo publishes only pre-releases, so v10 stays on 
 hours ago, and rolling or git files only once unchanged for 72 hours; xess-xmx-linux's index entry lists every
 script's sha256 and devices take a newer build only when they match the ones reviewed in versions.json (the helper
 checks again before running install.sh). The publish job re-checks the artifact (`tools/upscalers/check_plan.py`)
-and waits for the owner's approval (`release` environment, docs/RELEASING.md). Then `upscalers.json` signed with cosign keyless. The helper
+and runs in the data repo's `nightly` environment, which only its `main` can deploy to (docs/RELEASING.md). Then `upscalers.json` signed with cosign keyless. The helper
 (`mirror.py`) fetches it before any install, accepts it only from that workflow on main (the cosign get-gamecove.sh
 pins, `~/.local/share/gamecove/tools`), never takes an older list over a newer one, and uses the pins when it can't
 verify. Files come from the mirror first, then upstream, always sha256 checked. The app's background check
