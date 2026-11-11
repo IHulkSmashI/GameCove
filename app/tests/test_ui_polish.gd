@@ -102,3 +102,32 @@ func test_sheet_detail_wraps() -> void:
 	eq((short_row.find_child("Detail", true, false) as Label).autowrap_mode, TextServer.AUTOWRAP_OFF, "a short line stays one line")
 	ok(Sheet._detail_width(long) / 2.0 < Sheet._detail_room(s.items[1]), "two lines are enough for it")
 	s.free()
+
+
+# ---- nothing sliced at the foot ------------------------------------------------
+
+## Settings pages follow the device pages' rule: cards the foot would slice
+## aren't drawn, inside a long card its rows count, and "More below" shows.
+func test_settings_foot_rule() -> void:
+	var tall := VBoxContainer.new()
+	tall.size = Vector2(600, 900)
+	var rows: Array = []
+	for i in 6:
+		var r := PanelContainer.new()
+		r.size = Vector2(600, 110)
+		tall.add_child(r)
+		rows.append(r)
+	var short := PanelContainer.new()
+	short.size = Vector2(600, 180)
+	var page := VBoxContainer.new()
+	page.add_child(short)
+	page.add_child(tall)
+	var out: Array = []
+	SettingsScreen._cut_items_in(page, 300.0, out, 0)
+	ok(short in out, "a short card is one piece")
+	ok(not tall in out, "a long card isn't")
+	for r in rows:
+		ok(r in out, "its rows are")
+	page.free()
+	# The cut ends softly in the gap (a long card's own panel goes on below it).
+	ok(FadeMask.CUT_FADE >= 6.0 and FadeMask.CUT_FADE <= 12.0, "the cut fades over the gap between rows")
