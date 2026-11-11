@@ -192,12 +192,22 @@ if [ -f "$xmxenv" ] && [ "${GAMECOVE_XMX:-}" != 0 ]; then
       bundled="$tp/files/lib/wine/igdext/x86_64-windows/igdext64.dll"
       if [ -n "$tp" ] && [ -f "$bundled" ] && ! cmp -s "$bundled" "$shimdir/igdext64.dll"; then
         if [ -w "$bundled" ] || chmod u+w "$bundled" 2>/dev/null; then
-          if ! grep -aq 'IGDEXT_' "$bundled" && { [ ! -f "$bundled.stock" ] || ! cmp -s "$bundled" "$bundled.stock"; }; then
-            chmod u+w "$bundled.stock" 2>/dev/null; cp -p "$bundled" "$bundled.stock"
+          # never overwrite what the .stock copy doesn't verifiably hold: a Proton in a folder we can't write into lets
+          # the chmod above pass and then the backup fail, and the shim would replace the only copy of Intel's file
+          backed=1
+          if ! grep -aq 'IGDEXT_' "$bundled"; then
+            if [ ! -f "$bundled.stock" ] || ! cmp -s "$bundled" "$bundled.stock"; then
+              chmod u+w "$bundled.stock" 2>/dev/null; cp -p "$bundled" "$bundled.stock" 2>/dev/null
+            fi
+            cmp -s "$bundled" "$bundled.stock" || backed=0
           fi
-          if cp -f "$shimdir/igdext64.dll" "$bundled"; then
-            [ -f "$shimdir/run/shim-stamp" ] && touch -r "$shimdir/run/shim-stamp" "$bundled" 2>/dev/null
-            say "XMX shim put into this Proton's own igdext64.dll ($tp; original kept as .stock)"
+          if [ "$backed" = 1 ]; then
+            if cp -f "$shimdir/igdext64.dll" "$bundled"; then
+              [ -f "$shimdir/run/shim-stamp" ] && touch -r "$shimdir/run/shim-stamp" "$bundled" 2>/dev/null
+              say "XMX shim put into this Proton's own igdext64.dll ($tp; original kept as .stock)"
+            fi
+          else
+            say "this Proton's igdext64.dll was left alone: its original couldn't be kept as .stock ($bundled). It puts Intel's stock file into the game, so no XMX there. Pick another Proton for this game"
           fi
         else
           say "this Proton can't be changed ($bundled is read-only): it puts Intel's stock igdext64.dll into the game, so no XMX there. Pick another Proton for this game"
