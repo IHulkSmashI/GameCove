@@ -1649,6 +1649,11 @@ func _screen_in(s: Control, d: float) -> void:
 
 
 func _screen_out(s: Control, d: float) -> void:
+	# a keyboard left open on this screen (Library search, then Guide to Home) goes with it: for the
+	# fade-out it would still count as shown and take B, X, Y and the bumpers meant for what's in front
+	for k in get_tree().get_nodes_in_group("osk") if is_inside_tree() else []:
+		if s.is_ancestor_of(k):
+			k.dismiss()
 	var t := Motion.to(s, "modulate:a", 0.0, SCREEN_OUT_S)
 	Motion.to(s, "position:x", -Motion.slide(SCREEN_SLIDE_PX) * d, SCREEN_OUT_S, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	if t == null:

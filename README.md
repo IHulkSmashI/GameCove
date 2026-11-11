@@ -619,8 +619,8 @@ It asks for your admin password once, for the system package and device fixes.
 
 - **Bazzite and Fedora Atomic:** installs as a system package. Your previous system stays in the boot menu.
 - **SteamOS:** installs as a system extension that survives SteamOS updates. Read-only mode stays on. After a SteamOS
-  update, restart once so GameCove comes back. Our hardware testing so far was on Bazzite; the SteamOS install is
-  checked by our automated tests and hasn't been run on a handheld yet, so tell us how it goes.
+  update, restart once so GameCove comes back. We've run it on a ROG Ally on SteamOS (and the MSI Claw 8 EX AI+ on
+  Bazzite); other SteamOS handhelds are set up from what Valve ships, so tell us how it goes.
 - **Anything else:** you can try GameCove in a window.
 
 ### Game art

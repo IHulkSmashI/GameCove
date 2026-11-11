@@ -334,6 +334,23 @@ func test_tile_and_shelf() -> void:
 	s.free()
 
 
+## Layout check showcase/discover_free (ultrawide): a featured card grows past the size its row was made for
+## (badges and a price under the art), and the row must grow with it, not cut the card off.
+func test_a_shelf_row_grows_with_a_taller_tile() -> void:
+	var s: VBoxContainer = Shelf.new()
+	s.setup("free", "Free", [Logic.g("steam", "1", "A")], Vector2(300, 200))
+	var base: float = s.scroll.custom_minimum_size.y
+	eq(base, 200.0 + Shelf.PAD.y + Shelf.LABEL_ROOM, "a row for the size it was given")
+	s.tiles[0].custom_minimum_size = Vector2(300, 267)
+	s.fit_row()
+	eq(s.scroll.custom_minimum_size.y, 267.0 + Shelf.PAD.y + Shelf.LABEL_ROOM, "the row holds the taller tile")
+	eq(s._mask.custom_minimum_size.y, s.scroll.custom_minimum_size.y, "and so does its mask")
+	s.tiles[0].custom_minimum_size = Vector2(300, 150)
+	s.fit_row()
+	eq(s.scroll.custom_minimum_size.y, 267.0 + Shelf.PAD.y + Shelf.LABEL_ROOM, "it never shrinks under the focused tile")
+	s.free()
+
+
 func test_keyboard() -> void:
 	var k: PanelContainer = Osk.new()
 	var got: Array = []

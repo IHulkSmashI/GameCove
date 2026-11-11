@@ -6,8 +6,8 @@ Read with [CONTRACTS.md](CONTRACTS.md) (exact APIs) and [SESSION.md](SESSION.md)
 (root helper, polkit).
 
 Status: every parser and state machine is tested against fixtures and fake
-command runners. **Nothing here has run on a handheld yet.** The checklist at
-the end lists what to try on the Claw 8 EX (Bazzite) and a Steam Deck (SteamOS).
+command runners. Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS). The checklist at
+the end lists what to try on a handheld, including a Steam Deck (SteamOS).
 
 ## Rules all four follow
 

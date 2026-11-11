@@ -25,6 +25,53 @@ func _pad(k: PanelContainer, button: JoyButton, pressed := true) -> void:
 	k._input(e)
 
 
+## Seed 3987000 of the monkey: Library search open, Guide to Home, the quick menu opens, B: the
+## hidden keyboard took the B (closing itself, which sent focus to the hidden Library) and the
+## quick menu stayed open with nothing focused.
+func test_a_hidden_keyboard_takes_no_input() -> void:
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var host := Control.new()
+	root.add_child(host)
+	var k: PanelContainer = Osk.new()
+	host.add_child(k)
+	k.showing = true   # open, on a screen that then goes away
+	k.visible = true
+	var closed := []
+	k.closed.connect(func(t): closed.append(t))
+	host.visible = false
+	_pad(k, JOY_BUTTON_B)
+	ok(closed.is_empty() and k.showing, "B on a hidden keyboard doesn't close it")
+	_pad(k, JOY_BUTTON_X)
+	_pad(k, JOY_BUTTON_Y)
+	eq(k.text, "", "nor does it type or delete")
+	var ev := InputEventKey.new()
+	ev.pressed = true
+	ev.keycode = KEY_A
+	ev.unicode = 65
+	k._input(ev)
+	eq(k.text, "", "a physical key isn't typed into it either")
+	host.visible = true
+	k.visible = true
+	_pad(k, JOY_BUTTON_B)
+	eq(closed.size(), 1, "shown again, B closes it as before")
+	host.free()
+
+
+## Leaving the screen a keyboard is open on puts it away without `closed` (which would send focus back
+## to that screen); the screen fades out for a moment first, and a keyboard still open there took the B.
+func test_dismiss_puts_it_away_quietly() -> void:
+	var k := _kb()
+	var closed := []
+	k.closed.connect(func(t): closed.append(t))
+	k.dismiss()
+	ok(not k.showing and not k.is_open(), "not open any more")
+	ok(closed.is_empty(), "and `closed` was not sent")
+	_pad(k, JOY_BUTTON_B)
+	ok(closed.is_empty(), "so a B afterwards isn't taken")
+	k.dismiss()   # twice is fine
+	ok(Osk.GROUP == "osk", "keyboards are found by main.gd through their group")
+
+
 func _trigger(k: PanelContainer, axis: JoyAxis, value: float) -> void:
 	var e := InputEventJoypadMotion.new()
 	e.axis = axis

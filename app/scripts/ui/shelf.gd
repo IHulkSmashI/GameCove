@@ -129,7 +129,24 @@ func setup(shelf_id: String, shelf_title: String, games: Array, size := Vector2.
 		tile.focus_entered.connect(_on_focus.bind(i))
 		strip.add_child(tile)
 		tiles.append(tile)
+		tile.minimum_size_changed.connect(fit_row)
 	Kit.link_horizontal(tiles)
+
+
+## The row is as tall as its tallest tile needs: a tile that grows past the size it was given (a featured
+## giveaway card gets badges and a price under its art) would otherwise be cut off by the row, with its focus ring
+## outside it (layout check showcase/discover_free on ultrawide).
+func fit_row() -> void:
+	if scroll == null:
+		return
+	var tallest := tile_size.y
+	for t in tiles:
+		if is_instance_valid(t):
+			tallest = maxf(tallest, (t as Control).get_combined_minimum_size().y)
+	var h := ceilf(tallest + PAD.y + LABEL_ROOM)
+	if h > scroll.custom_minimum_size.y:
+		scroll.custom_minimum_size = Vector2(0, h)
+		_mask.custom_minimum_size = scroll.custom_minimum_size
 
 
 ## A row of one or two games as wide featured cards, two to the row (so a

@@ -67,11 +67,20 @@ printf 'intel stock prefix\n' >"$STORE/igdext64.dll"
 # 5. a Proton only root can write: said in the log, the game still starts
 if [ "$(id -u)" != 0 ]; then
 	printf 'intel stock ro\n' >"$BUNDLED"
+	rm -f "$BUNDLED.stock" # a distribution's Proton has none yet (an existing one can be refreshed in place)
 	chmod 0444 "$BUNDLED" && chmod 0555 "$(dirname "$BUNDLED")"
 	run
 	check 'grep -q "intel stock ro" "$BUNDLED"' "a read-only Proton is left alone"
 	chmod 0755 "$(dirname "$BUNDLED")" && chmod 0644 "$BUNDLED"
 fi
+# 5b. the .stock backup can't be made (here: a folder sits where the file would go; also true for root, which
+#     the read-only case above can't cover): the Proton's own file is never overwritten
+printf 'intel stock nobackup\n' >"$BUNDLED"
+rm -rf "$BUNDLED.stock" && mkdir "$BUNDLED.stock"
+run
+check 'grep -q "^intel stock nobackup$" "$BUNDLED"' "no verified .stock backup: the Proton's igdext64.dll is not overwritten"
+check 'log | grep -q "left alone"' "the log says the Proton was left alone"
+rm -rf "$BUNDLED.stock"
 # 6. XMX not wanted for this game: nothing is touched
 rm "$RT/xmx-every-game"
 printf 'intel stock v3\n' >"$BUNDLED"

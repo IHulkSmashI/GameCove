@@ -34,49 +34,63 @@ func test_monkey_journeys_hold_the_invariants() -> void:
 	await with_stores()
 	stores.set_speed(0.05)
 	for run in iters():
-		var seed := seed0() * 1000 + run
-		print("E2E SEED suite_monkey::test_monkey_journeys_hold_the_invariants %d" % seed)
-		var rng := RandomNumberGenerator.new()
-		rng.seed = seed
-		var trail: Array = []
-		var states: Array = []
-		var broke := false
-		for step in STEPS:
-			var move: String = MOVES[rng.randi() % MOVES.size()]
-			trail.append(move)
-			var fp := str(focus().get_path()).get_file() if focus() else "none"
-			states.append("%s@%s[%s%s]" % [move, where(), fp, " qm" if qm().visible else ""])
-			await do_move(move, rng)
-			await w.frames(3)   # a menu closing hands focus back over a frame or two
-			await w.frames(2)
-			# the screen settles (a page glides to the focused row, a sheet fades in)
-			await until(func(): return focus_on_screen() == "" or not main()._window_focused or main().launch_overlay.is_open(), 1000)
-			var probs := invariants("seed %d step %d (%s)" % [seed, step, move])
-			if not probs.is_empty():
-				# a hardware file read while the fake system's worker rewrote it reads
-				# empty (-1): look again once the workers are quiet; only what stays counts
-				await w.idle()
-				probs = invariants("seed %d step %d (%s)" % [seed, step, move])
-			if step % 10 == 9:
-				probs.append_array(await deep_checks("seed %d step %d" % [seed, step]))
-			if not probs.is_empty():
-				for p in probs:
-					ok(false, p)
-				var df: Control = main()._screen_default_focus()
-				ok(false, "seed %d: before each of the last moves: %s" % [seed, states.slice(maxi(0, states.size() - 6))])
-				ok(false, "seed %d: the last moves were %s; on %s, searching %s, sheet %s, keyboard %s, default focus %s (shown %s), quick menu %s, page %s, in settings page %s" % [seed, trail.slice(maxi(0, trail.size() - 12)),
-					where(), main().library_screen.searching(), main().game_actions.is_modal(), main().game_actions._kb_open,
-					df.get_path() if df != null and is_instance_valid(df) and df.is_inside_tree() else str(df), df.is_visible_in_tree() if df != null and is_instance_valid(df) and df.is_inside_tree() else false,
-					qm().visible, main().settings.category, main().settings.in_page()])
-				var st2: Control = main().settings
-				ok(false, "seed %d: settings focus %s, top bar %s, settings sheet %s, keyboard %s; grab -> %s" % [seed, st2.focus_behavior_recursive, main().top_bar.focus_behavior_recursive,
-					st2.sheet != null and st2.sheet.visible, st2.keyboard != null and st2.keyboard.is_open(), _try_grab(df)])
-				broke = true
-				break
-		await calm_down()
-		if broke:
+		if await journey(seed0() * 1000 + run):
 			break
 	await without_stores()
+
+
+## Seeds that once broke an invariant, kept for good.
+## 3987000: Library search open, Guide to Home, the quick menu opens, B: the hidden Library
+## keyboard took the B (and sent focus to the hidden Library): "nothing has focus" on Home.
+func test_seed_3987000_hidden_library_keyboard_takes_no_input() -> void:
+	await with_stores()
+	stores.set_speed(0.05)
+	await journey(3987000)
+	await without_stores()
+
+
+## One journey of STEPS moves from `seed`; true when an invariant broke (reported through ok()).
+func journey(seed: int) -> bool:
+	print("E2E SEED suite_monkey::journey %d" % seed)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var trail: Array = []
+	var states: Array = []
+	var broke := false
+	for step in STEPS:
+		var move: String = MOVES[rng.randi() % MOVES.size()]
+		trail.append(move)
+		var fp := str(focus().get_path()).get_file() if focus() else "none"
+		states.append("%s@%s[%s%s]" % [move, where(), fp, " qm" if qm().visible else ""])
+		await do_move(move, rng)
+		await w.frames(3)   # a menu closing hands focus back over a frame or two
+		await w.frames(2)
+		# the screen settles (a page glides to the focused row, a sheet fades in)
+		await until(func(): return focus_on_screen() == "" or not main()._window_focused or main().launch_overlay.is_open(), 1000)
+		var probs := invariants("seed %d step %d (%s)" % [seed, step, move])
+		if not probs.is_empty():
+			# a hardware file read while the fake system's worker rewrote it reads
+			# empty (-1): look again once the workers are quiet; only what stays counts
+			await w.idle()
+			probs = invariants("seed %d step %d (%s)" % [seed, step, move])
+		if step % 10 == 9:
+			probs.append_array(await deep_checks("seed %d step %d" % [seed, step]))
+		if not probs.is_empty():
+			for p in probs:
+				ok(false, p)
+			var df: Control = main()._screen_default_focus()
+			ok(false, "seed %d: before each of the last moves: %s" % [seed, states.slice(maxi(0, states.size() - 6))])
+			ok(false, "seed %d: the last moves were %s; on %s, searching %s, sheet %s, keyboard %s, default focus %s (shown %s), quick menu %s, page %s, in settings page %s" % [seed, trail.slice(maxi(0, trail.size() - 12)),
+				where(), main().library_screen.searching(), main().game_actions.is_modal(), main().game_actions._kb_open,
+				df.get_path() if df != null and is_instance_valid(df) and df.is_inside_tree() else str(df), df.is_visible_in_tree() if df != null and is_instance_valid(df) and df.is_inside_tree() else false,
+				qm().visible, main().settings.category, main().settings.in_page()])
+			var st2: Control = main().settings
+			ok(false, "seed %d: settings focus %s, top bar %s, settings sheet %s, keyboard %s; grab -> %s" % [seed, st2.focus_behavior_recursive, main().top_bar.focus_behavior_recursive,
+				st2.sheet != null and st2.sheet.visible, st2.keyboard != null and st2.keyboard.is_open(), _try_grab(df)])
+			broke = true
+			break
+	await calm_down()
+	return broke
 
 
 ## One move of the player's hands.

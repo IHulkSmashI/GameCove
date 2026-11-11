@@ -9,9 +9,9 @@
 # the next tag run would sign and publish without the owner's approval; if "nightly" were, any
 # branch could sign the nightly lists. So the workflows ask first (docs/RELEASING.md).
 #
-# Exit 1: the environment is missing, or lacks the protection asked for. Exit 0: it is protected,
-# or GitHub wouldn't say (anything but HTTP 200 and 404: a rate limit, a token that may not read
-# environments); then a warning is printed and the settings in docs/RELEASING.md are what stand.
+# Exit 1: the environment is missing, lacks the protection asked for, or GitHub wouldn't say (anything but
+# HTTP 200 and 404: a rate limit, a token that may not read environments, no network): it fails closed, because
+# a check that passes without an answer protects nothing. Exit 0: it is protected.
 # Environment: GITHUB_REPOSITORY, GITHUB_REPOSITORY_OWNER, GH_TOKEN (optional), GITHUB_API_URL, CURL.
 set -eu
 
@@ -38,8 +38,8 @@ case "$code" in
 	exit 1
 	;;
 *)
-	echo "::warning::couldn't read the \"$name\" environment (HTTP $code); its protection wasn't checked. docs/RELEASING.md says what it must be."
-	exit 0
+	echo "::error::couldn't read the \"$name\" environment (HTTP $code), so its protection can't be confirmed; failing rather than signing unchecked. Run again, or see docs/RELEASING.md."
+	exit 1
 	;;
 esac
 

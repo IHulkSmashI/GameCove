@@ -99,8 +99,8 @@ it: the `tag` job checks `release` before it creates the tag, and the `protected
 run; `release` (the job that signs) needs `protected`. The check fails when the environment is missing, has no
 required reviewer, doesn't have the owner among its reviewers, or lets every branch and tag deploy.
 
-The check can only fail on what GitHub tells it: when the API doesn't answer (a rate limit, or a token that may not
-read environments) it prints a warning and the run goes on, and these settings are what stand. It can't see *which*
+The check fails closed: when the API doesn't answer (a rate limit, no network, or a token that may not read
+environments) the job fails with an error instead of signing unchecked; run it again. It can't see *which*
 branches and tags are selected either, so look at that list here after any change. `packaging/tests/release.sh`
 runs the script against canned answers and checks that every job with `id-token: write` names `release`.
 
