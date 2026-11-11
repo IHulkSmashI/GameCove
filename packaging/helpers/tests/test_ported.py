@@ -597,6 +597,24 @@ def test_undo_never_deletes_a_backup_it_could_not_put_back(tmp_path, monkeypatch
     assert optiscaler.owner(str(g))["owner"] is None                                              # nothing of ours left
 
 
+def test_native_after_saving_optiscalers_own_menu_leaves_nothing_behind(tmp_path, monkeypatch):
+    """Review M: saving in OptiScaler's own menu rewrites OptiScaler.ini; undo kept it as "changed", and the folder
+    then read as another tool's OptiScaler, so the game was locked out of ours after Native."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = _game_with_own_files(tmp_path)
+    before = _snapshot(g)
+    assert optiscaler.patch(home, str(g), "0.9.4", {"Upscalers_Dx12Upscaler": "xess"})["ok"]
+    with open(g / "OptiScaler.ini", "a") as f:                  # the menu's Save, in the game
+        f.write("\n[Menu]\nScale=1.5\n")
+    r = optiscaler.unpatch(str(g), home)
+    assert r["ok"] and r["kept"] == [] and _snapshot(g) == before
+    assert optiscaler.owner(str(g))["owner"] is None
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]    # and ours goes in again
+
+
 def test_optiscaler_never_touches_another_tools_install(tmp_path, monkeypatch):
     from gamecove_upscale import optiscaler
     home = str(tmp_path)
@@ -1269,7 +1287,8 @@ def test_uninstall_restores_igdext_in_prefixes_and_protons(tmp_path):
 
 def test_optiscaler_undo_keeps_files_changed_since(tmp_path, monkeypatch):
     """review S2-3: undo removes only what still matches what GameCove put there, and never puts a stale backup
-    over a file a game update wrote; the user's own OptiScaler.ini edits stay."""
+    over a file a game update wrote; the user's own OptiScaler.ini edits are kept as a copy outside the game (a
+    changed OptiScaler.ini left in the game locked it out of ours after Native)."""
     from gamecove_upscale import optiscaler
     monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
     home = str(tmp_path)
@@ -1286,8 +1305,9 @@ def test_optiscaler_undo_keeps_files_changed_since(tmp_path, monkeypatch):
     r = optiscaler.unpatch(str(g), home)
     assert r["ok"] and r["removed"]
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess-2.0", "the update's file is never deleted or overwritten"
-    assert "; mine" in (g / "OptiScaler.ini").read_text(), "the user's edits stay"
-    assert sorted(r["kept"]) == ["OptiScaler.ini", "libxess.dll"], "and both are reported"
+    assert not (g / "OptiScaler.ini").exists() and "; mine" in open(r["saved"][0]).read(), "the user's edits are kept, outside the game"
+    assert r["saved"][0].startswith(os.path.join(home, optiscaler.KEPT_CONFIGS))
+    assert sorted(r["kept"]) == ["libxess.dll"], "the game's newer file is reported"
     assert not (g / "dxgi.dll").exists() and not (g / "D3D12_Optiscaler").exists(), "unchanged files of ours go"
 
 
@@ -1325,4 +1345,4 @@ def test_optiscaler_undo_of_an_older_manifest_checks_the_package(tmp_path, monke
     r = optiscaler.unpatch(str(g), home)
     assert not (g / "dxgi.dll").exists(), "matches the package's OptiScaler.dll: removed"
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess-2.0" and "libxess.dll" in r["kept"]
-    assert (g / "OptiScaler.ini").exists() and "OptiScaler.ini" in r["kept"], "can't tell: kept"
+    assert not (g / "OptiScaler.ini").exists() and "OptiScaler.ini" not in r["kept"], "our own config: always ours to take out"

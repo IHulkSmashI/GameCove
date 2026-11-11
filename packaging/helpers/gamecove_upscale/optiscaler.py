@@ -57,6 +57,10 @@ STATE = ".gamecove-optiscaler"
 # logs and caches OptiScaler, fakenvapi and OptiPatcher create in the game folder at run time (not in the manifest)
 RUNTIME_FILES = ("OptiScaler.log", "OptiScaler.log.*", "OptiScaler*.log", "fakenvapi.log", "OptiPatcher.log",
                  "dlssg_to_fsr3.log", "nvngx.log")
+# files GameCove writes that OptiScaler (its in-game menu's Save) and fakenvapi rewrite while the game runs: always
+# GameCove's to take out on undo, whatever their bytes are now. Kept, OptiScaler.ini made the folder read as "another
+# tool's OptiScaler" and locked the game out of ours after Native (review M).
+OWN_CONFIGS = ("OptiScaler.ini", "fakenvapi.ini", "OptiScaler/fakenvapi.ini")
 PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "winhttp.dll", "wininet.dll")
 FSR4_XMX_DIR = "fsr4-xmx"
 FSR4_XMX_FILES = ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll")   # what the user puts in ~/fsr4-xmx
@@ -915,7 +919,7 @@ def unpatch(folder: str | None, home: str | None = None) -> dict:
         if not folder or not os.path.isdir(os.path.join(folder, STATE)):
             return {"ok": True, "removed": False, "kept": []}
         m = {}                            # stopped before the first manifest was in place: only backups to look at
-    errors, kept = [], []
+    errors, kept, saved = [], [], []
     hashes = m.get("sha256") or {}
     pkg = package_dir(home, m.get("version", "")) if home and m.get("version") else None
 
@@ -931,9 +935,13 @@ def unpatch(folder: str | None, home: str | None = None) -> dict:
             if not os.path.isfile(p):
                 continue
             want = hashes.get(rel) or source_sha(rel)
-            if not want or downloads.sha256_of(p) != want:
+            mine = rel in OWN_CONFIGS and rel not in m.get("backed", [])
+            changed = not want or downloads.sha256_of(p) != want
+            if changed and not mine:
                 kept.append(rel)          # changed since GameCove put it there (or can't tell): not ours to delete
                 continue
+            if changed and home:
+                saved.append(_keep_edited(home, folder, rel))     # the player's own tuning: a copy, out of the game
             os.remove(p)
         except OSError as e:
             errors.append(f"{rel}: {e}")
@@ -994,7 +1002,21 @@ def unpatch(folder: str | None, home: str | None = None) -> dict:
             pass
     if not errors:
         _drop_state(folder)
-    return {"ok": not errors, "removed": True, "kept": kept, "error": "; ".join(errors) or None}
+    return {"ok": not errors, "removed": True, "kept": kept, "saved": saved, "error": "; ".join(errors) or None}
+
+
+KEPT_CONFIGS = ".local/share/gamecove/optiscaler-settings"
+
+
+def _keep_edited(home: str, folder: str, rel: str) -> str:
+    """A copy of a config the player changed in OptiScaler's own menu, in GameCove's data folder (named after the
+    game folder), before undo takes it out of the game."""
+    tag = re.sub(r"[^A-Za-z0-9._-]+", "_", folder.strip(os.sep))[-120:]
+    dest = os.path.join(home, KEPT_CONFIGS, tag, rel)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    shutil.copyfile(os.path.join(folder, rel), dest)
+    userexec.chown_tree(os.path.join(home, KEPT_CONFIGS), home)
+    return dest
 
 
 def _drop_state(folder: str) -> None:
