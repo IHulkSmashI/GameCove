@@ -29,7 +29,7 @@ const ACTIONS := [
 		"help": "Opens Steam's on-screen keyboard over the game, so you can type in it.", "strip": true, "button": true},
 	{"id": "steam_menu", "title": "Steam menu", "short": "Steam", "icon": "steam", "kind": "run", "game": "front",
 		"help": "Opens Steam's own quick access menu over the game: friends, notifications, Steam's settings.", "strip": true, "button": true},
-	{"id": "screenshot", "title": "Screenshot", "short": "Screenshot", "icon": "camera", "kind": "run", "control": "system.screenshot",
+	{"id": "screenshot", "title": "Screenshot", "short": "Capture", "icon": "camera", "kind": "run", "control": "system.screenshot",
 		"help": "Saves a picture of the game to Pictures/Screenshots.", "strip": true, "button": true},
 	{"id": "record", "title": "Record", "short": "Record", "icon": "record", "kind": "toggle",
 		"help": "Starts recording the screen, or stops and saves the clip.", "strip": true, "button": true},

@@ -14,6 +14,7 @@ const ArtLink := preload("res://scripts/ui/discover/art_link.gd")
 const Root := preload("res://scripts/ui/discover/root.gd")
 const DiscoverScreen := preload("res://scripts/ui/discover_screen.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const Shelf := preload("res://scripts/ui/shelf.gd")
 
 
 class FakeArt extends RefCounted:
@@ -624,4 +625,22 @@ func test_every_theme_builds() -> void:
 		ok(r.page != null, "page in " + id)
 		r.close_page()
 	ThemeLib.use("cove")
+	_cleanup()
+
+
+## The first tile's focus ring and glow (Shelf.PAD of room) sat under the page scroller's left edge
+## on Discover (the Free to keep picture showed the ring cut): the scroller starts PAD before the
+## tiles, and the rows start at its edge, so the room is inside it.
+func test_shelves_keep_room_for_the_first_tiles_focus_ring() -> void:
+	var d := _discover()
+	d.refresh(true)
+	var r := _root(d)
+	var home: Control = r.sections["home"]
+	var bleed := home.find_child("ShelfBleed", true, false) as Control
+	ok(bleed != null, "the shelves' scroller sits in a holder that lets it start before the page margin")
+	if bleed != null:
+		var mask := bleed.get_child(0) as Control
+		eq(mask.offset_left, -Shelf.PAD.x, "the scroller starts a shelf's padding before the tiles")
+		var scroll := home._scroll as ScrollContainer
+		eq((scroll.get_child(0) as Control).get_theme_constant("margin_left"), 0, "and its rows start at its own edge")
 	_cleanup()

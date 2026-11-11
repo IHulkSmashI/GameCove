@@ -13,6 +13,7 @@ extends SceneTree
 ##   SHOOT_SCRIPT=shoot_fixes.gd tools/screenshots/shoot.sh /tmp/shots 1920x1200 [only,these]
 ##   SHOOT_THEME=light renders the light theme (default: cove).
 
+const ShotVersion := preload("shot_version.gd")
 const LifeTests := preload("res://tests/test_fix_lifecycle.gd")
 const FixesSvc := preload("res://scripts/device/fixes.gd")
 const SHOTS := ["fixes_claw", "fixes_claw_details", "fixes_claw_clash", "fixes_claw_dialog", "fixes_ally", "fixes_deck"]
@@ -87,7 +88,7 @@ func _run() -> void:
 		prefs.theme = th
 		prefs.match_art = th != "light"
 		main.apply_theme()
-	main.hint_status.text = "● GameCove 0.4"
+	main.hint_status.text = "● GameCove %s" % ShotVersion.short()
 	await frames(4)
 
 	if want("fixes_claw") or want("fixes_claw_details"):

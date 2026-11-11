@@ -773,7 +773,7 @@ func _status() -> void:
 	main.top_bar.set_status("MSI Claw 8 EX AI+", {"percent": 72, "status": "Discharging", "watts": 9.4}, "2:05 PM", {"connected": true, "strength": 0.8})
 	main.top_bar.set_telemetry({"tdp_w": 17.0, "profile": "balanced", "temp_c": 58.0})
 	main.home.set_battery_left("~2 h 45 min")
-	main.hint_status.text = "● GameCove 0.4   MSI Claw 8 EX AI+"
+	main.hint_status.text = "● GameCove %s   MSI Claw 8 EX AI+" % ShotVersion.short()
 	if _home_ach == null:
 		_home_ach = load("res://tests/test_ui_games.gd").FakeAchievements.new()
 		_home_ach.data = _ach_data()
@@ -785,6 +785,7 @@ func _status() -> void:
 
 # ------------------------------------------------------------ games (s-games)
 
+const ShotVersion := preload("shot_version.gd")
 const Layout := preload("../layout/recorder.gd")
 const GAME_SHOTS := ["games_library", "games_home", "games_page", "games_page_achievements", "games_page_downloading",
 	"games_manage", "games_install", "games_launch_options", "games_compat", "games_downloads", "games_downloads_empty",

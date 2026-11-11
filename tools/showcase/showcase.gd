@@ -1028,6 +1028,11 @@ func _quick() -> void:
 		qm.exit_game_requested.connect(_noop)
 	main.show_screen("home")
 	await frames(3)
+	# The hero behind the menu is the game being played, not wherever the shots before left it.
+	var played = main.home.tile_for(str(g.get("key", "")))
+	if played != null:
+		played.grab_focus()
+		await frames(6)
 	main.home.play_button.grab_focus()
 	await frames(3)
 	main.playing = g
