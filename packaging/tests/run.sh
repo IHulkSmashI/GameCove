@@ -776,6 +776,8 @@ lacks "$T/curl.log" "x86_64.raw" "no sysext on Bazzite"
 contains "$GI/release.env" "^TAG=v0.2.0$" "release tag"
 contains "$GI/release.env" "^OS=bazzite$" "release os"
 contains "$GI/release.env" "^PACKAGE=$GI/packages/gamecove-0.2.0-1.fc43.x86_64.rpm$" "release package"
+want_sha="$(sha256sum "$GI/packages/gamecove-0.2.0-1.fc43.x86_64.rpm" | cut -d ' ' -f 1)"
+contains "$GI/release.env" "^PACKAGE_SHA256=$want_sha$" "release package's sha256, for the root step to check again"
 contains "$T/curl.log" "^https://api.example.test/repos/IHulkSmashI/GameCove/releases?per_page=100$" "asks the release list"
 lacks "$T/curl.log" "/releases/latest" "never asks releases/latest (it answers with a data release)"
 lacks "$T/curl.log" "9.9.9\|not-an-asset\|index.json" "nothing of the data release is downloaded"
@@ -792,6 +794,7 @@ if [ -f "$GI/packages/gamecove-0.2.0-x86_64.raw" ] && [ ! -e "$GI/packages/gamec
 contains "$GI/release.env" "^OS=steamos$" "steamos release env"
 expect_code 0 "bootstrap elsewhere (app only)" gg "$R_ARCH"
 contains "$GI/release.env" "^PACKAGE=$" "no package on other systems"
+contains "$GI/release.env" "^PACKAGE_SHA256=$" "and no sha256"
 expect_code 0 "bootstrap with a tag" gg "$R_BAZ" GAMECOVE_TAG=v0.2.0
 contains "$T/curl.log" "/releases/tags/v0.2.0$" "tag API"
 # final review, blocker 2: v0.1.0 is a pre-release while a data release is GitHub's "latest": the app release is

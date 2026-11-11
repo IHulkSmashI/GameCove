@@ -39,6 +39,7 @@ static func detect(paths: RefCounted, path_env := "") -> Dictionary:
 		"supported": method != "none",
 		"release": release,
 		"package": pkg,
+		"package_sha256": str(release.get("package_sha256", "")),
 		"installed": live,
 		"staged": staged,
 		"state": state,
@@ -70,11 +71,11 @@ static func read_fix_choices(path: String) -> Dictionary:
 	return out
 
 
-## release.env from get-gamecove.sh -> {"tag", "version", "os", "package", "app"}.
+## release.env from get-gamecove.sh -> {"tag", "version", "os", "package", "package_sha256", "app"}.
 static func read_release(path: String) -> Dictionary:
 	var kv := read_kv(path)
 	return {"tag": kv.get("TAG", ""), "version": kv.get("VERSION", ""), "os": kv.get("OS", ""),
-		"package": kv.get("PACKAGE", ""), "app": kv.get("APP", "")}
+		"package": kv.get("PACKAGE", ""), "package_sha256": kv.get("PACKAGE_SHA256", ""), "app": kv.get("APP", "")}
 
 
 static func read_state(path: String) -> Dictionary:

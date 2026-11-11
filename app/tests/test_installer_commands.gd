@@ -25,6 +25,46 @@ func test_rpm_ostree_commands() -> void:
 	eq(C.rpm_update("/dl/n.rpm"), ["pkexec", "rpm-ostree", "uninstall", "gamecove", "--install", "/dl/n.rpm"])
 
 
+func test_the_root_step_checks_the_package_again_on_its_own_copy() -> void:
+	var rpm := C.rpm_install("/dl/g.rpm", true, "abc")
+	eq([rpm[0], rpm[1], rpm[2], rpm[4], rpm[5], rpm[6]], ["pkexec", "sh", "-c", "sh", "/dl/g.rpm", "abc"], "the path and the hash are arguments")
+	ok(rpm[3].contains("sha256sum -c -") and rpm[3].contains("rpm-ostree install --idempotent --apply-live \"$1\""), "it checks, then installs")
+	ok(rpm[3].find("sha256sum") < rpm[3].find("rpm-ostree"), "the check comes first")
+	ok(rpm[3].contains("set -- \"$d/gamecove.rpm\""), "and installs the copy it checked, not the original")
+	ok(C.rpm_update("/dl/n.rpm", "abc")[3].contains("sha256sum -c -"), "an update too")
+	ok(C.sysext_install("/dl/g.raw", "abc")[3].contains("sha256sum -c -"), "and the sysext")
+	eq(C.rpm_install("/dl/g.rpm"), C.rpm_install("/dl/g.rpm", true, ""), "no hash (an older release.env): as before")
+
+
+## Runs the real script text on a temp copy: a matching package is used from a private copy, a changed one is refused.
+func test_a_changed_package_is_refused_before_anything_runs() -> void:
+	var dir := ProjectSettings.globalize_path("user://test_checked_pkg")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var pkg := dir.path_join("g.rpm")
+	var f := FileAccess.open(pkg, FileAccess.WRITE)
+	f.store_string("the package")
+	f.close()
+	var sha := FileAccess.get_sha256(pkg)
+	# the script text goes through a file: `sh file args` is the same program as `sh -c text sh args`, and this way
+	# nothing between the test and sh can touch the $1 and $d in it
+	var script_file := dir.path_join("check.sh")
+	f = FileAccess.open(script_file, FileAccess.WRITE)
+	f.store_string(C._checked("set -e; cat \"$1\"; echo; echo ran", "gamecove.rpm"))
+	f.close()
+	var out := []
+	eq(OS.execute("sh", [script_file, pkg, sha], out, true), 0, "the right hash goes on: " + str(out))
+	ok(str(out[0]).contains("the package") and str(out[0]).contains("ran"), "and works on the copy")
+	out.clear()
+	f = FileAccess.open(pkg, FileAccess.WRITE)
+	f.store_string("swapped")
+	f.close()
+	ok(OS.execute("sh", [script_file, pkg, sha], out) != 0, "a package changed since it was checked is refused")
+	ok(not str(out[0]).contains("ran"), "and nothing after the check ran")
+	DirAccess.remove_absolute(pkg)
+	DirAccess.remove_absolute(script_file)
+	DirAccess.remove_absolute(dir)
+
+
 func test_sysext_commands() -> void:
 	var c := C.sysext_install("/dl/g.raw")
 	eq(c.slice(0, 3), ["pkexec", "sh", "-c"])
