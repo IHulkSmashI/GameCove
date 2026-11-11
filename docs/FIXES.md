@@ -171,9 +171,10 @@ itself. Undo on the fix lifts that again.
 
 ## The nightly audit
 
-`.github/workflows/fixes.yml` runs `tools/fixes/audit.py` every night. For every fix it fetches
-the `watch` entries and compares each with what it saw the night before (a signed snapshot kept on
-the "fixes" release).
+The data repo's workflow ([GameCove-data](https://github.com/IHulkSmashI/GameCove-data),
+`.github/workflows/fixes.yml`) runs `tools/fixes/audit.py` every night, from the GameCove commit its
+`gamecove-source.env` pins. For every fix it fetches the `watch` entries and compares each with what it
+saw the night before (a signed snapshot kept on the "fixes" release).
 
 | Watch | What is compared |
 | --- | --- |
@@ -201,21 +202,23 @@ InputPlumber, Handheld Daemon, gamescope-session and linux-firmware.
 It never writes or changes a rule. Fetched pages are data: nothing in them is run or copied into
 rule fields, and what goes into an issue is a short, escaped summary.
 
-**What it leaves to a person.** Everything else. When a watch changed, the workflow opens or
-updates **one issue per fix** (label `fix-audit`) saying what changed, with links, and one summary
+**What it leaves to a person.** Everything else. When a watch changed, the audit writes it into
+`issues.json` (signed, on the same release), and this repo's `.github/workflows/fix-audit.yml` checks
+that signature and opens or updates **one issue per fix** here (label `fix-audit`) saying what changed, with links, and one summary
 issue per night with changes. A maintainer reads the change and, when it means the problem is
 fixed upstream, adds the rule (`{"kernel": ">=..."}`, `{"os": ..., "version": ...}`) or withdraws
 the fix, and sets `audited`. The next nightly release carries it to every handheld.
 
-A weekly job checks that every `https://` source and watch link still answers and reports dead
-ones in one issue. `tools/fixes/audit.py --fixtures <dir>` runs the whole audit from recorded
+A weekly job (`fix-audit.yml`) checks that every `https://` source and watch link still answers and
+reports dead ones in one issue. `tools/fixes/audit.py --fixtures <dir>` runs the whole audit from recorded
 answers (the tests and a dry run use it).
 
 ## The "fixes" data release
 
 The audit's output, `fixes.json`, is the bundled definitions plus what the audit recorded, signed
-with cosign keyless by the workflow on `main` and published on the rolling `fixes` release (never
-marked as GameCove's latest release). Like the firmware and upscaler indexes, two jobs: one
+with cosign keyless by GameCove-data's `fixes.yml` on `main` and published on that repo's rolling
+`fixes` release (`app/scripts/system/data_repo.gd` names the repo and the signer; a fix definition
+reaches it only once `gamecove-source.env` there is bumped to a GameCove commit that has it). Like the firmware and upscaler indexes, two jobs: one
 fetches with a read-only token and no signing identity, the other only checks the artifact, signs
 it and uploads it, in the `nightly` environment.
 

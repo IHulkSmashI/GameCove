@@ -1103,8 +1103,11 @@ contains "$T/out" "issue create --title Fix audit: onexfly-touch --label fix-aud
 contains "$T/out" "issue create --title Fix audit summary --label fix-audit" "and a summary"
 python3 -I "$REPO/tools/fixes/file_issues.py" "$T/audit-d1/issues.json" --dry-run >"$T/out" 2>&1 || true
 contains "$T/out" "nothing to report" "a night without changes files nothing"
-contains "$REPO/.github/workflows/fixes.yml" "environment: nightly" "fixes.yml signs in the nightly environment"
-contains "$REPO/.github/workflows/fixes.yml" "release create fixes --latest=false --prerelease" "the fixes release is never the latest release"
+# the fixes release is built and signed in IHulkSmashI/GameCove-data (its tests/check_workflows.py); here only the issues
+[ ! -e "$REPO/.github/workflows/fixes.yml" ] && ok || bad "fixes.yml publishes data: it belongs in IHulkSmashI/GameCove-data"
+contains "$REPO/.github/workflows/fix-audit.yml" "cosign verify-blob --bundle dist/issues.json.sigstore.json" "fix-audit.yml files issues only from a verified issues.json"
+contains "$REPO/app/scripts/device/fix_data.gd" "const URL := DataRepo.FIXES_URL" "fix_data.gd downloads from the data repo"
+contains "$REPO/app/scripts/device/fix_data.gd" "const SIGNER_IDENTITY := DataRepo.FIXES_SIGNER" "and pins its fixes.yml"
 # ------------------- traits, fix / quirk / matrix selectors (tools/traits/traits.py)
 if python3 -I "$REPO/tools/traits/traits.py" check >"$T/out" 2>&1; then ok; else bad "traits: $(cat "$T/out")"; fi
 python3 -I "$REPO/tools/traits/traits.py" trait controller:asus-ally-x >"$T/out" 2>&1

@@ -8,25 +8,23 @@ extends RefCounted
 ## runs as root: scripts come with GameCove itself, and who a fix is offered to (its selectors),
 ## its kind and its password rule always come from the built-in definition.
 ##
-## It is used only when cosign proved, on this device, that .github/workflows/fixes.yml signed it
-## on main (no cosign, a bad signature, an unknown schema, or a file older than the one already
+## It is used only when cosign proved, on this device, that the data repo's .github/workflows/fixes.yml
+## signed it on main (no cosign, a bad signature, an unknown schema, or a file older than the one already
 ## held: the built-in definitions stay in charge). Pure static functions; fixes.gd runs the
 ## commands (fetch_steps) through its runner.
 
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 
 const BUNDLED := "res://data/fixes.json"
-## The repository whose rolling "fixes" release this reads, and whose .github/workflows/fixes.yml must
-## have signed it. The one value to change when the data releases move (docs/RELEASING.md, "Moving the
-## data releases"; or data_repo.gd once the data repository lands).
-const RELEASES_REPO := "IHulkSmashI/GameCove"
-const URL := "https://github.com/" + RELEASES_REPO + "/releases/download/fixes/fixes.json"
+const DataRepo := preload("res://scripts/system/data_repo.gd")
+## The rolling "fixes" release of the data repo (data_repo.gd: the one place the app names it).
+const URL := DataRepo.FIXES_URL
 ## The schema this build understands. A release with another one is ignored whole.
 const SCHEMA := 1
 const MAX_BYTES := 2 * 1024 * 1024
 const CHECK_EVERY_S := 24 * 3600
-const SIGNER_IDENTITY := "(?i)^https://github\\.com/" + RELEASES_REPO + "/\\.github/workflows/fixes\\.yml@refs/heads/main$"
-const OIDC_ISSUER := "https://token.actions.githubusercontent.com"
+const SIGNER_IDENTITY := DataRepo.FIXES_SIGNER
+const OIDC_ISSUER := DataRepo.OIDC_ISSUER
 const FILE := "fixes.json"
 const VERIFIED_SUFFIX := ".verified"
 ## What the release may change on a fix this build knows.

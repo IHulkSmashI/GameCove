@@ -61,9 +61,9 @@ Settings > Environments > **`nightly`**. It exists. What it must stay:
 - **No required reviewers** (it runs every night).
 - **Deployment branches and tags:** "Selected branches and tags", one rule: branch `main`.
 
-Jobs that use it: `publish` in `firmware.yml`, `publish` in `upscalers.yml` and `publish` in `fixes.yml` (the nightly
-fix audit, [FIXES.md](FIXES.md); its `issues` job also needs the repository's Actions to be allowed to write issues,
-which the job's own `issues: write` permission grants).
+Jobs that use it: `publish` in `firmware.yml` and `publish` in `upscalers.yml`. (The nightly fix audit and its
+signed `fixes` release run in IHulkSmashI/GameCove-data, `fixes.yml`, [FIXES.md](FIXES.md); here,
+`fix-audit.yml` only files its issues, with its job's own `issues: write`.)
 
 **Never delete or rename either one.** A job that names an environment GitHub doesn't know gets one created on
 the spot **without** protection rules, so the next tag run would sign without approval. The workflows guard
@@ -82,19 +82,6 @@ read environments) it prints a warning and the run goes on, and these settings a
 branches and tags are selected either, so look at that list here after any change. `packaging/tests/release.sh`
 runs the script against canned answers and checks that every job with `id-token: write` names one of the two
 environments.
-
-### Moving the data releases
-
-The "fixes" release can move to a data-only repository (IHulkSmashI/GameCove-data) without touching anything else:
-
-1. Copy `.github/workflows/fixes.yml` into that repository's `.github/workflows/` and set its `SOURCE_REPO` to
-   `IHulkSmashI/GameCove` (where `fixes/<id>/fix.json` lives). The release, its signing identity ("fixes.yml on that
-   repository's `main`") and the firmware index the audit reads follow `github.repository` by themselves.
-2. Give that repository a `nightly` environment as above. The audit issues still go to GameCove: add a token that
-   may write issues there as the secret `FIX_AUDIT_ISSUES_TOKEN`.
-3. In the app, set `RELEASES_REPO` in `app/scripts/device/fix_data.gd` (the URL and the pinned signer are built from
-   it), then delete `fixes.yml` here. Builds from before the move keep their bundled list and simply stop finding
-   a newer one.
 
 ### Branch protection for `main`
 

@@ -236,32 +236,31 @@ def test_weekly_link_check(tmp_path):
     assert dead == [] and issues["summary"] is None
 
 
-def test_workflow_matches_the_other_nightly_releases():
-    wf = open(os.path.join(REPO, ".github", "workflows", "fixes.yml"), encoding="utf-8").read()
-    fw = open(os.path.join(REPO, ".github", "workflows", "firmware.yml"), encoding="utf-8").read()
-    assert "\npermissions: {}\n" in wf, "no default token permissions"
-    assert "environment: nightly" in wf and "if: github.ref == 'refs/heads/main'" in wf
-    assert "--latest=false" in wf, "never GameCove's latest release"
-    assert "fixes\\.yml@refs/heads/main" in wf, "signs as the identity the app pins"
-    assert "label fix-audit" in wf or "--label fix-audit" in wf
-    assert "tools/fixes/check_dist.py" in wf, "the signing job re-checks the artifact"
+def test_issue_workflow_and_data_repo_pins():
+    """The signed fixes release lives in IHulkSmashI/GameCove-data (its own checks cover fixes.yml); here
+    fix-audit.yml only files issues, from an issues.json whose signature it checked, and the app pins the
+    data repo's fixes.yml through data_repo.gd."""
     import re
+    wfdir = os.path.join(REPO, ".github", "workflows")
+    assert not os.path.exists(os.path.join(wfdir, "fixes.yml")), "data releases are published by GameCove-data"
+    wf = open(os.path.join(wfdir, "fix-audit.yml"), encoding="utf-8").read()
+    assert "\npermissions: {}\n" in wf, "no default token permissions"
+    assert "gh release create" not in wf and "gh release upload" not in wf and "id-token" not in wf
+    assert "cosign verify-blob --bundle dist/issues.json.sigstore.json" in wf
+    assert "--certificate-identity-regexp \"$ident\"" in wf and "FIXES_SIGNER" in wf
     uses = re.findall(r"uses: (\S+)", wf)
     assert uses and all(re.fullmatch(r"[\w./-]+@[0-9a-f]{40}", u) for u in uses), "every action pinned to a commit"
-    assert set(uses) <= set(re.findall(r"uses: (\S+)", fw) + re.findall(r"uses: (\S+)", open(os.path.join(REPO, ".github", "workflows", "upscalers.yml")).read())), "the same pinned actions as the other nightly workflows"
-    # least privilege: only the publish job can sign and write releases, only the issues job can write issues
     jobs = re.split(r"\n  (?=[a-z-]+:\n)", wf.split("\njobs:\n", 1)[1])
-    perms = {}
-    for j in jobs:
-        name = j.strip().split(":", 1)[0]
-        perms[name] = set(re.findall(r"^      ([a-z-]+): (write)", j, re.M))
-    assert perms["audit"] == set() and perms["links"] == set()
-    assert perms["publish"] == {("contents", "write"), ("id-token", "write")}
-    assert perms["issues"] == {("issues", "write")}
+    perms = {j.strip().split(":", 1)[0]: set(re.findall(r"^      ([a-z-]+): (write)", j, re.M)) for j in jobs}
+    assert perms == {"nightly": set(), "links": set(), "issues": {("issues", "write")}}, perms
+    dr = open(os.path.join(REPO, "app", "scripts", "system", "data_repo.gd"), encoding="utf-8").read()
+    signer = re.search(r'^const FIXES_SIGNER := "(.*)"$', dr, re.M).group(1).replace("\\\\", "\\")
+    rx = re.compile(signer)
+    base = "https://github.com/IHulkSmashI/GameCove-data/.github/workflows/fixes.yml@refs/heads/"
+    assert rx.search(base + "main") and not rx.search(base + "dev") and not rx.search(base + "main2")
+    assert not rx.search("https://github.com/IHulkSmashI/GameCove/.github/workflows/fixes.yml@refs/heads/main")
+    assert 'const FIXES_URL := RELEASES + "fixes/fixes.json"' in dr
     app = open(os.path.join(REPO, "app", "scripts", "device", "fix_data.gd"), encoding="utf-8").read()
-    assert "workflows/fixes\\\\.yml@refs/heads/main" in app and "/releases/download/fixes/fixes.json" in app
-    # one place names the release repository, in the app and in the workflow (easy to move, docs/RELEASING.md)
-    assert len(re.findall(r'^const RELEASES_REPO := "([\w.-]+/[\w.-]+)"$', app, re.M)) == 1
-    assert app.count("IHulkSmashI/") == 1, "URL and signer are built from RELEASES_REPO"
-    assert "SOURCE_REPO: ${{ github.repository }}" in wf and wf.count("repository: ${{ env.SOURCE_REPO }}") == wf.count("actions/checkout@")
-    assert "IHulkSmashI" not in wf.split("\njobs:\n", 1)[1], "no job names a repository"
+    assert "const URL := DataRepo.FIXES_URL" in app and "const SIGNER_IDENTITY := DataRepo.FIXES_SIGNER" in app
+    assert "IHulkSmashI" not in app, "data_repo.gd is the one place the app names the repo"
+    assert audit.DATA_REPO == re.search(r'^const REPO := "(.*)"$', dr, re.M).group(1)

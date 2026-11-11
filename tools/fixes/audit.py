@@ -63,9 +63,9 @@ GLOBAL = os.path.join(HERE, "audit.json")
 STATE_SCHEMA = 1
 MAX_BODY = 4 * 1024 * 1024
 REPO_URL = "https://github.com/IHulkSmashI/GameCove"
-# Where the rolling data releases (firmware, fixes) are published. GAMECOVE_DATA_REPO moves them, with
-# app/scripts/device/fix_data.gd and the workflow's DATA_REPO (docs/RELEASING.md, "Moving the data releases").
-DATA_REPO = os.environ.get("GAMECOVE_DATA_REPO", "IHulkSmashI/GameCove")
+# Where the rolling data releases (firmware, fixes) are published: GameCove-data, as
+# app/scripts/system/data_repo.gd names it (packaging/helpers/tests/test_fixes_audit.py checks they agree).
+DATA_REPO = "IHulkSmashI/GameCove-data"
 FIRMWARE_URL = "https://github.com/%s/releases/download/firmware/firmware.json.gz" % DATA_REPO
 UA = "GameCove-fix-audit (+%s)" % REPO_URL
 # Which fields of an observation decide "it changed" (the rest is shown, not compared).

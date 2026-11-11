@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks the audit's output before it is signed (the publish job of .github/workflows/fixes.yml).
+"""Checks the audit's output before it is signed (the publish job of GameCove-data's .github/workflows/fixes.yml).
 
     python3 -I tools/fixes/check_dist.py dist
 
