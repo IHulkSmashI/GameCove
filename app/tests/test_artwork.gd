@@ -390,3 +390,24 @@ func test_a_damaged_art_index_doesnt_drop_the_other_picks() -> void:
 	ok(not Overrides.set_override(dir, "steam:4", "cover", {"path": c, "source": "user"}), "and a pick isn't saved over what can't be read")
 	eq(FileAccess.get_file_as_string(Overrides.index_path(dir) + ".bak"), "not json", "the copy is left for repair")
 	wipe(dir)
+
+
+## Review nit: a pick whose index could not be written was reported as done.
+func test_a_pick_that_cannot_be_saved_is_not_reported_as_done() -> void:
+	var dir := tmp("apply_fail")
+	var f := FileAccess.open(Overrides.index_path(dir), FileAccess.WRITE)
+	f.store_string("not json")
+	f.close()
+	f = FileAccess.open(Overrides.index_path(dir) + ".bak", FileAccess.WRITE)
+	f.store_string("not json")
+	f.close()
+	var s: Node = ArtService.new()
+	var got := []
+	var changed := []
+	s.art_changed.connect(func(k): changed.append(k))
+	s._apply_finish(dir, "steam:1", "cover", {"path": dir.path_join("a.png")}, [], func(good: bool, msg: String): got.append([good, msg]))
+	eq(got.size(), 1, "told once")
+	eq(got[0][0], false, "not ok")
+	eq(changed, [], "and nobody is told the art changed")
+	s.free()
+	wipe(dir)

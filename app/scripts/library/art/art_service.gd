@@ -227,7 +227,11 @@ func _apply_finish(dir: String, key: String, kind: String, rec: Dictionary, writ
 	var msg := "Artwork changed."
 	if not written.is_empty():
 		msg = "Artwork changed here and in Steam (Steam shows it after it restarts)."
-	Overrides.set_override(dir, key, kind, rec)
+	if not Overrides.set_override(dir, key, kind, rec):
+		# the index could not be written (a full disk, a damaged index it will not overwrite): the pick is not kept
+		if done.is_valid():
+			done.call(false, "Couldn't save that choice. Try again.")
+		return
 	art_changed.emit(key)
 	if done.is_valid():
 		done.call(true, msg)

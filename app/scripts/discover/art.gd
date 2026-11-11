@@ -212,14 +212,23 @@ static func parse_sgdb(body: PackedByteArray, field := "url", wide := false) -> 
 	var data = j.data.get("data", [])
 	if not data is Array or data.is_empty():
 		return ""
+	# SteamGridDB's answer is not trusted to have the right types: a null or a word where a number or an
+	# address should be skips that entry (float(null) and int("x") raise and stopped the whole lookup)
 	if wide and field == "url":
 		for it in data:
-			if it is Dictionary and it.has("url") and float(it.get("height", 0)) > 0.0 \
-					and float(it.get("width", 0)) / float(it["height"]) >= WORDMARK_RATIO:
+			if it is Dictionary and it.get("url") is String and _number(it.get("height")) > 0.0 \
+					and _number(it.get("width")) / _number(it.get("height")) >= WORDMARK_RATIO:
 				return str(it["url"])
-	if data[0] is Dictionary and data[0].has(field):
-		return str(int(data[0][field])) if field == "id" else str(data[0][field])
+	if data[0] is Dictionary:
+		var v: Variant = data[0].get(field)
+		if field == "id":
+			return str(int(v)) if v is int or v is float else ""
+		return v if v is String else ""
 	return ""
+
+
+static func _number(v: Variant) -> float:
+	return float(v) if v is int or v is float else 0.0
 
 
 ## Width / height from which a logo counts as a horizontal wordmark.
