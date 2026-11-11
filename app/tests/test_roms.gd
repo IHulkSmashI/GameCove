@@ -944,3 +944,32 @@ func test_every_rom_root() -> void:
 	ExecSafe.run("mv", PackedStringArray([home.path_join("SD-out"), home.path_join("run/media/deck/SD")]))
 	ok(LibraryScript.collect(home, "/nonexistent/gamedb.json.gz")["entries"].has(nes_key), "card back: its games are back")
 	Emu.removable = Emu.REMOVABLE
+
+
+func test_tilde_is_only_the_home_folder_at_the_start() -> void:
+	eq(Emu.tilde("~/ROMs", "/h/u"), "/h/u/ROMs", "leading ~/")
+	eq(Emu.tilde("~", "/h/u"), "/h/u", "just ~")
+	eq(Emu.tilde("/mnt/a~b/roms", "/h/u"), "/mnt/a~b/roms", "a ~ inside a name is left alone")
+
+
+func test_variables_in_a_launch_command_are_not_expanded_twice() -> void:
+	var v := EsdeLaunch._vars("%ROM%|%BASENAME%", "/r/%BASENAME%.zip", "x", "/r", "", {})
+	eq(v, "/r/%BASENAME%.zip|x", "a ROM called %BASENAME%.zip stays as it is")
+
+
+func test_the_scan_cache_key_includes_the_extension_list() -> void:
+	var a := {"id": "snes", "root": "/r/snes", "exts": [".sfc", ".smc"]}
+	var b := {"id": "snes", "root": "/r/snes", "exts": [".sfc", ".smc", ".fig"]}
+	ok(Roms._key(a, "/m") != Roms._key(b, "/m"), "a new format in ES-DE's list rescans")
+	eq(Roms._key(a, "/m"), Roms._key({"id": "snes", "root": "/r/snes", "exts": [".smc", ".sfc"]}, "/m"), "its order does not matter")
+
+
+func test_a_shortcut_through_a_symlink_merges_with_its_rom() -> void:
+	var root := ProjectSettings.globalize_path("user://test_merge_link")
+	DirAccess.make_dir_recursive_absolute(root + "/real/snes")
+	OS.execute("ln", ["-sfn", root + "/real", root + "/link"])
+	var rom := {"rom": root + "/real/snes/a.sfc", "rom_rel": "a.sfc", "art": {}, "last_played": 0, "key": "emu:rom:a"}
+	var sc := {"id": "7", "rom_path": root + "/link/snes/a.sfc", "art": {}, "last_played": 5}
+	var out := Emu.merge_shortcuts([rom], [sc])
+	eq(out.size(), 0, "one game, not two")
+	eq(rom["last_played"], 5, "its play time followed")

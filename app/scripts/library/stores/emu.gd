@@ -263,7 +263,7 @@ static func detect(home: String, path_env := "", flatpak_dirs: Array = FLATPAK_D
 	var fe_cmd: Array = out["frontend"].get("command", []) if out["frontend"] is Dictionary else []
 	out["es_path"] = str(fe_cmd[0]).get_base_dir() if fe_cmd.size() == 1 else ""
 	if esde_dir != "":
-		var rd := _esde_setting(esde_dir, "ROMDirectory").replace("~", home)
+		var rd := tilde(_esde_setting(esde_dir, "ROMDirectory"), home)
 		if rd != "" and DirAccess.dir_exists_absolute(rd):
 			out["roms_dir"] = rd
 	out["media_dir"] = media_dir(home, esde_dir, str(out["roms_dir"]), out["kind"])
@@ -303,7 +303,7 @@ static func detect(home: String, path_env := "", flatpak_dirs: Array = FLATPAK_D
 static func media_dir(home: String, esde_dir: String, roms_dir: String, kind: String) -> String:
 	var cands: Array = []
 	if esde_dir != "":
-		var setting := _esde_setting(esde_dir, "MediaDirectory").replace("~", home)
+		var setting := tilde(_esde_setting(esde_dir, "MediaDirectory"), home)
 		if setting != "":
 			cands.append(setting)
 		cands.append(esde_dir.path_join("downloaded_media"))
@@ -336,7 +336,7 @@ static func _retrodeck_roms(home: String) -> String:
 			p = str(paths.get("roms_path", paths.get("roms_folder", "")))
 	if p == "":
 		p = home.path_join("retrodeck/roms")
-	return p.replace("~", home)
+	return tilde(p, home)
 
 
 ## Each system folder under `roms_dir` that holds games, most first:
@@ -603,6 +603,24 @@ const REMOVABLE := ["/run/media/", "/media/", "/mnt/"]
 static var removable: Array = REMOVABLE
 
 
+## real_path() of a file's folder (kept in `dirs`) plus its name.
+static func _real_in(path: String, dirs: Dictionary) -> String:
+	var p := path.simplify_path()
+	var d := p.get_base_dir()
+	if not dirs.has(d):
+		dirs[d] = real_path(d)
+	return str(dirs[d]).path_join(p.get_file())
+
+
+## A leading ~ or ~/ is the home folder; a ~ anywhere else in a path is just a character in a name.
+static func tilde(p: String, home: String) -> String:
+	if p == "~":
+		return home
+	if p.begins_with("~/"):
+		return home.path_join(p.substr(2))
+	return p
+
+
 ## `p` with every symbolic link followed (at most 32 hops; a loop stops there).
 static func real_path(p: String) -> String:
 	var parts := Array(p.simplify_path().split("/", false))
@@ -639,14 +657,14 @@ static func rom_roots(home: String, setup: Dictionary) -> Array:
 	var cands: Array = []
 	var add := func(p: String, from: String) -> void:
 		if p.strip_edges() != "":
-			cands.append([p.strip_edges().replace("~", home) if p.begins_with("~") else p.strip_edges(), from])
+			cands.append([tilde(p.strip_edges(), home), from])
 	if str(setup.get("roms_dir", "")) != "":
 		add.call(str(setup["roms_dir"]), str(setup.get("name", "")))
 	for d in ESDE_DIRS:
 		var esde := _expand(d, home, "")
 		var rd := _esde_setting(esde, "ROMDirectory")
 		if rd != "" and not "%ESPATH%" in rd:
-			add.call(rd.replace("~", home), "ES-DE")
+			add.call(tilde(rd, home), "ES-DE")
 	var emu_settings := home.path_join(".config/EmuDeck/settings.sh")
 	var ep := _kv(emu_settings, "emulationPath")
 	if ep != "":
@@ -817,14 +835,15 @@ const UNKNOWN_SYSTEM := "ES-DE doesn't know a system called \"%s\", so nothing c
 ## its key (in "aliases", so favourites, collections and play time follow).
 static func merge_shortcuts(roms: Array, shortcut_entries: Array) -> Array[Dictionary]:
 	var by_path := {}
+	var dirs := {}   # folder -> its real path: thousands of ROMs share a few folders
 	for r in roms:
-		by_path[str(r["rom"]).simplify_path()] = r
+		by_path[_real_in(str(r["rom"]), dirs)] = r
 		var root_rel := str(r["rom_rel"])
 		if str(r["rom"]).ends_with("/" + root_rel.get_file() + "/" + root_rel.get_file()):
-			by_path[str(r["rom"]).get_base_dir().simplify_path()] = r   # a folder game launched by its inner file
+			by_path[real_path(str(r["rom"]).get_base_dir())] = r   # a folder game launched by its inner file
 	var out: Array[Dictionary] = []
 	for e in shortcut_entries:
-		var p := str(e.get("rom_path", "")).simplify_path()
+		var p := _real_in(str(e.get("rom_path", "")), dirs)   # real paths: a link into the ROM folder is the same game
 		var hit: Variant = null
 		var up := p
 		for i in 5:

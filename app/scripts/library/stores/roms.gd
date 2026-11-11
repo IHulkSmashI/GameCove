@@ -458,7 +458,10 @@ static func scan_all(systems: Array, media_root: String, now := -1) -> Dictionar
 
 
 static func _key(s: Dictionary, media_root: String) -> String:
-	return "%s|%s|%s|%s" % [s["id"], s["root"], str(s.get("gamelist", "")), media_root]
+	# the extension list is part of it: ES-DE's list changing (an update adds a format) must rescan the folder
+	var exts: Array = Array(s.get("exts", [])).duplicate()
+	exts.sort()
+	return "%s|%s|%s|%s|%s" % [s["id"], s["root"], str(s.get("gamelist", "")), media_root, ",".join(exts)]
 
 
 ## What scan_all would return, as one hash, when every system's folders are as
