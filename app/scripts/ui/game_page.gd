@@ -619,6 +619,11 @@ func _relink() -> void:
 			below.focus_neighbor_top = below.get_path_to(first_cell)
 
 
+## The cards were dealt into new columns: the whole chain again (achievement grid edges too).
+func relink_after_deal() -> void:
+	_relink()
+
+
 ## Scrolls so the whole card is on screen (above the bottom fade), gliding.
 func _reveal(card: Control) -> void:
 	if not is_inside_tree() or scroll == null:

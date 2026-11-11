@@ -411,6 +411,35 @@ func test_page_template() -> void:
 	p.free()
 
 
+## The column cards are dealt again once the page knows its width (two columns
+## become three): the D-pad links follow the cards to their new column.
+func test_page_columns_dealt_again_keep_the_links() -> void:
+	var p: Control = PageTemplate.new()
+	p.setup_page(Logic.g("steam", "1", "Hades", true, 0, _ttb(20.0)), "")
+	p.add_action("Play", "play", true, "Play")
+	var buttons: Array = []
+	for i in 3:
+		var body: VBoxContainer = p.add_card("Card %d" % i, "info", "", true, i)
+		var b := Button.new()
+		b.name = "B%d" % i
+		body.add_child(b)
+		buttons.append(b)
+	p.add_focusables(buttons)
+	p.columns.size = Vector2(800, 400)
+	p._layout_columns()
+	p.finish()
+	eq(p.columns.get_child_count(), 2, "narrow: two columns")
+	p.columns.size = Vector2(1600, 400)
+	p._layout_columns()
+	eq(p.columns.get_child_count(), 3, "wide: three")
+	for i in 2:
+		var nb: NodePath = buttons[i].focus_neighbor_bottom
+		ok(buttons[i].get_node_or_null(nb) == buttons[i + 1], "card %d: down still reaches card %d (%s)" % [i, i + 1, nb])
+	var up: NodePath = buttons[2].focus_neighbor_top
+	ok(buttons[2].get_node_or_null(up) == buttons[1], "and up comes back (%s)" % up)
+	p.free()
+
+
 func test_discover_hook() -> void:
 	var d: Control = DiscoverScreen.new()
 	d.setup({"prefs_path": ""})

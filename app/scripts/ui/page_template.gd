@@ -374,6 +374,8 @@ const COLUMNS_3_W := 1080.0
 signal columns_laid_out(count: int, inner_width: float)
 var columns: HBoxContainer
 var _column_cards: Array = []
+## finish() has linked the focus chain (cards dealt again after it relink it).
+var _linked := false
 
 
 ## A tinted content card with an icon heading; returns its body. `column`:
@@ -454,6 +456,15 @@ func _layout_columns() -> void:
 	for st in stacks:
 		for c in st.get_children():
 			c.size_flags_vertical = Control.SIZE_EXPAND_FILL if st.get_child_count() == 1 else Control.SIZE_FILL
+	# The cards moved: the D-pad links made before point at the old columns.
+	if _linked:
+		relink_after_deal()
+
+
+## The column cards were dealt again (the page got its real width, or the
+## window changed): links are made again. Pages with links of their own override it.
+func relink_after_deal() -> void:
+	finish()
 
 
 ## Tint the primary action with the art's colour (from the backdrop), and
@@ -474,6 +485,7 @@ func add_focusables(list: Array) -> void:
 ## Focus: left/right along the actions, down from any action into the cards,
 ## up and down through the cards' controls.
 func finish() -> void:
+	_linked = true
 	Kit.link_horizontal(actions)
 	var chain: Array = [actions[0]] if not actions.is_empty() else []
 	chain.append_array(focusables)
