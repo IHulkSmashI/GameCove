@@ -1125,3 +1125,115 @@ func _undo_setup(st: Node, old: Dictionary, theme0: String) -> void:
 	if flow() != null:
 		flow().finish()
 	await w.frames(3)
+
+
+# ---- the GameCove installer: Easy, Custom, and Remove with / without the settings -------------
+
+const InstScreen := preload("res://scripts/ui/installer/installer_screen.gd")
+const InstPlan := preload("res://scripts/installer/plan.gd")
+const InstService := preload("res://scripts/installer/installer_service.gd")
+const InstPaths := preload("res://scripts/installer/paths.gd")
+const InstFakes := preload("res://tests/fixtures/installer/fakes.gd")
+const InstFakeRunner := preload("res://tests/fixtures/system/fake_runner.gd")
+
+
+## The installer service with its file steps inside a temp folder; "remove
+## settings" (which deletes the app's own user:// folder) is only noted here.
+class SafeInstaller extends "res://scripts/installer/installer_service.gd":
+	var noted: Array = []
+	func _internal(id: String) -> Array:
+		if id == "remove_settings":
+			noted.append(id)
+			return [true, ""]
+		return super._internal(id)
+
+
+## The installer on screen (it is its own app: GameCove's screens are paused under it).
+func open_installer(t: Dictionary) -> Control:
+	var d: String = w.home.path_join(".cache/e2e-installer")
+	DirAccess.make_dir_recursive_absolute(d)
+	var r: RefCounted = InstFakeRunner.new()
+	r.handler = func(cmd: String): return {"code": 1, "out": ""} if cmd.begins_with("pgrep") else {"code": 0, "out": ""}
+	var dev: Object = InstFakes.claw()
+	var p: RefCounted = InstPlan.start(t, dev.profile, {"theme": "cove"})
+	var inst: Node = SafeInstaller.new()
+	inst.setup(r, InstPaths.for_home(d + "/home", d + "/root"), t, "/opt/gc/gamecove.x86_64")
+	var s: Control = InstScreen.create(InstFakes.services(dev, InstFakes.FakeSetup.new(), InstFakes.Recorder.new(), d + "/power.cfg"), t, p, inst)
+	main().process_mode = Node.PROCESS_MODE_DISABLED
+	w.tree.root.add_child(s)
+	await w.frames(4)
+	s.focus_first()
+	await w.frames(2)
+	return s
+
+
+func close_installer(s: Control) -> void:
+	if is_instance_valid(s):
+		s.queue_free()
+	main().process_mode = Node.PROCESS_MODE_INHERIT
+	await w.frames(3)
+	main().home.default_focus().grab_focus()
+
+
+## Next with the pad until the installer reaches `want` (or `limit` presses).
+func installer_until(s: Control, want: String, limit := 20) -> bool:
+	for i in limit:
+		if s.plan.step == want:
+			return true
+		if s.plan.step == "progress":
+			await until(func(): return s.plan.step != "progress", 10000)
+			continue
+		if not await press_on(s.next_button, 30):
+			return false
+		await w.frames(3)
+	return s.plan.step == want
+
+
+func test_installer_easy_and_custom_by_pad() -> void:
+	for mode in ["easy", "custom"]:
+		var s := await open_installer(InstFakes.target("bazzite"))
+		eq(s.plan.step, "welcome", "%s: the installer opens on Welcome" % mode)
+		var card := func(): return s.body.find_child("Card_mode_" + mode, true, false)
+		ok(card.call() != null, "%s: its card" % mode)
+		ok(await press_on(card, 20), "%s: A on it" % mode)
+		eq(s.plan.mode, mode, "%s picked" % mode)
+		var seen := [s.plan.step]
+		for i in 20:
+			if s.plan.step in ["summary", "done"]:
+				break
+			ok(focus() != null and s.is_ancestor_of(focus()), "%s %s: focus inside the installer" % [mode, s.plan.step])
+			if not await press_on(s.next_button, 30):
+				break
+			await w.frames(3)
+			seen.append(s.plan.step)
+		eq(s.plan.step, "summary", "%s: Next through every step to the summary (%s)" % [mode, seen])
+		if mode == "custom":
+			ok(seen.size() >= 6, "custom walks its steps (%s)" % [seen])
+		ok(await installer_until(s, "done", 6), "%s: Install runs to Done (%s)" % [mode, s.plan.step])
+		ok(not s.installer.results.has("failed"), "%s: every step worked (%s)" % [mode, s.installer.results])
+		await close_installer(s)
+	check("installer")
+
+
+func test_installer_remove_keeping_or_not_the_settings() -> void:
+	for keep in [true, false]:
+		var t := InstFakes.target("bazzite", {"installed": true, "maintenance": true, "state": {"version": "0.2.0", "method": "rpm-ostree", "fixes": []}})
+		var s := await open_installer(t)
+		eq(s.plan.step, "maintenance", "installed: the maintenance page")
+		var rm := func(): var r = s.body.find_child("maint_remove", true, false); return r.button if r != null and "button" in r else r
+		ok(await press_on(rm, 30), "A on Remove GameCove")
+		eq(s.plan.step, "uninstall", "asks how")
+		eq(s.next_button.text, "Remove GameCove", "the button says what it does")
+		var ks := func(): var r = s.body.find_child("keep_settings", true, false); return r.button if r != null and "button" in r else r
+		ok(ks.call() != null, "a Keep my settings switch")
+		if bool(s.plan.choices["keep_settings"]) != keep:
+			ok(await press_on(ks, 20), "A on Keep my settings")
+		eq(bool(s.plan.choices["keep_settings"]), keep, "keep settings: %s" % keep)
+		ok(await press_on(s.next_button, 20), "A on Remove GameCove")
+		ok(await until(func(): return s.plan.step == "done" or not s.installer.running, 10000), "removed")
+		var ids: Array = s.installer.tasks.map(func(x): return str(x.get("id", "")))
+		ok("remove_user_files" in ids, "GameCove's shortcuts and startup files go (%s)" % [ids])
+		eq("remove_settings" in ids, not keep, "settings removed only when not kept")
+		eq(s.installer.noted.has("remove_settings"), not keep, "and only then run")
+		await close_installer(s)
+	check("installer remove")
