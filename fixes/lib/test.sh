@@ -142,6 +142,22 @@ demo remove >/dev/null || fail "remove after the system changed the value"
 [ "$(cat "$T/root/sys/demo/value")" = by-the-os ] || fail "remove: the system's own value is left alone, not overwritten by our saved one"
 grep -q "kept /sys/demo/value" "$ST/changes.log" 2>/dev/null || [ ! -d "$ST" ] || fail "the kept value is logged"
 
+# review 4-L6: saved values belong to the handheld that read them; a rule that only a comment mentions is not
+# "the system already does it"
+demo install >/dev/null || fail "install for the device test"
+echo "some-other-handheld" >"$ST/device"
+echo "changed" >"$T/root/sys/demo/value"
+demo remove >/dev/null || fail "remove with another handheld's record"
+[ "$(cat "$T/root/sys/demo/value")" = changed ] || fail "another handheld's saved value is not written here"
+echo factory >"$T/root/sys/demo/value"
+mkdir -p "$T/root/etc/udev/rules.d"
+printf '# ATTR{x}=="y"\nACTION=="add"\n' >"$T/root/etc/udev/rules.d/90-other.rules"
+elsewhere() { (NAME=probe DEVICES="*" FILES=/etc/x; GAMECOVE_ROOT="$T/root"; . "$HERE/gcfix.sh"; gc_rule_elsewhere "$@"); }
+if elsewhere 'ATTR{x}=="y"'; then fail "a comment that mentions the rule is not the rule"; fi
+printf 'ACTION=="add", ATTR{x}=="y"\n' >"$T/root/etc/udev/rules.d/90-other.rules"
+elsewhere 'ATTR{x}=="y"' || fail "a real line with it is found"
+rm -f "$T/root/etc/udev/rules.d/90-other.rules"
+
 # ---- SteamOS: /etc and /var are per OS slot and only keep-listed /etc files survive an update (docs/SESSION.md)
 KEEP="$T/root/etc/atomic-update.conf.d/gamecove-fix-demo.conf"
 demo install >/dev/null || fail "install (not SteamOS)"

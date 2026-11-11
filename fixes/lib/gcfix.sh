@@ -175,7 +175,8 @@ gc_rule_elsewhere() {
 			head -n 1 "$_r" | grep -qF "# GameCove fix " && continue
 			_all=0
 			for _s in "$@"; do
-				grep -qF -- "$_s" "$_r" || { _all=1; break; }
+				# a line of the rule, not a comment that mentions it
+				grep -v '^[[:space:]]*#' "$_r" | grep -qF -- "$_s" || { _all=1; break; }
 			done
 			[ "$_all" -eq 0 ] && return 0
 		done
@@ -198,6 +199,9 @@ gc_all_values() {
 save_value() {
 	[ -f "$ROOT$1" ] || return 0
 	mkdir -p "$STATE"
+	# which handheld read it: a drive that boots several shares this record, and another one's values are not
+	# this one's to put back (restore_values checks)
+	[ -f "$STATE/device" ] || gc_device >"$STATE/device" 2>/dev/null || true
 	grep -q "^$1=" "$STATE/saved" 2>/dev/null && return 0
 	printf '%s=%s\n' "$1" "$(cat "$ROOT$1" 2>/dev/null)" >>"$STATE/saved"
 }
@@ -222,6 +226,11 @@ write_value() {
 # nothing to compare with and is restored as it always was.
 restore_values() {
 	[ -f "$STATE/saved" ] || return 0
+	_dev="$(cat "$STATE/device" 2>/dev/null || true)"
+	if [ -n "$_dev" ] && [ "$_dev" != "$(gc_device)" ]; then
+		gc_log "kept the values: they were read on $_dev, this is $(gc_device)"
+		return 0
+	fi
 	while IFS= read -r _line; do
 		_p="${_line%%=*}"
 		_v="${_line#*=}"
@@ -324,7 +333,7 @@ gc_remove() {
 	else
 		restore_values
 	fi
-	rm -f "$STATE/installed" "$STATE/saved" "$STATE/set"
+	rm -f "$STATE/installed" "$STATE/saved" "$STATE/set" "$STATE/device"
 	gc_log "remove"
 	rmdir "$STATE" 2>/dev/null || true
 	gc_say "removed"
