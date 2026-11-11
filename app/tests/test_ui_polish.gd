@@ -212,3 +212,41 @@ func test_featured_cards_fill_a_short_row() -> void:
 	eq(t.cover_path(), g["art"]["hero"], "the wide art once it's there")
 	eq(t._art_kind(), "hero", "loaded uncropped")
 	s.free()
+
+
+# ---- Light: dark ink on light chips and cards ------------------------------------------
+
+## Every text / ground pair the Light theme puts on a hero or a card reads at
+## AA: chips (each tone on its own opaque fill), and the achievements card's
+## small lines on its glass, whatever art is behind it.
+func test_light_inks_reach_aa() -> void:
+	ThemeLib.use("light")
+	var t: Dictionary = Themes.get_theme("light")
+	for tone in Themes.TONES_LIGHT:
+		var chip: Control = Badge.make({"kind": "x", "text": "Community reports: Gold", "tone": tone, "icon": "clock"}, "chip")
+		var sb := chip.get_theme_stylebox("panel") as StyleBoxFlat
+		eq(sb.bg_color.a, 1.0, "chip %s: opaque" % tone)
+		ok(sb.bg_color.get_luminance() > 0.8, "chip %s: light" % tone)
+		var ink: Color = chip.label.get_theme_color("font_color")
+		var c := Themes.contrast(ink, sb.bg_color)
+		ok(c >= 4.5, "chip %s: dark ink at %.2f" % [tone, c])
+		chip.free()
+	# The achievements card on the hero sits on art: its ground is opaque, so
+	# its small lines read the same over the darkest picture.
+	var pc: PanelContainer = load("res://scripts/ui/progress_card.gd").new()
+	pc._restyle()
+	var ground: Color = (pc.get_theme_stylebox("panel") as StyleBoxFlat).bg_color
+	eq(ground.a, 1.0, "the hero's achievements card is opaque in Light")
+	for l in [pc.rare_line, pc.battery_label, pc.count_label]:
+		var c := Themes.contrast((l as Label).get_theme_color("font_color"), ground)
+		ok(c >= 4.5, "achievements card: %s at %.2f" % [l.name, c])
+	for name in ["text", "text_2", "accent", "good", "warn", "bad", "info"]:
+		ok(Themes.contrast(t[name], ground) >= 4.5, "light: %s on the card is %.2f" % [name, Themes.contrast(t[name], ground)])
+	pc.free()
+	# Cards elsewhere stand on Light's own ground (never on art).
+	for k in ["surface", "surface_2", "glass", "glass_2"]:
+		var gr: Color = Themes.over(t[k], t["bg"])
+		for name in ["text", "text_2", "accent", "good", "warn", "bad", "info"]:
+			var c := Themes.contrast(t[name], gr)
+			ok(c >= 4.5, "light: %s on %s is %.2f" % [name, k, c])
+	ThemeLib.use("cove")
