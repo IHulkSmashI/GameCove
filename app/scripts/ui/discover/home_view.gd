@@ -180,12 +180,25 @@ func build() -> void:
 	# A 48 px alpha fade at the foot: the next row peeking in looks masked,
 	# not sliced off under the hint bar.
 	var foot: TextureRect = FadeMask.wrap(_scroll, 48.0)
+	# The page's margin is SIDE, but a shelf keeps PAD of room around its tiles for the focus
+	# ring and glow; a scroller starting at the margin cut the first tile's ring and glow on
+	# its left edge. This one starts PAD earlier (the tiles stay where they were), so the
+	# room is inside it.
+	var bleed := Control.new()
+	bleed.name = "ShelfBleed"
+	bleed.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bleed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bleed.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.remove_child(foot)
+	root.add_child(bleed)
+	bleed.add_child(foot)
+	foot.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	foot.offset_left = -Shelf.PAD.x
 	# A card under the shelves (the gg.deals note, the credits) that the foot
 	# would slice isn't drawn until it fits: its text never sits half in the fade.
 	foot.cut_fn = func(): return foot_items()
 	var pad := Kit.margin(0)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pad.add_theme_constant_override("margin_left", -int(Shelf.PAD.x))
 	_scroll.add_child(pad)
 	_rows = Kit.vbox(4)
 	_rows.name = "Rows"

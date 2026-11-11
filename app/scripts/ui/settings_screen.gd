@@ -220,7 +220,7 @@ func _build() -> void:
 	root.add_child(cols)
 	var list_scroll := ScrollContainer.new()
 	list_scroll.name = "CategoryScroll"
-	list_scroll.follow_focus = true
+	FocusScroll.attach(list_scroll)   # not follow_focus: it left the row above half cut at the top
 	list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	list_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	list_scroll.custom_minimum_size = Vector2(280, 0)
@@ -247,6 +247,14 @@ func _build() -> void:
 			var b := _category_button(id)
 			list.add_child(b)
 			cat_buttons[id] = b
+	# A little room under the last category, so the list can stop on a whole row at its top
+	# when the last one is focused (without it the list ends flush and the row above the top
+	# edge stays half cut).
+	var tail := Control.new()
+	tail.name = "Tail"
+	tail.custom_minimum_size = Vector2(0, 96)
+	tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	list.add_child(tail)
 
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"

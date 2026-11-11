@@ -241,6 +241,7 @@ func test_library_screen_filters() -> void:
 	l.set_query("wit")
 	eq(l.tiles().map(func(t): return t.game["title"]), ["Witcher 3"], "search")
 	eq(l.count_label.text, "1 of 3", "count shows the filter")
+	eq(l._d_title.text, "Witcher 3", "the strip under the grid names the game that is left, not the one it showed before")
 	l.set_query("zzz")
 	ok(l.find_child("EmptyFilter", true, false).text.contains("zzz"), "no-results line names the query")
 	l.free()

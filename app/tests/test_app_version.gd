@@ -60,3 +60,23 @@ func test_version_run_starts_no_services() -> void:
 	var helper := RunMode.helper()
 	RunMode.test_args = null
 	ok(helper, "a --version run is a helper run: no store manager, no network, no watchers")
+
+
+func test_screenshot_tools_print_the_real_version() -> void:
+	# The README's pictures all come from these scripts: not one may print a version of its own
+	# ("GameCove 0.4" sat in the Fixes pictures next to "GameCove 0.1" in the rest).
+	var dir := ProjectSettings.globalize_path("res://").path_join("../tools/screenshots")
+	var checked := 0
+	var uses := 0
+	for f in DirAccess.get_files_at(dir):
+		if not f.ends_with(".gd"):
+			continue
+		var src := FileAccess.get_file_as_string(dir.path_join(f))
+		checked += 1
+		uses += 1 if "ShotVersion.short()" in src else 0
+		for line in src.split("\n"):
+			if "hint_status.text" in line and "GameCove" in line and "GameCove 0" in line:
+				ok(false, "%s prints a version of its own (use ShotVersion.short()): %s" % [f, line.strip_edges()])
+	ok(checked > 5 and uses >= 4, "the screenshot scripts were found and use ShotVersion")
+	var short: String = load(dir.path_join("shot_version.gd")).short()
+	ok(AppVersion.spec_version(_spec()).begins_with(short), "ShotVersion.short() (%s) is the spec's version" % short)
