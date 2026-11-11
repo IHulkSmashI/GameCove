@@ -481,7 +481,13 @@ func test_catalog_covers_everything() -> void:
 	for card in cards:
 		ids.append_array(card[2] + card[3])
 	for id in all:
-		ok(id in ids, id + " has a place")
+		ok(id in ids or Catalog.expand(Catalog.OWN_PAGE, [id], {}).size() == 1, id + " has a place")
 	eq(cards[-1][0], "Other", "unknown ids go to Other")
-	var paddles: Array = cards.filter(func(cd): return cd[0] == "Back buttons")
-	eq(paddles[0][2], ["controller.paddle.LeftPaddle1", "controller.paddle.RightPaddle1"], "prefix ids expand")
+	var with_own := Catalog.cards_for(["power", "controller"], all + ["controller.paddles_as", "controller.hold.QuickAccess"])
+	var paddles: Array = with_own.filter(func(cd): return cd[0] == "Back buttons")
+	eq(paddles[0][2], ["controller.paddles_as"], "the back buttons' own rows are on the Button shortcuts page, not here")
+	var listed := []
+	for card in with_own:
+		listed.append_array(card[2] + card[3])
+	ok(not "controller.hold.QuickAccess" in listed and not "controller.paddle.LeftPaddle1" in listed, "nor in Other")
+	eq(Catalog.expand(["power.*"], ["power.tdp", "power.boost"], {}), ["power.tdp", "power.boost"], "prefix ids expand")

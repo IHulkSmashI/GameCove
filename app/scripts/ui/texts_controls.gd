@@ -130,7 +130,7 @@ const QUICK_TOGGLES := "Quick toggles"
 ## Settings categories in the order they're listed, in two groups.
 const CATEGORY_GROUPS := [
 	["HANDHELD", ["power", "display", "audio", "controller", "performance", "system", "profiles"]],
-	["GAMECOVE", ["appearance", "stores", "saves", "discover", "media", "device", "about"]],
+	["GAMECOVE", ["appearance", "quick_menu", "stores", "saves", "discover", "media", "device", "about"]],
 ]
 const CATEGORY_NAMES := {
 	"power": "Power", "display": "Display", "audio": "Sound", "controller": "Controller",
@@ -237,5 +237,5 @@ static func fixes_line(counts: Dictionary) -> String:
 
 ## Controller category: the link to the device's button map and test.
 const BUTTONS_CARD := "Buttons"
-const BUTTONS_ROW := "Back buttons and button test"
-const BUTTONS_ROW_HINT := "Map the back buttons, see this game's layout and test every button."
+const BUTTONS_ROW := "Button shortcuts"
+const BUTTONS_ROW_HINT := "What each button does when pressed and when held, Quick Access in games, a button test and this game's own layout."

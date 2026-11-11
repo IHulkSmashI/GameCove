@@ -320,12 +320,14 @@ func test_keyboard_for_codes() -> void:
 	k.open("")
 	eq(k.field.text, "Code", "placeholder")
 	k.type("a")
-	k.shift_button.button_pressed = true
+	k.shift_button.pressed.emit()
 	k.type("b")
-	eq(k.text, "aB", "shift types capitals")
+	k.type("c")
+	eq(k.text, "aBc", "Shift types one capital")
+	ok(k.paste_button.visible, "codes can be pasted")
 	for i in 60:
 		k.type("x")
-	eq(k.text.length(), 62, "codes can be longer than search")
+	eq(k.text.length(), 63, "codes can be longer than search")
 	ok(k.field.text.begins_with("…"), "long text shows its end")
 	var search: PanelContainer = Osk.new()
 	search.open("")

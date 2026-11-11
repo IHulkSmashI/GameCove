@@ -14,10 +14,15 @@ extends Control
 ## overlay, frame limit, TDP, Auto TDP, upscaler and frame generation, Reset
 ## this game, Record / Stop recording (the Recording service, when one is
 ## passed), how long you've played and Exit game (press twice).
+##
+## Above the rows, on every tab: the Shortcuts strip (scripts/ui/quick/
+## shortcut_strip.gd, when an action runner is passed), one press each for the
+## keyboard, a screenshot, recording, sending a key and so on.
 
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const Drawer := preload("res://scripts/ui/drawer.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
@@ -42,6 +47,7 @@ const AppMixer := preload("res://scripts/ui/controls/app_mixer.gd")
 const MediaCard := preload("res://scripts/ui/controls/media_card.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
 const TL := preload("res://scripts/ui/texts_library.gd")
+const ShortcutStrip := preload("res://scripts/ui/quick/shortcut_strip.gd")
 
 signal closed
 ## A result worth a toast: text, tone (good / bad).
@@ -61,9 +67,9 @@ const SECTION_ICONS := TC.TAB_ICONS
 const WIDTH := 580
 ## The sheet runs the full height: the scrim dims the top and hint bars, so
 ## the sheet's own battery pill and prompts are the only ones that read.
-const TOP_INSET := 14.0
+const TOP_INSET := Drawer.MARGIN
 ## How dark the full-screen scrim is (it covers the top bar and hint bar too).
-const SCRIM_ALPHA := 0.55
+const SCRIM_ALPHA := Drawer.SCRIM_ALPHA
 const SUPPORT_TEXT := {
 	"full": "Tested on hardware: the GameCove team runs it on this device.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
@@ -95,6 +101,10 @@ var fixes: Object
 var model: Object
 ## The Recording service (scripts/system/recording.gd), or null: no Record row.
 var recording: Object
+## The action runner (scripts/actions/runner.gd), or null: no Shortcuts strip.
+var actions: Object
+## The Shortcuts strip above the rows (scripts/ui/quick/shortcut_strip.gd).
+var strip: VBoxContainer
 
 var section := 0
 var game: Dictionary = {}
@@ -157,6 +167,7 @@ func setup(services: Dictionary) -> void:
 	fixes = services.get("fixes")
 	collections = services.get("collections")
 	recording = services.get("recording")
+	actions = services.get("actions")
 	if recording != null and recording.has_signal("changed"):
 		recording.changed.connect(_update_record_row)
 	if services.has("session"):
@@ -183,6 +194,8 @@ func use_controls(registry: Object, prof: Object = null) -> void:
 	model = Model.new()
 	model.setup(controls, profiles)
 	model.add_local(_autotune_control())
+	if actions != null:
+		actions.model = model
 
 
 func _build_frame() -> void:
@@ -271,6 +284,11 @@ func _build_frame() -> void:
 	tabs_line.add_child(tab_track)
 	tabs_line.add_child(Kit.glyph("RB"))
 	col.add_child(tabs_line)
+	if actions != null:
+		strip = ShortcutStrip.new()
+		strip.setup(actions, self)
+		strip.relinked.connect(_link_strip)
+		col.add_child(strip)
 	var rule := ColorRect.new()
 	rule.name = "Rule"
 	rule.custom_minimum_size = Vector2(0, 1)
@@ -332,21 +350,7 @@ func set_side(s: String) -> void:
 
 
 func _place_panel() -> void:
-	var m := 14.0
-	panel.anchor_top = 0.0
-	panel.anchor_bottom = 1.0
-	panel.offset_top = TOP_INSET
-	panel.offset_bottom = -m
-	if side == "left":
-		panel.anchor_left = 0.0
-		panel.anchor_right = 0.0
-		panel.offset_left = m
-		panel.offset_right = m + WIDTH
-	else:
-		panel.anchor_left = 1.0
-		panel.anchor_right = 1.0
-		panel.offset_left = -WIDTH - m
-		panel.offset_right = -m
+	Drawer.place(panel, WIDTH, side)
 
 
 # ------------------------------------------------------------ open / close
@@ -366,6 +370,8 @@ func open(for_game: Dictionary) -> void:
 	visible = true
 	_set_header(for_game)
 	_animate_in()
+	if strip != null:
+		strip.refresh()
 	if gamescope != null:
 		gamescope.set_overlay(true)
 	show_section(0, "", true)
@@ -375,6 +381,8 @@ func open(for_game: Dictionary) -> void:
 func close() -> void:
 	if not visible:
 		return
+	if strip != null:
+		strip.close_sheet()
 	visible = false
 	if gamescope != null:
 		gamescope.set_overlay(false)
@@ -411,12 +419,7 @@ func _set_header(g: Dictionary) -> void:
 
 func _style_head() -> void:
 	# Near-opaque glass: the hint bar and shelves mustn't ghost through the rows.
-	panel.remove_theme_stylebox_override("panel")
-	var base := panel.get_theme_stylebox("panel")
-	if base is StyleBoxFlat:
-		var sb := (base as StyleBoxFlat).duplicate() as StyleBoxFlat
-		sb.bg_color.a = maxf(sb.bg_color.a, 0.97)
-		panel.add_theme_stylebox_override("panel", sb)
+	panel.add_theme_stylebox_override("panel", Drawer.glass())
 	var lp := panel.find_child("LivePill", true, false) as PanelContainer
 	if lp != null:
 		lp.add_theme_stylebox_override("panel", ThemeLib.pill(ThemeLib.color("accent", 0.08), ThemeLib.color("accent", 0.35), 12, 5))
@@ -442,7 +445,7 @@ func _style_tabs() -> void:
 
 
 func _animate_in() -> void:
-	dim.color = Color(0, 0, 0, SCRIM_ALPHA) if ThemeLib.is_dark() else Color(0.08, 0.1, 0.14, 0.6)
+	dim.color = Drawer.scrim()
 	dim.modulate.a = 0.0
 	Motion.to(dim, "modulate:a", 1.0, Motion.FAST)
 	var dx := Motion.slide(40.0) * (1.0 if side == "right" else -1.0)
@@ -458,7 +461,7 @@ func _animate_in() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not visible:
+	if not visible or (strip != null and strip.sheet_open()):
 		return
 	if event.is_action_pressed("ui_cancel"):
 		close()
@@ -667,6 +670,21 @@ func _relink() -> void:
 	Kit.link_vertical(_focusables, tabs[section])
 	for t in tabs:
 		t.focus_neighbor_bottom = t.get_path_to(_focusables[0] if not _focusables.is_empty() else t)
+	_link_strip()
+
+
+## The Shortcuts strip sits between the tabs and the rows: Up from the first
+## row lands on it, Up again on the open tab.
+func _link_strip() -> void:
+	if strip == null or strip.entry() == null:
+		return
+	var first: Control = _focusables[0] if not _focusables.is_empty() else null
+	strip.link(tabs[section], first)
+	var into: Control = strip.entry()
+	if first != null:
+		first.focus_neighbor_top = first.get_path_to(into)
+	for t in tabs:
+		t.focus_neighbor_bottom = t.get_path_to(into)
 
 
 ## Where focus goes in the current tab: the setting called `keep` (after a
@@ -1327,6 +1345,11 @@ func _on_steam_pressed() -> void:
 	_steam_armed = false
 	_steam_button.text = Texts.STEAM_TITLE
 	_begin_switch("steam")
+
+
+## The Shortcuts strip's Power sheet, already confirmed: "steam" or "desktop".
+func switch_session(target: String) -> void:
+	_begin_switch("steam" if target == "steam" else "desktop")
 
 
 ## Hands the controller back (InterceptMode 0 on every device; gamecove-session-select does it

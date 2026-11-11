@@ -124,6 +124,16 @@ the library changes, not while a game runs.
   work: a change behind the game (Auto TDP moving the TDP, say) only marks the row out of
   date, and it reads the value when the menu shows it.
 
+- **The quick menu's Shortcuts strip** is built once (and again only when its list or the
+  theme changes) and kept while the menu is closed. Opening the menu only reads memory to
+  show, hide and tint its buttons (the Controls cache, Recording's state): no program and no
+  D-Bus call (`suite_shortcuts.gd` checks the fake system saw nothing). The sheets (Send a
+  key, Power, Force close) are made the first time one is needed.
+- **Button shortcuts** cost nothing while no button is held: their presses arrive on the
+  InputPlumber monitor GameCove already runs, and a hold is one one-shot Timer started on
+  the press and dropped on the release. The usual shortcuts go into a profile on the same
+  load as the layout, so a wake or a new pad costs no extra D-Bus call.
+
 `tests/e2e/suite_perf.gd` fails if the main loop runs more than 50 iterations or 70
 main-thread wake-ups a second behind a game, a Timer outside that list runs there, the
 quick menu takes over 250 ms at worst or over 100 ms for the median of 10 presses, the
@@ -145,6 +155,11 @@ button event to the menu's first frame), with `open()` instrumented step by step
 | building This game | 12 ms | 0.4 ms (shown as kept) |
 | first focus (rebuilt the hint bar under the scrim) | 4 ms | 0.5 ms |
 | waiting out the main loop's sleep behind the game | 0-33 ms | 0-33 ms |
+
+With the Shortcuts strip in the menu (2026-11-11, on a 2-core box shared with other jobs):
+press to first frame median 34 / 30 / 40 ms, worst 93 / 61 / 100 ms (Claw / Ally / Legion Go S
+setups; budgets 100 and 250); behind a game 29-30 main-loop iterations, 30-31 wake-ups and
+4-5 ms of CPU a second (budgets 50, 70 and 30).
 
 No process or D-Bus call runs when it opens: the controller batteries (UPower) are read on
 a worker after it shows, Now playing and per-app volume are on the Audio tab and read on

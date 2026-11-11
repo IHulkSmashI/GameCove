@@ -350,6 +350,40 @@ func test_rail_compact_with_many_steps() -> void:
 	_free(s)
 
 
+## Typing a code or a key in the installer and in first-run setup is the same
+## on-screen keyboard as everywhere: pinned by its foot, with Paste, and what
+## was typed goes back to whoever asked.
+func test_installer_and_setup_ask_with_the_keyboard() -> void:
+	var s := _screen(F.target("bazzite"))
+	var got: Array = []
+	s.ask_text("Sign-in code", "", func(t): got.append(t))
+	var k: PanelContainer = s.keyboard
+	ok(k.visible, "installer: the keyboard opens")
+	ok(k.paste_button.visible and k.keep_case, "installer: codes can be pasted, case kept")
+	eq(k.field.text, "Sign-in code", "installer: it says what it wants")
+	eq(k.anchor_bottom, 1.0, "installer: pinned to the foot of the screen")
+	eq(k.grow_vertical, Control.GROW_DIRECTION_BEGIN, "installer: growing upward")
+	ok(k.offset_right - k.offset_left >= 10 * k.KEY.x + 9 * k.GAP + 48, "installer: wide enough for its keys")
+	k.type("a")
+	k.shift_button.pressed.emit()
+	k.type("b")
+	k.close()
+	eq(got, ["aB"], "installer: the text goes back")
+	_free(s)
+	var f: Control = SetupFlow.new()
+	f.setup({"setup": FirstRunSetup.new()})
+	var got2: Array = []
+	f.ask_text("API key", "x", func(t): got2.append(t))
+	ok(f.keyboard.visible and f.keyboard.paste_button.visible, "setup: the keyboard opens for a key")
+	eq(f.keyboard.text, "x", "setup: with what was there")
+	ok(f.keyboard.offset_right - f.keyboard.offset_left >= 10 * f.keyboard.KEY.x + 9 * f.keyboard.GAP + 48, "setup: wide enough for its keys")
+	f.keyboard.symbols_button.pressed.emit()
+	f.keyboard.keys[1][1].pressed.emit()
+	f.keyboard.close()
+	eq(got2, ["x@"], "setup: the text goes back")
+	f.free()
+
+
 ## Owner item: Easy never offered Epic / GOG / Amazon sign-in although the welcome card promises it.
 ## The store step is in Easy now: skippable with one press, Continue focused, stores that are
 ## already signed in (Heroic's sign-ins included) shown as done, and the summary names them.

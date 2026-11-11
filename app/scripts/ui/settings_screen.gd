@@ -19,6 +19,7 @@ extends Control
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const DKit := preload("res://scripts/ui/device/device_kit.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Icons := preload("res://scripts/ui/icons.gd")
@@ -43,6 +44,7 @@ const PAGES := {
 	"system": GroupPage,
 	"profiles": preload("res://scripts/ui/controls/profiles_page.gd"),
 	"appearance": preload("res://scripts/ui/settings/appearance_page.gd"),
+	"quick_menu": preload("res://scripts/ui/settings/quick_menu_page.gd"),
 	"stores": preload("res://scripts/ui/settings/stores_page.gd"),
 	"saves": preload("res://scripts/ui/settings/saves_page.gd"),
 	"discover": preload("res://scripts/ui/settings/discover_page.gd"),
@@ -80,6 +82,8 @@ var sign_in: HBoxContainer
 var _layout: Control
 var _content: VBoxContainer
 var _scroll: ScrollContainer
+## "More below" at the foot of the page while it can scroll further.
+var more_cue: HBoxContainer
 var _dim: ColorRect
 var _sheet_body: VBoxContainer
 var _ask_done: Callable
@@ -97,6 +101,25 @@ func _init() -> void:
 
 func _ready() -> void:
 	_late_start.call_deferred()
+
+
+## Leaving Settings for another screen hides it without changing the category:
+## the page on show stops what it watches (the Device page's Storage tab polls
+## the mounts while open) and starts again when Settings comes back.
+var _page_hidden := false
+
+
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_VISIBILITY_CHANGED or not pages.has(category):
+		return
+	if not is_visible_in_tree() and not _page_hidden:
+		_page_hidden = true
+		if pages[category].has_method("on_hidden"):
+			pages[category].on_hidden()
+	elif is_visible_in_tree() and _page_hidden:
+		_page_hidden = false
+		if pages[category].has_method("on_shown"):
+			pages[category].on_shown()
 
 
 ## No host passed services: use the autoloads (never under the test runner),
@@ -206,6 +229,10 @@ func _build() -> void:
 	list.name = "Categories"
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_scroll.add_child(list)
+	# On a small screen the category list is longer than the screen: the same
+	# rule, no half button at its foot.
+	var list_mask: TextureRect = FadeMask.wrap(list_scroll, 24.0)
+	list_mask.cut_fn = func(): return list.get_children()
 	for g in TC.CATEGORY_GROUPS:
 		var gl := Kit.micro(g[0])
 		gl.name = "Group_" + str(g[0])
@@ -228,9 +255,21 @@ func _build() -> void:
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	cols.add_child(_scroll)
-	# A card cut by the foot fades out instead of ending in a hard edge.
-	FadeMask.wrap(_scroll, 28.0)
+	# The same rule as the device pages: a card or a row the foot would slice
+	# isn't drawn at all (the mask ends under the last whole one, so no header
+	# sliver and no half row), what you're reading fades out instead, and
+	# "More below" says there's more.
+	var holder := Control.new()
+	holder.name = "PageColumn"
+	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cols.add_child(holder)
+	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.add_child(_scroll)
+	var mask: TextureRect = FadeMask.wrap(_scroll, 28.0)
+	mask.cut_fn = func(): return cut_items()
+	more_cue = DKit.more_cue(holder, _scroll)
 	var pad := Kit.margin(6, 6, 6)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(pad)
@@ -253,6 +292,33 @@ func _build() -> void:
 	swatches = pages["appearance"].swatches
 	_build_overlays()
 	show_category(keep_cat if pages.has(keep_cat) else "appearance")
+
+
+## What the page's foot may never slice: the cards of the page showing, and
+## inside a long card that runs past the view (a list), its rows. A long card
+## that's whole in view stays one piece, so its own foot shows.
+func cut_items() -> Array:
+	var out: Array = []
+	if _content == null or _scroll == null:
+		return out
+	var tall := maxf(_scroll.size.y * 0.45, 200.0)
+	var view := _scroll.get_global_rect() if _scroll.is_inside_tree() else Rect2()
+	for p in _content.get_children():
+		if p is Control and (p as Control).visible:
+			_cut_items_in(p, tall, out, 0, view)
+	return out
+
+
+static func _cut_items_in(n: Control, tall: float, out: Array, depth: int, view := Rect2()) -> void:
+	for c in n.get_children():
+		if not (c is Control) or not (c as Control).visible:
+			continue
+		var k := c as Control
+		var whole := view.size.y > 0.0 and k.is_inside_tree() and view.grow(1.0).encloses(k.get_global_rect())
+		if k.size.y > tall and not whole and depth < 5 and k is Container and not k is ScrollContainer and k.get_child_count() > 0:
+			_cut_items_in(k, tall, out, depth + 1, view)
+		elif k.size.y > 0.0:
+			out.append(k)
 
 
 func _category_button(id: String) -> Button:
@@ -437,6 +503,8 @@ func hints(f: Control) -> Array:
 			out.append(["A", named])
 		else:
 			out.append(["A", "Select"])
+		if pg_a != null and pg_a.has_method("extra_hints"):
+			out.append_array(pg_a.extra_hints(f))
 		out.append(["B", "Categories"])
 	# LB / RB always switch the top sections; LT / RT the page's own tabs.
 	var pg: Control = pages.get(category)
@@ -640,8 +708,8 @@ func _build_overlays() -> void:
 	keyboard.anchor_bottom = 1.0
 	keyboard.offset_left = -400
 	keyboard.offset_right = 400
-	keyboard.offset_top = -380
-	keyboard.offset_bottom = -20
+	keyboard.offset_top = -424
+	keyboard.offset_bottom = -64
 	keyboard.closed.connect(_on_keyboard_closed)
 	add_child(keyboard)
 

@@ -237,6 +237,7 @@ static func price_column(deal: Dictionary, big := false, align_right := true) ->
 	main.add_theme_font_override("font", ThemeLib.mono(true, 1))
 	main.add_theme_font_size_override("font_size", ThemeLib.SIZE_HEADLINE - 4 if big else ThemeLib.SIZE_BODY)
 	main.add_theme_color_override("font_color", ThemeLib.color("accent"))
+	main.set_meta("accent", p != "")
 	if p == "":
 		main.add_theme_font_override("font", ThemeLib.font("semibold"))
 		main.add_theme_color_override("font_color", ThemeLib.color("text_2"))

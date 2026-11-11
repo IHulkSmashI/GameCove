@@ -4,15 +4,16 @@ extends RefCounted
 
 const CATEGORIES := ["appearance", "stores", "saves", "discover", "media", "performance", "device", "about"]
 const CATEGORY_NAMES := {
-	"appearance": "Appearance", "stores": "Stores", "saves": "Saves", "discover": "Discover", "media": "Media",
+	"appearance": "Appearance", "quick_menu": "Quick menu", "stores": "Stores", "saves": "Saves", "discover": "Discover", "media": "Media",
 	"performance": "Performance", "device": "Device", "about": "About GameCove",
 }
 const CATEGORY_ICONS := {
-	"appearance": "palette", "stores": "store", "saves": "cloud", "discover": "discover", "media": "film",
+	"appearance": "palette", "quick_menu": "sliders", "stores": "store", "saves": "cloud", "discover": "discover", "media": "film",
 	"performance": "gauge", "device": "handheld", "about": "info",
 }
 const CATEGORY_LINES := {
 	"appearance": "Colours, motion and sounds.",
+	"quick_menu": "Shortcuts and their order.",
 	"stores": "Sign-ins, downloads, Steam.",
 	"saves": "Epic and GOG cloud saves.",
 	"discover": "Prices, keys and alerts.",

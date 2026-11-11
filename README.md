@@ -170,6 +170,12 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 
 - **Every store in one library.** Steam, Epic, GOG and Amazon side by side. Filter by store, genre, critic score (75+)
   or what's installed, sort by Top rated, and search with the on-screen keyboard.
+- **A keyboard made for a controller.** Wherever GameCove asks for text (search, a collection's name, a sign-in code
+  or key, a streaming PC's address, launch options) its own on-screen keyboard slides up: letters with a number row,
+  a symbols page with everything a code or a URL needs, Shift (press twice for Caps), a caret you can move, and Paste
+  where a code is asked for. X deletes, Y is space, LT shifts, RT shows the symbols, LB and RB move the caret, Menu is
+  Done; hold the D-pad or X and it repeats. Touch, a mouse and a real keyboard work too. In a game, typing stays
+  Steam's keyboard.
 - **Home stays quick with a big library.** Each Home shelf shows its first 24 games and ends with **See all**, which
   opens the Library on the same list. Thousands of ROMs don't slow Home down.
 - **Favourites, hidden games and collections.** Press Menu on any game (or the star on its page) to make it a
@@ -197,7 +203,8 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 - **Battery drain per game.** "Drains about 9 W, ~5 h on a full charge" on a game's page once you've played it on
   battery for a while, and a 7-day battery chart with every game's drain in About this device. Recorded only when a
   game starts or ends, the handheld sleeps or wakes, or the charger goes in or out.
-- **Store sign-in with your phone.** Scan a QR code and sign in there. No typing passwords on the handheld.
+- **Store sign-in with your phone.** Scan a QR code and sign in there. No typing passwords on the handheld. A code
+  or key you'd rather enter here goes in with the on-screen keyboard, or its Paste key.
 - **Your desktop apps too.** Browsers, Discord, Spotify, a video player, emulator front-ends: every Flatpak and desktop
   app on the handheld (minus settings tools and terminal programs) in an **Apps** view, reached from the Library's
   header or Home. Pin your favourites to Home's Apps shelf with X; they open full screen like a game, with the quick
@@ -216,6 +223,11 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 <td><img src="docs/images/library-filter.webp" alt="The Library's Filter sheet"><br><sub>Filter: favourites, your collections, emulation, hidden games</sub></td>
 <td><img src="docs/images/apps.webp" alt="The Apps view"><br><sub>Your desktop apps, full screen, pinned to Home with X</sub></td>
 <td><img src="docs/images/home-light.webp" alt="Home in the Light theme"><br><sub>The Light theme</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/keyboard.webp" alt="Searching the Library with the on-screen keyboard"><br><sub>Search: the on-screen keyboard, with the controller's buttons on its keys</sub></td>
+<td><img src="docs/images/keyboard-code.webp" alt="Typing a key with the symbols page, Caps on, Paste beside the field"><br><sub>A sign-in code or key: symbols, Caps, Paste</sub></td>
+<td><img src="docs/images/keyboard-light.webp" alt="The on-screen keyboard in the Light theme"><br><sub>The same keyboard in Light</sub></td>
 </tr>
 </table>
 
@@ -254,6 +266,43 @@ same interface as everything else.
 Press the Quick Access button (or Guide) and the quick menu slides in, in a game or on the home screen. It only shows
 what your handheld can actually do, and anything it can't gets a plain reason instead of a broken switch. Exit game and
 Switch to Desktop Mode live here too.
+
+**Quick Access is GameCove's in a game too.** A short press opens our quick menu over the game, and holding it opens
+Steam's keyboard. Steam's own quick access menu (friends, notifications) is one press away on the Shortcuts strip, and
+if you'd rather Quick Access went to Steam in games, one switch in Settings > Controller > Button shortcuts gives it
+back. Guide works just like before. Leave for Steam Gaming Mode or the desktop and every button is Steam's again.
+
+**Shortcuts strip.** A row of big buttons along the top of the quick menu for the things you want in one press. Pick
+which ones show and in what order in Settings > Quick menu.
+
+| Shortcut | What it does |
+| --- | --- |
+| **Keyboard** | Steam's on-screen keyboard over the game |
+| **Steam menu** | Steam's own quick access menu over the game |
+| **Screenshot** | Saves a picture of the game (without our menu) to Pictures/Screenshots |
+| **Record** | Starts and stops recording; the button shows the time |
+| **Mouse mode** | Right stick moves the pointer, right trigger clicks |
+| **Mute** | Sound off and back on |
+| **Send key** | Esc, Enter, Tab, Alt+Enter or Alt+F4, typed into the game (for stuck launchers and dialogs) |
+| **Sleep** | Puts the handheld to sleep |
+| Also there to add | Performance overlay, microphone, Wi-Fi, Bluetooth, airplane mode, night light, **Force close** (ends a hung game at once) and **Power** (restart, shut down, Desktop Mode, Steam Gaming Mode) |
+
+**Button shortcuts.** Settings > Controller > Button shortcuts shows your handheld with each button it has: set what
+a back button presses (a gamepad button, a mouse click, a key or a key combination like Alt+Enter, or a GameCove
+action like Screenshot or Keyboard) and what a hold on the buttons next to the screen does. Holds are only for those
+buttons, never for A, B, X, Y or the back buttons that games hold themselves, and Guide stays free for Steam's chords.
+A test area shows each press and hold as it happens, and one press puts everything back.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/quick-shortcuts.webp" alt="Quick menu with the Shortcuts strip"><br><sub>The Shortcuts strip over a game</sub></td>
+<td width="50%"><img src="docs/images/settings-buttons.webp" alt="Settings, Controller, Button shortcuts"><br><sub>Button shortcuts: press and hold for each button</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/quick-shortcuts-light.webp" alt="Shortcuts strip in the Light theme"><br><sub>The strip in the Light theme</sub></td>
+<td><img src="docs/images/settings-buttons-light.webp" alt="Button shortcuts in the Light theme"><br><sub>Button shortcuts in the Light theme</sub></td>
+</tr>
+</table>
 
 | Tab | What you control |
 | --- | --- |
@@ -295,8 +344,9 @@ it does.
   dim and screen-off timers.
 - **Sound:** volume, output device, microphone and input, plus a volume for each app playing sound (turn the game
   down under your music or a voice chat).
-- **Controller:** controller type (Xbox, DualSense, Steam Deck and more), **back buttons** remapped to any button, a key
-  or a mouse click, gyro on/off and which sensor, stick and trigger deadzones, trackpad mode, **rumble on/off and
+- **Controller:** controller type (Xbox, DualSense, Steam Deck and more), **Button shortcuts** (back buttons set to any
+  button, a key or key combination, a mouse click or a GameCove action; holds on the buttons next to the screen; Quick
+  Access in games), gyro on/off and which sensor, stick and trigger deadzones, trackpad mode, **rumble on/off and
   strength**, a rumble test, **lights** (effect, colours, brightness, speed), mouse mode with pointer speed, a button
   tester, and one press to start over. **Steam's controller settings** (gyro aiming, layouts) open straight from the
   game for every game Steam starts, emulated games Steam ROM Manager added included, and closing them lands you back
@@ -311,6 +361,7 @@ it does.
   off, 30 or 60 fps) and **Clips**: everything you recorded, with a picture, its length and size. Watch one full
   screen (in mpv, VLC or Celluloid; no player yet? one press installs mpv), **send it to your phone** with a QR code
   (a one-time page on your own Wi-Fi to watch and download it), or delete it.
+- **Quick menu:** which shortcuts the strip shows, and their order.
 - **Profiles, Appearance, Stores, Discover, Device and About GameCove:** your saved profiles, themes, store sign-ins and
   downloads, Discover's region and keys (SteamGridDB, gg.deals, OpenCritic), fixes, storage (with one-press
   **clean-up** of the shader caches uninstalled games leave behind), updates, and the network and privacy switches.

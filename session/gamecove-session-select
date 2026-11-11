@@ -17,6 +17,11 @@
 #                                               gone (uninstalled, rolled back), restore
 #   gamecove-session-select session-start       (session client) bounce a desktop switch
 #                                               that landed here by mistake
+#   gamecove-session-select leave               (GameCove's session unit, ExecStopPost) the
+#                                               session ended some other way than a switch
+#                                               of ours (Steam's own "Switch to Desktop", a
+#                                               logout, the app killed): tidy up as a switch
+#                                               would, unless one just did
 #
 # How: steamos-manager accepts any session in wayland-sessions/ whose file name
 # has no "gamescope" in it as a "desktop session", so gamecove.desktop can be
@@ -57,6 +62,9 @@ STATE_DIR="${GAMECOVE_STATE_DIR:-/var/lib/gamecove}"
 PKEXEC="${PKEXEC:-pkexec}"
 ROOT_WAIT_S="${GAMECOVE_ROOT_WAIT_S:-10}"
 GUARD_COPY="$DATA/gamecove-session-guard"
+# When leave_session last ran (seconds since the epoch): `leave` right after a switch of ours
+# has nothing left to do.
+LEFT="${XDG_RUNTIME_DIR:-$DATA}/gamecove-left"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_NAME="gamecove-session-guard.service"
 BOOT_ID_FILE="${GAMECOVE_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}"
@@ -71,7 +79,7 @@ die() {
 }
 
 usage() {
-	echo "usage: gamecove-session-select steam|gamecove|desktop [--default [--no-switch]] | restore | guard | session-start" >&2
+	echo "usage: gamecove-session-select steam|gamecove|desktop [--default [--no-switch]] | restore | guard | session-start | leave" >&2
 	exit 64
 }
 
@@ -90,7 +98,7 @@ if [ $# -ge 3 ]; then
 fi
 [ $# -le 3 ] || usage
 case "$target" in
-restore | guard | session-start) [ $# -eq 1 ] || usage ;;
+restore | guard | session-start | leave) [ $# -eq 1 ] || usage ;;
 steam | gamecove | desktop) ;;
 *) usage ;;
 esac
@@ -106,8 +114,9 @@ have_steamosctl() {
 if ! have_steamosctl; then
 	case "$target" in
 	guard | session-start) exit 0 ;; # nothing to manage on this system
+	leave) ;;                         # tidying up needs no steamosctl
+	*) die "steamosctl (steamos-manager) not found; switch sessions from the login screen instead" 2 ;;
 	esac
-	die "steamosctl (steamos-manager) not found; switch sessions from the login screen instead" 2
 fi
 
 # From a TTY the user's steamos-manager may not be running yet; it's a user unit.
@@ -267,6 +276,7 @@ root_restores() {
 # no-password helper), and Steam closed cleanly so it writes its files.
 leave_session() {
 	[ "${GAMECOVE_SESSION:-}" = 1 ] || return 0
+	{ mkdir -p "$(dirname "$LEFT")" && date +%s >"$LEFT"; } 2>/dev/null || true
 	if [ -x "$GAMECOVE_BIN" ]; then
 		if command -v timeout >/dev/null 2>&1; then
 			# -k: a GameCove that ignores TERM (stuck in a driver call) is killed 5 s later, so the switch
@@ -432,6 +442,24 @@ session-start)
 restore)
 	restore_defaults
 	exit $?
+	;;
+leave)
+	# GameCove's session unit stopped (its ExecStopPost). A logout we didn't start gives Godot
+	# no _exit_tree, so the buttons only GameCove answers (Quick Access to GameCove's menu, a
+	# back button set to a GameCove action) would stay mapped under Steam Gaming Mode or the
+	# desktop: hand them back, with the everyday values, as a switch of ours does. Skipped
+	# when one of ours did it in the last two minutes.
+	last="$(head -n 1 "$LEFT" 2>/dev/null)" || last=""
+	rm -f "$LEFT" 2>/dev/null || true
+	case "$last" in
+	'' | *[!0-9]*) last=0 ;;
+	esac
+	[ $(($(date +%s) - last)) -ge 120 ] || exit 0
+	reset_input_intercept
+	GAMECOVE_SESSION=1
+	leave_session
+	rm -f "$LEFT" 2>/dev/null || true # a mark is only for a switch of ours
+	exit 0
 	;;
 esac
 

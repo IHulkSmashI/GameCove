@@ -13,6 +13,8 @@ extends Control
 
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const Drawer := preload("res://scripts/ui/drawer.gd")
+const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
@@ -24,13 +26,15 @@ signal closed
 signal focus_lost
 
 const WIDTH := 560.0
-const MAX_ROWS := 9
+const Z := 15
 
 var items: Array = []
 var rows: Array = []
 var title_label: Label
 var sub_label: Label
 var panel: PanelContainer
+## What the buttons do, at the drawer's foot (it covers the screen's hint bar).
+var prompts: HBoxContainer
 var _list: VBoxContainer
 var _scroll: ScrollContainer
 var _dim: ColorRect
@@ -41,6 +45,9 @@ var _open := false
 
 func _init() -> void:
 	name = "Sheet"
+	# Over the screen's hint bar (the drawer runs the full height and carries
+	# its own prompts); dialogs that must win sit higher (keep 20, battery 30).
+	z_index = Z
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
@@ -52,16 +59,9 @@ func _init() -> void:
 	panel = PanelContainer.new()
 	panel.name = "Panel"
 	panel.theme_type_variation = "GlassPanel"
-	panel.anchor_left = 1.0
-	panel.anchor_right = 1.0
-	panel.anchor_top = 0.0
-	panel.anchor_bottom = 1.0
-	panel.offset_left = -WIDTH
-	panel.offset_right = 0.0
-	panel.offset_top = 0.0
-	# The hint bar stays in view under the drawer.
-	panel.offset_bottom = -ThemeLib.HINT_BAR_H
-	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	# The same drawer as the quick menu (drawer.gd): the full height, floating
+	# against the edge, its prompts at its own foot.
+	Drawer.place(panel, WIDTH)
 	add_child(panel)
 	var col := Kit.vbox(18)
 	panel.add_child(col)
@@ -78,25 +78,23 @@ func _init() -> void:
 	_scroll.name = "Scroll"
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	FocusScroll.attach(_scroll)
 	col.add_child(_scroll)
+	# More rows than fit (a long list on a small screen) fade out at the foot.
+	FadeMask.wrap(_scroll, 20.0)
 	_list = Kit.vbox(6)
 	_list.name = "Rows"
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(_list)
+	prompts = Kit.prompts(hints())
+	col.add_child(prompts)
 	_restyle()
 
 
 func _restyle() -> void:
-	var sc: Color = ThemeLib.color("scrim")
-	_dim.color = Color(sc, 0.62)
-	# A drawer: square on the screen edge, rounded where it meets the page.
-	var g := ThemeLib.glass(ThemeLib.radius("xl"), 32, 32)
-	g.corner_radius_top_right = 0
-	g.corner_radius_bottom_right = 0
-	g.border_width_right = 0
-	g.bg_color = ThemeLib.color("surface")
-	panel.add_theme_stylebox_override("panel", g)
+	_dim.color = Drawer.scrim()
+	panel.add_theme_stylebox_override("panel", Drawer.glass(32, 28))
 
 
 ## Short lines (a game's name) read as the headline under a mono eyebrow;
@@ -136,21 +134,17 @@ func open(title: String, subtitle: String, list: Array, on_choose: Callable = Ca
 		if it.get("current", false):
 			first = b
 	Kit.link_vertical(rows)
-	# Up to MAX_ROWS rows show; more scroll.
-	var h := 0.0
-	for i in mini(rows.size(), MAX_ROWS):
-		h += rows[i].custom_minimum_size.y + 6.0
-	_scroll.custom_minimum_size = Vector2(0, h - 6.0)
+	_scroll.scroll_vertical = 0
 	if is_inside_tree():
 		_focus_before = get_viewport().gui_get_focus_owner()
 	_open = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	Motion.fade(self, true)
 	var dx := Motion.slide(40.0)
-	panel.offset_left = -WIDTH + dx
-	panel.offset_right = dx
-	Motion.to(panel, "offset_left", -WIDTH, Motion.FAST)
-	Motion.to(panel, "offset_right", 0.0, Motion.FAST)
+	panel.offset_left = -WIDTH - Drawer.MARGIN + dx
+	panel.offset_right = -Drawer.MARGIN + dx
+	Motion.to(panel, "offset_left", -WIDTH - Drawer.MARGIN, Motion.FAST)
+	Motion.to(panel, "offset_right", -Drawer.MARGIN, Motion.FAST)
 	var f: Control = first if first != null else (rows[0] if not rows.is_empty() else null)
 	if f != null and is_inside_tree():
 		f.grab_focus()
@@ -160,7 +154,10 @@ func _row(it: Dictionary) -> Button:
 	var b := Kit.button("", "RowButton")
 	b.name = "Row_" + str(it.get("id", "x")).validate_node_name()
 	var detail := str(it.get("detail", ""))
-	b.custom_minimum_size = Vector2(0, 62 if detail != "" else 52)
+	# A line under the name wraps onto a second line when it's long (never an
+	# ellipsis mid-word); the row grows to hold it.
+	var wraps := detail != "" and _detail_width(detail) > _detail_room(it)
+	b.custom_minimum_size = Vector2(0, (82 if wraps else 62) if detail != "" else 52)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var disabled: bool = it.get("disabled", false)
 	var tone := str(it.get("tone", ""))
@@ -195,6 +192,10 @@ func _row(it: Dictionary) -> Button:
 		d.name = "Detail"
 		d.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		d.add_theme_font_size_override("font_size", ThemeLib.SIZE_CAPTION)
+		if wraps:
+			d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			d.max_lines_visible = 2
+			d.add_theme_constant_override("line_spacing", 0)
 		if disabled:
 			d.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 		texts.add_child(d)
@@ -212,6 +213,25 @@ func _row(it: Dictionary) -> Button:
 		if not disabled:
 			pick(id))
 	return b
+
+
+## Width of a row's detail line set on one line, px.
+static func _detail_width(detail: String) -> float:
+	return ThemeLib.font("regular").get_string_size(detail, HORIZONTAL_ALIGNMENT_LEFT, -1, ThemeLib.SIZE_CAPTION).x
+
+
+## Room a row has for its texts, px: the drawer less its padding, the row's
+## own, the icon, the value and the tick.
+static func _detail_room(it: Dictionary) -> float:
+	var room := WIDTH - 2.0 * 32.0 - 18.0 - 16.0
+	if str(it.get("icon", "")) != "":
+		room -= 22.0 + 14.0
+	var value := str(it.get("value", ""))
+	if value != "":
+		room -= ThemeLib.font("medium", true).get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, ThemeLib.SIZE_CAPTION).x + 14.0
+	if it.get("current", false):
+		room -= 22.0 + 14.0
+	return room - 4.0
 
 
 ## Choose a row by id (what A on that row does). Focus goes back to where the
