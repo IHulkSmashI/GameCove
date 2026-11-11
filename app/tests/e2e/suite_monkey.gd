@@ -39,11 +39,15 @@ func test_monkey_journeys_hold_the_invariants() -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = seed
 		var trail: Array = []
+		var states: Array = []
 		var broke := false
 		for step in STEPS:
 			var move: String = MOVES[rng.randi() % MOVES.size()]
 			trail.append(move)
+			var fp := str(focus().get_path()).get_file() if focus() else "none"
+			states.append("%s@%s[%s%s]" % [move, where(), fp, " qm" if qm().visible else ""])
 			await do_move(move, rng)
+			await w.frames(3)   # a menu closing hands focus back over a frame or two
 			await w.frames(2)
 			# the screen settles (a page glides to the focused row, a sheet fades in)
 			await until(func(): return focus_on_screen() == "" or not main()._window_focused or main().launch_overlay.is_open(), 1000)
@@ -59,9 +63,14 @@ func test_monkey_journeys_hold_the_invariants() -> void:
 				for p in probs:
 					ok(false, p)
 				var df: Control = main()._screen_default_focus()
-				ok(false, "seed %d: the last moves were %s; on %s, searching %s, sheet %s, keyboard %s, default focus %s (shown %s)" % [seed, trail.slice(maxi(0, trail.size() - 12)),
+				ok(false, "seed %d: before each of the last moves: %s" % [seed, states.slice(maxi(0, states.size() - 6))])
+				ok(false, "seed %d: the last moves were %s; on %s, searching %s, sheet %s, keyboard %s, default focus %s (shown %s), quick menu %s, page %s, in settings page %s" % [seed, trail.slice(maxi(0, trail.size() - 12)),
 					where(), main().library_screen.searching(), main().game_actions.is_modal(), main().game_actions._kb_open,
-					df.get_path() if df != null and is_instance_valid(df) and df.is_inside_tree() else str(df), df.is_visible_in_tree() if df != null and is_instance_valid(df) and df.is_inside_tree() else false])
+					df.get_path() if df != null and is_instance_valid(df) and df.is_inside_tree() else str(df), df.is_visible_in_tree() if df != null and is_instance_valid(df) and df.is_inside_tree() else false,
+					qm().visible, main().settings.category, main().settings.in_page()])
+				var st2: Control = main().settings
+				ok(false, "seed %d: settings focus %s, top bar %s, settings sheet %s, keyboard %s; grab -> %s" % [seed, st2.focus_behavior_recursive, main().top_bar.focus_behavior_recursive,
+					st2.sheet != null and st2.sheet.visible, st2.keyboard != null and st2.keyboard.is_open(), _try_grab(df)])
 				broke = true
 				break
 		await calm_down()
@@ -179,3 +188,10 @@ func calm_down() -> void:
 	main().show_screen("home")
 	await w.wait_s(0.4)
 	await w.idle()
+
+
+func _try_grab(c: Control) -> String:
+	if c == null or not is_instance_valid(c):
+		return "none"
+	c.grab_focus()
+	return str(focus() == c)
