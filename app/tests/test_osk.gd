@@ -455,3 +455,24 @@ func test_text_keyboard_is_the_same_keyboard() -> void:
 		k.type(ch)
 	eq(k.text, "abcde", "its limit is max_len")
 	k.free()
+
+
+## Review Medium (input): an on-screen keyboard hidden without close() (its screen went away) stayed
+## "showing" and went on taking every key and button, unseen.
+func test_a_keyboard_that_is_hidden_stops_taking_input() -> void:
+	var k := _kb()
+	k._on_seen_changed(true)   # what the engine reports when it shows
+	k._input(_key_event(KEY_A, 65))
+	eq(k.text, "a", "open: it types")
+	k._on_seen_changed(false)   # its screen went away, no close()
+	ok(not k.showing and not k.is_open(), "no longer open")
+	ok(not k.visible, "and hidden")
+	k._input(_key_event(KEY_B, 66))
+	_pad(k, JOY_BUTTON_Y)
+	eq(k.text, "a", "and takes nothing")
+	# a keyboard that was never seen (opened under a hidden screen) isn't closed by a hide
+	var k2 := _kb()
+	k2._on_seen_changed(false)
+	ok(k2.showing, "never seen: left as it was")
+	k.free()
+	k2.free()

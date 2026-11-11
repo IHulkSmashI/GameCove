@@ -73,6 +73,7 @@ var done_button: Button
 ## Open from open() until close(): it takes keys only then, not while it fades
 ## out (a press right after Done goes to the screen, not into the text).
 var showing := false
+var _was_seen := false
 ## Paste, beside the field: only where a code or key is asked for (use_for_codes).
 var paste_button: Button
 ## func() -> String: the clipboard; tests return canned text.
@@ -330,8 +331,20 @@ func _ink_action(b: Button) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and field != null:
 		_style()
-	elif what == NOTIFICATION_VISIBILITY_CHANGED and not is_visible_in_tree():
+	elif what == NOTIFICATION_VISIBILITY_CHANGED:
+		_on_seen_changed(is_visible_in_tree())
+
+
+## It can be seen now (true) or not (false: it, or a screen above it, was hidden).
+func _on_seen_changed(seen: bool) -> void:
+	if not seen:
 		_stop_repeat()
+	# Hidden without close() (its screen went away, Guide, the quick menu): it is closed. Left
+	# "showing" it kept taking every key and button, unseen (review Medium, input).
+	if _was_seen and not seen and showing:
+		showing = false
+		visible = false
+	_was_seen = seen
 
 
 # ---- pages, focus --------------------------------------------------------------
