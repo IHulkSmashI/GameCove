@@ -1429,3 +1429,15 @@ def test_lists_of_the_wrong_shape_never_raise(tmp_path, bad):
     page = '| a | English Title | I | A | N |\n| x | Foo | ✅ | ✅ | ✅ |\n<!-- opticlick-supported-games-meta %s -->'
     for meta in ('{"games": 5}', '{"games": [5, {"game_name_en": "Foo", "cover_steam_app_ids": 7}]}', '[1]'):
         assert isinstance(livedb.parse_supported_list(page % meta), dict)
+
+
+def test_the_xmx_proof_and_shim_find_an_sd_card_games_prefix(tmp_path):
+    """Review low: xess.prefix_dir looked only in the default library, so a game on the SD card (whose prefix Steam
+    keeps on the card) never showed the XMX proof."""
+    home = str(tmp_path / "home")
+    sd = tmp_path / "sd"
+    _w(os.path.join(home, ".local/share/Steam/steamapps/libraryfolders.vdf"), f'"libraryfolders"\n{{\n "1"\n {{\n  "path" "{sd}"\n }}\n}}\n')
+    pfx = sd / "steamapps" / "compatdata" / "777" / "pfx" / "drive_c"
+    _w(pfx / "igdext_kernels" / "anv_canary", "ok")
+    assert xess.prefix_dir(home, "777") == str(pfx)
+    assert xess.prefix_dir(home, "778").startswith(os.path.join(home, ".local/share/Steam"))   # none yet: the default
