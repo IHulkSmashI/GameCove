@@ -19,6 +19,12 @@ func _fake(look: String) -> Array:
 		var fa := FileAccess.open(dir + "/" + f[0], FileAccess.WRITE)
 		fa.store_string(f[1])
 		fa.close()
+	# the save the fake legendary talks about is really there: a sync time is dropped for an
+	# empty save folder (a deleted prefix), and the end of a game would then ask, not upload
+	DirAccess.make_dir_recursive_absolute(str(w.home) + "/MinSaves")
+	var sv := FileAccess.open(str(w.home) + "/MinSaves/world.sav", FileAccess.WRITE)
+	sv.store_string("progress")
+	sv.close()
 	var s: Node = main().saves
 	s.entry_lookup = func(_k: String) -> Dictionary: return EPIC.merged({"config_dir": dir, "platform": "Windows", "prefix": ""})
 	s.tools_lookup = func() -> Dictionary: return {"legendary": "/usr/bin/legendary", "heroic_flatpak": []}
@@ -91,6 +97,18 @@ func test_low_battery_warns_and_any_button_stays_awake() -> void:
 	low.suspend = func() -> void: slept[0] += 1
 	low.settings = func() -> Dictionary: return {"on": true, "at": 5}
 	low.suppressed = false
+	# on battery for real: a fixture whose battery says "Charging" counts as on the charger
+	low.charging_now = func() -> bool: return false
+	low.plugged_now = func() -> bool: return false
+	# start from a known healthy reading, whatever ran before: 80 % then 5 % is a sudden drop
+	low.ask_again = func() -> void: pass
+	low._pct = 80
+	low._unconfirmed = false
+	low.warning = false
+	power().battery_level.emit(5, false)
+	await w.idle()
+	# a sudden low reading (the fixture's battery is far above 5 %) waits for a second one
+	ok(main().low_dialog == null, "one sudden low reading doesn't start the countdown")
 	power().battery_level.emit(5, false)
 	await w.idle()
 	ok(main().low_dialog != null and is_instance_valid(main().low_dialog), "the 30 s warning shows")

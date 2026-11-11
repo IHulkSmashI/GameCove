@@ -8,6 +8,7 @@ extends Control
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const View := preload("res://scripts/ui/library_view.gd")
+const TL := preload("res://scripts/ui/texts_library.gd")
 const Tile := preload("res://scripts/ui/game_tile.gd")
 const Shelf := preload("res://scripts/ui/shelf.gd")
 const GameHeader := preload("res://scripts/ui/game_header.gd")
@@ -27,6 +28,8 @@ signal game_focused(game: Dictionary)
 signal downloads_requested
 ## The Apps shelf's "All apps" tile was pressed.
 signal apps_requested
+## A on a shelf's "See all" tile: the Library on that shelf's list.
+signal see_all_requested(shelf_id: String)
 
 ## Kept for callers that walk rows; Home.shelves() has the real list.
 const ROWS := [["recent", "Recently played"], ["installed", "Installed"], ["all", "All games"]]
@@ -407,7 +410,10 @@ func _build_rows() -> void:
 			s.count_label.text = "%d %s" % [apps.size(), "app" if apps.size() == 1 else "apps"]
 			s.tile_pressed.connect(_on_app_pressed)
 		else:
-			s.tile_pressed.connect(func(g): open_requested.emit(g))
+			if spec.has("total"):
+				s.total = int(spec["total"])
+				s.count_label.text = "%d games" % s.total   # what the shelf holds, not what it shows
+			s.tile_pressed.connect(_on_shelf_tile_pressed)
 		_rows_box.add_child(s)
 		_shelves.append(s)
 		# A shelf seen for the first time eases in (rebuilds after an install don't).
@@ -431,8 +437,45 @@ func _build_rows() -> void:
 const BEFORE_APPS := ["recent", "favourites", "installed", "emulation"]
 
 
+## Most games a Home shelf shows. A longer one ends with a "See all" tile that
+## opens the Library on the same list, and its count still says how many there are.
+## Why: every tile is a node tree built on the main thread, and Home is rebuilt on
+## every library change. Without a cap each of Steam ROM Manager's ROMs sat in
+## three shelves (Installed, Emulation, All games): 500 ROMs were 1,659 tiles
+## and about half a second per rebuild on a desktop CPU, 1,500 ROMs 4,659 tiles
+## and 1.2 to 1.8 s (docs/PERFORMANCE.md). Capped, Home never builds more than
+## SHELF_MAX + 1 tiles per shelf, whatever the library holds.
+const SHELF_MAX := 24
+const MORE_PREFIX := "app:__more__:"
+
+
+## The "See all" tile of shelf `shelf_id`, which holds `total` games. It's an app
+## tile (store "app"): no badges, no game options, the spotlight keeps its game.
+static func more_tile(shelf_id: String, total: int) -> Dictionary:
+	var Apps = load("res://scripts/library/apps.gd")
+	var icon := ProjectSettings.globalize_path(Apps.ICON_CACHE).path_join("_see_all.png")
+	if not FileAccess.file_exists(icon):
+		var img := Image.new()
+		if img.load_svg_from_buffer(Icons.svg("library", 24, Color(0.93, 0.95, 1.0)).to_utf8_buffer(), Apps.ICON_PX / 24.0) == OK:
+			DirAccess.make_dir_recursive_absolute(icon.get_base_dir())
+			img.save_png(icon)
+	return {"key": MORE_PREFIX + shelf_id, "store": Apps.STORE, "id": "__more__:" + shelf_id, "title": TL.SEE_ALL,
+		"sub": TL.SEE_ALL_LINE % total, "installed": true, "art": {"icon": icon} if FileAccess.file_exists(icon) else {}}
+
+
+## Shelves longer than SHELF_MAX cut to it, with "total" (what they hold) and the
+## "See all" tile at the end.
+static func cap_shelves(specs: Array, most := SHELF_MAX) -> Array:
+	for spec in specs:
+		var total: int = spec["games"].size()
+		if total > most:
+			spec["total"] = total
+			spec["games"] = spec["games"].slice(0, most) + [more_tile(str(spec["id"]), total)]
+	return specs
+
+
 static func shelf_specs(list: Array, pinned: Array) -> Array:
-	var specs: Array = View.shelves(list)
+	var specs: Array = cap_shelves(View.shelves(list))
 	if not pinned.is_empty():
 		var AppsView = load("res://scripts/ui/apps_view.gd")
 		var TX = load("res://scripts/ui/texts_extras.gd")
@@ -450,6 +493,15 @@ func set_apps(list: Array) -> void:
 	apps = list
 	_build_rows()
 	_restore_focus(keep)
+
+
+## A on a shelf's tile: the game's page, or the Library on that shelf's list ("See all").
+func _on_shelf_tile_pressed(g: Dictionary) -> void:
+	var key := str(g.get("key", ""))
+	if key.begins_with(MORE_PREFIX):
+		see_all_requested.emit(key.substr(MORE_PREFIX.length()))
+	else:
+		open_requested.emit(g)
 
 
 func _on_app_pressed(g: Dictionary) -> void:

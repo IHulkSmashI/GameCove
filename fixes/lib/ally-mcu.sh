@@ -4,8 +4,9 @@
 # the caller's $0 in fixes/<name>/.
 #
 # Older firmware can leave the controller dead after waking (kernel hid-asus warns: "The MCU firmware
-# version must be %d or greater to avoid issues with suspend"; minimums 319 Ally, 313 Ally X; Ally X
-# 314 in SimpleDeckyTDP, the stricter one is used). The version is read over hidraw by
+# version must be %d or greater to avoid issues with suspend"; ROG_ALLY_MIN_MCU 319, ROG_ALLY_X_MIN_MCU 313,
+# and at or above them validate_mcu_fw_version() calls set_ally_mcu_powersave(true) itself, so those are the
+# thresholds; SimpleDeckyTDP's "314" for the Ally X is in commented-out code). The version is read over hidraw by
 # ally-mcu-powersave/mcu_version.py (root), cached in /var/lib/gamecove/ally-mcu-version so `status`
 # (no root) can say why it isn't available.
 

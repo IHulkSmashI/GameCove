@@ -50,6 +50,53 @@ ok 'fix claw8ex-buttons install | grep -q "not needed"' "not needed when InputPl
 ok '[ "$(snapshot)" = "$before" ]' "nothing changed"
 ok 'fix claw8ex-buttons status | grep -qx state=not-needed' "status not-needed"
 
+# Stand down only when InputPlumber's own map takes what this firmware sends (read from the map, not its name).
+CLAW2_MAP='version: 1
+kind: CapabilityMap
+name: MSI Claw Type 2
+id: claw2
+mapping:
+  - name: Guide (Short)
+    source_events:
+      - keyboard: KeyF15
+      - keyboard: KeyG
+    target_event:
+      gamepad:
+        button: Guide
+  - name: QuickAccess
+    source_events:
+      - keyboard: KeyF16
+    target_event:
+      gamepad:
+        button: QuickAccess
+filtered_events: []
+'
+stock_map_file() { mkdir -p "$R/usr/share/inputplumber/capability_maps"; printf '%s' "$1" >"$R/usr/share/inputplumber/capability_maps/$2.yaml"; }
+case_start stock_map_still_broken
+stock_map_file "$CLAW2_MAP" msiclaw_type2
+ok 'fix claw8ex-buttons status | grep -qx os_fixed=no' "InputPlumber's claw2 (F15+G chord, F16): not fixed"
+ok 'fix claw8ex-buttons status | grep -qx state=off' "still offered"
+case_start stock_map_fixed_in_place
+# claw2 keeps its name but now takes Win+G and F15 alone
+stock_map_file "$(printf '%s' "$CLAW2_MAP" | sed 's/keyboard: KeyF15$/keyboard: KeyLeftMeta/; s/keyboard: KeyF16/keyboard: KeyF15/')" msiclaw_type2
+ok 'fix claw8ex-buttons status | grep -qx os_fixed=yes' "claw2 fixed in place: os_fixed=yes"
+before=$(snapshot)
+ok 'fix claw8ex-buttons install | grep -q "not needed"' "install stands down"
+ok '[ "$(snapshot)" = "$before" ]' "nothing changed"
+ok 'fix claw8ex-buttons status | grep -qx state=not-needed' "status not-needed"
+fix claw8ex-buttons remove >/dev/null 2>&1
+case_start stock_map_new_but_half_fixed
+# a new map for the board that fixes QuickAccess but still waits for the F15+G chord: ours is still needed
+sed -i 's/capability_map_id: claw2/capability_map_id: claw8ex_up/' "$R/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
+stock_map_file "$(printf '%s' "$CLAW2_MAP" | sed 's/^id: claw2/id: claw8ex_up/; s/keyboard: KeyF16/keyboard: KeyF15/')" msiclaw_8ex
+ok 'fix claw8ex-buttons status | grep -qx os_fixed=no' "half-fixed new map: os_fixed=no"
+fix claw8ex-buttons install >/dev/null 2>&1; rc=$?
+ok "[ $rc -eq 0 ] && override | grep -qx 'capability_map_id: gamecove_claw8ex'" "installs over a map that still drops Guide"
+case_start stock_map_new_and_fixed
+sed -i 's/capability_map_id: claw2/capability_map_id: claw8ex_up/' "$R/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
+stock_map_file "$(printf '%s' "$CLAW2_MAP" | sed 's/^id: claw2/id: claw8ex_up/; s/      - keyboard: KeyF15$//; s/keyboard: KeyF16/keyboard: KeyF15/')" msiclaw_8ex
+ok 'fix claw8ex-buttons status | grep -qx os_fixed=yes' "new map with G alone and F15 alone: os_fixed=yes"
+
 case_start existing_etc_inputplumber
 mkdir -p "$R/etc/inputplumber/capability_maps.d"
 echo keep >"$R/etc/inputplumber/capability_maps.d/other.yaml"

@@ -25,7 +25,12 @@
 #    ($XDG_RUNTIME_DIR/gamecove-heartbeat, rewritten every 5 s from the app's main
 #    loop) stops changing for GAMECOVE_HEARTBEAT_STALE_S (30 s) while it says "ui",
 #    is killed and counted as an unclean exit. While a game runs the app says
-#    "game" and is never killed: ending GameCove would end the game too.
+#    "game" and is never killed: ending GameCove would end the game too. The one
+#    exception is "front": a game runs, but GameCove's own UI is in front of it
+#    (quick menu, or Home brought back) and beats again. If those beats stop for
+#    GAMECOVE_HEARTBEAT_FRONT_STALE_S (45 s) the screen and the controller are held
+#    by a dead UI, so it is stopped too (the game ends with it: the other way out
+#    was holding the power button).
 set -u
 
 GAMECOVE_BIN="${GAMECOVE_BIN:-/usr/lib/gamecove/gamecove.x86_64}"
@@ -37,6 +42,7 @@ CRASH_LIMIT="${GAMECOVE_CRASH_LIMIT:-3}"
 HEALTHY_S="${GAMECOVE_HEALTHY_S:-600}"
 READY_TIMEOUT_S="${GAMECOVE_READY_TIMEOUT_S:-60}"
 HEARTBEAT_STALE_S="${GAMECOVE_HEARTBEAT_STALE_S:-30}"
+HEARTBEAT_FRONT_STALE_S="${GAMECOVE_HEARTBEAT_FRONT_STALE_S:-45}"
 
 log() {
 	echo "gamecove-session-client: $*" >&2
@@ -192,8 +198,9 @@ fi
 # Watch the app once a second (counted from its start, the Steam wait included):
 #  - not ready after READY_TIMEOUT_S: hung at start (ready = the first heartbeat, or
 #    the ready file only when no heartbeat is expected);
-#  - heartbeat unchanged for HEARTBEAT_STALE_S while it says "ui": hung (an app
-#    without a heartbeat is only checked for readiness);
+#  - heartbeat unchanged for HEARTBEAT_STALE_S while it says "ui", or for
+#    HEARTBEAT_FRONT_STALE_S while it says "front": hung (an app without a heartbeat
+#    is only checked for readiness); "game" is never stale;
 #  - ready and up HEALTHY_S with a live heartbeat (or none expected): clears the count.
 up=$((waited / 5))
 ready=0
@@ -216,8 +223,11 @@ while kill -0 "$app" 2>/dev/null; do
 		else
 			stale=$((stale + 1))
 		fi
-		if [ "$stale" -ge "$HEARTBEAT_STALE_S" ]; then
+		stale_limit="$HEARTBEAT_STALE_S"
+		[ "${now#* }" != front ] || stale_limit="$HEARTBEAT_FRONT_STALE_S"
+		if [ "$stale" -ge "$stale_limit" ]; then
 			hung="no heartbeat for ${stale}s"
+			[ "${now#* }" != front ] || hung="no heartbeat for ${stale}s with GameCove in front of a game"
 		fi
 	elif [ -z "$HEARTBEAT" ] && [ -e "$READY" ]; then
 		# the ready file is written early (Library autoload): with a heartbeat expected,

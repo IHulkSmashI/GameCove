@@ -1,7 +1,7 @@
 # GameCove RPM for Bazzite / Fedora Atomic (rpm-ostree) and Fedora.
 #
-# UNTESTED: written against Fedora packaging guidelines and checked with
-# `rpmspec -P`, but never built in mock or installed on a handheld.
+# Built by .github/workflows/release.yml (rpmbuild in a pinned Fedora container; not in mock).
+# Tested on hardware: MSI Claw 8 EX AI+ (Bazzite) and ASUS ROG Ally (SteamOS).
 #
 # Sources:
 #   Source0  the repository at a tag (git archive), for session files, helpers, fixes
@@ -24,7 +24,10 @@ Summary:        Controller-first home screen for Linux handhelds
 # GameCove: GPL-3.0-or-later. The gyro fix's HID-BPF program (fixes/claw8ex-gyro/bpf,
 # built here into MSI__Claw-ISH-IMU.bpf.o) is GPL-2.0-only; its Python helpers are
 # GPL-2.0-or-later. The VRR panel list and EDID logic derive from MIT-licensed code
-# (notice in fixes/claw8ex-vrr/LICENSE.ClawLab-MIT). Bundled in the app: Godot Engine
+# (notice in fixes/claw8ex-vrr/LICENSE.ClawLab-MIT). The LZMS cabinet.dll (tools/cabinet-lzms,
+# with wimlib's LZMS decoder) is LGPL-2.1-or-later, its helpers MIT. bin/fsr4-xmx holds nitec's
+# FSR 4.1.2 build for Intel XMX (OptiScaler community; made from AMD's FidelityFX SDK upscaler,
+# shared with his OK, shipped unmodified): LicenseRef-FSR4-XMX. Bundled in the app: Godot Engine
 # 4.7.2's export template (MIT, plus the components in LICENSES/Godot-COPYRIGHT.txt:
 # Apache-2.0, BSD-2/3-Clause, Zlib, MPL-2.0, BSL-1.0, FTL, IJG, Unlicense, CC-BY-4.0
 # and a few project licences grouped as LicenseRef-Godot-thirdparty), the OFL-1.1
@@ -34,7 +37,7 @@ Summary:        Controller-first home screen for Linux handhelds
 # trademarks, not GPL-licensed (app/assets/brand/LICENSE.md): LicenseRef-Trademarked-logos.
 # The one bundled device picture (app/assets/device_photos/acer-nitro-blaze-8.webp, bundled because no
 # linkable head-on image exists) is the maker's, not GPL-licensed (CREDITS.md): LicenseRef-Maker-image.
-License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND OFL-1.1 AND CC0-1.0 AND LicenseRef-Fedora-Public-Domain AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND Zlib AND MPL-2.0 AND BSL-1.0 AND FTL AND IJG AND Unlicense AND CC-BY-4.0 AND LicenseRef-Godot-thirdparty AND LicenseRef-Trademarked-logos AND LicenseRef-Maker-image
+License:        GPL-3.0-or-later AND GPL-3.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND OFL-1.1 AND CC0-1.0 AND LGPL-2.1-or-later AND LicenseRef-Fedora-Public-Domain AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND Zlib AND MPL-2.0 AND BSL-1.0 AND FTL AND IJG AND Unlicense AND CC-BY-4.0 AND LicenseRef-Godot-thirdparty AND LicenseRef-Trademarked-logos AND LicenseRef-Maker-image AND LicenseRef-FSR4-XMX
 URL:            https://github.com/IHulkSmashI/gamecove
 Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 Source1:        %{url}/releases/download/v%{version}/%{name}-%{version}-x86_64.tar.gz
@@ -91,6 +94,18 @@ UHB_SRC="$PWD/udev-hid-bpf" sh fixes/claw8ex-gyro/bpf/build-bpf.sh
 install -Dpm0755 app-export/gamecove.x86_64 %{buildroot}%{_prefix}/lib/gamecove/gamecove.x86_64
 install -Dpm0644 app-export/gamecove.pck    %{buildroot}%{_prefix}/lib/gamecove/gamecove.pck
 
+# The LZMS cabinet.dll FSR 4 on XMX needs (tools/cabinet-lzms: built, tested under Wine and checked against
+# cabinet.sha256 by the release workflow; it comes in Source1 with its LGPL source next to it)
+if [ -s app-export/bin/cabinet.dll ]; then
+    install -Dpm0644 app-export/bin/cabinet.dll %{buildroot}%{_prefix}/lib/gamecove/bin/cabinet.dll
+    install -Dpm0644 app-export/bin/cabinet-lzms-source.tar.gz %{buildroot}%{_prefix}/lib/gamecove/bin/cabinet-lzms-source.tar.gz
+fi
+# nitec's FSR 4.1.2 XMX files, unmodified, with their set.json (tools/upscalers/fetch_fsr4.py; in Source1)
+if [ -d app-export/bin/fsr4-xmx ]; then
+    mkdir -p %{buildroot}%{_prefix}/lib/gamecove/bin/fsr4-xmx
+    install -pm0644 app-export/bin/fsr4-xmx/* %{buildroot}%{_prefix}/lib/gamecove/bin/fsr4-xmx/
+fi
+mkdir -p %{buildroot}%{_prefix}/lib/gamecove/bin
 # Root fixes (one folder per fix, each with fix.sh); none is applied on install
 if [ -d fixes ]; then
     mkdir -p %{buildroot}%{_prefix}/lib/gamecove/fixes
@@ -126,6 +141,20 @@ install -Dpm0644 session/wayland-sessions/gamecove.desktop \
 install -Dpm0644 session/systemd/gamescope-session-plus@gamecove.service.d/10-gamecove.conf \
     %{buildroot}%{_userunitdir}/gamescope-session-plus@gamecove.service.d/10-gamecove.conf
 
+# Root autologin guard: the installer copies both into /etc so they outlive the package
+# (session/gamecove-autologin-guard says why)
+install -Dpm0755 session/gamecove-autologin-guard \
+    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard
+install -Dpm0644 session/systemd/gamecove-autologin-guard.service \
+    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard.service
+
+# Root autologin guard: the installer copies both into /etc so they outlive the package
+# (session/gamecove-autologin-guard says why)
+install -Dpm0755 session/gamecove-autologin-guard \
+    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard
+install -Dpm0644 session/systemd/gamecove-autologin-guard.service \
+    %{buildroot}%{_prefix}/lib/gamecove/session/gamecove-autologin-guard.service
+
 # polkit
 install -Dpm0644 packaging/polkit/io.github.ihulksmashi.gamecove.policy \
     %{buildroot}%{_datadir}/polkit-1/actions/io.github.ihulksmashi.gamecove.policy
@@ -140,6 +169,8 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 %{_prefix}/lib/gamecove/gamecove.x86_64
 %{_prefix}/lib/gamecove/gamecove.pck
 %{_prefix}/lib/gamecove/fixes
+%{_prefix}/lib/gamecove/bin
+%{_prefix}/lib/gamecove/session
 %dir %{_libexecdir}/gamecove
 %{_libexecdir}/gamecove/gamecove-fix
 %{_libexecdir}/gamecove/gamecove-fix-set

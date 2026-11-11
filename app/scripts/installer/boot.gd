@@ -12,6 +12,10 @@ extends Node
 ##                                    before a game a crash or a session switch left
 ##                                    behind), then quit: no screen. The session runs it
 ##                                    before it switches away (Profiles does the work)
+##   gamecove.x86_64 --headless -- --version
+##                                    print "GameCove <version>" and quit. The Release
+##                                    workflow runs it on the exported app and fails
+##                                    when it isn't the spec's Version (app_version.gd)
 ##   anything else                    the home screen (scenes/main.tscn)
 ## User arguments come after `--` (OS.get_cmdline_user_args(), the same in an
 ## exported binary). Kept apart from main.gd so the shell stays untouched.
@@ -24,6 +28,7 @@ const MAIN := "res://scenes/main.tscn"
 const INSTALLER := "res://scenes/installer.tscn"
 const Paths := preload("res://scripts/installer/paths.gd")
 const ControlsCli := preload("res://scripts/hwtest/controls_cli.gd")
+const RunMode := preload("res://scripts/system/run_mode.gd")
 
 
 static func wants_installer(args: PackedStringArray) -> bool:
@@ -42,12 +47,30 @@ static func wants_photo_prefetch(args: PackedStringArray) -> bool:
 	return "--prefetch-photo" in args
 
 
+static func wants_version(args: PackedStringArray) -> bool:
+	return "--version" in args
+
+
+## The line `--version` prints.
+static func version_line() -> String:
+	return "GameCove " + AppVersion.text()
+
+
 static func scene_for(args: PackedStringArray) -> String:
 	return INSTALLER if wants_installer(args) else MAIN
 
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
+	if wants_version(args):
+		print(version_line())
+		get_tree().quit(0)
+		return
+	if RunMode.second_instance():
+		# a home screen already runs on these settings: two would write them in turns
+		printerr("GameCove is already running; this second one steps aside.")
+		get_tree().quit()
+		return
 	if wants_controls_cli(args):
 		var cli: Node = ControlsCli.new()
 		cli.name = "ControlsCli"

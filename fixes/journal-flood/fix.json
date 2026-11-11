@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "id": "journal-flood",
+  "revision": 1,
+  "title": "Quiet system log",
+  "line": "Stops steamos-manager filling the system log with split-lock lines, so older logs aren't wiped.",
+  "symptom": "steamos-manager hands every split-lock hit to a crash reporter Bazzite doesn't have; each hit and each failure is logged (about 70,000 lines in five minutes on a Claw 8 EX, 14 % of a CPU core), so the capped journal loses every earlier boot within minutes.",
+  "why": "Any handheld with steamos-manager but without Valve's steamos-log-submitter (Bazzite); the fix checks for both, so it is offered everywhere.",
+  "kind": "file",
+  "page": "fixes",
+  "password": "admin",
+  "restart": "",
+  "level": "optional",
+  "must_fix": false,
+  "breaks": "",
+  "default": "suggested-off",
+  "risk": "low",
+  "risk_note": "One systemd drop-in; only the log lines of steamos-manager's crash-report forwarding go. Everything else it logs stays.",
+  "auto": [],
+  "optional": "*",
+  "exclude": {},
+  "changes": [
+    {
+      "type": "file",
+      "target": "/etc/systemd/system/steamos-manager.service.d/50-gamecove-quiet-split-lock.conf",
+      "detail": "Sets RUST_LOG=info,steamos_manager::sls=off for steamos-manager."
+    },
+    {
+      "type": "service",
+      "target": "steamos-manager.service",
+      "detail": "systemd reloads its units and restarts steamos-manager if it runs."
+    }
+  ],
+  "undo": "Deletes the drop-in, reloads systemd and restarts steamos-manager.",
+  "tested": [],
+  "bazzite": "Not fixed: Bazzite ships steamos-manager without steamos-log-submitter.",
+  "steamos": "Not needed: SteamOS has steamos-log-submitter, which takes the hits.",
+  "sources": [
+    "ClawDeck py_modules/clawdeck/quietlog.py and docs/HARDWARE-FINDINGS.md (measured on a Claw 8 EX, 2026-11-04)",
+    "https://gitlab.steamos.cloud/holo/steamos-manager/-/blob/a3b2013/steamos-manager/src/sls/ftrace.rs"
+  ],
+  "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+      "probe": "os_fixed"
+    },
+    "probe": {
+      "command": "status",
+      "native": "os_fixed=yes",
+      "what": "Looks for another steamos-manager drop-in (not GameCove's) that already turns the forwarding module's log off; the fix is not needed where steamos-log-submitter is installed."
+    },
+    "both_active": "harmless"
+  },
+  "watch": [
+    {
+      "id": "steamos-manager-sls",
+      "kind": "url",
+      "url": "https://gitlab.steamos.cloud/holo/steamos-manager/-/commits/main/steamos-manager/src/sls",
+      "note": "steamos-manager's log-submitter forwarding: a change that skips it without the reporter makes this fix unnecessary."
+    },
+    {
+      "id": "bazzite-units",
+      "kind": "github-commits",
+      "repo": "ublue-os/bazzite",
+      "path": "system_files/deck/shared/usr/lib/systemd/system",
+      "note": "Bazzite's own systemd units: a drop-in for steamos-manager there would make this os-fixed."
+    }
+  ],
+  "withdrawn": null,
+  "audited": "2026-11-10"
+}

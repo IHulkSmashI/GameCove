@@ -32,6 +32,10 @@ const GamescopeScript := preload("res://scripts/gamescope/gamescope.gd")
 
 const CAPS := ["install", "uninstall", "update", "verify", "move", "launch_options", "compat_tool", "progress", "pause", "resume", "cancel"]
 ## install_state_changed states.
+## Why an action on a running game is refused.
+const RUNNING_WHY := "Close the game first"
+## Why a move past its copy can't be paused or cancelled.
+const MOVE_FINISHING_WHY := "Finishing the move: it can't be stopped now"
 const STATE_FOR_ACTION := {"install": "installing", "update": "updating", "verify": "verifying", "move": "moving", "uninstall": "uninstalling"}
 
 var home := OS.get_environment("HOME")
@@ -48,6 +52,10 @@ var entry_lookup := func(_key: String) -> Dictionary: return {}
 var launcher: Object
 ## func(cmd: Array) -> bool. Starts a store's GUI (Heroic) without waiting.
 var open_external := func(cmd: Array) -> bool: return OS.create_process(str(cmd[0]), PackedStringArray(cmd.slice(1))) > 0
+## func(key) -> bool: that game is running right now (main.gd: the game session). Its
+## files aren't uninstalled, moved, updated or verified under it; Steam looks after its
+## own games.
+var game_running: Callable = func(_key: String) -> bool: return false
 ## Bring Steam's dialogs forward under gamescope (StoreSettings "focus_steam_dialogs").
 var under_gamescope := OS.get_environment("GAMESCOPE_WAYLAND_DISPLAY") != ""
 
@@ -197,6 +205,8 @@ func _facts(entry: Dictionary, options: Dictionary) -> Dictionary:
 		"home": home,
 		"options": options,
 		"gog_auth_exists": root != "" and FileAccess.file_exists(root.path_join("gog_store/auth.json")),
+		# a move on one drive is a rename; across drives it's a copy that can be picked up again
+		"same_drive": options.has("path") and path != "" and Disk.same_drive(path, str(options["path"])),
 		"gog_marker_exists": StoreCommands.gog_folder_is(path, id),
 	}
 
@@ -222,6 +232,11 @@ func capabilities(game: Dictionary) -> Dictionary:
 				c["needs_window"].append(action)
 		else:
 			c["why"][action] = p["why"]
+		if c[action] and action != "install" and game_running.call(_key(e)):
+			c[action] = false
+			c["how"].erase(action)
+			c["needs_window"].erase(action)
+			c["why"][action] = RUNNING_WHY
 	var queued := not queue.job_for(str(e.get("store", "")) + ":" + str(e.get("id", ""))).is_empty()
 	var ours: bool = installed and tools.get("umu", "") != ""
 	c["launch_options"] = installed
@@ -240,6 +255,10 @@ func capabilities(game: Dictionary) -> Dictionary:
 		for cap in ["pause", "resume", "cancel"]:
 			c[cap] = false
 			c["why"][cap] = "Nothing running for this game"
+	elif not queue.can_stop(_key(e)):
+		for cap in ["pause", "cancel"]:
+			c[cap] = false
+			c["why"][cap] = MOVE_FINISHING_WHY
 	return c
 
 
@@ -298,6 +317,9 @@ func _do(action: String, game: Dictionary, options: Dictionary) -> Dictionary:
 	var key := _key(e)
 	if str(e.get("store", "")) == "steam":
 		return _steam_do(action, e, options)
+	if action != "install" and game_running.call(key):
+		# rm -rf, mv or a repair under the live game (and, for some, its saves)
+		return _fail(key, action, RUNNING_WHY)
 	if not queue.job_for(key).is_empty():
 		return _fail(key, action, "Already in the download queue")
 	var p := StoreCommands.plan(action, e, tools, _facts(e, options))
@@ -310,6 +332,8 @@ func _do(action: String, game: Dictionary, options: Dictionary) -> Dictionary:
 		return _ok("heroic")
 	if action == "move" and DirAccess.dir_exists_absolute(str(p["finalize"].get("new_path", ""))):
 		return _fail(key, action, "There's already a folder with that name there")
+	if action == "move" and StoreCommands.is_inside(str(options.get("path", "")), str(e.get("install_path", ""))):
+		return _fail(key, action, "That folder is inside the game's own folder")
 	if action == "install":
 		var base := str(p["finalize"].get("base", ""))
 		DirAccess.make_dir_recursive_absolute(base)
@@ -363,6 +387,8 @@ func _control(what: String, game: Dictionary) -> Dictionary:
 	if str(e.get("store", "")) == "steam":
 		var r: Dictionary = steam.call(what, str(e["id"]))
 		return r if r["ok"] else _fail(key, what, r["why"])
+	if what in ["pause", "cancel"] and not queue.job_for(key).is_empty() and not queue.can_stop(key):
+		return _fail(key, what, MOVE_FINISHING_WHY)
 	var ok: bool = queue.call(what, key)
 	return _ok("queue") if ok else _fail(key, what, "Nothing to %s for this game" % what)
 

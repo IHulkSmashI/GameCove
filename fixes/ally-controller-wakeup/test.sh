@@ -39,4 +39,13 @@ allyx
 mkdir -p "$R/usr/lib/udev/rules.d"
 printf '%s\n' 'ACTION=="add", SUBSYSTEM=="usb", DRIVER=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="1b4c", ATTR{power/wakeup}="disabled"' >"$R/usr/lib/udev/rules.d/50-ally-x-controller.rules"
 t_check '[ "$(t_state)" = os-fixed ]' "Bazzite's rule: os-fixed"
+# No rule we can read, but the controller already can't wake it: the behaviour decides
+t_new
+allyx
+printf 'disabled\n' >"$R/sys/bus/usb/devices/1-3/power/wakeup"
+t_check '[ "$(t_state)" = os-fixed ]' "wakeup already disabled without our rule: os-fixed"
+t_new
+allyx
+sh "$FIX" install >/dev/null
+t_check 'sh "$FIX" status | grep -qx os_fixed=no' "disabled by our own rule: not os-fixed"
 t_end

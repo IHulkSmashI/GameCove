@@ -420,12 +420,12 @@ Every number is -1 when unknown. Sources (first that works):
 | --- | --- |
 | fps, frame_ms | mangoapp's MangoHud log: gamescope sends mangoapp each frame's timing (SysV queue `ftok("mangoapp", 65)`, one reader, so we don't read it). We add `output_folder=$XDG_RUNTIME_DIR/gamecove-mangohud` and `log_interval=1000` to the session's `MANGOHUD_CONFIGFILE` and start the log with `mangohudctl set log_session 1` (once per game; again only if no rows come, at most every 3 s, 5 times). No mangohudctl: `autostart_log=1`, which only logs while the overlay is visible (`fps_needs_overlay`). Not used: gamescope's `-T` stats pipe (fps once per 300 frames, may have another reader) |
 | cpu_load | `/proc/stat` delta |
-| package_w | RAPL `/sys/class/powercap/intel-rapl:N` (name `package-0`) `energy_uj` delta, if readable (root-only on many kernels); else amdgpu hwmon `power1_average`/`power1_input` on an APU (VRAM ≤ 4 GiB) |
+| package_w | RAPL `/sys/class/powercap/intel-rapl:N` (name `package-0`) `energy_uj` delta, if readable (root-only since CVE-2020-8694; the optional `overlay-power` fix opens it on Intel); else amdgpu hwmon `power1_average`/`power1_input` on an APU (VRAM ≤ 4 GiB) |
 | gpu_w | RAPL `uncore` subzone; amdgpu power on a dGPU; discrete Intel hwmon `energy1_input`; else the log's `gpu_power` |
 | gpu_load | amdgpu `device/gpu_busy_percent`; else the log's `gpu_load` (Intel) |
 | gpu_mhz | xe `device/tile0/gt0/freq0/act_freq`, i915 `gt_act_freq_mhz`, amdgpu hwmon `freq1_input` |
 | cpu_temp, gpu_temp | hwmon `coretemp`/`k10temp`/`zenpower` `temp1_input`, else thermal zone `x86_pkg_temp`; amdgpu / discrete Intel hwmon `temp1_input` |
-| battery_w | `BAT*/power_now` (or current × voltage) while discharging |
+| battery_w | `BAT*/power_now` (or current × voltage, sign ignored) while discharging; a reading above 200 W is divided by 100 (the Claw 8 EX EC reports `current_now` 100x too large) |
 
 Overlay: no gamescope atom. Like Steam and OpenGamepadUI, we rewrite the session's `MANGOHUD_CONFIGFILE` (gamescope-session-plus makes it with `mktemp /tmp/mangohud.XXXXXXXX` and writes `no_display`); mangoapp reloads it on inotify, and gamescope reads it to know if the overlay shows. Unsupported (returns false) without that variable or without `mangoapp` on `PATH`. The level is remembered in `user://perf.cfg` and put back at start. The overlay also shows over our home screen; while a log runs MangoHud draws a small dot in its corner.
 

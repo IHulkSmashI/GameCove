@@ -61,11 +61,11 @@ func test_epic_install_through_queue() -> void:
 	var g := _epic(false)
 	var res := m.install({"key": g["key"]})
 	eq(res, {"ok": true, "via": "legendary", "why": ""}, "accepted")
-	eq(r.last_cmd(), "/usr/bin/legendary info Quail --json", "probe runs")
+	eq(r.last_cmd(), "/usr/bin/legendary info --json -- Quail", "probe runs")
 	ok(DirAccess.dir_exists_absolute(m.home.path_join("Games/epic")), "install folder made")
 	ok(events.has(["state", "epic:Quail", "installing"]), "installing")
 	r.finish(1, 0)
-	eq(r.last_cmd(), "/usr/bin/legendary install Quail --base-path %s --platform Windows -y --skip-sdl" % m.home.path_join("Games/epic"), "install runs")
+	eq(r.last_cmd(), "/usr/bin/legendary install --base-path %s --platform Windows -y --skip-sdl -- Quail" % m.home.path_join("Games/epic"), "install runs")
 	r.feed(2, "[DLManager] INFO: = Progress: 50.00% (5/10), Running for 00:00:01, ETA: 00:00:01")
 	eq(m.downloads()[0]["progress"]["percent"], 50.0, "downloads() shows progress")
 	r.finish(2, 0)
@@ -135,7 +135,7 @@ func test_gog_install_records_the_folder() -> void:
 	eq(res["via"], "gogdl", "gogdl")
 	r.finish(1, 0)
 	var base := m.home.path_join("Games/gog")
-	ok(r.last_cmd().contains("download 42 --platform windows --path " + base), "download: " + r.last_cmd())
+	ok(r.last_cmd().contains("download --platform windows --path " + base) and r.last_cmd().ends_with(" -- 42"), "download: " + r.last_cmd())
 	DirAccess.make_dir_recursive_absolute(base.path_join("Game"))
 	FileAccess.open(base.path_join("Game/goggame-42.info"), FileAccess.WRITE).close()
 	r.finish(2, 0)
@@ -337,3 +337,33 @@ func test_gog_folder_proof() -> void:
 	FileAccess.open(dir.path_join("W/goggame-99.info"), FileAccess.WRITE).close()
 	eq(StoreCommands.find_gog_install(dir, "77", ["A"]), "", "another game's info file is never taken")
 	TempTree.remove_tree(dir)
+
+
+## Final review, low: nothing stopped uninstalling or moving an Epic, GOG or Amazon game
+## while it runs (rm -rf or mv under the live game, its saves inside for some).
+func test_no_uninstall_move_update_or_verify_under_the_running_game() -> void:
+	var m := _manager("sm_running")
+	var e := _epic(true)
+	var running := ["epic:Quail"]
+	m.game_running = func(key: String) -> bool: return key in running
+	for action in ["uninstall", "move", "update", "verify"]:
+		events.clear()
+		var r: Dictionary = m.move(e, "/sd/Games") if action == "move" else m.call(action, e)
+		ok(not r["ok"], action + ": refused while the game runs")
+		eq(r["why"], StoreManager.RUNNING_WHY, action + ": and says why")
+		eq(events, [["failed", "epic:Quail", action, StoreManager.RUNNING_WHY]], action + ": the UI hears it")
+	eq(m.runner.started.size(), 0, "no command was started")
+	ok(m.queue.job_for("epic:Quail").is_empty(), "nothing queued")
+	var caps: Dictionary = m.capabilities(e)
+	ok(not caps["uninstall"] and not caps["move"], "the game page doesn't offer them meanwhile")
+	eq(caps["why"]["uninstall"], StoreManager.RUNNING_WHY, "with the reason")
+	# another game runs: this one can go
+	running[0] = "gog:1"
+	ok(m.uninstall(e)["ok"], "a different game running doesn't block this one")
+	_done(m)
+
+
+## main.gd tells the store manager which game runs.
+func test_main_wires_the_running_game_to_the_store_manager() -> void:
+	var src := FileAccess.get_file_as_string("res://scripts/main.gd")
+	ok(src.contains("lib_store.game_running = func(key: String) -> bool: return session != null and session.runs(key)"), "main.gd wires store.game_running")

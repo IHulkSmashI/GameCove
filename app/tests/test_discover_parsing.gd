@@ -27,6 +27,38 @@ func test_cheapshark_deals() -> void:
 	eq(CheapShark.parse_deals("[]".to_utf8_buffer()), [], "empty list")
 
 
+## Final review (Low): CheapShark sends null for what it doesn't know. int(null)
+## was a script error inside the parser, which stopped the request's callback
+## and left the Discover refresh waiting for ever.
+func test_cheapshark_null_fields_never_stop_the_parser() -> void:
+	var deals: Variant = CheapShark.parse_deals(('[{"dealID":"a1","storeID":null,"gameID":null,"steamAppID":null,"title":null,'
+		+ '"salePrice":null,"normalPrice":null,"savings":null,"dealRating":null,"thumb":null,"releaseDate":null},'
+		+ '{"dealID":null,"title":"no id"},{"dealID":"b2","title":"Fine","salePrice":"1.50","normalPrice":"3.00","savings":"50.0",'
+		+ '"releaseDate":{"odd":1},"thumb":["x"],"storeID":7}]').to_utf8_buffer())
+	ok(deals is Array, "still a list")
+	eq(deals.size(), 2, "the entry without an id is left out, the others stay")
+	eq([deals[0]["deal_id"], deals[0]["store_id"], deals[0]["title"], deals[0]["thumb"], deals[0]["released"], deals[0]["price"], deals[0]["rating"]],
+		["a1", "", "", "", 0, 0.0, null], "nulls read as empty, never as \"<null>\"")
+	eq([deals[1]["released"], deals[1]["thumb"], deals[1]["store_id"], deals[1]["price"]], [0, "", "7", 1.5], "odd types too")
+	var stores := CheapShark.parse_stores('[{"storeID":"1","storeName":null,"isActive":null,"images":null},{"storeID":null},{"storeID":2,"storeName":"B","isActive":1,"images":{"icon":null}}]'.to_utf8_buffer())
+	eq(stores, {"1": {"name": "", "active": false, "icon": ""}, "2": {"name": "B", "active": true, "icon": ""}}, "stores with nulls")
+	var found: Variant = CheapShark.parse_search('[{"gameID":"5","steamAppID":null,"external":null,"cheapest":null,"cheapestDealID":null,"thumb":null},{"gameID":null}]'.to_utf8_buffer())
+	eq(found, [{"game_id": "5", "appid": "", "title": "", "cheapest": 0.0, "cheapest_deal_id": "", "thumb": ""}] as Array[Dictionary], "search with nulls")
+	var look := CheapShark.parse_lookup('{"7":{"info":{"title":null,"steamAppID":null,"thumb":null},"cheapestPriceEver":{"price":null,"date":null},"deals":null},"8":{"info":null,"cheapestPriceEver":null,"deals":[null,{"dealID":null},{"dealID":"d","storeID":null,"price":null,"retailPrice":null,"savings":null}]}}'.to_utf8_buffer())
+	eq(look["7"], {"game_id": "7", "appid": "", "title": "", "thumb": "", "historical_low": {"price": 0.0, "currency": "USD", "date": 0}, "offers": [] as Array[Dictionary]}, "a lookup whose deals are null")
+	eq(look["8"]["offers"].size(), 1, "null entries in the list are skipped")
+	eq(look["8"]["offers"][0]["store_id"], "", "and a null store reads as empty")
+	# Steam's own answers get the same care
+	var SteamApi = load("res://scripts/discover/steam_api.gd")
+	var items: Dictionary = SteamApi.parse_items('{"response":{"store_items":[{"success":1,"appid":10,"name":null,"is_free":null,"assets":null,"release":{"steam_release_date":null,"is_coming_soon":null},"best_purchase_option":{"final_price_in_cents":"999","original_price_in_cents":null,"discount_pct":null,"active_discounts":null,"formatted_final_price":null}},{"success":null,"appid":11}]}}'.to_utf8_buffer())
+	eq(items.keys(), ["10"], "an item full of nulls still parses; one without success is left out")
+	eq([items["10"]["price"], items["10"]["regular_price"], items["10"]["savings_pct"], items["10"]["title"], items["10"]["free"]], [9.99, 9.99, 0, "", false], "with what it does know")
+	eq(SteamApi.parse_items('{"response":{"store_items":null}}'.to_utf8_buffer()), {}, "no item list")
+	eq(SteamApi.parse_wishlist('{"response":{"items":[{"appid":20,"priority":null,"date_added":null},{"appid":null},null]}}'.to_utf8_buffer()),
+		[{"appid": "20", "priority": 0, "added": 0}] as Array[Dictionary], "a wishlist with nulls")
+	eq(SteamApi.parse_wishlist('{"response":{"items":null}}'.to_utf8_buffer()), [] as Array[Dictionary], "a null wishlist is an empty one")
+
+
 func test_cheapshark_stores_search_lookup() -> void:
 	var stores := CheapShark.parse_stores(_bytes("cs_stores.json"))
 	eq(stores["1"]["name"], "Steam", "store name")
@@ -128,6 +160,93 @@ func test_http_classify_and_user_agent() -> void:
 	ok(Http.classify(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray())["ok"], "200 ok")
 	ok(Http.user_agent().begins_with("GameCove/") and Http.user_agent().ends_with("(+https://github.com/IHulkSmashI/GameCove)"), "user agent")
 	eq(Http.host_of("https://www.cheapshark.com/api/1.0/deals"), "www.cheapshark.com", "host")
+
+
+# ---- final review (Low): hosts are checked on every redirect hop, nothing is uncapped -----------------
+
+## http.gd with its next request recorded instead of started.
+class RecHttp extends "res://scripts/discover/http.gd":
+	var started: Array = []
+	func _start(url: String, opts: Dictionary, done: Callable) -> void:
+		started.append([url, opts])
+		_opts_of[done] = opts
+		_active += 1
+
+
+func test_http_checks_the_host_on_every_redirect_hop() -> void:
+	var HttpScript := load("res://scripts/discover/http.gd")
+	var hosts := ["steamstatic.com", "images.igdb.com"]
+	for good in ["https://steamstatic.com/a.jpg", "https://shared.akamai.steamstatic.com/x/a.jpg", "https://images.igdb.com/igdb/a.jpg",
+			"https://cdn.steamstatic.com:443/a.jpg"]:
+		ok(HttpScript.host_allowed(good, hosts), "allowed: " + good)
+	for bad in ["http://steamstatic.com/a.jpg", "https://steamstatic.com.evil.example/a.jpg", "https://evilsteamstatic.com/a.jpg",
+			"https://evil.example/steamstatic.com/a.jpg", "https://steamstatic.com@evil.example/a.jpg", "https://evil.example?x=.steamstatic.com",
+			"https://evil.example#.steamstatic.com", "https://steamstatic.com:8443/a.jpg", "https://igdb.com/a.jpg", "ftp://steamstatic.com/a", ""]:
+		ok(not HttpScript.host_allowed(bad, hosts), "refused: " + bad)
+	# the first address
+	var h = RecHttp.new()
+	var got := []
+	var done := func(res: Dictionary) -> void: got.append(res)
+	h.request("https://evil.example/a.jpg", {"hosts": hosts}, done)
+	eq([got.size(), got[0]["error"], h.started.size()], [1, "redirect", 0], "an address off the list is never asked")
+	# a redirect to an allowed host is followed (by hand), one to any other host stops
+	got.clear()
+	h.request("https://cdn.steamstatic.com/a.jpg", {"hosts": hosts, "download_file": "/nonexistent/x.part"}, done)
+	eq(h.started.size(), 1, "started")
+	var req := HTTPRequest.new()
+	req.max_redirects = 0
+	h._on_done(HTTPRequest.RESULT_SUCCESS, 302, PackedStringArray(["Location: https://images.igdb.com/b.jpg"]), PackedByteArray(), req, "https://cdn.steamstatic.com/a.jpg", done)
+	eq([h.started.size(), got.size()], [2, 0], "a hop to an allowed host is followed")
+	eq(h.started[1][0], "https://images.igdb.com/b.jpg", "to where it points")
+	eq(h.started[1][1].get("hosts"), hosts, "under the same rule")
+	var req2 := HTTPRequest.new()
+	req2.max_redirects = 0
+	h._on_done(HTTPRequest.RESULT_SUCCESS, 301, PackedStringArray(["Location: https://evil.example/c.jpg"]), PackedByteArray(), req2, "https://images.igdb.com/b.jpg", done)
+	eq(h.started.size(), 2, "a hop off the list is not followed")
+	eq([got.size(), got[0]["ok"], got[0]["error"]], [1, false, "redirect"], "the request fails with \"redirect\"")
+	var req3 := HTTPRequest.new()
+	req3.max_redirects = 0
+	got.clear()
+	h.request("https://cdn.steamstatic.com/a.jpg", {"hosts": hosts}, done)
+	h._on_done(HTTPRequest.RESULT_SUCCESS, 302, PackedStringArray(["Location: http://cdn.steamstatic.com/a.jpg"]), PackedByteArray(), req3, "https://cdn.steamstatic.com/a.jpg", done)
+	eq(got[0]["error"], "redirect", "a downgrade to http is refused too")
+	h.free()
+	var src := FileAccess.get_file_as_string("res://scripts/discover/http.gd")
+	ok("opts.get(\"hosts\", []) as Array).is_empty():\n\t\treq.max_redirects = 0" in src, "a request with hosts never lets HTTPRequest follow redirects itself")
+	# caps: nothing goes out uncapped
+	eq(HttpScript.cap_for({}), HttpScript.DEFAULT_MAX_BYTES, "an answer kept in memory: default cap")
+	eq(HttpScript.cap_for({"download_file": "/x"}), HttpScript.DEFAULT_MAX_DOWNLOAD, "a download: its own default")
+	eq(HttpScript.cap_for({"max_bytes": 1000, "download_file": "/x"}), 1000, "the caller's cap wins")
+	eq(HttpScript.cap_for({"max_bytes": 0}), HttpScript.DEFAULT_MAX_BYTES, "0 no longer means no cap")
+	ok("req.body_size_limit = cap_for(opts)" in src, "and every HTTPRequest gets one")
+
+
+## Pictures: the callers that trust only certain hosts say so to http.gd.
+func test_picture_downloads_name_their_hosts() -> void:
+	var FakeHttp := load("res://scripts/discover/fake_http.gd")
+	var ArtScript := load("res://scripts/discover/art.gd")
+	var http = FakeHttp.new()
+	var png := Image.create_empty(4, 4, false, Image.FORMAT_RGBA8).save_png_to_buffer()
+	http.route("https://shared.akamai.steamstatic.com/", {"bytes": png})
+	var a: Node = ArtScript.new()
+	a.http = http
+	a.cache_dir = "user://tests/art_hosts_%d" % randi()
+	var out := []
+	a._download("steam:10", "cover", "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/10/library_600x900.jpg", func(p): out.append(p))
+	eq(http.options.size(), 1, "asked")
+	eq(http.options[0].get("hosts"), ArtScript.IMAGE_HOSTS, "Discover art: IMAGE_HOSTS on every hop")
+	eq(http.options[0].get("max_bytes"), ArtScript.MAX_FILE_BYTES, "and capped while it downloads, not only checked after")
+	ok(out.size() == 1 and out[0] != "", "the picture was kept")
+	for f in DirAccess.get_files_at(ProjectSettings.globalize_path(a.cache_dir)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(a.cache_dir).path_join(f))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(a.cache_dir))
+	a.free()
+	for f in ["res://scripts/library/meta/resolver.gd", "res://scripts/library/art/art_service.gd", "res://scripts/device/photo.gd"]:
+		var text := FileAccess.get_file_as_string(f)
+		for line in text.split("\n"):
+			if "http.request(" in line and "download_file" in line:
+				ok("\"hosts\":" in line and "\"max_bytes\":" in line, "%s: a download names its hosts and its cap (%s)" % [f.get_file(), line.strip_edges().substr(0, 60)])
+	ok("_http.body_size_limit = MAX_PACKED" in FileAccess.get_file_as_string("res://scripts/library/gamedb.gd"), "the game database download is capped")
 
 
 # ---- review L32: credentials stay with their host ------------------------------------------------

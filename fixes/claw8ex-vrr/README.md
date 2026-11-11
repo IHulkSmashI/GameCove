@@ -1,6 +1,6 @@
 # claw8ex-vrr: 30-120 Hz VRR on the Claw's screen
 
-The Claw 8 AI+ / 8 EX AI+ panel refreshes down to 30 Hz, but its EDID announces 48-120 Hz. Below 48 fps the GPU driver then holds each frame for a whole 48 Hz refresh, which judders. This fix gives the driver a corrected EDID with a 30-120 Hz range. It's the Linux version of the Intel VRR range fix (Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory, MIT), ported from ClawDeck. Bazzite only for now.
+The Claw 8 AI+ / 8 EX AI+ panel refreshes down to 30 Hz, but its EDID announces 48-120 Hz. Below 48 fps the GPU driver then holds each frame for a whole 48 Hz refresh, which judders. This fix gives the driver a corrected EDID with a 30-120 Hz range. It's the Linux version of the Intel VRR range fix (Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory, MIT), ported from ClawDeck. Bazzite and SteamOS.
 
 ```
 gamecove-fix claw8ex-vrr install    # then restart
@@ -38,6 +38,25 @@ It takes effect at the next restart. `remove` undoes all of it, also at the next
 - Or kill switch: at the boot menu press `e`, add `gamecove.novrr` to the `linux` line (or delete `gamecove.vrr=1`), then Ctrl+X. VRR fix off for that boot.
 - Then `gamecove-fix claw8ex-vrr remove` (Desktop Mode, or `sudo` from a TTY / SSH) undoes it for good at the next restart. Changes are recorded in `/var/lib/gamecove/fixes/claw8ex-vrr/manifest`. `install` refuses when another modprobe rule already has an `install` line for `xe`/`i915`.
 
+### SteamOS
+
+SteamOS has no rpm-ostree, so the boot switch goes where SteamOS takes kernel arguments: `/etc/default/grub`, which
+Holo's `update-grub` turns into `/efi/EFI/SteamOS/grub.cfg` (ClawDeck's `edid.py` method, checked by a tester on
+SteamOS 3.9.5). The EDID, the hook and the modprobe rule are the same files as on Bazzite.
+
+| What | Where |
+| --- | --- |
+| The boot switch | one line at the end of `/etc/default/grub`: `GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} gamecove.vrr=1"  # GameCove claw8ex-vrr`; nothing else in the file is touched, and `update-grub` runs (as its own systemd unit, so nothing can cut it halfway). Install checks that SteamOS's `grub.cfg` took it, or takes everything back |
+| Keep list | `/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf`: the EDID, the hook, its `edid.conf` and the modprobe rule survive SteamOS updates. Never `/etc/default/grub` itself, which would hide Valve's own changes to it |
+| Initramfs | nothing: the fix is only offered where the GPU driver starts after the real `/etc` is there (not built into the kernel, not in the running kernel's initramfs, read with `lsinitcpio`) |
+
+A SteamOS update brings back Valve's `/etc/default/grub` without our line. At its next start GameCove sees that
+(the fix's record says it is a SteamOS install, the marker is gone) and runs `gamecove-fix-set claw8ex-vrr set
+refresh`, which needs no password: it puts the one line back on top of the new file, and one restart brings the
+range back. If the update made the fix impossible (the driver now in the initramfs) or didn't keep its files, the
+fix takes itself out instead. `status` shows `after_update=yes` while the line is missing and `boot=steamos`.
+`remove` takes out the keep list first, then the line (update-grub again), then the files.
+
 ### Older installs
 
 Before this, the fix set the kernel arguments `drm.edid_firmware=eDP-1:edid/<file>` and `firmware_class.path=/etc/firmware`, which every handheld booting the drive got. `install`, or `status` run as root (`pkexec /usr/libexec/gamecove/gamecove-fix claw8ex-vrr status`), moves an old install to the hook and drops both arguments (the gyro fix keeps `firmware_class.path` if it holds it). Run on a different board, it removes the old install entirely, so the Claw's EDID can never reach another screen; install it again on the Claw. `status` shows `old_kernel_args=yes` until this has happened.
@@ -55,7 +74,11 @@ Before this, the fix set the kernel arguments `drm.edid_firmware=eDP-1:edid/<fil
 - the same drive booting a ROG Ally and a Legion Go S (hook changes nothing, install changes nothing), then the Claw again
 - the hook leaving someone else's EDID override or firmware path alone
 - migrating an old kernel-argument install, on the Claw and on another handheld
-- refusals: unknown panel, someone else's override, no rpm-ostree
+- refusals: unknown panel, someone else's override, neither rpm-ostree nor SteamOS
+- SteamOS: the roundtrip (one marked line, the boot menu checked, the keep list, back to exactly how it was), the
+  line put back after an update, the fix taken out when the update didn't keep its files, refusals when the driver
+  is in the initramfs or built in, without the keep-list folder, with someone else's EDID line, and when update-grub
+  leaves the switch out or fails
 - undo when the initramfs step fails
 - a zero-padded 128-byte EDID
 

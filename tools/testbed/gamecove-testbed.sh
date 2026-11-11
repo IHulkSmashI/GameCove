@@ -14,7 +14,7 @@
 #   sh gamecove-testbed.sh install [tag]  run the real installer (get-gamecove.sh + the
 #                                         installer app) for a release, logging everything.
 #                                         tag: the argument, else $GAMECOVE_TAG, else the newest
-#                                         release including pre-releases (releases/latest skips them)
+#                                         release including pre-releases (from the release list)
 #   sh gamecove-testbed.sh uninstall      open the installer to uninstall (you pick Uninstall), logged
 #   sh gamecove-testbed.sh check [--detach] [name...]
 #                                         run the machine checks in checks/ (all when no name);
@@ -276,12 +276,14 @@ cmd_status() {
 
 # --------------------------------------------------------------------- install
 # The release to install: the argument, $GAMECOVE_TAG, else the newest release including
-# pre-releases (the GitHub API's releases/latest skips pre-releases, so ask the list).
+# pre-releases (the GitHub API's releases/latest answers with a data release, so ask the list).
 resolve_tag() {
 	t="${1:-${GAMECOVE_TAG:-}}"
 	if [ -z "$t" ]; then
-		t="$("$CURL" -fsSL -H "Accept: application/vnd.github+json" "$API/repos/$REPO/releases?per_page=1" 2>/dev/null |
-			sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)" || t=""
+		# every tag in the list, app releases only (vX...; the data releases "upscalers", "firmware", "gamedb" and
+		# "device-photos" are in the same list and one of them is GitHub's "latest"), highest version
+		t="$("$CURL" -fsSL -H "Accept: application/vnd.github+json" "$API/repos/$REPO/releases?per_page=100" 2>/dev/null |
+			grep -o '"tag_name"[[:space:]]*:[[:space:]]*"v[0-9][A-Za-z0-9._+-]*"' | sed 's/.*"\(v[^"]*\)"$/\1/' | sort -V | tail -n 1)" || t=""
 	fi
 	case "$t" in
 	v[0-9]*) printf '%s' "$t" ;;

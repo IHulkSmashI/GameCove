@@ -12,7 +12,10 @@ extends "res://scripts/system/service.gd"
 ## installed (leftovers() measures, clean_leftovers() removes them through
 ## launch_files.gd's guarded remover), the same folders the Storage Cleaner
 ## Decky plugin clears. Proton prefixes (compatdata) are never touched: they can
-## hold saves that aren't in the cloud.
+## hold saves that aren't in the cloud. A cache is left over when no library has its game's
+## manifest; while a library Steam lists can't be read nothing counts as left over, and the
+## games of a library we have seen before (steam_library_memory.gd) stay protected while
+## it can't be read even if Steam no longer lists it.
 ##
 ## Formatting an SD card is not offered yet (docs/SYSTEM.md, future work).
 
@@ -22,6 +25,7 @@ const Parse := preload("res://scripts/system/storage_parse.gd")
 const SteamStore := preload("res://scripts/library/stores/steam.gd")
 const Common := preload("res://scripts/library/stores/common.gd")
 const LaunchFiles := preload("res://scripts/controls/perf/launch_files.gd")
+const Memory := preload("res://scripts/system/steam_library_memory.gd")
 
 const WATCH_S := 4.0
 const FINDMNT_ARGS := ["--json", "--list", "-b", "-o", "SOURCE,TARGET,FSTYPE,SIZE,USED,AVAIL,OPTIONS"]
@@ -29,6 +33,10 @@ const LSBLK_ARGS := ["--json", "-b", "-o", "NAME,PATH,PKNAME,TYPE,SIZE,RM,HOTPLU
 
 var home := OS.get_environment("HOME")
 var proc_mounts := "/proc/self/mounts"
+## Where the libraries we've seen are remembered ("" = Memory.path).
+var memory_path := ""
+## func() -> unix seconds (tests swap it).
+var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 
 var _state := {"drives": [], "libraries": [], "watching": false, "ready": false, "error": "",
 	"cleanup": {"ready": false, "dirs": [], "bytes": 0, "cleaning": false}}
@@ -196,13 +204,37 @@ static func missing_libraries(libs: Array) -> Array:
 	return libs.filter(func(lib): return DirAccess.open(str(lib).path_join("steamapps")) == null)
 
 
+## Notes the libraries readable now and returns the games that must be treated as
+## installed although no listed library shows them: {appid: library folder} of remembered
+## libraries that can't be read (an SD card that's out, whether or not Steam still lists it).
+func away_games(libs: Array) -> Dictionary:
+	var now: int = clock.call()
+	var seen := {}
+	for lib in libs:
+		if DirAccess.open(str(lib).path_join("steamapps")) != null:
+			seen[str(lib)] = Memory.apps_in(str(lib))
+	Memory.remember(seen, now, memory_path)
+	return Memory.away(libs, now, memory_path)
+
+
+## The library folders in an away_games() answer, sorted.
+static func away_libraries(away: Dictionary) -> Array:
+	var out: Array = []
+	for id in away:
+		if not away[id] in out:
+			out.append(away[id])
+	out.sort()
+	return out
+
+
 ## steamapps/shadercache/<appid> folders whose game has no appmanifest in any of
 ## `libs` (uninstalled, or moved away and back without its cache). [] while a
-## library is missing (missing_libraries()).
-static func leftover_dirs(libs: Array) -> Array:
+## library is missing (missing_libraries()). `away`: app ids that count as installed
+## anyway (away_games()).
+static func leftover_dirs(libs: Array, away := {}) -> Array:
 	if not missing_libraries(libs).is_empty():
 		return []
-	var installed := {}
+	var installed := away.duplicate()
 	for lib in libs:
 		for f in DirAccess.get_files_at(str(lib).path_join("steamapps")):
 			if f.begins_with("appmanifest_") and f.ends_with(".acf"):
@@ -223,10 +255,12 @@ func leftovers() -> void:
 	_queue("leftovers", func():
 		var libs := steam_library_paths()
 		var missing := missing_libraries(libs)
-		var dirs := leftover_dirs(libs)
+		var away := away_games(libs)
+		var dirs := leftover_dirs(libs, away)
 		var bytes := _du_total(dirs)
 		_main(func():
-			_state["cleanup"] = {"ready": true, "dirs": dirs, "bytes": bytes, "cleaning": false, "missing": missing}
+			_state["cleanup"] = {"ready": true, "dirs": dirs, "bytes": bytes, "cleaning": false, "missing": missing,
+				"away": away_libraries(away)}
 			changed.emit(state())))
 
 
@@ -245,7 +279,8 @@ func clean_leftovers() -> bool:
 		var freed := 0
 		var failed := 0
 		var libs := steam_library_paths()
-		var now := leftover_dirs(libs)
+		var away := away_games(libs)
+		var now := leftover_dirs(libs, away)
 		for d in dirs:
 			if not d in now:
 				continue
@@ -256,11 +291,12 @@ func clean_leftovers() -> bool:
 				freed += maxi(b, 0)
 			else:
 				failed += 1
-		var left := leftover_dirs(libs)
+		var left := leftover_dirs(libs, away)
 		var missing := missing_libraries(libs)
 		var bytes := _du_total(left)
 		_main(func():
-			_state["cleanup"] = {"ready": true, "dirs": left, "bytes": bytes, "cleaning": false, "freed": freed, "failed": failed, "missing": missing}
+			_state["cleanup"] = {"ready": true, "dirs": left, "bytes": bytes, "cleaning": false, "freed": freed, "failed": failed, "missing": missing,
+				"away": away_libraries(away)}
 			changed.emit(state())))
 	return true
 

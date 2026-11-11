@@ -249,3 +249,81 @@ func test_untouched_values_are_written_back_verbatim() -> void:
 	eq(SteamConfig.set_launch_options(home, user, "730", "-novid", no_proc), ERR_FILE_UNRECOGNIZED, "refused: it wouldn't round-trip")
 	eq(FileAccess.get_file_as_string(path), spaced, "file untouched")
 	TempTree.remove_tree(home)
+
+
+## Start check: Godot logged "Unicode parsing error ... Unexpected NUL character" four times
+## on every start, because the reader marked unquoted tokens with char(0), which the compiler
+## folds into the script's constants. The marker is a bare quote now; unquoted tokens are
+## still never written back as they were (writers always quote).
+func test_unquoted_tokens_are_marked_without_a_nul() -> void:
+	var raws := PackedStringArray()
+	VDF.tokenize("\"a\"\n{\n\tplain\t\tword\n\t\"q\"\t\t\"\\\"x\"\n}\n", [], raws)
+	eq(Array(raws), ["a", "{", VDF.UNQUOTED + "plain", VDF.UNQUOTED + "word", "q", "\\\"x", "}"], "tokens as written")
+	for r in raws:
+		ok(r.to_utf8_buffer().find(0) < 0, "no NUL in " + r)
+	var parsed: Dictionary = VDF.parse_strict_raw("\"a\"\n{\n\tplain\t\tword\n\t\"q\"\t\t\"\\\"x\"\n}\n")
+	eq(parsed["tree"], {"a": {"plain": "word", "q": "\"x"}}, "values")
+	eq(VdfWriter.dump(parsed["tree"], 0, parsed["raw"]), "\"a\"\n{\n\t\"plain\"\t\t\"word\"\n\t\"q\"\t\t\"\\\"x\"\n}\n",
+		"unquoted ones come back quoted, the quoted one exactly as written")
+	# no script may build a NUL character: it is what Godot complains about when it compiles
+	var bad: Array[String] = []
+	var stack := ["res://scripts"]
+	while not stack.is_empty():
+		var dir: String = stack.pop_back()
+		for d in DirAccess.get_directories_at(dir):
+			stack.append(dir.path_join(d))
+		for f in DirAccess.get_files_at(dir):
+			if f.ends_with(".gd"):
+				var text := FileAccess.get_file_as_string(dir.path_join(f))
+				if text.contains("char(" + "0)") or text.contains("\\u00" + "00") or text.contains("String.chr(" + "0)"):
+					bad.append(dir.path_join(f))
+	eq(bad, [] as Array[String], "scripts that build a NUL character")
+
+
+## Final review, low (saves and storage), and what it uncovered. Two ways a running Steam
+## was missed, so a setting was written while Steam runs and silently overwritten at exit:
+## - /proc files report a size of 0 and get_file_as_string() trusts the size, so on a real
+##   system the process name always read as "" (the fixture's ordinary files hid that);
+## - Flatpak Steam's pid file holds the pid inside the sandbox, which on the host is some
+##   other process or none.
+func test_steam_running_on_a_real_proc_and_in_a_flatpak() -> void:
+	var dir: String = TempTree.temp_dir("steam_running")
+	# the real /proc, with this process standing in for Steam
+	var me := str(OS.get_process_id())
+	ok(SteamConfig.read_proc("/proc/%s/comm" % me).strip_edges() != "", "a /proc file is read to its end")
+	var home := dir.path_join("home")
+	DirAccess.make_dir_recursive_absolute(home.path_join(".steam"))
+	var f := FileAccess.open(home.path_join(".steam/steam.pid"), FileAccess.WRITE)
+	f.store_string(me + "\n")
+	f.close()
+	var my_name := SteamConfig.read_proc("/proc/%s/comm" % me).strip_edges().to_lower()
+	ok(SteamConfig.is_running(home, "/proc", [my_name]), "a live process named in the pid file is seen on the real /proc")
+	ok(not SteamConfig.is_running(home, "/proc", ["no-such-program"]), "and only when it has the right name")
+	# Flatpak Steam: the pid file says 2 (its pid inside the sandbox); on the host Steam is 5150
+	var fhome := dir.path_join("fhome")
+	var pidfile := fhome.path_join(".var/app/com.valvesoftware.Steam/.steam/steam.pid")
+	DirAccess.make_dir_recursive_absolute(pidfile.get_base_dir())
+	f = FileAccess.open(pidfile, FileAccess.WRITE)
+	f.store_string("2\n")
+	f.close()
+	var proc := dir.path_join("proc")
+	for p in [["2", "kthreadd", "NSpid:\t2\n"], ["900", "bash", "NSpid:\t900\n"], ["5150", "steam", "Name:\tsteam\nNSpid:\t5150\t2\n"]]:
+		DirAccess.make_dir_recursive_absolute(proc.path_join(p[0]))
+		for item in [["comm", p[1] + "\n"], ["status", p[2]]]:
+			f = FileAccess.open(proc.path_join(p[0]).path_join(item[0]), FileAccess.WRITE)
+			f.store_string(item[1])
+			f.close()
+	ok(SteamConfig.is_running(fhome, proc), "Flatpak Steam is seen as running")
+	# the sandbox is gone (Steam closed, its pid file left behind)
+	DirAccess.remove_absolute(proc.path_join("5150/comm"))
+	DirAccess.remove_absolute(proc.path_join("5150/status"))
+	DirAccess.remove_absolute(proc.path_join("5150"))
+	ok(not SteamConfig.is_running(fhome, proc), "a stale Flatpak pid file isn't a running Steam")
+	# a native program called steam doesn't make the Flatpak one "running"
+	DirAccess.make_dir_recursive_absolute(proc.path_join("777"))
+	for item in [["comm", "steam\n"], ["status", "NSpid:\t777\n"]]:
+		f = FileAccess.open(proc.path_join("777").path_join(item[0]), FileAccess.WRITE)
+		f.store_string(item[1])
+		f.close()
+	ok(not SteamConfig.is_running(fhome, proc), "only a sandboxed steam counts for the Flatpak pid file")
+	TempTree.remove_tree(dir)

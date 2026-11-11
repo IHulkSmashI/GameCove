@@ -71,6 +71,9 @@ const VIEW_EMULATION_PAGE_DETAIL := "Your consoles, ES-DE and EmuDeck in one pla
 const SORT_ROW := "Order"
 const SORT_TITLE := "Order"
 const SORT_SUB := "How the Library lines your games up."
+## The last tile of a Home shelf that holds more games than it shows (%d: how many it holds).
+const SEE_ALL := "See all"
+const SEE_ALL_LINE := "%d in Library"
 const VIEW_NAMES := {"favourites": "Favourites", "hidden": "Hidden", "emulation": "Emulation"}
 const EMPTY_FAVOURITES := "No favourites yet. Press Menu on a game, or the star on its page, to add one."
 const EMPTY_HIDDEN := "Nothing hidden. Press Menu on a game and pick Hide this game to tuck it away."

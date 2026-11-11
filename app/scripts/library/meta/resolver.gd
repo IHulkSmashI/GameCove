@@ -393,7 +393,7 @@ func image(url: String, done: Callable) -> void:
 			done.call(base + "." + e)
 			return
 	var part := base + ".part"
-	http.request(url, {"download_file": part, "timeout": 30.0, "max_bytes": 6 * 1024 * 1024}, func(res: Dictionary):
+	http.request(url, {"download_file": part, "timeout": 30.0, "max_bytes": 6 * 1024 * 1024, "hosts": Metadata.IMAGE_HOSTS}, func(res: Dictionary):
 		var ext := ""
 		if res["ok"] and FileAccess.file_exists(part):
 			var f := FileAccess.open(part, FileAccess.READ)

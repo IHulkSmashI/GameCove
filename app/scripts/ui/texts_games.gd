@@ -35,6 +35,9 @@ const ACTION_NAME := {
 	"compat_tool": "change the compatibility tool for", "pause": "pause", "resume": "resume", "cancel": "cancel", "launch": "start",
 }
 
+## Play pressed while a cancelled launch is still being closed (%s: its title).
+const STILL_CLOSING := "Still closing %s. Try again in a moment."
+
 # ------------------------------------------------------------ game page
 
 const MANAGE := "Manage"

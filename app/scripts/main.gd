@@ -20,6 +20,7 @@ const Backdrop := preload("res://scripts/ui/backdrop.gd")
 const TopBar := preload("res://scripts/ui/top_bar.gd")
 const Toasts := preload("res://scripts/ui/toast.gd")
 const LaunchOverlay := preload("res://scripts/ui/launch_overlay.gd")
+const SteamTrip := preload("res://scripts/ui/steam_trip.gd")
 const StatusPanel := preload("res://scripts/ui/status_panel.gd")
 const Sounds := preload("res://scripts/ui/sounds.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
@@ -88,6 +89,8 @@ var hint_band: PanelContainer
 var hint_status: Label
 var toasts: VBoxContainer
 var launch_overlay: Control
+## The trip to Steam's controller settings and back (ui/steam_trip.gd).
+var steam_trip: Control
 var status_panel: PanelContainer
 var sounds: Node
 var screens := {}
@@ -189,6 +192,7 @@ func _ready() -> void:
 	home.game_focused.connect(_follow.bind("home"))
 	home.downloads_requested.connect(open_downloads)
 	home.apps_requested.connect(open_apps)
+	home.see_all_requested.connect(_see_all)
 	home.tile_hook = _hook_tile
 	_screen_layer.add_child(home)
 
@@ -294,6 +298,10 @@ func _ready() -> void:
 	status_panel.closed.connect(func(): top_bar.status_button.grab_focus())
 	add_child(status_panel)
 
+	steam_trip = SteamTrip.new()
+	add_child(steam_trip)
+	steam_trip.setup(self, _svc("Gamescope"))
+
 	launch_overlay = LaunchOverlay.new()
 	launch_overlay.cancel_requested.connect(_on_launch_cancelled)
 	launch_overlay.revealing.connect(_launch_reveal)
@@ -333,6 +341,7 @@ func _ready() -> void:
 	session.name = "GameSession"
 	session.setup(Gamescope, Power, Launcher)
 	session.ended.connect(_on_game_ended)
+	session.unwanted.connect(_close_running)
 	if session.has_signal("started"):
 		session.started.connect(_on_game_started)
 	add_child(session)
@@ -354,6 +363,7 @@ func _ready() -> void:
 	health.game_running = func() -> bool: return session != null and session.is_active()
 	add_child(health)
 	health.watch_session(session)
+	health.watch_background(background)   # the hang watchdog also runs while our UI is in front of a game
 	if quick_menu.has_method("attach_session"):
 		quick_menu.attach_session(session)
 	if quick_menu.has_signal("exit_game_requested"):
@@ -391,10 +401,25 @@ func _ready() -> void:
 func exit_game(_game: Dictionary = {}) -> void:
 	if quick_menu.visible:
 		quick_menu.close()
+	if not _close_running():
+		toast("No game is running", "info", "", "")
+
+
+## Asks what the session follows to close (Exit game; a cancelled launch, each
+## time the session finds something of it alive). False when nothing runs.
+func _close_running(_game: Dictionary = {}) -> bool:
 	if streaming != null and str(session.game.get("store", "")) == StreamingService.STORE:
 		streaming.stop_stream()   # Moonlight's Flatpak sits outside our scope
-	if not closer.close(session):
-		toast("No game is running", "info", "", "")
+	return closer.close(session)
+
+
+## A cancelled launch is still being closed: nothing else starts meanwhile (a
+## second Play would start a second copy, or leave the first one unfollowed).
+func _closing_guard() -> bool:
+	if session == null or not session.is_active() or not session.dismissed:
+		return false
+	toast(TG.STILL_CLOSING % str(session.game.get("title", "")), "info", "", "")
+	return true
 
 
 ## Settings > Run setup again (it names a step; setup opens at the first unfinished one).
@@ -526,6 +551,10 @@ func _wire_saves_and_battery() -> void:
 	saves.name = "CloudSaves"
 	saves.setup_library(_svc("Library"))
 	saves.game_running = func() -> bool: return session != null and session.is_active()
+	# no uninstall, move, update or verify of an Epic, GOG or Amazon game while it runs
+	var lib_store: Variant = _svc("Library").get("store") if _svc("Library") != null else null
+	if lib_store is Object and "game_running" in lib_store:
+		lib_store.game_running = func(key: String) -> bool: return session != null and session.runs(key)
 	saves.finished.connect(_on_saves_finished)
 	add_child(saves)
 	battery_log = BatteryLog.new()
@@ -630,6 +659,10 @@ func _on_autotune_limit(cant_reach: bool, info: Dictionary) -> void:
 
 ## Guide -> Home, QuickAccess -> quick menu, Keyboard -> search keyboard.
 func on_ui_action(action: String) -> void:
+	# Steam's controller settings are in front: the handheld's own button brings GameCove back, and does nothing else
+	if steam_trip != null and steam_trip.service.active():
+		steam_trip.service.back("guide")
+		return
 	match action:
 		"home":
 			# In a game: Guide toggles between the game and GameCove's home,
@@ -824,6 +857,8 @@ func _apps_open() -> bool:
 
 ## Starts a desktop app or a clip's player like a game.
 func _play_app(app: Dictionary) -> void:
+	if _closing_guard():
+		return
 	if session.runs(str(app.get("key", ""))):
 		session.return_to_game()
 		return
@@ -898,6 +933,11 @@ func _notification(what: int) -> void:
 			wiring.home_in_front(false)
 		if launch_overlay != null:
 			launch_overlay.finish()
+			# The screen that stepped back under the splash is back at once (finish()
+			# here doesn't say `revealing`): Guide in the game shows this screen long
+			# before the game ends, and it used to be there with alpha 0, focus
+			# moving over tiles nobody could see.
+			_launch_restore()
 		# the game took the screen: the quick menu's This game catches up with
 		# what changed since it started, once, so the first press is quick
 		if session != null and session.is_active() and not playing.is_empty() and quick_menu != null \
@@ -910,6 +950,8 @@ func _notification(what: int) -> void:
 		_update_timer()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_window_focused = true
+		if steam_trip != null:
+			steam_trip.service.arrived()   # back from Steam's controller settings
 		if background != null:
 			background.set_front(true)   # first: everything below runs at full speed
 		if wiring != null:
@@ -1175,6 +1217,17 @@ func _sound(kind: String) -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton or event is InputEventKey or event is InputEventJoypadMotion:
+		# Steam's controller settings are on their way, in front, or just closed: nothing here takes the pad
+		if steam_trip != null and steam_trip.blocks() and steam_trip.take(event):
+			get_viewport().set_input_as_handled()
+			return
+		# The launch splash is up: nothing under it takes the pad or the keys. The
+		# focused button under it would still get A (focus input comes before any
+		# _unhandled_input), so a blind D-pad then A started a second game and left
+		# the first one unfollowed. Only B (the splash's Cancel) and Guide pass.
+		if launch_overlay != null and launch_overlay.is_open() and not _passes_splash(event):
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_pressed():
 			if Time.get_ticks_msec() - _last_input_ms > IDLE_S * 1000.0:
 				_resume_motion()
@@ -1182,6 +1235,17 @@ func _input(event: InputEvent) -> void:
 			# the first press after a wake notices it at once (two clock reads, at most every 2 s)
 			if _last_input_ms - int(_clock_mark[1]) > 2000:
 				_check_resume()
+
+
+## What still gets through while the launch splash is up: B / Esc (Cancel) and Guide / F1.
+static func _passes_splash(event: InputEvent) -> bool:
+	if event.is_action("ui_cancel"):
+		return true
+	if event is InputEventJoypadButton:
+		return event.button_index == JOY_BUTTON_GUIDE
+	if event is InputEventKey:
+		return event.keycode == KEY_F1
+	return false
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1253,7 +1317,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			settings.cycle_tabs(d)
 		get_viewport().set_input_as_handled()
 	elif current in ["home", "library"] and _pressed(event, JOY_BUTTON_START, KEY_M) and _focused_tile() != null:
-		collection_actions.options(_focused_tile().game)
+		# game options are for games: not for a pinned app, "All apps" or a shelf's "See all"
+		if is_game_tile(_focused_tile()):
+			collection_actions.options(_focused_tile().game)
 		get_viewport().set_input_as_handled()
 	elif current == "library" and _pressed(event, JOY_BUTTON_BACK, KEY_F):
 		open_library_filter()
@@ -1286,6 +1352,13 @@ func _focused_tile() -> Control:
 	if f is Button and f.theme_type_variation == "TileButton" and f.get("game") is Dictionary and not f.game.is_empty():
 		return f
 	return null
+
+
+## True for a tile that shows a game. A desktop app's tile (store "app": pinned
+## apps, "All apps", a shelf's "See all") isn't one: favourites, hiding and
+## collections don't apply to it.
+static func is_game_tile(f: Control) -> bool:
+	return f != null and f.get("game") is Dictionary and not f.game.is_empty() and str(f.game.get("store", "")) != Apps.STORE
 
 
 ## LB / RB on the game page or Downloads: the top bar is showing, so they
@@ -1460,6 +1533,8 @@ func _play(game: Dictionary) -> void:
 	if install_state.is_busy(str(game.get("key", ""))):
 		open_downloads()
 		return
+	if _closing_guard():
+		return
 	if session.runs(str(game.get("key", ""))):
 		session.return_to_game()   # already running: back to it, no second launch
 		return
@@ -1557,6 +1632,18 @@ func _launch_reveal() -> void:
 	Motion.to(n, "modulate:a", 1.0, launch_overlay.BACK_S)
 
 
+## The screen that stepped back under the splash, in place and shown, at once
+## (no tween: this also runs as the game takes the screen, and nothing of ours
+## animates behind a game).
+func _launch_restore() -> void:
+	var n := _receded
+	_receded = null
+	if n == null or not is_instance_valid(n):
+		return
+	Motion.to(n, "position:y", 0.0, 0.0)
+	Motion.to(n, "modulate:a", 1.0, 0.0)
+
+
 ## Where the launch zoom starts: the art Play was pressed on (Home's hero, the
 ## game page's hero, the focused cover). {} = it grows from the middle.
 func _launch_source(game: Dictionary) -> Dictionary:
@@ -1575,6 +1662,8 @@ func _launch_source(game: Dictionary) -> Dictionary:
 ## A stream from the Stream tab: Moonlight starts, then the GameSession follows
 ## it like a game (focus, Guide to home and back, quick menu, Exit game).
 func _play_stream(game: Dictionary, host_id: String, app: Dictionary) -> void:
+	if _closing_guard():
+		return
 	if session.runs(str(game.get("key", ""))):
 		session.return_to_game()
 		return
@@ -1613,6 +1702,15 @@ func stream_display() -> Dictionary:
 		"hz": int(hz[hz.size() - 1]) if not hz.is_empty() else 60, "hdr": hdr}
 
 
+## B on the launch splash. A game that was already started is really closed
+## (GameCloser, like Exit game, when the session says there's something to
+## close) and stays "running" here until it's gone: the
+## session ends through its own exit check, so the cloud-save upload, Profiles'
+## restore and the play time only happen once, when the game has ended, and Play
+## can't start a second copy meanwhile.
+var _cancelled_key := ""
+
+
 func _on_launch_cancelled(_game: Dictionary) -> void:
 	_sound("back")
 	if _launch_wait != "":
@@ -1620,7 +1718,8 @@ func _on_launch_cancelled(_game: Dictionary) -> void:
 		playing = {}
 	_resume_motion()
 	if session.is_active():
-		session.stop()
+		_cancelled_key = str(session.game.get("key", ""))
+		session.dismiss()   # its `unwanted` closes the game (_close_running): now, or once Steam has started it
 
 
 ## GameSession follows the game now. The launch splash stays until the game's
@@ -1658,11 +1757,13 @@ func _on_game_ended(game: Dictionary) -> void:
 	if not playing.is_empty() and playing.get("key", "") == game.get("key", ""):
 		playing = {}
 	_check_resume()
+	var cancelled := _cancelled_key != "" and _cancelled_key == str(game.get("key", ""))
+	_cancelled_key = ""
 	if launch_overlay.is_open():
 		launch_overlay.back()   # it never got the screen: back into the art it came from
 		_resume_motion()
-	elif launch_overlay.phase == "closing":
-		_resume_motion()        # cancelled: already on its way back
+	elif launch_overlay.phase == "closing" or (cancelled and _window_focused):
+		_resume_motion()        # cancelled: already back (or on its way), nothing to replay
 	else:
 		_return_home()
 
@@ -1670,10 +1771,7 @@ func _on_game_ended(game: Dictionary) -> void:
 ## Coming back from a game: the screens settle in from slightly smaller.
 func _return_home() -> void:
 	_resume_motion()
-	if _receded != null and is_instance_valid(_receded):
-		Motion.to(_receded, "position:y", 0.0, 0.0)
-		Motion.to(_receded, "modulate:a", 1.0, 0.0)
-	_receded = null
+	_launch_restore()
 	_screen_layer.pivot_offset = size / 2.0
 	_screen_layer.scale = Vector2.ONE * (1.0 if Motion.reduce else 0.97)
 	_screen_layer.modulate.a = 0.0
@@ -1780,6 +1878,12 @@ func open_emulation() -> void:
 
 
 ## The Library's Filter sheet (its header button, or View).
+## A Home shelf's "See all" tile: the Library, on that shelf's list.
+func _see_all(shelf_id: String) -> void:
+	library_screen.show_shelf(shelf_id)
+	show_screen("library")
+
+
 func open_library_filter() -> void:
 	collection_actions.filter(library_screen)
 
@@ -1961,8 +2065,16 @@ func _mark_new_seen() -> void:
 func _on_library_changed() -> void:
 	_set_games(Library.games)
 	if not playing.is_empty():
-		var fresh := View.find_by_key(Library.games, playing["key"])
-		playing = fresh
+		# What runs isn't always a Library game: a stream, a desktop app, a clip's
+		# player or an emulation tool is never in Library.games. Dropping `playing`
+		# for those (any rescan, a download finishing) made the quick menu's "This
+		# game" edit another game. Only a fresh copy replaces it; without one it
+		# stays for as long as the session follows it.
+		var fresh := View.find_by_key(Library.games, str(playing.get("key", "")))
+		if not fresh.is_empty():
+			playing = fresh
+		elif not (session != null and session.is_active()):
+			playing = {}
 	if page != null and page.has_method("refresh_from"):
 		page.refresh_from(Library.emulation, _decorated())
 	elif page != null:
@@ -2032,7 +2144,7 @@ func focus_kind(f: Control) -> String:
 	if f == null:
 		return ""
 	if f is Button and f.theme_type_variation == "TileButton":
-		return "tile"
+		return "tile" if is_game_tile(f) else "app"
 	if f is HSlider:
 		return "slider"
 	if f is Button and f.theme_type_variation == "RowButton":
@@ -2054,6 +2166,7 @@ static func hints_for(ctx: Dictionary) -> Array:
 			out.append(["A", "Open"])
 			if not ctx.get("page", false):
 				out.append(["MENU", "Options"])
+		"app": out.append(["A", "Open"])   # an app's tile: no game options behind Menu
 		"play": out.append(["A", ctx.get("label", "Play")])
 		"row": out.append(["LR", "Change"])
 		"slider": out.append(["LR", "Adjust"])
@@ -2135,8 +2248,8 @@ func _build_settings() -> void:
 
 
 static func _version() -> String:
-	var v := str(ProjectSettings.get_setting("application/config/version", ""))
-	return v if v != "" else "Development build"
+	var v := AppVersion.text()   # the release's version, or "<spec Version>-dev" from a checkout
+	return v if v != "dev" else "Development build"
 
 
 func _on_setting_changed(key: String, value: Variant) -> void:

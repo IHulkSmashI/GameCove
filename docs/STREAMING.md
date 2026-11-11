@@ -56,7 +56,7 @@ decode video itself and doesn't reimplement the protocol: it drives Moonlight.
    when they're missing; if the app list says "Permission denied", allow
    **List applications** too.
 
-How it works: GameCove runs `moonlight pair <pc> --pin <PIN>` with
+How it works: GameCove runs `moonlight pair --pin <PIN> -- <pc>` with
 `QT_QPA_PLATFORM=offscreen` (no Moonlight window over GameCove), shows the PIN
 itself, and watches Moonlight's settings file for the PC's certificate, which
 Moonlight writes once the PIN matched. Pairing belongs to Moonlight: a PC paired in
@@ -72,10 +72,10 @@ PIN flow.
 | Find PCs | `avahi-browse -rpt _nvstream._tcp` (Sunshine-family hosts announce it over mDNS). Nothing found and no PCs yet: a TCP probe of port 47989 across this network (/22 or smaller, 0.7 s), then `serverinfo` on the ones that answer. PCs Moonlight already knows come from its settings. |
 | Add by address | IP, `.local` name, `host:port`, `[IPv6]:port`, Tailscale IP or MagicDNS name. Kept even if it doesn't answer yet. |
 | Status and latency | `GET http://<pc>:47989/serverinfo` through curl; the TCP connect time is the latency shown. Paired PCs also answer `https://<pc>:47984/serverinfo` with Moonlight's client certificate: the real MAC, what's running (`currentgame`), the Apollo/Vibepollo permission bits, and Vibepollo's sleep permission. Asleep = not answering but its MAC is known (from Moonlight, the paired serverinfo or the ARP cache). |
-| Apps and box art | `https://<pc>:47984/applist` and `/appasset?appid=N&AssetType=2&AssetIdx=0` with Moonlight's certificate (curl: Godot's HTTP client can't present a client certificate). Falls back to `moonlight list <pc> --csv`. Art is cached under `user://streaming/art/<pc uuid>/`. |
+| Apps and box art | `https://<pc>:47984/applist` and `/appasset?appid=N&AssetType=2&AssetIdx=0` with Moonlight's certificate (curl: Godot's HTTP client can't present a client certificate). Falls back to `moonlight list --csv -- <pc>`. Art is cached under `user://streaming/art/<pc uuid>/`. |
 | Wake | The magic packet, sent the way Moonlight sends it: to the PC's addresses, 255.255.255.255 and every network's broadcast, on ports 9, 47009 and 47998-48010 (shifted if the PC moved its port). Then GameCove watches for the PC for 90 s. |
 | Sleep | Vibepollo only, when it allows this client: `POST https://<pc>:47984/power-actions/v1/sleep`. |
-| Stream | `moonlight stream <pc> "<app>"` with the resolved settings (below), inside a systemd user scope `app-steam-app<id>-<n>` and a small `reaper` wrapper (`/usr/libexec/gamecove/reaper`), so gamescope can tell the stream's app id even for the Flatpak, which moves itself into its own `app-flatpak-*` scope (gamescope finds app ids by cgroup, else by a parent process named `reaper` with `SteamLaunch AppId=<id>`, as Steam's own reaper). GameSession then focuses it like a game; no frame limit and no Auto TDP for streams (the PC renders, the handheld only decodes). |
+| Stream | `moonlight stream <settings> -- <pc> "<app>"` with the resolved settings (below; the PC and the app's title come last, after `--`, so a title that begins with `-` is never read as an option), inside a systemd user scope `app-steam-app<id>-<n>` and a small `reaper` wrapper (`/usr/libexec/gamecove/reaper`), so gamescope can tell the stream's app id even for the Flatpak, which moves itself into its own `app-flatpak-*` scope (gamescope finds app ids by cgroup, else by a parent process named `reaper` with `SteamLaunch AppId=<id>`, as Steam's own reaper). GameSession then focuses it like a game; no frame limit and no Auto TDP for streams (the PC renders, the handheld only decodes). |
 | End | Moonlight's own exit (Start+Select+LB+RB, or the host quitting the app) ends the session. Exit game in the quick menu stops the wrapper and runs `flatpak kill com.moonlight_stream.Moonlight`; the game keeps running on the PC, so **Resume** picks it up. **Quit on PC** runs `moonlight quit <pc>`. |
 | Install Moonlight | `flatpak remote-add --user --if-not-exists flathub …` then `flatpak install --user --noninteractive -y flathub com.moonlight_stream.Moonlight`. A user install needs no password, so it works in Gaming Mode; the installer offers the same under Extras. |
 

@@ -285,7 +285,7 @@ def test_pinned_release_entry_comes_from_the_mirror_without_the_api(tmp_path, mo
     monkeypatch.setattr(downloads, "download", _fake_dl({e["mirror"]: data}, calls))
     monkeypatch.setattr(downloads, "release", lambda *a: pytest.fail("no API call for a mirrored pin"))
     got = downloads.fetch(e, str(tmp_path / "w"))
-    assert calls == [e["mirror"]] and got["tag"] == "20261104" and os.path.isfile(os.path.join(got["dir"], "pkg/install.sh"))
+    assert calls == [e["mirror"]] and got["tag"] == "20261111" and os.path.isfile(os.path.join(got["dir"], "pkg/install.sh"))
 
 
 def test_link_in_an_archive_is_refused_from_the_mirror_too(tmp_path, monkeypatch):

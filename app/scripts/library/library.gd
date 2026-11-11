@@ -203,25 +203,27 @@ func refresh_store(store_name: String) -> void:
 func _apply(result: Dictionary) -> void:
 	WorkerThreadPool.wait_for_task_completion(_task)
 	_task = -1
-	# A rescan that found exactly what we have (the usual case when the Library
-	# opens, or the app comes back from a game): we keep what we have and drop the
-	# fresh copy, so nothing is redrawn and thousands of ROM games aren't held
-	# twice while the old copy waits to be freed. With "emu_same" the scan didn't
-	# even make the "emu" games again (nothing they come from changed).
+	take(result, _task_store)
+	if _again:
+		_again = false
+		refresh()
+
+
+## A scan's result becomes the library: all of it (`store_name` ""), or one
+## store's part of it. A rescan that found exactly what we have (the usual case
+## when the Library opens, or the app comes back from a game) keeps what we have
+## and drops the fresh copy, so nothing is redrawn and thousands of ROM games
+## aren't held twice while the old copy waits to be freed. With "emu_same" the
+## scan didn't even make the "emu" games again (nothing they come from changed).
+func take(result: Dictionary, store_name: String) -> void:
 	var emu_same: bool = result.get("emu_same", false)
 	if result.has("emu_stamp"):
 		_emu_stamp = str(result["emu_stamp"])
-	if emu_same and result.has("imported"):
-		var kept := {}
-		for k in _entries:
-			if _entries[k].get("store", "") == "emu":
-				kept[k] = _entries[k]
-		add_entry_lists(result["imported"], kept)
 	var fresh_sigs: Dictionary = result.get("sigs", {})
 	var same := (emu_same or not fresh_sigs.is_empty()) and (not result.has("emulation") or str(result.get("emulation_sig", "")) == _emulation_sig)
 	for st in fresh_sigs:
 		same = same and _sigs.has(st) and str(_sigs[st]) == str(fresh_sigs[st])
-	if not same and _task_store == "":
+	if not same and store_name == "":
 		var fresh_games: Array[Dictionary] = result["games"]
 		var fresh_entries: Dictionary = result["entries"]
 		if emu_same:
@@ -235,7 +237,7 @@ func _apply(result: Dictionary) -> void:
 		games = fresh_games
 		_entries = fresh_entries
 	elif not same:
-		var merged := merge_store(games, _entries, result, _task_store)
+		var merged := merge_store(games, _entries, result, store_name)
 		games = merged["games"]
 		_entries = merged["entries"]
 	if result.has("emulation"):
@@ -244,13 +246,17 @@ func _apply(result: Dictionary) -> void:
 		_emulation_sig = str(result.get("emulation_sig", ""))
 	if result.has("emulation") or emu_same:
 		_last_emu_scan = int(Time.get_unix_time_from_system())
-	_sigs.merge(result.get("sigs", {}), true)
+	_sigs.merge(fresh_sigs, true)
 	if result.has("imported"):
-		collections.set_imported(result["imported"])   # emits only when something changed
+		# A one-store rescan (or one that kept the "emu" games) only saw part of the
+		# entries: a Steam-only one knew no shortcut, so the shortcuts hidden in Steam
+		# dropped off the hidden list and came back on every screen. The lists are
+		# completed from every entry we hold now (hidden in Steam, ES-DE's flags,
+		# shortcuts folded into a ROM).
+		var imp: Dictionary = result["imported"]
+		add_entry_lists(imp, _entries)
+		collections.set_imported(imp)   # emits only when something changed
 	if same:
-		if _again:
-			_again = false
-			refresh()
 		return
 	var aliases := aliases_of(_entries)
 	if not aliases.is_empty():
@@ -263,9 +269,6 @@ func _apply(result: Dictionary) -> void:
 	if artwork != null:
 		# ROMs: no SteamGridDB search can tell a console game from a PC one by its title alone.
 		artwork.auto_fill(games.filter(func(g): return not g.get("emulated", {}).get("rom", false)))
-	if _again:
-		_again = false
-		refresh()
 
 
 ## A store's games as one hash: what they look like on screen and, with
@@ -430,6 +433,17 @@ static func imported_lists(home_dir: String, entries: Dictionary) -> Dictionary:
 	var parsed := Collections.parse_steam_cloud(FileAccess.get_file_as_string(file)) if file != "" else {}
 	var imp := Collections.steam_to_keys(parsed)
 	add_entry_lists(imp, entries)
+	return imp
+
+
+## `imp` (imported_lists' shape) with every entry Steam hides (a shortcut's
+## IsHidden) on its hidden list. `entries`: the Library's entries by key.
+static func with_hidden_entries(imp: Dictionary, entries: Dictionary) -> Dictionary:
+	var hidden: Array = imp.get("hidden", [])
+	for k in entries:
+		if entries[k].get("hidden_in_steam", false) and not k in hidden:
+			hidden.append(k)
+	imp["hidden"] = hidden
 	return imp
 
 

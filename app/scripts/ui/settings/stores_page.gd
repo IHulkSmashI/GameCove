@@ -46,7 +46,7 @@ const SvcLib := preload("res://scripts/ui/settings/services.gd")
 
 func _build_sign_in() -> void:
 	var st := svc("setup")
-	var box := add_card("Accounts", "store", "Each store's games show up in your library once you're signed in.")
+	var box := add_card("Accounts", "store", TS.STORES_HOW)
 	if st == null or not st.has_method("store_status"):
 		box.add_child(SKit.note("Store sign-in isn't available in this build.", "info"))
 		return
