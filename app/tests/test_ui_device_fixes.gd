@@ -243,6 +243,20 @@ func test_failed_switch_takes_the_controller_back() -> void:
 	m.free()
 
 
+## Review at ff76ca4, session Low 6: a switch that didn't happen leaves no "just left" mark behind for `leave`.
+func test_a_switch_that_never_came_forgets_its_left_mark() -> void:
+	var dir := OS.get_user_data_dir().path_join("left_mark_test")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var was := OS.get_environment("XDG_RUNTIME_DIR")
+	OS.set_environment("XDG_RUNTIME_DIR", dir)
+	FileAccess.open(dir.path_join("gamecove-left"), FileAccess.WRITE).store_string("1\n")
+	var m := _menu(FakeRunner.new(), [], {})
+	m.switch_timed_out(m._switch_gen)
+	ok(not FileAccess.file_exists(dir.path_join("gamecove-left")), "the mark is gone once GameCove is back in charge")
+	OS.set_environment("XDG_RUNTIME_DIR", was)
+	m.free()
+
+
 ## Final review, session: Power stops writing before the switch runs (Auto TDP, charge hold, thermald
 ## hold, the 15 s check), and writes again when the switch didn't happen.
 class LeavingPower extends "res://tests/test_ui_screens.gd".FakePower:

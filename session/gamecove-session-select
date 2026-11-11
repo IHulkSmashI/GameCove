@@ -70,6 +70,7 @@ UNIT_NAME="gamecove-session-guard.service"
 BOOT_ID_FILE="${GAMECOVE_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}"
 OSTREE_BOOTED="${GAMECOVE_OSTREE_BOOTED:-/run/ostree-booted}"
 LOGINCTL="${LOGINCTL:-loginctl}"
+SYSTEMCTL="${SYSTEMCTL:-systemctl}"
 PROC="${GAMECOVE_PROC:-/proc}"
 OSTREE="${OSTREE:-ostree}"
 RPM_OSTREE="${RPM_OSTREE:-rpm-ostree}"
@@ -471,6 +472,11 @@ leave)
 	'' | *[!0-9]*) last=0 ;;
 	esac
 	[ $(($(date +%s) - last)) -ge 120 ] || exit 0
+	# The whole machine is going down (shutdown, reboot): the session unit stops with it, and everything
+	# `leave` hands back (the controller's mapping, the everyday values, the charge limit) is runtime state
+	# the next boot starts without. Running it would only hold the power-off for up to a minute (review at
+	# ff76ca4, session Low 7).
+	[ "$("$SYSTEMCTL" is-system-running 2>/dev/null)" = stopping ] && exit 0
 	reset_input_intercept
 	GAMECOVE_SESSION=1
 	leave_session

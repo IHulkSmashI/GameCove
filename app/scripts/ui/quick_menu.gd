@@ -1441,7 +1441,20 @@ func _on_switch_finished(id: String, code: int, output: String) -> void:
 	_rearm_after_switch()
 
 
+## gamecove-session-select's mark of "a switch of ours just left the session" (its `leave` does nothing for
+## two minutes after one). GameCove is still here, so that switch didn't happen: a logout a minute later must
+## still hand the buttons back, and the mark would stop it (review at ff76ca4, session Low 6).
+static func forget_left_mark() -> void:
+	var run := OS.get_environment("XDG_RUNTIME_DIR")
+	var base := run if run != "" else (OS.get_environment("XDG_DATA_HOME") if OS.get_environment("XDG_DATA_HOME") != "" \
+		else OS.get_environment("HOME").path_join(".local/share")).path_join("gamecove")
+	var mark := base.path_join("gamecove-left")
+	if FileAccess.file_exists(mark):
+		DirAccess.remove_absolute(mark)
+
+
 func _rearm_after_switch() -> void:
+	forget_left_mark()
 	if _switch_rearm and controller != null and controller.has_method("start_intercept"):
 		controller.start_intercept()
 	_switch_rearm = false

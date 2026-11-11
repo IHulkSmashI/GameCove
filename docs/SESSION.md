@@ -321,7 +321,11 @@ A session can also end without a switch of ours: Steam's own "Switch to Desktop"
 `ExecStopPost=-/usr/bin/gamecove-session-select leave`, which does the same tidying (the
 baseline run also hands back the buttons only GameCove answers, such as Quick Access mapped to
 GameCove's quick menu) unless a switch of ours did it in the last two minutes
-(`$XDG_RUNTIME_DIR/gamecove-left`). It never switches and needs no `steamosctl`.
+(`$XDG_RUNTIME_DIR/gamecove-left`). It never switches and needs no `steamosctl`. A switch that
+didn't happen (it failed, or GameCove is still here 20 s later) deletes that mark, so a logout a
+minute later is still tidied up. While the whole machine shuts down or reboots (`systemctl
+is-system-running` says `stopping`) `leave` does nothing: what it hands back is runtime state the next
+boot starts without, and running it would hold the power-off for up to a minute.
 
 ### If GameCove won't let you out
 

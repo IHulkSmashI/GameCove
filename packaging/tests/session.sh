@@ -397,6 +397,16 @@ eqv "$(cat "$T/leave.log")" "$(printf '%s\n' "app --headless -- --restore-baseli
 echo 1 >"$T/lrun/gamecove-left"
 leave sh "$SEL" leave
 has "$T/leave.log" "^app --headless -- --restore-baseline$" "an old switch mark doesn't stop it"
+# review at ff76ca4, session Low 7: the machine shutting down or rebooting takes the session unit with it;
+# `leave` then does nothing (the next boot starts without what it would hand back) instead of holding the power-off
+printf '#!/bin/sh\necho stopping\n' >"$LB/systemctl-stopping"
+chmod +x "$LB/systemctl-stopping"
+leave SYSTEMCTL="$LB/systemctl-stopping" sh "$SEL" leave
+eqv "$(cat "$T/leave.log")" "" "leave while the machine shuts down does nothing"
+printf '#!/bin/sh\necho running\n' >"$LB/systemctl-running"
+chmod +x "$LB/systemctl-running"
+leave SYSTEMCTL="$LB/systemctl-running" sh "$SEL" leave
+has "$T/leave.log" "^app --headless -- --restore-baseline$" "and on a running machine it tidies up as before"
 # review at ff76ca4: by the time `leave` runs, the Steam that runs may be the next session's (Steam
 # Gaming Mode's own): only a Steam in this session's control group is shut down
 echo "0::/user.slice/user-1000.slice/user@1000.service/app.slice/gamescope-session-plus@steam.service" >"$T/proc/4242/cgroup"
