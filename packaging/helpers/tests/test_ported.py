@@ -64,6 +64,9 @@ a|
 """
 
 
+_REAL_DOWNLOAD = downloads.download
+
+
 def _w(path, value):
     os.makedirs(os.path.dirname(str(path)), exist_ok=True)
     with open(path, "w") as f:
@@ -613,6 +616,53 @@ def test_native_after_saving_optiscalers_own_menu_leaves_nothing_behind(tmp_path
     assert r["ok"] and r["kept"] == [] and _snapshot(g) == before
     assert optiscaler.owner(str(g))["owner"] is None
     assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]    # and ours goes in again
+
+
+def test_game_files_are_matched_without_case(tmp_path, monkeypatch):
+    """Review low: names were compared with case, so a game's DXGI.DLL or LIBXESS.DLL wasn't seen: ours went in
+    next to it as dxgi.dll / libxess.dll (two files Wine can't tell apart) and the game's was never backed up."""
+    from gamecove_upscale import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x" * 100)
+    _w(g / "DXGI.DLL", "game-dxgi")
+    _w(g / "LIBXESS.DLL", "game-own-xess")
+    _w(g / "Plugins" / "game.asi", "game-plugin")
+    before = _snapshot(g)
+    r = optiscaler.patch(home, str(g), "0.9.4", {})
+    assert r["ok"] and r["dll"] == "winmm.dll", r                  # DXGI.DLL is taken, whatever its case
+    names = sorted(os.listdir(g))
+    assert "libxess.dll" not in names and "plugins" not in names and "dxgi.dll" not in names, names
+    assert (g / "LIBXESS.DLL").read_text().strip() == "xess-opti"   # ours, under the game's own spelling
+    assert (g / "Plugins" / "OptiPatcher.asi").exists()
+    _w(g / "optiscaler.LOG", "runtime")
+    assert optiscaler.unpatch(str(g), home)["ok"] and _snapshot(g) == before
+
+
+def test_downloads_and_lists_have_size_caps(tmp_path, monkeypatch):
+    import io
+    from gamecove_upscale import tls
+
+    class Answer(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    monkeypatch.setattr(tls, "urlopen", lambda req, timeout: Answer(b"x" * 5000))
+    monkeypatch.setattr(downloads, "MAX_DOWNLOAD", 4096)
+    dest = str(tmp_path / "big.bin")
+    with pytest.raises(ValueError):
+        _REAL_DOWNLOAD("https://example.com/big.bin", dest)        # the real one (conftest fakes it per test)
+    assert not os.path.exists(dest) and not os.path.exists(dest + ".part")
+    monkeypatch.setattr(downloads, "MAX_API", 4096)
+    with pytest.raises(ValueError):
+        downloads._get("https://api.github.com/x")
+    monkeypatch.setattr(livedb, "MAX_LIST", 4096)
+    with pytest.raises(OSError):
+        livedb._get("https://raw.githubusercontent.com/wiki/x")
 
 
 def test_optiscaler_never_touches_another_tools_install(tmp_path, monkeypatch):

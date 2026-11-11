@@ -32,6 +32,7 @@ touched: owner() says whose it is and the panel shows a warning instead.
 """
 from __future__ import annotations
 
+import fnmatch
 import glob
 import json
 import logging
@@ -389,6 +390,25 @@ def set_ini(text: str, values: dict[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def ci_path(folder: str, rel: str) -> str:
+    """folder/rel with each part spelled as it already is on disk, matched without case: Windows games (and Wine)
+    don't tell DXGI.dll from dxgi.dll or Plugins/ from plugins/, so ours must replace, back up and undo the game's
+    own file, never sit next to it under another case."""
+    cur = folder
+    for part in rel.replace(os.sep, "/").split("/"):
+        nxt = os.path.join(cur, part)
+        if not os.path.lexists(nxt) and os.path.isdir(cur):
+            lo = part.lower()
+            try:
+                hit = next((x for x in sorted(os.listdir(cur)) if x.lower() == lo), None)
+            except OSError:
+                hit = None
+            if hit:
+                nxt = os.path.join(cur, hit)
+        cur = nxt
+    return cur
+
+
 def _mkdirs(folder: str, rel_dir: str, dirs: list | None) -> None:
     """makedirs for folder/rel_dir, recording each folder that didn't exist yet (so unpatch takes it away again)."""
     if not rel_dir or rel_dir == ".":
@@ -448,6 +468,7 @@ def _put(src: str, dest: str, folder: str, m: dict) -> None:
     renamed into place."""
     added, backed, hashes = m["added"], m["backed"], m["sha256"]
     bshas = m.setdefault("backup_sha256", {})
+    dest = ci_path(folder, os.path.relpath(dest, folder))
     rel = os.path.relpath(dest, folder).replace(os.sep, "/")
     _mkdirs(folder, os.path.dirname(rel), m.setdefault("dirs", []))
     bak = os.path.join(folder, STATE, "backup", rel)
@@ -839,9 +860,9 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
     try:
         dll = m.get("dll")
         if not dll:
+            taken = {x.lower() for x in os.listdir(folder)}
             for name in dict.fromkeys([*(x.lower() for x in proxies or [] if x.lower() in PROXIES), *PROXIES]):
-                p = os.path.join(folder, name)
-                if not os.path.exists(p):
+                if name not in taken:
                     dll = name
                     break
             if not dll:
@@ -976,14 +997,21 @@ def unpatch(folder: str | None, home: str | None = None) -> dict:
         log.info("OptiScaler undo in %s kept changed files: %s", folder, ", ".join(kept))
     # what OptiScaler and its helpers write while the game runs: gone too, so the folder is as the game shipped it
     # (maintainer, 2026-11-04: "uninstall removes everything we installed and reverts everything back")
-    for pat in RUNTIME_FILES:
-        for p in glob.glob(os.path.join(glob.escape(folder), pat)):
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        names = []
+    backed_lo = {str(x).lower() for x in m.get("backed", [])}
+    for x in names:                      # matched without case, as Wine writes them
+        if any(fnmatch.fnmatch(x.lower(), pat.lower()) for pat in RUNTIME_FILES) and x.lower() not in backed_lo:
             try:
-                if os.path.isfile(p) and os.path.relpath(p, folder) not in m.get("backed", []):
-                    os.remove(p)
+                if os.path.isfile(os.path.join(folder, x)):
+                    os.remove(os.path.join(folder, x))
             except OSError:
                 pass
-    shutil.rmtree(os.path.join(folder, "D3D12_Optiscaler"), ignore_errors=True)
+    for x in names:
+        if x.lower() == "d3d12_optiscaler":
+            shutil.rmtree(os.path.join(folder, x), ignore_errors=True)
     # the folders GameCove created (manifest "dirs", deepest first): OptiScaler/ of the subfolder layout goes with
     # whatever OptiScaler wrote into it (its caches, logs); any other only when empty
     for rel in sorted(m.get("dirs") or [], key=lambda x: x.count("/"), reverse=True):

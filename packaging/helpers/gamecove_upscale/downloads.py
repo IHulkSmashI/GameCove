@@ -34,10 +34,22 @@ def is_pinned(entry: dict) -> bool:
     return entry.get("tag") not in UNPINNED
 
 
+# size caps: no answer may fill the disk or the memory before its sha256 is checked
+MAX_API = 8 << 20
+MAX_DOWNLOAD = 1 << 30                  # the largest upscaler file is ~100 MB (FSR 4.1.2 on XMX); the build's MAX_FILE
+
+
+def read_capped(r, limit: int) -> bytes:
+    data = r.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f"the answer is larger than {limit} bytes: not used")
+    return data
+
+
 def _get(url: str, timeout: float = 20.0) -> bytes:
     req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "GameCove"})
     with tls.urlopen(req, timeout) as r:
-        return r.read()
+        return read_capped(r, MAX_API)
 
 
 def release(repo: str, tag: str | None) -> dict:
@@ -88,8 +100,23 @@ def download(url: str, dest: str, timeout: float = 60.0) -> str:
         os.unlink(tmp)
     req = urllib.request.Request(url, headers={"User-Agent": "GameCove", "Accept": "application/octet-stream"})
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
-    with tls.urlopen(req, timeout) as r, os.fdopen(fd, "wb") as f:
-        shutil.copyfileobj(r, f, 1 << 20)
+    try:
+        with tls.urlopen(req, timeout) as r, os.fdopen(fd, "wb") as f:
+            total = 0
+            while True:
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_DOWNLOAD:
+                    raise ValueError(f"{url}: larger than {MAX_DOWNLOAD} bytes, stopped")
+                f.write(chunk)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
     os.replace(tmp, dest)
     return dest
 
