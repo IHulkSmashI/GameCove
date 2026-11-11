@@ -18,6 +18,8 @@ const NETWORK_CALLS := [
 		"when": "At start, at most once a day", "switch": "Background lookups"},
 	{"who": "GitHub (GameCove's upscalers list and mirror)", "what": "The signed list of the newest OptiScaler, OptiPatcher, fakenvapi, XeSS driver and FSR 4 files; the files themselves only when you install or update them. Nothing about you is sent.",
 		"when": "At most once a day, 90 s after start; when you install, update or press Check", "switch": "Background lookups (the daily check)"},
+	{"who": "GitHub (GameCove's list of device fixes)", "what": "The signed list of fixes: which ones your system no longer needs, and any we withdrew. The same file for every handheld; nothing about you or your model is sent.",
+		"when": "At start, at most once a day, never while a game runs", "switch": "Background lookups"},
 	{"who": "CheapShark and the Steam store", "what": "The Steam app ids and titles on your wishlist and in Discover, and your store country, to get deals and prices; and the list of games free to keep right now (nothing about you).",
 		"when": "45 s after start, then every 6 hours; when you search or open a game", "switch": "Look up deals and prices"},
 	{"who": "GG.deals", "what": "Steam app ids, your region and your own API key, for local prices.",

@@ -53,6 +53,7 @@ const SavesService := preload("res://scripts/system/saves_service.gd")
 const BatteryLog := preload("res://scripts/system/battery_log.gd")
 const LowBattery := preload("res://scripts/system/low_battery.gd")
 const LowBatteryDialog := preload("res://scripts/ui/low_battery_dialog.gd")
+const FixAttentionDialog := preload("res://scripts/ui/fix_attention_dialog.gd")
 const TSaves := preload("res://scripts/ui/texts_saves.gd")
 const SavesCardScript := preload("res://scripts/ui/games/saves_card.gd")
 const ProtonGE := preload("res://scripts/launch/proton_ge.gd")
@@ -118,6 +119,7 @@ var battery_log: Node
 ## Sleep at low battery (low_battery.gd) and its warning while it shows.
 var low_battery: Node
 var low_dialog: Control
+var fix_dialog: Control
 ## Key of the game waiting for its cloud save before it starts ("" when none).
 var _launch_wait := ""
 ## Key of the game whose save conflict sheet is open before its launch ("" when none).
@@ -515,6 +517,10 @@ func _wire_controls() -> void:
 	fixes.name = "Fixes"
 	add_child(fixes)
 	fixes.setup({"sys_root": "", "runner": CommandRunner.new(), "home": OS.get_environment("HOME"), "device": Device})
+	# a fix GameCove removed or updated by itself (the system caught up, docs/FIXES.md): said once
+	fixes.lifecycle_notice.connect(func(text, tone): toast(text, "check" if tone == "good" else "info", tone))
+	# one that does harm while it waits for the admin password: over the home screen, every start
+	fixes.attention_needed.connect(_on_fix_attention)
 	fixes.check_changes()
 	if quick_menu != null and "fixes" in quick_menu:
 		quick_menu.fixes = fixes
@@ -578,6 +584,25 @@ func _on_low_battery(percent: int) -> void:
 	background.set_menu(true)
 	if session.is_active() and not quick_menu.visible:
 		Gamescope.set_overlay(true)
+	_update_hints.call_deferred()
+
+
+## A fix GameCove installed must come out (withdrawn, or it clashes with the system's own fix)
+## and waits for the admin password: said prominently at start (fix_attention_dialog.gd).
+func _on_fix_attention(items: Array) -> void:
+	if items.is_empty() or (fix_dialog != null and is_instance_valid(fix_dialog)):
+		return
+	if session != null and session.is_active():
+		return   # fixes.gd never says it during a game; belt and braces
+	fix_dialog = FixAttentionDialog.open(_modal_layer, items, fixes.can_prompt())
+	fix_dialog.decided.connect(func(choice: String):
+		fix_dialog = null
+		if choice == "remove":
+			for it in items:
+				fixes.run_pending(str(it.get("id", "")))
+		elif choice == "open":
+			_open_settings_category("device", "fixes")
+		_update_hints.call_deferred())
 	_update_hints.call_deferred()
 
 
@@ -2004,6 +2029,8 @@ func _update_hints(f: Control = null) -> void:
 func _special_hints(f: Control) -> Array:
 	if low_dialog != null and is_instance_valid(low_dialog):
 		return LowBatteryDialog.hints()
+	if fix_dialog != null and is_instance_valid(fix_dialog):
+		return fix_dialog.hints()
 	if game_actions != null and game_actions.is_modal():
 		return game_actions.modal_hints()
 	if steam_overlay != null and steam_overlay.is_open():
@@ -2124,7 +2151,7 @@ func _build_settings() -> void:
 		settings.set_services({"device": Device, "power": Power, "library": Library, "discover": _svc("Discover"),
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
 			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
-			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log,
+			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log, "fixes": fixes,
 			"game_running": func() -> bool: return session != null and session.is_active(), "recording": recording})
 
 
