@@ -28,7 +28,7 @@ from . import models
 from .sources import asus, lenovo, msi, software, valve
 
 log = logging.getLogger("firmware")
-RELEASE = "https://github.com/IHulkSmashI/GameCove/releases/download/firmware/firmware.json.gz"
+RELEASE = "https://github.com/IHulkSmashI/GameCove-data/releases/download/firmware/firmware.json.gz"
 DEVICES = Path(__file__).resolve().parents[3] / "app" / "data" / "devices.json"
 
 

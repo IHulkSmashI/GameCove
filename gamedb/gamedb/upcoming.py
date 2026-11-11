@@ -26,7 +26,7 @@ from .build import Run, compact, write
 from .sources import ecb, igdb, releases
 
 SCHEMA = 1
-PREVIOUS_URL = "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/upcoming.json.gz"
+PREVIOUS_URL = "https://github.com/IHulkSmashI/GameCove-data/releases/download/gamedb/upcoming.json.gz"
 CREDITS = (
     "Game data from IGDB (https://www.igdb.com); release dates also from Steam (store data via the Steam Web API) and Wikidata (CC0); "
     "exchange rates: Source: ECB statistics. Game art belongs to its publishers."

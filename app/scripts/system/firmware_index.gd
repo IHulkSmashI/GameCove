@@ -12,7 +12,8 @@ extends RefCounted
 ## "how": auto = GameCove installs it (fwupd / OS update), guided = step-by-step instructions
 ## (and maybe a prepared USB drive), link = only the maker's page.
 
-const URL := "https://github.com/IHulkSmashI/GameCove/releases/download/firmware/firmware.json.gz"
+const DataRepo := preload("res://scripts/system/data_repo.gd")
+const URL := DataRepo.FIRMWARE_URL
 const MAX_UNPACKED := 8 * 1024 * 1024
 const MAX_AGE_S := 7 * 24 * 3600
 const DMI := "/sys/class/dmi/id/"
@@ -27,10 +28,11 @@ const DOWNLOAD_HOSTS := {
 	"onexplayer": ["onexplayer.com", "one-netbook.com"], "aokzoe": ["aokzoe.com", "aokzoestore.com"],
 	"zotac": ["zotac.com"], "orange pi": ["orangepi.org", "orangepi.net"],
 }
-## The nightly workflow signs firmware.json.gz with cosign keyless (firmware.json.gz.sigstore.json); when a cosign
-## binary is on the device the app requires that signature from exactly this workflow on the default branch.
-const SIGNER_IDENTITY := "(?i)^https://github\\.com/IHulkSmashI/GameCove/\\.github/workflows/firmware\\.yml@refs/heads/main$"
-const OIDC_ISSUER := "https://token.actions.githubusercontent.com"
+## The nightly workflow (firmware.yml in the GameCove-data repo) signs firmware.json.gz with cosign keyless
+## (firmware.json.gz.sigstore.json); when a cosign binary is on the device the app requires that signature from
+## exactly that workflow on the data repo's default branch (data_repo.gd).
+const SIGNER_IDENTITY := DataRepo.FIRMWARE_SIGNER
+const OIDC_ISSUER := DataRepo.OIDC_ISSUER
 
 
 ## The host of a maker download URL when it's allowed for `maker` (see DOWNLOAD_HOSTS), else "".

@@ -6,7 +6,7 @@ extends RefCounted
 ## provider calls them on Controls' worker, tests feed them fixtures.
 ##
 ## The helper fetches GameCove's signed upscalers index (nightly, from
-## .github/workflows/upscalers.yml) and checks its signature itself; the app only
+## IHulkSmashI/GameCove-data's .github/workflows/upscalers.yml) and checks its signature itself; the app only
 ## shows what the helper answers. The background check runs at most once a day
 ## and only while Settings > About > "Background lookups" is on; pressing the row
 ## checks right away whatever that switch says (the user asked for it).

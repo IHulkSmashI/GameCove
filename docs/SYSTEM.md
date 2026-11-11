@@ -99,8 +99,9 @@ Claw entries), so fwupd covers controllers via plugins and accessories only.
 
 ### Rules
 
-- Index: `firmware.json.gz` + `.sha256` on the rolling `firmware` release, built nightly by
-  `gamedb/gamedb/firmware/` (`.github/workflows/firmware.yml`). The app downloads it with `curl`
+- Index: `firmware.json.gz` + `.sha256` + `.sigstore.json` on the rolling `firmware` release of
+  IHulkSmashI/GameCove-data, built nightly by `gamedb/gamedb/firmware/` (that repo's `.github/workflows/firmware.yml`;
+  URL and signer in `app/scripts/system/data_repo.gd`). The app downloads it with `curl`
   when the copy is over 7 days old (a failed try is retried at most daily), only on AC or an
   unmetered network (NetworkManager `Metered`), and keeps it only when the sha256 matches.
 - fwupd metadata refresh: at most daily, same network rule. `fwupdmgr get-devices --json` lists

@@ -22,8 +22,9 @@
 #
 # Which release (final review, blocker 2): the newest vX.Y.Z tag in this repository's release
 # list. GitHub's releases/latest is never asked: it answers with whatever release is marked
-# "latest", and this repository also publishes data releases (upscalers, firmware, device
-# photos, the game database) that aren't the app. Only tags that start with v and a digit
+# "latest", and this repository used to publish data releases too (upscalers, firmware, device
+# photos, the game database; they're in IHulkSmashI/GameCove-data now, and a fork may still
+# have them). Only tags that start with v and a digit
 # count; a stable release wins over a pre-release, and while only pre-releases exist (v0.1.0
 # is one) the newest of those is used.
 # Environment (for tests and forks): GAMECOVE_REPO, GAMECOVE_API, GAMECOVE_TAG, GAMECOVE_NOTIFY,
