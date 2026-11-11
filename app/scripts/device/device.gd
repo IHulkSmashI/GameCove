@@ -578,13 +578,18 @@ static func cpu_counts(prefix := "") -> Dictionary:
 	return {"cores": cores, "threads": threads}
 
 
-## The integrated GPU: first DRM card with a PCI driver, preferring AMD/Intel.
+## The integrated GPU: first DRM card with a PCI driver, preferring AMD/Intel
+## (what picks the device row). "render" is the card games render on: an NVIDIA
+## card when there is one (always a discrete card; DXVK and vkd3d-proton put
+## discrete GPUs first, so Proton games run there), else the same card.
 static func gpu_info(prefix := "") -> Dictionary:
 	var base := prefix + "/sys/class/drm/"
 	var dir := DirAccess.open(base)
 	var out := {"vendor": "", "driver": "", "pci_id": "", "card": ""}
 	if dir == null:
+		out["render"] = {}
 		return out
+	var nvidia := {}
 	var names := Array(dir.get_directories()) + Array(dir.get_files())
 	names.sort()
 	for n in names:
@@ -601,10 +606,14 @@ static func gpu_info(prefix := "") -> Dictionary:
 			continue
 		var vendor: String = {"1002": "amd", "8086": "intel", "10DE": "nvidia"}.get(pci.get_slice(":", 0), "")
 		var cand := {"vendor": vendor, "driver": driver, "pci_id": pci, "card": n}
-		if vendor in ["amd", "intel"]:
-			return cand
-		if out["card"] == "":
+		if vendor == "nvidia" and nvidia.is_empty():
+			nvidia = cand.duplicate()
+		if vendor in ["amd", "intel"] and str(out.get("vendor", "")) not in ["amd", "intel"]:
 			out = cand
+		elif out["card"] == "":
+			out = cand
+	out["render"] = nvidia if not nvidia.is_empty() else {"vendor": out["vendor"], "driver": out["driver"],
+		"pci_id": out["pci_id"], "card": out["card"]}
 	return out
 
 

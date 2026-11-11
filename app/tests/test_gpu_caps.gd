@@ -114,3 +114,41 @@ func test_summary_is_one_plain_line_per_tier() -> void:
 			"xmx": r["gpu"]["xmx"], "chip": r["gpu"]["chip"], "gpu": r["gpu"]["gpu"]}, {"gpu_dev": {"vendor": r["gpu"]["vendor"]}}))
 		ok(line.length() > 20 and line.length() < 160 and not "\n" in line, "%s: %s" % [r["from"], line])
 		ok(not "Partial" in line and not " I " in line, "tone")
+
+
+func _card(root: String, n: String, driver: String, pci: String) -> void:
+	DirAccess.make_dir_recursive_absolute(root + "/sys/class/drm/%s/device" % n)
+	var f := FileAccess.open(root + "/sys/class/drm/%s/device/uevent" % n, FileAccess.WRITE)
+	f.store_string("DRIVER=%s\nPCI_ID=%s\n" % [driver, pci])
+	f.close()
+
+
+func test_an_nvidia_card_next_to_the_cpus_graphics_is_where_games_render() -> void:
+	# review M: a desktop or laptop with an Intel iGPU and an NVIDIA card was treated as Intel, so the helper
+	# put Intel's upscaler setup on a game that renders on the NVIDIA card
+	var root := OS.get_cache_dir().path_join("gamecove-test-gpu-%d" % Time.get_ticks_usec())
+	_card(root, "card0", "nvidia", "10DE:2786")
+	_card(root, "card1", "i915", "8086:A7A0")
+	var dev := DeviceScript.gpu_info(root)
+	eq(dev["vendor"], "intel", "the device row still comes from the CPU's own graphics")
+	eq(GpuCaps.render_vendor(dev), "nvidia", "games render on the NVIDIA card")
+	var g := GpuCaps.gpu({"gpu_family": "intel-xe-lpg", "gpu_arch": "Xe-LPG", "chip": "Intel Core Ultra 7 155H"}, dev)
+	eq(g["vendor"], "nvidia", "the helper is told NVIDIA")
+	eq(g["tier"], "nvidia", "tier: " + str(g["tier"]))
+	eq(GpuCaps.upscalers(g), ["own"], "native DLSS is left alone")
+	# one card only: unchanged
+	var root2 := root + "_one"
+	_card(root2, "card0", "amdgpu", "1002:15BF")
+	var one := DeviceScript.gpu_info(root2)
+	eq(GpuCaps.render_vendor(one), "amd", "a handheld renders on its only card")
+	eq(GpuCaps.gpu({"gpu_family": "amd-rdna3", "gpu_arch": "RDNA3", "chip": "AMD Ryzen Z1 Extreme"}, one)["tier"], "amd_rdna3", "and keeps its tier")
+	_rm(root)
+	_rm(root2)
+
+
+func _rm(dir: String) -> void:
+	for d in DirAccess.get_directories_at(dir):
+		_rm(dir.path_join(d))
+	for f in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute(dir.path_join(f))
+	DirAccess.remove_absolute(dir)

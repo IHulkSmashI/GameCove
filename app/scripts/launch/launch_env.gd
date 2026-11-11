@@ -159,10 +159,12 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 				notes.append("OptiScaler left out: this game has anti-cheat.")
 			else:
 				env["PROTON_USE_OPTISCALER"] = "1"
+	elif family == "nvidia":
+		notes.append("NVIDIA: the game's own DLSS, frame generation and Reflex are left alone.")
 	else:
 		notes.append("Unknown GPU: only the game's own settings apply.")
 
-	if low_latency and not native and family != "":
+	if low_latency and not native and family != "" and family != "nvidia":
 		if bundles_low_latency_layer(proton) or bool(host.get("low_latency_layer", false)):
 			env["LOW_LATENCY_LAYER"] = "1"
 

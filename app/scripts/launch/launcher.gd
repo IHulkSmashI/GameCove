@@ -7,6 +7,7 @@ const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const LaunchEnv := preload("res://scripts/launch/launch_env.gd")
 const PerDevice := preload("res://scripts/device/per_device.gd")
 const Proton := preload("res://scripts/launch/proton.gd")
+const GpuCaps := preload("res://scripts/device/gpu_caps.gd")
 
 const SETTINGS_PATH := "user://launch_settings.json"
 const GOALS := ["battery", "balanced", "smooth"]
@@ -23,6 +24,10 @@ var settings_path := SETTINGS_PATH
 var home := OS.get_environment("HOME")
 var root_prefix := ""
 var device_profile: Dictionary = {}
+## The vendor of the card games render on (Device.gpu["render"]): "nvidia" on a
+## machine with an NVIDIA card next to the CPU's graphics, whose own DLSS and
+## Reflex are then left alone. Overridable for tests.
+var render_vendor := ""
 ## Show the active upscaler on screen (Proton's FSR 4 watermark). For testing a game.
 var show_indicator := false
 ## More environment for a game at launch, from other areas (perf controls: the
@@ -48,10 +53,11 @@ var _loaded := false
 func _ready() -> void:
 	# kept here: the per-game controls read settings_for() on the Controls worker,
 	# which may not look up nodes in the tree
-	if device_profile.is_empty():
-		var d := get_node_or_null("/root/Device")
-		if d != null and d.get("profile") is Dictionary:
-			device_profile = d.get("profile")
+	var d := get_node_or_null("/root/Device")
+	if device_profile.is_empty() and d != null and d.get("profile") is Dictionary:
+		device_profile = d.get("profile")
+	if render_vendor == "" and d != null and d.get("gpu") is Dictionary:
+		render_vendor = GpuCaps.render_vendor(d.get("gpu"))
 
 
 func profile() -> Dictionary:
@@ -258,6 +264,8 @@ func launch_plan(game: Dictionary) -> Dictionary:
 			game["extra_env"] = extra
 	var p := profile()
 	var device := {"gpu_family": str(p.get("gpu_family", "")), "xmx": bool(p.get("xmx", false))}
+	if render_vendor == "nvidia":
+		device = {"gpu_family": "nvidia", "xmx": false}     # the game renders on the NVIDIA card
 	var proton := proton_for(game)
 	var facts := {
 		"anticheat": has_anticheat(game),

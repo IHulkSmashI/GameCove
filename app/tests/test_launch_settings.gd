@@ -72,3 +72,17 @@ func test_broken_file_starts_fresh() -> void:
 	var l := _launcher(path)
 	eq(l.settings_for("x")["upscaler"], "auto", "defaults")
 	l.free()
+
+
+func test_a_game_on_an_nvidia_card_gets_none_of_the_igpus_variables() -> void:
+	# review M: an Intel iGPU plus an NVIDIA card: the Intel row's variables (DXVK's Intel vendor id, XeSS on XMX)
+	# would hide the NVIDIA card from the game and break its DLSS
+	var l := _launcher(_temp("test_launch_nvidia.json"), {"gpu_family": "intel-xe2", "xmx": true})
+	l.save_settings("steam:5", {"goal": "balanced", "fps_limit": 0, "upscaler": "xess", "frame_gen": true, "low_latency": true})
+	var game := {"key": "steam:5", "store": "steam", "id": "5", "proton": "proton_11"}
+	ok(l.launch_plan(game)["env"].has("DXVK_CONFIG"), "on the Intel chip: XeSS shows the Intel GPU")
+	l.render_vendor = "nvidia"
+	var plan: Dictionary = l.launch_plan(game)
+	eq(plan["env"], {}, "on the NVIDIA card: nothing of ours")
+	ok(str(plan["notes"]).contains("NVIDIA"), "and says why: " + str(plan["notes"]))
+	l.free()
