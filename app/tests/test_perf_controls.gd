@@ -950,7 +950,7 @@ func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> vo
 	var w := _world("mode_offer", ALLY_X)
 	var runner = w["runner"]
 	var reg: Node = w["reg"]
-	var warn := "This is an online game. An upscaler in its files can break its rules and get the account banned, so we don't add one by ourselves. You can still add FSR 4.1.2 below if you accept that risk."
+	var warn := "This is an online game. An upscaler in its files can break its rules and get the account banned, so we don't add one by ourselves. Press Add to put FSR 4.1.2 in if you accept that risk."
 	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {}}
 	runner.answers["prepare"] = {"ok": true, "did": ""}
 	runner.answers["plan"] = {"ok": true, "line": warn, "auto": false, "refused": null, "online": true, "offer": "fsr4_amd"}

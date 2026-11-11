@@ -53,10 +53,10 @@ def opted_in(home: str, key: str) -> bool:
 
 
 ONLINE_LINE = ("This is an online game. An upscaler in its files can break its rules and get the account banned, so "
-               "we don't add one by ourselves. You can still add {up} below if you accept that risk.")
-UNKNOWN_LINE = "We don't know this game yet, so nothing is added by itself. Our pick here is {up}: add it below if you want it."
+               "we don't add one by ourselves. Press Add to put {up} in if you accept that risk.")
+UNKNOWN_LINE = "We don't know this game yet, so nothing is added by itself. Our pick here is {up}: press Add to put it in."
 UNSURE_LINE = ("We don't know this game yet and can't tell how it renders, so nothing is added by itself. You can still "
-               "add {up} below and see if it works.")
+               "press Add to try {up}.")
 
 
 def _stamp(home: str, key: str) -> float:
