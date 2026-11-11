@@ -238,6 +238,10 @@ focus to a tile on it. `tests/test_ui_library_virtual.gd` opens 20,000 ROMs and 
 What stays: sorting 20,000 games takes about 0.45 s on the 2-core box (natural title order),
 done once when the list changes, never while a game runs.
 
+Searching re-reads every title on every key, so each title is folded (lower case, accents and punctuation out, other
+scripts kept) once and kept (`View.folded`, at most 100,000 titles), and keys that arrive in one frame (a held key, a
+paste) rebuild the list once, after the last.
+
 ## Nothing waits on a slow job
 
 The main thread never joins a worker that may still be busy: leaving a page, a theme

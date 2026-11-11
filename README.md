@@ -173,9 +173,10 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
   or what's installed, sort by Top rated, and search with the on-screen keyboard.
 - **A keyboard made for a controller.** Wherever GameCove asks for text (search, a collection's name, a sign-in code
   or key, a streaming PC's address, launch options) its own on-screen keyboard slides up: letters with a number row,
-  a symbols page with everything a code or a URL needs, Shift (press twice for Caps), a caret you can move, and Paste
-  where a code is asked for. X deletes, Y is space, LT shifts, RT shows the symbols, LB and RB move the caret, Menu is
-  Done; hold the D-pad or X and it repeats. Touch, a mouse and a real keyboard work too. In a game, typing stays
+  a symbols page with everything a code or a URL needs, an accents page (áé), Shift (press twice for Caps), a caret
+  you can move, and Paste where a code is asked for; an API key shows as dots until you press Show. X deletes, Y is
+  space, LT shifts, RT shows the symbols, LB and RB move the caret, Menu is Done and B cancels (what you typed since it
+  opened is dropped); hold the D-pad or X and it repeats. Touch, a mouse and a real keyboard work too. In a game, typing stays
   Steam's keyboard.
 - **Home stays quick with a big library.** Each Home shelf shows its first 24 games and ends with **See all**, which
   opens the Library on the same list. Thousands of ROMs don't slow Home down.
