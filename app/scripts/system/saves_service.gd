@@ -685,6 +685,11 @@ func _recover(key: String, title: String, parts: Array) -> String:
 	var note: Variant = _cfg_value(key, "pending", {})
 	if not note is Dictionary or note.is_empty():
 		return ""
+	if str(note.get("backup", "")) == "" and Array(note.get("empty", [])).is_empty():
+		# nothing could have come down (a post-game run with no empty folder, from before such
+		# runs left no note): nothing to put right, and no reason to ask
+		_clear_mark(key)
+		return ""
 	var found: Dictionary = backups.backup(key, title, "interrupted", parts, true, true)
 	if not found["ok"]:
 		return str(found["why"])
@@ -928,10 +933,14 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 	var before := ts.duplicate()
 	if int(_cfg_value(key, "restored_at", 0)) > 0:
 		return _gog_after_restore(key, title, plan, entry, locs, ts, mode)
-	# gogdl downloads into an empty folder whatever it was asked (after a game too)
-	var empty := _mark_download(key, b, locs)
-	if not _noted:
-		return _set_status(key, "failed", NOTE_FAILED)
+	# gogdl downloads into an empty folder whatever it was asked (after a game too). After a
+	# game with no empty folder nothing can come down: no note, so a run killed then isn't
+	# taken for a cut download (review at ff76ca4, L10; the upload has its own note)
+	var empty: Array = []
+	if mode != "post" or locs.any(func(l): return not CloudSaves.has_files(str(l["path"]))):
+		empty = _mark_download(key, b, locs)
+		if not _noted:
+			return _set_status(key, "failed", NOTE_FAILED)
 	var step := str({"pre": "pre", "post": "post", "now": ""}[mode])
 	var acted := ""
 	var conflict := false

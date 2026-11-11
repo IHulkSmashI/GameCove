@@ -920,6 +920,36 @@ func test_a_cloud_copy_names_the_game_folder_from_the_start() -> void:
 	_done(w)
 
 
+## L10: a post-game GOG run killed mid-way left a download note with nothing to put back, and
+## the next sync dropped the sync times and asked for nothing.
+func test_a_killed_post_game_run_is_not_a_cut_download() -> void:
+	var w := _world("killed_post")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	# the app is killed during the post-game run: whatever notes it wrote stay
+	var real: Callable = w["s"].run
+	w["s"].run = func(program: String, args: PackedStringArray) -> Dictionary:
+		if program == "timeout" and "save-sync" in Array(args):
+			return {"code": 137, "out": "Killed"}
+		return real.call(program, args)
+	w["s"].after_exit(w["gog"])
+	w["s"].run = real
+	eq(_cfg(w, "gog:1207", "pending", {}), {}, "no download note: nothing could come down")
+	# a note an older build left that way
+	var c := ConfigFile.new()
+	c.load(w["s"].cfg_path)
+	c.set_value("game:gog:1207", "pending", {"backup": "", "empty": []})
+	c.erase_section_key("game:gog:1207", "uploading")
+	c.save(w["s"].cfg_path)
+	w["s"].sync_now(w["gog"])
+	ok(w["s"].status(w["gog"])["state"] != "conflict", "the next sync doesn't ask for nothing (%s)" % w["s"].status(w["gog"])["state"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 2", "it just uploads")
+	_done(w)
+
+
 ## The service marks the backups a choice or a restore made.
 func test_choice_backups_are_kept_apart() -> void:
 	var w := _world("pinned")
