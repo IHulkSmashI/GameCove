@@ -24,6 +24,7 @@ const LinkHandoff := preload("res://scripts/ui/games/link_handoff.gd")
 const View := preload("res://scripts/ui/library_view.gd")
 const Tile := preload("res://scripts/ui/game_tile.gd")
 const CardJobs := preload("res://scripts/system/card_jobs.gd")
+const ImageGuard := preload("res://scripts/ui/image_guard.gd")
 const TOP_INSET := 56
 ## System chips shown before "+N more" (read-only chips; buttons all show).
 const SYSTEMS_SHOWN := 18
@@ -344,20 +345,10 @@ static func collage(paths: Array, size: Vector2i, start := COLLAGE_FROM) -> Imag
 
 
 ## A PNG, JPEG or WebP file as an Image; null for anything else (a broken
-## download stays out of the collage without an error in the log).
+## download stays out of the collage without an error in the log) and for a
+## file whose header names a picture too big to decode (image_guard.gd).
 static func _load_image(path: String) -> Image:
-	var b := FileAccess.get_file_as_bytes(path)
-	if b.size() < 12:
-		return null
-	var img := Image.new()
-	var err := ERR_FILE_UNRECOGNIZED
-	if b[0] == 0x89 and b[1] == 0x50 and b[2] == 0x4E and b[3] == 0x47:
-		err = img.load_png_from_buffer(b)
-	elif b[0] == 0xFF and b[1] == 0xD8:
-		err = img.load_jpg_from_buffer(b)
-	elif b.slice(0, 4).get_string_from_ascii() == "RIFF" and b.slice(8, 12).get_string_from_ascii() == "WEBP":
-		err = img.load_webp_from_buffer(b)
-	return img if err == OK else null
+	return ImageGuard.load_known(path)
 
 
 func _collage_done(img: Image) -> void:

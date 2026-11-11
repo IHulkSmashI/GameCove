@@ -42,3 +42,22 @@ static func load(path: String) -> Image:
 		"jpg": err = img.load_jpg_from_buffer(bytes)
 		"webp": err = img.load_webp_from_buffer(bytes)
 	return img if err == OK and not img.is_empty() else null
+
+
+## Like load(), but only a PNG, JPEG or WebP by content (a broken download, a stray file or a
+## name that lies yields null, never a decode attempt), past no size limit: for the callers that
+## take art from folders other tools fill (ES-DE's media, the Steam grid folder).
+static func load_known(path: String) -> Image:
+	if path == "" or not FileAccess.file_exists(path):
+		return null
+	var bytes := FileAccess.get_file_as_bytes(path)
+	var kind := Photo.sniff_image(bytes)
+	if kind == "" or not Photo.size_ok(bytes):
+		return null
+	var img := Image.new()
+	var err := ERR_FILE_UNRECOGNIZED
+	match kind:
+		"png": err = img.load_png_from_buffer(bytes)
+		"jpg": err = img.load_jpg_from_buffer(bytes)
+		"webp": err = img.load_webp_from_buffer(bytes)
+	return img if err == OK and not img.is_empty() else null
