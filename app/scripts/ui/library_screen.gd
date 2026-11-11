@@ -506,6 +506,12 @@ func _rebuild(keep_focus: bool) -> void:
 		_empty_text.text = "No %s games found. Pick another store or All." % View.store_name(store)
 	var total := View.not_hidden(games).size() if view != "hidden" else in_view.size()
 	count_label.text = ("%d of %d" % [shown.size(), total]) if shown.size() != total else ("%d games" % total if total != 1 else "1 game")
+	if focused_key == "" and not _tiles.is_empty():
+		# nothing in the grid has focus (typing a search on the keyboard): the strip under the
+		# grid names the game focus would land on, not the one it was last on
+		var landing: Control = default_focus()
+		if landing in _tiles:
+			show_details(landing.game)
 	if focused_key != "":
 		for t in _tiles:
 			if t.game.get("key", "") == focused_key:
