@@ -22,6 +22,7 @@ onexplayer-onexfly-f1	sppt=35	fppt=35
 onexplayer-onexfly-f1-pro	sppt=41	fppt=41
 onexplayer-x1-amd	sppt=35	fppt=35
 onexplayer-x1-intel	sppt=32	fppt=32
+onexplayer-x1-air	sppt=32	fppt=32
 onexplayer-x1-mini	sppt=35	fppt=35
 onexplayer-x1-pro	sppt=35	fppt=35
 onexplayer-2	sppt=38	fppt=38
