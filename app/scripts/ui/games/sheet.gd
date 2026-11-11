@@ -226,6 +226,11 @@ func pick(id: String) -> void:
 	var back := _focus_before
 	if back != null and is_instance_valid(back) and back.is_visible_in_tree():
 		back.grab_focus()
+	elif is_inside_tree():
+		# that control was rebuilt meanwhile: nothing of this sheet keeps focus
+		var row := get_viewport().gui_get_focus_owner()
+		if row != null and is_ancestor_of(row):
+			row.release_focus()
 	chosen.emit(id)
 	if cb.is_valid():
 		cb.call(id)

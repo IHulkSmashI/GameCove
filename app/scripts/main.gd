@@ -462,6 +462,10 @@ func _wire_games() -> void:
 	Library.collections.changed.connect(_on_collections_changed)
 	steam_overlay = SteamOverlay.new()
 	steam_overlay.back_requested.connect(func(): store_api.return_from_steam())
+	steam_overlay.focus_lost.connect(func():
+		var f := _screen_default_focus()
+		if f != null and f.is_visible_in_tree():
+			f.grab_focus())
 	_modal_layer.add_child(steam_overlay)
 	if Library.has_signal("action_failed"):
 		Library.action_failed.connect(_on_action_failed)

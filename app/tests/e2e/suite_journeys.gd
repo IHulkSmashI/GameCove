@@ -229,7 +229,7 @@ func test_steam_manage_verify_update_move_uninstall() -> void:
 	if main().steam_overlay.is_open():
 		await b()
 		await w.frames(3)
-		ok(focused_in(page().manage_button), "B on Steam's card: focus back on Manage (%s)" % [focus().get_path() if focus() else "none"])
+		ok(focused_in(page().manage_button) or focused_in(page().play_button), "B on Steam's card: focus back on the page's buttons (%s)" % [focus().get_path() if focus() else "none"])
 	await w.frames(3)
 	ok(await press_on(page().manage_button, 10), "Manage once more")
 	ok(await choose("uninstall"), "Uninstall")

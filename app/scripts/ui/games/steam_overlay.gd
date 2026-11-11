@@ -11,6 +11,9 @@ const TG := preload("res://scripts/ui/texts_games.gd")
 const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 
 signal back_requested
+## Closed and the control it was opened from is gone (rebuilt meanwhile): the
+## host puts focus on the screen's own control.
+signal focus_lost
 
 var title_label: Label
 var line_label: Label
@@ -95,8 +98,14 @@ func close() -> void:
 		return
 	_open = false
 	Motion.fade(self, false)
-	if _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
+	if _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree() \
+			and not is_ancestor_of(_focus_before):
 		_focus_before.grab_focus()
+	elif is_inside_tree():
+		var f := get_viewport().gui_get_focus_owner()
+		if f != null and is_ancestor_of(f):
+			f.release_focus()
+		focus_lost.emit()
 
 
 func is_open() -> bool:
