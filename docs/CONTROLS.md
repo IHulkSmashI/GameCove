@@ -33,6 +33,7 @@ Floats are IEEE bit patterns in a CARDINAL. Names from gamescope `src/steamcompm
 | `display.hdr_itm`, `display.sdr_brightness` | `GAMESCOPE_HDR_ITM_ENABLE`; `GAMESCOPE_SDR_ON_HDR_CONTENT_BRIGHTNESS` (nits) | HDR supported; SDR brightness hidden where Brightness already uses it |
 | `display.effect` | `GAMESCOPE_RESHADE_TECHNIQUE_IDX`=0 then `GAMESCOPE_RESHADE_EFFECT` (text, path under Shaders/); Off removes it. Bundled effects are written to `~/.local/share/gamescope/reshade/Shaders/gamecove/` on first use; user and `/usr/share` `.fx` files are listed too | gamescope with ReShade |
 | `display.rotation` | `ORIENTATION` in the session env file (auto = removed, device-quirks' own) | gamescope-session-plus |
+| `display.hdmi_cec` | steamos-manager `HdmiCec1.HdmiCecState` (user bus; 0 off, 1 the TV remote only, 2 remote and TV power; the finer `HdmiCec2` state 3 reads as 2) | steamos-manager offers `HdmiCec1` (Steam Machine, a Steam Deck dock). Nothing else is tried: no `cec-client`, no polling |
 | `display.dim_after`, `display.screen_off_after` | stored per device; the UI's idle timer reads them (and skips while `system.keep_awake`) | always |
 | `audio.volume` / `audio.mute` | `wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@` / `set-mute` | `wpctl status` works and lists a sink |
 | `audio.output`, `audio.input` | `wpctl set-default <id>`; values are device names (ids change per boot) | sinks / sources listed |

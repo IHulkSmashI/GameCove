@@ -114,6 +114,11 @@ func test_every_row_has_its_drawing_and_buttons() -> void:
 		var path := ART + art + ".svg"
 		ok(FileAccess.file_exists(path), path + " exists")
 		var svg := FileAccess.get_file_as_string(path)
+		if DeviceScript.form_of(row) != "handheld":
+			# a box for the TV: an outline, no screen or controls to point at
+			ok(svg.contains("id=\"part-body\""), "%s has part-body" % art)
+			ok(not svg.contains("id=\"btn-South\""), "%s draws no controls it doesn't have" % art)
+			continue
 		for id in required_ids(row, body):
 			ok(svg.contains("id=\"%s\"" % id), "%s (%s) has %s" % [art, row["id"], id])
 
@@ -129,6 +134,9 @@ func test_bodies_are_sourced_and_drawn_to_scale() -> void:
 		for m in b.get("models", []):
 			ok(m in ids, "%s: model %s is a devices.json row" % [art, m])
 		for k in ["w_mm", "h_mm", "d_mm", "screen_in"]:
+			if k == "screen_in" and str(b.get("form", "")) == "console":
+				ok(b.get(k) == null, art + " is a box: no screen size")
+				continue
 			ok(_num(b.get(k)) or b.get(k) == "unverified", "%s.%s is a number or \"unverified\"" % [art, k])
 		var svg := FileAccess.get_file_as_string(ART + art + ".svg")
 		var core := bbox(svg, "part-body")
@@ -150,10 +158,20 @@ func test_no_orphan_drawings() -> void:
 	var bodies := _bodies()
 	for f in DirAccess.get_files_at(ART.trim_suffix("/")):
 		if f.ends_with(".svg"):
-			ok(f == "generic.svg" or bodies.has(f.get_basename()), f + " belongs to a body record")
+			ok(f in ["generic.svg", "generic-box.svg"] or bodies.has(f.get_basename()), f + " belongs to a body record")
 
 
 func test_body_for() -> void:
 	eq(float(DeviceScript.body_for("msi-claw-8-ex").get("w_mm", 0)), 321.0, "Claw 8 EX width")
 	eq(DeviceScript.body_for("steam-deck-oled"), DeviceScript.body_for("steam-deck-lcd"), "one shell, one record")
 	eq(DeviceScript.body_for("msi-claw-family"), {}, "generic")
+	eq(float(DeviceScript.body_for("valve-steam-machine").get("w_mm", 0)), 156.0, "Steam Machine width")
+
+
+func test_boxes_have_their_own_drawings() -> void:
+	eq(DeviceScript.picture_for("valve-steam-machine"), ART + "steam-machine.svg", "Steam Machine")
+	ok(FileAccess.file_exists(ART + "generic-box.svg"), "the drawing for an unknown PC by the TV")
+	var row := DeviceScript.fallback_row({"sys_vendor": "AZW", "product_name": "SER8"}, "AMD Ryzen 7 8845HS", {}, DeviceScript.load_doc().get("cpus", []), false)
+	eq(DeviceScript.art_path(str(row["art"])), ART + "generic-box.svg", "an unknown box gets it")
+	var hh := DeviceScript.fallback_row({"sys_vendor": "Contoso", "product_name": "Pocket"}, "AMD Ryzen 7 8840U", {}, DeviceScript.load_doc().get("cpus", []), true)
+	eq(DeviceScript.art_path(str(hh["art"])), ART + "generic.svg", "an unknown handheld keeps the handheld")

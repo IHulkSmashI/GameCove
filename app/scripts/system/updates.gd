@@ -176,7 +176,7 @@ func state() -> Dictionary:
 
 func _ready() -> void:
 	# one-shot: the opt-in automatic app update, once the first minutes after start are over
-	get_tree().create_timer(AUTO_FIRST_S).timeout.connect(func(): maybe_auto_update_apps())
+	get_tree().create_timer(AUTO_FIRST_S).timeout.connect(maybe_auto_update_apps)   # a method, not a lambda: freed with this node at exit
 
 
 ## main.gd / GameSession: true while a game runs. apply() refuses meanwhile.

@@ -21,7 +21,7 @@ OUT = os.path.join(REPO, "fixes", "power-tune", "handhelds.txt")
 spec = importlib.util.spec_from_file_location("gen", os.path.join(REPO, "tools", "fixes", "gen_handhelds.py"))
 gen = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gen)
-gen.uses_fixes = lambda row: True
+gen.uses_fixes = lambda row: row.get("form", "handheld") == "handheld"   # a box for the TV (Steam Machine) has no firmware power limits to tune
 text = gen.render().replace(
     "# Handhelds the fan and charge-limit fixes may write to (DMI ids, shell globs, any case).",
     "# Every handheld GameCove knows: power-tune sets firmware power limits and battery modes only on these.").replace(
@@ -34,7 +34,7 @@ def limits():
              "# Most watts power-tune writes to ppt_pl2_sppt / ppt_pl3_fppt per handheld (hhd / maker safe limits)."]
     for row in json.load(open(os.path.join(REPO, "app", "data", "devices.json"), encoding="utf-8"))["devices"]:
         t = row.get("tdp")
-        if not isinstance(t, dict):
+        if not isinstance(t, dict) or row.get("form", "handheld") != "handheld":
             continue
         top = t.get("boost_max", t.get("plugged_max"))
         lines.append("%s\tsppt=%d\tfppt=%d" % (row["id"], t.get("sppt_max", top), t.get("fppt_max", top)))

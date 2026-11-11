@@ -65,7 +65,7 @@ Three OFL-1.1 families in `app/fonts/` (Latin subset): **Outfit** (SemiBold, Bol
 
 Readability floor at arm's length: tile sub-lines 12 px and pills 12 px at the 1280x800 layout (15 px on a 1920x1200 panel), tile titles 14-15 px (17.5-19), slider tick labels 13 px in `text_2`, helper text under rows in neutral `text_2` (the accent is for focus and values). Portrait shelves and the Library grid show at most seven covers across.
 
-Density: the window keeps `canvas_items` stretch, but past 1280x800 the layout grows at half the rate (`main.gd base_size_for`: 1920x1200 lays out at 1536x960, 1.25x), so big panels get more room rather than just bigger text. The installer uses the same rule. Icons are `DPITexture` SVGs and re-rasterise at the screen's scale.
+Density: the window keeps `canvas_items` stretch, but the layout size comes from `scripts/ui/ui_scale.gd` (window pixels, kind of screen and diagonal, plus the Interface size setting): a handheld keeps a constant visual angle from its panel diagonal, a TV is laid out 800 tall at any resolution (4K = 1422x800 at 2.7x), a desk monitor is read from 1.2 m, and an unknown screen uses the older half-rate rule. Layout is at least 1280x800, at most 1600 wide when automatic, and between 5:4 and 2:1 (ultrawide and unrotated portrait get bars). `main.gd _fit_density` applies it on start, on window resize and on focus-in. The installer uses the same rule. Icons are `DPITexture` SVGs and re-rasterise at the screen's scale. Every size is checked by the layout harness ([docs/RESOLUTIONS.md](RESOLUTIONS.md)).
 
 ### Spacing
 

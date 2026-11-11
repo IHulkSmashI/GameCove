@@ -344,7 +344,10 @@ static func _run_scenario(info: Dictionary, scripts: Array, backends: Dictionary
 	var dev: Node = DeviceScript.new()
 	dev.root = root
 	dev.home = str(info["home"])
+	var pin: Variant = DeviceScript.assume_battery
+	DeviceScript.assume_battery = null   # the fixture's own /sys decides: a box has no battery
 	dev.detect()
+	DeviceScript.assume_battery = pin
 	var row: Dictionary = dev.profile
 	if dev.id() != str(info["expect_row"]):
 		problems.append("DMI resolved to %s, expected %s" % [dev.id(), info["expect_row"]])
@@ -1122,6 +1125,8 @@ static func _walk(root: String, rel: String, out: Dictionary) -> void:
 
 static func _set_ac(info: Dictionary, on: bool) -> void:
 	var root := str(info["root"])
+	if str(info.get("ac_online_file", "")) == "" or str(info.get("battery", "")) == "":
+		return   # a box with no battery or charger (Steam Machine, mini PC)
 	var f := FileAccess.open(root + str(info["ac_online_file"]), FileAccess.WRITE)
 	if f != null:
 		f.store_string("1\n" if on else "0\n")

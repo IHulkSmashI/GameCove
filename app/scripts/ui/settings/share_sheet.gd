@@ -113,7 +113,7 @@ func open_for(clip: Dictionary) -> bool:
 		finished.emit(TX.SHARE_OFFLINE, "bad")
 		return false
 	title_label.text = Clips.title_of(clip)
-	qr_rect.texture = QR.texture(drop.url, 6)
+	QR.show_on(qr_rect, drop.url, 6)
 	_shown_left = -1
 	_update_left()
 	if is_inside_tree():

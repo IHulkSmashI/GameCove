@@ -120,7 +120,15 @@ func test_pictures() -> void:
 	var svg := FileAccess.get_file_as_string("res://assets/devices/art/steam-deck.svg")
 	for part in ["btn-South", "btn-Guide", "btn-QuickAccess", "axis-LeftStick", "btn-DPad", "pad-Left", "btn-LeftPaddle1", "btn-RightBumper", "part-screen"]:
 		ok(svg.contains('id="%s"' % part), "deck picture has " + part)
+	# a box has no controls and no screen of its own: its drawing has nothing to highlight
+	var box_arts := {"generic-box.svg": true}  # the fallback for an unknown PC with no battery
+	for d in DeviceScript.load_table():
+		if DeviceScript.form_of(d) != "handheld":
+			box_arts[str(d.get("art", "generic")) + ".svg"] = true
 	for f in DirAccess.get_files_at("res://assets/devices/art"):
 		if f.ends_with(".svg"):
 			var s := FileAccess.get_file_as_string("res://assets/devices/art/" + f)
+			if box_arts.has(f):
+				ok(not s.contains('id="btn-South"'), f + " (a box) has no buttons to highlight")
+				continue
 			ok(s.contains('id="btn-South"') and s.contains('id="axis-RightStick"') and s.contains('id="part-screen"'), f + " has highlightable parts")

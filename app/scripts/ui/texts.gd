@@ -41,6 +41,7 @@ const TITLES := {
 	"claw8ex-gyro-accel": "Accelerometer",
 	"theme": "Theme",
 	"match_art": "Match game art colours",
+	"interface_size": "Interface size",
 	"reduce_motion": "Reduce motion",
 	"menu_side": "Quick menu side",
 	"ui_sounds": "Interface sounds",
@@ -62,10 +63,16 @@ const EXPLAIN := {
 	"claw8ex-gyro-accel": "Off gives steadier aiming. On adds the tilt sensor too, for games that want it. Asks for your admin password.",
 	"theme": "Colours for the whole app. Changes right away.",
 	"match_art": "Tints the background, focus glow and Play button with a colour from the focused game's art.",
+	"interface_size": "How big text and buttons are. We pick one that suits your screen; bigger shows less at once.",
 	"reduce_motion": "Swaps slides, zooms and pulses for plain fades or instant changes. Also saves a little battery.",
 	"menu_side": "Which edge the quick menu slides in from.",
 	"ui_sounds": "Soft clicks when you move, select and go back. Off saves a sliver of battery.",
 }
+
+## Interface size choices (ui_scale.gd SIZES).
+const SIZE_LABELS := {"small": "Small", "default": "Default", "large": "Large", "largest": "Largest"}
+## Shown instead of the general line when this screen has only one size.
+const SIZE_ONLY_ONE := "This screen has room for one size only."
 
 ## Value-specific lines that replace the general one when that value is picked.
 const EXPLAIN_VALUE := {

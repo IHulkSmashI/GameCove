@@ -9,6 +9,7 @@ extends "res://scripts/ui/settings/page.gd"
 ## "controls" (for titles and value labels), optional "profiles_dir" (where
 ## export / import look, default ~/Documents/GameCove).
 
+const Words := preload("res://scripts/ui/words.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
 const Model := preload("res://scripts/ui/controls/model.gd")
 const Sheet := preload("res://scripts/ui/games/sheet.gd")
@@ -54,7 +55,8 @@ func build() -> void:
 	lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	now.add_child(lbl)
 	var src := str(p.current_source()) if p.has_method("current_source") else "battery"
-	now.add_child(Kit.chip(TC.PROF_SOURCE_NOW.get(src, src), "plug" if src == "ac" else "bolt", "info", true))
+	if Words.battery:
+		now.add_child(Kit.chip(TC.PROF_SOURCE_NOW.get(src, src), "plug" if src == "ac" else "bolt", "info", true))
 	if "game_key" in p and str(p.game_key) != "":
 		now.add_child(Kit.chip(str(p.game_title) if str(p.game_title) != "" else str(p.game_key), "game", "accent", true))
 	head.add_child(now)
@@ -63,6 +65,8 @@ func build() -> void:
 	base.get_parent().name = "Card_layers"
 	for l in [["", TC.PROF_EVERYDAY, TC.PROF_EVERYDAY_LINE, "sliders"], ["battery", TC.PROF_BATTERY, TC.PROF_BATTERY_LINE, "bolt"],
 			["ac", TC.PROF_AC, TC.PROF_AC_LINE, "power"]]:
+		if str(l[0]) != "" and not Words.battery:
+			continue   # no battery (Steam Machine, mini PC): no "on battery" / "plugged in" settings
 		var vals: Dictionary = p.layer("", str(l[0]))
 		var key: String = "layer_" + (str(l[0]) if str(l[0]) != "" else "global")
 		var r := action_row(base, key, l[1], _count(vals), l[2] + " " + _summary(vals), l[3])

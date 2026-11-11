@@ -31,8 +31,16 @@ const EXPECT := {
 }
 
 
+## The Steam Machine: nothing a battery or a handheld's power limit needs, and
+## each of those says why; HDMI-CEC from steamos-manager.
+const EXPECT_BOX := {
+	"power.tdp": "runs from the wall", "power.battery_saver": "No battery", "power.low_battery_sleep": "No battery",
+	"power.battery_saver_at": "No battery", "display.brightness": "no brightness", "display.hdmi_cec": true, "perf.overlay": true,
+}
+
+
 func test_offers_what_this_setup_has_and_says_why_not() -> void:
-	var want: Dictionary = EXPECT.get(setup_name(), {})
+	var want: Dictionary = EXPECT.get(setup_name(), EXPECT_BOX if bool(w.info.get("boxed", false)) else {})
 	ok(not want.is_empty(), "expectations for %s" % setup_name())
 	for id in want:
 		var c := ctl(id)

@@ -93,6 +93,12 @@ GENERIC = [
     {"id": "generic-intel", "vendor": "intel", "dmi": {"sys_vendor": "Generic Handheld Co.", "product_name": "GH-1 Intel",
      "board_name": "GH1I", "board_vendor": "Generic Handheld Co.", "product_family": "GH"},
      "cpu_model": "Intel(R) Core(TM) Ultra 7 155H"},
+    # A mini PC by the TV (a Beelink SER8 running Bazzite): no battery, no panel. GameCove must
+    # treat it as a desktop: no battery UI, no handheld power limits even though the image's
+    # power services answer.
+    {"id": "generic-box-amd", "vendor": "amd", "battery": False, "dmi": {"sys_vendor": "AZW", "product_name": "SER8",
+     "board_name": "SER8", "board_vendor": "AZW", "product_family": "SER"},
+     "cpu_model": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics"},
 ]
 
 # CPU model strings (as /proc/cpuinfo prints them) -> (cores, threads, max kHz, GPU PCI id).
@@ -109,6 +115,9 @@ CPUS = [
     ("HX 370", "AMD Ryzen AI 9 HX 370 w/ Radeon 890M", 12, 24, 5100000, "1002:150E"),
     ("365", "AMD Ryzen AI 9 365 w/ Radeon 880M", 10, 20, 5000000, "1002:150E"),
     ("8840HS", "AMD Ryzen 7 8840HS w/ Radeon 780M Graphics", 8, 16, 5100000, "1002:1900"),
+    ("8845HS", "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics", 8, 16, 5100000, "1002:1900"),
+    # Steam Machine: the CPU string from Geekbench; the GPU PCI id is a stand-in (Navi 33 class)
+    ("Steam Machine", "AMD Custom CPU 1772", 6, 12, 4800000, "1002:7480"),
     ("8840U", "AMD Ryzen 7 8840U w/ Radeon 780M Graphics", 8, 16, 5100000, "1002:1900"),
     ("7840U", "AMD Ryzen 7 7840U w/ Radeon 780M Graphics", 8, 16, 5100000, "1002:15BF"),
     ("6800U", "AMD Ryzen 7 6800U with Radeon Graphics", 8, 16, 4700000, "1002:1681"),
@@ -194,6 +203,8 @@ def cpu_for(row: dict, override: dict) -> tuple:
             key = "Custom APU 0405"
         elif "Sephiroth" in chip:
             key = "Custom APU 0932"
+        elif "Steam Machine" in chip:
+            key = "Steam Machine"
         elif row.get("cpu_vendor") == "intel":
             key = next((k for k in INTEL_ATOM if k in chip), "Meteor Lake")
         else:
@@ -222,6 +233,13 @@ class Tree:
             f.write(str(value) if not isinstance(value, bool) else ("1" if value else "0"))
             if not str(value).endswith("\n"):
                 f.write("\n")
+        self.count += 1
+
+    def wb(self, path: str, data: bytes) -> None:
+        p = os.path.join(self.root, path.lstrip("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as f:
+            f.write(data)
         self.count += 1
 
     def d(self, path: str) -> None:
@@ -263,7 +281,7 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
         t.w(f"/sys/class/dmi/id/{k}", v)
     t.w("/sys/class/dmi/id/bios_vendor", dmi["sys_vendor"])
     t.w("/sys/class/dmi/id/bios_version", "DM1.00")
-    t.w("/sys/class/dmi/id/chassis_type", "31")
+    t.w("/sys/class/dmi/id/chassis_type", "35" if (generic or {}).get("battery") is False or row.get("form") in ("console", "desktop") else "31")
     if override.get("os") == "steamos-3.10":
         t.w("/proc/sys/kernel/osrelease", "7.2.4-valve1-1-neptune")
         t.w("/etc/os-release", 'NAME="SteamOS"\nID=steamos\nID_LIKE=arch\nVERSION_ID=3.10\nBUILD_ID=20260924.1000\n'
@@ -363,7 +381,14 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
             t.w(f"{c}/{k}", v)
     panel = row.get("panel") or {}
     res = panel.get("resolution") or [1920, 1080]
-    conn = f"/sys/class/drm/{card}-eDP-1"
+    boxed = (generic or {}).get("battery") is False or row.get("form") in ("console", "desktop")
+    conn = f"/sys/class/drm/{card}-{'HDMI-A-1' if boxed else 'eDP-1'}"
+    if boxed:
+        res = [3840, 2160]   # a 55 inch 4K TV: EDID bytes 21 / 22 are its size in cm
+        edid = bytearray(128)
+        edid[0:8] = b"\x00\xff\xff\xff\xff\xff\xff\x00"
+        edid[21], edid[22] = 121, 68
+        t.wb(f"{conn}/edid", bytes(edid))
     t.w(f"{conn}/status", "connected")
     t.w(f"{conn}/enabled", "enabled")
     t.w(f"{conn}/modes", f"{res[0]}x{res[1]}")
@@ -413,40 +438,49 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
             t.w(f"{hwmon}/{k}", v)
         hw += 1
 
-    # Power supply
-    ac = "ACAD" if row["id"].startswith("steam-deck") else ("AC0" if maker.startswith("asus") else "ADP1")
-    bat = override.get("battery") or ("BAT1" if row["id"].startswith("steam-deck") else "BAT0")
-    ps = "/sys/class/power_supply"
-    t.w(f"{ps}/{ac}/type", "Mains")
-    t.w(f"{ps}/{ac}/online", 0)
-    t.w(f"{ps}/ucsi-source-psy-USBC000:001/type", "USB")
-    t.w(f"{ps}/ucsi-source-psy-USBC000:001/online", 0)
-    if bat == "BAT1" and not row["id"].startswith("steam-deck"):
-        t.w(f"{ps}/ucsi-source-psy-USBC000:002/type", "USB")
-        t.w(f"{ps}/ucsi-source-psy-USBC000:002/online", 0)
-    b = f"{ps}/{bat}"
-    for k, v in {"type": "Battery", "status": "Discharging", "present": 1, "capacity": 76, "energy_now": 45600000,
-                 "energy_full": 60000000, "energy_full_design": 64000000, "power_now": 9500000,
-                 "voltage_now": 15400000, "cycle_count": 42, "technology": "Li-poly"}.items():
-        t.w(f"{b}/{k}", v)
-    via = row.get("charge_limit_via")
-    behaviour = via == "sysfs" and maker.startswith("ayaneo")
-    msi_ec = "msi-wmi-platform" in ((row.get("traits") or {}).get("ec") or [])
-    if "charge_threshold" in override:
-        t.w(f"{b}/charge_control_end_threshold", override["charge_threshold"])
-    elif row.get("charge_limit") and (via in ("sysfs", "fix") or msi_ec) and not behaviour:
-        t.w(f"{b}/charge_control_end_threshold", 0 if msi_ec else 100)
-    if behaviour or (via == "sysfs" and fan == "oxp_ec"):
-        t.w(f"{b}/charge_behaviour", "[auto] inhibit-charge")
+    # Power supply. A box (Steam Machine, mini PC) has no battery and no AC adapter node; its
+    # only "Battery" is the DualSense on a cable (scope Device), which is not the system's.
+    ac = ""
+    bat = ""
+    if boxed:
+        pad = "/sys/class/power_supply/ps-controller-battery-a0:fa:9c:11:22:33"
+        for k, v in {"type": "Battery", "scope": "Device", "status": "Discharging", "present": 1, "capacity": 15}.items():
+            t.w(f"{pad}/{k}", v)
+    else:
+        ac = "ACAD" if row["id"].startswith("steam-deck") else ("AC0" if maker.startswith("asus") else "ADP1")
+        bat = override.get("battery") or ("BAT1" if row["id"].startswith("steam-deck") else "BAT0")
+        ps = "/sys/class/power_supply"
+        t.w(f"{ps}/{ac}/type", "Mains")
+        t.w(f"{ps}/{ac}/online", 0)
+        t.w(f"{ps}/ucsi-source-psy-USBC000:001/type", "USB")
+        t.w(f"{ps}/ucsi-source-psy-USBC000:001/online", 0)
+        if bat == "BAT1" and not row["id"].startswith("steam-deck"):
+            t.w(f"{ps}/ucsi-source-psy-USBC000:002/type", "USB")
+            t.w(f"{ps}/ucsi-source-psy-USBC000:002/online", 0)
+        b = f"{ps}/{bat}"
+        for k, v in {"type": "Battery", "status": "Discharging", "present": 1, "capacity": 76, "energy_now": 45600000,
+                     "energy_full": 60000000, "energy_full_design": 64000000, "power_now": 9500000,
+                     "voltage_now": 15400000, "cycle_count": 42, "technology": "Li-poly"}.items():
+            t.w(f"{b}/{k}", v)
+        via = row.get("charge_limit_via")
+        behaviour = via == "sysfs" and maker.startswith("ayaneo")
+        msi_ec = "msi-wmi-platform" in ((row.get("traits") or {}).get("ec") or [])
+        if "charge_threshold" in override:
+            t.w(f"{b}/charge_control_end_threshold", override["charge_threshold"])
+        elif row.get("charge_limit") and (via in ("sysfs", "fix") or msi_ec) and not behaviour:
+            t.w(f"{b}/charge_control_end_threshold", 0 if msi_ec else 100)
+        if behaviour or (via == "sysfs" and fan == "oxp_ec"):
+            t.w(f"{b}/charge_behaviour", "[auto] inhibit-charge")
 
-    # Backlight
-    bl = override.get("backlight") or ("intel_backlight" if intel else ("amdgpu_bl0" if row["id"].startswith("steam-deck") else "amdgpu_bl1"))
-    bmax = 96000 if intel else 255
-    t.w(f"/sys/class/backlight/{bl}/max_brightness", bmax)
-    t.w(f"/sys/class/backlight/{bl}/brightness", bmax // 2)
-    t.w(f"/sys/class/backlight/{bl}/actual_brightness", bmax // 2)
-    t.w(f"/sys/class/backlight/{bl}/type", "raw")
-    t.w(f"/sys/class/backlight/{bl}/bl_power", 0)
+    # Backlight (none on a box: the TV has its own)
+    bl = "" if boxed else override.get("backlight") or ("intel_backlight" if intel else ("amdgpu_bl0" if row["id"].startswith("steam-deck") else "amdgpu_bl1"))
+    if not boxed:
+        bmax = 96000 if intel else 255
+        t.w(f"/sys/class/backlight/{bl}/max_brightness", bmax)
+        t.w(f"/sys/class/backlight/{bl}/brightness", bmax // 2)
+        t.w(f"/sys/class/backlight/{bl}/actual_brightness", bmax // 2)
+        t.w(f"/sys/class/backlight/{bl}/type", "raw")
+        t.w(f"/sys/class/backlight/{bl}/bl_power", 0)
 
     # LEDs (kernel class only; HID/EC RGB has no sysfs node)
     rgb = row.get("rgb") or {}
@@ -612,7 +646,8 @@ def build(row: dict, out: str, override: dict, generic: dict | None, devices: li
             "setup": setup["name"] if setup else "", "os": setup["os"] if setup else "bazzite",
             "vendor": vendor, "root": root, "home": os.path.join(root, "home"),
             "backends": os.path.join(base, "backends.json"),
-            "ac_online_file": f"/sys/class/power_supply/{ac}/online", "battery": f"/sys/class/power_supply/{bat}",
+            "ac_online_file": f"/sys/class/power_supply/{ac}/online" if ac else "",
+            "battery": f"/sys/class/power_supply/{bat}" if bat else "", "boxed": boxed,
             "backlight": bl, "leds": leds, "gpu_driver": driver, "gpu_card": card, "cpu_model": model,
             "threads": threads, "cores": cores, "stack": stack, "files": t.count,
             "tdp": tdp, "dmi": dmi}
@@ -640,6 +675,12 @@ SETUPS = {
                      "services": ["steamos-manager"],
                      "platform_profiles": "quiet balanced performance", "platform_now": "performance",
                      "sm_model": ["rog_ally", "RC71L"], "sm_default_profile": "performance"},
+    # The Steam Machine on SteamOS: steamos-manager only. Whether its Fremont config offers
+    # TdpLimit1 isn't known; the fixture answers it, and GameCove must still show no TDP slider.
+    "steam-machine-steamos": {"row": "valve-steam-machine", "os": "steamos", "controller": "inputplumber",
+                              "services": ["steamos-manager"],
+                              "platform_profiles": "low-power balanced performance", "platform_now": "balanced",
+                              "sm_model": ["steam_machine", "Fremont"], "sm_default_profile": "balanced"},
     "legion-go-s-bazzite": {"row": "lenovo-legion-go-s-z2go", "os": "bazzite", "controller": "inputplumber",
                             "services": ["steamos-manager", "powerstation", "ppd"],
                             "platform_profiles": "low-power balanced balanced-performance performance custom",
@@ -735,6 +776,9 @@ def backends_for(row, tdp, stack, controller, vendor, gpu_family, maker, threads
     t = tdp or {"min": 5, "battery_max": 20, "plugged_max": 25, "boost_max": 25}
     cur = int(round((t["min"] + t["battery_max"]) / 2))
     if "steamos-manager" in stack:
+        if row.get("form") == "console":
+            # steamos-manager data/devices/steam-machine.toml: cec_hw (cros_ec port 0), nothing else
+            prop("--user", SM, SM_PATH, f"{SM}.HdmiCec1", "HdmiCecState", "u", 2)
         prop("--user", SM, SM_PATH, f"{SM}.TdpLimit1", "TdpLimit", "u", cur)
         prop("--user", SM, SM_PATH, f"{SM}.TdpLimit1", "TdpLimitMin", "u", int(t["min"]))
         prop("--user", SM, SM_PATH, f"{SM}.TdpLimit1", "TdpLimitMax", "u", int(t["plugged_max"]))

@@ -2,6 +2,7 @@
 # Every handheld row, specific before family (first match wins). Used by fixes/lib/gcfix.sh.
 steam-deck-lcd	sys_vendor=Valve	product_name=Jupiter
 steam-deck-oled	sys_vendor=Valve	product_name=Galileo
+valve-steam-machine	sys_vendor=Valve	board_name=Fremont
 asus-rog-ally	sys_vendor=ASUSTeK COMPUTER INC.	board_name=RC71L
 asus-rog-ally-x	sys_vendor=ASUSTeK COMPUTER INC.	board_name=RC72LA
 asus-rog-xbox-ally	sys_vendor=ASUSTeK COMPUTER INC.	board_name=RC73YA

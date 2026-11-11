@@ -68,6 +68,8 @@ const Proc := preload("res://scripts/system/proc.gd")
 const AppsView := preload("res://scripts/ui/apps_view.gd")
 const Apps := preload("res://scripts/library/apps.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
+const UiScale := preload("res://scripts/ui/ui_scale.gd")
+const Words := preload("res://scripts/ui/words.gd")
 
 const LIVE_REFRESH_S := 5.0
 ## Wall clock running this far ahead of the monotonic clock means we were asleep.
@@ -166,6 +168,8 @@ var _pads_busy := false   # a UPower read is out (card_jobs.gd)
 
 ## Play the boot splash at start (screenshots and tests turn it off).
 static var boot_splash := true
+## The hint list last asked for (before it was cut to fit the band).
+var _last_hints: Array = []
 ## The boot intro while it plays (it frees itself).
 var _boot_intro: Control
 
@@ -173,12 +177,14 @@ var _boot_intro: Control
 func _ready() -> void:
 	background = BackgroundMode.new()
 	add_child(background)
+	UiPrefs.load_prefs()
+	# a Steam Machine or a PC by the TV: "device" for "handheld" in every text (words.gd)
+	Words.setup(Device)
+	Words.install()
 	get_window().size_changed.connect(_fit_density)
 	_fit_density()
-	UiPrefs.load_prefs()
 	_load_extra_prefs()
-	if Device.has_method("glyph_set"):
-		Glyph.use_set(str(Device.glyph_set()))
+	_pick_glyphs()
 	ThemeLib.use(UiPrefs.theme, device_accent())
 	theme = ThemeLib.build()
 
@@ -411,6 +417,7 @@ func _ready() -> void:
 	_link_top()
 	home.set_apps(_pinned_apps())
 	Input.joy_connection_changed.connect(func(_d, _c): read_pads(true))
+	Input.joy_connection_changed.connect(_on_pad_plugged)
 	read_pads(true)
 	_last_input_ms = Time.get_ticks_msec()
 	home.focus_later(home.default_focus())
@@ -1072,6 +1079,7 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_window_focused = true
 		_sync_pad_input()
+		_fit_density()   # docked or undocked while a game was in front
 		if steam_trip != null:
 			steam_trip.service.arrived()   # back from Steam's controller settings
 		if background != null:
@@ -1111,22 +1119,44 @@ func _resume_motion() -> void:
 	home.hero_stage.resume_motion()
 
 
-## Big screens get more room instead of just bigger pixels: past 1280x800
-## the scale grows at half the rate (1920x1200 lays out at 1536x960, 1.25x),
-## which keeps text about the size it is on a 7" 800p handheld.
+## Button pictures: a handheld shows its own (Device.glyph_set()); a box by the
+## TV (Steam Machine, mini PC) has no buttons of its own, so they follow the
+## first pad that is plugged in: shapes for a DualSense, Valve's labels for a
+## Steam Controller, Xbox letters for everything else.
+func _pick_glyphs() -> bool:
+	var want := str(Device.glyph_set()) if Device.has_method("glyph_set") else "xbox"
+	if Device.has_method("is_handheld") and not Device.is_handheld():
+		want = "xbox"
+		for id in Input.get_connected_joypads():
+			var info: Dictionary = Input.get_joy_info(id)
+			want = Glyph.set_for_pad(Input.get_joy_name(id), int(info.get("vendor_id", 0)))
+			break
+	if want == Glyph.glyph_set:
+		return false
+	Glyph.use_set(want)
+	return true
+
+
+func _on_pad_plugged(_device: int, _connected: bool) -> void:
+	if _pick_glyphs() and is_inside_tree():
+		propagate_notification(NOTIFICATION_THEME_CHANGED)   # every glyph on screen re-reads its label
+		_update_hints()
+
+
+## The layout follows the real output: the window's size (gamescope's nested
+## resolution, whatever the panel's own is), what it is shown on (the built-in
+## panel, a desk monitor or a TV: display_output.gd) and the player's
+## Interface size. ui_scale.gd has the rule. Runs at start, when the window's
+## size changes and when GameCove comes back to the front (docked meanwhile?).
 func _fit_density() -> void:
-	var w := get_window()
-	if w == null or w.content_scale_mode == Window.CONTENT_SCALE_MODE_DISABLED:
-		return
-	w.content_scale_size = base_size_for(w.size)
+	if UiScale.apply(get_window(), Device, UiPrefs.interface_size) and hint_bar != null and not _last_hints.is_empty():
+		call_deferred("_update_hints")
 
 
-static func base_size_for(win: Vector2i) -> Vector2i:
-	var s := minf(win.x / 1280.0, win.y / 800.0)
-	if s <= 1.0:
-		return Vector2i(1280, 800)
-	var eff := 1.0 + (s - 1.0) * 0.5
-	return Vector2i(roundi(win.x / eff), roundi(win.y / eff))
+## The layout size for a window on a screen nothing is known about (tests,
+## tools): past 1280x800 the scale grows at half the rate.
+static func base_size_for(win: Vector2i, screen := {}, size_id := "default") -> Vector2i:
+	return UiScale.layout_for(win, screen, size_id)
 
 
 ## An interrupted GE-Proton install or removal (power off, app killed) left files in
@@ -1154,6 +1184,7 @@ static func release_caches() -> void:
 	load("res://scripts/ui/icons.gd")._cache.clear()
 	load("res://scripts/ui/games/game_icons.gd").clear()
 	load("res://scripts/ui/art_cache.gd").shutdown()
+	load("res://scripts/ui/words.gd").uninstall()
 	ThemeLib._fonts.clear()
 	ThemeLib._knobs.clear()
 	ThemeLib._gradients.clear()
@@ -1825,19 +1856,31 @@ func _streaming_ctx() -> Dictionary:
 		"display_fn": stream_display, "gpu_family": str(prof.get("gpu_family", ""))}
 
 
-## The panel's size, top refresh rate and whether HDR is on now (display.hdr).
+## The screen games are shown on: size, top refresh rate and whether HDR is on
+## now (display.hdr). The handheld's own panel from the device table; on a TV
+## or monitor (docked, or a box with no panel) what the output really is.
 func stream_display() -> Dictionary:
 	var prof: Dictionary = Device.profile if Device.get("profile") is Dictionary else {}
-	var panel: Variant = prof.get("panel")
-	var res: Array = panel.get("resolution", []) if panel is Dictionary and panel.get("resolution") is Array else []
-	var hz: Array = prof.get("panel_hz", []) if prof.get("panel_hz") is Array else []
-	var win := DisplayServer.screen_get_size() if DisplayServer.get_name() != "headless" else Vector2i(1280, 800)
 	var controls := _svc("Controls")
 	var hdr := false
 	if controls != null and controls.has_method("has") and controls.has("display.hdr"):
 		hdr = controls.value("display.hdr") == true
-	return {"width": int(res[0]) if res.size() == 2 else win.x, "height": int(res[1]) if res.size() == 2 else win.y,
-		"hz": int(hz[hz.size() - 1]) if not hz.is_empty() else 60, "hdr": hdr}
+	var headless := DisplayServer.get_name() == "headless"
+	var out := display_for(prof, UiScale.screen_for(Device), Vector2i(1280, 800) if headless else DisplayServer.screen_get_size(),
+		60.0 if headless else DisplayServer.screen_get_refresh_rate())
+	out["hdr"] = hdr
+	return out
+
+
+## {width, height, hz} for a device row on `screen` (ui_scale.gd screen_for):
+## the row's panel while GameCove is on it, else the output's own size and rate.
+static func display_for(prof: Dictionary, screen: Dictionary, out_size: Vector2i, out_hz: float) -> Dictionary:
+	var panel: Variant = prof.get("panel")
+	var res: Array = panel.get("resolution", []) if panel is Dictionary and panel.get("resolution") is Array else []
+	var hz: Array = prof.get("panel_hz", []) if prof.get("panel_hz") is Array else []
+	if bool(screen.get("external", false)) or res.size() != 2:
+		return {"width": out_size.x, "height": out_size.y, "hz": int(roundf(out_hz)) if out_hz >= 24.0 else 60}
+	return {"width": int(res[0]), "height": int(res[1]), "hz": int(hz[hz.size() - 1]) if not hz.is_empty() else 60}
 
 
 ## B on the launch splash. A game that was already started is really closed
@@ -2255,7 +2298,25 @@ func _update_hints(f: Control = null) -> void:
 	for c in hint_bar.get_children():
 		hint_bar.remove_child(c)
 		c.queue_free()
+	_last_hints = list
 	hint_bar.add_child(Kit.prompts(list))
+	_fit_hints()
+
+
+## The hint bar never runs off the screen: where the prompts are wider than the
+## band (the Library's nine on a 1280 px layout), the last ones go, the ones
+## everybody knows first (Quick menu, Sections, Home); the action stays.
+func _fit_hints() -> void:
+	if hint_bar == null or hint_bar.get_child_count() == 0 or not is_inside_tree():
+		return
+	var avail := get_viewport_rect().size.x - 2.0 * ThemeLib.EDGE - ThemeLib.SPACE_4 - hint_status.get_combined_minimum_size().x
+	var list := _last_hints
+	while list.size() > 1 and (hint_bar.get_child(0) as Control).get_combined_minimum_size().x > avail:
+		list = list.slice(0, list.size() - 1)
+		var old := hint_bar.get_child(0)
+		hint_bar.remove_child(old)
+		old.free()
+		hint_bar.add_child(Kit.prompts(list))
 
 
 ## Hints from whatever sits on top: a sheet, the Steam overlay, the downloads
@@ -2370,6 +2431,8 @@ func _settings_values() -> Dictionary:
 	var v := UiPrefs.values()
 	v["menu_side"] = menu_side
 	v["ui_sounds"] = ui_sounds
+	var w := get_window()
+	v["interface_sizes"] = UiScale.sizes_for(UiScale.window_size(w), UiScale.screen_for(Device)) if w != null else ["default"]
 	return v
 
 
@@ -2403,6 +2466,11 @@ func _on_setting_changed(key: String, value: Variant) -> void:
 			v[key] = value
 			UiPrefs.set_values(v)
 			apply_theme()
+		"interface_size":
+			var v2 := UiPrefs.values()
+			v2[key] = value
+			UiPrefs.set_values(v2)
+			_fit_density()
 		"reduce_motion":
 			Motion.reduce = bool(value)
 			if Motion.reduce:

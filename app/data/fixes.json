@@ -841,6 +841,18 @@
       }
      },
      {
+      "id": "valve-steam-machine",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "Valve"
+       ],
+       "board_name": [
+        "Fremont"
+       ]
+      }
+     },
+     {
       "id": "asus-rog-ally",
       "level": "optional",
       "match": {
@@ -3101,6 +3113,18 @@
        ],
        "product_name": [
         "Galileo"
+       ]
+      }
+     },
+     {
+      "id": "valve-steam-machine",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "Valve"
+       ],
+       "board_name": [
+        "Fremont"
        ]
       }
      },

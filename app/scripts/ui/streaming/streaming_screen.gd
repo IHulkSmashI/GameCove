@@ -699,7 +699,7 @@ func _empty_state() -> Control:
 	qcol.add_child(Kit.label(T.QR_CAPTION, "EyebrowLabel"))
 	var qr := TextureRect.new()
 	qr.name = "QR"
-	qr.texture = QR.texture(T.VIBEPOLLO_URL, 5)
+	QR.show_on(qr, T.VIBEPOLLO_URL, 5)
 	qr.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	qr.custom_minimum_size = Vector2(210, 210)
 	qcol.add_child(qr)

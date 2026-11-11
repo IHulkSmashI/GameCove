@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="260" viewBox="0 0 480 260">
+<title>PC by the TV</title>
+<rect id="part-screen" x="95" y="22" width="290" height="166" rx="6" fill="#0B0E13" stroke="#5A6678" stroke-width="2.5"/>
+<path d="M240 188 V204 M196 206 H284" stroke="#5A6678" stroke-width="2.5" stroke-linecap="round"/>
+<path d="M150 46 L196 46" stroke="#9AA4B0" stroke-width="1.2" opacity="0.5"/>
+<rect id="part-body" x="170" y="216" width="140" height="30" rx="5" fill="#262E3A" stroke="#5A6678" stroke-width="2.5" stroke-linejoin="round"/>
+<circle id="part-led" cx="186" cy="231" r="2" fill="#E8ECF1"/>
+<rect x="250" y="227" width="16" height="7" rx="1.5" fill="#0B0E13" stroke="#9AA4B0" stroke-width="1.2"/>
+<rect x="274" y="227" width="16" height="7" rx="1.5" fill="#0B0E13" stroke="#9AA4B0" stroke-width="1.2"/>
+<g id="part-pad"><path d="M352 222 H398 Q412 222 414 236 L416 246 Q416 252 409 250 L400 242 H350 L341 250 Q334 252 334 246 L336 236 Q338 222 352 222 Z" fill="#262E3A" stroke="#5A6678" stroke-width="2" stroke-linejoin="round"/><circle cx="353" cy="232" r="3.2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.1"/><circle cx="397" cy="232" r="3.2" fill="#1F2630" stroke="#9AA4B0" stroke-width="1.1"/></g>
+</svg>

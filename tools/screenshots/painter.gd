@@ -71,6 +71,12 @@ static func make_library(tree: SceneTree, dir: String) -> Array:
 
 static func _render(tree: SceneTree, spec: Array, kind: String, path: String) -> String:
 	var size := Vector2i(600, 900) if kind == "cover" else Vector2i(1920, 620)
+	if DisplayServer.get_name() == "headless":
+		# nothing draws headless (tools/layout measures there): a flat picture of the right size
+		var flat := Image.create(size.x, size.y, false, Image.FORMAT_RGB8)
+		flat.fill(Color(0.16, 0.2, 0.3))
+		flat.save_png(path)
+		return path
 	var vp := SubViewport.new()
 	vp.size = size
 	vp.transparent_bg = false
@@ -90,6 +96,11 @@ static func _render(tree: SceneTree, spec: Array, kind: String, path: String) ->
 
 
 static func _logo(tree: SceneTree, title: String, path: String) -> String:
+	if DisplayServer.get_name() == "headless":
+		var flat := Image.create(900, 300, false, Image.FORMAT_RGBA8)
+		flat.fill(Color(1, 1, 1, 1))
+		flat.save_png(path)
+		return path
 	var vp := SubViewport.new()
 	vp.transparent_bg = true
 	vp.size = Vector2i(1100, 360)

@@ -21,13 +21,13 @@ static func texture(name: String, px := 22, tint := Color(0, 0, 0, 0)) -> Textur
 		return null
 	if tint.a <= 0.0:
 		tint = ThemeLib.color("text")
-	# Rasterise at 2x so the 1920x1200 layout (1.25x) stays crisp.
+	# Rasterise at 3x so a 4K screen (2.7x on a TV, 1.25x on a 1920x1200 handheld) stays crisp.
 	var key := "%s|%d|%s" % [path, px, tint.to_html(false)]
 	if _tex.has(key):
 		return _tex[key]
 	var t: Texture2D = null
 	if Brand.bundled_logo_for(name) != "":
-		t = Brand.logo_texture(name, px * 2, tint)
+		t = Brand.logo_texture(name, px * 3, tint)
 	else:
 		var img := Image.new()
 		var err := img.load_svg_from_buffer(FileAccess.get_file_as_bytes(path)) if path.ends_with(".svg") else img.load(path)
