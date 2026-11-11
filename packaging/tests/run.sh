@@ -1010,10 +1010,15 @@ for f in sorted(glob.glob(os.path.join(gh, "**", "*.yml"), recursive=True)):
         if len(ids) != len(set(ids)):
             bad.append(rel + ": duplicate ids")
 makers = sorted({d["maker"] for d in json.load(open(os.path.join(repo, "app/data/devices.json")))["devices"]})
-form = yaml.safe_load(open(os.path.join(gh, "ISSUE_TEMPLATE/bug_report.yml"), encoding="utf-8"))
-opts = [b for b in form["body"] if b.get("id") == "maker"][0]["attributes"]["options"]
-if opts != makers + ["Other"]:
-    bad.append("bug_report.yml makers %s != devices.json makers %s + Other" % (opts, makers))
+for name in ("bug_report.yml", "game_report.yml"):   # the game report form (one per game) too
+    form = yaml.safe_load(open(os.path.join(gh, "ISSUE_TEMPLATE", name), encoding="utf-8"))
+    opts = [b for b in form["body"] if b.get("id") == "maker"][0]["attributes"]["options"]
+    if opts != makers + ["Other"]:
+        bad.append("%s makers %s != devices.json makers %s + Other" % (name, opts, makers))
+game = yaml.safe_load(open(os.path.join(gh, "ISSUE_TEMPLATE", "game_report.yml"), encoding="utf-8"))
+for need in ("game", "store", "model", "os", "upscaler", "fg", "verdict"):
+    if need not in [b.get("id") for b in game["body"]]:
+        bad.append("game_report.yml has no " + need)
 assert not bad, bad
 PY
 	then ok; else bad "YAML under .github: $(cat "$T/out")"; fi
