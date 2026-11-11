@@ -1180,7 +1180,8 @@ func _gyro_note() -> void:
 		col.add_child(b)
 		_parts.append(b)
 	else:
-		var n := Kit.label(TC.GYRO_STEAM_NO_GAME, "QuietLabel", true)
+		var n := Kit.label(SteamInput.why_not(game), "QuietLabel", true)
+		n.name = "NoSteamInput"
 		n.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 		col.add_child(n)
 
@@ -1188,7 +1189,11 @@ func _gyro_note() -> void:
 func _open_steam_input() -> void:
 	if SteamInput.open(game, open_uri):
 		status_label.text = TC.GYRO_STEAM_OPENING
-		close()
+		# In the app the hand-off (ui/steam_trip.gd) closes the menu the moment Steam's
+		# screen is in front, and opens it here again afterwards: closing now would give
+		# the pad to the game under it while Steam is still getting its window up.
+		if open_uri.is_valid() or not SteamInput.handoff.is_valid():
+			close()
 	else:
 		status_label.text = TC.GYRO_STEAM_FAILED
 

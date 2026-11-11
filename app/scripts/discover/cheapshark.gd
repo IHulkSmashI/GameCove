@@ -12,6 +12,8 @@ extends RefCounted
 ##   honours.
 ## - Prices are always USD; dates are unix seconds; flags are "0"/"1".
 
+const JsonField := preload("res://scripts/discover/json_field.gd")
+
 const API := "https://www.cheapshark.com/api/1.0/"
 const REDIRECT := "https://www.cheapshark.com/redirect?dealID="
 const SITE := "https://www.cheapshark.com"
@@ -64,11 +66,20 @@ static func _json(body: Variant) -> Variant:
 
 
 static func _f(v: Variant) -> float:
-	return float(str(v)) if v != null and str(v).is_valid_float() else 0.0
+	return float(_s(v)) if _s(v).is_valid_float() else 0.0
+
+
+## JSON fields read without trusting their type (json_field.gd says why).
+static func _i(v: Variant) -> int:
+	return JsonField.i(v)
+
+
+static func _s(v: Variant) -> String:
+	return JsonField.s(v)
 
 
 static func _appid(v: Variant) -> String:
-	return "" if v == null or str(v) in ["", "0", "null"] else str(v)
+	return "" if _s(v) in ["", "0", "null"] else _s(v)
 
 
 ## /stores -> {"1": {"name": "Steam", "active": true, "icon": url}}.
@@ -80,9 +91,10 @@ static func parse_stores(body: Variant) -> Dictionary:
 	for s in d:
 		if s is Dictionary and s.has("storeID"):
 			var icon := ""
-			if s.get("images") is Dictionary and str(s["images"].get("icon", "")) != "":
-				icon = SITE + str(s["images"]["icon"])
-			out[str(s["storeID"])] = {"name": str(s.get("storeName", "")), "active": int(s.get("isActive", 0)) == 1, "icon": icon}
+			if s.get("images") is Dictionary and _s(s["images"].get("icon")) != "":
+				icon = SITE + _s(s["images"]["icon"])
+			if _s(s["storeID"]) != "":
+				out[_s(s["storeID"])] = {"name": _s(s.get("storeName")), "active": _i(s.get("isActive")) == 1, "icon": icon}
 	return out
 
 
@@ -95,16 +107,16 @@ static func parse_deals(body: Variant) -> Variant:
 		return null
 	var out: Array[Dictionary] = []
 	for x in d:
-		if not x is Dictionary or str(x.get("dealID", "")) == "":
+		if not x is Dictionary or _s(x.get("dealID")) == "":
 			continue
 		out.append({
-			"deal_id": str(x["dealID"]), "store_id": str(x.get("storeID", "")),
-			"game_id": str(x.get("gameID", "")), "appid": _appid(x.get("steamAppID")),
-			"title": str(x.get("title", "")).strip_edges(),
+			"deal_id": _s(x["dealID"]), "store_id": _s(x.get("storeID")),
+			"game_id": _s(x.get("gameID")), "appid": _appid(x.get("steamAppID")),
+			"title": _s(x.get("title")).strip_edges(),
 			"price": _f(x.get("salePrice")), "regular_price": _f(x.get("normalPrice")),
 			"savings_pct": int(round(_f(x.get("savings")))),
-			"rating": _f(x.get("dealRating")) if str(x.get("dealRating", "")).is_valid_float() else null,
-			"thumb": str(x.get("thumb", "")), "released": int(x.get("releaseDate", 0)),
+			"rating": _f(x.get("dealRating")) if _s(x.get("dealRating")).is_valid_float() else null,
+			"thumb": _s(x.get("thumb")), "released": _i(x.get("releaseDate")),
 		})
 	return out
 
@@ -117,12 +129,12 @@ static func parse_search(body: Variant) -> Variant:
 		return null
 	var out: Array[Dictionary] = []
 	for x in d:
-		if x is Dictionary and str(x.get("gameID", "")) != "":
+		if x is Dictionary and _s(x.get("gameID")) != "":
 			out.append({
-				"game_id": str(x["gameID"]), "appid": _appid(x.get("steamAppID")),
-				"title": str(x.get("external", "")).strip_edges(),
-				"cheapest": _f(x.get("cheapest")), "cheapest_deal_id": str(x.get("cheapestDealID", "")),
-				"thumb": str(x.get("thumb", "")),
+				"game_id": _s(x["gameID"]), "appid": _appid(x.get("steamAppID")),
+				"title": _s(x.get("external")).strip_edges(),
+				"cheapest": _f(x.get("cheapest")), "cheapest_deal_id": _s(x.get("cheapestDealID")),
+				"thumb": _s(x.get("thumb")),
 			})
 	return out
 
@@ -132,19 +144,19 @@ static func _lookup_one(game_id: String, x: Dictionary) -> Dictionary:
 	var low = null
 	if x.get("cheapestPriceEver") is Dictionary:
 		var c: Dictionary = x["cheapestPriceEver"]
-		low = {"price": _f(c.get("price")), "currency": CURRENCY, "date": int(c.get("date", 0))}
+		low = {"price": _f(c.get("price")), "currency": CURRENCY, "date": _i(c.get("date"))}
 	var offers: Array[Dictionary] = []
-	for o in x.get("deals", []):
-		if o is Dictionary and str(o.get("dealID", "")) != "":
+	for o in JsonField.list(x.get("deals")):
+		if o is Dictionary and _s(o.get("dealID")) != "":
 			offers.append({
-				"deal_id": str(o["dealID"]), "store_id": str(o.get("storeID", "")), "game_id": game_id,
-				"appid": _appid(info.get("steamAppID")), "title": str(info.get("title", "")),
+				"deal_id": _s(o["dealID"]), "store_id": _s(o.get("storeID")), "game_id": game_id,
+				"appid": _appid(info.get("steamAppID")), "title": _s(info.get("title")),
 				"price": _f(o.get("price")), "regular_price": _f(o.get("retailPrice")),
 				"savings_pct": int(round(_f(o.get("savings")))), "rating": null,
-				"thumb": str(info.get("thumb", "")), "released": 0,
+				"thumb": _s(info.get("thumb")), "released": 0,
 			})
-	return {"game_id": game_id, "appid": _appid(info.get("steamAppID")), "title": str(info.get("title", "")),
-		"thumb": str(info.get("thumb", "")), "historical_low": low, "offers": offers}
+	return {"game_id": game_id, "appid": _appid(info.get("steamAppID")), "title": _s(info.get("title")),
+		"thumb": _s(info.get("thumb")), "historical_low": low, "offers": offers}
 
 
 ## /games?ids=a,b -> {game_id: {"game_id", "appid", "title", "thumb",
