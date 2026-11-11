@@ -408,5 +408,11 @@ runs without a password on the way out, puts back only the day-to-day values abo
 administrator password stays until you change it again or the fix is removed (`gamecove-fix power-tune remove`,
 which the uninstaller runs): the session couldn't ask for the password to set it again.
 
+`gamecove-fix <name> update` (same action, same password) brings an installed fix to the revision of the script this
+GameCove carries, and puts the old version back when that fails. The fix lifecycle ([FIXES.md](FIXES.md)) uses only
+`remove` and `update` through this action when it retires or updates a fix by itself: it adds no prompt-free verb, so
+in Gaming Mode such a change waits for Desktop Mode (`packaging/tests/run.sh` checks `gamecove-fix-set` refuses
+`update` and `retire`).
+
 In Gaming Mode the Power page shows these as "Needs your admin password: change it in Desktop Mode", and the
 Fixes page shows the admin note on the file fixes.

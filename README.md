@@ -42,7 +42,8 @@ a script or a Windows app for is built in.
   gives power back within seconds when a scene gets heavy.
 - 🔥 **Upscaling and frame generation picked for your chip:** XeSS and FSR 4 on Intel's XMX cores, FSR 4 and 3.1 on
   AMD, Lossless Scaling frame generation on anything, with low latency on by default.
-- 🛠️ **Fixes for your exact model,** applied at install, each with one line on what it does and an **Undo**.
+- 🛠️ **[Fixes for your exact model](#fixes-for-your-handheld),** applied at install, checked every night, and removed
+  again when your system catches up. Each says what it changes and has an **Undo**.
 - 🕹️ **Emulation with EmuDeck:** your ROMs show up as games with their art and console, and ES-DE, EmuDeck and
   Steam ROM Manager open from one Emulation page. Favourites, hidden games and collections work for every store.
 - 🎯 **Profiles per game and per power source.** Change it in a game and it's saved for that game, with different
@@ -75,16 +76,78 @@ tested data. GameCove recognises your exact model and only shows what it can do:
 >
 > The installer takes it from there. Full steps: [Install](#install).
 
+## Fixes for your handheld
+
+Some handhelds need a nudge before the basics work on Linux: sleep that stays asleep, the built-in buttons, gyro,
+Wi-Fi after waking, touch that lines up with the picture. GameCove knows which of these your exact model needs,
+applies them when you install it, and takes them out again the day your system doesn't need them any more.
+
+<table>
+<tr>
+<td width="33%"><img src="docs/images/fixes.webp" alt="Fixes page on an MSI Claw 8 EX"><br><sub>Fixes for your exact model: Recommended or Optional, each with Undo</sub></td>
+<td width="33%"><img src="docs/images/fixes-details.webp" alt="A fix's details"><br><sub>Details: what it changes, how it's undone, the risk, where it was tested</sub></td>
+<td width="33%"><img src="docs/images/fixes-retired.webp" alt="A fix the system now does itself, in History"><br><sub>Your system caught up: removed, in History, Keep it anyway</sub></td>
+</tr>
+<tr>
+<td width="33%"><img src="docs/images/fixes-attention.webp" alt="Start dialog for a fix in the system's way"><br><sub>A fix in your system's way is shown at start until it's out</sub></td>
+<td width="33%"><img src="docs/images/device.webp" alt="About this device"><br><sub>About this device: your model, chip, drivers, memory</sub></td>
+<td width="33%"><img src="docs/images/battery-history.webp" alt="Battery history in About this device"><br><sub>Battery history: 7 days and each game's drain</sub></td>
+</tr>
+</table>
+
+Every fix in Settings > Device > **Fixes** says what it changes, how it's undone and where it comes from, and carries
+one of two badges:
+
+| Badge | What it means |
+| --- | --- |
+| **Recommended** | It fixes something that breaks everyday use on your model, the workaround is proven and safe, and one press undoes it. Preselected when you install. |
+| **Optional** | Everything else we offer: it helps only some units, or isn't proven widely enough to switch on for you. Yours to turn on. |
+| *Tested on hardware* | A second, smaller badge: we ran that fix on that exact model ourselves. Without it, the fix comes from projects that tested it (Bazzite, InputPlumber and others), linked as its sources. |
+
+| Fix | Restores | For | Tested on hardware | Your system today |
+| --- | --- | --- | --- | --- |
+| **MSI buttons**<br>Makes the two MSI buttons next to the screen work: left opens the menu, right opens Quick Access. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed (InputPlumber still maps the board to claw2). SteamOS: Not supported on SteamOS. |
+| **Smooth screen down to 30 fps**<br>Lets VRR keep games smooth down to 30 fps instead of 48. | Screen | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+<br>**Optional**: MSI Claw 7 AI+, MSI Claw A1M | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not supported on SteamOS. |
+| **Gyro aiming**<br>Turns on the motion sensor so you can aim by tilting the Claw. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not supported on SteamOS. |
+| **Volume buttons don't wake it**<br>Stops a bump of the volume buttons from waking the Claw in your bag. | Sleep and battery while asleep | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M, MSI Claw A8 | Not yet | Bazzite: Not fixed: Handheld Daemon switched it off at start, InputPlumber (Bazzite 44+) doesn't. SteamOS: Not fixed (no Claw support in SteamOS). |
+| **Wi-Fi back after sleep**<br>Keeps the Wi-Fi card awake enough to come back after sleep. Uses a little more battery asleep. | Wi-Fi and Bluetooth | **Optional**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M | Not yet | Bazzite: Not fixed (reported 2024-12, no answer). SteamOS: Not fixed (SteamOS issues 2742, 2703; user-verified workaround). |
+| **Intel AX210 Wi-Fi after sleep**<br>Stops the Intel AX210 Wi-Fi card from crashing after sleep. | Wi-Fi and Bluetooth | **Recommended**: AYANEO 2S, AYANEO 2, GPD WIN 5<br>**Optional**: Any handheld with the part | Not yet | Bazzite: Fixed up to stable 45.20261105 (50-intel-ax200-ax210-disable-d3cold-state.rules, after issue 5867). Bazzite reverted that rule on 2026-11-08 (in testing and unstable 45.20261110), so later builds need ours again; the fix checks the system's own rules. SteamOS: Not shipped as far as we can tell; the fix checks the system's own rules. |
+| **Sleep that works**<br>Switches off the fingerprint reader, which has no Linux driver and breaks sleep. | Sleep and battery while asleep | **Recommended**: GPD WIN 4, GPD WIN Max 2 | Not yet | Bazzite: Fixed (50-gpd-win-4-fingerprint.rules, 50-gpd-wm2-fingerprint.rules). SteamOS: Not shipped (GPD isn't a SteamOS device). |
+| **Stays asleep**<br>Stops the touch panel from waking the Win Max 2 right after it goes to sleep. | Sleep and battery while asleep | **Optional**: GPD WIN Max 2 | Not yet | Bazzite: Not fixed. SteamOS: Not shipped. |
+| **Sticks don't wake it**<br>Stops a nudge of the sticks from waking the handheld while it goes to sleep. | Sleep and battery while asleep | **Recommended**: ASUS ROG Ally X, ASUS ROG Xbox Ally, ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | Not yet | Bazzite: Fixed (50-ally-x-controller.rules). SteamOS: Unknown; the fix checks the system's own rules. |
+| **No drain while off**<br>Lets the fingerprint reader power down, so the battery doesn't drain while the Ally is off. | Sleep and battery while asleep | **Recommended**: ASUS ROG Ally, ASUS ROG Ally X<br>**Optional**: ASUS ROG Xbox Ally, ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | Not yet | Bazzite: Fixed (50-ally-fingerprint.rules). SteamOS: Reported fixed in SteamOS 3.8 and later (second-hand, from a write-up of the 3.8.0 notes; not yet confirmed on our Ally). The fix checks the system's own rules. |
+| **Less drain while asleep**<br>Lets the controller chip power down in sleep. Needs controller firmware 319+ (Ally X 313+); checked first. | Sleep and battery while asleep | **Optional**: ASUS ROG Ally, ASUS ROG Ally X, ASUS ROG Xbox Ally, ASUS ROG Xbox Ally X, ASUS ROG Xbox Ally X20 | Not yet | Bazzite: Handled by Bazzite's own MCU workaround (shows as fixed by the system when on). SteamOS: Not on by default. |
+| **Touch in the right place**<br>Makes touch line up with the picture in Gaming Mode (it's turned 90 degrees). | Touch | **Recommended**: OneXFly F1<br>**Optional**: OneXPlayer X1 (AMD), OneXPlayer X1 Mini, OneXPlayer 2, OneXPlayer 2 Pro, AOKZOE A1, AOKZOE A1 Pro | Not yet | Bazzite: Not fixed (issue 5581; waits for ChimeraOS/gamescope-session PR 128). SteamOS: Not affected the same way (SteamOS uses its own session). |
+
+Steam Deck and Legion Go need nothing extra today: the system already covers them. Where a problem has no software
+fix (say, it needs a BIOS update), the Fixes page says so in one line instead of pretending.
+
+**Kept current every night.** A workaround should disappear when the real fix lands, so GameCove checks:
+
+- **On your handheld**, at start and after every system update (never while you play): each fix looks whether the
+  problem is still there. If your system now handles it, GameCove removes its own workaround with that fix's own
+  undo, tells you once, and lists it under History, with **Keep it anyway** if you disagree. It never touches
+  anything it didn't install. In Gaming Mode nothing can ask for your admin password, so the removal waits for
+  Desktop Mode: said once when both copies are harmless together, shown over Home at every start when ours would get
+  in the way of the system's own fix (or was withdrawn), until it's out or you keep it.
+- **Every night, for everyone:** a job follows the kernel, Bazzite, SteamOS, InputPlumber, Handheld Daemon,
+  linux-firmware, maker BIOS listings and each fix's own sources. When something changes, it opens an issue for a
+  maintainer; rules it can check by machine are recorded by themselves. The result is a signed list your handheld
+  picks up within a day, so a fix can be retired, or withdrawn, without waiting for a GameCove update.
+
+How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs/FIXES.md). The research per model:
+[docs/DEVICE-FIXES.md](docs/DEVICE-FIXES.md).
+
 ---
 
 ## Contents
 
-1. [Home and library](#home-and-library)
-2. [Emulation](#emulation)
-3. [Quick menu and settings](#quick-menu-and-settings)
-4. [Auto TDP, upscaling and frame generation](#auto-tdp-upscaling-and-frame-generation)
-5. [Profiles](#profiles)
-6. [Device fixes](#device-fixes)
+1. [Fixes for your handheld](#fixes-for-your-handheld)
+2. [Home and library](#home-and-library)
+3. [Emulation](#emulation)
+4. [Quick menu and settings](#quick-menu-and-settings)
+5. [Auto TDP, upscaling and frame generation](#auto-tdp-upscaling-and-frame-generation)
+6. [Profiles](#profiles)
 7. [Updates](#updates)
 8. [Streaming from your PC](#streaming-from-your-pc)
 9. [Discover](#discover)
@@ -283,37 +346,6 @@ stay with the handheld they were made on, and you can copy, reset, export and im
 
 <p align="center"><img src="docs/images/profiles.webp" alt="Settings, Profiles" width="70%"></p>
 
-## Device fixes
-
-Settings > Device > **Fixes** lists the fixes for your exact model. The ones your handheld needs are applied when you
-install GameCove; optional ones are a press away. Every fix shows its status, says in one line what it does, and has
-**Undo**. GameCove also notices when an OS update starts fixing something itself, so you can drop its copy.
-
-<table>
-<tr>
-<td width="33%"><img src="docs/images/fixes.webp" alt="Device fixes"><br><sub>Fixes for your exact model, each with Undo</sub></td>
-<td width="33%"><img src="docs/images/device.webp" alt="About this device"><br><sub>About this device: your model, chip, drivers, memory</sub></td>
-<td width="33%"><img src="docs/images/battery-history.webp" alt="Battery history in About this device"><br><sub>Battery history: 7 days and each game's drain</sub></td>
-</tr>
-</table>
-
-<details>
-<summary><b>Every fix, by maker</b></summary>
-
-| Handhelds | Fixes |
-| --- | --- |
-| **MSI Claw** | MSI buttons next to the screen work (8 EX) · gyro aiming (8 EX) · smooth VRR down to 30 fps instead of 48 (8 EX, 8 AI+; optional on 7 AI+ and A1M) · volume buttons don't wake it in your bag (every Claw) · Wi-Fi comes back after sleep (optional, Intel Claws) |
-| **ASUS ROG Ally** | sticks don't wake it (Ally X, Xbox Ally, Xbox Ally X, X20) · no battery drain while off (Ally, Ally X; optional on the Xbox Allys) · less drain while asleep (optional, every Ally) |
-| **GPD** | sleep that works (WIN 4, WIN Max 2) · stays asleep (optional, WIN Max 2) · Intel AX210 Wi-Fi after sleep (WIN 5) |
-| **AYANEO** | Intel AX210 Wi-Fi after sleep (2, 2S) |
-| **OneXPlayer and AOKZOE** | touch lines up with the picture (OneXFly F1; optional on X1, X1 Mini, 2, 2 Pro, A1, A1 Pro) |
-| **Every handheld** | keeps GameCove off the game's CPU cores while you play · fan presets and charge limit where the system has no service for them · AX210 Wi-Fi fix offered wherever that card is fitted |
-
-Steam Deck and Legion Go need nothing extra today: the OS already covers them, and GameCove's settings do the rest.
-How each fix works: [docs/DEVICE-FIXES.md](docs/DEVICE-FIXES.md).
-
-</details>
-
 ## Updates
 
 One page for everything that can be updated:
@@ -417,6 +449,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Local prices (optional) | [GG.deals](https://gg.deals) (gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
 | Your device's photo | GitHub (free photos) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
 | Upscaler list and downloads (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and before an install; files only when you install or update | Background lookups (daily check); installs: you start them |
+| The list of device fixes | GitHub (GameCove's `fixes` release, signed) | Nothing about you: the same file for every handheld | At most once a day, at start, never while you play | Background lookups |
 | GE-Proton (Settings > Performance) | GitHub (GloriousEggroll's `proton-ge-custom` releases) | Nothing about you | When you press Check or Install | You start it |
 | BIOS and firmware list and downloads | GitHub (`firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |
 | Steam insights on a game's page (players now, reviews, Steam Deck rating, last update, DLC) | Steam's public API and store | The game's app id (DLC prices: also your store country) | When you open a Steam game's page; players at most every 10 min, the rest every 12 h | Background lookups (prices: Look up deals and prices) |

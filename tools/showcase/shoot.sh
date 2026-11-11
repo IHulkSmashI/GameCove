@@ -39,10 +39,11 @@ for res in $sizes; do
 	for theme in $themes; do
 		dir="$out/$res-$theme"
 		mkdir -p "$dir"
-		for script in showcase.gd showcase_stream.gd showcase_installer.gd; do
+		# the Fixes page on three handhelds and the start dialog: tools/screenshots/shoot_fixes.gd
+		for script in showcase.gd showcase_stream.gd showcase_installer.gd ../screenshots/shoot_fixes.gd; do
 			args=(--out "$dir")
 			[[ -n "$only" ]] && args+=(--only "$only")
-			SHOWCASE_THEME="$theme" xvfb-run -a -s "-screen 0 ${w}x${h}x24" \
+			SHOWCASE_THEME="$theme" SHOOT_THEME="$theme" xvfb-run -a -s "-screen 0 ${w}x${h}x24" \
 				"$godot" --path "$repo/app" --rendering-driver opengl3 --resolution "$res" --position 0,0 \
 				-s "$here/$script" -- "${args[@]}" 2>&1 | grep -E "^saved|SCRIPT ERROR" || true
 		done
@@ -59,7 +60,8 @@ README_NAMES=(
 	quick_controller:quick-controller quick_leds:quick-leds quick_device:quick-device
 	settings_power:settings-power settings_performance:settings-performance settings_system:settings-system
 	settings_media:settings-media settings_saves:settings-saves settings_storage:settings-storage
-	settings_battery:battery-history settings_about:device settings_fixes:fixes settings_updates:updates
+	settings_battery:battery-history settings_about:device fixes_claw:fixes fixes_claw_details:fixes-details
+	fixes_ally:fixes-retired fixes_claw_dialog:fixes-attention settings_updates:updates
 	settings_privacy:privacy settings_profiles:profiles stream:stream installer:installer setup_art:game-art-setup
 )
 src="$out/1920x1200-cove"

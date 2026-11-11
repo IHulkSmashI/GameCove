@@ -1,5 +1,8 @@
 # Device fixes for every handheld in devices.json
 
+How fixes are labelled (Recommended / Optional), kept current by the nightly audit and removed when the system
+catches up, and every shipped fix in full: [FIXES.md](FIXES.md). This page is the research behind them.
+
 Research for GameCove's Fixes page (fixes agent, 2026-11-08). For each handheld: what is broken,
 whether the shipping Bazzite (deck image, 44/45, read from the local clone of ublue-os/bazzite at
 de2198d, 2026-11-08) and SteamOS (3.8 / 3.9 issue tracker) already fix it, how a fix works, and the
@@ -140,7 +143,7 @@ Other findings from the shared-part pass:
 
 | Fix | Symptom | Bazzite | SteamOS | Method | GameCove | Sources |
 |---|---|---|---|---|---|---|
-| ax210-d3cold | AX210 (stock in some Air units, common swap) dies after sleep | Fixed (50-intel-ax200-ax210-disable-d3cold-state.rules) | Not shipped | udev | **Shipped, optional** on any handheld (status from the PCI id) | https://github.com/ublue-os/bazzite/issues/5867 |
+| ax210-d3cold | AX210 (stock in some Air units, common swap) dies after sleep | Fixed up to 45.20261105 (50-intel-ax200-ax210-disable-d3cold-state.rules), reverted 2026-11-08 | Not shipped | udev | **Shipped, optional** on any handheld (status from the PCI id) | https://github.com/ublue-os/bazzite/issues/5867 |
 | Air / Air Pro MT7921 sleep | | Fixed (kmod-sleep-workaround@mt7921e via 50-wifi-sleep.rules) | | | Skipped: OS (and the Air isn't in devices.json) | bazzite `50-wifi-sleep.rules` |
 | Slide random reboots | | Fixed (karg `acpi=strict`) | | | Skipped: OS | bazzite-hardware-setup |
 | Extra keys (66-69 -> F15-F18) | | Fixed (InputPlumber/hhd hwdb) | | | Skipped: upstream | InputPlumber `59-inputplumber.hwdb` |
@@ -153,7 +156,7 @@ Other findings from the shared-part pass:
 |---|---|---|---|---|---|---|
 | gpd-fingerprint | Suspend/resume unreliable (fingerprint reader without a driver: Win 4 2808:9338, WM2 2541:9711) | Fixed (50-gpd-win-4-fingerprint.rules, 50-gpd-wm2-fingerprint.rules) | Not shipped | udev `remove=1` | **Shipped, auto** (Win 4, Win Max 2) | https://github.com/aarron-lee/gpd-win-tricks |
 | gpd-wm2-touch-wakeup | Win Max 2 (2025) wakes again at once: I2C touch PNP0C50:00 is a wakeup source | Not fixed | Not shipped | udev `power/wakeup=disabled` | **Shipped, optional** ("not thoroughly tested" upstream) | https://github.com/aarron-lee/gpd-win-tricks/blob/main/wm2-suspend-udev.sh |
-| ax210-d3cold | WIN 5 Wi-Fi dead after sleep | Fixed | Not shipped | udev | **Shipped, auto** (WIN 5) | https://github.com/ublue-os/bazzite/issues/5867 |
+| ax210-d3cold | WIN 5 Wi-Fi dead after sleep | Fixed up to 45.20261105, reverted 2026-11-08 | Not shipped | udev | **Shipped, auto** (WIN 5) | https://github.com/ublue-os/bazzite/issues/5867 |
 | Hibernation | GPD needs hibernation | Fixed (needs-hibernation enables it) | | | Skipped: OS | bazzite `hwsupport/needs-hibernation` |
 | Win 4 refresh rates | | Fixed (gamescope gpd.win4.lcd.lua) | | | Skipped: OS | gamescope / bazzite displays |
 | Win Mini / Win 5 speaker EQ | | Fixed (pipewire profiles gpd-g1617-01, gpd-g1618-05) | | | Skipped: OS | bazzite hardware-profiles |
