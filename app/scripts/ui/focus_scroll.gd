@@ -154,10 +154,10 @@ func target_for(c: Control) -> float:
 		v = bottom + below - view
 	v = clampf(v, 0.0, max_v)
 	# Something cut by the top edge (a row, a line of text): show it whole if
-	# the focus still fits, else scroll past it. A few passes, as moving up
-	# can cut the next thing.
+	# the focus still fits, else scroll past it. Several passes, as moving up
+	# can cut the next thing (in a tight list, one row at a time).
 	var blocks := _blocks(content)
-	for _pass in 3:
+	for _pass in 24:
 		var moved := false
 		for b in blocks:
 			if b == c or b.is_ancestor_of(c) or c.is_ancestor_of(b):
@@ -233,5 +233,5 @@ static func _labels(n: Node, out: Array) -> void:
 		if ch is Control and (ch as Control).visible:
 			if ch is Label or ch is RichTextLabel:
 				out.append(ch)
-			else:
-				_labels(ch, out)
+			elif (ch as Control).focus_mode == Control.FOCUS_NONE:
+				_labels(ch, out)   # a focusable row is one block, already counted: its own text isn't another

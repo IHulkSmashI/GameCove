@@ -79,3 +79,37 @@ func test_the_page_still_scrolls_to_a_button_that_is_not_in_a_nested_scroller() 
 	await w.wait_s(0.8)
 	ok(outer.scroll_vertical > 100, "a page-level button below the pane is still scrolled to (%d)" % outer.scroll_vertical)
 	host.free()
+
+
+## Settings' category list on a screen too short for it: follow_focus stopped with the last
+## category at the foot and the row above the top edge cut in half (the Fixes pictures showed
+## "Display" sliced). FocusScroll keeps whole rows at the top.
+func test_settings_categories_never_stop_with_a_row_cut_at_the_top() -> void:
+	var m: Control = w.main
+	m.show_screen("settings")
+	await w.frames(6)
+	var st: Control = m.settings
+	var scroll := st.find_child("CategoryScroll", true, false) as ScrollContainer
+	ok(scroll != null, "the category list scrolls")
+	if scroll == null:
+		return
+	var holder := scroll.get_parent() as Control   # the fade mask the list sits in
+	holder.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var last: Button = st.cat_buttons[st.categories()[-1]]
+	# a short screen: the list doesn't fit; several heights, as where the rows fall differs
+	for h in [380.0, 401.0, 423.0, 437.0, 455.0, 489.0]:
+		holder.custom_minimum_size = Vector2(280, h)
+		await w.frames(4)
+		for k in [st.categories()[-1], st.categories()[-3], st.categories()[-6]]:
+			(st.cat_buttons[k] as Button).grab_focus()
+			await w.wait_s(0.5)
+			var top := scroll.get_global_rect().position.y
+			for b in st.cat_buttons.values():
+				var r: Rect2 = (b as Control).get_global_rect()
+				ok(not (r.position.y < top - 1.0 and r.end.y > top + 1.0),
+					"%s is not cut by the list's top edge with %s focused, list %d px tall (%s vs %s)" % [b.name, k, int(h), r, top])
+	last.grab_focus()
+	await w.wait_s(0.5)
+	ok(scroll.scroll_vertical > 0, "the list did scroll (size %s, content %s, scroll %s)" % [scroll.size, scroll.get_child(0).size, scroll.scroll_vertical])
+	holder.custom_minimum_size = Vector2(280, 0)
+	holder.size_flags_vertical = Control.SIZE_FILL
