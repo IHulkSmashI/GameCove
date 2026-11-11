@@ -134,7 +134,7 @@ func _button(a: Dictionary) -> Button:
 
 
 ## The label's size so its whole word sits inside the button with a little air:
-## eight buttons share the panel's width, and "Screenshot" or "Keyboard" at the
+## eight buttons share the panel's width, and "Screenshot" (now "Capture") or "Keyboard" at the
 ## usual size touched both edges. Steps down a point at a time, never below
 ## MIN_LABEL_PX.
 func fit_label(b: Button) -> void:
