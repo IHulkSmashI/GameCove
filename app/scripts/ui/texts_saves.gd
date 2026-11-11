@@ -57,6 +57,15 @@ const KEEP_CLOUD := "Keep the cloud save"
 const DECIDE_LATER := "Decide later"
 const DECIDE_LATER_DETAIL := "Play without syncing this time"
 const NEWER := "Newer"
+## This handheld's side of a conflict when nothing says it's further on: the folder is new
+## since the last sync (or never synced), or it holds far less than the cloud's save. Such a
+## side is never called "Newer" (a blank save a game just made has the newest file time).
+const FRESH_BADGE := "Might be new"
+const FRESH_DETAIL := "Started over since the last sync"
+const SMALL_BADGE := "Much smaller"
+const NO_FILES := "no files"
+const ONE_FILE := "1 file, %s"
+const N_FILES := "%d files, %s"
 const RESTORED_BADGE := "Restored"
 const RESTORED_DETAIL := "The backup you just restored"
 const SAVED_AT := "Saved %s"
@@ -89,7 +98,7 @@ const HOW_TITLE := "How it works"
 const HOW_LINES := [
 	"Before a game starts we get the newest save from the store's cloud; after it ends we send yours up.",
 	"Before anything replaces a save on this handheld, we back it up here. We keep the last 10 per game, plus the last 10 from a choice or a restore.",
-	"When both sides changed, you choose. For Epic the newest one is highlighted; GOG only tells us when a save was uploaded.",
+	"When both sides changed, you choose, with both sides backed up here first. For Epic the newest one is highlighted, unless this handheld's looks new or much smaller; GOG only tells us when a save was uploaded.",
 	"No connection? The game starts anyway and we sync next time.",
 ]
 const AMAZON_NOTE := "Amazon games aren't covered: nile, Amazon's tool, has no save sync."
@@ -122,6 +131,22 @@ static func tone(st: Dictionary) -> String:
 ## "Saved 2 h ago" for a side of a conflict.
 static func saved_at(ts: int, now: int) -> String:
 	return SAVED_AT % TG.ago(ts, now) if ts > 0 else UNKNOWN_TIME
+
+
+## "3 files, 2 KB" for a side of a conflict ("" when unknown).
+static func size_text(files: int, bytes: int) -> String:
+	if files < 0:
+		return ""
+	if files == 0:
+		return NO_FILES
+	var b := String.humanize_size(maxi(bytes, 0)).replace("i", "")
+	return ONE_FILE % b if files == 1 else N_FILES % [files, b]
+
+
+## "Saved 2 h ago · 3 files, 2 KB".
+static func side_detail(when: String, files: int, bytes: int) -> String:
+	var size := size_text(files, bytes)
+	return when if size == "" else "%s · %s" % [when, size]
 
 
 ## "Uploaded 2 h ago": GOG's cloud only knows when files arrived, not when they were played.

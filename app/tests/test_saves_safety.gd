@@ -82,7 +82,16 @@ func _world(name: String) -> Dictionary:
 		w["calls"].append(tool + " " + " ".join(PackedStringArray(rest)))
 		w["now"][0] += 1
 		gc.now = int(w["now"][0])
-		return gc.run(rest) if tool == "gogdl" else ec.run(rest)
+		if tool == "gogdl":
+			return gc.run(rest)
+		# legendary reads its config folder from LEGENDARY_CONFIG_PATH (a cloud copy runs on a copy)
+		var own: String = ec.config
+		for x in a.slice(0, i):
+			if str(x).begins_with("LEGENDARY_CONFIG_PATH="):
+				ec.config = str(x).trim_prefix("LEGENDARY_CONFIG_PATH=")
+		var r: Dictionary = ec.run(rest)
+		ec.config = own
+		return r
 	w["s"] = s
 	return w
 
@@ -500,6 +509,98 @@ func test_epic_not_set_up_drops_the_last_sync() -> void:
 	_done(w)
 
 
+# ---- Epic variant: the conflict sheet and a copy of the cloud (review at ff76ca4) ---------------
+
+const SavesCard := preload("res://scripts/ui/games/saves_card.gd")
+const TS := preload("res://scripts/ui/texts_saves.gd")
+
+
+## The blank save after a lost prefix: the conflict keeps a copy of the cloud's save at once,
+## knows what both sides hold, and the sheet never calls the blank one Newer. legendary's own
+## files never point at the scratch folder the copy is made in.
+func test_epic_blank_save_conflict_keeps_the_cloud_and_isnt_newer() -> void:
+	var w := _world("epic_blank_sheet")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "40 hours of progress", T0)
+	Fakes.put(w["esaves"].path_join("world2.sav"), "and a second world", T0)
+	w["s"].sync_now(w["epic"])
+	var user_before := FileAccess.get_file_as_string(w["epic"]["config_dir"].path_join("user.json"))
+	_rm(w["prefix"])
+	cloud.offline = true
+	w["s"].before_launch(w["epic"], func(_r): pass)
+	cloud.offline = false
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["esaves"].path_join("world.sav"), "new", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	var st: Dictionary = w["s"].status(w["epic"])
+	eq(st["state"], "conflict", "asked")
+	ok(st["fresh"], "no sync time for this folder: in doubt")
+	eq([st["local_files"], st["cloud_files"]], [1, 2], "what each side holds")
+	var rows := SavesCard.conflict_rows(st, int(w["now"][0]))
+	eq(rows[0]["id"], "cloud", "the cloud's save first")
+	ok(rows.all(func(r): return r.get("value", "") != TS.NEWER or r["id"] == "cloud"), "the blank one is never Newer")
+	var copies: Array = w["s"].backup_list("epic:Min").filter(func(b): return b["reason"] == "cloud_copy")
+	eq(copies.size(), 1, "a copy of the cloud's save is kept already")
+	eq(cloud.save_path(), w["esaves"], "legendary still keeps the game's own folder")
+	eq(FileAccess.get_file_as_string(w["epic"]["config_dir"].path_join("user.json")), user_before, "the sign-in is untouched")
+	eq(Array(DirAccess.get_directories_at(w["s"].backup_dir)).filter(func(d): return d.begins_with(".")), [], "no scratch folder left behind")
+	# the copy goes back into the game's folder
+	var r: Dictionary = w["s"].backups.restore("epic:Min", str(copies[0]["id"]))
+	ok(r["ok"], "restorable")
+	eq(Fakes.walk(w["esaves"]), ["world.sav", "world2.sav"], "both worlds")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "40 hours of progress", "the cloud's save")
+	_done(w)
+
+
+## Keeping this handheld's save over Epic's: the cloud's save is copied first, and without
+## that copy nothing is uploaded.
+func test_epic_keep_local_copies_the_cloud_first() -> void:
+	var w := _world("epic_keep_local_copy")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "here", T0)
+	cloud.saves.append({"t": T0 + 3000, "files": {"world.sav": "the cloud's"}})
+	w["s"].sync_now(w["epic"])
+	eq(w["s"].status(w["epic"])["state"], "conflict", "never synced, saves on both sides")
+	for b in w["s"].backup_list("epic:Min"):
+		DirAccess.remove_absolute(w["s"].backups.dir_for("epic:Min").path_join(str(b["id"]) + ".json"))
+	cloud.offline = true
+	w["s"].resolve(w["epic"], "local")
+	eq(cloud.saves.size(), 1, "no copy (offline): nothing uploaded")
+	eq(w["s"].status(w["epic"])["state"], "backup_failed", "and the status says why")
+	cloud.offline = false
+	w["s"].resolve(w["epic"], "local")
+	eq(cloud.saves[-1]["files"]["world.sav"], "here", "uploaded")
+	var copies: Array = w["s"].backup_list("epic:Min").filter(func(b): return b["reason"] == "cloud_copy")
+	eq(copies.size(), 1, "after a copy of the cloud's save")
+	w["s"].backups.restore("epic:Min", str(copies[0]["id"]))
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "the cloud's", "which holds the cloud's save")
+	_done(w)
+
+
+## GOG's side of it: the conflict after a lost prefix is marked as in doubt too.
+func test_gog_blank_save_conflict_is_in_doubt() -> void:
+	var w := _world("gog_blank_sheet")
+	for slot in ["slot1.sav", "slot2.sav"]:
+		Fakes.put(w["gsaves"].path_join(slot), "progress " + slot, T0)
+	w["s"].sync_now(w["gog"])
+	_rm(w["prefix"])
+	w["s"].set_enabled("gog:1207", false)
+	w["s"].before_launch(w["gog"], func(_r): pass)
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["gsaves"].path_join("settings.ini"), "d", int(w["now"][0]))
+	w["s"].set_enabled("gog:1207", true)
+	w["s"].sync_now(w["gog"])
+	var st: Dictionary = w["s"].status(w["gog"])
+	eq(st["state"], "conflict", "asked")
+	ok(st["fresh"], "in doubt")
+	eq([st["local_files"], st["cloud_files"]], [1, 2], "what each side holds")
+	eq(w["s"].backup_list("gog:1207").filter(func(b): return b["reason"] == "cloud_copy").size(), 1, "the cloud's slots are copied already")
+	eq(SavesCard.conflict_rows(st, int(w["now"][0]))[0]["id"], "cloud", "the cloud's first on the sheet")
+	_done(w)
+
+
 # ---- Epic: a changed prefix ---------------------------------------------------------------------
 
 ## legendary keeps the save folder it computed once. After a prefix change we hand it the
@@ -682,7 +783,8 @@ func test_epic_restore_is_not_undone_at_the_next_launch() -> void:
 	w["s"].before_launch(w["epic"], func(r): got.append(r))
 	ok(got[0].has("conflict"), "the launch asks instead of downloading over the restore")
 	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "before the bad day", "the restore is still in place")
-	eq(w["s"].backup_list("epic:Min").size(), before, "and no backup slot was used up")
+	var added: Array = w["s"].backup_list("epic:Min").slice(0, w["s"].backup_list("epic:Min").size() - before)
+	eq(added.map(func(b): return b["reason"]), ["cloud_copy"], "no everyday backup slot used up: only a copy of the cloud's save")
 	eq(got[0]["conflict"].get("prefer", ""), "local", "the restored side is the one offered first")
 	# keeping it makes it the cloud's newest
 	w["s"].resolve(w["epic"], "local")

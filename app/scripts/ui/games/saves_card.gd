@@ -124,23 +124,35 @@ func _maybe_relink() -> void:
 # ---- sheets ------------------------------------------------------------------------------------
 
 ## The two sides of a conflict, newest first and highlighted (Epic; for GOG a fixed order and
-## no "Newer", see below). A picks; both are kept as a backup.
+## no "Newer", see below), each with what it holds. A picks; both are kept as a backup.
 ## After a restore (st "prefer": "local") the restored save comes first whatever its age:
-## it is the one the user just asked for.
+## it is the one the user just asked for. A side here that may be a blank save (st "fresh",
+## or far smaller than the cloud's) is never "Newer": the cloud's comes first and this one
+## says why it's in doubt (review at ff76ca4: the blank save was badged Newer).
 static func conflict_rows(st: Dictionary, now: int, with_later := false) -> Array:
 	var local := int(st.get("local", 0))
 	var remote := int(st.get("remote", 0))
 	var rows: Array = [
-		{"id": "local", "text": TS.KEEP_LOCAL, "detail": TS.saved_at(local, now), "icon": "drive", "t": local},
-		{"id": "cloud", "text": TS.KEEP_CLOUD, "detail": TS.saved_at(remote, now), "icon": "download", "t": remote},
+		{"id": "local", "text": TS.KEEP_LOCAL, "detail": TS.side_detail(TS.saved_at(local, now), int(st.get("local_files", -1)), int(st.get("local_bytes", -1))), "icon": "drive", "t": local},
+		{"id": "cloud", "text": TS.KEEP_CLOUD, "detail": TS.side_detail(TS.saved_at(remote, now), int(st.get("cloud_files", -1)), int(st.get("cloud_bytes", -1))), "icon": "download", "t": remote},
 	]
 	var gog := str(st.get("store", "")) == "gog"
 	if gog:
 		# GOG's time is the upload's, not the play session's: it says nothing about which save
 		# is further on, so it's shown for what it is and neither side is called newer
-		rows[1]["detail"] = TS.uploaded_at(remote, now)
+		rows[1]["detail"] = TS.side_detail(TS.uploaded_at(remote, now), int(st.get("cloud_files", -1)), int(st.get("cloud_bytes", -1)))
+	var doubt := local_doubt(st)
 	if str(st.get("prefer", "")) == "local":
 		rows[0].merge({"tone": "good", "value": TS.RESTORED_BADGE, "detail": TS.RESTORED_DETAIL}, true)
+	elif doubt != "":
+		rows.reverse()
+		rows[1]["tone"] = "warn"
+		rows[1]["value"] = TS.SMALL_BADGE if doubt == "small" else TS.FRESH_BADGE
+		if doubt == "fresh":
+			rows[1]["detail"] = "%s · %s" % [TS.FRESH_DETAIL, str(rows[1]["detail"])]
+		if not gog and remote > local:
+			rows[0]["tone"] = "good"
+			rows[0]["value"] = TS.NEWER
 	elif not gog:
 		if remote > local:
 			rows.reverse()
@@ -150,6 +162,17 @@ static func conflict_rows(st: Dictionary, now: int, with_later := false) -> Arra
 	if with_later:
 		rows.append({"id": "later", "text": TS.DECIDE_LATER, "detail": TS.DECIDE_LATER_DETAIL, "icon": "clock"})
 	return rows
+
+
+## Why this handheld's side of a conflict may be a blank save: "small" (no files, or a quarter
+## of the cloud's size or less), "fresh" (no sync time for this folder), "" (no doubt).
+static func local_doubt(st: Dictionary) -> String:
+	var lf := int(st.get("local_files", -1))
+	var lb := int(st.get("local_bytes", -1))
+	var cb := int(st.get("cloud_bytes", -1))
+	if lf == 0 or (lb >= 0 and cb > 0 and lb * 4 <= cb):
+		return "small"
+	return "fresh" if bool(st.get("fresh", false)) else ""
 
 
 func open_conflict() -> void:

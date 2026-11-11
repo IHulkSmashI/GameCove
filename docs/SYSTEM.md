@@ -326,9 +326,11 @@ legendary's own same-age check); both changed, or never synced with saves on bot
 settles (the launch waits; B starts nothing; "Decide later" plays without syncing). GOG: gogdl's own classification;
 the fresh timestamp it prints on a conflict is never kept. Before anything may overwrite saves on the handheld
 (legendary's download empties the folder first, gogdl's deletes files the cloud doesn't have) the folders are backed
-up with `tar` into `user://saves/backups/<game>/`; a download that fails puts the backup back. Settling a GOG conflict
-for this handheld first fetches the cloud's files into a scratch folder and keeps them as a backup too (gogdl's forced
-upload deletes cloud files the handheld doesn't have); Epic keeps earlier cloud saves itself. A save folder over 1 GiB
+up with `tar` into `user://saves/backups/<game>/`; a download that fails puts the backup back. Before anything may
+overwrite the cloud's save the other way, the cloud's save is fetched into a scratch folder and kept as a backup
+too: when a conflict is found, and again when "Keep this handheld's save" is picked (GOG's forced upload deletes cloud
+files the handheld doesn't have; Epic keeps earlier cloud saves itself, but nothing on the handheld could put one
+back). No copy, no upload. A save folder over 1 GiB
 (a game that saves into its install folder) isn't backed up, so nothing is downloaded over it. Offline, signed out or a
 failed step: the game starts, nothing is deleted, the status says so and the next launch or exit tries again. Every
 step runs under `timeout 90`. Status per game in `user://saves.cfg`; the game page's Cloud saves card and Settings >
@@ -369,6 +371,15 @@ What keeps a save from being lost (final review; each has a test against ports o
   (`restored_at`): "cloud newer" is a conflict with the restored save offered first.
 - **"Keep this handheld's save" (Epic).** legendary names an upload by the newest local file's time and every device
   takes the newest name, so the newest file is stamped now before the forced upload.
+- **A copy of Epic's cloud save.** legendary only downloads into the save folder it keeps for a game, so the copy runs
+  legendary `sync-saves <app> --force-download` on a private copy of its config folder (`user.json` 0600,
+  `installed.json` naming the scratch folder, the game's metadata, `config.ini`), never on the user's own: legendary's
+  `save_path` can't be left pointing at the scratch folder by a cut-off run. Both folders are deleted afterwards; a
+  sign-in legendary refreshed meanwhile goes back to the user's folder unless that one changed too.
+- **A blank save is never "Newer".** A conflict notes what both sides hold (files and size, the cloud's from that copy)
+  and whether this folder has a sync time at all (`fresh`). When it has none, or this side holds a quarter of the
+  cloud's size or less, the sheet puts the cloud's save first and marks this one "Might be new" or "Much smaller"
+  instead of "Newer" (a fresh default save has the newest file time).
 - **What the status says.** gogdl's "Refused" (the other side is newer and this run could only go one way) is shown as
   waiting, not as synced. GOG's cloud time is an upload time, so the GOG conflict sheet calls neither side "Newer".
 - **Backups.** The newest 10 everyday backups per game, and apart from those the newest 10 made by a conflict choice,
