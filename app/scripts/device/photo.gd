@@ -61,7 +61,8 @@ extends Node
 signal photo_ready(device_id: String, path: String)
 
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
-const RELEASE := "https://github.com/IHulkSmashI/GameCove/releases/download/device-photos/"
+const DataRepo := preload("res://scripts/system/data_repo.gd")
+const RELEASE := DataRepo.PHOTOS
 const PREFS_PATH := "user://settings.cfg"
 const MANIFEST_MAX_AGE := 7 * 24 * 3600
 const MAX_PHOTO_BYTES := 4 * 1024 * 1024

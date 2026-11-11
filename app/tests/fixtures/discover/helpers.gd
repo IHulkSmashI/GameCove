@@ -8,7 +8,7 @@ const FakeHttp := preload("res://scripts/discover/fake_http.gd")
 const CS := "https://www.cheapshark.com/api/1.0/"
 const STEAM_ITEMS := "https://api.steampowered.com/IStoreBrowseService/GetItems/"
 const STEAM_WISHLIST := "https://api.steampowered.com/IWishlistService/GetWishlist/"
-const UPCOMING := "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/upcoming.json.gz"
+const UPCOMING := "https://github.com/IHulkSmashI/GameCove-data/releases/download/gamedb/upcoming.json.gz"
 
 
 static func now() -> int:

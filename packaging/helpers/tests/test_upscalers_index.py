@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from gamecove_upscale import cli, downloads, games, mirror, optiscaler, upkeep  # noqa: E402
 
-GOOD_ID = "https://github.com/IHulkSmashI/GameCove/.github/workflows/upscalers.yml@refs/heads/main"
+GOOD_ID = "https://github.com/IHulkSmashI/GameCove-data/.github/workflows/upscalers.yml@refs/heads/main"
 ISSUER = "https://token.actions.githubusercontent.com"
 RDNA35 = {"vendor": "amd", "family": "amd-rdna3", "arch": "RDNA3.5", "xmx": False}
 M = mirror.RELEASE_BASE + "upscalers/"
@@ -129,10 +129,11 @@ def test_tampered_index_is_refused_and_the_pins_stay(tmp_path, monkeypatch, cosi
 
 
 @pytest.mark.parametrize("identity,issuer", [
-    ("https://github.com/IHulkSmashI/GameCove/.github/workflows/firmware.yml@refs/heads/main", ISSUER),   # another workflow
-    ("https://github.com/IHulkSmashI/GameCove/.github/workflows/upscalers.yml@refs/heads/evil", ISSUER),  # another branch
-    ("https://github.com/someone/GameCove/.github/workflows/upscalers.yml@refs/heads/main", ISSUER),      # a fork
-    ("https://github.com/IHulkSmashI/GameCove/.github/workflows/upscalers.yml@refs/heads/main.x", ISSUER),
+    ("https://github.com/IHulkSmashI/GameCove-data/.github/workflows/firmware.yml@refs/heads/main", ISSUER),   # another workflow
+    ("https://github.com/IHulkSmashI/GameCove-data/.github/workflows/upscalers.yml@refs/heads/evil", ISSUER),  # another branch
+    ("https://github.com/someone/GameCove-data/.github/workflows/upscalers.yml@refs/heads/main", ISSUER),      # a fork
+    ("https://github.com/IHulkSmashI/GameCove-data/.github/workflows/upscalers.yml@refs/heads/main.x", ISSUER),
+    ("https://github.com/IHulkSmashI/GameCove/.github/workflows/upscalers.yml@refs/heads/main", ISSUER),       # the old home
     (GOOD_ID, "https://accounts.google.com"),                                                             # another issuer
 ])
 def test_wrong_identity_is_refused(tmp_path, monkeypatch, cosign, identity, issuer):
@@ -204,7 +205,8 @@ def test_an_older_signed_index_never_replaces_a_newer_one(tmp_path, monkeypatch,
 @pytest.mark.parametrize("mutate", [
     lambda e: e.update(mirror_url="https://evil.example/x.7z"),
     lambda e: e.update(mirror_url=M + "../firmware/x.7z"),
-    lambda e: e.update(mirror_url="https://github.com/IHulkSmashI/GameCove/releases/download/v1.0.0/x.7z"),
+    lambda e: e.update(mirror_url="https://github.com/IHulkSmashI/GameCove-data/releases/download/v1.0.0/x.7z"),
+    lambda e: e.update(mirror_url="https://github.com/IHulkSmashI/GameCove/releases/download/upscalers/x.7z"),  # old home
     lambda e: e.update(version="../../.ssh"),
     lambda e: e.update(sha256="abc"),
     lambda e: e.update(upstream_url="http://plain/x"),

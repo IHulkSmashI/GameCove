@@ -5,8 +5,9 @@ extends RefCounted
 ## parse_gz runs on a WorkerThreadPool thread.
 
 const Wish := preload("res://scripts/discover/wishlist.gd")
+const DataRepo := preload("res://scripts/system/data_repo.gd")
 
-const URL := "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/upcoming.json.gz"
+const URL := DataRepo.UPCOMING_URL
 const MAX_UNPACKED := 16 * 1024 * 1024
 const PRECISIONS := ["day", "month", "quarter", "year", "tba"]
 const DAY := 86400

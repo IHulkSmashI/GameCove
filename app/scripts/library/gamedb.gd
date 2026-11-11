@@ -11,7 +11,8 @@ extends Node
 
 signal updated
 
-const URL := "https://github.com/IHulkSmashI/GameCove/releases/download/gamedb/gamedb.json.gz"
+const DataRepo := preload("res://scripts/system/data_repo.gd")
+const URL := DataRepo.GAMEDB_URL
 const CACHE_PATH := "user://gamedb.json.gz"
 const MAX_AGE_S := 24 * 60 * 60
 ## Upper bound for the unpacked file, so a bad download can't eat all memory.
