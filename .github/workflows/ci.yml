@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: IHulkSmashI/clawdeck
-          ref: cf349a697b738a3456dc7c1c6c6ac147fbd754ba # ClawDeck main, 2026-11-08 (v0.2.0-beta.8)
+          ref: 4cf5cf90a0b3d2e371f6d0841bd76552fd6f8f0f # ClawDeck main, 2026-11-10 (v0.2.0-beta.15)
           path: clawdeck-ref
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:

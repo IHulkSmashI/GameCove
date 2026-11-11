@@ -23,8 +23,12 @@
       controller-rumble  rumble strength (0-100, or off/low/medium/high)
       claw8ex-gyro  accelerometer on/off; claw8ex-gyro / claw8ex-buttons refresh
                     (rebuild the InputPlumber override after an OS update)
-    It never installs or removes anything, never writes udev rules, kernel
-    arguments, the initramfs, firmware or systemd units.
+      claw8ex-vrr   refresh: after a SteamOS update, put the installed VRR
+                    fix's one marked boot line (gamecove.vrr=1) back into
+                    /etc/default/grub, or take the fix out if it can't stay
+    It never installs anything, never writes udev rules, the initramfs,
+    firmware or systemd units, and no kernel argument other than that one
+    line the administrator already approved when installing the VRR fix.
 
   io.github.ihulksmashi.gamecove.fix: /usr/libexec/gamecove/gamecove-fix
     Everything else, with an administrator password (auth_admin_keep: one

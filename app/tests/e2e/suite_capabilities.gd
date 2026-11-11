@@ -13,7 +13,7 @@ const EXPECT := {
 		"display.hdr": "doesn't support HDR", "controller.led_effect": true,
 	},
 	"ally-steamos": {
-		"power.tdp": [5.0, 25.0], "power.sppt": true, "power.fppt": true, "power.platform_profile": true,
+		"power.tdp": [7.0, 25.0], "power.sppt": true, "power.fppt": true, "power.platform_profile": true,
 		"power.charge_limit": true, "power.fan_curve": true, "power.gpu_level": true, "power.gpu_min": true,
 		"controller.gyro": true, "controller.led_effect": true, "display.refresh_rate": true,
 		# SteamOS: no PowerStation or power-profiles-daemon; the helper's admin verbs need Desktop Mode

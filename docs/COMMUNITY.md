@@ -19,6 +19,15 @@ GameCove), and where to find the logs:
 One problem per report. If it's already reported, a thumbs-up and your device
 details on the existing issue help just as much.
 
+## Tell us how a game runs
+
+Open a [game report](https://github.com/IHulkSmashI/GameCove/issues/new?template=game_report.yml),
+one per game. Good results help as much as problems: they tell other owners of
+your handheld what works. The form asks for the game and its store, your
+handheld and OS, the upscaler and frame generation you picked, and how it runs.
+For a problem, attach the game's launch log
+(`~/.local/share/gamecove/launch/<appid>.log`).
+
 ## Ask a question or share an idea
 
 - [Q&A](https://github.com/IHulkSmashI/GameCove/discussions/categories/q-a): setup, "how do I", help with your handheld.

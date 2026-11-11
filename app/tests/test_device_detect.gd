@@ -69,7 +69,10 @@ func test_unknown_amd_handheld_gets_cpu_defaults() -> void:
 	eq(d.profile["gpu_family"], "amd-rdna3", "Z2 Extreme -> RDNA 3 family (FSR 4 path)")
 	eq(d.profile["gpu_arch"], "RDNA3.5", "arch")
 	# the Z2 Extreme's own 8/30/35 W, capped to the conservative limits for an unlisted handheld (review L12)
-	eq(d.profile["tdp"], {"min": 8.0, "battery_max": 20.0, "plugged_max": 25.0}, "Z2 Extreme range, capped")
+	var tdp: Dictionary = d.profile["tdp"].duplicate()
+	ok(str(tdp.get("source", "")).contains("conservative"), "the source says these are conservative limits")
+	tdp.erase("source")
+	eq(tdp, {"min": 8.0, "battery_max": 20.0, "plugged_max": 25.0}, "Z2 Extreme range, capped")
 	eq(d.gpu["driver"], "amdgpu", "gpu driver")
 	eq(d.picture(), "res://assets/devices/art/generic.svg", "generic picture")
 	eq(d.glyph_set(), "xbox", "xbox glyphs")
@@ -93,7 +96,11 @@ func test_family_row_takes_chip_from_cpu() -> void:
 	var row := DeviceScript.resolve(doc, dmi, "AMD Ryzen AI 9 HX 370 w/ Radeon 890M", {})
 	eq(row["id"], "onexplayer-family", "family")
 	eq(row["gpu_arch"], "RDNA3.5", "arch from cpu")
-	eq(row["tdp"]["battery_max"], 28.0, "range from cpu table")
+	# the chip table's 28 W is the biggest handheld's with that chip: an unlisted model gets the
+	# conservative limits of an unknown handheld (item 9)
+	eq(row["tdp"]["battery_max"], 20.0, "range from the cpu table, made conservative")
+	eq(row["tdp"]["plugged_max"], 25.0, "plugged too")
+	ok(not row.has("profiles"), "no family presets past that range")
 
 
 func test_unlisted_claw_takes_its_cpu_vendor_from_the_cpu() -> void:

@@ -301,8 +301,12 @@ def test_ships_xess_matches_the_scope_script_depth(tmp_path):
     g = tmp_path / "game"
     _w(g / "a" / "b" / "c" / "libxess.dll", "x")
     assert xmxscope.ships_xess(str(g))
+    # Unreal plugins sit 7-8 folders down (ClawDeck 4cf5cf9, DEPTH 9)
+    ue = tmp_path / "ue"
+    _w(ue / "Engine" / "Plugins" / "Runtime" / "Intel" / "XeSS" / "Binaries" / "ThirdParty" / "Win64" / "libxess.dll", "x")
+    assert xmxscope.ships_xess(str(ue))
     deep = tmp_path / "deep"
-    _w(deep / "1" / "2" / "3" / "4" / "5" / "6" / "libxess.dll", "x")   # deeper than the launch-time check looks
+    _w(deep.joinpath(*[str(i) for i in range(1, 11)]) / "libxess.dll", "x")   # deeper than the launch-time check looks
     assert not xmxscope.ships_xess(str(deep))
     assert not xmxscope.ships_xess(None)
 
@@ -508,6 +512,29 @@ def test_main_exe_dir_finds_the_real_exe(tmp_path):
     assert optiscaler.main_exe_dir(str(t2)).endswith("bin")
 
 
+def test_main_exe_dir_skips_unreal_launcher_stubs_and_picks_dx12(tmp_path):
+    """ClawDeck 4cf5cf9: Gothic 1 Remake ships a small launcher stub with the -Shipping name in its top folder (#162);
+    The Witcher 3 has witcher3.exe in bin/x64 and bin/x64_dx12, and only the DX12 one has DLSS, FSR and XeSS (#141)."""
+    from gamecove_upscale import optiscaler
+    g = tmp_path / "gothic"
+    _w(g / "Gothic-Win64-Shipping.exe", "x" * 10)
+    _w(g / "Gothic" / "Binaries" / "Win64" / "Gothic-Win64-Shipping.exe", "x" * 900)
+    assert optiscaler.main_exe_dir(str(g)) == str(g / "Gothic" / "Binaries" / "Win64")
+    w = tmp_path / "witcher"
+    _w(w / "bin" / "x64" / "witcher3.exe", "x")
+    _w(w / "bin" / "x64_dx12" / "witcher3.exe", "x")
+    assert optiscaler.main_exe_dir(str(w), ["witcher3.exe"]) == str(w / "bin" / "x64_dx12")
+
+
+def test_optiscaler_xess_shows_the_intel_gpu_to_dxvk():
+    """ClawDeck #150: OptiScaler's XeSS loads before the game's DXGI factory, so DXVK hides the Intel GPU and XeSS
+    takes DP4a. Any OptiScaler XeSS gets dxgi.customVendorId = 8086, at any multiplier and without frame generation."""
+    from gamecove_upscale import launchenv
+    assert launchenv.compose({"opti": "xess"})["DXVK_CONFIG"] == launchenv.SHOW_INTEL
+    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "fsr4_xmx"})
+    assert launchenv.compose({"opti": "fsr4_xmx", "fg": 3, "opti_fg": "dlssg"})["DXVK_CONFIG"] == launchenv.SHOW_INTEL
+
+
 def test_installed_games_from_steam_manifests(tmp_path):
     lib2 = tmp_path / "sd" / "SteamLibrary"
     _w(tmp_path / ".local/share/Steam/steamapps/libraryfolders.vdf", f'"libraryfolders"\n{{\n "1" {{ "path" "{lib2}" }}\n}}\n')
@@ -669,7 +696,8 @@ def _ini(text):
 def test_versions_pin_the_capcom_setup():
     v = downloads.load_versions(os.path.join(ROOT, "data", "versions.json"))
     ref = v["reframework"]
-    assert ref["repo"] == "onehoon/REFramework" and ref["tag"] == "fork-release-15-854e42d58b97be792c8ce441e4bdc691684e5866"
+    assert ref["repo"] == "onehoon/REFramework" and ref["tag"] == "fork-release-18-135e7ac98b0703ef157080cbd1ee4f39e54ba8e0"
+    assert ref["dll_sha256"] == "58e65e32e2a12951a81bb342a62b65079efddf56e67301ce7288d4c85daedb9b"
     assert ref["asset_glob"] == "REFramework.zip" and len(ref["sha256"]) == 64 and downloads.is_pinned(ref)
     o10 = v["optiscaler_v10"]
     assert o10["layout"] == "subfolder" and o10["tag"] == "nightly-20261030"

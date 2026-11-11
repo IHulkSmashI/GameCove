@@ -1,6 +1,6 @@
 #!/bin/sh
 # GameCove fix: 30-120 Hz VRR on the Claw's own screen instead of the 48-120 Hz its EDID announces.
-# usage: fix.sh install|remove|status
+# usage: fix.sh install|remove|status|set refresh
 #
 # The panel refreshes down to 30 Hz but its EDID says 48, so below 48 fps every frame is held for a whole
 # 48 Hz refresh, which judders. This writes a copy of the factory EDID with only the range bytes changed
@@ -25,6 +25,14 @@
 # Older installs used kernel arguments (drm.edid_firmware=...,
 # firmware_class.path=...); install, and status run as root, move them to the hook. Ported from
 # ClawDeck's edid.py. See fixes/README.md.
+#
+# SteamOS (no rpm-ostree): the same EDID, hook and modprobe rule, but no initramfs step: the fix is only offered
+# where the GPU driver starts after the real /etc is there (not built in, not in the running initramfs: lsinitcpio),
+# as ClawDeck checks. The switch gamecove.vrr=1 goes on one marked line in /etc/default/grub, update-grub rebuilds
+# SteamOS's boot menu (checked in /efi/EFI/SteamOS/grub.cfg), and /etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf
+# keeps the fix's own files across SteamOS updates. An update brings back Valve's grub file without our line:
+# `set refresh` (no password; GameCove runs it at start when the line is gone) puts it back on top of the new file,
+# and one restart brings the range back; where the update made the fix impossible, it takes the fix out instead.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=fixes/lib/claw8ex-common.sh
@@ -42,13 +50,122 @@ HOOK_CONF=$CONF_DIR/edid.conf
 MODPROBE_CONF=/etc/modprobe.d/gamecove-claw8ex-vrr.conf
 DRM_PARAM=/sys/module/drm/parameters/edid_firmware
 VRR_KARG=gamecove.vrr=1
+KEEP_CONF=$KEEP_DIR/gamecove-claw8ex-vrr.conf
 m_init "$NAME"
+
+# How this system takes the boot switch: rpm-ostree (Bazzite / Fedora Atomic), steamos (its GRUB config), or none.
+boot_backend() {
+	if has_rpm_ostree; then
+		echo rpm-ostree
+	elif is_steamos && [ -f "$ROOT$GRUB_DEFAULT" ] && command -v update-grub >/dev/null 2>&1; then
+		echo steamos
+	else
+		echo none
+	fi
+}
+
+# The screen's GPU driver (xe / i915), from the panel's DRM card.
+gpu_driver() {
+	for c in "$ROOT"/sys/class/drm/card*-"$CONNECTOR"; do
+		[ -e "$c" ] || continue
+		card=${c##*/}
+		card=${card%%-*}
+		d=$(readlink -f "$ROOT/sys/class/drm/$card/device/driver" 2>/dev/null) || continue
+		printf '%s' "${d##*/}"
+		return 0
+	done
+	return 1
+}
+
+# The driver probes before the real /etc is there (built into the kernel, or inside the running kernel's initramfs),
+# so it could never read the EDID or the hook from /etc. Unknown (no lsinitcpio, image not found) counts as no, as
+# in ClawDeck (the fix then does nothing at boot, and status says restart).
+driver_in_initramfs() {
+	drv=$(gpu_driver) || return 1
+	case $drv in xe | i915) ;; *) return 1 ;; esac
+	kver=$(cmdline | sed -n 's/.*BOOT_IMAGE=[^ ]*vmlinuz-\([^ ]*\).*/\1/p')
+	[ -n "$kver" ] || kver=$(uname -r)
+	grep -Eq "/$drv\.ko(\.[a-z]+)?\$" "$ROOT/usr/lib/modules/$kver/modules.builtin" 2>/dev/null && return 0
+	img=$ROOT/boot/initramfs-$kver.img
+	[ -f "$img" ] && command -v lsinitcpio >/dev/null 2>&1 || return 1
+	lsinitcpio "$img" 2>/dev/null | grep -Eq "/$drv\.ko(\.[a-z]+)?\$"
+}
+
+# Why SteamOS can't take the fix here, "" when it can.
+steamos_blocker() {
+	[ -d "$ROOT$KEEP_DIR" ] || { printf "this SteamOS has no %s, which keeps the fix's files across updates" "$KEEP_DIR"; return 0; }
+	driver_in_initramfs && { printf 'on this SteamOS the graphics driver starts from the initramfs, before /etc is there, so it could never get the corrected range'; return 0; }
+	return 0
+}
+
+# Someone else's drm.edid_firmware in /etc/default/grub (a line without our marker).
+grub_other_edid() {
+	grep -vF "$(grub_mark "$NAME")" "$ROOT$GRUB_DEFAULT" 2>/dev/null | grep -v '^[[:space:]]*#' | grep -o 'drm\.edid_firmware=[^ "]*' | head -n 1
+}
+
+keep_text() {
+	cat <<EOF
+## GameCove claw8ex-vrr: keeps GameCove's corrected screen description (EDID), its boot hook and modprobe rule
+## across SteamOS updates (GameCove's own files only). gamecove-fix $NAME remove deletes this file.
+$EDID_DIR/gamecove-*.bin
+$HOOK_CONF
+$HOOK
+$MODPROBE_CONF
+EOF
+}
 
 # The boot entry switch (kept in the manifest as "marker", so migrate never takes it for an old karg).
 ensure_marker() {
+	if [ "$(boot_backend)" = steamos ]; then
+		m_has grubline "$GRUB_DEFAULT" && grub_has_line && return 0
+		m_has grubline "$GRUB_DEFAULT" || m_add grubline "$GRUB_DEFAULT"
+		grub_line_add "$VRR_KARG"
+		return
+	fi
 	m_has marker "$VRR_KARG" && return 0
 	karg_hold "$VRR_KARG" "$NAME" || return 1
 	m_add marker "$VRR_KARG"
+}
+
+# The boot switch is in place for the next boot.
+switch_set() {
+	if m_has grubline "$GRUB_DEFAULT"; then
+		grub_has_line
+	else
+		m_has marker "$VRR_KARG"
+	fi
+}
+
+# After a SteamOS update: Valve's new /etc/default/grub has no line of ours, while the keep list kept the fix's
+# files. Put the line back (one restart brings the range back); where the update made the fix impossible here, or
+# its files didn't survive, take the fix out instead of keeping it forever (ClawDeck steamos_after_update).
+refresh() {
+	require_root
+	lock
+	if ! m_installed || ! m_has grubline "$GRUB_DEFAULT"; then
+		say "nothing to do"
+		return 0
+	fi
+	if grub_has_line; then
+		say "already in place"
+		return 0
+	fi
+	why=""
+	[ "$(boot_backend)" = steamos ] || why="this system can't take the boot switch any more"
+	[ -n "$why" ] || why=$(steamos_blocker)
+	if [ -z "$why" ]; then
+		for f in "$HOOK_CONF" "$HOOK" "$MODPROBE_CONF"; do
+			[ -f "$ROOT$f" ] || why="the update didn't keep $f"
+		done
+		ls "$ROOT$EDID_DIR"/gamecove-*.bin >/dev/null 2>&1 || why="the update didn't keep the corrected EDID"
+	fi
+	if [ -n "$why" ]; then
+		m_undo || warn "some changes could not be undone; run remove"
+		say "removed: $why"
+		return 0
+	fi
+	grub_line_add "$VRR_KARG" || die "could not put the boot switch back after the SteamOS update"
+	say "put back after the SteamOS update: restart the Claw to get 30-120 Hz VRR again"
 }
 
 kill_switch() { karg_in gamecove.novrr "$(cmdline)"; }
@@ -135,6 +252,7 @@ put_hook() {
 	m_put "$GC_TMP/edid.conf" "$HOOK_CONF" 644 || return 1
 	m_put "$HERE/edid-hook.sh" "$HOOK" 755 || return 1
 	m_put "$GC_TMP/modprobe.conf" "$MODPROBE_CONF" 644 || return 1
+	has_rpm_ostree || return 0
 	for f in "$HOOK_CONF" "$HOOK" "$MODPROBE_CONF"; do
 		m_has initramfs "$f" && continue
 		rpm-ostree initramfs-etc --track="$f" >/dev/null || return 1
@@ -191,7 +309,17 @@ install() {
 		return 0
 	fi
 	claw_board || die "this fix is only for the MSI Claw (boards MS-1T*); this board is '$(board_name)'"
-	has_rpm_ostree || die "this system has no rpm-ostree (Bazzite / Fedora Atomic only for now)"
+	backend=$(boot_backend)
+	case $backend in
+	rpm-ostree) ;;
+	steamos)
+		why=$(steamos_blocker)
+		[ -z "$why" ] || die "$why"
+		other=$(grub_other_edid)
+		[ -z "$other" ] || die "another EDID override is set in $GRUB_DEFAULT ($other); remove it first"
+		;;
+	*) die "this fix needs Bazzite / Fedora Atomic (rpm-ostree) or SteamOS (its GRUB config and update-grub)" ;;
+	esac
 	raw=$(panel_edid) || die "no internal screen EDID found"
 	booted=$(karg_value drm.edid_firmware "$(cmdline)")
 	pending=$(karg_value drm.edid_firmware "$(karg_pending)")
@@ -229,13 +357,20 @@ install() {
 	name=$(file_name "$key")
 	dest=$EDID_DIR/$name
 	m_put "$GC_TMP/patched.bin" "$dest" 644 || { m_undo || true; die "could not write $dest"; }
-	if ! rpm-ostree initramfs-etc --track="$dest" >/dev/null; then
-		m_undo || true
-		die "rpm-ostree initramfs-etc failed"
+	if [ "$backend" = rpm-ostree ]; then
+		if ! rpm-ostree initramfs-etc --track="$dest" >/dev/null; then
+			m_undo || true
+			die "rpm-ostree initramfs-etc failed"
+		fi
+		m_add initramfs "$dest"
 	fi
-	m_add initramfs "$dest"
 	put_hook "$(board_name)" "$name" || { m_undo || true; die "could not set up the boot hook"; }
-	ensure_marker || { m_undo || true; die "could not add the gamecove.vrr=1 kernel argument"; }
+	ensure_marker || { m_undo || true; die "could not add the gamecove.vrr=1 boot switch"; }
+	if [ "$backend" = steamos ]; then
+		# last in, so undo takes it out first: an interrupted remove never comes back after an update
+		keep_text >"$GC_TMP/keep.conf"
+		m_put "$GC_TMP/keep.conf" "$KEEP_CONF" 644 || { m_undo || true; die "could not write $KEEP_CONF"; }
+	fi
 	say "installed for panel $key on board $(board_name): restart the Claw to get 30-120 Hz VRR"
 	say "other handhelds booting this drive are not affected"
 	say "if the screen is wrong after the restart: pick the previous boot entry, or add gamecove.novrr at the boot menu (e), then remove this fix"
@@ -253,7 +388,7 @@ remove() {
 }
 
 status() {
-	if m_installed && is_root && { [ -n "$(old_kargs)" ] || ! m_has marker "$VRR_KARG"; }; then
+	if m_installed && is_root && has_rpm_ostree && { [ -n "$(old_kargs)" ] || ! m_has marker "$VRR_KARG"; }; then
 		lock
 		migrate >&2 || true
 		! m_installed || ensure_marker >&2 || true
@@ -275,8 +410,12 @@ status() {
 	installed=no
 	m_installed && installed=yes
 	pending=no
-	if [ "$installed" = yes ] && grep -qF "$(board_name) $CONNECTOR:edid/$(file_name "$key")" "$ROOT$HOOK_CONF" 2>/dev/null; then
+	if [ "$installed" = yes ] && switch_set && grep -qF "$(board_name) $CONNECTOR:edid/$(file_name "$key")" "$ROOT$HOOK_CONF" 2>/dev/null; then
 		pending=yes
+	fi
+	after_update=no
+	if [ "$installed" = yes ] && m_has grubline "$GRUB_DEFAULT" && ! grub_has_line; then
+		after_update=yes
 	fi
 	say "applies=yes"
 	say "panel=${key:-unknown}"
@@ -285,15 +424,19 @@ status() {
 	say "installed=$installed"
 	say "pending=$pending"
 	say "old_kernel_args=$old"
-	say "boot_switch=$(m_has marker "$VRR_KARG" && echo yes || echo no)"
+	say "boot=$(boot_backend)"
+	say "boot_switch=$(switch_set && echo yes || echo no)"
+	say "after_update=$after_update"
 	say "kill_switch=$(kill_switch && echo on || echo off)"
 	if theirs "$booted"; then
 		say "state=other-override"
-	elif [ "$installed" = yes ] && [ "$range" = "$LO $HI" ] && [ -n "$booted" ]; then
+	elif [ "$installed" = yes ] && [ "$after_update" = no ] && [ "$range" = "$LO $HI" ] && [ -n "$booted" ]; then
 		say "state=on"
 	elif [ "$installed" = yes ]; then
 		say "state=restart"
 	elif [ -z "$row" ]; then
+		say "state=unsupported"
+	elif [ "$(boot_backend)" = none ] || { [ "$(boot_backend)" = steamos ] && [ -n "$(steamos_blocker)" ]; }; then
 		say "state=unsupported"
 	else
 		say "state=off"
@@ -304,5 +447,11 @@ case ${1:-} in
 install) install ;;
 remove) remove ;;
 status) status ;;
-*) die "usage: $0 install|remove|status" ;;
+set)
+	case ${2:-} in
+	refresh) refresh ;;
+	*) die "usage: $0 set refresh" ;;
+	esac
+	;;
+*) die "usage: $0 install|remove|status|set refresh" ;;
 esac

@@ -13,6 +13,8 @@ signal info_updated(info: Dictionary)
 const Buttons := preload("res://scripts/device/buttons.gd")
 const Traits := preload("res://scripts/device/traits.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
+const OsInfo := preload("res://scripts/system/os_info.gd")
+const Sources := preload("res://scripts/perf/sources.gd")
 
 const DEVICE_TABLE := "res://data/devices.json"
 const DMI := "/sys/class/dmi/id/"
@@ -87,8 +89,38 @@ func detect() -> Dictionary:
 	product_family = dmi["product_family"]
 	cpu_model = cpu_model_name(root)
 	gpu = gpu_info(root)
-	profile = resolve(load_doc(), dmi, cpu_model, gpu)
+	profile = for_os(resolve(load_doc(), dmi, cpu_model, gpu), OsInfo.detect(root))
 	return profile
+
+
+## The row as it holds on this OS: each `by_os` entry whose os (OsInfo family) and version range
+## ("from" / "until", the VERSION_ID's major number, both inclusive) match replaces the keys in its
+## "set" (the Legion Go's gyro is broken on Bazzite 44+, a Claw's lights are the kernel's there).
+## The entry's "why" goes to the row's "os_notes". Rows without by_os come back unchanged.
+static func for_os(row: Dictionary, os: Dictionary) -> Dictionary:
+	var entries: Variant = row.get("by_os")
+	if not entries is Array or (entries as Array).is_empty():
+		return row
+	var out := row.duplicate(true)
+	var notes: Array = []
+	var major := str(os.get("version", "")).get_slice(".", 0)
+	for e in entries:
+		if not e is Dictionary or str(e.get("os", "")) != str(os.get("family", "")):
+			continue
+		if not major.is_valid_int():
+			continue
+		var v := major.to_int()
+		if e.has("from") and v < int(e["from"]):
+			continue
+		if e.has("until") and v > int(e["until"]):
+			continue
+		var set_: Dictionary = e.get("set", {}) if e.get("set") is Dictionary else {}
+		for k in set_:
+			out[k] = set_[k]
+		notes.append(str(e.get("why", "")))
+	if not notes.is_empty():
+		out["os_notes"] = notes
+	return out
 
 
 # ---- identity -------------------------------------------------------------------
@@ -135,6 +167,7 @@ static func features_of(row: Dictionary) -> Dictionary:
 		"fan_control": row.get("fan_via") != null,
 		"charge_limit": bool(row.get("charge_limit", false)),
 		"gyro": str(row.get("gyro", "unknown")),
+		"gyro_reason": str(row.get("gyro_reason", "")),
 		"rgb": rgb is Dictionary,
 		"rgb_via": str(rgb.get("via", "")) if rgb is Dictionary else "",
 		"vrr": row.get("vrr_range") is Array,
@@ -296,7 +329,13 @@ const SUPPORT_LEVELS := ["full", "partial", "beta", "generic"]
 const GPU_FAMILIES := ["", "amd-vega", "amd-rdna2", "amd-rdna3", "intel-xe-lpg", "intel-xe2", "intel-xe3"]
 const GPU_ARCHS := ["unknown", "Vega", "RDNA2", "RDNA3", "RDNA3.5", "Xe-LPG", "Xe2", "Xe3"]
 const GYRO_STATES := ["yes", "fix", "no", "none", "unknown"]
+## devices.json rgb.via: who drives the lights (texts_device.gd LED_BY names each).
+const RGB_VIA := ["inputplumber", "hhd", "ayaneo-ec", "oxp-ec", "kernel", "steam"]
+## by_os may only change what an OS changes about a handheld, never its identity or limits.
+const BY_OS_KEYS := ["gyro", "gyro_reason", "rgb"]
 const TDP_BACKENDS := ["steamos-manager", "powerstation"]
+const TDP_KEYS := ["min", "battery_max", "plugged_max", "boost_max", "default", "source",
+	"sppt_max", "fppt_max", "sppt_ratio", "fppt_ratio", "sppt_over", "fppt_over"]
 const REQUIRED := ["id", "name", "maker", "tier", "match", "chip", "gpu", "gpu_family", "gpu_arch", "xmx",
 	"panel_hz", "tdp", "fan", "charge_limit", "gyro", "buttons", "glyphs", "art", "fixes", "support", "verified", "unverified"]
 
@@ -361,6 +400,14 @@ static func row_problems(row: Dictionary) -> Array:
 			p.append("%s: tdp must be 2 <= min < battery_max <= plugged_max <= 150" % id)
 		if t.has("boost_max") and float(t["boost_max"]) < pmax:
 			p.append("%s: boost_max below plugged_max" % id)
+		# the maker's limits for this exact model, and where they come from (item 9: stay with the maker)
+		if str(t.get("source", "")).strip_edges().length() < 12:
+			p.append("%s: tdp needs a source (where the maker's limits for this model come from)" % id)
+		if t.has("default") and (float(t["default"]) < lo or float(t["default"]) > pmax):
+			p.append("%s: tdp default outside min..plugged_max" % id)
+		for k in t:
+			if not k in TDP_KEYS:
+				p.append("%s: unknown tdp key %s" % [id, k])
 		var prof: Dictionary = row.get("profiles", {})
 		var last := 0.0
 		for name in ["battery", "balanced", "performance"]:
@@ -371,6 +418,8 @@ static func row_problems(row: Dictionary) -> Array:
 				if w < last:
 					p.append("%s: profiles must rise battery <= balanced <= performance" % id)
 				last = w
+	if str(row.get("cpu_vendor", "")) == "intel" and str(row["tier"]) == "specific" and float(row.get("pl2_offset_w", -1)) != 2.0:
+		p.append("%s: Intel rows run PL2 = PL1 + 2 W (pl2_offset_w 2)" % id)
 	if row.has("pl2_offset_w") and (float(row["pl2_offset_w"]) < 0.0 or float(row["pl2_offset_w"]) > 20.0):
 		p.append("%s: pl2_offset_w out of range" % id)
 	for b in row.get("tdp_backends", []):
@@ -390,11 +439,36 @@ static func row_problems(row: Dictionary) -> Array:
 		if not panel is Dictionary or float(panel.get("size_in", 0)) < 3.0 or float(panel.get("size_in", 0)) > 18.0 \
 				or not panel.get("resolution") is Array or panel["resolution"].size() != 2:
 			p.append("%s: panel needs size_in (3..18) and resolution [w, h]" % id)
-	var rgb: Variant = row.get("rgb")
-	if rgb != null and (not rgb is Dictionary or str(rgb.get("via", "")) == ""):
-		p.append("%s: rgb must be null or {zones, via}" % id)
+	p.append_array(_rgb_problems(id, row.get("rgb")))
+	if row.has("gyro_reason") and str(row["gyro"]) == "yes":
+		p.append("%s: gyro_reason only where the gyro doesn't simply work" % id)
+	var by_os: Variant = row.get("by_os")
+	if by_os != null:
+		if not by_os is Array:
+			p.append("%s: by_os must be a list" % id)
+		else:
+			for e in by_os:
+				if not e is Dictionary or not str(e.get("os", "")) in ["bazzite", "steamos", "fedora-atomic"] \
+						or not e.get("set") is Dictionary or str(e.get("why", "")) == "" or str(e.get("source", "")) == "":
+					p.append("%s: by_os entries need os, set, why and source" % id)
+					continue
+				for k in e["set"]:
+					if not k in BY_OS_KEYS:
+						p.append("%s: by_os can't change %s" % [id, k])
+				if e["set"].has("gyro") and not str(e["set"]["gyro"]) in GYRO_STATES:
+					p.append("%s: by_os gyro %s" % [id, e["set"]["gyro"]])
+				if e["set"].has("rgb"):
+					p.append_array(_rgb_problems(id + " by_os", e["set"]["rgb"]))
 	p.append_array(rumble_problems(id, row.get("rumble")))
 	return p
+
+
+static func _rgb_problems(id: String, rgb: Variant) -> Array:
+	if rgb == null:
+		return []
+	if not rgb is Dictionary or not str(rgb.get("via", "")) in RGB_VIA:
+		return ["%s: rgb must be null or {zones, via} with via one of %s" % [id, ", ".join(RGB_VIA)]]
+	return []
 
 
 const RUMBLE_STRENGTH := ["kernel", "hhd", "steam", "none"]
@@ -512,6 +586,23 @@ static func vendor_from(model: String, gpu_dev: Dictionary) -> String:
 	return g if g in ["intel", "amd"] else ""
 
 
+## Limits for a handheld whose maker's limits we don't know (an unlisted model, or a family row
+## filled from its CPU): never above SAFE_TDP for its CPU vendor, a chip with lower limits keeps
+## its own. The source says so.
+const SAFE_TDP := {"amd": {"min": 5, "battery_max": 20, "plugged_max": 25}, "intel": {"min": 8, "battery_max": 25, "plugged_max": 28}}
+
+static func conservative_tdp(chip_tdp: Dictionary, vendor: String) -> Dictionary:
+	var safe: Dictionary = SAFE_TDP["intel"] if vendor == "intel" else SAFE_TDP["amd"]
+	var tdp: Dictionary = (chip_tdp if not chip_tdp.is_empty() else safe).duplicate()
+	for k in ["battery_max", "plugged_max"]:
+		tdp[k] = minf(float(tdp.get(k, safe[k])), float(safe[k]))
+	tdp["min"] = minf(maxf(float(tdp.get("min", safe["min"])), float(safe["min"])), float(tdp["battery_max"]))
+	if tdp.has("boost_max"):
+		tdp["boost_max"] = minf(float(tdp["boost_max"]), float(tdp["plugged_max"]))
+	tdp["source"] = "Not in the device table: conservative limits for an unknown %s handheld (GameCove's own, never above the chip's)" % ("Intel" if vendor == "intel" else "AMD")
+	return tdp
+
+
 ## A row for hardware no specific row knows. Ranges are conservative.
 static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cpus: Array) -> Dictionary:
 	var c := cpu_entry(cpus, model)
@@ -526,13 +617,7 @@ static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cp
 	# The chip table's range is what the chip can do in the biggest handheld that has it (a
 	# Ryzen AI Max: 45/80 W); an unlisted handheld may be a small one, so never more than
 	# these conservative limits (review L12). A chip with lower limits keeps its own.
-	var safe: Dictionary = {"min": 5, "battery_max": 20, "plugged_max": 25} if vendor != "intel" else {"min": 8, "battery_max": 25, "plugged_max": 28}
-	var tdp: Dictionary = (c.get("tdp", safe) as Dictionary).duplicate()
-	for k in ["battery_max", "plugged_max"]:
-		tdp[k] = minf(float(tdp.get(k, safe[k])), float(safe[k]))
-	tdp["min"] = minf(float(tdp.get("min", safe["min"])), float(tdp["battery_max"]))
-	if tdp.has("boost_max"):
-		tdp["boost_max"] = minf(float(tdp["boost_max"]), float(tdp["plugged_max"]))
+	var tdp := conservative_tdp(c.get("tdp", {}) as Dictionary, vendor)
 	var name := str(dmi.get("product_name", ""))
 	var row := {
 		"id": "unknown",
@@ -587,7 +672,10 @@ static func resolve(doc: Dictionary, dmi: Dictionary, model: String, gpu_dev: Di
 	if c.has("pl2_offset_w") and not row.has("pl2_offset_w"):
 		row["pl2_offset_w"] = c["pl2_offset_w"]
 	if str(row.get("tier", "")) == "family":
-		row["tdp"] = c["tdp"].duplicate()
+		# the chip table's range is the biggest handheld's with that chip: an unlisted model of this
+		# family may be a small one, so the same conservative limits as an unknown handheld
+		row["tdp"] = conservative_tdp(c["tdp"], str(row["cpu_vendor"]))
+		row.erase("profiles")
 	return row
 
 
@@ -618,12 +706,13 @@ func battery() -> Dictionary:
 	out["status"] = read_text(bat + "status")
 	var power_uw := read_text(bat + "power_now")
 	if power_uw.is_valid_int():
-		out["watts"] = power_uw.to_int() / 1_000_000.0
+		out["watts"] = Sources.scale_fix(power_uw.to_int() / 1_000_000.0)
 	else:
 		var cur := read_text(bat + "current_now")
 		var volt := read_text(bat + "voltage_now")
 		if cur.is_valid_int() and volt.is_valid_int():
-			out["watts"] = cur.to_int() * volt.to_int() / 1e12
+			# the Claw 8 EX EC reports current_now 100x too large (perf/sources.gd scale_fix)
+			out["watts"] = Sources.scale_fix(cur.to_int() * volt.to_int() / 1e12)
 	return out
 
 

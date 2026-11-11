@@ -486,6 +486,11 @@ func test_ally_battery_saver_puts_custom_watts_and_ppts_back() -> void:
 	var spl := FileAccess.open(e["root"] + a + "ppt_pl1_spl/current_value", FileAccess.WRITE)
 	spl.store_string("30\n")
 	spl.close()
+	# on the charger asus-armoury reports ASUS's AC table (SPL up to 30 W; the tree has the DC one)
+	spl = FileAccess.open(e["root"] + a + "ppt_pl1_spl/max_value", FileAccess.WRITE)
+	spl.store_string("30\n")
+	spl.close()
+	reg.detect_all()
 	for f in ["ppt_pl2_sppt", "ppt_pl3_fppt"]:
 		var mx := FileAccess.open(e["root"] + a + f + "/max_value", FileAccess.WRITE)
 		mx.store_string("35\n")
