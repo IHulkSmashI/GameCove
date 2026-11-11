@@ -47,7 +47,13 @@ func _enter_tree() -> void:
 
 
 func _open_if_shown() -> void:
-	if is_inside_tree() and is_visible_in_tree():
+	# its own and every parent control's visibility (the window itself may be hidden headless)
+	var n: Node = self
+	while n is CanvasItem:
+		if not (n as CanvasItem).visible:
+			return
+		n = n.get_parent()
+	if is_instance_valid(self):
 		opened()
 
 
