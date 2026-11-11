@@ -510,8 +510,11 @@ func _rebuild(keep_focus: bool) -> void:
 				return
 
 
-## Tiles made at once, and how many more each time focus nears the last row made.
-const PAGE := 140
+## Tiles made at once, and how many more each time focus nears the last row made:
+## eight rows of seven, a good two screens at 1280x800. Every tile is a node tree
+## made on the main thread, so opening the Library on thousands of ROMs costs what
+## this page costs (140 took 330 ms and the most memory of anything on screen).
+const PAGE := 56
 
 
 ## Makes tiles up to `count` of `shown` (never fewer than there are now).
