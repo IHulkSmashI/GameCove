@@ -708,10 +708,16 @@ do_restore() { # [all]: with "all" the administrator's keys too
 		else
 			order="smt cores gpumax gpumin platform sppt fppt"; last=""
 		fi
+		# the governor before the energy preference: under "performance" the kernel refuses an EPP write, so
+		# every gov-* goes back before any epp-* (the glob would give epp- first)
 		keys="$order"
+		for f in "$ORIG"/gov-*; do
+			[ -f "$f" ] || continue
+			keys="$keys ${f##*/}"
+		done
 		for f in "$ORIG"/*; do
 			[ -f "$f" ] || continue
-			case " $order $last " in *" ${f##*/} "*) ;; *) keys="$keys ${f##*/}" ;; esac
+			case " $keys $last " in *" ${f##*/} "*) ;; *) keys="$keys ${f##*/}" ;; esac
 		done
 		for k in $keys $last; do
 			[ -f "$ORIG/$k" ] || continue
