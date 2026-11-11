@@ -881,3 +881,80 @@ func test_over_a_game_record_a_clip_sleep_wake_and_switch_sessions() -> void:
 	stores.game_quit("1145360")
 	ok(await until(func(): return not main().session.is_active(), 12000), "the game ends")
 	await without_stores()
+
+
+# ---- Settings > Device > Fixes: apply and undo with the pad --------------------------------
+
+func test_fixes_page_apply_then_undo() -> void:
+	var fx: Node = main().fixes
+	ok(fx != null, "the Fixes service")
+	ok(await open_settings("device"), "Settings > Device")
+	var s: Control = main().settings
+	var dp: Control = s.pages.get("device")
+	# RT walks the Device page's tabs to Fixes
+	for i in 5:
+		if dp.part == "fixes":
+			break
+		await rt()
+		await w.frames(3)
+	eq(dp.part, "fixes", "RT reaches the Fixes tab")
+	var page: Control = dp.panels.get("fixes")
+	ok(page != null, "the Fixes page")
+	if page == null:
+		return
+	var rows: Array = fx.rows()
+	ok(not rows.is_empty(), "this handheld has fixes listed (%d)" % rows.size())
+	# a fix that can be applied (or undone) here
+	var pick := {}
+	for r in rows:
+		if r.get("can_apply", false) or r.get("can_undo", false):
+			pick = r
+			break
+	if pick.is_empty():
+		ok(rows.all(func(r): return str(r.get("status", "")) != ""), "nothing to do here, every fix says why")
+		await go_tab("home")
+		return
+	var id: String = pick["id"]
+	var verb := "apply" if pick.get("can_apply", false) else "undo"
+	var other := "undo" if verb == "apply" else "apply"
+	var done := []
+	fx.action_finished.connect(func(f, v, okk, m): done.append([f, v, okk, m]))
+	var btn := func(v: String): return page.buttons.get("%s:%s" % [v, id])
+	ok(await press_on(func(): return btn.call(verb), 60), "D-pad to %s on %s, A" % [verb, id])
+	ok(await until(func(): return done.any(func(d): return d[0] == id and d[1] == verb), 15000), "%s finished (%s)" % [verb, done])
+	await w.idle()
+	var d1: Array = done.filter(func(d): return d[0] == id and d[1] == verb)
+	ok(not d1.is_empty() and d1[-1][2], "%s worked (%s)" % [verb, d1])
+	if str(pick.get("kind", "")) == "app":
+		eq(fx.quiet_enabled(), verb == "apply", "GameCove's own fix (quiet behind a game) follows")
+	else:
+		ok(w.fake.calls.any(func(c): return c[0] == "pkexec" and id in str(c[1])), "the fix helper was asked")
+	ok(focus() != null and focus_on_screen() == "", "focus stays on the page after it rebuilt")
+	await w.frames(3)
+	if btn.call(other) != null:
+		ok(await press_on(func(): return btn.call(other), 60), "%s offered now, A" % other)
+		ok(await until(func(): return done.any(func(d): return d[0] == id and d[1] == other), 15000), "%s finished" % other)
+		await w.idle()
+		var d2: Array = done.filter(func(d): return d[0] == id and d[1] == other)
+		ok(not d2.is_empty() and d2[-1][2], "%s worked (%s)" % [other, d2])
+	# a fix that needs the admin password: Gaming Mode has no one to ask, it says so
+	var admin := {}
+	for r in fx.rows():
+		if r.get("admin", false) and (r.get("can_apply", false) or r.get("can_undo", false)):
+			admin = r
+			break
+	if not admin.is_empty():
+		var aid: String = admin["id"]
+		var av := "apply" if admin.get("can_apply", false) else "undo"
+		done.clear()
+		ok(await press_on(func(): return btn_of(page, av, aid), 80), "%s on %s (needs the password)" % [av, aid])
+		ok(await until(func(): return done.any(func(d): return d[0] == aid), 15000), "it finishes (%s)" % [done])
+		var r2: Array = done.filter(func(d): return d[0] == aid)
+		ok(not r2.is_empty() and not r2[-1][2] and str(r2[-1][3]) != "", "it says why it couldn't here (%s)" % [r2])
+		ok(page.find_child("Admin", true, false) != null, "the card says it needs Desktop Mode")
+	check("fixes")
+	await go_tab("home")
+
+
+func btn_of(page: Control, verb: String, id: String) -> Control:
+	return page.buttons.get("%s:%s" % [verb, id])
