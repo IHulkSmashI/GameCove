@@ -240,6 +240,7 @@ func build() -> void:
 			shelf.setup(s[0], s[1], s[2])
 		for t in shelf.tiles:
 			_decorate(t, now, cur)
+		shelf.fit_row()
 		shelf.tile_focused.connect(_on_tile_focus.bind(shelf))
 		shelf.tile_pressed.connect(func(v): ctx.open_page(v))
 		_rows.add_child(shelf)
