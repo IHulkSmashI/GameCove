@@ -527,10 +527,10 @@ ce 404 '{"message": "Not Found"}' release reviewers && bad "a missing environmen
 contains "$T/out" "doesn't exist" "says it is missing"
 ce 200 "{\"name\": \"nightly\", \"protection_rules\": [{\"type\": \"branch_policy\"}], $POLICY}" nightly branches && ok || bad "nightly with a branch rule must pass ($(cat "$T/out"))"
 ce 200 '{"name": "nightly", "protection_rules": [], "deployment_branch_policy": null}' nightly branches && bad "nightly open to every branch must fail" || ok
-ce 403 '{"message": "rate limit"}' release reviewers && ok || bad "an answer GitHub won't give is a warning, not a failure"
-contains "$T/out" "::warning::" "warns when it couldn't check"
+ce 403 '{"message": "rate limit"}' release reviewers && bad "an answer GitHub won't give must fail closed, not pass" || ok
+contains "$T/out" "::error::" "says it couldn't check"
 touch "$T/ce/fail"
-ce 200 '{}' release reviewers && ok || bad "unreachable API: a warning, not a failure"
+ce 200 '{}' release reviewers && bad "unreachable API must fail closed" || ok
 rm -f "$T/ce/fail"
 grep -q "check-environment.sh" "$REPO/docs/RELEASING.md" && ok || bad "docs/RELEASING.md must describe the environment check"
 if grep -q "owner: create it" "$REPO/docs/RELEASING.md"; then bad "docs/RELEASING.md still says the environments are to be created"; else ok; fi
@@ -578,6 +578,14 @@ for s in claw8ex-bazzite ally-steamos legion-go-s-bazzite steam-machine-steamos;
 	printf '%s\n' "$E2E_JOB" | grep -q "$s" && ok || bad "ci.yml: the e2e matrix is missing the $s setup"
 done
 printf '%s\n' "$E2E_JOB" | grep -qE "timeout-minutes: (3[5-9]|[4-9][0-9])$" && ok || bad "ci.yml: the e2e job needs a time limit above 30 minutes"
+
+# release.yml: signing needs a green CI run on the tagged commit; ci.yml's helper step fails on any skipped test
+python3 - "$REPO/.github/workflows/release.yml" <<'PY' && ok || bad "release.yml: the release job must need a ci-passed job that checks ci.yml's run for the tagged commit"
+import sys, re
+t = open(sys.argv[1], encoding="utf-8").read()
+assert re.search(r"needs: \[[^\]]*ci-passed", t) and "workflows/ci.yml/runs?head_sha=$GITHUB_SHA" in t and '"$res" != "success"' in t
+PY
+grep -qF "'^SKIPPED' out.txt" "$REPO/.github/workflows/ci.yml" && ok || bad "ci.yml: the helper step must fail on any skipped test"
 
 # the CLA workflow links to github.com, not a mirror (a contributor reads that page before signing)
 if git -C "$REPO" grep -nIE "cloudns|ali360|https://gh\.[a-z0-9-]+\.[a-z]+/" -- . ':!packaging/tests/release.sh' >"$T/mirror"; then bad "a non-github mirror host is linked: $(head -n 2 "$T/mirror" | tr '\n' ' ')"; else ok; fi

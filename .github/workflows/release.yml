@@ -341,9 +341,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: sh tools/ci/check-environment.sh release reviewers
 
+  ci-passed:
+    # the tagged commit has to have a green CI run (every job of ci.yml); a red or missing run blocks signing
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: CI passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -o pipefail
+          # the newest completed CI run for this exact commit
+          res="$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&status=completed&per_page=20" \
+            --jq '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA)] | sort_by(.created_at) | last | .conclusion // "none"')"
+          if [ "$res" != "success" ]; then
+            echo "CI on $GITHUB_SHA is \"$res\" (needs success): fix it or re-run CI on this commit, then tag again" >&2
+            exit 1
+          fi
+          echo "CI passed on $GITHUB_SHA"
+
   release:
     if: github.ref_type == 'tag'
-    needs: [app, package, protected]
+    needs: [app, package, protected, ci-passed]
     # signing waits for the owner's approval: the "release" environment has him as required reviewer and allows only
     # main and v* tags (docs/RELEASING.md; review 2, problem 10)
     environment: release

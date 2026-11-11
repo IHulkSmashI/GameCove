@@ -43,14 +43,15 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install --require-hashes --no-deps -r tools/ci/requirements-pytest.txt
-      - name: Helper tests with the ClawDeck comparison (none of its tests may be skipped)
+      - name: Helper tests with the ClawDeck comparison (no test may be skipped, for any reason)
         working-directory: packaging/helpers
         env:
           CLAWDECK_SRC: ${{ github.workspace }}/clawdeck-ref
         run: |
           set -o pipefail
           python -m pytest -q -rs | tee out.txt
-          ! grep -q "CLAWDECK_SRC is not a ClawDeck checkout" out.txt
+          # no test may be skipped, whatever the reason; the one allowed skip is the 7z test where 7z is missing
+          if grep '^SKIPPED' out.txt | grep -vi '7z'; then echo "a helper test was skipped (reasons above)" >&2; exit 1; fi
 
   device-photos:
     # Offline checks of app/data/device_photos.json on every push: every row has a picture
