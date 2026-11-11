@@ -224,6 +224,13 @@ func test_slider_tick_labels_are_even() -> void:
 	eq(SliderRow.tick_values(5.0, 25.0, 1.0), [5.0, 10.0, 15.0, 20.0, 25.0], "even steps on 5-25 W")
 	eq(SliderRow.tick_values(8.0, 35.0, 1.0), [8.0, 15.0, 22.0, 28.0, 35.0], "even steps from an odd start")
 	eq(SliderRow.tick_values(0.0, 2.0, 1.0), [0.0, 1.0, 2.0], "no repeats on a short range")
+	# Battery saver at (0-50 % in fives) sat on 20 % with no label to light:
+	# its labels were 0, 15, 25, 40, 50. Even ranges get even labels.
+	var saver: Array = SliderRow.tick_values(0.0, 50.0, 5.0)
+	eq(saver, [0.0, 10.0, 20.0, 30.0, 40.0, 50.0], "0-50 % in fives: a label every 10")
+	eq(SliderRow.lit_tick(saver, 20.0, 5.0), 2, "20 % lights its own label")
+	eq(SliderRow.lit_tick(saver, 25.0, 5.0), -1, "between labels, none lights")
+	eq(SliderRow.tick_values(50.0, 100.0, 5.0), [50.0, 60.0, 70.0, 80.0, 90.0, 100.0], "charge limit: 80 % has its label")
 	var v: Array = SliderRow.tick_values(8.0, 35.0, 1.0)
 	eq(v[0], 8.0, "starts at the minimum")
 	eq(v[-1], 35.0, "ends at the maximum")
