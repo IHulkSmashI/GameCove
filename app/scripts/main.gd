@@ -822,6 +822,11 @@ func open_apps() -> void:
 	screens[current].visible = false
 	apps_view.open()
 	_link_top()
+	# no tiles yet (still looking for apps) or none at all: focus goes up to the
+	# top bar's tab, not left on the Apps button the screen just hid (the list
+	# takes it when it arrives)
+	if apps_view.default_focus() == null:
+		top_bar.tabs[current].grab_focus()
 	_sound("select")
 	_update_hints.call_deferred()
 
