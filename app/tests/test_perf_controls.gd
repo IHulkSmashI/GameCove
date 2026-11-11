@@ -391,6 +391,9 @@ func test_upscaler_updates_summary() -> void:
 	var u := UpscaleUpdates.summary(CHECK_CURRENT)
 	ok(not u["update"] and u["reason"] == "", "up to date stays usable (press: check now)")
 	eq(u["help"], "Up to date: OptiScaler 0.9.5 · OptiPatcher rolling-20261020. Press to check now.", "installed versions shown")
+	var stale := CHECK_CURRENT.duplicate(true)
+	stale["index"] = {"verified": true, "stale": true, "files_from": "2026-10-02", "generated": "2026-10-02T05:00:00Z"}
+	ok(UpscaleUpdates.summary(stale)["help"].begins_with("Up to date (offline, files from 2026-10-02):"), "a month without a check says how old the files are: " + UpscaleUpdates.summary(stale)["help"])
 	var pins := CHECK_CURRENT.duplicate(true)
 	pins["index"]["verified"] = false
 	ok("tested versions" in UpscaleUpdates.summary(pins)["help"], "says when the newest list isn't verified")

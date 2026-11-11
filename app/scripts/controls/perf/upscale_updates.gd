@@ -68,6 +68,9 @@ static func summary(check: Dictionary) -> Dictionary:
 		return {"reason": "Nothing downloaded yet: the newest is fetched the first time a game uses it", "help": "", "update": false}
 	var idx: Dictionary = check.get("index", {}) if check.get("index") is Dictionary else {}
 	var source := "" if bool(idx.get("verified", false)) else " (GameCove's tested versions: the list of the newest isn't checked yet)"
+	if bool(idx.get("verified", false)) and bool(idx.get("stale", false)):
+		# not checked again for a month: the last good set stays in use, and we say how old it is
+		source = " (offline, files from %s)" % str(idx.get("files_from", "an earlier check"))
 	var ups := updates_line(check)
 	if ups != "":
 		return {"reason": "", "help": "Update available: %s. Games keep their copy until you update them on their page." % ups, "update": true}

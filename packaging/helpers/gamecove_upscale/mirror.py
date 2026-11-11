@@ -54,7 +54,10 @@ CACHE = os.path.join(".local", "share", "gamecove", "upscalers")
 TOOLS = os.path.join(".local", "share", "gamecove", "tools")
 MAX_INDEX = 1 << 20
 FRESH_S = 600                     # an install right after another doesn't fetch again
-MAX_AGE_S = 30 * 24 * 3600        # a verified copy is used offline for this long, then the pins
+# a verified copy that hasn't been checked again for this long is "stale": still used (the last good set, with its
+# withdrawals), and the app says "offline, files from <date>"; never replaced by an older list (as fix_data.gd and
+# the other signed data releases, review M)
+MAX_AGE_S = 30 * 24 * 3600
 # files live on "upscalers" and, once it nears GitHub's 1000-asset limit, on "upscalers-2", "upscalers-3", ...
 MIRROR_RE = re.compile(r"^https://github\.com/IHulkSmashI/GameCove-data/releases/download/upscalers(-[0-9]{1,3})?/"
                        r"[A-Za-z0-9][A-Za-z0-9._+-]{0,199}$")
@@ -308,21 +311,27 @@ def _num(v) -> float:
 
 
 def load(home: str, now: float | None = None) -> dict | None:
-    """The cached index when it was verified (its sha256 is the one recorded right after cosign accepted it) and
-    that was less than MAX_AGE_S ago; else None."""
+    """The cached index when it was verified (its sha256 is the one recorded right after cosign accepted it),
+    however long ago: the last good set keeps working offline (stale() says when it is old). Else None."""
     p, st = _paths(home), _stamp(home)
-    now = time.time() if now is None else now
     try:
         with open(p["index"], "rb") as f:
             raw = f.read(MAX_INDEX + 1)
     except OSError:
         return None
-    if st.get("sha256") != sha256_bytes(raw) or now - _num(st.get("verified_at")) > MAX_AGE_S:
+    if st.get("sha256") != sha256_bytes(raw):
         return None
     try:
         return parse(raw)
     except ValueError:
         return None
+
+
+def stale(home: str, now: float | None = None) -> bool:
+    """The held list wasn't checked again for MAX_AGE_S (or when it was can't be read)."""
+    now = time.time() if now is None else now
+    at = _num(_stamp(home).get("verified_at"))
+    return not at or now - at > MAX_AGE_S
 
 
 def refresh(home: str, force: bool = False, timeout: float = 10.0, now: float | None = None) -> dict:
@@ -331,7 +340,7 @@ def refresh(home: str, force: bool = False, timeout: float = 10.0, now: float | 
     now = time.time() if now is None else now
     p, st = _paths(home), _stamp(home)
     have = load(home, now)
-    if have and not force and now - _num(st.get("verified_at")) < FRESH_S:
+    if have and not force and 0 <= now - _num(st.get("verified_at")) < FRESH_S:
         return {"state": "cached", "generated": have.get("generated"), "error": None}
     try:
         raw = _fetch(INDEX_URL, MAX_INDEX, timeout)
@@ -444,9 +453,11 @@ def versions(home: str | None, pins: dict) -> dict:
     return copy.deepcopy(_memo[key])
 
 
-def status(home: str) -> dict:
-    """What the cached list is: {"verified": bool, "generated", "verified_at"} (no network)."""
+def status(home: str, now: float | None = None) -> dict:
+    """What the cached list is (no network): {"verified": bool, "generated", "verified_at", "stale": not checked
+    again for MAX_AGE_S, "files_from": the list's date (YYYY-MM-DD)}."""
     idx = load(home)
     st = _stamp(home)
-    return {"verified": idx is not None, "generated": idx.get("generated") if idx else None,
-            "verified_at": st.get("verified_at") if idx else None}
+    gen = idx.get("generated") if idx else None
+    return {"verified": idx is not None, "generated": gen, "verified_at": st.get("verified_at") if idx else None,
+            "stale": bool(idx) and stale(home, now), "files_from": str(gen)[:10] if gen else None}
