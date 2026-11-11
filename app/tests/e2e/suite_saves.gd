@@ -42,7 +42,7 @@ func test_epic_launch_waits_for_its_cloud_save() -> void:
 	main()._play(EPIC)
 	eq(main().launch_overlay.status.text, TSaves.SYNC_LAUNCH, "the launch screen says it's getting the save")
 	ok(await until(func(): return main()._launch_wait == "", 4000), "then the launch goes ahead")
-	ok(calls.size() >= 1 and str(calls[0]).contains("sync-saves Min"), "legendary looked first")
+	ok(calls.size() >= 1 and str(calls[0]).contains("sync-saves") and str(calls[0]).ends_with("-- Min"), "legendary looked first")
 	eq(main().saves.status(EPIC)["state"], "synced", "status: synced")
 	main()._on_launch_cancelled(EPIC)
 	await w.idle()
@@ -87,7 +87,8 @@ func test_the_end_of_a_game_uploads() -> void:
 		Time.get_datetime_string_from_unix_time(t - 9000, true).replace("T", " "), Time.get_datetime_string_from_unix_time(t - 30, true).replace("T", " ")])
 	main()._on_game_ended(EPIC)
 	ok(await until(func(): return not main().saves.busy("epic:Min"), 4000), "the upload finishes")
-	ok(str(calls[-1]).ends_with("--skip-download"), "an upload only")
+	# the store id comes after "--" (a game id can never be read as an option)
+	ok(str(calls[-1]).contains("--skip-download") and not str(calls[-1]).contains("--skip-upload") and str(calls[-1]).ends_with("-- Min"), "an upload only")
 	eq(main().saves.status(EPIC)["state"], "uploaded", "status: uploaded")
 
 
