@@ -98,10 +98,15 @@ the library changes, not while a game runs.
   and once more (the emulation entries only) when ES-DE, RetroDECK or an emulated game ends, to
   add its play time. Nothing of it runs while a game is in front.
 - **Thousands of ROMs.** The ROM list is cached per system folder with every folder's
-  modification time (`user://emu/roms.cache`): a later scan only compares those times. A rescan
-  that finds what's already shown redraws nothing. Home's shelves hold 60 tiles at most and the
-  Library grid makes its tiles 140 at a time as you scroll. Measured with a 160-system,
-  5,440-ROM folder (e2e `suite_emulation`, headless, 2-core box): see "ROM folders" below.
+  modification time (`user://emu/roms.cache`, each system's games kept packed): a later scan
+  only compares those times. When nothing a ROM game is made from changed (the folders, the
+  setup, ES-DE's custom systems, Steam ROM Manager's shortcuts, play time, picked art), the
+  scan makes no game at all and the Library keeps the ones it has; a scan that finds exactly
+  what's shown redraws nothing and keeps nothing new. ROMs with the same details share one
+  read-only copy of them. The game database is read only when a scanned game can match it
+  (never for the emulation rescan). Home's shelves show 24 games at most, then See all, and the Library grid
+  makes its tiles 56 at a time as you scroll. Measured with a 160-system, 5,440-ROM folder
+  (e2e `suite_emulation`, headless, 2-core box): see "ROM folders" below.
 - **Cloud saves** run before a launch and after a game ends, never during one. **Battery
   history** writes one small file at game start and end, sleep, wake and the charger (a few
   sysfs reads each); **Sleep at low battery** reacts to Power's 15 s check. None adds a timer that
@@ -162,17 +167,29 @@ To be measured again on real hardware.
 
 ## ROM folders
 
-A 160-system, 5,440-ROM EmuDeck folder (e2e `suite_emulation`, headless, 2-core box, measured twice):
+A 160-system, 5,440-ROM EmuDeck folder (e2e `suite_emulation`, headless, 2-core box; "busy" is
+with a dozen other jobs on the same cores):
 
-| | before (every tile at once) | now |
+| | before | now (quiet / busy) |
 | --- | --- | --- |
-| Library rescan, every store, on its thread | - | 1.4-1.6 s (the ROM part ~0.25 s cached, ~0.8 s first) |
-| Library opened on Filter > Emulation | - | 360-700 ms |
-| Godot's own memory with the 5,440 games and the Library open | - | 270 MB (peak 335 MB) |
-| Process memory (RSS), peak | over 4 GB, killed | 1.9 GB (250 MB with an empty library; the rest isn't Godot's own allocations, to be checked on a device) |
+| First scan, every store, on the Library's thread | 2.5 s | 2.5 s / 5.8-6.6 s |
+| Whole-Library rescan, nothing changed | 1.5 s | 0.2 s / 0.2-0.5 s (the ROM games aren't made again) |
+| Emulation rescan (Library or Emulation page opening), nothing changed | 0.8 s, plus the game database when there is one | 0.15 s / 0.2-0.3 s |
+| Library opened on Filter > Emulation | 330 ms (140 tiles) | 0.6 s busy (56 tiles) |
+| Godot's own memory over the start, everything open | +142 MB | +54 MB |
+| Process memory (RSS) peak over the start | +313 MB (555 MB in all) | +127 MB (383 MB in all) |
+| An Emulation rescan with GameCove's game database present (bare process) | 1.6 GB peak | 157 MB |
+
+What held it: every rescan read and indexed the whole game database (73 MB of JSON, well over
+a gigabyte of dictionaries for a moment) though ROMs never match it; every ROM carried its own
+copy of details, console line and empty art (65 MB of dictionaries, now 22 MB shared read-only);
+and an identical rescan built every game again and swapped it in, so two copies lived for a
+while and the worker thread's memory stayed with the process. Still true for every store: a
+whole-Library rescan with Steam, Epic, GOG or Amazon games reads the game database (about
+1.3 GB for a moment) when the app starts and after the database updates.
 
 The first numbers had every tile made at once (Home's All games shelf and the Library grid):
-the app ran out of memory. Now Home's shelves hold 60 tiles and the Library grid makes 140 at a
+the app ran out of memory. Now Home's shelves show 24 games and See all, and the Library grid makes 56 at a
 time as focus nears the end (LT / RT letter jumps make what they land on). None of this runs
 behind a game: the rescan waits until the game ends.
 

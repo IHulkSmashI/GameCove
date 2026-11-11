@@ -13,19 +13,32 @@ const Roms := preload("res://scripts/library/stores/roms.gd")
 const Emu := preload("res://scripts/library/stores/emu.gd")
 const View := preload("res://scripts/ui/library_view.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
+const ProcStats := preload("res://tests/perf/proc_stats.gd")
+
+
+## This process's memory in MB: resident now, its peak (VmHWM) and Godot's own.
+func _mem() -> Dictionary:
+	var st := ProcStats._status("/proc/self/status")
+	return {"rss": int(st.get("VmRSS", 0)) / 1024, "hwm": int(st.get("VmHWM", 0)) / 1024, "static": OS.get_static_memory_usage() / 1048576}
+
 
 ## A 160-system, 5,000+ ROM folder: scanned on the Library's thread (first time,
-## then from the cache) and the Library opened on it. Measured on a 2-core CI box
-## (docs/PERFORMANCE.md); budgets with headroom.
-## Measured: whole Library rescan (every store) 1.4-1.6 s first and cached alike (the ROM part
-## is ~0.25 s; the rest is the Library's own per-game work), the Library opened on the
-## Emulation view in 360-700 ms.
-## Budgets leave room for a box busy with other jobs (5-7 s was seen with four other Godot
-## runs on the same two cores); a scan that walks every file every time, or a Library that
-## makes every tile at once, still fails them.
-const MAX_SCAN_COLD_MS := 20000.0
-const MAX_SCAN_CACHED_MS := 20000.0
-const MAX_LIBRARY_OPEN_MS := 3000.0
+## then from the cache), the Library opened on it, the Emulation page and its
+## rescan, and what it all cost the process (docs/PERFORMANCE.md).
+## Measured on the 2-core box: quiet, first scan 2.5 s, whole-Library rescan with
+## nothing changed 0.2 s (the ROM games aren't made again), Library open on the
+## Emulation view 0.3 s, Emulation rescan 0.15 s; with a dozen other jobs on the
+## same cores 5.8-6.6 s / 0.2-0.5 s / 0.6 s / 0.3 s. Process memory peak +127 MB
+## over the start, Godot's own +54 MB (before: +313 MB and +142 MB, and 1.6 GB
+## when a game database was there to read). Budgets: the quiet numbers with
+## headroom; a scan that rebuilds every ROM game, a Library that makes every
+## tile, or ROM data held twice fails them.
+const MAX_SCAN_COLD_MS := 8000.0
+const MAX_SCAN_CACHED_MS := 3000.0
+const MAX_LIBRARY_OPEN_MS := 1000.0
+const MAX_EMU_RESCAN_MS := 1500
+const MAX_ROMS_RSS_GROWTH_MB := 200
+const MAX_ROMS_STATIC_GROWTH_MB := 80
 const BIG_SYSTEMS := 160
 const BIG_PER_SYSTEM := 34
 
@@ -195,6 +208,7 @@ func test_five_thousand_roms() -> void:
 			f.close()
 			n += 1
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Roms.CACHE_PATH))
+	var mem0 := _mem()
 	var t0 := Time.get_ticks_msec()
 	await _rescan()
 	var cold := Time.get_ticks_msec() - t0
@@ -223,7 +237,26 @@ func test_five_thousand_roms() -> void:
 	main().library_screen.set_view("")
 	main().show_screen("home")
 	await w.frames(2)
-	ok(main().home.shelves().all(func(s): return s.id == "all" or s.tiles.size() <= maxi(View.EMU_SHELF_MAX, 60)), "Home's shelves stay short")
+	ok(main().home.shelves().all(func(s): return s.tiles.size() <= main().home.SHELF_MAX + 1), "Home's shelves stay short")
+	# The Emulation page with every console, then an Emulation rescan as it opens again.
+	main().open_emulation()
+	await w.frames(30)
+	await b()
+	await w.frames(4)
+	_lib()._last_emu_scan = 0
+	t0 = Time.get_ticks_msec()
+	ok(_lib().rescan_emulation(), "the Emulation rescan runs")
+	await until(func(): return _lib()._task == -1, 60000)
+	var emu_rescan := Time.get_ticks_msec() - t0
+	await w.frames(4)
+	var mem1 := _mem()
+	var rss_growth: int = mem1["hwm"] - mem0["rss"]
+	var static_growth: int = mem1["static"] - mem0["static"]
+	print("E2E ROMS_MEM rss_start=%dMB rss_end=%dMB peak=%dMB peak_growth=%dMB static_growth=%dMB emu_rescan=%dms" % [mem0["rss"], mem1["rss"],
+		mem1["hwm"], rss_growth, static_growth, emu_rescan])
+	ok(rss_growth <= MAX_ROMS_RSS_GROWTH_MB, "process memory peak grew %d MB with %d ROM games <= %d" % [rss_growth, count, MAX_ROMS_RSS_GROWTH_MB])
+	ok(static_growth <= MAX_ROMS_STATIC_GROWTH_MB, "Godot's own memory grew %d MB <= %d" % [static_growth, MAX_ROMS_STATIC_GROWTH_MB])
+	ok(emu_rescan <= MAX_EMU_RESCAN_MS, "an Emulation rescan with nothing changed in %d ms <= %d" % [emu_rescan, MAX_EMU_RESCAN_MS])
 	_clean()
 	await _rescan()
 	eq(_roms().size(), 0, "fixture gone")
