@@ -27,7 +27,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path-to-signatures: signatures/version1/cla.json
-          path-to-document: https://gh.ali360.cloudns.ch/IHulkSmashI/GameCove/blob/main/docs/CLA.md
+          path-to-document: https://github.com/IHulkSmashI/GameCove/blob/main/docs/CLA.md
           branch: cla-signatures
           allowlist: IHulkSmashI,dependabot[bot],github-actions[bot]
-          custom-notsigned-prcomment: "Thanks for the pull request! Before we can merge it, please read our [Contributor License Agreement](https://gh.ali360.cloudns.ch/IHulkSmashI/GameCove/blob/main/docs/CLA.md). You keep your copyright; it lets the project owner license GameCove under other terms in the future. To sign, post the comment below."
+          custom-notsigned-prcomment: "Thanks for the pull request! Before we can merge it, please read our [Contributor License Agreement](https://github.com/IHulkSmashI/GameCove/blob/main/docs/CLA.md). You keep your copyright; it lets the project owner license GameCove under other terms in the future. To sign, post the comment below."
