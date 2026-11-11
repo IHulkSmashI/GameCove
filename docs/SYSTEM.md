@@ -386,6 +386,8 @@ What keeps a save from being lost (final review; each has a test against ports o
 - **Two GOG locations.** When one fails and the backup goes back, a location that had downloaded gets its old sync time
   back with it.
 - **A restore holds.** Restoring makes the folder exactly what the backup holds (unpacked next to it and swapped in).
+  A backup of several folders goes back all or nothing: every folder is unpacked first, then all are swapped, and a
+  failed swap puts the ones already swapped back.
   The restored files carry old times, so until the next good sync the local side counts as changed (`restored_at`).
   Epic: "cloud newer" is a conflict with the restored save offered first. GOG: gogdl decides by file times alone, so
   the cloud is listed first (the far-future `--ts` look): changed since the last sync (or never synced), a conflict

@@ -144,42 +144,71 @@ func find(key: String, id: String) -> Dictionary:
 
 
 ## Puts a backup back: each folder becomes exactly what the backup holds (files made since
-## don't stay; callers back the current state up first). The backup is unpacked next to the
-## folder and swapped in, so a backup that can't be unpacked changes nothing.
+## don't stay; callers back the current state up first). All of it or nothing (review at
+## ff76ca4, L3): every folder is unpacked next to its place first, and only when all are
+## unpacked are they swapped in; a swap that fails puts the ones already swapped back. A
+## folder that can't be renamed (a mount point) is emptied and filled in place, last.
 ## -> {"ok", "why"}.
 func restore(key: String, id: String) -> Dictionary:
 	var b := find(key, id)
 	if b.is_empty():
 		return {"ok": false, "why": "missing"}
 	var dir := dir_for(key)
+	var staged_all: Array = []   # [path, staged, archive]
 	for p in b["parts"]:
 		var path := str(p["path"]).simplify_path()
 		var staged := path + ".gamecove-restore"
-		var old := path + ".gamecove-old"
 		remove_tree(staged)
 		if DirAccess.make_dir_recursive_absolute(staged) != OK:
+			_drop_staged(staged_all)
 			return {"ok": false, "why": "couldn't make a folder next to the saves"}
+		staged_all.append([path, staged, dir.path_join(str(p["file"]))])
 		var r: Dictionary = run.call("tar", PackedStringArray(["-xzf", dir.path_join(str(p["file"])), "-C", staged]))
 		if int(r.get("code", -1)) != 0:
-			remove_tree(staged)
+			_drop_staged(staged_all)
 			return {"ok": false, "why": "tar: " + str(r.get("out", "")).strip_edges().left(200)}
+	var swapped: Array = []   # [path, old, had]
+	var in_place: Array = []
+	for s in staged_all:
+		var path: String = s[0]
+		var old := path + ".gamecove-old"
 		remove_tree(old)
 		var had := DirAccess.dir_exists_absolute(path)
 		if had and DirAccess.rename_absolute(path, old) != OK:
-			# a folder that can't be renamed (a mount point): emptied and filled in place
-			empty_dir(path)
-			var m: Dictionary = run.call("tar", PackedStringArray(["-xzf", dir.path_join(str(p["file"])), "-C", path]))
-			remove_tree(staged)
-			if int(m.get("code", -1)) != 0:
-				return {"ok": false, "why": "tar: " + str(m.get("out", "")).strip_edges().left(200)}
+			in_place.append(s)
 			continue
-		if DirAccess.rename_absolute(staged, path) != OK:
+		if DirAccess.rename_absolute(str(s[1]), path) != OK:
 			if had:
 				DirAccess.rename_absolute(old, path)
-			remove_tree(staged)
+			_undo_swaps(swapped)
+			_drop_staged(staged_all)
 			return {"ok": false, "why": "couldn't put the saves in place"}
-		remove_tree(old)
+		swapped.append([path, old, had])
+	for s in in_place:
+		var path: String = s[0]
+		empty_dir(path)
+		var m: Dictionary = run.call("tar", PackedStringArray(["-xzf", str(s[2]), "-C", path]))
+		remove_tree(str(s[1]))
+		if int(m.get("code", -1)) != 0:
+			_undo_swaps(swapped)
+			_drop_staged(staged_all)
+			return {"ok": false, "why": "tar: " + str(m.get("out", "")).strip_edges().left(200)}
+	for w in swapped:
+		remove_tree(str(w[1]))
 	return {"ok": true, "why": ""}
+
+
+static func _drop_staged(staged: Array) -> void:
+	for s in staged:
+		remove_tree(str(s[1]))
+
+
+## Puts the folders a failed restore already swapped back as they were.
+static func _undo_swaps(swapped: Array) -> void:
+	for w in swapped:
+		remove_tree(str(w[0]))
+		if bool(w[2]):
+			DirAccess.rename_absolute(str(w[1]), str(w[0]))
 
 
 ## Deletes a folder tree. A symlink is removed as a link, never followed (a Wine prefix

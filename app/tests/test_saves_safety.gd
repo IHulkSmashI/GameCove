@@ -765,6 +765,29 @@ func test_rotation_with_the_clock_behind_keeps_the_new_backup() -> void:
 	_done(w)
 
 
+## L3: a backup of two folders whose second can't be unpacked used to leave the first one
+## restored and the second not: a save from two different times. All or nothing now.
+func test_a_two_folder_restore_is_all_or_nothing() -> void:
+	var w := _world("restore_atomic")
+	var bk: RefCounted = w["s"].backups
+	var a: String = w["root"].path_join("a")
+	var b2: String = w["root"].path_join("b")
+	Fakes.put(a.path_join("slot.sav"), "a then", T0)
+	Fakes.put(b2.path_join("keys.ini"), "b then", T0)
+	var b: Dictionary = bk.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": a}, {"name": "cfg", "path": b2}])
+	Fakes.put(a.path_join("slot.sav"), "a now", T0 + 10)
+	Fakes.put(b2.path_join("keys.ini"), "b now", T0 + 10)
+	# the second folder's archive is damaged
+	var second: String = bk.dir_for("gog:1207").path_join(str(bk.find("gog:1207", str(b["id"]))["parts"][1]["file"]))
+	Fakes.put(second, "not a tar file")
+	var r: Dictionary = bk.restore("gog:1207", str(b["id"]))
+	ok(not r["ok"], "the restore fails")
+	eq(FileAccess.get_file_as_string(a.path_join("slot.sav")), "a now", "and the first folder wasn't touched either")
+	eq(FileAccess.get_file_as_string(b2.path_join("keys.ini")), "b now", "nor the second")
+	eq(Array(DirAccess.get_directories_at(w["root"])).filter(func(d): return d.contains(".gamecove-")), [], "nothing left next to them")
+	_done(w)
+
+
 ## The service marks the backups a choice or a restore made.
 func test_choice_backups_are_kept_apart() -> void:
 	var w := _world("pinned")
