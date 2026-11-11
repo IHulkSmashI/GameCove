@@ -114,7 +114,9 @@ func test_low_battery_warns_and_any_button_stays_awake() -> void:
 	await w.idle()
 	ok(main().low_dialog == null, "and the battery read again says it was a glitch: no warning")
 	eq(slept[0], 0, "no sleep")
+	# a second low report in a row is believed at once
 	low._pct = 80
+	power().battery_level.emit(5, false)
 	power().battery_level.emit(5, false)
 	await w.idle()
 	ok(main().low_dialog != null and is_instance_valid(main().low_dialog), "the 30 s warning shows")
