@@ -67,6 +67,11 @@ static func clean_title(stem: String) -> String:
 	if art != null:
 		s = "%s %s%s" % [art.get_string(2), art.get_string(1), art.get_string(3)]
 	s = s.strip_edges().trim_suffix(" -").strip_edges()
+	# No-Intro and Redump write a title's colon as " - ": the first one is the colon back
+	# ("Castlevania - Symphony of the Night" -> "Castlevania: Symphony of the Night").
+	var dash := s.find(" - ")
+	if dash > 0:
+		s = s.substr(0, dash) + ": " + s.substr(dash + 3)
 	return s if s != "" else stem.strip_edges()
 
 

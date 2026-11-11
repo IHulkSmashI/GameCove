@@ -19,6 +19,8 @@ const MetadataCard := preload("res://scripts/ui/games/metadata_card.gd")
 const MetaResolver := preload("res://scripts/library/meta/resolver.gd")
 const FallbackArt := preload("res://scripts/ui/fallback_art.gd")
 const TL := preload("res://scripts/ui/texts_library.gd")
+const Tile := preload("res://scripts/ui/game_tile.gd")
+const Shelf := preload("res://scripts/ui/shelf.gd")
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 const EmuTests := preload("res://tests/test_emulation.gd")
@@ -164,7 +166,11 @@ func test_clean_titles() -> void:
 	eq(Roms.clean_title("Super Game (USA)"), "Super Game", "region")
 	eq(Roms.clean_title("Super Game (USA, Europe) (Rev 1) [!]"), "Super Game", "revision and dump tags")
 	eq(Roms.clean_title("Disc Game (USA) (Disc 1)"), "Disc Game", "disc")
-	eq(Roms.clean_title("Legend of Hyrule, The - A Link (USA)"), "The Legend of Hyrule - A Link", "No-Intro's ', The' turned round")
+	eq(Roms.clean_title("Legend of Hyrule, The - A Link (USA)"), "The Legend of Hyrule: A Link", "No-Intro's ', The' turned round, its ' - ' the colon again")
+	eq(Roms.clean_title("Castlevania - Symphony of the Night (USA)"), "Castlevania: Symphony of the Night", "the colon No-Intro can't write")
+	eq(Roms.clean_title("Super Metroid (Japan, USA) (En,Ja)"), "Super Metroid", "languages")
+	eq(Roms.clean_title("Sonic the Hedgehog 2 (World) (Rev A)"), "Sonic the Hedgehog 2", "revision letter")
+	eq(Roms.clean_title("Star Wars - Episode I - Racer (USA)"), "Star Wars: Episode I - Racer", "only the first dash")
 	eq(Roms.clean_title("Adventure, An"), "An Adventure", "', An'")
 	eq(Roms.clean_title("Third_Game_Plus"), "Third Game Plus", "underscores when there are no spaces")
 	eq(Roms.clean_title("Keep_This Name"), "Keep_This Name", "underscores kept beside spaces")
@@ -447,7 +453,7 @@ func test_library_lists_every_rom() -> void:
 	var res := LibraryScript.collect(home, "/nonexistent/gamedb.json.gz")
 	var roms: Array = res["games"].filter(func(g): return g["emulated"].get("rom", false))
 	var titles: Array = roms.map(func(g): return g["title"])
-	for t in ["Super Game & Friends", "The Legend of Hyrule - A Link", "Third Game", "Disc Game", "Big Game", "Island Game", "Racer", "Single"]:
+	for t in ["Super Game & Friends", "The Legend of Hyrule: A Link", "Third Game", "Disc Game", "Big Game", "Island Game", "Racer", "Single"]:
 		ok(t in titles, "%s is a game" % t)
 	ok(titles.has("x"), "a folder ES-DE doesn't know keeps its games")
 	var x: Dictionary = roms[titles.find("x")]
@@ -480,7 +486,7 @@ func test_library_lists_every_rom() -> void:
 	eq(gens.size(), 3, "Filter > Emulation > SNES")
 	var sys := View.systems_in(res["games"])
 	eq(sys[0]["id"], "psx", "systems, most games first")
-	eq(View.search(res["games"], "hyrule").map(func(x): return x["title"]), ["The Legend of Hyrule - A Link"], "search finds ROM titles")
+	eq(View.search(res["games"], "hyrule").map(func(x): return x["title"]), ["The Legend of Hyrule: A Link"], "search finds ROM titles")
 
 
 func test_setting_turns_rom_games_off() -> void:
@@ -589,6 +595,52 @@ func test_page_is_the_hub() -> void:
 	ok(p.game_tiles[0].focus_neighbor_top != NodePath(""), "linked for the d-pad")
 	ok(p.find_child("Recent", true, false).find_child("Title", true, false).size_flags_horizontal & Control.SIZE_EXPAND, "a recent title has the row's whole width")
 	p.free()
+
+
+## Every tile of a ROM game names it and its console, with box art too (scanned
+## or scraped console art often has no readable title): Home's shelves, the
+## Library grid and search (the same tiles) and the Emulation page's grid.
+## A store cover keeps its painted logo alone.
+func test_rom_tiles_show_name_and_system() -> void:
+	var home := _emudeck("tiles")
+	SettingsFile.reset_for_tests()
+	var res := LibraryScript.collect(home, "/nonexistent/gamedb.json.gz")
+	var roms: Array = res["games"].filter(func(g): return g["emulated"].get("rom", false) and not g["emulated"].get("unknown", false))
+	ok(roms.size() >= 4, "ROM games to show")
+	var cover := ImageTexture.create_from_image(Image.create(30, 40, false, Image.FORMAT_RGBA8))
+	var check := func(t: Button, where: String) -> void:
+		var g: Dictionary = t.game
+		for with_art in [false, true]:
+			if with_art:
+				t._show_art(cover, false)
+			ok(t.title_label != null and t.title_label.visible and t.title_label.text == str(g["title"]) and str(g["title"]) != "",
+				"%s: %s shows its name (%s)" % [where, g["title"], "with box art" if with_art else "no art"])
+			ok(t.sub_label.text.begins_with(str(g["emulated"]["system_short"]) + " ·") or t.sub_label.text == str(g["emulated"]["system_short"]),
+				"%s: and its console, not the store (%s)" % [where, t.sub_label.text])
+			ok(not t.sub_label.text.contains("Emulation"), "%s: never \"Emulation\"" % where)
+	for g in roms:
+		var t: Button = Tile.new()
+		t.setup(g, true, Tile.SIZE, false)
+		check.call(t, "Library tile")
+		t.free()
+	var shelf: VBoxContainer = Shelf.new()
+	shelf.setup("emulation", "Emulation", View.emulation_shelf(res["games"]))
+	for t in shelf.tiles:
+		if View.system_of(t.game) != "":
+			check.call(t, "Home shelf")
+	shelf.free()
+	var p: Control = EmulationPage.new()
+	p.setup(res["emulation"], res["games"])
+	for t in p.game_tiles:
+		check.call(t, "Emulation page")
+	p.free()
+	var steam := {"key": "steam:1", "store": "steam", "id": "1", "title": "Store Game", "installed": true, "art": {"cover": ""},
+		"info": {}, "last_played": 0, "playtime_min": 0, "emulated": {}, "shortcut": false}
+	var st: Button = Tile.new()
+	st.setup(steam, true, Tile.SIZE, false)
+	st._show_art(cover, false)
+	ok(not st.title_label.visible, "a store cover keeps its own logo alone")
+	st.free()
 
 
 func test_page_hero() -> void:

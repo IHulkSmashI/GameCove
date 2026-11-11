@@ -7,8 +7,9 @@ extends Button
 ##
 ## The top three quarters of a cover stay clean (covers carry their own logo
 ## there). Everything we add sits in one plate along the bottom:
-##   title      only where the art doesn't carry one (generated covers); a
-##              cover with art never repeats its painted logo, focused or not
+##   title      only where the art doesn't carry one (generated covers and
+##              every ROM game); a store cover with art never repeats its
+##              painted logo, focused or not
 ##   pill row   one status pill (sale, update, downloading, Linux denied...)
 ##              and, on Discover, the price
 ##   sub row    store and playtime (or "Not installed"), plus one quiet extra
@@ -320,13 +321,19 @@ static func row_width() -> float:
 	return w - 2.0 * ThemeLib.EDGE
 
 
-## The plate's title: generated covers only (the art has none). A cover with
-## art carries its own logo, so focusing it never adds a second title or
-## shifts its store line (the spotlight, details bar or page names it).
+## The plate's title: generated covers (the art has none) and every ROM game
+## (box art scanned or scraped for a console game often has no readable title,
+## and a shelf of them would show only "SNES · 10 h"). Any other cover with art
+## carries its own logo, so focusing it never adds a second title or shifts its
+## store line (the spotlight, details bar or page names it).
 func _update_title() -> void:
 	if title_label == null:
 		return
-	title_label.visible = not has_cover()
+	title_label.visible = shows_title(game, has_cover())
+
+
+static func shows_title(g: Dictionary, with_cover: bool) -> bool:
+	return not with_cover or View.system_of(g) != ""
 
 
 ## The status pill in the plate ({} clears it). Spec as Badges gives it.

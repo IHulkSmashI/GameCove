@@ -109,6 +109,8 @@ func test_rom_games_in_the_library() -> void:
 	shown.sort()
 	eq(shown, ["Copper Canyon Racing", "Moonlit Harbor"], "Filter > Emulation > SNES")
 	eq(main().library_screen.view_label.text, "SNES  ·", "the view says which console")
+	ok(main().library_screen.tiles().all(func(t): return t.title_label.visible and t.title_label.text == t.game["title"] and t.sub_label.text.begins_with("SNES")),
+		"each tile names its game and its console")
 	main().library_screen.set_view("")
 	main().library_screen.set_query("moonlit")
 	await w.frames(3)
