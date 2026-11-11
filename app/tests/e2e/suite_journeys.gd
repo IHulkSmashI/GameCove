@@ -990,8 +990,14 @@ func test_every_screen_by_pad_discover_stream_apps_emulation_art() -> void:
 	await roam("discover", 14)
 	check("discover")
 	# Stream: hosts (none found on the fake network) and its own buttons
-	ok(await go_tab("stream"), "RB to Stream")
+	# RB to Stream; its discovery answers in the same frame and rebuilds the tab
+	# (Install and the host cards are made again): focus still lands on it
+	ok(await go_tab("discover"), "back to Discover")
+	await rb()
+	main().stream_screen.rebuild()
 	await w.frames(4)
+	eq(main().current, "stream", "RB to Stream")
+	ok(focus() != null and main().stream_screen.is_ancestor_of(focus()), "focus on the Stream tab after it rebuilt (%s)" % [focus().get_path() if focus() else "none"])
 	ok(screen_text(main().stream_screen) != "", "the Stream tab says something (no hosts here)")
 	await roam("stream", 6)
 	check("stream")

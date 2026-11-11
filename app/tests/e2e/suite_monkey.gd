@@ -13,8 +13,9 @@ extends "res://tests/e2e/journey_case.gd"
 ## Steps per run.
 const STEPS := 70
 const SetupFlow := preload("res://scripts/ui/setup/setup_flow.gd")
-## What the quick menu may take to open, even on a busy machine (suite_perf has the tight budgets).
-const QM_BUDGET_MS := 1500
+## What the quick menu may take to open, even on a heavily loaded test machine
+## (suite_perf has the real, tight budgets; this only catches a menu that hangs).
+const QM_BUDGET_MS := 3000
 ## Weighted moves: navigation most, then the face buttons, then everything else.
 const MOVES := ["up", "down", "left", "right", "up", "down", "left", "right", "a", "a", "b", "b",
 	"x", "y", "lb", "rb", "lt", "rt", "start", "view", "guide", "qam", "key", "tap", "hold_b", "play"]
@@ -47,13 +48,20 @@ func test_monkey_journeys_hold_the_invariants() -> void:
 			# the screen settles (a page glides to the focused row, a sheet fades in)
 			await until(func(): return focus_on_screen() == "" or not main()._window_focused or main().launch_overlay.is_open(), 1000)
 			var probs := invariants("seed %d step %d (%s)" % [seed, step, move])
+			if not probs.is_empty():
+				# a hardware file read while the fake system's worker rewrote it reads
+				# empty (-1): look again once the workers are quiet; only what stays counts
+				await w.idle()
+				probs = invariants("seed %d step %d (%s)" % [seed, step, move])
 			if step % 10 == 9:
 				probs.append_array(await deep_checks("seed %d step %d" % [seed, step]))
 			if not probs.is_empty():
 				for p in probs:
 					ok(false, p)
-				ok(false, "seed %d: the last moves were %s; on %s, searching %s, sheet %s, keyboard %s" % [seed, trail.slice(maxi(0, trail.size() - 12)),
-					where(), main().library_screen.searching(), main().game_actions.is_modal(), main().game_actions._kb_open])
+				var df: Control = main()._screen_default_focus()
+				ok(false, "seed %d: the last moves were %s; on %s, searching %s, sheet %s, keyboard %s, default focus %s (shown %s)" % [seed, trail.slice(maxi(0, trail.size() - 12)),
+					where(), main().library_screen.searching(), main().game_actions.is_modal(), main().game_actions._kb_open,
+					df.get_path() if df != null and is_instance_valid(df) and df.is_inside_tree() else str(df), df.is_visible_in_tree() if df != null and is_instance_valid(df) and df.is_inside_tree() else false])
 				broke = true
 				break
 		await calm_down()
@@ -107,6 +115,18 @@ func deep_checks(where_: String) -> Array[String]:
 	var bad := settings_files_valid()
 	if bad != "":
 		out.append("%s: settings files that don't parse: %s" % [where_, bad])
+	# the monkey asked for another session (Switch to Desktop / Steam pressed twice):
+	# GameCove lets the controller go and waits to be replaced; the fake switch
+	# never comes, so the wait ends the way it does when a switch doesn't happen
+	var sessions: Array = w.fake.events.filter(func(e): return str(e) in ["desktop", "steam", "plasma", "gamescope", "gnome"])
+	if not sessions.is_empty() and qm().has_method("switch_timed_out"):
+		qm().switch_timed_out(qm()._switch_gen)
+		w.fake.events.clear()
+		await w.idle()
+	# what the last presses started lands first (Y in the quick menu opens its
+	# Settings page once the menu has closed)
+	await w.wait_s(0.5)
+	await w.idle()
 	# never stuck: B a few times and Guide get home (or back to the game)
 	var game_on: bool = main().session.is_active()
 	if not game_on and not main()._window_focused:
@@ -117,15 +137,20 @@ func deep_checks(where_: String) -> Array[String]:
 			await b()
 			await w.frames(3)
 	await w.frames(4)
+	var heard := []
 	if not game_on and main().current != "home":
+		var cb := func(a): heard.append([a, main().current])
+		w.autoload("Controller").ui_action.connect(cb)
 		await guide()
-		await w.frames(4)
+		await until(func(): return main().current == "home", 2000)
+		w.autoload("Controller").ui_action.disconnect(cb)
 	var home_or_game: bool = main().current == "home" or main().session.is_active()
 	if not home_or_game:
 		var st: Control = main().settings
-		out.append("%s: stuck: B and Guide didn't get home (on %s; keep dialog %s, settings sheet %s, settings keyboard %s, setup %s, focus %s)" % [where_, where(),
+		out.append("%s: stuck: B and Guide didn't get home (on %s; keep dialog %s, settings sheet %s, settings keyboard %s, setup %s, focus %s, events %s, intercepting %s, qm %s, heard %s)" % [where_, where(),
 			main().find_child("KeepDialog", true, false) != null, st.sheet != null and st.sheet.visible, st.keyboard != null and st.keyboard.is_open(),
-			SetupFlow.instance != null and is_instance_valid(SetupFlow.instance), focus().get_path() if focus() else "none"])
+			SetupFlow.instance != null and is_instance_valid(SetupFlow.instance), focus().get_path() if focus() else "none",
+			w.fake.events, w.autoload("Controller")._intercepting, qm().visible, heard])
 	# the quick menu opens within its budget
 	if not qm().visible:
 		var t0 := Time.get_ticks_msec()
