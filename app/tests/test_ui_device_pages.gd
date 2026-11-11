@@ -192,6 +192,24 @@ func test_storage_bars_watch_and_measure() -> void:
 	_done(p, s)
 
 
+func test_storage_watches_only_while_it_shows() -> void:
+	# inside Settings > Device every panel is in the tree; a hidden Storage tab must not watch (behind a game)
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var s := Fakes.services()
+	var host := Control.new()
+	host.visible = false
+	root.add_child(host)
+	var p: Control = StoragePage.build(s)
+	host.add_child(p)
+	p._open_if_shown()
+	ok(not s["storage"].calls.has("watch true"), "a hidden panel doesn't watch")
+	host.visible = true
+	p._open_if_shown()
+	ok(s["storage"].calls.has("watch true"), "a shown one does")
+	p.closed()
+	host.free()
+
+
 func test_storage_loading_and_empty() -> void:
 	var s := Fakes.services()
 	s["storage"].st = {"ready": false, "error": "", "drives": [], "libraries": []}

@@ -1,8 +1,8 @@
 extends "res://scripts/ui/device/device_panel.gd"
 ## Storage page: every drive that can hold games (internal, SD card, USB) with
 ## a usage bar, and the game folders on them. Storage.watch(true) while the
-## page is in the tree, so a card or drive that comes or goes shows up at once;
-## watch(false) when it leaves.
+## page shows, so a card or drive that comes or goes shows up at once;
+## watch(false) when it closes or leaves.
 
 const Icons := preload("res://scripts/ui/icons.gd")
 const KeepFocus := preload("res://scripts/ui/keep_focus.gd")
@@ -39,7 +39,19 @@ func _build() -> void:
 
 
 func _enter_tree() -> void:
-	opened()
+	# only while it shows: inside Settings > Device every panel is in the tree, and the Device page
+	# opens / closes the one whose tab is picked (a hidden Storage panel must not watch behind a game)
+	call_deferred("_open_if_shown")
+
+
+func _open_if_shown() -> void:
+	var n: Node = self
+	while n is CanvasItem:
+		if not (n as CanvasItem).visible:
+			return
+		n = n.get_parent()
+	if is_instance_valid(self):
+		opened()
 
 
 func closed() -> void:
