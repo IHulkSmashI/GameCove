@@ -1,0 +1,55 @@
+{
+ "_about": "Where every FSR 4 file GameCove ships came from: one row per file with its source, author, terms, sha256 and date. Kept in step with versions.json by packaging/helpers/tests/test_bundle.py; credits are in CREDITS.md. A row is only ever added for a file whose bytes are pinned in versions.json. The signed nightly list can replace a set with a newer one (72 hours unchanged upstream, smoke check, the set before kept for rollback) and tools/upscalers/withdrawn.json takes a set off every device.",
+ "files": [
+  {
+   "component": "fsr4_amd",
+   "file": "amd_fidelityfx_upscaler_dx12.dll",
+   "what": "FSR Upscaling 4.1.2 from AMD's FSR SDK 2.4.0, the signed binary (file version 4.1.2.4555). Carries the FP8 model and the INT8 and lightweight INT8 models.",
+   "author": "Advanced Micro Devices, Inc.",
+   "official": true,
+   "source": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/tree/7539ae8b6568ad29ed78a753404351daf3b5cca7/Kits/FidelityFX/signedbin",
+   "terms": "AMD FidelityFX SDK licence (Kits/FidelityFX/docs/license.md): redistribution in binary form with its notice, no reverse engineering. The notice ships as licenses/AMD-FidelityFX-SDK-license.md.",
+   "sha256": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace",
+   "size": 57664272,
+   "date": "2026-10-28",
+   "delivery": "inside every package (bin/fsr4-xmx/fsr-original.dll holds the same bytes; bin/upscalers/bundle.json points at it), also on the mirror",
+   "tiers": ["amd_rdna4", "amd_halo", "amd_rdna35", "amd_rdna3", "amd_z2a", "amd_rdna2"],
+   "why": "AMD's own release is the build every OptiScaler user and both FSR 4 capable Protons run, and it is the only FSR 4 file with redistribution terms. On chips AMD lists (RDNA 4, Ryzen AI Max, 880M / 890M, Z2 A) it picks its model by itself. On chips AMD doesn't list (780M class such as the Z1 Extreme, and RDNA 2) OptiScaler's own switch (Fsr4ForceEnableInt8) runs the same file's INT8 model, so no community build is needed there."
+  },
+  {
+   "component": "fsr4_xmx",
+   "file": "amd_fidelityfx_upscaler_dx12.dll",
+   "what": "FSR 4.1.2 for Intel's XMX cores: a drop-in for AMD's upscaler DLL whose network runs as Intel GPU kernels. Regular and Lite models.",
+   "author": "nitec and the OptiScaler community",
+   "official": false,
+   "source": "https://github.com/IHulkSmashI/ClawDeck/tree/34a8210e75962eaa3b7b1bf55c6f915eb036c3f6 (branch fsr4-xmx-files)",
+   "terms": "",
+   "sha256": "a609f609a3ef29ddff59adfbd27dc417bf68fcd865383b2529987a7eff1081ac",
+   "size": 45480960,
+   "date": "2026-10-29",
+   "delivery": "inside every package (bin/fsr4-xmx), copied to ~/fsr4-xmx, also on the mirror",
+   "tiers": ["intel_xmx"],
+   "why": "The only FSR 4 build that runs on Intel's XMX cores, and the one tested on the Claw 8 EX (CONTROL Resonant with XeSS frame generation 3x, 2026-11-05). Shipped byte for byte."
+  },
+  {
+   "component": "fsr4_xmx",
+   "file": "fsr-original.dll",
+   "what": "AMD's FSR 4.1.2 upscaler DLL under the name the XMX build looks for: it reads the network weights from it at run time. The same bytes as fsr4_amd's file.",
+   "author": "Advanced Micro Devices, Inc.",
+   "official": true,
+   "source": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/tree/7539ae8b6568ad29ed78a753404351daf3b5cca7/Kits/FidelityFX/signedbin",
+   "terms": "AMD FidelityFX SDK licence, as above.",
+   "sha256": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace",
+   "size": 57664272,
+   "date": "2026-10-28",
+   "delivery": "inside every package (bin/fsr4-xmx)",
+   "tiers": ["intel_xmx"],
+   "why": "The XMX build is made for exactly this AMD release; a newer AMD file is never paired with it by itself."
+  }
+ ],
+ "never_shipped": [
+  {"what": "the FSR 4.0.2 INT8 build that leaked from AMD", "why": "not a release, no terms"},
+  {"what": "amdxcffx64.dll and amdxc64.dll (AMD's driver files, also the copy another vendor's driver carries)", "why": "driver licence, no redistribution terms; Proton fetches its own when PROTON_FSR4_UPGRADE is set"},
+  {"what": "anything from NVIDIA (nvngx_dlss.dll, nvngx_dlssg.dll, Streamline)", "why": "only a game's own copy is ever used"}
+ ]
+}

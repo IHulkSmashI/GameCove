@@ -43,6 +43,7 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 | — | steamdb.info | Nothing: GameCove never contacts SteamDB (it forbids scraping). The page shows a QR code with the game's SteamDB address for your phone. | — | — | `app/scripts/ui/games/insights_card.gd` |
 | 11 | steamcommunity.com, `IWishlistService` | Your Steam profile name or SteamID64 | You import your wishlist | You start it | `discover.gd` |
 | 12a | github.com (`upscalers/upscalers.json`, `.sigstore.json`; the upscaler files on `upscalers*` releases, then their upstream release) | Nothing personal | The list: at most daily, 90 s after start (background check), and before any upscaler install or update; files: only when you install or update | Background lookups (the daily check); installs and updates: you start them | `app/scripts/controls/providers/perf.gd`, `packaging/helpers/gamecove_upscale/mirror.py` |
+| 12c | builds.lsfg-vk.dev (lsfg-vk's release tarball, pinned by sha256) | Nothing personal | You press Set up Lossless frame generation and Lossless Scaling is installed from your Steam library; never in the background | You start it | `packaging/helpers/gamecove_upscale/lsfg.py` |
 | 12b | api.github.com (`repos/GloriousEggroll/proton-ge-custom/releases/latest`), then github.com (that release's `GE-Proton*.tar.gz` and `.sha512sum`, only from GloriousEggroll's release page) | Nothing personal (curl's request with a `User-Agent: GameCove` header) | You press Check, then Install, in Settings > Performance > GE-Proton; never in the background | You start it | `app/scripts/launch/proton_ge.gd` |
 | 12 | github.com (`firmware/firmware.json.gz`, `.sha256`, `.sigstore.json`) | Nothing | Checking for updates | You start it | `app/scripts/system/updates.gd` |
 | 13 | The maker's own download site (allow-listed per maker, https only, redirects included; at most 5 redirects, and the address the download ends on must be on the maker's site (the hops in between are https but not host-checked); the file must match the sha256 in the signed list; offered only when cosign on this device checked the list's signature) | Nothing | You prepare a USB drive | You start it | `updates.gd`, `firmware_index.gd` |
@@ -60,8 +61,12 @@ as `<file>.bad` and Background lookups, Look up game details (`settings.cfg`) an
 | 21 | Inbound, on your LAN only: your phone opens a clip's one-time page | GameCove sends the page and the one clip you picked; your phone sends nothing but its requests | Only while the Send to phone code shows: until the clip is downloaded in full, you close it, or 10 minutes pass | You start it | `app/scripts/system/clip_drop.gd` |
 | 22 | Flathub (dl.flathub.org) through `flatpak install` | Flatpak's own requests | You press Install GPU Screen Recorder (system-wide) or Get a video player (mpv, for your user) in Settings > Media | You start it | `app/scripts/ui/settings/media_page.gd` |
 
-Helpers and scripts outside the app: the upscaling helper downloads OptiScaler, OptiPatcher, fakenvapi,
-REFramework, xess-xmx-linux and the FSR 4 files only when you install or update them: the newest versions from
+Helpers and scripts outside the app: OptiScaler, OptiPatcher, fakenvapi, REFramework, xess-xmx-linux's release and
+the FSR 4 files come inside the GameCove package (`bin/upscalers`, `bin/fsr4-xmx`), so setting a game up fetches
+nothing. The upscaling helper downloads one of them only when the signed list names a newer tested version than
+the packaged one (then a game being set up, by you or by "Best for this handheld", fetches that version once), or
+when a build has no packaged copy. The XeSS XMX driver's own installer fetches Intel's compiler and libraries and
+AMD's FidelityFX files from those vendors when you install the driver. The newest versions come from
 GameCove's signed `upscalers.json` (row 12a; its signature is checked with the cosign the installer pins, which it
 downloads once from sigstore's GitHub release if the system has none; cosign itself may refresh Sigstore's public
 trust root from tuf-repo-cdn.sigstore.dev, sending nothing about you), else the tested pins in

@@ -4,6 +4,7 @@ used as before; a bundle with the wrong bytes is never used."""
 import hashlib
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -209,3 +210,41 @@ def test_purge_keeps_fsr4_xmx_files_the_user_put_there(tmp_path):
     assert cli.run(["purge", "--home", home])["ok"]
     assert sorted(os.listdir(os.path.join(home, optiscaler.FSR4_XMX_DIR))) == sorted(optiscaler.FSR4_XMX_FILES)
     assert upkeep._our_fsr4_set(home) is False
+
+
+# ---- where every FSR 4 file came from (data/fsr4_files.json) ------------------------------------------------------
+def test_every_shipped_fsr4_file_has_its_provenance_and_matches_the_pins():
+    from gamecove_upscale import chips
+    root = os.path.join(HERE, "..", "..", "..")
+    doc = json.load(open(os.path.join(HERE, "..", "gamecove_upscale", "data", "fsr4_files.json"), encoding="utf-8"))
+    pins = fetch_bundle.load_pins()
+    rows = doc["files"]
+    # every pinned FSR 4 file has exactly one row, and no row names a file that isn't pinned
+    pinned = {(c, n): s for c in ("fsr4_amd", "fsr4_xmx") for n, s in pins[c]["files"].items()}
+    assert {(r["component"], r["file"]): r["sha256"] for r in rows} == pinned
+    for r in rows:
+        for k in ("what", "author", "source", "sha256", "date", "delivery", "why"):
+            assert str(r[k]).strip(), (r["file"], k)
+        assert r["source"].startswith("https://github.com/") and len(r["sha256"]) == 64 and r["size"] > 1 << 20
+        assert r["date"][:4].isdigit() and len(r["date"]) == 10
+        commit = re.search(r"/([0-9a-f]{40})(/|$)", pins["fsr4_amd" if r["official"] else "fsr4_xmx"]["base"]).group(1)
+        assert commit in r["source"], (r["file"], "the source names the pinned commit")
+        assert r["official"] is (r["author"].startswith("Advanced Micro Devices"))
+        assert r["terms"] if r["official"] else r["terms"] == ""      # terms only where the author published some
+    # every chip that is offered FSR 4 has a file, and the official one wherever it does the job
+    covered = {t for r in rows for t in r["tiers"]}
+    assert covered == set(chips.FSR4) | {"intel_xmx"}
+    for t in chips.FSR4:
+        assert [r["component"] for r in rows if t in r["tiers"]] == ["fsr4_amd"], t
+    # the credit is in CREDITS.md, in plain words, and says nothing about anyone's say-so
+    credits = open(os.path.join(root, "CREDITS.md"), encoding="utf-8").read()
+    assert "FSR 4 on XMX** by nitec and the OptiScaler community" in credits and "AMD FSR SDK" in credits
+    for path in ("CREDITS.md", "README.md", "docs/UPSCALING.md", "packaging/helpers/gamecove_upscale/data/fsr4_files.json",
+                 "packaging/helpers/gamecove_upscale/data/versions.json", "tools/upscalers/fetch_fsr4.py"):
+        text = open(os.path.join(root, path), encoding="utf-8").read().lower()
+        for m in re.finditer("nitec", text):
+            near = text[max(0, m.start() - 160): m.start() + 160]
+            for word in ("permission", "allowed us", "'s ok", "consent", "agreed", "approved", "blessing", "authoris", "authoriz"):
+                assert word not in near, (path, word)
+    names = " ".join(str(n["what"]).lower() for n in doc["never_shipped"])
+    assert "leaked" in names and "amdxcffx64" in names and "nvidia" in names
