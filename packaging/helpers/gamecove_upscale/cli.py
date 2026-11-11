@@ -28,12 +28,18 @@ import json
 import os
 import sys
 
-from . import framegen, games, launchenv, livedb, mirror, optiscaler, upkeep, xess
+from . import best, chips, framegen, games, launchenv, livedb, mirror, optiscaler, upkeep, xess
 
 COMMANDS = ("recommend", "status", "choose", "apply", "undo", "state", "refresh", "latency", "xess-install", "xess-remove",
-            "check", "update", "game-update")
+            "check", "update", "game-update", "plan", "prepare", "mode", "native", "caps")
 # commands that may download: the signed index is fetched (at most every mirror.FRESH_S) before they run
 INSTALLS = ("choose", "apply", "xess-install", "game-update")
+# GameCove: "best for your handheld" (best.py)
+#   plan      what GameCove would pick for the game and whether it may set it up by itself (read-only)
+#   prepare   set the game up ahead of its start when that is safe (run when a game is installed, updated or opened)
+#   mode      --mode best|custom|native: how the game is handled;  native: everything out, nothing added
+#   caps      what this GPU can run (chips.capabilities), no game needed
+#   status    also answers "active": the read-out of the last start, and "mode"
 
 
 def _state(home: str, gpu: dict) -> dict:
@@ -83,13 +89,31 @@ def run(argv: list[str]) -> dict:
     p.add_argument("--online", action="store_true")
     p.add_argument("--allow-unpinned", action="store_true")
     p.add_argument("--component", default=None, choices=sorted(mirror.NAMES))
+    p.add_argument("--generator", default=None, choices=sorted(launchenv.FG_OUTS))
+    p.add_argument("--mode", default=None, choices=best.MODES)
+    p.add_argument("--anticheat", action="store_true", help="the app's data says this game has anti-cheat")
     a = p.parse_args(argv)
     gpu = parse_gpu(a.gpu)
     home = a.home
-    if a.command in ("recommend", "status", "choose", "apply", "undo", "latency", "game-update") and not a.key:
+    if a.command in ("recommend", "status", "choose", "apply", "undo", "latency", "game-update", "plan", "prepare", "mode", "native") and not a.key:
         raise ValueError(f"{a.command} needs --key")
     if a.command in INSTALLS and not (a.command == "choose" and a.upscaler == "own"):
         mirror.refresh(home)
+    if a.command == "caps":
+        return {"ok": True, **chips.capabilities(gpu)}
+    if a.command == "plan":
+        return best.plan(home, a.key, gpu, a.dir, a.name, a.anticheat)
+    if a.command == "prepare":
+        return best.prepare(home, a.key, gpu, a.dir, a.name, a.anticheat, a.allow_unpinned)
+    if a.command == "native":
+        return best.native(home, a.key, gpu, a.dir)
+    if a.command == "mode":
+        if a.mode == "native":
+            return best.native(home, a.key, gpu, a.dir)
+        if a.mode:
+            best.set_mode(home, a.key, a.mode)
+        return {"ok": True, "mode": best.get_mode(home, a.key),
+                **(best.prepare(home, a.key, gpu, a.dir, a.name, a.anticheat) if a.mode == "best" else {})}
     if a.command == "check":
         return upkeep.check(home, gpu, refresh=a.online)
     if a.command == "update":
@@ -99,11 +123,18 @@ def run(argv: list[str]) -> dict:
     if a.command == "recommend":
         return {"ok": True, **games.recommend(home, a.key, gpu, a.dir, a.name, a.online)}
     if a.command == "status":
-        return {"ok": True, **games.status(home, a.key, gpu, a.dir)}
+        return best.status(home, a.key, gpu, a.dir)
     if a.command == "choose":
-        return games.choose(home, a.key, a.upscaler, a.fg, gpu, a.dir, a.overlay, a.allow_unpinned, a.online)
+        r = games.choose(home, a.key, a.upscaler, a.fg, gpu, a.dir, a.overlay, a.allow_unpinned, a.online,
+                         generator=a.generator, anticheat=a.anticheat)
+        if r.get("ok"):
+            best.set_mode(home, a.key, "custom")
+        return r
     if a.command == "apply":
-        return games.apply_recommended(home, a.key, gpu, a.dir, a.allow_unpinned, a.online)
+        r = games.apply_recommended(home, a.key, gpu, a.dir, a.allow_unpinned, a.online, anticheat=a.anticheat)
+        if r.get("ok"):
+            best.set_mode(home, a.key, "best")
+        return r
     if a.command == "undo":
         return games.undo(home, a.key, gpu, a.dir)
     if a.command == "state":
