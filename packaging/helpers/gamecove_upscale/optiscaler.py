@@ -88,6 +88,9 @@ SKIP_SUFFIX = (".bat",)                  # v10: OptiScaler/Streamlined_fetcher_w
 # always: OptiPatcher (plugins/) loads, and the HQ font stays off (its auto mode asserts on a missing font under
 # Proton; Decky Framegen sets the same two)
 BASE_INI = {"Plugins_LoadAsiPlugins": "true", "Menu_UseHQFont": "false"}
+# how deep below the game's folder main_exe_dir() looks for the exe: the folder OptiScaler goes into is at most this
+# many levels down. guard.py scans at least as deep (review H4: it stopped one level short).
+EXE_DEPTH = 5
 MAIN_EXE_SKIP = re.compile(r"(unins|crash|setup|redist|launcher|vc_?redist|dxsetup|easyanticheat|eac|ue4prereq|cefprocess|helper|report)", re.I)
 
 
@@ -290,7 +293,7 @@ def main_exe_dir(game_dir: str, known_exes: list[str] | None = None) -> str | No
     shipping: list[tuple[bool, int, str]] = []
     for r, d, f in os.walk(game_dir):
         d.sort()                                         # the same folder every time, whatever the file system's order
-        if r.count(os.sep) - base >= 5:
+        if r.count(os.sep) - base >= EXE_DEPTH:
             d[:] = []
         for x in sorted(f):
             lo = x.lower()

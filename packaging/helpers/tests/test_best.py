@@ -102,6 +102,30 @@ def test_anticheat_in_the_folder_is_found(tmp_path, files, system):
     assert guard.anticheat(str(tmp_path / "g")) == [system]
 
 
+def test_anticheat_scan_reaches_every_folder_optiscaler_can_go_into(tmp_path):
+    """Review H4: the scan stopped one level short of placement. An exe as deep as main_exe_dir() looks, with
+    EasyAntiCheat next to it, is where OptiScaler would go, so the scan must see it."""
+    deep = os.path.join(*["d%d" % i for i in range(optiscaler.EXE_DEPTH)])
+    _w(tmp_path / "g" / deep / "Game.exe", "x" * 4096)
+    _w(tmp_path / "g" / deep / "EasyAntiCheat" / "Settings.json")
+    g = str(tmp_path / "g")
+    assert optiscaler.main_exe_dir(g) == os.path.join(g, deep)
+    assert guard.anticheat(g) == ["Easy Anti-Cheat"]
+    assert guard.DEPTH > optiscaler.EXE_DEPTH                       # derived from placement, never shallower
+
+
+def test_anticheat_scan_looks_up_to_the_games_own_folder(tmp_path):
+    """An app that passes the game's Binaries folder still sees EasyAntiCheat/ at the game's top; the scan never
+    climbs into the library (another game's anti-cheat isn't this game's)."""
+    common = tmp_path / "lib" / "steamapps" / "common"
+    _w(common / "Game" / "EasyAntiCheat" / "EasyAntiCheat_x64.dll")
+    _w(common / "Game" / "Game" / "Binaries" / "Win64" / "Game-Win64-Shipping.exe")
+    assert guard.anticheat(str(common / "Game" / "Game" / "Binaries" / "Win64")) == ["Easy Anti-Cheat"]
+    _w(common / "Other" / "BattlEye" / "BEClient_x64.dll")
+    _w(common / "Clean" / "Clean.exe")
+    assert guard.anticheat(str(common / "Clean")) == []
+
+
 def test_no_anticheat_false_positives(tmp_path):
     for f in ("Game.exe", "pb/readme.txt", "Engine/Binaries/ThirdParty/x.dll", "beta/notes.txt", "nvngx_dlss.dll"):
         _w(tmp_path / "g" / f)

@@ -11,7 +11,16 @@ from __future__ import annotations
 import fnmatch
 import os
 
-DEPTH = 4
+from .optiscaler import EXE_DEPTH
+
+# every folder OptiScaler can be put into (optiscaler.main_exe_dir looks EXE_DEPTH levels down) is scanned, and one
+# level inside each, so a folder of anti-cheat files next to the exe is seen too (review H4: the scan stopped one
+# level short of where OptiScaler goes)
+DEPTH = EXE_DEPTH + 1
+# folders that hold many games (a library): the scan upwards from a game's folder stops below them
+LIBRARY_DIRS = {"common", "steamapps", "games", "heroic", "gog games", "epic games", "lutris", "legendary", "itch",
+                "roms", "faugus", "bottles", "drive_c", "program files", "program files (x86)"}
+MAX_UP = 3
 # folder and file names (lower case, fnmatch) the anti-cheat systems install next to a game
 ANTICHEAT = {
     "Easy Anti-Cheat": ("easyanticheat", "easyanticheat_eos", "easyanticheat_x64.dll", "easyanticheat_eos_setup.exe",
@@ -49,17 +58,41 @@ def _walk(game_dir: str, depth: int):
         yield r, d, f
 
 
+def _parents(game_dir: str):
+    """The folders above game_dir that still belong to the same game: up to the game's own folder in a library
+    (steamapps/common/<game>, Heroic's or Lutris' <game>), never the library itself, the home folder or /."""
+    d = os.path.realpath(game_dir)
+    stop = {os.path.realpath(os.path.expanduser("~")), os.sep}
+    for _ in range(MAX_UP):
+        up = os.path.dirname(d)
+        if up == d or up in stop or os.path.basename(d).lower() in LIBRARY_DIRS or \
+                os.path.basename(up).lower() in LIBRARY_DIRS or os.path.isdir(os.path.join(up, "steamapps")):
+            return
+        yield up
+        d = up
+
+
+def _match(names: set[str], seen: set[str]) -> None:
+    for system, pats in ANTICHEAT.items():
+        strong = [p for p in pats if p not in _WEAK]
+        if any(fnmatch.filter(names, p) for p in strong):
+            seen.add(system)
+
+
 def anticheat(game_dir: str | None) -> list[str]:
-    """Names of the anti-cheat systems whose files are in the game's folder ([] = none found)."""
+    """Names of the anti-cheat systems whose files are in the game's folder ([] = none found): everything below it
+    as deep as OptiScaler can go (DEPTH), and what sits directly in the folders above it up to the game's own
+    folder in its library (an app that passes a game's Binaries folder still sees EasyAntiCheat/ at the top)."""
     if not game_dir or not os.path.isdir(game_dir):
         return []
     seen: set[str] = set()
     for _r, dirs, files in _walk(game_dir, DEPTH):
-        names = {x.lower() for x in dirs} | {x.lower() for x in files}
-        for system, pats in ANTICHEAT.items():
-            strong = [p for p in pats if p not in _WEAK]
-            if any(fnmatch.filter(names, p) for p in strong):
-                seen.add(system)
+        _match({x.lower() for x in dirs} | {x.lower() for x in files}, seen)
+    for up in _parents(game_dir):
+        try:
+            _match({x.lower() for x in os.listdir(up)}, seen)
+        except OSError:
+            break
     return sorted(seen)
 
 
