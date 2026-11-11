@@ -317,7 +317,7 @@ func _init() -> void:
 	keyboard.offset_right = 400
 	keyboard.offset_top = -420
 	keyboard.offset_bottom = -64
-	keyboard.text_changed.connect(set_query)
+	keyboard.text_changed.connect(_query_typed)
 	keyboard.closed.connect(func(_t): _after_search())
 	add_child(keyboard)
 	_refresh_toolbar()
@@ -451,6 +451,25 @@ func cycle_sort(d := 1) -> void:
 
 func set_query(q: String) -> void:
 	query = q
+	_query_pending = false
+	_rebuild(false)
+
+
+## The keyboard's text: several keys in one frame (a held key, a paste) rebuild once, after the last.
+func _query_typed(q: String) -> void:
+	query = q
+	if not _query_pending:
+		_query_pending = true
+		call_deferred("_apply_query")
+
+
+var _query_pending := false
+
+
+func _apply_query() -> void:
+	if not _query_pending:
+		return
+	_query_pending = false
 	_rebuild(false)
 
 
@@ -924,7 +943,7 @@ func jump_letter(d: int) -> void:
 
 
 static func _initial(g: Dictionary) -> String:
-	var t := View.fold(String(g.get("title", "")))
+	var t := View.folded(String(g.get("title", "")))
 	if t.begins_with("the "):
 		t = t.substr(4)
 	return t.substr(0, 1) if t != "" else "#"

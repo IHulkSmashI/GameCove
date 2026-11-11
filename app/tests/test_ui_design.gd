@@ -238,6 +238,11 @@ func test_search() -> void:
 	eq(titles.call("lta"), ["Delta Force"], "substring")
 	eq(titles.call("xyz"), [], "no match")
 	eq(View.fold("  The Witcher 3: Wild-Hunt "), "the witcher 3 wild hunt", "fold")
+	eq(View.fold("ドラゴンクエスト III"), "ドラゴンクエスト iii", "Japanese letters stay in the folded title")
+	eq(View.fold("Тетрис: Ёлка"), "тетрис ёлка", "so do Cyrillic ones")
+	eq(View.fold("Straße・Æon"), "strasse aeon", "ß and Æ fold, a middle dot separates")
+	eq(View.search([{"title": "ドラゴンクエスト III"}, {"title": "Tetris"}], "クエスト").size(), 1, "a Japanese title can be searched")
+	eq(View.folded("Café"), View.fold("Café"), "the kept fold is the same")
 
 
 # ------------------------------------------------------------ motion
