@@ -5,6 +5,7 @@ extends "res://tests/e2e/e2e_case.gd"
 ## 30 s warning any button cancels.
 
 const TSaves := preload("res://scripts/ui/texts_saves.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const EPIC := {"key": "epic:Min", "title": "Minecraft Dungeons", "store": "epic", "id": "Min", "installed": true,
 	"art": {"cover": "", "hero": "", "logo": "", "icon": ""}, "info": {}}
 
@@ -47,11 +48,15 @@ func test_epic_launch_waits_for_its_cloud_save() -> void:
 	await w.idle()
 
 
+## The last sync of the fake game: at t, with the save folder this test just made. The folder is
+## a new one every test (a new inode, often reused within the same second), so an anchor left by
+## an earlier test's sync would say "another folder" and drop the sync time (folder_guard, as it
+## should); the anchor is dropped here with the rest of that earlier sync's memory of the folder.
 func _last_sync(t: int) -> void:
-	var cfg := ConfigFile.new()
-	cfg.load(main().saves.cfg_path)
-	cfg.set_value("game:epic:Min", "last_sync", t)
-	cfg.save(main().saves.cfg_path)
+	SettingsFile.update_cfg(main().saves.cfg_path, func(c: ConfigFile):
+		c.set_value("game:epic:Min", "last_sync", t)
+		if c.has_section_key("game:epic:Min", "anchors"):
+			c.erase_section_key("game:epic:Min", "anchors"))
 
 
 func test_a_conflict_asks_and_b_starts_nothing() -> void:
