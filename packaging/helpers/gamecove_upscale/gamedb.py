@@ -21,12 +21,20 @@ KEY_RE = r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$"
 
 
 def load(path: str) -> dict:
+    """The list, or an empty one when the file is missing, isn't JSON or has the wrong shape (a list, a string, a
+    "games" that isn't a list): never raises (review low)."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             doc = json.load(f)
     except (OSError, ValueError):
         return {"games": [], "re_engine_exes": []}
-    return doc if isinstance(doc.get("games"), list) else {"games": [], "re_engine_exes": []}
+    if not isinstance(doc, dict) or not isinstance(doc.get("games"), list):
+        return {"games": [], "re_engine_exes": []}
+    for k, want in (("re_engine_exes", list), ("compat", dict), ("capcom", dict)):
+        if k in doc and not isinstance(doc[k], want):
+            doc[k] = want()
+    doc["games"] = [g for g in doc["games"] if isinstance(g, dict)]
+    return doc
 
 
 def exes_in(game_dir: str | None) -> list[str]:
@@ -42,12 +50,24 @@ def exes_in(game_dir: str | None) -> list[str]:
     return sorted(set(out))
 
 
+# Unreal project names every other game uses ("Game-Win64-Shipping.exe"): never enough to say which game it is
+# (review low: OptiScaler's list has "game" among one entry's projects, which made any such game that entry)
+GENERIC_UE = {"game", "project", "myproject", "unrealgame", "shooter"}
+
+
 def match(doc: dict, exes: list[str]) -> dict | None:
-    have = set(exes)
-    for g in doc.get("games", []):
-        if have & {e.lower() for e in g.get("exes", [])}:
+    have = set(x for x in exes if isinstance(x, str)) if isinstance(exes, (list, tuple, set)) else set()
+    games = doc.get("games") if isinstance(doc, dict) else None
+    for g in games if isinstance(games, list) else []:
+        if not isinstance(g, dict):
+            continue
+        names = [e for e in g.get("exes") or [] if isinstance(e, str)] if isinstance(g.get("exes"), list) else []
+        if have & {e.lower() for e in names}:
             return g
-        for ue in g.get("ue_exes", []):
+        ues = g.get("ue_exes") if isinstance(g.get("ue_exes"), list) else []
+        for ue in ues:
+            if not isinstance(ue, str) or ue.lower() in GENERIC_UE:
+                continue
             if {f"{ue.lower()}-win64-shipping.exe", f"{ue.lower()}-wingdk-shipping.exe"} & have:
                 return g
     return None

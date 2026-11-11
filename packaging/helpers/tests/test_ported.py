@@ -1400,3 +1400,32 @@ def test_optiscaler_undo_of_an_older_manifest_checks_the_package(tmp_path, monke
     assert not (g / "dxgi.dll").exists(), "matches the package's OptiScaler.dll: removed"
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess-2.0" and "libxess.dll" in r["kept"]
     assert not (g / "OptiScaler.ini").exists() and "OptiScaler.ini" not in r["kept"], "our own config: always ours to take out"
+
+
+def test_exe_skip_words_and_generic_unreal_names(tmp_path):
+    """Review low: MAIN_EXE_SKIP matched anywhere in the name ("eac" in Peaceful.exe, "crash" in Crashlands), and a
+    generic Unreal project name ("Game") made any Game-Win64-Shipping.exe a known game."""
+    from gamecove_upscale import optiscaler
+    for name in ("Peaceful.exe", "Crashlands2.exe", "Reporter.exe", "Helpless.exe", "Teacup.exe"):
+        assert not optiscaler.MAIN_EXE_SKIP.search(name.lower()), name
+    for name in ("unins000.exe", "UnityCrashHandler64.exe", "CrashReportClient.exe", "EasyAntiCheat_EOS_Setup.exe",
+                 "vc_redist.x64.exe", "GameLauncher.exe", "Launcher.exe", "setup.exe", "eac_launcher.exe",
+                 "UE4PrereqSetup_x64.exe", "Game_Setup.exe", "bug_report.exe"):
+        assert optiscaler.MAIN_EXE_SKIP.search(name.lower()), name
+    g = tmp_path / "pc"
+    _w(g / "Peaceful.exe", "x" * 5000)
+    _w(g / "unins000.exe", "x" * 9000)
+    assert optiscaler.main_exe_dir(str(g)) == str(g)
+    doc = gamedb.load(os.path.join(ROOT, "data", "games.json"))
+    assert gamedb.match(doc, ["game-win64-shipping.exe"]) is None
+
+
+@pytest.mark.parametrize("bad", ['[]', '"x"', '{"games": {}}', '{"games": [1, "a", null]}', '{"games": [], "compat": []}'])
+def test_lists_of_the_wrong_shape_never_raise(tmp_path, bad):
+    p = tmp_path / "games.json"
+    p.write_text(bad)
+    doc = gamedb.load(str(p))
+    assert gamedb.match(doc, ["x.exe"]) is None and gamedb.knowledge(doc, None, "1", "x")["known"] is False
+    page = '| a | English Title | I | A | N |\n| x | Foo | ✅ | ✅ | ✅ |\n<!-- opticlick-supported-games-meta %s -->'
+    for meta in ('{"games": 5}', '{"games": [5, {"game_name_en": "Foo", "cover_steam_app_ids": 7}]}', '[1]'):
+        assert isinstance(livedb.parse_supported_list(page % meta), dict)

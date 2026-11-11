@@ -153,16 +153,22 @@ def parse_supported_list(text: str) -> dict[str, dict]:
             support[_norm(cells[1])] = (cells[2], cells[3], cells[4])
     m = re.search(r"<!--\s*opticlick-supported-games-meta\s*(\{.*?\})\s*-->", text, re.S)
     try:
-        meta = json.loads(m.group(1)).get("games", []) if m else []
+        doc = json.loads(m.group(1)) if m else {}
     except ValueError:
-        meta = []
+        doc = {}
+    # the page is someone else's: any part of the wrong type is skipped, never raised on (review low)
+    meta = doc.get("games") if isinstance(doc, dict) else None
     out: dict[str, dict] = {}
-    for g in meta:
+    for g in meta if isinstance(meta, list) else []:
+        if not isinstance(g, dict):
+            continue
         name = str(g.get("game_name_en") or "")
         cols = support.get(_norm(name))
         if not cols:
             continue
         ids = g.get("cover_steam_app_ids") or ([g["cover_steam_app_id"]] if g.get("cover_steam_app_id") else [])
+        if not isinstance(ids, list):
+            ids = [ids] if isinstance(ids, (str, int)) and not isinstance(ids, bool) else []
         for appid in ids:
             out[str(appid)] = {"name": name, "intel": cols[0], "amd": cols[1], "nvidia": cols[2],
                                "game_id": g.get("game_id")}

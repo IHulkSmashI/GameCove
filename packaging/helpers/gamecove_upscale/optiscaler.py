@@ -96,7 +96,11 @@ BASE_INI = {"Plugins_LoadAsiPlugins": "true", "Menu_UseHQFont": "false"}
 # how deep below the game's folder main_exe_dir() looks for the exe: the folder OptiScaler goes into is at most this
 # many levels down. guard.py scans at least as deep (review H4: it stopped one level short).
 EXE_DEPTH = 5
-MAIN_EXE_SKIP = re.compile(r"(unins|crash|setup|redist|launcher|vc_?redist|dxsetup|easyanticheat|eac|ue4prereq|cefprocess|helper|report)", re.I)
+# exes that are never the game: matched as whole words or name endings, not anywhere in the name (review low: "eac"
+# skipped Peaceful.exe, "report" a game named Reporter, "crash" Crashlands)
+MAIN_EXE_SKIP = re.compile(r"^(unins\w*|.*crash(report|handler|pad|sender|_?reporter)\w*|.*(easyanticheat|ue4prereq|cefprocess|"
+                           r"dxsetup|vc_?redist|redist)[\w.]*|(.*[^a-z0-9])?(setup|eac|installer|report)([^a-z0-9].*)?|"
+                           r".*(launcher|helper|setup))\.exe$", re.I)
 
 
 # ---- the package ------------------------------------------------------------------------------------------------
