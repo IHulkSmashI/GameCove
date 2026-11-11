@@ -767,6 +767,30 @@ func test_page_hero() -> void:
 	p.setup(setup, [games[2]])
 	eq(p.hero_fallback.pattern_systems, ["GBA"], "no covers yet: a pattern of your consoles")
 	p.free()
+	# The frame's shape: at 1280x800 the hero is narrower for its height than at 1920x1200,
+	# and a fixed-size collage was cut off the frame's right edge (half a cover).
+	for fs in [Vector2(1216, 336), Vector2(1840, 336)]:
+		var cs := EmulationPage.collage_size(fs)
+		ok(absf(float(cs.x) / cs.y - fs.x / fs.y) < 0.01, "collage shaped like a %dx%d frame (%s)" % [fs.x, fs.y, cs])
+	var q: Control = EmulationPage.new()
+	q.setup(setup, games)
+	ok(q.hero.texture == null, "no collage before the frame has a size")
+	q.frame.resized.emit()   # laid out (outside the tree it never is)
+	ok(q.hero.texture == null, "still none at no size")
+	q.frame.size = Vector2(1216, 336)
+	q.frame.resized.emit()
+	var tex: Texture2D = q.hero.texture
+	ok(tex != null and absf(float(tex.get_width()) / tex.get_height() - 1216.0 / 336.0) < 0.01, "then one in its shape")
+	var from: float = q.art_from()
+	ok(from >= EmulationPage.COLLAGE_FROM and 32.0 + q.actions_row.get_combined_minimum_size().x < from * 1216.0,
+		"and it starts past the buttons (%.2f of the width)" % from)
+	var pat: Control = EmulationPage.new()
+	pat.setup(setup, [games[2]])
+	pat.frame.size = Vector2(1216, 336)
+	pat.frame.resized.emit()
+	eq(pat.hero_fallback.pattern_from, pat.art_from(), "the console pattern too")
+	pat.free()
+	q.free()
 
 
 func test_game_page_facts_and_placeholder() -> void:

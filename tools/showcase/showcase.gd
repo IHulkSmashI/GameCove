@@ -364,8 +364,11 @@ func _emulation(lib: Node) -> void:
 	for s in specs:
 		i += 1
 		var art := none.duplicate()
-		art["cover"] = _cache("emu/%s-cover.png" % s[5])
-		art["hero"] = _cache("emu/%s-snap.png" % s[5])
+		# SHOWCASE_ROM_ART=0: ROMs ES-DE has no art for (a fresh install): console
+		# covers on the tiles and the console pattern behind the Emulation page.
+		if OS.get_environment("SHOWCASE_ROM_ART") != "0":
+			art["cover"] = _cache("emu/%s-cover.png" % s[5])
+			art["hero"] = _cache("emu/%s-snap.png" % s[5])
 		# Every ROM is a game of its own (scripts/library/stores/roms.gd): ES-DE's details, its art, our play time.
 		var id := "rom:%s/%s" % [s[1], s[8]]
 		var summary := "From your %s ROM folder. It runs in RetroArch (%s) through EmuDeck." % [s[3], s[4]]

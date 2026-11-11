@@ -96,6 +96,11 @@ func _draw() -> void:
 	if w < 2.0 or h < 2.0:
 		return
 	var shape := rounded_rect(Rect2(Vector2.ZERO, size), corner)
+	# The console pattern (a hero): on the theme's own card like the cover collage,
+	# so the title and buttons on the left sit on a calm ground in every theme.
+	if not pattern_systems.is_empty():
+		_draw_pattern(w, h, shape)
+		return
 	var a := colors[0]
 	var b := colors[1]
 	# Diagonal gradient: dark base bottom-left, brighter partner top-right.
@@ -104,13 +109,6 @@ func _draw() -> void:
 		var t := clampf((p.x / w) * 0.55 + (1.0 - p.y / h) * 0.45, 0.0, 1.0)
 		cols.append(a.lerp(b, t))
 	draw_polygon(shape, cols)
-
-	if not pattern_systems.is_empty():
-		_draw_pattern(w, h, shape)
-		var edge := shape.duplicate()
-		edge.append(shape[0])
-		draw_polyline(edge, Color(1, 1, 1, 0.10), 1.0, true)
-		return
 	var decor: Array = []
 	match motif:
 		"waves":
@@ -172,32 +170,40 @@ func _draw_monogram(w: float, h: float) -> void:
 	draw_string(f, Vector2(0, cy + (asc - desc) / 2.0), mono, HORIZONTAL_ALIGNMENT_CENTER, w, fs, Color(1, 1, 1, 0.34))
 
 
-## Rows of little cards across the right of the hero, one per console, in its
-## colours with its name: a pattern of the user's own systems, no console art.
-func _draw_pattern(w: float, h: float, shape: PackedVector2Array) -> void:
-	var ch := h * 0.36
+## Where the console pattern starts across the hero, and how far its left end
+## fades in: the same as the cover collage (emulation_page.gd COLLAGE_FROM / FADE).
+const PATTERN_FROM := 0.5
+const PATTERN_FADE := 0.14
+## Where this one starts (the Emulation page moves it past its buttons).
+var pattern_from := PATTERN_FROM
+
+
+## Rows of little cards across the right half of the hero, one per console, in
+## its colours with its name: a pattern of the user's own systems, no console
+## art. Cards the frame's edge would cut are left out; the leftmost fade in.
+func _draw_pattern(w: float, h: float, _shape: PackedVector2Array) -> void:
+	var gap := h * 0.05
+	var ch := (h - gap * 3.0) / 2.0
 	var cw := ch * 0.74
-	var gap := ch * 0.12
 	var f: Font = ThemeLib.font("semibold")
 	var fs := maxi(11, int(cw * 0.14))
+	var from := w * pattern_from
 	var i := 0
-	for row in 3:
-		var y := gap * 0.5 + row * (ch + gap) - ch * 0.35
-		var x := w - cw - gap - (cw + gap) * 0.5 * (row % 2)
-		while x > w * 0.28:
+	for row in 2:
+		var y := gap + row * (ch + gap)
+		var x := w - cw - gap * 2.0 - (cw + gap) * 0.5 * (row % 2)
+		while x >= from:
 			var sys := str(pattern_systems[i % pattern_systems.size()])
 			i += 1
 			var c: Array[Color] = ArtColor.fallback_colors("system:" + sys.to_lower())
+			var k := smoothstep(0.0, 1.0, (x - from) / maxf(w * PATTERN_FADE, 1.0))
 			var r := Rect2(x, y, cw, ch)
 			var card := rounded_rect(r, cw * 0.1)
-			var inside := Geometry2D.intersect_polygons(card, shape)
-			for poly in inside:
-				var cols := PackedColorArray()
-				for p in poly:
-					cols.append(c[0].lerp(c[1], clampf((p.y - y) / ch, 0.0, 1.0)))
-				draw_polygon(poly, cols)
-			if not inside.is_empty() and r.position.y > 0.0 and r.end.y < h:
-				draw_string(f, Vector2(x, y + ch * 0.2 + f.get_ascent(fs) * 0.5), sys, HORIZONTAL_ALIGNMENT_CENTER, cw, fs, Color(1, 1, 1, 0.8))
+			var cols := PackedColorArray()
+			for p in card:
+				cols.append(Color(c[0].lerp(c[1], clampf((p.y - y) / ch, 0.0, 1.0)), k))
+			draw_polygon(card, cols)
+			draw_string(f, Vector2(x, y + ch * 0.2 + f.get_ascent(fs) * 0.5), sys, HORIZONTAL_ALIGNMENT_CENTER, cw, fs, Color(1, 1, 1, 0.86 * k))
 			x -= cw + gap
 
 

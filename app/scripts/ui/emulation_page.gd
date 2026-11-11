@@ -222,9 +222,10 @@ func _title_meta(title: String, meta_text: String) -> VBoxContainer:
 
 # ------------------------------------------------------------ the hero
 
-## Covers in the hero collage at most, and the size it's drawn at.
+## Covers in the hero collage at most, and the height it's drawn at (its width
+## follows the hero frame's shape, so the frame never crops a cover off its edge).
 const COLLAGE_MAX := 8
-const COLLAGE_SIZE := Vector2i(1800, 420)
+const COLLAGE_H := 420
 ## The collage starts this far across (the shared scrim fades it in from there).
 const COLLAGE_FROM := 0.5
 ## Its left edge fades in over this part of the width (no hard cut beside the buttons).
@@ -239,16 +240,58 @@ static var _sync_jobs := false
 ## Never console makers' art or logos.
 func _hero_art() -> void:
 	var covers := collage_covers(emu_games)
+	# Drawn at the frame's shape and clear of the buttons: again once it has its size.
+	var sized := frame.size.x >= 2.0 and frame.size.y >= 2.0
+	if not sized and not frame.resized.is_connected(_hero_art):
+		frame.resized.connect(_hero_art, CONNECT_ONE_SHOT)
+	# The buttons grow as they're styled and laid out: the art moves with them.
+	if actions_row != null and not actions_row.sort_children.is_connected(_on_actions_laid_out):
+		actions_row.sort_children.connect(_on_actions_laid_out)
+	var from := art_from()
+	_art_from_used = from
 	if covers.is_empty():
 		var shorts: Array = View.systems_in(emu_games).map(func(sy): return sy["short"])
 		if shorts.is_empty():
 			shorts = (emu.get("systems", []) as Array).map(func(sy): return sy["short"])
 		if not shorts.is_empty() and hero_fallback != null:
+			hero_fallback.pattern_from = from
 			hero_fallback.set_pattern(shorts)
 		return
-	var size := COLLAGE_SIZE
+	if not sized:
+		return
+	var size := collage_size(frame.size)
 	# Off the main thread, owned by CardJobs: the page never waits for it, and a page that's gone is skipped.
-	CardJobs.shared().run_for(self, func(): return collage(covers, size), "_collage_done", [], not _sync_jobs)
+	CardJobs.shared().run_for(self, func(): return collage(covers, size, from), "_collage_done", [], not _sync_jobs)
+
+
+var _art_from_used := -1.0
+
+
+## The buttons row was laid out: draw the hero art again only if it must move.
+func _on_actions_laid_out() -> void:
+	if frame != null and frame.size.x >= 2.0 and absf(art_from() - _art_from_used) > 0.01:
+		_hero_art()
+
+
+## Where the hero art may start across the frame (0..1): past the buttons row
+## with room to spare, never left of COLLAGE_FROM (at 1280x800 the buttons
+## reach past the middle).
+func art_from() -> float:
+	if frame == null or frame.size.x < 2.0 or actions_row == null:
+		return COLLAGE_FROM
+	# The buttons' real right edge once laid out (styled buttons outgrow their first minimum).
+	var row := actions_row.get_combined_minimum_size().x
+	for c in actions_row.get_children():
+		if c is Control and c.visible:
+			row = maxf(row, c.position.x + c.size.x)
+	var right := 32.0 + row + 48.0   # the hero column starts 32 px into the frame
+	return clampf(right / frame.size.x, COLLAGE_FROM, 0.75)
+
+
+## The collage's size for a hero frame of `frame_size`: COLLAGE_H tall, as wide
+## as the frame's shape asks (the hero fills the frame without cutting a side).
+static func collage_size(frame_size: Vector2) -> Vector2i:
+	return Vector2i(maxi(COLLAGE_H, int(round(COLLAGE_H * frame_size.x / maxf(frame_size.y, 1.0)))), COLLAGE_H)
 
 
 ## Covers for the collage: the ROM games played last first, then A to Z.
@@ -266,7 +309,7 @@ static func collage_covers(games: Array) -> Array:
 
 ## The covers in a row from the right edge, each cut to fill a 3:4 cell (no
 ## stretching), as far left as COLLAGE_FROM; clear elsewhere. Off the main thread.
-static func collage(paths: Array, size: Vector2i) -> Image:
+static func collage(paths: Array, size: Vector2i, start := COLLAGE_FROM) -> Image:
 	var img := Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))   # the theme's own card shows through where the title sits
 	var ch := size.y
@@ -274,7 +317,7 @@ static func collage(paths: Array, size: Vector2i) -> Image:
 	var gap := 10
 	var x := size.x - cw
 	for p in paths:
-		if x < int(size.x * COLLAGE_FROM):
+		if x < int(size.x * start):
 			break   # the left of the hero stays clear for the title and buttons
 		var src := _load_image(str(p))
 		if src == null or src.is_empty():
