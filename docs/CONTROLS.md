@@ -378,14 +378,14 @@ fails with the reason ("remove it there first").
   and `gamecove-upscale fsr4-rollback` swaps back (`test_fsr4_set.py`).
 
 ### The Intel XMX path against ClawDeck, step by step
-Reference: ClawDeck at cf349a6 (v0.2.0-beta.8). `packaging/helpers/tests/test_clawdeck_parity.py` runs the same
+Reference: ClawDeck at 4cf5cf9 (v0.2.0-beta.15). `packaging/helpers/tests/test_clawdeck_parity.py` runs the same
 fixture game through both projects (`CLAWDECK_SRC=<clone>`; CI checks ClawDeck out at that commit) and fails on any
 difference that isn't in this table.
 
 | Step | ClawDeck | GameCove | Same? |
 | --- | --- | --- | --- |
-| Driver | xess-xmx-linux, pinned release, its own `install.sh` as the user | the same release and script; also a sha256 pin for the zip, a reviewed-script check, a mirror | same run; safety added before it |
-| Driver scope | session file moved aside, `xmx.env`, a scope script in every Proton with the installer's hook; redone at every plugin start | the same files and text (`xmxscope.py`); redone before the helper's commands (`games.xmx_upkeep`) | same |
+| Driver | xess-xmx-linux, pinned release (20261111: stock mode on Xe3, its five extra session variables carried per game like the others), its own `install.sh` as the user | the same release and script; also a sha256 pin for the zip, a reviewed-script check, a mirror | same run; safety added before it |
+| Driver scope | session file moved aside, `xmx.env`, a scope script in every Proton with the installer's hook (looks 9 folders down for Unreal plugins); redone at every plugin start | the same files and text (`xmxscope.py`); redone before the helper's commands (`games.xmx_upkeep`) | same |
 | Launch file | `launchenv.compose` / `write`, per game unless the session-wide file is active | the same code, the same flag (`games.per_game`) | same (line order follows the variable names) |
 | Shim, at set-up | `xmxscope.prefix_shim` after OptiScaler goes in | the same call in `games.choose` | same |
 | Shim, at launch | prefix copy when it is the shim, else the package folder through `Z:`; the Proton the game runs on gets the shim as its bundled `igdext64.dll`, original kept as `.stock`, stamped | the same lines in `gamecove-run` | same |
@@ -393,12 +393,14 @@ difference that isn't in this table.
 | OptiScaler.ini | `launchenv.opti_ini` into the package's ini | the same | same |
 | Files in the game | proxy DLL, package files, nitec's two files, `cabinet.dll` + `cabinet_wine.dll`, `fakenvapi.ini` with `force_reflex=2` | the same files and bytes | same; the manifest also records each file's sha256 |
 | DLL overrides | `WINEDLLOVERRIDES=<proxy>=n,b;dinput8=n,b;cabinet=n,b;`, the user's own kept behind | the same | same |
-| Variables | `VK_DRIVER_FILES`, `VKD3D_DISABLE_EXTENSIONS`, `ANV_CM_KERNEL_DIR`, `INTC_ALT_DRIVER_EXTENSIONS_PATH`, `XESS_FG`, `FSR`, `DXVK_CONFIG`, `IGDEXT_XELL_LOG=1` | the same | same; `IGDEXT_XELL_LOG` only once the driver is installed (nothing reads it before) |
+| Variables | `VK_DRIVER_FILES`, `VKD3D_DISABLE_EXTENSIONS`, `ANV_CM_KERNEL_DIR`, `INTC_ALT_DRIVER_EXTENSIONS_PATH`, `XESS_FG`, `FSR`, `DXVK_CONFIG` (for any OptiScaler XeSS, and 3x+ frame generation through OptiScaler), `IGDEXT_XELL_LOG=1` | the same | same; `IGDEXT_XELL_LOG` only once the driver is installed (nothing reads it before) |
 | FSR 4.1.2 files | inside the zip (`bin/fsr4-xmx`), copied to `~/fsr4-xmx` at start; the user's own files never replaced; import from Downloads; download as a fallback | inside every package (`/usr/lib/gamecove/bin/fsr4-xmx`), the same rule and order (`optiscaler.fsr4_xmx_ready`); the mirror is tried before the branch | same; also `set.json`, the set before kept, `fsr4-rollback` |
 | `cabinet.dll` | built by CI, `bin/cabinet.dll` | the same bytes, `/usr/lib/gamecove/bin/cabinet.dll` | same |
 | Decky Framegen games | second stage after `fgmod` puts FSR 4 XMX over fgmod's files and takes it out again | the same stage in `gamecove-run` | same; the removal list takes file names only |
 | Undo | manifest: files out, backups back; driver: its `uninstall.sh` | the same, but a file that changed since is kept; every `.stock` in a Proton is put back by GameCove too | safety added; nothing changes while in use |
+| Game folder | OptiScaler next to the largest `-Shipping` exe under `Binaries` (not a launcher stub of that name), the DirectX 12 folder when a known exe is in two | the same `main_exe_dir` | same |
 | Not taken | MangoHud log for Auto TDP, E-cores switch | Auto TDP reads mangoapp; cores are a power control | on purpose |
+| Not taken here | non-Steam games in the list (#161), the debug-logs launch (#150) | the per-game upscaling UI (feat/upscaling) | later |
 
 `gamecove-run` used to keep the shim in the game's prefix only and never touch a Proton. That lost against Protons
 that copy their own `igdext64.dll` over the prefix at every launch (ClawDeck: black screen with FSR 4.1.2 on

@@ -286,15 +286,25 @@ def main_exe_dir(game_dir: str, known_exes: list[str] | None = None) -> str | No
     best, size = None, -1
     want = {e.lower() for e in known_exes or []}
     base = game_dir.rstrip(os.sep).count(os.sep)
+    named: list[str] = []
+    shipping: list[tuple[bool, int, str]] = []
     for r, d, f in os.walk(game_dir):
+        d.sort()                                         # the same folder every time, whatever the file system's order
         if r.count(os.sep) - base >= 5:
             d[:] = []
-        for x in f:
+        for x in sorted(f):
             lo = x.lower()
             if not lo.endswith(".exe"):
                 continue
-            if lo.endswith(("-win64-shipping.exe", "-wingdk-shipping.exe")) or lo in want:
-                return r
+            if lo.endswith(("-win64-shipping.exe", "-wingdk-shipping.exe")):
+                try:
+                    shipping.append((os.sep + "binaries" + os.sep in (r + os.sep).lower(), os.path.getsize(os.path.join(r, x)), r))
+                except OSError:
+                    pass
+                continue
+            if lo in want:
+                named.append(r)
+                continue
             if MAIN_EXE_SKIP.search(lo):
                 continue
             try:
@@ -303,6 +313,15 @@ def main_exe_dir(game_dir: str, known_exes: list[str] | None = None) -> str | No
                 continue
             if s > size:
                 best, size = r, s
+    if shipping:
+        # Unreal: the -Shipping exe in <Project>/Binaries/Win64, and of several the largest. Gothic 1 Remake ships a
+        # 310 KB launcher stub of the same name in its top folder, which the walk reaches first (#162)
+        return max(shipping)[2]
+    if named:
+        # the same exe name in a DirectX 11 and a DirectX 12 folder (The Witcher 3: bin/x64 and bin/x64_dx12, issue
+        # #141): DLSS, FSR and XeSS live in the DX12 one, so OptiScaler goes there
+        dx12 = [r for r in named if re.search(r"dx12|d3d12", os.path.basename(r), re.I)]
+        return (dx12 or named)[0]
     return best
 
 

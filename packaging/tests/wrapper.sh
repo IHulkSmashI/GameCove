@@ -1,6 +1,6 @@
 #!/bin/sh
 # gamecove-run places the XMX shim exactly as ClawDeck's launch wrapper does (ClawDeck tools/clawdeck-launch.sh at
-# cf349a6): the prefix's copy when it already is the shim, else the package folder through Z:, and the Proton the
+# 4cf5cf9): the prefix's copy when it already is the shim, else the package folder through Z:, and the Proton the
 # game runs on gets the shim as its bundled igdext64.dll (original kept as .stock), because GE-Proton, Proton
 # Experimental and proton-cachyos copy their own over the prefix at every launch (black screen with FSR 4.1.2).
 # Also: the second stage after Decky Framegen's fgmod (FSR 4 XMX files in, and out again), and prefixes an older

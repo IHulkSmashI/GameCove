@@ -3,7 +3,7 @@ FSR 4.1.2 on XMX): the same fixture goes through both projects' generators and w
 
   CLAWDECK_SRC=/path/to/clawdeck python3 -m pytest -q packaging/helpers/tests/test_clawdeck_parity.py
 
-CLAWDECK_SRC is a ClawDeck checkout (its py_modules/ and tools/clawdeck-launch.sh; the reference is cf349a6).
+CLAWDECK_SRC is a ClawDeck checkout (its py_modules/ and tools/clawdeck-launch.sh; the reference is 4cf5cf9).
 Without it every test here is skipped. Compared: the launch environment (compose / the .env file), OptiScaler.ini
 and every file put into the game (patch), undo, the XMX scope files, and both launch wrappers run on the same
 fake Steam library (the environment the game gets, what happens to the Proton and the prefix, the launch log).

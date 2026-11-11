@@ -217,7 +217,7 @@ def test_fetch_tool_takes_the_pinned_files_from_clawdecks_branch_and_checks_them
 
 
 def test_pins_are_the_files_clawdeck_ships():
-    """The same two files, by sha256, as ClawDeck's versions.json at cf349a6."""
+    """The same two files, by sha256, as ClawDeck's versions.json at 4cf5cf9 (unchanged since cf349a6)."""
     pins = _tool().entry()["files"]
     assert pins == {"amd_fidelityfx_upscaler_dx12.dll": "a609f609a3ef29ddff59adfbd27dc417bf68fcd865383b2529987a7eff1081ac",
                     "fsr-original.dll": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace"}
