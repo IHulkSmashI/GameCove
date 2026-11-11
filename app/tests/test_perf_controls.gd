@@ -730,6 +730,7 @@ func test_the_game_can_change_while_the_worker_reads_it() -> void:
 	var other := {"key": "steam:42", "store": "steam", "id": "42", "title": "Steam Game", "install_path": "/games/42"}
 	var stop := [false]
 	var seen := {"reads": 0, "bad": []}
+	PerfProvider.set_game(ctx, {})   # the reader starts on "none", one of the values it may see
 	var reader := Thread.new()
 	reader.start(func():
 		while not stop[0]:
@@ -741,8 +742,16 @@ func test_the_game_can_change_while_the_worker_reads_it() -> void:
 			if gk == "steam:42" and str(g.get("install_path", "")) != "/games/42":
 				seen["bad"].append(["torn", g])
 			seen["reads"] += 1)
-	for i in 20000:
+	# a loaded machine may not run the reader at once: wait for it, then swap until it has read
+	# a fair number of times while the game changes (not only a fixed count of swaps)
+	var t0 := Time.get_ticks_msec()
+	while int(seen["reads"]) == 0 and Time.get_ticks_msec() - t0 < 5000:
+		OS.delay_usec(500)
+	var start_reads := int(seen["reads"])
+	var i := 0
+	while i < 20000 or (int(seen["reads"]) - start_reads < 200 and Time.get_ticks_msec() - t0 < 10000):
 		PerfProvider.set_game(ctx, [EPIC, other, {}][i % 3])
+		i += 1
 	stop[0] = true
 	reader.wait_to_finish()
 	ok(int(seen["reads"]) > 0, "the worker read while the game changed (%d reads)" % int(seen["reads"]))
