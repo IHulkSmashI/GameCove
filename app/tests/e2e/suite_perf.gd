@@ -69,7 +69,10 @@ func test_behind_a_game_the_main_loop_is_near_idle() -> void:
 	ok(_bg().throttled(), "BackgroundMode throttles behind the game")
 	var a := ProcStats.snapshot()
 	await w.wait_s(MEASURE_S)
-	var d := ProcStats.delta(a, ProcStats.snapshot())
+	var z := ProcStats.snapshot()
+	var d := ProcStats.delta(a, z)
+	print("E2E BEHIND loops/s %s wake-ups/s %s (voluntary %d, preempted %d) CPU ms/s %s" % [d["loops_per_s"], d["main_wake_per_s"],
+		int(z["main_vol"]) - int(a["main_vol"]), int(z["main_invol"]) - int(a["main_invol"]), d["cpu_ms_per_s"]])
 	ok(float(d["loops_per_s"]) <= MAX_LOOPS_PER_S, "main-loop iterations %s/s <= %s" % [d["loops_per_s"], MAX_LOOPS_PER_S])
 	ok(float(d["main_wake_per_s"]) <= MAX_MAIN_WAKE_PER_S, "main-thread wake-ups %s/s <= %s" % [d["main_wake_per_s"], MAX_MAIN_WAKE_PER_S])
 	ok(float(d["cpu_ms_per_s"]) <= MAX_CPU_MS_PER_S, "CPU %s ms/s <= %s" % [d["cpu_ms_per_s"], MAX_CPU_MS_PER_S])

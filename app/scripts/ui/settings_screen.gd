@@ -44,6 +44,7 @@ const PAGES := {
 	"system": GroupPage,
 	"profiles": preload("res://scripts/ui/controls/profiles_page.gd"),
 	"appearance": preload("res://scripts/ui/settings/appearance_page.gd"),
+	"quick_menu": preload("res://scripts/ui/settings/quick_menu_page.gd"),
 	"stores": preload("res://scripts/ui/settings/stores_page.gd"),
 	"saves": preload("res://scripts/ui/settings/saves_page.gd"),
 	"discover": preload("res://scripts/ui/settings/discover_page.gd"),
@@ -100,6 +101,25 @@ func _init() -> void:
 
 func _ready() -> void:
 	_late_start.call_deferred()
+
+
+## Leaving Settings for another screen hides it without changing the category:
+## the page on show stops what it watches (the Device page's Storage tab polls
+## the mounts while open) and starts again when Settings comes back.
+var _page_hidden := false
+
+
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_VISIBILITY_CHANGED or not pages.has(category):
+		return
+	if not is_visible_in_tree() and not _page_hidden:
+		_page_hidden = true
+		if pages[category].has_method("on_hidden"):
+			pages[category].on_hidden()
+	elif is_visible_in_tree() and _page_hidden:
+		_page_hidden = false
+		if pages[category].has_method("on_shown"):
+			pages[category].on_shown()
 
 
 ## No host passed services: use the autoloads (never under the test runner),
@@ -483,6 +503,8 @@ func hints(f: Control) -> Array:
 			out.append(["A", named])
 		else:
 			out.append(["A", "Select"])
+		if pg_a != null and pg_a.has_method("extra_hints"):
+			out.append_array(pg_a.extra_hints(f))
 		out.append(["B", "Categories"])
 	# LB / RB always switch the top sections; LT / RT the page's own tabs.
 	var pg: Control = pages.get(category)

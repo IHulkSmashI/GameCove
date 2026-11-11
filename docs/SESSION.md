@@ -311,6 +311,14 @@ What goes back, in order:
    your choice: GameCove's own profile is what it applies the next time it starts.
 3. The root helper: the charge limit released, power-tune values restored, thermald started.
 
+A session can also end without a switch of ours: Steam's own "Switch to Desktop"
+(`GAMECOVE_STEAM_MODE=gamepadui`), a logout, the app killed. So the session unit's drop-in
+(`gamescope-session-plus@gamecove.service.d/10-gamecove.conf`) has
+`ExecStopPost=-/usr/bin/gamecove-session-select leave`, which does the same tidying (the
+baseline run also hands back the buttons only GameCove answers, such as Quick Access mapped to
+GameCove's quick menu) unless a switch of ours did it in the last two minutes
+(`$XDG_RUNTIME_DIR/gamecove-left`). It never switches and needs no `steamosctl`.
+
 ### If GameCove won't let you out
 
 - **Crash loop:** the session client counts unclean exits in a row (a non-zero

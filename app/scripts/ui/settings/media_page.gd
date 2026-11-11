@@ -1,7 +1,8 @@
 extends "res://scripts/ui/settings/page.gd"
 ## Settings > Media: recording (GPU Screen Recorder: install it, allow screen
-## capture once, sound and frame rate) and Clips (what you've recorded, with
-## pictures: watch, send to your phone, delete).
+## capture once, sound and frame rate), Clips (what you've recorded, with
+## pictures: watch, send to your phone, delete) and Screenshots (what the
+## Screenshot shortcut saved: look at one, delete).
 ##
 ## Built the first time it's shown and read again each time it's shown or a
 ## clip is saved. Everything that touches the disk or runs a program happens
@@ -18,6 +19,7 @@ extends "res://scripts/ui/settings/page.gd"
 
 const Recorder := preload("res://scripts/system/recorder.gd")
 const Clips := preload("res://scripts/system/clips.gd")
+const Screenshots := preload("res://scripts/system/screenshots.gd")
 const Proc := preload("res://scripts/system/proc.gd")
 const Sheet := preload("res://scripts/ui/games/sheet.gd")
 const ShareSheet := preload("res://scripts/ui/settings/share_sheet.gd")
@@ -29,6 +31,8 @@ const CardJobs := preload("res://scripts/system/card_jobs.gd")
 const CH := "media"
 ## Clips listed at once (the rest are counted); pictures made per read with ffmpeg.
 const MAX_ROWS := 40
+## Screenshots listed at once (the rest are counted).
+const MAX_SHOTS := 12
 const THUMBS_PER_READ := 6
 
 ## {"loc", "status", "clips", "player", "ffmpeg"} from the last read; {} before it.
@@ -124,7 +128,12 @@ static func read_state(r: RefCounted, env: Dictionary) -> Dictionary:
 			for l in str(out.get("out", "")).split("\n", false):
 				apps.append(l.strip_edges())
 	var player := Clips.find_player(str(env.get("path_env", "")), apps, str(env.get("sys_root", "")))
-	return {"loc": loc, "status": st, "clips": clips, "pictures": pictures, "player": player, "flatpak": flatpak}
+	var shots := Screenshots.list(Screenshots.root(home))
+	for s in shots.slice(0, MAX_SHOTS):
+		var small := Screenshots.thumb(s["path"])
+		if small != null:
+			pictures[s["path"]] = small
+	return {"loc": loc, "status": st, "clips": clips, "shots": shots, "pictures": pictures, "player": player, "flatpak": flatpak}
 
 
 ## Hands `fn` to the job owner; `done(result, extra...)` runs on whichever page is
@@ -163,6 +172,7 @@ func build() -> void:
 	clip_rows.clear()
 	_build_recorder()
 	_build_clips()
+	_build_shots()
 
 
 ## The recorder row says what to do next: install, allow capture, or ready.
@@ -311,6 +321,120 @@ func _build_clips() -> void:
 		var more := Kit.label(TX.CLIPS_MORE % (clips.size() - MAX_ROWS), "QuietLabel")
 		more.name = "ClipsMore"
 		box.add_child(more)
+
+
+# ---- screenshots ----------------------------------------------------------------------
+
+var shot_rows: Array = []
+var viewer: Control
+
+
+## What the Screenshot shortcut (and the handheld's screenshot button) saved.
+func _build_shots() -> void:
+	shot_rows.clear()
+	var box := add_card(TX.SHOTS_TITLE, "camera", TX.SHOTS_LINE)
+	if state.is_empty():
+		box.add_child(SKit.note(TX.SHOTS_LOADING, "info", "ShotsLoading"))
+		return
+	var shots: Array = state.get("shots", [])
+	if shots.is_empty():
+		box.add_child(SKit.note(TX.SHOTS_EMPTY, "info", "ShotsEmpty"))
+		return
+	for s in shots.slice(0, MAX_SHOTS):
+		var row: VBoxContainer = ClipRow.new()
+		row.setup(s, _textures.get(s["path"]))
+		row.name = "shot_" + str(s["path"]).md5_text().substr(0, 12)
+		row.key = String(row.name)
+		var shot: Dictionary = s
+		row.pressed.connect(func(): open_shot(shot))
+		add_row(box, row)
+		shot_rows.append(row)
+	if shots.size() > MAX_SHOTS:
+		var more := Kit.label(TX.SHOTS_MORE % (shots.size() - MAX_SHOTS), "QuietLabel")
+		more.name = "ShotsMore"
+		box.add_child(more)
+
+
+func open_shot(shot: Dictionary) -> void:
+	_sheet().open(Clips.title_of(shot), ClipRow.meta_text(shot), [
+		{"id": "view", "text": TX.SHOTS_VIEW, "detail": TX.SHOTS_VIEW_DETAIL, "icon": "eye"},
+		{"id": "delete", "text": TX.SHOTS_DELETE, "detail": TX.SHOTS_DELETE_DETAIL, "icon": "trash", "tone": "bad"},
+	], func(id: String): act_shot(shot, id))
+
+
+## One sheet action for a screenshot (tests call it directly).
+func act_shot(shot: Dictionary, id: String) -> void:
+	match id:
+		"view": view_shot(shot)
+		"delete":
+			_sheet().open.call_deferred(Clips.title_of(shot), TX.SHOTS_DELETE_DETAIL, [
+				{"id": "delete_yes", "text": TX.SHOTS_DELETE, "detail": ClipRow.meta_text(shot), "icon": "trash", "tone": "bad"},
+			], func(id2: String): act_shot(shot, id2))
+		"delete_yes":
+			var home := str(_env().get("home", ""))
+			if Screenshots.delete(Screenshots.root(home), str(shot["path"])):
+				notify(TX.SHOTS_DELETED, "good")
+				var list: Array = state.get("shots", [])
+				state["shots"] = list.filter(func(c): return c["path"] != shot["path"])
+				_textures.erase(shot["path"])
+				rebuild()
+			else:
+				notify(TX.CLIPS_DELETE_FAILED, "bad")
+
+
+## The picture, full screen. A or B closes it. Read off the main thread.
+func view_shot(shot: Dictionary) -> void:
+	var path := str(shot["path"])
+	_job("view", func():
+		var img := Image.load_from_file(path)
+		return {"img": img if img != null and not img.is_empty() else null}, "_on_view")
+
+
+func _on_view(res: Dictionary) -> void:
+	if res.get("img") == null:
+		notify(TX.SHOTS_VIEW_FAILED, "bad")
+		return
+	close_viewer()
+	viewer = ColorRect.new()
+	viewer.name = "ShotViewer"
+	(viewer as ColorRect).color = Color(0, 0, 0, 0.94)
+	viewer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	viewer.z_index = 17
+	viewer.focus_mode = Control.FOCUS_ALL
+	var pic := TextureRect.new()
+	pic.name = "Picture"
+	pic.texture = ImageTexture.create_from_image(res["img"])
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	pic.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	viewer.add_child(pic)
+	viewer.gui_input.connect(func(e: InputEvent):
+		if e.is_action_pressed("ui_accept") or e.is_action_pressed("ui_cancel") or (e is InputEventMouseButton and e.pressed):
+			viewer.accept_event()
+			close_viewer())
+	var parent: Node = host if host is Node else self
+	parent.add_child(viewer)
+	_viewer_return = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if is_inside_tree():
+		viewer.grab_focus()
+
+
+var _viewer_return: Control
+
+
+func close_viewer() -> void:
+	if viewer == null or not is_instance_valid(viewer):
+		viewer = null
+		return
+	viewer.queue_free()
+	viewer = null
+	if _viewer_return != null and is_instance_valid(_viewer_return) and _viewer_return.is_visible_in_tree():
+		_viewer_return.grab_focus()
+
+
+func modal_hints() -> Array:
+	return [["A", TX.SHOTS_CLOSE], ["B", TX.SHOTS_CLOSE]] if viewer != null and is_instance_valid(viewer) else []
 
 
 func _sheet() -> Control:

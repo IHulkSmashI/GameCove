@@ -38,19 +38,16 @@ func _build() -> void:
 	_fill()
 
 
+## On its own (a test, a screenshot) the panel watches while it's on screen. In
+## the Device page every part is built at once, hidden: there only the part on
+## show watches (the page calls opened() / closed()), so a Storage tab nobody
+## looked at never polls the mounts behind a game.
 func _enter_tree() -> void:
-	# only while it shows: inside Settings > Device every panel is in the tree, and the Device page
-	# opens / closes the one whose tab is picked (a hidden Storage panel must not watch behind a game)
 	call_deferred("_open_if_shown")
 
 
 func _open_if_shown() -> void:
-	var n: Node = self
-	while n is CanvasItem:
-		if not (n as CanvasItem).visible:
-			return
-		n = n.get_parent()
-	if is_instance_valid(self):
+	if is_inside_tree() and is_visible_in_tree():
 		opened()
 
 

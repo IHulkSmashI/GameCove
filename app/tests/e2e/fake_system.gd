@@ -72,6 +72,7 @@ func _init(backends: Dictionary, sys_root: String, repo_dir: String, device_row:
 
 func reset_log() -> void:
 	_log_mutex.lock()
+	keys_sent.clear()
 	log.clear()
 	helper_runs.clear()
 	events.clear()
@@ -141,6 +142,17 @@ func _dispatch(program: String, args: PackedStringArray) -> Dictionary:
 	if program.ends_with("session-select") and args.size() > 0:
 		_event(str(args[0]))
 		return {"code": 0, "out": ""}
+	# the Keyboard shortcut: `steam -ifrunning steam://open/keyboard` reaches the running client
+	if program.get_file() == "steam" and args.size() == 2 and args[0] == "-ifrunning":
+		_event("steam " + str(args[1]))
+		return {"code": 0 if str(faults.get("steam", "")) != "down" else 1, "out": ""}
+	# gamescope writes its screenshot when the request atom is set
+	if program == "xprop" and "GAMESCOPECTRL_REQUEST_SCREENSHOT" in args and "-set" in args and str(faults.get("screenshot", "")) != "none":
+		DirAccess.make_dir_recursive_absolute(root + "/tmp")
+		var img := Image.create(16, 10, false, Image.FORMAT_RGB8)
+		img.fill(Color(0.1, 0.4, 0.6))
+		img.save_png(root + "/tmp/gamescope.png")
+		_event("screenshot")
 	match program:
 		"pkexec":
 			return _pkexec(args)
@@ -674,7 +686,27 @@ var ip_profile: Dictionary = {"version": 1, "kind": "DeviceProfile", "name": "De
 var ip_loads := 0
 
 
+## Keys pressed on InputPlumber's virtual keyboard: ["KEY_ESC true", ...], and
+## the keyboards made and stopped for them.
+var keys_sent: Array = []
+var keyboards_made := 0
+var keyboards_stopped := 0
+
+
 func _ip_call(path: String, iface: String, method: String, a: Array) -> Dictionary:
+	if method == "SendKey" and iface == "org.shadowblip.Input.Keyboard":
+		if mode == "failing" or str(faults.get("keys", "")) == "refused":
+			return {"code": 1, "out": "Call failed: refused"}
+		_log_mutex.lock()
+		keys_sent.append("%s %s" % [str(a[1]) if a.size() > 1 else "", str(a[2]) if a.size() > 2 else ""])
+		_log_mutex.unlock()
+		return {"code": 0, "out": ""}
+	if path == "/org/shadowblip/InputPlumber/Manager" and method == "CreateTargetDevice":
+		keyboards_made += 1
+		return {"code": 0, "out": JSON.stringify({"type": "s", "data": ["/org/shadowblip/InputPlumber/devices/target/keyboard9"]})}
+	if path == "/org/shadowblip/InputPlumber/Manager" and method == "StopTargetDevice":
+		keyboards_stopped += 1
+		return {"code": 0, "out": ""}
 	if not path.begins_with("/org/shadowblip/InputPlumber/CompositeDevice"):
 		return {}
 	match method:
@@ -692,6 +724,10 @@ func _ip_call(path: String, iface: String, method: String, a: Array) -> Dictiona
 			if props.has(key):
 				props[key]["data"] = str(p.get("name", ""))
 			return {"code": 0, "out": ""}
+		"SendButtonChord":
+			# straight to the virtual pad (Steam menu shortcut): "as N cap..."
+			_event("chord " + " ".join(PackedStringArray(a.slice(2).map(func(x): return str(x)))))
+			return {"code": 0 if mode != "failing" else 1, "out": ""}
 		"SetInterceptActivation", "Rumble", "Stop":
 			return {"code": 0 if mode != "failing" else 1, "out": ""}
 	return {}

@@ -214,6 +214,7 @@ func boot_main() -> void:
 	if main.fixes != null:
 		main.fixes.setup({"sys_root": root, "runner": fake, "home": home, "device": autoload("Device")})
 	main.quick_menu.commands.runner = Fake.BgRunner.new(fake)
+	_wire_actions()
 	# the Stream tab's discovery: the fake answers (no mDNS, no network), nothing is probed
 	if main.streaming != null:
 		main.streaming.ctx["runner"] = fake
@@ -230,6 +231,17 @@ func boot_main() -> void:
 		return 4242
 	main.closer.alive = func(_pid: int) -> bool: return false
 	await idle()
+
+
+## The action runner (Shortcuts strip, button shortcuts): its programs go to the
+## fake, Steam is "installed", and key presses don't really wait.
+func _wire_actions() -> void:
+	if main.actions == null:
+		return
+	main.actions.runner = fake
+	main.actions.keys = load("res://scripts/actions/key_sender.gd").new(fake)
+	main.actions.keys.wait = func(_ms: int) -> void: pass
+	main.actions.steam_bin = "/usr/bin/steam"
 
 
 ## A game's window and Steam launch go away (it quit, or was closed).
@@ -314,6 +326,7 @@ func reset() -> void:
 	if main != null:
 		main.fixes.setup({"sys_root": root, "runner": fake, "home": home, "device": autoload("Device")})
 		main.quick_menu.commands.runner = Fake.BgRunner.new(fake)
+		_wire_actions()
 	await idle()
 	fake.reset_log()
 

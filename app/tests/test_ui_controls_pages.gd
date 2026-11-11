@@ -1,4 +1,5 @@
 extends "res://tests/test_case.gd"
+const Catalog := preload("res://scripts/ui/controls/catalog.gd")
 ## Pages made from Controls: a generated settings page (cards, More, the
 ## "Not on this handheld" card, rebuild after detection), Performance with
 ## and without Controls, Profiles (layers, games, save / copy / reset with a
@@ -95,7 +96,8 @@ func test_unavailable_topics_gather_at_the_end() -> void:
 	for l in page.cards.lists:
 		var p: Array = l.placement()
 		total += p[0].size() + p[1].size()
-	eq(total, c.list("controller").size(), "every controller setting has a place")
+	var own: int = Catalog.expand(Catalog.OWN_PAGE, c.list("controller").map(func(x): return str(x.id)), {}).size()
+	eq(total + own, c.list("controller").size(), "every controller setting has a place (the button shortcuts on their own page)")
 	page.free()
 	c.free()
 
