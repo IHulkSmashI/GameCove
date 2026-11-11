@@ -12,6 +12,17 @@ if ! allowed install-game; then
 	skip all "needs --allow-install-game (installs and removes Steam app $app)"
 	exit 0
 fi
+# Steam must be running and signed in: start it through a URI and give it 2 minutes, else stop here
+# (waiting 15 minutes for an install that can't start helps nobody)
+steam_up() { pgrep -u "$(id -u)" -x steam >/dev/null 2>&1 || pgrep -u "$(id -u)" -f 'ubuntu12_32/steam' >/dev/null 2>&1; }
+if ! steam_up; then
+	steam_uri "steam://open/library"
+	if ! wait_for 120 steam_up; then
+		fail steam "Steam isn't running (and didn't start in 2 min): start Steam, sign in, run this suite again"
+		exit 0
+	fi
+	sleep 20   # let it finish signing in
+fi
 pre_installed=0
 installed "$app" && pre_installed=1
 cleanup() {
