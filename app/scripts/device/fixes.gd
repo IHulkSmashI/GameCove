@@ -465,13 +465,11 @@ func refresh_stale_override() -> bool:
 ## A SteamOS update brought back Valve's /etc/default/grub without the VRR fix's line (the fix is installed on
 ## SteamOS: its record has the grub line). The range is gone from the next restart until the line is back.
 static func vrr_line_lost(root: String) -> bool:
-	var m := root + VRR_MANIFEST
-	if not FileAccess.file_exists(m):
+	var mf := FileAccess.open(root + VRR_MANIFEST, FileAccess.READ)
+	if mf == null or not ("grubline " + GRUB_DEFAULT) in DeviceScript.read_all(mf).split("\n", false):
 		return false
-	if not ("grubline " + GRUB_DEFAULT) in FileAccess.get_file_as_string(m).split("\n", false):
-		return false
-	var grub := root + GRUB_DEFAULT
-	return FileAccess.file_exists(grub) and not FileAccess.get_file_as_string(grub).contains(VRR_GRUB_MARK)
+	var gf := FileAccess.open(root + GRUB_DEFAULT, FileAccess.READ)
+	return gf != null and not DeviceScript.read_all(gf).contains(VRR_GRUB_MARK)
 
 
 ## Puts the line back at once, without a password (the fix was installed with it); the fix takes itself out
