@@ -411,6 +411,21 @@ ok 'grep -qx "grubline /etc/default/grub" "$R/etc/gamecove/claw8ex-vrr/record/ma
 fix claw8ex-vrr remove >/dev/null 2>&1
 ok '[ "$(snapshot)" = "$before" ]' "remove then finishes the job"
 
+# review Medium (Fixes): a failed update-grub left the marked line in /etc/default/grub, so refresh found "already in
+# place" and never tried the boot menu again
+case_start steamos_refresh_retries_a_failed_update_grub
+steamos_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+steamos_update
+export FAKE_FAIL=update-grub
+ok '! fix claw8ex-vrr set refresh >/dev/null 2>&1' "refresh: update-grub fails, so it fails"
+unset FAKE_FAIL
+ok '! grep -q "# GameCove claw8ex-vrr" "$R$GRUB"' "the line is not left marked in the grub file"
+ok 'fix claw8ex-vrr status | grep -qx after_update=yes' "status still says the update left it out"
+ok 'fix claw8ex-vrr set refresh | grep -q "put back after the SteamOS update"' "the next refresh tries again, and works"
+ok 'grep -q "quiet splash amd_iommu=off gamecove.vrr=1" "$R/efi/EFI/SteamOS/grub.cfg"' "the boot menu has it"
+fix claw8ex-vrr remove >/dev/null 2>&1
+
 case_start initramfs_failure_undoes
 vrr_ready
 before=$(snapshot)

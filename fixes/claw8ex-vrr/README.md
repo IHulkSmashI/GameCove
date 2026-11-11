@@ -57,8 +57,8 @@ refresh`, which needs no password: it puts the one line back on top of the new f
 range back. If the update made the fix impossible (the driver now in the initramfs) or didn't keep its files, the
 fix takes itself out instead. `status` shows `after_update=yes` while the line is missing and `boot=steamos`.
 `remove` takes out the keep list first, then the line (update-grub again), then the files.
-The SteamOS path, the keep list and the refresh after an update are tested against a fake root only (the fake update
-wipes `/var` and everything off the keep list); they are not tested on a SteamOS handheld yet.
+The line counts as there only once SteamOS's boot menu took it: when `update-grub` fails or leaves it out, the
+file goes back to how it was, so the next `set refresh` (GameCove runs it at every start) tries again.
 
 ### Older installs
 
