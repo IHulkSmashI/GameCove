@@ -42,11 +42,15 @@
 #                             on only with new enough MCU firmware (../lib/ally-mcu.sh), exit 3 otherwise
 #     battery:standard|long-life      charge_types (Lenovo Legion Go: Long Life stops at 80 %);
 #                             handhelds only
-#     restore                 put back everything this fix changed (GameCove's session runs it
-#                             when GameCove exits)
+#     restore                 put back the day-to-day values this fix changed (GameCove's session
+#                             runs it when GameCove exits). smt, cores, sleep and mcu stay as
+#                             they are: they were set with an administrator password, GameCove's
+#                             session can't ask for one to set them again, and leaving GameCove
+#                             must not quietly undo them (final review, low). `remove` puts
+#                             those back too.
 #   fix.sh status            applies=yes, installed=yes|no, one line per value changed, state=on|off
 #   fix.sh install           nothing to do (values are recorded at their first change)
-#   fix.sh remove            same as `set restore`, then forget
+#   fix.sh remove            put back everything this fix changed, then forget
 #
 # The first change of each value records the value before it in
 # /var/lib/gamecove/fixes/power-tune/orig/<key>; restore writes those back.
@@ -478,13 +482,34 @@ thermald_watch() {
 		[ "$gone" -ge 2 ] && break
 		sleep "${GAMECOVE_THERMALD_CHECK_S:-10}"
 	done
-	if [ -f "$STATE/thermald-held" ]; then
-		fix_lock power-tune
-		if systemctl start thermald.service; then
-			rm -f "$STATE/thermald-held"
-			log_change "thermald released: no game running"
+	# Never leave without thermald running again (final review, low: one failed start, or the
+	# lock being busy, ended the watcher with thermald still stopped and nobody left to try).
+	# The lock is taken with lockdir_take itself (fix_lock exits when it can't have it), and the
+	# start is tried GAMECOVE_THERMALD_TRIES times (30), a check apart.
+	tries=0
+	wlock="$ROOT/run/gamecove-power-tune.lock"
+	while [ -f "$STATE/thermald-held" ] && [ "$tries" -lt "${GAMECOVE_THERMALD_TRIES:-30}" ]; do
+		tries=$((tries + 1))
+		mkdir -p "$ROOT/run" 2>/dev/null || true
+		if lockdir_take "$wlock" 30; then
+			# shellcheck disable=SC2034 # read by fix_unlock (../lib/handheld.sh)
+			FIX_LOCK="$wlock"
+			if [ ! -f "$STATE/thermald-held" ]; then
+				fix_unlock
+				break
+			fi
+			if systemctl start thermald.service; then
+				rm -f "$STATE/thermald-held"
+				log_change "thermald released: no game running"
+				fix_unlock
+				break
+			fi
+			fix_unlock
 		fi
-		fix_unlock
+		sleep "${GAMECOVE_THERMALD_CHECK_S:-10}"
+	done
+	if [ -f "$STATE/thermald-held" ]; then
+		log_change "thermald still stopped after $tries tries; restore or the next hold starts it"
 	fi
 	[ "$(cat "$WATCH_PID" 2>/dev/null)" = "$$" ] && rm -f "$WATCH_PID"
 	return 0
@@ -653,7 +678,13 @@ restore_key() {
 	esac
 }
 
-do_restore() {
+# The keys only an administrator can set (gamecove-fix-set refuses them): `set restore` leaves
+# them alone, `remove` puts them back. boost-policy*, epp-* and the others are day-to-day keys.
+ADMIN_KEYS="smt cores sleep mcu"
+is_admin_key() { case " $ADMIN_KEYS " in *" $1 "*) return 0 ;; esac; return 1; }
+
+do_restore() { # [all]: with "all" the administrator's keys too
+	scope="${1:-}"
 	if [ -f "$STATE/device" ] && [ "$(cat "$STATE/device")" != "$(this_device)" ]; then
 		# read on another handheld (same drive): never written here
 		rm -rf "$ORIG"
@@ -684,10 +715,12 @@ do_restore() {
 		done
 		for k in $keys $last; do
 			[ -f "$ORIG/$k" ] || continue
+			if [ "$scope" != all ] && is_admin_key "$k"; then continue; fi
 			if restore_key "$k"; then rm -f "$ORIG/$k"; else failed="$failed $k"; printf 'power-tune: could not put back %s\n' "$k" >&2; fi
 		done
-		[ -z "$failed" ] || [ -f "$STATE/device" ] || printf '%s\n' "$(this_device)" > "$STATE/device"
 		rmdir "$ORIG" 2>/dev/null || true
+		# whatever is still recorded (a key that failed, an administrator's key) was read here
+		[ ! -d "$ORIG" ] || [ -f "$STATE/device" ] || printf '%s\n' "$(this_device)" > "$STATE/device"
 	fi
 	# always, even when a key above failed
 	if [ -f "$STATE/thermald-held" ]; then
@@ -746,7 +779,7 @@ case "${1:-}" in
 	install) printf 'installed=yes\n' ;;
 	set) do_set "${2:-}" ;;
 	status) do_status ;;
-	remove) fix_lock power-tune; do_restore; rm -rf "$ORIG"; printf 'restored\n' ;;
+	remove) fix_lock power-tune; do_restore all; rm -rf "$ORIG"; printf 'restored\n' ;;
 	# internal: the hold's watcher (start_watch); gamecove-fix never passes this action
 	thermald-watch) trap - EXIT; thermald_watch "${2:-}" ;;
 	*) die 2 "usage: fix.sh install|remove|status|set <key>:<value>|set restore" ;;

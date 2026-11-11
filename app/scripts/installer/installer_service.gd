@@ -14,11 +14,14 @@ const Paths := preload("res://scripts/installer/paths.gd")
 const LaunchFiles := preload("res://scripts/controls/perf/launch_files.gd")
 const SteamConfig := preload("res://scripts/steam/steam_config.gd")
 const Proton := preload("res://scripts/launch/proton.gd")
+const UserData := preload("res://scripts/installer/user_data.gd")
 
 ## How long uninstall waits for Steam to close before editing its launch options.
 const STEAM_STOP_WAIT_S := 30
 ## Tests: "/proc" except in fixtures.
 var proc_root := "/proc"
+## The app's own data folder (user://). Tests point it at a temp folder.
+var user_dir := OS.get_user_data_dir()
 
 signal task_started(index: int, task: Dictionary)
 signal task_line(index: int, line: String)
@@ -207,10 +210,20 @@ func _internal(id: String) -> Array:
 		"steam_unwrap":
 			return _steam_unwrap()
 		"remove_settings":
-			var user_dir := OS.get_user_data_dir()
 			# Only GameCove's own folders: the app's user:// and ~/.local/share/gamecove (but its log).
 			if user_dir.ends_with("/GameCove") or user_dir.ends_with("/gamecove"):
-				UserFiles.remove_tree(user_dir, user_dir.get_base_dir())
+				# final review, high 9: Steam gets its own art back before the copies of it go, and save
+				# backups stay unless the user said to delete them (user_data.gd)
+				var art: Dictionary = UserData.restore_steam_art(user_dir, UserData.steam_roots(paths.home))
+				log_line("Steam art: %d original(s) put back, %d left in the backup" % [art["restored"], art["left"]])
+				var keep: Array = []
+				if int(art["left"]) > 0:
+					keep.append(UserData.ART_BACKUPS)
+				if not bool(choices.get("remove_save_backups", false)):
+					keep.append(UserData.SAVE_BACKUPS)
+				var kept: Array = UserData.remove_except(user_dir, user_dir.get_base_dir(), keep)
+				if not kept.is_empty():
+					log_line("kept in %s: %s" % [user_dir, ", ".join(PackedStringArray(kept))])
 			UserFiles.remove_tree(paths.installer_dir(), paths.data_dir())
 			UserFiles.remove_settings_files(paths)
 			log_line("removed settings")

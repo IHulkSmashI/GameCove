@@ -332,10 +332,32 @@ func test_unlock_asks_in_the_next_session() -> void:
 	ok(SessionGuard.check(host, c) == null, "same session: nothing to ask yet")
 	var dlg: Control = SessionGuard.check(host, c, null, OS.get_process_id() + 1)
 	ok(dlg != null, "next session asks")
-	ok(SessionGuard.pending().is_empty(), "asked once")
+	# final review, low: the record must outlive the question (it was deleted here, before any answer)
+	eq(SessionGuard.pending().get("asked"), true, "the question is up: the record stays, marked asked")
+	ok(SessionGuard.check(host, c, null, OS.get_process_id() + 1) == null, "the same session doesn't ask twice")
 	for i in 15:
 		dlg.tick()
 	eq(c.value("display.refresh_unlock"), false, "nobody kept it: back off")
+	ok(SessionGuard.pending().is_empty(), "answered (by the countdown): forgotten")
+	# a session that dies during the countdown (a black panel, the power button): the next start
+	# puts the old value back at once, without a question nobody can see
+	c.control("display.refresh_unlock").write(true)
+	SessionGuard.remember("display.refresh_unlock", "Unlock refresh rates", false, true, "On")
+	var dlg2: Control = SessionGuard.check(host, c, null, OS.get_process_id() + 1)
+	ok(dlg2 != null, "asked in the session after the change")
+	eq(c.value("display.refresh_unlock"), true, "no answer yet: still on")
+	dlg2.free()   # that session ends here, mid-countdown
+	ok(not SessionGuard.pending().is_empty(), "the record survived the session")
+	ok(SessionGuard.check(host, c, null, OS.get_process_id() + 2) == null, "the start after that asks nothing")
+	eq(c.value("display.refresh_unlock"), false, "and has the old value back")
+	ok(SessionGuard.pending().is_empty(), "done")
+	# Keep is an answer too
+	c.control("display.refresh_unlock").write(true)
+	SessionGuard.remember("display.refresh_unlock", "Unlock refresh rates", false, true, "On")
+	var dlg3: Control = SessionGuard.check(host, c, null, OS.get_process_id() + 1)
+	dlg3.finish(true)
+	eq(c.value("display.refresh_unlock"), true, "kept")
+	ok(SessionGuard.pending().is_empty(), "kept: forgotten")
 	v.free()
 	host.free()
 	SessionGuard.clear()

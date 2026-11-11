@@ -243,6 +243,43 @@ func test_failed_switch_takes_the_controller_back() -> void:
 	m.free()
 
 
+## Final review, session: Power stops writing before the switch runs (Auto TDP, charge hold, thermald
+## hold, the 15 s check), and writes again when the switch didn't happen.
+class LeavingPower extends "res://tests/test_ui_screens.gd".FakePower:
+	var log: Array = []
+	var done := Callable()
+	func request_leave(cb := Callable()) -> void:
+		log.append("leave")
+		done = cb
+	func request_cancel_leave() -> void:
+		log.append("cancel")
+
+
+func test_switch_quiets_power_first_and_wakes_it_when_it_fails() -> void:
+	var r := FakeRunner.new()
+	var pw := LeavingPower.new()
+	var m := _menu(r, [], {"power": pw})
+	r.switch_code = 0
+	_steam(m).pressed.emit()
+	_steam(m).pressed.emit()
+	eq(pw.log, ["leave"], "Power is told first")
+	eq(r.spawned, [], "the switch waits until Power has stopped writing")
+	pw.done.call()
+	eq(r.spawned, ["/usr/bin/gamecove-session-select steam"], "then the switch runs")
+	eq(pw.log, ["leave"], "a switch that worked leaves Power quiet")
+	m.switch_timed_out(m._switch_gen)
+	eq(pw.log, ["leave", "cancel"], "GameCove is still here: Power writes again")
+	r.switch_code = 1
+	r.switch_out = "gamecove-session-select: no\n"
+	r.spawned.clear()
+	_steam(m).pressed.emit()
+	_steam(m).pressed.emit()
+	pw.done.call()
+	eq(pw.log, ["leave", "cancel", "leave", "cancel"], "a failed switch wakes Power at once")
+	ok(QuickMenu.SWITCH_LIMIT_S >= 40.0 + 10.0 + 10.0, "the overall wait covers a slow switch (baseline 40 s, root 10 s, Steam 10 s)")
+	m.free()
+
+
 func test_switch_to_steam_hands_the_controller_back_first() -> void:
 	var r := FakeRunner.new()
 	var ctl := FakeController.new()

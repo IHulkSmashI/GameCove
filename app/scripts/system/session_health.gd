@@ -12,6 +12,15 @@ extends Node
 ## file says "game" the client never counts it stale, so a beat is written only when the
 ## mode changes (the game ended: "ui" within BEAT_S), never every 5 s to a tmpfs file.
 ##
+## "front" (final review, session): a game is running but GameCove's own UI holds the screen
+## and the controller again (the quick menu is open, or Home was brought back with Guide).
+## A deadlock there used to say "game" for good, so nothing ever ended it and the only way
+## out was holding the power button. In "front" the file beats every BEAT_S like "ui" and
+## the client stops a GameCove whose beats stop (GAMECOVE_HEARTBEAT_FRONT_STALE_S, 45 s).
+## It only starts once the game has had the screen: while a game is still starting (our
+## window keeps the focus until the game's own window shows) the mode stays "game", so a slow
+## launch is never taken for a hang. The change is written at once, not at the next tick.
+##
 ## Fallback notice: the client leaves crash-fallback ("<unix time>\n<reason>") in the data
 ## folder when it gave up on GameCove for a boot; the next start shows why, once.
 
@@ -22,6 +31,11 @@ const FALLBACK_FILE := "crash-fallback"
 
 ## Returns true while a game runs (main.gd: GameSession.is_active).
 var game_running: Callable = func() -> bool: return false
+## Returns true while GameCove's UI is what the user sees and steers (its window has the focus
+## or the quick menu is open). Set by watch_background(); never true without it.
+var ui_front: Callable = func() -> bool: return false
+## The running game has had the screen at least once (see "front" above).
+var _game_had_screen := false
 var path := ""
 var seq := 0
 ## The mode the file says now ("" before the first beat).
@@ -55,11 +69,35 @@ func watch_session(session: Object) -> void:
 
 
 func _on_game_change(_game: Dictionary) -> void:
+	_game_had_screen = false   # a new game hasn't shown yet; after a game there is none
 	beat()
 
 
+## `background` is main.gd's BackgroundMode: it knows whether our window or the quick menu is
+## in front, and says when that changes (front_changed).
+func watch_background(background: Object) -> void:
+	if background == null or not background.has_method("in_background"):
+		return
+	ui_front = func() -> bool: return is_instance_valid(background) and not background.in_background()
+	if background.has_signal("front_changed") and not background.is_connected("front_changed", _on_front_changed):
+		background.connect("front_changed", _on_front_changed)
+
+
+func _on_front_changed(in_front: bool) -> void:
+	if not (game_running.is_valid() and bool(game_running.call())):
+		return
+	if not in_front:
+		_game_had_screen = true
+	if mode() != written_mode:
+		beat()
+
+
 func mode() -> String:
-	return "game" if game_running.is_valid() and bool(game_running.call()) else "ui"
+	if not (game_running.is_valid() and bool(game_running.call())):
+		return "ui"
+	if _game_had_screen and ui_front.is_valid() and bool(ui_front.call()):
+		return "front"
+	return "game"
 
 
 ## The Timer's beat: skipped while the file already says "game" and a game still runs.

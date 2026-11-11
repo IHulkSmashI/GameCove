@@ -6,12 +6,19 @@ extends Node
 ##   - listens only while start() .. stop(), on one LAN address (never on all
 ##     interfaces), on a random port the system picks;
 ##   - every address carries a one-time token (128 random bits); anything else
-##     gets 404, and past KeyDrop.MAX_BAD wrong requests a minute new
-##     connections are closed unanswered for the rest of that minute;
+##     gets 404, and past KeyDrop.MAX_BAD wrong requests a minute from one device,
+##     that device's new connections are closed unanswered for the rest of that
+##     minute (per device: someone else on the Wi-Fi can't close the page to your
+##     phone; final review, low);
+##   - a connection that sends nothing for IDLE_TIMEOUT s is closed, a download
+##     that takes nothing for STALL_TIMEOUT s too, and when every slot is taken
+##     the longest-idle connection that isn't receiving the clip makes room, so
+##     idle sockets can't lock the phone out (final review, low);
 ##   - serves exactly one file, read-only; the page has no scripts, no outside
 ##     resources, no caching, no referrer;
 ##   - closes by itself once the clip has been downloaded in full (sent()), or
-##     after `lifetime` seconds (10 minutes) with nothing being sent.
+##     after `lifetime` seconds (10 minutes, by the clock: sleep counts) with
+##     nothing being sent.
 ## Plain HTTP on the local network: the clip crosses your Wi-Fi once. It never
 ## leaves your network through GameCove.
 ##
@@ -31,6 +38,10 @@ const LIFETIME := 600.0
 const CLIENT_TIMEOUT := 10.0
 const MAX_REQUEST := 8192
 const MAX_CLIENTS := 8
+## A connection that never sends a request is closed after this long.
+const IDLE_TIMEOUT := 3.0
+## A download or playback that takes no bytes for this long is closed (the phone left).
+const STALL_TIMEOUT := 30.0
 ## Bytes written per client per frame at most (the socket takes what it can).
 const CHUNK := 262144
 const PER_FRAME := 8 * CHUNK
@@ -48,7 +59,12 @@ var port := 0
 var _server: TCPServer
 var _clients: Array = []   # {"peer", "buf", "age", "file": FileAccess, "left": int, "full": bool, "head": PackedByteArray}
 var _age := 0.0
-var _bad_times: Array[float] = []
+var _bad_by: Dictionary = {}   # per device, see KeyDrop.bad_note
+## The address a connection comes from (tests give each fake client its own).
+var peer_address: Callable = func(peer: StreamPeerTCP) -> String: return peer.get_connected_host()
+## Wall clock in seconds (tests swap it): the lifetime runs by it.
+var clock: Callable = func() -> float: return Time.get_unix_time_from_system()
+var _opened_at := 0.0
 
 
 func _init() -> void:
@@ -78,7 +94,8 @@ func start(path: String, clip_title := "") -> bool:
 	token = KeyDrop.new_token()
 	url = "http://%s:%d/c/%s" % [address, port, token]
 	_age = 0.0
-	_bad_times.clear()
+	_opened_at = float(clock.call())
+	_bad_by.clear()
 	set_process(true)
 	return true
 
@@ -96,7 +113,15 @@ func stop() -> void:
 
 
 func seconds_left() -> int:
-	return maxi(0, int(ceil(lifetime - _age))) if is_running() else 0
+	return maxi(0, int(ceil(lifetime - open_for()))) if is_running() else 0
+
+
+func open_for() -> float:
+	return KeyDrop.elapsed(_age, _opened_at, float(clock.call()))
+
+
+func throttled(from: String) -> bool:
+	return KeyDrop.bad_throttled(_bad_by, from, KeyDrop.MAX_BAD)
 
 
 func _process(delta: float) -> void:
@@ -109,22 +134,42 @@ func poll(delta: float) -> void:
 		return
 	_age += delta
 	var sending := _clients.any(func(c): return c["file"] != null)
-	if _age >= lifetime and not sending:
+	if open_for() >= lifetime and not sending:
 		stop()
 		expired.emit("timeout")
 		return
-	while not _bad_times.is_empty() and _age - _bad_times[0] >= 60.0:
-		_bad_times.pop_front()
+	KeyDrop.bad_prune(_bad_by, _age, KeyDrop.BAD_WINDOW)
 	while _server != null and _server.is_connection_available():
 		var peer := _server.take_connection()
-		if _bad_times.size() >= KeyDrop.MAX_BAD or _clients.size() >= MAX_CLIENTS:
+		var from := str(peer_address.call(peer))
+		if throttled(from):
 			peer.disconnect_from_host()
 			continue
-		_clients.append({"peer": peer, "buf": PackedByteArray(), "age": 0.0, "file": null, "left": 0, "full": false, "head": PackedByteArray()})
+		if _clients.size() >= MAX_CLIENTS and not _evict_idlest():
+			peer.disconnect_from_host()   # every slot is sending the clip: nothing to make room with
+			continue
+		_clients.append({"peer": peer, "buf": PackedByteArray(), "age": 0.0, "idle": 0.0, "from": from, "file": null,
+			"left": 0, "full": false, "head": PackedByteArray()})
 	for c in _clients.duplicate():
 		if not is_running():
 			return
 		_serve(c, delta)
+
+
+## Closes the connection that has been silent longest among those not receiving the clip.
+## False when every one of them is (then the newcomer is refused instead).
+func _evict_idlest() -> bool:
+	var worst := {}
+	for c in _clients:
+		if c["file"] != null or not (c["head"] as PackedByteArray).is_empty():
+			continue
+		if worst.is_empty() or float(c["idle"]) > float(worst["idle"]):
+			worst = c
+	if worst.is_empty():
+		return false
+	_close(worst)
+	_clients.erase(worst)
+	return true
 
 
 func _close(c: Dictionary) -> void:
@@ -141,8 +186,17 @@ func _serve(c: Dictionary, delta: float) -> void:
 		_close(c)
 		_clients.erase(c)
 		return
+	c["idle"] = float(c["idle"]) + delta
 	if c["file"] != null or not (c["head"] as PackedByteArray).is_empty():
+		var before := int(c["left"]) + (c["head"] as PackedByteArray).size()
 		_send_more(c)
+		if not c in _clients:
+			return
+		if int(c["left"]) + (c["head"] as PackedByteArray).size() < before:
+			c["idle"] = 0.0
+		elif float(c["idle"]) >= STALL_TIMEOUT:
+			_close(c)   # asked for the clip and stopped taking it: the slot and the file go back
+			_clients.erase(c)
 		return
 	c["age"] = float(c["age"]) + delta
 	var n := mini(peer.get_available_bytes(), MAX_REQUEST + 1 - (c["buf"] as PackedByteArray).size())
@@ -152,8 +206,13 @@ func _serve(c: Dictionary, delta: float) -> void:
 			var grown: PackedByteArray = c["buf"]
 			grown.append_array(got[1])
 			c["buf"] = grown
+			c["idle"] = 0.0
 	var buf: PackedByteArray = c["buf"]
 	var req := KeyDrop.parse_request(buf)
+	if req.is_empty() and buf.is_empty() and float(c["idle"]) >= IDLE_TIMEOUT:
+		_close(c)   # connected and never said anything
+		_clients.erase(c)
+		return
 	if req.is_empty() and buf.size() <= MAX_REQUEST and float(c["age"]) < CLIENT_TIMEOUT:
 		return
 	if req.is_empty():
@@ -162,7 +221,7 @@ func _serve(c: Dictionary, delta: float) -> void:
 		return
 	var ans := respond(req, token, title, FileAccess.get_size(file_path))
 	if int(ans["status"]) == 404:
-		_bad_times.append(_age)
+		KeyDrop.bad_note(_bad_by, str(c.get("from", "")), _age)
 	if ans.has("range"):
 		var f := FileAccess.open(file_path, FileAccess.READ)
 		if f == null:
@@ -173,6 +232,7 @@ func _serve(c: Dictionary, delta: float) -> void:
 			c["file"] = f
 			c["left"] = int(r[1]) - int(r[0]) + 1
 			c["full"] = bool(ans.get("full", false))
+	c["idle"] = 0.0
 	c["head"] = http_head(int(ans["status"]), ans["headers"], ans.get("body", PackedByteArray()))
 	if str(req.get("method", "")) == "HEAD" and c["file"] != null:
 		(c["file"] as FileAccess).close()

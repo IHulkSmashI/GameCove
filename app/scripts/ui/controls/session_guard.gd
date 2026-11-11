@@ -5,6 +5,12 @@ extends RefCounted
 ## change is remembered here and checked once at the next start: nobody
 ## pressing Keep within 15 s puts the old value back (and the session after
 ## that is normal again). Docs: SSH / TTY recovery in docs/CONTROLS.md.
+##
+## The record stays until there is an answer (final review, low: it used to be deleted the
+## moment the question showed, so a session that died during the countdown, which is what a
+## black panel leads to, kept the bad value for good). While the question is up the record
+## says "asked"; a start that finds it that way knows the last session ended before anyone
+## could answer, and puts the old value back without asking again.
 
 const KeepDialog := preload("res://scripts/ui/controls/keep_dialog.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
@@ -51,12 +57,21 @@ static func check(host: Control, controls: Object, _profiles: Object = null, pid
 		# detection still running: ask once it's done
 		controls.detected.connect(func(): check(host, controls, _profiles, pid), CONNECT_ONE_SHOT)
 		return null
-	clear()
+	if bool(p.get("asked", false)):
+		# asked in an earlier session that ended before an answer: the old value, now
+		controls.set_value(id, p.get("old"))
+		clear()
+		return null
+	# asked from here on; our pid, so this session doesn't ask twice
+	p["asked"] = true
+	p["pid"] = pid if pid >= 0 else OS.get_process_id()
+	preload("res://scripts/system/settings_file.gd").save_text(path, JSON.stringify(p))
 	var top: Control = host
 	while top.get_parent() is Control:
 		top = top.get_parent()
 	var dlg: Control = KeepDialog.open(top, str(p.get("title", id)), str(p.get("label", "")), TC.CONFIRM_SECONDS)
 	dlg.decided.connect(func(keep: bool):
 		if not keep:
-			controls.set_value(id, p.get("old")))
+			controls.set_value(id, p.get("old"))
+		clear())
 	return dlg

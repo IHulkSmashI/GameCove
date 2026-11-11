@@ -207,6 +207,10 @@ static func store_line(st: Dictionary) -> String:
 	return "Not signed in. Sign in with your phone; no password typing here."
 
 
+## Settings > Stores > Accounts: how signing in works, with a controller, in Gaming Mode.
+const STORES_HOW := "Press A on a store to sign in: scan the code with your phone, sign in on the store's own page there, then type the short code it shows you back here. Each store's games show up in your library once you're signed in."
+
+
 ## True when GameCove can run the sign-in itself (QR + code).
 static func can_sign_in(st: Dictionary) -> bool:
 	return not bool(st.get("signed_in", false)) and str(st.get("how", "")) in ["code", "redirect_url"]

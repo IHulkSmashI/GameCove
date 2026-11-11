@@ -104,6 +104,27 @@ func test_addresses() -> void:
 	eq(GameStream.url_host("fd00::1"), "[fd00::1]", "brackets")
 
 
+## The fixture is no one's Moonlight identity (final review, low: "contains a PEM private key; make
+## sure it's a throwaway"). Its client certificate and "PRIVATE KEY" blocks are stubs, cut off
+## after the first base64 line: 48 and 39 bytes of what would be 727 and 1217, i.e. the ASN.1
+## headers and nothing of a key. The one complete certificate is a server certificate made with
+## openssl for the pinning test below (self-signed "NVIDIA GameStream Server", created
+## 2026-11-09), and a certificate is public anyway. This test keeps it that way.
+func test_moonlight_fixture_holds_no_private_key() -> void:
+	var text := _f("Moonlight.conf")
+	var re := RegEx.create_from_string("-----BEGIN ([A-Z ]+)-----(.*?)-----END")
+	var kinds: Array = []
+	for m in re.search_all(text):
+		var raw := Marshalls.base64_to_raw(m.get_string(2).replace("\\n", "").strip_edges())
+		kinds.append(m.get_string(1))
+		if m.get_string(1).contains("PRIVATE KEY"):
+			# DER says how long the whole key would be (bytes 2-3, plus the 4-byte header)
+			var declared := (raw[2] << 8 | raw[3]) + 4
+			ok(raw.size() < 64 and declared > 1000, "the key block is a %d-byte stub of a %d-byte structure: no key material" % [raw.size(), declared])
+	eq(kinds.count("PRIVATE KEY"), 1, "one key block, the stub")
+	ok(not text.contains("ENCRYPTED") and not text.contains("RSA PRIVATE KEY") and not text.contains("EC PRIVATE KEY"), "no other kind of key")
+
+
 func test_moonlight_conf() -> void:
 	var c := Moonlight.parse_conf(_f("Moonlight.conf"))
 	ok(str(c["cert"]).begins_with("-----BEGIN CERTIFICATE-----\nMIIC"), "client cert with real newlines")

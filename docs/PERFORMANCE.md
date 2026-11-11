@@ -59,7 +59,9 @@ costs far more:
   (about 6 ms of CPU per run here). The 3 s check only runs to confirm an end, or when the
   watch can't run.
 - **The heartbeat Timer** ticks every 5 s but writes nothing while the file says "game"
-  (the session client never treats a "game" heartbeat as stale).
+  (the session client never treats a "game" heartbeat as stale). It writes again only
+  while the quick menu or Home is in front of the game ("front": one small tmpfs write
+  every 5 s, so a UI that hangs there is caught), and stops when the game is back in front.
 - **Performance sampling** (1 s) only while Auto TDP runs; it is what Auto TDP steers by.
 - Paused while a game runs: Discover refreshes, the metadata and art fill, update checks,
   Streaming's PC checks. The live top-bar refresh stops whenever our window is hidden.

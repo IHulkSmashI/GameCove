@@ -77,9 +77,10 @@ Settings > Rules > Rulesets > **Release tags**, target: tags matching `v*`.
   tag whose commit isn't on `main`, and signing waits for the owner's approval. Anyone who can push a new `v*` tag
   (people with write access) could start a run, but it can't sign without that approval.
 
-### Environment "release" (owner: create it)
+### Environment "release" (in place since 2026-11-10)
 
-Settings > Environments > New environment, name **`release`** (exactly; the workflows refer to it):
+Settings > Environments > **`release`** (exactly that name; the workflows refer to it). It exists, with the owner
+(IHulkSmashI) as required reviewer. What it must stay:
 
 - **Required reviewers:** the owner (IHulkSmashI) only. Leave "Prevent self-review" off, so the owner can approve
   his own runs.
@@ -88,10 +89,23 @@ Settings > Environments > New environment, name **`release`** (exactly; the work
 
 Job that uses it: `release` in `release.yml`.
 
-Until an environment exists, GitHub creates it on the first run **without** protection rules, so create it before
-the next run. `packaging/tests/release.sh` checks that every job with `id-token: write` names it. (This repo's own
-`nightly` environment, which the data workflows used before they moved, isn't used any more; it can be deleted in
-Settings > Environments.)
+**Never delete or rename it.** A job that names an environment GitHub doesn't know gets one created on the spot
+**without** protection rules, so the next tag run would sign without approval. `release.yml` guards against that
+itself with `tools/ci/check-environment.sh`, which asks GitHub's API for the environment before any job runs in
+it: the `tag` job checks `release` before it creates the tag, and the `protected` job checks it again in the tag's
+run; `release` (the job that signs) needs `protected`. The check fails when the environment is missing, has no
+required reviewer, doesn't have the owner among its reviewers, or lets every branch and tag deploy.
+
+The check can only fail on what GitHub tells it: when the API doesn't answer (a rate limit, or a token that may not
+read environments) it prints a warning and the run goes on, and these settings are what stand. It can't see *which*
+branches and tags are selected either, so look at that list here after any change. `packaging/tests/release.sh`
+runs the script against canned answers and checks that every job with `id-token: write` names `release`.
+
+### Environment "nightly" (no longer used here)
+
+This repo's `nightly` environment was for the data workflows, which run in IHulkSmashI/GameCove-data now (with
+that repo's own `nightly` environment, which its signing workflows check the same way before they run). Once the
+old data releases here are deleted, this repo's `nightly` can be deleted in Settings > Environments.
 
 ### Branch protection for `main`
 
@@ -103,8 +117,17 @@ lists, so protect it the same way.
 
 - `release.yml`: the tag job runs only on `main`; the release job refuses a tagged commit that isn't on `main` and
   checks its own signature against the identity the installer requires before publishing.
-- In the data repo, `firmware.yml`, `upscalers.yml`: the build job is read-only with no OIDC and checks it got
-  exactly the pinned commit; the publish job runs only pinned cosign, `gh` and standard-library checks.
-  `upscalers.yml`'s publish job re-hashes every planned file and re-checks the index (official upstream
-  repositories only, builds at least 72 hours old) with `tools/upscalers/check_plan.py` before signing.
+- `release.yml`, version: the tag must be `v<spec Version>`, the export stamps that Version into the app, and the
+  exported app is asked (`gamecove.x86_64 --headless -- --version`) and must answer the same number. The repository's
+  `app/project.godot` carries no version, so the spec is the only place to bump.
+- `release.yml`, files: `SHA256SUMS` lists every file except itself. Before signing, the release job checks the
+  downloaded files against it again (every listed file present and matching, nothing unlisted, the tag's tarball,
+  RPM, sysext and installer script all listed, and `get-gamecove.sh` identical to the tagged commit's).
+- Before the first release from a changed `release.yml`, do a dry run: `gh workflow run release.yml --ref main`
+  (publish off) builds everything and runs every check except tagging, signing and publishing.
+- In the data repo, `firmware.yml`, `upscalers.yml`: the build job checks its `nightly` environment exists and only
+  `main` can deploy to it, is read-only with no OIDC and checks it got exactly the pinned commit; the publish job
+  runs only pinned cosign, `gh` and standard-library checks. `upscalers.yml`'s publish job re-hashes every planned
+  file and re-checks the index (official upstream repositories only, builds at least 72 hours old) with
+  `tools/upscalers/check_plan.py` before signing.
 - In the data repo, `gamedb.yml`, `device-photos.yml`: the same build/publish split, without signing.

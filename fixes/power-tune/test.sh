@@ -31,7 +31,11 @@ case "$1 ${2:-}" in
 "stop thermald.service") echo inactive > "$f"; echo "stop" >> "$GAMECOVE_ROOT/systemctl.log"
 	# the caller is killed right after thermald stopped (gamecove-fix-set's time limit)
 	if [ -f "$GAMECOVE_ROOT/stop-kills-caller" ]; then kill -KILL "$PPID"; fi ;;
-"start thermald.service") echo active > "$f"; echo "start" >> "$GAMECOVE_ROOT/systemctl.log" ;;
+"start thermald.service")
+	# the first <n> starts fail while $GAMECOVE_ROOT/start-fails holds a number above 0
+	left="$(cat "$GAMECOVE_ROOT/start-fails" 2>/dev/null || echo 0)"
+	if [ "$left" -gt 0 ]; then echo $((left - 1)) > "$GAMECOVE_ROOT/start-fails"; echo "start-failed" >> "$GAMECOVE_ROOT/systemctl.log"; exit 1; fi
+	echo active > "$f"; echo "start" >> "$GAMECOVE_ROOT/systemctl.log" ;;
 *) echo "$*" >> "$GAMECOVE_ROOT/systemctl-other.log" ;;
 esac
 EOF
@@ -128,14 +132,24 @@ tail -n 1 "$T/st" | grep -q '^state=on$' || fail "status ends state=on"
 expect 0 "restore" set restore
 [ "$(r "$C/cpu2/cpufreq/energy_performance_preference")" = balance_performance ] || fail "EPP back"
 [ "$(r "$C/intel_pstate/max_perf_pct") $(r "$C/intel_pstate/no_turbo")" = "100 0" ] || fail "CPU ceiling and boost back"
-[ "$(r "$C/cpu2/online") $(r "$C/cpu3/online")" = "1 1" ] || fail "cores back online"
 [ "$(r "$G/min_freq") $(r "$G/max_freq")" = "100 2300" ] || fail "GPU window back"
 [ "$(r "$G/power_profile")" = base ] || fail "GPU profile back"
 [ "$(r "$P/constraint_0_time_window_us")" = 55967744 ] || fail "PL1 window back"
-[ "$(r "$R/sys/power/mem_sleep")" = s2idle ] || fail "mem_sleep back"
 [ "$(r "$R/thermald.state")" = active ] || fail "thermald started again"
 [ "$(r "$C/cpu0/cpufreq/scaling_governor")" = powersave ] || fail "governor back"
-sh "$FIX" status | grep -q '^installed=no$' || fail "nothing recorded after restore"
+# final review, low: `set restore` is what GameCove's session runs on exit, without a password. The settings
+# that need an administrator (cores, sleep here; smt and mcu below) must survive it: the session couldn't
+# set them again. Their originals stay recorded, for this handheld, until `remove`.
+[ "$(r "$C/cpu2/online") $(r "$C/cpu3/online")" = "0 0" ] || fail "session restore must leave the administrator's core count alone"
+[ "$(r "$R/sys/power/mem_sleep")" = deep ] || fail "session restore must leave the administrator's sleep mode alone"
+[ "$(ls "$R/var/lib/gamecove/fixes/power-tune/orig" | tr '\n' ' ')" = "cores sleep " ] || fail "only the administrator's keys stay recorded ($(ls "$R/var/lib/gamecove/fixes/power-tune/orig" | tr '\n' ' '))"
+[ -s "$R/var/lib/gamecove/fixes/power-tune/device" ] || fail "what stays recorded still names its handheld"
+expect 0 "restore again leaves them too" set restore
+[ "$(r "$C/cpu2/online") $(r "$R/sys/power/mem_sleep")" = "0 deep" ] || fail "a second session restore changes nothing"
+expect 0 "remove puts the administrator's settings back" remove
+[ "$(r "$C/cpu2/online") $(r "$C/cpu3/online")" = "1 1" ] || fail "cores back online"
+[ "$(r "$R/sys/power/mem_sleep")" = s2idle ] || fail "mem_sleep back"
+sh "$FIX" status | grep -q '^installed=no$' || fail "nothing recorded after remove"
 expect 0 "restore again is a no-op" set restore
 grep -q 'set epp=balance_power' "$R/var/lib/gamecove/fixes/power-tune/changes.log" || fail "changes logged"
 # review S3-2: a hold never outlives the game: the watcher starts thermald again once no game runs
@@ -187,6 +201,16 @@ sleep 0.3
 kill -0 "$victim" 2>/dev/null || fail "a process that isn't a watcher was killed"
 kill "$victim"
 n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 30 ]; do sleep 0.2; n=$((n + 1)); done
+# final review, low: the watcher never gives up after one failed start (it used to exit with thermald
+# still stopped and nobody left to try): it tries again a check later
+echo active > "$R/thermald.state"; : > "$T/game"; echo 2 > "$R/start-fails"; : > "$R/systemctl.log"
+PKEXEC_UID=1000 expect 0 "hold whose release will fail twice" set thermald:hold
+rm -f "$T/game"
+n=0; while [ "$(r "$R/thermald.state")" != active ] && [ "$n" -lt 60 ]; do sleep 0.2; n=$((n + 1)); done
+[ "$(grep -c '^start-failed$' "$R/systemctl.log")" = 2 ] || fail "the watcher met two failed starts ($(tr '\n' ' ' < "$R/systemctl.log"))"
+[ "$(r "$R/thermald.state")" = active ] || fail "the watcher gave up after a failed start: thermald is still stopped"
+[ ! -e "$R/var/lib/gamecove/fixes/power-tune/thermald-held" ] || fail "hold marker cleared after the retry"
+rm -f "$R/start-fails"
 # with systemd running, the watcher is a transient system unit (outside the session's cgroup)
 printf '#!/bin/sh\necho "systemd-run $*" >> "%s/systemd-run.log"\n' "$T" > "$T/bin/systemd-run"
 chmod +x "$T/bin/systemd-run"
@@ -295,11 +319,13 @@ expect 0 "platform" set platform:performance
 expect 2 "platform not offered" set platform:turbo
 expect 2 "battery mode without charge_types" set battery:long-life
 expect 0 "restore ally" set restore
-[ "$(r "$C/cpufreq/boost") $(r "$C/smt/control")" = "1 on" ] || fail "boost and SMT back"
+[ "$(r "$C/cpufreq/boost") $(r "$C/smt/control")" = "1 off" ] || fail "boost back; SMT (an administrator's setting) left alone by the session restore"
 [ "$(r "$A/ppt_pl2_sppt/current_value") $(r "$A/ppt_pl3_fppt/current_value")" = "20 25" ] || fail "PPT back"
 [ "$(r "$C/cpufreq/policy0/scaling_max_freq")" = 5100000 ] || fail "scaling_max_freq back"
 [ "$(r "$D/power_dpm_force_performance_level")" = auto ] || fail "GPU level back"
 [ "$(r "$R/sys/firmware/acpi/platform_profile")" = balanced ] || fail "platform profile back"
+expect 0 "remove ally" remove
+[ "$(r "$C/smt/control")" = on ] || fail "remove puts SMT back"
 # ASUS order (hhd asus driver): thermal profile first, then the PPT values
 expect 0 "ally sppt for order" set sppt:28
 expect 0 "ally platform for order" set platform:performance
@@ -329,7 +355,7 @@ expect 0 "m2 smt off" set smt:off
 expect 0 "m2 boost off" set boost:off
 GAMECOVE_THERMALD_WATCH=off expect 0 "m2 thermald hold" set thermald:hold
 rm "$C/cpu3/online"; mkdir "$C/cpu3/online"
-expect 1 "m2 restore with a CPU that won't come online" set restore
+expect 1 "m2 restore with a CPU that won't come online" remove
 grep -q "could not put back: cores" "$T/out" || fail "m2: the failure names the key left ($(cat "$T/out"))"
 [ "$(r "$C/intel_pstate/max_perf_pct") $(r "$C/intel_pstate/no_turbo")" = "100 0" ] || fail "m2: keys after cores still come back"
 [ "$(r "$C/smt/control")" = on ] || fail "m2: SMT back"
@@ -337,13 +363,13 @@ grep -q "could not put back: cores" "$T/out" || fail "m2: the failure names the 
 [ "$(r "$R/thermald.state")" = active ] || fail "m2: thermald released even though a key failed"
 [ "$(ls "$R/var/lib/gamecove/fixes/power-tune/orig")" = cores ] || fail "m2: only the failed key stays recorded"
 rmdir "$C/cpu3/online"; w "$C/cpu3/online" 0
-expect 0 "m2 restore again once the CPU can come online" set restore
+expect 0 "m2 restore again once the CPU can come online" remove
 [ "$(r "$C/cpu3/online")" = 1 ] || fail "m2: cores back on the second restore"
 # order: SMT before cores (the failure list is in the order keys were tried)
 expect 0 "m2 cores again" set cores:2
 expect 0 "m2 smt again" set smt:off
 rm "$C/cpu3/online"; mkdir "$C/cpu3/online"; rm "$C/smt/control"; mkdir "$C/smt/control"
-expect 1 "m2 both refused" set restore
+expect 1 "m2 both refused" remove
 grep -q "could not put back: smt cores" "$T/out" || fail "m2: smt is restored before cores ($(cat "$T/out"))"
 rmdir "$C/cpu3/online" "$C/smt/control"
 
@@ -376,7 +402,9 @@ GAMECOVE_TEST_MCU_INFO="$T/mcu-ok" expect 0 "mcu on with MCU firmware 319" set m
 [ "$(r "$A/mcu_powersave/current_value")" = 1 ] || fail "mcu_powersave 1"
 GAMECOVE_TEST_MCU_INFO="$T/mcu-old" expect 0 "mcu off always allowed" set mcu:off
 expect 0 "restore pstate" set restore
-[ "$(r "$C/cpufreq/policy1/boost") $(r "$A/ppt_fppt/current_value") $(r "$A/mcu_powersave/current_value")" = "1 30 1" ] || fail "per-policy boost, FPPT and MCU back"
+[ "$(r "$C/cpufreq/policy1/boost") $(r "$A/ppt_fppt/current_value") $(r "$A/mcu_powersave/current_value")" = "1 30 0" ] || fail "per-policy boost and FPPT back; MCU power saving (an administrator's setting) left alone"
+expect 0 "remove pstate" remove
+[ "$(r "$A/mcu_powersave/current_value")" = 1 ] || fail "remove puts MCU power saving back"
 
 # Lenovo: firmware attributes under lenovo-wmi-other-0, and only in the custom platform mode
 R="$T/lgo"; export GAMECOVE_ROOT="$R"

@@ -5,7 +5,7 @@
 #
 # What it does, and nothing more:
 #   1. works out which system this is (Bazzite / Fedora Atomic, SteamOS, other)
-#   2. downloads the latest GameCove release from GitHub: the app, the package
+#   2. downloads the newest GameCove release from GitHub: the app, the package
 #      for this system (RPM or SteamOS sysext) and SHA256SUMS
 #   3. checks SHA256SUMS's signature (Sigstore keyless: signed by this repository's release
 #      workflow through GitHub OIDC, verified with cosign) and every file against SHA256SUMS
@@ -17,10 +17,17 @@
 # It needs no root and changes nothing outside your home folder. The installer
 # app asks for your admin password (pkexec) only for the steps that need it.
 #
-# Options: --no-launch (download only), --tag vX.Y.Z (a given release; pre-releases need it
-#          while a stable release exists: GitHub's releases/latest skips them),
-#          --detect-os (print the system type and stop), --help
-# Environment (for tests and forks): GAMECOVE_REPO, GAMECOVE_API, GAMECOVE_TAG,
+# Options: --no-launch (download only), --tag vX.Y.Z (a given release; a pre-release needs it
+#          once a stable release exists), --detect-os (print the system type and stop), --help
+#
+# Which release (final review, blocker 2): the newest vX.Y.Z tag in this repository's release
+# list. GitHub's releases/latest is never asked: it answers with whatever release is marked
+# "latest", and this repository used to publish data releases too (upscalers, firmware, device
+# photos, the game database; they're in IHulkSmashI/GameCove-data now, and a fork may still
+# have them). Only tags that start with v and a digit
+# count; a stable release wins over a pre-release, and while only pre-releases exist (v0.1.0
+# is one) the newest of those is used.
+# Environment (for tests and forks): GAMECOVE_REPO, GAMECOVE_API, GAMECOVE_TAG, GAMECOVE_NOTIFY,
 #   GAMECOVE_HOME, GAMECOVE_ROOT (prefix for /etc/os-release, /run/ostree-booted),
 #   CURL, SHA256SUM, COSIGN (a cosign binary; else the system's, else a pinned download),
 #   GAMECOVE_ALLOW_UNSIGNED=1 (accept a release without a signature, e.g. one from before
@@ -47,6 +54,7 @@ DEST="$DATA/installer"
 LOG="$DATA/installer.log"
 APP_ID="io.github.ihulksmashi.GameCoveInstaller"
 launch=1
+NOTIFY="${GAMECOVE_NOTIFY:-notify-send}"
 COSIGN_VERSION=v2.5.3
 COSIGN_SHA256=783b5d6c74105401c63946c68d9b2a4e1aab3c8abce043e06b8510b02b623ec9
 OIDC_ISSUER=https://token.actions.githubusercontent.com
@@ -64,7 +72,35 @@ log() {
 die() {
 	printf 'get-gamecove: %s\n' "$*" >&2
 	log "error: $*"
+	# Started from the app menu ("GameCove Installer", Terminal=false) nobody sees stderr: say
+	# it as a desktop notification too. Never from a terminal, never fails the script.
+	if [ ! -t 2 ] && command -v "$NOTIFY" >/dev/null 2>&1; then
+		"$NOTIFY" -a "GameCove Installer" "GameCove Installer" "$*" >/dev/null 2>&1 || true
+	fi
 	exit 1
+}
+
+# The text --help prints. A function, not a read of "$0": piped into bash there is no file.
+usage() {
+	cat <<'EOF'
+GameCove installer bootstrap. Run it in Desktop Mode:
+
+  curl -fsSL https://raw.githubusercontent.com/IHulkSmashI/GameCove/main/packaging/get-gamecove.sh | bash
+
+It finds this system (Bazzite / Fedora Atomic, SteamOS, other), downloads the newest GameCove
+release from GitHub, checks its signature and checksums, unpacks the app into
+~/.local/share/gamecove/installer, adds "GameCove Installer" to the app menu and opens the
+installer, which explains each step and asks before changing anything. It needs no root and
+changes nothing outside your home folder.
+
+Options:
+  --no-launch   download only, don't open the installer
+  --tag vX.Y.Z  a given release (a pre-release needs it once a stable release exists)
+  --detect-os   print the system type and stop
+  --help        this text
+
+With options, piped: curl -fsSL <the address above> | bash -s -- --tag v0.1.0
+EOF
 }
 
 # GitHub API GET: sets body (the answer) and status (the HTTP code; 000 when unreachable).
@@ -127,7 +163,7 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	-h | --help)
-		sed -n '2,27p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+		usage
 		exit 0
 		;;
 	*) die "unknown option $1 (try --help)" ;;
@@ -217,52 +253,127 @@ version_lt() {
 	}'
 }
 
-if [ -n "$TAG" ]; then
-	url="$API/repos/$REPO/releases/tags/$TAG"
-else
-	url="$API/repos/$REPO/releases/latest"
-fi
+# releases: GitHub's answer (one release, or the release list) on stdin, as lines
+#   R <tag> <draft> <prerelease>     one per release, in the order GitHub gave them
+#   U <url>                          that release's downloads (browser_download_url)
+# Read as JSON, not by pattern: a release's notes can hold any text, and GitHub sends the
+# answer on one line to some clients. Splitting on the quote character gives the text between
+# strings and the strings in turn; a piece ending in an odd number of backslashes ended at an
+# escaped quote, so the string goes on. Names and addresses with anything but plain URL
+# characters are dropped (they are used unquoted further down).
+releases() {
+	awk '
+	function odd(s,   n) { n = 0; while (n < length(s) && substr(s, length(s) - n, 1) == "\\") n++; return n % 2 }
+	function value(k, v) {
+		if (depth == base) {
+			if (k == "tag_name") tag = v
+			else if (k == "draft") draft = v
+			else if (k == "prerelease") pre = v
+		} else if (depth == base + 2 && k == "browser_download_url" && v ~ /^https:\/\/[A-Za-z0-9._~%+\/:-]+$/) {
+			urls = urls "U " v "\n"
+		}
+	}
+	function outside(seg,   k, c, rest) {
+		for (k = 1; k <= length(seg); k++) {
+			c = substr(seg, k, 1)
+			if (c == ":") {
+				key = last; want = 1
+				rest = substr(seg, k + 1)
+				if (rest ~ /^[ \t\r]*true/) value(key, "true")
+				else if (rest ~ /^[ \t\r]*false/) value(key, "false")
+			} else if (c == "{" || c == "[") {
+				if (!base) base = (c == "[") ? 2 : 1
+				depth++; want = 0
+				if (c == "{" && depth == base) { tag = ""; draft = "false"; pre = "false"; urls = "" }
+			} else if (c == "}" || c == "]") {
+				if (c == "}" && depth == base && tag ~ /^[A-Za-z0-9._+-]+$/) printf "R %s %s %s\n%s", tag, draft, pre, urls
+				depth--; want = 0
+			} else if (c == ",") {
+				want = 0
+			}
+		}
+	}
+	{
+		n = split($0, f, "\"")
+		i = 1
+		while (i <= n) {
+			outside(f[i]); i++
+			if (i > n) break
+			s = f[i]
+			while (odd(s) && i < n) { i++; s = s "\"" f[i] }
+			if (want) { value(key, s); want = 0 } else last = s
+			i++
+		}
+	}'
+}
 
-say "Looking up the ${TAG:-latest} GameCove release"
-json=""
-api_get "$url"
-if [ "$status" = 404 ] && [ -z "$TAG" ]; then
-	# releases/latest skips pre-releases, so it 404s while only pre-releases exist (v0.1.0 is
-	# one): then the newest release of any kind. Only on a 404 (review M7): a timeout, a 5xx or
-	# a rate limit must never swap a stable release for a pre-release. A given --tag is never
-	# replaced.
-	url="$API/repos/$REPO/releases?per_page=1"
-	api_get "$url"
-	if [ "$status" = 200 ] && [ -n "$body" ]; then
-		say "No stable GameCove release yet; using the newest pre-release"
-	fi
-fi
-if [ "$status" = 200 ]; then
-	json="$body"
-elif [ "$status" != 000 ]; then
-	log "GitHub answered HTTP $status for $url"
-fi
-if [ -z "$json" ]; then
+# No release to download (GitHub unreachable or answering with an error, or no app release in
+# the list): open the copy downloaded before when there is one, so "GameCove Installer" in the
+# app menu still changes, repairs and removes an install. Otherwise stop with the reason.
+no_release() { # <what to say with a copy> <why, without one>
 	if [ -x "$DEST/app/gamecove.x86_64" ]; then
-		say "Can't reach GitHub; using the copy downloaded before."
+		say "$1; using the copy downloaded before."
 		launch_app
 		exit 0
 	fi
-	if [ "$status" != 000 ] && [ -n "$status" ]; then
-		die "GitHub answered HTTP $status for $url. Try again in a while."
-	fi
-	die "can't reach GitHub ($url). Check the connection and try again."
+	die "$2"
+}
+
+if [ -n "$TAG" ]; then
+	url="$API/repos/$REPO/releases/tags/$TAG"
+else
+	url="$API/repos/$REPO/releases?per_page=100"
 fi
 
-tag="$(printf '%s\n' "$json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
-[ -n "$tag" ] || die "no release found at $url"
-# review problem 9: "latest" never moves an install backwards (an older, validly signed release served as latest,
-# by a replayed or stale API answer); a given --tag or GAMECOVE_ALLOW_DOWNGRADE=1 may
+say "Looking up the ${TAG:-newest} GameCove release"
+api_get "$url"
+if [ "$status" = 000 ]; then
+	no_release "Can't reach GitHub" "can't reach GitHub ($url). Check the connection and try again."
+elif [ "$status" != 200 ] || [ -z "$body" ]; then
+	log "GitHub answered HTTP $status for $url"
+	if [ -n "$TAG" ] && [ "$status" = 404 ]; then
+		die "there is no GameCove release $TAG ($url)"
+	fi
+	no_release "GitHub answered HTTP $status" "GitHub answered HTTP $status for $url. Try again in a while."
+fi
+rels="$(printf '%s\n' "$body" | releases)"
+
+# The release to use. A given --tag: exactly that one, never another. Otherwise the highest
+# version among the vX... tags that aren't drafts; stable first, and only without any stable
+# release the highest pre-release. A timeout, a 5xx or a rate limit never gets here (review
+# M7), so an error can't swap a stable release for a pre-release.
+tag=""
+if [ -n "$TAG" ]; then
+	tag="$(printf '%s\n' "$rels" | awk -v t="$TAG" '$1 == "R" && $2 == t { print $2; exit }')"
+	[ -n "$tag" ] || die "no release found at $url"
+else
+	best_stable=""
+	best_pre=""
+	for line in $(printf '%s\n' "$rels" | awk '$1 == "R" && $3 != "true" && $2 ~ /^v[0-9]/ { print $2 ":" $4 }'); do
+		t="${line%%:*}"
+		if [ "${line##*:}" = true ]; then
+			if [ -z "$best_pre" ] || version_lt "$best_pre" "$t"; then best_pre="$t"; fi
+		else
+			if [ -z "$best_stable" ] || version_lt "$best_stable" "$t"; then best_stable="$t"; fi
+		fi
+	done
+	if [ -n "$best_stable" ]; then
+		tag="$best_stable"
+	elif [ -n "$best_pre" ]; then
+		tag="$best_pre"
+		say "No stable GameCove release yet; using the newest pre-release $tag"
+	else
+		no_release "GitHub lists no GameCove release" "no GameCove release found at $url. --tag vX.Y.Z picks one by name."
+	fi
+fi
+# review problem 9: the lookup never moves an install backwards (an older, validly signed release served as newest,
+# by a replayed or stale API answer); a given --tag or GAMECOVE_ALLOW_DOWNGRADE=1 may. The installed copy opens instead.
 have_tag="$(sed -n 's/^TAG=//p' "$DEST/release.env" 2>/dev/null | head -n 1)"
 if [ -z "$TAG" ] && [ -n "$have_tag" ] && [ "${GAMECOVE_ALLOW_DOWNGRADE:-}" != 1 ] && version_lt "$tag" "$have_tag"; then
-	die "the latest release GitHub reports ($tag) is older than the installed $have_tag; not going back. --tag $tag (or GAMECOVE_ALLOW_DOWNGRADE=1) does it on purpose"
+	no_release "The newest release GitHub lists ($tag) is older than the installed $have_tag: not going back (--tag $tag or GAMECOVE_ALLOW_DOWNGRADE=1 does it on purpose)" \
+		"the newest release GitHub lists ($tag) is older than the installed $have_tag; not going back. --tag $tag (or GAMECOVE_ALLOW_DOWNGRADE=1) does it on purpose"
 fi
-urls="$(printf '%s\n' "$json" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')"
+urls="$(printf '%s\n' "$rels" | awk -v t="$tag" '$1 == "R" { on = ($2 == t) } $1 == "U" && on { print $2 }')"
 
 # pick <pattern> [exclude]: the first asset URL whose file name matches
 pick() {

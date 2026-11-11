@@ -354,6 +354,7 @@ func _ready() -> void:
 	health.game_running = func() -> bool: return session != null and session.is_active()
 	add_child(health)
 	health.watch_session(session)
+	health.watch_background(background)   # the hang watchdog also runs while our UI is in front of a game
 	if quick_menu.has_method("attach_session"):
 		quick_menu.attach_session(session)
 	if quick_menu.has_signal("exit_game_requested"):
@@ -2128,8 +2129,8 @@ func _build_settings() -> void:
 
 
 static func _version() -> String:
-	var v := str(ProjectSettings.get_setting("application/config/version", ""))
-	return v if v != "" else "Development build"
+	var v := AppVersion.text()   # the release's version, or "<spec Version>-dev" from a checkout
+	return v if v != "dev" else "Development build"
 
 
 func _on_setting_changed(key: String, value: Variant) -> void:
