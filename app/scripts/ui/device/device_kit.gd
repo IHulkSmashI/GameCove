@@ -338,11 +338,28 @@ static func more_cue(holder: Control, s: ScrollContainer) -> HBoxContainer:
 	cue.offset_top = -24
 	cue.offset_bottom = 0
 	cue.alignment = BoxContainer.ALIGNMENT_CENTER
+	# its own plate: a card taller than the column can't be cut above the cue, and its
+	# text would show through the words
+	var plate := Panel.new()
+	plate.name = "MoreCuePlate"
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.anchor_left = 0.5
+	plate.anchor_right = 0.5
+	plate.anchor_top = 1.0
+	plate.anchor_bottom = 1.0
+	plate.offset_left = -76
+	plate.offset_right = 76
+	plate.offset_top = -27
+	plate.offset_bottom = 1
+	plate.add_theme_stylebox_override("panel", ThemeLib.box(Color(ThemeLib.color("bg"), 0.94), 999, 0, 0))
+	holder.add_child(plate)
 	holder.add_child(cue)
 	var bar := s.get_v_scroll_bar()
 	var upd := func(_v = 0.0):
 		if is_instance_valid(cue):
 			cue.visible = bar.max_value - bar.page - bar.value > 24.0
+			if is_instance_valid(plate):
+				plate.visible = cue.visible
 	bar.value_changed.connect(upd)
 	bar.changed.connect(upd)
 	upd.call()

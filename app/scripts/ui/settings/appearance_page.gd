@@ -1,6 +1,6 @@
 extends "res://scripts/ui/settings/page.gd"
-## Appearance: theme with live mini previews, match game art colours, reduce
-## motion, quick menu side, interface sounds. These are UI prefs main.gd
+## Appearance: theme with live mini previews, match game art colours, interface
+## size (where the screen has room for more than one), reduce motion, quick menu side, interface sounds. These are UI prefs main.gd
 ## applies, so every change goes out through host.changed(key, value).
 
 const Themes := preload("res://theme/themes.gd")
@@ -18,6 +18,12 @@ func build() -> void:
 	look.add_child(swatches)
 	theme_row.changed.connect(func(v): mark(swatches, v))
 	_ui_row(look, "match_art", [false, true], ["Off", "On"], values.get("match_art", true), "sparkle")
+	# Interface size: only the sizes that look different on this screen
+	var sizes: Array = values.get("interface_sizes", ["default"])
+	if sizes.size() > 1:
+		var cur: String = str(values.get("interface_size", "default"))
+		_ui_row(look, "interface_size", sizes, sizes.map(func(i): return Texts.SIZE_LABELS[i]),
+			cur if cur in sizes else "default", "screen")
 
 	var feel := add_card("Feel", "motion")
 	_ui_row(feel, "reduce_motion", [false, true], ["Off", "On"], values.get("reduce_motion", false), "motion")

@@ -266,7 +266,7 @@ func test_prefs_round_trip() -> void:
 	UiPrefs.save_prefs()
 	UiPrefs.set_values(UiPrefs.DEFAULTS)
 	UiPrefs.load_prefs(path)
-	eq(UiPrefs.values(), {"theme": "sunset", "match_art": false, "reduce_motion": true}, "saved and loaded")
+	eq(UiPrefs.values(), {"theme": "sunset", "match_art": false, "reduce_motion": true, "interface_size": "default"}, "saved and loaded")
 	UiPrefs.set_values({"theme": "bogus"})
 	eq(UiPrefs.theme, "cove", "unknown theme rejected")
 	UiPrefs.set_values(UiPrefs.DEFAULTS)

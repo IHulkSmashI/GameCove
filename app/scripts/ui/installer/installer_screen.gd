@@ -28,6 +28,8 @@ const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
 const SliderRow := preload("res://scripts/ui/slider_row.gd")
 const ActionRow := preload("res://scripts/ui/settings/action_row.gd")
 const UiPrefs := preload("res://scripts/ui/ui_prefs.gd")
+const UiScale := preload("res://scripts/ui/ui_scale.gd")
+const Words := preload("res://scripts/ui/words.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const TI := preload("res://scripts/ui/installer/texts_installer.gd")
@@ -174,9 +176,11 @@ func _enter_tree() -> void:
 
 func _fit_density() -> void:
 	var w := get_window()
-	if w == null or w.content_scale_mode == Window.CONTENT_SCALE_MODE_DISABLED:
+	if w == null:
 		return
-	w.content_scale_size = load("res://scripts/main.gd").base_size_for(w.size)
+	# a window on the desktop, not the whole screen: the screen's own pixels say how dense it is
+	var dev: Node = get_tree().root.get_node_or_null("Device") if is_inside_tree() else null
+	UiScale.apply(w, dev, UiPrefs.interface_size, false)
 
 
 ## The real thing: autoloads, this system, a real command runner.
@@ -194,6 +198,8 @@ func _ready() -> void:
 	var t := Target.detect(paths)
 	var dev := get_node_or_null("/root/Device")
 	var row: Dictionary = dev.profile if dev != null else {}
+	Words.setup(dev)   # "device" for "handheld" on a Steam Machine or a PC by the TV
+	Words.install()
 	var p := Plan.start(t, row, UiPrefs.values())
 	var inst: Node = Service.new()
 	inst.name = "InstallerService"
@@ -295,6 +301,14 @@ func _build() -> void:
 	# Page: eyebrow + title + content (scrolls), then a note and Back / Continue.
 	var page := Kit.margin(0, 64, 0)
 	page.name = "Page"
+	# rows and paragraphs keep a readable width on wide windows: the column is
+	# centred and never wider than PAGE_MAX_W
+	var fit_page := func():
+		var side := maxi(64, int((page.size.x - PAGE_MAX_W) / 2.0))
+		if page.get_theme_constant("margin_left") != side:
+			page.add_theme_constant_override("margin_left", side)
+			page.add_theme_constant_override("margin_right", side)
+	page.resized.connect(fit_page)
 	page.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var page_col := Kit.vbox(14)
 	page.add_child(page_col)
@@ -315,6 +329,9 @@ func _build() -> void:
 	title_box.add_child(page_title)
 	page_lead = Kit.label("", "QuietLabel", true)
 	page_lead.name = "Lead"
+	# a readable measure on wide windows (ultrawide monitors): never a 1500 px line
+	page_lead.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	title_box.resized.connect(func(): page_lead.custom_minimum_size.x = minf(title_box.size.x, LEAD_MAX_W))
 	title_box.add_child(page_lead)
 	page_col.add_child(title_box)
 	scroll = ScrollContainer.new()
@@ -422,6 +439,10 @@ func _hairline() -> ColorRect:
 ## Steps shown by name in the top bar; more than this and only the current
 ## one is named (the rest are dots), so 11 Custom steps fit at 1280 px.
 const RAIL_NAMED := 8
+## Widest the page's lead paragraph gets (layout px).
+const LEAD_MAX_W := 980.0
+## Widest the page column gets (layout px); wider windows centre it.
+const PAGE_MAX_W := 1300.0
 
 
 ## A rounded pill: optional dot, mono caps text. `accent`: tinted with the accent.
@@ -1341,7 +1362,12 @@ func _build_progress() -> void:
 		sub.name = "Line"
 		sub.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO)
 		sub.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+		# one line, cut with "…" (a wrapping label that also trims has no height of its
+		# own and the line never showed); hidden while there is nothing to say
+		sub.autowrap_mode = TextServer.AUTOWRAP_OFF
+		sub.clip_text = true
 		sub.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		sub.visible = false
 		col2.add_child(sub)
 		h.add_child(col2)
 		var st := Kit.label("", "CaptionLabel")
@@ -1411,6 +1437,7 @@ func _on_task_line(i: int, line: String) -> void:
 		var l: Label = task_rows[i].find_child("Line", true, false)
 		if l != null:
 			l.text = line
+			l.visible = line != ""
 
 
 func _on_task_finished(i: int, _ok: bool, _msg: String) -> void:
@@ -1444,6 +1471,7 @@ func _refresh_task(i: int) -> void:
 			l.text = TI.TASK_WHY.get(str(installer.tasks[i]["id"]), "")
 	elif res != "failed":
 		l.text = ""
+	l.visible = l.text != ""
 	if progress_bar != null and is_instance_valid(progress_bar):
 		var done := 0
 		var current := ""
@@ -1825,6 +1853,7 @@ func _notification(what: int) -> void:
 		_rebuild_queued = true
 		_rebuild_for_theme.call_deferred()
 	elif what == NOTIFICATION_PREDELETE:
+		Words.uninstall()
 		for c in _graveyard:
 			if is_instance_valid(c):
 				c.free()

@@ -153,6 +153,14 @@ It formats with Steam's options and adds the card as a Steam library. We would c
 the same helper (no root action of ours), only for an `sd` drive, only after a typed
 confirmation, never while a game runs, and show its progress lines.
 
+## Display output (`DisplayOutput`, `scripts/system/display_output.gd`)
+
+Reads `/sys/class/drm/card*-*/{status,enabled,edid}` (through `Device.read_all`) to say what the window is on: the handheld's own panel
+(eDP / DSI), an external monitor or a TV. The EDID's physical size bytes (21 and 22) give the diagonal. An external output that is
+connected and enabled wins; a machine with no panel at all (a Steam Machine) counts as a TV. `UiScale` (docs/RESOLUTIONS.md) uses it for the
+layout, and streaming uses the real output size and refresh when the output is external or there is no panel. It runs on start, on window
+resize and on focus-in: about ten tiny sysfs reads, no Timer and no polling.
+
 ## Controller (`Controller`, `scripts/input/controller.gd`)
 
 Autoload name `Controller`, not `Input`: an autoload called `Input` would hide Godot's
