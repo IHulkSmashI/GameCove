@@ -1,4 +1,7 @@
 # Builds what packaging needs and the packages themselves:
+#   cabinet  tools/cabinet-lzms: the LZMS cabinet.dll FSR 4 on XMX needs, cross-compiled with mingw-w64 at pinned
+#            package versions on Ubuntu 24.04, tested under Wine, and compared with tools/cabinet-lzms/cabinet.sha256
+#            (the build is reproducible; other bytes fail the run). The app tarball carries it as bin/cabinet.dll.
 #   app      Godot export -> gamecove-<version>-x86_64.tar.gz (gamecove.x86_64 + gamecove.pck at the top
 #            level: Source1 of packaging/rpm/gamecove.spec, --app of packaging/sysext/build-sysext.sh)
 #   package  in a Fedora container: the gyro fix's HID-BPF object (fixes/claw8ex-gyro/bpf/build-bpf.sh),
@@ -44,6 +47,11 @@ env:
   GODOT_TEMPLATES_SHA256: f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011
   # Source2: udev-hid-bpf-bbaad63.tar.gz from gitlab.freedesktop.org (same bytes on two downloads, 2026-11-09)
   UHB_SHA256: aab408afea76fab67b925225d6b4f0d28b226a9558ab6e750db79b12732e9ff8
+  # The cabinet job's cross toolchain (Ubuntu 24.04 packages; these versions give the bytes in
+  # tools/cabinet-lzms/cabinet.sha256, the same as ClawDeck's own build, checked 2026-11-10)
+  MINGW_GCC: 13.2.0-6ubuntu1+26.1
+  MINGW_BINUTILS: 2.41.90.20240122-1ubuntu1+11.4
+  MINGW_DEV: 11.0.1-3build1
 
 jobs:
   tag:
@@ -76,8 +84,33 @@ jobs:
           gh workflow run release.yml --ref "refs/tags/$tag" -f prerelease="$PRE"
           echo "started the release run for $tag on $GITHUB_SHA"
 
+  cabinet:
+    if: github.event_name != 'workflow_dispatch' || !inputs.publish || github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain (mingw-w64 at the pinned versions; Wine and wimlib for the test)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            "gcc-mingw-w64-x86-64=${MINGW_GCC}" "gcc-mingw-w64-x86-64-win32=${MINGW_GCC}" \
+            "gcc-mingw-w64-x86-64-posix=${MINGW_GCC}" "gcc-mingw-w64-base=${MINGW_GCC}" \
+            "binutils-mingw-w64-x86-64=${MINGW_BINUTILS}" "mingw-w64-x86-64-dev=${MINGW_DEV}" \
+            wine wine64 libwine libwim-dev
+      - name: Build (must be the reviewed bytes)
+        run: bash tools/cabinet-lzms/build.sh --check
+      - name: Test under Wine
+        run: bash tools/cabinet-lzms/test/run.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cabinet
+          path: tools/cabinet-lzms/out/cabinet.dll
+          if-no-files-found: error
+
   app:
     if: github.event_name != 'workflow_dispatch' || !inputs.publish || github.ref != 'refs/heads/main'
+    needs: cabinet
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -137,13 +170,23 @@ jobs:
             res://fonts/OFL-JetBrainsMono.txt res://addons/kenyoni/qr_code/LICENSE.md; do
             grep -qx "$f" pck-files.txt || { echo "missing from gamecove.pck: $f" >&2; exit 1; }
           done
-      - name: App tarball (with licenses/)
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cabinet
+          path: app/build/bin
+      - name: FSR 4.1.2 on XMX files (nitec's build, from the pinned commit of ClawDeck's fsr4-xmx-files branch, sha256 checked)
+        run: python3 -I tools/upscalers/fetch_fsr4.py app/build/bin/fsr4-xmx
+      - name: App tarball (with licenses/, bin/cabinet.dll and bin/fsr4-xmx)
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p dist
-          sh packaging/make-app-tarball.sh app/build "dist/gamecove-${VERSION}-x86_64.tar.gz"
+          REQUIRE_CABINET=1 REQUIRE_FSR4=1 sh packaging/make-app-tarball.sh app/build "dist/gamecove-${VERSION}-x86_64.tar.gz"
           tar -tzf "dist/gamecove-${VERSION}-x86_64.tar.gz" | tee tarball-files.txt
+          for f in bin/cabinet.dll bin/cabinet-lzms-source.tar.gz bin/fsr4-xmx/set.json \
+            bin/fsr4-xmx/amd_fidelityfx_upscaler_dx12.dll bin/fsr4-xmx/fsr-original.dll; do
+            grep -qx "$f" tarball-files.txt || { echo "missing from the tarball: $f" >&2; exit 1; }
+          done
           sed -n 's/^[^#][^ ]* \(.*\)$/licenses\/\1/p' packaging/licenses.list | while read -r f; do
             grep -qx "$f" tarball-files.txt || { echo "missing from the tarball: $f" >&2; exit 1; }
           done
@@ -196,6 +239,11 @@ jobs:
           rpm -qlp "$top"/RPMS/x86_64/gamecove-*.rpm | tee rpm-files.txt
           grep -qx /usr/lib/gamecove/fixes/claw8ex-gyro/bpf/MSI__Claw-ISH-IMU.bpf.o rpm-files.txt
           grep -qx /usr/libexec/gamecove/gamecove-fix-set rpm-files.txt
+          grep -qx /usr/lib/gamecove/bin/cabinet.dll rpm-files.txt
+          grep -qx /usr/lib/gamecove/bin/cabinet-lzms-source.tar.gz rpm-files.txt
+          for f in set.json amd_fidelityfx_upscaler_dx12.dll fsr-original.dll; do
+            grep -qx "/usr/lib/gamecove/bin/fsr4-xmx/$f" rpm-files.txt
+          done
           sed -n 's/^[^#][^ ]* \(.*\)$/\/usr\/share\/licenses\/gamecove\/\1/p' packaging/licenses.list | while read -r f; do
             grep -qx "$f" rpm-files.txt || { echo "missing from the RPM: $f" >&2; exit 1; }
           done
@@ -206,7 +254,16 @@ jobs:
           tar -xzf "dist/gamecove-${VERSION}-x86_64.tar.gz" -C app-export
           sh packaging/sysext/build-sysext.sh --app app-export --out sysext 2>&1 | tee sysext.log
           ! grep -q "no gyro HID-BPF object" sysext.log
+          ! grep -q "no bin/cabinet.dll" sysext.log
+          ! grep -q "no bin/fsr4-xmx" sysext.log
           unsquashfs -l sysext/gamecove.raw >sysext-files.txt
+          grep -q "/usr/lib/gamecove/bin/cabinet.dll\$" sysext-files.txt
+          grep -q "/usr/lib/gamecove/bin/fsr4-xmx/amd_fidelityfx_upscaler_dx12.dll\$" sysext-files.txt
+          # the shipped FSR 4.1.2 XMX files are the pinned bytes (what ClawDeck ships)
+          python3 -I tools/upscalers/fetch_fsr4.py --check app-export/bin/fsr4-xmx
+          # the same file as a release asset of its own (SHA256SUMS and its signature name it): the reviewed bytes
+          cp app-export/bin/cabinet.dll dist/cabinet.dll
+          (cd dist && sha256sum -c "$GITHUB_WORKSPACE/tools/cabinet-lzms/cabinet.sha256")
           sed -n 's/^[^#][^ ]* \(.*\)$/usr\/share\/licenses\/gamecove\/\1/p' packaging/licenses.list | while read -r f; do
             grep -q "/$f\$" sysext-files.txt || { echo "missing from the sysext: $f" >&2; exit 1; }
           done
@@ -222,6 +279,7 @@ jobs:
             dist/*.rpm
             dist/*.raw
             dist/*.bpf.o
+            dist/cabinet.dll
             dist/get-gamecove.sh
             dist/SHA256SUMS
           if-no-files-found: error
