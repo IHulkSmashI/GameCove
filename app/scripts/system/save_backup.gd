@@ -19,6 +19,8 @@ const KEEP := 10
 
 var base_dir := ""
 var run: Callable
+## func() -> unix seconds (tests set it back to play a clock that's behind).
+var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 
 
 func _init(dir: String, runner: Callable) -> void:
@@ -64,6 +66,9 @@ func backup(key: String, title: String, reason: String, parts: Array, force := f
 	var dir := dir_for(key)
 	DirAccess.make_dir_recursive_absolute(dir)
 	var stamp := _stamp(dir)
+	var seq := 1
+	for b in last:
+		seq = maxi(seq, int(b.get("seq", 0)) + 1)
 	var out_parts: Array = []
 	for i in with_files.size():
 		var p: Dictionary = with_files[i]
@@ -80,17 +85,19 @@ func backup(key: String, title: String, reason: String, parts: Array, force := f
 			size = fa.get_length()
 			fa.close()
 		out_parts.append({"name": str(p["name"]), "path": str(p["path"]), "file": file, "bytes": size})
-	var meta := {"time": int(Time.get_unix_time_from_system()), "reason": reason, "title": title,
-		"parts": out_parts, "fingerprint": fp, "pinned": pinned}
+	var meta := {"time": int(clock.call()), "reason": reason, "title": title,
+		"parts": out_parts, "fingerprint": fp, "pinned": pinned, "seq": seq}
 	if SettingsFile.save_json(dir.path_join(stamp + ".json"), meta, "\t") != OK:
 		return {"ok": false, "id": "", "skipped": "", "why": "couldn't write the backup list"}
-	prune(key)
+	prune(key, KEEP, stamp)
+	if find(key, stamp).is_empty():
+		return {"ok": false, "id": "", "skipped": "", "why": "the backup was dropped as soon as it was made"}
 	return {"ok": true, "id": stamp, "skipped": "", "why": ""}
 
 
 ## A name that sorts by time and never collides within a second.
 func _stamp(dir: String) -> String:
-	var t := Time.get_datetime_string_from_system(true).replace("-", "").replace(":", "").replace("T", "-")
+	var t := Time.get_datetime_string_from_unix_time(int(clock.call())).replace("-", "").replace(":", "").replace("T", "-")
 	var s := t
 	var n := 1
 	while FileAccess.file_exists(dir.path_join(s + ".json")):
@@ -100,6 +107,10 @@ func _stamp(dir: String) -> String:
 
 
 ## Backups of a game, newest first: [{"id", "time", "reason", "title", "parts", "bytes", "fingerprint"}].
+## Newest is the order they were made in ("seq"), not their time stamp: with the clock set back
+## (no network time yet after a dead battery) a new backup's stamp sorts before older ones, and
+## rotation then dropped the one just made (review at ff76ca4, L2). Backups from before "seq"
+## count as older than any with one, by their stamp among themselves.
 func list(key: String) -> Array:
 	var dir := dir_for(key)
 	var out: Array = []
@@ -118,7 +129,10 @@ func list(key: String) -> Array:
 		e["id"] = f.trim_suffix(".json")
 		e["bytes"] = total
 		out.append(e)
-	out.sort_custom(func(x, y): return str(x["id"]) > str(y["id"]))
+	out.sort_custom(func(x, y):
+		var sx := int(x.get("seq", 0))
+		var sy := int(y.get("seq", 0))
+		return sx > sy if sx != sy else str(x["id"]) > str(y["id"]))
 	return out
 
 
@@ -194,14 +208,15 @@ static func empty_dir(path: String) -> void:
 			remove_tree(path.path_join(sub))
 
 
-## Keeps the newest `keep` everyday backups of a game and the newest `keep` pinned ones.
-func prune(key: String, keep := KEEP) -> void:
+## Keeps the newest `keep` everyday backups of a game and the newest `keep` pinned ones;
+## `spare` (the backup just made) is never dropped.
+func prune(key: String, keep := KEEP, spare := "") -> void:
 	var dir := dir_for(key)
 	var seen := {false: 0, true: 0}
 	for b in list(key):
 		var kind := bool(b.get("pinned", false))
 		seen[kind] += 1
-		if seen[kind] <= keep:
+		if seen[kind] <= keep or str(b["id"]) == spare:
 			continue
 		for p in b["parts"]:
 			DirAccess.remove_absolute(dir.path_join(str(p["file"])))

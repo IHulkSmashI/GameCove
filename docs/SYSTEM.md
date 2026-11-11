@@ -405,7 +405,8 @@ What keeps a save from being lost (final review; each has a test against ports o
 - **What the status says.** gogdl's "Refused" (the other side is newer and this run could only go one way) is shown as
   waiting, not as synced. GOG's cloud time is an upload time, so the GOG conflict sheet calls neither side "Newer".
 - **Backups.** The newest 10 everyday backups per game, and apart from those the newest 10 made by a conflict choice,
-  a cloud copy, a restore or an interrupted download.
+  a cloud copy, a restore or an interrupted download. "Newest" is the order they were made in (`seq` in each backup's
+  JSON), not the time in their name: with the clock behind, the backup just made is never the one rotated out.
 
 ## Battery history and Sleep at low battery
 

@@ -743,6 +743,28 @@ func test_rotation_keeps_conflict_and_cloud_copies() -> void:
 	_done(w)
 
 
+## L2: with the clock behind (no network time yet after a flat battery) a new backup's stamp
+## sorted before the older ones, so rotation dropped the backup just made, and backup() said ok.
+func test_rotation_with_the_clock_behind_keeps_the_new_backup() -> void:
+	var w := _world("rotation_clock")
+	var bk: RefCounted = w["s"].backups
+	var parts := [{"name": "saves", "path": w["esaves"]}]
+	var t := [T0 + 100000]
+	bk.clock = func() -> int: return int(t[0])
+	for i in 10:
+		t[0] += 10
+		Fakes.put(w["esaves"].path_join("slot1.sav"), "launch %d" % i, T0 + i)
+		bk.backup("epic:Min", "M", "before_download", parts)
+	t[0] = T0 - 86400 * 365   # the clock a year behind
+	Fakes.put(w["esaves"].path_join("slot1.sav"), "the save before this download", T0 + 50)
+	var b: Dictionary = bk.backup("epic:Min", "M", "before_download", parts)
+	ok(b["ok"], "made")
+	ok(not bk.find("epic:Min", str(b["id"])).is_empty(), "and kept")
+	eq(str(bk.list("epic:Min")[0]["id"]), str(b["id"]), "it's the newest, whatever its stamp")
+	eq(bk.list("epic:Min").size(), 10, "the oldest one made went instead")
+	_done(w)
+
+
 ## The service marks the backups a choice or a restore made.
 func test_choice_backups_are_kept_apart() -> void:
 	var w := _world("pinned")
