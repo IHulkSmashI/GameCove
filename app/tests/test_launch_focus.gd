@@ -676,3 +676,43 @@ func test_processes_alive_outlives_the_session() -> void:
 	eq(GameSession.scope_alive("not-ours.service"), false, "only our own scopes are asked about")
 	s.free()
 	r[0].free()
+
+
+## Review at ff76ca4, residual A: a game handed to Heroic (heroic://launch) runs under
+## Heroic's own launch process, outside our scope. B on the splash closed only the opener and
+## the session ended with it, while the game still started behind GameCove.
+func test_a_launch_handed_to_heroic_is_followed_by_heroics_launch() -> void:
+	var r := _gamescope()
+	var s := _session(r[0], FakePower.new(), FakeLauncher.new())
+	var opener := [true]
+	var game_runs := [false]
+	s.pid_running = func(_p: int) -> bool: return opener[0]
+	s.handoff_alive = func(g: Dictionary) -> bool: return game_runs[0] and g.get("key", "") == "epic:Quail"
+	var ended := []
+	s.ended.connect(func(g): ended.append(g["key"]))
+	var close := []
+	s.unwanted.connect(func(g): close.append(g["key"]))
+	var id := LibraryScript.app_id_for("epic:Quail")
+	s.begin(EPIC, {"ok": true, "app_id": id, "pid": 4242, "scoped": true, "handoff": true})
+	opener[0] = false   # the opener hands the URL to Heroic and exits
+	s.dismiss()
+	eq(close, [], "B: nothing of the game to close yet (Heroic hasn't started it)")
+	for i in 10:
+		s.poll_focus()
+	ok(s.is_active(), "the opener being gone doesn't end it")
+	game_runs[0] = true   # Heroic starts the game anyway
+	for i in int(GameSession.REAPER_CHECK_S / GameSession.FOCUS_POLL_S) + 1:
+		s.poll_focus()
+	eq(close, ["epic:Quail"], "found: closed (its Heroic launch)")
+	ok(s.is_active(), "still followed while it closes")
+	ok(s.processes_alive(), "and counts as running for the saves")
+	game_runs[0] = false
+	for i in 2 * (int(GameSession.REAPER_CHECK_S / GameSession.FOCUS_POLL_S) + 1):
+		s.poll_focus()
+	eq(s.phase, "idle", "ended once its launch is gone")
+	eq(ended, ["epic:Quail"], "once")
+	eq(GameSession.handoff_pattern({"store": "gog", "id": "1207"}), "gogdl( .*)? launch( .*)? 1207( |$)", "GOG: Heroic's gogdl launch")
+	eq(GameSession.handoff_pattern({"store": "amazon", "id": "amzn1.adg.x"}), "nile( .*)? launch( .*)? amzn1\\.adg\\.x( |$)", "dots matched as dots")
+	eq(GameSession.handoff_pattern({"store": "epic", "id": "a b"}), "", "an id that can't be one: nothing")
+	s.free()
+	r[0].free()

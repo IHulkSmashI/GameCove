@@ -142,7 +142,11 @@ for an option.
   `heroic://launch?appName=<id>&runner=<legendary|gog|nile>`; Heroic's protocol
   only knows `launch` and `ping` (`src/backend/protocol.ts`), and for a game
   that isn't installed it asks the user to install it. Other actions open Heroic.
-  `external_window_needed(key, "heroic", reason)` tells the UI.
+  `external_window_needed(key, "heroic", reason)` tells the UI. A game started this way
+  runs under Heroic's own `legendary|gogdl|nile ... launch ... <id>` process, outside our
+  scope, so GameSession follows that process (`pgrep -u <uid> -f`, like a Steam game's
+  reaper) rather than the opener we started, and Exit game or B on the splash closes it
+  (GameCloser's `handoff` mode).
 - **GOG installs of our own** are recorded in
   `~/.local/share/gamecove/gog/installed.json` (Heroic's shape: `appName`,
   `install_path`, `platform`, `title`); `Gog.scan` lists them as `source:

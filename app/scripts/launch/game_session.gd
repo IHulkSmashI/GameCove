@@ -59,12 +59,20 @@ var pid_running: Callable = func(pid: int) -> bool: return OS.is_process_running
 var steam_alive: Callable = steam_launch_alive
 ## func(unit: String) -> bool: our systemd scope for a launch still holds a process. Swapped in tests.
 var unit_alive: Callable = scope_alive
+## func(game) -> bool: Heroic's launch of a game handed to it still runs. Swapped in tests.
+var handoff_alive: Callable = handoff_running
 
 var game: Dictionary = {}
 var app_id := 0
 var pid := 0
 ## Our systemd scope of the launch ("app-steam-app<id>-<n>.scope"), "" when unscoped.
 var unit := ""
+## The launch was handed to Heroic (`heroic://launch`, no store tool of our own): the game
+## runs outside our scope, under Heroic's legendary / gogdl / nile `launch` process for it,
+## and the process we started is only the opener. Followed and closed by that process, like
+## a Steam launch by its reaper (review at ff76ca4, residual A: B on the splash closed only the
+## opener and the game started anyway).
+var handed_off := false
 ## Games whose session ended without their processes being seen gone (the app quitting,
 ## a launch that never showed a window): [{key, app_id, pid, unit, steam}]. processes_alive()
 ## looks at them again and lets each go once it's gone.
@@ -137,6 +145,8 @@ func _tracked_alive(t: Dictionary) -> bool:
 		return true
 	if str(t["unit"]) != "" and bool(unit_alive.call(str(t["unit"]))):
 		return true
+	if not Dictionary(t.get("handoff", {})).is_empty() and bool(handoff_alive.call(t["handoff"])):
+		return true
 	return bool(t["steam"]) and int(t["app_id"]) > 0 and bool(steam_alive.call(int(t["app_id"])))
 
 
@@ -161,6 +171,7 @@ func begin(g: Dictionary, launched: Dictionary) -> void:
 	app_id = int(launched.get("app_id", 0))
 	pid = int(launched.get("pid", 0))
 	unit = str(launched.get("unit", ""))
+	handed_off = bool(launched.get("handoff", false))
 	if app_id <= 0 and pid <= 0:
 		return   # nothing we can follow (e.g. shell_open with no app id)
 	phase = "waiting"
@@ -220,12 +231,13 @@ func _on_focus_read(apps: Array) -> void:
 		return
 	# Never got a window with our app id. With a process to watch, keep the
 	# session going (settings stay applied) and end when it exits.
-	if pid > 0 and bool(pid_running.call(pid)):
+	if pid > 0 and not handed_off and bool(pid_running.call(pid)):
 		_enter_running()
 		return
 	# A Steam launch: keep waiting for its window (and keep the profile and Auto TDP)
-	# while Steam's reaper for it runs; the window gets focus when it appears.
-	if pid <= 0 and app_id > 0:
+	# while Steam's reaper for it runs; the window gets focus when it appears. A launch
+	# handed to Heroic the same way, by Heroic's launch process for it.
+	if (pid <= 0 and app_id > 0) or handed_off:
 		_reaper_wait += FOCUS_POLL_S
 		if _reaper_wait < REAPER_CHECK_S and _waited > FOCUS_WAIT_S:
 			return
@@ -243,7 +255,7 @@ func _on_focus_read(apps: Array) -> void:
 ##   it yet when B was pressed, so "not there" only counts once it has been seen,
 ##   or after the usual FOCUS_WAIT_S (the caller's own rule then).
 func _poll_dismissed() -> bool:
-	if pid > 0:
+	if pid > 0 and not handed_off:
 		if bool(pid_running.call(pid)):
 			_gone = 0
 			return true
@@ -251,7 +263,7 @@ func _poll_dismissed() -> bool:
 		if _gone >= GONE_TICKS:
 			_finish(true)
 		return true
-	if app_id <= 0 or _waited >= FOCUS_WAIT_S:
+	if (app_id <= 0 and not handed_off) or _waited >= FOCUS_WAIT_S:
 		return false
 	_reaper_wait += FOCUS_POLL_S
 	if _reaper_wait < REAPER_CHECK_S:
@@ -268,11 +280,46 @@ func _check_reaper() -> void:
 		if _steam_task < 0:
 			var id := app_id
 			var gen := _gen
-			var fn := steam_alive
+			var fn := _launch_alive_fn()
 			_steam_task = WorkerThreadPool.add_task(func(): _steam_checked.call_deferred(gen, id, bool(fn.call(id))),
 				false, "GameSession reaper check")
 		return
-	_reaper_result(bool(steam_alive.call(app_id)))
+	_reaper_result(bool(_launch_alive_fn().call(app_id)))
+
+
+## func(app_id) -> bool for the launch's own process: Steam's reaper, or Heroic's launch.
+func _launch_alive_fn() -> Callable:
+	if handed_off:
+		var g := game.duplicate()
+		var fn := handoff_alive
+		return func(_id: int) -> bool: return bool(fn.call(g))
+	return steam_alive
+
+
+## The `pgrep -f` pattern of Heroic's launch of `game` (its legendary, gogdl or nile run with
+## `launch` and the game's id), "" for a store or id that can't be one.
+static func handoff_pattern(g: Dictionary) -> String:
+	var tool := str({"epic": "legendary", "gog": "gogdl", "amazon": "nile"}.get(str(g.get("store", "")), ""))
+	var id := str(g.get("id", ""))
+	if tool == "" or RegEx.create_from_string("^[A-Za-z0-9._-]+$").search(id) == null:
+		return ""
+	return "%s( .*)? launch( .*)? %s( |$)" % [tool, id.replace(".", "\\.")]
+
+
+## True while Heroic's launch of `g` runs (our user's processes only).
+static func handoff_running(g: Dictionary) -> bool:
+	var pattern := handoff_pattern(g)
+	if pattern == "":
+		return false
+	var uid := ""
+	var st := FileAccess.open("/proc/self/status", FileAccess.READ)
+	for line in (DeviceScript.read_all(st) if st != null else "").split("\n"):
+		if line.begins_with("Uid:"):
+			uid = line.substr(4).strip_edges().split("\t", false)[0]
+	var args := ["-f", "--", pattern]
+	if uid.is_valid_int():
+		args = ["-u", uid] + args
+	return ExecSafe.run("pgrep", PackedStringArray(args), false)["code"] == 0
 
 
 func _steam_checked(gen: int, id: int, alive: bool) -> void:
@@ -365,9 +412,9 @@ func dismiss() -> void:
 	if focused and gamescope != null and gamescope.is_running():
 		_focus_home()
 	focused = false
-	if pid > 0 or phase == "running" or _reaper_seen:
+	if (pid > 0 and not handed_off) or phase == "running" or _reaper_seen:
 		unwanted.emit(game)
-	elif app_id > 0:
+	elif app_id > 0 or handed_off:
 		_check_reaper()
 
 
@@ -453,7 +500,8 @@ func _finish(go_home: bool) -> void:
 	var g := game
 	if not g.is_empty():
 		_left.append({"key": str(g.get("key", "")), "app_id": app_id, "pid": pid, "unit": unit,
-			"steam": str(g.get("store", "")) == "steam" or g.get("shortcut", false) == true})
+			"steam": str(g.get("store", "")) == "steam" or g.get("shortcut", false) == true,
+			"handoff": g.duplicate() if handed_off else {}})
 	_stop(_focus_timer)
 	_stop(_exit_timer)
 	exit_polling = false
@@ -473,6 +521,7 @@ func _finish(go_home: bool) -> void:
 	app_id = 0
 	pid = 0
 	unit = ""
+	handed_off = false
 	focused = false
 	dismissed = false
 	ended.emit(g)

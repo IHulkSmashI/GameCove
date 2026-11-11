@@ -658,6 +658,8 @@ func launch(game: Dictionary, options := {}) -> Dictionary:
 	var pid := OS.create_process(cmd[0], cmd.slice(1))
 	result["ok"] = pid > 0
 	result["pid"] = maxi(pid, 0)
+	# handed to Heroic: the game runs under Heroic's own launch, not the process we started
+	result["handoff"] = cmd.any(func(c): return str(c).begins_with("heroic://"))
 	if not result["ok"]:
 		result["app_id"] = 0
 	return result

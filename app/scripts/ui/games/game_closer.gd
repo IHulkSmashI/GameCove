@@ -31,11 +31,17 @@ extends Node
 
 const GRACE_S := 5.0
 
-## sh -c script: $1 signal, $2 "steam" or "pid", $3 app id or pid. The kill
-## command is $GC_KILL (tests put a recorder there), else kill.
-const KILL_SCRIPT := """sig="$1"; mode="$2"; arg="$3"
+## sh -c script: $1 signal, $2 "steam", "pid" or "handoff", $3 app id, pid or store id,
+## $4 (handoff) the store tool Heroic runs the game with. The kill command is $GC_KILL (tests
+## put a recorder there), else kill.
+const KILL_SCRIPT := """sig="$1"; mode="$2"; arg="$3"; tool="$4"
 k="${GC_KILL:-kill}"
-case "$arg" in ''|*[!0-9]*) exit 2 ;; esac
+if [ "$mode" = handoff ]; then
+	case "$arg" in ''|*[!A-Za-z0-9._-]*) exit 2 ;; esac
+	case "$tool" in legendary|gogdl|nile) ;; *) exit 2 ;; esac
+else
+	case "$arg" in ''|*[!0-9]*) exit 2 ;; esac
+fi
 tree() {
 	for c in $(pgrep -P "$1" 2>/dev/null); do tree "$c"; done
 	$k -"$sig" "$1" 2>/dev/null
@@ -47,6 +53,11 @@ group_or_tree() {
 }
 if [ "$mode" = steam ]; then
 	for p in $(pgrep -u "$(id -u)" -f "SteamLaunch AppId=$arg( |$)" 2>/dev/null); do group_or_tree "$p"; done
+elif [ "$mode" = handoff ]; then
+	rx="$(printf '%s' "$arg" | sed 's/[.]/[.]/g')"
+	for p in $(pgrep -u "$(id -u)" -f -- "$tool( .*)? launch( .*)? $rx( |$)" 2>/dev/null); do
+		[ "$p" = "$$" ] || group_or_tree "$p"
+	done
 else
 	group_or_tree "$arg"
 fi
@@ -58,15 +69,28 @@ var run: Callable = func(cmd: Array) -> int: return OS.create_process(str(cmd[0]
 var alive: Callable = func(pid: int) -> bool: return pid > 0 and OS.is_process_running(pid)
 
 
-static func _kill(sig: String, mode: String, arg: String) -> Array:
-	return ["sh", "-c", KILL_SCRIPT, "gamecove-close", sig, mode, arg]
+static func _kill(sig: String, mode: String, arg: String, tool := "") -> Array:
+	var out: Array = ["sh", "-c", KILL_SCRIPT, "gamecove-close", sig, mode, arg]
+	if tool != "":
+		out.append(tool)
+	return out
+
+
+## The store tool Heroic runs a handed-off game with, "" when none.
+const HANDOFF_TOOLS := {"epic": "legendary", "gog": "gogdl", "amazon": "nile"}
 
 
 ## [first commands, commands for after GRACE_S] to close `game`.
 ## app_id: gamescope's id (Steam appid or our scope's id); pid: our process or 0.
-static func plan(game: Dictionary, app_id: int, pid: int) -> Array:
+static func plan(game: Dictionary, app_id: int, pid: int, handed_off := false) -> Array:
 	var now: Array = []
 	var later: Array = []
+	# a launch handed to Heroic: the game runs under Heroic's legendary / gogdl / nile `launch`
+	# for it, outside our scope (the opener we started is closed below as usual)
+	if handed_off and HANDOFF_TOOLS.has(str(game.get("store", ""))):
+		var tool := str(HANDOFF_TOOLS[str(game.get("store", ""))])
+		now.append(_kill("TERM", "handoff", str(game.get("id", "")), tool))
+		later.append(_kill("KILL", "handoff", str(game.get("id", "")), tool))
 	# Steam's own games, and non-Steam shortcuts Steam starts (Steam ROM Manager's
 	# emulated games: store "emu", shortcut true, id = the shortcut's app id). Steam
 	# wraps both in the same reaper, so both stop the same way. Keyed on `shortcut`,
@@ -90,7 +114,7 @@ static func plan(game: Dictionary, app_id: int, pid: int) -> Array:
 func close(session: Object) -> bool:
 	if session == null or not session.is_active():
 		return false
-	var p := plan(session.game, int(session.app_id), int(session.pid))
+	var p := plan(session.game, int(session.app_id), int(session.pid), session.get("handed_off") == true)
 	for cmd in p[0]:
 		run.call(cmd)
 	var later: Array = p[1]
@@ -108,8 +132,10 @@ func close(session: Object) -> bool:
 ## [commands] that end `game` at once (the quick menu's Force close, for a game
 ## that hangs and ignores TERM): the same targets as plan(), with KILL and no
 ## grace. A scoped game's whole scope is killed too.
-static func force_plan(game: Dictionary, app_id: int, pid: int) -> Array:
+static func force_plan(game: Dictionary, app_id: int, pid: int, handed_off := false) -> Array:
 	var out: Array = []
+	if handed_off and HANDOFF_TOOLS.has(str(game.get("store", ""))):
+		out.append(_kill("KILL", "handoff", str(game.get("id", "")), str(HANDOFF_TOOLS[str(game.get("store", ""))])))
 	if str(game.get("store", "")) == "steam" or game.get("shortcut", false) == true:
 		var appid := str(game.get("id", app_id))
 		if preload("res://scripts/steam/app_id.gd").valid(appid):
@@ -126,7 +152,7 @@ static func force_plan(game: Dictionary, app_id: int, pid: int) -> Array:
 func force(session: Object) -> bool:
 	if session == null or not session.is_active():
 		return false
-	var cmds := force_plan(session.game, int(session.app_id), int(session.pid))
+	var cmds := force_plan(session.game, int(session.app_id), int(session.pid), session.get("handed_off") == true)
 	for cmd in cmds:
 		run.call(cmd)
 	return not cmds.is_empty()
