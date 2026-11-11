@@ -358,9 +358,18 @@ func _lsfg_reason() -> String:
 			return "Update lsfg-vk to version 2 below"
 	if game_key() == "":
 		return NO_GAME
-	if _anticheat():
+	if _anticheat() or _helper_says_anticheat():
 		return "Off for this game: it uses anti-cheat"
 	return ""
+
+
+## The upscaling helper's look at the game (its folder's anti-cheat files, the
+## lists' notes) says anti-cheat, also when the app's own data has no record
+## (review H2: Lossless checked only the app's data). Cached with the plan.
+func _helper_says_anticheat() -> bool:
+	if _upscale_reason() != "":
+		return false
+	return str(upscale_plan().get("refused", "")) == "anticheat"
 
 
 ## Lossless on/off: never next to another frame generator. The game's own (or

@@ -974,6 +974,18 @@ func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> vo
 	_done(w)
 
 
+func test_lossless_is_off_when_the_helper_finds_anticheat() -> void:
+	# the app's own data has no anti-cheat record; the game's folder (or the list's notes) does
+	var w := _world("lsfg_ac_folder", ALLY_X)
+	var runner = w["runner"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none"}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "refused": "anticheat", "line": "This game uses NetEase Anti-Cheat."}
+	_with_game(w, EPIC)
+	eq(w["reg"].control("perf.lsfg").reason, "Off for this game: it uses anti-cheat", "Lossless stays off")
+	_done(w)
+
+
 func test_never_two_frame_generators() -> void:
 	var w := _world("fg_exclusive", ALLY_X)
 	var runner = w["runner"]
