@@ -264,10 +264,19 @@ def newest_release(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work:
             continue
         _need_upstream(comp, asset.get("browser_download_url", ""))
         digest = downloads.asset_digest(asset)
-        if prev and prev.get("tag") == rel["tag_name"] and prev.get("asset") == asset["name"] and \
-                (not spec.get("gpl") or prev.get("source")) and (not digest or digest == prev.get("sha256")) and \
-                mir.url_of(prev["mirror_url"].rsplit("/", 1)[1]):
+        same = prev and prev.get("tag") == rel["tag_name"] and prev.get("asset") == asset["name"] and \
+            mir.url_of(prev["mirror_url"].rsplit("/", 1)[1])
+        if same and (not spec.get("gpl") or prev.get("source")) and (not digest or digest == prev.get("sha256")):
             return prev                                        # nothing new: no download
+        # the asset's own upload time counts, not the release's: an asset deleted and uploaded again into an old
+        # release (other bytes under the same name) waits MIN_AGE_H like a new release (review M)
+        uploaded = max(str(asset.get("updated_at") or ""), str(asset.get("created_at") or "")) or str(rel["published_at"])
+        if cutoff and uploaded > cutoff:
+            if same:
+                log(f"note: {comp} {rel['tag_name']}: {asset['name']} was uploaded again {uploaded}; the copy before "
+                    f"stays until the new one is {MIN_AGE_H} h old")
+                return prev
+            continue
         commit = source_commit(net, spec, rel) if spec.get("gpl") else None
         if spec.get("gpl") and not commit:
             skipped.append(rel["tag_name"])
