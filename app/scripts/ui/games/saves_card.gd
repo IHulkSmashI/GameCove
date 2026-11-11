@@ -181,7 +181,12 @@ func open_conflict() -> void:
 	var st: Dictionary = service.status(game)
 	actions.open_menu(TS.CONFLICT_TITLE, TS.CONFLICT_LINE % str(game.get("title", "")), conflict_rows(st, clock.call()),
 		func(id: String):
-			if id in ["local", "cloud"] and service.resolve(game, id) == false and actions.get("toast") is Callable:
+			if not id in ["local", "cloud"]:
+				return
+			var told := func(st: Dictionary) -> void:
+				if not st.has("refused") and str(st.get("state", "")) == "conflict" and actions != null and actions.get("toast") is Callable:
+					actions.toast.call(TS.RESOLVE_CHANGED, "info", "warn")
+			if service.resolve(game, id, told) == false and actions.get("toast") is Callable:
 				actions.toast.call(TS.RESOLVE_RUNNING, "info", "warn"))
 
 

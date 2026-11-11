@@ -258,7 +258,7 @@ func resolve(game: Dictionary, choice: String, done: Callable = Callable()) -> b
 	var key := str(game.get("key", ""))
 	if game_running.call() or not choice in ["local", "cloud"]:
 		if done.is_valid():
-			done.call(status(game))
+			done.call(status(game).merged({"refused": true}))
 		return false
 	_queue(game, "resolve", func(e, t): return _resolve(key, e, t, choice), func(_r):
 		if done.is_valid():
@@ -353,6 +353,7 @@ func _set_status(key: String, state: String, detail := "", extra := {}) -> Dicti
 		c.set_value(sec, "fresh", bool(extra.get("fresh", false)))
 		for n in ["local_files", "local_bytes", "cloud_files", "cloud_bytes"]:
 			c.set_value(sec, n, int(extra.get(n, -1)))
+		c.set_value(sec, "local_fp", str(extra.get("local_fp", "")))
 		if bool(extra.get("synced", false)):
 			c.set_value(sec, "last_sync", now)
 			if c.has_section_key(sec, "restored_at"):
@@ -679,6 +680,17 @@ func _clear_upload(key: String) -> void:
 static func _gog_may_upload(l: Dictionary, ts: String) -> bool:
 	var st := CloudSaves.dir_stats(str(l["path"]))
 	return int(st["files"]) > 0 and (float(ts) <= 0.0 or int(st["newest"]) >= int(float(ts)))
+
+
+## The game's save folders as a sync sees them ([] when there is no plan).
+func _local_parts(entry: Dictionary, tools: Dictionary) -> Array:
+	if CloudSaves.kind_of(entry) == "epic":
+		var plan := CloudSaves.epic_plan(entry, tools)
+		return _epic_parts(entry, plan, str(entry.get("id", ""))) if plan["ok"] else []
+	var client := CloudSaves.gog_client_id(str(entry.get("install_path", "")), str(entry.get("id", "")))
+	var cached: Variant = SettingsFile.load_cfg(cfg_path).get_value("gog_remote", client, null) if client != "" else null
+	var gp := CloudSaves.gog_plan(entry, tools, cached)
+	return gp["locations"] if gp["ok"] else []
 
 
 func _epic_parts(entry: Dictionary, plan: Dictionary, app: String) -> Array:
@@ -1017,6 +1029,12 @@ func _gogdl(plan: Dictionary, entry: Dictionary, loc: Dictionary, ts: String, st
 
 func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String) -> Dictionary:
 	var title := str(entry.get("title", key))
+	# the sheet showed the save as it was when the conflict was found; if it changed since
+	# (played from Heroic, a restore), the choice was made on something that isn't there any
+	# more: look again instead (review at ff76ca4, L5). The caller sees a conflict again.
+	var seen := str(_cfg_value(key, "local_fp", ""))
+	if seen != "" and _local_parts(entry, tools).size() > 0 and SaveBackup.fingerprint(_local_parts(entry, tools)) != seen:
+		return _sync(key, entry, tools, "now")
 	match CloudSaves.kind_of(entry):
 		"epic":
 			var plan := CloudSaves.epic_plan(entry, tools)
@@ -1092,7 +1110,7 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 ## replace it). The copy failing (offline) leaves the cloud's side unknown; the choice itself
 ## takes its own copy again before it uploads.
 func _conflict_sides(key: String, entry: Dictionary, plan: Dictionary, locs: Array) -> Dictionary:
-	var out := {"local_files": 0, "local_bytes": 0, "cloud_files": -1, "cloud_bytes": -1}
+	var out := {"local_files": 0, "local_bytes": 0, "cloud_files": -1, "cloud_bytes": -1, "local_fp": SaveBackup.fingerprint(locs)}
 	for l in locs:
 		var st := CloudSaves.dir_stats(str(l["path"]))
 		out["local_files"] += int(st["files"])

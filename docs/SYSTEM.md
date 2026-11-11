@@ -393,6 +393,9 @@ What keeps a save from being lost (final review; each has a test against ports o
   the cloud is listed first (the far-future `--ts` look): changed since the last sync (or never synced), a conflict
   with the restored save offered first; unchanged, the whole restore goes up with a forced upload (after a cloud copy)
   when the run may upload, else it waits for the game's end ("pending up"), never a download over it.
+- **A choice is about the save that was shown.** A conflict notes the folders' fingerprint (`local_fp`). If they
+  changed before the choice is made (played from Heroic, a restore), nothing is replaced: the game syncs again and,
+  still a conflict, the sheet asks again with what is there now.
 - **"Keep this handheld's save" (Epic).** legendary names an upload by the newest local file's time and every device
   takes the newest name, so the newest file is stamped now before the forced upload.
 - **A copy of Epic's cloud save.** legendary only downloads into the save folder it keeps for a game, so the copy runs

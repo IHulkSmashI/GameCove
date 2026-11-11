@@ -1815,7 +1815,12 @@ func _after_cloud_check(game: Dictionary, r: Dictionary) -> void:
 				launch_overlay.show_for(game, backdrop.current_accent(), _launch_source(game))
 				if id in ["local", "cloud"]:
 					launch_overlay.status.text = TSaves.SYNC_LAUNCH
-					saves.resolve(game, id, func(_st): _start_after_sync(game))
+					# the save here changed since the sheet was made: it asks again with what's there now
+					saves.resolve(game, id, func(st: Dictionary) -> void:
+						if str(st.get("state", "")) == "conflict":
+							_after_cloud_check(game, {"conflict": st})
+						else:
+							_start_after_sync(game))
 				else:
 					_start_after_sync(game))
 		game_actions.sheet.closed.connect(func(): call_deferred("_conflict_closed", key), CONNECT_ONE_SHOT)

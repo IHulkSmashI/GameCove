@@ -805,6 +805,28 @@ func test_a_linked_subfolder_is_backed_up_by_its_files() -> void:
 	_done(w)
 
 
+## L5: the sheet shows the save as it was when the conflict was found. Changed since (played
+## from Heroic), "keep the cloud" used to download over a save nobody had looked at.
+func test_a_choice_on_a_save_that_changed_since_asks_again() -> void:
+	var w := _world("resolve_changed")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "local", T0)
+	cloud.seed("saves", "slot1.sav", "cloud", T0 + 50)
+	w["s"].sync_now(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "conflict", "a conflict")
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "played on from Heroic", int(w["now"][0]))
+	var got := []
+	w["s"].resolve(w["gog"], "cloud", func(st): got.append(st))
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "played on from Heroic", "nothing downloaded over it")
+	eq(str(got[0]["state"]), "conflict", "asked again")
+	eq(int(got[0]["local_bytes"]), "played on from Heroic".length(), "with what's there now")
+	# asked again and chosen: it goes through
+	w["s"].resolve(w["gog"], "cloud")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "cloud", "the cloud's save")
+	_done(w)
+
+
 ## The service marks the backups a choice or a restore made.
 func test_choice_backups_are_kept_apart() -> void:
 	var w := _world("pinned")
