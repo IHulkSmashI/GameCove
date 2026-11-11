@@ -298,3 +298,23 @@ func test_starting_another_game_asks_to_close_the_first() -> void:
 	eq(scope.key() if scope != null else "", GAME_B["key"], "Controls follow B, not \"no game\"")
 	m.session.ended.disconnect(on_end)
 	await end_game()
+
+
+## Review at ff76ca4, the splash-timeout residual: once the splash gave up waiting (its own
+## timeout) on a game still starting, Play on another game dropped the first one unfollowed.
+## It is still followed, so the other game asks first.
+func test_play_after_the_splash_timed_out_still_asks_first() -> void:
+	var m: Control = w.main
+	await _press_play(GAME_A)   # Steam's launch runs, no window yet
+	m.launch_overlay.finish(true)   # what the splash's timeout does
+	await w.wait_s(0.5)
+	ok(not m.launch_overlay.is_open(), "the splash is gone")
+	ok(m.session.is_active(), "A is still being followed")
+	m._play(GAME_B)
+	ok(await until(func(): return m.game_actions.sheet.is_open(), 3000), "B asks first")
+	eq(m.session.game.get("key", ""), GAME_A["key"], "A isn't dropped")
+	await b()
+	await until(func(): return not m.game_actions.sheet.is_open(), 3000)
+	w.end_app(int(GAME_A["id"]))
+	ok(await until(func(): return not m.session.is_active(), 20000), "A ends when it's gone")
+	await w.idle()
