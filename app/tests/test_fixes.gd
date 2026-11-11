@@ -497,7 +497,8 @@ func test_vrr_line_is_put_back_after_a_steamos_update() -> void:
 	s.data_dir = h + "/data"
 	ok(not FixesSvc.vrr_line_lost(root), "line in place")
 	s.check_changes()
-	ok(not s.commands.runner.calls.any(func(c): return "claw8ex-vrr" in c), "nothing run while the line is there")
+	# (the start pass may ask the fix for its status: reading, never changing)
+	ok(not s.commands.runner.calls.any(func(c): return "claw8ex-vrr" in c and c.begins_with("pkexec")), "nothing run while the line is there")
 	g = FileAccess.open(root + FixesSvc.GRUB_DEFAULT, FileAccess.WRITE)
 	g.store_string("GRUB_CMDLINE_LINUX_DEFAULT=\"quiet amd_iommu=off\"\n")
 	g.close()
