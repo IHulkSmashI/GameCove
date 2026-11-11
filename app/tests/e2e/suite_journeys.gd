@@ -458,6 +458,11 @@ func test_library_order_search_favourite_collection_hide() -> void:
 	await w.frames(2)
 	ok(focus() != null and focus_on_screen() == "", "RT jumps to the next letter, focus on screen")
 	ok(before != focus() or shown_keys().size() < 2, "it moved")
+	# X with a tile focused: a new order, focus stays on the same game
+	ok(await nav_to(func(): return lib_tile("steam:367520"), 80), "D-pad to Hollow Knight")
+	await x()
+	await w.frames(3)
+	ok(lib_tile("steam:367520") != null and focused_in(lib_tile("steam:367520")), "X re-sorts and focus stays on Hollow Knight (%s)" % [focus().get_path() if focus() else "none"])
 	check("library journey")
 	await without_stores()
 
@@ -890,7 +895,6 @@ func test_fixes_page_apply_then_undo() -> void:
 	var fx: Node = main().fixes
 	ok(fx != null, "the Fixes service")
 	var quiet0: bool = fx.quiet_enabled()
-	fx.set_quiet_enabled(false)   # GameCove's own fix starts off (it's kept in user://, not in the reset home)
 	ok(await open_settings("device"), "Settings > Device")
 	var s: Control = main().settings
 	var dp: Control = s.pages.get("device")
@@ -905,6 +909,10 @@ func test_fixes_page_apply_then_undo() -> void:
 	ok(page != null, "the Fixes page")
 	if page == null:
 		return
+	# the service the page shows (its own, from the Settings services)
+	if page.has_method("svc") and page.svc("fixes") != null:
+		fx = page.svc("fixes")
+		quiet0 = fx.quiet_enabled()
 	var rows: Array = fx.rows()
 	ok(not rows.is_empty(), "this handheld has fixes listed (%d)" % rows.size())
 	# a fix that can be applied (or undone) here
@@ -918,7 +926,8 @@ func test_fixes_page_apply_then_undo() -> void:
 		await go_tab("home")
 		return
 	var id: String = pick["id"]
-	var verb := "apply" if pick.get("can_apply", false) else "undo"
+	# what the card offers now (GameCove's own fix keeps its state in user://, across tests)
+	var verb := "apply" if page.buttons.has("apply:" + id) else "undo"
 	var other := "undo" if verb == "apply" else "apply"
 	var done := []
 	fx.action_finished.connect(func(f, v, okk, m): done.append([f, v, okk, m]))
@@ -955,7 +964,9 @@ func test_fixes_page_apply_then_undo() -> void:
 		var r2: Array = done.filter(func(d): return d[0] == aid)
 		ok(not r2.is_empty() and not r2[-1][2] and str(r2[-1][3]) != "", "it says why it couldn't here (%s)" % [r2])
 		ok(page.find_child("Admin", true, false) != null, "the card says it needs Desktop Mode")
-	fx.set_quiet_enabled(quiet0)
+	if fx.quiet_enabled() != quiet0:
+		fx.set_quiet_enabled(quiet0)
+		fx.changed.emit(fx.rows())
 	check("fixes")
 	await go_tab("home")
 
