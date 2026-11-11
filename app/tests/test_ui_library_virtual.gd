@@ -93,3 +93,15 @@ func test_a_short_list_has_no_spacers_and_every_tile() -> void:
 	eq(l.tiles().size(), 30, "30 games, 30 tiles")
 	ok(_spacers_height(l, l._top_sp) == 0.0 and _spacers_height(l, l._bot_sp) == 0.0, "nothing to stand in for")
 	l.free()
+
+
+## The hint bar over the search keyboard names its buttons: B cancels (it is not "Home"), Menu keeps.
+func test_the_hint_bar_over_the_search_keyboard_says_cancel_and_done() -> void:
+	var l: Control = LibraryScreen.new()
+	eq(l.hints(null), [], "no keyboard: the usual hints")
+	l.open_search()
+	var h: Array = l.hints(null)
+	ok(["B", "Cancel"] in h and ["MENU", "Done"] in h, "keyboard open: B Cancel, Menu Done (%s)" % [h])
+	ok(not (["B", "Home"] in h), "and no Home")
+	l.keyboard.cancel()
+	l.free()

@@ -60,7 +60,7 @@ func is_modal() -> bool:
 ## Hints for whatever modal is open, [] when none.
 func modal_hints() -> Array:
 	if _kb_open:
-		return [["A", "Type"], ["Y", "Space"], ["X", "Delete"], ["B", "Done"]]
+		return [["A", "Type"], ["Y", "Space"], ["X", "Delete"], ["B", "Cancel"], ["MENU", "Done"]]
 	if sheet != null and sheet.is_open():
 		return Sheet.hints()
 	return []

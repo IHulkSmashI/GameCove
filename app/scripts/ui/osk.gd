@@ -254,7 +254,7 @@ func _build_actions() -> void:
 	shift_button.pressed.connect(press_shift)
 	symbols_button = _action("SymbolsKey", "RT", "", "?123", 92)
 	symbols_button.pressed.connect(toggle_symbols)
-	space_button = _action("Space", "Y", "", "Space", 60)
+	space_button = _action("Space", "Y", "", "Space", 104)
 	space_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	space_button.pressed.connect(type.bind(" "))
 	left_button = _action("CaretLeft", "LB", "chevron_left", "Left", 62)
@@ -272,13 +272,13 @@ func _build_actions() -> void:
 		if not _back_held:
 			backspace()
 		_back_held = false)
-	accents_button = _action("Accents", "", "", "áé", 60)
+	accents_button = _action("Accents", "", "", "áé", 52)
 	accents_button.pressed.connect(toggle_accents)
-	clear_button = _action("Clear", "", "", "Clear", 64)
+	clear_button = _action("Clear", "", "", "Clear", 56)
 	clear_button.pressed.connect(func(): set_text(""))
 	done_button = Kit.button("Done", "AccentButton")
 	done_button.name = "Done"
-	done_button.custom_minimum_size = Vector2(118, KEY.y)
+	done_button.custom_minimum_size = Vector2(104, KEY.y)
 	done_button.add_theme_font_size_override("font_size", ThemeLib.SIZE_BODY)
 	load("res://scripts/ui/button_fx.gd").attach(done_button, {"glyph": "MENU"})
 	done_button.pressed.connect(close)

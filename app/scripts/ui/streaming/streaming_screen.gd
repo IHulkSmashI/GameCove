@@ -1009,7 +1009,7 @@ func hints(f: Control) -> Array:
 	if more_sheet != null and more_sheet.is_open():
 		return Sheet.hints()
 	if _kb_modal != null and _kb_modal.visible:
-		return [["A", "Type"], ["B", "Done"]]
+		return [["A", "Type"], ["B", "Cancel"], ["MENU", "Done"]]
 	var out: Array = []
 	if f is HostCard:
 		var hh: Dictionary = f.host

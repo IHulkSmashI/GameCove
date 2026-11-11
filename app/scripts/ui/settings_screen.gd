@@ -489,7 +489,7 @@ static func changes_with_lr(f: Control) -> bool:
 ## (see docs: main uses it when the screen has `hints`). [] = main's default.
 func hints(f: Control) -> Array:
 	if keyboard != null and keyboard.is_open():
-		return [["A", "Type"], ["Y", "Space"], ["X", "Delete"], ["B", "Done"]]
+		return [["A", "Type"], ["Y", "Space"], ["X", "Delete"], ["B", "Cancel"], ["MENU", "Done"]]
 	if sheet != null and sheet.visible:
 		return [["A", "Select"], ["B", TS.CLOSE]]
 	var pg_m: Control = pages.get(category)

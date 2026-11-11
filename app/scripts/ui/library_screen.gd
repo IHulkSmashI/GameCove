@@ -481,6 +481,13 @@ func searching() -> bool:
 	return keyboard.is_open()
 
 
+## The hint bar while the search keyboard is open: its buttons, B cancels, Menu keeps. [] = the usual.
+func hints(_f: Control) -> Array:
+	if keyboard != null and keyboard.is_open():
+		return [["A", "Type"], ["Y", "Space"], ["X", "Delete"], ["B", "Cancel"], ["MENU", "Done"]]
+	return []
+
+
 func tiles() -> Array:
 	return _tiles
 
