@@ -54,7 +54,10 @@ func test_claw_8_ex_row_kept() -> void:
 		if d["id"] == "msi-claw-8-ex":
 			ex = d
 	eq(ex.get("match"), {"board_name": ["MS-1T91"]}, "match")
-	eq(ex.get("tdp"), {"min": 8.0, "battery_max": 35.0, "plugged_max": 35.0, "boost_max": 45.0}, "tdp")
+	var tdp: Dictionary = ex.get("tdp", {}).duplicate()
+	ok(str(tdp.get("source", "")).contains("MSI"), "tdp source names the maker's limits")
+	tdp.erase("source")
+	eq(tdp, {"min": 8.0, "battery_max": 35.0, "plugged_max": 35.0, "boost_max": 45.0}, "tdp")
 	eq(ex.get("profiles"), {"battery": 12.0, "balanced": 17.0, "performance": 25.0}, "profiles")
 	eq(ex.get("tdp_backends"), ["powerstation"], "backends")
 	eq(ex.get("fixes"), ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro", "claw-kbd-wakeup"], "fixes")
@@ -149,3 +152,29 @@ func test_validator_catches_bad_by_os() -> void:
 	bad = _row("lenovo-legion-go").duplicate(true)
 	bad["rgb"] = {"zones": "x", "via": "magic"}
 	ok(not DeviceScript.row_problems(bad).is_empty(), "unknown rgb via caught")
+
+
+# ---- item 9: the maker's limits per row, with their source ---------------------------------------------
+
+func test_every_row_has_maker_limits_and_a_source() -> void:
+	for d in DeviceScript.load_table():
+		var t: Dictionary = d["tdp"]
+		for k in ["min", "battery_max", "plugged_max"]:
+			ok(t.has(k), "%s: tdp.%s" % [d["id"], k])
+		ok(str(t.get("source", "")).length() >= 12, "%s: tdp.source" % d["id"])
+	var bad := _row("msi-claw-8-ex").duplicate(true)
+	bad["tdp"].erase("source")
+	ok(DeviceScript.row_problems(bad).any(func(m): return "source" in m), "a row without a source is caught")
+	bad = _row("msi-claw-8-ex").duplicate(true)
+	bad["pl2_offset_w"] = 5
+	ok(DeviceScript.row_problems(bad).any(func(m): return "PL2 = PL1 + 2" in m), "Intel rows run PL2 = PL1 + 2 W")
+
+
+func test_audited_corrections() -> void:
+	var oxp3: Dictionary = _row("onexplayer-3")["tdp"]
+	eq([oxp3["min"], oxp3["battery_max"], oxp3["plugged_max"], oxp3["boost_max"]], [5.0, 35.0, 40.0, 42.0], "OneXPlayer 3: 5-35 W, 40 W plugged, PL2 42 W")
+	eq(_row("msi-claw-a8")["tdp"]["min"], 7.0, "Claw A8: MSI's 7 W minimum")
+	for id in ["asus-rog-ally", "asus-rog-ally-x", "asus-rog-xbox-ally-x", "asus-rog-xbox-ally-x20"]:
+		eq(_row(id)["tdp"]["min"], 7.0, "%s: ASUS's 7 W minimum (asus-armoury)" % id)
+	eq(_row("asus-rog-ally")["tdp"]["battery_max"], 25.0, "Ally: 25 W on battery, as ASUS's DC table")
+	eq(_row("onexplayer-x2-mini").get("pl2_offset_w"), 2.0, "X2 Mini: Intel PL2 rule")

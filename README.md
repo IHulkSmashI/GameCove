@@ -211,7 +211,8 @@ it does.
 - **Power:** TDP and boost limits, power and platform modes, a thermal limit, **Auto TDP**, fan presets and **custom
   fan curves**, **charge limit** and battery care, battery saver that turns on by itself at a level you pick, sleep
   mode, plus CPU (boost, SMT, active cores, energy preference, governor, CPU ceiling) and graphics (GPU performance
-  level, clocks, power profile).
+  level, clocks, power profile). Every TDP and boost value stays inside your handheld maker's own limits for that
+  model (and the firmware's, when it's stricter), whatever sets it: the slider, a preset, Auto TDP or a game's profile.
 - **Display:** refresh rate (and extra refresh rates where the panel allows), VRR, allow tearing, colour temperature,
   night light with a schedule, vibrance, **HDR** with inverse tone mapping and SDR brightness, screen effects, rotation,
   dim and screen-off timers.

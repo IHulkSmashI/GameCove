@@ -334,6 +334,8 @@ const RGB_VIA := ["inputplumber", "hhd", "ayaneo-ec", "oxp-ec", "kernel", "steam
 ## by_os may only change what an OS changes about a handheld, never its identity or limits.
 const BY_OS_KEYS := ["gyro", "gyro_reason", "rgb"]
 const TDP_BACKENDS := ["steamos-manager", "powerstation"]
+const TDP_KEYS := ["min", "battery_max", "plugged_max", "boost_max", "default", "source",
+	"sppt_max", "fppt_max", "sppt_ratio", "fppt_ratio", "sppt_over", "fppt_over"]
 const REQUIRED := ["id", "name", "maker", "tier", "match", "chip", "gpu", "gpu_family", "gpu_arch", "xmx",
 	"panel_hz", "tdp", "fan", "charge_limit", "gyro", "buttons", "glyphs", "art", "fixes", "support", "verified", "unverified"]
 
@@ -398,6 +400,14 @@ static func row_problems(row: Dictionary) -> Array:
 			p.append("%s: tdp must be 2 <= min < battery_max <= plugged_max <= 150" % id)
 		if t.has("boost_max") and float(t["boost_max"]) < pmax:
 			p.append("%s: boost_max below plugged_max" % id)
+		# the maker's limits for this exact model, and where they come from (item 9: stay with the maker)
+		if str(t.get("source", "")).strip_edges().length() < 12:
+			p.append("%s: tdp needs a source (where the maker's limits for this model come from)" % id)
+		if t.has("default") and (float(t["default"]) < lo or float(t["default"]) > pmax):
+			p.append("%s: tdp default outside min..plugged_max" % id)
+		for k in t:
+			if not k in TDP_KEYS:
+				p.append("%s: unknown tdp key %s" % [id, k])
 		var prof: Dictionary = row.get("profiles", {})
 		var last := 0.0
 		for name in ["battery", "balanced", "performance"]:
@@ -408,6 +418,8 @@ static func row_problems(row: Dictionary) -> Array:
 				if w < last:
 					p.append("%s: profiles must rise battery <= balanced <= performance" % id)
 				last = w
+	if str(row.get("cpu_vendor", "")) == "intel" and str(row["tier"]) == "specific" and float(row.get("pl2_offset_w", -1)) != 2.0:
+		p.append("%s: Intel rows run PL2 = PL1 + 2 W (pl2_offset_w 2)" % id)
 	if row.has("pl2_offset_w") and (float(row["pl2_offset_w"]) < 0.0 or float(row["pl2_offset_w"]) > 20.0):
 		p.append("%s: pl2_offset_w out of range" % id)
 	for b in row.get("tdp_backends", []):
@@ -574,6 +586,23 @@ static func vendor_from(model: String, gpu_dev: Dictionary) -> String:
 	return g if g in ["intel", "amd"] else ""
 
 
+## Limits for a handheld whose maker's limits we don't know (an unlisted model, or a family row
+## filled from its CPU): never above SAFE_TDP for its CPU vendor, a chip with lower limits keeps
+## its own. The source says so.
+const SAFE_TDP := {"amd": {"min": 5, "battery_max": 20, "plugged_max": 25}, "intel": {"min": 8, "battery_max": 25, "plugged_max": 28}}
+
+static func conservative_tdp(chip_tdp: Dictionary, vendor: String) -> Dictionary:
+	var safe: Dictionary = SAFE_TDP["intel"] if vendor == "intel" else SAFE_TDP["amd"]
+	var tdp: Dictionary = (chip_tdp if not chip_tdp.is_empty() else safe).duplicate()
+	for k in ["battery_max", "plugged_max"]:
+		tdp[k] = minf(float(tdp.get(k, safe[k])), float(safe[k]))
+	tdp["min"] = minf(maxf(float(tdp.get("min", safe["min"])), float(safe["min"])), float(tdp["battery_max"]))
+	if tdp.has("boost_max"):
+		tdp["boost_max"] = minf(float(tdp["boost_max"]), float(tdp["plugged_max"]))
+	tdp["source"] = "Not in the device table: conservative limits for an unknown %s handheld (GameCove's own, never above the chip's)" % ("Intel" if vendor == "intel" else "AMD")
+	return tdp
+
+
 ## A row for hardware no specific row knows. Ranges are conservative.
 static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cpus: Array) -> Dictionary:
 	var c := cpu_entry(cpus, model)
@@ -588,13 +617,7 @@ static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cp
 	# The chip table's range is what the chip can do in the biggest handheld that has it (a
 	# Ryzen AI Max: 45/80 W); an unlisted handheld may be a small one, so never more than
 	# these conservative limits (review L12). A chip with lower limits keeps its own.
-	var safe: Dictionary = {"min": 5, "battery_max": 20, "plugged_max": 25} if vendor != "intel" else {"min": 8, "battery_max": 25, "plugged_max": 28}
-	var tdp: Dictionary = (c.get("tdp", safe) as Dictionary).duplicate()
-	for k in ["battery_max", "plugged_max"]:
-		tdp[k] = minf(float(tdp.get(k, safe[k])), float(safe[k]))
-	tdp["min"] = minf(float(tdp.get("min", safe["min"])), float(tdp["battery_max"]))
-	if tdp.has("boost_max"):
-		tdp["boost_max"] = minf(float(tdp["boost_max"]), float(tdp["plugged_max"]))
+	var tdp := conservative_tdp(c.get("tdp", {}) as Dictionary, vendor)
 	var name := str(dmi.get("product_name", ""))
 	var row := {
 		"id": "unknown",
@@ -649,7 +672,10 @@ static func resolve(doc: Dictionary, dmi: Dictionary, model: String, gpu_dev: Di
 	if c.has("pl2_offset_w") and not row.has("pl2_offset_w"):
 		row["pl2_offset_w"] = c["pl2_offset_w"]
 	if str(row.get("tier", "")) == "family":
-		row["tdp"] = c["tdp"].duplicate()
+		# the chip table's range is the biggest handheld's with that chip: an unlisted model of this
+		# family may be a small one, so the same conservative limits as an unknown handheld
+		row["tdp"] = conservative_tdp(c["tdp"], str(row["cpu_vendor"]))
+		row.erase("profiles")
 	return row
 
 
