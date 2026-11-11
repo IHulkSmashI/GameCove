@@ -51,6 +51,11 @@ var _status_cache := {}           # game key -> {"t": ms, "r": Dictionary}
 var _plan_cache := {}             # game key -> {"t": ms, "r": Dictionary}
 var _prepared := {}               # game keys set up ahead of their start this session
 var _last_did := {}               # game key -> what prepare changed, for the mode row's help
+var _running_key := ""            # the game running now (session_wiring through ctx["upscale_running"])
+var _pending := {}                # game key -> {"verb", "extra"}: a change asked for while that game ran
+## Helper commands that change the game's files: never while that game runs
+## (its DLLs are loaded; review M7). They wait and run once it has quit.
+const CHANGES_FILES := ["choose", "mode", "opt-in"]
 var _check := {}                  # the helper's last "check" answer
 var _check_t := -1
 var _mutex := Mutex.new()
@@ -71,6 +76,7 @@ func setup(c: Dictionary) -> void:
 	library = c.get("library", _autoload("Library") if real else null)
 	store = Store.new(str(c.get("perf_store_path", "")), str(_profile().get("id", "unknown")))
 	c["prepare_installed"] = prepare_installed
+	c["upscale_running"] = set_running_game
 	if launcher != null and "env_hooks" in launcher:
 		launcher.env_hooks.append(launch_env_hook)
 	if launcher != null and "frame_gen_hooks" in launcher:
@@ -501,24 +507,99 @@ func _upscale_reason() -> String:
 
 
 func _upscale_run(verb: String, extra: Array = []) -> Dictionary:
-	return Upscale.run(ctx.get("runner"), upscale_cmd(), verb, _home(), game_key(), _gpu(),
+	var k := game_key()
+	if verb in CHANGES_FILES and is_running(k):
+		# the game has these files loaded: the change waits until it has quit (flush_pending)
+		_mutex.lock()
+		_pending[k] = {"verb": verb, "extra": extra.duplicate()}
+		var c: Dictionary = _status_cache.get(k, {})
+		_mutex.unlock()
+		var env: Variant = (c.get("r", {}) as Dictionary).get("env", {}) if not c.is_empty() else store.get_value(k, "upscale_env", {})
+		return {"ok": true, "queued": true, "env": env if env is Dictionary else {}}
+	return Upscale.run(ctx.get("runner"), upscale_cmd(), verb, _home(), k, _gpu(),
 		str(game().get("install_path", "")), extra)
+
+
+## Session wiring: `key` started ("" when the game ended). A change asked for
+## while it ran is made at the next look at the game or its next start.
+func set_running_game(key: String) -> void:
+	_mutex.lock()
+	_running_key = key
+	_mutex.unlock()
+
+
+func is_running(key: String) -> bool:
+	_mutex.lock()
+	var r := key != "" and _running_key == key
+	_mutex.unlock()
+	return r
+
+
+## The change that waited for the game to quit, made now. True when one ran.
+func flush_pending(key: String) -> bool:
+	_mutex.lock()
+	var p: Dictionary = _pending.get(key, {})
+	var waiting := not p.is_empty() and _running_key != key
+	if waiting:
+		_pending.erase(key)
+	_mutex.unlock()
+	if not waiting or key != game_key():
+		if waiting:
+			_mutex.lock()
+			_pending[key] = p          # not the open game: kept until it is looked at
+			_mutex.unlock()
+		return false
+	var r := _upscale_run(str(p["verb"]), p["extra"])
+	_forget_status()
+	if bool(r.get("ok", false)):
+		var env: Variant = upscale_status().get("env", {})
+		_sv("upscale_env", env if env is Dictionary and not env.is_empty() else null)
+	return true
 
 
 ## The helper's status for the game, cached for a few seconds (one detect_all
 ## reads several controls).
 func upscale_status() -> Dictionary:
 	var k := game_key()
+	flush_pending(k)
 	_mutex.lock()
 	var c: Dictionary = _status_cache.get(k, {})
+	var waiting: Dictionary = _pending.get(k, {})
 	_mutex.unlock()
 	if not c.is_empty() and Time.get_ticks_msec() - int(c["t"]) < STATUS_TTL_MS:
-		return c["r"]
+		return _with_pending(c["r"], waiting)
 	var r := _upscale_run("status")
 	_mutex.lock()
 	_status_cache[k] = {"t": Time.get_ticks_msec(), "r": r}
+	var p: Dictionary = _pending.get(k, {})
 	_mutex.unlock()
-	return r
+	return _with_pending(r, p)
+
+
+## The status as it will be once the waiting change is made, so the rows show
+## the pick (and say it waits for the game to quit).
+static func _with_pending(r: Dictionary, p: Dictionary) -> Dictionary:
+	if p.is_empty() or not bool(r.get("ok", false)):
+		return r
+	var out := r.duplicate()
+	var x: Array = p.get("extra", [])
+	var arg := func(name: String) -> String:
+		var i := x.find(name)
+		return str(x[i + 1]) if i >= 0 and i + 1 < x.size() else ""
+	match str(p.get("verb", "")):
+		"choose":
+			out["upscaler"] = arg.call("--upscaler")
+			out["fg"] = int(arg.call("--fg"))
+			out["mode"] = "custom"
+		"mode":
+			out["mode"] = arg.call("--mode")
+		"opt-in":
+			out["mode"] = "best"
+	var a: Dictionary = (out.get("active", {}) as Dictionary).duplicate() if out.get("active") is Dictionary else {}
+	a["line"] = "Your change is made when you quit the game: its files are in use now."
+	out["active"] = a
+	out["pending"] = true
+	return out
 
 
 func _forget_status() -> void:
@@ -566,7 +647,8 @@ func upscale_native(key: String) -> bool:
 ## the pick didn't come up. Worker thread (detect) or the launch itself.
 func prepare_game(key := "") -> Dictionary:
 	var k := key if key != "" else game_key()
-	if k == "" or _prepared.has(k) or _upscale_reason() != "":
+	flush_pending(k)
+	if k == "" or _prepared.has(k) or _upscale_reason() != "" or is_running(k):
 		return {}
 	_prepared[k] = true
 	var r := _upscale_run("prepare", _ac_args() + _auto_net_args())

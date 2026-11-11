@@ -974,6 +974,35 @@ func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> vo
 	_done(w)
 
 
+func test_upscaler_changes_wait_until_the_game_has_quit() -> void:
+	# review M7: changing the upscaler while the game ran rewrote DLLs the game had loaded
+	var w := _world("upscale_running", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove",
+		"env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}, "active": {"state": "active", "line": "Active: FSR 4.1.2"}}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null}
+	runner.answers["choose"] = {"ok": true, "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
+	_with_game(w, EPIC)
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	runner.calls.clear()
+	reg.set_value("perf.upscaler", "fsr31")
+	eq(_calls_with(runner, "choose").size(), 0, "nothing in the game's folder changes while it runs")
+	reg.detect_all()
+	eq(reg.control("perf.upscaler").value, "fsr31", "the pick shows")
+	ok("when you quit the game" in reg.control("perf.upscale_active").help, reg.control("perf.upscale_active").help)
+	eq(w["p"].launch_env_hook("epic:abc", EPIC).get("WINEDLLOVERRIDES"), "dxgi=n,b;", "the running setup keeps its launch settings")
+	(w["ctx"]["upscale_running"] as Callable).call("")
+	w["p"]._forget_status()
+	reg.detect_all()
+	var calls := _calls_with(runner, "choose")
+	ok(calls.size() == 1 and "--upscaler fsr31" in calls[0], "made once the game has quit: " + str(calls))
+	reg.detect_all()
+	eq(_calls_with(runner, "choose").size(), 1, "and only once")
+	_done(w)
+
+
 func test_lossless_is_off_when_the_helper_finds_anticheat() -> void:
 	# the app's own data has no anti-cheat record; the game's folder (or the list's notes) does
 	var w := _world("lsfg_ac_folder", ALLY_X)
