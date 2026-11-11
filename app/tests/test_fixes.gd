@@ -481,6 +481,37 @@ func test_stale_inputplumber_override_is_rebuilt_at_start() -> void:
 	s.free()
 
 
+func test_vrr_line_is_put_back_after_a_steamos_update() -> void:
+	# a SteamOS update brings back Valve's /etc/default/grub without the VRR fix's line (fixes/claw8ex-vrr set refresh)
+	var h := _tmp("vrr_update")
+	var s := _svc("msi-claw-8-ex", {}, h)
+	var root := h + "/root"
+	DirAccess.make_dir_recursive_absolute(root + "/var/lib/gamecove/fixes/claw8ex-vrr")
+	DirAccess.make_dir_recursive_absolute(root + "/etc/default")
+	var m := FileAccess.open(root + FixesSvc.VRR_MANIFEST, FileAccess.WRITE)
+	m.store_string("file /etc/firmware/edid/gamecove-csw0801-30-120.bin\ngrubline /etc/default/grub\nfile /etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf\n")
+	m.close()
+	var g := FileAccess.open(root + FixesSvc.GRUB_DEFAULT, FileAccess.WRITE)
+	g.store_string("GRUB_CMDLINE_LINUX_DEFAULT=\"quiet\"\nGRUB_CMDLINE_LINUX_DEFAULT=\"${GRUB_CMDLINE_LINUX_DEFAULT} gamecove.vrr=1\"  # GameCove claw8ex-vrr\n")
+	g.close()
+	s.data_dir = h + "/data"
+	ok(not FixesSvc.vrr_line_lost(root), "line in place")
+	s.check_changes()
+	ok(not s.commands.runner.calls.any(func(c): return "claw8ex-vrr" in c), "nothing run while the line is there")
+	g = FileAccess.open(root + FixesSvc.GRUB_DEFAULT, FileAccess.WRITE)
+	g.store_string("GRUB_CMDLINE_LINUX_DEFAULT=\"quiet amd_iommu=off\"\n")
+	g.close()
+	ok(FixesSvc.vrr_line_lost(root), "lost after the update")
+	s.check_changes()
+	ok(s.commands.runner.calls.has("pkexec %s claw8ex-vrr set refresh" % FixesSvc.FIX_SET_HELPER), "put back through the no-password entry")
+	# a Bazzite install (kernel argument through rpm-ostree, no grub line in its record) is never touched
+	m = FileAccess.open(root + FixesSvc.VRR_MANIFEST, FileAccess.WRITE)
+	m.store_string("file /etc/firmware/edid/gamecove-csw0801-30-120.bin\nmarker gamecove.vrr=1\n")
+	m.close()
+	ok(not FixesSvc.vrr_line_lost(root), "Bazzite install: nothing to put back")
+	s.free()
+
+
 func test_page_empty_states() -> void:
 	var s := _svc("unknown", {})
 	var dev := FakeDevice.new()

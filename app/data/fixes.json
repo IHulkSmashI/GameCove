@@ -161,15 +161,20 @@
     {
      "type": "initramfs",
      "target": "rpm-ostree initramfs-etc --track",
-     "detail": "The four files above, so it also works when the driver loads early."
+     "detail": "Bazzite: the four files above, so it also works when the driver loads early. (SteamOS: only offered where the driver starts after /etc is there, so no initramfs step.)"
     },
     {
      "type": "kernel-arg",
      "target": "gamecove.vrr=1",
-     "detail": "The switch the hook looks for (plus firmware_class.path=/etc/firmware, shared with the gyro fix)."
+     "detail": "The switch the hook looks for (plus firmware_class.path=/etc/firmware, shared with the gyro fix). Bazzite: a kernel argument. SteamOS: one marked line in /etc/default/grub, then update-grub."
+    },
+    {
+     "type": "file",
+     "target": "/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf",
+     "detail": "SteamOS only: keeps the fix's own files across SteamOS updates (never Valve's grub file); after an update GameCove puts the grub line back without a password."
     }
    ],
-   "undo": "Takes out the kernel argument, the initramfs entries and every file, in reverse order. The panel's own EDID is back after a restart.",
+   "undo": "Takes out the boot switch (kernel argument, or the grub line and update-grub on SteamOS), the initramfs entries, the SteamOS keep list and every file, in reverse order. The panel's own EDID is back after a restart.",
    "tested": [
     {
      "device": "msi-claw-8-ex",
@@ -179,7 +184,7 @@
     }
    ],
    "bazzite": "Not fixed.",
-   "steamos": "Not supported on SteamOS.",
+   "steamos": "Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); not yet tested on a SteamOS Claw.",
    "sources": [
     "ClawDeck docs/HARDWARE-FINDINGS.md section 11",
     "fixes/claw8ex-vrr/README.md"
@@ -188,7 +193,21 @@
     "needed_when": {
      "all": [
       {
-       "file": "/usr/bin/rpm-ostree"
+       "any": [
+        {
+         "file": "/usr/bin/rpm-ostree"
+        },
+        {
+         "all": [
+          {
+           "os": "steamos"
+          },
+          {
+           "file": "/etc/default/grub"
+          }
+         ]
+        }
+       ]
       },
       {
        "any": [
@@ -1062,6 +1081,28 @@
         "ONEXPLAYER X1 i"
        ]
       }
+     },
+     {
+      "id": "onexplayer-x1-air",
+      "level": "optional",
+      "match": [
+       {
+        "board_vendor": [
+         "ONE-NETBOOK"
+        ],
+        "board_name": [
+         "ONEXPLAYER X1Air"
+        ]
+       },
+       {
+        "sys_vendor": [
+         "ONE-NETBOOK"
+        ],
+        "product_name": [
+         "ONEXPLAYER X1Air"
+        ]
+       }
+      ]
      },
      {
       "id": "onexplayer-x1-mini",
@@ -2967,6 +3008,1032 @@
    "withdrawn": null,
    "audited": "2026-11-10",
    "devices": []
+  },
+  {
+   "id": "journal-flood",
+   "revision": 1,
+   "title": "Quiet system log",
+   "line": "Stops steamos-manager filling the system log with split-lock lines, so older logs aren't wiped.",
+   "symptom": "steamos-manager hands every split-lock hit to a crash reporter Bazzite doesn't have; each hit and each failure is logged (about 70,000 lines in five minutes on a Claw 8 EX, 14 % of a CPU core), so the capped journal loses every earlier boot within minutes.",
+   "why": "Any handheld with steamos-manager but without Valve's steamos-log-submitter (Bazzite); the fix checks for both, so it is offered everywhere.",
+   "kind": "file",
+   "page": "fixes",
+   "password": "admin",
+   "restart": "",
+   "level": "optional",
+   "must_fix": false,
+   "breaks": "",
+   "default": "suggested-off",
+   "risk": "low",
+   "risk_note": "One systemd drop-in; only the log lines of steamos-manager's crash-report forwarding go. Everything else it logs stays.",
+   "auto": [],
+   "optional": "*",
+   "exclude": {},
+   "changes": [
+    {
+     "type": "file",
+     "target": "/etc/systemd/system/steamos-manager.service.d/50-gamecove-quiet-split-lock.conf",
+     "detail": "Sets RUST_LOG=info,steamos_manager::sls=off for steamos-manager."
+    },
+    {
+     "type": "service",
+     "target": "steamos-manager.service",
+     "detail": "systemd reloads its units and restarts steamos-manager if it runs."
+    }
+   ],
+   "undo": "Deletes the drop-in, reloads systemd and restarts steamos-manager.",
+   "tested": [],
+   "bazzite": "Not fixed: Bazzite ships steamos-manager without steamos-log-submitter.",
+   "steamos": "Not needed: SteamOS has steamos-log-submitter, which takes the hits.",
+   "sources": [
+    "ClawDeck py_modules/clawdeck/quietlog.py and docs/HARDWARE-FINDINGS.md (measured on a Claw 8 EX, 2026-11-04)",
+    "https://gitlab.steamos.cloud/holo/steamos-manager/-/blob/a3b2013/steamos-manager/src/sls/ftrace.rs"
+   ],
+   "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+     "probe": "os_fixed"
+    },
+    "probe": {
+     "command": "status",
+     "native": "os_fixed=yes",
+     "what": "Looks for another steamos-manager drop-in (not GameCove's) that already turns the forwarding module's log off; the fix is not needed where steamos-log-submitter is installed."
+    },
+    "both_active": "harmless"
+   },
+   "watch": [
+    {
+     "id": "steamos-manager-sls",
+     "kind": "url",
+     "url": "https://gitlab.steamos.cloud/holo/steamos-manager/-/commits/main/steamos-manager/src/sls",
+     "note": "steamos-manager's log-submitter forwarding: a change that skips it without the reporter makes this fix unnecessary."
+    },
+    {
+     "id": "bazzite-units",
+     "kind": "github-commits",
+     "repo": "ublue-os/bazzite",
+     "path": "system_files/deck/shared/usr/lib/systemd/system",
+     "note": "Bazzite's own systemd units: a drop-in for steamos-manager there would make this os-fixed."
+    }
+   ],
+   "withdrawn": null,
+   "audited": "2026-11-10",
+   "devices": {
+    "listed": [
+     {
+      "id": "steam-deck-lcd",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "Valve"
+       ],
+       "product_name": [
+        "Jupiter"
+       ]
+      }
+     },
+     {
+      "id": "steam-deck-oled",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "Valve"
+       ],
+       "product_name": [
+        "Galileo"
+       ]
+      }
+     },
+     {
+      "id": "asus-rog-ally",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ASUSTeK COMPUTER INC."
+       ],
+       "board_name": [
+        "RC71L"
+       ]
+      }
+     },
+     {
+      "id": "asus-rog-ally-x",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ASUSTeK COMPUTER INC."
+       ],
+       "board_name": [
+        "RC72LA"
+       ]
+      }
+     },
+     {
+      "id": "asus-rog-xbox-ally",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ASUSTeK COMPUTER INC."
+       ],
+       "board_name": [
+        "RC73YA"
+       ]
+      }
+     },
+     {
+      "id": "asus-rog-xbox-ally-x",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ASUSTeK COMPUTER INC."
+       ],
+       "board_name": [
+        "RC73XA"
+       ]
+      }
+     },
+     {
+      "id": "asus-rog-xbox-ally-x20",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ASUS"
+       ],
+       "board_name": [
+        "RC74XA"
+       ]
+      }
+     },
+     {
+      "id": "lenovo-legion-go",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "LENOVO"
+       ],
+       "product_name": [
+        "83E1"
+       ]
+      }
+     },
+     {
+      "id": "lenovo-legion-go-2",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "LENOVO"
+       ],
+       "product_name": [
+        "83N0"
+       ]
+      }
+     },
+     {
+      "id": "lenovo-legion-go-2-z2",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "LENOVO"
+       ],
+       "product_name": [
+        "83N1"
+       ]
+      }
+     },
+     {
+      "id": "lenovo-legion-go-s-z2go",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "LENOVO"
+       ],
+       "product_name": [
+        "83L3",
+        "83Q2"
+       ]
+      }
+     },
+     {
+      "id": "lenovo-legion-go-s-z1e",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "LENOVO"
+       ],
+       "product_name": [
+        "83N6",
+        "83Q3"
+       ]
+      }
+     },
+     {
+      "id": "msi-claw-8-ex",
+      "level": "optional",
+      "match": {
+       "board_name": [
+        "MS-1T91"
+       ]
+      }
+     },
+     {
+      "id": "msi-claw-8-ai-plus",
+      "level": "optional",
+      "match": {
+       "board_vendor": [
+        "Micro-Star International Co., Ltd."
+       ],
+       "board_name": [
+        "MS-1T52"
+       ]
+      }
+     },
+     {
+      "id": "msi-claw-7-ai-plus",
+      "level": "optional",
+      "match": {
+       "board_vendor": [
+        "Micro-Star International Co., Ltd."
+       ],
+       "board_name": [
+        "MS-1T42"
+       ]
+      }
+     },
+     {
+      "id": "msi-claw-a1m",
+      "level": "optional",
+      "match": {
+       "board_vendor": [
+        "Micro-Star International Co., Ltd."
+       ],
+       "board_name": [
+        "MS-1T41"
+       ]
+      }
+     },
+     {
+      "id": "msi-claw-a8",
+      "level": "optional",
+      "match": {
+       "board_vendor": [
+        "Micro-Star International Co., Ltd."
+       ],
+       "board_name": [
+        "MS-1T8K"
+       ]
+      }
+     },
+     {
+      "id": "msi-claw-family",
+      "level": "optional",
+      "match": {
+       "board_vendor": [
+        "Micro-Star International Co., Ltd."
+       ],
+       "board_name": [
+        "MS-1T*"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-onexfly-f1",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER F1",
+        "ONEXPLAYER F1 EVA-01",
+        "ONEXPLAYER F1 OLED"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-onexfly-f1-pro",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER F1Pro",
+        "ONEXPLAYER F1 EVA-02"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-x1-amd",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER X1 A"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-x1-intel",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER X1 i"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-x1-air",
+      "level": "optional",
+      "match": [
+       {
+        "board_vendor": [
+         "ONE-NETBOOK"
+        ],
+        "board_name": [
+         "ONEXPLAYER X1Air"
+        ]
+       },
+       {
+        "sys_vendor": [
+         "ONE-NETBOOK"
+        ],
+        "product_name": [
+         "ONEXPLAYER X1Air"
+        ]
+       }
+      ]
+     },
+     {
+      "id": "onexplayer-x1-mini",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER X1 mini"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-x1-pro",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER X1Pro",
+        "ONEXPLAYER X1 Pro"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-2",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER 2 ARP23"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-2-pro",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER 2 PRO ARP23",
+        "ONEXPLAYER 2 PRO ARP23H",
+        "ONEXPLAYER 2 PRO ARP23P",
+        "ONEXPLAYER 2 PRO ARP23 EVA-01"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-g1-amd",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER G1 A"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-g1-intel",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER G1 i"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-3",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER 3"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-x2-mini",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER X2Mini"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-x2-mini-pro",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER X2Mini PRO"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-onexfly-apex",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER APEX"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-super-x",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER SUPER X"
+       ]
+      }
+     },
+     {
+      "id": "onexplayer-family",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ]
+      }
+     },
+     {
+      "id": "aokzoe-a1",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AOKZOE"
+       ],
+       "product_name": [
+        "AOKZOE A1 AR07"
+       ]
+      }
+     },
+     {
+      "id": "aokzoe-a1-pro",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AOKZOE"
+       ],
+       "product_name": [
+        "AOKZOE A1 Pro"
+       ]
+      }
+     },
+     {
+      "id": "aokzoe-a1x",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AOKZOE"
+       ],
+       "product_name": [
+        "AOKZOE A1X"
+       ]
+      }
+     },
+     {
+      "id": "aokzoe-family",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AOKZOE"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-2s",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO"
+       ],
+       "product_name": [
+        "AYANEO 2S",
+        "GEEK 1S",
+        "AYANEO GEEK 1S"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-2",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO"
+       ],
+       "product_name": [
+        "AYANEO 2",
+        "GEEK"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-kun",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO"
+       ],
+       "product_name": [
+        "AYANEO KUN",
+        "KUN"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-air-1s",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO"
+       ],
+       "product_name": [
+        "AIR 1S",
+        "AIR 1S Limited"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-air-plus",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO"
+       ],
+       "product_name": [
+        "AIR Plus"
+       ],
+       "board_name": [
+        "AB05-AMD",
+        "AB05-Mendocino",
+        "AB05-Intel"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-flip",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO"
+       ],
+       "product_name": [
+        "FLIP KB",
+        "FLIP DS"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-flip-1s-ds",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO"
+       ],
+       "product_name": [
+        "FLIP 1S DS"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-3",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO"
+       ],
+       "product_name": [
+        "AYANEO 3"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-slide",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO"
+       ],
+       "product_name": [
+        "SLIDE"
+       ]
+      }
+     },
+     {
+      "id": "ayaneo-family",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "AYANEO",
+        "AYADEVICE",
+        "AYA NEO"
+       ]
+      }
+     },
+     {
+      "id": "gpd-win-4",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "GPD"
+       ],
+       "product_name": [
+        "G1618-04"
+       ]
+      }
+     },
+     {
+      "id": "gpd-win-mini",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "GPD"
+       ],
+       "product_name": [
+        "G1617-01",
+        "G1617-02"
+       ]
+      }
+     },
+     {
+      "id": "gpd-win-max-2",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "GPD"
+       ],
+       "product_name": [
+        "G1619-04",
+        "G1619-05"
+       ]
+      }
+     },
+     {
+      "id": "gpd-win-5",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "GPD"
+       ],
+       "product_name": [
+        "G1618-05"
+       ]
+      }
+     },
+     {
+      "id": "gpd-family",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "GPD"
+       ]
+      }
+     },
+     {
+      "id": "zotac-zone",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "ZOTAC"
+       ],
+       "board_name": [
+        "G0A1W",
+        "G1A1W"
+       ]
+      }
+     },
+     {
+      "id": "acer-predator-atlas-8",
+      "level": "optional",
+      "match": [
+       {
+        "sys_vendor": [
+         "Acer"
+        ],
+        "board_name": [
+         "F900_PTG"
+        ]
+       },
+       {
+        "product_name": [
+         "Predator PA08-I51"
+        ]
+       }
+      ]
+     },
+     {
+      "id": "acer-nitro-blaze-7",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "Acer"
+       ],
+       "product_name": [
+        "*Blaze 7*",
+        "GN771*"
+       ]
+      }
+     },
+     {
+      "id": "acer-nitro-blaze-8",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "Acer"
+       ],
+       "product_name": [
+        "*Blaze 8*",
+        "GN881*"
+       ]
+      }
+     },
+     {
+      "id": "acer-nitro-blaze-11",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "Acer"
+       ],
+       "product_name": [
+        "*Blaze 11*",
+        "GN1101*"
+       ]
+      }
+     },
+     {
+      "id": "orangepi-neo",
+      "level": "optional",
+      "match": {
+       "sys_vendor": [
+        "OrangePi"
+       ],
+       "product_name": [
+        "NEO-01"
+       ]
+      }
+     }
+    ],
+    "others": "optional"
+   }
+  },
+  {
+   "id": "overlay-power",
+   "revision": 1,
+   "title": "Watts in the overlay",
+   "line": "Shows real CPU watts in the performance overlay. Any program can then read the power counter.",
+   "symptom": "The performance overlay shows 0.0 W for the CPU on Intel handhelds: the RAPL energy counter it reads is root-only since 2020.",
+   "why": "Every Intel chip's RAPL package counter (intel-rapl:0, intel-rapl-mmio:0) is mode 0400 since Linux closed the PLATYPUS power side channel (CVE-2020-8694).",
+   "kind": "file",
+   "page": "fixes",
+   "password": "admin",
+   "restart": "",
+   "level": "optional",
+   "must_fix": false,
+   "breaks": "",
+   "default": "suggested-off",
+   "risk": "low",
+   "risk_note": "Reopens what the kernel closed on purpose: any local program can sample the chip's power counter (a side channel). Off by default for that reason.",
+   "auto": [],
+   "optional": "cpu_vendor:intel",
+   "exclude": {},
+   "changes": [
+    {
+     "type": "file",
+     "target": "/etc/tmpfiles.d/gamecove-overlay-power.conf",
+     "detail": "systemd-tmpfiles makes the package energy counters 0444 at every boot, before Game Mode starts."
+    },
+    {
+     "type": "sysfs",
+     "target": "/sys/class/powercap/intel-rapl:0/energy_uj (and intel-rapl-mmio:0)",
+     "detail": "Mode 0444 at once; the old mode is saved and put back on undo."
+    }
+   ],
+   "undo": "Deletes the tmpfiles rule and puts each counter's saved mode back (0400).",
+   "tested": [],
+   "bazzite": "Not changed (the kernel's 0400 default).",
+   "steamos": "Not changed (the kernel's 0400 default).",
+   "sources": [
+    "ClawDeck py_modules/clawdeck/telemetry.py and docs/HARDWARE-FINDINGS.md (measured on a Claw 8 EX)",
+    "https://nvd.nist.gov/vuln/detail/CVE-2020-8694",
+    "https://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html"
+   ],
+   "lifecycle": {
+    "needed_when": null,
+    "obsolete_when": {
+     "probe": "os_fixed"
+    },
+    "probe": {
+     "command": "status",
+     "native": "os_fixed=yes",
+     "what": "Looks for a tmpfiles rule from the system (not GameCove's) that opens the counters, or the counters already being readable by everyone without GameCove."
+    },
+    "both_active": "harmless"
+   },
+   "watch": [
+    {
+     "id": "intel-rapl-powercap",
+     "kind": "github-commits",
+     "repo": "torvalds/linux",
+     "path": "drivers/powercap/intel_rapl_common.c",
+     "note": "The RAPL powercap driver: a change to energy_uj's mode would make the rule unnecessary."
+    }
+   ],
+   "withdrawn": null,
+   "audited": "2026-11-10",
+   "devices": [
+    {
+     "id": "msi-claw-8-ex",
+     "level": "optional",
+     "match": {
+      "board_name": [
+       "MS-1T91"
+      ]
+     }
+    },
+    {
+     "id": "msi-claw-8-ai-plus",
+     "level": "optional",
+     "match": {
+      "board_vendor": [
+       "Micro-Star International Co., Ltd."
+      ],
+      "board_name": [
+       "MS-1T52"
+      ]
+     }
+    },
+    {
+     "id": "msi-claw-7-ai-plus",
+     "level": "optional",
+     "match": {
+      "board_vendor": [
+       "Micro-Star International Co., Ltd."
+      ],
+      "board_name": [
+       "MS-1T42"
+      ]
+     }
+    },
+    {
+     "id": "msi-claw-a1m",
+     "level": "optional",
+     "match": {
+      "board_vendor": [
+       "Micro-Star International Co., Ltd."
+      ],
+      "board_name": [
+       "MS-1T41"
+      ]
+     }
+    },
+    {
+     "id": "onexplayer-x1-intel",
+     "level": "optional",
+     "match": {
+      "sys_vendor": [
+       "ONE-NETBOOK"
+      ],
+      "product_name": [
+       "ONEXPLAYER X1 i"
+      ]
+     }
+    },
+    {
+     "id": "onexplayer-x1-air",
+     "level": "optional",
+     "match": [
+      {
+       "board_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "board_name": [
+        "ONEXPLAYER X1Air"
+       ]
+      },
+      {
+       "sys_vendor": [
+        "ONE-NETBOOK"
+       ],
+       "product_name": [
+        "ONEXPLAYER X1Air"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "onexplayer-g1-intel",
+     "level": "optional",
+     "match": {
+      "sys_vendor": [
+       "ONE-NETBOOK"
+      ],
+      "product_name": [
+       "ONEXPLAYER G1 i"
+      ]
+     }
+    },
+    {
+     "id": "onexplayer-3",
+     "level": "optional",
+     "match": {
+      "sys_vendor": [
+       "ONE-NETBOOK"
+      ],
+      "product_name": [
+       "ONEXPLAYER 3"
+      ]
+     }
+    },
+    {
+     "id": "onexplayer-x2-mini",
+     "level": "optional",
+     "match": {
+      "sys_vendor": [
+       "ONE-NETBOOK"
+      ],
+      "product_name": [
+       "ONEXPLAYER X2Mini"
+      ]
+     }
+    },
+    {
+     "id": "acer-predator-atlas-8",
+     "level": "optional",
+     "match": [
+      {
+       "sys_vendor": [
+        "Acer"
+       ],
+       "board_name": [
+        "F900_PTG"
+       ]
+      },
+      {
+       "product_name": [
+        "Predator PA08-I51"
+       ]
+      }
+     ]
+    }
+   ]
   },
   {
    "id": "power-tune",

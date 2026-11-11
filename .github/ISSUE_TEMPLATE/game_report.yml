@@ -1,0 +1,125 @@
+# Device list: the makers in app/data/devices.json, plus "Other" (the same list as bug_report.yml;
+# packaging/tests/run.sh checks both stay in step).
+name: Game report
+description: How a game runs with GameCove on your handheld. Good results help as much as problems.
+title: "[Game] "
+labels: ["game report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! One report per game, please. Good results help as much as problems: they tell other owners of your handheld what works, and they feed the per-game settings GameCove suggests.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Its name as your store shows it.
+      placeholder: CONTROL Ultimate Edition
+    validations:
+      required: true
+  - type: dropdown
+    id: store
+    attributes:
+      label: Store
+      options:
+        - Steam
+        - Epic (Heroic)
+        - GOG (Heroic)
+        - Amazon (Heroic)
+        - Another launcher or a non-Steam shortcut
+        - Emulator
+    validations:
+      required: true
+  - type: dropdown
+    id: maker
+    attributes:
+      label: Handheld maker
+      options:
+        - AOKZOE
+        - ASUS
+        - AYANEO
+        - Acer
+        - GPD
+        - Lenovo
+        - MSI
+        - OneXPlayer
+        - Orange Pi
+        - Valve
+        - ZOTAC
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: Settings > About GameCove > About this device shows what GameCove detected.
+      placeholder: Claw 8 EX AI+
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Bazzite
+        - SteamOS
+        - CachyOS Handheld
+        - ChimeraOS
+        - Nobara
+        - Other (say which below)
+    validations:
+      required: true
+  - type: dropdown
+    id: upscaler
+    attributes:
+      label: Upscaler picked in GameCove
+      options:
+        - XeSS on XMX
+        - FSR 4.1.2 on XMX
+        - FSR 4 (AMD)
+        - FSR 3.1
+        - The game's own
+        - "Off"
+        - Not sure
+  - type: dropdown
+    id: fg
+    attributes:
+      label: Frame generation
+      options:
+        - "Off"
+        - 2x
+        - 3x
+        - 4x or more
+        - The game's own
+        - Lossless frame gen
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: How it runs
+      options:
+        - Great
+        - Playable with small issues
+        - Bad
+        - Doesn't start
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Frame rate, TDP (or Auto TDP), on battery or plugged in, and anything odd (flicker, stutter, input lag, a crash). Say if the game sits on an SD card or another drive.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "GameCove (Settings > About GameCove), the OS version, and the Proton the game runs on."
+      placeholder: "GameCove 0.1.0, Bazzite 45, Proton 11.0"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Launch log (for problems)
+      description: |
+        Drag the file in. GameCove writes one per game for its upscaling and frame generation setup:
+        `~/.local/share/gamecove/launch/<appid>.log`. GameCove's own log: `~/.local/share/godot/app_userdata/GameCove/logs/godot.log`.
+      render: text

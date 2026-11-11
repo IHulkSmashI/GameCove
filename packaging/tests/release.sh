@@ -68,10 +68,85 @@ echo MIT >"$T/ss/LICENSE"
 	usr/share/gamescope-session-plus/device-quirks usr/lib/systemd/user/gamescope-session-plus@.service LICENSE) >"$T/ss.sums"
 if SESSION_SUMS="$T/ss.sums" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$T/app" --session-src "$T/ss" --out "$T/sx" --tree-only >"$T/out" 2>&1; then ok; else bad "sysext tree: $(cat "$T/out")"; fi
 while read -r d; do [ -s "$T/sx/gamecove/usr/share/licenses/gamecove/$d" ] && ok || bad "sysext lacks /usr/share/licenses/gamecove/$d"; done <"$T/dests"
+# ------------------------------------------------------------- the LZMS cabinet.dll (FSR 4 on XMX) in every artefact
+CAB="$REPO/tools/cabinet-lzms"
+grep -Eqx '[0-9a-f]{64}  cabinet\.dll' "$CAB/cabinet.sha256" && ok || bad "tools/cabinet-lzms/cabinet.sha256 must hold the reviewed build's sha256"
+for f in cabinet.c cabinet.def build.sh LICENSE wimlib/lzms_decompress.c wimlib/COPYING wimlib/COPYING.LGPL test/run.sh; do
+	[ -s "$CAB/$f" ] && ok || bad "tools/cabinet-lzms/$f missing"
+done
+for need in LICENSE.cabinet-lzms-LGPL wimlib-COPYING wimlib-COPYING.LGPL; do
+	grep -qx "$need" "$T/dests" && ok || bad "licenses.list lacks $need"
+done
+# a release tarball must have the reviewed DLL: none, or other bytes, fails
+if REQUIRE_CABINET=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/nocab.tar.gz" >"$T/out" 2>&1; then bad "REQUIRE_CABINET=1 must fail without bin/cabinet.dll"; else ok; fi
+mkdir -p "$T/app/bin"
+echo "not the reviewed dll" >"$T/app/bin/cabinet.dll"
+if REQUIRE_CABINET=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/badcab.tar.gz" >"$T/out" 2>&1; then bad "REQUIRE_CABINET=1 must refuse a cabinet.dll that isn't the reviewed build"; else ok; fi
+# the real build when it is here (tools/cabinet-lzms/build.sh ran): accepted
+if [ -s "$CAB/out/cabinet.dll" ] && (cd "$CAB/out" && sha256sum -c ../cabinet.sha256 >/dev/null 2>&1); then
+	cp "$CAB/out/cabinet.dll" "$T/app/bin/cabinet.dll"
+	if REQUIRE_CABINET=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/cab.tar.gz" >"$T/out" 2>&1; then ok; else bad "the reviewed cabinet.dll is refused: $(cat "$T/out")"; fi
+else
+	sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/cab.tar.gz" >"$T/out" 2>&1 || bad "make-app-tarball with bin/: $(cat "$T/out")"
+fi
+tar -tzf "$T/cab.tar.gz" >"$T/cabtar" 2>/dev/null
+for f in bin/cabinet.dll bin/cabinet-lzms-source.tar.gz; do grep -qx "$f" "$T/cabtar" && ok || bad "tarball lacks $f"; done
+mkdir -p "$T/cabx" && tar -xzf "$T/cab.tar.gz" -C "$T/cabx" 2>/dev/null
+tar -tzf "$T/cabx/bin/cabinet-lzms-source.tar.gz" >"$T/cabsrc" 2>/dev/null
+for f in cabinet-lzms/cabinet.c cabinet-lzms/wimlib/lzms_decompress.c cabinet-lzms/LICENSE cabinet-lzms/wimlib/COPYING.LGPL; do
+	grep -qx "$f" "$T/cabsrc" && ok || bad "the cabinet source archive lacks $f"
+done
+grep -q '^cabinet-lzms/out/' "$T/cabsrc" && bad "the cabinet source archive carries build output" || ok
+# nitec's FSR 4.1.2 XMX files: a release tarball must carry the pinned set, and nothing else is accepted
+if REQUIRE_FSR4=1 sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/nofsr.tar.gz" >"$T/out" 2>&1; then bad "REQUIRE_FSR4=1 must fail without bin/fsr4-xmx"; else ok; fi
+mkdir -p "$T/app/bin/fsr4-xmx"
+echo "not nitec's" >"$T/app/bin/fsr4-xmx/amd_fidelityfx_upscaler_dx12.dll"
+echo "not nitec's" >"$T/app/bin/fsr4-xmx/fsr-original.dll"
+echo '{}' >"$T/app/bin/fsr4-xmx/set.json"
+if sh "$REPO/packaging/make-app-tarball.sh" "$T/app" "$T/badfsr.tar.gz" >"$T/out" 2>&1; then bad "a bin/fsr4-xmx that isn't the pinned set must be refused"; else ok; fi
+rm -rf "$T/app/bin/fsr4-xmx"
+python3 -I "$REPO/tools/upscalers/fetch_fsr4.py" --check "$T/nowhere" >/dev/null 2>&1 && bad "fetch_fsr4 --check passes on a missing folder" || ok
+# the unpacked tarball as the sysext and the RPM see it (stand-in bytes: the real check is the one above)
+mkdir -p "$T/cabx/bin/fsr4-xmx"
+for f in amd_fidelityfx_upscaler_dx12.dll fsr-original.dll set.json; do echo "$f" >"$T/cabx/bin/fsr4-xmx/$f"; done
+# sysext: from the unpacked tarball to /usr/lib/gamecove/bin (the path optiscaler.SYSTEM_CABINET checks)
+if SESSION_SUMS="$T/ss.sums" sh "$REPO/packaging/sysext/build-sysext.sh" --app "$T/cabx" --session-src "$T/ss" --out "$T/sxc" --tree-only >"$T/out" 2>&1; then ok; else bad "sysext tree with cabinet: $(cat "$T/out")"; fi
+cmp -s "$T/cabx/bin/cabinet.dll" "$T/sxc/gamecove/usr/lib/gamecove/bin/cabinet.dll" && ok || bad "sysext lacks /usr/lib/gamecove/bin/cabinet.dll"
+[ -s "$T/sxc/gamecove/usr/lib/gamecove/bin/cabinet-lzms-source.tar.gz" ] && ok || bad "sysext lacks the cabinet source archive"
+for f in amd_fidelityfx_upscaler_dx12.dll fsr-original.dll set.json; do
+	cmp -s "$T/cabx/bin/fsr4-xmx/$f" "$T/sxc/gamecove/usr/lib/gamecove/bin/fsr4-xmx/$f" && ok || bad "sysext lacks /usr/lib/gamecove/bin/fsr4-xmx/$f"
+done
+grep -q "no bin/fsr4-xmx" "$T/out" && bad "sysext warned about FSR 4 files that are there" || ok
+grep -q '^SYSTEM_DIR = "/usr/lib/gamecove"$' "$REPO/packaging/helpers/gamecove_upscale/optiscaler.py" && ok || bad "optiscaler.SYSTEM_DIR moved: packages install the FSR 4 set to /usr/lib/gamecove/bin/fsr4-xmx"
+grep -q 'app-export/bin/fsr4-xmx/\* %{buildroot}%{_prefix}/lib/gamecove/bin/fsr4-xmx/' "$REPO/packaging/rpm/gamecove.spec" && ok || bad "spec must install bin/fsr4-xmx"
+RELY="$REPO/.github/workflows/release.yml"
+grep -q 'python3 -I tools/upscalers/fetch_fsr4.py app/build/bin/fsr4-xmx' "$RELY" && ok || bad "release.yml must fetch the pinned FSR 4.1.2 XMX files into the app"
+grep -q 'REQUIRE_FSR4=1' "$RELY" && ok || bad "release.yml must require the FSR 4.1.2 XMX files in the tarball"
+grep -q 'fetch_fsr4.py --check app-export/bin/fsr4-xmx' "$RELY" && ok || bad "release.yml must check the shipped FSR 4.1.2 XMX files against the pins"
+grep -q '"/usr/lib/gamecove/bin/fsr4-xmx/$f" rpm-files.txt' "$RELY" && ok || bad "release.yml must check the RPM has the FSR 4.1.2 XMX files"
+grep -Eq '"base": "https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/[0-9a-f]{40}"' "$REPO/packaging/helpers/gamecove_upscale/data/versions.json" && ok || bad "versions.json fsr4_xmx must pin ClawDeck's fsr4-xmx-files branch by commit"
+grep -q 'nitec and the OptiScaler community' "$REPO/CREDITS.md" && ok || bad "CREDITS.md must credit nitec and the OptiScaler community for FSR 4 on XMX"
+grep -q "no bin/cabinet.dll" "$T/out" && bad "sysext warned about a cabinet.dll that is there" || ok
+grep -q '^SYSTEM_CABINET = "/usr/lib/gamecove/bin/cabinet.dll"$' "$REPO/packaging/helpers/gamecove_upscale/optiscaler.py" && ok || bad "optiscaler.SYSTEM_CABINET moved: packages install to /usr/lib/gamecove/bin/cabinet.dll"
+# RPM and workflows
+SPEC0="$REPO/packaging/rpm/gamecove.spec"
+grep -q 'app-export/bin/cabinet.dll %{buildroot}%{_prefix}/lib/gamecove/bin/cabinet.dll' "$SPEC0" && ok || bad "spec must install bin/cabinet.dll"
+grep -qx '%{_prefix}/lib/gamecove/bin' "$SPEC0" && ok || bad "spec %files must take /usr/lib/gamecove/bin"
+grep -q 'LGPL-2.1-or-later' "$SPEC0" && ok || bad "spec License must name LGPL-2.1-or-later (cabinet.dll)"
+REL="$REPO/.github/workflows/release.yml"
+grep -q 'bash tools/cabinet-lzms/build.sh --check' "$REL" && ok || bad "release.yml must build cabinet.dll and compare it with cabinet.sha256"
+grep -q 'bash tools/cabinet-lzms/test/run.sh' "$REL" && ok || bad "release.yml must test cabinet.dll under Wine"
+grep -q '"gcc-mingw-w64-x86-64=${MINGW_GCC}"' "$REL" && grep -Eq '^  MINGW_GCC: [0-9]' "$REL" && ok || bad "release.yml must pin the mingw-w64 toolchain by version"
+grep -q 'REQUIRE_CABINET=1 REQUIRE_FSR4=1 sh packaging/make-app-tarball.sh' "$REL" && ok || bad "release.yml must require the reviewed cabinet.dll in the tarball"
+grep -q 'grep -qx /usr/lib/gamecove/bin/cabinet.dll rpm-files.txt' "$REL" && ok || bad "release.yml must check the RPM has cabinet.dll"
+grep -q 'cp app-export/bin/cabinet.dll dist/cabinet.dll' "$REL" && grep -q 'dist/cabinet.dll$' "$REL" && ok || bad "release.yml must publish cabinet.dll so SHA256SUMS and its signature cover it"
+grep -q 'bash tools/cabinet-lzms/test/run.sh' "$REPO/.github/workflows/ci.yml" && ok || bad "ci.yml must build and test cabinet.dll on every push"
+rm -rf "$T/app/bin"
+
 # RPM: run the spec's %prep licence loop against the repo and check %files takes the result
 SPEC="$REPO/packaging/rpm/gamecove.spec"
 awk '/^# licence and notice texts/{f=1;next} f&&/^done < packaging\/licenses.list/{print;exit} f' "$SPEC" >"$T/prep.sh"
-if (cd "$REPO" && mkdir -p "$T/rpm" && cd "$T/rpm" && ln -s "$REPO/packaging" packaging && for s in LICENSE CREDITS.md LICENSES fixes app; do ln -s "$REPO/$s" "$s"; done && sh "$T/prep.sh") >"$T/out" 2>&1; then ok; else bad "spec %prep licence loop: $(cat "$T/out")"; fi
+if (cd "$REPO" && mkdir -p "$T/rpm" && cd "$T/rpm" && ln -s "$REPO/packaging" packaging && for s in LICENSE CREDITS.md LICENSES fixes app tools; do ln -s "$REPO/$s" "$s"; done && sh "$T/prep.sh") >"$T/out" 2>&1; then ok; else bad "spec %prep licence loop: $(cat "$T/out")"; fi
 while read -r d; do [ -s "$T/rpm/licenses/$d" ] && ok || bad "RPM %prep doesn't stage licenses/$d"; done <"$T/dests"
 grep -qx '%license licenses/\*' "$SPEC" && ok || bad "spec %files must take %license licenses/*"
 grep -q "missing from the RPM" "$REPO/.github/workflows/release.yml" && ok || bad "release.yml must check the built RPM's licence files"

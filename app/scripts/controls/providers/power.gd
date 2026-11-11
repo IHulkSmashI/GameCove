@@ -449,16 +449,36 @@ func _cpu_boost() -> RefCounted:
 		func(_c, v): return be.set_boost(bool(v)))
 
 
+## SMT. Where quirks.json smt-off-breaks-sleep holds (ASUS handhelds: Bazzite documents that
+## suspend may break with SMT off) the switch is off by default: greyed out showing On while SMT
+## is on, and where something else switched it off it can only be turned back on (normalize
+## turns down "off" from the UI, profiles and imports alike).
 func _smt() -> RefCounted:
-	return _make("power.smt", "toggle", {"affects": ["power.cpu_cores"], "apply_order": 82},
-		func(_c):
+	var guard := smt_guarded()
+	var spec := {"affects": ["power.cpu_cores"], "apply_order": 82}
+	if guard:
+		spec["help"] = Tx.SMT_HELP_SLEEP
+	var c: RefCounted = _make("power.smt", "toggle", spec,
+		func(ctl):
+			ctl.forced_value = null
 			if not be.smt_control() in ["on", "off"]:
 				return Tx.NO_SMT
+			if guard and be.smt_control() == "on":
+				ctl.forced_value = true
+				return Tx.SMT_KEEP_ON
 			if be.smt_via() == "sysfs" and _admin_blocked():
 				return Tx.NEEDS_ADMIN
 			return "" if be.smt_via() != "" else Tx.NO_HELPER,
 		func(_c): return be.get_smt(),
 		func(_c, v): return be.set_smt(bool(v)))
+	if guard:
+		c.normalize = func(v): return v if v == true else null
+	return c
+
+
+## True where SMT must stay on for sleep to work (quirks.json smt-off-breaks-sleep).
+func smt_guarded() -> bool:
+	return Traits.has_quirk("smt-off-breaks-sleep", row())
 
 
 func _cores() -> RefCounted:

@@ -237,6 +237,152 @@ before=$(snapshot)
 ok '! fix claw8ex-vrr install 2>/dev/null' "refused without rpm-ostree"
 ok '[ "$(snapshot)" = "$before" ]' "nothing written"
 
+# ---- SteamOS: no rpm-ostree; the switch on one marked line in /etc/default/grub, update-grub, a keep list --------
+GRUB=/etc/default/grub
+KEEP=/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf
+steamos_ready() {
+	vrr_ready
+	rm "$BIN/rpm-ostree"
+	printf 'NAME="SteamOS"\nID=steamos\nID_LIKE=arch\nVERSION_ID=3.9.5\n' >"$R/etc/os-release"
+	mkdir -p "$R/etc/default" "$R/etc/atomic-update.conf.d" "$R/efi/EFI/SteamOS" "$R/sys/bus/pci/drivers/xe" "$R/sys/class/drm/card1/device"
+	ln -s "$R/sys/bus/pci/drivers/xe" "$R/sys/class/drm/card1/device/driver"
+	printf 'GRUB_DEFAULT=0\nGRUB_TIMEOUT=0\nGRUB_CMDLINE_LINUX_DEFAULT="quiet splash"\n' >"$R$GRUB"
+	chmod 0644 "$R$GRUB"
+	# Holo's update-grub: grub-mkconfig sources /etc/default/grub and writes SteamOS's grub.cfg
+	cat >"$BIN/update-grub" <<'EOF'
+#!/bin/sh
+echo "update-grub" >>"$FAKE/calls"
+[ "${FAKE_FAIL:-}" = update-grub ] && exit 1
+GRUB_CMDLINE_LINUX_DEFAULT=
+. "$GAMECOVE_ROOT/etc/default/grub"
+[ "${FAKE_GRUB_DROPS:-}" = 1 ] && GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+printf 'menuentry "SteamOS" {\n  linux /boot/vmlinuz-linux-neptune-612 root=UUID=x %s\n}\n' "$GRUB_CMDLINE_LINUX_DEFAULT" >"$GAMECOVE_ROOT/efi/EFI/SteamOS/grub.cfg"
+EOF
+	chmod +x "$BIN/update-grub"
+	update-grub
+	: >"$FAKE/calls"
+	echo "BOOT_IMAGE=/boot/vmlinuz-linux-neptune-612 root=UUID=x quiet splash" >"$R/proc/cmdline"
+}
+# Boot SteamOS from its grub.cfg: the hook runs with that command line.
+steamos_boot() {
+	sed -n 's/^ *linux \/boot\/vmlinuz-linux-neptune-612 /BOOT_IMAGE=\/boot\/vmlinuz-linux-neptune-612 /p' "$R/efi/EFI/SteamOS/grub.cfg" >"$R/proc/cmdline"
+	GAMECOVE_ROOT=$R sh "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh"
+}
+# A SteamOS update: Valve's new grub file (no line of ours), its boot menu rebuilt; only keep-listed /etc files stay.
+steamos_update() {
+	printf 'GRUB_DEFAULT=0\nGRUB_TIMEOUT=0\nGRUB_CMDLINE_LINUX_DEFAULT="quiet splash amd_iommu=off"\n' >"$R$GRUB"
+	update-grub
+	[ "${1:-}" = drop-hook ] && rm -f "$R/etc/modprobe.d/gamecove-claw8ex-vrr.conf"
+	echo "BOOT_IMAGE=/boot/vmlinuz-linux-neptune-612 root=UUID=x quiet splash amd_iommu=off" >"$R/proc/cmdline"
+	echo >"$R/sys/module/drm/parameters/edid_firmware"
+	echo >"$R/sys/module/firmware_class/parameters/path"
+	sh "$HERE/make-edid.sh" >"$R/sys/class/drm/card1-eDP-1/edid"
+}
+
+case_start steamos_roundtrip
+steamos_ready
+before=$(snapshot)
+fix claw8ex-vrr install >"$T/out" 2>&1
+rc=$?
+ok "[ $rc -eq 0 ]" "SteamOS: install succeeds ($(tail -n 1 "$T/out"))"
+ok 'check_patched "$R/sys/class/drm/card1-eDP-1/edid" "$R$EDID_FILE"' "the same patched EDID"
+for f in /etc/gamecove/claw8ex-vrr/edid.conf /etc/gamecove/claw8ex-vrr/edid-hook.sh /etc/modprobe.d/gamecove-claw8ex-vrr.conf; do
+	ok "[ -f \"\$R$f\" ]" "$f written"
+done
+ok '[ ! -s "$FAKE/initramfs" ] && ! grep -q rpm-ostree "$FAKE/calls"' "no initramfs step (the driver starts after /etc)"
+ok '[ "$(grep -c "# GameCove claw8ex-vrr" "$R$GRUB")" = 1 ]' "one marked line in /etc/default/grub"
+ok 'grep -qx "GRUB_CMDLINE_LINUX_DEFAULT=\"\${GRUB_CMDLINE_LINUX_DEFAULT} gamecove.vrr=1\"  # GameCove claw8ex-vrr" "$R$GRUB"' "only the switch, appended to SteamOS's own arguments"
+ok 'grep -q "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet splash\"$" "$R$GRUB"' "SteamOS's own line untouched"
+ok '[ "$(stat -c %a "$R$GRUB")" = 644 ]' "grub file keeps its mode"
+ok 'grep -q "quiet splash gamecove.vrr=1" "$R/efi/EFI/SteamOS/grub.cfg"' "update-grub put it in SteamOS's boot menu"
+ok '! grep -q "drm.edid_firmware\|firmware_class" "$R$GRUB"' "no global EDID argument (the hook is per board)"
+ok 'grep -qx "/etc/firmware/edid/gamecove-\*.bin" "$R$KEEP" && grep -qx /etc/modprobe.d/gamecove-claw8ex-vrr.conf "$R$KEEP" && grep -qx /etc/gamecove/claw8ex-vrr/edid-hook.sh "$R$KEEP" && grep -qx /etc/gamecove/claw8ex-vrr/edid.conf "$R$KEEP"' "keep list: the fix's own files"
+ok '! grep -q "^/etc/default/grub" "$R$KEEP"' "never Valve's grub file"
+ok 'fix claw8ex-vrr status | grep -qx boot=steamos' "status: boot=steamos"
+ok 'fix claw8ex-vrr status | grep -qx state=restart && fix claw8ex-vrr status | grep -qx pending=yes' "status: restart, pending"
+steamos_boot
+ok '[ "$(drm_param)" = "eDP-1:edid/gamecove-csw0801-30-120.bin" ]' "next boot: the hook hands the driver the corrected EDID"
+cp "$R$EDID_FILE" "$R/sys/class/drm/card1-eDP-1/edid"
+ok 'fix claw8ex-vrr status | grep -qx state=on' "status: on"
+ok '[ "$(fix claw8ex-vrr set refresh)" = "already in place" ]' "refresh with the line in place: nothing to do"
+fix claw8ex-vrr remove >/dev/null 2>&1
+ok '! grep -q GameCove "$R$GRUB" && ! grep -q gamecove "$R/efi/EFI/SteamOS/grub.cfg"' "remove: line and boot menu entry gone"
+ok '[ ! -e "$R$KEEP" ]' "remove: keep list gone"
+ok '[ "$(snapshot)" = "$before" ]' "remove: back to exactly how it was"
+
+case_start steamos_after_update
+steamos_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+steamos_update
+ok 'fix claw8ex-vrr status | grep -qx after_update=yes' "after an update: status says the line is gone"
+ok 'fix claw8ex-vrr status | grep -qx state=restart && fix claw8ex-vrr status | grep -qx pending=no' "not pending until it is back"
+ok 'fix claw8ex-vrr set refresh | grep -q "put back after the SteamOS update"' "refresh puts it back"
+ok 'grep -q "amd_iommu=off" "$R$GRUB" && [ "$(grep -c "# GameCove claw8ex-vrr" "$R$GRUB")" = 1 ]' "on top of Valve's new file, once"
+ok 'grep -q "quiet splash amd_iommu=off gamecove.vrr=1" "$R/efi/EFI/SteamOS/grub.cfg"' "in the new boot menu"
+ok 'fix claw8ex-vrr status | grep -qx after_update=no && fix claw8ex-vrr status | grep -qx pending=yes' "status: pending again"
+steamos_boot
+ok '[ "$(drm_param)" = "eDP-1:edid/gamecove-csw0801-30-120.bin" ]' "the restart after brings the range back"
+
+case_start steamos_update_lost_files
+steamos_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+steamos_update drop-hook
+ok 'fix claw8ex-vrr set refresh | grep -q "removed: the update didn.t keep /etc/modprobe.d/gamecove-claw8ex-vrr.conf"' "files the update didn't keep: the fix is taken out"
+ok '[ ! -e "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest" ] && [ ! -e "$R$KEEP" ] && [ ! -e "$R$EDID_FILE" ]' "nothing of it left"
+ok '! grep -q GameCove "$R$GRUB"' "no line added"
+
+case_start steamos_driver_in_initramfs
+steamos_ready
+mkdir -p "$R/boot"
+: >"$R/boot/initramfs-linux-neptune-612.img"
+printf '#!/bin/sh\necho usr/lib/modules/6.12/kernel/drivers/gpu/drm/xe/xe.ko.zst\n' >"$BIN/lsinitcpio"
+chmod +x "$BIN/lsinitcpio"
+before=$(snapshot)
+ok 'fix claw8ex-vrr install 2>&1 | grep -q "starts from the initramfs"' "driver in the initramfs: refused with the reason"
+ok '[ "$(snapshot)" = "$before" ]' "nothing written"
+ok 'fix claw8ex-vrr status | grep -qx state=unsupported' "status: unsupported"
+printf '#!/bin/sh\necho usr/lib/modules/6.12/kernel/drivers/nvme/nvme.ko.zst\n' >"$BIN/lsinitcpio"
+ok 'fix claw8ex-vrr status | grep -qx state=off' "driver after switch_root: offered"
+
+case_start steamos_driver_built_in
+steamos_ready
+mkdir -p "$R/usr/lib/modules/linux-neptune-612"
+echo kernel/drivers/gpu/drm/xe/xe.ko >"$R/usr/lib/modules/linux-neptune-612/modules.builtin"
+ok '! fix claw8ex-vrr install 2>/dev/null' "driver built into the kernel: refused"
+
+case_start steamos_no_keep_list
+steamos_ready
+rmdir "$R/etc/atomic-update.conf.d"
+before=$(snapshot)
+ok 'fix claw8ex-vrr install 2>&1 | grep -q "atomic-update.conf.d"' "no keep-list folder: refused"
+ok '[ "$(snapshot)" = "$before" ]' "nothing written"
+
+case_start steamos_other_edid_in_grub
+steamos_ready
+echo 'GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} drm.edid_firmware=eDP-1:edid/mine.bin"' >>"$R$GRUB"
+before=$(snapshot)
+ok '! fix claw8ex-vrr install 2>/dev/null' "someone else's EDID line in the grub file: refused"
+ok '[ "$(snapshot)" = "$before" ]' "nothing written"
+
+case_start steamos_boot_menu_drops_it
+steamos_ready
+before=$(snapshot)
+export FAKE_GRUB_DROPS=1
+ok '! fix claw8ex-vrr install 2>/dev/null' "update-grub left the switch out: install fails"
+unset FAKE_GRUB_DROPS
+ok '[ "$(snapshot)" = "$before" ]' "everything taken back"
+
+case_start steamos_update_grub_fails
+steamos_ready
+before=$(snapshot)
+export FAKE_FAIL=update-grub
+ok '! fix claw8ex-vrr install 2>/dev/null' "update-grub fails: install fails"
+unset FAKE_FAIL
+ok '! grep -q GameCove "$R$GRUB"' "no line left in the grub file"
+ok 'grep -qx "grubline /etc/default/grub" "$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest"' "the boot menu step that failed is kept to retry"
+fix claw8ex-vrr remove >/dev/null 2>&1
+ok '[ "$(snapshot)" = "$before" ]' "remove then finishes the job"
+
 case_start initramfs_failure_undoes
 vrr_ready
 before=$(snapshot)

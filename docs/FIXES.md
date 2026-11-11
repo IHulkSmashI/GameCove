@@ -291,13 +291,14 @@ Lets VRR keep games smooth down to 30 fps instead of 48. The Claw's panel EDID s
 - Changes (file): `/etc/gamecove/claw8ex-vrr/edid.conf`. Which board and connector the EDID is for.
 - Changes (file): `/etc/gamecove/claw8ex-vrr/edid-hook.sh`. A tiny board check that runs right before the GPU driver loads.
 - Changes (file): `/etc/modprobe.d/gamecove-claw8ex-vrr.conf`. Runs the hook before xe / i915.
-- Changes (initramfs): `rpm-ostree initramfs-etc --track`. The four files above, so it also works when the driver loads early.
-- Changes (kernel-arg): `gamecove.vrr=1`. The switch the hook looks for (plus firmware_class.path=/etc/firmware, shared with the gyro fix).
-- Undo: Takes out the kernel argument, the initramfs entries and every file, in reverse order. The panel's own EDID is back after a restart.
+- Changes (initramfs): `rpm-ostree initramfs-etc --track`. Bazzite: the four files above, so it also works when the driver loads early. (SteamOS: only offered where the driver starts after /etc is there, so no initramfs step.)
+- Changes (kernel-arg): `gamecove.vrr=1`. The switch the hook looks for (plus firmware_class.path=/etc/firmware, shared with the gyro fix). Bazzite: a kernel argument. SteamOS: one marked line in /etc/default/grub, then update-grub.
+- Changes (file): `/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf`. SteamOS only: keeps the fix's own files across SteamOS updates (never Valve's grub file); after an update GameCove puts the grub line back without a password.
+- Undo: Takes out the boot switch (kernel argument, or the grub line and update-grub on SteamOS), the initramfs entries, the SteamOS keep list and every file, in reverse order. The panel's own EDID is back after a restart.
 - Risk: Changes what the Intel GPU driver is told about the panel at boot. Only exact, validated factory EDIDs are patched, and a boot-menu kill switch (gamecove.novrr) skips it.
 - Tested on hardware: MSI Claw 8 EX AI+ (Bazzite, 2026-11-09)
-- Bazzite: Not fixed. SteamOS: Not supported on SteamOS.
-- Needed when: `{"all": [{"file": "/usr/bin/rpm-ostree"}, {"any": [{"module": "xe"}, {"module": "i915"}]}]}`
+- Bazzite: Not fixed. SteamOS: Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); not yet tested on a SteamOS Claw.
+- Needed when: `{"all": [{"any": [{"file": "/usr/bin/rpm-ostree"}, {"all": [{"os": "steamos"}, {"file": "/etc/default/grub"}]}]}, {"any": [{"module": "xe"}, {"module": "i915"}]}]}`
 - Not needed any more when: `{"probe": "os_fixed"}`
 - Probe: Reads the panel's own EDID. If it already says 30 Hz or lower (a BIOS that corrected it), nothing is needed. With GameCove's copy in place the factory EDID can't be read, so a BIOS change is checked by a maintainer.
 - With the system's own fix also active: harmless (the same setting twice)
@@ -655,6 +656,47 @@ How strong the built-in controller rumbles.
 - Risk: A day-to-day setting with checked values; the original is always saved and put back.
 - Tested on hardware: not yet
 - Sources: fixes/controller-rumble/README.md
+
+### journal-flood
+
+**Quiet system log** · Optional · risk: low · revision 1 · last audited 2026-11-10
+
+Stops steamos-manager filling the system log with split-lock lines, so older logs aren't wiped. steamos-manager hands every split-lock hit to a crash reporter Bazzite doesn't have; each hit and each failure is logged (about 70,000 lines in five minutes on a Claw 8 EX, 14 % of a CPU core), so the capped journal loses every earlier boot within minutes.
+
+- Optional on: Any handheld with the part
+- Changes (file): `/etc/systemd/system/steamos-manager.service.d/50-gamecove-quiet-split-lock.conf`. Sets RUST_LOG=info,steamos_manager::sls=off for steamos-manager.
+- Changes (service): `steamos-manager.service`. systemd reloads its units and restarts steamos-manager if it runs.
+- Undo: Deletes the drop-in, reloads systemd and restarts steamos-manager.
+- Risk: One systemd drop-in; only the log lines of steamos-manager's crash-report forwarding go. Everything else it logs stays.
+- Tested on hardware: not yet
+- Bazzite: Not fixed: Bazzite ships steamos-manager without steamos-log-submitter. SteamOS: Not needed: SteamOS has steamos-log-submitter, which takes the hits.
+- Needed when: always
+- Not needed any more when: `{"probe": "os_fixed"}`
+- Probe: Looks for another steamos-manager drop-in (not GameCove's) that already turns the forwarding module's log off; the fix is not needed where steamos-log-submitter is installed.
+- With the system's own fix also active: harmless (the same setting twice)
+- Watches (url): https://gitlab.steamos.cloud/holo/steamos-manager/-/commits/main/steamos-manager/src/sls. steamos-manager's log-submitter forwarding: a change that skips it without the reporter makes this fix unnecessary.
+- Watches (github-commits): ublue-os/bazzite `system_files/deck/shared/usr/lib/systemd/system`. Bazzite's own systemd units: a drop-in for steamos-manager there would make this os-fixed.
+- Sources: ClawDeck py_modules/clawdeck/quietlog.py and docs/HARDWARE-FINDINGS.md (measured on a Claw 8 EX, 2026-11-04); <https://gitlab.steamos.cloud/holo/steamos-manager/-/blob/a3b2013/steamos-manager/src/sls/ftrace.rs>
+
+### overlay-power
+
+**Watts in the overlay** · Optional · risk: low · revision 1 · last audited 2026-11-10
+
+Shows real CPU watts in the performance overlay. Any program can then read the power counter. The performance overlay shows 0.0 W for the CPU on Intel handhelds: the RAPL energy counter it reads is root-only since 2020.
+
+- Optional on: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M, OneXPlayer X1 (Intel), OneXPlayer X1 Air, OneXPlayer G1 (Intel), OneXPlayer 3, OneXPlayer X2 Mini, Acer Predator Atlas 8
+- Changes (file): `/etc/tmpfiles.d/gamecove-overlay-power.conf`. systemd-tmpfiles makes the package energy counters 0444 at every boot, before Game Mode starts.
+- Changes (sysfs): `/sys/class/powercap/intel-rapl:0/energy_uj (and intel-rapl-mmio:0)`. Mode 0444 at once; the old mode is saved and put back on undo.
+- Undo: Deletes the tmpfiles rule and puts each counter's saved mode back (0400).
+- Risk: Reopens what the kernel closed on purpose: any local program can sample the chip's power counter (a side channel). Off by default for that reason.
+- Tested on hardware: not yet
+- Bazzite: Not changed (the kernel's 0400 default). SteamOS: Not changed (the kernel's 0400 default).
+- Needed when: always
+- Not needed any more when: `{"probe": "os_fixed"}`
+- Probe: Looks for a tmpfiles rule from the system (not GameCove's) that opens the counters, or the counters already being readable by everyone without GameCove.
+- With the system's own fix also active: harmless (the same setting twice)
+- Watches (github-commits): torvalds/linux `drivers/powercap/intel_rapl_common.c`. The RAPL powercap driver: a change to energy_uj's mode would make the rule unnecessary.
+- Sources: ClawDeck py_modules/clawdeck/telemetry.py and docs/HARDWARE-FINDINGS.md (measured on a Claw 8 EX); <https://nvd.nist.gov/vuln/detail/CVE-2020-8694>; <https://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html>
 
 ### power-tune
 

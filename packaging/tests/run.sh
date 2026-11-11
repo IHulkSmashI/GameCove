@@ -210,9 +210,9 @@ expect_code 64 "set entry refuses gyro install" gfs claw8ex-gyro install
 expect_code 64 "set entry refuses gyro remove" gfs claw8ex-gyro remove
 expect_code 64 "set entry refuses charge install" gfs charge-limit install
 expect_code 64 "set entry refuses other actions" gfs fan explode
-expect_code 65 "set entry refuses vrr (boot config)" gfs claw8ex-vrr set on
-expect_code 65 "set entry refuses vrr install" gfs claw8ex-vrr install
-expect_code 65 "set entry refuses vrr status" gfs claw8ex-vrr status
+expect_code 66 "set entry refuses vrr on (boot config: refresh only)" gfs claw8ex-vrr set on
+expect_code 64 "set entry refuses vrr install" gfs claw8ex-vrr install
+expect_code 64 "set entry refuses vrr remove" gfs claw8ex-vrr remove
 expect_code 66 "set entry refuses buttons on" gfs claw8ex-buttons set on
 expect_code 64 "set entry refuses buttons install" gfs claw8ex-buttons install
 expect_code 65 "set entry refuses other fixes" gfs dummy set 80
@@ -243,6 +243,11 @@ contains "$ROOT/calls" "^claw8ex-gyro:set accel-off$" "gyro set reached fix.sh"
 expect_code 0 "set entry: buttons refresh" gfs claw8ex-buttons set refresh
 expect_code 0 "set entry: gyro refresh" gfs claw8ex-gyro set refresh
 contains "$ROOT/calls" "^claw8ex-buttons:set refresh$" "buttons refresh reached fix.sh"
+# after a SteamOS update the VRR fix's grub line comes back without a password; nothing else of it does
+expect_code 0 "set entry: vrr refresh" gfs claw8ex-vrr set refresh
+contains "$ROOT/calls" "^claw8ex-vrr:set refresh$" "vrr refresh reached fix.sh"
+expect_code 66 "set entry: vrr install as value" gfs claw8ex-vrr set install
+expect_code 66 "set entry: vrr remove as value" gfs claw8ex-vrr set remove
 expect_code 0 "set entry: status" gfs fan status
 contains "$T/out" "^state=on$" "status passed through"
 expect_code 0 "set entry: fan curve" gfs fan set curve:0,40,50,60,80,100
@@ -1161,10 +1166,15 @@ for f in sorted(glob.glob(os.path.join(gh, "**", "*.yml"), recursive=True)):
         if len(ids) != len(set(ids)):
             bad.append(rel + ": duplicate ids")
 makers = sorted({d["maker"] for d in json.load(open(os.path.join(repo, "app/data/devices.json")))["devices"]})
-form = yaml.safe_load(open(os.path.join(gh, "ISSUE_TEMPLATE/bug_report.yml"), encoding="utf-8"))
-opts = [b for b in form["body"] if b.get("id") == "maker"][0]["attributes"]["options"]
-if opts != makers + ["Other"]:
-    bad.append("bug_report.yml makers %s != devices.json makers %s + Other" % (opts, makers))
+for name in ("bug_report.yml", "game_report.yml"):   # the game report form (one per game) too
+    form = yaml.safe_load(open(os.path.join(gh, "ISSUE_TEMPLATE", name), encoding="utf-8"))
+    opts = [b for b in form["body"] if b.get("id") == "maker"][0]["attributes"]["options"]
+    if opts != makers + ["Other"]:
+        bad.append("%s makers %s != devices.json makers %s + Other" % (name, opts, makers))
+game = yaml.safe_load(open(os.path.join(gh, "ISSUE_TEMPLATE", "game_report.yml"), encoding="utf-8"))
+for need in ("game", "store", "model", "os", "upscaler", "fg", "verdict"):
+    if need not in [b.get("id") for b in game["body"]]:
+        bad.append("game_report.yml has no " + need)
 assert not bad, bad
 PY
 	then ok; else bad "YAML under .github: $(cat "$T/out")"; fi

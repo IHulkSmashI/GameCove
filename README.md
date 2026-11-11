@@ -107,7 +107,7 @@ one of two badges:
 | Fix | Restores | For | Tested on hardware | Your system today |
 | --- | --- | --- | --- | --- |
 | **MSI buttons**<br>Makes the two MSI buttons next to the screen work: left opens the menu, right opens Quick Access. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed (InputPlumber still maps the board to claw2). SteamOS: Not supported on SteamOS. |
-| **Smooth screen down to 30 fps**<br>Lets VRR keep games smooth down to 30 fps instead of 48. | Screen | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+<br>**Optional**: MSI Claw 7 AI+, MSI Claw A1M | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not supported on SteamOS. |
+| **Smooth screen down to 30 fps**<br>Lets VRR keep games smooth down to 30 fps instead of 48. | Screen | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+<br>**Optional**: MSI Claw 7 AI+, MSI Claw A1M | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not fixed. GameCove's fix works on SteamOS too (a grub switch kept across SteamOS updates, as ClawDeck does it); not yet tested on a SteamOS Claw. |
 | **Gyro aiming**<br>Turns on the motion sensor so you can aim by tilting the Claw. | Controls and built-in buttons | **Recommended**: MSI Claw 8 EX AI+ | MSI Claw 8 EX AI+ (Bazzite, 2026-11-09) | Bazzite: Not fixed. SteamOS: Not supported on SteamOS. |
 | **Volume buttons don't wake it**<br>Stops a bump of the volume buttons from waking the Claw in your bag. | Sleep and battery while asleep | **Recommended**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M, MSI Claw A8 | Not yet | Bazzite: Not fixed: Handheld Daemon switched it off at start, InputPlumber (Bazzite 44+) doesn't. SteamOS: Not fixed (no Claw support in SteamOS). |
 | **Wi-Fi back after sleep**<br>Keeps the Wi-Fi card awake enough to come back after sleep. Uses a little more battery asleep. | Wi-Fi and Bluetooth | **Optional**: MSI Claw 8 EX AI+, MSI Claw 8 AI+, MSI Claw 7 AI+, MSI Claw A1M | Not yet | Bazzite: Not fixed (reported 2024-12, no answer). SteamOS: Not fixed (SteamOS issues 2742, 2703; user-verified workaround). |
@@ -276,7 +276,8 @@ it does.
 - **Power:** TDP and boost limits, power and platform modes, a thermal limit, **Auto TDP**, fan presets and **custom
   fan curves**, **charge limit** and battery care, battery saver that turns on by itself at a level you pick, sleep
   mode, plus CPU (boost, SMT, active cores, energy preference, governor, CPU ceiling) and graphics (GPU performance
-  level, clocks, power profile).
+  level, clocks, power profile). Every TDP and boost value stays inside your handheld maker's own limits for that
+  model (and the firmware's, when it's stricter), whatever sets it: the slider, a preset, Auto TDP or a game's profile.
 - **Display:** refresh rate (and extra refresh rates where the panel allows), VRR, allow tearing, colour temperature,
   night light with a schedule, vibrance, **HDR** with inverse tone mapping and SDR brightness, screen effects, rotation,
   dim and screen-off timers.

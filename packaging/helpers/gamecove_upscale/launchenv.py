@@ -174,8 +174,11 @@ def compose(launch: dict, per_game: bool = True, vendor: str = "intel") -> dict[
         raise ValueError(f"frame generation multiplier must be 2 to 8 (or 0 for the game's own), not {fg!r}")
     if fg:
         env["XESS_FG"] = str(fg)
-    if fg >= 3 and launch.get("opti") not in (None, "off") and (launch.get("opti_fg") not in (None, "off")
-                                                               or launch.get("opti_xefg")):
+    # also whenever OptiScaler's own XeSS is the upscaler: OptiScaler loads libxess before the game makes its DXGI
+    # factory, DXVK then reports AMD and XeSS takes DP4a instead of XMX (ClawDeck #150, confirmed by a tester on a
+    # Claw 8 AI+, Tainted Grail). gamecove-run appends it to a DXVK_CONFIG the user set, never replaces it.
+    if launch.get("opti") == "xess" or (fg >= 3 and launch.get("opti") not in (None, "off")
+                                        and (launch.get("opti_fg") not in (None, "off") or launch.get("opti_xefg"))):
         env["DXVK_CONFIG"] = SHOW_INTEL
     route = launch.get("fsr") or "off"
     if route not in FSR_ROUTES:

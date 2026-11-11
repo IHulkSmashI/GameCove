@@ -35,4 +35,18 @@ ally
 mkdir -p "$R/usr/lib/udev/rules.d"
 printf '%s\n' 'ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{idVendor}=="1c7a", ATTR{idProduct}=="0588", ATTR{power/control}="auto"' >"$R/usr/lib/udev/rules.d/50-ally-fingerprint.rules"
 t_check '[ "$(t_state)" = os-fixed ]' "Bazzite's rule: os-fixed"
+# No rule we can read, but the reader already powers down by itself (SteamOS 3.8+ is reported to fix it, mechanism
+# unpublished): the behaviour on the device decides, not a version string
+t_new
+ally
+printf 'auto\n' >"$F"
+t_check '[ "$(t_state)" = os-fixed ]' "reader already at auto without our rule: os-fixed"
+t_check 'sh "$FIX" install | grep -q "not needed"' "install stands down"
+t_check '[ ! -e "$R$RULE" ]' "no rule written"
+# our own rule is what keeps it at auto: never reported as the system's (it would be retired, then needed again)
+t_new
+ally
+sh "$FIX" install >/dev/null
+t_check 'sh "$FIX" status | grep -qx os_fixed=no' "installed and at auto because of us: not os-fixed"
+t_check '[ "$(t_state)" = on ]' "state on"
 t_end

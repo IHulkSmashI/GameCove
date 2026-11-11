@@ -65,6 +65,8 @@ func test_h6_boost_never_exceeds_boost_max_after_plugging_in() -> void:
 	for id in ["acer-predator-atlas-8", "gpd-win-5", "onexplayer-super-x"]:
 		var t: Dictionary = Trees.new().claw8ex()
 		var row := Trees.row(id)
+		# the Claw tree's MSI firmware range (8-35 W) isn't these handhelds' own: without it their row's limits stand
+		DirAccess.remove_absolute(t["root"] + "/sys/class/firmware-attributes/msi-wmi-platform/attributes/ppt_pl1_spl/max_value")
 		var e := _setup(t, row)
 		var cap := float(row["tdp"]["boost_max"])
 		var b: RefCounted = e["reg"].control("power.boost")
@@ -561,6 +563,8 @@ func test_l10_guard_runs_when_thermald_was_already_held() -> void:
 func test_l11_unplug_clamp_retried() -> void:
 	var t: Dictionary = Trees.new().ally()
 	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "1")
+	# on the charger asus-armoury reports ASUS's AC table (SPL up to 30 W; the tree has the DC one)
+	_wr(t["root"] + "/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/max_value", "30")
 	var e := _setup(t)
 	var p: Node = e["power"]
 	ok(p.set_tdp(30.0), "30 W on the charger")
@@ -568,6 +572,7 @@ func test_l11_unplug_clamp_retried() -> void:
 	ok(hi < 30.0, "battery limit is lower (%.0f W)" % hi)
 	e["runner"].frozen.append(SM_TDP)   # steamos-manager takes the write but nothing changes
 	_wr(t["root"] + "/sys/class/power_supply/ADP1/online", "0")
+	_wr(t["root"] + "/sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/max_value", "25")
 	p.check_power_source()
 	eq(float(e["runner"].props[SM_TDP]["data"]), 30.0, "the clamp failed")
 	e["runner"].frozen.clear()
