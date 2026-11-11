@@ -1733,7 +1733,7 @@ func _on_keyboard_closed(text: String) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if keyboard != null and keyboard.visible:
+	if keyboard != null and keyboard.is_open():
 		return
 	var lb: bool = event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_LEFT_SHOULDER
 	var rb: bool = event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_RIGHT_SHOULDER

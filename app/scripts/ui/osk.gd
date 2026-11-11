@@ -26,6 +26,9 @@ var shift_button: Button
 var keys: Array = []          # rows of Buttons
 var field: Label
 var done_button: Button
+## Open from open() until close(): it takes keys only then, not while it fades
+## out (a press right after Done goes to the screen, not into the text).
+var showing := false
 
 
 func _init() -> void:
@@ -99,6 +102,7 @@ static func _col(i: int, from_n: int, to_n: int) -> int:
 
 
 func open(start := "") -> void:
+	showing = true
 	set_text(start, false)
 	Motion.fade(self, true)
 	if is_inside_tree():
@@ -106,8 +110,9 @@ func open(start := "") -> void:
 
 
 func close() -> void:
-	if not visible:
+	if not showing:
 		return
+	showing = false
 	Motion.fade(self, false)
 	closed.emit(text)
 
@@ -161,8 +166,13 @@ func set_text(t: String, emit := true) -> void:
 		text_changed.emit(text)
 
 
+## Open and taking keys (false as soon as Done is pressed, while it fades out).
+func is_open() -> bool:
+	return showing
+
+
 func _input(event: InputEvent) -> void:
-	if not visible:
+	if not showing:
 		return
 	var handled := true
 	if event is InputEventKey and event.pressed:

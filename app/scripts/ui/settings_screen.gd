@@ -398,7 +398,7 @@ static func changes_with_lr(f: Control) -> bool:
 ## Hint bar for whatever has focus here, for main.gd's hint bar
 ## (see docs: main uses it when the screen has `hints`). [] = main's default.
 func hints(f: Control) -> Array:
-	if keyboard != null and keyboard.visible:
+	if keyboard != null and keyboard.is_open():
 		return [["A", "Type"], ["Y", "Space"], ["X", "Delete"], ["B", "Done"]]
 	if sheet != null and sheet.visible:
 		return [["A", "Select"], ["B", TS.CLOSE]]
@@ -434,9 +434,9 @@ func hints(f: Control) -> Array:
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_visible_in_tree():
 		return
-	var overlay := (sheet != null and sheet.visible) or (keyboard != null and keyboard.visible)
+	var overlay: bool = (sheet != null and sheet.visible) or (keyboard != null and keyboard.is_open())
 	if overlay:
-		if event.is_action_pressed("ui_cancel") and sheet.visible and not keyboard.visible:
+		if event.is_action_pressed("ui_cancel") and sheet.visible and not keyboard.is_open():
 			close_sheet()
 			get_viewport().set_input_as_handled()
 		elif _swallow(event):

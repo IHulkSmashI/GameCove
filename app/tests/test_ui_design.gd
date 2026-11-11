@@ -337,6 +337,37 @@ func test_keyboard() -> void:
 	k.free()
 
 
+## Done closes the keyboard at once: while it fades out, a press (X sorts the
+## Library, Y...) goes to the screen, not into the text it just closed.
+func test_osk_takes_no_keys_once_closed() -> void:
+	var k: PanelContainer = Osk.new()
+	k.open("hol")
+	ok(k.is_open(), "open")
+	var y := InputEventJoypadButton.new()
+	y.button_index = JOY_BUTTON_Y
+	y.pressed = true
+	k._input(y)
+	eq(k.text, "hol ", "open: Y types a space")
+	k.close()
+	ok(not k.is_open(), "closed as soon as Done is pressed")
+	var x := InputEventJoypadButton.new()
+	x.button_index = JOY_BUTTON_X
+	x.pressed = true
+	k._input(x)
+	k._input(y)
+	var kb := InputEventKey.new()
+	kb.keycode = KEY_A
+	kb.unicode = 97
+	kb.pressed = true
+	k._input(kb)
+	eq(k.text, "hol ", "presses during the fade change nothing")
+	var closes := [0]
+	k.closed.connect(func(_t): closes[0] += 1)
+	k.close()
+	eq(closes[0], 0, "a second Done doesn't close it twice")
+	k.free()
+
+
 func test_toasts() -> void:
 	var t: VBoxContainer = Toasts.new()
 	for i in 5:

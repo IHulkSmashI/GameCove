@@ -408,7 +408,7 @@ func open_search() -> void:
 
 
 func searching() -> bool:
-	return keyboard.visible
+	return keyboard.is_open()
 
 
 func tiles() -> Array:

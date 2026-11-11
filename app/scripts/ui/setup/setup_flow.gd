@@ -832,7 +832,7 @@ func _on_keyboard_closed(text: String) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if keyboard != null and keyboard.visible:
+	if keyboard != null and keyboard.is_open():
 		return
 	var guide: bool = event is InputEventJoypadButton and event.button_index == JOY_BUTTON_GUIDE
 	if guide or (event is InputEventKey and event.keycode == KEY_F1):

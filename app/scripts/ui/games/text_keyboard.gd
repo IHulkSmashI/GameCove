@@ -82,7 +82,7 @@ func set_text(t: String, emit := true) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not visible:
+	if not showing:
 		return
 	if event is InputEventKey and event.pressed and event.unicode >= 32 and event.unicode < 0x10000 \
 			and not event.ctrl_pressed and event.keycode != KEY_BACKSPACE:
