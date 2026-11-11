@@ -20,9 +20,12 @@ const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 ## Measured: whole Library rescan (every store) 1.4-1.6 s first and cached alike (the ROM part
 ## is ~0.25 s; the rest is the Library's own per-game work), the Library opened on the
 ## Emulation view in 360-700 ms.
-const MAX_SCAN_COLD_MS := 5000.0
-const MAX_SCAN_CACHED_MS := 5000.0
-const MAX_LIBRARY_OPEN_MS := 1500.0
+## Budgets leave room for a box busy with other jobs (5-7 s was seen with four other Godot
+## runs on the same two cores); a scan that walks every file every time, or a Library that
+## makes every tile at once, still fails them.
+const MAX_SCAN_COLD_MS := 20000.0
+const MAX_SCAN_CACHED_MS := 20000.0
+const MAX_LIBRARY_OPEN_MS := 3000.0
 const BIG_SYSTEMS := 160
 const BIG_PER_SYSTEM := 34
 
