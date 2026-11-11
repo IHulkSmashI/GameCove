@@ -21,7 +21,7 @@ const SHOTS := ["controls_quick_game", "controls_quick_game_everyday", "controls
 	"controls_settings_fan_curve", "controls_settings_display", "controls_settings_controller", "controls_settings_lights",
 	"controls_settings_performance", "controls_settings_system", "controls_settings_profiles", "controls_settings_fixes",
 	"controls_settings_more", "controls_keep", "controls_game_page", "controls_quick_midnight", "controls_settings_light",
-	"controls_quick_sunset", "controls_quick_legion", "controls_settings_about", "controls_settings_about_works", "controls_settings_about_photo", "controls_settings_stores"]
+	"controls_quick_sunset", "controls_quick_legion", "controls_quick_upscaling", "controls_settings_upscaling", "controls_quick_upscaling_amd", "controls_settings_about", "controls_settings_about_works", "controls_settings_about_photo", "controls_settings_stores"]
 
 
 ## The Device service the Settings pages see: Device.info() of a set-up Claw
@@ -72,10 +72,14 @@ static func claw_patch() -> Dictionary:
 		"perf.overlay_position": {"value": "top-left"},
 		"perf.overlay_opacity": {"value": 40, "min": 0.0, "max": 100.0, "step": 5.0, "unit": "%"},
 		"perf.overlay_scale": {"value": 100, "min": 50.0, "max": 200.0, "step": 10.0, "unit": "%"},
-		"perf.upscaler": {"value": "xess"},
-		"perf.frame_gen": {"value": 0},
-		"perf.upscale_recommended": {"value": null},
+		# a DirectX 12 game set up by "Best for this handheld" on the Claw, started once
+		"perf.upscale_mode": {"value": "best", "help": "Best here: FSR 4.1.2 on XMX. We turn the game's DLSS into FSR 4.1.2 on the XMX cores. Pick DLSS in the game's graphics menu."},
+		"perf.upscale_active": {"value": null, "help": "Active: FSR 4.1.2 on XMX, XeSS frame generation 2x, XeLL low latency"},
+		"perf.upscaler": {"value": "fsr4_xmx"},
+		"perf.frame_gen": {"value": 2},
+		"perf.upscale_menu": {"value": null},
 		"perf.upscale_undo": {"value": null},
+		"perf.lsfg_setup": {"value": null, "help": "Lossless Scaling is a paid app on Steam. Press to open its store page."},
 		"perf.low_latency": {"value": true},
 		"perf.proton": {"value": "proton_cachyos", "options": [{"value": "", "label": "Steam's default"},
 			{"value": "proton_cachyos", "label": "Proton-CachyOS 11"}, {"value": "GE-Proton10-25", "label": "GE-Proton 10-25"},
@@ -124,8 +128,12 @@ static func legion_patch() -> Dictionary:
 	p["power.charge_limit"] = {"reason": "This battery has no charge limit"}
 	p["power.battery_long_life"] = {"value": true}
 	p["power.autotune_floor"] = {"value": 5, "min": 5.0, "max": 30.0, "unit": "W"}
-	p["perf.upscaler"] = {"value": "own", "options": [{"value": "own", "label": "Game's own"}, {"value": "fsr31", "label": "FSR 3.1 (OptiScaler)"}]}
-	p["perf.frame_gen"] = {"value": 0, "options": [{"value": 0, "label": "Off"}, {"value": 2, "label": "2x"}]}
+	# the Z2 Go (RDNA 2): FSR 3.1 is the pick, FSR 4.1.2 is offered with its cost said plainly
+	p["perf.upscale_mode"] = {"value": "best", "help": "Best here: FSR 3.1. We turn the game's DLSS into FSR 3.1. Pick DLSS in the game's graphics menu."}
+	p["perf.upscale_active"] = {"value": null, "help": "Active: FSR 3.1"}
+	p["perf.upscaler"] = {"value": "fsr31"}
+	p["perf.frame_gen"] = {"value": 0}
+	p["perf.lsfg_setup"] = {"value": null, "help": "Ready: nothing left to set up"}
 	p["perf.low_latency"] = {"value": false}
 	p["perf.lsfg"] = {"value": false}
 	p["perf.lsfg_multiplier"] = {"value": 2}
@@ -177,7 +185,7 @@ func _run() -> void:
 	await _settings_shots_controls()
 	await _game_page_shot()
 	await _theme_shots()
-	if want(["controls_quick_legion", "controls_quick_display", "controls_settings_display", "controls_settings_more"]):
+	if want(["controls_quick_legion", "controls_quick_display", "controls_settings_display", "controls_settings_more", "controls_quick_upscaling_amd"]):
 		await _use_device("lenovo-legion-go-s-z2go", legion_patch())
 		await _legion_shots()
 	quit()
@@ -289,7 +297,8 @@ func _open_quick(g: Dictionary, tab: int, focus_id := "") -> void:
 
 func _quick_shots() -> void:
 	if not want(["controls_quick_game", "controls_quick_game_everyday", "controls_quick_power", "controls_quick_audio",
-			"controls_quick_controller", "controls_quick_device", "controls_quick_midnight", "controls_quick_sunset"]):
+			"controls_quick_controller", "controls_quick_device", "controls_quick_midnight", "controls_quick_sunset",
+			"controls_quick_upscaling"]):
 		return
 	var qm = main.quick_menu
 	var g := _game(0)
@@ -311,6 +320,10 @@ func _quick_shots() -> void:
 	qm.model.set_value("power.tdp", 14)
 	await _open_quick(g, 0, "power.tdp")
 	await shot("controls_quick_game")
+	if want(["controls_quick_upscaling"]):
+		# This game > Upscaling: the mode, what really ran, the choices
+		await _open_quick(g, 0, "perf.upscale_mode")
+		await shot("controls_quick_upscaling")
 	qm._on_autotune_limit(true, {"cant_reach": true, "target_fps": 60, "ceiling_w": 15.0, "tdp_max": 35.0})
 	await _open_quick(g, 1, "power.fan_mode")
 	await shot("controls_quick_power")
@@ -367,6 +380,9 @@ func _settings_shots_controls() -> void:
 	if want(["controls_settings_performance"]):
 		await _settings_page("performance", "perf.upscaler")
 		await shot("controls_settings_performance")
+	if want(["controls_settings_upscaling"]):
+		await _settings_page("performance", "perf.frame_gen")
+		await shot("controls_settings_upscaling")
 	if want(["controls_settings_system"]):
 		await _settings_page("system", "network.wifi")
 		await shot("controls_settings_system")
@@ -494,6 +510,10 @@ func _legion_shots() -> void:
 		await shot("controls_quick_display")
 		await _open_quick(g, 0, "perf.overlay")
 		await shot("controls_quick_legion")
+	if want(["controls_quick_upscaling_amd"]):
+		main._open_menu()
+		await _open_quick(g, 0, "perf.upscaler")
+		await shot("controls_quick_upscaling_amd")
 		main.quick_menu.close()
 	if want(["controls_settings_display"]):
 		await _settings_page("display", "display.vrr")

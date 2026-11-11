@@ -12,6 +12,7 @@
 #   SIZES="1920x1200 1280x800" THEMES="cove light"   what to render
 #   DOCS=0                    skip the README copies in docs/images/
 #   REFRESH=1                 re-fetch the data first (fetch.py, then record_discover.gd)
+#   SHOWCASE_ROM_ART=0        the ROM games without art (console covers, console pattern hero)
 #
 # docs/images/<name>.webp are the README copies: the 1920x1200 Cove set,
 # resized to 1600 px wide and compressed. Their names are stable; see

@@ -38,8 +38,11 @@ var memory_path := ""
 ## func() -> unix seconds (tests swap it).
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 
+## The upscaling helper (tests swap it); asked for its storage report only while the page is open.
+var upscale_helper := "/usr/libexec/gamecove/gamecove-upscale"
+
 var _state := {"drives": [], "libraries": [], "watching": false, "ready": false, "error": "",
-	"cleanup": {"ready": false, "dirs": [], "bytes": 0, "cleaning": false}}
+	"cleanup": {"ready": false, "dirs": [], "bytes": 0, "cleaning": false}, "upscaling": {}}
 var _timer: Timer
 var _signature := ""
 
@@ -262,6 +265,33 @@ func leftovers() -> void:
 			_state["cleanup"] = {"ready": true, "dirs": dirs, "bytes": bytes, "cleaning": false, "missing": missing,
 				"away": away_libraries(away)}
 			changed.emit(state())))
+
+
+## What upscaling keeps on this handheld (OptiScaler packages, FSR 4 files, the
+## XMX driver, lists): one helper call on the worker, `changed` follows. The
+## files live in one managed folder; the page shows its size. {} without the helper.
+func upscaling() -> void:
+	_queue("upscaling", func():
+		var info := upscaling_report()
+		_main(func():
+			_state["upscaling"] = info
+			changed.emit(state())))
+
+
+## {"bytes", "games", "bundle_bytes", "folder", "parts"} from `gamecove-upscale storage`.
+func upscaling_report() -> Dictionary:
+	if runner == null or upscale_helper == "" or not FileAccess.file_exists(upscale_helper):
+		return {}
+	var r: Dictionary = runner.run(upscale_helper, PackedStringArray(["storage", "--home", home]))
+	var lines := str(r.get("out", "")).strip_edges().split("\n")
+	var last := lines[lines.size() - 1] if lines.size() > 0 else ""
+	var json := JSON.new()      # parse(): a broken answer is no error in the log, just nothing to show
+	var parsed: Variant = json.data if last.begins_with("{") and json.parse(last) == OK else null
+	if not (parsed is Dictionary) or not bool(parsed.get("ok", false)):
+		return {}
+	return {"bytes": int(parsed.get("bytes", 0)), "games": int(parsed.get("games", 0)),
+		"bundle_bytes": int(parsed.get("bundle_bytes", 0)), "folder": str(parsed.get("folder", "")),
+		"parts": parsed.get("parts", []) if parsed.get("parts") is Array else []}
 
 
 ## Removes the leftovers found by the last leftovers(), then measures again.

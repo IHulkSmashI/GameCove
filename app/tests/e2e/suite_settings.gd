@@ -13,7 +13,7 @@ const ControlsScript := preload("res://scripts/controls/controls.gd")
 const CATEGORIES := ["power", "display", "audio", "controller", "performance", "system"]
 ## Moved by their own tests (they leave the session, need a game, or go to Steam).
 const NOT_HERE := ["system.sleep", "system.screenshot", "perf.wrapper_remove_all", "perf.clear_shader_cache",
-	"controller.reset_layout", "controller.rumble_test", "perf.upscale_recommended", "perf.upscale_undo"]
+	"controller.reset_layout", "controller.rumble_test", "perf.upscale_active", "perf.upscale_menu", "perf.upscale_undo"]
 
 
 func settings() -> Control:

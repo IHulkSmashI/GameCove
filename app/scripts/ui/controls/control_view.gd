@@ -221,7 +221,7 @@ func _rebuild() -> void:
 				button = r.button
 			_:
 				var r: VBoxContainer = ActionRow.new()
-				r.setup("row", title(), TC.RUN, "", icon if icon != "" else "", true)
+				r.setup("row", title(), str(TC.ACTION_VERBS.get(id, TC.RUN)), "", icon if icon != "" else "", true)
 				r.pressed.connect(func(): _ask(true))
 				row = r
 				button = r.button
@@ -274,14 +274,29 @@ func _decorate() -> void:
 	var hint := explanation()
 	if row.has_method("set_explainer"):
 		row.collapse_hint = blocked == ""
-		row.set_explainer(func(_v): return hint)
+		row.set_explainer(func(v): return _option_line(v, hint))
 	elif row.has_method("set_hint"):
 		if "collapse_hint" in row:
-			row.collapse_hint = avail and blocked == ""
+			# a read-out (what really ran in this game) is shown whether or not the row has focus
+			row.collapse_hint = avail and blocked == "" and not id in TC.ALWAYS_EXPLAIN
 		row.set_hint(hint)
 	_set_badges()
 	if not bool(desc.get("failed", false)) and status_label.text != TC.NEXT_SESSION:
 		status_label.visible = false
+
+
+## A choice whose options carry their own line ("help") shows the line of the
+## option in view, so every alternative says in plain words what it is; a
+## control that can't be used or is locked keeps saying why.
+func _option_line(v: Variant, hint: String) -> String:
+	if not bool(desc.get("available", false)) or str(desc.get("blocked", "")) != "":
+		return hint
+	var options: Variant = desc.get("options", [])
+	if options is Array:
+		for o in options:
+			if o is Dictionary and str(o.get("help", "")) != "" and typeof(o.get("value")) == typeof(v) and o.get("value") == v:
+				return str(o["help"])
+	return hint
 
 
 ## The line under the row: reason when it can't be used, else the help, the

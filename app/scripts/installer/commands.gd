@@ -146,6 +146,12 @@ static func xess_remove(helper: String, home: String) -> Array:
 	return [helper, "xess-remove", "--home", home]
 
 
+## Uninstall: everything upscaling put on this handheld goes (games as shipped,
+## the XeSS XMX driver, lsfg-vk from us, the managed folders). Saves stay.
+static func upscale_purge(helper: String, home: String) -> Array:
+	return [helper, "purge", "--home", home]
+
+
 ## Default session without switching now (needs the package live).
 static func session_default(select: String, startup: String) -> Array:
 	if startup == "gamecove":
@@ -279,8 +285,10 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 			if bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false)):
 				# not only what the installer recorded: every fix and device setting in use
 				out.append(_cmd("fix_remove_all", fix_remove_all(paths.fix_helper())))
-			if had_xess and bool(target.get("installed", false)):
-				out.append(_cmd("xess_remove", xess_remove(paths.upscale_helper(), paths.home), {"optional": true}))
+			if bool(target.get("installed", false)):
+				# every game back to the files it shipped with, the XeSS XMX driver and lsfg-vk we
+				# installed out, our folder of upscaler files gone (as the user; upkeep.purge)
+				out.append(_cmd("upscale_purge", upscale_purge(paths.upscale_helper(), paths.home), {"optional": true}))
 			var purge := bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false))
 			if method == "rpm-ostree":
 				out.append(_cmd("package_remove", rpm_remove(purge)))

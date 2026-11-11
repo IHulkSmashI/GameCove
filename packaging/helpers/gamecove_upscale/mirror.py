@@ -246,6 +246,47 @@ def parse(raw: bytes) -> dict:
     return {**d, "components": comps}
 
 
+# ---- GameCove: data and withdrawals riding in the same signed index ----------------------------------------------
+DATA_NAMES = ("games",)                       # idx["data"]["games"]: the per-game knowledge base (games.json)
+WITHDRAWABLE = ("fsr4_xmx", "fsr4_amd", "optipatcher", "reframework", "fakenvapi", "optiscaler_v10", "xess_xmx_linux")
+MAX_DATA = 8 << 20
+
+
+def data_entry(idx: dict | None, name: str = "games") -> dict | None:
+    """A data file of the verified index, checked: {"version", "sha256", "size", "mirror_url"} with the URL on
+    GameCove's own mirror. None when the index has none or it isn't well formed (then the bundled file is used)."""
+    e = ((idx or {}).get("data") or {}).get(name) if name in DATA_NAMES else None
+    if not isinstance(e, dict):
+        return None
+    if not (HEX64.match(str(e.get("sha256", ""))) and VERSION_RE.match(str(e.get("version", "")))
+            and is_mirror_url(str(e.get("mirror_url", ""))) and isinstance(e.get("size"), int) and 0 < e["size"] <= MAX_DATA):
+        return None
+    return e
+
+
+def fetch_data(home: str, name: str = "games") -> bytes | None:
+    """The data file named by the cached verified index, downloaded from the mirror and sha256 checked."""
+    e = data_entry(load(home), name)
+    if not e:
+        return None
+    raw = _fetch(e["mirror_url"], MAX_DATA, 30.0)
+    if len(raw) != e["size"] or sha256_bytes(raw) != e["sha256"]:
+        raise ValueError(f"{name}: the downloaded file isn't the one the signed index names")
+    return raw
+
+
+def withdrawn(home: str | None) -> dict[str, str]:
+    """Components pulled back by the signed index ({"component": "why"}): the kill switch. A withdrawn component
+    is no longer offered, set up or kept in games on this device from the next time anything looks (games.py,
+    best.prepare). Only the verified index can say so; without one nothing is withdrawn."""
+    if not home:
+        return {}
+    w = (load(home) or {}).get("withdrawn")
+    if not isinstance(w, dict):
+        return {}
+    return {k: str(v)[:200] for k, v in w.items() if k in WITHDRAWABLE}
+
+
 def _paths(home: str) -> dict:
     d = os.path.join(home, CACHE)
     return {"dir": d, "index": os.path.join(d, INDEX_NAME), "bundle": os.path.join(d, INDEX_NAME + ".sigstore.json"),

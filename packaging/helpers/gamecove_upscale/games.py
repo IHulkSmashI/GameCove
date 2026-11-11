@@ -26,7 +26,7 @@ import logging
 import os
 import shutil
 
-from . import framegen, gamedb, launchenv, livedb, mirror, optiscaler, reframework, xess, xmxscope
+from . import active, chips, framegen, gamedb, guard, launchenv, livedb, mirror, optiscaler, reframework, xess, xmxscope
 
 log = logging.getLogger("gamecove.games")
 
@@ -36,7 +36,8 @@ VERSIONS = os.path.join(HERE, "data", "versions.json")
 DATA = ".local/share/gamecove"
 STATE = os.path.join(DATA, "upscale.json")
 LISTS = os.path.join(DATA, "lists")
-REC_KEYS = ("opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "fsr", "opti_dll", "opti_overlay")
+REC_KEYS = ("opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "fsr", "opti_dll", "opti_overlay", "fg_out",
+            "fsr4_int8", "proton_fsr4")
 INTEL_UPSCALERS = ("own", "xess", "fsr4_xmx", "fsr4_xmx_lite")
 AMD_UPSCALERS = ("own", "fsr31", "fsr4_amd")
 FSR4_AMD_ARCHS = ("RDNA3", "RDNA3.5")
@@ -94,23 +95,23 @@ def vendor(gpu: dict) -> str:
 
 
 def upscalers_for(gpu: dict) -> list[str]:
-    """The upscaler choices this GPU gets (the first is always the game's own)."""
-    v = vendor(gpu)
-    if v == "intel":
-        return list(INTEL_UPSCALERS) if gpu.get("xmx") else ["own", "xess"]
-    if v == "amd":
-        return list(AMD_UPSCALERS) if str(gpu.get("arch")) in FSR4_AMD_ARCHS else ["own", "fsr31"]
-    return ["own"]
+    """The upscaler choices this GPU gets (the first is always the game's own): chips.py's table."""
+    return chips.upscalers(gpu)
+
+
+# which upscaler choices need which withdrawable component (mirror.withdrawn: the signed index's kill switch)
+NEEDS = {"fsr4_xmx": "fsr4_xmx", "fsr4_xmx_lite": "fsr4_xmx", "fsr4_amd": "fsr4_amd"}
+
+
+def offered(home: str | None, gpu: dict) -> list[str]:
+    """upscalers_for() without the choices whose files were withdrawn."""
+    gone = mirror.withdrawn(home)
+    return [u for u in upscalers_for(gpu) if NEEDS.get(u) not in gone]
 
 
 def fg_for(gpu: dict) -> list[int]:
-    """Frame generation multipliers: XeSS-FG 2x-4x on XMX, FSR-FG 2x on AMD, none elsewhere."""
-    v = vendor(gpu)
-    if v == "intel" and gpu.get("xmx"):
-        return [0, 2, 3, 4]
-    if v == "amd":
-        return [0, 2]
-    return [0]
+    """Frame generation multipliers: XeSS-FG 2x-4x on XMX, 2x on everything else that has a generator, none elsewhere."""
+    return chips.frame_gens(gpu)
 
 
 # ---- the recommendation -----------------------------------------------------------------------------------------
@@ -182,7 +183,7 @@ def _prefer_fsr4(home: str, rec: dict, d: str | None, gpu: dict, xmx_off: bool) 
         rec["reasons"].append("FSR 4.1.2 (newer than XeSS) would be picked here once its files are in ~/fsr4-xmx (they come with GameCove; pick it once and they are fetched)")
 
 
-def _for_gpu(rec: dict, d: str | None, gpu: dict) -> None:
+def _for_gpu(rec: dict, d: str | None, gpu: dict, home: str | None = None) -> None:
     """GameCove: ClawDeck's recommendation (made for Intel XMX) turned into this GPU's."""
     v = vendor(gpu)
     if v == "intel" and gpu.get("xmx"):
@@ -198,34 +199,54 @@ def _for_gpu(rec: dict, d: str | None, gpu: dict) -> None:
             rec["reasons"][0] = rec["reasons"][0].replace(" on the XMX cores", "")
         return
     if v != "amd":
-        rec.update(route="own", optiscaler=False, launch={}, upscaler=None, frame_gen=None,
-                   reasons=["Unknown GPU: only the game's own settings apply."])
+        why = ("NVIDIA: the game's own DLSS, frame generation and Reflex already are the best here. Nothing is added."
+               if chips.tier(gpu) == "nvidia" else "Unknown GPU: only the game's own settings apply.")
+        rec.update(route="own", optiscaler=False, launch={}, upscaler=None, frame_gen=None, reasons=[why])
         return
+    t = chips.tier(gpu)
     ships = rec.get("ships") or {}
+    dx12 = bool(d and gamedb.is_dx12(d, rec.get("main_exes")))
+    if t == "amd_old":
+        rec.update(route="own", optiscaler=False, launch={}, upscaler=None, frame_gen=None, ini={}, later=[],
+                   reasons=["This GPU is too old for a newer upscaler: use the game's own FSR in its graphics menu."])
+        return
     if "FSR" in ships.get("upscaler", []) and not rec.get("re_engine"):
-        rec.update(route="own_fsr", optiscaler=False, launch={}, upscaler=None, frame_gen=None, ini={}, later=[])
-        rec["reasons"] = ["This game ships FSR: pick it in its graphics menu. Proton-CachyOS or GE-Proton upgrade "
-                          "FSR 3.1 to FSR 4 on RDNA3 by themselves (Launcher sets it)."
+        # the game has FSR of its own: nothing goes into its folder. Where Proton can upgrade FSR 3.1 to FSR 4 by
+        # itself (GE-Proton, Proton-CachyOS) and FSR 4 is this chip's default, the launch gets PROTON_FSR4_UPGRADE.
+        up = dx12 and t in chips.PROTON_FSR4 and chips.FSR4.get(t) == "default" and gamedb.has_fsr31(d)
+        rec.update(route="own_fsr", optiscaler=False, launch={"proton_fsr4": True} if up else {}, upscaler="fsr" if up else None,
+                   frame_gen=None, ini={}, later=[])
+        rec["reasons"] = [("This game ships FSR 3.1: pick FSR in its graphics menu and Proton turns it into FSR 4 "
+                           "(GE-Proton or Proton-CachyOS; nothing is added to the game's files)." if up else
+                           "This game ships FSR: pick it in its graphics menu.")
                           + (" Its own FSR frame generation works too." if "FSR-FG" in ships.get("fg", []) else "")]
         return
-    if rec["route"] == "own_xess":                         # XeSS only: OptiScaler can turn it into FSR 3.1
+    if rec["route"] == "own_xess":                         # XeSS only: OptiScaler turns it into FSR
         rec.update(route="optiscaler", optiscaler=True)
         launch = {"opti_fg": "off", "opti_ini": rec.get("ini") or {}}
-        rec["reasons"] = ["This game ships XeSS (slow on AMD without XMX): OptiScaler turns it into FSR 3.1. "
+        rec["reasons"] = ["This game ships XeSS (slow on AMD): OptiScaler turns it into FSR 3.1. "
                           "Pick XeSS in the game's graphics menu."]
-    launch["opti"] = "fsr31"
+    opti = chips.default_upscaler(gpu, dx12)
+    launch["opti"] = opti
+    if opti == "fsr4_amd" and t not in chips.FSR4_LISTED:
+        launch["fsr4_int8"] = True
     if launch.get("opti_fg") not in (None, "off", "dlssg", "fsrfg", "upscaler"):
         launch["opti_fg"] = "off"
     rec["launch"] = launch
-    rec["upscaler"] = "fsr31"
+    rec["upscaler"] = opti
+    name = "FSR 4.1.2" if opti == "fsr4_amd" else "FSR 3.1"
     first = rec["reasons"][0]
-    first = first.replace("XeSS on the XMX cores", "FSR 3.1").replace("into XeSS", "into FSR 3.1")
-    first = first.replace("(XeSS on the XMX cores)", "(FSR 3.1)").replace("XeSS frame generation", "FSR frame generation")
+    first = first.replace("XeSS on the XMX cores", name).replace("into XeSS", "into " + name).replace("into FSR 3.1", "into " + name)
+    first = first.replace("(XeSS on the XMX cores)", f"({name})").replace("XeSS frame generation", "FSR frame generation")
     rec["reasons"][0] = first
     if rec.get("re_engine"):
-        rec["reasons"].append("The Capcom setup is tested on Intel only; on AMD it runs with FSR 3.1 and FSR frame generation.")
-    if str(gpu.get("arch")) in FSR4_AMD_ARCHS and d and gamedb.is_dx12(d, rec.get("main_exes")):
-        rec["reasons"].append("FSR 4 (AMD's 4.1.2 upscaler) is available for this DirectX 12 game: sharper, costs a few fps.")
+        rec["reasons"].append("The Capcom setup is tested on Intel only; on AMD it runs with FSR and FSR frame generation.")
+    if opti == "fsr4_amd":
+        rec["reasons"].append(f"FSR 4.1.2 ({chips.FSR4_MODEL.get(t, 'INT8')} model) is the sharpest this chip runs. "
+                              "If it costs too many frames here, FSR 3.1 is one tap away.")
+    elif chips.FSR4.get(t) == "optin" and dx12:
+        rec["reasons"].append("FSR 4.1.2 is available for this DirectX 12 game: sharper, but it costs about a quarter "
+                              "of the frame rate on this chip.")
 
 
 def recommend(home: str, key: str, gpu: dict, game_dir: str | None = None, name: str | None = None,
@@ -236,15 +257,29 @@ def recommend(home: str, key: str, gpu: dict, game_dir: str | None = None, name:
     folder = optiscaler.main_exe_dir(d, rec["main_exes"]) if d else None
     if name is None and str(key).isdigit():
         name = xess.steam_app_name(home, key)
+    rec["entry"] = gamedb.knowledge(gamedb.load(games_path(home)), d, key, name)
+    if rec["entry"]["proxies"] and not rec.get("proxies"):
+        rec["proxies"] = list(rec["entry"]["proxies"])
+    if rec["entry"]["wine_check"] and rec.get("optiscaler"):
+        rec["reasons"].append("This game switches DLSS off under Proton by itself: pick XeSS or FSR in its graphics "
+                              "menu, or use GE-Proton 11-9 or newer.")
     _supported_list_verdict(home, rec, key, gpu)
     _optiscaler_entry(home, rec, name, online)
     _prefer_fsr4(home, rec, d, gpu, xmx_off)
-    _for_gpu(rec, d, gpu)
+    _for_gpu(rec, d, gpu, home)
+    gone = mirror.withdrawn(home)
+    if gone and NEEDS.get((rec.get("launch") or {}).get("opti")) in gone:       # withdrawn: the next best this chip has
+        step = {"fsr4_xmx": "xess", "fsr4_xmx_lite": "xess", "fsr4_amd": "fsr31"}[rec["launch"]["opti"]]
+        rec["launch"]["opti"] = step
+        rec["launch"].pop("fsr4_int8", None)
+        rec["upscaler"] = step
+        rec["reasons"].append("The sharper upscaler was taken out of GameCove for now, so this is the next best.")
     launch = get_launch(home, key)
     applied = bool(rec["launch"]) and all(launch.get(k) == v for k, v in rec["launch"].items())
     dx12 = gamedb.is_dx12(d, rec["main_exes"]) if d else False
     return {**rec, "dir": d, "folder": folder, "applied": applied, "opti_owner": optiscaler.owner(folder)["owner"],
-            "dx12": dx12, "upscalers": upscalers_for(gpu), "frame_gens": fg_for(gpu), "vendor": vendor(gpu),
+            "dx12": dx12, "upscalers": offered(home, gpu), "frame_gens": fg_for(gpu), "vendor": vendor(gpu),
+            "chip": chips.capabilities(gpu), "api": gamedb.api(d, rec["main_exes"]), "engine": gamedb.engine(d),
             "fsr4_xmx_missing": optiscaler.fsr4_xmx_missing(home) if vendor(gpu) == "intel" and gpu.get("xmx") else [],
             "fsr4_amd_missing": optiscaler.fsr4_amd_missing(home) if vendor(gpu) == "amd" else [],
             "reframework_state": reframework.status(folder) if folder and rec["re_engine"] else None,
@@ -254,7 +289,10 @@ def recommend(home: str, key: str, gpu: dict, game_dir: str | None = None, name:
 # ---- putting it in ----------------------------------------------------------------------------------------------
 def _opti_entry(launch: dict, home: str | None = None) -> dict:
     v = versions(home)
-    return v["optiscaler_v10"] if launchenv.v10(launch) and v.get("optiscaler_v10") else v["optiscaler"]
+    key = "optiscaler_v10" if launchenv.v10(launch) and v.get("optiscaler_v10") else "optiscaler"
+    if home and v[key].get("version") in (load_state(home).get("bad_versions") or []):
+        return pins()[key]                        # the newest failed its check on this device: the tested pin
+    return v[key]
 
 
 def _ref_shas(home: str | None = None) -> tuple[str, ...]:
@@ -284,7 +322,7 @@ def _opti_into(home: str, key: str, folder: str, launch: dict, gpu: dict, proxie
         r = optiscaler.fsr4_amd_download(home, versions(home)["fsr4_amd"])
         if not r.get("ok"):
             return r
-    r = optiscaler.patch(home, folder, entry["version"], launchenv.opti_ini({**launch, "opti": opti}, v), opti,
+    r = optiscaler.patch(home, folder, entry["version"], {**launchenv.opti_ini({**launch, "opti": opti}, v), **active.LOG_INI}, opti,
                          opti in launchenv.FSR4_XMX, entry.get("layout") or "flat", proxies,
                          fsr4_amd=opti == "fsr4_amd", force_reflex="2" if v == "intel" else None)
     if r.get("ok"):
@@ -292,6 +330,12 @@ def _opti_into(home: str, key: str, folder: str, launch: dict, gpu: dict, proxie
         s["opti_games"][str(key)] = folder
         save_state(home, s)
     return r
+
+
+def _refused(d: str | None, folder: str | None, anticheat: bool, rec: dict) -> dict | None:
+    """guard.refusal as a helper answer: anti-cheat, another injector in the folder."""
+    no = guard.refusal(d, folder, anticheat, rec.get("entry"))
+    return {"ok": False, "refused": no["code"], "error": no["error"]} if no and no["code"] != "broken" else None
 
 
 def per_game(home: str, gpu: dict) -> bool:
@@ -368,9 +412,13 @@ def _foreign(who: str | None) -> dict | None:
 
 
 def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str | None = None,
-           overlay: int | None = None, allow_unpinned: bool = False, online: bool = False) -> dict:
+           overlay: int | None = None, allow_unpinned: bool = False, online: bool = False,
+           generator: str | None = None, anticheat: bool = False) -> dict:
     """ClawDeck's game_choose, for this GPU: the upscaler (the game's own, or one through GameCove's OptiScaler)
     and frame generation (0 off, else the multiplier). Everything they need is put in or taken out here."""
+    if upscaler in upscalers_for(gpu) and upscaler not in offered(home, gpu):
+        return {"ok": False, "withdrawn": NEEDS[upscaler], "error": "This upscaler was taken out of GameCove for now: "
+                + mirror.withdrawn(home)[NEEDS[upscaler]]}
     if upscaler not in upscalers_for(gpu):
         return {"ok": False, "error": f"{upscaler!r} isn't offered on this GPU ({', '.join(upscalers_for(gpu))})"}
     fg = int(fg or 0)
@@ -405,11 +453,17 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
         save_state(home, s)
         r = set_launch(home, key, {**{k: None for k in REC_KEYS}, "fg": fg or None}, gpu)
         return {**r, "optiscaler": out, "reframework_left": bool(ref.get("present") and not ref.get("removed"))}
-    bad = _foreign(optiscaler.owner(folder)["owner"])
+    bad = _foreign(optiscaler.owner(folder)["owner"]) or _refused(d, folder, anticheat, rec)
     if bad:
         return bad
+    gens = chips.generators(gpu)
+    if generator not in (None, "") and generator not in gens:
+        return {"ok": False, "error": f"{generator!r} frame generation isn't offered on this GPU"}
+    amd = vendor(gpu) != "intel"
     launch = {"opti": upscaler, "opti_fg": rec["fg_source"] if fg else "off", "opti_ini": rec["ini"] if rec["optiscaler"] else {},
               "fg": fg or None, "reframework": True if rec["re_engine"] else None, "fsr": None, "opti_xefg": None,
+              "proton_fsr4": None, "fg_out": (generator or get_launch(home, key).get("fg_out") or gens[0]) if amd and fg and gens else None,
+              "fsr4_int8": True if upscaler == "fsr4_amd" and chips.tier(gpu) not in chips.FSR4_LISTED else None,
               "opti_overlay": overlay if isinstance(overlay, int) and overlay in launchenv.OVERLAYS else None}
     r = _opti_into(home, key, folder, {**{k: v for k, v in launch.items() if v is not None},
                                        "xmx": get_launch(home, key).get("xmx")}, gpu, rec.get("proxies"))
@@ -430,7 +484,7 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
 
 
 def apply_recommended(home: str, key: str, gpu: dict, game_dir: str | None = None, allow_unpinned: bool = False,
-                      online: bool = False) -> dict:
+                      online: bool = False, anticheat: bool = False) -> dict:
     """ClawDeck's game_apply_recommended, for this GPU."""
     rec = recommend(home, key, gpu, game_dir, online=online, xmx_off=get_launch(home, key).get("xmx") is False)
     d = rec["dir"]
@@ -441,7 +495,7 @@ def apply_recommended(home: str, key: str, gpu: dict, game_dir: str | None = Non
         return {"ok": False, "error": rec["reasons"][0]}
     launch = dict(rec["launch"])
     if rec["optiscaler"]:
-        bad = _foreign(optiscaler.owner(folder)["owner"])
+        bad = _foreign(optiscaler.owner(folder)["owner"]) or _refused(d, folder, anticheat, rec)
         if bad:
             return bad
         r = _opti_into(home, key, folder, launch, gpu, rec.get("proxies"))

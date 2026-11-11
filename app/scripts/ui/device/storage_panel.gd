@@ -68,6 +68,8 @@ func opened() -> void:
 		_watching = true
 		if st.has_method("leftovers"):
 			st.leftovers()
+		if st.has_method("upscaling"):
+			st.upscaling()
 
 
 func _leave() -> void:
@@ -193,6 +195,36 @@ func _fill_side() -> void:
 	c[1].add_child(note)
 	_side.add_child(c[0])
 	_clean_card()
+	_upscaling_card()
+
+
+## Upscaling files: one managed folder, its size, and how to get rid of it.
+## Only shown once the helper has answered and something is there.
+func _upscaling_card() -> void:
+	var up: Dictionary = state.get("upscaling", {}) if state.get("upscaling") is Dictionary else {}
+	var bytes := float(up.get("bytes", 0))
+	var bundle := float(up.get("bundle_bytes", 0))
+	if up.is_empty() or (bytes <= 0.0 and bundle <= 0.0):
+		return
+	var c := DKit.card(TX.UPSCALE_STORE_TITLE, "gauge", "info", false)
+	c[0].name = "UpscalingFiles"
+	var games := int(up.get("games", 0))
+	var size := Kit.label(TX.UPSCALE_STORE_SIZE % Texts.bytes(bytes), "")
+	size.name = "UpscalingSize"
+	size.add_theme_font_override("font", ThemeLib.font("medium", true))
+	c[1].add_child(size)
+	var line := TX.UPSCALE_STORE_GAMES % [games, "game" if games == 1 else "games"] if games > 0 else TX.UPSCALE_STORE_NO_GAMES
+	var gl := DKit.quiet(line)
+	gl.name = "UpscalingGames"
+	c[1].add_child(gl)
+	if bundle > 0.0:
+		var b := DKit.quiet(TX.UPSCALE_STORE_BUNDLE % Texts.bytes(bundle))
+		b.name = "UpscalingBundle"
+		c[1].add_child(b)
+	var how := DKit.quiet(TX.UPSCALE_STORE_LINE)
+	how.name = "UpscalingWhy"
+	c[1].add_child(how)
+	_side.add_child(c[0])
 
 
 ## Clean up: leftover shader caches of uninstalled games, one button.

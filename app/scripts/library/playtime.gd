@@ -1,7 +1,7 @@
 extends RefCounted
 ## Play time for what GameCove starts and no store counts for us: ES-DE or
-## RetroDECK opened from the Emulation page, and emulated games Steam ROM
-## Manager added (Steam keeps no local play time for non-Steam shortcuts).
+## RetroDECK opened from the Emulation page, every ROM game, and emulated games
+## Steam ROM Manager added (Steam keeps no local play time for non-Steam shortcuts).
 ## user://playtime.json: {"version": 1, "games": {key: {"last_played": unix, "seconds": n}}}.
 ## Written once when a game ends (main.gd), never while it runs.
 
@@ -40,7 +40,13 @@ static func record(key: String, started: int, ended: int, path := PATH) -> bool:
 ## `entry` with GameCove's own play time: last played is the newest of the
 ## store's and ours, minutes add up (the store's are 0 for these games).
 static func apply(entry: Dictionary, ours: Dictionary) -> void:
-	var t: Variant = ours.get("%s:%s" % [entry.get("store", ""), entry.get("id", "")])
+	apply_key(entry, ours, "%s:%s" % [entry.get("store", ""), entry.get("id", "")])
+
+
+## The same with the time counted under another key (a Steam ROM Manager
+## shortcut whose ROM is now a game of its own).
+static func apply_key(entry: Dictionary, ours: Dictionary, key: String) -> void:
+	var t: Variant = ours.get(key)
 	if not t is Dictionary:
 		return
 	entry["last_played"] = maxi(int(entry.get("last_played", 0)), int(t["last_played"]))

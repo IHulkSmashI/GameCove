@@ -72,6 +72,12 @@ OPTI_PRESETS = {
 OPTI_PRESETS["fsr31"] = {"Dx12Upscaler": "fsr31"}
 OPTI_PRESETS["fsr4_amd"] = {"Dx12Upscaler": "fsr31", "FSR_Fsr4Update": "true"}
 AMD_PRESETS = ("fsr31", "fsr4_amd")
+# FSR 4.1.2 on a GPU AMD's own list leaves out (780M class: Z1 Extreme, Z2, 7840U, 8840U): OptiScaler 0.9.4's switch
+# for the SDK upscaler's INT8 model (launch setting "fsr4_int8", set from the chip: chips.FSR4_LISTED)
+FSR4_FORCE_INT8 = {"FSR_Fsr4ForceEnableInt8": "true"}
+# Frame generation output on GPUs without XMX ("fg_out"): FSR frame generation (the default on AMD), or XeSS frame
+# generation on its DP4a model at 2x, which brings XeLL with it (OptiScaler wiki, Frame Generation Options)
+FG_OUTS = ("fsrfg", "xefg")
 INTEL_PRESETS = ("xess", "fsr4", "fsr4_xmx", "fsr4_xmx_lite")
 FSR4_XMX = ("fsr4_xmx", "fsr4_xmx_lite")
 OPTI_XEFG = {"FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
@@ -85,9 +91,17 @@ OPTI_FG = {
 # AMD: OptiScaler's frame generation goes out as FSR frame generation (OptiFG), not XeSS-FG (Intel only)
 OPTI_FG_AMD = {k: ({**v, "FrameGen_FGOutput": "fsrfg"} if v["FrameGen_FGOutput"] == "xefg" else dict(v)) for k, v in OPTI_FG.items()}
 CAPCOM_AMD = {"Upscalers_VulkanUpscaler": "fsr31", "FrameGen_FGOutput": "FSRFG"}
+
+
+def fg_amd(source: str, out: str = "fsrfg") -> dict[str, str]:
+    """OptiScaler's frame generation lines on a GPU without XMX: `source` as OPTI_FG's keys, `out` one of FG_OUTS."""
+    d = dict(OPTI_FG_AMD[source])
+    if out == "xefg" and d.get("FrameGen_FGOutput") == "fsrfg":
+        d["FrameGen_FGOutput"] = "xefg"
+    return d
 CAPCOM_AMD_DROP = ("FrameGen_FGNvngxReplacement",)
 KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "opti_dll",
-        "opti_overlay", "cores"}
+        "opti_overlay", "cores", "fg_out", "fsr4_int8", "proton_fsr4"}
 # OptiScaler's own FPS overlay (OptiScaler.ini [Menu] FpsOverlayType): shows the upscaler and "(XeFG)" when frame
 # generation runs, which Steam's overlay can't tell. Top right, clear of Steam's performance overlay at the top left.
 OVERLAYS = {0: "FPS", 1: "Simple", 2: "Detailed", 3: "Detailed + graph", 4: "Full", 5: "Full + graph"}
@@ -248,11 +262,22 @@ def _compose_amd(launch: dict) -> dict[str, str]:
     if opti not in OPTI_PRESETS:
         raise ValueError(f"unknown OptiScaler preset {opti!r}")
     env.update(OPTI_PRESETS[opti])
+    out = launch.get("fg_out") or "fsrfg"
+    if out not in FG_OUTS:
+        raise ValueError(f"unknown frame generation output {out!r}")
     ofg = launch.get("opti_fg")
     if ofg is not None:
         if ofg not in OPTI_FG_AMD:
             raise ValueError(f"unknown OptiScaler frame generation {ofg!r}")
-        env.update(OPTI_FG_AMD[ofg])
+        env.update(fg_amd(ofg, out))
+    if opti == "fsr4_amd" and launch.get("fsr4_int8"):
+        env.update(FSR4_FORCE_INT8)
+    # Proton's own FSR 4 files (GE-Proton, Proton-CachyOS: they download AMD's amdxcffx64.dll themselves). Set for a
+    # game whose FSR 3.1 Proton upgrades by itself (launch setting "proton_fsr4", nothing in the game's folder), and
+    # next to OptiScaler's FSR 4, which is the Linux setup of OptiScaler's own wiki (FSR4 Compatibility List, Linux
+    # Setup: "PROTON_FSR4_UPGRADE=1 ... setup OptiScaler as usual"). Other Protons ignore the variable.
+    if launch.get("proton_fsr4") or opti == "fsr4_amd":
+        env["PROTON_FSR4_UPGRADE"] = "1"
     ini = launch.get("opti_ini") or {}
     if not isinstance(ini, dict):
         raise ValueError("opti_ini must be a map of Section_Key to value")
@@ -260,7 +285,7 @@ def _compose_amd(launch: dict) -> dict[str, str]:
         v = str(v)
         if capcom(launch) and k in CAPCOM_DROP:
             continue
-        if not INI_KEY_RE.match(k) or not INI_VAL_RE.match(v) or k in env:
+        if not INI_KEY_RE.match(k) or not INI_VAL_RE.match(v) or (k in env and env[k] != v):
             raise ValueError(f"bad OptiScaler setting {k}={v}")
         env[k] = v
     od = launch.get("opti_dll")
@@ -310,7 +335,9 @@ def opti_ini(launch: dict, vendor: str = "intel") -> dict[str, str]:
     Variables that aren't ini settings (FSR 4 XMX's own switches, GameCove's) stay in the launch environment."""
     o = "fsr4_xmx" if launch.get("opti") == "fsr4" else launch.get("opti") or "off"
     env = {**OPTI_PRESETS.get(o, {}), **(OPTI_XEFG if launch.get("opti_xefg") else {}),
-           **(OPTI_FG if vendor == "intel" else OPTI_FG_AMD).get(launch.get("opti_fg") or "", {}),
+           **(OPTI_FG.get(launch.get("opti_fg") or "", {}) if vendor == "intel" else
+              fg_amd(launch["opti_fg"], launch.get("fg_out") or "fsrfg") if launch.get("opti_fg") in OPTI_FG_AMD else {}),
+           **(FSR4_FORCE_INT8 if vendor != "intel" and o == "fsr4_amd" and launch.get("fsr4_int8") else {}),
            **(launch.get("opti_ini") or {})}
     fg = launch.get("fg") or 0                     # XeSS-FG's multiplier: 2x-4x through OptiScaler (1-3 extra frames)
     if vendor == "intel" and fg and (launch.get("opti_fg") not in (None, "off") or launch.get("opti_xefg")):

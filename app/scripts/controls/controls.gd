@@ -43,9 +43,24 @@ var _cache_mutex := Mutex.new()
 func _ready() -> void:
 	if ctx.is_empty():
 		setup({"sys_root": "", "runner": load("res://scripts/device/command_runner.gd").new(),
-			"home": OS.get_environment("HOME"), "device": get_node_or_null("/root/Device")})
+			"home": OS.get_environment("HOME"), "device": get_node_or_null("/root/Device"),
+			"open_uri": open_uri})
 		load_providers()
 		detect_all()
+
+
+## ctx["open_uri"]: a provider asks for a steam:// or https:// link to be opened
+## (Lossless Scaling's store page); providers run on the worker and never reach
+## the desktop themselves. Only these two schemes; opened on the main thread.
+func open_uri(uri: String) -> bool:
+	if not (uri.begins_with("steam://") or uri.begins_with("https://")):
+		return false
+	call_deferred("_shell_open", uri)
+	return true
+
+
+func _shell_open(uri: String) -> void:
+	OS.shell_open(uri)
 
 
 ## Every script in providers/ is a provider (new() then controls()), so each
@@ -78,6 +93,9 @@ func setup(context: Dictionary) -> void:
 	ctx = context
 	if ctx.get("runner") == null:
 		ctx["runner"] = NoRunner.new()
+	# the game per-game controls act on: made here, before any worker reads the
+	# context, so changing the game later never adds or erases a context key
+	load("res://scripts/controls/game_scope.gd").ensure(ctx)
 	for id in _order:
 		_controls[id].ctx = ctx
 

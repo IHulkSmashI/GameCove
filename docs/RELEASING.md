@@ -132,5 +132,12 @@ lists, so protect it the same way.
   `main` can deploy to it, is read-only with no OIDC and checks it got exactly the pinned commit; the publish job
   runs only pinned cosign, `gh` and standard-library checks. `upscalers.yml`'s publish job re-hashes every planned
   file and re-checks the index (official upstream repositories only, builds at least 72 hours old) with
-  `tools/upscalers/check_plan.py` before signing.
+  `tools/upscalers/check_plan.py` before signing. The nightly's
+  newer steps live in the data repo's `upscalers.yml` (GameCove-data, branch `upscalers-smoke-watch` until it is
+  merged there): the per-game list from OptiScaler's sources as they were 72 hours ago (`tools/upscalers/gen_games.py`),
+  `tools/upscalers/smoke.py` over what is new (its publish job only runs when it passed, so devices keep last night's
+  signed index otherwise), `tools/upscalers/watch.py` over the upstreams a person has to look at, and a `report` job
+  with `issues: write` and no code that opens or updates one issue when something moved or a check failed.
+  `tools/upscalers/withdrawn.json` is the kill switch: a component named there rides in the signed index and every
+  device stops using its files.
 - In the data repo, `gamedb.yml`, `device-photos.yml`: the same build/publish split, without signing.

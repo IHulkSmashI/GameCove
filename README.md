@@ -34,18 +34,21 @@
 GameCove is the screen your handheld boots into. Your games sit up front, and everything you'd normally need a plugin,
 a script or a Windows app for is built in.
 
+- 🔥 **The best upscaler your chip runs, set up for you.** FSR 4.1.2 on Intel's XMX cores with XeSS frame generation
+  up to 4x, FSR 4.1.2 on AMD (the Z1 Extreme too), Lossless Scaling frame generation for everything else, and low
+  latency with every frame generator that has one. Nothing to download or copy: it's ready before a game's first
+  start, and one tap takes it out again.
 - 🎮 **Every store, one library.** Steam, Epic, GOG and Amazon side by side, with art, critic scores, time to beat,
   achievements and ProtonDB ratings. Install, update, repair and move games right from the handheld.
 - ⚡ **A quick menu with every setting your handheld has**, one button away in any game: TDP, fan, frame limit,
   refresh rate, VRR, gyro, stick lights, charge limit and more. It only shows what your model can actually do.
 - 🔋 **Auto TDP** finds the lowest power that holds your frame rate, learns each game on battery and plugged in, and
   gives power back within seconds when a scene gets heavy.
-- 🔥 **Upscaling and frame generation picked for your chip:** XeSS and FSR 4 on Intel's XMX cores, FSR 4 and 3.1 on
-  AMD, Lossless Scaling frame generation on anything, with low latency on by default.
 - 🛠️ **[Fixes for your exact model](#fixes-for-your-handheld),** applied at install, checked every night, and removed
   again when your system catches up. Each says what it changes and has an **Undo**.
-- 🕹️ **Emulation with EmuDeck:** your ROMs show up as games with their art and console, and ES-DE, EmuDeck and
-  Steam ROM Manager open from one Emulation page. Favourites, hidden games and collections work for every store.
+- 🕹️ **Emulation with EmuDeck:** every ROM in your ROM folders is a real game in the Library, like your Steam games:
+  ES-DE's art and details, its own page, Play, play time, filters by console. ES-DE, EmuDeck and Steam ROM Manager
+  open from one Emulation page. Favourites, hidden games and collections work for every store.
 - 🎯 **Profiles per game and per power source.** Change it in a game and it's saved for that game, with different
   values on battery and plugged in.
 - 🏷️ **Discover:** deals in your real local prices, wishlist price alerts and a release calendar.
@@ -146,7 +149,7 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 2. [Home and library](#home-and-library)
 3. [Emulation](#emulation)
 4. [Quick menu and settings](#quick-menu-and-settings)
-5. [Auto TDP, upscaling and frame generation](#auto-tdp-upscaling-and-frame-generation)
+5. [Upscaling, frame generation and Auto TDP](#upscaling-frame-generation-and-auto-tdp)
 6. [Profiles](#profiles)
 7. [Updates](#updates)
 8. [Streaming from your PC](#streaming-from-your-pc)
@@ -221,12 +224,21 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 GameCove works with what EmuDeck (or RetroDECK, or ES-DE on its own) already set up, so your console games live in the
 same interface as everything else.
 
-- **Your ROMs in the library.** Steam ROM Manager's games show up as games, with the art it picked, a badge for the
-  console, and play time. They start through Steam, exactly as Steam starts them.
-- **One Emulation page** (Library > Filter > Emulation page, or ES-DE's tile): open ES-DE or RetroDECK full screen
-  like a game (the quick menu works over it), open EmuDeck for emulator updates and settings, and **Add or update ROMs
-  in the library** with Steam ROM Manager. It shows your systems with how many games each has, and what you played
-  last in ES-DE.
+- **Every ROM is a game.** We read every ROM folder your setup points at (EmuDeck's, also on an SD card, ES-DE's own,
+  RetroDECK's) and list each game the way ES-DE does: one entry per game (a `.m3u` for its discs, a `.cue` for its
+  tracks, a `Game.ps3` folder as one game), a clean title ("Super Game (USA) [!]" reads "Super Game"), ES-DE's
+  description, developer, genres, players and rating from its `gamelist.xml`, and the box art, fan art and marquee
+  ES-DE downloaded. No art yet? A card in the console's colours with its name on it.
+- **Plays the way your setup plays it.** Play starts the emulator ES-DE would pick (your alternative emulator for the
+  system or the game included) through EmuDeck's own launcher scripts, RetroDECK's command line, or ES-DE's command,
+  in its own scope like any game: the quick menu, sleep, recording and play time all work.
+- **Like your Steam games.** Filter > Emulation, then any console; search finds ROM titles; favourites, hidden games
+  and collections work (ES-DE's favourites and hidden games are where we start; your changes stay ours); what you
+  played last is on Home. A game Steam ROM Manager also added to Steam shows once.
+- **One Emulation page** (Library > Filter > Emulation page, or ES-DE's tile): every console with its game count
+  (pick one and the Library opens on it), what you played last, each ROM folder, open ES-DE or RetroDECK full screen
+  like a game, open EmuDeck for emulator updates and settings, and add ROMs to Steam too with Steam ROM Manager.
+  Settings > Stores > **Show emulated games in the Library** turns the ROM games off.
 - **Nothing installed yet?** The page shows a QR code to emudeck.com and three short steps.
 - GameCove never downloads or ships games or BIOS files. Play backups of games you own.
 
@@ -320,25 +332,37 @@ it does.
 
 </details>
 
-## Auto TDP, upscaling and frame generation
+## Upscaling, frame generation and Auto TDP
+
+**GameCove sets up the best upscaler your handheld runs, per game, before you press Play.** It reads your chip and
+what the game ships, puts the right files in, and shows afterwards what really ran. No downloads, no folders, no
+launch options. The full guide and the table for every chip are in [docs/UPSCALING.md](docs/UPSCALING.md).
+
+| Your chip | What "Best for this handheld" picks | Frame generation |
+| --- | --- | --- |
+| **Intel Arc with XMX** (Claw 8 EX, Claw 8 AI+, OneXPlayer 3) | **FSR 4.1.2 on the XMX cores**, then its Lite model, then XeSS 2 | XeSS frame generation **2x, 3x or 4x** with XeLL low latency |
+| **AMD Z1 Extreme, Z2 Extreme, 780M / 890M, Ryzen AI** | **FSR 4.1.2** from AMD's own file; FSR 3.1 by itself if it doesn't come up | FSR or XeSS frame generation 2x with low latency |
+| **Steam Deck, Z2 Go and other RDNA 2** | FSR 3.1; FSR 4.1.2 is one tap away, with its cost said plainly | FSR frame generation 2x |
+| **NVIDIA** | Nothing: the game's own DLSS is already the best | The game's own |
+| **Anything** | | Lossless Scaling frame generation, if you own Lossless Scaling on Steam |
+
+- **Three plain choices per game:** Best for this handheld, My choice, and Native (nothing added, everything undone).
+  Every option has one line saying what it is.
+- **You see what's really running.** After a start the card reads the logs and says, for example,
+  "Active: FSR 4.1.2 on XMX, XeSS frame generation 2x, XeLL low latency", or why it isn't active.
+- **One install.** Every file comes with GameCove, each pinned and checked. The size of it all is in
+  Settings > Device > Storage, and uninstalling puts every game back exactly as it shipped.
+- **Safe.** Never on games with anti-cheat. Never on top of another tool's upscaler or ReShade. Never two frame
+  generators at once. Nothing in a game folder is changed for good.
+- **Always the newest tested files.** A nightly job watches every project this builds on and adopts a new build only
+  after 72 hours and a smoke check, through a signed list your handheld verifies. The version before is kept.
+- **Lossless Scaling frame generation** is for owners of Lossless Scaling only: GameCove uses the copy in your own
+  Steam library and never ships or downloads it.
 
 **Auto TDP** watches your frame rate and finds the lowest power that keeps it, so the battery lasts longer without you
 noticing a drop. Give it a target FPS or let it pick one. It learns each game on battery and plugged in, gives power
 back within seconds in heavy scenes, skips loading screens, and puts everything back when you quit. It's ported from
 ClawDeck, which was built and tuned on real hardware, and works on every handheld with a TDP control.
-
-**Upscaling and frame generation** pick the right thing for your chip, per game:
-
-- **Intel Arc:** XeSS on the XMX cores, FSR 4 on XMX, and XeSS frame generation (2x to 4x), through OptiScaler and the
-  XeSS XMX driver.
-- **AMD:** FSR 4 on newer chips (using AMD's own files), FSR 3.1 everywhere, FSR frame generation.
-- **Any GPU:** Lossless Scaling frame generation through lsfg-vk (2x to 4x, with your own copy of Lossless Scaling).
-- **Low latency** (Anti-Lag on AMD, XeLL on Intel Arc) is on by default, and always on while frame generation runs.
-- **Always the newest tested files.** GameCove checks once a day, shows what's installed and when an update is out, and
-  downloads from its own signed mirror on GitHub ([GameCove-data](https://github.com/IHulkSmashI/GameCove-data), then the project's own release), so a moved download never breaks
-  your setup.
-- **Clean Undo.** Everything GameCove adds to a game folder is recorded and removed exactly on Undo. Folders set up by
-  other tools are left alone.
 
 ## Profiles
 
@@ -453,7 +477,8 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Deals, prices and free-to-keep games (Discover, wishlist) | [CheapShark](https://www.cheapshark.com) (cheapshark.com) and the Steam store API | Steam app ids and titles from your wishlist and Discover, what you search for, your store country | 45 s after start, then every 6 hours (top deals and the free-to-keep list: two requests); when you search or open a game | Look up deals and prices |
 | Local prices (optional) | [GG.deals](https://gg.deals) (gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
 | Your device's photo | GitHub (free photos on GameCove-data's `device-photos` release) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
-| Upscaler list and downloads (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove-data's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and before an install; files only when you install or update | Background lookups (daily check); installs: you start them |
+| Upscaler list and newer upscaler files (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove-data's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and when you change an upscaler; files only when the list has a newer tested version than the one that came with GameCove | Background lookups (daily check). With it off, the files that came with GameCove are used |
+| lsfg-vk for Lossless Scaling frame generation | Its author's site (builds.lsfg-vk.dev) | Nothing about you | When you press Set up Lossless frame generation, and only if you have Lossless Scaling installed | You start it |
 | The list of device fixes | GitHub (the `fixes` release of GameCove's data repo, [GameCove-data](https://github.com/IHulkSmashI/GameCove-data), signed) | Nothing about you: the same file for every handheld | At most once a day, at start, never while you play | Background lookups |
 | GE-Proton (Settings > Performance) | GitHub (GloriousEggroll's `proton-ge-custom` releases) | Nothing about you | When you press Check or Install | You start it |
 | BIOS and firmware list and downloads | GitHub (GameCove-data's `firmware` release, signed), then only the maker's own site | Nothing about you | When you check for updates or prepare a USB drive | You start it |

@@ -173,7 +173,9 @@ func test_model_set_game_redetects_once() -> void:
 	m.set_game({"key": "steam:1"})
 	m.set_game({"key": "steam:1"})
 	eq(c.detect_calls, 1, "per-game controls re-detected only when the game changes")
-	eq(c.ctx.get("game_key", ""), "steam:1", "perf provider context follows the game")
+	var scope: RefCounted = load("res://scripts/controls/game_scope.gd").of(c.ctx)
+	eq(scope.key() if scope != null else "", "steam:1", "perf provider context follows the game")
+	ok(not c.ctx.has("game_key"), "through the game scope, not a key of the shared context")
 	_done([c])
 
 

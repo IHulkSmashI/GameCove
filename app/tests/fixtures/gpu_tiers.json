@@ -1,0 +1,1221 @@
+{
+ "_about": "Every chip in app/data/devices.json (rows and the cpus table) plus desktop cards, with the tier and choices both chips.py (helper) and gpu_caps.gd (app) must give. Written by hand-review of chips.py's output; test_chips.py and test_gpu_caps.gd read it.",
+ "rows": [
+  {
+   "from": "steam-deck-lcd",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Van Gogh (Aerith)",
+    "gpu": "RDNA 2"
+   },
+   "tier": "amd_rdna2",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "steam-deck-oled",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Sephiroth",
+    "gpu": "RDNA 2"
+   },
+   "tier": "amd_rdna2",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "asus-rog-ally",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen Z1 Extreme / Z1",
+    "gpu": "Radeon 780M / 740M (RDNA 3)"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "asus-rog-ally-x",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen Z1 Extreme",
+    "gpu": "Radeon 780M (RDNA 3)"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "asus-rog-xbox-ally",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Ryzen Z2 A",
+    "gpu": "Radeon (RDNA 2)"
+   },
+   "tier": "amd_z2a",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "asus-rog-xbox-ally-x",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "AMD Ryzen AI Z2 Extreme",
+    "gpu": "Radeon 890M-class (RDNA 3.5)"
+   },
+   "tier": "amd_rdna35",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "lenovo-legion-go-2",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "AMD Ryzen Z2 Extreme",
+    "gpu": "Radeon 890M-class (RDNA 3.5)"
+   },
+   "tier": "amd_rdna35",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "lenovo-legion-go-2-z2",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen Z2",
+    "gpu": "Radeon (RDNA 3)"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "lenovo-legion-go-s-z2go",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Ryzen Z2 Go",
+    "gpu": "Radeon 680M-class (RDNA 2)"
+   },
+   "tier": "amd_rdna2",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "msi-claw-8-ex",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe3",
+    "arch": "Xe3",
+    "xmx": true,
+    "chip": "Intel Panther Lake",
+    "gpu": "Arc B390 / B370 (Xe3)"
+   },
+   "tier": "intel_xmx",
+   "upscalers": [
+    "own",
+    "xess",
+    "fsr4_xmx",
+    "fsr4_xmx_lite"
+   ],
+   "frame_gens": [
+    0,
+    2,
+    3,
+    4
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "msi-claw-8-ai-plus",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe2",
+    "arch": "Xe2",
+    "xmx": true,
+    "chip": "Intel Lunar Lake (Core Ultra 200V)",
+    "gpu": "Arc 140V (Xe2)"
+   },
+   "tier": "intel_xmx",
+   "upscalers": [
+    "own",
+    "xess",
+    "fsr4_xmx",
+    "fsr4_xmx_lite"
+   ],
+   "frame_gens": [
+    0,
+    2,
+    3,
+    4
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "msi-claw-a1m",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe-lpg",
+    "arch": "Xe-LPG",
+    "xmx": false,
+    "chip": "Intel Meteor Lake (Core Ultra 155H / 135H)",
+    "gpu": "Arc (Xe-LPG)"
+   },
+   "tier": "intel",
+   "upscalers": [
+    "own",
+    "xess"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "msi-claw-family",
+   "gpu": {
+    "vendor": "other",
+    "family": "",
+    "arch": "unknown",
+    "xmx": false,
+    "chip": "Unknown",
+    "gpu": "Unknown"
+   },
+   "tier": "other",
+   "upscalers": [
+    "own"
+   ],
+   "frame_gens": [
+    0
+   ],
+   "generators": [],
+   "latency": ""
+  },
+  {
+   "from": "onexplayer-onexfly-f1",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen 7 7840U / 8840U",
+    "gpu": "Radeon 780M (RDNA 3)"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "onexplayer-onexfly-f1-pro",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "AMD Ryzen AI 9 HX 370 / 365",
+    "gpu": "Radeon 890M / 880M (RDNA 3.5)"
+   },
+   "tier": "amd_rdna35",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "onexplayer-x1-amd",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen 7 8840U",
+    "gpu": "Radeon 780M (RDNA 3)"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "onexplayer-x1-intel",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe-lpg",
+    "arch": "Xe-LPG",
+    "xmx": false,
+    "chip": "Intel Meteor Lake (Core Ultra 7 155H)",
+    "gpu": "Arc (Xe-LPG)"
+   },
+   "tier": "intel",
+   "upscalers": [
+    "own",
+    "xess"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "onexplayer-x1-pro",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "AMD Ryzen AI 9 HX 370",
+    "gpu": "Radeon 890M (RDNA 3.5)"
+   },
+   "tier": "amd_rdna35",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "onexplayer-2",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Ryzen 7 6800U",
+    "gpu": "Radeon 680M (RDNA 2)"
+   },
+   "tier": "amd_rdna2",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "onexplayer-2-pro",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen 7 7840U",
+    "gpu": "Radeon 780M (RDNA 3)"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "onexplayer-g1-amd",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "AMD Ryzen AI 9 HX 370 / Ryzen 7 8840U",
+    "gpu": "Radeon 890M / 780M (RDNA 3.5 / 3)"
+   },
+   "tier": "amd_rdna35",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "onexplayer-g1-intel",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe-lpg",
+    "arch": "Xe-LPG",
+    "xmx": true,
+    "chip": "Intel Arrow Lake (Core Ultra 7 255H)",
+    "gpu": "Arc 140T (Xe-LPG+)"
+   },
+   "tier": "intel_xmx",
+   "upscalers": [
+    "own",
+    "xess",
+    "fsr4_xmx",
+    "fsr4_xmx_lite"
+   ],
+   "frame_gens": [
+    0,
+    2,
+    3,
+    4
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "onexplayer-3",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe3",
+    "arch": "Xe3",
+    "xmx": true,
+    "chip": "Intel Panther Lake (Arc G3 Extreme)",
+    "gpu": "Arc B390 (Xe3)"
+   },
+   "tier": "intel_xmx",
+   "upscalers": [
+    "own",
+    "xess",
+    "fsr4_xmx",
+    "fsr4_xmx_lite"
+   ],
+   "frame_gens": [
+    0,
+    2,
+    3,
+    4
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "onexplayer-x2-mini",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe3",
+    "arch": "Xe3",
+    "xmx": false,
+    "chip": "Unknown",
+    "gpu": "Unknown"
+   },
+   "tier": "intel",
+   "upscalers": [
+    "own",
+    "xess"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "onexplayer-x2-mini-pro",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "Unknown",
+    "gpu": "Unknown"
+   },
+   "tier": "amd_rdna35",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "onexplayer-onexfly-apex",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "AMD Ryzen AI Max+ 395",
+    "gpu": "Radeon 8060S (RDNA 3.5)"
+   },
+   "tier": "amd_halo",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "ayaneo-air-plus",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Ryzen 7 6800U / 7320U, or Intel i3-1215U",
+    "gpu": "Radeon 680M / 610M, or Intel UHD"
+   },
+   "tier": "amd_rdna2",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "gpd-win-4",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen 7 6800U / 7840U / 8840U",
+    "gpu": "Radeon 680M / 780M (RDNA 2 / 3)"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "gpd-win-mini",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen 7 7840U / 8840U / AI 9 HX 370",
+    "gpu": "Radeon 780M / 890M (RDNA 3 / 3.5)"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "gpd-win-5",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "AMD Ryzen AI Max+ 395 / 385",
+    "gpu": "Radeon 8060S / 8050S (RDNA 3.5)"
+   },
+   "tier": "amd_halo",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "zotac-zone",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen 7 8840HS",
+    "gpu": "Radeon 780M (RDNA 3)"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "acer-predator-atlas-8",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe3",
+    "arch": "Xe3",
+    "xmx": true,
+    "chip": "Intel Panther Lake (Arc G3 / G3 Extreme)",
+    "gpu": "Arc B390 / B370 (Xe3)"
+   },
+   "tier": "intel_xmx",
+   "upscalers": [
+    "own",
+    "xess",
+    "fsr4_xmx",
+    "fsr4_xmx_lite"
+   ],
+   "frame_gens": [
+    0,
+    2,
+    3,
+    4
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "cpus:*Custom APU 0405*",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Van Gogh (Steam Deck)",
+    "gpu": "AMD Van Gogh (Steam Deck)"
+   },
+   "tier": "amd_rdna2",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "cpus:*Custom APU 0932*",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Sephiroth (Steam Deck OLED)",
+    "gpu": "AMD Sephiroth (Steam Deck OLED)"
+   },
+   "tier": "amd_rdna2",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "cpus:*Ryzen Z1*",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen Z1",
+    "gpu": "AMD Ryzen Z1"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "cpus:*AI MAX*",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "AMD Ryzen AI Max",
+    "gpu": "AMD Ryzen AI Max"
+   },
+   "tier": "amd_halo",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "cpus:*Ryzen AI*",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3.5",
+    "xmx": false,
+    "chip": "AMD Ryzen AI 300",
+    "gpu": "AMD Ryzen AI 300"
+   },
+   "tier": "amd_rdna35",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "cpus:*8840*",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "AMD Ryzen 7040/8040",
+    "gpu": "AMD Ryzen 7040/8040"
+   },
+   "tier": "amd_rdna3",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "cpus:*6800U*",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Ryzen 6000",
+    "gpu": "AMD Ryzen 6000"
+   },
+   "tier": "amd_rdna2",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "cpus:*7320U*",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna2",
+    "arch": "RDNA2",
+    "xmx": false,
+    "chip": "AMD Mendocino",
+    "gpu": "AMD Mendocino"
+   },
+   "tier": "amd_rdna2",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "cpus:*5800U*",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-vega",
+    "arch": "Vega",
+    "xmx": false,
+    "chip": "AMD Ryzen 4000/5000 (Vega)",
+    "gpu": "AMD Ryzen 4000/5000 (Vega)"
+   },
+   "tier": "amd_old",
+   "upscalers": [
+    "own"
+   ],
+   "frame_gens": [
+    0
+   ],
+   "generators": [],
+   "latency": ""
+  },
+  {
+   "from": "cpus:*Ultra*2??V*",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe2",
+    "arch": "Xe2",
+    "xmx": true,
+    "chip": "Intel Lunar Lake",
+    "gpu": "Intel Lunar Lake"
+   },
+   "tier": "intel_xmx",
+   "upscalers": [
+    "own",
+    "xess",
+    "fsr4_xmx",
+    "fsr4_xmx_lite"
+   ],
+   "frame_gens": [
+    0,
+    2,
+    3,
+    4
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "cpus:*Ultra*2??H*",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe-lpg",
+    "arch": "Xe-LPG",
+    "xmx": false,
+    "chip": "Intel Arrow Lake",
+    "gpu": "Intel Arrow Lake"
+   },
+   "tier": "intel",
+   "upscalers": [
+    "own",
+    "xess"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "cpus:*Ultra*1??H*",
+   "gpu": {
+    "vendor": "intel",
+    "family": "intel-xe-lpg",
+    "arch": "Xe-LPG",
+    "xmx": false,
+    "chip": "Intel Meteor Lake",
+    "gpu": "Intel Meteor Lake"
+   },
+   "tier": "intel",
+   "upscalers": [
+    "own",
+    "xess"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "xefg"
+   ],
+   "latency": "xell"
+  },
+  {
+   "from": "desktop-nvidia",
+   "gpu": {
+    "vendor": "nvidia",
+    "family": "nvidia",
+    "arch": "unknown",
+    "xmx": false,
+    "chip": "Desktop",
+    "gpu": "NVIDIA GeForce RTX 4070"
+   },
+   "tier": "nvidia",
+   "upscalers": [
+    "own"
+   ],
+   "frame_gens": [
+    0
+   ],
+   "generators": [],
+   "latency": "reflex"
+  },
+  {
+   "from": "desktop-rdna4",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna4",
+    "arch": "RDNA4",
+    "xmx": false,
+    "chip": "Desktop",
+    "gpu": "AMD Radeon RX 9070 XT"
+   },
+   "tier": "amd_rdna4",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "desktop-rdna3-card",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-rdna3",
+    "arch": "RDNA3",
+    "xmx": false,
+    "chip": "Desktop",
+    "gpu": "AMD Radeon RX 7600"
+   },
+   "tier": "amd_halo",
+   "upscalers": [
+    "own",
+    "fsr31",
+    "fsr4_amd"
+   ],
+   "frame_gens": [
+    0,
+    2
+   ],
+   "generators": [
+    "fsrfg",
+    "xefg"
+   ],
+   "latency": "antilag2"
+  },
+  {
+   "from": "vega",
+   "gpu": {
+    "vendor": "amd",
+    "family": "amd-vega",
+    "arch": "Vega",
+    "xmx": false,
+    "chip": "AMD Ryzen 7 5800U",
+    "gpu": "Vega 8"
+   },
+   "tier": "amd_old",
+   "upscalers": [
+    "own"
+   ],
+   "frame_gens": [
+    0
+   ],
+   "generators": [],
+   "latency": ""
+  }
+ ]
+}

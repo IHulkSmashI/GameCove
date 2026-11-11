@@ -781,10 +781,27 @@ func _on_install_finished(key: String, action: String, ok: bool) -> void:
 		return
 	var g := View.find_by_key(Library.games, key)
 	var title := str(g.get("title", ""))
+	if action in ["install", "update", "verify"] and not g.is_empty():
+		_prepare_upscaling(g)
 	if action == "install" and title != "":
 		toast("%s is ready to play" % title, "check", "good", "")
 	elif action in ["update", "move", "uninstall", "verify"] and title != "":
 		toast("%s: %s" % [title, TG.ACTION_DONE[action].to_lower()], "check", "good", "")
+
+
+## Upscaling is set up when a game lands (installed, updated, files checked),
+## not at its first start: one short helper run on the Controls worker. While a
+## game is running nothing is started; that game is set up at its next look.
+func _prepare_upscaling(g: Dictionary) -> void:
+	var controls := _svc("Controls")
+	if controls == null or not controls.has_method("run_on_worker") or not ("ctx" in controls):
+		return
+	var prepare: Variant = controls.ctx.get("prepare_installed")
+	if not (prepare is Callable and (prepare as Callable).is_valid()):
+		return
+	var game := g.duplicate()
+	var now: bool = not (session != null and session.is_active())
+	controls.run_on_worker(func(): (prepare as Callable).call(game, now))
 
 
 func open_downloads() -> void:
@@ -1462,6 +1479,8 @@ func show_screen(id: String, dir := 0) -> void:
 		_close_page()
 	close_downloads()
 	close_apps()
+	if id == "library" and Library.has_method("rescan_emulation"):
+		Library.rescan_emulation()   # ROMs copied in since show up (background, cached, never behind a game)
 	var old: Control = screens[current]
 	var d := float(signi(dir)) if dir != 0 else signf(SCREENS.find(id) - SCREENS.find(current))
 	current = id
@@ -1869,6 +1888,8 @@ func open_emulation() -> void:
 	if page != null:
 		_close_page()
 	close_downloads()
+	if Library.has_method("rescan_emulation"):
+		Library.rescan_emulation()
 	page = EmulationPage.new()
 	page.setup(Library.emulation, _decorated())
 	page.play_requested.connect(_play)
@@ -1876,6 +1897,13 @@ func open_emulation() -> void:
 		_close_page()
 		show_screen("library")
 		library_screen.set_view("emulation"))
+	page.system_requested.connect(func(system: String):
+		_close_page()
+		show_screen("library")
+		library_screen.set_view("emulation:" + system))
+	page.game_requested.connect(func(g: Dictionary):
+		_close_page()
+		_open_page(g))
 	add_child(page)
 	move_child(page, top_bar.get_index())
 	# Rises in like the game page.

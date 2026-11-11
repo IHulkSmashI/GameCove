@@ -46,6 +46,21 @@ static func empty_art() -> Dictionary:
 	return EMPTY_ART.duplicate()
 
 
+## Makes a dictionary or array, and everything in it, read-only: for data many
+## games share (thousands of ROMs, one copy), so a write meant for one game is
+## refused instead of reaching all of them. Returns `v`.
+static func freeze(v: Variant) -> Variant:
+	if v is Dictionary:
+		for k in v:
+			freeze(v[k])
+		(v as Dictionary).make_read_only()
+	elif v is Array:
+		for x in v:
+			freeze(x)
+		(v as Array).make_read_only()
+	return v
+
+
 ## Heroic config folders that exist under this home.
 static func heroic_roots(home: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []

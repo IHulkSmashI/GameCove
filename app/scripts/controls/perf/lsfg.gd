@@ -35,6 +35,58 @@ const DLL_NAMES := ["lsfg-vk.dll", "Lossless.dll"]
 const NAME_PREFIX := "GameCove "
 const MULTIPLIERS := [2, 3, 4]
 const DEFAULTS := {"lsfg": false, "lsfg_multiplier": 2, "lsfg_flow_scale": 0.8, "lsfg_performance": false}
+const APP_ID := "993090"                      # Lossless Scaling on Steam
+const STORE_URI := "steam://store/993090"
+const INSTALL_URI := "steam://install/993090"
+## Chips where the lighter model and a lower flow scale are the sensible start
+## (device/gpu_caps.gd tiers): RDNA 2 handhelds and Arc without XMX.
+const LIGHT_TIERS := ["amd_rdna2", "amd_z2a", "amd_old", "intel"]
+
+
+## Starting values for a chip tier: 2x everywhere; the lighter model and 60 %
+## flow scale on the slower chips.
+static func defaults_for(tier: String) -> Dictionary:
+	var d := DEFAULTS.duplicate()
+	if tier in LIGHT_TIERS:
+		d["lsfg_performance"] = true
+		d["lsfg_flow_scale"] = 0.6
+	return d
+
+
+## Where Lossless Scaling stands: "ready" (its lsfg-vk DLL is there),
+## "wrong_branch" (installed, but not on the "lsfg-vk" beta that has the DLL),
+## "not_installed" (owned: the library has it), or "not_owned".
+## owned: the library lists Steam app 993090.
+## Strict on purpose: "ready" needs Steam's own install record for the app
+## (appmanifest_993090.acf) next to the DLL, so a DLL copied in from somewhere
+## else never counts. This only works for people who own Lossless Scaling.
+static func app_state(libraries: Array, owned: bool) -> String:
+	var installed := false
+	for lib in libraries:
+		if FileAccess.file_exists(str(lib).path_join("steamapps/appmanifest_%s.acf" % APP_ID)):
+			installed = true
+			if find_dll([lib]) != "":
+				return "ready"
+	if installed:
+		return "wrong_branch"
+	return "not_installed" if owned else "not_owned"
+
+
+## The one thing to do next for Lossless frame generation, in order:
+## {"step": "" (nothing: ready) | "buy" | "install_app" | "branch" | "layer" | "layer_update", "line": plain words}.
+static func next_step(layer_state: String, app: String) -> Dictionary:
+	match app:
+		"not_owned":
+			return {"step": "buy", "line": "Lossless Scaling is a paid app on Steam. This uses your own copy."}
+		"not_installed":
+			return {"step": "install_app", "line": "You own Lossless Scaling: install it in Steam first."}
+		"wrong_branch":
+			return {"step": "branch", "line": "In Steam, open Lossless Scaling > Properties > Betas and pick lsfg-vk."}
+	if layer_state == "":
+		return {"step": "layer", "line": "One more piece: lsfg-vk, the part that runs it on Linux. Press to install it."}
+	if layer_state == "v1":
+		return {"step": "layer_update", "line": "lsfg-vk here is version 1: press to install version 2."}
+	return {"step": "", "line": ""}
 ## what decky-lsfg-vk sets for a game it turns frame generation on for (wrapper_service.py default_state)
 const GAME_ENV := {"ENABLE_GAMESCOPE_WSI": "0", "DXVK_HDR": "0"}
 

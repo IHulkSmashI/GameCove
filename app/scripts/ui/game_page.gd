@@ -204,9 +204,12 @@ func _fill_about(about: VBoxContainer, g: Dictionary, info: Dictionary) -> void:
 		syn.max_lines_visible = 3
 		syn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		about.add_child(syn)
-	about.add_child(_ttb_chips(info))
+	# A ROM: time to beat, anti-cheat and Proton reports are about PC games; its facts are in the details below.
+	var rom: bool = g.get("emulated", {}).get("rom", false) if g.get("emulated") is Dictionary else false
+	if not rom:
+		about.add_child(_ttb_chips(info))
 	var ac := Texts.anticheat_badge(info)
-	for s in [["shield", Texts.anticheat_line(info), "anticheat"], ["gauge", Texts.protondb_line(info), ""]]:
+	for s in ([] if rom else [["shield", Texts.anticheat_line(info), "anticheat"], ["gauge", Texts.protondb_line(info), ""]]):
 		var tone: String = ac.get("tone", "") if s[2] == "anticheat" else ""
 		var col: Color = ThemeLib.color("text_2")
 		if tone == "warn":
@@ -222,6 +225,8 @@ func _fill_about(about: VBoxContainer, g: Dictionary, info: Dictionary) -> void:
 		info_lines.append(l)
 		about.add_child(row)
 	_add_drain(about, g)
+	if rom:
+		return
 	var credit := Kit.label(Texts.DATA_CREDIT, "CaptionLabel", true)
 	credit.name = "Credit"
 	credit.add_theme_font_size_override("font_size", 12)

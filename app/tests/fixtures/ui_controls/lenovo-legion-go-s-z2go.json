@@ -121,7 +121,7 @@
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": true,
    "group": "controller",
    "help": "Motion aiming for games and Steam Input. Off stops the gyro reaching games.",
@@ -133,12 +133,12 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "InputPlumber sees no gyro on this handheld",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Gyro",
    "unit": "",
-   "value": null
+   "value": true
   },
   {
    "apply_order": 0,
@@ -171,7 +171,7 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "InputPlumber sees no gyro on this handheld",
+   "reason": "This handheld has one gyro",
    "requires": [
     "controller.gyro"
    ],
@@ -776,7 +776,7 @@
   },
   {
    "apply_order": 0,
-   "available": false,
+   "available": true,
    "default": "default",
    "group": "controller",
    "help": "What the trackpad does in games.",
@@ -787,8 +787,16 @@
    "needs_root": false,
    "options": [
     {
-     "label": "Default",
+     "label": "As the handheld sends it",
      "value": "default"
+    },
+    {
+     "label": "Steam right trackpad",
+     "value": "RightPad"
+    },
+    {
+     "label": "Steam left trackpad",
+     "value": "LeftPad"
     },
     {
      "label": "Off",
@@ -797,15 +805,15 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "This handheld has no trackpad",
+   "reason": "",
    "requires": [],
    "step": 1.0,
    "title": "Trackpad",
    "unit": "",
-   "value": null
+   "value": "default"
   },
   {
-   "apply_order": 0,
+   "apply_order": 1,
    "available": true,
    "default": true,
    "group": "controller",
@@ -826,11 +834,11 @@
    "value": true
   },
   {
-   "apply_order": 0,
+   "apply_order": 2,
    "available": false,
    "default": 100,
    "group": "controller",
-   "help": "How strong the vibration is.",
+   "help": "How strong every game's vibration is. Kept in the controller itself where it can be.",
    "id": "controller.rumble_strength",
    "kind": "choice",
    "max": 1.0,
@@ -860,7 +868,7 @@
    ],
    "per_game": true,
    "points": 0,
-   "reason": "InputPlumber can only turn rumble on or off",
+   "reason": "This controller has no rumble strength setting",
    "requires": [],
    "step": 1.0,
    "title": "Rumble strength",
@@ -872,7 +880,7 @@
    "available": true,
    "default": null,
    "group": "controller",
-   "help": "A short buzz.",
+   "help": "A short buzz at the rumble strength set here.",
    "id": "controller.rumble_test",
    "kind": "action",
    "max": 1.0,
@@ -882,7 +890,9 @@
    "per_game": false,
    "points": 0,
    "reason": "",
-   "requires": [],
+   "requires": [
+    "controller.rumble"
+   ],
    "step": 1.0,
    "title": "Test rumble",
    "unit": "",
@@ -1066,7 +1076,7 @@
    "requires": [
     "controller.led_effect"
    ],
-   "step": 5.0,
+   "step": 1.0,
    "title": "Light brightness",
    "unit": "%",
    "value": null
@@ -1307,7 +1317,7 @@
    "available": true,
    "default": 0,
    "group": "display",
-   "help": "How a game running below the screen's resolution is scaled up. FSR and NIS sharpen; Nearest and Pixel keep pixel art crisp.",
+   "help": "How the screen scales up a game running below its resolution (not the game's own upscaler). FSR and NIS sharpen; Nearest and Pixel keep pixel art crisp.",
    "id": "display.upscale_filter",
    "kind": "choice",
    "max": 1.0,
@@ -2136,7 +2146,7 @@
    "available": false,
    "default": false,
    "group": "perf",
-   "help": "Adds generated frames with lsfg-vk and your own Lossless Scaling. Best above 40 real fps.",
+   "help": "For games the upscaler above can't reach: older games, emulators, anything. Uses your own Lossless Scaling. Best above 40 real fps.",
    "id": "perf.lsfg",
    "kind": "toggle",
    "max": 1.0,
@@ -2145,7 +2155,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs lsfg-vk",
+   "reason": "Needs Lossless Scaling, a paid app on Steam",
    "requires": [],
    "step": 1.0,
    "title": "Lossless Scaling frame generation",
@@ -2165,35 +2175,38 @@
    "needs_root": false,
    "options": [
     {
+     "help": "One made frame per real frame.",
      "label": "2x",
      "value": 2
     },
     {
+     "help": "Two made frames per real frame: more lag and more artefacts.",
      "label": "3x",
      "value": 3
     },
     {
+     "help": "Three made frames per real frame: the most lag and artefacts.",
      "label": "4x",
      "value": 4
     }
    ],
    "per_game": true,
    "points": 0,
-   "reason": "Needs lsfg-vk",
+   "reason": "Needs Lossless Scaling, a paid app on Steam",
    "requires": [
     "perf.lsfg"
    ],
    "step": 1.0,
-   "title": "Frame generation multiplier",
+   "title": "Lossless multiplier",
    "unit": "",
    "value": null
   },
   {
    "apply_order": 0,
    "available": false,
-   "default": 0.8,
+   "default": 0.6,
    "group": "perf",
-   "help": "Lower is faster with a softer result; 80 % suits handheld screens.",
+   "help": "Lower is faster with a softer result; 80 % suits handheld screens, 60 % the slower chips.",
    "id": "perf.lsfg_flow_scale",
    "kind": "slider",
    "max": 1.0,
@@ -2202,7 +2215,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs lsfg-vk",
+   "reason": "Needs Lossless Scaling, a paid app on Steam",
    "requires": [
     "perf.lsfg"
    ],
@@ -2214,7 +2227,7 @@
   {
    "apply_order": 0,
    "available": false,
-   "default": false,
+   "default": true,
    "group": "perf",
    "help": "A lighter frame generation model: faster, slightly lower quality.",
    "id": "perf.lsfg_performance",
@@ -2225,7 +2238,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs lsfg-vk",
+   "reason": "Needs Lossless Scaling, a paid app on Steam",
    "requires": [
     "perf.lsfg"
    ],
@@ -2235,11 +2248,89 @@
    "value": null
   },
   {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "perf",
+   "help": "Lossless Scaling is a paid app on Steam. This uses your own copy.",
+   "id": "perf.lsfg_setup",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Set up Lossless frame generation",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 4,
+   "available": false,
+   "default": "best",
+   "group": "perf",
+   "help": "Best sets up the sharpest upscaler this handheld runs, before you start the game. Native takes everything out again.",
+   "id": "perf.upscale_mode",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "label": "Best for this handheld",
+     "value": "best"
+    },
+    {
+     "help": "You picked the upscaler and frame generation below. We keep them exactly as you set them.",
+     "label": "My choice",
+     "value": "custom"
+    },
+    {
+     "help": "The game as it shipped: everything we added is taken out, and nothing comes back by itself.",
+     "label": "Native (nothing added)",
+     "value": "native"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Upscaling for this game",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "What the last start of this game really used. Press to check again.",
+   "id": "perf.upscale_active",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Running now",
+   "unit": "",
+   "value": null
+  },
+  {
    "apply_order": 3,
    "available": false,
    "default": "own",
    "group": "perf",
-   "help": "Puts a better upscaler into the game with OptiScaler (XeSS on Intel Arc, FSR on AMD). Pick the game's DLSS or FSR in its menu.",
+   "help": "Pick one yourself. The game keeps its own menu: choose DLSS or FSR there and it becomes this.",
    "id": "perf.upscaler",
    "kind": "choice",
    "max": 1.0,
@@ -2247,12 +2338,19 @@
    "needs_root": false,
    "options": [
     {
+     "help": "The game's own upscaler, untouched. Nothing of ours goes into the game.",
      "label": "Game's own",
      "value": "own"
     },
     {
-     "label": "FSR 3.1 (OptiScaler)",
+     "help": "FSR 3.1: runs on every chip and costs the fewest frames.",
+     "label": "FSR 3.1",
      "value": "fsr31"
+    },
+    {
+     "help": "AMD's newest FSR: a clearly better picture for about a quarter fewer frames on this chip. FSR 3.1 is the faster pick.",
+     "label": "FSR 4.1.2",
+     "value": "fsr4_amd"
     }
    ],
    "per_game": true,
@@ -2269,7 +2367,7 @@
    "available": false,
    "default": 0,
    "group": "perf",
-   "help": "XeSS frame generation on Intel Arc (2x-4x), FSR frame generation on AMD (2x). Needs about 40 real fps.",
+   "help": "Makes every second frame from the two around it (2x), with low latency on. Needs about 40 real fps.",
    "id": "perf.frame_gen",
    "kind": "choice",
    "max": 1.0,
@@ -2277,10 +2375,12 @@
    "needs_root": false,
    "options": [
     {
+     "help": "No frames are added.",
      "label": "Off",
      "value": 0
     },
     {
+     "help": "One made frame between every two real ones, with low latency on. Best from about 40 real fps.",
      "label": "2x",
      "value": 2
     }
@@ -2295,12 +2395,39 @@
    "value": null
   },
   {
+   "apply_order": 2,
+   "available": false,
+   "default": "fsrfg",
+   "group": "perf",
+   "help": "FSR is lighter and pairs with Anti-Lag 2. XeSS handles menus and HUDs better, costs more, and brings XeLL. Not every game likes XeSS here yet.",
+   "id": "perf.fg_generator",
+   "kind": "choice",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [
+    {
+     "help": "AMD's: the lightest, paired with Anti-Lag 2.",
+     "label": "FSR frame generation",
+     "value": "fsrfg"
+    }
+   ],
+   "per_game": true,
+   "points": 0,
+   "reason": "One frame generator on this graphics chip",
+   "requires": [],
+   "step": 1.0,
+   "title": "Frame generation by",
+   "unit": "",
+   "value": null
+  },
+  {
    "apply_order": 0,
    "available": false,
    "default": null,
    "group": "perf",
-   "help": "Sets up the best upscaler for this game from what it ships and OptiScaler's game list.",
-   "id": "perf.upscale_recommended",
+   "help": "Opens the in-game menu with every setting (the Insert key). Works while the game is in front.",
+   "id": "perf.upscale_menu",
    "kind": "action",
    "max": 1.0,
    "min": 0.0,
@@ -2311,7 +2438,7 @@
    "reason": "Needs GameCove's upscaling helper",
    "requires": [],
    "step": 1.0,
-   "title": "Use the recommended setup",
+   "title": "Open the upscaler's menu",
    "unit": "",
    "value": null
   },
@@ -2320,7 +2447,7 @@
    "available": false,
    "default": null,
    "group": "perf",
-   "help": "Takes OptiScaler (and REFramework) out of the game folder, exactly as it was.",
+   "help": "Takes every file we added out of the game folder, exactly as it was. Same as Native.",
    "id": "perf.upscale_undo",
    "kind": "action",
    "max": 1.0,
@@ -2332,7 +2459,49 @@
    "reason": "Needs GameCove's upscaling helper",
    "requires": [],
    "step": 1.0,
-   "title": "Remove GameCove's upscaler",
+   "title": "Remove our upscaler from this game",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "OptiScaler, OptiPatcher, the XeSS driver and FSR 4 files GameCove downloaded, kept at the newest.",
+   "id": "perf.upscaler_update",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Upscaler downloads",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": false,
+   "default": null,
+   "group": "perf",
+   "help": "Puts the newest OptiScaler into this game, with its settings kept.",
+   "id": "perf.upscale_game_update",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "Needs GameCove's upscaling helper",
+   "requires": [],
+   "step": 1.0,
+   "title": "Update this game's upscaler",
    "unit": "",
    "value": null
   },
@@ -2341,7 +2510,7 @@
    "available": false,
    "default": true,
    "group": "perf",
-   "help": "Cuts input lag: Anti-Lag through low_latency_layer on AMD, XeLL on Intel Arc. From the next launch.",
+   "help": "Leave on. Turn off only if a game stutters or won't start with it.",
    "id": "perf.low_latency",
    "kind": "toggle",
    "max": 1.0,
@@ -2396,6 +2565,27 @@
    "requires": [],
    "step": 1.0,
    "title": "Start through GameCove",
+   "unit": "",
+   "value": null
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": null,
+   "group": "perf",
+   "help": "Takes GameCove's launcher out of every Steam game's launch options. Steam closes for a moment and starts again. Per-game upscaling and frame limits stop until you turn them on again.",
+   "id": "perf.wrapper_remove_all",
+   "kind": "action",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Remove GameCove from all Steam games",
    "unit": "",
    "value": null
   },
@@ -2834,7 +3024,7 @@
    "available": false,
    "default": null,
    "group": "power",
-   "help": "Fixed GPU clock in manual mode.",
+   "help": "Fixed GPU clock. Setting it switches the GPU to manual mode.",
    "id": "power.gpu_clock",
    "kind": "slider",
    "max": 1.0,
@@ -2908,7 +3098,7 @@
    "options": [],
    "per_game": true,
    "points": 0,
-   "reason": "Needs an Intel Arc (xe) GPU or steamos-manager",
+   "reason": "steamos-manager offers no GPU power profiles on this handheld",
    "requires": [],
    "step": 1.0,
    "title": "GPU efficiency mode",
@@ -2967,7 +3157,7 @@
    "kind": "toggle",
    "max": 1.0,
    "min": 0.0,
-   "needs_root": true,
+   "needs_root": false,
    "options": [],
    "per_game": false,
    "points": 0,
@@ -3061,6 +3251,48 @@
    "title": "Battery saver at",
    "unit": "%",
    "value": 0.0
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": false,
+   "group": "power",
+   "help": "Puts the handheld to sleep on battery at the level below, after a 30 s warning any button cancels. Off by default.",
+   "id": "power.low_battery_sleep",
+   "kind": "toggle",
+   "max": 1.0,
+   "min": 0.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Sleep at low battery",
+   "unit": "",
+   "value": false
+  },
+  {
+   "apply_order": 0,
+   "available": true,
+   "default": 5.0,
+   "group": "power",
+   "help": "The battery level for Sleep at low battery, 3 to 10 %.",
+   "id": "power.low_battery_sleep_at",
+   "kind": "slider",
+   "max": 10.0,
+   "min": 3.0,
+   "needs_root": false,
+   "options": [],
+   "per_game": false,
+   "points": 0,
+   "reason": "",
+   "requires": [],
+   "step": 1.0,
+   "title": "Sleep at",
+   "unit": "%",
+   "value": 5.0
   },
   {
    "apply_order": 0,
