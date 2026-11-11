@@ -61,6 +61,18 @@ for f in old old-x err; do
 	t_check '[ ! -e "$R$RULE" ]' "$f firmware: no udev rule"
 	t_check '[ "$(cat "$N")" = 0 ]' "$f firmware: switch untouched"
 done
+# review 4-L4: the cached answer is only good for the boot it was read in (the MCU is updated from the BIOS and
+# takes effect after a restart): "too old" from an earlier boot must not keep hiding Apply
+t_new
+ally
+unset GAMECOVE_TEST_MCU_INFO
+mkdir -p "$R/var/lib/gamecove" "$R/proc/sys/kernel/random"
+echo "boot-now" >"$R/proc/sys/kernel/random/boot_id"
+{ echo "boot=boot-before"; cat "$MCU_DIR/old"; } >"$R/var/lib/gamecove/ally-mcu-version"
+t_check '! sh "$FIX" status | grep -q "older than"' "a 'too old' read on an earlier boot is not believed (it reads as unknown until root checks)"
+{ echo "boot=boot-now"; cat "$MCU_DIR/old"; } >"$R/var/lib/gamecove/ally-mcu-version"
+t_check '[ "$(t_state)" = unsupported ]' "but one read on this boot still does"
+rm -f "$R/var/lib/gamecove/ally-mcu-version"
 export GAMECOVE_TEST_MCU_INFO="$MCU_DIR/old-x"
 t_check 'sh "$FIX" status | grep -q "older than 313"' "Ally X minimum 313 (kernel ROG_ALLY_X_MIN_MCU)"
 export GAMECOVE_TEST_MCU_INFO="$MCU_DIR/ok-x"

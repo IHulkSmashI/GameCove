@@ -27,12 +27,22 @@ ally_mcu_info() {
 		fi
 		[ -n "$_out" ] || _out="error=couldn't read the MCU firmware version"
 		mkdir -p "$(dirname "$ALLY_MCU_CACHE")" 2>/dev/null &&
-			printf '%s\n' "$_out" >"$ALLY_MCU_CACHE" 2>/dev/null || true
+			{ printf 'boot=%s\n' "$(ally_boot_id)"; printf '%s\n' "$_out"; } >"$ALLY_MCU_CACHE" 2>/dev/null || true
 		printf '%s\n' "$_out"
 		return 0
 	fi
-	cat "$ALLY_MCU_CACHE" 2>/dev/null || true
+	# The cached answer is only good for the boot it was read in: the MCU firmware is updated from the BIOS or
+	# Windows and takes effect after a restart, so an answer from an earlier boot ("too old") would keep hiding
+	# Apply after the update. Nothing cached for this boot reads as unknown (which doesn't block).
+	_c="$(cat "$ALLY_MCU_CACHE" 2>/dev/null || true)"
+	case "$_c" in
+	"boot=$(ally_boot_id)"*) printf '%s\n' "$_c" | sed 1d ;;
+	boot=*) ;;
+	*) printf '%s\n' "$_c" ;;   # a cache from before boot ids were recorded
+	esac
 }
+
+ally_boot_id() { cat "$ROOT/proc/sys/kernel/random/boot_id" 2>/dev/null || true; }
 
 # ally_mcu_blocked [strict]: prints why MCU power saving can't be turned on and returns 0; returns 1
 # when it may. Without "strict" an unknown version (no root, nothing cached) doesn't block: the
