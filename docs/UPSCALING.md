@@ -11,7 +11,9 @@ author); the technical notes are in [CONTROLS.md](CONTROLS.md).
 
 1. Open a game's page (or the quick menu's **This game** tab while playing). The **Upscaling and frame generation**
    card is there.
-2. It is already on **Best for this handheld**. The line under it says what we picked and why.
+2. It is already on **Best for this handheld**. The line under it says what we picked and why. For an online game,
+   or one no list knows yet, Best doesn't add anything by itself: the line says why, and **Add ... to this game**
+   puts our pick in when you press it.
 3. Start the game and pick **DLSS** (or FSR, when the line says so) in the game's own graphics menu. The game still
    thinks it runs that; we turn it into the upscaler we picked.
 4. Back in GameCove, **Running now** says what the last start really used, read from the logs, for example
@@ -25,7 +27,8 @@ Every choice shows one line under it saying what it is. These are all of them.
 | --- | --- | --- |
 | Upscaling for this game | **Best for this handheld** (default) | We pick from the table below and keep it set up: after an install, after a game update, and before each start. |
 | | **My choice** | You picked the upscaler or frame generation yourself. We keep it exactly as you set it, and put it back after a game update. |
-| | **Native (nothing added)** | The game as it shipped. Every file we added is taken out, byte for byte, and nothing comes back by itself. |
+| | **Native (nothing added)** | The game as it shipped. Every file we added is taken out, byte for byte (also an `OptiScaler.ini` you saved from the upscaler's own menu: a copy of it is kept in `~/.local/share/gamecove/optiscaler-settings`), and nothing comes back by itself. Proton's FSR 4 upgrade is off for the game too. |
+| Add ... to this game | Add | Only for games Best doesn't set up by itself: online games and games no list knows yet. It names our pick, and nothing goes in until you press it. For an online game the line under it says plainly that an upscaler can get the account banned. |
 | Upscaler | Game's own | The game's own upscaler, untouched. |
 | | FSR 4.1.2 on XMX | AMD's newest FSR on Intel Arc's XMX cores. DirectX 12 games. Intel Arc with XMX only. |
 | | FSR 4.1.2 Lite on XMX | The lighter model: a few more frames, slightly softer. Intel Arc with XMX only. |
@@ -45,6 +48,12 @@ Rules that always hold:
 - **Low latency always rides along with frame generation:** XeLL with XeSS frame generation, Anti-Lag 2 with FSR
   frame generation on AMD, the game's own Reflex on NVIDIA.
 - **Frame generation is never switched on by itself**, except in the Capcom setup below, which was tested that way.
+- **Best sets up only games it knows.** A game OptiScaler's list or ours knows is set up by itself. An online game
+  (the list says "online game, use at your own risk", or that its anti-cheat has to be switched off) and a game no
+  list knows are offered, never added by themselves. A game no list knows gets the upscaler only, no frame
+  generation. Native forgets the offer you took, so Best asks again.
+- **With Background lookups off** (Settings > About), what Best does by itself downloads nothing. Files that came
+  with GameCove are still used; a pick you make yourself still downloads what it needs.
 
 ## What each chip gets
 
@@ -76,8 +85,8 @@ so; after two starts where it didn't come up, Best steps down to XeSS 2 by itsel
 
 | The game has | Best picks | Frame generation, when you turn it on | Low latency |
 | --- | --- | --- | --- |
-| FSR 3.1 of its own, DirectX 12 | the game's own FSR, upgraded to **FSR 4** by Proton (GE-Proton and Proton-CachyOS do this). Nothing is added to the game's files. | the game's own FSR frame generation | Anti-Lag 2 |
-| DLSS, XeSS or older FSR, DirectX 12 | **FSR 4.1.2** with AMD's own file. After two starts where it didn't come up, FSR 3.1 by itself. | FSR frame generation 2x (default) or XeSS frame generation 2x | Anti-Lag 2 with FSR, XeLL with XeSS |
+| FSR 3.1 or newer of its own | the game's own FSR; in a DirectX 12 game upgraded to **FSR 4** by Proton (GE-Proton and Proton-CachyOS do this). Nothing is added to the game's files. | the game's own FSR frame generation | Anti-Lag 2 |
+| DLSS, XeSS or older FSR (2.x, 3.0), DirectX 12 | **FSR 4.1.2** with AMD's own file. After two starts where it didn't come up, FSR 3.1 by itself. | FSR frame generation 2x (default) or XeSS frame generation 2x | Anti-Lag 2 with FSR, XeLL with XeSS |
 | DLSS or FSR, DirectX 11 or Vulkan | FSR 3.1 | none | - |
 | A Capcom RE Engine game | the Capcom setup with FSR (not tested on AMD hardware yet; the card says so) | the game's DLSS frame generation becomes FSR frame generation | the game's Reflex calls, mapped for AMD |
 
@@ -104,7 +113,9 @@ frames" on its own line. XeSS frame generation isn't offered on these chips.
 
 ### NVIDIA
 
-Nothing is added. The game's own DLSS, frame generation and Reflex already are the best there.
+Nothing is added. The game's own DLSS, frame generation and Reflex already are the best there. This also holds on a
+machine with an NVIDIA card next to the CPU's own Intel or AMD graphics: games render on the NVIDIA card (Proton puts
+discrete cards first), so that is the chip we go by.
 
 ### Older or unknown graphics chips
 
@@ -127,11 +138,21 @@ native Linux games, emulators.
 ## What we never do
 
 - **No games with anti-cheat.** If our data or the game's folder shows an anti-cheat system, nothing is added, and
-  there is no switch to override it. If a game gains anti-cheat in an update, everything of ours is taken out.
+  there is no switch to override it. If a game gains anti-cheat in an update, everything of ours is taken out. The
+  folder check looks as deep as our upscaler can go and up to the game's own folder in its library, and knows Easy
+  Anti-Cheat, BattlEye, EA Javelin, NetEase's anti-cheat, Anti-Cheat Expert (Tencent), Tencent TP, Vanguard,
+  nProtect GameGuard, XIGNCODE3, Nexon Game Security, AhnLab HackShield, PunkBuster, EQU8, miHoYo's protection,
+  FACEIT, Denuvo Anti-Cheat and Ricochet. Proton's FSR 4 upgrade is off for these games too.
+- **No online games by themselves.** An online game is only set up when you add it yourself, after a plain line
+  about the ban risk.
 - **No stacking.** If another tool's upscaler, ReShade or Special K is in the game, we leave it alone and say which
   one we found.
 - **Nothing permanent.** Every file we add is listed in a manifest with its hash; files we replace are kept and put
-  back. Native and uninstalling GameCove both restore the game exactly. A file that changed since is never deleted.
+  back. The manifest is written before each file changes, so a full disk or a power cut in the middle never loses
+  a game file. Native and uninstalling GameCove both restore the game exactly. A file that changed since is never
+  deleted, and neither is a backup we couldn't put back. File names are matched without case, as Windows does.
+- **A game moved to another library** (Steam's "Move install folder", another drive) keeps its upscaler and its
+  undo: we follow it by the game, not the path.
 - **Nothing from NVIDIA** is shipped or fetched. Only a game's own copy is ever used.
 
 ## One install: where the files come from
@@ -160,8 +181,10 @@ games have our files in them. Uninstalling GameCove puts every game back as it s
 ## Staying up to date
 
 A nightly job watches every upstream this depends on. New builds of the files above are adopted only after they
-have been out, unchanged, for 72 hours and pass a smoke check; then they go into a signed list your handheld
-verifies before it uses anything from it. The version before is kept, a package that fails its check after an
+have been out, unchanged, for 72 hours (counted from when the file itself was uploaded, so a file swapped into an
+old release waits too) and pass a smoke check; then they go into a signed list your handheld verifies before it
+uses anything from it. Offline, the last list your handheld checked keeps working, withdrawals included; after a
+month without a check **Upscaler downloads** says "offline, files from <date>". An older list never replaces it. The version before is kept, a package that fails its check after an
 update is rolled back by itself, and a file can be withdrawn from every handheld through the same signed list.
 Things that need a person's eyes first (a new Proton, a new Intel or AMD library, a new lsfg-vk) open an issue
 instead of changing anything.

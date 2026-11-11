@@ -13,6 +13,12 @@ Builds GameCove's open game database every night and publishes it as a GitHub re
 | `meta.wikidata` (genres, developers, publishers) | Wikidata P136 / P178 / P123 | CC0 |
 | `protondb` compatibility tier | Our summary of ProtonDB user reports from [bdefore/protondb-data](https://github.com/bdefore/protondb-data) | ODbL 1.0 |
 
+The app reads the anti-cheat field as a hard stop for injection: a game with any anti-cheat listed (whatever its
+Linux status) never gets an upscaler, Lossless frame generation or Proton's FSR 4 upgrade from GameCove, on top of
+the check of the game's own folder (EA Javelin, NetEase, Tencent, Easy Anti-Cheat, BattlEye and more; see
+[docs/UPSCALING.md](../docs/UPSCALING.md)). Online games without an anti-cheat entry are marked from OptiScaler's
+own compatibility notes and are only set up when the player adds them.
+
 ```
 pip install -e '.[test]'
 pytest

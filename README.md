@@ -394,7 +394,7 @@ launch options. The full guide and the table for every chip are in [docs/UPSCALI
 | **Intel Arc with XMX** (Claw 8 EX, Claw 8 AI+, OneXPlayer 3) | **FSR 4.1.2 on the XMX cores**, then its Lite model, then XeSS 2 | XeSS frame generation **2x, 3x or 4x** with XeLL low latency |
 | **AMD Z1 Extreme, Z2 Extreme, 780M / 890M, Ryzen AI** | **FSR 4.1.2** from AMD's own file; FSR 3.1 by itself if it doesn't come up | FSR or XeSS frame generation 2x with low latency |
 | **Steam Deck, Z2 Go and other RDNA 2** | FSR 3.1; FSR 4.1.2 is one tap away, with its cost said plainly | FSR frame generation 2x |
-| **NVIDIA** | Nothing: the game's own DLSS is already the best | The game's own |
+| **NVIDIA** (also an NVIDIA card next to Intel or AMD graphics) | Nothing: the game's own DLSS is already the best | The game's own |
 | **Anything** | | Lossless Scaling frame generation, if you own Lossless Scaling on Steam |
 
 - **Three plain choices per game:** Best for this handheld, My choice, and Native (nothing added, everything undone).
@@ -403,10 +403,15 @@ launch options. The full guide and the table for every chip are in [docs/UPSCALI
   "Active: FSR 4.1.2 on XMX, XeSS frame generation 2x, XeLL low latency", or why it isn't active.
 - **One install.** Every file comes with GameCove, each pinned and checked. The size of it all is in
   Settings > Device > Storage, and uninstalling puts every game back exactly as it shipped.
-- **Safe.** Never on games with anti-cheat. Never on top of another tool's upscaler or ReShade. Never two frame
-  generators at once. Nothing in a game folder is changed for good.
+- **Safe.** Never on games with anti-cheat (EA Javelin, NetEase, Tencent and a dozen more are recognised in the
+  game's folder), and Proton's FSR 4 upgrade stays off for them. Online games and games no list knows are offered,
+  never added by themselves: one press adds our pick, after a plain line about the ban risk for online games.
+  Never on top of another tool's upscaler or ReShade. Never two frame generators at once. Nothing in a game folder
+  is changed for good, a power cut in the middle loses nothing, and a game moved to another drive keeps its undo.
 - **Always the newest tested files.** A nightly job watches every project this builds on and adopts a new build only
   after 72 hours and a smoke check, through a signed list your handheld verifies. The version before is kept.
+  Offline, the last checked list keeps working and an older one is never taken; after a month the card says
+  "offline, files from <date>".
 - **Lossless Scaling frame generation** is for owners of Lossless Scaling only: GameCove uses the copy in your own
   Steam library and never ships or downloads it.
 
@@ -528,7 +533,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Deals, prices and free-to-keep games (Discover, wishlist) | [CheapShark](https://www.cheapshark.com) (cheapshark.com) and the Steam store API | Steam app ids and titles from your wishlist and Discover, what you search for, your store country | 45 s after start, then every 6 hours (top deals and the free-to-keep list: two requests); when you search or open a game | Look up deals and prices |
 | Local prices (optional) | [GG.deals](https://gg.deals) (gg.deals) | Steam app ids, your region, your own API key | With the deals refresh, only if you added a key | Look up deals and prices, or remove the key |
 | Your device's photo | GitHub (free photos on GameCove-data's `device-photos` release) or your handheld's maker (ASUS, MSI, Lenovo, ...) | One request; the address tells the site your model | At start until it's saved, then weekly | Show maker photos, Background lookups |
-| Upscaler list and newer upscaler files (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove-data's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and when you change an upscaler; files only when the list has a newer tested version than the one that came with GameCove | Background lookups (daily check). With it off, the files that came with GameCove are used |
+| Upscaler list and newer upscaler files (OptiScaler, XeSS driver, FSR 4) | GitHub (GameCove-data's `upscalers` release, signed list and mirrored files), then the project's own release | Nothing about you | The list at most daily (90 s after start) and when you change an upscaler; files only when the list has a newer tested version than the one that came with GameCove | Background lookups (daily check, and anything "Best" would fetch by itself when a game is installed or opened). With it off, the files that came with GameCove are used; a pick you make yourself still downloads |
 | lsfg-vk for Lossless Scaling frame generation | Its author's site (builds.lsfg-vk.dev) | Nothing about you | When you press Set up Lossless frame generation, and only if you have Lossless Scaling installed | You start it |
 | The list of device fixes | GitHub (the `fixes` release of GameCove's data repo, [GameCove-data](https://github.com/IHulkSmashI/GameCove-data), signed) | Nothing about you: the same file for every handheld | At most once a day, at start, never while you play | Background lookups |
 | GE-Proton (Settings > Performance) | GitHub (GloriousEggroll's `proton-ge-custom` releases) | Nothing about you | When you press Check or Install | You start it |
