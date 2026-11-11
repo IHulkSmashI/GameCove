@@ -33,7 +33,7 @@ signal relinked
 const BUTTON_MIN := Vector2(56, 62)
 const ICON_PX := 26
 const GAP := 4
-const LABEL_AIR := 12.0     # px of room left and right of a label inside its button
+const LABEL_AIR := 8.0      # px of room left and right of a label inside its button (4 px a side keeps "Keyboard" at 11 px in the narrowest 62 px button)
 const MIN_LABEL_PX := 9
 
 var runner: Object

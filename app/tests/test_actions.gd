@@ -14,6 +14,7 @@ const QuickMenu := preload("res://scripts/ui/quick_menu.gd")
 const Screens := preload("res://tests/test_ui_screens.gd")
 const UiPrefs := preload("res://scripts/ui/ui_prefs.gd")
 const CIcons := preload("res://scripts/ui/controls/cicons.gd")
+const ShortcutStrip := preload("res://scripts/ui/quick/shortcut_strip.gd")
 const Catalog := preload("res://scripts/ui/controls/catalog.gd")
 const T := preload("res://scripts/ui/quick/texts_shortcuts.gd")
 const TX := preload("res://scripts/ui/texts_extras.gd")
@@ -603,6 +604,21 @@ func test_runner_context_reads_memory_only() -> void:
 
 
 # ---- the strip in the quick menu ----------------------------------------------------------------
+
+## The narrowest the eight buttons get (a 62 px button on the smallest panels): every usual label stays
+## at 11 px or more, which the layout harness requires of text on those screens (it flagged "Keyboard" at 10).
+func test_strip_labels_stay_readable_in_the_narrowest_buttons() -> void:
+	var strip: Control = ShortcutStrip.new()
+	for id in Registry.STRIP_DEFAULT:
+		var b: Button = strip._button(Registry.action(id))
+		b.size = Vector2(62, 62)
+		strip.fit_label(b)
+		var l := b.get_node("Col/Name") as Label
+		var px: int = l.get_theme_font_size("font_size")
+		ok(px >= 11, "%s: '%s' is %d px in a 62 px button" % [id, l.text, px])
+		b.free()
+	strip.free()
+
 
 func _menu(rig: Dictionary) -> Control:
 	var qm: Control = QuickMenu.new()
