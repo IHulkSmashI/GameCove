@@ -488,6 +488,12 @@ func step_control(id: String, game_key := "") -> Variant:
 		await right()
 	await w.wait_s(0.35)
 	await w.idle()
+	# at the top of what this power source allows (the battery's TDP ceiling under
+	# the slider's plugged-in one): a step down instead
+	if str(shown_value(id, game_key)) == str(cur):
+		await left()
+		await w.wait_s(0.35)
+		await w.idle()
 	return shown_value(id, game_key)
 
 

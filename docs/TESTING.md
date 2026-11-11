@@ -33,9 +33,8 @@ How long (a two-core machine also running other jobs; a quiet one is about half)
 
 | Run | Claw 8 EX | ROG Ally | Legion Go S |
 | --- | --- | --- | --- |
-| `--suites journeys` (19 journeys, 7 pending merge) | 5 min | 6 min | 8 min |
-| `--suites monkey` (CI, 5 runs of 70 steps) | 1 min | 1 min | 2 min |
-| everything (`run.py` with no `--suites`) | 25 min | 25 min | 30 min |
+| `--suites journeys` (21 journeys, 7 pending merge) | 3 min | 4 min | 4 min |
+| `--suites monkey` (CI, 5 runs of 70 steps) | 2 min | 2 min | 3.5 min |
 
 ### How a journey works
 
