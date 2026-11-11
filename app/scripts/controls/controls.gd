@@ -167,12 +167,17 @@ var detected_seq := 0
 func detect_all() -> void:
 	requested_seq += 1
 	var n := requested_seq
+	# The controls as they are now: the worker never reads the registry while
+	# the main thread may change it (a reset registering the providers again
+	# swapped it under a running detection, which then stopped half way).
+	var ids: Array = _order.duplicate()
+	var ctls: Dictionary = _controls.duplicate()
 	_queue(func():
-		for id in _order:
-			var c = _controls[id]
+		for id in ids:
+			var c = ctls[id]
 			c.detect()
 			c.read()
-		_commit(_order)
+		_commit(ids, ctls)
 		_emit_detected(n))
 
 
@@ -245,11 +250,12 @@ func snapshot(per_game_only := true) -> Dictionary:
 
 
 ## Copies what the worker changed into the cache (end of each worker job).
-func _commit(ids: Array) -> void:
+## `from`: the controls a job worked on (only those still registered are cached).
+func _commit(ids: Array, from := {}) -> void:
 	_cache_mutex.lock()
 	for id in ids:
 		var c = _controls.get(id)
-		if c != null:
+		if c != null and (from.is_empty() or from.get(id) == c):
 			_cache[id] = {"available": bool(c.available), "value": _copy(c.value), "per_game": bool(c.per_game),
 				"desc": c.describe().duplicate(true)}
 	_cache_mutex.unlock()

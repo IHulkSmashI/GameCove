@@ -181,3 +181,25 @@ func test_describe_cached_is_a_committed_copy() -> void:
 	d["options"].clear()
 	eq(reg.describe_cached("power.x")["options"].size(), 1, "and get their own copy")
 	reg.free()
+
+
+## A detection works on the controls as they were when it was asked for: the
+## registry changing under it (a reset registering the providers again, the
+## e2e harness between tests) no longer stops it half way on a missing id
+## ("Invalid access to key 'power.thermal_limit'"), and what it found is cached
+## only for controls still registered.
+func test_detection_survives_the_registry_changing_under_it() -> void:
+	var store := {"power.tdp": 15.0, "power.thermal_limit": 90.0}
+	var r := _reg()
+	var swap := Ctl.make({"id": "power.tdp", "group": "power", "kind": "slider", "min_value": 0.0, "max_value": 30.0},
+		func(_c):
+			# what a reset does on the main thread while the worker walks the list
+			r._controls = {}
+			r._order = []
+			return "",
+		func(_c): return store["power.tdp"], func(_c, _v): return true)
+	r.register(swap)
+	r.register(_store_ctl("power.thermal_limit", store, {"group": "power", "min_value": 60.0, "max_value": 100.0}))
+	r.detect_all()
+	eq(r.control("power.thermal_limit"), null, "the registry was emptied under the detection")
+	r.free()
