@@ -170,6 +170,12 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 
 - **Every store in one library.** Steam, Epic, GOG and Amazon side by side. Filter by store, genre, critic score (75+)
   or what's installed, sort by Top rated, and search with the on-screen keyboard.
+- **A keyboard made for a controller.** Wherever GameCove asks for text (search, a collection's name, a sign-in code
+  or key, a streaming PC's address, launch options) its own on-screen keyboard slides up: letters with a number row,
+  a symbols page with everything a code or a URL needs, Shift (press twice for Caps), a caret you can move, and Paste
+  where a code is asked for. X deletes, Y is space, LT shifts, RT shows the symbols, LB and RB move the caret, Menu is
+  Done; hold the D-pad or X and it repeats. Touch, a mouse and a real keyboard work too. In a game, typing stays
+  Steam's keyboard.
 - **Home stays quick with a big library.** Each Home shelf shows its first 24 games and ends with **See all**, which
   opens the Library on the same list. Thousands of ROMs don't slow Home down.
 - **Favourites, hidden games and collections.** Press Menu on any game (or the star on its page) to make it a
@@ -197,7 +203,8 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 - **Battery drain per game.** "Drains about 9 W, ~5 h on a full charge" on a game's page once you've played it on
   battery for a while, and a 7-day battery chart with every game's drain in About this device. Recorded only when a
   game starts or ends, the handheld sleeps or wakes, or the charger goes in or out.
-- **Store sign-in with your phone.** Scan a QR code and sign in there. No typing passwords on the handheld.
+- **Store sign-in with your phone.** Scan a QR code and sign in there. No typing passwords on the handheld. A code
+  or key you'd rather enter here goes in with the on-screen keyboard, or its Paste key.
 - **Your desktop apps too.** Browsers, Discord, Spotify, a video player, emulator front-ends: every Flatpak and desktop
   app on the handheld (minus settings tools and terminal programs) in an **Apps** view, reached from the Library's
   header or Home. Pin your favourites to Home's Apps shelf with X; they open full screen like a game, with the quick
@@ -216,6 +223,11 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 <td><img src="docs/images/library-filter.webp" alt="The Library's Filter sheet"><br><sub>Filter: favourites, your collections, emulation, hidden games</sub></td>
 <td><img src="docs/images/apps.webp" alt="The Apps view"><br><sub>Your desktop apps, full screen, pinned to Home with X</sub></td>
 <td><img src="docs/images/home-light.webp" alt="Home in the Light theme"><br><sub>The Light theme</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/keyboard.webp" alt="Searching the Library with the on-screen keyboard"><br><sub>Search: the on-screen keyboard, with the controller's buttons on its keys</sub></td>
+<td><img src="docs/images/keyboard-code.webp" alt="Typing a key with the symbols page, Caps on, Paste beside the field"><br><sub>A sign-in code or key: symbols, Caps, Paste</sub></td>
+<td><img src="docs/images/keyboard-light.webp" alt="The on-screen keyboard in the Light theme"><br><sub>The same keyboard in Light</sub></td>
 </tr>
 </table>
 

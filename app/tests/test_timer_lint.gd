@@ -27,6 +27,7 @@ const KNOWN := {
 	"scripts/ui/toast.gd": [1, "one-shot: a toast's stay time"],
 	"scripts/system/updates.gd": [1, "one-shot 3 min after start: the opt-in automatic app update (refused while a game runs)"],
 	"scripts/ui/slider_row.gd": [1, "one-shot settle after a slider change"],
+	"scripts/ui/osk.gd": [1, "key repeat only while a D-pad direction, backspace or a caret button is held on the open keyboard"],
 	"scripts/ui/controls/color_row.gd": [1, "one-shot settle after a colour change"],
 	"scripts/ui/controls/keep_dialog.gd": [1, "countdown only while the Keep this? dialog is open"],
 	"scripts/ui/low_battery_dialog.gd": [1, "30 s countdown only while the Sleep at low battery warning is open (started by Power's 15 s check)"],

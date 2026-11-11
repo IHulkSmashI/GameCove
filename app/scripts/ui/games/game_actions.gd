@@ -370,6 +370,7 @@ func _build_keyboard() -> void:
 	keyboard_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
 	keyboard_modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	keyboard_modal.visible = false
+	keyboard_modal.z_index = Sheet.Z + 1    # over a sheet, like it (and the hint bar under both)
 	var dim := ColorRect.new()
 	dim.name = "Dim"
 	Kit.fill(dim)

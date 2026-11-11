@@ -49,6 +49,8 @@ func _hook() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.focus_entered.connect(_on_focus.bind(true))
 	button.focus_exited.connect(_on_focus.bind(false))
+	button.mouse_entered.connect(_style_fill)
+	button.mouse_exited.connect(_style_fill)
 	button.resized.connect(func(): button.pivot_offset = button.size / 2.0)
 	button.draw.connect(_on_button_draw)
 
@@ -75,8 +77,53 @@ func _apply() -> void:
 	if _glow != null:
 		_glow.visible = glow
 		_style_glow()
+	_style_fill()
 	_fit.call_deferred()
 	queue_redraw()
+
+
+var _fill_key := ""
+## Follows the button's focus signals (what the fill and the label go by).
+var _focused := false
+
+## How much of its colour a waiting primary button's fill keeps.
+const CALM_TINT := 0.26
+
+
+## True while a primary button waits: no focus, no pointer on it.
+func is_calm() -> bool:
+	return glow and button != null and not _focused and not button.is_hovered() and not button.disabled
+
+
+## One thing glows on a screen: the focused one. A primary button that waits
+## is a calm filled pill (a tint of its colour, a hairline in it, the theme's
+## text); with focus, or under the pointer, it gets the bright gradient, and
+## with focus the ring and the glow too.
+func _style_fill() -> void:
+	if not glow or button == null:
+		return
+	var cs: Array = button.get_meta("fill_colors", ThemeLib.primary_colors())
+	var a: Color = cs[0]
+	var e: Color = cs[1]
+	var calm := is_calm()
+	var key := "%s|%s|%s|%s" % [a.to_html(), e.to_html(), calm, ThemeLib.theme_id]
+	if key == _fill_key:
+		return
+	_fill_key = key
+	if calm:
+		button.add_theme_stylebox_override("normal", ThemeLib.pill(calm_fill(a), Color(a, 0.60), 26, 11))
+	else:
+		button.add_theme_stylebox_override("normal", ThemeLib.gradient_pill(a, e, 40, 26, 11))
+	queue_redraw()
+
+
+## The waiting fill for a primary button coloured `c`: opaque, so it reads the
+## same on art as on a card.
+static func calm_fill(c: Color) -> Color:
+	var base: Color = ThemeLib.color("surface_2")
+	var out := Color(base.r, base.g, base.b, 1.0).lerp(Color(c.r, c.g, c.b, 1.0), CALM_TINT)
+	out.a = 1.0
+	return out
 
 
 ## The glow takes the button's own gradient start (art colour or accent).
@@ -91,10 +138,12 @@ func _style_glow() -> void:
 	sb.shadow_size = int(ThemeLib.tok("glow_size")) - 2
 	sb.shadow_offset = Vector2(0, 2)
 	_glow.add_theme_stylebox_override("panel", sb)
-	_glow.modulate.a = 1.0 if button.has_focus() else 0.45
+	_glow.modulate.a = 1.0 if button.has_focus() else 0.0
 
 
 func _on_focus(on: bool) -> void:
+	_focused = on
+	_style_fill()
 	if glyph_on_focus:
 		queue_redraw()
 	if button.disabled:
@@ -102,7 +151,8 @@ func _on_focus(on: bool) -> void:
 	button.pivot_offset = button.size / 2.0
 	Motion.to(button, "scale", Vector2.ONE * (FOCUS_SCALE if on else 1.0), Motion.FAST)
 	if _glow != null:
-		Motion.to(_glow, "modulate:a", 1.0 if on else 0.45, Motion.FAST)
+		Motion.to(_glow, "modulate:a", 1.0 if on else 0.0, Motion.FAST)
+	_style_fill()
 
 
 func _on_button_draw() -> void:
@@ -117,6 +167,7 @@ func _on_button_draw() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and button != null:
 		_style_glow()
+		_style_fill()
 		_fit.call_deferred()
 
 
@@ -135,6 +186,8 @@ func _label() -> String:
 func _color() -> Color:
 	if button.disabled:
 		return ThemeLib.color("text_3")
+	if is_calm():
+		return ThemeLib.color("text")
 	if fg.a > 0.0:
 		return fg
 	var v := String(button.theme_type_variation)

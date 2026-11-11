@@ -8,6 +8,10 @@ extends Control
 const ArtCache := preload("res://scripts/ui/art_cache.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const FadeShader := preload("res://shaders/hero_fade.gdshader")
+const HeroInk := preload("res://scripts/ui/hero_ink.gd")
+
+## The art (or its absence) under the text changed: see text_on_art().
+signal art_changed
 
 const CROSSFADE := 0.30
 const DRIFT_S := 20.0
@@ -22,6 +26,8 @@ var _path := ""
 var _paused := false
 ## Inside the Home hero frame: rounded corners, no drift (it would leave the frame).
 var frame_radius := 0.0
+## Light: where the scrim's full-strength part ends (set_text_extent()).
+var text_hold := HeroInk.HOLD_MAX
 
 
 func _init() -> void:
@@ -54,15 +60,12 @@ func _notification(what: int) -> void:
 
 
 ## The art keeps its full colour in every theme. In its Home / Discover frame
-## only the text side gets a shade (dark themes: toward the scrim, fading out
-## by 58 % of the width; Light: a light band behind the title that's gone by
-## LIGHT_SHADE_TO, never a veil over the picture). Unframed (the downloads
-## list), the art dissolves into the backdrop at its edges instead.
-const LIGHT_SHADE_FROM := 0.22
-const LIGHT_SHADE_TO := 0.40
-const LIGHT_SHADE_ALPHA := 0.88
-
-
+## only the text side gets a shade. Dark themes: toward the scrim colour,
+## fading out by 58 % of the width, and a short fade at the foot. Light: the
+## console look (hero_ink.gd): a soft dark scrim behind the title that's gone
+## by 45 % of the width, as strong as this picture needs and no stronger, with
+## light text over it; nothing washes the art toward white. Unframed (the
+## downloads list), the art dissolves into the backdrop at its edges instead.
 func _apply_fade() -> void:
 	for l in layers:
 		_fade_layer(l)
@@ -83,18 +86,44 @@ func _fade_layer(l: TextureRect) -> void:
 	m.set_shader_parameter("shade_from", 0.0)
 	if frame_radius > 0.0:
 		# Key art at full colour in its frame: no fade into the backdrop, only a
-		# shade behind the text on the left and a short fade at the foot.
+		# shade behind the text on the left (and, dark, a short fade at the foot).
 		var sc: Color = ThemeLib.color("scrim")
 		m.set_shader_parameter("fade_left_from", -1.0)
 		m.set_shader_parameter("fade_left_to", 0.0)
 		m.set_shader_parameter("fade_top", 0.0)
-		m.set_shader_parameter("fade_bottom_from", 0.84)
-		m.set_shader_parameter("shade_color", Color(sc, 0.80 if dark else LIGHT_SHADE_ALPHA))
-		m.set_shader_parameter("shade_from", 0.0 if dark else LIGHT_SHADE_FROM)
-		m.set_shader_parameter("shade_to", 0.58 if dark else LIGHT_SHADE_TO)
+		if dark:
+			m.set_shader_parameter("fade_bottom_from", 0.84)
+			m.set_shader_parameter("shade_color", Color(sc, 0.80))
+			m.set_shader_parameter("shade_to", 0.58)
+		else:
+			m.set_shader_parameter("fade_bottom_from", 0.999)
+			m.set_shader_parameter("shade_color", Color(0, 0, 0, float(l.get_meta("scrim", HeroInk.MAX))))
+			m.set_shader_parameter("shade_from", text_hold)
+			m.set_shader_parameter("shade_to", HeroInk.END)
 	if l.get_meta("poster", false):
 		m.set_shader_parameter("fade_left_from", 0.0)
 		m.set_shader_parameter("fade_left_to", 0.55)
+	if not dark and (l.get_meta("poster", false) or l.get_meta("glow", false)):
+		# The text isn't on a poster (it starts past the middle), and the
+		# welcome glow is no picture: no scrim, the theme's own text.
+		m.set_shader_parameter("shade_color", Color(0, 0, 0, 0))
+
+
+## Where the title ends, as a fraction of the stage's width: the scrim holds
+## its strength to there (Light). The owner calls it when the title changes.
+func set_text_extent(title_right: float) -> void:
+	var h := HeroInk.hold_for(title_right, size.x)
+	if is_equal_approx(h, text_hold):
+		return
+	text_hold = h
+	_apply_fade()
+
+
+## True while the words beside the stage sit on real art (not on a poster,
+## the welcome glow or the bare frame): Light then uses light text (HeroInk).
+func text_on_art() -> bool:
+	var l := layers[_front]
+	return l.texture != null and not l.get_meta("poster", false) and not l.get_meta("glow", false)
 
 
 static func hero_path(g: Dictionary) -> String:
@@ -126,9 +155,9 @@ func show_game(g: Dictionary) -> void:
 	var want := p
 	var tex := ArtCache.request(kind, p, func(t):
 		if _path == want:
-			_crossfade(t, kind == "cover"), self)
+			_crossfade(t, kind == "cover", ArtCache.text_side(kind, want)), self)
 	if tex != null:
-		_crossfade(tex, kind == "cover")
+		_crossfade(tex, kind == "cover", ArtCache.text_side(kind, p))
 
 
 ## First launch: a soft glow in the theme's two accents instead of key art.
@@ -147,6 +176,9 @@ func show_welcome() -> void:
 	t.fill_from = Vector2(0.68, 0.42)
 	t.fill_to = Vector2(1.05, 0.95)
 	_crossfade(t)
+	layers[_front].set_meta("glow", true)
+	_fade_layer(layers[_front])
+	art_changed.emit()
 
 
 func has_art() -> bool:
@@ -158,7 +190,8 @@ func front_texture() -> Texture2D:
 	return layers[_front].texture
 
 
-func _crossfade(tex: Texture2D, poster := false) -> void:
+## `side`: how bright the art's text side is (ArtCache.text_side()).
+func _crossfade(tex: Texture2D, poster := false, side := Color(0, 0, 0, 0)) -> void:
 	var old := layers[_front]
 	_front = 1 - _front
 	var new := layers[_front]
@@ -169,6 +202,8 @@ func _crossfade(tex: Texture2D, poster := false) -> void:
 	new.anchor_left = POSTER_LEFT if poster else 0.0
 	(new.material as ShaderMaterial).set_shader_parameter("rect_size", new.size)
 	new.set_meta("poster", poster)
+	new.set_meta("glow", false)
+	new.set_meta("scrim", HeroInk.strength_for(side))
 	_fade_layer(new)
 	Motion.to(new, "scale", Vector2.ONE, 0.0)
 	new.modulate.a = 0.0
@@ -176,6 +211,7 @@ func _crossfade(tex: Texture2D, poster := false) -> void:
 	Motion.to(old, "modulate:a", 0.0, CROSSFADE)
 	if tex != null and not Motion.reduce and not _paused and frame_radius <= 0.0:
 		Motion.to(new, "scale", Vector2(DRIFT_SCALE, DRIFT_SCALE), DRIFT_S, Tween.TRANS_SINE, Tween.EASE_IN_OUT)
+	art_changed.emit()
 
 
 ## Some store heroes come with black bars baked into their sides (Frostpunk's):

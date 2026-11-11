@@ -25,6 +25,9 @@ const HERO_FRACTION := 0.66
 const FRAME_TOP := 20
 const FRAME_H := 336
 const FadeShader := preload("res://shaders/hero_fade.gdshader")
+const HeroInk := preload("res://scripts/ui/hero_ink.gd")
+## Light: the scroll offset where the hero art starts to fade (see _update_cue).
+const LIGHT_FADE_FROM := 170.0
 
 var game: Dictionary = {}
 ## Extra space above the hero card, set before setup_page(): the game page
@@ -160,8 +163,10 @@ func setup_page(g: Dictionary, line := "") -> void:
 	col.add_child(top)
 	header = GameHeader.new()
 	header.max_badges = 6
+	header.on_art = true
 	header.show_game(g, line)
 	col.add_child(header)
+	header.extent_changed.connect(_sync_scrim)
 	actions_row = Kit.hbox(14)
 	actions_row.name = "Actions"
 	col.add_child(actions_row)
@@ -259,8 +264,11 @@ func _update_cue() -> void:
 		_place_cue()
 	# The hero art stays put while the cards scroll up over it: fade it out
 	# so text never sits on a busy picture (only on scroll, never per frame).
+	# Light's title is light text on that art: there the art stays until the
+	# header has scrolled out from under the top bar, then goes.
 	if frame != null:
-		frame.modulate.a = clampf(1.0 - bar.value / 260.0, 0.0, 1.0)
+		var from := 0.0 if ThemeLib.is_dark() else LIGHT_FADE_FROM
+		frame.modulate.a = clampf(1.0 - (bar.value - from) / (260.0 - from), 0.0, 1.0)
 
 
 ## Centred in the hint band, between its status text and its prompts.
@@ -277,6 +285,9 @@ func can_scroll_down() -> bool:
 	return cue != null and cue.visible
 
 
+var _hero_path := ""
+
+
 func _load_hero() -> void:
 	var a: Variant = game.get("art", {})
 	var p := ""
@@ -287,6 +298,7 @@ func _load_hero() -> void:
 				break
 	if p == "":
 		return
+	_hero_path = p
 	var tex := ArtCache.request("hero", p, func(t): _show_hero(t), self)
 	if tex != null:
 		_show_hero(tex)
@@ -306,21 +318,49 @@ func _show_hero(tex: Texture2D) -> void:
 	hero.texture = tex
 	hero.visible = true
 	hero_fallback.visible = false
+	if _side != null and HeroInk.active():
+		_restyle()
 
 
-## Light theme's title shade: [start, end of the strong part, gone] as fractions of the width.
-const LIGHT_SIDE := [0.0, 0.22, 0.40]
+## Light: how strong the scrim behind the title is for this art, and where
+## its full-strength part ends (hero_ink.gd).
+var _scrim := HeroInk.MAX
+var _hold := HeroInk.HOLD_MAX
+
+
+## The title changed or moved: the scrim's full-strength part ends with it.
+func _sync_scrim() -> void:
+	if header == null or frame == null or not HeroInk.active():
+		return
+	# the scroll never moves sideways, so the layout's own offsets are enough
+	var h := HeroInk.hold_for(HeroInk.x_within(header, self) + header.title_right() - frame.position.x, frame.size.x)
+	if not is_equal_approx(h, _hold):
+		_hold = h
+		_restyle()
+
+
+## The art is the picture when there is one, else the generated card.
+func _scrim_for_art() -> float:
+	if hero != null and hero.visible and _hero_path != "":
+		return HeroInk.strength_for(ArtCache.text_side("hero", _hero_path))
+	var tone := Color(0, 0, 0, 0)
+	for c in hero_fallback.colors:
+		if tone.a <= 0.0 or (c as Color).get_luminance() > tone.get_luminance():
+			tone = Color(c.r, c.g, c.b, 1.0)
+	return HeroInk.strength_for(tone)
 
 
 func _restyle() -> void:
 	var bg: Color = ThemeLib.color("scrim")
 	var g := Gradient.new()
-	# Key art at full colour in every theme: a short fade at the foot only, and
-	# a shade behind the title on the left (Light: a light band that's gone by
-	# LIGHT_SIDE[2] of the width, never a veil over the picture).
+	# Key art at full colour in every theme, and a shade behind the title on
+	# the left. Dark themes: toward the backdrop colour, with a short fade at
+	# the foot. Light: the console look (hero_ink.gd), a soft dark scrim that's
+	# gone by 45 % of the width with light text over it, and no fade at the
+	# foot: nothing washes the picture toward white.
 	var dark := ThemeLib.is_dark()
 	g.offsets = PackedFloat32Array([0.0, 0.72, 1.0])
-	g.colors = PackedColorArray([Color(bg, 0.0), Color(bg, 0.0), Color(bg, 0.55 if dark else 0.45)])
+	g.colors = PackedColorArray([Color(bg, 0.0), Color(bg, 0.0), Color(bg, 0.55 if dark else 0.0)])
 	var t := GradientTexture2D.new()
 	t.gradient = g
 	t.width = 4
@@ -328,11 +368,24 @@ func _restyle() -> void:
 	t.fill_to = Vector2(0, 1)
 	_fade.texture = t
 	var g2 := Gradient.new()
-	g2.offsets = PackedFloat32Array([0.0, 0.30, 0.58] if dark else LIGHT_SIDE)
-	g2.colors = PackedColorArray([Color(bg, 0.86 if dark else 0.90), Color(bg, 0.55 if dark else 0.82), Color(bg, 0.0)])
+	if dark:
+		g2.offsets = PackedFloat32Array([0.0, 0.30, 0.58])
+		g2.colors = PackedColorArray([Color(bg, 0.86), Color(bg, 0.55), Color(bg, 0.0)])
+	else:
+		_scrim = _scrim_for_art()
+		var offs := PackedFloat32Array()
+		var cols := PackedColorArray()
+		for i in 25:
+			var x := i / 24.0 * (HeroInk.END + 0.03)
+			offs.append(x)
+			cols.append(Color(0, 0, 0, HeroInk.alpha_at(x, _scrim, _hold)))
+		g2.offsets = offs
+		g2.colors = cols
+	if header != null:
+		header.on_art = true
 	var t2 := GradientTexture2D.new()
 	t2.gradient = g2
-	t2.width = 256
+	t2.width = 512
 	t2.height = 4
 	t2.fill_to = Vector2(1, 0)
 	_side.texture = t2
@@ -348,6 +401,8 @@ func _restyle() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and _fade != null:
 		_restyle()
+		if columns != null:
+			columns.queue_redraw()
 
 
 ## A button in the action row. `primary`: the accent button (Play / Buy).
@@ -378,7 +433,8 @@ var _column_cards: Array = []
 
 ## A tinted content card with an icon heading; returns its body. `column`:
 ## put it in the side-by-side row instead of the full-width stack.
-func add_card(title: String, icon := "", subtitle := "", column := false, column_index := -1) -> VBoxContainer:
+## `floating` (column cards only): no column of its own, see _place_floats().
+func add_card(title: String, icon := "", subtitle := "", column := false, column_index := -1, floating := false) -> VBoxContainer:
 	var p := PanelContainer.new()
 	p.theme_type_variation = "CardPanel"
 	p.name = "Card_" + title.validate_node_name()
@@ -395,6 +451,7 @@ func add_card(title: String, icon := "", subtitle := "", column := false, column
 	col.add_child(head)
 	if column:
 		p.set_meta("col", column_index)
+		p.set_meta("float", floating)
 		_add_column_card(p)
 	else:
 		cards_box.add_child(p)
@@ -408,8 +465,28 @@ func _add_column_card(card: PanelContainer) -> void:
 		columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		cards_box.add_child(columns)
 		columns.resized.connect(_layout_columns)
+		# The ambient glow (the game's colour, behind everything) shone at full
+		# strength through the gaps between the cards and at a sixth of it
+		# through the cards: a bright seam between two columns. The bento
+		# stands on the page's own colour, feathered at its edges, so the glow
+		# stays a halo around it and never a line inside it.
+		columns.draw.connect(_draw_columns_ground)
 	_column_cards.append(card)
 	_layout_columns()
+
+
+## How far the bento's ground feathers out past it, px (less than the gap
+## under the hero card, so it never touches the art).
+const GROUND_FEATHER := 12
+
+
+func _draw_columns_ground() -> void:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = ThemeLib.color("scrim")
+	sb.set_corner_radius_all(ThemeLib.radius("l"))
+	sb.shadow_color = ThemeLib.color("scrim")
+	sb.shadow_size = GROUND_FEATHER
+	columns.draw_style_box(sb, Rect2(Vector2.ZERO, columns.size))
 
 
 ## (Re)deals the column cards into stacks for the current width.
@@ -420,7 +497,9 @@ func _layout_columns() -> void:
 	if w <= 0.0:
 		w = size.x - 2.0 * (ThemeLib.EDGE + 32)
 	var n := 3 if w >= COLUMNS_3_W else 2
-	n = mini(n, _column_cards.size())
+	# Floating cards are dealt last, each under the shortest column (_place_floats).
+	var fixed: Array = _column_cards.filter(func(c): return not c.get_meta("float", false))
+	n = mini(n, fixed.size() if not fixed.is_empty() else _column_cards.size())
 	if n > 0:
 		columns_laid_out.emit(n, (w - 18.0 * (n - 1)) / n - 40.0)
 	if columns.get_child_count() == n and columns.get_meta("dealt", 0) == _column_cards.size():
@@ -439,17 +518,64 @@ func _layout_columns() -> void:
 		st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		columns.add_child(st)
 		stacks.append(st)
-	var asked := _column_cards.any(func(c): return int(c.get_meta("col", -1)) >= 0)
-	for i in _column_cards.size():
-		var card: PanelContainer = _column_cards[i]
+	var asked := fixed.any(func(c): return int(c.get_meta("col", -1)) >= 0)
+	for i in fixed.size():
+		var card: PanelContainer = fixed[i]
 		var k: int
 		if asked:
 			# The column the card asked for (the last one when there are fewer).
 			k = clampi(int(card.get_meta("col", i)) if int(card.get_meta("col", -1)) >= 0 else i, 0, n - 1)
 		else:
 			# Two columns: everything but the last card stacks on the left.
-			k = i if n >= _column_cards.size() else (0 if i < _column_cards.size() - 1 else n - 1)
+			k = i if n >= fixed.size() else (0 if i < fixed.size() - 1 else n - 1)
 		stacks[k].add_child(card)
+	for st in stacks:
+		if not st.minimum_size_changed.is_connected(_queue_floats):
+			st.minimum_size_changed.connect(_queue_floats)
+	_place_floats()
+
+
+var _floats_queued := false
+
+
+func _queue_floats() -> void:
+	if _floats_queued or not is_inside_tree():
+		return
+	_floats_queued = true
+	_place_floats_later.call_deferred()
+
+
+func _place_floats_later() -> void:
+	_floats_queued = false
+	_place_floats()
+
+
+## A floating card (add_card(..., float)) goes under whichever column is
+## shortest without it, so a tall column never runs far below the fold
+## while its neighbours stand half empty. Looked at again whenever a
+## column's height changes (achievements arriving, a card opening).
+func _place_floats() -> void:
+	if columns == null or columns.get_child_count() == 0:
+		return
+	var stacks: Array = columns.get_children()
+	for card in _column_cards:
+		if not card.get_meta("float", false):
+			continue
+		var best: Control = null
+		var best_h := INF
+		for st in stacks:
+			var h := 0.0
+			for c in st.get_children():
+				if c != card and c is Control and (c as Control).visible:
+					h += (c as Control).get_combined_minimum_size().y + 18.0
+			# a tie stays where the card is, else the leftmost wins
+			if h < best_h - 0.5 or (absf(h - best_h) <= 0.5 and st == card.get_parent()):
+				best_h = h
+				best = st
+		if best != null and card.get_parent() != best:
+			if card.get_parent() != null:
+				card.get_parent().remove_child(card)
+			best.add_child(card)
 	# A card alone in its column fills it, so the bento's bottoms line up.
 	for st in stacks:
 		for c in st.get_children():

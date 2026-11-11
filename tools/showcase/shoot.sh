@@ -64,6 +64,7 @@ README_NAMES=(
 	settings_battery:battery-history settings_about:device fixes_claw:fixes fixes_claw_details:fixes-details
 	fixes_ally:fixes-retired fixes_claw_dialog:fixes-attention settings_updates:updates
 	settings_privacy:privacy settings_profiles:profiles stream:stream installer:installer setup_art:game-art-setup
+	keyboard:keyboard keyboard_code:keyboard-code
 )
 src="$out/1920x1200-cove"
 if [[ "${DOCS:-1}" == "1" && -d "$src" ]]; then
@@ -77,5 +78,6 @@ if [[ "${DOCS:-1}" == "1" && -d "$src" ]]; then
 	[[ -f "$out/1920x1200-light/home.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/home.png=$repo/docs/images/home-light.png"
 	[[ -f "$out/1920x1200-light/quick_power.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/quick_power.png=$repo/docs/images/quick-power-light.png"
 	[[ -f "$out/1920x1200-light/game.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/game.png=$repo/docs/images/game-light.png"
+	[[ -f "$out/1920x1200-light/keyboard.png" ]] && python3 -I "$here/optimise.py" "$out/1920x1200-light/keyboard.png=$repo/docs/images/keyboard-light.png"
 fi
 echo "showcase: $out"

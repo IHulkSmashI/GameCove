@@ -73,6 +73,19 @@ func setup(b: Dictionary, badge_style := "tile") -> void:
 		# shows the art at full colour (a see-through tint failed AA there).
 		bg = ThemeLib.color("surface").lerp(tone_col, 0.10)
 		bg.a = 1.0
+		# Dark ink: a tone that falls short of AA on its own tint (the accent
+		# did, 4.4:1) is deepened until it reads.
+		var ink := fg
+		for i in 8:
+			if Themes.contrast(ink, bg) >= 4.6:
+				break
+			ink = ink.darkened(0.08)
+		if ink != fg:
+			fg = ink
+			label.add_theme_color_override("font_color", fg)
+			var icon_node := row.get_node_or_null("Icon") as TextureRect
+			if icon_node != null:
+				icon_node.texture = Icons.tex(b["icon"], icon_px, fg)
 	var px := 6 if not chip else 12
 	var py := 2 if not chip else 5
 	var sb := ThemeLib.box(bg, 999 if chip else 6, px, py)

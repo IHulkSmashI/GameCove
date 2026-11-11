@@ -12,7 +12,7 @@ const ThemeLib := preload("res://theme/gamecove_theme.gd")
 signal changed(value: float)
 
 const SETTLE_S := 0.3
-## At most this many tick labels under the track.
+## This many tick labels under the track (one more when that makes them even).
 const MAX_LABELS := 5
 ## Height of the tick marks under the track.
 const TICK_H := 6
@@ -119,13 +119,18 @@ func setup(setting_key: String, title: String, lo: float, hi: float, current: fl
 ## Label values for the track: evenly spaced from end to end (8, 15, 22, 28,
 ## 35 W on an 8-35 W range), each rounded to the slider's step so it names a
 ## value the slider really has. Round-number grids looked lopsided when the
-## range didn't start on one (8, 20, 30, 35).
+## range didn't start on one (8, 20, 30, 35). When the range splits into four
+## or five equal parts the labels are exactly even (0, 10, ... 50 % on a
+## 0-50 % range in steps of 5, not 0, 15, 25, 40, 50), so the usual values
+## each have their own label to light.
 static func tick_values(lo: float, hi: float, step: float) -> Array:
 	if hi <= lo:
 		return [lo]
 	var st := step if step > 0.0 else 1.0
 	var steps := roundi((hi - lo) / st)
 	var n := clampi(steps, 1, MAX_LABELS - 1)
+	if steps > n and steps % n != 0 and steps % MAX_LABELS == 0:
+		n = MAX_LABELS
 	var out: Array = []
 	for i in n + 1:
 		var v := lo + roundf(float(steps) * i / n) * st

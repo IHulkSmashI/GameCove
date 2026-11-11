@@ -8,6 +8,7 @@ extends "res://scripts/ui/discover/section.gd"
 const Shelf := preload("res://scripts/ui/shelf.gd")
 const GameHeader := preload("res://scripts/ui/game_header.gd")
 const HeroStage := preload("res://scripts/ui/hero_stage.gd")
+const HeroInk := preload("res://scripts/ui/hero_ink.gd")
 const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 
 ## The spotlight card: about 26 px shorter than Home's, so the shelves get the room.
@@ -34,6 +35,10 @@ var _cards_pad: Control
 ## Kept for callers: Top deals now leaves out every game the spotlight or the
 ## wishlist shelf shows.
 const TOP_UNIQUE := 8
+## Free to keep with this many games or fewer shows them as wide featured cards.
+const FEATURED_MAX := 2
+## Discover's side margin (discover_screen.gd), for sizes worked out before layout.
+const SIDE := 48.0
 
 
 func setup(c: RefCounted) -> void:
@@ -50,6 +55,7 @@ func attach_stage(layer: Control) -> void:
 	stage.pause_motion()      # no slow drift here: nothing moves when nothing happens
 	stage.visible = visible
 	visibility_changed.connect(func(): stage.visible = is_visible_in_tree())
+	stage.art_changed.connect(_sync_ink)
 
 
 ## Keep the hero art (on root's stage layer) inside the spotlight's frame.
@@ -70,6 +76,37 @@ func _sync_stage(frame: Control) -> void:
 	stage.size = frame.size
 	stage._apply_fade()
 	stage.visible = is_visible_in_tree() and frame.visible
+	_sync_ink()
+
+
+## The spotlight's text follows what's behind it (light on art in every
+## theme, see hero_ink.gd), and the stage's scrim follows the title's width.
+func _sync_ink() -> void:
+	if stage == null or not is_instance_valid(header):
+		return
+	header.on_art = stage.text_on_art()
+	# Light: the frame's glass would lie over the art as a white veil (the
+	# stage is on the layer behind): clear while there's art, the border stays.
+	if is_instance_valid(_spot_frame):
+		var fsb := _spot_frame.get_theme_stylebox("panel") as StyleBoxFlat
+		if fsb != null:
+			fsb.bg_color.a = 0.0 if header.light_ink() else 0.45
+	if is_inside_tree() and stage.is_inside_tree() and header.is_inside_tree():
+		stage.set_text_extent(header.global_position.x + header.title_right() - stage.global_position.x)
+	_ink_price()
+
+
+## The price beside the chips is built in the hero's light ink while it sits
+## on art: build it again when that changes (the art arrived, or left).
+var _price_ink := false
+
+
+func _ink_price() -> void:
+	if not is_instance_valid(price_box) or spot_view.is_empty() or header.light_ink() == _price_ink:
+		return
+	for c in price_box.get_children():
+		W.detach(price_box, c)
+	_fill_price(spot_view)
 
 
 func build() -> void:
@@ -113,6 +150,7 @@ func build() -> void:
 	header.max_logo = Vector2(340, 110)
 	header.max_badges = 0
 	header.meta.visible = false
+	header.extent_changed.connect(_sync_ink)
 	_spot.add_child(header)
 	price_box = Kit.hbox(18)
 	price_box.name = "SpotPrice"
@@ -141,7 +179,10 @@ func build() -> void:
 	root.add_child(_scroll)
 	# A 48 px alpha fade at the foot: the next row peeking in looks masked,
 	# not sliced off under the hint bar.
-	FadeMask.wrap(_scroll, 48.0)
+	var foot: TextureRect = FadeMask.wrap(_scroll, 48.0)
+	# A card under the shelves (the gg.deals note, the credits) that the foot
+	# would slice isn't drawn until it fits: its text never sits half in the fade.
+	foot.cut_fn = func(): return foot_items()
 	var pad := Kit.margin(0)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_theme_constant_override("margin_left", -int(Shelf.PAD.x))
@@ -183,7 +224,20 @@ func build() -> void:
 			ctx.art.fill(v, ["cover"])
 			views.append(v)
 		var shelf: VBoxContainer = Shelf.new()
-		shelf.setup(s[0], s[1], s[2])
+		# One or two giveaways are shown as wide featured cards that fill the
+		# row (a single cover left most of the screen empty).
+		if s[0] == "free" and s[2].size() <= FEATURED_MAX:
+			for v in s[2]:
+				ctx.art.fill(v, ["hero"])
+			shelf.art_kind = "hero"
+			# the row is as wide as the spotlight: the screen less Discover's margins
+			var row_w: float = Shelf.Tile.row_width() + 2.0 * ThemeLib.EDGE - 2.0 * SIDE
+			var fsize := Shelf.featured_size(row_w)
+			shelf.setup(s[0], s[1], s[2], fsize)
+			if s[2].size() == 1:
+				shelf.strip.add_child(_free_note(s[2][0], fsize, now, cur))
+		else:
+			shelf.setup(s[0], s[1], s[2])
 		for t in shelf.tiles:
 			_decorate(t, now, cur)
 		shelf.tile_focused.connect(_on_tile_focus.bind(shelf))
@@ -241,6 +295,44 @@ static func _store_of(v: Dictionary) -> String:
 		var bd: Variant = d.get("best_deal", {})
 		return str(bd.get("store_name", "")) if bd is Dictionary else ""
 	return str(d.get("store_name", ""))
+
+
+## Beside a lone giveaway's featured card: what it is, where, what it
+## usually costs and when the giveaway ends (all from the deal itself).
+func _free_note(v: Dictionary, card: Vector2, now: int, cur: String) -> Control:
+	var d: Dictionary = v["data"]
+	var p := PanelContainer.new()
+	p.name = "FreeNote"
+	p.theme_type_variation = "CardPanel"
+	p.custom_minimum_size = card
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var col := Kit.vbox(10)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(col)
+	var store := str(v.get("store", ""))
+	var eyebrow := Kit.micro(T.FREE_ON % store if store != "" else T.SHELF_FREE, "EyebrowLabel")
+	col.add_child(eyebrow)
+	var title := Kit.label(str(v.get("title", "")), "HeaderLabel", true)
+	title.name = "Title"
+	title.max_lines_visible = 2
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	col.add_child(title)
+	var price := W.price_column(d, true, false)
+	price.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	col.add_child(price)
+	var chips := Kit.hbox(8)
+	chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for b in W.deal_badges(d, cur, now):
+		chips.add_child(W.badge(b["kind"], b["text"], b["tone"], b["icon"], "chip"))
+	if chips.get_child_count() > 0:
+		col.add_child(chips)
+	else:
+		chips.free()
+	var how := Kit.label(T.FREE_HOW, "QuietLabel", true)
+	how.name = "How"
+	col.add_child(how)
+	return p
 
 
 ## Price plate and extra pills on a shelf tile.
@@ -318,6 +410,8 @@ func _set_spot(v: Dictionary, line: String, animate: bool) -> void:
 
 
 func _fill_price(v: Dictionary) -> void:
+	var ink: bool = header.light_ink()
+	_price_ink = ink
 	var d: Dictionary = v["data"]
 	var now: int = ctx.now()
 	var cur: String = ctx.currency()
@@ -338,6 +432,13 @@ func _fill_price(v: Dictionary) -> void:
 	if deal.is_empty():
 		return
 	var col := W.price_column(deal, true, false)
+	if ink:
+		var amount := col.find_child("Amount", true, false) as Label
+		amount.add_theme_color_override("font_color", HeroInk.accent(Color(0, 0, 0, 0)) if amount.get_meta("accent", false) else HeroInk.meta())
+		GameHeader._shade(amount, true)
+		var reg := col.find_child("Regular", true, false) as RichTextLabel
+		if reg != null:
+			reg.add_theme_color_override("default_color", HeroInk.meta())
 	price_box.add_child(col)
 	var side := Kit.vbox(6)
 	side.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -346,7 +447,10 @@ func _fill_price(v: Dictionary) -> void:
 	# the deal is on a different one.
 	var store := str(deal.get("store_name", ""))
 	if store != "" and store != str(v.get("store", "")):
-		var where := Kit.icon_label("store", "on " + store, "QuietLabel", Color(0, 0, 0, 0), 18, false)
+		var where := Kit.icon_label("store", "on " + store, "QuietLabel", HeroInk.meta() if ink else Color(0, 0, 0, 0), 18, false)
+		if ink:
+			(where.get_child(1) as Label).add_theme_color_override("font_color", HeroInk.meta())
+			GameHeader._shade(where.get_child(1) as Label, true)
 		side.add_child(where)
 	var chips := Kit.hbox(8)
 	chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -399,6 +503,19 @@ func _scroll_rows(y: float) -> void:
 
 
 # ---- cards under the shelves -------------------------------------------------------
+
+## What the foot never slices: the shelves and the cards under them.
+func foot_items() -> Array:
+	var out: Array = []
+	for s in shelves:
+		if is_instance_valid(s):
+			out.append(s)
+	if is_instance_valid(_cards_pad) and _cards_pad.get_child_count() > 0:
+		for c in _cards_pad.get_child(0).get_children():
+			if c is Control and (c as Control).visible:
+				out.append(c)
+	return out
+
 
 func _build_cards(deals: Array, nothing: bool) -> void:
 	var box := Kit.vbox(16)
@@ -520,10 +637,10 @@ func on_button(b: String, f: Control) -> bool:
 func on_art(key: String, kind: String, path: String) -> void:
 	if not W.ArtLinkScript.apply(views, key, kind, path):
 		return
-	if kind == "cover":
+	if kind == "cover" or kind == "hero":
 		for s in shelves:
 			for t in s.tiles:
-				if t.game.get("key", "") == key:
+				if t.game.get("key", "") == key and (kind == "cover" or t.art_kind == "hero"):
 					t.ensure_art()
 	if spot_view.get("key", "") == key:
 		if (kind == "hero" or kind == "cover") and stage != null:

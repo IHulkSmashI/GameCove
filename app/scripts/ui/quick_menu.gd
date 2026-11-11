@@ -18,6 +18,7 @@ extends Control
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const Drawer := preload("res://scripts/ui/drawer.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 const TS := preload("res://scripts/ui/texts_settings.gd")
 const TC := preload("res://scripts/ui/texts_controls.gd")
@@ -61,9 +62,9 @@ const SECTION_ICONS := TC.TAB_ICONS
 const WIDTH := 580
 ## The sheet runs the full height: the scrim dims the top and hint bars, so
 ## the sheet's own battery pill and prompts are the only ones that read.
-const TOP_INSET := 14.0
+const TOP_INSET := Drawer.MARGIN
 ## How dark the full-screen scrim is (it covers the top bar and hint bar too).
-const SCRIM_ALPHA := 0.55
+const SCRIM_ALPHA := Drawer.SCRIM_ALPHA
 const SUPPORT_TEXT := {
 	"full": "Tested on hardware: the GameCove team runs it on this device.",
 	"beta": "Beta: testers confirmed it works; we haven't tested it ourselves yet.",
@@ -332,21 +333,7 @@ func set_side(s: String) -> void:
 
 
 func _place_panel() -> void:
-	var m := 14.0
-	panel.anchor_top = 0.0
-	panel.anchor_bottom = 1.0
-	panel.offset_top = TOP_INSET
-	panel.offset_bottom = -m
-	if side == "left":
-		panel.anchor_left = 0.0
-		panel.anchor_right = 0.0
-		panel.offset_left = m
-		panel.offset_right = m + WIDTH
-	else:
-		panel.anchor_left = 1.0
-		panel.anchor_right = 1.0
-		panel.offset_left = -WIDTH - m
-		panel.offset_right = -m
+	Drawer.place(panel, WIDTH, side)
 
 
 # ------------------------------------------------------------ open / close
@@ -411,12 +398,7 @@ func _set_header(g: Dictionary) -> void:
 
 func _style_head() -> void:
 	# Near-opaque glass: the hint bar and shelves mustn't ghost through the rows.
-	panel.remove_theme_stylebox_override("panel")
-	var base := panel.get_theme_stylebox("panel")
-	if base is StyleBoxFlat:
-		var sb := (base as StyleBoxFlat).duplicate() as StyleBoxFlat
-		sb.bg_color.a = maxf(sb.bg_color.a, 0.97)
-		panel.add_theme_stylebox_override("panel", sb)
+	panel.add_theme_stylebox_override("panel", Drawer.glass())
 	var lp := panel.find_child("LivePill", true, false) as PanelContainer
 	if lp != null:
 		lp.add_theme_stylebox_override("panel", ThemeLib.pill(ThemeLib.color("accent", 0.08), ThemeLib.color("accent", 0.35), 12, 5))
@@ -442,7 +424,7 @@ func _style_tabs() -> void:
 
 
 func _animate_in() -> void:
-	dim.color = Color(0, 0, 0, SCRIM_ALPHA) if ThemeLib.is_dark() else Color(0.08, 0.1, 0.14, 0.6)
+	dim.color = Drawer.scrim()
 	dim.modulate.a = 0.0
 	Motion.to(dim, "modulate:a", 1.0, Motion.FAST)
 	var dx := Motion.slide(40.0) * (1.0 if side == "right" else -1.0)

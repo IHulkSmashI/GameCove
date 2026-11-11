@@ -189,7 +189,12 @@ func _restyle() -> void:
 	if _styling:
 		return
 	_styling = true
-	add_theme_stylebox_override("panel", ThemeLib.card(20, 16))
+	var ground := ThemeLib.card(20, 16)
+	if not ThemeLib.is_dark():
+		# On the hero's art, Light's see-through card went grey over a dark
+		# picture and its small coloured lines fell under AA: opaque there.
+		ground.bg_color = ThemeLib.color("surface")
+	add_theme_stylebox_override("panel", ground)
 	_track.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.soft(0.12), 999, 0, 0))
 	# Solid accent, the same fill as the game page's achievement bar (ProgressLine).
 	_fill.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.color("accent"), 999, 0, 0))

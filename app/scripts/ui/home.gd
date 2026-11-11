@@ -18,6 +18,7 @@ const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const ArtColor := preload("res://theme/art_color.gd")
 const Motion := preload("res://scripts/ui/motion.gd")
 const HeroStage := preload("res://scripts/ui/hero_stage.gd")
+const HeroInk := preload("res://scripts/ui/hero_ink.gd")
 
 signal play_requested(game: Dictionary)
 signal open_requested(game: Dictionary)
@@ -143,6 +144,8 @@ func _init() -> void:
 	header = GameHeader.new()
 	header.max_logo = Vector2(440, 130)
 	_spotlight.add_child(header)
+	hero_stage.art_changed.connect(_sync_ink)
+	header.extent_changed.connect(_sync_ink)
 
 	_buttons_row = Kit.hbox(ThemeLib.SPACE_3)
 	_buttons_row.name = "HeroButtons"
@@ -319,6 +322,13 @@ func set_top_target(c: Control) -> void:
 	top_target = c
 	for b in _hero_buttons:
 		b.focus_neighbor_top = b.get_path_to(c)
+
+
+## The header's text follows what's behind it (light on art in every theme,
+## see hero_ink.gd), and the stage's scrim follows the title's width.
+func _sync_ink() -> void:
+	header.on_art = hero_stage.text_on_art()
+	hero_stage.set_text_extent(HeroInk.x_within(header, self) + header.title_right() - hero_stage.position.x)
 
 
 func _style_play() -> void:
