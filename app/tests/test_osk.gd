@@ -14,6 +14,7 @@ const Kit := preload("res://scripts/ui/ui_kit.gd")
 func _kb() -> PanelContainer:
 	var k: PanelContainer = Osk.new()
 	k.visible = true
+	k.showing = true   # open (what open() sets), without its fade
 	return k
 
 
@@ -257,6 +258,7 @@ func test_controller_buttons() -> void:
 	_pad(k, JOY_BUTTON_START)
 	eq(closed, ["ax"], "Menu (Start) is Done: the text goes back")
 	k.visible = true
+	k.showing = true   # open (what open() sets), without its fade
 	_pad(k, JOY_BUTTON_B)
 	eq(closed.size(), 2, "B closes too")
 	k.visible = false
