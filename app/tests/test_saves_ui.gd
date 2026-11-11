@@ -255,3 +255,32 @@ func test_gog_conflict_rows_dont_claim_a_newer_side() -> void:
 	eq(SavesCard.conflict_rows({"local": 1000, "remote": 0, "store": "gog"}, 2030)[1]["detail"], TS.UNKNOWN_TIME, "no time: unknown")
 	var epic := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "store": "epic"}, 2030)
 	eq(epic[0].get("value", ""), TS.NEWER, "Epic's times are both save times: Newer stays")
+
+
+## Review at ff76ca4: a blank save a game just made has the newest file time, and the sheet
+## badged it "Newer". A side that may be blank is never called newer: the cloud's comes first.
+func test_a_blank_local_save_is_never_called_newer() -> void:
+	var fresh := SavesCard.conflict_rows({"local": 2000, "remote": 1000, "store": "epic", "fresh": true,
+		"local_files": 1, "local_bytes": 900, "cloud_files": 3, "cloud_bytes": 2000}, 2030, true)
+	eq(fresh.map(func(r): return r["id"]), ["cloud", "local", "later"], "a fresh folder: the cloud's save first")
+	ok(fresh[0].get("value", "") != TS.NEWER and fresh[1].get("value", "") != TS.NEWER, "nobody called newer (the cloud is older by the clock)")
+	eq([fresh[1].get("tone", ""), fresh[1].get("value", "")], ["warn", TS.FRESH_BADGE], "this handheld's says it might be new")
+	ok(str(fresh[1]["detail"]).begins_with(TS.FRESH_DETAIL), "and why")
+	ok(str(fresh[1]["detail"]).ends_with("1 file, 900 B"), "with what it holds (%s)" % fresh[1]["detail"])
+	ok(str(fresh[0]["detail"]).ends_with("3 files, 2.0 KB") or str(fresh[0]["detail"]).ends_with("3 files, 1.95 KB"), "and what the cloud's holds (%s)" % fresh[0]["detail"])
+	# not fresh, but far smaller than the cloud's: the same caution
+	var small := SavesCard.conflict_rows({"local": 2000, "remote": 1000, "store": "epic", "local_files": 1,
+		"local_bytes": 100, "cloud_files": 2, "cloud_bytes": 4000}, 2030)
+	eq(small.map(func(r): return r["id"]), ["cloud", "local"], "much smaller: the cloud's first")
+	eq(small[1].get("value", ""), TS.SMALL_BADGE, "and said so")
+	var empty := SavesCard.conflict_rows({"local": 2000, "remote": 1000, "store": "gog", "local_files": 0, "local_bytes": 0}, 2030)
+	eq(empty[1].get("value", ""), TS.SMALL_BADGE, "GOG, no files here: the same")
+	# both real (synced before, similar sizes): newest first and Newer, as before
+	var real := SavesCard.conflict_rows({"local": 2000, "remote": 1000, "store": "epic", "local_files": 2,
+		"local_bytes": 3000, "cloud_files": 2, "cloud_bytes": 3100}, 2030)
+	eq([real[0]["id"], real[0].get("value", "")], ["local", TS.NEWER], "a real newer save here is still Newer")
+	# the cloud newer and this side in doubt: the cloud's keeps its Newer
+	var both := SavesCard.conflict_rows({"local": 1000, "remote": 2000, "store": "epic", "fresh": true}, 2030)
+	eq([both[0]["id"], both[0].get("value", "")], ["cloud", TS.NEWER], "the cloud's newer save is still called newer")
+	eq(TS.size_text(-1, 0), "", "unknown size: nothing")
+	eq(TS.size_text(0, 0), TS.NO_FILES, "no files")

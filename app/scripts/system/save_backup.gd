@@ -19,6 +19,8 @@ const KEEP := 10
 
 var base_dir := ""
 var run: Callable
+## func() -> unix seconds (tests set it back to play a clock that's behind).
+var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 
 
 func _init(dir: String, runner: Callable) -> void:
@@ -43,7 +45,7 @@ static func fingerprint(parts: Array) -> String:
 	return ",".join(bits)
 
 
-## Backs up `parts` ([{name, path}]). -> {"ok", "id", "skipped": "" | "empty" | "same" , "why"}.
+## Backs up `parts` ([{name, path, restore_path?}]). -> {"ok", "id", "skipped": "" | "empty" | "same" , "why"}.
 ## ok is false only when a copy was needed and couldn't be made (then nothing may overwrite
 ## the folders). `force` takes a copy even when the last one has the same fingerprint.
 ## `pinned`: counted apart from the everyday backups when the oldest are dropped.
@@ -64,11 +66,17 @@ func backup(key: String, title: String, reason: String, parts: Array, force := f
 	var dir := dir_for(key)
 	DirAccess.make_dir_recursive_absolute(dir)
 	var stamp := _stamp(dir)
+	var seq := 1
+	for b in last:
+		seq = maxi(seq, int(b.get("seq", 0)) + 1)
 	var out_parts: Array = []
 	for i in with_files.size():
 		var p: Dictionary = with_files[i]
 		var file := "%s-%d.tar.gz" % [stamp, i]
-		var r: Dictionary = run.call("tar", PackedStringArray(["-czf", dir.path_join(file), "-C", str(p["path"]), "."]))
+		# -h: a linked subfolder is copied, not stored as a link (gogdl and legendary follow links,
+		# so its files are part of the save; a link alone would restore to whatever it points at
+		# then, or to nothing; review at ff76ca4, L4)
+		var r: Dictionary = run.call("tar", PackedStringArray(["-czhf", dir.path_join(file), "-C", str(p["path"]), "."]))
 		if int(r.get("code", -1)) != 0:
 			for q in out_parts:
 				DirAccess.remove_absolute(dir.path_join(str(q["file"])))
@@ -79,18 +87,23 @@ func backup(key: String, title: String, reason: String, parts: Array, force := f
 		if fa != null:
 			size = fa.get_length()
 			fa.close()
-		out_parts.append({"name": str(p["name"]), "path": str(p["path"]), "file": file, "bytes": size})
-	var meta := {"time": int(Time.get_unix_time_from_system()), "reason": reason, "title": title,
-		"parts": out_parts, "fingerprint": fp, "pinned": pinned}
+		# a copy made elsewhere (the cloud's, fetched into a scratch folder) names the folder it
+		# goes back into: written with the backup itself, never fixed up after it (an app killed
+		# in between left it pointing at the scratch folder; review at ff76ca4, L9)
+		out_parts.append({"name": str(p["name"]), "path": str(p.get("restore_path", p["path"])), "file": file, "bytes": size})
+	var meta := {"time": int(clock.call()), "reason": reason, "title": title,
+		"parts": out_parts, "fingerprint": fp, "pinned": pinned, "seq": seq}
 	if SettingsFile.save_json(dir.path_join(stamp + ".json"), meta, "\t") != OK:
 		return {"ok": false, "id": "", "skipped": "", "why": "couldn't write the backup list"}
-	prune(key)
+	prune(key, KEEP, stamp)
+	if find(key, stamp).is_empty():
+		return {"ok": false, "id": "", "skipped": "", "why": "the backup was dropped as soon as it was made"}
 	return {"ok": true, "id": stamp, "skipped": "", "why": ""}
 
 
 ## A name that sorts by time and never collides within a second.
 func _stamp(dir: String) -> String:
-	var t := Time.get_datetime_string_from_system(true).replace("-", "").replace(":", "").replace("T", "-")
+	var t := Time.get_datetime_string_from_unix_time(int(clock.call())).replace("-", "").replace(":", "").replace("T", "-")
 	var s := t
 	var n := 1
 	while FileAccess.file_exists(dir.path_join(s + ".json")):
@@ -100,6 +113,10 @@ func _stamp(dir: String) -> String:
 
 
 ## Backups of a game, newest first: [{"id", "time", "reason", "title", "parts", "bytes", "fingerprint"}].
+## Newest is the order they were made in ("seq"), not their time stamp: with the clock set back
+## (no network time yet after a dead battery) a new backup's stamp sorts before older ones, and
+## rotation then dropped the one just made (review at ff76ca4, L2). Backups from before "seq"
+## count as older than any with one, by their stamp among themselves.
 func list(key: String) -> Array:
 	var dir := dir_for(key)
 	var out: Array = []
@@ -118,7 +135,10 @@ func list(key: String) -> Array:
 		e["id"] = f.trim_suffix(".json")
 		e["bytes"] = total
 		out.append(e)
-	out.sort_custom(func(x, y): return str(x["id"]) > str(y["id"]))
+	out.sort_custom(func(x, y):
+		var sx := int(x.get("seq", 0))
+		var sy := int(y.get("seq", 0))
+		return sx > sy if sx != sy else str(x["id"]) > str(y["id"]))
 	return out
 
 
@@ -130,42 +150,71 @@ func find(key: String, id: String) -> Dictionary:
 
 
 ## Puts a backup back: each folder becomes exactly what the backup holds (files made since
-## don't stay; callers back the current state up first). The backup is unpacked next to the
-## folder and swapped in, so a backup that can't be unpacked changes nothing.
+## don't stay; callers back the current state up first). All of it or nothing (review at
+## ff76ca4, L3): every folder is unpacked next to its place first, and only when all are
+## unpacked are they swapped in; a swap that fails puts the ones already swapped back. A
+## folder that can't be renamed (a mount point) is emptied and filled in place, last.
 ## -> {"ok", "why"}.
 func restore(key: String, id: String) -> Dictionary:
 	var b := find(key, id)
 	if b.is_empty():
 		return {"ok": false, "why": "missing"}
 	var dir := dir_for(key)
+	var staged_all: Array = []   # [path, staged, archive]
 	for p in b["parts"]:
 		var path := str(p["path"]).simplify_path()
 		var staged := path + ".gamecove-restore"
-		var old := path + ".gamecove-old"
 		remove_tree(staged)
 		if DirAccess.make_dir_recursive_absolute(staged) != OK:
+			_drop_staged(staged_all)
 			return {"ok": false, "why": "couldn't make a folder next to the saves"}
+		staged_all.append([path, staged, dir.path_join(str(p["file"]))])
 		var r: Dictionary = run.call("tar", PackedStringArray(["-xzf", dir.path_join(str(p["file"])), "-C", staged]))
 		if int(r.get("code", -1)) != 0:
-			remove_tree(staged)
+			_drop_staged(staged_all)
 			return {"ok": false, "why": "tar: " + str(r.get("out", "")).strip_edges().left(200)}
+	var swapped: Array = []   # [path, old, had]
+	var in_place: Array = []
+	for s in staged_all:
+		var path: String = s[0]
+		var old := path + ".gamecove-old"
 		remove_tree(old)
 		var had := DirAccess.dir_exists_absolute(path)
 		if had and DirAccess.rename_absolute(path, old) != OK:
-			# a folder that can't be renamed (a mount point): emptied and filled in place
-			empty_dir(path)
-			var m: Dictionary = run.call("tar", PackedStringArray(["-xzf", dir.path_join(str(p["file"])), "-C", path]))
-			remove_tree(staged)
-			if int(m.get("code", -1)) != 0:
-				return {"ok": false, "why": "tar: " + str(m.get("out", "")).strip_edges().left(200)}
+			in_place.append(s)
 			continue
-		if DirAccess.rename_absolute(staged, path) != OK:
+		if DirAccess.rename_absolute(str(s[1]), path) != OK:
 			if had:
 				DirAccess.rename_absolute(old, path)
-			remove_tree(staged)
+			_undo_swaps(swapped)
+			_drop_staged(staged_all)
 			return {"ok": false, "why": "couldn't put the saves in place"}
-		remove_tree(old)
+		swapped.append([path, old, had])
+	for s in in_place:
+		var path: String = s[0]
+		empty_dir(path)
+		var m: Dictionary = run.call("tar", PackedStringArray(["-xzf", str(s[2]), "-C", path]))
+		remove_tree(str(s[1]))
+		if int(m.get("code", -1)) != 0:
+			_undo_swaps(swapped)
+			_drop_staged(staged_all)
+			return {"ok": false, "why": "tar: " + str(m.get("out", "")).strip_edges().left(200)}
+	for w in swapped:
+		remove_tree(str(w[1]))
 	return {"ok": true, "why": ""}
+
+
+static func _drop_staged(staged: Array) -> void:
+	for s in staged:
+		remove_tree(str(s[1]))
+
+
+## Puts the folders a failed restore already swapped back as they were.
+static func _undo_swaps(swapped: Array) -> void:
+	for w in swapped:
+		remove_tree(str(w[0]))
+		if bool(w[2]):
+			DirAccess.rename_absolute(str(w[1]), str(w[0]))
 
 
 ## Deletes a folder tree. A symlink is removed as a link, never followed (a Wine prefix
@@ -194,14 +243,15 @@ static func empty_dir(path: String) -> void:
 			remove_tree(path.path_join(sub))
 
 
-## Keeps the newest `keep` everyday backups of a game and the newest `keep` pinned ones.
-func prune(key: String, keep := KEEP) -> void:
+## Keeps the newest `keep` everyday backups of a game and the newest `keep` pinned ones;
+## `spare` (the backup just made) is never dropped.
+func prune(key: String, keep := KEEP, spare := "") -> void:
 	var dir := dir_for(key)
 	var seen := {false: 0, true: 0}
 	for b in list(key):
 		var kind := bool(b.get("pinned", false))
 		seen[kind] += 1
-		if seen[kind] <= keep:
+		if seen[kind] <= keep or str(b["id"]) == spare:
 			continue
 		for p in b["parts"]:
 			DirAccess.remove_absolute(dir.path_join(str(p["file"])))

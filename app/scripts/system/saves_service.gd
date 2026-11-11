@@ -15,7 +15,9 @@ extends Node
 ## Status per game in user://saves.cfg [game:<key>]: enabled, last_sync, state, at, detail,
 ## local, remote, pending ({"backup": id, "empty": [folders]}: a download is replacing the save folders right
 ## now; still there at the next sync means it was cut off by a crash or power loss and is put
-## right first), restored_at (a backup was put back and not synced since), prefer (the side
+## right first), uploading ({"at", "fp": the folders' fingerprint, "folders"}: an upload is
+## going up right now; still there at the next sync means it was cut off and the cloud may hold
+## part of it: finished first, see _finish_upload), restored_at (a backup was put back and not synced since), prefer (the side
 ## a conflict sheet offers first: "local" after a restore), gog_ts ({location: gogdl timestamp}), gog_paths ({location: the folder that
 ## timestamp is about}), own (we keep our own sync times: Heroic's are no longer a fallback);
 ## [gog_remote] caches GOG's answer per client id.
@@ -46,6 +48,8 @@ const CFG := "user://saves.cfg"
 const GROUP := "saves"
 
 var cfg_path := CFG
+## The games whose sync is switched off, kept apart from saves.cfg (see enabled()).
+var off_path := "user://saves_off.json"
 var privacy_path := Privacy.PREFS_PATH
 ## Where backups go (an absolute folder).
 var backup_dir := ""
@@ -61,6 +65,10 @@ var tools_lookup: Callable = func() -> Dictionary: return {}
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
 ## func() -> bool: a game runs now (restores wait).
 var game_running: Callable = func() -> bool: return false
+## func(path) -> "<device>:<inode>:<birth>" of a folder, "" when it isn't there (tests swap it). A
+## save folder's anchor (CloudSaves.identity_anchor) with another identity than at the last
+## sync is a new folder, whatever is in it now.
+var folder_id: Callable = func(path: String) -> String: return stat_id(path)
 
 var backups: RefCounted
 var _busy := {}       # key -> "pre" | "post" | "now" | "resolve" | "restore" (main thread)
@@ -95,6 +103,8 @@ func setup_library(lib: Object) -> void:
 		tools_lookup = func() -> Dictionary: return lib.tools()
 	if lib.has_signal("install_state_changed"):
 		lib.install_state_changed.connect(_on_install_state)
+	if lib.has_signal("changed"):
+		lib.changed.connect(repair_cut_uploads)
 
 
 ## An uninstalled game's sync times are forgotten: its folders may be gone or new when it
@@ -146,14 +156,34 @@ func set_allowed(on: bool) -> bool:
 	return Privacy.set_cloud_saves_allowed(on, privacy_path)
 
 
+## A game's switch is kept twice: in saves.cfg and in saves_off.json (the games switched
+## off). saves.cfg found damaged is set aside and read as empty, which used to switch sync
+## back on for every game (review at ff76ca4, L7); the second file keeps them off.
 func enabled(key: String) -> bool:
+	if _off_list().has(key):
+		return false
 	return bool(SettingsFile.load_cfg(cfg_path).get_value(_sec(key), "enabled", true))
 
 
 func set_enabled(key: String, on: bool) -> bool:
 	var ok := SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(_sec(key), "enabled", on)) == OK
+	var off := _off_list()
+	if on:
+		off.erase(key)
+	else:
+		off[key] = true
+	ok = SettingsFile.save_json(off_path, off.keys()) == OK and ok
 	status_changed.emit(key)
 	return ok
+
+
+func _off_list() -> Dictionary:
+	var d: Variant = SettingsFile.load_json(off_path).get("data")
+	var out := {}
+	if d is Array:
+		for k in d:
+			out[str(k)] = true
+	return out
 
 
 func busy(key: String) -> bool:
@@ -161,7 +191,11 @@ func busy(key: String) -> bool:
 
 
 ## {"state", "at", "detail", "local", "remote", "last_sync", "enabled", "busy": "" | phase,
-##  "store", "prefer": "" | "local" (a conflict after a restore: the restored side first)}. state "off" when the game's switch is off, "disabled" when the global one is.
+##  "store", "prefer": "" | "local" (a conflict after a restore: the restored side first),
+##  "fresh" (a conflict with no sync time for this folder: nothing says the local save is
+##  further on, it may be a blank one), "local_files", "local_bytes", "cloud_files",
+##  "cloud_bytes" (both sides of a conflict, -1 when unknown; the cloud's from the copy of it
+##  kept when the conflict was found)}. state "off" when the game's switch is off, "disabled" when the global one is.
 func status(game: Dictionary) -> Dictionary:
 	var key := str(game.get("key", ""))
 	var cfg := SettingsFile.load_cfg(cfg_path)
@@ -170,11 +204,17 @@ func status(game: Dictionary) -> Dictionary:
 		"detail": str(cfg.get_value(sec, "detail", "")), "local": int(cfg.get_value(sec, "local", 0)),
 		"remote": int(cfg.get_value(sec, "remote", 0)), "last_sync": int(cfg.get_value(sec, "last_sync", 0)),
 		"enabled": bool(cfg.get_value(sec, "enabled", true)), "busy": str(_busy.get(key, "")),
-		"store": str(game.get("store", "")), "prefer": str(cfg.get_value(sec, "prefer", ""))}
+		"store": str(game.get("store", "")), "prefer": str(cfg.get_value(sec, "prefer", "")),
+		"fresh": bool(cfg.get_value(sec, "fresh", false)), "local_files": int(cfg.get_value(sec, "local_files", -1)),
+		"local_bytes": int(cfg.get_value(sec, "local_bytes", -1)), "cloud_files": int(cfg.get_value(sec, "cloud_files", -1)),
+		"cloud_bytes": int(cfg.get_value(sec, "cloud_bytes", -1))}
+	st["enabled"] = enabled(key)
 	if not st["enabled"]:
 		st["state"] = "off"
 	elif not allowed():
 		st["state"] = "disabled"
+	elif SettingsFile.blocked(cfg_path):
+		st["state"] = "state_unsaved"
 	return st
 
 
@@ -199,7 +239,15 @@ func backup_list(key: String) -> Array:
 ## user must pick first. Calls done right away when there's nothing to do.
 func before_launch(game: Dictionary, done: Callable) -> void:
 	var key := str(game.get("key", ""))
+	if applies(game):
+		folder_guard(key)   # also with sync off or signed out: what's seen now is kept
 	if not applies(game) or not enabled(key) or not allowed():
+		if applies(game) and busy(key):
+			# sync is off for it, but a restore (or a sync started before it was switched off) is
+			# still at work on its folder: the game waits for that, never starts under it
+			# (review at ff76ca4, L6)
+			_queue(game, "wait", func(_e, _t): return {"state": ""}, func(_r): done.call({"go": true}))
+			return
 		done.call({"go": true})
 		return
 	_queue(game, "pre", func(e, t): return _sync(key, e, t, "pre"), func(r: Dictionary) -> void:
@@ -209,12 +257,16 @@ func before_launch(game: Dictionary, done: Callable) -> void:
 			done.call({"go": true}))
 
 
-## After the game ended: uploads what it saved.
-func after_exit(game: Dictionary) -> void:
+## After the game ended: uploads what it saved. True when an upload job was queued (its
+## `finished` with phase "post" follows).
+func after_exit(game: Dictionary) -> bool:
 	var key := str(game.get("key", ""))
+	if applies(game):
+		folder_guard(key)
 	if not applies(game) or not enabled(key) or not allowed():
-		return
+		return false
 	_queue(game, "post", func(e, t): return _sync(key, e, t, "post"), Callable())
+	return true
 
 
 ## Both ways now (never while that game runs). done(status).
@@ -237,7 +289,7 @@ func resolve(game: Dictionary, choice: String, done: Callable = Callable()) -> b
 	var key := str(game.get("key", ""))
 	if game_running.call() or not choice in ["local", "cloud"]:
 		if done.is_valid():
-			done.call(status(game))
+			done.call(status(game).merged({"refused": true}))
 		return false
 	_queue(game, "resolve", func(e, t): return _resolve(key, e, t, choice), func(_r):
 		if done.is_valid():
@@ -267,7 +319,12 @@ func _queue(game: Dictionary, phase: String, job: Callable, done: Callable) -> v
 	status_changed.emit(key)
 	if not entry.has("title"):
 		entry["title"] = str(game.get("title", key))
-	var wrapped := func() -> Dictionary: return job.call(entry, tools)
+	var wrapped := func() -> Dictionary:
+		_noted = true
+		if SettingsFile.blocked(cfg_path):
+			# saves.cfg was damaged and set aside this run: what a sync does couldn't be kept
+			return {"state": "state_unsaved", "conflict": false}
+		return job.call(entry, tools)
 	var finish := func(r: Dictionary) -> void:
 		_busy.erase(key)
 		status_changed.emit(key)
@@ -313,6 +370,14 @@ func _cfg_value(key: String, name: String, fallback: Variant) -> Variant:
 ## Writes the outcome. last_sync moves only when both sides agree after this step.
 func _set_status(key: String, state: String, detail := "", extra := {}) -> Dictionary:
 	var now: int = clock.call()
+	var anchors := {}
+	if bool(extra.get("synced", false)):
+		var folders: Array = []
+		if str(extra.get("epic_path", "")) != "":
+			folders.append(str(extra["epic_path"]))
+		if extra.get("gog_paths") is Dictionary:
+			folders.append_array(extra["gog_paths"].values())
+		anchors = _anchors_of(folders)
 	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
 		var sec := _sec(key)
 		c.set_value(sec, "state", state)
@@ -321,6 +386,10 @@ func _set_status(key: String, state: String, detail := "", extra := {}) -> Dicti
 		c.set_value(sec, "local", int(extra.get("local", 0)))
 		c.set_value(sec, "remote", int(extra.get("remote", 0)))
 		c.set_value(sec, "prefer", str(extra.get("prefer", "")))
+		c.set_value(sec, "fresh", bool(extra.get("fresh", false)))
+		for n in ["local_files", "local_bytes", "cloud_files", "cloud_bytes"]:
+			c.set_value(sec, n, int(extra.get(n, -1)))
+		c.set_value(sec, "local_fp", str(extra.get("local_fp", "")))
 		if bool(extra.get("synced", false)):
 			c.set_value(sec, "last_sync", now)
 			if c.has_section_key(sec, "restored_at"):
@@ -331,7 +400,11 @@ func _set_status(key: String, state: String, detail := "", extra := {}) -> Dicti
 		if extra.has("gog_paths"):
 			c.set_value(sec, "gog_paths", extra["gog_paths"])
 		if bool(extra.get("synced", false)) and str(extra.get("epic_path", "")) != "":
-			c.set_value(sec, "epic_path", str(extra["epic_path"])))
+			c.set_value(sec, "epic_path", str(extra["epic_path"]))
+		if bool(extra.get("synced", false)):
+			c.set_value(sec, "anchors", anchors)
+			# the cloud save's own time as of this sync (Epic), -1 when this step didn't learn it
+			c.set_value(sec, "synced_remote", int(extra.get("synced_remote", -1))))
 	return {"state": state, "conflict": state == "conflict"}
 
 
@@ -343,7 +416,7 @@ func _drop_sync(key: String, create: bool) -> bool:
 		var sec := _sec(key)
 		if not c.has_section(sec) and not create:
 			return false
-		for name in ["gog_ts", "gog_paths", "epic_path"]:
+		for name in ["gog_ts", "gog_paths", "epic_path", "anchors"]:
 			if c.has_section_key(sec, name):
 				c.erase_section_key(sec, name)
 		c.set_value(sec, "last_sync", 0)
@@ -353,7 +426,106 @@ func _drop_sync(key: String, create: bool) -> bool:
 	return wrote[0]
 
 
+## The local half of blocker 1, on every path that may upload and at every launch, whether
+## sync is on, allowed or signed in or not: a sync time only stands for the folder it was
+## made with. A folder the last sync knew that is now empty or gone, or whose anchor (the
+## prefix's drive_c) isn't the same folder any more (a deleted and re-made prefix, even one
+## the game has written a fresh save into since, played outside GameCove), loses its sync
+## time at once, so the next sync sees both sides changed and asks: a blank save never goes
+## up over the cloud's on the strength of an old time. Nothing touches the network here.
+## True when something was dropped. Main or worker thread.
+func folder_guard(key: String) -> bool:
+	var cfg := SettingsFile.load_cfg(cfg_path)
+	var sec := _sec(key)
+	if not cfg.has_section(sec):
+		return false
+	var anchors: Variant = cfg.get_value(sec, "anchors", {})
+	var known: Dictionary = anchors if anchors is Dictionary else {}
+	var folders := {}   # path -> GOG location name, "" for Epic's one folder
+	var epic := str(cfg.get_value(sec, "epic_path", ""))
+	if epic != "" and int(cfg.get_value(sec, "last_sync", 0)) > 0:
+		folders[epic] = ""
+	var ts: Variant = cfg.get_value(sec, "gog_ts", {})
+	var paths: Variant = cfg.get_value(sec, "gog_paths", {})
+	if ts is Dictionary and paths is Dictionary:
+		for name in paths:
+			if str(ts.get(name, "0")) != "0":
+				folders[str(paths[name])] = str(name)
+	var stale: Array = []
+	for path in folders:
+		if not CloudSaves.has_files(path):
+			stale.append(path)
+		elif known.has(path) and str(known[path]) != "" and str(folder_id.call(CloudSaves.identity_anchor(path))) != str(known[path]):
+			stale.append(path)
+	if stale.is_empty():
+		return false
+	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
+		var gts: Variant = c.get_value(sec, "gog_ts", {})
+		var new_ts: Dictionary = gts.duplicate() if gts is Dictionary else {}
+		var kept: Variant = c.get_value(sec, "anchors", {})
+		var new_anchors: Dictionary = kept.duplicate() if kept is Dictionary else {}
+		for path in stale:
+			if str(folders[path]) != "":
+				new_ts[folders[path]] = "0"
+			new_anchors.erase(path)
+		if c.has_section_key(sec, "gog_ts"):
+			c.set_value(sec, "gog_ts", new_ts)
+		c.set_value(sec, "anchors", new_anchors)
+		c.set_value(sec, "last_sync", 0)
+		c.set_value(sec, "own", true))
+	if OS.get_thread_caller_id() == OS.get_main_thread_id():
+		status_changed.emit(key)
+	else:
+		call_deferred("_emit_status", key)
+	return true
+
+
+func _emit_status(key: String) -> void:
+	status_changed.emit(key)
+
+
+## {folder: identity of its anchor} for the folders that are there.
+func _anchors_of(folders: Array) -> Dictionary:
+	var out := {}
+	for f in folders:
+		var id := str(folder_id.call(CloudSaves.identity_anchor(str(f))))
+		if id != "":
+			out[str(f)] = id
+	return out
+
+
+## A folder we put back ourselves (a backup restored, the save folder swapped in) keeps
+## counting as the folder its sync time is for.
+func _refresh_anchors(key: String, folders: Array) -> void:
+	var cfg := SettingsFile.load_cfg(cfg_path)
+	var kept: Variant = cfg.get_value(_sec(key), "anchors", {})
+	if not kept is Dictionary or kept.is_empty():
+		return
+	var mine: Array = folders.filter(func(f): return kept.has(str(f)))
+	if mine.is_empty():
+		return
+	var fresh := _anchors_of(mine)
+	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
+		var cur: Variant = c.get_value(_sec(key), "anchors", {})
+		var d: Dictionary = cur.duplicate() if cur is Dictionary else {}
+		for f in fresh:
+			d[f] = fresh[f]
+		c.set_value(_sec(key), "anchors", d))
+
+
+## `stat`'s "<device>:<inode>:<birth>" for a folder ("" when it isn't there or stat fails).
+## The birth time (0 where the file system doesn't keep one) is there because a deleted
+## folder's inode number is often handed straight to the next new one.
+static func stat_id(path: String) -> String:
+	if path == "" or not DirAccess.dir_exists_absolute(path):
+		return ""
+	var r := ExecSafe.run("stat", PackedStringArray(["-c", "%d:%i:%W", "--", path]), false)
+	var out := str(r.get("out", "")).strip_edges()
+	return out if int(r.get("code", -1)) == 0 and out.contains(":") else ""
+
+
 func _sync(key: String, entry: Dictionary, tools: Dictionary, mode: String) -> Dictionary:
+	folder_guard(key)
 	match CloudSaves.kind_of(entry):
 		"epic": return _sync_epic(key, entry, tools, mode)
 		"gog": return _sync_gog(key, entry, tools, mode)
@@ -373,6 +545,9 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 	var cut := _recover(key, str(entry.get("title", key)), [{"name": "saves", "path": str(plan["save_path"])}] if str(plan["save_path"]) != "" else [])
 	if cut != "":
 		return _set_status(key, "backup_failed", cut)
+	var cut_up := _finish_upload(key, entry, plan, _epic_parts(entry, plan, app))
+	if not cut_up.is_empty():
+		return cut_up
 	_epic_folder_check(key, str(plan["save_path"]))
 	var look := _legendary(plan, app, "check")
 	if look["state"] in ["offline", "failed", "unsupported", "no_path"]:
@@ -382,22 +557,29 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 	if look["state"] == "none":
 		return _set_status(key, "no_saves", "", {"synced": true, "epic_path": folder})
 	if look["state"] == "same":
-		return _set_status(key, "synced", "", {"synced": true, "local": look["local"], "remote": look["remote"], "epic_path": folder})
+		return _set_status(key, "synced", "", {"synced": true, "local": look["local"], "remote": look["remote"], "epic_path": folder, "synced_remote": look["remote"]})
 	var last := int(_cfg_value(key, "last_sync", 0))
 	var times := {"local": look["local"], "remote": look["remote"], "epic_path": folder}
 	# a restored backup has its old file times: legendary sees "cloud newer" and would download
 	# straight over the restore (final review, high 6)
 	var restored := int(_cfg_value(key, "restored_at", 0)) > 0
-	match CloudSaves.epic_decide(look, last, mode, restored):
+	match CloudSaves.epic_decide(look, last, mode, restored, int(_cfg_value(key, "synced_remote", -1))):
 		"conflict":
-			return _set_status(key, "conflict", "", times.merged({"prefer": "local"} if restored and look["state"] == "remote_newer" else {}))
+			var sides := _conflict_sides(key, entry, plan, [{"name": "saves", "path": str(plan["save_path"]) if str(plan["save_path"]) != "" else folder}])
+			sides["fresh"] = last <= 0 and not restored
+			return _set_status(key, "conflict", "", times.merged(sides).merged({"prefer": "local"} if restored and look["state"] == "remote_newer" else {}))
 		"download":
 			return _epic_download(key, entry, plan, app, look, "download", times)
 		"upload":
+			_mark_upload(key, [{"name": "saves", "path": folder}])
+			if not _noted:
+				return _set_status(key, "failed", NOTE_FAILED)
 			var up := _legendary(plan, app, "upload")
 			if up["state"] in ["offline", "failed"]:
-				return _set_status(key, up["state"], str(up.get("error", "")), times)
-			return _set_status(key, "uploaded", "", times.merged({"synced": true}, true))
+				return _set_status(key, "upload_cut", str(up.get("error", "")), times)
+			_clear_upload(key)
+			# legendary names the new cloud save by the newest local file's time
+			return _set_status(key, "uploaded", "", times.merged({"synced": true, "synced_remote": look["local"]}, true))
 		"later":
 			# the other direction waits for its turn (next exit uploads, next launch downloads)
 			return _set_status(key, "pending_up" if look["state"] == "local_newer" else "pending_down", "", times)
@@ -436,25 +618,33 @@ func _epic_download(key: String, entry: Dictionary, plan: Dictionary, app: Strin
 	if not b["ok"]:
 		return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]), times)
 	var empty := _mark_download(key, b, parts)
+	if not _noted:
+		return _set_status(key, "failed", NOTE_FAILED)
 	var down := _legendary(plan, app, step)
 	if down["state"] in ["offline", "failed"]:
 		var back := _put_back(key, b, empty)
 		return _set_status(key, down["state"], str(down.get("error", "")) + back, times)
 	_clear_mark(key)
-	return _set_status(key, "downloaded", "", times.merged({"synced": true}, true))
+	return _set_status(key, "downloaded", "", times.merged({"synced": true, "synced_remote": int(look.get("remote", -1)) if not look.is_empty() else -1}, true))
 
 
 ## Before a tool may write into the save folders: notes it in the status file (the backup to
 ## put back and the folders that had no files), so a download cut off by a crash or power
 ## loss, when none of our code runs, is found and put right by the next sync (_recover).
 ## -> the folders that are empty now.
+## False when the last note (_mark_download, _mark_upload) couldn't be written: then no tool
+## may run, since a crash after it couldn't be put right (review at ff76ca4, L7).
+var _noted := true
+const NOTE_FAILED := "couldn't write saves.cfg"
+
+
 func _mark_download(key: String, b: Dictionary, parts: Array) -> Array:
 	var empty: Array = []
 	for p in parts:
 		if int(CloudSaves.dir_stats(str(p["path"]))["files"]) == 0:
 			empty.append(str(p["path"]))
 	var id := "" if str(b.get("skipped", "")) == "empty" else str(b.get("id", ""))
-	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(_sec(key), "pending", {"backup": id, "empty": empty}))
+	_noted = SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(_sec(key), "pending", {"backup": id, "empty": empty})) == OK
 	return empty
 
 
@@ -477,6 +667,9 @@ func _put_back(key: String, b: Dictionary, empty: Array) -> String:
 	if str(b.get("id", "")) != "" and str(b.get("skipped", "")) != "empty":
 		var r: Dictionary = backups.restore(key, str(b["id"]))
 		why = "" if r["ok"] else " (" + str(r["why"]) + ")"
+		if r["ok"]:
+			var put: Array = backups.find(key, str(b["id"])).get("parts", [])
+			_refresh_anchors(key, put.map(func(p): return str(p.get("path", ""))))
 	if why == "":
 		_clear_mark(key)
 	return why
@@ -491,6 +684,11 @@ func _put_back(key: String, b: Dictionary, empty: Array) -> String:
 func _recover(key: String, title: String, parts: Array) -> String:
 	var note: Variant = _cfg_value(key, "pending", {})
 	if not note is Dictionary or note.is_empty():
+		return ""
+	if str(note.get("backup", "")) == "" and Array(note.get("empty", [])).is_empty():
+		# nothing could have come down (a post-game run with no empty folder, from before such
+		# runs left no note): nothing to put right, and no reason to ask
+		_clear_mark(key)
 		return ""
 	var found: Dictionary = backups.backup(key, title, "interrupted", parts, true, true)
 	if not found["ok"]:
@@ -509,6 +707,133 @@ func _recover(key: String, title: String, parts: Array) -> String:
 	_drop_sync(key, true)
 	_clear_mark(key)
 	return ""
+
+
+## An upload is about to go up (worker thread): noted first, with what the folders hold now,
+## so one cut short (the 90 s cap, the app or the power going) is found and finished by the
+## next sync before anything else touches the game's saves (review at ff76ca4, medium: a
+## cut-off GOG upload left the cloud a mix of new and old files with nothing to finish it).
+func _mark_upload(key: String, parts: Array) -> void:
+	var note := {"at": int(clock.call()), "fp": SaveBackup.fingerprint(parts), "folders": parts.map(func(p): return str(p["path"]))}
+	_noted = SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(_sec(key), "uploading", note)) == OK
+
+
+func _clear_upload(key: String) -> void:
+	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
+		if not c.has_section_key(_sec(key), "uploading"):
+			return false
+		c.erase_section_key(_sec(key), "uploading")
+		return true)
+
+
+## A gogdl run that may upload location `l` with sync time `ts`: there are files and some is
+## newer than the time (or there is no time). The same test as _gog_upload_guard's.
+static func _gog_may_upload(l: Dictionary, ts: String) -> bool:
+	var st := CloudSaves.dir_stats(str(l["path"]))
+	return int(st["files"]) > 0 and (float(ts) <= 0.0 or int(st["newest"]) >= int(float(ts)))
+
+
+## The game's save folders as a sync sees them ([] when there is no plan).
+func _local_parts(entry: Dictionary, tools: Dictionary) -> Array:
+	if CloudSaves.kind_of(entry) == "epic":
+		var plan := CloudSaves.epic_plan(entry, tools)
+		return _epic_parts(entry, plan, str(entry.get("id", ""))) if plan["ok"] else []
+	var client := CloudSaves.gog_client_id(str(entry.get("install_path", "")), str(entry.get("id", "")))
+	var rc := SettingsFile.load_cfg(cfg_path)
+	var cached: Variant = rc.get_value("gog_remote", client) if client != "" and rc.has_section_key("gog_remote", client) else null
+	var gp := CloudSaves.gog_plan(entry, tools, cached)
+	return gp["locations"] if gp["ok"] else []
+
+
+func _epic_parts(entry: Dictionary, plan: Dictionary, app: String) -> Array:
+	var folder := str(plan.get("save_path", ""))
+	if folder == "":
+		folder = CloudSaves.epic_save_path(str(entry.get("config_dir", "")), app)
+	return [{"name": "saves", "path": folder}] if folder != "" else []
+
+
+## An upload of this game was cut short (its note from _mark_upload is still there): the cloud
+## may hold part of it. Before anything else syncs:
+##  - the folders are as they were then: the upload is finished (a forced one, so every file
+##    goes up and the cloud ends up exactly this handheld's save), after a copy of the cloud
+##    as it is now is kept. Not reachable: nothing else syncs for this game ("upload_cut"),
+##    the game still starts, and the next sync tries again;
+##  - they changed since (played from Heroic, a restore): finishing would mix it again, so a
+##    copy of the cloud is kept, the sync times are dropped and the sync goes on: it asks.
+## -> {} to go on, else the status dictionary this sync ends with.
+func _finish_upload(key: String, entry: Dictionary, plan: Dictionary, parts: Array) -> Dictionary:
+	var note: Variant = _cfg_value(key, "uploading", {})
+	if not note is Dictionary or note.is_empty():
+		return {}
+	var title := str(entry.get("title", key))
+	var epic := CloudSaves.kind_of(entry) == "epic"
+	var app := str(entry.get("id", ""))
+	var same: bool = SaveBackup.fingerprint(parts) == str(note.get("fp", "")) \
+			and parts.map(func(p): return str(p["path"])) == Array(note.get("folders", []))
+	var why := ""
+	if epic:
+		why = str(_epic_cloud_copy(key, title, entry, plan, app, str(parts[0]["path"]) if not parts.is_empty() else "")["why"])
+	else:
+		why = _gog_cloud_copy(key, title, plan, entry, parts, false)
+	if not same:
+		if why != "":
+			return _set_status(key, "upload_cut", why)   # not even a copy of the mixed cloud: wait
+		_drop_sync(key, true)
+		_clear_upload(key)
+		return {}
+	if why != "":
+		return _set_status(key, "upload_cut", why)
+	if epic:
+		var up := _legendary(plan, app, "force_upload")
+		if up["state"] in ["offline", "failed"]:
+			return _set_status(key, "upload_cut", str(up.get("error", "")))
+		_clear_upload(key)
+		return _set_status(key, "upload_finished", "", {"synced": true, "epic_path": str(parts[0]["path"]) if not parts.is_empty() else ""})
+	var ts := _gog_ts(key, entry, parts)
+	for l in parts:
+		var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_upload")
+		if r["action"] == "failed":
+			return _set_status(key, "upload_cut", str(r["error"]), {"gog_ts": ts})
+		if r["ts"] != "":
+			ts[l["name"]] = r["ts"]
+	_clear_upload(key)
+	return _set_status(key, "upload_finished", "", {"synced": true, "gog_ts": ts, "gog_paths": _gog_paths(parts)})
+
+
+## Games whose last upload was cut short, looked at once the Library knows them (its
+## `changed`), never while a game runs: each gets a "repair" job that finishes it
+## (_finish_upload) and says so, so the player hears about it at the next start, not only
+## at the game's next launch. Once per game and run.
+var _repair_tried := {}
+
+
+func repair_cut_uploads() -> void:
+	if not allowed() or game_running.call():
+		return
+	var cfg := SettingsFile.load_cfg(cfg_path)
+	for sec in cfg.get_sections():
+		if not sec.begins_with("game:") or not cfg.has_section_key(sec, "uploading"):
+			continue
+		var key := sec.trim_prefix("game:")
+		if _repair_tried.has(key) or busy(key) or not enabled(key):
+			continue
+		var entry: Dictionary = entry_lookup.call(key)
+		if entry.is_empty() or not applies(entry):
+			continue
+		_repair_tried[key] = true
+		_queue(entry, "repair", func(e, t): return _repair(key, e, t), Callable())
+
+
+func _repair(key: String, entry: Dictionary, tools: Dictionary) -> Dictionary:
+	var plan: Dictionary = CloudSaves.epic_plan(entry, tools) if CloudSaves.kind_of(entry) == "epic" else _gog_plan(entry, tools)
+	if not plan["ok"]:
+		return _set_status(key, "upload_cut", str(plan["why"]))
+	var parts: Array = _epic_parts(entry, plan, str(entry.get("id", ""))) if CloudSaves.kind_of(entry) == "epic" else plan["locations"]
+	var r := _finish_upload(key, entry, plan, parts)
+	if r.is_empty():
+		# changed here since: the sync that follows asks
+		return _sync(key, entry, tools, "now")
+	return r
 
 
 ## A plan with "moved" (a changed prefix) tells legendary the folder on every call until
@@ -530,12 +855,14 @@ func _gog_plan(entry: Dictionary, tools: Dictionary) -> Dictionary:
 		return plan
 	var client := str(plan["client_id"])
 	var cfg := SettingsFile.load_cfg(cfg_path)
-	var cached: Variant = cfg.get_value("gog_remote", client, null)
+	var cached: Variant = cfg.get_value("gog_remote", client) if cfg.has_section_key("gog_remote", client) else null
 	if cached == null:
-		var r: Dictionary = run.call("curl", PackedStringArray(["-sS", "--fail", "-m", "15", CloudSaves.GOG_REMOTE_CONFIG % client]))
+		var r: Dictionary = run.call("curl", CloudSaves.gog_remote_args(client))
 		if int(r.get("code", -1)) != 0:
 			return {"ok": false, "why": "offline"}
 		var locs: Variant = CloudSaves.parse_gog_remote(str(r.get("out", "")))
+		if locs is String and locs == "invalid":
+			return {"ok": false, "why": "offline"}   # not GOG's answer: asked again next time
 		cached = locs if locs != null else "none"
 		SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value("gog_remote", client, cached))
 	return CloudSaves.gog_plan(entry, tools, cached)
@@ -593,6 +920,9 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 	var cut := _recover(key, title, locs)
 	if cut != "":
 		return _set_status(key, "backup_failed", cut)
+	var cut_up := _finish_upload(key, entry, plan, locs)
+	if not cut_up.is_empty():
+		return cut_up
 	var b := {"ok": true, "id": "", "skipped": "empty"}
 	if mode != "post":
 		# gogdl's download deletes local files the cloud doesn't have: a copy first
@@ -601,22 +931,37 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 			return _set_status(key, "too_big" if b["why"] == "too_big" else "backup_failed", str(b["why"]))
 	var ts := _gog_ts(key, entry, locs)
 	var before := ts.duplicate()
-	# gogdl downloads into an empty folder whatever it was asked (after a game too)
-	var empty := _mark_download(key, b, locs)
+	if int(_cfg_value(key, "restored_at", 0)) > 0:
+		return _gog_after_restore(key, title, plan, entry, locs, ts, mode)
+	# gogdl downloads into an empty folder whatever it was asked (after a game too). After a
+	# game with no empty folder nothing can come down: no note, so a run killed then isn't
+	# taken for a cut download (review at ff76ca4, L10; the upload has its own note)
+	var empty: Array = []
+	if mode != "post" or locs.any(func(l): return not CloudSaves.has_files(str(l["path"]))):
+		empty = _mark_download(key, b, locs)
+		if not _noted:
+			return _set_status(key, "failed", NOTE_FAILED)
 	var step := str({"pre": "pre", "post": "post", "now": ""}[mode])
 	var acted := ""
 	var conflict := false
 	var cloud_newest := 0
 	var downloaded: Array = []
 	var waiting := ""
+	var marked := false
 	for l in locs:
 		var cur := str(ts.get(l["name"], "0"))
 		var r := {}
 		if mode != "pre":
+			if not marked and _gog_may_upload(l, cur):
+				_mark_upload(key, locs)   # an upload cut short is finished at the next sync
+				if not _noted:
+					return _set_status(key, "failed", NOTE_FAILED)
+				marked = true
 			# this run may upload, and gogdl's upload deletes cloud files the folder lacks
 			var guard := _gog_upload_guard(key, title, plan, entry, l, cur)
 			if guard.has("stop"):
 				_clear_mark(key)
+				_clear_upload(key)   # held before it began
 				return _set_status(key, "backup_failed", str(guard["stop"]), {"gog_ts": ts})
 			r = guard.get("result", {})
 		if r.is_empty():
@@ -636,7 +981,9 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 					# went through stays through, and keeps its new time)
 					for name in downloaded:
 						ts[name] = before.get(name, "0")
-				return _set_status(key, "offline" if r["offline"] else "failed", str(r["error"]) + back, {"gog_ts": ts})
+				# an upload may have been under way: the cloud may hold part of it (finished next time)
+				var failed_state := "upload_cut" if marked else ("offline" if r["offline"] else "failed")
+				return _set_status(key, failed_state, str(r["error"]) + back, {"gog_ts": ts})
 			"conflict":
 				conflict = true
 			"upload", "download":
@@ -656,13 +1003,65 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 	for l in locs:
 		local_newest = maxi(local_newest, int(CloudSaves.dir_stats(str(l["path"]))["newest"]))
 	_clear_mark(key)
+	_clear_upload(key)
 	var times := {"local": local_newest, "remote": cloud_newest, "gog_ts": ts, "gog_paths": _gog_paths(locs)}
 	if conflict:
-		return _set_status(key, "conflict", "", times)
+		var sides := _conflict_sides(key, entry, plan, locs)
+		sides["fresh"] = before.values().has("0") or before.size() < locs.size()
+		return _set_status(key, "conflict", "", times.merged(sides))
 	if waiting != "":
 		return _set_status(key, waiting, "", times)
 	var state := str({"upload": "uploaded", "download": "downloaded", "both": "synced", "": "synced"}[acted])
 	return _set_status(key, state, "", times.merged({"synced": true}, true))
+
+
+## A backup was put back and not synced since (review at ff76ca4: high 6 was only fixed for
+## Epic). gogdl decides by file times, and a restored backup's files carry their old ones:
+## with the cloud changed since the last sync it would download straight over the restore,
+## and with the cloud unchanged it would see nothing to do and never send the restore up.
+## So: the cloud is listed (gogdl's look). Changed since the last sync (or never synced):
+## a conflict with the restored save offered first. Unchanged: the restore goes up, the
+## whole of it (a forced upload, after a copy of the cloud: it deletes what the restore
+## lacks), right away when this run may upload, else after the game.
+func _gog_after_restore(key: String, title: String, plan: Dictionary, entry: Dictionary, locs: Array, ts: Dictionary, mode: String) -> Dictionary:
+	var changed := false
+	var cloud_newest := 0
+	for l in locs:
+		var cur := str(ts.get(l["name"], "0"))
+		var look := _gogdl(plan, entry, l, cur, "look")
+		if look["action"] == "failed":
+			return _set_status(key, "offline" if look["offline"] else "failed", str(look["error"]), {"gog_ts": ts})
+		cloud_newest = maxi(cloud_newest, int(look["cloud_newest"]))
+		if look["action"] in ["upload", "download"]:
+			# one side had no files: gogdl already did the whole sync of this location
+			if look["ts"] != "":
+				ts[l["name"]] = look["ts"]
+			continue
+		if float(cur) <= 0.0 or int(look["cloud_newest"]) > int(float(cur)) + CloudSaves.SLACK_S:
+			changed = true
+	var local_newest := 0
+	for l in locs:
+		local_newest = maxi(local_newest, int(CloudSaves.dir_stats(str(l["path"]))["newest"]))
+	var times := {"local": local_newest, "remote": cloud_newest, "gog_ts": ts, "gog_paths": _gog_paths(locs)}
+	if changed:
+		var sides := _conflict_sides(key, entry, plan, locs)
+		return _set_status(key, "conflict", "", times.merged(sides).merged({"prefer": "local"}))
+	if mode == "pre":
+		return _set_status(key, "pending_up", "", times)
+	var why := _gog_cloud_copy(key, title, plan, entry, locs, false)
+	if why != "":
+		return _set_status(key, "backup_failed", why, times)
+	_mark_upload(key, locs)
+	if not _noted:
+		return _set_status(key, "failed", NOTE_FAILED)
+	for l in locs:
+		var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_upload")
+		if r["action"] == "failed":
+			return _set_status(key, "upload_cut", str(r["error"]), {"gog_ts": ts})
+		if r["ts"] != "":
+			ts[l["name"]] = r["ts"]
+	_clear_upload(key)
+	return _set_status(key, "uploaded", "", times.merged({"synced": true, "gog_ts": ts}, true))
 
 
 ## Before a run that may upload location `loc`: lists the cloud (gogdl "look") and, when the
@@ -694,6 +1093,12 @@ func _gogdl(plan: Dictionary, entry: Dictionary, loc: Dictionary, ts: String, st
 
 func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String) -> Dictionary:
 	var title := str(entry.get("title", key))
+	# the sheet showed the save as it was when the conflict was found; if it changed since
+	# (played from Heroic, a restore), the choice was made on something that isn't there any
+	# more: look again instead (review at ff76ca4, L5). The caller sees a conflict again.
+	var seen := str(_cfg_value(key, "local_fp", ""))
+	if seen != "" and _local_parts(entry, tools).size() > 0 and SaveBackup.fingerprint(_local_parts(entry, tools)) != seen:
+		return _sync(key, entry, tools, "now")
 	match CloudSaves.kind_of(entry):
 		"epic":
 			var plan := CloudSaves.epic_plan(entry, tools)
@@ -705,8 +1110,13 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 			if cut != "":
 				return _set_status(key, "backup_failed", cut)
 			if choice == "cloud":
+				_clear_upload(key)   # the user chose the cloud's save: nothing of ours is left to finish
 				return _epic_download(key, entry, plan, app, {}, "force_download", {"epic_path": folder})
-			# Epic keeps the earlier cloud saves next to the new one, so uploading loses nothing there.
+			# Epic keeps the earlier cloud saves next to the new one, but nothing here could put
+			# one back: the cloud's save is fetched and kept as a backup first (no copy, no upload).
+			var copy := _epic_cloud_copy(key, title, entry, plan, app, folder)
+			if str(copy["why"]) != "":
+				return _set_status(key, "backup_failed", str(copy["why"]))
 			# legendary names the upload by the newest local file's time and every device takes the
 			# newest name, so an older save kept on purpose would lose again: its newest file is
 			# stamped now (the content isn't touched).
@@ -715,9 +1125,13 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 				var touched: Dictionary = run.call("touch", PackedStringArray(["-c", "--", newest]))
 				if int(touched.get("code", -1)) != 0:
 					return _set_status(key, "failed", "couldn't mark this handheld's save as the newest")
+			_mark_upload(key, [{"name": "saves", "path": folder}])
+			if not _noted:
+				return _set_status(key, "failed", NOTE_FAILED)
 			var up := _legendary(plan, app, "force_upload")
 			if up["state"] in ["offline", "failed"]:
-				return _set_status(key, up["state"], str(up.get("error", "")))
+				return _set_status(key, "upload_cut", str(up.get("error", "")))
+			_clear_upload(key)
 			return _set_status(key, "uploaded", "", {"synced": true, "epic_path": folder})
 		"gog":
 			var plan := _gog_plan(entry, tools)
@@ -739,24 +1153,118 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 			var ts := _gog_ts(key, entry, locs)
 			var before := ts.duplicate()
 			var empty: Array = _mark_download(key, b, locs) if choice == "cloud" else []
+			if not _noted:
+				return _set_status(key, "failed", NOTE_FAILED)
+			if choice == "local":
+				_mark_upload(key, locs)
+				if not _noted:
+					return _set_status(key, "failed", NOTE_FAILED)
 			for l in locs:
 				var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_download" if choice == "cloud" else "force_upload")
 				if r["action"] == "failed":
 					var back := _put_back(key, b, empty) if choice == "cloud" else ""
 					if choice == "cloud":
 						ts = before   # every folder is back as it was
-					return _set_status(key, "offline" if r["offline"] else "failed", str(r["error"]) + back, {"gog_ts": ts})
+					var failed_state := "upload_cut" if choice == "local" else ("offline" if r["offline"] else "failed")
+					return _set_status(key, failed_state, str(r["error"]) + back, {"gog_ts": ts})
 				if r["ts"] != "":
 					ts[l["name"]] = r["ts"]
 			_clear_mark(key)
+			_clear_upload(key)
 			return _set_status(key, "downloaded" if choice == "cloud" else "uploaded", "", {"synced": true, "gog_ts": ts, "gog_paths": _gog_paths(locs)})
 	return _set_status(key, "unsupported")
+
+
+## A conflict was found: what each side holds, so the sheet can tell a near-empty save from a
+## real one, and a copy of the cloud's save kept as a backup right away (before any choice can
+## replace it). The copy failing (offline) leaves the cloud's side unknown; the choice itself
+## takes its own copy again before it uploads.
+func _conflict_sides(key: String, entry: Dictionary, plan: Dictionary, locs: Array) -> Dictionary:
+	var out := {"local_files": 0, "local_bytes": 0, "cloud_files": -1, "cloud_bytes": -1, "local_fp": SaveBackup.fingerprint(locs)}
+	for l in locs:
+		var st := CloudSaves.dir_stats(str(l["path"]))
+		out["local_files"] += int(st["files"])
+		out["local_bytes"] += int(st["bytes"])
+	var title := str(entry.get("title", key))
+	var copy := {}
+	match CloudSaves.kind_of(entry):
+		"epic":
+			copy = _epic_cloud_copy(key, title, entry, plan, str(entry.get("id", "")), str(locs[0]["path"]) if not locs.is_empty() else "")
+		"gog":
+			var stats := {}
+			copy = {"why": _gog_cloud_copy(key, title, plan, entry, locs, false, stats)}
+			copy.merge(stats)
+	if str(copy.get("why", "x")) == "":
+		out["cloud_files"] = int(copy.get("files", 0))
+		out["cloud_bytes"] = int(copy.get("bytes", 0))
+	return out
+
+
+## Epic's newest cloud save fetched into a scratch folder and kept as a backup ("cloud
+## copy", restored into the game's own folder `folder`). legendary only downloads into the
+## save folder it keeps for the game, so it runs on a private copy of its config folder whose
+## installed.json names the scratch folder: the user's own legendary files never point
+## anywhere else, even if this is cut off. The sign-in (user.json) is copied, 0600, and gone
+## afterwards; should legendary refresh it meanwhile, the fresh one goes back to the user's
+## folder (unless something else changed that one), as legendary would have written it there.
+## -> {"why": "" when done (also when the cloud has no save), "files", "bytes"}.
+func _epic_cloud_copy(key: String, title: String, entry: Dictionary, plan: Dictionary, app: String, folder: String) -> Dictionary:
+	var cfg := str(entry.get("config_dir", ""))
+	var name := SaveBackup.game_dir_name(key)
+	var scratch := backup_dir.path_join(".cloud-" + name)
+	var tmp := backup_dir.path_join(".legendary-" + name)
+	_remove_tree(scratch)
+	_remove_tree(tmp)
+	if DirAccess.make_dir_recursive_absolute(tmp.path_join("metadata")) != OK or DirAccess.make_dir_recursive_absolute(scratch) != OK:
+		return _copy_failed(scratch, tmp, "couldn't make a scratch folder")
+	FileAccess.set_unix_permissions(tmp, FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER | FileAccess.UNIX_EXECUTE_OWNER)
+	var user := FileAccess.get_file_as_string(cfg.path_join("user.json"))
+	if user == "":
+		return _copy_failed(scratch, tmp, "signed out")
+	var inst: Variant = SettingsFile.load_json(cfg.path_join("installed.json")).get("data")
+	var mine: Dictionary = inst.get(app, {}).duplicate() if inst is Dictionary and inst.get(app) is Dictionary else {}
+	mine["save_path"] = scratch
+	var wrote := SettingsFile.save_text(tmp.path_join("user.json"), user, true) == OK
+	wrote = wrote and SettingsFile.save_json(tmp.path_join("installed.json"), {app: mine}) == OK
+	for f in ["metadata/%s.json" % app, "config.ini"]:
+		if wrote and FileAccess.file_exists(cfg.path_join(f)):
+			wrote = SettingsFile.save_bytes(tmp.path_join(f), FileAccess.get_file_as_bytes(cfg.path_join(f))) == OK
+	if not wrote:
+		return _copy_failed(scratch, tmp, "couldn't copy legendary's settings")
+	var cmd: Array = []
+	for c in plan["cmd"]:
+		var a := str(c)
+		if a == "LEGENDARY_CONFIG_PATH=" + cfg:
+			a = "LEGENDARY_CONFIG_PATH=" + tmp
+		elif a == "--env=LEGENDARY_CONFIG_PATH=" + cfg:
+			a = "--env=LEGENDARY_CONFIG_PATH=" + tmp
+		cmd.append(a)
+	var argv := CloudSaves.with_timeout(cmd, CloudSaves.legendary_args(app, "force_download"))
+	var r: Dictionary = run.call(argv[0], PackedStringArray(argv.slice(1)))
+	var got := CloudSaves.parse_legendary(str(r.get("out", "")), int(r.get("code", -1)))
+	var renewed := FileAccess.get_file_as_string(tmp.path_join("user.json"))
+	if renewed != "" and renewed != user and FileAccess.get_file_as_string(cfg.path_join("user.json")) == user:
+		SettingsFile.save_text(cfg.path_join("user.json"), renewed, true)
+	if got["state"] in ["offline", "failed"]:
+		return _copy_failed(scratch, tmp, str(got["error"]) if str(got["error"]) != "" else "couldn't reach Epic")
+	var st := CloudSaves.dir_stats(scratch)
+	var parts := [{"name": "saves", "path": scratch, "restore_path": folder if folder != "" else scratch}]
+	var b: Dictionary = backups.backup(key, title, "cloud_copy", parts, true, true)
+	_remove_tree(scratch)
+	_remove_tree(tmp)
+	return {"why": "" if b["ok"] else str(b["why"]), "files": int(st["files"]), "bytes": int(st["bytes"])}
+
+
+static func _copy_failed(scratch: String, tmp: String, why: String) -> Dictionary:
+	_remove_tree(scratch)
+	_remove_tree(tmp)
+	return {"why": why, "files": 0, "bytes": 0}
 
 
 ## Downloads every cloud file of each location into a scratch folder and backs that up
 ## ("cloud copy"). "" when done (or the cloud is empty), else why it couldn't. `again`:
 ## keep a copy even when the last cloud copy holds the same files.
-func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictionary, locs: Array, again: bool) -> String:
+func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictionary, locs: Array, again: bool, stats := {}) -> String:
 	var scratch := backup_dir.path_join(".cloud-" + SaveBackup.game_dir_name(key))
 	_remove_tree(scratch)
 	var parts: Array = []
@@ -769,6 +1277,9 @@ func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictio
 			return str(r["error"]) if r["error"] != "" else "couldn't reach GOG"
 		# restored into the real folder, should anyone want the cloud's version back
 		parts.append({"name": l["name"], "path": dir, "restore_path": l["path"]})
+		var st := CloudSaves.dir_stats(dir)
+		stats["files"] = int(stats.get("files", 0)) + int(st["files"])
+		stats["bytes"] = int(stats.get("bytes", 0)) + int(st["bytes"])
 	if not again:
 		var fp: String = SaveBackup.fingerprint(parts.filter(func(p): return int(CloudSaves.dir_stats(str(p["path"]))["files"]) > 0))
 		for old in backups.list(key):
@@ -778,23 +1289,8 @@ func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictio
 					return ""   # an upload that failed after its copy: the copy is already kept
 				break
 	var b: Dictionary = backups.backup(key, title, "cloud_copy", parts, true, true)
-	if b["ok"] and str(b["id"]) != "":
-		_point_parts(key, str(b["id"]), parts)
 	_remove_tree(scratch)
 	return "" if b["ok"] else str(b["why"])
-
-
-## A cloud copy is restored into the game's own folders, not the scratch one it came from.
-func _point_parts(key: String, id: String, parts: Array) -> void:
-	var path: String = backups.dir_for(key).path_join(id + ".json")
-	var j: Variant = SettingsFile.load_json(path).get("data")
-	if not j is Dictionary:
-		return
-	for p in j["parts"]:
-		for q in parts:
-			if str(q["name"]) == str(p["name"]):
-				p["path"] = str(q["restore_path"])
-	SettingsFile.save_json(path, j, "\t")
 
 
 static func _remove_tree(path: String) -> void:
@@ -813,6 +1309,7 @@ func _restore(key: String, title: String, id: String) -> Dictionary:
 		return {"ok": false, "why": str(before["why"])}
 	var r: Dictionary = backups.restore(key, id)
 	if r["ok"]:
+		_refresh_anchors(key, parts.map(func(p): return str(p["path"])))
 		var now: int = clock.call()
 		SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(_sec(key), "restored_at", now))
 		_set_status(key, "restored", str(b.get("time", 0)))

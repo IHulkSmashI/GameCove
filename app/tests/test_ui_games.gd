@@ -704,7 +704,7 @@ func test_game_closer_kill_script() -> void:
 	var log := bin.path_join("kills.log")
 	var files := {
 		# reaper 100 (AppId=42) with child 101, grandchild 102; reaper 200 is AppId=420
-		"pgrep": "#!/bin/sh\ncase \"$*\" in\n*\"-u 1000 -f SteamLaunch AppId=42( |$)\"*) echo 100 ;;\n\"-P 100\") echo 101 ;;\n\"-P 101\") echo 102 ;;\n\"-P 300\") echo 301 ;;\nesac\nexit 0\n",
+		"pgrep": "#!/bin/sh\ncase \"$*\" in\n*\"-u 1000 -f SteamLaunch AppId=42( |$)\"*) echo 100 ;;\n\"-P 100\") echo 101 ;;\n\"-P 101\") echo 102 ;;\n\"-P 300\") echo 301 ;;\n*\"-u 1000 -f -- gogdl( .*)? launch( .*)? 1207( |$)\"*) echo 500 ;;\n\"-P 500\") echo 501 ;;\nesac\nexit 0\n",
 		"ps": "#!/bin/sh\ncase \"$*\" in *\"-p 100\") echo ' 100' ;; *\"-p 300\") echo ' 7' ;; esac\n",
 		"id": "#!/bin/sh\necho 1000\n",
 		"fakekill": "#!/bin/sh\necho \"$*\" >> '%s'\n" % log,
@@ -731,5 +731,15 @@ func test_game_closer_kill_script() -> void:
 		"not a group leader (group 7 is someone else's): only the process and its children")
 	run.call(["TERM", "steam", "42; reboot"])
 	ok(not FileAccess.file_exists(log), "junk id: nothing signalled")
+	# review at ff76ca4, residual A: a game handed to Heroic, by Heroic's launch of it
+	run.call(["TERM", "handoff", "1207", "gogdl"])
+	eq(FileAccess.get_file_as_string(log).split("\n", false), PackedStringArray(["-TERM 501", "-TERM 500"]), "Heroic's gogdl launch of the game and what it started")
+	run.call(["TERM", "handoff", "1207", "rm"])
+	ok(not FileAccess.file_exists(log), "not a store tool: nothing signalled")
+	run.call(["TERM", "handoff", "1207|.*", "gogdl"])
+	ok(not FileAccess.file_exists(log), "an id that isn't one: nothing signalled")
+	var ho: Array = GC.plan({"key": "gog:1207", "store": "gog", "id": "1207"}, 3000000123, 4242, true)
+	eq(ho[0][0], ["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "TERM", "handoff", "1207", "gogdl"], "a handed-off launch: Heroic's launch first")
+	eq(GC.force_plan({"key": "gog:1207", "store": "gog", "id": "1207"}, 0, 4242, true)[0], ["sh", "-c", GC.KILL_SCRIPT, "gamecove-close", "KILL", "handoff", "1207", "gogdl"], "force too")
 	for f in files:
 		DirAccess.remove_absolute(bin.path_join(f))

@@ -7,6 +7,7 @@ const Service := preload("res://scripts/system/saves_service.gd")
 const CloudSaves := preload("res://scripts/system/cloud_saves.gd")
 const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 const Fakes := preload("res://tests/fixtures/saves/fake_clouds.gd")
+const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const BASE := "user://test_saves_safety"
 ## A day in the past the saves were made on, and the clock after it.
 const T0 := 1762000000
@@ -62,6 +63,7 @@ func _world(name: String) -> Dictionary:
 		"gog_cloud": gc, "epic_cloud": ec, "calls": [], "now": [T0 + 100000], "running": [false], "entries": {"gog:1207": gog, "epic:Min": epic}}
 	var s: Node = Service.new()
 	s.cfg_path = root.path_join("saves.cfg")
+	s.off_path = root.path_join("saves_off.json")
 	s.privacy_path = root.path_join("settings.cfg")
 	s.backup_dir = root.path_join("backups")
 	s.backups.base_dir = s.backup_dir
@@ -82,7 +84,16 @@ func _world(name: String) -> Dictionary:
 		w["calls"].append(tool + " " + " ".join(PackedStringArray(rest)))
 		w["now"][0] += 1
 		gc.now = int(w["now"][0])
-		return gc.run(rest) if tool == "gogdl" else ec.run(rest)
+		if tool == "gogdl":
+			return gc.run(rest)
+		# legendary reads its config folder from LEGENDARY_CONFIG_PATH (a cloud copy runs on a copy)
+		var own: String = ec.config
+		for x in a.slice(0, i):
+			if str(x).begins_with("LEGENDARY_CONFIG_PATH="):
+				ec.config = str(x).trim_prefix("LEGENDARY_CONFIG_PATH=")
+		var r: Dictionary = ec.run(rest)
+		ec.config = own
+		return r
 	w["s"] = s
 	return w
 
@@ -319,6 +330,130 @@ func test_gog_no_upload_without_the_cloud_copy() -> void:
 	_done(w)
 
 
+# ---- blocker 1 everywhere: the folder check doesn't need a sync to run (review at ff76ca4) ---
+
+## A world whose folder identities are ours to change: w["gen"][path] bumps when the test
+## "re-makes" a folder (a real stat can hand a deleted folder's inode to the next one).
+func _ided(w: Dictionary) -> void:
+	w["gen"] = {}
+	w["s"].folder_id = func(path: String) -> String:
+		return "" if not DirAccess.dir_exists_absolute(path) else path + "#" + str(w["gen"].get(path, 0))
+
+
+## GOG, sync switched off for the first launch after the prefix was lost: the launch sees the
+## empty folder and drops the sync time, so the blank save that game makes is a conflict
+## when sync is back on, never an upload that deletes the cloud's slots.
+func test_gog_lost_prefix_with_sync_off_never_uploads_the_blank_save() -> void:
+	var w := _world("gog_lost_sync_off")
+	var cloud: Object = w["gog_cloud"]
+	for slot in ["slot1.sav", "slot2.sav"]:
+		Fakes.put(w["gsaves"].path_join(slot), "progress " + slot, T0)
+	w["s"].sync_now(w["gog"])
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav"], "synced")
+	_rm(w["prefix"])
+	w["s"].set_enabled("gog:1207", false)
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "sync off: the game starts at once")
+	eq(str(Dictionary(_cfg(w, "gog:1207", "gog_ts", {})).get("saves", "0")), "0", "but the empty folder's sync time is gone")
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["gsaves"].path_join("settings.ini"), "defaults", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	w["s"].set_enabled("gog:1207", true)
+	cloud.did.clear()
+	w["s"].sync_now(w["gog"])
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav"], "both slots are still in the cloud")
+	ok(cloud.did.filter(func(x): return str(x).begins_with("delete cloud") or str(x).begins_with("upload")).is_empty(), "nothing uploaded or deleted (%s)" % str(cloud.did))
+	eq(w["s"].status(w["gog"])["state"], "conflict", "we ask")
+	_done(w)
+
+
+## Same with Epic and the user signed out of Epic at that launch.
+func test_epic_lost_prefix_while_signed_out_never_uploads_the_blank_save() -> void:
+	var w := _world("epic_lost_signed_out")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "40 hours", T0)
+	w["s"].sync_now(w["epic"])
+	eq(cloud.saves.size(), 1, "synced")
+	_rm(w["prefix"])
+	var user_json: String = w["epic"]["config_dir"].path_join("user.json")
+	DirAccess.remove_absolute(user_json)
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	eq(got, [{"go": true}], "signed out: the game starts")
+	eq(int(_cfg(w, "epic:Min", "last_sync", -1)), 0, "the sync time of the folder that's gone is dropped")
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["esaves"].path_join("world.sav"), "new game", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	_json(user_json, {})
+	w["s"].sync_now(w["epic"])
+	eq(cloud.saves.size(), 1, "nothing was uploaded")
+	eq(cloud.saves[-1]["files"]["world.sav"], "40 hours", "the cloud's newest save is the real one")
+	eq(w["s"].status(w["epic"])["state"], "conflict", "we ask")
+	_done(w)
+
+
+## A prefix lost and re-made while GameCove never looked (the game played from Heroic): the
+## folder is full again by the time we see it, but its prefix isn't the one we synced with.
+func test_remade_prefix_seen_only_after_the_fact_is_a_conflict() -> void:
+	var w := _world("remade_unseen")
+	_ided(w)
+	var cloud: Object = w["gog_cloud"]
+	for slot in ["slot1.sav", "slot2.sav"]:
+		Fakes.put(w["gsaves"].path_join(slot), "progress " + slot, T0)
+	w["s"].sync_now(w["gog"])
+	Fakes.put(w["esaves"].path_join("world.sav"), "40 hours", T0)
+	w["s"].sync_now(w["epic"])
+	ok(Dictionary(_cfg(w, "gog:1207", "anchors", {})).has(w["gsaves"]), "the folder's prefix is noted at the sync")
+	_rm(w["prefix"])
+	var drive: String = w["prefix"].path_join("drive_c")
+	w["gen"][drive] = 1
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["gsaves"].path_join("settings.ini"), "defaults", int(w["now"][0]))
+	Fakes.put(w["esaves"].path_join("world.sav"), "new game", int(w["now"][0]))
+	cloud.did.clear()
+	w["s"].sync_now(w["gog"])
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav"], "GOG: the slots stay")
+	ok(cloud.did.filter(func(x): return str(x).begins_with("upload")).is_empty(), "GOG: nothing uploaded")
+	eq(w["s"].status(w["gog"])["state"], "conflict", "GOG: we ask")
+	w["s"].sync_now(w["epic"])
+	eq(w["epic_cloud"].saves.size(), 1, "Epic: nothing uploaded")
+	eq(w["s"].status(w["epic"])["state"], "conflict", "Epic: we ask")
+	_done(w)
+
+
+## Our own put-back of a backup (a download that failed) isn't a new folder.
+func test_our_own_restore_keeps_the_folder_identity() -> void:
+	var w := _world("own_restore_identity")
+	var cloud: Object = w["gog_cloud"]
+	var folder: String = w["root"].path_join("gogsaves")   # outside any prefix: its own anchor
+	_json(w["gog"]["heroic_root"].path_join("GamesConfig/1207.json"), {"1207": {"gogSaves": [{"name": "saves", "location": folder}]}})
+	Fakes.put(folder.path_join("slot1.sav"), "progress", T0)
+	w["s"].sync_now(w["gog"])
+	var before := str(Dictionary(_cfg(w, "gog:1207", "anchors", {})).get(folder, ""))
+	ok(before != "", "noted (a real stat: %s)" % before)
+	Fakes.put(folder.path_join("slot2.sav"), "x", T0)
+	var b: Dictionary = w["s"].backups.backup("gog:1207", "The Witcher", "before_download", [{"name": "saves", "path": folder}], true)
+	w["s"]._put_back("gog:1207", b, [])
+	ok(not w["s"].folder_guard("gog:1207"), "the swapped-in folder still counts as ours")
+	ok(str(Dictionary(_cfg(w, "gog:1207", "gog_ts", {})).get("saves", "0")) != "0", "the sync time stays")
+	_done(w)
+
+
+func test_stat_id_reads_a_folder() -> void:
+	var dir := ProjectSettings.globalize_path(BASE).path_join("stat_id")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var id := Service.stat_id(dir)
+	eq(id.split(":").size(), 3, "device, inode and birth (%s)" % id)
+	eq(Service.stat_id(dir.path_join("missing")), "", "nothing for a folder that isn't there")
+	eq(CloudSaves.identity_anchor("/p/pfx/drive_c/users/steamuser/Documents/W"), "/p/pfx/drive_c", "a prefix folder: its drive_c")
+	eq(CloudSaves.identity_anchor("/games/W/saves"), "/games/W/saves", "elsewhere: the folder")
+	_rm(dir)
+
+
 # ---- blocker 1, Epic: a blank save never becomes the newest cloud save ------------------------
 
 ## Synced, prefix deleted, the launch can't reach Epic, the game writes a blank save. The
@@ -373,6 +508,122 @@ func test_epic_not_set_up_drops_the_last_sync() -> void:
 	w["s"].before_launch(w["epic"], func(r): got.append(r))
 	eq(w["s"].status(w["epic"])["state"], "not_set_up", "no prefix yet")
 	eq(int(_cfg(w, "epic:Min", "last_sync", -1)), 0, "an old sync time doesn't outlive the prefix")
+	_done(w)
+
+
+# ---- Epic variant: the conflict sheet and a copy of the cloud (review at ff76ca4) ---------------
+
+const SavesCard := preload("res://scripts/ui/games/saves_card.gd")
+const TS := preload("res://scripts/ui/texts_saves.gd")
+
+
+## The blank save after a lost prefix: the conflict keeps a copy of the cloud's save at once,
+## knows what both sides hold, and the sheet never calls the blank one Newer. legendary's own
+## files never point at the scratch folder the copy is made in.
+func test_epic_blank_save_conflict_keeps_the_cloud_and_isnt_newer() -> void:
+	var w := _world("epic_blank_sheet")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "40 hours of progress", T0)
+	Fakes.put(w["esaves"].path_join("world2.sav"), "and a second world", T0)
+	w["s"].sync_now(w["epic"])
+	var user_before := FileAccess.get_file_as_string(w["epic"]["config_dir"].path_join("user.json"))
+	_rm(w["prefix"])
+	cloud.offline = true
+	w["s"].before_launch(w["epic"], func(_r): pass)
+	cloud.offline = false
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["esaves"].path_join("world.sav"), "new", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	var st: Dictionary = w["s"].status(w["epic"])
+	eq(st["state"], "conflict", "asked")
+	ok(st["fresh"], "no sync time for this folder: in doubt")
+	eq([st["local_files"], st["cloud_files"]], [1, 2], "what each side holds")
+	var rows := SavesCard.conflict_rows(st, int(w["now"][0]))
+	eq(rows[0]["id"], "cloud", "the cloud's save first")
+	ok(rows.all(func(r): return r.get("value", "") != TS.NEWER or r["id"] == "cloud"), "the blank one is never Newer")
+	var copies: Array = w["s"].backup_list("epic:Min").filter(func(b): return b["reason"] == "cloud_copy")
+	eq(copies.size(), 1, "a copy of the cloud's save is kept already")
+	eq(cloud.save_path(), w["esaves"], "legendary still keeps the game's own folder")
+	eq(FileAccess.get_file_as_string(w["epic"]["config_dir"].path_join("user.json")), user_before, "the sign-in is untouched")
+	eq(Array(DirAccess.get_directories_at(w["s"].backup_dir)).filter(func(d): return d.begins_with(".")), [], "no scratch folder left behind")
+	# the copy goes back into the game's folder
+	var r: Dictionary = w["s"].backups.restore("epic:Min", str(copies[0]["id"]))
+	ok(r["ok"], "restorable")
+	eq(Fakes.walk(w["esaves"]), ["world.sav", "world2.sav"], "both worlds")
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "40 hours of progress", "the cloud's save")
+	_done(w)
+
+
+## Keeping this handheld's save over Epic's: the cloud's save is copied first, and without
+## that copy nothing is uploaded.
+func test_epic_keep_local_copies_the_cloud_first() -> void:
+	var w := _world("epic_keep_local_copy")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "here", T0)
+	cloud.saves.append({"t": T0 + 3000, "files": {"world.sav": "the cloud's"}})
+	w["s"].sync_now(w["epic"])
+	eq(w["s"].status(w["epic"])["state"], "conflict", "never synced, saves on both sides")
+	for b in w["s"].backup_list("epic:Min"):
+		DirAccess.remove_absolute(w["s"].backups.dir_for("epic:Min").path_join(str(b["id"]) + ".json"))
+	cloud.offline = true
+	w["s"].resolve(w["epic"], "local")
+	eq(cloud.saves.size(), 1, "no copy (offline): nothing uploaded")
+	eq(w["s"].status(w["epic"])["state"], "backup_failed", "and the status says why")
+	cloud.offline = false
+	w["s"].resolve(w["epic"], "local")
+	eq(cloud.saves[-1]["files"]["world.sav"], "here", "uploaded")
+	var copies: Array = w["s"].backup_list("epic:Min").filter(func(b): return b["reason"] == "cloud_copy")
+	eq(copies.size(), 1, "after a copy of the cloud's save")
+	w["s"].backups.restore("epic:Min", str(copies[0]["id"]))
+	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "the cloud's", "which holds the cloud's save")
+	_done(w)
+
+
+## GOG's side of it: the conflict after a lost prefix is marked as in doubt too.
+func test_gog_blank_save_conflict_is_in_doubt() -> void:
+	var w := _world("gog_blank_sheet")
+	for slot in ["slot1.sav", "slot2.sav"]:
+		Fakes.put(w["gsaves"].path_join(slot), "progress " + slot, T0)
+	w["s"].sync_now(w["gog"])
+	_rm(w["prefix"])
+	w["s"].set_enabled("gog:1207", false)
+	w["s"].before_launch(w["gog"], func(_r): pass)
+	w["now"][0] += 900
+	Fakes.put(w["prefix"].path_join("user.reg"), "reg")
+	Fakes.put(w["gsaves"].path_join("settings.ini"), "d", int(w["now"][0]))
+	w["s"].set_enabled("gog:1207", true)
+	w["s"].sync_now(w["gog"])
+	var st: Dictionary = w["s"].status(w["gog"])
+	eq(st["state"], "conflict", "asked")
+	ok(st["fresh"], "in doubt")
+	eq([st["local_files"], st["cloud_files"]], [1, 2], "what each side holds")
+	eq(w["s"].backup_list("gog:1207").filter(func(b): return b["reason"] == "cloud_copy").size(), 1, "the cloud's slots are copied already")
+	eq(SavesCard.conflict_rows(st, int(w["now"][0]))[0]["id"], "cloud", "the cloud's first on the sheet")
+	_done(w)
+
+
+# ---- the review's Low items (review at ff76ca4, section 3) ----------------------------------------
+
+## L1: a cloud save is named by when it was saved, not uploaded. Saved on another device before
+## our last sync and uploaded after it, it looked older than our sync, so "unchanged", and our
+## post-game upload buried it. The cloud save's own time at our last sync is kept and compared.
+func test_epic_a_cloud_save_older_than_our_sync_but_new_to_us_is_a_change() -> void:
+	var w := _world("epic_l1")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "ours", T0)
+	w["s"].sync_now(w["epic"])
+	eq(cloud.saves.size(), 1, "synced")
+	# the other device saved an hour after T0 (long before our sync), and only now uploaded
+	cloud.saves.append({"t": T0 + 3600, "files": {"world.sav": "the other device's"}})
+	cloud.offline = true
+	w["s"].before_launch(w["epic"], func(_r): pass)
+	cloud.offline = false
+	w["now"][0] += 900
+	Fakes.put(w["esaves"].path_join("world.sav"), "ours, played on", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	eq(cloud.saves[-1]["files"]["world.sav"], "the other device's", "nothing uploaded over it")
+	eq(w["s"].status(w["epic"])["state"], "conflict", "we ask")
 	_done(w)
 
 
@@ -494,6 +745,211 @@ func test_rotation_keeps_conflict_and_cloud_copies() -> void:
 	_done(w)
 
 
+## L2: with the clock behind (no network time yet after a flat battery) a new backup's stamp
+## sorted before the older ones, so rotation dropped the backup just made, and backup() said ok.
+func test_rotation_with_the_clock_behind_keeps_the_new_backup() -> void:
+	var w := _world("rotation_clock")
+	var bk: RefCounted = w["s"].backups
+	var parts := [{"name": "saves", "path": w["esaves"]}]
+	var t := [T0 + 100000]
+	bk.clock = func() -> int: return int(t[0])
+	for i in 10:
+		t[0] += 10
+		Fakes.put(w["esaves"].path_join("slot1.sav"), "launch %d" % i, T0 + i)
+		bk.backup("epic:Min", "M", "before_download", parts)
+	t[0] = T0 - 86400 * 365   # the clock a year behind
+	Fakes.put(w["esaves"].path_join("slot1.sav"), "the save before this download", T0 + 50)
+	var b: Dictionary = bk.backup("epic:Min", "M", "before_download", parts)
+	ok(b["ok"], "made")
+	ok(not bk.find("epic:Min", str(b["id"])).is_empty(), "and kept")
+	eq(str(bk.list("epic:Min")[0]["id"]), str(b["id"]), "it's the newest, whatever its stamp")
+	eq(bk.list("epic:Min").size(), 10, "the oldest one made went instead")
+	_done(w)
+
+
+## L3: a backup of two folders whose second can't be unpacked used to leave the first one
+## restored and the second not: a save from two different times. All or nothing now.
+func test_a_two_folder_restore_is_all_or_nothing() -> void:
+	var w := _world("restore_atomic")
+	var bk: RefCounted = w["s"].backups
+	var a: String = w["root"].path_join("a")
+	var b2: String = w["root"].path_join("b")
+	Fakes.put(a.path_join("slot.sav"), "a then", T0)
+	Fakes.put(b2.path_join("keys.ini"), "b then", T0)
+	var b: Dictionary = bk.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": a}, {"name": "cfg", "path": b2}])
+	Fakes.put(a.path_join("slot.sav"), "a now", T0 + 10)
+	Fakes.put(b2.path_join("keys.ini"), "b now", T0 + 10)
+	# the second folder's archive is damaged
+	var second: String = bk.dir_for("gog:1207").path_join(str(bk.find("gog:1207", str(b["id"]))["parts"][1]["file"]))
+	Fakes.put(second, "not a tar file")
+	var r: Dictionary = bk.restore("gog:1207", str(b["id"]))
+	ok(not r["ok"], "the restore fails")
+	eq(FileAccess.get_file_as_string(a.path_join("slot.sav")), "a now", "and the first folder wasn't touched either")
+	eq(FileAccess.get_file_as_string(b2.path_join("keys.ini")), "b now", "nor the second")
+	eq(Array(DirAccess.get_directories_at(w["root"])).filter(func(d): return d.contains(".gamecove-")), [], "nothing left next to them")
+	_done(w)
+
+
+## L4: a save folder with a linked subfolder (the tools follow links, so its files are part of
+## the save) was backed up as the bare link: the files themselves weren't in the backup.
+func test_a_linked_subfolder_is_backed_up_by_its_files() -> void:
+	var w := _world("backup_link")
+	var bk: RefCounted = w["s"].backups
+	var outside: String = w["root"].path_join("elsewhere")
+	Fakes.put(outside.path_join("slot2.sav"), "the linked slot", T0)
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "slot 1", T0)
+	OS.execute("ln", ["-s", outside, w["gsaves"].path_join("more")])
+	var b: Dictionary = bk.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": w["gsaves"]}])
+	ok(b["ok"], "backed up")
+	_rm(outside)
+	ok(bk.restore("gog:1207", str(b["id"]))["ok"], "restored")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("more/slot2.sav")), "the linked slot", "the linked folder's file came back")
+	_done(w)
+
+
+## L5: the sheet shows the save as it was when the conflict was found. Changed since (played
+## from Heroic), "keep the cloud" used to download over a save nobody had looked at.
+func test_a_choice_on_a_save_that_changed_since_asks_again() -> void:
+	var w := _world("resolve_changed")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "local", T0)
+	cloud.seed("saves", "slot1.sav", "cloud", T0 + 50)
+	w["s"].sync_now(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "conflict", "a conflict")
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "played on from Heroic", int(w["now"][0]))
+	var got := []
+	w["s"].resolve(w["gog"], "cloud", func(st): got.append(st))
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "played on from Heroic", "nothing downloaded over it")
+	eq(str(got[0]["state"]), "conflict", "asked again")
+	eq(int(got[0]["local_bytes"]), "played on from Heroic".length(), "with what's there now")
+	# asked again and chosen: it goes through
+	w["s"].resolve(w["gog"], "cloud")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "cloud", "the cloud's save")
+	_done(w)
+
+
+## L6: with sync off for a game, its launch didn't wait for a restore still at work on the
+## worker: the game could start while its folder was being swapped.
+func test_a_launch_with_sync_off_waits_for_a_restore_at_work() -> void:
+	var w := _world("launch_waits_restore")
+	w["s"].set_enabled("gog:1207", false)
+	var phases := []
+	w["s"].finished.connect(func(_k, ph, _st): phases.append(ph))
+	w["s"]._busy["gog:1207"] = "restore"   # a restore queued on the worker, not done yet
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append([r, phases.duplicate()]))
+	eq(got.size(), 1, "the launch goes ahead once")
+	eq(got[0][1], ["wait"], "after its turn on the worker, behind the restore")
+	_done(w)
+
+
+## L7: saves.cfg found damaged is set aside and read as empty, which switched sync back on for
+## every game the user had switched off, and later writes failed unseen.
+func test_a_damaged_saves_cfg_keeps_games_off_and_syncs_nothing() -> void:
+	var w := _world("cfg_damaged")
+	var cloud: Object = w["gog_cloud"]
+	cloud.seed("saves", "slot1.sav", "cloud", T0)
+	w["s"].set_enabled("gog:1207", false)
+	var f := FileAccess.open(w["s"].cfg_path, FileAccess.WRITE)
+	f.store_string("[game:gog:1207\nthis isn't a config file =")
+	f.close()
+	expect_error("ConfigFile parse error", 1)
+	ok(not w["s"].enabled("gog:1207"), "a game switched off stays off")
+	eq(w["s"].status(w["gog"])["state"], "off", "and says so")
+	w["s"].set_enabled("gog:1207", true)
+	var calls: int = w["calls"].size()
+	w["s"].sync_now(w["gog"])
+	eq(w["calls"].size(), calls, "with nowhere to keep what a sync does, nothing runs")
+	eq(w["s"].status(w["gog"])["state"], "state_unsaved", "and the status says why")
+	SettingsFile.reset_for_tests()
+	_done(w)
+
+
+## L7: a note that can't be written (a full disk) means no tool runs: a crash after it couldn't
+## be put right.
+func test_no_download_without_its_note() -> void:
+	var w := _world("note_unwritable")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "local", T0)
+	w["s"].sync_now(w["gog"])
+	cloud.seed("saves", "slot1.sav", "cloud, newer", int(w["now"][0]) + 500)
+	w["now"][0] += 1000
+	SettingsFile.test_write_limit = 0   # every write from here comes out short
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	SettingsFile.reset_for_tests()
+	eq(got, [{"go": true}], "the game still starts")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "local", "nothing downloaded without its note")
+	_done(w)
+
+
+## L8: the remote-config answer from behind a captive portal isn't kept; the next sync asks GOG again.
+func test_a_captive_portal_answer_isnt_cached() -> void:
+	var w := _world("captive")
+	var install: String = w["gog"]["install_path"]
+	_json(install.path_join("goggame-1207.info"), {"clientId": "53035488294233580"})
+	_json(w["gog"]["heroic_root"].path_join("store_cache/gog_library.json"), {"games": []})
+	var answers := ["<html>hotel wifi</html>"]
+	var real: Callable = w["s"].run
+	w["s"].run = func(program: String, args: PackedStringArray) -> Dictionary:
+		if program == "curl":
+			return {"code": 0, "out": answers[0]}
+		return real.call(program, args)
+	w["s"].sync_now(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "offline", "said as offline, not 'no cloud saves'")
+	var c := ConfigFile.new()
+	c.load(w["s"].cfg_path)
+	ok(not c.has_section_key("gog_remote", "53035488294233580"), "and nothing kept")
+	answers[0] = JSON.stringify({"content": {"Windows": {"cloudStorage": {"enabled": true, "locations": []}}}})
+	w["s"].sync_now(w["gog"])
+	ok(w["s"].status(w["gog"])["state"] != "unsupported", "GOG's real answer next time (%s)" % w["s"].status(w["gog"])["state"])
+	_done(w)
+
+
+## L9: a cloud copy's backup named the scratch folder and was pointed at the game's folder
+## only after it was written; an app killed in between left it restoring into the scratch
+## folder. The folder it goes back into is written with the backup itself.
+func test_a_cloud_copy_names_the_game_folder_from_the_start() -> void:
+	var w := _world("copy_path")
+	var bk: RefCounted = w["s"].backups
+	var scratch: String = w["root"].path_join("scratch")
+	Fakes.put(scratch.path_join("slot1.sav"), "the cloud's", T0)
+	var b: Dictionary = bk.backup("gog:1207", "W", "cloud_copy", [{"name": "saves", "path": scratch, "restore_path": w["gsaves"]}], true, true)
+	eq(str(bk.find("gog:1207", str(b["id"]))["parts"][0]["path"]), w["gsaves"], "the game's folder, as written")
+	_done(w)
+
+
+## L10: a post-game GOG run killed mid-way left a download note with nothing to put back, and
+## the next sync dropped the sync times and asked for nothing.
+func test_a_killed_post_game_run_is_not_a_cut_download() -> void:
+	var w := _world("killed_post")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	# the app is killed during the post-game run: whatever notes it wrote stay
+	var real: Callable = w["s"].run
+	w["s"].run = func(program: String, args: PackedStringArray) -> Dictionary:
+		if program == "timeout" and "save-sync" in Array(args):
+			return {"code": 137, "out": "Killed"}
+		return real.call(program, args)
+	w["s"].after_exit(w["gog"])
+	w["s"].run = real
+	eq(_cfg(w, "gog:1207", "pending", {}), {}, "no download note: nothing could come down")
+	# a note an older build left that way
+	var c := ConfigFile.new()
+	c.load(w["s"].cfg_path)
+	c.set_value("game:gog:1207", "pending", {"backup": "", "empty": []})
+	c.erase_section_key("game:gog:1207", "uploading")
+	c.save(w["s"].cfg_path)
+	w["s"].sync_now(w["gog"])
+	ok(w["s"].status(w["gog"])["state"] != "conflict", "the next sync doesn't ask for nothing (%s)" % w["s"].status(w["gog"])["state"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 2", "it just uploads")
+	_done(w)
+
+
 ## The service marks the backups a choice or a restore made.
 func test_choice_backups_are_kept_apart() -> void:
 	var w := _world("pinned")
@@ -537,6 +993,105 @@ func test_epic_keep_local_becomes_the_newest_cloud_save() -> void:
 	_done(w)
 
 
+# ---- high 5: the guard follows the game's processes (review at ff76ca4) ------------------------
+
+## The session can end while the game still runs (app quitting, a launch given up on): a
+## conflict choice, a restore and Sync now are still refused until its process is gone.
+func test_choices_wait_for_the_games_processes_not_the_session() -> void:
+	var w := _world("guard_processes")
+	var GS := preload("res://scripts/launch/game_session.gd")
+	var session: Node = GS.new()
+	var alive := [true]
+	session.pid_running = func(_p: int) -> bool: return alive[0]
+	session.unit_alive = func(_u: String) -> bool: return false
+	w["s"].game_running = func() -> bool: return session.processes_alive()
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "progress", T0)
+	w["gog_cloud"].seed("saves", "slot1.sav", "cloud", T0 + 50)
+	w["s"].sync_now(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "conflict", "a conflict to settle")
+	session.begin(w["gog"], {"ok": true, "app_id": 0, "pid": 4242})
+	session.stop()
+	eq(session.phase, "idle", "the session ended")
+	ok(not w["s"].resolve(w["gog"], "cloud"), "the choice is refused: the game's process still runs")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "progress", "nothing swapped under it")
+	var res := []
+	w["s"].restore(w["gog"], "x", func(r): res.append(r))
+	eq(res, [{"ok": false, "why": "running"}], "a restore too")
+	var calls: int = w["calls"].size()
+	w["s"].sync_now(w["gog"])
+	eq(w["calls"].size(), calls, "and Sync now")
+	alive[0] = false
+	ok(w["s"].resolve(w["gog"], "cloud"), "gone: the choice goes ahead")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "cloud", "the cloud's save")
+	session.free()
+	_done(w)
+
+
+# ---- high 6, GOG: a restore holds too (review at ff76ca4) ----------------------------------------
+
+## Synced, then a bad session went up; the user restores the backup from before it. Another
+## device uploads meanwhile. The next launch used to download straight over the restore
+## (gogdl: only the cloud is newer than --ts, the restored files carry their old times).
+func test_gog_restore_is_not_undone_at_the_next_launch() -> void:
+	var w := _world("gog_restore")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "before the bad day", T0)
+	var bk: Dictionary = w["s"].backups.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": w["gsaves"]}])
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "after the bad day", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "after the bad day", "the bad save went up")
+	var res := []
+	w["s"].restore(w["gog"], str(bk["id"]), func(r): res.append(r))
+	ok(res[0]["ok"], "restored")
+	w["now"][0] += 900
+	cloud.now = int(w["now"][0])
+	cloud.seed("saves", "slot1.sav", "another device, also bad", int(w["now"][0]))
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "the launch asks instead of downloading over the restore")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "before the bad day", "the restore is still in place")
+	eq(got[0]["conflict"].get("prefer", ""), "local", "the restored side is offered first")
+	w["s"].resolve(w["gog"], "local")
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "before the bad day", "kept: the restore is the cloud's save now")
+	got.clear()
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the next launch just starts")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "before the bad day", "with the restored save")
+	_done(w)
+
+
+## The cloud didn't change since: the whole restore goes up after the game (gogdl alone saw
+## nothing to do and the cloud kept the bad save; a played slot alone would have gone up,
+## leaving the cloud a mix).
+func test_gog_restore_goes_up_whole_when_the_cloud_didnt_change() -> void:
+	var w := _world("gog_restore_up")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "good 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "good 2", T0)
+	var bk: Dictionary = w["s"].backups.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": w["gsaves"]}])
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "bad 1", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "bad 2", int(w["now"][0]))
+	w["s"].sync_now(w["gog"])
+	eq(cloud.cloud["saves/slot2.sav"]["data"], "bad 2", "the bad saves went up")
+	w["s"].restore(w["gog"], str(bk["id"]))
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the game starts")
+	eq(w["s"].status(w["gog"])["state"], "pending_up", "the restore waits to go up after the game")
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "good 1, played on", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "good 1, played on", "the played slot went up")
+	eq(cloud.cloud["saves/slot2.sav"]["data"], "good 2", "and the restored slot that wasn't played")
+	eq(w["s"].status(w["gog"])["state"], "uploaded", "uploaded")
+	eq(int(_cfg(w, "gog:1207", "restored_at", 0)), 0, "settled")
+	_done(w)
+
+
 # ---- high 6: an Epic restore holds ---------------------------------------------------------------
 
 ## A restored backup has old file times, so legendary sees "cloud newer" and the next launch
@@ -558,7 +1113,8 @@ func test_epic_restore_is_not_undone_at_the_next_launch() -> void:
 	w["s"].before_launch(w["epic"], func(r): got.append(r))
 	ok(got[0].has("conflict"), "the launch asks instead of downloading over the restore")
 	eq(FileAccess.get_file_as_string(w["esaves"].path_join("world.sav")), "before the bad day", "the restore is still in place")
-	eq(w["s"].backup_list("epic:Min").size(), before, "and no backup slot was used up")
+	var added: Array = w["s"].backup_list("epic:Min").slice(0, w["s"].backup_list("epic:Min").size() - before)
+	eq(added.map(func(b): return b["reason"]), ["cloud_copy"], "no everyday backup slot used up: only a copy of the cloud's save")
 	eq(got[0]["conflict"].get("prefer", ""), "local", "the restored side is the one offered first")
 	# keeping it makes it the cloud's newest
 	w["s"].resolve(w["epic"], "local")
@@ -668,9 +1224,127 @@ func test_gog_a_failed_location_after_play_keeps_what_was_uploaded() -> void:
 	cloud.fail_names = []
 	w["now"][0] += 100
 	w["s"].after_exit(w["gog"])
-	eq(w["s"].status(w["gog"])["state"], "uploaded", "the retry finishes location 2 without calling location 1 a conflict")
+	eq(w["s"].status(w["gog"])["state"], "upload_finished", "the retry finishes the cut upload (location 2) without calling location 1 a conflict")
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 2", "location 1 stays as uploaded")
 	eq(cloud.cloud["cfg/keys.ini"]["data"], "esdf", "location 2 went up")
 	_done(w)
+
+
+# ---- an upload cut short (review at ff76ca4, medium) --------------------------------------------
+
+## Two slots changed, the upload is killed after one (the 90 s cap): the cloud is a mix of a
+## new slot 1 and an old slot 2. The note stays, the status says so, and the next sync, before
+## anything else, finishes it (a copy of the cloud first): never a download of the mix.
+func test_gog_cut_upload_is_finished_before_anything_else() -> void:
+	var w := _world("gog_cut_upload")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload_after = 1
+	w["s"].after_exit(w["gog"])
+	eq([cloud.cloud["saves/slot1.sav"]["data"], cloud.cloud["saves/slot2.sav"]["data"]], ["hour 2", "hour 1"], "cut: the cloud is a mix")
+	eq(w["s"].status(w["gog"])["state"], "upload_cut", "the status says the upload was cut off")
+	ok(not Dictionary(_cfg(w, "gog:1207", "uploading", {})).is_empty(), "and the note stays")
+	# another device downloading the mix is beyond us; here, the next launch finishes it first
+	cloud.cut_upload_after = -1
+	cloud.did.clear()
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "the game starts")
+	eq([cloud.cloud["saves/slot1.sav"]["data"], cloud.cloud["saves/slot2.sav"]["data"]], ["hour 2", "hour 2"], "the upload is finished")
+	ok(cloud.did.filter(func(x): return str(x).begins_with("download")).size() > 0 and Fakes.walk(w["gsaves"]) == ["slot1.sav", "slot2.sav"], "after a copy of the cloud (fetched into a scratch folder)")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot2.sav")), "hour 2", "nothing of the mix came down here")
+	eq(w["s"].status(w["gog"])["state"], "upload_finished", "and the status says so in plain words")
+	eq(_cfg(w, "gog:1207", "uploading", {}), {}, "the note is gone")
+	eq(w["s"].backup_list("gog:1207").filter(func(b): return b["reason"] == "cloud_copy").size(), 1, "the mix is kept as a cloud copy")
+	_done(w)
+
+
+## While it can't be finished (offline), nothing else syncs for that game: no download of the mix.
+func test_gog_cut_upload_blocks_other_syncs_until_finished() -> void:
+	var w := _world("gog_cut_upload_offline")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload_after = 1
+	w["s"].after_exit(w["gog"])
+	cloud.cut_upload_after = -1
+	# someone else's newer slot 2 lands in the cloud meanwhile; we're offline at the launch
+	cloud.offline = true
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "offline: the game starts")
+	eq(w["s"].status(w["gog"])["state"], "upload_cut", "still waiting to finish")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot2.sav")), "hour 2", "this handheld's save untouched")
+	ok(not Dictionary(_cfg(w, "gog:1207", "uploading", {})).is_empty(), "the note stays for the next try")
+	cloud.offline = false
+	_done(w)
+
+
+## Played on elsewhere since the cut (from Heroic): finishing would mix again. A copy of the
+## cloud is kept and we ask.
+func test_gog_cut_upload_changed_since_asks() -> void:
+	var w := _world("gog_cut_upload_changed")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload_after = 1
+	w["s"].after_exit(w["gog"])
+	cloud.cut_upload_after = -1
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 3, from Heroic", int(w["now"][0]))
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "we ask")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot2.sav")), "hour 3, from Heroic", "nothing came down over it")
+	ok(w["s"].backup_list("gog:1207").any(func(b): return b["reason"] == "cloud_copy"), "the cloud's mix is kept as a copy")
+	eq(_cfg(w, "gog:1207", "uploading", {}), {}, "the note is settled")
+	_done(w)
+
+
+## Epic: an upload killed before legendary wrote its manifest. The next start (the Library
+## loading) finishes it on its own, and says so.
+func test_epic_cut_upload_is_finished_at_the_next_start() -> void:
+	var w := _world("epic_cut_upload")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "hour 1", T0)
+	w["s"].sync_now(w["epic"])
+	w["now"][0] += 900
+	Fakes.put(w["esaves"].path_join("world.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload = true
+	w["s"].after_exit(w["epic"])
+	eq(cloud.saves[-1]["files"]["world.sav"], "hour 1", "cut before the manifest")
+	eq(w["s"].status(w["epic"])["state"], "upload_cut", "said so")
+	cloud.cut_upload = false
+	# the next start: a fresh service, the Library comes up
+	var lib := RepairLibrary.new()
+	var phases := []
+	w["s"].finished.connect(func(k, ph, st): phases.append([k, ph, st]))
+	w["s"].setup_library(lib)
+	w["s"].entry_lookup = func(k: String) -> Dictionary: return w["entries"].get(k, {}).duplicate()
+	lib.changed.emit()
+	eq(phases, [["epic:Min", "repair", "upload_finished"]], "finished at the start, before any launch")
+	eq(cloud.saves[-1]["files"]["world.sav"], "hour 2", "the save is up")
+	lib.changed.emit()
+	eq(phases.size(), 1, "once")
+	lib.free()
+	_done(w)
+
+
+class RepairLibrary extends Node:
+	signal changed
 
 
 # ---- high 10: a download cut short ------------------------------------------------------------------

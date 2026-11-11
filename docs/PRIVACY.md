@@ -67,8 +67,8 @@ release. The app's own releases (what `get-gamecove.sh` installs) stay on IHulkS
 | 16 | Wake-on-LAN: your LAN's broadcast addresses, and every address saved for that PC, which includes a remote (internet) address or host name if you added the PC by one; UDP ports 9, 47009 and five around the PC's GameStream port | The wake packet, which is your PC's MAC address | You wake a PC | You start it | `wol.gd` |
 | 17 | 127.0.0.1 (Steam's CEF debugger; Handheld Daemon) | Local only | Opt-in Steam control; controller settings | — | `app/scripts/steam/`, `hhd_client.gd` |
 | 18 | legendary.gl, auth.gog.com, Amazon | The sign-in code you type back | You sign in to a store | You start it | `app/scripts/library/stores/` |
-| 18a | Epic (through legendary `sync-saves`), GOG cloud storage (through heroic-gogdl `save-sync`) | Your save files for that game and your store sign-in (legendary's / Heroic's own tokens; GameCove never reads them) | Just before an installed Epic or GOG game starts and just after it ends; Sync now on its page or in Settings > Saves; a conflict you settle. Never while a game runs | Sync cloud saves (also per game) | `app/scripts/system/saves_service.gd`, `cloud_saves.gd` |
-| 18b | remote-config.gog.com (`components/galaxy_client/clients/<client id>`) | The game's GOG client id (from its `goggame-<id>.info`), nothing about you | Once per game, the first sync of a GOG game whose save folders Heroic doesn't list (games GameCove installed with gogdl); the answer is cached in `user://saves.cfg` | Sync cloud saves | `saves_service.gd` (`_gog_plan`) |
+| 18a | Epic (through legendary `sync-saves`), GOG cloud storage (through heroic-gogdl `save-sync`) | Your save files for that game and your store sign-in (legendary's / Heroic's own tokens; GameCove never reads them. For a copy of Epic's cloud save, legendary's sign-in file is copied unread into a private 0600 folder of ours for that one run and deleted after) | Just before an installed Epic or GOG game starts and just after it ends; Sync now on its page or in Settings > Saves; a conflict (a copy of the cloud's save is fetched when one is found) and the choice you make; once at start for a game whose last upload was cut off, to finish it. Never while a game runs | Sync cloud saves (also per game) | `app/scripts/system/saves_service.gd`, `cloud_saves.gd` |
+| 18b | remote-config.gog.com (`components/galaxy_client/clients/<client id>`) | The game's GOG client id (from its `goggame-<id>.info`), nothing about you | Once per game, the first sync of a GOG game whose save folders Heroic doesn't list (games GameCove installed with gogdl); the answer is cached in `user://saves.cfg` (an answer that isn't GOG's, such as a captive portal's page, never is) | Sync cloud saves | `saves_service.gd` (`_gog_plan`) |
 | 19 | www.steamgriddb.com (`games/steam/400`) | Your SteamGridDB key (bearer header), once | You send or type your key in the Game art step: one request checks it before it is saved | You start it (needs Look up game details) | `app/scripts/ui/setup/art_key_step.gd`, `sgdb.gd` (`check_url`) |
 | 20 | Inbound, on your LAN only: your phone opens GameCove's one-time page | Your phone sends the key you paste; GameCove sends the page (no scripts, nothing from outside) | Only after you choose **Send from my phone** in the Game art step (showing the step opens nothing), until the key arrives, you leave the step or 10 minutes pass by the clock | You start it | `app/scripts/system/key_drop.gd` |
 | 21 | Inbound, on your LAN only: your phone opens a clip's one-time page | GameCove sends the page and the one clip you picked; your phone sends nothing but its requests | Only while the Send to phone code shows: until the clip is downloaded in full, you close it, or 10 minutes pass | You start it | `app/scripts/system/clip_drop.gd` |
@@ -157,12 +157,17 @@ art your games are missing (row 9).
 ## Files GameCove writes for cloud saves and battery history
 
 - `user://saves.cfg`: per game, its sync switch, the last sync time, how it stands, gogdl's timestamps and the save
-  folders they were made with, and a note while a download is replacing a save folder; GOG's remote-config answers
-  per client id.
+  folders they were made with (and the identity of their prefix: `stat` device, inode and birth time), a note while a
+  download is replacing a save folder or an upload is going up, what both sides of a conflict hold; GOG's
+  remote-config answers per client id.
+- `user://saves_off.json`: the games whose cloud-save switch is off, kept apart from `saves.cfg` so a damaged
+  `saves.cfg` never switches them back on.
 - `user://saves/backups/<game>/`: the local backups (`<time>-<n>.tar.gz` per save folder and `<time>.json` listing
   them), at most 10 everyday ones per game plus 10 made by a choice, a restore or a copy of the cloud. Taken before a
-  cloud save replaces one on the handheld, before a restore, and of the cloud's copy before a GOG upload would delete
-  files from it.
+  cloud save replaces one on the handheld, before a restore, and of the cloud's save when a conflict is found, before
+  this handheld's save is kept over it, before a GOG upload would delete files from it and before a cut-off upload is
+  finished. While an Epic copy is made, `.cloud-<game>/` and `.legendary-<game>/` (0700, legendary's settings and
+  sign-in copied for that run) sit next to them and are deleted after.
 - `user://steam_libraries.json`: the Steam library folders seen on this handheld and the app ids each held, so Clean
   up never offers the shader caches of games on a card that isn't in. Never sent anywhere.
 - `user://gamecove.pid`: the process id of the running home screen, so a second one steps aside.

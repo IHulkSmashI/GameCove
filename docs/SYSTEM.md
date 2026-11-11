@@ -318,17 +318,28 @@ Heroic makes. Steam games keep Steam Cloud. Amazon games aren't covered: nile ha
 | Store | Tool | Look / before a launch / after a game / a conflict |
 | --- | --- | --- |
 | Epic | legendary (native, Heroic's bundled one, or `flatpak run --command=legendary com.heroicgameslauncher.hgl`) | `legendary -y sync-saves <app> --accept-path --skip-upload --skip-download` to look; `--skip-upload` downloads, `--skip-download` uploads, `--force-download` / `--force-upload` settle a conflict. `LEGENDARY_CONFIG_PATH` is the game's legendary folder, `WINEPREFIX` its prefix (`<prefix>/pfx` for Proton layouts) so legendary finds the save folder; it keeps it in `installed.json` `save_path` |
-| GOG | heroic-gogdl (native or Heroic's Flatpak) | `gogdl --auth-config-path <heroic>/gog_store/auth.json save-sync <folder> <id> --os windows --ts <last> --name <location>` with `--skip-upload` before a launch, `--skip-download` after, `--force-*` for a conflict. Folders from Heroic's `GamesConfig/<id>.json` `gogSaves`, else `store_cache/gog_library.json` `gog_save_location` with GOG's `<?VARIABLES?>` resolved in the prefix, else GOG's remote config for the game's client id; the timestamps start from Heroic's `gog_store/saveTimestamps.json` |
+| GOG | heroic-gogdl (native or Heroic's Flatpak) | `gogdl --auth-config-path <heroic>/gog_store/auth.json save-sync <folder> <id> --os windows --ts <last> --name <location>` with `--skip-upload` before a launch, `--skip-download` after, `--force-*` for a conflict. Folders from Heroic's `GamesConfig/<id>.json` `gogSaves`, else `store_cache/gog_library.json` `gog_save_location` with GOG's `<?VARIABLES?>` resolved in the prefix, else GOG's remote config for the game's client id (digits only, `^[0-9]{1,32}$`, asked with `curl --proto =https -g --max-filesize 1048576 -- <url>`; a resolved location must stay inside the install folder or the prefix); the timestamps start from Heroic's `gog_store/saveTimestamps.json` |
 
 Rules: never while a game runs (one worker thread, before `Library.launch()` and after `GameSession.ended`; Sync now,
-a restore and a conflict choice are refused while one runs). Epic: a side counts as changed when its newest save is past our last sync (60 s slack, as
+a restore and a conflict choice are refused while one runs). "Runs" is the game's processes, not the session
+(`GameSession.processes_alive()`): a session that ended while its game was still there (the app quitting, a launch
+given up on) keeps counting until its pid, its `app-steam-app<id>-<n>.scope` (`systemctl --user is-active`) and, for
+Steam, its reaper are gone. A launch of a game whose sync is off still waits its turn on the worker while a restore
+of it is queued or running. One game at a time: Play on another game, app or stream while one runs
+asks "Close <game> first?" (`main.gd` `_close_first`); "Keep playing" comes first and B is the same. Yes closes the running game the way Exit game
+does, and the next one starts only after the session saw it exit and its exit sync (`after_exit`, phase `post`) is done
+(given up when the game doesn't close within 2 minutes). `GameSession.begin()` never ends a running session: starting
+a second game used to fire the first one's `ended` under it, so its upload ran mid-write, Sync now and Restore were
+allowed under it, its real exit was never uploaded, and Controls were left on "no game". Epic: a side counts as changed when its newest save is past our last sync (60 s slack, as
 legendary's own same-age check); both changed, or never synced with saves on both sides, is a conflict the user
 settles (the launch waits; B starts nothing; "Decide later" plays without syncing). GOG: gogdl's own classification;
 the fresh timestamp it prints on a conflict is never kept. Before anything may overwrite saves on the handheld
 (legendary's download empties the folder first, gogdl's deletes files the cloud doesn't have) the folders are backed
-up with `tar` into `user://saves/backups/<game>/`; a download that fails puts the backup back. Settling a GOG conflict
-for this handheld first fetches the cloud's files into a scratch folder and keeps them as a backup too (gogdl's forced
-upload deletes cloud files the handheld doesn't have); Epic keeps earlier cloud saves itself. A save folder over 1 GiB
+up with `tar -h` (a linked subfolder's files, not the link) into `user://saves/backups/<game>/`; a download that fails puts the backup back. Before anything may
+overwrite the cloud's save the other way, the cloud's save is fetched into a scratch folder and kept as a backup
+too: when a conflict is found, and again when "Keep this handheld's save" is picked (GOG's forced upload deletes cloud
+files the handheld doesn't have; Epic keeps earlier cloud saves itself, but nothing on the handheld could put one
+back). No copy, no upload. A save folder over 1 GiB
 (a game that saves into its install folder) isn't backed up, so nothing is downloaded over it. Offline, signed out or a
 failed step: the game starts, nothing is deleted, the status says so and the next launch or exit tries again. Every
 step runs under `timeout 90`. Status per game in `user://saves.cfg`; the game page's Cloud saves card and Settings >
@@ -344,6 +355,14 @@ What keeps a save from being lost (final review; each has a test against ports o
   for (`gog_paths`), and the whole game's when there is no folder to sync yet; Heroic's time is only a fallback for a
   folder Heroic itself synced. Epic: `last_sync` is dropped the same way (`epic_path`). Uninstalling forgets both. With
   no sync time both sides count as changed and the user chooses.
+- **That check runs without a sync too** (`folder_guard`). Every launch and every game's end of an Epic or GOG game
+  looks at the folders the last sync knew, whether cloud saves are on, allowed or signed in or not, and so does every
+  sync before it does anything else. A folder that is empty or gone loses its sync time right then, so a blank save the
+  game makes at a launch with sync off or signed out still asks later instead of going up. Each sync also notes the
+  identity (`stat` device, inode and birth time; `anchors` in `saves.cfg`) of the folder's prefix (`drive_c`), or of
+  the folder itself outside a prefix: a prefix deleted and made again while GameCove never looked (the game played from
+  Heroic) has another identity, so its fresh save asks too. A backup we put back ourselves keeps its identity. Purely
+  local: nothing goes over the network.
 - **A copy of the cloud before an upload may delete from it.** Before a run that may upload, gogdl is run once with a
   `--ts` in the far future: nothing counts as changed, so it only lists the cloud (its debug log). If the cloud holds
   files the folder lacks, or the list can't be read, the cloud is fetched and kept as a backup first; without that
@@ -354,17 +373,50 @@ What keeps a save from being lost (final review; each has a test against ports o
   backup to put back, the folders that were empty). A failed download puts the backup back and empties the folders that
   were empty. A note still there at the next sync (the app or the power went mid-download) is put right first: what is
   found is kept as a backup, the folders go back as they were, the sync times are dropped.
+- **An upload cut short.** Before a tool may upload, a note goes into `saves.cfg` (`uploading`: when, the folders and
+  their fingerprint). One cut off (the 90 s cap, the app or the power going) leaves the cloud a mix of new and old
+  files; the note stays and the status says so ("upload cut off"). The next sync of that game, before anything else,
+  and once at start (when the Library loads; never under a game), finishes it: with the folders as they were then, a
+  copy of the cloud as it is is kept and a forced upload sends every file ("we finished it"; offline: nothing else
+  syncs for that game, the game still starts, the next sync tries again). With the folders changed since (played from
+  Heroic, a restore), finishing would mix again, so the copy is kept, the sync times are dropped and the sync asks.
+  Picking a side in a conflict settles the note.
+- **A cloud save new to us (Epic).** A cloud save is named by when it was saved, not uploaded, so one saved elsewhere
+  before our last sync and uploaded after it looks older than the sync. The cloud save's own time at each sync is kept
+  (`synced_remote`): any other one counts as a change, so it's a conflict, never an upload over it.
 - **Two GOG locations.** When one fails and the backup goes back, a location that had downloaded gets its old sync time
   back with it.
 - **A restore holds.** Restoring makes the folder exactly what the backup holds (unpacked next to it and swapped in).
-  For Epic the restored files carry old times, so until the next good sync the local side counts as changed
-  (`restored_at`): "cloud newer" is a conflict with the restored save offered first.
+  A backup of several folders goes back all or nothing: every folder is unpacked first, then all are swapped, and a
+  failed swap puts the ones already swapped back.
+  The restored files carry old times, so until the next good sync the local side counts as changed (`restored_at`).
+  Epic: "cloud newer" is a conflict with the restored save offered first. GOG: gogdl decides by file times alone, so
+  the cloud is listed first (the far-future `--ts` look): changed since the last sync (or never synced), a conflict
+  with the restored save offered first; unchanged, the whole restore goes up with a forced upload (after a cloud copy)
+  when the run may upload, else it waits for the game's end ("pending up"), never a download over it.
+- **A choice is about the save that was shown.** A conflict notes the folders' fingerprint (`local_fp`). If they
+  changed before the choice is made (played from Heroic, a restore), nothing is replaced: the game syncs again and,
+  still a conflict, the sheet asks again with what is there now.
 - **"Keep this handheld's save" (Epic).** legendary names an upload by the newest local file's time and every device
   takes the newest name, so the newest file is stamped now before the forced upload.
+- **A copy of Epic's cloud save.** legendary only downloads into the save folder it keeps for a game, so the copy runs
+  legendary `sync-saves <app> --force-download` on a private copy of its config folder (`user.json` 0600,
+  `installed.json` naming the scratch folder, the game's metadata, `config.ini`), never on the user's own: legendary's
+  `save_path` can't be left pointing at the scratch folder by a cut-off run. Both folders are deleted afterwards; a
+  sign-in legendary refreshed meanwhile goes back to the user's folder unless that one changed too.
+- **A blank save is never "Newer".** A conflict notes what both sides hold (files and size, the cloud's from that copy)
+  and whether this folder has a sync time at all (`fresh`). When it has none, or this side holds a quarter of the
+  cloud's size or less, the sheet puts the cloud's save first and marks this one "Might be new" or "Much smaller"
+  instead of "Newer" (a fresh default save has the newest file time).
 - **What the status says.** gogdl's "Refused" (the other side is newer and this run could only go one way) is shown as
   waiting, not as synced. GOG's cloud time is an upload time, so the GOG conflict sheet calls neither side "Newer".
+- **`saves.cfg` itself.** A game's switch is also kept in `saves_off.json`, so a damaged `saves.cfg` (set aside and
+  read as empty) never switches sync back on for a game switched off. While it's set aside nothing syncs that run
+  ("we couldn't save how your saves stand"), and a note (`pending`, `uploading`) that can't be written stops the tool
+  from running at all.
 - **Backups.** The newest 10 everyday backups per game, and apart from those the newest 10 made by a conflict choice,
-  a cloud copy, a restore or an interrupted download.
+  a cloud copy, a restore or an interrupted download. "Newest" is the order they were made in (`seq` in each backup's
+  JSON), not the time in their name: with the clock behind, the backup just made is never the one rotated out.
 
 ## Battery history and Sleep at low battery
 

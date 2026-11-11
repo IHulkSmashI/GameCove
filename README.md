@@ -198,7 +198,8 @@ How it all works, every fix in full and how to propose one: [docs/FIXES.md](docs
 - **Cloud saves for Epic and GOG.** Just before an Epic or GOG game starts, GameCove gets your newest save from the
   store's own cloud (through legendary and Heroic's gogdl, with your sign-in); just after it ends, yours goes up. The
   game page says how it stands ("Saves synced 2 min ago"), with a switch per game, Sync now, and a local backup before
-  anything replaces a save on the handheld. Changed on both sides? You pick, with the newer one highlighted. No
+  anything replaces a save on the handheld. Changed on both sides? You pick, with both kept as a backup first and the
+  newer one highlighted (a save that looks freshly started is flagged, never called newer). No
   connection? The game starts anyway. Steam games keep Steam Cloud; Amazon games aren't covered (nile has no save sync).
 - **Battery drain per game.** "Drains about 9 W, ~5 h on a full charge" on a game's page once you've played it on
   battery for a while, and a 7-day battery chart with every game's drain in About this device. Recorded only when a
@@ -488,9 +489,13 @@ over Tailscale. More in [docs/STREAMING.md](docs/STREAMING.md).
 - **Risky screen changes revert by themselves.** After HDR or a new refresh rate you get "Keep this?" with a 15-second
   countdown.
 - **Saves are never overwritten without a copy.** Before a cloud save replaces one on the handheld (or a backup is
-  restored), the current one is backed up locally; a download that fails half way puts it straight back. The last 10
-  backups per game are kept, plus the last 10 made by a choice between two saves or by a restore, and the game page
-  restores any of them.
+  restored), the current one is backed up locally; a download that fails half way puts it straight back. Before your
+  save replaces the cloud's in a choice, the cloud's is copied here too. A save folder that started over (a lost
+  Wine prefix) never goes up over the cloud's on its own, even if it happened with sync off, and an upload that was
+  cut off is finished before anything else syncs that game. The last 10 backups per game are kept, plus the last 10
+  made by a choice between two saves, a copy of the cloud or a restore, and the game page restores any of them.
+- **One game at a time.** Starting another game while one runs asks to close it first; the next one starts once the
+  first has closed and its saves have synced.
 - **Undo everything:** fixes, upscaling files, launch options, profiles. Uninstalling puts Steam Gaming Mode back as the
   default.
 - **Signed releases.** The installer checks every download against a signed checksum list before anything runs.
@@ -544,7 +549,7 @@ yet). It only changes the link, never the price, and sends nothing about you. Ev
 | Sending a clip to your phone | Your phone, on your own network | The clip itself, from a one-time page GameCove serves on your LAN; nothing leaves your network | Only while the Send to phone code shows, until it's downloaded or 10 minutes pass | You start it |
 | GPU Screen Recorder and a video player (Settings > Media) | Flathub, through Flatpak | Flatpak's own requests | When you press Install (the recorder, or mpv to watch clips) | You start it |
 | Game streaming | PCs on your own network (GameStream: Vibepollo, Sunshine, Apollo) | A fixed client id and Moonlight's certificate; Wake-on-LAN packets (your PC's MAC address, to your network's broadcast addresses and to every address saved for that PC, a remote one you added included). With no PC saved and none found by mDNS, a connection attempt to port 47989 on every address of your local network | When you open the Stream tab or wake a PC | You start it |
-| Cloud saves (Epic, GOG) | Epic and GOG, through legendary and heroic-gogdl (GOG's remote config once for a game Heroic doesn't know) | Your save files for the game you start or just closed, with your store sign-in; for GOG's remote config only the game's client id | Just before an Epic or GOG game starts and just after it ends; when you press Sync now | Sync cloud saves (Settings > Saves; also per game) |
+| Cloud saves (Epic, GOG) | Epic and GOG, through legendary and heroic-gogdl (GOG's remote config once for a game Heroic doesn't know) | Your save files for the game you start or just closed, with your store sign-in; for GOG's remote config only the game's client id | Just before an Epic or GOG game starts and just after it ends; when you press Sync now; a copy of the cloud's save when both sides changed; once at start to finish an upload that was cut off | Sync cloud saves (Settings > Saves; also per game) |
 | Updates, store sign-ins | Your OS, Flatpak, fwupd/LVFS, legendary / gogdl / nile | Those tools' own requests | When you update or sign in; Flatpak apps also once a day if you turned on "Update apps by themselves" | You start it (automatic app updates: off by default, and Background lookups) |
 
 </details>

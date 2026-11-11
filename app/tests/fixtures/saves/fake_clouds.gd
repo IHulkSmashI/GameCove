@@ -44,6 +44,9 @@ class Gog extends RefCounted:
 	## >= 0: a download writes this many files, leaves the next one cut short and is killed
 	## (exit 124, as coreutils timeout reports it).
 	var cut_download_after := -1
+	## >= 0: an upload sends this many files and is killed (exit 124): the cloud is left a mix.
+	var cut_upload_after := -1
+	var _sent := 0
 	## Leave the cloud's file list out of the log (a gogdl that words it differently).
 	var hide_listing := false
 	var offline := false
@@ -95,10 +98,12 @@ class Gog extends RefCounted:
 			if not hide_listing:
 				out.append("[SAVES] DEBUG: Files: [%s]" % ", ".join(listing))
 		var downloadable := cloud_files.filter(func(f): return f["hash"] != DELETED)
+		_sent = 0
 		if local.size() > 0 and cloud_files.is_empty():
 			out.append("[SAVES] INFO: No files in cloud, uploading")
 			for f in local:
-				_upload(name, f)
+				if not _upload(name, f):
+					return {"code": 124, "out": "\n".join(out) + "\n"}
 			return _end(out)
 		if local.is_empty() and cloud_files.size() > 0:
 			out.append("[SAVES] INFO: No files locally, downloading")
@@ -136,7 +141,8 @@ class Gog extends RefCounted:
 			"upload":
 				out.append("[SAVES] INFO: Uploading files")
 				for f in updated_local:
-					_upload(name, f)
+					if not _upload(name, f):
+						return {"code": 124, "out": "\n".join(out) + "\n"}
 				for f in not_local:
 					out.append("[SAVES] INFO: DELETING IN CLOUD %s %s" % [f["hash"], f["rel"]])
 					did.append("delete cloud " + str(f["rel"]))
@@ -156,10 +162,14 @@ class Gog extends RefCounted:
 				out.append("[SAVES] INFO: Nothing to do")
 		return _end(out)
 
-	func _upload(name: String, f: Dictionary) -> void:
+	func _upload(name: String, f: Dictionary) -> bool:
+		if cut_upload_after >= 0 and _sent >= cut_upload_after:
+			return false
+		_sent += 1
 		var data := FileAccess.get_file_as_string(str(f["abs"]))
 		cloud[name + "/" + str(f["rel"])] = {"data": data, "t": now, "lt": int(f["t"]), "hash": data.md5_text()}
 		did.append("upload " + str(f["rel"]))
+		return true
 
 	func _download(path: String, list: Array, out: PackedStringArray, finish := true) -> Dictionary:
 		var n := 0
@@ -190,6 +200,8 @@ class Epic extends RefCounted:
 	var did: Array = []
 	## A download that is cut off after the old files are gone and one new file is half written.
 	var cut_download := false
+	## An upload killed before its manifest went up (legendary writes the manifest last).
+	var cut_upload := false
 	var offline := false
 
 	func save_path() -> String:
@@ -280,6 +292,8 @@ class Epic extends RefCounted:
 				out.append("[cli] INFO: Save game uploading is disabled, skipping...")
 				return {"code": 0, "out": "\n".join(out) + "\n"}
 			out.append("[cli] INFO: Uploading local savegame...")
+			if cut_upload:
+				return {"code": 124, "out": "\n".join(out) + "\n"}
 			var files := {}
 			for rel in Fx.walk(path):
 				files[rel] = FileAccess.get_file_as_string(path.path_join(rel))

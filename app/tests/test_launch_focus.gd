@@ -326,7 +326,9 @@ func test_power_jobs_go_through_queue_and_coalesce() -> void:
 	r[0].free()
 
 
-func test_new_launch_replaces_running_session() -> void:
+## Review at ff76ca4, high 3: a second start used to end the running session (its exit-time
+## save upload ran under the live game). A session is never ended while its game runs.
+func test_a_new_launch_never_ends_the_running_session() -> void:
 	var r := _gamescope()
 	var power := FakePower.new()
 	var s := _session(r[0], power, FakeLauncher.new())
@@ -334,9 +336,9 @@ func test_new_launch_replaces_running_session() -> void:
 	s.ended.connect(func(g): ended.append(g["key"]))
 	s.begin(EPIC, {"ok": true, "app_id": 0, "pid": 7})
 	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
-	eq(ended, ["epic:Quail"], "old session ended")
-	eq(s.game["key"], "steam:976730", "new game tracked")
-	eq(power.calls, ["start", "stop", "start"], "Auto TDP restarted for the new game")
+	eq(ended, [], "the running game's session goes on")
+	eq(s.game["key"], "epic:Quail", "still following the first game")
+	eq(power.calls, ["start"], "Auto TDP untouched")
 	s.free()
 	r[0].free()
 
@@ -633,5 +635,84 @@ func test_dismissed_steam_launch_ends_once_its_reaper_is_gone() -> void:
 	for i in per_check:
 		s.poll_focus()
 	eq(s.phase, "idle", "gone twice: ended")
+	s.free()
+	r[0].free()
+
+
+## Review at ff76ca4, high 5: the saves guard was "a session is on", which goes false while
+## the game still runs. processes_alive() follows the game's processes instead: its pid, our
+## scope, Steam's reaper, after the session ended too, and lets each go once it's gone.
+func test_processes_alive_outlives_the_session() -> void:
+	var r := _gamescope()
+	var s := _session(r[0], FakePower.new(), FakeLauncher.new())
+	var pids := {99: true}
+	var units := {}
+	var reapers := {}
+	s.pid_running = func(p: int) -> bool: return pids.get(p, false)
+	s.unit_alive = func(u: String) -> bool: return units.get(u, false)
+	s.steam_alive = func(id: int) -> bool: return reapers.get(id, false)
+	ok(not s.processes_alive(), "nothing started: nothing alive")
+	s.begin(EPIC, {"ok": true, "app_id": 0, "pid": 99, "scoped": false})
+	ok(s.processes_alive(), "a session: alive")
+	s.stop()   # the session ends (the app quitting, a launch given up) while the game still runs
+	eq(s.phase, "idle", "the session is over")
+	ok(s.processes_alive(), "but its process runs: still alive")
+	pids[99] = false
+	ok(not s.processes_alive(), "its process gone: not alive")
+	# a scoped launch whose first process (the launcher) exits while the game runs on in the scope
+	s.begin(EPIC, {"ok": true, "app_id": 0, "pid": 5, "scoped": true, "unit": "app-steam-app1-2.scope"})
+	units["app-steam-app1-2.scope"] = true
+	s.stop()
+	ok(s.processes_alive(), "our scope still holds the game")
+	units["app-steam-app1-2.scope"] = false
+	ok(not s.processes_alive(), "the scope collected: gone")
+	# Steam's game: its reaper
+	reapers[976730] = true
+	s.begin(STEAM, {"ok": true, "app_id": 976730, "pid": 0})
+	s.stop()
+	ok(s.processes_alive(), "Steam's reaper for it runs")
+	reapers[976730] = false
+	ok(not s.processes_alive(), "reaper gone")
+	eq(GameSession.scope_alive("not-ours.service"), false, "only our own scopes are asked about")
+	s.free()
+	r[0].free()
+
+
+## Review at ff76ca4, residual A: a game handed to Heroic (heroic://launch) runs under
+## Heroic's own launch process, outside our scope. B on the splash closed only the opener and
+## the session ended with it, while the game still started behind GameCove.
+func test_a_launch_handed_to_heroic_is_followed_by_heroics_launch() -> void:
+	var r := _gamescope()
+	var s := _session(r[0], FakePower.new(), FakeLauncher.new())
+	var opener := [true]
+	var game_runs := [false]
+	s.pid_running = func(_p: int) -> bool: return opener[0]
+	s.handoff_alive = func(g: Dictionary) -> bool: return game_runs[0] and g.get("key", "") == "epic:Quail"
+	var ended := []
+	s.ended.connect(func(g): ended.append(g["key"]))
+	var close := []
+	s.unwanted.connect(func(g): close.append(g["key"]))
+	var id := LibraryScript.app_id_for("epic:Quail")
+	s.begin(EPIC, {"ok": true, "app_id": id, "pid": 4242, "scoped": true, "handoff": true})
+	opener[0] = false   # the opener hands the URL to Heroic and exits
+	s.dismiss()
+	eq(close, [], "B: nothing of the game to close yet (Heroic hasn't started it)")
+	for i in 10:
+		s.poll_focus()
+	ok(s.is_active(), "the opener being gone doesn't end it")
+	game_runs[0] = true   # Heroic starts the game anyway
+	for i in int(GameSession.REAPER_CHECK_S / GameSession.FOCUS_POLL_S) + 1:
+		s.poll_focus()
+	eq(close, ["epic:Quail"], "found: closed (its Heroic launch)")
+	ok(s.is_active(), "still followed while it closes")
+	ok(s.processes_alive(), "and counts as running for the saves")
+	game_runs[0] = false
+	for i in 2 * (int(GameSession.REAPER_CHECK_S / GameSession.FOCUS_POLL_S) + 1):
+		s.poll_focus()
+	eq(s.phase, "idle", "ended once its launch is gone")
+	eq(ended, ["epic:Quail"], "once")
+	eq(GameSession.handoff_pattern({"store": "gog", "id": "1207"}), "gogdl( .*)? launch( .*)? 1207( |$)", "GOG: Heroic's gogdl launch")
+	eq(GameSession.handoff_pattern({"store": "amazon", "id": "amzn1.adg.x"}), "nile( .*)? launch( .*)? amzn1\\.adg\\.x( |$)", "dots matched as dots")
+	eq(GameSession.handoff_pattern({"store": "epic", "id": "a b"}), "", "an id that can't be one: nothing")
 	s.free()
 	r[0].free()

@@ -649,6 +649,7 @@ func _saves_and_battery() -> void:
 		_write(bat + f[0], f[1] + "\n")
 	var sv: Node = main.saves
 	sv.cfg_path = tmp + "/saves.cfg"
+	sv.off_path = tmp + "/saves_off.json"
 	sv.backup_dir = tmp + "/backups"
 	sv.backups.base_dir = sv.backup_dir
 	var cfg := ConfigFile.new()

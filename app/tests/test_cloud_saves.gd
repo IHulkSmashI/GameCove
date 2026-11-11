@@ -252,3 +252,47 @@ func test_gog_listing_and_what_an_upload_would_delete() -> void:
 	ok(not CS.gogdl_args("/a", "/p", "1", "saves", "123.4", "look").has("123.4"), "and not the real one")
 	eq(CS.parse_gogdl("[SAVES] WARNING: Refused to upload files, newer files in the cloud\n123.4", 0)["refused"], "upload", "refused to upload")
 	eq(CS.parse_gogdl("[SAVES] WARNING: Refused to download files, newer files locally\n123.4", 0)["refused"], "download", "refused to download")
+
+
+## Review at ff76ca4, L1: the cloud's time as of our last sync makes any other time a change.
+func test_epic_decide_sees_a_cloud_save_that_is_older_than_our_sync() -> void:
+	var last := 2000000000
+	var look := {"state": "local_newer", "local": last + 9000, "remote": last - 5000}
+	eq(CS.epic_decide(look, last, "post"), "upload", "by the clock alone it looked unchanged")
+	eq(CS.epic_decide(look, last, "post", false, last - 90000), "conflict", "but it isn't the one we last saw")
+	eq(CS.epic_decide(look, last, "post", false, last - 5000), "upload", "the one we last saw: upload")
+	eq(CS.epic_decide(look, last, "post", false, 0), "upload", "0 (a sync that learnt no cloud time): not known, by the clock")
+
+
+## Review at ff76ca4, L8: a captive portal's page (a 200 that isn't GOG's answer) was cached
+## as "this game has no cloud saves" for good.
+func test_a_page_that_isnt_gogs_answer_is_not_no_cloud_saves() -> void:
+	eq(CS.parse_gog_remote("<html>Sign in to the hotel Wi-Fi</html>"), "invalid", "not JSON")
+	eq(CS.parse_gog_remote("{\"welcome\": true}"), "invalid", "JSON, but not GOG's")
+	eq(CS.parse_gog_remote(JSON.stringify({"content": {"Windows": {}}})), null, "GOG's answer without cloud saves: none")
+
+
+## Review at ff76ca4, section 9 L3: the client id from a game's own files went into a curl URL
+## and a folder path unchecked.
+func test_gog_client_id_and_locations_stay_in_bounds() -> void:
+	var root := ProjectSettings.globalize_path("user://test_cloud_saves_l3")
+	DirAccess.make_dir_recursive_absolute(root)
+	var write := func(id: String) -> void:
+		var f := FileAccess.open(root.path_join("goggame-1.info"), FileAccess.WRITE)
+		f.store_string(JSON.stringify({"clientId": id}))
+		f.close()
+	write.call("53035488294233580")
+	eq(CS.gog_client_id(root, "1"), "53035488294233580", "a real client id")
+	for bad in ["../../../etc", "1?x=@evil.example", "123 456", "1" .repeat(33), "{1..9}"]:
+		write.call(bad)
+		eq(CS.gog_client_id(root, "1"), "", "refused: %s" % bad)
+	DirAccess.remove_absolute(root.path_join("goggame-1.info"))
+	DirAccess.remove_absolute(root)
+	var args := Array(CS.gog_remote_args("5150"))
+	ok(args.has("--proto") and args[args.find("--proto") + 1] == "=https", "https only")
+	ok(args.has("-g"), "no URL globbing")
+	ok(args.has("--max-filesize"), "size cap")
+	eq(args[-2], "--", "the URL after --")
+	ok(str(args[-1]).begins_with("https://remote-config.gog.com/"), "GOG's host")
+	eq(CS.resolve_gog_location("<?INSTALL?>/../../home/user/.ssh", "/games/w", ""), "", "a location can't climb out of the install folder")
+	eq(CS.resolve_gog_location("/etc/x", "/games/w", ""), "", "nor name a folder elsewhere")

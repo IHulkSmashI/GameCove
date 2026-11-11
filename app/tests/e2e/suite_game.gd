@@ -256,3 +256,85 @@ func test_what_runs_is_kept_when_the_library_changes() -> void:
 	await w.frames(2)
 	ok(m.playing.is_empty(), "not running and not in the library: forgotten")
 	await w.idle()
+
+
+## Review at ff76ca4, high 3 and the Controls medium: Play on another game while one runs used
+## to end the running game's session under it (its exit-time cloud-save upload ran while it
+## still wrote, and Controls ended on "no game"). Now it asks "Close <game> first?"; "Keep
+## playing" (first) changes nothing; yes closes the running game and starts the next only once
+## that one has exited.
+func test_starting_another_game_asks_to_close_the_first() -> void:
+	var m: Control = w.main
+	await start_game(GAME_A)
+	ok(m.session.phase == "running", "A runs")
+	await guide()   # home over the running game, where Play on another one is pressed
+	await w.idle()
+	var ended := []
+	var on_end := func(g: Dictionary) -> void: ended.append(g.get("key", ""))
+	m.session.ended.connect(on_end)
+	m._play(GAME_B)
+	ok(await until(func(): return m.game_actions.sheet.is_open(), 3000), "Play on B asks first")
+	eq(m.session.game.get("key", ""), GAME_A["key"], "A is still followed")
+	eq(ended, [], "and its session wasn't ended")
+	ok(not m.launch_overlay.is_open(), "nothing is launching")
+	await a()   # the first answer: keep playing
+	ok(await until(func(): return not m.game_actions.sheet.is_open(), 3000), "keep playing: the question goes away")
+	await w.wait_s(0.5)
+	eq(m.session.game.get("key", ""), GAME_A["key"], "A keeps running")
+	eq(_closes("TERM", str(GAME_A["id"])), 0, "and isn't closed")
+	# again, and this time yes (B goes through Library.launch: a stand-in `steam` takes it, so
+	# nothing real is opened)
+	var bin := ProjectSettings.globalize_path("user://e2e_fake_steam")
+	DirAccess.make_dir_recursive_absolute(bin)
+	var fs := FileAccess.open(bin.path_join("steam"), FileAccess.WRITE)
+	fs.store_string("#!/bin/sh\nexit 0\n")
+	fs.close()
+	OS.execute("chmod", ["+x", bin.path_join("steam")])
+	var path := OS.get_environment("PATH")
+	OS.set_environment("PATH", bin + ":" + path)
+	w.fake_apps[int(GAME_B["id"])] = true
+	_set_focusable(int(GAME_B["id"]), true)
+	m._play(GAME_B)
+	ok(await until(func(): return m.game_actions.sheet.is_open(), 3000), "asked again")
+	await down()   # "Keep playing" comes first
+	await a()
+	ok(await until(func(): return _closes("TERM", str(GAME_A["id"])) == 1, 3000), "A is told to close (GameCloser, like Exit game)")
+	ok(await until(func(): return m.session.game.get("key", "") == GAME_B["key"], 20000), "B starts once A has closed")
+	eq(ended, [GAME_A["key"]], "A ended once, through its own exit check")
+	await w.idle()
+	await w.frames(3)
+	var scope: RefCounted = load("res://scripts/controls/game_scope.gd").of(controls().ctx)
+	eq(scope.key() if scope != null else "", GAME_B["key"], "Controls follow B, not \"no game\"")
+	m.session.ended.disconnect(on_end)
+	OS.set_environment("PATH", path)
+	await end_game()
+	# the stand-in steam exited at once; reap it (a child left as a zombie would count as one
+	# of ours behind the next game in suite_perf)
+	for d in DirAccess.get_directories_at("/proc"):
+		if d.is_valid_int():
+			var st := FileAccess.open("/proc/%s/stat" % d, FileAccess.READ)
+			var line := st.get_line() if st != null else ""
+			var rest := line.substr(line.rfind(")") + 2).split(" ")
+			if line.contains("(steam)") and rest.size() > 1 and rest[1].to_int() == OS.get_process_id():
+				OS.is_process_running(d.to_int())   # waitpid: reaped
+
+
+## Review at ff76ca4, the splash-timeout residual: once the splash gave up waiting (its own
+## timeout) on a game still starting, Play on another game dropped the first one unfollowed.
+## It is still followed, so the other game asks first.
+func test_play_after_the_splash_timed_out_still_asks_first() -> void:
+	var m: Control = w.main
+	await _press_play(GAME_A)   # Steam's launch runs, no window yet
+	m.launch_overlay.finish(true)   # what the splash's timeout does
+	await w.wait_s(0.5)
+	ok(not m.launch_overlay.is_open(), "the splash is gone")
+	ok(m.session.is_active(), "A is still being followed")
+	m._play(GAME_B)
+	ok(await until(func(): return m.game_actions.sheet.is_open(), 3000), "B asks first")
+	eq(m.session.game.get("key", ""), GAME_A["key"], "A isn't dropped")
+	await b()
+	await until(func(): return not m.game_actions.sheet.is_open(), 3000)
+	w.end_app(int(GAME_A["id"]))
+	m.session.stop()   # its reaper is only looked for again past FOCUS_WAIT_S; the test doesn't wait that long
+	await w.idle()
+	ok(not m.session.is_active(), "done")

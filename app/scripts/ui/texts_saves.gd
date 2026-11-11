@@ -43,11 +43,15 @@ const STATE := {
 	"signed_out": "Sign in to the store (Settings > Stores) to sync saves.",
 	"no_tool": "Needs legendary or Heroic to sync saves.",
 	"linux": "The store's cloud saves only cover the Windows version of this game.",
+	"upload_finished": "The last upload was cut off; we finished it %s.",
+	"upload_cut": "The last upload was cut off, so the cloud may hold only part of it. We finish it before anything else syncs.",
+	"state_unsaved": "We couldn't save how your saves stand (the file was damaged), so nothing syncs until GameCove restarts. Your saves are safe on this handheld.",
 	"off": OFF_LINE,
 	"disabled": DISABLED_LINE,
 }
 ## state -> tone for the status line.
 const TONE := {"synced": "good", "uploaded": "good", "downloaded": "good", "restored": "good", "conflict": "warn",
+	"upload_finished": "good", "upload_cut": "warn", "state_unsaved": "warn",
 	"offline": "warn", "failed": "bad", "backup_failed": "bad", "too_big": "warn", "pending_up": "", "pending_down": ""}
 
 const CONFLICT_TITLE := "Which save do we keep?"
@@ -57,6 +61,15 @@ const KEEP_CLOUD := "Keep the cloud save"
 const DECIDE_LATER := "Decide later"
 const DECIDE_LATER_DETAIL := "Play without syncing this time"
 const NEWER := "Newer"
+## This handheld's side of a conflict when nothing says it's further on: the folder is new
+## since the last sync (or never synced), or it holds far less than the cloud's save. Such a
+## side is never called "Newer" (a blank save a game just made has the newest file time).
+const FRESH_BADGE := "Might be new"
+const FRESH_DETAIL := "Started over since the last sync"
+const SMALL_BADGE := "Much smaller"
+const NO_FILES := "no files"
+const ONE_FILE := "1 file, %s"
+const N_FILES := "%d files, %s"
 const RESTORED_BADGE := "Restored"
 const RESTORED_DETAIL := "The backup you just restored"
 const SAVED_AT := "Saved %s"
@@ -74,10 +87,13 @@ const RESTORED := "Backup restored."
 const RESTORE_FAILED := "Couldn't restore that backup: %s"
 const RESTORE_RUNNING := "Close the game first."
 const RESOLVE_RUNNING := "Close the game first, then choose. We never swap saves under a running game."
+const RESOLVE_CHANGED := "The save here changed since you were asked. Have a look at both again."
 
 const SYNC_FAILED_TOAST := "%s: saves didn't sync. They're safe on this handheld."
 const CONFLICT_TOAST := "%s: saves changed here and in the cloud. Open the game to choose."
 const UPLOADED_TOAST := "%s: saves uploaded."
+const UPLOAD_FINISHED_TOAST := "%s: last time its saves' upload was cut off. We finished it."
+const UPLOAD_CUT_TOAST := "%s: its saves' upload was cut off. We'll finish it before anything else syncs."
 
 # ---- Settings > Saves --------------------------------------------------------------------------
 
@@ -89,7 +105,7 @@ const HOW_TITLE := "How it works"
 const HOW_LINES := [
 	"Before a game starts we get the newest save from the store's cloud; after it ends we send yours up.",
 	"Before anything replaces a save on this handheld, we back it up here. We keep the last 10 per game, plus the last 10 from a choice or a restore.",
-	"When both sides changed, you choose. For Epic the newest one is highlighted; GOG only tells us when a save was uploaded.",
+	"When both sides changed, you choose, with both sides backed up here first. For Epic the newest one is highlighted, unless this handheld's looks new or much smaller; GOG only tells us when a save was uploaded.",
 	"No connection? The game starts anyway and we sync next time.",
 ]
 const AMAZON_NOTE := "Amazon games aren't covered: nile, Amazon's tool, has no save sync."
@@ -122,6 +138,22 @@ static func tone(st: Dictionary) -> String:
 ## "Saved 2 h ago" for a side of a conflict.
 static func saved_at(ts: int, now: int) -> String:
 	return SAVED_AT % TG.ago(ts, now) if ts > 0 else UNKNOWN_TIME
+
+
+## "3 files, 2 KB" for a side of a conflict ("" when unknown).
+static func size_text(files: int, bytes: int) -> String:
+	if files < 0:
+		return ""
+	if files == 0:
+		return NO_FILES
+	var b := String.humanize_size(maxi(bytes, 0)).replace("i", "")
+	return ONE_FILE % b if files == 1 else N_FILES % [files, b]
+
+
+## "Saved 2 h ago · 3 files, 2 KB".
+static func side_detail(when: String, files: int, bytes: int) -> String:
+	var size := size_text(files, bytes)
+	return when if size == "" else "%s · %s" % [when, size]
 
 
 ## "Uploaded 2 h ago": GOG's cloud only knows when files arrived, not when they were played.

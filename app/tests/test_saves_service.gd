@@ -59,6 +59,7 @@ func _world(name: String) -> Dictionary:
 	var w := {"root": root, "saves": saves, "gsaves": gsaves, "epic": epic, "gog": gog, "calls": [], "now": [2000000000]}
 	var s: Node = Service.new()
 	s.cfg_path = root.path_join("saves.cfg")
+	s.off_path = root.path_join("saves_off.json")
 	s.privacy_path = root.path_join("settings.cfg")
 	s.backup_dir = root.path_join("backups")
 	s.backups.base_dir = s.backup_dir
@@ -145,7 +146,8 @@ func test_changes_on_both_sides_stop_and_ask() -> void:
 	ok(got.size() == 1 and got[0].has("conflict"), "the launch waits for a choice")
 	eq(got[0]["conflict"]["remote"], last + 5000, "cloud time for the prompt")
 	eq(got[0]["conflict"]["local"], last + 3000, "local time for the prompt")
-	eq(w["calls"].size(), 1, "only the look ran: nothing downloaded or uploaded")
+	eq(w["calls"].size(), 2, "the look, then a copy of the cloud's save: nothing downloaded or uploaded here")
+	ok(str(w["calls"][1]).contains("--force-download") and not str(w["calls"][1]).contains("--skip"), "the copy is a download (into a scratch folder)")
 	eq(conflicts, ["epic:Min"], "conflict_found")
 	eq(FileAccess.get_file_as_string(w["saves"].path_join("slot1.sav")), "local progress", "local save untouched")
 	# keep the cloud: local backed up, forced download
@@ -157,11 +159,13 @@ func test_changes_on_both_sides_stop_and_ask() -> void:
 	w["s"].resolve(w["epic"], "cloud")
 	eq(w["s"].status(w["epic"])["state"], "downloaded", "kept the cloud")
 	eq(w["s"].backup_list("epic:Min").size(), 1, "the local save was backed up first")
-	# keep local: forced upload
+	# keep local: a copy of the cloud's save first (a download into a scratch folder), then the forced upload
 	w["handler"] = func(tool: String, args: Array) -> Dictionary:
-		return {"code": 0, "out": ""} if tool == "legendary" and "--force-upload" in args else {"code": 1, "out": ""}
+		return {"code": 0, "out": ""} if tool == "legendary" and ("--force-upload" in args or "--force-download" in args) else {"code": 1, "out": ""}
 	w["s"].resolve(w["epic"], "local")
 	eq(w["s"].status(w["epic"])["state"], "uploaded", "kept this handheld's")
+	ok(str(w["calls"][-2]).contains("--force-download") and str(w["calls"][-1]).contains("--force-upload"), "the cloud copy came before the upload")
+	eq(FileAccess.get_file_as_string(w["saves"].path_join("slot1.sav")), "cloud progress", "the copy didn't touch the save folder")
 	_done(w)
 
 

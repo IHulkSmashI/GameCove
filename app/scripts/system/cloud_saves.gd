@@ -306,9 +306,16 @@ static func _offline(out: String) -> bool:
 ## both changed (or we never synced and both have saves), the user picks.
 ## local_restored: a backup was put back since the last sync. Its files carry their old
 ## times, so by the clock the local side looks unchanged; it did change.
-static func epic_decide(look: Dictionary, last_sync: int, mode: String, local_restored := false) -> String:
+## synced_remote: the cloud save's own time (its manifest name) at our last sync, -1 when not
+## known. A cloud save is named by when it was *saved*, not when it went up: one saved on
+## another device before our last sync but uploaded after it has an older time than our sync
+## and would look unchanged (review at ff76ca4, L1). With the time we last saw, any other
+## time is a change.
+static func epic_decide(look: Dictionary, last_sync: int, mode: String, local_restored := false, synced_remote := -1) -> String:
 	var local := int(look.get("local", 0))
 	var remote := int(look.get("remote", 0))
+	# 0 or -1: not known (legendary prints no dates for a save that's up to date)
+	var cloud_moved := synced_remote > 0 and remote > 0 and absi(remote - synced_remote) > SLACK_S
 	match str(look.get("state", "")):
 		"remote_newer":
 			var local_changed := local > 0 and (last_sync <= 0 or local > last_sync + SLACK_S or local_restored)
@@ -316,7 +323,7 @@ static func epic_decide(look: Dictionary, last_sync: int, mode: String, local_re
 				return "conflict"
 			return "later" if mode == "post" else "download"
 		"local_newer":
-			var remote_changed := remote > 0 and (last_sync <= 0 or remote > last_sync + SLACK_S)
+			var remote_changed := remote > 0 and (last_sync <= 0 or remote > last_sync + SLACK_S or cloud_moved)
 			if remote_changed:
 				return "conflict"
 			return "later" if mode == "pre" else "upload"
@@ -368,18 +375,30 @@ static func heroic_gog_timestamps(heroic_root: String, id: String) -> Dictionary
 	return out
 
 
-## The game's GOG client id from goggame-<id>.info, "" when missing.
+## The game's GOG client id from goggame-<id>.info, "" when missing or not a client id (GOG's
+## are digits): it goes into a URL and a folder path, so a tampered game file can't put
+## anything else there (review at ff76ca4, section 9 L3).
 static func gog_client_id(install_path: String, id: String) -> String:
 	var info: Variant = Common.read_json(install_path.path_join("goggame-%s.info" % id), {})
-	return str(Common.dict(info).get("clientId", ""))
+	var c := str(Common.dict(info).get("clientId", ""))
+	return c if RegEx.create_from_string("^[0-9]{1,32}$").search(c) != null else ""
+
+
+## curl's arguments for GOG's remote config of `client` (https only, no URL globbing, the
+## answer capped at 1 MiB, 15 s).
+static func gog_remote_args(client: String) -> PackedStringArray:
+	return PackedStringArray(["-sS", "--fail", "--proto", "=https", "--proto-redir", "=https", "-g",
+		"--max-filesize", "1048576", "-m", "15", "--", GOG_REMOTE_CONFIG % client])
 
 
 ## GOG remote config JSON -> locations [{name, location}] (Windows), [] when cloud storage is
-## on with no locations listed, null when the game has no cloud saves.
+## on with no locations listed, null when the game has no cloud saves, "invalid" when the
+## answer isn't GOG's at all (a captive portal's page with a 200): that one is never kept as
+## "no cloud saves" (review at ff76ca4, L8).
 static func parse_gog_remote(text: String) -> Variant:
 	var j := JSON.new()
-	if j.parse(text) != OK or not j.data is Dictionary:
-		return null
+	if j.parse(text) != OK or not j.data is Dictionary or not j.data.get("content") is Dictionary:
+		return "invalid"
 	var win: Dictionary = Common.dict(Common.dict(j.data.get("content")).get("Windows"))
 	var cs: Dictionary = Common.dict(win.get("cloudStorage"))
 	if not bool(cs.get("enabled", false)):
@@ -423,7 +442,17 @@ static func resolve_gog_location(location: String, install_path: String, pfx: St
 			p = p.replace(m.get_string(0), map[key])
 	if not p.begins_with("/"):
 		return ""
-	return case_insensitive(p.simplify_path())
+	p = p.simplify_path()
+	# a location may only name a folder in the game's install folder or its prefix ("../"
+	# in a location from a tampered file or answer stays out)
+	var inside := false
+	for root in [install_path, pfx]:
+		var r := str(root).simplify_path()
+		if r != "" and r != "/" and (p == r or p.begins_with(r + "/")):
+			inside = true
+	if not inside:
+		return ""
+	return case_insensitive(p)
 
 
 ## Matches each existing folder of `path` case-insensitively (Windows games' paths, on a
@@ -617,6 +646,32 @@ static func dir_stats(path: String) -> Dictionary:
 		return r
 	_walk(path, r, 0)
 	return r
+
+
+## True when there is at least one file under `path` (stops at the first one: cheap enough
+## for the main thread, unlike dir_stats on a big folder).
+static func has_files(path: String, depth := 0) -> bool:
+	var d := DirAccess.open(path) if path != "" and depth <= 24 else null
+	if d == null:
+		return false
+	d.include_hidden = true
+	if not d.get_files().is_empty():
+		return true
+	for sub in d.get_directories():
+		if has_files(path.path_join(sub), depth + 1):
+			return true
+	return false
+
+
+## The folder whose identity stands for a save folder: the Wine prefix's drive_c when the
+## folder is inside one (a deleted and re-made prefix gets a new one, while games are free
+## to re-make their own save folder), else the folder itself.
+static func identity_anchor(path: String) -> String:
+	var p := path.simplify_path()
+	var at := p.find("/drive_c/")
+	if at > 0:
+		return p.substr(0, at + "/drive_c".length())
+	return p
 
 
 ## Every file under `path`, relative to it with "/" between folders.
