@@ -66,7 +66,7 @@ class Gog extends RefCounted:
 		if offline:
 			return {"code": 1, "out": "requests.exceptions.ConnectionError: Max retries exceeded"}
 		var i := args.find("save-sync")
-		var path := str(args[i + 1])
+		var path := str(args[args.find("--") + 1])   # path and id come after `--`
 		var ts := float(str(args[args.find("--ts") + 1]))
 		var name := str(args[args.find("--name") + 1])
 		if name in fail_names:

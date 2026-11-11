@@ -246,7 +246,7 @@ func test_gog_keeps_timestamps_only_after_a_real_sync() -> void:
 	# keep this handheld's: the cloud is fetched into a scratch folder and backed up, then forced upload
 	w["handler"] = func(tool: String, args: Array) -> Dictionary:
 		if tool == "gogdl" and not "--force-upload" in args and not "--skip-upload" in args and not "--skip-download" in args:
-			_write(str(args[3]).path_join("cloud.dat"), "gog cloud")
+			_write(str(args[args.find("--") + 1]).path_join("cloud.dat"), "gog cloud")
 			return {"code": 0, "out": "[SAVES] INFO: No files locally, downloading\n1762800000.1"}
 		if tool == "gogdl" and "--force-upload" in args:
 			return {"code": 0, "out": "[SAVES] WARNING: Forcing upload\n[SAVES] INFO: Uploading files\n1762800001.2"}
