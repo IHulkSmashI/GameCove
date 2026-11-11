@@ -153,3 +153,11 @@ def test_models_reference_real_rows():
     ids = {r["id"] for r in ROWS}
     for table in (models.ASUS, models.LENOVO, models.MSI, models.VALVE, models.GPD_PAGES):
         assert set(table) <= ids, set(table) - ids
+
+
+def test_previous_index_comes_from_the_data_repo():
+    assert build.RELEASE == "https://github.com/IHulkSmashI/GameCove-data/releases/download/firmware/firmware.json.gz"
+    prev = gzip.compress(json.dumps({"schema": 1, "devices": {"x": {}}}).encode())
+    f = Fake({build.RELEASE: prev})
+    assert build.fetch_previous(f) == {"schema": 1, "devices": {"x": {}}} and f.calls == [build.RELEASE]
+    assert build.fetch_previous(Fake({})) == {}   # nothing there yet: start empty

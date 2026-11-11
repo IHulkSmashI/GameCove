@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build upscalers.json and the mirror's new files (.github/workflows/upscalers.yml runs this nightly).
+"""Build upscalers.json and the mirror's new files (IHulkSmashI/GameCove-data's .github/workflows/upscalers.yml runs this nightly).
 
 Promotion rules (review 2, problem 8; the owner wants the newest builds, with these guards):
   - only from each component's official upstream repository (gamecove_upscale.mirror.UPSTREAM, reviewed in-repo);
