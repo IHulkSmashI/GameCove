@@ -29,7 +29,8 @@ jobs:
   device-photos:
     # Offline checks of app/data/device_photos.json on every push: every row has a picture
     # source, each maker image link sits on that maker's own site (its _makers rules), family
-    # rows name a representative. The weekly device-photos workflow does the network checks.
+    # rows name a representative. The network checks are weekly: maker-links.yml (the makers' links) and
+    # GameCove-data's device-photos workflow (licences, the photos themselves).
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
