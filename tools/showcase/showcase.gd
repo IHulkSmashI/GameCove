@@ -14,7 +14,7 @@ extends "../screenshots/shoot_controls.gd"
 const SHOTS_ALL := ["home", "home_shelves", "library", "library_filter", "library_apps", "game", "game_achievements",
 	"game_saves", "emulation", "library_emulation", "game_rom", "apps_view", "discover", "discover_free", "discover_deals", "discover_calendar",
 	"discover_calendar_month", "discover_wishlist", "quick_game", "quick_power", "quick_display", "quick_audio",
-	"quick_controller", "quick_leds", "quick_device", "settings_power", "settings_performance", "settings_system",
+	"quick_controller", "quick_leds", "quick_device", "quick_shortcuts", "settings_power", "settings_performance", "settings_system",
 	"settings_profiles", "settings_saves", "settings_media", "media_clip_sheet", "media_share", "settings_about",
 	"settings_battery", "settings_storage", "settings_fixes", "settings_updates", "settings_privacy", "setup_art"]
 
@@ -936,8 +936,25 @@ func _discover(lib: Node) -> void:
 
 # ------------------------------------------------------------------ quick menu
 
+class ShowSession extends RefCounted:
+	var game: Dictionary
+	var app_id := 0
+	var pid := 0
+
+	func _init(g: Dictionary) -> void:
+		game = g
+
+	func is_active() -> bool:
+		return true
+
+
+class ShowController extends RefCounted:
+	func state() -> Dictionary:
+		return {"backend": "inputplumber"}
+
+
 func _quick() -> void:
-	if not want(["quick_game", "quick_power", "quick_display", "quick_audio", "quick_controller", "quick_leds", "quick_device"]):
+	if not want(["quick_game", "quick_power", "quick_display", "quick_audio", "quick_controller", "quick_leds", "quick_device", "quick_shortcuts"]):
 		return
 	var qm = main.quick_menu
 	var g := _find_key("steam:1245620")
@@ -959,6 +976,16 @@ func _quick() -> void:
 	rec.state = "recording"
 	rec._started_ms = Time.get_ticks_msec() - 83 * 1000
 	main.top_bar.set_recording(true)
+	# The Shortcuts strip as it is over a running game on InputPlumber.
+	main.actions.session = ShowSession.new(g)
+	main.actions.controls = fake
+	for cid in ["system.screenshot", "system.sleep", "audio.mute", "controller.desktop_mode"]:
+		if not fake.has(cid):
+			fake.add({"id": cid, "kind": "toggle" if cid in ["audio.mute", "controller.desktop_mode"] else "action", "value": cid == "audio.mute"})
+		fake.set_available(cid, true)
+	main.actions.controller = ShowController.new()
+	main.actions.game_front = func() -> bool: return true
+	main.actions.steam_bin = "/usr/bin/steam"
 	main._open_menu()
 	qm.game = g
 	await _open_quick(g, 0)
@@ -989,7 +1016,16 @@ func _quick() -> void:
 	await shot("quick_leds")
 	await _open_quick(g, 5)
 	await shot("quick_device")
+	# The strip itself: focus on Screenshot, sound muted.
+	await _open_quick(g, 0)
+	if qm.strip != null and qm.strip.buttons.has("screenshot"):
+		qm.strip.buttons["screenshot"].grab_focus()
+	await frames(8)
+	await shot("quick_shortcuts")
 	qm.close()
+	main.actions.session = main.session
+	main.actions.controller = root.get_node_or_null("Controller")
+	main.actions.controls = root.get_node_or_null("Controls")
 	rec.state = "idle"
 	main.top_bar.set_recording(false)
 	main.playing = {}

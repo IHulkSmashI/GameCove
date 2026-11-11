@@ -59,6 +59,8 @@ const SavesCardScript := preload("res://scripts/ui/games/saves_card.gd")
 const ProtonGE := preload("res://scripts/launch/proton_ge.gd")
 const CardJobs := preload("res://scripts/system/card_jobs.gd")
 const Recording := preload("res://scripts/system/recording.gd")
+const ActionRunner := preload("res://scripts/actions/runner.gd")
+const TShortcuts := preload("res://scripts/ui/quick/texts_shortcuts.gd")
 const UPower := preload("res://scripts/system/upower.gd")
 const Proc := preload("res://scripts/system/proc.gd")
 const AppsView := preload("res://scripts/ui/apps_view.gd")
@@ -150,6 +152,8 @@ var setup_flow: Node
 var background: Node
 ## Record / Stop recording (quick menu) and the REC chip.
 var recording: Node
+## Runs the one-press actions (the quick menu's Shortcuts strip, button shortcuts).
+var actions: Node
 ## Desktop apps (Home's Apps shelf "All apps", the Library header's Apps).
 var apps_view: Control
 ## Controller batteries: the last UPower read (ticks msec) and whether one is out.
@@ -316,8 +320,12 @@ func _ready() -> void:
 	recording.failed.connect(func(kind: String, detail: String):
 		toast(str(TX.REC_ERRORS.get(kind, TX.REC_ERRORS["failed"])), "alert", "bad", detail))
 
+	# the strip is built with the menu; the runner gets its services further down
+	actions = ActionRunner.new()
+	actions.name = "Actions"
+	add_child(actions)
 	quick_menu = QuickMenu.new()
-	var qm_services := {"recording": recording, "device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
+	var qm_services := {"actions": actions, "recording": recording, "device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
 	if _svc("Controls") != null:
 		qm_services["controls"] = _svc("Controls")
 		qm_services["profiles"] = _svc("Profiles")
@@ -357,6 +365,16 @@ func _ready() -> void:
 	closer = GameCloser.new()
 	closer.name = "GameCloser"
 	add_child(closer)
+	actions.setup({"controls": _svc("Controls"), "model": quick_menu.model, "recording": recording, "closer": closer,
+		"session": session, "controller": _svc("Controller"),
+		"game_front": func() -> bool: return session.is_active() and not _window_focused,
+		"close_menu": func() -> void: if quick_menu.visible: quick_menu.close(),
+		"toggle_menu": func() -> void: on_ui_action("quick_menu"),
+		"exit_game": func() -> void: exit_game(),
+		"switch_session": func(target: String) -> void: quick_menu.switch_session(target),
+		"open_settings": _open_settings_category,
+		"current_game": func() -> Dictionary: return session.game if session.is_active() else {}})
+	actions.notice.connect(_on_action_notice)
 	# heartbeat for the session client's hang check, and why it left GameCove last time
 	var health := SessionHealth.new()
 	health.name = "SessionHealth"
@@ -657,7 +675,13 @@ func _on_autotune_limit(cant_reach: bool, info: Dictionary) -> void:
 		toast(m[0], "bolt", "warn", m[1])
 
 
-## Guide -> Home, QuickAccess -> quick menu, Keyboard -> search keyboard.
+## A one-press action finished with something to say (a toast, never focus).
+func _on_action_notice(text: String, tone: String, icon: String) -> void:
+	toast(text, icon if icon != "" else "info", tone, TShortcuts.SHOT_SAVED_DETAIL if text == TShortcuts.SHOT_SAVED else "")
+
+
+## Guide -> Home, QuickAccess -> quick menu, Keyboard -> Steam's keyboard over a
+## game and the search keyboard in GameCove, Screenshot -> a screenshot.
 func on_ui_action(action: String) -> void:
 	# Steam's controller settings are in front: the handheld's own button brings GameCove back, and does nothing else
 	if steam_trip != null and steam_trip.service.active():
@@ -686,8 +710,14 @@ func on_ui_action(action: String) -> void:
 				quick_menu.close()
 			else:
 				_open_menu()
+		"screenshot":
+			if actions != null:
+				actions.run("screenshot", "button")
 		"osk":
-			if not (game_actions.is_modal() or quick_menu.visible):
+			# over a game the keyboard is Steam's, for the game; in GameCove it's the search
+			if actions != null and session != null and session.is_active() and not _window_focused:
+				actions.run("keyboard", "button")
+			elif not (game_actions.is_modal() or quick_menu.visible):
 				close_downloads()
 				_close_page()
 				if current != "library":
@@ -2261,7 +2291,8 @@ func _build_settings() -> void:
 			"perf": _svc("PerfMonitor"), "achievements": _svc("Achievements"), "setup": _svc("Setup"),
 			"updates": _svc("Updates"), "storage": _svc("Storage"), "controller": _svc("Controller"),
 			"photo": _svc("DevicePhoto"), "saves": saves, "battery": battery_log,
-			"game_running": func() -> bool: return session != null and session.is_active(), "recording": recording})
+			"game_running": func() -> bool: return session != null and session.is_active(), "recording": recording,
+			"actions": actions})
 
 
 static func _version() -> String:
