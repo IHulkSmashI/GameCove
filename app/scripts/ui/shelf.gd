@@ -39,6 +39,8 @@ var strip: HBoxContainer
 var count_label: Label
 var memory := 0          # last focused index (TV-style row memory)
 var tile_size := Vector2.ZERO
+## "hero" for a row of wide featured cards (set before setup()); see featured_size().
+var art_kind := "cover"
 ## The row's holder: an alpha mask (clip children) that fades the ends.
 var _mask: TextureRect
 var _mask_grad: Gradient
@@ -116,6 +118,7 @@ func setup(shelf_id: String, shelf_title: String, games: Array, size := Vector2.
 
 	for g in games:
 		var tile: Button = Tile.new()
+		tile.art_kind = art_kind
 		tile.setup(g, true, tile_size)
 		var game: Dictionary = g
 		var i := tiles.size()
@@ -124,6 +127,15 @@ func setup(shelf_id: String, shelf_title: String, games: Array, size := Vector2.
 		strip.add_child(tile)
 		tiles.append(tile)
 	Kit.link_horizontal(tiles)
+
+
+## A row of one or two games as wide featured cards, two to the row (so a
+## short row never leaves the screen empty beside one lonely cover; with one
+## game the caller puts what it knows about it in the other half): the size
+## of a card across `avail_w` px, as tall as the usual covers.
+static func featured_size(avail_w: float) -> Vector2:
+	var usual := Tile.size_for(Tile.row_width(), GAP)
+	return Vector2(maxf(usual.x, floorf((avail_w - GAP) / 2.0)), usual.y)
 
 
 ## Fade the left edge while scrolled past the start, the right one while

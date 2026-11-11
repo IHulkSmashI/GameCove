@@ -35,6 +35,10 @@ var _cards_pad: Control
 ## Kept for callers: Top deals now leaves out every game the spotlight or the
 ## wishlist shelf shows.
 const TOP_UNIQUE := 8
+## Free to keep with this many games or fewer shows them as wide featured cards.
+const FEATURED_MAX := 2
+## Discover's side margin (discover_screen.gd), for sizes worked out before layout.
+const SIDE := 48.0
 
 
 func setup(c: RefCounted) -> void:
@@ -217,7 +221,20 @@ func build() -> void:
 			ctx.art.fill(v, ["cover"])
 			views.append(v)
 		var shelf: VBoxContainer = Shelf.new()
-		shelf.setup(s[0], s[1], s[2])
+		# One or two giveaways are shown as wide featured cards that fill the
+		# row (a single cover left most of the screen empty).
+		if s[0] == "free" and s[2].size() <= FEATURED_MAX:
+			for v in s[2]:
+				ctx.art.fill(v, ["hero"])
+			shelf.art_kind = "hero"
+			# the row is as wide as the spotlight: the screen less Discover's margins
+			var row_w: float = Shelf.Tile.row_width() + 2.0 * ThemeLib.EDGE - 2.0 * SIDE
+			var fsize := Shelf.featured_size(row_w)
+			shelf.setup(s[0], s[1], s[2], fsize)
+			if s[2].size() == 1:
+				shelf.strip.add_child(_free_note(s[2][0], fsize, now, cur))
+		else:
+			shelf.setup(s[0], s[1], s[2])
 		for t in shelf.tiles:
 			_decorate(t, now, cur)
 		shelf.tile_focused.connect(_on_tile_focus.bind(shelf))
@@ -275,6 +292,44 @@ static func _store_of(v: Dictionary) -> String:
 		var bd: Variant = d.get("best_deal", {})
 		return str(bd.get("store_name", "")) if bd is Dictionary else ""
 	return str(d.get("store_name", ""))
+
+
+## Beside a lone giveaway's featured card: what it is, where, what it
+## usually costs and when the giveaway ends (all from the deal itself).
+func _free_note(v: Dictionary, card: Vector2, now: int, cur: String) -> Control:
+	var d: Dictionary = v["data"]
+	var p := PanelContainer.new()
+	p.name = "FreeNote"
+	p.theme_type_variation = "CardPanel"
+	p.custom_minimum_size = card
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var col := Kit.vbox(10)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(col)
+	var store := str(v.get("store", ""))
+	var eyebrow := Kit.micro(T.FREE_ON % store if store != "" else T.SHELF_FREE, "EyebrowLabel")
+	col.add_child(eyebrow)
+	var title := Kit.label(str(v.get("title", "")), "HeaderLabel", true)
+	title.name = "Title"
+	title.max_lines_visible = 2
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	col.add_child(title)
+	var price := W.price_column(d, true, false)
+	price.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	col.add_child(price)
+	var chips := Kit.hbox(8)
+	chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for b in W.deal_badges(d, cur, now):
+		chips.add_child(W.badge(b["kind"], b["text"], b["tone"], b["icon"], "chip"))
+	if chips.get_child_count() > 0:
+		col.add_child(chips)
+	else:
+		chips.free()
+	var how := Kit.label(T.FREE_HOW, "QuietLabel", true)
+	how.name = "How"
+	col.add_child(how)
+	return p
 
 
 ## Price plate and extra pills on a shelf tile.
@@ -566,10 +621,10 @@ func on_button(b: String, f: Control) -> bool:
 func on_art(key: String, kind: String, path: String) -> void:
 	if not W.ArtLinkScript.apply(views, key, kind, path):
 		return
-	if kind == "cover":
+	if kind == "cover" or kind == "hero":
 		for s in shelves:
 			for t in s.tiles:
-				if t.game.get("key", "") == key:
+				if t.game.get("key", "") == key and (kind == "cover" or t.art_kind == "hero"):
 					t.ensure_art()
 	if spot_view.get("key", "") == key:
 		if (kind == "hero" or kind == "cover") and stage != null:

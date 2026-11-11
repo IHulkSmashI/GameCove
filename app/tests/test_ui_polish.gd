@@ -181,3 +181,34 @@ func test_game_page_about_keeps_its_last_lines_in_reach() -> void:
 	ok(q.ttb_card == null, "no times, no card")
 	q.free()
 	games._free(r)
+
+
+# ---- Discover: a short Free to keep row ---------------------------------------------
+
+func test_featured_cards_fill_a_short_row() -> void:
+	var usual: Vector2 = Tile.size_for(Tile.row_width(), Shelf.GAP)
+	var f: Vector2 = Shelf.featured_size(1184.0)
+	eq(f.y, usual.y, "as tall as the usual covers")
+	eq(f.x * 2.0 + Shelf.GAP, 1184.0, "two fill the row exactly")
+	ok(f.x > usual.x * 3.0, "wide, not a lonely cover")
+	eq(Tile.lift_for(usual), Tile.LIFT, "covers lift as before")
+	ok((Tile.lift_for(f) - 1.0) * f.x <= (Tile.LIFT - 1.0) * usual.y + 0.5, "a wide card grows by a few px, not out of its row")
+	# A wide card shows the wide art when the game has it, else its cover.
+	var dir := ProjectSettings.globalize_path("user://test_featured")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var img := Image.create(64, 32, false, Image.FORMAT_RGB8)
+	img.fill(Color(0.2, 0.5, 0.7))
+	img.save_png(dir.path_join("hero.png"))
+	img.save_png(dir.path_join("cover.png"))
+	var g: Dictionary = Logic.g("epic", "f", "Flotsam")
+	g["art"]["cover"] = dir.path_join("cover.png")
+	var s: VBoxContainer = Shelf.new()
+	s.art_kind = "hero"
+	s.setup("free", "Free to keep", [g], f)
+	var t: Button = s.tiles[0]
+	eq(t.custom_minimum_size, f, "the card takes the featured size")
+	eq(t.cover_path(), g["art"]["cover"], "no wide art yet: the cover")
+	g["art"]["hero"] = dir.path_join("hero.png")
+	eq(t.cover_path(), g["art"]["hero"], "the wide art once it's there")
+	eq(t._art_kind(), "hero", "loaded uncropped")
+	s.free()
