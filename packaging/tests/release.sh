@@ -244,6 +244,10 @@ ci_pin=$(sed -n 's/^  GODOT_EDITOR_SHA256: \([0-9a-f]\{64\}\)$/\1/p' "$CI")
 rel_pin=$(sed -n 's/^  GODOT_EDITOR_SHA256: \([0-9a-f]\{64\}\)$/\1/p' "$W")
 [ -n "$ci_pin" ] && [ "$ci_pin" = "$rel_pin" ] && ok || bad "ci.yml must pin the same Godot editor sha256 as release.yml ($ci_pin vs $rel_pin)"
 [ "$(grep -c 'godot.zip "https://' "$CI")" = "$(grep -c '${GODOT_EDITOR_SHA256}  godot.zip" | sha256sum -c -' "$CI")" ] && ok || bad "ci.yml must check every Godot download"
+# one cosign order everywhere (review 6 low): the pinned copy first, then the system's
+pin_at=$(awk '/^cosign_bin\(\)/ { f = 1 } f && /cosign-\$COSIGN_VERSION/ { print NR; exit }' "$GG")
+sys_at=$(awk '/^cosign_bin\(\)/ { f = 1 } f && /command -v cosign/ { print NR; exit }' "$GG")
+[ -n "$pin_at" ] && [ -n "$sys_at" ] && [ "$pin_at" -lt "$sys_at" ] && ok || bad "get-gamecove.sh must try the pinned cosign before the system's"
 # a "run:" without "shell: bash" has no pipefail on GitHub: "pytest | tee" would pass with failing tests (review M)
 nopf=$(awk '/^ *- (name|run|uses):/ { pf = 0 } /set -o pipefail/ { pf = 1 } /\| tee / && !pf { n++ } END { print n + 0 }' "$CI")
 [ "$nopf" = 0 ] && ok || bad "ci.yml: every step that pipes into tee must set -o pipefail first ($nopf without)"

@@ -669,9 +669,16 @@ func load_index() -> Dictionary:
 		var s: Dictionary = runner.run("curl", PackedStringArray(["--proto", "=https", "--proto-redir", "=https", "-fsSL", "--max-time", "20", "--", Index.URL + ".sha256"]))
 		var want := Index.sha_from_text(str(s.get("out", "")))
 		var good := int(r.get("code", -1)) == 0 and int(s.get("code", -1)) == 0 and want != "" \
-			and FileAccess.file_exists(part) and FileAccess.get_sha256(part) == want \
-			and not Index.parse_gz(FileAccess.get_file_as_bytes(part)).is_empty()
+			and FileAccess.file_exists(part) and FileAccess.get_sha256(part) == want
+		# the signature first, then the contents: nothing in the download is read before cosign has looked at it
 		var sig := _index_signature(part) if good else "bad"
+		var doc: Dictionary = Index.parse_gz(FileAccess.get_file_as_bytes(part)) if good and sig != "bad" else {}
+		good = good and not doc.is_empty()
+		# never an older list than the one held (a replayed index must not bring back a withdrawn item)
+		if good and FileAccess.file_exists(path):
+			var held: Dictionary = Index.parse_gz(FileAccess.get_file_as_bytes(path))
+			if not held.is_empty() and str(doc.get("built", "")) < str(held.get("built", "")):
+				good = false
 		if good and sig != "bad":
 			DirAccess.rename_absolute(part, path)
 			# the sha256 of the file cosign accepted; any other file at `path` counts as unverified
@@ -684,8 +691,9 @@ func load_index() -> Dictionary:
 	return Index.parse_gz(FileAccess.get_file_as_bytes(path)) if FileAccess.file_exists(path) else {}
 
 
-## cosign on this device: the system's, else the copy the installer downloaded (get-gamecove.sh's pinned
-## COSIGN_VERSION and sha256); "" when there is none.
+## cosign on this device: the copy the installer downloaded (get-gamecove.sh's pinned COSIGN_VERSION, the one
+## the bundles are made for), else the system's; "" when there is none. The same order as the installer and the
+## upscaling helper (mirror.cosign_path).
 const COSIGN_VERSION := "v2.5.3"
 const VERIFIED_SUFFIX := ".verified"
 ## A maker's firmware download: redirects and size are capped (review problem 1).
@@ -694,11 +702,10 @@ const MAX_FW_BYTES := 512 * 1024 * 1024
 
 
 func _cosign() -> String:
-	var sys := _which("cosign")
-	if sys != "":
-		return sys
 	var mine := home.path_join(".local/share/gamecove/tools/cosign-" + COSIGN_VERSION)
-	return mine if home != "" and FileAccess.file_exists(mine) else ""
+	if home != "" and FileAccess.file_exists(mine):
+		return mine
+	return _which("cosign")
 
 
 ## The cached index's signature was checked on this device (review problem 1): only then are maker downloads
