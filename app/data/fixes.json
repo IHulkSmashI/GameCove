@@ -258,6 +258,25 @@
    "page": "fixes"
   },
   {
+   "id": "journal-flood",
+   "title": "Quiet system log",
+   "line": "Stops steamos-manager filling the system log with split-lock lines, so older logs aren't wiped.",
+   "symptom": "steamos-manager hands every split-lock hit to a crash reporter Bazzite doesn't have; each hit and each failure is logged (about 70,000 lines in five minutes on a Claw 8 EX, 14 % of a CPU core), so the capped journal loses every earlier boot within minutes.",
+   "kind": "file",
+   "password": "admin",
+   "restart": "",
+   "auto": [],
+   "optional": "*",
+   "why": "Any handheld with steamos-manager but without Valve's steamos-log-submitter (Bazzite); the fix checks for both, so it is offered everywhere.",
+   "bazzite": "Not fixed: Bazzite ships steamos-manager without steamos-log-submitter.",
+   "steamos": "Not needed: SteamOS has steamos-log-submitter, which takes the hits.",
+   "sources": [
+    "ClawDeck py_modules/clawdeck/quietlog.py and docs/HARDWARE-FINDINGS.md (measured on a Claw 8 EX, 2026-11-04)",
+    "https://gitlab.steamos.cloud/holo/steamos-manager/-/blob/a3b2013/steamos-manager/src/sls/ftrace.rs (split_lock_warn trace, forwarded to the log submitter)"
+   ],
+   "page": "fixes"
+  },
+  {
    "id": "quiet",
    "title": "Keep GameCove off the game's cores",
    "line": "While a game runs, GameCove's own work moves to the efficiency cores at low priority.",

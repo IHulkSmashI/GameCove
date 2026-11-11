@@ -142,6 +142,8 @@ func test_each_fix_resolves_to_the_expected_devices() -> void:
 		eq(_fixset(fix, "optional"), want[fix][1], fix + ": optional")
 	eq(_fixset("ax210-d3cold", "auto"), ["ayaneo-2", "ayaneo-2s", "gpd-win-5"], "ax210-d3cold: every row with an AX210")
 	eq(_fixset("ax210-d3cold", "optional").size(), _rows().size() - 3, "ax210-d3cold: offered everywhere else")
+	eq(_fixset("journal-flood", "auto"), [], "journal-flood: never automatic")
+	eq(_fixset("journal-flood", "optional").size(), _rows().size(), "journal-flood: offered on every handheld (the fix checks for steamos-manager)")
 
 
 func test_no_fix_applies_to_a_device_lacking_its_trait() -> void:
