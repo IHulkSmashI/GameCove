@@ -1879,6 +1879,9 @@ func _close_page() -> void:
 
 
 func _open_menu() -> void:
+	# One drawer at a time: a choice sheet left open would sit over the menu.
+	if game_actions != null and game_actions.sheet != null and game_actions.sheet.is_open():
+		game_actions.sheet.close()
 	_focus_before_menu = get_viewport().gui_get_focus_owner()
 	_screen().focus_behavior_recursive = Control.FOCUS_BEHAVIOR_DISABLED
 	top_bar.focus_behavior_recursive = Control.FOCUS_BEHAVIOR_DISABLED
