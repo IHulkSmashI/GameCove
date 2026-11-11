@@ -243,7 +243,11 @@ def _fallback(home: str, key: str, gpu: dict, game_dir: str | None, p: dict) -> 
     if not started or seen.get(str(key)) == started:
         return _repair(home, key, gpu, game_dir)
     seen[str(key)] = started
-    bad = st["active"]["state"] == "not_loaded" or (st["active"]["state"] == "loaded" and st["active"].get("errors"))
+    # a strike: OptiScaler never started, or it started and its log says the upscaler itself failed. "Loaded" with
+    # other errors is a game whose DLSS / FSR wasn't switched on in its menu (review low: that counted, and two starts
+    # without DLSS on said "FSR 4.1.2 didn't start twice")
+    a = st["active"]
+    bad = a["state"] == "not_loaded" or (a["state"] == "loaded" and active.upscaler_failed(a.get("errors")))
     strikes[str(key)] = strikes.get(str(key), 0) + 1 if bad else 0
     games.save_state(home, s)
     if strikes[str(key)] < STRIKES:

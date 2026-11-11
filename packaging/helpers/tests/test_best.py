@@ -449,6 +449,30 @@ def test_fsr4_that_never_starts_falls_back_to_fsr31_once(tmp_path):
     assert best.status(home, "501", Z1E)["fell_back"] is None
 
 
+def test_starts_without_dlss_switched_on_are_no_strikes(tmp_path):
+    """Review low: "loaded" plus any [error] line counted as a strike, so two starts where the player hadn't switched
+    DLSS on yet stepped FSR 4 down. Only the upscaler's own failure counts."""
+    home = str(tmp_path)
+    _pkg(home)
+    _amd_fsr4(home)
+    d = _steam_game(home, "503", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    best.opt_in(home, "503", Z1E)
+    t = time.time() + 30
+    log = os.path.join(d, "OptiScaler.log")
+    for i in range(3):
+        _start(home, "503", t + i * 60)
+        _w(log, "[info] OptiScaler loaded\n[error] Hooks: GetProcAddress for nvapi64 failed\n")
+        os.utime(log, (t + i * 60 + 1,) * 2)
+        assert best.prepare(home, "503", Z1E)["did"] == ""
+    assert "Fsr4Update=true" in open(os.path.join(d, "OptiScaler.ini")).read()
+    for i in range(3, 5):
+        _start(home, "503", t + i * 60)
+        _w(log, "[info] OptiScaler loaded\n[error] FSR4FeatureDx12: amd_fidelityfx_upscaler_dx12.dll init failed\n")
+        os.utime(log, (t + i * 60 + 1,) * 2)
+        r = best.prepare(home, "503", Z1E)
+    assert "switched to FSR 3.1" in r["did"]
+
+
 def test_a_good_start_clears_the_strikes(tmp_path):
     home = str(tmp_path)
     _pkg(home)
