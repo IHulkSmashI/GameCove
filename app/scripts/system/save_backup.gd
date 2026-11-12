@@ -76,7 +76,14 @@ func backup(key: String, title: String, reason: String, parts: Array, force := f
 		# -h: a linked subfolder is copied, not stored as a link (gogdl and legendary follow links,
 		# so its files are part of the save; a link alone would restore to whatever it points at
 		# then, or to nothing; review at ff76ca4, L4)
-		var r: Dictionary = run.call("tar", PackedStringArray(["-czhf", dir.path_join(file), "-C", str(p["path"]), "."]))
+		# a link that points nowhere stops tar -h ("File removed before we read it", exit 1) and
+		# with it every backup and download; it holds nothing, so it's left out, by its exact name
+		# (review at 56f5255, low)
+		var args := PackedStringArray(["--no-wildcards", "--anchored"])
+		for rel in dangling_links(str(p["path"])):
+			args.append("--exclude=./" + str(rel))
+		args.append_array(["-czhf", dir.path_join(file), "-C", str(p["path"]), "."])
+		var r: Dictionary = run.call("tar", args)
 		if int(r.get("code", -1)) != 0:
 			for q in out_parts:
 				DirAccess.remove_absolute(dir.path_join(str(q["file"])))
@@ -99,6 +106,24 @@ func backup(key: String, title: String, reason: String, parts: Array, force := f
 	if find(key, stamp).is_empty():
 		return {"ok": false, "id": "", "skipped": "", "why": "the backup was dropped as soon as it was made"}
 	return {"ok": true, "id": stamp, "skipped": "", "why": ""}
+
+
+## Links under `path` that point nowhere (also through links to links), relative to it, walking
+## into linked folders as tar -h does (24 levels at most, so a link loop ends).
+static func dangling_links(path: String, base := "", depth := 0) -> Array:
+	var out: Array = []
+	var d := DirAccess.open(path) if path != "" and depth <= 24 else null
+	if d == null:
+		return out
+	d.include_hidden = true
+	for f in d.get_files():
+		if d.is_link(f):
+			var to := path.path_join(f)
+			if not FileAccess.file_exists(to) and not DirAccess.dir_exists_absolute(to):
+				out.append(base + f)
+	for sub in d.get_directories():
+		out.append_array(dangling_links(path.path_join(sub), base + sub + "/", depth + 1))
+	return out
 
 
 ## A name that sorts by time and never collides within a second.

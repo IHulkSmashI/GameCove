@@ -882,6 +882,33 @@ func test_a_linked_subfolder_is_backed_up_by_its_files() -> void:
 	_done(w)
 
 
+## Review at 56f5255, low: tar -h stops on a link that points nowhere ("File removed before we
+## read it", exit 1), so one dangling link in a save folder failed every backup, and with it
+## every download. A link that points nowhere holds nothing: it's left out, everything else in.
+func test_a_dangling_link_doesnt_stop_the_backup() -> void:
+	var w := _world("backup_dangling")
+	var bk: RefCounted = w["s"].backups
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "slot 1", T0)
+	Fakes.put(w["gsaves"].path_join("sub/slot2.sav"), "slot 2", T0)
+	OS.execute("ln", ["-s", w["root"].path_join("gone/for/good"), w["gsaves"].path_join("broken.lnk")])
+	OS.execute("ln", ["-s", "../nothing-here", w["gsaves"].path_join("sub/also broken")])
+	OS.execute("ln", ["-s", "../slot1.sav", w["gsaves"].path_join("sub/fine.lnk")])
+	var b: Dictionary = bk.backup("gog:1207", "W", "before_download", [{"name": "saves", "path": w["gsaves"]}])
+	ok(b["ok"], "backed up (%s)" % str(b.get("why", "")))
+	_rm(w["gsaves"])
+	ok(bk.restore("gog:1207", str(b["id"]))["ok"], "restored")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "slot 1", "the slots came back")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("sub/slot2.sav")), "slot 2", "the one in a subfolder too")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("sub/fine.lnk")), "slot 1", "a link that works is kept by its file")
+	# and a sync that backs up before downloading goes through
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "slot 1", T0)
+	OS.execute("ln", ["-s", w["root"].path_join("gone/for/good"), w["gsaves"].path_join("broken.lnk")])
+	w["gog_cloud"].seed("saves", "slot1.sav", "cloud slot 1", T0 + 50)
+	w["s"].sync_now(w["gog"])
+	ok(w["s"].status(w["gog"])["state"] != "backup_failed", "the sync isn't stopped by it (%s)" % w["s"].status(w["gog"])["state"])
+	_done(w)
+
+
 ## L5: the sheet shows the save as it was when the conflict was found. Changed since (played
 ## from Heroic), "keep the cloud" used to download over a save nobody had looked at.
 func test_a_choice_on_a_save_that_changed_since_asks_again() -> void:

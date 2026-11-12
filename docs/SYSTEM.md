@@ -339,7 +339,8 @@ legendary's own same-age check); both changed, or never synced with saves on bot
 settles (the launch waits; B starts nothing; "Decide later" plays without syncing). GOG: gogdl's own classification;
 the fresh timestamp it prints on a conflict is never kept. Before anything may overwrite saves on the handheld
 (legendary's download empties the folder first, gogdl's deletes files the cloud doesn't have) the folders are backed
-up with `tar -h` (a linked subfolder's files, not the link) into `user://saves/backups/<game>/`; a download that fails puts the backup back. Before anything may
+up with `tar -h` (a linked subfolder's files, not the link; a link that points nowhere holds nothing and is left out
+by its exact name, `--no-wildcards --anchored --exclude=./<path>`, since tar -h stops on it) into `user://saves/backups/<game>/`; a download that fails puts the backup back. Before anything may
 overwrite the cloud's save the other way, the cloud's save is fetched into a scratch folder and kept as a backup
 too: when a conflict is found, and again when "Keep this handheld's save" is picked (GOG's forced upload deletes cloud
 files the handheld doesn't have; Epic keeps earlier cloud saves itself, but nothing on the handheld could put one
