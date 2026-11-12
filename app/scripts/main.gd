@@ -9,6 +9,7 @@ extends Control
 
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
+const TouchTargets := preload("res://scripts/ui/touch_targets.gd")
 const Home := preload("res://scripts/ui/home.gd")
 const LibraryScreen := preload("res://scripts/ui/library_screen.gd")
 const DiscoverScreen := preload("res://scripts/ui/discover_screen.gd")
@@ -179,6 +180,8 @@ var _boot_intro: Control
 func _ready() -> void:
 	background = BackgroundMode.new()
 	add_child(background)
+	# every control a finger presses is 48 x 48 or more (docs/CONTROLLER-UX.md CUX-13), from here on
+	add_child(TouchTargets.attach(get_tree()))
 	UiPrefs.load_prefs()
 	# a Steam Machine or a PC by the TV: "device" for "handheld" in every text (words.gd)
 	Words.setup(Device)
