@@ -615,3 +615,21 @@ func test_art_with_a_huge_declared_size_is_never_decoded() -> void:
 	eq(ImageGuard.load(dir.path_join("missing.png")), null, "missing: nothing")
 	for name in ["cover.png", "cover.jpg", "cover.webp", "fake.png", "huge.png"]:
 		DirAccess.remove_absolute(dir.path_join(name))
+
+
+## Review 56f5255: a load kept going for art nobody waits for any more (a tile scrolled away and freed).
+func test_art_nobody_waits_for_is_not_decoded() -> void:
+	var gone := Node.new()
+	var cb := Callable(gone, "queue_free")
+	gone.free()
+	var live := Node.new()
+	ArtCache._pending.clear()
+	ArtCache._pending["cover|/a"] = [cb]
+	ArtCache._pending["cover|/b"] = [cb, Callable(live, "queue_free")]
+	ArtCache._pending["cover|/c"] = []
+	ok(not ArtCache._claim("cover|/a"), "every waiter freed: not decoded")
+	ok(not ArtCache.is_pending("cover", "/a"), "and forgotten, so the next request starts afresh")
+	ok(ArtCache._claim("cover|/b"), "one waiter left: decoded")
+	ok(ArtCache._claim("cover|/c"), "a prefetch with no callback: decoded")
+	ArtCache._pending.clear()
+	live.free()
