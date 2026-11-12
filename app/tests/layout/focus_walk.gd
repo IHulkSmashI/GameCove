@@ -35,6 +35,7 @@ extends RefCounted
 ##   meta "ux_modal"    a panel that owns the pad while open (the on-screen keyboard): the rest isn't walked
 ##   meta "ux_follows"  on a scroller: it follows focus with its own code (the journeys check it on screen)
 ##   meta "ux_any_key"  a "press any button" countdown: nothing to walk
+##   meta "ux_no_walk"  an overlay the D-pad doesn't drive (the launch splash: B cancels), with the reason
 ##   meta "ux_nav_bar"  on a container: the top bar, side categories, section tabs; a press out of it
 ##                      may land on the screen's main control rather than the nearest one
 ##   method ux_looks_focused() -> bool: a control that draws its own focus look
@@ -45,6 +46,8 @@ const Checks := preload("res://tests/layout/layout_checks.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 
 const TOL := 4.0
+## Scripts that draw a dimming layer over everything behind them (as layout_checks.gd).
+const SCRIMS: Array[String] = ["/ui/games/sheet.gd", "/ui/low_battery_dialog.gd"]
 ## Two candidates whose gaps differ by less than this are "equally near".
 const NEAR := 14.0
 ## Smallest touch target, layout px (Android 48 dp, Steam Deck's own UI).
@@ -77,9 +80,11 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 	var view := root.get_visible_rect()
 	var start: Control = root.gui_get_focus_owner()
 	var any_key := _find_meta(root, "ux_any_key")
+	if any_key == null:
+		any_key = _find_meta(root, "ux_no_walk")
 	if any_key != null:
 		# "press any button" (a countdown dialog): every button is its answer, so there is nothing to walk
-		stats["opt_outs"].append("%s: %s" % [_where(any_key), str(any_key.get_meta("ux_any_key"))])
+		stats["opt_outs"].append("%s: %s" % [_where(any_key), str(any_key.get_meta("ux_any_key", any_key.get_meta("ux_no_walk", "")))])
 		return {"problems": problems, "stats": stats}
 	var cands := candidates(root, _modal_of(start))
 	stats["focusable"] = cands.size()
@@ -121,6 +126,9 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 	var holders := _value_holders(root)
 	var edges := {}   # Cand -> [Cand or null per dir]
 	var aborted := ""
+	# the tabs open now (a category, a section): grabbing them again shows this shot's page
+	var any_swap := false
+	var open_tabs: Array = cands.filter(func(x): return _is_tab(x.node) and x.node is BaseButton and (x.node as BaseButton).button_pressed).map(func(x): return x.node)
 	for c in cands:
 		if aborted != "" or not c.pad:
 			continue
@@ -128,12 +136,16 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 			aborted = "stopped after %d presses" % MAX_PRESSES
 			break
 		var row: Array = [null, null, null, null]
+		# a tab shows its own page when it takes focus: what is beside it then isn't what was walked
+		var swapped := false
 		for di in 4:
 			if not is_instance_valid(c.node) or not c.node.is_visible_in_tree():
 				break
 			c.node.grab_focus()
+			_finish_tweens(root)
 			if root.gui_get_focus_owner() != c.node:
 				break
+			swapped = swapped or (_is_tab(c.node) and _any_hidden(cands))
 			var d: Dictionary = DIRS[di]
 			var before := _values(holders)
 			var shown := _shown(cands)
@@ -143,7 +155,11 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 			var changed := _diff(holders, before)
 			var gone := _gone(cands, shown)
 			if not gone.is_empty():
-				var tab := _is_tab(c.node)
+				# a tab, or a press onto one (a master list's row shows its own detail when it takes focus)
+				var tab := _is_tab(c.node) or (g != null and is_instance_valid(g) and _is_tab(g))
+				# a stepper's value can rebuild what it filters (Deals' store): its own value, put back below
+				if _is_stepper(c.node) and di >= 2 and changed.any(func(x): return is_instance_valid(x) and (x == c.node or (x as Node).is_ancestor_of(c.node))):
+					tab = true
 				if not tab:
 					_add(problems, "pad-action", c.node, "%s here changed the screen (%s no longer shows)" % [d["name"], _where(gone[0])])
 				# put the screen back: the opposite press (tabs), else stop walking this screen
@@ -159,7 +175,9 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 			if not changed.is_empty():
 				var node := c.node
 				var own := changed.any(func(x): return x == node or (x as Node).is_ancestor_of(node))
-				var allowed := own and ((_is_stepper(node) and di >= 2) or _is_tab(node))
+				var allowed := (own and _is_stepper(node) and di >= 2) \
+					or (_is_tab(node) and changed.all(func(x): return is_instance_valid(x) and (_is_tab(x) or (g != null and (x as Node).is_ancestor_of(g))))) \
+					or (g != null and _is_tab(g) and changed.all(func(x): return is_instance_valid(x) and _is_tab(x)))
 				if not allowed:
 					_add(problems, "pad-value", node, "%s changed %s" % [d["name"], ", ".join(changed.map(func(x): return _where(x).right(50)))])
 				_restore(holders, before)
@@ -170,10 +188,12 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 				continue
 			if g == c.node:
 				var near := _nearest_in_line(c, cands, d["v"])
-				if not near.is_empty() and not _is_stepper(c.node):
+				if not near.is_empty() and not _is_stepper(c.node) and not swapped:
 					_add(problems, "pad-stuck", c.node, "%s goes nowhere though %s is right there" % [d["name"], _where(near[0].node)])
 				continue
 			var gc: Cand = by_node.get(g)
+			if gc == null and (swapped or any_swap or _shows_now(g, root)):
+				continue   # into a page a tab shows (walked on that page's own shot), or a row rebuilt or scrolled in
 			if gc == null:
 				_add(problems, "pad-hidden", c.node, "%s goes to %s, which isn't on screen (%s)" % [d["name"], _where(g), _why_hidden(g, root)])
 				continue
@@ -183,6 +203,17 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 			if why != "":
 				_add(problems, why.get_slice("|", 0), c.node, why.get_slice("|", 1))
 		edges[c] = row
+		if swapped:
+			any_swap = true
+			for t in open_tabs:   # back to the page the shot shows
+				if is_instance_valid(t) and t.is_visible_in_tree():
+					t.grab_focus()
+					_finish_tweens(root)
+			if is_instance_valid(start) and start.is_visible_in_tree():
+				start.grab_focus()
+			_finish_tweens(root)
+			if _any_hidden(cands):
+				aborted = "the tab %s showed another page and the walk couldn't put it back" % _where(c.node)
 	# ---- reachability ---------------------------------------------------------------
 	if aborted == "" and by_node.has(start):
 		var seen := {by_node[start]: true}
@@ -194,7 +225,7 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 					seen[nxt] = true
 					todo.append(nxt)
 		for c in cands:
-			if c.pad and c.actionable and not seen.has(c) and _can_show(c, view):
+			if c.pad and c.actionable and not seen.has(c) and is_instance_valid(c.node) and c.node.is_visible_in_tree() and _can_show(c, view):
 				_add(problems, "pad-unreachable", c.node, "the D-pad can't get here from %s" % _where(start))
 	if aborted != "":
 		stats["aborted"] = aborted
@@ -207,6 +238,30 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 
 # ---- what's on screen -------------------------------------------------------------
 
+static var _last_occ: Array[Checks.Item] = []
+
+
+## A control that wasn't on the list when the walk began (a panel rebuilt, a
+## scroller's row): on screen once its scrollers follow focus to it, and not
+## under a sheet?
+static func _shows_now(g: Control, root: Window) -> bool:
+	if not g.is_visible_in_tree():
+		return false
+	var it := Checks.Item.new()
+	it.node = g
+	it.rect = g.get_global_rect()
+	it.order = 1 << 40   # judged against panels drawn over the whole screen only
+	var vis := _project(it.rect, _chain(g)).intersection(root.get_visible_rect())
+	if vis.size.x <= 0.0 or vis.size.y <= 0.0:
+		return false
+	for o in _last_occ:
+		if is_instance_valid(o.node) and o.node.is_visible_in_tree() and not o.node.is_ancestor_of(g) \
+				and (SCRIMS.any(func(x): return o.node.get_script() != null and o.node.get_script().resource_path.ends_with(x)) or o.node is ColorRect) \
+				and o.rect.grow(1.0).encloses(vis):
+			return false
+	return true
+
+
 ## Every control on screen that takes focus (pad or touch), not under a sheet;
 ## inside `scope` only when focus is in a modal panel (meta "ux_modal": the
 ## on-screen keyboard, a dialog without a full-screen scrim).
@@ -216,6 +271,7 @@ static func candidates(root: Window, scope: Node = null) -> Array[Cand]:
 	var typed: Array[Checks.Item] = []
 	_collect(root, view, false, 1.0, typed, counter)
 	var occ := Checks._occluders(typed)
+	_last_occ = occ
 	var out: Array[Cand] = []
 	for it in typed:
 		var n := it.node
@@ -318,7 +374,8 @@ static func _under(it: Checks.Item, vis: Rect2, occ: Array[Checks.Item]) -> bool
 ## True when pressing A (or tapping) does something.
 static func actionable(n: Control) -> bool:
 	if n.has_meta("ux_action"):
-		return bool(n.get_meta("ux_action"))
+		var m: Variant = n.get_meta("ux_action")
+		return m if m is bool else true   # a reason string: it does something
 	if n is BaseButton:
 		return not (n as BaseButton).disabled
 	if n is LineEdit:
@@ -793,6 +850,14 @@ static func _gone(cands: Array[Cand], shown: Dictionary) -> Array:
 		if shown[c] and (not is_instance_valid(c.node) or not c.node.is_visible_in_tree()):
 			out.append(c.node)
 	return out
+
+
+## Something walked here is now hidden (a tab swapped the page beside it).
+static func _any_hidden(cands: Array[Cand]) -> bool:
+	for c in cands:
+		if not is_instance_valid(c.node) or not c.node.is_visible_in_tree():
+			return true
+	return false
 
 
 static func _scroll_state(root: Node) -> Array:
