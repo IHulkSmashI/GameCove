@@ -5,7 +5,7 @@ extends "res://scripts/ui/discover/section.gd"
 ##          toggle beside it.
 ##   Month: a Monday-first month grid (days with releases are focusable and
 ##          show small covers where the cell is big enough, else the first
-##          titles and a dot with the count; today is ringed in the accent),
+##          titles and a dot with the count; today has an accent tint and bar),
 ##          with the focused day's games in a panel on the right; month and
 ##          quarter dates go under "Sometime this month".
 ## A game coming out today is highlighted. Y toggles Notify me anywhere.
@@ -237,11 +237,12 @@ static func _sub(r: Dictionary) -> String:
 	return "  ·  ".join(bits)
 
 
-## Today (and a game out today in the list): ringed in the accent.
+## Today (and a game out today in the list): an accent tint and a bar along the
+## bottom, never a ring: the ring is focus alone (docs/CONTROLLER-UX.md CUX-1, CUX-2).
 func _highlight(b: Button) -> void:
-	var sb := ThemeLib.box(Color(ThemeLib.color("accent"), 0.08), ThemeLib.radius("m"), 18, 10)
+	var sb := ThemeLib.box(Color(ThemeLib.color("accent"), 0.10), ThemeLib.radius("m"), 18, 10)
 	sb.border_color = ThemeLib.color("accent")
-	sb.set_border_width_all(2)
+	sb.border_width_bottom = 3
 	b.add_theme_stylebox_override("normal", sb)
 	b.set_meta("today", true)
 

@@ -15,6 +15,7 @@ const Root := preload("res://scripts/ui/discover/root.gd")
 const DiscoverScreen := preload("res://scripts/ui/discover_screen.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Shelf := preload("res://scripts/ui/shelf.gd")
+const ThemeLib := preload("res://theme/gamecove_theme.gd")
 
 
 class FakeArt extends RefCounted:
@@ -310,6 +311,10 @@ func test_calendar_list_notify_and_today() -> void:
 	var fm: Array = cal.rows.filter(func(p): return p[0].get_meta("view")["title"] == "Football Manager 27")
 	eq(fm.size(), 1, "FM27 listed")
 	ok(fm[0][0].has_meta("today"), "released-today highlight")
+	# docs/CONTROLLER-UX.md CUX-1: the today mark is a tint and a bar, never a ring like focus
+	var tsb: StyleBox = fm[0][0].get_theme_stylebox("normal")
+	ok(tsb is StyleBoxFlat and not preload("res://tests/layout/focus_walk.gd")._ringlike(tsb, ThemeLib.color("ring"), ThemeLib.color("accent")),
+		"today doesn't wear the focus ring")
 	ok(_texts(fm[0][0]).contains(T.HERO_OUT_TODAY), "Out today badge")
 	# Notify me on a future entry.
 	var future: Array = cal.rows.filter(func(p): return p[1].focus_mode != Control.FOCUS_NONE and p[0].get_meta("view")["data"].get("days_until") != null and int(p[0].get_meta("view")["data"]["days_until"]) > 0)
