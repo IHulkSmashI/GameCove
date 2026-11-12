@@ -333,16 +333,48 @@ def _norm(name: str | None) -> str:
     return "".join(ch for ch in str(name or "").lower() if ch.isalnum())
 
 
+_EDITION_RE = re.compile(r"\s*[:\-\u2013\u2014]\s*(standard|deluxe|ultimate|gold|premium|complete|definitive|digital|launch|early access|"
+                         r"game of the year|goty)( edition)?\s*$|\s+(standard|deluxe|ultimate|gold|premium|complete|definitive|"
+                         r"digital|game of the year|goty) edition\s*$", re.I)
+_REGION_RE = re.compile(r"\s*[\(\[]\s*(global|epic( games)?|steam|gog|ea app|xbox|windows|pc|na|eu|asia|sea|cn|jp|kr|"
+                        r"intl|international|en|worldwide|launcher)[^\)\]]*[\)\]]\s*", re.I)
+
+
+def title_variants(name: str | None) -> list[str]:
+    """A store title as the list might spell it: the title itself, then without trademark marks, region/store
+    suffixes ("(Global)", "(Epic)") and edition suffixes (": Standard Edition"), each normalised (lower case,
+    letters and digits only). The first is the exact title."""
+    t = str(name or "").replace("\u2122", "").replace("\u00ae", "").replace("\u00a9", "").strip()
+    out = [_norm(t)]
+    for _ in range(3):
+        t2 = _EDITION_RE.sub("", _REGION_RE.sub(" ", t)).strip()
+        if t2 == t or not t2:
+            break
+        t = t2
+        out.append(_norm(t))
+    return [v for i, v in enumerate(out) if v and v not in out[:i]]
+
+
+def compat_rows(doc: dict, names: list, appid: str | None = None) -> list[dict]:
+    """Every compatibility row that any of these titles (and the app id) lead to, in order, without repeats."""
+    rows = doc.get("compat") or {}
+    found: list[dict] = []
+    a = str(appid or "")
+    if a.isdigit():
+        found += [r for r in rows.values() if a in [str(x) for x in r.get("appids") or []]][:1]
+    for n in names:
+        for v in title_variants(n):
+            r = rows.get(v)
+            if r and not any(r is f for f in found):
+                found.append(r)
+    return found
+
+
 def compat_row(doc: dict, name: str | None, appid: str | None = None) -> dict | None:
     """OptiScaler's Compatibility List as packed into games.json ("compat": normalised name -> row), for a game by
     app id or title: works offline, and is what the nightly data refreshes."""
-    rows = doc.get("compat") or {}
-    a = str(appid or "")
-    if a.isdigit():
-        hit = next((r for r in rows.values() if a in [str(x) for x in r.get("appids") or []]), None)
-        if hit:
-            return hit
-    return rows.get(_norm(name)) if name else None
+    hit = compat_rows(doc, [name], appid)
+    return hit[0] if hit else None
 
 
 # OptiScaler's Compatibility List marks online games ("**Online game, use at your own risk!**", "at your own
@@ -381,15 +413,19 @@ def knowledge(doc: dict, game_dir: str | None, appid: str | None = None, name: s
     (by app id, then title). Keys a caller can rely on: known, status ("works" | "broken" | "mixed" | ""), inputs,
     proxies, args, anticheat, online, notes, steamdeck0, optipatcher, appids, id, name."""
     g = by_appid(doc, appid) or match(doc, exes_in(game_dir)) or {}
-    row = compat_row(doc, name or g.get("name"), appid) or {}
+    # The store's title can be spelled any way ("Wuthering Waves (Global)", "WuWa"): look the row up by that title AND by
+    # the exe-matched entry's own name, and a flag any of them carries stays (review blocker: a passed title that
+    # missed replaced the matched game's name, and the "online" note was lost).
+    rows = compat_rows(doc, [name, g.get("name")], appid)
+    row = rows[0] if rows else {}
     return {"known": bool(g or row), "id": g.get("id") or row.get("slug"), "name": g.get("name") or row.get("name"),
             "status": g.get("status") or row.get("status") or "", "inputs": g.get("inputs") or row.get("inputs") or [],
             "proxies": g.get("proxies") or row.get("proxies") or [], "args": g.get("args") or row.get("args") or "",
-            "anticheat": bool(g.get("anticheat") or row.get("anticheat") or anticheat_note(g.get("notes"))
-                              or anticheat_note(row.get("notes"), row.get("issues"))),
+            "anticheat": bool(g.get("anticheat") or any(r.get("anticheat") or anticheat_note(r.get("notes"), r.get("issues")) for r in rows)
+                              or anticheat_note(g.get("notes"))),
             "notes": g.get("notes") or row.get("notes") or "",
-            "online": bool(g.get("online") or row.get("online") or online_risk(g.get("notes"))
-                           or online_risk(row.get("notes"), row.get("issues"))),
+            "online": bool(g.get("online") or any(r.get("online") or online_risk(r.get("notes"), r.get("issues")) for r in rows)
+                           or online_risk(g.get("notes"))),
             "steamdeck0": bool(g.get("steamdeck0")), "optipatcher": bool(row.get("optipatcher")),
             "appids": sorted({str(x) for x in (g.get("appids") or []) + (row.get("appids") or [])}),
             "wine_check": bool(g.get("wine_check")), "ini": dict(g.get("ini") or {}), "in_list": bool(g), "in_compat": bool(row)}

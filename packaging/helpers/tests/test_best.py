@@ -731,3 +731,61 @@ def test_the_readout_says_when_the_proton_cant_do_fsr4(tmp_path):
     os.remove(log)
     assert best.status(home, "401", Z1E)["active"]["state"] == "env"
     assert active.proton_of(log) == "" and active.proton_of(None) == ""
+
+
+MISMATCH = [("Wuthering Waves", "Client-Win64-Shipping.exe", ["Wuthering Waves (Global)", "WuWa", "Wuthering Waves: Standard Edition", "WUTHERING WAVES™"]),
+            ("Where Winds Meet", "wwm.exe", ["Where Winds Meet (Global)", "WWM", "Where Winds Meet (Epic)"]),
+            ("Zenless Zone Zero", "ZenlessZoneZero.exe", ["Zenless Zone Zero (Global)", "ZZZ", "Zenless Zone Zero®"]),
+            ("Arknights: Endfield", "Endfield.exe", ["Arknights: Endfield (Global)", "Endfield", "Arknights Endfield: Standard Edition"])]
+
+
+@pytest.mark.parametrize("game,exe,titles", MISMATCH)
+def test_a_store_title_that_doesnt_match_exactly_keeps_the_online_note(game, exe, titles):
+    """Review blocker: a passed title that missed ("Wuthering Waves (Global)", "WuWa") replaced the exe-matched game's
+    name, and the online flag was lost: prepare then installed OptiScaler with no ban warning."""
+    doc = gamedb.load(games.BUNDLED_GAMES)
+    base = gamedb.knowledge(doc, _exe_dir(exe), None, game)
+    assert base["online"] or base["anticheat"], game
+    for t in titles:
+        k = gamedb.knowledge(doc, _exe_dir(exe), None, t)
+        assert k["online"] == base["online"] and k["anticheat"] == base["anticheat"], t
+        assert k["name"] == game or k["name"] == base["name"], t
+
+
+def _exe_dir(exe):
+    import tempfile
+    d = tempfile.mkdtemp()
+    _w(os.path.join(d, exe), "x" * 10)
+    return d
+
+
+@pytest.mark.parametrize("title", ["Infinity Nikki (Epic)", "Infinity Nikki: Standard Edition", "Infinity Nikki™", "infinity nikki (global)"])
+def test_infinity_nikki_by_any_title_is_refused_for_anticheat(tmp_path, title):
+    home = str(tmp_path)
+    _pkg(home)
+    d = os.path.join(home, "Games", "InfinityNikki")
+    for f in ("X6Game/Binaries/Win64/X6Game-Win64-Shipping.exe", "nvngx_dlss.dll", "D3D12Core.dll"):
+        _w(os.path.join(d, f), "x" * 10)
+    before = _tree(d)
+    args = ["--home", home, "--key", "epic:nikki", "--gpu", json.dumps(DECK), "--dir", d, "--name", title]
+    p = cli.run(["plan"] + args)
+    assert p["refused"] == "anticheat" and p["hands_off"] and not p.get("offer"), title
+    assert cli.run(["opt-in"] + args)["refused"] == "anticheat"
+    assert cli.run(["prepare"] + args)["did"] == "" and _tree(d) == before
+
+
+@pytest.mark.parametrize("title", ["Wuthering Waves (Global)", "WuWa", "Wuthering Waves: Standard Edition"])
+def test_prepare_never_installs_into_an_online_game_without_opt_in_whatever_the_title(tmp_path, title):
+    home = str(tmp_path)
+    _pkg(home)
+    _amd_fsr4(home)
+    d = os.path.join(home, "Games", "Wuwa")
+    for f in ("Client/Binaries/Win64/Client-Win64-Shipping.exe", "nvngx_dlss.dll", "D3D12Core.dll"):
+        _w(os.path.join(d, f), "x" * 10)
+    before = _tree(d)
+    args = ["--home", home, "--key", "epic:wuwa", "--gpu", json.dumps(Z1E), "--dir", d, "--name", title]
+    p = cli.run(["plan"] + args)
+    assert p["online"] and p["auto"] is False and p["hands_off"], title
+    assert cli.run(["prepare"] + args)["did"] == "" and _tree(d) == before
+    assert cli.run(["choose", "--upscaler", "fsr31", "--fg", "0"] + args).get("refused") == "optin" and _tree(d) == before
+    assert cli.run(["opt-in"] + args)["ok"] and cli.run(["prepare"] + args) is not None
