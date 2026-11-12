@@ -68,6 +68,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: sh tools/ci/check-environment.sh release reviewers
+      - name: CI passed on this commit (checked before any tag exists)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: sh tools/ci/check-ci-passed.sh "$GITHUB_SHA"
       - name: Tag this commit and start the release run on the tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -163,7 +168,8 @@ jobs:
           ./godot --headless --path app --import 2>&1 | tee import.log
           mkdir -p app/build
           ./godot --headless --path app --export-release "Linux" build/gamecove.x86_64 2>&1 | tee export.log
-          ! grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log export.log
+          # not `! grep`: a negated command never stops a bash -e step unless it is the last line
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load" import.log export.log; then exit 1; fi
           test -x app/build/gamecove.x86_64
           test -s app/build/gamecove.pck
       - name: Licence texts are inside the app (review H8)
@@ -278,10 +284,10 @@ jobs:
           mkdir -p app-export
           tar -xzf "dist/gamecove-${VERSION}-x86_64.tar.gz" -C app-export
           sh packaging/sysext/build-sysext.sh --app app-export --out sysext 2>&1 | tee sysext.log
-          ! grep -q "no gyro HID-BPF object" sysext.log
-          ! grep -q "no bin/cabinet.dll" sysext.log
-          ! grep -q "no bin/fsr4-xmx" sysext.log
-          ! grep -q "no bin/upscalers" sysext.log
+          # not `! grep`: a negated command never stops a bash -e step unless it is the last line
+          for warning in "no gyro HID-BPF object" "no bin/cabinet.dll" "no bin/fsr4-xmx" "no bin/upscalers"; do
+            if grep -q "$warning" sysext.log; then echo "the sysext build warned: $warning" >&2; exit 1; fi
+          done
           unsquashfs -l sysext/gamecove.raw >sysext-files.txt
           grep -q "/usr/lib/gamecove/bin/cabinet.dll\$" sysext-files.txt
           grep -q "/usr/lib/gamecove/bin/fsr4-xmx/amd_fidelityfx_upscaler_dx12.dll\$" sysext-files.txt
@@ -308,7 +314,7 @@ jobs:
           xargs -d '\n' sha256sum -- <../sums.list >../SHA256SUMS.new
           mv ../SHA256SUMS.new SHA256SUMS
           cat SHA256SUMS
-          ! grep -q 'SHA256SUMS' SHA256SUMS
+          if grep -q 'SHA256SUMS' SHA256SUMS; then echo 'SHA256SUMS lists itself' >&2; exit 1; fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: packages
@@ -347,22 +353,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       actions: read
     steps:
-      - name: CI passed on this commit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          sparse-checkout: tools/ci
+          sparse-checkout-cone-mode: false
+      - name: CI passed on this commit (pull_request runs for the same sha do not count)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          set -o pipefail
-          # the newest completed CI run for this exact commit
-          res="$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&status=completed&per_page=20" \
-            --jq '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA)] | sort_by(.created_at) | last | .conclusion // "none"')"
-          if [ "$res" != "success" ]; then
-            echo "CI on $GITHUB_SHA is \"$res\" (needs success): fix it or re-run CI on this commit, then tag again" >&2
-            exit 1
-          fi
-          echo "CI passed on $GITHUB_SHA"
+        run: sh tools/ci/check-ci-passed.sh "$GITHUB_SHA"
 
   release:
     if: github.ref_type == 'tag'
@@ -406,7 +409,7 @@ jobs:
           # and the installer script is the tagged commit's own.
           cd dist
           test -s SHA256SUMS
-          ! grep -q 'SHA256SUMS' SHA256SUMS
+          if grep -q 'SHA256SUMS' SHA256SUMS; then echo 'SHA256SUMS lists itself' >&2; exit 1; fi
           sha256sum --strict -c SHA256SUMS
           find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | LC_ALL=C sort >../have.list
           sed 's/^[0-9a-f]\{64\} [ *]//' SHA256SUMS | LC_ALL=C sort >../listed.list

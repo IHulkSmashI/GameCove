@@ -18,9 +18,13 @@ firmware list, upscaler files and list, device photos, device fix list) is built
 1. Bump `Version:` in `packaging/rpm/gamecove.spec` and add `packaging/release-notes/v<version>.md` on `main`.
 2. Run the Release workflow on `main` with **publish** on (Actions > Release > Run workflow, or
    `gh workflow run release.yml --ref main -f publish=true -f prerelease=true`).
-3. The `tag` job creates `v<version>` on that commit and starts the workflow again on the tag
-   (`--ref refs/tags/v<version>`). That run builds everything; its `release` job checks the tagged commit is on
-   `main`, then **waits for the owner's approval** (the `release` environment, below).
+3. The `tag` job first checks that CI is green on that commit (`tools/ci/check-ci-passed.sh`: the newest completed
+   `ci.yml` run for exactly that sha, a push or a manual run; a `pull_request` run for the same sha never counts, for
+   or against). With CI red, missing or unreadable it stops, and **no tag is made**: fix CI or re-run it on the commit,
+   then run the workflow again. Only then it creates `v<version>` on that commit and starts the workflow again on the tag
+   (`--ref refs/tags/v<version>`). That run builds everything; its `ci-passed` job asks the same question again before
+   anything is signed, its `release` job checks the tagged commit is on `main`, then **waits for the owner's approval**
+   (the `release` environment, below).
 4. Approve the deployment (the run's page shows "Review deployments"). The job signs `SHA256SUMS`, creates the
    release as a draft, uploads every file, then publishes it.
 
