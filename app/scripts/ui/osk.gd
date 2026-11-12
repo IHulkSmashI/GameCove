@@ -759,7 +759,9 @@ func _stop_repeat(what := "") -> void:
 
 
 func _on_repeat() -> void:
-	if _repeat_what == "" or not is_visible_in_tree():
+	# A cover (the quick menu) opened or the screen was left while a key was held: the release goes to whoever is in
+	# front, so this keyboard never sees it; the repeat stops now instead of deleting on (review: held X kept deleting)
+	if _repeat_what == "" or not is_visible_in_tree() or _covered() or _hidden():
 		_stop_repeat()
 		return
 	repeat_step(_repeat_what)
@@ -832,6 +834,8 @@ func _input(event: InputEvent) -> void:
 	if not showing:
 		return
 	if _covered():
+		if _repeat_what != "":
+			_stop_repeat()          # a key held when the menu opened: its release won't come here
 		return
 	# Open on a screen that has since been left (Library search, then Guide to Home): hidden, the
 	# keyboard must not take B, Start, X, Y or the bumpers from whatever is in front now

@@ -552,6 +552,42 @@ func test_a_keyboard_under_the_quick_menu_takes_nothing() -> void:
 	menu.free()
 
 
+## Review: X held, the quick menu opens, X released: the release went to the menu, so the keyboard never stopped its
+## repeat and kept deleting (25 characters down to 9 in 1.5 s).
+func test_a_key_held_when_the_quick_menu_opens_stops_repeating() -> void:
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var host := Control.new()
+	root.add_child(host)
+	var k: PanelContainer = Osk.new()
+	host.add_child(k)
+	k.visible = true
+	k.showing = true
+	k.text = "abcdefghij"
+	k.caret = 10
+	var menu := Control.new()
+	menu.visible = false
+	root.add_child(menu)
+	Osk.add_cover(menu)
+	_pad(k, JOY_BUTTON_X)
+	eq(k.text, "abcdefghi", "X deletes one")
+	eq(k._repeat_what, "back", "and starts repeating")
+	menu.visible = true                            # the quick menu opens; the release goes to it
+	k._on_repeat()
+	eq(k.text, "abcdefghi", "the repeat deletes nothing under the menu")
+	eq(k._repeat_what, "", "and is stopped")
+	menu.visible = false
+	k._on_repeat()
+	eq(k.text, "abcdefghi", "the menu closed with X still down: no repeat comes back")
+	# a press while the menu is shown stops one that was running, too
+	_pad(k, JOY_BUTTON_X)
+	menu.visible = true
+	_pad(k, JOY_BUTTON_Y)
+	ok(k._repeat_what == "", "an event under the menu clears a held repeat")
+	Osk.covers.erase(menu)
+	menu.free()
+	host.free()
+
+
 func test_cancel_puts_the_old_text_back_and_done_keeps_the_new() -> void:
 	var k := _kb()
 	var got := {"changed": [], "closed": []}
