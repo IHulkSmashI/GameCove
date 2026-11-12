@@ -530,7 +530,12 @@ these places:
 | `/etc/gamecove/sysext-enabled` | the sysext install, only when it turned `systemd-sysext.service` on | tells the uninstall to turn it off again, and only when no other extension is left |
 | `/etc/gamecove/claw8ex-vrr/` (record, hook, EDID) and `/etc/gamecove/` fix files | the Claw VRR fix on SteamOS | kept across updates through the entry above |
 | `/etc/udev/rules.d`, `/etc/modprobe.d`, `/etc/inputplumber`, `/etc/default/grub` (one marked line), the initramfs and kernel arguments (rpm-ostree) | the fixes that name them (docs/FIXES.md) | the fix's own marked files only; each is removed by its own `remove` |
+| `/etc/systemd/system/gamecove-gyro-keepalive.service`, `gamecove-gyro-bias.service` | the Claw gyro fix | the two services only on board MS-1T91; removed with the fix |
+| `/etc/systemd/system/steamos-manager.service.d/50-gamecove-quiet-split-lock.conf` | the journal-flood fix | one drop-in that quiets a log line; removed with the fix |
+| `/etc/firmware/` (`edid/gamecove-*.bin` and the Claw's sensor firmware) | the Claw VRR and gyro fixes | their own files only, found by the kernel through `firmware_class.path`; removed with the fix |
+| `/var/lib/ish-gyro-bias` | the Claw gyro fix (its bias service's `StateDirectory`) | the sensor offsets the service saved; it sits next to `/var/lib/gamecove`, not in it, and is removed with the fix |
+| `/efi/EFI/SteamOS/grub.cfg` | SteamOS's own `update-grub`, which the Claw VRR fix runs after it adds or removes its one line in `/etc/default/grub` | GameCove never edits this file itself; Valve's tool rebuilds it |
 | `/run` | the helpers' locks and rate limits | volatile |
 
-Nothing else is written as root, and nothing writes outside `/etc`, `/var/lib/gamecove`, `/run`, `/home/.steamos/offload/gamecove`
-and temporary folders.
+Nothing else is written as root, and nothing writes outside `/etc`, `/var/lib/gamecove`, `/var/lib/ish-gyro-bias`, `/efi/EFI/SteamOS/grub.cfg`
+(by `update-grub`), `/run`, `/home/.steamos/offload/gamecove` and temporary folders.

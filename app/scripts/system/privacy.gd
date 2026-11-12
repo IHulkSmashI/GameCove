@@ -56,6 +56,12 @@ const NETWORK_CALLS := [
 		"when": "Only while you have them open from the Emulation page", "switch": "You start it"},
 	{"who": "Epic and GOG (through legendary and heroic-gogdl)", "what": "Your save files for the Epic or GOG game you start or just closed, with your store sign-in: the stores' own cloud saves, as Heroic does. For a GOG game Heroic doesn't know, GOG's remote config is asked once for where the game keeps its saves (its client id only).",
 		"when": "Just before an Epic or GOG game starts and just after it ends; when you press Sync now", "switch": "Sync cloud saves (Settings > Saves; also per game)"},
+	{"who": "builds.lsfg-vk.dev (lsfg-vk)", "what": "lsfg-vk's release file (size and sha256 pinned), for Lossless frame generation. Nothing about you is sent.",
+		"when": "When you press Set up Lossless frame generation and Lossless Scaling is installed from your Steam library; never in the background", "switch": "You start it"},
+	{"who": "Sigstore (tuf-repo-cdn.sigstore.dev, and its GitHub release for cosign)", "what": "cosign refreshes Sigstore's public trust root when it checks a signed list or release; the pinned cosign itself is downloaded once if the system has none. Nothing about you is sent.",
+		"when": "Whenever a signed list or release is checked; the cosign download once", "switch": "None (it only checks signatures)"},
+	{"who": "GitHub (the upscaling wiki pages, raw.githubusercontent.com)", "what": "OptiScaler's Compatibility-List.md and OptiClick's Supported-Game-List.md, the same files for every handheld. Nothing about you is sent.",
+		"when": "At most twice a day, with the daily upscalers check", "switch": "Background lookups"},
 	{"who": "OS, Flatpak, fwupd and store tools", "what": "Their own update and sign-in requests.",
 		"when": "When you update or sign in, or install GPU Screen Recorder or mpv in Settings > Media; Flatpak apps also once a day, with no game running, if you turned on Update apps by themselves", "switch": "You start it (automatic app updates: off by default, and Background lookups)"},
 ]
