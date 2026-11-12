@@ -963,6 +963,9 @@ func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> vo
 	ok(c.available, "offered: " + c.reason)
 	eq(c.title, "Add FSR 4.1.2 to this game", "our pick is the one offered")
 	eq(c.help, warn, "with the plain warning")
+	# review H1: the Upscaler and Frame generation rows wait for the same Add step (the helper refuses them as well)
+	for id in ["perf.upscaler", "perf.frame_gen"]:
+		ok(not reg.control(id).available and "press Add first" in reg.control(id).reason, id + " waits for Add: " + reg.control(id).reason)
 	runner.answers["opt-in"] = {"ok": true, "did": "set up", "mode": "best"}
 	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove", "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
 	reg.set_value("perf.upscale_offer", true)
@@ -973,6 +976,7 @@ func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> vo
 	w["p"]._forget_status()
 	reg.detect_all()
 	ok(not reg.control("perf.upscale_offer").available, "nothing left to offer once added")
+	ok(reg.control("perf.upscaler").available, "and the Upscaler row is open: " + reg.control("perf.upscaler").reason)
 	_done(w)
 
 

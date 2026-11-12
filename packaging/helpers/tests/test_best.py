@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from gamecove_upscale import active, best, chips, cli, gamedb, games, guard, launchenv, optiscaler  # noqa: E402
-from test_games import _pkg, _steam_game, _w  # noqa: E402
+from test_games import _accept, _pkg, _steam_game, _w  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 FIXTURE = os.path.join(HERE, "..", "..", "..", "app", "tests", "fixtures", "gpu_tiers.json")
@@ -237,12 +237,65 @@ def test_anticheat_named_in_the_notes_is_refused_and_cant_be_added(tmp_path, nam
     assert games.choose(home, "455", "fsr31", 0, DECK)["refused"] == "anticheat" and _tree(d) == before
 
 
+@pytest.mark.parametrize("name", ONLINE_TITLES)
+def test_the_upscaler_row_cant_skip_the_online_warning(tmp_path, name):
+    """Review H1: picking FSR in the Upscaler row (choose) on Wuthering Waves put OptiScaler in with no ban warning;
+    only Best's "Add" asked. choose and apply now refuse a game nobody opted in, with the same warning."""
+    home = str(tmp_path)
+    _pkg(home)
+    _amd_fsr4(home)
+    d = _steam_game(home, "460", name, ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    for r in (games.choose(home, "460", "fsr31", 0, Z1E),
+              cli.run(["choose", "--home", home, "--key", "460", "--gpu", json.dumps(Z1E), "--upscaler", "fsr4_amd", "--fg", "0"]),
+              games.apply_recommended(home, "460", Z1E)):
+        assert r["ok"] is False and r["refused"] == "optin" and r["need"] == "online", name
+        assert "online game" in r["error"] and "banned" in r["error"] and "Add" in r["error"]
+    assert _tree(d) == before and not games.get_launch(home, "460")
+    assert best.get_mode(home, "460") == "best"                    # the refused pick didn't turn Best off
+    assert best.opt_in(home, "460", Z1E)["ok"]                      # the same Add step as before
+    assert games.choose(home, "460", "fsr31", 0, Z1E)["ok"] and _tree(d) != before
+    assert games.choose(home, "460", "own", 0, Z1E)["ok"] and _tree(d) == before    # taking it out is never held back
+
+
+def test_the_upscaler_row_cant_skip_the_add_step_for_a_game_no_list_knows(tmp_path):
+    home = str(tmp_path)
+    _pkg(home)
+    d = _steam_game(home, "461", "Some Unlisted Game", ["Some.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    r = games.choose(home, "461", "fsr31", 0, DECK)
+    assert r["refused"] == "optin" and r["need"] == "unknown" and "don't know this game" in r["error"] and _tree(d) == before
+    assert best.plan(home, "461", DECK)["hands_off"] is True
+    assert best.opt_in(home, "461", DECK)["ok"] and games.choose(home, "461", "fsr31", 0, DECK)["ok"]
+
+
+def test_one_hands_off_fact_per_game(tmp_path):
+    """Review H3's source of truth: the plan says hands off for a refused game and for an online game nobody opted
+    in; a listed game and an unknown game's environment-only setup are not held back."""
+    home = str(tmp_path)
+    _pkg(home)
+    _amd_fsr4(home)
+    _steam_game(home, "462", "Wuthering Waves", ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    _steam_game(home, "463", "Zenless Zone Zero", ["ZZZ.exe", "nvngx_dlss.dll", "D3D12Core.dll", "mhypbase.dll"])
+    _steam_game(home, "464", "FsrGame", ["FsrGame.exe", "amd_fidelityfx_dx12.dll"])
+    assert best.plan(home, "462", Z1E)["hands_off"] is True
+    assert best.plan(home, "463", Z1E)["hands_off"] is True and best.plan(home, "463", Z1E)["refused"] == "anticheat"
+    assert best.plan(home, "464", Z1E)["hands_off"] is False
+    assert best.plan(home, "462", Z1E, anticheat=False)["hands_off"] is True
+    assert best.opt_in(home, "462", Z1E)["ok"] and best.plan(home, "462", Z1E)["hands_off"] is False
+    assert best.plan(home, "464", Z1E, anticheat=True)["hands_off"] is True      # the app's own anti-cheat data counts
+
+
 def test_an_online_game_set_up_before_it_was_flagged_comes_out(tmp_path):
     home = str(tmp_path)
     _pkg(home)
     d = _steam_game(home, "451", "Wuthering Waves", ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
     before = _tree(d)
+    _accept(home, "451", "online")
     assert games.apply_recommended(home, "451", DECK)["ok"] and _tree(d) != before    # an older GameCove's doing
+    st = games.load_state(home)
+    st["optin"].pop("451")                                    # ...before there was a warning to accept
+    games.save_state(home, st)
     r = best.prepare(home, "451", DECK)
     assert "online game" in r["did"] and _tree(d) == before
 
@@ -336,6 +389,7 @@ def test_an_unknown_game_without_clear_signs_is_never_touched(tmp_path):
     p = best.plan(home, "402", DECK)
     assert p["auto"] is False and p["known"] is False and "don't know this game" in p["why_not"]
     assert best.prepare(home, "402", DECK)["did"] == "" and _tree(d) == before
+    _accept(home, "402")
     assert games.choose(home, "402", "fsr31", 0, DECK)["ok"]        # by hand it still works
 
 
@@ -375,6 +429,7 @@ def test_custom_choices_are_kept_and_repaired_after_a_game_update(tmp_path):
     home = str(tmp_path)
     _pkg(home)
     d = _steam_game(home, "405", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    _accept(home, "405")
     r = cli.run(["choose", "--home", home, "--key", "405", "--gpu", json.dumps(Z1E), "--upscaler", "fsr31", "--fg", "2",
                  "--generator", "xefg"])
     assert r["ok"] and best.get_mode(home, "405") == "custom"
@@ -403,6 +458,7 @@ def test_the_readout_follows_what_really_happened(tmp_path):
     _amd_fsr4(home)
     d = _steam_game(home, "500", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
     assert best.status(home, "500", Z1E)["active"]["state"] == "own"
+    _accept(home, "500")
     assert games.choose(home, "500", "fsr4_amd", 2, Z1E)["ok"]
     a = best.status(home, "500", Z1E)["active"]
     assert a["state"] == "waiting" and "FSR 4.1.2, FSR frame generation 2x, Anti-Lag 2" in a["line"]

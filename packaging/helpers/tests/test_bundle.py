@@ -150,7 +150,7 @@ def test_real_pins_are_all_bundled_and_hash_pinned():
 
 # ---- one managed place: its size (Settings > Device > Storage) and the clean uninstall ----------------------------
 from gamecove_upscale import best, cli, games, optiscaler, upkeep  # noqa: E402
-from test_games import _pkg, _steam_game, _w  # noqa: E402
+from test_games import _accept, _pkg, _steam_game, _w  # noqa: E402
 
 Z1E = {"vendor": "amd", "family": "amd-rdna3", "arch": "RDNA3", "chip": "AMD Ryzen Z1 Extreme"}
 
@@ -203,12 +203,14 @@ def test_native_and_a_purge_without_gpu_clear_frame_generation(tmp_path):
     d = _steam_game(home, "480", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
     before = _tree(d)
     xmx = {"vendor": "intel", "family": "intel-xe2", "arch": "Xe2", "xmx": True}
+    _accept(home, "480")
     assert games.choose(home, "480", "xess", 3, xmx)["ok"]
     env = os.path.join(home, ".local/share/gamecove/launch/480.env")
     assert "XESS_FG=3" in open(env).read()
     r = cli.run(["purge", "--home", home])                  # what the installer runs: no --gpu
     assert r["ok"] and "480" in r["games"] and _tree(d) == before and not os.path.exists(env)
     _pkg(home)                                              # purge took the package out with the managed folders
+    _accept(home, "480")                                    # ...and the opt-in with the rest of the state
     assert games.choose(home, "480", "xess", 3, xmx)["ok"]
     assert best.native(home, "480", xmx)["ok"] and not os.path.exists(env)
     assert games.get_launch(home, "480").get("fg") is None

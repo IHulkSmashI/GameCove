@@ -507,6 +507,26 @@ func _upscale_reason() -> String:
 	return ""
 
 
+## Why the Upscaler and Frame generation rows wait (review H1): the helper's plan says to keep hands off this
+## game until the player presses Add (an online game, with the ban warning; a game no list knows), or refuses it
+## (anti-cheat, another tool's files). "" when the rows may be used. Picking a row anyway is refused by the helper
+## itself (choose answers "optin"), so this is the explanation, not the guard.
+func _optin_reason() -> String:
+	var p := upscale_plan()
+	if not bool(p.get("ok", false)):
+		return ""
+	var refused: Variant = p.get("refused")
+	if refused != null and str(refused) == "anticheat":
+		return "Off for this game: it uses anti-cheat"
+	if refused != null:
+		return ""
+	var offer: Variant = p.get("offer")
+	if (offer != null and str(offer) != "") or (bool(p.get("hands_off", false)) and str(p.get("need", "")) != ""):
+		return "Online game: press Add first (an upscaler can get the account banned)" if str(p.get("need", "")) == "online" \
+			else "We don't know this game yet: press Add first"
+	return ""
+
+
 func _upscale_run(verb: String, extra: Array = []) -> Dictionary:
 	var k := game_key()
 	if verb in CHANGES_FILES and is_running(k):
@@ -773,7 +793,7 @@ func _upscale_controls() -> Array:
 			"help": "Pick one yourself. The game keeps its own menu: choose DLSS or FSR there and it becomes this.",
 			"kind": "choice", "options": _opts(Upscale.upscalers(g), Upscale.LABELS, Upscale.upscaler_help(g)), "default_value": "own",
 			"apply_order": 3},
-			_upscale_reason,
+			func(): return _upscale_reason() if _upscale_reason() != "" else _optin_reason(),
 			func(): return str(upscale_status().get("upscaler", "own")) if upscale_status().get("ok", false) else null,
 			func(v):
 				if not _after_upscale(_upscale_run("choose", ["--upscaler", v, "--fg", str(int(upscale_status().get("fg", 0)))] + _gen_args() + _ac_args())):
@@ -789,7 +809,7 @@ func _upscale_controls() -> Array:
 					return "Not on this graphics chip: games use their own" if _gpu()["vendor"] == "nvidia" else "Not on this graphics chip"
 				if _upscale_reason() == "" and bool(_gv("lsfg", false)):
 					return "Off while Lossless frame generation is on for this game"
-				return _upscale_reason(),
+				return _upscale_reason() if _upscale_reason() != "" else _optin_reason(),
 			func(): return int(upscale_status().get("fg", 0)) if upscale_status().get("ok", false) else null,
 			func(v):
 				if int(v) > 0 and bool(_gv("lsfg", false)):
@@ -802,7 +822,10 @@ func _upscale_controls() -> Array:
 			"help": "FSR is lighter and pairs with Anti-Lag 2. XeSS handles menus and HUDs better, costs more, and brings XeLL. Not every game likes XeSS here yet.",
 			"kind": "choice", "options": _opts(Upscale.generators(g), Upscale.GENERATOR_LABELS, Upscale.GENERATOR_HELP),
 			"default_value": Upscale.generators(g)[0] if not Upscale.generators(g).is_empty() else "", "apply_order": 2},
-			func(): return _upscale_reason() if Upscale.generators(_gpu()).size() > 1 else "One frame generator on this graphics chip",
+			func():
+				if Upscale.generators(_gpu()).size() <= 1:
+					return "One frame generator on this graphics chip"
+				return _upscale_reason() if _upscale_reason() != "" else _optin_reason(),
 			func():
 				var st := upscale_status()
 				var gens := Upscale.generators(_gpu())

@@ -154,12 +154,12 @@ def run(argv: list[str]) -> dict:
         return best.status(home, a.key, gpu, a.dir)
     if a.command == "choose":
         r = games.choose(home, a.key, a.upscaler, a.fg, gpu, a.dir, a.overlay, a.allow_unpinned, a.online,
-                         generator=a.generator, anticheat=a.anticheat)
+                         generator=a.generator, anticheat=a.anticheat, name=a.name)
         if r.get("ok"):
             best.set_mode(home, a.key, "custom")
         return r
     if a.command == "apply":
-        r = games.apply_recommended(home, a.key, gpu, a.dir, a.allow_unpinned, a.online, anticheat=a.anticheat)
+        r = games.apply_recommended(home, a.key, gpu, a.dir, a.allow_unpinned, a.online, anticheat=a.anticheat, name=a.name)
         if r.get("ok"):
             best.set_mode(home, a.key, "best")
         return r
