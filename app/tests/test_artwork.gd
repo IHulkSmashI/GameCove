@@ -240,6 +240,23 @@ func test_auto_fill_never_asks_about_a_rom() -> void:
 	wipe(dir)
 
 
+## Review 56f5255: Change artwork sent a ROM game's title to SteamGridDB's search.
+func test_change_artwork_never_sends_a_rom_title() -> void:
+	var dir := tmp("manualrom")
+	var http := FakeHttp.new()
+	_routes(http)
+	var s := _service(http, dir)
+	var rom := {"key": "emu:3000000001", "store": "emu", "id": "3000000001", "title": "Moonlit Harbor",
+		"emulated": {"system": "snes", "system_short": "SNES", "rom": true}, "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	var got := []
+	s.search(rom, "cover", {}, 0, func(assets, err): got.append([assets, err]))
+	eq(got.size(), 1, "answered at once")
+	ok(str(got[0][1]) != "" and got[0][0].is_empty(), "with a reason and no pictures")
+	eq(http.requests.size(), 0, "and nothing sent anywhere")
+	s.free()
+	wipe(dir)
+
+
 ## Review 2, low 23: the automatic fill forgot what it had tried at every start, and its
 ## queue kept draining after a switch went off.
 func test_auto_fill_remembers_tries_and_stops_with_the_switch() -> void:
