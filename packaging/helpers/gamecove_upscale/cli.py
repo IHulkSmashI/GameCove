@@ -145,7 +145,7 @@ def run(argv: list[str]) -> dict:
     if a.command == "update":
         return upkeep.update(home, gpu, a.component)
     if a.command == "game-update":
-        return games.game_update(home, a.key, gpu, a.dir)
+        return games.game_update(home, a.key, gpu, a.dir, a.name, a.anticheat)
     if a.command == "fsr4-rollback":
         return optiscaler.fsr4_xmx_rollback(home)
     if a.command == "recommend":

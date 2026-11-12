@@ -397,6 +397,11 @@ def _refused(d: str | None, folder: str | None, anticheat: bool, rec: dict) -> d
     return {"ok": False, "refused": no["code"], "error": no["error"]} if no and no["code"] != "broken" else None
 
 
+def _refused_anticheat(d: str | None, folder: str | None, anticheat: bool, rec: dict) -> dict | None:
+    no = _refused(d, folder, anticheat, rec)
+    return no if no and no["refused"] == "anticheat" else None
+
+
 def per_game(home: str, gpu: dict) -> bool:
     """ClawDeck's `not xmxscope.session_active(HOME)`: the XeSS XMX driver is scoped per game unless the package's
     session-wide driver file is still in place (an install.sh run by hand outside GameCove's folder). Then the launch
@@ -555,6 +560,13 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
         missing = optiscaler.fsr4_xmx_missing(home)
         if missing:
             return {"ok": False, "error": f"FSR 4.1.2 on XMX needs nitec's files in {os.path.join(home, optiscaler.FSR4_XMX_DIR)} (missing: {', '.join(missing)})"}
+    if upscaler == "own" and fg:
+        # frame generation on the game's own upscaler writes XESS_FG / GAMECOVE_XMX into the launch: held back for
+        # anti-cheat and for an online game nobody opted in, like everything else we add (review H1); taking it out
+        # (fg 0) is never held back
+        no = _refused_anticheat(d, folder, anticheat, rec) or _optin_refusal(home, key, rec, upscaler, files=False)
+        if no:
+            return no
     if upscaler == "own":
         out = optiscaler.unpatch(folder, home)
         ref = reframework.remove(folder, _ref_shas(home))
@@ -694,7 +706,8 @@ def game_outdated(folder: str | None, entry: dict) -> bool:
     return False
 
 
-def game_update(home: str, key: str, gpu: dict, game_dir: str | None = None) -> dict:
+def game_update(home: str, key: str, gpu: dict, game_dir: str | None = None, name: str | None = None,
+                anticheat: bool = False) -> dict:
     """Bring GameCove's OptiScaler in this game up to the newest (and its REFramework, if GameCove put one there),
     with the game's own settings kept. patch() takes the older version out first exactly as undo does (only files
     whose sha256 is still what GameCove put there; backups never over newer game files), or, for the same
@@ -709,6 +722,12 @@ def game_update(home: str, key: str, gpu: dict, game_dir: str | None = None) -> 
     entry = _opti_entry(launch, home)
     if not game_outdated(folder, entry):
         return {"ok": True, "up_to_date": True, "version": who.get("version"), "folder": folder}
+    # an outdated copy in a game the lists flagged since (anti-cheat, or an online game nobody opted in): not patched
+    # again (review: game-update re-patched it); best.prepare takes the old copy out
+    rec = recommend(home, key, gpu, game_dir, name, xmx_off=launch.get("xmx") is False)
+    no = _refused_anticheat(rec["dir"] or d, folder, anticheat, rec) or _optin_refusal(home, key, rec, launch.get("opti") or "own")
+    if no:
+        return no
     r = _opti_into(home, key, folder, launch, gpu, [who["dll"]] if who.get("dll") else None, d)
     if not r.get("ok"):
         return r

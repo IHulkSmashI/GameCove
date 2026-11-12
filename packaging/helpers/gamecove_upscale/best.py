@@ -136,7 +136,7 @@ def prepare(home: str, key: str, gpu: dict, game_dir: str | None = None, name: s
         # the game gained anti-cheat (an update, or our data learnt it): everything of ours comes out
         r = games.undo(home, key, gpu, game_dir)
         return {"ok": bool(r.get("ok", True)), "did": "removed: this game has anti-cheat", "mode": mode, "plan": p}
-    if p.get("hands_off") and not p.get("refused") and mode == "best" and \
+    if p.get("hands_off") and not p.get("refused") and (mode == "best" or p.get("need") == "online") and \
             (games.load_state(home)["opti_games"].get(str(key)) or games.get_launch(home, key)):
         # set up by itself before the lists said it is an online game (or no list knows it): out again until the
         # player picks it, with what they accept recorded (games.optin_risk)

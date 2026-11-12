@@ -789,3 +789,62 @@ def test_prepare_never_installs_into_an_online_game_without_opt_in_whatever_the_
     assert cli.run(["prepare"] + args)["did"] == "" and _tree(d) == before
     assert cli.run(["choose", "--upscaler", "fsr31", "--fg", "0"] + args).get("refused") == "optin" and _tree(d) == before
     assert cli.run(["opt-in"] + args)["ok"] and cli.run(["prepare"] + args) is not None
+
+
+def test_frame_generation_on_the_games_own_upscaler_is_held_back_like_every_other_change(tmp_path):
+    """Review H1: on Intel, `choose --upscaler own --fg N` returned before every guard and wrote XESS_FG / GAMECOVE_XMX=1
+    for an anti-cheat game and for an online game nobody opted in."""
+    home = str(tmp_path)
+    _pkg(home)
+    launch = os.path.join(home, ".local/share/gamecove/launch")
+    d = _steam_game(home, "470", "Wuthering Waves", ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    z = _steam_game(home, "471", "Zenless Zone Zero", ["ZZZ.exe", "nvngx_dlss.dll", "D3D12Core.dll", "mhypbase.dll"])
+    before = _tree(d)
+    r = games.choose(home, "470", "own", 3, XMX)
+    assert r["ok"] is False and r["refused"] == "optin" and r["need"] == "online" and not games.get_launch(home, "470")
+    r = cli.run(["choose", "--home", home, "--key", "471", "--gpu", json.dumps(XMX), "--upscaler", "own", "--fg", "3"])
+    assert r["ok"] is False and r["refused"] == "anticheat" and not games.get_launch(home, "471")
+    assert not os.path.exists(os.path.join(launch, "470.env")) and not os.path.exists(os.path.join(launch, "471.env"))
+    assert games.choose(home, "470", "own", 0, XMX)["ok"] and _tree(d) == before         # taking it out is never held back
+    assert games.choose(home, "471", "own", 0, XMX)["ok"]
+    assert games.choose(home, "471", "own", 3, XMX, anticheat=True)["refused"] == "anticheat"
+    _accept(home, "470", "online")
+    r = games.choose(home, "470", "own", 3, XMX)
+    assert r["ok"] and games.get_launch(home, "470").get("fg") == 3
+    _steam_game(home, "472", "Plain", ["Plain.exe", "nvngx_dlss.dll"])
+    assert games.choose(home, "472", "own", 2, XMX)["ok"]          # a game no list knows: environment only, not held back
+
+
+def test_an_online_game_patched_through_the_upscaler_row_comes_out_in_my_choice_too(tmp_path):
+    home = str(tmp_path)
+    _pkg(home)
+    d = _steam_game(home, "473", "Wuthering Waves", ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    _accept(home, "473", "online")
+    assert cli.run(["choose", "--home", home, "--key", "473", "--gpu", json.dumps(Z1E), "--upscaler", "fsr31", "--fg", "0"])["ok"]
+    assert best.get_mode(home, "473") == "custom" and _tree(d) != before
+    assert best.prepare(home, "473", Z1E)["did"] != "taken out: this is an online game"       # opted in: it stays
+    st = games.load_state(home)
+    st["optin"].pop("473")                                      # an older build patched it before there was a warning
+    games.save_state(home, st)
+    r = best.prepare(home, "473", Z1E)
+    assert "online game" in r["did"] and _tree(d) == before and not games.get_launch(home, "473")
+
+
+def test_game_update_doesnt_patch_an_outdated_copy_in_a_game_flagged_since(tmp_path, monkeypatch):
+    home = str(tmp_path)
+    _pkg(home)
+    d = _steam_game(home, "474", "Wuthering Waves", ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    _accept(home, "474", "online")
+    assert games.choose(home, "474", "fsr31", 0, Z1E)["ok"]
+    monkeypatch.setattr(games, "game_outdated", lambda *a, **k: True)
+    patched = []
+    monkeypatch.setattr(games, "_opti_into", lambda *a, **k: patched.append(1) or {"ok": True, "version": "x"})
+    assert games.game_update(home, "474", Z1E)["ok"] is True and patched                 # opted in: updated as before
+    patched.clear()
+    assert games.game_update(home, "474", Z1E, anticheat=True)["refused"] == "anticheat" and not patched
+    st = games.load_state(home)
+    st["optin"].pop("474")
+    games.save_state(home, st)
+    r = cli.run(["game-update", "--home", home, "--key", "474", "--gpu", json.dumps(Z1E)])
+    assert r["ok"] is False and r["refused"] == "optin" and not patched
