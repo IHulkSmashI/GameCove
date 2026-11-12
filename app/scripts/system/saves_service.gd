@@ -559,7 +559,9 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 	if look["state"] == "none":
 		return _set_status(key, "no_saves", "", {"synced": true, "epic_path": folder})
 	if look["state"] == "same":
-		return _set_status(key, "synced", "", {"synced": true, "local": look["local"], "remote": look["remote"], "epic_path": folder, "synced_remote": look["remote"]})
+		# the cloud save's real time, from legendary's debug line (0 = not printed: unknown, -1)
+		return _set_status(key, "synced", "", {"synced": true, "local": look["local"], "remote": look["remote"], "epic_path": folder,
+			"synced_remote": look["remote"] if int(look["remote"]) > 0 else -1})
 	var last := int(_cfg_value(key, "last_sync", 0))
 	var times := {"local": look["local"], "remote": look["remote"], "epic_path": folder}
 	# a restored backup has its old file times: legendary sees "cloud newer" and would download

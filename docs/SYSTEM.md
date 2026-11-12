@@ -318,7 +318,7 @@ Heroic makes. Steam games keep Steam Cloud. Amazon games aren't covered: nile ha
 
 | Store | Tool | Look / before a launch / after a game / a conflict |
 | --- | --- | --- |
-| Epic | legendary (native, Heroic's bundled one, or `flatpak run --command=legendary com.heroicgameslauncher.hgl`) | `legendary -y sync-saves <app> --accept-path --skip-upload --skip-download` to look; `--skip-upload` downloads, `--skip-download` uploads, `--force-download` / `--force-upload` settle a conflict. `LEGENDARY_CONFIG_PATH` is the game's legendary folder, `WINEPREFIX` its prefix (`<prefix>/pfx` for Proton layouts) so legendary finds the save folder; it keeps it in `installed.json` `save_path` |
+| Epic | legendary (native, Heroic's bundled one, or `flatpak run --command=legendary com.heroicgameslauncher.hgl`) | `legendary -v -y sync-saves <app> --accept-path --skip-upload --skip-download` to look (`-v`: its debug line has both save dates, also when they're the same age); `--skip-upload` downloads, `--skip-download` uploads, `--force-download` / `--force-upload` settle a conflict. `LEGENDARY_CONFIG_PATH` is the game's legendary folder, `WINEPREFIX` its prefix (`<prefix>/pfx` for Proton layouts) so legendary finds the save folder; it keeps it in `installed.json` `save_path` |
 | GOG | heroic-gogdl (native or Heroic's Flatpak) | `gogdl --auth-config-path <heroic>/gog_store/auth.json save-sync <folder> <id> --os windows --ts <last> --name <location>` with `--skip-upload` before a launch, `--skip-download` after, `--force-*` for a conflict. Folders from Heroic's `GamesConfig/<id>.json` `gogSaves`, else `store_cache/gog_library.json` `gog_save_location` with GOG's `<?VARIABLES?>` resolved in the prefix, else GOG's remote config for the game's client id (digits only, `^[0-9]{1,32}$`, asked with `curl --proto =https -g --max-filesize 1048576 -- <url>`; a resolved location must stay inside the install folder or the prefix); the timestamps start from Heroic's `gog_store/saveTimestamps.json` |
 
 Rules: never while a game runs (one worker thread, before `Library.launch()` and after `GameSession.ended`; Sync now,
@@ -393,7 +393,9 @@ What keeps a save from being lost (final review; each has a test against ports o
   side in a conflict settles the note.
 - **A cloud save new to us (Epic).** A cloud save is named by when it was saved, not uploaded, so one saved elsewhere
   before our last sync and uploaded after it looks older than the sync. The cloud save's own time at each sync is kept
-  (`synced_remote`): any other one counts as a change, so it's a conflict, never an upload over it.
+  (`synced_remote`): any other one counts as a change, so it's a conflict, never an upload over it. A sync that finds
+  both sides the same age keeps it too: legendary prints no dates then except in its debug line
+  (`Local save date: …, Remote save date: …`), which is why the look runs with `-v`.
 - **Two GOG locations.** When one fails and the backup goes back, a location that had downloaded gets its old sync time
   back with it.
 - **A restore holds.** Restoring makes the folder exactly what the backup holds (unpacked next to it and swapped in).

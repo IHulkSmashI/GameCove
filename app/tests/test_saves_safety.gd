@@ -627,6 +627,30 @@ func test_epic_a_cloud_save_older_than_our_sync_but_new_to_us_is_a_change() -> v
 	_done(w)
 
 
+## The same after a sync that found both sides up to date (review at 56f5255): legendary prints
+## no dates then, so the cloud save's time was kept as 0 ("not known") and the L1 check was off
+## until the next upload or download. legendary's debug line has the real time; it's kept.
+func test_epic_l1_holds_after_an_up_to_date_sync() -> void:
+	var w := _world("epic_l1_same")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "ours", T0)
+	w["s"].sync_now(w["epic"])
+	w["now"][0] += 60
+	w["s"].sync_now(w["epic"])
+	eq(w["s"].status(w["epic"])["state"], "synced", "the second sync found both sides the same")
+	eq(int(_cfg(w, "epic:Min", "synced_remote", -1)), T0, "and kept the cloud save's real time")
+	cloud.saves.append({"t": T0 + 3600, "files": {"world.sav": "the other device's"}})
+	cloud.offline = true
+	w["s"].before_launch(w["epic"], func(_r): pass)
+	cloud.offline = false
+	w["now"][0] += 900
+	Fakes.put(w["esaves"].path_join("world.sav"), "ours, played on", int(w["now"][0]))
+	w["s"].after_exit(w["epic"])
+	eq(cloud.saves[-1]["files"]["world.sav"], "the other device's", "nothing uploaded over it")
+	eq(w["s"].status(w["epic"])["state"], "conflict", "we ask")
+	_done(w)
+
+
 # ---- Epic: a changed prefix ---------------------------------------------------------------------
 
 ## legendary keeps the save folder it computed once. After a prefix change we hand it the

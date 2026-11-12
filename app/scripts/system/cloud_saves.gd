@@ -4,7 +4,8 @@ extends RefCounted
 ## tests cover it without a network; saves_service.gd runs it around a game's launch.
 ##
 ## Epic: legendary `sync-saves` (github.com/legendary-gl/legendary, cli.py sync_saves):
-##   legendary -y sync-saves <app> --accept-path --skip-upload --skip-download   (look only)
+##   legendary -v -y sync-saves <app> --accept-path --skip-upload --skip-download (look only;
+##                                       -v for the debug line with both save dates)
 ##   ... --skip-upload (download if the cloud is newer) | --skip-download (upload if local is newer)
 ##   ... --force-download | --force-upload                                       (a conflict, decided)
 ## legendary computes the save folder once from the game's CloudSaveFolder and the Wine
@@ -124,7 +125,10 @@ static func with_timeout(base: Array, args: Array, secs := TIMEOUT_S) -> Array[S
 ## legendary's arguments for one sync step. step: check | download | upload | force_download | force_upload.
 ## save_path: the folder legendary should keep for the app from now on ("" = the one it has).
 static func legendary_args(app: String, step: String, save_path := "") -> Array:
-	var a: Array = ["-y", "sync-saves", "--accept-path"]
+	# the look runs at debug level (-v): only there does legendary print both save dates when
+	# they're the same age (core.py check_savegame_state), and the cloud save's own time is what
+	# tells another device's save from ours later (epic_decide synced_remote)
+	var a: Array = (["-v"] if step == "check" else []) + ["-y", "sync-saves", "--accept-path"]
 	if save_path != "":
 		a.append_array(["--save-path", save_path])
 	match step:
@@ -251,6 +255,8 @@ static func utc_to_unix(s: String) -> int:
 static func parse_legendary(out: String, code: int) -> Dictionary:
 	var r := {"state": "", "local": 0, "remote": 0, "save_path": "", "acted": "", "error": ""}
 	var checking := false
+	var dbg_local := 0
+	var dbg_remote := 0
 	for raw in out.split("\n"):
 		var line := raw.strip_edges()
 		var msg := line.substr(line.find(": ") + 2) if line.begins_with("[") and line.find(": ") > 0 else line
@@ -272,6 +278,11 @@ static func parse_legendary(out: String, code: int) -> Dictionary:
 			r["remote"] = utc_to_unix(msg.trim_prefix("- Cloud save date: "))
 		elif msg.begins_with("- Local save date: "):
 			r["local"] = utc_to_unix(msg.trim_prefix("- Local save date: "))
+		elif msg.begins_with("Local save date: ") and msg.contains(", Remote save date: "):
+			# debug level (-v), also for a save that's up to date: "Local save date: <utc>,
+			# Remote save date: <utc>" (str() of both datetimes)
+			dbg_local = utc_to_unix(msg.trim_prefix("Local save date: ").get_slice(", Remote save date: ", 0))
+			dbg_remote = utc_to_unix(msg.get_slice(", Remote save date: ", 1))
 		elif msg.begins_with("Path contains unprocessed variables") or msg.begins_with("Save path for this title has not been set"):
 			r["state"] = "no_path"
 		elif msg.begins_with("Downloading remote savegame"):
@@ -281,6 +292,10 @@ static func parse_legendary(out: String, code: int) -> Dictionary:
 		elif line.contains(" ERROR: ") or line.contains(" CRITICAL: ") or line.begins_with("Traceback"):
 			if r["error"] == "":
 				r["error"] = msg
+	if int(r["local"]) == 0:
+		r["local"] = dbg_local
+	if int(r["remote"]) == 0:
+		r["remote"] = dbg_remote
 	if code == 124 or code == 137 or _offline(out):
 		r["state"] = "offline"
 	elif code != 0 or r["error"] != "":

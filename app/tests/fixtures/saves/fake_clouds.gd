@@ -259,6 +259,9 @@ class Epic extends RefCounted:
 			res = "same"
 		else:
 			res = "local" if newest > remote else "remote"
+		if newest > 0 and not latest.is_empty() and "-v" in args:
+			# core.py check_savegame_state, at debug level: str() of both datetimes
+			out.append("[Core] DEBUG: Local save date: %s.123456+00:00, Remote save date: %s+00:00" % [_utc(newest).replace("T", " "), _utc(remote).replace("T", " ")])
 		var force_up := "--force-upload" in args
 		var force_down := "--force-download" in args
 		if res == "same" and not (force_up or force_down):

@@ -64,6 +64,9 @@ func test_legendary_output_is_read() -> void:
 	eq(l["state"], "local_newer", "local newer")
 	eq(l["remote"], 0, "no cloud save: N/A is 0")
 	eq(CS.parse_legendary(L_SAME, 0)["state"], "same", "up to date")
+	var same := CS.parse_legendary("[Core] DEBUG: Local save date: 2026-11-10 12:00:20.512345+00:00, Remote save date: 2026-11-10 12:00:00+00:00\n" + L_SAME, 0)
+	eq([same["state"], same["remote"], same["local"]], ["same", int(Time.get_unix_time_from_datetime_string("2026-11-10T12:00:00")),
+		int(Time.get_unix_time_from_datetime_string("2026-11-10T12:00:20"))], "up to date: both dates from the debug line")
 	eq(CS.parse_legendary("[cli] INFO: Got 0 remote save game(s)\n", 0)["state"], "unsupported", "skipped silently = no cloud saves")
 	eq(CS.parse_legendary("[cli] INFO: Checking \"X\" (x)\n[cli] INFO: No cloud or local savegame found.\n", 0)["state"], "none", "nothing either side")
 	eq(CS.parse_legendary("[cli] ERROR: Login failed! Cannot continue with download process.\n", 1)["state"], "offline", "login failed = offline")
@@ -76,7 +79,7 @@ func test_legendary_output_is_read() -> void:
 
 
 func test_legendary_arguments() -> void:
-	eq(CS.legendary_args("Min", "check"), ["-y", "sync-saves", "--accept-path", "--skip-upload", "--skip-download", "--", "Min"], "look only")
+	eq(CS.legendary_args("Min", "check"), ["-v", "-y", "sync-saves", "--accept-path", "--skip-upload", "--skip-download", "--", "Min"], "look only, at debug level (both save dates)")
 	eq(CS.legendary_args("Min", "download"), ["-y", "sync-saves", "--accept-path", "--skip-upload", "--", "Min"], "download only")
 	eq(CS.legendary_args("Min", "upload")[-3], "--skip-download", "upload only")
 	eq(CS.legendary_args("Min", "force_download")[-3], "--force-download", "forced download")
