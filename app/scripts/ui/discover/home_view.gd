@@ -588,20 +588,10 @@ func _link() -> void:
 			t.focus_neighbor_top = t.get_path_to(primary)
 	if not cards_focus.is_empty():
 		var above: Control = shelves[-1].remembered() if not shelves.is_empty() else top_target
-		# Each card's buttons sit on one row; up/down move between rows.
-		var rows: Array = []
+		# A card's buttons sit side by side on one row: left / right along it, up / down
+		# between rows (one chain of every button sent down to the button beside: CUX-5).
+		Kit.link_rows(cards_focus, above)
 		for b in cards_focus:
-			rows.append(b)
-		for i in rows.size():
-			var b: Control = rows[i]
-			var up: Control = rows[i - 1] if i > 0 else above
-			b.focus_neighbor_top = b.get_path_to(up if up != null else b)
-			b.focus_neighbor_bottom = b.get_path_to(rows[i + 1] if i + 1 < rows.size() else b)
-			# Buttons beside the first one in a card share its up/down.
-			for sib in b.get_parent().get_children():
-				if sib is Button and sib != b and not sib in rows:
-					sib.focus_neighbor_top = sib.get_path_to(up if up != null else sib)
-					sib.focus_neighbor_bottom = sib.get_path_to(rows[i + 1] if i + 1 < rows.size() else sib)
 			b.focus_entered.connect(func(): _scroll_rows(maxf(0.0, _cards_pad.position.y - 40.0)))
 
 
