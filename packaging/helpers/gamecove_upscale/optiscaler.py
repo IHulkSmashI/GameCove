@@ -940,6 +940,14 @@ def unpatch(folder: str | None, home: str | None = None) -> dict:
     the hashes: a file is ours when it matches the package file it came from (needs `home`), else it is kept.
     Returns {"ok", "removed", "kept": [files left because they changed], "error"}."""
     m = _manifest(folder) if folder else None
+    if folder and (m is None or not isinstance(m, dict)) and os.path.isfile(os.path.join(folder, STATE, "manifest.json")):
+        # a manifest that is there but can't be read (cut by a power-off, edited, a full disk): it is the only list of
+        # what GameCove put in and what it backed up, so nothing is removed or put back from a guess, the backups stay
+        # where they are, and the answer says so instead of "done" (review low)
+        return {"ok": False, "removed": False, "kept": [], "saved": [], "damaged": True,
+                "error": f"the list of what GameCove put into {folder} is damaged, so nothing was taken out. The game's own "
+                         f"files are safe in {os.path.join(folder, STATE, 'backup')}: verify the game's files in its store "
+                         "to get it back as shipped, then try again"}
     if not m:
         if not folder or not os.path.isdir(os.path.join(folder, STATE)):
             return {"ok": True, "removed": False, "kept": []}

@@ -1402,6 +1402,34 @@ def test_optiscaler_undo_of_an_older_manifest_checks_the_package(tmp_path, monke
     assert not (g / "OptiScaler.ini").exists() and "OptiScaler.ini" not in r["kept"], "our own config: always ours to take out"
 
 
+def test_undo_with_a_damaged_manifest_reports_it_and_keeps_the_backups(tmp_path, monkeypatch):
+    """Review low: a manifest that can't be read was treated as "stopped before the first manifest": undo dropped the
+    state folder and answered ok with every file of ours still in the game."""
+    from gamecove_upscale import cli, optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x" * 100)
+    _w(g / "libxess.dll", "game-own-xess-1.0")
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"]
+    st = g / ".gamecove-optiscaler"
+    backups = sorted(p.relative_to(st).as_posix() for p in (st / "backup").rglob("*") if p.is_file())
+    assert backups
+    for damaged in ("{not json", "[1, 2]", ""):
+        (st / "manifest.json").write_text(damaged)
+        r = optiscaler.unpatch(str(g), home)
+        assert r["ok"] is False and r["damaged"] and "damaged" in r["error"] and r["removed"] is False
+        assert (g / "dxgi.dll").exists() and (g / "OptiScaler.ini").exists(), "nothing of ours was taken out on a guess"
+        assert sorted(p.relative_to(st).as_posix() for p in (st / "backup").rglob("*") if p.is_file()) == backups
+        assert (st / "manifest.json").exists(), "the state stays for the next try"
+    r = cli.run(["undo", "--home", home, "--key", "1", "--gpu", "{}", "--dir", str(g)])
+    assert r["ok"] is False and "damaged" in json.dumps(r)
+    # an intact manifest is undone as before
+    (st / "manifest.json").write_text(json.dumps({"added": [], "backed": []}))
+    assert optiscaler.unpatch(str(g), home)["ok"] is True
+
+
 def test_exe_skip_words_and_generic_unreal_names(tmp_path):
     """Review low: MAIN_EXE_SKIP matched anywhere in the name ("eac" in Peaceful.exe, "crash" in Crashlands), and a
     generic Unreal project name ("Game") made any Game-Win64-Shipping.exe a known game."""
