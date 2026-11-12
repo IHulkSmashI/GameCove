@@ -36,6 +36,9 @@ const SteamGrid := preload("res://scripts/library/art/steam_grid.gd")
 const HEROIC_FLATPAK_ID := "com.heroicgameslauncher.hgl"
 ## A clock difference smaller than this is the same moment (legendary SAME_AGE uses 60 s).
 const SLACK_S := 60
+## How far outside one of our own gogdl runs a cloud change may be and still count as ours (review B1 edge: another
+## device uploading within 60 s of a real cut was taken for our run's). A change just outside is asked about.
+const RUN_SLACK_S := 10
 ## Save folders larger than this aren't backed up (a game that keeps saves in its install
 ## folder); a download that would empty one is refused instead.
 const MAX_BACKUP_BYTES := 1024 * 1024 * 1024
@@ -683,7 +686,7 @@ static func gog_cloud_moved(listing: Variant, name: String, since: float, runs: 
 				continue
 			var start := int(w[0])
 			var end := int(w[1]) if int(w[1]) > 0 else start + TIMEOUT_S + 5
-			if t >= start - SLACK_S and t <= end + SLACK_S:
+			if t >= start - RUN_SLACK_S and t <= end + RUN_SLACK_S:
 				ours = true
 				break
 		if not ours:
