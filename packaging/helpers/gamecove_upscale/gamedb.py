@@ -350,8 +350,14 @@ def compat_row(doc: dict, name: str | None, appid: str | None = None) -> dict | 
 # names an anti-cheat counts as anti-cheat whatever the row's status: nothing is ever put in, as for anti-cheat found
 # in the folder. An online game whose note names none is never set up by itself: the menu says why in one line and
 # the player can still add it per game. "no anti-cheat" / "does not use anticheat" are games that say they are safe.
-_ONLINE_RE = re.compile(r"online game|at your own (risk|discretion)|own responsibility", re.I)
-_AC_RE = re.compile(r"anti-?cheat|\bEAC\b|battleye|vanguard|\bACE\b|xigncode|gameguard|nprotect|javelin", re.I)
+# "Offline mode ONLY!" / "Requires using Offline mode" (F1 24, F1 25, Gears of War: E-Day) say the game is only safe
+# without its online side: the same ban warning, with the same Add step. Anti-cheat names beyond the first few
+# (review low): the systems' own names as the list's authors write them, whole words only.
+_ONLINE_RE = re.compile(r"online game|at your own (risk|discretion)|own responsibility|offline[ -]mode\W{0,4}only|"
+                        r"only\W{1,4}(works\W{1,4})?(in\W{1,4})?offline|requires?\W{1,3}(using\W{1,3})?offline mode|offline[ -]only", re.I)
+_AC_RE = re.compile(r"anti-?cheat|\bEAC\b|battleye|vanguard|\bACE\b|xigncode\d*|gameguard|nprotect|javelin|"
+                    r"punk ?buster|hack ?shield|hyperion|byfron|faceit|\bequ8\b|wellbia|black ?cipher|mhyprot\d*|\bNEAC\b|"
+                    r"tenprotect|\bVAC\b|denuvo anti", re.I)
 _AC_NONE_RE = re.compile(r"\b(no|without|doesn'?t use|does not use|not use)\s+(an?\s+)?anti-?cheat", re.I)
 
 

@@ -207,6 +207,25 @@ def test_online_games_in_the_list_are_flagged():
         assert not gamedb.online_risk(safe), safe
 
 
+def test_notes_that_say_offline_only_or_name_more_anticheats_are_caught():
+    """Review low: "Offline mode ONLY" titles (F1 24, F1 25, Gears of War: E-Day) and several anti-cheat names weren't
+    matched, so those games were planned as plain known games."""
+    doc = gamedb.load(games.BUNDLED_GAMES)
+    for name in ("F1 24", "F1 25", "Gears of War: E-Day"):
+        k = gamedb.knowledge(doc, None, None, name)
+        assert k["known"] and k["online"] is True and k["anticheat"] is False, name       # the ban warning and Add
+    for text in ("**Offline mode ONLY!** Spoofing doesn't work", "Use OptiScaler in **offline mode ONLY!**",
+                 "Requires using **Offline mode**", "Only works in offline mode", "Offline-only"):
+        assert gamedb.online_risk(text) and not gamedb.anticheat_note(text), text
+    for text in ("Blocked by Hyperion (Byfron)", "PunkBuster kicks it", "Punk Buster", "XIGNCODE3 blocks the DLL", "FACEIT AC",
+                 "EQU8 is active", "BlackCipher loads at start", "HackShield", "NEAC Safe driver", "Wellbia", "mhyprot2.sys",
+                 "TenProtect", "VAC secured", "Denuvo Anti-Cheat"):
+        assert gamedb.anticheat_note(text), text
+    for safe in ("Use DX12", "Free online co-op game, no anticheat", "Offline mode is fine too, set Dxgi=false",
+                 "The vacuum effect", "Faceted shadows"):
+        assert not gamedb.anticheat_note(safe) and not (safe.startswith("Offline") and gamedb.online_risk(safe)), safe
+
+
 @pytest.mark.parametrize("name", ONLINE_TITLES)
 def test_online_games_are_never_set_up_by_themselves(tmp_path, name):
     home = str(tmp_path)
