@@ -403,9 +403,16 @@ func wait_s(s: float) -> void:
 	await tree.create_timer(s).timeout
 
 
+## The longest single wait for a frame seen so far in this run (ms): the diagnostic of a tap that
+## turned into a hold behind a long frame (e2e_case.gd _press_state).
+var longest_frame_ms := 0
+
+
 func frames(n := 1) -> void:
 	for i in n:
+		var t0 := Time.get_ticks_msec()
 		await tree.process_frame
+		longest_frame_ms = maxi(longest_frame_ms, Time.get_ticks_msec() - t0)
 
 
 ## Waits until every worker (Controls, Power, Controller, Gamescope's runner) has

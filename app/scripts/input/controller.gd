@@ -445,6 +445,7 @@ func _setup_intercept() -> void:
 	intercept.on_hint = func(a: String): shortcut_hint.emit(a)
 	intercept.on_seen = func(c: String, w: String): shortcut_seen.emit(c, w)
 	intercept.start_timer = _start_hold_timer
+	intercept.defer = func(fn: Callable) -> void: fn.call_deferred()   # a release waiting in the queue is handled first
 	if intercept.shortcuts.is_empty():
 		intercept.shortcuts = ButtonMap.table({}, device_id)   # the usual holds, until the profile is read
 	intercept.on_button = func(c: String, p: bool): button_event.emit(c, p)
