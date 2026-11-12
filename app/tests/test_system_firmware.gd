@@ -287,11 +287,24 @@ func test_a_box_with_no_battery_may_update_firmware() -> void:
 		if str(k).begins_with("sys/class/power_supply"):
 			files.erase(k)   # no battery, no charger entry: a box
 	var f: RefCounted = Fake.new()
-	var u := _upd(_tree(files), f, _row("msi-claw-8-ex"))
+	var u := _upd(_tree(files), f, _row("valve-steam-machine"))
 	eq(u.power_block(), "", "no battery: on the mains, firmware may be written")
 	var st: Dictionary = u.power_state()
 	ok(bool(st["ok"]) and st["battery"] == -1 and bool(st["ac"]), "the state says so (%s)" % [st])
 	u.free()
+	# a wireless pad's battery (scope Device) is not the box's: still a box with no battery
+	var pad := files.duplicate()
+	pad["sys/class/power_supply/hid-aa:bb-battery/type"] = "Battery"
+	pad["sys/class/power_supply/hid-aa:bb-battery/scope"] = "Device"
+	pad["sys/class/power_supply/hid-aa:bb-battery/capacity"] = "12"
+	var up := _upd(_tree(pad), f, _row("valve-steam-machine"))
+	ok(not up.has_battery(), "a controller's battery is not the machine's")
+	eq(up.power_block(), "", "a Steam Machine with a pad connected may still update firmware")
+	up.free()
+	# a handheld whose battery the kernel does not list is not a box: no charger known, no firmware write
+	var u0 := _upd(_tree(files), f, _row("msi-claw-8-ex"))
+	eq(u0.power_block(), "needs_ac", "a handheld with no battery entry and no charger entry is refused")
+	u0.free()
 	# the same files with a battery on a charger that isn't in: still refused
 	files["sys/class/power_supply/ADP1/online"] = "0"
 	files["sys/class/power_supply/ADP1/type"] = "Mains"
