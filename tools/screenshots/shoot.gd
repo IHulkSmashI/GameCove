@@ -718,6 +718,7 @@ func _saves_shots() -> void:
 		bg.color = load("res://theme/gamecove_theme.gd").color("bg")
 		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 		bg.z_index = 50
+		bg.set_meta("ux_no_walk", "a picture of one card for the docs, drawn over the app")
 		main.add_child(bg)   # main's theme (fonts, colours)
 		var c: Array = DKit.card(TD.SECTIONS["history"], TD.SECTION_ICONS["history"], "good", false)
 		c[0].position = Vector2(48, 48)

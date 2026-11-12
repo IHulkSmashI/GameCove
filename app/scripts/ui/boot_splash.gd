@@ -86,6 +86,7 @@ static func pick_mode() -> String:
 func _init() -> void:
 	name = "BootSplash"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_meta("ux_no_walk", "the boot intro: any button skips it")
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	z_index = 100
 	_shade = ColorRect.new()

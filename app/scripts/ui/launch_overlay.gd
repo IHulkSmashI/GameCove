@@ -128,6 +128,8 @@ func _init() -> void:
 	name = "LaunchOverlay"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	visible = false
+	# nothing here to move between: only B (Cancel) and Guide get through while it shows (main.gd)
+	set_meta("ux_no_walk", "the launch splash takes only B (Cancel) and Guide")
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	base = ColorRect.new()
 	base.name = "Base"

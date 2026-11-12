@@ -648,6 +648,8 @@ func open_credits() -> void:
 	r.add_theme_font_size_override("bold_font_size", ThemeLib.SIZE_SMALL)
 	r.add_theme_color_override("default_color", ThemeLib.color("text"))
 	r.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	# the sheet's one control: the D-pad scrolls it (its prompt says so); B closes
+	r.set_meta("ux_action", "the D-pad scrolls the credits")
 	r.text = Credits.to_bbcode(text, "#" + ThemeLib.color("text").to_html(false), "#" + ThemeLib.color("text_2").to_html(false)) if text != "" else TS.CREDITS_MISSING
 	_sheet_body.add_child(r)
 	_sheet_body.add_child(Kit.prompts([["DPAD", "Scroll"], ["B", TS.CLOSE]]))
