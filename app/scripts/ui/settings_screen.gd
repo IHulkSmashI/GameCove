@@ -341,6 +341,8 @@ func _category_button(id: String) -> Button:
 	b.add_theme_stylebox_override("pressed", chosen)
 	b.add_theme_stylebox_override("hover_pressed", chosen)
 	b.focus_entered.connect(func(): show_category(id))
+	# a side tab strip: the page beside follows focus (docs/CONTROLLER-UX.md CUX-3, Android TV side navigation)
+	b.set_meta("ux_tab", true)
 	b.pressed.connect(func():
 		b.set_pressed_no_signal(true)
 		enter_page())
