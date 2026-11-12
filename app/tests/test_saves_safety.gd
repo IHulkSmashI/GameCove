@@ -204,6 +204,37 @@ func test_gog_changed_prefix_starts_over() -> void:
 	_done(w)
 
 
+## Review at 56f5255: Heroic's resolved save folder (GamesConfig gogSaves) is a path in Heroic's
+## prefix. With another prefix set for the game in GameCove, the game saves there, but we kept
+## syncing Heroic's folder: "synced", while the real saves never went up. The same folder in
+## the game's own prefix is synced instead.
+func test_gog_custom_prefix_wins_over_heroics_resolved_folder() -> void:
+	var w := _world("gog_custom_prefix")
+	var cloud: Object = w["gog_cloud"]
+	_json(w["gog"]["heroic_root"].path_join("GamesConfig/1207.json"), {"1207": {"gogSaves": [{"name": "saves", "location": w["gsaves"]}]}})
+	_json(w["gog"]["heroic_root"].path_join("gog_store/saveTimestamps.json"), {"1207": {"saves": "%d.0" % (T0 + 50)}})
+	Fakes.put(w["gsaves"].path_join("old.sav"), "an old save in Heroic's prefix", T0)
+	var mine: String = w["root"].path_join("custom")
+	Fakes.put(mine.path_join("user.reg"), "reg")
+	var msaves := mine.path_join("drive_c/users/steamuser/Documents/Witcher")
+	w["now"][0] += 900
+	Fakes.put(msaves.path_join("slot1.sav"), "played in the custom prefix", int(w["now"][0]))
+	w["entries"]["gog:1207"]["prefix"] = mine   # Library.entry_for with the compatibility settings applied
+	w["s"].sync_now(w["gog"])
+	eq(cloud.files("saves"), ["slot1.sav"], "the custom prefix's save went up, not Heroic's folder")
+	eq(Dictionary(cloud.cloud.get("saves/slot1.sav", {})).get("data"), "played in the custom prefix", "the real save")
+	ok(w["calls"].all(func(c): return not str(c).contains(w["gsaves"])), "Heroic's folder was never synced")
+	ok(w["calls"].any(func(c): return str(c).contains("--ts 0 ")), "and Heroic's time, about its own folder, isn't used for this one")
+	# the custom prefix isn't made yet: nothing to sync, never Heroic's folder instead
+	var later: String = w["root"].path_join("not_made_yet")
+	w["entries"]["gog:1207"]["prefix"] = later
+	w["calls"].clear()
+	w["s"].sync_now(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "not_set_up", "waits for the prefix")
+	ok(w["calls"].all(func(c): return not str(c).contains(w["gsaves"])), "still never Heroic's folder")
+	_done(w)
+
+
 ## Uninstalling forgets the sync times (the folders may be gone when it comes back).
 func test_uninstall_forgets_the_sync_times() -> void:
 	var w := _world("forget")

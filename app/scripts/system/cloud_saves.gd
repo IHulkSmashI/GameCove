@@ -190,10 +190,11 @@ static func epic_save_path(config_dir: String, app: String) -> String:
 	return str(v) if v is String else ""
 
 
-## The save folder legendary keeps (`saved`), as the same folder inside the prefix the game
-## runs in now (`pfx`, from wine_prefix()). legendary works the folder out once and keeps it,
-## so after a prefix change it would go on syncing the old prefix's folder. "" when `saved`
-## isn't inside a prefix, or is in `pfx` already.
+## A save folder worked out in one prefix (`saved`: legendary's kept folder, Heroic's resolved
+## GOG location), as the same folder inside the prefix the game runs in now (`pfx`, from
+## wine_prefix()). legendary works the folder out once and keeps it, so after a prefix change
+## it would go on syncing the old prefix's folder. "" when `saved` isn't inside a prefix, or
+## is in `pfx` already.
 static func epic_moved_save_path(saved: String, pfx: String) -> String:
 	if saved == "" or pfx == "":
 		return ""
@@ -511,7 +512,18 @@ static func gog_plan(entry: Dictionary, tools: Dictionary, remote: Variant = nul
 	var locations: Array = []
 	if not resolved.is_empty():
 		for s in resolved:
-			locations.append({"name": s["name"], "path": s["location"], "heroic": true})
+			# Heroic resolved it in Heroic's prefix. The game runs in `entry.prefix` (another one when
+			# set in GameCove's compatibility settings): there it saves, so the same folder in that
+			# prefix is the one to sync, and Heroic's sync time isn't about it (review at 56f5255)
+			var path := str(s["location"])
+			if path.simplify_path().find("/drive_c/") > 0:
+				if pfx == "":
+					return {"ok": false, "why": "not_set_up"}   # the game's prefix isn't made yet
+				var moved := epic_moved_save_path(path, pfx)
+				if moved != "":
+					locations.append({"name": s["name"], "path": moved})
+					continue
+			locations.append({"name": s["name"], "path": path, "heroic": true})
 	else:
 		var raw: Variant = heroic_gog_locations(root, id) if root != "" else null
 		var client := gog_client_id(install, id)
