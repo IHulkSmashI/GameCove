@@ -245,6 +245,8 @@ static func leftover_dirs(libs: Array, away := {}) -> Array:
 	var out: Array = []
 	for lib in libs:
 		var base := str(lib).path_join("steamapps/shadercache")
+		if not DirAccess.dir_exists_absolute(base):
+			continue   # a library nothing was launched from has no cache folder (listing it logs an engine error)
 		for id in DirAccess.get_directories_at(base):
 			if not id.is_valid_int() or int(id) <= 0 or int(id) >= SHORTCUT_IDS or installed.has(id):
 				continue

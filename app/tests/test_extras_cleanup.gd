@@ -67,6 +67,20 @@ func test_leftovers_are_uninstalled_steam_games_only() -> void:
 	_rm(t.root)
 
 
+## A library nothing was launched from has no shadercache folder: not an error (the engine
+## logs one for listing a missing folder; monkey seed 109000 met it on the Storage page).
+func test_a_library_without_a_shader_cache_folder_is_quiet() -> void:
+	var t := _tree("nocache")
+	_rm(t.sd.path_join("steamapps/shadercache"))
+	var ids: Array = StorageScript.leftover_dirs(t.s.steam_library_paths()).map(func(d): return str(d).get_file())
+	ids.sort()
+	eq(ids, ["20"], "the other library's leftovers are still found")
+	_rm(t.steam.path_join("steamapps/shadercache"))
+	eq(StorageScript.leftover_dirs(t.s.steam_library_paths()), [], "and with no cache folders at all, nothing and no engine error")
+	t.s.free()
+	_rm(t.root)
+
+
 func test_measure_then_clean() -> void:
 	var t := _tree("clean")
 	var got := []
