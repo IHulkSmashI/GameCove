@@ -99,6 +99,7 @@ var launch_overlay: Control
 ## The trip to Steam's controller settings and back (ui/steam_trip.gd).
 var steam_trip: Control
 var status_panel: PanelContainer
+var _dismissing_overlays := false     # a screen change put the status panel away: focus is the next screen's
 var sounds: Node
 var screens := {}
 var current := "home"
@@ -309,7 +310,7 @@ func _ready() -> void:
 
 	status_panel = StatusPanel.new()
 	status_panel.setup({})
-	status_panel.closed.connect(func(): top_bar.status_button.grab_focus())
+	status_panel.closed.connect(func(): if not _dismissing_overlays: top_bar.status_button.grab_focus())
 	add_child(status_panel)
 
 	steam_trip = SteamTrip.new()
@@ -1750,6 +1751,14 @@ func _screen_out(s: Control, d: float) -> void:
 	# sheets a screen keeps in main's modal layer (Stream's) are not under it: it puts them away itself
 	if s.has_method("dismiss_overlays"):
 		s.dismiss_overlays()
+	# ...and so are main's own: the game sheet / keyboard (Library > Menu on a game > Guide stayed up over Home with focus
+	# behind it, and A started Home's game) and the status panel
+	_dismissing_overlays = true
+	if game_actions != null:
+		game_actions.dismiss()
+	if status_panel != null and status_panel.visible:
+		status_panel.close()
+	_dismissing_overlays = false
 	var t := Motion.to(s, "modulate:a", 0.0, SCREEN_OUT_S)
 	Motion.to(s, "position:x", -Motion.slide(SCREEN_SLIDE_PX) * d, SCREEN_OUT_S, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	if t == null:

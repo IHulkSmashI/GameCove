@@ -204,6 +204,30 @@ func test_wishlist_name() -> void:
 	await w.frames(3)
 
 
+## Review: Library, Menu on a game (or the filter sheet), Guide left the sheet up over Home with focus behind it, and A
+## started Home's game. The game sheet, its text keyboard and the status panel go with the screen like Stream's.
+func test_game_sheets_and_the_status_panel_go_with_the_screen() -> void:
+	for kind in ["sheet", "keyboard", "status"]:
+		main().show_screen("library")
+		await w.wait_s(0.3)
+		match kind:
+			"sheet": main().game_actions.open_menu("Game", "sub", [{"id": "x", "text": "Do it"}], func(_id): pass)
+			"keyboard": main().game_actions.open_keyboard("Name", "detail", "abc", func(_t): pass)
+			"status": main()._open_status()
+		await w.frames(3)
+		ok(main().game_actions.is_modal() or main().status_panel.visible, "%s is open over Library" % kind)
+		await guide()
+		await w.wait_s(0.4)
+		eq(main().current, "home", "%s: Guide went Home" % kind)
+		ok(not main().game_actions.is_modal(), "%s: the game sheet / keyboard went with the Library screen" % kind)
+		ok(not main().status_panel.visible, "%s: and the status panel" % kind)
+		ok(w.ui_clean(), "%s: nothing modal is left over Home" % kind)
+		var f := focus()
+		ok(f != null and main().home.is_ancestor_of(f), "%s: Home has the focus, not something behind a sheet" % kind)
+	main().show_screen("home")
+	await w.frames(3)
+
+
 func test_streaming_host() -> void:
 	main().show_screen("stream")
 	await w.frames(4)

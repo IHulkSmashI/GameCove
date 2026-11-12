@@ -57,6 +57,20 @@ func is_modal() -> bool:
 	return (sheet != null and sheet.is_open()) or _kb_open
 
 
+## The screen under them was left (main.gd _screen_out): the sheet and the text keyboard sit in main's layer, so they
+## would stay up over the next screen and A would start its game. Put away, no focus grabbed back (the next screen
+## takes it). Library, Menu on a game, Guide left the sheet over Home.
+func dismiss() -> void:
+	if sheet != null and sheet.is_open():
+		sheet.close(false)
+	if _kb_open:
+		keyboard.dismiss()
+		_kb_open = false
+		_kb_done = Callable()
+		keyboard_modal.visible = false
+		modal_changed.emit(false)
+
+
 ## Hints for whatever modal is open, [] when none.
 func modal_hints() -> Array:
 	if _kb_open:
