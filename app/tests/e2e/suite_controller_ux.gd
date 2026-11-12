@@ -26,6 +26,26 @@ func test_a_settings_sheet_keeps_focus_until_it_closes() -> void:
 	ok(focus() != null and not s.sheet.is_ancestor_of(focus()), "and focus is back on the page")
 
 
+## CUX-5: down from the top bar goes into the screen as it is now: in Settings,
+## the category that is open, not the one Settings opened on.
+func test_down_from_the_top_bar_lands_on_the_open_category() -> void:
+	ok(await open_settings("display"), "Settings > Display with the pad")
+	var s: Control = main().settings
+	# up out of the page (not through the category list, which would open each category on the way)
+	var bar: Control = main().top_bar
+	for i in 30:
+		if focus() != null and bar.is_ancestor_of(focus()):
+			break
+		await up()
+		await w.frames(1)
+	ok(focus() != null and bar.is_ancestor_of(focus()), "up from the page reaches the top bar (%s)" % where())
+	eq(s.category, "display", "Display is still the open category")
+	await down()
+	await w.frames(2)
+	eq(focus(), s.cat_buttons["display"], "down from the bar: the open category (Display)")
+	eq(s.category, "display", "and Display stays open")
+
+
 ## CUX-3: a switch row changes on A only; left / right leave it as it is.
 func test_a_switch_changes_on_a_and_not_on_left_or_right() -> void:
 	ok(await open_settings("appearance"), "Settings > Appearance with the pad")

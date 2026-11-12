@@ -1794,6 +1794,22 @@ func _link_top() -> void:
 	for t in top_bar.pad_order():
 		t.focus_neighbor_bottom = t.get_path_to(f) if f != null else NodePath()
 		t.focus_neighbor_top = t.get_path_to(t)
+		if not t.has_meta("down_wired"):
+			t.set_meta("down_wired", true)
+			t.gui_input.connect(_on_top_bar_input.bind(t))
+
+
+## Down from a top-bar button goes into what is on screen now, asked at the
+## press: its main control (in Settings, the category that is open). The path
+## set when the screen opened went stale once the screen moved on: down from the
+## bar opened the category Settings had started on (docs/CONTROLLER-UX.md CUX-5).
+func _on_top_bar_input(event: InputEvent, t: Control) -> void:
+	if not event.is_action_pressed("ui_down"):
+		return
+	var f: Control = _screen().default_focus()
+	if f != null and f.is_visible_in_tree() and f.focus_mode == Control.FOCUS_ALL:
+		t.accept_event()
+		f.grab_focus()
 
 
 ## Home's and the page's main button. Owned games that aren't installed get
