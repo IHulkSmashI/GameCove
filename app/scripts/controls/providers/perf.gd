@@ -61,6 +61,9 @@ const CHANGES_FILES := ["choose", "mode", "opt-in", "game-update"]
 ## Where a held change is kept with the game's values: a power-off while the game ran (a handheld's usual end of a
 ## session) must not lose the pick silently.
 const PENDING_KEY := "upscale_pending"
+## The plan's anti-cheat verdict for a game, kept with its values: Lossless frame generation is switched off
+## underneath (env and lsfg-vk's config), not only greyed, once a game shows anti-cheat (review M).
+const AC_KEY := "upscale_anticheat"
 var _check := {}                  # the helper's last "check" answer
 var _check_t := -1
 var _mutex := Mutex.new()
@@ -476,7 +479,7 @@ func write_lsfg_config() -> bool:
 	var profiles := {}
 	for k in store.games():
 		var vals: Dictionary = store.values(k)
-		if bool(vals.get("lsfg", false)):
+		if bool(vals.get("lsfg", false)) and not lsfg_blocked(k):
 			var merged := Lsfg.defaults_for(GpuCaps.tier(_gpu()))
 			merged.merge(vals, true)
 			profiles[k] = merged
@@ -737,16 +740,40 @@ func upscale_hands_off(key: String, g: Dictionary = {}) -> bool:
 	return remember_hands_off(key, r, game_dict)
 
 
-## Keeps the plan's hands-off fact for the game; when it changed, a Steam game's env file is written again.
+## Keeps the plan's hands-off fact (and its anti-cheat verdict) for the game; when either changed, a Steam game's
+## env file is written again, and lsfg-vk's config when the game has Lossless on.
 func remember_hands_off(key: String, plan: Dictionary, g: Dictionary = {}) -> bool:
 	var off := bool(plan.get("hands_off", false))
+	var refused: Variant = plan.get("refused")
+	var ac := refused != null and str(refused) == "anticheat"
 	_mutex.lock()
 	_hands_off_cache[key] = {"t": Time.get_ticks_msec(), "v": off}
 	_mutex.unlock()
+	var changed := false
 	if bool(store.get_value(key, "upscale_hands_off", false)) != off:
 		store.set_value(key, "upscale_hands_off", true if off else null)
+		changed = true
+	if bool(store.get_value(key, AC_KEY, false)) != ac:
+		store.set_value(key, AC_KEY, true if ac else null)
+		changed = true
+		if bool(store.get_value(key, "lsfg", false)):
+			write_lsfg_config()
+	if changed:
 		game_changed(key, g)
 	return off
+
+
+## Lossless frame generation must not run for this game: the app's own anti-cheat data, or the plan's verdict (the
+## helper looks at the folder and the lists' notes) kept with the game's values.
+func lsfg_blocked(key: String, g: Dictionary = {}) -> bool:
+	if store == null or key == "":
+		return false
+	if bool(store.get_value(key, AC_KEY, false)):
+		return true
+	var game_dict := g if not g.is_empty() else (game() if key == game_key() else {})
+	if game_dict.is_empty() and library != null and library.has_method("game_by_key"):
+		game_dict = library.game_by_key(key)
+	return launcher != null and launcher.has_method("has_anticheat") and not game_dict.is_empty() and bool(launcher.has_anticheat(game_dict))
 
 
 ## Sets the open game up ahead of its first start ("Best for this handheld"),
@@ -1129,7 +1156,7 @@ func frame_gen_on(key := "") -> bool:
 	var k := key if key != "" else game_key()
 	if k == "" or store == null:
 		return false
-	if bool(store.get_value(k, "lsfg", false)) or int(store.get_value(k, "frame_gen", 0)) > 0:
+	if (bool(store.get_value(k, "lsfg", false)) and not lsfg_blocked(k)) or int(store.get_value(k, "frame_gen", 0)) > 0:
 		return true
 	if launcher != null and launcher.has_method("settings_for") and bool(launcher.settings_for(k).get("frame_gen", false)):
 		return true
@@ -1329,7 +1356,7 @@ func env_for(key: String, g: Dictionary, include_launcher := false) -> Dictionar
 		env["MANGOHUD"] = "1"
 		env["MANGOHUD_CONFIG"] = "no_display,fps_limit=%d,fps_limit_method=%s" % [fps,
 			"early" if str(vals.get("fps_limit_method", "late")) == "early" else "late"]
-	if bool(vals.get("lsfg", false)):
+	if bool(vals.get("lsfg", false)) and not lsfg_blocked(key, g):
 		env.merge(Lsfg.game_env(key), true)
 	if include_launcher and launcher != null and launcher.has_method("launch_env") and not g.is_empty():
 		var le: Variant = launcher.launch_env(g)
@@ -1342,10 +1369,10 @@ func env_for(key: String, g: Dictionary, include_launcher := false) -> Dictionar
 
 ## Launcher.env_hooks: a non-Steam game GameCove starts gets our variables and
 ## the upscaler's (the helper's launch file is only read by gamecove-run).
-func launch_env_hook(key: String, _game: Dictionary) -> Dictionary:
+func launch_env_hook(key: String, g: Dictionary) -> Dictionary:
 	if key == game_key():
 		prepare_game(key)     # a start from Home without opening the game's page: set up first (once per session)
-	var env := env_for(key, {})
+	var env := env_for(key, g)
 	var up: Variant = store.get_value(key, "upscale_env", {})
 	if up is Dictionary:
 		for k in up:

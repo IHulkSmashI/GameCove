@@ -1113,6 +1113,46 @@ func test_lossless_is_off_when_the_helper_finds_anticheat() -> void:
 	_done(w)
 
 
+func test_lossless_is_really_off_after_a_game_shows_anticheat() -> void:
+	# review M: the row was greyed, but the game kept its lsfg-vk profile and environment (and forced low latency)
+	var w := _world("lsfg_ac_off", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	var p = w["p"]
+	var cfg: String = w["home"].path_join(Lsfg.CONFIG)
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none"}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "refused": null, "line": "Nothing to add.", "hands_off": false}
+	_with_game(w, EPIC)
+	reg.set_value("perf.lsfg", true)
+	ok(Lsfg.profile_name("epic:abc") in _read(cfg), "Lossless on: the game has its profile")
+	ok(p.env_for("epic:abc", EPIC).has("LSFGVK_PROFILE"), "and its environment")
+	ok(p.frame_gen_on("epic:abc"), "and counts as frame generation")
+	# an update brings an anti-cheat: the helper's plan now refuses the game
+	runner.answers["plan"] = {"ok": true, "refused": "anticheat", "line": "This game uses NetEase Anti-Cheat.", "hands_off": true}
+	p._forget_status()
+	reg.detect_all()
+	ok(not Lsfg.profile_name("epic:abc") in _read(cfg), "the profile is gone from lsfg-vk's config")
+	ok(not p.env_for("epic:abc", EPIC).has("LSFGVK_PROFILE"), "and from the environment")
+	ok(not p.launch_env_hook("epic:abc", EPIC).has("LSFGVK_PROFILE"), "also at launch")
+	ok(not p.frame_gen_on("epic:abc"), "it no longer forces low latency")
+	eq(reg.control("perf.lsfg").reason, "Off for this game: it uses anti-cheat", "and the row says so")
+	# the app's own anti-cheat data counts the same, without any plan
+	var other := {"key": "gog:7", "store": "gog", "id": "7", "title": "Other", "install_path": "/games/7"}
+	w["launcher"].anticheat_keys = ["gog:7"]
+	w["library"].games["gog:7"] = other
+	p.store.set_value("gog:7", "lsfg", true)
+	ok(not p.env_for("gog:7", other).has("LSFGVK_PROFILE"), "the app's own data too")
+	p.write_lsfg_config()
+	ok(not Lsfg.profile_name("gog:7") in _read(cfg), "also in the config")
+	# the anti-cheat goes away (the list was wrong): Lossless is back
+	runner.answers["plan"] = {"ok": true, "refused": null, "line": "Nothing to add.", "hands_off": false}
+	p._forget_status()
+	reg.detect_all()
+	ok(Lsfg.profile_name("epic:abc") in _read(cfg) and p.env_for("epic:abc", EPIC).has("LSFGVK_PROFILE"), "no anti-cheat now: it runs again")
+	_done(w)
+
+
 func test_never_two_frame_generators() -> void:
 	var w := _world("fg_exclusive", ALLY_X)
 	var runner = w["runner"]
