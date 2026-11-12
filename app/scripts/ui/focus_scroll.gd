@@ -128,8 +128,15 @@ func target_for(c: Control) -> float:
 	var max_v := maxf(0.0, content.size.y - view)
 	# The first / last control of a page (meta "scroll_edge": "start" | "end") shows the page's own top / bottom,
 	# so whatever sits above or below the focusable rows (a heading, a note, an explanation) is never out of reach.
+	# Only when the control still fits the view there: a first card taller than a short screen is shown whole
+	# instead. While the page is still laying out (a position outside the content) only its size is judged.
 	if c.has_meta("scroll_edge"):
-		return max_v if str(c.get_meta("scroll_edge")) == "end" else 0.0
+		var er := _rect_in_content(_row_of(c, content))
+		var settled := er.position.y >= 0.0 and er.position.y <= content.size.y
+		var edge_end := str(c.get_meta("scroll_edge")) == "end"
+		var span := er.size.y if (not settled or edge_end) else er.end.y
+		if span + MARGIN + margin_bottom <= view:
+			return max_v if edge_end else 0.0
 	# Focus inside a scroller of its own (a column of cards inside the page):
 	# that scroller keeps the control in view; this one only keeps the whole
 	# pane in view. Following the control itself would chase it while the inner
