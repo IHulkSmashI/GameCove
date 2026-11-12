@@ -917,7 +917,11 @@ func _finish_upload(key: String, entry: Dictionary, plan: Dictionary, parts: Arr
 		if up["state"] in ["offline", "failed"]:
 			return _set_status(key, "upload_cut", str(up.get("error", "")))
 		_clear_upload(key)
-		return _set_status(key, "upload_finished", "", {"synced": true, "epic_path": str(parts[0]["path"]) if not parts.is_empty() else ""})
+		# the cloud save is ours now: legendary names it by the newest local file's time, which is what the next sync
+		# compares another device's upload against (L1: it was left unknown, -1, so such a save could be buried)
+		var mine_t := int(CloudSaves.dir_stats(str(parts[0]["path"]))["newest"]) if not parts.is_empty() else 0
+		return _set_status(key, "upload_finished", "", {"synced": true, "epic_path": str(parts[0]["path"]) if not parts.is_empty() else "",
+			"synced_remote": mine_t if mine_t > 0 else -1})
 	var ts := _gog_ts(key, entry, parts)
 	if _gog_finish_held(note, parts, ts, listings):
 		_clear_upload(key)

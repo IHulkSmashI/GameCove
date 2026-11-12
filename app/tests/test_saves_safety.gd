@@ -1687,6 +1687,7 @@ func test_epic_cut_upload_is_finished_at_the_next_start() -> void:
 	lib.changed.emit()
 	eq(phases, [["epic:Min", "repair", "upload_finished"]], "finished at the start, before any launch")
 	eq(cloud.saves[-1]["files"]["world.sav"], "hour 2", "the save is up")
+	eq(int(_cfg(w, "epic:Min", "synced_remote", -1)), int(CloudSaves.dir_stats(w["esaves"])["newest"]), "and the cloud save's time is known again (L1 stays on)")
 	lib.changed.emit()
 	eq(phases.size(), 1, "once")
 	lib.free()
