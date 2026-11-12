@@ -83,7 +83,12 @@ jobs:
           [ -n "$ver" ] || { echo "no Version in the spec" >&2; exit 1; }
           tag="v$ver"
           test -s "packaging/release-notes/$tag.md" || { echo "missing packaging/release-notes/$tag.md" >&2; exit 1; }
-          have="$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq .object.sha 2>/dev/null || true)"
+          # gh prints the 404 body on stdout, so trust only a successful call that returns a sha
+          if have="$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq .object.sha 2>/dev/null)"; then
+            case "$have" in [0-9a-f][0-9a-f]*) ;; *) have="" ;; esac
+          else
+            have=""
+          fi
           if [ -n "$have" ] && [ "$have" != "$GITHUB_SHA" ]; then
             echo "$tag already exists on $have (this run is $GITHUB_SHA); bump Version in the spec" >&2
             exit 1
