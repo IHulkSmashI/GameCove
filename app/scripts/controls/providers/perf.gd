@@ -1126,8 +1126,47 @@ func background_check(now_unix: int) -> bool:
 	upscale_check(true)
 	# the per-game lists: the signed nightly games.json and OptiScaler's compatibility notes (anti-cheat and
 	# online flags, fixes). Nothing else called this, so devices kept the list they were installed with (review low)
-	Upscale.run(ctx.get("runner"), upscale_cmd(), "refresh", _home(), "", _gpu())
+	var lists := Upscale.run(ctx.get("runner"), upscale_cmd(), "refresh", _home(), "", _gpu())
+	if _lists_changed(lists):
+		apply_refreshed_lists()
 	return true
+
+
+## True when the helper's "refresh" answer says a list was replaced by a newer one.
+static func _lists_changed(r: Dictionary) -> bool:
+	var l: Variant = r.get("lists", {})
+	if not l is Dictionary:
+		return false
+	for k in l:
+		if str(l[k]) == "updated":
+			return true
+	return false
+
+
+## A refreshed list can name an anti-cheat or an online game that was not known when a game was set up: the games
+## that already have our files (or settings) are looked at again now, not at the next restart (review M: `_prepared`
+## kept them out of Best's check for the whole session). While a game runs, nothing is run behind it: the caches are
+## dropped and each game is looked at the next time it is opened or started. Returns how many games were re-checked.
+func apply_refreshed_lists() -> int:
+	_mutex.lock()
+	_prepared.clear()
+	_plan_cache.clear()
+	_status_cache.clear()
+	_hands_off_cache.clear()
+	var running := _running_key != ""
+	_mutex.unlock()
+	if running or store == null or library == null or not library.has_method("game_by_key"):
+		return 0
+	var n := 0
+	for k in store.games():
+		if not (store.has_value(k, "upscale_env") or store.has_value(k, "upscale_hands_off")):
+			continue
+		var g: Dictionary = library.game_by_key(k)
+		if g.is_empty():
+			continue
+		prepare_installed(g, true)
+		n += 1
+	return n
 
 
 func _schedule_background_check(delay_s: float) -> void:

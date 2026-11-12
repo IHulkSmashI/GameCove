@@ -948,6 +948,50 @@ func test_best_downloads_nothing_by_itself_with_background_lookups_off() -> void
 	_done(w)
 
 
+func test_a_refreshed_list_reaches_games_that_are_already_set_up() -> void:
+	# review M: a game prepared once this session was never looked at again, so a list that now names an anti-cheat
+	# or an online game for it changed nothing until the app restarted
+	var w := _world("lists_refresh", ALLY_X)
+	var base := ProjectSettings.globalize_path("user://test_perf_controls/lists_refresh")
+	w["ctx"]["privacy_path"] = base.path_join("settings.cfg")
+	w["ctx"]["upscale_stamp_path"] = base.path_join("upscalers.cfg")
+	PrivacyScript.set_background_allowed(true, base.path_join("settings.cfg"))
+	var runner = w["runner"]
+	var p = w["p"]
+	runner.answers["check"] = CHECK_UPDATE
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr31", "fg": 0, "owner": "gamecove", "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
+	runner.answers["prepare"] = {"ok": true, "did": "", "plan": {"ok": true, "hands_off": false, "refused": null}}
+	runner.answers["refresh"] = {"ok": true, "lists": {"games": "updated"}}
+	w["library"].games["epic:abc"] = EPIC
+	p.store.set_value("epic:abc", "upscale_env", {"WINEDLLOVERRIDES": "dxgi=n,b;"})
+	var other := {"key": "gog:9", "store": "gog", "id": "9", "title": "No files", "install_path": "/games/9"}
+	w["library"].games["gog:9"] = other
+	_with_game(w, EPIC)
+	eq(_calls_with(runner, "prepare").size(), 1, "prepared once when it was opened")
+	p.prepare_game()
+	eq(_calls_with(runner, "prepare").size(), 1, "and not again this session")
+	runner.answers["prepare"] = {"ok": true, "did": "taken out: this game has anti-cheat", "plan": {"ok": true, "hands_off": true, "refused": "anticheat"}}
+	ok(p.background_check(1_800_000_000), "the daily check refreshes the lists")
+	var calls := _calls_with(runner, "prepare")
+	eq(calls.size(), 2, "the patched game is looked at again without a restart: " + str(calls))
+	ok("--key epic:abc" in calls[1] and "--name Epic Game" in calls[1], "that game, by its title")
+	ok(p.store.get_value("epic:abc", "upscale_hands_off", false), "and its verdict is kept")
+	# nothing changed in the lists: nothing is run
+	runner.answers["refresh"] = {"ok": true, "lists": {"games": "bundled"}}
+	runner.calls.clear()
+	ok(p.background_check(1_800_000_000 + UpscaleUpdates.INTERVAL_S), "next day")
+	eq(_calls_with(runner, "prepare").size(), 0, "an unchanged list re-checks nothing")
+	# behind a running game nothing runs; the game is looked at when it is next opened
+	runner.answers["refresh"] = {"ok": true, "lists": {"games": "updated"}}
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	ok(p.background_check(1_800_000_000 + 2 * UpscaleUpdates.INTERVAL_S), "another day, a game running")
+	eq(_calls_with(runner, "prepare").size(), 0, "nothing is run behind the game")
+	(w["ctx"]["upscale_running"] as Callable).call("")
+	p.prepare_game()
+	eq(_calls_with(runner, "prepare").size(), 1, "it is prepared once the game has quit")
+	_done(w)
+
+
 func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> void:
 	var w := _world("mode_offer", ALLY_X)
 	var runner = w["runner"]
