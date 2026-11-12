@@ -108,7 +108,7 @@ CUTOFF = "2026-11-06T05:41:00Z"        # _run's now (2026-11-09T05:41:00Z) minus
 
 def rel(tag, asset, data, digest=True, pre=False, date="2026-11-05T00:00:00Z", repo="x/y"):
     url = f"https://github.com/{repo}/releases/download/{tag}/{asset}"
-    a = {"name": asset, "browser_download_url": url}
+    a = {"name": asset, "browser_download_url": url, "created_at": date, "updated_at": date}
     if digest:
         a["digest"] = "sha256:" + sha(data)
     return {"tag_name": tag, "prerelease": pre, "draft": False, "published_at": date, "html_url": "https://x",
@@ -138,9 +138,9 @@ def world(xess_new=XESS_NEW, patcher=PATCHER_NOW, xess_digest=True):
     build.SOURCES["fakenvapi"]["asset"] = "fakenvapi-*.zip"            # zip here: no 7z on the test machine
     api["/repos/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/tags/bins-for-optipatcher-rolling"] = {
         "assets": [{"name": "OptiPatcher_rolling.asi", "updated_at": "2026-11-05T10:00:00Z", "digest": "sha256:" + sha(patcher)}]}
-    api[f"/repos/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/commits?per_page=1&path=Kits/FidelityFX/signedbin&until={CUTOFF}"] = [
+    api[f"/repos/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/commits?per_page=1&path=Kits/FidelityFX/signedbin"] = [
         {"sha": AMD_COMMIT, "commit": {"committer": {"date": "2026-10-28T00:00:00Z"}}}]
-    api[f"/repos/IHulkSmashI/ClawDeck/commits?per_page=1&sha=fsr4-xmx-files&until={CUTOFF}"] = [
+    api[f"/repos/IHulkSmashI/ClawDeck/commits?per_page=1&sha=fsr4-xmx-files"] = [
         {"sha": XMX_COMMIT, "commit": {"committer": {"date": "2026-11-05T00:00:00Z"}}}]
     # the pins' releases: v0.9.4 is a tag in the source repo; nothing says which commit the v10 pin came from
     api["/repos/optiscaler/OptiScaler/releases/tags/v0.9.4"] = {"tag_name": "v0.9.4", "body": "0.9.4 final"}
@@ -153,7 +153,8 @@ def nightly(tag, body, data, pre=False, date="2026-11-05T00:00:00Z"):
     asset = f"OptiScaler_v10.0.0-pre2_{tag[-8:]}.zip"
     url = f"https://github.com/optiscaler/OptiScaler-nightly/releases/download/{tag}/{asset}"
     return {"tag_name": tag, "prerelease": pre, "draft": False, "published_at": date, "html_url": "https://x",
-            "body": body, "assets": [{"name": asset, "browser_download_url": url, "digest": "sha256:" + sha(data)}]}, url
+            "body": body, "assets": [{"name": asset, "browser_download_url": url, "digest": "sha256:" + sha(data),
+                                                              "created_at": date, "updated_at": date}]}, url
 
 
 @pytest.fixture(autouse=True)
@@ -164,11 +165,11 @@ def _restore_sources():
     build.SOURCES.update(saved)
 
 
-def _run(tmp_path, v, net, name="dist", have=None, previous=None):
+def _run(tmp_path, v, net, name="dist", have=None, previous=None, now="2026-11-09T05:41:00Z"):
     vp = tmp_path / "versions.json"
     vp.write_text(json.dumps(v))
     out = tmp_path / name
-    rep = build.build(net, str(vp), str(out), have, previous, now="2026-11-09T05:41:00Z")
+    rep = build.build(net, str(vp), str(out), have, previous, now=now)
     idx = mirror.parse((out / "upscalers.json").read_bytes())
     plan = [ln.split("\t") for ln in (out / "upload-plan.tsv").read_text().splitlines()]
     return rep, idx, plan, out
@@ -201,7 +202,11 @@ def test_first_run_fills_the_mirror_with_every_pin_and_the_newest(tmp_path):
     assert c["xess_xmx_linux"]["scripts"] == {"install.sh": sha(b"echo new"), "uninstall.sh": sha(b"echo")}
     assert c["fakenvapi"]["inner"] == {"fakenvapi.dll": sha(b"fnv")}
     assert c["reframework"]["inner"] == {"dinput8.dll": sha(b"ref15")}
-    assert c["fsr4_amd"]["version"] == "20261028-7539ae8b" and c["fsr4_amd"]["notice_url"].endswith("license.md")
+    # git files wait 72 h from when THIS build first saw the commit (a commit's own date is the author's word): the
+    # first night keeps the tested pin and starts the clock
+    assert c["fsr4_amd"]["version"] == "sdk2.4.0-7539ae8b" and c["fsr4_amd"]["pinned"] is True
+    assert idx["first_seen"] == {"fsr4_amd": {"commit": AMD_COMMIT, "at": "2026-11-09T05:41:00Z"},
+                                 "fsr4_xmx": {"commit": XMX_COMMIT, "at": "2026-11-09T05:41:00Z"}}
     assert c["optiscaler"]["version"] == "0.9.4" and c["optiscaler"]["pinned"] is True, "API down: the pin, mirrored"
     assert c["optiscaler"]["source"]["commit"] == OPTI_094_COMMIT and c["optiscaler"]["source"]["sha256"] == sha(b"source 0.9.4")
     assert c["optiscaler"]["source"]["mirror_url"].rsplit("/", 1)[1] == src[0]
@@ -212,6 +217,53 @@ def test_first_run_fills_the_mirror_with_every_pin_and_the_newest(tmp_path):
     # every planned file is really there, with the bytes its name's hash says
     for t, n, p in plan:
         assert sha((out / p).read_bytes())[:8] in n or "source" in n or n.endswith("license.md")
+
+
+def test_a_backdated_commit_still_waits_72_hours_from_when_it_was_first_seen(tmp_path):
+    """Review low: git-file components asked GitHub for commits with committer date <= cutoff, and that date is whatever
+    the author wrote: a commit backdated by a year was promoted the night it appeared."""
+    v, net = world()
+    api = "/repos/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/commits?per_page=1&path=Kits/FidelityFX/signedbin"
+    net.api[api] = [{"sha": "ab" * 20, "commit": {"committer": {"date": "2020-01-01T00:00:00Z"}}}]   # "a year old"
+    net.files[v["fsr4_amd"]["base"].replace(AMD_COMMIT, "ab" * 20) + "/amd_fidelityfx_upscaler_dx12.dll"] = b"new amd dll"
+    net.files[f"https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/{'ab' * 20}/Kits/FidelityFX/docs/license.md"] = NOTICE
+    _r, idx1, plan1, out1 = _run(tmp_path, v, net, "n1")
+    assert idx1["components"]["fsr4_amd"]["version"] == "sdk2.4.0-7539ae8b", "first seen tonight: the tested pin stays"
+    assert idx1["first_seen"]["fsr4_amd"] == {"commit": "ab" * 20, "at": "2026-11-09T05:41:00Z"}
+    # 71 h later: still waiting (the index carries the first-seen time from night to night)
+    _r, idx2, plan2, out2 = _run(tmp_path, v, net, "n2", _have(tmp_path, [plan1]), str(out1 / "upscalers.json"), now="2026-11-12T04:41:00Z")
+    assert idx2["components"]["fsr4_amd"]["version"] == "sdk2.4.0-7539ae8b"
+    assert idx2["first_seen"]["fsr4_amd"]["at"] == "2026-11-09T05:41:00Z"
+    # a newer commit restarts the clock, whatever its own date says
+    net.api[api] = [{"sha": "cd" * 20, "commit": {"committer": {"date": "2019-01-01T00:00:00Z"}}}]
+    _r, idx3, _p3, out3 = _run(tmp_path, v, net, "n3", _have(tmp_path, [plan1, plan2]), str(out2 / "upscalers.json"), now="2026-11-12T06:41:00Z")
+    assert idx3["components"]["fsr4_amd"]["version"] == "sdk2.4.0-7539ae8b"
+    assert idx3["first_seen"]["fsr4_amd"] == {"commit": "cd" * 20, "at": "2026-11-12T06:41:00Z"}
+    # 72 h after first being seen: promoted, versioned by that date
+    net.api[api] = [{"sha": "ab" * 20, "commit": {"committer": {"date": "2020-01-01T00:00:00Z"}}}]
+    _r, idx4, _p4, _o4 = _run(tmp_path, v, net, "n4", _have(tmp_path, [plan1, plan2]), str(out2 / "upscalers.json"), now="2026-11-12T05:42:00Z")
+    assert idx4["components"]["fsr4_amd"]["version"] == "20261109-" + "ab" * 4
+    assert "pinned" not in idx4["components"]["fsr4_amd"]
+
+
+def test_missing_or_unreadable_times_are_never_old_enough():
+    """Review low: with no asset time the release's date stood in for it, and times compared as text."""
+    cutoff = "2026-11-06T05:41:00Z"
+    assert build.too_new("2026-11-06T05:41:01Z", cutoff) and not build.too_new("2026-11-06T05:41:00Z", cutoff)
+    assert not build.too_new("2026-11-05T10:00:00+00:00", cutoff), "an offset is read, not compared as text"
+    assert build.too_new("2026-11-06T10:41:00+05:00", cutoff) is False and build.too_new("2026-11-06T12:00:00+05:00", cutoff) is True
+    assert build.too_new("2026-11-06T12:00:00-05:00", cutoff) is True
+    for bad in (None, "", "yesterday", 5, [], {}):
+        assert build.too_new(bad, cutoff) is True, bad
+
+
+def test_an_asset_without_times_isnt_promoted_on_its_releases_old_date(tmp_path):
+    v, net = world()
+    for r in net.api["/repos/HHHHanasak1/xess-xmx-linux/releases?per_page=15"]:
+        for a in r["assets"]:
+            a.pop("created_at"), a.pop("updated_at")
+    rep, idx, _plan, _out = _run(tmp_path, v, net)
+    assert idx["components"]["xess_xmx_linux"]["version"] != "20261120", "no asset time: it waits, the pin stays"
 
 
 def test_second_run_uploads_nothing_new(tmp_path):

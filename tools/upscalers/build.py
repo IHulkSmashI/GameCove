@@ -95,6 +95,25 @@ def _need_upstream(comp: str, url: str) -> None:
         raise ValueError(f"{comp}: {url} isn't from its official upstream ({mirror.UPSTREAM.get(comp)})")
 
 
+def parse_time(ts: object) -> dt.datetime | None:
+    """A GitHub timestamp ("2026-11-05T10:00:00Z", also with an offset) as an aware UTC time; None when missing or
+    not a time (an age nobody can establish is never old enough)."""
+    if not isinstance(ts, str) or not ts.strip():
+        return None
+    try:
+        t = dt.datetime.fromisoformat(ts.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t.astimezone(dt.timezone.utc) if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+
+
+def too_new(ts: object, cutoff: str = "") -> bool:
+    """True unless `ts` is a time at or before `cutoff` (now - MIN_AGE_H). A missing or unreadable time counts as
+    too new: the 72 h wait fails closed (review low: it fell back to an older date, or passed, without one)."""
+    t, c = parse_time(ts), parse_time(cutoff or cutoff_for(None))
+    return t is None or c is None or t > c
+
+
 def cutoff_for(now: str | None) -> str:
     """The newest publish time a build may have to be promoted (now - MIN_AGE_H), as GitHub writes times."""
     t = dt.datetime.strptime(now, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc) if now else dt.datetime.now(dt.timezone.utc)
@@ -257,8 +276,8 @@ def newest_release(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work:
     for rel in rels:
         if rel.get("draft") or rel.get("prerelease"):
             continue
-        if not rel.get("published_at") or (cutoff and str(rel["published_at"]) > cutoff):
-            continue                                           # too new: it waits until it has been out MIN_AGE_H
+        if too_new(rel.get("published_at"), cutoff):
+            continue                                           # too new (or no time): it waits until it has been out MIN_AGE_H
         asset = next((a for a in rel.get("assets", []) if fnmatch.fnmatch(a.get("name", "").lower(), spec["asset"].lower())), None)
         if not asset:
             continue
@@ -270,8 +289,10 @@ def newest_release(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work:
             return prev                                        # nothing new: no download
         # the asset's own upload time counts, not the release's: an asset deleted and uploaded again into an old
         # release (other bytes under the same name) waits MIN_AGE_H like a new release (review M)
-        uploaded = max(str(asset.get("updated_at") or ""), str(asset.get("created_at") or "")) or str(rel["published_at"])
-        if cutoff and uploaded > cutoff:
+        # no asset time at all: the release's date would say nothing about this file, so it isn't old enough (fail closed)
+        times = [t for t in (parse_time(asset.get("updated_at")), parse_time(asset.get("created_at"))) if t]
+        uploaded = max(times).strftime("%Y-%m-%dT%H:%M:%SZ") if times else ""
+        if too_new(uploaded, cutoff):
             if same:
                 log(f"note: {comp} {rel['tag_name']}: {asset['name']} was uploaded again {uploaded}; the copy before "
                     f"stays until the new one is {MIN_AGE_H} h old")
@@ -375,7 +396,7 @@ def newest_rolling(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work:
     sha = sha256_of(path)
     if prev and prev.get("sha256") == sha:                     # the same bytes: the same build
         return prev
-    if not updated or (cutoff and updated > cutoff):
+    if too_new(updated, cutoff):
         # a new upload isn't promoted until it has been there MIN_AGE_H (unknown age: not at all)
         raise ValueError(f"the rolling build uploaded {updated or 'at an unknown time'} is newer than {MIN_AGE_H} h; it waits")
     version = "rolling-" + date.replace("-", "")
@@ -385,14 +406,29 @@ def newest_rolling(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work:
 
 
 def newest_files(net: Net, comp: str, spec: dict, mir: Mirror, out: str, work: str, prev: dict | None,
-                 cutoff: str = "") -> dict:
-    # the newest commit at least MIN_AGE_H old
+                 cutoff: str = "", seen: dict | None = None, now: str = "") -> dict:
+    """The newest commit of the files, once it has been SEEN here for MIN_AGE_H. A commit's own date is whatever its
+    author wrote (a backdated commit passed `until=cutoff` at once), so the clock starts when this build first saw the
+    commit, kept in the index's "first_seen" from night to night (`seen`, changed in place). Until then the previous
+    entry stays; with none the caller falls back to the tested pin."""
     q = f"/repos/{spec['repo']}/commits?per_page=1" + (f"&sha={spec['ref']}" if spec.get("ref") else "") + \
-        (f"&path={spec['dir']}" if spec.get("dir") else "") + (f"&until={cutoff}" if cutoff else "")
+        (f"&path={spec['dir']}" if spec.get("dir") else "")
     c = net.json(q)[0]
-    commit, date = c["sha"], c["commit"]["committer"]["date"][:10]
+    commit = c["sha"]
     if prev and prev.get("commit") == commit:
         return prev
+    seen = seen if seen is not None else {}
+    now = now or dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rec = seen.get(comp)
+    if not (isinstance(rec, dict) and rec.get("commit") == commit and parse_time(rec.get("at"))):
+        seen[comp] = {"commit": commit, "at": now}
+        rec = seen[comp]
+    if too_new(rec["at"], cutoff):
+        if prev:
+            log(f"note: {comp}: commit {commit[:8]} first seen {rec['at']}; the copy before stays until it has waited {MIN_AGE_H} h")
+            return prev
+        raise ValueError(f"commit {commit[:8]} was first seen {rec['at']}: it waits {MIN_AGE_H} h (its own date isn't trusted)")
+    date = rec["at"][:10]
     version = f"{date.replace('-', '')}-{commit[:8]}"
     return files_entry(net, comp, spec, commit, version, date, mir, out, work)
 
@@ -572,12 +608,14 @@ def build(net: Net, versions_path: str, out: str, have: str | None = None, previ
     check_sources()
     cutoff = cutoff_for(now)
     v = json.load(open(versions_path, encoding="utf-8"))
-    prev_comps, pin_sources, prev_idx = {}, {}, {}
+    prev_comps, pin_sources, prev_idx, first_seen = {}, {}, {}, {}
     if previous and os.path.exists(previous):
         try:
             prev_idx = mirror.parse(open(previous, "rb").read())
             prev_comps = prev_idx["components"]
             pin_sources = {k: x for k, x in (prev_idx.get("pin_sources") or {}).items() if isinstance(x, dict)}
+            first_seen = {k: x for k, x in (prev_idx.get("first_seen") or {}).items()
+                          if isinstance(x, dict) and k in SOURCES and parse_time(x.get("at"))}
         except ValueError as e:
             log(f"warning: previous index ignored: {e}")
     os.makedirs(out, exist_ok=True)
@@ -593,7 +631,8 @@ def build(net: Net, versions_path: str, out: str, have: str | None = None, previ
             prev = None                         # its file isn't on the mirror (a hand-edited release): not carried
         try:
             fn = {"release": newest_release, "rolling": newest_rolling, "git-files": newest_files}[spec["kind"]]
-            comps[comp] = fn(net, comp, spec, mir, out, work, prev, cutoff=cutoff)
+            extra = {"seen": first_seen, "now": now or ""} if spec["kind"] == "git-files" else {}
+            comps[comp] = fn(net, comp, spec, mir, out, work, prev, cutoff=cutoff, **extra)
             report["components"][comp] = comps[comp]["version"]
         except Exception as e:                  # one upstream failing never takes the others down
             fallback = prev or pin_entry(comp, v, mir, pin_sources)
@@ -620,7 +659,8 @@ def build(net: Net, versions_path: str, out: str, have: str | None = None, previ
            "repo": mirror.REPO, "note": "Newest upstream build of each upscaler GameCove installs, mirrored on this "
            "repository's 'upscalers' releases under immutable names. Signed with cosign keyless by "
            ".github/workflows/upscalers.yml on main; GameCove checks that signature and every file's sha256.",
-           "components": comps, "pin_sources": pin_sources}
+           "components": comps, "pin_sources": pin_sources,
+           "first_seen": {k: x for k, x in first_seen.items() if k in comps}}
     raw = json.dumps(idx, indent=1, sort_keys=True).encode() + b"\n"
     mirror.parse(raw)                            # what devices will accept, or this run fails before publishing
     with open(os.path.join(out, mirror.INDEX_NAME), "wb") as f:
