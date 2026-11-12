@@ -160,7 +160,7 @@ EOF
 # The boot entry switch (kept in the manifest as "marker", so migrate never takes it for an old karg).
 ensure_marker() {
 	if [ "$(boot_backend)" = steamos ]; then
-		m_has grubline "$GRUB_DEFAULT" && grub_has_line && return 0
+		m_has grubline "$GRUB_DEFAULT" && grub_has_line "$VRR_KARG" && return 0
 		m_has grubline "$GRUB_DEFAULT" || m_add grubline "$GRUB_DEFAULT"
 		grub_line_add "$VRR_KARG"
 		return
@@ -189,7 +189,7 @@ refresh() {
 		say "nothing to do"
 		return 0
 	fi
-	if grub_has_line; then
+	if grub_has_line "$VRR_KARG"; then
 		say "already in place"
 		return 0
 	fi

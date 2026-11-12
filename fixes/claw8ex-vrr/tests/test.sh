@@ -397,6 +397,15 @@ ok 'fix claw8ex-vrr status | grep -qx after_update=no && fix claw8ex-vrr status 
 steamos_boot
 ok '[ "$(drm_param)" = "eDP-1:edid/gamecove-csw0801-30-120.bin" ]' "the restart after brings the range back"
 
+case_start steamos_menu_without_the_line
+steamos_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+# the file still has our line, but the menu SteamOS boots from was rebuilt without it (a rebuild that failed)
+sed 's/ gamecove.vrr=1//' "$R/efi/EFI/SteamOS/grub.cfg" >"$R/efi/EFI/SteamOS/grub.cfg.new"
+mv "$R/efi/EFI/SteamOS/grub.cfg.new" "$R/efi/EFI/SteamOS/grub.cfg"
+ok '[ "$(fix claw8ex-vrr set refresh)" != "already in place" ]' "refresh does not call a marked file with a menu that lacks the line in place"
+ok 'grep -q "gamecove.vrr=1" "$R/efi/EFI/SteamOS/grub.cfg"' "the menu has the setting again"
+
 case_start steamos_old_record_in_var_moves
 steamos_ready
 fix claw8ex-vrr install >/dev/null 2>&1

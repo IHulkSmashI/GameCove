@@ -302,7 +302,12 @@ is_steamos() { [ "$(os_id)" = steamos ]; }
 # grub_mark <fix>: the marker that ends each of the fix's lines in /etc/default/grub.
 grub_mark() { printf '# GameCove %s' "$1"; }
 
-grub_has_line() { grep -qF "$(grub_mark "$FIX")" "$ROOT$GRUB_DEFAULT" 2>/dev/null; }
+# grub_has_line [<args>]: our line is in /etc/default/grub; with <args> also in the menu SteamOS boots from (its
+# grub.cfg, when there is one): a rebuild that failed after the line went in leaves the file marked and the menu not.
+grub_has_line() {
+	grep -qF "$(grub_mark "$FIX")" "$ROOT$GRUB_DEFAULT" 2>/dev/null || return 1
+	[ -z "${1:-}" ] || [ ! -f "$ROOT$STEAMOS_GRUB_CFG" ] || grep -qF -- "$1" "$ROOT$STEAMOS_GRUB_CFG" 2>/dev/null
+}
 
 # grub_write <file> <content file>: atomically, into the real file (a symlinked config stays one), mode kept.
 # The copy is written, flushed and compared with what was meant to be written before it replaces anything: a full
