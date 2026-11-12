@@ -129,7 +129,10 @@ func setup(shelf_id: String, shelf_title: String, games: Array, size := Vector2.
 		tile.focus_entered.connect(_on_focus.bind(i))
 		strip.add_child(tile)
 		tiles.append(tile)
+		# a tile can end up taller than it was made after layout (text wrapping differently with another font, a badge
+		# or price added): the row follows its size, not only its minimum, and not only once
 		tile.minimum_size_changed.connect(fit_row)
+		tile.resized.connect(fit_row)
 	Kit.link_horizontal(tiles)
 
 
@@ -142,7 +145,7 @@ func fit_row() -> void:
 	var tallest := tile_size.y
 	for t in tiles:
 		if is_instance_valid(t):
-			tallest = maxf(tallest, (t as Control).get_combined_minimum_size().y)
+			tallest = maxf(tallest, maxf((t as Control).get_combined_minimum_size().y, (t as Control).size.y))
 	var h := ceilf(tallest + PAD.y + LABEL_ROOM)
 	if h > scroll.custom_minimum_size.y:
 		scroll.custom_minimum_size = Vector2(0, h)

@@ -358,6 +358,25 @@ func test_a_shelf_row_grows_with_a_taller_tile() -> void:
 	s.free()
 
 
+## Layout check showcase/discover_free on a machine whose fonts wrap the card differently: the tile ends up taller than
+## fit_row saw when it ran once, and the focus ring left the row. The row follows the tile's size, every time it changes.
+func test_a_shelf_row_follows_a_tile_that_grows_after_layout() -> void:
+	var s: VBoxContainer = Shelf.new()
+	s.setup("free", "Free", [Logic.g("steam", "1", "A")], Vector2(300, 200))
+	(Engine.get_main_loop() as SceneTree).root.add_child(s)
+	s.fit_row()
+	var base: float = s.scroll.custom_minimum_size.y
+	ok(s.tiles[0].resized.is_connected(s.fit_row) and s.tiles[0].minimum_size_changed.is_connected(s.fit_row), "a tile's resize and its minimum both refit the row")
+	s.tiles[0].size = Vector2(300, 275)             # layout gave it more than it was made for; nobody calls fit_row
+	s.tiles[0].resized.emit()                       # (the signal a layout pass sends; a tree under test isn't laid out)
+	eq(s.scroll.custom_minimum_size.y, 275.0 + Shelf.PAD.y + Shelf.LABEL_ROOM, "the row grew with the tile's size (was %d)" % base)
+	eq(s._mask.custom_minimum_size.y, s.scroll.custom_minimum_size.y, "and its mask")
+	s.tiles[0].size = Vector2(300, 310)
+	s.tiles[0].resized.emit()
+	eq(s.scroll.custom_minimum_size.y, 310.0 + Shelf.PAD.y + Shelf.LABEL_ROOM, "and again for a later change")
+	s.free()
+
+
 func test_keyboard() -> void:
 	var k: PanelContainer = Osk.new()
 	var got: Array = []
