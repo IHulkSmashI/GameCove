@@ -54,7 +54,8 @@ func _drive(k: Control, where: String) -> void:
 	ok(row.has(focus()), "%s: and wraps around inside the row" % where)
 	await up()
 	await up()
-	ok(k.keys[-1].has(focus()) or (k.keys[0].size() == 1 and focus() == k.keys[0][0]), "%s: up from the top row wraps to the far end" % where)
+	await up()
+	ok(k.keys[0].has(focus()), "%s: up from the top row stays on it (a grid doesn't loop)" % where)
 	# Shift once, Caps twice (L3 / LT), symbols (RT).
 	await press(JOY_BUTTON_LEFT_STICK)
 	ok(k.shift and not k.caps, "%s: L3 is Shift" % where)

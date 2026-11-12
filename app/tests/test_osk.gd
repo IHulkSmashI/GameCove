@@ -239,15 +239,18 @@ func test_symbols_page() -> void:
 	k.free()
 
 
-## Left / right wrap inside a row, up / down wrap from the last row to the first.
+## Left / right wrap inside a row (a linear list); up on the top row and down on
+## the action row stay put (a grid doesn't loop: docs/CONTROLLER-UX.md CUX-5).
 func test_focus_wraps() -> void:
 	var k := _kb()
 	var top: Array = k.keys[0]
 	var last: Array = k.keys[-1]
 	eq(top[0].get_node(top[0].focus_neighbor_left), top[-1], "left from the first key: the last")
 	eq(top[-1].get_node(top[-1].focus_neighbor_right), top[0], "right from the last key: the first")
-	eq(top[0].get_node(top[0].focus_neighbor_top), last[0], "up from the top row: the action row")
-	eq(last[-1].get_node(last[-1].focus_neighbor_bottom), top[-1], "down from Done: the top row")
+	eq(top[0].get_node(top[0].focus_neighbor_top), top[0], "up from the top row: stays")
+	eq(last[-1].get_node(last[-1].focus_neighbor_bottom), last[-1], "down from Done: stays")
+	eq(k.keys[1][0].get_node(k.keys[1][0].focus_neighbor_top), top[0], "up from the second row: the top row")
+	ok(top[0].get_parent().has_meta("ux_wrap"), "a row says it wraps (the focus walk accepts it)")
 	eq(last[0], k.shift_button, "Shift first")
 	eq(last[-1], k.done_button, "Done last")
 	k.free()
