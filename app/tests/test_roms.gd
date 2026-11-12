@@ -232,6 +232,18 @@ func test_a_cap_and_a_skipped_gamelist_are_reported() -> void:
 	_rm(dir)
 
 
+## The count on the Emulation page and the scan agree: a .cue hides only the tracks it names.
+func test_the_count_matches_the_scan_for_a_cue_beside_a_stray_bin() -> void:
+	var dir := _dir("cuecount")
+	_touch(dir.path_join("Disc A.cue"), "FILE \"Disc A (Track 1).bin\" BINARY\r\n")
+	_touch(dir.path_join("Disc A (Track 1).bin"))
+	_touch(dir.path_join("Homebrew Game.bin"))
+	var exts := ["cue", "bin"]
+	eq(Roms.list_games(dir, exts)["games"].size(), 2, "the scan lists the disc and the stray .bin")
+	eq(Emu.count_roms(dir), 2, "and the count says the same")
+	_rm(dir)
+
+
 func test_listing_rules() -> void:
 	var home := _emudeck("list")
 	var roms := home.path_join("Emulation/roms")
