@@ -332,7 +332,9 @@ minutes (a one-shot `SceneTreeTimer`, given up as soon as another game starts), 
 of it is queued or running. One game at a time: Play on another game, app or stream while one runs
 asks "Close <game> first?" (`main.gd` `_close_first`); "Keep playing" comes first and B is the same. Yes closes the running game the way Exit game
 does, and the next one starts only after the session saw it exit and its exit sync (`after_exit`, phase `post`) is done
-(given up when the game doesn't close within 2 minutes). `GameSession.begin()` never ends a running session: starting
+(given up when the game doesn't close within 2 minutes). If the running game quit by itself while the question
+was up, yes starts the next one straight away (after that game's exit sync when one is running); if another game
+runs by then, it asks about that one. `GameSession.begin()` never ends a running session: starting
 a second game used to fire the first one's `ended` under it, so its upload ran mid-write, Sync now and Restore were
 allowed under it, its real exit was never uploaded, and Controls were left on "no game". Epic: a side counts as changed when its newest save is past our last sync (60 s slack, as
 legendary's own same-age check); both changed, or never synced with saves on both sides, is a conflict the user

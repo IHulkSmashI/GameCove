@@ -483,7 +483,19 @@ func _close_first(next: Dictionary, starter: String, extra: Array = []) -> bool:
 		{"id": "keep", "text": TG.KEEP_PLAYING % old_title, "detail": TG.KEEP_PLAYING_DETAIL, "icon": "play"},
 		{"id": "close", "text": TG.CLOSE_AND_START % new_title, "detail": TG.CLOSE_AND_START_DETAIL, "icon": "x"},
 	], func(id: String) -> void:
-		if id != "close" or not session.is_active() or str(session.game.get("key", "")) != key:
+		if id != "close":
+			return
+		if session.is_active() and str(session.game.get("key", "")) != key:
+			_close_first(next, starter, extra)   # another game runs now: that's the one to ask about
+			return
+		if not session.is_active():
+			# it quit by itself while the question was up: nothing left to close, the next one
+			# starts (once its exit sync is done, when one is running; review at 56f5255, low)
+			var syncing: bool = saves != null and str(saves.status(running).get("busy", "")) == "post"
+			_queued_start = {"after": key, "starter": starter, "next": next, "extra": extra,
+				"at": int(Time.get_unix_time_from_system()), "sync": syncing}
+			if not syncing:
+				call_deferred("_run_queued_start")
 			return
 		_queued_start = {"after": key, "starter": starter, "next": next, "extra": extra,
 			"at": int(Time.get_unix_time_from_system()), "sync": false}

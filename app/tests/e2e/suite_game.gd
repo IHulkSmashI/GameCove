@@ -319,6 +319,46 @@ func test_starting_another_game_asks_to_close_the_first() -> void:
 				OS.is_process_running(d.to_int())   # waitpid: reaped
 
 
+## Review at 56f5255, low: "Close A and start B" did nothing when A quit by itself while the
+## question was up (the answer only acted while A still ran). Nothing is left to close: B starts.
+func test_close_and_start_still_starts_b_when_a_quit_meanwhile() -> void:
+	var m: Control = w.main
+	await start_game(GAME_A)
+	await guide()
+	await w.idle()
+	var bin := ProjectSettings.globalize_path("user://e2e_fake_steam")
+	DirAccess.make_dir_recursive_absolute(bin)
+	var fs := FileAccess.open(bin.path_join("steam"), FileAccess.WRITE)
+	fs.store_string("#!/bin/sh\nexit 0\n")
+	fs.close()
+	OS.execute("chmod", ["+x", bin.path_join("steam")])
+	var path := OS.get_environment("PATH")
+	OS.set_environment("PATH", bin + ":" + path)
+	w.fake_apps[int(GAME_B["id"])] = true
+	_set_focusable(int(GAME_B["id"]), true)
+	m._play(GAME_B)
+	ok(await until(func(): return m.game_actions.sheet.is_open(), 3000), "Play on B asks first")
+	# A quits by itself while the question is up
+	w.end_app(int(GAME_A["id"]))
+	m.session.stop()
+	await w.idle()
+	ok(not m.session.is_active(), "A is gone")
+	ok(m.game_actions.sheet.is_open(), "the question is still up")
+	await down()   # "Keep playing" comes first
+	await a()
+	ok(await until(func(): return m.session.game.get("key", "") == GAME_B["key"], 20000), "close and start: B starts")
+	eq(_closes("TERM", str(GAME_A["id"])), 0, "nothing was told to close")
+	OS.set_environment("PATH", path)
+	await end_game()
+	for d in DirAccess.get_directories_at("/proc"):
+		if d.is_valid_int():
+			var st := FileAccess.open("/proc/%s/stat" % d, FileAccess.READ)
+			var line := st.get_line() if st != null else ""
+			var rest := line.substr(line.rfind(")") + 2).split(" ")
+			if line.contains("(steam)") and rest.size() > 1 and rest[1].to_int() == OS.get_process_id():
+				OS.is_process_running(d.to_int())   # waitpid: reaped
+
+
 ## Review at ff76ca4, the splash-timeout residual: once the splash gave up waiting (its own
 ## timeout) on a game still starting, Play on another game dropped the first one unfollowed.
 ## It is still followed, so the other game asks first.
