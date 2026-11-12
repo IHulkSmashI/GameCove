@@ -314,7 +314,7 @@ func test_upscaler_runs_the_helper_and_keeps_its_environment() -> void:
 	eq(c.options.map(func(o): return o["value"]), ["own", "fsr31", "fsr4_amd"], "AMD choices")
 	reg.set_value("perf.upscaler", "fsr31")
 	var last: String = runner.calls[runner.calls.size() - 1]
-	ok(last.begins_with("/usr/libexec/gamecove/gamecove-upscale choose --home ") and "--key epic:abc --dir /games/abc --upscaler fsr31 --fg 0" in last, "choose call: " + last)
+	ok(last.begins_with("/usr/libexec/gamecove/gamecove-upscale choose --home ") and "--key epic:abc --dir /games/abc --name Epic Game --upscaler fsr31 --fg 0" in last, "choose call: " + last)
 	ok("--gpu {\"arch\":\"RDNA3.5\",\"chip\":\"\",\"family\":\"amd-rdna3\",\"gpu\":\"\",\"tier\":\"amd_rdna35\",\"vendor\":\"amd\",\"xmx\":false} " in last, "GPU facts passed as JSON: " + last)
 	var env: Dictionary = w["p"].launch_env_hook("epic:abc", EPIC)
 	eq(env.get("WINEDLLOVERRIDES"), "dxgi=n,b;", "non-Steam launch gets OptiScaler's override")
@@ -948,6 +948,50 @@ func test_best_downloads_nothing_by_itself_with_background_lookups_off() -> void
 	_done(w)
 
 
+func test_a_refreshed_list_reaches_games_that_are_already_set_up() -> void:
+	# review M: a game prepared once this session was never looked at again, so a list that now names an anti-cheat
+	# or an online game for it changed nothing until the app restarted
+	var w := _world("lists_refresh", ALLY_X)
+	var base := ProjectSettings.globalize_path("user://test_perf_controls/lists_refresh")
+	w["ctx"]["privacy_path"] = base.path_join("settings.cfg")
+	w["ctx"]["upscale_stamp_path"] = base.path_join("upscalers.cfg")
+	PrivacyScript.set_background_allowed(true, base.path_join("settings.cfg"))
+	var runner = w["runner"]
+	var p = w["p"]
+	runner.answers["check"] = CHECK_UPDATE
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr31", "fg": 0, "owner": "gamecove", "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
+	runner.answers["prepare"] = {"ok": true, "did": "", "plan": {"ok": true, "hands_off": false, "refused": null}}
+	runner.answers["refresh"] = {"ok": true, "lists": {"games": "updated"}}
+	w["library"].games["epic:abc"] = EPIC
+	p.store.set_value("epic:abc", "upscale_env", {"WINEDLLOVERRIDES": "dxgi=n,b;"})
+	var other := {"key": "gog:9", "store": "gog", "id": "9", "title": "No files", "install_path": "/games/9"}
+	w["library"].games["gog:9"] = other
+	_with_game(w, EPIC)
+	eq(_calls_with(runner, "prepare").size(), 1, "prepared once when it was opened")
+	p.prepare_game()
+	eq(_calls_with(runner, "prepare").size(), 1, "and not again this session")
+	runner.answers["prepare"] = {"ok": true, "did": "taken out: this game has anti-cheat", "plan": {"ok": true, "hands_off": true, "refused": "anticheat"}}
+	ok(p.background_check(1_800_000_000), "the daily check refreshes the lists")
+	var calls := _calls_with(runner, "prepare")
+	eq(calls.size(), 2, "the patched game is looked at again without a restart: " + str(calls))
+	ok("--key epic:abc" in calls[1] and "--name Epic Game" in calls[1], "that game, by its title")
+	ok(p.store.get_value("epic:abc", "upscale_hands_off", false), "and its verdict is kept")
+	# nothing changed in the lists: nothing is run
+	runner.answers["refresh"] = {"ok": true, "lists": {"games": "bundled"}}
+	runner.calls.clear()
+	ok(p.background_check(1_800_000_000 + UpscaleUpdates.INTERVAL_S), "next day")
+	eq(_calls_with(runner, "prepare").size(), 0, "an unchanged list re-checks nothing")
+	# behind a running game nothing runs; the game is looked at when it is next opened
+	runner.answers["refresh"] = {"ok": true, "lists": {"games": "updated"}}
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	ok(p.background_check(1_800_000_000 + 2 * UpscaleUpdates.INTERVAL_S), "another day, a game running")
+	eq(_calls_with(runner, "prepare").size(), 0, "nothing is run behind the game")
+	(w["ctx"]["upscale_running"] as Callable).call("")
+	p.prepare_game()
+	eq(_calls_with(runner, "prepare").size(), 1, "it is prepared once the game has quit")
+	_done(w)
+
+
 func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> void:
 	var w := _world("mode_offer", ALLY_X)
 	var runner = w["runner"]
@@ -963,6 +1007,9 @@ func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> vo
 	ok(c.available, "offered: " + c.reason)
 	eq(c.title, "Add FSR 4.1.2 to this game", "our pick is the one offered")
 	eq(c.help, warn, "with the plain warning")
+	# review H1: the Upscaler and Frame generation rows wait for the same Add step (the helper refuses them as well)
+	for id in ["perf.upscaler", "perf.frame_gen"]:
+		ok(not reg.control(id).available and "press Add first" in reg.control(id).reason, id + " waits for Add: " + reg.control(id).reason)
 	runner.answers["opt-in"] = {"ok": true, "did": "set up", "mode": "best"}
 	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove", "env": {"WINEDLLOVERRIDES": "dxgi=n,b;"}}
 	reg.set_value("perf.upscale_offer", true)
@@ -973,6 +1020,56 @@ func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> vo
 	w["p"]._forget_status()
 	reg.detect_all()
 	ok(not reg.control("perf.upscale_offer").available, "nothing left to offer once added")
+	ok(reg.control("perf.upscaler").available, "and the Upscaler row is open: " + reg.control("perf.upscaler").reason)
+	_done(w)
+
+
+func test_the_launch_asks_the_helpers_plan_whether_to_keep_hands_off() -> void:
+	# review H3: one per-game fact (the plan's hands_off) for the launch swap, kept with the game's values
+	var w := _world("hands_off_launch", ALLY_X)
+	var runner = w["runner"]
+	var launcher = w["launcher"]
+	ok(launcher.hands_off_hooks.size() == 1, "the provider is on the launcher's list")
+	var nikki := {"key": "epic:nikki", "store": "epic", "id": "nikki", "title": "Infinity Nikki", "install_path": "/games/nikki"}
+	runner.answers["plan"] = {"ok": true, "hands_off": true, "refused": "anticheat", "line": "x"}
+	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "refused: hands off")
+	var calls := _calls_with(runner, "plan")
+	ok(calls.size() == 1 and "--name Infinity Nikki" in calls[0] and "--dir /games/nikki" in calls[0], "asked for that game: " + str(calls))
+	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "answered again within the plan's lifetime")
+	eq(_calls_with(runner, "plan").size(), 1, "without another helper run")
+	ok(w["p"].store.get_value("epic:nikki", "upscale_hands_off", false), "kept with the game's values")
+	runner.answers["plan"] = {"ok": true, "hands_off": false, "refused": null, "line": "x"}
+	w["p"]._hands_off_cache.clear()
+	ok(not launcher.hands_off_hooks[0].call("epic:nikki", nikki), "added to the game: not held back")
+	ok(not w["p"].store.has_value("epic:nikki", "upscale_hands_off"), "and the kept fact is gone")
+	runner.answers["plan"] = {"ok": false, "error": "helper failed"}
+	w["p"].store.set_value("epic:nikki", "upscale_hands_off", true)
+	w["p"]._hands_off_cache.clear()
+	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "a helper that fails keeps the last known answer")
+	_done(w)
+
+
+func test_every_helper_call_for_a_game_carries_its_title() -> void:
+	# review H2: the lists' notes (anti-cheat named, online game) are found by title; a non-Steam game has no app id,
+	# so Infinity Nikki from Epic was planned as "unknown" with no ban line
+	var w := _world("helper_title", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {}}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 3.1.", "auto": true, "refused": null}
+	runner.answers["choose"] = {"ok": true, "env": {}}
+	var nikki := {"key": "epic:nikki", "store": "epic", "id": "nikki", "title": "Infinity Nikki", "install_path": "/games/nikki"}
+	_with_game(w, nikki)
+	reg.set_value("perf.upscaler", "fsr31")
+	for verb in ["status", "plan", "prepare", "choose"]:
+		var calls := _calls_with(runner, verb)
+		ok(not calls.is_empty(), verb + " was asked")
+		for c in calls:
+			ok("--name Infinity Nikki" in c, verb + " names the game: " + c)
+	w["p"].prepare_installed(nikki)
+	for c in _calls_with(runner, "prepare"):
+		ok("--name Infinity Nikki" in c, "an install-time prepare names it too: " + c)
 	_done(w)
 
 
@@ -1011,6 +1108,43 @@ func test_upscaler_changes_wait_until_the_game_has_quit() -> void:
 	_done(w)
 
 
+func test_a_held_change_survives_a_power_off_and_game_update_is_held_too() -> void:
+	# review M: "game-update" ran while the game had its files loaded, and a held change lived in memory only, so
+	# a handheld switched off during the game lost the pick silently
+	var w := _world("held_persist", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove",
+		"env": {}, "game_update": true, "opti_version": "0.9.4", "opti_latest": "0.9.5"}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null}
+	runner.answers["choose"] = {"ok": true, "env": {}}
+	runner.answers["game-update"] = {"ok": true, "version": "0.9.5"}
+	_with_game(w, EPIC)
+	w["ctx"]["upscale_launch_grace_ms"] = 0
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	runner.calls.clear()
+	reg.set_value("perf.upscaler", "fsr31")
+	reg.set_value("perf.upscale_game_update", true)
+	eq(_calls_with(runner, "choose").size() + _calls_with(runner, "game-update").size(), 0, "nothing is written while the game runs")
+	ok(w["p"].store.has_value("epic:abc", "upscale_pending"), "the held change is kept with the game's values")
+	# the power goes off: a new session, nothing in memory
+	var p2 = PerfProvider.new()
+	p2.setup(w["ctx"])
+	(w["ctx"]["upscale_running"] as Callable).call("")
+	ok(p2.flush_pending("epic:abc"), "after the restart it is made once")
+	eq([_calls_with(runner, "choose").size(), _calls_with(runner, "game-update").size()], [1, 1], "the pick and the update both ran: " + str(runner.calls))
+	ok(not p2.store.has_value("epic:abc", "upscale_pending"), "and is gone from the store")
+	ok(not p2.flush_pending("epic:abc"), "not made twice")
+	# game-update alone is held as well
+	w["p"]._pending.clear()
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	runner.calls.clear()
+	w["p"]._upscale_run("game-update")
+	eq(_calls_with(runner, "game-update").size(), 0, "game-update waits while the game runs")
+	_done(w)
+
+
 func test_lossless_is_off_when_the_helper_finds_anticheat() -> void:
 	# the app's own data has no anti-cheat record; the game's folder (or the list's notes) does
 	var w := _world("lsfg_ac_folder", ALLY_X)
@@ -1020,6 +1154,46 @@ func test_lossless_is_off_when_the_helper_finds_anticheat() -> void:
 	runner.answers["plan"] = {"ok": true, "refused": "anticheat", "line": "This game uses NetEase Anti-Cheat."}
 	_with_game(w, EPIC)
 	eq(w["reg"].control("perf.lsfg").reason, "Off for this game: it uses anti-cheat", "Lossless stays off")
+	_done(w)
+
+
+func test_lossless_is_really_off_after_a_game_shows_anticheat() -> void:
+	# review M: the row was greyed, but the game kept its lsfg-vk profile and environment (and forced low latency)
+	var w := _world("lsfg_ac_off", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	var p = w["p"]
+	var cfg: String = w["home"].path_join(Lsfg.CONFIG)
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none"}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "refused": null, "line": "Nothing to add.", "hands_off": false}
+	_with_game(w, EPIC)
+	reg.set_value("perf.lsfg", true)
+	ok(Lsfg.profile_name("epic:abc") in _read(cfg), "Lossless on: the game has its profile")
+	ok(p.env_for("epic:abc", EPIC).has("LSFGVK_PROFILE"), "and its environment")
+	ok(p.frame_gen_on("epic:abc"), "and counts as frame generation")
+	# an update brings an anti-cheat: the helper's plan now refuses the game
+	runner.answers["plan"] = {"ok": true, "refused": "anticheat", "line": "This game uses NetEase Anti-Cheat.", "hands_off": true}
+	p._forget_status()
+	reg.detect_all()
+	ok(not Lsfg.profile_name("epic:abc") in _read(cfg), "the profile is gone from lsfg-vk's config")
+	ok(not p.env_for("epic:abc", EPIC).has("LSFGVK_PROFILE"), "and from the environment")
+	ok(not p.launch_env_hook("epic:abc", EPIC).has("LSFGVK_PROFILE"), "also at launch")
+	ok(not p.frame_gen_on("epic:abc"), "it no longer forces low latency")
+	eq(reg.control("perf.lsfg").reason, "Off for this game: it uses anti-cheat", "and the row says so")
+	# the app's own anti-cheat data counts the same, without any plan
+	var other := {"key": "gog:7", "store": "gog", "id": "7", "title": "Other", "install_path": "/games/7"}
+	w["launcher"].anticheat_keys = ["gog:7"]
+	w["library"].games["gog:7"] = other
+	p.store.set_value("gog:7", "lsfg", true)
+	ok(not p.env_for("gog:7", other).has("LSFGVK_PROFILE"), "the app's own data too")
+	p.write_lsfg_config()
+	ok(not Lsfg.profile_name("gog:7") in _read(cfg), "also in the config")
+	# the anti-cheat goes away (the list was wrong): Lossless is back
+	runner.answers["plan"] = {"ok": true, "refused": null, "line": "Nothing to add.", "hands_off": false}
+	p._forget_status()
+	reg.detect_all()
+	ok(Lsfg.profile_name("epic:abc") in _read(cfg) and p.env_for("epic:abc", EPIC).has("LSFGVK_PROFILE"), "no anti-cheat now: it runs again")
 	_done(w)
 
 

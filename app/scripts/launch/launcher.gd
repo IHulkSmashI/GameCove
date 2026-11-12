@@ -41,6 +41,10 @@ var frame_gen_hooks: Array[Callable] = []
 ## `hook(key) -> bool`: did the player pick Native for this game's upscaling
 ## (perf controls)? Then nothing at launch swaps the game's upscaler.
 var native_hooks: Array[Callable] = []
+## `hook(key, game) -> bool`: the upscaling helper's plan says to keep hands off this game (refused, or an online
+## game / one no list knows that the player hasn't added ours to). Then nothing at launch swaps its upscaler either:
+## the launch swap follows the same per-game fact as the files do (review H3), not only the app's anti-cheat data.
+var hands_off_hooks: Array[Callable] = []
 
 var _games := {}
 ## Frame rates measured per device: {device id: {game key: fps}} (a game runs
@@ -276,6 +280,7 @@ func launch_plan(game: Dictionary) -> Dictionary:
 		"extra_env": game.get("extra_env", {}),
 		"frame_gen_on": frame_gen_elsewhere(key),
 		"upscale_native": upscale_native(key),
+		"hands_off": upscale_hands_off(key, game),
 	}
 	var plan := LaunchEnv.compose(settings_for(key), device, proton, host_facts(), facts, {"indicator": show_indicator})
 	for hook in env_hooks:
@@ -291,6 +296,14 @@ func launch_plan(game: Dictionary) -> Dictionary:
 func upscale_native(key: String) -> bool:
 	for hook in native_hooks:
 		if hook.is_valid() and bool(hook.call(key)):
+			return true
+	return false
+
+
+## True when a hands_off_hooks hook says to keep hands off `key` (see the hook list).
+func upscale_hands_off(key: String, game: Dictionary = {}) -> bool:
+	for hook in hands_off_hooks:
+		if hook.is_valid() and bool(hook.call(key, game)):
 			return true
 	return false
 

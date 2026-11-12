@@ -471,9 +471,59 @@ def _foreign(who: str | None) -> dict | None:
     return None
 
 
+# ---- online and unknown games: nothing goes in until the player says so (review H1/H5) ---------------------------
+# An online game (the list says so, and names no anti-cheat) can ban the account for an upscaler in its files; a game
+# no list knows could be anything. Both are offered, never done by themselves, and never done through the Upscaler
+# row either: every way in (Best's "Add", the Upscaler row, a profile) goes through the same check. What the player
+# accepted is saved with the opt-in: an opt-in for an unknown game doesn't count for the online ban risk it never
+# showed (review M).
+ONLINE_LINE = ("This is an online game. An upscaler in its files can break its rules and get the account banned, so "
+               "we don't add one by ourselves. Press Add to put {up} in if you accept that risk.")
+UNKNOWN_LINE = "We don't know this game yet, so nothing is added by itself. Our pick here is {up}: press Add to put it in."
+UNSURE_LINE = ("We don't know this game yet and can't tell how it renders, so nothing is added by itself. You can still "
+               "press Add to try {up}.")
+RISKS = {"": 0, "unknown": 1, "online": 2}
+
+
+def optin_risk(home: str, key: str) -> str:
+    """What the player accepted for this game: "online" (the ban risk, shown with the warning), "unknown" (a game no
+    list knows) or "" (nothing). An opt-in saved before this was recorded (a bare time) counts as "unknown" only."""
+    v = (load_state(home).get("optin") or {}).get(str(key))
+    if isinstance(v, dict):
+        return v.get("risk") if v.get("risk") in ("unknown", "online") else "unknown"
+    return "unknown" if v else ""
+
+
+def optin_needed(entry: dict, rec: dict | None = None) -> str:
+    """"online", "unknown" or "" (a game the lists know, not online: GameCove may set it up by itself)."""
+    if entry.get("online"):
+        return "online"
+    if not entry.get("known") and not (rec or {}).get("re_engine"):
+        return "unknown"
+    return ""
+
+
+def optin_ok(home: str, key: str, need: str) -> bool:
+    return RISKS[optin_risk(home, key)] >= RISKS[need or ""]
+
+
+def optin_line(need: str, up: str, sure: bool = True) -> str:
+    return ONLINE_LINE.format(up=up) if need == "online" else (UNKNOWN_LINE if sure else UNSURE_LINE).format(up=up)
+
+
+def _optin_refusal(home: str, key: str, rec: dict, upscaler: str, files: bool = True) -> dict | None:
+    """None, or the answer that sends the player through the warning and the Add step. An unknown game's environment
+    -only setup (Proton's FSR 4 upgrade, nothing in its folder) isn't held back; its files are (files=True)."""
+    need = optin_needed(rec["entry"], rec)
+    if not need or optin_ok(home, key, need) or (need == "unknown" and not files):
+        return None
+    return {"ok": False, "refused": "optin", "need": need,
+            "error": optin_line(need, active.LABELS.get(upscaler, upscaler))}
+
+
 def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str | None = None,
            overlay: int | None = None, allow_unpinned: bool = False, online: bool = False,
-           generator: str | None = None, anticheat: bool = False) -> dict:
+           generator: str | None = None, anticheat: bool = False, name: str | None = None) -> dict:
     """ClawDeck's game_choose, for this GPU: the upscaler (the game's own, or one through GameCove's OptiScaler)
     and frame generation (0 off, else the multiplier). Everything they need is put in or taken out here."""
     if upscaler in upscalers_for(gpu) and upscaler not in offered(home, gpu):
@@ -484,7 +534,7 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
     fg = int(fg or 0)
     if fg not in fg_for(gpu):
         return {"ok": False, "error": f"frame generation {fg}x isn't offered on this GPU"}
-    rec = recommend(home, key, gpu, game_dir, online=online, xmx_off=get_launch(home, key).get("xmx") is False)
+    rec = recommend(home, key, gpu, game_dir, name, online=online, xmx_off=get_launch(home, key).get("xmx") is False)
     d = rec["dir"]
     folder = _folder(home, key, d, rec)
     if not d or not folder:
@@ -511,7 +561,8 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
         _forget(home, key)
         r = set_launch(home, key, {**{k: None for k in REC_KEYS}, "fg": fg or None}, gpu)
         return {**r, "optiscaler": out, "reframework_left": bool(ref.get("present") and not ref.get("removed"))}
-    bad = _foreign(optiscaler.owner(folder)["owner"]) or _refused(d, folder, anticheat, rec)
+    bad = _foreign(optiscaler.owner(folder)["owner"]) or _refused(d, folder, anticheat, rec) \
+        or _optin_refusal(home, key, rec, upscaler)
     if bad:
         return bad
     gens = chips.generators(gpu)
@@ -542,9 +593,9 @@ def choose(home: str, key: str, upscaler: str, fg: int, gpu: dict, game_dir: str
 
 
 def apply_recommended(home: str, key: str, gpu: dict, game_dir: str | None = None, allow_unpinned: bool = False,
-                      online: bool = False, anticheat: bool = False) -> dict:
+                      online: bool = False, anticheat: bool = False, name: str | None = None) -> dict:
     """ClawDeck's game_apply_recommended, for this GPU."""
-    rec = recommend(home, key, gpu, game_dir, online=online, xmx_off=get_launch(home, key).get("xmx") is False)
+    rec = recommend(home, key, gpu, game_dir, name, online=online, xmx_off=get_launch(home, key).get("xmx") is False)
     d = rec["dir"]
     folder = _folder(home, key, d, rec)
     if not d or not folder:
@@ -552,6 +603,9 @@ def apply_recommended(home: str, key: str, gpu: dict, game_dir: str | None = Non
     if rec.get("recommended") is False:
         return {"ok": False, "error": rec["reasons"][0]}
     launch = dict(rec["launch"])
+    bad = _optin_refusal(home, key, rec, rec.get("upscaler") or "own", bool(rec["optiscaler"])) if launch else None
+    if bad:
+        return bad
     if rec["optiscaler"]:
         bad = _foreign(optiscaler.owner(folder)["owner"]) or _refused(d, folder, anticheat, rec)
         if bad:

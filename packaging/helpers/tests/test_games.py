@@ -43,6 +43,13 @@ def _steam_game(home, appid, name, files):
     return d
 
 
+def _accept(home, key, risk="unknown"):
+    """The player pressed Add for this game (best.opt_in's record): games no list knows are never changed without it."""
+    st = games.load_state(home)
+    st.setdefault("optin", {})[str(key)] = {"at": 1, "risk": risk}
+    games.save_state(home, st)
+
+
 @pytest.fixture(autouse=True)
 def _no_chown(monkeypatch):
     monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
@@ -111,6 +118,7 @@ def test_choose_on_amd_puts_optiscaler_in_and_takes_it_out(tmp_path):
     v = games.versions()["optiscaler"]
     d = _steam_game(home, "200", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll"])
     before = sorted(os.listdir(d))
+    _accept(home, "200")
     r = games.choose(home, "200", "fsr31", 2, RDNA35)
     assert r["ok"], r
     assert r["env"]["WINEDLLOVERRIDES"] == "dxgi=n,b;" and r["env"]["FrameGen_FGOutput"] == "fsrfg"
@@ -140,6 +148,7 @@ def test_fsr4_on_amd_uses_amds_own_upscaler_and_puts_the_packages_back(tmp_path,
         _w(dest, "not amd")
         return dest
     monkeypatch.setattr(optiscaler.downloads, "download", fake_download)
+    _accept(home, "200")
     r = games.choose(home, "200", "fsr4_amd", 0, RDNA35)
     assert not r["ok"] and "sha256" in r["error"] and not os.path.exists(os.path.join(d, "OptiScaler.ini"))
     # GameCove's mirror first, then AMD's own repository at the pinned commit; both refused on the hash
@@ -241,6 +250,7 @@ def test_a_game_moved_to_another_library_keeps_its_upscaler_and_undo(tmp_path):
     d = _steam_game(home, "620", "Moving", ["Moving/Binaries/Win64/Moving-Win64-Shipping.exe", "Moving/Binaries/Win64/nvngx_dlss.dll",
                                             "Moving/Binaries/Win64/D3D12Core.dll"])
     before = _tree(d)
+    _accept(home, "620")
     assert games.choose(home, "620", "fsr31", 0, RDNA2)["ok"]
     # Steam moves it to the SD card library: the manifest goes along, the old path is gone
     sd = tmp_path / "sd"

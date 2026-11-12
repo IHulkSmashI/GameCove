@@ -365,6 +365,9 @@ def test_check_update_and_game_update(tmp_path, monkeypatch, cosign):
     g = os.path.join(lib, "common", "G")
     _w(os.path.join(g, "G.exe"), "x" * 10)
     _w(os.path.join(g, "nvngx_dlss.dll"), "x" * 10)
+    st = games.load_state(home)
+    st.setdefault("optin", {})["200"] = {"at": 1, "risk": "unknown"}      # the player pressed Add
+    games.save_state(home, st)
     assert games.choose(home, "200", "fsr31", 0, RDNA35)["ok"]          # offline at this point: 0.9.4 is used
     assert open(os.path.join(g, "dxgi.dll")).read() == "opti-0.9.4"
     _w(os.path.join(g, "libxess.dll"), "the user's own build")

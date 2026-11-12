@@ -62,6 +62,11 @@ const LAYERS: Array[String] = ["global", "source", "game", "game+source"]
 const MAX_IMPORT_BYTES := 1 << 20
 ## The frame limit control Profiles owns (see sync_launcher_fps()).
 const FPS_ID := "display.fps_limit"
+## What an everyday layer (global, ac, battery) never holds: the upscaler and frame generation put files in a game's
+## folder, which only the game's own page may do after the warning and the Add step for an online or unknown game
+## (review H1). A game's own layers may hold them; the helper still checks each game when they apply.
+const GAME_ONLY_PREFIXES: Array[String] = ["perf.upscale", "perf.frame_gen", "perf.fg_generator"]
+const EVERYDAY_LAYERS: Array[String] = ["global", "ac", "battery"]
 ## The values from before the running game, kept on disk next to profiles.json while it
 ## runs (review H2): a crash, a SIGTERM at a session switch or a power-off leaves them
 ## there, and the next start (or `gamecove.x86_64 --headless -- --restore-baseline`, run by
@@ -305,6 +310,23 @@ func sync_launcher_fps(key: String) -> bool:
 
 # ---- applying -----------------------------------------------------------------
 
+## True for the controls that change a game's files (see GAME_ONLY_PREFIXES).
+static func game_only(id: String) -> bool:
+	for p in GAME_ONLY_PREFIXES:
+		if id.begins_with(p):
+			return true
+	return false
+
+
+## `values` without the game-only controls: what an everyday layer may keep.
+static func everyday(values: Dictionary) -> Dictionary:
+	var out := {}
+	for id in values:
+		if not game_only(str(id)):
+			out[id] = values[id]
+	return out
+
+
 ## Sends what's in effect now (game + source) to Controls. `only`: limit to
 ## these ids. Returns what was sent.
 func apply_now(reason := "", only: Array = []) -> Dictionary:
@@ -312,6 +334,12 @@ func apply_now(reason := "", only: Array = []) -> Dictionary:
 		return {}
 	var eff := effective(game_key, source)
 	var from := explain(game_key, source)
+	for id in eff.keys():
+		# a profile saved before this (or imported) may hold an upscaler in an everyday layer: it never applies, so
+		# it can't reach an online game inside the start-up grace
+		if game_only(str(id)) and str(from.get(id, "")) in EVERYDAY_LAYERS + ["global"]:
+			eff.erase(id)
+			from.erase(id)
 	if game_key != "":
 		var grew := false
 		for id in game_ids(game_key):
@@ -565,12 +593,14 @@ func set_layer(game: String, src: String, values: Dictionary) -> void:
 	var l := _layer_ref(game, src, true)
 	var ids := l.keys() + values.keys()
 	l.clear()
-	l.merge(_clean(values), true)
+	l.merge(_clean(everyday(values) if game == "" else values), true)
 	_touched(game, src, true, ids)
 
 
 ## One value in one layer; null removes it.
 func set_value(game: String, src: String, id: String, v: Variant) -> void:
+	if game == "" and game_only(id):
+		return
 	var l := _layer_ref(game, src, true)
 	if v == null:
 		l.erase(id)
@@ -802,8 +832,8 @@ static func _clean(values: Variant) -> Dictionary:
 
 
 static func _clean_device(d: Dictionary) -> Dictionary:
-	var out := {"global": _clean(d.get("global", {})), "ac": _clean(d.get("ac", {})),
-		"battery": _clean(d.get("battery", {})), "games": {}}
+	var out := {"global": everyday(_clean(d.get("global", {}))), "ac": everyday(_clean(d.get("ac", {}))),
+		"battery": everyday(_clean(d.get("battery", {}))), "games": {}}
 	var gs: Variant = d.get("games", {})
 	if gs is Dictionary:
 		for key in gs:

@@ -49,14 +49,21 @@ var launcher: Object
 var library: Object
 var _status_cache := {}           # game key -> {"t": ms, "r": Dictionary}
 var _plan_cache := {}             # game key -> {"t": ms, "r": Dictionary}
+var _hands_off_cache := {}        # game key -> {"t": ms, "v": bool}: the plan's hands-off fact at launch
 var _prepared := {}               # game keys set up ahead of their start this session
 var _last_did := {}               # game key -> what prepare changed, for the mode row's help
 var _running_key := ""            # the game running now (session_wiring through ctx["upscale_running"])
 var _running_since := 0           # Time.get_ticks_msec() when it started
-var _pending := {}                # game key -> {"verb", "extra"}: a change asked for while that game ran
+var _pending := {}                # game key -> {"verb", "extra"}: a change asked for while that game ran (also in the store)
 ## Helper commands that change the game's files: never while that game runs
 ## (its DLLs are loaded; review M7). They wait and run once it has quit.
-const CHANGES_FILES := ["choose", "mode", "opt-in"]
+const CHANGES_FILES := ["choose", "mode", "opt-in", "game-update"]
+## Where a held change is kept with the game's values: a power-off while the game ran (a handheld's usual end of a
+## session) must not lose the pick silently.
+const PENDING_KEY := "upscale_pending"
+## The plan's anti-cheat verdict for a game, kept with its values: Lossless frame generation is switched off
+## underneath (env and lsfg-vk's config), not only greyed, once a game shows anti-cheat (review M).
+const AC_KEY := "upscale_anticheat"
 var _check := {}                  # the helper's last "check" answer
 var _check_t := -1
 var _mutex := Mutex.new()
@@ -84,6 +91,8 @@ func setup(c: Dictionary) -> void:
 		launcher.frame_gen_hooks.append(frame_gen_on)
 	if launcher != null and "native_hooks" in launcher:
 		launcher.native_hooks.append(upscale_native)
+	if launcher != null and "hands_off_hooks" in launcher:
+		launcher.hands_off_hooks.append(upscale_hands_off)
 	refresh_device_files()
 	if real:
 		_schedule_background_check(UpscaleUpdates.FIRST_DELAY_S)
@@ -470,7 +479,7 @@ func write_lsfg_config() -> bool:
 	var profiles := {}
 	for k in store.games():
 		var vals: Dictionary = store.values(k)
-		if bool(vals.get("lsfg", false)):
+		if bool(vals.get("lsfg", false)) and not lsfg_blocked(k):
 			var merged := Lsfg.defaults_for(GpuCaps.tier(_gpu()))
 			merged.merge(vals, true)
 			profiles[k] = merged
@@ -507,18 +516,44 @@ func _upscale_reason() -> String:
 	return ""
 
 
+## Why the Upscaler and Frame generation rows wait (review H1): the helper's plan says to keep hands off this
+## game until the player presses Add (an online game, with the ban warning; a game no list knows), or refuses it
+## (anti-cheat, another tool's files). "" when the rows may be used. Picking a row anyway is refused by the helper
+## itself (choose answers "optin"), so this is the explanation, not the guard.
+func _optin_reason() -> String:
+	var p := upscale_plan()
+	if not bool(p.get("ok", false)):
+		return ""
+	var refused: Variant = p.get("refused")
+	if refused != null and str(refused) == "anticheat":
+		return "Off for this game: it uses anti-cheat"
+	if refused != null:
+		return ""
+	var offer: Variant = p.get("offer")
+	if (offer != null and str(offer) != "") or (bool(p.get("hands_off", false)) and str(p.get("need", "")) != ""):
+		return "Online game: press Add first (an upscaler can get the account banned)" if str(p.get("need", "")) == "online" \
+			else "We don't know this game yet: press Add first"
+	return ""
+
+
 func _upscale_run(verb: String, extra: Array = []) -> Dictionary:
 	var k := game_key()
 	if verb in CHANGES_FILES and is_running(k):
 		# the game has these files loaded: the change waits until it has quit (flush_pending)
 		_mutex.lock()
-		_pending[k] = {"verb": verb, "extra": extra.duplicate()}
+		var held: Dictionary = _pending_of(k).duplicate()
+		if verb == "game-update":
+			held["game_update"] = true          # beside a held pick: both are made, the pick first
+		else:
+			held["verb"] = verb
+			held["extra"] = extra.duplicate()
+		_pending_put(k, held)
 		var c: Dictionary = _status_cache.get(k, {})
 		_mutex.unlock()
 		var env: Variant = (c.get("r", {}) as Dictionary).get("env", {}) if not c.is_empty() else store.get_value(k, "upscale_env", {})
 		return {"ok": true, "queued": true, "env": env if env is Dictionary else {}}
 	return Upscale.run(ctx.get("runner"), upscale_cmd(), verb, _home(), k, _gpu(),
-		str(game().get("install_path", "")), extra)
+		str(game().get("install_path", "")), extra, Upscale.title_of(game()))
 
 
 ## Session wiring: `key` started ("" when the game ended). A change asked for
@@ -544,21 +579,51 @@ func is_running(key: String) -> bool:
 	return r
 
 
+## The held change for a game: in memory, else the one saved with its values (a restart). Call with _mutex held.
+func _pending_of(key: String) -> Dictionary:
+	var p: Dictionary = _pending.get(key, {})
+	if p.is_empty() and store != null:
+		var saved: Variant = store.get_value(key, PENDING_KEY, {})
+		if saved is Dictionary:
+			var sd: Dictionary = saved
+			if (str(sd.get("verb", "")) in CHANGES_FILES and sd.get("extra") is Array) or bool(sd.get("game_update", false)):
+				p = sd
+				_pending[key] = p
+	return p
+
+
+func _pending_put(key: String, p: Dictionary) -> void:
+	_pending[key] = p
+	if store != null:
+		store.set_value(key, PENDING_KEY, p)
+
+
+func _pending_drop(key: String) -> void:
+	_pending.erase(key)
+	if store != null:
+		store.set_value(key, PENDING_KEY, null)
+
+
 ## The change that waited for the game to quit, made now. True when one ran.
 func flush_pending(key: String) -> bool:
 	_mutex.lock()
-	var p: Dictionary = _pending.get(key, {})
+	var p: Dictionary = _pending_of(key)
 	var waiting := not p.is_empty() and _running_key != key
 	if waiting:
-		_pending.erase(key)
+		_pending_drop(key)
 	_mutex.unlock()
 	if not waiting or key != game_key():
 		if waiting:
 			_mutex.lock()
-			_pending[key] = p          # not the open game: kept until it is looked at
+			_pending_put(key, p)       # not the open game: kept until it is looked at
 			_mutex.unlock()
 		return false
-	var r := _upscale_run(str(p["verb"]), p["extra"])
+	var r := {"ok": true}
+	if str(p.get("verb", "")) != "":
+		r = _upscale_run(str(p["verb"]), p["extra"])
+	if bool(p.get("game_update", false)):
+		var ru := _upscale_run("game-update")
+		r = ru if not bool(ru.get("ok", false)) else r
 	_forget_status()
 	if bool(r.get("ok", false)):
 		var env: Variant = upscale_status().get("env", {})
@@ -573,14 +638,14 @@ func upscale_status() -> Dictionary:
 	flush_pending(k)
 	_mutex.lock()
 	var c: Dictionary = _status_cache.get(k, {})
-	var waiting: Dictionary = _pending.get(k, {})
+	var waiting: Dictionary = _pending_of(k)
 	_mutex.unlock()
 	if not c.is_empty() and Time.get_ticks_msec() - int(c["t"]) < STATUS_TTL_MS:
 		return _with_pending(c["r"], waiting)
 	var r := _upscale_run("status")
 	_mutex.lock()
 	_status_cache[k] = {"t": Time.get_ticks_msec(), "r": r}
-	var p: Dictionary = _pending.get(k, {})
+	var p: Dictionary = _pending_of(k)
 	_mutex.unlock()
 	return _with_pending(r, p)
 
@@ -615,6 +680,7 @@ func _forget_status() -> void:
 	_mutex.lock()
 	_status_cache.erase(game_key())
 	_plan_cache.erase(game_key())
+	_hands_off_cache.erase(game_key())
 	_mutex.unlock()
 
 
@@ -650,6 +716,66 @@ func upscale_native(key: String) -> bool:
 	return store != null and bool(store.get_value(key, "upscale_native", false))
 
 
+## Launcher.hands_off_hooks: the helper's plan says to keep hands off this game (refused, or an online game / one no
+## list knows that nobody added ours to), so a launch swaps nothing in it either (Proton's FSR 4 upgrade; review H3).
+## Asked at every launch plan, so the answer is the plan of the last PLAN_TTL_MS, else a new "plan" for that game
+## (with its title and the app's anti-cheat data); it is kept with the game's values so a Steam game's env file,
+## written at another time, follows it. Unknown (no helper, no folder) counts as not held back, as before.
+func upscale_hands_off(key: String, g: Dictionary = {}) -> bool:
+	if store == null or key == "":
+		return false
+	var game_dict := g if not g.is_empty() else (game() if key == game_key() else {})
+	var dir := str(game_dict.get("install_path", ""))
+	if upscale_cmd() == "" or _gpu()["vendor"] == "other" or game_dict.is_empty() or (Files.steam_appid(key) == "" and dir == ""):
+		return bool(store.get_value(key, "upscale_hands_off", false))
+	_mutex.lock()
+	var c: Dictionary = _hands_off_cache.get(key, {})
+	_mutex.unlock()
+	if not c.is_empty() and Time.get_ticks_msec() - int(c["t"]) < PLAN_TTL_MS:
+		return bool(c["v"])
+	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(game_dict)) else []
+	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "plan", _home(), key, _gpu(), dir, ac, Upscale.title_of(game_dict))
+	if not bool(r.get("ok", false)):
+		return bool(store.get_value(key, "upscale_hands_off", false))       # the last known answer
+	return remember_hands_off(key, r, game_dict)
+
+
+## Keeps the plan's hands-off fact (and its anti-cheat verdict) for the game; when either changed, a Steam game's
+## env file is written again, and lsfg-vk's config when the game has Lossless on.
+func remember_hands_off(key: String, plan: Dictionary, g: Dictionary = {}) -> bool:
+	var off := bool(plan.get("hands_off", false))
+	var refused: Variant = plan.get("refused")
+	var ac := refused != null and str(refused) == "anticheat"
+	_mutex.lock()
+	_hands_off_cache[key] = {"t": Time.get_ticks_msec(), "v": off}
+	_mutex.unlock()
+	var changed := false
+	if bool(store.get_value(key, "upscale_hands_off", false)) != off:
+		store.set_value(key, "upscale_hands_off", true if off else null)
+		changed = true
+	if bool(store.get_value(key, AC_KEY, false)) != ac:
+		store.set_value(key, AC_KEY, true if ac else null)
+		changed = true
+		if bool(store.get_value(key, "lsfg", false)):
+			write_lsfg_config()
+	if changed:
+		game_changed(key, g)
+	return off
+
+
+## Lossless frame generation must not run for this game: the app's own anti-cheat data, or the plan's verdict (the
+## helper looks at the folder and the lists' notes) kept with the game's values.
+func lsfg_blocked(key: String, g: Dictionary = {}) -> bool:
+	if store == null or key == "":
+		return false
+	if bool(store.get_value(key, AC_KEY, false)):
+		return true
+	var game_dict := g if not g.is_empty() else (game() if key == game_key() else {})
+	if game_dict.is_empty() and library != null and library.has_method("game_by_key"):
+		game_dict = library.game_by_key(key)
+	return launcher != null and launcher.has_method("has_anticheat") and not game_dict.is_empty() and bool(launcher.has_anticheat(game_dict))
+
+
 ## Sets the open game up ahead of its first start ("Best for this handheld"),
 ## once per game and session: the helper puts the plan in when that is safe,
 ## repairs what a game update removed and steps down when the last start showed
@@ -661,6 +787,8 @@ func prepare_game(key := "") -> Dictionary:
 		return {}
 	_prepared[k] = true
 	var r := _upscale_run("prepare", _ac_args() + _auto_net_args())
+	if r.get("plan") is Dictionary:
+		remember_hands_off(k, r["plan"], game())
 	if str(r.get("waiting", "")) != "":
 		_last_did[k] = str(r["waiting"]).trim_suffix(".")
 	if str(r.get("did", "")) != "":
@@ -692,15 +820,18 @@ func prepare_installed(g: Dictionary, now := true) -> Dictionary:
 	_mutex.lock()
 	_status_cache.erase(k)
 	_plan_cache.erase(k)
+	_hands_off_cache.erase(k)
 	_mutex.unlock()
 	var dir := str(g.get("install_path", ""))
 	if not now or upscale_cmd() == "" or _gpu()["vendor"] == "other" or (Files.steam_appid(k) == "" and dir == ""):
 		return {}
 	_prepared[k] = true
 	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(g)) else []
-	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac + _auto_net_args())
+	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac + _auto_net_args(), Upscale.title_of(g))
+	if r.get("plan") is Dictionary:
+		remember_hands_off(k, r["plan"], g)
 	if str(r.get("did", "")) != "":
-		var st := Upscale.run(ctx.get("runner"), upscale_cmd(), "status", _home(), k, _gpu(), dir)
+		var st := Upscale.run(ctx.get("runner"), upscale_cmd(), "status", _home(), k, _gpu(), dir, [], Upscale.title_of(g))
 		var env: Variant = st.get("env", {})
 		store.set_value(k, "upscale_env", env if env is Dictionary and not env.is_empty() else null)
 		game_changed(k, g)
@@ -721,6 +852,8 @@ func upscale_plan() -> Dictionary:
 	_mutex.lock()
 	_plan_cache[k] = {"t": Time.get_ticks_msec(), "r": r}
 	_mutex.unlock()
+	if bool(r.get("ok", false)) and k != "":
+		remember_hands_off(k, r, game())
 	return r
 
 
@@ -773,7 +906,7 @@ func _upscale_controls() -> Array:
 			"help": "Pick one yourself. The game keeps its own menu: choose DLSS or FSR there and it becomes this.",
 			"kind": "choice", "options": _opts(Upscale.upscalers(g), Upscale.LABELS, Upscale.upscaler_help(g)), "default_value": "own",
 			"apply_order": 3},
-			_upscale_reason,
+			func(): return _upscale_reason() if _upscale_reason() != "" else _optin_reason(),
 			func(): return str(upscale_status().get("upscaler", "own")) if upscale_status().get("ok", false) else null,
 			func(v):
 				if not _after_upscale(_upscale_run("choose", ["--upscaler", v, "--fg", str(int(upscale_status().get("fg", 0)))] + _gen_args() + _ac_args())):
@@ -789,7 +922,7 @@ func _upscale_controls() -> Array:
 					return "Not on this graphics chip: games use their own" if _gpu()["vendor"] == "nvidia" else "Not on this graphics chip"
 				if _upscale_reason() == "" and bool(_gv("lsfg", false)):
 					return "Off while Lossless frame generation is on for this game"
-				return _upscale_reason(),
+				return _upscale_reason() if _upscale_reason() != "" else _optin_reason(),
 			func(): return int(upscale_status().get("fg", 0)) if upscale_status().get("ok", false) else null,
 			func(v):
 				if int(v) > 0 and bool(_gv("lsfg", false)):
@@ -802,7 +935,10 @@ func _upscale_controls() -> Array:
 			"help": "FSR is lighter and pairs with Anti-Lag 2. XeSS handles menus and HUDs better, costs more, and brings XeLL. Not every game likes XeSS here yet.",
 			"kind": "choice", "options": _opts(Upscale.generators(g), Upscale.GENERATOR_LABELS, Upscale.GENERATOR_HELP),
 			"default_value": Upscale.generators(g)[0] if not Upscale.generators(g).is_empty() else "", "apply_order": 2},
-			func(): return _upscale_reason() if Upscale.generators(_gpu()).size() > 1 else "One frame generator on this graphics chip",
+			func():
+				if Upscale.generators(_gpu()).size() <= 1:
+					return "One frame generator on this graphics chip"
+				return _upscale_reason() if _upscale_reason() != "" else _optin_reason(),
 			func():
 				var st := upscale_status()
 				var gens := Upscale.generators(_gpu())
@@ -990,8 +1126,47 @@ func background_check(now_unix: int) -> bool:
 	upscale_check(true)
 	# the per-game lists: the signed nightly games.json and OptiScaler's compatibility notes (anti-cheat and
 	# online flags, fixes). Nothing else called this, so devices kept the list they were installed with (review low)
-	Upscale.run(ctx.get("runner"), upscale_cmd(), "refresh", _home(), "", _gpu())
+	var lists := Upscale.run(ctx.get("runner"), upscale_cmd(), "refresh", _home(), "", _gpu())
+	if _lists_changed(lists):
+		apply_refreshed_lists()
 	return true
+
+
+## True when the helper's "refresh" answer says a list was replaced by a newer one.
+static func _lists_changed(r: Dictionary) -> bool:
+	var l: Variant = r.get("lists", {})
+	if not l is Dictionary:
+		return false
+	for k in l:
+		if str(l[k]) == "updated":
+			return true
+	return false
+
+
+## A refreshed list can name an anti-cheat or an online game that was not known when a game was set up: the games
+## that already have our files (or settings) are looked at again now, not at the next restart (review M: `_prepared`
+## kept them out of Best's check for the whole session). While a game runs, nothing is run behind it: the caches are
+## dropped and each game is looked at the next time it is opened or started. Returns how many games were re-checked.
+func apply_refreshed_lists() -> int:
+	_mutex.lock()
+	_prepared.clear()
+	_plan_cache.clear()
+	_status_cache.clear()
+	_hands_off_cache.clear()
+	var running := _running_key != ""
+	_mutex.unlock()
+	if running or store == null or library == null or not library.has_method("game_by_key"):
+		return 0
+	var n := 0
+	for k in store.games():
+		if not (store.has_value(k, "upscale_env") or store.has_value(k, "upscale_hands_off")):
+			continue
+		var g: Dictionary = library.game_by_key(k)
+		if g.is_empty():
+			continue
+		prepare_installed(g, true)
+		n += 1
+	return n
 
 
 func _schedule_background_check(delay_s: float) -> void:
@@ -1020,7 +1195,7 @@ func frame_gen_on(key := "") -> bool:
 	var k := key if key != "" else game_key()
 	if k == "" or store == null:
 		return false
-	if bool(store.get_value(k, "lsfg", false)) or int(store.get_value(k, "frame_gen", 0)) > 0:
+	if (bool(store.get_value(k, "lsfg", false)) and not lsfg_blocked(k)) or int(store.get_value(k, "frame_gen", 0)) > 0:
 		return true
 	if launcher != null and launcher.has_method("settings_for") and bool(launcher.settings_for(k).get("frame_gen", false)):
 		return true
@@ -1220,7 +1395,7 @@ func env_for(key: String, g: Dictionary, include_launcher := false) -> Dictionar
 		env["MANGOHUD"] = "1"
 		env["MANGOHUD_CONFIG"] = "no_display,fps_limit=%d,fps_limit_method=%s" % [fps,
 			"early" if str(vals.get("fps_limit_method", "late")) == "early" else "late"]
-	if bool(vals.get("lsfg", false)):
+	if bool(vals.get("lsfg", false)) and not lsfg_blocked(key, g):
 		env.merge(Lsfg.game_env(key), true)
 	if include_launcher and launcher != null and launcher.has_method("launch_env") and not g.is_empty():
 		var le: Variant = launcher.launch_env(g)
@@ -1233,10 +1408,10 @@ func env_for(key: String, g: Dictionary, include_launcher := false) -> Dictionar
 
 ## Launcher.env_hooks: a non-Steam game GameCove starts gets our variables and
 ## the upscaler's (the helper's launch file is only read by gamecove-run).
-func launch_env_hook(key: String, _game: Dictionary) -> Dictionary:
+func launch_env_hook(key: String, g: Dictionary) -> Dictionary:
 	if key == game_key():
 		prepare_game(key)     # a start from Home without opening the game's page: set up first (once per session)
-	var env := env_for(key, {})
+	var env := env_for(key, g)
 	var up: Variant = store.get_value(key, "upscale_env", {})
 	if up is Dictionary:
 		for k in up:

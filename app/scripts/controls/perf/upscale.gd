@@ -95,8 +95,10 @@ static func gpu_arg(g: Dictionary) -> String:
 
 
 ## Runs one command; {} with "ok": false and "error" when it can't.
+## title: the game's title, passed as --name on every call that names a game: the helper's lists (notes naming an
+## anti-cheat, "online game") know games by title, and only a Steam game has an app id to find them by (review H2).
 static func run(runner: RefCounted, cmd: String, verb: String, home: String, game_key: String,
-		g: Dictionary, game_dir := "", extra: Array = []) -> Dictionary:
+		g: Dictionary, game_dir := "", extra: Array = [], title := "") -> Dictionary:
 	if runner == null or cmd == "":
 		return {"ok": false, "error": "The upscaling helper isn't installed"}
 	var args := PackedStringArray([verb, "--home", home, "--gpu", gpu_arg(g)])
@@ -104,6 +106,8 @@ static func run(runner: RefCounted, cmd: String, verb: String, home: String, gam
 		args.append_array(["--key", helper_key(game_key)])
 	if game_dir != "":
 		args.append_array(["--dir", game_dir])
+	if game_key != "" and title.strip_edges() != "":
+		args.append_array(["--name", title.strip_edges()])
 	for a in extra:
 		args.append(str(a))
 	var r: Dictionary = runner.run(cmd, args)
@@ -113,6 +117,11 @@ static func run(runner: RefCounted, cmd: String, verb: String, home: String, gam
 	if parsed is Dictionary:
 		return parsed
 	return {"ok": false, "error": "The upscaling helper failed (exit %s)" % str(r.get("code", r.get("exit", -1)))}
+
+
+## The title the helper looks a game up by ("" when the game dictionary has none).
+static func title_of(game: Dictionary) -> String:
+	return str(game.get("title", game.get("name", ""))).strip_edges()
 
 
 ## The helper keys Steam games by app id (its launch file is <appid>.env, the

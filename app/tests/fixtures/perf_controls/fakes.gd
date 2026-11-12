@@ -27,6 +27,7 @@ class FakeLauncher extends RefCounted:
 	var env := {"LOW_LATENCY_LAYER": "1"}
 	var env_hooks: Array[Callable] = []
 	var frame_gen_hooks: Array[Callable] = []
+	var hands_off_hooks: Array[Callable] = []
 	var anticheat_keys: Array = []
 	func has_anticheat(game: Dictionary) -> bool:
 		return str(game.get("key", "")) in anticheat_keys

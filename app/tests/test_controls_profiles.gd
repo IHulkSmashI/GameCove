@@ -179,6 +179,36 @@ func test_unknown_unavailable_and_invalid_are_skipped_but_kept() -> void:
 	_cleanup()
 
 
+func test_an_everyday_profile_never_carries_an_upscaler_to_a_game() -> void:
+	# review H1: a profile saved while a game ran on FSR 3.1 held perf.upscaler in an everyday layer, and starting an
+	# online game applied it inside the 6 s grace, with no press for that game at all
+	var p = _setup()
+	for id in ["perf.upscaler", "perf.frame_gen", "perf.upscale_mode", "perf.fg_generator"]:
+		_store[id] = "own"
+		_reg.register(_ctl(id, {"kind": "choice", "options": [{"value": "own"}, {"value": "fsr31"}, {"value": 2}]}))
+	_reg.detect_all()
+	p.set_layer("", "", {"power.tdp": 12, "perf.upscaler": "fsr31", "perf.frame_gen": 2})
+	p.set_layer("", "ac", {"perf.upscale_mode": "fsr31", "perf.fps": 40})
+	p.set_value("", "battery", "perf.fg_generator", "fsr31")
+	eq(p.layer("", ""), {"power.tdp": 12}, "the everyday layers don't keep them")
+	eq(p.layer("", "ac"), {"perf.fps": 40}, "also per power source")
+	eq(p.layer("", "battery"), {}, "or one value at a time")
+	# a file written before this: the value is there, it still never applies
+	p._layer_ref("", "", true)["perf.upscaler"] = "fsr31"
+	p._layer_ref("", "ac", true)["perf.frame_gen"] = 2
+	p.game_started({"key": "g:2", "title": "An online game"})
+	eq(_store["perf.upscaler"], "own", "starting a game doesn't apply an everyday upscaler")
+	eq(_store["perf.frame_gen"], "own", "nor frame generation")
+	p.game_ended({"key": "g:2"})
+	# the game's own layer may hold them: the helper still checks that game when they apply
+	p.set_layer("g:3", "", {"perf.upscaler": "fsr31"})
+	eq(p.layer("g:3", ""), {"perf.upscaler": "fsr31"}, "a game's own layer keeps its pick")
+	p.game_started({"key": "g:3"})
+	eq(_store["perf.upscaler"], "fsr31", "and applies it for that game")
+	p.free()
+	_cleanup()
+
+
 func test_controls_that_appear_later_get_their_values() -> void:
 	var p = _setup()
 	_reg.detect_all()

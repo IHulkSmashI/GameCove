@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from gamecove_upscale import active, best, chips, cli, gamedb, games, guard, launchenv, optiscaler  # noqa: E402
-from test_games import _pkg, _steam_game, _w  # noqa: E402
+from test_games import _accept, _pkg, _steam_game, _w  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 FIXTURE = os.path.join(HERE, "..", "..", "..", "app", "tests", "fixtures", "gpu_tiers.json")
@@ -131,6 +131,27 @@ def test_anticheat_scan_looks_up_to_the_games_own_folder(tmp_path):
     assert guard.anticheat(str(common / "Clean")) == []
 
 
+@pytest.mark.parametrize("files", [["PnkBstrA.exe"], ["PnkBstrB.exe"], ["pbsvc.exe"], ["pbsvc"], ["pb/pbcl.dll"], ["pb/PBsv.dll"],
+                                   ["Bin/PnkBstrA.exe"], ["pb/pbag.so"]])
+def test_punkbuster_is_found_by_its_real_files(tmp_path, files):
+    """Review low: the pattern had "pb" as a folder name that was never counted, and no PnkBstrA/B.exe or pbsvc."""
+    _w(tmp_path / "g" / "Game.exe", "x" * 4096)
+    for f in files:
+        _w(tmp_path / "g" / f)
+    assert guard.anticheat(str(tmp_path / "g")) == ["PunkBuster"], files
+    assert guard.refusal(str(tmp_path / "g"), str(tmp_path / "g"), False, None)["code"] == "anticheat"
+
+
+def test_a_pb_folder_alone_is_not_punkbuster_but_one_in_the_folder_above_is(tmp_path):
+    _w(tmp_path / "a" / "Game.exe", "x" * 4096)
+    _w(tmp_path / "a" / "pb" / "data.bin")                     # Unity / Java games have a "pb" folder
+    assert guard.anticheat(str(tmp_path / "a")) == []
+    common = tmp_path / "lib" / "steamapps" / "common"
+    _w(common / "Game" / "pb" / "pbcl.dll")
+    _w(common / "Game" / "Bin" / "Win64" / "Game.exe", "x" * 4096)
+    assert guard.anticheat(str(common / "Game" / "Bin" / "Win64")) == ["PunkBuster"]
+
+
 def test_no_anticheat_false_positives(tmp_path):
     for f in ("Game.exe", "pb/readme.txt", "Engine/Binaries/ThirdParty/x.dll", "beta/notes.txt", "nvngx_dlss.dll"):
         _w(tmp_path / "g" / f)
@@ -207,6 +228,25 @@ def test_online_games_in_the_list_are_flagged():
         assert not gamedb.online_risk(safe), safe
 
 
+def test_notes_that_say_offline_only_or_name_more_anticheats_are_caught():
+    """Review low: "Offline mode ONLY" titles (F1 24, F1 25, Gears of War: E-Day) and several anti-cheat names weren't
+    matched, so those games were planned as plain known games."""
+    doc = gamedb.load(games.BUNDLED_GAMES)
+    for name in ("F1 24", "F1 25", "Gears of War: E-Day"):
+        k = gamedb.knowledge(doc, None, None, name)
+        assert k["known"] and k["online"] is True and k["anticheat"] is False, name       # the ban warning and Add
+    for text in ("**Offline mode ONLY!** Spoofing doesn't work", "Use OptiScaler in **offline mode ONLY!**",
+                 "Requires using **Offline mode**", "Only works in offline mode", "Offline-only"):
+        assert gamedb.online_risk(text) and not gamedb.anticheat_note(text), text
+    for text in ("Blocked by Hyperion (Byfron)", "PunkBuster kicks it", "Punk Buster", "XIGNCODE3 blocks the DLL", "FACEIT AC",
+                 "EQU8 is active", "BlackCipher loads at start", "HackShield", "NEAC Safe driver", "Wellbia", "mhyprot2.sys",
+                 "TenProtect", "VAC secured", "Denuvo Anti-Cheat"):
+        assert gamedb.anticheat_note(text), text
+    for safe in ("Use DX12", "Free online co-op game, no anticheat", "Offline mode is fine too, set Dxgi=false",
+                 "The vacuum effect", "Faceted shadows"):
+        assert not gamedb.anticheat_note(safe) and not (safe.startswith("Offline") and gamedb.online_risk(safe)), safe
+
+
 @pytest.mark.parametrize("name", ONLINE_TITLES)
 def test_online_games_are_never_set_up_by_themselves(tmp_path, name):
     home = str(tmp_path)
@@ -237,14 +277,122 @@ def test_anticheat_named_in_the_notes_is_refused_and_cant_be_added(tmp_path, nam
     assert games.choose(home, "455", "fsr31", 0, DECK)["refused"] == "anticheat" and _tree(d) == before
 
 
+@pytest.mark.parametrize("name", ONLINE_TITLES)
+def test_the_upscaler_row_cant_skip_the_online_warning(tmp_path, name):
+    """Review H1: picking FSR in the Upscaler row (choose) on Wuthering Waves put OptiScaler in with no ban warning;
+    only Best's "Add" asked. choose and apply now refuse a game nobody opted in, with the same warning."""
+    home = str(tmp_path)
+    _pkg(home)
+    _amd_fsr4(home)
+    d = _steam_game(home, "460", name, ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    for r in (games.choose(home, "460", "fsr31", 0, Z1E),
+              cli.run(["choose", "--home", home, "--key", "460", "--gpu", json.dumps(Z1E), "--upscaler", "fsr4_amd", "--fg", "0"]),
+              games.apply_recommended(home, "460", Z1E)):
+        assert r["ok"] is False and r["refused"] == "optin" and r["need"] == "online", name
+        assert "online game" in r["error"] and "banned" in r["error"] and "Add" in r["error"]
+    assert _tree(d) == before and not games.get_launch(home, "460")
+    assert best.get_mode(home, "460") == "best"                    # the refused pick didn't turn Best off
+    assert best.opt_in(home, "460", Z1E)["ok"]                      # the same Add step as before
+    assert games.choose(home, "460", "fsr31", 0, Z1E)["ok"] and _tree(d) != before
+    assert games.choose(home, "460", "own", 0, Z1E)["ok"] and _tree(d) == before    # taking it out is never held back
+
+
+def test_the_upscaler_row_cant_skip_the_add_step_for_a_game_no_list_knows(tmp_path):
+    home = str(tmp_path)
+    _pkg(home)
+    d = _steam_game(home, "461", "Some Unlisted Game", ["Some.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    r = games.choose(home, "461", "fsr31", 0, DECK)
+    assert r["refused"] == "optin" and r["need"] == "unknown" and "don't know this game" in r["error"] and _tree(d) == before
+    assert best.plan(home, "461", DECK)["hands_off"] is True
+    assert best.opt_in(home, "461", DECK)["ok"] and games.choose(home, "461", "fsr31", 0, DECK)["ok"]
+
+
+def test_one_hands_off_fact_per_game(tmp_path):
+    """Review H3's source of truth: the plan says hands off for a refused game and for an online game nobody opted
+    in; a listed game and an unknown game's environment-only setup are not held back."""
+    home = str(tmp_path)
+    _pkg(home)
+    _amd_fsr4(home)
+    _steam_game(home, "462", "Wuthering Waves", ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    _steam_game(home, "463", "Zenless Zone Zero", ["ZZZ.exe", "nvngx_dlss.dll", "D3D12Core.dll", "mhypbase.dll"])
+    _steam_game(home, "464", "FsrGame", ["FsrGame.exe", "amd_fidelityfx_dx12.dll"])
+    assert best.plan(home, "462", Z1E)["hands_off"] is True
+    assert best.plan(home, "463", Z1E)["hands_off"] is True and best.plan(home, "463", Z1E)["refused"] == "anticheat"
+    assert best.plan(home, "464", Z1E)["hands_off"] is False
+    assert best.plan(home, "462", Z1E, anticheat=False)["hands_off"] is True
+    assert best.opt_in(home, "462", Z1E)["ok"] and best.plan(home, "462", Z1E)["hands_off"] is False
+    assert best.plan(home, "464", Z1E, anticheat=True)["hands_off"] is True      # the app's own anti-cheat data counts
+
+
+def test_list_notes_reach_a_game_that_isnt_from_steam(tmp_path):
+    """Review H2: only a Steam game has an app id the lists can be asked by, and the app never passed the title: an
+    Infinity Nikki from Epic was planned as "unknown, press Add" with no ban line. With the title (--name) the note
+    naming an anti-cheat refuses it, on every command."""
+    home = str(tmp_path)
+    _pkg(home)
+    d = os.path.join(home, "Games", "InfinityNikki")
+    for f in ("X6Game/Binaries/Win64/X6Game-Win64-Shipping.exe", "nvngx_dlss.dll", "D3D12Core.dll"):
+        _w(os.path.join(d, f), "x" * 10)
+    before = _tree(d)
+    key = "epic:nikki"
+    assert best.plan(home, key, DECK, d)["refused"] is None                       # nothing says which game this is
+    args = ["--home", home, "--key", key, "--gpu", json.dumps(DECK), "--dir", d, "--name", "Infinity Nikki"]
+    p = cli.run(["plan"] + args)
+    assert p["refused"] == "anticheat" and p["hands_off"] and not p.get("offer")
+    assert cli.run(["opt-in"] + args)["refused"] == "anticheat"
+    assert cli.run(["choose", "--upscaler", "fsr31", "--fg", "0"] + args)["refused"] == "anticheat"
+    assert cli.run(["apply"] + args)["ok"] is False
+    assert cli.run(["prepare"] + args)["did"] == "" and _tree(d) == before
+
+
 def test_an_online_game_set_up_before_it_was_flagged_comes_out(tmp_path):
     home = str(tmp_path)
     _pkg(home)
     d = _steam_game(home, "451", "Wuthering Waves", ["Client.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
     before = _tree(d)
+    _accept(home, "451", "online")
     assert games.apply_recommended(home, "451", DECK)["ok"] and _tree(d) != before    # an older GameCove's doing
+    st = games.load_state(home)
+    st["optin"].pop("451")                                    # ...before there was a warning to accept
+    games.save_state(home, st)
     r = best.prepare(home, "451", DECK)
     assert "online game" in r["did"] and _tree(d) == before
+
+
+def test_an_opt_in_for_an_unknown_game_doesnt_accept_the_online_ban_risk(tmp_path, monkeypatch):
+    """Review M: the opt-in was a bare time, so a game added by pressing Add while no list knew it kept counting as
+    "accepted the ban risk" once the list said it is an online game. The opt-in records what was accepted."""
+    home = str(tmp_path)
+    _pkg(home)
+    d = _steam_game(home, "465", "Some Unlisted Game", ["Some.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    assert best.opt_in(home, "465", DECK)["ok"] and _tree(d) != before
+    assert games.optin_risk(home, "465") == "unknown" and games.load_state(home)["optin"]["465"]["risk"] == "unknown"
+    assert best.plan(home, "465", DECK)["opted_in"] is True
+    known = gamedb.knowledge
+
+    def now_online(*a, **k):                                   # the nightly list learns it is an online game
+        return {**known(*a, **k), "known": True, "online": True, "name": "Some Unlisted Game"}
+    monkeypatch.setattr(gamedb, "knowledge", now_online)
+    p = best.plan(home, "465", DECK)
+    assert p["need"] == "online" and p["opted_in"] is False and p["hands_off"] and p["offer"]
+    assert "online game" in p["line"] and "banned" in p["line"]
+    r = best.prepare(home, "465", DECK)
+    assert "online game" in r["did"] and _tree(d) == before         # out again until the warning is accepted
+    assert games.choose(home, "465", "fsr31", 0, DECK)["refused"] == "optin"
+    assert best.opt_in(home, "465", DECK)["ok"] and games.optin_risk(home, "465") == "online"
+    assert best.plan(home, "465", DECK)["opted_in"] is True and games.choose(home, "465", "fsr31", 0, DECK)["ok"]
+
+
+def test_an_opt_in_saved_before_it_recorded_anything_counts_for_unknown_games_only(tmp_path):
+    home = str(tmp_path)
+    st = games.load_state(home)
+    st["optin"] = {"1": 1700000000, "2": {"at": 1, "risk": "online"}, "3": {"at": 1}}
+    games.save_state(home, st)
+    assert [games.optin_risk(home, k) for k in ("1", "2", "3", "4")] == ["unknown", "online", "unknown", ""]
+    assert games.optin_ok(home, "1", "unknown") and not games.optin_ok(home, "1", "online") and games.optin_ok(home, "2", "unknown")
 
 
 def test_opt_in_still_refuses_anticheat(tmp_path):
@@ -336,6 +484,7 @@ def test_an_unknown_game_without_clear_signs_is_never_touched(tmp_path):
     p = best.plan(home, "402", DECK)
     assert p["auto"] is False and p["known"] is False and "don't know this game" in p["why_not"]
     assert best.prepare(home, "402", DECK)["did"] == "" and _tree(d) == before
+    _accept(home, "402")
     assert games.choose(home, "402", "fsr31", 0, DECK)["ok"]        # by hand it still works
 
 
@@ -375,6 +524,7 @@ def test_custom_choices_are_kept_and_repaired_after_a_game_update(tmp_path):
     home = str(tmp_path)
     _pkg(home)
     d = _steam_game(home, "405", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    _accept(home, "405")
     r = cli.run(["choose", "--home", home, "--key", "405", "--gpu", json.dumps(Z1E), "--upscaler", "fsr31", "--fg", "2",
                  "--generator", "xefg"])
     assert r["ok"] and best.get_mode(home, "405") == "custom"
@@ -403,6 +553,7 @@ def test_the_readout_follows_what_really_happened(tmp_path):
     _amd_fsr4(home)
     d = _steam_game(home, "500", "DlssGame", ["DlssGame.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
     assert best.status(home, "500", Z1E)["active"]["state"] == "own"
+    _accept(home, "500")
     assert games.choose(home, "500", "fsr4_amd", 2, Z1E)["ok"]
     a = best.status(home, "500", Z1E)["active"]
     assert a["state"] == "waiting" and "FSR 4.1.2, FSR frame generation 2x, Anti-Lag 2" in a["line"]
