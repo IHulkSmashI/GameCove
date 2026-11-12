@@ -677,6 +677,7 @@ func _wire_saves_and_battery() -> void:
 	saves.setup_library(_svc("Library"))
 	# the game's processes, not the session: a session can end while its game still runs
 	saves.game_running = func() -> bool: return session != null and session.processes_alive()
+	saves.session_idle = func() -> bool: return session == null or not session.is_active()
 	# no uninstall, move, update or verify of an Epic, GOG or Amazon game while it runs
 	var lib_store: Variant = _svc("Library").get("store") if _svc("Library") != null else null
 	if lib_store is Object and "game_running" in lib_store:

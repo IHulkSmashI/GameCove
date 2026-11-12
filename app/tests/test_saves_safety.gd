@@ -1102,6 +1102,58 @@ func test_choices_wait_for_the_games_processes_not_the_session() -> void:
 	_done(w)
 
 
+## Review at 56f5255: the launch and exit syncs weren't gated like the choices. A session that
+## ended while the game's processes were still there (its scope still holding them, the app
+## quitting) uploaded while the game could still write, and a launch could download into a
+## folder a game still had open. Now the exit sync waits for the processes (looked at again a
+## few times, never while another game runs) and the launch starts the game without syncing.
+func test_launch_and_exit_syncs_wait_for_the_games_processes() -> void:
+	var w := _world("sync_processes")
+	var cloud: Object = w["gog_cloud"]
+	var GS := preload("res://scripts/launch/game_session.gd")
+	var session: Node = GS.new()
+	var alive := [true]
+	session.pid_running = func(_p: int) -> bool: return alive[0]
+	session.unit_alive = func(_u: String) -> bool: return false
+	w["s"].game_running = func() -> bool: return session.processes_alive()
+	w["s"].session_idle = func() -> bool: return not session.is_active()
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	session.begin(w["gog"], {"ok": true, "app_id": 0, "pid": 4242})
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	session.stop()
+	eq(session.phase, "idle", "the session ended")
+	var calls: int = w["calls"].size()
+	eq(w["s"].after_exit(w["gog"]), false, "no exit sync while the game's process is still there")
+	eq(w["calls"].size(), calls, "no tool ran")
+	eq(w["s"].status(w["gog"])["state"], "game_running", "the status says it waits for the game")
+	w["s"].retry_held_exits()
+	eq(w["calls"].size(), calls, "still there: still waiting")
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "a launch meanwhile starts the game")
+	eq(w["calls"].size(), calls, "without syncing under the process still there")
+	alive[0] = false
+	w["s"].retry_held_exits()
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 2", "gone: the exit sync runs")
+	ok(w["s"].status(w["gog"])["state"] != "game_running", "and the status moves on")
+	# another game starting while one is held: the wait ends there (nothing polls behind a game)
+	alive[0] = true
+	session.begin(w["gog"], {"ok": true, "app_id": 0, "pid": 4243})
+	session.stop()
+	w["s"].after_exit(w["gog"])
+	session.begin(w["epic"], {"ok": true, "app_id": 0, "pid": 4244})
+	w["s"].retry_held_exits()
+	ok(w["s"].status(w["gog"])["state"] != "game_running", "another game started: the wait is given up")
+	calls = w["calls"].size()
+	alive[0] = false
+	w["s"].retry_held_exits()
+	eq(w["calls"].size(), calls, "and nothing runs for it later behind that game")
+	session.free()
+	_done(w)
+
+
 # ---- high 6, GOG: a restore holds too (review at ff76ca4) ----------------------------------------
 
 ## Synced, then a bad session went up; the user restores the backup from before it. Another

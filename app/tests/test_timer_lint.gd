@@ -37,6 +37,7 @@ const KNOWN := {
 	"scripts/ui/settings_screen.gd": [1, "one-shot: clears a status line"],
 	"scripts/ui/quick_menu.gd": [2, "one-shots after a session switch was asked for: the overall limit and the wait for the logout; nothing while a game just runs"],
 	"scripts/ui/games/game_closer.gd": [1, "one-shot grace before a hard kill (Exit game)"],
+	"scripts/system/saves_service.gd": [1, "one-shot 5 s re-look (up to 24) only after a game's session ended while its processes were still there (its exit sync waits); given up as soon as another game starts"],
 	# command-line modes, never in the running app
 	"scripts/hwtest/controls_cli.gd": [1, "CLI timeout"],
 	"scripts/installer/boot.gd": [1, "CLI prefetch timeout"],

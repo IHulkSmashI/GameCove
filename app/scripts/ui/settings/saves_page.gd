@@ -11,7 +11,7 @@ const SavesCard := preload("res://scripts/ui/games/saves_card.gd")
 
 ## Short state for a game's row (the full line is its explanation).
 const SHORT := {"synced": "Synced", "uploaded": "Synced", "downloaded": "Synced", "restored": "Restored",
-	"no_saves": "No saves yet", "pending_up": "Waiting", "pending_down": "Waiting", "conflict": "Choose",
+	"no_saves": "No saves yet", "pending_up": "Waiting", "pending_down": "Waiting", "game_running": "Waiting", "conflict": "Choose",
 	"offline": "Offline", "failed": "Didn't sync", "backup_failed": "Didn't sync", "too_big": "Upload only",
 	"not_set_up": "After first play", "unsupported": "No cloud saves", "signed_out": "Signed out",
 	"no_tool": "Needs Heroic", "linux": "Windows only", "off": "Off", "disabled": "Off", "never": "Not yet"}

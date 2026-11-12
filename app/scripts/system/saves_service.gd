@@ -65,8 +65,19 @@ var entry_lookup: Callable = func(_k: String) -> Dictionary: return {}
 var tools_lookup: Callable = func() -> Dictionary: return {}
 ## func() -> unix seconds (tests swap it).
 var clock: Callable = func() -> int: return int(Time.get_unix_time_from_system())
-## func() -> bool: a game runs now (restores wait).
+## func() -> bool: a game runs now: its processes, not only its session (main:
+## GameSession.processes_alive). Restores, choices and Sync now are refused, a launch starts
+## without syncing and an exit sync waits.
 var game_running: Callable = func() -> bool: return false
+## func() -> bool: no game session is on (main: not GameSession.is_active). An exit sync waiting
+## for its game's processes gives up once another game starts: nothing is looked at behind it.
+var session_idle: Callable = func() -> bool: return true
+## Exit syncs waiting for their game's processes to go: key -> {"game", "tries"}. Looked at
+## again every EXIT_RETRY_S, at most EXIT_RETRIES times (main thread).
+var _held_exits := {}
+var _retry_armed := false
+const EXIT_RETRY_S := 5.0
+const EXIT_RETRIES := 24
 ## func(path) -> "<device>:<inode>:<birth>" of a folder, "" when it isn't there (tests swap it). A
 ## save folder's anchor (CloudSaves.identity_anchor) with another identity than at the last
 ## sync is a new folder, whatever is in it now.
@@ -217,6 +228,8 @@ func status(game: Dictionary) -> Dictionary:
 		st["state"] = "disabled"
 	elif SettingsFile.blocked(cfg_path):
 		st["state"] = "state_unsaved"
+	elif _held_exits.has(key):
+		st["state"] = "game_running"
 	return st
 
 
@@ -243,6 +256,12 @@ func before_launch(game: Dictionary, done: Callable) -> void:
 	var key := str(game.get("key", ""))
 	if applies(game):
 		folder_guard(key)   # also with sync off or signed out: what's seen now is kept
+	if applies(game) and enabled(key) and allowed() and game_running.call():
+		# a game's processes are still there (a session that ended before its game did): nothing
+		# is downloaded into a folder it may still have open. The game starts; its own exit sync
+		# sees both sides changed if the cloud moved meanwhile (review at 56f5255, medium)
+		done.call({"go": true})
+		return
 	if not applies(game) or not enabled(key) or not allowed():
 		if applies(game) and busy(key):
 			# sync is off for it, but a restore (or a sync started before it was switched off) is
@@ -267,8 +286,51 @@ func after_exit(game: Dictionary) -> bool:
 		folder_guard(key)
 	if not applies(game) or not enabled(key) or not allowed():
 		return false
+	if game_running.call():
+		# the session ended but the game's processes haven't (its scope still holds them, the app
+		# quit under it): it may still be writing. The upload waits for them to go (review at
+		# 56f5255, medium)
+		_held_exits[key] = {"game": game, "tries": 0}
+		status_changed.emit(key)
+		_arm_exit_retry()
+		return false
+	_held_exits.erase(key)
 	_queue(game, "post", func(e, t): return _sync(key, e, t, "post"), Callable())
 	return true
+
+
+func _arm_exit_retry() -> void:
+	if _retry_armed or _held_exits.is_empty() or not is_inside_tree():
+		return
+	_retry_armed = true
+	get_tree().create_timer(EXIT_RETRY_S).timeout.connect(retry_held_exits)
+
+
+## Exit syncs that waited for their game's processes: run the ones whose processes are gone,
+## give up on all of them once another game runs (the next sync of each catches up: its
+## launch sees "this handheld is newer", its exit uploads) or after EXIT_RETRIES looks.
+func retry_held_exits() -> void:
+	_retry_armed = false
+	if _held_exits.is_empty():
+		return
+	var keys := _held_exits.keys()
+	if not session_idle.call():
+		_held_exits.clear()
+		for k in keys:
+			status_changed.emit(k)
+		return
+	var gone: bool = not game_running.call()
+	for k in keys:
+		var h: Dictionary = _held_exits[k]
+		if gone:
+			_held_exits.erase(k)
+			after_exit(h["game"])
+			continue
+		h["tries"] = int(h["tries"]) + 1
+		if int(h["tries"]) >= EXIT_RETRIES:
+			_held_exits.erase(k)
+			status_changed.emit(k)
+	_arm_exit_retry()
 
 
 ## Both ways now (never while that game runs). done(status).

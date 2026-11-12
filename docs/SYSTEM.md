@@ -325,7 +325,10 @@ Rules: never while a game runs (one worker thread, before `Library.launch()` and
 a restore and a conflict choice are refused while one runs). "Runs" is the game's processes, not the session
 (`GameSession.processes_alive()`): a session that ended while its game was still there (the app quitting, a launch
 given up on) keeps counting until its pid, its `app-steam-app<id>-<n>.scope` (`systemctl --user is-active`) and, for
-Steam, its reaper are gone. A launch of a game whose sync is off still waits its turn on the worker while a restore
+Steam, its reaper are gone. That holds for the launch and exit syncs too: a launch while a game's processes are
+still there starts the game without syncing (its exit sync then sees both sides changed if the cloud moved), and an
+exit sync whose game's processes outlive its session ("Waiting" for the game) is looked at again every 5 s, up to 2
+minutes (a one-shot `SceneTreeTimer`, given up as soon as another game starts), and runs once they're gone. A launch of a game whose sync is off still waits its turn on the worker while a restore
 of it is queued or running. One game at a time: Play on another game, app or stream while one runs
 asks "Close <game> first?" (`main.gd` `_close_first`); "Keep playing" comes first and B is the same. Yes closes the running game the way Exit game
 does, and the next one starts only after the session saw it exit and its exit sync (`after_exit`, phase `post`) is done

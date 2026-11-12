@@ -44,6 +44,7 @@ const STATE := {
 	"no_tool": "Needs legendary or Heroic to sync saves.",
 	"linux": "The store's cloud saves only cover the Windows version of this game.",
 	"upload_finished": "The last upload was cut off; we finished it %s.",
+	"game_running": "The game was still running after its session ended, so we haven't touched its saves yet. They sync once it has closed.",
 	"upload_cut": "The last upload was cut off, so the cloud may hold only part of it. We finish it before anything else syncs.",
 	"state_unsaved": "We couldn't save how your saves stand (the file was damaged), so nothing syncs until GameCove restarts. Your saves are safe on this handheld.",
 	"off": OFF_LINE,
@@ -52,7 +53,7 @@ const STATE := {
 ## state -> tone for the status line.
 const TONE := {"synced": "good", "uploaded": "good", "downloaded": "good", "restored": "good", "conflict": "warn",
 	"upload_finished": "good", "upload_cut": "warn", "state_unsaved": "warn",
-	"offline": "warn", "failed": "bad", "backup_failed": "bad", "too_big": "warn", "pending_up": "", "pending_down": ""}
+	"game_running": "", "offline": "warn", "failed": "bad", "backup_failed": "bad", "too_big": "warn", "pending_up": "", "pending_down": ""}
 
 const CONFLICT_TITLE := "Which save do we keep?"
 const CONFLICT_LINE := "%s changed here and in the cloud since the last sync. The other one is backed up on this handheld first, so nothing is lost."
