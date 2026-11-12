@@ -15,6 +15,7 @@ const LaunchFiles := preload("res://scripts/controls/perf/launch_files.gd")
 const SteamConfig := preload("res://scripts/steam/steam_config.gd")
 const Proton := preload("res://scripts/launch/proton.gd")
 const UserData := preload("res://scripts/installer/user_data.gd")
+const RootKeyboard := preload("res://scripts/installer/root_keyboard.gd")
 
 ## How long uninstall waits for Steam to close before editing its launch options.
 const STEAM_STOP_WAIT_S := 30
@@ -50,6 +51,11 @@ var deferred_fixes: Array = []
 var failed_fixes: Array = []
 ## The app binary desktop entries point to before the package is live.
 var exe_path := OS.get_executable_path()
+## The session the password dialog shows in (tests set them; the keyboard switch is KDE Plasma on Wayland only).
+var desktop := OS.get_environment("XDG_CURRENT_DESKTOP")
+var session_type := OS.get_environment("XDG_SESSION_TYPE")
+## Root steps of this run that already ran in the one batch: task index -> {"code", "last", "pending", "retried"}.
+var _batch := {}
 var _log_mutex := Mutex.new()
 var _clock: Callable = func() -> String: return Time.get_datetime_string_from_system(true) + "Z"
 
@@ -77,6 +83,7 @@ func start(act: String, plan_choices: Dictionary) -> bool:
 	installed_fixes = (st.get("fixes", []) as Array).duplicate() if st.get("fixes", []) is Array else []
 	deferred_fixes = []
 	failed_fixes = []
+	_batch.clear()
 	running = true
 	last_message = ""
 	log_line("---- %s (%s, %s)" % [act, target.get("family", "?"), target.get("method", "?")])
@@ -93,6 +100,8 @@ func retry() -> bool:
 		return false
 	running = true
 	log_line("---- retry %s from %s" % [action, tasks[from]["id"]])
+	for k in range(from, tasks.size()):
+		_batch.erase(k)
 	_queue("run", _run_all.bind(from))
 	return true
 
@@ -109,6 +118,7 @@ func retry_fix(fix: String) -> bool:
 		return false
 	running = true
 	log_line("---- retry fix %s" % fix)
+	_batch.erase(i)
 	_queue("run", func():
 		results[i] = ""
 		var ok := _run_task(i)
@@ -165,10 +175,22 @@ func _run_task(i: int) -> bool:
 		ok = r[0]
 		msg = r[1]
 	else:
-		var r := _command(i, t["cmd"])
-		if r[0] != 0 and not (t["fallback"] as Array).is_empty():
-			log_line("%s: trying again without applying live" % _name(t))
-			r = _command(i, t["fallback"])
+		var r: Array
+		if bool(t["privileged"]):
+			# every queued root step of the run went in one pkexec (one password): this step's own result
+			r = _batch_result(i)
+			if bool(_batch.get(i, {}).get("pending", false)):
+				results[i] = "pending"
+				if t["id"] == "fix_install":
+					deferred_fixes.append(t["fix"])
+				log_line("%s: waits for the reboot" % _name(t))
+				_main(func(): task_finished.emit(i, true, "pending"))
+				return true
+		else:
+			r = _command(i, t["cmd"])
+			if r[0] != 0 and not (t["fallback"] as Array).is_empty():
+				log_line("%s: trying again without applying live" % _name(t))
+				r = _command(i, t["fallback"])
 		ok = r[0] == 0
 		msg = "" if ok else _why(r[0], r[1])
 	if ok:
@@ -188,6 +210,84 @@ func _run_task(i: int) -> bool:
 		last_message = msg
 		return false
 	return true
+
+
+## [exit code, last line] of root step i. The first root step of a run (or of a retry) runs the whole
+## queue of root steps that follow it without a step in between that isn't one (those wait for the package
+## or for each other): one pkexec, one password.
+func _batch_result(i: int) -> Array:
+	if not _batch.has(i):
+		var items: Array = []
+		for k in range(i, tasks.size()):
+			var t: Dictionary = tasks[k]
+			if t["kind"] != "cmd" or not bool(t["privileged"]):
+				break
+			if k > i and results[k] in ["ok", "pending"]:
+				continue
+			items.append({"i": k, "cmd": t["cmd"], "fallback": t["fallback"], "optional": bool(t["optional"]),
+				"needs_live": bool(t["needs_live"])})
+		_batch.merge(_run_batch(items), true)
+	var b: Dictionary = _batch.get(i, {"code": 1, "last": "not run", "pending": false, "retried": false})
+	if bool(b.get("retried", false)):
+		log_line("%s: trying again without applying live" % _name(tasks[i]))
+	return [int(b["code"]), str(b["last"])]
+
+
+## Runs `items` (Commands.batch_script) as ONE pkexec and reads every step's result from its markers.
+## Returns index -> {"code", "last", "pending", "retried"}. Without markers (the dialog was dismissed, pkexec
+## failed): the exit code is the first step's, and that is the answer for all of them.
+func _run_batch(items: Array) -> Dictionary:
+	var out := {}
+	if items.is_empty():
+		return out
+	var script := Commands.batch_script(items, [paths.fix_helper(), paths.installed_binary()])
+	var cmd := Commands.batch_command(script)
+	var ids: Array = items.map(func(x): return _name(tasks[int(x["i"])]) if x["i"] is int and int(x["i"]) < tasks.size() else str(x["i"]))
+	log_line("$ pkexec sh -c <one root script for: %s>" % ", ".join(PackedStringArray(ids)))
+	var kb: Dictionary = RootKeyboard.prepare(runner, desktop, session_type)
+	if bool(kb["on"]):
+		log_line("on-screen keyboard for the password dialog: %s" % kb["file"].get_file())
+	var cur := [-1]
+	var any := [false]
+	var code: int = runner.stream(str(cmd[0]), PackedStringArray(cmd.slice(1)), func(line: String):
+		var l := line.strip_edges()
+		if l == "":
+			return
+		if l.begins_with(Commands.MARK):
+			any[0] = true
+			var p := l.trim_prefix(Commands.MARK).split(" ")
+			var k := int(p[1]) if p.size() > 1 else -1
+			match p[0]:
+				"start":
+					cur[0] = k
+					out[k] = {"code": 1, "last": "", "pending": false, "retried": false}
+				"retry":
+					if out.has(k):
+						out[k]["retried"] = true
+						out[k]["last"] = ""
+				"pending":
+					out[k] = {"code": 0, "last": "pending", "pending": true, "retried": false}
+				"end":
+					if out.has(k):
+						out[k]["code"] = int(p[2]) if p.size() > 2 else 1
+			return
+		log_line("  " + l)
+		if out.has(cur[0]):
+			out[cur[0]]["last"] = l
+		var kk: int = cur[0]
+		_main(func(): task_line.emit(kk, l)))
+	RootKeyboard.restore(runner, kb)
+	log_line("  exit %d" % code)
+	if not any[0]:
+		# no step ever started: the password prompt was dismissed or pkexec itself failed. Every step gets
+		# that code, so nothing asks again; a fake/plain runner that answers 0 means every step went fine.
+		for it in items:
+			out[int(it["i"])] = {"code": code, "last": "", "pending": false, "retried": false}
+		if code != 0:
+			var why := _why(code, "")
+			for k in out:
+				out[k]["last"] = why
+	return out
 
 
 ## [exit code, last output line]
@@ -348,13 +448,24 @@ func undo() -> bool:
 	log_line("---- undo %s" % action)
 	_queue("undo", func():
 		var all_ok := true
+		# every root undo in one pkexec (one password), newest first; the rest one by one
+		var undo_items: Array = []
+		for i in range(tasks.size() - 1, -1, -1):
+			var u0: Variant = tasks[i]["undo"]
+			if results[i] == "ok" and u0 is Array and not (u0 as Array).is_empty() and (u0 as Array)[0] == Commands.PKEXEC:
+				undo_items.append({"i": i, "cmd": u0, "fallback": [], "optional": true, "needs_live": false})
+		var undone_root: Dictionary = _run_batch(undo_items)
 		for i in range(tasks.size() - 1, -1, -1):
 			if results[i] != "ok":
 				continue
 			var t: Dictionary = tasks[i]
 			var u: Variant = t["undo"]
 			var ok := true
-			if u is Array and not (u as Array).is_empty():
+			if undone_root.has(i):
+				ok = int(undone_root[i]["code"]) == 0
+				if ok and t["id"] == "fix_install":
+					installed_fixes.erase(t["fix"])
+			elif u is Array and not (u as Array).is_empty():
 				ok = _command(i, u)[0] == 0
 				if ok and t["id"] == "fix_install":
 					installed_fixes.erase(t["fix"])

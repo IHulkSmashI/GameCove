@@ -86,6 +86,52 @@ static func pkexec(cmd: Array) -> Array:
 	return [PKEXEC] + cmd
 
 
+## One password for the whole install: every queued root step of a run goes into one `sh` script that
+## one pkexec runs, so the admin password is asked once. Each step keeps its own result: the script prints
+## "@@GC start N", "@@GC end N <exit code>" (and "@@GC retry N" when the step's fallback ran, "@@GC pending N"
+## when the step waits for GameCove to be in /usr) and the service reads them. A step that isn't optional and
+## fails stops the script, as it would stop the run. `items`: [{"i", "cmd" (with or without the leading
+## pkexec), "fallback", "optional", "needs_live"}]; `live`: files whose presence means GameCove is in /usr.
+const MARK := "@@GC "
+
+
+static func batch_script(items: Array, live: Array) -> String:
+	var probe := " || ".join(PackedStringArray(live.map(func(f): return "[ -e %s ]" % _q(str(f))))) if not live.is_empty() else "false"
+	var out: Array = []
+	for it in items:
+		var i := int(it["i"])
+		var lines: Array = ["echo '%sstart %d'" % [MARK, i]]
+		var body := _root_line(it["cmd"])
+		var run := body + "; rc=$?"
+		if not (it.get("fallback", []) as Array).is_empty():
+			run += "; if [ $rc -ne 0 ]; then echo '%sretry %d'; %s; rc=$?; fi" % [MARK, i, _root_line(it["fallback"])]
+		run += "; echo \"%send %d $rc\"" % [MARK, i]
+		if not bool(it.get("optional", false)):
+			run += "; if [ $rc -ne 0 ]; then exit 0; fi"
+		if bool(it.get("needs_live", false)):
+			lines.append("if %s; then %s; else echo '%spending %d'; fi" % [probe, run, MARK, i])
+		else:
+			lines.append(run)
+		out.append("\n".join(PackedStringArray(lines)))
+	return "\n".join(PackedStringArray(out)) + "\nexit 0"
+
+
+static func _q(a: String) -> String:
+	return "'" + a.replace("'", "'\\''") + "'"
+
+
+static func _root_line(cmd: Array) -> String:
+	var c: Array = (cmd as Array).duplicate()
+	if not c.is_empty() and c[0] == PKEXEC:
+		c.remove_at(0)
+	return " ".join(PackedStringArray(c.map(func(a): return _q(str(a)))))
+
+
+## The single pkexec command for a batch.
+static func batch_command(script: String) -> Array:
+	return pkexec(["sh", "-c", script])
+
+
 ## Bazzite / Fedora Atomic: layer the package. --apply-live makes it usable
 ## right away (fixes, session) and keeps it for the next boot; when that
 ## isn't possible the fallback just stages it for the next boot.
@@ -298,13 +344,14 @@ static func tasks_for(action: String, choices: Dictionary, target: Dictionary, p
 			out.append(_cmd("session_restore", session_restore(paths)))
 			# GameCove's launcher out of every Steam game's launch options (stops Steam first)
 			out.append(_internal("steam_unwrap", {"optional": true}))
+			if bool(target.get("installed", false)):
+				# every game back to the files it shipped with, the XeSS XMX driver and lsfg-vk we
+				# installed out, our folder of upscaler files gone (as the user; upkeep.purge). Before the
+				# root steps, which run as one batch (one password) and take the package with them.
+				out.append(_cmd("upscale_purge", upscale_purge(paths.upscale_helper(), paths.home), {"optional": true}))
 			if bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false)):
 				# not only what the installer recorded: every fix and device setting in use
 				out.append(_cmd("fix_remove_all", fix_remove_all(paths.fix_helper())))
-			if bool(target.get("installed", false)):
-				# every game back to the files it shipped with, the XeSS XMX driver and lsfg-vk we
-				# installed out, our folder of upscaler files gone (as the user; upkeep.purge)
-				out.append(_cmd("upscale_purge", upscale_purge(paths.upscale_helper(), paths.home), {"optional": true}))
 			var purge := bool(choices.get("remove_fixes", true)) and bool(target.get("installed", false))
 			if method == "rpm-ostree":
 				out.append(_cmd("package_remove", rpm_remove(purge)))

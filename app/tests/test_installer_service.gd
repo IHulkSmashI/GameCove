@@ -100,7 +100,8 @@ func test_staged_install_defers_fixes_and_session() -> void:
 	eq(st["choices"]["startup"], "gamecove")
 	ok(not st["choices"].has("ggdeals_key"), "keys stay out of the state file")
 	var log := FileAccess.get_file_as_string(p.log_file())
-	ok("$ pkexec sh -c set -e; rpm-ostree install" in log, "commands logged")
+	ok("$ pkexec sh -c <one root script for: package" in log, "the root steps are logged as one script")
+	ok("rpm-ostree install" in log or "claw8ex-buttons" in log, "and name their steps: " + log.left(300))
 	ok("install finished" in log)
 	_cleanup()
 
@@ -195,8 +196,9 @@ func test_uninstall_restores_steam_and_cleans_up() -> void:
 	eq(cmds.size(), 4)
 	ok(cmds[0].begins_with("sh -c ") and "restore" in cmds[0], "session defaults restored first (desktop session too)")
 	ok(cmds[0].ends_with(s2.paths.session_select()), "through the switcher when it's there")
-	eq(cmds[1], "pkexec " + s2.paths.fix_helper() + " --remove-all")
-	eq(cmds[2], "%s purge --home %s" % [s2.paths.upscale_helper(), s2.paths.home], "our upscaler files leave the games, as the user, while the helper is still there")
+	eq(cmds[1], "%s purge --home %s" % [s2.paths.upscale_helper(), s2.paths.home], "our upscaler files leave the games, as the user, while the helper is still there")
+	eq(cmds[2], "pkexec " + s2.paths.fix_helper() + " --remove-all")
+	eq(r.batches, 1, "one password for the fixes and the package (one pkexec)")
 	ok(cmds[3].begins_with("pkexec sh -c rm -rf /var/lib/gamecove && ") and cmds[3].ends_with("exec rpm-ostree uninstall gamecove"), "the helper's state goes with the layer: " + cmds[3])
 	for f in [s2.paths.env_conf(), s2.paths.unit_file(), s2.paths.switch_entry(), s2.paths.window_entry(),
 			s2.paths.pending_file(), s2.paths.state_file(), data + "/crash-count", data + "/crash-fallback",
@@ -372,6 +374,45 @@ func test_failed_session_restore_stops_the_uninstall() -> void:
 
 ## Device finding 10: ClawDeck's files made claw8ex-gyro refuse and the whole install stopped at 18%.
 ## An optional fix failing never stops the run: the rest installs, the failure is listed with its own retry.
+## Device finding 12: one pkexec (one password prompt) for every root step of an install, each step
+## keeping its own result; and the Plasma virtual keyboard is on while the dialog is open.
+func test_one_password_for_the_whole_install_and_a_keyboard_for_it() -> void:
+	var d := _dir("onepass")
+	_make_live(d)
+	var t := F.target("bazzite", {"installed": true})
+	var r := _runner()
+	var s := _svc(d, r, t)
+	s.desktop = "KDE"
+	s.session_type = "wayland"
+	var c := _choices(t)
+	c["fixes"] = ["claw8ex-buttons", "claw8ex-vrr", "claw8ex-gyro"]
+	var results := []
+	s.finished.connect(func(a, ok_, m): results.append([a, ok_, m]))
+	s.start("install", c)
+	eq(results[-1][1], true, "installed")
+	eq(r.batches, 1, "one pkexec for the package and every fix")
+	for f in c["fixes"]:
+		ok(r.called("pkexec %s %s install" % [s.paths.fix_helper(), f]), "step ran: " + f)
+	eq(s.results.count("failed"), 0)
+	_cleanup()
+
+
+func test_a_dismissed_password_asks_once_and_stops() -> void:
+	var d := _dir("nopass")
+	_make_live(d)
+	var t := F.target("bazzite", {"installed": true})
+	var r := _runner({"pkexec batch": {"code": 126, "out": "Not authorized"}})
+	var s := _svc(d, r, t)
+	var results := []
+	s.finished.connect(func(a, ok_, m): results.append([a, ok_, m]))
+	var c := _choices(t)
+	c["fixes"] = ["claw8ex-buttons", "claw8ex-vrr"]
+	s.start("install", c)
+	eq(results[-1], ["install", false, "no_password"])
+	eq(r.batches, 1, "the dialog came once, not once per step")
+	_cleanup()
+
+
 func test_a_failing_fix_does_not_stop_the_install_and_can_be_retried() -> void:
 	var d := _dir("fixfail")
 	_make_live(d)

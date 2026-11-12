@@ -5,6 +5,7 @@ const C := preload("res://scripts/installer/commands.gd")
 const Paths := preload("res://scripts/installer/paths.gd")
 const Plan := preload("res://scripts/installer/plan.gd")
 const F := preload("res://tests/fixtures/installer/fakes.gd")
+const ExecSafe := preload("res://scripts/system/exec_safe.gd")
 
 
 func _ids(tasks: Array) -> Array:
@@ -95,6 +96,41 @@ func test_sysext_commands() -> void:
 	eq(C.rpm_remove(false), C.rpm_uninstall(), "fixes kept: their state stays too")
 
 
+## One pkexec for every root step (device finding 12): a script that prints each step's result.
+func test_batch_script_runs_every_step_once_with_markers() -> void:
+	var items := [
+		{"i": 1, "cmd": C.pkexec(["sh", "-c", "echo it's fine", "sh", "/x y"]), "fallback": C.pkexec(["true"]), "optional": false, "needs_live": false},
+		{"i": 2, "cmd": C.pkexec(["/h/gamecove-fix", "a", "install"]), "fallback": [], "optional": true, "needs_live": true}]
+	var sc := C.batch_script(items, ["/usr/libexec/gamecove/gamecove-fix"])
+	ok(not "pkexec" in sc, "already root: no pkexec inside")
+	ok("@@GC start 1" in sc and "@@GC end 1 $rc" in sc and "@@GC retry 1" in sc and "@@GC pending 2" in sc, "markers for every step")
+	ok("'echo it'\\''s fine'" in sc, "arguments are quoted")
+	ok("then exit 0" in sc.split("start 2")[0] and not "then exit 0" in sc.split("start 2")[1], "a required step stops the script, an optional one doesn't")
+	ok("[ -e '/usr/libexec/gamecove/gamecove-fix' ]" in sc, "steps that need GameCove in /usr check for it")
+	eq(C.batch_command(sc), ["pkexec", "sh", "-c", sc])
+
+
+## The real script, run by a real sh: every step's marker, a failing required step stops it, a failing
+## optional one doesn't, a fallback runs, a step that needs GameCove in /usr waits when it isn't there.
+func test_batch_script_really_runs() -> void:
+	var items := [
+		{"i": 0, "cmd": ["true"], "fallback": [], "optional": false, "needs_live": false},
+		{"i": 1, "cmd": ["false"], "fallback": ["true"], "optional": false, "needs_live": false},
+		{"i": 2, "cmd": ["false"], "fallback": [], "optional": true, "needs_live": false},
+		{"i": 3, "cmd": ["sh", "-c", "echo hi"], "fallback": [], "optional": true, "needs_live": true},
+		{"i": 4, "cmd": ["false"], "fallback": [], "optional": false, "needs_live": false},
+		{"i": 5, "cmd": ["true"], "fallback": [], "optional": false, "needs_live": false}]
+	var r: Dictionary = ExecSafe.run("sh", PackedStringArray(["-c", C.batch_script(items, ["/nonexistent/gamecove-fix"])]))
+	var out := str(r["out"])
+	ok("@@GC end 0 0" in out, "step 0 ok")
+	ok("@@GC retry 1" in out and "@@GC end 1 0" in out, "step 1: fallback ran, ok")
+	ok("@@GC end 2 1" in out, "an optional step's failure is reported")
+	ok("@@GC pending 3" in out and not "hi" in out, "not live: waits")
+	ok("@@GC end 4 1" in out, "the required failure is reported")
+	ok(not "@@GC start 5" in out, "and stops the script")
+	eq(int(r["code"]), 0)
+
+
 func test_session_and_misc_commands() -> void:
 	eq(C.session_default("/usr/bin/gamecove-session-select", "gamecove"), ["/usr/bin/gamecove-session-select", "gamecove", "--default", "--no-switch"])
 	eq(C.session_default("/usr/bin/gamecove-session-select", "steam"), ["/usr/bin/gamecove-session-select", "steam", "--default", "--no-switch"])
@@ -154,17 +190,17 @@ func test_change_repair_update_uninstall_finish() -> void:
 	c["remove_fixes"] = true
 	c["keep_settings"] = false
 	var un := C.tasks_for("uninstall", c, t, p)
-	eq(_ids(un), ["check_game", "session_restore", "steam_unwrap", "fix_remove_all", "upscale_purge", "package_remove",
+	eq(_ids(un), ["check_game", "session_restore", "steam_unwrap", "upscale_purge", "fix_remove_all", "package_remove",
 		"remove_user_files", "remove_settings", "forget"])
-	eq(un[3]["cmd"], ["pkexec", p.fix_helper(), "--remove-all"], "every fix in use, not only the installer's (review S2-5)")
+	eq(un[4]["cmd"], ["pkexec", p.fix_helper(), "--remove-all"], "every fix in use, not only the installer's (review S2-5): root steps are adjacent, so one password")
 	eq(un[1]["cmd"], C.session_restore(p))
 	eq(un[1]["cmd"][4], p.data_dir() + "/gamecove-session-guard", "the copy that survives the package goes first")
-	eq(un[4]["cmd"], C.upscale_purge(p.upscale_helper(), p.home), "our upscaler files leave the games before the package goes")
-	ok(not un[4]["privileged"] and un[4]["optional"], "as the user; a game that can't be put back doesn't stop the uninstall")
+	eq(un[3]["cmd"], C.upscale_purge(p.upscale_helper(), p.home), "our upscaler files leave the games before the package goes")
+	ok(not un[3]["privileged"] and un[3]["optional"], "as the user; a game that can't be put back doesn't stop the uninstall")
 	eq(un[5]["cmd"], C.rpm_remove(true), "fixes undone: /var/lib/gamecove goes with the layer (review L25)")
 	ok(un[2]["optional"], "taking GameCove out of Steam's launch options never stops an uninstall")
 	ok(not un[1]["optional"], "review H4: the boot default must be restored before the package goes")
-	ok(not un[3]["optional"], "review H4: every fix undone before the helper that undoes them goes")
+	ok(not un[4]["optional"], "review H4: every fix undone before the helper that undoes them goes")
 	c["remove_fixes"] = false
 	c["keep_settings"] = true
 	var kept := C.tasks_for("uninstall", c, t, p)
