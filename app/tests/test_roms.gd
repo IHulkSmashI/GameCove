@@ -208,6 +208,30 @@ func test_a_cue_hides_only_the_tracks_it_names() -> void:
 	DirAccess.remove_absolute(dir)
 
 
+## Review 56f5255: the 20,000-game cap and an over-size gamelist.xml cut a library short without a word.
+func test_a_cap_and_a_skipped_gamelist_are_reported() -> void:
+	var dir := _dir("capped")
+	for i in 5:
+		_touch(dir.path_join("g%d.sfc" % i))
+	var capped := Roms.list_games(dir, ["sfc"], 3)
+	eq(capped["games"].size(), 3, "listing stops at the cap")
+	eq(capped["capped"], true, "and says it did")
+	eq(Roms.list_games(dir, ["sfc"], 5)["capped"], false, "a folder that fits is not capped")
+	var gl := dir.path_join("gamelist.xml")
+	_touch(gl, "<gameList/>")
+	eq(Roms.parse_gamelist(gl, dir)["too_big"], false, "a small gamelist is read")
+	var f := FileAccess.open(gl, FileAccess.WRITE)
+	f.store_string("<gameList>")
+	f.store_buffer(PackedByteArray([32]).duplicate())
+	f.seek(Roms.GAMELIST_MAX_BYTES + 10)
+	f.store_8(32)
+	f.close()
+	eq(Roms.parse_gamelist(gl, dir)["too_big"], true, "one over the limit is skipped and says so")
+	var res := Roms.scan_system("snes", dir, ["sfc"], gl, "", 3)
+	ok(res["capped"] and res["gamelist_skipped"], "scan_system carries both for the Emulation page")
+	_rm(dir)
+
+
 func test_listing_rules() -> void:
 	var home := _emudeck("list")
 	var roms := home.path_join("Emulation/roms")

@@ -17,6 +17,7 @@ extends "res://scripts/ui/page_template.gd"
 
 const TL := preload("res://scripts/ui/texts_library.gd")
 const TG := preload("res://scripts/ui/texts_games.gd")
+const Roms := preload("res://scripts/library/stores/roms.gd")
 const SKit := preload("res://scripts/ui/settings/kit.gd")
 const GameIcons := preload("res://scripts/ui/games/game_icons.gd")
 const QR := preload("res://scripts/ui/settings/qr.gd")
@@ -183,6 +184,15 @@ func _fill_systems(body: VBoxContainer, roms: String) -> void:
 	line.name = "RomTotal"
 	line.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 	body.add_child(line)
+	for s in list:
+		var sid := str(s["id"]).validate_node_name()
+		for note in [["Capped", bool(s.get("capped", false)), TL.EMU_CAPPED % [str(Roms.SYSTEM_MAX), s["name"]]],
+				["Gamelist", bool(s.get("gamelist_skipped", false)), TL.EMU_GAMELIST_BIG % s["name"]]]:
+			if note[1]:
+				var l := Kit.label(note[2], "CaptionLabel", true)
+				l.name = "RomNote%s_%s" % [note[0], sid]
+				l.add_theme_color_override("font_color", ThemeLib.color("text_3"))
+				body.add_child(l)
 
 
 func _fill_recent(body: VBoxContainer, fe: Dictionary) -> void:

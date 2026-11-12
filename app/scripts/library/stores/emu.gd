@@ -808,8 +808,10 @@ static func rom_entries(home: String, setup: Dictionary, names: Dictionary, sour
 				"last_played": int(g["last_played"]), "playtime_min": 0,
 				"local_meta": {"source": "esde" if not (g["meta"] as Dictionary).is_empty() else "emu", "meta": meta}})
 		if not by_sys.has(id):
-			by_sys[id] = {"id": id, "name": sname, "short": sshort, "count": 0, "roots": [], "known": known}
+			by_sys[id] = {"id": id, "name": sname, "short": sshort, "count": 0, "roots": [], "known": known, "capped": false, "gamelist_skipped": false}
 		by_sys[id]["count"] += (res["games"] as Array).size()
+		by_sys[id]["capped"] = by_sys[id]["capped"] or bool(res.get("capped", false))
+		by_sys[id]["gamelist_skipped"] = by_sys[id]["gamelist_skipped"] or bool(res.get("gamelist_skipped", false))
 		if not str(sy["base"]) in by_sys[id]["roots"]:
 			by_sys[id]["roots"].append(str(sy["base"]))
 	var counts: Array = by_sys.values()
