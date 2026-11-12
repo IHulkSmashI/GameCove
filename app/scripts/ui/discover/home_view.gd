@@ -176,6 +176,7 @@ func build() -> void:
 
 	_scroll = W.scroller()
 	_scroll.follow_focus = false
+	_scroll.set_meta("ux_follows", "home_view.gd scrolls the shelves on focus")   # docs/CONTROLLER-UX.md CUX-8
 	root.add_child(_scroll)
 	# A 48 px alpha fade at the foot: the next row peeking in looks masked,
 	# not sliced off under the hint bar.

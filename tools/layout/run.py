@@ -13,6 +13,10 @@ app/tests/layout/layout_checks.gd on each. Headless: nothing is drawn, so a
   python3 -I tools/layout/run.py --full --sets showcase,installer
   python3 -I tools/layout/run.py --rows tv-4k-55in --form console   wording on a Steam Machine
 
+Every shot also gets the focus walk (app/tests/layout/focus_walk.gd, the
+controller rules of docs/CONTROLLER-UX.md; FOCUS_WALK=0 skips it), whose own
+test (app/tests/layout/walk_selftest.gd) runs first.
+
 Rows that get the same layout are run once (the first row stands for the
 group; the report names them all). Exit 1 when a check fails that isn't in
 tools/layout/known.json (each entry there says why it is accepted).
@@ -97,6 +101,13 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     godot = godot_path(a.godot)
     subprocess.run([godot, "--headless", "--path", APP, "--import"], capture_output=True, check=False)
+    if os.environ.get("FOCUS_WALK", "1") != "0":
+        st = subprocess.run([godot, "--headless", "--path", APP, "-s", "res://tests/layout/walk_selftest.gd"],
+                            capture_output=True, text=True, timeout=300, check=False)
+        print("\n".join(l for l in (st.stdout + st.stderr).splitlines() if l.startswith("WALK SELFTEST")), flush=True)
+        if st.returncode != 0 or "SCRIPT ERROR" in st.stdout + st.stderr:
+            print((st.stdout + st.stderr)[-3000:])
+            sys.exit("the focus walk's own test failed")
     rows = matrix(godot)
     by_id = {r["id"]: r for r in rows}
     if a.rows:
@@ -134,7 +145,7 @@ def main(argv=None) -> int:
             d = os.path.join(out, r["id"])
             os.makedirs(d, exist_ok=True)
             home = tempfile.mkdtemp(prefix="gamecove-layout-home-")
-            env = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG", "LC_ALL", "TERM", "USER", "TZ")}
+            env = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG", "LC_ALL", "TERM", "USER", "TZ", "FOCUS_WALK")}
             env.update({"HOME": home, "XDG_DATA_HOME": os.path.join(home, "data"), "XDG_CACHE_HOME": os.path.join(home, "cache"),
                         "XDG_CONFIG_HOME": os.path.join(home, "config"), "LAYOUT_ROW": r["id"], "LAYOUT_OUT": d,
                         "LAYOUT_FORM": a.form, "SHOWCASE_THEME": a.theme, "SHOOT_THEME": "" if a.theme == "cove" else a.theme})

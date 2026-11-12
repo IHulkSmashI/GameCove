@@ -168,6 +168,7 @@ func _init() -> void:
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"
 	_scroll.follow_focus = false
+	_scroll.set_meta("ux_follows", "home.gd glides rows into view on focus")   # docs/CONTROLLER-UX.md CUX-8
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL

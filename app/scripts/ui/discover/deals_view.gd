@@ -83,6 +83,7 @@ func build() -> void:
 
 	_scroll = W.scroller()
 	_scroll.follow_focus = false
+	_scroll.set_meta("ux_follows", "each row follows with widgets.follow")   # docs/CONTROLLER-UX.md CUX-8
 	col.add_child(_scroll)
 	_list = Kit.vbox(10)
 	_list.name = "List"

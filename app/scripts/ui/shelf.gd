@@ -83,6 +83,7 @@ func setup(shelf_id: String, shelf_title: String, games: Array, size := Vector2.
 	scroll = ScrollContainer.new()
 	scroll.name = "Scroll"
 	scroll.follow_focus = false
+	scroll.set_meta("ux_follows", "its own glide to the focused tile")   # docs/CONTROLLER-UX.md CUX-8
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.custom_minimum_size = Vector2(0, tile_size.y + PAD.y + LABEL_ROOM)

@@ -35,6 +35,8 @@ static func open(host: Control, percent: int, secs := TS.LOW_SECONDS) -> Control
 
 func build(percent: int, secs: int) -> void:
 	name = "LowBatteryDialog"
+	# a countdown to sleep: any button means "still here" (docs/CONTROLLER-UX.md CUX-4, the one any-key screen)
+	set_meta("ux_any_key", "any button keeps the handheld awake before it sleeps")
 	total = maxi(1, secs)
 	seconds_left = total
 	set_anchors_preset(Control.PRESET_FULL_RECT)
