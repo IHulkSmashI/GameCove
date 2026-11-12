@@ -243,6 +243,19 @@ func test_failed_switch_takes_the_controller_back() -> void:
 	m.free()
 
 
+## A second "Switch to Steam" while the first one's release was still standing read the intercept as off
+## and dropped the re-arm: a switch that then failed left the controller dead.
+func test_a_second_switch_keeps_the_rearm_of_the_first() -> void:
+	var r := FakeRunner.new()
+	var ctl := FakeController.new()
+	var m := _menu(r, [], {"controller": ctl})
+	m._begin_switch("steam")
+	m._begin_switch("steam")
+	m.switch_timed_out(m._switch_gen)
+	eq(ctl.started, 1, "the controller comes back though the second press saw it off")
+	m.free()
+
+
 ## Review at ff76ca4, session Low 6: a switch that didn't happen leaves no "just left" mark behind for `leave`.
 func test_a_switch_that_never_came_forgets_its_left_mark() -> void:
 	var dir := OS.get_user_data_dir().path_join("left_mark_test")
