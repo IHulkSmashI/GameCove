@@ -79,10 +79,15 @@ chmod 444 "$D/rumble_intensity_right"
 as_user=""
 if [ "$(id -u)" = 0 ]; then
 	command -v setpriv >/dev/null 2>&1 && as_user="setpriv --reuid=65534 --regid=65534 --clear-groups"
+	# nobody may not be able to read the checkout (a home folder, a worktree under /root): it gets its own copy of
+	# what the fix sources, in the world-readable temp folder
+	mkdir -p "$T/pub"; cp -R "$HERE" "$T/pub/controller-rumble"; cp -R "$HERE/../lib" "$T/pub/lib"
+	chmod -R a+rX "$T/pub"
 	chmod -R a+rwX "$T"; chmod 444 "$D/rumble_intensity_right"; chmod 755 "$T"
 fi
 if [ "$(id -u)" != 0 ] || [ -n "$as_user" ]; then
-	set +e; GAMECOVE_ROOT="$R" $as_user sh "$FIX" set 30 >/dev/null 2>&1; c=$?; set -e
+	USER_FIX="$FIX"; [ -z "$as_user" ] || USER_FIX="$T/pub/controller-rumble/fix.sh"
+	set +e; GAMECOVE_ROOT="$R" $as_user sh "$USER_FIX" set 30 >/dev/null 2>&1; c=$?; set -e
 	[ "$c" = 1 ] || fail "refused write -> exit 1 (got $c)"
 	[ "$(cat "$D/rumble_intensity_left")" = 70 ] || fail "left restored after the right refused"
 fi
