@@ -20,6 +20,9 @@ var _footer_text := ""
 var _selected_text := ""
 var min_height := 200.0
 var _content: VBoxContainer
+## The button named in the footer hint ("A"): drawn as the controller glyph beside accent text, big enough to read.
+var hint_glyph := ""
+var _hint_row: HBoxContainer
 
 
 ## badge: [text, tone] or []; corner: small text top-right ("~1 MIN").
@@ -105,6 +108,13 @@ func setup(card_key: String, title: String, line: String, icon := "", badge: Arr
 	set_selected(false)
 
 
+## A card that shows something but can't be used: no focus from the pad, none from a touch or a click, and
+## no press (a disabled Button alone still took focus).
+func make_inert() -> void:
+	disabled = true
+	focus_mode = Control.FOCUS_NONE
+
+
 ## Buttons don't size to their children: grow to fit the content.
 func _fit() -> void:
 	if _content == null:
@@ -114,12 +124,35 @@ func _fit() -> void:
 		custom_minimum_size.y = want
 
 
+## The footer is an action hint with the controller's button drawn next to it ("(A) Add it"), in the
+## accent, at the size of a button label: the way to use the card is the first thing the eye finds.
+func set_hint_glyph(button: String) -> void:
+	hint_glyph = button
+	if _hint_row == null and footer != null:
+		_hint_row = Kit.hbox(10)
+		_hint_row.name = "Hint"
+		_hint_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var g := Kit.glyph(button, true)
+		g.name = "HintGlyph"
+		_hint_row.add_child(g)
+		var parent := footer.get_parent()
+		var at := footer.get_index()
+		parent.remove_child(footer)
+		_hint_row.add_child(footer)
+		footer.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		parent.add_child(_hint_row)
+		parent.move_child(_hint_row, at)
+	set_selected(selected)
+
+
 func set_selected(on: bool) -> void:
 	selected = on
 	if footer != null:
 		footer.text = ("●  " + _selected_text) if on else _footer_text
-		footer.add_theme_font_override("font", ThemeLib.mono(on, 1))
-		footer.add_theme_color_override("font_color", ThemeLib.color("accent") if on else ThemeLib.color("text_2"))
+		var strong := on or hint_glyph != ""
+		footer.add_theme_font_override("font", ThemeLib.mono(strong, 1))
+		footer.add_theme_font_size_override("font_size", ThemeLib.SIZE_SMALL if hint_glyph != "" else ThemeLib.SIZE_MICRO + 1)
+		footer.add_theme_color_override("font_color", ThemeLib.color("accent") if strong else ThemeLib.color("text_2"))
 	_restyle()
 
 
@@ -131,11 +164,13 @@ func _restyle() -> void:
 		return
 	_styling = true
 	var r := ThemeLib.radius("l")
-	var base := ThemeLib.box(ThemeLib.color("surface"), r, 0, 0)
-	base.border_color = ThemeLib.color("accent") if selected else ThemeLib.color("line")
-	base.set_border_width_all(2 if selected else 1)
+	# Selected (what the choice is) and focused (where the pad is) never look alike: selected is a soft
+	# accent tint with a thin accent edge and the "Selected" footer; focus is the bold ring below.
+	var base := ThemeLib.box(ThemeLib.color("surface").lerp(ThemeLib.color("accent"), 0.10) if selected else ThemeLib.color("surface"), r, 0, 0)
+	base.border_color = Color(ThemeLib.color("accent"), 0.55) if selected else ThemeLib.color("line")
+	base.set_border_width_all(1)
 	var hover := base.duplicate() as StyleBoxFlat
-	hover.bg_color = ThemeLib.color("surface_3")
+	hover.bg_color = ThemeLib.color("surface_3").lerp(ThemeLib.color("accent"), 0.10) if selected else ThemeLib.color("surface_3")
 	for st in ["normal", "pressed", "disabled"]:
 		add_theme_stylebox_override(st, base)
 	for st in ["hover", "hover_pressed"]:
@@ -147,6 +182,6 @@ func _restyle() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and footer != null and not _styling:
 		_styling = true
-		footer.add_theme_color_override("font_color", ThemeLib.color("accent") if selected else ThemeLib.color("text_2"))
+		footer.add_theme_color_override("font_color", ThemeLib.color("accent") if (selected or hint_glyph != "") else ThemeLib.color("text_2"))
 		_styling = false
 		_restyle()

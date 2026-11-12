@@ -131,6 +131,21 @@ func test_batch_script_really_runs() -> void:
 	eq(int(r["code"]), 0)
 
 
+## A first install that stopped midway (the package layered, one fix applied, no install-state file
+## written): running the installer again repairs it cleanly. Every step is safe to repeat (rpm-ostree
+## --idempotent, a fix that is installed answers "already installed"), so the plan is the whole install.
+func test_rerunning_after_an_install_that_stopped_midway() -> void:
+	var t := F.target("bazzite", {"installed": true, "maintenance": true, "state": {}})
+	var c := _choices(t)
+	var tasks := C.tasks_for("repair", c, t, Paths.for_home("/h"))
+	var ids := _ids(tasks)
+	ok("package" in ids, "the package step again (--idempotent)")
+	ok(" ".join(PackedStringArray(tasks[ids.find("package")]["cmd"])).contains("--idempotent"))
+	for f in c["fixes"]:
+		ok(("fix_install:" + f) in ids, "every wanted fix again: " + f)
+	ok(ids.find("state") > ids.find("user_files"), "and the install state is written at the end this time")
+
+
 func test_session_and_misc_commands() -> void:
 	eq(C.session_default("/usr/bin/gamecove-session-select", "gamecove"), ["/usr/bin/gamecove-session-select", "gamecove", "--default", "--no-switch"])
 	eq(C.session_default("/usr/bin/gamecove-session-select", "steam"), ["/usr/bin/gamecove-session-select", "steam", "--default", "--no-switch"])

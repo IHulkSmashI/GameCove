@@ -207,6 +207,23 @@ static func xess_remove(helper: String, home: String) -> Array:
 	return [helper, "xess-remove", "--home", home]
 
 
+## Heroic Games Launcher (Epic, GOG and Amazon sign-in and games without separate tools) from Flathub,
+## for this user: the same two commands the Stream page runs for Moonlight (scripts/streaming/moonlight.gd,
+## install_commands), no password.
+const HEROIC_ID := "com.heroicgameslauncher.hgl"
+
+
+static func heroic_install(flatpak := "flatpak") -> Array:
+	var Moonlight = load("res://scripts/streaming/moonlight.gd")
+	var cmds: Array = Moonlight.install_commands(flatpak)
+	cmds[1] = [flatpak, "install", "--user", "--noninteractive", "-y", "flathub", HEROIC_ID]
+	return cmds
+
+
+static func heroic_open(flatpak := "flatpak") -> Array:
+	return [flatpak, "run", HEROIC_ID]
+
+
 ## Uninstall: everything upscaling put on this handheld goes (games as shipped,
 ## the XeSS XMX driver, lsfg-vk from us, the managed folders). Saves stay.
 static func upscale_purge(helper: String, home: String) -> Array:

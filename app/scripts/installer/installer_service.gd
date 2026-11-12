@@ -30,6 +30,9 @@ signal task_line(index: int, line: String)
 signal task_finished(index: int, ok: bool, message: String)
 signal finished(action: String, ok: bool, message: String)
 signal undone(ok: bool)
+## A small job on its own (Heroic from Flathub): its lines, then its end.
+signal job_line(id: String, line: String)
+signal job_finished(id: String, ok: bool, message: String)
 ## A single fix tried again from the done page (retry_fix).
 signal fix_retried(fix: String, ok: bool, message: String)
 
@@ -103,6 +106,37 @@ func retry() -> bool:
 	for k in range(from, tasks.size()):
 		_batch.erase(k)
 	_queue("run", _run_all.bind(from))
+	return true
+
+
+## Runs `cmds` ([[program, args...], ...]) in order as the user, one after another, on the worker thread
+## (Install Heroic on the stores step). job_line for every output line, job_finished at the end. False while
+## another run is going or a game is.
+func start_job(id: String, cmds: Array) -> bool:
+	if running:
+		return false
+	running = true
+	log_line("---- job %s" % id)
+	_queue("job", func():
+		var ok := true
+		var last := ""
+		for c in cmds:
+			log_line("$ " + " ".join(PackedStringArray((c as Array).map(func(a): return str(a)))))
+			var code: int = runner.stream(str(c[0]), PackedStringArray((c as Array).slice(1)), func(line: String):
+				var l := line.strip_edges()
+				if l == "":
+					return
+				last = l
+				log_line("  " + l)
+				_main(func(): job_line.emit(id, l)))
+			log_line("  exit %d" % code)
+			if code != 0:
+				ok = false
+				break
+		log_line("job %s: %s" % [id, "ok" if ok else "failed"])
+		_main(func():
+			running = false
+			job_finished.emit(id, ok, "" if ok else (last if last != "" else "failed"))))
 	return true
 
 

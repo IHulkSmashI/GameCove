@@ -38,6 +38,9 @@ const SignIn := preload("res://scripts/ui/installer/store_signin.gd")
 const ArtKeyStep := preload("res://scripts/ui/setup/art_key_step.gd")
 const PhotoView := preload("res://scripts/ui/device/device_photo_view.gd")
 const OptionCard := preload("res://scripts/ui/installer/option_card.gd")
+const StoresCommon := preload("res://scripts/library/stores/common.gd")
+const Commands := preload("res://scripts/installer/commands.gd")
+const Nav := preload("res://scripts/ui/installer/installer_nav.gd")
 const Plan := preload("res://scripts/installer/plan.gd")
 const Target := preload("res://scripts/installer/target.gd")
 const Paths := preload("res://scripts/installer/paths.gd")
@@ -146,6 +149,8 @@ func configure(svc: Dictionary, t: Dictionary, p: RefCounted, inst: Node) -> voi
 		installer.finished.connect(_on_finished)
 		installer.undone.connect(_on_undone)
 		installer.fix_retried.connect(_on_fix_retried)
+		installer.job_line.connect(_on_job_line)
+		installer.job_finished.connect(_on_job_finished)
 	var st: Object = services.get("setup")
 	if st != null and st.has_signal("changed"):
 		st.changed.connect(func(_s): _refresh_stores_later())
@@ -352,6 +357,10 @@ func _build() -> void:
 	body.name = "Body"
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_child(body)
+	# The page never gets wider than its column: with horizontal scrolling off, one child that wants more
+	# (a long unbroken path in an error line, a button label) would push the whole page, buttons and all,
+	# past the screen edge (device finding 11). Such text wraps anywhere and buttons trim their label.
+	body.minimum_size_changed.connect(_clamp_wide)
 	page_col.add_child(_hairline())
 	nav = Kit.hbox(14)
 	nav.name = "Nav"
@@ -525,6 +534,25 @@ func show_step() -> void:
 	_link()
 	body.modulate.a = 0.0
 	Motion.to(body, "modulate:a", 1.0, Motion.BASE)
+
+
+func _clamp_wide() -> void:
+	if body == null or scroll == null or scroll.size.x <= 0.0:
+		return
+	if body.get_combined_minimum_size().x <= scroll.size.x - 12.0:
+		return
+	var todo: Array = [body]
+	while not todo.is_empty():
+		var n: Node = todo.pop_back()
+		for c in n.get_children():
+			todo.append(c)
+		if n is Label:
+			(n as Label).autowrap_mode = TextServer.AUTOWRAP_ARBITRARY if (n as Label).autowrap_mode != TextServer.AUTOWRAP_OFF else TextServer.AUTOWRAP_OFF
+			(n as Label).clip_text = true
+			(n as Control).custom_minimum_size.x = 0.0
+		elif n is Button:
+			(n as Button).clip_text = true
+			(n as Control).custom_minimum_size.x = 0.0
 
 
 func _build_rail() -> void:
@@ -729,6 +757,7 @@ func _choice(key: String, title: String, vals: Array, labels: Array, current: Va
 	var r: VBoxContainer = ChoiceRow.new()
 	r.setup(key, title, vals, labels, current, icon)
 	r.set_explainer(explain)
+	r.step_on_pad = false   # a choice changes on A only; left / right / up / down move focus
 	(parent if parent != null else body).add_child(r)
 	_focusables.append(r.button)
 	return r
@@ -831,10 +860,14 @@ func _card(key: String, title: String, line: String, icon: String, badge: Array,
 	return c
 
 
-## Easy or Custom, then on to the next page.
+## Easy or Custom is a radio choice: A selects it and the page stays (Continue goes on).
 func pick_mode(m: String) -> void:
 	plan.set_mode(m)
-	go(plan.next())
+	for k in ["easy", "custom"]:
+		var c: Button = body.find_child("Card_mode_" + k, true, false) as Button
+		if c != null:
+			c.set_selected(m == k)
+	_update_hints()
 
 
 func _build_startup() -> void:
@@ -850,7 +883,8 @@ func _build_startup() -> void:
 		if k in allowed:
 			c.pressed.connect(func(): choose("startup", k))
 		else:
-			c.disabled = true
+			c.make_inert()
+			_focusables.erase(c)
 	body.add_child(cards)
 	_nav_note(TI.STARTUP_BACK, "info")
 
@@ -943,6 +977,7 @@ func _build_stores() -> void:
 			heroic = true
 	if heroic:
 		body.add_child(SKit.note(TI.STORES_HEROIC, "good", "Heroic"))
+	_heroic_actions(status)
 	# One card per store: its state as a badge, what A does in the footer.
 	var cards := Kit.hbox(18)
 	cards.name = "StoreCards"
@@ -960,9 +995,106 @@ func _build_stores() -> void:
 		if can:
 			c.pressed.connect(func(): open_sign_in(store))
 		else:
-			c.disabled = true
+			c.make_inert()
+			_focusables.erase(c)
 	body.add_child(cards)
 	_nav_note(TI.STORES_LATER)
+
+
+## Heroic is where Epic, GOG and Amazon sign in. Missing: an "Install Heroic" button right here (Flathub, for
+## this user, no password: the same flatpak commands as Moonlight on the Stream page), with its progress
+## shown; installed but a store not signed in: "Open Heroic to sign in".
+func _heroic_actions(status: Dictionary) -> void:
+	var home := str(installer.paths.get("home")) if installer != null and installer.paths != null else OS.get_environment("HOME")
+	var present := not StoresCommon.heroic_roots(home).is_empty()
+	var needs_sign_in := false
+	for store in ["epic", "gog", "amazon"]:
+		var info: Dictionary = status.get(store, {})
+		needs_sign_in = needs_sign_in or (not bool(info.get("signed_in", false)) and str(info.get("how", "")) == "heroic")
+	var busy: bool = installer != null and installer.running
+	if present and not needs_sign_in:
+		return
+	var box := Kit.vbox(10)
+	box.name = "HeroicBox"
+	if not present:
+		box.add_child(SKit.note(TI.HEROIC_NEED, "info", "HeroicNeed"))
+		var line := Kit.label(TI.HEROIC_INSTALLING if busy else "", "MonoLabel", true)
+		line.name = "HeroicLine"
+		line.visible = busy
+		box.add_child(line)
+		var b := SKit.action(TI.HEROIC_INSTALL, "download", "InstallHeroic")
+		b.theme_type_variation = "AccentButton"
+		b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		b.disabled = busy
+		b.pressed.connect(install_heroic)
+		var acts := Kit.hbox(12)
+		acts.name = "HeroicActions"
+		acts.add_child(b)
+		box.add_child(acts)
+		if not busy:
+			_focusables.append(b)
+	else:
+		var b2 := SKit.action(TI.HEROIC_OPEN, "rocket", "OpenHeroic")
+		b2.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		b2.pressed.connect(func(): launch.call(Commands.heroic_open()))
+		var acts2 := Kit.hbox(12)
+		acts2.name = "HeroicActions"
+		acts2.add_child(b2)
+		box.add_child(acts2)
+		_focusables.append(b2)
+	body.add_child(box)
+
+
+## Install Heroic from Flathub (user scope, with progress), then the store rows are read again.
+func install_heroic() -> bool:
+	if installer == null or installer.running:
+		return false
+	var home := str(installer.paths.get("home"))
+	var flat := _which_flatpak()
+	if flat == "":
+		toasts.show_toast(TI.HEROIC_NO_FLATPAK, "alert", "bad")
+		return false
+	if not installer.start_job("heroic", Commands.heroic_install(flat)):
+		return false
+	_redraw_keep_focus()
+	return home != ""
+
+
+## "flatpak" when this system has it (tests: set `flatpak` to say it does).
+var flatpak := ""
+
+
+func _which_flatpak() -> String:
+	if flatpak != "":
+		return flatpak
+	for d in OS.get_environment("PATH").split(":"):
+		if d != "" and FileAccess.file_exists(d.path_join("flatpak")):
+			return "flatpak"
+	return "flatpak" if FileAccess.file_exists("/usr/bin/flatpak") else ""
+
+
+func _on_job_line(id: String, line: String) -> void:
+	if id != "heroic" or plan.step != "stores":
+		return
+	var l: Label = body.find_child("HeroicLine", true, false) as Label
+	if l != null:
+		l.text = line
+		l.visible = true
+
+
+func _on_job_finished(id: String, ok: bool, msg: String) -> void:
+	if id != "heroic":
+		return
+	if ok:
+		# Heroic makes its folder when it first runs; the stores' tools look for it, so it is there now
+		var home := str(installer.paths.get("home"))
+		DirAccess.make_dir_recursive_absolute(home.path_join(".var/app/%s/config/heroic" % Commands.HEROIC_ID))
+		toasts.show_toast(TI.HEROIC_DONE, "check", "good")
+	else:
+		toasts.show_toast(TI.HEROIC_FAILED % msg, "alert", "bad")
+	if plan.step == "stores":
+		show_step()
+		focus_first()
 
 
 func open_sign_in(store: String) -> void:
@@ -985,23 +1117,10 @@ func open_sign_in(store: String) -> void:
 	for b in sign_in.buttons:
 		_focusables.append(b)
 	_focusables.append(back)
-	_link_signin()
+	_link()
 	sign_in.start()
 	if is_inside_tree():
 		sign_in.first_focus().grab_focus()
-
-
-func _link_signin() -> void:
-	var row: Array = sign_in.buttons
-	Kit.link_horizontal(row)
-	var back: Control = _focusables[-1]
-	for b in row:
-		b.focus_neighbor_bottom = b.get_path_to(back)
-		b.focus_neighbor_top = b.get_path_to(b)
-	back.focus_neighbor_top = back.get_path_to(row[0])
-	back.focus_neighbor_bottom = back.get_path_to(next_button)
-	for b in [back_button, skip_button, next_button]:
-		b.focus_neighbor_top = b.get_path_to(back)
 
 
 func _refresh_stores_later() -> void:
@@ -1085,6 +1204,7 @@ func _xess_card() -> void:
 	var c := _card("xess_driver", TI.XESS_TITLE, TI.XESS_LINE, "sparkle", [TI.XESS_BADGE, "info"], TI.XESS_TIME,
 		TI.XESS_FOOT, TI.XESS_ON, row)
 	c.set_selected(on)
+	c.set_hint_glyph("A")
 	c.pressed.connect(func():
 		var now := not bool(plan.choices.get("xess_driver", false))
 		plan.set_choice("xess_driver", now)
@@ -1653,6 +1773,7 @@ func _build_maintenance() -> void:
 		same.collapse_hint = false
 		same.set_hint(TI.MAINT_UP_TO_DATE_LINE)
 		same.button.disabled = true
+		same.button.focus_mode = Control.FOCUS_NONE
 		_focusables.erase(same.button)
 	var rm := _row("maint_remove", TI.MAINT_REMOVE, "", TI.MAINT_REMOVE_LINE, "x")
 	rm.collapse_hint = false
@@ -1782,7 +1903,9 @@ func focus_first() -> void:
 			f = c
 			break
 	# Easy mode's store step starts on Continue: one press moves on, signing in is a step up
-	var on_next: bool = plan.step in ["summary", "uninstall", "finish", "done"] or (plan.step == "stores" and plan.mode == "easy" and sign_in == null)
+	# A page starts on its first actionable item, at the top. Only a page whose one action is the primary
+	# button (the finish list, the done page) starts on Continue.
+	var on_next: bool = plan.step in ["finish", "done"]
 	if f == null or on_next and next_button.visible:
 		f = next_button if next_button.visible else f
 	if f != null:
@@ -1794,40 +1917,82 @@ func focusables() -> Array:
 	return _focusables
 
 
+## D-pad order: where the controls are on screen (installer_nav.gd). Applied now (the best guess before the
+## page has been laid out) and again once it has: a page keeps its focus order from the first frame.
 func _link() -> void:
-	var navs: Array = [back_button, skip_button, next_button].filter(func(b): return b.visible)
-	Kit.link_horizontal(navs)
-	var chain: Array = _focusables.filter(func(c): return not (c is BaseButton and c.disabled))
-	Kit.link_vertical(chain)
-	var last: Control = chain[-1] if not chain.is_empty() else null
-	for b in navs:
-		b.focus_neighbor_top = b.get_path_to(last if last != null else b)
-		b.focus_neighbor_bottom = b.get_path_to(b)
-	if last != null and not navs.is_empty():
-		last.focus_neighbor_bottom = last.get_path_to(next_button if next_button.visible else navs[-1])
-	# Rows that sit side by side (cards, fail actions) move left / right; down
-	# goes to whatever follows the row in the chain (else Continue), up to
-	# what comes before it.
-	for row_name in ["FailActions", "Modes", "Startup", "StoreCards", "Themes", "Actions"]:
-		var r := body.find_child(row_name, true, false)
-		if r == null:
-			continue
-		var items: Array = r.get_children().filter(func(c): return c is BaseButton and not c.disabled and c in chain)
-		if items.is_empty():
-			continue
-		Kit.link_horizontal(items)
-		var first_i := chain.find(items[0])
-		var last_i := chain.find(items[-1])
-		var below: Control = chain[last_i + 1] if last_i + 1 < chain.size() else (next_button if next_button.visible else null)
-		var above: Control = chain[first_i - 1] if first_i > 0 else null
-		for c in items:
-			c.focus_neighbor_bottom = c.get_path_to(below if below != null else c)
-			c.focus_neighbor_top = c.get_path_to(above if above != null else c)
-		if below != null and below in chain:
-			below.focus_neighbor_top = below.get_path_to(items[0])
-		if last_i == chain.size() - 1:
-			for b in navs:
-				b.focus_neighbor_top = b.get_path_to(items[0])
+	_apply_nav()
+	if is_inside_tree():
+		_link_token += 1
+		_relink_later(_link_token)
+
+
+var _link_token := 0
+
+
+func _relink_later(token: int) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if token == _link_token and is_inside_tree():
+		_apply_nav()
+
+
+## The page's focusable controls (top to bottom as built) and then the visible buttons under it in the
+## order they sit (Back / Skip / Continue), with their kinds for installer_nav.gd.
+func nav_controls() -> Array:
+	var out: Array = []
+	for c in _focusables:
+		if c is Control and is_instance_valid(c) and c.visible and c.focus_mode != Control.FOCUS_NONE and not (c is BaseButton and c.disabled):
+			out.append(c)
+	for c in nav.get_children():
+		if c is BaseButton and c.visible and not c.disabled and c.focus_mode != Control.FOCUS_NONE:
+			out.append(c)
+	return out
+
+
+func _apply_nav() -> void:
+	var ctl: Array = nav_controls()
+	if ctl.is_empty():
+		return
+	var kinds: Array = []
+	var rects: Array = []
+	var laid_out := is_inside_tree()
+	for c in ctl:
+		kinds.append(Nav.NAV if c.get_parent() == nav else Nav.ITEM)
+		var r: Rect2 = (c as Control).get_global_rect()
+		laid_out = laid_out and r.size.x > 1.0 and r.size.y > 1.0
+		rects.append(r)
+	if not laid_out:
+		# not laid out (outside the tree, or the first frame): one control per row, buttons in one row below
+		var row := 0
+		var col := 0
+		for i in ctl.size():
+			if kinds[i] == Nav.NAV:
+				rects[i] = Rect2(col * 220.0, 100000.0, 200.0, 50.0)
+				col += 1
+			else:
+				rects[i] = Rect2(0.0, row * 80.0, 600.0, 60.0)
+				row += 1
+	# the first and last control of the page show the page's own top and bottom (focus_scroll.gd), so
+	# nothing above or below the focusable rows is out of reach
+	var first := true
+	var last_item: Control = null
+	for i in ctl.size():
+		if kinds[i] == Nav.ITEM:
+			ctl[i].remove_meta("scroll_edge")
+			if first:
+				ctl[i].set_meta("scroll_edge", "start")
+				first = false
+			last_item = ctl[i]
+	if last_item != null and not last_item.has_meta("scroll_edge"):
+		last_item.set_meta("scroll_edge", "end")
+	var nb: Array = Nav.neighbors(kinds, rects)
+	for i in ctl.size():
+		var c: Control = ctl[i]
+		var d: Dictionary = nb[i]
+		c.focus_neighbor_left = c.get_path_to(ctl[d["left"]] if d["left"] >= 0 else c)
+		c.focus_neighbor_right = c.get_path_to(ctl[d["right"]] if d["right"] >= 0 else c)
+		c.focus_neighbor_top = c.get_path_to(ctl[d["up"]] if d["up"] >= 0 else c)
+		c.focus_neighbor_bottom = c.get_path_to(ctl[d["down"]] if d["down"] >= 0 else c)
 
 
 ## `secret`: an API key or password, drawn as dots (Show reveals it).

@@ -47,6 +47,9 @@ var _badge_box: HBoxContainer
 ## Optional card look for the row (and its line when carded) instead of the
 ## theme's RowButton box, e.g. the quick menu's tinted per-game switch.
 var card_box: StyleBox
+## Left / right step through the values (settings pages). Off in the installer: a choice there changes only on
+## A, and the d-pad only moves focus between controls and columns.
+var step_on_pad := true
 
 
 func setup(setting_key: String, title: String, vals: Array, lbls: Array, current: Variant, icon := "") -> void:
@@ -335,6 +338,8 @@ func _draw() -> void:
 
 
 func _on_gui_input(event: InputEvent) -> void:
+	if not step_on_pad:
+		return
 	if event.is_action_pressed("ui_left", true):
 		step(-1)
 		button.accept_event()

@@ -138,6 +138,15 @@ func _run() -> void:
 		at("summary")
 		progress(["ok", "failed"], "failed", "no_password")
 		await shot("installer_failed")
+	# a refusal with what a fix really prints: a long line with a path that has no spaces (device finding 11)
+	if want("installer_failed_long"):
+		at("summary")
+		progress(["ok", "failed"], "failed", "error: /etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml exists and isn't GameCove's or ClawDeck's; leaving it. Try again after removing /etc/inputplumber/capability_maps/msiclaw_claw8ex.yaml and /etc/systemd/system/steamos-manager.service.d/50-clawdeck-quiet-split-lock.conf then restart the whole handheld /var/lib/gamecove/backup/clawdeck/devices.d/50-msi_claw8_ex_ai_cg3em.yaml/with/a/very/long/unbroken/path/that/has/no/spaces/in/it/at/all/so/the/line/can/only/break/inside/the/word")
+		# the failed step's own last output line sits under its title too (the service's task_line)
+		var ln: Label = screen.task_rows[1].find_child("Line", true, false)
+		ln.text = "error: /etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml exists and isn't GameCove's or ClawDeck's; leaving it"
+		ln.visible = true
+		await shot("installer_failed_long")
 	if want("installer_done"):
 		at("summary")
 		progress(["ok", "ok", "pending", "pending", "pending", "ok", "ok", "pending", "ok"], "ok")
