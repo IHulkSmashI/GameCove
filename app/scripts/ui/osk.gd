@@ -808,8 +808,30 @@ func _hidden() -> bool:
 	return false
 
 
+## Screens that sit over a keyboard and own the pad while they are shown (main.gd registers the quick menu): a
+## keyboard open under one stays open but takes nothing (Library search, then Quick Access: LB / RB moved the
+## caret and B cancelled the search instead of going to the menu).
+static var covers: Array = []
+
+
+static func add_cover(n: Node) -> void:
+	covers = covers.filter(func(c): return is_instance_valid(c))   # a main scene that was closed and made again
+	if not n in covers:
+		covers.append(n)
+
+
+## A registered cover is shown and this keyboard is not part of it (the quick menu may open a keyboard of its own).
+func _covered() -> bool:
+	for n in covers:
+		if is_instance_valid(n) and n is CanvasItem and (n as CanvasItem).visible and not (n as Node).is_ancestor_of(self):
+			return true
+	return false
+
+
 func _input(event: InputEvent) -> void:
 	if not showing:
+		return
+	if _covered():
 		return
 	# Open on a screen that has since been left (Library search, then Guide to Home): hidden, the
 	# keyboard must not take B, Start, X, Y or the bumpers from whatever is in front now

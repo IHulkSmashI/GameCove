@@ -21,6 +21,7 @@ const TopBar := preload("res://scripts/ui/top_bar.gd")
 const Toasts := preload("res://scripts/ui/toast.gd")
 const LaunchOverlay := preload("res://scripts/ui/launch_overlay.gd")
 const SteamTrip := preload("res://scripts/ui/steam_trip.gd")
+const Osk := preload("res://scripts/ui/osk.gd")
 const StatusPanel := preload("res://scripts/ui/status_panel.gd")
 const Sounds := preload("res://scripts/ui/sounds.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
@@ -334,6 +335,7 @@ func _ready() -> void:
 	actions.name = "Actions"
 	add_child(actions)
 	quick_menu = QuickMenu.new()
+	Osk.add_cover(quick_menu)   # a keyboard open under the menu takes nothing while it is shown
 	var qm_services := {"actions": actions, "recording": recording, "device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
 	if _svc("Controls") != null:
 		qm_services["controls"] = _svc("Controls")
