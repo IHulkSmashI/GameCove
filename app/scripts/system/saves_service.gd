@@ -941,8 +941,11 @@ func _finish_upload(key: String, entry: Dictionary, plan: Dictionary, parts: Arr
 ## note's own time for a forced one) outside the windows of our own runs, or whose cloud
 ## listing we couldn't read.
 static func _gog_finish_held(note: Dictionary, parts: Array, ts: Dictionary, listings: Dictionary) -> bool:
-	var since: Dictionary = note.get("since", {}) if note.get("since") is Dictionary else {}
-	var runs: Dictionary = note.get("runs", {}) if note.get("runs") is Dictionary else {}
+	# a note a build before "since" / "runs" left says nothing about whose cloud changes are whose: ask, never force
+	if not note.get("since") is Dictionary or not note.get("runs") is Dictionary:
+		return true
+	var since: Dictionary = note["since"]
+	var runs: Dictionary = note["runs"]
 	for l in parts:
 		var name := str(l["name"])
 		if float(str(ts.get(name, "0"))) <= 0.0:

@@ -1664,6 +1664,38 @@ func test_epic_cut_upload_with_a_newer_cloud_save_since_asks() -> void:
 	_done(w)
 
 
+## A note a pre-fix build left (no "since" / "runs") on a synced GOG game was forced at app start: with nothing saying
+## whose cloud changes are whose, the cut upload is asked about, not finished.
+func test_a_legacy_upload_note_is_asked_about_not_forced() -> void:
+	var w := _world("gog_legacy_note")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload_after = 1
+	w["s"].after_exit(w["gog"])
+	cloud.cut_upload_after = -1
+	var note: Dictionary = Dictionary(_cfg(w, "gog:1207", "uploading", {})).duplicate(true)
+	note.erase("since")
+	note.erase("runs")
+	SettingsFile.update_cfg(w["s"].cfg_path, func(c: ConfigFile): c.set_value("game:gog:1207", "uploading", note))
+	cloud.did.clear()
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq([cloud.cloud["saves/slot1.sav"]["data"], cloud.cloud["saves/slot2.sav"]["data"]], ["hour 2", "hour 1"], "nothing was forced over the cloud")
+	ok(cloud.did.filter(func(x): return str(x).begins_with("force_upload") or str(x).begins_with("upload")).is_empty(), "no upload was started")
+	ok(got.size() == 1 and (got[0].has("conflict") or got[0].has("go")), "the answer came")
+	# the rule itself: another device's upload after our last sync but before the note's own time was taken for ours
+	var parts := [{"name": "saves", "path": w["gsaves"]}]
+	var listing := {"saves": [{"name": "saves/slot1.sav", "t": T0 + 500}]}
+	var ts := {"saves": str(T0 + 100)}
+	ok(Service._gog_finish_held({"at": T0 + 900}, parts, ts, listing), "a note with no since / runs is held: ask")
+	_done(w)
+
+
 ## Epic: an upload killed before legendary wrote its manifest. The next start (the Library
 ## loading) finishes it on its own, and says so.
 func test_epic_cut_upload_is_finished_at_the_next_start() -> void:
