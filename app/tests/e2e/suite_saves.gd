@@ -27,6 +27,10 @@ func _fake(look: String) -> Array:
 	sv.store_string("progress")
 	sv.close()
 	var s: Node = main().saves
+	# the switches are the tests' own: an earlier randomized test (random pad bursts, seed-dependent) may
+	# have pressed A on Settings > Saves and left "Sync cloud saves" or this game's switch off
+	s.set_allowed(true)
+	s.set_enabled(EPIC["key"], true)
 	s.entry_lookup = func(_k: String) -> Dictionary: return EPIC.merged({"config_dir": dir, "platform": "Windows", "prefix": ""})
 	s.tools_lookup = func() -> Dictionary: return {"legendary": "/usr/bin/legendary", "heroic_flatpak": []}
 	s.run = func(_p: String, args: PackedStringArray) -> Dictionary:
