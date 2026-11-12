@@ -79,6 +79,19 @@ func _power(bus_fixture: String, row: Dictionary, root: String) -> Node:
 	return p
 
 
+func test_a_second_start_keeps_one_15s_check() -> void:
+	var root := _sys("one_timer")
+	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)
+	p._start_timer()
+	p._start_timer()
+	var n := 0
+	for c in p.get_children():
+		if c is Timer and is_equal_approx(c.wait_time, p.SOURCE_CHECK_S):
+			n += 1
+	eq(n, 1, "the charger / resume check is one Timer however often it is started")
+	p.free()
+
+
 func test_claw_uses_powerstation_and_fixes() -> void:
 	var root := _sys("claw_detect")
 	var p := _power("bus_claw_powerstation.json", _row("msi-claw-8-ex"), root)

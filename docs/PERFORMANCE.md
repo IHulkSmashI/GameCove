@@ -83,7 +83,9 @@ tiny sysfs reads) runs on start, on window resize and on focus-in only: no Timer
   sleep up to 33 ms between iterations whenever nothing of ours is visible (a game, Steam or
   any other window in front), instead of 6.9 ms. It never sleeps past the next running
   Timer, wakes to full speed the moment the quick menu opens or our window comes back, and
-  for 30 s after a resume from sleep.
+  for 30 s after a resume from sleep. When Power's 15 s check hands its work to the worker it
+  also stays at full speed for 0.25 s, so the worker's answer (`resumed` after a sleep) is not
+  left waiting for a 33 ms sleep: that wait, not the work (0.3 ms), was the 64 ms on CI.
 - **Power's 15 s check** (charger plugged or not, and noticing a sleep while a game is in
   front so a firmware-reset TDP, fan table or charge limit is put back) and the **thermal
   guard** (10 s, only while GameCove holds thermald). Safety; they stay.

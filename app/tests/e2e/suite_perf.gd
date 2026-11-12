@@ -234,6 +234,7 @@ func test_resume_is_handled_promptly_behind_a_game() -> void:
 	var reg: Node = controls()
 	var timers: Array = p.get_children().filter(func(n): return n is Timer and is_equal_approx(n.wait_time, p.SOURCE_CHECK_S) and not n.is_stopped())
 	ok(not timers.is_empty(), "Power's resume check runs behind the game")
+	ok(p.check_queued.is_connected(_bg().burst), "main loop stays awake for the worker's answer after the check (no 33 ms sleep in the way)")
 	if timers.is_empty():
 		return
 	var offset := [0.0]

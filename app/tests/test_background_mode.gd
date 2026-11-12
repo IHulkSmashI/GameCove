@@ -55,6 +55,24 @@ func test_the_quick_menu_restores_full_speed_at_once() -> void:
 	_done(m)
 
 
+func test_a_worker_job_gets_full_speed_for_a_moment() -> void:
+	var clock := [1000.0, 50_000]
+	var m := _mode(clock)
+	m.set_front(false)
+	eq(OS.low_processor_usage_mode_sleep_usec, BackgroundMode.BACK_SLEEP_US, "behind a game: the long sleep")
+	m.burst()
+	eq(OS.low_processor_usage_mode_sleep_usec, 6900, "a worker's answer is coming: full speed at once")
+	m._tick()
+	eq(OS.low_processor_usage_mode_sleep_usec, 6900, "and the next iteration keeps it")
+	clock[1] += int(BackgroundMode.WORKER_BURST_S * 1000.0) + 10
+	m._tick()
+	eq(OS.low_processor_usage_mode_sleep_usec, BackgroundMode.BACK_SLEEP_US, "then the long sleep again")
+	m.set_front(true)
+	m.burst()
+	ok(not m.is_processing(), "in front a burst changes nothing")
+	_done(m)
+
+
 ## Stands in for a Timer in the tree (the unit runner's tree isn't running).
 class FakeTimer extends RefCounted:
 	var time_left := 0.0

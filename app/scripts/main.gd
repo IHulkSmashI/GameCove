@@ -637,6 +637,8 @@ func _wire_services() -> void:
 		power.autotune_limit.connect(_on_autotune_limit)
 	if power != null and power.has_signal("resumed"):
 		power.resumed.connect(_on_power_resumed)
+	if power != null and power.has_signal("check_queued") and background != null:
+		power.check_queued.connect(background.burst)
 	# The s-hw Controller service may emit ui_action("home" | "quick_menu" | "osk")
 	# for Guide / QuickAccess / Keyboard buttons it intercepts in InputPlumber.
 	var ctl: Node = _svc("Controller")

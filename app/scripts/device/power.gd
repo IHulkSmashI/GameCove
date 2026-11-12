@@ -45,6 +45,9 @@ signal battery_level(percent: int, plugged: bool)
 ## After a resume from sleep, once the TDP was put back (main.gd calls request_refresh()).
 ## Providers re-apply what the firmware may have reset. Main thread.
 signal resumed()
+## The 15 s check was queued to the worker (main thread): main.gd keeps the main loop at full
+## speed for a moment behind a game, so what the worker hands back is not left waiting for a sleep.
+signal check_queued()
 
 const Runner := preload("res://scripts/device/command_runner.gd")
 const Busctl := preload("res://scripts/device/busctl.gd")
@@ -229,11 +232,15 @@ func _start() -> bool:
 
 
 func _start_timer() -> void:
+	if _timer != null and is_instance_valid(_timer) and _timer.get_parent() == self:
+		return   # a second start (the e2e world re-runs it) must not stack a second 15 s check
 	_timer = Timer.new()
 	_timer.wait_time = SOURCE_CHECK_S
-	_timer.timeout.connect(func(): _queue("source", func(): source_tick(); return true))
+	_timer.timeout.connect(func():
+		_queue("source", func(): source_tick(); return true)
+		check_queued.emit())
+	_timer.autostart = true   # starts as it enters the tree
 	add_child(_timer)
-	_timer.start()
 
 
 func _before_file() -> String:
