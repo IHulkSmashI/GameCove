@@ -158,6 +158,28 @@ func test_status_lines_cover_every_state() -> void:
 	eq(TS.drain_line({"watts": 6.25, "hours": -1.0}), "Drains about 6.2 W on battery", "no full-charge figure")
 
 
+## Every state the service can leave a game in has a status line and a short label on Settings >
+## Saves (they were blank for "upload cut off", "upload finished" and "couldn't save state").
+## The states are read from the service's own source, so a new one fails here until it has both.
+func test_every_state_the_service_emits_has_a_line_and_a_short_label() -> void:
+	var emitted := {"never": true, "pending_down": true, "synced": true, "uploaded": true, "downloaded": true}
+	var src := FileAccess.get_file_as_string("res://scripts/system/saves_service.gd")
+	for pat in ["_set_status\\(key, \"([a-z_]+)\"", "st\\[\"state\"\\] = \"([a-z_]+)\"", "\"state\": \"([a-z_]+)\"",
+			"return \"(offline|failed|upload_cut)\""]:
+		for m in RegEx.create_from_string(pat).search_all(src):
+			emitted[m.get_string(1)] = true
+	# a plan's "why" becomes the state (signed_out, no_tool, ...); "ask" is handled inside the service
+	for m in RegEx.create_from_string("\"why\": \"([a-z_]+)\"").search_all(FileAccess.get_file_as_string("res://scripts/system/cloud_saves.gd")):
+		if m.get_string(1) != "ask":
+			emitted[m.get_string(1)] = true
+	ok(emitted.size() > 20, "the states were found (%d)" % emitted.size())
+	for state in emitted:
+		ok(TS.STATE.has(state), "%s has a status line" % state)
+		ok(str(SavesPage.SHORT.get(state, "")) != "", "%s has a short label on Settings > Saves" % state)
+	for state in TS.STATE:
+		ok(str(SavesPage.SHORT.get(state, "")) != "", "%s (a known state) has a short label" % state)
+
+
 func test_game_page_has_the_card_for_epic_only_and_the_drain_line() -> void:
 	var s := FakeSaves.new()
 	var bat := FakeBattery.new()

@@ -675,7 +675,7 @@ func _epic_download(key: String, entry: Dictionary, plan: Dictionary, app: Strin
 	if folder == "":
 		folder = str(look.get("save_path", ""))
 	if folder == "":
-		return _set_status(key, "no_path", "", times)
+		return _set_status(key, "not_set_up", "", times)   # no folder to download into yet (legendary's no_path)
 	var title := str(entry.get("title", key))
 	# a conflict choice: its backup is the one copy of the side not kept, so it's pinned
 	var chosen := step == "force_download"

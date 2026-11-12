@@ -14,8 +14,10 @@ const SHORT := {"synced": "Synced", "uploaded": "Synced", "downloaded": "Synced"
 	"no_saves": "No saves yet", "pending_up": "Waiting", "pending_down": "Waiting", "game_running": "Waiting", "conflict": "Choose",
 	"offline": "Offline", "failed": "Didn't sync", "backup_failed": "Didn't sync", "too_big": "Upload only",
 	"not_set_up": "After first play", "unsupported": "No cloud saves", "signed_out": "Signed out",
-	"no_tool": "Needs Heroic", "linux": "Windows only", "off": "Off", "disabled": "Off", "never": "Not yet"}
-const SHORT_TONE := {"Synced": "good", "Restored": "good", "Choose": "warn", "Offline": "warn", "Didn't sync": "bad"}
+	"no_tool": "Needs Heroic", "linux": "Windows only", "off": "Off", "disabled": "Off", "never": "Not yet",
+	"upload_cut": "Cut off", "upload_finished": "Synced", "state_unsaved": "Paused"}
+const SHORT_TONE := {"Synced": "good", "Restored": "good", "Choose": "warn", "Offline": "warn", "Didn't sync": "bad",
+	"Cut off": "warn", "Paused": "warn"}
 
 var sheet: Control
 var _return_key := ""
