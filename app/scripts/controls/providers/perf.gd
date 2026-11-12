@@ -54,10 +54,13 @@ var _prepared := {}               # game keys set up ahead of their start this s
 var _last_did := {}               # game key -> what prepare changed, for the mode row's help
 var _running_key := ""            # the game running now (session_wiring through ctx["upscale_running"])
 var _running_since := 0           # Time.get_ticks_msec() when it started
-var _pending := {}                # game key -> {"verb", "extra"}: a change asked for while that game ran
+var _pending := {}                # game key -> {"verb", "extra"}: a change asked for while that game ran (also in the store)
 ## Helper commands that change the game's files: never while that game runs
 ## (its DLLs are loaded; review M7). They wait and run once it has quit.
-const CHANGES_FILES := ["choose", "mode", "opt-in"]
+const CHANGES_FILES := ["choose", "mode", "opt-in", "game-update"]
+## Where a held change is kept with the game's values: a power-off while the game ran (a handheld's usual end of a
+## session) must not lose the pick silently.
+const PENDING_KEY := "upscale_pending"
 var _check := {}                  # the helper's last "check" answer
 var _check_t := -1
 var _mutex := Mutex.new()
@@ -535,7 +538,13 @@ func _upscale_run(verb: String, extra: Array = []) -> Dictionary:
 	if verb in CHANGES_FILES and is_running(k):
 		# the game has these files loaded: the change waits until it has quit (flush_pending)
 		_mutex.lock()
-		_pending[k] = {"verb": verb, "extra": extra.duplicate()}
+		var held: Dictionary = _pending_of(k).duplicate()
+		if verb == "game-update":
+			held["game_update"] = true          # beside a held pick: both are made, the pick first
+		else:
+			held["verb"] = verb
+			held["extra"] = extra.duplicate()
+		_pending_put(k, held)
 		var c: Dictionary = _status_cache.get(k, {})
 		_mutex.unlock()
 		var env: Variant = (c.get("r", {}) as Dictionary).get("env", {}) if not c.is_empty() else store.get_value(k, "upscale_env", {})
@@ -567,21 +576,51 @@ func is_running(key: String) -> bool:
 	return r
 
 
+## The held change for a game: in memory, else the one saved with its values (a restart). Call with _mutex held.
+func _pending_of(key: String) -> Dictionary:
+	var p: Dictionary = _pending.get(key, {})
+	if p.is_empty() and store != null:
+		var saved: Variant = store.get_value(key, PENDING_KEY, {})
+		if saved is Dictionary:
+			var sd: Dictionary = saved
+			if (str(sd.get("verb", "")) in CHANGES_FILES and sd.get("extra") is Array) or bool(sd.get("game_update", false)):
+				p = sd
+				_pending[key] = p
+	return p
+
+
+func _pending_put(key: String, p: Dictionary) -> void:
+	_pending[key] = p
+	if store != null:
+		store.set_value(key, PENDING_KEY, p)
+
+
+func _pending_drop(key: String) -> void:
+	_pending.erase(key)
+	if store != null:
+		store.set_value(key, PENDING_KEY, null)
+
+
 ## The change that waited for the game to quit, made now. True when one ran.
 func flush_pending(key: String) -> bool:
 	_mutex.lock()
-	var p: Dictionary = _pending.get(key, {})
+	var p: Dictionary = _pending_of(key)
 	var waiting := not p.is_empty() and _running_key != key
 	if waiting:
-		_pending.erase(key)
+		_pending_drop(key)
 	_mutex.unlock()
 	if not waiting or key != game_key():
 		if waiting:
 			_mutex.lock()
-			_pending[key] = p          # not the open game: kept until it is looked at
+			_pending_put(key, p)       # not the open game: kept until it is looked at
 			_mutex.unlock()
 		return false
-	var r := _upscale_run(str(p["verb"]), p["extra"])
+	var r := {"ok": true}
+	if str(p.get("verb", "")) != "":
+		r = _upscale_run(str(p["verb"]), p["extra"])
+	if bool(p.get("game_update", false)):
+		var ru := _upscale_run("game-update")
+		r = ru if not bool(ru.get("ok", false)) else r
 	_forget_status()
 	if bool(r.get("ok", false)):
 		var env: Variant = upscale_status().get("env", {})
@@ -596,14 +635,14 @@ func upscale_status() -> Dictionary:
 	flush_pending(k)
 	_mutex.lock()
 	var c: Dictionary = _status_cache.get(k, {})
-	var waiting: Dictionary = _pending.get(k, {})
+	var waiting: Dictionary = _pending_of(k)
 	_mutex.unlock()
 	if not c.is_empty() and Time.get_ticks_msec() - int(c["t"]) < STATUS_TTL_MS:
 		return _with_pending(c["r"], waiting)
 	var r := _upscale_run("status")
 	_mutex.lock()
 	_status_cache[k] = {"t": Time.get_ticks_msec(), "r": r}
-	var p: Dictionary = _pending.get(k, {})
+	var p: Dictionary = _pending_of(k)
 	_mutex.unlock()
 	return _with_pending(r, p)
 

@@ -1064,6 +1064,43 @@ func test_upscaler_changes_wait_until_the_game_has_quit() -> void:
 	_done(w)
 
 
+func test_a_held_change_survives_a_power_off_and_game_update_is_held_too() -> void:
+	# review M: "game-update" ran while the game had its files loaded, and a held change lived in memory only, so
+	# a handheld switched off during the game lost the pick silently
+	var w := _world("held_persist", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "fsr4_amd", "fg": 0, "owner": "gamecove",
+		"env": {}, "game_update": true, "opti_version": "0.9.4", "opti_latest": "0.9.5"}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 4.1.2.", "auto": true, "refused": null}
+	runner.answers["choose"] = {"ok": true, "env": {}}
+	runner.answers["game-update"] = {"ok": true, "version": "0.9.5"}
+	_with_game(w, EPIC)
+	w["ctx"]["upscale_launch_grace_ms"] = 0
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	runner.calls.clear()
+	reg.set_value("perf.upscaler", "fsr31")
+	reg.set_value("perf.upscale_game_update", true)
+	eq(_calls_with(runner, "choose").size() + _calls_with(runner, "game-update").size(), 0, "nothing is written while the game runs")
+	ok(w["p"].store.has_value("epic:abc", "upscale_pending"), "the held change is kept with the game's values")
+	# the power goes off: a new session, nothing in memory
+	var p2 = PerfProvider.new()
+	p2.setup(w["ctx"])
+	(w["ctx"]["upscale_running"] as Callable).call("")
+	ok(p2.flush_pending("epic:abc"), "after the restart it is made once")
+	eq([_calls_with(runner, "choose").size(), _calls_with(runner, "game-update").size()], [1, 1], "the pick and the update both ran: " + str(runner.calls))
+	ok(not p2.store.has_value("epic:abc", "upscale_pending"), "and is gone from the store")
+	ok(not p2.flush_pending("epic:abc"), "not made twice")
+	# game-update alone is held as well
+	w["p"]._pending.clear()
+	(w["ctx"]["upscale_running"] as Callable).call("epic:abc")
+	runner.calls.clear()
+	w["p"]._upscale_run("game-update")
+	eq(_calls_with(runner, "game-update").size(), 0, "game-update waits while the game runs")
+	_done(w)
+
+
 func test_lossless_is_off_when_the_helper_finds_anticheat() -> void:
 	# the app's own data has no anti-cheat record; the game's folder (or the list's notes) does
 	var w := _world("lsfg_ac_folder", ALLY_X)
