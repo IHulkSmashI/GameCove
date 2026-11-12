@@ -15,9 +15,11 @@ extends Node
 ## Status per game in user://saves.cfg [game:<key>]: enabled, last_sync, state, at, detail,
 ## local, remote, pending ({"backup": id, "empty": [folders]}: a download is replacing the save folders right
 ## now; still there at the next sync means it was cut off by a crash or power loss and is put
-## right first), uploading ({"at", "fp": the folders' fingerprint, "folders"}: an upload is
-## going up right now; still there at the next sync means it was cut off and the cloud may hold
-## part of it: finished first, see _finish_upload), restored_at (a backup was put back and not synced since), prefer (the side
+## right first), uploading ({"at", "fp": the folders' fingerprint, "folders", "since":
+## {location: from when a cloud change is someone else's}, "runs": {location: [[start, end]]
+## of our tool runs}}: an upload may be going up right now; kept after a failed run only when
+## the tool said the upload began, so still there at the next sync means it was cut off and
+## the cloud may hold part of it: finished first if that's safe, see _finish_upload), restored_at (a backup was put back and not synced since), prefer (the side
 ## a conflict sheet offers first: "local" after a restore), gog_ts ({location: gogdl timestamp}), gog_paths ({location: the folder that
 ## timestamp is about}), own (we keep our own sync times: Heroic's are no longer a fallback);
 ## [gog_remote] caches GOG's answer per client id.
@@ -576,7 +578,7 @@ func _sync_epic(key: String, entry: Dictionary, tools: Dictionary, mode: String)
 				return _set_status(key, "failed", NOTE_FAILED)
 			var up := _legendary(plan, app, "upload")
 			if up["state"] in ["offline", "failed"]:
-				return _set_status(key, "upload_cut", str(up.get("error", "")), times)
+				return _set_status(key, _upload_failed_state(key, up["acted"] == "upload", up["state"] == "offline"), str(up.get("error", "")), times)
 			_clear_upload(key)
 			# legendary names the new cloud save by the newest local file's time
 			return _set_status(key, "uploaded", "", times.merged({"synced": true, "synced_remote": look["local"]}, true))
@@ -709,13 +711,65 @@ func _recover(key: String, title: String, parts: Array) -> String:
 	return ""
 
 
-## An upload is about to go up (worker thread): noted first, with what the folders hold now,
-## so one cut short (the 90 s cap, the app or the power going) is found and finished by the
-## next sync before anything else touches the game's saves (review at ff76ca4, medium: a
+## An upload may be about to go up (worker thread): noted first, with what the folders hold
+## now, so one cut short (the 90 s cap, the app or the power going) is found and finished by
+## the next sync before anything else touches the game's saves (review at ff76ca4, medium: a
 ## cut-off GOG upload left the cloud a mix of new and old files with nothing to finish it).
-func _mark_upload(key: String, parts: Array) -> void:
-	var note := {"at": int(clock.call()), "fp": SaveBackup.fingerprint(parts), "folders": parts.map(func(p): return str(p["path"]))}
+## The note only stays when the tool's output shows the upload began, or when the tool never
+## came back (a crash: we can't know); a run that failed before it began takes it away again
+## (review at 56f5255, B1: an offline exit left it and the next launch forced this
+## handheld's save over the cloud's). `since` ({location: sync time}): from when a change in
+## the cloud is someone else's for that location (default: now; a forced choice already
+## looked at the cloud). "runs" ({location: [[start, end]]}) gets the time window of each
+## gogdl run made under the note (_gogdl_up), so finishing can tell our half upload from
+## another device's save.
+func _mark_upload(key: String, parts: Array, since := {}) -> void:
+	var now := int(clock.call())
+	var note := {"at": now, "fp": SaveBackup.fingerprint(parts), "folders": parts.map(func(p): return str(p["path"])),
+		"since": since, "runs": {}}
 	_noted = SettingsFile.update_cfg(cfg_path, func(c: ConfigFile): c.set_value(_sec(key), "uploading", note)) == OK
+
+
+## Notes a gogdl run under the upload note for location `name` (end 0: it started, `end`:
+## it came back). Nothing when there is no note.
+func _note_run(key: String, name: String, start: int, end := 0) -> void:
+	SettingsFile.update_cfg(cfg_path, func(c: ConfigFile):
+		var sec := _sec(key)
+		var cur: Variant = c.get_value(sec, "uploading", null)
+		if not cur is Dictionary or cur.is_empty():
+			return false
+		var note: Dictionary = cur.duplicate(true)
+		var runs: Dictionary = note.get("runs", {}) if note.get("runs") is Dictionary else {}
+		var list: Array = runs.get(name, []) if runs.get(name) is Array else []
+		if end == 0:
+			list.append([start, 0])
+		else:
+			for i in list.size():
+				if list[i] is Array and int(list[i][0]) == start:
+					list[i] = [start, end]
+		runs[name] = list
+		note["runs"] = runs
+		c.set_value(sec, "uploading", note)
+		return true)
+
+
+## A gogdl run that may upload, with its time window noted under the upload note.
+func _gogdl_up(key: String, plan: Dictionary, entry: Dictionary, loc: Dictionary, ts: String, step: String) -> Dictionary:
+	var start := int(clock.call())
+	_note_run(key, str(loc["name"]), start)
+	var r := _gogdl(plan, entry, loc, ts, step)
+	_note_run(key, str(loc["name"]), start, maxi(int(clock.call()), start + 1))
+	return r
+
+
+## A run under the upload note failed. Its upload began (gogdl / legendary said so): the cloud
+## may hold part of it, the note stays and the state is "upload_cut". It never began: nothing
+## went up, the note goes and the state says why (offline | failed).
+func _upload_failed_state(key: String, began: bool, offline: bool) -> String:
+	if began:
+		return "upload_cut"
+	_clear_upload(key)
+	return "offline" if offline else "failed"
 
 
 func _clear_upload(key: String) -> void:
@@ -724,13 +778,6 @@ func _clear_upload(key: String) -> void:
 			return false
 		c.erase_section_key(_sec(key), "uploading")
 		return true)
-
-
-## A gogdl run that may upload location `l` with sync time `ts`: there are files and some is
-## newer than the time (or there is no time). The same test as _gog_upload_guard's.
-static func _gog_may_upload(l: Dictionary, ts: String) -> bool:
-	var st := CloudSaves.dir_stats(str(l["path"]))
-	return int(st["files"]) > 0 and (float(ts) <= 0.0 or int(st["newest"]) >= int(float(ts)))
 
 
 ## The game's save folders as a sync sees them ([] when there is no plan).
@@ -754,10 +801,16 @@ func _epic_parts(entry: Dictionary, plan: Dictionary, app: String) -> Array:
 
 ## An upload of this game was cut short (its note from _mark_upload is still there): the cloud
 ## may hold part of it. Before anything else syncs:
-##  - the folders are as they were then: the upload is finished (a forced one, so every file
-##    goes up and the cloud ends up exactly this handheld's save), after a copy of the cloud
-##    as it is now is kept. Not reachable: nothing else syncs for this game ("upload_cut"),
-##    the game still starts, and the next sync tries again;
+##  - the folders are as they were then, and the cloud changed in no way our own upload can
+##    explain: the upload is finished (a forced one, so every file goes up and the cloud ends
+##    up exactly this handheld's save), after a copy of the cloud as it is now is kept. Not
+##    reachable: nothing else syncs for this game ("upload_cut"), the game still starts, and
+##    the next sync tries again;
+##  - a location was never synced here (no sync time: nothing says this save is the one to
+##    keep), or the cloud holds a change made after the note's reference time outside our own
+##    runs (another device's save, a listing we can't read): nothing is forced (review at
+##    56f5255, B1). The note goes and the sync goes on as usual: gogdl or legendary see both
+##    sides changed and we ask;
 ##  - they changed since (played from Heroic, a restore): finishing would mix it again, so a
 ##    copy of the cloud is kept, the sync times are dropped and the sync goes on: it asks.
 ## -> {} to go on, else the status dictionary this sync ends with.
@@ -770,11 +823,23 @@ func _finish_upload(key: String, entry: Dictionary, plan: Dictionary, parts: Arr
 	var app := str(entry.get("id", ""))
 	var same: bool = SaveBackup.fingerprint(parts) == str(note.get("fp", "")) \
 			and parts.map(func(p): return str(p["path"])) == Array(note.get("folders", []))
+	if epic and same:
+		# legendary writes the manifest last: a cut upload left nothing in the cloud to finish,
+		# so what matters is only whether forcing ours now would bury someone else's save
+		var look := _legendary(plan, app, "check")
+		if look["state"] in ["offline", "failed"]:
+			return _set_status(key, "upload_cut", str(look.get("error", "")))
+		if _epic_finish_held(key, look, parts):
+			_clear_upload(key)
+			return {}
 	var why := ""
+	var listings := {}
 	if epic:
 		why = str(_epic_cloud_copy(key, title, entry, plan, app, str(parts[0]["path"]) if not parts.is_empty() else "")["why"])
 	else:
-		why = _gog_cloud_copy(key, title, plan, entry, parts, false)
+		var stats := {}
+		why = _gog_cloud_copy(key, title, plan, entry, parts, false, stats)
+		listings = stats.get("listings", {})
 	if not same:
 		if why != "":
 			return _set_status(key, "upload_cut", why)   # not even a copy of the mixed cloud: wait
@@ -790,14 +855,54 @@ func _finish_upload(key: String, entry: Dictionary, plan: Dictionary, parts: Arr
 		_clear_upload(key)
 		return _set_status(key, "upload_finished", "", {"synced": true, "epic_path": str(parts[0]["path"]) if not parts.is_empty() else ""})
 	var ts := _gog_ts(key, entry, parts)
+	if _gog_finish_held(note, parts, ts, listings):
+		_clear_upload(key)
+		return {}
 	for l in parts:
-		var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_upload")
+		var r := _gogdl_up(key, plan, entry, l, str(ts.get(l["name"], "0")), "force_upload")
 		if r["action"] == "failed":
 			return _set_status(key, "upload_cut", str(r["error"]), {"gog_ts": ts})
 		if r["ts"] != "":
 			ts[l["name"]] = r["ts"]
 	_clear_upload(key)
 	return _set_status(key, "upload_finished", "", {"synced": true, "gog_ts": ts, "gog_paths": _gog_paths(parts)})
+
+
+## A cut GOG upload may not be finished by force: a location with no sync time, or whose
+## cloud changed after the note's reference time (its sync time for an ordinary upload, the
+## note's own time for a forced one) outside the windows of our own runs, or whose cloud
+## listing we couldn't read.
+static func _gog_finish_held(note: Dictionary, parts: Array, ts: Dictionary, listings: Dictionary) -> bool:
+	var since: Dictionary = note.get("since", {}) if note.get("since") is Dictionary else {}
+	var runs: Dictionary = note.get("runs", {}) if note.get("runs") is Dictionary else {}
+	for l in parts:
+		var name := str(l["name"])
+		if float(str(ts.get(name, "0"))) <= 0.0:
+			return true
+		var from := float(since.get(name, float(note.get("at", 0))))
+		if from <= 0.0:
+			return true
+		if CloudSaves.gog_cloud_moved(listings.get(name), name, from, runs.get(name, []) if runs.get(name) is Array else []):
+			return true
+	return false
+
+
+## A cut Epic upload may not be finished by force: never synced here (no sync time), or the
+## cloud's save isn't the one our last sync saw (nor the one this upload would have made: one
+## killed after its manifest went up), or we don't know which one that was.
+func _epic_finish_held(key: String, look: Dictionary, parts: Array) -> bool:
+	if int(_cfg_value(key, "last_sync", 0)) <= 0:
+		return true
+	if look["state"] == "same":
+		return true   # it went up after all: the ordinary sync has nothing to do
+	var remote := int(look.get("remote", 0))
+	if remote <= 0:
+		return false   # the cloud has no save at all: nothing to bury
+	var known := int(_cfg_value(key, "synced_remote", -1))
+	var mine := int(CloudSaves.dir_stats(str(parts[0]["path"]))["newest"]) if not parts.is_empty() else 0
+	if absi(remote - mine) <= CloudSaves.SLACK_S:
+		return false   # ours, its manifest up before the run was cut
+	return known <= 0 or absi(remote - known) > CloudSaves.SLACK_S
 
 
 ## Games whose last upload was cut short, looked at once the Library knows them (its
@@ -952,8 +1057,14 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 		var cur := str(ts.get(l["name"], "0"))
 		var r := {}
 		if mode != "pre":
-			if not marked and _gog_may_upload(l, cur):
-				_mark_upload(key, locs)   # an upload cut short is finished at the next sync
+			# any run with files here may upload (gogdl uploads everything when the cloud has
+			# none, whatever the sync time): noted first, so one cut short is finished at the next
+			# sync; a change in the cloud after each location's sync time is someone else's
+			if not marked and CloudSaves.has_files(str(l["path"])):
+				var since := {}
+				for l2 in locs:
+					since[str(l2["name"])] = float(str(ts.get(l2["name"], "0")))
+				_mark_upload(key, locs, since)
 				if not _noted:
 					return _set_status(key, "failed", NOTE_FAILED)
 				marked = true
@@ -965,7 +1076,7 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 				return _set_status(key, "backup_failed", str(guard["stop"]), {"gog_ts": ts})
 			r = guard.get("result", {})
 		if r.is_empty():
-			r = _gogdl(plan, entry, l, cur, step)
+			r = _gogdl_up(key, plan, entry, l, cur, step) if marked else _gogdl(plan, entry, l, cur, step)
 		cloud_newest = maxi(cloud_newest, int(r["cloud_newest"]))
 		match r["action"]:
 			"failed":
@@ -981,8 +1092,10 @@ func _sync_gog(key: String, entry: Dictionary, tools: Dictionary, mode: String) 
 					# went through stays through, and keeps its new time)
 					for name in downloaded:
 						ts[name] = before.get(name, "0")
-				# an upload may have been under way: the cloud may hold part of it (finished next time)
-				var failed_state := "upload_cut" if marked else ("offline" if r["offline"] else "failed")
+				# an upload that began may have been cut: the cloud may hold part of it (finished next
+				# time); one that never began leaves nothing to finish
+				var failed_state := _upload_failed_state(key, bool(r["began"]), bool(r["offline"])) if marked \
+						else ("offline" if r["offline"] else "failed")
 				return _set_status(key, failed_state, str(r["error"]) + back, {"gog_ts": ts})
 			"conflict":
 				conflict = true
@@ -1055,9 +1168,9 @@ func _gog_after_restore(key: String, title: String, plan: Dictionary, entry: Dic
 	if not _noted:
 		return _set_status(key, "failed", NOTE_FAILED)
 	for l in locs:
-		var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_upload")
+		var r := _gogdl_up(key, plan, entry, l, str(ts.get(l["name"], "0")), "force_upload")
 		if r["action"] == "failed":
-			return _set_status(key, "upload_cut", str(r["error"]), {"gog_ts": ts})
+			return _set_status(key, _upload_failed_state(key, bool(r["began"]), bool(r["offline"])), str(r["error"]), {"gog_ts": ts})
 		if r["ts"] != "":
 			ts[l["name"]] = r["ts"]
 	_clear_upload(key)
@@ -1074,7 +1187,8 @@ func _gog_upload_guard(key: String, title: String, plan: Dictionary, entry: Dict
 		return {}   # never synced: gogdl asks when both sides have files; no files: nothing to upload
 	if int(stats["newest"]) < int(float(ts)):
 		return {}   # nothing changed here since the last sync: gogdl won't upload
-	var look := _gogdl(plan, entry, loc, ts, "look")
+	# a look uploads everything when the cloud has no files: under the upload note like any run
+	var look := _gogdl_up(key, plan, entry, loc, ts, "look")
 	if look["action"] in ["failed", "upload", "download"]:
 		return {"result": look}
 	var only: Variant = CloudSaves.gog_cloud_only(look["cloud_files"], str(loc["name"]), str(loc["path"]))
@@ -1130,7 +1244,7 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 				return _set_status(key, "failed", NOTE_FAILED)
 			var up := _legendary(plan, app, "force_upload")
 			if up["state"] in ["offline", "failed"]:
-				return _set_status(key, "upload_cut", str(up.get("error", "")))
+				return _set_status(key, _upload_failed_state(key, up["acted"] == "upload", up["state"] == "offline"), str(up.get("error", "")))
 			_clear_upload(key)
 			return _set_status(key, "uploaded", "", {"synced": true, "epic_path": folder})
 		"gog":
@@ -1160,12 +1274,13 @@ func _resolve(key: String, entry: Dictionary, tools: Dictionary, choice: String)
 				if not _noted:
 					return _set_status(key, "failed", NOTE_FAILED)
 			for l in locs:
-				var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_download" if choice == "cloud" else "force_upload")
+				var r := _gogdl(plan, entry, l, str(ts.get(l["name"], "0")), "force_download") if choice == "cloud" \
+						else _gogdl_up(key, plan, entry, l, str(ts.get(l["name"], "0")), "force_upload")
 				if r["action"] == "failed":
 					var back := _put_back(key, b, empty) if choice == "cloud" else ""
 					if choice == "cloud":
 						ts = before   # every folder is back as it was
-					var failed_state := "upload_cut" if choice == "local" else ("offline" if r["offline"] else "failed")
+					var failed_state := _upload_failed_state(key, bool(r["began"]), bool(r["offline"])) if choice == "local" else ("offline" if r["offline"] else "failed")
 					return _set_status(key, failed_state, str(r["error"]) + back, {"gog_ts": ts})
 				if r["ts"] != "":
 					ts[l["name"]] = r["ts"]
@@ -1275,6 +1390,14 @@ func _gog_cloud_copy(key: String, title: String, plan: Dictionary, entry: Dictio
 		if r["action"] == "failed":
 			_remove_tree(scratch)
 			return str(r["error"]) if r["error"] != "" else "couldn't reach GOG"
+		# the cloud's file list with times, for _gog_finish_held: an empty cloud (GOG answers 404,
+		# gogdl logs no list) is an empty list; a count with no list we could read is unknown
+		var listing: Variant = r["cloud_files"]
+		if listing == null and (int(r["cloud_count"]) == 0 or (int(r["cloud_count"]) < 0 and r["action"] == "none")):
+			listing = []
+		var ls: Dictionary = stats.get("listings", {})
+		ls[str(l["name"])] = listing
+		stats["listings"] = ls
 		# restored into the real folder, should anyone want the cloud's version back
 		parts.append({"name": l["name"], "path": dir, "restore_path": l["path"]})
 		var st := CloudSaves.dir_stats(dir)

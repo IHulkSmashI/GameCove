@@ -301,3 +301,26 @@ func test_gog_client_id_and_locations_stay_in_bounds() -> void:
 	ok(str(args[-1]).begins_with("https://remote-config.gog.com/"), "GOG's host")
 	eq(CS.resolve_gog_location("<?INSTALL?>/../../home/user/.ssh", "/games/w", ""), "", "a location can't climb out of the install folder")
 	eq(CS.resolve_gog_location("/etc/x", "/games/w", ""), "", "nor name a folder elsewhere")
+
+
+## Review at 56f5255, B1: an upload only counts as begun when gogdl says so, and a cloud change
+## after the sync time that none of our own runs can have made is someone else's.
+func test_an_upload_begins_only_when_gogdl_says_so_and_other_changes_are_seen() -> void:
+	var offline := CS.parse_gogdl("requests.exceptions.ConnectionError: Max retries exceeded\n", 1)
+	ok(offline["action"] == "failed" and not offline["began"], "offline before anything: nothing began")
+	var cut := CS.parse_gogdl("[SAVES] INFO: Local files: 2\n[SAVES] INFO: Uploading files\n", 124)
+	ok(cut["action"] == "failed" and cut["began"], "cut after the upload line: it began")
+	ok(CS.parse_gogdl("[SAVES] INFO: No files in cloud, uploading\n", 124)["began"], "a first upload too")
+	ok(not CS.parse_gogdl("[SAVES] WARNING: Files in conflict force downloading or uploading of files\n1762000000.5", 0)["began"], "a conflict uploads nothing")
+	var listing: Variant = CS.parse_gog_listing("[{'name': 'saves/a.sav', 'hash': 'x', 'last_modified': '2025-11-01T12:00:00+00:00'}, {'name': 'saves/b.sav', 'hash': 'y'}]")
+	eq(listing, [{"name": "saves/a.sav", "hash": "x", "t": 1761998400}, {"name": "saves/b.sav", "hash": "y", "t": -1}], "times are read; a missing one is -1")
+	var at := 1761998400
+	var one := [{"name": "saves/a.sav", "hash": "x", "t": at}]
+	ok(not CS.gog_cloud_moved(one, "saves", float(at), []), "not after the sync time: unchanged")
+	ok(CS.gog_cloud_moved(one, "saves", float(at - 1000), []), "after it, with no run of ours: changed")
+	ok(not CS.gog_cloud_moved(one, "saves", float(at - 1000), [[at - 5, at + 5]]), "inside a run of ours: our own half upload")
+	ok(not CS.gog_cloud_moved(one, "saves", float(at - 1000), [[at - 60, 0]]), "a run that never came back may have run to its cap")
+	ok(CS.gog_cloud_moved(one, "saves", float(at - 1000), [[at - 1000, at - 900]]), "outside every run: someone else's")
+	ok(not CS.gog_cloud_moved(one, "cfg", 0.0, []), "another location's files don't count")
+	ok(CS.gog_cloud_moved(null, "saves", float(at), []), "an unknown listing counts as changed")
+	ok(CS.gog_cloud_moved([{"name": "saves/b.sav", "hash": "y", "t": -1}], "saves", float(at), []), "and so does a file with no time")

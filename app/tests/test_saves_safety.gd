@@ -942,7 +942,7 @@ func test_a_killed_post_game_run_is_not_a_cut_download() -> void:
 	var c := ConfigFile.new()
 	c.load(w["s"].cfg_path)
 	c.set_value("game:gog:1207", "pending", {"backup": "", "empty": []})
-	c.erase_section_key("game:gog:1207", "uploading")
+	ok(not c.has_section_key("game:gog:1207", "uploading"), "killed before gogdl said an upload began: no upload note either")
 	c.save(w["s"].cfg_path)
 	w["s"].sync_now(w["gog"])
 	ok(w["s"].status(w["gog"])["state"] != "conflict", "the next sync doesn't ask for nothing (%s)" % w["s"].status(w["gog"])["state"])
@@ -1224,7 +1224,8 @@ func test_gog_a_failed_location_after_play_keeps_what_was_uploaded() -> void:
 	cloud.fail_names = []
 	w["now"][0] += 100
 	w["s"].after_exit(w["gog"])
-	eq(w["s"].status(w["gog"])["state"], "upload_finished", "the retry finishes the cut upload (location 2) without calling location 1 a conflict")
+	eq(_cfg(w, "gog:1207", "uploading", {}), {}, "location 2 failed before its upload began: nothing to finish")
+	eq(w["s"].status(w["gog"])["state"], "uploaded", "the retry uploads location 2 without calling location 1 a conflict")
 	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 2", "location 1 stays as uploaded")
 	eq(cloud.cloud["cfg/keys.ini"]["data"], "esdf", "location 2 went up")
 	_done(w)
@@ -1311,6 +1312,201 @@ func test_gog_cut_upload_changed_since_asks() -> void:
 	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot2.sav")), "hour 3, from Heroic", "nothing came down over it")
 	ok(w["s"].backup_list("gog:1207").any(func(b): return b["reason"] == "cloud_copy"), "the cloud's mix is kept as a copy")
 	eq(_cfg(w, "gog:1207", "uploading", {}), {}, "the note is settled")
+	_done(w)
+
+
+# ---- review at 56f5255, B1: an upload that never began is never "finished" by force -------------
+
+## Scenario 1: a GOG game never synced on this handheld, 40 hours in the cloud from a PC. The
+## game makes a fresh default save and the exit sync runs offline. The note used to stay, and
+## the next online launch forced the fresh save over the cloud and deleted the PC's second slot.
+func test_gog_never_synced_offline_exit_never_overwrites_the_cloud() -> void:
+	var w := _world("b1_never_synced")
+	var cloud: Object = w["gog_cloud"]
+	cloud.seed("saves", "slot1.sav", "40 hours", T0)
+	cloud.seed("saves", "slot2.sav", "PC second slot", T0)
+	cloud.offline = true
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	eq(got, [{"go": true}], "offline: the game starts")
+	w["now"][0] += 600
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "fresh default save", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	eq(w["s"].status(w["gog"])["state"], "offline", "the exit sync says it was offline, not that an upload was cut")
+	eq(_cfg(w, "gog:1207", "uploading", {}), {}, "nothing began going up: no note to finish")
+	cloud.offline = false
+	got.clear()
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "the online launch asks")
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "40 hours", "the 40 hours in the cloud are untouched")
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav"], "and the PC's second slot is still there")
+	ok(cloud.did.filter(func(x): return str(x).begins_with("upload") or str(x).begins_with("delete")).is_empty(), "nothing was uploaded or deleted")
+	ok(w["s"].status(w["gog"])["state"] != "upload_finished", "and nothing claims an upload finished")
+	_done(w)
+
+
+## Scenario 2: a synced game played offline here while the PC uploaded newer progress. The
+## offline exit left the note and the next launch put "hour 2 here" over "hour 30 on the PC";
+## without the note gogdl sees both sides changed: a conflict.
+func test_gog_offline_play_while_the_pc_uploaded_is_a_conflict() -> void:
+	var w := _world("b1_offline_play")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 1", "synced")
+	w["now"][0] += 5000
+	cloud.cloud["saves/slot1.sav"] = {"data": "hour 30 on the PC", "t": int(w["now"][0]), "lt": int(w["now"][0]), "hash": "h30"}
+	w["now"][0] += 100
+	cloud.offline = true
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	w["now"][0] += 600
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2 here", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	eq(_cfg(w, "gog:1207", "uploading", {}), {}, "offline before anything went up: no note")
+	cloud.offline = false
+	got.clear()
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "the next launch asks")
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 30 on the PC", "the PC's progress is still the cloud save")
+	eq(FileAccess.get_file_as_string(w["gsaves"].path_join("slot1.sav")), "hour 2 here", "and this handheld's is still here")
+	_done(w)
+
+
+## A genuinely cut upload, then another device saved to the cloud before we could finish:
+## forcing ours would bury it. We ask.
+func test_gog_cut_upload_with_a_newer_cloud_save_since_asks() -> void:
+	var w := _world("b1_cut_then_pc")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 900
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2", int(w["now"][0]))
+	Fakes.put(w["gsaves"].path_join("slot2.sav"), "hour 2", int(w["now"][0]))
+	cloud.cut_upload_after = 1
+	w["s"].after_exit(w["gog"])
+	cloud.cut_upload_after = -1
+	eq(w["s"].status(w["gog"])["state"], "upload_cut", "cut after it began: the note stays")
+	w["now"][0] += 5000
+	cloud.cloud["saves/slot2.sav"] = {"data": "hour 30 on the PC", "t": int(w["now"][0]), "lt": int(w["now"][0]), "hash": "p30"}
+	w["now"][0] += 100
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "we ask")
+	eq(cloud.cloud["saves/slot2.sav"]["data"], "hour 30 on the PC", "the PC's save isn't forced over")
+	ok(w["s"].status(w["gog"])["state"] != "upload_finished", "nothing claims an upload finished")
+	ok(w["s"].backup_list("gog:1207").any(func(b): return b["reason"] == "cloud_copy"), "a copy of the cloud is kept")
+	eq(_cfg(w, "gog:1207", "uploading", {}), {}, "the note is settled")
+	_done(w)
+
+
+## The app (or the power) dies during the exit sync before gogdl decided anything: the note
+## stays on disk, and nothing says whether an upload began.
+func _crash_during_exit_sync(w: Dictionary) -> void:
+	var inner: Callable = w["s"].run
+	var frozen := [""]
+	w["s"].run = func(program: String, args: PackedStringArray) -> Dictionary:
+		if program != "tar" and "--skip-download" in args and frozen[0] == "":
+			frozen[0] = FileAccess.get_file_as_string(w["s"].cfg_path)
+			return {"code": 124, "out": ""}
+		return inner.call(program, args)
+	w["s"].after_exit(w["gog"])
+	w["s"].run = inner
+	ok(frozen[0].contains("uploading"), "the note was written before the run")
+	Fakes.put(w["s"].cfg_path, frozen[0])   # the instant of the crash
+
+
+## ... on a game never synced here: there is no sync time to say this save is the one to keep,
+## so nothing is forced; gogdl sees both sides with files and we ask.
+func test_gog_crash_note_on_a_never_synced_game_is_never_forced() -> void:
+	var w := _world("b1_crash_never_synced")
+	var cloud: Object = w["gog_cloud"]
+	cloud.seed("saves", "slot1.sav", "40 hours", T0)
+	cloud.seed("saves", "slot2.sav", "PC second slot", T0)
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "fresh default save", int(w["now"][0]))
+	_crash_during_exit_sync(w)
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "we ask")
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "40 hours", "the cloud save is untouched")
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav"], "and no slot was deleted")
+	_done(w)
+
+
+## ... on a synced game whose cloud got another device's save while we played: that change is
+## after our sync time and outside any run of ours. We ask.
+func test_gog_crash_note_with_a_newer_cloud_save_is_never_forced() -> void:
+	var w := _world("b1_crash_synced")
+	var cloud: Object = w["gog_cloud"]
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 1", T0)
+	w["s"].sync_now(w["gog"])
+	w["now"][0] += 5000
+	cloud.cloud["saves/slot1.sav"] = {"data": "hour 30 on the PC", "t": int(w["now"][0]), "lt": int(w["now"][0]), "hash": "h30"}
+	w["now"][0] += 600
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "hour 2 here", int(w["now"][0]))
+	_crash_during_exit_sync(w)
+	var got := []
+	w["s"].before_launch(w["gog"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "we ask")
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "hour 30 on the PC", "the PC's save is still the cloud save")
+	_done(w)
+
+
+## Epic has the same shape: legendary's check went through, then the upload failed before it
+## began (the connection dropped). The note used to stay and the next launch forced it over a
+## save the PC uploaded meanwhile.
+func test_epic_upload_that_never_began_leaves_no_note_and_asks() -> void:
+	var w := _world("b1_epic_never_began")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "hour 1", T0)
+	w["s"].sync_now(w["epic"])
+	eq(cloud.saves[-1]["files"]["world.sav"], "hour 1", "synced")
+	w["now"][0] += 900
+	Fakes.put(w["esaves"].path_join("world.sav"), "hour 2 here", int(w["now"][0]))
+	var inner: Callable = w["s"].run
+	w["s"].run = func(program: String, args: PackedStringArray) -> Dictionary:
+		if "--skip-download" in args and not "--skip-upload" in args:
+			cloud.offline = true
+			var r: Dictionary = inner.call(program, args)
+			cloud.offline = false
+			return r
+		return inner.call(program, args)
+	w["s"].after_exit(w["epic"])
+	w["s"].run = inner
+	eq(w["s"].status(w["epic"])["state"], "offline", "said it was offline")
+	eq(_cfg(w, "epic:Min", "uploading", {}), {}, "nothing began: no note")
+	w["now"][0] += 5000
+	cloud.saves.append({"t": int(w["now"][0]), "files": {"world.sav": "hour 30 on the PC"}})
+	w["now"][0] += 100
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "the next launch asks")
+	eq(cloud.saves[-1]["files"]["world.sav"], "hour 30 on the PC", "the PC's save is still the newest")
+	_done(w)
+
+
+## Epic, a genuinely cut upload (legendary began, then was killed before its manifest), and the
+## PC saved to the cloud before we could finish: forcing ours would make it the older one.
+func test_epic_cut_upload_with_a_newer_cloud_save_since_asks() -> void:
+	var w := _world("b1_epic_cut_then_pc")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "hour 1", T0)
+	w["s"].sync_now(w["epic"])
+	w["now"][0] += 900
+	Fakes.put(w["esaves"].path_join("world.sav"), "hour 2 here", int(w["now"][0]))
+	cloud.cut_upload = true
+	w["s"].after_exit(w["epic"])
+	cloud.cut_upload = false
+	eq(w["s"].status(w["epic"])["state"], "upload_cut", "cut after it began")
+	w["now"][0] += 5000
+	cloud.saves.append({"t": int(w["now"][0]), "files": {"world.sav": "hour 30 on the PC"}})
+	w["now"][0] += 100
+	var got := []
+	w["s"].before_launch(w["epic"], func(r): got.append(r))
+	ok(got.size() == 1 and got[0].has("conflict"), "we ask")
+	eq(cloud.saves[-1]["files"]["world.sav"], "hour 30 on the PC", "the PC's save is still the newest")
+	eq(_cfg(w, "epic:Min", "uploading", {}), {}, "the note is settled")
 	_done(w)
 
 

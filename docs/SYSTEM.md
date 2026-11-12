@@ -375,13 +375,22 @@ What keeps a save from being lost (final review; each has a test against ports o
   were empty. A note still there at the next sync (the app or the power went mid-download) is put right first: what is
   found is kept as a backup, the folders go back as they were, the sync times are dropped.
 - **An upload cut short.** Before a tool may upload, a note goes into `saves.cfg` (`uploading`: when, the folders and
-  their fingerprint). One cut off (the 90 s cap, the app or the power going) leaves the cloud a mix of new and old
-  files; the note stays and the status says so ("upload cut off"). The next sync of that game, before anything else,
-  and once at start (when the Library loads; never under a game), finishes it: with the folders as they were then, a
-  copy of the cloud as it is is kept and a forced upload sends every file ("we finished it"; offline: nothing else
-  syncs for that game, the game still starts, the next sync tries again). With the folders changed since (played from
-  Heroic, a restore), finishing would mix again, so the copy is kept, the sync times are dropped and the sync asks.
-  Picking a side in a conflict settles the note.
+  their fingerprint, from when a cloud change counts as someone else's per location (`since`: the sync time for an
+  ordinary upload, the note's own time for a forced one), and the start and end of every gogdl run made under it
+  (`runs`)). A run that fails before the tool says the upload began (gogdl's "Uploading files" / "No files in cloud,
+  uploading" / "Forcing upload", legendary's "Uploading local savegame") takes the note away again: nothing went up,
+  and the status says offline or failed. One cut off after it began (the 90 s cap, the app or the power going) leaves
+  the cloud a mix of new and old files; the note stays and the status says so ("upload cut off"). The next sync of that
+  game, before anything else, and once at start (when the Library loads; never under a game), finishes it: with the
+  folders as they were then, a copy of the cloud as it is is kept and a forced upload sends every file ("we finished
+  it"; offline: nothing else syncs for that game, the game still starts, the next sync tries again). It is never
+  forced when a location has no sync time here, or when the cloud changed after `since` outside the windows of our own
+  runs (a run that never came back counts until its 90 s cap; a GOG list we can't read counts as changed; Epic: the
+  cloud's save isn't the one our last sync saw nor the one this upload made): then the note goes and the sync carries
+  on as usual, so both sides changed is a conflict (review at 56f5255, B1: an offline exit used to leave the note and
+  the next launch put a fresh save over 40 hours in the cloud). With the folders changed since (played from Heroic, a
+  restore), finishing would mix again, so the copy is kept, the sync times are dropped and the sync asks. Picking a
+  side in a conflict settles the note.
 - **A cloud save new to us (Epic).** A cloud save is named by when it was saved, not uploaded, so one saved elsewhere
   before our last sync and uploaded after it looks older than the sync. The cloud save's own time at each sync is kept
   (`synced_remote`): any other one counts as a change, so it's a conflict, never an upload over it.

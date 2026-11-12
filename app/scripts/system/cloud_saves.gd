@@ -522,14 +522,17 @@ static func gog_plan(entry: Dictionary, tools: Dictionary, remote: Variant = nul
 
 
 ## gogdl save-sync output -> {"action", "ts", "cloud_newest", "error", "offline", "refused",
-## "cloud_count", "cloud_files"}.
+## "cloud_count", "cloud_files", "began"}.
 ## action: upload | download | conflict | none | refused | failed. refused: "upload" (the
 ## cloud is newer and this run could only upload) | "download" | "". cloud_count: files GOG
-## holds for the game (-1 when the log didn't say); cloud_files: [{name, hash}] of them, null
-## when the list wasn't in the log.
+## holds for the game (-1 when the log didn't say); cloud_files: [{name, hash, t}] of them
+## (t: the cloud's last_modified in unix seconds, -1 when not given), null when the list
+## wasn't in the log. began: gogdl logged that it started uploading (saves.py logs that line
+## before the first file goes up), also when the run failed after it: only then can the
+## cloud hold part of an upload.
 static func parse_gogdl(out: String, code: int) -> Dictionary:
 	var r := {"action": "none", "ts": "", "cloud_newest": 0, "error": "", "offline": false, "refused": "",
-		"cloud_count": -1, "cloud_files": null}
+		"cloud_count": -1, "cloud_files": null, "began": false}
 	for raw in out.split("\n"):
 		var line := raw.strip_edges()
 		if line.contains("Files in conflict"):
@@ -542,6 +545,7 @@ static func parse_gogdl(out: String, code: int) -> Dictionary:
 		elif line.contains("DEBUG: Files: ["):
 			r["cloud_files"] = parse_gog_listing(line.substr(line.find("Files: [") + 7))
 		elif line.contains("No files in cloud, uploading") or line.contains("Uploading files") or line.contains("Forcing upload"):
+			r["began"] = true
 			if r["action"] != "conflict":
 				r["action"] = "upload"
 		elif line.contains("No files locally, downloading") or line.contains("Downloading files") or line.contains("Forcing download"):
@@ -571,7 +575,8 @@ static func parse_gogdl(out: String, code: int) -> Dictionary:
 
 ## The cloud's file list as gogdl logs it at debug level (a Python list of dicts:
 ## [{'name': 'saves/slot1.sav', 'hash': '...', 'last_modified': '...'}, ...]) ->
-## [{name, hash}], or null when it doesn't read as one (then nothing may be assumed).
+## [{name, hash, t}] (t: last_modified in unix seconds, -1 when missing), or null when it
+## doesn't read as one (then nothing may be assumed).
 static func parse_gog_listing(text: String) -> Variant:
 	var t := text.strip_edges()
 	if not t.begins_with("[") or not t.ends_with("]"):
@@ -583,13 +588,17 @@ static func parse_gog_listing(text: String) -> Variant:
 	var item := RegEx.create_from_string("\\{[^{}]*\\}")
 	var name_rx := RegEx.create_from_string("'name':\\s*(?:'([^'\\\\]*)'|\"([^\"\\\\]*)\")")
 	var hash_rx := RegEx.create_from_string("'hash':\\s*'([^']*)'")
+	var time_rx := RegEx.create_from_string("'last_modified':\\s*'([^']*)'")
 	var covered := 0
 	for m in item.search_all(inner):
 		var n := name_rx.search(m.get_string(0))
 		if n == null:
 			return null   # a name with escapes: not guessed at
 		var h := hash_rx.search(m.get_string(0))
-		out.append({"name": n.get_string(1) if n.get_string(1) != "" else n.get_string(2), "hash": h.get_string(1) if h != null else ""})
+		var lm := time_rx.search(m.get_string(0))
+		var when := iso_to_unix(lm.get_string(1)) if lm != null else 0
+		out.append({"name": n.get_string(1) if n.get_string(1) != "" else n.get_string(2), "hash": h.get_string(1) if h != null else "",
+			"t": when if when > 0 else -1})
 		covered += m.get_string(0).length()
 	# everything between the dicts must be ", ": anything else and the list isn't what we think
 	if inner.length() - covered != maxi(0, out.size() - 1) * 2:
@@ -621,6 +630,38 @@ static func gog_cloud_only(listing: Variant, name: String, folder: String) -> Va
 		if not have.has(rel):
 			out.append(rel)
 	return out
+
+
+## Whether GOG's cloud for location `name` changed since `since` (a sync time, unix seconds)
+## in a way our own upload can't explain: a file (or a deletion mark) in `listing`
+## (parse_gog_listing) with a time after `since` that falls in none of `runs`, the time
+## windows our gogdl runs of that upload ran in ([[start, end]]; end 0: the run never came
+## back, a crash or power loss, so it may have run until the time cap). An unknown listing,
+## or a changed file with no time, counts as changed: then nothing may be forced over it.
+## Files are picked the way gogdl picks them (names that start with the location's name).
+static func gog_cloud_moved(listing: Variant, name: String, since: float, runs: Array) -> bool:
+	if not listing is Array:
+		return true
+	for f in listing:
+		if not str(f.get("name", "")).begins_with(name):
+			continue
+		var t := int(f.get("t", -1))
+		if t < 0:
+			return true
+		if float(t) <= since:
+			continue
+		var ours := false
+		for w in runs:
+			if not w is Array or w.size() < 2:
+				continue
+			var start := int(w[0])
+			var end := int(w[1]) if int(w[1]) > 0 else start + TIMEOUT_S + 5
+			if t >= start - SLACK_S and t <= end + SLACK_S:
+				ours = true
+				break
+		if not ours:
+			return true
+	return false
 
 
 ## ISO 8601 with an offset ("2026-11-10T10:00:00+01:00", "...Z") -> unix seconds; 0 when not.
