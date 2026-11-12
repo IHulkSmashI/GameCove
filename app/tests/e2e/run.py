@@ -187,6 +187,19 @@ def run_one(godot: str, work: str, info_path: str, extra: dict, timeout: int, la
     return result
 
 
+def suites_for(setup: str, requested: list) -> list:
+    """The suites to run on `setup` ([] = the whole set, for a setup that runs all of them). A box (the Steam Machine)
+    runs only BOX_SUITES: asked for suites it doesn't run, the answer is [] with `skipped` saying so (see main)."""
+    if setup in BOXED:
+        fit = BOX_SUITES.split(",")
+        return [s for s in requested if s in fit] if requested else fit
+    return requested
+
+
+def setup_has_no_suites(setup: str, requested: list) -> bool:
+    return bool(requested) and setup in BOXED and not suites_for(setup, requested)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--setups", default=",".join(SETUPS))
@@ -206,6 +219,16 @@ def main(argv=None) -> int:
     godot = godot_path(a.godot)
     setups = [s for s in a.setups.split(",") if s]
     print(f"e2e: setups {setups}, iterations {iters}, seed {seed} (replay: --seed {seed} --iters {iters})")
+    asked = [s for s in a.suites.split(",") if s]
+    # a setup none of the asked suites apply to is said so, never "0 passed (ok)"; when that is every setup the run is a
+    # failure (nothing was tested), else the others still run
+    skipped = [s for s in setups if setup_has_no_suites(s, asked)]
+    for s in skipped:
+        print(f"{s}: skipped, none of the suites asked for ({', '.join(asked)}) apply to it "
+              f"(it runs: {', '.join(BOX_SUITES.split(','))})")
+    if setups and len(skipped) == len(setups):
+        print("e2e: nothing ran: none of the suites asked for apply to the setups asked for")
+        return 1
     base = tempfile.mkdtemp(prefix="gamecove-e2e-")
     fixtures = os.path.join(base, "fixtures")
     rows = ",".join(ROWS[s] for s in setups)
@@ -222,11 +245,9 @@ def main(argv=None) -> int:
         work, info_path = prepare(fixtures, manifest, setup, base)
         common = {"E2E_SEED": str(seed), "E2E_ITERS": str(iters), "E2E_TEST": a.test}
         suites = [s for s in a.suites.split(",") if s]
-        if setup in BOXED:
-            fit = BOX_SUITES.split(",")
-            suites = [s for s in suites if s in fit] if suites else fit
-            if not suites:
-                continue
+        if setup in skipped:
+            continue
+        suites = suites_for(setup, suites)
         runs = []
         shared = [s for s in suites if s != RESTART_SUITE and s not in OWN_PROCESS]
         if not suites or shared:

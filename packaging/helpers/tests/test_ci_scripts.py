@@ -48,6 +48,22 @@ def test_a_normal_run_passes_and_a_pending_only_run_is_not_empty():
     assert j({"passed": 0, "failed": 0, "failures": [], "skipped": 2}, 0, "x", False)["failed"] == 0
 
 
+def test_a_suite_that_does_not_apply_to_the_setup_is_said_so_and_fails_when_nothing_ran(capsys):
+    """review: `--setups steam-machine-steamos --suites keyboard` printed "0 passed" and exited 0."""
+    code = _runner().main(["--setups", "steam-machine-steamos", "--suites", "keyboard", "--godot", "/bin/true"])
+    out = capsys.readouterr().out
+    assert code == 1 and "skipped, none of the suites asked for (keyboard) apply" in out and "nothing ran" in out
+
+
+def test_suites_for_a_box_are_the_ones_that_fit_it():
+    r = _runner()
+    assert r.suites_for("steam-machine-steamos", ["keyboard"]) == []
+    assert r.suites_for("steam-machine-steamos", ["keyboard", "smoke"]) == ["smoke"]
+    assert r.suites_for("steam-machine-steamos", []) == r.BOX_SUITES.split(",")
+    assert r.suites_for("ally-steamos", ["keyboard"]) == ["keyboard"] and r.suites_for("ally-steamos", []) == []
+    assert not r.setup_has_no_suites("ally-steamos", ["keyboard"]) and not r.setup_has_no_suites("steam-machine-steamos", [])
+
+
 def _gate(tmp_path, runs, sha="abc"):
     f = tmp_path / "runs.json"
     f.write_text(json.dumps({"workflow_runs": runs}))
@@ -55,8 +71,8 @@ def _gate(tmp_path, runs, sha="abc"):
     return subprocess.run(["sh", str(CHECK), sha], env=env, capture_output=True, text=True, check=False)
 
 
-def _run(event, conclusion, created, sha="abc"):
-    return {"head_sha": sha, "event": event, "conclusion": conclusion, "created_at": created}
+def _run(event, conclusion, created, sha="abc", branch="main", status="completed"):
+    return {"head_sha": sha, "event": event, "conclusion": conclusion, "created_at": created, "head_branch": branch, "status": status}
 
 
 @pytest.mark.skipif(shutil.which("jq") is None, reason="jq is on the CI runners")
@@ -79,6 +95,27 @@ class TestReleaseGate:
     def test_only_pull_request_runs_is_no_ci(self, tmp_path):
         r = _gate(tmp_path, [_run("pull_request", "success", "2026-11-10T10:00:00Z")])
         assert r.returncode == 1 and "none" in r.stderr
+
+    def test_a_green_run_on_another_branch_does_not_clear_a_red_main_run(self, tmp_path):
+        r = _gate(tmp_path, [_run("push", "failure", "2026-11-10T10:00:00Z"), _run("push", "success", "2026-11-10T12:00:00Z", branch="staging")])
+        assert r.returncode == 1 and "failure" in r.stderr
+
+    def test_only_runs_on_another_branch_is_no_ci(self, tmp_path):
+        r = _gate(tmp_path, [_run("push", "success", "2026-11-10T10:00:00Z", branch="staging")])
+        assert r.returncode == 1 and "none" in r.stderr
+
+    def test_a_manual_run_does_not_count(self, tmp_path):
+        assert _gate(tmp_path, [_run("workflow_dispatch", "success", "2026-11-10T10:00:00Z")]).returncode == 1
+
+    def test_a_newer_run_still_going_blocks_an_older_green_one(self, tmp_path):
+        r = _gate(tmp_path, [_run("push", "success", "2026-11-10T10:00:00Z"), _run("push", None, "2026-11-10T11:00:00Z", status="in_progress")])
+        assert r.returncode == 1 and "still running" in r.stderr
+
+    def test_a_queued_newer_run_blocks_too(self, tmp_path):
+        assert _gate(tmp_path, [_run("push", "success", "2026-11-10T10:00:00Z"), _run("push", None, "2026-11-10T11:00:00Z", status="queued")]).returncode == 1
+
+    def test_an_older_run_still_going_does_not_block_a_newer_green_one(self, tmp_path):
+        assert _gate(tmp_path, [_run("push", None, "2026-11-10T10:00:00Z", status="in_progress"), _run("push", "success", "2026-11-10T11:00:00Z")]).returncode == 0
 
     def test_another_commits_run_does_not_count(self, tmp_path):
         assert _gate(tmp_path, [_run("push", "success", "2026-11-10T10:00:00Z", sha="other")]).returncode == 1
