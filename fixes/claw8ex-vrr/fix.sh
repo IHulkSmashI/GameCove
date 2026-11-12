@@ -303,6 +303,22 @@ put_hook() {
 	done
 }
 
+# A record whose files are not all there: an install that was cut short (the manifest is written step by step).
+# The boot hook is three files and the EDID comes before them, so a cut can fall between any two; on Bazzite the
+# initramfs entries are recorded one by one as well.
+install_incomplete() {
+	m_installed || return 1
+	_edid=$(sed -n 's|^file \(/etc/firmware/edid/gamecove-.*\.bin\)$|\1|p' "$MANIFEST" | head -n 1)
+	[ -n "$_edid" ] && [ -f "$ROOT$_edid" ] || return 0
+	for _f in "$HOOK_CONF" "$HOOK" "$MODPROBE_CONF"; do
+		[ -f "$ROOT$_f" ] || return 0
+		if has_rpm_ostree && [ "$(boot_backend)" = rpm-ostree ] && ! m_has initramfs "$_f"; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 # Kernel arguments recorded by an install from before the hook.
 old_kargs() {
 	[ -f "$MANIFEST" ] || return 0
@@ -343,8 +359,8 @@ migrate() {
 install() {
 	require_root
 	lock
-	if m_installed && { [ ! -f "$ROOT$HOOK" ] || [ ! -f "$ROOT$HOOK_CONF" ]; } && [ -z "$(old_kargs)" ]; then
-		# a record without its boot hook is an install that was cut short (the manifest is written step by
+	if install_incomplete && [ -z "$(old_kargs)" ]; then
+		# a record without all its files is an install that was cut short (the manifest is written step by
 		# step): "already installed" would leave it half done for good. Undo what it did and install again.
 		vrr_undo || die "an earlier install was cut short and could not be undone; see the messages above, then run remove"
 	fi

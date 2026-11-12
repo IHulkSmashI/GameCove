@@ -178,6 +178,21 @@ ok '! grep -q "already installed" "$T/out"' "and does not claim it was already i
 ok '[ -f "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh" ] && [ -f "$R$EDID_FILE" ]' "the hook and the EDID are in place"
 fix claw8ex-vrr remove >/dev/null 2>&1
 
+# cut between the boot hook's files: the modprobe rule is missing but the hook and its conf are there
+case_start install_cut_short_after_the_hook
+vrr_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+rm -f "$R/etc/modprobe.d/gamecove-claw8ex-vrr.conf"
+ok 'fix claw8ex-vrr install >"$T/out" 2>&1' "install after a cut between the hook's files succeeds ($(tail -n 1 "$T/out" 2>/dev/null))"
+ok '! grep -q "already installed" "$T/out" && [ -f "$R/etc/modprobe.d/gamecove-claw8ex-vrr.conf" ]' "and puts the missing file back"
+# cut before the EDID file was written (the record names it)
+vrr_ready
+fix claw8ex-vrr remove >/dev/null 2>&1
+fix claw8ex-vrr install >/dev/null 2>&1
+rm -f "$R$EDID_FILE"
+ok 'fix claw8ex-vrr install >"$T/out" 2>&1 && [ -f "$R$EDID_FILE" ]' "a missing EDID file is written again"
+fix claw8ex-vrr remove >/dev/null 2>&1
+
 # an older EDID is active and can't be rebuilt: nothing is changed
 case_start update_refuses_when_it_cannot_rebuild
 vrr_ready
