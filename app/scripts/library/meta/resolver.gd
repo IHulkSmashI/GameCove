@@ -163,8 +163,8 @@ func jobs_for(game: Dictionary) -> Array:
 		return out
 	# A ROM's details come from ES-DE's gamelist: a lookup by title alone would find PC games.
 	var emu = game.get("emulated", {})
-	if emu is Dictionary and emu.get("rom", false):
-		return out
+	if emu is Dictionary and (emu.get("rom", false) or bool(game.get("shortcut", false))):
+		return out        # a Steam ROM Manager shortcut's title stays on the device too
 	var key := str(game.get("key", ""))
 	var info = game.get("info", {})
 	var meta: Dictionary = info.get("meta", {}) if info is Dictionary and info.get("meta") is Dictionary else Metadata.empty()

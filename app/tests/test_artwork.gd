@@ -269,6 +269,26 @@ func test_change_artwork_never_sends_a_rom_title() -> void:
 	wipe(dir)
 
 
+## Review at 254d8f5: a Steam ROM Manager shortcut has no "rom" key, so its title was still sent to SteamGridDB.
+func test_a_steam_rom_manager_shortcut_never_sends_its_title() -> void:
+	var dir := tmp("manualshortcut")
+	var http := FakeHttp.new()
+	_routes(http)
+	var s := _service(http, dir)
+	var sc := {"key": "emu:3000000002", "store": "emu", "id": "3000000002", "title": "Moonlit Harbor", "shortcut": true,
+		"emulated": {"system": "snes", "system_short": "SNES", "emulator": "RetroArch", "via": "emudeck"},
+		"art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	ok(s.is_rom(sc), "counts as a ROM game for the title rule")
+	var got := []
+	s.search(sc, "cover", {}, 0, func(assets, err): got.append([assets, err]))
+	eq(got.size(), 1, "answered at once")
+	ok(str(got[0][1]) != "" and got[0][0].is_empty(), "with a reason and no pictures")
+	s.auto_fill([sc])
+	eq(http.requests.size(), 0, "and nothing sent anywhere, not even by the automatic fill")
+	s.free()
+	wipe(dir)
+
+
 ## Review 2, low 23: the automatic fill forgot what it had tried at every start, and its
 ## queue kept draining after a switch went off.
 func test_auto_fill_remembers_tries_and_stops_with_the_switch() -> void:

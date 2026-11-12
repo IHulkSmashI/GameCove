@@ -308,7 +308,9 @@ func override_for(game: Dictionary, kind: String) -> Dictionary:
 ## A game made from a ROM file (the Emulation page's, EmuDeck / RetroDECK / ES-DE folders).
 static func is_rom(game: Dictionary) -> bool:
 	var e: Variant = game.get("emulated", {})
-	return e is Dictionary and bool(e.get("rom", false))
+	# a ROM from the ROM folder ("rom"), or a game Steam ROM Manager made a Steam shortcut of (emu.gd shortcuts():
+	# an "emulated" game with no "rom" key): the title of either stays on the device
+	return e is Dictionary and (bool(e.get("rom", false)) or bool(game.get("shortcut", false)))
 
 
 static func missing_kinds(game: Dictionary) -> Array:
