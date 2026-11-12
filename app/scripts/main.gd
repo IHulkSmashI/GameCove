@@ -900,7 +900,7 @@ func _hook_tile(t: Control) -> void:
 ## Install state changed (queued, started, finished...): badges and the
 ## downloads indicators follow. Tiles are rebuilt only here, never per tick.
 func _on_install_changed() -> void:
-	_set_games(Library.games)
+	_queue_games()
 	_refresh_downloads_indicators()
 	if steam_overlay.is_open() and install_state.is_busy(steam_overlay.key):
 		steam_overlay.close()
@@ -2347,7 +2347,25 @@ func _mark_new_seen() -> void:
 	top_bar.set_dot("library", false)
 
 
+## Several changes in one frame (a store's install state and the library's own, a batch of art) rebuild the
+## screens once: with 20,000 games a rebuild is the cost, not the change.
+var _games_queued := false
+
+
+func _queue_games() -> void:
+	if _games_queued:
+		return
+	_games_queued = true
+	_flush_games.call_deferred()
+
+
 func _on_library_changed() -> void:
+	_queue_games()
+
+
+## The queued change: the screens, then what depends on the list besides them.
+func _flush_games() -> void:
+	_games_queued = false
 	_set_games(Library.games)
 	if not playing.is_empty():
 		# What runs isn't always a Library game: a stream, a desktop app, a clip's

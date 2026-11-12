@@ -97,6 +97,7 @@ const MAX_COLS := 7
 
 
 func _init() -> void:
+	visibility_changed.connect(_on_visibility_changed)
 	name = "Library"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -328,7 +329,26 @@ func _init() -> void:
 
 func set_games(list: Array) -> void:
 	games = list
+	_games_gen += 1
+	if is_inside_tree() and not is_visible_in_tree():
+		_stale = true   # built the next time the Library is shown, not on every change behind a game or another tab
+		return
 	_rebuild(true)
+
+
+## Games came in while the Library was out of sight.
+var _stale := false
+
+
+func _on_visibility_changed() -> void:
+	if _stale and is_visible_in_tree():
+		_rebuild(true)
+
+
+## Whoever asks for the tiles gets them current, in sight or not.
+func _fresh() -> void:
+	if _stale:
+		_rebuild(true)
 
 
 func set_store(id: String) -> void:
@@ -458,12 +478,27 @@ func set_query(q: String) -> void:
 ## The keyboard's text: several keys in one frame (a held key, a paste) rebuild once, after the last.
 func _query_typed(q: String) -> void:
 	query = q
+	if games.size() > DEBOUNCE_MIN_GAMES and is_inside_tree():
+		# a big list: the grid is redone once the typing pauses, not after every key
+		_query_pending = true
+		_query_gen += 1
+		get_tree().create_timer(DEBOUNCE_S).timeout.connect(_apply_query_after.bind(_query_gen))
+		return
 	if not _query_pending:
 		_query_pending = true
 		call_deferred("_apply_query")
 
 
 var _query_pending := false
+var _query_gen := 0
+## From this many games the search waits for a pause in the typing.
+const DEBOUNCE_MIN_GAMES := 2000
+const DEBOUNCE_S := 0.12
+
+
+func _apply_query_after(gen: int) -> void:
+	if gen == _query_gen:
+		_apply_query()
 
 
 func _apply_query() -> void:
@@ -489,10 +524,12 @@ func hints(_f: Control) -> Array:
 
 
 func tiles() -> Array:
+	_fresh()
 	return _tiles
 
 
 func default_focus() -> Control:
+	_fresh()
 	if not _tiles.is_empty():
 		for t in _tiles:
 			if t.game.get("key", "") == _memory_key:
@@ -508,7 +545,56 @@ func set_top_target(c: Control) -> void:
 
 # ------------------------------------------------------------ build
 
+## What a rebuild keeps while nothing it depends on changed: the list after the view, store, install, genre and
+## critic filters, in the sort order (a search only filters it: a key typed is no new sort), and the last search.
+## A new list from main (set_games) starts them over; a typed key never sorts 20,000 games again.
+var _games_gen := 0
+var _picked_sig := ""
+var _in_view: Array = []
+var _sorted_picked: Array = []
+var _visible_total := 0
+var _search_folded := ""
+var _search_result: Array = []
+var _search_sig := ""
+
+
+func _refresh_picked() -> void:
+	var sig := "%d|%s|%s|%s|%s|%s|%s" % [_games_gen, view, store, install_filter, genre, critic_filter, sort]
+	if sig == _picked_sig:
+		return
+	_picked_sig = sig
+	_in_view = View.filter_view(games, view)
+	# only the filters that are on: each is a pass over every game
+	var picked: Array = _in_view if store == "" else View.filter_by_store(_in_view, store)
+	if install_filter != "":
+		picked = filter_install(picked, install_filter)
+	if genre != "" or critic_filter:
+		picked = View.filter_meta(picked, genre, View.CRITIC_MIN if critic_filter else 0)
+	_sorted_picked = View.sort_games(picked, sort)
+	_visible_total = _in_view.size() if view == "" else View.not_hidden(games).size()
+	_search_folded = ""
+
+
+## `_sorted_picked` kept to the query. Typing more of the same query only narrows the last result (every word
+## still has to start a title word, or the text has to be in the title, so what matched the longer text matched
+## the shorter), which is a pass over a few games after the first letter.
+func _searched() -> Array:
+	var folded := View.fold(query)
+	if folded == "":
+		_search_folded = ""
+		return _sorted_picked.duplicate()
+	var from: Array = _sorted_picked
+	if _search_folded != "" and folded.begins_with(_search_folded) and _search_sig == _picked_sig:
+		from = _search_result
+	var out := View.search(from, query)
+	_search_folded = folded
+	_search_sig = _picked_sig
+	_search_result = out
+	return out.duplicate()
+
+
 func _rebuild(keep_focus: bool) -> void:
+	_stale = false
 	var focused_key := ""
 	var focused_at := -1
 	if is_inside_tree():
@@ -517,9 +603,9 @@ func _rebuild(keep_focus: bool) -> void:
 			focused_key = f.game.get("key", "")
 			# a new order or view (X, the Filter sheet) starts at the top of the grid
 			focused_at = (_first + _tiles.find(f)) if keep_focus else 0
-	var in_view := View.filter_view(games, view)
-	var picked := View.filter_meta(filter_install(View.filter_by_store(in_view, store), install_filter), genre, View.CRITIC_MIN if critic_filter else 0)
-	shown = View.sort_games(View.search(picked, query), sort)
+	_refresh_picked()
+	var in_view: Array = _in_view
+	shown = _searched()
 	for t in _tiles:
 		Kit.drop(grid, t)
 	_tiles.clear()
@@ -557,7 +643,7 @@ func _rebuild(keep_focus: bool) -> void:
 			else "Everything here is installed. Clear the filter to see all your games.")
 	elif shown.is_empty():
 		_empty_text.text = "No %s games found. Pick another store or All." % View.store_name(store)
-	var total := View.not_hidden(games).size() if view != "hidden" else in_view.size()
+	var total := _visible_total if view != "hidden" else in_view.size()
 	count_label.text = ("%d of %d" % [shown.size(), total]) if shown.size() != total else ("%d games" % total if total != 1 else "1 game")
 	if focused_key == "" and not _tiles.is_empty():
 		# nothing in the grid has focus (typing a search on the keyboard): the strip under the
@@ -608,6 +694,7 @@ func _tile_at(i: int) -> Control:
 ## The tile of the game with this key, made first when it is out of the window (null: it
 ## isn't shown).
 func tile_for(key: String) -> Control:
+	_fresh()
 	for t in _tiles:
 		if t.game.get("key", "") == key:
 			return t

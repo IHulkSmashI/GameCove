@@ -237,8 +237,22 @@ d-pad press, one window on a jump, which lands at once instead of scrolling thro
 in between). A drag on the touch screen far from the focus moves the window to the screen and
 focus to a tile on it. `tests/test_ui_library_virtual.gd` opens 20,000 ROMs and jumps to the
 19,000th under time budgets; `suite_library` walks 40 rows by the d-pad and six letters.
-What stays: sorting 20,000 games takes about 0.45 s on the 2-core box (natural title order),
-done once when the list changes, never while a game runs.
+A library change used to cost about 2.3 s at 20,000 ROMs (every game copied, the full list sorted three times for
+Home's shelves, the Library rebuilt, a library change every 2 s while art and details fill in). Now:
+
+- `Library.games` arrives in title order, and `View.by_title` checks that in one pass; every other order is a stable
+  sort of ints done natively on top of it (`View.sorted_by_field`), not a Callable per comparison (sorting 20,000
+  games: 0.2-0.7 s before, 10-25 ms now).
+- Home's shelves come from one pass that sorts each game into the shelves it belongs to (1.1 s before, ~0.1 s).
+- `Collections.decorate` copies only the games that are favourites, hidden or in a collection.
+- A screen out of sight is not rebuilt: Home and the Library keep the new list and build when shown (or when
+  something asks for their tiles). Several changes in one frame rebuild once (`main.gd _queue_games`).
+- The Library keeps its filtered, sorted list between keys; a longer query narrows the last result instead of
+  searching all games again, and in a list over 2,000 games the grid is redone once typing pauses for 0.12 s.
+
+`tests/e2e/suite_perf.gd` measures a change with the screens in the tree at 20,300 games (shown: under 400 ms,
+out of sight: under 60 ms, a key: under 400 ms; about 80, 0 and 70 ms on a quiet 4-core box), which the unit
+runner cannot (its tree is not running).
 
 Searching re-reads every title on every key, so each title is folded (lower case, accents and punctuation out, other
 scripts kept) once and kept (`View.folded`, at most 100,000 titles), and keys that arrive in one frame (a held key, a
