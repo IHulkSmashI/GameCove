@@ -264,6 +264,26 @@ func test_heroic_time_is_not_a_fallback_for_another_folder() -> void:
 	_done(h)
 
 
+## Review at 56f5255: Heroic's time was taken for its folder whatever the folder held, though
+## GameCove had never looked at it (no anchors, so folder_guard had nothing to compare). A
+## prefix Heroic re-made, where the game then wrote a fresh default save, looked like "only
+## local changed": it went up over the cloud and deleted the second slot. Heroic's time only
+## stands while nothing in the folder is newer than it.
+func test_heroic_time_is_not_taken_for_a_folder_changed_since_heroic_synced() -> void:
+	var w := _world("heroic_ts_remade")
+	var cloud: Object = w["gog_cloud"]
+	_json(w["gog"]["heroic_root"].path_join("GamesConfig/1207.json"), {"1207": {"gogSaves": [{"name": "saves", "location": w["gsaves"]}]}})
+	_json(w["gog"]["heroic_root"].path_join("gog_store/saveTimestamps.json"), {"1207": {"saves": "%d.0" % (T0 + 50)}})
+	cloud.seed("saves", "slot1.sav", "40 hours", T0)
+	cloud.seed("saves", "slot2.sav", "second slot", T0)
+	Fakes.put(w["gsaves"].path_join("slot1.sav"), "fresh default save", int(w["now"][0]))
+	w["s"].after_exit(w["gog"])
+	eq(cloud.cloud["saves/slot1.sav"]["data"], "40 hours", "the cloud save is untouched")
+	eq(cloud.files("saves"), ["slot1.sav", "slot2.sav"], "and the second slot is still there")
+	eq(w["s"].status(w["gog"])["state"], "conflict", "we ask")
+	_done(w)
+
+
 ## An upload that would delete cloud files this handheld doesn't have keeps a copy of the
 ## cloud first (a save slot deleted in the game is the honest case).
 func test_gog_upload_that_deletes_cloud_files_keeps_a_cloud_copy() -> void:

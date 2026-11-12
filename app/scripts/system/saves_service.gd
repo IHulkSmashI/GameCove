@@ -975,8 +975,9 @@ func _gog_plan(entry: Dictionary, tools: Dictionary) -> Dictionary:
 	return CloudSaves.gog_plan(entry, tools, cached)
 
 
-## gogdl timestamps per location: ours, else Heroic's for a folder Heroic itself synced (so
-## that game isn't a conflict at first), and "0" (never synced: gogdl then asks when both
+## gogdl timestamps per location: ours, else Heroic's for a folder Heroic itself synced and
+## nothing in it changed since (so that game isn't a conflict at first), and "0" (never
+## synced: gogdl then asks when both
 ## sides have files) for a location whose folder is empty, isn't there, or isn't the folder
 ## the time was kept for. What was dropped is written down at once, so it holds when this
 ## sync fails and the game runs anyway.
@@ -993,7 +994,13 @@ func _gog_ts(key: String, entry: Dictionary, locs: Array) -> Dictionary:
 	var dropped := false
 	for l in locs:
 		var name := str(l["name"])
-		if not ts.has(name) and heroic.has(name) and bool(l.get("heroic", false)):
+		# Heroic's time only stands for its folder as Heroic left it. GameCove never looked at
+		# that folder (no anchors: folder_guard has nothing to compare it with), so a file newer
+		# than the time (a prefix re-made with a fresh default save, play with sync off) can't be
+		# told from progress: then there is no time and both sides with files is a conflict
+		# (review at 56f5255, medium)
+		if not ts.has(name) and heroic.has(name) and bool(l.get("heroic", false)) \
+				and int(CloudSaves.dir_stats(str(l["path"]))["newest"]) <= int(float(str(heroic[name]))):
 			ts[name] = heroic[name]
 		var moved: bool = paths is Dictionary and paths.has(name) and str(paths[name]) != str(l["path"])
 		if (moved or int(CloudSaves.dir_stats(str(l["path"]))["files"]) == 0) and str(ts.get(name, "0")) != "0":

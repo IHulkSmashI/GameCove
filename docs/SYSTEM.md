@@ -354,7 +354,8 @@ What keeps a save from being lost (final review; each has a test against ports o
   newer. So a deleted or changed prefix, where the game writes a fresh default save, must not look like "only local
   changed". GOG: a location's time is dropped to `0` when its folder is empty, missing, or not the one the time was kept
   for (`gog_paths`), and the whole game's when there is no folder to sync yet; Heroic's time is only a fallback for a
-  folder Heroic itself synced. Epic: `last_sync` is dropped the same way (`epic_path`). Uninstalling forgets both. With
+  folder Heroic itself synced, and only while nothing in it is newer than that time (GameCove never saw that folder,
+  so a fresh default save in a prefix Heroic re-made can't be told from progress). Epic: `last_sync` is dropped the same way (`epic_path`). Uninstalling forgets both. With
   no sync time both sides count as changed and the user chooses.
 - **That check runs without a sync too** (`folder_guard`). Every launch and every game's end of an Epic or GOG game
   looks at the folders the last sync knew, whether cloud saves are on, allowed or signed in or not, and so does every
