@@ -191,6 +191,30 @@ ok 'grep -q "nothing was changed" "$T/out"' "says nothing was changed"
 ok '[ "$(snapshot)" = "$before" ]' "and nothing was"
 fix claw8ex-vrr remove >/dev/null 2>&1
 
+# review Low (Fixes): after a revision that changes the range, the screen runs the OLD patched range: that is not this
+# revision's range, and `update` used to take the fix out and then fail to install it again
+case_start update_refuses_when_an_older_range_is_active
+vrr_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+python3 -I -c '
+import sys
+b = bytearray(open(sys.argv[1], "rb").read())
+b[95] = 40
+b[142] = 40
+b[127] = (256 - sum(b[:127]) % 256) % 256
+b[254] = (256 - sum(b[129:254]) % 256) % 256
+b[255] = (256 - sum(b[128:255]) % 256) % 256
+open(sys.argv[2], "wb").write(b)
+' "$R$EDID_FILE" "$T/older.edid"
+cp "$T/older.edid" "$R$EDID_FILE"                          # an older revision wrote 40-120
+cp "$T/older.edid" "$R/sys/class/drm/card1-eDP-1/edid"     # and the screen runs it
+before=$(snapshot)
+ok '! fix claw8ex-vrr update >"$T/out" 2>&1' "refused"
+ok 'grep -q "nothing was changed" "$T/out"' "says nothing was changed"
+ok '[ "$(snapshot)" = "$before" ]' "and nothing was: the fix is not taken out"
+ok 'fix claw8ex-vrr status | grep -qx installed=yes' "still installed"
+fix claw8ex-vrr remove >/dev/null 2>&1
+
 case_start refuses_other_modprobe_rule
 vrr_ready
 mkdir -p "$R/etc/modprobe.d"
@@ -464,6 +488,23 @@ ok 'fix claw8ex-vrr status | grep -qx after_update=yes' "status still says the u
 ok 'fix claw8ex-vrr set refresh | grep -q "put back after the SteamOS update"' "the next refresh tries again, and works"
 ok 'grep -q "quiet splash amd_iommu=off gamecove.vrr=1" "$R/efi/EFI/SteamOS/grub.cfg"' "the boot menu has it"
 fix claw8ex-vrr remove >/dev/null 2>&1
+
+# review Medium (Fixes): a retried install on SteamOS, cut short after the hook, ended "already installed" with no keep list
+case_start install_cut_short_before_the_keep_list
+steamos_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+ok '[ -f "$R/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" ]' "installed: the keep list is there"
+rm -f "$R/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf"
+grep -vxF "file /etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" "$R/etc/gamecove/claw8ex-vrr/record/manifest" >"$T/m.tmp" || true
+cat "$T/m.tmp" >"$R/etc/gamecove/claw8ex-vrr/record/manifest"
+ok 'fix claw8ex-vrr install >"$T/out" 2>&1' "the retry succeeds ($(tail -n 1 "$T/out" 2>/dev/null))"
+ok '[ -f "$R/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" ]' "and the keep list is back"
+ok 'grep -qxF "file /etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" "$R/etc/gamecove/claw8ex-vrr/record/manifest"' "recorded, so remove takes it out again"
+ok '! grep -q "already installed" "$T/out"' "and it does not say everything was in place"
+fix claw8ex-vrr install >"$T/out" 2>&1
+ok 'grep -q "already installed" "$T/out"' "a complete install is still \"already installed\""
+fix claw8ex-vrr remove >/dev/null 2>&1
+ok '[ ! -e "$R/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" ]' "remove takes the keep list away"
 
 case_start initramfs_failure_undoes
 vrr_ready

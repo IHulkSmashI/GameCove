@@ -352,7 +352,17 @@ install() {
 		migrate || die "could not move the old kernel arguments to the boot hook; see the messages above"
 		if m_installed; then
 			ensure_marker || die "could not add the gamecove.vrr=1 kernel argument"
-			say "already installed"
+			if [ "$(boot_backend)" = steamos ] && [ ! -f "$ROOT$KEEP_CONF" ]; then
+				# an install cut short after the hook but before its last step: without the keep list the next
+				# SteamOS update takes the fix away (the files are in /etc), and "already installed" hid that
+				GC_TMP=$(mktemp -d)
+				keep_text >"$GC_TMP/keep.conf"
+				m_put "$GC_TMP/keep.conf" "$KEEP_CONF" 644 || die "could not write $KEEP_CONF"
+				m_has rev "$REVISION" || m_add rev "$REVISION"
+				say "an earlier install was cut short: the SteamOS keep list is written now, so the fix survives updates"
+			else
+				say "already installed"
+			fi
 		fi
 		return 0
 	fi
@@ -443,7 +453,11 @@ update() {
 	[ -n "$edid" ] && [ -f "$ROOT$edid" ] || die "the fix's EDID file is missing; remove the fix and apply it again"
 	if [ "$(edid_q "$ROOT$edid" -v mode=range 2>/dev/null)" != "$LO $HI" ] || ! edid_q "$ROOT$edid" -v mode=check 2>/dev/null; then
 		raw=$(panel_edid) || die "no internal screen EDID found"
-		if [ "$(edid_q "$raw" -v mode=range 2>/dev/null)" = "$LO $HI" ]; then
+		# GameCove's EDID is what the screen reports now when it has the installed file's range (an older revision's)
+		# or this revision's: judging by this revision's range alone sent a range revision down the remove-then-install
+		# road, which can't validate the factory EDID while the patched one is active, and left the fix gone
+		live=$(edid_q "$raw" -v mode=range 2>/dev/null)
+		if [ "$live" = "$LO $HI" ] || [ "$live" = "$(edid_q "$ROOT$edid" -v mode=range 2>/dev/null)" ]; then
 			die "the screen is running GameCove's older EDID, so it can't be rebuilt now: restart with gamecove.novrr at the boot menu (or remove the fix, restart), then apply it again; nothing was changed"
 		fi
 		sh "$0" remove || die "the installed version could not be taken out; nothing else was changed"
