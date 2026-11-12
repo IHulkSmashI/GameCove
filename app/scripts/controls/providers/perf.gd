@@ -26,6 +26,7 @@ const Upscale := preload("res://scripts/controls/perf/upscale.gd")
 const UpscaleUpdates := preload("res://scripts/controls/perf/upscale_updates.gd")
 const Privacy := preload("res://scripts/system/privacy.gd")
 const Proton := preload("res://scripts/launch/proton.gd")
+const LaunchEnv := preload("res://scripts/launch/launch_env.gd")
 
 const NO_GAME := "Open a game first"
 ## Low latency can't be turned off while frame generation is on: generated
@@ -726,8 +727,10 @@ func upscale_hands_off(key: String, g: Dictionary = {}) -> bool:
 		return false
 	var game_dict := g if not g.is_empty() else (game() if key == game_key() else {})
 	var dir := str(game_dict.get("install_path", ""))
-	if upscale_cmd() == "" or _gpu()["vendor"] == "other" or game_dict.is_empty() or (Files.steam_appid(key) == "" and dir == ""):
-		return bool(store.get_value(key, "upscale_hands_off", false))
+	if _gpu()["vendor"] == "other":
+		return false
+	if upscale_cmd() == "" or game_dict.is_empty() or (Files.steam_appid(key) == "" and dir == ""):
+		return _last_hands_off(key)
 	_mutex.lock()
 	var c: Dictionary = _hands_off_cache.get(key, {})
 	_mutex.unlock()
@@ -736,8 +739,16 @@ func upscale_hands_off(key: String, g: Dictionary = {}) -> bool:
 	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(game_dict)) else []
 	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "plan", _home(), key, _gpu(), dir, ac, Upscale.title_of(game_dict))
 	if not bool(r.get("ok", false)):
-		return bool(store.get_value(key, "upscale_hands_off", false))       # the last known answer
+		return _last_hands_off(key)
 	return remember_hands_off(key, r, game_dict)
+
+
+## The last answer the helper's plan gave for the game; with none (never asked, or the helper is missing or fails)
+## the game is not known to be safe, so hands off: a launch swaps nothing in it (review H3: it used to fall back to "on").
+func _last_hands_off(key: String) -> bool:
+	if not store.has_value(key, "upscale_hands_off"):
+		return true
+	return bool(store.get_value(key, "upscale_hands_off", true))
 
 
 ## Keeps the plan's hands-off fact (and its anti-cheat verdict) for the game; when either changed, a Steam game's
@@ -750,8 +761,8 @@ func remember_hands_off(key: String, plan: Dictionary, g: Dictionary = {}) -> bo
 	_hands_off_cache[key] = {"t": Time.get_ticks_msec(), "v": off}
 	_mutex.unlock()
 	var changed := false
-	if bool(store.get_value(key, "upscale_hands_off", false)) != off:
-		store.set_value(key, "upscale_hands_off", true if off else null)
+	if not store.has_value(key, "upscale_hands_off") or bool(store.get_value(key, "upscale_hands_off", false)) != off:
+		store.set_value(key, "upscale_hands_off", off)       # kept either way: no answer yet is not "known safe"
 		changed = true
 	if bool(store.get_value(key, AC_KEY, false)) != ac:
 		store.set_value(key, AC_KEY, true if ac else null)
@@ -1159,14 +1170,27 @@ func apply_refreshed_lists() -> int:
 		return 0
 	var n := 0
 	for k in store.games():
-		if not (store.has_value(k, "upscale_env") or store.has_value(k, "upscale_hands_off")):
-			continue
 		var g: Dictionary = library.game_by_key(k)
 		if g.is_empty():
 			continue
-		prepare_installed(g, true)
-		n += 1
+		if store.has_value(k, "upscale_env") or bool(store.get_value(k, "upscale_hands_off", false)):
+			prepare_installed(g, true)
+			n += 1
+		# A Steam launch reads the env file from the last write: a game the new list flags (online, anti-cheat) would
+		# keep Proton's FSR 4 upgrade until its page opened (review H3), so the files are written again now
+		var appid := Files.steam_appid(k)
+		if appid != "" and _env_file_swaps(appid):
+			game_changed(k, g)
 	return n
+
+
+## True when the Steam game's env file sets one of Proton's FSR 4 upgrade variables.
+func _env_file_swaps(appid: String) -> bool:
+	var e: Dictionary = Files.read_env(Files.perf_env_path(_home(), appid))
+	for v in LaunchEnv.FSR4_VARS:
+		if e.has(v):
+			return true
+	return false
 
 
 func _schedule_background_check(delay_s: float) -> void:

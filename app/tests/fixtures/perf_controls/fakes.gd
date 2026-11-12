@@ -29,6 +29,13 @@ class FakeLauncher extends RefCounted:
 	var frame_gen_hooks: Array[Callable] = []
 	var hands_off_hooks: Array[Callable] = []
 	var anticheat_keys: Array = []
+	## A launch that swaps in Proton's FSR 4 upgrade unless the hands-off hooks say to leave the game alone
+	var fsr4_swap := false
+	func upscale_hands_off(key: String, game: Dictionary = {}) -> bool:
+		for hook in hands_off_hooks:
+			if hook.is_valid() and bool(hook.call(key, game)):
+				return true
+		return false
 	func has_anticheat(game: Dictionary) -> bool:
 		return str(game.get("key", "")) in anticheat_keys
 	func settings_for(key: String) -> Dictionary:
@@ -36,7 +43,10 @@ class FakeLauncher extends RefCounted:
 	func save_settings(key: String, s: Dictionary) -> void:
 		settings[key] = s
 	func launch_env(game: Dictionary) -> Dictionary:
-		return env.duplicate() if settings_for(str(game.get("key", ""))).get("low_latency", true) else {}
+		var out: Dictionary = env.duplicate() if settings_for(str(game.get("key", ""))).get("low_latency", true) else {}
+		if fsr4_swap and not upscale_hands_off(str(game.get("key", "")), game):
+			out["PROTON_FSR4_UPGRADE"] = "1"
+		return out
 
 
 class FakeLibrary extends RefCounted:

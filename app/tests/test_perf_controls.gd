@@ -1041,11 +1041,54 @@ func test_the_launch_asks_the_helpers_plan_whether_to_keep_hands_off() -> void:
 	runner.answers["plan"] = {"ok": true, "hands_off": false, "refused": null, "line": "x"}
 	w["p"]._hands_off_cache.clear()
 	ok(not launcher.hands_off_hooks[0].call("epic:nikki", nikki), "added to the game: not held back")
-	ok(not w["p"].store.has_value("epic:nikki", "upscale_hands_off"), "and the kept fact is gone")
+	ok(not bool(w["p"].store.get_value("epic:nikki", "upscale_hands_off", true)), "and the kept fact says it is safe (not just gone)")
 	runner.answers["plan"] = {"ok": false, "error": "helper failed"}
 	w["p"].store.set_value("epic:nikki", "upscale_hands_off", true)
 	w["p"]._hands_off_cache.clear()
 	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "a helper that fails keeps the last known answer")
+	w["p"].store.set_value("epic:nikki", "upscale_hands_off", false)
+	w["p"]._hands_off_cache.clear()
+	ok(not launcher.hands_off_hooks[0].call("epic:nikki", nikki), "...a known-safe one too")
+	_done(w)
+
+
+func test_a_helper_that_cant_answer_never_leaves_the_swap_on() -> void:
+	# review H3: a missing or failing helper fell back to "on"; a game never known to be safe now gets no swap
+	var w := _world("hands_off_failsafe", ALLY_X)
+	var runner = w["runner"]
+	var launcher = w["launcher"]
+	var nikki := {"key": "epic:nikki", "store": "epic", "id": "nikki", "title": "Infinity Nikki", "install_path": "/games/nikki"}
+	runner.answers["plan"] = {"ok": false, "error": "helper failed"}
+	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "the helper fails and nothing is known: hands off")
+	runner.answers.erase("plan")
+	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "no answer at all: hands off")
+	DirAccess.remove_absolute(w["root"].path_join("usr/libexec/gamecove/gamecove-upscale"))
+	w["p"]._hands_off_cache.clear()
+	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "the helper is not installed: hands off")
+	_done(w)
+
+
+func test_a_refreshed_list_rewrites_a_steam_games_env_file() -> void:
+	# review H3: a Steam launch uses the env file from the last write, so a game the new list flags as online kept
+	# PROTON_FSR4_UPGRADE until its page opened
+	var w := _world("refresh_env", ALLY_X)
+	var runner = w["runner"]
+	var p = w["p"]
+	w["launcher"].fsr4_swap = true
+	var g := {"key": "steam:42", "store": "steam", "id": "42", "title": "Wuthering Waves", "install_path": "/games/ww"}
+	w["library"].games["steam:42"] = g
+	runner.answers["plan"] = {"ok": true, "hands_off": false, "refused": null, "line": "x"}
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {}}
+	runner.answers["prepare"] = {"ok": true, "did": "", "plan": {"ok": true, "hands_off": false, "refused": null}}
+	p.store.set_value("steam:42", "fps_limit", 60)
+	p.game_changed("steam:42", g)
+	var path: String = Files.perf_env_path(w["home"], "42")
+	ok("PROTON_FSR4_UPGRADE=1" in FileAccess.get_file_as_string(path), "the swap is in the file: " + FileAccess.get_file_as_string(path))
+	# the nightly list now says it is an online game nobody added ours to
+	runner.answers["plan"] = {"ok": true, "hands_off": true, "refused": null, "line": "x"}
+	runner.answers["prepare"] = {"ok": true, "did": "", "plan": {"ok": true, "hands_off": true, "refused": null}}
+	p.apply_refreshed_lists()
+	ok(not "PROTON_FSR4_UPGRADE" in FileAccess.get_file_as_string(path), "the file was written again without it: " + FileAccess.get_file_as_string(path))
 	_done(w)
 
 
