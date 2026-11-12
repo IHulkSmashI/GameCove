@@ -1137,13 +1137,13 @@ func _fix_badges(fix: String) -> HBoxContainer:
 	var row := Kit.hbox(8)
 	row.name = "Badges_" + fix.validate_node_name()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var lv := Kit.badge(TFix.LEVEL["recommended"], "info")
+	var lv := Kit.chip(TFix.LEVEL["recommended"], "", "info")
 	lv.name = "Level"
 	row.add_child(lv)
 	var id := str(_device_row().get("id", ""))
 	for t in Texts.fix_tested(fix):
 		if str(t.get("device", "")) == id:
-			var tb := Kit.badge(TFix.TESTED_BADGE, "good")
+			var tb := Kit.chip(TFix.TESTED_BADGE, "check", "good")
 			tb.name = "Tested"
 			row.add_child(tb)
 			break

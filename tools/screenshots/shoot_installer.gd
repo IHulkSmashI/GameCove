@@ -66,7 +66,9 @@ class OkRunner extends RefCounted:
 		return 0
 
 
-func make(target: Dictionary, theme_id := "cove") -> void:
+func make(target: Dictionary, theme_id := "") -> void:
+	if theme_id == "":
+		theme_id = OS.get_environment("SHOOT_THEME") if OS.get_environment("SHOOT_THEME") != "" else "cove"
 	if screen != null:
 		root.remove_child(screen)
 		screen.free()

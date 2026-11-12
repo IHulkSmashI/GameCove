@@ -104,6 +104,10 @@ func setup(card_key: String, title: String, line: String, icon := "", badge: Arr
 	footer.name = "Footer"
 	footer.add_theme_font_override("font", ThemeLib.mono(false, 1))
 	footer.add_theme_font_size_override("font_size", ThemeLib.SIZE_MICRO + 1)
+	# wraps inside the card: a long status line ("Ready: games show up in your library") never widens it past its column
+	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	footer.custom_minimum_size.x = 40
+	footer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(footer)
 	set_selected(false)
 
