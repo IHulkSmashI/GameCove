@@ -831,6 +831,24 @@ func test_service_hands_the_buttons_back_when_the_monitor_cannot_be_restarted() 
 	c.free()
 
 
+func test_a_layout_loaded_after_the_monitor_gave_up_maps_nothing_to_it() -> void:
+	var t := _service("monitor_gone_load")
+	var c: Node = t[0]
+	var f: RefCounted = t[1]
+	var ip = t[2]
+	ip.loaded = Profile.to_json(ButtonMap.set_press(_empty(), "LeftPaddle1", "action:mute"))
+	c.refresh()
+	c.setup_intercept_for_tests()
+	c.monitor_line({"kind": "started"})
+	c._restarts = 3
+	c.monitor_line({"kind": "exited"})
+	f.calls.clear()
+	c.refresh()
+	for l in _loads(f):
+		ok(not JSON.stringify(l).contains("\"dbus\""), "a reload after the give-up maps no button to GameCove")
+	c.free()
+
+
 func test_service_opens_steams_menu_through_the_virtual_pad() -> void:
 	var t := _service("steam_menu")
 	var c: Node = t[0]
