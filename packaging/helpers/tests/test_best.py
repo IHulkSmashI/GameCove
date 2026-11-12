@@ -286,6 +286,27 @@ def test_one_hands_off_fact_per_game(tmp_path):
     assert best.plan(home, "464", Z1E, anticheat=True)["hands_off"] is True      # the app's own anti-cheat data counts
 
 
+def test_list_notes_reach_a_game_that_isnt_from_steam(tmp_path):
+    """Review H2: only a Steam game has an app id the lists can be asked by, and the app never passed the title: an
+    Infinity Nikki from Epic was planned as "unknown, press Add" with no ban line. With the title (--name) the note
+    naming an anti-cheat refuses it, on every command."""
+    home = str(tmp_path)
+    _pkg(home)
+    d = os.path.join(home, "Games", "InfinityNikki")
+    for f in ("X6Game/Binaries/Win64/X6Game-Win64-Shipping.exe", "nvngx_dlss.dll", "D3D12Core.dll"):
+        _w(os.path.join(d, f), "x" * 10)
+    before = _tree(d)
+    key = "epic:nikki"
+    assert best.plan(home, key, DECK, d)["refused"] is None                       # nothing says which game this is
+    args = ["--home", home, "--key", key, "--gpu", json.dumps(DECK), "--dir", d, "--name", "Infinity Nikki"]
+    p = cli.run(["plan"] + args)
+    assert p["refused"] == "anticheat" and p["hands_off"] and not p.get("offer")
+    assert cli.run(["opt-in"] + args)["refused"] == "anticheat"
+    assert cli.run(["choose", "--upscaler", "fsr31", "--fg", "0"] + args)["refused"] == "anticheat"
+    assert cli.run(["apply"] + args)["ok"] is False
+    assert cli.run(["prepare"] + args)["did"] == "" and _tree(d) == before
+
+
 def test_an_online_game_set_up_before_it_was_flagged_comes_out(tmp_path):
     home = str(tmp_path)
     _pkg(home)

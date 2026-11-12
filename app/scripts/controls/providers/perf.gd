@@ -538,7 +538,7 @@ func _upscale_run(verb: String, extra: Array = []) -> Dictionary:
 		var env: Variant = (c.get("r", {}) as Dictionary).get("env", {}) if not c.is_empty() else store.get_value(k, "upscale_env", {})
 		return {"ok": true, "queued": true, "env": env if env is Dictionary else {}}
 	return Upscale.run(ctx.get("runner"), upscale_cmd(), verb, _home(), k, _gpu(),
-		str(game().get("install_path", "")), extra)
+		str(game().get("install_path", "")), extra, Upscale.title_of(game()))
 
 
 ## Session wiring: `key` started ("" when the game ended). A change asked for
@@ -718,9 +718,9 @@ func prepare_installed(g: Dictionary, now := true) -> Dictionary:
 		return {}
 	_prepared[k] = true
 	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(g)) else []
-	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac + _auto_net_args())
+	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac + _auto_net_args(), Upscale.title_of(g))
 	if str(r.get("did", "")) != "":
-		var st := Upscale.run(ctx.get("runner"), upscale_cmd(), "status", _home(), k, _gpu(), dir)
+		var st := Upscale.run(ctx.get("runner"), upscale_cmd(), "status", _home(), k, _gpu(), dir, [], Upscale.title_of(g))
 		var env: Variant = st.get("env", {})
 		store.set_value(k, "upscale_env", env if env is Dictionary and not env.is_empty() else null)
 		game_changed(k, g)

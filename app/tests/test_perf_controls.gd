@@ -314,7 +314,7 @@ func test_upscaler_runs_the_helper_and_keeps_its_environment() -> void:
 	eq(c.options.map(func(o): return o["value"]), ["own", "fsr31", "fsr4_amd"], "AMD choices")
 	reg.set_value("perf.upscaler", "fsr31")
 	var last: String = runner.calls[runner.calls.size() - 1]
-	ok(last.begins_with("/usr/libexec/gamecove/gamecove-upscale choose --home ") and "--key epic:abc --dir /games/abc --upscaler fsr31 --fg 0" in last, "choose call: " + last)
+	ok(last.begins_with("/usr/libexec/gamecove/gamecove-upscale choose --home ") and "--key epic:abc --dir /games/abc --name Epic Game --upscaler fsr31 --fg 0" in last, "choose call: " + last)
 	ok("--gpu {\"arch\":\"RDNA3.5\",\"chip\":\"\",\"family\":\"amd-rdna3\",\"gpu\":\"\",\"tier\":\"amd_rdna35\",\"vendor\":\"amd\",\"xmx\":false} " in last, "GPU facts passed as JSON: " + last)
 	var env: Dictionary = w["p"].launch_env_hook("epic:abc", EPIC)
 	eq(env.get("WINEDLLOVERRIDES"), "dxgi=n,b;", "non-Steam launch gets OptiScaler's override")
@@ -977,6 +977,30 @@ func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> vo
 	reg.detect_all()
 	ok(not reg.control("perf.upscale_offer").available, "nothing left to offer once added")
 	ok(reg.control("perf.upscaler").available, "and the Upscaler row is open: " + reg.control("perf.upscaler").reason)
+	_done(w)
+
+
+func test_every_helper_call_for_a_game_carries_its_title() -> void:
+	# review H2: the lists' notes (anti-cheat named, online game) are found by title; a non-Steam game has no app id,
+	# so Infinity Nikki from Epic was planned as "unknown" with no ban line
+	var w := _world("helper_title", ALLY_X)
+	var runner = w["runner"]
+	var reg: Node = w["reg"]
+	runner.answers["status"] = {"ok": true, "mode": "best", "upscaler": "own", "fg": 0, "owner": "none", "env": {}}
+	runner.answers["prepare"] = {"ok": true, "did": ""}
+	runner.answers["plan"] = {"ok": true, "line": "Best here: FSR 3.1.", "auto": true, "refused": null}
+	runner.answers["choose"] = {"ok": true, "env": {}}
+	var nikki := {"key": "epic:nikki", "store": "epic", "id": "nikki", "title": "Infinity Nikki", "install_path": "/games/nikki"}
+	_with_game(w, nikki)
+	reg.set_value("perf.upscaler", "fsr31")
+	for verb in ["status", "plan", "prepare", "choose"]:
+		var calls := _calls_with(runner, verb)
+		ok(not calls.is_empty(), verb + " was asked")
+		for c in calls:
+			ok("--name Infinity Nikki" in c, verb + " names the game: " + c)
+	w["p"].prepare_installed(nikki)
+	for c in _calls_with(runner, "prepare"):
+		ok("--name Infinity Nikki" in c, "an install-time prepare names it too: " + c)
 	_done(w)
 
 
