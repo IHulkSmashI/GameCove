@@ -513,5 +513,7 @@ func hints_for(c: Control) -> Array:
 		return [["A", "Reset"], ["B", "Back"]]
 	for v in views:
 		if is_instance_valid(v) and v.is_ancestor_of(c):
-			return [["LR", "Change"], ["B", "Back"]]
+			# a switch or segmented row changes on A, a stepper or slider with left / right
+			var p: Node = c.get_parent()
+			return [Kit.change_hint(c) if c is Slider or (p != null and p.has_method("is_stepper")) else ["LR", "Change"], ["B", "Back"]]
 	return []

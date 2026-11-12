@@ -336,8 +336,7 @@ func _build_frame() -> void:
 	status_label = Kit.label("", "AccentLabel", true)
 	status_label.name = "Status"
 	col.add_child(status_label)
-	prompts = Kit.prompts([["B", "Close"], [["LB", "RB"], "Tabs"], ["Y", TC.ALL_SETTINGS], ["LR", "Change"]])
-	prompts.name = "Prompts"
+	_set_prompts(["LR", "Change"])
 	col.add_child(prompts)
 	_style_head()
 
@@ -376,11 +375,45 @@ func open(for_game: Dictionary) -> void:
 		gamescope.set_overlay(true)
 	show_section(0, "", true)
 	refresh_live()
+	var vp := get_viewport()
+	if vp != null and not vp.gui_focus_changed.is_connected(_on_focus_changed):
+		vp.gui_focus_changed.connect(_on_focus_changed)
+	_on_focus_changed(vp.gui_get_focus_owner() if vp != null else null)
+
+
+## The prompts' last item says what changes the focused row: left / right on a
+## slider or stepper, A on a switch or segmented row (only on a focus change).
+var _change_prompt: Array = []
+
+
+func _set_prompts(change: Array) -> void:
+	_change_prompt = change
+	var old := prompts
+	prompts = Kit.prompts([["B", "Close"], [["LB", "RB"], "Tabs"], ["Y", TC.ALL_SETTINGS], change])
+	prompts.name = "Prompts"
+	if old != null and old.get_parent() != null:
+		var at := old.get_index()
+		var parent := old.get_parent()
+		parent.remove_child(old)
+		old.queue_free()
+		parent.add_child(prompts)
+		parent.move_child(prompts, at)
+
+
+func _on_focus_changed(f: Control) -> void:
+	if not visible or f == null or not is_ancestor_of(f):
+		return
+	var want := Kit.change_hint(f)
+	if want != _change_prompt:
+		_set_prompts(want)
 
 
 func close() -> void:
 	if not visible:
 		return
+	var vp := get_viewport()
+	if vp != null and vp.gui_focus_changed.is_connected(_on_focus_changed):
+		vp.gui_focus_changed.disconnect(_on_focus_changed)
 	if strip != null:
 		strip.close_sheet()
 	visible = false

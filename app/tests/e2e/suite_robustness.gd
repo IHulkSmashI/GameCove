@@ -160,7 +160,7 @@ func test_failing_writes_keep_the_value_and_say_so() -> void:
 		ok(await open_settings_page("power"), "Power page")
 		var v := view("power.epp", main().settings)
 		ok(v != null and await focus_on(v), "EPP row")
-		await right()
+		await change()
 		await w.idle()
 		ok(v.model.is_failed("power.epp"), "the change is marked failed")
 		eq(ctl("power.epp").value, before, "the control keeps the old value")

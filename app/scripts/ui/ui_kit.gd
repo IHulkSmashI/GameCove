@@ -279,6 +279,18 @@ static func prompts(list: Array) -> HBoxContainer:
 	return row
 
 
+## The hint for what changes `f`: a slider or a "‹ value ›" stepper changes
+## with left / right; a switch or segmented row (ChoiceRow) on A; anything else
+## is A Select (docs/CONTROLLER-UX.md CUX-3, CUX-10).
+static func change_hint(f: Control) -> Array:
+	if f is Slider:
+		return ["LR", "Adjust"]
+	var p: Node = f.get_parent() if f != null else null
+	if p != null and p.has_method("is_stepper"):
+		return ["LR", "Change"] if p.is_stepper() else ["A", "Change"]
+	return ["A", "Select"]
+
+
 ## Plain text of a prompt row (tests, accessibility).
 static func prompts_text(row: Control) -> String:
 	var parts: Array[String] = []

@@ -232,7 +232,7 @@ func _change(id: String, v: Node) -> String:
 	var blocked: String = model.blocked_reason(c)
 	if blocked != "":
 		# "Turn on X first": the row is locked and pushing it changes nothing
-		await right()
+		await change()
 		await w.idle()
 		ok(c.value == before, "%s: %s is locked (%s) and stayed %s" % [setup_name(), id, blocked, before])
 		return ""
@@ -246,7 +246,7 @@ func _change(id: String, v: Node) -> String:
 			await w.frames(1)
 			await w.wait_s(0.35)   # SliderRow settles before it sends
 		"choice", "toggle":
-			await right()
+			await change()
 		"color":
 			await right()
 			await w.wait_s(0.5)   # ColorRow settles before it sends

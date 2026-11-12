@@ -416,7 +416,7 @@ func hints_for(c: Control) -> Array:
 			return h
 	for k in rows:
 		if rows[k].button == c:
-			return [["LR", "Change"], ["B", "Back"]]
+			return [Kit.change_hint(c), ["B", "Back"]]   # A on a switch, left / right on a stepper
 	if c is Button:
 		return [["A", c.text], ["B", "Back"]]
 	return [["DPAD", "Scroll"], ["B", "Back"]]

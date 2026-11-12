@@ -482,7 +482,8 @@ func in_page() -> bool:
 static func changes_with_lr(f: Control) -> bool:
 	if f is Slider:
 		return f.editable
-	return f is Button and f.theme_type_variation == "RowButton" and f.get_parent() != null and "values" in f.get_parent()
+	return f is Button and f.theme_type_variation == "RowButton" and f.get_parent() != null and f.get_parent().has_method("is_stepper") \
+		and f.get_parent().is_stepper()
 
 
 ## Hint bar for whatever has focus here, for main.gd's hint bar
@@ -507,6 +508,8 @@ func hints(f: Control) -> Array:
 		var named: String = pg_a.a_hint(f) if pg_a != null and pg_a.has_method("a_hint") else ""
 		if changes_with_lr(f):
 			out.append(["LR", "Change"])
+		elif named == "" and f.get_parent() != null and f.get_parent().has_method("is_stepper"):
+			out.append(["A", "Change"])   # a switch or segmented row: A, not left / right
 		elif named != "":
 			out.append(["A", named])
 		else:

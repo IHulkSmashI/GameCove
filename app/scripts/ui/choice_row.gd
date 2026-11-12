@@ -2,8 +2,11 @@ extends VBoxContainer
 ## One setting: a wide row "Title ...... [ A | B | C ]" with a segmented
 ## control (the chosen segment filled with the accent) when there are two to
 ## four short values, else "‹ Value ›" with position dots; and a line under it
-## (neutral text, inside the row's card while it shows). Left/right (d-pad, stick, arrow keys) step
-## through values; A / click steps forward. Booleans are a switch (Off / On).
+## (neutral text, inside the row's card while it shows). Booleans are a switch
+## (Off / On). A / click steps forward on every kind. Only the "‹ Value ›"
+## stepper also steps with left / right (d-pad, stick, arrow keys): a switch or
+## a segmented choice changes on A alone, and left / right move focus on, like
+## everywhere else (docs/CONTROLLER-UX.md CUX-3).
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
@@ -154,6 +157,7 @@ func setup(setting_key: String, title: String, vals: Array, lbls: Array, current
 				_dots.add_child(d)
 		val_col.add_child(_dots)
 		row.add_child(val_col)
+		button.set_meta("ux_stepper", true)   # the focus walk: left / right are its value
 
 	_hint = Kit.label("", "QuietLabel", true)
 	_hint.name = "Hint"
@@ -334,7 +338,14 @@ func _draw() -> void:
 		draw_style_box(ThemeLib.row_focus(), r)
 
 
+## True for the "‹ Value ›" kind: left / right step it.
+func is_stepper() -> bool:
+	return _left != null
+
+
 func _on_gui_input(event: InputEvent) -> void:
+	if not is_stepper():
+		return
 	if event.is_action_pressed("ui_left", true):
 		step(-1)
 		button.accept_event()

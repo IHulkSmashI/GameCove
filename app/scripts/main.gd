@@ -2494,7 +2494,9 @@ func focus_kind(f: Control) -> String:
 	if f is HSlider:
 		return "slider"
 	if f is Button and f.theme_type_variation == "RowButton":
-		return "row"
+		var cr: Node = f.get_parent()
+		# a switch or segmented row changes on A; only a "‹ value ›" stepper takes left / right
+		return "row" if cr == null or not cr.has_method("is_stepper") or cr.is_stepper() else "toggle"
 	if f is Button and (f.theme_type_variation == "TabButton") and top_bar.is_ancestor_of(f):
 		return "status" if f == top_bar.status_button else "tab"
 	if f is Button and f.name == "Play":
@@ -2515,6 +2517,7 @@ static func hints_for(ctx: Dictionary) -> Array:
 		"app": out.append(["A", "Open"])   # an app's tile: no game options behind Menu
 		"play": out.append(["A", ctx.get("label", "Play")])
 		"row": out.append(["LR", "Change"])
+		"toggle": out.append(["A", "Change"])
 		"slider": out.append(["LR", "Adjust"])
 		"tab": out.append(["A", "Open"])
 		"status": out.append(["A", "Status"])
