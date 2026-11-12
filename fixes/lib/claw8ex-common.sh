@@ -305,11 +305,21 @@ grub_mark() { printf '# GameCove %s' "$1"; }
 grub_has_line() { grep -qF "$(grub_mark "$FIX")" "$ROOT$GRUB_DEFAULT" 2>/dev/null; }
 
 # grub_write <file> <content file>: atomically, into the real file (a symlinked config stays one), mode kept.
+# The copy is written, flushed and compared with what was meant to be written before it replaces anything: a full
+# or failing disk leaves the file as it was (it used to be replaced by an empty one, and update-grub then built the
+# boot menu from that).
 grub_write() {
 	_real=$(readlink -f "$ROOT$1" 2>/dev/null) || _real=$ROOT$1
-	cp -p "$_real" "$_real.gamecove-tmp" 2>/dev/null || : >"$_real.gamecove-tmp" || return 1
-	cat "$2" >"$_real.gamecove-tmp" && sync "$_real.gamecove-tmp" 2>/dev/null
-	mv -f "$_real.gamecove-tmp" "$_real" || { rm -f "$_real.gamecove-tmp"; return 1; }
+	_gt=$_real.gamecove-tmp
+	rm -f "$_gt"
+	if [ -e "$_real" ]; then
+		cp -p "$_real" "$_gt" 2>/dev/null || { rm -f "$_gt"; return 1; }
+	fi
+	if ! { cat "$2" >"$_gt" && sync "$_gt" 2>/dev/null; cmp -s "$2" "$_gt"; }; then
+		rm -f "$_gt"
+		return 1
+	fi
+	mv -f "$_gt" "$_real" || { rm -f "$_gt"; return 1; }
 }
 
 # update-grub as its own systemd unit when it can (a Steam or GameCove restart can't kill it halfway), else directly.
@@ -329,8 +339,14 @@ grub_regen() {
 grub_line_add() {
 	_tmp=$(mktemp) || return 1
 	_orig=$(mktemp) || { rm -f "$_tmp"; return 1; }
-	cat "$ROOT$GRUB_DEFAULT" >"$_orig" 2>/dev/null || : >"$_orig"
-	grep -vF "$(grub_mark "$FIX")" "$ROOT$GRUB_DEFAULT" >"$_tmp" 2>/dev/null || true
+	# the file as it is now, or as "absent"; a file that is there but can't be read is never replaced by a guess
+	_had=0
+	if [ -e "$ROOT$GRUB_DEFAULT" ]; then
+		_had=1
+		cat "$ROOT$GRUB_DEFAULT" >"$_orig" 2>/dev/null || { rm -f "$_tmp" "$_orig"; return 1; }
+	fi
+	grep -vF "$(grub_mark "$FIX")" "$_orig" >"$_tmp" 2>/dev/null
+	[ $? -le 1 ] || { rm -f "$_tmp" "$_orig"; return 1; }   # 1 = nothing left, fine; more = a read error
 	printf 'GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} %s"  %s\n' "$1" "$(grub_mark "$FIX")" >>"$_tmp"
 	if ! grub_write "$GRUB_DEFAULT" "$_tmp"; then
 		rm -f "$_tmp" "$_orig"
@@ -344,8 +360,13 @@ grub_line_add() {
 	fi
 	if [ -n "$_why" ]; then
 		warn "$_why"
-		# not marked after all: the file as it was, and the boot menu rebuilt from it (best effort)
-		grub_write "$GRUB_DEFAULT" "$_orig" || warn "could not put $GRUB_DEFAULT back"
+		# not marked after all: the file as it was, and the boot menu rebuilt from it (best effort). When the
+		# file can't be put back, update-grub is NOT run: it would build the menu from what is there now.
+		if [ "$_had" = 1 ]; then
+			grub_write "$GRUB_DEFAULT" "$_orig" || { warn "could not put $GRUB_DEFAULT back; the boot menu was not rebuilt"; rm -f "$_orig"; return 1; }
+		else
+			rm -f "$ROOT$GRUB_DEFAULT"
+		fi
 		grub_regen || true
 		rm -f "$_orig"
 		return 1
@@ -357,7 +378,8 @@ grub_line_add() {
 grub_line_remove() {
 	if grep -qF "$(grub_mark "$FIX")" "$ROOT$1" 2>/dev/null; then
 		_tmp=$(mktemp) || return 1
-		grep -vF "$(grub_mark "$FIX")" "$ROOT$1" >"$_tmp" || true
+		grep -vF "$(grub_mark "$FIX")" "$ROOT$1" >"$_tmp" 2>/dev/null
+		[ $? -le 1 ] || { rm -f "$_tmp"; return 1; }
 		grub_write "$1" "$_tmp" || { rm -f "$_tmp"; return 1; }
 		rm -f "$_tmp"
 	fi

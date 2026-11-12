@@ -184,4 +184,48 @@ demo remove >/dev/null || fail "remove after the update took the record"
 [ ! -e "$RULE" ] && [ ! -e "$CONF" ] && [ ! -e "$KEEP" ] || fail "remove: files and keep entry gone"
 demo status | grep -qx "state=off" || fail "off again"
 
+# ---- grub_write (claw8ex-common.sh): a failed write leaves /etc/default/grub exactly as it was
+(
+	GAMECOVE_ROOT="$T/gw"
+	mkdir -p "$GAMECOVE_ROOT/etc/default"
+	# shellcheck source=fixes/lib/claw8ex-common.sh
+	. "$HERE/claw8ex-common.sh"
+	FIX=demo
+	G="$GAMECOVE_ROOT/etc/default/grub"
+	printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX_DEFAULT="quiet"\n' >"$G"
+	chmod 640 "$G"
+	want=$(command cat "$G")
+	printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX_DEFAULT="quiet x=1"  # GameCove demo\n' >"$T/gw.new"
+	# a full disk: cat writes part of it and fails
+	cat() { head -c 12 "$@"; return 1; }
+	if grub_write /etc/default/grub "$T/gw.new" 2>/dev/null; then fail "a full disk: grub_write must fail"; fi
+	[ "$(command cat "$G")" = "$want" ] || fail "a full disk: /etc/default/grub is untouched"
+	[ ! -L "$G" ] && [ -s "$G" ] || fail "a full disk: the file is still the real, non-empty file"
+	[ ! -e "$G.gamecove-tmp" ] || fail "a full disk: no half-written copy is left"
+	# a write that fails without saying so (cut short, exit 0): the compare catches it
+	cat() { head -c 12 "$@"; }
+	if grub_write /etc/default/grub "$T/gw.new" 2>/dev/null; then fail "a short write: grub_write must fail"; fi
+	[ "$(command cat "$G")" = "$want" ] || fail "a short write: the file is untouched"
+	unset -f cat
+	# the content to write is not there
+	if grub_write /etc/default/grub "$T/gw.missing" 2>/dev/null; then fail "no content file: grub_write must fail"; fi
+	[ "$(command cat "$G")" = "$want" ] || fail "no content file: the file is untouched, never emptied"
+	# the normal write: new content, mode kept, no leftovers
+	grub_write /etc/default/grub "$T/gw.new" || fail "a normal write works"
+	cmp -s "$T/gw.new" "$G" || fail "a normal write: the new content"
+	[ "$(stat -c %a "$G")" = 640 ] || fail "a normal write keeps the mode"
+	[ ! -e "$G.gamecove-tmp" ] || fail "a normal write leaves no copy"
+	# the whole add: when the write fails, update-grub is never run and the file is as it was
+	printf 'GRUB_TIMEOUT=5\n' >"$G"
+	want=$(command cat "$G")
+	runs="$T/gw.runs"
+	: >"$runs"
+	grub_regen() { echo regen >>"$runs"; }
+	cat() { if [ "$1" = "$T/gw.line" ]; then command cat "$@"; else head -c 3 "$@"; return 1; fi; }
+	if grub_line_add "gamecove.test=1" 2>/dev/null; then fail "grub_line_add on a full disk must fail"; fi
+	unset -f cat
+	[ "$(command cat "$G")" = "$want" ] || fail "grub_line_add on a full disk: file untouched"
+	[ ! -s "$runs" ] || fail "update-grub is not run when the file could not be written"
+) || exit 1
+
 echo "lib tests passed"
