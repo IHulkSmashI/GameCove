@@ -49,6 +49,25 @@ func test_seed_3987000_hidden_library_keyboard_takes_no_input() -> void:
 	await without_stores()
 
 
+## 115001: Guide left Stream for Home and a Y within the fade-out opened Stream's keyboard behind Home; the next B closed
+## it and sent the focus into the hidden screen (a screen that has been left takes no buttons: main.gd _screen_out).
+func test_seed_115001_a_screen_still_fading_takes_no_buttons() -> void:
+	await with_stores()
+	stores.set_speed(0.05)
+	await journey(115001)
+	await without_stores()
+
+
+## 112003 (Ally, step 59) once ended with B and Guide not getting home from Settings: focus on the top bar's Status, the
+## intercept up, the quick menu shut, and Guide never reaching Controller.ui_action. Not reproduced since (the same
+## seed replays clean); the stuck report now says what the intercept held, so a recurrence names its cause.
+func test_seed_112003_b_and_guide_get_home() -> void:
+	await with_stores()
+	stores.set_speed(0.05)
+	await journey(112003)
+	await without_stores()
+
+
 ## One journey of STEPS moves from `seed`; true when an invariant broke (reported through ok()).
 func journey(seed: int) -> bool:
 	print("E2E SEED suite_monkey::journey %d" % seed)
@@ -174,6 +193,8 @@ func deep_checks(where_: String) -> Array[String]:
 			main().find_child("KeepDialog", true, false) != null, st.sheet != null and st.sheet.visible, st.keyboard != null and st.keyboard.is_open(),
 			SetupFlow.instance != null and is_instance_valid(SetupFlow.instance), focus().get_path() if focus() else "none",
 			w.fake.events, w.autoload("Controller")._intercepting, qm().visible, heard])
+		var ic: Variant = w.autoload("Controller").intercept
+		out.append("%s: intercept held %s, holds %s, status panel %s" % [where_, ic._held.keys(), ic._holds.keys(), main().status_panel.visible])
 	# the quick menu opens within its budget
 	if not qm().visible:
 		var t0 := Time.get_ticks_msec()

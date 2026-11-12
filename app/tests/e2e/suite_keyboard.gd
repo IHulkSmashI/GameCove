@@ -228,6 +228,30 @@ func test_game_sheets_and_the_status_panel_go_with_the_screen() -> void:
 	await w.frames(3)
 
 
+## Monkey seed 115001 (step 61): Guide left Stream for Home, and a Y within the screen's fade-out opened Stream's add-a-PC
+## keyboard: a screen still fading is shown, so it kept its own buttons. The next B closed that keyboard over Home and
+## sent the focus into the hidden screen: "nothing has focus". A screen that has been left takes no input at all.
+func test_a_screen_that_was_just_left_takes_no_buttons() -> void:
+	main().show_screen("stream")
+	await w.frames(4)
+	var sc: Control = main().stream_screen
+	if sc.keyboard == null:
+		sc._make_modals()
+	main().show_screen("home")
+	await press(JOY_BUTTON_Y)   # the same instant: Stream is still fading out
+	await w.frames(2)
+	ok(not sc.modal_open(), "Y on Home does not open Stream's keyboard behind it")
+	main().show_screen("stream")
+	await w.wait_s(0.4)
+	await press(JOY_BUTTON_Y)
+	await w.frames(2)
+	ok(sc.modal_open(), "and once Stream is the screen again its Y works")
+	await press(JOY_BUTTON_B)
+	await w.wait_s(0.3)
+	main().show_screen("home")
+	await w.frames(3)
+
+
 func test_streaming_host() -> void:
 	main().show_screen("stream")
 	await w.frames(4)

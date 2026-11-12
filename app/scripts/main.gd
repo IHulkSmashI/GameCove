@@ -1736,6 +1736,7 @@ func _screen_in(s: Control, d: float) -> void:
 	if not s.visible:
 		s.modulate.a = 0.0
 	s.visible = true   # a screen still fading out (pressed back quickly) turns around from where it is
+	s.set_process_unhandled_input(true)
 	s.scale = Vector2.ONE
 	s.position.x = Motion.slide(SCREEN_SLIDE_PX) * d
 	Motion.to(s, "modulate:a", 1.0, SCREEN_FADE_IN_S, Tween.TRANS_LINEAR, Tween.EASE_OUT)
@@ -1759,6 +1760,8 @@ func _screen_out(s: Control, d: float) -> void:
 	if status_panel != null and status_panel.visible:
 		status_panel.close()
 	_dismissing_overlays = false
+	# still on screen for the fade, but no longer the screen: its own buttons (Stream's Y, Settings' tabs) are not for it
+	s.set_process_unhandled_input(false)
 	var t := Motion.to(s, "modulate:a", 0.0, SCREEN_OUT_S)
 	Motion.to(s, "position:x", -Motion.slide(SCREEN_SLIDE_PX) * d, SCREEN_OUT_S, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	if t == null:
