@@ -88,10 +88,17 @@ func test_storage_mount_watch_runs_only_while_the_page_is_shown() -> void:
 	ok(storage._timer == null or storage._timer.is_stopped(), "not watching after Settings is left")
 
 
+## Behind a game the loop is throttled except for the 0.25 s full-speed burst after Power's 15 s check
+## hands work to its worker (BackgroundMode.burst, on purpose): a check that lands on such a moment
+## waits it out instead of failing on it.
+func _throttled() -> bool:
+	return await until(func(): return _bg().throttled(), 1500)
+
+
 func test_behind_a_game_the_main_loop_is_near_idle() -> void:
 	await _behind_game()
 	ok(not w.main._window_focused, "the game in front")
-	ok(_bg().throttled(), "BackgroundMode throttles behind the game")
+	ok(await _throttled(), "BackgroundMode throttles behind the game")
 	var a := ProcStats.snapshot()
 	await w.wait_s(MEASURE_S)
 	var z := ProcStats.snapshot()
@@ -117,13 +124,13 @@ func test_behind_a_game_the_main_loop_is_near_idle() -> void:
 func test_front_and_menu_run_at_full_speed() -> void:
 	ok(not _bg().throttled(), "home in front: full speed")
 	await _behind_game()
-	ok(_bg().throttled(), "behind the game: throttled")
+	ok(await _throttled(), "behind the game: throttled")
 	await qam()
 	ok(qm().visible and not _bg().throttled(), "the menu over the game: full speed")
 	eq(OS.low_processor_usage_mode_sleep_usec, _bg().front_sleep_us, "the project's own pace")
 	await b()
 	await w.idle()
-	ok(_bg().throttled(), "menu closed over the game: throttled again")
+	ok(await _throttled(), "menu closed over the game: throttled again")
 	await end_game()
 	await w.idle()
 	ok(not _bg().throttled(), "the game ended, home in front: full speed")
@@ -138,7 +145,7 @@ func _menu_presses(n: int) -> Array:
 	var path := "/org/shadowblip/InputPlumber/CompositeDevice0"
 	var out: Array = []
 	for i in n:
-		ok(_bg().throttled(), "throttled before the press")
+		ok(await _throttled(), "throttled before the press")
 		var box := {"t0": 0}
 		var th := Thread.new()
 		th.start(func():
