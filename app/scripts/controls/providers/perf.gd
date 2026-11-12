@@ -49,6 +49,7 @@ var launcher: Object
 var library: Object
 var _status_cache := {}           # game key -> {"t": ms, "r": Dictionary}
 var _plan_cache := {}             # game key -> {"t": ms, "r": Dictionary}
+var _hands_off_cache := {}        # game key -> {"t": ms, "v": bool}: the plan's hands-off fact at launch
 var _prepared := {}               # game keys set up ahead of their start this session
 var _last_did := {}               # game key -> what prepare changed, for the mode row's help
 var _running_key := ""            # the game running now (session_wiring through ctx["upscale_running"])
@@ -84,6 +85,8 @@ func setup(c: Dictionary) -> void:
 		launcher.frame_gen_hooks.append(frame_gen_on)
 	if launcher != null and "native_hooks" in launcher:
 		launcher.native_hooks.append(upscale_native)
+	if launcher != null and "hands_off_hooks" in launcher:
+		launcher.hands_off_hooks.append(upscale_hands_off)
 	refresh_device_files()
 	if real:
 		_schedule_background_check(UpscaleUpdates.FIRST_DELAY_S)
@@ -635,6 +638,7 @@ func _forget_status() -> void:
 	_mutex.lock()
 	_status_cache.erase(game_key())
 	_plan_cache.erase(game_key())
+	_hands_off_cache.erase(game_key())
 	_mutex.unlock()
 
 
@@ -670,6 +674,42 @@ func upscale_native(key: String) -> bool:
 	return store != null and bool(store.get_value(key, "upscale_native", false))
 
 
+## Launcher.hands_off_hooks: the helper's plan says to keep hands off this game (refused, or an online game / one no
+## list knows that nobody added ours to), so a launch swaps nothing in it either (Proton's FSR 4 upgrade; review H3).
+## Asked at every launch plan, so the answer is the plan of the last PLAN_TTL_MS, else a new "plan" for that game
+## (with its title and the app's anti-cheat data); it is kept with the game's values so a Steam game's env file,
+## written at another time, follows it. Unknown (no helper, no folder) counts as not held back, as before.
+func upscale_hands_off(key: String, g: Dictionary = {}) -> bool:
+	if store == null or key == "":
+		return false
+	var game_dict := g if not g.is_empty() else (game() if key == game_key() else {})
+	var dir := str(game_dict.get("install_path", ""))
+	if upscale_cmd() == "" or _gpu()["vendor"] == "other" or game_dict.is_empty() or (Files.steam_appid(key) == "" and dir == ""):
+		return bool(store.get_value(key, "upscale_hands_off", false))
+	_mutex.lock()
+	var c: Dictionary = _hands_off_cache.get(key, {})
+	_mutex.unlock()
+	if not c.is_empty() and Time.get_ticks_msec() - int(c["t"]) < PLAN_TTL_MS:
+		return bool(c["v"])
+	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(game_dict)) else []
+	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "plan", _home(), key, _gpu(), dir, ac, Upscale.title_of(game_dict))
+	if not bool(r.get("ok", false)):
+		return bool(store.get_value(key, "upscale_hands_off", false))       # the last known answer
+	return remember_hands_off(key, r, game_dict)
+
+
+## Keeps the plan's hands-off fact for the game; when it changed, a Steam game's env file is written again.
+func remember_hands_off(key: String, plan: Dictionary, g: Dictionary = {}) -> bool:
+	var off := bool(plan.get("hands_off", false))
+	_mutex.lock()
+	_hands_off_cache[key] = {"t": Time.get_ticks_msec(), "v": off}
+	_mutex.unlock()
+	if bool(store.get_value(key, "upscale_hands_off", false)) != off:
+		store.set_value(key, "upscale_hands_off", true if off else null)
+		game_changed(key, g)
+	return off
+
+
 ## Sets the open game up ahead of its first start ("Best for this handheld"),
 ## once per game and session: the helper puts the plan in when that is safe,
 ## repairs what a game update removed and steps down when the last start showed
@@ -681,6 +721,8 @@ func prepare_game(key := "") -> Dictionary:
 		return {}
 	_prepared[k] = true
 	var r := _upscale_run("prepare", _ac_args() + _auto_net_args())
+	if r.get("plan") is Dictionary:
+		remember_hands_off(k, r["plan"], game())
 	if str(r.get("waiting", "")) != "":
 		_last_did[k] = str(r["waiting"]).trim_suffix(".")
 	if str(r.get("did", "")) != "":
@@ -712,6 +754,7 @@ func prepare_installed(g: Dictionary, now := true) -> Dictionary:
 	_mutex.lock()
 	_status_cache.erase(k)
 	_plan_cache.erase(k)
+	_hands_off_cache.erase(k)
 	_mutex.unlock()
 	var dir := str(g.get("install_path", ""))
 	if not now or upscale_cmd() == "" or _gpu()["vendor"] == "other" or (Files.steam_appid(k) == "" and dir == ""):
@@ -719,6 +762,8 @@ func prepare_installed(g: Dictionary, now := true) -> Dictionary:
 	_prepared[k] = true
 	var ac: Array = ["--anticheat"] if launcher != null and launcher.has_method("has_anticheat") and bool(launcher.has_anticheat(g)) else []
 	var r := Upscale.run(ctx.get("runner"), upscale_cmd(), "prepare", _home(), k, _gpu(), dir, ac + _auto_net_args(), Upscale.title_of(g))
+	if r.get("plan") is Dictionary:
+		remember_hands_off(k, r["plan"], g)
 	if str(r.get("did", "")) != "":
 		var st := Upscale.run(ctx.get("runner"), upscale_cmd(), "status", _home(), k, _gpu(), dir, [], Upscale.title_of(g))
 		var env: Variant = st.get("env", {})
@@ -741,6 +786,8 @@ func upscale_plan() -> Dictionary:
 	_mutex.lock()
 	_plan_cache[k] = {"t": Time.get_ticks_msec(), "r": r}
 	_mutex.unlock()
+	if bool(r.get("ok", false)) and k != "":
+		remember_hands_off(k, r, game())
 	return r
 
 

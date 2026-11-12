@@ -25,6 +25,7 @@ const INTEL := ["intel-xe-lpg", "intel-xe2", "intel-xe3"]
 ## Below this base frame rate frame generation feels worse than no frame generation.
 const FRAME_GEN_MIN_BASE_FPS := 40
 const SHOW_INTEL := "dxgi.customVendorId = 8086"
+const HANDS_OFF_NOTE := "Left alone: this game is refused, or an online game nobody added our pick to."
 const FSR4_VARS := ["PROTON_FSR4_UPGRADE", "PROTON_FSR4_RDNA3_UPGRADE"]
 const NVAPI_SPOOF := ["PROTON_FORCE_NVAPI", "LOW_LATENCY_LAYER_SPOOF_NVIDIA"]
 
@@ -86,7 +87,8 @@ static func resolve_upscaler(choice: String, gpu_family: String, xmx_ready: bool
 ## host:     {"xess_xmx": bool, "low_latency_layer": bool}
 ## game:     {"anticheat": bool, "base_fps": int (-1 unknown), "extra_env": Dictionary,
 ##            "frame_gen_on": bool (lsfg-vk / OptiScaler frame generation is on),
-##            "upscale_native": bool (the player picked Native for this game)}
+##            "upscale_native": bool (the player picked Native for this game),
+##            "hands_off": bool (the upscaling helper's plan: refused, or an online / unknown game nobody added ours to)}
 ## A game with anti-cheat, or set to Native, gets no variable that swaps its
 ## upscaler (Proton's FSR 4 upgrade, Proton's OptiScaler, FSR on XeSS) and,
 ## with anti-cheat, no frame generation either: nothing replaces a game file.
@@ -103,7 +105,8 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 	var native := flavour == "native"
 	var xmx_ready: bool = family in INTEL and bool(device.get("xmx", false)) and bool(host.get("xess_xmx", false))
 	var anticheat: bool = game.get("anticheat", false)
-	var hands_off: bool = anticheat or bool(game.get("upscale_native", false))
+	var plan_off: bool = bool(game.get("hands_off", false))
+	var hands_off: bool = anticheat or plan_off or bool(game.get("upscale_native", false))
 	var picked := choice_for_gpu(str(settings.get("upscaler", "auto")), family)
 	var choice: String = picked[0]
 	if picked[1] != "":
@@ -131,7 +134,7 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 		notes.append("Native Linux game: Proton settings don't apply.")
 	elif family in AMD:
 		if upscaler == "fsr" and hands_off:
-			notes.append("Off for this game: it uses anti-cheat." if anticheat else "Native: the game's own FSR runs as it shipped.")
+			notes.append("Off for this game: it uses anti-cheat." if anticheat else (HANDS_OFF_NOTE if plan_off else "Native: the game's own FSR runs as it shipped."))
 		elif upscaler == "fsr":
 			var v := fsr4_var(family, proton)
 			if v != "":
@@ -152,7 +155,7 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 		if xmx_ready:
 			if upscaler == "fsr" and not hands_off:
 				env["FSR"] = "xess"
-			if frame_gen and not anticheat:
+			if frame_gen and not anticheat and not plan_off:
 				env["XESS_FG"] = "2"
 				if upscaler != "fsr":
 					env["FSR_FG"] = "xess"
@@ -164,6 +167,8 @@ static func compose(settings: Dictionary, device: Dictionary, proton: Dictionary
 		if choice == "xess" and bundles_optiscaler(proton):
 			if anticheat:
 				notes.append("OptiScaler left out: this game has anti-cheat.")
+			elif plan_off:
+				notes.append("OptiScaler left out: " + HANDS_OFF_NOTE.to_lower())
 			elif hands_off:
 				notes.append("OptiScaler left out: this game is set to Native.")
 			else:

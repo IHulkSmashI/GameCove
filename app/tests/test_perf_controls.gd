@@ -980,6 +980,31 @@ func test_online_and_unknown_games_are_offered_never_added_by_themselves() -> vo
 	_done(w)
 
 
+func test_the_launch_asks_the_helpers_plan_whether_to_keep_hands_off() -> void:
+	# review H3: one per-game fact (the plan's hands_off) for the launch swap, kept with the game's values
+	var w := _world("hands_off_launch", ALLY_X)
+	var runner = w["runner"]
+	var launcher = w["launcher"]
+	ok(launcher.hands_off_hooks.size() == 1, "the provider is on the launcher's list")
+	var nikki := {"key": "epic:nikki", "store": "epic", "id": "nikki", "title": "Infinity Nikki", "install_path": "/games/nikki"}
+	runner.answers["plan"] = {"ok": true, "hands_off": true, "refused": "anticheat", "line": "x"}
+	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "refused: hands off")
+	var calls := _calls_with(runner, "plan")
+	ok(calls.size() == 1 and "--name Infinity Nikki" in calls[0] and "--dir /games/nikki" in calls[0], "asked for that game: " + str(calls))
+	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "answered again within the plan's lifetime")
+	eq(_calls_with(runner, "plan").size(), 1, "without another helper run")
+	ok(w["p"].store.get_value("epic:nikki", "upscale_hands_off", false), "kept with the game's values")
+	runner.answers["plan"] = {"ok": true, "hands_off": false, "refused": null, "line": "x"}
+	w["p"]._hands_off_cache.clear()
+	ok(not launcher.hands_off_hooks[0].call("epic:nikki", nikki), "added to the game: not held back")
+	ok(not w["p"].store.has_value("epic:nikki", "upscale_hands_off"), "and the kept fact is gone")
+	runner.answers["plan"] = {"ok": false, "error": "helper failed"}
+	w["p"].store.set_value("epic:nikki", "upscale_hands_off", true)
+	w["p"]._hands_off_cache.clear()
+	ok(launcher.hands_off_hooks[0].call("epic:nikki", nikki), "a helper that fails keeps the last known answer")
+	_done(w)
+
+
 func test_every_helper_call_for_a_game_carries_its_title() -> void:
 	# review H2: the lists' notes (anti-cheat named, online game) are found by title; a non-Steam game has no app id,
 	# so Infinity Nikki from Epic was planned as "unknown" with no ban line

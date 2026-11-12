@@ -80,3 +80,31 @@ func test_launcher_plan_reads_the_system_through_overrides() -> void:
 	l.home = fixture("launch/xmxhome")
 	ok(l.xess_xmx_installed(), "XMX driver found")
 	l.free()
+
+
+func test_the_launch_swap_follows_the_helpers_hands_off_fact() -> void:
+	# review H3: PROTON_FSR4_UPGRADE was decided on the app's anti-cheat data alone, so a game the helper refuses (an
+	# anti-cheat in its folder or its list note, another tool's files) or an online game nobody added ours to still
+	# got the swap at launch
+	var l: Node = LauncherScript.new()
+	l.home = fixture("launch/home")
+	l.root_prefix = fixture("launch/root")
+	l.settings_path = OS.get_user_data_dir().path_join("test_launch_hands_off.json")
+	DirAccess.remove_absolute(l.settings_path)
+	l.device_profile = {"gpu_family": "amd-rdna3", "xmx": false}
+	var game := {"key": "steam:200", "store": "steam", "id": "200"}
+	eq(l.launch_plan(game)["env"].get("PROTON_FSR4_UPGRADE"), "1", "no hook: the swap, as before")
+	var off := {"v": true, "asked": []}
+	l.hands_off_hooks.append(func(key: String, g: Dictionary) -> bool:
+		off["asked"].append([key, str(g.get("id", ""))])
+		return off["v"])
+	var plan: Dictionary = l.launch_plan(game)
+	ok(not plan["env"].has("PROTON_FSR4_UPGRADE"), "hands off: no FSR 4 swap")
+	ok(plan["notes"].any(func(n): return "Left alone" in n), "and it says why: " + str(plan["notes"]))
+	eq(off["asked"][-1], ["steam:200", "200"], "the hook gets the game")
+	off["v"] = false
+	eq(l.launch_plan(game)["env"].get("PROTON_FSR4_UPGRADE"), "1", "added to the game: the swap is back")
+	l.device_profile = {"gpu_family": "intel-xe3", "xmx": true}
+	off["v"] = true
+	ok(not l.launch_plan(game)["env"].has("FSR"), "nor FSR on XeSS on Intel")
+	l.free()

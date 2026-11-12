@@ -190,3 +190,15 @@ func test_native_and_anticheat_games_get_no_upscaler_swap() -> void:
 		ok(not intel["env"].has("PROTON_USE_OPTISCALER"), "no Proton OptiScaler")
 	ok(not _env("intel-xe3", "valve11", {"frame_gen": true}, {}, {"anticheat": true})["env"].has("XESS_FG"), "no frame generation swapped into an anti-cheat game")
 	eq(_env("intel-xe3", "valve11", {"frame_gen": true}, {}, {"upscale_native": true})["env"].get("XESS_FG"), "2", "Native leaves frame generation to its own setting")
+
+
+func test_hands_off_games_get_no_upscaler_or_frame_generation_swap() -> void:
+	# review H3: the helper's plan (refused, or an online game nobody added ours to) is one more reason for hands off
+	var g := {"hands_off": true}
+	var plan := _env("amd-rdna3", "cachy11", {"upscaler": "fsr"}, {}, g)
+	for v in LaunchEnv.FSR4_VARS:
+		ok(not plan["env"].has(v), "no " + v)
+	ok(plan["notes"].has(LaunchEnv.HANDS_OFF_NOTE), "AMD says why: " + str(plan["notes"]))
+	ok(not _env("intel-xe3", "cachy11", {"upscaler": "fsr"}, {}, g)["env"].has("FSR"), "no FSR on XeSS")
+	ok(not _env("intel-xe3", "valve11", {"frame_gen": true}, {}, g)["env"].has("XESS_FG"), "no frame generation swapped in")
+	ok(_env("amd-rdna3", "cachy11", {"upscaler": "fsr"}, {}, {"hands_off": false})["env"].has("PROTON_FSR4_UPGRADE"), "not held back: the swap stays")
