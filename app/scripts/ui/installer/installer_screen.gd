@@ -145,6 +145,7 @@ func configure(svc: Dictionary, t: Dictionary, p: RefCounted, inst: Node) -> voi
 		installer.task_finished.connect(_on_task_finished)
 		installer.finished.connect(_on_finished)
 		installer.undone.connect(_on_undone)
+		installer.fix_retried.connect(_on_fix_retried)
 	var st: Object = services.get("setup")
 	if st != null and st.has_signal("changed"):
 		st.changed.connect(func(_s): _refresh_stores_later())
@@ -1511,6 +1512,14 @@ func _on_finished(act: String, ok: bool, msg: String) -> void:
 		focus_first()
 
 
+func _on_fix_retried(fix: String, ok: bool, _msg: String) -> void:
+	if ok:
+		toasts.show_toast(TI.FIX_RETRY_OK % Texts.fix_title(fix), "check", "good")
+	if plan.step == "done":
+		show_step()
+		focus_first()
+
+
 func _on_undone(ok: bool) -> void:
 	_run_state = "undone"
 	_run_message = TI.UNDO_OK if ok else TI.UNDO_PARTLY
@@ -1590,6 +1599,17 @@ func _build_done() -> void:
 		col.add_child(SKit.note(TI.COLD_BOOT, "warn", "ColdBoot"))
 	elif "claw8ex-vrr" in fixes:
 		col.add_child(SKit.note(TI.RESTART_FIX, "info", "RestartFix"))
+	# an optional fix that failed doesn't stop the install: it is listed here, each with its own retry
+	var failed: Array = installer.failed_fixes if installer != null else []
+	for x in failed:
+		var ff: String = x["fix"]
+		var fkey := ff.validate_node_name()
+		col.add_child(SKit.note(TI.FIX_FAILED % [Texts.fix_title(ff), TI.error_line(str(x["message"]))], "warn", "FixFailed_" + fkey))
+		var rb := SKit.action(TI.FIX_RETRY % Texts.fix_title(ff), "update", "RetryFix_" + fkey)
+		rb.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		rb.pressed.connect(func(): installer.retry_fix(ff))
+		col.add_child(rb)
+		_focusables.append(rb)
 	var later := SKit.action(TI.LATER if _wants_restart() else TI.CLOSE, "x", "Later")
 	later.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	later.custom_minimum_size = Vector2(220, 52)

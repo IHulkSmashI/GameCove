@@ -118,6 +118,8 @@ func test_install_tasks_bazzite() -> void:
 	eq(pkg["undo"], C.rpm_uninstall(), "package can be undone")
 	eq(pkg["fallback"], C.rpm_install(t["package"], false), "staged install when live apply fails")
 	ok(tasks[2]["needs_live"], "fixes wait for the package")
+	for k in [2, 3, 4, 5]:
+		ok(tasks[k]["optional"], "a failing fix never stops the install: " + str(tasks[k]["fix"]))
 	eq(tasks[2]["undo"], ["pkexec", "/usr/libexec/gamecove/gamecove-fix", "claw8ex-buttons", "remove"])
 	eq(tasks[8]["cmd"], ["/usr/libexec/gamecove/gamecove-apply-choices"])
 	ok(tasks[8]["optional"] and tasks[8]["needs_live"])

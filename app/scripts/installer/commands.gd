@@ -243,7 +243,7 @@ static func fix_task(paths: RefCounted, fix_name: String, verb := "install") -> 
 	var undo_verb := "remove" if verb == "install" else "install"
 	return _cmd("fix_" + verb, fix(paths.fix_helper(), fix_name, verb),
 		{"undo": fix(paths.fix_helper(), fix_name, undo_verb), "needs_live": true, "fix": fix_name,
-		 "optional": verb == "remove"})
+		 "optional": true})   # one optional fix failing never stops the install: it is listed at the end with its own retry
 
 
 ## The tasks for `action` (install | change | repair | update | uninstall | finish).

@@ -29,6 +29,8 @@ signal task_line(index: int, line: String)
 signal task_finished(index: int, ok: bool, message: String)
 signal finished(action: String, ok: bool, message: String)
 signal undone(ok: bool)
+## A single fix tried again from the done page (retry_fix).
+signal fix_retried(fix: String, ok: bool, message: String)
 
 var paths: RefCounted = Paths.new()
 var target: Dictionary = {}
@@ -43,6 +45,9 @@ var last_message := ""
 var installed_fixes: Array = []
 ## Fixes that wait until the package is live (staged install: after the reboot).
 var deferred_fixes: Array = []
+## Fixes whose install failed this run: [{"fix", "message"}]. The install went on without them; the done page
+## lists each with its own retry (retry_fix).
+var failed_fixes: Array = []
 ## The app binary desktop entries point to before the package is live.
 var exe_path := OS.get_executable_path()
 var _log_mutex := Mutex.new()
@@ -71,6 +76,7 @@ func start(act: String, plan_choices: Dictionary) -> bool:
 	var st: Dictionary = target.get("state", {})
 	installed_fixes = (st.get("fixes", []) as Array).duplicate() if st.get("fixes", []) is Array else []
 	deferred_fixes = []
+	failed_fixes = []
 	running = true
 	last_message = ""
 	log_line("---- %s (%s, %s)" % [act, target.get("family", "?"), target.get("method", "?")])
@@ -89,6 +95,40 @@ func retry() -> bool:
 	log_line("---- retry %s from %s" % [action, tasks[from]["id"]])
 	_queue("run", _run_all.bind(from))
 	return true
+
+
+## Tries one failed fix again, on its own (the rest of the install is done). Result: fix_retried.
+func retry_fix(fix: String) -> bool:
+	if running:
+		return false
+	var i := -1
+	for k in tasks.size():
+		if tasks[k]["id"] == "fix_install" and tasks[k]["fix"] == fix:
+			i = k
+	if i < 0 or not failed_fixes.any(func(x): return x["fix"] == fix):
+		return false
+	running = true
+	log_line("---- retry fix %s" % fix)
+	_queue("run", func():
+		results[i] = ""
+		var ok := _run_task(i)
+		var good: bool = results[i] in ["ok", "pending"]
+		if good:
+			failed_fixes = failed_fixes.filter(func(x): return x["fix"] != fix)
+			_write_state()
+		var msg := "" if good else last_message_for(i)
+		_main(func():
+			running = false
+			fix_retried.emit(fix, good, msg))
+		return ok)
+	return true
+
+
+func last_message_for(i: int) -> String:
+	for x in failed_fixes:
+		if x["fix"] == tasks[i]["fix"]:
+			return str(x["message"])
+	return ""
 
 
 func _run_all(from := 0) -> void:
@@ -138,6 +178,9 @@ func _run_task(i: int) -> bool:
 					installed_fixes.append(t["fix"])
 			"fix_remove":
 				installed_fixes.erase(t["fix"])
+	if not ok and t["id"] == "fix_install":
+		failed_fixes = failed_fixes.filter(func(x): return x["fix"] != t["fix"])
+		failed_fixes.append({"fix": t["fix"], "message": msg})
 	results[i] = "ok" if ok else ("skipped" if bool(t["optional"]) else "failed")
 	log_line("%s: %s%s" % [_name(t), "ok" if ok else "failed", "" if msg == "" else " (" + msg + ")"])
 	_main(func(): task_finished.emit(i, ok, msg))

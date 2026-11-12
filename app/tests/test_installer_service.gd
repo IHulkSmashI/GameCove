@@ -370,6 +370,48 @@ func test_failed_session_restore_stops_the_uninstall() -> void:
 	_cleanup()
 
 
+## Device finding 10: ClawDeck's files made claw8ex-gyro refuse and the whole install stopped at 18%.
+## An optional fix failing never stops the run: the rest installs, the failure is listed with its own retry.
+func test_a_failing_fix_does_not_stop_the_install_and_can_be_retried() -> void:
+	var d := _dir("fixfail")
+	_make_live(d)
+	var t := F.target("bazzite", {"installed": true})
+	var broken := [true]
+	var r := Fake.new()
+	r.handler = func(cmd: String):
+		if cmd.begins_with("pgrep"):
+			return {"code": 1, "out": ""}
+		if "claw8ex-gyro install" in cmd and broken[0]:
+			return {"code": 1, "out": "error: /etc/inputplumber/devices.d/x.yaml exists and isn't GameCove's; leaving it"}
+		return {"code": 0, "out": "done"}
+	var s := _svc(d, r, t)
+	var results := []
+	s.finished.connect(func(a, ok_, m): results.append([a, ok_, m]))
+	var c := _choices(t)
+	c["fixes"] = ["claw8ex-buttons", "claw8ex-gyro", "claw8ex-vrr"]
+	s.start("install", c)
+	eq(results[-1][1], true, "the install finished")
+	var ids: Array = s.tasks.map(func(x): return str(x["id"]) + ":" + str(x["fix"]))
+	var gyro := ids.find("fix_install:claw8ex-gyro")
+	eq(s.results[gyro], "skipped", "the failed fix is marked, not fatal")
+	eq(s.results[ids.find("fix_install:claw8ex-vrr")], "ok", "the fix after it still ran")
+	ok(s.results.slice(gyro + 1).all(func(x): return x == "ok" or x == "pending"), "so did everything after it")
+	eq(s.failed_fixes.size(), 1, "one failed fix is listed")
+	eq(s.failed_fixes[0]["fix"], "claw8ex-gyro")
+	ok("isn't GameCove's" in str(s.failed_fixes[0]["message"]), "with the reason")
+	ok(not "claw8ex-gyro" in s.installed_fixes, "it isn't recorded as installed")
+	ok("claw8ex-vrr" in s.installed_fixes)
+	var again := []
+	s.fix_retried.connect(func(f, ok_, m): again.append([f, ok_, m]))
+	broken[0] = false
+	ok(s.retry_fix("claw8ex-gyro"), "its own retry")
+	eq(again[-1][0], "claw8ex-gyro")
+	eq(again[-1][1], true, "worked this time")
+	ok(s.failed_fixes.is_empty() and "claw8ex-gyro" in s.installed_fixes, "no longer listed, now installed")
+	ok(not s.retry_fix("claw8ex-gyro"), "nothing to retry any more")
+	_cleanup()
+
+
 func test_settings_writer_and_setup_marks() -> void:
 	var d := _dir("settings")
 	var rec := F.Recorder.new()
