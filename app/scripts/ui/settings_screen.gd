@@ -16,6 +16,7 @@ extends Control
 ## Overlays it owns: the store sign-in sheet (QR code + code entry), the credits
 ## viewer and the on-screen keyboard for keys and codes.
 
+const FocusTrap := preload("res://scripts/ui/focus_trap.gd")
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
@@ -726,6 +727,8 @@ func _build_overlays() -> void:
 	keyboard.offset_bottom = -64
 	keyboard.closed.connect(_on_keyboard_closed)
 	add_child(keyboard)
+	# up from the sheet's first row went into the top bar behind the dim
+	FocusTrap.attach(sheet, [keyboard])
 
 
 func _open_sheet() -> void:
