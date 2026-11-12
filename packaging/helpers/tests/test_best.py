@@ -321,6 +321,40 @@ def test_an_online_game_set_up_before_it_was_flagged_comes_out(tmp_path):
     assert "online game" in r["did"] and _tree(d) == before
 
 
+def test_an_opt_in_for_an_unknown_game_doesnt_accept_the_online_ban_risk(tmp_path, monkeypatch):
+    """Review M: the opt-in was a bare time, so a game added by pressing Add while no list knew it kept counting as
+    "accepted the ban risk" once the list said it is an online game. The opt-in records what was accepted."""
+    home = str(tmp_path)
+    _pkg(home)
+    d = _steam_game(home, "465", "Some Unlisted Game", ["Some.exe", "nvngx_dlss.dll", "D3D12Core.dll"])
+    before = _tree(d)
+    assert best.opt_in(home, "465", DECK)["ok"] and _tree(d) != before
+    assert games.optin_risk(home, "465") == "unknown" and games.load_state(home)["optin"]["465"]["risk"] == "unknown"
+    assert best.plan(home, "465", DECK)["opted_in"] is True
+    known = gamedb.knowledge
+
+    def now_online(*a, **k):                                   # the nightly list learns it is an online game
+        return {**known(*a, **k), "known": True, "online": True, "name": "Some Unlisted Game"}
+    monkeypatch.setattr(gamedb, "knowledge", now_online)
+    p = best.plan(home, "465", DECK)
+    assert p["need"] == "online" and p["opted_in"] is False and p["hands_off"] and p["offer"]
+    assert "online game" in p["line"] and "banned" in p["line"]
+    r = best.prepare(home, "465", DECK)
+    assert "online game" in r["did"] and _tree(d) == before         # out again until the warning is accepted
+    assert games.choose(home, "465", "fsr31", 0, DECK)["refused"] == "optin"
+    assert best.opt_in(home, "465", DECK)["ok"] and games.optin_risk(home, "465") == "online"
+    assert best.plan(home, "465", DECK)["opted_in"] is True and games.choose(home, "465", "fsr31", 0, DECK)["ok"]
+
+
+def test_an_opt_in_saved_before_it_recorded_anything_counts_for_unknown_games_only(tmp_path):
+    home = str(tmp_path)
+    st = games.load_state(home)
+    st["optin"] = {"1": 1700000000, "2": {"at": 1, "risk": "online"}, "3": {"at": 1}}
+    games.save_state(home, st)
+    assert [games.optin_risk(home, k) for k in ("1", "2", "3", "4")] == ["unknown", "online", "unknown", ""]
+    assert games.optin_ok(home, "1", "unknown") and not games.optin_ok(home, "1", "online") and games.optin_ok(home, "2", "unknown")
+
+
 def test_opt_in_still_refuses_anticheat(tmp_path):
     home = str(tmp_path)
     _pkg(home)
