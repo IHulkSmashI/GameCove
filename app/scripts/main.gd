@@ -1788,16 +1788,12 @@ func _link_top() -> void:
 	for extra in [page, downloads_view, apps_view]:
 		if extra != null and is_instance_valid(extra) and extra.has_method("set_top_target"):
 			extra.set_top_target(tab)
-	for t in top_bar.tab_buttons():
-		t.focus_neighbor_bottom = t.get_path_to(f if f != null else t)
-		t.focus_neighbor_top = t.get_path_to(t)
+	# Every button of the bar in the order drawn (tabs, Search, Downloads, status, Settings): down goes into the screen.
 	top_bar.link_bar()
-	# The downloads button sits between the tabs and the status pill.
-	Kit.link_horizontal([top_bar.tabs["home"], top_bar.tabs["library"], top_bar.tabs["discover"], top_bar.tabs["stream"], downloads_button, top_bar.status_button, top_bar.tabs["settings"]])
-	downloads_button.focus_neighbor_bottom = downloads_button.get_path_to(f if f != null else top_bar.tabs[current])
-	downloads_button.focus_neighbor_top = downloads_button.get_path_to(downloads_button)
-	top_bar.status_button.focus_neighbor_bottom = top_bar.status_button.get_path_to(f if f != null else top_bar.tabs[current])
-	top_bar.status_button.focus_neighbor_top = top_bar.status_button.get_path_to(top_bar.status_button)
+	# (A screen with nothing to name leaves it to Godot: the nearest control below.)
+	for t in top_bar.pad_order():
+		t.focus_neighbor_bottom = t.get_path_to(f) if f != null else NodePath()
+		t.focus_neighbor_top = t.get_path_to(t)
 
 
 ## Home's and the page's main button. Owned games that aren't installed get

@@ -345,3 +345,23 @@ func test_goal_change_keeps_the_cards_frame_limit() -> void:
 	g._on_changed("battery", "goal")
 	eq(int(launcher.saved["steam:1"]["fps_limit"]), int(Texts.GOAL_PRESETS["battery"].get("fps_limit", 0)), "with its own row the goal still sets it")
 	g.free()
+
+
+## docs/CONTROLLER-UX.md CUX-5: left / right along the top bar visit every
+## button in the order drawn. Search, between the tabs and Downloads, was left
+## out of the chain: Downloads' left jumped over it and nothing led to it.
+func test_top_bar_pad_order_has_every_button_in_place() -> void:
+	var bar = TopBar.new()
+	var dl := Button.new()
+	dl.name = "Downloads"
+	dl.focus_mode = Control.FOCUS_ALL
+	bar.add_child(dl)
+	bar.move_child(dl, bar.status_button.get_index())   # where main.gd puts it
+	var names: Array = bar.pad_order().map(func(b): return String(b.name))
+	eq(names, ["Tab_home", "Tab_library", "Tab_discover", "Tab_stream", "Search", "Downloads", "Status", "Tab_settings"], "left to right")
+	bar.link_bar()
+	var s: Button = bar.search_button
+	eq(s.get_node(s.focus_neighbor_left), bar.tabs["stream"], "left of Search: Stream")
+	eq(s.get_node(s.focus_neighbor_right), dl, "right of Search: Downloads")
+	eq(dl.get_node(dl.focus_neighbor_left), s, "left of Downloads: Search, not past it")
+	bar.free()

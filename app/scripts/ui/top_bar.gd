@@ -274,8 +274,23 @@ func _add_count(id: String) -> void:
 
 ## Left/right across the bar: Home, Library, Discover, Stream, search, status, Settings.
 func link_bar() -> void:
-	var order: Array = [tabs["home"], tabs["library"], tabs["discover"], tabs["stream"], status_button, tabs["settings"]]
-	Kit.link_horizontal(order)
+	Kit.link_horizontal(pad_order())
+
+
+## Every button of the bar the pad can reach, left to right as drawn: the tabs,
+## Search, whatever main.gd put in the bar (Downloads), the status pill and
+## Settings. Built from the bar's own children, so nothing in the middle is
+## skipped (docs/CONTROLLER-UX.md CUX-5).
+func pad_order() -> Array:
+	var out: Array = []
+	for c in get_children():
+		if c == _tab_group:
+			for t in TABS:
+				if t[0] != "settings" and tabs[t[0]].visible:
+					out.append(tabs[t[0]])
+		elif c is Button and (c as Button).visible and (c as Button).focus_mode == Control.FOCUS_ALL:
+			out.append(c)
+	return out
 
 
 func select(id: String) -> void:
