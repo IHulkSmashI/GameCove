@@ -52,6 +52,17 @@ Rules that always hold:
   (the list says "online game, use at your own risk", or that its anti-cheat has to be switched off) and a game no
   list knows are offered, never added by themselves. A game no list knows gets the upscaler only, no frame
   generation. Native forgets the offer you took, so Best asks again.
+- **Every way in goes through the same Add step.** The **Upscaler** and **Frame generation** rows wait ("press Add
+  first") on an online game or one no list knows, and picking one anyway is refused with the same warning. A profile
+  never carries an upscaler to a game: the upscaler and frame generation settings are kept in a game's own profile
+  only, never in the everyday ones (global, plugged in, on battery). What you accepted is remembered: pressing Add on
+  a game no list knew doesn't count as accepting the ban risk when a list later says it is an online game; Best takes
+  it out again and asks with the warning.
+- **A change made while the game runs waits for it to quit.** That includes **Update this game's upscaler**. It is
+  kept, so switching the handheld off during the game doesn't lose it; it is made once, the next time you open the
+  game or start it.
+- **A refreshed list is used at once.** When the nightly list changes, games that already have our files are looked at
+  again right away (not after a restart), and one that now shows an anti-cheat is taken out.
 - **With Background lookups off** (Settings > About), what Best does by itself downloads nothing. Files that came
   with GameCove are still used; a pick you make yourself still downloads what it needs.
 
@@ -142,10 +153,15 @@ native Linux games, emulators.
   folder check looks as deep as our upscaler can go and up to the game's own folder in its library, and knows Easy
   Anti-Cheat, BattlEye, EA Javelin, NetEase's anti-cheat, Anti-Cheat Expert (Tencent), Tencent TP, Vanguard,
   nProtect GameGuard, XIGNCODE3, Nexon Game Security, AhnLab HackShield, Hyperion, PunkBuster, EQU8, miHoYo's protection,
-  FACEIT, Denuvo Anti-Cheat and Ricochet. Proton's FSR 4 upgrade is off for these games too.
+  FACEIT, Denuvo Anti-Cheat and Ricochet (PunkBuster by its own files: PnkBstrA/B.exe, the pbsvc service, the pb folder).
+  Proton's FSR 4 upgrade is off for these games too, and so is Lossless frame generation: it is taken out of the
+  game's launch and of lsfg-vk's settings, not only greyed.
 - **No online games by themselves.** An online game is only set up when you add it yourself, after a plain line
   about the ban risk. A game whose entry in OptiScaler's list names an anti-cheat ("EAC active", "disable
-  BattlEye", "anti-cheat will block it") counts as an anti-cheat game, whatever the entry says about working.
+  BattlEye", "anti-cheat will block it", Hyperion, PunkBuster, FACEIT and the like) counts as an anti-cheat game,
+  whatever the entry says about working. An entry that says "offline mode only" is an online game: same warning, same
+  Add step. The launch follows the same one fact per game as the files do: the game's own FSR is not swapped to FSR 4
+  at launch in a game we keep our hands off (refused, or an online game you haven't added our pick to).
 - **No stacking.** If another tool's upscaler, ReShade or Special K is in the game, we leave it alone and say which
   one we found.
 - **Nothing permanent.** Every file we add is listed in a manifest with its hash; files we replace are kept and put
@@ -183,7 +199,8 @@ games have our files in them. Uninstalling GameCove puts every game back as it s
 
 A nightly job watches every upstream this depends on. New builds of the files above are adopted only after they
 have been out, unchanged, for 72 hours (counted from when the file itself was uploaded, so a file swapped into an
-old release waits too) and pass a smoke check; then they go into a signed list your handheld verifies before it
+old release waits too; for files taken from a repository, from when we first saw that version, never from the date
+its author wrote on it; a missing or unreadable time means it waits) and pass a smoke check; then they go into a signed list your handheld verifies before it
 uses anything from it. Offline, the last list your handheld checked keeps working, withdrawals included; after a
 month without a check **Upscaler downloads** says "offline, files from <date>". An older list never replaces it. The version before is kept, a package that fails its check after an
 update is rolled back by itself, and a file can be withdrawn from every handheld through the same signed list.

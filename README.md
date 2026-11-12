@@ -408,8 +408,9 @@ and the upscaler files come with GameCove (lsfg-vk and the XeSS driver's vendor 
   driver's vendor files, about 260 MB, download only when you ask). The size of it all is in
   Settings > Device > Storage, and uninstalling puts every game back exactly as it shipped.
 - **Safe.** Never on games with anti-cheat (EA Javelin, NetEase, Tencent and a dozen more are recognised in the
-  game's folder), and Proton's FSR 4 upgrade stays off for them. Online games and games no list knows are offered,
-  never added by themselves: one press adds our pick, after a plain line about the ban risk for online games.
+  game's folder), and Proton's FSR 4 upgrade and Lossless frame generation stay off for them. Online games and games no list knows are offered,
+  never added by themselves: one press adds our pick, after a plain line about the ban risk for online games, and the
+  Upscaler row goes through the same step (a profile can't carry an upscaler to a game either).
   Never on top of another tool's upscaler or ReShade. Never two frame generators at once. Nothing in a game folder
   is changed for good, a power cut in the middle loses nothing, and a game moved to another drive keeps its undo.
 - **Always the newest tested files.** A nightly job watches every project this builds on and adopts a new build only
