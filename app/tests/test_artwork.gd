@@ -240,6 +240,35 @@ func test_auto_fill_never_asks_about_a_rom() -> void:
 	wipe(dir)
 
 
+## Review 56f5255: the same wrong-type answers parse_sgdb skips used to raise inside parse_assets / parse_game_id.
+func test_sgdb_answers_with_the_wrong_types_do_not_raise() -> void:
+	var body := ('{"success":true,"data":[{"id":null,"url":"https://cdn2.steamgriddb.com/a.png","width":null,"height":{"x":1},'
+		+ '"score":"high","nsfw":"yes","humor":null,"animated":[1]},{"id":7,"url":"https://cdn2.steamgriddb.com/b.png","width":600,"height":900}]}').to_utf8_buffer()
+	var a := Sgdb.parse_assets(body)
+	eq(a.size(), 2, "both entries survive")
+	eq([a[0]["id"], a[0]["width"], a[0]["height"], a[0]["score"]], [0, 0, 0, 0], "odd numbers are 0")
+	eq([a[0]["nsfw"], a[0]["humor"], a[0]["animated"]], [false, false, false], "odd flags are false")
+	eq(a[1]["id"], 7, "a good entry is kept")
+	eq(Sgdb.parse_game_id('{"success":true,"data":[{"id":null,"name":"X"}]}'.to_utf8_buffer(), "X"), 0, "a null id is none")
+
+
+## Review 56f5255: Change artwork sent a ROM game's title to SteamGridDB's search.
+func test_change_artwork_never_sends_a_rom_title() -> void:
+	var dir := tmp("manualrom")
+	var http := FakeHttp.new()
+	_routes(http)
+	var s := _service(http, dir)
+	var rom := {"key": "emu:3000000001", "store": "emu", "id": "3000000001", "title": "Moonlit Harbor",
+		"emulated": {"system": "snes", "system_short": "SNES", "rom": true}, "art": {"cover": "", "hero": "", "logo": "", "icon": ""}}
+	var got := []
+	s.search(rom, "cover", {}, 0, func(assets, err): got.append([assets, err]))
+	eq(got.size(), 1, "answered at once")
+	ok(str(got[0][1]) != "" and got[0][0].is_empty(), "with a reason and no pictures")
+	eq(http.requests.size(), 0, "and nothing sent anywhere")
+	s.free()
+	wipe(dir)
+
+
 ## Review 2, low 23: the automatic fill forgot what it had tried at every start, and its
 ## queue kept draining after a switch went off.
 func test_auto_fill_remembers_tries_and_stops_with_the_switch() -> void:

@@ -523,6 +523,35 @@ func test_a_keyboard_that_is_hidden_stops_taking_input() -> void:
 	k.free()
 
 
+## Review Medium: a keyboard still open under the quick menu (Library search, then Quick Access) took the menu's
+## buttons: LB / RB moved the caret and B cancelled the search. The menu on top owns the pad.
+func test_a_keyboard_under_the_quick_menu_takes_nothing() -> void:
+	var k := _kb()
+	var menu := Control.new()
+	menu.visible = false
+	Osk.add_cover(menu)
+	k._input(_key_event(KEY_A, 65))
+	eq(k.text, "a", "no menu: it types")
+	menu.visible = true
+	k._input(_key_event(KEY_B, 66))
+	_pad(k, JOY_BUTTON_B)
+	_pad(k, JOY_BUTTON_LEFT_SHOULDER)
+	eq(k.text, "a", "the menu is shown: nothing reaches the keyboard")
+	ok(k.is_open(), "it stays open under the menu")
+	menu.visible = false
+	k._input(_key_event(KEY_C, 67))
+	eq(k.text, "ac", "the menu closed: it types again")
+	# a keyboard that is part of the menu is not covered by it
+	var inner := _kb()
+	menu.add_child(inner)
+	menu.visible = true
+	inner._input(_key_event(KEY_D, 68))
+	eq(inner.text, "d", "the menu's own keyboard still types")
+	Osk.covers.erase(menu)
+	k.free()
+	menu.free()
+
+
 func test_cancel_puts_the_old_text_back_and_done_keeps_the_new() -> void:
 	var k := _kb()
 	var got := {"changed": [], "closed": []}

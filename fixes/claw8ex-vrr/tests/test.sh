@@ -178,6 +178,21 @@ ok '! grep -q "already installed" "$T/out"' "and does not claim it was already i
 ok '[ -f "$R/etc/gamecove/claw8ex-vrr/edid-hook.sh" ] && [ -f "$R$EDID_FILE" ]' "the hook and the EDID are in place"
 fix claw8ex-vrr remove >/dev/null 2>&1
 
+# cut between the boot hook's files: the modprobe rule is missing but the hook and its conf are there
+case_start install_cut_short_after_the_hook
+vrr_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+rm -f "$R/etc/modprobe.d/gamecove-claw8ex-vrr.conf"
+ok 'fix claw8ex-vrr install >"$T/out" 2>&1' "install after a cut between the hook's files succeeds ($(tail -n 1 "$T/out" 2>/dev/null))"
+ok '! grep -q "already installed" "$T/out" && [ -f "$R/etc/modprobe.d/gamecove-claw8ex-vrr.conf" ]' "and puts the missing file back"
+# cut before the EDID file was written (the record names it)
+vrr_ready
+fix claw8ex-vrr remove >/dev/null 2>&1
+fix claw8ex-vrr install >/dev/null 2>&1
+rm -f "$R$EDID_FILE"
+ok 'fix claw8ex-vrr install >"$T/out" 2>&1 && [ -f "$R$EDID_FILE" ]' "a missing EDID file is written again"
+fix claw8ex-vrr remove >/dev/null 2>&1
+
 # an older EDID is active and can't be rebuilt: nothing is changed
 case_start update_refuses_when_it_cannot_rebuild
 vrr_ready
@@ -189,6 +204,30 @@ before=$(snapshot)
 ok '! fix claw8ex-vrr update >"$T/out" 2>&1' "refused"
 ok 'grep -q "nothing was changed" "$T/out"' "says nothing was changed"
 ok '[ "$(snapshot)" = "$before" ]' "and nothing was"
+fix claw8ex-vrr remove >/dev/null 2>&1
+
+# review Low (Fixes): after a revision that changes the range, the screen runs the OLD patched range: that is not this
+# revision's range, and `update` used to take the fix out and then fail to install it again
+case_start update_refuses_when_an_older_range_is_active
+vrr_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+python3 -I -c '
+import sys
+b = bytearray(open(sys.argv[1], "rb").read())
+b[95] = 40
+b[142] = 40
+b[127] = (256 - sum(b[:127]) % 256) % 256
+b[254] = (256 - sum(b[129:254]) % 256) % 256
+b[255] = (256 - sum(b[128:255]) % 256) % 256
+open(sys.argv[2], "wb").write(b)
+' "$R$EDID_FILE" "$T/older.edid"
+cp "$T/older.edid" "$R$EDID_FILE"                          # an older revision wrote 40-120
+cp "$T/older.edid" "$R/sys/class/drm/card1-eDP-1/edid"     # and the screen runs it
+before=$(snapshot)
+ok '! fix claw8ex-vrr update >"$T/out" 2>&1' "refused"
+ok 'grep -q "nothing was changed" "$T/out"' "says nothing was changed"
+ok '[ "$(snapshot)" = "$before" ]' "and nothing was: the fix is not taken out"
+ok 'fix claw8ex-vrr status | grep -qx installed=yes' "still installed"
 fix claw8ex-vrr remove >/dev/null 2>&1
 
 case_start refuses_other_modprobe_rule
@@ -373,6 +412,15 @@ ok 'fix claw8ex-vrr status | grep -qx after_update=no && fix claw8ex-vrr status 
 steamos_boot
 ok '[ "$(drm_param)" = "eDP-1:edid/gamecove-csw0801-30-120.bin" ]' "the restart after brings the range back"
 
+case_start steamos_menu_without_the_line
+steamos_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+# the file still has our line, but the menu SteamOS boots from was rebuilt without it (a rebuild that failed)
+sed 's/ gamecove.vrr=1//' "$R/efi/EFI/SteamOS/grub.cfg" >"$R/efi/EFI/SteamOS/grub.cfg.new"
+mv "$R/efi/EFI/SteamOS/grub.cfg.new" "$R/efi/EFI/SteamOS/grub.cfg"
+ok '[ "$(fix claw8ex-vrr set refresh)" != "already in place" ]' "refresh does not call a marked file with a menu that lacks the line in place"
+ok 'grep -q "gamecove.vrr=1" "$R/efi/EFI/SteamOS/grub.cfg"' "the menu has the setting again"
+
 case_start steamos_old_record_in_var_moves
 steamos_ready
 fix claw8ex-vrr install >/dev/null 2>&1
@@ -464,6 +512,23 @@ ok 'fix claw8ex-vrr status | grep -qx after_update=yes' "status still says the u
 ok 'fix claw8ex-vrr set refresh | grep -q "put back after the SteamOS update"' "the next refresh tries again, and works"
 ok 'grep -q "quiet splash amd_iommu=off gamecove.vrr=1" "$R/efi/EFI/SteamOS/grub.cfg"' "the boot menu has it"
 fix claw8ex-vrr remove >/dev/null 2>&1
+
+# review Medium (Fixes): a retried install on SteamOS, cut short after the hook, ended "already installed" with no keep list
+case_start install_cut_short_before_the_keep_list
+steamos_ready
+fix claw8ex-vrr install >/dev/null 2>&1
+ok '[ -f "$R/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" ]' "installed: the keep list is there"
+rm -f "$R/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf"
+grep -vxF "file /etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" "$R/etc/gamecove/claw8ex-vrr/record/manifest" >"$T/m.tmp" || true
+cat "$T/m.tmp" >"$R/etc/gamecove/claw8ex-vrr/record/manifest"
+ok 'fix claw8ex-vrr install >"$T/out" 2>&1' "the retry succeeds ($(tail -n 1 "$T/out" 2>/dev/null))"
+ok '[ -f "$R/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" ]' "and the keep list is back"
+ok 'grep -qxF "file /etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" "$R/etc/gamecove/claw8ex-vrr/record/manifest"' "recorded, so remove takes it out again"
+ok '! grep -q "already installed" "$T/out"' "and it does not say everything was in place"
+fix claw8ex-vrr install >"$T/out" 2>&1
+ok 'grep -q "already installed" "$T/out"' "a complete install is still \"already installed\""
+fix claw8ex-vrr remove >/dev/null 2>&1
+ok '[ ! -e "$R/etc/atomic-update.conf.d/gamecove-claw8ex-vrr.conf" ]' "remove takes the keep list away"
 
 case_start initramfs_failure_undoes
 vrr_ready

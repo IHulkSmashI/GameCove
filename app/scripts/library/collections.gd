@@ -290,11 +290,35 @@ func decorate(games: Array) -> Array:
 			member[k].append(c["id"])
 	var out: Array = []
 	var none := []   # one empty list for every game in no collection (thousands of ROMs)
+	# the flag lists as sets once, not a scan of each per game (is_favourite / is_hidden say the same per key)
+	var favs := {}
+	var hids := {}
+	for k in _data["favourites"]:
+		favs[k] = true
+	for k in _data["hidden"]:
+		hids[k] = true
+	for k in _data["unfavourite"]:
+		favs.erase(k)
+	for k in _data["unhide"]:
+		hids.erase(k)
+	var unfav := {}
+	var unhid := {}
+	for k in _data["unfavourite"]:
+		unfav[k] = true
+	for k in _data["unhide"]:
+		unhid[k] = true
 	for g in games:
-		var d: Dictionary = g.duplicate()
 		var k := str(g.get("key", ""))
-		d["favourite"] = is_favourite(k)
-		d["hidden"] = is_hidden(k)
+		var fav: bool = favs.has(k) or (_imported["favourites"].has(k) and not unfav.has(k))
+		var hid: bool = hids.has(k) or (_imported["hidden"].has(k) and not unhid.has(k))
+		if not fav and not hid and not member.has(k) and not g.has("favourite") and not g.has("hidden") and not g.has("collections"):
+			# in nothing and not marked: every reader says .get("favourite", false), so the game itself will do
+			# (20,000 ROMs were 20,000 copies on every library change)
+			out.append(g)
+			continue
+		var d: Dictionary = g.duplicate()
+		d["favourite"] = fav
+		d["hidden"] = hid
 		d["collections"] = member.get(k, none)
 		out.append(d)
 	return out

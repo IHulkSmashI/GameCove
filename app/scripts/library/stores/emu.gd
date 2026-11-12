@@ -364,12 +364,19 @@ static func count_roms(dir: String, depth := 0) -> int:
 	if d == null or depth > COUNT_DEPTH or FileAccess.file_exists(dir.path_join("noload.txt")):
 		return 0
 	var files := d.get_files()
-	var has_sheet := false
+	# the same rule as the scan (roms.gd): a .bin is a track only when a sheet names it; one .cue used to hide
+	# every .bin in the folder from this count
+	var tracks := {}
+	var bare_sheets: Array = []
 	var listed := {}
 	for f in files:
 		var ext := f.get_extension().to_lower()
 		if ext in ["cue", "gdi"]:
-			has_sheet = true
+			var named := Roms._sheet_tracks(dir.path_join(f), ext)
+			for t in named:
+				tracks[t] = true
+			if named.is_empty():
+				bare_sheets.append(f.get_basename().to_lower())
 		elif ext == "m3u":
 			for line in FileAccess.get_file_as_string(dir.path_join(f)).split("\n"):
 				var l := line.strip_edges()
@@ -378,7 +385,7 @@ static func count_roms(dir: String, depth := 0) -> int:
 	var n := 0
 	for f in files:
 		var ext := f.get_extension().to_lower()
-		if f.begins_with(".") or ext in NOT_ROM_EXT or listed.has(f) or (has_sheet and ext in TRACK_EXT):
+		if f.begins_with(".") or ext in NOT_ROM_EXT or listed.has(f) or (ext in TRACK_EXT and (tracks.has(f.to_lower()) or f.get_basename().to_lower() in bare_sheets)):
 			continue
 		n += 1
 	for sub in d.get_directories():
@@ -808,8 +815,10 @@ static func rom_entries(home: String, setup: Dictionary, names: Dictionary, sour
 				"last_played": int(g["last_played"]), "playtime_min": 0,
 				"local_meta": {"source": "esde" if not (g["meta"] as Dictionary).is_empty() else "emu", "meta": meta}})
 		if not by_sys.has(id):
-			by_sys[id] = {"id": id, "name": sname, "short": sshort, "count": 0, "roots": [], "known": known}
+			by_sys[id] = {"id": id, "name": sname, "short": sshort, "count": 0, "roots": [], "known": known, "capped": false, "gamelist_skipped": false}
 		by_sys[id]["count"] += (res["games"] as Array).size()
+		by_sys[id]["capped"] = by_sys[id]["capped"] or bool(res.get("capped", false))
+		by_sys[id]["gamelist_skipped"] = by_sys[id]["gamelist_skipped"] or bool(res.get("gamelist_skipped", false))
 		if not str(sy["base"]) in by_sys[id]["roots"]:
 			by_sys[id]["roots"].append(str(sy["base"]))
 	var counts: Array = by_sys.values()

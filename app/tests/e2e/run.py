@@ -118,7 +118,28 @@ def pids() -> set:
     return {int(x) for x in ps.split() if x.isdigit()}
 
 
-def run_one(godot: str, work: str, info_path: str, extra: dict, timeout: int, label: str, verbose: bool) -> dict:
+def judge(result: dict, code: int, label: str, filtered: bool) -> dict:
+    """Turns what a Godot run reported into failures where it must not count as a pass: a setup that broke before any
+    test ran (the harness's own result has an "error" and no counts), an exit code 1 with nothing failed, and a run
+    that found no test at all (a broken fixture used to read "0 passed, 0 failed (ok)"). `filtered`: --test was
+    given, so a run with no match is normal (main() asks that at least one test ran overall)."""
+    result.setdefault("passed", 0)
+    result.setdefault("failed", 0)
+    result.setdefault("failures", [])
+    if result.get("error") and not result["failed"]:
+        result["failed"] += 1
+        result["failures"].append(f"{label}: setup failed: {result['error']}")
+    elif code == 1 and not result["failed"]:
+        result["failed"] += 1
+        result["failures"].append(f"{label}: Godot exited with 1 but reported no failure")
+    if not filtered and not (result["passed"] or result["failed"] or result.get("skipped")):
+        result["failed"] += 1
+        result["failures"].append(f"{label}: ran no tests")
+    return result
+
+
+def run_one(godot: str, work: str, info_path: str, extra: dict, timeout: int, label: str, verbose: bool,
+            filtered: bool = False) -> dict:
     env = private_env(work, info_path, extra)
     before = pids()
     t0 = time.time()
@@ -146,6 +167,7 @@ def run_one(godot: str, work: str, info_path: str, extra: dict, timeout: int, la
     for line in err.splitlines():
         if line.startswith("E2E FAIL"):
             print("  " + line)
+    judge(result, code, label, filtered)
     time.sleep(0.2)
     left = leftovers(work, before)
     if left:
@@ -217,7 +239,7 @@ def main(argv=None) -> int:
             runs.append(("restart-1", dict(common, E2E_SUITES=RESTART_SUITE, E2E_PHASE="1")))
             runs.append(("restart-2", dict(common, E2E_SUITES=RESTART_SUITE, E2E_PHASE="2")))
         for label, extra in runs:
-            r = run_one(godot, work, info_path, extra, timeout, f"{setup}/{label}", a.verbose)
+            r = run_one(godot, work, info_path, extra, timeout, f"{setup}/{label}", a.verbose, bool(a.test))
             total_fail += int(r.get("failed", 0))
             total_pass += int(r.get("passed", 0))
             state = "ok" if not r.get("failed") else "FAILED"
@@ -231,6 +253,9 @@ def main(argv=None) -> int:
         shutil.rmtree(base, ignore_errors=True)
     else:
         print("work folder kept: " + base)
+    if a.test and not total_pass and not total_fail:
+        total_fail += 1
+        print(f"e2e: no test matches --test {a.test!r}")
     print(f"e2e: {total_pass} passed, {total_fail} failed (seed {seed}, iterations {iters})")
     return 1 if total_fail else 0
 

@@ -355,6 +355,9 @@ func ui_clean() -> bool:
 	for o in [main.status_panel, s.sheet, s.keyboard]:
 		if o != null and is_instance_valid(o) and o.is_visible_in_tree():
 			return false
+	# Stream keeps its sheets and keyboard in main's modal layer, not under the screen
+	if main.stream_screen != null and main.stream_screen.has_method("modal_open") and main.stream_screen.modal_open():
+		return false
 	if main.page != null or main._downloads_open() or main.game_actions.is_modal() or main.steam_overlay.is_open():
 		return false
 	return main.find_child("KeepDialog", true, false) == null
@@ -400,9 +403,16 @@ func wait_s(s: float) -> void:
 	await tree.create_timer(s).timeout
 
 
+## The longest single wait for a frame seen so far in this run (ms): the diagnostic of a tap that
+## turned into a hold behind a long frame (e2e_case.gd _press_state).
+var longest_frame_ms := 0
+
+
 func frames(n := 1) -> void:
 	for i in n:
+		var t0 := Time.get_ticks_msec()
 		await tree.process_frame
+		longest_frame_ms = maxi(longest_frame_ms, Time.get_ticks_msec() - t0)
 
 
 ## Waits until every worker (Controls, Power, Controller, Gamescope's runner) has

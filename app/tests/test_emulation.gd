@@ -279,6 +279,21 @@ func _decorated(home: String) -> Dictionary:
 	return {"setup": setup, "games": games}
 
 
+func test_page_says_when_a_system_was_cut_short() -> void:
+	var d := _decorated(_emudeck("page_cap"))
+	var setup: Dictionary = d["setup"]
+	var p0: Control = EmulationPage.new()
+	p0.setup(setup, d["games"])
+	eq(p0.find_children("RomNote*", "", true, false).size(), 0, "nothing cut: no note")
+	p0.free()
+	setup["systems"][0]["capped"] = true
+	setup["systems"][0]["gamelist_skipped"] = true
+	var p: Control = EmulationPage.new()
+	p.setup(setup, d["games"])
+	eq(p.find_children("RomNote*", "", true, false).size(), 2, "a cut system and a skipped gamelist each say so")
+	p.free()
+
+
 func test_page_with_emudeck() -> void:
 	var d := _decorated(_emudeck("page"))
 	var p: Control = EmulationPage.new()

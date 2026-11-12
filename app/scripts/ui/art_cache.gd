@@ -24,6 +24,7 @@ static var _accent := {}     # path -> Color (a = 0 when grey)
 static var _side := {}       # "kind|path" -> Color: how bright the art's text side is (HeroInk)
 static var _tasks: Array[int] = []   # WorkerThreadPool ids still running
 static var _closed := false          # set by shutdown(): late results are dropped
+static var _lock := Mutex.new()      # _pending is read by the workers too (_claim)
 
 
 static func usable(path: String) -> bool:
@@ -58,19 +59,37 @@ static func request(kind: String, path: String, done: Callable = Callable(), own
 		var r := _load(kind, path)
 		_finish(kind, path, r[0], r[1], r[2])
 		return _tex.get(key)
+	_lock.lock()
 	if _pending.has(key):
 		if done.is_valid():
 			_pending[key].append(done)
+		_lock.unlock()
 		return null
 	_pending[key] = [done] if done.is_valid() else []
+	_lock.unlock()
 	for t in _tasks.filter(func(t): return WorkerThreadPool.is_task_completed(t)):
 		WorkerThreadPool.wait_for_task_completion(t)   # frees it; returns at once
 		_tasks.erase(t)
 	_tasks.append(WorkerThreadPool.add_task(func():
+		if not _claim(key):
+			return   # everything that asked for it is gone (a tile scrolled away and freed): not worth decoding
 		var r := _load(kind, path)
 		_finish.call_deferred(kind, path, r[0], r[1], r[2]),
 		false, "GameCove art"))
 	return null
+
+
+## Worker side, before a load starts: false (and the request forgotten, so a later one starts afresh) when
+## every callback waiting for `key` belongs to an object that has been freed. A request with no callback
+## (a prefetch) always loads.
+static func _claim(key: String) -> bool:
+	_lock.lock()
+	var cbs: Array = _pending.get(key, [])
+	var wanted := cbs.is_empty() or cbs.any(func(cb): return cb.is_valid())
+	if not wanted:
+		_pending.erase(key)
+	_lock.unlock()
+	return wanted
 
 
 ## The art's vibrant colour (Color(0,0,0,0) if unknown/grey). Known once the
@@ -169,8 +188,10 @@ static func _finish(kind: String, path: String, img: Image, acc: Color, side := 
 	if kind == "blur":
 		_accent[path] = acc
 	_touch(kind, key)
+	_lock.lock()
 	var cbs: Array = _pending.get(key, [])
 	_pending.erase(key)
+	_lock.unlock()
 	if tex == null:
 		return
 	for cb in cbs:
@@ -196,7 +217,9 @@ static func shutdown() -> void:
 	for t in _tasks:
 		WorkerThreadPool.wait_for_task_completion(t)
 	_tasks.clear()
+	_lock.lock()
 	_pending.clear()
+	_lock.unlock()
 	_closed = true
 	clear()
 

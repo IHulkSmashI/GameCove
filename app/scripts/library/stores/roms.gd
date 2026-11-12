@@ -111,7 +111,7 @@ static func es_time(s: String) -> int:
 ## `path` is what starts the game (a folder game's same-named file inside it
 ## when there is one, as ES-DE does).
 static func list_games(root: String, exts: Array, max_games := SYSTEM_MAX) -> Dictionary:
-	var out := {"games": [], "dirs": {}}
+	var out := {"games": [], "dirs": {}, "capped": false}
 	var allowed := {}
 	for e in exts:
 		allowed[str(e).to_lower().trim_prefix(".")] = true
@@ -188,6 +188,7 @@ static func _list(root: String, rel_dir: String, depth: int, allowed: Dictionary
 	var games: Array = out["games"]
 	for f in files:
 		if games.size() >= max_games:
+			out["capped"] = true
 			return
 		var ext := f.get_extension().to_lower()
 		if f.begins_with(".") or f.to_lower() in NOT_ROM_FILES:
@@ -207,6 +208,7 @@ static func _list(root: String, rel_dir: String, depth: int, allowed: Dictionary
 		games.append({"rel": rel_dir.path_join(f) if rel_dir != "" else f, "path": abs, "dir": false})
 	for sub in d.get_directories():
 		if games.size() >= max_games:
+			out["capped"] = true
 			return
 		if sub.begins_with(".") or sub.to_lower() in NOT_ROM_DIRS:
 			continue
@@ -227,9 +229,12 @@ static func _list(root: String, rel_dir: String, depth: int, allowed: Dictionary
 ## label ("" = the default), "games": {relative path: {field: text}}}. Paths
 ## are relative to the system's ROM folder `root` ("./x.sfc" -> "x.sfc").
 static func parse_gamelist(path: String, root: String) -> Dictionary:
-	var out := {"alt": "", "games": {}}
+	var out := {"alt": "", "games": {}, "too_big": false}
 	var fa := FileAccess.open(path, FileAccess.READ) if path != "" else null
-	if fa == null or fa.get_length() > GAMELIST_MAX_BYTES:
+	if fa == null:
+		return out
+	if fa.get_length() > GAMELIST_MAX_BYTES:
+		out["too_big"] = true   # not read at all: the Emulation page says so
 		return out
 	fa.close()
 	var x := XMLParser.new()
@@ -407,7 +412,8 @@ static func scan_system(system: String, root: String, exts: Array, gamelist: Str
 	if media_root != "":
 		var mb := media_root.path_join(system)
 		dirs[mb] = FileAccess.get_modified_time(mb)
-	return {"games": games, "alt": gl["alt"], "dirs": dirs, "files": files}
+	return {"games": games, "alt": gl["alt"], "dirs": dirs, "files": files, "capped": bool(listing.get("capped", false)),
+		"gamelist_skipped": bool(gl.get("too_big", false))}
 
 
 # ------------------------------------------------------------ all systems, cached

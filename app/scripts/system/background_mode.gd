@@ -30,6 +30,10 @@ extends Node
 const RESUME_GAP_S := 20.0
 ## After a resume: full speed this long (the controller lights re-apply 5 s after it).
 const RESUME_FAST_S := 30.0
+## After a Timer of ours queued work for a worker thread (Power's 15 s check): full speed this
+## long, so what the worker hands back with a deferred call lands within one front sleep, not
+## after a long one (the resume re-apply was up to 33 ms late behind a game, review of 56f5255).
+const WORKER_BURST_S := 0.25
 ## Longest sleep between main-loop iterations while nothing of ours is visible.
 ## The quick-menu button waits at most this long, so it stays well under 100 ms.
 const BACK_SLEEP_US := 33_000
@@ -87,6 +91,15 @@ func set_menu(open: bool) -> void:
 ## True while nothing of ours is visible: the main loop may sleep long.
 func in_background() -> bool:
 	return not (front or menu)
+
+
+## Something was just handed to a worker thread and its answer comes back as a deferred call on
+## this thread: stay at full speed for WORKER_BURST_S so the main loop is not asleep when it does.
+func burst(seconds := WORKER_BURST_S) -> void:
+	if not in_background():
+		return
+	_fast_until_ms = maxi(_fast_until_ms, int(clock.call()[1]) + int(seconds * 1000.0))
+	OS.low_processor_usage_mode_sleep_usec = front_sleep_us
 
 
 ## Sleeping long now (in the background and not just after a resume).

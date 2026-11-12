@@ -309,15 +309,33 @@ func _arm(event: String, seconds: float) -> void:
 		start_timer.call(seconds, event, _hold_gen)
 
 
+## Runs `fn` after the lines already queued behind this one (a release that came in while a long
+## frame held everything up). The owner sets it to call_deferred; the default runs it at once.
+var defer: Callable = func(fn: Callable) -> void: fn.call()
+
+
 ## The hold time for `event` passed (the owner's timer). Runs the hold action
-## when that same press is still down.
+## when that same press is still down. The timer can only fire late, never early, so after a long frame
+## it can fire before a release that was already waiting in the queue: the decision is taken once that
+## release has been handled (a tap on a button that acts on release would otherwise become a hold and
+## open nothing).
 func hold_elapsed(event: String, gen: int) -> void:
+	if not _hold_due(event, gen):
+		return
+	defer.call(func() -> void:
+		if _hold_due(event, gen):
+			_fire_hold(event))
+
+
+func _hold_due(event: String, gen: int) -> bool:
 	var h: Variant = _holds.get(event)
 	if h == null or int(h["gen"]) != gen or bool(h["fired"]) or not _held.has(event) or not shortcuts.has(event):
-		return
-	if bool(_chord_used.get(str(Buttons.DBUS_EVENTS.get(event, "")), false)):
-		return   # it was a chord
-	h["fired"] = true
+		return false
+	return not bool(_chord_used.get(str(Buttons.DBUS_EVENTS.get(event, "")), false))   # a chord is no hold
+
+
+func _fire_hold(event: String) -> void:
+	_holds[event]["fired"] = true
 	var e: Dictionary = shortcuts[event]
 	_seen(str(e.get("cap", "")), "hold")
 	_run(str(e["press"]) if bool(e.get("slot", false)) else str(e["hold"]), "hold")

@@ -186,6 +186,18 @@ func test_no_battery_no_history_and_old_samples_go() -> void:
 	_done(w)
 
 
+func test_a_pad_battery_sorting_first_is_not_the_machines() -> void:
+	var w := _world("padfirst")
+	_bat(w, 50, 25.0)
+	var pad: String = w["root"] + "/sys/class/power_supply/AA-pad/"
+	_put(pad + "type", "Battery")
+	_put(pad + "scope", "Device")
+	_put(pad + "capacity", "9")
+	var r: Dictionary = w["log"].read()
+	eq(r["pct"], 50, "the machine's battery, not a pad's")
+	_done(w)
+
+
 func test_streams_dont_count_as_games() -> void:
 	var w := _world("stream")
 	var l: Node = w["log"]

@@ -133,10 +133,12 @@ func special(action: String) -> void:
 	var ev := dbus_event_for(action)
 	var path := "/org/shadowblip/InputPlumber/CompositeDevice0"
 	var c: Node = w.autoload("Controller")
-	c.monitor_line({"kind": "event", "path": path, "event": ev, "value": 1.0})
-	await w.frames(1)
-	c.monitor_line({"kind": "event", "path": path, "event": ev, "value": 0.0})
-	await w.frames(2)
+	# the way the monitor's reader thread delivers a tap: both lines queued, in order, for one flush of the
+	# main loop. A frame between them let a slow one (more than the 0.5 s hold time) turn the tap into a
+	# hold, which on a button that acts on release opens nothing (the "Power tab" flake).
+	c.monitor_line.call_deferred({"kind": "event", "path": path, "event": ev, "value": 1.0})
+	c.monitor_line.call_deferred({"kind": "event", "path": path, "event": ev, "value": 0.0})
+	await w.frames(3)
 
 
 func guide() -> void:
@@ -166,9 +168,9 @@ func open_menu_tab(tab: String) -> bool:
 	if not qm().visible:
 		await qam()
 	if not qm().visible:
-		ok(false, "open_menu_tab %s: the menu did not open (screen %s, page %s, playing %s, session %s, modal %s, low dialog %s, fix dialog %s)" % [tab,
+		ok(false, "open_menu_tab %s: the menu did not open (screen %s, page %s, playing %s, session %s, modal %s, low dialog %s, fix dialog %s; %s)" % [tab,
 			main().current, main().page != null, main().playing.get("key", ""), main().session.phase, main().game_actions.is_modal(),
-			main().low_dialog != null, main().fix_dialog != null])
+			main().low_dialog != null, main().fix_dialog != null, _press_state()])
 		return false
 	var want := TC.TAB_IDS.find(tab)
 	var guard := 0
@@ -180,6 +182,21 @@ func open_menu_tab(tab: String) -> bool:
 		ok(false, "open_menu_tab %s: menu section %d (want %d), screen %s, page %s, playing %s, session %s, modal %s" % [tab, qm().section, want,
 			main().current, main().page != null, main().playing.get("key", ""), main().session.phase, main().game_actions.is_modal()])
 	return qm().section == want
+
+
+## Where the Quick Access press may have gone (the "menu did not open" message): the intercept's held
+## buttons, holds and press times, a Steam trip under way, whether our window has focus, and the
+## longest frame lately (a long frame turns a tap into a hold: the hold action then ran).
+func _press_state() -> String:
+	var c: Node = w.autoload("Controller")
+	var i: Variant = c.get("intercept")
+	var held: Variant = i._held if i != null else "no intercept"
+	var holds: Variant = i._holds if i != null else ""
+	var down: Variant = i._down_ms if i != null else ""
+	var trip: bool = main().steam_trip != null and main().steam_trip.service.active()
+	return "intercept %s, held %s, holds %s, down_ms %s, now_ms %d, steam trip %s, window focused %s, menu visible %s, keyboard shown %s, longest frame %d ms" % [
+		c.intercept_state(), held, holds, down, Time.get_ticks_msec(), trip, main()._window_focused, qm().visible,
+		w.tree.get_nodes_in_group("osk").any(func(k): return k.showing), w.longest_frame_ms]
 
 
 ## The ControlView for `id` inside `under` (quick menu body or a Settings page), or null.

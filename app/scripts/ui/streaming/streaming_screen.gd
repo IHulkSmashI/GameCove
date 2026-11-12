@@ -236,6 +236,24 @@ func _make_modals() -> void:
 	layer.add_child(_kb_modal)
 
 
+## The screen was left (main.gd _screen_out): its sheets and keyboard sit in main's layer, not under
+## it, so they would stay up over the next screen and take its B (focus then went to a hidden
+## button: monkey seed 104004). Put away, no focus grabbed back: the next screen takes it.
+func dismiss_overlays() -> void:
+	if pair_sheet != null and pair_sheet.is_open():
+		if pair_sheet.state == "waiting":
+			service.cancel_pair()
+		pair_sheet.close(false)
+	if settings_sheet != null and settings_sheet.is_open():
+		settings_sheet.close(false)
+	if more_sheet != null and more_sheet.is_open():
+		more_sheet.close(false)
+	if _kb_modal != null and _kb_modal.visible:
+		keyboard.dismiss()
+		_kb_modal.visible = false
+	_hints_changed()
+
+
 func _exit_tree() -> void:
 	# the modals sit in main's layer: they go with this screen
 	for m in [pair_sheet, settings_sheet, more_sheet, _kb_modal]:

@@ -101,6 +101,16 @@ static func search_url(title: String) -> String:
 	return API + "search/autocomplete/" + title.uri_encode()
 
 
+## A number from an answer that is not trusted to have the right types: a null, a word or a list where a number
+## should be is 0 (int(null) raises and stopped the whole parse).
+static func _int(v: Variant) -> int:
+	return int(v) if v is int or v is float else 0
+
+
+static func _flag(v: Variant) -> bool:
+	return v is bool and v
+
+
 static func _data(body: PackedByteArray) -> Variant:
 	var j := JSON.new()
 	if j.parse(body.get_string_from_utf8()) != OK or not j.data is Dictionary or not j.data.get("success", false):
@@ -127,11 +137,11 @@ static func parse_assets(body: PackedByteArray) -> Array:
 		var name := str(author.get("name", "")) if author is Dictionary else ""
 		var s64 := str(author.get("steam64", "")) if author is Dictionary else ""
 		var mime := str(a.get("mime", ""))
-		out.append({"id": int(a.get("id", 0)), "url": url, "thumb": thumb, "author": name,
+		out.append({"id": _int(a.get("id")), "url": url, "thumb": thumb, "author": name,
 			"author_url": ("https://www.steamgriddb.com/profile/" + s64) if s64.is_valid_int() else "",
-			"style": str(a.get("style", "")), "width": int(a.get("width", 0)), "height": int(a.get("height", 0)),
-			"mime": mime, "animated": bool(a.get("animated", false)) or mime == "image/apng" or (a.get("tags") is Array and "animated" in a["tags"]),
-			"score": int(a.get("score", 0)), "nsfw": bool(a.get("nsfw", false)), "humor": bool(a.get("humor", false))})
+			"style": str(a.get("style", "")), "width": _int(a.get("width")), "height": _int(a.get("height")),
+			"mime": mime, "animated": _flag(a.get("animated")) or mime == "image/apng" or (a.get("tags") is Array and "animated" in a["tags"]),
+			"score": _int(a.get("score")), "nsfw": _flag(a.get("nsfw")), "humor": _flag(a.get("humor"))})
 	return out
 
 
@@ -144,8 +154,8 @@ static func parse_game_id(body: PackedByteArray, title := "") -> int:
 	var norm := func(t: String) -> String: return RegEx.create_from_string("[^\\p{L}\\p{N}]+").sub(t.to_lower(), "", true)
 	for g in data:
 		if g is Dictionary and title != "" and norm.call(str(g.get("name", ""))) == norm.call(title):
-			return int(g.get("id", 0))
-	return int(data[0].get("id", 0)) if data[0] is Dictionary else 0
+			return _int(g.get("id"))
+	return _int(data[0].get("id")) if data[0] is Dictionary else 0
 
 
 ## The credit line for one asset ("Art by <author> on SteamGridDB").

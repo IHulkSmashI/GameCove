@@ -199,13 +199,13 @@ func _refresh_summary() -> void:
 	summary.text = T.WILL_STREAM % Settings.summary(r)
 
 
-func close() -> void:
+func close(restore_focus := true) -> void:
 	if not _open:
 		return
 	_open = false
 	Motion.fade(self, false)
 	closed.emit()
-	if _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
+	if restore_focus and _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
 		_focus_before.grab_focus()
 
 

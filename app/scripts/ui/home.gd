@@ -78,6 +78,7 @@ var _revealed := {}
 
 
 func _init() -> void:
+	visibility_changed.connect(_on_visibility_changed)
 	name = "Home"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -226,6 +227,22 @@ func _build_tips() -> HBoxContainer:
 
 # ------------------------------------------------------------ data in
 
+## Games came in while Home was out of sight (another tab, a game in front): its shelves are built the next
+## time it is shown, not on every change of a 20,000-ROM library.
+var _stale := false
+
+
+func _on_visibility_changed() -> void:
+	if _stale and is_visible_in_tree():
+		_apply_games()
+
+
+## Whoever asks for the shelves or their tiles gets them current, in sight or not.
+func _fresh() -> void:
+	if _stale:
+		_apply_games()
+
+
 func set_games(list: Array) -> void:
 	var keep := _focused_tile_ref()
 	games = list
@@ -235,6 +252,22 @@ func set_games(list: Array) -> void:
 		spot = hero_game
 	else:
 		spot = View.find_by_key(games, spot["key"])
+	if is_inside_tree() and not is_visible_in_tree():
+		_stale = true
+		spotlight_game = spot   # what the quick menu names meanwhile is the fresh copy of the game
+		return
+	_apply_games(keep)
+
+
+func _apply_games(keep: Variant = null) -> void:
+	var spot := spotlight_game
+	if spot.is_empty() or View.find_by_key(games, spot.get("key", "")).is_empty():
+		spot = hero_game
+	else:
+		spot = View.find_by_key(games, spot["key"])
+	if keep == null:
+		keep = _focused_tile_ref()
+	_stale = false
 	_build_rows()
 	_set_spotlight(spot, "", false)
 	_restore_focus(keep)
@@ -259,6 +292,7 @@ func default_focus() -> Control:
 
 
 func tiles(row_id: String) -> Array:
+	_fresh()
 	for s in _shelves:
 		if s.id == row_id:
 			return s.tiles
@@ -266,15 +300,18 @@ func tiles(row_id: String) -> Array:
 
 
 func shelves() -> Array:
+	_fresh()
 	return _shelves
 
 
 func shelf_ids() -> Array:
+	_fresh()
 	return _shelves.map(func(s): return s.id)
 
 
 ## Every tile showing `key`, first match per shelf.
 func tile_for(key: String) -> Control:
+	_fresh()
 	for s in _shelves:
 		for t in s.tiles:
 			if t.game.get("key", "") == key:
@@ -400,6 +437,7 @@ func _on_hero_focus() -> void:
 # ------------------------------------------------------------ shelves
 
 func _build_rows() -> void:
+	_stale = false
 	var memory := {}
 	for s in _shelves:
 		if is_instance_valid(s):

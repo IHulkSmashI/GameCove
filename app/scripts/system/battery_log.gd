@@ -136,7 +136,8 @@ static func battery_dir(root: String) -> String:
 	var names := Array(dir.get_directories()) + Array(dir.get_files())
 	names.sort()
 	for n in names:
-		if DeviceScript.read_text(base + n + "/type") == "Battery":
+		# a controller or a mouse shows up as a Battery too (scope "Device"); the machine's own is the one
+		if DeviceScript.read_text(base + n + "/type") == "Battery" and DeviceScript.read_text(base + n + "/scope") != "Device":
 			return base + n + "/"
 	return ""
 

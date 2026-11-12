@@ -139,6 +139,10 @@ func search(game: Dictionary, kind: String, filters := {}, page := 0, done: Call
 	if sid.is_valid_int():
 		by_id.call(sid, true)
 		return
+	if is_rom(game):
+		# A ROM game's title stays on the device (docs/PRIVACY.md row 9), here too.
+		_fail(done, "A game from a ROM file keeps its title on this device, so there is no artwork to browse for it.")
+		return
 	var title := str(game.get("title", ""))
 	var norm := title.to_lower()
 	if _game_ids.has(norm):

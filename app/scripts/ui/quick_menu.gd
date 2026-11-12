@@ -1378,8 +1378,9 @@ func switch_session(target: String) -> void:
 ## GameCove is still here SWITCH_REARM_S later, the same (review M8).
 func _begin_switch(target: String) -> void:
 	_switch_gen += 1
-	_switch_rearm = controller != null and controller.has_method("intercept_state") \
-		and bool(controller.intercept_state().get("active", false))
+	# a second switch while the first one's release stands: intercept already reads off, but it was on
+	_switch_rearm = _switch_rearm or (controller != null and controller.has_method("intercept_state") \
+		and bool(controller.intercept_state().get("active", false)))
 	if controller != null and controller.has_method("release_intercept"):
 		controller.release_intercept(_quiet_power_then_switch.bind(target, _switch_gen))
 	else:

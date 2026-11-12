@@ -46,7 +46,7 @@ func _run() -> void:
 		var row: Dictionary = load("res://tests/layout/matrix.gd").row(screen_row)
 		if row.is_empty():
 			printerr("E2E FAIL setup: E2E_SCREEN %s is not a row of tests/layout/matrix.gd" % screen_row)
-			_finish(1, {"error": "bad E2E_SCREEN"})
+			_finish(1, {"error": "bad E2E_SCREEN", "passed": 0, "failed": 1, "failures": ["setup: E2E_SCREEN %s is not a row of tests/layout/matrix.gd" % screen_row]})
 			return
 		load("res://scripts/ui/ui_scale.gd").override_screen = row["screen"]
 		load("res://scripts/ui/ui_scale.gd").override_window = row["size"]
@@ -54,7 +54,7 @@ func _run() -> void:
 	var err: String = await world.configure()
 	if err != "":
 		printerr("E2E FAIL setup: " + err)
-		_finish(1, {"error": err})
+		_finish(1, {"error": err, "passed": 0, "failed": 1, "failures": ["setup: " + err]})
 		return
 	await world.boot_main()
 	# the fixtures are regular files, real sysfs / procfs aren't (sizes 4096 / 0):

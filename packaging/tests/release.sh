@@ -593,7 +593,9 @@ printf '%s\n' "$E2E_JOB" | grep -qE "timeout-minutes: (3[5-9]|[4-9][0-9])$" && o
 python3 - "$REPO/.github/workflows/release.yml" <<'PY' && ok || bad "release.yml: the release job must need a ci-passed job that checks ci.yml's run for the tagged commit"
 import sys, re
 t = open(sys.argv[1], encoding="utf-8").read()
-assert re.search(r"needs: \[[^\]]*ci-passed", t) and "workflows/ci.yml/runs?head_sha=$GITHUB_SHA" in t and '"$res" != "success"' in t
+assert re.search(r"needs: \[[^\]]*ci-passed", t) and t.count('sh tools/ci/check-ci-passed.sh "$GITHUB_SHA"') == 2
+g = open(sys.argv[1].replace(".github/workflows/release.yml", "tools/ci/check-ci-passed.sh"), encoding="utf-8").read()
+assert "workflows/ci.yml/runs?head_sha=$sha" in g and '"$res" != "success"' in g and "pull_request" in g
 PY
 grep -qF "'^SKIPPED' out.txt" "$REPO/.github/workflows/ci.yml" && ok || bad "ci.yml: the helper step must fail on any skipped test"
 

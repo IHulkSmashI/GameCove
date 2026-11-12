@@ -284,7 +284,7 @@ func refresh() -> void:
 	# after a layout change (Reset controller layout loads the stock one) the usual
 	# button shortcuts go back in; _ensure_shortcuts() reads the profile either way
 	_queue("refresh", func():
-		if _intercepting:
+		if _listening_wanted():
 			_ensure_shortcuts()
 		else:
 			_refresh())
@@ -445,6 +445,7 @@ func _setup_intercept() -> void:
 	intercept.on_hint = func(a: String): shortcut_hint.emit(a)
 	intercept.on_seen = func(c: String, w: String): shortcut_seen.emit(c, w)
 	intercept.start_timer = _start_hold_timer
+	intercept.defer = func(fn: Callable) -> void: fn.call_deferred()   # a release waiting in the queue is handled first
 	if intercept.shortcuts.is_empty():
 		intercept.shortcuts = ButtonMap.table({}, device_id)   # the usual holds, until the profile is read
 	intercept.on_button = func(c: String, p: bool): button_event.emit(c, p)
@@ -472,7 +473,7 @@ func shortcuts_file() -> String:
 ## user chose, and every load (start, a game's own layout, its end, a reload)
 ## comes through here again.
 func _ensure_shortcuts() -> void:
-	if not _intercepting:
+	if not _listening_wanted():
 		return
 	ProfileLock.mutex.lock()
 	_refresh()
@@ -668,6 +669,12 @@ func _reload_layout() -> void:
 
 
 var _gave_up := false   # the monitor could not be restarted and the buttons were handed back
+
+
+## Somebody answers a button mapped to GameCove: the intercept is on and its monitor was not given up on.
+## After the give-up every later profile load (a wake, a game's layout) would map them to a dead listener again.
+func _listening_wanted() -> bool:
+	return _intercepting and not _gave_up
 
 
 func _restart_monitor_later() -> void:
@@ -998,7 +1005,7 @@ func _load_file(path: String) -> bool:
 	var text := FileAccess.get_file_as_string(path)
 	var d: Variant = JSON.parse_string(text)
 	if d is Dictionary:
-		var next: Dictionary = ButtonMap.ensure_defaults(d, device_id) if _intercepting else ButtonMap.for_other_sessions(d)
+		var next: Dictionary = ButtonMap.ensure_defaults(d, device_id) if _listening_wanted() else ButtonMap.for_other_sessions(d)
 		if not is_same(next, d):
 			text = Profile.to_json(next)
 	return _load_json(text)

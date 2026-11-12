@@ -21,6 +21,7 @@ const TopBar := preload("res://scripts/ui/top_bar.gd")
 const Toasts := preload("res://scripts/ui/toast.gd")
 const LaunchOverlay := preload("res://scripts/ui/launch_overlay.gd")
 const SteamTrip := preload("res://scripts/ui/steam_trip.gd")
+const Osk := preload("res://scripts/ui/osk.gd")
 const StatusPanel := preload("res://scripts/ui/status_panel.gd")
 const Sounds := preload("res://scripts/ui/sounds.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
@@ -334,6 +335,7 @@ func _ready() -> void:
 	actions.name = "Actions"
 	add_child(actions)
 	quick_menu = QuickMenu.new()
+	Osk.add_cover(quick_menu)   # a keyboard open under the menu takes nothing while it is shown
 	var qm_services := {"actions": actions, "recording": recording, "device": Device, "power": Power, "launcher": Launcher, "gamescope": Gamescope, "perf": _svc("PerfMonitor"), "controller": _svc("Controller")}
 	if _svc("Controls") != null:
 		qm_services["controls"] = _svc("Controls")
@@ -649,6 +651,8 @@ func _wire_services() -> void:
 		power.autotune_limit.connect(_on_autotune_limit)
 	if power != null and power.has_signal("resumed"):
 		power.resumed.connect(_on_power_resumed)
+	if power != null and power.has_signal("check_queued") and background != null:
+		power.check_queued.connect(background.burst)
 	# The s-hw Controller service may emit ui_action("home" | "quick_menu" | "osk")
 	# for Guide / QuickAccess / Keyboard buttons it intercepts in InputPlumber.
 	var ctl: Node = _svc("Controller")
@@ -911,7 +915,7 @@ func _hook_tile(t: Control) -> void:
 ## Install state changed (queued, started, finished...): badges and the
 ## downloads indicators follow. Tiles are rebuilt only here, never per tick.
 func _on_install_changed() -> void:
-	_set_games(Library.games)
+	_queue_games()
 	_refresh_downloads_indicators()
 	if steam_overlay.is_open() and install_state.is_busy(steam_overlay.key):
 		steam_overlay.close()
@@ -1743,6 +1747,9 @@ func _screen_out(s: Control, d: float) -> void:
 	for k in get_tree().get_nodes_in_group("osk") if is_inside_tree() else []:
 		if s.is_ancestor_of(k):
 			k.dismiss()
+	# sheets a screen keeps in main's modal layer (Stream's) are not under it: it puts them away itself
+	if s.has_method("dismiss_overlays"):
+		s.dismiss_overlays()
 	var t := Motion.to(s, "modulate:a", 0.0, SCREEN_OUT_S)
 	Motion.to(s, "position:x", -Motion.slide(SCREEN_SLIDE_PX) * d, SCREEN_OUT_S, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	if t == null:
@@ -2355,7 +2362,25 @@ func _mark_new_seen() -> void:
 	top_bar.set_dot("library", false)
 
 
+## Several changes in one frame (a store's install state and the library's own, a batch of art) rebuild the
+## screens once: with 20,000 games a rebuild is the cost, not the change.
+var _games_queued := false
+
+
+func _queue_games() -> void:
+	if _games_queued:
+		return
+	_games_queued = true
+	_flush_games.call_deferred()
+
+
 func _on_library_changed() -> void:
+	_queue_games()
+
+
+## The queued change: the screens, then what depends on the list besides them.
+func _flush_games() -> void:
+	_games_queued = false
 	_set_games(Library.games)
 	if not playing.is_empty():
 		# What runs isn't always a Library game: a stream, a desktop app, a clip's

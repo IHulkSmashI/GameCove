@@ -234,6 +234,7 @@ func test_resume_is_handled_promptly_behind_a_game() -> void:
 	var reg: Node = controls()
 	var timers: Array = p.get_children().filter(func(n): return n is Timer and is_equal_approx(n.wait_time, p.SOURCE_CHECK_S) and not n.is_stopped())
 	ok(not timers.is_empty(), "Power's resume check runs behind the game")
+	ok(p.check_queued.is_connected(_bg().burst), "main loop stays awake for the worker's answer after the check (no 33 ms sleep in the way)")
 	if timers.is_empty():
 		return
 	var offset := [0.0]
@@ -280,3 +281,88 @@ func test_resume_is_handled_promptly_behind_a_game() -> void:
 		await w.idle()
 	p.clock = real_clock
 	_bg().clock = real_bg
+
+
+# ---- a library change at 20,000 ROMs (review H5: 2.3 s each) -------------------------------------------
+
+const LibraryScreen := preload("res://scripts/ui/library_screen.gd")
+const HomeScreen := preload("res://scripts/ui/home.gd")
+## A change with the screen shown (measured ~80 ms on a quiet 4-core box; allowed 5x for a shared CI runner),
+## with it out of sight (nothing is built), and a key typed in the search (was 200-445 ms each).
+const MAX_CHANGE_MS := 400
+const MAX_HIDDEN_CHANGE_MS := 60
+const MAX_KEY_MS := 400
+
+
+func _big_list() -> Array:
+	var out: Array = []
+	for i in 20000:
+		out.append({"key": "emu:%d" % (3000000000 + i), "store": "emu", "id": str(3000000000 + i), "title": "Rom %05d" % i,
+			"installed": true, "shortcut": true, "art": {"cover": "", "hero": "", "logo": "", "icon": ""},
+			"info": {"released": null, "time_to_beat": null, "anticheat": null, "protondb": null, "summary": ""},
+			"last_played": 0, "playtime_min": 0, "emulated": {"system": "snes", "system_short": "SNES"}})
+	for i in 300:
+		out.append({"key": "steam:%d" % i, "store": "steam" if i % 2 == 0 else "gog", "id": str(i), "title": "Store game %d" % i,
+			"installed": i % 3 == 0, "added": 1700000000 + i, "art": {"cover": ""}, "info": {}, "last_played": 1700000000 + i * 1000 if i % 5 == 0 else 0,
+			"playtime_min": i % 97})
+	return out
+
+
+func test_a_library_change_at_20000_roms_is_cheap_in_front_and_free_behind() -> void:
+	var list := _big_list()
+	var l: Control = LibraryScreen.new()
+	w.tree.root.add_child(l)
+	await w.frames(2)
+	l.set_games(list)
+	var t0 := Time.get_ticks_msec()
+	l.set_games(list.duplicate())
+	var front := Time.get_ticks_msec() - t0
+	ok(front <= MAX_CHANGE_MS, "a change with the Library shown: %d ms <= %d" % [front, MAX_CHANGE_MS])
+	l.visible = false
+	t0 = Time.get_ticks_msec()
+	for i in 5:
+		l.set_games(list.duplicate())
+	var behind := (Time.get_ticks_msec() - t0) / 5
+	ok(behind <= MAX_HIDDEN_CHANGE_MS, "a change with the Library out of sight: %d ms <= %d" % [behind, MAX_HIDDEN_CHANGE_MS])
+	ok(l._stale, "it is built when shown")
+	t0 = Time.get_ticks_msec()
+	l.visible = true
+	ok(not l._stale and l.tiles().size() > 0, "shown: the grid is there")
+	ok(Time.get_ticks_msec() - t0 <= MAX_CHANGE_MS, "and it took one change's time")
+	# keys typed in a big list: each one is cheap, and typing together is applied once after the pause
+	var worst := 0
+	for q in ["r", "ro", "rom", "rom ", "rom 1", "rom 12"]:
+		t0 = Time.get_ticks_msec()
+		l.set_query(q)
+		worst = maxi(worst, Time.get_ticks_msec() - t0)
+	ok(worst <= MAX_KEY_MS, "the slowest key: %d ms <= %d (was 200-445 each)" % [worst, MAX_KEY_MS])
+	l.set_query("")
+	l._query_typed("r")
+	l._query_typed("ro")
+	ok(l._query_pending and l.shown.size() == 20300, "a big list waits for a pause in the typing")
+	l._apply_query_after(l._query_gen - 1)
+	ok(l._query_pending, "an earlier key's timer does nothing")
+	l._apply_query_after(l._query_gen)
+	ok(not l._query_pending and l.shown.size() < 20300, "the last one applies it")
+	l.queue_free()
+
+
+func test_home_builds_when_shown_not_on_every_library_change() -> void:
+	var list := _big_list()
+	var h: Control = HomeScreen.new()
+	w.tree.root.add_child(h)
+	await w.frames(2)
+	h.set_games(list)
+	var t0 := Time.get_ticks_msec()
+	h.set_games(list.duplicate())
+	var front := Time.get_ticks_msec() - t0
+	ok(front <= 2 * MAX_CHANGE_MS, "a change with Home shown: %d ms <= %d" % [front, 2 * MAX_CHANGE_MS])
+	h.visible = false
+	t0 = Time.get_ticks_msec()
+	h.set_games(list.duplicate())
+	var behind := Time.get_ticks_msec() - t0
+	ok(h._stale and behind <= MAX_CHANGE_MS, "a change with Home out of sight builds no shelves (%d ms)" % behind)
+	h.visible = true
+	ok(not h._stale and not h.shelves().is_empty(), "shown: its shelves are built")
+	h.queue_free()
+	await w.frames(2)

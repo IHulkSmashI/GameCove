@@ -4,9 +4,15 @@ extends "res://tests/test_case.gd"
 ## now: only the rows around the view are made, spacers stand in for the rest.
 
 const LibraryScreen := preload("res://scripts/ui/library_screen.gd")
+const View := preload("res://scripts/ui/library_view.gd")
+const Home := preload("res://scripts/ui/home.gd")
+const Collections := preload("res://scripts/library/collections.gd")
 
 ## Time budgets on a loaded 2-core box (a shared CI runner; quiet: 0.8 s to open 20,000, 60 ms to jump): the old code needed 40 s and more for the deep ones.
 const MAX_OPEN_MS := 6000
+## Home's shelves from 20,300 games (review H5: 1.1 s; ~0.1 s on a quiet 4-core box). The screens in the tree, where a
+## change is measured as it really comes, are in e2e/suite_perf.gd (this runner has no running tree).
+const MAX_SHELVES_MS := 450
 const MAX_JUMP_MS := 3000
 ## Tiles that may exist at once at any size the tests use (window rows x 7 columns).
 const MAX_TILES := 24 * 7
@@ -105,3 +111,100 @@ func test_the_hint_bar_over_the_search_keyboard_says_cancel_and_done() -> void:
 	ok(not (["B", "Home"] in h), "and no Home")
 	l.keyboard.cancel()
 	l.free()
+
+
+func _store_games(n: int) -> Array:
+	var out: Array = []
+	for i in n:
+		out.append({"key": "steam:%d" % i, "store": "steam" if i % 2 == 0 else "gog", "id": str(i), "title": "Store game %d" % i,
+			"installed": i % 3 == 0, "added": 1700000000 + i, "art": {"cover": ""}, "info": {}, "last_played": 1700000000 + i * 1000 if i % 5 == 0 else 0,
+			"playtime_min": i % 97})
+	return out
+
+
+func _in_tree(n: Control) -> Control:
+	(Engine.get_main_loop() as SceneTree).root.add_child(n)
+	return n
+
+
+func _drop(n: Node) -> void:
+	n.get_parent().remove_child(n)
+	n.free()
+
+
+## The orders are what the Callable sorts gave: title, recent, most played, shortest, top rated.
+func test_home_shelves_from_20000_roms_are_quick_and_complete() -> void:
+	var list := _roms(20000) + _store_games(300)
+	var t0 := Time.get_ticks_msec()
+	var shelves := View.shelves(list)
+	var took := Time.get_ticks_msec() - t0
+	ok(took <= MAX_SHELVES_MS, "Home's shelves from 20,300 games: %d ms <= %d (was 1.1 s)" % [took, MAX_SHELVES_MS])
+	var ids: Array = shelves.map(func(s): return s["id"])
+	ok("installed" in ids and "emulation" in ids and "all" in ids and "store_steam" in ids, "the shelves are all there (%s)" % [ids])
+
+
+func test_the_fast_orders_equal_the_comparator_orders() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var list: Array = []
+	for i in 600:
+		list.append({"key": "k%d" % i, "title": "Game %d%s" % [rng.randi() % 50, ["", " b", " A", " é"][rng.randi() % 4]],
+			"last_played": [0, 0, 1700000000 + rng.randi() % 5][rng.randi() % 3], "playtime_min": rng.randi() % 4,
+			"info": {"time_to_beat": {"main_h": float(rng.randi() % 4) - 1.0}}})
+	var by_title := list.duplicate()
+	by_title.sort_custom(View.title_order)
+	for mode in View.SORTS:
+		var got: Array = View.sort_games(list, mode)
+		eq(got.size(), 600, "%s: every game" % mode)
+		for i in range(1, got.size()):
+			var a: Dictionary = got[i - 1]
+			var b: Dictionary = got[i]
+			var fine := true
+			match mode:
+				"recent": fine = int(a["last_played"]) > int(b["last_played"]) or (int(a["last_played"]) == int(b["last_played"]) and a["title"].naturalnocasecmp_to(b["title"]) <= 0)
+				"playtime": fine = int(a["playtime_min"]) > int(b["playtime_min"]) or (int(a["playtime_min"]) == int(b["playtime_min"]) and a["title"].naturalnocasecmp_to(b["title"]) <= 0)
+				"az": fine = a["title"].naturalnocasecmp_to(b["title"]) <= 0
+				"ttb":
+					var ha := View.main_hours(a)
+					var hb := View.main_hours(b)
+					fine = (ha > 0.0 and hb <= 0.0) or ((ha > 0.0) == (hb > 0.0) and (ha < hb or (ha == hb and a["title"].naturalnocasecmp_to(b["title"]) <= 0)))
+			if not fine:
+				ok(false, "%s: %s (%s) then %s (%s)" % [mode, a["title"], a, b["title"], b])
+				break
+	ok(View.title_sorted(by_title) and not View.title_sorted(list), "title_sorted tells")
+
+
+## Typing more of the query narrows the last result and finds what a fresh search of the whole list finds.
+func test_a_longer_query_finds_what_a_fresh_search_finds() -> void:
+	var list := _roms(3000) + _store_games(300)
+	var l: Control = LibraryScreen.new()
+	l.set_games(list)
+	for q in ["r", "ro", "rom", "rom ", "rom 1", "rom 12", "rom 123", "rom 1234", "store", "store g", "sto 1", "st", "s"]:
+		l.set_query(q)
+		var fresh: Array = View.sort_games(View.search(View.not_hidden(list), q), "recent")
+		eq(l.shown.map(func(g): return g["key"]), fresh.map(func(g): return g["key"]), "query '%s' shows what a fresh search shows" % q)
+	# a changed filter or list starts over: no old result is reused
+	l.set_query("rom 1")
+	l.set_store("steam")
+	eq(l.shown.size(), 0, "another store: the ROMs are gone")
+	l.set_store("")
+	l.set_query("rom 0000")
+	var other := _roms(10)
+	for g in other:
+		g["key"] = "emu:other" + g["id"]
+	l.set_games(other)
+	eq(l.shown.map(func(g): return g["key"]), other.map(func(g): return g["key"]), "a new list is searched afresh, not narrowed from the old result")
+	l.free()
+
+
+func test_decorate_copies_only_games_that_are_marked() -> void:
+	var c := Collections.new("user://test_decorate_pass.json")
+	var plain := {"key": "emu:1", "title": "A"}
+	var marked := {"key": "emu:2", "title": "B"}
+	c.set_favourite("emu:2", true)
+	var out: Array = c.decorate([plain, marked])
+	ok(is_same(out[0], plain) or out[0] == plain, "a game in nothing is passed through")
+	ok(not out[0].has("favourite"), "without copying it")
+	eq(out[1].get("favourite"), true, "a favourite is a decorated copy")
+	ok(not marked.has("favourite"), "and the original stays as it was")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_decorate_pass.json"))

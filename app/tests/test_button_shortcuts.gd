@@ -295,6 +295,32 @@ func test_a_hand_edited_hold_time_never_raises() -> void:
 	eq(ButtonMap.hold_seconds({"hold_s": 0.8}), 0.8, "a number is taken")
 
 
+## A long frame: the hold timer fires before a release that was already waiting in the queue. Such a
+## tap on a button that acts on release (every handheld with Quick Access in a chord) became a hold
+## and opened nothing.
+func test_a_release_already_queued_beats_a_late_hold_timer() -> void:
+	var t := _rec(CLAW, _empty())
+	var i: RefCounted = t[0]
+	var log: Dictionary = t[1]
+	var queue := []
+	i.defer = func(fn: Callable) -> void: queue.append(fn)
+	i.handle("ui_quick", 1.0)
+	i.hold_elapsed("ui_quick", log["timers"][0][2])   # the timer, late
+	eq(log["shortcuts"], [], "the timer alone decides nothing yet")
+	i.handle("ui_quick", 0.0)                          # the release that was waiting behind it
+	for fn in queue:
+		fn.call()
+	eq(log["shortcuts"], [], "the tap was a tap: no hold action")
+	eq(log["actions"], ["quick_menu"], "and the menu opens")
+	# a real hold still runs, one step later
+	queue.clear()
+	i.handle("ui_quick", 1.0)
+	i.hold_elapsed("ui_quick", log["timers"][1][2])
+	for fn in queue:
+		fn.call()
+	eq(log["shortcuts"].size(), 1, "a button still down when the queue is reached is a hold")
+
+
 func test_a_lost_release_does_not_swallow_the_next_press() -> void:
 	var p := ButtonMap.set_press(_empty(), "LeftPaddle1", "action:screenshot")
 	var t := _rec("generic", p)
@@ -802,6 +828,24 @@ func test_service_hands_the_buttons_back_when_the_monitor_cannot_be_restarted() 
 	c._restarts = 3   # three restarts already failed
 	c.monitor_line({"kind": "exited"})
 	ok(_loads(f).size() >= 1 and not JSON.stringify(_loads(f)[-1]).contains("\"dbus\""), "no mapping to a listener that is gone")
+	c.free()
+
+
+func test_a_layout_loaded_after_the_monitor_gave_up_maps_nothing_to_it() -> void:
+	var t := _service("monitor_gone_load")
+	var c: Node = t[0]
+	var f: RefCounted = t[1]
+	var ip = t[2]
+	ip.loaded = Profile.to_json(ButtonMap.set_press(_empty(), "LeftPaddle1", "action:mute"))
+	c.refresh()
+	c.setup_intercept_for_tests()
+	c.monitor_line({"kind": "started"})
+	c._restarts = 3
+	c.monitor_line({"kind": "exited"})
+	f.calls.clear()
+	c.refresh()
+	for l in _loads(f):
+		ok(not JSON.stringify(l).contains("\"dbus\""), "a reload after the give-up maps no button to GameCove")
 	c.free()
 
 
