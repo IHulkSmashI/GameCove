@@ -245,7 +245,7 @@ func _fresh() -> void:
 
 func set_games(list: Array) -> void:
 	var keep := _focused_tile_ref()
-	games = list
+	games = View.by_title(list)       # in title order once, here (library_screen.gd set_games says why)
 	hero_game = View.continue_game(games)
 	var spot := spotlight_game
 	if spot.is_empty() or View.find_by_key(games, spot.get("key", "")).is_empty():

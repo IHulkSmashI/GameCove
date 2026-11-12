@@ -294,6 +294,7 @@ func test_resume_is_handled_promptly_behind_a_game() -> void:
 
 const LibraryScreen := preload("res://scripts/ui/library_screen.gd")
 const HomeScreen := preload("res://scripts/ui/home.gd")
+const ViewLib := preload("res://scripts/ui/library_view.gd")
 ## A change with the screen shown (measured ~80 ms on a quiet 4-core box; allowed 5x for a shared CI runner),
 ## with it out of sight (nothing is built), and a key typed in the search (was 200-445 ms each).
 const MAX_CHANGE_MS := 400
@@ -351,6 +352,53 @@ func test_a_library_change_at_20000_roms_is_cheap_in_front_and_free_behind() -> 
 	ok(l._query_pending, "an earlier key's timer does nothing")
 	l._apply_query_after(l._query_gen)
 	ok(not l._query_pending and l.shown.size() < 20300, "the last one applies it")
+	l.queue_free()
+
+
+## The same change when the list is NOT in title order (20,000 ROMs in the order a scan found them, then the store games):
+## the shape that cost 590 ms against 157 ms. The list is put in title order once, where the screen takes it, and every
+## later pass over it is a check; the search is measured with the budget the fix reached, not a loose one.
+const MAX_UNSORTED_CHANGE_MS := 800
+const MAX_SEARCH_KEY_MS := 200
+const MAX_AGAIN_MS := 250
+
+
+func _unsorted_list() -> Array:
+	var list := _big_list()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20300
+	for i in range(list.size() - 1, 0, -1):          # a fixed shuffle: the same list every run
+		var j := rng.randi_range(0, i)
+		var t: Variant = list[i]
+		list[i] = list[j]
+		list[j] = t
+	return list
+
+
+func test_a_library_change_with_an_unsorted_list_at_20000_roms() -> void:
+	var list := _unsorted_list()
+	ok(not ViewLib.title_sorted(list), "the list is not in title order")
+	var l: Control = LibraryScreen.new()
+	w.tree.root.add_child(l)
+	await w.frames(2)
+	l.set_games(list)
+	var t0 := Time.get_ticks_msec()
+	l.set_games(list.duplicate())
+	var front := Time.get_ticks_msec() - t0
+	ok(front <= MAX_UNSORTED_CHANGE_MS, "an unsorted change with the Library shown: %d ms <= %d" % [front, MAX_UNSORTED_CHANGE_MS])
+	ok(ViewLib.title_sorted(l.games), "the screen keeps its list in title order")
+	# the next change with that list in order again is the cheap one
+	t0 = Time.get_ticks_msec()
+	l.set_games(l.games.duplicate())
+	var again := Time.get_ticks_msec() - t0
+	ok(again <= MAX_AGAIN_MS, "and a change after it is the sorted case: %d ms <= %d (328 ms when every pass sorted again)" % [again, MAX_AGAIN_MS])
+	var worst := 0
+	for q in ["r", "ro", "rom", "rom ", "rom 1", "rom 12", "rom 123"]:
+		t0 = Time.get_ticks_msec()
+		l.set_query(q)
+		worst = maxi(worst, Time.get_ticks_msec() - t0)
+	print("E2E TIME unsorted change %d ms, then %d ms, slowest search key %d ms" % [front, again, worst])
+	ok(worst <= MAX_SEARCH_KEY_MS, "the slowest search key: %d ms <= %d (a return to 200+ ms a key fails)" % [worst, MAX_SEARCH_KEY_MS])
 	l.queue_free()
 
 

@@ -328,7 +328,9 @@ func _init() -> void:
 # ------------------------------------------------------------ data in
 
 func set_games(list: Array) -> void:
-	games = list
+	# kept in title order from here on (one check when it already is, one sort when it is not): every shelf and filter
+	# below reads that order, and each of them sorting again was most of a 20,000-ROM rebuild (590 ms against 157)
+	games = View.by_title(list)
 	_games_gen += 1
 	if is_inside_tree() and not is_visible_in_tree():
 		_stale = true   # built the next time the Library is shown, not on every change behind a game or another tab
