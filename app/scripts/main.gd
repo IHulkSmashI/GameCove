@@ -1730,6 +1730,9 @@ func _screen_out(s: Control, d: float) -> void:
 	for k in get_tree().get_nodes_in_group("osk") if is_inside_tree() else []:
 		if s.is_ancestor_of(k):
 			k.dismiss()
+	# sheets a screen keeps in main's modal layer (Stream's) are not under it: it puts them away itself
+	if s.has_method("dismiss_overlays"):
+		s.dismiss_overlays()
 	var t := Motion.to(s, "modulate:a", 0.0, SCREEN_OUT_S)
 	Motion.to(s, "position:x", -Motion.slide(SCREEN_SLIDE_PX) * d, SCREEN_OUT_S, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	if t == null:

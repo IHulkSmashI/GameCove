@@ -355,6 +355,9 @@ func ui_clean() -> bool:
 	for o in [main.status_panel, s.sheet, s.keyboard]:
 		if o != null and is_instance_valid(o) and o.is_visible_in_tree():
 			return false
+	# Stream keeps its sheets and keyboard in main's modal layer, not under the screen
+	if main.stream_screen != null and main.stream_screen.has_method("modal_open") and main.stream_screen.modal_open():
+		return false
 	if main.page != null or main._downloads_open() or main.game_actions.is_modal() or main.steam_overlay.is_open():
 		return false
 	return main.find_child("KeepDialog", true, false) == null

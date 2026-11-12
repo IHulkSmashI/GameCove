@@ -219,3 +219,39 @@ func test_streaming_host() -> void:
 	ok(not k.visible, "B closes it")
 	main().show_screen("home")
 	await w.frames(3)
+
+
+## Monkey seed 104004: Stream's keyboard and sheets live in main's modal layer, not under the screen, so
+## leaving by Guide to Home left them up: the next B closed a hidden dialog and nothing had focus.
+func test_streaming_dialogs_go_with_the_screen() -> void:
+	main().show_screen("stream")
+	await w.frames(4)
+	var sc: Control = main().stream_screen
+	if sc.keyboard == null:
+		sc._make_modals()
+	sc.open_add()
+	await w.frames(3)
+	ok(sc.modal_open(), "Y opened the Add PC keyboard")
+	await guide()
+	await w.wait_s(0.4)
+	eq(main().current, "home", "Guide went Home")
+	ok(not sc.modal_open(), "the Add PC keyboard went with the Stream screen")
+	ok(not sc.keyboard.showing, "and it is not showing")
+	ok(w.ui_clean(), "nothing modal is left over Home")
+	await b()
+	await w.frames(3)
+	ok(focus() != null, "B on Home leaves something focused")
+	for kind in ["more", "settings", "pair"]:
+		main().show_screen("stream")
+		await w.frames(4)
+		match kind:
+			"more": sc.more_sheet.open("PC", "1.2.3.4", [{"id": "refresh", "text": "Check again"}])
+			"settings": sc.settings_sheet.open(sc.service, "x", {})
+			"pair": sc.pair_sheet.open_waiting("PC", "1234", "")
+		await w.frames(2)
+		main().show_screen("library")
+		await w.wait_s(0.3)
+		ok(not sc.modal_open(), "%s sheet is put away when the tab changes" % kind)
+		ok(w.ui_clean(), "%s: nothing modal is left over Library" % kind)
+	main().show_screen("home")
+	await w.frames(3)

@@ -216,12 +216,12 @@ func _show() -> void:
 		action.grab_focus()
 
 
-func close() -> void:
+func close(restore_focus := true) -> void:
 	if state == "closed":
 		return
 	state = "closed"
 	Motion.fade(self, false)
-	if _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
+	if restore_focus and _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
 		_focus_before.grab_focus()
 
 
