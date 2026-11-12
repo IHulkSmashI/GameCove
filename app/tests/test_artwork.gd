@@ -240,6 +240,18 @@ func test_auto_fill_never_asks_about_a_rom() -> void:
 	wipe(dir)
 
 
+## Review 56f5255: the same wrong-type answers parse_sgdb skips used to raise inside parse_assets / parse_game_id.
+func test_sgdb_answers_with_the_wrong_types_do_not_raise() -> void:
+	var body := ('{"success":true,"data":[{"id":null,"url":"https://cdn2.steamgriddb.com/a.png","width":null,"height":{"x":1},'
+		+ '"score":"high","nsfw":"yes","humor":null,"animated":[1]},{"id":7,"url":"https://cdn2.steamgriddb.com/b.png","width":600,"height":900}]}').to_utf8_buffer()
+	var a := Sgdb.parse_assets(body)
+	eq(a.size(), 2, "both entries survive")
+	eq([a[0]["id"], a[0]["width"], a[0]["height"], a[0]["score"]], [0, 0, 0, 0], "odd numbers are 0")
+	eq([a[0]["nsfw"], a[0]["humor"], a[0]["animated"]], [false, false, false], "odd flags are false")
+	eq(a[1]["id"], 7, "a good entry is kept")
+	eq(Sgdb.parse_game_id('{"success":true,"data":[{"id":null,"name":"X"}]}'.to_utf8_buffer(), "X"), 0, "a null id is none")
+
+
 ## Review 56f5255: Change artwork sent a ROM game's title to SteamGridDB's search.
 func test_change_artwork_never_sends_a_rom_title() -> void:
 	var dir := tmp("manualrom")
