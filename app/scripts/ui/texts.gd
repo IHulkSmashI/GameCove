@@ -136,6 +136,7 @@ const FIX_STATES := {
 	"os-fixed": "Fixed by the system",
 	"unsupported": "Not supported here",
 	"other-override": "Another fix is in place",
+	"clawdeck": "Already set up by ClawDeck",
 	"n/a": "Doesn't apply",
 	"checking": "Checking…",
 	"working": "Working…",
@@ -147,6 +148,7 @@ const FIX_STATE_NOTES := {
 	"os-fixed": "Your system already does this, so GameCove's copy isn't needed.",
 	"unsupported": "Your screen isn't one we've checked, so we won't touch it.",
 	"other-override": "Something else already changed this setting. Remove that first if you want ours.",
+	"clawdeck": "ClawDeck already did this, and it works. We leave it as it is.",
 	"n/a": "This fix isn't for this exact model.",
 	"unknown": "The fix helper didn't answer. Is GameCove fully installed?",
 }

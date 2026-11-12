@@ -51,6 +51,19 @@ before=$(snapshot)
 ok '! fix claw8ex-buttons install 2>/dev/null' "refuses with someone else's override"
 ok '[ "$(snapshot)" = "$before" ]' "their override untouched"
 
+case_start clawdeck_override
+mkdir -p "$R/etc/inputplumber/devices.d"
+{
+	echo "# ClawDeck override of the stock file (only capability_map_id differs); delete to restore it"
+	printf '%s' "$STOCK_YAML" | sed 's/capability_map_id: claw2/capability_map_id: msiclaw_claw8ex/'
+} >"$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"
+before=$(snapshot)
+ok 'fix claw8ex-buttons install >/dev/null 2>&1' "ClawDeck's override is adopted, not refused"
+ok 'override | grep -qx "capability_map_id: gamecove_claw8ex"' "GameCove's map is in use"
+ok '[ -f "$R/var/lib/gamecove/backup/clawdeck/devices.d/50-msi_claw8_ex_ai_cg3em.yaml" ]' "ClawDeck's original is backed up"
+fix claw8ex-buttons remove >/dev/null 2>&1
+ok '[ "$(snapshot)" = "$before" ]' "remove puts ClawDeck's override back"
+
 case_start upstream_fixed
 sed -i 's/capability_map_id: claw2/capability_map_id: claw8ex_upstream/' "$R/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
 before=$(snapshot)

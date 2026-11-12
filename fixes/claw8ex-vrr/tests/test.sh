@@ -356,6 +356,26 @@ before=$(snapshot)
 ok '! fix claw8ex-vrr install 2>/dev/null' "someone else's EDID override is refused"
 ok '[ "$(snapshot)" = "$before" ]' "nothing written"
 
+# Finding 10: ClawDeck's own EDID override (a Claw that came from ClawDeck) is "already set up by ClawDeck", not a refusal.
+for where in pending booted; do
+	case_start "clawdeck_edid_$where"
+	vrr_ready
+	mkdir -p "$R/etc/firmware/edid"
+	echo edid >"$R/etc/firmware/edid/clawdeck-csw0801-30-120.bin"
+	if [ "$where" = pending ]; then
+		echo "drm.edid_firmware=eDP-1:edid/clawdeck-csw0801-30-120.bin" >>"$FAKE/kargs"
+	else
+		echo "BOOT_IMAGE=/vmlinuz root=UUID=x drm.edid_firmware=eDP-1:edid/clawdeck-csw0801-30-120.bin" >"$R/proc/cmdline"
+	fi
+	before=$(snapshot)
+	fix claw8ex-vrr install >"$T/out" 2>&1
+	rc=$?
+	ok "[ $rc -eq 0 ]" "$where: install doesn't fail for ClawDeck's EDID ($(tail -n 1 "$T/out"))"
+	ok 'grep -q "already set up by ClawDeck" "$T/out"' "$where: says so"
+	ok '[ "$(snapshot)" = "$before" ]' "$where: ClawDeck's files and the boot are untouched"
+	ok 'fix claw8ex-vrr status | grep -qx state=clawdeck' "$where: status says ClawDeck did it"
+done
+
 case_start no_rpm_ostree
 vrr_ready
 rm "$BIN/rpm-ostree"

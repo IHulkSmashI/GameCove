@@ -328,4 +328,59 @@ ok 'fix claw8ex-gyro status | grep -qx installed=yes' "update: still installed"
 fix claw8ex-gyro remove >/dev/null 2>&1
 ok 'fix claw8ex-gyro status | grep -qx installed=no' "remove after an update"
 
+# Finding 10: a Claw that ClawDeck set up first. Its override of the controller config, its capability map,
+# its steamos-manager drop-in and its EDID are recognised: the gyro fix adopts the override (backed up, ClawDeck's
+# capability map kept) instead of refusing, and remove puts ClawDeck's files back exactly.
+clawdeck_ready() {
+	mkdir -p "$R/etc/inputplumber/devices.d" "$R/etc/inputplumber/capability_maps"
+	{
+		echo "# ClawDeck override of the stock file (only capability_map_id differs); delete to restore it"
+		printf '%s' "$STOCK_YAML" | sed 's/capability_map_id: claw2/capability_map_id: msiclaw_claw8ex/'
+	} >"$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"
+	echo "id: msiclaw_claw8ex" >"$R/etc/inputplumber/capability_maps/msiclaw_claw8ex.yaml"
+	mkdir -p "$R/etc/systemd/system/steamos-manager.service.d" "$R/etc/firmware/edid"
+	echo "[Service]" >"$R/etc/systemd/system/steamos-manager.service.d/50-clawdeck-quiet-split-lock.conf"
+	echo edid >"$R/etc/firmware/edid/clawdeck-csw0801-30-120.bin"
+}
+
+case_start clawdeck_preinstalled
+gyro_ready
+clawdeck_ready
+before=$(snapshot)
+cd_override=$(cat "$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml")
+fix claw8ex-gyro install >"$T/out" 2>&1
+rc=$?
+ok "[ $rc -eq 0 ]" "install does not refuse ClawDeck's files ($(tail -n 2 "$T/out" | tr '\n' ' '))"
+ok 'grep -q "ClawDeck" "$T/out"' "says what it did with ClawDeck's override"
+ok 'override | grep -q "name: gyro_3d"' "the gyro is in the override"
+ok 'override | grep -q "^# GameCove override"' "which is GameCove's now"
+ok 'override | grep -qx "capability_map_id: msiclaw_claw8ex"' "ClawDeck's capability map stays in use (the face buttons keep working)"
+ok '[ "$(cat "$R/var/lib/gamecove/backup/clawdeck/devices.d/50-msi_claw8_ex_ai_cg3em.yaml")" = "$cd_override" ]' "ClawDeck's original is backed up byte for byte"
+ok 'grep -qx "clawdeck /etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml" "$R/var/lib/gamecove/fixes/claw8ex-gyro/manifest"' "the adoption is in the fix's record"
+ok '[ -f "$R/etc/inputplumber/capability_maps/msiclaw_claw8ex.yaml" ] && [ -f "$R/etc/firmware/edid/clawdeck-csw0801-30-120.bin" ] && [ -f "$R/etc/systemd/system/steamos-manager.service.d/50-clawdeck-quiet-split-lock.conf" ]' "ClawDeck's other files are untouched"
+fix claw8ex-gyro remove >/dev/null 2>&1
+ok '[ "$(cat "$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml")" = "$cd_override" ]' "Undo restores ClawDeck's override"
+ok '[ "$(snapshot)" = "$before" ]' "and the fake root is exactly as ClawDeck left it"
+
+case_start clawdeck_then_buttons_and_gyro
+gyro_ready
+clawdeck_ready
+before=$(snapshot)
+ok 'fix claw8ex-buttons install >/dev/null 2>&1' "the buttons fix adopts ClawDeck's override too"
+ok 'fix claw8ex-gyro install >/dev/null 2>&1' "then the gyro fix"
+ok 'override | grep -qx "capability_map_id: gamecove_claw8ex"' "GameCove's own map with the buttons fix on"
+fix claw8ex-buttons remove >/dev/null 2>&1
+ok 'override | grep -q "name: gyro_3d"' "the gyro stays after the buttons fix goes"
+ok 'override | grep -qx "capability_map_id: msiclaw_claw8ex"' "and ClawDeck's map is back in it"
+fix claw8ex-gyro remove >/dev/null 2>&1
+ok '[ "$(snapshot)" = "$before" ]' "the last one out puts ClawDeck's override back"
+
+case_start not_clawdeck
+gyro_ready
+mkdir -p "$R/etc/inputplumber/devices.d"
+echo "# my own file" >"$R/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"
+before=$(snapshot)
+ok '! fix claw8ex-gyro install >/dev/null 2>&1' "a file that isn't ClawDeck's or ours is still refused"
+ok '[ "$(snapshot)" = "$before" ]' "and left alone"
+
 finish
