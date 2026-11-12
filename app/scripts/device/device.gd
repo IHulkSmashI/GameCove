@@ -101,7 +101,7 @@ func detect() -> Dictionary:
 	cpu_model = cpu_model_name(root)
 	gpu = gpu_info(root)
 	_has_battery = battery_path() != "" if assume_battery == null else bool(assume_battery)
-	profile = for_os(resolve(load_doc(), dmi, cpu_model, gpu, _has_battery), OsInfo.detect(root))
+	profile = for_os(resolve(load_doc(), dmi, cpu_model, gpu, _has_battery, builtin_display(root)), OsInfo.detect(root))
 	return profile
 
 
@@ -661,7 +661,7 @@ static func conservative_tdp(chip_tdp: Dictionary, vendor: String) -> Dictionary
 ## `battery` false = no system battery: a desktop (mini PC, HTPC, tower), not a
 ## handheld. No power service may set a TDP there (tdp_backends []): the
 ## handheld-sized limits below would choke a desktop chip.
-static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cpus: Array, battery := true) -> Dictionary:
+static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cpus: Array, battery := true, display := false) -> Dictionary:
 	var c := cpu_entry(cpus, model)
 	var vendor := str(c.get("cpu_vendor", ""))
 	if vendor == "":
@@ -700,7 +700,9 @@ static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cp
 	}
 	if c.has("pl2_offset_w"):
 		row["pl2_offset_w"] = c["pl2_offset_w"]
-	if not battery:
+	if not battery and not display:
+		# no battery AND no screen of its own: a PC by the TV. A device with a built-in screen is a handheld whose
+		# kernel doesn't list its battery (review: it was treated as a box, so battery and power settings vanished)
 		row["form"] = "desktop"
 		row["name"] = name if name != "" else "Unknown PC"
 		row["art"] = "generic-box"
@@ -711,11 +713,11 @@ static func fallback_row(dmi: Dictionary, model: String, gpu_dev: Dictionary, cp
 
 ## The row for this hardware: best DMI match, its chip details filled in from
 ## the CPU where the row leaves them open, else the generic fallback.
-static func resolve(doc: Dictionary, dmi: Dictionary, model: String, gpu_dev: Dictionary, battery := true) -> Dictionary:
+static func resolve(doc: Dictionary, dmi: Dictionary, model: String, gpu_dev: Dictionary, battery := true, display := false) -> Dictionary:
 	var cpus: Array = doc.get("cpus", [])
 	var row := match_dmi(doc.get("devices", []), dmi)
 	if row.is_empty():
-		return fallback_row(dmi, model, gpu_dev, cpus, battery)
+		return fallback_row(dmi, model, gpu_dev, cpus, battery, display)
 	var c := cpu_entry(cpus, model)
 	var open_chip := str(row.get("chip", "")) == "Unknown" or bool(row.get("chip_from_cpu", false))
 	if c.is_empty() and open_chip and str(row.get("cpu_vendor", "")) == "":
@@ -747,6 +749,23 @@ static func resolve(doc: Dictionary, dmi: Dictionary, model: String, gpu_dev: Di
 ## First battery found, e.g. BAT0 or BAT1. Empty string when there's none.
 func battery_path() -> String:
 	return battery_path_at(root)
+
+
+## The machine has a screen of its own: a connected eDP, DSI or LVDS connector (/sys/class/drm). A handheld's kernel
+## may not list its battery; a mini PC or a Steam Machine has no such connector.
+static func builtin_display(prefix := "") -> bool:
+	var base := prefix + "/sys/class/drm/"
+	var dir := DirAccess.open(base)
+	if dir == null:
+		return false
+	for n in Array(dir.get_directories()) + Array(dir.get_files()):
+		var name := str(n)
+		if not name.begins_with("card") or not ("-eDP-" in name or "-DSI-" in name or "-LVDS-" in name):
+			continue
+		var status := read_text(base + name + "/status")
+		if status == "connected" or status == "unknown" or status == "":
+			return true
+	return false
 
 
 ## The system battery under `prefix`: BAT* first, else any supply of type

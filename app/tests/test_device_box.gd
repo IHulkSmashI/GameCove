@@ -126,6 +126,30 @@ func test_detection_from_sysfs_ignores_controller_batteries() -> void:
 	_rm(root)
 
 
+## Review: an unlisted handheld whose battery the kernel doesn't list was treated as a box (no battery, no power
+## settings, a firmware update allowed on battery). A built-in screen makes it a handheld; a box has none.
+func test_an_unknown_device_with_a_built_in_screen_and_no_battery_is_a_handheld() -> void:
+	var cpus: Array = DeviceScript.load_doc().get("cpus", [])
+	var cpu := "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics"
+	eq(DeviceScript.form_of(DeviceScript.fallback_row(MINI_PC, cpu, {}, cpus, false, true)), "handheld", "a screen of its own: handheld")
+	eq(DeviceScript.form_of(DeviceScript.fallback_row(MINI_PC, cpu, {}, cpus, false, false)), "desktop", "no screen: still a box")
+	var root := _tmp()
+	for k in MINI_PC:
+		_w(root + "/sys/class/dmi/id/" + k, MINI_PC[k])
+	_w(root + "/proc/cpuinfo", "model name\t: " + cpu)
+	_w(root + "/sys/class/drm/card1-DP-1/status", "connected")        # a TV on a cable is not a screen of its own
+	ok(not DeviceScript.builtin_display(root), "an external connector is not a built-in screen")
+	var dev := _device(root)
+	eq(dev.form(), "desktop", "a box with only an external screen")
+	dev.free()
+	_w(root + "/sys/class/drm/card1-eDP-1/status", "connected")
+	ok(DeviceScript.builtin_display(root), "an eDP connector is")
+	dev = _device(root)
+	eq([dev.has_battery(), dev.form(), dev.is_handheld()], [false, "handheld", true], "no battery found, but a screen of its own: handheld")
+	dev.free()
+	_rm(root)
+
+
 func test_steam_machine_from_sysfs_lays_out_for_the_tv() -> void:
 	var root := _tmp()
 	for k in FREMONT:
