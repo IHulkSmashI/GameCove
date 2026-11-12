@@ -133,6 +133,7 @@ static func _autoload(n: String) -> Object:
 func _build_header() -> HBoxContainer:
 	var h := Kit.hbox(12)
 	h.name = "Header"
+	h.set_meta("ux_nav_bar", true)   # a press out of it lands on the screen's main control (docs/CONTROLLER-UX.md CUX-5)
 	var t := Kit.label(T.TITLE, "TitleLabel")
 	t.name = "Title"
 	h.add_child(t)

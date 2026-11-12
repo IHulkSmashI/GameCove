@@ -35,6 +35,8 @@ extends RefCounted
 ##   meta "ux_modal"    a panel that owns the pad while open (the on-screen keyboard): the rest isn't walked
 ##   meta "ux_follows"  on a scroller: it follows focus with its own code (the journeys check it on screen)
 ##   meta "ux_any_key"  a "press any button" countdown: nothing to walk
+##   meta "ux_nav_bar"  on a container: the top bar, side categories, section tabs; a press out of it
+##                      may land on the screen's main control rather than the nearest one
 ##   method ux_looks_focused() -> bool: a control that draws its own focus look
 ##
 ## Headless and synchronous (no frames): every press is handled before the next.
@@ -437,6 +439,13 @@ static func _order_problem(c: Cand, g: Cand, cands: Array[Cand], d: Dictionary) 
 	var near: Array = line.filter(func(x): return _gap_to(c, x, v) <= best + NEAR)
 	if g in near:
 		return ""
+	# somewhere nearer that way than anything in line (the hero's Play above a shelf): Godot's nearest, fine
+	if _gap_to(c, g, v) <= best + NEAR:
+		return ""
+	# out of a navigation bar (top bar, side categories, section tabs) into the screen: its main control (tvOS primary item)
+	var bar := _nav_bar_of(c.node)
+	if bar != null and not bar.is_ancestor_of(g.node):
+		return ""
 	# entering a tab strip lands on the tab that is open (Android TV top and side navigation)
 	if _is_tab(g.node) and g.node is BaseButton and (g.node as BaseButton).button_pressed and not _shares_group(c, g):
 		return ""
@@ -444,9 +453,19 @@ static func _order_problem(c: Cand, g: Cand, cands: Array[Cand], d: Dictionary) 
 	if g.group != null and g.group != c.group and not _shares_group(c, g) \
 			and near.any(func(x): return x.group == g.group):
 		return ""
+	var at := " (from %s to %s; %s at %s)" % [_r(pr[0]), _r(pr[1]), "nearest", _r(_pair(c, near[0])[1])]
 	if g in line:
-		return "pad-skip|%s jumps to %s over %s" % [d["name"], _where(g.node), _where(near[0].node)]
-	return "pad-order|%s goes to %s, off its line, though %s is next in line" % [d["name"], _where(g.node), _where(near[0].node)]
+		return "pad-skip|%s jumps to %s over %s%s" % [d["name"], _where(g.node), _where(near[0].node), at]
+	return "pad-order|%s goes to %s, off its line, though %s is next in line%s" % [d["name"], _where(g.node), _where(near[0].node), at]
+
+
+static func _nav_bar_of(n: Node) -> Node:
+	var p := n.get_parent()
+	while p != null and not p is Window:
+		if p.has_meta("ux_nav_bar"):
+			return p
+		p = p.get_parent()
+	return null
 
 
 static func _shares_group(c: Cand, g: Cand) -> bool:
@@ -473,6 +492,11 @@ static func _in_line(c: Cand, cands: Array[Cand], v: Vector2) -> Array:
 			continue   # mostly overlapping along the axis: not "ahead"
 		if _overlap_across(a, b, v) > minf(8.0, minf(_across(a, v), _across(b, v)) * 0.25):
 			out.append(x)
+	# inside a scrolling list the list comes first: up / down go along it and leave it only at its ends
+	if c.in_scroll != null:
+		var same := out.filter(func(x): return x.in_scroll == c.in_scroll)
+		if not same.is_empty():
+			return same
 	return out
 
 

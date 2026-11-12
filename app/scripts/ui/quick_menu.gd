@@ -261,6 +261,7 @@ func _build_frame() -> void:
 	# Tabs: icons in a track; the open one is filled and shows its name.
 	var tab_row := Kit.hbox(2)
 	tab_row.name = "Tabs"
+	tab_row.set_meta("ux_nav_bar", true)   # a press out of it lands on the screen's main control (docs/CONTROLLER-UX.md CUX-5)
 	var tab_track := PanelContainer.new()
 	tab_track.name = "TabTrack"
 	tab_track.size_flags_horizontal = Control.SIZE_EXPAND_FILL

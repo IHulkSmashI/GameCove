@@ -1026,6 +1026,7 @@ func _discover_shots(lib: Node) -> void:
 		if want(["discover_import"]):
 			var w = r.sections["wishlist"]
 			w.open_import()
+			await frames(2)   # the import card focuses its field a frame later; the keyboard opens after, as when A is pressed on it
 			w._open_keyboard()
 			for ch in "robin_walker":
 				w.keyboard.type(ch)

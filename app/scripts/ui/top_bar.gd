@@ -51,6 +51,7 @@ var pads: Array = []
 
 func _init() -> void:
 	name = "TopBar"
+	set_meta("ux_nav_bar", true)   # a press out of it lands on the screen's main control (docs/CONTROLLER-UX.md CUX-5)
 	add_theme_constant_override("separation", ThemeLib.SPACE_2)
 	var logo := TextureRect.new()
 	logo.name = "Logo"

@@ -228,6 +228,7 @@ func _build() -> void:
 	cols.add_child(list_scroll)
 	var list := Kit.vbox(3)
 	list.name = "Categories"
+	list.set_meta("ux_nav_bar", true)   # a press out of it lands on the screen's main control (docs/CONTROLLER-UX.md CUX-5)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_scroll.add_child(list)
 	# On a small screen the category list is longer than the screen: the same
