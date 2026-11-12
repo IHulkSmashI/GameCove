@@ -1435,6 +1435,19 @@ func _epic_cloud_copy(key: String, title: String, entry: Dictionary, plan: Dicti
 		return _copy_failed(scratch, tmp, str(got["error"]) if str(got["error"]) != "" else "couldn't reach Epic")
 	var st := CloudSaves.dir_stats(scratch)
 	var parts := [{"name": "saves", "path": scratch, "restore_path": folder if folder != "" else scratch}]
+	# the same cloud save as the last copy (legendary stamps every file with the save's own
+	# time, so the same save has the same fingerprint): it's kept already. Every launch that
+	# finds the same conflict used to pin another copy, and ten of them rotated out the other
+	# pinned backups (review at 56f5255, low)
+	if int(st["files"]) > 0:
+		var fp := SaveBackup.fingerprint(parts)
+		for old in backups.list(key):
+			if str(old.get("reason", "")) == "cloud_copy":
+				if str(old.get("fingerprint", "")) == fp:
+					_remove_tree(scratch)
+					_remove_tree(tmp)
+					return {"why": "", "files": int(st["files"]), "bytes": int(st["bytes"])}
+				break
 	var b: Dictionary = backups.backup(key, title, "cloud_copy", parts, true, true)
 	_remove_tree(scratch)
 	_remove_tree(tmp)

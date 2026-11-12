@@ -1670,6 +1670,33 @@ class RepairLibrary extends Node:
 	signal changed
 
 
+# ---- review at 56f5255, lows -------------------------------------------------------------------------
+
+## Epic's cloud copies were never de-duplicated: every launch that found the same conflict kept
+## another pinned copy of the same cloud save, and ten of them rotated out the other pinned
+## backups (here the one from before a restore). The same cloud save is kept once, as for GOG.
+func test_epic_cloud_copies_of_the_same_save_are_kept_once() -> void:
+	var w := _world("epic_copy_dedupe")
+	var cloud: Object = w["epic_cloud"]
+	Fakes.put(w["esaves"].path_join("world.sav"), "ours", T0)
+	var kept: Dictionary = w["s"].backups.backup("epic:Min", "Minecraft Dungeons", "before_restore", [{"name": "saves", "path": w["esaves"]}], true, true)
+	ok(kept["ok"], "a pinned backup from before a restore")
+	cloud.saves.append({"t": T0 + 50000, "files": {"world.sav": "the PC's"}})
+	for i in 11:
+		w["now"][0] += 60
+		var got := []
+		w["s"].before_launch(w["epic"], func(r): got.append(r))
+		ok(got.size() == 1 and got[0].has("conflict"), "launch %d: the same conflict" % i)
+	var copies: Array = w["s"].backup_list("epic:Min").filter(func(b): return b["reason"] == "cloud_copy")
+	eq(copies.size(), 1, "one copy of the one cloud save")
+	ok(not w["s"].backups.find("epic:Min", str(kept["id"])).is_empty(), "the other pinned backup is still there")
+	# a new cloud save is a new copy
+	cloud.saves.append({"t": T0 + 60000, "files": {"world.sav": "the PC's, later"}})
+	w["s"].before_launch(w["epic"], func(_r): pass)
+	eq(w["s"].backup_list("epic:Min").filter(func(b): return b["reason"] == "cloud_copy").size(), 2, "another cloud save: another copy")
+	_done(w)
+
+
 # ---- high 10: a download cut short ------------------------------------------------------------------
 
 ## An empty folder, the first download killed by the timeout: the half file used to stay,

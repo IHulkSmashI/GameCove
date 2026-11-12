@@ -432,7 +432,9 @@ What keeps a save from being lost (final review; each has a test against ports o
   from running at all.
 - **Backups.** The newest 10 everyday backups per game, and apart from those the newest 10 made by a conflict choice,
   a cloud copy, a restore or an interrupted download. "Newest" is the order they were made in (`seq` in each backup's
-  JSON), not the time in their name: with the clock behind, the backup just made is never the one rotated out.
+  JSON), not the time in their name: with the clock behind, the backup just made is never the one rotated out. A
+  cloud copy of the same cloud save as the last cloud copy (same fingerprint) isn't kept again, for Epic as for GOG,
+  so launches that keep finding the same conflict never rotate the other pinned backups out.
 
 ## Battery history and Sleep at low battery
 
