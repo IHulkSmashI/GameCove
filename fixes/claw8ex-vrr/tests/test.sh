@@ -270,6 +270,54 @@ ok 'fix claw8ex-vrr status | grep -qx installed=yes' "still installed"
 fix claw8ex-vrr remove >/dev/null
 ok '[ "$(snapshot)" = "$before" ]' "remove after migration restores everything"
 
+# Review: the record is written before the file it names (a cut between the rename and the record left a file that
+# remove never took out), and rewriting the record on a full disk never leaves a truncated one.
+case_start the_record_is_written_before_the_files
+vrr_ready
+cat >"$BIN/mv" <<'EOF'
+#!/bin/sh
+# the moment a GameCove file is renamed into place: what does the record say already?
+for last; do :; done
+case $last in
+*/etc/gamecove/claw8ex-vrr/*) cp "$GAMECOVE_ROOT/var/lib/gamecove/fixes/claw8ex-vrr/manifest" "$FAKE/seen.$(basename "$last")" 2>/dev/null ;;
+esac
+exec /bin/mv "$@"
+EOF
+chmod +x "$BIN/mv"
+fix claw8ex-vrr install >/dev/null 2>&1
+ok '[ -f "$FAKE/seen.edid-hook.sh" ] && grep -qxF "file /etc/gamecove/claw8ex-vrr/edid-hook.sh" "$FAKE/seen.edid-hook.sh"' "the hook is in the record before it is renamed into place"
+ok '[ -f "$FAKE/seen.edid-hook.sh" ] && grep -q "^dir " "$FAKE/seen.edid-hook.sh"' "and so are the folders made for it"
+
+case_start a_full_disk_never_truncates_the_record
+vrr_ready
+before=$(snapshot)
+make_old_install
+M=$R/var/lib/gamecove/fixes/claw8ex-vrr/manifest
+cp "$M" "$T/manifest.before"
+# a grep -vxF (the one that writes the new record) is cut short, as on a full disk: the first one only
+cat >"$BIN/grep" <<'EOF'
+#!/bin/sh
+case " $* " in
+*" -vxF "*/manifest" "*)
+	if [ ! -e "$FAKE/grep.cut" ]; then
+		: >"$FAKE/grep.cut"
+		/usr/bin/grep "$@" | head -n 1
+		exit 0
+	fi
+	;;
+esac
+exec /usr/bin/grep "$@"
+EOF
+chmod +x "$BIN/grep"
+fix claw8ex-vrr status >/dev/null 2>&1
+ok '[ -e "$FAKE/grep.cut" ]' "the record was rewritten (and cut short once)"
+ok '[ "$(wc -l <"$M")" -ge "$(($(wc -l <"$T/manifest.before") - 2))" ]' "the record is not truncated"
+ok '[ ! -e "$M.tmp" ]' "no half-written temp file left"
+rm -f "$BIN/grep"
+fix claw8ex-vrr status >/dev/null 2>&1
+fix claw8ex-vrr remove >/dev/null 2>&1
+ok '[ "$(snapshot)" = "$before" ]' "and remove still restores everything"
+
 case_start migrates_via_install
 vrr_ready
 make_old_install

@@ -112,8 +112,7 @@ migrate_fw() {
 		rpm-ostree initramfs-etc --untrack="$FW_GENERIC" >/dev/null || return 1
 	fi
 	rm -f "$ROOT$FW_GENERIC"
-	grep -vxF -e "file $FW_GENERIC" -e "initramfs $FW_GENERIC" "$MANIFEST" >"$MANIFEST.tmp" || true
-	mv -f "$MANIFEST.tmp" "$MANIFEST"
+	m_drop "file $FW_GENERIC" "initramfs $FW_GENERIC" || return 1
 	say "moved MSI's ISH firmware to the name only this model loads (${FW_DEST##*/})" >&2
 }
 

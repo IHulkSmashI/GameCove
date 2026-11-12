@@ -341,8 +341,7 @@ migrate() {
 	fi
 	for a in $olds; do
 		if karg_release "$a" "$NAME"; then
-			grep -vxF "karg $a" "$MANIFEST" >"$MANIFEST.tmp" || true
-			mv -f "$MANIFEST.tmp" "$MANIFEST"
+			m_drop "karg $a" || { warn "could not update the change record"; return 1; }
 		else
 			warn "could not remove the kernel argument $a"
 		fi

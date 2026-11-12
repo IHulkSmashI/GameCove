@@ -107,6 +107,31 @@ m_add() {
 
 m_has() { [ -f "$MANIFEST" ] && grep -qxF "$1 $2" "$MANIFEST"; }
 
+# m_rewrite <command ...>: the change record becomes what the command prints (it must print the same every time it
+# runs, from files that don't change meanwhile). Written to a temp file, synced, compared with a second run, then
+# renamed over the record: a full disk or a cut leaves the old record whole, never a truncated one (the record is the
+# only way back). Status 0 or 1 from the command both mean "printed what it had" (grep with nothing left is 1).
+m_rewrite() {
+	_mt="$MANIFEST.tmp"
+	"$@" >"$_mt" 2>/dev/null
+	[ $? -le 1 ] || { rm -f "$_mt"; return 1; }
+	sync "$_mt" 2>/dev/null || sync 2>/dev/null || true
+	if ! "$@" 2>/dev/null | cmp -s - "$_mt"; then
+		rm -f "$_mt"
+		return 1
+	fi
+	mv -f "$_mt" "$MANIFEST" || { rm -f "$_mt"; return 1; }
+}
+
+# m_drop <line> ...: take these whole lines out of the record (m_rewrite).
+m_drop() {
+	_m_gone=$(printf '%s\n' "$@")
+	m_rewrite _m_kept
+}
+_m_kept() { printf '%s\n' "$_m_gone" | grep -vxF -f - "$MANIFEST"; }
+
+_m_reversed() { sed -n '1!G;h;$p' "$_m_left"; }
+
 # The revision that was installed ("rev <n>" in the manifest; 1 for installs from before it was recorded).
 m_rev() {
 	_r=$(sed -n 's/^rev \([0-9][0-9]*\)$/\1/p' "$MANIFEST" 2>/dev/null | tail -n 1)
@@ -138,8 +163,10 @@ gc_root_update() {
 m_mkdir() {
 	[ -d "$ROOT$1" ] && return 0
 	m_mkdir "$(dirname "$1")" || return 1
-	mkdir "$ROOT$1" || return 1
+	# recorded first: a cut between the two leaves a record of a folder that isn't there (undo skips it), never a
+	# folder nothing remembers
 	m_add dir "$1"
+	mkdir "$ROOT$1" || return 1
 }
 
 # m_put <source file> <real dest path> <mode>: written atomically; an existing file is backed up first.
@@ -150,11 +177,13 @@ m_put() {
 		cp -p "$ROOT$2" "$M_DIR/backup$2" || return 1
 		m_add replaced "$2"
 	fi
+	# the file is recorded before it is written: a cut after the rename but before the record left a file that
+	# remove never took out
+	m_has file "$2" || m_has replaced "$2" || m_add file "$2"
 	if ! { cp "$1" "$ROOT$2.gamecove-tmp" && chmod "$3" "$ROOT$2.gamecove-tmp" && mv -f "$ROOT$2.gamecove-tmp" "$ROOT$2"; }; then
 		rm -f "$ROOT$2.gamecove-tmp"
 		return 1
 	fi
-	m_has file "$2" || m_has replaced "$2" || m_add file "$2"
 }
 
 # Undo everything in the manifest, newest first. Keeps going on errors; what couldn't be undone stays in
@@ -200,7 +229,9 @@ m_undo() {
 	rm -f "$M_DIR/undo"
 	[ "$units" = 0 ] || systemctl daemon-reload >/dev/null 2>&1 || true
 	if [ -s "$M_DIR/left" ]; then
-		sed -n '1!G;h;$p' "$M_DIR/left" >"$MANIFEST"
+		_m_left=$M_DIR/left
+		# a record that can't be written whole stays as it was (all of it, so remove retries everything)
+		m_rewrite _m_reversed || warn "could not update the change record"
 		rm -f "$M_DIR/left"
 		return 1
 	fi
