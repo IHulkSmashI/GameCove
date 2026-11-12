@@ -613,18 +613,43 @@ func add_focusables(list: Array) -> void:
 func finish() -> void:
 	_linked = true
 	Kit.link_horizontal(actions)
-	var chain: Array = [actions[0]] if not actions.is_empty() else []
-	chain.append_array(focusables)
-	Kit.link_vertical(chain)
+	# The cards stand in columns: up / down run down each column (a card's button
+	# row is one row), left / right cross to the next column, up from a column's
+	# top reaches the action row (docs/CONTROLLER-UX.md CUX-5). One long chain
+	# made down at a column's foot jump up into the next one and left / right
+	# stay put.
+	var cols := {}
+	var order: Array = []
+	for c in focusables:
+		var col := _column_of(c)
+		if not cols.has(col):
+			cols[col] = []
+			order.append(col)
+		cols[col].append(c)
+	for col in order:
+		Kit.link_rows(cols[col], actions[0] if not actions.is_empty() else null)
 	if not actions.is_empty():
+		actions[0].focus_neighbor_bottom = actions[0].get_path_to(focusables[0] if not focusables.is_empty() else actions[0])
+		actions[0].focus_neighbor_left = actions[0].get_path_to(actions[0])
 		actions[0].focus_neighbor_right = actions[0].get_path_to(actions[1] if actions.size() > 1 else actions[0])
 	for i in range(1, actions.size()):
 		var a: Control = actions[i]
 		a.focus_neighbor_top = a.get_path_to(a)
-		a.focus_neighbor_bottom = a.get_path_to(focusables[0] if not focusables.is_empty() else a)
+		# down from the other actions: the card control right below (Godot's search), not column 1's top
+		a.focus_neighbor_bottom = NodePath() if not focusables.is_empty() else a.get_path_to(a)
 		a.focus_neighbor_left = a.get_path_to(actions[i - 1])
 		a.focus_neighbor_right = a.get_path_to(actions[i + 1] if i + 1 < actions.size() else a)
 	_link_top_target()
+
+
+## The column (bento stack) a card control stands in, or the cards box itself.
+func _column_of(c: Node) -> Node:
+	var p := c
+	while p != null and p != self:
+		if columns != null and p.get_parent() == columns:
+			return p
+		p = p.get_parent()
+	return self
 
 
 ## D-pad up from the action row goes to `c` (main passes the top bar's tab).

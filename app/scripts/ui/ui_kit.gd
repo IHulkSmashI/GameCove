@@ -150,6 +150,33 @@ static func link_vertical(controls: Array, top: Control = null) -> void:
 		c.focus_neighbor_right = c.get_path_to(c)
 
 
+## Up / down through `items` (top to bottom, as built) for a column of cards:
+## controls side by side in one box row (a card's button row) count as one row,
+## so up / down go to the row above's or below's first control and left / right
+## walk along the row. Left / right off a row's ends are left to Godot's own
+## search (the nearest control that way: the next column), never "stay put";
+## up from the first row goes to `top`, down from the last stays
+## (docs/CONTROLLER-UX.md CUX-5).
+static func link_rows(items: Array, top: Control = null) -> void:
+	var rows: Array = []
+	for c in items:
+		var p: Node = (c as Control).get_parent()
+		if not rows.is_empty() and (p is HBoxContainer or p is HFlowContainer) and rows[-1][0].get_parent() == p:
+			rows[-1].append(c)
+		else:
+			rows.append([c])
+	for r in rows.size():
+		var row: Array = rows[r]
+		var up: Control = rows[r - 1][0] if r > 0 else top
+		var down: Control = rows[r + 1][0] if r + 1 < rows.size() else null
+		for i in row.size():
+			var c: Control = row[i]
+			c.focus_neighbor_top = c.get_path_to(up if up != null else c)
+			c.focus_neighbor_bottom = c.get_path_to(down if down != null else c)
+			c.focus_neighbor_left = c.get_path_to(row[i - 1]) if i > 0 else NodePath()
+			c.focus_neighbor_right = c.get_path_to(row[i + 1]) if i + 1 < row.size() else NodePath()
+
+
 ## Chain controls left to right; ends stop at themselves.
 static func link_horizontal(controls: Array) -> void:
 	for i in controls.size():

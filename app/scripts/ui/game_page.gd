@@ -634,9 +634,13 @@ func _relink() -> void:
 	focusables = list
 	finish()
 	if first_cell != null:
-		var i := list.find(first_cell)
-		var above: Control = list[i - 1] if i > 0 else actions[0]
-		var below: Control = list[i + 1] if i + 1 < list.size() else first_cell
+		# its neighbours in its own column, as finish() linked them
+		var above: Control = first_cell.get_node_or_null(first_cell.focus_neighbor_top)
+		var below: Control = first_cell.get_node_or_null(first_cell.focus_neighbor_bottom)
+		if above == null or above == first_cell:
+			above = actions[0]
+		if below == null:
+			below = first_cell
 		ach_card.link_edges(above, below)
 		above.focus_neighbor_bottom = above.get_path_to(first_cell)
 		if below != first_cell:

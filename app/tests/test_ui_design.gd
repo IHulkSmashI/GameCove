@@ -304,7 +304,8 @@ func test_hints_follow_focus() -> void:
 	var p := MainScript.hints_for({"screen": "home", "page": true, "kind": "play", "label": "Install"})
 	eq(p[0], ["A", "Install"], "page: A says what Play does")
 	ok(p.any(func(x): return x == ["B", "Back"]) and not p.any(func(x): return x[1] == "Sections"), "page: B back, no tabs")
-	eq(MainScript.hints_for({"screen": "settings", "kind": "row"})[0], ["LR", "Change"], "rows: left/right change")
+	eq(MainScript.hints_for({"screen": "settings", "kind": "row"})[0], ["LR", "Change"], "stepper rows: left/right change")
+	eq(MainScript.hints_for({"screen": "settings", "kind": "toggle"})[0], ["A", "Change"], "switch and segmented rows: A changes them")
 	eq(MainScript.hints_for({"kind": ""})[-1], ["GUIDE", "Quick menu"], "quick menu always listed")
 	# final review (Low): an app's tile has no game options behind Menu
 	ok(h.any(func(x): return x == ["MENU", "Options"]), "a game's tile: Menu opens its options")
@@ -464,9 +465,29 @@ func test_page_template() -> void:
 	eq(p.header.eyebrow.text, "On sale", "line above the title")
 	eq(play.get_node(play.focus_neighbor_right), more, "actions in a row")
 	eq(play.get_node(play.focus_neighbor_bottom), row.button, "down into the cards")
-	eq(more.get_node(more.focus_neighbor_bottom), row.button, "down from any action")
+	eq(more.focus_neighbor_bottom, NodePath(), "down from another action: whatever is right below it (Godot's search, CUX-5)")
 	eq(row.button.get_node(row.button.focus_neighbor_top), play, "up returns to the primary action")
 	p.free()
+
+
+## Every column of a page is its own up / down chain (docs/CONTROLLER-UX.md
+## CUX-5): down at a column's foot stays (it used to jump up into the next
+## column), up from its top reaches the action row, left / right cross columns.
+func _columns_linked(p: Control, buttons: Array, play: Control, what: String) -> void:
+	var cols := {}
+	for b in buttons:
+		var col: Node = p._column_of(b)
+		if not cols.has(col):
+			cols[col] = []
+		cols[col].append(b)
+	ok(cols.size() == p.columns.get_child_count(), "%s: every column holds a card" % what)
+	for col in cols:
+		var list: Array = cols[col]
+		for i in list.size():
+			var b: Control = list[i]
+			eq(b.get_node_or_null(b.focus_neighbor_top), list[i - 1] if i > 0 else play, "%s, %s: up" % [what, b.name])
+			eq(b.get_node_or_null(b.focus_neighbor_bottom), list[i + 1] if i + 1 < list.size() else b, "%s, %s: down (the foot stays)" % [what, b.name])
+			eq(b.focus_neighbor_right, NodePath(), "%s, %s: right crosses to the next column" % [what, b.name])
 
 
 ## The column cards are dealt again once the page knows its width (two columns
@@ -482,19 +503,17 @@ func test_page_columns_dealt_again_keep_the_links() -> void:
 		b.name = "B%d" % i
 		body.add_child(b)
 		buttons.append(b)
+	var play: Button = p.actions[0]
 	p.add_focusables(buttons)
 	p.columns.size = Vector2(800, 400)
 	p._layout_columns()
 	p.finish()
 	eq(p.columns.get_child_count(), 2, "narrow: two columns")
+	_columns_linked(p, buttons, play, "two columns")
 	p.columns.size = Vector2(1600, 400)
 	p._layout_columns()
 	eq(p.columns.get_child_count(), 3, "wide: three")
-	for i in 2:
-		var nb: NodePath = buttons[i].focus_neighbor_bottom
-		ok(buttons[i].get_node_or_null(nb) == buttons[i + 1], "card %d: down still reaches card %d (%s)" % [i, i + 1, nb])
-	var up: NodePath = buttons[2].focus_neighbor_top
-	ok(buttons[2].get_node_or_null(up) == buttons[1], "and up comes back (%s)" % up)
+	_columns_linked(p, buttons, play, "three columns")
 	p.free()
 
 
