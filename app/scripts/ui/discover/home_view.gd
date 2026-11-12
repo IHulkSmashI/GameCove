@@ -502,8 +502,10 @@ func _on_tile_focus(v: Dictionary, i: int, shelf: Control) -> void:
 	var down: Control = shelves[r + 1].remembered() if r + 1 < shelves.size() else (cards_focus[0] if not cards_focus.is_empty() else t)
 	t.focus_neighbor_top = t.get_path_to(up)
 	t.focus_neighbor_bottom = t.get_path_to(down)
-	for b in [primary, secondary]:
-		b.focus_neighbor_bottom = b.get_path_to(t)
+	# down from the spotlight goes to the first shelf (its remembered tile), never past it to a lower one
+	if r == 0:
+		for b in [primary, secondary]:
+			b.focus_neighbor_bottom = b.get_path_to(t)
 	if not cards_focus.is_empty():
 		cards_focus[0].focus_neighbor_top = cards_focus[0].get_path_to(t)
 	_scroll_rows(shelf.position.y)

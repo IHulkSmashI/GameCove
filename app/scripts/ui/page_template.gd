@@ -626,19 +626,43 @@ func finish() -> void:
 			cols[col] = []
 			order.append(col)
 		cols[col].append(c)
-	# full-width cards above the columns (a pending change): between the action row and the columns
+	# full-width cards above the columns (a pending change) sit between the action row and the
+	# columns; full-width cards below them (a store page's credits) after the columns' feet
 	var top: Control = actions[0] if not actions.is_empty() else null
-	var pre: Array = cols.get(self, [])
+	var pre: Array = []
+	var post: Array = []
+	for c in cols.get(self, []):
+		(pre if _above_columns(c) else post).append(c)
 	if not pre.is_empty():
 		Kit.link_rows(pre, top)
 		top = pre[-1]
 	for col in order:
 		if col != self:
 			Kit.link_rows(cols[col], top)
-	if not pre.is_empty():
-		for c in pre:
-			if c.get_node_or_null(c.focus_neighbor_bottom) == c:
-				c.focus_neighbor_bottom = NodePath()   # the full-width row's foot: whatever column control is below it
+	for c in pre:
+		if c.get_node_or_null(c.focus_neighbor_bottom) == c:
+			c.focus_neighbor_bottom = NodePath()   # the full-width row's foot: whatever column control is below it
+	if not post.is_empty():
+		Kit.link_rows(post, null)
+		for col in order:
+			if col != self and not cols[col].is_empty():
+				var foot: Control = cols[col][-1]
+				if foot.get_node_or_null(foot.focus_neighbor_bottom) == foot:
+					foot.focus_neighbor_bottom = foot.get_path_to(post[0])
+		var up: Control = null
+		for col in order:
+			if col != self and not cols[col].is_empty():
+				up = cols[col][-1]
+				break
+		for c in post:
+			if c.get_node_or_null(c.focus_neighbor_top) == c:
+				c.focus_neighbor_top = c.get_path_to(up) if up != null else NodePath()
+	# a full-width row has nothing beside it: left / right stay (Godot's search went up into the columns)
+	for c in pre + post:
+		if c.focus_neighbor_left == NodePath():
+			c.focus_neighbor_left = c.get_path_to(c)
+		if c.focus_neighbor_right == NodePath():
+			c.focus_neighbor_right = c.get_path_to(c)
 	# left / right off a column: the control in the next column nearest in height, found at the press
 	_col_chains = {}
 	for col in order:
@@ -690,6 +714,16 @@ func _on_card_input(event: InputEvent, c: Control) -> void:
 			return
 		i += side
 	c.accept_event()   # the last column: stays (never up into the action row)
+
+
+## A full-width card control above the columns (true) or below them.
+func _above_columns(c: Node) -> bool:
+	if columns == null or cards_box == null:
+		return true
+	var p := c
+	while p != null and p.get_parent() != cards_box:
+		p = p.get_parent()
+	return p == null or p.get_index() < columns.get_index()
 
 
 ## The column (bento stack) a card control stands in, or the cards box itself.

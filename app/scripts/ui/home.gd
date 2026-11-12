@@ -352,8 +352,20 @@ func _set_spotlight(g: Dictionary, line: String, animate: bool) -> void:
 		b.focus_neighbor_bottom = b.get_path_to(down)
 		if not b.focus_entered.is_connected(_on_hero_focus):
 			b.focus_entered.connect(_on_hero_focus)
+	# the shelves are rebuilt when the library changes: the way down is looked up at the press (CUX-5)
+	Kit.lead_down(_hero_buttons, _hero_down)
 	if is_inside_tree():
 		game_focused.emit(g)
+
+
+## Down from Play / Game page: the first shelf, on the tile it had focused last.
+func _hero_down() -> Control:
+	for s in _shelves:
+		if is_instance_valid(s) and s.is_visible_in_tree():
+			var r: Control = s.remembered()
+			if r != null and is_instance_valid(r):
+				return r
+	return null
 
 
 func set_top_target(c: Control) -> void:
@@ -564,8 +576,10 @@ func _on_tile_focus(g: Dictionary, i: int, s: Control) -> void:
 	var down: Control = _shelves[r + 1].remembered() if r + 1 < _shelves.size() else t
 	t.focus_neighbor_top = t.get_path_to(up)
 	t.focus_neighbor_bottom = t.get_path_to(down)
-	for b in _hero_buttons:
-		b.focus_neighbor_bottom = b.get_path_to(t)
+	# down from Play goes to the first shelf (its own remembered tile), never past it to a lower one
+	if r == 0:
+		for b in _hero_buttons:
+			b.focus_neighbor_bottom = b.get_path_to(t)
 	_scroll_to(s.position.y)
 	# an app isn't a game: the spotlight keeps the last game
 	if str(g.get("store", "")) != "app":

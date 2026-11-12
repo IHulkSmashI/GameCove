@@ -242,6 +242,30 @@ static func nearest_toward(from: Control, items: Array, dir: Vector2) -> Control
 	return best
 
 
+## Down from each of `buttons` goes to `target.call()` at the press (a screen's
+## or section's main control as it is now; a path set earlier goes stale when
+## the screen below changes: a new layout, another category). Wired once.
+static func lead_down(buttons: Array, target: Callable) -> void:
+	for b in buttons:
+		var c := b as Control
+		if c == null:
+			continue
+		c.set_meta("lead_down", target)
+		if not c.has_meta("lead_down_wired"):
+			c.set_meta("lead_down_wired", true)
+			c.gui_input.connect(_lead_down_input.bind(c))
+
+
+static func _lead_down_input(event: InputEvent, c: Control) -> void:
+	if not event.is_action_pressed("ui_down") or c.get_viewport() == null or c.get_viewport().is_input_handled():
+		return
+	var t: Callable = c.get_meta("lead_down")
+	var f: Variant = t.call() if t.is_valid() else null
+	if f is Control and is_instance_valid(f) and (f as Control).is_visible_in_tree() and (f as Control).focus_mode == Control.FOCUS_ALL:
+		c.accept_event()
+		(f as Control).grab_focus()
+
+
 ## Chain controls left to right; ends stop at themselves.
 static func link_horizontal(controls: Array) -> void:
 	for i in controls.size():

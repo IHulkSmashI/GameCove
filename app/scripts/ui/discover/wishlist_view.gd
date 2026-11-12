@@ -248,6 +248,7 @@ func _row(v: Dictionary, it: Dictionary, now: int, cur: String) -> Button:
 		right = l
 	var b := W.row(v, {"title": v["title"], "sub": sub, "badges": badges, "right": right}, 92)
 	b.set_meta("role", "wish")
+	b.set_meta("ux_tab", true)   # the detail beside follows the focused row: a master list (CUX-3)
 	b.pressed.connect(func(): ctx.open_page(v))
 	b.focus_entered.connect(func():
 		ctx.focus(v)
@@ -447,9 +448,16 @@ func _link() -> void:
 	if not alert_buttons.is_empty():
 		Kit.link_horizontal(alert_buttons)
 		var below: Control = rows[0] if not rows.is_empty() else (empty_card.get_meta("buttons")[0] if empty_card != null else null)
+		# "Mark all seen" heads the alerts card: up from an alert reaches it, then the toolbar
+		var head: Control = seen_button if seen_button != null and is_instance_valid(seen_button) and seen_button.visible else import_button
 		for a in alert_buttons:
-			a.focus_neighbor_top = a.get_path_to(import_button)
+			a.focus_neighbor_top = a.get_path_to(head)
 			a.focus_neighbor_bottom = a.get_path_to(below if below != null else a)
+		if head == seen_button:
+			seen_button.focus_neighbor_top = seen_button.get_path_to(import_button)
+			seen_button.focus_neighbor_bottom = seen_button.get_path_to(alert_buttons[-1])
+			seen_button.focus_neighbor_left = seen_button.get_path_to(seen_button)
+			seen_button.focus_neighbor_right = seen_button.get_path_to(seen_button)
 	var above_rows: Control = alert_buttons[0] if not alert_buttons.is_empty() else import_button
 	W.chain(rows, above_rows)
 	for r in rows:
