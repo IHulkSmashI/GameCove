@@ -44,15 +44,29 @@ ANTICHEAT = {
     "AhnLab HackShield": ("hshield", "ehsvc.dll"),
     # Byfron's Hyperion lives inside Roblox's own client files (no separate file of its own)
     "Hyperion": ("robloxplayerbeta.exe", "robloxplayerbeta.dll", "robloxplayerlauncher.exe"),
-    "PunkBuster": ("pb", "pbsvc.exe", "punkbuster"),
+    # PunkBuster's real files (Even Balance's PnkBstrA.exe / PnkBstrB.exe installers, the pbsvc service, and the pb/
+    # folder with pbcl / pbsv / pbag in it); a bare "pb" folder is counted only with those inside (see _pb_folder)
+    "PunkBuster": ("punkbuster", "pbsvc*", "pnkbstra.exe", "pnkbstrb.exe", "pnkbstr*.exe"),
     "EQU8": ("equ8", "equ8_conf.json", "equ8*.sys"),
     "miHoYo Protect": ("mhyprot2.sys", "mhyprot3.sys", "hoyokprotect.sys", "mhypbase.dll"),
     "FACEIT": ("faceit", "faceitclient.exe", "faceit.sys"),
     "Denuvo Anti-Cheat": ("denuvo-anti-cheat-update-service.exe", "denuvo anti-cheat", "denuvo-anti-cheat.sys"),
     "Ricochet": ("randgrid.sys",),
 }
-# "pb" as a folder name is too common: only counted together with a PunkBuster file
-_WEAK = {"pb"}
+# "pb" as a folder name is too common (Unity and Java games have one): it counts only with PunkBuster's own libraries in it
+_PB_FILES = ("pbcl*", "pbsv*", "pbag*", "pbsvc*")
+
+
+def _pb_folder(root: str, dirs: list[str]) -> bool:
+    for d in dirs:
+        if d.lower() == "pb":
+            try:
+                inside = {x.lower() for x in os.listdir(os.path.join(root, d))}
+            except OSError:
+                continue
+            if any(fnmatch.filter(inside, p) for p in _PB_FILES):
+                return True
+    return False
 # other tools that hook the same DLLs: stacking them with OptiScaler breaks games (OptiScaler wiki, compatibility with
 # other mods). GameCove stands aside and says which one it found.
 MODS = {
@@ -88,8 +102,7 @@ def _parents(game_dir: str):
 
 def _match(names: set[str], seen: set[str]) -> None:
     for system, pats in ANTICHEAT.items():
-        strong = [p for p in pats if p not in _WEAK]
-        if any(fnmatch.filter(names, p) for p in strong):
+        if any(fnmatch.filter(names, p) for p in pats):
             seen.add(system)
 
 
@@ -100,11 +113,16 @@ def anticheat(game_dir: str | None) -> list[str]:
     if not game_dir or not os.path.isdir(game_dir):
         return []
     seen: set[str] = set()
-    for _r, dirs, files in _walk(game_dir, DEPTH):
+    for r, dirs, files in _walk(game_dir, DEPTH):
         _match({x.lower() for x in dirs} | {x.lower() for x in files}, seen)
+        if _pb_folder(r, dirs):
+            seen.add("PunkBuster")
     for up in _parents(game_dir):
         try:
-            _match({x.lower() for x in os.listdir(up)}, seen)
+            names = os.listdir(up)
+            _match({x.lower() for x in names}, seen)
+            if _pb_folder(up, names):
+                seen.add("PunkBuster")
         except OSError:
             break
     return sorted(seen)

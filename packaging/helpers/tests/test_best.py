@@ -131,6 +131,27 @@ def test_anticheat_scan_looks_up_to_the_games_own_folder(tmp_path):
     assert guard.anticheat(str(common / "Clean")) == []
 
 
+@pytest.mark.parametrize("files", [["PnkBstrA.exe"], ["PnkBstrB.exe"], ["pbsvc.exe"], ["pbsvc"], ["pb/pbcl.dll"], ["pb/PBsv.dll"],
+                                   ["Bin/PnkBstrA.exe"], ["pb/pbag.so"]])
+def test_punkbuster_is_found_by_its_real_files(tmp_path, files):
+    """Review low: the pattern had "pb" as a folder name that was never counted, and no PnkBstrA/B.exe or pbsvc."""
+    _w(tmp_path / "g" / "Game.exe", "x" * 4096)
+    for f in files:
+        _w(tmp_path / "g" / f)
+    assert guard.anticheat(str(tmp_path / "g")) == ["PunkBuster"], files
+    assert guard.refusal(str(tmp_path / "g"), str(tmp_path / "g"), False, None)["code"] == "anticheat"
+
+
+def test_a_pb_folder_alone_is_not_punkbuster_but_one_in_the_folder_above_is(tmp_path):
+    _w(tmp_path / "a" / "Game.exe", "x" * 4096)
+    _w(tmp_path / "a" / "pb" / "data.bin")                     # Unity / Java games have a "pb" folder
+    assert guard.anticheat(str(tmp_path / "a")) == []
+    common = tmp_path / "lib" / "steamapps" / "common"
+    _w(common / "Game" / "pb" / "pbcl.dll")
+    _w(common / "Game" / "Bin" / "Win64" / "Game.exe", "x" * 4096)
+    assert guard.anticheat(str(common / "Game" / "Bin" / "Win64")) == ["PunkBuster"]
+
+
 def test_no_anticheat_false_positives(tmp_path):
     for f in ("Game.exe", "pb/readme.txt", "Engine/Binaries/ThirdParty/x.dll", "beta/notes.txt", "nvngx_dlss.dll"):
         _w(tmp_path / "g" / f)
