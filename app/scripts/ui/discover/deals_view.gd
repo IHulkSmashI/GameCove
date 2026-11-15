@@ -41,7 +41,9 @@ func build() -> void:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(col)
 
-	var bar := Kit.hbox(14)
+	# Store over Sort, one under the other: left / right change a stepper's value, so two
+	# of them side by side would leave the second out of the D-pad's reach (CUX-3, CUX-9).
+	var bar := Kit.vbox(8)
 	bar.name = "Toolbar"
 	var stores := Model.stores_of(_deals)
 	var store := current_store()
@@ -190,21 +192,18 @@ func cycle_sort() -> void:
 
 
 func _link() -> void:
-	var top_row: Array = [store_row.button, sort_row.button]
-	Kit.link_horizontal(top_row)
 	var below: Control = rows[0] if not rows.is_empty() else (credits_buttons[0] if not credits_buttons.is_empty() else null)
-	for b in top_row:
-		b.focus_neighbor_top = b.get_path_to(top_target if top_target != null else b)
-		b.focus_neighbor_bottom = b.get_path_to(below if below != null else b)
+	Kit.link_vertical([store_row.button, sort_row.button], top_target)
+	sort_row.button.focus_neighbor_bottom = sort_row.button.get_path_to(below if below != null else sort_row.button)
 	var chain: Array = rows.duplicate()
 	if not credits_buttons.is_empty():
 		chain.append(credits_buttons[0])
-	W.chain(chain, store_row.button)
+	W.chain(chain, sort_row.button)
 	for r in rows:
 		r.focus_neighbor_left = r.get_path_to(r)
 		r.focus_neighbor_right = r.get_path_to(r)
 	if not credits_buttons.is_empty():
-		var up: Control = rows[-1] if not rows.is_empty() else store_row.button
+		var up: Control = rows[-1] if not rows.is_empty() else sort_row.button
 		for cb in credits_buttons:
 			cb.focus_neighbor_top = cb.get_path_to(up)
 			cb.focus_neighbor_bottom = cb.get_path_to(cb)
@@ -213,8 +212,7 @@ func _link() -> void:
 func set_top_target(c: Control) -> void:
 	super.set_top_target(c)
 	if store_row != null and is_instance_valid(store_row):
-		for b in [store_row.button, sort_row.button]:
-			b.focus_neighbor_top = b.get_path_to(c)
+		store_row.button.focus_neighbor_top = store_row.button.get_path_to(c)
 
 
 func default_focus() -> Control:

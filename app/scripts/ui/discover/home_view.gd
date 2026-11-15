@@ -593,6 +593,11 @@ func _link() -> void:
 		# A card's buttons sit side by side on one row: left / right along it, up / down
 		# between rows (one chain of every button sent down to the button beside: CUX-5).
 		Kit.link_rows(cards_focus, above)
+		# nothing stands beside a card's row: left / right off its ends stay (Godot's search found a shelf tile above)
+		for b in cards_focus:
+			for side in ["focus_neighbor_left", "focus_neighbor_right"]:
+				if b.get(side) == NodePath():
+					b.set(side, b.get_path_to(b))
 		for b in cards_focus:
 			b.focus_entered.connect(func(): _scroll_rows(maxf(0.0, _cards_pad.position.y - 40.0)))
 
