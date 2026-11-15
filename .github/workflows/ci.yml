@@ -237,6 +237,8 @@ jobs:
         run: shellcheck -S warning tools/testbed/*.sh && shellcheck -S warning -x -P tools/testbed/checks tools/testbed/checks/*.sh && sh tools/testbed/test.sh
       - name: Contact sheet script
         run: shellcheck -S warning tools/ux_walk/sheets.sh
+      - name: STATE.md check (the Stop hook's script)
+        run: shellcheck -S warning tools/ci/state-check.sh tools/ci/state-check-test.sh && sh tools/ci/state-check-test.sh
       - name: Root fixes, dispatcher, session scripts and packaging
         run: sh packaging/tests/run.sh
       - name: RPM spec parses

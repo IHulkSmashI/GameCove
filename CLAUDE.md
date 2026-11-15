@@ -2,7 +2,7 @@
 
 GameCove is a GPL-3.0, Godot 4.7.2 (GDScript), controller-first home screen for Linux handhelds (Bazzite, SteamOS). The owner wants a finished product: every item done fully, no placeholders, no "coming soon".
 
-**Where we are, and what's next:** `docs/dev/STATE.md`. Read it before anything else, and update it before you stop.
+**Where we are, and what's next:** `docs/dev/STATE.md`. Read it before anything else. Keep it current as you go, not only at the end: whenever something it says stops being true (a milestone moves, a decision is made, the owner is asked for something, main changes colour), fix the file in the same commit as the work. Every session and every chat the owner shows it to starts from that file, so it has to be right on main at all times. A Stop hook (`.claude/settings.json`, `tools/ci/state-check.sh`) holds a Claude Code session that changed the repo and left STATE.md alone.
 
 ## How a session works (keep it cheap)
 1. One milestone per session. Read `docs/dev/STATE.md`, take the top unchecked milestone, and don't start a second one.

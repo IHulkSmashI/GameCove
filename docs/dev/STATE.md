@@ -4,7 +4,10 @@ Each session takes the top unchecked milestone, finishes it and ticks it here. L
 
 ## Where we are
 - **v0.1.0** is published as a hidden pre-release (main `5c8fa49` at the time).
-- **M1 and M2 are on main** (2026-11-15): the controller rules and the installer's pad fixes, CI green on the four setups and the five layouts.
+- **M1 and M2 are on main** (2026-11-15): the controller rules and the installer's pad fixes, CI green on the four setups and the five layouts (run 165).
+- **Waiting on the owner:** M3. Ten sample walkthrough sheets were sent on 2026-11-15 (installer, first boot, Home, Library, game page, quick menu, Settings, keyboard). They were rendered just before the last fixes (the right-stick "Scroll" hint, Down from Manage on a game page, the cancelled Library search, the Profiles sheet); render fresh ones before he looks again.
+- **Testing on the real Claw:** a cloud session can't reach the handheld. Run `claude remote-control` (or `claude`) in a terminal in the GameCove clone on the Claw, in desktop mode; that session can run `tools/devicetest/devicetest.sh`, which drives the real system with a virtual pad. The owner answers the one password prompt himself.
+- **This file is kept current by rule and by a hook:** see the top of `CLAUDE.md`. A session that changes the repo updates it in the same commit.
 - **The Claw right now:**
   - GameCove's RPM is layered with rpm-ostree, pending a reboot.
   - The gyro fix is applied. ClawDeck's InputPlumber device file was moved to `/var/lib/clawdeck-backup-<time>/`; to restore it, move it back to `/etc/inputplumber/devices.d/`.
